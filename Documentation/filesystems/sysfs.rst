@@ -147,6 +147,250 @@ __ATTR_RW(name):
 __ATTR_NULL:
 	         which sets the name to NULL and is used as end of list
                  indicator (see: kernel/workqueue.c)
+__ATTR_IGNORE_LOCKDEP(name, mode, show, store):
+                 like __ATTR() but disables lockdep checks; used in cases
+                 where lockdep may emit false positives
+
+Additional Attribute Helpers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ATTRIBUTE_GROUPS(name):
+       Convenience macro to create an array of attribute group pointers.
+
+Example::
+
+    static struct attribute *foo_attrs[] = {
+            &attr1.attr,
+            &attr2.attr,
+            NULL
+    };
+    ATTRIBUTE_GROUPS(foo);
+
+BIN_ATTRIBUTE_GROUPS(name):
+        Same as ATTRIBUTE_GROUPS(), but for bin_attribute_group structures.
+
+Example::
+
+    static struct bin_attribute *foo_attrs[] = {
+            &bin_attr1.attr,
+            &bin_attr2.attr,
+            NULL
+    };
+    BIN_ATTRIBUTE_GROUPS(bin_foo);
+
+DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(name):
+        A helper macro to pair with the assignment of
+
+                ".is_visible = SYSFS_GROUP_VISIBLE(name)",
+
+        that arranges for the directory associated with a named attribute_group
+        to optionally be hidden.  This allows for static declaration of
+        attribute_groups, and the simplification of attribute visibility
+        lifetime that implies, without polluting sysfs with empty attribute
+        directories.
+
+Example::
+
+    static umode_t example_attr_visible(struct kobject *kobj,
+                                        struct attribute *attr, int n)
+    {
+            if (example_attr_condition)
+                    return 0;
+            if (ro_attr_condition)
+                    return 0444;
+            return a->mode;
+    }
+
+    static bool example_group_visible(struct kobject *kobj)
+    {
+            if (example_group_condition)
+                    return false;
+            return true;
+    }
+
+    DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(example);
+
+    static struct attribute_group example_group = {
+            .name = "example",
+            .is_visible = SYSFS_GROUP_VISIBLE(example),
+            .attrs = &example_attrs,
+    };
+
+Note that it expects <name>_attr_visible and <name>_group_visible to
+be defined. For cases where individual attributes do not need
+separate visibility consideration, only entire group visibility at
+once, see DEFINE_SYSFS_GROUP_VISIBILITY().
+
+DEFINE_SYSFS_GROUP_VISIBILITY(name):
+        A helper macro to pair with SYSFS_GROUP_VISIBLE() that, like
+        DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(), controls group visibility, but
+        does not require the implementation of a per-attribute visibility
+        callback.
+
+Example::
+
+    static bool example_group_visible(struct kobject *kobj)
+    {
+            if (example_group_condition)
+                    return false;
+            return true;
+    }
+
+    DEFINE_SYSFS_GROUP_VISIBILITY(example);
+
+    static struct attribute_group example_group = {
+            .name = "example",
+            .is_visible = SYSFS_GROUP_VISIBLE(example),
+            .attrs = &example_attrs,
+    };
+
+DEFINE_SYSFS_BIN_GROUP_COMBO_VISIBILITY(name):
+DEFINE_SYSFS_BIN_GROUP_VISIBILITY(name):
+        Same as DEFINE_SYSFS_GROUP_VISIBILITY(), but for groups with only binary
+        attributes. If an attribute_group defines both text and binary
+        attributes, the group visibility is determined by the function
+        specified to is_visible() not is_bin_visible().
+
+Named Attribute Group Macros (with visibility)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These macros define struct attribute_group objects with a static name and
+visibility function(s). They are useful for creating named directories in sysfs
+where individual attributes can be conditionally exposed.
+
+NAMED_ATTRIBUTE_GROUP_VISIBLE(name):
+        Defines an attribute group with a fixed directory name (matching name)
+        with a group visibility function. Expects an attribute array
+        <name>_attrs. The macro automatically defines the visibility function.
+
+Example::
+
+    static ssize_t foo_show(struct device *dev, struct device_attribute *attr,
+                            char *buf)
+    {
+            ...
+    }
+
+    static ssize_t foo_store(struct device *dev, struct device_attribute *attr,
+                             const char *buf, size_t count)
+    {
+            ...
+    }
+    static DEVICE_ATTR_RW(foo);
+
+    static bool bar_group_visible(struct kobject *kobj)
+    {
+            if (bar_group_condition)
+                    return false;
+            return true;
+    }
+
+    static struct attribute *bar_attrs[] = {
+            &dev_attr_foo.attr,
+            NULL
+    };
+    NAMED_ATTRIBUTE_GROUP_VISIBLE(bar);
+
+Creates::
+
+    static const struct attribute_group bar_group = {
+            .name = "bar",
+            .attrs = bar_attrs,
+            .is_visible = SYSFS_GROUP_VISIBLE(bar),
+    };
+
+    /*
+     * Where SYSFS_GROUP_VISIBLE(bar) is a function created by
+     * DEFINE_SYSFS_GROUP_VISIBILITY(bar) that calls bar_group_visible().
+     */
+
+NAMED_ATTRIBUTE_GROUPS_VISIBLE(name):
+        Like NAMED_ATTRIBUTE_GROUP_VISIBLE(), defines the visible attribute
+        group but also creates the group list <name>_groups[].
+
+Example::
+
+    ...
+
+    static struct attribute *bar_attrs[] = {
+            &attr1.attr,
+            &attr2.attr,
+            NULL
+    };
+    NAMED_ATTRIBUTE_GROUPS_VISIBLE(bar);
+
+Creates::
+
+    static const struct attribute_group bar_group = {
+            .name = "bar",
+            .attrs = bar_attrs,
+            .is_visible = SYSFS_GROUP_VISIBLE(bar),
+    };
+
+    static const struct attribute_group *bar_groups[] = {
+            &bar_group,
+            NULL
+    };
+
+NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(name):
+        Same as NAMED_ATTRIBUTE_GROUP_VISIBLE(), but uses the "combo" visibility
+        variant to support both group and per-attribute visibility control.
+        Automatically generates the combo visibility boilerplate.
+
+Example::
+
+    static ssize_t foo_show(struct device *dev, struct device_attribute *attr,
+                            char *buf)
+    {
+            ...
+    }
+
+    static ssize_t foo_store(struct device *dev, struct device_attribute *attr,
+                             const char *buf, size_t count)
+    {
+            ...
+    }
+    static DEVICE_ATTR_RW(foo);
+
+    static umode_t foo_attr_visible(struct kobject *kobj,
+                                    struct attribute *attr, int n)
+    {
+            if (example_attr_condition)
+                    return 0;
+            return attr->mode;
+    }
+
+    static bool foo_group_visible(struct kobject *kobj)
+    {
+            if (foo_group_condition)
+                    return false;
+            return true;
+    }
+
+    static struct attribute *foo_attrs[] = {
+            &dev_attr_foo.attr,
+            NULL
+    };
+    NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(foo);
+
+Creates::
+
+    static const struct attribute_group foo_group = {
+            .name = "foo",
+            .attrs = foo_attrs,
+            .is_visible = SYSFS_GROUP_VISIBLE(foo),
+    };
+
+    /*
+     * Where SYSFS_GROUP_VISIBLE(foo) is a function created by
+     * DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(foo) that calls foo_group_visible()
+     * and foo_attr_visible().
+     */
+
+NAMED_ATTRIBUTE_GROUPS_COMBO_VISIBLE(name):
+        Like NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE() defines the attribute group,
+        supporting both group and per-attribute visibility control, but also
+        creates the group list <name>_groups[].
 
 Subsystem-Specific Callbacks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
