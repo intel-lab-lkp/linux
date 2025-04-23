@@ -122,7 +122,8 @@ void free_pid(struct pid *pid)
 	for (i = 0; i <= pid->level; i++) {
 		struct upid *upid = pid->numbers + i;
 		struct pid_namespace *ns = upid->ns;
-		switch (--ns->pid_allocated) {
+		WRITE_ONCE(ns->pid_allocated, READ_ONCE(ns->pid_allocated) - 1);
+		switch (READ_ONCE(ns->pid_allocated)) {
 		case 2:
 		case 1:
 			/* When all that is left in the pid namespace
@@ -271,13 +272,13 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	upid = pid->numbers + ns->level;
 	idr_preload(GFP_KERNEL);
 	spin_lock(&pidmap_lock);
-	if (!(ns->pid_allocated & PIDNS_ADDING))
+	if (!(READ_ONCE(ns->pid_allocated) & PIDNS_ADDING))
 		goto out_unlock;
 	pidfs_add_pid(pid);
 	for ( ; upid >= pid->numbers; --upid) {
 		/* Make the PID visible to find_pid_ns. */
 		idr_replace(&upid->ns->idr, pid, upid->nr);
-		upid->ns->pid_allocated++;
+		WRITE_ONCE(upid->ns->pid_allocated, READ_ONCE(upid->ns->pid_allocated) + 1);
 	}
 	spin_unlock(&pidmap_lock);
 	idr_preload_end();
