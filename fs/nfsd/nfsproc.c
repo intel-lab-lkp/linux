@@ -219,7 +219,7 @@ nfsd_proc_read(struct svc_rqst *rqstp)
 	/* Obtain buffer pointer for payload. 19 is 1 word for
 	 * status, 17 words for fattr, and 1 word for the byte count.
 	 */
-	svc_reserve_auth(rqstp, (19<<2) + argp->count + 4);
+	svc_reserve_auth(rqstp, (19<<2) + xdr_align_size(argp->count));
 
 	resp->count = argp->count;
 	fh_copy(&resp->fh, &argp->fh);
@@ -739,7 +739,7 @@ static const struct svc_procedure nfsd_procedures2[18] = {
 		.pc_argzero = sizeof(struct nfsd_readargs),
 		.pc_ressize = sizeof(struct nfsd_readres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+AT+1+NFSSVC_MAXBLKSIZE_V2/4,
+		.pc_xdrressize = ST+AT+1,
 		.pc_name = "READ",
 	},
 	[NFSPROC_WRITECACHE] = {

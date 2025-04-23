@@ -202,7 +202,7 @@ nfsd3_proc_read(struct svc_rqst *rqstp)
 	 */
 	resp->count = argp->count;
 	svc_reserve_auth(rqstp, ((1 + NFS3_POST_OP_ATTR_WORDS + 3) << 2) +
-			 resp->count + 4);
+			 xdr_align_size(resp->count));
 
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = nfsd_read(rqstp, &resp->fh, argp->offset,
@@ -921,7 +921,7 @@ static const struct svc_procedure nfsd_procedures3[22] = {
 		.pc_argzero = sizeof(struct nfsd3_readargs),
 		.pc_ressize = sizeof(struct nfsd3_readres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+pAT+4+NFSSVC_MAXBLKSIZE/4,
+		.pc_xdrressize = ST+pAT+3,
 		.pc_name = "READ",
 	},
 	[NFS3PROC_WRITE] = {
