@@ -1127,6 +1127,7 @@ int mlx5_blocking_notifier_call_chain(struct mlx5_core_dev *dev, unsigned int ev
 				      void *data);
 
 int mlx5_core_query_vendor_id(struct mlx5_core_dev *mdev, u32 *vendor_id);
+#define MLX5_VUID_STR_MAX_SIZE (MLX5_ST_SZ_BYTES(array1024_auto) + 1)
 int mlx5_core_query_vuid(struct mlx5_core_dev *dev, u16 vhca_id,
 			 bool data_direct, char *out_vuid);
 

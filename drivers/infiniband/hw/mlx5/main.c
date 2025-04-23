@@ -3587,7 +3587,7 @@ unbind:
 
 static int mlx5_ib_data_direct_init(struct mlx5_ib_dev *dev)
 {
-	char vuid[MLX5_ST_SZ_BYTES(array1024_auto) + 1] = {};
+	char vuid[MLX5_VUID_STR_MAX_SIZE] = {};
 	int ret;
 
 	if (!MLX5_CAP_GEN(dev->mdev, data_direct) ||
