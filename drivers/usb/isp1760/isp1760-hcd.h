@@ -50,7 +50,7 @@ struct isp1760_hcd {
 	void __iomem		*base;
 
 	struct regmap		*regs;
-	struct regmap_field	*fields[HC_FIELD_MAX];
+	struct regmap_field	*fields[DC_HC_FIELD_MAX];
 
 	bool			is_isp1763;
 	const struct isp1760_memory_layout	*memory_layout;

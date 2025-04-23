@@ -267,6 +267,9 @@ enum isp176x_device_controller_fields {
 	DC_FIELD_MAX,
 };
 
+#define	DC_HC_FIELD_MAX	\
+	(DC_FIELD_MAX > HC_FIELD_MAX ? DC_FIELD_MAX : HC_FIELD_MAX)
+
 /* ISP1763 */
 /* Initialization Registers */
 #define ISP1763_DC_ADDRESS		0x00
