@@ -744,8 +744,12 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 				continue;
 			}
 
+			/* we don't want to account evictions at this point */
+			bool old_ctx_account = ctx->account_op;
+			ctx->account_op = false;
 			ret = ttm_bo_evict_alloc(bdev, man, place, bo, ctx,
 						 ticket, res, limit_pool);
+			ctx->account_op = old_ctx_account;
 			dmem_cgroup_pool_state_put(limit_pool);
 			if (ret == -EBUSY)
 				continue;

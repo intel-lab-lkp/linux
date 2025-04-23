@@ -672,6 +672,9 @@ static void ttm_pool_free_range(struct ttm_pool *pool, struct ttm_tt *tt,
 				tt->dma_address + i : NULL;
 
 			nr = ttm_pool_unmap_and_free(pool, p, dma_addr, caching);
+			if (tt->page_flags & TTM_TT_FLAG_ACCOUNTED) {
+				mod_memcg_state(tt->memcg, MEMCG_GPU, -nr);
+			}
 		}
 	}
 }
@@ -742,9 +745,17 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		 * that behaviour.
 		 */
 		if (!p) {
+			gfp_t account_flags = gfp_flags;
 			page_caching = ttm_cached;
 			allow_pools = false;
-			p = ttm_pool_alloc_page(pool, gfp_flags, order);
+
+			if (!pool->use_dma_alloc && tt->memcg && ctx->account_op) {
+				account_flags |= __GFP_ACCOUNT;
+				tt->page_flags |= TTM_TT_FLAG_ACCOUNTED;
+			} else {
+				tt->page_flags &= ~TTM_TT_FLAG_ACCOUNTED;
+			}
+			p = ttm_pool_alloc_page(pool, account_flags, order);
 		}
 		/* If that fails, lower the order if possible and retry. */
 		if (!p) {
@@ -757,6 +768,12 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			r = -ENOMEM;
 			goto error_free_all;
 		}
+
+		/* only deal with non-pool pages for memcg for now */
+		if (tt->page_flags & TTM_TT_FLAG_ACCOUNTED) {
+			mod_memcg_state(tt->memcg, MEMCG_GPU, (1 << order));
+		}
+
 		r = ttm_pool_page_allocated(pool, order, p, page_caching, alloc,
 					    restore);
 		if (r)

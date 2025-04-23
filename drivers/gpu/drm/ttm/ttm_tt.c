@@ -161,6 +161,7 @@ static void ttm_tt_init_fields(struct ttm_tt *ttm,
 	ttm->caching = caching;
 	ttm->restore = NULL;
 	ttm->backup = NULL;
+	ttm->memcg = bo->memcg;
 }
 
 int ttm_tt_init(struct ttm_tt *ttm, struct ttm_buffer_object *bo,
