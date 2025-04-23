@@ -318,9 +318,11 @@ static void f2fs_write_end_io(struct bio *bio)
 {
 	struct f2fs_sb_info *sbi;
 	struct folio_iter fi;
+	bool check;
 
 	iostat_update_and_unbind_ctx(bio);
 	sbi = bio->bi_private;
+	check = is_sbi_flag_set(sbi, SBI_NEED_FSCK);
 
 	if (time_to_inject(sbi, FAULT_WRITE_IO))
 		bio->bi_status = BLK_STS_IOERR;
@@ -328,6 +330,11 @@ static void f2fs_write_end_io(struct bio *bio)
 	bio_for_each_folio_all(fi, bio) {
 		struct folio *folio = fi.folio;
 		enum count_type type;
+
+		if (check) {
+			mapping_set_error(folio->mapping, -EFSCORRUPTED);
+			continue;
+		}
 
 		if (fscrypt_is_bounce_folio(folio)) {
 			struct folio *io_folio = folio;
