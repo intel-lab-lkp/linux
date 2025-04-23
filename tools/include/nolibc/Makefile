@@ -37,6 +37,7 @@ all_files := \
 		limits.h \
 		math.h \
 		nolibc.h \
+		sched.h \
 		signal.h \
 		stackprotector.h \
 		std.h \

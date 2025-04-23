@@ -106,6 +106,8 @@ DEFCONFIG_sparc64    = sparc64_defconfig
 DEFCONFIG            = $(DEFCONFIG_$(XARCH))
 
 EXTRACONFIG           = $(EXTRACONFIG_$(XARCH))
+EXTRACONFIG_arm       = -e CONFIG_NAMESPACES
+EXTRACONFIG_armthumb  = -e CONFIG_NAMESPACES
 
 # optional tests to run (default = all)
 TEST =
