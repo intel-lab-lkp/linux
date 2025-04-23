@@ -562,6 +562,7 @@ void __head early_snp_set_memory_shared(unsigned long vaddr, unsigned long paddr
 	 /* Ask hypervisor to mark the memory pages shared in the RMP table. */
 	early_set_pages_state(vaddr, paddr, npages, SNP_PAGE_STATE_SHARED);
 }
+SYM_PI_ALIAS(early_snp_set_memory_shared);
 
 /* Writes to the SVSM CAA MSR are ignored */
 static enum es_result __vc_handle_msr_caa(struct pt_regs *regs, bool write)
@@ -1383,8 +1384,10 @@ bool __head snp_init(struct boot_params *bp)
 
 	return true;
 }
+SYM_PI_ALIAS(snp_init);
 
 void __head __noreturn snp_abort(void)
 {
 	sev_es_terminate(SEV_TERM_SET_GEN, GHCB_SNP_UNSUPPORTED);
 }
+SYM_PI_ALIAS(snp_abort);
