@@ -220,12 +220,6 @@ struct attribute_group {
 		return a->mode;                                             \
 	}
 
-/* Transitional aliases: so legacy code using old names continues to work */
-#define DEFINE_SYSFS_GROUP_VISIBLE(name) DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(name)
-#define DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name) DEFINE_SYSFS_GROUP_VISIBILITY(name)
-#define DEFINE_SYSFS_BIN_GROUP_VISIBLE(name) DEFINE_SYSFS_BIN_GROUP_COMBO_VISIBILITY(name)
-#define DEFINE_SIMPLE_SYSFS_BIN_GROUP_VISIBLE(name) DEFINE_SYSFS_BIN_GROUP_VISIBILITY(name)
-
 #define SYSFS_GROUP_VISIBLE(fn) sysfs_group_visible_##fn
 
 /*
