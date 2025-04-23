@@ -12,5 +12,6 @@ int ionic_bus_register_driver(void);
 void ionic_bus_unregister_driver(void);
 void __iomem *ionic_bus_map_dbpage(struct ionic *ionic, int page_num);
 void ionic_bus_unmap_dbpage(struct ionic *ionic, void __iomem *page);
+phys_addr_t ionic_bus_phys_dbpage(struct ionic *ionic, int page_num);
 
 #endif /* _IONIC_BUS_H_ */

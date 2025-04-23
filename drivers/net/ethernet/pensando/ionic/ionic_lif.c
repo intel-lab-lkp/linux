@@ -244,14 +244,13 @@ static int ionic_request_irq(struct ionic_lif *lif, struct ionic_qcq *qcq)
 				0, intr->name, &qcq->napi);
 }
 
-static int ionic_intr_alloc(struct ionic_lif *lif, struct ionic_intr_info *intr)
+int ionic_intr_alloc(struct ionic *ionic, struct ionic_intr_info *intr)
 {
-	struct ionic *ionic = lif->ionic;
 	int index;
 
 	index = find_first_zero_bit(ionic->intrs, ionic->nintrs);
 	if (index == ionic->nintrs) {
-		netdev_warn(lif->netdev, "%s: no intr, index=%d nintrs=%d\n",
+		netdev_warn(ionic->lif->netdev, "%s: no intr, index=%d nintrs=%d\n",
 			    __func__, index, ionic->nintrs);
 		return -ENOSPC;
 	}
@@ -262,7 +261,7 @@ static int ionic_intr_alloc(struct ionic_lif *lif, struct ionic_intr_info *intr)
 	return 0;
 }
 
-static void ionic_intr_free(struct ionic *ionic, int index)
+void ionic_intr_free(struct ionic *ionic, int index)
 {
 	if (index != IONIC_INTR_INDEX_NOT_ASSIGNED && index < ionic->nintrs)
 		clear_bit(index, ionic->intrs);
@@ -504,7 +503,7 @@ static int ionic_alloc_qcq_interrupt(struct ionic_lif *lif, struct ionic_qcq *qc
 		return 0;
 	}
 
-	err = ionic_intr_alloc(lif, &qcq->intr);
+	err = ionic_intr_alloc(lif->ionic, &qcq->intr);
 	if (err) {
 		netdev_warn(lif->netdev, "no intr for %s: %d\n",
 			    qcq->q.name, err);
@@ -3268,6 +3267,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	lif->netdev->max_mtu =
 		le32_to_cpu(lif->identity->eth.max_frame_size) - VLAN_ETH_HLEN;
 
+	lif->nrdma_eqs_avail = ionic->nrdma_eqs_per_lif;
 	lif->nrdma_eqs = ionic->nrdma_eqs_per_lif;
 	lif->nxqs = ionic->ntxqs_per_lif;
 
@@ -3295,6 +3295,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	mutex_init(&lif->queue_lock);
 	mutex_init(&lif->config_lock);
 	mutex_init(&lif->adev_lock);
+	mutex_init(&lif->dbid_inuse_lock);
 
 	spin_lock_init(&lif->adminq_lock);
 
@@ -3351,6 +3352,7 @@ err_out_free_lif_info:
 	lif->info = NULL;
 	lif->info_pa = 0;
 err_out_free_mutex:
+	mutex_destroy(&lif->dbid_inuse_lock);
 	mutex_destroy(&lif->adev_lock);
 	mutex_destroy(&lif->config_lock);
 	mutex_destroy(&lif->queue_lock);
@@ -3507,6 +3509,14 @@ err_out:
 	dev_err(ionic->dev, "FW Up: LIFs restart failed - err %d\n", err);
 }
 
+static void ionic_lif_dbid_inuse_free(struct ionic_lif *lif)
+{
+	mutex_lock(&lif->dbid_inuse_lock);
+	bitmap_free(lif->dbid_inuse);
+	lif->dbid_inuse = NULL;
+	mutex_unlock(&lif->dbid_inuse_lock);
+}
+
 void ionic_lif_free(struct ionic_lif *lif)
 {
 	struct device *dev = lif->ionic->dev;
@@ -3535,10 +3545,12 @@ void ionic_lif_free(struct ionic_lif *lif)
 	/* unmap doorbell page */
 	ionic_bus_unmap_dbpage(lif->ionic, lif->kern_dbpage);
 	lif->kern_dbpage = NULL;
+	ionic_lif_dbid_inuse_free(lif);
 
 	mutex_destroy(&lif->config_lock);
 	mutex_destroy(&lif->queue_lock);
 	mutex_destroy(&lif->adev_lock);
+	mutex_destroy(&lif->dbid_inuse_lock);
 
 	/* free netdev & lif */
 	ionic_debugfs_del_lif(lif);
@@ -3561,6 +3573,8 @@ void ionic_lif_deinit(struct ionic_lif *lif)
 	napi_disable(&lif->adminqcq->napi);
 	ionic_lif_qcq_deinit(lif, lif->notifyqcq);
 	ionic_lif_qcq_deinit(lif, lif->adminqcq);
+
+	ionic_lif_dbid_inuse_free(lif);
 
 	ionic_lif_reset(lif);
 }
@@ -3755,12 +3769,25 @@ int ionic_lif_init(struct ionic_lif *lif)
 		return -EINVAL;
 	}
 
+	mutex_lock(&lif->dbid_inuse_lock);
+	lif->dbid_inuse = bitmap_zalloc(lif->dbid_count, GFP_KERNEL);
+	if (!lif->dbid_inuse) {
+		dev_err(dev, "Failed alloc doorbell id bitmap, aborting\n");
+		mutex_unlock(&lif->dbid_inuse_lock);
+		return -ENOMEM;
+	}
+
+	/* first doorbell id reserved for kernel (dbid aka pid == zero) */
+	set_bit(0, lif->dbid_inuse);
+	mutex_unlock(&lif->dbid_inuse_lock);
 	lif->kern_pid = 0;
+
 	dbpage_num = ionic_db_page_num(lif, lif->kern_pid);
 	lif->kern_dbpage = ionic_bus_map_dbpage(lif->ionic, dbpage_num);
 	if (!lif->kern_dbpage) {
 		dev_err(dev, "Cannot map dbpage, aborting\n");
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto err_out_free_dbid;
 	}
 
 	err = ionic_lif_adminq_init(lif);
@@ -3807,6 +3834,8 @@ err_out_adminq_deinit:
 	ionic_lif_reset(lif);
 	ionic_bus_unmap_dbpage(lif->ionic, lif->kern_dbpage);
 	lif->kern_dbpage = NULL;
+err_out_free_dbid:
+	ionic_lif_dbid_inuse_free(lif);
 
 	return err;
 }

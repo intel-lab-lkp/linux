@@ -204,6 +204,7 @@ struct ionic_lif {
 	unsigned int kern_pid;
 	u64 __iomem *kern_dbpage;
 	unsigned int nrdma_eqs;
+	unsigned int nrdma_eqs_avail;
 	unsigned int nxqs;
 	unsigned int ntxq_descs;
 	unsigned int nrxq_descs;
@@ -241,6 +242,8 @@ struct ionic_lif {
 	u32 tx_coalesce_usecs;		/* what the user asked for */
 	u32 tx_coalesce_hw;		/* what the hw is using */
 	unsigned int dbid_count;
+	struct mutex dbid_inuse_lock;   /* lock the dbid bit list */
+	unsigned long *dbid_inuse;
 
 	struct ionic_phc *phc;
 
@@ -402,6 +405,8 @@ int ionic_lif_set_hwstamp_rxfilt(struct ionic_lif *lif, u64 pkt_class);
 
 int ionic_lif_rss_config(struct ionic_lif *lif, u16 types,
 			 const u8 *key, const u32 *indir);
+int ionic_intr_alloc(struct ionic *ionic, struct ionic_intr_info *intr);
+void ionic_intr_free(struct ionic *ionic, int index);
 void ionic_lif_rx_mode(struct ionic_lif *lif);
 int ionic_reconfigure_queues(struct ionic_lif *lif,
 			     struct ionic_queue_params *qparam);

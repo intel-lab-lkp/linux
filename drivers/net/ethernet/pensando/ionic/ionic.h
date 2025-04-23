@@ -65,12 +65,6 @@ struct ionic {
 	int watchdog_period;
 };
 
-struct ionic_admin_ctx {
-	struct completion work;
-	union ionic_adminq_cmd cmd;
-	union ionic_adminq_comp comp;
-};
-
 int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx);
 int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 		      const int err, const bool do_msg);
@@ -96,5 +90,7 @@ int ionic_port_init(struct ionic *ionic);
 int ionic_port_reset(struct ionic *ionic);
 
 bool ionic_doorbell_wa(struct ionic *ionic);
+
+int ionic_error_to_errno(enum ionic_status_code code);
 
 #endif /* _IONIC_H_ */

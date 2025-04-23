@@ -65,4 +65,98 @@ struct net_device *ionic_api_get_netdev_from_handle(void *handle);
  */
 const struct ionic_devinfo *ionic_api_get_devinfo(void *handle);
 
+/**
+ * ionic_api_request_reset - request reset or disable the device or lif
+ * @handle:     Handle to lif
+ *
+ * The reset is triggered asynchronously. It will wait until reset request
+ * completes or times out.
+ */
+void ionic_api_request_reset(void *handle);
+
+/**
+ * ionic_api_get_intr - Reserve a device interrupt index
+ * @handle:     Handle to lif
+ * @irq:        OS interrupt number returned
+ *
+ * Reserve an interrupt index, and indicate the irq number for that index.
+ *
+ * Return: interrupt index or negative error status
+ */
+int ionic_api_get_intr(void *handle, int *irq);
+
+/**
+ * ionic_api_put_intr - Release a device interrupt index
+ * @handle:     Handle to lif
+ * @intr:       Interrupt index
+ *
+ * Mark the interrupt index unused so that it can be reserved again.
+ */
+void ionic_api_put_intr(void *handle, int intr);
+
+/**
+ * ionic_api_kernel_dbpage - Get mapped doorbell page for use in kernel space
+ * @handle:     Handle to lif
+ * @intr_ctrl:  Interrupt control registers
+ * @dbid:       Doorbell id for use in kernel space
+ * @dbpage:     One ioremapped doorbell page for use in kernel space
+ *
+ * This also provides mapped interrupt control registers.
+ *
+ * The id and page returned here refer to the doorbell page reserved for use in
+ * kernel space for this lif.  For user space, use ionic_api_get_dbid to
+ * allocate a doorbell id for exclusive use by a process.
+ */
+void ionic_api_kernel_dbpage(void *handle,
+			     struct ionic_intr __iomem **intr_ctrl,
+			     u32 *dbid, u64 __iomem **dbpage);
+
+/**
+ * struct ionic_admin_ctx - Admin command context
+ * @work:       Work completion wait queue element
+ * @cmd:        Admin command (64B) to be copied to the queue
+ * @comp:       Admin completion (16B) copied from the queue
+ */
+struct ionic_admin_ctx {
+	struct completion work;
+	union ionic_adminq_cmd cmd;
+	union ionic_adminq_comp comp;
+};
+
+/**
+ * ionic_api_adminq_post - Post an admin command
+ * @handle:     Handle to lif
+ * @ctx:        API admin command context
+ *
+ * Post the command to an admin queue in the ethernet driver.  If this command
+ * succeeds, then the command has been posted, but that does not indicate a
+ * completion.  If this command returns success, then the completion callback
+ * will eventually be called.
+ *
+ * Return: zero or negative error status
+ */
+int ionic_api_adminq_post(void *handle, struct ionic_admin_ctx *ctx);
+
+/**
+ * ionic_api_adminq_post_wait - Post an admin command and wait for response
+ * @handle:     Handle to lif
+ * @ctx:        API admin command context
+ *
+ * Post the command to an admin queue in the ethernet driver.  If this command
+ * succeeds, then the command has been posted, but that does not indicate a
+ * completion.  If this command returns success, then the completion callback
+ * will eventually be called.
+ *
+ * Return: zero or negative error status
+ */
+int ionic_api_adminq_post_wait(void *handle, struct ionic_admin_ctx *ctx);
+
+/**
+ * ionic_api_error_to_errno - Transform ionic_if errors to os errno
+ * @code:       Ionic error number
+ *
+ * Return:      Negative OS error number or zero
+ */
+int ionic_api_error_to_errno(enum ionic_status_code code);
+
 #endif /* _IONIC_API_H_ */

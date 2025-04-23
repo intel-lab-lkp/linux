@@ -109,6 +109,12 @@ void ionic_bus_unmap_dbpage(struct ionic *ionic, void __iomem *page)
 	iounmap(page);
 }
 
+phys_addr_t ionic_bus_phys_dbpage(struct ionic *ionic, int page_num)
+{
+	return ionic->bars[IONIC_PCI_BAR_DBELL].bus_addr +
+		((phys_addr_t)page_num << PAGE_SHIFT);
+}
+
 static void ionic_vf_dealloc_locked(struct ionic *ionic)
 {
 	struct ionic_vf_setattr_cmd vfc = { .attr = IONIC_VF_ATTR_STATSADDR };
