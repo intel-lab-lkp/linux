@@ -15,6 +15,8 @@ MODULE_DESCRIPTION(DRIVER_DESCRIPTION);
 MODULE_LICENSE("GPL");
 MODULE_IMPORT_NS("NET_IONIC");
 
+#define IONIC_VERSION(a, b) (((a) << 16) + ((b) << 8))
+
 static const struct auxiliary_device_id ionic_aux_id_table[] = {
 	{ .name = "ionic.rdma", },
 	{},
@@ -38,7 +40,12 @@ static void ionic_destroy_ibdev(struct ionic_ibdev *dev)
 	ionic_kill_rdma_admin(dev, false);
 	ib_unregister_device(&dev->ibdev);
 	ionic_destroy_rdma_admin(dev);
+	ionic_resid_destroy(&dev->inuse_qpid);
 	ionic_resid_destroy(&dev->inuse_cqid);
+	ionic_resid_destroy(&dev->inuse_mrid);
+	ionic_resid_destroy(&dev->inuse_ahid);
+	ionic_resid_destroy(&dev->inuse_pdid);
+	xa_destroy(&dev->qp_tbl);
 	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 }
@@ -84,6 +91,13 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	dev->qp_opcodes = ident->rdma.qp_opcodes;
 	dev->admin_opcodes = ident->rdma.admin_opcodes;
 
+	if (IONIC_VERSION(ident->rdma.version, ident->rdma.minor_version) >=
+		IONIC_VERSION(2, 1))
+		dev->page_size_supported =
+			cpu_to_le64(ident->rdma.page_size_cap);
+	else
+		dev->page_size_supported = IONIC_PAGE_SIZE_SUPPORTED;
+
 	dev->aq_base = le32_to_cpu(ident->rdma.aq_qtype.qid_base);
 	dev->cq_base = le32_to_cpu(ident->rdma.cq_qtype.qid_base);
 	dev->eq_base = le32_to_cpu(ident->rdma.eq_qtype.qid_base);
@@ -103,11 +117,48 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	dev->cq_qtype = ident->rdma.cq_qtype.qtype;
 	dev->eq_qtype = ident->rdma.eq_qtype.qtype;
 
+	dev->max_stride = ident->rdma.max_stride;
+	dev->expdb_mask = ionic_api_get_expdb(dev->handle);
+	if (dev->expdb_mask) {
+		struct ionic_qtype_info *qti;
+
+		qti = ionic_api_get_queue_identity(dev->handle,
+						   IONIC_QTYPE_TXQ);
+		dev->sq_expdb = !!(qti->features & IONIC_QIDENT_F_EXPDB);
+
+		qti = ionic_api_get_queue_identity(dev->handle,
+						   IONIC_QTYPE_RXQ);
+		dev->rq_expdb = !!(qti->features & IONIC_QIDENT_F_EXPDB);
+	}
+
 	dev->udma_qgrp_shift = ident->rdma.udma_shift;
 	dev->udma_count = 2;
 
+	xa_init_flags(&dev->qp_tbl, GFP_ATOMIC);
+	rwlock_init(&dev->qp_tbl_rw);
 	xa_init_flags(&dev->cq_tbl, GFP_ATOMIC);
 	rwlock_init(&dev->cq_tbl_rw);
+
+	mutex_init(&dev->inuse_lock);
+	spin_lock_init(&dev->inuse_splock);
+
+	rc = ionic_resid_init(&dev->inuse_pdid, IONIC_MAX_PD);
+	if (rc)
+		goto err_pdid;
+
+	rc = ionic_resid_init(&dev->inuse_ahid,
+			      le32_to_cpu(ident->rdma.nahs_per_lif));
+	if (rc)
+		goto err_ahid;
+
+	rc = ionic_resid_init(&dev->inuse_mrid,
+			      le32_to_cpu(ident->rdma.nmrs_per_lif));
+	if (rc)
+		goto err_mrid;
+
+	/* skip reserved lkey */
+	dev->inuse_mrid.next_id = 1;
+	dev->next_mrkey = 1;
 
 	rc = ionic_resid_init(&dev->inuse_cqid,
 			      le32_to_cpu(ident->rdma.cq_qtype.qid_count));
@@ -118,6 +169,17 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	dev->next_cqid[1] = dev->inuse_cqid.inuse_size / dev->udma_count;
 	dev->half_cqid_udma_shift =
 		order_base_2(dev->inuse_cqid.inuse_size / dev->udma_count);
+
+	dev->size_qpid = le32_to_cpu(ident->rdma.sq_qtype.qid_count);
+	rc = ionic_resid_init(&dev->inuse_qpid, dev->size_qpid);
+	if (rc)
+		goto err_qpid;
+
+	/* skip reserved SMI and GSI qpids */
+	dev->next_qpid[0] = 2;
+	dev->next_qpid[1] = dev->size_qpid / dev->udma_count;
+	dev->half_qpid_udma_shift =
+		order_base_2(dev->size_qpid / dev->udma_count);
 
 	rc = ionic_rdma_reset_devcmd(dev);
 	if (rc)
@@ -141,6 +203,7 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 
 	addrconf_ifid_eui48((u8 *)&ibdev->node_guid, ndev);
 
+	ionic_controlpath_setops(dev);
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
 	if (rc)
 		goto err_register;
@@ -151,8 +214,17 @@ err_register:
 	ionic_kill_rdma_admin(dev, false);
 	ionic_destroy_rdma_admin(dev);
 err_reset:
+	ionic_resid_destroy(&dev->inuse_qpid);
+err_qpid:
 	ionic_resid_destroy(&dev->inuse_cqid);
 err_cqid:
+	ionic_resid_destroy(&dev->inuse_mrid);
+err_mrid:
+	ionic_resid_destroy(&dev->inuse_ahid);
+err_ahid:
+	ionic_resid_destroy(&dev->inuse_pdid);
+err_pdid:
+	xa_destroy(&dev->qp_tbl);
 	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 err_dev:
