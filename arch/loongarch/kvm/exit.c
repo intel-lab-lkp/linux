@@ -341,7 +341,7 @@ static int kvm_trap_handle_gspr(struct kvm_vcpu *vcpu)
  * 2) Execute CACOP/IDLE instructions;
  * 3) Access to unimplemented CSRs/IOCSRs.
  */
-static int kvm_handle_gspr(struct kvm_vcpu *vcpu)
+static int kvm_handle_gspr(struct kvm_vcpu *vcpu, int ecode)
 {
 	int ret = RESUME_GUEST;
 	enum emulation_result er = EMULATE_DONE;
@@ -705,12 +705,12 @@ static int kvm_handle_rdwr_fault(struct kvm_vcpu *vcpu, bool write)
 	return ret;
 }
 
-static int kvm_handle_read_fault(struct kvm_vcpu *vcpu)
+static int kvm_handle_read_fault(struct kvm_vcpu *vcpu, int ecode)
 {
 	return kvm_handle_rdwr_fault(vcpu, false);
 }
 
-static int kvm_handle_write_fault(struct kvm_vcpu *vcpu)
+static int kvm_handle_write_fault(struct kvm_vcpu *vcpu, int ecode)
 {
 	return kvm_handle_rdwr_fault(vcpu, true);
 }
@@ -730,7 +730,7 @@ int kvm_complete_user_service(struct kvm_vcpu *vcpu, struct kvm_run *run)
  * Handle when the guest attempts to use fpu which hasn't been allowed
  * by the root context.
  */
-static int kvm_handle_fpu_disabled(struct kvm_vcpu *vcpu)
+static int kvm_handle_fpu_disabled(struct kvm_vcpu *vcpu, int ecode)
 {
 	struct kvm_run *run = vcpu->run;
 
@@ -787,7 +787,7 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
  * Handle when the guest attempts to use LSX when it is disabled in the root
  * context.
  */
-static int kvm_handle_lsx_disabled(struct kvm_vcpu *vcpu)
+static int kvm_handle_lsx_disabled(struct kvm_vcpu *vcpu, int ecode)
 {
 	if (kvm_own_lsx(vcpu))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
@@ -802,7 +802,7 @@ static int kvm_handle_lsx_disabled(struct kvm_vcpu *vcpu)
  * Handle when the guest attempts to use LASX when it is disabled in the root
  * context.
  */
-static int kvm_handle_lasx_disabled(struct kvm_vcpu *vcpu)
+static int kvm_handle_lasx_disabled(struct kvm_vcpu *vcpu, int ecode)
 {
 	if (kvm_own_lasx(vcpu))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
@@ -810,7 +810,7 @@ static int kvm_handle_lasx_disabled(struct kvm_vcpu *vcpu)
 	return RESUME_GUEST;
 }
 
-static int kvm_handle_lbt_disabled(struct kvm_vcpu *vcpu)
+static int kvm_handle_lbt_disabled(struct kvm_vcpu *vcpu, int ecode)
 {
 	if (kvm_own_lbt(vcpu))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
@@ -872,7 +872,7 @@ static void kvm_handle_service(struct kvm_vcpu *vcpu)
 	kvm_write_reg(vcpu, LOONGARCH_GPR_A0, ret);
 }
 
-static int kvm_handle_hypercall(struct kvm_vcpu *vcpu)
+static int kvm_handle_hypercall(struct kvm_vcpu *vcpu, int ecode)
 {
 	int ret;
 	larch_inst inst;
@@ -932,16 +932,14 @@ static int kvm_handle_hypercall(struct kvm_vcpu *vcpu)
 /*
  * LoongArch KVM callback handling for unimplemented guest exiting
  */
-static int kvm_fault_ni(struct kvm_vcpu *vcpu)
+static int kvm_fault_ni(struct kvm_vcpu *vcpu, int ecode)
 {
-	unsigned int ecode, inst;
-	unsigned long estat, badv;
+	unsigned int inst;
+	unsigned long badv;
 
 	/* Fetch the instruction */
 	inst = vcpu->arch.badi;
 	badv = vcpu->arch.badv;
-	estat = vcpu->arch.host_estat;
-	ecode = (estat & CSR_ESTAT_EXC) >> CSR_ESTAT_EXC_SHIFT;
 	kvm_err("ECode: %d PC=%#lx Inst=0x%08x BadVaddr=%#lx ESTAT=%#lx\n",
 			ecode, vcpu->arch.pc, inst, badv, read_gcsr_estat());
 	kvm_arch_vcpu_dump_regs(vcpu);
@@ -966,5 +964,5 @@ static exit_handle_fn kvm_fault_tables[EXCCODE_INT_START] = {
 
 int kvm_handle_fault(struct kvm_vcpu *vcpu, int fault)
 {
-	return kvm_fault_tables[fault](vcpu);
+	return kvm_fault_tables[fault](vcpu, fault);
 }
