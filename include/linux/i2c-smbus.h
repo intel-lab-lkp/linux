@@ -44,9 +44,9 @@ static inline void i2c_free_slave_host_notify_device(struct i2c_client *client)
 #endif
 
 #if IS_ENABLED(CONFIG_I2C_SMBUS) && IS_ENABLED(CONFIG_DMI)
-void i2c_register_spd(struct i2c_adapter *adap);
+void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled);
 #else
-static inline void i2c_register_spd(struct i2c_adapter *adap) { }
+static inline void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled) { }
 #endif
 
 #endif /* _LINUX_I2C_SMBUS_H */

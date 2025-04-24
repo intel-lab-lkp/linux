@@ -372,7 +372,7 @@ EXPORT_SYMBOL_GPL(i2c_free_slave_host_notify_device);
  *  - Only works on systems with 1 to 8 memory slots
  */
 #if IS_ENABLED(CONFIG_DMI)
-void i2c_register_spd(struct i2c_adapter *adap)
+void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled)
 {
 	int n, slot_count = 0, dimm_count = 0;
 	u16 handle;
