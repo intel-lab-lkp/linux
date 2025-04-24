@@ -41,13 +41,11 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         deps,
         cfg=[],
         is_workspace_member=True,
-        is_proc_macro=False,
     ):
-        crate = {
+        return {
             "display_name": display_name,
             "root_module": str(root_module),
             "is_workspace_member": is_workspace_member,
-            "is_proc_macro": is_proc_macro,
             "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
             "cfg": cfg,
             "edition": "2021",
@@ -55,13 +53,6 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
                 "RUST_MODFILE": "This is only for rust-analyzer"
             }
         }
-        if is_proc_macro:
-            proc_macro_dylib_name = subprocess.check_output(
-                [os.environ["RUSTC"], "--print", "file-names", "--crate-name", display_name, "--crate-type", "proc-macro", "-"],
-                stdin=subprocess.DEVNULL,
-            ).decode('utf-8').strip()
-            crate["proc_macro_dylib_path"] = f"{objtree}/rust/{proc_macro_dylib_name}"
-        return crate
 
     def register_crate(crate):
         crates_indexes[crate["display_name"]] = len(crates)
@@ -73,13 +64,47 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         deps,
         cfg=[],
         is_workspace_member=True,
-        is_proc_macro=False,
     ):
         register_crate(
             build_crate(
-                display_name, root_module, deps, cfg, is_workspace_member, is_proc_macro
+                display_name,
+                root_module,
+                deps,
+                cfg,
+                is_workspace_member,
             )
         )
+
+    def append_proc_macro_crate(
+        display_name,
+        root_module,
+        deps,
+        cfg=[],
+    ):
+        crate = build_crate(display_name, root_module, deps, cfg)
+        proc_macro_dylib_name = (
+            subprocess.check_output(
+                [
+                    os.environ["RUSTC"],
+                    "--print",
+                    "file-names",
+                    "--crate-name",
+                    display_name,
+                    "--crate-type",
+                    "proc-macro",
+                    "-",
+                ],
+                stdin=subprocess.DEVNULL,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+        proc_macro_crate = {
+            **crate,
+            "is_proc_macro": True,
+            "proc_macro_dylib_path": f"{objtree}/rust/{proc_macro_dylib_name}",
+        }
+        register_crate(proc_macro_crate)
 
     def append_sysroot_crate(
         display_name,
@@ -108,11 +133,10 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         [],
     )
 
-    append_crate(
+    append_proc_macro_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
         ["std", "proc_macro"],
-        is_proc_macro=True,
     )
 
     append_crate(
@@ -121,12 +145,11 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         ["core", "compiler_builtins"],
     )
 
-    append_crate(
+    append_proc_macro_crate(
         "pin_init_internal",
         srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
         [],
         cfg=["kernel"],
-        is_proc_macro=True,
     )
 
     append_crate(
