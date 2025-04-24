@@ -131,6 +131,11 @@ enum pm_qos_req_action {
 	PM_QOS_REMOVE_REQ	/* Remove an existing request */
 };
 
+struct cpu_affinity_qos_req {
+	struct list_head list;
+	struct dev_pm_qos_request req;
+};
+
 static inline int dev_pm_qos_request_active(struct dev_pm_qos_request *req)
 {
 	return req->dev != NULL;
@@ -316,4 +321,34 @@ int freq_qos_remove_notifier(struct freq_constraints *qos,
 			     enum freq_qos_req_type type,
 			     struct notifier_block *notifier);
 
+#endif
+
+#if defined(CONFIG_CPU_IDLE) && defined(CONFIG_PM)
+int cpu_latency_qos_affinity_add(struct cpu_affinity_qos_req *pm_req,
+			const cpumask_t *affinity_mask, s32 latency_value);
+int cpu_latency_qos_affinity_update(struct cpu_affinity_qos_req *pm_req,
+			s32 new_value);
+int cpu_latency_qos_affinity_remove(struct cpu_affinity_qos_req *pm_req);
+int cpu_latency_qos_affinity_release(struct list_head *pm_reqs);
+void wakeup_qos_affinity_idle_cpu(int cpu);
+#else
+int cpu_latency_qos_affinity_add(struct cpu_affinity_qos_req *pm_req,
+			const cpumask_t *affinity_mask, s32 latency_value)
+{
+	return 0;
+}
+int cpu_latency_qos_affinity_update(struct cpu_affinity_qos_req *pm_req,
+			s32 new_value)
+{
+	return 0;
+}
+int cpu_latency_qos_affinity_remove(struct cpu_affinity_qos_req *pm_req)
+{
+	return 0;
+}
+int cpu_latency_qos_affinity_release(struct list_head *pm_reqs)
+{
+	return 0;
+}
+void wakeup_qos_affinity_idle_cpu(int cpu) {}
 #endif
