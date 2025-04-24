@@ -2049,10 +2049,11 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 				drm_dbg_kms(aux->drm_dev,
 					    "%s: I2C partially ack (result=%d, size=%zu)\n",
 					    aux->name, ret, msg->size);
-				if (!(msg->request & DP_AUX_I2C_READ)) {
-					usleep_range(AUX_RETRY_INTERVAL, AUX_RETRY_INTERVAL + 100);
+				usleep_range(AUX_RETRY_INTERVAL, AUX_RETRY_INTERVAL + 100);
+				if (msg->request & DP_AUX_I2C_READ)
+					msg->size -= ret;
+				else
 					drm_dp_i2c_msg_write_status_update(msg);
-				}
 
 				continue;
 			}
