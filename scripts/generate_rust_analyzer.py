@@ -60,17 +60,14 @@ def generate_crates(
             line = line.replace("\n", "")
             cfg.append(line)
 
-    # Now fill the crates list -- dependencies need to come first.
-    #
-    # Avoid O(n^2) iterations by keeping a map of indexes.
+    # Now fill the crates list.
     crates: List[Crate] = []
-    crates_indexes: Dict[str, int] = {}
 
     def build_crate(
         display_name: str,
         root_module: pathlib.Path,
         *,
-        deps: List[str],
+        deps: List[Dependency],
         cfg: List[str],
         is_workspace_member: bool,
     ) -> Crate:
@@ -78,7 +75,7 @@ def generate_crates(
             "display_name": display_name,
             "root_module": str(root_module),
             "is_workspace_member": is_workspace_member,
-            "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
+            "deps": deps,
             "cfg": cfg,
             "edition": "2021",
             "env": {
@@ -86,18 +83,19 @@ def generate_crates(
             },
         }
 
-    def register_crate(crate: Crate) -> None:
-        crates_indexes[crate["display_name"]] = len(crates)
+    def register_crate(crate: Crate) -> Dependency:
+        index = len(crates)
         crates.append(crate)
+        return {"crate": index, "name": crate["display_name"]}
 
     def append_crate(
         display_name: str,
         root_module: pathlib.Path,
         *,
-        deps: List[str],
+        deps: List[Dependency],
         cfg: List[str],
-    ) -> None:
-        register_crate(
+    ) -> Dependency:
+        return register_crate(
             build_crate(
                 display_name,
                 root_module,
@@ -111,9 +109,9 @@ def generate_crates(
         display_name: str,
         root_module: pathlib.Path,
         *,
-        deps: List[str],
+        deps: List[Dependency],
         cfg: List[str],
-    ) -> None:
+    ) -> Dependency:
         crate = build_crate(
             display_name,
             root_module,
@@ -143,15 +141,15 @@ def generate_crates(
             "is_proc_macro": True,
             "proc_macro_dylib_path": str(objtree / "rust" / proc_macro_dylib_name),
         }
-        register_crate(proc_macro_crate)
+        return register_crate(proc_macro_crate)
 
     def append_sysroot_crate(
         display_name: str,
         *,
-        deps: List[str],
+        deps: List[Dependency],
         cfg: List[str],
-    ) -> None:
-        register_crate(
+    ) -> Dependency:
+        return register_crate(
             build_crate(
                 display_name,
                 sysroot_src / display_name / "src" / "lib.rs",
@@ -164,59 +162,59 @@ def generate_crates(
     # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
     # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
     # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
-    append_sysroot_crate("core", deps=[], cfg=crates_cfgs["core"])
-    append_sysroot_crate("alloc", deps=["core"], cfg=[])
-    append_sysroot_crate("std", deps=["alloc", "core"], cfg=[])
-    append_sysroot_crate("proc_macro", deps=["core", "std"], cfg=[])
+    core = append_sysroot_crate("core", deps=[], cfg=crates_cfgs["core"])
+    alloc = append_sysroot_crate("alloc", deps=[core], cfg=[])
+    std = append_sysroot_crate("std", deps=[alloc, core], cfg=[])
+    proc_macro = append_sysroot_crate("proc_macro", deps=[core, std], cfg=[])
 
-    append_crate(
+    compiler_builtins = append_crate(
         "compiler_builtins",
         srctree / "rust" / "compiler_builtins.rs",
         deps=[],
         cfg=[],
     )
 
-    append_proc_macro_crate(
+    macros = append_proc_macro_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        deps=["std", "proc_macro"],
+        deps=[std, proc_macro],
         cfg=[],
     )
 
-    append_crate(
+    build_error = append_crate(
         "build_error",
         srctree / "rust" / "build_error.rs",
-        deps=["core", "compiler_builtins"],
+        deps=[core, compiler_builtins],
         cfg=[],
     )
 
-    append_proc_macro_crate(
+    pin_init_internal = append_proc_macro_crate(
         "pin_init_internal",
         srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
         deps=[],
         cfg=["kernel"],
     )
 
-    append_crate(
+    pin_init = append_crate(
         "pin_init",
         srctree / "rust" / "pin-init" / "src" / "lib.rs",
-        deps=["core", "pin_init_internal", "macros"],
+        deps=[core, pin_init_internal, macros],
         cfg=["kernel"],
     )
 
-    append_crate(
+    ffi = append_crate(
         "ffi",
         srctree / "rust" / "ffi.rs",
-        deps=["core", "compiler_builtins"],
+        deps=[core, compiler_builtins],
         cfg=[],
     )
 
     def append_crate_with_generated(
         display_name: str,
         *,
-        deps: List[str],
+        deps: List[Dependency],
         cfg: List[str],
-    ) -> None:
+    ) -> Dependency:
         crate = build_crate(
             display_name,
             srctree / "rust" / display_name / "lib.rs",
@@ -235,20 +233,20 @@ def generate_crates(
                 "exclude_dirs": [],
             }
         }
-        register_crate(crate_with_generated)
+        return register_crate(crate_with_generated)
 
-    append_crate_with_generated("bindings", deps=["core", "ffi"], cfg=[])
-    append_crate_with_generated("uapi", deps=["core", "ffi"], cfg=[])
-    append_crate_with_generated(
+    bindings = append_crate_with_generated("bindings", deps=[core, ffi], cfg=[])
+    uapi = append_crate_with_generated("uapi", deps=[core, ffi], cfg=[])
+    kernel = append_crate_with_generated(
         "kernel",
         deps=[
-            "core",
-            "macros",
-            "build_error",
-            "pin_init",
-            "ffi",
-            "bindings",
-            "uapi",
+            core,
+            macros,
+            build_error,
+            pin_init,
+            ffi,
+            bindings,
+            uapi,
         ],
         cfg=[],
     )
@@ -279,7 +277,7 @@ def generate_crates(
             append_crate(
                 name,
                 path,
-                deps=["core", "kernel"],
+                deps=[core, kernel],
                 cfg=cfg,
             )
 
