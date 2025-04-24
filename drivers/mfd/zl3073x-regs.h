@@ -71,6 +71,23 @@
 #define ZL_REG_FW_VER				ZL_REG(0, 0x05, 2)
 #define ZL_REG_CUSTOM_CONFIG_VER		ZL_REG(0, 0x07, 4)
 
+/***********************************
+ * Register Page 9, Synth and Output
+ ***********************************/
+
+#define ZL_REG_SYNTH_CTRL(_idx)						\
+	ZL_REG_IDX(_idx, 9, 0x00, 1, ZL3073X_NUM_SYNTHS, 1)
+#define ZL_SYNTH_CTRL_EN			BIT(0)
+#define ZL_SYNTH_CTRL_DPLL_SEL			GENMASK(6, 4)
+
+#define ZL_REG_OUTPUT_CTRL(_idx)					\
+	ZL_REG_IDX(_idx, 9, 0x28, 1, ZL3073X_NUM_OUTPUTS, 1)
+#define ZL_OUTPUT_CTRL_EN			BIT(0)
+#define ZL_OUTPUT_CTRL_STOP			BIT(1)
+#define ZL_OUTPUT_CTRL_STOP_HIGH		BIT(2)
+#define ZL_OUTPUT_CTRL_STOP_HZ			BIT(3)
+#define ZL_OUTPUT_CTRL_SYNTH_SEL		GENMASK(6, 4)
+
 /*******************************
  * Register Page 10, Ref Mailbox
  *******************************/
