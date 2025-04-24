@@ -1517,7 +1517,8 @@ int genphy_c45_ethtool_get_eee(struct phy_device *phydev,
 	data->eee_active = phydev->eee_active;
 	linkmode_andnot(data->supported, phydev->supported_eee,
 			phydev->eee_disabled_modes);
-	linkmode_copy(data->advertised, phydev->advertising_eee);
+	if (phydev->eee_cfg.eee_enabled)
+		linkmode_copy(data->advertised, phydev->advertising_eee);
 	return 0;
 }
 EXPORT_SYMBOL(genphy_c45_ethtool_get_eee);
