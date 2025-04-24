@@ -1868,6 +1868,12 @@ static void drm_dp_i2c_msg_write_status_update(struct drm_dp_aux_msg *msg)
 		msg->request &= DP_AUX_I2C_MOT;
 		msg->request |= DP_AUX_I2C_WRITE_STATUS_UPDATE;
 	}
+
+	/*
+	 * Address only transaction
+	 */
+	msg->buffer = NULL;
+	msg->size = 0;
 }
 
 #define AUX_PRECHARGE_LEN 10 /* 10 to 16 */
@@ -2034,10 +2040,22 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		case DP_AUX_I2C_REPLY_ACK:
 			/*
 			 * Both native ACK and I2C ACK replies received. We
-			 * can assume the transfer was successful.
+			 * can't assume the transfer was completed. Both I2C
+			 * WRITE/READ request may get I2C ack reply with partially
+			 * completion. We have to continue to poll for the
+			 * completion of the request.
 			 */
-			if (ret != msg->size)
-				drm_dp_i2c_msg_write_status_update(msg);
+			if (ret != msg->size) {
+				drm_dbg_kms(aux->drm_dev,
+					    "%s: I2C partially ack (result=%d, size=%zu)\n",
+					    aux->name, ret, msg->size);
+				if (!(msg->request & DP_AUX_I2C_READ)) {
+					usleep_range(AUX_RETRY_INTERVAL, AUX_RETRY_INTERVAL + 100);
+					drm_dp_i2c_msg_write_status_update(msg);
+				}
+
+				continue;
+			}
 			return ret;
 
 		case DP_AUX_I2C_REPLY_NACK:
@@ -2056,7 +2074,8 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 			if (defer_i2c < 7)
 				defer_i2c++;
 			usleep_range(AUX_RETRY_INTERVAL, AUX_RETRY_INTERVAL + 100);
-			drm_dp_i2c_msg_write_status_update(msg);
+			if (!(msg->request & DP_AUX_I2C_READ))
+				drm_dp_i2c_msg_write_status_update(msg);
 
 			continue;
 
