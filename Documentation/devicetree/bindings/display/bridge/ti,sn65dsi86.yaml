@@ -34,6 +34,12 @@ properties:
       Set if the HPD line on the bridge isn't hooked up to anything or is
       otherwise unusable.
 
+  keep-hpd:
+    type: boolean
+    description:
+      HPD is disabled in the bridge by default. Set it if HPD line makes
+      sense and is used.
+
   vccio-supply:
     description: A 1.8V supply that powers the digital IOs.
 
