@@ -15,7 +15,6 @@
 #include "../cdx.h"
 #include "cdx_controller.h"
 #include "mcdi_functions.h"
-#include "mcdi.h"
 
 static struct rpmsg_device_id cdx_rpmsg_id_table[] = {
 	{ .name = "mcdi_ipc" },

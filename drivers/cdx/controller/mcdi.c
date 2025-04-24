@@ -23,9 +23,7 @@
 #include <linux/log2.h>
 #include <linux/net_tstamp.h>
 #include <linux/wait.h>
-
-#include "bitfield.h"
-#include "mcdi.h"
+#include "linux/mcdi.h"
 
 static void cdx_mcdi_cancel_cmd(struct cdx_mcdi *cdx, struct cdx_mcdi_cmd *cmd);
 static void cdx_mcdi_wait_for_cleanup(struct cdx_mcdi *cdx);

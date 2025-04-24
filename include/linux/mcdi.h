@@ -11,8 +11,8 @@
 #include <linux/kref.h>
 #include <linux/rpmsg.h>
 
-#include "bitfield.h"
-#include "mc_cdx_pcol.h"
+#include "linux/mc_bitfield.h"
+#include "linux/mc_cdx_pcol.h"
 
 #ifdef DEBUG
 #define CDX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
