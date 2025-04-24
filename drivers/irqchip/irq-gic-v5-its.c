@@ -786,9 +786,8 @@ static struct gicv5_its_dev *gicv5_its_find_device(struct gicv5_its_chip_data *i
 	return dev ? dev : ERR_PTR(-ENODEV);
 }
 
-static struct gicv5_its_dev *gicv5_its_alloc_device(
-				struct gicv5_its_chip_data *its, int nvec,
-				u32 dev_id)
+struct gicv5_its_dev *gicv5_its_alloc_device(struct gicv5_its_chip_data *its,
+					     int nvec, u32 dev_id, bool is_iwb)
 {
 	struct gicv5_its_dev *its_dev;
 	int ret;
@@ -815,6 +814,7 @@ static struct gicv5_its_dev *gicv5_its_alloc_device(
 	its_dev->device_id = dev_id;
 	its_dev->num_events = nvec;
 	its_dev->num_mapped_events = 0;
+	its_dev->is_iwb = is_iwb;
 
 	ret = gicv5_its_device_register(its, its_dev);
 	if (ret) {
@@ -827,9 +827,11 @@ static struct gicv5_its_dev *gicv5_its_alloc_device(
 
 	/*
 	 * This is the first time we have seen this device. Hence, it is not
-	 * shared.
+	 * shared, unless it is an IWB that is a shared ITS device by
+	 * definition, its eventids are hardcoded and never change - we allocate
+	 * it once for all and never free it.
 	 */
-	its_dev->shared = false;
+	its_dev->shared = is_iwb;
 
 	its_dev->its_node = its;
 
@@ -859,7 +861,7 @@ static int gicv5_its_msi_prepare(struct irq_domain *domain, struct device *dev,
 
 	guard(mutex)(&its->dev_alloc_lock);
 
-	its_dev = gicv5_its_alloc_device(its, nvec, dev_id);
+	its_dev = gicv5_its_alloc_device(its, nvec, dev_id, false);
 	if (IS_ERR(its_dev))
 		return PTR_ERR(its_dev);
 
@@ -937,28 +939,55 @@ static void gicv5_its_free_event(struct gicv5_its_dev *its_dev, u16 event_id)
 }
 
 static int gicv5_its_alloc_eventid(struct gicv5_its_dev *its_dev,
+				   msi_alloc_info_t *info,
 				   unsigned int nr_irqs, u32 *eventid)
 {
-	int ret;
+	int event_id_base;
 
-	ret = bitmap_find_free_region(its_dev->event_map,
-				      its_dev->num_events,
-				      get_count_order(nr_irqs));
+	if (!its_dev->is_iwb) {
 
-	if (ret < 0)
-		return ret;
+		event_id_base = bitmap_find_free_region(
+			its_dev->event_map, its_dev->num_events,
+			get_count_order(nr_irqs));
+		if (event_id_base < 0)
+			return event_id_base;
+	} else {
+		/*
+		 * We want to have a fixed EventID mapped for the IWB.
+		 */
+		if (WARN(nr_irqs != 1, "IWB requesting nr_irqs != 1\n"))
+			return -EINVAL;
 
-	*eventid = ret;
+		event_id_base = info->scratchpad[1].ul;
+
+		if (event_id_base >= its_dev->num_events) {
+			pr_err("EventID ouside of ITT range; cannot allocate an ITT entry!\n");
+
+			return -EINVAL;
+		}
+
+		if (test_and_set_bit(event_id_base, its_dev->event_map)) {
+			pr_warn("Can't reserve event_id bitmap\n");
+			return -EINVAL;
+
+		}
+	}
+
+	*eventid = event_id_base;
 
 	return 0;
+
 }
 
 static void gicv5_its_free_eventid(struct gicv5_its_dev *its_dev,
 				   u32 event_id_base,
 				   unsigned int nr_irqs)
 {
-	bitmap_release_region(its_dev->event_map, event_id_base,
+	if (!its_dev->is_iwb)
+		bitmap_release_region(its_dev->event_map, event_id_base,
 				      get_count_order(nr_irqs));
+	else
+		clear_bit(event_id_base, its_dev->event_map);
 }
 
 static int gicv5_its_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
@@ -986,7 +1015,7 @@ static int gicv5_its_irq_domain_alloc(struct irq_domain *domain, unsigned int vi
 		return PTR_ERR(its_dev);
 	}
 
-	ret = gicv5_its_alloc_eventid(its_dev, nr_irqs, &event_id_base);
+	ret = gicv5_its_alloc_eventid(its_dev, info, nr_irqs, &event_id_base);
 	if (ret) {
 		mutex_unlock(&its->dev_alloc_lock);
 		return ret;
@@ -994,9 +1023,12 @@ static int gicv5_its_irq_domain_alloc(struct irq_domain *domain, unsigned int vi
 
 	mutex_unlock(&its->dev_alloc_lock);
 
-	ret = iommu_dma_prepare_msi(info->desc, its->its_trans_phys_base);
-	if (ret)
-		goto out_eventid;
+	/* IWBs are never upstream an IOMMU */
+	if (!its_dev->is_iwb) {
+		ret = iommu_dma_prepare_msi(info->desc, its->its_trans_phys_base);
+		if (ret)
+			goto out_eventid;
+	}
 
 	for (i = 0; i < nr_irqs; i++) {
 		lpi = gicv5_alloc_lpi();

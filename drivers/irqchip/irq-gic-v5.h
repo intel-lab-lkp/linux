@@ -238,6 +238,20 @@
 #define GICV5_ITS_HWIRQ_DEVICE_ID		GENMASK_ULL(31, 0)
 #define GICV5_ITS_HWIRQ_EVENT_ID		GENMASK_ULL(63, 32)
 
+#define GICV5_IWB_IDR0				0x0000
+#define GICV5_IWB_CR0				0x0080
+#define GICV5_IWB_WENABLE_STATUSR		0x00c0
+#define GICV5_IWB_WENABLER			0x2000
+#define GICV5_IWB_WTMR				0x4000
+
+#define GICV5_IWB_IDR0_INT_DOMS			GENMASK(14, 11)
+#define GICV5_IWB_IDR0_IW_RANGE			GENMASK(10, 0)
+
+#define GICV5_IWB_CR0_IDLE			BIT(1)
+#define GICV5_IWB_CR0_IWBEN			BIT(0)
+
+#define GICV5_IWB_WENABLE_STATUSR_IDLE		BIT(0)
+
 struct gicv5_chip_data {
 	struct fwnode_handle	*fwnode;
 	struct irq_domain	*ppi_domain;
@@ -348,6 +362,7 @@ struct gicv5_its_dev {
 	u32				num_events;
 	u32				num_mapped_events;
 	bool				shared;
+	bool				is_iwb;
 };
 
 void gicv5_init_lpis(u32 max);
@@ -357,4 +372,17 @@ int gicv5_alloc_lpi(void);
 void gicv5_free_lpi(u32 lpi);
 
 void __init gicv5_its_of_probe(struct device_node *parent);
+struct gicv5_its_dev *gicv5_its_alloc_device(struct gicv5_its_chip_data *its,
+					     int nvec, u32 dev_id, bool is_iwb);
+
+struct gicv5_iwb_chip_data {
+	void __iomem		*iwb_base;
+	struct irq_domain	*domain;
+	u64			flags;
+	u32			device_id;
+	u16			nr_regs;
+};
+
+void gicv5_iwb_of_probe(void);
+
 #endif
