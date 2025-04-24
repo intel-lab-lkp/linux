@@ -16,6 +16,7 @@
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
+#include <drm/drm_of.h>
 #include <drm/drm_panel.h>
 
 #include <video/mipi_display.h>
@@ -1263,6 +1264,21 @@ static int ili9881c_send_cmd_data(struct ili9881c *ctx, u8 cmd, u8 data)
 	return 0;
 }
 
+static int ili9881c_set_lanes_cfg(struct ili9881c *ctx)
+{
+	int ret;
+
+	if (ctx->dsi->lanes != 2)
+		/* Nothing to do */
+		return 0;
+
+	ret = ili9881c_switch_page(ctx, 1);
+	if (ret)
+		return ret;
+
+	return ili9881c_send_cmd_data(ctx, 0xB7, 0x3);
+}
+
 static int ili9881c_prepare(struct drm_panel *panel)
 {
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
@@ -1294,6 +1310,10 @@ static int ili9881c_prepare(struct drm_panel *panel)
 		if (ret)
 			return ret;
 	}
+
+	ret = ili9881c_set_lanes_cfg(ctx);
+	if (ret)
+		return ret;
 
 	ret = ili9881c_switch_page(ctx, 0);
 	if (ret)
@@ -1503,8 +1523,9 @@ static const struct drm_panel_funcs ili9881c_funcs = {
 
 static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 {
+	struct device_node *endpoint;
 	struct ili9881c *ctx;
-	int ret;
+	int ret, lanes;
 
 	ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -1545,11 +1566,19 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return ret;
 
+	endpoint = of_graph_get_endpoint_by_regs(dsi->dev.of_node, -1, -1);
+	lanes = drm_of_get_data_lanes_count(endpoint, 2, 4);
+	of_node_put(endpoint);
+	if (lanes == -EINVAL)
+		lanes = 4;
+	else if (lanes < 0)
+		return lanes;
+
 	drm_panel_add(&ctx->panel);
 
 	dsi->mode_flags = ctx->desc->mode_flags;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->lanes = 4;
+	dsi->lanes = lanes;
 
 	return mipi_dsi_attach(dsi);
 }
