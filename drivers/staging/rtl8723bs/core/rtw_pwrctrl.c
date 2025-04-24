@@ -40,9 +40,8 @@ void ips_enter(struct adapter *padapter)
 
 	hal_btcoex_IpsNotify(padapter, pwrpriv->ips_mode_req);
 
-	mutex_lock(&pwrpriv->lock);
-	_ips_enter(padapter);
-	mutex_unlock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock)
+		_ips_enter(padapter);
 }
 
 int _ips_leave(struct adapter *padapter)
@@ -72,9 +71,8 @@ int ips_leave(struct adapter *padapter)
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 	int ret;
 
-	mutex_lock(&pwrpriv->lock);
-	ret = _ips_leave(padapter);
-	mutex_unlock(&pwrpriv->lock);
+	scope_guard(mutex, &pwrpriv->lock)
+		ret = _ips_leave(padapter);
 
 	if (ret == _SUCCESS)
 		hal_btcoex_IpsNotify(padapter, IPS_NONE);
@@ -144,9 +142,8 @@ void rtw_ps_processor(struct adapter *padapter)
 	struct debug_priv *pdbgpriv = &psdpriv->drv_dbg;
 	u32 ps_deny = 0;
 
-	mutex_lock(&adapter_to_pwrctl(padapter)->lock);
-	ps_deny = rtw_ps_deny_get(padapter);
-	mutex_unlock(&adapter_to_pwrctl(padapter)->lock);
+	scoped_guard(mutex, &adapter_to_pwrctl(padapter)->lock)
+		ps_deny = rtw_ps_deny_get(padapter);
 	if (ps_deny != 0)
 		goto exit;
 
@@ -348,53 +345,51 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode, u8 smart_ps, u8 bcn_a
 			return;
 
 
-	mutex_lock(&pwrpriv->lock);
-
+	scoped_guard(mutex, &pwrpriv->lock) {
 	/* if (pwrpriv->pwr_mode == PS_MODE_ACTIVE) */
-	if (ps_mode == PS_MODE_ACTIVE) {
-		if (!(hal_btcoex_IsBtControlLps(padapter))
+		if (ps_mode == PS_MODE_ACTIVE) {
+			if (!(hal_btcoex_IsBtControlLps(padapter))
 				|| (hal_btcoex_IsBtControlLps(padapter)
 					&& !(hal_btcoex_IsLpsOn(padapter)))) {
-			pwrpriv->pwr_mode = ps_mode;
-			rtw_set_rpwm(padapter, PS_STATE_S4);
+				pwrpriv->pwr_mode = ps_mode;
+				rtw_set_rpwm(padapter, PS_STATE_S4);
 
-			rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
-			pwrpriv->fw_current_in_ps_mode = false;
+				rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
+				pwrpriv->fw_current_in_ps_mode = false;
 
-			hal_btcoex_LpsNotify(padapter, ps_mode);
-		}
-	} else {
-		if ((PS_RDY_CHECK(padapter) && check_fwstate(&padapter->mlmepriv, WIFI_ASOC_STATE)) ||
-		    ((hal_btcoex_IsBtControlLps(padapter)) && (hal_btcoex_IsLpsOn(padapter)))
-			) {
-			u8 pslv;
-
-			hal_btcoex_LpsNotify(padapter, ps_mode);
-
-			pwrpriv->fw_current_in_ps_mode = true;
-			pwrpriv->pwr_mode = ps_mode;
-			pwrpriv->smart_ps = smart_ps;
-			pwrpriv->bcn_ant_mode = bcn_ant_mode;
-			rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
-
-			pslv = PS_STATE_S2;
-			if (pwrpriv->alives == 0)
-				pslv = PS_STATE_S0;
-
-			if (!(hal_btcoex_IsBtDisabled(padapter)) &&
-			    (hal_btcoex_IsBtControlLps(padapter))) {
-				u8 val8;
-
-				val8 = hal_btcoex_LpsVal(padapter);
-				if (val8 & BIT(4))
-					pslv = PS_STATE_S2;
+				hal_btcoex_LpsNotify(padapter, ps_mode);
 			}
+		} else {
+			if ((PS_RDY_CHECK(padapter) && check_fwstate(&padapter->mlmepriv, WIFI_ASOC_STATE)) ||
+			((hal_btcoex_IsBtControlLps(padapter)) && (hal_btcoex_IsLpsOn(padapter)))
+				) {
+				u8 pslv;
 
-			rtw_set_rpwm(padapter, pslv);
+				hal_btcoex_LpsNotify(padapter, ps_mode);
+
+				pwrpriv->fw_current_in_ps_mode = true;
+				pwrpriv->pwr_mode = ps_mode;
+				pwrpriv->smart_ps = smart_ps;
+				pwrpriv->bcn_ant_mode = bcn_ant_mode;
+				rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
+
+				pslv = PS_STATE_S2;
+				if (pwrpriv->alives == 0)
+					pslv = PS_STATE_S0;
+
+				if (!(hal_btcoex_IsBtDisabled(padapter)) &&
+				(hal_btcoex_IsBtControlLps(padapter))) {
+					u8 val8;
+
+					val8 = hal_btcoex_LpsVal(padapter);
+					if (val8 & BIT(4))
+						pslv = PS_STATE_S2;
+				}
+
+				rtw_set_rpwm(padapter, pslv);
+			}
 		}
 	}
-
-	mutex_unlock(&pwrpriv->lock);
 }
 
 /*
@@ -509,11 +504,8 @@ void LeaveAllPowerSaveModeDirect(struct adapter *Adapter)
 		if (pwrpriv->pwr_mode == PS_MODE_ACTIVE)
 			return;
 
-		mutex_lock(&pwrpriv->lock);
-
-		rtw_set_rpwm(Adapter, PS_STATE_S4);
-
-		mutex_unlock(&pwrpriv->lock);
+		scoped_guard(mutex, &pwrpriv->lock)
+			rtw_set_rpwm(Adapter, PS_STATE_S4);
 
 		rtw_lps_ctrl_wk_cmd(pri_padapter, LPS_CTRL_LEAVE, 0);
 	} else {
@@ -567,14 +559,12 @@ void LPS_Leave_check(struct adapter *padapter)
 	cond_resched();
 
 	while (1) {
-		mutex_lock(&pwrpriv->lock);
-
-		if (padapter->bSurpriseRemoved ||
-		    !(padapter->hw_init_completed) ||
-		    (pwrpriv->pwr_mode == PS_MODE_ACTIVE))
-			bReady = true;
-
-		mutex_unlock(&pwrpriv->lock);
+		scoped_guard(mutex, &pwrpriv->lock) {
+			if (padapter->bSurpriseRemoved ||
+			    !(padapter->hw_init_completed) ||
+			    (pwrpriv->pwr_mode == PS_MODE_ACTIVE))
+				bReady = true;
+		}
 
 		if (bReady)
 			break;
@@ -599,24 +589,21 @@ void cpwm_int_hdl(struct adapter *padapter, struct reportpwrstate_parm *preportp
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock) {
+		if (pwrpriv->rpwm < PS_STATE_S2)
+			return;
 
-	if (pwrpriv->rpwm < PS_STATE_S2)
-		goto exit;
+		pwrpriv->cpwm = PS_STATE(preportpwrstate->state);
+		pwrpriv->cpwm_tog = preportpwrstate->state & PS_TOGGLE;
 
-	pwrpriv->cpwm = PS_STATE(preportpwrstate->state);
-	pwrpriv->cpwm_tog = preportpwrstate->state & PS_TOGGLE;
+		if (pwrpriv->cpwm >= PS_STATE_S2) {
+			if (pwrpriv->alives & CMD_ALIVE)
+				complete(&padapter->cmdpriv.cmd_queue_comp);
 
-	if (pwrpriv->cpwm >= PS_STATE_S2) {
-		if (pwrpriv->alives & CMD_ALIVE)
-			complete(&padapter->cmdpriv.cmd_queue_comp);
-
-		if (pwrpriv->alives & XMIT_ALIVE)
-			complete(&padapter->xmitpriv.xmit_comp);
+			if (pwrpriv->alives & XMIT_ALIVE)
+				complete(&padapter->xmitpriv.xmit_comp);
+		}
 	}
-
-exit:
-	mutex_unlock(&pwrpriv->lock);
 
 }
 
@@ -642,11 +629,10 @@ static void rpwmtimeout_workitem_callback(struct work_struct *work)
 	dvobj = pwrctl_to_dvobj(pwrpriv);
 	padapter = dvobj->if1;
 
-	mutex_lock(&pwrpriv->lock);
-	if ((pwrpriv->rpwm == pwrpriv->cpwm) || (pwrpriv->cpwm >= PS_STATE_S2))
-		goto exit;
-
-	mutex_unlock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock) {
+		if ((pwrpriv->rpwm == pwrpriv->cpwm) || (pwrpriv->cpwm >= PS_STATE_S2))
+			return;
+	}
 
 	if (rtw_read8(padapter, 0x100) != 0xEA) {
 		struct reportpwrstate_parm report;
@@ -657,17 +643,14 @@ static void rpwmtimeout_workitem_callback(struct work_struct *work)
 		return;
 	}
 
-	mutex_lock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock) {
+		if ((pwrpriv->rpwm == pwrpriv->cpwm) || (pwrpriv->cpwm >= PS_STATE_S2))
+			return;
 
-	if ((pwrpriv->rpwm == pwrpriv->cpwm) || (pwrpriv->cpwm >= PS_STATE_S2))
-		goto exit;
-
-	pwrpriv->brpwmtimeout = true;
-	rtw_set_rpwm(padapter, pwrpriv->rpwm);
-	pwrpriv->brpwmtimeout = false;
-
-exit:
-	mutex_unlock(&pwrpriv->lock);
+		pwrpriv->brpwmtimeout = true;
+		rtw_set_rpwm(padapter, pwrpriv->rpwm);
+		pwrpriv->brpwmtimeout = false;
+	}
 }
 
 /*
@@ -719,20 +702,18 @@ s32 rtw_register_task_alive(struct adapter *padapter, u32 task)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S2;
 
-	mutex_lock(&pwrctrl->lock);
+	scoped_guard(mutex, &pwrctrl->lock) {
+		register_task_alive(pwrctrl, task);
 
-	register_task_alive(pwrctrl, task);
-
-	if (pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm < pslv) {
-			if (pwrctrl->cpwm < PS_STATE_S2)
-				res = _FAIL;
-			if (pwrctrl->rpwm < pslv)
-				rtw_set_rpwm(padapter, pslv);
+		if (pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm < pslv) {
+				if (pwrctrl->cpwm < PS_STATE_S2)
+					res = _FAIL;
+				if (pwrctrl->rpwm < pslv)
+					rtw_set_rpwm(padapter, pslv);
+			}
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 
 	if (res == _FAIL)
 		if (pwrctrl->cpwm >= PS_STATE_S2)
@@ -767,18 +748,16 @@ void rtw_unregister_task_alive(struct adapter *padapter, u32 task)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	scoped_guard(mutex, &pwrctrl->lock) {
+		unregister_task_alive(pwrctrl, task);
 
-	unregister_task_alive(pwrctrl, task);
+		if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm > pslv)
+				if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
+					rtw_set_rpwm(padapter, pslv);
 
-	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm > pslv)
-			if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
-				rtw_set_rpwm(padapter, pslv);
-
+		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 /*
@@ -804,20 +783,18 @@ s32 rtw_register_tx_alive(struct adapter *padapter)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S2;
 
-	mutex_lock(&pwrctrl->lock);
+	scope_guard(mutex, &pwrctrl->lock) {
+		register_task_alive(pwrctrl, XMIT_ALIVE);
 
-	register_task_alive(pwrctrl, XMIT_ALIVE);
-
-	if (pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm < pslv) {
-			if (pwrctrl->cpwm < PS_STATE_S2)
-				res = _FAIL;
-			if (pwrctrl->rpwm < pslv)
-				rtw_set_rpwm(padapter, pslv);
+		if (pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm < pslv) {
+				if (pwrctrl->cpwm < PS_STATE_S2)
+					res = _FAIL;
+				if (pwrctrl->rpwm < pslv)
+					rtw_set_rpwm(padapter, pslv);
+			}
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 
 	if (res == _FAIL)
 		if (pwrctrl->cpwm >= PS_STATE_S2)
@@ -849,20 +826,18 @@ s32 rtw_register_cmd_alive(struct adapter *padapter)
 	pwrctrl = adapter_to_pwrctl(padapter);
 	pslv = PS_STATE_S2;
 
-	mutex_lock(&pwrctrl->lock);
+	scoped_guard(mutex, &pwrctrl->lock) {
+		register_task_alive(pwrctrl, CMD_ALIVE);
 
-	register_task_alive(pwrctrl, CMD_ALIVE);
-
-	if (pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm < pslv) {
-			if (pwrctrl->cpwm < PS_STATE_S2)
-				res = _FAIL;
-			if (pwrctrl->rpwm < pslv)
-				rtw_set_rpwm(padapter, pslv);
+		if (pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm < pslv) {
+				if (pwrctrl->cpwm < PS_STATE_S2)
+					res = _FAIL;
+				if (pwrctrl->rpwm < pslv)
+					rtw_set_rpwm(padapter, pslv);
+			}
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 
 	if (res == _FAIL)
 		if (pwrctrl->cpwm >= PS_STATE_S2)
@@ -894,17 +869,15 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	scoped_guard(mutex, &pwrctrl->lock) {
+		unregister_task_alive(pwrctrl, XMIT_ALIVE);
 
-	unregister_task_alive(pwrctrl, XMIT_ALIVE);
-
-	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm > pslv)
-			if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
-				rtw_set_rpwm(padapter, pslv);
+		if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm > pslv)
+				if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
+					rtw_set_rpwm(padapter, pslv);
+		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 /*
@@ -930,18 +903,16 @@ void rtw_unregister_cmd_alive(struct adapter *padapter)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	scoped_guard(mutex, &pwrctrl->lock) {
+		unregister_task_alive(pwrctrl, CMD_ALIVE);
 
-	unregister_task_alive(pwrctrl, CMD_ALIVE);
-
-	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
-		if (pwrctrl->cpwm > pslv) {
-			if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
-				rtw_set_rpwm(padapter, pslv);
+		if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
+			if (pwrctrl->cpwm > pslv) {
+				if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
+					rtw_set_rpwm(padapter, pslv);
+			}
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 void rtw_init_pwrctrl_priv(struct adapter *padapter)
@@ -1131,9 +1102,9 @@ void rtw_ps_deny(struct adapter *padapter, enum ps_deny_reason reason)
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
-	pwrpriv->ps_deny |= BIT(reason);
-	mutex_unlock(&pwrpriv->lock);
+	scope_guard(mutex, &pwrpriv->lock) {
+		pwrpriv->ps_deny |= BIT(reason);
+	}
 }
 
 /*
@@ -1146,9 +1117,9 @@ void rtw_ps_deny_cancel(struct adapter *padapter, enum ps_deny_reason reason)
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
-	pwrpriv->ps_deny &= ~BIT(reason);
-	mutex_unlock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock) {
+		pwrpriv->ps_deny &= ~BIT(reason);
+	}
 }
 
 /*
