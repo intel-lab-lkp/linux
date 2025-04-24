@@ -733,8 +733,6 @@ static void __del_gendisk(struct gendisk *disk)
 		bdi_unregister(disk->bdi);
 	}
 
-	blk_unregister_queue(disk);
-
 	kobject_put(disk->part0->bd_holder_dir);
 	kobject_put(disk->slave_dir);
 	disk->slave_dir = NULL;
@@ -743,9 +741,11 @@ static void __del_gendisk(struct gendisk *disk)
 	disk->part0->bd_stamp = 0;
 	sysfs_remove_link(block_depr, dev_name(disk_to_dev(disk)));
 	pm_runtime_set_memalloc_noio(disk_to_dev(disk), false);
-	device_del(disk_to_dev(disk));
 
 	blk_mq_freeze_queue_wait(q);
+
+	blk_unregister_queue(disk);
+	device_del(disk_to_dev(disk));
 
 	blk_throtl_cancel_bios(disk);
 
