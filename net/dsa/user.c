@@ -1246,13 +1246,11 @@ static int dsa_user_set_eee(struct net_device *dev, struct ethtool_keee *e)
 	/* If the port is using phylink managed EEE, then an unimplemented
 	 * set_mac_eee() is permissible.
 	 */
-	if (!phylink_mac_implements_lpi(ds->phylink_mac_ops)) {
+	if (ds->ops->set_mac_eee &&
+	    !phylink_mac_implements_lpi(ds->phylink_mac_ops)) {
 		/* Port's PHY and MAC both need to be EEE capable */
 		if (!dev->phydev)
 			return -ENODEV;
-
-		if (!ds->ops->set_mac_eee)
-			return -EOPNOTSUPP;
 
 		ret = ds->ops->set_mac_eee(ds, dp->index, e);
 		if (ret)
