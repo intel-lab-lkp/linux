@@ -783,8 +783,8 @@ int serdev_controller_add(struct serdev_controller *ctrl)
 		goto err_rpm_disable;
 	}
 
-	dev_dbg(&ctrl->dev, "serdev%d registered: dev:%p\n",
-		ctrl->nr, &ctrl->dev);
+	dev_dbg(&ctrl->dev, "%s registered: dev:%p\n",
+		dev_name(&ctrl->dev), &ctrl->dev);
 	return 0;
 
 err_rpm_disable:
