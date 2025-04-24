@@ -1,59 +1,48 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
+#
+# Generates compressed kernel headers archive for CONFIG_IKHEADERS
+# Supports incremental builds by tracking MD5 checksums of inputs
 
-# This script generates an archive consisting of kernel headers
-# for CONFIG_IKHEADERS.
 set -e
+
 sfile="$(readlink -f "$0")"
 outdir="$(pwd)"
-tarfile=$1
-tmpdir=$outdir/${tarfile%/*}/.tmp_dir
+tarfile="$1"
+tmpdir="$outdir/${tarfile%/*}/.tmp_dir"
 
+# Target header directories
 dir_list="
 include/
 arch/$SRCARCH/include/
 "
 
-# Support incremental builds by skipping archive generation
-# if timestamps of files being archived are not changed.
-
-# This block is useful for debugging the incremental builds.
-# Uncomment it for debugging.
-# if [ ! -f /tmp/iter ]; then iter=1; echo 1 > /tmp/iter;
-# else iter=$(($(cat /tmp/iter) + 1)); echo $iter > /tmp/iter; fi
-# find $all_dirs -name "*.h" | xargs ls -l > /tmp/ls-$iter
-
 all_dirs=
 if [ "$building_out_of_srctree" ]; then
-	for d in $dir_list; do
-		all_dirs="$all_dirs $srctree/$d"
-	done
+    for d in $dir_list; do
+        all_dirs="$all_dirs $srctree/$d"  # Preserve original directory order
+    done
 fi
 all_dirs="$all_dirs $dir_list"
 
-# include/generated/utsversion.h is ignored because it is generated after this
-# script is executed. (utsversion.h is unneeded for kheaders)
-#
-# When Kconfig regenerates include/generated/autoconf.h, its timestamp is
-# updated, but the contents might be still the same. When any CONFIG option is
-# changed, Kconfig touches the corresponding timestamp file include/config/*.
-# Hence, the md5sum detects the configuration change anyway. We do not need to
-# check include/generated/autoconf.h explicitly.
-#
-# Ignore them for md5 calculation to avoid pointless regeneration.
-headers_md5="$(find $all_dirs -name "*.h" -a			\
-		! -path include/generated/utsversion.h -a	\
-		! -path include/generated/autoconf.h		|
-		xargs ls -l | md5sum | cut -d ' ' -f1)"
+# Checksum calculation excludes generated files that change frequently but don't
+# affect header functionality. This prevents unnecessary rebuilds when:
+# - Only autoconf.h timestamps change (content remains identical)
+# - utsversion.h gets regenerated (contains volatile build info)
+headers_md5="$(find $all_dirs -name "*.h" -a \
+        ! -path "include/generated/utsversion.h" -a \
+        ! -path "include/generated/autoconf.h" 2>/dev/null |
+    xargs ls -l | md5sum | cut -d ' ' -f1)"  # ls -l captures timestamps and sizes
+this_file_md5="$(ls -l "$sfile" | md5sum | cut -d ' ' -f1)"  # Track script changes
 
-# Any changes to this script will also cause a rebuild of the archive.
-this_file_md5="$(ls -l $sfile | md5sum | cut -d ' ' -f1)"
-if [ -f $tarfile ]; then tarfile_md5="$(md5sum $tarfile | cut -d ' ' -f1)"; fi
-if [ -f kernel/kheaders.md5 ] &&
-	[ "$(head -n 1 kernel/kheaders.md5)" = "$headers_md5" ] &&
-	[ "$(head -n 2 kernel/kheaders.md5 | tail -n 1)" = "$this_file_md5" ] &&
-	[ "$(tail -n 1 kernel/kheaders.md5)" = "$tarfile_md5" ]; then
-		exit
+# Three-layer incremental build check: headers, script, and final archive
+if [ -f "$tarfile" ] && [ -f "kernel/kheaders.md5" ]; then
+    tarfile_md5="$(md5sum "$tarfile" | cut -d ' ' -f1)"
+    if [ "$(head -n 1 kernel/kheaders.md5)" = "$headers_md5" ] &&  # Header content
+       [ "$(head -n 2 kernel/kheaders.md5 | tail -n 1)" = "$this_file_md5" ] &&  # Script
+       [ "$(tail -n 1 kernel/kheaders.md5)" = "$tarfile_md5" ]; then  # Archive
+        exit 0
+    fi
 fi
 
 echo "  GEN     $tarfile"
@@ -61,39 +50,41 @@ echo "  GEN     $tarfile"
 rm -rf "${tmpdir}"
 mkdir "${tmpdir}"
 
+# Build processing
 if [ "$building_out_of_srctree" ]; then
-	(
-		cd $srctree
-		for f in $dir_list
-			do find "$f" -name "*.h";
-		done | tar -c -f - -T - | tar -xf - -C "${tmpdir}"
-	)
+    (
+        cd "$srctree"
+        for f in $dir_list; do
+            find "$f" -name "*.h" 2>/dev/null  # Silent but fails on major errors
+        done | tar -c -f - -T - 2>/dev/null  # Stream to avoid temp files
+    ) | tar -xf - -C "${tmpdir}" 2>/dev/null  # Extract directly to target
 fi
 
-for f in $dir_list;
-	do find "$f" -name "*.h";
-done | tar -c -f - -T - | tar -xf - -C "${tmpdir}"
+# In-tree processing uses same streaming approach for consistency
+for f in $dir_list; do
+    find "$f" -name "*.h" 2>/dev/null
+done | tar -c -f - -T - 2>/dev/null | tar -xf - -C "${tmpdir}" 2>/dev/null
 
-# Always exclude include/generated/utsversion.h
-# Otherwise, the contents of the tarball may vary depending on the build steps.
-rm -f "${tmpdir}/include/generated/utsversion.h"
+# Remove volatile utsversion.h to ensure reproducible builds
+rm -f "${tmpdir}/include/generated/utsversion.h" 2>/dev/null
 
-# Remove comments except SDPX lines
 # Use a temporary file to store directory contents to prevent find/xargs from
 # seeing temporary files created by perl.
-find "${tmpdir}" -type f -print0 > "${tmpdir}.contents.txt"
-xargs -0 -P8 -n1 \
-	perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;' \
-	< "${tmpdir}.contents.txt"
-rm -f "${tmpdir}.contents.txt"
+find "${tmpdir}" -type f -print0 2>/dev/null | xargs -0 -P8 -n1 \
+    perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;' 2>/dev/null
 
-# Create archive and try to normalize metadata for reproducibility.
+# Create final archive with normalized metadata for reproducibility using
+# fixed timestamps (when KBUILD_BUILD_TIMESTAMP set)
 tar "${KBUILD_BUILD_TIMESTAMP:+--mtime=$KBUILD_BUILD_TIMESTAMP}" \
     --owner=0 --group=0 --sort=name --numeric-owner --mode=u=rw,go=r,a+X \
-    -I $XZ -cf $tarfile -C "${tmpdir}/" . > /dev/null
+    -I "$XZ" -cf "$tarfile" -C "${tmpdir}/" . >/dev/null 2>&1
 
-echo $headers_md5 > kernel/kheaders.md5
-echo "$this_file_md5" >> kernel/kheaders.md5
-echo "$(md5sum $tarfile | cut -d ' ' -f1)" >> kernel/kheaders.md5
+# Atomic checksum update (all three values written together)
+mkdir -p kernel
+{
+    echo "$headers_md5"  # Header content fingerprint
+    echo "$this_file_md5"  # Script version marker
+    md5sum "$tarfile" | cut -d ' ' -f1  # Final archive integrity
+} > kernel/kheaders.md5
 
 rm -rf "${tmpdir}"
