@@ -210,6 +210,8 @@ config SND_HDA_SCODEC_TAS2781_SPI
 	depends on ACPI
 	depends on EFI
 	depends on SND_SOC
+	select SND_SOC_TAS2781_COMLIB
+	select SND_SOC_TAS2781_FMWLIB
 	select CRC32
 	help
 	  Say Y or M here to include TAS2781 SPI HD-audio side codec support

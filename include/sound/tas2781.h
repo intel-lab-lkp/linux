@@ -32,6 +32,8 @@
 	SNDRV_PCM_FMTBIT_S24_LE | \
 	SNDRV_PCM_FMTBIT_S32_LE)
 
+#define TASDEVICE_CRC8_POLYNOMIAL		0x4d
+
 /* PAGE Control Register (available in page0 of each book) */
 #define TASDEVICE_PAGE_SELECT		0x00
 #define TASDEVICE_BOOKCTL_PAGE		0x00
@@ -193,6 +195,7 @@ struct tasdevice_priv {
 	bool force_fwload_status;
 	bool playback_started;
 	bool isacpi;
+	bool isspi;
 	bool is_user_space_calidata;
 	unsigned int global_addr;
 
@@ -210,6 +213,16 @@ struct tasdevice_priv {
 	int (*tasdevice_load_block)(struct tasdevice_priv *tas_priv,
 		struct tasdev_blk *block);
 
+	int (*change_chn_book)(struct tasdevice_priv *tas_priv,
+		unsigned short chn, int book);
+	int (*update_bits)(struct tasdevice_priv *tas_priv,
+		unsigned short chn, unsigned int reg, unsigned int mask,
+		unsigned int value);
+	int (*dev_read)(struct tasdevice_priv *tas_priv,
+		unsigned short chn, unsigned int reg, unsigned int *value);
+	int (*dev_bulk_read)(struct tasdevice_priv *tas_priv,
+		unsigned short chn, unsigned int reg, unsigned char *p_data,
+		unsigned int n_length);
 	int (*save_calibration)(struct tasdevice_priv *tas_priv);
 	void (*apply_calibration)(struct tasdevice_priv *tas_priv);
 };

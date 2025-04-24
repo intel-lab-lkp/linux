@@ -21,8 +21,6 @@
 #include <sound/soc.h>
 #include <sound/tas2781.h>
 
-#define TASDEVICE_CRC8_POLYNOMIAL	0x4d
-
 static const struct regmap_range_cfg tasdevice_ranges[] = {
 	{
 		.range_min = 0,
@@ -122,7 +120,7 @@ int tasdevice_dev_read(struct tasdevice_priv *tas_priv,
 	if (chn < tas_priv->ndev) {
 		struct regmap *map = tas_priv->regmap;
 
-		ret = tasdevice_change_chn_book(tas_priv, chn,
+		ret = tas_priv->change_chn_book(tas_priv, chn,
 			TASDEVICE_BOOK_ID(reg));
 		if (ret < 0)
 			goto out;
@@ -149,7 +147,7 @@ int tasdevice_dev_write(struct tasdevice_priv *tas_priv,
 	if (chn < tas_priv->ndev) {
 		struct regmap *map = tas_priv->regmap;
 
-		ret = tasdevice_change_chn_book(tas_priv, chn,
+		ret = tas_priv->change_chn_book(tas_priv, chn,
 			TASDEVICE_BOOK_ID(reg));
 		if (ret < 0)
 			goto out;
@@ -179,7 +177,7 @@ int tasdevice_dev_bulk_write(
 	if (chn < tas_priv->ndev) {
 		struct regmap *map = tas_priv->regmap;
 
-		ret = tasdevice_change_chn_book(tas_priv, chn,
+		ret = tas_priv->change_chn_book(tas_priv, chn,
 			TASDEVICE_BOOK_ID(reg));
 		if (ret < 0)
 			goto out;
@@ -208,7 +206,7 @@ int tasdevice_dev_bulk_read(struct tasdevice_priv *tas_priv,
 	if (chn < tas_priv->ndev) {
 		struct regmap *map = tas_priv->regmap;
 
-		ret = tasdevice_change_chn_book(tas_priv, chn,
+		ret = tas_priv->change_chn_book(tas_priv, chn,
 			TASDEVICE_BOOK_ID(reg));
 		if (ret < 0)
 			goto out;
@@ -234,7 +232,7 @@ int tasdevice_dev_update_bits(
 	if (chn < tas_priv->ndev) {
 		struct regmap *map = tas_priv->regmap;
 
-		ret = tasdevice_change_chn_book(tas_priv, chn,
+		ret = tas_priv->change_chn_book(tas_priv, chn,
 			TASDEVICE_BOOK_ID(reg));
 		if (ret < 0)
 			goto out;
@@ -340,12 +338,18 @@ int tasdevice_init(struct tasdevice_priv *tas_priv)
 
 	tas_priv->cur_prog = -1;
 	tas_priv->cur_conf = -1;
+	tas_priv->isspi = false;
 
 	for (i = 0; i < tas_priv->ndev; i++) {
 		tas_priv->tasdevice[i].cur_book = -1;
 		tas_priv->tasdevice[i].cur_prog = -1;
 		tas_priv->tasdevice[i].cur_conf = -1;
 	}
+
+	tas_priv->update_bits = tasdevice_dev_update_bits;
+	tas_priv->change_chn_book = tasdevice_change_chn_book;
+	tas_priv->dev_read = tasdevice_dev_read;
+	tas_priv->dev_bulk_read = tasdevice_dev_bulk_read;
 
 	mutex_init(&tas_priv->codec_lock);
 
