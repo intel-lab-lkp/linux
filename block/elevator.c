@@ -426,7 +426,10 @@ elv_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
 
 	e = container_of(kobj, struct elevator_queue, kobj);
 	mutex_lock(&e->sysfs_lock);
-	error = e->type ? entry->show(e, page) : -ENOENT;
+	if (test_bit(ELEVATOR_FLAG_DYING, &e->flags))
+		error = -ENODEV;
+	else
+		error = e->type ? entry->show(e, page) : -ENOENT;
 	mutex_unlock(&e->sysfs_lock);
 	return error;
 }
@@ -444,7 +447,10 @@ elv_attr_store(struct kobject *kobj, struct attribute *attr,
 
 	e = container_of(kobj, struct elevator_queue, kobj);
 	mutex_lock(&e->sysfs_lock);
-	error = e->type ? entry->store(e, page, length) : -ENOENT;
+	if (test_bit(ELEVATOR_FLAG_DYING, &e->flags))
+		error = -ENODEV;
+	else
+		error = e->type ? entry->store(e, page, length) : -ENOENT;
 	mutex_unlock(&e->sysfs_lock);
 	return error;
 }
