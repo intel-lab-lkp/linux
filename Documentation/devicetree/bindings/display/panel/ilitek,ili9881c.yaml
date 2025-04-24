@@ -27,6 +27,20 @@ properties:
   reg:
     maxItems: 1
 
+  port:
+    $ref: /schemas/graph.yaml#/$defs/port-base
+    unevaluatedProperties: false
+
+    properties:
+      endpoint:
+        $ref: /schemas/media/video-interfaces.yaml#
+        unevaluatedProperties: false
+
+        properties:
+          data-lanes:
+            minItems: 1
+            maxItems: 4
+
   backlight: true
   power-supply: true
   reset-gpios: true
@@ -53,6 +67,12 @@ examples:
             power-supply = <&reg_display>;
             reset-gpios = <&r_pio 0 5 GPIO_ACTIVE_LOW>; /* PL05 */
             backlight = <&pwm_bl>;
+            port {
+                panel_in: endpoint {
+                    remote-endpoint = <&dsi_out>;
+                    data-lanes = <1 2>;
+                };
+            };
         };
     };
 
