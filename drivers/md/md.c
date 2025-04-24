@@ -523,18 +523,27 @@ void mddev_resume(struct mddev *mddev)
 EXPORT_SYMBOL_GPL(mddev_resume);
 
 /* sync bdev before setting device to readonly or stopping raid*/
-static int mddev_set_closing_and_sync_blockdev(struct mddev *mddev, int opener_num)
+static int mddev_set_closing_and_sync_blockdev(struct mddev *mddev)
 {
-	mutex_lock(&mddev->open_mutex);
-	if (mddev->pers && atomic_read(&mddev->openers) > opener_num) {
-		mutex_unlock(&mddev->open_mutex);
+	spin_lock(&all_mddevs_lock);
+
+	/*
+	 * there are two places that call this function and ->active
+	 * is added before calling this function. So the array can't
+	 *  be stopped when ->active is bigger than 1.
+	 */
+	if (mddev->pers && atomic_read(&mddev->active) > 1) {
+
+		spin_unlock(&all_mddevs_lock);
 		return -EBUSY;
 	}
+
 	if (test_and_set_bit(MD_CLOSING, &mddev->flags)) {
-		mutex_unlock(&mddev->open_mutex);
+		spin_unlock(&all_mddevs_lock);
 		return -EBUSY;
 	}
-	mutex_unlock(&mddev->open_mutex);
+
+	spin_unlock(&all_mddevs_lock);
 
 	sync_blockdev(mddev->gendisk->part0);
 	return 0;
@@ -663,7 +672,6 @@ int mddev_init(struct mddev *mddev)
 	/* We want to start with the refcount at zero */
 	percpu_ref_put(&mddev->writes_pending);
 
-	mutex_init(&mddev->open_mutex);
 	mutex_init(&mddev->reconfig_mutex);
 	mutex_init(&mddev->suspend_mutex);
 	mutex_init(&mddev->bitmap_info.mutex);
@@ -672,7 +680,6 @@ int mddev_init(struct mddev *mddev)
 	INIT_LIST_HEAD(&mddev->deleting);
 	timer_setup(&mddev->safemode_timer, md_safemode_timeout, 0);
 	atomic_set(&mddev->active, 1);
-	atomic_set(&mddev->openers, 0);
 	atomic_set(&mddev->sync_seq, 0);
 	spin_lock_init(&mddev->lock);
 	init_waitqueue_head(&mddev->sb_wait);
@@ -4421,8 +4428,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	case read_auto:
 		if (!mddev->pers || !md_is_rdwr(mddev))
 			break;
-		/* write sysfs will not open mddev and opener should be 0 */
-		err = mddev_set_closing_and_sync_blockdev(mddev, 0);
+		err = mddev_set_closing_and_sync_blockdev(mddev);
 		if (err)
 			return err;
 		break;
@@ -7745,7 +7751,7 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		/* Need to flush page cache, and ensure no-one else opens
 		 * and writes
 		 */
-		err = mddev_set_closing_and_sync_blockdev(mddev, 1);
+		err = mddev_set_closing_and_sync_blockdev(mddev);
 		if (err)
 			return err;
 	}
@@ -7945,7 +7951,6 @@ out_unlock:
 static int md_open(struct gendisk *disk, blk_mode_t mode)
 {
 	struct mddev *mddev;
-	int err;
 
 	spin_lock(&all_mddevs_lock);
 	mddev = mddev_get(disk->private_data);
@@ -7953,25 +7958,8 @@ static int md_open(struct gendisk *disk, blk_mode_t mode)
 	if (!mddev)
 		return -ENODEV;
 
-	err = mutex_lock_interruptible(&mddev->open_mutex);
-	if (err)
-		goto out;
-
-	err = -ENODEV;
-	if (test_bit(MD_CLOSING, &mddev->flags))
-		goto out_unlock;
-
-	atomic_inc(&mddev->openers);
-	mutex_unlock(&mddev->open_mutex);
-
 	disk_check_media_change(disk);
 	return 0;
-
-out_unlock:
-	mutex_unlock(&mddev->open_mutex);
-out:
-	mddev_put(mddev);
-	return err;
 }
 
 static void md_release(struct gendisk *disk)
@@ -7979,7 +7967,6 @@ static void md_release(struct gendisk *disk)
 	struct mddev *mddev = disk->private_data;
 
 	BUG_ON(!mddev);
-	atomic_dec(&mddev->openers);
 	mddev_put(mddev);
 }
 

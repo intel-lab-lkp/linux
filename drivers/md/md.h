@@ -496,19 +496,8 @@ struct mddev {
 	int				recovery_disabled;
 
 	int				in_sync;	/* know to not need resync */
-	/* 'open_mutex' avoids races between 'md_open' and 'do_md_stop', so
-	 * that we are never stopping an array while it is open.
-	 * 'reconfig_mutex' protects all other reconfiguration.
-	 * These locks are separate due to conflicting interactions
-	 * with disk->open_mutex.
-	 * Lock ordering is:
-	 *  reconfig_mutex -> disk->open_mutex
-	 *  disk->open_mutex -> open_mutex:  e.g. __blkdev_get -> md_open
-	 */
-	struct mutex			open_mutex;
 	struct mutex			reconfig_mutex;
 	atomic_t			active;		/* general refcount */
-	atomic_t			openers;	/* number of active opens */
 
 	int				changed;	/* True if we might need to
 							 * reread partition info */
