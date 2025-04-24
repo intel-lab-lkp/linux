@@ -1057,6 +1057,7 @@ static inline u64 cgroup_id_from_mm(struct mm_struct *mm)
 	return id;
 }
 
+extern void mem_cgroup_early_init(void);
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1471,6 +1472,10 @@ static inline void folio_split_memcg_refs(struct folio *folio,
 static inline u64 cgroup_id_from_mm(struct mm_struct *mm)
 {
 	return 0;
+}
+
+static inline void mem_cgroup_early_init(void)
+{
 }
 #endif /* CONFIG_MEMCG */
 

@@ -3602,10 +3602,8 @@ static bool alloc_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 {
 	struct mem_cgroup_per_node *pn;
 
-	pn = likely(memcg_pn_cachep) ?
-		     kmem_cache_alloc_node(memcg_pn_cachep,
-					   GFP_KERNEL | __GFP_ZERO, node) :
-		     kzalloc_node(sizeof(*pn), GFP_KERNEL, node);
+	pn = kmem_cache_alloc_node(memcg_pn_cachep, GFP_KERNEL | __GFP_ZERO,
+				   node);
 	if (!pn)
 		return false;
 
@@ -3658,10 +3656,7 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	int __maybe_unused i;
 	long error;
 
-	memcg = likely(memcg_cachep) ?
-			kmem_cache_zalloc(memcg_cachep, GFP_KERNEL) :
-			kzalloc(struct_size(memcg, nodeinfo, nr_node_ids),
-				GFP_KERNEL);
+	memcg = kmem_cache_zalloc(memcg_cachep, GFP_KERNEL);
 	if (!memcg)
 		return ERR_PTR(-ENOMEM);
 
@@ -5037,6 +5032,27 @@ static int __init cgroup_memory(char *s)
 }
 __setup("cgroup.memory=", cgroup_memory);
 
+/**
+ * Before cgroup_init() create root_mem_cgroup, we can prepare
+ * something in here which root_mem_cgroup may need.
+ * This currently initializes:
+ *   1) memcg_cachep  - kmem_cache for mem_cgroup struct allocations
+ *   2) memcg_pn_cachep - kmem_cache for mem_cgroup_per_node structs
+ *      (one per NUMA node)
+ */
+void __init mem_cgroup_early_init(void)
+{
+	struct mem_cgroup *memcg;
+	unsigned int memcg_size;
+
+	memcg_size = struct_size(memcg, nodeinfo, nr_node_ids);
+	memcg_cachep = kmem_cache_create("mem_cgroup", memcg_size, 0,
+					 SLAB_PANIC | SLAB_HWCACHE_ALIGN, NULL);
+
+	memcg_pn_cachep = KMEM_CACHE(mem_cgroup_per_node,
+				     SLAB_PANIC | SLAB_HWCACHE_ALIGN);
+}
+
 /*
  * subsys_initcall() for memory controller.
  *
@@ -5048,7 +5064,6 @@ __setup("cgroup.memory=", cgroup_memory);
 static int __init mem_cgroup_init(void)
 {
 	int cpu;
-	unsigned int memcg_size;
 
 	/*
 	 * Currently s32 type (can refer to struct batched_lruvec_stat) is
@@ -5064,13 +5079,6 @@ static int __init mem_cgroup_init(void)
 	for_each_possible_cpu(cpu)
 		INIT_WORK(&per_cpu_ptr(&memcg_stock, cpu)->work,
 			  drain_local_stock);
-
-	memcg_size = struct_size_t(struct mem_cgroup, nodeinfo, nr_node_ids);
-	memcg_cachep = kmem_cache_create("mem_cgroup", memcg_size, 0,
-					 SLAB_PANIC | SLAB_HWCACHE_ALIGN, NULL);
-
-	memcg_pn_cachep = KMEM_CACHE(mem_cgroup_per_node,
-				     SLAB_PANIC | SLAB_HWCACHE_ALIGN);
 
 	return 0;
 }
