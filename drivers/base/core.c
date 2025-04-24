@@ -4961,8 +4961,12 @@ define_dev_printk_level(_dev_info, KERN_INFO);
 
 #endif
 
-static void __dev_probe_failed(const struct device *dev, int err, bool fatal,
-			       const char *fmt, va_list vargsp)
+#define DEV_LOG_ERRVAL_F_PROBE	0x1
+#define DEV_LOG_ERRVAL_F_FATAL	0x2
+
+static void __dev_log_msg_with_errval(const struct device *dev, int err,
+				      unsigned int flags, const char *fmt,
+				      va_list vargsp)
 {
 	struct va_format vaf;
 	va_list vargs;
@@ -4983,18 +4987,20 @@ static void __dev_probe_failed(const struct device *dev, int err, bool fatal,
 	vaf.va = &vargs;
 
 	switch (err) {
-	case -EPROBE_DEFER:
-		device_set_deferred_probe_reason(dev, &vaf);
-		dev_dbg(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-		break;
-
 	case -ENOMEM:
 		/* Don't print anything on -ENOMEM, there's already enough output */
 		break;
 
+	case -EPROBE_DEFER:
+		if (flags & DEV_LOG_ERRVAL_F_PROBE) {
+			device_set_deferred_probe_reason(dev, &vaf);
+			dev_dbg(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
+			break;
+		}
+		fallthrough;
 	default:
 		/* Log fatal final failures as errors, otherwise produce warnings */
-		if (fatal)
+		if (flags & DEV_LOG_ERRVAL_F_FATAL)
 			dev_err(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
 		else
 			dev_warn(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
@@ -5044,7 +5050,9 @@ int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
 	va_start(vargs, fmt);
 
 	/* Use dev_err() for logging when err doesn't equal -EPROBE_DEFER */
-	__dev_probe_failed(dev, err, true, fmt, vargs);
+	__dev_log_msg_with_errval(dev, err,
+				  DEV_LOG_ERRVAL_F_PROBE | DEV_LOG_ERRVAL_F_FATAL,
+				  fmt, vargs);
 
 	va_end(vargs);
 
@@ -5092,13 +5100,97 @@ int dev_warn_probe(const struct device *dev, int err, const char *fmt, ...)
 	va_start(vargs, fmt);
 
 	/* Use dev_warn() for logging when err doesn't equal -EPROBE_DEFER */
-	__dev_probe_failed(dev, err, false, fmt, vargs);
+	__dev_log_msg_with_errval(dev, err, DEV_LOG_ERRVAL_F_PROBE, fmt, vargs);
 
 	va_end(vargs);
 
 	return err;
 }
 EXPORT_SYMBOL_GPL(dev_warn_probe);
+
+/**
+ * dev_err_ret - log error message with error value and return error value
+ * @dev: the pointer to the struct device
+ * @err: error value to log
+ * @fmt: printf-style format string
+ * @...: arguments as specified in the format string
+ *
+ * This helper implements common pattern for error checking:
+ * print error message with error code and propagate error upwards.
+ * It replaces the following code sequence::
+ *
+ *	if (err) {
+ *		dev_err(dev, ..., err);
+ *		return err;
+ *	}
+ *
+ * with::
+ *
+ *	if (err)
+ *		return dev_err_ret(dev, err, ...);
+ *
+ * The benefit compared to a normal dev_err() is the standardized format
+ * of the error code, which is emitted symbolically (i.e. you get "EAGAIN"
+ * instead of "-35"), and having the error code returned allows more
+ * compact error paths.
+ *
+ * Returns @err.
+ */
+int dev_err_ret(const struct device *dev, int err, const char *fmt, ...)
+{
+	va_list vargs;
+
+	va_start(vargs, fmt);
+
+	__dev_log_msg_with_errval(dev, err, DEV_LOG_ERRVAL_F_FATAL, fmt, vargs);
+
+	va_end(vargs);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(dev_err_ret);
+
+/**
+ * dev_warn_ret - log warning message with error value and return error value
+ * @dev: the pointer to the struct device
+ * @err: error value to log
+ * @fmt: printf-style format string
+ * @...: arguments as specified in the format string
+ *
+ * This helper implements common pattern for error checking:
+ * print warning message with error code and propagate error upwards.
+ * It replaces the following code sequence::
+ *
+ *	if (err) {
+ *		dev_warn(dev, ..., err);
+ *		return err;
+ *	}
+ *
+ * with::
+ *
+ *	if (err)
+ *		return dev_warn_ret(dev, err, ...);
+ *
+ * The benefit compared to a normal dev_warn() is the standardized format
+ * of the error code, which is emitted symbolically (i.e. you get "EAGAIN"
+ * instead of "-35"), and having the error code returned allows more
+ * compact error paths.
+ *
+ * Returns @err.
+ */
+int dev_warn_ret(const struct device *dev, int err, const char *fmt, ...)
+{
+	va_list vargs;
+
+	va_start(vargs, fmt);
+
+	__dev_log_msg_with_errval(dev, err, 0, fmt, vargs);
+
+	va_end(vargs);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(dev_warn_ret);
 
 static inline bool fwnode_is_primary(struct fwnode_handle *fwnode)
 {

@@ -286,4 +286,7 @@ __printf(3, 4) int dev_warn_probe(const struct device *dev, int err, const char 
 #define dev_err_cast_probe(dev, ___err_ptr, fmt, ...) \
 	ERR_PTR(dev_err_probe(dev, PTR_ERR(___err_ptr), fmt, ##__VA_ARGS__))
 
+__printf(3, 4) int dev_err_ret(const struct device *dev, int err, const char *fmt, ...);
+__printf(3, 4) int dev_warn_ret(const struct device *dev, int err, const char *fmt, ...);
+
 #endif /* _DEVICE_PRINTK_H_ */
