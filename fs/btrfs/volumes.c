@@ -404,7 +404,7 @@ static void btrfs_free_device(struct btrfs_device *device)
 {
 	WARN_ON(!list_empty(&device->post_commit_list));
 	rcu_string_free(device->name);
-	extent_io_tree_release(&device->alloc_state);
+	btrfs_extent_io_tree_release(&device->alloc_state);
 	btrfs_destroy_dev_zone_info(device);
 	kfree(device);
 }
@@ -415,8 +415,8 @@ static void free_fs_devices(struct btrfs_fs_devices *fs_devices)
 
 	WARN_ON(fs_devices->opened);
 	while (!list_empty(&fs_devices->devices)) {
-		device = list_entry(fs_devices->devices.next,
-				    struct btrfs_device, dev_list);
+		device = list_first_entry(&fs_devices->devices,
+					  struct btrfs_device, dev_list);
 		list_del(&device->dev_list);
 		btrfs_free_device(device);
 	}
@@ -428,8 +428,8 @@ void __exit btrfs_cleanup_fs_uuids(void)
 	struct btrfs_fs_devices *fs_devices;
 
 	while (!list_empty(&fs_uuids)) {
-		fs_devices = list_entry(fs_uuids.next,
-					struct btrfs_fs_devices, fs_list);
+		fs_devices = list_first_entry(&fs_uuids, struct btrfs_fs_devices,
+					      fs_list);
 		list_del(&fs_devices->fs_list);
 		free_fs_devices(fs_devices);
 	}
@@ -1225,7 +1225,7 @@ static void btrfs_close_one_device(struct btrfs_device *device)
 
 	device->fs_info = NULL;
 	atomic_set(&device->dev_stats_ccnt, 0);
-	extent_io_tree_release(&device->alloc_state);
+	btrfs_extent_io_tree_release(&device->alloc_state);
 
 	/*
 	 * Reset the flush error record. We might have a transient flush error
@@ -1600,9 +1600,9 @@ static bool contains_pending_extent(struct btrfs_device *device, u64 *start,
 
 	lockdep_assert_held(&device->fs_info->chunk_mutex);
 
-	if (find_first_extent_bit(&device->alloc_state, *start,
-				  &physical_start, &physical_end,
-				  CHUNK_ALLOCATED, NULL)) {
+	if (btrfs_find_first_extent_bit(&device->alloc_state, *start,
+					&physical_start, &physical_end,
+					CHUNK_ALLOCATED, NULL)) {
 
 		if (in_range(physical_start, *start, len) ||
 		    in_range(*start, physical_start,
@@ -1617,6 +1617,9 @@ static bool contains_pending_extent(struct btrfs_device *device, u64 *start,
 static u64 dev_extent_search_start(struct btrfs_device *device)
 {
 	switch (device->fs_devices->chunk_alloc_policy) {
+	default:
+		btrfs_warn_unknown_chunk_allocation(device->fs_devices->chunk_alloc_policy);
+		fallthrough;
 	case BTRFS_CHUNK_ALLOC_REGULAR:
 		return BTRFS_DEVICE_RANGE_RESERVED;
 	case BTRFS_CHUNK_ALLOC_ZONED:
@@ -1626,8 +1629,6 @@ static u64 dev_extent_search_start(struct btrfs_device *device)
 		 * for superblock logging.
 		 */
 		return 0;
-	default:
-		BUG();
 	}
 }
 
@@ -1706,6 +1707,9 @@ static bool dev_extent_hole_check(struct btrfs_device *device, u64 *hole_start,
 		}
 
 		switch (device->fs_devices->chunk_alloc_policy) {
+		default:
+			btrfs_warn_unknown_chunk_allocation(device->fs_devices->chunk_alloc_policy);
+			fallthrough;
 		case BTRFS_CHUNK_ALLOC_REGULAR:
 			/* No extra check */
 			break;
@@ -1720,8 +1724,6 @@ static bool dev_extent_hole_check(struct btrfs_device *device, u64 *hole_start,
 				continue;
 			}
 			break;
-		default:
-			BUG();
 		}
 
 		break;
@@ -3338,7 +3340,8 @@ int btrfs_remove_chunk(struct btrfs_trans_handle *trans, u64 chunk_offset)
 		 * user having built with ASSERT enabled, so if ASSERT doesn't
 		 * do anything we still error out.
 		 */
-		ASSERT(0);
+		DEBUG_WARN("errr %ld reading chunk map at offset %llu",
+			   PTR_ERR(map), chunk_offset);
 		return PTR_ERR(map);
 	}
 
@@ -3419,8 +3422,17 @@ int btrfs_remove_chunk(struct btrfs_trans_handle *trans, u64 chunk_offset)
 	if (ret == -ENOSPC) {
 		const u64 sys_flags = btrfs_system_alloc_profile(fs_info);
 		struct btrfs_block_group *sys_bg;
+		struct btrfs_space_info *space_info;
 
-		sys_bg = btrfs_create_chunk(trans, sys_flags);
+		space_info = btrfs_find_space_info(fs_info, sys_flags);
+		if (!space_info) {
+			ASSERT(0);
+			ret = -EINVAL;
+			btrfs_abort_transaction(trans, ret);
+			goto out;
+		}
+
+		sys_bg = btrfs_create_chunk(trans, space_info, sys_flags);
 		if (IS_ERR(sys_bg)) {
 			ret = PTR_ERR(sys_bg);
 			btrfs_abort_transaction(trans, ret);
@@ -3534,7 +3546,8 @@ int btrfs_relocate_chunk(struct btrfs_fs_info *fs_info, u64 chunk_offset)
 	 * filesystem's point of view.
 	 */
 	if (btrfs_is_zoned(fs_info)) {
-		ret = btrfs_discard_extent(fs_info, chunk_offset, length, NULL);
+		ret = btrfs_discard_extent(fs_info, chunk_offset, length, NULL,
+					   BTRFS_CLEAR_OP_DISCARD);
 		if (ret)
 			btrfs_info(fs_info,
 				"failed to reset zone %llu after relocation",
@@ -5088,8 +5101,8 @@ again:
 
 	mutex_lock(&fs_info->chunk_mutex);
 	/* Clear all state bits beyond the shrunk device size */
-	clear_extent_bits(&device->alloc_state, new_size, (u64)-1,
-			  CHUNK_STATE_MASK);
+	btrfs_clear_extent_bits(&device->alloc_state, new_size, (u64)-1,
+				CHUNK_STATE_MASK);
 
 	btrfs_device_set_disk_total_bytes(device, new_size);
 	if (list_empty(&device->post_commit_list))
@@ -5216,6 +5229,8 @@ struct alloc_chunk_ctl {
 	u64 stripe_size;
 	u64 chunk_size;
 	int ndevs;
+	/* Space_info the block group is going to belong. */
+	struct btrfs_space_info *space_info;
 };
 
 static void init_alloc_chunk_ctl_policy_regular(
@@ -5289,14 +5304,15 @@ static void init_alloc_chunk_ctl(struct btrfs_fs_devices *fs_devices,
 	ctl->ndevs = 0;
 
 	switch (fs_devices->chunk_alloc_policy) {
+	default:
+		btrfs_warn_unknown_chunk_allocation(fs_devices->chunk_alloc_policy);
+		fallthrough;
 	case BTRFS_CHUNK_ALLOC_REGULAR:
 		init_alloc_chunk_ctl_policy_regular(fs_devices, ctl);
 		break;
 	case BTRFS_CHUNK_ALLOC_ZONED:
 		init_alloc_chunk_ctl_policy_zoned(fs_devices, ctl);
 		break;
-	default:
-		BUG();
 	}
 }
 
@@ -5481,12 +5497,13 @@ static int decide_stripe_size(struct btrfs_fs_devices *fs_devices,
 	ctl->ndevs = min(ctl->ndevs, ctl->devs_max);
 
 	switch (fs_devices->chunk_alloc_policy) {
+	default:
+		btrfs_warn_unknown_chunk_allocation(fs_devices->chunk_alloc_policy);
+		fallthrough;
 	case BTRFS_CHUNK_ALLOC_REGULAR:
 		return decide_stripe_size_regular(ctl, devices_info);
 	case BTRFS_CHUNK_ALLOC_ZONED:
 		return decide_stripe_size_zoned(ctl, devices_info);
-	default:
-		BUG();
 	}
 }
 
@@ -5496,9 +5513,9 @@ static void chunk_map_device_set_bits(struct btrfs_chunk_map *map, unsigned int 
 		struct btrfs_io_stripe *stripe = &map->stripes[i];
 		struct btrfs_device *device = stripe->dev;
 
-		set_extent_bit(&device->alloc_state, stripe->physical,
-			       stripe->physical + map->stripe_size - 1,
-			       bits | EXTENT_NOWAIT, NULL);
+		btrfs_set_extent_bit(&device->alloc_state, stripe->physical,
+				     stripe->physical + map->stripe_size - 1,
+				     bits | EXTENT_NOWAIT, NULL);
 	}
 }
 
@@ -5508,10 +5525,9 @@ static void chunk_map_device_clear_bits(struct btrfs_chunk_map *map, unsigned in
 		struct btrfs_io_stripe *stripe = &map->stripes[i];
 		struct btrfs_device *device = stripe->dev;
 
-		__clear_extent_bit(&device->alloc_state, stripe->physical,
-				   stripe->physical + map->stripe_size - 1,
-				   bits | EXTENT_NOWAIT,
-				   NULL, NULL);
+		btrfs_clear_extent_bits(&device->alloc_state, stripe->physical,
+					stripe->physical + map->stripe_size - 1,
+					bits | EXTENT_NOWAIT);
 	}
 }
 
@@ -5618,7 +5634,8 @@ static struct btrfs_block_group *create_chunk(struct btrfs_trans_handle *trans,
 		return ERR_PTR(ret);
 	}
 
-	block_group = btrfs_make_block_group(trans, type, start, ctl->chunk_size);
+	block_group = btrfs_make_block_group(trans, ctl->space_info, type, start,
+					     ctl->chunk_size);
 	if (IS_ERR(block_group)) {
 		btrfs_remove_chunk_map(info, map);
 		return block_group;
@@ -5644,7 +5661,8 @@ static struct btrfs_block_group *create_chunk(struct btrfs_trans_handle *trans,
 }
 
 struct btrfs_block_group *btrfs_create_chunk(struct btrfs_trans_handle *trans,
-					    u64 type)
+					     struct btrfs_space_info *space_info,
+					     u64 type)
 {
 	struct btrfs_fs_info *info = trans->fs_info;
 	struct btrfs_fs_devices *fs_devices = info->fs_devices;
@@ -5656,7 +5674,7 @@ struct btrfs_block_group *btrfs_create_chunk(struct btrfs_trans_handle *trans,
 	lockdep_assert_held(&info->chunk_mutex);
 
 	if (!alloc_profile_is_valid(type, 0)) {
-		ASSERT(0);
+		DEBUG_WARN("invalid alloc profile for type %llu", type);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -5668,12 +5686,13 @@ struct btrfs_block_group *btrfs_create_chunk(struct btrfs_trans_handle *trans,
 
 	if (!(type & BTRFS_BLOCK_GROUP_TYPE_MASK)) {
 		btrfs_err(info, "invalid chunk type 0x%llx requested", type);
-		ASSERT(0);
+		DEBUG_WARN();
 		return ERR_PTR(-EINVAL);
 	}
 
 	ctl.start = find_next_chunk(info);
 	ctl.type = type;
+	ctl.space_info = space_info;
 	init_alloc_chunk_ctl(fs_devices, &ctl);
 
 	devices_info = kcalloc(fs_devices->rw_devices, sizeof(*devices_info),
@@ -5817,7 +5836,9 @@ static noinline int init_first_rw_device(struct btrfs_trans_handle *trans)
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	u64 alloc_profile;
 	struct btrfs_block_group *meta_bg;
+	struct btrfs_space_info *meta_space_info;
 	struct btrfs_block_group *sys_bg;
+	struct btrfs_space_info *sys_space_info;
 
 	/*
 	 * When adding a new device for sprouting, the seed device is read-only
@@ -5841,12 +5862,22 @@ static noinline int init_first_rw_device(struct btrfs_trans_handle *trans)
 	 */
 
 	alloc_profile = btrfs_metadata_alloc_profile(fs_info);
-	meta_bg = btrfs_create_chunk(trans, alloc_profile);
+	meta_space_info = btrfs_find_space_info(fs_info, alloc_profile);
+	if (!meta_space_info) {
+		ASSERT(0);
+		return -EINVAL;
+	}
+	meta_bg = btrfs_create_chunk(trans, meta_space_info, alloc_profile);
 	if (IS_ERR(meta_bg))
 		return PTR_ERR(meta_bg);
 
 	alloc_profile = btrfs_system_alloc_profile(fs_info);
-	sys_bg = btrfs_create_chunk(trans, alloc_profile);
+	sys_space_info = btrfs_find_space_info(fs_info, alloc_profile);
+	if (!sys_space_info) {
+		ASSERT(0);
+		return -EINVAL;
+	}
+	sys_bg = btrfs_create_chunk(trans, sys_space_info, alloc_profile);
 	if (IS_ERR(sys_bg))
 		return PTR_ERR(sys_bg);
 
@@ -6953,7 +6984,7 @@ struct btrfs_device *btrfs_alloc_device(struct btrfs_fs_info *fs_info,
 
 	atomic_set(&dev->dev_stats_ccnt, 0);
 	btrfs_device_data_ordered_init(dev);
-	extent_io_tree_init(fs_info, &dev->alloc_state, IO_TREE_DEVICE_ALLOC_STATE);
+	btrfs_extent_io_tree_init(fs_info, &dev->alloc_state, IO_TREE_DEVICE_ALLOC_STATE);
 
 	if (devid)
 		tmp = *devid;
@@ -7845,7 +7876,7 @@ void btrfs_dev_stat_inc_and_print(struct btrfs_device *dev, int index)
 
 	if (!dev->dev_stats_valid)
 		return;
-	btrfs_err_rl_in_rcu(dev->fs_info,
+	btrfs_debug_rl_in_rcu(dev->fs_info,
 		"bdev %s errs: wr %u, rd %u, flush %u, corrupt %u, gen %u",
 			   btrfs_dev_name(dev),
 			   btrfs_dev_stat_read(dev, BTRFS_DEV_STAT_WRITE_ERRS),
@@ -8076,6 +8107,11 @@ static int verify_chunk_dev_extent_mapping(struct btrfs_fs_info *fs_info)
 out:
 	read_unlock(&fs_info->mapping_tree_lock);
 	return ret;
+}
+
+void btrfs_chunk_map_clear_bits(struct btrfs_chunk_map *map, unsigned int bits)
+{
+	chunk_map_device_clear_bits(map, bits);
 }
 
 /*
