@@ -621,7 +621,7 @@ void elevator_init_mq(struct request_queue *q)
  * If switching fails, we are most likely running out of memory and not able
  * to restore the old io scheduler, so leaving the io scheduler being none.
  */
-int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
+static int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
 {
 	int ret;
 
@@ -657,7 +657,7 @@ out_unfreeze:
 	return ret;
 }
 
-void elevator_disable(struct request_queue *q)
+static void elevator_disable(struct request_queue *q)
 {
 	WARN_ON_ONCE(q->mq_freeze_depth == 0);
 	lockdep_assert_held(&q->elevator_lock);
@@ -677,7 +677,8 @@ void elevator_disable(struct request_queue *q)
 /*
  * Switch this queue to the given IO scheduler.
  */
-static int elevator_change(struct request_queue *q, const char *elevator_name)
+static int __elevator_change(struct request_queue *q,
+			     const char *elevator_name)
 {
 	struct elevator_type *e;
 	int ret;
@@ -692,15 +693,34 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 		return 0;
 	}
 
-	if (q->elevator && elevator_match(q->elevator->type, elevator_name))
-		return 0;
-
 	e = elevator_find_get(elevator_name);
 	if (!e)
 		return -EINVAL;
 	ret = elevator_switch(q, e);
 	elevator_put(e);
 	return ret;
+}
+
+static int elevator_change(struct request_queue *q, const char *elevator_name)
+{
+	if (!q->elevator || !elevator_match(q->elevator->type, elevator_name))
+		return __elevator_change(q, elevator_name);
+	return 0;
+}
+
+/*
+ * The I/O scheduler depends on the number of hardware queues, this forces a
+ * reattachment when nr_hw_queues changes.
+ */
+void elv_update_nr_hw_queues(struct request_queue *q)
+{
+	const char *name = "none";
+
+	mutex_lock(&q->elevator_lock);
+	if (q->elevator && !blk_queue_dying(q))
+		name = q->elevator->type->elevator_name;
+	__elevator_change(q, name);
+	mutex_unlock(&q->elevator_lock);
 }
 
 static void elv_iosched_load_module(char *elevator_name)
