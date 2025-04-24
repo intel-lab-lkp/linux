@@ -228,10 +228,30 @@ static void mock_sched_free_job(struct drm_sched_job *sched_job)
 	/* Mock job itself is freed by the kunit framework. */
 }
 
+static void mock_sched_fence_context_kill(struct drm_gpu_scheduler *gpu_sched)
+{
+	struct drm_mock_scheduler *sched = drm_sched_to_mock_sched(gpu_sched);
+	struct drm_mock_sched_job *job;
+	unsigned long flags;
+
+	spin_lock_irqsave(&sched->lock, flags);
+	list_for_each_entry(job, &sched->job_list, link) {
+		spin_lock(&job->lock);
+		if (!dma_fence_is_signaled_locked(&job->hw_fence)) {
+			dma_fence_set_error(&job->hw_fence, -ECANCELED);
+			dma_fence_signal_locked(&job->hw_fence);
+		}
+		complete(&job->done);
+		spin_unlock(&job->lock);
+	}
+	spin_unlock_irqrestore(&sched->lock, flags);
+}
+
 static const struct drm_sched_backend_ops drm_mock_scheduler_ops = {
 	.run_job = mock_sched_run_job,
 	.timedout_job = mock_sched_timedout_job,
-	.free_job = mock_sched_free_job
+	.free_job = mock_sched_free_job,
+	.kill_fence_context = mock_sched_fence_context_kill,
 };
 
 /**
@@ -299,18 +319,6 @@ void drm_mock_sched_fini(struct drm_mock_scheduler *sched)
 	list_for_each_entry_safe(job, next, &list, link)
 		drm_mock_sched_job_complete(job);
 	spin_unlock_irqrestore(&sched->lock, flags);
-
-	/*
-	 * Free completed jobs and jobs not yet processed by the DRM scheduler
-	 * free worker.
-	 */
-	spin_lock_irqsave(&sched->lock, flags);
-	list_for_each_entry_safe(job, next, &sched->done_list, link)
-		list_move_tail(&job->link, &list);
-	spin_unlock_irqrestore(&sched->lock, flags);
-
-	list_for_each_entry_safe(job, next, &list, link)
-		mock_sched_free_job(&job->base);
 
 	drm_sched_fini(&sched->base);
 }
