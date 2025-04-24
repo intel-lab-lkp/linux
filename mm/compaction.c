@@ -656,6 +656,17 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 
 		/* Found a free page, will break it into order-0 pages */
 		order = buddy_order(page);
+
+		/*
+		 * Do not break free pages whose order is larger than
+		 * compact's desired order
+		 */
+		if (cc->order != -1 && order >= cc->order) {
+			blockpfn += (1 << order) - 1;
+			page += (1 << order) - 1;
+			goto isolate_fail;
+		}
+
 		isolated = __isolate_free_page(page, order);
 		if (!isolated)
 			break;
