@@ -154,6 +154,7 @@ static int m_can_plat_probe(struct platform_device *pdev)
 	ret = m_can_class_register(mcan_class);
 	if (ret)
 		goto out_runtime_disable;
+	spin_lock_init(&mcan_class->tx_handling_spinlock);
 
 	return ret;
 

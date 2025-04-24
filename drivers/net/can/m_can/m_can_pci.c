@@ -143,6 +143,7 @@ static int m_can_pci_probe(struct pci_dev *pci, const struct pci_device_id *id)
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_put_noidle(dev);
 	pm_runtime_allow(dev);
+	spin_lock_init(&mcan_class->tx_handling_spinlock);
 
 	return 0;
 
