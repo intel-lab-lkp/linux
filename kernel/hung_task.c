@@ -26,6 +26,8 @@
 
 #include <trace/events/sched.h>
 
+#define PR_LEVEL KERN_SOH __stringify(CONFIG_HUNG_TASK_STACKTRACE_LOGLEVEL)
+
 /*
  * The number of tasks checked:
  */
@@ -153,7 +155,7 @@ static void debug_show_blocker(struct task_struct *task)
 			       task->comm, task->pid, t->comm, t->pid);
 			break;
 		}
-		sched_show_task(t);
+		sched_show_task_log_lvl(t, PR_LEVEL);
 		return;
 	}
 }
@@ -221,7 +223,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 			pr_err("      Blocked by coredump.\n");
 		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
 			" disables this message.\n");
-		sched_show_task(t);
+		sched_show_task_log_lvl(t, PR_LEVEL);
 		debug_show_blocker(t);
 		hung_task_show_lock = true;
 

@@ -34,6 +34,7 @@ extern void show_stack(struct task_struct *task, unsigned long *sp,
 		       const char *loglvl);
 
 extern void sched_show_task(struct task_struct *p);
+extern void sched_show_task_log_lvl(struct task_struct *p, const char *lvl);
 
 struct seq_file;
 extern void proc_sched_show_task(struct task_struct *p,

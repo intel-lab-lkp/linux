@@ -7744,7 +7744,7 @@ void __sched io_schedule(void)
 }
 EXPORT_SYMBOL(io_schedule);
 
-void sched_show_task(struct task_struct *p)
+void sched_show_task_log_lvl(struct task_struct *p, const char *lvl)
 {
 	unsigned long free;
 	int ppid;
@@ -7752,7 +7752,8 @@ void sched_show_task(struct task_struct *p)
 	if (!try_get_task_stack(p))
 		return;
 
-	pr_info("task:%-15.15s state:%c", p->comm, task_state_to_char(p));
+	printk("%stask:%-15.15s state:%c", lvl,
+	       p->comm, task_state_to_char(p));
 
 	if (task_is_running(p))
 		pr_cont("  running task    ");
@@ -7766,11 +7767,17 @@ void sched_show_task(struct task_struct *p)
 		free, task_pid_nr(p), task_tgid_nr(p),
 		ppid, p->flags, read_task_thread_flags(p));
 
-	print_worker_info(KERN_INFO, p);
-	print_stop_info(KERN_INFO, p);
-	print_scx_info(KERN_INFO, p);
-	show_stack(p, NULL, KERN_INFO);
+	print_worker_info(lvl, p);
+	print_stop_info(lvl, p);
+	print_scx_info(lvl, p);
+	show_stack(p, NULL, lvl);
 	put_task_stack(p);
+}
+EXPORT_SYMBOL_GPL(sched_show_task_log_lvl);
+
+void sched_show_task(struct task_struct *p)
+{
+	sched_show_task_log_lvl(p, KERN_INFO);
 }
 EXPORT_SYMBOL_GPL(sched_show_task);
 
