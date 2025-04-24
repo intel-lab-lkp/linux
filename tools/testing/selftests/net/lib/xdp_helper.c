@@ -62,6 +62,12 @@ static void ksft_wait(void)
 		close(fd);
 }
 
+static void print_usage(const char *bin)
+{
+	fprintf(stderr, "Usage: %s ifindex queue_id [-z]\n\n"
+		"where:\n\t-z: force zerocopy mode", bin);
+}
+
 /* this is a simple helper program that creates an XDP socket and does the
  * minimum necessary to get bind() to succeed.
  *
@@ -81,8 +87,8 @@ int main(int argc, char **argv)
 	int sock_fd;
 	int queue;
 
-	if (argc != 3) {
-		fprintf(stderr, "Usage: %s ifindex queue_id\n", argv[0]);
+	if (argc != 3 && argc != 4) {
+		print_usage(argv[0]);
 		return 1;
 	}
 
@@ -131,6 +137,15 @@ int main(int argc, char **argv)
 	sxdp.sxdp_ifindex = ifindex;
 	sxdp.sxdp_queue_id = queue;
 	sxdp.sxdp_flags = 0;
+
+	if (argc > 3) {
+		if (!strcmp(argv[3], "-z")) {
+			sxdp.sxdp_flags = XDP_ZEROCOPY;
+		} else {
+			print_usage(argv[0]);
+			return 1;
+		}
+	}
 
 	if (bind(sock_fd, (struct sockaddr *)&sxdp, sizeof(sxdp)) != 0) {
 		munmap(umem_area, UMEM_SZ);
