@@ -2698,8 +2698,10 @@ int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 		 * Enable 1.8V Signal Enable in the Host Control2
 		 * register
 		 */
-		ctrl |= SDHCI_CTRL_VDD_180;
-		sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+		if (!(host->quirks2 & SDHCI_QUIRK2_SUPPRESS_V1P8_ENA)) {
+			ctrl |= SDHCI_CTRL_VDD_180;
+			sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+		}
 
 		/* Some controller need to do more when switching */
 		if (host->ops->voltage_switch)
@@ -2707,7 +2709,7 @@ int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 
 		/* 1.8V regulator output should be stable within 5 ms */
 		ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
-		if (ctrl & SDHCI_CTRL_VDD_180)
+		if (ctrl & SDHCI_CTRL_VDD_180 || (host->quirks2 & SDHCI_QUIRK2_SUPPRESS_V1P8_ENA))
 			return 0;
 
 		pr_warn("%s: 1.8V regulator output did not become stable\n",
