@@ -5,6 +5,8 @@
 #ifndef __LINUX_IRQCHIP_GIC_V5_H
 #define __LINUX_IRQCHIP_GIC_V5_H
 
+#include <linux/iopoll.h>
+
 #include <asm/arch_gicv5.h>
 #include <asm/smp.h>
 
@@ -41,6 +43,8 @@
 #define GICV5_IRS_IDR7			0x001c
 #define GICV5_IRS_CR0			0x0080
 #define GICV5_IRS_CR1			0x0084
+#define GICV5_IRS_SYNCR			0x00c0
+#define GICV5_IRS_SYNC_STATUSR		0x00c4
 #define GICV5_IRS_SPI_SELR		0x0108
 #define GICV5_IRS_SPI_CFGR		0x0114
 #define GICV5_IRS_SPI_STATUSR		0x0118
@@ -94,6 +98,10 @@
 #define GICV5_IRS_CR1_OC		GENMASK(3, 2)
 #define GICV5_IRS_CR1_SH		GENMASK(1, 0)
 
+#define GICV5_IRS_SYNCR_SYNC		BIT(31)
+
+#define GICV5_IRS_SYNC_STATUSR_IDLE	BIT(0)
+
 #define GICV5_IRS_SPI_STATUSR_V		BIT(1)
 #define GICV5_IRS_SPI_STATUSR_IDLE	BIT(0)
 
@@ -135,6 +143,101 @@
 
 #define GICV5_ISTL1E_L2_ADDR_MASK	GENMASK_ULL(55, 12)
 
+#define GICV5_ITS_IDR1		0x0004
+#define GICV5_ITS_IDR2		0x0008
+#define GICV5_ITS_CR0		0x0080
+#define GICV5_ITS_CR1		0x0084
+#define GICV5_ITS_DT_BASER	0x00c0
+#define GICV5_ITS_DT_CFGR	0x00d0
+#define GICV5_ITS_DIDR		0x0100
+#define GICV5_ITS_EIDR		0x0108
+#define GICV5_ITS_INV_EVENTR	0x010c
+#define GICV5_ITS_INV_DEVICER	0x0110
+#define GICV5_ITS_STATUSR	0x0120
+#define GICV5_ITS_SYNCR		0x0140
+#define GICV5_ITS_SYNC_STATUSR	0x0148
+
+#define GICV5_ITS_IDR1_L2SZ			GENMASK(10, 8)
+#define GICV5_ITS_IDR1_ITT_LEVELS		BIT(7)
+#define GICV5_ITS_IDR1_DT_LEVELS		BIT(6)
+#define GICV5_ITS_IDR1_DEVICEID_BITS		GENMASK(5, 0)
+
+#define GICV5_ITS_IDR1_L2SZ_SUPPORT_4KB(r)	FIELD_GET(BIT(8), (r))
+#define GICV5_ITS_IDR1_L2SZ_SUPPORT_16KB(r)	FIELD_GET(BIT(9), (r))
+#define GICV5_ITS_IDR1_L2SZ_SUPPORT_64KB(r)	FIELD_GET(BIT(10), (r))
+
+#define GICV5_ITS_IDR2_XDMN_EVENTs		GENMASK(6, 5)
+#define GICV5_ITS_IDR2_EVENTID_BITS		GENMASK(4, 0)
+
+#define GICV5_ITS_CR0_IDLE			BIT(1)
+#define GICV5_ITS_CR0_ITSEN			BIT(0)
+
+#define GICV5_ITS_CR1_ITT_RA			BIT(7)
+#define GICV5_ITS_CR1_DT_RA			BIT(6)
+#define GICV5_ITS_CR1_IC			GENMASK(5, 4)
+#define GICV5_ITS_CR1_OC			GENMASK(3, 2)
+#define GICV5_ITS_CR1_SH			GENMASK(1, 0)
+
+#define GICV5_ITS_DT_CFGR_STRUCTURE		BIT(16)
+#define GICV5_ITS_DT_CFGR_L2SZ			GENMASK(7, 6)
+#define GICV5_ITS_DT_CFGR_DEVICEID_BITS		GENMASK(5, 0)
+
+#define GICV5_ITS_DT_BASER_ADDR_MASK		GENMASK_ULL(55, 3)
+
+#define GICV5_ITS_INV_DEVICER_I			BIT(31)
+#define GICV5_ITS_INV_DEVICER_EVENTID_BITS	GENMASK(5, 1)
+#define GICV5_ITS_INV_DEVICER_L1		BIT(0)
+
+#define GICV5_ITS_DIDR_DEVICEID			GENMASK_ULL(31, 0)
+
+#define GICV5_ITS_EIDR_EVENTID			GENMASK(15, 0)
+
+#define GICV5_ITS_INV_EVENTR_I			BIT(31)
+#define GICV5_ITS_INV_EVENTR_ITT_L2SZ		GENMASK(2, 1)
+#define GICV5_ITS_INV_EVENTR_L1			BIT(0)
+
+#define GICV5_ITS_STATUSR_IDLE			BIT(0)
+
+#define GICV5_ITS_SYNCR_SYNC			BIT_ULL(63)
+#define GICV5_ITS_SYNCR_SYNCALL			BIT_ULL(32)
+#define GICV5_ITS_SYNCR_DEVICEID		GENMASK_ULL(31, 0)
+
+#define GICV5_ITS_SYNC_STATUSR_IDLE		BIT(0)
+
+#define GICV5_DTL1E_VALID			BIT_ULL(0)
+// Note that there is no shift for the address by design
+#define GICV5_DTL1E_L2_ADDR_MASK		GENMASK_ULL(55, 3)
+#define GICV5_DTL1E_SPAN			GENMASK_ULL(63, 60)
+
+#define GICV5_DTL2E_VALID			BIT_ULL(0)
+#define GICV5_DTL2E_ITT_L2SZ			GENMASK_ULL(2, 1)
+// Note that there is no shift for the address by design
+#define GICV5_DTL2E_ITT_ADDR_MASK		GENMASK_ULL(55, 3)
+#define GICV5_DTL2E_ITT_DSWE			BIT_ULL(57)
+#define GICV5_DTL2E_ITT_STRUCTURE		BIT_ULL(58)
+#define GICV5_DTL2E_EVENT_ID_BITS		GENMASK_ULL(63, 59)
+
+#define GICV5_ITTL1E_VALID			BIT_ULL(0)
+// Note that there is no shift for the address by design
+#define GICV5_ITTL1E_L2_ADDR_MASK		GENMASK_ULL(55, 3)
+#define GICV5_ITTL1E_SPAN			GENMASK_ULL(63, 60)
+
+#define GICV5_ITTL2E_LPI_ID			GENMASK_ULL(23, 0)
+#define GICV5_ITTL2E_DAC			GENMASK_ULL(29, 28)
+#define GICV5_ITTL2E_VIRTUAL			BIT_ULL(30)
+#define GICV5_ITTL2E_VALID			BIT_ULL(31)
+#define GICV5_ITTL2E_VM_ID			GENMASK_ULL(47, 32)
+
+#define GICV5_ITS_DT_ITT_CFGR_L2SZ_4k		0b00
+#define GICV5_ITS_DT_ITT_CFGR_L2SZ_16k		0b01
+#define GICV5_ITS_DT_ITT_CFGR_L2SZ_64k		0b10
+
+#define GICV5_ITS_DT_ITT_CFGR_STRUCTURE_LINEAR		0
+#define GICV5_ITS_DT_ITT_CFGR_STRUCTURE_TWO_LEVEL	1
+
+#define GICV5_ITS_HWIRQ_DEVICE_ID		GENMASK_ULL(31, 0)
+#define GICV5_ITS_HWIRQ_EVENT_ID		GENMASK_ULL(63, 32)
+
 struct gicv5_chip_data {
 	struct fwnode_handle	*fwnode;
 	struct irq_domain	*ppi_domain;
@@ -168,17 +271,90 @@ struct gicv5_irs_chip_data {
 
 void __init gicv5_init_lpi_domain(void);
 void __init gicv5_free_lpi_domain(void);
+static inline int gicv5_wait_for_op(void __iomem *addr, u32 offset, u32 mask,
+				    u32 *val)
+{
+	void __iomem *reg = addr + offset;
+	u32 tmp;
+	int ret;
+
+	ret = readl_poll_timeout_atomic(reg, tmp, tmp & mask, 1, 10 * USEC_PER_MSEC);
+
+	if (val)
+		*val = tmp;
+
+	return ret;
+}
 
 int gicv5_irs_of_probe(struct device_node *parent);
 void gicv5_irs_remove(void);
 int gicv5_irs_enable(void);
+void gicv5_irs_its_probe(void);
 int gicv5_irs_register_cpu(int cpuid);
 int gicv5_irs_cpu_to_iaffid(int cpu_id, u16 *iaffid);
 struct gicv5_irs_chip_data *gicv5_irs_lookup_by_spi_id(u32 spi_id);
 int gicv5_spi_irq_set_type(struct irq_data *d, unsigned int type);
 int gicv5_spi_set_type(struct irq_data *d, unsigned int type);
 int gicv5_irs_iste_alloc(u32 lpi);
+void gicv5_irs_syncr(void);
+
+struct gicv5_its_devtab_cfg {
+	union {
+		struct {
+			__le64	*devtab;
+		} linear;
+		struct {
+			__le64	*l1devtab;
+			__le64	**l2ptrs;
+		} l2;
+	};
+	u32	cfgr;
+};
+
+struct gicv5_its_itt_cfg {
+	union {
+		struct {
+			__le64	*itt;
+			unsigned int num_ents;
+		} linear;
+		struct {
+			__le64	*l1itt;
+			__le64	**l2ptrs;
+			unsigned int num_l1_ents;
+			u8 l2sz;
+		} l2;
+	};
+	u8 event_id_bits;
+	bool l2itt;
+};
+
+struct gicv5_its_chip_data {
+	struct	list_head		entry;
+	struct	xarray			its_devices;
+	struct	mutex			dev_alloc_lock;
+	struct	fwnode_handle		*fwnode;
+	struct gicv5_its_devtab_cfg	devtab_cfgr;
+	struct irq_domain		*domain;
+	void	__iomem			*its_base;
+	phys_addr_t			its_trans_phys_base;
+	u32				flags;
+};
+
+struct gicv5_its_dev {
+	struct gicv5_its_chip_data	*its_node;
+	struct gicv5_its_itt_cfg	itt_cfg;
+	unsigned long			*event_map;
+	u32				device_id;
+	u32				num_events;
+	u32				num_mapped_events;
+	bool				shared;
+};
 
 void gicv5_init_lpis(u32 max);
 void gicv5_deinit_lpis(void);
+
+int gicv5_alloc_lpi(void);
+void gicv5_free_lpi(u32 lpi);
+
+void __init gicv5_its_of_probe(struct device_node *parent);
 #endif

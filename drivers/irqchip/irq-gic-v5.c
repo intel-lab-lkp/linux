@@ -55,12 +55,12 @@ static void release_lpi(u32 lpi)
 	ida_free(&lpi_ida, lpi);
 }
 
-static int gicv5_alloc_lpi(void)
+int gicv5_alloc_lpi(void)
 {
 	return alloc_lpi();
 }
 
-static void gicv5_free_lpi(u32 lpi)
+void gicv5_free_lpi(u32 lpi)
 {
 	release_lpi(lpi);
 }
@@ -1044,6 +1044,8 @@ static int __init gicv5_of_init(struct device_node *node,
 		goto out_int;
 
 	gicv5_smp_init();
+
+	gicv5_irs_its_probe();
 
 	return 0;
 out_int:
