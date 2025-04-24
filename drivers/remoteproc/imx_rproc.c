@@ -595,6 +595,19 @@ static int imx_rproc_prepare(struct rproc *rproc)
 	return  0;
 }
 
+static int imx_rproc_unprepare(struct rproc *rproc)
+{
+	struct rproc_mem_entry *entry, *tmp;
+
+	rproc_coredump_cleanup(rproc);
+	/* clean up carveout allocations */
+	list_for_each_entry_safe(entry, tmp, &rproc->carveouts, node) {
+		list_del(&entry->node);
+		kfree(entry);
+	}
+	return  0;
+}
+
 static int imx_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 {
 	int ret;
@@ -675,6 +688,7 @@ imx_rproc_elf_find_loaded_rsc_table(struct rproc *rproc, const struct firmware *
 
 static const struct rproc_ops imx_rproc_ops = {
 	.prepare	= imx_rproc_prepare,
+	.unprepare	= imx_rproc_unprepare,
 	.attach		= imx_rproc_attach,
 	.detach		= imx_rproc_detach,
 	.start		= imx_rproc_start,
