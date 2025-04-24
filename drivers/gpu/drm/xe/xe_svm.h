@@ -134,12 +134,16 @@ int xe_devm_add(struct xe_tile *tile, struct xe_vram_region *vr)
 static inline
 int xe_svm_init(struct xe_vm *vm)
 {
-	return 0;
+	return drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)", &vm->xe->drm,
+			       NULL, NULL, 0, 0, 0, NULL, NULL, 0);
 }
 
 static inline
 void xe_svm_fini(struct xe_vm *vm)
 {
+	xe_assert(vm->xe, xe_vm_is_closed(vm));
+
+	drm_gpusvm_fini(&vm->svm.gpusvm);
 }
 
 static inline

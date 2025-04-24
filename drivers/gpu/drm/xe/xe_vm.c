@@ -40,7 +40,6 @@
 #include "xe_sync.h"
 #include "xe_trace_bo.h"
 #include "xe_wa.h"
-#include "xe_hmm.h"
 
 static struct drm_gem_object *xe_vm_obj(struct xe_vm *vm)
 {
@@ -53,7 +52,7 @@ static struct drm_gem_object *xe_vm_obj(struct xe_vm *vm)
  *
  * Check if the userptr vma has been invalidated since last successful
  * repin. The check is advisory only and can the function can be called
- * without the vm->userptr.notifier_lock held. There is no guarantee that the
+ * without the vm->svm.gpusvm.notifier_lock held. There is no guarantee that the
  * vma userptr will remain valid after a lockless check, so typically
  * the call needs to be followed by a proper check under the notifier_lock.
  *
@@ -62,7 +61,7 @@ static struct drm_gem_object *xe_vm_obj(struct xe_vm *vm)
 int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma)
 {
 	return mmu_interval_check_retry(&uvma->userptr.notifier,
-					uvma->userptr.notifier_seq) ?
+					uvma->userptr.pages.notifier_seq) ?
 		-EAGAIN : 0;
 }
 
@@ -71,11 +70,22 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma)
 	struct xe_vma *vma = &uvma->vma;
 	struct xe_vm *vm = xe_vma_vm(vma);
 	struct xe_device *xe = vm->xe;
+	struct drm_gpusvm_ctx ctx = {
+		.read_only = xe_vma_read_only(vma),
+	};
 
 	lockdep_assert_held(&vm->lock);
 	xe_assert(xe, xe_vma_is_userptr(vma));
 
-	return xe_hmm_userptr_populate_range(uvma, false);
+	if (vma->gpuva.flags & XE_VMA_DESTROYED)
+		return 0;
+
+	return drm_gpusvm_get_pages(&vm->svm.gpusvm, &uvma->userptr.pages,
+				    uvma->userptr.notifier.mm,
+				    &uvma->userptr.notifier,
+				    xe_vma_userptr(vma),
+				    xe_vma_userptr(vma) + xe_vma_size(vma),
+				    &ctx);
 }
 
 static bool preempt_fences_waiting(struct xe_vm *vm)
@@ -249,7 +259,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
 	++vm->preempt.num_exec_queues;
 	q->lr.pfence = pfence;
 
-	down_read(&vm->userptr.notifier_lock);
+	down_read(&vm->svm.gpusvm.notifier_lock);
 
 	drm_gpuvm_resv_add_fence(&vm->gpuvm, exec, pfence,
 				 DMA_RESV_USAGE_BOOKKEEP, DMA_RESV_USAGE_BOOKKEEP);
@@ -263,7 +273,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
 	if (wait)
 		dma_fence_enable_sw_signaling(pfence);
 
-	up_read(&vm->userptr.notifier_lock);
+	up_read(&vm->svm.gpusvm.notifier_lock);
 
 out_fini:
 	drm_exec_fini(exec);
@@ -305,14 +315,14 @@ void xe_vm_remove_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
  * @vm: The VM.
  *
  * This function checks for whether the VM has userptrs that need repinning,
- * and provides a release-type barrier on the userptr.notifier_lock after
+ * and provides a release-type barrier on the svm.gpusvm.notifier_lock after
  * checking.
  *
  * Return: 0 if there are no userptrs needing repinning, -EAGAIN if there are.
  */
 int __xe_vm_userptr_needs_repin(struct xe_vm *vm)
 {
-	lockdep_assert_held_read(&vm->userptr.notifier_lock);
+	lockdep_assert_held_read(&vm->svm.gpusvm.notifier_lock);
 
 	return (list_empty(&vm->userptr.repin_list) &&
 		list_empty(&vm->userptr.invalidated)) ? 0 : -EAGAIN;
@@ -546,9 +556,9 @@ retry:
 	(!(__tries)++ || __xe_vm_userptr_needs_repin(__vm)) : \
 	__xe_vm_userptr_needs_repin(__vm))
 
-	down_read(&vm->userptr.notifier_lock);
+	down_read(&vm->svm.gpusvm.notifier_lock);
 	if (retry_required(tries, vm)) {
-		up_read(&vm->userptr.notifier_lock);
+		up_read(&vm->svm.gpusvm.notifier_lock);
 		err = -EAGAIN;
 		goto out_unlock;
 	}
@@ -562,7 +572,7 @@ retry:
 	/* Point of no return. */
 	arm_preempt_fences(vm, &preempt_fences);
 	resume_and_reinstall_preempt_fences(vm, &exec);
-	up_read(&vm->userptr.notifier_lock);
+	up_read(&vm->svm.gpusvm.notifier_lock);
 
 out_unlock:
 	drm_exec_fini(&exec);
@@ -589,6 +599,9 @@ static void __vma_userptr_invalidate(struct xe_vm *vm, struct xe_userptr_vma *uv
 	struct xe_vma *vma = &uvma->vma;
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
+	struct drm_gpusvm_ctx ctx = {
+		.in_notifier = true,
+	};
 	long err;
 
 	/*
@@ -625,7 +638,8 @@ static void __vma_userptr_invalidate(struct xe_vm *vm, struct xe_userptr_vma *uv
 		XE_WARN_ON(err);
 	}
 
-	xe_hmm_userptr_unmap(uvma);
+	drm_gpusvm_unmap_pages(&vm->svm.gpusvm, &uvma->userptr.pages,
+			       xe_vma_size(vma) >> PAGE_SHIFT, &ctx);
 }
 
 static bool vma_userptr_invalidate(struct mmu_interval_notifier *mni,
@@ -646,11 +660,11 @@ static bool vma_userptr_invalidate(struct mmu_interval_notifier *mni,
 	       "NOTIFIER: addr=0x%016llx, range=0x%016llx",
 		xe_vma_start(vma), xe_vma_size(vma));
 
-	down_write(&vm->userptr.notifier_lock);
+	down_write(&vm->svm.gpusvm.notifier_lock);
 	mmu_interval_set_seq(mni, cur_seq);
 
 	__vma_userptr_invalidate(vm, uvma);
-	up_write(&vm->userptr.notifier_lock);
+	up_write(&vm->svm.gpusvm.notifier_lock);
 	trace_xe_vma_userptr_invalidate_complete(vma);
 
 	return true;
@@ -674,7 +688,7 @@ void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma)
 	/* Protect against concurrent userptr pinning */
 	lockdep_assert_held(&vm->lock);
 	/* Protect against concurrent notifiers */
-	lockdep_assert_held(&vm->userptr.notifier_lock);
+	lockdep_assert_held(&vm->svm.gpusvm.notifier_lock);
 	/*
 	 * Protect against concurrent instances of this function and
 	 * the critical exec sections
@@ -747,7 +761,7 @@ int xe_vm_userptr_pin(struct xe_vm *vm)
 	}
 
 	if (err) {
-		down_write(&vm->userptr.notifier_lock);
+		down_write(&vm->svm.gpusvm.notifier_lock);
 		spin_lock(&vm->userptr.invalidated_lock);
 		list_for_each_entry_safe(uvma, next, &vm->userptr.repin_list,
 					 userptr.repin_link) {
@@ -756,7 +770,7 @@ int xe_vm_userptr_pin(struct xe_vm *vm)
 				       &vm->userptr.invalidated);
 		}
 		spin_unlock(&vm->userptr.invalidated_lock);
-		up_write(&vm->userptr.notifier_lock);
+		up_write(&vm->svm.gpusvm.notifier_lock);
 	}
 	return err;
 }
@@ -1222,7 +1236,6 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
 			INIT_LIST_HEAD(&userptr->invalidate_link);
 			INIT_LIST_HEAD(&userptr->repin_link);
 			vma->gpuva.gem.offset = bo_offset_or_userptr;
-			mutex_init(&userptr->unmap_mutex);
 
 			err = mmu_interval_notifier_insert(&userptr->notifier,
 							   current->mm,
@@ -1233,7 +1246,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
 				return ERR_PTR(err);
 			}
 
-			userptr->notifier_seq = LONG_MAX;
+			userptr->pages.notifier_seq = LONG_MAX;
 		}
 
 		xe_vm_get(vm);
@@ -1255,8 +1268,8 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
 		struct xe_userptr_vma *uvma = to_userptr_vma(vma);
 		struct xe_userptr *userptr = &uvma->userptr;
 
-		if (userptr->sg)
-			xe_hmm_userptr_free_sg(uvma);
+		drm_gpusvm_free_pages(&vm->svm.gpusvm, &uvma->userptr.pages,
+				      xe_vma_size(vma) >> PAGE_SHIFT);
 
 		/*
 		 * Since userptr pages are not pinned, we can't remove
@@ -1264,7 +1277,6 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
 		 * them anymore
 		 */
 		mmu_interval_notifier_remove(&userptr->notifier);
-		mutex_destroy(&userptr->unmap_mutex);
 		xe_vm_put(vm);
 	} else if (xe_vma_is_null(vma) || xe_vma_is_cpu_addr_mirror(vma)) {
 		xe_vm_put(vm);
@@ -1657,7 +1669,6 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 
 	INIT_LIST_HEAD(&vm->userptr.repin_list);
 	INIT_LIST_HEAD(&vm->userptr.invalidated);
-	init_rwsem(&vm->userptr.notifier_lock);
 	spin_lock_init(&vm->userptr.invalidated_lock);
 
 	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
@@ -1757,11 +1768,9 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 		}
 	}
 
-	if (flags & XE_VM_FLAG_FAULT_MODE) {
-		err = xe_svm_init(vm);
-		if (err)
-			goto err_close;
-	}
+	err = xe_svm_init(vm);
+	if (err)
+		goto err_close;
 
 	if (number_tiles > 1)
 		vm->composite_fence_ctx = dma_fence_context_alloc(1);
@@ -1867,9 +1876,9 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		vma = gpuva_to_vma(gpuva);
 
 		if (xe_vma_has_no_bo(vma)) {
-			down_read(&vm->userptr.notifier_lock);
+			down_read(&vm->svm.gpusvm.notifier_lock);
 			vma->gpuva.flags |= XE_VMA_DESTROYED;
-			up_read(&vm->userptr.notifier_lock);
+			up_read(&vm->svm.gpusvm.notifier_lock);
 		}
 
 		xe_vm_remove_vma(vm, vma);
@@ -1913,8 +1922,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		xe_vma_destroy_unlocked(vma);
 	}
 
-	if (xe_vm_in_fault_mode(vm))
-		xe_svm_fini(vm);
+	xe_svm_fini(vm);
 
 	up_write(&vm->lock);
 
@@ -2145,9 +2153,9 @@ static const u32 region_to_mem_type[] = {
 static void prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
 			     bool post_commit)
 {
-	down_read(&vm->userptr.notifier_lock);
+	down_read(&vm->svm.gpusvm.notifier_lock);
 	vma->gpuva.flags |= XE_VMA_DESTROYED;
-	up_read(&vm->userptr.notifier_lock);
+	up_read(&vm->svm.gpusvm.notifier_lock);
 	if (post_commit)
 		xe_vm_remove_vma(vm, vma);
 }
@@ -2643,9 +2651,9 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
 		struct xe_vma *vma = gpuva_to_vma(op->base.unmap.va);
 
 		if (vma) {
-			down_read(&vm->userptr.notifier_lock);
+			down_read(&vm->svm.gpusvm.notifier_lock);
 			vma->gpuva.flags &= ~XE_VMA_DESTROYED;
-			up_read(&vm->userptr.notifier_lock);
+			up_read(&vm->svm.gpusvm.notifier_lock);
 			if (post_commit)
 				xe_vm_insert_vma(vm, vma);
 		}
@@ -2664,9 +2672,9 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
 			xe_vma_destroy_unlocked(op->remap.next);
 		}
 		if (vma) {
-			down_read(&vm->userptr.notifier_lock);
+			down_read(&vm->svm.gpusvm.notifier_lock);
 			vma->gpuva.flags &= ~XE_VMA_DESTROYED;
-			up_read(&vm->userptr.notifier_lock);
+			up_read(&vm->svm.gpusvm.notifier_lock);
 			if (post_commit)
 				xe_vm_insert_vma(vm, vma);
 		}
@@ -3648,7 +3656,7 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
 		if (xe_vma_is_userptr(vma)) {
 			WARN_ON_ONCE(!mmu_interval_check_retry
 				     (&to_userptr_vma(vma)->userptr.notifier,
-				      to_userptr_vma(vma)->userptr.notifier_seq));
+				      to_userptr_vma(vma)->userptr.pages.notifier_seq));
 			WARN_ON_ONCE(!dma_resv_test_signaled(xe_vm_resv(xe_vma_vm(vma)),
 							     DMA_RESV_USAGE_BOOKKEEP));
 

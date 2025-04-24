@@ -294,7 +294,7 @@ retry:
 		if (err)
 			goto err_put_job;
 
-		err = down_read_interruptible(&vm->userptr.notifier_lock);
+		err = down_read_interruptible(&vm->svm.gpusvm.notifier_lock);
 		if (err)
 			goto err_put_job;
 
@@ -336,7 +336,7 @@ retry:
 
 err_repin:
 	if (!xe_vm_in_lr_mode(vm))
-		up_read(&vm->userptr.notifier_lock);
+		up_read(&vm->svm.gpusvm.notifier_lock);
 err_put_job:
 	if (err)
 		xe_sched_job_put(job);

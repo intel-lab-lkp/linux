@@ -43,7 +43,7 @@ config DRM_XE
 	select MMU_NOTIFIER
 	select WANT_DEV_COREDUMP
 	select AUXILIARY_BUS
-	select HMM_MIRROR
+	select DRM_GPUSVM
 	help
 	  Experimental driver for Intel Xe series GPUs
 
@@ -79,7 +79,6 @@ config DRM_XE_GPUSVM
 	depends on !UML
 	depends on DEVICE_PRIVATE
 	default y
-	select DRM_GPUSVM
 	help
 	  Enable this option if you want support for CPU to GPU address
 	  mirroring.
