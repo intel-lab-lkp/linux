@@ -270,6 +270,9 @@ fail:
 static void gsc_irq_handler(struct intel_gt *gt, unsigned int intf_id)
 {
 	int ret;
+#ifdef CONFIG_PREEMPT_RT
+	int irq_disabled_flag;
+#endif
 
 	if (intf_id >= INTEL_GSC_NUM_INTERFACES) {
 		gt_warn_once(gt, "GSC irq: intf_id %d is out of range", intf_id);
@@ -284,7 +287,18 @@ static void gsc_irq_handler(struct intel_gt *gt, unsigned int intf_id)
 	if (gt->gsc.intf[intf_id].irq < 0)
 		return;
 
+#ifdef CONFIG_PREEMPT_RT
+	/* mei interrupt top half should run in irq disabled context */
+	irq_disabled_flag = irqs_disabled();
+	if (!irq_disabled_flag)
+		local_irq_disable();
+#endif
 	ret = generic_handle_irq(gt->gsc.intf[intf_id].irq);
+#ifdef CONFIG_PREEMPT_RT
+	if (!irq_disabled_flag)
+		local_irq_enable();
+#endif
+
 	if (ret)
 		gt_err_ratelimited(gt, "error handling GSC irq: %d\n", ret);
 }
