@@ -243,4 +243,10 @@
 	RESTORE_SP_AND_RET \docfi
 	.endm
 
+	.macro STACKLEAK_ERASE
+#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
+	bl		stackleak_erase_on_task_stack
+#endif
+	.endm
+
 #endif /* _ASM_STACKFRAME_H */
