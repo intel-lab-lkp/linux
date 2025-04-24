@@ -2821,6 +2821,22 @@ static struct extent_buffer *__alloc_extent_buffer(struct btrfs_fs_info *fs_info
 	return eb;
 }
 
+/*
+ * Detach folios and folio_put() them.
+ *
+ * For use in eb allocation error cleanup paths, as btrfs_release_extent_buffer()
+ * does not call folio_put().
+ */
+static void cleanup_extent_buffer_folios(struct extent_buffer *eb)
+{
+	for (int i = 0; i < num_extent_folios(eb); i++) {
+		ASSERT(eb->folios[i]);
+		detach_extent_buffer_folio(eb, eb->folios[i]);
+		folio_put(eb->folios[i]);
+		eb->folios[i] = NULL;
+	}
+}
+
 struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 {
 	struct extent_buffer *new;
@@ -2838,26 +2854,30 @@ struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 	set_bit(EXTENT_BUFFER_UNMAPPED, &new->bflags);
 
 	ret = alloc_eb_folio_array(new, false);
-	if (ret) {
-		btrfs_release_extent_buffer(new);
-		return NULL;
-	}
+	if (ret)
+		goto release_eb;
 
 	for (int i = 0; i < num_extent_folios(src); i++) {
 		struct folio *folio = new->folios[i];
 
 		ret = attach_extent_buffer_folio(new, folio, NULL);
-		if (ret < 0) {
-			btrfs_release_extent_buffer(new);
-			return NULL;
-		}
+		if (ret < 0)
+			goto cleanup_folios;
 		WARN_ON(folio_test_dirty(folio));
-		folio_put(folio);
 	}
+	for (int i = 0; i < num_extent_folios(src); i++)
+		folio_put(new->folios[i]);
+
 	copy_extent_buffer_full(new, src);
 	set_extent_buffer_uptodate(new);
 
 	return new;
+
+cleanup_folios:
+	cleanup_extent_buffer_folios(new);
+release_eb:
+	btrfs_release_extent_buffer(new);
+	return NULL;
 }
 
 struct extent_buffer *alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
@@ -2872,12 +2892,12 @@ struct extent_buffer *alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 
 	ret = alloc_eb_folio_array(eb, false);
 	if (ret)
-		goto out;
+		goto release_eb;
 
 	for (int i = 0; i < num_extent_folios(eb); i++) {
 		ret = attach_extent_buffer_folio(eb, eb->folios[i], NULL);
 		if (ret < 0)
-			goto out_detach;
+			goto cleanup_folios;
 	}
 	for (int i = 0; i < num_extent_folios(eb); i++)
 		folio_put(eb->folios[i]);
@@ -2888,15 +2908,10 @@ struct extent_buffer *alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 
 	return eb;
 
-out_detach:
-	for (int i = 0; i < num_extent_folios(eb); i++) {
-		if (eb->folios[i]) {
-			detach_extent_buffer_folio(eb, eb->folios[i]);
-			folio_put(eb->folios[i]);
-		}
-	}
-out:
-	kmem_cache_free(extent_buffer_cache, eb);
+cleanup_folios:
+	cleanup_extent_buffer_folios(eb);
+release_eb:
+	btrfs_release_extent_buffer(eb);
 	return NULL;
 }
 
