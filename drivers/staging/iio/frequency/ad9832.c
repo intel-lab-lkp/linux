@@ -236,7 +236,7 @@ static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
 		if (val)
 			st->ctrl_src &= ~(AD9832_RESET | AD9832_SLEEP | AD9832_CLR);
 		else
-			st->ctrl_src |= FIELD_PREP(AD9832_RESET, 1);
+			st->ctrl_src |= FIELD_PREP(AD9832_SLEEP, 1);
 
 		st->data = cpu_to_be16(FIELD_PREP(AD9832_CMD_MSK, AD9832_CMD_SLEEPRESCLR) |
 						  st->ctrl_src);
