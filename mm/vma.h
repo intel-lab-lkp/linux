@@ -548,4 +548,12 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address);
 
 int __vm_munmap(unsigned long start, size_t len, bool unlock);
 
+#ifdef CONFIG_MMU
+struct vm_area_struct *vm_area_alloc(struct mm_struct *);
+void vm_area_free(struct vm_area_struct *);
+struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig);
+#endif
+
+extern void __init vma_state_init(void);
+
 #endif	/* __MM_VMA_H */

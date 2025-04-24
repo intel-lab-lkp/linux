@@ -97,7 +97,7 @@ static void vm_area_init_from(const struct vm_area_struct *src,
 	dest->vm_region = src->vm_region;
 }
 
-struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
+static struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 {
 	struct vm_area_struct *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 

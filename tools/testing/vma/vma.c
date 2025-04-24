@@ -1667,6 +1667,7 @@ int main(void)
 	int num_tests = 0, num_fail = 0;
 
 	maple_tree_init();
+	vma_state_init();
 
 #define TEST(name)							\
 	do {								\

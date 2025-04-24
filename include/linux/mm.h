@@ -222,19 +222,6 @@ static inline struct folio *lru_to_folio(struct list_head *head)
 void setup_initial_init_mm(void *start_code, void *end_code,
 			   void *end_data, void *brk);
 
-/*
- * Linux kernel virtual memory manager primitives.
- * The idea being to have a "virtual" mm in the same way
- * we have a virtual fs - giving a cleaner interface to the
- * mm details, and allowing different kinds of memory mappings
- * (from shared memory to executable loading to arbitrary
- * mmap() functions).
- */
-
-struct vm_area_struct *vm_area_alloc(struct mm_struct *);
-struct vm_area_struct *vm_area_dup(struct vm_area_struct *);
-void vm_area_free(struct vm_area_struct *);
-
 #ifndef CONFIG_MMU
 extern struct rb_root nommu_region_tree;
 extern struct rw_semaphore nommu_region_sem;

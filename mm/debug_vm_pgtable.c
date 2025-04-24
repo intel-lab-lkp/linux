@@ -36,6 +36,8 @@
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 
+#include "vma.h"
+
 /*
  * Please refer Documentation/mm/arch_pgtable_helpers.rst for the semantics
  * expectations that are being validated here. All future changes in here
