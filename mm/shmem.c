@@ -4368,7 +4368,13 @@ static const struct xattr_handler * const shmem_xattr_handlers[] = {
 static ssize_t shmem_listxattr(struct dentry *dentry, char *buffer, size_t size)
 {
 	struct shmem_inode_info *info = SHMEM_I(d_inode(dentry));
-	return simple_xattr_list(d_inode(dentry), &info->xattrs, buffer, size);
+	ssize_t sz = simple_xattr_list(d_inode(dentry), &info->xattrs, buffer,
+				size);
+	if (sz >= 0 && sz <= size)
+		sz += security_inode_listsecurity(d_inode(dentry),
+						buffer ? buffer + sz : NULL,
+						size - sz);
+	return sz;
 }
 #endif /* CONFIG_TMPFS_XATTR */
 

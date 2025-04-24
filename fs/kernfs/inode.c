@@ -140,12 +140,18 @@ ssize_t kernfs_iop_listxattr(struct dentry *dentry, char *buf, size_t size)
 {
 	struct kernfs_node *kn = kernfs_dentry_node(dentry);
 	struct kernfs_iattrs *attrs;
+	ssize_t sz;
 
 	attrs = kernfs_iattrs(kn);
 	if (!attrs)
 		return -ENOMEM;
 
-	return simple_xattr_list(d_inode(dentry), &attrs->xattrs, buf, size);
+	sz = simple_xattr_list(d_inode(dentry), &attrs->xattrs, buf, size);
+	if (sz >= 0 && sz <= size)
+		sz += security_inode_listsecurity(d_inode(dentry),
+						buf ? buf + sz : NULL,
+						size - sz);
+	return sz;
 }
 
 static inline void set_default_inode_attr(struct inode *inode, umode_t mode)
