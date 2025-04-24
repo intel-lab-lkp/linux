@@ -192,7 +192,7 @@ static int cdns_pcie_ep_map_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 	}
 
 	fn = cdns_pcie_get_fn_from_vfn(pcie, fn, vfn);
-	cdns_pcie_set_outbound_region(pcie, 0, fn, r, false, addr, pci_addr, size);
+	pcie->ops->set_outbound_region(pcie, 0, fn, r, false, addr, pci_addr, size);
 
 	set_bit(r, &ep->ob_region_map);
 	ep->ob_addr[r] = addr;
@@ -214,7 +214,7 @@ static void cdns_pcie_ep_unmap_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 	if (r == ep->max_regions - 1)
 		return;
 
-	cdns_pcie_reset_outbound_region(pcie, r);
+	pcie->ops->reset_outbound_region(pcie, r);
 
 	ep->ob_addr[r] = 0;
 	clear_bit(r, &ep->ob_region_map);
@@ -329,8 +329,7 @@ static void cdns_pcie_ep_assert_intx(struct cdns_pcie_ep *ep, u8 fn, u8 intx,
 	if (unlikely(ep->irq_pci_addr != CDNS_PCIE_EP_IRQ_PCI_ADDR_LEGACY ||
 		     ep->irq_pci_fn != fn)) {
 		/* First region was reserved for IRQ writes. */
-		cdns_pcie_set_outbound_region_for_normal_msg(pcie, 0, fn, 0,
-							     ep->irq_phys_addr);
+		pcie->ops->set_outbound_region_for_normal_msg(pcie, 0, fn, 0, ep->irq_phys_addr);
 		ep->irq_pci_addr = CDNS_PCIE_EP_IRQ_PCI_ADDR_LEGACY;
 		ep->irq_pci_fn = fn;
 	}
@@ -411,11 +410,11 @@ static int cdns_pcie_ep_send_msi_irq(struct cdns_pcie_ep *ep, u8 fn, u8 vfn,
 	if (unlikely(ep->irq_pci_addr != (pci_addr & ~pci_addr_mask) ||
 		     ep->irq_pci_fn != fn)) {
 		/* First region was reserved for IRQ writes. */
-		cdns_pcie_set_outbound_region(pcie, 0, fn, 0,
-					      false,
-					      ep->irq_phys_addr,
-					      pci_addr & ~pci_addr_mask,
-					      pci_addr_mask + 1);
+		pcie->ops->set_outbound_region(pcie, 0, fn, 0,
+					       false,
+					       ep->irq_phys_addr,
+					       pci_addr & ~pci_addr_mask,
+					       pci_addr_mask + 1);
 		ep->irq_pci_addr = (pci_addr & ~pci_addr_mask);
 		ep->irq_pci_fn = fn;
 	}
@@ -514,11 +513,11 @@ static int cdns_pcie_ep_send_msix_irq(struct cdns_pcie_ep *ep, u8 fn, u8 vfn,
 	if (ep->irq_pci_addr != (msg_addr & ~pci_addr_mask) ||
 	    ep->irq_pci_fn != fn) {
 		/* First region was reserved for IRQ writes. */
-		cdns_pcie_set_outbound_region(pcie, 0, fn, 0,
-					      false,
-					      ep->irq_phys_addr,
-					      msg_addr & ~pci_addr_mask,
-					      pci_addr_mask + 1);
+		pcie->ops->set_outbound_region(pcie, 0, fn, 0,
+					       false,
+					       ep->irq_phys_addr,
+					       msg_addr & ~pci_addr_mask,
+					       pci_addr_mask + 1);
 		ep->irq_pci_addr = (msg_addr & ~pci_addr_mask);
 		ep->irq_pci_fn = fn;
 	}
@@ -869,7 +868,7 @@ int cdns_pcie_ep_setup(struct cdns_pcie_ep *ep)
 	set_bit(0, &ep->ob_region_map);
 
 	if (ep->quirk_detect_quiet_flag)
-		cdns_pcie_detect_quiet_min_delay_set(&ep->pcie);
+		pcie->ops->detect_quiet_min_delay_set(&ep->pcie);
 
 	spin_lock_init(&ep->lock);
 

@@ -30,7 +30,30 @@ static u64 cdns_plat_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
 }
 
 static const struct cdns_pcie_ops cdns_plat_ops = {
+	.link_up = cdns_pcie_linkup,
 	.cpu_addr_fixup = cdns_plat_cpu_addr_fixup,
+	.host_init_root_port = cdns_pcie_host_init_root_port,
+	.host_bar_ib_config = cdns_pcie_host_bar_ib_config,
+	.host_init_address_translation = cdns_pcie_host_init_address_translation,
+	.detect_quiet_min_delay_set = cdns_pcie_detect_quiet_min_delay_set,
+	.set_outbound_region = cdns_pcie_set_outbound_region,
+	.set_outbound_region_for_normal_msg =
+					    cdns_pcie_set_outbound_region_for_normal_msg,
+	.reset_outbound_region = cdns_pcie_reset_outbound_region,
+};
+
+static const struct cdns_pcie_ops cdns_hpa_plat_ops = {
+	.start_link = cdns_pcie_hpa_start_link,
+	.stop_link = cdns_pcie_hpa_stop_link,
+	.link_up = cdns_pcie_hpa_linkup,
+	.host_init_root_port = cdns_pcie_hpa_host_init_root_port,
+	.host_bar_ib_config = cdns_pcie_hpa_host_bar_ib_config,
+	.host_init_address_translation = cdns_pcie_hpa_host_init_address_translation,
+	.detect_quiet_min_delay_set = cdns_pcie_hpa_detect_quiet_min_delay_set,
+	.set_outbound_region = cdns_pcie_hpa_set_outbound_region,
+	.set_outbound_region_for_normal_msg =
+					    cdns_pcie_hpa_set_outbound_region_for_normal_msg,
+	.reset_outbound_region = cdns_pcie_hpa_reset_outbound_region,
 };
 
 static int cdns_plat_pcie_probe(struct platform_device *pdev)
@@ -67,7 +90,7 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 
 		rc = pci_host_bridge_priv(bridge);
 		rc->pcie.dev = dev;
-		rc->pcie.ops = &cdns_plat_ops;
+		rc->pcie.ops = data->is_hpa ? &cdns_hpa_plat_ops : &cdns_plat_ops;
 		rc->pcie.is_hpa = data->is_hpa;
 		rc->pcie.is_rc = data->is_rc;
 
@@ -100,7 +123,7 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 			return -ENOMEM;
 
 		ep->pcie.dev = dev;
-		ep->pcie.ops = &cdns_plat_ops;
+		ep->pcie.ops = data->is_hpa ? &cdns_hpa_plat_ops : &cdns_plat_ops;
 		ep->pcie.is_hpa = data->is_hpa;
 		ep->pcie.is_rc = data->is_rc;
 

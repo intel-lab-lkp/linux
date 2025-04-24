@@ -164,6 +164,14 @@ static const struct cdns_pcie_ops j721e_pcie_ops = {
 	.start_link = j721e_pcie_start_link,
 	.stop_link = j721e_pcie_stop_link,
 	.link_up = j721e_pcie_link_up,
+	.host_init_root_port = cdns_pcie_host_init_root_port,
+	.host_bar_ib_config = cdns_pcie_host_bar_ib_config,
+	.host_init_address_translation = cdns_pcie_host_init_address_translation,
+	.detect_quiet_min_delay_set = cdns_pcie_detect_quiet_min_delay_set,
+	.set_outbound_region = cdns_pcie_set_outbound_region,
+	.set_outbound_region_for_normal_msg =
+					    cdns_pcie_set_outbound_region_for_normal_msg,
+	.reset_outbound_region = cdns_pcie_reset_outbound_region,
 };
 
 static int j721e_pcie_set_mode(struct j721e_pcie *pcie, struct regmap *syscon,
@@ -479,6 +487,8 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 		cdns_pcie = &rc->pcie;
 		cdns_pcie->dev = dev;
+		cdns_pcie->is_rc = true;
+		cdns_pcie->is_hpa = false;
 		cdns_pcie->ops = &j721e_pcie_ops;
 		pcie->cdns_pcie = cdns_pcie;
 		break;
@@ -495,6 +505,8 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 		cdns_pcie = &ep->pcie;
 		cdns_pcie->dev = dev;
+		cdns_pcie->is_rc = false;
+		cdns_pcie->is_hpa = false;
 		cdns_pcie->ops = &j721e_pcie_ops;
 		pcie->cdns_pcie = cdns_pcie;
 		break;
