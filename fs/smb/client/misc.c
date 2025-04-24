@@ -6,6 +6,7 @@
  *
  */
 
+#include <crypto/hash.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/mempool.h>
