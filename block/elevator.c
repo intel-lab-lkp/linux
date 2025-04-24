@@ -45,6 +45,12 @@
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
 
+/* Holding context data for changing elevator */
+struct elv_change_ctx {
+	const char *name;
+	bool uevent;
+};
+
 static DEFINE_SPINLOCK(elv_list_lock);
 static LIST_HEAD(elv_list);
 
@@ -621,7 +627,8 @@ void elevator_init_mq(struct request_queue *q)
  * If switching fails, we are most likely running out of memory and not able
  * to restore the old io scheduler, so leaving the io scheduler being none.
  */
-static int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
+static int elevator_switch(struct request_queue *q, struct elevator_type *new_e,
+			   struct elv_change_ctx *ctx)
 {
 	int ret;
 
@@ -639,7 +646,7 @@ static int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
 	if (ret)
 		goto out_unfreeze;
 
-	ret = elv_register_queue(q, true);
+	ret = elv_register_queue(q, ctx->uevent);
 	if (ret) {
 		elevator_exit(q);
 		goto out_unfreeze;
@@ -678,8 +685,9 @@ static void elevator_disable(struct request_queue *q)
  * Switch this queue to the given IO scheduler.
  */
 static int __elevator_change(struct request_queue *q,
-			     const char *elevator_name)
+			     struct elv_change_ctx *ctx)
 {
+	const char *elevator_name = ctx->name;
 	struct elevator_type *e;
 	int ret;
 
@@ -698,20 +706,21 @@ static int __elevator_change(struct request_queue *q,
 	e = elevator_find_get(elevator_name);
 	if (!e)
 		return -EINVAL;
-	ret = elevator_switch(q, e);
+	ret = elevator_switch(q, e, ctx);
 	elevator_put(e);
 	return ret;
 }
 
-static int elevator_change(struct request_queue *q, const char *elevator_name)
+static int elevator_change(struct request_queue *q,
+			   struct elv_change_ctx *ctx)
 {
 	unsigned int memflags;
 	int ret = 0;
 
 	memflags = blk_mq_freeze_queue(q);
 	mutex_lock(&q->elevator_lock);
-	if (!q->elevator || !elevator_match(q->elevator->type, elevator_name))
-		ret = __elevator_change(q, elevator_name);
+	if (!q->elevator || !elevator_match(q->elevator->type, ctx->name))
+		ret = __elevator_change(q, ctx);
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
 	return ret;
@@ -723,16 +732,19 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
  */
 void elv_update_nr_hw_queues(struct request_queue *q)
 {
-	const char *name = "none";
+	struct elv_change_ctx ctx = {
+		.name	= "none",
+		.uevent	= true,
+	};
 
 	mutex_lock(&q->elevator_lock);
 	if (q->elevator && !blk_queue_dying(q))
-		name = q->elevator->type->elevator_name;
-	__elevator_change(q, name);
+		ctx.name = q->elevator->type->elevator_name;
+	__elevator_change(q, &ctx);
 	mutex_unlock(&q->elevator_lock);
 }
 
-static void elv_iosched_load_module(char *elevator_name)
+static void elv_iosched_load_module(const char *elevator_name)
 {
 	struct elevator_type *found;
 
@@ -748,7 +760,9 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 			  size_t count)
 {
 	char elevator_name[ELV_NAME_MAX];
-	char *name;
+	struct elv_change_ctx ctx = {
+		.uevent = true,
+	};
 	int ret;
 	struct request_queue *q = disk->queue;
 	struct blk_mq_tag_set *set = q->tag_set;
@@ -759,12 +773,12 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	 * queue is the one for the device storing the module file.
 	 */
 	strscpy(elevator_name, buf, sizeof(elevator_name));
-	name = strstrip(elevator_name);
+	ctx.name = strstrip(elevator_name);
 
-	elv_iosched_load_module(name);
+	elv_iosched_load_module(ctx.name);
 
 	down_read_nested(&set->update_nr_hwq_sema, 1);
-	ret = elevator_change(q, name);
+	ret = elevator_change(q, &ctx);
 	if (!ret)
 		ret = count;
 	up_read(&set->update_nr_hwq_sema);
