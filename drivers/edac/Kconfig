@@ -576,4 +576,15 @@ config EDAC_LOONGSON
 	  errors (CE) only. Loongson-3A5000/3C5000/3D5000/3A6000/3C6000
 	  are compatible.
 
+config EDAC_VERSALNET
+	tristate "AMD Versal NET EDAC"
+	depends on CDX_CONTROLLER && ARCH_ZYNQMP
+	help
+	  Support for single bit error correction, double bit error detection on
+	  the AMD Versal NET DDR memory controller and other system errors
+	  from various IP subsystems (e.g., RPU, NOCs, HNICX, PL).
+
+	  Report single bit errors (CE), double bit errors (UE) and
+	  errors from other IP subsystems like RPU, APU, NOC, HNICX and PL.
+
 endif # EDAC
