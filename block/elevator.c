@@ -683,6 +683,8 @@ static int __elevator_change(struct request_queue *q,
 	struct elevator_type *e;
 	int ret;
 
+	lockdep_assert_held(&q->tag_set->update_nr_hwq_sema);
+
 	/* Make sure queue is not in the middle of being removed */
 	if (!blk_queue_registered(q))
 		return -ENOENT;
@@ -703,9 +705,16 @@ static int __elevator_change(struct request_queue *q,
 
 static int elevator_change(struct request_queue *q, const char *elevator_name)
 {
+	unsigned int memflags;
+	int ret = 0;
+
+	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->elevator_lock);
 	if (!q->elevator || !elevator_match(q->elevator->type, elevator_name))
-		return __elevator_change(q, elevator_name);
-	return 0;
+		ret = __elevator_change(q, elevator_name);
+	mutex_unlock(&q->elevator_lock);
+	blk_mq_unfreeze_queue(q, memflags);
+	return ret;
 }
 
 /*
@@ -741,7 +750,6 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	char elevator_name[ELV_NAME_MAX];
 	char *name;
 	int ret;
-	unsigned int memflags;
 	struct request_queue *q = disk->queue;
 	struct blk_mq_tag_set *set = q->tag_set;
 
@@ -756,13 +764,9 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	elv_iosched_load_module(name);
 
 	down_read_nested(&set->update_nr_hwq_sema, 1);
-	memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->elevator_lock);
 	ret = elevator_change(q, name);
 	if (!ret)
 		ret = count;
-	mutex_unlock(&q->elevator_lock);
-	blk_mq_unfreeze_queue(q, memflags);
 	up_read(&set->update_nr_hwq_sema);
 	return ret;
 }
