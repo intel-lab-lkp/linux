@@ -105,6 +105,13 @@ lib-$(CONFIG_UNACCEPTED_MEMORY) += unaccepted_memory.o bitmap.o find.o
 extra-y				:= $(lib-y)
 lib-y				:= $(patsubst %.o,%.stub.o,$(lib-y))
 
+extra-$(CONFIG_EFI_SBAT)	+= sbat.o
+$(obj)/sbat.o: $(obj)/sbat.bin
+targets += sbat.bin
+filechk_sbat.bin = cat $(or $(real-prereqs), /dev/null)
+$(obj)/sbat.bin: $(CONFIG_EFI_SBAT_FILE) FORCE
+	$(call filechk,sbat.bin)
+
 # Even when -mbranch-protection=none is set, Clang will generate a
 # .note.gnu.property for code-less object files (like lib/ctype.c),
 # so work around this by explicitly removing the unwanted section.

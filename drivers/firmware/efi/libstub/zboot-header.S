@@ -135,6 +135,20 @@ __efistub_efi_zboot_header:
 			IMAGE_SCN_MEM_READ | \
 			IMAGE_SCN_MEM_WRITE
 
+#ifdef CONFIG_EFI_SBAT
+	.ascii		".sbat\0\0\0"
+	.long		__sbat_size
+	.long		_edata - .Ldoshdr
+	.long		__sbat_size
+	.long		_edata - .Ldoshdr
+
+	.long		0, 0
+	.short		0, 0
+	.long		IMAGE_SCN_CNT_INITIALIZED_DATA | \
+			IMAGE_SCN_MEM_READ | \
+			IMAGE_SCN_MEM_DISCARDABLE
+#endif
+
 	.set		.Lsection_count, (. - .Lsection_table) / 40
 
 #ifdef PE_DLL_CHAR_EX

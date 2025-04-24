@@ -31,9 +31,23 @@ SECTIONS
 
 	.data : ALIGN(4096) {
 		*(.data* .init.data*)
+#ifndef CONFIG_EFI_SBAT
 		_edata = ALIGN(512);
+#else
+		/* Avoid gap between '.data' and '.sbat' */
+		_edata = ALIGN(4096);
+#endif
 		. = _edata;
 	}
+
+#ifdef CONFIG_EFI_SBAT
+        .sbat : ALIGN(4096) {
+		_sbat = . ;
+		*(.sbat)
+		_esbat = ALIGN(512);
+		. = _esbat;
+	}
+#endif
 
 	.bss : {
 		*(.bss* .init.bss*)
@@ -52,3 +66,6 @@ PROVIDE(__efistub__gzdata_size =
 
 PROVIDE(__data_rawsize = ABSOLUTE(_edata - _etext));
 PROVIDE(__data_size = ABSOLUTE(_end - _etext));
+#ifdef CONFIG_EFI_SBAT
+PROVIDE(__sbat_size = ABSOLUTE(_esbat - _sbat));
+#endif
