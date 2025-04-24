@@ -1404,17 +1404,15 @@ static void rtw_lps_change_dtim_hdl(struct adapter *padapter, u8 dtim)
 	if (hal_btcoex_IsBtControlLps(padapter))
 		return;
 
-	mutex_lock(&pwrpriv->lock);
+	scoped_guard(mutex, &pwrpriv->lock) {
+		pwrpriv->dtim = dtim;
 
-	pwrpriv->dtim = dtim;
+		if (pwrpriv->fw_current_in_ps_mode && (pwrpriv->pwr_mode > PS_MODE_ACTIVE)) {
+			u8 ps_mode = pwrpriv->pwr_mode;
 
-	if (pwrpriv->fw_current_in_ps_mode && (pwrpriv->pwr_mode > PS_MODE_ACTIVE)) {
-		u8 ps_mode = pwrpriv->pwr_mode;
-
-		rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
+			rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&ps_mode));
+		}
 	}
-
-	mutex_unlock(&pwrpriv->lock);
 }
 
 static void rtw_dm_ra_mask_hdl(struct adapter *padapter, struct sta_info *psta)
