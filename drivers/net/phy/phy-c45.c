@@ -1510,8 +1510,8 @@ int genphy_c45_ethtool_get_eee(struct phy_device *phydev,
 {
 	int ret;
 
-	ret = genphy_c45_eee_is_active(phydev, data->lp_advertised);
-	if (ret < 0)
+	ret = genphy_c45_read_eee_lpa(phydev, data->lp_advertised);
+	if (ret)
 		return ret;
 
 	data->eee_active = phydev->eee_active;
