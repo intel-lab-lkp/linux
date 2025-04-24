@@ -170,6 +170,426 @@ zl3073x_read_reg(struct zl3073x_dev *zldev, unsigned int reg, void *val)
 	return rc;
 }
 
+static int
+zl3073x_write_reg(struct zl3073x_dev *zldev, unsigned int reg, const void *val)
+{
+	unsigned int len;
+	u8 buf[6];
+	int rc;
+
+	/* Offset of the last item in the indexed register or offset of
+	 * the non-indexed register itself.
+	 */
+	if (ZL_REG_OFFSET(reg) > ZL_REG_MAX_OFFSET(reg)) {
+		dev_err(zldev->dev, "Index of out range for reg 0x%04lx\n",
+			ZL_REG_ADDR(reg));
+		return -EINVAL;
+	}
+
+	len = ZL_REG_SIZE(reg);
+	switch (len) {
+	case 1:
+		buf[0] = *(u8 *)val;
+		break;
+	case 2:
+		put_unaligned_be16(*(u16 *)val, buf);
+		break;
+	case 4:
+		put_unaligned_be32(*(u32 *)val, buf);
+		break;
+	case 6:
+		put_unaligned_be48(*(u64 *)val, buf);
+		break;
+	default:
+		dev_err(zldev->dev, "Invalid reg-width %u for reg 0x%04lx\n",
+			len, ZL_REG_ADDR(reg));
+		return -EINVAL;
+	}
+
+	/* Map the register address to virtual range */
+	reg = ZL_REG_ADDR(reg) + ZL_RANGE_OFFSET;
+
+	rc = regmap_bulk_write(zldev->regmap, reg, buf, len);
+	if (rc) {
+		dev_err(zldev->dev, "Failed to write reg 0x%04x: %pe\n", reg,
+			ERR_PTR(rc));
+		return rc;
+	}
+
+	return rc;
+}
+
+static int
+zl3073x_wait_reg_zero_bits(struct zl3073x_dev *zldev, unsigned int reg, u8 mask)
+{
+	/* Register polling sleep & timeout */
+#define ZL_POLL_SLEEP_US   10
+#define ZL_POLL_TIMEOUT_US 2000000
+	unsigned int val;
+
+	/* Only 8bit registers are supported */
+	BUILD_BUG_ON(ZL_REG_SIZE(reg) != 1);
+
+	/* Map the register address to virtual range for polling */
+	reg = ZL_REG_ADDR(reg) + ZL_RANGE_OFFSET;
+
+	return regmap_read_poll_timeout(zldev->regmap, reg, val, !(val & mask),
+					ZL_POLL_SLEEP_US, ZL_POLL_TIMEOUT_US);
+}
+
+static int
+zl3073x_mb_cmd_do(struct zl3073x_dev *zldev, unsigned int cmd_reg, u8 cmd,
+		  unsigned int mask_reg, u16 mask)
+{
+	int rc;
+
+	rc = zl3073x_write_reg(zldev, mask_reg, &mask);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_write_reg(zldev, cmd_reg, &cmd);
+	if (rc)
+		return rc;
+
+	/* Wait for the command to finish */
+	return zl3073x_wait_reg_zero_bits(zldev, cmd_reg, cmd);
+}
+
+/**
+ * zl3073x_mb_dpll_read - read given DPLL configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: DPLL index
+ * @fields: mask of the mailbox fields to be filled
+ * @mb: DPLL mailbox
+ *
+ * Reads selected configuration of given reference into output mailbox.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_dpll_read(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			 struct zl3073x_mb_dpll *mb)
+{
+	int i, rc;
+
+	rc = zl3073x_mb_cmd_do(zldev, ZL_REG_DPLL_MB_SEM, ZL_DPLL_MB_SEM_RD,
+			       ZL_REG_DPLL_MB_MASK, BIT(index));
+	if (rc)
+		return rc;
+
+	for (i = 0; i < ARRAY_SIZE(mb->ref_prio); i++) {
+		if (fields & BIT(i)) {
+			rc = zl3073x_read_reg(zldev, ZL_REG_DPLL_REF_PRIO(i),
+					      &mb->ref_prio[i]);
+			if (rc)
+				break;
+		}
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_dpll_read, "ZL3073X");
+
+/**
+ * zl3073x_mb_dpll_write - write given DPLL configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: DPLL index
+ * @fields: mask of the mailbox fields to be written
+ * @mb: DPLL channel mailbox
+ *
+ * Writes selected fields from the mailbox into device.
+  *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_dpll_write(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			  struct zl3073x_mb_dpll *mb)
+{
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(mb->ref_prio); i++) {
+		if (fields & BIT(i)) {
+			rc = zl3073x_write_reg(zldev, ZL_REG_DPLL_REF_PRIO(i),
+					       &mb->ref_prio[i]);
+			if (rc)
+				break;
+		}
+	}
+
+	return zl3073x_mb_cmd_do(zldev, ZL_REG_DPLL_MB_SEM, ZL_DPLL_MB_SEM_WR,
+				 ZL_REG_DPLL_MB_MASK, BIT(index));
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_dpll_write, "ZL3073X");
+
+/**
+ * zl3073x_mb_output_read - read given output configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: output index
+ * @fields: mask of the mailbox fields to be filled
+ * @mb: output mailbox
+ *
+ * Reads selected configuration of given reference into output mailbox.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_output_read(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			   struct zl3073x_mb_output *mb)
+{
+	int rc;
+
+	rc = zl3073x_mb_cmd_do(zldev, ZL_REG_OUTPUT_MB_SEM, ZL_OUTPUT_MB_SEM_RD,
+			       ZL_REG_OUTPUT_MB_MASK, BIT(index));
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_MODE))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_MODE, &mb->mode);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_DIV))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_DIV, &mb->div);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_WIDTH))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_WIDTH, &mb->width);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_ESYNC_PERIOD))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_ESYNC_PERIOD,
+				      &mb->esync_period);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_ESYNC_WIDTH))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_ESYNC_WIDTH,
+				      &mb->esync_width);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_PHASE_COMP))
+		rc = zl3073x_read_reg(zldev, ZL_REG_OUTPUT_PHASE_COMP,
+				      &mb->phase_comp);
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_output_read, "ZL3073X");
+
+/**
+ * zl3073x_mb_output_write - write given output configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: output index
+ * @fields: mask of the mailbox fields to be written
+ * @mb: output mailbox
+ *
+ * Writes selected fields from the mailbox into device.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_output_write(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			    const struct zl3073x_mb_output *mb)
+{
+	int rc = 0;
+
+	if (fields & ZL3073X_MB_OUTPUT_MODE)
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_MODE, &mb->mode);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_DIV))
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_DIV, &mb->div);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_WIDTH))
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_WIDTH, &mb->width);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_ESYNC_PERIOD))
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_ESYNC_PERIOD,
+				       &mb->esync_period);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_ESYNC_WIDTH))
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_ESYNC_WIDTH,
+				       &mb->esync_width);
+
+	if (!rc && (fields & ZL3073X_MB_OUTPUT_PHASE_COMP))
+		rc = zl3073x_write_reg(zldev, ZL_REG_OUTPUT_PHASE_COMP,
+				       &mb->phase_comp);
+	if (rc)
+		return rc;
+
+	return zl3073x_mb_cmd_do(zldev,
+				 ZL_REG_OUTPUT_MB_SEM, ZL_OUTPUT_MB_SEM_WR,
+				 ZL_REG_OUTPUT_MB_MASK, BIT(index));
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_output_write, "ZL3073X");
+
+/**
+ * zl3073x_mb_ref_read - read given reference configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: reference index
+ * @fields: mask of the mailbox fields to be filled
+ * @mb: reference mailbox
+ *
+ * Reads selected configuration of given reference into ref mailbox.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_ref_read(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			struct zl3073x_mb_ref *mb)
+{
+	int rc;
+
+	rc = zl3073x_mb_cmd_do(zldev, ZL_REG_REF_MB_SEM, ZL_REF_MB_SEM_RD,
+			       ZL_REG_REF_MB_MASK, BIT(index));
+
+	if (!rc && (fields & ZL3073X_MB_REF_FREQ_BASE))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_FREQ_BASE,
+				      &mb->freq_base);
+
+	if (!rc && (fields & ZL3073X_MB_REF_FREQ_MULT))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_FREQ_MULT,
+				      &mb->freq_mult);
+
+	if (!rc && (fields & ZL3073X_MB_REF_RATIO_M))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_RATIO_M, &mb->ratio_m);
+
+	if (!rc && (fields & ZL3073X_MB_REF_RATIO_N))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_RATIO_N, &mb->ratio_n);
+
+	if (!rc && (fields & ZL3073X_MB_REF_CONFIG))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_CONFIG, &mb->config);
+
+	if (!rc && (fields & ZL3073X_MB_REF_PHASE_OFFSET_COMP))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_PHASE_OFFSET_COMP,
+				      &mb->phase_offset_comp);
+
+	if (!rc && (fields & ZL3073X_MB_REF_SYNC_CTRL))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_SYNC_CTRL,
+				      &mb->sync_ctrl);
+
+	if (!rc && (fields & ZL3073X_MB_REF_ESYNC_DIV))
+		rc = zl3073x_read_reg(zldev, ZL_REG_REF_ESYNC_DIV,
+				      &mb->esync_div);
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_ref_read, "ZL3073X");
+
+/**
+ * zl3073x_mb_ref_write - write given reference configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: reference index
+ * @fields: mask of the mailbox fields to be written
+ * @mb: reference mailbox
+ *
+ * Writes selected fields from the mailbox into device.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			 const struct zl3073x_mb_ref *mb)
+{
+	int rc = 0;
+
+	if (fields & ZL3073X_MB_REF_FREQ_BASE)
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_FREQ_BASE,
+				       &mb->freq_base);
+
+	if (!rc && (fields & ZL3073X_MB_REF_FREQ_MULT))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_FREQ_MULT,
+				       &mb->freq_mult);
+
+	if (!rc && (fields & ZL3073X_MB_REF_RATIO_M))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_RATIO_M,
+				       &mb->ratio_m);
+
+	if (!rc && (fields & ZL3073X_MB_REF_RATIO_N))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_RATIO_N,
+				       &mb->ratio_n);
+
+	if (!rc && (fields & ZL3073X_MB_REF_CONFIG))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_CONFIG, &mb->config);
+
+	if (!rc && (fields & ZL3073X_MB_REF_PHASE_OFFSET_COMP))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_PHASE_OFFSET_COMP,
+				       &mb->phase_offset_comp);
+
+	if (!rc && (fields & ZL3073X_MB_REF_SYNC_CTRL))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_SYNC_CTRL,
+				       &mb->sync_ctrl);
+
+	if (!rc && (fields & ZL3073X_MB_REF_ESYNC_DIV))
+		rc = zl3073x_write_reg(zldev, ZL_REG_REF_ESYNC_DIV,
+				       &mb->esync_div);
+
+	if (rc)
+		return rc;
+
+	return zl3073x_mb_cmd_do(zldev, ZL_REG_REF_MB_SEM, ZL_REF_MB_SEM_WR,
+				 ZL_REG_REF_MB_MASK, BIT(index));
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_ref_write, "ZL3073X");
+
+/**
+ * zl3073x_mb_synth_read - read given synth configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: synth index
+ * @fields: mask of the mailbox fields to be filled
+ * @mb: synth mailbox
+ *
+ * Reads selected configuration of given reference into synth mailbox.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			  struct zl3073x_mb_synth *mb)
+{
+	int rc;
+
+	rc = zl3073x_mb_cmd_do(zldev, ZL_REG_SYNTH_MB_SEM, ZL_SYNTH_MB_SEM_RD,
+			       ZL_REG_SYNTH_MB_MASK, BIT(index));
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_BASE))
+		rc = zl3073x_read_reg(zldev, ZL_REG_SYNTH_FREQ_BASE,
+				      &mb->freq_base);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_MULT))
+		rc = zl3073x_read_reg(zldev, ZL_REG_SYNTH_FREQ_MULT,
+				      &mb->freq_mult);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_M))
+		rc = zl3073x_read_reg(zldev, ZL_REG_SYNTH_FREQ_M, &mb->freq_m);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_N))
+		rc = zl3073x_read_reg(zldev, ZL_REG_SYNTH_FREQ_N, &mb->freq_n);
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_synth_read, "ZL3073X");
+
+/**
+ * zl3073x_mb_synth_write - write given synth configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: synth index
+ * @fields: mask of the mailbox fields to be written
+ * @mb: synth mailbox
+ *
+ * Writes selected fields from the mailbox into device.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index, u32 fields,
+			   struct zl3073x_mb_synth *mb)
+{
+	int rc = 0;
+
+	if (fields & ZL3073X_MB_SYNTH_FREQ_BASE)
+		rc = zl3073x_write_reg(zldev, ZL_REG_SYNTH_FREQ_BASE,
+				       &mb->freq_base);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_MULT))
+		rc = zl3073x_write_reg(zldev, ZL_REG_SYNTH_FREQ_MULT,
+				       &mb->freq_mult);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_M))
+		rc = zl3073x_write_reg(zldev, ZL_REG_SYNTH_FREQ_M, &mb->freq_m);
+
+	if (!rc && (fields & ZL3073X_MB_SYNTH_FREQ_N))
+		rc = zl3073x_write_reg(zldev, ZL_REG_SYNTH_FREQ_N, &mb->freq_n);
+
+	if (rc)
+		return rc;
+
+	return zl3073x_mb_cmd_do(zldev, ZL_REG_SYNTH_MB_SEM, ZL_SYNTH_MB_SEM_WR,
+				 ZL_REG_SYNTH_MB_MASK, BIT(index));
+}
+EXPORT_SYMBOL_NS_GPL(zl3073x_mb_synth_write, "ZL3073X");
+
 /**
  * zl3073x_devlink_info_get - Devlink device info callback
  * @devlink: devlink structure pointer

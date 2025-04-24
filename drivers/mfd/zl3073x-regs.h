@@ -71,4 +71,68 @@
 #define ZL_REG_FW_VER				ZL_REG(0, 0x05, 2)
 #define ZL_REG_CUSTOM_CONFIG_VER		ZL_REG(0, 0x07, 4)
 
+/*******************************
+ * Register Page 10, Ref Mailbox
+ *******************************/
+
+#define ZL_REG_REF_MB_MASK			ZL_REG(10, 0x02, 2)
+
+#define ZL_REG_REF_MB_SEM			ZL_REG(10, 0x04, 1)
+#define ZL_REF_MB_SEM_WR			BIT(0)
+#define ZL_REF_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_REF_FREQ_BASE			ZL_REG(10, 0x05, 2)
+#define ZL_REG_REF_FREQ_MULT			ZL_REG(10, 0x07, 2)
+#define ZL_REG_REF_RATIO_M			ZL_REG(10, 0x09, 2)
+#define ZL_REG_REF_RATIO_N			ZL_REG(10, 0x0b, 2)
+#define ZL_REG_REF_CONFIG			ZL_REG(10, 0x0d, 1)
+#define ZL_REG_REF_PHASE_OFFSET_COMP		ZL_REG(10, 0x28, 6)
+#define ZL_REG_REF_SYNC_CTRL			ZL_REG(10, 0x2e, 1)
+#define ZL_REG_REF_ESYNC_DIV			ZL_REG(10, 0x30, 4)
+
+/********************************
+ * Register Page 12, DPLL Mailbox
+ ********************************/
+
+#define ZL_REG_DPLL_MB_MASK			ZL_REG(12, 0x02, 2)
+
+#define ZL_REG_DPLL_MB_SEM			ZL_REG(12, 0x04, 1)
+#define ZL_DPLL_MB_SEM_WR			BIT(0)
+#define ZL_DPLL_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_DPLL_REF_PRIO(_idx)					\
+	ZL_REG_IDX(_idx, 12, 0x52, 1, ZL3073X_NUM_INPUTS / 2, 1)
+
+/*********************************
+ * Register Page 13, Synth Mailbox
+ *********************************/
+
+#define ZL_REG_SYNTH_MB_MASK			ZL_REG(13, 0x02, 2)
+
+#define ZL_REG_SYNTH_MB_SEM			ZL_REG(13, 0x04, 1)
+#define ZL_SYNTH_MB_SEM_WR			BIT(0)
+#define ZL_SYNTH_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_SYNTH_FREQ_BASE			ZL_REG(13, 0x06, 2)
+#define ZL_REG_SYNTH_FREQ_MULT			ZL_REG(13, 0x08, 4)
+#define ZL_REG_SYNTH_FREQ_M			ZL_REG(13, 0x0c, 2)
+#define ZL_REG_SYNTH_FREQ_N			ZL_REG(13, 0x0e, 2)
+
+/**********************************
+ * Register Page 14, Output Mailbox
+ **********************************/
+
+#define ZL_REG_OUTPUT_MB_MASK			ZL_REG(14, 0x02, 2)
+
+#define ZL_REG_OUTPUT_MB_SEM			ZL_REG(14, 0x04, 1)
+#define ZL_OUTPUT_MB_SEM_WR			BIT(0)
+#define ZL_OUTPUT_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_OUTPUT_MODE			ZL_REG(14, 0x05, 1)
+#define ZL_REG_OUTPUT_DIV			ZL_REG(14, 0x0c, 4)
+#define ZL_REG_OUTPUT_WIDTH			ZL_REG(14, 0x10, 4)
+#define ZL_REG_OUTPUT_ESYNC_PERIOD		ZL_REG(14, 0x14, 4)
+#define ZL_REG_OUTPUT_ESYNC_WIDTH		ZL_REG(14, 0x18, 4)
+#define ZL_REG_OUTPUT_PHASE_COMP		ZL_REG(14, 0x20, 4)
+
 #endif /* __ZL3073X_REGS_H */
