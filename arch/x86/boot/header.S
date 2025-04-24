@@ -207,6 +207,19 @@ pecompat_fstart:
 		IMAGE_SCN_MEM_READ		| \
 		IMAGE_SCN_MEM_WRITE		# Characteristics
 
+#ifdef CONFIG_EFI_SBAT
+	.ascii ".sbat\0\0\0"
+	.long	ZO__esbat - ZO__sbat		# VirtualSize
+	.long	setup_size + ZO__sbat		# VirtualAddress
+	.long	ZO__esbat - ZO__sbat		# SizeOfRawData
+	.long	setup_size + ZO__sbat		# PointerToRawData
+
+	.long	0, 0, 0
+	.long	IMAGE_SCN_CNT_INITIALIZED_DATA	| \
+		IMAGE_SCN_MEM_READ		| \
+		IMAGE_SCN_MEM_DISCARDABLE	# Characteristics
+#endif
+
 	.set	section_count, (. - section_table) / 40
 #endif /* CONFIG_EFI_STUB */
 

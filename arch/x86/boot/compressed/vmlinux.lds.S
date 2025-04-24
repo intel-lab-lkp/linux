@@ -49,9 +49,22 @@ SECTIONS
 		*(.data.*)
 
 		/* Add 4 bytes of extra space for the obsolete CRC-32 checksum */
+#ifndef CONFIG_EFI_SBAT
 		. = ALIGN(. + 4, 0x200);
+#else
+		/* Avoid gap between '.data' and '.sbat' */
+		. = ALIGN(. + 4, 0x1000);
+#endif
 		_edata = . ;
 	}
+#ifdef CONFIG_EFI_SBAT
+	.sbat : ALIGN(0x1000) {
+		_sbat = . ;
+		*(.sbat)
+		_esbat = ALIGN(0x200);
+		. = _esbat;
+	}
+#endif
 	. = ALIGN(L1_CACHE_BYTES);
 	.bss : {
 		_bss = . ;
