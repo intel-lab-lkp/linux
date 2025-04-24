@@ -593,7 +593,7 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 		return -EINVAL;
 
 	memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->elevator_lock);
+	mutex_lock(&disk->rqos_state_mutex);
 
 	rqos = wbt_rq_qos(q);
 	if (!rqos) {
@@ -622,7 +622,7 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 
 	blk_mq_unquiesce_queue(q);
 out:
-	mutex_unlock(&q->elevator_lock);
+	mutex_unlock(&disk->rqos_state_mutex);
 	blk_mq_unfreeze_queue(q, memflags);
 
 	return ret;
@@ -870,9 +870,7 @@ int blk_register_queue(struct gendisk *disk)
 		goto out_unregister_ia_ranges;
 
 	elevator_set_default(q);
-	mutex_lock(&q->elevator_lock);
 	wbt_enable_default(disk);
-	mutex_unlock(&q->elevator_lock);
 
 	blk_queue_flag_set(QUEUE_FLAG_REGISTERED, q);
 
