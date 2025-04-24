@@ -204,25 +204,12 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 				  STATX_ATTR_DAX);
 
 	idmap = mnt_idmap(path->mnt);
-	if (inode->i_op->getattr) {
-		int ret;
+	if (inode->i_op->getattr)
+		return inode->i_op->getattr(idmap, path, stat,
+					    request_mask,
+					    query_flags);
 
-		ret = inode->i_op->getattr(idmap, path, stat, request_mask,
-				query_flags);
-		if (ret)
-			return ret;
-	} else {
-		generic_fillattr(idmap, request_mask, inode, stat);
-	}
-
-	/*
-	 * If this is a block device inode, override the filesystem attributes
-	 * with the block device specific parameters that need to be obtained
-	 * from the bdev backing inode.
-	 */
-	if (S_ISBLK(stat->mode))
-		bdev_statx(path, stat, request_mask);
-
+	generic_fillattr(idmap, request_mask, inode, stat);
 	return 0;
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
@@ -308,6 +295,15 @@ static int vfs_statx_path(struct path *path, int flags, struct kstat *stat,
 	if (path_mounted(path))
 		stat->attributes |= STATX_ATTR_MOUNT_ROOT;
 	stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+
+	/*
+	 * If this is a block device inode, override the filesystem
+	 * attributes with the block device specific parameters that need to be
+	 * obtained from the bdev backing inode.
+	 */
+	if (S_ISBLK(stat->mode))
+		bdev_statx(path, stat, request_mask);
+
 	return 0;
 }
 
