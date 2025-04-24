@@ -378,6 +378,7 @@ void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled)
 	u16 handle;
 	u8 common_mem_type = 0x0, mem_type;
 	u64 mem_size;
+	bool scan_needed = true;
 	const char *name;
 
 	while ((handle = dmi_memdev_handle(slot_count)) != 0xffff) {
@@ -438,6 +439,7 @@ void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled)
 	case 0x22:	/* DDR5 */
 	case 0x23:	/* LPDDR5 */
 		name = "spd5118";
+		scan_needed = !write_disabled;
 		break;
 	default:
 		dev_info(&adap->dev,
@@ -460,6 +462,9 @@ void i2c_register_spd(struct i2c_adapter *adap, bool write_disabled)
 		strscpy(info.type, name, I2C_NAME_SIZE);
 		addr_list[0] = 0x50 + n;
 		addr_list[1] = I2C_CLIENT_END;
+
+		if (!scan_needed)
+			continue;
 
 		if (!IS_ERR(i2c_new_scanned_device(adap, &info, addr_list, NULL))) {
 			dev_info(&adap->dev,
