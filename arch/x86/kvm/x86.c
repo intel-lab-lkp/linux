@@ -7118,12 +7118,6 @@ set_identity_unlock:
 			goto create_irqchip_unlock;
 		}
 
-		r = kvm_setup_default_irq_routing(kvm);
-		if (r) {
-			kvm_ioapic_destroy(kvm);
-			kvm_pic_destroy(kvm);
-			goto create_irqchip_unlock;
-		}
 		/* Write kvm->irq_routing before enabling irqchip_in_kernel. */
 		smp_wmb();
 		kvm->arch.irqchip_mode = KVM_IRQCHIP_KERNEL;
