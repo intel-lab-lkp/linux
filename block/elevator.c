@@ -49,6 +49,7 @@
 struct elv_change_ctx {
 	const char *name;
 	bool uevent;
+	bool init;
 };
 
 static DEFINE_SPINLOCK(elv_list_lock);
@@ -154,7 +155,7 @@ static void elevator_release(struct kobject *kobj)
 	kfree(e);
 }
 
-void elevator_exit(struct request_queue *q)
+static void elevator_exit(struct request_queue *q)
 {
 	struct elevator_queue *e = q->elevator;
 
@@ -458,7 +459,7 @@ static const struct kobj_type elv_ktype = {
 	.release	= elevator_release,
 };
 
-int elv_register_queue(struct request_queue *q, bool uevent)
+static int elv_register_queue(struct request_queue *q, bool uevent)
 {
 	struct elevator_queue *e = q->elevator;
 	int error;
@@ -488,7 +489,7 @@ int elv_register_queue(struct request_queue *q, bool uevent)
 	return error;
 }
 
-void elv_unregister_queue(struct request_queue *q)
+static void elv_unregister_queue(struct request_queue *q)
 {
 	struct elevator_queue *e = q->elevator;
 
@@ -565,60 +566,16 @@ EXPORT_SYMBOL_GPL(elv_unregister);
  * For single queue devices, default to using mq-deadline. If we have multiple
  * queues or mq-deadline is not available, default to "none".
  */
-static struct elevator_type *elevator_get_default(struct request_queue *q)
+static bool use_default_elevator(struct request_queue *q)
 {
 	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
-		return NULL;
+		return false;
 
 	if (q->nr_hw_queues != 1 &&
 	    !blk_mq_is_shared_tags(q->tag_set->flags))
-		return NULL;
+		return false;
 
-	return elevator_find_get("mq-deadline");
-}
-
-/*
- * Use the default elevator settings. If the chosen elevator initialization
- * fails, fall back to the "none" elevator (no elevator).
- */
-void elevator_init_mq(struct request_queue *q)
-{
-	struct elevator_type *e;
-	unsigned int memflags;
-	int err;
-
-	WARN_ON_ONCE(blk_queue_registered(q));
-
-	if (unlikely(q->elevator))
-		return;
-
-	e = elevator_get_default(q);
-	if (!e)
-		return;
-
-	/*
-	 * We are called before adding disk, when there isn't any FS I/O,
-	 * so freezing queue plus canceling dispatch work is enough to
-	 * drain any dispatch activities originated from passthrough
-	 * requests, then no need to quiesce queue which may add long boot
-	 * latency, especially when lots of disks are involved.
-	 *
-	 * Disk isn't added yet, so verifying queue lock only manually.
-	 */
-	memflags = blk_mq_freeze_queue(q);
-
-	blk_mq_cancel_work_sync(q);
-
-	err = blk_mq_init_sched(q, e);
-
-	blk_mq_unfreeze_queue(q, memflags);
-
-	if (err) {
-		pr_warn("\"%s\" elevator initialization failed, "
-			"falling back to \"none\"\n", e->elevator_name);
-	}
-
-	elevator_put(e);
+	return true;
 }
 
 /*
@@ -694,7 +651,7 @@ static int __elevator_change(struct request_queue *q,
 	lockdep_assert_held(&q->tag_set->update_nr_hwq_sema);
 
 	/* Make sure queue is not in the middle of being removed */
-	if (!blk_queue_registered(q))
+	if (!ctx->init && !blk_queue_registered(q))
 		return -ENOENT;
 
 	if (!strncmp(elevator_name, "none", 4)) {
@@ -718,12 +675,65 @@ static int elevator_change(struct request_queue *q,
 	int ret = 0;
 
 	memflags = blk_mq_freeze_queue(q);
+	/*
+	 * May be called before adding disk, when there isn't any FS I/O,
+	 * so freezing queue plus canceling dispatch work is enough to
+	 * drain any dispatch activities originated from passthrough
+	 * requests, then no need to quiesce queue which may add long boot
+	 * latency, especially when lots of disks are involved.
+	 *
+	 * Disk isn't added yet, so verifying queue lock only manually.
+	 */
+	blk_mq_cancel_work_sync(q);
 	mutex_lock(&q->elevator_lock);
 	if (!q->elevator || !elevator_match(q->elevator->type, ctx->name))
 		ret = __elevator_change(q, ctx);
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
 	return ret;
+}
+
+/*
+ * Use the default elevator settings. If the chosen elevator initialization
+ * fails, fall back to the "none" elevator (no elevator).
+ */
+void elevator_set_default(struct request_queue *q)
+{
+	struct elv_change_ctx ctx = {
+		.init = true,
+	};
+	int err;
+
+	if (!queue_is_mq(q))
+		return;
+
+	ctx.name = use_default_elevator(q) ? "mq-deadline" : "none";
+	if (!q->elevator && !strcmp(ctx.name, "none"))
+		return;
+	err = elevator_change(q, &ctx);
+	if (err < 0)
+		pr_warn("\"%s\" set elevator failed %d, "
+			"falling back to \"none\"\n", ctx.name, err);
+}
+
+void elevator_set_none(struct request_queue *q)
+{
+	struct elv_change_ctx ctx = {
+		.name	= "none",
+		.uevent = true,
+		.init = true,
+	};
+	int err;
+
+	if (!queue_is_mq(q))
+		return;
+
+	if (!q->elevator)
+		return;
+
+	err = elevator_change(q, &ctx);
+	if (err < 0)
+		pr_warn("%s: set none elevator failed %d\n", __func__, err);
 }
 
 /*
