@@ -3206,6 +3206,7 @@ EXPORT_SYMBOL_GPL(pci_create_root_bus);
 int pci_host_probe(struct pci_host_bridge *bridge)
 {
 	struct pci_bus *bus, *child;
+	struct pci_dev *dev;
 	int ret;
 
 	pci_lock_rescan_remove();
@@ -3227,6 +3228,17 @@ int pci_host_probe(struct pci_host_bridge *bridge)
 	 * this will reassign everything.
 	 */
 	pci_assign_unassigned_root_bus_resources(bus);
+
+	if (pcie_bus_config != PCIE_BUS_TUNE_OFF) {
+		/* Configure root ports MPS to be MPSS by default */
+		for_each_pci_bridge(dev, bus) {
+			if (pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT)
+				continue;
+
+			pcie_write_mps(dev, 128 << dev->pcie_mpss);
+			pcie_write_mrrs(dev);
+		}
+	}
 
 	list_for_each_entry(child, &bus->children, node)
 		pcie_bus_configure_settings(child);
