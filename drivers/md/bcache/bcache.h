@@ -405,6 +405,12 @@ struct cached_dev {
 	 */
 #define BCH_WBRATE_UPDATE_MAX_SKIPS	15
 	unsigned int		rate_update_retry;
+
+	/*
+	 * In the deferred flush mode, 0 indicates that there is no
+	 * need to send flush to the backing device.
+	 */
+	atomic_t		need_flush;
 };
 
 enum alloc_reserve {
