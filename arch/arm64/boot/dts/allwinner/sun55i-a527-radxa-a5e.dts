@@ -56,7 +56,7 @@
 
 &mmc0 {
 	vmmc-supply = <&reg_cldo3>;
-	cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_DOWN)>; /* PF6 */
+	cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* PF6 */
 	bus-width = <4>;
 	status = "okay";
 };
