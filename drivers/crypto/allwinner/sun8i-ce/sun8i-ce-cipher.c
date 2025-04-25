@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <crypto/scatterwalk.h>
+#include <crypto/skcipher.h>
 #include <crypto/internal/des.h>
 #include <crypto/internal/skcipher.h>
 #include "sun8i-ce.h"
@@ -438,7 +439,7 @@ int sun8i_ce_cipher_init(struct crypto_tfm *tfm)
 				    crypto_skcipher_reqsize(op->fallback_tfm));
 
 	memcpy(algt->fbname,
-	       crypto_tfm_alg_driver_name(crypto_skcipher_tfm(op->fallback_tfm)),
+	       crypto_skcipher_driver_name(op->fallback_tfm),
 	       CRYPTO_MAX_ALG_NAME);
 
 	err = pm_runtime_get_sync(op->ce->dev);
