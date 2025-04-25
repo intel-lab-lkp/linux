@@ -24,8 +24,6 @@
 .section .text, "ax"
 
 SYM_FUNC_START(__vdso_sgx_enter_enclave)
-	/* Prolog */
-	.cfi_startproc
 	push	%rbp
 	.cfi_adjust_cfa_offset	8
 	.cfi_rel_offset		%rbp, 0
@@ -142,8 +140,6 @@ SYM_FUNC_START(__vdso_sgx_enter_enclave)
 	cmp	$0, %eax
 	jle	.Lout
 	jmp	.Lenter_enclave
-
-	.cfi_endproc
 
 _ASM_VDSO_EXTABLE_HANDLE(.Lenclu_eenter_eresume, .Lhandle_exception)
 
