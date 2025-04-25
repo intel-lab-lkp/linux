@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/random.h>
+#include <linux/string.h>
 #include <linux/topology.h>
 #include <asm/processor.h>
 #include <asm/apic.h>
@@ -643,7 +644,7 @@ static void init_amd_k8(struct cpuinfo_x86 *c)
 	}
 
 	if (!c->x86_model_id[0])
-		strcpy(c->x86_model_id, "Hammer");
+		strscpy(c->x86_model_id, "Hammer");
 
 #ifdef CONFIG_SMP
 	/*
