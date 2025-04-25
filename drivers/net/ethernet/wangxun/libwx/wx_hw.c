@@ -2450,6 +2450,9 @@ int wx_fc_enable(struct wx *wx, bool tx_pause, bool rx_pause)
 			wx_disable_rx_drop(wx, wx->rx_ring[i]);
 	}
 
+	wx->fc.rx_pause = rx_pause;
+	wx->fc.tx_pause = tx_pause;
+
 	return 0;
 }
 EXPORT_SYMBOL(wx_fc_enable);

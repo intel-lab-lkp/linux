@@ -266,11 +266,20 @@ int wx_set_pauseparam(struct net_device *netdev,
 		      struct ethtool_pauseparam *pause)
 {
 	struct wx *wx = netdev_priv(netdev);
+	int err;
 
 	if (wx->mac.type == wx_mac_aml)
 		return -EOPNOTSUPP;
 
-	return phylink_ethtool_set_pauseparam(wx->phylink, pause);
+	err = phylink_ethtool_set_pauseparam(wx->phylink, pause);
+	if (err)
+		return err;
+
+	if (wx->fc.rx_pause != pause->rx_pause ||
+	    wx->fc.tx_pause != pause->tx_pause)
+		return wx_fc_enable(wx, pause->tx_pause, pause->rx_pause);
+
+	return 0;
 }
 EXPORT_SYMBOL(wx_set_pauseparam);
 

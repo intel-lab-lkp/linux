@@ -1067,6 +1067,8 @@ enum wx_isb_idx {
 struct wx_fc_info {
 	u32 high_water; /* Flow Ctrl High-water */
 	u32 low_water; /* Flow Ctrl Low-water */
+	bool rx_pause;
+	bool tx_pause;
 };
 
 /* Statistics counters collected by the MAC */
