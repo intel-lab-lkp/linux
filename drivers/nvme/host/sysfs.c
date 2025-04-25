@@ -260,6 +260,7 @@ static struct attribute *nvme_ns_attrs[] = {
 	&dev_attr_ana_state.attr,
 	&dev_attr_queue_depth.attr,
 	&dev_attr_numa_nodes.attr,
+	&dev_attr_delayed_removal_secs.attr,
 #endif
 	&dev_attr_io_passthru_err_log_enabled.attr,
 	NULL,
@@ -294,6 +295,18 @@ static umode_t nvme_ns_attrs_are_visible(struct kobject *kobj,
 	}
 	if (a == &dev_attr_queue_depth.attr || a == &dev_attr_numa_nodes.attr) {
 		if (nvme_disk_is_ns_head(dev_to_disk(dev)))
+			return 0;
+	}
+	if (a == &dev_attr_delayed_removal_secs.attr) {
+		struct nvme_ns_head *head = dev_to_ns_head(dev);
+		struct gendisk *disk = dev_to_disk(dev);
+
+		/*
+		 * This attribute is only valid for head node and non-fabric
+		 * setup.
+		 */
+		if (!nvme_disk_is_ns_head(disk) ||
+				test_bit(NVME_NSHEAD_FABRICS, &head->flags))
 			return 0;
 	}
 #endif
