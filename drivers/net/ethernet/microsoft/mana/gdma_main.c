@@ -6,6 +6,9 @@
 #include <linux/pci.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
+#include <linux/msi.h>
+#include <linux/irqdomain.h>
+#include <linux/list.h>
 
 #include <net/mana/mana.h>
 
@@ -80,8 +83,15 @@ static int mana_gd_query_max_resources(struct pci_dev *pdev)
 		return err ? err : -EPROTO;
 	}
 
-	if (gc->num_msix_usable > resp.max_msix)
-		gc->num_msix_usable = resp.max_msix;
+	if (!pci_msix_can_alloc_dyn(pdev)) {
+		if (gc->num_msix_usable > resp.max_msix)
+			gc->num_msix_usable = resp.max_msix;
+	} else {
+		/* If dynamic allocation is enabled we have already allocated
+		 * hwc msi
+		 */
+		gc->num_msix_usable = min(resp.max_msix, num_online_cpus() + 1);
+	}
 
 	if (gc->num_msix_usable <= 1)
 		return -ENOSPC;
@@ -462,12 +472,13 @@ static int mana_gd_register_irq(struct gdma_queue *queue,
 				const struct gdma_queue_spec *spec)
 {
 	struct gdma_dev *gd = queue->gdma_dev;
-	struct gdma_irq_context *gic;
+	struct gdma_irq_context *gic = NULL;
+	unsigned long flags, flag_irq;
 	struct gdma_context *gc;
 	unsigned int msi_index;
-	unsigned long flags;
+	struct list_head *pos;
 	struct device *dev;
-	int err = 0;
+	int err = 0, count;
 
 	gc = gd->gdma_context;
 	dev = gc->dev;
@@ -482,7 +493,23 @@ static int mana_gd_register_irq(struct gdma_queue *queue,
 	}
 
 	queue->eq.msix_index = msi_index;
-	gic = &gc->irq_contexts[msi_index];
+
+	/* get the msi_index value from the list*/
+	count = 0;
+	spin_lock_irqsave(&gc->irq_ctxs_lock, flag_irq);
+	list_for_each(pos, &gc->irq_contexts) {
+		if (count == msi_index) {
+			gic = list_entry(pos, struct gdma_irq_context,
+					 gic_list);
+			break;
+		}
+
+		count++;
+	}
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flag_irq);
+
+	if (!gic)
+		return -1;
 
 	spin_lock_irqsave(&gic->lock, flags);
 	list_add_rcu(&queue->entry, &gic->eq_list);
@@ -494,11 +521,13 @@ static int mana_gd_register_irq(struct gdma_queue *queue,
 static void mana_gd_deregiser_irq(struct gdma_queue *queue)
 {
 	struct gdma_dev *gd = queue->gdma_dev;
-	struct gdma_irq_context *gic;
+	struct gdma_irq_context *gic = NULL;
+	unsigned long flags, flag_irq;
 	struct gdma_context *gc;
 	unsigned int msix_index;
-	unsigned long flags;
+	struct list_head *pos;
 	struct gdma_queue *eq;
+	int count;
 
 	gc = gd->gdma_context;
 
@@ -507,7 +536,23 @@ static void mana_gd_deregiser_irq(struct gdma_queue *queue)
 	if (WARN_ON(msix_index >= gc->num_msix_usable))
 		return;
 
-	gic = &gc->irq_contexts[msix_index];
+	/* get the msi_index value from the list*/
+	count = 0;
+	spin_lock_irqsave(&gc->irq_ctxs_lock, flag_irq);
+	list_for_each(pos, &gc->irq_contexts) {
+		if (count == msix_index) {
+			gic = list_entry(pos, struct gdma_irq_context,
+					 gic_list);
+			break;
+		}
+
+		count++;
+	}
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flag_irq);
+
+	if (!gic)
+		return;
+
 	spin_lock_irqsave(&gic->lock, flags);
 	list_for_each_entry_rcu(eq, &gic->eq_list, entry) {
 		if (queue == eq) {
@@ -1288,7 +1333,8 @@ void mana_gd_free_res_map(struct gdma_resource *r)
 	r->size = 0;
 }
 
-static int irq_setup(unsigned int *irqs, unsigned int len, int node)
+static int irq_setup(unsigned int *irqs, unsigned int len, int node,
+		     bool skip_first_cpu)
 {
 	const struct cpumask *next, *prev = cpu_none_mask;
 	cpumask_var_t cpus __free(free_cpumask_var);
@@ -1303,9 +1349,20 @@ static int irq_setup(unsigned int *irqs, unsigned int len, int node)
 		while (weight > 0) {
 			cpumask_andnot(cpus, next, prev);
 			for_each_cpu(cpu, cpus) {
+				/*
+				 * if the CPU sibling set is to be skipped we
+				 * just move on to the next CPUs without len--
+				 */
+				if (unlikely(skip_first_cpu)) {
+					skip_first_cpu = false;
+					goto next_cpumask;
+				}
+
 				if (len-- == 0)
 					goto done;
+
 				irq_set_affinity_and_hint(*irqs++, topology_sibling_cpumask(cpu));
+next_cpumask:
 				cpumask_andnot(cpus, cpus, topology_sibling_cpumask(cpu));
 				--weight;
 			}
@@ -1317,29 +1374,99 @@ done:
 	return 0;
 }
 
-static int mana_gd_setup_irqs(struct pci_dev *pdev)
+static int mana_gd_setup_dyn_irqs(struct pci_dev *pdev, int nvec)
 {
 	struct gdma_context *gc = pci_get_drvdata(pdev);
-	unsigned int max_queues_per_port;
 	struct gdma_irq_context *gic;
-	unsigned int max_irqs, cpu;
+	bool skip_first_cpu = false;
+	unsigned long flags;
+	int err, i = 0, j;
+	int *irqs, irq;
+
+	cpus_read_lock();
+	spin_lock_irqsave(&gc->irq_ctxs_lock, flags);
+	irqs = kmalloc_array(nvec, sizeof(int), GFP_KERNEL);
+	if (!irqs) {
+		err = -ENOMEM;
+		goto free_irq_vector;
+	}
+
+	for (i = 0; i < nvec; i++) {
+		gic = kcalloc(1, sizeof(struct gdma_irq_context), GFP_KERNEL);
+		if (!gic) {
+			err = -ENOMEM;
+			goto free_irq;
+		}
+		gic->handler = mana_gd_process_eq_events;
+		INIT_LIST_HEAD(&gic->eq_list);
+		spin_lock_init(&gic->lock);
+
+		snprintf(gic->name, MANA_IRQ_NAME_SZ, "mana_q%d@pci:%s",
+			 i, pci_name(pdev));
+
+		/* one pci vector is already allocated for HWC */
+		irqs[i] = pci_irq_vector(pdev, i + 1);
+		if (irqs[i] < 0) {
+			err = irqs[i];
+			goto free_current_gic;
+		}
+
+		err = request_irq(irqs[i], mana_gd_intr, 0, gic->name, gic);
+		if (err)
+			goto free_current_gic;
+
+		list_add_tail(&gic->gic_list, &gc->irq_contexts);
+	}
+
+	/*
+	 * When calling irq_setup() for dynamically added IRQs, if number of
+	 * IRQs is more than or equal to allocated MSI-X, we need to skip the
+	 * first CPU sibling group since they are already affinitized to HWC IRQ
+	 */
+	if (gc->num_msix_usable <= num_online_cpus())
+		skip_first_cpu = true;
+
+	err = irq_setup(irqs, nvec, gc->numa_node, skip_first_cpu);
+	if (err)
+		goto free_irq;
+
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flags);
+	cpus_read_unlock();
+	kfree(irqs);
+	return 0;
+
+free_current_gic:
+	kfree(gic);
+free_irq:
+	for (j = i - 1; j >= 0; j--) {
+		irq = pci_irq_vector(pdev, j + 1);
+		gic = list_last_entry(&gc->irq_contexts,
+				      struct gdma_irq_context, gic_list);
+		irq_update_affinity_hint(irq, NULL);
+		free_irq(irq, gic);
+		list_del(&gic->gic_list);
+		kfree(gic);
+	}
+	kfree(irqs);
+free_irq_vector:
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flags);
+	cpus_read_unlock();
+	return err;
+}
+
+static int mana_gd_setup_irqs(struct pci_dev *pdev, int nvec)
+{
+	struct gdma_context *gc = pci_get_drvdata(pdev);
+	struct gdma_irq_context *gic;
 	int start_irq_index = 1;
-	int nvec, *irqs, irq;
+	unsigned long flags;
+	unsigned int cpu;
+	int *irqs, irq;
 	int err, i = 0, j;
 
 	cpus_read_lock();
-	max_queues_per_port = num_online_cpus();
-	if (max_queues_per_port > MANA_MAX_NUM_QUEUES)
-		max_queues_per_port = MANA_MAX_NUM_QUEUES;
+	spin_lock_irqsave(&gc->irq_ctxs_lock, flags);
 
-	/* Need 1 interrupt for the Hardware communication Channel (HWC) */
-	max_irqs = max_queues_per_port + 1;
-
-	nvec = pci_alloc_irq_vectors(pdev, 2, max_irqs, PCI_IRQ_MSIX);
-	if (nvec < 0) {
-		cpus_read_unlock();
-		return nvec;
-	}
 	if (nvec <= num_online_cpus())
 		start_irq_index = 0;
 
@@ -1349,15 +1476,12 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 		goto free_irq_vector;
 	}
 
-	gc->irq_contexts = kcalloc(nvec, sizeof(struct gdma_irq_context),
-				   GFP_KERNEL);
-	if (!gc->irq_contexts) {
-		err = -ENOMEM;
-		goto free_irq_array;
-	}
-
 	for (i = 0; i < nvec; i++) {
-		gic = &gc->irq_contexts[i];
+		gic = kcalloc(1, sizeof(struct gdma_irq_context), GFP_KERNEL);
+		if (!gic) {
+			err = -ENOMEM;
+			goto free_irq;
+		}
 		gic->handler = mana_gd_process_eq_events;
 		INIT_LIST_HEAD(&gic->eq_list);
 		spin_lock_init(&gic->lock);
@@ -1372,22 +1496,14 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 		irq = pci_irq_vector(pdev, i);
 		if (irq < 0) {
 			err = irq;
-			goto free_irq;
+			goto free_current_gic;
 		}
 
 		if (!i) {
 			err = request_irq(irq, mana_gd_intr, 0, gic->name, gic);
 			if (err)
-				goto free_irq;
+				goto free_current_gic;
 
-			/* If number of IRQ is one extra than number of online CPUs,
-			 * then we need to assign IRQ0 (hwc irq) and IRQ1 to
-			 * same CPU.
-			 * Else we will use different CPUs for IRQ0 and IRQ1.
-			 * Also we are using cpumask_local_spread instead of
-			 * cpumask_first for the node, because the node can be
-			 * mem only.
-			 */
 			if (start_irq_index) {
 				cpu = cpumask_local_spread(i, gc->numa_node);
 				irq_set_affinity_and_hint(irq, cpumask_of(cpu));
@@ -1396,39 +1512,108 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 			}
 		} else {
 			irqs[i - start_irq_index] = irq;
-			err = request_irq(irqs[i - start_irq_index], mana_gd_intr, 0,
-					  gic->name, gic);
+			err = request_irq(irqs[i - start_irq_index],
+					  mana_gd_intr, 0, gic->name, gic);
 			if (err)
-				goto free_irq;
+				goto free_current_gic;
 		}
+
+		list_add_tail(&gic->gic_list, &gc->irq_contexts);
 	}
 
-	err = irq_setup(irqs, (nvec - start_irq_index), gc->numa_node);
+	err = irq_setup(irqs, nvec - start_irq_index, gc->numa_node, false);
 	if (err)
 		goto free_irq;
 
-	gc->max_num_msix = nvec;
-	gc->num_msix_usable = nvec;
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flags);
 	cpus_read_unlock();
 	kfree(irqs);
 	return 0;
 
+free_current_gic:
+	kfree(gic);
 free_irq:
 	for (j = i - 1; j >= 0; j--) {
 		irq = pci_irq_vector(pdev, j);
-		gic = &gc->irq_contexts[j];
-
+		gic = list_last_entry(&gc->irq_contexts,
+				      struct gdma_irq_context, gic_list);
 		irq_update_affinity_hint(irq, NULL);
 		free_irq(irq, gic);
+		list_del(&gic->gic_list);
+		kfree(gic);
 	}
-
-	kfree(gc->irq_contexts);
-	gc->irq_contexts = NULL;
-free_irq_array:
 	kfree(irqs);
 free_irq_vector:
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flags);
 	cpus_read_unlock();
-	pci_free_irq_vectors(pdev);
+	return err;
+}
+
+static int mana_gd_setup_hwc_irqs(struct pci_dev *pdev)
+{
+	struct gdma_context *gc = pci_get_drvdata(pdev);
+	unsigned int max_irqs, min_irqs;
+	int max_queues_per_port;
+	int nvec, err;
+
+	if (pci_msix_can_alloc_dyn(pdev)) {
+		max_irqs = 1;
+		min_irqs = 1;
+	} else {
+		max_queues_per_port = num_online_cpus();
+		if (max_queues_per_port > MANA_MAX_NUM_QUEUES)
+			max_queues_per_port = MANA_MAX_NUM_QUEUES;
+		/* Need 1 interrupt for HWC */
+		max_irqs = max_queues_per_port + 1;
+		min_irqs = 2;
+	}
+
+	nvec = pci_alloc_irq_vectors(pdev, min_irqs, max_irqs, PCI_IRQ_MSIX);
+	if (nvec < 0)
+		return nvec;
+
+	err = mana_gd_setup_irqs(pdev, nvec);
+	if (err) {
+		pci_free_irq_vectors(pdev);
+		return err;
+	}
+
+	gc->num_msix_usable = nvec;
+	gc->max_num_msix = nvec;
+
+	return err;
+}
+
+static int mana_gd_setup_remaining_irqs(struct pci_dev *pdev)
+{
+	struct gdma_context *gc = pci_get_drvdata(pdev);
+	int max_irqs, i, err = 0;
+	struct msi_map irq_map;
+
+	if (!pci_msix_can_alloc_dyn(pdev))
+		/* remain irqs are already allocated with HWC IRQ */
+		return 0;
+
+	/* allocate only remaining IRQs*/
+	max_irqs = gc->num_msix_usable - 1;
+
+	for (i = 1; i <= max_irqs; i++) {
+		irq_map = pci_msix_alloc_irq_at(pdev, i, NULL);
+		if (!irq_map.virq) {
+			err = irq_map.index;
+			/* caller will handle cleaning up all allocated
+			 * irqs, after HWC is destroyed
+			 */
+			return err;
+		}
+	}
+
+	err = mana_gd_setup_dyn_irqs(pdev, max_irqs);
+	if (err)
+		return err;
+
+	gc->max_num_msix = gc->max_num_msix + max_irqs;
+
 	return err;
 }
 
@@ -1436,29 +1621,34 @@ static void mana_gd_remove_irqs(struct pci_dev *pdev)
 {
 	struct gdma_context *gc = pci_get_drvdata(pdev);
 	struct gdma_irq_context *gic;
-	int irq, i;
+	struct list_head *pos, *n;
+	unsigned long flags;
+	int irq, i = 0;
 
 	if (gc->max_num_msix < 1)
 		return;
 
-	for (i = 0; i < gc->max_num_msix; i++) {
+	spin_lock_irqsave(&gc->irq_ctxs_lock, flags);
+	list_for_each_safe(pos, n, &gc->irq_contexts) {
 		irq = pci_irq_vector(pdev, i);
 		if (irq < 0)
 			continue;
 
-		gic = &gc->irq_contexts[i];
+		gic = list_entry(pos, struct gdma_irq_context, gic_list);
 
 		/* Need to clear the hint before free_irq */
 		irq_update_affinity_hint(irq, NULL);
 		free_irq(irq, gic);
+		list_del(pos);
+		kfree(gic);
+		i++;
 	}
+	spin_unlock_irqrestore(&gc->irq_ctxs_lock, flags);
 
 	pci_free_irq_vectors(pdev);
 
 	gc->max_num_msix = 0;
 	gc->num_msix_usable = 0;
-	kfree(gc->irq_contexts);
-	gc->irq_contexts = NULL;
 }
 
 static int mana_gd_setup(struct pci_dev *pdev)
@@ -1469,9 +1659,10 @@ static int mana_gd_setup(struct pci_dev *pdev)
 	mana_gd_init_registers(pdev);
 	mana_smc_init(&gc->shm_channel, gc->dev, gc->shm_base);
 
-	err = mana_gd_setup_irqs(pdev);
+	err = mana_gd_setup_hwc_irqs(pdev);
 	if (err) {
-		dev_err(gc->dev, "Failed to setup IRQs: %d\n", err);
+		dev_err(gc->dev, "Failed to setup IRQs for HWC creation: %d\n",
+			err);
 		return err;
 	}
 
@@ -1484,6 +1675,10 @@ static int mana_gd_setup(struct pci_dev *pdev)
 		goto destroy_hwc;
 
 	err = mana_gd_query_max_resources(pdev);
+	if (err)
+		goto destroy_hwc;
+
+	err = mana_gd_setup_remaining_irqs(pdev);
 	if (err)
 		goto destroy_hwc;
 
@@ -1563,6 +1758,8 @@ static int mana_gd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	gc->is_pf = mana_is_pf(pdev->device);
 	gc->bar0_va = bar0_va;
 	gc->dev = &pdev->dev;
+	INIT_LIST_HEAD(&gc->irq_contexts);
+	spin_lock_init(&gc->irq_ctxs_lock);
 
 	if (gc->is_pf)
 		gc->mana_pci_debugfs = debugfs_create_dir("0", mana_debugfs_root);
