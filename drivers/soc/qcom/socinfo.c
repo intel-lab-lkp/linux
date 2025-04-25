@@ -155,6 +155,7 @@ struct socinfo_params {
 	u32 boot_core;
 	u32 raw_package_type;
 	u32 nsubpart_feat_array_offset;
+	u32 ncluster_cores_array_offset;
 };
 
 struct smem_image_version {
@@ -609,6 +610,11 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 22):
+		qcom_socinfo->info.ncluster_cores_array_offset =
+				   __le32_to_cpu(info->ncluster_cores_array_offset);
+		debugfs_create_u32("ncluster_cores_array_offset", 0444, qcom_socinfo->dbg_root,
+				   &qcom_socinfo->info.ncluster_cores_array_offset);
 	case SOCINFO_VERSION(0, 21):
 		qcom_socinfo->info.nsubpart_feat_array_offset =
 				   __le32_to_cpu(info->nsubpart_feat_array_offset);
