@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/maxim,max77686.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Maxim MAX77686 family clock generator block
+
+maintainers:
+  - Anand Moon <linux.amoon@gmail.com>
+
+description: |
+  Binding for Maxim MAX77686 32k clock generator block
+
+  This is a part of device tree bindings of MAX77686 multi-function
+  device. More information can be found in MFD DT binding
+  doc as follows:
+    bindings/mfd/maxim,max77686.yaml for MAX77686
+
+  The MAX77686 contains three 32.768khz crystal clock outputs that can
+  be controlled (gated/ungated) over I2C. Clocks are defined as
+  preprocessor macros in dt-bindings/clock/maxim,max77686.h.
+
+properties:
+  compatible:
+    enum:
+      - max77686-rtc
+
+  "#clock-cells":
+    const: 1
+
+  clock-output-names:
+    maxItems: 3
+    description: Names for AP, CP and BT clocks.
+
+required:
+  - compatible
+  - "#clock-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    max77686_osc: clocks {
+        compatible = "max77686-rtc";
+        #clock-cells = <1>;
+        clock-output-names = "32khz_ap", "32khz_cp", "32khz_pmic";
+    };
