@@ -919,9 +919,8 @@ static int asus_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	struct ec_sensors_data *state = dev_get_drvdata(dev);
 	int sidx = find_ec_sensor_index(state, type, channel);
 
-	if (sidx < 0) {
+	if (WARN_ONCE(sidx < 0, "asus-ec-sensors: sensor not found\n"))
 		return sidx;
-	}
 
 	ret = get_cached_value_or_update(dev, sidx, state, &value);
 	if (!ret) {
@@ -938,6 +937,10 @@ static int asus_ec_hwmon_read_string(struct device *dev,
 {
 	struct ec_sensors_data *state = dev_get_drvdata(dev);
 	int sensor_index = find_ec_sensor_index(state, type, channel);
+
+	if (WARN_ONCE(sensor_index < 0, "asus-ec-sensors: sensor not found\n"))
+		return sensor_index;
+
 	*str = get_sensor_info(state, sensor_index)->label;
 
 	return 0;
