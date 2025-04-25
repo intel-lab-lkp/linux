@@ -277,6 +277,17 @@ properties:
 
     additionalProperties: false
 
+  mdi:
+    type: object
+
+    patternProperties:
+      '^connector-[a-f0-9]+$':
+        $ref: /schemas/net/ethernet-connector.yaml#
+
+        unevaluatedProperties: false
+
+    additionalProperties: false
+
 required:
   - reg
 
@@ -312,6 +323,13 @@ examples:
                     function = LED_FUNCTION_LAN;
                     default-state = "keep";
                 };
+            };
+
+            mdi {
+              connector-0 {
+                lanes = <2>;
+                media = "BaseT";
+              };
             };
         };
     };
