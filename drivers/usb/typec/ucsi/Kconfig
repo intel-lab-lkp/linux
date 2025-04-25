@@ -94,6 +94,7 @@ config UCSI_LENOVO_YOGA_C630
 config UCSI_HUAWEI_GAOKUN
 	tristate "UCSI Interface Driver for Huawei Matebook E Go"
 	depends on EC_HUAWEI_GAOKUN
+	depends on DRM_BRIDGE && OF
 	select DRM_AUX_HPD_BRIDGE
 	help
 	  This driver enables UCSI support on the Huawei Matebook E Go tablet,
