@@ -402,7 +402,7 @@ static bool gdsc_get_hwmode(struct generic_pm_domain *domain, struct device *dev
 
 static int gdsc_init(struct gdsc *sc)
 {
-	u32 mask, val;
+	u32 mask, val, tmp;
 	int on, ret;
 
 	/*
@@ -419,6 +419,14 @@ static int gdsc_init(struct gdsc *sc)
 		sc->en_few_wait_val = EN_FEW_WAIT_VAL;
 	if (!sc->clk_dis_wait_val)
 		sc->clk_dis_wait_val = CLK_DIS_WAIT_VAL;
+
+	regmap_read(sc->regmap, sc->gdscr, &tmp);
+	if (sc->en_rest_wait_val != ((tmp >> EN_REST_WAIT_SHIFT) & 0xf))
+		printk(KERN_ERR "gdsc_init: %s en_rest_wait_val mismatch: (new) 0x%x vs 0x%x (reset)\n", sc->pd.name, sc->en_rest_wait_val, (tmp >> EN_REST_WAIT_SHIFT) & 0xf);
+	if (sc->en_few_wait_val != ((tmp >> EN_FEW_WAIT_SHIFT) & 0xf))
+		printk(KERN_ERR "gdsc_init: %s en_few_wait_val mismatch: (new) 0x%x vs 0x%x (reset)\n", sc->pd.name, sc->en_few_wait_val, (tmp >> EN_FEW_WAIT_SHIFT) & 0xf);
+	if (sc->clk_dis_wait_val != ((tmp >> CLK_DIS_WAIT_SHIFT) & 0xf))
+		printk(KERN_ERR "gdsc_init: %s clk_dis_wait_val mismatch: (new) 0x%x vs 0x%x (reset)\n", sc->pd.name, sc->clk_dis_wait_val, (tmp >> CLK_DIS_WAIT_SHIFT) & 0xf);
 
 	val = sc->en_rest_wait_val << EN_REST_WAIT_SHIFT |
 		sc->en_few_wait_val << EN_FEW_WAIT_SHIFT |
