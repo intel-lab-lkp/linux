@@ -55,6 +55,9 @@
 #define   AXI_AD485X_PACKET_FORMAT_32BIT	0x2
 #define   AXI_AD408X_CNTRL_3_FILTER_EN_MSK	BIT(0)
 
+#define ADI_AXI_ADC_REG_SYNC_STATUS		0x0068
+#define   ADI_AXI_ADC_SYNC			BIT(0)
+
 #define ADI_AXI_ADC_REG_DRP_STATUS		0x0074
 #define   ADI_AXI_ADC_DRP_LOCKED		BIT(17)
 
@@ -433,6 +436,21 @@ static int axi_adc_sync_disable(struct iio_backend *back)
 				 AXI_AD408X_CTRL_SYNC_MSK);
 }
 
+static int axi_adc_sync_status_get(struct iio_backend *back, bool *sync_en)
+{
+	struct adi_axi_adc_state *st = iio_backend_get_priv(back);
+	int ret;
+	u32 val;
+
+	ret = regmap_read(st->regmap, ADI_AXI_ADC_REG_SYNC_STATUS, &val);
+	if (ret)
+		return ret;
+
+	*sync_en = FIELD_GET(ADI_AXI_ADC_SYNC, val);
+
+	return 0;
+}
+
 static struct iio_buffer *axi_adc_request_buffer(struct iio_backend *back,
 						 struct iio_dev *indio_dev)
 {
@@ -582,6 +600,7 @@ static const struct iio_backend_ops adi_axi_adc_ops = {
 	.test_pattern_set = axi_adc_test_pattern_set,
 	.chan_status = axi_adc_chan_status,
 	.interface_type_get = axi_adc_interface_type_get,
+	.sync_status_get = axi_adc_sync_status_get,
 	.debugfs_reg_access = iio_backend_debugfs_ptr(axi_adc_reg_access),
 	.debugfs_print_chan_status = iio_backend_debugfs_ptr(axi_adc_debugfs_print_chan_status),
 };
@@ -626,6 +645,7 @@ static const struct iio_backend_ops adi_ad408x_ops = {
 	.filter_type_set = axi_adc_ad408x_filter_type_set,
 	.data_alignment_enable = axi_adc_sync_enable,
 	.data_alignment_disable = axi_adc_sync_disable,
+	.sync_status_get = axi_adc_sync_status_get,
 	.debugfs_reg_access = iio_backend_debugfs_ptr(axi_adc_reg_access),
 	.debugfs_print_chan_status = iio_backend_debugfs_ptr(axi_adc_debugfs_print_chan_status),
 };
