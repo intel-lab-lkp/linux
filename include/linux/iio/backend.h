@@ -109,6 +109,8 @@ enum iio_backend_filter_type {
  * @debugfs_print_chan_status: Print channel status into a buffer.
  * @debugfs_reg_access: Read or write register value of backend.
  * @filter_type_set: Set filter type.
+ * @data_alignment_enable: Enable sync process.
+ * @data_alignment_disable: Disable sync process.
  * @ddr_enable: Enable interface DDR (Double Data Rate) mode.
  * @ddr_disable: Disable interface DDR (Double Data Rate) mode.
  * @data_stream_enable: Enable data stream.
@@ -161,6 +163,8 @@ struct iio_backend_ops {
 				  unsigned int writeval, unsigned int *readval);
 	int (*filter_type_set)(struct iio_backend *back,
 			       enum iio_backend_filter_type type);
+	int (*data_alignment_enable)(struct iio_backend *back);
+	int (*data_alignment_disable)(struct iio_backend *back);
 	int (*ddr_enable)(struct iio_backend *back);
 	int (*ddr_disable)(struct iio_backend *back);
 	int (*data_stream_enable)(struct iio_backend *back);
@@ -203,6 +207,8 @@ int devm_iio_backend_request_buffer(struct device *dev,
 				    struct iio_dev *indio_dev);
 int iio_backend_filter_type_set(struct iio_backend *back,
 				enum iio_backend_filter_type type);
+int iio_backend_data_alignment_enable(struct iio_backend *back);
+int iio_backend_data_alignment_disable(struct iio_backend *back);
 int iio_backend_ddr_enable(struct iio_backend *back);
 int iio_backend_ddr_disable(struct iio_backend *back);
 int iio_backend_data_stream_enable(struct iio_backend *back);

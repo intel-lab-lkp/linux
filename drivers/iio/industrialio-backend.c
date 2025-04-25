@@ -796,6 +796,32 @@ int iio_backend_filter_type_set(struct iio_backend *back,
 EXPORT_SYMBOL_NS_GPL(iio_backend_filter_type_set, "IIO_BACKEND");
 
 /**
+ * iio_backend_data_alignment_enable - Enable the sync process.
+ * @back: Backend device
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_data_alignment_enable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, data_alignment_enable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_data_alignment_enable, "IIO_BACKEND");
+
+/**
+ * iio_backend_data_alignment_disable - Disable the sync process.
+ * @back: Backend device
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_data_alignment_disable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, data_alignment_disable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_data_alignment_disable, "IIO_BACKEND");
+
+/**
  * iio_backend_ddr_enable - Enable interface DDR (Double Data Rate) mode
  * @back: Backend device
  *
