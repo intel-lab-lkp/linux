@@ -273,6 +273,7 @@ static int dw8250_handle_irq(struct uart_port *p)
 	unsigned int quirks = d->pdata->quirks;
 	unsigned int status;
 	unsigned long flags;
+	unsigned char old_fcr;
 
 	/*
 	 * There are ways to get Designware-based UARTs into a state where
@@ -288,8 +289,18 @@ static int dw8250_handle_irq(struct uart_port *p)
 		uart_port_lock_irqsave(p, &flags);
 		status = serial_lsr_in(up);
 
-		if (!(status & (UART_LSR_DR | UART_LSR_BI)))
+		if (!(status & (UART_LSR_DR | UART_LSR_BI))) {
+			/* To avoid PSLVERR, disable the FIFO first. */
+			if (up->fcr & UART_FCR_ENABLE_FIFO) {
+				old_fcr = serial_in(up, UART_FCR);
+				serial_out(up, UART_FCR, old_fcr & ~1);
+			}
+
 			(void) p->serial_in(p, UART_RX);
+
+			if (up->fcr & UART_FCR_ENABLE_FIFO)
+				serial_out(up, UART_FCR, old_fcr);
+		}
 
 		uart_port_unlock_irqrestore(p, flags);
 	}
