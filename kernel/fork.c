@@ -2585,7 +2585,7 @@ __latent_entropy struct task_struct *copy_process(
 	rseq_fork(p, clone_flags);
 
 	/* Don't start children in a dying pid namespace */
-	if (unlikely(!(ns_of_pid(pid)->pid_allocated & PIDNS_ADDING))) {
+	if (unlikely(!(data_race(ns_of_pid(pid)->pid_allocated & PIDNS_ADDING)))) {
 		retval = -ENOMEM;
 		goto bad_fork_core_free;
 	}

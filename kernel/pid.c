@@ -122,7 +122,7 @@ void free_pid(struct pid *pid)
 	for (i = 0; i <= pid->level; i++) {
 		struct upid *upid = pid->numbers + i;
 		struct pid_namespace *ns = upid->ns;
-		switch (--ns->pid_allocated) {
+		switch (data_race(--ns->pid_allocated)) {
 		case 2:
 		case 1:
 			/* When all that is left in the pid namespace
@@ -134,7 +134,7 @@ void free_pid(struct pid *pid)
 		case PIDNS_ADDING:
 			/* Handle a fork failure of the first process */
 			WARN_ON(ns->child_reaper);
-			ns->pid_allocated = 0;
+			data_race(ns->pid_allocated = 0);
 			break;
 		}
 
@@ -271,13 +271,13 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	upid = pid->numbers + ns->level;
 	idr_preload(GFP_KERNEL);
 	spin_lock(&pidmap_lock);
-	if (!(ns->pid_allocated & PIDNS_ADDING))
+	if (!(data_race(ns->pid_allocated & PIDNS_ADDING)))
 		goto out_unlock;
 	pidfs_add_pid(pid);
 	for ( ; upid >= pid->numbers; --upid) {
 		/* Make the PID visible to find_pid_ns. */
 		idr_replace(&upid->ns->idr, pid, upid->nr);
-		upid->ns->pid_allocated++;
+		data_race(upid->ns->pid_allocated++);
 	}
 	spin_unlock(&pidmap_lock);
 	idr_preload_end();

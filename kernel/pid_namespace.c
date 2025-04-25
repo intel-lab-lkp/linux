@@ -268,7 +268,7 @@ void zap_pid_ns_processes(struct pid_namespace *pid_ns)
 	 */
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		if (pid_ns->pid_allocated == init_pids)
+		if (data_race(pid_ns->pid_allocated == init_pids))
 			break;
 		schedule();
 	}
