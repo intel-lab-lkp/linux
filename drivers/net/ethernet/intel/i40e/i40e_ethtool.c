@@ -1461,7 +1461,7 @@ static int i40e_set_link_ksettings(struct net_device *netdev,
 			netdev_info(netdev,
 				    "Set phy config failed, err %pe aq_err %s\n",
 				    ERR_PTR(status),
-				    i40e_aq_str(hw, hw->aq.asq_last_status));
+				    libie_aq_str(hw->aq.asq_last_status));
 			err = -EAGAIN;
 			goto done;
 		}
@@ -1471,7 +1471,7 @@ static int i40e_set_link_ksettings(struct net_device *netdev,
 			netdev_dbg(netdev,
 				   "Updating link info failed with err %pe aq_err %s\n",
 				   ERR_PTR(status),
-				   i40e_aq_str(hw, hw->aq.asq_last_status));
+				   libie_aq_str(hw->aq.asq_last_status));
 
 	} else {
 		netdev_info(netdev, "Nothing changed, exiting without setting anything.\n");
@@ -1519,7 +1519,7 @@ static int i40e_set_fec_cfg(struct net_device *netdev, u8 fec_cfg)
 			netdev_info(netdev,
 				    "Set phy config failed, err %pe aq_err %s\n",
 				    ERR_PTR(status),
-				    i40e_aq_str(hw, hw->aq.asq_last_status));
+				    libie_aq_str(hw->aq.asq_last_status));
 			err = -EAGAIN;
 			goto done;
 		}
@@ -1533,7 +1533,7 @@ static int i40e_set_fec_cfg(struct net_device *netdev, u8 fec_cfg)
 			netdev_dbg(netdev,
 				   "Updating link info failed with err %pe aq_err %s\n",
 				   ERR_PTR(status),
-				   i40e_aq_str(hw, hw->aq.asq_last_status));
+				   libie_aq_str(hw->aq.asq_last_status));
 	}
 
 done:
@@ -1640,7 +1640,7 @@ static int i40e_nway_reset(struct net_device *netdev)
 	if (ret) {
 		netdev_info(netdev, "link restart failed, err %pe aq_err %s\n",
 			    ERR_PTR(ret),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		return -EIO;
 	}
 
@@ -1757,19 +1757,19 @@ static int i40e_set_pauseparam(struct net_device *netdev,
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_GET) {
 		netdev_info(netdev, "Set fc failed on the get_phy_capabilities call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_SET) {
 		netdev_info(netdev, "Set fc failed on the set_phy_config call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_UPDATE) {
 		netdev_info(netdev, "Set fc failed on the get_link_info call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 
@@ -5377,8 +5377,7 @@ flags_complete:
 			dev_info(&pf->pdev->dev,
 				 "couldn't set switch config bits, err %pe aq_err %s\n",
 				 ERR_PTR(ret),
-				 i40e_aq_str(&pf->hw,
-					     pf->hw.aq.asq_last_status));
+				 libie_aq_str(pf->hw.aq.asq_last_status));
 			/* not a fatal problem, just keep going */
 		}
 	}
@@ -5457,8 +5456,7 @@ flags_complete:
 					dev_warn(&pf->pdev->dev,
 						 "Starting FW LLDP agent failed: error: %pe, %s\n",
 						 ERR_PTR(status),
-						 i40e_aq_str(&pf->hw,
-							     adq_err));
+						 libie_aq_str(adq_err));
 					return -EINVAL;
 				}
 			}
