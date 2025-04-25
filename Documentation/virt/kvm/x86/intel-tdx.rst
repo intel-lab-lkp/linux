@@ -11,7 +11,7 @@ host and physical attacks.  A CPU-attested software module called 'the TDX
 module' runs inside a new CPU isolated range to provide the functionalities to
 manage and run protected VMs, a.k.a, TDX guests or TDs.
 
-Please refer to [1] for the whitepaper, specifications and other resources.
+Please refer to [1]_ for the whitepaper, specifications and other resources.
 
 This documentation describes TDX-specific KVM ABIs.  The TDX module needs to be
 initialized before it can be used by KVM to run any TDX guests.  The host
