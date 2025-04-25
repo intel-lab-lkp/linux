@@ -1725,16 +1725,12 @@ iwl_mld_send_proto_offload(struct iwl_mld *mld,
 #if IS_ENABLED(CONFIG_IPV6)
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld_wowlan_data *wowlan_data = &mld_vif->wowlan_data;
-	struct iwl_ns_config *nsc;
-	struct iwl_targ_addr *addrs;
-	int n_nsc, n_addrs;
+	const int n_addrs = ARRAY_SIZE(cmd->targ_addrs);
+	struct iwl_targ_addr *addrs = cmd->targ_addrs;
+	const int n_nsc = ARRAY_SIZE(cmd->ns_config);
+	struct iwl_ns_config *nsc = cmd->ns_config;
 	int i, c;
 	int num_skipped = 0;
-
-	nsc = cmd->ns_config;
-	n_nsc = IWL_PROTO_OFFLOAD_NUM_NS_CONFIG_V3L;
-	addrs = cmd->targ_addrs;
-	n_addrs = IWL_PROTO_OFFLOAD_NUM_IPV6_ADDRS_V3L;
 
 	/* For each address we have (and that will fit) fill a target
 	 * address struct and combine for NS offload structs with the
@@ -1756,7 +1752,7 @@ iwl_mld_send_proto_offload(struct iwl_mld *mld,
 
 		addrconf_addr_solict_mult(&wowlan_data->target_ipv6_addrs[i],
 					  &solicited_addr);
-		for (j = 0; j < c; j++)
+		for (j = 0; j < n_nsc && j < c; j++)
 			if (ipv6_addr_cmp(&nsc[j].dest_ipv6_addr,
 					  &solicited_addr) == 0)
 				break;
