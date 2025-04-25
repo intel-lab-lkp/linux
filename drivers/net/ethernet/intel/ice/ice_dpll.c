@@ -155,7 +155,7 @@ ice_dpll_pin_freq_set(struct ice_pf *pf, struct ice_dpll_pin *pin,
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to set pin freq:%u on pin:%u",
 				   ret,
-				   ice_aq_str(pf->hw.adminq.sq_last_status),
+				   libie_aq_str(pf->hw.adminq.sq_last_status),
 				   freq, pin->idx);
 		return ret;
 	}
@@ -462,7 +462,7 @@ ice_dpll_pin_enable(struct ice_hw *hw, struct ice_dpll_pin *pin,
 	if (ret)
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to enable %s pin:%u",
-				   ret, ice_aq_str(hw->adminq.sq_last_status),
+				   ret, libie_aq_str(hw->adminq.sq_last_status),
 				   pin_type_name[pin_type], pin->idx);
 
 	return ret;
@@ -507,7 +507,7 @@ ice_dpll_pin_disable(struct ice_hw *hw, struct ice_dpll_pin *pin,
 	if (ret)
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to disable %s pin:%u",
-				   ret, ice_aq_str(hw->adminq.sq_last_status),
+				   ret, libie_aq_str(hw->adminq.sq_last_status),
 				   pin_type_name[pin_type], pin->idx);
 
 	return ret;
@@ -686,13 +686,13 @@ err:
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to update %s pin:%u",
 				   ret,
-				   ice_aq_str(pf->hw.adminq.sq_last_status),
+				   libie_aq_str(pf->hw.adminq.sq_last_status),
 				   pin_type_name[pin_type], pin->idx);
 	else
 		dev_err_ratelimited(ice_pf_to_dev(pf),
 				    "err:%d %s failed to update %s pin:%u\n",
 				    ret,
-				    ice_aq_str(pf->hw.adminq.sq_last_status),
+				    libie_aq_str(pf->hw.adminq.sq_last_status),
 				    pin_type_name[pin_type], pin->idx);
 	return ret;
 }
@@ -725,7 +725,7 @@ ice_dpll_hw_input_prio_set(struct ice_pf *pf, struct ice_dpll *dpll,
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to set pin prio:%u on pin:%u",
 				   ret,
-				   ice_aq_str(pf->hw.adminq.sq_last_status),
+				   libie_aq_str(pf->hw.adminq.sq_last_status),
 				   prio, pin->idx);
 	else
 		dpll->input_prio[pin->idx] = prio;
@@ -1586,7 +1586,7 @@ ice_dpll_pin_phase_adjust_set(const struct dpll_pin *pin, void *pin_priv,
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to set pin phase_adjust:%d for pin:%u on dpll:%u",
 				   ret,
-				   ice_aq_str(pf->hw.adminq.sq_last_status),
+				   libie_aq_str(pf->hw.adminq.sq_last_status),
 				   phase_adjust, p->idx, d->dpll_idx);
 
 	return ret;
@@ -2092,7 +2092,7 @@ ice_dpll_rclk_state_on_pin_set(const struct dpll_pin *pin, void *pin_priv,
 		NL_SET_ERR_MSG_FMT(extack,
 				   "err:%d %s failed to set pin state:%u for pin:%u on parent:%u",
 				   ret,
-				   ice_aq_str(pf->hw.adminq.sq_last_status),
+				   libie_aq_str(pf->hw.adminq.sq_last_status),
 				   state, p->idx, parent->idx);
 unlock:
 	mutex_unlock(&pf->dplls.lock);
@@ -2291,7 +2291,7 @@ ice_dpll_update_state(struct ice_pf *pf, struct ice_dpll *d, bool init)
 		dev_err(ice_pf_to_dev(pf),
 			"update dpll=%d state failed, ret=%d %s\n",
 			d->dpll_idx, ret,
-			ice_aq_str(pf->hw.adminq.sq_last_status));
+			libie_aq_str(pf->hw.adminq.sq_last_status));
 		return ret;
 	}
 	if (init) {
@@ -3205,7 +3205,7 @@ static int ice_dpll_init_info(struct ice_pf *pf, bool cgu)
 	if (ret) {
 		dev_err(ice_pf_to_dev(pf),
 			"err:%d %s failed to read cgu abilities\n",
-			ret, ice_aq_str(hw->adminq.sq_last_status));
+			ret, libie_aq_str(hw->adminq.sq_last_status));
 		return ret;
 	}
 
