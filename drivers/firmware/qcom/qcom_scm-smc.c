@@ -17,7 +17,7 @@
 #include "qcom_scm.h"
 
 /**
- * struct arm_smccc_args
+ * struct arm_smccc_args - Arguments for the ARM SMC instruction
  * @args:	The array of values used in registers in smc instruction
  */
 struct arm_smccc_args {

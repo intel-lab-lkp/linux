@@ -298,6 +298,8 @@ found:
  *
  * Sends a command to the SCM and waits for the command to finish processing.
  * This should *only* be called in pre-emptible context.
+ *
+ * Return: Result of scm_smc_call or scm_legacy_call, negative errno on failure.
  */
 static int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 			 struct qcom_scm_res *res)
@@ -323,6 +325,8 @@ static int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
  *
  * Sends a command to the SCM and waits for the command to finish processing.
  * This can be called in atomic context.
+ *
+ * Return: Result of scm_smc_call or scm_legacy_call, negative errno on failure.
  */
 static int qcom_scm_call_atomic(struct device *dev,
 				const struct qcom_scm_desc *desc,
@@ -422,6 +426,8 @@ static int qcom_scm_set_boot_addr_mc(void *entry, unsigned int flags)
  *
  * Set the Linux entry point for the SCM to transfer control to when coming
  * out of a power down. CPU power down may be executed on cpuidle or hotplug.
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_set_warm_boot_addr(void *entry)
 {
@@ -435,6 +441,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_set_warm_boot_addr);
 /**
  * qcom_scm_set_cold_boot_addr() - Set the cold boot address for all cpus
  * @entry: Entry point function for the cpus
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_set_cold_boot_addr(void *entry)
 {
@@ -662,7 +670,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_metadata_release);
  * @addr:	start address of memory area to prepare
  * @size:	size of the memory area to prepare
  *
- * Returns 0 on success.
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
 {
@@ -701,7 +709,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_mem_setup);
  *				   and reset the remote processor
  * @peripheral:	peripheral id
  *
- * Return 0 on success.
+ * Return: 0 on success negative errno on failure.
  */
 int qcom_scm_pas_auth_and_reset(u32 peripheral)
 {
@@ -737,7 +745,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_auth_and_reset);
  * qcom_scm_pas_shutdown() - Shut down the remote processor
  * @peripheral: peripheral id
  *
- * Returns 0 on success.
+ * Returns: 0 on success, negative errno on failure.
  */
 int qcom_scm_pas_shutdown(u32 peripheral)
 {
@@ -774,7 +782,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown);
  *			      available for the given peripherial
  * @peripheral:	peripheral id
  *
- * Returns true if PAS is supported for this peripheral, otherwise false.
+ * Return: true if PAS is supported for this peripheral, otherwise false.
  */
 bool qcom_scm_pas_supported(u32 peripheral)
 {
@@ -879,7 +887,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_io_writel);
  * qcom_scm_restore_sec_cfg_available() - Check if secure environment
  * supports restore security config interface.
  *
- * Return true if restore-cfg interface is supported, false if not.
+ * Return: true if restore-cfg interface is supported, false if not.
  */
 bool qcom_scm_restore_sec_cfg_available(void)
 {
@@ -1054,7 +1062,7 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
  *            flags
  * @dest_cnt: number of owners in next set.
  *
- * Return negative errno on failure or 0 on success with @srcvm updated.
+ * Return: Negative errno on failure or 0 on success with @srcvm updated.
  */
 int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 			u64 *srcvm,
@@ -1129,6 +1137,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
 
 /**
  * qcom_scm_ocmem_lock_available() - is OCMEM lock/unlock interface available
+ *
+ * Return: true if the OCMEM lock/unlock interface is available, false otherwise.
  */
 bool qcom_scm_ocmem_lock_available(void)
 {
@@ -1145,6 +1155,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_ocmem_lock_available);
  * @offset: OCMEM offset
  * @size:   OCMEM size
  * @mode:   access mode (WIDE/NARROW)
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset, u32 size,
 			u32 mode)
@@ -1170,6 +1182,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_ocmem_lock);
  * @id:     tz initiator id
  * @offset: OCMEM offset
  * @size:   OCMEM size
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_ocmem_unlock(enum qcom_scm_ocmem_client id, u32 offset, u32 size)
 {
@@ -1499,7 +1513,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_import_ice_key);
 /**
  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
  *
- * Return true if HDCP is supported, false if not.
+ * Return: true if HDCP is supported, false if not.
  */
 bool qcom_scm_hdcp_available(void)
 {
@@ -1525,6 +1539,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_hdcp_available);
  * @resp: response buffer passed to SCM
  *
  * Write HDCP register(s) through SCM.
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt, u32 *resp)
 {
@@ -2086,6 +2102,8 @@ static int qcom_scm_qseecom_init(struct qcom_scm *scm)
 
 /**
  * qcom_scm_is_available() - Checks if SCM is available
+ *
+ * Return: true if SCM is available, false otherwise.
  */
 bool qcom_scm_is_available(void)
 {
