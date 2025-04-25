@@ -57,3 +57,8 @@ void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj)
 {
 	i915_debugfs_describe_obj(m, to_intel_bo(obj));
 }
+
+int intel_bo_panic_map(struct drm_gem_object *obj, struct iosys_map *map)
+{
+	return i915_gem_object_panic_map(to_intel_bo(obj), map);
+}
