@@ -1151,6 +1151,7 @@ config VIDEO_LT6911UXE
 	tristate "Lontium LT6911UXE decoder"
 	depends on ACPI && VIDEO_DEV
 	select V4L2_FWNODE
+	select V4L2_CCI_I2C
 	help
 	  This is a Video4Linux2 sensor-level driver for the Lontium
 	  LT6911UXE HDMI to MIPI CSI-2 bridge.
