@@ -429,7 +429,8 @@ qca8k_parse_port_leds(struct qca8k_priv *priv, struct fwnode_handle *port, int p
 		init_data.fwnode = led;
 		init_data.devname_mandatory = true;
 		init_data.devicename = kasprintf(GFP_KERNEL, "%s:0%d",
-						 priv->internal_mdio_bus->id,
+						 ds->slave_mii_bus ?
+						 ds->slave_mii_bus->id : dev_name(&priv->bus->dev),
 						 port_num);
 		if (!init_data.devicename) {
 			fwnode_handle_put(led);
