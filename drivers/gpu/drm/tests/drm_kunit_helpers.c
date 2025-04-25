@@ -332,6 +332,45 @@ int drm_kunit_helper_enable_crtc_connector(struct kunit *test,
 }
 EXPORT_SYMBOL_GPL(drm_kunit_helper_enable_crtc_connector);
 
+/**
+ * drm_kunit_helper_try_enable_crtc_connector - (Re)tries to enable a CRTC -> Connector output
+ * @test: The test context object
+ * @drm: The device to alloc the plane for
+ * @crtc: The CRTC to enable
+ * @connector: The Connector to enable
+ * @mode: The display mode to configure the CRTC with
+ * @ctx: Locking context
+ *
+ * This function is a wrapper over @drm_kunit_helper_enable_crtc_connector
+ * to automatically handle EDEADLK and (re)try to enable the route from
+ * @crtc to @connector, with the given @mode.
+ *
+ * Returns:
+ *
+ * A pointer to the new CRTC, or an ERR_PTR() otherwise.
+ */
+int drm_kunit_helper_try_enable_crtc_connector(struct kunit *test,
+					       struct drm_device *drm,
+					       struct drm_crtc *crtc,
+					       struct drm_connector *connector,
+					       const struct drm_display_mode *mode,
+					       struct drm_modeset_acquire_ctx *ctx)
+{
+	int ret;
+
+retry_enable:
+	ret = drm_kunit_helper_enable_crtc_connector(test, drm, crtc, connector,
+						     mode, ctx);
+	if (ret == -EDEADLK) {
+		ret = drm_modeset_backoff(ctx);
+		if (!ret)
+			goto retry_enable;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(drm_kunit_helper_try_enable_crtc_connector);
+
 static void kunit_action_drm_mode_destroy(void *ptr)
 {
 	struct drm_display_mode *mode = ptr;

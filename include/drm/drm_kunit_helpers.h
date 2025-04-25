@@ -126,6 +126,13 @@ int drm_kunit_helper_enable_crtc_connector(struct kunit *test,
 					   const struct drm_display_mode *mode,
 					   struct drm_modeset_acquire_ctx *ctx);
 
+int drm_kunit_helper_try_enable_crtc_connector(struct kunit *test,
+					       struct drm_device *drm,
+					       struct drm_crtc *crtc,
+					       struct drm_connector *connector,
+					       const struct drm_display_mode *mode,
+					       struct drm_modeset_acquire_ctx *ctx);
+
 int drm_kunit_add_mode_destroy_action(struct kunit *test,
 				      struct drm_display_mode *mode);
 
