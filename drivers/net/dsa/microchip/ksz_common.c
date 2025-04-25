@@ -3492,18 +3492,6 @@ static bool ksz_support_eee(struct dsa_switch *ds, int port)
 static int ksz_set_mac_eee(struct dsa_switch *ds, int port,
 			   struct ethtool_keee *e)
 {
-	struct ksz_device *dev = ds->priv;
-
-	if (!e->tx_lpi_enabled) {
-		dev_err(dev->dev, "Disabling EEE Tx LPI is not supported\n");
-		return -EINVAL;
-	}
-
-	if (e->tx_lpi_timer) {
-		dev_err(dev->dev, "Setting EEE Tx LPI timer is not supported\n");
-		return -EINVAL;
-	}
-
 	return 0;
 }
 
