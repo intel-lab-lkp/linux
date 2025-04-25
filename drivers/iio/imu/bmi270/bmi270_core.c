@@ -8,6 +8,7 @@
 #include <linux/regmap.h>
 #include <linux/units.h>
 
+#include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/trigger.h>
@@ -27,6 +28,9 @@
 
 #define BMI270_ACCEL_X_REG				0x0c
 #define BMI270_ANG_VEL_X_REG				0x12
+
+#define BMI270_INT_STATUS_0_REG				0x1c
+#define BMI270_INT_STATUS_0_STEP_CNT_MSK		BIT(1)
 
 #define BMI270_INT_STATUS_1_REG				0x1d
 #define BMI270_INT_STATUS_1_ACC_GYR_DRDY_MSK		GENMASK(7, 6)
@@ -74,6 +78,10 @@
 #define BMI270_INT_LATCH_REG				0x55
 #define BMI270_INT_LATCH_REG_MSK			BIT(0)
 
+#define BMI270_INT1_MAP_FEAT_REG			0x56
+#define BMI270_INT2_MAP_FEAT_REG			0x57
+#define BMI270_INT_MAP_FEAT_STEP_CNT_WTRMRK_MSK		BIT(1)
+
 #define BMI270_INT_MAP_DATA_REG				0x58
 #define BMI270_INT_MAP_DATA_DRDY_INT1_MSK		BIT(2)
 #define BMI270_INT_MAP_DATA_DRDY_INT2_MSK		BIT(6)
@@ -94,6 +102,7 @@
 #define BMI270_PWR_CTRL_ACCEL_EN_MSK			BIT(2)
 #define BMI270_PWR_CTRL_TEMP_EN_MSK			BIT(3)
 
+#define BMI270_STEP_SC26_WTRMRK_MSK			GENMASK(9, 0)
 #define BMI270_STEP_SC26_RST_CNT_MSK			BIT(10)
 #define BMI270_STEP_SC26_EN_CNT_MSK			BIT(12)
 
@@ -119,6 +128,7 @@ struct bmi270_data {
 	 /* Protect device's private data from concurrent access */
 	struct mutex mutex;
 	int steps_enabled;
+	unsigned int feature_events;
 
 	/*
 	 * Where IIO_DMA_MINALIGN may be larger than 8 bytes, align to
@@ -383,6 +393,42 @@ static int bmi270_read_steps(struct bmi270_data *data, int *val)
 	return IIO_VAL_INT;
 }
 
+static int bmi270_int_map_reg(enum bmi270_irq_pin pin)
+{
+	switch (pin) {
+	case BMI270_IRQ_INT1:
+		return BMI270_INT1_MAP_FEAT_REG;
+	case BMI270_IRQ_INT2:
+		return BMI270_INT2_MAP_FEAT_REG;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int bmi270_step_wtrmrk_en(struct bmi270_data *data, bool state)
+{
+	int ret, reg, field_value;
+
+	guard(mutex)(&data->mutex);
+	if (!data->steps_enabled)
+		return -EINVAL;
+
+	reg = bmi270_int_map_reg(data->irq_pin);
+	if (reg < 0)
+		return -EINVAL;
+
+	field_value = FIELD_PREP(BMI270_INT_MAP_FEAT_STEP_CNT_WTRMRK_MSK, state);
+	ret = regmap_update_bits(data->regmap, reg,
+				 BMI270_INT_MAP_FEAT_STEP_CNT_WTRMRK_MSK,
+				 field_value);
+	if (ret)
+		return ret;
+
+	set_mask_bits(&data->feature_events,
+		      BMI270_INT_MAP_FEAT_STEP_CNT_WTRMRK_MSK, field_value);
+	return 0;
+}
+
 static int bmi270_set_scale(struct bmi270_data *data, int chan_type, int uscale)
 {
 	int i;
@@ -539,18 +585,31 @@ static irqreturn_t bmi270_irq_thread_handler(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
 	struct bmi270_data *data = iio_priv(indio_dev);
-	unsigned int status;
+	unsigned int status0, status1;
+	s64 timestamp = iio_get_time_ns(indio_dev);
 	int ret;
 
 	scoped_guard(mutex, &data->mutex) {
+		ret = regmap_read(data->regmap, BMI270_INT_STATUS_0_REG,
+				  &status0);
+		if (ret)
+			return IRQ_NONE;
+
 		ret = regmap_read(data->regmap, BMI270_INT_STATUS_1_REG,
-				  &status);
+				  &status1);
 		if (ret)
 			return IRQ_NONE;
 	}
 
-	if (FIELD_GET(BMI270_INT_STATUS_1_ACC_GYR_DRDY_MSK, status))
+	if (FIELD_GET(BMI270_INT_STATUS_1_ACC_GYR_DRDY_MSK, status1))
 		iio_trigger_poll_nested(data->trig);
+
+	if (FIELD_GET(BMI270_INT_STATUS_0_STEP_CNT_MSK, status0))
+		iio_push_event(indio_dev, IIO_MOD_EVENT_CODE(IIO_STEPS, 0,
+							     IIO_NO_MOD,
+							     IIO_EV_TYPE_CHANGE,
+							     IIO_EV_DIR_NONE),
+			       timestamp);
 
 	return IRQ_HANDLED;
 }
@@ -761,10 +820,111 @@ static int bmi270_read_avail(struct iio_dev *indio_dev,
 	}
 }
 
+static int bmi270_write_event_config(struct iio_dev *indio_dev,
+				     const struct iio_chan_spec *chan,
+				     enum iio_event_type type,
+				     enum iio_event_direction dir, bool state)
+{
+	struct bmi270_data *data = iio_priv(indio_dev);
+
+	switch (type) {
+	case IIO_EV_TYPE_CHANGE:
+		return bmi270_step_wtrmrk_en(data, state);
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int bmi270_read_event_config(struct iio_dev *indio_dev,
+				    const struct iio_chan_spec *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir)
+{
+	struct bmi270_data *data = iio_priv(indio_dev);
+
+	guard(mutex)(&data->mutex);
+
+	switch (chan->type) {
+	case IIO_STEPS:
+		return FIELD_GET(BMI270_INT_MAP_FEAT_STEP_CNT_WTRMRK_MSK,
+				 data->feature_events) ? 1 : 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int bmi270_write_event_value(struct iio_dev *indio_dev,
+				    const struct iio_chan_spec *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir,
+				    enum iio_event_info info,
+				    int val, int val2)
+{
+	struct bmi270_data *data = iio_priv(indio_dev);
+	unsigned int raw;
+
+	guard(mutex)(&data->mutex);
+
+	switch (type) {
+	case IIO_EV_TYPE_CHANGE:
+		if (!in_range(val, 0, 20461))
+			return -EINVAL;
+
+		raw = val / 20;
+		return bmi270_update_feature_reg(data, BMI270_SC_26_REG,
+						 BMI270_STEP_SC26_WTRMRK_MSK,
+						 FIELD_PREP(BMI270_STEP_SC26_WTRMRK_MSK,
+							    raw));
+	default:
+		return -EINVAL;
+	}
+}
+
+static int bmi270_read_event_value(struct iio_dev *indio_dev,
+				   const struct iio_chan_spec *chan,
+				   enum iio_event_type type,
+				   enum iio_event_direction dir,
+				   enum iio_event_info info,
+				   int *val, int *val2)
+{
+	struct bmi270_data *data = iio_priv(indio_dev);
+	unsigned int raw;
+	u16 reg_val;
+	int ret;
+
+	guard(mutex)(&data->mutex);
+
+	switch (type) {
+	case IIO_EV_TYPE_CHANGE:
+		ret = bmi270_read_feature_reg(data, BMI270_SC_26_REG, &reg_val);
+		if (ret)
+			return ret;
+
+		raw = FIELD_GET(BMI270_STEP_SC26_WTRMRK_MSK, reg_val);
+		*val = raw * 20;
+		return IIO_VAL_INT;
+	default:
+		return -EINVAL;
+	}
+}
+
+static const struct iio_event_spec bmi270_step_wtrmrk_event = {
+	.type = IIO_EV_TYPE_CHANGE,
+	.dir = IIO_EV_DIR_NONE,
+	.mask_shared_by_type = BIT(IIO_EV_INFO_ENABLE) |
+			       BIT(IIO_EV_INFO_VALUE),
+};
+
 static const struct iio_info bmi270_info = {
 	.read_raw = bmi270_read_raw,
 	.write_raw = bmi270_write_raw,
 	.read_avail = bmi270_read_avail,
+	.write_event_config = bmi270_write_event_config,
+	.read_event_config = bmi270_read_event_config,
+	.write_event_value = bmi270_write_event_value,
+	.read_event_value = bmi270_read_event_value,
 };
 
 #define BMI270_ACCEL_CHANNEL(_axis) {				\
@@ -824,6 +984,8 @@ static const struct iio_chan_spec bmi270_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_ENABLE) |
 				      BIT(IIO_CHAN_INFO_PROCESSED),
 		.scan_index = -1, /* No buffer support */
+		.event_spec = &bmi270_step_wtrmrk_event,
+		.num_event_specs = 1,
 	},
 	IIO_CHAN_SOFT_TIMESTAMP(BMI270_SCAN_TIMESTAMP),
 };
