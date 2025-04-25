@@ -205,8 +205,7 @@ enum iwl_tx_offload_assist_flags_pos {
  * @tid_tspec: TID/tspec
  * @pm_frame_timeout: PM TX frame timeout
  * @reserved4: reserved
- * @payload: payload (same as @hdr)
- * @hdr: 802.11 header (same as @payload)
+ * @hdr: 802.11 header
  *
  * The byte count (both len and next_frame_len) includes MAC header
  * (24/26/30/32 bytes)
@@ -222,34 +221,36 @@ enum iwl_tx_offload_assist_flags_pos {
  * and then the actial payload.
  */
 struct iwl_tx_cmd {
-	__le16 len;
-	__le16 offload_assist;
-	__le32 tx_flags;
-	struct {
-		u8 try_cnt;
-		u8 btkill_cnt;
-		__le16 reserved;
-	} scratch; /* DRAM_SCRATCH_API_U_VER_1 */
-	__le32 rate_n_flags;
-	u8 sta_id;
-	u8 sec_ctl;
-	u8 initial_rate_index;
-	u8 reserved2;
-	u8 key[16];
-	__le32 reserved3;
-	__le32 life_time;
-	__le32 dram_lsb_ptr;
-	u8 dram_msb_ptr;
-	u8 rts_retry_limit;
-	u8 data_retry_limit;
-	u8 tid_tspec;
-	__le16 pm_frame_timeout;
-	__le16 reserved4;
-	union {
-		DECLARE_FLEX_ARRAY(u8, payload);
-		DECLARE_FLEX_ARRAY(struct ieee80211_hdr, hdr);
-	};
+	/* New members MUST be added within the __struct_group() macro below. */
+	__struct_group(iwl_tx_cmd_hdr, __hdr, __packed,
+		__le16 len;
+		__le16 offload_assist;
+		__le32 tx_flags;
+		struct {
+			u8 try_cnt;
+			u8 btkill_cnt;
+			__le16 reserved;
+		} scratch; /* DRAM_SCRATCH_API_U_VER_1 */
+		__le32 rate_n_flags;
+		u8 sta_id;
+		u8 sec_ctl;
+		u8 initial_rate_index;
+		u8 reserved2;
+		u8 key[16];
+		__le32 reserved3;
+		__le32 life_time;
+		__le32 dram_lsb_ptr;
+		u8 dram_msb_ptr;
+		u8 rts_retry_limit;
+		u8 data_retry_limit;
+		u8 tid_tspec;
+		__le16 pm_frame_timeout;
+		__le16 reserved4;
+	);
+	struct ieee80211_hdr hdr[];
 } __packed; /* TX_CMD_API_S_VER_6 */
+static_assert(offsetof(struct iwl_tx_cmd, hdr) == sizeof(struct iwl_tx_cmd_hdr),
+	      "struct member likely outside of __struct_group()");
 
 struct iwl_dram_sec_info {
 	__le32 pn_low;
@@ -742,7 +743,7 @@ struct iwl_compressed_ba_notif {
  * @frame: the template of the beacon frame
  */
 struct iwl_mac_beacon_cmd_v6 {
-	struct iwl_tx_cmd tx;
+	struct iwl_tx_cmd_hdr tx;
 	__le32 template_id;
 	__le32 tim_idx;
 	__le32 tim_size;
@@ -761,7 +762,7 @@ struct iwl_mac_beacon_cmd_v6 {
  * @frame: the template of the beacon frame
  */
 struct iwl_mac_beacon_cmd_v7 {
-	struct iwl_tx_cmd tx;
+	struct iwl_tx_cmd_hdr tx;
 	__le32 template_id;
 	__le32 tim_idx;
 	__le32 tim_size;
