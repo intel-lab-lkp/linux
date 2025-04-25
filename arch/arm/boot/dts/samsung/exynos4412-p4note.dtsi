@@ -448,6 +448,10 @@
 			ldo2_reg: LDO2 {
 				regulator-name = "ldo2";
 				regulator-always-on;
+
+				regulator-state-mem {
+					regulator-off-in-suspend;
+				};
 			};
 
 			/* WM8994 audio */
@@ -457,10 +461,6 @@
 				regulator-max-microvolt = <1800000>;
 				regulator-always-on;
 				regulator-boot-on;
-
-				regulator-state-mem {
-					regulator-on-in-suspend;
-				};
 			};
 
 			ldo4_reg: LDO4 {
@@ -472,20 +472,24 @@
 				regulator-name = "VCC_1.8V_IO";
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
+			};
+
+			ldo6_reg: LDO6 {
+				regulator-name = "ldo6";
+				regulator-always-on;
 
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
-			ldo6_reg: LDO6 {
-				regulator-name = "ldo6";
-				regulator-always-on;
-			};
-
 			ldo7_reg: LDO7 {
 				regulator-name = "ldo7";
 				regulator-always-on;
+
+				regulator-state-mem {
+					regulator-off-in-suspend;
+				};
 			};
 
 			/* CSI IP block */
@@ -506,10 +510,6 @@
 				regulator-name = "VLED_IC_1.9V";
 				regulator-min-microvolt = <1950000>;
 				regulator-max-microvolt = <1950000>;
-
-				regulator-state-mem {
-					regulator-off-in-suspend;
-				};
 			};
 
 			/* CSI IP block */
