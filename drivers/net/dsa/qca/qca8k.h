@@ -463,6 +463,7 @@ struct qca8k_priv {
 	struct net_device *mgmt_conduit; /* Track if mdio/mib Ethernet is available */
 	struct qca8k_mgmt_eth_data mgmt_eth_data;
 	struct qca8k_mib_eth_data mib_eth_data;
+	bool can_access_phys_over_mgmt;
 	struct qca8k_mdio_cache mdio_cache;
 	struct qca8k_pcs pcs_port_0;
 	struct qca8k_pcs pcs_port_6;
