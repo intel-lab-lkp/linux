@@ -777,7 +777,8 @@ bool __nvme_check_ready(struct nvme_ctrl *ctrl, struct request *rq,
 	 * sequence. until the controller will be LIVE, fail with
 	 * BLK_STS_RESOURCE so that they will be rescheduled.
 	 */
-	if (rq->q == ctrl->admin_q && (req->flags & NVME_REQ_USERCMD))
+	if (rq->q == ctrl->admin_q && (req->flags & NVME_REQ_USERCMD) &&
+	    (nvme_ctrl_state(ctrl) != NVME_CTRL_CONNECTING))
 		return false;
 
 	if (ctrl->ops->flags & NVME_F_FABRICS) {
