@@ -1215,20 +1215,65 @@ Kernel response contents:
 
   =====================================  ======  ==========================
   ``ETHTOOL_A_EEE_HEADER``               nested  request header
-  ``ETHTOOL_A_EEE_MODES_OURS``           bool    supported/advertised modes
-  ``ETHTOOL_A_EEE_MODES_PEER``           bool    peer advertised link modes
+  ``ETHTOOL_A_EEE_MODES_OURS``           bitset  supported/advertised modes
+  ``ETHTOOL_A_EEE_MODES_PEER``           bitset  peer advertised link modes
   ``ETHTOOL_A_EEE_ACTIVE``               bool    EEE is actively used
   ``ETHTOOL_A_EEE_ENABLED``              bool    EEE is enabled
   ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx lpi enabled
   ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx lpi timeout (in us)
   =====================================  ======  ==========================
 
-In ``ETHTOOL_A_EEE_MODES_OURS``, mask consists of link modes for which EEE is
-enabled, value of link modes for which EEE is advertised. Link modes for which
-peer advertises EEE are listed in ``ETHTOOL_A_EEE_MODES_PEER`` (no mask). The
-netlink interface allows reporting EEE status for all link modes but only
-first 32 are provided by the ``ethtool_ops`` callback.
+Detailed behavior:
 
+``ETHTOOL_A_EEE_MODES_OURS`` is a bitset consisting of:
+
+ - Value: link modes that the driver intends to advertise for EEE.
+ - Mask: subset of link modes supported for EEE by the interface.
+
+The `advertised` value is stored in software and remains even if EEE is
+disabled. It can be modified independently and is preserved across toggles of
+EEE enable/disable. If ``ETHTOOL_A_EEE_ENABLED`` is false, PHY does not
+advertise EEE, but the configured value is reported.
+
+``ETHTOOL_A_EEE_MODES_PEER`` shows the peer's EEE capabilities. It is a bitset
+consisting of:
+
+ - Value: link modes that the link partner advertises for EEE.
+ - Mask: empty
+
+This value is typically reported by the hardware and may represent only a
+subset of the actual capabilities supported and advertised by the link partner.
+The local hardware may not be able to detect or represent all EEE-capable modes
+of the peer. As a result, the true EEE support on the peer side may exceed what
+is reported.
+
+``ETHTOOL_A_EEE_ACTIVE`` indicates whether EEE is currently active on the link.
+This is determined by the kernel as a combination of the currently active link
+mode, locally advertised EEE modes, and peer-advertised EEE modes:
+
+    active = (current_link_mode & advertised & link_partner)
+
+In practice, the evaluation may also depend on whether the MAC supports EEE for
+the given mode. There is mostly no hardware status bit that directly indicates
+an active EEE state. Furthermore, even if ``ETHTOOL_A_EEE_ACTIVE`` is true,
+other settings such as ``ETHTOOL_A_EEE_TX_LPI_ENABLED`` or an excessively high
+``ETHTOOL_A_EEE_TX_LPI_TIMER`` may prevent the MAC from actually entering the
+LPI state. Thus, the "active" status should be interpreted as a potential
+capability, not as a guaranteed indication of LPI activity. The only strict
+rule is that if ``ETHTOOL_A_EEE_ENABLED`` is false, then
+``ETHTOOL_A_EEE_ACTIVE`` must also be false.
+
+``ETHTOOL_A_EEE_ENABLED`` is a software-only switch that controls if the
+advertisement is programmed into hardware.
+
+``ETHTOOL_A_EEE_TX_LPI_TIMER`` defines the delay in microseconds after the last
+transmitted frame before the MAC enters the Low Power Idle (LPI) state. This
+value applies globally to all link modes, though in practice, optimal values
+may differ between modes.
+
+The netlink interface can represent link modes up to
+``__ETHTOOL_LINK_MODE_MASK_NBITS``, but traditional ioctls only support the
+first 32.
 
 EEE_SET
 =======
@@ -1239,18 +1284,50 @@ Request contents:
 
   =====================================  ======  ==========================
   ``ETHTOOL_A_EEE_HEADER``               nested  request header
-  ``ETHTOOL_A_EEE_MODES_OURS``           bool    advertised modes
+  ``ETHTOOL_A_EEE_MODES_OURS``           bitset  advertised modes
   ``ETHTOOL_A_EEE_ENABLED``              bool    EEE is enabled
   ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx lpi enabled
   ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx lpi timeout (in us)
   =====================================  ======  ==========================
 
-``ETHTOOL_A_EEE_MODES_OURS`` is used to either list link modes to advertise
-EEE for (if there is no mask) or specify changes to the list (if there is
-a mask). The netlink interface allows reporting EEE status for all link modes
-but only first 32 can be set at the moment as that is what the ``ethtool_ops``
-callback supports.
+Detailed behavior:
 
+``ETHTOOL_A_EEE_MODES_OURS`` can specify the list of advertised link modes.
+
+``ETHTOOL_A_EEE_ENABLED`` is a software flag that tells the kernel to prepare
+EEE functionality. If autonegotiation is enabled, this means writing the EEE
+advertisement register so that the PHY includes the EEE-capable modes in the
+autonegotiation pages it transmits. The actual advertisement set is a subset
+derived from PHY-supported modes, MAC capabilities, and possible blacklists.
+This subset can be further restricted by ``ETHTOOL_A_EEE_MODES_OURS``. If
+autonegotiation is disabled, EEE advertisement is not transmitted and EEE will
+not be negotiated or used.
+
+``ETHTOOL_A_EEE_TX_LPI_ENABLED`` controls whether the system should enter the
+Low Power Idle (LPI) state. In this state, the MAC typically notifies the PHY,
+which then transitions the medium (e.g., twisted pair) side into LPI. The exact
+behavior depends on the active link mode:
+
+ - In **100BaseT/Full**, an asymmetric LPI configuration (local off, peer on)
+   leads to asymmetric behavior: the local TX line remains active, while the RX
+   line may enter LPI.
+ - In **1000BaseT/Full**, there are no separate TX/RX lines; the wire is silent
+   only if both sides enter the LPI state.
+
+- ``ETHTOOL_A_EEE_TX_LPI_TIMER`` configures the delay after the last
+  transmitted frame before the MAC enters the LPI state. This single timer
+  value applies to all link modes, although using the same value for all modes
+  may not be optimal in practice. A value that is too high may effectively
+  prevent entry into the LPI state.
+
+.. note::
+   For EEE advertisement to take effect, PHY autonegotiation must be enabled.
+
+Limitations:
+
+The netlink interface allows configuring all link modes up to
+``__ETHTOOL_LINK_MODE_MASK_NBITS``, but if drivers depend on legacy
+``ethtool_ops``, only the first 32 link modes are supported.
 
 TSINFO_GET
 ==========
