@@ -435,7 +435,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_EXPECT_TRUE(test, conn_state->hdmi.is_limited_range);
@@ -497,7 +497,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_EXPECT_FALSE(test, conn_state->hdmi.is_limited_range);
@@ -559,7 +559,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_ASSERT_EQ(test,
@@ -623,7 +623,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_ASSERT_EQ(test,
@@ -689,7 +689,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_ASSERT_EQ(test,
@@ -753,7 +753,7 @@ retry:
 	drm_kunit_atomic_restart_on_deadlock(ret, state, &ctx, retry);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	conn_state = drm_atomic_get_connector_state(state, conn);
+	conn_state = drm_atomic_get_new_connector_state(state, conn);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_ASSERT_EQ(test,
