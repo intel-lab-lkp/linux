@@ -110,6 +110,8 @@ static const char * const POWER_SUPPLY_HEALTH_TEXT[] = {
 	[POWER_SUPPLY_HEALTH_COOL]		    = "Cool",
 	[POWER_SUPPLY_HEALTH_HOT]		    = "Hot",
 	[POWER_SUPPLY_HEALTH_NO_BATTERY]	    = "No battery",
+	[POWER_SUPPLY_HEALTH_FUSE_BLOWN]	    = "Fuse blown",
+	[POWER_SUPPLY_HEALTH_CELL_IMBALANCED]	    = "Cell imbalanced",
 };
 
 static const char * const POWER_SUPPLY_TECHNOLOGY_TEXT[] = {
