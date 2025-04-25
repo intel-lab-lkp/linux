@@ -99,6 +99,7 @@ select:
           - nuvoton,ma35d1-sys
           - nuvoton,wpcm450-shm
           - qcom,apq8064-mmss-sfpb
+          - qcom,apq8064-sps-sic
           - rockchip,px30-qos
           - rockchip,rk3036-qos
           - rockchip,rk3066-qos
@@ -203,6 +204,7 @@ properties:
           - nuvoton,ma35d1-sys
           - nuvoton,wpcm450-shm
           - qcom,apq8064-mmss-sfpb
+          - qcom,apq8064-sps-sic
           - rockchip,px30-qos
           - rockchip,rk3036-qos
           - rockchip,rk3066-qos
