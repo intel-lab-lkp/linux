@@ -509,5 +509,13 @@ static inline void crypto_request_set_tfm(struct crypto_async_request *req,
 	req->flags &= ~CRYPTO_TFM_REQ_ON_STACK;
 }
 
+static inline void crypto_stack_request_init(struct crypto_async_request *req,
+					     struct crypto_tfm *tfm)
+{
+	req->flags = 0;
+	crypto_request_set_tfm(req, tfm);
+	req->flags |= CRYPTO_TFM_REQ_ON_STACK;
+}
+
 #endif	/* _LINUX_CRYPTO_H */
 
