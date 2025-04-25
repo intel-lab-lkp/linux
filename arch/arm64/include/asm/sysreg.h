@@ -1185,6 +1185,16 @@
 		write_sysreg_s(__scs_new, sysreg);			\
 } while (0)
 
+#define write_sysreg_hcr(__val) do {					\
+	if(IS_ENABLED(CONFIG_AMPERE_ERRATUM_AC04_CPU_23) &&		\
+	   alternative_has_cap_unlikely(ARM64_WORKAROUND_AMPERE_AC04_CPU_23)) \
+		asm volatile("dsb nsh; msr hcr_el2, %x0; isb"		\
+			     : : "rZ" (__val));				\
+	else								\
+		asm volatile("msr hcr_el2, %x0"				\
+			     : : "rZ" (__val));				\
+} while (0)
+
 #define read_sysreg_par() ({						\
 	u64 par;							\
 	asm(ALTERNATIVE("nop", "dmb sy", ARM64_WORKAROUND_1508412));	\
