@@ -8,6 +8,8 @@
 #include <linux/of.h>
 #include <linux/phy_port.h>
 
+#include "phy-caps.h"
+
 /**
  * phy_port_alloc: Allocate a new phy_port
  *
@@ -145,6 +147,21 @@ void phy_port_update_supported(struct phy_port *port)
 		linkmode_zero(supported);
 		ethtool_medium_get_supported(supported, i, port->lanes);
 		linkmode_or(port->supported, port->supported, supported);
+	}
+
+	/* Serdes ports supported may through SFP may not have any medium set,
+	 * as they will output PHY_INTERFACE_MODE_XXX modes. In that case, derive
+	 * the supported list based on these interfaces
+	 */
+	if (port->is_serdes && linkmode_empty(supported)) {
+		unsigned long interface, link_caps = 0;
+
+		/* Get each interface's caps */
+		for_each_set_bit(interface, port->interfaces,
+				 PHY_INTERFACE_MODE_MAX)
+			link_caps |= phy_caps_from_interface(interface);
+
+		phy_caps_linkmodes(link_caps, port->supported);
 	}
 }
 EXPORT_SYMBOL_GPL(phy_port_update_supported);
