@@ -863,23 +863,21 @@ iwl_mld_add_mcast_rekey(struct ieee80211_vif *vif,
 			u32 cipher)
 {
 	struct ieee80211_key_conf *key_config;
-	struct {
-		struct ieee80211_key_conf conf;
-		u8 key[WOWLAN_KEY_MAX_SIZE];
-	} conf = {
-		.conf.cipher = cipher,
-		.conf.keyidx = key_data->id,
-	};
+	DEFINE_RAW_FLEX(struct ieee80211_key_conf, conf, key,
+			WOWLAN_KEY_MAX_SIZE);
 	int link_id = vif->active_links ? __ffs(vif->active_links) : -1;
 
+	conf->cipher = cipher;
+	conf->keyidx = key_data->id;
+
 	BUILD_BUG_ON(WLAN_KEY_LEN_CCMP != WLAN_KEY_LEN_GCMP);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_CCMP);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_GCMP_256);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_TKIP);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_BIP_GMAC_128);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_BIP_GMAC_256);
-	BUILD_BUG_ON(sizeof(conf.key) < WLAN_KEY_LEN_AES_CMAC);
-	BUILD_BUG_ON(sizeof(conf.key) < sizeof(key_data->key));
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_CCMP);
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_GCMP_256);
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_TKIP);
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_BIP_GMAC_128);
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_BIP_GMAC_256);
+	BUILD_BUG_ON(__member_size(conf->key) < WLAN_KEY_LEN_AES_CMAC);
+	BUILD_BUG_ON(__member_size(conf->key) < sizeof(key_data->key));
 
 	if (!key_data->len)
 		return true;
@@ -887,32 +885,32 @@ iwl_mld_add_mcast_rekey(struct ieee80211_vif *vif,
 	switch (cipher) {
 	case WLAN_CIPHER_SUITE_CCMP:
 	case WLAN_CIPHER_SUITE_GCMP:
-		conf.conf.keylen = WLAN_KEY_LEN_CCMP;
+		conf->keylen = WLAN_KEY_LEN_CCMP;
 		break;
 	case WLAN_CIPHER_SUITE_GCMP_256:
-		conf.conf.keylen = WLAN_KEY_LEN_GCMP_256;
+		conf->keylen = WLAN_KEY_LEN_GCMP_256;
 		break;
 	case WLAN_CIPHER_SUITE_TKIP:
-		conf.conf.keylen = WLAN_KEY_LEN_TKIP;
+		conf->keylen = WLAN_KEY_LEN_TKIP;
 		break;
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
-		conf.conf.keylen = WLAN_KEY_LEN_BIP_GMAC_128;
+		conf->keylen = WLAN_KEY_LEN_BIP_GMAC_128;
 		break;
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
-		conf.conf.keylen = WLAN_KEY_LEN_BIP_GMAC_256;
+		conf->keylen = WLAN_KEY_LEN_BIP_GMAC_256;
 		break;
 	case WLAN_CIPHER_SUITE_AES_CMAC:
-		conf.conf.keylen = WLAN_KEY_LEN_AES_CMAC;
+		conf->keylen = WLAN_KEY_LEN_AES_CMAC;
 		break;
 	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
-		conf.conf.keylen = WLAN_KEY_LEN_BIP_CMAC_256;
+		conf->keylen = WLAN_KEY_LEN_BIP_CMAC_256;
 		break;
 	default:
 		WARN_ON(1);
 	}
 
-	memcpy(conf.conf.key, key_data->key, conf.conf.keylen);
-	key_config = ieee80211_gtk_rekey_add(vif, &conf.conf, link_id);
+	memcpy(conf->key, key_data->key, conf->keylen);
+	key_config = ieee80211_gtk_rekey_add(vif, conf, link_id);
 	if (IS_ERR(key_config))
 		return false;
 
