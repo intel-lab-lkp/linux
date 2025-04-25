@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/chemical/sharp,gp2y1010au0f.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sharp GP2Y1010AU0F Optical Dust Sensor
+
+maintainers:
+  - Suraj Sonawane <surajsonawane0215@gmail.com>
+
+description: |
+  Optical dust sensor measuring particulate matter concentration via infrared scattering.
+  Requires ADC for analog output and GPIO for pulsed LED control with strict timing.
+  Datasheet: https://global.sharp/products/device/lineup/data/pdf/datasheet/gp2y1010au_appl_e.pdf
+
+properties:
+  compatible:
+    const: sharp,gp2y1010au0f
+
+  vdd-supply:
+    description: Phandle to the regulator that provides power to the sensor
+
+  led-gpios:
+    description: GPIO connected to the sensor's LED control pin (V-LED)
+    maxItems: 1
+
+  io-channels:
+    description: ADC channel connected to the sensor's analog output (Vo)
+    maxItems: 1
+
+  io-channel-names:
+    const: dust
+
+  sharp,led-on-delay-us:
+    description: Time in microseconds to wait after turning LED on before ADC read
+    default: 40
+    minimum: 0
+    maximum: 100
+
+  sharp,measurement-window-us:
+    description: Measurement window in microseconds after LED turn-on
+    default: 200
+    minimum: 0
+    maximum: 280
+
+required:
+  - compatible
+  - led-gpios
+  - io-channels
+  - io-channel-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    dust_sensor {
+        compatible = "sharp,gp2y1010au0f";
+        vdd-supply = <&vcc>;
+        led-gpios = <&gpio 44 GPIO_ACTIVE_HIGH>;
+        io-channels = <&adc 0>;
+        io-channel-names = "dust";
+        sharp,led-on-delay-us = <40>;
+        sharp,measurement-window-us = <200>;
+    };
