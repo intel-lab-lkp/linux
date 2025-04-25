@@ -703,15 +703,15 @@ static void nvme_remove_head_work(struct work_struct *work)
 {
 	struct nvme_ns_head *head = container_of(to_delayed_work(work),
 			struct nvme_ns_head, remove_work);
-	bool shutdown = false;
+	bool remove = false;
 
 	mutex_lock(&head->subsys->lock);
 	if (list_empty(&head->list)) {
 		list_del_init(&head->entry);
-		shutdown = true;
+		remove = true;
 	}
 	mutex_unlock(&head->subsys->lock);
-	if (shutdown)
+	if (remove)
 		nvme_remove_head(head);
 
 	module_put(THIS_MODULE);
@@ -1280,9 +1280,9 @@ void nvme_mpath_add_disk(struct nvme_ns *ns, __le32 anagrpid)
 #endif
 }
 
-void nvme_mpath_shutdown_disk(struct nvme_ns_head *head)
+void nvme_mpath_remove_disk(struct nvme_ns_head *head)
 {
-	bool shutdown = false;
+	bool remove = false;
 
 	mutex_lock(&head->subsys->lock);
 
@@ -1301,15 +1301,15 @@ void nvme_mpath_shutdown_disk(struct nvme_ns_head *head)
 	} else {
 		list_del_init(&head->entry);
 		if (head->disk)
-			shutdown = true;
+			remove = true;
 	}
 out:
 	mutex_unlock(&head->subsys->lock);
-	if (shutdown)
+	if (remove)
 		nvme_remove_head(head);
 }
 
-void nvme_mpath_remove_disk(struct nvme_ns_head *head)
+void nvme_mpath_put_disk(struct nvme_ns_head *head)
 {
 	if (!head->disk)
 		return;
