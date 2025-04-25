@@ -10,9 +10,58 @@
 #include "nvme.h"
 
 bool multipath = true;
-module_param(multipath, bool, 0444);
+bool multipath_head_always;	/* default is flase */
+
+static int multipath_param_set(const char *val, const struct kernel_param *kp)
+{
+	int ret;
+
+	ret = param_set_bool(val, kp);
+	if (ret)
+		return ret;
+
+	if (multipath_head_always && !*(bool *)kp->arg) {
+		pr_err("Can't disable multipath when multipath_head_always is configured.\n");
+		*(bool *)kp->arg = true;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static const struct kernel_param_ops multipath_param_ops = {
+	.set = multipath_param_set,
+	.get = param_get_bool,
+};
+
+module_param_cb(multipath, &multipath_param_ops, &multipath, 0444);
 MODULE_PARM_DESC(multipath,
 	"turn on native support for multiple controllers per subsystem");
+
+static int multipath_head_always_set(const char *val,
+		const struct kernel_param *kp)
+{
+	int ret;
+
+	ret = param_set_bool(val, kp);
+	if (ret < 0)
+		return ret;
+
+	if (*(bool *)kp->arg)
+		multipath = true;
+
+	return 0;
+}
+
+static const struct kernel_param_ops multipath_head_always_param_ops = {
+	.set = multipath_head_always_set,
+	.get = param_get_bool,
+};
+
+module_param_cb(multipath_head_always, &multipath_head_always_param_ops,
+		&multipath_head_always, 0444);
+MODULE_PARM_DESC(multipath_head_always,
+	"create multipath head node always; note that this also implicitly enables native multipath support");
 
 static const char *nvme_iopolicy_names[] = {
 	[NVME_IOPOLICY_NUMA]	= "numa",
@@ -681,13 +730,20 @@ int nvme_mpath_alloc_disk(struct nvme_ctrl *ctrl, struct nvme_ns_head *head)
 	head->delayed_removal_secs = 0;
 
 	/*
-	 * Add a multipath node if the subsystems supports multiple controllers.
-	 * We also do this for private namespaces as the namespace sharing flag
-	 * could change after a rescan.
+	 * If multipath_head_always is configured then we add a multipath head
+	 * disk node irrespective of disk is single/multi ported or namespace is
+	 * shared/private.
 	 */
-	if (!(ctrl->subsys->cmic & NVME_CTRL_CMIC_MULTI_CTRL) ||
-	    !nvme_is_unique_nsid(ctrl, head) || !multipath)
-		return 0;
+	if (!multipath_head_always) {
+		/*
+		 * Add a multipath node if the subsystems supports multiple
+		 * controllers. We also do this for private namespaces as the
+		 * namespace sharing flag could change after a rescan.
+		 */
+		if (!(ctrl->subsys->cmic & NVME_CTRL_CMIC_MULTI_CTRL) ||
+		    !nvme_is_unique_nsid(ctrl, head) || !multipath)
+			return 0;
+	}
 
 	blk_set_stacking_limits(&lim);
 	lim.dma_alignment = 3;
