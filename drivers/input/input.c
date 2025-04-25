@@ -370,6 +370,13 @@ void input_handle_event(struct input_dev *dev,
 	}
 }
 
+static void handle_screenlock_as_meta_l(struct input_dev *dev, unsigned int type,
+					int value)
+{
+	input_handle_event(dev, type, KEY_LEFTMETA, value);
+	input_handle_event(dev, type, KEY_L, value);
+}
+
 /**
  * input_event() - report new input event
  * @dev: device that generated the event
@@ -392,6 +399,12 @@ void input_event(struct input_dev *dev,
 {
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
 		guard(spinlock_irqsave)(&dev->event_lock);
+#ifdef CONFIG_INPUT_SCREENLOCK_EMULATION
+		if (code == KEY_SCREENLOCK) {
+			handle_screenlock_as_meta_l(dev, type, value);
+			return;
+		}
+#endif
 		input_handle_event(dev, type, code, value);
 	}
 }
@@ -2114,6 +2127,13 @@ void input_set_capability(struct input_dev *dev, unsigned int type, unsigned int
 
 	switch (type) {
 	case EV_KEY:
+#ifdef CONFIG_INPUT_SCREENLOCK_EMULATION
+		if (code == KEY_SCREENLOCK) {
+			__set_bit(KEY_L, dev->keybit);
+			__set_bit(KEY_LEFTMETA, dev->keybit);
+			break;
+		}
+#endif
 		__set_bit(code, dev->keybit);
 		break;
 
