@@ -348,7 +348,7 @@ static void cdx_shutdown(struct device *dev)
 
 static int cdx_dma_configure(struct device *dev)
 {
-	struct cdx_driver *cdx_drv = to_cdx_driver(dev->driver);
+	const struct device_driver *drv = READ_ONCE(dev->driver);
 	struct cdx_device *cdx_dev = to_cdx_device(dev);
 	struct cdx_controller *cdx = cdx_dev->cdx;
 	u32 input_id = cdx_dev->req_id;
@@ -360,8 +360,8 @@ static int cdx_dma_configure(struct device *dev)
 		return ret;
 	}
 
-	/* @cdx_drv may not be valid when we're called from the IOMMU layer */
-	if (!ret && dev->driver && !cdx_drv->driver_managed_dma) {
+	/* @drv may not be valid when we're called from the IOMMU layer */
+	if (!ret && drv && !to_cdx_driver(drv)->driver_managed_dma) {
 		ret = iommu_device_use_default_domain(dev);
 		if (ret)
 			arch_teardown_dma_ops(dev);
