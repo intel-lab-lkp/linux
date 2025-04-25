@@ -21921,6 +21921,13 @@ F:	drivers/iio/chemical/sps30.c
 F:	drivers/iio/chemical/sps30_i2c.c
 F:	drivers/iio/chemical/sps30_serial.c
 
+SHARP GP2Y1010AU0F DUST SENSOR DRIVER
+M:	Suraj Sonawane <surajsonawane0215@gmail.com>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/chemical/sharp,gp2y1010au0f.yaml
+F:	drivers/iio/chemical/gp2y1010.c
+
 SERIAL DEVICE BUS
 M:	Rob Herring <robh@kernel.org>
 L:	linux-serial@vger.kernel.org

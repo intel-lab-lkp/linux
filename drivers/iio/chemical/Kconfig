@@ -100,6 +100,18 @@ config ENS160_SPI
 	tristate
 	select REGMAP_SPI
 
+config GP2Y1010AU0F
+	tristate "Sharp GP2Y1010AU0F optical dust sensor"
+	depends on IIO
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Say Y here to build support for Sharp GP2Y1010AU0F optical dust sensor
+	  that measures particulate matter concentration in air.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called gp2y1010au0f.
+
 config IAQCORE
 	tristate "AMS iAQ-Core VOC sensors"
 	depends on I2C
