@@ -4062,7 +4062,7 @@ static void __cgroup_kill(struct cgroup *cgrp)
 	css_task_iter_start(&cgrp->self, CSS_TASK_ITER_PROCS | CSS_TASK_ITER_THREADED, &it);
 	while ((task = css_task_iter_next(&it))) {
 		/* Ignore kernel threads here. */
-		if (task->flags & PF_KTHREAD)
+		if (is_kernel_thread(task))
 			continue;
 
 		/* Skip tasks that are already dying. */
@@ -6747,7 +6747,7 @@ void cgroup_post_fork(struct task_struct *child,
 		cset = NULL;
 	}
 
-	if (!(child->flags & PF_KTHREAD)) {
+	if (is_user_thread(child)) {
 		if (unlikely(test_bit(CGRP_FREEZE, &cgrp_flags))) {
 			/*
 			 * If the cgroup has to be frozen, the new task has
@@ -6829,7 +6829,7 @@ void cgroup_exit(struct task_struct *tsk)
 		dec_dl_tasks_cs(tsk);
 
 	WARN_ON_ONCE(cgroup_task_frozen(tsk));
-	if (unlikely(!(tsk->flags & PF_KTHREAD) &&
+	if (unlikely(is_user_thread(tsk) &&
 		     test_bit(CGRP_FREEZE, &task_dfl_cgroup(tsk)->flags)))
 		cgroup_update_frozen(task_dfl_cgroup(tsk));
 

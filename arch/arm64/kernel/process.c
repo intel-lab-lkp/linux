@@ -514,7 +514,7 @@ static void ssbs_thread_switch(struct task_struct *next)
 	 * Nothing to do for kernel threads, but 'regs' may be junk
 	 * (e.g. idle task) so check the flags and bail early.
 	 */
-	if (unlikely(next->flags & PF_KTHREAD))
+	if (unlikely(is_kernel_thread(next)))
 		return;
 
 	/*

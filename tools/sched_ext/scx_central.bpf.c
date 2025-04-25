@@ -111,7 +111,7 @@ void BPF_STRUCT_OPS(central_enqueue, struct task_struct *p, u64 enq_flags)
 	 * behind other threads which is necessary for forward progress
 	 * guarantee as we depend on the BPF timer which may run from ksoftirqd.
 	 */
-	if ((p->flags & PF_KTHREAD) && p->nr_cpus_allowed == 1) {
+	if (is_kernel_thread(p) && p->nr_cpus_allowed == 1) {
 		__sync_fetch_and_add(&nr_locals, 1);
 		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, SCX_SLICE_INF,
 				   enq_flags | SCX_ENQ_PREEMPT);

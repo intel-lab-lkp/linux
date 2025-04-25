@@ -220,7 +220,7 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 	fpu_clone(p, clone_flags, args->fn, new_ssp);
 
 	/* Kernel thread ? */
-	if (unlikely(p->flags & PF_KTHREAD)) {
+	if (unlikely(is_kernel_thread(p))) {
 		p->thread.pkru = pkru_get_init_value();
 		memset(childregs, 0, sizeof(struct pt_regs));
 		kthread_frame_init(frame, args->fn, args->fn_arg);

@@ -2061,7 +2061,7 @@ out:
  */
 void blkcg_schedule_throttle(struct gendisk *disk, bool use_memdelay)
 {
-	if (unlikely(current->flags & PF_KTHREAD))
+	if (unlikely(is_kernel_thread(current)))
 		return;
 
 	if (current->throttle_disk != disk) {

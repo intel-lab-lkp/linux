@@ -164,7 +164,7 @@ static bool oom_unkillable_task(struct task_struct *p)
 {
 	if (is_global_init(p))
 		return true;
-	if (p->flags & PF_KTHREAD)
+	if (is_kernel_thread(p))
 		return true;
 	return false;
 }
@@ -987,7 +987,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 		 * No kthread_use_mm() user needs to read from the userspace so
 		 * we are ok to reap it.
 		 */
-		if (unlikely(p->flags & PF_KTHREAD))
+		if (unlikely(is_kernel_thread(p)))
 			continue;
 		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
 	}

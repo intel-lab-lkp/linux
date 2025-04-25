@@ -137,7 +137,7 @@ static void emit_log_message(int priority, const char *module, const char *prefi
 	 * If it's a kernel thread and the module name is a prefix of its name, assume it is ours
 	 * and only identify the thread.
 	 */
-	if (((current->flags & PF_KTHREAD) != 0) &&
+	if ((is_kernel_thread(current)) &&
 	    (strncmp(module, current->comm, strlen(module)) == 0)) {
 		emit_log_message_to_kernel(priority, "%s: %s%pV%pV\n", current->comm,
 					   prefix, vaf1, vaf2);

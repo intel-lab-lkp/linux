@@ -487,7 +487,7 @@ out:
 int bch2_move_ratelimit(struct moving_context *ctxt)
 {
 	struct bch_fs *c = ctxt->trans->c;
-	bool is_kthread = current->flags & PF_KTHREAD;
+	bool is_kthread = is_kernel_thread(current);
 	u64 delay;
 
 	if (ctxt->wait_on_copygc && c->copygc_running) {
@@ -749,7 +749,7 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 {
 	struct btree_trans *trans = ctxt->trans;
 	struct bch_fs *c = trans->c;
-	bool is_kthread = current->flags & PF_KTHREAD;
+	bool is_kthread = is_kernel_thread(current);
 	struct bch_io_opts io_opts = bch2_opts_to_inode_opts(c->opts);
 	struct btree_iter iter = {}, bp_iter = {};
 	struct bkey_buf sk;
@@ -961,7 +961,7 @@ static int bch2_move_btree(struct bch_fs *c,
 			   move_btree_pred pred, void *arg,
 			   struct bch_move_stats *stats)
 {
-	bool kthread = (current->flags & PF_KTHREAD) != 0;
+	bool kthread = is_kernel_thread(current);
 	struct bch_io_opts io_opts = bch2_opts_to_inode_opts(c->opts);
 	struct moving_context ctxt;
 	struct btree_trans *trans;

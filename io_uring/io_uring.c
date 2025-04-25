@@ -523,7 +523,7 @@ static void io_queue_iowq(struct io_kiocb *req)
 
 	BUG_ON(!tctx);
 
-	if ((current->flags & PF_KTHREAD) || !tctx->io_wq) {
+	if (is_kernel_thread(current) || !tctx->io_wq) {
 		io_req_task_queue_fail(req, -ECANCELED);
 		return;
 	}

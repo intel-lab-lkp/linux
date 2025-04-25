@@ -81,7 +81,7 @@ enum KTHREAD_BITS {
 
 static inline struct kthread *to_kthread(struct task_struct *k)
 {
-	WARN_ON(!(k->flags & PF_KTHREAD));
+	WARN_ON(is_user_thread(k));
 	return k->worker_private;
 }
 
@@ -99,7 +99,7 @@ static inline struct kthread *to_kthread(struct task_struct *k)
 static inline struct kthread *__to_kthread(struct task_struct *p)
 {
 	void *kthread = p->worker_private;
-	if (kthread && !(p->flags & PF_KTHREAD))
+	if (kthread && is_user_thread(p))
 		kthread = NULL;
 	return kthread;
 }
@@ -1601,7 +1601,7 @@ void kthread_use_mm(struct mm_struct *mm)
 	struct mm_struct *active_mm;
 	struct task_struct *tsk = current;
 
-	WARN_ON_ONCE(!(tsk->flags & PF_KTHREAD));
+	WARN_ON_ONCE(is_user_thread(tsk));
 	WARN_ON_ONCE(tsk->mm);
 
 	/*
@@ -1646,7 +1646,7 @@ void kthread_unuse_mm(struct mm_struct *mm)
 {
 	struct task_struct *tsk = current;
 
-	WARN_ON_ONCE(!(tsk->flags & PF_KTHREAD));
+	WARN_ON_ONCE(is_user_thread(tsk));
 	WARN_ON_ONCE(!tsk->mm);
 
 	task_lock(tsk);
@@ -1686,7 +1686,7 @@ void kthread_associate_blkcg(struct cgroup_subsys_state *css)
 {
 	struct kthread *kthread;
 
-	if (!(current->flags & PF_KTHREAD))
+	if (is_user_thread(current))
 		return;
 	kthread = to_kthread(current);
 	if (!kthread)
@@ -1712,7 +1712,7 @@ struct cgroup_subsys_state *kthread_blkcg(void)
 {
 	struct kthread *kthread;
 
-	if (current->flags & PF_KTHREAD) {
+	if (is_kernel_thread(current)) {
 		kthread = to_kthread(current);
 		if (kthread)
 			return kthread->blkcg_css;

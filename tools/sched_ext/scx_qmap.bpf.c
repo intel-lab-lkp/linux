@@ -200,7 +200,7 @@ void BPF_STRUCT_OPS(qmap_enqueue, struct task_struct *p, u64 enq_flags)
 	void *ring;
 	s32 cpu;
 
-	if (p->flags & PF_KTHREAD) {
+	if (is_kernel_thread(p)) {
 		if (stall_kernel_nth && !(++kernel_cnt % stall_kernel_nth))
 			return;
 	} else {

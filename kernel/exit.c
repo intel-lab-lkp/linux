@@ -539,7 +539,7 @@ void mm_update_next_owner(struct mm_struct *mm)
 	for_each_process(g) {
 		if (atomic_read(&mm->mm_users) <= 1)
 			break;
-		if (g->flags & PF_KTHREAD)
+		if (is_kernel_thread(g))
 			continue;
 		if (try_to_set_owner(g, mm))
 			goto ret;

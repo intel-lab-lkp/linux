@@ -76,7 +76,7 @@ int __no_sanitize_address arch_stack_walk_reliable(stack_trace_consume_fn consum
 	stack_end = stack_page + THREAD_SIZE;
 
 	// See copy_thread() for details.
-	if (task->flags & PF_KTHREAD)
+	if (is_kernel_thread(task))
 		stack_end -= STACK_FRAME_MIN_SIZE;
 	else
 		stack_end -= STACK_USER_INT_FRAME_SIZE;

@@ -666,7 +666,7 @@ static void __update_pstate_ssbs(struct pt_regs *regs, bool state)
 void spectre_v4_enable_task_mitigation(struct task_struct *tsk)
 {
 	struct pt_regs *regs = task_pt_regs(tsk);
-	bool ssbs = false, kthread = tsk->flags & PF_KTHREAD;
+	bool ssbs = false, kthread = is_kernel_thread(tsk);
 
 	if (spectre_v4_mitigations_off())
 		ssbs = true;

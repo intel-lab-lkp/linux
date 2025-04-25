@@ -46,7 +46,7 @@ bool freezing_slow_path(struct task_struct *p)
 	if (pm_nosig_freezing || cgroup_freezing(p))
 		return true;
 
-	if (pm_freezing && !(p->flags & PF_KTHREAD))
+	if (pm_freezing && is_user_thread(p))
 		return true;
 
 	return false;
@@ -170,7 +170,7 @@ bool freeze_task(struct task_struct *p)
 		return false;
 	}
 
-	if (!(p->flags & PF_KTHREAD))
+	if (is_user_thread(p))
 		fake_signal_wake_up(p);
 	else
 		wake_up_state(p, TASK_NORMAL);

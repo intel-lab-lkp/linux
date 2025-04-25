@@ -279,7 +279,7 @@ bool amdgpu_amdkfd_compute_active(struct amdgpu_device *adev, uint32_t node_id);
 			pagefault_disable();				\
 			if ((mmptr) == current->mm) {			\
 				valid = !get_user((dst), (wptr));	\
-			} else if (current->flags & PF_KTHREAD) {	\
+			} else if (is_kernel_thread(current)) {	\
 				kthread_use_mm(mmptr);			\
 				valid = !get_user((dst), (wptr));	\
 				kthread_unuse_mm(mmptr);		\

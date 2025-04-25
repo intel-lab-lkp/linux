@@ -74,7 +74,7 @@ void exit_thread(struct task_struct *tsk)
 	 * User threads may have allocated a delay slot emulation frame.
 	 * If so, clean up that allocation.
 	 */
-	if (!(current->flags & PF_KTHREAD))
+	if (is_user_thread(current))
 		dsemul_thread_cleanup(tsk);
 }
 

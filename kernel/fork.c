@@ -586,7 +586,7 @@ void free_task(struct task_struct *tsk)
 	rt_mutex_debug_task_free(tsk);
 	ftrace_graph_exit_task(tsk);
 	arch_release_task_struct(tsk);
-	if (tsk->flags & PF_KTHREAD)
+	if (is_kernel_thread(tsk))
 		free_kthread_struct(tsk);
 	bpf_task_storage_free(tsk);
 	free_task_struct(tsk);
@@ -1545,7 +1545,7 @@ struct file *get_task_exe_file(struct task_struct *task)
 	struct file *exe_file = NULL;
 	struct mm_struct *mm;
 
-	if (task->flags & PF_KTHREAD)
+	if (is_kernel_thread(task))
 		return NULL;
 
 	task_lock(task);
@@ -1570,7 +1570,7 @@ struct mm_struct *get_task_mm(struct task_struct *task)
 {
 	struct mm_struct *mm;
 
-	if (task->flags & PF_KTHREAD)
+	if (is_kernel_thread(task))
 		return NULL;
 
 	task_lock(task);

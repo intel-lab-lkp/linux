@@ -665,7 +665,7 @@ static int __bch2_journal_reclaim(struct journal *j, bool direct, bool kicked)
 {
 	struct bch_fs *c = container_of(j, struct bch_fs, journal);
 	struct btree_cache *bc = &c->btree_cache;
-	bool kthread = (current->flags & PF_KTHREAD) != 0;
+	bool kthread = is_kernel_thread(current);
 	u64 seq_to_flush;
 	size_t min_nr, min_key_cache, nr_flushed;
 	unsigned flags;

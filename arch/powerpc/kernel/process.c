@@ -1770,7 +1770,7 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 
 	klp_init_thread_info(p);
 
-	if (unlikely(p->flags & PF_KTHREAD)) {
+	if (unlikely(is_kernel_thread(p))) {
 		/* kernel thread */
 
 		/* Create initial minimum stack frame. */

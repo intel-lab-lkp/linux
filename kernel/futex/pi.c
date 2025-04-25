@@ -428,7 +428,7 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 	if (!p)
 		return handle_exit_race(uaddr, uval, NULL);
 
-	if (unlikely(p->flags & PF_KTHREAD)) {
+	if (unlikely(is_kernel_thread(p))) {
 		put_task_struct(p);
 		return -EPERM;
 	}

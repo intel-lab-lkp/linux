@@ -370,7 +370,7 @@ void BPF_STRUCT_OPS(fcg_enqueue, struct task_struct *p, u64 enq_flags)
 		 * implement per-cgroup fallback dq's instead so that we have
 		 * more control over when tasks with custom cpumask get issued.
 		 */
-		if (p->nr_cpus_allowed == 1 && (p->flags & PF_KTHREAD)) {
+		if (p->nr_cpus_allowed == 1 && is_kernel_thread(p)) {
 			stat_inc(FCG_STAT_LOCAL);
 			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, SCX_SLICE_DFL,
 					   enq_flags);

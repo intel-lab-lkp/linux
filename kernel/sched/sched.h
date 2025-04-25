@@ -2571,7 +2571,7 @@ static inline bool task_allowed_on_cpu(struct task_struct *p, int cpu)
 		return false;
 
 	/* Can @cpu run a user thread? */
-	if (!(p->flags & PF_KTHREAD) && !task_cpu_possible(cpu, p))
+	if (is_user_thread(p) && !task_cpu_possible(cpu, p))
 		return false;
 
 	return true;
@@ -3556,7 +3556,7 @@ static inline void membarrier_switch_mm(struct rq *rq,
 #ifdef CONFIG_SMP
 static inline bool is_per_cpu_kthread(struct task_struct *p)
 {
-	if (!(p->flags & PF_KTHREAD))
+	if (is_user_thread(p))
 		return false;
 
 	if (p->nr_cpus_allowed != 1)

@@ -2555,7 +2555,7 @@ static struct obj_cgroup *current_objcg_update(void)
 		}
 
 		/* If new objcg is NULL, no reason for the second atomic update. */
-		if (!current->mm || (current->flags & PF_KTHREAD))
+		if (!current->mm || is_kernel_thread(current))
 			return NULL;
 
 		/*

@@ -223,7 +223,7 @@ void thaw_kernel_threads(void)
 
 	read_lock(&tasklist_lock);
 	for_each_process_thread(g, p) {
-		if (p->flags & PF_KTHREAD)
+		if (is_kernel_thread(p))
 			__thaw_task(p);
 	}
 	read_unlock(&tasklist_lock);

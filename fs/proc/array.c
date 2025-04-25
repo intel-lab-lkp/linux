@@ -106,7 +106,7 @@ void proc_task_name(struct seq_file *m, struct task_struct *p, bool escape)
 	 */
 	if (p->flags & PF_WQ_WORKER)
 		wq_worker_comm(tcomm, sizeof(tcomm), p);
-	else if (p->flags & PF_KTHREAD)
+	else if (is_kernel_thread(p))
 		get_kthread_comm(tcomm, sizeof(tcomm), p);
 	else
 		get_task_comm(tcomm, p);
@@ -221,7 +221,7 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 #endif
 	seq_putc(m, '\n');
 
-	seq_printf(m, "Kthread:\t%c\n", p->flags & PF_KTHREAD ? '1' : '0');
+	seq_printf(m, "Kthread:\t%c\n", is_kernel_thread(p) ? '1' : '0');
 }
 
 void render_sigset_t(struct seq_file *m, const char *header,

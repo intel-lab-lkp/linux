@@ -805,7 +805,7 @@ void fpregs_lock_and_load(void)
 	 * Warn about it.
 	 */
 	WARN_ON_ONCE(!irq_fpu_usable());
-	WARN_ON_ONCE(current->flags & PF_KTHREAD);
+	WARN_ON_ONCE(is_kernel_thread(current));
 
 	fpregs_lock();
 

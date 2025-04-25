@@ -2448,7 +2448,7 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 		return cpu_online(cpu);
 
 	/* Non kernel threads are not allowed during either online or offline. */
-	if (!(p->flags & PF_KTHREAD))
+	if (is_user_thread(p))
 		return cpu_active(cpu);
 
 	/* KTHREAD_IS_PER_CPU is always allowed. */
@@ -3074,7 +3074,7 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 {
 	const struct cpumask *cpu_allowed_mask = task_cpu_possible_mask(p);
 	const struct cpumask *cpu_valid_mask = cpu_active_mask;
-	bool kthread = p->flags & PF_KTHREAD;
+	bool kthread = is_kernel_thread(p);
 	unsigned int dest_cpu;
 	int ret = 0;
 
@@ -8895,7 +8895,7 @@ void normalize_rt_tasks(void)
 		/*
 		 * Only normalize user tasks:
 		 */
-		if (p->flags & PF_KTHREAD)
+		if (is_kernel_thread(p))
 			continue;
 
 		p->se.exec_start = 0;

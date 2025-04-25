@@ -387,7 +387,7 @@ void play_idle_precise(u64 duration_ns, u64 latency_ns)
 	 */
 	WARN_ON_ONCE(current->policy != SCHED_FIFO);
 	WARN_ON_ONCE(current->nr_cpus_allowed != 1);
-	WARN_ON_ONCE(!(current->flags & PF_KTHREAD));
+	WARN_ON_ONCE(is_user_thread(current));
 	WARN_ON_ONCE(!(current->flags & PF_NO_SETAFFINITY));
 	WARN_ON_ONCE(!duration_ns);
 	WARN_ON_ONCE(current->mm);

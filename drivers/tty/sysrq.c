@@ -360,7 +360,7 @@ static void send_sig_all(int sig)
 
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
-		if (p->flags & PF_KTHREAD)
+		if (is_kernel_thread(p))
 			continue;
 		if (is_global_init(p))
 			continue;

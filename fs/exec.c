@@ -1923,7 +1923,7 @@ int kernel_execve(const char *kernel_filename,
 	int retval;
 
 	/* It is non-sense for kernel threads to call execve */
-	if (WARN_ON_ONCE(current->flags & PF_KTHREAD))
+	if (WARN_ON_ONCE(is_kernel_thread(current)))
 		return -EINVAL;
 
 	filename = getname_kernel(kernel_filename);

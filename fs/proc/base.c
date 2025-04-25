@@ -1179,7 +1179,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 				continue;
 
 			/* do not touch kernel threads or the global init */
-			if (p->flags & PF_KTHREAD || is_global_init(p))
+			if (is_kernel_thread(p) || is_global_init(p))
 				continue;
 
 			task_lock(p);
@@ -1330,7 +1330,7 @@ static ssize_t proc_loginuid_write(struct file * file, const char __user * buf,
 	int rv;
 
 	/* Don't let kthreads write their own loginuid */
-	if (current->flags & PF_KTHREAD)
+	if (is_kernel_thread(current))
 		return -EPERM;
 
 	rcu_read_lock();
@@ -1876,7 +1876,7 @@ void task_dump_owner(struct task_struct *task, umode_t mode,
 	kuid_t uid;
 	kgid_t gid;
 
-	if (unlikely(task->flags & PF_KTHREAD)) {
+	if (unlikely(is_kernel_thread(task))) {
 		*ruid = GLOBAL_ROOT_UID;
 		*rgid = GLOBAL_ROOT_GID;
 		return;
