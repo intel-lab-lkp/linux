@@ -63,4 +63,26 @@
 #define ZL_REG(_page, _offset, _size)					\
 	ZL_REG_IDX(0, _page, _offset, _size, 1, 0)
 
+/*******************************
+ * Register Page 10, Ref Mailbox
+ *******************************/
+
+#define ZL_REG_REF_MB_MASK			ZL_REG(10, 0x02, 2)
+
+#define ZL_REG_REF_MB_SEM			ZL_REG(10, 0x04, 1)
+#define ZL_REF_MB_SEM_WR			BIT(0)
+#define ZL_REF_MB_SEM_RD			BIT(1)
+
+/**********************************
+ * Register Page 14, Output Mailbox
+ **********************************/
+#define ZL_REG_OUTPUT_MB_MASK			ZL_REG(14, 0x02, 2)
+
+#define ZL_REG_OUTPUT_MB_SEM			ZL_REG(14, 0x04, 1)
+#define ZL_OUTPUT_MB_SEM_WR			BIT(0)
+#define ZL_OUTPUT_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_OUTPUT_MODE			ZL_REG(14, 0x05, 1)
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT		GENMASK(7, 4)
+
 #endif /* __LINUX_MFD_ZL3073X_REGS_H */
