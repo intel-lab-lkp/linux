@@ -526,6 +526,12 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	if (!file)
 		return -EBADF;
 
+	if (unlikely(!file->f_op->read_iter))
+		return -EINVAL;
+
+	if (file->f_mode & FMODE_WRITE && unlikely(!file->f_op->write_iter))
+		return -EINVAL;
+
 	/* suppress uevents while reconfiguring the device */
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
 
@@ -963,6 +969,14 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 
 	if (!file)
 		return -EBADF;
+
+	if (unlikely(!file->f_op->read_iter))
+		return -EINVAL;
+
+	if (((file->f_mode & FMODE_WRITE) || (mode & BLK_OPEN_WRITE)) &&
+	    unlikely(!file->f_op->write_iter))
+		return -EINVAL;
+
 	is_loop = is_loop_device(file);
 
 	/* This is safe, since we have a reference from open(). */
