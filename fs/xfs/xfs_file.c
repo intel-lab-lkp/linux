@@ -914,6 +914,27 @@ out:
 	return ret;
 }
 
+#define offset_in_block(inode, p) ((unsigned long)(p) & (i_blocksize(inode) - 1))
+
+static inline bool xfs_allow_concurrent(
+	struct kiocb		*iocb,
+	struct iov_iter		*from)
+{
+	struct inode		*inode = iocb->ki_filp->f_mapping->host;
+
+	/* Extending write? */
+	if (iocb->ki_flags & IOCB_APPEND ||
+	    iocb->ki_pos >= i_size_read(inode))
+		return false;
+
+	/* Exceeds a block range? */
+	if (iov_iter_count(from) > i_blocksize(inode) ||
+	    offset_in_block(inode, iocb->ki_pos) + iov_iter_count(from) > i_blocksize(inode))
+		return false;
+
+	return true;
+}
+
 STATIC ssize_t
 xfs_file_buffered_write(
 	struct kiocb		*iocb,
@@ -925,8 +946,12 @@ xfs_file_buffered_write(
 	bool			cleared_space = false;
 	unsigned int		iolock;
 
+	if (xfs_allow_concurrent(iocb, from))
+		iolock = XFS_IOLOCK_SHARED;
+	else
+		iolock = XFS_IOLOCK_EXCL;
+
 write_retry:
-	iolock = XFS_IOLOCK_EXCL;
 	ret = xfs_ilock_iocb_for_write(iocb, &iolock, false);
 	if (ret)
 		return ret;
@@ -934,6 +959,13 @@ write_retry:
 	ret = xfs_file_write_checks(iocb, from, &iolock, NULL);
 	if (ret)
 		goto out;
+
+	if (iolock == XFS_IOLOCK_SHARED &&
+	    iocb->ki_pos + iov_iter_count(from) > i_size_read(inode)) {
+		xfs_iunlock(ip, iolock);
+		iolock = XFS_IOLOCK_EXCL;
+		goto write_retry;
+	}
 
 	trace_xfs_file_buffered_write(iocb, from);
 	ret = iomap_file_buffered_write(iocb, from,
