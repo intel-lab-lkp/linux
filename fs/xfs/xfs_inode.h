@@ -51,6 +51,12 @@ typedef struct xfs_inode {
 	uint16_t		i_checked;
 	uint16_t		i_sick;
 
+	/*
+	 * Indicates the current IO mode of this inode, (DIO/buffered IO)
+	 * protected by i_rwsem lock.
+	 */
+	uint32_t		i_direct_mode;
+
 	spinlock_t		i_flags_lock;	/* inode i_flags lock */
 	/* Miscellaneous state. */
 	unsigned long		i_flags;	/* see defined flags below */

@@ -206,7 +206,8 @@ xfs_ilock_iocb(
 static int
 xfs_ilock_iocb_for_write(
 	struct kiocb		*iocb,
-	unsigned int		*lock_mode)
+	unsigned int		*lock_mode,
+	bool			is_dio)
 {
 	ssize_t			ret;
 	struct xfs_inode	*ip = XFS_I(file_inode(iocb->ki_filp));
@@ -224,6 +225,21 @@ xfs_ilock_iocb_for_write(
 		xfs_iunlock(ip, *lock_mode);
 		*lock_mode = XFS_IOLOCK_EXCL;
 		return xfs_ilock_iocb(iocb, *lock_mode);
+	}
+
+	/*
+	 * If the i_direct_mode need update, take the iolock exclusively to write
+	 * it.
+	 */
+	if (ip->i_direct_mode != is_dio) {
+		if (*lock_mode == XFS_IOLOCK_SHARED) {
+			xfs_iunlock(ip, *lock_mode);
+			*lock_mode = XFS_IOLOCK_EXCL;
+			ret = xfs_ilock_iocb(iocb, *lock_mode);
+			if (ret)
+				return ret;
+		}
+		ip->i_direct_mode = is_dio;
 	}
 
 	return 0;
@@ -247,6 +263,19 @@ xfs_file_dio_read(
 	ret = xfs_ilock_iocb(iocb, XFS_IOLOCK_SHARED);
 	if (ret)
 		return ret;
+
+	if (!ip->i_direct_mode) {
+		xfs_iunlock(ip, XFS_IOLOCK_SHARED);
+		ret = xfs_ilock_iocb(iocb, XFS_IOLOCK_EXCL);
+		if (ret)
+			return ret;
+
+		ip->i_direct_mode = 1;
+
+		/* Update finished, now downgrade to shared lock */
+		xfs_ilock_demote(ip, XFS_IOLOCK_EXCL);
+	}
+
 	ret = iomap_dio_rw(iocb, to, &xfs_read_iomap_ops, NULL, 0, NULL, 0);
 	xfs_iunlock(ip, XFS_IOLOCK_SHARED);
 
@@ -680,7 +709,7 @@ xfs_file_dio_write_aligned(
 	unsigned int		iolock = XFS_IOLOCK_SHARED;
 	ssize_t			ret;
 
-	ret = xfs_ilock_iocb_for_write(iocb, &iolock);
+	ret = xfs_ilock_iocb_for_write(iocb, &iolock, true);
 	if (ret)
 		return ret;
 	ret = xfs_file_write_checks(iocb, from, &iolock, ac);
@@ -767,7 +796,7 @@ retry_exclusive:
 		flags = IOMAP_DIO_FORCE_WAIT;
 	}
 
-	ret = xfs_ilock_iocb_for_write(iocb, &iolock);
+	ret = xfs_ilock_iocb_for_write(iocb, &iolock, true);
 	if (ret)
 		return ret;
 
@@ -898,7 +927,7 @@ xfs_file_buffered_write(
 
 write_retry:
 	iolock = XFS_IOLOCK_EXCL;
-	ret = xfs_ilock_iocb(iocb, iolock);
+	ret = xfs_ilock_iocb_for_write(iocb, &iolock, false);
 	if (ret)
 		return ret;
 
