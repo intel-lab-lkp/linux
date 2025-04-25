@@ -438,8 +438,12 @@ static void tcp4_check_fraglist_gro(struct list_head *head, struct sk_buff *skb,
 				       iph->daddr, ntohs(th->dest),
 				       iif, sdif);
 	NAPI_GRO_CB(skb)->is_flist = !sk;
-	if (sk)
-		sock_put(sk);
+	if (sk) {
+		if (sk->sk_state == TCP_TIME_WAIT)
+			inet_twsk_put(inet_twsk(sk));
+		else
+			sock_put(sk);
+	}
 }
 
 INDIRECT_CALLABLE_SCOPE
