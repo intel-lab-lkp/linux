@@ -44,12 +44,24 @@
 
 void dpp401_read_state(struct dpp *dpp_base, struct dcn_dpp_state *s)
 {
-	struct dcn3_dpp *dpp = TO_DCN30_DPP(dpp_base);
+	struct dcn401_dpp *dpp = TO_DCN401_DPP(dpp_base);
+	uint32_t gamcor_lut_mode;
 
 	REG_GET(DPP_CONTROL,
 		DPP_CLOCK_ENABLE, &s->is_enabled);
+	// Pre-degamma (ROM)
+	REG_GET_2(PRE_DEGAM,
+		  PRE_DEGAM_MODE, &s->pre_dgam_mode,
+		  PRE_DEGAM_SELECT, &s->pre_dgam_select);
 
-	// TODO: Implement for DCN4
+	// Gamma Correction (RAM)
+	REG_GET(CM_GAMCOR_CONTROL,
+		CM_GAMCOR_MODE_CURRENT, &s->gamcor_mode);
+	if (s->gamcor_mode) {
+		REG_GET(CM_GAMCOR_CONTROL, CM_GAMCOR_SELECT_CURRENT, &gamcor_lut_mode);
+		if (!gamcor_lut_mode)
+			s->gamcor_mode = LUT_RAM_A; // Otherwise, LUT_RAM_B
+	}
 }
 
 void dpp401_dpp_setup(

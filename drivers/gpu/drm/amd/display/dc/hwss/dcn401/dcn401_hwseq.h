@@ -35,6 +35,9 @@ void dcn401_program_gamut_remap(struct pipe_ctx *pipe_ctx);
 
 void dcn401_init_hw(struct dc *dc);
 
+void dcn401_log_color_state(struct dc *dc,
+			    struct dc_log_buffer_ctx *log_ctx);
+
 bool dcn401_set_mcm_luts(struct pipe_ctx *pipe_ctx,
 				const struct dc_plane_state *plane_state);
 bool dcn401_set_output_transfer_func(struct dc *dc,

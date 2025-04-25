@@ -585,8 +585,38 @@ void mpc401_get_gamut_remap(struct mpc *mpc,
 		arr_reg_val, ARRAY_SIZE(arr_reg_val));
 }
 
+static void mpc401_read_mpcc_state(struct mpc *mpc,
+				   int mpcc_inst,
+				   struct mpcc_state *s)
+{
+	struct dcn401_mpc *mpc401 = TO_DCN401_MPC(mpc);
+
+	REG_GET(MPCC_OPP_ID[mpcc_inst], MPCC_OPP_ID, &s->opp_id);
+	REG_GET(MPCC_TOP_SEL[mpcc_inst], MPCC_TOP_SEL, &s->dpp_id);
+	REG_GET(MPCC_BOT_SEL[mpcc_inst], MPCC_BOT_SEL, &s->bot_mpcc_id);
+	REG_GET_4(MPCC_CONTROL[mpcc_inst], MPCC_MODE, &s->mode,
+			MPCC_ALPHA_BLND_MODE, &s->alpha_mode,
+			MPCC_ALPHA_MULTIPLIED_MODE, &s->pre_multiplied_alpha,
+			MPCC_BLND_ACTIVE_OVERLAP_ONLY, &s->overlap_only);
+	REG_GET_2(MPCC_STATUS[mpcc_inst], MPCC_IDLE, &s->idle,
+			MPCC_BUSY, &s->busy);
+
+	/* Color blocks state */
+	REG_GET(MPCC_MCM_SHAPER_CONTROL[mpcc_inst], MPCC_MCM_SHAPER_MODE_CURRENT, &s->shaper_lut_mode);
+	REG_GET(MPCC_MCM_3DLUT_MODE[mpcc_inst],
+		MPCC_MCM_3DLUT_MODE_CURRENT,  &s->lut3d_mode);
+	REG_GET(MPCC_MCM_3DLUT_READ_WRITE_CONTROL[mpcc_inst],
+		MPCC_MCM_3DLUT_30BIT_EN, &s->lut3d_bit_depth);
+	REG_GET(MPCC_MCM_3DLUT_MODE[mpcc_inst], MPCC_MCM_3DLUT_SIZE, &s->lut3d_size);
+	REG_GET(MPCC_MCM_1DLUT_CONTROL[mpcc_inst],
+		MPCC_MCM_1DLUT_MODE_CURRENT, &s->rgam_mode);
+	REG_GET(MPCC_MCM_1DLUT_CONTROL[mpcc_inst],
+		MPCC_MCM_1DLUT_SELECT_CURRENT, &s->rgam_lut);
+
+}
+
 static const struct mpc_funcs dcn401_mpc_funcs = {
-	.read_mpcc_state = mpc1_read_mpcc_state,
+	.read_mpcc_state = mpc401_read_mpcc_state,
 	.insert_plane = mpc1_insert_plane,
 	.remove_mpcc = mpc1_remove_mpcc,
 	.mpc_init = mpc32_mpc_init,
