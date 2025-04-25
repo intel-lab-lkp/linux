@@ -822,6 +822,20 @@ int iio_backend_data_alignment_disable(struct iio_backend *back)
 EXPORT_SYMBOL_NS_GPL(iio_backend_data_alignment_disable, "IIO_BACKEND");
 
 /**
+ * iio_backend_sync_status_get - Read the syncronization status
+ * @back: Backend device
+ * @sync_en: Synchronization status returned (enabled or disabled)
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_sync_status_get(struct iio_backend *back, bool *sync_en)
+{
+	return iio_backend_op_call(back, sync_status_get, sync_en);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_sync_status_get, "IIO_BACKEND");
+
+/**
  * iio_backend_ddr_enable - Enable interface DDR (Double Data Rate) mode
  * @back: Backend device
  *
