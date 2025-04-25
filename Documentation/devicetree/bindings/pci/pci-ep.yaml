@@ -42,6 +42,15 @@ properties:
     default: 1
     maximum: 16
 
+  ref-clk-mode:
+    description: Reference clocking architechture
+    enum:
+      - common-clk        # Common Reference Clock (provided by RC side)
+      - common-clk-ep     # Common Reference Clock (provided by EP side)
+      - common-clk-ep-ssc # Common Reference Clock With Spread (provided by EP side)
+      - srns              # Separate Reference Clocks No Spread
+      - sris              # Separate Reference Clocks Independent Spread
+
   linux,pci-domain:
     description:
       If present this property assigns a fixed PCI domain number to a PCI
