@@ -449,10 +449,15 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	cmd->iocb.ki_flags = IOCB_DIRECT;
 	cmd->iocb.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
 
-	if (rw == ITER_SOURCE)
-		ret = file->f_op->write_iter(&cmd->iocb, &iter);
-	else
-		ret = file->f_op->read_iter(&cmd->iocb, &iter);
+	ret = 0;
+	if (rw == ITER_SOURCE) {
+		if (likely(file->f_op->write_iter))
+			ret = file->f_op->write_iter(&cmd->iocb, &iter);
+	}
+	else {
+		if (likely(file->f_op->read_iter))
+			ret = file->f_op->read_iter(&cmd->iocb, &iter);
+	}
 
 	lo_rw_aio_do_completion(cmd);
 
