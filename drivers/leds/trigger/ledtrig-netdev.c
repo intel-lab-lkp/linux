@@ -584,15 +584,28 @@ static int netdev_trig_notify(struct notifier_block *nb,
 		container_of(nb, struct led_netdev_data, notifier);
 	struct led_classdev *led_cdev = trigger_data->led_cdev;
 
-	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
-	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
-	    && evt != NETDEV_CHANGENAME)
+	switch (evt) {
+	case NETDEV_REGISTER:
+		if (trigger_data->net_dev ||
+		    strcmp(dev->name, trigger_data->device_name))
+			return NOTIFY_DONE;
+		break;
+	case NETDEV_CHANGENAME:
+		if (trigger_data->net_dev != dev &&
+		    (trigger_data->net_dev ||
+		     strcmp(dev->name, trigger_data->device_name)))
+			return NOTIFY_DONE;
+		break;
+	case NETDEV_UNREGISTER:
+	case NETDEV_UP:
+	case NETDEV_DOWN:
+	case NETDEV_CHANGE:
+		if (trigger_data->net_dev != dev)
+			return NOTIFY_DONE;
+		break;
+	default:
 		return NOTIFY_DONE;
-
-	if (!(dev == trigger_data->net_dev ||
-	      (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
-	      (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
-		return NOTIFY_DONE;
+	}
 
 	cancel_delayed_work_sync(&trigger_data->work);
 
