@@ -224,6 +224,16 @@ drm_kunit_helper_connector_hdmi_init(struct kunit *test,
 				test_edid_hdmi_1080p_rgb_max_200mhz);
 }
 
+#define drm_kunit_atomic_restart_on_deadlock(ret, state, ctx, start) do {	\
+	if (ret == -EDEADLK) {							\
+		if (state)							\
+			drm_atomic_state_clear(state);				\
+		ret = drm_modeset_backoff(ctx);					\
+		if (!ret)							\
+			goto start;						\
+	}									\
+} while (0)
+
 /*
  * Test that if we change the RGB quantization property to a different
  * value, we trigger a mode change on the connector's CRTC, which will
