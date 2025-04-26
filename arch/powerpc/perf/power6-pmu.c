@@ -27,7 +27,6 @@
 #define PM_BYTE_MSK	3
 #define PM_SUBUNIT_SH	8	/* Subunit event comes from (NEST_SEL enc.) */
 #define PM_SUBUNIT_MSK	7
-#define PM_SUBUNIT_MSKS	(PM_SUBUNIT_MSK << PM_SUBUNIT_SH)
 #define PM_PMCSEL_MSK	0xff	/* PMCxSEL value */
 #define PM_BUSEVENT_MSK	0xf3700
 
@@ -46,7 +45,6 @@
 #define MMCR1_PMC1_ADDR_SEL	(1ul << 35)
 #define MMCR1_PMC1SEL_SH	24
 #define MMCR1_PMCSEL_SH(n)	(MMCR1_PMC1SEL_SH - (n) * 8)
-#define MMCR1_PMCSEL_MSK	0xff
 
 /*
  * Map of which direct events on which PMCs are marked instruction events.
