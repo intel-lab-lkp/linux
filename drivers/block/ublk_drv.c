@@ -609,6 +609,11 @@ static void ublk_apply_params(struct ublk_device *ub)
 		ublk_dev_param_zoned_apply(ub);
 }
 
+static inline bool ublk_support_zero_copy(const struct ublk_queue *ubq)
+{
+	return ubq->flags & UBLK_F_SUPPORT_ZERO_COPY;
+}
+
 static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
 {
 	return ubq->flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY);
@@ -1950,8 +1955,15 @@ static int ublk_register_io_buf(struct io_uring_cmd *cmd,
 				unsigned int index, unsigned int issue_flags)
 {
 	struct ublk_device *ub = cmd->file->private_data;
+	struct ublk_io *io = &ubq->ios[tag];
 	struct request *req;
 	int ret;
+
+	if (!ublk_support_zero_copy(ubq))
+		return -EINVAL;
+
+	if (!(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV))
+		return -EINVAL;
 
 	req = __ublk_check_and_get_req(ub, ubq, tag, 0);
 	if (!req)
@@ -1968,8 +1980,17 @@ static int ublk_register_io_buf(struct io_uring_cmd *cmd,
 }
 
 static int ublk_unregister_io_buf(struct io_uring_cmd *cmd,
+				  struct ublk_queue *ubq, unsigned int tag,
 				  unsigned int index, unsigned int issue_flags)
 {
+	struct ublk_io *io = &ubq->ios[tag];
+
+	if (!ublk_support_zero_copy(ubq))
+		return -EINVAL;
+
+	if (!(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV))
+		return -EINVAL;
+
 	return io_buffer_unregister_bvec(cmd, index, issue_flags);
 }
 
@@ -2073,7 +2094,7 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	case UBLK_IO_REGISTER_IO_BUF:
 		return ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
 	case UBLK_IO_UNREGISTER_IO_BUF:
-		return ublk_unregister_io_buf(cmd, ub_cmd->addr, issue_flags);
+		return ublk_unregister_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
 	case UBLK_IO_FETCH_REQ:
 		ret = ublk_fetch(cmd, ubq, io, ub_cmd->addr);
 		if (ret)
