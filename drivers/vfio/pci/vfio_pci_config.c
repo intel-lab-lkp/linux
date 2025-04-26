@@ -120,6 +120,106 @@ struct perm_bits {
 #define	NO_WRITE	0
 #define	ALL_WRITE	0xFFFFFFFFU
 
+static bool block_pci_unassigned_write;
+module_param(block_pci_unassigned_write, bool, 0644);
+MODULE_PARM_DESC(block_pci_unassigned_write,
+		 "Block write accesses to unassigned PCI config regions.");
+
+static bool block_pci_unassigned_read;
+module_param(block_pci_unassigned_read, bool, 0644);
+MODULE_PARM_DESC(block_pci_unassigned_read,
+		 "Block read accesses from unassigned PCI config regions.");
+
+static char *uaccess_allow_ids;
+module_param(uaccess_allow_ids, charp, 0444);
+MODULE_PARM_DESC(uaccess_allow_ids, "PCI IDs to allow access to unassigned PCI config regions, format is \"vendor:device\" and multiple comma separated entries can be specified");
+
+static LIST_HEAD(allowed_device_ids);
+static DEFINE_SPINLOCK(device_ids_lock);
+
+struct uaccess_device_id {
+	struct list_head slot_list;
+	unsigned short vendor;
+	unsigned short device;
+};
+
+static void pci_uaccess_add_device(struct uaccess_device_id *new,
+				   int vendor, int device)
+{
+	struct uaccess_device_id *pci_dev_id;
+	unsigned long flags;
+	int found = 0;
+
+	spin_lock_irqsave(&device_ids_lock, flags);
+
+	list_for_each_entry(pci_dev_id, &allowed_device_ids, slot_list) {
+		if (pci_dev_id->vendor == vendor &&
+		    pci_dev_id->device == device) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found) {
+		new->vendor = vendor;
+		new->device = device;
+		list_add_tail(&new->slot_list, &allowed_device_ids);
+	}
+
+	spin_unlock_irqrestore(&device_ids_lock, flags);
+
+	if (found)
+		kfree(new);
+}
+
+static bool pci_uaccess_lookup(struct pci_dev *dev)
+{
+	struct uaccess_device_id *pdev_id;
+	unsigned long flags;
+	bool found = false;
+
+	spin_lock_irqsave(&device_ids_lock, flags);
+	list_for_each_entry(pdev_id, &allowed_device_ids, slot_list) {
+		if (pdev_id->vendor == dev->vendor &&
+		    pdev_id->device == dev->device) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&device_ids_lock, flags);
+
+	return found;
+}
+
+static int __init pci_uaccess_init(void)
+{
+	char *p, *id;
+	int fields;
+	int vendor, device;
+	struct uaccess_device_id *pci_dev_id;
+
+	/* add ids specified in the module parameter */
+	p = uaccess_allow_ids;
+	while ((id = strsep(&p, ","))) {
+		if (!strlen(id))
+			continue;
+
+		fields = sscanf(id, "%x:%x", &vendor, &device);
+
+		if (fields != 2) {
+			pr_warn("Invalid id string \"%s\"\n", id);
+			continue;
+		}
+
+		pci_dev_id = kmalloc(sizeof(*pci_dev_id), GFP_KERNEL);
+		if (!pci_dev_id)
+			return -ENOMEM;
+
+		pci_uaccess_add_device(pci_dev_id, vendor, device);
+	}
+	return 0;
+}
+
 static int vfio_user_config_read(struct pci_dev *pdev, int offset,
 				 __le32 *val, int count)
 {
@@ -333,6 +433,18 @@ static struct perm_bits ecap_perms[PCI_EXT_CAP_ID_MAX + 1] = {
 static struct perm_bits unassigned_perms = {
 	.readfn = vfio_raw_config_read,
 	.writefn = vfio_raw_config_write
+};
+
+/*
+ * Read/write access to PCI unassigned config regions can be blocked
+ * using the block_pci_unassigned_read and block_pci_unassigned_write
+ * module parameters. The uaccess_allow_ids module parameter can be used
+ * to whitelist devices (i.e., bypass the block) when either of the
+ * above parameters is specified.
+ */
+static struct perm_bits block_unassigned_perms = {
+	.readfn = NULL,
+	.writefn = NULL
 };
 
 static struct perm_bits virt_perms = {
@@ -1107,6 +1219,9 @@ int __init vfio_pci_init_perm_bits(void)
 	ret |= init_pci_ext_cap_pwr_perm(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
 	ecap_perms[PCI_EXT_CAP_ID_VNDR].writefn = vfio_raw_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_DVSEC].writefn = vfio_raw_config_write;
+
+	/* Device list allowed to access unassigned PCI regions */
+	ret |= pci_uaccess_init();
 
 	if (ret)
 		vfio_pci_uninit_perm_bits();
@@ -1896,7 +2011,12 @@ static ssize_t vfio_config_do_rw(struct vfio_pci_core_device *vdev, char __user 
 	cap_id = vdev->pci_config_map[*ppos];
 
 	if (cap_id == PCI_CAP_ID_INVALID) {
-		perm = &unassigned_perms;
+		if (((iswrite && block_pci_unassigned_write) ||
+		     (!iswrite && block_pci_unassigned_read)) &&
+		    !pci_uaccess_lookup(pdev))
+			perm = &block_unassigned_perms;
+		else
+			perm = &unassigned_perms;
 		cap_start = *ppos;
 	} else if (cap_id == PCI_CAP_ID_INVALID_VIRT) {
 		perm = &virt_perms;
