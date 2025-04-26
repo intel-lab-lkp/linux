@@ -236,6 +236,9 @@ int iommufd_object_depend(struct iommufd_object *obj_dependent,
 			  struct iommufd_object *obj_depended);
 void iommufd_object_undepend(struct iommufd_object *obj_dependent,
 			     struct iommufd_object *obj_depended);
+int iommufd_ctx_alloc_mmap(struct iommufd_ctx *ictx, phys_addr_t base,
+			   size_t size, unsigned long *immap_id);
+void iommufd_ctx_free_mmap(struct iommufd_ctx *ictx, unsigned long immap_id);
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 int iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
@@ -262,8 +265,20 @@ static inline int iommufd_object_depend(struct iommufd_object *obj_dependent,
 	return -EOPNOTSUPP;
 }
 
+static inline int iommufd_ctx_alloc_mmap(struct iommufd_ctx *ictx,
+					 phys_addr_t base, size_t size,
+					 unsigned long *immap_id)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline void iommufd_object_undepend(struct iommufd_object *obj_dependent,
 					   struct iommufd_object *obj_depended)
+{
+}
+
+static inline void iommufd_ctx_free_mmap(struct iommufd_ctx *ictx,
+					 unsigned long immap_id)
 {
 }
 
