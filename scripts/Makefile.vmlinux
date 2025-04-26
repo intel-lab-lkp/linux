@@ -70,6 +70,18 @@ endif
 ifdef CONFIG_MODULES
 targets += .vmlinux.export.o
 $(vmlinux-final): .vmlinux.export.o
+
+# .module.builtin.modinfo.modpost
+# ---------------------------------------------------------------------------
+__default: .modules.builtin.modinfo.modpost
+
+OBJCOPYFLAGS_.modules.builtin.modinfo.modpost := -j .modinfo -O binary
+
+targets += .modules.builtin.modinfo.modpost
+.modules.builtin.modinfo.modpost: .vmlinux.export.o FORCE
+	$(call if_changed,objcopy)
+
+modules.builtin.modinfo: .modules.builtin.modinfo.modpost
 endif
 
 ifdef CONFIG_ARCH_WANTS_PRE_LINK_VMLINUX
@@ -97,15 +109,27 @@ ifdef CONFIG_BUILDTIME_TABLE_SORT
 vmlinux: scripts/sorttable
 endif
 
+# .module.builtin.modinfo.vmlinux
+# ---------------------------------------------------------------------------
+__default: .modules.builtin.modinfo.vmlinux
+
+OBJCOPYFLAGS_.modules.builtin.modinfo.vmlinux := -j .modinfo -O binary
+
+targets += .modules.builtin.modinfo.vmlinux
+.modules.builtin.modinfo.vmlinux: vmlinux.o FORCE
+	$(call if_changed,objcopy)
+
 # module.builtin.modinfo
 # ---------------------------------------------------------------------------
 __default: modules.builtin.modinfo
 
-OBJCOPYFLAGS_modules.builtin.modinfo := -j .modinfo -O binary
+quiet_cmd_modules_builtin_modinfo = GEN     $@
+      cmd_modules_builtin_modinfo = \
+	cat $< $(wildcard .modules.builtin.modinfo.modpost) > $@
 
 targets += modules.builtin.modinfo
-modules.builtin.modinfo: vmlinux.o FORCE
-	$(call if_changed,objcopy)
+modules.builtin.modinfo: .modules.builtin.modinfo.vmlinux FORCE
+	$(call if_changed,modules_builtin_modinfo)
 
 # module.builtin
 # ---------------------------------------------------------------------------
