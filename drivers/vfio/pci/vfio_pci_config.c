@@ -25,6 +25,7 @@
 #include <linux/uaccess.h>
 #include <linux/vfio.h>
 #include <linux/slab.h>
+#include <linux/audit.h>
 
 #include "vfio_pci_priv.h"
 
@@ -1980,6 +1981,37 @@ static size_t vfio_pci_cap_remaining_dword(struct vfio_pci_core_device *vdev,
 	return i;
 }
 
+enum vfio_audit {
+	VFIO_AUDIT_READ,
+	VFIO_AUDIT_WRITE,
+	VFIO_AUDIT_MAX,
+};
+
+static const char * const vfio_audit_str[VFIO_AUDIT_MAX] = {
+	[VFIO_AUDIT_READ]  = "READ",
+	[VFIO_AUDIT_WRITE] = "WRITE",
+};
+
+static void vfio_audit_access(const struct pci_dev *pdev,
+			      size_t count, loff_t *ppos, bool blocked, unsigned int op)
+{
+	struct audit_buffer *ab;
+
+	if (WARN_ON_ONCE(op >= VFIO_AUDIT_MAX))
+		return;
+	if (audit_enabled == AUDIT_OFF)
+		return;
+	ab = audit_log_start(audit_context(), GFP_ATOMIC, AUDIT_VFIO);
+	if (unlikely(!ab))
+		return;
+	audit_log_format(ab,
+			 "device=%04x:%02x:%02x.%d access=%s offset=0x%llx size=%ld blocked=%u\n",
+			 pci_domain_nr(pdev->bus), pdev->bus->number,
+			 PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
+			 vfio_audit_str[op], *ppos, count, blocked);
+	audit_log_end(ab);
+}
+
 static ssize_t vfio_config_do_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 				 size_t count, loff_t *ppos, bool iswrite)
 {
@@ -1989,6 +2021,7 @@ static ssize_t vfio_config_do_rw(struct vfio_pci_core_device *vdev, char __user 
 	int cap_start = 0, offset;
 	u8 cap_id;
 	ssize_t ret;
+	bool blocked;
 
 	if (*ppos < 0 || *ppos >= pdev->cfg_size ||
 	    *ppos + count > pdev->cfg_size)
@@ -2011,13 +2044,22 @@ static ssize_t vfio_config_do_rw(struct vfio_pci_core_device *vdev, char __user 
 	cap_id = vdev->pci_config_map[*ppos];
 
 	if (cap_id == PCI_CAP_ID_INVALID) {
-		if (((iswrite && block_pci_unassigned_write) ||
+		blocked = (((iswrite && block_pci_unassigned_write) ||
 		     (!iswrite && block_pci_unassigned_read)) &&
-		    !pci_uaccess_lookup(pdev))
+		    !pci_uaccess_lookup(pdev));
+		if (blocked)
 			perm = &block_unassigned_perms;
 		else
 			perm = &unassigned_perms;
 		cap_start = *ppos;
+		if (IS_ENABLED(CONFIG_VFIO_PCI_UNASSIGNED_ACCESS_AUDIT)) {
+			if (iswrite)
+				vfio_audit_access(pdev, count, ppos, blocked,
+						  VFIO_AUDIT_WRITE);
+			else
+				vfio_audit_access(pdev, count, ppos, blocked,
+						  VFIO_AUDIT_READ);
+		}
 	} else if (cap_id == PCI_CAP_ID_INVALID_VIRT) {
 		perm = &virt_perms;
 		cap_start = *ppos;

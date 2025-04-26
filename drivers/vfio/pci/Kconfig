@@ -42,6 +42,18 @@ config VFIO_PCI_IGD
 	  and LPC bridge config space.
 
 	  To enable Intel IGD assignment through vfio-pci, say Y.
+
+config VFIO_PCI_UNASSIGNED_ACCESS_AUDIT
+	bool "Audit accesses to unassigned PCI configuration regions"
+	depends on AUDIT && VFIO_PCI_CORE
+	help
+	  Some PCIe devices are known to cause bus errors when accessing
+	  unassigned PCI configuration space, potentially leading to host
+	  system hangs on certain platforms. When enabled, this option
+	  audits accesses to unassigned PCI configuration regions.
+
+	  If you don't know what to do here, say N.
+
 endif
 
 config VFIO_PCI_ZDEV_KVM
