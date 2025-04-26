@@ -267,7 +267,6 @@ int regulator_set_suspend_voltage(struct regulator *regulator, int min_uV,
 
 /* driver data - core doesn't touch */
 void *regulator_get_drvdata(struct regulator *regulator);
-void regulator_set_drvdata(struct regulator *regulator, void *data);
 
 /* misc helpers */
 
@@ -631,11 +630,6 @@ static inline int regulator_set_suspend_voltage(struct regulator *regulator,
 static inline void *regulator_get_drvdata(struct regulator *regulator)
 {
 	return NULL;
-}
-
-static inline void regulator_set_drvdata(struct regulator *regulator,
-	void *data)
-{
 }
 
 static inline int regulator_count_voltages(struct regulator *regulator)
