@@ -424,7 +424,6 @@ PWM
   devm_fwnode_pwm_get()
 
 REGULATOR
-  devm_regulator_bulk_register_supply_alias()
   devm_regulator_bulk_get()
   devm_regulator_bulk_get_const()
   devm_regulator_bulk_get_enable()
