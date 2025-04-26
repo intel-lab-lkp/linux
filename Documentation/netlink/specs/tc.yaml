@@ -52,6 +52,31 @@ definitions:
       - tunoam
       - tuncrit
   -
+    name: tc-dualpi2-drop-overload-flags
+    type: flags
+    entries:
+      - drop
+      - overflow
+  -
+    name: tc-dualpi2-drop-early-flags
+    type: flags
+    entries:
+      - drop-enqueue
+      - drop-dequeue
+  -
+    name: tc-dualpi2-ecn-mask-flags
+    type: flags
+    entries:
+      - l4s-ect
+      - any-ect
+      - none
+  -
+    name: tc-dualpi2-credit-queue-flags
+    type: flags
+    entries:
+      - C-queue
+      - L-queue
+  -
     name: tc-stats
     type: struct
     members:
@@ -816,6 +841,64 @@ definitions:
       -
         name: drop-overmemory
         type: u32
+  -
+    name: tc-dualpi2-xstats
+    type: struct
+    members:
+      -
+        name: prob
+        type: u32
+        doc: Current probability
+      -
+        name: delay-c
+        type: u32
+        doc: Current C-queue delay in microseconds
+      -
+        name: delay-l
+        type: u32
+        doc: Current L-queue delay in microseconds
+      -
+        name: pkts-in-c
+        type: u32
+        doc: Number of packets enqueued in the C-queue
+      -
+        name: pkts-in-l
+        type: u32
+        doc: Number of packets enqueued in the L-queue
+      -
+        name: maxq
+        type: u32
+        doc: Maximum number of packets seen by the DualPI2
+      -
+        name: ecn-mark
+        type: u32
+        doc: All packets marked with ecn
+      -
+        name: step-mark
+        type: u32
+        doc: Only packets marked with ecn due to L-queue step AQM
+      -
+        name: credit
+        type: s32
+        doc: Current credit value for WRR
+      -
+        name: credit-queue
+        type: u8
+        doc: Current credit queue
+        enum: tc-dualpi2-credit-queue-flags
+        enum-as-flags: true
+      -
+        name: memory-used
+        type: u32
+        doc: Memory used in bytes by the DualPI2
+      -
+        name: max-memory-used
+        type: u32
+        doc: Maximum memory used in bytes by the DualPI2
+      -
+        name: memory-limit
+        type: u32
+        doc: Memory limit in bytes
   -
     name: tc-fq-pie-xstats
     type: struct
@@ -2300,6 +2383,83 @@ attribute-sets:
         name: quantum
         type: u32
   -
+    name: tc-dualpi2-attrs
+    attributes:
+      -
+        name: limit
+        type: uint
+        doc: Limit of total number of packets in queue
+      -
+        name: memlimit
+        type: uint
+        doc: Memory limit of total number of packets in queue
+      -
+        name: target
+        type: uint
+        doc: Classic target delay in microseconds
+      -
+        name: tupdate
+        type: uint
+        doc: Drop probability update interval time in microseconds
+      -
+        name: alpha
+        type: uint
+        doc: Integral gain factor in Hz for PI controller
+      -
+        name: beta
+        type: uint
+        doc: Proportional gain factor in Hz for PI controller
+      -
+        name: step-thresh
+        type: uint
+        doc: L4S step marking threshold (see also step-packets)
+      -
+        name: step-packets
+        type: flag
+        doc: L4S Step marking threshold unit in packets (otherwise is in microseconds)
+      -
+        name: min-qlen-step
+        type: uint
+        doc: Packets enqueued to the L-queue can apply the step threshold when the queue length of L-queue is larger than this value. (0 is recommended)
+      -
+        name: coupling-factor
+        type: uint
+        doc: Probability coupling factor between Classic and L4S (2 is recommended)
+      -
+        name: overload
+        type: uint
+        doc: Control the overload strategy (drop to preserve latency or let the queue overflow)
+        enum: tc-dualpi2-drop-overload-flags
+        enum-as-flags: true
+      -
+        name: drop-early
+        type: uint
+        doc: Decide where the Classic packets are PI-based dropped or marked
+        enum: tc-dualpi2-drop-early-flags
+        enum-as-flags: true
+      -
+        name: classic-protection
+        type: uint
+        doc: Classic WRR weight in percentage (from 0 to 100)
+      -
+        name: ecn-mask
+        type: uint
+        doc: Configure the L-queue ECN classifier
+        enum: tc-dualpi2-ecn-mask-flags
+        enum-as-flags: true
+      -
+        name: split-gso
+        type: flag
+        doc: Split aggregated skb or not
+      -
+        name: max-rtt
+        type: uint
+        doc: The maximum expected RTT of the traffic that is controlled by DualPI2 in usec
+      -
+        name: typical-rtt
+        type: uint
+        doc: The typical base RTT of the traffic that is controlled by DualPI2 in usec
+  -
     name: tc-ematch-attrs
     attributes:
       -
@@ -3680,6 +3840,9 @@ sub-messages:
         value: drr
         attribute-set: tc-drr-attrs
       -
+        value: dualpi2
+        attribute-set: tc-dualpi2-attrs
+      -
         value: etf
         attribute-set: tc-etf-attrs
       -
@@ -3846,6 +4009,9 @@ sub-messages:
       -
         value: codel
         fixed-header: tc-codel-xstats
+      -
+        value: dualpi2
+        fixed-header: tc-dualpi2-xstats
       -
         value: fq
         fixed-header: tc-fq-qd-stats
