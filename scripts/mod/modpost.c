@@ -183,7 +183,7 @@ static struct module *find_module(const char *filename, const char *modname)
 	return NULL;
 }
 
-static struct module *new_module(const char *name, size_t namelen)
+struct module *new_module(const char *name, size_t namelen)
 {
 	struct module *mod;
 
@@ -1610,7 +1610,7 @@ static void read_symbols(const char *modname)
 		symname = remove_dot(info.strtab + sym->st_name);
 
 		handle_symbol(mod, &info, sym, symname);
-		handle_moddevtable(mod, &info, sym, symname);
+		handle_moddevtable(&modules, mod, &info, sym, symname);
 	}
 
 	check_sec_ref(mod, &info);
@@ -2021,11 +2021,26 @@ static void write_if_changed(struct buffer *b, const char *fname)
 static void write_vmlinux_export_c_file(struct module *mod)
 {
 	struct buffer buf = { };
+	struct module_alias *alias, *next;
 
 	buf_printf(&buf,
-		   "#include <linux/export-internal.h>\n");
+		   "#include <linux/export-internal.h>\n"
+		   "#include <linux/module.h>\n");
 
 	add_exported_symbols(&buf, mod);
+
+	list_for_each_entry(mod, &modules, list) {
+		if (!mod->is_vmlinux || !mod->dump_file ||
+		    strcmp(mod->dump_file, MODULE_BUILTIN_FNAME))
+			continue;
+		list_for_each_entry_safe(alias, next, &mod->aliases, node) {
+			buf_printf(&buf, "MODULE_ALIAS_MODNAME(\"%s\", \"%s\");\n",
+					mod->name, alias->str);
+			list_del(&alias->node);
+			free(alias);
+		}
+	}
+
 	write_if_changed(&buf, ".vmlinux.export.c");
 	free(buf.p);
 }

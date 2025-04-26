@@ -199,6 +199,10 @@ static inline bool is_valid_name(struct elf_info *elf, Elf_Sym *sym)
 	return !is_mapping_symbol(name);
 }
 
+#define MODULE_BUILTIN_FNAME "(builtin)"
+
+struct module *new_module(const char *name, size_t namelen);
+
 /* symsearch.c */
 void symsearch_init(struct elf_info *elf);
 void symsearch_finish(struct elf_info *elf);
@@ -207,7 +211,8 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 				Elf_Addr min_distance);
 
 /* file2alias.c */
-void handle_moddevtable(struct module *mod, struct elf_info *info,
+void handle_moddevtable(struct list_head *modules,
+			struct module *mod, struct elf_info *info,
 			Elf_Sym *sym, const char *symname);
 
 /* sumversion.c */

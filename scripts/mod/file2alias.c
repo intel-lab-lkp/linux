@@ -1471,7 +1471,8 @@ static const struct devtable devtable[] = {
 /* Create MODULE_ALIAS() statements.
  * At this time, we cannot write the actual output C source yet,
  * so we write into the mod->dev_table_buf buffer. */
-void handle_moddevtable(struct module *mod, struct elf_info *info,
+void handle_moddevtable(struct list_head *modules,
+			struct module *mod, struct elf_info *info,
 			Elf_Sym *sym, const char *symname)
 {
 	void *symval;
@@ -1508,6 +1509,16 @@ void handle_moddevtable(struct module *mod, struct elf_info *info,
 		return;
 	typelen = name - type;
 	name += strlen("__");
+
+	if (mod->is_vmlinux) {
+		struct module *builtin_mod;
+
+		builtin_mod = new_module(modname, modnamelen);
+		builtin_mod->is_vmlinux = mod->is_vmlinux;
+		builtin_mod->dump_file = MODULE_BUILTIN_FNAME;
+
+		mod = builtin_mod;
+	}
 
 	/* Handle all-NULL symbols allocated into .bss */
 	if (info->sechdrs[get_secindex(info, sym)].sh_type & SHT_NOBITS) {
