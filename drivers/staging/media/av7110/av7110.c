@@ -159,7 +159,7 @@ static void init_av7110_av(struct av7110 *av7110)
 		 * some special handling for the Siemens DVB-C cards...
 		 */
 	} else if (av7110_init_analog_module(av7110) == 0) {
-		/* done. */
+		goto init_skip_analog_module;
 	} else if (dev->pci->subsystem_vendor == 0x110a) {
 		pr_info("DVB-C w/o analog module @ card %d detected\n", av7110->dvb_adapter.num);
 		av7110->adac_type = DVB_ADAC_NONE;
@@ -168,6 +168,7 @@ static void init_av7110_av(struct av7110 *av7110)
 		pr_info("adac type set to %d @ card %d\n", av7110->adac_type, av7110->dvb_adapter.num);
 	}
 
+init_skip_analog_module:
 	if (av7110->adac_type == DVB_ADAC_NONE || av7110->adac_type == DVB_ADAC_MSP34x0) {
 		// switch DVB SCART on
 		ret = av7110_fw_cmd(av7110, COMTYPE_AUDIODAC, MainSwitch, 1, 0);
