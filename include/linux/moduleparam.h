@@ -20,10 +20,13 @@
 /* Chosen so that structs with an unsigned long line up. */
 #define MAX_PARAM_PREFIX_LEN (64 - sizeof(unsigned long))
 
-#define __MODULE_INFO(tag, name, info)					  \
+#define __MODULE_INFO_WITH_PREFIX(prefix, tag, name, info)		  \
 	static const char __UNIQUE_ID(name)[]				  \
 		__used __section(".modinfo") __aligned(1)		  \
-		= __MODULE_INFO_PREFIX __stringify(tag) "=" info
+		= prefix __stringify(tag) "=" info
+
+#define __MODULE_INFO(tag, name, info)					  \
+	__MODULE_INFO_WITH_PREFIX(__MODULE_INFO_PREFIX, tag, name, info)
 
 #define __MODULE_PARM_TYPE(name, _type)					  \
 	__MODULE_INFO(parmtype, name##type, #name ":" _type)
