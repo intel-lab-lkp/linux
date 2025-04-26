@@ -62,6 +62,7 @@ Low level entry and exit
    :maxdepth: 1
 
    entry
+   exec-binfmt
 
 Concurrency primitives
 ======================

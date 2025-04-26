@@ -243,7 +243,7 @@ my $decl_type;
 # Name of the kernel-doc identifier for non-DOC markups
 my $identifier;
 
-my $doc_start = '^/\*\*\s*$'; # Allow whitespace at end of comment start.
+my $doc_start = '^\s*/\*\*\s*$'; # Allow whitespace at end of comment start.
 my $doc_end = '\*/';
 my $doc_com = '\s*\*\s*';
 my $doc_com_body = '\s*\* ?';
@@ -2261,7 +2261,7 @@ sub process_file($) {
 
     $section_counter = 0;
     while (<IN_FILE>) {
-        while (!/^ \*/ && s/\\\s*$//) {
+        while (!/^\s* \*/ && s/\\\s*$//) {
             $_ .= <IN_FILE>;
         }
         # Replace tabs by spaces
