@@ -446,12 +446,6 @@ int regulator_check_voltage(struct regulator_dev *rdev,
 	return 0;
 }
 
-/* return 0 if the state is valid */
-static int regulator_check_states(suspend_state_t state)
-{
-	return (state > PM_SUSPEND_MAX || state == PM_SUSPEND_TO_IDLE);
-}
-
 /* Make sure we select a voltage that suits the needs of all
  * regulator consumers
  */
@@ -4243,46 +4237,6 @@ int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regulator_set_voltage);
-
-static int _regulator_set_suspend_voltage(struct regulator *regulator,
-					  int min_uV, int max_uV,
-					  suspend_state_t state)
-{
-	struct regulator_dev *rdev = regulator->rdev;
-	struct regulator_state *rstate;
-
-	rstate = regulator_get_suspend_state(rdev, state);
-	if (rstate == NULL)
-		return -EINVAL;
-
-	if (rstate->min_uV == rstate->max_uV) {
-		rdev_err(rdev, "The suspend voltage can't be changed!\n");
-		return -EPERM;
-	}
-
-	return regulator_set_voltage_unlocked(regulator, min_uV, max_uV, state);
-}
-
-int regulator_set_suspend_voltage(struct regulator *regulator, int min_uV,
-				  int max_uV, suspend_state_t state)
-{
-	struct ww_acquire_ctx ww_ctx;
-	int ret;
-
-	/* PM_SUSPEND_ON is handled by regulator_set_voltage() */
-	if (regulator_check_states(state) || state == PM_SUSPEND_ON)
-		return -EINVAL;
-
-	regulator_lock_dependent(regulator->rdev, &ww_ctx);
-
-	ret = _regulator_set_suspend_voltage(regulator, min_uV,
-					     max_uV, state);
-
-	regulator_unlock_dependent(regulator->rdev, &ww_ctx);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(regulator_set_suspend_voltage);
 
 /**
  * regulator_set_voltage_time - get raise/fall time

@@ -257,10 +257,6 @@ int regulator_unregister_notifier(struct regulator *regulator,
 void devm_regulator_unregister_notifier(struct regulator *regulator,
 					struct notifier_block *nb);
 
-/* regulator suspend */
-int regulator_set_suspend_voltage(struct regulator *regulator, int min_uV,
-				  int max_uV, suspend_state_t state);
-
 /* driver data - core doesn't touch */
 void *regulator_get_drvdata(struct regulator *regulator);
 
@@ -602,13 +598,6 @@ static inline int devm_regulator_unregister_notifier(struct regulator *regulator
 						     struct notifier_block *nb)
 {
 	return 0;
-}
-
-static inline int regulator_set_suspend_voltage(struct regulator *regulator,
-						int min_uV, int max_uV,
-						suspend_state_t state)
-{
-	return -EINVAL;
 }
 
 static inline void *regulator_get_drvdata(struct regulator *regulator)
