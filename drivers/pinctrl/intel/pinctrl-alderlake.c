@@ -677,6 +677,14 @@ static const struct pinctrl_pin_desc adls_pins[] = {
 	PINCTRL_PIN(301, "JTAG_TCK"),
 	PINCTRL_PIN(302, "DBG_PMODE"),
 	PINCTRL_PIN(303, "CPU_TRSTB"),
+
+	/* Missing I2C buses based on TigerLake: fixes #220056 */
+	PINCTRL_PIN(79, "I2C2_SDA"),
+	PINCTRL_PIN(80, "I2C2_SCL"),
+	PINCTRL_PIN(81, "I2C3_SDA"),
+	PINCTRL_PIN(82, "I2C3_SCL"),
+	PINCTRL_PIN(83, "I2C4_SDA"),
+	PINCTRL_PIN(84, "I2C4_SCL"),
 };
 
 static const struct intel_padgroup adls_community0_gpps[] = {
@@ -709,6 +717,7 @@ static const struct intel_padgroup adls_community4_gpps[] = {
 static const struct intel_padgroup adls_community5_gpps[] = {
 	ADL_GPP(0, 270, 294, 448),			/* GPP_D */
 	ADL_GPP(1, 295, 303, INTEL_GPIO_BASE_NOMAP),	/* JTAG */
+	ADL_GPP(2, 304, 309, INTEL_GPIO_BASE_NOMAP),	/* I2C fix #220056 */
 };
 
 static const struct intel_community adls_communities[] = {
@@ -716,7 +725,7 @@ static const struct intel_community adls_communities[] = {
 	ADL_S_COMMUNITY(1, 95, 150, adls_community1_gpps),
 	ADL_S_COMMUNITY(2, 151, 199, adls_community3_gpps),
 	ADL_S_COMMUNITY(3, 200, 269, adls_community4_gpps),
-	ADL_S_COMMUNITY(4, 270, 303, adls_community5_gpps),
+	ADL_S_COMMUNITY(4, 270, 309, adls_community5_gpps),
 };
 
 static const struct intel_pinctrl_soc_data adls_soc_data = {
