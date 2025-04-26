@@ -19,7 +19,7 @@ static int module_extend_max_pages(struct load_info *info, unsigned int extent)
 	struct page **new_pages;
 
 	new_pages = kvmalloc_array(info->max_pages + extent,
-				   sizeof(info->pages), GFP_KERNEL);
+				   sizeof(*new_pages), GFP_KERNEL);
 	if (!new_pages)
 		return -ENOMEM;
 
