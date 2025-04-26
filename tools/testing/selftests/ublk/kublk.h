@@ -169,6 +169,7 @@ struct ublk_queue {
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
 #define UBLKSRV_NO_BUF		(1U << 2)
 #define UBLKSRV_ZC		(1U << 3)
+#define UBLKSRV_AUTO_ZC		(1U << 4)
 	unsigned state;
 	pid_t tid;
 	pthread_t thread;
@@ -386,6 +387,11 @@ static inline int ublk_completed_tgt_io(struct ublk_queue *q, unsigned tag)
 static inline int ublk_queue_use_zc(const struct ublk_queue *q)
 {
 	return q->state & UBLKSRV_ZC;
+}
+
+static inline int ublk_queue_use_auto_zc(const struct ublk_queue *q)
+{
+	return q->state & UBLKSRV_AUTO_ZC;
 }
 
 extern const struct ublk_tgt_ops null_tgt_ops;

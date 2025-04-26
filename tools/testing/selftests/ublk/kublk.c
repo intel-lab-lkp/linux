@@ -420,9 +420,12 @@ static int ublk_queue_init(struct ublk_queue *q)
 	q->cmd_inflight = 0;
 	q->tid = gettid();
 
-	if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+	if (dev->dev_info.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_AUTO_ZERO_COPY)) {
 		q->state |= UBLKSRV_NO_BUF;
-		q->state |= UBLKSRV_ZC;
+		if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY)
+			q->state |= UBLKSRV_ZC;
+		if (dev->dev_info.flags & UBLK_F_AUTO_ZERO_COPY)
+			q->state |= UBLKSRV_AUTO_ZC;
 	}
 
 	cmd_buf_size = ublk_queue_cmd_buf_sz(q);
@@ -461,7 +464,7 @@ static int ublk_queue_init(struct ublk_queue *q)
 		goto fail;
 	}
 
-	if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+	if (dev->dev_info.flags & (UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_AUTO_ZERO_COPY)) {
 		ret = io_uring_register_buffers_sparse(&q->ring, q->q_depth);
 		if (ret) {
 			ublk_err("ublk dev %d queue %d register spare buffers failed %d",
@@ -1203,6 +1206,7 @@ static int cmd_dev_get_features(void)
 		[const_ilog2(UBLK_F_USER_COPY)] = "USER_COPY",
 		[const_ilog2(UBLK_F_ZONED)] = "ZONED",
 		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
+		[const_ilog2(UBLK_F_AUTO_ZERO_COPY)] = "AUTO_ZC",
 	};
 	struct ublk_dev *dev;
 	__u64 features = 0;
@@ -1297,6 +1301,7 @@ int main(int argc, char *argv[])
 		{ "recovery_fail_io",	1,	NULL, 'e'},
 		{ "recovery_reissue",	1,	NULL, 'i'},
 		{ "get_data",		1,	NULL, 'g'},
+		{ "auto_zc",		0,	NULL,  0},
 		{ 0, 0, 0, 0 }
 	};
 	const struct ublk_tgt_ops *ops = NULL;
@@ -1367,6 +1372,8 @@ int main(int argc, char *argv[])
 				ublk_dbg_mask = 0;
 			if (!strcmp(longopts[option_idx].name, "foreground"))
 				ctx.fg = 1;
+			if (!strcmp(longopts[option_idx].name, "auto_zc"))
+				ctx.flags |= UBLK_F_AUTO_ZERO_COPY;
 			break;
 		case '?':
 			/*

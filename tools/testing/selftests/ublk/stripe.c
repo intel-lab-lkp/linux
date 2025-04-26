@@ -126,8 +126,9 @@ static inline enum io_uring_op stripe_to_uring_op(
 static int stripe_queue_tgt_rw_io(struct ublk_queue *q, const struct ublksrv_io_desc *iod, int tag)
 {
 	const struct stripe_conf *conf = get_chunk_shift(q);
-	int zc = !!(ublk_queue_use_zc(q) != 0);
-	enum io_uring_op op = stripe_to_uring_op(iod, zc);
+	unsigned auto_zc = (ublk_queue_use_auto_zc(q) != 0);
+	unsigned zc = (ublk_queue_use_zc(q) != 0);
+	enum io_uring_op op = stripe_to_uring_op(iod, zc | auto_zc);
 	struct io_uring_sqe *sqe[NR_STRIPE];
 	struct stripe_array *s = alloc_stripe_array(conf, iod);
 	struct ublk_io *io = ublk_get_io(q, tag);
@@ -153,12 +154,11 @@ static int stripe_queue_tgt_rw_io(struct ublk_queue *q, const struct ublksrv_io_
 				(void *)t->vec,
 				t->nr_vec,
 				t->start << 9);
-		if (zc) {
+		io_uring_sqe_set_flags(sqe[i], IOSQE_FIXED_FILE);
+		if (auto_zc || zc) {
 			sqe[i]->buf_index = tag;
-			io_uring_sqe_set_flags(sqe[i],
-					IOSQE_FIXED_FILE | IOSQE_IO_HARDLINK);
-		} else {
-			io_uring_sqe_set_flags(sqe[i], IOSQE_FIXED_FILE);
+			if (zc)
+				sqe[i]->flags |= IOSQE_IO_HARDLINK;
 		}
 		/* bit63 marks us as tgt io */
 		sqe[i]->user_data = build_user_data(tag, ublksrv_get_op(iod), i - zc, 1);
