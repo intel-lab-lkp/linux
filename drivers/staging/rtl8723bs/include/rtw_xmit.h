@@ -181,7 +181,7 @@ struct pkt_attrib {
 	u8 cts2self;
 	union Keytype	dot11tkiptxmickey;
 	/* union Keytype	dot11tkiprxmickey; */
-	union Keytype	dot118021x_UncstKey;
+	union Keytype	dot11_802_1x_uncst_key;
 
 	u8 icmp_pkt;
 

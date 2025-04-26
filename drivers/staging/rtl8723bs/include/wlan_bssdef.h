@@ -26,9 +26,9 @@ struct ndis_802_11_ssid {
 
 enum ndis_802_11_network_type {
 	Ndis802_11FH,
-	Ndis802_11DS,
+	ndis_802_11_ds,
 	Ndis802_11OFDM5,
-	Ndis802_11OFDM24,
+	ndis_802_11_ofdm_24,
 	Ndis802_11NetworkTypeMax    /*  not a real type, defined as an upper bound */
 };
 
@@ -48,7 +48,7 @@ enum ndis_802_11_network_infrastructure {
 	Ndis802_11Infrastructure,
 	Ndis802_11AutoUnknown,
 	Ndis802_11InfrastructureMax,     /*  Not a real value, defined as upper bound */
-	Ndis802_11APMode,
+	ndis_802_11_ap_mode,
 };
 
 struct ndis_802_11_fix_ie {
@@ -73,7 +73,7 @@ struct ndis_80211_var_ie {
  * define a macro to present the partial sum.
  */
 enum ndis_802_11_authentication_mode {
-	Ndis802_11AuthModeOpen,
+	ndis_802_11_auth_mode_open,
 	Ndis802_11AuthModeShared,
 	Ndis802_11AuthModeAutoSwitch,
 	Ndis802_11AuthModeWPA,
@@ -86,8 +86,8 @@ enum ndis_802_11_authentication_mode {
 enum {
 	Ndis802_11WEPEnabled,
 	Ndis802_11Encryption1Enabled = Ndis802_11WEPEnabled,
-	Ndis802_11WEPDisabled,
-	Ndis802_11EncryptionDisabled = Ndis802_11WEPDisabled,
+	ndis_802_11_wep_disabled,
+	Ndis802_11EncryptionDisabled = ndis_802_11_wep_disabled,
 	Ndis802_11WEPKeyAbsent,
 	Ndis802_11Encryption1KeyAbsent = Ndis802_11WEPKeyAbsent,
 	Ndis802_11WEPNotSupported,
@@ -126,8 +126,8 @@ struct ndis_802_11_wep {
 /*  MIC check time, 60 seconds. */
 #define MIC_CHECK_TIME	60000000
 
-#ifndef Ndis802_11APMode
-#define Ndis802_11APMode (Ndis802_11InfrastructureMax + 1)
+#ifndef ndis_802_11_ap_mode
+#define ndis_802_11_ap_mode (Ndis802_11InfrastructureMax + 1)
 #endif
 
 struct wlan_phy_info {

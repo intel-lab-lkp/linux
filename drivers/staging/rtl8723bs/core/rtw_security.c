@@ -10,7 +10,7 @@
 
 static const char * const _security_type_str[] = {
 	"N/A",
-	"WEP40",
+	"_WEP40_",
 	"TKIP",
 	"TKIP_WM",
 	"AES",
@@ -57,7 +57,7 @@ void rtw_wep_encrypt(struct adapter *padapter, u8 *pxmitframe)
 	pframe = ((struct xmit_frame *)pxmitframe)->buf_addr + hw_hdr_offset;
 
 	/* start to encrypt each fragment */
-	if ((pattrib->encrypt == _WEP40_) || (pattrib->encrypt == _WEP104_)) {
+	if ((pattrib->encrypt == WEP_40) || (pattrib->encrypt == _WEP104_)) {
 		keylength = psecuritypriv->dot11DefKeylen[psecuritypriv->dot11PrivacyKeyIndex];
 
 		for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
@@ -105,7 +105,7 @@ void rtw_wep_decrypt(struct adapter  *padapter, u8 *precvframe)
 	pframe = (unsigned char *)((union recv_frame *)precvframe)->u.hdr.rx_data;
 
 	/* start to decrypt recvframe */
-	if ((prxattrib->encrypt == _WEP40_) || (prxattrib->encrypt == _WEP104_)) {
+	if ((prxattrib->encrypt == WEP_40) || (prxattrib->encrypt == _WEP104_)) {
 		iv = pframe+prxattrib->hdrlen;
 		/* keyindex =(iv[3]&0x3); */
 		keyindex = prxattrib->key_index;
@@ -486,9 +486,9 @@ u32 rtw_tkip_encrypt(struct adapter *padapter, u8 *pxmitframe)
 
 		{
 			if (is_multicast_ether_addr(pattrib->ra))
-				prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot118021XGrpKeyid].skey;
+				prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot11_802_1x_grp_key_id].skey;
 			else
-				prwskey = pattrib->dot118021x_UncstKey.skey;
+				prwskey = pattrib->dot11_802_1x_uncst_key.skey;
 
 			for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
 				iv = pframe+pattrib->hdrlen;
@@ -597,7 +597,7 @@ u32 rtw_tkip_decrypt(struct adapter *padapter, u8 *precvframe)
 
 				prwskey = psecuritypriv->dot118021XGrpKey[prxattrib->key_index].skey;
 			} else {
-				prwskey = &stainfo->dot118021x_UncstKey.skey[0];
+				prwskey = &stainfo->dot11_802_1x_uncst_key.skey[0];
 			}
 
 			iv = pframe+prxattrib->hdrlen;
@@ -1051,9 +1051,9 @@ u32 rtw_aes_encrypt(struct adapter *padapter, u8 *pxmitframe)
 	/* 4 start to encrypt each fragment */
 	if (pattrib->encrypt == _AES_) {
 		if (is_multicast_ether_addr(pattrib->ra))
-			prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot118021XGrpKeyid].skey;
+			prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot11_802_1x_grp_key_id].skey;
 		else
-			prwskey = pattrib->dot118021x_UncstKey.skey;
+			prwskey = pattrib->dot11_802_1x_uncst_key.skey;
 
 		for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
 			if ((curfragnum+1) == pattrib->nr_frags) {	/* 4 the last fragment */
@@ -1348,12 +1348,12 @@ u32 rtw_aes_decrypt(struct adapter *padapter, u8 *precvframe)
 				no_gkey_mc_cnt = 0;
 
 				prwskey = psecuritypriv->dot118021XGrpKey[prxattrib->key_index].skey;
-				if (psecuritypriv->dot118021XGrpKeyid != prxattrib->key_index) {
+				if (psecuritypriv->dot11_802_1x_grp_key_id != prxattrib->key_index) {
 					res = _FAIL;
 					goto exit;
 				}
 			} else {
-				prwskey = &stainfo->dot118021x_UncstKey.skey[0];
+				prwskey = &stainfo->dot11_802_1x_uncst_key.skey[0];
 			}
 
 			length = ((union recv_frame *)precvframe)->u.hdr.len-prxattrib->hdrlen-prxattrib->iv_len;
@@ -1553,7 +1553,7 @@ void rtw_sec_restore_wep_key(struct adapter *adapter)
 	struct security_priv *securitypriv = &(adapter->securitypriv);
 	signed int keyid;
 
-	if ((_WEP40_ == securitypriv->dot11PrivacyAlgrthm) || (_WEP104_ == securitypriv->dot11PrivacyAlgrthm)) {
+	if ((WEP_40 == securitypriv->dot11_privacy_algrthm) || (_WEP104_ == securitypriv->dot11_privacy_algrthm)) {
 		for (keyid = 0; keyid < 4; keyid++) {
 			if (securitypriv->key_mask & BIT(keyid)) {
 				if (keyid == securitypriv->dot11PrivacyKeyIndex)

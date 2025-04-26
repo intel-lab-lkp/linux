@@ -55,7 +55,7 @@ static void rtw_hal_init_opmode(struct adapter *padapter)
 	else if (fw_state & WIFI_STATION_STATE)
 		networkType = Ndis802_11Infrastructure;
 	else if (fw_state & WIFI_AP_STATE)
-		networkType = Ndis802_11APMode;
+		networkType = ndis_802_11_ap_mode;
 	else
 		return;
 

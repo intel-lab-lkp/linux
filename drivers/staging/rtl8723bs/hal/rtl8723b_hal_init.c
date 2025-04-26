@@ -2003,7 +2003,7 @@ static u8 fill_txdesc_sectype(struct pkt_attrib *pattrib)
 	if ((pattrib->encrypt > 0) && !pattrib->bswenc) {
 		switch (pattrib->encrypt) {
 		/*  SEC_TYPE */
-		case _WEP40_:
+		case WEP_40:
 		case _WEP104_:
 		case _TKIP_:
 		case _TKIP_WTMIC_:
@@ -2275,12 +2275,12 @@ void rtl8723b_fill_fake_txdesc(
 	if (bDataFrame) {
 		u32 EncAlg;
 
-		EncAlg = padapter->securitypriv.dot11PrivacyAlgrthm;
+		EncAlg = padapter->securitypriv.dot11_privacy_algrthm;
 		switch (EncAlg) {
 		case _NO_PRIVACY_:
 			SET_TX_DESC_SEC_TYPE_8723B(pDesc, 0x0);
 			break;
-		case _WEP40_:
+		case WEP_40:
 		case _WEP104_:
 		case _TKIP_:
 			SET_TX_DESC_SEC_TYPE_8723B(pDesc, 0x1);
@@ -2314,7 +2314,7 @@ static void hw_var_set_opmode(struct adapter *padapter, u8 variable, u8 *val)
 		rtw_write8(padapter, REG_BCN_CTRL, val8);
 
 		/*  set net_type */
-		Set_MSR(padapter, mode);
+		set_msr(padapter, mode);
 
 		if ((mode == _HW_STATE_STATION_) || (mode == _HW_STATE_NOLINK_)) {
 			{
@@ -2813,7 +2813,7 @@ void SetHwReg8723B(struct adapter *padapter, u8 variable, u8 *val)
 			break;
 		case 2:
 			/*  sta add event callback */
-/* 				rtw_btcoex_MediaStatusNotify(padapter, RT_MEDIA_CONNECT); */
+/* 				rtw_btcoex_media_status_notify(padapter, RT_MEDIA_CONNECT); */
 			break;
 		}
 		break;

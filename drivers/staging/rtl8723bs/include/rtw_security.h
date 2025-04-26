@@ -10,7 +10,7 @@
 #include <crypto/arc4.h>
 
 #define _NO_PRIVACY_		0x0
-#define _WEP40_				0x1
+#define WEP_40				0x1
 #define _TKIP_				0x2
 #define _TKIP_WTMIC_		0x3
 #define _AES_				0x4
@@ -18,7 +18,7 @@
 #define _WEP_WPA_MIXED_	0x07  /*  WEP + WPA */
 #define _SMS4_				0x06
 #define _BIP_				0x8
-#define is_wep_enc(alg) (((alg) == _WEP40_) || ((alg) == _WEP104_))
+#define is_wep_enc(alg) (((alg) == WEP_40) || ((alg) == _WEP104_))
 
 const char *security_type_str(u8 value);
 
@@ -91,8 +91,8 @@ struct rt_pmkid_list {
 
 
 struct security_priv {
-	u32   dot11AuthAlgrthm;		/*  802.11 auth, could be open, shared, 8021x and authswitch */
-	u32   dot11PrivacyAlgrthm;	/*  This specify the privacy for shared auth. algorithm. */
+	u32   dot11_auth_algrthm;		/*  802.11 auth, could be open, shared, 8021x and authswitch */
+	u32   dot11_privacy_algrthm;	/*  This specify the privacy for shared auth. algorithm. */
 
 	/* WEP */
 	u32   dot11PrivacyKeyIndex;	/*  this is only valid for legendary wep, 0~3 for key id. (tx key index) */
@@ -101,7 +101,7 @@ struct security_priv {
 	u8 key_mask; /* use to restore wep key after hal_init */
 
 	u32 dot118021XGrpPrivacy;	/*  This specify the privacy algthm. used for Grp key */
-	u32 dot118021XGrpKeyid;		/*  key id used for Grp Key (tx key index) */
+	u32 dot11_802_1x_grp_key_id;		/*  key id used for Grp Key (tx key index) */
 	union Keytype	dot118021XGrpKey[BIP_MAX_KEYID + 1];	/*  802.1x Group Key, for inx0 and inx1 */
 	union Keytype	dot118021XGrptxmickey[BIP_MAX_KEYID + 1];
 	union Keytype	dot118021XGrprxmickey[BIP_MAX_KEYID + 1];
@@ -170,20 +170,20 @@ struct security_priv {
 
 #define GET_ENCRY_ALGO(psecuritypriv, psta, encry_algo, bmcst)\
 do {\
-	switch (psecuritypriv->dot11AuthAlgrthm) {\
-	case dot11AuthAlgrthm_Open:\
-	case dot11AuthAlgrthm_Shared:\
-	case dot11AuthAlgrthm_Auto:\
-		encry_algo = (u8)psecuritypriv->dot11PrivacyAlgrthm;\
+	switch (psecuritypriv->dot11_auth_algrthm) {\
+	case dot11_auth_algrthm_Open:\
+	case dot11_auth_algrthm_Shared:\
+	case dot11_auth_algrthm_Auto:\
+		encry_algo = (u8)psecuritypriv->dot11_privacy_algrthm;\
 		break;\
-	case dot11AuthAlgrthm_8021X:\
+	case dot11_auth_algrthm_8021X:\
 		if (bmcst)\
 			encry_algo = (u8)psecuritypriv->dot118021XGrpPrivacy;\
 		else\
-			encry_algo = (u8)psta->dot118021XPrivacy;\
+			encry_algo = (u8)psta->dot11_802_1x_privacy;\
 		break;\
-	case dot11AuthAlgrthm_WAPI:\
-		encry_algo = (u8)psecuritypriv->dot11PrivacyAlgrthm;\
+	case dot11_auth_algrthm_WAPI:\
+		encry_algo = (u8)psecuritypriv->dot11_privacy_algrthm;\
 		break;\
 	} \
 } while (0)
@@ -191,7 +191,7 @@ do {\
 #define SET_ICE_IV_LEN(iv_len, icv_len, encrypt)\
 do {\
 	switch (encrypt) {\
-	case _WEP40_:\
+	case WEP_40:\
 	case _WEP104_:\
 		iv_len = 4;\
 		icv_len = 4;\

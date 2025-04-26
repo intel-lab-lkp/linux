@@ -322,7 +322,7 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 				/* rxdata_key_idx =(((iv[3])>>6)&0x3) ; */
 				mickey = &psecuritypriv->dot118021XGrprxmickey[prxattrib->key_index].skey[0];
 
-				/* psecuritypriv->dot118021XGrpKeyid, pmlmeinfo->key_index, rxdata_key_idx); */
+				/* psecuritypriv->dot11_802_1x_grp_key_id, pmlmeinfo->key_index, rxdata_key_idx); */
 
 				if (psecuritypriv->binstallGrpkey == false) {
 					res = _FAIL;
@@ -350,7 +350,7 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 
 			if (bmic_err == true) {
 				/*  double check key_index for some timing issue , */
-				/*  cannot compare with psecuritypriv->dot118021XGrpKeyid also cause timing issue */
+				/*  cannot compare with psecuritypriv->dot11_802_1x_grp_key_id also cause timing issue */
 				if ((is_multicast_ether_addr(prxattrib->ra) == true)  && (prxattrib->key_index != pmlmeinfo->key_index))
 					brpt_micerror = false;
 
@@ -392,14 +392,14 @@ static union recv_frame *decryptor(struct adapter *padapter, union recv_frame *p
 
 		if (prxattrib->key_index > WEP_KEYS) {
 			switch (prxattrib->encrypt) {
-			case _WEP40_:
+			case WEP_40:
 			case _WEP104_:
 				prxattrib->key_index = psecuritypriv->dot11PrivacyKeyIndex;
 				break;
 			case _TKIP_:
 			case _AES_:
 			default:
-				prxattrib->key_index = psecuritypriv->dot118021XGrpKeyid;
+				prxattrib->key_index = psecuritypriv->dot11_802_1x_grp_key_id;
 				break;
 			}
 		}
@@ -409,7 +409,7 @@ static union recv_frame *decryptor(struct adapter *padapter, union recv_frame *p
 		psecuritypriv->hw_decrypted = false;
 
 		switch (prxattrib->encrypt) {
-		case _WEP40_:
+		case WEP_40:
 		case _WEP104_:
 			rtw_wep_decrypt(padapter, (u8 *)precv_frame);
 			break;
@@ -454,7 +454,7 @@ static union recv_frame *portctrl(struct adapter *adapter, union recv_frame *pre
 
 	pstapriv = &adapter->stapriv;
 
-	auth_alg = adapter->securitypriv.dot11AuthAlgrthm;
+	auth_alg = adapter->securitypriv.dot11_auth_algrthm;
 
 	ptr = precv_frame->u.hdr.rx_data;
 	pfhdr = &precv_frame->u.hdr;

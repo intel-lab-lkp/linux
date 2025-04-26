@@ -87,10 +87,10 @@ struct sta_info {
 	u8 hwaddr[ETH_ALEN];
 
 	uint	ieee8021x_blocked;	/* 0: allowed, 1:blocked */
-	uint	dot118021XPrivacy; /* aes, tkip... */
+	uint	dot11_802_1x_privacy; /* aes, tkip... */
 	union Keytype	dot11tkiptxmickey;
 	union Keytype	dot11tkiprxmickey;
-	union Keytype	dot118021x_UncstKey;
+	union Keytype	dot11_802_1x_uncst_key;
 	union pn48		dot11txpn;			/*  PN48 used for Unicast xmit */
 	union pn48		dot11wtxpn;			/*  PN48 used for Unicast mgmt xmit. */
 	union pn48		dot11rxpn;			/*  PN48 used for Unicast recv. */
