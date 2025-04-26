@@ -45,6 +45,8 @@ module_param(napi_tx, bool, 0644);
 #define VIRTIO_XDP_TX		BIT(0)
 #define VIRTIO_XDP_REDIR	BIT(1)
 
+#define VIRTNET_MAX_ZC_SEGS	8
+
 /* RX packet size EWMA. The average packet size is used to determine the packet
  * buffer size when refilling RX rings. As the entire RX ring may be refilled
  * at once, the weight is chosen so that the EWMA will be insensitive to short-
@@ -1232,65 +1234,53 @@ static void xsk_drop_follow_bufs(struct net_device *dev,
 	}
 }
 
-static int xsk_append_merge_buffer(struct virtnet_info *vi,
-				   struct receive_queue *rq,
-				   struct sk_buff *head_skb,
-				   u32 num_buf,
-				   struct virtio_net_hdr_mrg_rxbuf *hdr,
-				   struct virtnet_rq_stats *stats)
+static int virtnet_build_xsk_buff_mrg(struct virtnet_info *vi,
+				      struct receive_queue *rq,
+				      u32 num_buf,
+				      struct xdp_buff *xdp,
+				      struct virtnet_rq_stats *stats)
 {
-	struct sk_buff *curr_skb;
-	struct xdp_buff *xdp;
-	u32 len, truesize;
-	struct page *page;
+	unsigned int len;
 	void *buf;
 
-	curr_skb = head_skb;
+	if (num_buf < 2)
+		return 0;
 
-	while (--num_buf) {
+	while (num_buf > 1) {
+		struct xdp_buff *new_xdp;
+
 		buf = virtqueue_get_buf(rq->vq, &len);
-		if (unlikely(!buf)) {
-			pr_debug("%s: rx error: %d buffers out of %d missing\n",
-				 vi->dev->name, num_buf,
-				 virtio16_to_cpu(vi->vdev,
-						 hdr->num_buffers));
+		if (!unlikely(buf)) {
+			pr_debug("%s: rx error: %d buffers missing\n",
+				 vi->dev->name, num_buf);
 			DEV_STATS_INC(vi->dev, rx_length_errors);
-			return -EINVAL;
+			return -1;
 		}
 
-		u64_stats_add(&stats->bytes, len);
+		new_xdp = buf_to_xdp(vi, rq, buf, len);
+		if (!new_xdp)
+			goto drop_bufs;
 
-		xdp = buf_to_xdp(vi, rq, buf, len);
-		if (!xdp)
-			goto err;
+		/* In virtnet_add_recvbuf_xsk(), we ask the host to fill from
+		 * xdp->data - vi->hdr_len with both virtio_net_hdr and data.
+		 * However, only the first packet has the virtio_net_hdr, the
+		 * following ones do not. So we need to adjust the following
+		 * packets' data pointer to the correct place.
+		 */
+		new_xdp->data -= vi->hdr_len;
+		new_xdp->data_end = new_xdp->data + len;
 
-		buf = napi_alloc_frag(len);
-		if (!buf) {
-			xsk_buff_free(xdp);
-			goto err;
-		}
+		if (!xsk_buff_add_frag(xdp, new_xdp))
+			goto drop_bufs;
 
-		memcpy(buf, xdp->data - vi->hdr_len, len);
-
-		xsk_buff_free(xdp);
-
-		page = virt_to_page(buf);
-
-		truesize = len;
-
-		curr_skb  = virtnet_skb_append_frag(head_skb, curr_skb, page,
-						    buf, len, truesize);
-		if (!curr_skb) {
-			put_page(page);
-			goto err;
-		}
+		num_buf--;
 	}
 
 	return 0;
 
-err:
+drop_bufs:
 	xsk_drop_follow_bufs(vi->dev, rq, num_buf, stats);
-	return -EINVAL;
+	return -1;
 }
 
 static struct sk_buff *virtnet_receive_xsk_merge(struct net_device *dev, struct virtnet_info *vi,
@@ -1307,23 +1297,28 @@ static struct sk_buff *virtnet_receive_xsk_merge(struct net_device *dev, struct 
 	num_buf = virtio16_to_cpu(vi->vdev, hdr->num_buffers);
 
 	ret = XDP_PASS;
+	if (virtnet_build_xsk_buff_mrg(vi, rq, num_buf, xdp, stats))
+		goto drop;
+
 	rcu_read_lock();
 	prog = rcu_dereference(rq->xdp_prog);
-	/* TODO: support multi buffer. */
-	if (prog && num_buf == 1)
+	if (prog)
 		ret = virtnet_xdp_handler(prog, xdp, dev, xdp_xmit, stats);
 	rcu_read_unlock();
 
 	switch (ret) {
 	case XDP_PASS:
-		skb = xsk_construct_skb(rq, xdp);
+		skb = xdp_build_skb_from_zc(xdp);
 		if (!skb)
-			goto drop_bufs;
+			break;
 
-		if (xsk_append_merge_buffer(vi, rq, skb, num_buf, hdr, stats)) {
-			dev_kfree_skb(skb);
-			goto drop;
-		}
+		/* Later, in virtnet_receive_done(), eth_type_trans()
+		 * is called. However, in xdp_build_skb_from_zc(), it is called
+		 * already. As a result, we need to reset the data to before
+		 * the mac header so that the later call in
+		 * virtnet_receive_done() works correctly.
+		 */
+		skb_push(skb, ETH_HLEN);
 
 		return skb;
 
@@ -1332,14 +1327,11 @@ static struct sk_buff *virtnet_receive_xsk_merge(struct net_device *dev, struct 
 		return NULL;
 
 	default:
-		/* drop packet */
-		xsk_buff_free(xdp);
+		break;
 	}
 
-drop_bufs:
-	xsk_drop_follow_bufs(dev, rq, num_buf, stats);
-
 drop:
+	xsk_buff_free(xdp);
 	u64_stats_inc(&stats->drops);
 	return NULL;
 }
@@ -1396,6 +1388,8 @@ static int virtnet_add_recvbuf_xsk(struct virtnet_info *vi, struct receive_queue
 		return -ENOMEM;
 
 	len = xsk_pool_get_rx_frame_size(pool) + vi->hdr_len;
+	/* Reserve some space for skb_shared_info */
+	len -= SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
 	for (i = 0; i < num; ++i) {
 		/* Use the part of XDP_PACKET_HEADROOM as the virtnet hdr space.
@@ -6721,6 +6715,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	dev->netdev_ops = &virtnet_netdev;
 	dev->stat_ops = &virtnet_stat_ops;
 	dev->features = NETIF_F_HIGHDMA;
+	dev->xdp_zc_max_segs = VIRTNET_MAX_ZC_SEGS;
 
 	dev->ethtool_ops = &virtnet_ethtool_ops;
 	SET_NETDEV_DEV(dev, &vdev->dev);
