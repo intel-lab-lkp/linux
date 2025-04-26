@@ -211,6 +211,26 @@
  */
 #define UBLK_F_USER_RECOVERY_FAIL_IO (1ULL << 9)
 
+/*
+ * request buffer is registered automatically before delivering this io
+ * command to ublk server, meantime it is un-registered automatically
+ * when completing this io command.
+ *
+ * request tag has to be used as the buffer index, and ublk server has to
+ * pass this IO's tag as buffer index for using the registered zero copy
+ * buffer
+ *
+ * This way avoids extra uring_cmd cost, but also simplifies backend
+ * implementation, such as, the dependency on IO_REGISTER_IO_BUF and
+ * IO_UNREGISTER_IO_BUF becomes not necessary.
+ *
+ * For using this feature, ublk server has to register buffer table
+ * in sparse way, and buffer number has to be >= ublk queue depth.
+ *
+ * This feature is preferred to UBLK_F_SUPPORT_ZERO_COPY.
+ */
+#define UBLK_F_AUTO_ZERO_COPY 	(1ULL << 10)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1

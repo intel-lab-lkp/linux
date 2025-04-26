@@ -64,7 +64,8 @@
 		| UBLK_F_CMD_IOCTL_ENCODE \
 		| UBLK_F_USER_COPY \
 		| UBLK_F_ZONED \
-		| UBLK_F_USER_RECOVERY_FAIL_IO)
+		| UBLK_F_USER_RECOVERY_FAIL_IO \
+		| UBLK_F_AUTO_ZERO_COPY)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -130,6 +131,14 @@ struct ublk_uring_cmd_pdu {
  * after the IO command is issued again and UBLK_IO_FLAG_NEED_GET_DATA is unset.
  */
 #define UBLK_IO_FLAG_NEED_GET_DATA 0x08
+
+/*
+ * request buffer is registered automatically, so we have to unregister it
+ * before completing this request.
+ *
+ * io_uring will unregister buffer automatically for us during exiting.
+ */
+#define UBLK_IO_FLAG_UNREG_BUF 	0x10
 
 /* atomic RW with ubq->cancel_lock */
 #define UBLK_IO_FLAG_CANCELED	0x80000000
@@ -207,7 +216,8 @@ static inline struct ublksrv_io_desc *ublk_get_iod(struct ublk_queue *ubq,
 						   int tag);
 static inline bool ublk_dev_is_user_copy(const struct ublk_device *ub)
 {
-	return ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY);
+	return ub->dev_info.flags & (UBLK_F_USER_COPY |
+			UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_AUTO_ZERO_COPY);
 }
 
 static inline bool ublk_dev_is_zoned(const struct ublk_device *ub)
@@ -614,6 +624,11 @@ static inline bool ublk_support_zero_copy(const struct ublk_queue *ubq)
 	return ubq->flags & UBLK_F_SUPPORT_ZERO_COPY;
 }
 
+static inline bool ublk_support_auto_zc(const struct ublk_queue *ubq)
+{
+	return ubq->flags & UBLK_F_AUTO_ZERO_COPY;
+}
+
 static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
 {
 	return ubq->flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY);
@@ -621,7 +636,7 @@ static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
 
 static inline bool ublk_need_map_io(const struct ublk_queue *ubq)
 {
-	return !ublk_support_user_copy(ubq);
+	return !ublk_support_user_copy(ubq) && !ublk_support_auto_zc(ubq);
 }
 
 static inline bool ublk_need_req_ref(const struct ublk_queue *ubq)
@@ -629,17 +644,21 @@ static inline bool ublk_need_req_ref(const struct ublk_queue *ubq)
 	/*
 	 * read()/write() is involved in user copy, so request reference
 	 * has to be grabbed
+	 *
+	 * For auto zc, ublk server still may issue UBLK_IO_COMMIT_AND_FETCH_REQ
+	 * before one registered buffer is used up, so reference is
+	 * required too.
 	 */
-	return ublk_support_user_copy(ubq);
+	return ublk_support_user_copy(ubq) || ublk_support_auto_zc(ubq);
 }
 
 static inline void ublk_init_req_ref(const struct ublk_queue *ubq,
-		struct request *req)
+		struct request *req, int init_ref)
 {
 	if (ublk_need_req_ref(ubq)) {
 		struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
 
-		kref_init(&data->ref);
+		refcount_set(&data->ref.refcount, init_ref);
 	}
 }
 
@@ -665,6 +684,15 @@ static inline void ublk_put_req_ref(const struct ublk_queue *ubq,
 	} else {
 		__ublk_complete_rq(req);
 	}
+}
+
+/* for ublk zero copy */
+static void ublk_io_release(void *priv)
+{
+	struct request *rq = priv;
+	struct ublk_queue *ubq = rq->mq_hctx->driver_data;
+
+	ublk_put_req_ref(ubq, rq);
 }
 
 static inline bool ublk_need_get_data(const struct ublk_queue *ubq)
@@ -1231,7 +1259,22 @@ static void ublk_dispatch_req(struct ublk_queue *ubq,
 			mapped_bytes >> 9;
 	}
 
-	ublk_init_req_ref(ubq, req);
+	if (ublk_support_auto_zc(ubq) && ublk_rq_has_data(req)) {
+		int ret;
+
+		/* one extra reference is dropped by ublk_io_release */
+		ublk_init_req_ref(ubq, req, 2);
+		ret = io_buffer_register_bvec(io->cmd, req, ublk_io_release,
+					      tag, issue_flags);
+		if (ret) {
+			blk_mq_end_request(req, BLK_STS_IOERR);
+			return;
+		}
+		io->flags |= UBLK_IO_FLAG_UNREG_BUF;
+	} else {
+		ublk_init_req_ref(ubq, req, 1);
+	}
+
 	ubq_complete_io_cmd(io, UBLK_IO_RES_OK, issue_flags);
 }
 
@@ -1593,7 +1636,8 @@ static int ublk_ch_mmap(struct file *filp, struct vm_area_struct *vma)
 }
 
 static void ublk_commit_completion(struct ublk_device *ub,
-		const struct ublksrv_io_cmd *ub_cmd)
+		const struct ublksrv_io_cmd *ub_cmd,
+		unsigned int issue_flags)
 {
 	u32 qid = ub_cmd->q_id, tag = ub_cmd->tag;
 	struct ublk_queue *ubq = ublk_get_queue(ub, qid);
@@ -1603,6 +1647,15 @@ static void ublk_commit_completion(struct ublk_device *ub,
 	/* now this cmd slot is owned by nbd driver */
 	io->flags &= ~UBLK_IO_FLAG_OWNED_BY_SRV;
 	io->res = ub_cmd->result;
+
+	if (io->flags & UBLK_IO_FLAG_UNREG_BUF) {
+		int ret;
+
+		ret = io_buffer_unregister_bvec(io->cmd, tag, issue_flags);
+		if (ret)
+			io->res = ret;
+		io->flags &= ~UBLK_IO_FLAG_UNREG_BUF;
+	}
 
 	/* find the io request and complete */
 	req = blk_mq_tag_to_rq(ub->tag_set.tags[qid], tag);
@@ -1942,14 +1995,6 @@ static inline void ublk_prep_cancel(struct io_uring_cmd *cmd,
 	io_uring_cmd_mark_cancelable(cmd, issue_flags);
 }
 
-static void ublk_io_release(void *priv)
-{
-	struct request *rq = priv;
-	struct ublk_queue *ubq = rq->mq_hctx->driver_data;
-
-	ublk_put_req_ref(ubq, rq);
-}
-
 static int ublk_register_io_buf(struct io_uring_cmd *cmd,
 				struct ublk_queue *ubq, unsigned int tag,
 				unsigned int index, unsigned int issue_flags)
@@ -2124,7 +2169,7 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		}
 
 		ublk_fill_io_cmd(io, cmd, ub_cmd->addr);
-		ublk_commit_completion(ub, ub_cmd);
+		ublk_commit_completion(ub, ub_cmd, issue_flags);
 		break;
 	case UBLK_IO_NEED_GET_DATA:
 		if (!(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV))
@@ -2730,6 +2775,11 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		return -EINVAL;
 	}
 
+	/* F_AUTO_ZERO_COPY and F_SUPPORT_ZERO_COPY can't co-exist */
+	if ((info.flags & UBLK_F_AUTO_ZERO_COPY) &&
+			(info.flags & UBLK_F_SUPPORT_ZERO_COPY))
+		return -EINVAL;
+
 	/*
 	 * unprivileged device can't be trusted, but RECOVERY and
 	 * RECOVERY_REISSUE still may hang error handling, so can't
@@ -2747,7 +2797,8 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		 * buffer by pwrite() to ublk char device, which can't be
 		 * used for unprivileged device
 		 */
-		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY))
+		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
+					UBLK_F_AUTO_ZERO_COPY))
 			return -EINVAL;
 	}
 
