@@ -41,10 +41,10 @@
 #include "msg.h"
 #include "bcast.h"
 
-#define TIPC_TX_GRACE_PERIOD	msecs_to_jiffies(5000) /* 5s */
-#define TIPC_TX_LASTING_TIME	msecs_to_jiffies(10000) /* 10s */
-#define TIPC_RX_ACTIVE_LIM	msecs_to_jiffies(3000) /* 3s */
-#define TIPC_RX_PASSIVE_LIM	msecs_to_jiffies(15000) /* 15s */
+#define TIPC_TX_GRACE_PERIOD	secs_to_jiffies(5)
+#define TIPC_TX_LASTING_TIME	secs_to_jiffies(10)
+#define TIPC_RX_ACTIVE_LIM	secs_to_jiffies(3)
+#define TIPC_RX_PASSIVE_LIM	secs_to_jiffies(15)
 
 #define TIPC_MAX_TFMS_DEF	10
 #define TIPC_MAX_TFMS_LIM	1000
@@ -2348,7 +2348,7 @@ static void tipc_crypto_work_rx(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct tipc_crypto *rx = container_of(dwork, struct tipc_crypto, work);
 	struct tipc_crypto *tx = tipc_net(rx->net)->crypto_tx;
-	unsigned long delay = msecs_to_jiffies(5000);
+	unsigned long delay = secs_to_jiffies(5);
 	bool resched = false;
 	u8 key;
 	int rc;
@@ -2418,8 +2418,8 @@ void tipc_crypto_rekeying_sched(struct tipc_crypto *tx, bool changed,
 	}
 
 	if (tx->rekeying_intv || now) {
-		delay = (now) ? 0 : tx->rekeying_intv * 60 * 1000;
-		queue_delayed_work(tx->wq, &tx->work, msecs_to_jiffies(delay));
+		delay = now ? 0 : tx->rekeying_intv * 60;
+		queue_delayed_work(tx->wq, &tx->work, secs_to_jiffies(delay));
 	}
 }
 
