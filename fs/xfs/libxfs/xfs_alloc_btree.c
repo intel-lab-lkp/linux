@@ -238,13 +238,13 @@ xfs_cntbt_diff_two_keys(
 	ASSERT(!mask || (mask->alloc.ar_blockcount &&
 			 mask->alloc.ar_startblock));
 
-	diff =  be32_to_cpu(k1->alloc.ar_blockcount) -
-		be32_to_cpu(k2->alloc.ar_blockcount);
+	diff = (int64_t)be32_to_cpu(k1->alloc.ar_blockcount) -
+			be32_to_cpu(k2->alloc.ar_blockcount);
 	if (diff)
 		return diff;
 
-	return  be32_to_cpu(k1->alloc.ar_startblock) -
-		be32_to_cpu(k2->alloc.ar_startblock);
+	return (int64_t)be32_to_cpu(k1->alloc.ar_startblock) -
+			be32_to_cpu(k2->alloc.ar_startblock);
 }
 
 static xfs_failaddr_t
