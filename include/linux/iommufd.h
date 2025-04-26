@@ -232,6 +232,10 @@ struct iommufd_object *_iommufd_object_alloc(struct iommufd_ctx *ictx,
 					     size_t size,
 					     enum iommufd_object_type type);
 void iommufd_object_abort(struct iommufd_ctx *ictx, struct iommufd_object *obj);
+int iommufd_object_depend(struct iommufd_object *obj_dependent,
+			  struct iommufd_object *obj_depended);
+void iommufd_object_undepend(struct iommufd_object *obj_dependent,
+			     struct iommufd_object *obj_depended);
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 int iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
@@ -249,6 +253,17 @@ _iommufd_object_alloc(struct iommufd_ctx *ictx, size_t size,
 
 static inline void iommufd_object_abort(struct iommufd_ctx *ictx,
 					struct iommufd_object *obj)
+{
+}
+
+static inline int iommufd_object_depend(struct iommufd_object *obj_dependent,
+					struct iommufd_object *obj_depended)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void iommufd_object_undepend(struct iommufd_object *obj_dependent,
+					   struct iommufd_object *obj_depended)
 {
 }
 
@@ -328,5 +343,37 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 					  drv_struct->member.obj));            \
 		static_assert(offsetof(typeof(*drv_struct), member.obj) == 0); \
 		iommufd_object_abort(ictx, &drv_struct->member.obj);           \
+	})
+
+/*
+ * Helpers for IOMMU driver to build/destroy a dependency between two sibling
+ * structures created by one of the allocators above
+ */
+#define iommufd_vcmdq_depend(vcmdq_dependent, vcmdq_depended, member)          \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_object,               \
+					  vcmdq_dependent->member.obj));       \
+		static_assert(offsetof(typeof(*vcmdq_dependent),               \
+					      member.obj) == 0);               \
+		static_assert(__same_type(struct iommufd_object,               \
+					  vcmdq_depended->member.obj));        \
+		static_assert(offsetof(typeof(*vcmdq_depended),                \
+					      member.obj) == 0);               \
+		iommufd_object_depend(&vcmdq_dependent->member.obj,            \
+				      &vcmdq_depended->member.obj);            \
+	})
+
+#define iommufd_vcmdq_undepend(vcmdq_dependent, vcmdq_depended, member)        \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_object,               \
+					  vcmdq_dependent->member.obj));       \
+		static_assert(offsetof(typeof(*vcmdq_dependent),               \
+					      member.obj) == 0);               \
+		static_assert(__same_type(struct iommufd_object,               \
+					  vcmdq_depended->member.obj));        \
+		static_assert(offsetof(typeof(*vcmdq_depended),                \
+					      member.obj) == 0);               \
+		iommufd_object_undepend(&vcmdq_dependent->member.obj,          \
+					&vcmdq_depended->member.obj);          \
 	})
 #endif
