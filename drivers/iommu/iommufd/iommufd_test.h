@@ -265,4 +265,7 @@ struct iommu_viommu_event_selftest {
 	__u32 virt_id;
 };
 
+#define IOMMU_VCMDQ_TYPE_SELFTEST 0xdeadbeef
+#define IOMMU_TEST_VCMDQ_MAX 2
+
 #endif

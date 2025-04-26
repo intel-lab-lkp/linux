@@ -148,11 +148,24 @@ to_mock_nested(struct iommu_domain *domain)
 struct mock_viommu {
 	struct iommufd_viommu core;
 	struct mock_iommu_domain *s2_parent;
+	struct mock_vcmdq *mock_vcmdq[IOMMU_TEST_VCMDQ_MAX];
 };
 
 static inline struct mock_viommu *to_mock_viommu(struct iommufd_viommu *viommu)
 {
 	return container_of(viommu, struct mock_viommu, core);
+}
+
+struct mock_vcmdq {
+	struct iommufd_vcmdq core;
+	struct mock_viommu *mock_viommu;
+	struct mock_vcmdq *prev;
+	u16 index;
+};
+
+static inline struct mock_vcmdq *to_mock_vcmdq(struct iommufd_vcmdq *vcmdq)
+{
+	return container_of(vcmdq, struct mock_vcmdq, core);
 }
 
 enum selftest_obj_type {
@@ -727,10 +740,64 @@ out:
 	return rc;
 }
 
+/* Test iommufd_vcmdq_depend/_undepend() */
+static struct iommufd_vcmdq *
+mock_vcmdq_alloc(struct iommufd_viommu *viommu, unsigned int type, u32 index,
+		 dma_addr_t addr, size_t length)
+{
+	struct mock_viommu *mock_viommu = to_mock_viommu(viommu);
+	struct mock_vcmdq *mock_vcmdq, *prev = 0;
+	int rc;
+
+	if (type != IOMMU_VCMDQ_TYPE_SELFTEST)
+		return ERR_PTR(-EOPNOTSUPP);
+	if (index >= IOMMU_TEST_VCMDQ_MAX)
+		return ERR_PTR(-EINVAL);
+	if (mock_viommu->mock_vcmdq[index])
+		return ERR_PTR(-EEXIST);
+	if (index) {
+		prev = mock_viommu->mock_vcmdq[index - 1];
+		if (!prev)
+			return ERR_PTR(-EIO);
+	}
+
+	mock_vcmdq = iommufd_vcmdq_alloc(viommu, struct mock_vcmdq, core);
+	if (IS_ERR(mock_vcmdq))
+		return ERR_CAST(mock_vcmdq);
+
+	if (prev) {
+		rc = iommufd_vcmdq_depend(mock_vcmdq, prev, core);
+		if (rc)
+			goto free_vcmdq;
+	}
+	mock_vcmdq->prev = prev;
+	mock_vcmdq->mock_viommu = mock_viommu;
+	mock_viommu->mock_vcmdq[index] = mock_vcmdq;
+
+	return &mock_vcmdq->core;
+free_vcmdq:
+	iommufd_struct_destroy(viommu->ictx, mock_vcmdq, core);
+	return ERR_PTR(rc);
+}
+
+static void mock_vcmdq_destroy(struct iommufd_vcmdq *vcmdq)
+{
+	struct mock_vcmdq *mock_vcmdq = to_mock_vcmdq(vcmdq);
+	struct mock_viommu *mock_viommu = mock_vcmdq->mock_viommu;
+
+	mock_viommu->mock_vcmdq[mock_vcmdq->index] = NULL;
+	if (mock_vcmdq->prev)
+		iommufd_vcmdq_undepend(mock_vcmdq, mock_vcmdq->prev, core);
+
+	/* iommufd core frees mock_vcmdq and vcmdq */
+}
+
 static struct iommufd_viommu_ops mock_viommu_ops = {
 	.destroy = mock_viommu_destroy,
 	.alloc_domain_nested = mock_viommu_alloc_domain_nested,
 	.cache_invalidate = mock_viommu_cache_invalidate,
+	.vcmdq_alloc = mock_vcmdq_alloc,
+	.vcmdq_destroy = mock_vcmdq_destroy,
 };
 
 static struct iommufd_viommu *
