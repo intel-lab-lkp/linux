@@ -4244,50 +4244,6 @@ int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 }
 EXPORT_SYMBOL_GPL(regulator_set_voltage);
 
-static inline int regulator_suspend_toggle(struct regulator_dev *rdev,
-					   suspend_state_t state, bool en)
-{
-	struct regulator_state *rstate;
-
-	rstate = regulator_get_suspend_state(rdev, state);
-	if (rstate == NULL)
-		return -EINVAL;
-
-	if (!rstate->changeable)
-		return -EPERM;
-
-	rstate->enabled = (en) ? ENABLE_IN_SUSPEND : DISABLE_IN_SUSPEND;
-
-	return 0;
-}
-
-int regulator_suspend_enable(struct regulator_dev *rdev,
-				    suspend_state_t state)
-{
-	return regulator_suspend_toggle(rdev, state, true);
-}
-EXPORT_SYMBOL_GPL(regulator_suspend_enable);
-
-int regulator_suspend_disable(struct regulator_dev *rdev,
-				     suspend_state_t state)
-{
-	struct regulator *regulator;
-	struct regulator_voltage *voltage;
-
-	/*
-	 * if any consumer wants this regulator device keeping on in
-	 * suspend states, don't set it as disabled.
-	 */
-	list_for_each_entry(regulator, &rdev->consumer_list, list) {
-		voltage = &regulator->voltage[state];
-		if (voltage->min_uV || voltage->max_uV)
-			return 0;
-	}
-
-	return regulator_suspend_toggle(rdev, state, false);
-}
-EXPORT_SYMBOL_GPL(regulator_suspend_disable);
-
 static int _regulator_set_suspend_voltage(struct regulator *regulator,
 					  int min_uV, int max_uV,
 					  suspend_state_t state)

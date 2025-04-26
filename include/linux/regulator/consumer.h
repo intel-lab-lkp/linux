@@ -258,10 +258,6 @@ void devm_regulator_unregister_notifier(struct regulator *regulator,
 					struct notifier_block *nb);
 
 /* regulator suspend */
-int regulator_suspend_enable(struct regulator_dev *rdev,
-			     suspend_state_t state);
-int regulator_suspend_disable(struct regulator_dev *rdev,
-			      suspend_state_t state);
 int regulator_set_suspend_voltage(struct regulator *regulator, int min_uV,
 				  int max_uV, suspend_state_t state);
 
@@ -606,18 +602,6 @@ static inline int devm_regulator_unregister_notifier(struct regulator *regulator
 						     struct notifier_block *nb)
 {
 	return 0;
-}
-
-static inline int regulator_suspend_enable(struct regulator_dev *rdev,
-					   suspend_state_t state)
-{
-	return -EINVAL;
-}
-
-static inline int regulator_suspend_disable(struct regulator_dev *rdev,
-					    suspend_state_t state)
-{
-	return -EINVAL;
 }
 
 static inline int regulator_set_suspend_voltage(struct regulator *regulator,
