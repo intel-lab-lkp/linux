@@ -17,12 +17,10 @@
  */
 #define PM_PMC_SH	16	/* PMC number (1-based) for direct events */
 #define PM_PMC_MSK	0xf
-#define PM_PMC_MSKS	(PM_PMC_MSK << PM_PMC_SH)
 #define PM_UNIT_SH	12	/* TTMMUX number and setting - unit select */
 #define PM_UNIT_MSK	0xf
 #define PM_COMBINE_SH	11	/* Combined event bit */
 #define PM_COMBINE_MSK	1
-#define PM_COMBINE_MSKS	0x800
 #define PM_L2SEL_SH	8	/* L2 event select */
 #define PM_L2SEL_MSK	7
 #define PM_PMCSEL_MSK	0xff
@@ -31,22 +29,10 @@
  * Bits in MMCR1 for POWER7
  */
 #define MMCR1_TTM0SEL_SH	60
-#define MMCR1_TTM1SEL_SH	56
-#define MMCR1_TTM2SEL_SH	52
-#define MMCR1_TTM3SEL_SH	48
-#define MMCR1_TTMSEL_MSK	0xf
 #define MMCR1_L2SEL_SH		45
-#define MMCR1_L2SEL_MSK		7
 #define MMCR1_PMC1_COMBINE_SH	35
-#define MMCR1_PMC2_COMBINE_SH	34
-#define MMCR1_PMC3_COMBINE_SH	33
-#define MMCR1_PMC4_COMBINE_SH	32
 #define MMCR1_PMC1SEL_SH	24
-#define MMCR1_PMC2SEL_SH	16
-#define MMCR1_PMC3SEL_SH	8
-#define MMCR1_PMC4SEL_SH	0
 #define MMCR1_PMCSEL_SH(n)	(MMCR1_PMC1SEL_SH - (n) * 8)
-#define MMCR1_PMCSEL_MSK	0xff
 
 /*
  * Power7 event codes.
