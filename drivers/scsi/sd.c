@@ -3191,10 +3191,7 @@ defaults:
 static bool sd_is_perm_stream(struct scsi_disk *sdkp, unsigned int stream_id)
 {
 	u8 cdb[16] = { SERVICE_ACTION_IN_16, SAI_GET_STREAM_STATUS };
-	struct {
-		struct scsi_stream_status_header h;
-		struct scsi_stream_status s;
-	} buf;
+	DEFINE_RAW_FLEX(struct scsi_stream_status_header, buf, stream_status, 1);
 	struct scsi_device *sdev = sdkp->device;
 	struct scsi_sense_hdr sshdr;
 	const struct scsi_exec_args exec_args = {
@@ -3203,9 +3200,9 @@ static bool sd_is_perm_stream(struct scsi_disk *sdkp, unsigned int stream_id)
 	int res;
 
 	put_unaligned_be16(stream_id, &cdb[4]);
-	put_unaligned_be32(sizeof(buf), &cdb[10]);
+	put_unaligned_be32(__struct_size(buf), &cdb[10]);
 
-	res = scsi_execute_cmd(sdev, cdb, REQ_OP_DRV_IN, &buf, sizeof(buf),
+	res = scsi_execute_cmd(sdev, cdb, REQ_OP_DRV_IN, buf, __struct_size(buf),
 			       SD_TIMEOUT, sdkp->max_retries, &exec_args);
 	if (res < 0)
 		return false;
@@ -3213,9 +3210,9 @@ static bool sd_is_perm_stream(struct scsi_disk *sdkp, unsigned int stream_id)
 		sd_print_sense_hdr(sdkp, &sshdr);
 	if (res)
 		return false;
-	if (get_unaligned_be32(&buf.h.len) < sizeof(struct scsi_stream_status))
+	if (get_unaligned_be32(&buf->len) < sizeof(struct scsi_stream_status))
 		return false;
-	return buf.h.stream_status[0].perm;
+	return buf->stream_status[0].perm;
 }
 
 static void sd_read_io_hints(struct scsi_disk *sdkp, unsigned char *buffer)
