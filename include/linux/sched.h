@@ -1748,6 +1748,38 @@ extern struct pid *cad_pid;
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
 
 /*
+ * Helpers for PF_ flags:
+ */
+#define task_vcpu(task)				((task)->flags & PF_VCPU)
+#define task_idle(task)				((task)->flags & PF_IDLE)
+#define task_exiting(task)			((task)->flags & PF_EXITING)
+#define task_postcoredump(task)			((task)->flags & PF_POSTCOREDUMP)
+#define task_io_worker(task)			((task)->flags & PF_IO_WORKER)
+#define task_wq_worker(task)			((task)->flags & PF_WQ_WORKER)
+#define task_forknoexec(task)			((task)->flags & PF_FORKNOEXEC)
+#define task_mce_process(task)			((task)->flags & PF_MCE_PROCESS)
+#define task_superpriv(task)			((task)->flags & PF_SUPERPRIV)
+#define task_dumpcore(task)			((task)->flags & PF_DUMPCORE)
+#define task_signaled(task)			((task)->flags & PF_SIGNALED)
+#define task_memalloc(task)			((task)->flags & PF_MEMALLOC)
+#define task_nproc_exceeded(task)		((task)->flags & PF_NPROC_EXCEEDED)
+#define task_used_math(task)			((task)->flags & PF_USED_MATH)
+#define task_user_worker(task)			((task)->flags & PF_USER_WORKER)
+#define task_nofreeze(task)			((task)->flags & PF_NOFREEZE)
+#define task_kcompactd(task)			((task)->flags & PF_KCOMPACTD)
+#define task_kswapd(task)			((task)->flags & PF_KSWAPD)
+#define task_memalloc_nofs(task)		((task)->flags & PF_MEMALLOC_NOFS)
+#define task_memalloc_noio(task)		((task)->flags & PF_MEMALLOC_NOIO)
+#define task_local_throttle(task)		((task)->flags & PF_LOCAL_THROTTLE)
+#define task_kthread(task)			((task)->flags & PF_KTHREAD)
+#define task_randomize(task)			((task)->flags & PF_RANDOMIZE)
+#define task_no_setaffinity(task)		((task)->flags & PF_NO_SETAFFINITY)
+#define task_mce_early(task)			((task)->flags & PF_MCE_EARLY)
+#define task_memalloc_pin(task)			((task)->flags & PF_MEMALLOC_PIN)
+#define task_block_ts(task)			((task)->flags & PF_BLOCK_TS)
+#define task_suspend_task(task)			((task)->flags & PF_SUSPEND_TASK)
+
+/*
  * Only the _current_ task can read/write to tsk->flags, but other
  * tasks can access tsk->flags in readonly mode for example
  * with tsk_used_math (like during threaded core dumping).
