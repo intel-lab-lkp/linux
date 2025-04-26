@@ -56,6 +56,7 @@ enum {
 	IOMMUFD_CMD_VDEVICE_ALLOC = 0x91,
 	IOMMUFD_CMD_IOAS_CHANGE_PROCESS = 0x92,
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
+	IOMMUFD_CMD_VCMDQ_ALLOC = 0x94,
 };
 
 /**
@@ -1147,4 +1148,44 @@ struct iommu_veventq_alloc {
 	__u32 __reserved;
 };
 #define IOMMU_VEVENTQ_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VEVENTQ_ALLOC)
+
+/**
+ * enum iommu_vcmdq_type - Virtual Command Queue Type
+ * @IOMMU_VCMDQ_TYPE_DEFAULT: Reserved for future use
+ */
+enum iommu_vcmdq_type {
+	IOMMU_VCMDQ_TYPE_DEFAULT = 0,
+};
+
+/**
+ * struct iommu_vcmdq_alloc - ioctl(IOMMU_VCMDQ_ALLOC)
+ * @size: sizeof(struct iommu_vcmdq_alloc)
+ * @flags: Must be 0
+ * @viommu_id: Virtual IOMMU ID to associate the virtual command queue with
+ * @type: One of enum iommu_vcmdq_type
+ * @index: The logical index to the virtual command queue per virtual IOMMU, for
+ *         a multi-queue model
+ * @out_vcmdq_id: The ID of the new virtual command queue
+ * @addr: Base address of the queue memory in the guest physical address space
+ * @length: Length of the queue memory in the guest physical address space
+ *
+ * Allocate a virtual command queue object for a vIOMMU-specific HW-accelerated
+ * feature that can access a guest queue memory described by @addr and @length.
+ * It's suggested for VMM to back the queue memory using a single huge page with
+ * a proper alignment for its contiguity in the host physical address space. The
+ * call will fail, if the queue memory is not contiguous in the physical address
+ * space. Upon success, its underlying physical pages will be pinned to prevent
+ * VMM from unmapping them in the IOAS, until the virtual CMDQ gets destroyed.
+ */
+struct iommu_vcmdq_alloc {
+	__u32 size;
+	__u32 flags;
+	__u32 viommu_id;
+	__u32 type;
+	__u32 index;
+	__u32 out_vcmdq_id;
+	__aligned_u64 addr;
+	__aligned_u64 length;
+};
+#define IOMMU_VCMDQ_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VCMDQ_ALLOC)
 #endif
