@@ -317,7 +317,7 @@ static int vpe_early_init(struct amdgpu_ip_block *ip_block)
 	vpe_set_ring_funcs(adev);
 	vpe_set_regs(vpe);
 
-	dev_info(adev->dev, "VPE: collaborate mode %s", vpe->collaborate_mode ? "true" : "false");
+	dev_info(adev->dev, "VPE: collaborate mode %s", str_true_false(vpe->collaborate_mode));
 
 	return 0;
 }
