@@ -76,7 +76,7 @@ static int syscon_reboot_probe(struct platform_device *pdev)
 		ctx->value = ctx->mask;
 		ctx->mask = 0xFFFFFFFF;
 	} else if (mask_err) {
-		/* support value without mask*/
+		/* support value without mask */
 		ctx->mask = 0xFFFFFFFF;
 	}
 
