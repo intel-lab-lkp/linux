@@ -366,6 +366,9 @@ struct ethtool_eeprom {
  *	its tx lpi (after reaching 'idle' state). Effective only when eee
  *	was negotiated and tx_lpi_enabled was set.
  * @reserved: Reserved for future use; see the note on reserved space.
+ *
+ * More detailed documentation can be found in
+ * Documentation/networking/ethtool-netlink.rst section "EEE Attributes".
  */
 struct ethtool_eee {
 	__u32	cmd;

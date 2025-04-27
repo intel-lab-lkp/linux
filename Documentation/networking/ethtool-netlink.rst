@@ -1215,20 +1215,16 @@ Kernel response contents:
 
   =====================================  ======  ==========================
   ``ETHTOOL_A_EEE_HEADER``               nested  request header
-  ``ETHTOOL_A_EEE_MODES_OURS``           bool    supported/advertised modes
-  ``ETHTOOL_A_EEE_MODES_PEER``           bool    peer advertised link modes
+  ``ETHTOOL_A_EEE_MODES_OURS``           bitset  supported/advertised modes
+  ``ETHTOOL_A_EEE_MODES_PEER``           bitset  peer advertised link modes
   ``ETHTOOL_A_EEE_ACTIVE``               bool    EEE is actively used
   ``ETHTOOL_A_EEE_ENABLED``              bool    EEE is enabled
-  ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx lpi enabled
-  ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx lpi timeout (in us)
+  ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx LPI enabled
+  ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx LPI timeout (in us)
   =====================================  ======  ==========================
 
-In ``ETHTOOL_A_EEE_MODES_OURS``, mask consists of link modes for which EEE is
-enabled, value of link modes for which EEE is advertised. Link modes for which
-peer advertises EEE are listed in ``ETHTOOL_A_EEE_MODES_PEER`` (no mask). The
-netlink interface allows reporting EEE status for all link modes but only
-first 32 are provided by the ``ethtool_ops`` callback.
-
+For detailed explanation of each attribute, see the ``EEE Attributes``
+section.
 
 EEE_SET
 =======
@@ -1239,17 +1235,96 @@ Request contents:
 
   =====================================  ======  ==========================
   ``ETHTOOL_A_EEE_HEADER``               nested  request header
-  ``ETHTOOL_A_EEE_MODES_OURS``           bool    advertised modes
+  ``ETHTOOL_A_EEE_MODES_OURS``           bitset  advertised modes
   ``ETHTOOL_A_EEE_ENABLED``              bool    EEE is enabled
-  ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx lpi enabled
-  ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx lpi timeout (in us)
+  ``ETHTOOL_A_EEE_TX_LPI_ENABLED``       bool    Tx LPI enabled
+  ``ETHTOOL_A_EEE_TX_LPI_TIMER``         u32     Tx LPI timeout (in us)
   =====================================  ======  ==========================
 
-``ETHTOOL_A_EEE_MODES_OURS`` is used to either list link modes to advertise
-EEE for (if there is no mask) or specify changes to the list (if there is
-a mask). The netlink interface allows reporting EEE status for all link modes
-but only first 32 can be set at the moment as that is what the ``ethtool_ops``
-callback supports.
+For detailed explanation of each attribute, see the ``EEE Attributes``
+section.
+
+EEE Attributes
+==============
+
+Limitations:
+
+The netlink interface allows configuring all link modes up to
+``__ETHTOOL_LINK_MODE_MASK_NBITS``, but if the driver relies on legacy
+``ethtool_ops``, only the first 32 link modes are supported.
+
+The following structure is used for the ioctl interface (``ETHTOOL_GEEE`` and
+``ETHTOOL_SEEE``):
+
+.. kernel-doc:: include/uapi/linux/ethtool.h
+    :identifiers: ethtool_eee
+
+Mapping between netlink attributes and struct fields:
+
+  ================================  ================================
+  Netlink attribute                 struct ethtool_eee field
+  ================================  ================================
+  ``ETHTOOL_A_EEE_MODES_OURS``       advertised
+  ``ETHTOOL_A_EEE_MODES_PEER``       lp_advertised
+  ``ETHTOOL_A_EEE_ACTIVE``           eee_active
+  ``ETHTOOL_A_EEE_ENABLED``          eee_enabled
+  ``ETHTOOL_A_EEE_TX_LPI_ENABLED``   tx_lpi_enabled
+  ``ETHTOOL_A_EEE_TX_LPI_TIMER``     tx_lpi_timer
+  ================================  ================================
+
+
+``ETHTOOL_A_EEE_MODES_OURS`` (bitset)
+-------------------------------------
+- Value: link modes that the driver intends to advertise for EEE.
+- Mask: subset of link modes supported for EEE by the interface.
+
+The advertised EEE capabilities are maintained in software state and persist
+across toggling EEE on or off. If ``ETHTOOL_A_EEE_ENABLED`` is false, the PHY
+does not advertise EEE, but the configured value is reported.
+
+``ETHTOOL_A_EEE_MODES_PEER`` (bitset)
+-------------------------------------
+- Value: link modes that the link partner advertises for EEE.
+- Mask: empty.
+
+This value is typically reported by the hardware and may represent only a
+subset of the actual capabilities supported and advertised by the link partner.
+The local hardware may not be able to detect or represent all EEE-capable modes
+of the peer.
+
+``ETHTOOL_A_EEE_ACTIVE`` (bool)
+-------------------------------
+Indicates whether EEE is currently active on the link. EEE is considered active
+if:
+
+ - ``ETHTOOL_A_EEE_ENABLED`` is true,
+ - Autonegotiation is enabled,
+ - The current link mode is EEE-capable,
+ - Both the local advertisement and the peer advertisement include this link
+   mode.
+
+``ETHTOOL_A_EEE_ENABLED`` (bool)
+--------------------------------
+A software-controlled flag.
+
+When ``ETHTOOL_A_EEE_ENABLED`` is set to true and autonegotiation is active,
+the kernel programs the EEE advertisement settings into the PHY hardware
+registers. This enables negotiation of EEE capability with the link partner.
+
+When ``ETHTOOL_A_EEE_ENABLED`` is set to false, EEE advertisement is disabled.
+The PHY will not include EEE capability in its autonegotiation pages, and EEE
+will not be negotiated even if it remains configured in software state.
+
+``ETHTOOL_A_EEE_TX_LPI_ENABLED`` (bool)
+---------------------------------------
+Controls whether the system may enter the Low Power Idle (LPI) state after
+transmission has stopped.
+
+``ETHTOOL_A_EEE_TX_LPI_TIMER`` (u32)
+------------------------------------
+Defines the delay in microseconds after the last transmitted frame before the
+MAC may enter the Low Power Idle (LPI) state. This value applies globally to
+all link modes. A higher timer value delays LPI entry.
 
 
 TSINFO_GET
