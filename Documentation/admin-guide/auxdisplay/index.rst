@@ -5,8 +5,9 @@ Auxiliary Display Support
 .. toctree::
     :maxdepth: 1
 
-    ks0108.rst
     cfag12864b.rst
+    ks0108.rst
+    lp5812.rst
 
 .. only::  subproject and html
 

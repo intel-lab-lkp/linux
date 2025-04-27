@@ -24021,6 +24021,7 @@ M:	Nam Tran <trannamatk@gmail.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/ABI/testing/sysfs-bus-i2c-devices-lp5812
+F:	Documentation/admin-guide/auxdisplay/lp5812.rst
 F:	Documentation/devicetree/bindings/auxdisplay/ti,lp5812.yaml
 F:	drivers/auxdisplay/Kconfig
 F:	drivers/auxdisplay/Makefile
