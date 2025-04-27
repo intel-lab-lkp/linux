@@ -27,8 +27,7 @@ name_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 	return sysfs_emit(buf, "%s\n", kobj_to_engine(kobj)->name);
 }
 
-static const struct kobj_attribute name_attr =
-__ATTR(name, 0444, name_show, NULL);
+static const struct kobj_attribute name_attr = __ATTR_RO(name);
 
 static ssize_t
 class_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
