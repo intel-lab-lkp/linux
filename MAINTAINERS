@@ -24021,6 +24021,10 @@ M:	Nam Tran <trannamatk@gmail.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/auxdisplay/ti,lp5812.yaml
+F:	drivers/auxdisplay/Kconfig
+F:	drivers/auxdisplay/Makefile
+F:	drivers/auxdisplay/lp5812.c
+F:	drivers/auxdisplay/lp5812.h
 
 TEXAS INSTRUMENTS' LB8864 LED BACKLIGHT DRIVER
 M:	Alexander Sverdlin <alexander.sverdlin@siemens.com>

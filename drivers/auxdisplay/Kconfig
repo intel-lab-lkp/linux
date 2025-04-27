@@ -539,6 +539,23 @@ config ARM_CHARLCD
 	  line and the Linux version on the second line, but that's
 	  still useful.
 
+#
+# TI LP5812 matrix RGB LED driver section
+#
+config LP5812
+tristate "Enable LP5812 support LED matrix 4x3"
+depends on I2C
+help
+  If you say Y here you get support for TI LP5812 LED driver.
+
+  The LP5812 is a 4 × 3 matrix RGB LED driver with autonomous
+  animation engine control.
+
+  To compile this driver as a module, choose M here: the
+  module will be called lp5812.
+
+  If unsure, say N.
+
 endif # AUXDISPLAY
 
 #
