@@ -147,6 +147,7 @@ bool input_mt_report_slot_state(struct input_dev *dev,
 
 	if (!active) {
 		input_event(dev, EV_ABS, ABS_MT_TRACKING_ID, -1);
+		input_sync(dev);
 		return false;
 	}
 
