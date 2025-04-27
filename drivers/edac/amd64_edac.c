@@ -4,6 +4,7 @@
 #include "amd64_edac.h"
 #include <asm/amd_nb.h>
 #include <asm/amd_node.h>
+#include <asm/msr.h>
 
 static struct edac_pci_ctl_info *pci_ctl;
 

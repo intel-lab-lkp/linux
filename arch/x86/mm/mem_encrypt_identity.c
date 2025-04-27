@@ -44,6 +44,7 @@
 #include <asm/sections.h>
 #include <asm/coco.h>
 #include <asm/sev.h>
+#include <asm/msr.h>
 
 #include "mm_internal.h"
 

@@ -30,6 +30,7 @@
 #include <linux/cs5535.h>
 
 #include <asm/olpc.h>
+#include <asm/msr.h>
 
 #include "gxfb.h"
 
