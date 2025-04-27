@@ -1857,6 +1857,12 @@ static u32 drm_dp_i2c_functionality(struct i2c_adapter *adapter)
 	       I2C_FUNC_10BIT_ADDR;
 }
 
+static inline bool
+drm_dp_i2c_msg_is_write_status_update(struct drm_dp_aux_msg *msg)
+{
+	return ((msg->request & ~DP_AUX_I2C_MOT) == DP_AUX_I2C_WRITE_STATUS_UPDATE);
+}
+
 static void drm_dp_i2c_msg_write_status_update(struct drm_dp_aux_msg *msg)
 {
 	/*
@@ -1965,6 +1971,7 @@ MODULE_PARM_DESC(dp_aux_i2c_speed_khz,
 static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 {
 	unsigned int retry, defer_i2c;
+	struct drm_dp_aux_msg orig_msg = *msg;
 	int ret;
 	/*
 	 * DP1.2 sections 2.7.7.1.5.6.1 and 2.7.7.1.6.6.1: A DP Source device
@@ -1976,6 +1983,12 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 	int max_retries = max(7, drm_dp_i2c_retry_count(msg, dp_aux_i2c_speed_khz));
 
 	for (retry = 0, defer_i2c = 0; retry < (max_retries + defer_i2c); retry++) {
+		if (drm_dp_i2c_msg_is_write_status_update(msg)) {
+			/* Address only transaction */
+			msg->buffer = NULL;
+			msg->size = 0;
+		}
+
 		ret = aux->transfer(aux, msg);
 		if (ret < 0) {
 			if (ret == -EBUSY)
@@ -1993,7 +2006,7 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 			else
 				drm_dbg_kms(aux->drm_dev, "%s: transaction failed: %d\n",
 					    aux->name, ret);
-			return ret;
+			goto out;
 		}
 
 
@@ -2008,7 +2021,8 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		case DP_AUX_NATIVE_REPLY_NACK:
 			drm_dbg_kms(aux->drm_dev, "%s: native nack (result=%d, size=%zu)\n",
 				    aux->name, ret, msg->size);
-			return -EREMOTEIO;
+			ret = -EREMOTEIO;
+			goto out;
 
 		case DP_AUX_NATIVE_REPLY_DEFER:
 			drm_dbg_kms(aux->drm_dev, "%s: native defer\n", aux->name);
@@ -2027,24 +2041,35 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		default:
 			drm_err(aux->drm_dev, "%s: invalid native reply %#04x\n",
 				aux->name, msg->reply);
-			return -EREMOTEIO;
+			ret = -EREMOTEIO;
+			goto out;
 		}
 
 		switch (msg->reply & DP_AUX_I2C_REPLY_MASK) {
 		case DP_AUX_I2C_REPLY_ACK:
+			/*
+			 * When I2C write firstly get defer and get ack after
+			 * retries by wirte_status_update, we have to return
+			 * all data bytes get transferred instead of 0.
+			 */
+			if (drm_dp_i2c_msg_is_write_status_update(msg) && ret == 0)
+				ret = orig_msg.size;
+
 			/*
 			 * Both native ACK and I2C ACK replies received. We
 			 * can assume the transfer was successful.
 			 */
 			if (ret != msg->size)
 				drm_dp_i2c_msg_write_status_update(msg);
-			return ret;
+
+			goto out;
 
 		case DP_AUX_I2C_REPLY_NACK:
 			drm_dbg_kms(aux->drm_dev, "%s: I2C nack (result=%d, size=%zu)\n",
 				    aux->name, ret, msg->size);
 			aux->i2c_nack_count++;
-			return -EREMOTEIO;
+			ret = -EREMOTEIO;
+			goto out;
 
 		case DP_AUX_I2C_REPLY_DEFER:
 			drm_dbg_kms(aux->drm_dev, "%s: I2C defer\n", aux->name);
@@ -2063,12 +2088,18 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		default:
 			drm_err(aux->drm_dev, "%s: invalid I2C reply %#04x\n",
 				aux->name, msg->reply);
-			return -EREMOTEIO;
+			ret = -EREMOTEIO;
+			goto out;
 		}
 	}
 
 	drm_dbg_kms(aux->drm_dev, "%s: Too many retries, giving up\n", aux->name);
-	return -EREMOTEIO;
+	ret = -EREMOTEIO;
+out:
+	/* In case we change original msg by Write_Status_Update*/
+	msg->buffer = orig_msg.buffer;
+	msg->size = orig_msg.size;
+	return ret;
 }
 
 static void drm_dp_i2c_msg_set_request(struct drm_dp_aux_msg *msg,
