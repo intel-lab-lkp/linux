@@ -72,7 +72,20 @@ struct prm_module_info {
 	struct prm_handler_info handlers[] __counted_by(handler_count);
 };
 
-static u64 efi_pa_va_lookup(efi_guid_t *guid, u64 pa)
+enum prm_addr_type {
+	PRM_HANDLER_ADDR,
+	PRM_STATIC_DATA_BUFFER_ADDR,
+	PRM_ACPI_PARAM_BUFFER_ADDR,
+	PRM_ADD_TYPE_MAX,
+};
+
+static char *prm_addr_type_name[PRM_ADD_TYPE_MAX] = {
+	"handler",
+	"static data buffer",
+	"acpi param buffer",
+};
+
+static u64 efi_pa_va_lookup(efi_guid_t *guid, u64 pa, enum prm_addr_type type)
 {
 	efi_memory_desc_t *md;
 	u64 pa_offset = pa & ~PAGE_MASK;
@@ -85,7 +98,12 @@ static u64 efi_pa_va_lookup(efi_guid_t *guid, u64 pa)
 		}
 	}
 
-	pr_warn("Failed to find VA for GUID: %pUL, PA: 0x%llx", guid, pa);
+	if (type == PRM_HANDLER_ADDR)
+		pr_warn("Failed to find %s VA for GUID: %pUL, PA: 0x%llx",
+			prm_addr_type_name[type], guid, pa);
+	else
+		pr_debug("Failed to find %s VA for GUID: %pUL, PA: 0x%llx",
+			prm_addr_type_name[type], guid, pa);
 
 	return 0;
 }
@@ -153,13 +171,16 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 
 		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);
 		th->handler_addr =
-			(void *)efi_pa_va_lookup(&th->guid, handler_info->handler_address);
+			(void *)efi_pa_va_lookup(&th->guid, handler_info->handler_address,
+					PRM_HANDLER_ADDR);
 
 		th->static_data_buffer_addr =
-			efi_pa_va_lookup(&th->guid, handler_info->static_data_buffer_address);
+			efi_pa_va_lookup(&th->guid, handler_info->static_data_buffer_address,
+					PRM_STATIC_DATA_BUFFER_ADDR);
 
 		th->acpi_param_buffer_addr =
-			efi_pa_va_lookup(&th->guid, handler_info->acpi_param_buffer_address);
+			efi_pa_va_lookup(&th->guid, handler_info->acpi_param_buffer_address,
+					PRM_ACPI_PARAM_BUFFER_ADDR);
 
 	} while (++cur_handler < tm->handler_count && (handler_info = get_next_handler(handler_info)));
 
