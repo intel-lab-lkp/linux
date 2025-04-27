@@ -1501,7 +1501,7 @@ unsigned char *cipso_v4_optptr(const struct sk_buff *skb)
 	int optlen;
 	int taglen;
 
-	for (optlen = iph->ihl*4 - sizeof(struct iphdr); optlen > 1; ) {
+	for (optlen = IPV4_HEADER_LEN(iph->ihl) - sizeof(struct iphdr); optlen > 1; ) {
 		switch (optptr[0]) {
 		case IPOPT_END:
 			return NULL;
@@ -1728,7 +1728,7 @@ void cipso_v4_error(struct sk_buff *skb, int error, u32 gateway)
 	 */
 
 	memset(opt, 0, sizeof(struct ip_options));
-	opt->optlen = ip_hdr(skb)->ihl*4 - sizeof(struct iphdr);
+	opt->optlen = IPV4_HEADER_LEN(ip_hdr(skb)->ihl) - sizeof(struct iphdr);
 	rcu_read_lock();
 	res = __ip_options_compile(dev_net(skb->dev), opt, skb, NULL);
 	rcu_read_unlock();

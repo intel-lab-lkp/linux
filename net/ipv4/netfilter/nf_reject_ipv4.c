@@ -27,10 +27,10 @@ static int nf_reject_iphdr_validate(struct sk_buff *skb)
 	len = ntohs(iph->tot_len);
 	if (skb->len < len)
 		return 0;
-	else if (len < (iph->ihl*4))
+	else if (len < IPV4_HEADER_LEN(iph->ihl))
 		return 0;
 
-	if (!pskb_may_pull(skb, iph->ihl*4))
+	if (!pskb_may_pull(skb, IPV4_HEADER_LEN(iph->ihl)))
 		return 0;
 
 	return 1;

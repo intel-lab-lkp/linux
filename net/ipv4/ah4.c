@@ -77,7 +77,7 @@ static inline struct scatterlist *ah_req_sg(struct crypto_ahash *ahash,
 static int ip_clear_mutable_options(const struct iphdr *iph, __be32 *daddr)
 {
 	unsigned char *optptr = (unsigned char *)(iph+1);
-	int  l = iph->ihl*4 - sizeof(struct iphdr);
+	int  l = IPV4_HEADER_LEN(iph->ihl) - sizeof(struct iphdr);
 	int  optlen;
 
 	while (l > 0) {
@@ -134,7 +134,7 @@ static void ah_output_done(void *data, int err)
 	top_iph->frag_off = iph->frag_off;
 	if (top_iph->ihl != 5) {
 		top_iph->daddr = iph->daddr;
-		memcpy(top_iph+1, iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
+		memcpy(top_iph + 1, iph + 1, IPV4_HEADER_LEN(top_iph->ihl) - sizeof(struct iphdr));
 	}
 
 	kfree(AH_SKB_CB(skb)->tmp);
@@ -194,7 +194,7 @@ static int ah_output(struct xfrm_state *x, struct sk_buff *skb)
 
 	if (top_iph->ihl != 5) {
 		iph->daddr = top_iph->daddr;
-		memcpy(iph+1, top_iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
+		memcpy(iph + 1, top_iph + 1, IPV4_HEADER_LEN(top_iph->ihl) - sizeof(struct iphdr));
 		err = ip_clear_mutable_options(top_iph, &top_iph->daddr);
 		if (err)
 			goto out_free;
@@ -250,7 +250,7 @@ static int ah_output(struct xfrm_state *x, struct sk_buff *skb)
 	top_iph->frag_off = iph->frag_off;
 	if (top_iph->ihl != 5) {
 		top_iph->daddr = iph->daddr;
-		memcpy(top_iph+1, iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
+		memcpy(top_iph + 1, iph + 1, IPV4_HEADER_LEN(top_iph->ihl) - sizeof(struct iphdr));
 	}
 
 out_free:
