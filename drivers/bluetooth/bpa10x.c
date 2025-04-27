@@ -375,7 +375,7 @@ static int bpa10x_probe(struct usb_interface *intf,
 	if (!data)
 		return -ENOMEM;
 
-	data->udev = interface_to_usbdev(intf);
+	data->udev = usb_get_dev(interface_to_usbdev(intf));
 
 	init_usb_anchor(&data->tx_anchor);
 	init_usb_anchor(&data->rx_anchor);
@@ -421,6 +421,8 @@ static void bpa10x_disconnect(struct usb_interface *intf)
 		return;
 
 	usb_set_intfdata(intf, NULL);
+
+	usb_put_dev(data->udev);
 
 	hci_unregister_dev(data->hdev);
 
