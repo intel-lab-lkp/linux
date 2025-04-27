@@ -4398,16 +4398,44 @@ static void rtw89_init_he_eht_cap(struct rtw89_dev *rtwdev,
 	_ieee80211_set_sband_iftype_data(sband, iftype_data, idx);
 }
 
+static struct ieee80211_supported_band *rtw89_copy_sband(const struct ieee80211_supported_band *sband)
+{
+	struct ieee80211_supported_band *copy = kmemdup(sband, sizeof(*sband), GFP_KERNEL);
+
+	copy->channels = kmemdup(sband->channels, sizeof(struct ieee80211_channel) * sband->n_channels, GFP_KERNEL);
+	if (!copy->channels) {
+		kfree(copy);
+		return NULL;
+	}
+
+	copy->bitrates = kmemdup(sband->bitrates, sizeof(struct ieee80211_rate) * sband->n_bitrates, GFP_KERNEL);
+	if (!copy->bitrates) {
+		kfree(copy->channels);
+		kfree(copy);
+		return NULL;
+	}
+
+	return copy;
+}
+
+static void rtw89_free_sband(const struct ieee80211_supported_band *sband)
+{
+	if (sband) {
+		kfree(sband->bitrates);
+		kfree(sband->channels);
+		kfree(sband);
+	}
+}
+
 static int rtw89_core_set_supported_band(struct rtw89_dev *rtwdev)
 {
 	struct ieee80211_hw *hw = rtwdev->hw;
 	struct ieee80211_supported_band *sband_2ghz = NULL, *sband_5ghz = NULL;
 	struct ieee80211_supported_band *sband_6ghz = NULL;
-	u32 size = sizeof(struct ieee80211_supported_band);
 	u8 support_bands = rtwdev->chip->support_bands;
 
 	if (support_bands & BIT(NL80211_BAND_2GHZ)) {
-		sband_2ghz = kmemdup(&rtw89_sband_2ghz, size, GFP_KERNEL);
+		sband_2ghz = rtw89_copy_sband(&rtw89_sband_2ghz);
 		if (!sband_2ghz)
 			goto err;
 		rtw89_init_ht_cap(rtwdev, &sband_2ghz->ht_cap);
@@ -4416,7 +4444,7 @@ static int rtw89_core_set_supported_band(struct rtw89_dev *rtwdev)
 	}
 
 	if (support_bands & BIT(NL80211_BAND_5GHZ)) {
-		sband_5ghz = kmemdup(&rtw89_sband_5ghz, size, GFP_KERNEL);
+		sband_5ghz = rtw89_copy_sband(&rtw89_sband_5ghz);
 		if (!sband_5ghz)
 			goto err;
 		rtw89_init_ht_cap(rtwdev, &sband_5ghz->ht_cap);
@@ -4426,7 +4454,7 @@ static int rtw89_core_set_supported_band(struct rtw89_dev *rtwdev)
 	}
 
 	if (support_bands & BIT(NL80211_BAND_6GHZ)) {
-		sband_6ghz = kmemdup(&rtw89_sband_6ghz, size, GFP_KERNEL);
+		sband_6ghz = rtw89_copy_sband(&rtw89_sband_6ghz);
 		if (!sband_6ghz)
 			goto err;
 		rtw89_init_he_eht_cap(rtwdev, NL80211_BAND_6GHZ, sband_6ghz);
@@ -4445,9 +4473,9 @@ err:
 		kfree((__force void *)sband_5ghz->iftype_data);
 	if (sband_6ghz)
 		kfree((__force void *)sband_6ghz->iftype_data);
-	kfree(sband_2ghz);
-	kfree(sband_5ghz);
-	kfree(sband_6ghz);
+	rtw89_free_sband(sband_2ghz);
+	rtw89_free_sband(sband_5ghz);
+	rtw89_free_sband(sband_6ghz);
 	return -ENOMEM;
 }
 
@@ -4461,9 +4489,9 @@ static void rtw89_core_clr_supported_band(struct rtw89_dev *rtwdev)
 		kfree((__force void *)hw->wiphy->bands[NL80211_BAND_5GHZ]->iftype_data);
 	if (hw->wiphy->bands[NL80211_BAND_6GHZ])
 		kfree((__force void *)hw->wiphy->bands[NL80211_BAND_6GHZ]->iftype_data);
-	kfree(hw->wiphy->bands[NL80211_BAND_2GHZ]);
-	kfree(hw->wiphy->bands[NL80211_BAND_5GHZ]);
-	kfree(hw->wiphy->bands[NL80211_BAND_6GHZ]);
+	rtw89_free_sband(hw->wiphy->bands[NL80211_BAND_2GHZ]);
+	rtw89_free_sband(hw->wiphy->bands[NL80211_BAND_5GHZ]);
+	rtw89_free_sband(hw->wiphy->bands[NL80211_BAND_6GHZ]);
 	hw->wiphy->bands[NL80211_BAND_2GHZ] = NULL;
 	hw->wiphy->bands[NL80211_BAND_5GHZ] = NULL;
 	hw->wiphy->bands[NL80211_BAND_6GHZ] = NULL;
