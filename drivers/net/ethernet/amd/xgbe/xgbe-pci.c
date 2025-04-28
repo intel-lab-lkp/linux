@@ -510,6 +510,10 @@ static const struct pci_device_id xgbe_pci_table[] = {
 	  .driver_data = (kernel_ulong_t)&xgbe_v2a },
 	{ PCI_VDEVICE(AMD, 0x1459),
 	  .driver_data = (kernel_ulong_t)&xgbe_v2b },
+	{ PCI_VDEVICE(HYGON, 0x1458),
+	  .driver_data = (kernel_ulong_t)&xgbe_v2a },
+	{ PCI_VDEVICE(HYGON, 0x1459),
+	  .driver_data = (kernel_ulong_t)&xgbe_v2b },
 	/* Last entry must be zero */
 	{ 0, }
 };
