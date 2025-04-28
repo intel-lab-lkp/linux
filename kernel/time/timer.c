@@ -2162,6 +2162,16 @@ bool timer_base_is_idle(void)
 	return __this_cpu_read(timer_bases[BASE_LOCAL].is_idle);
 }
 
+/**
+ * timer_base_remote_is_idle() - Return whether timer base is set idle for cpu
+ *
+ * Returns value of local timer base is_idle value for remote cpu.
+ */
+bool timer_base_remote_is_idle(unsigned int cpu)
+{
+	return per_cpu(timer_bases[BASE_LOCAL].is_idle, cpu);
+}
+
 static void __run_timer_base(struct timer_base *base);
 
 /**
