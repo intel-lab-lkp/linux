@@ -13,6 +13,18 @@
 #include "internal.h"
 #include "pnode.h"
 
+static struct mnt_namespace *source_anon;
+static inline bool IS_MNT_PROPAGATED(const struct mount *m)
+{
+	/*
+	 * If this is an anonymous mount tree ensure that mount
+	 * propagation can detect mounts that were just
+	 * propagated to the target mount tree so we don't
+	 * propagate onto them.
+	 */
+	return !m->mnt_ns || m->mnt_ns == source_anon;
+}
+
 /* return the next shared peer mount of @p */
 static inline struct mount *next_peer(struct mount *p)
 {
@@ -300,6 +312,9 @@ int propagate_mnt(struct mount *dest_mnt, struct mountpoint *dest_mp,
 	last_source = source_mnt;
 	list = tree_list;
 	dest_master = dest_mnt->mnt_master;
+	source_anon = source_mnt->mnt_ns;
+	if (source_anon && !is_anon_ns(source_anon))
+		source_anon = NULL;
 
 	/* all peers of dest_mnt, except dest_mnt itself */
 	for (n = next_peer(dest_mnt); n != dest_mnt; n = next_peer(n)) {

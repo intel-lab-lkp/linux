@@ -3661,14 +3661,6 @@ static int do_move_mount(struct path *old_path,
 		 */
 		if ((is_anon_ns(p->mnt_ns) && ns == p->mnt_ns))
 			goto out;
-
-		/*
-		 * If this is an anonymous mount tree ensure that mount
-		 * propagation can detect mounts that were just
-		 * propagated to the target mount tree so we don't
-		 * propagate onto them.
-		 */
-		ns->mntns_flags |= MNTNS_PROPAGATING;
 	} else if (is_anon_ns(p->mnt_ns)) {
 		/*
 		 * Don't allow moving an attached mount tree to an
@@ -3718,9 +3710,6 @@ static int do_move_mount(struct path *old_path,
 	err = attach_recursive_mnt(old, real_mount(new_path->mnt), mp, flags);
 	if (err)
 		goto out;
-
-	if (is_anon_ns(ns))
-		ns->mntns_flags &= ~MNTNS_PROPAGATING;
 
 	/* if the mount is moved, it should no longer be expire
 	 * automatically */
