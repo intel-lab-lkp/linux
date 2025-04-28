@@ -5339,6 +5339,8 @@ static inline void mte_destroy_walk(struct maple_enode *enode,
 
 static void mas_wr_store_setup(struct ma_wr_state *wr_mas)
 {
+	unsigned char node_size;
+
 	if (!mas_is_active(wr_mas->mas)) {
 		if (mas_is_start(wr_mas->mas))
 			return;
@@ -5361,17 +5363,42 @@ static void mas_wr_store_setup(struct ma_wr_state *wr_mas)
 	 * writes within this node.  This is to stop partial walks in
 	 * mas_prealloc() from being reset.
 	 */
+
+	/* Leaf root node is safe */
+	if (mte_is_root(wr_mas->mas->node))
+		return;
+
+	/* Cannot span beyond this node */
 	if (wr_mas->mas->last > wr_mas->mas->max)
 		goto reset;
 
-	if (wr_mas->entry)
-		return;
-
-	if (mte_is_leaf(wr_mas->mas->node) &&
-	    wr_mas->mas->last == wr_mas->mas->max)
+	/* Cannot span before this node */
+	if (wr_mas->mas->index < wr_mas->mas->min)
 		goto reset;
 
-	return;
+	wr_mas->type = mte_node_type(wr_mas->mas->node);
+	/* unfinished walk is okay */
+	if (!ma_is_leaf(wr_mas->type))
+		return;
+
+	/* Leaf node that ends in 0 means a spanning store */
+	if (!wr_mas->entry &&
+	    (wr_mas->mas->last == wr_mas->mas->max))
+		goto reset;
+
+	mas_wr_node_walk(wr_mas);
+	if (wr_mas->r_min == wr_mas->mas->index &&
+	    wr_mas->r_max == wr_mas->mas->last)
+		return; /* exact fit, no allocations */
+
+	wr_mas->slots = ma_slots(wr_mas->node, wr_mas->type);
+	mas_wr_end_piv(wr_mas);
+	node_size = mas_wr_new_end(wr_mas);
+	if (node_size >= mt_slots[wr_mas->type])
+		goto reset; /* Not going to fit */
+
+	if (node_size - 1 > mt_min_slots[wr_mas->type])
+		return; /* sufficient and will fit */
 
 reset:
 	mas_reset(wr_mas->mas);
