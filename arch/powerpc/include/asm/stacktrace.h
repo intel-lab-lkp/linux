@@ -8,6 +8,14 @@
 #ifndef _ASM_POWERPC_STACKTRACE_H
 #define _ASM_POWERPC_STACKTRACE_H
 
+#include <linux/sched.h>
+
 void show_user_instructions(struct pt_regs *regs);
+
+static inline bool on_thread_stack(void)
+{
+	return !(((unsigned long)(current->stack) ^ current_stack_pointer)
+			& ~(THREAD_SIZE -1));
+}
 
 #endif /* _ASM_POWERPC_STACKTRACE_H */

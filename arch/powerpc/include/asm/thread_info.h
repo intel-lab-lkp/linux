@@ -54,6 +54,7 @@
 struct thread_info {
 	int		preempt_count;		/* 0 => preemptable,
 						   <0 => BUG */
+	unsigned long	syscall_work;		/* SYSCALL_WORK_ flags */
 #ifdef CONFIG_SMP
 	unsigned int	cpu;
 #endif
