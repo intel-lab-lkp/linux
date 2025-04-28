@@ -259,7 +259,12 @@ void intel_vrr_compute_cmrr_timings(struct intel_crtc_state *crtc_state)
 static
 void intel_vrr_compute_vrr_timings(struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	crtc_state->vrr.enable = true;
+
+	if (HAS_VRR_DC_BALANCE(display))
+		crtc_state->vrr.dc_balance.enable = true;
+
 	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
 }
 
@@ -623,6 +628,8 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 	ctl = VRR_CTL_VRR_ENABLE | trans_vrr_ctl(crtc_state);
 	if (crtc_state->cmrr.enable)
 		ctl |= VRR_CTL_CMRR_ENABLE;
+	if (crtc_state->vrr.dc_balance.enable)
+		ctl |= VRR_CTL_DCB_ADJ_ENABLE;
 
 	intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder), ctl);
 
@@ -641,6 +648,9 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 			       crtc_state->vrr.dc_balance.slope);
 		intel_de_write(display, PIPEDMC_DCB_VBLANK(display, cpu_transcoder),
 			       crtc_state->vrr.dc_balance.vblank_target);
+		/* FIXME reset counters? */
+		intel_de_write(display, TRANS_ADAPTIVE_SYNC_DCB_CTL(display, cpu_transcoder),
+			       ADAPTIVE_SYNC_COUNTER_EN);
 		intel_pipedmc_dcb_enable(NULL, crtc);
 	}
 }
