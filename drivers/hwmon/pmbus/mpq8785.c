@@ -8,7 +8,7 @@
 #include <linux/of_device.h>
 #include "pmbus.h"
 
-enum chips { mpq8785 };
+enum chips { mpq8785, mpm82504 };
 
 static int mpq8785_identify(struct i2c_client *client,
 			    struct pmbus_driver_info *info)
@@ -59,12 +59,14 @@ static struct pmbus_driver_info mpq8785_info = {
 
 static const struct i2c_device_id mpq8785_id[] = {
 	{ "mpq8785", mpq8785 },
+	{ "mpm82504", mpm82504 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, mpq8785_id);
 
 static const struct of_device_id __maybe_unused mpq8785_of_match[] = {
 	{ .compatible = "mps,mpq8785", .data = (void *)mpq8785 },
+	{ .compatible = "mps,mpm82504", .data = (void *)mpm82504 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, mpq8785_of_match);
@@ -87,6 +89,14 @@ static int mpq8785_probe(struct i2c_client *client)
 	switch (chip_id) {
 	case mpq8785:
 		info->identify = mpq8785_identify;
+
+		break;
+	case mpm82504:
+		info->format[PSC_VOLTAGE_OUT] = direct;
+		info->m[PSC_VOLTAGE_OUT] = 8;
+		info->b[PSC_VOLTAGE_OUT] = 0;
+		info->R[PSC_VOLTAGE_OUT] = 2;
+
 		break;
 	default:
 		return -ENODEV;
