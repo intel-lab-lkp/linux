@@ -31,7 +31,9 @@ static bool rcu_rdp_is_offloaded(struct rcu_data *rdp)
 		  lockdep_is_held(&rcu_state.nocb_mutex) ||
 		  (!(IS_ENABLED(CONFIG_PREEMPT_COUNT) && preemptible()) &&
 		   rdp == this_cpu_ptr(&rcu_data)) ||
-		  rcu_current_is_nocb_kthread(rdp)),
+		  rcu_current_is_nocb_kthread(rdp) ||
+		  (IS_ENABLED(CONFIG_PREEMPT_RT) &&
+		   current == rdp->rcu_cpu_kthread_task)),
 		"Unsafe read of RCU_NOCB offloaded state"
 	);
 
