@@ -55,6 +55,13 @@
 		dma-noncoherent;
 		ranges;
 
+		mailbox: mailbox@1900000 {
+			compatible = "sophgo,cv1800b-mailbox";
+			reg = <0x01900000 0x1000>;
+			interrupts = <101 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <2>;
+		};
+
 		clk: clock-controller@3002000 {
 			reg = <0x03002000 0x1000>;
 			clocks = <&osc>;
