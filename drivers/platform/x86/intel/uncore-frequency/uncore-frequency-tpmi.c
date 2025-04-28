@@ -74,6 +74,12 @@ struct tpmi_uncore_struct {
 /* Bit definitions for STATUS register */
 #define UNCORE_CURRENT_RATIO_MASK			GENMASK_ULL(6, 0)
 
+/* Uncore agent type bits */
+#define UNCORE_CORE_PRESENT				BIT(23)
+#define UNCORE_CACHE_PRESENT				BIT(24)
+#define UNCORE_MEMORY_PRESENT				BIT(25)
+#define UNCORE_IO_PRESENT				BIT(26)
+
 /* Bit definitions for CONTROL register */
 #define UNCORE_MAX_RATIO_MASK				GENMASK_ULL(14, 8)
 #define UNCORE_MIN_RATIO_MASK				GENMASK_ULL(21, 15)
@@ -347,6 +353,26 @@ static int uncore_read_freq(struct uncore_data *data, unsigned int *freq)
 	return 0;
 }
 
+/* Helper function to read agent type over MMIO and set the agent type */
+static void uncore_set_agent_type(struct tpmi_uncore_cluster_info *cluster_info)
+{
+	u64 status;
+
+	status = readq((u8 __iomem *)cluster_info->cluster_base + UNCORE_STATUS_INDEX);
+
+	if (status & UNCORE_CORE_PRESENT)
+		cluster_info->uncore_data.agent_type_mask |= AGENT_TYPE_CORE;
+
+	if (status & UNCORE_CACHE_PRESENT)
+		cluster_info->uncore_data.agent_type_mask |= AGENT_TYPE_CACHE;
+
+	if (status & UNCORE_MEMORY_PRESENT)
+		cluster_info->uncore_data.agent_type_mask |= AGENT_TYPE_MEMORY;
+
+	if (status & UNCORE_IO_PRESENT)
+		cluster_info->uncore_data.agent_type_mask |= AGENT_TYPE_IO;
+}
+
 /* Callback for sysfs read for TPMI uncore values. Called under mutex locks. */
 static int uncore_read(struct uncore_data *data, unsigned int *value, enum uncore_index index)
 {
@@ -551,6 +577,8 @@ static int uncore_probe(struct auxiliary_device *auxdev, const struct auxiliary_
 			cluster_info = &pd_info->cluster_infos[j];
 
 			cluster_info->cluster_base = pd_info->uncore_base + mask;
+
+			uncore_set_agent_type(cluster_info);
 
 			cluster_info->uncore_data.package_id = pkg;
 			/* There are no dies like Cascade Lake */
