@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <asm/apic.h>
 #include <asm/svm.h>
 #include <asm/sev.h>
 #include <asm/io.h>
@@ -288,7 +289,7 @@ static void snp_cleanup_vmsa(struct sev_es_save_area *vmsa)
 		free_page((unsigned long)vmsa);
 }
 
-int hv_snp_boot_ap(u32 cpu, unsigned long start_ip)
+int hv_snp_boot_ap(struct wakeup_secondary_cpu_data *wakeup)
 {
 	struct sev_es_save_area *vmsa = (struct sev_es_save_area *)
 		__get_free_page(GFP_KERNEL | __GFP_ZERO);
@@ -296,10 +297,15 @@ int hv_snp_boot_ap(u32 cpu, unsigned long start_ip)
 	struct desc_ptr gdtr;
 	u64 ret, retry = 5;
 	struct hv_enable_vp_vtl *start_vp_input;
+	unsigned long start_ip;
 	unsigned long flags;
+	u32 cpu;
 
 	if (!vmsa)
 		return -ENOMEM;
+
+	cpu = wakeup->cpu;
+	start_ip = wakeup->apicid;
 
 	native_store_gdt(&gdtr);
 
