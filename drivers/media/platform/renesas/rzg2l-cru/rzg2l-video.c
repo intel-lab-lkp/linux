@@ -348,7 +348,7 @@ bool rzg2l_fifo_empty(struct rzg2l_cru_dev *cru)
 	if (amnfifopntr_w == amnfifopntr_r_y)
 		return true;
 
-	return amnfifopntr_w == amnfifopntr_r_y;
+	return false;
 }
 
 void rzg2l_cru_stop_image_processing(struct rzg2l_cru_dev *cru)
