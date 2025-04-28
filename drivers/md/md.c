@@ -599,7 +599,7 @@ static inline struct mddev *mddev_get(struct mddev *mddev)
 {
 	lockdep_assert_held(&all_mddevs_lock);
 
-	if (test_bit(MD_DELETED, &mddev->flags))
+	if (test_bit(MD_CLOSING, &mddev->flags))
 		return NULL;
 	atomic_inc(&mddev->active);
 	return mddev;
@@ -612,9 +612,6 @@ static void __mddev_put(struct mddev *mddev)
 	if (mddev->raid_disks || !list_empty(&mddev->disks) ||
 	    mddev->ctime || mddev->hold_active)
 		return;
-
-	/* Array is not configured at all, and not held active, so destroy it */
-	set_bit(MD_DELETED, &mddev->flags);
 
 	/*
 	 * Call queue_work inside the spinlock so that flush_workqueue() after
@@ -3312,7 +3309,7 @@ static bool md_rdev_overlaps(struct md_rdev *rdev)
 
 	spin_lock(&all_mddevs_lock);
 	list_for_each_entry(mddev, &all_mddevs, all_mddevs) {
-		if (test_bit(MD_DELETED, &mddev->flags))
+		if (test_bit(MD_CLOSING, &mddev->flags))
 			continue;
 		rdev_for_each(rdev2, mddev) {
 			if (rdev != rdev2 && rdev->bdev == rdev2->bdev &&
@@ -6360,15 +6357,10 @@ static void md_clean(struct mddev *mddev)
 	mddev->persistent = 0;
 	mddev->level = LEVEL_NONE;
 	mddev->clevel[0] = 0;
-	/*
-	 * Don't clear MD_CLOSING, or mddev can be opened again.
-	 * 'hold_active != 0' means mddev is still in the creation
-	 * process and will be used later.
-	 */
-	if (mddev->hold_active)
-		mddev->flags = 0;
-	else
-		mddev->flags &= BIT_ULL_MASK(MD_CLOSING);
+	/* UNTIL_STOP is cleared here */
+	mddev->hold_active = 0;
+	/* Don't clear MD_CLOSING, or mddev can be opened again. */
+	mddev->flags &= BIT_ULL_MASK(MD_CLOSING);
 	mddev->sb_flags = 0;
 	mddev->ro = MD_RDWR;
 	mddev->metadata_type[0] = 0;
@@ -6595,8 +6587,6 @@ static int do_md_stop(struct mddev *mddev, int mode)
 		export_array(mddev);
 
 		md_clean(mddev);
-		if (mddev->hold_active == UNTIL_STOP)
-			mddev->hold_active = 0;
 	}
 	md_new_event();
 	sysfs_notify_dirent_safe(mddev->sysfs_state);
@@ -8999,7 +8989,7 @@ void md_do_sync(struct md_thread *thread)
 			goto skip;
 		spin_lock(&all_mddevs_lock);
 		list_for_each_entry(mddev2, &all_mddevs, all_mddevs) {
-			if (test_bit(MD_DELETED, &mddev2->flags))
+			if (test_bit(MD_CLOSING, &mddev2->flags))
 				continue;
 			if (mddev2 == mddev)
 				continue;
