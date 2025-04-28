@@ -247,6 +247,14 @@ struct keybuf {
 	DECLARE_ARRAY_ALLOCATOR(struct keybuf_key, freelist, KEYBUF_NR);
 };
 
+struct keybuf_preflush {
+	spinlock_t	lock;
+#define KEYBUF_NR		500
+	struct keybuf_key data[KEYBUF_NR];
+	unsigned int nr_keys;
+};
+
+
 struct bcache_device {
 	struct closure		cl;
 
@@ -346,6 +354,12 @@ struct cached_dev {
 
 	struct keybuf		writeback_keys;
 
+	/*
+	 * Before performing preflush to the backing device, temporarily
+	 * store the bkey waiting to clean up the dirty mark
+	 */
+	struct keybuf_preflush  preflush_keys;
+
 	struct task_struct	*status_update_thread;
 	/*
 	 * Order the write-half of writeback operations strongly in dispatch
@@ -405,6 +419,12 @@ struct cached_dev {
 	 */
 #define BCH_WBRATE_UPDATE_MAX_SKIPS	15
 	unsigned int		rate_update_retry;
+
+	/*
+	 * In the deferred flush mode, 0 indicates that there is no
+	 * need to send flush to the backing device.
+	 */
+	atomic_t		need_flush;
 };
 
 enum alloc_reserve {

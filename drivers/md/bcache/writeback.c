@@ -362,23 +362,31 @@ static CLOSURE_CALLBACK(write_dirty_finish)
 		unsigned int i;
 		struct keylist keys;
 
-		bch_keylist_init(&keys);
+		if (!BDEV_DEFERRED_FLUSH(&dc->sb)) {
+			bch_keylist_init(&keys);
 
-		bkey_copy(keys.top, &w->key);
-		SET_KEY_DIRTY(keys.top, false);
-		bch_keylist_push(&keys);
+			bkey_copy(keys.top, &w->key);
+			SET_KEY_DIRTY(keys.top, false);
+			bch_keylist_push(&keys);
 
-		for (i = 0; i < KEY_PTRS(&w->key); i++)
-			atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
+			for (i = 0; i < KEY_PTRS(&w->key); i++)
+				atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
 
-		ret = bch_btree_insert(dc->disk.c, &keys, NULL, &w->key);
+			ret = bch_btree_insert(dc->disk.c, &keys, NULL, &w->key);
 
-		if (ret)
-			trace_bcache_writeback_collision(&w->key);
+			if (ret)
+				trace_bcache_writeback_collision(&w->key);
 
-		atomic_long_inc(ret
-				? &dc->disk.c->writeback_keys_failed
-				: &dc->disk.c->writeback_keys_done);
+			atomic_long_inc(ret
+					? &dc->disk.c->writeback_keys_failed
+					: &dc->disk.c->writeback_keys_done);
+		} else {
+			/* After flushing the backing device, update the btree */
+			spin_lock(&dc->preflush_keys.lock);
+			dc->preflush_keys.data[dc->preflush_keys.nr_keys] = *w;
+			dc->preflush_keys.nr_keys++;
+			spin_unlock(&dc->preflush_keys.lock);
+		}
 	}
 
 	bch_keybuf_del(&dc->writeback_keys, w);
@@ -435,6 +443,7 @@ static CLOSURE_CALLBACK(write_dirty)
 	if (KEY_DIRTY(&w->key)) {
 		dirty_init(w);
 		io->bio.bi_opf = REQ_OP_WRITE;
+
 		io->bio.bi_iter.bi_sector = KEY_START(&w->key);
 		bio_set_dev(&io->bio, io->dc->bdev);
 		io->bio.bi_end_io	= dirty_endio;
@@ -469,6 +478,66 @@ static CLOSURE_CALLBACK(read_dirty_submit)
 	closure_bio_submit(io->dc->disk.c, &io->bio, cl);
 
 	continue_at(cl, write_dirty, io->dc->writeback_write_wq);
+}
+
+static void flush_backing_device(struct cached_dev *dc)
+{
+	int ret;
+	unsigned int i;
+	struct bio flush;
+	struct keybuf_key *p;
+
+	if (dc->preflush_keys.nr_keys == 0)
+		return;
+
+	bio_init(&flush, dc->bdev, NULL, 0, REQ_OP_WRITE | REQ_PREFLUSH);
+	ret = submit_bio_wait(&flush);
+	if (ret) {
+		pr_warn("flush backing device error, ret=%d!\n", ret);
+		dc->preflush_keys.nr_keys = 0;
+		/*
+		 * Due to the flush failure, the dirty marked bkey will wait for
+		 * the next rescheduling to be written back
+		 */
+		return;
+	}
+
+	/*
+	 * The dirty data was successfully written back and confirmed to be written
+	 * to the disk. The status of the bkey in the btree was updated.
+	 */
+	for (i = 0; i < dc->preflush_keys.nr_keys; i++) {
+		int ret;
+		unsigned int j;
+		struct keylist keys;
+
+		bch_keylist_init(&keys);
+
+		p = &dc->preflush_keys.data[i];
+		bkey_copy(keys.top, &p->key);
+		SET_KEY_DIRTY(keys.top, false);
+		bch_keylist_push(&keys);
+
+		for (j = 0; j < KEY_PTRS(&p->key); j++)
+			atomic_inc(&PTR_BUCKET(dc->disk.c, &p->key, j)->pin);
+
+		ret = bch_btree_insert(dc->disk.c, &keys, NULL, &p->key);
+
+		if (ret)
+			trace_bcache_writeback_collision(&p->key);
+
+		atomic_long_inc(ret
+				? &dc->disk.c->writeback_keys_failed
+				: &dc->disk.c->writeback_keys_done);
+
+		/* For those bkeys that failed to be inserted, you can
+		 * ignore them and they will be processed again in the
+		 * next write-back scan.
+		 */
+	}
+
+	dc->preflush_keys.nr_keys = 0;
+
 }
 
 static void read_dirty(struct cached_dev *dc)
@@ -819,6 +888,8 @@ static int bch_writeback_thread(void *arg)
 
 		read_dirty(dc);
 
+		flush_backing_device(dc);
+
 		if (searched_full_index) {
 			unsigned int delay = dc->writeback_delay * HZ;
 
@@ -1071,6 +1142,9 @@ void bch_cached_dev_writeback_init(struct cached_dev *dc)
 
 	/* For dc->writeback_lock contention in update_writeback_rate() */
 	dc->rate_update_retry = 0;
+
+	spin_lock_init(&dc->preflush_keys.lock);
+	dc->preflush_keys.nr_keys = 0;
 
 	WARN_ON(test_and_clear_bit(BCACHE_DEV_WB_RUNNING, &dc->disk.flags));
 	INIT_DELAYED_WORK(&dc->writeback_rate_update, update_writeback_rate);

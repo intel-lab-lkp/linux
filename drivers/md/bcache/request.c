@@ -1026,16 +1026,28 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 		bio->bi_end_io = backing_request_endio;
 		closure_bio_submit(s->iop.c, bio, cl);
 
+		if (BDEV_DEFERRED_FLUSH(&dc->sb))
+			atomic_set(&dc->need_flush, 1);
+
 	} else if (s->iop.writeback) {
 		bch_writeback_add(dc);
 		s->iop.bio = bio;
 
 		if (bio->bi_opf & REQ_PREFLUSH) {
+			struct bio *flush;
+
+			/*
+			 * When DEFERRED_FLUSH is enabled, if need_flush is 0,
+			 * there is no need to send a flush to the backing device.
+			 */
+			if (BDEV_DEFERRED_FLUSH(&dc->sb) &&
+				 (!atomic_cmpxchg(&dc->need_flush, 1, 0)))
+				goto insert_data;
+
 			/*
 			 * Also need to send a flush to the backing
 			 * device.
 			 */
-			struct bio *flush;
 
 			flush = bio_alloc_bioset(bio->bi_bdev, 0,
 						 REQ_OP_WRITE | REQ_PREFLUSH,
@@ -1050,6 +1062,9 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 			closure_bio_submit(s->iop.c, flush, cl);
 		}
 	} else {
+		if (BDEV_DEFERRED_FLUSH(&dc->sb))
+			atomic_set(&dc->need_flush, 1);
+
 		s->iop.bio = bio_alloc_clone(bio->bi_bdev, bio, GFP_NOIO,
 					     &dc->disk.bio_split);
 		/* I/O request sent to backing device */
@@ -1066,14 +1081,27 @@ static CLOSURE_CALLBACK(cached_dev_nodata)
 {
 	closure_type(s, struct search, cl);
 	struct bio *bio = &s->bio.bio;
+	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
 
-	if (s->iop.flush_journal)
+	if (s->iop.flush_journal) {
 		bch_journal_meta(s->iop.c, cl);
+
+		/*
+		 * When deferred flush is enabled, it is necessary to determine
+		 * whether the flush request can be sent to the backing device.
+		 */
+		if (BDEV_DEFERRED_FLUSH(&dc->sb) &&
+				 (!atomic_cmpxchg(&dc->need_flush, 1, 0))) {
+			s->iop.status = BLK_STS_OK;
+			goto end;
+		}
+	}
 
 	/* If it's a flush, we send the flush to the backing device too */
 	bio->bi_end_io = backing_request_endio;
 	closure_bio_submit(s->iop.c, bio, cl);
 
+end:
 	continue_at(cl, cached_dev_bio_complete, NULL);
 }
 

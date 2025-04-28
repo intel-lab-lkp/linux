@@ -117,6 +117,10 @@ static inline bool should_writeback(struct cached_dev *dc, struct bio *bio,
 				    bio_sectors(bio)))
 		return true;
 
+	/* Prevent IO from bypassing the cache disk */
+	if (BDEV_DEFERRED_FLUSH(&dc->sb) == DEFERRED_FLUSH_FORCE)
+		return true;
+
 	if (would_skip)
 		return false;
 
