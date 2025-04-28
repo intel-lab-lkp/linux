@@ -7,6 +7,7 @@ Supported chips:
 
   * MPS MPQ8785
   * MPS MPM82504
+  * MPS MPM3695-10
 
     Prefix: 'mpq8785'
 
@@ -29,6 +30,13 @@ The device can also operate in parallel with the MPM3695-100 and additional
 MPM82504 devices to provide a higher output current. The MPM82504 operates
 at high efficiency across a wide load range.
 
+The MPM3695-10 is a scalable, ultra-thin, fully integrated power module with
+a PMBus interface. It offers a complete power solution that achieves up to
+10A of output current with excellent load and line regulation across a wide
+input voltage range. The device’s 2mm height enables it to be placed on the
+backside of a PCB for space optimization. It operates at high efficiency over
+a wide load range, and can be paralleled to deliver higher current.
+
 The PMBus interface provides converter configurations and key parameters
 monitoring.
 
@@ -43,8 +51,9 @@ over-voltage protection (OVP), under-voltage protection (UVP), and
 over-temperature protection (OTP).
 
 All supported modules require a minimal number of readily available, standard
-external components. The MPQ8785 is available in a TLGA (5mmx6mm) package
-and the MPM82504 is available in a BGA (15mmx30mmx5.18mm) package.
+external components. The MPQ8785 is available in a TLGA (5mmx6mm) package,
+the MPM82504 is available in a BGA (15mmx30mmx5.18mm) package and the MPM3695-10
+is available in an LGA-45 (8mmx8mmx2mm) package.
 
 Device compliant with:
 
