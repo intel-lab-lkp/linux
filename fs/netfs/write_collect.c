@@ -23,7 +23,7 @@
 
 static void netfs_dump_request(const struct netfs_io_request *rreq)
 {
-	pr_err("Request R=%08x r=%d fl=%lx or=%x e=%ld\n",
+	pr_err("Request R=%08x r=%d fl=%lx or=%x e=%d\n",
 	       rreq->debug_id, refcount_read(&rreq->ref), rreq->flags,
 	       rreq->origin, rreq->error);
 	pr_err("  st=%llx tsl=%zx/%llx/%llx\n",
