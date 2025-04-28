@@ -1707,6 +1707,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 
 	crtc_state->has_sel_update = intel_sel_update_config_valid(intel_dp, crtc_state);
 
+	crtc_state->has_alpm = intel_psr_needs_alpm(intel_dp, crtc_state);
+
 	/* Wa_18037818876 */
 	if (intel_psr_needs_wa_18037818876(intel_dp, crtc_state)) {
 		crtc_state->has_psr = false;

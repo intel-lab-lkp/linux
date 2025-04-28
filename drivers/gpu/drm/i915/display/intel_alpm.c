@@ -322,6 +322,8 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 
 	crtc_state->has_lobf = (context_latency + guardband) >
 		(first_sdp_position + waketime_in_lines);
+
+	crtc_state->has_alpm |= crtc_state->has_lobf;
 }
 
 static void lnl_alpm_configure(struct intel_dp *intel_dp,
@@ -332,8 +334,7 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	enum port port = dp_to_dig_port(intel_dp)->base.port;
 	u32 alpm_ctl;
 
-	if (DISPLAY_VER(display) < 20 || (!intel_psr_needs_alpm(intel_dp, crtc_state) &&
-					  !crtc_state->has_lobf))
+	if (DISPLAY_VER(display) < 20 || !crtc_state->has_alpm)
 		return;
 
 	mutex_lock(&intel_dp->alpm_parameters.lock);
@@ -417,12 +418,20 @@ void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 		if (!intel_dp_is_edp(intel_dp))
 			continue;
 
-		if (old_crtc_state->has_lobf) {
-			mutex_lock(&intel_dp->alpm_parameters.lock);
+		mutex_lock(&intel_dp->alpm_parameters.lock);
+		if (crtc_state->has_alpm) {
+			u32 alpm_ctl = intel_de_read(display, ALPM_CTL(display, cpu_transcoder));
+			if (alpm_ctl & ALPM_CTL_LOBF_ENABLE) {
+				alpm_ctl &= ~ALPM_CTL_LOBF_ENABLE;
+				intel_de_write(display, ALPM_CTL(display, cpu_transcoder), alpm_ctl);
+				drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
+			}
+		} else {
 			intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
-			drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
-			mutex_unlock(&intel_dp->alpm_parameters.lock);
+			drm_dbg_kms(display->drm,
+				    "Link off between frames (LOBF) with ALPM disabled\n");
 		}
+		mutex_unlock(&intel_dp->alpm_parameters.lock);
 	}
 }
 
@@ -431,7 +440,7 @@ static void intel_alpm_enable_sink(struct intel_dp *intel_dp,
 {
 	u8 val;
 
-	if (!intel_psr_needs_alpm(intel_dp, crtc_state) && !crtc_state->has_lobf)
+	if (!crtc_state->has_alpm)
 		return;
 
 	val = DP_ALPM_ENABLE | DP_ALPM_LOCK_ERROR_IRQ_HPD_ENABLE;

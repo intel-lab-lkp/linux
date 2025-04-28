@@ -1328,6 +1328,9 @@ struct intel_crtc_state {
 
 	/* LOBF flag */
 	bool has_lobf;
+
+	/* ALPM flag */
+	bool has_alpm;
 };
 
 enum intel_pipe_crc_source {
