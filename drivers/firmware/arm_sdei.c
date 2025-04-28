@@ -1062,14 +1062,14 @@ static bool __init sdei_present_acpi(void)
 	return true;
 }
 
-void __init sdei_init(void)
+int __init sdei_init(void)
 {
 	struct platform_device *pdev;
 	int ret;
 
 	ret = platform_driver_register(&sdei_driver);
 	if (ret || !sdei_present_acpi())
-		return;
+		return ret;
 
 	pdev = platform_device_register_simple(sdei_driver.driver.name,
 					       0, NULL, 0);
@@ -1079,7 +1079,12 @@ void __init sdei_init(void)
 		pr_info("Failed to register ACPI:SDEI platform device %d\n",
 			ret);
 	}
+
+	return ret;
 }
+#ifndef CONFIG_ACPI_APEI_GHES
+subsys_initcall_sync(sdei_init);
+#endif
 
 int sdei_event_handler(struct pt_regs *regs,
 		       struct sdei_registered_event *arg)
