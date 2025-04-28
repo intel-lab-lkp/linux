@@ -119,6 +119,8 @@ struct pll_clk {
  * @on_bit: ON/MON bit
  * @mon_index: monitor register offset
  * @mon_bit: monitor bit
+ * @external_clk: Boolean flag indicating whether the parent clock can be an external clock
+ * @external_clk_mux_index: Index of the clock mux selection when the source is an external clock
  */
 struct mod_clock {
 	struct rzv2h_cpg_priv *priv;
@@ -129,6 +131,8 @@ struct mod_clock {
 	u8 on_bit;
 	s8 mon_index;
 	u8 mon_bit;
+	bool external_clk;
+	u8 external_clk_mux_index;
 };
 
 #define to_mod_clock(_hw) container_of(_hw, struct mod_clock, hw)
@@ -567,10 +571,33 @@ static int rzv2h_mod_clock_is_enabled(struct clk_hw *hw)
 {
 	struct mod_clock *clock = to_mod_clock(hw);
 	struct rzv2h_cpg_priv *priv = clock->priv;
+	bool skip_mon = false;
 	u32 bitmask;
 	u32 offset;
 
-	if (clock->mon_index >= 0) {
+	if (clock->mon_index >= 0 && clock->external_clk) {
+		struct clk_hw *parent_hw;
+		struct clk *parent_clk;
+		struct clk_mux *mux;
+		int index;
+		u32 val;
+
+		parent_clk = clk_get_parent(hw->clk);
+		if (IS_ERR(parent_clk))
+			goto check_mon;
+
+		parent_hw = __clk_get_hw(parent_clk);
+		mux = to_clk_mux(parent_hw);
+
+		val = readl(mux->reg) >> mux->shift;
+		val &= mux->mask;
+		index = clk_mux_val_to_index(parent_hw, mux->table, 0, val);
+		if (index == clock->external_clk_mux_index)
+			skip_mon = true;
+	}
+
+check_mon:
+	if (clock->mon_index >= 0 && !skip_mon) {
 		offset = GET_CLK_MON_OFFSET(clock->mon_index);
 		bitmask = BIT(clock->mon_bit);
 
@@ -687,6 +714,8 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 	clock->mon_index = mod->mon_index;
 	clock->mon_bit = mod->mon_bit;
 	clock->no_pm = mod->no_pm;
+	clock->external_clk = mod->external_clk;
+	clock->external_clk_mux_index = mod->external_clk_mux_index;
 	clock->priv = priv;
 	clock->hw.init = &init;
 	clock->mstop_data = mod->mstop_data;
