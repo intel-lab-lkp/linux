@@ -78,6 +78,8 @@ static int mpq8785_probe(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	struct pmbus_driver_info *info;
 	enum chips chip_id;
+	u32 voltage_scale;
+	int ret;
 
 	info = devm_kmemdup(dev, &mpq8785_info, sizeof(*info), GFP_KERNEL);
 	if (!info)
@@ -103,6 +105,14 @@ static int mpq8785_probe(struct i2c_client *client)
 		break;
 	default:
 		return -ENODEV;
+	}
+
+	if (!of_property_read_u32(dev->of_node, "voltage-scale-loop",
+				  &voltage_scale)) {
+		ret = i2c_smbus_write_word_data(client, PMBUS_VOUT_SCALE_LOOP,
+						voltage_scale);
+		if (ret)
+			return ret;
 	}
 
 	return pmbus_do_probe(client, info);
