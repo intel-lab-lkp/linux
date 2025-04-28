@@ -138,6 +138,29 @@ static inline void nap_adjust_return(struct pt_regs *regs)
 #endif
 }
 
+static inline void booke_load_dbcr0(void)
+{
+#ifdef CONFIG_PPC_ADV_DEBUG_REGS
+       unsigned long dbcr0 = current->thread.debug.dbcr0;
+
+       if (likely(!(dbcr0 & DBCR0_IDM)))
+               return;
+
+       /*
+        * Check to see if the dbcr0 register is set up to debug.
+        * Use the internal debug mode bit to do this.
+        */
+       mtmsr(mfmsr() & ~MSR_DE);
+       if (IS_ENABLED(CONFIG_PPC32)) {
+               isync();
+               global_dbcr0[smp_processor_id()] = mfspr(SPRN_DBCR0);
+       }
+       mtspr(SPRN_DBCR0, dbcr0);
+       mtspr(SPRN_DBSR, -1);
+#endif
+}
+
+
 static inline void booke_restore_dbcr0(void)
 {
 #ifdef CONFIG_PPC_ADV_DEBUG_REGS
