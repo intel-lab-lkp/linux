@@ -119,6 +119,7 @@ struct prueth_tx_chn {
 	struct k3_cppi_desc_pool *desc_pool;
 	struct k3_udma_glue_tx_channel *tx_chn;
 	struct prueth_emac *emac;
+	spinlock_t lock; /* protect TX rings in multi-port mode */
 	u32 id;
 	u32 descs_num;
 	unsigned int irq;

@@ -157,7 +157,9 @@ int emac_tx_complete_packets(struct prueth_emac *emac, int chn,
 	tx_chn = &emac->tx_chns[chn];
 
 	while (true) {
+		spin_lock(&tx_chn->lock);
 		res = k3_udma_glue_pop_tx_chn(tx_chn->tx_chn, &desc_dma);
+		spin_unlock(&tx_chn->lock);
 		if (res == -ENODATA)
 			break;
 
@@ -325,6 +327,7 @@ int prueth_init_tx_chns(struct prueth_emac *emac)
 		snprintf(tx_chn->name, sizeof(tx_chn->name),
 			 "tx%d-%d", slice, i);
 
+		spin_lock_init(&tx_chn->lock);
 		tx_chn->emac = emac;
 		tx_chn->id = i;
 		tx_chn->descs_num = PRUETH_MAX_TX_DESC;
@@ -627,7 +630,9 @@ u32 emac_xmit_xdp_frame(struct prueth_emac *emac,
 	cppi5_hdesc_set_pktlen(first_desc, xdpf->len);
 	desc_dma = k3_cppi_desc_pool_virt2dma(tx_chn->desc_pool, first_desc);
 
+	spin_lock_bh(&tx_chn->lock);
 	ret = k3_udma_glue_push_tx_chn(tx_chn->tx_chn, first_desc, desc_dma);
+	spin_unlock_bh(&tx_chn->lock);
 	if (ret) {
 		netdev_err(ndev, "xdp tx: push failed: %d\n", ret);
 		netdev_tx_completed_queue(netif_txq, 1, xdpf->len);
@@ -981,7 +986,9 @@ enum netdev_tx icssg_ndo_start_xmit(struct sk_buff *skb, struct net_device *ndev
 	/* cppi5_desc_dump(first_desc, 64); */
 
 	skb_tx_timestamp(skb);  /* SW timestamp if SKBTX_IN_PROGRESS not set */
+	spin_lock_bh(&tx_chn->lock);
 	ret = k3_udma_glue_push_tx_chn(tx_chn->tx_chn, first_desc, desc_dma);
+	spin_unlock_bh(&tx_chn->lock);
 	if (ret) {
 		netdev_err(ndev, "tx: push failed: %d\n", ret);
 		netdev_tx_completed_queue(netif_txq, 1, pkt_len);
