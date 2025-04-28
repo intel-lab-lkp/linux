@@ -97,4 +97,6 @@ extern void add_taint(unsigned flag, enum lockdep_ok);
 extern int test_taint(unsigned flag);
 extern unsigned long get_taint(void);
 
+void panic_set_handling(void (*fn)(void), int priority);
+
 #endif	/* _LINUX_PANIC_H */

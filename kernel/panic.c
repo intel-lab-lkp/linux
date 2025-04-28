@@ -276,6 +276,30 @@ static void panic_other_cpus_shutdown(bool crash_kexec)
 		crash_smp_send_stop();
 }
 
+/*
+ * This is the default function called after a kernel panic has been
+ * handled. Higher priority alternatives can be set with function
+ * panic_set_handling()
+ *
+ */
+static void after_panic_handling(void)
+{
+	mdelay(PANIC_TIMER_STEP);
+}
+
+static void (*panic_halt)(void) = after_panic_handling;
+static int panic_hlt_priority;
+
+void panic_set_handling(void (*fn)(void), int priority)
+{
+	if (priority <= panic_hlt_priority)
+		return;
+
+	panic_hlt_priority = priority;
+	panic_halt = fn;
+}
+EXPORT_SYMBOL_GPL(panic_set_handling);
+
 /**
  *	panic - halt the system
  *	@fmt: The text string to print
@@ -466,6 +490,9 @@ void panic(const char *fmt, ...)
 	 */
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 	nbcon_atomic_flush_unsafe();
+
+	if (panic_halt)
+		panic_halt();
 
 	local_irq_enable();
 	for (i = 0; ; i += PANIC_TIMER_STEP) {
