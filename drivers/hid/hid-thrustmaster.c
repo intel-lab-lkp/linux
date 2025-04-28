@@ -150,7 +150,7 @@ static const struct usb_ctrlrequest change_request = {
 static void thrustmaster_interrupts(struct hid_device *hdev)
 {
 	int ret, trans, i, b_ep;
-	u8 *send_buf = kmalloc(256, GFP_KERNEL);
+	u8 *send_buf __free(kfree) = kmalloc(256, GFP_KERNEL);
 	struct usb_host_endpoint *ep;
 	struct device *dev = &hdev->dev;
 	struct usb_interface *usbif = to_usb_interface(dev->parent);
@@ -162,7 +162,6 @@ static void thrustmaster_interrupts(struct hid_device *hdev)
 	}
 
 	if (usbif->cur_altsetting->desc.bNumEndpoints < 2) {
-		kfree(send_buf);
 		hid_err(hdev, "Wrong number of endpoints?\n");
 		return;
 	}
@@ -174,7 +173,6 @@ static void thrustmaster_interrupts(struct hid_device *hdev)
 	u8 ep_addr[2] = {b_ep, 0};
 
 	if (!usb_check_int_endpoints(usbif, ep_addr)) {
-		kfree(send_buf);
 		hid_err(hdev, "Unexpected non-int endpoint\n");
 		return;
 	}
@@ -191,12 +189,9 @@ static void thrustmaster_interrupts(struct hid_device *hdev)
 
 		if (ret) {
 			hid_err(hdev, "setup data couldn't be sent\n");
-			kfree(send_buf);
 			return;
 		}
 	}
-
-	kfree(send_buf);
 }
 
 static void thrustmaster_change_handler(struct urb *urb)
