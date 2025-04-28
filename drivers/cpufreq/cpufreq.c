@@ -653,10 +653,7 @@ static ssize_t store_local_boost(struct cpufreq_policy *policy,
 
 	policy->boost_enabled = enable;
 
-	cpus_read_lock();
 	ret = cpufreq_driver->set_boost(policy, enable);
-	cpus_read_unlock();
-
 	if (ret) {
 		policy->boost_enabled = !policy->boost_enabled;
 		return ret;
@@ -1045,10 +1042,16 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
 	if (!fattr->store)
 		return -EIO;
 
+	if (fattr == &local_boost)
+		cpus_read_lock();
+
 	down_write(&policy->rwsem);
 	if (likely(!policy_is_inactive(policy)))
 		ret = fattr->store(policy, buf, count);
 	up_write(&policy->rwsem);
+
+	if (fattr == &local_boost)
+		cpus_read_unlock();
 
 	return ret;
 }
