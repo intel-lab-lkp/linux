@@ -750,7 +750,7 @@ static void restore_exclusive_pte(struct vm_area_struct *vma,
 		pte = pte_mkuffd_wp(pte);
 
 	if ((vma->vm_flags & VM_WRITE) &&
-	    can_change_pte_writable(vma, address, pte)) {
+	    can_change_ptes_writable(vma, address, pte, NULL, 1)) {
 		if (folio_test_dirty(folio))
 			pte = pte_mkdirty(pte);
 		pte = pte_mkwrite(pte, vma);
@@ -5796,7 +5796,7 @@ static void numa_rebuild_large_mapping(struct vm_fault *vmf, struct vm_area_stru
 			ptent = pte_modify(ptent, vma->vm_page_prot);
 			writable = pte_write(ptent);
 			if (!writable && pte_write_upgrade &&
-			    can_change_pte_writable(vma, addr, ptent))
+			    can_change_ptes_writable(vma, addr, ptent, NULL, 1))
 				writable = true;
 		}
 
@@ -5837,7 +5837,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	 */
 	writable = pte_write(pte);
 	if (!writable && pte_write_upgrade &&
-	    can_change_pte_writable(vma, vmf->address, pte))
+	    can_change_ptes_writable(vma, vmf->address, pte, NULL, 1))
 		writable = true;
 
 	folio = vm_normal_folio(vma, vmf->address, pte);

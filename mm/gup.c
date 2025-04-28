@@ -614,7 +614,7 @@ static inline bool can_follow_write_common(struct page *page,
 		return false;
 
 	/*
-	 * See can_change_pte_writable(): we broke COW and could map the page
+	 * See can_change_ptes_writable(): we broke COW and could map the page
 	 * writable if we have an exclusive anonymous page ...
 	 */
 	return page && PageAnon(page) && PageAnonExclusive(page);

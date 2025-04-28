@@ -2094,12 +2094,12 @@ static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
 		return false;
 
 	if (!(vma->vm_flags & VM_SHARED)) {
-		/* See can_change_pte_writable(). */
+		/* See can_change_ptes_writable(). */
 		page = vm_normal_page_pmd(vma, addr, pmd);
 		return page && PageAnon(page) && PageAnonExclusive(page);
 	}
 
-	/* See can_change_pte_writable(). */
+	/* See can_change_ptes_writable(). */
 	return pmd_dirty(pmd);
 }
 
