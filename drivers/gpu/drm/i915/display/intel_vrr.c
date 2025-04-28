@@ -263,7 +263,7 @@ int intel_vrr_fixed_rr_vtotal(const struct intel_crtc_state *crtc_state)
 	if (DISPLAY_VER(display) >= 13)
 		return crtc_vtotal;
 	else
-		return crtc_vtotal -
+		return crtc_vtotal +
 			intel_vrr_real_vblank_delay(crtc_state);
 }
 
