@@ -7867,7 +7867,8 @@ void perf_output_sample(struct perf_output_handle *handle,
 		}
 	}
 
-	if (sample_type & PERF_SAMPLE_STACK_USER) {
+	if (sample_type & PERF_SAMPLE_STACK_USER &&
+			!(current->flags & PF_EXITING)) {
 		perf_output_sample_ustack(handle,
 					  data->stack_user_size,
 					  data->regs_user.regs);
