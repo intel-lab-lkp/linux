@@ -54,6 +54,11 @@ config PINCTRL_ALDERLAKE
 	  This pinctrl driver provides an interface that allows configuring
 	  of Intel Alder Lake PCH pins and using them as GPIOs.
 
+	  Note: On some Alder Lake platforms, including systems with
+	  the PixArt I2C touchpad (PIXA3848), the hardware reuses
+	  Tiger Lake style GPIO blocks. For proper device detection,
+	  enabling CONFIG_PINCTRL_TIGERLAKE may be necessary.
+
 config PINCTRL_BROXTON
 	tristate "Intel Broxton pinctrl and GPIO driver"
 	select PINCTRL_INTEL
