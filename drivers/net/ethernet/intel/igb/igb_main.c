@@ -5573,6 +5573,8 @@ static void igb_watchdog_task(struct work_struct *work)
 	u32 connsw;
 	u16 phy_data, retry_count = 20;
 
+	rtnl_lock();
+
 	link = igb_has_link(adapter);
 
 	if (adapter->flags & IGB_FLAG_NEED_LINK_UPDATE) {
@@ -5709,7 +5711,7 @@ no_wait:
 				if (adapter->flags & IGB_FLAG_MEDIA_RESET) {
 					schedule_work(&adapter->reset_task);
 					/* return immediately */
-					return;
+					goto unlock;
 				}
 			}
 			pm_schedule_suspend(netdev->dev.parent,
@@ -5722,7 +5724,7 @@ no_wait:
 			if (adapter->flags & IGB_FLAG_MEDIA_RESET) {
 				schedule_work(&adapter->reset_task);
 				/* return immediately */
-				return;
+				goto unlock;
 			}
 		}
 	}
@@ -5743,7 +5745,7 @@ no_wait:
 				adapter->tx_timeout_count++;
 				schedule_work(&adapter->reset_task);
 				/* return immediately since reset is imminent */
-				return;
+				goto unlock;
 			}
 		}
 
@@ -5798,6 +5800,9 @@ no_wait:
 			mod_timer(&adapter->watchdog_timer,
 				  round_jiffies(jiffies + 2 * HZ));
 	}
+
+unlock:
+	rtnl_unlock();
 }
 
 enum latency_range {
