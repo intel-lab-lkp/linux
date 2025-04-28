@@ -498,6 +498,9 @@ static int ovl_verify_fh(struct ovl_fs *ofs, struct dentry *dentry,
 	struct ovl_fh *ofh = ovl_get_fh(ofs, dentry, ox);
 	int err = 0;
 
+	if (!fh)
+		return -ENODATA;
+
 	if (!ofh)
 		return -ENODATA;
 
@@ -518,7 +521,7 @@ int ovl_verify_set_fh(struct ovl_fs *ofs, struct dentry *dentry,
 	int err;
 
 	err = ovl_verify_fh(ofs, dentry, ox, fh);
-	if (set && err == -ENODATA)
+	if (set && err == -ENODATA && fh)
 		err = ovl_setxattr(ofs, dentry, ox, fh->buf, fh->fb.len);
 
 	return err;
@@ -703,6 +706,9 @@ orphan:
 int ovl_get_index_name_fh(const struct ovl_fh *fh, struct qstr *name)
 {
 	char *n, *s;
+
+	if (!fh)
+		return -EINVAL;
 
 	n = kcalloc(fh->fb.len, 2, GFP_KERNEL);
 	if (!n)

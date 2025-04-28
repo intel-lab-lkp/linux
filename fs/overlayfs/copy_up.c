@@ -491,8 +491,8 @@ int ovl_set_origin_fh(struct ovl_fs *ofs, const struct ovl_fh *fh,
 	/*
 	 * Do not fail when upper doesn't support xattrs.
 	 */
-	err = ovl_check_setxattr(ofs, upper, OVL_XATTR_ORIGIN, fh->buf,
-				 fh ? fh->fb.len : 0, 0);
+	err = ovl_check_setxattr(ofs, upper, OVL_XATTR_ORIGIN,
+				 fh ? fh->buf : NULL, fh ? fh->fb.len : 0, 0);
 
 	/* Ignore -EPERM from setting "user.*" on symlink/special */
 	return err == -EPERM ? 0 : err;
