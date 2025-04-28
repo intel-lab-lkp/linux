@@ -185,7 +185,7 @@ static inline void verify_assert_printk_format(const char *fmt, ...) {
  */
 #define __REST_ARGS(_, ... ) __VA_OPT__(,) __VA_ARGS__
 
-#if GCC_VERSION >= 80000
+#if defined(CONFIG_CC_IS_CLANG) || CONFIG_GCC_VERSION >= 80000
 /*
  * Assertion with optional printk() format.
  *
