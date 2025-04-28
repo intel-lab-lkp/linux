@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/chemical/dfrobot,sen0322.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: DFRobot SEN0322 oxygen sensor
+
+maintainers:
+  - Tóth János <gomba007@gmail.com>
+
+description: >
+  DFRobot SEN0322 is an oxygen sensor. It supports I2C for communication.
+
+  Datasheet:
+    https://wiki.dfrobot.com/Gravity_I2C_Oxygen_Sensor_SKU_SEN0322
+
+properties:
+  compatible:
+    const: dfrobot,sen0322
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      sen0322@73 {
+        compatible = "dfrobot,sen0322";
+        reg = <0x73>;
+      };
+    };
