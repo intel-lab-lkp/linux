@@ -117,4 +117,59 @@
 #define  DMC_WAKELOCK_CTL_REQ	 REG_BIT(31)
 #define  DMC_WAKELOCK_CTL_ACK	 REG_BIT(15)
 
+#define _PIPEDMC_DCB_CTL_A			0x5F1A0
+#define _PIPEDMC_DCB_CTL_B			0x5F5A0
+#define _PIPEDMC_DCB_CTL_C			0x5F9A0
+#define _PIPEDMC_DCB_CTL_D			0x5FDA0
+#define PIPEDMC_DCB_CTL(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_CTL_A)
+#define PIPEDMC_ADAPTIVE_DCB_ENABLE		REG_BIT(31)
+
+#define _PIPEDMC_DCB_VBLANK_A			0x5F1BC
+#define _PIPEDMC_DCB_VBLANK_B			0x5F5BC
+#define _PIPEDMC_DCB_VBLANK_C			0x5F9BC
+#define _PIPEDMC_DCB_VBLANK_D			0x5FDBC
+#define PIPEDMC_DCB_VBLANK(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_VBLANK_A)
+
+#define _PIPEDMC_DCB_SLOPE_A			0x5F1B8
+#define _PIPEDMC_DCB_SLOPE_B			0x5F5B8
+#define _PIPEDMC_DCB_SLOPE_C			0x5F9B8
+#define _PIPEDMC_DCB_SLOPE_D			0x5FDB8
+#define PIPEDMC_DCB_SLOPE(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_SLOPE_A)
+
+#define _PIPEDMC_DCB_GUARDBAND_A		0x5F1B4
+#define _PIPEDMC_DCB_GUARDBAND_B		0x5F5B4
+#define _PIPEDMC_DCB_GUARDBAND_C		0x5F9B4
+#define _PIPEDMC_DCB_GUARDBAND_D		0x5FDB4
+#define PIPEDMC_DCB_GUARDBAND(dev_priv, trans)	_MMIO_TRANS2(dev_priv, \
+							     trans, \
+							     _PIPEDMC_DCB_GUARDBAND_A)
+
+#define _PIPEDMC_DCB_MAX_INCREASE_A			0x5F1AC
+#define _PIPEDMC_DCB_MAX_INCREASE_B			0x5F5AC
+#define _PIPEDMC_DCB_MAX_INCREASE_C			0x5F9AC
+#define _PIPEDMC_DCB_MAX_INCREASE_D			0x5FDAC
+#define PIPEDMC_DCB_MAX_INCREASE(dev_priv, trans)	_MMIO_TRANS2(dev_priv, \
+								     trans, \
+								     _PIPEDMC_DCB_MAX_INCREASE_A)
+
+#define _PIPEDMC_DCB_MAX_DECREASE_A			0x5F1B0
+#define _PIPEDMC_DCB_MAX_DECREASE_B			0x5F5B0
+#define _PIPEDMC_DCB_MAX_DECREASE_C			0x5F9B0
+#define _PIPEDMC_DCB_MAX_DECREASE_D			0x5FDB0
+#define PIPEDMC_DCB_MAX_DECREASE(dev_priv, trans)	_MMIO_TRANS2(dev_priv, \
+								     trans, \
+								     _PIPEDMC_DCB_MAX_DECREASE_A)
+
+#define _PIPEDMC_DCB_VMIN_A			0x5F1A4
+#define _PIPEDMC_DCB_VMIN_B			0x5F5A4
+#define _PIPEDMC_DCB_VMIN_C			0x5F9A4
+#define _PIPEDMC_DCB_VMIN_D			0x5FDA4
+#define PIPEDMC_DCB_VMIN(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_VMIN_A)
+
+#define _PIPEDMC_DCB_VMAX_A			0x5F1A8
+#define _PIPEDMC_DCB_VMAX_B			0x5F5A8
+#define _PIPEDMC_DCB_VMAX_C			0x5F9A8
+#define _PIPEDMC_DCB_VMAX_D			0x5FDA8
+#define PIPEDMC_DCB_VMAX(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_VMAX_A)
+
 #endif /* __INTEL_DMC_REGS_H__ */
