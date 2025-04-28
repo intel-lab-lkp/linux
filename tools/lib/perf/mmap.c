@@ -4,6 +4,7 @@
 #include <asm/bug.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 #include <linux/ring_buffer.h>
 #include <linux/perf_event.h>
 #include <perf/mmap.h>
@@ -43,6 +44,21 @@ int perf_mmap__mmap(struct perf_mmap *map, struct perf_mmap_param *mp,
 	if (map->base == MAP_FAILED) {
 		map->base = NULL;
 		return -1;
+	}
+
+	/*
+	 * In overwrite mode, pages are mapped as read-only.  Fix the permission
+	 * to make the user page writable, as the tool needs to update
+	 * information (e.g., aux_offset/aux_size) into it.
+	 */
+	if (mp->prot == PROT_READ) {
+		const long page_sz = sysconf(_SC_PAGE_SIZE);
+
+		if (mprotect(map->base, page_sz, mp->prot | PROT_WRITE) < 0) {
+			munmap(map->base, perf_mmap__mmap_len(map));
+			map->base = NULL;
+			return -1;
+		}
 	}
 
 	map->fd  = fd;
