@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 
-CFLAGS += -O3 -Wl,-no-as-needed -Wall -I $(top_srcdir)
+CONFIG = $(top_srcdir)/include/config/auto.conf
+WERROR = $(if $(shell grep CONFIG_WERROR=y ${CONFIG}),-Werror,)
+CFLAGS += -O3 -Wl,-no-as-needed -Wall ${WERROR} -I $(top_srcdir)
 LDLIBS += -lpthread -lm -luring
 
 TEST_PROGS := test_generic_01.sh
