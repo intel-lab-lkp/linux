@@ -332,8 +332,10 @@ TEST(pid_max_simple)
 {
 	pid_t pid;
 
-
 	pid = do_clone(pid_max_cb, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	if (errno == EPERM)
+		SKIP(return, "Must be run as root");
+
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
@@ -343,6 +345,9 @@ TEST(pid_max_nested_limit)
 	pid_t pid;
 
 	pid = do_clone(pid_max_nested_limit_outer, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	if (errno == EPERM)
+		SKIP(return, "Must be run as root");
+
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
@@ -352,6 +357,9 @@ TEST(pid_max_nested)
 	pid_t pid;
 
 	pid = do_clone(pid_max_nested_outer, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	if (errno == EPERM)
+		SKIP(return, "Must be run as root");
+
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
