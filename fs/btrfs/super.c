@@ -569,6 +569,12 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		break;
 	case Opt_commit_interval:
 		ctx->commit_interval = result.uint_32;
+		if (ctx->commit_interval > BTRFS_WARNING_COMMIT_INTERVAL) {
+			btrfs_warn(NULL,
+"commit=%u is considerably high (> %u). Large amount of data can be lost when the system crashes.",
+				ctx->commit_interval,
+				BTRFS_WARNING_COMMIT_INTERVAL);
+		}
 		if (ctx->commit_interval == 0)
 			ctx->commit_interval = BTRFS_DEFAULT_COMMIT_INTERVAL;
 		break;
