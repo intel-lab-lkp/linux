@@ -10,6 +10,7 @@
 #include <linux/bitops.h>
 #include <linux/of.h>
 #include <linux/phy.h>
+#include <linux/netdevice.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
@@ -37,6 +38,10 @@
 #define RTL8211F_PHYCR2_PHY_EEE_ENABLE		BIT(5)
 
 #define RTL8211F_INSR				0x1d
+
+#define RTL8211F_WOL_MAGIC			BIT(12)
+#define RTL8211F_WOL_CLEAR			(BIT(15) | 0x1fff)
+#define RTL8211F_WOL_INT_ENABLE			BIT(5)
 
 #define RTL8211F_LEDCR				0x10
 #define RTL8211F_LEDCR_MODE			BIT(15)
@@ -123,6 +128,7 @@ struct rtl821x_priv {
 	u16 phycr2;
 	bool has_phycr2;
 	struct clk *clk;
+	u32 saved_wolopts;
 };
 
 static int rtl821x_read_page(struct phy_device *phydev)
@@ -352,6 +358,56 @@ static irqreturn_t rtl8211f_handle_interrupt(struct phy_device *phydev)
 	phy_trigger_machine(phydev);
 
 	return IRQ_HANDLED;
+}
+
+static void rtl8211f_get_wol(struct phy_device *dev, struct ethtool_wolinfo *wol)
+{
+	struct rtl821x_priv *priv = dev->priv;
+
+	wol->supported = WAKE_MAGIC;
+	wol->wolopts = priv->saved_wolopts;
+}
+
+static int rtl8211f_set_wol(struct phy_device *dev, struct ethtool_wolinfo *wol)
+{
+	struct rtl821x_priv *priv = dev->priv;
+	const u8 *mac_addr = dev->attached_dev->dev_addr;
+	int oldpage;
+
+	oldpage = phy_save_page(dev);
+	if (oldpage < 0)
+		goto err;
+
+	if (wol->wolopts & WAKE_MAGIC) {
+		/* Store the device address for the magic packet */
+		rtl821x_write_page(dev, 0xd8c);
+		__phy_write(dev, 16, mac_addr[1] << 8 | (mac_addr[0]));
+		__phy_write(dev, 17, mac_addr[3] << 8 | (mac_addr[2]));
+		__phy_write(dev, 18, mac_addr[5] << 8 | (mac_addr[4]));
+
+		/* Clear WOL status and enable magic packet matching */
+		rtl821x_write_page(dev, 0xd8a);
+		__phy_write(dev, 16, RTL8211F_WOL_MAGIC);
+		__phy_write(dev, 17, RTL8211F_WOL_CLEAR);
+
+		/* Enable the WOL interrupt */
+		rtl821x_write_page(dev, 0xd40);
+		__phy_set_bits(dev, 0x16, RTL8211F_WOL_INT_ENABLE);
+	} else {
+		/* Disable the WOL interrupt */
+		rtl821x_write_page(dev, 0xd40);
+		__phy_clear_bits(dev, 0x16, RTL8211F_WOL_INT_ENABLE);
+
+		/* Clear WOL status and disable magic packet matching */
+		rtl821x_write_page(dev, 0xd8a);
+		__phy_write(dev, 16, 0x0);
+		__phy_write(dev, 17, RTL8211F_WOL_CLEAR);
+	}
+
+	priv->saved_wolopts = wol->wolopts;
+
+err:
+	return phy_restore_page(dev, oldpage, 0);
 }
 
 static int rtl8211_config_aneg(struct phy_device *phydev)
@@ -1400,6 +1456,8 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status	= rtlgen_read_status,
 		.config_intr	= &rtl8211f_config_intr,
 		.handle_interrupt = rtl8211f_handle_interrupt,
+		.set_wol	= rtl8211f_set_wol,
+		.get_wol	= rtl8211f_get_wol,
 		.suspend	= rtl821x_suspend,
 		.resume		= rtl821x_resume,
 		.read_page	= rtl821x_read_page,
