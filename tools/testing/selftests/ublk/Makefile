@@ -2,7 +2,7 @@
 
 CONFIG = $(top_srcdir)/include/config/auto.conf
 WERROR = $(if $(shell grep CONFIG_WERROR=y ${CONFIG}),-Werror,)
-CFLAGS += -O3 -Wl,-no-as-needed -Wall ${WERROR} -I $(top_srcdir)
+CFLAGS += -O3 -Wl,-no-as-needed -Wall ${WERROR} -I $(top_srcdir)/usr/include
 LDLIBS += -lpthread -lm -luring
 
 TEST_PROGS := test_generic_01.sh
