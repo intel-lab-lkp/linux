@@ -1683,9 +1683,7 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 
 	ri->cfg = pci_acpi_setup_ecam_mapping(root);
 	if (!ri->cfg) {
-		kfree(ri);
-		kfree(root_ops);
-		return NULL;
+		goto cleanup_exit;
 	}
 
 	root_ops->release_info = pci_acpi_generic_release_info;
@@ -1693,7 +1691,7 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 	root_ops->pci_ops = (struct pci_ops *)&ri->cfg->ops->pci_ops;
 	bus = acpi_pci_root_create(root, root_ops, &ri->common, ri->cfg);
 	if (!bus)
-		return NULL;
+		goto cleanup_exit;
 
 	/* If we must preserve the resource configuration, claim now */
 	host = pci_find_host_bridge(bus);
@@ -1710,6 +1708,11 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 		pcie_bus_configure_settings(child);
 
 	return bus;
+
+cleanup_exit:
+	kfree(root_ops);
+	kfree(ri);
+	return NULL;
 }
 
 void pcibios_add_bus(struct pci_bus *bus)
