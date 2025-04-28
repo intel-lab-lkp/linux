@@ -265,16 +265,48 @@ static void ksz_phylink_mac_link_down(struct phylink_config *config,
 				      unsigned int mode,
 				      phy_interface_t interface);
 
+/**
+ * ksz_phylink_mac_disable_tx_lpi() - Dummy handler to disable TX LPI
+ * @config: phylink config structure
+ *
+ * For ports with integrated PHYs, LPI is managed internally by hardware.
+ * Ports without integrated PHYs do not document MAC-level LPI support.
+ * No software action is needed.
+ */
+static void ksz_phylink_mac_disable_tx_lpi(struct phylink_config *config)
+{
+}
+
+/**
+ * ksz_phylink_mac_enable_tx_lpi() - Dummy handler to enable TX LPI
+ * @config: phylink config structure
+ * @timer: timer value before entering LPI
+ * @tx_clock_stop: whether to stop the TX clock in LPI mode
+ *
+ * For ports with integrated PHYs, LPI is managed internally by hardware.
+ * Ports without integrated PHYs do not document MAC-level LPI support.
+ * Always return success.
+ */
+static int ksz_phylink_mac_enable_tx_lpi(struct phylink_config *config,
+					 u32 timer, bool tx_clock_stop)
+{
+	return 0;
+}
+
 static const struct phylink_mac_ops ksz88x3_phylink_mac_ops = {
 	.mac_config	= ksz88x3_phylink_mac_config,
 	.mac_link_down	= ksz_phylink_mac_link_down,
 	.mac_link_up	= ksz8_phylink_mac_link_up,
+	.mac_disable_tx_lpi = ksz_phylink_mac_disable_tx_lpi,
+	.mac_enable_tx_lpi = ksz_phylink_mac_enable_tx_lpi,
 };
 
 static const struct phylink_mac_ops ksz8_phylink_mac_ops = {
 	.mac_config	= ksz_phylink_mac_config,
 	.mac_link_down	= ksz_phylink_mac_link_down,
 	.mac_link_up	= ksz8_phylink_mac_link_up,
+	.mac_disable_tx_lpi = ksz_phylink_mac_disable_tx_lpi,
+	.mac_enable_tx_lpi = ksz_phylink_mac_enable_tx_lpi,
 };
 
 static const struct ksz_dev_ops ksz88xx_dev_ops = {
@@ -358,6 +390,8 @@ static const struct phylink_mac_ops ksz9477_phylink_mac_ops = {
 	.mac_config	= ksz_phylink_mac_config,
 	.mac_link_down	= ksz_phylink_mac_link_down,
 	.mac_link_up	= ksz9477_phylink_mac_link_up,
+	.mac_disable_tx_lpi = ksz_phylink_mac_disable_tx_lpi,
+	.mac_enable_tx_lpi = ksz_phylink_mac_enable_tx_lpi,
 };
 
 static const struct ksz_dev_ops ksz9477_dev_ops = {
@@ -401,6 +435,8 @@ static const struct phylink_mac_ops lan937x_phylink_mac_ops = {
 	.mac_config	= ksz_phylink_mac_config,
 	.mac_link_down	= ksz_phylink_mac_link_down,
 	.mac_link_up	= ksz9477_phylink_mac_link_up,
+	.mac_disable_tx_lpi = ksz_phylink_mac_disable_tx_lpi,
+	.mac_enable_tx_lpi = ksz_phylink_mac_enable_tx_lpi,
 };
 
 static const struct ksz_dev_ops lan937x_dev_ops = {
@@ -2016,6 +2052,18 @@ static void ksz_phylink_get_caps(struct dsa_switch *ds, int port,
 
 	if (dev->dev_ops->get_caps)
 		dev->dev_ops->get_caps(dev, port, config);
+
+	if (ds->ops->support_eee && ds->ops->support_eee(ds, port)) {
+		memcpy(config->lpi_interfaces, config->supported_interfaces,
+		       sizeof(config->lpi_interfaces));
+
+		config->lpi_capabilities = MAC_100FD;
+		if (dev->info->gbit_capable[port])
+			config->lpi_capabilities |= MAC_1000FD;
+
+		/* EEE is fully operational */
+		config->eee_enabled_default = true;
+	}
 }
 
 void ksz_r_mib_stats64(struct ksz_device *dev, int port)
@@ -3008,31 +3056,6 @@ static u32 ksz_get_phy_flags(struct dsa_switch *ds, int port)
 		if (!port)
 			return MICREL_KSZ8_P1_ERRATA;
 		break;
-	case KSZ8567_CHIP_ID:
-		/* KSZ8567R Errata DS80000752C Module 4 */
-	case KSZ8765_CHIP_ID:
-	case KSZ8794_CHIP_ID:
-	case KSZ8795_CHIP_ID:
-		/* KSZ879x/KSZ877x/KSZ876x Errata DS80000687C Module 2 */
-	case KSZ9477_CHIP_ID:
-		/* KSZ9477S Errata DS80000754A Module 4 */
-	case KSZ9567_CHIP_ID:
-		/* KSZ9567S Errata DS80000756A Module 4 */
-	case KSZ9896_CHIP_ID:
-		/* KSZ9896C Errata DS80000757A Module 3 */
-	case KSZ9897_CHIP_ID:
-	case LAN9646_CHIP_ID:
-		/* KSZ9897R Errata DS80000758C Module 4 */
-		/* Energy Efficient Ethernet (EEE) feature select must be manually disabled
-		 *   The EEE feature is enabled by default, but it is not fully
-		 *   operational. It must be manually disabled through register
-		 *   controls. If not disabled, the PHY ports can auto-negotiate
-		 *   to enable EEE, and this feature can cause link drops when
-		 *   linked to another device supporting EEE.
-		 *
-		 * The same item appears in the errata for all switches above.
-		 */
-		return MICREL_NO_EEE;
 	}
 
 	return 0;
@@ -3475,15 +3498,33 @@ static bool ksz_support_eee(struct dsa_switch *ds, int port)
 
 	switch (dev->chip_id) {
 	case KSZ8563_CHIP_ID:
-	case KSZ8567_CHIP_ID:
-	case KSZ9477_CHIP_ID:
 	case KSZ9563_CHIP_ID:
-	case KSZ9567_CHIP_ID:
 	case KSZ9893_CHIP_ID:
+		return true;
+	case KSZ8567_CHIP_ID:
+		/* KSZ8567R Errata DS80000752C Module 4 */
+	case KSZ8765_CHIP_ID:
+	case KSZ8794_CHIP_ID:
+	case KSZ8795_CHIP_ID:
+		/* KSZ879x/KSZ877x/KSZ876x Errata DS80000687C Module 2 */
+	case KSZ9477_CHIP_ID:
+		/* KSZ9477S Errata DS80000754A Module 4 */
+	case KSZ9567_CHIP_ID:
+		/* KSZ9567S Errata DS80000756A Module 4 */
 	case KSZ9896_CHIP_ID:
+		/* KSZ9896C Errata DS80000757A Module 3 */
 	case KSZ9897_CHIP_ID:
 	case LAN9646_CHIP_ID:
-		return true;
+		/* KSZ9897R Errata DS80000758C Module 4 */
+		/* Energy Efficient Ethernet (EEE) feature select must be manually disabled
+		 *   The EEE feature is enabled by default, but it is not fully
+		 *   operational. It must be manually disabled through register
+		 *   controls. If not disabled, the PHY ports can auto-negotiate
+		 *   to enable EEE, and this feature can cause link drops when
+		 *   linked to another device supporting EEE.
+		 *
+		 * The same item appears in the errata for all switches above.
+		 */
 	}
 
 	return false;
