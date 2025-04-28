@@ -1769,7 +1769,7 @@ SYSCALL_DEFINE2(setrlimit, unsigned int, resource, struct rlimit __user *, rlim)
  * given child after it's reaped, or none so this sample is before reaping.
  *
  * Locking:
- * We need to take the siglock for CHILDEREN, SELF and BOTH
+ * We need to take the siglock for CHILDREN, SELF and BOTH
  * for  the cases current multithreaded, non-current single threaded
  * non-current multithreaded.  Thread traversal is now safe with
  * the siglock held.
