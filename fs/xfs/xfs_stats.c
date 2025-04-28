@@ -24,6 +24,12 @@ int xfs_stats_format(struct xfsstats __percpu *stats, char *buf)
 	uint64_t	xs_write_bytes = 0;
 	uint64_t	xs_read_bytes = 0;
 	uint64_t	defer_relog = 0;
+	uint64_t	pg_alloc = 0;
+	uint64_t	pg_free = 0;
+	uint64_t	kbb_alloc = 0;
+	uint64_t	kbb_free = 0;
+	uint64_t	vbb_alloc = 0;
+	uint64_t	vbb_free = 0;
 
 	static const struct xstats_entry {
 		char	*desc;
@@ -77,6 +83,12 @@ int xfs_stats_format(struct xfsstats __percpu *stats, char *buf)
 		xs_write_bytes += per_cpu_ptr(stats, i)->s.xs_write_bytes;
 		xs_read_bytes += per_cpu_ptr(stats, i)->s.xs_read_bytes;
 		defer_relog += per_cpu_ptr(stats, i)->s.defer_relog;
+		pg_alloc += per_cpu_ptr(stats, i)->s.xs_buf_page_alloc;
+		pg_free += per_cpu_ptr(stats, i)->s.xs_buf_page_free;
+		kbb_alloc += per_cpu_ptr(stats, i)->s.xs_buf_kbb_alloc;
+		kbb_free += per_cpu_ptr(stats, i)->s.xs_buf_kbb_free;
+		vbb_alloc += per_cpu_ptr(stats, i)->s.xs_buf_vbb_alloc;
+		vbb_free += per_cpu_ptr(stats, i)->s.xs_buf_vbb_free;
 	}
 
 	len += scnprintf(buf + len, PATH_MAX-len, "xpc %llu %llu %llu\n",
@@ -89,6 +101,10 @@ int xfs_stats_format(struct xfsstats __percpu *stats, char *buf)
 #else
 		0);
 #endif
+	len += scnprintf(buf + len, PATH_MAX-len,
+			 "cache %llu %llu %llu %llu %llu %llu\n",
+			 pg_alloc, pg_free, kbb_alloc, kbb_free,
+			 vbb_alloc, vbb_free);
 
 	return len;
 }

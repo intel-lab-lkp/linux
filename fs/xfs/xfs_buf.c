@@ -113,12 +113,17 @@ xfs_buf_free(
 	if (!xfs_buftarg_is_mem(bp->b_target) && size >= PAGE_SIZE)
 		mm_account_reclaimed_pages(howmany(size, PAGE_SHIFT));
 
-	if (is_vmalloc_addr(bp->b_addr))
+	if (is_vmalloc_addr(bp->b_addr)) {
 		vfree(bp->b_addr);
-	else if (bp->b_flags & _XBF_KMEM)
+		XFS_STATS_ADD(bp->b_mount, xs_buf_vbb_free, bp->b_length);
+	} else if (bp->b_flags & _XBF_KMEM) {
 		kfree(bp->b_addr);
-	else
+		XFS_STATS_ADD(bp->b_mount, xs_buf_kbb_free, bp->b_length);
+	} else {
 		folio_put(virt_to_folio(bp->b_addr));
+		XFS_STATS_ADD(bp->b_mount, xs_buf_page_free,
+			      BBTOB(bp->b_length) >> PAGE_SHIFT);
+	}
 
 	call_rcu(&bp->b_rcu, xfs_buf_free_callback);
 }
@@ -147,6 +152,7 @@ xfs_buf_alloc_kmem(
 		return -ENOMEM;
 	}
 	bp->b_flags |= _XBF_KMEM;
+	XFS_STATS_ADD(bp->b_mount, xs_buf_kbb_alloc, bp->b_length);
 	trace_xfs_buf_backing_kmem(bp, _RET_IP_);
 	return 0;
 }
@@ -232,6 +238,7 @@ xfs_buf_alloc_backing_mem(
 	}
 	bp->b_addr = folio_address(folio);
 	trace_xfs_buf_backing_folio(bp, _RET_IP_);
+	XFS_STATS_ADD(bp->b_mount, xs_buf_page_alloc, size >> PAGE_SHIFT);
 	return 0;
 
 fallback:
@@ -244,7 +251,7 @@ fallback:
 		XFS_STATS_INC(bp->b_mount, xb_page_retries);
 		memalloc_retry_wait(gfp_mask);
 	}
-
+	XFS_STATS_ADD(bp->b_mount, xs_buf_vbb_alloc, bp->b_length);
 	trace_xfs_buf_backing_vmalloc(bp, _RET_IP_);
 	return 0;
 }

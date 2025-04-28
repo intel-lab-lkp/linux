@@ -143,6 +143,14 @@ struct __xfsstats {
 	uint64_t		xs_write_bytes;
 	uint64_t		xs_read_bytes;
 	uint64_t		defer_relog;
+
+	/* number of pages/bbs allocated/freed in buffer cache */
+	uint64_t		xs_buf_page_alloc;
+	uint64_t		xs_buf_page_free;
+	uint64_t		xs_buf_kbb_alloc;
+	uint64_t		xs_buf_kbb_free;
+	uint64_t		xs_buf_vbb_alloc;
+	uint64_t		xs_buf_vbb_free;
 };
 
 #define	xfsstats_offset(f)	(offsetof(struct __xfsstats, f)/sizeof(uint32_t))
