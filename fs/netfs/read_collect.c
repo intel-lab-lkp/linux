@@ -653,7 +653,6 @@ ssize_t netfs_wait_for_read(struct netfs_io_request *rreq)
 		switch (rreq->origin) {
 		case NETFS_DIO_READ:
 		case NETFS_READ_SINGLE:
-			ret = rreq->transferred;
 			break;
 		default:
 			if (rreq->submitted < rreq->len) {
