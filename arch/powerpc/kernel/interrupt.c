@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <linux/context_tracking.h>
+#include <linux/entry-common.h>
 #include <linux/err.h>
 #include <linux/compat.h>
 #include <linux/rseq.h>
@@ -167,14 +168,9 @@ notrace unsigned long syscall_exit_prepare(unsigned long r3,
 	unsigned long ret = 0;
 	bool is_not_scv = !IS_ENABLED(CONFIG_PPC_BOOK3S_64) || !scv;
 
-	CT_WARN_ON(ct_state() == CT_STATE_USER);
-
 	kuap_assert_locked();
 
 	regs->result = r3;
-
-	/* Check whether the syscall is issued inside a restartable sequence */
-	rseq_syscall(regs);
 
 	ti_flags = read_thread_flags();
 
@@ -196,13 +192,27 @@ notrace unsigned long syscall_exit_prepare(unsigned long r3,
 	}
 
 	if (unlikely(ti_flags & _TIF_SYSCALL_DOTRACE)) {
-		do_syscall_trace_leave(regs);
 		ret |= _TIF_RESTOREALL;
 	}
 
-	local_irq_disable();
-	ret = interrupt_exit_user_prepare_main(ret, regs);
+again:
+	syscall_exit_to_user_mode(regs);
 
+	user_enter_irqoff();
+	if (!prep_irq_for_enabled_exit(true)) {
+		user_exit_irqoff();
+		local_irq_enable();
+		local_irq_disable();
+		goto again;
+	}
+
+	/* Restore user access locks last */
+	kuap_user_restore(regs);
+
+	if (unlikely((local_paca->generic_fw_flags & GFW_RESTORE_ALL) == GFW_RESTORE_ALL)) {
+		ret |= _TIF_RESTOREALL;
+		local_paca->generic_fw_flags &= ~GFW_RESTORE_ALL;
+	}
 #ifdef CONFIG_PPC64
 	regs->exit_result = ret;
 #endif
@@ -213,6 +223,7 @@ notrace unsigned long syscall_exit_prepare(unsigned long r3,
 #ifdef CONFIG_PPC64
 notrace unsigned long syscall_exit_restart(unsigned long r3, struct pt_regs *regs)
 {
+	unsigned long ret = 0;
 	/*
 	 * This is called when detecting a soft-pending interrupt as well as
 	 * an alternate-return interrupt. So we can't just have the alternate
@@ -226,14 +237,23 @@ notrace unsigned long syscall_exit_restart(unsigned long r3, struct pt_regs *reg
 #ifdef CONFIG_PPC_BOOK3S_64
 	set_kuap(AMR_KUAP_BLOCKED);
 #endif
+again:
+	syscall_exit_to_user_mode(regs);
 
-	trace_hardirqs_off();
-	user_exit_irqoff();
-	account_cpu_user_entry();
+	user_enter_irqoff();
+	if (!prep_irq_for_enabled_exit(true)) {
+		user_exit_irqoff();
+		local_irq_enable();
+		local_irq_disable();
+		goto again;
+	}
 
-	BUG_ON(!user_mode(regs));
+	if (unlikely((local_paca->generic_fw_flags & GFW_RESTORE_ALL) == GFW_RESTORE_ALL)) {
+		ret = _TIF_RESTOREALL;
+		local_paca->generic_fw_flags &= ~GFW_RESTORE_ALL;
+	}
 
-	regs->exit_result = interrupt_exit_user_prepare_main(regs->exit_result, regs);
+	regs->exit_result |= ret;
 
 	return regs->exit_result;
 }
