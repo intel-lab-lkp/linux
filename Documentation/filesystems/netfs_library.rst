@@ -275,11 +275,6 @@ handle falling back from one source type to another.  The members are:
      This can be set to indicate that the remainder of the slice, from
      transferred to len, should be cleared.
 
-   * ``NETFS_SREQ_SEEK_DATA_READ``
-
-     This is a hint to the cache that it might want to try skipping ahead to
-     the next data (ie. using SEEK_DATA).
-
  * ``debug_index``
 
    A number allocated to this slice that can be displayed in trace lines for
