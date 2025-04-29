@@ -56,17 +56,26 @@ struct aer_capability_regs {
 #if defined(CONFIG_PCIEAER)
 int pci_aer_clear_nonfatal_status(struct pci_dev *dev);
 int pcie_aer_is_native(struct pci_dev *dev);
+void pci_print_aer(char *level, struct pci_dev *dev, int aer_severity,
+		   struct aer_capability_regs *aer);
 #else
 static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 {
 	return -EINVAL;
 }
 static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
+static inline void pci_print_aer(char *level, struct pci_dev *dev,
+				 int aer_severity,
+				 struct aer_capability_regs *aer)
+{ }
 #endif
 
-void pci_print_aer(char *level, struct pci_dev *dev, int aer_severity,
-		   struct aer_capability_regs *aer);
+#if defined(CONFIG_ACPI_APEI_PCIEAER)
 int cper_severity_to_aer(int cper_severity);
+#else
+static inline int cper_severity_to_aer(int cper_severity) { return 0; }
+#endif
+
 void aer_recover_queue(int domain, unsigned int bus, unsigned int devfn,
 		       int severity, struct aer_capability_regs *aer_regs);
 #endif //_AER_H_
