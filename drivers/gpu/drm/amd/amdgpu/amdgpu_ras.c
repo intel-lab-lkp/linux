@@ -184,9 +184,7 @@ static int amdgpu_reserve_page_direct(struct amdgpu_device *adev, uint64_t addre
 		return 0;
 	}
 
-	ret = amdgpu_ras_error_data_init(&err_data);
-	if (ret)
-		return ret;
+	amdgpu_ras_error_data_init(&err_data);
 
 	memset(&err_rec, 0x0, sizeof(struct eeprom_table_record));
 	err_data.err_addr = &err_rec;
@@ -689,8 +687,7 @@ static struct ras_manager *amdgpu_ras_create_obj(struct amdgpu_device *adev,
 	if (alive_obj(obj))
 		return NULL;
 
-	if (amdgpu_ras_error_data_init(&obj->err_data))
-		return NULL;
+	amdgpu_ras_error_data_init(&obj->err_data);
 
 	obj->head = *head;
 	obj->adev = adev;
@@ -1430,9 +1427,7 @@ static int amdgpu_ras_query_error_status_with_event(struct amdgpu_device *adev,
 	if (!obj)
 		return -EINVAL;
 
-	ret = amdgpu_ras_error_data_init(&err_data);
-	if (ret)
-		return ret;
+	amdgpu_ras_error_data_init(&err_data);
 
 	if (!amdgpu_ras_get_error_query_mode(adev, &error_query_mode))
 		return -EINVAL;
@@ -2271,9 +2266,7 @@ static void amdgpu_ras_interrupt_umc_handler(struct ras_manager *obj,
 	if (!data->cb)
 		return;
 
-	ret = amdgpu_ras_error_data_init(&err_data);
-	if (ret)
-		return;
+	amdgpu_ras_error_data_init(&err_data);
 
 	/* Let IP handle its data, maybe we need get the output
 	 * from the callback to update the error type/count, etc
@@ -4932,13 +4925,11 @@ void amdgpu_ras_inst_reset_ras_error_count(struct amdgpu_device *adev,
 	}
 }
 
-int amdgpu_ras_error_data_init(struct ras_err_data *err_data)
+void amdgpu_ras_error_data_init(struct ras_err_data *err_data)
 {
 	memset(err_data, 0, sizeof(*err_data));
 
 	INIT_LIST_HEAD(&err_data->err_node_list);
-
-	return 0;
 }
 
 static void amdgpu_ras_error_node_release(struct ras_err_node *err_node)

@@ -52,9 +52,7 @@ int amdgpu_umc_page_retirement_mca(struct amdgpu_device *adev,
 	struct ras_err_data err_data;
 	int ret;
 
-	ret = amdgpu_ras_error_data_init(&err_data);
-	if (ret)
-		return ret;
+	amdgpu_ras_error_data_init(&err_data);
 
 	err_data.err_addr =
 		kcalloc(adev->umc.max_ras_err_cnt_per_query,
@@ -231,9 +229,7 @@ int amdgpu_umc_pasid_poison_handler(struct amdgpu_device *adev,
 			};
 			struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head);
 
-			ret = amdgpu_ras_error_data_init(&err_data);
-			if (ret)
-				return ret;
+			amdgpu_ras_error_data_init(&err_data);
 
 			ret = amdgpu_umc_do_page_retirement(adev, &err_data, NULL, reset);
 
