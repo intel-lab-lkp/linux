@@ -25,6 +25,7 @@ struct f_hid_opts {
 	unsigned short			report_desc_length;
 	unsigned char			*report_desc;
 	bool				report_desc_alloc;
+	unsigned char			interval;
 
 	/*
 	 * Protect the data form concurrent access by read/write
