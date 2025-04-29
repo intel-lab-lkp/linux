@@ -177,6 +177,7 @@ static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
 	struct xe_devcoredump *coredump = data;
 	struct xe_devcoredump_snapshot *ss;
 	ssize_t byte_copied;
+	u32 chunk_offset;
 
 	if (!coredump)
 		return -ENODEV;
@@ -203,8 +204,9 @@ static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
 
 	if (offset >= ss->read.chunk_position + XE_DEVCOREDUMP_CHUNK_MAX ||
 	    offset < ss->read.chunk_position) {
-		ss->read.chunk_position =
-			ALIGN_DOWN(offset, XE_DEVCOREDUMP_CHUNK_MAX);
+		ss->read.chunk_position = div_u64_rem(offset,
+			XE_DEVCOREDUMP_CHUNK_MAX, &chunk_offset)
+			* XE_DEVCOREDUMP_CHUNK_MAX;
 
 		__xe_devcoredump_read(ss->read.buffer,
 				      XE_DEVCOREDUMP_CHUNK_MAX,
@@ -213,8 +215,7 @@ static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
 
 	byte_copied = count < ss->read.size - offset ? count :
 		ss->read.size - offset;
-	memcpy(buffer, ss->read.buffer +
-	       (offset % XE_DEVCOREDUMP_CHUNK_MAX), byte_copied);
+	memcpy(buffer, ss->read.buffer + chunk_offset, byte_copied);
 
 	mutex_unlock(&coredump->lock);
 
