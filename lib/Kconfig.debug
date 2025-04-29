@@ -436,7 +436,28 @@ config GDB_SCRIPTS
 	  instance. See Documentation/process/debugging/gdb-kernel-debugging.rst
 	  for further details.
 
+
 endif # DEBUG_INFO
+
+config NO_AUTO_INLINE
+	bool "Disable compiler auto-inline optimizations (EXPERIMENTAL)"
+	default n
+	help
+	  This will prevent the compiler from optimizing the kernel by
+	  auto-inlining functions not marked with the inline keyword.
+	  With this option, only functions explicitly marked with
+	  "inline" will be inlined. This will allow the function tracer
+	  to trace more functions because it only traces functions that
+	  the compiler has not inlined.
+
+	  Note that Clang with -O2 optimization does not fully support
+	  disabling all inline-related optimizations,
+	  as Clang does not support options like
+	  -fno-inline-small-functions and -fno-inline-functions-called-once
+	  that gcc does.
+	  Some functions without the inline keyword may still be inlined.
+
+	  If unsure, select N.
 
 config FRAME_WARN
 	int "Warn for stack frames larger than"

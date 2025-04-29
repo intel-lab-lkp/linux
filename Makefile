@@ -1073,6 +1073,22 @@ endif
 # Ensure compilers do not transform certain loops into calls to wcslen()
 KBUILD_CFLAGS += -fno-builtin-wcslen
 
+ifdef CONFIG_NO_AUTO_INLINE
+# -fno-inline-functions behaves differently between gcc and clang.
+# With gcc, it prevents auto-inlining of functions but still considers functions
+# explicitly marked with "inline" for inlining. However, with clang, the flag
+# prevents inlining of all functions, including those explicitly marked with
+# inline. Clang provides the "-finline-hint-functions" option, which
+# specifically allows inlining of functions marked with "inline".
+#
+# In summary, to achieve equivalent behavior across compilers:
+# -fno-inline-functions (gcc) = -fno-inline-functions + -finline-hint-functions (clang)
+KBUILD_CFLAGS   += -fno-inline-functions \
+		   $(call cc-option, -finline-hint-functions) \
+		   $(call cc-option, -fno-inline-small-functions) \
+		   $(call cc-option, -fno-inline-functions-called-once)
+endif
+
 # change __FILE__ to the relative path to the source directory
 ifdef building_out_of_srctree
 KBUILD_CPPFLAGS += $(call cc-option,-ffile-prefix-map=$(srcroot)/=)

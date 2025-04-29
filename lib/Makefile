@@ -87,6 +87,9 @@ obj-$(CONFIG_TEST_BITMAP) += test_bitmap.o
 ifeq ($(CONFIG_CC_IS_CLANG)$(CONFIG_KASAN),yy)
 # FIXME: Clang breaks test_bitmap_const_eval when KASAN and GCOV are enabled
 GCOV_PROFILE_test_bitmap.o := n
+# FIXME:
+# Clang breaks test_bitmap_const_eval when NO_AUTO_INLINE and KASAN are enabled
+CFLAGS_test_bitmap.o += -finline-functions
 endif
 
 obj-$(CONFIG_TEST_UUID) += test_uuid.o
