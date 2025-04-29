@@ -104,17 +104,19 @@ struct ppe_mbox_data {
 			u8 xpon_hal_api;
 			u8 wan_xsi;
 			u8 ct_joyme4;
-			int ppe_type;
-			int wan_mode;
-			int wan_sel;
-		} init_info;
+			u8 max_packet;
+			u8 rsv[3]; /* align to fw layout */
+			u32 ppe_type;
+			u32 wan_mode;
+			u32 wan_sel;
+		} __packed init_info;
 		struct {
-			int func_id;
+			u32 func_id;
 			u32 size;
 			u32 data;
-		} set_info;
+		} __packed set_info;
 	};
-};
+} __packed;
 
 static int airoha_npu_send_msg(struct airoha_npu *npu, int func_id,
 			       void *p, int size)
