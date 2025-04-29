@@ -696,7 +696,7 @@ static void __xen_pgd_walk(struct mm_struct *mm, pgd_t *pgd,
 	(*func)(mm, virt_to_page(pgd), PT_PGD);
 }
 
-static void xen_pgd_walk(struct mm_struct *mm,
+static void __init xen_pgd_walk(struct mm_struct *mm,
 			 void (*func)(struct mm_struct *mm, struct page *,
 				      enum pt_level),
 			 unsigned long limit)
