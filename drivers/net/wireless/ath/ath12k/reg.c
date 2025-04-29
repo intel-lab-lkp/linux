@@ -176,6 +176,12 @@ int ath12k_reg_update_chan_list(struct ath12k *ar, bool wait)
 			if (bands[band]->channels[i].flags &
 			    IEEE80211_CHAN_DISABLED)
 				continue;
+			/* Skip Channels that are not in current radio's range */
+			if (bands[band]->channels[i].center_freq <
+			    KHZ_TO_MHZ(ar->freq_range.start_freq) ||
+			    bands[band]->channels[i].center_freq >
+			    KHZ_TO_MHZ(ar->freq_range.end_freq))
+				continue;
 
 			num_channels++;
 		}
@@ -202,6 +208,13 @@ int ath12k_reg_update_chan_list(struct ath12k *ar, bool wait)
 			channel = &bands[band]->channels[i];
 
 			if (channel->flags & IEEE80211_CHAN_DISABLED)
+				continue;
+
+			/* Skip Channels that are not in current radio's range */
+			if (bands[band]->channels[i].center_freq <
+			    KHZ_TO_MHZ(ar->freq_range.start_freq) ||
+			    bands[band]->channels[i].center_freq >
+			    KHZ_TO_MHZ(ar->freq_range.end_freq))
 				continue;
 
 			/* TODO: Set to true/false based on some condition? */
@@ -516,6 +529,11 @@ static void ath12k_reg_intersect_rules(struct ieee80211_reg_rule *rule1,
 	/* Use the flags of both the rules */
 	new_rule->flags = rule1->flags | rule2->flags;
 
+	if ((rule1->flags & NL80211_RRF_PSD) && (rule2->flags & NL80211_RRF_PSD))
+		new_rule->psd = min_t(s8, rule1->psd, rule2->psd);
+	else
+		new_rule->flags &= ~NL80211_RRF_PSD;
+
 	/* To be safe, lts use the max cac timeout of both rules */
 	new_rule->dfs_cac_ms = max_t(u32, rule1->dfs_cac_ms,
 				     rule2->dfs_cac_ms);
@@ -613,13 +631,14 @@ ath12k_reg_adjust_bw(u16 start_freq, u16 end_freq, u16 max_bw)
 static void
 ath12k_reg_update_rule(struct ieee80211_reg_rule *reg_rule, u32 start_freq,
 		       u32 end_freq, u32 bw, u32 ant_gain, u32 reg_pwr,
-		       u32 reg_flags)
+		       s8 psd, u32 reg_flags)
 {
 	reg_rule->freq_range.start_freq_khz = MHZ_TO_KHZ(start_freq);
 	reg_rule->freq_range.end_freq_khz = MHZ_TO_KHZ(end_freq);
 	reg_rule->freq_range.max_bandwidth_khz = MHZ_TO_KHZ(bw);
 	reg_rule->power_rule.max_antenna_gain = DBI_TO_MBI(ant_gain);
 	reg_rule->power_rule.max_eirp = DBM_TO_MBM(reg_pwr);
+	reg_rule->psd = psd;
 	reg_rule->flags = reg_flags;
 }
 
@@ -641,7 +660,7 @@ ath12k_reg_update_weather_radar_band(struct ath12k_base *ab,
 	ath12k_reg_update_rule(regd->reg_rules + i, reg_rule->start_freq,
 			       ETSI_WEATHER_RADAR_BAND_LOW, bw,
 			       reg_rule->ant_gain, reg_rule->reg_power,
-			       flags);
+			       reg_rule->psd_eirp, flags);
 
 	ath12k_dbg(ab, ATH12K_DBG_REG,
 		   "\t%d. (%d - %d @ %d) (%d, %d) (%d ms) (FLAGS %d)\n",
@@ -663,7 +682,7 @@ ath12k_reg_update_weather_radar_band(struct ath12k_base *ab,
 	ath12k_reg_update_rule(regd->reg_rules + i,
 			       ETSI_WEATHER_RADAR_BAND_LOW, end_freq, bw,
 			       reg_rule->ant_gain, reg_rule->reg_power,
-			       flags);
+			       reg_rule->psd_eirp, flags);
 
 	regd->reg_rules[i].dfs_cac_ms = ETSI_WEATHER_RADAR_BAND_CAC_TIMEOUT;
 
@@ -688,7 +707,7 @@ ath12k_reg_update_weather_radar_band(struct ath12k_base *ab,
 	ath12k_reg_update_rule(regd->reg_rules + i, ETSI_WEATHER_RADAR_BAND_HIGH,
 			       reg_rule->end_freq, bw,
 			       reg_rule->ant_gain, reg_rule->reg_power,
-			       flags);
+			       reg_rule->psd_eirp, flags);
 
 	ath12k_dbg(ab, ATH12K_DBG_REG,
 		   "\t%d. (%d - %d @ %d) (%d, %d) (%d ms) (FLAGS %d)\n",
@@ -710,26 +729,73 @@ static void ath12k_reg_update_freq_range(struct ath12k_reg_freq *reg_freq,
 		reg_freq->end_freq = reg_rule->end_freq;
 }
 
+static bool ath12k_reg_is_world_alpha(char *alpha)
+{
+	return (alpha[0] == '0' && alpha[1] == '0') ||
+	       (alpha[0] == 'n' && alpha[1] == 'a');
+}
+
+enum wmi_reg_6g_ap_type
+ath12k_reg_ap_pwr_convert(enum ieee80211_ap_reg_power power_type)
+{
+	switch (power_type) {
+	case IEEE80211_REG_LPI_AP:
+		return WMI_REG_INDOOR_AP;
+	case IEEE80211_REG_SP_AP:
+		return WMI_REG_STD_POWER_AP;
+	case IEEE80211_REG_VLP_AP:
+		return WMI_REG_VLP_AP;
+	default:
+		return WMI_REG_MAX_AP_TYPE;
+	}
+}
+
 struct ieee80211_regdomain *
 ath12k_reg_build_regd(struct ath12k_base *ab,
-		      struct ath12k_reg_info *reg_info, bool intersect)
+		      struct ath12k_reg_info *reg_info,
+		      enum wmi_vdev_type vdev_type,
+		      enum ieee80211_ap_reg_power power_type)
 {
 	struct ieee80211_regdomain *tmp_regd, *default_regd, *new_regd = NULL;
-	struct ath12k_reg_rule *reg_rule;
+	struct ath12k_reg_rule *reg_rule, *reg_rule_6ghz;
+	u32 flags, reg_6ghz_number, max_bw_6ghz;
 	u8 i = 0, j = 0, k = 0;
 	u8 num_rules;
 	u16 max_bw;
-	u32 flags;
 	char alpha2[3];
 
 	num_rules = reg_info->num_5g_reg_rules + reg_info->num_2g_reg_rules;
 
-	/* FIXME: Currently taking reg rules for 6G only from Indoor AP mode list.
-	 * This can be updated to choose the combination dynamically based on AP
-	 * type and client type, after complete 6G regulatory support is added.
-	 */
-	if (reg_info->is_ext_reg_event)
-		num_rules += reg_info->num_6g_reg_rules_ap[WMI_REG_INDOOR_AP];
+	if (reg_info->is_ext_reg_event) {
+		if (vdev_type == WMI_VDEV_TYPE_STA) {
+			enum wmi_reg_6g_ap_type ap_type;
+
+			ap_type = ath12k_reg_ap_pwr_convert(power_type);
+			if (ap_type == WMI_REG_MAX_AP_TYPE)
+				ap_type = WMI_REG_INDOOR_AP;
+
+			reg_6ghz_number = reg_info->num_6g_reg_rules_cl
+					[ap_type][WMI_REG_DEFAULT_CLIENT];
+			if (reg_6ghz_number == 0) {
+				ap_type = WMI_REG_INDOOR_AP;
+				reg_6ghz_number = reg_info->num_6g_reg_rules_cl
+						[ap_type][WMI_REG_DEFAULT_CLIENT];
+			}
+
+			reg_rule_6ghz = reg_info->reg_rules_6g_client_ptr
+					[ap_type][WMI_REG_DEFAULT_CLIENT];
+			max_bw_6ghz = reg_info->max_bw_6g_client
+					[ap_type][WMI_REG_DEFAULT_CLIENT];
+		} else {
+			reg_6ghz_number = reg_info->num_6g_reg_rules_ap
+						[WMI_REG_INDOOR_AP];
+			reg_rule_6ghz =
+				reg_info->reg_rules_6g_ap_ptr[WMI_REG_INDOOR_AP];
+			max_bw_6ghz = reg_info->max_bw_6g_ap[WMI_REG_INDOOR_AP];
+		}
+
+		num_rules += reg_6ghz_number;
+	}
 
 	if (!num_rules)
 		goto ret;
@@ -788,13 +854,13 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 			 */
 			flags = NL80211_RRF_AUTO_BW;
 			ath12k_reg_update_freq_range(&ab->reg_freq_5ghz, reg_rule);
-		} else if (reg_info->is_ext_reg_event &&
-			   reg_info->num_6g_reg_rules_ap[WMI_REG_INDOOR_AP] &&
-			(k < reg_info->num_6g_reg_rules_ap[WMI_REG_INDOOR_AP])) {
-			reg_rule = reg_info->reg_rules_6g_ap_ptr[WMI_REG_INDOOR_AP] + k++;
-			max_bw = min_t(u16, reg_rule->max_bw,
-				       reg_info->max_bw_6g_ap[WMI_REG_INDOOR_AP]);
+		} else if (reg_info->is_ext_reg_event && reg_6ghz_number &&
+			   (k < reg_6ghz_number)) {
+			reg_rule = reg_rule_6ghz + k++;
+			max_bw = min_t(u16, reg_rule->max_bw, max_bw_6ghz);
 			flags = NL80211_RRF_AUTO_BW;
+			if (reg_rule->psd_flag)
+				flags |= NL80211_RRF_PSD;
 			ath12k_reg_update_freq_range(&ab->reg_freq_6ghz, reg_rule);
 		} else {
 			break;
@@ -807,7 +873,7 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 				       reg_rule->start_freq,
 				       reg_rule->end_freq, max_bw,
 				       reg_rule->ant_gain, reg_rule->reg_power,
-				       flags);
+				       reg_rule->psd_eirp, flags);
 
 		/* Update dfs cac timeout if the dfs domain is ETSI and the
 		 * new rule covers weather radar band.
@@ -842,9 +908,14 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 
 	tmp_regd->n_reg_rules = i;
 
-	if (intersect) {
-		default_regd = ab->default_regd[reg_info->phy_id];
-
+	/* Intersect new rules with default regd if a new country setting was
+	 * requested, i.e a default regd was already set during initialization
+	 * and the regd coming from this event has a valid country info.
+	 */
+	default_regd = ab->default_regd[reg_info->phy_id];
+	if (default_regd &&
+	    !ath12k_reg_is_world_alpha((char *)default_regd->alpha2) &&
+	    !ath12k_reg_is_world_alpha((char *)reg_info->alpha2)) {
 		/* Get a new regd by intersecting the received regd with
 		 * our default regd.
 		 */
@@ -879,6 +950,105 @@ void ath12k_regd_update_work(struct work_struct *work)
 	}
 }
 
+void ath12k_reg_reset_reg_info(struct ath12k_reg_info *reg_info)
+{
+	u8 i, j;
+
+	if (!reg_info)
+		return;
+
+	kfree(reg_info->reg_rules_2g_ptr);
+	kfree(reg_info->reg_rules_5g_ptr);
+
+	if (reg_info->is_ext_reg_event) {
+		for (i = 0; i < WMI_REG_CURRENT_MAX_AP_TYPE; i++) {
+			kfree(reg_info->reg_rules_6g_ap_ptr[i]);
+
+			for (j = 0; j < WMI_REG_MAX_CLIENT_TYPE; j++)
+				kfree(reg_info->reg_rules_6g_client_ptr[i][j]);
+		}
+	}
+}
+
+enum ath12k_reg_status ath12k_reg_validate_reg_info(struct ath12k_base *ab,
+						    struct ath12k_reg_info *reg_info)
+{
+	int pdev_idx = reg_info->phy_id;
+
+	if (reg_info->status_code != REG_SET_CC_STATUS_PASS) {
+		/* In case of failure to set the requested country,
+		 * firmware retains the current regd. We print a failure info
+		 * and return from here.
+		 */
+		ath12k_warn(ab, "Failed to set the requested Country regulatory setting\n");
+		return ATH12K_REG_STATUS_DROP;
+	}
+
+	if (pdev_idx >= ab->num_radios) {
+		/* Process the event for phy0 only if single_pdev_only
+		 * is true. If pdev_idx is valid but not 0, discard the
+		 * event. Otherwise, it goes to fallback.
+		 */
+		if (ab->hw_params->single_pdev_only &&
+		    pdev_idx < ab->hw_params->num_rxdma_per_pdev)
+			return ATH12K_REG_STATUS_DROP;
+		else
+			return ATH12K_REG_STATUS_FALLBACK;
+	}
+
+	/* Avoid multiple overwrites to default regd, during core
+	 * stop-start after mac registration.
+	 */
+	if (ab->default_regd[pdev_idx] && !ab->new_regd[pdev_idx] &&
+	    !memcmp(ab->default_regd[pdev_idx]->alpha2,
+		    reg_info->alpha2, 2))
+		return ATH12K_REG_STATUS_DROP;
+
+	return ATH12K_REG_STATUS_VALID;
+}
+
+int ath12k_reg_handle_chan_list(struct ath12k_base *ab,
+				struct ath12k_reg_info *reg_info,
+				enum wmi_vdev_type vdev_type,
+				enum ieee80211_ap_reg_power power_type)
+{
+	struct ieee80211_regdomain *regd = NULL;
+	int pdev_idx = reg_info->phy_id;
+	struct ath12k *ar;
+
+	regd = ath12k_reg_build_regd(ab, reg_info, vdev_type, power_type);
+	if (!regd)
+		return -EINVAL;
+
+	spin_lock_bh(&ab->base_lock);
+	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags)) {
+		/* Once mac is registered, ar is valid and all CC events from
+		 * firmware is considered to be received due to user requests
+		 * currently.
+		 * Free previously built regd before assigning the newly
+		 * generated regd to ar. NULL pointer handling will be
+		 * taken care by kfree itself.
+		 */
+		ar = ab->pdevs[pdev_idx].ar;
+		kfree(ab->new_regd[pdev_idx]);
+		ab->new_regd[pdev_idx] = regd;
+		queue_work(ab->workqueue, &ar->regd_update_work);
+	} else {
+		/* Multiple events for the same *ar is not expected. But we
+		 * can still clear any previously stored default_regd if we
+		 * are receiving this event for the same radio by mistake.
+		 * NULL pointer handling will be taken care by kfree itself.
+		 */
+		kfree(ab->default_regd[pdev_idx]);
+		/* This regd would be applied during mac registration */
+		ab->default_regd[pdev_idx] = regd;
+	}
+	ab->dfs_region = reg_info->dfs_region;
+	spin_unlock_bh(&ab->base_lock);
+
+	return 0;
+}
+
 void ath12k_reg_init(struct ieee80211_hw *hw)
 {
 	hw->wiphy->regulatory_flags = REGULATORY_WIPHY_SELF_MANAGED;
@@ -891,6 +1061,12 @@ void ath12k_reg_free(struct ath12k_base *ab)
 	int i;
 
 	mutex_lock(&ab->core_lock);
+	for (i = 0; i < MAX_RADIOS; i++) {
+		ath12k_reg_reset_reg_info(ab->reg_info[i]);
+		kfree(ab->reg_info[i]);
+		ab->reg_info[i] = NULL;
+	}
+
 	for (i = 0; i < ab->hw_params->max_radios; i++) {
 		kfree(ab->default_regd[i]);
 		kfree(ab->new_regd[i]);
