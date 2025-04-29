@@ -20257,6 +20257,13 @@ F:	Documentation/networking/device_drivers/cellular/qualcomm/rmnet.rst
 F:	drivers/net/ethernet/qualcomm/rmnet/
 F:	include/linux/if_rmnet.h
 
+QUALCOMM TEE (QCOMTEE) DRIVER
+M:	Amirreza Zarrabi <amirreza.zarrabi@oss.qualcomm.com>
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	drivers/tee/qcomtee/
+F:	include/linux/firmware/qcom/qcom_tee.h
+
 QUALCOMM TRUST ZONE MEMORY ALLOCATOR
 M:	Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
 L:	linux-arm-msm@vger.kernel.org
