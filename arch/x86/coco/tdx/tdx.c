@@ -247,43 +247,59 @@ static void disable_sept_ve(u64 td_attr)
 }
 
 /*
+ * Newer TDX modules provide a "REDUCE_VE" feature.  When enabled, it
+ * drastically cuts cases when guests receive #VE on MSR and CPUID accesses,
+ * and TDX module also forces ENUM_TOPOLOGY and VIRT_CPUID to enabled.
+ *
+ * But REDUCE_VE can only be enabled if x2APIC_ID has been properly configured
+ * with unique values for each VCPU. So check if VMM has provided a valid
+ * topology configuration first.
+ *
  * TDX 1.0 generates a #VE when accessing topology-related CPUID leafs (0xB and
  * 0x1F) and the X2APIC_APICID MSR. The kernel returns all zeros on CPUID #VEs.
  * In practice, this means that the kernel can only boot with a plain topology.
  * Any complications will cause problems.
  *
  * The ENUM_TOPOLOGY feature allows the VMM to provide topology information.
- * Enabling the feature  eliminates topology-related #VEs: the TDX module
+ * Enabling the feature eliminates topology-related #VEs: the TDX module
  * virtualizes accesses to the CPUID leafs and the MSR.
  *
- * Enable ENUM_TOPOLOGY if it is available.
+ * The VIRT_CPUID2 feature allows TDX module provides fixed values
+ * eax=0x00feff01, ebx=0, ecx=0 and edx=0, meaning "cache data is returned by
+ * CPUID leaf 0x4" and "TLB data is returned by CPUID leaf 0x18" while TD
+ * guest execution of CPUID leaf 0x2, instead the kernel CPUID #VE handler
+ * returns all zeros. It is quite useful for backward compatibility.
+ *
+ * Both ENUM_TOPOLOGY and VIRT_CPUID2 are earlier than REDUCE_VE, fall back to
+ * enable them if REDUCE_VE was not successful.
  */
-static void enable_cpu_topology_enumeration(void)
+static void reduce_unnecessary_ve(void)
 {
+	u64 err = TDX_SUCCESS;
 	u64 configured;
 
 	/* Has the VMM provided a valid topology configuration? */
 	tdg_vm_rd(TDCS_TOPOLOGY_ENUM_CONFIGURED, &configured);
-	if (!configured) {
+
+	if (configured) {
+		err = tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_REDUCE_VE, TD_CTLS_REDUCE_VE);
+
+		/*
+		 * Enabling REDUCE_VE includes ENUM_TOPOLOGY. Only try to
+		 * enable ENUM_TOPOLOGY if REDUCE_VE was not successful.
+		 */
+		if (err != TDX_SUCCESS)
+			tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_ENUM_TOPOLOGY, TD_CTLS_ENUM_TOPOLOGY);
+	} else
 		pr_err("VMM did not configure X2APIC_IDs properly\n");
-		return;
-	}
-
-	tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_ENUM_TOPOLOGY, TD_CTLS_ENUM_TOPOLOGY);
-}
-
-static void reduce_unnecessary_ve(void)
-{
-	u64 err = tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_REDUCE_VE, TD_CTLS_REDUCE_VE);
-
-	if (err == TDX_SUCCESS)
-		return;
 
 	/*
-	 * Enabling REDUCE_VE includes ENUM_TOPOLOGY. Only try to
-	 * enable ENUM_TOPOLOGY if REDUCE_VE was not successful.
+	 * Enabling REDUCE_VE includes VIRT_CPUID2. Only try to enable
+	 * VIRT_CPUID2 if REDUCE_VE was not successful.
 	 */
-	enable_cpu_topology_enumeration();
+	if (!configured || err != TDX_SUCCESS)
+		tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_VIRT_CPUID2, TD_CTLS_VIRT_CPUID2);
+
 }
 
 static void tdx_setup(u64 *cc_mask)
