@@ -6041,6 +6041,8 @@ static int binder_open(struct inode *nodp, struct file *filp)
 
 	mutex_lock(&binder_procs_lock);
 	hlist_for_each_entry(itr, &binder_procs, proc_node) {
+		if (itr->is_dead)
+			continue;
 		if (itr->pid == proc->pid) {
 			existing_pid = true;
 			break;
