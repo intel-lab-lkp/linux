@@ -12,6 +12,8 @@ struct gpiochip_fwd;
 
 struct gpio_chip *gpio_fwd_get_gpiochip(struct gpiochip_fwd *fwd);
 
+int gpio_fwd_request(struct gpio_chip *chip, unsigned int offset);
+
 int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset);
 
 int gpio_fwd_direction_input(struct gpio_chip *chip, unsigned int offset);
@@ -39,6 +41,8 @@ struct gpiochip_fwd *devm_gpio_fwd_alloc(struct device *dev,
 
 int gpio_fwd_gpio_add(struct gpiochip_fwd *fwd,
 		      struct gpio_desc *desc, unsigned int offset);
+
+void gpio_fwd_gpio_free(struct gpiochip_fwd *fwd, unsigned int offset);
 
 int gpio_fwd_register(struct gpiochip_fwd *fwd);
 
