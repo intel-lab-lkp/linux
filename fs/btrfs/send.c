@@ -819,8 +819,6 @@ static int send_rename(struct send_ctx *sctx,
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret;
 
-	btrfs_debug(fs_info, "send_rename %s -> %s", from->start, to->start);
-
 	ret = begin_cmd(sctx, BTRFS_SEND_C_RENAME);
 	if (ret < 0)
 		return ret;
@@ -843,8 +841,6 @@ static int send_link(struct send_ctx *sctx,
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret;
 
-	btrfs_debug(fs_info, "send_link %s -> %s", path->start, lnk->start);
-
 	ret = begin_cmd(sctx, BTRFS_SEND_C_LINK);
 	if (ret < 0)
 		return ret;
@@ -866,8 +862,6 @@ static int send_unlink(struct send_ctx *sctx, struct fs_path *path)
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret;
 
-	btrfs_debug(fs_info, "send_unlink %s", path->start);
-
 	ret = begin_cmd(sctx, BTRFS_SEND_C_UNLINK);
 	if (ret < 0)
 		return ret;
@@ -887,8 +881,6 @@ static int send_rmdir(struct send_ctx *sctx, struct fs_path *path)
 {
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret;
-
-	btrfs_debug(fs_info, "send_rmdir %s", path->start);
 
 	ret = begin_cmd(sctx, BTRFS_SEND_C_RMDIR);
 	if (ret < 0)
@@ -1686,14 +1678,8 @@ static int find_extent_clone(struct send_ctx *sctx,
 	}
 	up_read(&fs_info->commit_root_sem);
 
-	btrfs_debug(fs_info,
-		    "find_extent_clone: data_offset=%llu, ino=%llu, num_bytes=%llu, logical=%llu",
-		    data_offset, ino, num_bytes, logical);
-
-	if (!backref_ctx.found) {
-		btrfs_debug(fs_info, "no clones found");
+	if (!backref_ctx.found)
 		return -ENOENT;
-	}
 
 	cur_clone_root = NULL;
 	for (i = 0; i < sctx->clone_roots_cnt; i++) {
@@ -2635,8 +2621,6 @@ static int send_truncate(struct send_ctx *sctx, u64 ino, u64 gen, u64 size)
 	int ret = 0;
 	struct fs_path *p;
 
-	btrfs_debug(fs_info, "send_truncate %llu size=%llu", ino, size);
-
 	p = get_path_for_command(sctx, ino, gen);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
@@ -2661,8 +2645,6 @@ static int send_chmod(struct send_ctx *sctx, u64 ino, u64 gen, u64 mode)
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret = 0;
 	struct fs_path *p;
-
-	btrfs_debug(fs_info, "send_chmod %llu mode=%llu", ino, mode);
 
 	p = get_path_for_command(sctx, ino, gen);
 	if (IS_ERR(p))
@@ -2692,8 +2674,6 @@ static int send_fileattr(struct send_ctx *sctx, u64 ino, u64 gen, u64 fileattr)
 	if (sctx->proto < 2)
 		return 0;
 
-	btrfs_debug(fs_info, "send_fileattr %llu fileattr=%llu", ino, fileattr);
-
 	p = get_path_for_command(sctx, ino, gen);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
@@ -2718,9 +2698,6 @@ static int send_chown(struct send_ctx *sctx, u64 ino, u64 gen, u64 uid, u64 gid)
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret = 0;
 	struct fs_path *p;
-
-	btrfs_debug(fs_info, "send_chown %llu uid=%llu, gid=%llu",
-		    ino, uid, gid);
 
 	p = get_path_for_command(sctx, ino, gen);
 	if (IS_ERR(p))
@@ -2752,8 +2729,6 @@ static int send_utimes(struct send_ctx *sctx, u64 ino, u64 gen)
 	struct extent_buffer *eb;
 	struct btrfs_key key;
 	int slot;
-
-	btrfs_debug(fs_info, "send_utimes %llu", ino);
 
 	p = get_path_for_command(sctx, ino, gen);
 	if (IS_ERR(p))
@@ -2869,8 +2844,6 @@ static int send_create_inode(struct send_ctx *sctx, u64 ino)
 	u64 gen;
 	u64 mode;
 	u64 rdev;
-
-	btrfs_debug(fs_info, "send_create_inode %llu", ino);
 
 	p = fs_path_alloc();
 	if (!p)
@@ -4224,8 +4197,6 @@ static int process_recorded_refs(struct send_ctx *sctx, int *pending_move)
 	bool orphanized_dir = false;
 	bool orphanized_ancestor = false;
 
-	btrfs_debug(fs_info, "process_recorded_refs %llu", sctx->cur_ino);
-
 	/*
 	 * This should never happen as the root dir always has the same ref
 	 * which is always '..'
@@ -5338,8 +5309,6 @@ static int send_write(struct send_ctx *sctx, u64 offset, u32 len)
 	int ret = 0;
 	struct fs_path *p;
 
-	btrfs_debug(fs_info, "send_write offset=%llu, len=%d", offset, len);
-
 	p = get_cur_inode_path(sctx);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
@@ -5371,11 +5340,6 @@ static int send_clone(struct send_ctx *sctx,
 	struct fs_path *p;
 	struct fs_path *cur_inode_path;
 	u64 gen;
-
-	btrfs_debug(sctx->send_root->fs_info,
-		    "send_clone offset=%llu, len=%d, clone_root=%llu, clone_inode=%llu, clone_offset=%llu",
-		    offset, len, btrfs_root_id(clone_root->root),
-		    clone_root->ino, clone_root->offset);
 
 	cur_inode_path = get_cur_inode_path(sctx);
 	if (IS_ERR(cur_inode_path))
