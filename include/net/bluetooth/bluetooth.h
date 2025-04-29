@@ -242,6 +242,7 @@ struct bt_codecs {
 #define BT_CODEC_MSBC		0x05
 
 #define BT_ISO_BASE		20
+#define BT_ISO_TS		21
 
 __printf(1, 2)
 void bt_info(const char *fmt, ...);
@@ -390,7 +391,8 @@ struct bt_sock {
 enum {
 	BT_SK_DEFER_SETUP,
 	BT_SK_SUSPEND,
-	BT_SK_PKT_STATUS
+	BT_SK_PKT_STATUS,
+	BT_SK_ISO_TS
 };
 
 struct bt_sock_list {

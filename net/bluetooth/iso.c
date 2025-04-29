@@ -1718,7 +1718,21 @@ static int iso_sock_setsockopt(struct socket *sock, int level, int optname,
 		iso_pi(sk)->base_len = optlen;
 
 		break;
+	case BT_ISO_TS:
+		if (optlen != sizeof(opt)) {
+			err = -EINVAL;
+			break;
+		}
 
+		err = copy_safe_from_sockptr(&opt, sizeof(opt), optval, optlen);
+		if (err)
+			break;
+
+		if (opt)
+			set_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags);
+		else
+			clear_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags);
+		break;
 	default:
 		err = -ENOPROTOOPT;
 		break;
@@ -1789,7 +1803,16 @@ static int iso_sock_getsockopt(struct socket *sock, int level, int optname,
 			err = -EFAULT;
 
 		break;
+	case BT_ISO_TS:
+		if (len < sizeof(u32)) {
+			err = -EINVAL;
+			break;
+		}
 
+		if (put_user(test_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags),
+			    (u32 __user *)optval))
+			err = -EFAULT;
+		break;
 	default:
 		err = -ENOPROTOOPT;
 		break;
@@ -2271,13 +2294,21 @@ static void iso_disconn_cfm(struct hci_conn *hcon, __u8 reason)
 void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 {
 	struct iso_conn *conn = hcon->iso_data;
+	struct sock *sk;
 	__u16 pb, ts, len;
 
 	if (!conn)
 		goto drop;
 
-	pb     = hci_iso_flags_pb(flags);
-	ts     = hci_iso_flags_ts(flags);
+	iso_conn_lock(conn);
+	sk = conn->sk;
+	iso_conn_unlock(conn);
+
+	if (!sk)
+		goto drop;
+
+	pb = hci_iso_flags_pb(flags);
+	ts = hci_iso_flags_ts(flags);
 
 	BT_DBG("conn %p len %d pb 0x%x ts 0x%x", conn, skb->len, pb, ts);
 
@@ -2294,16 +2325,25 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 		if (ts) {
 			struct hci_iso_ts_data_hdr *hdr;
 
-			/* TODO: add timestamp to the packet? */
-			hdr = skb_pull_data(skb, HCI_ISO_TS_DATA_HDR_SIZE);
-			if (!hdr) {
-				BT_ERR("Frame is too short (len %d)", skb->len);
-				goto drop;
-			}
+			if (test_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags)) {
+				hdr = (struct hci_iso_ts_data_hdr *)skb->data;
+				len = hdr->slen + HCI_ISO_TS_DATA_HDR_SIZE;
+			} else {
+				hdr = skb_pull_data(skb, HCI_ISO_TS_DATA_HDR_SIZE);
+				if (!hdr) {
+					BT_ERR("Frame is too short (len %d)", skb->len);
+					goto drop;
+				}
 
-			len = __le16_to_cpu(hdr->slen);
+				len = __le16_to_cpu(hdr->slen);
+			}
 		} else {
 			struct hci_iso_data_hdr *hdr;
+
+			if (test_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags)) {
+				BT_ERR("Invalid option BT_SK_ISO_TS");
+				clear_bit(BT_SK_ISO_TS, &bt_sk(sk)->flags);
+			}
 
 			hdr = skb_pull_data(skb, HCI_ISO_DATA_HDR_SIZE);
 			if (!hdr) {
