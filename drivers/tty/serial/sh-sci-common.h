@@ -142,6 +142,9 @@ struct sci_port {
 	int				rx_fifo_timeout;
 	u16				hscif_tot;
 
+	unsigned int			type;
+	unsigned int			regtype;
+
 	const struct sci_port_ops *ops;
 
 	bool has_rtscts;
