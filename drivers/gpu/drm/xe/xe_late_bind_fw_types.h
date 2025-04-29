@@ -90,6 +90,8 @@ struct xe_late_bind {
 	/** @late_bind.late_bind_fw: late binding firmwares */
 	struct xe_late_bind_fw late_bind_fw[MAX_ID];
 
+	/** @late_bind.disable to block late binding reload during pm resume flow*/
+	bool disable;
 };
 
 #endif

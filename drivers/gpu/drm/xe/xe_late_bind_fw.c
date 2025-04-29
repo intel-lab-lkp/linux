@@ -111,6 +111,9 @@ int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
 	if (!late_bind->component_added)
 		return -EINVAL;
 
+	if (late_bind->disable)
+		return 0;
+
 	for (id = 0; id < MAX_ID; id++) {
 		lbfw = &late_bind->late_bind_fw[id];
 		if (lbfw->valid) {
