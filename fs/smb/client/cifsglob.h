@@ -1024,6 +1024,8 @@ compare_mid(__u16 mid, const struct smb_hdr *smb)
 #define CIFS_DEFAULT_NON_POSIX_RSIZE (60 * 1024)
 #define CIFS_DEFAULT_NON_POSIX_WSIZE (65536)
 
+#define CIFS_IO_ALIGN(v) umax(round_down((v), PAGE_SIZE), PAGE_SIZE)
+
 /*
  * Macros to allow the TCP_Server_Info->net field and related code to drop out
  * when CONFIG_NET_NS isn't set.

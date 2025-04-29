@@ -361,4 +361,36 @@ static inline void cifs_mount_unlock(void)
 	mutex_unlock(&cifs_mount_mutex);
 }
 
+static inline void cifs_negotiate_rsize(struct TCP_Server_Info *server,
+					struct smb3_fs_context *ctx,
+					struct cifs_tcon *tcon)
+{
+	unsigned int size;
+
+	size = umax(server->ops->negotiate_rsize(tcon, ctx), PAGE_SIZE);
+	if (ctx->rsize)
+		size = umax(umin(ctx->rsize, size), PAGE_SIZE);
+	ctx->rsize = round_down(size, PAGE_SIZE);
+}
+
+static inline void cifs_negotiate_wsize(struct TCP_Server_Info *server,
+					struct smb3_fs_context *ctx,
+					struct cifs_tcon *tcon)
+{
+	unsigned int size;
+
+	size = umax(server->ops->negotiate_wsize(tcon, ctx), PAGE_SIZE);
+	if (ctx->wsize)
+		size = umax(umin(ctx->wsize, size), PAGE_SIZE);
+	ctx->wsize = round_down(size, PAGE_SIZE);
+}
+
+static inline void cifs_negotiate_iosize(struct TCP_Server_Info *server,
+					 struct smb3_fs_context *ctx,
+					 struct cifs_tcon *tcon)
+{
+	cifs_negotiate_rsize(server, ctx, tcon);
+	cifs_negotiate_wsize(server, ctx, tcon);
+}
+
 #endif
