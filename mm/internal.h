@@ -280,6 +280,8 @@ static inline int folio_pte_batch(struct folio *folio, unsigned long addr,
 			dirty = !!pte_dirty(pte);
 		pte = __pte_batch_clear_ignored(pte, flags);
 
+		if (!pte_present(pte))
+			break;
 		if (!pte_same(pte, expected_pte))
 			break;
 
