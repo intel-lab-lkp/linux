@@ -576,6 +576,22 @@ bool intel_vrr_always_use_vrr_tg(struct intel_display *display)
 	return false;
 }
 
+static
+void intel_vrr_set_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	/*
+	 * For BMG and LNL+ onwards the EMP_AS_SDP_TL is used for programming
+	 * double buffering point and transmission line for Adaptive Sync SDP.
+	 */
+	if (DISPLAY_VERx100(display) == 1401 || DISPLAY_VER(display) >= 20)
+		intel_de_write(display,
+			       EMP_AS_SDP_TL(display, cpu_transcoder),
+			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+}
+
 void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -595,6 +611,8 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 		       TRANS_PUSH_EN);
 
 	if (!intel_vrr_always_use_vrr_tg(display)) {
+		intel_vrr_set_emp_as_sdp_tl(crtc_state);
+
 		if (crtc_state->cmrr.enable) {
 			intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder),
 				       VRR_CTL_VRR_ENABLE | VRR_CTL_CMRR_ENABLE |
@@ -645,6 +663,8 @@ void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state)
 
 	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
 		       TRANS_PUSH_EN);
+
+	intel_vrr_set_emp_as_sdp_tl(crtc_state);
 
 	intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder),
 		       VRR_CTL_VRR_ENABLE | trans_vrr_ctl(crtc_state));
