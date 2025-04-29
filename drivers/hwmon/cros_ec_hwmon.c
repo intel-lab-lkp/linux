@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/units.h>
 
@@ -28,6 +29,11 @@ struct cros_ec_hwmon_priv {
 	bool fan_control_supported;
 	u8 manual_fans; /* bits to indicate whether the fan is set to manual */
 	u8 manual_fan_pwm_values[EC_FAN_SPEED_ENTRIES];
+};
+
+struct cros_ec_hwmon_cooling_priv {
+	struct cros_ec_hwmon_priv *hwmon_priv;
+	u8 index;
 };
 
 static int cros_ec_hwmon_read_fan_speed(struct cros_ec_device *cros_ec, u8 index, u16 *speed)
@@ -340,11 +346,49 @@ static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 	NULL
 };
 
+static int
+cros_ec_hwmon_cooling_get_max_state(struct thermal_cooling_device *cdev,
+				    unsigned long *val)
+{
+	*val = 100;
+	return 0;
+}
+
+static int
+cros_ec_hwmon_cooling_get_cur_state(struct thermal_cooling_device *cdev,
+				    unsigned long *val)
+{
+	const struct cros_ec_hwmon_cooling_priv *priv = cdev->devdata;
+	u8 raw_val;
+	int ret = cros_ec_hwmon_read_pwm_raw_value(priv->hwmon_priv->cros_ec,
+						   priv->index, &raw_val);
+
+	if (ret == 0)
+		*val = raw_val;
+	return ret;
+}
+
+static int
+cros_ec_hwmon_cooling_set_cur_state(struct thermal_cooling_device *cdev,
+				    unsigned long val)
+{
+	const struct cros_ec_hwmon_cooling_priv *priv = cdev->devdata;
+
+	return cros_ec_hwmon_set_pwm_raw_value(priv->hwmon_priv, priv->index,
+					       val);
+}
+
 static const struct hwmon_ops cros_ec_hwmon_ops = {
 	.read = cros_ec_hwmon_read,
 	.read_string = cros_ec_hwmon_read_string,
 	.write = cros_ec_hwmon_write,
 	.is_visible = cros_ec_hwmon_is_visible,
+};
+
+static const struct thermal_cooling_device_ops cros_ec_thermal_cooling_ops = {
+	.get_max_state = cros_ec_hwmon_cooling_get_max_state,
+	.get_cur_state = cros_ec_hwmon_cooling_get_cur_state,
+	.set_cur_state = cros_ec_hwmon_cooling_set_cur_state,
 };
 
 static const struct hwmon_chip_info cros_ec_hwmon_chip_info = {
@@ -421,6 +465,33 @@ cros_ec_hwmon_probe_fan_control_supported(struct cros_ec_hwmon_priv *priv)
 	priv->fan_control_supported = true;
 }
 
+static void
+cros_ec_hwmon_register_fan_cooling_devices(struct device *dev,
+					   struct cros_ec_hwmon_priv *priv)
+{
+	struct cros_ec_hwmon_cooling_priv *cpriv;
+	size_t i;
+
+	if (!priv->fan_control_supported)
+		return;
+
+	for (i = 0; i < EC_FAN_SPEED_ENTRIES; i++) {
+		if (!(priv->usable_fans & BIT(i)))
+			continue;
+
+		cpriv = devm_kzalloc(dev, sizeof(*cpriv), GFP_KERNEL);
+		if (!cpriv)
+			return;
+
+		cpriv->hwmon_priv = priv;
+		cpriv->index = i;
+		devm_thermal_of_cooling_device_register(
+			dev, NULL,
+			devm_kasprintf(dev, GFP_KERNEL, "cros-ec-fan%zu", i),
+			cpriv, &cros_ec_thermal_cooling_ops);
+	}
+}
+
 static int cros_ec_hwmon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -452,6 +523,7 @@ static int cros_ec_hwmon_probe(struct platform_device *pdev)
 	cros_ec_hwmon_probe_temp_sensors(dev, priv, thermal_version);
 	cros_ec_hwmon_probe_fans(priv);
 	cros_ec_hwmon_probe_fan_control_supported(priv);
+	cros_ec_hwmon_register_fan_cooling_devices(dev, priv);
 
 	platform_priv->hwmon_dev = devm_hwmon_device_register_with_info(
 		dev, "cros_ec", priv, &cros_ec_hwmon_chip_info, NULL);
