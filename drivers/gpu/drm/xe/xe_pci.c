@@ -27,6 +27,7 @@
 #include "xe_module.h"
 #include "xe_pci_sriov.h"
 #include "xe_pci_types.h"
+#include "xe_pcode_fwctl.h"
 #include "xe_pm.h"
 #include "xe_sriov.h"
 #include "xe_step.h"
@@ -865,6 +866,10 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return err;
 
 	err = xe_pm_init(xe);
+	if (err)
+		goto err_driver_cleanup;
+
+	err = xe_pcode_fwctl_init(xe);
 	if (err)
 		goto err_driver_cleanup;
 
