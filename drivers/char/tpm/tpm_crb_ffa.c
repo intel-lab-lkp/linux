@@ -38,9 +38,11 @@
  * messages.
  *
  * All requests with FFA_MSG_SEND_DIRECT_REQ and FFA_MSG_SEND_DIRECT_RESP
- * are using the AArch32 SMC calling convention with register usage as
- * defined in FF-A specification:
- * w0:    Function ID (0x8400006F or 0x84000070)
+ * are using the AArch32 or AArch64 SMC calling convention with register usage
+ * as defined in FF-A specification:
+ * w0:    Function ID
+ *          -for 32-bit: 0x8400006F or 0x84000070
+ *          -for 64-bit: 0xC400006F or 0xC4000070
  * w1:    Source/Destination IDs
  * w2:    Reserved (MBZ)
  * w3-w7: Implementation defined, free to be used below
