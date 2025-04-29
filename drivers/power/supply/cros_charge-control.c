@@ -53,23 +53,17 @@ static int cros_chctl_send_charge_control_cmd(struct cros_ec_device *cros_ec,
 		[3] = sizeof(struct ec_params_charge_control),
 	};
 
-	struct {
-		struct cros_ec_command msg;
-		union {
-			struct ec_params_charge_control req;
-			struct ec_response_charge_control resp;
-		} __packed data;
-	} __packed buf = {
-		.msg = {
-			.command = EC_CMD_CHARGE_CONTROL,
-			.version = cmd_version,
-			.insize  = 0,
-			.outsize = outsizes[cmd_version],
-		},
-		.data.req = *req,
-	};
+	DEFINE_RAW_FLEX(struct cros_ec_command, msg, data,
+			MAX(sizeof(struct ec_params_charge_control),
+			    sizeof(struct ec_response_charge_control)));
 
-	return cros_ec_cmd_xfer_status(cros_ec, &buf.msg);
+	msg->command = EC_CMD_CHARGE_CONTROL;
+	msg->version = cmd_version;
+	msg->insize  = 0;
+	msg->outsize = outsizes[cmd_version];
+	*(struct ec_params_charge_control *)msg->data = *req;
+
+	return cros_ec_cmd_xfer_status(cros_ec, msg);
 }
 
 static int cros_chctl_configure_ec(struct cros_chctl_priv *priv)
