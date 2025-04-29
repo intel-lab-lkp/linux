@@ -113,11 +113,11 @@ struct imx8mq_usb_phy {
 	struct tca_blk *tca;
 	u32 pcs_tx_swing_full;
 	u32 pcs_tx_deemph_3p5db;
-	u32 tx_vref_tune;
-	u32 tx_rise_tune;
+	s32 tx_vref_tune;
+	s32 tx_rise_tune;
 	u32 tx_preemp_amp_tune;
 	u32 tx_vboost_level;
-	u32 comp_dis_tune;
+	s32 comp_dis_tune;
 };
 
 
@@ -286,24 +286,24 @@ static void imx95_usb_phy_put_tca(struct imx8mq_usb_phy *imx_phy)
 	tca_blk_put_typec_switch(tca->sw);
 }
 
-static u32 phy_tx_vref_tune_from_property(u32 percent)
+static u32 phy_tx_vref_tune_from_property(s32 percent)
 {
-	percent = clamp(percent, 94U, 124U);
+	percent = clamp(percent, -6, 24);
 
-	return DIV_ROUND_CLOSEST(percent - 94U, 2);
+	return DIV_ROUND_CLOSEST(percent + 6, 2);
 }
 
-static u32 phy_tx_rise_tune_from_property(u32 percent)
+static u32 phy_tx_rise_tune_from_property(s32 percent)
 {
 	switch (percent) {
-	case 0 ... 98:
+	case -3:
 		return 3;
-	case 99:
+	case -1:
 		return 2;
-	case 100 ... 101:
-		return 1;
-	default:
+	case 3:
 		return 0;
+	default:
+		return 1;
 	}
 }
 
@@ -317,12 +317,12 @@ static u32 phy_tx_preemp_amp_tune_from_property(u32 microamp)
 static u32 phy_tx_vboost_level_from_property(u32 microvolt)
 {
 	switch (microvolt) {
-	case 0 ... 960:
-		return 0;
-	case 961 ... 1160:
-		return 2;
-	default:
+	case 1156:
+		return 5;
+	case 844:
 		return 3;
+	default:
+		return 4;
 	}
 }
 
@@ -331,27 +331,28 @@ static u32 phy_pcs_tx_deemph_3p5db_from_property(u32 decibel)
 	return min(decibel, 36U);
 }
 
-static u32 phy_comp_dis_tune_from_property(u32 percent)
+static u32 phy_comp_dis_tune_from_property(s32 percent)
 {
 	switch (percent) {
-	case 0 ... 92:
+	case -9:
 		return 0;
-	case 93 ... 95:
+	case -6:
 		return 1;
-	case 96 ... 97:
+	case -3:
 		return 2;
-	case 98 ... 102:
-		return 3;
-	case 103 ... 105:
+	case 4:
 		return 4;
-	case 106 ... 109:
+	case 7:
 		return 5;
-	case 110 ... 113:
+	case 11:
 		return 6;
-	default:
+	case 15:
 		return 7;
+	default:
+		return 3;
 	}
 }
+
 static u32 phy_pcs_tx_swing_full_from_property(u32 percent)
 {
 	percent = min(percent, 100U);
