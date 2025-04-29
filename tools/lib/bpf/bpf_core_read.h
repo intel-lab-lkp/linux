@@ -517,9 +517,9 @@ extern void *bpf_rdonly_cast(const void *obj, __u32 btf_id) __ksym __weak;
  * than enough for any practical purpose.
  */
 #define BPF_CORE_READ(src, a, ...) ({					    \
-	___type((src), a, ##__VA_ARGS__) __r;				    \
+	__u8 __r[sizeof(___type((src), a, ##__VA_ARGS__))];		    \
 	BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);		    \
-	__r;								    \
+	*(___type((src), a, ##__VA_ARGS__) *)__r;			    \
 })
 
 /*
@@ -533,16 +533,16 @@ extern void *bpf_rdonly_cast(const void *obj, __u32 btf_id) __ksym __weak;
  * input argument.
  */
 #define BPF_CORE_READ_USER(src, a, ...) ({				    \
-	___type((src), a, ##__VA_ARGS__) __r;				    \
+	__u8 __r[sizeof(___type((src), a, ##__VA_ARGS__))];		    \
 	BPF_CORE_READ_USER_INTO(&__r, (src), a, ##__VA_ARGS__);		    \
-	__r;								    \
+	*(___type((src), a, ##__VA_ARGS__) *)__r;			    \
 })
 
 /* Non-CO-RE variant of BPF_CORE_READ() */
 #define BPF_PROBE_READ(src, a, ...) ({					    \
-	___type((src), a, ##__VA_ARGS__) __r;				    \
+	__u8 __r[sizeof(___type((src), a, ##__VA_ARGS__))];		    \
 	BPF_PROBE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);		    \
-	__r;								    \
+	*(___type((src), a, ##__VA_ARGS__) *)__r;			    \
 })
 
 /*
@@ -552,9 +552,9 @@ extern void *bpf_rdonly_cast(const void *obj, __u32 btf_id) __ksym __weak;
  * not restricted to kernel types only.
  */
 #define BPF_PROBE_READ_USER(src, a, ...) ({				    \
-	___type((src), a, ##__VA_ARGS__) __r;				    \
+	__u8 __r[sizeof(___type((src), a, ##__VA_ARGS__))];		    \
 	BPF_PROBE_READ_USER_INTO(&__r, (src), a, ##__VA_ARGS__);	    \
-	__r;								    \
+	*(___type((src), a, ##__VA_ARGS__) *)__r;			    \
 })
 
 #endif
