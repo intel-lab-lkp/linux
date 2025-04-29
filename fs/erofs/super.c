@@ -376,14 +376,20 @@ static const struct constant_table erofs_dax_param_enums[] = {
 static const struct fs_parameter_spec erofs_fs_parameters[] = {
 	fsparam_flag_no("user_xattr",	Opt_user_xattr),
 	fsparam_flag_no("acl",		Opt_acl),
+#ifdef CONFIG_EROFS_FS_ZIP
 	fsparam_enum("cache_strategy",	Opt_cache_strategy,
 		     erofs_param_cache_strategy),
+#endif
 	fsparam_flag("dax",             Opt_dax),
 	fsparam_enum("dax",		Opt_dax_enum, erofs_dax_param_enums),
 	fsparam_string("device",	Opt_device),
+#ifdef CONFIG_EROFS_FS_ONDEMAND
 	fsparam_string("fsid",		Opt_fsid),
 	fsparam_string("domain_id",	Opt_domain_id),
+#endif
+#ifdef CONFIG_EROFS_FS_BACKED_BY_FILE
 	fsparam_flag_no("directio",	Opt_directio),
+#endif
 	{}
 };
 
@@ -444,13 +450,11 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 		errorfc(fc, "{,no}acl options not supported");
 #endif
 		break;
-	case Opt_cache_strategy:
 #ifdef CONFIG_EROFS_FS_ZIP
+	case Opt_cache_strategy:
 		sbi->opt.cache_strategy = result.uint_32;
-#else
-		errorfc(fc, "compression not supported, cache_strategy ignored");
-#endif
 		break;
+#endif
 	case Opt_dax:
 		if (!erofs_fc_set_dax_mode(fc, EROFS_MOUNT_DAX_ALWAYS))
 			return -EINVAL;
@@ -491,22 +495,15 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 		if (!sbi->domain_id)
 			return -ENOMEM;
 		break;
-#else
-	case Opt_fsid:
-	case Opt_domain_id:
-		errorfc(fc, "%s option not supported", erofs_fs_parameters[opt].name);
-		break;
 #endif
-	case Opt_directio:
 #ifdef CONFIG_EROFS_FS_BACKED_BY_FILE
+	case Opt_directio:
 		if (result.boolean)
 			set_opt(&sbi->opt, DIRECT_IO);
 		else
 			clear_opt(&sbi->opt, DIRECT_IO);
-#else
-		errorfc(fc, "%s option not supported", erofs_fs_parameters[opt].name);
-#endif
 		break;
+#endif
 	}
 	return 0;
 }
