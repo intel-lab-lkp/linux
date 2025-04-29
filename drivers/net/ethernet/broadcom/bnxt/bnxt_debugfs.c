@@ -10,6 +10,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <net/netdev_rx_queue.h>
 #include "bnxt_hsi.h"
 #include <linux/dim.h>
 #include "bnxt.h"
@@ -61,6 +62,48 @@ static const struct file_operations debugfs_dim_fops = {
 	.read = debugfs_dim_read,
 };
 
+static ssize_t debugfs_reset_rx_write(struct file *filep,
+				      const char __user *buffer,
+				      size_t count, loff_t *ppos)
+{
+	unsigned int ring_nr;
+	struct bnxt *bp;
+	char buf[10];
+	ssize_t ret;
+	int rc;
+
+	if (*ppos != 0)
+		return 0;
+
+	if (count >= sizeof(buf))
+		return -ENOSPC;
+
+	ret = copy_from_user(buf, buffer, count);
+	if (ret)
+		return -EFAULT;
+	buf[count] = '\0';
+
+	sscanf(buf, "%u", &ring_nr);
+
+	bp = filep->private_data;
+	if (ring_nr > bp->rx_nr_rings)
+		return -EINVAL;
+
+	netdev_lock(bp->dev);
+	rc = netdev_rx_queue_restart(bp->dev, ring_nr);
+	netdev_unlock(bp->dev);
+	if (rc)
+		return rc;
+
+	return count;
+}
+
+static const struct file_operations debugfs_reset_rx_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = debugfs_reset_rx_write,
+};
+
 static void debugfs_dim_ring_init(struct dim *dim, int ring_idx,
 				  struct dentry *dd)
 {
@@ -86,6 +129,8 @@ void bnxt_debug_dev_init(struct bnxt *bp)
 		if (cpr && bp->bnapi[i]->rx_ring)
 			debugfs_dim_ring_init(&cpr->dim, i, dir);
 	}
+
+	debugfs_create_file("reset_rx", 0600, bp->debugfs_pdev, bp, &debugfs_reset_rx_fops);
 }
 
 void bnxt_debug_dev_exit(struct bnxt *bp)
