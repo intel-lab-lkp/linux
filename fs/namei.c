@@ -1318,11 +1318,25 @@ static int may_create_in_sticky(struct mnt_idmap *idmap, struct nameidata *nd,
 
 	i_vfsuid = i_uid_into_vfsuid(idmap, inode);
 
-	if (vfsuid_eq(i_vfsuid, dir_vfsuid))
-		return 0;
+	if (unlikely(inode->i_op->have_same_owner)) {
+		int ret = inode->i_op->have_same_owner(idmap, inode, nd->path.dentry);
 
-	if (vfsuid_eq_kuid(i_vfsuid, current_fsuid()))
-		return 0;
+		if (ret <= 0)
+			return ret;
+	} else {
+		if (vfsuid_eq(i_vfsuid, dir_vfsuid))
+			return 0;
+	}
+
+	if (unlikely(inode->i_op->is_owned_by_me)) {
+		int ret = inode->i_op->is_owned_by_me(idmap, inode);
+
+		if (ret <= 0)
+			return ret;
+	} else {
+		if (vfsuid_eq_kuid(i_vfsuid, current_fsuid()))
+			return 0;
+	}
 
 	if (likely(dir_mode & 0002)) {
 		audit_log_path_denied(AUDIT_ANOM_CREAT, "sticky_create");

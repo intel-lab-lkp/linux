@@ -477,6 +477,58 @@ error:
 	return ret;
 }
 
+/*
+ * Determine if an inode is owned by 'me' - whatever that means for the
+ * filesystem.  In the case of AFS, this means that the file is owned by the
+ * AFS user represented by the token (e.g. from a kerberos server) held in a
+ * key.  Returns 0 if owned by me, 1 if not; can also return an error.
+ */
+int afs_is_owned_by_me(struct mnt_idmap *idmap, struct inode *inode)
+{
+	struct afs_vnode *vnode = AFS_FS_I(inode);
+	afs_access_t access;
+	struct key *key;
+	int ret;
+
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key))
+		return PTR_ERR(key);
+
+	/* Get the access rights for the key on this file. */
+	ret = afs_check_permit(vnode, key, &access);
+	if (ret < 0)
+		goto error;
+
+	/* We get the ADMINISTER bit if we own the file. */
+	ret = (access & AFS_ACE_ADMINISTER) ? 0 : 1;
+error:
+	key_put(key);
+	return ret;
+}
+
+/*
+ * Determine if a file has the same owner as its parent - whatever that means
+ * for the filesystem.  In the case of AFS, this means comparing their AFS
+ * UIDs.  Returns 0 if same, 1 if not same; can also return an error.
+ */
+int afs_have_same_owner(struct mnt_idmap *idmap, struct inode *inode,
+			struct dentry *dentry)
+{
+	struct afs_vnode *vnode = AFS_FS_I(inode);
+	struct dentry *parent;
+	s64 owner;
+
+	/* Get the owner's ID for the directory.  Ideally, we'd use RCU to
+	 * access the parent rather than getting a ref.
+	 */
+	parent = dget_parent(dentry);
+	vnode = AFS_FS_I(d_backing_inode(parent));
+	owner = vnode->status.owner;
+	dput(parent);
+
+	return vnode->status.owner != owner;
+}
+
 void __exit afs_clean_up_permit_cache(void)
 {
 	int i;

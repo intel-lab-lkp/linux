@@ -2236,6 +2236,9 @@ struct inode_operations {
 			    struct dentry *dentry, struct fileattr *fa);
 	int (*fileattr_get)(struct dentry *dentry, struct fileattr *fa);
 	struct offset_ctx *(*get_offset_ctx)(struct inode *inode);
+	int (*is_owned_by_me)(struct mnt_idmap *idmap, struct inode *inode);
+	int (*have_same_owner)(struct mnt_idmap *idmap, struct inode *inode,
+			       struct dentry *dentry);
 } ____cacheline_aligned;
 
 static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
