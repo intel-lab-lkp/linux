@@ -53,6 +53,7 @@
 #define SHA2_KEY_OFFSET(bs)	(SHA2_CV_SIZE(bs) + SHA2_IMBL_SIZE(bs))
 
 struct s390_hmac_ctx {
+	struct crypto_shash *fb;
 	u8 key[MAX_BLOCK_SIZE];
 };
 
@@ -157,6 +158,11 @@ static int s390_hmac_sha2_setkey(struct crypto_shash *tfm,
 	struct s390_hmac_ctx *tfm_ctx = crypto_shash_ctx(tfm);
 	unsigned int ds = crypto_shash_digestsize(tfm);
 	unsigned int bs = crypto_shash_blocksize(tfm);
+	int err;
+
+	err = crypto_shash_setkey(tfm_ctx->fb, key, keylen);
+	if (err)
+		return err;
 
 	memset(tfm_ctx, 0, sizeof(*tfm_ctx));
 
@@ -273,7 +279,160 @@ static int s390_hmac_sha2_digest(struct shash_desc *desc,
 	return 0;
 }
 
-#define S390_HMAC_SHA2_ALG(x) {						\
+static int s390_hmac_sha2_init_tfm(struct crypto_shash *tfm)
+{
+	struct s390_hmac_ctx *ctx = crypto_shash_ctx(tfm);
+	struct crypto_shash *fb;
+
+	fb = crypto_alloc_shash(crypto_shash_alg_name(tfm), 0,
+				CRYPTO_ALG_NEED_FALLBACK);
+	if (IS_ERR(fb))
+		return PTR_ERR(fb);
+
+	ctx->fb = fb;
+	return 0;
+}
+
+static void s390_hmac_sha2_exit_tfm(struct crypto_shash *tfm)
+{
+	struct s390_hmac_ctx *ctx = crypto_shash_ctx(tfm);
+
+	crypto_free_shash(ctx->fb);
+}
+
+static int s390_hmac_export_zero(struct shash_desc *desc, void *out)
+{
+	struct s390_hmac_ctx *ctx = crypto_shash_ctx(desc->tfm);
+	struct crypto_shash *fb = ctx->fb;
+	SHASH_DESC_ON_STACK(fbdesc, fb);
+
+	fbdesc->tfm = fb;
+	return crypto_shash_init(fbdesc) ?:
+	       crypto_shash_export(fbdesc, out);
+}
+
+static int s390_hmac_export_sha256(struct shash_desc *desc, void *out)
+{
+	struct s390_kmac_sha2_ctx *ctx = shash_desc_ctx(desc);
+	u64 total = ctx->buflen[0];
+	union {
+		u8 *u8;
+		u64 *u64;
+	} p = { .u8 = out };
+	unsigned int remain;
+	u64 hashed;
+	int err = 0;
+
+	hashed = round_down(total, SHA256_BLOCK_SIZE);
+	remain = total - hashed;
+
+	if (!hashed)
+		err = s390_hmac_export_zero(desc, out);
+	else
+		memcpy(p.u8, ctx->param, SHA256_DIGEST_SIZE);
+
+	p.u8 += SHA256_DIGEST_SIZE;
+	put_unaligned(total, p.u64++);
+
+	memcpy(p.u8, ctx->buf, remain);
+
+	return err;
+}
+
+static int s390_hmac_import_sha256(struct shash_desc *desc, const void *in)
+{
+	struct s390_kmac_sha2_ctx *ctx = shash_desc_ctx(desc);
+	union {
+		const u8 *u8;
+		const u64 *u64;
+	} p = { .u8 = in };
+	unsigned int remain;
+	u64 total;
+	int err;
+
+	err = s390_hmac_sha2_init(desc);
+	if (err)
+		return err;
+
+	memcpy(ctx->param, p.u8, SHA256_DIGEST_SIZE);
+	p.u8 += SHA256_DIGEST_SIZE;
+
+	total = get_unaligned(p.u64++);
+	remain = total % SHA256_BLOCK_SIZE;
+	ctx->buflen[0] = total;
+
+	if (total - remain)
+		ctx->gr0.ikp = 1;
+
+	memcpy(ctx->buf, p.u8, remain);
+
+	return 0;
+}
+
+static int s390_hmac_export_sha512(struct shash_desc *desc, void *out)
+{
+	struct s390_kmac_sha2_ctx *ctx = shash_desc_ctx(desc);
+	u64 total_hi = ctx->buflen[1];
+	u64 total = ctx->buflen[0];
+	union {
+		u8 *u8;
+		u32 *u32;
+		u64 *u64;
+	} p = { .u8 = out };
+	unsigned int remain;
+	u64 hashed;
+	int err = 0;
+
+	hashed = round_down(total, SHA512_BLOCK_SIZE);
+	remain = total - hashed;
+
+	if (!(hashed | total_hi))
+		err = s390_hmac_export_zero(desc, out);
+	else
+		memcpy(p.u8, ctx->param, SHA512_DIGEST_SIZE);
+
+	p.u8 += SHA512_DIGEST_SIZE;
+	put_unaligned(total, p.u64++);
+	put_unaligned(total_hi, p.u64++);
+
+	memcpy(p.u8, ctx->buf, remain);
+
+	return err;
+}
+
+static int s390_hmac_import_sha512(struct shash_desc *desc, const void *in)
+{
+	struct s390_kmac_sha2_ctx *ctx = shash_desc_ctx(desc);
+	union {
+		const u8 *u8;
+		const u64 *u64;
+	} p = { .u8 = in };
+	unsigned int remain;
+	u64 total, total_hi;
+	int err;
+
+	err = s390_hmac_sha2_init(desc);
+	if (err)
+		return err;
+
+	memcpy(ctx->param, p.u8, SHA512_DIGEST_SIZE);
+	p.u8 += SHA512_DIGEST_SIZE;
+
+	total = get_unaligned(p.u64++);
+	total_hi = get_unaligned(p.u64++);
+	ctx->buflen[0] = total;
+	ctx->buflen[1] = total_hi;
+
+	remain = total % SHA512_BLOCK_SIZE;
+	if ((total - remain) | total_hi)
+		ctx->gr0.ikp = 1;
+
+	memcpy(ctx->buf, p.u8, remain);
+
+	return 0;
+}
+
+#define S390_HMAC_SHA2_ALG(x, exf, imf, state) {			\
 	.fc = CPACF_KMAC_HMAC_SHA_##x,					\
 	.alg = {							\
 		.init = s390_hmac_sha2_init,				\
@@ -281,8 +440,13 @@ static int s390_hmac_sha2_digest(struct shash_desc *desc,
 		.final = s390_hmac_sha2_final,				\
 		.digest = s390_hmac_sha2_digest,			\
 		.setkey = s390_hmac_sha2_setkey,			\
+		.init_tfm = s390_hmac_sha2_init_tfm,			\
+		.exit_tfm = s390_hmac_sha2_exit_tfm,			\
+		.export = exf,						\
+		.import = imf,						\
 		.descsize = sizeof(struct s390_kmac_sha2_ctx),		\
 		.halg = {						\
+			.statesize = sizeof(struct state),		\
 			.digestsize = SHA##x##_DIGEST_SIZE,		\
 			.base = {					\
 				.cra_name = "hmac(sha" #x ")",		\
@@ -291,6 +455,7 @@ static int s390_hmac_sha2_digest(struct shash_desc *desc,
 				.cra_priority = 400,			\
 				.cra_ctxsize = sizeof(struct s390_hmac_ctx), \
 				.cra_module = THIS_MODULE,		\
+				.cra_flags = CRYPTO_ALG_NEED_FALLBACK,	\
 			},						\
 		},							\
 	},								\
@@ -301,10 +466,10 @@ static struct s390_hmac_alg {
 	unsigned int fc;
 	struct shash_alg alg;
 } s390_hmac_algs[] = {
-	S390_HMAC_SHA2_ALG(224),
-	S390_HMAC_SHA2_ALG(256),
-	S390_HMAC_SHA2_ALG(384),
-	S390_HMAC_SHA2_ALG(512),
+	S390_HMAC_SHA2_ALG(224, s390_hmac_export_sha256, s390_hmac_import_sha256, sha256_state),
+	S390_HMAC_SHA2_ALG(256, s390_hmac_export_sha256, s390_hmac_import_sha256, sha256_state),
+	S390_HMAC_SHA2_ALG(384, s390_hmac_export_sha512, s390_hmac_import_sha512, sha512_state),
+	S390_HMAC_SHA2_ALG(512, s390_hmac_export_sha512, s390_hmac_import_sha512, sha512_state),
 };
 
 static __always_inline void _s390_hmac_algs_unregister(void)
