@@ -268,6 +268,7 @@ struct gpiochip_fwd {
 		spinlock_t slock;	/* protects tmp[] if !can_sleep */
 	};
 	struct gpiochip_fwd_timing *delay_timings;
+	void *data;
 	unsigned long *valid_mask;
 	unsigned long tmp[];		/* values and descs for multiple ops */
 };
@@ -288,6 +289,18 @@ struct gpio_chip *gpio_fwd_get_gpiochip(struct gpiochip_fwd *fwd)
 	return &fwd->chip;
 }
 EXPORT_SYMBOL_NS_GPL(gpio_fwd_get_gpiochip, "GPIO_FORWARDER");
+
+/**
+ * gpio_fwd_get_data - Get data for the GPIO forwarder
+ * @fwd: GPIO forwarder
+ *
+ * Returns: The data for the GPIO forwarder
+ */
+void *gpio_fwd_get_data(struct gpiochip_fwd *fwd)
+{
+	return fwd->data;
+}
+EXPORT_SYMBOL_NS_GPL(gpio_fwd_get_data, "GPIO_FORWARDER");
 
 /**
  * gpio_fwd_request - Request a line of the GPIO forwarder
@@ -716,10 +729,11 @@ EXPORT_SYMBOL_NS_GPL(gpio_fwd_gpio_free, "GPIO_FORWARDER");
 /**
  * gpio_fwd_register - Register a GPIO forwarder
  * @fwd: GPIO forwarder
+ * @data: driver-private data associated with this forwarder
  *
  * Returns: 0 on success, or negative errno on failure.
  */
-int gpio_fwd_register(struct gpiochip_fwd *fwd)
+int gpio_fwd_register(struct gpiochip_fwd *fwd, void *data)
 {
 	struct gpio_chip *chip = &fwd->chip;
 
@@ -734,6 +748,8 @@ int gpio_fwd_register(struct gpiochip_fwd *fwd)
 		mutex_init(&fwd->mlock);
 	else
 		spin_lock_init(&fwd->slock);
+
+	fwd->data = data;
 
 	return devm_gpiochip_add_data(chip->parent, chip, fwd);
 }
@@ -779,7 +795,7 @@ static struct gpiochip_fwd *gpio_fwd_create(struct device *dev,
 			return ERR_PTR(error);
 	}
 
-	error = gpio_fwd_register(fwd);
+	error = gpio_fwd_register(fwd, NULL);
 	if (error)
 		return ERR_PTR(error);
 
