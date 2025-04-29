@@ -796,10 +796,11 @@ static int liquidio_watchdog(void *param)
 
 #ifdef CONFIG_MODULE_UNLOAD
 		vfs_mask1 = READ_ONCE(oct->sriov_info.vf_drv_loaded_mask);
-		vfs_mask2 = READ_ONCE(other_oct->sriov_info.vf_drv_loaded_mask);
-
-		vfs_referencing_pf  = hweight64(vfs_mask1);
-		vfs_referencing_pf += hweight64(vfs_mask2);
+		vfs_referencing_pf = hweight64(vfs_mask1);
+		if (other_oct) {
+			vfs_mask2 = READ_ONCE(other_oct->sriov_info.vf_drv_loaded_mask);
+			vfs_referencing_pf += hweight64(vfs_mask2);
+		}
 
 		refcount = module_refcount(THIS_MODULE);
 		if (refcount >= vfs_referencing_pf) {
