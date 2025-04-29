@@ -276,6 +276,25 @@ static void panic_other_cpus_shutdown(bool crash_kexec)
 		crash_smp_send_stop();
 }
 
+/*
+ * If set, this function is called after a kernel panic is handled. It can
+ * be assigned using panic_set_handling(), which supports priority-based
+ * logic. For example, specific architectures may provide a default handler
+ * (priority 0) that halts the system to conserve CPU resources.
+ */
+static void (*panic_halt)(void);
+
+static int panic_halt_priority;
+
+void panic_set_handling(void (*fn)(void), int priority)
+{
+	if (panic_halt && priority <= panic_halt_priority)
+		return;
+
+	panic_halt_priority = priority;
+	panic_halt = fn;
+}
+
 /**
  *	panic - halt the system
  *	@fmt: The text string to print
@@ -466,6 +485,9 @@ void panic(const char *fmt, ...)
 	 */
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 	nbcon_atomic_flush_unsafe();
+
+	if (panic_halt)
+		panic_halt();
 
 	local_irq_enable();
 	for (i = 0; ; i += PANIC_TIMER_STEP) {
