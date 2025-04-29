@@ -24,6 +24,8 @@ enum ipe_hook_type {
 
 int ipe_bprm_check_security(struct linux_binprm *bprm);
 
+int ipe_bprm_creds_for_exec(struct linux_binprm *bprm);
+
 int ipe_mmap_file(struct file *f, unsigned long reqprot, unsigned long prot,
 		  unsigned long flags);
 

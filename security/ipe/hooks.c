@@ -36,6 +36,29 @@ int ipe_bprm_check_security(struct linux_binprm *bprm)
 }
 
 /**
+ * ipe_bprm_creds_for_exec() - ipe security hook function for bprm creds check.
+ * @bprm: Supplies a pointer to a linux_binprm structure to source the file
+ *	  being evaluated.
+ *
+ * This LSM hook is called when a script is checked for execution through the
+ * execveat syscall with the AT_EXECVE_CHECK flag.
+ *
+ * Return:
+ * * %0		- Success
+ * * %-EACCES	- Did not pass IPE policy
+ */
+int ipe_bprm_creds_for_exec(struct linux_binprm *bprm)
+{
+	struct ipe_eval_ctx ctx = IPE_EVAL_CTX_INIT;
+
+	if (!bprm->is_check)
+		return 0;
+
+	ipe_build_eval_ctx(&ctx, bprm->file, IPE_OP_EXEC, IPE_HOOK_BPRM_CHECK);
+	return ipe_evaluate_event(&ctx);
+}
+
+/**
  * ipe_mmap_file() - ipe security hook function for mmap check.
  * @f: File being mmap'd. Can be NULL in the case of anonymous memory.
  * @reqprot: The requested protection on the mmap, passed from usermode.
