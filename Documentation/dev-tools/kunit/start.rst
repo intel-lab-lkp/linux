@@ -39,6 +39,18 @@ can run kunit_tool:
 	``make ARCH=um mrproper``, just be aware that this will delete the
 	current configuration and all generated files.
 
+	You may see the following error if a prior build leaves behind
+	header files which 'make ARCH=um mrproper' fails to clean:
+
+	"undefined symbol sev_es_trampoline_start referenced ..."
+
+	This is special case scenario when a prior x86_64 build populates
+	the source tree with arch/x86/realmode/rm/pasyms.h. This header
+	will not be cleaned by 'make ARCH=um mrproper'
+
+	If you encouter this problem, run 'make ARCH=x86_64 mrproper' to
+	remove generated header files.
+
 If everything worked correctly, you should see the following:
 
 .. code-block::
