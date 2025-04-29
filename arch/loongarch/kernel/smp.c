@@ -50,6 +50,9 @@ EXPORT_SYMBOL(cpu_sibling_map);
 cpumask_t cpu_core_map[NR_CPUS] __read_mostly;
 EXPORT_SYMBOL(cpu_core_map);
 
+cpumask_t cpu_llc_shared_map[NR_CPUS] __read_mostly;
+EXPORT_SYMBOL(cpu_llc_shared_map);
+
 static DECLARE_COMPLETION(cpu_starting);
 static DECLARE_COMPLETION(cpu_running);
 
@@ -65,6 +68,10 @@ static cpumask_t cpu_sibling_setup_map;
 
 /* representing cpus for which core maps can be computed */
 static cpumask_t cpu_core_setup_map;
+
+/* representing cpus for which llc sibling maps can be computed */
+static cpumask_t cpu_llc_shared_setup_map;
+
 
 struct secondary_data cpuboot_data;
 static DEFINE_PER_CPU(int, cpu_state);
@@ -100,6 +107,42 @@ static inline void set_cpu_core_map(int cpu)
 			cpumask_set_cpu(cpu, &cpu_core_map[i]);
 		}
 	}
+}
+
+static inline bool cpus_are_shared_llc(int cpua, int cpub)
+{
+	if (cpu_to_node(cpua) != cpu_to_node(cpub))
+		return false;
+
+	return true;
+}
+
+static inline void set_cpu_llc_shared_map(int cpu)
+{
+	int i;
+
+	cpumask_set_cpu(cpu, &cpu_llc_shared_setup_map);
+
+	for_each_cpu(i, &cpu_llc_shared_setup_map) {
+		if (cpus_are_shared_llc(cpu, i)) {
+			cpumask_set_cpu(i, &cpu_llc_shared_map[cpu]);
+			cpumask_set_cpu(cpu, &cpu_llc_shared_map[i]);
+		}
+	}
+}
+
+static inline void clear_cpu_llc_shared_map(int cpu)
+{
+	int i;
+
+	for_each_cpu(i, &cpu_llc_shared_setup_map) {
+		if (cpus_are_shared_llc(cpu, i)) {
+			cpumask_clear_cpu(i, &cpu_llc_shared_map[cpu]);
+			cpumask_clear_cpu(cpu, &cpu_llc_shared_map[i]);
+		}
+	}
+
+	cpumask_clear_cpu(cpu, &cpu_llc_shared_setup_map);
 }
 
 static inline void set_cpu_sibling_map(int cpu)
@@ -406,6 +449,7 @@ int loongson_cpu_disable(void)
 #endif
 	set_cpu_online(cpu, false);
 	clear_cpu_sibling_map(cpu);
+	clear_cpu_llc_shared_map(cpu);
 	calculate_cpu_foreign_map();
 	local_irq_save(flags);
 	irq_migrate_all_off_this_cpu();
@@ -573,6 +617,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	loongson_prepare_cpus(max_cpus);
 	set_cpu_sibling_map(0);
 	set_cpu_core_map(0);
+	set_cpu_llc_shared_map(0);
 	calculate_cpu_foreign_map();
 #ifndef CONFIG_HOTPLUG_CPU
 	init_cpu_present(cpu_possible_mask);
@@ -614,6 +659,7 @@ asmlinkage void start_secondary(void)
 
 	set_cpu_sibling_map(cpu);
 	set_cpu_core_map(cpu);
+	set_cpu_llc_shared_map(cpu);
 
 	notify_cpu_starting(cpu);
 
