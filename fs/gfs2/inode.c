@@ -701,7 +701,6 @@ static int gfs2_create_inode(struct inode *dir, struct dentry *dentry,
 	u32 aflags = 0;
 	unsigned blocks = 1;
 	struct gfs2_diradd da = { .bh = NULL, .save_loc = 1, };
-	bool xattr_initialized = false;
 
 	if (!name->len || name->len > GFS2_FNAMESIZE)
 		return -ENAMETOOLONG;
@@ -843,10 +842,8 @@ retry:
 	if (error)
 		goto fail_gunlock3;
 
-	if (blocks > 1) {
+	if (blocks > 1)
 		gfs2_init_xattr(ip);
-		xattr_initialized = true;
-	}
 	init_dinode(dip, ip, symname);
 	gfs2_trans_end(sdp);
 
