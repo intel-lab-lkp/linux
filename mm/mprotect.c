@@ -91,6 +91,9 @@ static bool prot_numa_skip(struct vm_area_struct *vma, struct folio *folio,
 	bool toptier;
 	int nid;
 
+	if (folio_is_zone_device(folio) || folio_test_ksm(folio))
+		return true;
+
 	/* Also skip shared copy-on-write pages */
 	if (is_cow_mapping(vma->vm_flags) &&
 	    (folio_maybe_dma_pinned(folio) ||
@@ -126,8 +129,10 @@ static bool prot_numa_skip(struct vm_area_struct *vma, struct folio *folio,
 }
 
 static bool prot_numa_avoid_fault(struct vm_area_struct *vma,
-		unsigned long addr, pte_t oldpte, int target_node)
+		unsigned long addr, pte_t *pte, pte_t oldpte, int target_node,
+		int max_nr, int *nr)
 {
+	const fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
 	struct folio *folio;
 	int ret;
 
@@ -136,12 +141,16 @@ static bool prot_numa_avoid_fault(struct vm_area_struct *vma,
 		return true;
 
 	folio = vm_normal_folio(vma, addr, oldpte);
-	if (!folio || folio_is_zone_device(folio) ||
-	    folio_test_ksm(folio))
+	if (!folio)
 		return true;
+
 	ret = prot_numa_skip(vma, folio, target_node);
-	if (ret)
+	if (ret) {
+		if (folio_test_large(folio) && max_nr != 1)
+			*nr = folio_pte_batch(folio, addr, pte, oldpte,
+					      max_nr, flags, NULL, NULL, NULL);
 		return ret;
+	}
 	if (folio_use_access_time(folio))
 		folio_xchg_access_time(folio,
 			jiffies_to_msecs(jiffies));
@@ -159,6 +168,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 	bool prot_numa = cp_flags & MM_CP_PROT_NUMA;
 	bool uffd_wp = cp_flags & MM_CP_UFFD_WP;
 	bool uffd_wp_resolve = cp_flags & MM_CP_UFFD_WP_RESOLVE;
+	int nr;
 
 	tlb_change_page_size(tlb, PAGE_SIZE);
 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
@@ -173,8 +183,10 @@ static long change_pte_range(struct mmu_gather *tlb,
 	flush_tlb_batched_pending(vma->vm_mm);
 	arch_enter_lazy_mmu_mode();
 	do {
+		nr = 1;
 		oldpte = ptep_get(pte);
 		if (pte_present(oldpte)) {
+			int max_nr = (end - addr) >> PAGE_SHIFT;
 			pte_t ptent;
 
 			/*
@@ -182,8 +194,9 @@ static long change_pte_range(struct mmu_gather *tlb,
 			 * pages. See similar comment in change_huge_pmd.
 			 */
 			if (prot_numa &&
-			    prot_numa_avoid_fault(vma, addr,
-						  oldpte, target_node))
+			    prot_numa_avoid_fault(vma, addr, pte,
+						  oldpte, target_node,
+							  max_nr, &nr))
 					continue;
 
 			oldpte = ptep_modify_prot_start(vma, addr, pte);
@@ -300,7 +313,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				pages++;
 			}
 		}
-	} while (pte++, addr += PAGE_SIZE, addr != end);
+	} while (pte += nr, addr += nr * PAGE_SIZE, addr != end);
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(pte - 1, ptl);
 
