@@ -881,6 +881,7 @@ static void riscv_iommu_bond_unlink(struct riscv_iommu_domain *domain,
 	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
 	struct riscv_iommu_bond *bond, *found = NULL;
 	struct riscv_iommu_command cmd;
+	struct riscv_iommu_info *info;
 	int count = 0;
 
 	if (!domain)
@@ -895,8 +896,11 @@ static void riscv_iommu_bond_unlink(struct riscv_iommu_domain *domain,
 		else if (dev_to_iommu(bond->dev) == iommu)
 			count++;
 	}
-	if (found)
+	if (found) {
+		info = dev_iommu_priv_get(dev);
+		info->domain = NULL;
 		list_del_rcu(&found->list);
+	}
 	spin_unlock(&domain->lock);
 	kfree_rcu(found, rcu);
 
@@ -1292,8 +1296,16 @@ static void riscv_iommu_free_paging_domain(struct iommu_domain *iommu_domain)
 {
 	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
 	const unsigned long pfn = virt_to_pfn(domain->pgd_root);
+	struct riscv_iommu_bond *bond;
+	struct riscv_iommu_info *info;
 
 	WARN_ON(!list_empty(&domain->bonds));
+	spin_lock(&domain->lock);
+	list_for_each_entry(bond, &domain->bonds, list) {
+		info = dev_iommu_priv_get(bond->dev);
+		info->domain = NULL;
+	}
+	spin_unlock(&domain->lock);
 
 	if ((int)domain->pscid > 0)
 		ida_free(&riscv_iommu_pscids, domain->pscid);
