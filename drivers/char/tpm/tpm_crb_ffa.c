@@ -68,7 +68,8 @@
 #define CRB_FFA_GET_INTERFACE_VERSION 0x0f000001
 
 /*
- * Return information on a given feature of the TPM service
+ * Notifies the TPM service that a TPM command or TPM locality request is
+ * ready to be processed, and allows the TPM service to process it.
  * Call register usage:
  * w3:    Not used (MBZ)
  * w4:    TPM service function ID, CRB_FFA_START
