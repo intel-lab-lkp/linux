@@ -1863,6 +1863,7 @@ out:
 static int etm4_cpu_save(struct etmv4_drvdata *drvdata)
 {
 	int ret = 0;
+	struct coresight_device *sink;
 
 	/* Save the TRFCR irrespective of whether the ETM is ON */
 	if (drvdata->trfcr)
@@ -1871,8 +1872,14 @@ static int etm4_cpu_save(struct etmv4_drvdata *drvdata)
 	 * Save and restore the ETM Trace registers only if
 	 * the ETM is active.
 	 */
-	if (coresight_get_mode(drvdata->csdev) && drvdata->save_state)
+	if (coresight_get_mode(drvdata->csdev) && drvdata->save_state) {
 		ret = __etm4_cpu_save(drvdata);
+		if (ret == 0) {
+			sink = coresight_get_percpu_sink(drvdata->cpu);
+			if (sink && sink_ops(sink)->percpu_save)
+				sink_ops(sink)->percpu_save(sink);
+		}
+	}
 	return ret;
 }
 
@@ -1977,6 +1984,10 @@ static void __etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 
 static void etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 {
+	struct coresight_device *sink = coresight_get_percpu_sink(drvdata->cpu);
+
+	if (sink && sink_ops(sink)->percpu_restore)
+		sink_ops(sink)->percpu_restore(sink);
 	if (drvdata->trfcr)
 		write_trfcr(drvdata->save_trfcr);
 	if (drvdata->state_needs_restore)

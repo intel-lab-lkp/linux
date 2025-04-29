@@ -116,6 +116,20 @@ static int trbe_errata_cpucaps[] = {
 #define TRBE_WORKAROUND_OVERWRITE_FILL_MODE_SKIP_BYTES	256
 
 /*
+ * struct trbe_save_state: Register values representing TRBE state
+ * @trblimitr	- Trace Buffer Limit Address Register value
+ * @trbbaser	- Trace Buffer Base Register value
+ * @trbptr	- Trace Buffer Write Pointer Register value
+ * @trbsr	- Trace Buffer Status Register value
+ */
+struct trbe_save_state {
+	u64 trblimitr;
+	u64 trbbaser;
+	u64 trbptr;
+	u64 trbsr;
+};
+
+/*
  * struct trbe_cpudata: TRBE instance specific data
  * @trbe_flag		- TRBE dirty/access flag support
  * @trbe_hw_align	- Actual TRBE alignment required for TRBPTR_EL1.
@@ -123,6 +137,8 @@ static int trbe_errata_cpucaps[] = {
  * @cpu			- CPU this TRBE belongs to.
  * @mode		- Mode of current operation. (perf/disabled)
  * @drvdata		- TRBE specific drvdata
+ * @state_needs_restore	- Whether TRBE state has been saved and can be restored
+ * @save_state		- Saved TRBE state
  * @errata		- Bit map for the errata on this TRBE.
  */
 struct trbe_cpudata {
@@ -133,6 +149,8 @@ struct trbe_cpudata {
 	enum cs_mode mode;
 	struct trbe_buf *buf;
 	struct trbe_drvdata *drvdata;
+	bool state_needs_restore;
+	struct trbe_save_state save_state;
 	DECLARE_BITMAP(errata, TRBE_ERRATA_MAX);
 };
 
@@ -1187,12 +1205,51 @@ static irqreturn_t arm_trbe_irq_handler(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
+static void arm_trbe_cpu_save(struct coresight_device *csdev)
+{
+	struct trbe_cpudata *cpudata = dev_get_drvdata(&csdev->dev);
+	struct trbe_save_state *state;
+
+	if (cpudata->mode == CS_MODE_DISABLED)
+		return;
+
+	state = &cpudata->save_state;
+	state->trbbaser = read_sysreg_s(SYS_TRBBASER_EL1);
+	state->trbptr = read_sysreg_s(SYS_TRBPTR_EL1);
+	state->trblimitr = read_sysreg_s(SYS_TRBLIMITR_EL1);
+	state->trbsr = read_sysreg_s(SYS_TRBSR_EL1);
+	cpudata->state_needs_restore = true;
+}
+
+static void arm_trbe_cpu_restore(struct coresight_device *csdev)
+{
+	struct trbe_cpudata *cpudata = dev_get_drvdata(&csdev->dev);
+	struct trbe_save_state *state;
+
+	if (cpudata->state_needs_restore) {
+		/*
+		 * To avoid disruption of normal tracing, restore trace
+		 * registers only when TRBE lost power (TRBLIMITR == 0).
+		 */
+		if (read_sysreg_s(SYS_TRBLIMITR_EL1) == 0) {
+			state = &cpudata->save_state;
+			write_sysreg_s(state->trbbaser, SYS_TRBBASER_EL1);
+			write_sysreg_s(state->trbptr, SYS_TRBPTR_EL1);
+			write_sysreg_s(state->trbsr, SYS_TRBSR_EL1);
+			set_trbe_enabled(cpudata, state->trblimitr);
+		}
+		cpudata->state_needs_restore = false;
+	}
+}
+
 static const struct coresight_ops_sink arm_trbe_sink_ops = {
 	.enable		= arm_trbe_enable,
 	.disable	= arm_trbe_disable,
 	.alloc_buffer	= arm_trbe_alloc_buffer,
 	.free_buffer	= arm_trbe_free_buffer,
 	.update_buffer	= arm_trbe_update_buffer,
+	.percpu_save	= arm_trbe_cpu_save,
+	.percpu_restore	= arm_trbe_cpu_restore,
 };
 
 static const struct coresight_ops arm_trbe_cs_ops = {
@@ -1358,6 +1415,7 @@ static void arm_trbe_probe_cpu(void *info)
 	cpudata->trbe_flag = get_trbe_flag_update(trbidr);
 	cpudata->cpu = cpu;
 	cpudata->drvdata = drvdata;
+	cpudata->state_needs_restore = false;
 	return;
 cpu_clear:
 	cpumask_clear_cpu(cpu, &drvdata->supported_cpus);
