@@ -894,6 +894,8 @@ int xe_device_probe(struct xe_device *xe)
 
 	xe_late_bind_fw_init(&xe->late_bind);
 
+	xe_late_bind_fw_load(&xe->late_bind);
+
 	err = xe_oa_init(xe);
 	if (err)
 		return err;

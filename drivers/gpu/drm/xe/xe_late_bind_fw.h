@@ -13,5 +13,6 @@ struct xe_late_bind;
 int xe_late_bind_init(struct xe_late_bind *late_bind);
 void xe_late_bind_remove(struct xe_late_bind *late_bind);
 int xe_late_bind_fw_init(struct xe_late_bind *late_bind);
+int xe_late_bind_fw_load(struct xe_late_bind *late_bind);
 
 #endif

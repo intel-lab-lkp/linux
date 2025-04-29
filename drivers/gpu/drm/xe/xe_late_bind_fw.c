@@ -16,6 +16,16 @@
 #include "xe_late_bind_fw.h"
 #include "xe_pcode.h"
 #include "xe_pcode_api.h"
+#include "xe_pm.h"
+
+/*
+ * The component should load quite quickly in most cases, but it could take
+ * a bit. Using a very big timeout just to cover the worst case scenario
+ */
+#define LB_INIT_TIMEOUT_MS 20000
+
+#define LB_FW_LOAD_RETRY_MAXCOUNT 40
+#define LB_FW_LOAD_RETRY_PAUSE_MS 50
 
 static const char * const fw_id_to_name[] = {
 		[FAN_CONTROL_ID] = "fan_control",
@@ -45,6 +55,78 @@ static int late_bind_fw_num_fans(struct xe_late_bind *late_bind)
 		return 0;
 }
 
+static void late_bind_work(struct work_struct *work)
+{
+	struct xe_late_bind_fw *lbfw = container_of(work, struct xe_late_bind_fw, work);
+	struct xe_late_bind *late_bind = container_of(lbfw, struct xe_late_bind,
+						      late_bind_fw[lbfw->id]);
+	struct xe_device *xe = late_bind_to_xe(late_bind);
+	int retry = LB_FW_LOAD_RETRY_MAXCOUNT;
+	int ret;
+	int slept;
+
+	if (!late_bind->component_added)
+		return;
+
+	if (!lbfw->valid)
+		return;
+
+	/* we can queue this before the component is bound */
+	for (slept = 0; slept < LB_INIT_TIMEOUT_MS; slept += 100) {
+		if (late_bind->component)
+			break;
+		msleep(100);
+	}
+
+	xe_pm_runtime_get(xe);
+	mutex_lock(&late_bind->mutex);
+	drm_dbg(&xe->drm, "Load %s firmware\n", fw_id_to_name[lbfw->id]);
+
+	do {
+		ret = late_bind->component->ops->push_config(late_bind->component->mei_dev,
+							     lbfw->type, lbfw->flags,
+							     lbfw->payload, lbfw->payload_size);
+		if (!ret)
+			break;
+		msleep(LB_FW_LOAD_RETRY_PAUSE_MS);
+	} while (--retry && ret == -EAGAIN);
+
+	if (ret)
+		drm_err(&xe->drm, "Load %s firmware failed with err %d\n",
+			fw_id_to_name[lbfw->id], ret);
+	else
+		drm_dbg(&xe->drm, "Load %s firmware successful\n",
+			fw_id_to_name[lbfw->id]);
+
+	mutex_unlock(&late_bind->mutex);
+	xe_pm_runtime_put(xe);
+}
+
+int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
+{
+	struct xe_device *xe = late_bind_to_xe(late_bind);
+	struct xe_late_bind_fw *lbfw;
+	int id;
+
+	if (!late_bind->component_added)
+		return -EINVAL;
+
+	for (id = 0; id < MAX_ID; id++) {
+		lbfw = &late_bind->late_bind_fw[id];
+		if (lbfw->valid) {
+			drm_dbg(&xe->drm, "Queue work: to load %s firmware\n",
+				fw_id_to_name[lbfw->id]);
+			queue_work(late_bind->wq, &lbfw->work);
+		}
+	}
+	return 0;
+}
+
+/**
+ * late_bind_fw_init() - initialize late bind firmware
+ *
+ * Return: 0 if the initialization was successful, a negative errno otherwise.
+ */
 static int late_bind_fw_init(struct xe_late_bind *late_bind, u32 id)
 {
 	struct xe_device *xe = late_bind_to_xe(late_bind);
@@ -93,6 +175,7 @@ static int late_bind_fw_init(struct xe_late_bind *late_bind, u32 id)
 
 	memcpy(lb_fw->payload, fw->data, lb_fw->payload_size);
 	release_firmware(fw);
+	INIT_WORK(&lb_fw->work, late_bind_work);
 	lb_fw->valid = true;
 
 	return 0;
@@ -108,12 +191,17 @@ int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
 	int id;
 	int ret;
 
+	late_bind->wq = create_singlethread_workqueue("late-bind-ordered-wq");
+	if (!late_bind->wq)
+		return -ENOMEM;
+
 	for (id = 0; id < MAX_ID; id++) {
 		ret = late_bind_fw_init(late_bind, id);
 		if (ret)
 			return ret;
 	}
-	return ret;
+
+	return 0;
 }
 
 static int xe_late_bind_component_bind(struct device *xe_kdev,
@@ -179,7 +267,6 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
 	}
 
 	late_bind->component_added = true;
-	/* the component must be removed before unload, so can't use drmm for cleanup */
 
 	return 0;
 }
