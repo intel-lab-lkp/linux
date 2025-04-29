@@ -16,6 +16,7 @@
 #include <linux/initrd.h>
 #include <linux/iscsi_ibft.h>
 #include <linux/memblock.h>
+#include <linux/panic.h>
 #include <linux/panic_notifier.h>
 #include <linux/pci.h>
 #include <linux/root_dev.h>
@@ -783,6 +784,20 @@ static void __init x86_report_nx(void)
 }
 
 /*
+ * Halt the CPU to save resources after panic is handled. If
+ * console_trylock() succeeds, no other CPU is currently writing to the
+ * console
+ *
+ */
+static void x86_panic_handler(void)
+{
+	if (console_trylock()) {
+		console_unlock();
+		safe_halt();
+	}
+}
+
+/*
  * Determine if we were loaded by an EFI loader.  If so, then we have also been
  * passed the efi memmap, systab, etc., so we should use these data structures
  * for initialization.  Note, the efi init code path is determined by the
@@ -1262,6 +1277,8 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	unwind_init();
+
+	panic_set_handling(x86_panic_handler, 0);
 }
 
 #ifdef CONFIG_X86_32
