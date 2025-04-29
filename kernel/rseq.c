@@ -27,7 +27,7 @@
 				  RSEQ_CS_FLAG_NO_RESTART_ON_MIGRATE)
 
 #ifdef CONFIG_DEBUG_RSEQ
-static struct rseq *rseq_kernel_fields(struct task_struct *t)
+static __always_inline struct rseq *rseq_kernel_fields(struct task_struct *t)
 {
 	return (struct rseq *) t->rseq_fields;
 }
