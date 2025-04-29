@@ -101,7 +101,7 @@ static enum dso_binary_type binary_type_symtab[] = {
 static bool symbol_type__filter(char symbol_type)
 {
 	symbol_type = toupper(symbol_type);
-	return symbol_type == 'T' || symbol_type == 'W' || symbol_type == 'D' || symbol_type == 'B';
+	return symbol_type == 'T' || symbol_type == 'W' || symbol_type == 'D' || symbol_type == 'B' || symbol_type == 'U';
 }
 
 static int prefix_underscores_count(const char *str)
