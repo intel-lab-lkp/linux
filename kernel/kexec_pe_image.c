@@ -15,6 +15,9 @@
 #include <linux/kexec.h>
 #include <linux/pe.h>
 #include <linux/string.h>
+#include <linux/bpf.h>
+#include <linux/filter.h>
+#include <linux/decompress/generic.h>
 #include <asm/byteorder.h>
 #include <asm/cpufeature.h>
 #include <asm/image.h>
@@ -51,6 +54,186 @@ static struct parsed_phase *alloc_new_phase(void)
 
 	return phase;
 }
+
+struct mem_range_result {
+	refcount_t usage;
+	/*
+	 * Pointer to a kernel space, which is written by kfunc and read by
+	 * bpf-prog. Hence kfunc guarantees its validation.
+	 */
+	char *buf;
+	uint32_t size;     // Size of decompressed data
+	int status;        // Status code (0 for success)
+};
+
+#define MAX_KEXEC_RES_SIZE	(1 << 29)
+
+BTF_KFUNCS_START(bpf_kexec_ids)
+BTF_ID_FLAGS(func, bpf_kexec_carrier, KF_TRUSTED_ARGS)
+BTF_ID_FLAGS(func, bpf_kexec_decompress, KF_TRUSTED_ARGS | KF_ACQUIRE)
+BTF_ID_FLAGS(func, bpf_kexec_result_release, KF_RELEASE)
+BTF_KFUNCS_END(bpf_kexec_ids)
+
+static const struct btf_kfunc_id_set kexec_kfunc_set = {
+	.owner = THIS_MODULE,
+	.set = &bpf_kexec_ids,
+};
+
+/*
+ * Copy the partial decompressed content in [buf, buf + len) to dst.
+ * If the dst size is beyond the capacity, return 0 to indicate the
+ * decompress method that something is wrong.
+ */
+//to do
+static long flush_buffer(void *buf, unsigned long len)
+{
+
+	//return len to indicate everything goest smoothly
+	return 0;
+}
+
+
+__bpf_kfunc_start_defs();
+
+/*
+ * @name should be one of : kernel, initrd, cmdline
+ */
+__bpf_kfunc int bpf_kexec_carrier(const char *name, struct mem_range_result *r)
+{
+	struct kexec_res *res;
+	int ret = 0;
+
+	if (!r) {
+		pr_err("%s, receive invalid range\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!r || !name)
+		return -EINVAL;
+	if (r->size == 0 || r->size > MAX_KEXEC_RES_SIZE) {
+		pr_err("Invalid resource size: 0x%x\n", r->size);
+		return -EINVAL;
+	}
+
+	res = kzalloc(sizeof(struct kexec_res), GFP_KERNEL);
+	if (!res)
+		return -ENOMEM;
+
+	for (int i = 0; i < ARRAY_SIZE(kexec_res_names); i++) {
+		if (!strcmp(kexec_res_names[i], name))
+			res->name = kexec_res_names[i];
+	}
+
+	if (res->name == NULL) {
+		pr_err("Invalid resource name: %s, should be 'kernel', 'initrd', 'cmdline'\n", name);
+		kfree(res);
+		return -EINVAL;
+	}
+
+	res->buf = vmalloc(r->size);
+	if (!res->buf) {
+		kfree(res);
+		return -ENOMEM;
+	}
+	ret = copy_from_kernel_nofault(res->buf, r->buf, r->size);
+	if (unlikely(ret < 0)) {
+		kfree(res->buf);
+		kfree(res);
+		return -EINVAL;
+	}
+	res->size = r->size;
+
+	INIT_LIST_HEAD(&res->node);
+	list_add_tail(&res->node, &cur_phase->res_head);
+	return 0;
+}
+
+__bpf_kfunc struct mem_range_result *bpf_kexec_decompress(char *image_gz_payload, int image_gz_sz,
+			unsigned int expected_decompressed_sz)
+{
+	decompress_fn decompressor;
+	//todo, use flush to cap the memory size used by decompression
+	long (*flush)(void*, unsigned long) = NULL;
+	struct mem_range_result *range;
+	const char *name;
+	void *output_buf;
+	char *input_buf;
+	int ret;
+
+	range = kmalloc(sizeof(struct mem_range_result), GFP_KERNEL);
+	if (!range) {
+		pr_err("fail to allocate mem_range_result\n");
+		return NULL;
+	}
+	refcount_set(&range->usage, 1);
+
+	input_buf = vmalloc(image_gz_sz);
+	if (!input_buf) {
+		pr_err("fail to allocate input buffer\n");
+		kfree(range);
+		return NULL;
+	}
+
+	ret = copy_from_kernel_nofault(input_buf, image_gz_payload, image_gz_sz);
+	if (ret < 0) {
+		pr_err("Error when copying from 0x%px, size:0x%x\n",
+				image_gz_payload, image_gz_sz);
+		kfree(range);
+		vfree(input_buf);
+		return NULL;
+	}
+
+	output_buf = vmalloc(expected_decompressed_sz);
+	if (!output_buf) {
+		pr_err("fail to allocate output buffer\n");
+		kfree(range);
+		vfree(input_buf);
+		return NULL;
+	}
+
+	decompressor = decompress_method(input_buf, image_gz_sz, &name);
+	if (!decompressor) {
+		pr_err("Can not find decompress method\n");
+		kfree(range);
+		vfree(input_buf);
+		vfree(output_buf);
+		return NULL;
+	}
+	//to do, use flush
+	ret = decompressor(image_gz_payload, image_gz_sz, NULL, NULL,
+				output_buf, NULL, NULL);
+
+	/* Update the range map */
+	if (ret == 0) {
+		range->buf = output_buf;
+		range->size = expected_decompressed_sz;
+		range->status = 0;
+	} else {
+		pr_err("Decompress error\n");
+		vfree(output_buf);
+		kfree(range);
+		return NULL;
+	}
+	pr_info("%s, return range 0x%lx\n", __func__, range);
+	return range;
+}
+
+__bpf_kfunc int bpf_kexec_result_release(struct mem_range_result *result)
+{
+	if (!result) {
+		pr_err("%s, receive invalid range\n", __func__);
+		return -EINVAL;
+	}
+
+	if (refcount_dec_and_test(&result->usage)) {
+		vfree(result->buf);
+		kfree(result);
+	}
+
+	return 0;
+}
+
+__bpf_kfunc_end_defs();
 
 static bool is_valid_pe(const char *kernel_buf, unsigned long kernel_len)
 {
@@ -336,3 +519,14 @@ const struct kexec_file_ops kexec_pe_image_ops = {
 	.verify_sig = kexec_kernel_verify_pe_sig,
 #endif
 };
+
+static int __init bpf_kfunc_init(void)
+{
+	int ret;
+
+	ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_TRACING, &kexec_kfunc_set);
+	if (!!ret)
+		pr_err("Fail to register btf for kexec_kfunc_set\n");
+	return ret;
+}
+late_initcall(bpf_kfunc_init);
