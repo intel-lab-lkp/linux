@@ -319,7 +319,7 @@ static char *demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 	 * DWARF DW_compile_unit has this, but we don't always have access
 	 * to it...
 	 */
-	if (!want_demangle(dso__kernel(dso) || kmodule))
+	if (!want_demangle((dso && dso__kernel(dso)) || kmodule))
 		return demangled;
 
 	rust_demangle_demangle(elf_name, &rust_demangle);
@@ -338,7 +338,7 @@ static char *demangle_sym(struct dso *dso, int kmodule, const char *elf_name)
 			}
 			demangled = tmp;
 			if (rust_demangle_display_demangle(&rust_demangle, demangled, buf_len,
-							   /*alternate=*/false) == OverflowOk)
+							   /*alternate=*/true) == OverflowOk)
 				return demangled;
 		}
 		/* Buffer exceeded sensible bounds, return what is there. */
