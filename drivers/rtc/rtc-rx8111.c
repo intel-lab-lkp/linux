@@ -58,7 +58,14 @@
 #define RX8111_FLAG_XST_BIT BIT(0)
 #define RX8111_FLAG_VLF_BIT BIT(1)
 
+#define RX8111_REG_TS_RAM_START		0x40	/* Timestamp RAM area start. */
+#define RX8111_REG_TS_RAM_END		0x7f	/* Timestamp RAM area end. */
+
+#define RX8111_BIT_EVIN_SETTING_OVW	BIT(1)	/* Enable overwrite timestamp RAM. */
+#define RX8111_BIT_EVIN_SETTING_PU1	BIT(3)	/* Pull up select 1. */
+
 #define RX8111_TIME_BUF_SZ (RX8111_REG_YEAR - RX8111_REG_SEC + 1)
+#define RX8111_TS_BUF_SZ (RX8111_REG_TS_YEAR - RX8111_REG_TS_SEC + 1)
 
 enum rx8111_regfield {
 	/* RX8111_REG_EXT. */
@@ -98,6 +105,11 @@ enum rx8111_regfield {
 	/* RX8111_REG_STATUS_MON. */
 	RX8111_REGF_VLOW,
 
+	/* RX8111_REG_TS_CTRL1. */
+	RX8111_REGF_TSRAM,
+	RX8111_REGF_TSCLR,
+	RX8111_REGF_EISEL,
+
 	/* Sentinel value. */
 	RX8111_REGF_MAX
 };
@@ -134,12 +146,16 @@ static const struct reg_field rx8111_regfields[] = {
 	[RX8111_REGF_CHGEN]  = REG_FIELD(RX8111_REG_PWR_SWITCH_CTRL, 7, 7),
 
 	[RX8111_REGF_VLOW]  = REG_FIELD(RX8111_REG_STATUS_MON, 1, 1),
+
+	[RX8111_REGF_TSRAM]  = REG_FIELD(RX8111_REG_TS_CTRL1, 0, 0),
+	[RX8111_REGF_TSCLR]  = REG_FIELD(RX8111_REG_TS_CTRL1, 1, 1),
+	[RX8111_REGF_EISEL]  = REG_FIELD(RX8111_REG_TS_CTRL1, 2, 2),
 };
 
 static const struct regmap_config rx8111_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
-	.max_register = RX8111_REG_TS_CTRL3,
+	.max_register = RX8111_REG_TS_RAM_END,
 };
 
 struct rx8111_data {
@@ -147,7 +163,223 @@ struct rx8111_data {
 	struct regmap_field *regfields[RX8111_REGF_MAX];
 	struct device *dev;
 	struct rtc_device *rtc;
+	spinlock_t ts_lock;	/* Don't allow poll of ETS bit when it's temporarily disabled. */
 };
+
+static ssize_t timestamp0_store(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct rx8111_data *data = dev_get_drvdata(dev);
+	int ret, etsval;
+
+	/*
+	 * Clear event only if events are enabled. This is to protect
+	 * us from losing events in the future if events have been disabled
+	 * by mistake (error in read function).
+	 */
+	spin_lock(&data->ts_lock);
+	ret = regmap_field_read(data->regfields[RX8111_REGF_ETS], &etsval);
+	spin_unlock(&data->ts_lock);
+
+	if (ret) {
+		dev_dbg(dev, "Could not read ETS (%d)\n", ret);
+		return ret;
+	}
+
+	if (!etsval)
+		return -EINVAL;
+
+	ret = regmap_field_write(data->regfields[RX8111_REGF_EVF], 0);
+	if (ret) {
+		dev_dbg(dev, "Could not write EVF bit (%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_field_write(data->regfields[RX8111_REGF_TSCLR], 1);
+	if (ret) {
+		dev_dbg(dev, "Could not write TSCLR bit (%d)\n", ret);
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t timestamp0_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct rx8111_data *data = dev_get_drvdata(dev);
+
+	struct rtc_time tm;
+	int ret, evfval;
+	u8 date[RX8111_TS_BUF_SZ];
+
+	/* Read out timestamp values only when an event has occurred. */
+	ret = regmap_field_read(data->regfields[RX8111_REGF_EVF], &evfval);
+	if (ret) {
+		dev_dbg(dev, "Could not read EVF (%d)\n", ret);
+		return ret;
+	}
+
+	if (!evfval)
+		return 0;
+
+	spin_lock(&data->ts_lock);
+
+	/* Disable timestamp during readout to avoid unreliable data. */
+	ret = regmap_field_write(data->regfields[RX8111_REGF_ETS], 0);
+	if (ret) {
+		dev_dbg(dev, "Could not disable timestamp function (%d)\n",
+			ret);
+		goto err_out;
+	}
+
+	ret = regmap_bulk_read(data->regmap, RX8111_REG_TS_SEC, date,
+			       sizeof(date));
+	if (ret) {
+		dev_dbg(dev, "Could not read timestamp data (%d)\n", ret);
+		goto err_out;
+	}
+
+	ret = regmap_field_write(data->regfields[RX8111_REGF_ETS], 1);
+	if (ret) {
+		dev_dbg(dev, "Could not enable timestamp function (%d)\n", ret);
+		goto err_out;
+	}
+
+	spin_unlock(&data->ts_lock);
+
+	tm.tm_sec = bcd2bin(date[0]);
+	tm.tm_min = bcd2bin(date[1]);
+	tm.tm_hour = bcd2bin(date[2]);
+	tm.tm_mday = bcd2bin(date[4]);
+	tm.tm_mon = bcd2bin(date[5]) - 1;
+	tm.tm_year = bcd2bin(date[6]) + 100;
+
+	ret = rtc_valid_tm(&tm);
+	if (ret)
+		return ret;
+
+	return sprintf(buf, "%llu\n",
+		       (unsigned long long)rtc_tm_to_time64(&tm));
+
+err_out:
+	spin_unlock(&data->ts_lock);
+	return ret;
+}
+
+static DEVICE_ATTR_RW(timestamp0);
+
+static ssize_t timestamp0_write_nvmem_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct rx8111_data *data = dev_get_drvdata(dev);
+	bool enable;
+	int ret;
+
+	if (count < 1)
+		return -EINVAL;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	ret = regmap_field_write(data->regfields[RX8111_REGF_TSRAM],
+				 enable ? 1 : 0);
+	if (ret) {
+		dev_dbg(dev, "Could not set TSRAM bit (%d)\n", ret);
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t timestamp0_write_nvmem_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct rx8111_data *data = dev_get_drvdata(dev);
+	int enable;
+	int ret;
+
+	ret = regmap_field_read(data->regfields[RX8111_REGF_TSRAM], &enable);
+	if (ret) {
+		dev_dbg(dev, "Could not read TSRAM bit (%d)\n", ret);
+		return ret;
+	}
+
+	return sprintf(buf, "%s\n", enable ? "1" : "0");
+}
+
+static DEVICE_ATTR_RW(timestamp0_write_nvmem);
+
+static int rx8111_sysfs_register(struct device *dev)
+{
+	int ret;
+
+	ret = device_create_file(dev, &dev_attr_timestamp0);
+	if (ret)
+		return ret;
+
+	ret = device_create_file(dev, &dev_attr_timestamp0_write_nvmem);
+	if (ret)
+		device_remove_file(dev, &dev_attr_timestamp0);
+
+	return ret;
+}
+
+static void rx8111_sysfs_unregister(void *data)
+{
+	struct device *dev = (struct device *)data;
+
+	device_remove_file(dev, &dev_attr_timestamp0);
+	device_remove_file(dev, &dev_attr_timestamp0_write_nvmem);
+}
+
+static int rx8111_setup(struct rx8111_data *data)
+{
+	int ret;
+
+	/* Disable multiple timestamps; area is used for nvmem as default. */
+	ret = regmap_write(data->regmap, RX8111_REG_TS_CTRL2, 0);
+	if (ret) {
+		dev_dbg(data->dev, "Could not setup TS_CTRL2 (%d)\n", ret);
+		return ret;
+	}
+
+	ret = regmap_write(data->regmap, RX8111_REG_TS_CTRL3, 0);
+	if (ret) {
+		dev_dbg(data->dev, "Could not setup TS_CTRL3 (%d)\n", ret);
+		return ret;
+	}
+
+	/* Configure EVIN pin, trigger on low level. PU = 1M Ohm. */
+	ret = regmap_write(data->regmap, RX8111_REG_EVIN_SETTING,
+			   RX8111_BIT_EVIN_SETTING_PU1 |
+				   RX8111_BIT_EVIN_SETTING_OVW);
+	if (ret) {
+		dev_dbg(data->dev, "Could not setup EVIN (%d)\n", ret);
+		return ret;
+	}
+
+	/* Enable timestamp triggered by EVIN pin. */
+	ret = regmap_field_write(data->regfields[RX8111_REGF_ETS], 1);
+	if (ret) {
+		dev_dbg(data->dev, "Could not enable timestamp function (%d)\n",
+			ret);
+		return ret;
+	}
+
+	/* Disable all interrupts. */
+	ret = regmap_write(data->regmap, RX8111_REG_CTRL, 0);
+	if (ret) {
+		dev_dbg(data->dev, "Could not disable interrupts (%d)\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 static int rx8111_read_vl_flag(struct rx8111_data *data, unsigned int *vlval)
 {
@@ -156,6 +388,17 @@ static int rx8111_read_vl_flag(struct rx8111_data *data, unsigned int *vlval)
 	ret = regmap_field_read(data->regfields[RX8111_REGF_VLF], vlval);
 	if (ret)
 		dev_dbg(data->dev, "Could not read VL flag (%d)", ret);
+
+	return ret;
+}
+
+static int rx8111_clear_vl_flag(struct rx8111_data *data)
+{
+	int ret;
+
+	ret = regmap_field_write(data->regfields[RX8111_REGF_VLF], 0);
+	if (ret)
+		dev_dbg(data->dev, "Could not write VL flag (%d)", ret);
 
 	return ret;
 }
@@ -289,9 +532,67 @@ static int rx8111_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
 		vlval |= regval ? RTC_VL_BACKUP_LOW : 0;
 
 		return put_user(vlval, (typeof(vlval) __user *)arg);
+	case RTC_VL_CLR:
+		return rx8111_clear_vl_flag(data);
 	default:
 		return -ENOIOCTLCMD;
 	}
+}
+
+static int rx8111_nvram_write(void *priv, unsigned int offset, void *val,
+			      size_t bytes)
+{
+	struct rx8111_data *data = priv;
+	int ret, len;
+
+	/*
+	 * The RX8111 device can only handle transfers with repeated start
+	 * within the same 16 bytes aligned block.
+	 */
+	while (bytes > 0) {
+		len = ((offset % 15) + bytes > 16) ? 16 - (offset % 16) : bytes;
+		ret = regmap_bulk_write(data->regmap,
+					RX8111_REG_TS_RAM_START + offset, val,
+					len);
+		if (ret) {
+			dev_dbg(data->dev, "Could not write nvmem (%d)\n", ret);
+			return ret;
+		}
+
+		val += len;
+		offset += len;
+		bytes -= len;
+	}
+
+	return 0;
+}
+
+static int rx8111_nvram_read(void *priv, unsigned int offset, void *val,
+			     size_t bytes)
+{
+	struct rx8111_data *data = priv;
+	int ret, len;
+
+	/*
+	 * The RX8111 device can only handle transfers with repeated start
+	 * within the same 16 bytes aligned block.
+	 */
+	while (bytes > 0) {
+		len = ((offset % 15) + bytes > 16) ? 16 - (offset % 16) : bytes;
+		ret = regmap_bulk_read(data->regmap,
+				       RX8111_REG_TS_RAM_START + offset, val,
+				       len);
+		if (ret) {
+			dev_dbg(data->dev, "Could not read nvmem (%d)\n", ret);
+			return ret;
+		}
+
+		val += len;
+		offset += len;
+		bytes -= len;
+	}
+
+	return 0;
 }
 
 static const struct rtc_class_ops rx8111_rtc_ops = {
@@ -305,12 +606,24 @@ static int rx8111_probe(struct i2c_client *client)
 	struct rx8111_data *data;
 	struct rtc_device *rtc;
 	size_t i;
+	int ret;
+	struct nvmem_config nvmem_cfg = {
+		.name = "rx8111_nvram",
+		.word_size = 1,
+		.stride = 1,
+		.size = RX8111_REG_TS_RAM_END - RX8111_REG_TS_RAM_START + 1,
+		.type = NVMEM_TYPE_BATTERY_BACKED,
+		.reg_read = rx8111_nvram_read,
+		.reg_write = rx8111_nvram_write,
+	};
 
 	data = devm_kmalloc(&client->dev, sizeof(*data), GFP_KERNEL);
 	if (!data) {
 		dev_dbg(&client->dev, "Could not allocate device data\n");
 		return -ENOMEM;
 	}
+
+	spin_lock_init(&data->ts_lock);
 
 	data->dev = &client->dev;
 	dev_set_drvdata(data->dev, data);
@@ -331,6 +644,10 @@ static int rx8111_probe(struct i2c_client *client)
 		}
 	}
 
+	ret = rx8111_setup(data);
+	if (ret)
+		return ret;
+
 	rtc = devm_rtc_allocate_device(data->dev);
 	if (IS_ERR(rtc)) {
 		dev_dbg(data->dev, "Could not allocate rtc device\n");
@@ -343,7 +660,37 @@ static int rx8111_probe(struct i2c_client *client)
 
 	clear_bit(RTC_FEATURE_ALARM, rtc->features);
 
-	return devm_rtc_register_device(rtc);
+	ret = devm_rtc_register_device(rtc);
+	if (ret) {
+		dev_dbg(data->dev,
+			"Could not register rtc device (%d)\n", ret);
+		return ret;
+	}
+
+	ret = rx8111_sysfs_register(data->dev);
+	if (ret) {
+		dev_dbg(data->dev,
+			"Could not create sysfs entry (%d)\n", ret);
+		return ret;
+	}
+
+	ret = devm_add_action_or_reset(data->dev, &rx8111_sysfs_unregister,
+				       data->dev);
+	if (ret) {
+		dev_dbg(data->dev,
+			"Could not add sysfs unregister devres action (%d)\n", ret);
+		return ret;
+	}
+
+	nvmem_cfg.priv = data;
+	ret = devm_rtc_nvmem_register(rtc, &nvmem_cfg);
+	if (ret) {
+		dev_dbg(data->dev,
+			"Could not register rtc nvmem device (%d)\n", ret);
+		return ret;
+	}
+
+	return 0;
 }
 
 static const struct of_device_id rx8111_of_match[] = {
