@@ -6,6 +6,7 @@
 
 use crate::{
     bindings,
+    error::to_result,
     str::CStr,
     types::{ARef, Opaque},
 };
@@ -206,6 +207,20 @@ impl<Ctx: DeviceContext> Device<Ctx> {
     pub fn property_present(&self, name: &CStr) -> bool {
         // SAFETY: By the invariant of `CStr`, `name` is null-terminated.
         unsafe { bindings::device_property_present(self.as_raw().cast_const(), name.as_char_ptr()) }
+    }
+}
+
+impl Device<Bound> {
+    /// Populate platform_devices from device tree data
+    pub fn devm_of_platform_populate(&self) -> crate::error::Result<()> {
+        // SAFETY: self is valid bound Device reference
+        to_result(unsafe { bindings::devm_of_platform_populate(self.as_raw()) })
+    }
+
+    /// Remove devices populated from device tree
+    pub fn devm_of_platform_depopulate(&self) {
+        // SAFETY: self is valid bound Device reference
+        unsafe { bindings::devm_of_platform_depopulate(self.as_raw()) }
     }
 }
 
