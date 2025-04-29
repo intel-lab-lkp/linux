@@ -560,7 +560,8 @@ static const struct rkisp1_info imx8mp_isp_info = {
 	.isp_ver = RKISP1_V_IMX8MP,
 	.features = RKISP1_FEATURE_MAIN_STRIDE
 		  | RKISP1_FEATURE_DMA_34BIT
-		  | RKISP1_FEATURE_COMPAND,
+		  | RKISP1_FEATURE_COMPAND
+		  | RKISP1_FEATURE_AWB64,
 	.max_width = 4096,
 	.max_height = 3072,
 };
