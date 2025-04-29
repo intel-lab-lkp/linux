@@ -495,9 +495,13 @@ static int ovl_check_origin(struct ovl_fs *ofs, struct dentry *upperdentry,
 static int ovl_verify_fh(struct ovl_fs *ofs, struct dentry *dentry,
 			 enum ovl_xattr ox, const struct ovl_fh *fh)
 {
-	struct ovl_fh *ofh = ovl_get_fh(ofs, dentry, ox);
+	struct ovl_fh *ofh;
 	int err = 0;
 
+	if (!fh)
+		return -EINVAL;
+
+	ofh = ovl_get_fh(ofs, dentry, ox);
 	if (!ofh)
 		return -ENODATA;
 
@@ -703,6 +707,9 @@ orphan:
 int ovl_get_index_name_fh(const struct ovl_fh *fh, struct qstr *name)
 {
 	char *n, *s;
+
+	if (!fh)
+		return -EINVAL;
 
 	n = kcalloc(fh->fb.len, 2, GFP_KERNEL);
 	if (!n)
