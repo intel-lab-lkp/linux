@@ -2501,8 +2501,7 @@ static const struct uvc_device_info uvc_quirk_force_y8 = {
  */
 static const struct usb_device_id uvc_ids[] = {
 	/* Quanta ACER HD User Facing */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
-				| USB_DEVICE_ID_MATCH_INT_INFO,
+	{
 	  .idVendor		= 0x0408,
 	  .idProduct		= 0x4033,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
@@ -2510,10 +2509,12 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceProtocol	= UVC_PC_PROTOCOL_15,
 	  .driver_info		= (kernel_ulong_t)&(const struct uvc_device_info){
 		.uvc_version = 0x010a,
-	  } },
-	/* Quanta ACER HD User Facing */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  },
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Quanta ACER HD User Facing */
+	{
 	  .idVendor		= 0x0408,
 	  .idProduct		= 0x4035,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
@@ -2521,530 +2522,648 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceProtocol	= UVC_PC_PROTOCOL_15,
 	  .driver_info		= (kernel_ulong_t)&(const struct uvc_device_info){
 		.uvc_version = 0x010a,
-	  } },
-	/* LogiLink Wireless Webcam */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  },
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* LogiLink Wireless Webcam */
+	{
 	  .idVendor		= 0x0416,
 	  .idProduct		= 0xa91a,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Genius eFace 2025 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Genius eFace 2025 */
+	{
 	  .idVendor		= 0x0458,
 	  .idProduct		= 0x706e,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Microsoft Lifecam NX-6000 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Microsoft Lifecam NX-6000 */
+	{
 	  .idVendor		= 0x045e,
 	  .idProduct		= 0x00f8,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Microsoft Lifecam NX-3000 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Microsoft Lifecam NX-3000 */
+	{
 	  .idVendor		= 0x045e,
 	  .idProduct		= 0x0721,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Microsoft Lifecam VX-7000 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Microsoft Lifecam VX-7000 */
+	{
 	  .idVendor		= 0x045e,
 	  .idProduct		= 0x0723,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Logitech, Webcam C910 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech, Webcam C910 */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x0821,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_WAKE_AUTOSUSPEND)},
-	/* Logitech, Webcam B910 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_WAKE_AUTOSUSPEND),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech, Webcam B910 */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x0823,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_WAKE_AUTOSUSPEND)},
-	/* Logitech Quickcam Fusion */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_WAKE_AUTOSUSPEND),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam Fusion */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c1,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech Quickcam Orbit MP */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam Orbit MP */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c2,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech Quickcam Pro for Notebook */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam Pro for Notebook */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c3,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech Quickcam Pro 5000 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam Pro 5000 */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c5,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech Quickcam OEM Dell Notebook */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam OEM Dell Notebook */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c6,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech Quickcam OEM Cisco VT Camera II */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Quickcam OEM Cisco VT Camera II */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08c7,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Logitech HD Pro Webcam C920 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech HD Pro Webcam C920 */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x082d,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTORE_CTRLS_ON_INIT
-					       | UVC_QUIRK_INVALID_DEVICE_SOF) },
-	/* Logitech HD Pro Webcam C922 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+					       | UVC_QUIRK_INVALID_DEVICE_SOF),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech HD Pro Webcam C922 */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x085c,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_INVALID_DEVICE_SOF) },
-	/* Logitech Rally Bar Huddle */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_INVALID_DEVICE_SOF),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Rally Bar Huddle */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x087c,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME) },
-	/* Logitech Rally Bar */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Rally Bar */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x089b,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME) },
-	/* Logitech Rally Bar Mini */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Logitech Rally Bar Mini */
+	{
 	  .idVendor		= 0x046d,
 	  .idProduct		= 0x08d3,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME) },
-	/* Chicony CNF7129 (Asus EEE 100HE) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_NO_RESET_RESUME),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Chicony CNF7129 (Asus EEE 100HE) */
+	{
 	  .idVendor		= 0x04f2,
 	  .idProduct		= 0xb071,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTRICT_FRAME_RATE) },
-	/* Alcor Micro AU3820 (Future Boy PC USB Webcam) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTRICT_FRAME_RATE),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Alcor Micro AU3820 (Future Boy PC USB Webcam) */
+	{
 	  .idVendor		= 0x058f,
 	  .idProduct		= 0x3820,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Dell XPS m1530 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Dell XPS m1530 */
+	{
 	  .idVendor		= 0x05a9,
 	  .idProduct		= 0x2640,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Dell SP2008WFP Monitor */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Dell SP2008WFP Monitor */
+	{
 	  .idVendor		= 0x05a9,
 	  .idProduct		= 0x2641,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Dell Alienware X51 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Dell Alienware X51 */
+	{
 	  .idVendor		= 0x05a9,
 	  .idProduct		= 0x2643,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Dell Studio Hybrid 140g (OmniVision webcam) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Dell Studio Hybrid 140g (OmniVision webcam) */
+	{
 	  .idVendor		= 0x05a9,
 	  .idProduct		= 0x264a,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Dell XPS M1330 (OmniVision OV7670 webcam) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Dell XPS M1330 (OmniVision OV7670 webcam) */
+	{
 	  .idVendor		= 0x05a9,
 	  .idProduct		= 0x7670,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Apple Built-In iSight */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Apple Built-In iSight */
+	{
 	  .idVendor		= 0x05ac,
 	  .idProduct		= 0x8501,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
-					| UVC_QUIRK_BUILTIN_ISIGHT) },
-	/* Apple FaceTime HD Camera (Built-In) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| UVC_QUIRK_BUILTIN_ISIGHT),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Apple FaceTime HD Camera (Built-In) */
+	{
 	  .idVendor		= 0x05ac,
 	  .idProduct		= 0x8514,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Apple Built-In iSight via iBridge */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Apple Built-In iSight via iBridge */
+	{
 	  .idVendor		= 0x05ac,
 	  .idProduct		= 0x8600,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* Foxlink ("HP Webcam" on HP Mini 5103) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Foxlink ("HP Webcam" on HP Mini 5103) */
+	{
 	  .idVendor		= 0x05c8,
 	  .idProduct		= 0x0403,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
-	/* Genesys Logic USB 2.0 PC Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Genesys Logic USB 2.0 PC Camera */
+	{
 	  .idVendor		= 0x05e3,
 	  .idProduct		= 0x0505,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Hercules Classic Silver */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Hercules Classic Silver */
+	{
 	  .idVendor		= 0x06f8,
 	  .idProduct		= 0x300c,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
-	/* ViMicro Vega */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* ViMicro Vega */
+	{
 	  .idVendor		= 0x0ac8,
 	  .idProduct		= 0x332d,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
-	/* ViMicro - Minoru3D */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* ViMicro - Minoru3D */
+	{
 	  .idVendor		= 0x0ac8,
 	  .idProduct		= 0x3410,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
-	/* ViMicro Venus - Minoru3D */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* ViMicro Venus - Minoru3D */
+	{
 	  .idVendor		= 0x0ac8,
 	  .idProduct		= 0x3420,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
-	/* Ophir Optronics - SPCAM 620U */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Ophir Optronics - SPCAM 620U */
+	{
 	  .idVendor		= 0x0bd3,
 	  .idProduct		= 0x0555,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Sonix Technology Co. Ltd. - 292A IPC AR0330 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Sonix Technology Co. Ltd. - 292A IPC AR0330 */
+	{
 	  .idVendor		= 0x0c45,
 	  .idProduct		= 0x6366,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_MJPEG_NO_EOF) },
-	/* MT6227 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_MJPEG_NO_EOF),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* MT6227 */
+	{
 	  .idVendor		= 0x0e8d,
 	  .idProduct		= 0x0004,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
-					| UVC_QUIRK_PROBE_DEF) },
-	/* IMC Networks (Medion Akoya) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| UVC_QUIRK_PROBE_DEF),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* IMC Networks (Medion Akoya) */
+	{
 	  .idVendor		= 0x13d3,
 	  .idProduct		= 0x5103,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* JMicron USB2.0 XGA WebCam */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* JMicron USB2.0 XGA WebCam */
+	{
 	  .idVendor		= 0x152d,
 	  .idProduct		= 0x0310,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Kurokesu C1 PRO */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Kurokesu C1 PRO */
+	{
 	  .idVendor		= 0x16d0,
 	  .idProduct		= 0x0ed1,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_MJPEG_NO_EOF) },
-	/* Syntek (HP Spartan) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_MJPEG_NO_EOF),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (HP Spartan) */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x5212,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Syntek (Samsung Q310) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (Samsung Q310) */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x5931,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Syntek (Packard Bell EasyNote MX52 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (Packard Bell EasyNote MX52 */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x8a12,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Syntek (Asus F9SG) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (Asus F9SG) */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x8a31,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Syntek (Asus U3S) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (Asus U3S) */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x8a33,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Syntek (JAOtech Smart Terminal) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Syntek (JAOtech Smart Terminal) */
+	{
 	  .idVendor		= 0x174f,
 	  .idProduct		= 0x8a34,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Miricle 307K */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Miricle 307K */
+	{
 	  .idVendor		= 0x17dc,
 	  .idProduct		= 0x0202,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Lenovo Thinkpad SL400/SL500 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Lenovo Thinkpad SL400/SL500 */
+	{
 	  .idVendor		= 0x17ef,
 	  .idProduct		= 0x480b,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
-	/* Aveo Technology USB 2.0 Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Aveo Technology USB 2.0 Camera */
+	{
 	  .idVendor		= 0x1871,
 	  .idProduct		= 0x0306,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
-					| UVC_QUIRK_PROBE_EXTRAFIELDS) },
-	/* Aveo Technology USB 2.0 Camera (Tasco USB Microscope) */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| UVC_QUIRK_PROBE_EXTRAFIELDS),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Aveo Technology USB 2.0 Camera (Tasco USB Microscope) */
+	{
 	  .idVendor		= 0x1871,
 	  .idProduct		= 0x0516,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Ecamm Pico iMage */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Ecamm Pico iMage */
+	{
 	  .idVendor		= 0x18cd,
 	  .idProduct		= 0xcafe,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_EXTRAFIELDS) },
-	/* Manta MM-353 Plako */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_EXTRAFIELDS),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Manta MM-353 Plako */
+	{
 	  .idVendor		= 0x18ec,
 	  .idProduct		= 0x3188,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* FSC WebCam V30S */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* FSC WebCam V30S */
+	{
 	  .idVendor		= 0x18ec,
 	  .idProduct		= 0x3288,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Arkmicro unbranded */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Arkmicro unbranded */
+	{
 	  .idVendor		= 0x18ec,
 	  .idProduct		= 0x3290,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
-	/* The Imaging Source USB CCD cameras */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* The Imaging Source USB CCD cameras */
+	{
 	  .idVendor		= 0x199e,
 	  .idProduct		= 0x8102,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
-	  .bInterfaceProtocol	= 0 },
-	/* Bodelin ProScopeHR */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
-				| USB_DEVICE_ID_MATCH_DEV_HI
+	  .bInterfaceProtocol	= 0,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Bodelin ProScopeHR */
+	{
 	  .idVendor		= 0x19ab,
 	  .idProduct		= 0x1000,
 	  .bcdDevice_hi		= 0x0126,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_STATUS_INTERVAL) },
-	/* MSI StarCam 370i */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_STATUS_INTERVAL),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_DEV_HI
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* MSI StarCam 370i */
+	{
 	  .idVendor		= 0x1b3b,
 	  .idProduct		= 0x2951,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Generalplus Technology Inc. 808 Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Generalplus Technology Inc. 808 Camera */
+	{
 	  .idVendor		= 0x1b3f,
 	  .idProduct		= 0x2002,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Shenzhen Aoni Electronic Co.,Ltd 2K FHD camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Shenzhen Aoni Electronic Co.,Ltd 2K FHD camera */
+	{
 	  .idVendor		= 0x1bcf,
 	  .idProduct		= 0x0b40,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
@@ -3052,152 +3171,187 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= (kernel_ulong_t)&(const struct uvc_device_info){
 		.uvc_version = 0x010a,
-	  } },
-	/* SiGma Micro USB Web Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  },
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* SiGma Micro USB Web Camera */
+	{
 	  .idVendor		= 0x1c4f,
 	  .idProduct		= 0x3000,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
-					| UVC_QUIRK_IGNORE_SELECTOR_UNIT) },
-	/* Actions Microelectronics Co. Display capture-UVC05 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| UVC_QUIRK_IGNORE_SELECTOR_UNIT),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Actions Microelectronics Co. Display capture-UVC05 */
+	{
 	  .idVendor		= 0x1de1,
 	  .idProduct		= 0xf105,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_DISABLE_AUTOSUSPEND) },
-	/* NXP Semiconductors IR VIDEO */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_DISABLE_AUTOSUSPEND),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* NXP Semiconductors IR VIDEO */
+	{
 	  .idVendor		= 0x1fc9,
 	  .idProduct		= 0x009b,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
-	/* Oculus VR Positional Tracker DK2 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Oculus VR Positional Tracker DK2 */
+	{
 	  .idVendor		= 0x2833,
 	  .idProduct		= 0x0201,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8 },
-	/* Oculus VR Rift Sensor */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Oculus VR Rift Sensor */
+	{
 	  .idVendor		= 0x2833,
 	  .idProduct		= 0x0211,
 	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8 },
-	/* GEO Semiconductor GC6500 */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8,
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* GEO Semiconductor GC6500 */
+	{
 	  .idVendor		= 0x29fe,
 	  .idProduct		= 0x4d53,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_FORCE_BPP) },
-	/* Insta360 Link */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_FORCE_BPP),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Insta360 Link */
+	{
 	  .idVendor		= 0x2e1a,
 	  .idProduct		= 0x4c01,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_DISABLE_AUTOSUSPEND) },
-	/* Intel D410/ASR depth camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_DISABLE_AUTOSUSPEND),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D410/ASR depth camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0ad2,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D415/ASRC depth camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D415/ASRC depth camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0ad3,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D430/AWG depth camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D430/AWG depth camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0ad4,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel RealSense D4M */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel RealSense D4M */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0b03,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D435/AWGC depth camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D435/AWGC depth camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0b07,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D435i depth camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D435i depth camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0b3a,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D405 Depth Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D405 Depth Camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0b5b,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D455 Depth Camera */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D455 Depth Camera */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x0b5c,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
-	/* Intel D421 Depth Module */
-	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
+	/* Intel D421 Depth Module */
+	{
 	  .idVendor		= 0x8086,
 	  .idProduct		= 0x1155,
 	  .bInterfaceClass	= USB_CLASS_VIDEO,
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
-	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX),
+	  .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	},
 	/* Generic USB Video Class */
 	{ USB_INTERFACE_INFO(USB_CLASS_VIDEO, 1, UVC_PC_PROTOCOL_UNDEFINED) },
 	{ USB_INTERFACE_INFO(USB_CLASS_VIDEO, 1, UVC_PC_PROTOCOL_15) },
