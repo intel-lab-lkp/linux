@@ -513,7 +513,10 @@ static int mv88q2xxx_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
-	/* Enable temperature sense */
+	/* Enable temperature sense again. There might have been a hard reset
+	 * of the PHY and in this case the register content is restored to
+	 * defaults and we need to enable it again.
+	 */
 	if (priv->enable_temp) {
 		ret = phy_modify_mmd(phydev, MDIO_MMD_PCS,
 				     MDIO_MMD_PCS_MV_TEMP_SENSOR2,
@@ -765,6 +768,13 @@ static int mv88q2xxx_hwmon_probe(struct phy_device *phydev)
 	struct mv88q2xxx_priv *priv = phydev->priv;
 	struct device *dev = &phydev->mdio.dev;
 	struct device *hwmon;
+	int ret;
+
+	/* Enable temperature sense */
+	ret = phy_modify_mmd(phydev, MDIO_MMD_PCS, MDIO_MMD_PCS_MV_TEMP_SENSOR2,
+			     MDIO_MMD_PCS_MV_TEMP_SENSOR2_DIS_MASK, 0);
+	if (ret < 0)
+		return ret;
 
 	priv->enable_temp = true;
 
