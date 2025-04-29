@@ -130,7 +130,7 @@ static void tidss_crtc_position_planes(struct tidss_device *tidss,
 	    !to_tidss_crtc_state(cstate)->plane_pos_changed)
 		return;
 
-	for (layer = 0; layer < tidss->feat->num_planes; layer++) {
+	for (layer = 0; layer < tidss->feat->num_vids ; layer++) {
 		struct drm_plane_state *pstate;
 		struct drm_plane *plane;
 		bool layer_active = false;
@@ -271,9 +271,12 @@ static void tidss_crtc_atomic_disable(struct drm_crtc *crtc,
 	 * another videoport, the DSS will report sync lost issues. Disable all
 	 * the layers here as a work-around.
 	 */
-	for (u32 layer = 0; layer < tidss->feat->num_planes; layer++)
-		dispc_ovr_enable_layer(tidss->dispc, tcrtc->hw_videoport, layer,
-				       false);
+	for (u32 layer = 0; layer < tidss->feat->num_vids; layer++) {
+		u32 hw_id = tidss->feat->vid_info[layer].hw_id;
+
+		dispc_ovr_enable_layer(tidss->dispc, tcrtc->hw_videoport,
+				       hw_id, false);
+	}
 
 	dispc_vp_disable(tidss->dispc, tcrtc->hw_videoport);
 
