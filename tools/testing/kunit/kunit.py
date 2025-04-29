@@ -583,7 +583,7 @@ def main(argv: Sequence[str]) -> None:
 						'the options in .kunitconfig')
 	add_common_opts(config_parser)
 
-	build_parser = subparser.add_parser('build', help='Builds a kernel with KUnit tests')
+	build_parser = subparser.add_parser('build', help='Builds a kernel with KUnit tests. Successful build depends on a clean source tree. Run mrproper to clean generated artifcats for prior ARCH=foo kernel build. Run 'make ARCH=foo mrproper')
 	add_common_opts(build_parser)
 	add_build_opts(build_parser)
 
