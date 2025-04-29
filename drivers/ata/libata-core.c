@@ -4240,6 +4240,11 @@ static const struct ata_dev_quirks_entry __ata_dev_quirks[] = {
 	{ "WDC WD3200JD-*",		NULL,	ATA_QUIRK_WD_BROKEN_LPM },
 
 	/*
+	 * This specific WD SATA-3 model has problems with LPM.
+	 */
+	{ "WDC WD20EFAX-68FB5N0",	NULL,	ATA_QUIRK_NOLPM },
+
+	/*
 	 * This sata dom device goes on a walkabout when the ATA_LOG_DIRECTORY
 	 * log page is accessed. Ensure we never ask for this log page with
 	 * these devices.
