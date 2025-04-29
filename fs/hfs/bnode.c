@@ -219,6 +219,8 @@ void hfs_bnode_unlink(struct hfs_bnode *node)
 		tree->root = 0;
 		tree->depth = 0;
 	}
+
+	hfs_bnode_clear(node, 0, tree->node_size);
 	set_bit(HFS_BNODE_DELETED, &node->flags);
 }
 
