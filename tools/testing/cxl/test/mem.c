@@ -1909,4 +1909,5 @@ static struct platform_driver cxl_mock_mem_driver = {
 
 module_platform_driver(cxl_mock_mem_driver);
 MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("CXL test mem device mock module");
 MODULE_IMPORT_NS("CXL");
