@@ -23,7 +23,7 @@ static mempool_t btrfs_failed_bio_pool;
 struct btrfs_failed_bio {
 	struct btrfs_bio *bbio;
 	int num_copies;
-	atomic_t repair_count;
+	refcount_t repair_count;
 };
 
 /* Is this a data path I/O that needs storage layer checksum and repair? */
@@ -150,7 +150,7 @@ static int prev_repair_mirror(struct btrfs_failed_bio *fbio, int cur_mirror)
 
 static void btrfs_repair_done(struct btrfs_failed_bio *fbio)
 {
-	if (atomic_dec_and_test(&fbio->repair_count)) {
+	if (refcount_dec_and_test(&fbio->repair_count)) {
 		btrfs_bio_end_io(fbio->bbio, fbio->bbio->bio.bi_status);
 		mempool_free(fbio, &btrfs_failed_bio_pool);
 	}
@@ -235,10 +235,10 @@ static struct btrfs_failed_bio *repair_one_sector(struct btrfs_bio *failed_bbio,
 		fbio = mempool_alloc(&btrfs_failed_bio_pool, GFP_NOFS);
 		fbio->bbio = failed_bbio;
 		fbio->num_copies = num_copies;
-		atomic_set(&fbio->repair_count, 1);
+		refcount_set(&fbio->repair_count, 1);
 	}
 
-	atomic_inc(&fbio->repair_count);
+	refcount_inc(&fbio->repair_count);
 
 	repair_bio = bio_alloc_bioset(NULL, 1, REQ_OP_READ, GFP_NOFS,
 				      &btrfs_repair_bioset);
