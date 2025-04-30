@@ -183,7 +183,7 @@ struct drm_gem_object *ivpu_gem_prime_import(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	int ret;
 
-	attach = dma_buf_attach(dma_buf, attach_dev);
+	attach = dma_buf_attach(dma_buf, attach_dev, false);
 	if (IS_ERR(attach))
 		return ERR_CAST(attach);
 

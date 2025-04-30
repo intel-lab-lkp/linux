@@ -803,7 +803,7 @@ struct drm_gem_object *qaic_gem_prime_import(struct drm_device *dev, struct dma_
 	obj = &bo->base;
 	get_dma_buf(dma_buf);
 
-	attach = dma_buf_attach(dma_buf, dev->dev);
+	attach = dma_buf_attach(dma_buf, dev->dev, false);
 	if (IS_ERR(attach)) {
 		ret = PTR_ERR(attach);
 		goto attach_fail;

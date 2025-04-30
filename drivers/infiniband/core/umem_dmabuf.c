@@ -159,7 +159,8 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 					dmabuf,
 					dma_device,
 					ops,
-					umem_dmabuf);
+					umem_dmabuf,
+					false);
 	if (IS_ERR(umem_dmabuf->attach)) {
 		ret = ERR_CAST(umem_dmabuf->attach);
 		goto out_free_umem;

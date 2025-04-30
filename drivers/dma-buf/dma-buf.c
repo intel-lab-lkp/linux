@@ -904,7 +904,7 @@ static struct sg_table *__map_dma_buf(struct dma_buf_attachment *attach,
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
-		       void *importer_priv)
+		       void *importer_priv, bool skip_map)
 {
 	struct dma_buf_attachment *attach;
 	int ret;
@@ -941,8 +941,6 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 	 */
 	if (dma_buf_attachment_is_dynamic(attach) !=
 	    dma_buf_is_dynamic(dmabuf)) {
-		struct sg_table *sgt;
-
 		dma_resv_lock(attach->dmabuf->resv, NULL);
 		if (dma_buf_is_dynamic(attach->dmabuf)) {
 			ret = dmabuf->ops->pin(attach);
@@ -950,16 +948,20 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 				goto err_unlock;
 		}
 
-		sgt = __map_dma_buf(attach, DMA_BIDIRECTIONAL);
-		if (!sgt)
-			sgt = ERR_PTR(-ENOMEM);
-		if (IS_ERR(sgt)) {
-			ret = PTR_ERR(sgt);
-			goto err_unpin;
+		if (!skip_map) {
+			struct sg_table *sgt;
+
+			sgt = __map_dma_buf(attach, DMA_BIDIRECTIONAL);
+			if (!sgt)
+				sgt = ERR_PTR(-ENOMEM);
+			if (IS_ERR(sgt)) {
+				ret = PTR_ERR(sgt);
+				goto err_unpin;
+			}
+			attach->sgt = sgt;
+			attach->dir = DMA_BIDIRECTIONAL;
 		}
 		dma_resv_unlock(attach->dmabuf->resv);
-		attach->sgt = sgt;
-		attach->dir = DMA_BIDIRECTIONAL;
 	}
 
 	return attach;
@@ -989,9 +991,10 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_dynamic_attach, "DMA_BUF");
  * mapping.
  */
 struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
-					  struct device *dev)
+					  struct device *dev,
+					  bool skip_map)
 {
-	return dma_buf_dynamic_attach(dmabuf, dev, NULL, NULL);
+	return dma_buf_dynamic_attach(dmabuf, dev, NULL, NULL, skip_map);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_attach, "DMA_BUF");
 

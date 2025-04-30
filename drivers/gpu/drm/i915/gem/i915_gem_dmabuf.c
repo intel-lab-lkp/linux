@@ -305,7 +305,7 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 		return ERR_PTR(-E2BIG);
 
 	/* need to attach */
-	attach = dma_buf_attach(dma_buf, dev->dev);
+	attach = dma_buf_attach(dma_buf, dev->dev, false);
 	if (IS_ERR(attach))
 		return ERR_CAST(attach);
 

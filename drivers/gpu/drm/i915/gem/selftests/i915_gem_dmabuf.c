@@ -287,7 +287,7 @@ static int igt_dmabuf_import_same_driver(struct drm_i915_private *i915,
 		goto out_import;
 
 	/* Now try a fake an importer */
-	import_attach = dma_buf_attach(dmabuf, obj->base.dev->dev);
+	import_attach = dma_buf_attach(dmabuf, obj->base.dev->dev, false);
 	if (IS_ERR(import_attach)) {
 		err = PTR_ERR(import_attach);
 		goto out_import;

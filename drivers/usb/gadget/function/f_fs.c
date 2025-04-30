@@ -1487,7 +1487,7 @@ static int ffs_dmabuf_attach(struct file *file, int fd)
 	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);
 
-	attach = dma_buf_attach(dmabuf, gadget->dev.parent);
+	attach = dma_buf_attach(dmabuf, gadget->dev.parent, false);
 	if (IS_ERR(attach)) {
 		err = PTR_ERR(attach);
 		goto err_dmabuf_put;

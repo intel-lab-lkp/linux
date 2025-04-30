@@ -587,7 +587,7 @@ dmabuf_imp_to_refs(struct gntdev_dmabuf_priv *priv, struct device *dev,
 	gntdev_dmabuf->priv = priv;
 	gntdev_dmabuf->fd = fd;
 
-	attach = dma_buf_attach(dma_buf, dev);
+	attach = dma_buf_attach(dma_buf, dev, false);
 	if (IS_ERR(attach)) {
 		ret = ERR_CAST(attach);
 		goto fail_free_obj;

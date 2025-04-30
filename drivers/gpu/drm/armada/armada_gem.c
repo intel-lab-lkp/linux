@@ -514,7 +514,7 @@ armada_gem_prime_import(struct drm_device *dev, struct dma_buf *buf)
 		}
 	}
 
-	attach = dma_buf_attach(buf, dev->dev);
+	attach = dma_buf_attach(buf, dev->dev, false);
 	if (IS_ERR(attach))
 		return ERR_CAST(attach);
 
