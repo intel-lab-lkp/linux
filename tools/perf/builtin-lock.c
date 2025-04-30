@@ -569,7 +569,7 @@ static int report_lock_acquire_event(struct evsel *evsel,
 	struct lock_seq_stat *seq;
 	const char *name = evsel__strval(evsel, sample, "name");
 	u64 addr = evsel__intval(evsel, sample, "lockdep_addr");
-	int flag = evsel__intval(evsel, sample, "flags");
+	int flag = (int)evsel__intval(evsel, sample, "flags");
 	u64 key;
 	int ret;
 
@@ -837,7 +837,7 @@ static int get_symbol_name_offset(struct map *map, struct symbol *sym, u64 ip,
 	if (offset)
 		return scnprintf(buf, size, "%s+%#lx", sym->name, offset);
 	else
-		return strlcpy(buf, sym->name, size);
+		return (int)strlcpy(buf, sym->name, size);
 }
 static int lock_contention_caller(struct evsel *evsel, struct perf_sample *sample,
 				  char *buf, int size)
@@ -968,7 +968,7 @@ static int report_lock_contention_begin_event(struct evsel *evsel,
 	struct thread_stat *ts;
 	struct lock_seq_stat *seq;
 	u64 addr = evsel__intval(evsel, sample, "lock_addr");
-	unsigned int flags = evsel__intval(evsel, sample, "flags");
+	unsigned int flags = (unsigned int)evsel__intval(evsel, sample, "flags");
 	u64 key;
 	int i, ret;
 	static bool kmap_loaded;
@@ -1303,7 +1303,7 @@ static void print_result(void)
 				struct thread *t;
 
 				/* st->addr contains tid of thread */
-				t = perf_session__findnew(session, st->addr);
+				t = perf_session__findnew(session, (int)st->addr);
 				name = thread__comm_str(t);
 			}
 
@@ -1638,7 +1638,7 @@ static void print_lock_stat_stdio(struct lock_contention *con, struct lock_stat 
 		fprintf(lock_output, "  %10s   %s\n", get_type_flags_name(st->flags), st->name);
 		break;
 	case LOCK_AGGR_TASK:
-		pid = st->addr;
+		pid = (int)st->addr;
 		t = perf_session__findnew(session, pid);
 		fprintf(lock_output, "  %10d   %s\n",
 			pid, pid == -1 ? "Unknown" : thread__comm_str(t));
@@ -1691,7 +1691,7 @@ static void print_lock_stat_csv(struct lock_contention *con, struct lock_stat *s
 			fprintf(lock_output, "\n");
 		break;
 	case LOCK_AGGR_TASK:
-		pid = st->addr;
+		pid = (int)st->addr;
 		t = perf_session__findnew(session, pid);
 		fprintf(lock_output, "%d%s %s\n", pid, sep,
 			pid == -1 ? "Unknown" : thread__comm_str(t));
@@ -1870,7 +1870,7 @@ static int __cmd_report(bool display_info)
 	session = perf_session__new(&data, &eops);
 	if (IS_ERR(session)) {
 		pr_err("Initializing perf session failed\n");
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 	}
 
 	symbol_conf.allow_aliases = true;
@@ -2023,7 +2023,7 @@ static int __cmd_contention(int argc, const char **argv)
 	session = perf_session__new(use_bpf ? NULL : &data, &eops);
 	if (IS_ERR(session)) {
 		pr_err("Initializing perf session failed\n");
-		err = PTR_ERR(session);
+		err = (int)PTR_ERR(session);
 		session = NULL;
 		goto out_delete;
 	}

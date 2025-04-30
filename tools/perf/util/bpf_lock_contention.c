@@ -54,7 +54,7 @@ static void check_slab_cache_iter(struct lock_contention *con)
 
 	has_slab_iter = true;
 
-	bpf_map__set_max_entries(skel->maps.slab_caches, con->map_nr_entries);
+	bpf_map__set_max_entries(skel->maps.slab_caches, (__u32)con->map_nr_entries);
 out:
 	btf__free(btf);
 }
@@ -123,23 +123,24 @@ int lock_contention_prepare(struct lock_contention *con)
 	}
 
 	bpf_map__set_value_size(skel->maps.stacks, con->max_stack * sizeof(u64));
-	bpf_map__set_max_entries(skel->maps.lock_stat, con->map_nr_entries);
-	bpf_map__set_max_entries(skel->maps.tstamp, con->map_nr_entries);
+	bpf_map__set_max_entries(skel->maps.lock_stat, (__u32)con->map_nr_entries);
+	bpf_map__set_max_entries(skel->maps.tstamp, (__u32)con->map_nr_entries);
 
 	if (con->aggr_mode == LOCK_AGGR_TASK)
-		bpf_map__set_max_entries(skel->maps.task_data, con->map_nr_entries);
+		bpf_map__set_max_entries(skel->maps.task_data, (__u32)con->map_nr_entries);
 	else
 		bpf_map__set_max_entries(skel->maps.task_data, 1);
 
 	if (con->save_callstack) {
-		bpf_map__set_max_entries(skel->maps.stacks, con->map_nr_entries);
+		bpf_map__set_max_entries(skel->maps.stacks, (__u32)con->map_nr_entries);
 		if (con->owner) {
 			bpf_map__set_value_size(skel->maps.stack_buf, con->max_stack * sizeof(u64));
 			bpf_map__set_key_size(skel->maps.owner_stacks,
 						con->max_stack * sizeof(u64));
-			bpf_map__set_max_entries(skel->maps.owner_stacks, con->map_nr_entries);
-			bpf_map__set_max_entries(skel->maps.owner_data, con->map_nr_entries);
-			bpf_map__set_max_entries(skel->maps.owner_stat, con->map_nr_entries);
+			bpf_map__set_max_entries(skel->maps.owner_stacks,
+						 (__u32)con->map_nr_entries);
+			bpf_map__set_max_entries(skel->maps.owner_data, (__u32)con->map_nr_entries);
+			bpf_map__set_max_entries(skel->maps.owner_stat, (__u32)con->map_nr_entries);
 			skel->rodata->max_stack = con->max_stack;
 		}
 	} else {
