@@ -56,7 +56,7 @@ int mem2node__init(struct mem2node *map, struct perf_env *env)
 
 	for (i = 0; i < env->nr_memory_nodes; i++) {
 		n = &nodes[i];
-		max += bitmap_weight(n->set, n->size);
+		max += bitmap_weight(n->set, (unsigned int)n->size);
 	}
 
 	entries = zalloc(sizeof(*entries) * max);

@@ -173,10 +173,10 @@ static int insert_caller_stat(unsigned long call_site,
 
 static int evsel__process_alloc_event(struct evsel *evsel, struct perf_sample *sample)
 {
-	unsigned long ptr = evsel__intval(evsel, sample, "ptr"),
-		      call_site = evsel__intval(evsel, sample, "call_site");
-	int bytes_req = evsel__intval(evsel, sample, "bytes_req"),
-	    bytes_alloc = evsel__intval(evsel, sample, "bytes_alloc");
+	unsigned long ptr = evsel__intval(evsel, sample, "ptr");
+	unsigned long call_site = evsel__intval(evsel, sample, "call_site");
+	int bytes_req = (int)evsel__intval(evsel, sample, "bytes_req");
+	int bytes_alloc = (int)evsel__intval(evsel, sample, "bytes_alloc");
 
 	if (insert_alloc_stat(call_site, ptr, bytes_req, bytes_alloc, sample->cpu) ||
 	    insert_caller_stat(call_site, bytes_req, bytes_alloc))
@@ -202,7 +202,7 @@ static int evsel__process_alloc_event(struct evsel *evsel, struct perf_sample *s
 		int node1, node2;
 
 		node1 = cpu__get_node((struct perf_cpu){.cpu = sample->cpu});
-		node2 = evsel__intval(evsel, sample, "node");
+		node2 = (int)evsel__intval(evsel, sample, "node");
 
 		/*
 		 * If the field "node" is NUMA_NO_NODE (-1), we don't take it
@@ -737,7 +737,7 @@ static char *compact_gfp_flags(char *gfp_flags)
 	return new_flags;
 }
 
-static char *compact_gfp_string(unsigned long gfp_flags)
+static char *compact_gfp_string(unsigned int gfp_flags)
 {
 	struct gfp_flag key = {
 		.flags = gfp_flags,
@@ -808,10 +808,9 @@ static int parse_gfp_flags(struct evsel *evsel, struct perf_sample *sample,
 static int evsel__process_page_alloc_event(struct evsel *evsel, struct perf_sample *sample)
 {
 	u64 page;
-	unsigned int order = evsel__intval(evsel, sample, "order");
-	unsigned int gfp_flags = evsel__intval(evsel, sample, "gfp_flags");
-	unsigned int migrate_type = evsel__intval(evsel, sample,
-						       "migratetype");
+	unsigned int order = (unsigned int)evsel__intval(evsel, sample, "order");
+	unsigned int gfp_flags = (unsigned int)evsel__intval(evsel, sample, "gfp_flags");
+	unsigned int migrate_type = (unsigned int)evsel__intval(evsel, sample, "migratetype");
 	u64 bytes = kmem_page_size << order;
 	u64 callsite;
 	struct page_stat *pstat;
@@ -880,7 +879,7 @@ static int evsel__process_page_alloc_event(struct evsel *evsel, struct perf_samp
 static int evsel__process_page_free_event(struct evsel *evsel, struct perf_sample *sample)
 {
 	u64 page;
-	unsigned int order = evsel__intval(evsel, sample, "order");
+	unsigned int order = (unsigned int)evsel__intval(evsel, sample, "order");
 	u64 bytes = kmem_page_size << order;
 	struct page_stat *pstat;
 	struct page_stat this = {
@@ -1064,12 +1063,12 @@ static void __print_page_alloc_result(struct perf_session *session, int n_lines)
 	struct rb_node *next = rb_first(&page_alloc_sorted);
 	struct machine *machine = &session->machines.host;
 	const char *format;
-	int gfp_len = max(strlen("GFP flags"), max_gfp_len);
+	size_t gfp_len = max(strlen("GFP flags"), max_gfp_len);
 
 	printf("\n%.105s\n", graph_dotted_line);
 	printf(" %-16s | %5s alloc (KB) | Hits      | Order | Mig.type | %-*s | Callsite\n",
 	       use_pfn ? "PFN" : "Page", live_page ? "Live" : "Total",
-	       gfp_len, "GFP flags");
+		(int)gfp_len, "GFP flags");
 	printf("%.105s\n", graph_dotted_line);
 
 	if (use_pfn)
@@ -1102,7 +1101,7 @@ static void __print_page_alloc_result(struct perf_session *session, int n_lines)
 
 	if (n_lines == -1) {
 		printf(" ...              | ...              | ...       | ...   | ...      | %-*s | ...\n",
-		       gfp_len, "...");
+		       (int)gfp_len, "...");
 	}
 
 	printf("%.105s\n", graph_dotted_line);
@@ -1112,11 +1111,11 @@ static void __print_page_caller_result(struct perf_session *session, int n_lines
 {
 	struct rb_node *next = rb_first(&page_caller_sorted);
 	struct machine *machine = &session->machines.host;
-	int gfp_len = max(strlen("GFP flags"), max_gfp_len);
+	size_t gfp_len = max(strlen("GFP flags"), max_gfp_len);
 
 	printf("\n%.105s\n", graph_dotted_line);
 	printf(" %5s alloc (KB) | Hits      | Order | Mig.type | %-*s | Callsite\n",
-	       live_page ? "Live" : "Total", gfp_len, "GFP flags");
+	       live_page ? "Live" : "Total", (int)gfp_len, "GFP flags");
 	printf("%.105s\n", graph_dotted_line);
 
 	while (next && n_lines--) {
@@ -1137,14 +1136,14 @@ static void __print_page_caller_result(struct perf_session *session, int n_lines
 		       (unsigned long long)data->alloc_bytes / 1024,
 		       data->nr_alloc, data->order,
 		       migrate_type_str[data->migrate_type],
-		       gfp_len, compact_gfp_string(data->gfp_flags), caller);
+		       (int)gfp_len, compact_gfp_string(data->gfp_flags), caller);
 
 		next = rb_next(next);
 	}
 
 	if (n_lines == -1) {
 		printf(" ...              | ...       | ...   | ...      | %-*s | ...\n",
-		       gfp_len, "...");
+		       (int)gfp_len, "...");
 	}
 
 	printf("%.105s\n", graph_dotted_line);
@@ -1828,7 +1827,7 @@ static int parse_line_opt(const struct option *opt __maybe_unused,
 	if (!arg)
 		return -1;
 
-	lines = strtoul(arg, NULL, 10);
+	lines = (int)strtoul(arg, NULL, 10);
 
 	if (caller_flag > alloc_flag)
 		caller_lines = lines;
@@ -2001,7 +2000,7 @@ int cmd_kmem(int argc, const char **argv)
 
 	kmem_session = session = perf_session__new(&data, &perf_kmem);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	ret = -1;
 

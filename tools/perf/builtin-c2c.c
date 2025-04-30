@@ -1206,7 +1206,7 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 			break;
 		case 1:
 		{
-			int num = bitmap_weight(set, c2c.cpus_cnt);
+			int num = (int)bitmap_weight(set, c2c.cpus_cnt);
 			struct c2c_stats *stats = &c2c_he->node_stats[node];
 
 			ret = scnprintf(hpp->buf, hpp->size, "%2d{%2d ", node, num);
@@ -1249,7 +1249,7 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 			ret = scnprintf(hpp->buf, hpp->size, "%2d{", node);
 			advance_hpp(hpp, ret);
 
-			ret = bitmap_scnprintf(set, c2c.cpus_cnt, hpp->buf, hpp->size);
+			ret = (int)bitmap_scnprintf(set, c2c.cpus_cnt, hpp->buf, hpp->size);
 			advance_hpp(hpp, ret);
 
 			ret = scnprintf(hpp->buf, hpp->size, "}");
@@ -1911,7 +1911,7 @@ static int c2c_se_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 			len = symbol_width(he->hists, dim->se);
 	}
 
-	return dim->se->se_snprintf(he, hpp->buf, hpp->size, len);
+	return dim->se->se_snprintf(he, hpp->buf, hpp->size, (unsigned int)len);
 }
 
 static int64_t c2c_se_cmp(struct perf_hpp_fmt *fmt,
@@ -2164,7 +2164,7 @@ static void set_node_width(struct c2c_hist_entry *c2c_he, int len)
 static int set_nodestr(struct c2c_hist_entry *c2c_he)
 {
 	char buf[30];
-	int len;
+	size_t len;
 
 	if (c2c_he->nodestr)
 		return 0;
@@ -2176,7 +2176,7 @@ static int set_nodestr(struct c2c_hist_entry *c2c_he)
 		len = scnprintf(buf, sizeof(buf), "N/A");
 	}
 
-	set_node_width(c2c_he, len);
+	set_node_width(c2c_he, (int)len);
 	c2c_he->nodestr = strdup(buf);
 	return c2c_he->nodestr ? 0 : -ENOMEM;
 }
@@ -2353,7 +2353,7 @@ static int hists__iterate_cb(struct hists *hists, hists__resort_cb_t cb)
 
 static void print_c2c__display_stats(FILE *out)
 {
-	int llc_misses;
+	uint64_t llc_misses;
 	struct c2c_stats *stats = &c2c.hists.stats;
 
 	llc_misses = get_load_llc_misses(stats);
@@ -2379,7 +2379,7 @@ static void print_c2c__display_stats(FILE *out)
 	fprintf(out, "  Load Remote DRAM                  : %10d\n", stats->rmt_dram);
 	fprintf(out, "  Load MESI State Exclusive         : %10d\n", stats->ld_excl);
 	fprintf(out, "  Load MESI State Shared            : %10d\n", stats->ld_shared);
-	fprintf(out, "  Load LLC Misses                   : %10d\n", llc_misses);
+	fprintf(out, "  Load LLC Misses                   : %10"PRIu64"\n", llc_misses);
 	fprintf(out, "  Load access blocked by data       : %10d\n", stats->blk_data);
 	fprintf(out, "  Load access blocked by address    : %10d\n", stats->blk_addr);
 	fprintf(out, "  Load HIT Local Peer               : %10d\n", stats->lcl_peer);
@@ -2738,9 +2738,10 @@ static void perf_c2c_display(struct perf_session *session)
 }
 #endif /* HAVE_SLANG_SUPPORT */
 
-static char *fill_line(const char *orig, int len)
+static char *fill_line(const char *orig, size_t len)
 {
-	int i, j, olen = strlen(orig);
+	size_t i, j;
+	size_t olen = strlen(orig);
 	char *buf;
 
 	buf = zalloc(len + 1);
@@ -3068,7 +3069,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	c2c.tool.ordering_requires_timestamps = true;
 	session = perf_session__new(&data, &c2c.tool);
 	if (IS_ERR(session)) {
-		err = PTR_ERR(session);
+		err = (int)PTR_ERR(session);
 		pr_debug("Error creating perf session\n");
 		goto out;
 	}

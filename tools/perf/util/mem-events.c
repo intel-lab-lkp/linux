@@ -364,7 +364,7 @@ int perf_mem__tlb_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 	if (miss)
 		l += scnprintf(out + l, sz - l, " miss");
 
-	return l;
+	return (int)l;
 }
 
 static const char * const mem_lvl[] = {
@@ -476,7 +476,7 @@ int perf_mem__lvl_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 			l += scnprintf(out + l, sz - l, "Unknown level %d", lvl);
 
 		l += scnprintf(out + l, sz - l, " %s", hit_miss);
-		return l;
+		return (int)l;
 	}
 
 	lvl = data_src.mem_lvl;
@@ -499,7 +499,7 @@ int perf_mem__lvl_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 
 	if (printed) {
 		l += scnprintf(out + l, sz - l, " %s", hit_miss);
-		return l;
+		return (int)l;
 	}
 
 na:
@@ -559,7 +559,7 @@ int perf_mem__snp_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 	if (*out == '\0')
 		l += scnprintf(out, sz - l, "N/A");
 
-	return l;
+	return (int)l;
 }
 
 int perf_mem__lck_scnprintf(char *out, size_t sz, const struct mem_info *mem_info)
@@ -593,14 +593,14 @@ int perf_mem__blk_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 
 	if (!mask || (mask & PERF_MEM_BLK_NA)) {
 		l += scnprintf(out + l, sz - l, " N/A");
-		return l;
+		return (int)l;
 	}
 	if (mask & PERF_MEM_BLK_DATA)
 		l += scnprintf(out + l, sz - l, " Data");
 	if (mask & PERF_MEM_BLK_ADDR)
 		l += scnprintf(out + l, sz - l, " Addr");
 
-	return l;
+	return (int)l;
 }
 
 int perf_script__meminfo_scnprintf(char *out, size_t sz, const struct mem_info *mem_info)

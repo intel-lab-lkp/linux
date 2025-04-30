@@ -293,7 +293,7 @@ static int report_raw_events(struct perf_mem *mem)
 	session = perf_session__new(&data, &mem->tool);
 
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	session->itrace_synth_opts = &itrace_synth_opts;
 
