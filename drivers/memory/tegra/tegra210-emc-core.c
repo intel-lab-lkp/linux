@@ -1783,6 +1783,226 @@ static void tegra210_emc_detect(struct tegra210_emc *emc)
 		emc->num_channels = 1;
 }
 
+static struct device_node *
+tegra_emc_find_node_by_ram_code(struct device_node *node, u32 ram_code)
+{
+	struct device_node *np;
+	int err;
+
+	for_each_child_of_node(node, np) {
+		u32 value;
+
+		err = of_property_read_u32(np, "nvidia,ram-code", &value);
+		if (err || (value != ram_code))
+			continue;
+
+		return np;
+	}
+
+	return NULL;
+}
+
+static int load_one_timing_from_dt(struct tegra210_emc *emc,
+				   struct tegra210_emc_timing *timing,
+				   struct device_node *node)
+{
+	int err;
+
+#define EMC_READ_PROP(prop, dtprop) { \
+	err = of_property_read_u32(node, dtprop, &timing->prop); \
+	if (err) { \
+		dev_err(emc->dev, "timing %pOFn: failed to read " #prop ": %d\n", \
+			node, err); \
+		return err; \
+	} \
+}
+
+#define EMC_READ_PROP_STRING(prop, dtprop) { \
+	err = of_property_read_string(node, dtprop, (const char **)&timing->prop); \
+	if (err) { \
+		dev_err(emc->dev, "timing %pOFn: failed to read " #prop ": %d\n", \
+			node, err); \
+		return err; \
+	} \
+}
+
+#define EMC_READ_PROP_ARRAY(prop, dtprop, length) { \
+	err = of_property_read_u32_array(node, dtprop, timing->prop, length); \
+	if (err) { \
+		dev_err(emc->dev, "timing %pOFn: failed to read " #prop ": %d\n", \
+			node, err); \
+		return err; \
+	} \
+}
+
+	EMC_READ_PROP_STRING(clock_src, "nvidia,source")
+	EMC_READ_PROP_STRING(dvfs_ver, "nvidia,dvfs-version")
+
+	EMC_READ_PROP(revision, "nvidia,revision")
+	EMC_READ_PROP(rate, "clock-frequency")
+	EMC_READ_PROP(min_volt, "nvidia,emc-min-mv")
+	EMC_READ_PROP(gpu_min_volt, "nvidia,gk20a-min-mv")
+	EMC_READ_PROP(clk_src_emc, "nvidia,src-sel-reg")
+	EMC_READ_PROP(num_burst, "nvidia,burst-regs-num")
+	EMC_READ_PROP(emc_cfg_2, "nvidia,emc-cfg-2")
+	EMC_READ_PROP(emc_sel_dpd_ctrl, "nvidia,emc-sel-dpd-ctrl")
+	EMC_READ_PROP(emc_auto_cal_config, "nvidia,emc-auto-cal-config")
+	EMC_READ_PROP(emc_auto_cal_config2, "nvidia,emc-auto-cal-config2")
+	EMC_READ_PROP(emc_auto_cal_config3, "nvidia,emc-auto-cal-config3")
+	EMC_READ_PROP(latency, "nvidia,emc-clock-latency-change")
+	EMC_READ_PROP_ARRAY(burst_regs, "nvidia,emc-registers", timing->num_burst)
+	EMC_READ_PROP(needs_training, "nvidia,needs-training")
+	EMC_READ_PROP(trained, "nvidia,trained")
+
+	if (timing->revision >= 0x6) {
+		EMC_READ_PROP(periodic_training, "nvidia,periodic_training")
+		EMC_READ_PROP(trained_dram_clktree[C0D0U0], "nvidia,trained_dram_clktree_c0d0u0")
+		EMC_READ_PROP(trained_dram_clktree[C0D0U1], "nvidia,trained_dram_clktree_c0d0u1")
+		EMC_READ_PROP(trained_dram_clktree[C0D1U0], "nvidia,trained_dram_clktree_c0d1u0")
+		EMC_READ_PROP(trained_dram_clktree[C0D1U1], "nvidia,trained_dram_clktree_c0d1u1")
+		EMC_READ_PROP(trained_dram_clktree[C1D0U0], "nvidia,trained_dram_clktree_c1d0u0")
+		EMC_READ_PROP(trained_dram_clktree[C1D0U1], "nvidia,trained_dram_clktree_c1d0u1")
+		EMC_READ_PROP(trained_dram_clktree[C1D1U0], "nvidia,trained_dram_clktree_c1d1u0")
+		EMC_READ_PROP(trained_dram_clktree[C1D1U1], "nvidia,trained_dram_clktree_c1d1u1")
+		EMC_READ_PROP(current_dram_clktree[C0D0U0], "nvidia,current_dram_clktree_c0d0u0")
+		EMC_READ_PROP(current_dram_clktree[C0D0U1], "nvidia,current_dram_clktree_c0d0u1")
+		EMC_READ_PROP(current_dram_clktree[C0D1U0], "nvidia,current_dram_clktree_c0d1u0")
+		EMC_READ_PROP(current_dram_clktree[C0D1U1], "nvidia,current_dram_clktree_c0d1u1")
+		EMC_READ_PROP(current_dram_clktree[C1D0U0], "nvidia,current_dram_clktree_c1d0u0")
+		EMC_READ_PROP(current_dram_clktree[C1D0U1], "nvidia,current_dram_clktree_c1d0u1")
+		EMC_READ_PROP(current_dram_clktree[C1D1U0], "nvidia,current_dram_clktree_c1d1u0")
+		EMC_READ_PROP(current_dram_clktree[C1D1U1], "nvidia,current_dram_clktree_c1d1u1")
+		EMC_READ_PROP(run_clocks, "nvidia,run_clocks")
+		EMC_READ_PROP(tree_margin, "nvidia,tree_margin")
+	}
+
+	EMC_READ_PROP(num_burst_per_ch, "nvidia,burst-regs-per-ch-num")
+	EMC_READ_PROP(num_trim, "nvidia,trim-regs-num")
+	EMC_READ_PROP(num_trim_per_ch, "nvidia,trim-regs-per-ch-num")
+	EMC_READ_PROP(num_mc_regs, "nvidia,burst-mc-regs-num")
+	EMC_READ_PROP(num_up_down, "nvidia,la-scale-regs-num")
+	EMC_READ_PROP(vref_num, "nvidia,vref-regs-num")
+	EMC_READ_PROP(dram_timing_num, "nvidia,dram-timing-regs-num")
+	EMC_READ_PROP(min_mrs_wait, "nvidia,min-mrs-wait")
+	EMC_READ_PROP(emc_mrw, "nvidia,emc-mrw")
+	EMC_READ_PROP(emc_mrw2, "nvidia,emc-mrw2")
+	EMC_READ_PROP(emc_mrw3, "nvidia,emc-mrw3")
+	EMC_READ_PROP(emc_mrw4, "nvidia,emc-mrw4")
+	EMC_READ_PROP(emc_mrw9, "nvidia,emc-mrw9")
+	EMC_READ_PROP(emc_mrs, "nvidia,emc-mrs")
+	EMC_READ_PROP(emc_emrs, "nvidia,emc-emrs")
+	EMC_READ_PROP(emc_emrs2, "nvidia,emc-emrs2")
+	EMC_READ_PROP(emc_auto_cal_config4, "nvidia,emc-auto-cal-config4")
+	EMC_READ_PROP(emc_auto_cal_config5, "nvidia,emc-auto-cal-config5")
+	EMC_READ_PROP(emc_auto_cal_config6, "nvidia,emc-auto-cal-config6")
+	EMC_READ_PROP(emc_auto_cal_config7, "nvidia,emc-auto-cal-config7")
+	EMC_READ_PROP(emc_auto_cal_config8, "nvidia,emc-auto-cal-config8")
+	EMC_READ_PROP(emc_fdpd_ctrl_cmd_no_ramp, "nvidia,emc-fdpd-ctrl-cmd-no-ramp")
+	EMC_READ_PROP(dll_clk_src, "nvidia,dll-clk-src")
+	EMC_READ_PROP(clk_out_enb_x_0_clk_enb_emc_dll, "nvidia,clk-out-enb-x-0-clk-enb-emc-dll")
+
+	if (timing->revision >= 0x7)
+		EMC_READ_PROP_ARRAY(ptfv_list, "nvidia,ptfv", ARRAY_SIZE(timing->ptfv_list))
+
+	EMC_READ_PROP_ARRAY(burst_reg_per_ch, "nvidia,emc-burst-regs-per-ch",
+			timing->num_burst_per_ch)
+	EMC_READ_PROP_ARRAY(shadow_regs_ca_train, "nvidia,emc-shadow-regs-ca-train",
+			timing->num_burst)
+	EMC_READ_PROP_ARRAY(shadow_regs_quse_train, "nvidia,emc-shadow-regs-quse-train",
+			timing->num_burst)
+	EMC_READ_PROP_ARRAY(shadow_regs_rdwr_train, "nvidia,emc-shadow-regs-rdwr-train",
+			timing->num_burst)
+	EMC_READ_PROP_ARRAY(trim_regs, "nvidia,emc-trim-regs", timing->num_trim)
+	EMC_READ_PROP_ARRAY(trim_perch_regs, "nvidia,emc-trim-regs-per-ch", timing->num_trim_per_ch)
+	EMC_READ_PROP_ARRAY(vref_perch_regs, "nvidia,emc-vref-regs", timing->vref_num)
+	EMC_READ_PROP_ARRAY(dram_timings, "nvidia,emc-dram-timing-regs", timing->dram_timing_num)
+	EMC_READ_PROP_ARRAY(burst_mc_regs, "nvidia,emc-burst-mc-regs", timing->num_mc_regs)
+	EMC_READ_PROP_ARRAY(la_scale_regs, "nvidia,emc-la-scale-regs", timing->num_up_down)
+
+#undef EMC_READ_PROP
+#undef EMC_READ_STRING
+#undef EMC_READ_PROP_ARRAY
+
+	return 0;
+}
+
+#define NOMINAL_COMPATIBLE "nvidia,tegra21-emc-table"
+#define DERATED_COMPATIBLE "nvidia,tegra21-emc-table-derated"
+static int tegra210_emc_load_timings_from_dt(struct tegra210_emc *emc,
+					     struct device_node *node)
+{
+	struct tegra210_emc_timing *timing;
+	unsigned int num_nominal = 0, num_derated = 0;
+	int err;
+
+	emc->num_timings = 0;
+	for_each_child_of_node_scoped(node, child) {
+		if (of_device_is_compatible(child, NOMINAL_COMPATIBLE))
+			emc->num_timings++;
+		else if (of_device_is_compatible(child, DERATED_COMPATIBLE))
+			num_derated++;
+	}
+
+	if (!emc->num_timings || (num_derated && (emc->num_timings != num_derated)))
+		return -EINVAL;
+
+	emc->nominal = devm_kcalloc(emc->dev, emc->num_timings, sizeof(*timing),
+				    GFP_KERNEL);
+	if (!emc->nominal)
+		return -ENOMEM;
+
+	if (num_derated) {
+		num_derated = 0;
+		emc->derated = devm_kcalloc(emc->dev, emc->num_timings, sizeof(*timing),
+					    GFP_KERNEL);
+		if (!emc->derated)
+			return -ENOMEM;
+	}
+
+	for_each_child_of_node_scoped(node, child) {
+		if (of_device_is_compatible(child, NOMINAL_COMPATIBLE))
+			timing = &emc->nominal[num_nominal++];
+		else if (of_device_is_compatible(child, DERATED_COMPATIBLE))
+			timing = &emc->derated[num_derated++];
+		else
+			continue;
+
+		err = load_one_timing_from_dt(emc, timing, child);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int tegra210_emc_parse_dt(struct tegra210_emc *emc)
+{
+	struct device_node *node, *np = emc->dev->of_node;
+	int ram_code, ret = 0;
+
+	if (!np) {
+		dev_err(emc->dev, "Unable to find emc node\n");
+		return -ENODEV;
+	}
+
+	if (of_find_property(np, "nvidia,use-ram-code", NULL)) {
+		ram_code = tegra_read_ram_code();
+		node = tegra_emc_find_node_by_ram_code(np, ram_code);
+
+		if (!node) {
+			dev_warn(emc->dev, "can't find emc table for ram-code\n");
+			return -ENODEV;
+		}
+
+		ret = tegra210_emc_load_timings_from_dt(emc, node);
+		of_node_put(node);
+	} else {
+		ret = tegra210_emc_load_timings_from_dt(emc, np);
+	}
+
+	return ret;
+}
+
 static int tegra210_emc_validate_timings(struct tegra210_emc *emc,
 					 struct tegra210_emc_timing *timings,
 					 unsigned int num_timings)
@@ -1815,6 +2035,7 @@ static int tegra210_emc_probe(struct platform_device *pdev)
 	struct device_node *np;
 	unsigned int i;
 	int err;
+	bool have_dt_tables = false;
 
 	emc = devm_kzalloc(&pdev->dev, sizeof(*emc), GFP_KERNEL);
 	if (!emc)
@@ -1847,16 +2068,20 @@ static int tegra210_emc_probe(struct platform_device *pdev)
 	np = pdev->dev.of_node;
 
 	/* attach to the nominal and (optional) derated tables */
-	err = of_reserved_mem_device_init_by_name(emc->dev, np, "nominal");
-	if (err < 0) {
-		dev_err(emc->dev, "failed to get nominal EMC table: %d\n", err);
-		return err;
-	}
+	if (of_reserved_mem_device_init_by_name(emc->dev, np, "nominal") >= 0) {
+		err = of_reserved_mem_device_init_by_name(emc->dev, np, "derated");
+		if (err < 0 && err != -ENODEV) {
+			dev_err(emc->dev, "failed to get derated EMC table: %d\n", err);
+			goto release;
+		}
+	} else {
+		err = tegra210_emc_parse_dt(emc);
+		if (err < 0) {
+			dev_err(emc->dev, "failed to get EMC tables: %d\n", err);
+			return err;
+		}
 
-	err = of_reserved_mem_device_init_by_name(emc->dev, np, "derated");
-	if (err < 0 && err != -ENODEV) {
-		dev_err(emc->dev, "failed to get derated EMC table: %d\n", err);
-		goto release;
+		have_dt_tables = true;
 	}
 
 	/* validate the tables */
@@ -1980,7 +2205,8 @@ detach:
 	debugfs_remove_recursive(emc->debugfs.root);
 	tegra210_clk_emc_detach(emc->clk);
 release:
-	of_reserved_mem_device_release(emc->dev);
+	if (!have_dt_tables)
+		of_reserved_mem_device_release(emc->dev);
 
 	return err;
 }
