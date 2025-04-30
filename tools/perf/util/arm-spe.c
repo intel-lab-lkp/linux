@@ -786,7 +786,7 @@ static bool arm_spe__synth_ds(struct arm_spe_queue *speq,
 	}
 
 	for (i = 0; i < ARRAY_SIZE(data_source_handles); i++) {
-		if (is_midr_in_range_list(midr, data_source_handles[i].midr_ranges)) {
+		if (is_midr_in_range_list((u32)midr, data_source_handles[i].midr_ranges)) {
 			data_source_handles[i].ds_synth(record, data_src);
 			return true;
 		}
@@ -956,7 +956,7 @@ static int arm_spe_run_decoder(struct arm_spe_queue *speq, u64 *timestamp)
 		 */
 		record = &speq->decoder->record;
 		if (!spe->timeless_decoding && record->context_id != (u64)-1) {
-			ret = arm_spe_set_tid(speq, record->context_id);
+			ret = arm_spe_set_tid(speq, (pid_t)record->context_id);
 			if (ret)
 				return ret;
 
@@ -1344,8 +1344,8 @@ static u64 **arm_spe__alloc_metadata(struct perf_record_auxtrace_info *info,
 	}
 
 	*ver = ptr[ARM_SPE_HEADER_VERSION];
-	hdr_sz = ptr[ARM_SPE_HEADER_SIZE];
-	*nr_cpu = ptr[ARM_SPE_CPUS_NUM];
+	hdr_sz = (int)ptr[ARM_SPE_HEADER_SIZE];
+	*nr_cpu = (int)ptr[ARM_SPE_CPUS_NUM];
 
 	metadata = calloc(*nr_cpu, sizeof(*metadata));
 	if (!metadata)
@@ -1353,7 +1353,7 @@ static u64 **arm_spe__alloc_metadata(struct perf_record_auxtrace_info *info,
 
 	/* Locate the start address of per CPU metadata */
 	ptr += hdr_sz;
-	per_cpu_sz = (metadata_size - (hdr_sz * sizeof(u64))) / (*nr_cpu);
+	per_cpu_sz = (int)((metadata_size - (hdr_sz * sizeof(u64))) / (*nr_cpu));
 
 	for (i = 0; i < *nr_cpu; i++) {
 		metadata[i] = arm_spe__alloc_per_cpu_metadata(ptr, per_cpu_sz);
@@ -1405,7 +1405,7 @@ static void arm_spe_free(struct perf_session *session)
 	auxtrace_heap__free(&spe->heap);
 	arm_spe_free_events(session);
 	session->auxtrace = NULL;
-	arm_spe__free_metadata(spe->metadata, spe->metadata_nr_cpu);
+	arm_spe__free_metadata(spe->metadata, (int)spe->metadata_nr_cpu);
 	free(spe);
 }
 
@@ -1451,8 +1451,8 @@ static void arm_spe_print_info(struct arm_spe *spe, __u64 *arr)
 		hdr_size = ARM_SPE_AUXTRACE_V1_PRIV_MAX;
 		hdr_fmts = metadata_hdr_v1_fmts;
 	} else {
-		cpu_num = arr[ARM_SPE_CPUS_NUM];
-		hdr_size = arr[ARM_SPE_HEADER_SIZE];
+		cpu_num = (unsigned int)arr[ARM_SPE_CPUS_NUM];
+		hdr_size = (unsigned int)arr[ARM_SPE_HEADER_SIZE];
 		hdr_fmts = metadata_hdr_fmts;
 	}
 
@@ -1466,7 +1466,7 @@ static void arm_spe_print_info(struct arm_spe *spe, __u64 *arr)
 		 * are fixed. The sequential parameter size is decided by the
 		 * field 'ARM_SPE_CPU_NR_PARAMS'.
 		 */
-		cpu_size = (ARM_SPE_CPU_NR_PARAMS + 1) + arr[ARM_SPE_CPU_NR_PARAMS];
+		cpu_size = (unsigned int)((ARM_SPE_CPU_NR_PARAMS + 1) + arr[ARM_SPE_CPU_NR_PARAMS]);
 		for (i = 0; i < cpu_size; i++)
 			fprintf(stdout, metadata_per_cpu_fmts[i], arr[i]);
 		arr += cpu_size;
@@ -1731,9 +1731,9 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 	spe->machine = &session->machines.host; /* No kvm support */
 	spe->auxtrace_type = auxtrace_info->type;
 	if (metadata_ver == 1)
-		spe->pmu_type = auxtrace_info->priv[ARM_SPE_PMU_TYPE];
+		spe->pmu_type = (u32)auxtrace_info->priv[ARM_SPE_PMU_TYPE];
 	else
-		spe->pmu_type = auxtrace_info->priv[ARM_SPE_PMU_TYPE_V2];
+		spe->pmu_type = (u32)auxtrace_info->priv[ARM_SPE_PMU_TYPE_V2];
 	spe->metadata = metadata;
 	spe->metadata_ver = metadata_ver;
 	spe->metadata_nr_cpu = nr_cpu;
@@ -1752,7 +1752,7 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 	 * "time_cycles" only if they are contained in the event.
 	 */
 	spe->tc.time_shift = tc->time_shift;
-	spe->tc.time_mult = tc->time_mult;
+	spe->tc.time_mult = (u32)tc->time_mult;
 	spe->tc.time_zero = tc->time_zero;
 
 	if (event_contains(*tc, time_cycles)) {

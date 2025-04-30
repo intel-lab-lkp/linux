@@ -63,7 +63,7 @@ static int arm_spe_get_payload(const unsigned char *buf, size_t len,
 	default: return ARM_SPE_BAD_PACKET;
 	}
 
-	return 1 + ext_hdr + payload_len;
+	return 1 + ext_hdr + (int)payload_len;
 }
 
 static int arm_spe_get_pad(struct arm_spe_pkt *packet)

@@ -117,7 +117,7 @@ static int arm_spe_get_data(struct arm_spe_decoder *decoder)
 	if (!decoder->len)
 		pr_debug("No more data\n");
 
-	return decoder->len;
+	return (int)decoder->len;
 }
 
 static int arm_spe_get_next_packet(struct arm_spe_decoder *decoder)
@@ -187,7 +187,7 @@ static int arm_spe_read_record(struct arm_spe_decoder *decoder)
 			break;
 		case ARM_SPE_COUNTER:
 			if (idx == SPE_CNT_PKT_HDR_INDEX_TOTAL_LAT)
-				decoder->record.latency = payload;
+				decoder->record.latency = (u32)payload;
 			break;
 		case ARM_SPE_CONTEXT:
 			decoder->record.context_id = payload;
