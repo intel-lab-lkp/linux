@@ -1062,8 +1062,7 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 		goto err;
 	}
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	skb_put(skb, xdp->data_end - xdp->data);
+	xdp_skb_reserve_put(xdp, skb);
 
 	skb_set_network_header(skb, ETH_HLEN);
 	skb_reset_mac_header(skb);

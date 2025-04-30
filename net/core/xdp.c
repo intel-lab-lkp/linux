@@ -647,8 +647,7 @@ struct sk_buff *xdp_build_skb_from_buff(const struct xdp_buff *xdp)
 	if (unlikely(!skb))
 		return NULL;
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	__skb_put(skb, xdp->data_end - xdp->data);
+	xdp_skb_reserve_put(xdp, skb);
 
 	metalen = xdp->data - xdp->data_meta;
 	if (metalen > 0)

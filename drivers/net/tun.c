@@ -2415,8 +2415,7 @@ build:
 		goto out;
 	}
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	skb_put(skb, xdp->data_end - xdp->data);
+	xdp_skb_reserve_put(xdp, skb);
 
 	/* The externally provided xdp_buff may have no metadata support, which
 	 * is marked by xdp->data_meta being xdp->data + 1. This will lead to a
