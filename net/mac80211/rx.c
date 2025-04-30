@@ -5125,6 +5125,41 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 	return ieee80211_prepare_and_rx_handle(rx, skb, consume);
 }
 
+static bool
+ieee80211_rx_is_sdata_match(struct ieee80211_sub_if_data *sdata,
+			    int freq)
+{
+	unsigned int link_id;
+	bool is_freq_match = false;
+	struct ieee80211_bss_conf *bss_conf;
+	struct ieee80211_chanctx_conf *conf;
+	unsigned long valid_links = sdata->vif.valid_links;
+
+	if (valid_links) {
+		for_each_set_bit(link_id, &valid_links, IEEE80211_MLD_MAX_NUM_LINKS) {
+			bss_conf = rcu_dereference(sdata->vif.link_conf[link_id]);
+			if (!bss_conf)
+				continue;
+			conf = rcu_dereference(bss_conf->chanctx_conf);
+			if (conf && conf->def.chan &&
+			    conf->def.chan->center_freq == freq) {
+				is_freq_match = true;
+				break;
+			}
+		}
+	} else {
+		bss_conf = &sdata->vif.bss_conf;
+		if (bss_conf) {
+			conf = rcu_dereference(bss_conf->chanctx_conf);
+			if (conf && conf->def.chan &&
+			    conf->def.chan->center_freq == freq) {
+				is_freq_match = true;
+			}
+		}
+	}
+	return is_freq_match;
+}
+
 /*
  * This is the actual Rx frames handler. as it belongs to Rx path it must
  * be called with rcu_read_lock protection.
@@ -5264,22 +5299,34 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		 * the loop to avoid copying the SKB once too much
 		 */
 
-		if (!prev) {
+		/* Process the group addressed management and data packets
+		 * in the intended interface when the operating frequency
+		 * matches with rx_status->freq in multi-radio devices.
+		 * If rx_status->freq is not set by the driver, then
+		 * follow the existing code flow.
+		 */
+
+		if (!status->freq ||
+		    ieee80211_rx_is_sdata_match(sdata, status->freq)) {
+			if (!prev) {
+				prev = sdata;
+				continue;
+			}
+
+			rx.sdata = prev;
+			ieee80211_rx_for_interface(&rx, skb, false);
 			prev = sdata;
-			continue;
 		}
-
-		rx.sdata = prev;
-		ieee80211_rx_for_interface(&rx, skb, false);
-
-		prev = sdata;
 	}
 
 	if (prev) {
-		rx.sdata = prev;
+		if (!status->freq ||
+		    ieee80211_rx_is_sdata_match(prev, status->freq)) {
+			rx.sdata = prev;
 
-		if (ieee80211_rx_for_interface(&rx, skb, true))
-			return;
+			if (ieee80211_rx_for_interface(&rx, skb, true))
+				return;
+		}
 	}
 
  out:
