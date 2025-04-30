@@ -2889,7 +2889,7 @@ int dev_pm_opp_sync_regulators(struct device *dev)
 {
 	struct opp_table *opp_table __free(put_opp_table);
 	struct regulator *reg;
-	int i;
+	int i, ret;
 
 	/* Device may not have OPP table */
 	opp_table = _find_opp_table(dev);
@@ -2906,7 +2906,9 @@ int dev_pm_opp_sync_regulators(struct device *dev)
 
 	for (i = 0; i < opp_table->regulator_count; i++) {
 		reg = opp_table->regulators[i];
-		return regulator_sync_voltage(reg);
+		ret = regulator_sync_voltage(reg);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
