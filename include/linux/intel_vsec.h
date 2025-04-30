@@ -170,6 +170,8 @@ int intel_vsec_add_aux(struct pci_dev *pdev, struct device *parent,
 		       struct intel_vsec_device *intel_vsec_dev,
 		       const char *name);
 
+int intel_vsec_suppliers_ready(struct intel_vsec_device *vsec_dev,
+			       unsigned long needs);
 static inline struct intel_vsec_device *dev_to_ivdev(struct device *dev)
 {
 	return container_of(dev, struct intel_vsec_device, auxdev.dev);
@@ -183,11 +185,23 @@ static inline struct intel_vsec_device *auxdev_to_ivdev(struct auxiliary_device 
 #if IS_ENABLED(CONFIG_INTEL_VSEC)
 int intel_vsec_register(struct pci_dev *pdev,
 			 struct intel_vsec_platform_info *info);
+int intel_vsec_set_mapping(struct oobmsm_plat_info *plat_info,
+			   struct intel_vsec_device *vsec_dev);
+struct oobmsm_plat_info *intel_vsec_get_mapping(struct pci_dev *pdev);
 #else
 static inline int intel_vsec_register(struct pci_dev *pdev,
 				       struct intel_vsec_platform_info *info)
 {
 	return -ENODEV;
+}
+static inline int intel_vsec_set_mapping(struct oobmsm_plat_info *plat_info,
+					 struct intel_vsec_device *vsec_dev)
+{
+	return -ENODEV;
+}
+static inline struct oobmsm_plat_info *intel_vsec_get_mapping(struct pci_dev *pdev)
+{
+	return ERR_PTR(-ENODEV);
 }
 #endif
 #endif
