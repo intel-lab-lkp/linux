@@ -680,6 +680,9 @@ void elevator_set_default(struct request_queue *q)
 	};
 	int err = 0;
 
+	/* now we allow to switch elevator */
+	blk_queue_flag_clear(QUEUE_FLAG_NO_ELV_SWITCH, q);
+
 	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
 		return;
 
@@ -730,7 +733,7 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	struct blk_mq_tag_set *set = q->tag_set;
 
 	/* Make sure queue is not in the middle of being removed */
-	if (!blk_queue_registered(q))
+	if (!blk_queue_registered(q) || blk_queue_no_elv_switch(q))
 		return -ENOENT;
 
 	/*
