@@ -713,7 +713,7 @@ int intel_pt_pkt_desc(const struct intel_pt_pkt *packet, char *buf,
 		if (ret < 0)
 			return ret;
 		blen -= ret;
-		return buf_len - blen;
+		return (int)(buf_len - blen);
 	}
 	case INTEL_PT_TIP_PGD:
 	case INTEL_PT_TIP_PGE:

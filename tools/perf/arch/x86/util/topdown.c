@@ -43,7 +43,7 @@ bool arch_is_topdown_slots(const struct evsel *evsel)
 
 bool arch_is_topdown_metrics(const struct evsel *evsel)
 {
-	int config = evsel->core.attr.config;
+	__u64 config = evsel->core.attr.config;
 	const char *name_from_config;
 	struct perf_pmu *pmu;
 

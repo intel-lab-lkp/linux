@@ -841,7 +841,7 @@ static int intel_pt_calc_cyc_cb(struct intel_pt_pkt_info *pkt_info)
 		if (!data->have_tma)
 			return 0;
 
-		mtc = pkt_info->packet.payload;
+		mtc = (uint32_t)pkt_info->packet.payload;
 		if (decoder->mtc_shift > 8 && data->fixup_last_mtc) {
 			data->fixup_last_mtc = false;
 			intel_pt_fixup_last_mtc(mtc, decoder->mtc_shift,
@@ -904,7 +904,7 @@ static int intel_pt_calc_cyc_cb(struct intel_pt_pkt_info *pkt_info)
 		if (!decoder->tsc_ctc_ratio_d)
 			return 0;
 
-		ctc = pkt_info->packet.payload;
+		ctc = (uint32_t)pkt_info->packet.payload;
 		fc = pkt_info->packet.count;
 		ctc_rem = ctc & decoder->ctc_rem_mask;
 
@@ -930,7 +930,7 @@ static int intel_pt_calc_cyc_cb(struct intel_pt_pkt_info *pkt_info)
 		return 0;
 
 	case INTEL_PT_CBR:
-		cbr = pkt_info->packet.payload;
+		cbr = (uint32_t)pkt_info->packet.payload;
 		if (data->cbr && data->cbr != cbr)
 			return 1;
 		data->cbr = cbr;
@@ -1268,7 +1268,7 @@ static void intel_pt_mode_exec_status(struct intel_pt_decoder *decoder)
 {
 	bool iflag = decoder->packet.count & INTEL_PT_IFLAG;
 
-	decoder->exec_mode = decoder->packet.payload;
+	decoder->exec_mode = (int)decoder->packet.payload;
 	decoder->iflag = iflag;
 	decoder->next_iflag = iflag;
 	decoder->state.from_iflag = iflag;
@@ -1279,7 +1279,7 @@ static void intel_pt_mode_exec(struct intel_pt_decoder *decoder)
 {
 	bool iflag = decoder->packet.count & INTEL_PT_IFLAG;
 
-	decoder->exec_mode = decoder->packet.payload;
+	decoder->exec_mode = (int)decoder->packet.payload;
 	decoder->next_iflag = iflag;
 }
 
@@ -1331,7 +1331,7 @@ static bool intel_pt_fup_event(struct intel_pt_decoder *decoder, bool no_tip)
 		if (!ip && decoder->pge)
 			decoder->state.type |= INTEL_PT_BRANCH;
 		decoder->state.cfe_type = decoder->fup_cfe_pkt.count;
-		decoder->state.cfe_vector = decoder->fup_cfe_pkt.payload;
+		decoder->state.cfe_vector = (int)decoder->fup_cfe_pkt.payload;
 		decoder->state.evd_cnt = decoder->evd_cnt;
 		decoder->state.evd = decoder->evd;
 		decoder->evd_cnt = 0;
@@ -1906,7 +1906,7 @@ static inline void intel_pt_mtc_cyc_cnt_upd(struct intel_pt_decoder *decoder)
 
 static void intel_pt_calc_tma(struct intel_pt_decoder *decoder)
 {
-	uint32_t ctc = decoder->packet.payload;
+	uint32_t ctc = (uint32_t)decoder->packet.payload;
 	uint32_t fc = decoder->packet.count;
 	uint32_t ctc_rem = ctc & decoder->ctc_rem_mask;
 
@@ -1943,7 +1943,7 @@ static void intel_pt_calc_mtc_timestamp(struct intel_pt_decoder *decoder)
 	if (!decoder->have_tma)
 		return;
 
-	mtc = decoder->packet.payload;
+	mtc = (uint32_t)decoder->packet.payload;
 
 	if (decoder->mtc_shift > 8 && decoder->fixup_last_mtc) {
 		decoder->fixup_last_mtc = false;
@@ -2044,7 +2044,7 @@ static void intel_pt_bbp(struct intel_pt_decoder *decoder)
 		memset(decoder->state.items.mask, 0, sizeof(decoder->state.items.mask));
 		decoder->state.items.is_32_bit = false;
 	}
-	decoder->blk_type = decoder->packet.payload;
+	decoder->blk_type = (enum intel_pt_blk_type)decoder->packet.payload;
 	decoder->blk_type_pos = intel_pt_blk_type_pos(decoder->blk_type);
 	if (decoder->blk_type == INTEL_PT_GP_REGS)
 		decoder->state.items.is_32_bit = decoder->packet.count;
@@ -2488,12 +2488,12 @@ static uint64_t intel_pt_calc_expected_tsc(struct intel_pt_decoder *decoder,
 static uint64_t intel_pt_expected_tsc(struct intel_pt_decoder *decoder,
 				      struct intel_pt_vm_tsc_info *data)
 {
-	uint32_t ctc = data->tma_packet.payload;
+	uint32_t ctc = (uint32_t)data->tma_packet.payload;
 	uint32_t fc = data->tma_packet.count;
 
 	return intel_pt_calc_expected_tsc(decoder, ctc, fc,
 					  decoder->ctc_timestamp,
-					  data->ctc_delta, data->last_ctc);
+					  data->ctc_delta, (uint32_t)data->last_ctc);
 }
 
 static void intel_pt_translate_vm_tsc(struct intel_pt_decoder *decoder,
@@ -2889,7 +2889,7 @@ static int intel_pt_vm_time_correlation(struct intel_pt_decoder *decoder)
 			break;
 
 		case INTEL_PT_BBP:
-			decoder->blk_type = decoder->packet.payload;
+			decoder->blk_type = (enum intel_pt_blk_type)decoder->packet.payload;
 			break;
 
 		case INTEL_PT_BIP:
@@ -3825,7 +3825,7 @@ static int intel_pt_part_psb(struct intel_pt_decoder *decoder)
 		if (i > decoder->len)
 			continue;
 		if (!memcmp(end - i, INTEL_PT_PSB_STR, i))
-			return i;
+			return (int)i;
 	}
 	return 0;
 }
@@ -3839,7 +3839,7 @@ static int intel_pt_rest_psb(struct intel_pt_decoder *decoder, int part_psb)
 	    memcmp(decoder->buf, psb + part_psb, rest_psb))
 		return 0;
 
-	return rest_psb;
+	return (int)rest_psb;
 }
 
 static int intel_pt_get_split_psb(struct intel_pt_decoder *decoder,
@@ -3898,7 +3898,7 @@ static int intel_pt_scan_for_psb(struct intel_pt_decoder *decoder)
 			continue;
 		}
 
-		decoder->pkt_step = next - decoder->buf;
+		decoder->pkt_step = (int)(next - decoder->buf);
 		return intel_pt_get_next_packet(decoder);
 	}
 }

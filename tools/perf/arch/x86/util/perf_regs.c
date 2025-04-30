@@ -195,7 +195,8 @@ static void sdt_rename_register(char *sdt_reg, int sdt_len, char *uprobe_reg)
 int arch_sdt_arg_parse_op(char *old_op, char **new_op)
 {
 	char new_reg[SDT_REG_NAME_SIZE] = {0};
-	int new_len = 0, ret;
+	int ret;
+	size_t new_len = 0;
 	/*
 	 * rm[0]:  +/-NUM(REG)
 	 * rm[1]:  +/-

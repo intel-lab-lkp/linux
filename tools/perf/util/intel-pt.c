@@ -557,7 +557,7 @@ static int intel_pt_config_div(const char *var, const char *value, void *data)
 	if (!strcmp(var, "intel-pt.cache-divisor")) {
 		val = strtol(value, NULL, 0);
 		if (val > 0 && val <= INT_MAX)
-			*d = val;
+			*d = (int)val;
 	}
 
 	return 0;
@@ -589,7 +589,7 @@ static unsigned int intel_pt_cache_size(struct dso *dso,
 		return 10;
 	if (size > (1 << 21))
 		return 21;
-	return 32 - __builtin_clz(size);
+	return 32 - __builtin_clz((unsigned int)size);
 }
 
 static struct auxtrace_cache *intel_pt_cache(struct dso *dso,
@@ -635,7 +635,7 @@ static int intel_pt_cache_add(struct dso *dso, struct machine *machine,
 	e->rel = intel_pt_insn->rel;
 	memcpy(e->insn, intel_pt_insn->buf, INTEL_PT_INSN_BUF_SZ);
 
-	err = auxtrace_cache__add(c, offset, &e->entry);
+	err = auxtrace_cache__add(c, (u32)offset, &e->entry);
 	if (err)
 		auxtrace_cache__free_entry(c, e);
 
@@ -650,7 +650,7 @@ intel_pt_cache_lookup(struct dso *dso, struct machine *machine, u64 offset)
 	if (!c)
 		return NULL;
 
-	return auxtrace_cache__lookup(dso__auxtrace_cache(dso), offset);
+	return auxtrace_cache__lookup(dso__auxtrace_cache(dso), (u32)offset);
 }
 
 static void intel_pt_cache_invalidate(struct dso *dso, struct machine *machine,
@@ -661,7 +661,7 @@ static void intel_pt_cache_invalidate(struct dso *dso, struct machine *machine,
 	if (!c)
 		return;
 
-	auxtrace_cache__remove(dso__auxtrace_cache(dso), offset);
+	auxtrace_cache__remove(dso__auxtrace_cache(dso), (u32)offset);
 }
 
 static inline bool intel_pt_guest_kernel_ip(uint64_t ip)
@@ -1101,7 +1101,7 @@ static unsigned int intel_pt_mtc_period(struct intel_pt *pt)
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
 		if (intel_pt_get_config(pt, &evsel->core.attr, &config))
-			return (config & pt->mtc_freq_bits) >> shift;
+			return (unsigned int)((config & pt->mtc_freq_bits) >> shift);
 	}
 	return 0;
 }
@@ -2424,7 +2424,7 @@ static int intel_pt_synth_pebs_sample(struct intel_pt_queue *ptq)
 	struct intel_pt_pebs_event *pe;
 	struct intel_pt *pt = ptq->pt;
 	int err = -EINVAL;
-	int hw_id;
+	size_t hw_id;
 
 	if (!items->has_applicable_counters || !items->applicable_counters) {
 		if (!pt->single_pebs)
@@ -2435,9 +2435,10 @@ static int intel_pt_synth_pebs_sample(struct intel_pt_queue *ptq)
 	for_each_set_bit(hw_id, (unsigned long *)&items->applicable_counters, INTEL_PT_MAX_PEBS) {
 		pe = &ptq->pebs[hw_id];
 		if (!pe->evsel) {
-			if (!pt->single_pebs)
-				pr_err("PEBS-via-PT record with no matching event, hw_id %d\n",
+			if (!pt->single_pebs) {
+				pr_err("PEBS-via-PT record with no matching event, hw_id %zu\n",
 				       hw_id);
+			}
 			return intel_pt_synth_single_pebs_sample(ptq);
 		}
 		err = intel_pt_do_synth_pebs_sample(ptq, pe->evsel, pe->id);
@@ -3272,7 +3273,7 @@ static int intel_pt_process_switch(struct intel_pt *pt,
 	if (evsel != pt->switch_evsel)
 		return 0;
 
-	tid = evsel__intval(evsel, sample, "next_pid");
+	tid = (pid_t)evsel__intval(evsel, sample, "next_pid");
 	cpu = sample->cpu;
 
 	intel_pt_log("sched_switch: cpu %d tid %d time %"PRIu64" tsc %#"PRIx64"\n",
@@ -4258,14 +4259,14 @@ int intel_pt_process_auxtrace_info(union perf_event *event,
 	pt->session = session;
 	pt->machine = &session->machines.host; /* No kvm support */
 	pt->auxtrace_type = auxtrace_info->type;
-	pt->pmu_type = auxtrace_info->priv[INTEL_PT_PMU_TYPE];
+	pt->pmu_type = (u32)auxtrace_info->priv[INTEL_PT_PMU_TYPE];
 	pt->tc.time_shift = auxtrace_info->priv[INTEL_PT_TIME_SHIFT];
-	pt->tc.time_mult = auxtrace_info->priv[INTEL_PT_TIME_MULT];
+	pt->tc.time_mult = (u32)auxtrace_info->priv[INTEL_PT_TIME_MULT];
 	pt->tc.time_zero = auxtrace_info->priv[INTEL_PT_TIME_ZERO];
 	pt->cap_user_time_zero = auxtrace_info->priv[INTEL_PT_CAP_USER_TIME_ZERO];
 	pt->tsc_bit = auxtrace_info->priv[INTEL_PT_TSC_BIT];
 	pt->noretcomp_bit = auxtrace_info->priv[INTEL_PT_NORETCOMP_BIT];
-	pt->have_sched_switch = auxtrace_info->priv[INTEL_PT_HAVE_SCHED_SWITCH];
+	pt->have_sched_switch = (int)auxtrace_info->priv[INTEL_PT_HAVE_SCHED_SWITCH];
 	pt->snapshot_mode = auxtrace_info->priv[INTEL_PT_SNAPSHOT_MODE];
 	pt->per_cpu_mmaps = auxtrace_info->priv[INTEL_PT_PER_CPU_MMAPS];
 	intel_pt_print_info(&auxtrace_info->priv[0], INTEL_PT_PMU_TYPE,
@@ -4274,8 +4275,8 @@ int intel_pt_process_auxtrace_info(union perf_event *event,
 	if (intel_pt_has(auxtrace_info, INTEL_PT_CYC_BIT)) {
 		pt->mtc_bit = auxtrace_info->priv[INTEL_PT_MTC_BIT];
 		pt->mtc_freq_bits = auxtrace_info->priv[INTEL_PT_MTC_FREQ_BITS];
-		pt->tsc_ctc_ratio_n = auxtrace_info->priv[INTEL_PT_TSC_CTC_N];
-		pt->tsc_ctc_ratio_d = auxtrace_info->priv[INTEL_PT_TSC_CTC_D];
+		pt->tsc_ctc_ratio_n = (u32)auxtrace_info->priv[INTEL_PT_TSC_CTC_N];
+		pt->tsc_ctc_ratio_d = (u32)auxtrace_info->priv[INTEL_PT_TSC_CTC_D];
 		pt->cyc_bit = auxtrace_info->priv[INTEL_PT_CYC_BIT];
 		intel_pt_print_info(&auxtrace_info->priv[0], INTEL_PT_MTC_BIT,
 				    INTEL_PT_CYC_BIT);
@@ -4283,7 +4284,7 @@ int intel_pt_process_auxtrace_info(union perf_event *event,
 
 	if (intel_pt_has(auxtrace_info, INTEL_PT_MAX_NONTURBO_RATIO)) {
 		pt->max_non_turbo_ratio =
-			auxtrace_info->priv[INTEL_PT_MAX_NONTURBO_RATIO];
+			(unsigned int)auxtrace_info->priv[INTEL_PT_MAX_NONTURBO_RATIO];
 		intel_pt_print_info(&auxtrace_info->priv[0],
 				    INTEL_PT_MAX_NONTURBO_RATIO,
 				    INTEL_PT_MAX_NONTURBO_RATIO);
@@ -4418,12 +4419,11 @@ int intel_pt_process_auxtrace_info(union perf_event *event,
 		u64 tsc_freq = intel_pt_ns_to_ticks(pt, 1000000000);
 
 		if (!pt->max_non_turbo_ratio)
-			pt->max_non_turbo_ratio =
-					(tsc_freq + 50000000) / 100000000;
+			pt->max_non_turbo_ratio = (unsigned int)((tsc_freq + 50000000) / 100000000);
 		intel_pt_log("TSC frequency %"PRIu64"\n", tsc_freq);
 		intel_pt_log("Maximum non-turbo ratio %u\n",
 			     pt->max_non_turbo_ratio);
-		pt->cbr2khz = tsc_freq / pt->max_non_turbo_ratio / 1000;
+		pt->cbr2khz = (unsigned int)(tsc_freq / pt->max_non_turbo_ratio / 1000);
 	}
 
 	err = intel_pt_setup_time_ranges(pt, session->itrace_synth_opts);

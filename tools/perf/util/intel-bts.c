@@ -850,9 +850,9 @@ int intel_bts_process_auxtrace_info(union perf_event *event,
 	bts->session = session;
 	bts->machine = &session->machines.host; /* No kvm support */
 	bts->auxtrace_type = auxtrace_info->type;
-	bts->pmu_type = auxtrace_info->priv[INTEL_BTS_PMU_TYPE];
+	bts->pmu_type = (u32)auxtrace_info->priv[INTEL_BTS_PMU_TYPE];
 	bts->tc.time_shift = auxtrace_info->priv[INTEL_BTS_TIME_SHIFT];
-	bts->tc.time_mult = auxtrace_info->priv[INTEL_BTS_TIME_MULT];
+	bts->tc.time_mult = (u32)auxtrace_info->priv[INTEL_BTS_TIME_MULT];
 	bts->tc.time_zero = auxtrace_info->priv[INTEL_BTS_TIME_ZERO];
 	bts->cap_user_time_zero =
 			auxtrace_info->priv[INTEL_BTS_CAP_USER_TIME_ZERO];

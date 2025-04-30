@@ -31,7 +31,7 @@ static void mmio_event_get_key(struct evsel *evsel, struct perf_sample *sample,
 			       struct event_key *key)
 {
 	key->key  = evsel__intval(evsel, sample, "gpa");
-	key->info = evsel__intval(evsel, sample, "type");
+	key->info = (int)evsel__intval(evsel, sample, "type");
 }
 
 #define KVM_TRACE_MMIO_READ_UNSATISFIED 0
@@ -94,7 +94,7 @@ static void ioport_event_get_key(struct evsel *evsel,
 				 struct event_key *key)
 {
 	key->key  = evsel__intval(evsel, sample, "port");
-	key->info = evsel__intval(evsel, sample, "rw");
+	key->info = (int)evsel__intval(evsel, sample, "rw");
 }
 
 static bool ioport_event_begin(struct evsel *evsel,
@@ -138,7 +138,7 @@ static void msr_event_get_key(struct evsel *evsel,
 				 struct event_key *key)
 {
 	key->key  = evsel__intval(evsel, sample, "ecx");
-	key->info = evsel__intval(evsel, sample, "write");
+	key->info = (int)evsel__intval(evsel, sample, "write");
 }
 
 static bool msr_event_begin(struct evsel *evsel,

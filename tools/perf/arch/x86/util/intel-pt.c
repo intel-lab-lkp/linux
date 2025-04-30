@@ -418,7 +418,7 @@ static int intel_pt_track_switches(struct evlist *evlist)
 
 	evsel = evlist__add_sched_switch(evlist, true);
 	if (IS_ERR(evsel)) {
-		err = PTR_ERR(evsel);
+		err = (int)PTR_ERR(evsel);
 		pr_debug2("%s: failed to create %s, error = %d\n",
 			  __func__, sched_switch, err);
 		return err;
@@ -692,7 +692,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 			size_t sz = opts->auxtrace_snapshot_size;
 
 			sz = round_up(sz, page_size) / page_size;
-			opts->auxtrace_mmap_pages = roundup_pow_of_two(sz);
+			opts->auxtrace_mmap_pages = (unsigned int)roundup_pow_of_two(sz);
 		}
 		if (opts->auxtrace_snapshot_size >
 				opts->auxtrace_mmap_pages * (size_t)page_size) {
@@ -726,7 +726,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 		if (!opts->auxtrace_mmap_pages) {
 			size_t sz = round_up(max_sz, page_size) / page_size;
 
-			opts->auxtrace_mmap_pages = roundup_pow_of_two(sz);
+			opts->auxtrace_mmap_pages = (unsigned int)roundup_pow_of_two(sz);
 		}
 		if (max_sz > opts->auxtrace_mmap_pages * (size_t)page_size) {
 			pr_err("Sample size %zu must not be greater than AUX area tracing mmap size %zu\n",
@@ -772,7 +772,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 
 	if (!opts->auxtrace_snapshot_mode && !opts->auxtrace_sample_mode) {
 		size_t aw = opts->auxtrace_mmap_pages * (size_t)page_size / 4;
-		u32 aux_watermark = aw > UINT_MAX ? UINT_MAX : aw;
+		u32 aux_watermark = aw > UINT_MAX ? UINT_MAX : (u32)aw;
 
 		intel_pt_evsel->core.attr.aux_watermark = aux_watermark;
 	}
@@ -1093,7 +1093,7 @@ static bool intel_pt_wrapped(struct intel_pt_recording *ptr, int idx,
 
 static bool intel_pt_first_wrap(u64 *data, size_t buf_size)
 {
-	int i, a, b;
+	size_t i, a, b;
 
 	b = buf_size >> 3;
 	a = b - 512;

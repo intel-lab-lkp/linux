@@ -37,7 +37,7 @@ static int spawn_child(void)
 		 * waits in signal for parent to trace it,
 		 * then it calls bp_1 and quits.
 		 */
-		int err = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+		int err = (int)ptrace(PTRACE_TRACEME, 0, NULL, NULL);
 
 		if (err) {
 			pr_debug("failed to PTRACE_TRACEME\n");

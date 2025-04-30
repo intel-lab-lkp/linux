@@ -169,7 +169,7 @@ static int intel_bts_recording_options(struct auxtrace_record *itr,
 			size_t sz = opts->auxtrace_snapshot_size;
 
 			sz = round_up(sz, page_size) / page_size;
-			opts->auxtrace_mmap_pages = roundup_pow_of_two(sz);
+			opts->auxtrace_mmap_pages = (unsigned int)roundup_pow_of_two(sz);
 		}
 		if (opts->auxtrace_snapshot_size >
 				opts->auxtrace_mmap_pages * (size_t)page_size) {
@@ -347,7 +347,7 @@ static int intel_bts_snapshot_finish(struct auxtrace_record *itr)
 
 static bool intel_bts_first_wrap(u64 *data, size_t buf_size)
 {
-	int i, a, b;
+	size_t i, a, b;
 
 	b = buf_size >> 3;
 	a = b - 512;

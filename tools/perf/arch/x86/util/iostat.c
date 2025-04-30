@@ -305,7 +305,7 @@ static int iostat_event_group(struct evlist *evl,
 	  uncore_iio_%x/event=0x83,umask=0x01,ch_mask=0xF,fc_mask=0x07/,\
 	  uncore_iio_%x/event=0xc0,umask=0x04,ch_mask=0xF,fc_mask=0x07/,\
 	  uncore_iio_%x/event=0xc0,umask=0x01,ch_mask=0xF,fc_mask=0x07/}";
-	const int len_template = strlen(iostat_cmd_template) + 1;
+	const size_t len_template = strlen(iostat_cmd_template) + 1;
 	struct evsel *evsel = NULL;
 	int metrics_count = iostat_metrics_count();
 	char *iostat_cmd = calloc(len_template, 1);

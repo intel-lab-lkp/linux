@@ -193,7 +193,7 @@ int intel_pt_get_insn(const unsigned char *buf, size_t len, int x86_64,
 	struct insn insn;
 	int ret;
 
-	ret = insn_decode(&insn, buf, len,
+	ret = insn_decode(&insn, buf, (int)len,
 			  x86_64 ? INSN_MODE_64 : INSN_MODE_32);
 	if (ret < 0 || insn.length > len)
 		return -1;
