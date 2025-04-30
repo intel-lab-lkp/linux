@@ -2026,7 +2026,7 @@ static void NCR5380_reselect(struct Scsi_Host *instance)
 	struct NCR5380_hostdata *hostdata = shost_priv(instance);
 	unsigned char target_mask;
 	unsigned char lun;
-	unsigned char msg[3];
+	unsigned char msg[16];
 	struct NCR5380_cmd *ncmd;
 	struct scsi_cmnd *tmp;
 
@@ -2084,7 +2084,7 @@ static void NCR5380_reselect(struct Scsi_Host *instance)
 	msg[0] = NCR5380_read(CURRENT_SCSI_DATA_REG);
 #else
 	{
-		int len = 1;
+		int len = sizeof(msg);
 		unsigned char *data = msg;
 		unsigned char phase = PHASE_MSGIN;
 
@@ -2099,7 +2099,26 @@ static void NCR5380_reselect(struct Scsi_Host *instance)
 
 	if (!(msg[0] & 0x80)) {
 		shost_printk(KERN_ERR, instance, "expecting IDENTIFY message, got ");
-		spi_print_msg(msg);
+
+		/*
+		 * Defensive check before calling spi_print_msg():
+		 * Avoid buffer overrun if msg claims extended length.
+		 */
+		if (msg[0] == EXTENDED_MESSAGE && len >= 3) {
+			int expected_len = 2 + msg[1];
+
+			if (expected_len == 2)
+				expected_len += 256;
+
+			if (len >= expected_len)
+				spi_print_msg(msg);
+			else
+				pr_warn("spi_print_msg: skipping malformed extended message (len=%d, expected=%d)\n",
+					len, expected_len);
+		} else {
+			spi_print_msg(msg);
+		}
+
 		printk("\n");
 		do_abort(instance, 0);
 		return;
