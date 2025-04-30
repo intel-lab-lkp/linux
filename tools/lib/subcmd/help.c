@@ -125,13 +125,11 @@ static void get_term_dimensions(struct winsize *ws)
 	ws->ws_col = 80;
 }
 
-static void pretty_print_string_list(struct cmdnames *cmds, int longest)
+static void pretty_print_string_list(struct cmdnames *cmds, size_t longest)
 {
-	int cols = 1, rows;
-	int space = longest + 1; /* min 1 SP between words */
+	size_t cols = 1, rows, max_cols;
+	size_t space = longest + 1; /* min 1 SP between words */
 	struct winsize win;
-	int max_cols;
-	int i, j;
 
 	get_term_dimensions(&win);
 	max_cols = win.ws_col - 1; /* don't print *on* the edge */
@@ -140,12 +138,12 @@ static void pretty_print_string_list(struct cmdnames *cmds, int longest)
 		cols = max_cols / space;
 	rows = (cmds->cnt + cols - 1) / cols;
 
-	for (i = 0; i < rows; i++) {
+	for (size_t i = 0; i < rows; i++) {
 		printf("  ");
 
-		for (j = 0; j < cols; j++) {
-			unsigned int n = j * rows + i;
-			unsigned int size = space;
+		for (size_t j = 0; j < cols; j++) {
+			size_t n = j * rows + i;
+			int size = (int)space;
 
 			if (n >= cmds->cnt)
 				break;
@@ -180,7 +178,7 @@ static void list_commands_in_dir(struct cmdnames *cmds,
 					 const char *path,
 					 const char *prefix)
 {
-	int prefix_len;
+	size_t prefix_len;
 	DIR *dir = opendir(path);
 	struct dirent *de;
 	char *buf = NULL;
@@ -194,7 +192,7 @@ static void list_commands_in_dir(struct cmdnames *cmds,
 	astrcatf(&buf, "%s/", path);
 
 	while ((de = readdir(dir)) != NULL) {
-		int entlen;
+		size_t entlen;
 
 		if (!strstarts(de->d_name, prefix))
 			continue;
@@ -250,10 +248,16 @@ void load_command_list(const char *prefix,
 	exclude_cmds(other_cmds, main_cmds);
 }
 
+static void mput_char(char c, size_t num)
+{
+	while (num--)
+		putchar(c);
+}
+
 void list_commands(const char *title, struct cmdnames *main_cmds,
 		   struct cmdnames *other_cmds)
 {
-	unsigned int i, longest = 0;
+	size_t i, longest = 0;
 
 	for (i = 0; i < main_cmds->cnt; i++)
 		if (longest < main_cmds->names[i]->len)

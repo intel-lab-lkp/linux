@@ -201,7 +201,7 @@ static int get_value(struct parse_opt_ctx_t *p,
 		return 0;
 
 	case OPTION_SET_UINT:
-		*(unsigned int *)opt->value = unset ? 0 : opt->defval;
+		*(unsigned int *)opt->value = unset ? 0 : (unsigned int)opt->defval;
 		return 0;
 
 	case OPTION_SET_PTR:
@@ -256,12 +256,12 @@ static int get_value(struct parse_opt_ctx_t *p,
 			return 0;
 		}
 		if (opt->flags & PARSE_OPT_OPTARG && !p->opt) {
-			*(int *)opt->value = opt->defval;
+			*(int *)opt->value = (int)opt->defval;
 			return 0;
 		}
 		if (get_arg(p, opt, flags, &arg))
 			return -1;
-		*(int *)opt->value = strtol(arg, (char **)&s, 10);
+		*(int *)opt->value = (int)strtol(arg, (char **)&s, 10);
 		if (*s)
 			return opterror(opt, "expects a numerical value", flags);
 		return 0;
@@ -272,14 +272,14 @@ static int get_value(struct parse_opt_ctx_t *p,
 			return 0;
 		}
 		if (opt->flags & PARSE_OPT_OPTARG && !p->opt) {
-			*(unsigned int *)opt->value = opt->defval;
+			*(unsigned int *)opt->value = (unsigned int)opt->defval;
 			return 0;
 		}
 		if (get_arg(p, opt, flags, &arg))
 			return -1;
 		if (arg[0] == '-')
 			return opterror(opt, "expects an unsigned numerical value", flags);
-		*(unsigned int *)opt->value = strtol(arg, (char **)&s, 10);
+		*(unsigned int *)opt->value = (unsigned int)strtol(arg, (char **)&s, 10);
 		if (*s)
 			return opterror(opt, "expects a numerical value", flags);
 		return 0;
@@ -770,9 +770,9 @@ static void print_option_help(const struct option *opts, int full)
 		break;
 	}
 
-	if (pos <= USAGE_OPTS_WIDTH)
-		pad = USAGE_OPTS_WIDTH - pos;
-	else {
+	if (pos <= USAGE_OPTS_WIDTH) {
+		pad = (int)(USAGE_OPTS_WIDTH - pos);
+	} else {
 		fputc('\n', stderr);
 		pad = USAGE_OPTS_WIDTH;
 	}
