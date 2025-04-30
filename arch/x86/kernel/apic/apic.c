@@ -2128,9 +2128,10 @@ out:
 }
 
 /**
- * spurious_interrupt - Catch all for interrupts raised on unused vectors
- * @regs:	Pointer to pt_regs on stack
- * @vector:	The vector number
+ * DEFINE_IDTENTRY_IRQ - Handler for spurious interrupts
+ * @spurious_interrupt: Catch all for interrupts raised on unused vectors
+ * regs:	Pointer to pt_regs on stack
+ * vector:	The vector number
  *
  * This is invoked from ASM entry code to catch all interrupts which
  * trigger on an entry which is routed to the common_spurious idtentry
