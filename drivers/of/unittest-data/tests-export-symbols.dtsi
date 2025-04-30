@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-2.0
+
+/ {
+	testcase-data {
+		test-export-symbols {
+			test_export_symbols_b0: base0 {
+				test_export_symbols_n0: node {
+					dummy;
+				};
+
+				export-symbols {
+					test_export_base = <&test_export_symbols_b0>;
+					test_export_node = <&test_export_symbols_n0>;
+				};
+			};
+
+			test_export_symbols_b1: base1 {
+
+				test_export_symbols_n1: node {
+					dummy;
+				};
+
+				export-symbols {
+					test_export_base = <&test_export_symbols_b1>;
+					test_export_node = <&test_export_symbols_n1>;
+				};
+			};
+		};
+	};
+};
