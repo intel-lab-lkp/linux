@@ -88,6 +88,10 @@ static void ttyport_write_flush(struct serdev_controller *ctrl)
 {
 	struct serport *serport = serdev_controller_get_drvdata(ctrl);
 	struct tty_struct *tty = serport->tty;
+	if (!tty) {
+		dev_err(&ctrl->dev, "tty is null\n");
+		return;
+	}
 
 	tty_driver_flush_buffer(tty);
 }
@@ -100,8 +104,10 @@ static int ttyport_open(struct serdev_controller *ctrl)
 	int ret;
 
 	tty = tty_init_dev(serport->tty_drv, serport->tty_idx);
-	if (IS_ERR(tty))
+	if (IS_ERR(tty)) {
+		serport->tty = NULL;
 		return PTR_ERR(tty);
+	}
 	serport->tty = tty;
 
 	if (!tty->ops->open || !tty->ops->close) {
@@ -147,6 +153,11 @@ static void ttyport_close(struct serdev_controller *ctrl)
 	struct tty_struct *tty = serport->tty;
 
 	clear_bit(SERPORT_ACTIVE, &serport->flags);
+
+	if (!tty) {
+		dev_err(&ctrl->dev, "tty is null\n");
+		return;
+	}
 
 	tty_lock(tty);
 	if (tty->ops->close)
