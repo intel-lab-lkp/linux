@@ -751,11 +751,17 @@ static void __del_gendisk(struct gendisk *disk)
 
 static void disable_elv_switch(struct request_queue *q)
 {
+	struct blk_mq_tag_set *set = q->tag_set;
+
 	WARN_ON_ONCE(!queue_is_mq(q));
 
 	mutex_lock(&q->elevator_lock);
 	blk_queue_flag_set(QUEUE_FLAG_NO_ELV_SWITCH, q);
 	mutex_unlock(&q->elevator_lock);
+
+	/* wait until in-progress elevator switch is done */
+	down_write(&set->update_nr_hwq_lock);
+	up_write(&set->update_nr_hwq_lock);
 }
 
 /**
