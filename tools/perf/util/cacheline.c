@@ -3,7 +3,10 @@
 #include <unistd.h>
 
 #ifdef _SC_LEVEL1_DCACHE_LINESIZE
-#define cache_line_size(cacheline_sizep) *cacheline_sizep = sysconf(_SC_LEVEL1_DCACHE_LINESIZE)
+static void cache_line_size(int *cacheline_sizep)
+{
+	*cacheline_sizep = (int)sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+}
 #else
 #include <api/fs/fs.h>
 #include "debug.h"

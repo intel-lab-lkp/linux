@@ -310,7 +310,7 @@ static int match_cgroups(const char *str)
 		return -1;
 
 	/* cgroup_name will have a full path, skip the root directory */
-	prefix_len = strlen(mnt);
+	prefix_len = (int)strlen(mnt);
 
 	/* collect all cgroups in the cgroup_list */
 	if (nftw(mnt, add_cgroup_name, 20, 0) < 0)
@@ -607,7 +607,7 @@ void read_all_cgroups(struct rb_root *root)
 {
 	char mnt[PATH_MAX];
 	struct cgroup_name *cn;
-	int prefix_len;
+	size_t prefix_len;
 
 	if (cgroupfs_find_mountpoint(mnt, sizeof(mnt), "perf_event"))
 		return;

@@ -303,13 +303,12 @@ void perf_debug_setup(void)
 void dump_stack(void)
 {
 	void *array[16];
-	size_t size = backtrace(array, ARRAY_SIZE(array));
+	int size = backtrace(array, ARRAY_SIZE(array));
 	char **strings = backtrace_symbols(array, size);
-	size_t i;
 
-	printf("Obtained %zd stack frames.\n", size);
+	printf("Obtained %d stack frames.\n", size);
 
-	for (i = 0; i < size; i++)
+	for (int i = 0; i < size; i++)
 		printf("%s\n", strings[i]);
 
 	free(strings);

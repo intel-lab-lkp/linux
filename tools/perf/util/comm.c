@@ -111,7 +111,7 @@ static void comm_strs__remove_if_last(struct comm_str *cs)
 		entry = bsearch(comm_str__str(cs), comm_strs->strs, comm_strs->num_strs,
 				sizeof(struct comm_str *), comm_str__search);
 		comm_str__put(*entry);
-		for (int i = entry - comm_strs->strs; i < comm_strs->num_strs - 1; i++)
+		for (long i = entry - comm_strs->strs; i < comm_strs->num_strs - 1; i++)
 			comm_strs->strs[i] = comm_strs->strs[i + 1];
 		comm_strs->num_strs--;
 	}

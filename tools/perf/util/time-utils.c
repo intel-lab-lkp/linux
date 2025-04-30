@@ -25,7 +25,6 @@ int parse_nsec_time(const char *str, u64 *ptime)
 		return -1;
 
 	if (*end == '.') {
-		int i;
 		char nsec_buf[10];
 
 		if (strlen(++end) > 9)
@@ -35,7 +34,7 @@ int parse_nsec_time(const char *str, u64 *ptime)
 		nsec_buf[9] = '\0';
 
 		/* make it nsec precision */
-		for (i = strlen(nsec_buf); i < 9; i++)
+		for (size_t i = strlen(nsec_buf); i < 9; i++)
 			nsec_buf[i] = '0';
 
 		time_nsec = strtoull(nsec_buf, &end, 10);
@@ -284,7 +283,8 @@ static int percent_comma_split(struct perf_time_interval *ptime_buf, int num,
 			       time_pecent_split func)
 {
 	char *str, *p1, *p2;
-	int len, ret, i = 0;
+	int ret, i = 0;
+	size_t len;
 
 	str = strdup(ostr);
 	if (str == NULL)
@@ -328,7 +328,8 @@ static int one_percent_convert(struct perf_time_interval *ptime_buf,
 			       const char *ostr, u64 start, u64 end, char *c)
 {
 	char *str;
-	int len = strlen(ostr), ret;
+	size_t len = strlen(ostr);
+	int ret;
 
 	/*
 	 * c points to '%'.

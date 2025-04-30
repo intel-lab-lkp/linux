@@ -360,7 +360,7 @@ int perf_tip(char **strp, const char *dirpath)
 	if (strlist__nr_entries(tips) == 0)
 		goto out;
 
-	node = strlist__entry(tips, random() % strlist__nr_entries(tips));
+	node = strlist__entry(tips, (unsigned int)random() % strlist__nr_entries(tips));
 	if (asprintf(strp, "Tip: %s", node->s) < 0)
 		ret = -ENOMEM;
 
@@ -370,9 +370,10 @@ out:
 	return ret;
 }
 
-char *perf_exe(char *buf, int len)
+char *perf_exe(char *buf, size_t len)
 {
-	int n = readlink("/proc/self/exe", buf, len);
+	ssize_t n = readlink("/proc/self/exe", buf, len);
+
 	if (n > 0) {
 		buf[n] = 0;
 		return buf;
@@ -409,7 +410,7 @@ char *filename_with_chroot(int pid, const char *filename)
 	char buf[PATH_MAX];
 	char proc_root[32];
 	char *new_name = NULL;
-	int ret;
+	ssize_t ret;
 
 	scnprintf(proc_root, sizeof(proc_root), "/proc/%d/root", pid);
 	ret = readlink(proc_root, buf, sizeof(buf) - 1);

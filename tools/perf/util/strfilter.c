@@ -287,7 +287,7 @@ static int strfilter_node__sprint(struct strfilter_node *node, char *buf)
 		len += rlen;
 		break;
 	default:
-		len = strlen(node->p);
+		len = (int)strlen(node->p);
 		if (buf)
 			strcpy(buf, node->p);
 	}

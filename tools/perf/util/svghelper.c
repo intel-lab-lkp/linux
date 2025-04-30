@@ -100,7 +100,7 @@ void open_svg(const char *filename, int cpus, int rows, u64 start, u64 end)
 	 * if the recording is short, we default to a width of 1000, but
 	 * for longer recordings we want at least 200 units of width per second
 	 */
-	new_width = (last_time - first_time) / 5000000;
+	new_width = (int)((last_time - first_time) / 5000000);
 
 	if (new_width > svg_page_width)
 		svg_page_width = new_width;
@@ -344,7 +344,8 @@ static char *cpu_model(void)
 	file = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies", "r");
 	if (file) {
 		while (fgets(buf, 255, file)) {
-			unsigned int freq;
+			unsigned long long freq;
+
 			freq = strtoull(buf, NULL, 10);
 			if (freq > max_freq)
 				max_freq = freq;
@@ -698,12 +699,11 @@ struct topology {
 };
 
 static void scan_thread_topology(int *map, struct topology *t, int cpu,
-				 int *pos, int nr_cpus)
+				 int *pos, size_t nr_cpus)
 {
-	int i;
-	int thr;
+	for (int i = 0; i < t->sib_thr_nr; i++) {
+		size_t thr;
 
-	for (i = 0; i < t->sib_thr_nr; i++) {
 		if (!test_bit(cpu, cpumask_bits(&t->sib_thr[i])))
 			continue;
 
@@ -713,15 +713,16 @@ static void scan_thread_topology(int *map, struct topology *t, int cpu,
 	}
 }
 
-static void scan_core_topology(int *map, struct topology *t, int nr_cpus)
+static void scan_core_topology(int *map, struct topology *t, size_t nr_cpus)
 {
 	int pos = 0;
-	int i;
-	int cpu;
 
-	for (i = 0; i < t->sib_core_nr; i++)
+	for (int i = 0; i < t->sib_core_nr; i++) {
+		size_t cpu;
+
 		for_each_set_bit(cpu, cpumask_bits(&t->sib_core[i]), nr_cpus)
-			scan_thread_topology(map, t, cpu, &pos, nr_cpus);
+			scan_thread_topology(map, t, (int)cpu, &pos, nr_cpus);
+	}
 }
 
 static int str_to_bitmap(char *s, cpumask_t *b, int nr_cpus)

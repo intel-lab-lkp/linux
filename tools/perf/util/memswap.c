@@ -3,7 +3,7 @@
 #include "memswap.h"
 #include <linux/types.h>
 
-void mem_bswap_32(void *src, int byte_size)
+void mem_bswap_32(void *src, size_t byte_size)
 {
 	u32 *m = src;
 	while (byte_size > 0) {
@@ -13,7 +13,7 @@ void mem_bswap_32(void *src, int byte_size)
 	}
 }
 
-void mem_bswap_64(void *src, int byte_size)
+void mem_bswap_64(void *src, size_t byte_size)
 {
 	u64 *m = src;
 

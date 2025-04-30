@@ -388,7 +388,7 @@ int perf_config_int(int *dest, const char *name, const char *value)
 		bad_config(name);
 		return -1;
 	}
-	*dest = ret;
+	*dest = (int)ret;
 	return 0;
 }
 
@@ -454,10 +454,10 @@ static int perf_buildid_config(const char *var, const char *value)
 static int perf_default_core_config(const char *var, const char *value)
 {
 	if (!strcmp(var, "core.proc-map-timeout"))
-		proc_map_timeout = strtoul(value, NULL, 10);
+		proc_map_timeout = (int)strtoul(value, NULL, 10);
 
 	if (!strcmp(var, "core.addr2line-timeout"))
-		addr2line_timeout_ms = strtoul(value, NULL, 10);
+		addr2line_timeout_ms = (int)strtoul(value, NULL, 10);
 
 	/* Add other config variables here. */
 	return 0;

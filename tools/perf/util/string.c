@@ -199,8 +199,9 @@ bool strlazymatch(const char *str, const char *pat)
  */
 int strtailcmp(const char *s1, const char *s2)
 {
-	int i1 = strlen(s1);
-	int i2 = strlen(s2);
+	size_t i1 = strlen(s1);
+	size_t i2 = strlen(s2);
+
 	while (--i1 >= 0 && --i2 >= 0) {
 		if (s1[i1] != s2[i2])
 			return s1[i1] - s2[i2];
@@ -331,7 +332,7 @@ char *strdup_esc(const char *str)
 }
 
 /* Remove backslash right before quote and return next quote address. */
-static char *remove_consumed_esc(char *str, int len, int quote)
+static char *remove_consumed_esc(char *str, size_t len, int quote)
 {
 	char *ptr = str, *end = str + len;
 
@@ -373,7 +374,7 @@ char *strdup_esq(const char *str)
 		if (*d == '"' || *d == '\'') {
 			/* This is non-escaped quote */
 			int quote = *d;
-			int len = strlen(d + 1) + 1;
+			size_t len = strlen(d + 1) + 1;
 
 			/*
 			 * Remove the start quote and remove consumed escape (backslash
@@ -420,7 +421,7 @@ unsigned int hex(char c)
  */
 char *strreplace_chars(char needle, const char *haystack, const char *replace)
 {
-	int replace_len = strlen(replace);
+	size_t replace_len = strlen(replace);
 	char *new_s, *to;
 	const char *loc = strchr(haystack, needle);
 	const char *from = haystack;

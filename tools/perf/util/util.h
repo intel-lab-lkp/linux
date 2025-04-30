@@ -64,7 +64,7 @@ extern bool perf_singlethreaded;
 void perf_set_singlethreaded(void);
 void perf_set_multithreaded(void);
 
-char *perf_exe(char *buf, int len);
+char *perf_exe(char *buf, size_t len);
 
 #ifndef O_CLOEXEC
 #ifdef __sparc__

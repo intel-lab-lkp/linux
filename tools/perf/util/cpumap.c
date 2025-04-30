@@ -107,14 +107,14 @@ static struct perf_cpu_map *cpu_map__from_mask(const struct perf_record_cpu_map_
 
 	for (int i = 0, j = 0; i < mask_nr; i++) {
 		int cpus_per_i = (i * data->mask32_data.long_size  * BITS_PER_BYTE);
-		int cpu;
+		size_t cpu;
 
 		perf_record_cpu_map_data__read_one_mask(data, i, local_copy);
 		for_each_set_bit(cpu, local_copy, 64) {
 			if (cpu + cpus_per_i < INT16_MAX) {
 				RC_CHK_ACCESS(map)->map[j++].cpu = cpu + cpus_per_i;
 			} else {
-				pr_err("Invalid cpumap entry %d\n", cpu + cpus_per_i);
+				pr_err("Invalid cpumap entry %zu\n", cpu + cpus_per_i);
 				perf_cpu_map__put(map);
 				return NULL;
 			}
