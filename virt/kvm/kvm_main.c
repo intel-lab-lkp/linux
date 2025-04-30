@@ -1394,6 +1394,31 @@ out_unlock:
 }
 EXPORT_SYMBOL_GPL(kvm_trylock_all_vcpus);
 
+/*
+ * Lock all of the VM's vCPUs.
+ * Assumes that the kvm->lock is held.
+ * Returns -EINTR if the process is killed.
+ */
+int kvm_lock_all_vcpus(struct kvm *kvm)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned long i, j;
+
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		if (mutex_lock_killable_nest_lock(&vcpu->mutex, &kvm->lock))
+			goto out_unlock;
+	return 0;
+
+out_unlock:
+	kvm_for_each_vcpu(j, vcpu, kvm) {
+		if (i == j)
+			break;
+		mutex_unlock(&vcpu->mutex);
+	}
+	return -EINTR;
+}
+EXPORT_SYMBOL_GPL(kvm_lock_all_vcpus);
+
 void kvm_unlock_all_vcpus(struct kvm *kvm)
 {
 	struct kvm_vcpu *vcpu;
