@@ -37,7 +37,7 @@ static LIST_HEAD(srcfile_list);
 static long map_total_sz;
 static int num_srcfiles;
 
-static int countlines(char *map, int maplen)
+static int countlines(char *map, size_t maplen)
 {
 	int numl;
 	char *end = map + maplen;
@@ -136,7 +136,7 @@ static struct srcfile *find_srcfile(char *fn)
 	h->lines = calloc(h->numlines, sizeof(char *));
 	if (!h->lines)
 		goto out_map;
-	fill_lines(h->lines, h->numlines, h->map, h->maplen);
+	fill_lines(h->lines, h->numlines, h->map, (int)h->maplen);
 	list_add(&h->nd, &srcfile_list);
 	hlist_add_head(&h->hash_nd, &srcfile_htab[hval]);
 	map_total_sz += h->maplen;
@@ -166,6 +166,6 @@ char *find_sourceline(char *fn, unsigned line, int *lenp)
 	if (!l)
 		return NULL;
 	p = memchr(l, '\n', sf->map + sf->maplen - l);
-	*lenp = p - l;
+	*lenp = (int)(p - l);
 	return l;
 }

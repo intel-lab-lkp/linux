@@ -800,7 +800,7 @@ static int count_lost_samples_event(const struct perf_tool *tool,
 	evsel = evlist__id2evsel(rep->session->evlist, sample->id);
 	if (evsel) {
 		struct hists *hists = evsel__hists(evsel);
-		u32 count = event->lost_samples.lost;
+		u32 count = (u32)event->lost_samples.lost;
 
 		if (event->header.misc & PERF_RECORD_MISC_LOST_SAMPLES_BPF)
 			hists__inc_nr_dropped_samples(hists, count);
@@ -1602,7 +1602,7 @@ repeat:
 
 	session = perf_session__new(&data, &report.tool);
 	if (IS_ERR(session)) {
-		ret = PTR_ERR(session);
+		ret = (int)PTR_ERR(session);
 		goto exit;
 	}
 

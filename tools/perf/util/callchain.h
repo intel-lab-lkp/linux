@@ -65,7 +65,7 @@ struct callchain_node {
 	struct rb_node		rb_node;    /* to sort nodes in an output tree */
 	struct rb_root		rb_root_in; /* input tree of children */
 	struct rb_root		rb_root;    /* sorted output tree of children */
-	unsigned int		val_nr;
+	u64			val_nr;
 	unsigned int		count;
 	unsigned int		children_count;
 	u64			hit;

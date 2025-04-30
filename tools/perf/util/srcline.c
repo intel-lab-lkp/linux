@@ -443,7 +443,7 @@ static int filename_split(char *filename, unsigned int *line_nr)
 	sep = strchr(filename, ':');
 	if (sep) {
 		*sep++ = '\0';
-		*line_nr = strtoul(sep, NULL, 0);
+		*line_nr = (unsigned int)strtoul(sep, NULL, 0);
 		return 1;
 	}
 	pr_debug("addr2line missing ':' in filename split\n");

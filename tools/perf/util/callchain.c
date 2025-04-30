@@ -214,7 +214,7 @@ try_numbers:
 
 			if (get_stack_size(tok, &size) < 0)
 				return -1;
-			callchain_param.dump_size = size;
+			callchain_param.dump_size = (u32)size;
 			try_stack_size = false;
 		} else if (!minpcnt_set) {
 			/* try to get the min percent */
@@ -224,7 +224,7 @@ try_numbers:
 			minpcnt_set = true;
 		} else {
 			/* try print limit at last */
-			callchain_param.print_limit = strtoul(tok, &endptr, 0);
+			callchain_param.print_limit = (u32)strtoul(tok, &endptr, 0);
 			if (tok == endptr)
 				return -1;
 		}
@@ -295,7 +295,7 @@ int parse_callchain_record(const char *arg, struct callchain_param *param)
 				unsigned long size = 0;
 
 				ret = get_stack_size(tok, &size);
-				param->dump_size = size;
+				param->dump_size = (u32)size;
 			}
 		} else if (!strncmp(name, "lbr", sizeof("lbr"))) {
 			if (!strtok_r(NULL, ",", &saveptr)) {
@@ -332,7 +332,7 @@ int perf_callchain_config(const char *var, const char *value)
 		int ret;
 
 		ret = get_stack_size(value, &size);
-		callchain_param.dump_size = size;
+		callchain_param.dump_size = (u32)size;
 
 		return ret;
 	}
@@ -817,7 +817,7 @@ split_add_child(struct callchain_node *parent,
 {
 	struct callchain_node *new;
 	struct list_head *old_tail;
-	unsigned int idx_total = idx_parents + idx_local;
+	u64 idx_total = idx_parents + idx_local;
 
 	/* split */
 	new = create_child(parent, true);
@@ -1027,7 +1027,7 @@ merge_chain_branch(struct callchain_cursor *cursor,
 	struct callchain_node *child;
 	struct callchain_list *list, *next_list;
 	struct rb_node *n;
-	int old_pos = cursor->nr;
+	u64 old_pos = cursor->nr;
 	int err = 0;
 
 	list_for_each_entry_safe(list, next_list, &src->val, list) {
