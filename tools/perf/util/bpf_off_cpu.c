@@ -164,7 +164,7 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		ntasks = 0;
 		strlist__for_each_entry(pos, pid_slist) {
 			char *end_ptr;
-			int pid = strtol(pos->s, &end_ptr, 10);
+			int pid = (int)strtol(pos->s, &end_ptr, 10);
 
 			if (pid == INT_MIN || pid == INT_MAX ||
 			    (*end_ptr != '\0' && *end_ptr != ','))
@@ -234,7 +234,7 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		strlist__for_each_entry(pos, pid_slist) {
 			char *end_ptr;
 			u32 tgid;
-			int pid = strtol(pos->s, &end_ptr, 10);
+			int pid = (int)strtol(pos->s, &end_ptr, 10);
 
 			if (pid == INT_MIN || pid == INT_MAX ||
 			    (*end_ptr != '\0' && *end_ptr != ','))

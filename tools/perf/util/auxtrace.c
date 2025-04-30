@@ -780,7 +780,7 @@ int auxtrace_parse_sample_options(struct auxtrace_record *itr,
 		if (evsel__is_group_leader(evsel)) {
 			has_aux_leader = evsel__is_aux_event(evsel);
 		} else if (has_aux_leader) {
-			evsel->core.attr.aux_sample_size = sz;
+			evsel->core.attr.aux_sample_size = (__u32)sz;
 		}
 	}
 no_opt:
@@ -1647,7 +1647,7 @@ int itrace_do_parse_synth_opts(struct itrace_synth_opts *synth_opts,
 			if (isdigit(*p)) {
 				unsigned int val;
 
-				val = strtoul(p, &endptr, 10);
+				val = (unsigned int)strtoul(p, &endptr, 10);
 				p = endptr;
 				if (!val || val > PERF_ITRACE_MAX_CALLCHAIN_SZ)
 					goto out_err;
@@ -1667,7 +1667,7 @@ int itrace_do_parse_synth_opts(struct itrace_synth_opts *synth_opts,
 			if (isdigit(*p)) {
 				unsigned int val;
 
-				val = strtoul(p, &endptr, 10);
+				val = (unsigned int)strtoul(p, &endptr, 10);
 				p = endptr;
 				if (!val ||
 				    val > PERF_ITRACE_MAX_LAST_BRANCH_SZ)
@@ -2300,7 +2300,7 @@ static int parse_sym_idx(char **inp, int *idx)
 		if (endptr == *inp || num > INT_MAX)
 			return -EINVAL;
 		*inp = endptr;
-		*idx = num;
+		*idx = (int)num;
 	}
 
 	return 0;

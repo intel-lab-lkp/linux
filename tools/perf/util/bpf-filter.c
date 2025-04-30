@@ -217,7 +217,7 @@ static int convert_to_tgid(int tid)
 		return -1;
 	}
 
-	tgid = strtol(p + 6, &q, 0);
+	tgid = (int)strtol(p + 6, &q, 0);
 	free(buf);
 	if (*q != '\n')
 		return -1;
@@ -284,7 +284,7 @@ static void destroy_event_hash(u64 event_id)
  */
 static u64 create_event_hash(struct evsel *evsel)
 {
-	int x, y, fd;
+	int fd;
 	u64 the_id = 0, id;
 
 	fd = get_pinned_fd("event_hash");
@@ -293,8 +293,8 @@ static u64 create_event_hash(struct evsel *evsel)
 		return 0;
 	}
 
-	for (x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
-		for (y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
+	for (size_t x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
+		for (size_t y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
 			int ret = ioctl(FD(evsel, x, y), PERF_EVENT_IOC_ID, &id);
 
 			if (ret < 0) {
@@ -444,7 +444,7 @@ err:
 
 int perf_bpf_filter__prepare(struct evsel *evsel, struct target *target)
 {
-	int i, x, y, fd, ret;
+	int i, fd, ret;
 	struct sample_filter_bpf *skel = NULL;
 	struct bpf_program *prog;
 	struct bpf_link *link;
@@ -485,8 +485,8 @@ int perf_bpf_filter__prepare(struct evsel *evsel, struct target *target)
 			goto err;
 		}
 
-		for (x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
-			for (y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
+		for (size_t x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
+			for (size_t y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
 				ret = ioctl(FD(evsel, x, y), PERF_EVENT_IOC_SET_BPF, fd);
 				if (ret < 0) {
 					pr_err("Failed to attach perf sample-filter\n");
@@ -519,12 +519,12 @@ int perf_bpf_filter__prepare(struct evsel *evsel, struct target *target)
 	}
 
 	prog = skel->progs.perf_sample_filter;
-	for (x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
-		for (y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
+	for (size_t x = 0; x < xyarray__max_x(evsel->core.fd); x++) {
+		for (size_t y = 0; y < xyarray__max_y(evsel->core.fd); y++) {
 			link = bpf_program__attach_perf_event(prog, FD(evsel, x, y));
 			if (IS_ERR(link)) {
 				pr_err("Failed to attach perf sample-filter program\n");
-				ret = PTR_ERR(link);
+				ret = (int)PTR_ERR(link);
 				goto err;
 			}
 		}

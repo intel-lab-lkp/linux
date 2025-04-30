@@ -375,7 +375,7 @@ static void prompt_integer(int *target, const char *msg)
 			goto out_free;
 		p++;
 	}
-	tmp = strtoul(buf, NULL, 10);
+	tmp = (int)strtoul(buf, NULL, 10);
 	*target = tmp;
 out_free:
 	free(buf);
@@ -1817,7 +1817,7 @@ int cmd_top(int argc, const char **argv)
 
 	top.session = perf_session__new(NULL, NULL);
 	if (IS_ERR(top.session)) {
-		status = PTR_ERR(top.session);
+		status = (int)PTR_ERR(top.session);
 		top.session = NULL;
 		goto out_delete_evlist;
 	}

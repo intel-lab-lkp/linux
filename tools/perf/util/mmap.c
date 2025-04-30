@@ -31,7 +31,7 @@ void mmap_cpu_mask__scnprintf(struct mmap_cpu_mask *mask, const char *tag)
 	char buf[MASK_SIZE + 1];
 	size_t len;
 
-	len = bitmap_scnprintf(mask->bits, mask->nbits, buf, MASK_SIZE);
+	len = bitmap_scnprintf(mask->bits, (unsigned int)mask->nbits, buf, MASK_SIZE);
 	buf[len] = '\0';
 	pr_debug("%p: %s mask[%zd]: %s\n", mask, tag, mask->nbits, buf);
 }
@@ -165,7 +165,7 @@ static int perf_mmap__aio_mmap(struct mmap *map, struct mmap_params *mp)
 			pr_debug2("failed to allocate data buffer, error %m\n");
 			return -1;
 		}
-		delta_max = sysconf(_SC_AIO_PRIO_DELTA_MAX);
+		delta_max = (int)sysconf(_SC_AIO_PRIO_DELTA_MAX);
 		for (i = 0; i < map->aio.nr_cblocks; ++i) {
 			ret = perf_mmap__aio_alloc(map, i);
 			if (ret == -1) {
@@ -261,7 +261,7 @@ static void build_node_mask(int node, struct mmap_cpu_mask *mask)
 static int perf_mmap__setup_affinity_mask(struct mmap *map, struct mmap_params *mp)
 {
 	map->affinity_mask.nbits = cpu__max_cpu().cpu;
-	map->affinity_mask.bits = bitmap_zalloc(map->affinity_mask.nbits);
+	map->affinity_mask.bits = bitmap_zalloc((int)map->affinity_mask.nbits);
 	if (!map->affinity_mask.bits)
 		return -1;
 

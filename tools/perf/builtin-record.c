@@ -443,7 +443,7 @@ static int record__aio_pushfn(struct mmap *map, void *to, void *buf, size_t size
 
 	aio->size += size;
 
-	return size;
+	return (int)size;
 }
 
 static int record__aio_push(struct record *rec, struct mmap *map, off_t *off)
@@ -523,7 +523,7 @@ static int record__aio_parse(const struct option *opt,
 		opts->nr_cblocks = 0;
 	} else {
 		if (str)
-			opts->nr_cblocks = strtol(str, NULL, 0);
+			opts->nr_cblocks = (int)strtol(str, NULL, 0);
 		if (!opts->nr_cblocks)
 			opts->nr_cblocks = nr_cblocks_default;
 	}
@@ -577,15 +577,15 @@ static int record__mmap_flush_parse(const struct option *opt,
 		return 0;
 
 	if (str) {
-		opts->mmap_flush = parse_tag_value(str, tags);
+		opts->mmap_flush = (int)parse_tag_value(str, tags);
 		if (opts->mmap_flush == (int)-1)
-			opts->mmap_flush = strtol(str, NULL, 0);
+			opts->mmap_flush = (int)strtol(str, NULL, 0);
 	}
 
 	if (!opts->mmap_flush)
 		opts->mmap_flush = MMAP_FLUSH_DEFAULT;
 
-	flush_max = evlist__mmap_size(opts->mmap_pages);
+	flush_max = (int)evlist__mmap_size(opts->mmap_pages);
 	flush_max /= 4;
 	if (opts->mmap_flush > flush_max)
 		opts->mmap_flush = flush_max;
@@ -604,7 +604,7 @@ static int record__parse_comp_level(const struct option *opt, const char *str, i
 		opts->comp_level = 0;
 	} else {
 		if (str)
-			opts->comp_level = strtol(str, NULL, 0);
+			opts->comp_level = (unsigned int)strtol(str, NULL, 0);
 		if (!opts->comp_level)
 			opts->comp_level = comp_level_default;
 	}
@@ -1080,11 +1080,12 @@ static int record__thread_data_init_maps(struct record_thread *thread_data, stru
 	struct perf_cpu_map *cpus = evlist->core.all_cpus;
 	bool per_thread = evlist__per_thread(evlist);
 
-	if (per_thread)
+	if (per_thread) {
 		thread_data->nr_mmaps = nr_mmaps;
-	else
-		thread_data->nr_mmaps = bitmap_weight(thread_data->mask->maps.bits,
-						      thread_data->mask->maps.nbits);
+	} else {
+		thread_data->nr_mmaps = (int)bitmap_weight(thread_data->mask->maps.bits,
+						(unsigned int)thread_data->mask->maps.nbits);
+	}
 	if (mmap) {
 		thread_data->maps = zalloc(thread_data->nr_mmaps * sizeof(struct mmap *));
 		if (!thread_data->maps)
@@ -1519,10 +1520,11 @@ static void record__adjust_affinity(struct record *rec, struct mmap *map)
 {
 	if (rec->opts.affinity != PERF_AFFINITY_SYS &&
 	    !bitmap_equal(thread->mask->affinity.bits, map->affinity_mask.bits,
-			  thread->mask->affinity.nbits)) {
-		bitmap_zero(thread->mask->affinity.bits, thread->mask->affinity.nbits);
+			 (unsigned int)thread->mask->affinity.nbits)) {
+		bitmap_zero(thread->mask->affinity.bits,
+			    (unsigned int)thread->mask->affinity.nbits);
 		bitmap_or(thread->mask->affinity.bits, thread->mask->affinity.bits,
-			  map->affinity_mask.bits, thread->mask->affinity.nbits);
+			  map->affinity_mask.bits, (unsigned int)thread->mask->affinity.nbits);
 		sched_setaffinity(0, MMAP_CPU_MASK_BYTES(&thread->mask->affinity),
 					(cpu_set_t *)thread->mask->affinity.bits);
 		if (verbose == 2) {
@@ -1688,7 +1690,7 @@ static void *record__thread(void *arg)
 	thread = arg;
 	thread->tid = gettid();
 
-	err = write(thread->pipes.ack[1], &msg, sizeof(msg));
+	err = (int)write(thread->pipes.ack[1], &msg, sizeof(msg));
 	if (err == -1)
 		pr_warning("threads[%d]: failed to notify on start: %s\n",
 			   thread->tid, strerror(errno));
@@ -1732,7 +1734,7 @@ static void *record__thread(void *arg)
 	}
 	record__mmap_read_all(thread->rec, true);
 
-	err = write(thread->pipes.ack[1], &msg, sizeof(msg));
+	err = (int)write(thread->pipes.ack[1], &msg, sizeof(msg));
 	if (err == -1)
 		pr_warning("threads[%d]: failed to notify on termination: %s\n",
 			   thread->tid, strerror(errno));
@@ -1958,8 +1960,8 @@ static void record__read_lost_samples(struct record *rec)
 			continue;
 		}
 
-		for (int x = 0; x < xyarray__max_x(xy); x++) {
-			for (int y = 0; y < xyarray__max_y(xy); y++) {
+		for (int x = 0; x < (int)xyarray__max_x(xy); x++) {
+			for (int y = 0; y < (int)xyarray__max_y(xy); y++) {
 				struct perf_counts_values count;
 
 				if (perf_evsel__read(&evsel->core, x, y, &count) < 0) {
@@ -2246,7 +2248,7 @@ static int record__terminate_thread(struct record_thread *thread_data)
 
 	close(thread_data->pipes.msg[1]);
 	thread_data->pipes.msg[1] = -1;
-	err = read(thread_data->pipes.ack[0], &ack, sizeof(ack));
+	err = (int)read(thread_data->pipes.ack[0], &ack, sizeof(ack));
 	if (err > 0)
 		pr_debug2("threads[%d]: sent %s\n", tid, thread_msg_tags[ack]);
 	else
@@ -2294,7 +2296,7 @@ static int record__start_threads(struct record *rec)
 			goto out_err;
 		}
 
-		err = read(thread_data[t].pipes.ack[0], &msg, sizeof(msg));
+		err = (int)read(thread_data[t].pipes.ack[0], &msg, sizeof(msg));
 		if (err > 0)
 			pr_debug2("threads[%d]: sent %s\n", rec->thread_data[t].tid,
 				  thread_msg_tags[msg]);
@@ -2409,7 +2411,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	session = perf_session__new(data, tool);
 	if (IS_ERR(session)) {
 		pr_err("Perf session creation failed.\n");
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 	}
 
 	if (record__threads_enabled(rec)) {
@@ -2495,7 +2497,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 	/* Debug message used by test scripts */
 	pr_debug3("perf record done opening and mmapping events\n");
-	session->header.env.comp_mmap_len = session->evlist->core.mmap_len;
+	session->header.env.comp_mmap_len = (u32)session->evlist->core.mmap_len;
 
 	if (rec->opts.kcore) {
 		err = record__kcore_copy(&session->machines.host, data);
@@ -2713,7 +2715,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 
 			/* re-arm the alarm */
 			if (rec->switch_output.time)
-				alarm(rec->switch_output.time);
+				alarm((unsigned int)rec->switch_output.time);
 		}
 
 		if (hits == thread->samples) {
@@ -2976,7 +2978,7 @@ static int perf_record_config(const char *var, const char *value, void *cb)
 	}
 #ifdef HAVE_AIO_SUPPORT
 	if (!strcmp(var, "record.aio")) {
-		rec->opts.nr_cblocks = strtol(value, NULL, 0);
+		rec->opts.nr_cblocks = (int)strtol(value, NULL, 0);
 		if (!rec->opts.nr_cblocks)
 			rec->opts.nr_cblocks = nr_cblocks_default;
 	}
@@ -3016,7 +3018,7 @@ static int record__parse_affinity(const struct option *opt, const char *str, int
 static int record__mmap_cpu_mask_alloc(struct mmap_cpu_mask *mask, int nr_bits)
 {
 	mask->nbits = nr_bits;
-	mask->bits = bitmap_zalloc(mask->nbits);
+	mask->bits = bitmap_zalloc((int)mask->nbits);
 	if (!mask->bits)
 		return -ENOMEM;
 
@@ -3604,7 +3606,7 @@ static int record__mmap_cpu_mask_init_spec(struct mmap_cpu_mask *mask, const cha
 	if (!cpus)
 		return -ENOMEM;
 
-	bitmap_zero(mask->bits, mask->nbits);
+	bitmap_zero(mask->bits, (unsigned int)mask->nbits);
 	if (record__mmap_cpu_mask_init(mask, cpus))
 		return -ENODEV;
 
@@ -3722,13 +3724,13 @@ static int record__init_thread_masks_spec(struct record *rec, struct perf_cpu_ma
 
 		/* ignore invalid CPUs but do not allow empty masks */
 		if (!bitmap_and(thread_mask.maps.bits, thread_mask.maps.bits,
-				cpus_mask.bits, thread_mask.maps.nbits)) {
+				cpus_mask.bits, (unsigned int)thread_mask.maps.nbits)) {
 			pr_err("Empty maps mask: %s\n", maps_spec[s]);
 			ret = -EINVAL;
 			goto out_free;
 		}
 		if (!bitmap_and(thread_mask.affinity.bits, thread_mask.affinity.bits,
-				cpus_mask.bits, thread_mask.affinity.nbits)) {
+				cpus_mask.bits, (unsigned int)thread_mask.affinity.nbits)) {
 			pr_err("Empty affinity mask: %s\n", affinity_spec[s]);
 			ret = -EINVAL;
 			goto out_free;
@@ -3736,22 +3738,22 @@ static int record__init_thread_masks_spec(struct record *rec, struct perf_cpu_ma
 
 		/* do not allow intersection with other masks (full_mask) */
 		if (bitmap_intersects(thread_mask.maps.bits, full_mask.maps.bits,
-				      thread_mask.maps.nbits)) {
+				      (unsigned int)thread_mask.maps.nbits)) {
 			pr_err("Intersecting maps mask: %s\n", maps_spec[s]);
 			ret = -EINVAL;
 			goto out_free;
 		}
 		if (bitmap_intersects(thread_mask.affinity.bits, full_mask.affinity.bits,
-				      thread_mask.affinity.nbits)) {
+				      (unsigned int)thread_mask.affinity.nbits)) {
 			pr_err("Intersecting affinity mask: %s\n", affinity_spec[s]);
 			ret = -EINVAL;
 			goto out_free;
 		}
 
 		bitmap_or(full_mask.maps.bits, full_mask.maps.bits,
-			  thread_mask.maps.bits, full_mask.maps.nbits);
+			  thread_mask.maps.bits, (unsigned int)full_mask.maps.nbits);
 		bitmap_or(full_mask.affinity.bits, full_mask.affinity.bits,
-			  thread_mask.affinity.bits, full_mask.maps.nbits);
+			  thread_mask.affinity.bits, (unsigned int)full_mask.maps.nbits);
 
 		thread_masks = realloc(rec->thread_masks, (t + 1) * sizeof(struct thread_mask));
 		if (!thread_masks) {
@@ -4101,7 +4103,7 @@ int cmd_record(int argc, const char **argv)
 
 	if (rec->switch_output.time) {
 		signal(SIGALRM, alarm_sig_handler);
-		alarm(rec->switch_output.time);
+		alarm((unsigned int)rec->switch_output.time);
 	}
 
 	if (rec->switch_output.num_files) {
