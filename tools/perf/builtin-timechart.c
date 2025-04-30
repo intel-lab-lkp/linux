@@ -118,7 +118,7 @@ struct per_pidcomm {
 	int		Y;
 	int		display;
 
-	long		state;
+	int		state;
 	u64		state_since;
 
 	char		*comm;
@@ -385,7 +385,7 @@ static struct power_event *p_state_end(struct timechart *tchart, int cpu,
 	if (!pwr)
 		return NULL;
 
-	pwr->state = cpus_pstate_state[cpu];
+	pwr->state = (int)cpus_pstate_state[cpu];
 	pwr->start_time = cpus_pstate_start_times[cpu];
 	pwr->end_time = timestamp;
 	pwr->cpu = cpu;
@@ -601,8 +601,8 @@ process_sample_cpu_idle(struct timechart *tchart __maybe_unused,
 			struct perf_sample *sample,
 			const char *backtrace __maybe_unused)
 {
-	u32 state  = evsel__intval(evsel, sample, "state");
-	u32 cpu_id = evsel__intval(evsel, sample, "cpu_id");
+	u32 state  = (u32)evsel__intval(evsel, sample, "state");
+	u32 cpu_id = (u32)evsel__intval(evsel, sample, "cpu_id");
 
 	if (state == (u32)PWR_EVENT_EXIT)
 		c_state_end(tchart, cpu_id, sample->time);
@@ -617,8 +617,8 @@ process_sample_cpu_frequency(struct timechart *tchart,
 			     struct perf_sample *sample,
 			     const char *backtrace __maybe_unused)
 {
-	u32 state  = evsel__intval(evsel, sample, "state");
-	u32 cpu_id = evsel__intval(evsel, sample, "cpu_id");
+	u32 state  = (u32)evsel__intval(evsel, sample, "state");
+	u32 cpu_id = (u32)evsel__intval(evsel, sample, "cpu_id");
 
 	p_state_change(tchart, cpu_id, sample->time, state);
 	return 0;
@@ -631,8 +631,8 @@ process_sample_sched_wakeup(struct timechart *tchart,
 			    const char *backtrace)
 {
 	u8 flags  = evsel__intval(evsel, sample, "common_flags");
-	int waker = evsel__intval(evsel, sample, "common_pid");
-	int wakee = evsel__intval(evsel, sample, "pid");
+	int waker = (int)evsel__intval(evsel, sample, "common_pid");
+	int wakee = (int)evsel__intval(evsel, sample, "pid");
 
 	sched_wakeup(tchart, sample->cpu, sample->time, waker, wakee, flags, backtrace);
 	return 0;
@@ -644,8 +644,8 @@ process_sample_sched_switch(struct timechart *tchart,
 			    struct perf_sample *sample,
 			    const char *backtrace)
 {
-	int prev_pid   = evsel__intval(evsel, sample, "prev_pid");
-	int next_pid   = evsel__intval(evsel, sample, "next_pid");
+	int prev_pid   = (int)evsel__intval(evsel, sample, "prev_pid");
+	int next_pid   = (int)evsel__intval(evsel, sample, "next_pid");
 	u64 prev_state = evsel__intval(evsel, sample, "prev_state");
 
 	sched_switch(tchart, sample->cpu, sample->time, prev_pid, next_pid,
@@ -660,8 +660,8 @@ process_sample_power_start(struct timechart *tchart __maybe_unused,
 			   struct perf_sample *sample,
 			   const char *backtrace __maybe_unused)
 {
-	u64 cpu_id = evsel__intval(evsel, sample, "cpu_id");
-	u64 value  = evsel__intval(evsel, sample, "value");
+	int cpu_id = (int)evsel__intval(evsel, sample, "cpu_id");
+	int value  = (int)evsel__intval(evsel, sample, "value");
 
 	c_state_start(cpu_id, sample->time, value);
 	return 0;
@@ -683,7 +683,7 @@ process_sample_power_frequency(struct timechart *tchart,
 			       struct perf_sample *sample,
 			       const char *backtrace __maybe_unused)
 {
-	u64 cpu_id = evsel__intval(evsel, sample, "cpu_id");
+	int cpu_id = (int)evsel__intval(evsel, sample, "cpu_id");
 	u64 value  = evsel__intval(evsel, sample, "value");
 
 	p_state_change(tchart, cpu_id, sample->time, value);
@@ -697,10 +697,9 @@ process_sample_power_frequency(struct timechart *tchart,
  */
 static void end_sample_processing(struct timechart *tchart)
 {
-	u64 cpu;
 	struct power_event *pwr;
 
-	for (cpu = 0; cpu <= tchart->numcpus; cpu++) {
+	for (unsigned int cpu = 0; cpu <= tchart->numcpus; cpu++) {
 		/* C state */
 #if 0
 		pwr = zalloc(sizeof(*pwr));
@@ -723,7 +722,7 @@ static void end_sample_processing(struct timechart *tchart)
 			return;
 
 		if (!pwr->state)
-			pwr->state = tchart->min_freq;
+			pwr->state = (int)tchart->min_freq;
 	}
 }
 
@@ -812,7 +811,7 @@ static int pid_end_io_sample(struct timechart *tchart, int pid, int type,
 	}
 
 	if (ret < 0) {
-		sample->err = ret;
+		sample->err = (int)ret;
 	} else if (type == IOTYPE_READ || type == IOTYPE_WRITE ||
 		   type == IOTYPE_TX || type == IOTYPE_RX) {
 
@@ -852,7 +851,8 @@ process_enter_read(struct timechart *tchart,
 		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_READ,
 				   sample->time, fd);
 }
@@ -872,7 +872,8 @@ process_enter_write(struct timechart *tchart,
 		    struct evsel *evsel,
 		    struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_WRITE,
 				   sample->time, fd);
 }
@@ -892,7 +893,8 @@ process_enter_sync(struct timechart *tchart,
 		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_SYNC,
 				   sample->time, fd);
 }
@@ -912,7 +914,8 @@ process_enter_tx(struct timechart *tchart,
 		 struct evsel *evsel,
 		 struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_TX,
 				   sample->time, fd);
 }
@@ -932,7 +935,8 @@ process_enter_rx(struct timechart *tchart,
 		 struct evsel *evsel,
 		 struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_RX,
 				   sample->time, fd);
 }
@@ -952,7 +956,8 @@ process_enter_poll(struct timechart *tchart,
 		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
-	long fd = evsel__intval(evsel, sample, "fd");
+	int fd = (int)evsel__intval(evsel, sample, "fd");
+
 	return pid_begin_io_sample(tchart, sample->tid, IOTYPE_POLL,
 				   sample->time, fd);
 }
@@ -1034,7 +1039,7 @@ static void draw_c_p_states(struct timechart *tchart)
 	while (pwr) {
 		if (pwr->type == PSTATE) {
 			if (!pwr->state)
-				pwr->state = tchart->min_freq;
+				pwr->state = (int)tchart->min_freq;
 			svg_pstate(pwr->cpu, pwr->start_time, pwr->end_time, pwr->state);
 		}
 		pwr = pwr->next;
@@ -1310,7 +1315,7 @@ static void draw_process_bars(struct timechart *tchart)
 
 static void add_process_filter(const char *string)
 {
-	int pid = strtoull(string, NULL, 10);
+	int pid = (int)strtoull(string, NULL, 10);
 	struct process_filter *filt = malloc(sizeof(*filt));
 
 	if (!filt)
@@ -1458,7 +1463,6 @@ static int determine_display_io_tasks(struct timechart *timechart, u64 threshold
 
 static void write_svg_file(struct timechart *tchart, const char *filename)
 {
-	u64 i;
 	int count;
 	int thresh = tchart->io_events ? BYTES_THRESH : TIME_THRESH;
 
@@ -1494,7 +1498,7 @@ static void write_svg_file(struct timechart *tchart, const char *filename)
 
 		svg_legenda();
 
-		for (i = 0; i < tchart->numcpus; i++)
+		for (unsigned int i = 0; i < tchart->numcpus; i++)
 			svg_cpu_box(i, tchart->max_freq, tchart->turbo_frequency);
 
 		draw_cpu_usage(tchart);
@@ -1616,7 +1620,7 @@ static int __cmd_timechart(struct timechart *tchart, const char *output_name)
 
 	session = perf_session__new(&data, &tchart->tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	symbol__init(&session->header.env);
 
