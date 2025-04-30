@@ -202,7 +202,7 @@ static void s390_cpumcfdg_dump(struct perf_pmu *pmu, struct perf_sample *sample)
 		color_fprintf(stdout, color, "    [%#08zx] Counterset:%d"
 			      " Counters:%d\n", offset, ce.set, ce.ctr);
 		for (i = 0, p = (u64 *)(cep + 1); i < ce.ctr; ++i, ++p) {
-			char *ev_name = get_counter_name(ce.set, i, pmu);
+			char *ev_name = get_counter_name(ce.set, (int)i, pmu);
 
 			color_fprintf(stdout, color,
 				      "\tCounter:%03zd %s Value:%#018"PRIx64"\n", i,
@@ -258,7 +258,7 @@ static void s390_pai_all_dump(struct evsel *evsel, struct perf_sample *sample)
 		p += sizeof(pai_data.event_val);
 		offset += sizeof(pai_data.event_val);
 
-		ev_name = get_counter_name(evsel->core.attr.config,
+		ev_name = get_counter_name((int)evsel->core.attr.config,
 					   pai_data.event_nr, evsel->pmu);
 		color_fprintf(stdout, color, "\tCounter:%03d %s Value:%#018"PRIx64"\n",
 			      pai_data.event_nr, ev_name ?: "<unknown>",
