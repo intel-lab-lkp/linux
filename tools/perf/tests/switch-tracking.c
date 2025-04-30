@@ -140,8 +140,8 @@ static int process_sample_event(struct evlist *evlist,
 
 	evsel = evlist__id2evsel(evlist, sample.id);
 	if (evsel == switch_tracking->switch_evsel) {
-		next_tid = evsel__intval(evsel, &sample, "next_pid");
-		prev_tid = evsel__intval(evsel, &sample, "prev_pid");
+		next_tid = (int)evsel__intval(evsel, &sample, "next_pid");
+		prev_tid = (int)evsel__intval(evsel, &sample, "prev_pid");
 		cpu = sample.cpu;
 		pr_debug3("sched_switch: cpu: %d prev_tid %d next_tid %d\n",
 			  cpu, prev_tid, next_tid);
@@ -262,9 +262,10 @@ static int compar(const void *a, const void *b)
 {
 	const struct event_node *nodea = a;
 	const struct event_node *nodeb = b;
-	s64 cmp = nodea->event_time - nodeb->event_time;
 
-	return cmp;
+	if (nodea->event_time == nodeb->event_time)
+		return 0;
+	return nodea->event_time < nodeb->event_time ? -1 : 1;
 }
 
 static int process_events(struct evlist *evlist,
@@ -398,7 +399,7 @@ static int test__switch_tracking(struct test_suite *test __maybe_unused, int sub
 
 	switch_evsel = evlist__add_sched_switch(evlist, true);
 	if (IS_ERR(switch_evsel)) {
-		err = PTR_ERR(switch_evsel);
+		err = (int)PTR_ERR(switch_evsel);
 		pr_debug("Failed to create event %s\n", sched_switch);
 		goto out_err;
 	}

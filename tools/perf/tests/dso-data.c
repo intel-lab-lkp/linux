@@ -233,14 +233,14 @@ static int dsos__create(int cnt, int size, struct dsos *dsos)
 	return 0;
 }
 
-static int set_fd_limit(int n)
+static int set_fd_limit(long n)
 {
 	struct rlimit rlim;
 
 	if (getrlimit(RLIMIT_NOFILE, &rlim))
 		return -1;
 
-	pr_debug("file limit %ld, new %d\n", (long) rlim.rlim_cur, n);
+	pr_debug("file limit %ld, new %ld\n", (long) rlim.rlim_cur, n);
 
 	rlim.rlim_cur = n;
 	return setrlimit(RLIMIT_NOFILE, &rlim);
@@ -249,8 +249,8 @@ static int set_fd_limit(int n)
 static int test__dso_data_cache(struct test_suite *test __maybe_unused, int subtest __maybe_unused)
 {
 	struct machine machine;
-	long nr_end, nr = open_files_cnt();
-	int dso_cnt, limit, i, fd;
+	long dso_cnt, limit, nr_end, nr = open_files_cnt();
+	int i, fd;
 
 	/* Rest the internal dso open counter limit. */
 	reset_fd_limit();
@@ -264,7 +264,7 @@ static int test__dso_data_cache(struct test_suite *test __maybe_unused, int subt
 	/* and this is now our dso open FDs limit */
 	dso_cnt = limit / 2;
 	TEST_ASSERT_VAL("failed to create dsos\n",
-			!dsos__create(dso_cnt, TEST_FILE_SIZE, &machine.dsos));
+			!dsos__create((int)dso_cnt, TEST_FILE_SIZE, &machine.dsos));
 
 	for (i = 0; i < (dso_cnt - 1); i++) {
 		struct dso *dso = machine.dsos.dsos[i];

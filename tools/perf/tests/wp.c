@@ -31,10 +31,10 @@ volatile u8 data2[3];
 #ifndef __s390x__
 static int wp_read(int fd, long long *count, int size)
 {
-	int ret = read(fd, count, size);
+	ssize_t ret = read(fd, count, size);
 
 	if (ret != size) {
-		pr_debug("failed to read: %d\n", ret);
+		pr_debug("failed to read: %zd\n", ret);
 		return -1;
 	}
 	return 0;

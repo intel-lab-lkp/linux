@@ -33,7 +33,7 @@ static int overflows;
 
 static noinline int test_function(void)
 {
-	return time(NULL);
+	return (int)time(NULL);
 }
 
 static void sig_handler(int signum __maybe_unused,
@@ -46,11 +46,11 @@ static void sig_handler(int signum __maybe_unused,
 static long long bp_count(int fd)
 {
 	long long count;
-	int ret;
+	ssize_t ret;
 
 	ret = read(fd, &count, sizeof(long long));
 	if (ret != sizeof(long long)) {
-		pr_debug("failed to read: %d\n", ret);
+		pr_debug("failed to read: %zd\n", ret);
 		return TEST_FAIL;
 	}
 

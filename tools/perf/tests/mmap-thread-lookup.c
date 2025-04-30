@@ -45,7 +45,7 @@ static int thread_init(struct thread_data *td)
 	}
 
 	td->map = map;
-	td->tid = syscall(SYS_gettid);
+	td->tid = (pid_t)syscall(SYS_gettid);
 
 	pr_debug("tid = %d, map = %p\n", td->tid, map);
 	return 0;

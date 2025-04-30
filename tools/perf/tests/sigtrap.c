@@ -154,13 +154,13 @@ sigtrap_handler(int signum __maybe_unused, siginfo_t *info, void *ucontext __may
 {
 	if (!__atomic_fetch_add(&ctx.signal_count, 1, __ATOMIC_RELAXED))
 		ctx.first_siginfo = *info;
-	__atomic_fetch_sub(&ctx.tids_want_signal, syscall(SYS_gettid), __ATOMIC_RELAXED);
+	__atomic_fetch_sub(&ctx.tids_want_signal, (pid_t)syscall(SYS_gettid), __ATOMIC_RELAXED);
 }
 
 static void *test_thread(void *arg)
 {
 	pthread_barrier_t *barrier = (pthread_barrier_t *)arg;
-	pid_t tid = syscall(SYS_gettid);
+	pid_t tid = (pid_t)syscall(SYS_gettid);
 	int i;
 
 	pthread_barrier_wait(barrier);

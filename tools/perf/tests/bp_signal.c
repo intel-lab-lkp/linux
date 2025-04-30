@@ -64,7 +64,7 @@ static noinline int test_function(void)
 {
 	__test_function(&the_var);
 	the_var++;
-	return time(NULL);
+	return (int)time(NULL);
 }
 
 static void sig_handler_2(int signum __maybe_unused,
@@ -151,11 +151,11 @@ static int wp_event(void *addr, int sig)
 static long long bp_count(int fd)
 {
 	long long count;
-	int ret;
+	ssize_t ret;
 
 	ret = read(fd, &count, sizeof(long long));
 	if (ret != sizeof(long long)) {
-		pr_debug("failed to read: %d\n", ret);
+		pr_debug("failed to read: %zd\n", ret);
 		return TEST_FAIL;
 	}
 

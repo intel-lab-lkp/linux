@@ -82,7 +82,7 @@ static bool is_ignored_symbol(const char *name, char type)
 			return true;
 
 	for (p = ignored_suffixes; *p; p++) {
-		int l = strlen(name) - strlen(*p);
+		ssize_t l = strlen(name) - strlen(*p);
 
 		if (l >= 0 && !strcmp(name + l, *p))
 			return true;
@@ -313,7 +313,7 @@ next_pair:
 				 * _really_ have a problem.
 				 */
 				s64 skew = mem_end - UM(pair->end);
-				if (llabs(skew) >= page_size)
+				if (llabs(skew) >= (s64)page_size)
 					pr_debug("WARN: %#" PRIx64 ": diff end addr for %s v: %#" PRIx64 " k: %#" PRIx64 "\n",
 						 mem_start, sym->name, mem_end,
 						 UM(pair->end));

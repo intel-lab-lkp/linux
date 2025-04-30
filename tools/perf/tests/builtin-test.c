@@ -301,7 +301,7 @@ static int print_test_result(struct test_suite *t, int curr_suite, int curr_test
 	return 0;
 }
 
-static void finish_test(struct child_test **child_tests, int running_test, int child_test_num,
+static void finish_test(struct child_test **child_tests, size_t running_test, size_t child_test_num,
 		int width)
 {
 	struct child_test *child_test = child_tests[running_test];
@@ -349,7 +349,7 @@ static void finish_test(struct child_test **child_tests, int running_test, int c
 		if (perf_use_color_default) {
 			int running = 0;
 
-			for (int y = running_test; y < child_test_num; y++) {
+			for (size_t y = running_test; y < child_test_num; y++) {
 				if (child_tests[y] == NULL)
 					continue;
 				if (check_if_command_finished(&child_tests[y]->process) == 0)
@@ -478,13 +478,14 @@ static int __cmd_test(struct test_suite **suites, int argc, const char *argv[],
 	int err = 0;
 
 	for (struct test_suite **t = suites; *t; t++) {
-		int i, len = strlen(test_description(*t, -1));
+		int i;
+		int len = (int)strlen(test_description(*t, -1));
 
 		if (width < len)
 			width = len;
 
 		test_suite__for_each_test_case(*t, i) {
-			len = strlen(test_description(*t, i));
+			len = (int)strlen(test_description(*t, i));
 			if (width < len)
 				width = len;
 			num_tests += runs_per_test;

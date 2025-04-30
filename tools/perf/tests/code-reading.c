@@ -188,7 +188,7 @@ static int objdump_version(void)
 	char *line = NULL;
 	const char *fmt;
 	FILE *f;
-	int ret;
+	ssize_t ret;
 
 	int version_tmp, version_num = 0;
 	char *version = 0, *token;
@@ -295,7 +295,7 @@ static int read_via_objdump(const char *filename, u64 addr, void *buf,
 	if (len) {
 		pr_debug("objdump read too few bytes: %zd\n", len);
 		if (!ret)
-			ret = len;
+			ret = (int)len;
 	}
 
 	pclose(f);

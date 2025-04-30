@@ -74,7 +74,7 @@ static int setup_test(char path[PATH_MAX], const char *contents,
 		unlink(path);
 		return -1;
 	}
-	io__init(io, io->fd, io->buf, buf_size);
+	io__init(io, io->fd, io->buf, (unsigned int)buf_size);
 	return 0;
 }
 

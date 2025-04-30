@@ -609,7 +609,7 @@ static int __test_uncore_pmu_event_aliases(struct perf_pmu_test_pmu *test_pmu)
 	pmu_add_sys_aliases(pmu);
 
 	/* Count how many aliases we generated */
-	alias_count = perf_pmu__num_events(pmu);
+	alias_count = (int)perf_pmu__num_events(pmu);
 
 	/* Count how many aliases we expect from the known table */
 	for (table = &test_pmu->aliases[0]; *table; table++)
