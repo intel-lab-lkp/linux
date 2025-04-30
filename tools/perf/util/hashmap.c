@@ -115,7 +115,7 @@ static int hashmap_grow(struct hashmap *map)
 		return -ENOMEM;
 
 	hashmap__for_each_entry_safe(map, cur, tmp, bkt) {
-		h = hash_bits(map->hash_fn(cur->key, map->ctx), new_cap_bits);
+		h = hash_bits(map->hash_fn(cur->key, map->ctx), (int)new_cap_bits);
 		hashmap_add_entry(&new_buckets[h], cur);
 	}
 
@@ -164,7 +164,7 @@ int hashmap_insert(struct hashmap *map, long key, long value,
 	if (old_value)
 		*old_value = 0;
 
-	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
+	h = hash_bits(map->hash_fn(key, map->ctx), (int)map->cap_bits);
 	if (strategy != HASHMAP_APPEND &&
 	    hashmap_find_entry(map, key, h, NULL, &entry)) {
 		if (old_key)
@@ -188,7 +188,7 @@ int hashmap_insert(struct hashmap *map, long key, long value,
 		err = hashmap_grow(map);
 		if (err)
 			return err;
-		h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
+		h = hash_bits(map->hash_fn(key, map->ctx), (int)map->cap_bits);
 	}
 
 	entry = malloc(sizeof(struct hashmap_entry));
@@ -208,7 +208,7 @@ bool hashmap_find(const struct hashmap *map, long key, long *value)
 	struct hashmap_entry *entry;
 	size_t h;
 
-	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
+	h = hash_bits(map->hash_fn(key, map->ctx), (int)map->cap_bits);
 	if (!hashmap_find_entry(map, key, h, NULL, &entry))
 		return false;
 
@@ -223,7 +223,7 @@ bool hashmap_delete(struct hashmap *map, long key,
 	struct hashmap_entry **pprev, *entry;
 	size_t h;
 
-	h = hash_bits(map->hash_fn(key, map->ctx), map->cap_bits);
+	h = hash_bits(map->hash_fn(key, map->ctx), (int)map->cap_bits);
 	if (!hashmap_find_entry(map, key, h, &pprev, &entry))
 		return false;
 
