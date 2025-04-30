@@ -24,14 +24,15 @@ static int levenshtein_compare(const void *p1, const void *p2)
 {
 	const struct cmdname *const *c1 = p1, *const *c2 = p2;
 	const char *s1 = (*c1)->name, *s2 = (*c2)->name;
-	int l1 = (*c1)->len;
-	int l2 = (*c2)->len;
-	return l1 != l2 ? l1 - l2 : strcmp(s1, s2);
+	ssize_t l1 = (*c1)->len;
+	ssize_t l2 = (*c2)->len;
+
+	return l1 != l2 ? (int)(l1 - l2) : (int)strcmp(s1, s2);
 }
 
 static int add_cmd_list(struct cmdnames *cmds, struct cmdnames *old)
 {
-	unsigned int i, nr = cmds->cnt + old->cnt;
+	size_t nr = cmds->cnt + old->cnt;
 	void *tmp;
 
 	if (nr > cmds->alloc) {
@@ -45,7 +46,7 @@ static int add_cmd_list(struct cmdnames *cmds, struct cmdnames *old)
 			return -1;
 		cmds->names = tmp;
 	}
-	for (i = 0; i < old->cnt; i++)
+	for (size_t i = 0; i < old->cnt; i++)
 		cmds->names[cmds->cnt++] = old->names[i];
 	zfree(&old->names);
 	old->cnt = 0;
@@ -54,7 +55,8 @@ static int add_cmd_list(struct cmdnames *cmds, struct cmdnames *old)
 
 const char *help_unknown_cmd(const char *cmd, struct cmdnames *main_cmds)
 {
-	unsigned int i, n = 0, best_similarity = 0;
+	unsigned int i, n = 0;
+	size_t best_similarity = 0;
 	struct cmdnames other_cmds;
 
 	memset(&other_cmds, 0, sizeof(other_cmds));

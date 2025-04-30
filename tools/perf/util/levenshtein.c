@@ -44,19 +44,19 @@
 int levenshtein(const char *string1, const char *string2,
 		int w, int s, int a, int d)
 {
-	int len1 = strlen(string1), len2 = strlen(string2);
+	size_t len1 = strlen(string1), len2 = strlen(string2);
 	int *row0 = malloc(sizeof(int) * (len2 + 1));
 	int *row1 = malloc(sizeof(int) * (len2 + 1));
 	int *row2 = malloc(sizeof(int) * (len2 + 1));
-	int i, j;
+	int ret;
 
-	for (j = 0; j <= len2; j++)
-		row1[j] = j * a;
-	for (i = 0; i < len1; i++) {
+	for (size_t j = 0; j <= len2; j++)
+		row1[j] = (int)j * a;
+	for (size_t i = 0; i < len1; i++) {
 		int *dummy;
 
-		row2[0] = (i + 1) * d;
-		for (j = 0; j < len2; j++) {
+		row2[0] = ((int)i + 1) * d;
+		for (size_t j = 0; j < len2; j++) {
 			/* substitution */
 			row2[j + 1] = row1[j] + s * (string1[i] != string2[j]);
 			/* swap */
@@ -78,10 +78,10 @@ int levenshtein(const char *string1, const char *string2,
 		row2 = dummy;
 	}
 
-	i = row1[len2];
+	ret = row1[len2];
 	free(row0);
 	free(row1);
 	free(row2);
 
-	return i;
+	return ret;
 }
