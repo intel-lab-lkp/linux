@@ -233,7 +233,7 @@ out:
 static int __hpp__sort(struct hist_entry *a, struct hist_entry *b,
 		       hpp_field_fn get_field)
 {
-	s64 ret;
+	int ret;
 	int i, nr_members;
 	struct evsel *evsel;
 	u64 *fields_a, *fields_b;
@@ -272,7 +272,7 @@ out:
 static int __hpp__sort_acc(struct hist_entry *a, struct hist_entry *b,
 			   hpp_field_fn get_field)
 {
-	s64 ret = 0;
+	int ret = 0;
 
 	if (symbol_conf.cumulate_callchain) {
 		/*
@@ -287,7 +287,7 @@ static int __hpp__sort_acc(struct hist_entry *a, struct hist_entry *b,
 		    !hist_entry__has_callchains(a) || !symbol_conf.use_callchain)
 			return 0;
 
-		ret = b->callchain->max_depth - a->callchain->max_depth;
+		ret = field_cmp(b->callchain->max_depth, a->callchain->max_depth);
 		if (callchain_param.order == ORDER_CALLER)
 			ret = -ret;
 	}
@@ -299,6 +299,7 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 			 struct hists *hists)
 {
 	int len = fmt->user_len ?: fmt->len;
+	int fmt_len = (int)strlen(fmt->name);
 	struct evsel *evsel = hists_to_evsel(hists);
 
 	if (symbol_conf.event_group) {
@@ -314,10 +315,7 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 		len = max(len, nr * fmt->len);
 	}
 
-	if (len < (int)strlen(fmt->name))
-		len = strlen(fmt->name);
-
-	return len;
+	return len < fmt_len ? fmt_len : len;
 }
 
 static int hpp__header_fn(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
@@ -341,7 +339,7 @@ int hpp_color_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
 	ret = percent_color_len_snprintf(hpp->buf, hpp->size, fmt, len, percent);
 	va_end(args);
 
-	return (ret >= ssize) ? (ssize - 1) : ret;
+	return (ret >= ssize) ? (int)(ssize - 1) : ret;
 }
 
 static int hpp_entry_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
@@ -354,7 +352,7 @@ static int hpp_entry_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
 	ret = vsnprintf(hpp->buf, hpp->size, fmt, args);
 	va_end(args);
 
-	return (ret >= ssize) ? (ssize - 1) : ret;
+	return (ret >= ssize) ? (int)(ssize - 1) : ret;
 }
 
 #define __HPP_COLOR_PERCENT_FN(_type, _field, _fmttype)				\
@@ -945,7 +943,7 @@ void perf_hpp__set_user_width(const char *width_list_str)
 	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		char *p;
 
-		int len = strtol(ptr, &p, 10);
+		int len = (int)strtol(ptr, &p, 10);
 		fmt->user_len = len;
 
 		if (*p == ',')

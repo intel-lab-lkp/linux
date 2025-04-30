@@ -450,7 +450,7 @@ int __hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp,
 		advance_hpp(hpp, ret);
 	}
 
-	return hpp->buf - start;
+	return (int)(hpp->buf - start);
 }
 
 static int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp)
@@ -612,8 +612,7 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 	ret = fprintf(fp, "%s\n", bf);
 
 	if (hist_entry__has_callchains(he) && !ignore_callchains)
-		callchain_ret = hist_entry_callchain__fprintf(he, total_period,
-							      0, fp);
+		callchain_ret = (int)hist_entry_callchain__fprintf(he, total_period, 0, fp);
 
 	ret += callchain_ret;
 
