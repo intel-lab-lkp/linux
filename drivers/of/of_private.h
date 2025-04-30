@@ -94,7 +94,7 @@ static inline void __of_detach_node_sysfs(struct device_node *np) {}
 #endif
 
 #if defined(CONFIG_OF_RESOLVE)
-int of_resolve_phandles(struct device_node *tree);
+int of_resolve_phandles(struct device_node *tree, const struct device_node *export_symbols);
 #endif
 
 void __of_phandle_cache_inv_entry(phandle handle);
