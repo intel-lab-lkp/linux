@@ -105,30 +105,6 @@ void __init hv_common_free(void)
 	hv_synic_eventring_tail = NULL;
 }
 
-/*
- * A Hyper-V page can be used by UIO for mapping to user-space, it should
- * always be allocated on system page boundaries.
- */
-void *hv_alloc_hyperv_page(void)
-{
-	BUILD_BUG_ON(PAGE_SIZE < HV_HYP_PAGE_SIZE);
-	return (void *)__get_free_page(GFP_KERNEL);
-}
-EXPORT_SYMBOL_GPL(hv_alloc_hyperv_page);
-
-void *hv_alloc_hyperv_zeroed_page(void)
-{
-	BUILD_BUG_ON(PAGE_SIZE < HV_HYP_PAGE_SIZE);
-	return (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
-}
-EXPORT_SYMBOL_GPL(hv_alloc_hyperv_zeroed_page);
-
-void hv_free_hyperv_page(void *addr)
-{
-	free_page((unsigned long)addr);
-}
-EXPORT_SYMBOL_GPL(hv_free_hyperv_page);
-
 static void *hv_panic_page;
 
 /*
