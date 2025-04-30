@@ -425,24 +425,22 @@ int bch2_fs_replicas_usage_read(struct bch_fs *c, darray_char *usage)
 
 	percpu_down_read(&c->mark_lock);
 	darray_for_each(acc->k, i) {
-		struct {
-			struct bch_replicas_usage r;
-			u8 pad[BCH_BKEY_PTRS_MAX];
-		} u;
+		DEFINE_FLEX(struct bch_replicas_usage, u, r.devs, r.nr_devs,
+			    BCH_BKEY_PTRS_MAX);
 
-		if (!accounting_to_replicas(&u.r.r, i->pos))
+		if (!accounting_to_replicas(&u->r, i->pos))
 			continue;
 
 		u64 sectors;
 		bch2_accounting_mem_read_counters(acc, i - acc->k.data, &sectors, 1, false);
-		u.r.sectors = sectors;
+		u->sectors = sectors;
 
-		ret = darray_make_room(usage, replicas_usage_bytes(&u.r));
+		ret = darray_make_room(usage, replicas_usage_bytes(u));
 		if (ret)
 			break;
 
-		memcpy(&darray_top(*usage), &u.r, replicas_usage_bytes(&u.r));
-		usage->nr += replicas_usage_bytes(&u.r);
+		memcpy(&darray_top(*usage), u, replicas_usage_bytes(u));
+		usage->nr += replicas_usage_bytes(u);
 	}
 	percpu_up_read(&c->mark_lock);
 
