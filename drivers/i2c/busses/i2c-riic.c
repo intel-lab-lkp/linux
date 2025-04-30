@@ -79,6 +79,7 @@
 #define ICIER_SPIE	BIT(3)
 
 #define ICSR2_NACKF	BIT(4)
+#define ICSR2_AL	BIT(1)
 
 #define ICBR_RESERVED	GENMASK(7, 5) /* Should be 1 on writes */
 
@@ -180,6 +181,7 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 	reinit_completion(&riic->msg_done);
 
+retry:
 	riic_writeb(riic, 0, RIIC_ICSR2);
 
 	for (i = 0, start_bit = ICCR2_ST; i < num; i++) {
@@ -193,8 +195,14 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		riic_writeb(riic, start_bit, RIIC_ICCR2);
 
 		time_left = wait_for_completion_timeout(&riic->msg_done, riic->adapter.timeout);
-		if (time_left == 0)
+		if (time_left == 0) {
+			if (riic_readb(riic, RIIC_ICSR2) & ICSR2_AL) {
+				ret = i2c_recover_bus(&riic->adapter);
+				if (!ret)
+					goto retry;
+			}
 			riic->err = -ETIMEDOUT;
+		}
 
 		if (riic->err)
 			break;
