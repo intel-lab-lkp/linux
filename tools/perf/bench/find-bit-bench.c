@@ -31,7 +31,7 @@ static const char *const bench_usage[] = {
 static unsigned int accumulator;
 static unsigned int use_of_val;
 
-static noinline void workload(int val)
+static noinline void workload(unsigned long val)
 {
 	use_of_val += val;
 	accumulator++;
@@ -59,8 +59,9 @@ static int do_for_each_set_bit(unsigned int num_bits)
 	u64 runtime_us;
 	struct stats fb_time_stats, tb_time_stats;
 	double time_average, time_stddev;
-	unsigned int bit, i, j;
+	unsigned int i, j;
 	unsigned int set_bits, skip;
+	unsigned long bit;
 
 	init_stats(&fb_time_stats);
 	init_stats(&tb_time_stats);

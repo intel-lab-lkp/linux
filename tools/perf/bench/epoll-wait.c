@@ -182,7 +182,8 @@ static void shuffle(void *array, size_t n, size_t size)
 
 static void *workerfn(void *arg)
 {
-	int fd, ret, r;
+	int fd, ret;
+	ssize_t r;
 	struct worker *w = (struct worker *) arg;
 	unsigned long ops = w->ops;
 	struct epoll_event ev;

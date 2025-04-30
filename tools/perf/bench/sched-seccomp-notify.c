@@ -43,7 +43,7 @@ static const char * const bench_seccomp_usage[] = {
 
 static int seccomp(unsigned int op, unsigned int flags, void *args)
 {
-	return syscall(__NR_seccomp, op, flags, args);
+	return (int)syscall(__NR_seccomp, op, flags, args);
 }
 
 static int user_notif_syscall(int nr, unsigned int flags)

@@ -173,16 +173,16 @@ static char *bench__repeat_event_string(const char *evstr, int n)
 {
 	char sbuf[STRERR_BUFSIZE];
 	struct strbuf buf;
-	int i, str_size = strlen(evstr),
-	    final_size = str_size * n + n,
-	    err = strbuf_init(&buf, final_size);
+	size_t str_size = strlen(evstr);
+	size_t final_size = str_size * n + n;
+	int err = strbuf_init(&buf, final_size);
 
 	if (err) {
 		pr_err("strbuf_init: %s\n", str_error_r(err, sbuf, sizeof(sbuf)));
 		goto out_error;
 	}
 
-	for (i = 0; i < n; i++) {
+	for (int i = 0; i < n; i++) {
 		err = strbuf_add(&buf, evstr, str_size);
 		if (err) {
 			pr_err("strbuf_add: %s\n", str_error_r(err, sbuf, sizeof(sbuf)));

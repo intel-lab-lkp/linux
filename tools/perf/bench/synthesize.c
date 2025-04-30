@@ -120,7 +120,7 @@ static int run_single_threaded(void)
 	session = perf_session__new(NULL, NULL);
 	if (IS_ERR(session)) {
 		pr_err("Session creation failed.\n");
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 	}
 	threads = thread_map__new_by_pid(getpid());
 	if (!threads) {
@@ -163,7 +163,7 @@ static int do_run_multi_threaded(struct target *target,
 	for (i = 0; i < multi_iterations; i++) {
 		session = perf_session__new(NULL, NULL);
 		if (IS_ERR(session))
-			return PTR_ERR(session);
+			return (int)PTR_ERR(session);
 
 		atomic_set(&event_count, 0);
 		gettimeofday(&start, NULL);
@@ -210,7 +210,7 @@ static int run_multi_threaded(void)
 	int err;
 
 	if (max_threads == UINT_MAX)
-		max_threads = sysconf(_SC_NPROCESSORS_ONLN);
+		max_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
 
 	puts(
 "Computing performance of multi threaded perf event synthesis by\n"

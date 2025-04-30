@@ -175,7 +175,7 @@ static ssize_t synthesize_mmap(struct bench_data *data, struct bench_dso *dso, u
 	union perf_event event;
 	size_t len = offsetof(struct perf_record_mmap2, filename);
 	u64 *id_hdr_ptr = (void *)&event;
-	int ts_idx;
+	size_t ts_idx;
 
 	len += roundup(strlen(dso->name) + 1, 8) + bench_id_hdr_size;
 
@@ -250,14 +250,14 @@ static void *data_reader(void *arg)
 	struct bench_data *data = arg;
 	char buf[8192];
 	int flag;
-	int n;
 
 	flag = fcntl(data->output_pipe[0], F_GETFL);
 	fcntl(data->output_pipe[0], F_SETFL, flag | O_NONBLOCK);
 
 	/* read out data from child */
 	while (true) {
-		n = read(data->output_pipe[0], buf, sizeof(buf));
+		ssize_t n = read(data->output_pipe[0], buf, sizeof(buf));
+
 		if (n > 0)
 			continue;
 		if (n == 0)
@@ -451,7 +451,7 @@ static void do_inject_loop(struct bench_data *data, bool build_id_all)
 static int do_inject_loops(struct bench_data *data)
 {
 
-	srand(time(NULL));
+	srand((int)time(NULL));
 	symbol__init(NULL);
 
 	bench_sample_type  = PERF_SAMPLE_IDENTIFIER | PERF_SAMPLE_IP;

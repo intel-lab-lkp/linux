@@ -19,8 +19,8 @@ static unsigned int iterations = 100;
 
 struct pmu_scan_result {
 	char *name;
-	int nr_aliases;
-	int nr_formats;
+	size_t nr_aliases;
+	size_t nr_formats;
 	int nr_caps;
 	bool is_core;
 };
@@ -63,7 +63,7 @@ static int save_result(void)
 		list_for_each(list, &pmu->format)
 			r->nr_formats++;
 
-		pr_debug("pmu[%d] name=%s, nr_caps=%d, nr_aliases=%d, nr_formats=%d\n",
+		pr_debug("pmu[%d] name=%s, nr_caps=%d, nr_aliases=%zu, nr_formats=%zu\n",
 			nr_pmus, r->name, r->nr_caps, r->nr_aliases, r->nr_formats);
 		nr_pmus++;
 	}
@@ -77,7 +77,7 @@ static int check_result(bool core_only)
 	struct pmu_scan_result *r;
 	struct perf_pmu *pmu;
 	struct list_head *list;
-	int nr;
+	size_t nr;
 
 	for (int i = 0; i < nr_pmus; i++) {
 		r = &results[i];
@@ -98,7 +98,7 @@ static int check_result(bool core_only)
 
 		nr = perf_pmu__num_events(pmu);
 		if (nr != r->nr_aliases) {
-			pr_err("Unmatched number of event aliases in %s: expect %d vs got %d\n",
+			pr_err("Unmatched number of event aliases in %s: expect %zu vs got %zu\n",
 				pmu->name, r->nr_aliases, nr);
 			return -1;
 		}
@@ -107,7 +107,7 @@ static int check_result(bool core_only)
 		list_for_each(list, &pmu->format)
 			nr++;
 		if (nr != r->nr_formats) {
-			pr_err("Unmatched number of event formats in %s: expect %d vs got %d\n",
+			pr_err("Unmatched number of event formats in %s: expect %zu vs got %zu\n",
 				pmu->name, r->nr_formats, nr);
 			return -1;
 		}

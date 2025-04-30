@@ -102,7 +102,8 @@ static const char * const bench_sched_pipe_usage[] = {
 static int enter_cgroup(int nr)
 {
 	char buf[32];
-	int fd, len, ret;
+	int fd;
+	ssize_t ret, len;
 	int saved_errno;
 	struct cgroup *cgrp;
 	pid_t pid;
@@ -118,7 +119,7 @@ static int enter_cgroup(int nr)
 	cgrp = cgrps[nr];
 
 	if (threaded)
-		pid = syscall(__NR_gettid);
+		pid = (pid_t)syscall(__NR_gettid);
 	else
 		pid = getpid();
 
@@ -172,23 +173,25 @@ static void exit_cgroup(int nr)
 
 static inline int read_pipe(struct thread_data *td)
 {
-	int ret, m;
+	ssize_t ret;
+	int m;
 retry:
 	if (nonblocking) {
 		ret = epoll_wait(td->epoll_fd, &td->epoll_ev, 1, -1);
 		if (ret < 0)
-			return ret;
+			return (int)ret;
 	}
 	ret = read(td->pipe_read, &m, sizeof(int));
 	if (nonblocking && ret < 0 && errno == EWOULDBLOCK)
 		goto retry;
-	return ret;
+	return (int)ret;
 }
 
 static void *worker_thread(void *__tdata)
 {
 	struct thread_data *td = __tdata;
-	int i, ret, m = 0;
+	int i, m = 0;
+	ssize_t ret;
 
 	ret = enter_cgroup(td->nr);
 	if (ret < 0) {

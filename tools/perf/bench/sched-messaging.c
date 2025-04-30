@@ -102,7 +102,7 @@ static void *sender(struct sender_context *ctx)
 	/* Now pump to every receiver. */
 	for (i = 0; i < nr_loops; i++) {
 		for (j = 0; j < ctx->num_fds; j++) {
-			int ret, done = 0;
+			ssize_t ret, done = 0;
 
 again:
 			ret = write(ctx->out_fds[j], data + done,
@@ -133,7 +133,7 @@ static void *receiver(struct receiver_context* ctx)
 	/* Receive them all */
 	for (i = 0; i < ctx->num_packets; i++) {
 		char data[DATASIZE];
-		int ret, done = 0;
+		ssize_t ret, done = 0;
 
 again:
 		ret = read(ctx->in_fds[0], data + done, DATASIZE - done);

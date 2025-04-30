@@ -57,7 +57,7 @@ static int breakpoint_setup(void *addr)
 	attr.bp_addr = (unsigned long)addr;
 	attr.bp_type = HW_BREAKPOINT_RW;
 	attr.bp_len = HW_BREAKPOINT_LEN_1;
-	fd = syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0);
+	fd = (int)syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0);
 
 	if (fd < 0)
 		fd = -errno;
@@ -111,7 +111,8 @@ static void *breakpoint_thread(void *arg)
 // then starts nparallel threads which create and join bench_repeat batches of nthreads threads.
 int bench_breakpoint_thread(int argc, const char **argv)
 {
-	unsigned int i, result_usec;
+	unsigned int i;
+	long result_usec;
 	int repeat = bench_repeat;
 	struct breakpoint *breakpoints;
 	pthread_t *parallel;
@@ -197,7 +198,8 @@ static const char * const enable_usage[] = {
 // and then disables and enables the breakpoint bench_repeat times.
 int bench_breakpoint_enable(int argc, const char **argv)
 {
-	unsigned int i, nthreads, result_usec, done = 0;
+	unsigned int i, nthreads, done = 0;
+	long result_usec;
 	char watched;
 	int fd;
 	pthread_t *threads;

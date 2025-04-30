@@ -212,7 +212,7 @@ static int bench_str2int(const char *str)
 static int run_bench(const char *coll_name, const char *bench_name, bench_fn_t fn,
 		     int argc, const char **argv)
 {
-	int size;
+	size_t size;
 	char *name;
 	int ret;
 

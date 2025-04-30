@@ -82,7 +82,7 @@ static int init_cycles(void)
 
 static u64 get_cycles(void)
 {
-	int ret;
+	ssize_t ret;
 	u64 clk;
 
 	ret = read(cycles_fd, &clk, sizeof(u64));
