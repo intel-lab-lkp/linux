@@ -106,41 +106,26 @@ void __init hv_common_free(void)
 }
 
 /*
- * Functions for allocating and freeing memory with size and
- * alignment HV_HYP_PAGE_SIZE. These functions are needed because
- * the guest page size may not be the same as the Hyper-V page
- * size. We depend upon kmalloc() aligning power-of-two size
- * allocations to the allocation size boundary, so that the
- * allocated memory appears to Hyper-V as a page of the size
- * it expects.
+ * A Hyper-V page can be used by UIO for mapping to user-space, it should
+ * always be allocated on system page boundaries.
  */
-
 void *hv_alloc_hyperv_page(void)
 {
-	BUILD_BUG_ON(PAGE_SIZE <  HV_HYP_PAGE_SIZE);
-
-	if (PAGE_SIZE == HV_HYP_PAGE_SIZE)
-		return (void *)__get_free_page(GFP_KERNEL);
-	else
-		return kmalloc(HV_HYP_PAGE_SIZE, GFP_KERNEL);
+	BUILD_BUG_ON(PAGE_SIZE < HV_HYP_PAGE_SIZE);
+	return (void *)__get_free_page(GFP_KERNEL);
 }
 EXPORT_SYMBOL_GPL(hv_alloc_hyperv_page);
 
 void *hv_alloc_hyperv_zeroed_page(void)
 {
-	if (PAGE_SIZE == HV_HYP_PAGE_SIZE)
-		return (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
-	else
-		return kzalloc(HV_HYP_PAGE_SIZE, GFP_KERNEL);
+	BUILD_BUG_ON(PAGE_SIZE < HV_HYP_PAGE_SIZE);
+	return (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
 }
 EXPORT_SYMBOL_GPL(hv_alloc_hyperv_zeroed_page);
 
 void hv_free_hyperv_page(void *addr)
 {
-	if (PAGE_SIZE == HV_HYP_PAGE_SIZE)
-		free_page((unsigned long)addr);
-	else
-		kfree(addr);
+	free_page((unsigned long)addr);
 }
 EXPORT_SYMBOL_GPL(hv_free_hyperv_page);
 
@@ -272,7 +257,7 @@ static void hv_kmsg_dump_unregister(void)
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					 &hyperv_panic_report_block);
 
-	hv_free_hyperv_page(hv_panic_page);
+	kfree(hv_panic_page);
 	hv_panic_page = NULL;
 }
 
@@ -280,7 +265,7 @@ static void hv_kmsg_dump_register(void)
 {
 	int ret;
 
-	hv_panic_page = hv_alloc_hyperv_zeroed_page();
+	hv_panic_page = kzalloc(HV_HYP_PAGE_SIZE, GFP_KERNEL);
 	if (!hv_panic_page) {
 		pr_err("Hyper-V: panic message page memory allocation failed\n");
 		return;
@@ -289,7 +274,7 @@ static void hv_kmsg_dump_register(void)
 	ret = kmsg_dump_register(&hv_kmsg_dumper);
 	if (ret) {
 		pr_err("Hyper-V: kmsg dump register error 0x%x\n", ret);
-		hv_free_hyperv_page(hv_panic_page);
+		kfree(hv_panic_page);
 		hv_panic_page = NULL;
 	}
 }
