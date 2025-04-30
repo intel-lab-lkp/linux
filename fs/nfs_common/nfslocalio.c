@@ -171,7 +171,24 @@ static bool nfs_uuid_put(nfs_uuid_t *nfs_uuid)
 
 	/* Walk list of files and ensure their last references dropped */
 	list_for_each_entry_safe(nfl, tmp, &local_files, list) {
-		nfs_close_local_fh(nfl);
+		struct nfsd_file __rcu *ro_nf;
+		struct nfsd_file __rcu *rw_nf;
+
+		ro_nf = xchg(&nfl->ro_file, RCU_INITIALIZER(NULL));
+		rw_nf = xchg(&nfl->rw_file, RCU_INITIALIZER(NULL));
+
+		spin_lock(&nfs_uuid->lock);
+		/* Remove nfl from nfs_uuid->files list */
+		list_del_init(&nfl->list);
+		spin_unlock(&nfs_uuid->lock);
+		/* Now we can allow racing nfs_close_local_fh() to
+		 * skip the locking.
+		 */
+		RCU_INIT_POINTER(nfl->nfs_uuid, NULL);
+
+		nfs_to_nfsd_file_put_local(ro_nf);
+		nfs_to_nfsd_file_put_local(rw_nf);
+
 		cond_resched();
 	}
 
