@@ -17,6 +17,11 @@ struct mmap_state {
 	unsigned long pglen;
 	unsigned long flags;
 	struct file *file;
+	pgprot_t page_prot;
+
+	/* User-defined fields, perhaps updated by .mmap_proto(). */
+	const struct vm_operations_struct *vm_ops;
+	void *vm_private_data;
 
 	unsigned long charged;
 	bool retry_merge;
@@ -40,6 +45,7 @@ struct mmap_state {
 		.pglen = PHYS_PFN(len_),				\
 		.flags = flags_,					\
 		.file = file_,						\
+		.page_prot = vm_get_page_prot(flags_),			\
 	}
 
 #define VMG_MMAP_STATE(name, map_, vma_)				\
@@ -2384,7 +2390,17 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 	struct vma_iterator *vmi = map->vmi;
 	int error;
 
+	VM_WARN_ON(!file_has_mmap_hook(map->file));
+
 	vma->vm_file = get_file(map->file);
+
+	/*
+	 * The caller might only define .mmap_proto(), in which case we have
+	 * nothing further to do.
+	 */
+	if (!map->file->f_op->mmap)
+		return 0;
+
 	error = mmap_file(vma->vm_file, vma);
 	if (error) {
 		fput(vma->vm_file);
@@ -2441,7 +2457,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 	vma_iter_config(vmi, map->addr, map->end);
 	vma_set_range(vma, map->addr, map->end, map->pgoff);
 	vm_flags_init(vma, map->flags);
-	vma->vm_page_prot = vm_get_page_prot(map->flags);
+	vma->vm_page_prot = map->page_prot;
 
 	if (vma_iter_prealloc(vmi, vma)) {
 		error = -ENOMEM;
@@ -2528,6 +2544,69 @@ static void __mmap_complete(struct mmap_state *map, struct vm_area_struct *vma)
 	vma_set_page_prot(vma);
 }
 
+/* Does the driver backing this implement an .mmap_proto() hook? */
+static bool have_mmap_proto_hook(struct mmap_state *map)
+{
+	struct file *file = map->file;
+
+	return file && file->f_op->mmap_proto;
+}
+
+/*
+ * Invoke the f_op->mmap_proto() callback for a file-backed mapping that
+ * specifies it.
+ *
+ * This is called prior to any merge attempt, and updates whitelisted fields
+ * that are permitted to be updated by the caller.
+ *
+ * All but user-defined fields will be pre-populated with original values
+ *
+ * Returns 0 on success, or an error code otherwise.
+ */
+static int call_proto(struct mmap_state *map)
+{
+	int err;
+	const struct file_operations *f_op = map->file->f_op;
+	struct vma_proto proto = {
+		.mm = map->mm,
+		.start = map->addr,
+		.end = map->end,
+
+		.pgoff = map->pgoff,
+		.file = map->file,
+		.flags = map->flags,
+	};
+
+	/* Invoke the hook. */
+	err = f_op->mmap_proto(&proto);
+	if (err)
+		return err;
+
+	/* Update fields permitted to be changed. */
+	map->pgoff = proto.pgoff;
+	map->file = proto.file;
+	map->flags = proto.flags;
+	map->page_prot = proto.page_prot;
+	/* User-defined fields. */
+	map->vm_ops = proto.vm_ops;
+	map->vm_private_data = proto.private_data;
+
+	return 0;
+}
+
+static void set_vma_user_defined_fields(struct vm_area_struct *vma,
+		struct mmap_state *map)
+{
+	/*
+	 * If the .mmap() handler set these, that takes precedent (indicated by
+	 * the vma fields being non-empty).
+	 */
+	if (map->vm_ops && vma->vm_ops == &vma_dummy_vm_ops)
+		vma->vm_ops = map->vm_ops;
+	if (!vma->vm_private_data)
+		vma->vm_private_data = map->vm_private_data;
+}
+
 static unsigned long __mmap_region(struct file *file, unsigned long addr,
 		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
 		struct list_head *uf)
@@ -2537,8 +2616,11 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 	int error;
 	VMA_ITERATOR(vmi, mm, addr);
 	MMAP_STATE(map, mm, &vmi, addr, len, pgoff, vm_flags, file);
+	bool have_proto = have_mmap_proto_hook(&map);
 
 	error = __mmap_prepare(&map, uf);
+	if (!error && have_proto)
+		error = call_proto(&map);
 	if (error)
 		goto abort_munmap;
 
@@ -2555,6 +2637,9 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 		if (error)
 			goto unacct_error;
 	}
+
+	if (have_proto)
+		set_vma_user_defined_fields(vma, &map);
 
 	/* If flags changed, we might be able to merge, so try again. */
 	if (map.retry_merge) {

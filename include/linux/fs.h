@@ -2169,6 +2169,7 @@ struct file_operations {
 	int (*uring_cmd)(struct io_uring_cmd *ioucmd, unsigned int issue_flags);
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
+	int (*mmap_proto)(struct vma_proto *);
 } __randomize_layout;
 
 /* Supports async buffered reads */
@@ -2241,6 +2242,12 @@ struct inode_operations {
 static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	return file->f_op->mmap(file, vma);
+}
+
+/* Does the file have an .mmap() hook? */
+static inline bool file_has_mmap_hook(struct file *file)
+{
+	return file->f_op->mmap || file->f_op->mmap_proto;
 }
 
 extern ssize_t vfs_read(struct file *, char __user *, size_t, loff_t *);

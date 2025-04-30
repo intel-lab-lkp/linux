@@ -253,8 +253,40 @@ struct mm_struct {
 	unsigned long flags; /* Must use atomic bitops to access */
 };
 
+struct vm_area_struct;
+
+/*
+ * Describes a prototype VMA that is about to be mmap()'ed. Drivers may choose
+ * to manipulate non-const fields, which will cause those fields to be updated
+ * in the resultant VMA.
+ *
+ * Helper functions are not required for manipulating any field.
+ */
+struct vma_proto {
+	/* Immutable state. */
+	struct mm_struct *mm;
+	unsigned long start;
+	unsigned long end;
+
+	/* Mutable fields. Populated with initial state. */
+	pgoff_t pgoff;
+	struct file *file;
+	vm_flags_t flags;
+	pgprot_t page_prot;
+
+	/* Write-only fields. */
+	const struct vm_operations_struct *vm_ops;
+	void *private_data;
+};
+
+struct file_operations {
+	int (*mmap)(struct file *, struct vm_area_struct *);
+	int (*mmap_proto)(struct vma_proto *);
+};
+
 struct file {
 	struct address_space	*f_mapping;
+	const struct file_operations	*f_op;
 };
 
 #define VMA_LOCK_OFFSET	0x40000000
@@ -1403,6 +1435,12 @@ static inline void dup_anon_vma_name(struct vm_area_struct *orig_vma,
 static inline void free_anon_vma_name(struct vm_area_struct *vma)
 {
 	(void)vma;
+}
+
+/* Does the file have an .mmap() hook? */
+static inline bool file_has_mmap_hook(struct file *file)
+{
+	return file->f_op->mmap || file->f_op->mmap_proto;
 }
 
 #endif	/* __MM_VMA_INTERNAL_H */
