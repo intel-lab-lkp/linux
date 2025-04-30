@@ -7,7 +7,7 @@
 #include <asm/bug.h>
 #include <stdio.h>
 
-static void perf_thread_map__reset(struct perf_thread_map *map, int start, int nr)
+static void perf_thread_map__reset(struct perf_thread_map *map, size_t start, size_t nr)
 {
 	size_t size = (nr - start) * sizeof(map->map[0]);
 
@@ -15,7 +15,7 @@ static void perf_thread_map__reset(struct perf_thread_map *map, int start, int n
 	map->err_thread = -1;
 }
 
-struct perf_thread_map *perf_thread_map__realloc(struct perf_thread_map *map, int nr)
+struct perf_thread_map *perf_thread_map__realloc(struct perf_thread_map *map, size_t nr)
 {
 	size_t size = sizeof(*map) + sizeof(map->map[0]) * nr;
 	int start = map ? map->nr : 0;

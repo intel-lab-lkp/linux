@@ -21,7 +21,7 @@ DECLARE_RC_STRUCT(perf_cpu_map) {
 	struct perf_cpu	map[];
 };
 
-struct perf_cpu_map *perf_cpu_map__alloc(int nr_cpus);
+struct perf_cpu_map *perf_cpu_map__alloc(size_t nr_cpus);
 int perf_cpu_map__idx(const struct perf_cpu_map *cpus, struct perf_cpu cpu);
 bool perf_cpu_map__is_subset(const struct perf_cpu_map *a, const struct perf_cpu_map *b);
 

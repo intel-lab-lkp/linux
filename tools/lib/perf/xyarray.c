@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct xyarray *xyarray__new(int xlen, int ylen, size_t entry_size)
+struct xyarray *xyarray__new(size_t xlen, size_t ylen, size_t entry_size)
 {
 	size_t row_size = ylen * entry_size;
 	struct xyarray *xy = zalloc(sizeof(*xy) + xlen * row_size);

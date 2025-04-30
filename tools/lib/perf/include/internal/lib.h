@@ -4,7 +4,7 @@
 
 #include <sys/types.h>
 
-extern unsigned int page_size;
+extern size_t page_size;
 
 ssize_t readn(int fd, void *buf, size_t n);
 ssize_t writen(int fd, const void *buf, size_t n);

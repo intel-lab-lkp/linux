@@ -5,6 +5,7 @@
 #include <perf/core.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 /** A wrapper around a CPU to avoid confusion with the perf_cpu_map's map's indices. */
 struct perf_cpu {
@@ -47,7 +48,7 @@ LIBPERF_API void perf_cpu_map__put(struct perf_cpu_map *map);
  * perf_cpu_map__cpu - get the CPU value at the given index. Returns -1 if index
  *                     is invalid.
  */
-LIBPERF_API struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
+LIBPERF_API struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, size_t idx);
 /**
  * perf_cpu_map__nr - for an empty map returns 1, as perf_cpu_map__cpu returns a
  *                    cpu of -1 for an invalid index, this makes an empty map

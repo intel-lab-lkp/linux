@@ -139,7 +139,7 @@ void perf_evsel__free_fd(struct perf_evsel *evsel);
 int perf_evsel__read_size(struct perf_evsel *evsel);
 int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter);
 
-int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
+int perf_evsel__alloc_id(struct perf_evsel *evsel, size_t ncpus, size_t nthreads);
 void perf_evsel__free_id(struct perf_evsel *evsel);
 
 bool perf_evsel__attr_has_per_thread_sample_period(struct perf_evsel *evsel);

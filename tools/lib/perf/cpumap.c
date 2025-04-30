@@ -20,7 +20,7 @@ void perf_cpu_map__set_nr(struct perf_cpu_map *map, int nr_cpus)
 	RC_CHK_ACCESS(map)->nr = nr_cpus;
 }
 
-struct perf_cpu_map *perf_cpu_map__alloc(int nr_cpus)
+struct perf_cpu_map *perf_cpu_map__alloc(size_t nr_cpus)
 {
 	RC_STRUCT(perf_cpu_map) *cpus;
 	struct perf_cpu_map *result;
@@ -30,7 +30,7 @@ struct perf_cpu_map *perf_cpu_map__alloc(int nr_cpus)
 
 	cpus = malloc(sizeof(*cpus) + sizeof(struct perf_cpu) * nr_cpus);
 	if (ADD_RC_CHK(result, cpus)) {
-		cpus->nr = nr_cpus;
+		cpus->nr = (int)nr_cpus;
 		refcount_set(&cpus->refcnt, 1);
 	}
 	return result;
@@ -78,7 +78,7 @@ void perf_cpu_map__put(struct perf_cpu_map *map)
 static struct perf_cpu_map *cpu_map__new_sysconf(void)
 {
 	struct perf_cpu_map *cpus;
-	int nr_cpus, nr_cpus_conf;
+	size_t nr_cpus, nr_cpus_conf;
 
 	nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	if (nr_cpus < 0)
@@ -86,15 +86,13 @@ static struct perf_cpu_map *cpu_map__new_sysconf(void)
 
 	nr_cpus_conf = sysconf(_SC_NPROCESSORS_CONF);
 	if (nr_cpus != nr_cpus_conf) {
-		pr_warning("Number of online CPUs (%d) differs from the number configured (%d) the CPU map will only cover the first %d CPUs.",
+		pr_warning("Number of online CPUs (%zu) differs from the number configured (%zu) the CPU map will only cover the first %zu CPUs.",
 			nr_cpus, nr_cpus_conf, nr_cpus);
 	}
 
 	cpus = perf_cpu_map__alloc(nr_cpus);
 	if (cpus != NULL) {
-		int i;
-
-		for (i = 0; i < nr_cpus; ++i)
+		for (size_t i = 0; i < nr_cpus; ++i)
 			RC_CHK_ACCESS(cpus)->map[i].cpu = i;
 	}
 
@@ -132,7 +130,7 @@ static int cmp_cpu(const void *a, const void *b)
 	return cpu_a->cpu - cpu_b->cpu;
 }
 
-static struct perf_cpu __perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
+static struct perf_cpu __perf_cpu_map__cpu(const struct perf_cpu_map *cpus, size_t idx)
 {
 	return RC_CHK_ACCESS(cpus)->map[idx];
 }
@@ -247,13 +245,13 @@ static int __perf_cpu_map__nr(const struct perf_cpu_map *cpus)
 	return RC_CHK_ACCESS(cpus)->nr;
 }
 
-struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
+struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, size_t idx)
 {
 	struct perf_cpu result = {
 		.cpu = -1
 	};
 
-	if (cpus && idx < __perf_cpu_map__nr(cpus))
+	if (cpus && idx < (size_t)__perf_cpu_map__nr(cpus))
 		return __perf_cpu_map__cpu(cpus, idx);
 
 	return result;

@@ -71,7 +71,7 @@ int perf_evsel__alloc_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
 	return evsel->fd != NULL ? 0 : -ENOMEM;
 }
 
-static int perf_evsel__alloc_mmap(struct perf_evsel *evsel, int ncpus, int nthreads)
+static int perf_evsel__alloc_mmap(struct perf_evsel *evsel, size_t ncpus, size_t nthreads)
 {
 	evsel->mmap = xyarray__new(ncpus, nthreads, sizeof(struct perf_mmap));
 
@@ -83,7 +83,7 @@ sys_perf_event_open(struct perf_event_attr *attr,
 		    pid_t pid, struct perf_cpu cpu, int group_fd,
 		    unsigned long flags)
 {
-	return syscall(__NR_perf_event_open, attr, pid, cpu.cpu, group_fd, flags);
+	return (int)syscall(__NR_perf_event_open, attr, pid, cpu.cpu, group_fd, flags);
 }
 
 static int get_group_fd(struct perf_evsel *evsel, int cpu_map_idx, int thread, int *group_fd)
@@ -179,11 +179,9 @@ out:
 	return err;
 }
 
-static void perf_evsel__close_fd_cpu(struct perf_evsel *evsel, int cpu_map_idx)
+static void perf_evsel__close_fd_cpu(struct perf_evsel *evsel, size_t cpu_map_idx)
 {
-	int thread;
-
-	for (thread = 0; thread < xyarray__max_y(evsel->fd); ++thread) {
+	for (size_t thread = 0; thread < xyarray__max_y(evsel->fd); ++thread) {
 		int *fd = FD(evsel, cpu_map_idx, thread);
 
 		if (fd && *fd >= 0) {
@@ -195,7 +193,7 @@ static void perf_evsel__close_fd_cpu(struct perf_evsel *evsel, int cpu_map_idx)
 
 void perf_evsel__close_fd(struct perf_evsel *evsel)
 {
-	for (int idx = 0; idx < xyarray__max_x(evsel->fd); idx++)
+	for (size_t idx = 0; idx < xyarray__max_x(evsel->fd); idx++)
 		perf_evsel__close_fd_cpu(evsel, idx);
 }
 
@@ -224,13 +222,11 @@ void perf_evsel__close_cpu(struct perf_evsel *evsel, int cpu_map_idx)
 
 void perf_evsel__munmap(struct perf_evsel *evsel)
 {
-	int idx, thread;
-
 	if (evsel->fd == NULL || evsel->mmap == NULL)
 		return;
 
-	for (idx = 0; idx < xyarray__max_x(evsel->fd); idx++) {
-		for (thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
+	for (size_t idx = 0; idx < xyarray__max_x(evsel->fd); idx++) {
+		for (size_t thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
 			int *fd = FD(evsel, idx, thread);
 
 			if (fd == NULL || *fd < 0)
@@ -246,7 +242,7 @@ void perf_evsel__munmap(struct perf_evsel *evsel)
 
 int perf_evsel__mmap(struct perf_evsel *evsel, int pages)
 {
-	int ret, idx, thread;
+	int ret;
 	struct perf_mmap_param mp = {
 		.prot = PROT_READ | PROT_WRITE,
 		.mask = (pages * page_size) - 1,
@@ -258,8 +254,8 @@ int perf_evsel__mmap(struct perf_evsel *evsel, int pages)
 	if (perf_evsel__alloc_mmap(evsel, xyarray__max_x(evsel->fd), xyarray__max_y(evsel->fd)) < 0)
 		return -ENOMEM;
 
-	for (idx = 0; idx < xyarray__max_x(evsel->fd); idx++) {
-		for (thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
+	for (size_t idx = 0; idx < xyarray__max_x(evsel->fd); idx++) {
+		for (size_t thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
 			int *fd = FD(evsel, idx, thread);
 			struct perf_mmap *map;
 			struct perf_cpu cpu = perf_cpu_map__cpu(evsel->cpus, idx);
@@ -415,7 +411,7 @@ int perf_evsel__read(struct perf_evsel *evsel, int cpu_map_idx, int thread,
 }
 
 static int perf_evsel__ioctl(struct perf_evsel *evsel, int ioc, void *arg,
-			     int cpu_map_idx, int thread)
+			     size_t cpu_map_idx, size_t thread)
 {
 	int *fd = FD(evsel, cpu_map_idx, thread);
 
@@ -427,11 +423,9 @@ static int perf_evsel__ioctl(struct perf_evsel *evsel, int ioc, void *arg,
 
 static int perf_evsel__run_ioctl(struct perf_evsel *evsel,
 				 int ioc,  void *arg,
-				 int cpu_map_idx)
+				 size_t cpu_map_idx)
 {
-	int thread;
-
-	for (thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
+	for (size_t thread = 0; thread < xyarray__max_y(evsel->fd); thread++) {
 		int err = perf_evsel__ioctl(evsel, ioc, arg, cpu_map_idx, thread);
 
 		if (err)
@@ -463,10 +457,9 @@ int perf_evsel__enable_thread(struct perf_evsel *evsel, int thread)
 
 int perf_evsel__enable(struct perf_evsel *evsel)
 {
-	int i;
 	int err = 0;
 
-	for (i = 0; i < xyarray__max_x(evsel->fd) && !err; i++)
+	for (size_t i = 0; i < xyarray__max_x(evsel->fd) && !err; i++)
 		err = perf_evsel__run_ioctl(evsel, PERF_EVENT_IOC_ENABLE, NULL, i);
 	return err;
 }
@@ -478,10 +471,9 @@ int perf_evsel__disable_cpu(struct perf_evsel *evsel, int cpu_map_idx)
 
 int perf_evsel__disable(struct perf_evsel *evsel)
 {
-	int i;
 	int err = 0;
 
-	for (i = 0; i < xyarray__max_x(evsel->fd) && !err; i++)
+	for (size_t i = 0; i < xyarray__max_x(evsel->fd) && !err; i++)
 		err = perf_evsel__run_ioctl(evsel, PERF_EVENT_IOC_DISABLE, NULL, i);
 	return err;
 }
@@ -512,7 +504,7 @@ struct perf_event_attr *perf_evsel__attr(struct perf_evsel *evsel)
 	return &evsel->attr;
 }
 
-int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads)
+int perf_evsel__alloc_id(struct perf_evsel *evsel, size_t ncpus, size_t nthreads)
 {
 	if (ncpus == 0 || nthreads == 0)
 		return 0;

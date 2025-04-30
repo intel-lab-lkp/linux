@@ -14,11 +14,11 @@ struct xyarray {
 	char contents[] __aligned(8);
 };
 
-struct xyarray *xyarray__new(int xlen, int ylen, size_t entry_size);
+struct xyarray *xyarray__new(size_t xlen, size_t ylen, size_t entry_size);
 void xyarray__delete(struct xyarray *xy);
 void xyarray__reset(struct xyarray *xy);
 
-static inline void *__xyarray__entry(struct xyarray *xy, int x, int y)
+static inline void *__xyarray__entry(struct xyarray *xy, size_t x, size_t y)
 {
 	return &xy->contents[x * xy->row_size + y * xy->entry_size];
 }
@@ -30,12 +30,12 @@ static inline void *xyarray__entry(struct xyarray *xy, size_t x, size_t y)
 	return __xyarray__entry(xy, x, y);
 }
 
-static inline int xyarray__max_y(struct xyarray *xy)
+static inline size_t xyarray__max_y(struct xyarray *xy)
 {
 	return xy->max_y;
 }
 
-static inline int xyarray__max_x(struct xyarray *xy)
+static inline size_t xyarray__max_x(struct xyarray *xy)
 {
 	return xy->max_x;
 }

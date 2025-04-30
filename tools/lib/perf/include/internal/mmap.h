@@ -23,7 +23,7 @@ typedef void (*libperf_unmap_cb_t)(struct perf_mmap *map);
  */
 struct perf_mmap {
 	void			*base;
-	int			 mask;
+	size_t			 mask;
 	int			 fd;
 	struct perf_cpu		 cpu;
 	refcount_t		 refcnt;
@@ -40,7 +40,7 @@ struct perf_mmap {
 
 struct perf_mmap_param {
 	int	prot;
-	int	mask;
+	size_t	mask;
 };
 
 size_t perf_mmap__mmap_len(struct perf_mmap *map);

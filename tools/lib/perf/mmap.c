@@ -109,11 +109,11 @@ void perf_mmap__consume(struct perf_mmap *map)
 		perf_mmap__put(map);
 }
 
-static int overwrite_rb_find_range(void *buf, int mask, u64 *start, u64 *end)
+static int overwrite_rb_find_range(void *buf, size_t mask, u64 *start, u64 *end)
 {
 	struct perf_event_header *pheader;
 	u64 evt_head = *start;
-	int size = mask + 1;
+	size_t size = mask + 1;
 
 	pr_debug2("%s: buf=%p, start=%"PRIx64"\n", __func__, buf, *start);
 	pheader = (struct perf_event_header *)(buf + (*start & mask));
@@ -157,7 +157,7 @@ static int __perf_mmap__read_init(struct perf_mmap *md)
 	if ((md->end - md->start) < md->flush)
 		return -EAGAIN;
 
-	size = md->end - md->start;
+	size = (unsigned long)(md->end - md->start);
 	if (size > (unsigned long)(md->mask) + 1) {
 		if (!md->overwrite) {
 			WARN_ONCE(1, "failed to keep up with mmap data. (warn only once)\n");
@@ -212,7 +212,7 @@ static union perf_event *perf_mmap__read(struct perf_mmap *map,
 {
 	unsigned char *data = map->base + page_size;
 	union perf_event *event = NULL;
-	int diff = end - *startp;
+	s64 diff = end - *startp;
 
 	if (diff >= (int)sizeof(event->header)) {
 		size_t size;
@@ -228,8 +228,7 @@ static union perf_event *perf_mmap__read(struct perf_mmap *map,
 		 * be inside due to u64 alignment of output.
 		 */
 		if ((*startp & map->mask) + size != ((*startp + size) & map->mask)) {
-			unsigned int offset = *startp;
-			unsigned int len = size, cpy;
+			u64 offset = *startp, len = size, cpy;
 			void *dst = map->event_copy;
 
 			if (size > map->event_copy_sz) {
@@ -242,7 +241,7 @@ static union perf_event *perf_mmap__read(struct perf_mmap *map,
 
 			do {
 				cpy = min(map->mask + 1 - (offset & map->mask), len);
-				memcpy(dst, &data[offset & map->mask], cpy);
+				memcpy(dst, &data[offset & map->mask], (size_t)cpy);
 				offset += cpy;
 				dst += cpy;
 				len -= cpy;
