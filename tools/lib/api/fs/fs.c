@@ -349,7 +349,7 @@ int filename__read_str(const char *filename, char **buf, size_t *sizep)
 {
 	struct io io;
 	char bf[128];
-	int err;
+	ssize_t err;
 
 	io.fd = open(filename, O_RDONLY);
 	if (io.fd < 0)
@@ -363,7 +363,7 @@ int filename__read_str(const char *filename, char **buf, size_t *sizep)
 	} else
 		err = 0;
 	close(io.fd);
-	return err;
+	return (int)err;
 }
 
 int filename__write_int(const char *filename, int value)

@@ -182,7 +182,7 @@ char *strreplace(char *s, char old, char new)
 	return s;
 }
 
-static void *check_bytes8(const u8 *start, u8 value, unsigned int bytes)
+static void *check_bytes8(const u8 *start, u8 value, size_t bytes)
 {
 	while (bytes) {
 		if (*start != value)
@@ -206,7 +206,7 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 {
 	u8 value = c;
 	u64 value64;
-	unsigned int words, prefix;
+	size_t words, prefix;
 
 	if (bytes <= 16)
 		return check_bytes8(start, value, bytes);
@@ -216,7 +216,7 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 	value64 |= value64 << 16;
 	value64 |= value64 << 32;
 
-	prefix = (unsigned long)start % 8;
+	prefix = (size_t)start % 8;
 	if (prefix) {
 		u8 *r;
 
