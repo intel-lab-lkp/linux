@@ -296,6 +296,8 @@ struct mt7996_phy {
 
 	bool has_aux_rx;
 	bool counter_reset;
+
+	struct dentry *debugfs_dir;
 };
 
 struct mt7996_dev {

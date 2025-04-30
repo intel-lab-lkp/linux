@@ -842,9 +842,28 @@ mt7996_rf_regval_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_rf_regval, mt7996_rf_regval_get,
 			 mt7996_rf_regval_set, "0x%08llx\n");
 
-int mt7996_init_debugfs(struct mt7996_dev *dev)
+static int
+mt7996_init_radio_phy_debugfs(struct mt7996_phy *phy)
 {
 	struct dentry *dir;
+	char fname[12];
+
+	snprintf(fname, sizeof(fname), "radio_phy%d", phy->mt76->band_idx);
+	dir = debugfs_create_dir(fname, phy->dev->debugfs_dir);
+
+	if (IS_ERR_OR_NULL(dir))
+		return -ENOMEM;
+
+	phy->debugfs_dir = dir;
+
+	return 0;
+}
+
+int mt7996_init_debugfs(struct mt7996_dev *dev)
+{
+	int err;
+	struct dentry *dir;
+	struct mt7996_phy *phy;
 
 	dir = mt76_register_debugfs_fops(&dev->mphy, NULL);
 	if (!dir)
@@ -876,6 +895,12 @@ int mt7996_init_debugfs(struct mt7996_dev *dev)
 				    mt7996_rdd_monitor);
 
 	dev->debugfs_dir = dir;
+
+	mt7996_for_each_phy(dev, phy) {
+		err = mt7996_init_radio_phy_debugfs(phy);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
