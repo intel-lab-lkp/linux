@@ -157,7 +157,7 @@ static void process_branch_stack(struct branch_stack *bs, struct addr_location *
 	if (!bi)
 		return;
 
-	for (i = bs->nr - 1; i >= 0; i--) {
+	for (i = (int)bs->nr - 1; i >= 0; i--) {
 		/*
 		 * XXX filter against symbol
 		 */
@@ -880,7 +880,7 @@ int cmd_annotate(int argc, const char **argv)
 
 	annotate.session = perf_session__new(&data, &annotate.tool);
 	if (IS_ERR(annotate.session))
-		return PTR_ERR(annotate.session);
+		return (int)PTR_ERR(annotate.session);
 
 	annotate.session->itrace_synth_opts = &itrace_synth_opts;
 

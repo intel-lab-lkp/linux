@@ -856,7 +856,7 @@ static int ins__cmp(const void *a, const void *b)
 
 static void ins__sort(struct arch *arch)
 {
-	const int nmemb = arch->nr_instructions;
+	const size_t nmemb = arch->nr_instructions;
 
 	qsort(arch->instructions, nmemb, sizeof(struct ins), ins__cmp);
 }
@@ -864,7 +864,7 @@ static void ins__sort(struct arch *arch)
 static struct ins_ops *__ins__find(struct arch *arch, const char *name, struct disasm_line *dl)
 {
 	struct ins *ins;
-	const int nmemb = arch->nr_instructions;
+	const size_t nmemb = arch->nr_instructions;
 
 	if (arch__is(arch, "powerpc")) {
 		/*
@@ -1263,7 +1263,7 @@ static int dso__disassemble_filename(struct dso *dso, char *filename, size_t fil
 	char *build_id_filename;
 	char *build_id_path = NULL;
 	char *pos;
-	int len;
+	size_t len;
 
 	if (dso__symtab_type(dso) == DSO_BINARY_TYPE__KALLSYMS &&
 	    !dso__is_kcore(dso))
@@ -1754,7 +1754,8 @@ static int symbol__disassemble_raw(char *filename, struct symbol *sym,
 	u64 end = map__rip_2objdump(map, sym->end);
 	u64 len = end - start;
 	u64 offset;
-	int i, count;
+	int i;
+	ssize_t count;
 	u8 *buf = NULL;
 	char disasm_buf[512];
 	struct disasm_line *dl;
@@ -1823,7 +1824,7 @@ static int symbol__disassemble_raw(char *filename, struct symbol *sym,
 
 out:
 	free(buf);
-	return count < 0 ? count : 0;
+	return count < 0 ? (int)count : 0;
 
 err:
 	count = -1;

@@ -337,7 +337,8 @@ static int symbol__account_br_cntr(struct annotated_branch *branch,
 	unsigned int base = evsel__leader(evsel)->br_cntr_idx;
 	unsigned int off = offset * evsel->evlist->nr_br_cntr;
 	u64 *branch_br_cntr = branch->br_cntr;
-	unsigned int i, mask, width;
+	unsigned int i, width;
+	u64 mask;
 
 	if (!br_cntr || !branch_br_cntr)
 		return 0;
@@ -360,7 +361,7 @@ static int symbol__account_cycles(u64 addr, u64 start, struct symbol *sym,
 				  u64 br_cntr)
 {
 	struct annotated_branch *branch;
-	unsigned offset;
+	unsigned int offset;
 	int ret;
 
 	if (sym == NULL)
@@ -377,7 +378,7 @@ static int symbol__account_cycles(u64 addr, u64 start, struct symbol *sym,
 		if (start >= addr)
 			start = 0;
 	}
-	offset = addr - sym->start;
+	offset = (unsigned int)(addr - sym->start);
 	ret = __symbol__account_cycles(branch->cycles_hist,
 					start ? start - sym->start : 0,
 					offset, cycles,
@@ -1563,7 +1564,7 @@ static int annotation__max_ins_name(struct annotation *notes)
 		if (al->offset == -1)
 			continue;
 
-		len = strlen(disasm_line(al)->ins.name);
+		len = (int)strlen(disasm_line(al)->ins.name);
 		if (max_name < len)
 			max_name = len;
 	}
@@ -2183,20 +2184,20 @@ static int annotation_options__add_disassemblers_str(struct annotation_options *
 {
 	while (str && *str != '\0') {
 		const char *comma = strchr(str, ',');
-		int len = comma ? comma - str : (int)strlen(str);
+		size_t len = comma ? (size_t)(comma - str) : strlen(str);
 		bool match = false;
 
 		for (u8 i = 0; i < ARRAY_SIZE(perf_disassembler__strs); i++) {
 			const char *dis_str = perf_disassembler__strs[i];
 
-			if (len == (int)strlen(dis_str) && !strncmp(str, dis_str, len)) {
+			if (len == strlen(dis_str) && !strncmp(str, dis_str, len)) {
 				annotation_options__add_disassembler(options, i);
 				match = true;
 				break;
 			}
 		}
 		if (!match) {
-			pr_err("Invalid disassembler '%.*s'\n", len, str);
+			pr_err("Invalid disassembler '%.*s'\n", (int)len, str);
 			return -1;
 		}
 		str = comma ? comma + 1 : NULL;
@@ -2406,7 +2407,7 @@ static int extract_reg_offset(struct arch *arch, const char *str,
 			str++;
 	}
 
-	op_loc->offset = strtol(str, &p, 0);
+	op_loc->offset = (int)strtol(str, &p, 0);
 
 	p = strchr(p, arch->objdump.register_char);
 	if (p == NULL)
@@ -2516,8 +2517,7 @@ int annotate_get_insn_location(struct arch *arch, struct disasm_line *dl,
 				/* FIXME: Handle other segment registers */
 				if (!strncmp(insn_str, "%gs:", 4)) {
 					op_loc->segment = INSN_SEG_X86_GS;
-					op_loc->offset = strtol(insn_str + 4,
-								&p, 0);
+					op_loc->offset = (int)strtol(insn_str + 4, &p, 0);
 					if (p && p != insn_str + 4)
 						op_loc->imm = true;
 					continue;
@@ -2531,7 +2531,7 @@ int annotate_get_insn_location(struct arch *arch, struct disasm_line *dl,
 			if (*s == arch->objdump.register_char)
 				op_loc->reg1 = get_dwarf_regnum(s, arch->e_machine, arch->e_flags);
 			else if (*s == arch->objdump.imm_char) {
-				op_loc->offset = strtol(s + 1, &p, 0);
+				op_loc->offset = (int)strtol(s + 1, &p, 0);
 				if (p && p != s + 1)
 					op_loc->imm = true;
 			}
