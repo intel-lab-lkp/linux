@@ -2514,6 +2514,12 @@ static inline bool kvm_mem_is_private(struct kvm *kvm, gfn_t gfn)
 }
 #endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
 
+static inline bool kvm_mem_from_gmem(struct kvm *kvm, gfn_t gfn)
+{
+	/* For now, only private memory gets consumed from guest_memfd. */
+	return kvm_mem_is_private(kvm, gfn);
+}
+
 #ifdef CONFIG_KVM_GMEM
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		     gfn_t gfn, kvm_pfn_t *pfn, struct page **page,
