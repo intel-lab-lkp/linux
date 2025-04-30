@@ -54,6 +54,9 @@ config PINCTRL_ALDERLAKE
 	  This pinctrl driver provides an interface that allows configuring
 	  of Intel Alder Lake PCH pins and using them as GPIOs.
 
+	  Some platforms may reuse GPIO IP blocks from earlier generations
+	  and require CONFIG_PINCTRL_TIGERLAKE instead.
+
 config PINCTRL_BROXTON
 	tristate "Intel Broxton pinctrl and GPIO driver"
 	select PINCTRL_INTEL
@@ -160,6 +163,12 @@ config PINCTRL_TIGERLAKE
 	help
 	  This pinctrl driver provides an interface that allows configuring
 	  of Intel Tiger Lake PCH pins and using them as GPIOs.
+
+	  Also used on some Alder Lake platforms that share compatible GPIO IP.
+
+	  Supported platforms:
+	    - Tiger Lake (all variants)
+	    - Alder Lake-P
 
 source "drivers/pinctrl/intel/Kconfig.tng"
 endmenu
