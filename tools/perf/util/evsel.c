@@ -655,12 +655,12 @@ struct tep_event *evsel__tp_format(struct evsel *evsel)
 		return NULL;
 
 	if (!evsel->tp_sys)
-		tp_format = trace_event__tp_format_id(evsel->core.attr.config);
+		tp_format = trace_event__tp_format_id((int)evsel->core.attr.config);
 	else
 		tp_format = trace_event__tp_format(evsel->tp_sys, evsel->tp_name);
 
 	if (IS_ERR(tp_format)) {
-		int err = -PTR_ERR(evsel->tp_format);
+		int err = (int)-PTR_ERR(evsel->tp_format);
 
 		pr_err("Error getting tracepoint format '%s' '%s'(%d)\n",
 			evsel__name(evsel), strerror(err), err);
@@ -688,7 +688,7 @@ char *evsel__bpf_counter_events;
 
 bool evsel__match_bpf_counter_events(const char *name)
 {
-	int name_len;
+	size_t name_len;
 	bool match;
 	char *ptr;
 
@@ -1154,7 +1154,7 @@ static void evsel__apply_config_terms(struct evsel *evsel,
 				evsel__reset_sample_bit(evsel, BRANCH_STACK);
 			break;
 		case EVSEL__CONFIG_TERM_STACK_USER:
-			dump_size = term->val.stack_user;
+			dump_size = (u32)term->val.stack_user;
 			break;
 		case EVSEL__CONFIG_TERM_MAX_STACK:
 			max_stack = term->val.max_stack;
@@ -1770,7 +1770,7 @@ static u64 evsel__group_read_size(struct evsel *leader)
 	u64 read_format = leader->core.attr.read_format;
 	int entry = sizeof(u64); /* value */
 	int size = 0;
-	int nr = 1;
+	u64 nr = 1;
 
 	if (!evsel__group_has_tpebs(leader))
 		return perf_evsel__read_size(&leader->core);
@@ -1834,7 +1834,7 @@ static int evsel__read_group(struct evsel *leader, int cpu_map_idx, int thread)
 {
 	struct perf_stat_evsel *ps = leader->stats;
 	u64 read_format = leader->core.attr.read_format;
-	int size = evsel__group_read_size(leader);
+	size_t size = evsel__group_read_size(leader);
 	u64 *data = ps->group_data;
 
 	if (!(read_format & PERF_FORMAT_ID))
@@ -2176,31 +2176,27 @@ int evsel__prepare_open(struct evsel *evsel, struct perf_cpu_map *cpus,
 static bool __has_attr_feature(struct perf_event_attr *attr,
 			       struct perf_cpu cpu, unsigned long flags)
 {
-	int fd = syscall(SYS_perf_event_open, attr, /*pid=*/0, cpu.cpu,
-			 /*group_fd=*/-1, flags);
+	int fd = sys_perf_event_open(attr, /*pid=*/0, cpu.cpu, /*group_fd=*/-1, flags);
 	close(fd);
 
 	if (fd < 0) {
 		attr->exclude_kernel = 1;
 
-		fd = syscall(SYS_perf_event_open, attr, /*pid=*/0, cpu.cpu,
-			     /*group_fd=*/-1, flags);
+		fd = sys_perf_event_open(attr, /*pid=*/0, cpu.cpu, /*group_fd=*/-1, flags);
 		close(fd);
 	}
 
 	if (fd < 0) {
 		attr->exclude_hv = 1;
 
-		fd = syscall(SYS_perf_event_open, attr, /*pid=*/0, cpu.cpu,
-			     /*group_fd=*/-1, flags);
+		fd = sys_perf_event_open(attr, /*pid=*/0, cpu.cpu, /*group_fd=*/-1, flags);
 		close(fd);
 	}
 
 	if (fd < 0) {
 		attr->exclude_guest = 1;
 
-		fd = syscall(SYS_perf_event_open, attr, /*pid=*/0, cpu.cpu,
-			     /*group_fd=*/-1, flags);
+		fd = sys_perf_event_open(attr, /*pid=*/0, cpu.cpu, /*group_fd=*/-1, flags);
 		close(fd);
 	}
 
@@ -3464,7 +3460,7 @@ char evsel__taskstate(struct evsel *evsel, struct perf_sample *sample, const cha
 	 * We can change this if we have a good reason in the future.
 	 */
 	val = evsel__intval(evsel, sample, name);
-	bit = val ? ffs(val) : 0;
+	bit = val ? ffs((int)val) : 0;
 	state = (!bit || bit > strlen(states)) ? 'R' : states[bit-1];
 	return state;
 }
@@ -3809,18 +3805,15 @@ struct perf_env *evsel__env(struct evsel *evsel)
 
 static int store_evsel_ids(struct evsel *evsel, struct evlist *evlist)
 {
-	int cpu_map_idx, thread;
-
 	if (evsel__is_retire_lat(evsel))
 		return 0;
 
-	for (cpu_map_idx = 0; cpu_map_idx < xyarray__max_x(evsel->core.fd); cpu_map_idx++) {
-		for (thread = 0; thread < xyarray__max_y(evsel->core.fd);
-		     thread++) {
+	for (size_t cpu_map_idx = 0; cpu_map_idx < xyarray__max_x(evsel->core.fd); cpu_map_idx++) {
+		for (size_t thread = 0; thread < xyarray__max_y(evsel->core.fd); thread++) {
 			int fd = FD(evsel, cpu_map_idx, thread);
 
 			if (perf_evlist__id_add_fd(&evlist->core, &evsel->core,
-						   cpu_map_idx, thread, fd) < 0)
+						   (int)cpu_map_idx, (int)thread, fd) < 0)
 				return -1;
 		}
 	}

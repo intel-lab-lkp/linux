@@ -919,7 +919,7 @@ int __evlist__parse_mmap_pages(unsigned int *mmap_pages, const char *str)
 		return -1;
 	}
 
-	*mmap_pages = pages;
+	*mmap_pages = (unsigned int)pages;
 	return 0;
 }
 
@@ -1441,7 +1441,7 @@ int evlist__prepare_workload(struct evlist *evlist, struct target *target, const
 	}
 
 	if (!evlist->workload.pid) {
-		int ret;
+		ssize_t ret;
 
 		if (pipe_output)
 			dup2(2, 1);
@@ -1481,7 +1481,7 @@ int evlist__prepare_workload(struct evlist *evlist, struct target *target, const
 		if (ret != 1) {
 			if (ret == -1)
 				perror("unable to read pipe");
-			exit(ret);
+			exit((int)ret);
 		}
 
 		execvp(argv[0], (char **)argv);
@@ -1542,7 +1542,7 @@ int evlist__start_workload(struct evlist *evlist)
 {
 	if (evlist->workload.cork_fd >= 0) {
 		char bf = 0;
-		int ret;
+		ssize_t ret;
 		/*
 		 * Remove the cork, let it rip!
 		 */
@@ -1552,7 +1552,7 @@ int evlist__start_workload(struct evlist *evlist)
 
 		close(evlist->workload.cork_fd);
 		evlist->workload.cork_fd = -1;
-		return ret;
+		return (int)ret;
 	}
 
 	return 0;
@@ -1655,7 +1655,8 @@ out_default:
 int evlist__strerror_mmap(struct evlist *evlist, int err, char *buf, size_t size)
 {
 	char sbuf[STRERR_BUFSIZE], *emsg = str_error_r(err, sbuf, sizeof(sbuf));
-	int pages_attempted = evlist->core.mmap_len / 1024, pages_max_per_user, printed = 0;
+	int pages_attempted = (int)evlist->core.mmap_len / 1024;
+	int pages_max_per_user, printed = 0;
 
 	switch (err) {
 	case EPERM:
@@ -1940,7 +1941,7 @@ int evlist__parse_control(const char *str, int *ctl_fd, int *ctl_fd_ack, bool *c
 	if (strncmp(str, "fd:", 3))
 		return evlist__parse_control_fifo(str, ctl_fd, ctl_fd_ack, ctl_fd_close);
 
-	*ctl_fd = strtoul(&str[3], &endptr, 0);
+	*ctl_fd = (int)strtoul(&str[3], &endptr, 0);
 	if (endptr == &str[3])
 		return -EINVAL;
 
@@ -1949,7 +1950,7 @@ int evlist__parse_control(const char *str, int *ctl_fd, int *ctl_fd_ack, bool *c
 		if (endptr != comma)
 			return -EINVAL;
 
-		*ctl_fd_ack = strtoul(comma + 1, &endptr, 0);
+		*ctl_fd_ack = (int)strtoul(comma + 1, &endptr, 0);
 		if (endptr == comma + 1 || *endptr != '\0')
 			return -EINVAL;
 	}
@@ -2015,7 +2016,7 @@ int evlist__finalize_ctlfd(struct evlist *evlist)
 static int evlist__ctlfd_recv(struct evlist *evlist, enum evlist_ctl_cmd *cmd,
 			      char *cmd_data, size_t data_size)
 {
-	int err;
+	ssize_t err;
 	char c;
 	size_t bytes_read = 0;
 
@@ -2069,12 +2070,12 @@ static int evlist__ctlfd_recv(struct evlist *evlist, enum evlist_ctl_cmd *cmd,
 		}
 	}
 
-	return bytes_read ? (int)bytes_read : err;
+	return bytes_read ? (int)bytes_read : (int)err;
 }
 
 int evlist__ctlfd_ack(struct evlist *evlist)
 {
-	int err;
+	ssize_t err;
 
 	if (evlist->ctl_fd.ack == -1)
 		return 0;
@@ -2084,7 +2085,7 @@ int evlist__ctlfd_ack(struct evlist *evlist)
 	if (err == -1)
 		pr_err("failed to write to ctl_ack_fd %d: %m\n", evlist->ctl_fd.ack);
 
-	return err;
+	return (int)err;
 }
 
 static int get_cmd_arg(char *cmd_data, size_t cmd_size, char **arg)
@@ -2304,7 +2305,7 @@ static int str_to_delay(const char *str)
 	d = strtol(str, &endptr, 10);
 	if (*endptr || d > INT_MAX || d < -1)
 		return 0;
-	return d;
+	return (int)d;
 }
 
 int evlist__parse_event_enable_time(struct evlist *evlist, struct record_opts *opts,
@@ -2325,7 +2326,7 @@ int evlist__parse_event_enable_time(struct evlist *evlist, struct record_opts *o
 
 	ret = parse_event_enable_times(str, NULL);
 	if (ret < 0)
-		return ret;
+		return (int)ret;
 
 	times_cnt = ret;
 	if (times_cnt == 0)
