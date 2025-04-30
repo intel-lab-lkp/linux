@@ -212,6 +212,28 @@ static int adjust_local_phandle_references(const struct device_node *local_fixup
 	return 0;
 }
 
+static int get_phandle_from_symbols_node(const struct device_node *tree_symbols,
+					 const char *symbol_name,
+					 phandle *phandle)
+{
+	struct device_node *refnode;
+	const char *refpath;
+	int err;
+
+	err = of_property_read_string(tree_symbols, symbol_name, &refpath);
+	if (err)
+		return err;
+
+	refnode = of_find_node_by_path(refpath);
+	if (!refnode)
+		return -ENOENT;
+
+	*phandle = refnode->phandle;
+	of_node_put(refnode);
+
+	return 0;
+}
+
 /**
  * of_resolve_phandles - Relocate and resolve overlay against live tree
  *
@@ -247,11 +269,9 @@ static int adjust_local_phandle_references(const struct device_node *local_fixup
  */
 int of_resolve_phandles(struct device_node *overlay)
 {
-	struct device_node *child, *refnode;
-	struct device_node *overlay_fixups;
+	struct device_node *child, *overlay_fixups;
 	struct device_node __free(device_node) *local_fixups = NULL;
 	struct property *prop;
-	const char *refpath;
 	phandle phandle, phandle_delta;
 	int err;
 
@@ -298,20 +318,13 @@ int of_resolve_phandles(struct device_node *overlay)
 		if (!of_prop_cmp(prop->name, "name"))
 			continue;
 
-		err = of_property_read_string(tree_symbols,
-				prop->name, &refpath);
+		err = get_phandle_from_symbols_node(tree_symbols, prop->name,
+						    &phandle);
 		if (err) {
-			pr_err("node label '%s' not found in live devicetree symbols table\n",
+			pr_err("node label '%s' not found or invalid in live devicetree symbols table\n",
 			       prop->name);
 			return err;
 		}
-
-		refnode = of_find_node_by_path(refpath);
-		if (!refnode)
-			return -ENOENT;
-
-		phandle = refnode->phandle;
-		of_node_put(refnode);
 
 		err = update_usages_of_a_phandle_reference(overlay, prop, phandle);
 		if (err)
