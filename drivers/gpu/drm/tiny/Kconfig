@@ -199,6 +199,20 @@ config TINYDRM_SHARP_MEMORY
 
 	  If M is selected the module will be called sharp_memory.
 
+config TINYDRM_ST7365P
+	tristate "DRM support for Sitronix ST7365P display panels"
+	depends on DRM && SPI
+	select DRM_CLIENT_SELECTION
+	select DRM_KMS_HELPER
+	select DRM_GEM_DMA_HELPER
+	select DRM_MIPI_DBI
+	select BACKLIGHT_CLASS_DEVICE
+	help
+	  DRM driver for the following Sitronix ST7365P panels:
+	  * Kingway HW-035P0Z002
+
+	  If M is selected the module will be called st7365p.
+
 config TINYDRM_ST7586
 	tristate "DRM support for Sitronix ST7586 display panels"
 	depends on DRM && SPI
