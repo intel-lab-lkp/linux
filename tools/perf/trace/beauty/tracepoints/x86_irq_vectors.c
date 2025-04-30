@@ -13,7 +13,8 @@ static DEFINE_STRARRAY(x86_irq_vectors, "_VECTOR");
 
 static size_t x86_irq_vectors__scnprintf(unsigned long vector, char *bf, size_t size, bool show_prefix)
 {
-	return strarray__scnprintf_suffix(&strarray__x86_irq_vectors, bf, size, "%#x", show_prefix, vector);
+	return strarray__scnprintf_suffix(&strarray__x86_irq_vectors, bf, size, "%#x", show_prefix,
+					  (int)vector);
 }
 
 size_t syscall_arg__scnprintf_x86_irq_vectors(char *bf, size_t size, struct syscall_arg *arg)

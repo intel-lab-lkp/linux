@@ -79,7 +79,7 @@ size_t open__scnprintf_flags(unsigned long flags, char *bf, size_t size, bool sh
 
 size_t syscall_arg__scnprintf_open_flags(char *bf, size_t size, struct syscall_arg *arg)
 {
-	int flags = arg->val;
+	int flags = (int)arg->val;
 
 	if (!(flags & O_CREAT))
 		arg->mask |= 1 << (arg->idx + 1); /* Mask the mode parm */

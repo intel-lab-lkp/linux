@@ -24,7 +24,7 @@ size_t syscall_arg__scnprintf_flock(char *bf, size_t size, struct syscall_arg *a
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "LOCK_";
-	int printed = 0, op = arg->val;
+	int printed = 0, op = (int)arg->val;
 
 	if (op == 0)
 		return scnprintf(bf, size, "NONE");

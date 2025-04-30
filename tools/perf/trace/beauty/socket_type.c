@@ -23,7 +23,7 @@ static size_t syscall_arg__scnprintf_socket_type(char *bf, size_t size, struct s
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "SOCK_";
 	size_t printed;
-	int type = arg->val,
+	int type = (int)arg->val,
 	    flags = type & ~SOCK_TYPE_MASK;
 
 	type &= SOCK_TYPE_MASK;

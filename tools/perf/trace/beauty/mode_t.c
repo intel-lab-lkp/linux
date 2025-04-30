@@ -24,7 +24,7 @@ static size_t syscall_arg__scnprintf_mode_t(char *bf, size_t size, struct syscal
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "S_";
-	int printed = 0, mode = arg->val;
+	int printed = 0, mode = (int)arg->val;
 
 #define	P_MODE(n) \
 	if ((mode & S_##n) == S_##n) { \

@@ -76,7 +76,7 @@ static size_t madvise__scnprintf_behavior(int behavior, char *bf, size_t size)
 static size_t syscall_arg__scnprintf_madvise_behavior(char *bf, size_t size,
 						      struct syscall_arg *arg)
 {
-	return madvise__scnprintf_behavior(arg->val, bf, size);
+	return madvise__scnprintf_behavior((int)arg->val, bf, size);
 }
 
 #define SCA_MADV_BHV syscall_arg__scnprintf_madvise_behavior

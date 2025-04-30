@@ -549,7 +549,7 @@ out_delete:
 
 size_t strarray__scnprintf_suffix(struct strarray *sa, char *bf, size_t size, const char *intfmt, bool show_suffix, int val)
 {
-	int idx = val - sa->offset;
+	int idx = (int)(val - sa->offset);
 
 	if (idx < 0 || idx >= sa->nr_entries || sa->entries[idx] == NULL) {
 		size_t printed = scnprintf(bf, size, intfmt, val);
@@ -563,7 +563,7 @@ size_t strarray__scnprintf_suffix(struct strarray *sa, char *bf, size_t size, co
 
 size_t strarray__scnprintf(struct strarray *sa, char *bf, size_t size, const char *intfmt, bool show_prefix, int val)
 {
-	int idx = val - sa->offset;
+	int idx = (int)(val - sa->offset);
 
 	if (idx < 0 || idx >= sa->nr_entries || sa->entries[idx] == NULL) {
 		size_t printed = scnprintf(bf, size, intfmt, val);
@@ -579,7 +579,8 @@ static size_t __syscall_arg__scnprintf_strarray(char *bf, size_t size,
 						const char *intfmt,
 					        struct syscall_arg *arg)
 {
-	return strarray__scnprintf(arg->parm, bf, size, intfmt, arg->show_string_prefix, arg->val);
+	return strarray__scnprintf(arg->parm, bf, size, intfmt, arg->show_string_prefix,
+				   (int)arg->val);
 }
 
 static size_t syscall_arg__scnprintf_strarray(char *bf, size_t size,
@@ -617,7 +618,7 @@ size_t strarrays__scnprintf(struct strarrays *sas, char *bf, size_t size, const 
 
 	for (i = 0; i < sas->nr_entries; ++i) {
 		struct strarray *sa = sas->entries[i];
-		int idx = val - sa->offset;
+		int idx = (int)(val - sa->offset);
 
 		if (idx >= 0 && idx < sa->nr_entries) {
 			if (sa->entries[idx] == NULL)
@@ -654,7 +655,7 @@ bool strarray__strtoul_flags(struct strarray *sa, char *bf, size_t size, u64 *re
 	*ret = 0;
 
 	while (size != 0) {
-		int toklen = size;
+		size_t toklen = size;
 
 		sep = memchr(tok, '|', size);
 		if (sep != NULL) {
@@ -703,7 +704,8 @@ bool strarrays__strtoul(struct strarrays *sas, char *bf, size_t size, u64 *ret)
 size_t syscall_arg__scnprintf_strarrays(char *bf, size_t size,
 					struct syscall_arg *arg)
 {
-	return strarrays__scnprintf(arg->parm, bf, size, "%d", arg->show_string_prefix, arg->val);
+	return strarrays__scnprintf(arg->parm, bf, size, "%d", arg->show_string_prefix,
+				    (int)arg->val);
 }
 
 #ifndef AT_FDCWD
@@ -713,7 +715,7 @@ size_t syscall_arg__scnprintf_strarrays(char *bf, size_t size,
 static size_t syscall_arg__scnprintf_fd_at(char *bf, size_t size,
 					   struct syscall_arg *arg)
 {
-	int fd = arg->val;
+	int fd = (int)arg->val;
 	const char *prefix = "AT_FD";
 
 	if (fd == AT_FDCWD)
@@ -855,7 +857,7 @@ static size_t syscall_arg__scnprintf_access_mode(char *bf, size_t size,
 	bool show_prefix = arg->show_string_prefix;
 	const char *suffix = "_OK";
 	size_t printed = 0;
-	int mode = arg->val;
+	int mode = (int)arg->val;
 
 	if (mode == F_OK) /* 0 */
 		return scnprintf(bf, size, "F%s", show_prefix ? suffix : "");
@@ -897,7 +899,7 @@ static size_t syscall_arg__scnprintf_pipe_flags(char *bf, size_t size,
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "O_";
-	int printed = 0, flags = arg->val;
+	int printed = 0, flags = (int)arg->val;
 
 #define	P_FLAG(n) \
 	if (flags & O_##n) { \
@@ -929,7 +931,7 @@ static size_t syscall_arg__scnprintf_getrandom_flags(char *bf, size_t size,
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "GRND_";
-	int printed = 0, flags = arg->val;
+	int printed = 0, flags = (int)arg->val;
 
 #define	P_FLAG(n) \
 	if (flags & GRND_##n) { \
@@ -975,7 +977,7 @@ static bool syscall_arg__strtoul_btf_enum(char *bf, size_t size, struct syscall_
 
 	for (int i = 0; i < btf_vlen(bt); ++i, ++be) {
 		const char *name = btf__name_by_offset(btf, be->name_off);
-		int max_len = max(size, strlen(name));
+		size_t max_len = max(size, strlen(name));
 
 		if (strncmp(name, bf, max_len) == 0) {
 			*val = be->val;
@@ -1713,7 +1715,7 @@ static int thread__read_fd_path(struct thread *thread, int fd)
 {
 	char linkname[PATH_MAX], pathname[PATH_MAX];
 	struct stat st;
-	int ret;
+	ssize_t ret;
 
 	if (thread__pid(thread) == thread__tid(thread)) {
 		scnprintf(linkname, sizeof(linkname),
@@ -1760,7 +1762,7 @@ static const char *thread__fd_path(struct thread *thread, int fd,
 
 size_t syscall_arg__scnprintf_fd(char *bf, size_t size, struct syscall_arg *arg)
 {
-	int fd = arg->val;
+	int fd = (int)arg->val;
 	size_t printed = scnprintf(bf, size, "%d", fd);
 	const char *path = thread__fd_path(arg->thread, fd, arg->trace);
 
@@ -1790,7 +1792,7 @@ size_t pid__scnprintf_fd(struct trace *trace, pid_t pid, int fd, char *bf, size_
 static size_t syscall_arg__scnprintf_close_fd(char *bf, size_t size,
 					      struct syscall_arg *arg)
 {
-	int fd = arg->val;
+	int fd = (int)arg->val;
 	size_t printed = syscall_arg__scnprintf_fd(bf, size, arg);
 	struct thread_trace *ttrace = thread__priv(arg->thread);
 
@@ -2063,11 +2065,11 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 			    bool *use_btf)
 {
 	struct tep_format_field *last_field = NULL;
-	int len;
 
 	for (; field; field = field->next, ++arg) {
-		last_field = field;
+		size_t len;
 
+		last_field = field;
 		if (arg->scnprintf)
 			continue;
 
@@ -2167,7 +2169,7 @@ static int syscall__read_info(struct syscall *sc, struct trace *trace)
 	 */
 	if (IS_ERR(sc->tp_format)) {
 		sc->nonexistent = true;
-		err = PTR_ERR(sc->tp_format);
+		err = (int)PTR_ERR(sc->tp_format);
 		sc->tp_format = NULL;
 		return err;
 	}
@@ -2436,7 +2438,8 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 
 			if (trace->force_btf || default_scnprintf == NULL || default_scnprintf == SCA_PTR) {
 				btf_printed = trace__btf_scnprintf(trace, &arg, bf + printed,
-								   size - printed, val, field->type);
+								   size - printed, (int)val,
+								   field->type);
 				if (btf_printed) {
 					printed += btf_printed;
 					continue;
@@ -2653,7 +2656,7 @@ static void thread__update_stats(struct thread *thread, struct thread_trace *ttr
 			}
 
 			stats->errnos = new_errnos;
-			stats->max_errno = err;
+			stats->max_errno = (int)err;
 		}
 
 		++stats->errnos[err - 1];
@@ -2685,7 +2688,7 @@ static int trace__printf_interrupted_entry(struct trace *trace)
 	ttrace->entry_pending = false;
 	++trace->nr_events_printed;
 
-	return printed;
+	return (int)printed;
 }
 
 static int trace__fprintf_sample(struct trace *trace, struct evsel *evsel,
@@ -2752,8 +2755,8 @@ static int trace__sys_enter(struct trace *trace, struct evsel *evsel,
 	void *args;
 	int printed = 0;
 	struct thread *thread;
-	int id = perf_evsel__sc_tp_uint(evsel, id, sample), err = -1;
-	int augmented_args_size = 0, e_machine;
+	int id = (int)perf_evsel__sc_tp_uint(evsel, id, sample);
+	int err = -1, augmented_args_size = 0, e_machine;
 	void *augmented_args = NULL;
 	struct syscall *sc;
 	struct thread_trace *ttrace;
@@ -2829,11 +2832,11 @@ static int trace__fprintf_sys_enter(struct trace *trace, struct evsel *evsel,
 {
 	struct thread_trace *ttrace;
 	struct thread *thread;
-	int id = perf_evsel__sc_tp_uint(evsel, id, sample), err = -1;
+	int id = (int)perf_evsel__sc_tp_uint(evsel, id, sample);
 	struct syscall *sc;
 	char msg[1024];
 	void *args, *augmented_args = NULL;
-	int augmented_args_size, e_machine;
+	int err = -1, augmented_args_size, e_machine;
 	size_t printed = 0;
 
 
@@ -2905,7 +2908,8 @@ static int trace__sys_exit(struct trace *trace, struct evsel *evsel,
 	u64 duration = 0;
 	bool duration_calculated = false;
 	struct thread *thread;
-	int id = perf_evsel__sc_tp_uint(evsel, id, sample), err = -1, callchain_ret = 0, printed = 0;
+	int id = (int)perf_evsel__sc_tp_uint(evsel, id, sample);
+	int err = -1, callchain_ret = 0, printed = 0;
 	int alignment = trace->args_alignment, e_machine;
 	struct syscall *sc;
 	struct thread_trace *ttrace;
@@ -2927,7 +2931,7 @@ static int trace__sys_exit(struct trace *trace, struct evsel *evsel,
 		thread__update_stats(thread, ttrace, id, sample, ret, trace);
 
 	if (!trace->fd_path_disabled && sc->is_open && ret >= 0 && ttrace->filename.pending_open) {
-		trace__set_fd_pathname(thread, ret, ttrace->filename.name);
+		trace__set_fd_pathname(thread, (int)ret, ttrace->filename.name);
 		ttrace->filename.pending_open = false;
 		++trace->stats.vfs_getname;
 	}
@@ -2982,8 +2986,8 @@ signed_print:
 	} else if (ret < 0) {
 errno_print: {
 		char bf[STRERR_BUFSIZE];
-		const char *emsg = str_error_r(-ret, bf, sizeof(bf)),
-			   *e = errno_to_name(evsel, -ret);
+		const char *emsg = str_error_r((int)-ret, bf, sizeof(bf));
+		const char *e = errno_to_name(evsel, (int)-ret);
 
 		fprintf(trace->output, "-1 %s (%s)", e, emsg);
 	}
@@ -3002,7 +3006,7 @@ errno_print: {
 	} else if (sc->fmt->hexret)
 		fprintf(trace->output, "%#lx", ret);
 	else if (sc->fmt->errpid) {
-		struct thread *child = machine__find_thread(trace->host, ret, ret);
+		struct thread *child = machine__find_thread(trace->host, (int)ret, (int)ret);
 
 		if (child != NULL) {
 			fprintf(trace->output, "%ld", ret);
@@ -3062,7 +3066,7 @@ static int trace__vfs_getname(struct trace *trace, struct evsel *evsel,
 		if (f == NULL)
 			goto out_put;
 
-		ttrace->filename.namelen = filename_len;
+		ttrace->filename.namelen = (unsigned int)filename_len;
 		ttrace->filename.name = f;
 	}
 
@@ -3190,7 +3194,8 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct evsel *evsel,
 			int offset = field->offset;
 
 			if (field->flags & TEP_FIELD_IS_DYNAMIC) {
-				offset = format_field__intval(field, sample, evsel->needs_swap);
+				offset = (int)format_field__intval(field, sample,
+								   evsel->needs_swap);
 				syscall_arg.len = offset >> 16;
 				offset &= 0xffff;
 				if (tep_field_is_relative(field->flags))
@@ -3215,7 +3220,8 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct evsel *evsel,
 		if (trace->show_arg_names)
 			printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
 
-		btf_printed = trace__btf_scnprintf(trace, &syscall_arg, bf + printed, size - printed, val, field->type);
+		btf_printed = trace__btf_scnprintf(trace, &syscall_arg, bf + printed,
+						   size - printed, (int)val, field->type);
 		if (btf_printed) {
 			printed += btf_printed;
 			continue;
@@ -3260,7 +3266,7 @@ static int trace__event_handler(struct trace *trace, struct evsel *evsel,
 		trace__fprintf_comm_tid(trace, thread, trace->output);
 
 	if (evsel == trace->syscalls.events.bpf_output) {
-		int id = perf_evsel__sc_tp_uint(evsel, id, sample);
+		int id = (int)perf_evsel__sc_tp_uint(evsel, id, sample);
 		int e_machine = thread ? thread__e_machine(thread, trace->host) : EM_HOST;
 		struct syscall *sc = trace__syscall_info(trace, evsel, e_machine, id);
 
@@ -4277,8 +4283,8 @@ static int trace__expand_filter(struct trace *trace, struct evsel *evsel)
 
 		if (isalpha(*right)) {
 			struct syscall_arg_fmt *fmt;
-			int left_size = tok - left,
-			    right_size = right_end - right;
+			int left_size = (int)(tok - left);
+			int right_size = (int)(right_end - right);
 			char arg[128], *type;
 
 			while (isspace(left[left_size - 1]))
@@ -4308,7 +4314,7 @@ static int trace__expand_filter(struct trace *trace, struct evsel *evsel)
 				if (fmt->strtoul(right, right_size, &syscall_arg, &val)) {
 					char *n, expansion[19];
 					int expansion_lenght = scnprintf(expansion, sizeof(expansion), "%#" PRIx64, val);
-					int expansion_offset = right - new_filter;
+					int expansion_offset = (int)(right - new_filter);
 
 					pr_debug("%s", expansion);
 
@@ -4737,7 +4743,7 @@ static int trace__replay(struct trace *trace)
 
 	session = perf_session__new(&data, &trace->tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	if (trace->opts.target.pid)
 		symbol_conf.pid_list_str = strdup(trace->opts.target.pid);
@@ -4835,7 +4841,7 @@ static struct syscall_entry *syscall__sort_stats(struct hashmap *syscall_stats)
 {
 	struct syscall_entry *entry;
 	struct hashmap_entry *pos;
-	unsigned bkt, i, nr;
+	size_t bkt, i, nr;
 
 	nr = syscall_stats->sz;
 	entry = malloc(nr * sizeof(*entry));
@@ -4849,7 +4855,7 @@ static struct syscall_entry *syscall__sort_stats(struct hashmap *syscall_stats)
 
 		entry[i].stats = ss;
 		entry[i].msecs = (u64)st->n * (avg_stats(st) / NSEC_PER_MSEC);
-		entry[i].syscall = pos->key;
+		entry[i].syscall = (int)pos->key;
 		i++;
 	}
 	assert(i == nr);
@@ -5030,7 +5036,6 @@ static int trace__set_filter_pids_from_option(const struct option *opt, const ch
 					      int unset __maybe_unused)
 {
 	int ret = -1;
-	size_t i;
 	struct trace *trace = opt->value;
 	/*
 	 * FIXME: introduce a intarray class, plain parse csv and create a
@@ -5041,16 +5046,16 @@ static int trace__set_filter_pids_from_option(const struct option *opt, const ch
 	if (list == NULL)
 		return -1;
 
-	i = trace->filter_pids.nr = intlist__nr_entries(list) + 1;
-	trace->filter_pids.entries = calloc(i, sizeof(pid_t));
+	trace->filter_pids.nr = intlist__nr_entries(list) + 1;
+	trace->filter_pids.entries = calloc(trace->filter_pids.nr, sizeof(pid_t));
 
 	if (trace->filter_pids.entries == NULL)
 		goto out;
 
 	trace->filter_pids.entries[0] = getpid();
 
-	for (i = 1; i < trace->filter_pids.nr; ++i)
-		trace->filter_pids.entries[i] = intlist__entry(list, i - 1)->i;
+	for (unsigned int i = 1; i < trace->filter_pids.nr; ++i)
+		trace->filter_pids.entries[i] = (pid_t)intlist__entry(list, i - 1)->i;
 
 	intlist__delete(list);
 	ret = 0;
@@ -5186,7 +5191,8 @@ static int trace__parse_events_option(const struct option *opt, const char *str,
 	struct trace *trace = (struct trace *)opt->value;
 	const char *s = str;
 	char *sep = NULL, *lists[2] = { NULL, NULL, };
-	int len = strlen(str) + 1, err = -1, list, idx;
+	size_t len = strlen(str) + 1;
+	int err = -1, list, idx;
 	char *strace_groups_dir = system_path(STRACE_GROUPS_DIR);
 	char group_name[PATH_MAX];
 	const struct syscall_fmt *fmt;
@@ -5653,7 +5659,7 @@ skip_augmentation:
 
 	if (callchain_param.enabled) {
 		if (!mmap_pages_user_set && geteuid() == 0)
-			trace.opts.mmap_pages = perf_event_mlock_kb_in_pages() * 4;
+			trace.opts.mmap_pages = (unsigned int)perf_event_mlock_kb_in_pages() * 4;
 
 		symbol_conf.use_callchain = true;
 	}

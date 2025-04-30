@@ -48,7 +48,7 @@ static size_t pkey_alloc__scnprintf_access_rights(int access_rights, char *bf, s
 
 size_t syscall_arg__scnprintf_pkey_alloc_access_rights(char *bf, size_t size, struct syscall_arg *arg)
 {
-	unsigned long cmd = arg->val;
+	int cmd = (int)arg->val;
 
 	return pkey_alloc__scnprintf_access_rights(cmd, bf, size, arg->show_string_prefix);
 }

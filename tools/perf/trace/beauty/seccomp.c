@@ -10,7 +10,7 @@ static size_t syscall_arg__scnprintf_seccomp_op(char *bf, size_t size, struct sy
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "SECCOMP_SET_MODE_";
-	int op = arg->val;
+	int op = (int)arg->val;
 	size_t printed = 0;
 
 	switch (op) {
@@ -35,7 +35,7 @@ static size_t syscall_arg__scnprintf_seccomp_flags(char *bf, size_t size,
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "SECCOMP_FILTER_FLAG_";
-	int printed = 0, flags = arg->val;
+	int printed = 0, flags = (int)arg->val;
 
 #define	P_FLAG(n) \
 	if (flags & SECCOMP_FILTER_FLAG_##n) { \

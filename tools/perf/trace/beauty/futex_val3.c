@@ -8,7 +8,7 @@
 static size_t syscall_arg__scnprintf_futex_val3(char *bf, size_t size, struct syscall_arg *arg)
 {
 	const char *prefix = "FUTEX_BITSET_";
-	unsigned int bitset = arg->val;
+	unsigned int bitset = (unsigned int)arg->val;
 
 	if (bitset == FUTEX_BITSET_MATCH_ANY)
 		return scnprintf(bf, size, "%s%s", arg->show_string_prefix ? prefix : "", "MATCH_ANY");

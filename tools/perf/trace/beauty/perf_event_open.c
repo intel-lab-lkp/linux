@@ -20,7 +20,7 @@ static size_t syscall_arg__scnprintf_perf_flags(char *bf, size_t size,
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "PERF_";
-	int printed = 0, flags = arg->val;
+	int printed = 0, flags = (int)arg->val;
 
 	if (flags == 0)
 		return 0;
@@ -58,7 +58,7 @@ static int attr__fprintf(FILE *fp __maybe_unused, const char *name, const char *
 
 	args->first = false;
 	args->printed += printed;
-	return printed;
+	return (int)printed;
 }
 
 static size_t perf_event_attr___scnprintf(struct perf_event_attr *attr, char *bf, size_t size, bool show_zeros __maybe_unused)

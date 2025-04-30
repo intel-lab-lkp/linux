@@ -23,7 +23,8 @@ static DEFINE_STRARRAYS(x86_MSRs_tables);
 
 static size_t x86_MSR__scnprintf(unsigned long msr, char *bf, size_t size, bool show_prefix)
 {
-	return strarrays__scnprintf(&strarrays__x86_MSRs_tables, bf, size, "%#x", show_prefix, msr);
+	return strarrays__scnprintf(&strarrays__x86_MSRs_tables, bf, size, "%#x", show_prefix,
+				    (int)msr);
 }
 
 size_t syscall_arg__scnprintf_x86_MSR(char *bf, size_t size, struct syscall_arg *arg)

@@ -29,7 +29,7 @@ static size_t fs_at__scnprintf_flags(unsigned long flags, char *bf, size_t size,
 size_t syscall_arg__scnprintf_fs_at_flags(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
-	int flags = arg->val;
+	int flags = (int)arg->val;
 
 	return fs_at__scnprintf_flags(flags, bf, size, show_prefix);
 }
@@ -52,7 +52,7 @@ static size_t faccessat2__scnprintf_flags(unsigned long flags, char *bf, size_t 
 size_t syscall_arg__scnprintf_faccessat2_flags(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
-	int flags = arg->val;
+	int flags = (int)arg->val;
 
 	return faccessat2__scnprintf_flags(flags, bf, size, show_prefix);
 }

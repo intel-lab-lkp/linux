@@ -29,7 +29,7 @@ static size_t syscall_arg__scnprintf_futex_op(char *bf, size_t size, struct sysc
 		SCF_UADDR2  = (1 << 4),
 		SCF_VAL3    = (1 << 5),
 	};
-	int op = arg->val;
+	int op = (int)arg->val;
 	int cmd = op & FUTEX_CMD_MASK;
 	size_t printed = 0;
 

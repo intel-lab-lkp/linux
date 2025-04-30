@@ -29,7 +29,7 @@ static size_t x86_arch_prctl__scnprintf_code(int option, char *bf, size_t size, 
 
 size_t syscall_arg__scnprintf_x86_arch_prctl_code(char *bf, size_t size, struct syscall_arg *arg)
 {
-	unsigned long code = arg->val;
+	int code = (int)arg->val;
 
 	return x86_arch_prctl__scnprintf_code(code, bf, size, arg->show_string_prefix);
 }

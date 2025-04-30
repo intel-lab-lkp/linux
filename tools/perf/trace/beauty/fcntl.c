@@ -25,7 +25,8 @@ static size_t fcntl__scnprintf_getlease(unsigned long val, char *bf, size_t size
 	static const char *fcntl_setlease[] = { "RDLCK", "WRLCK", "UNLCK", };
 	static DEFINE_STRARRAY(fcntl_setlease, "F_");
 
-	return strarray__scnprintf(&strarray__fcntl_setlease, bf, size, "%x", show_prefix, val);
+	return strarray__scnprintf(&strarray__fcntl_setlease, bf, size, "%x", show_prefix,
+				   (int)val);
 }
 
 static size_t syscall_arg__scnprintf_fcntl_getlease(char *bf, size_t size, struct syscall_arg *arg)
@@ -70,7 +71,7 @@ out:
 size_t syscall_arg__scnprintf_fcntl_arg(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
-	int cmd = syscall_arg__val(arg, 1);
+	size_t cmd = syscall_arg__val(arg, 1);
 
 	if (cmd == F_DUPFD)
 		return syscall_arg__scnprintf_fd(bf, size, arg);

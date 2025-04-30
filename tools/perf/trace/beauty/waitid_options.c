@@ -7,7 +7,7 @@ static size_t syscall_arg__scnprintf_waitid_options(char *bf, size_t size,
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "W";
-	int printed = 0, options = arg->val;
+	int printed = 0, options = (int)arg->val;
 
 #define	P_OPTION(n) \
 	if (options & W##n) { \

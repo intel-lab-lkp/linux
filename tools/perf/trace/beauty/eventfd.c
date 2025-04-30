@@ -15,7 +15,7 @@ static size_t syscall_arg__scnprintf_eventfd_flags(char *bf, size_t size, struct
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "EFD_";
-	int printed = 0, flags = arg->val;
+	int printed = 0, flags = (int)arg->val;
 
 	if (flags == 0)
 		return scnprintf(bf, size, "NONE");

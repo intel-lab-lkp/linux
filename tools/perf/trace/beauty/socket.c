@@ -20,10 +20,10 @@ static size_t socket__scnprintf_ipproto(int protocol, char *bf, size_t size, boo
 
 size_t syscall_arg__scnprintf_socket_protocol(char *bf, size_t size, struct syscall_arg *arg)
 {
-	int domain = syscall_arg__val(arg, 0);
+	int domain = (int)syscall_arg__val(arg, 0);
 
 	if (domain == AF_INET || domain == AF_INET6)
-		return socket__scnprintf_ipproto(arg->val, bf, size, arg->show_string_prefix);
+		return socket__scnprintf_ipproto((int)arg->val, bf, size, arg->show_string_prefix);
 
 	return syscall_arg__scnprintf_int(bf, size, arg);
 }
@@ -43,5 +43,5 @@ static size_t socket__scnprintf_level(int level, char *bf, size_t size, bool sho
 
 size_t syscall_arg__scnprintf_socket_level(char *bf, size_t size, struct syscall_arg *arg)
 {
-	return socket__scnprintf_level(arg->val, bf, size, arg->show_string_prefix);
+	return socket__scnprintf_level((int)arg->val, bf, size, arg->show_string_prefix);
 }

@@ -23,7 +23,7 @@ static size_t syscall_arg__scnprintf_sched_policy(char *bf, size_t size,
 		"NORMAL", "FIFO", "RR", "BATCH", "ISO", "IDLE", "DEADLINE",
 	};
 	size_t printed;
-	int policy = arg->val,
+	int policy = (int)arg->val,
 	    flags = policy & ~SCHED_POLICY_MASK;
 
 	policy &= SCHED_POLICY_MASK;

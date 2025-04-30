@@ -26,10 +26,10 @@ static size_t prctl__scnprintf_set_mm(int option, char *bf, size_t size, bool sh
 
 size_t syscall_arg__scnprintf_prctl_arg2(char *bf, size_t size, struct syscall_arg *arg)
 {
-	int option = syscall_arg__val(arg, 0);
+	int option = (int)syscall_arg__val(arg, 0);
 
 	if (option == PR_SET_MM)
-		return prctl__scnprintf_set_mm(arg->val, bf, size, arg->show_string_prefix);
+		return prctl__scnprintf_set_mm((int)arg->val, bf, size, arg->show_string_prefix);
 	/*
 	 * We still don't grab the contents of pointers on entry or exit,
 	 * so just print them as hex numbers
@@ -42,7 +42,7 @@ size_t syscall_arg__scnprintf_prctl_arg2(char *bf, size_t size, struct syscall_a
 
 size_t syscall_arg__scnprintf_prctl_arg3(char *bf, size_t size, struct syscall_arg *arg)
 {
-	int option = syscall_arg__val(arg, 0);
+	int option = (int)syscall_arg__val(arg, 0);
 
 	if (option == PR_SET_MM)
 		return syscall_arg__scnprintf_hex(bf, size, arg);
@@ -52,7 +52,7 @@ size_t syscall_arg__scnprintf_prctl_arg3(char *bf, size_t size, struct syscall_a
 
 size_t syscall_arg__scnprintf_prctl_option(char *bf, size_t size, struct syscall_arg *arg)
 {
-	unsigned long option = arg->val;
+	int option = (int)arg->val;
 	enum {
                 SPO_ARG2 = (1 << 1),
                 SPO_ARG3 = (1 << 2),
@@ -75,7 +75,7 @@ size_t syscall_arg__scnprintf_prctl_option(char *bf, size_t size, struct syscall
 		[PR_SET_PDEATHSIG]	 = all_but2,
 	};
 
-	if (option < ARRAY_SIZE(masks))
+	if (option < (int)ARRAY_SIZE(masks))
 		arg->mask |= masks[option];
 
 	return prctl__scnprintf_option(option, bf, size, arg->show_string_prefix);

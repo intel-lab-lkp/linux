@@ -19,7 +19,7 @@ static size_t statx__scnprintf_mask(unsigned long mask, char *bf, size_t size, b
 size_t syscall_arg__scnprintf_statx_mask(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
-	int mask = arg->val;
+	int mask = (int)arg->val;
 
 	return statx__scnprintf_mask(mask, bf, size, show_prefix);
 }
