@@ -273,8 +273,8 @@ EXPORT_SYMBOL_GPL(nfs_open_local_fh);
 
 void nfs_close_local_fh(struct nfs_file_localio *nfl)
 {
-	struct nfsd_file *ro_nf = NULL;
-	struct nfsd_file *rw_nf = NULL;
+	struct nfsd_file __rcu *ro_nf;
+	struct nfsd_file __rcu *rw_nf;
 	nfs_uuid_t *nfs_uuid;
 
 	rcu_read_lock();
@@ -285,8 +285,8 @@ void nfs_close_local_fh(struct nfs_file_localio *nfl)
 		return;
 	}
 
-	ro_nf = unrcu_pointer(xchg(&nfl->ro_file, NULL));
-	rw_nf = unrcu_pointer(xchg(&nfl->rw_file, NULL));
+	ro_nf = xchg(&nfl->ro_file, RCU_INITIALIZER(NULL));
+	rw_nf = xchg(&nfl->rw_file, RCU_INITIALIZER(NULL));
 
 	spin_lock(&nfs_uuid->lock);
 	/* Remove nfl from nfs_uuid->files list */
@@ -298,10 +298,8 @@ void nfs_close_local_fh(struct nfs_file_localio *nfl)
 	 */
 	RCU_INIT_POINTER(nfl->nfs_uuid, NULL);
 
-	if (ro_nf)
-		nfs_to_nfsd_file_put_local(ro_nf);
-	if (rw_nf)
-		nfs_to_nfsd_file_put_local(rw_nf);
+	nfs_to_nfsd_file_put_local(ro_nf);
+	nfs_to_nfsd_file_put_local(rw_nf);
 	return;
 }
 EXPORT_SYMBOL_GPL(nfs_close_local_fh);
