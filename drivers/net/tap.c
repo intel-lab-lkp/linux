@@ -1048,7 +1048,7 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 	struct sk_buff *skb;
 	int err, depth;
 
-	if (unlikely(xdp->data_end - xdp->data < ETH_HLEN)) {
+	if (unlikely(xdp_headlen(xdp) < ETH_HLEN)) {
 		err = -EINVAL;
 		goto err;
 	}
@@ -1062,8 +1062,8 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 		goto err;
 	}
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	skb_put(skb, xdp->data_end - xdp->data);
+	skb_reserve(skb, xdp_headroom(xdp));
+	skb_put(skb, xdp_headlen(xdp));
 
 	skb_set_network_header(skb, ETH_HLEN);
 	skb_reset_mac_header(skb);

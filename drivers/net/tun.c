@@ -1567,7 +1567,7 @@ static int tun_xdp_act(struct tun_struct *tun, struct bpf_prog *xdp_prog,
 			dev_core_stats_rx_dropped_inc(tun->dev);
 			return err;
 		}
-		dev_sw_netstats_rx_add(tun->dev, xdp->data_end - xdp->data);
+		dev_sw_netstats_rx_add(tun->dev, xdp_headlen(xdp));
 		break;
 	case XDP_TX:
 		err = tun_xdp_tx(tun->dev, xdp);
@@ -1575,7 +1575,7 @@ static int tun_xdp_act(struct tun_struct *tun, struct bpf_prog *xdp_prog,
 			dev_core_stats_rx_dropped_inc(tun->dev);
 			return err;
 		}
-		dev_sw_netstats_rx_add(tun->dev, xdp->data_end - xdp->data);
+		dev_sw_netstats_rx_add(tun->dev, xdp_headlen(xdp));
 		break;
 	case XDP_PASS:
 		break;
@@ -2355,7 +2355,7 @@ static int tun_xdp_one(struct tun_struct *tun,
 		       struct xdp_buff *xdp, int *flush,
 		       struct tun_page *tpage)
 {
-	unsigned int datasize = xdp->data_end - xdp->data;
+	unsigned int datasize = xdp_headlen(xdp);
 	struct tun_xdp_hdr *hdr = xdp->data_hard_start;
 	struct virtio_net_hdr *gso = &hdr->gso;
 	struct bpf_prog *xdp_prog;
@@ -2415,14 +2415,14 @@ build:
 		goto out;
 	}
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	skb_put(skb, xdp->data_end - xdp->data);
+	skb_reserve(skb, xdp_headroom(xdp));
+	skb_put(skb, xdp_headlen(xdp));
 
 	/* The externally provided xdp_buff may have no metadata support, which
 	 * is marked by xdp->data_meta being xdp->data + 1. This will lead to a
 	 * metasize of -1 and is the reason why the condition checks for > 0.
 	 */
-	metasize = xdp->data - xdp->data_meta;
+	metasize = xdp_metadata_len(xdp);
 	if (metasize > 0)
 		skb_metadata_set(skb, metasize);
 

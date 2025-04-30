@@ -582,8 +582,8 @@ struct xdp_frame *xdp_convert_zc_to_xdp_frame(struct xdp_buff *xdp)
 
 	/* Clone into a MEM_TYPE_PAGE_ORDER0 xdp_frame. */
 	metasize = xdp_data_meta_unsupported(xdp) ? 0 :
-		   xdp->data - xdp->data_meta;
-	totsize = xdp->data_end - xdp->data + metasize;
+		   xdp_metadata_len(xdp);
+	totsize = xdp_headlen(xdp) + metasize;
 
 	if (sizeof(*xdpf) + totsize > PAGE_SIZE)
 		return NULL;
@@ -647,10 +647,10 @@ struct sk_buff *xdp_build_skb_from_buff(const struct xdp_buff *xdp)
 	if (unlikely(!skb))
 		return NULL;
 
-	skb_reserve(skb, xdp->data - xdp->data_hard_start);
-	__skb_put(skb, xdp->data_end - xdp->data);
+	skb_reserve(skb, xdp_headroom(xdp));
+	__skb_put(skb, xdp_headlen(xdp));
 
-	metalen = xdp->data - xdp->data_meta;
+	metalen = xdp_metadata_len(xdp);
 	if (metalen > 0)
 		skb_metadata_set(skb, metalen);
 
@@ -765,7 +765,7 @@ struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 
 	memcpy(__skb_put(skb, len), xdp->data_meta, LARGEST_ALIGN(len));
 
-	metalen = xdp->data - xdp->data_meta;
+	metalen = xdp_metadata_len(xdp);
 	if (metalen > 0) {
 		skb_metadata_set(skb, metalen);
 		__skb_pull(skb, metalen);

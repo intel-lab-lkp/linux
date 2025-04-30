@@ -151,10 +151,56 @@ xdp_get_shared_info_from_buff(const struct xdp_buff *xdp)
 	return (struct skb_shared_info *)xdp_data_hard_end(xdp);
 }
 
+/**
+ * xdp_headlen - Calculate the length of the data in an XDP buffer
+ * @xdp: Pointer to the XDP buffer structure
+ *
+ * Compute the length of the data contained in the XDP buffer. Does not
+ * include frags, use xdp_get_buff_len() for that instead.
+ *
+ * Analogous to skb_headlen().
+ *
+ * Return: The length of the data in the XDP buffer in bytes.
+ */
+static inline unsigned int xdp_headlen(const struct xdp_buff *xdp)
+{
+	return xdp->data_end - xdp->data;
+}
+
+/**
+ * xdp_headroom - Calculate the headroom available in an XDP buffer
+ * @xdp: Pointer to the XDP buffer structure
+ *
+ * Compute the headroom in an XDP buffer.
+ *
+ * Analogous to the skb_headroom().
+ *
+ * Return: The size of the headroom in bytes.
+ */
+static inline unsigned int xdp_headroom(const struct xdp_buff *xdp)
+{
+	return xdp->data - xdp->data_hard_start;
+}
+
+/**
+ * xdp_metadata_len - Calculate the length of metadata in an XDP buffer
+ * @xdp: Pointer to the XDP buffer structure
+ *
+ * Compute the length of the metadata region in an XDP buffer.
+ *
+ * Analogous to skb_metadata_len().
+ *
+ * Return: The length of the metadata in bytes.
+ */
+static inline unsigned int xdp_metadata_len(const struct xdp_buff *xdp)
+{
+	return xdp->data - xdp->data_meta;
+}
+
 static __always_inline unsigned int
 xdp_get_buff_len(const struct xdp_buff *xdp)
 {
-	unsigned int len = xdp->data_end - xdp->data;
+	unsigned int len = xdp_headlen(xdp);
 	const struct skb_shared_info *sinfo;
 
 	if (likely(!xdp_buff_has_frags(xdp)))
@@ -364,8 +410,8 @@ int xdp_update_frame_from_buff(const struct xdp_buff *xdp,
 	int metasize, headroom;
 
 	/* Assure headroom is available for storing info */
-	headroom = xdp->data - xdp->data_hard_start;
-	metasize = xdp->data - xdp->data_meta;
+	headroom = xdp_headroom(xdp);
+	metasize = xdp_metadata_len(xdp);
 	metasize = metasize > 0 ? metasize : 0;
 	if (unlikely((headroom - metasize) < sizeof(*xdp_frame)))
 		return -ENOSPC;
@@ -377,7 +423,7 @@ int xdp_update_frame_from_buff(const struct xdp_buff *xdp,
 	}
 
 	xdp_frame->data = xdp->data;
-	xdp_frame->len  = xdp->data_end - xdp->data;
+	xdp_frame->len  = xdp_headlen(xdp);
 	xdp_frame->headroom = headroom - sizeof(*xdp_frame);
 	xdp_frame->metasize = metasize;
 	xdp_frame->frame_sz = xdp->frame_sz;
