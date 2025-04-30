@@ -564,12 +564,31 @@ static void intel_vsec_feature_walk(struct pci_dev *pdev, bool *have_devices,
 		*have_devices = true;
 }
 
+static void intel_vsec_skip_missing_dependencies(struct pci_dev *pdev)
+{
+	struct vsec_priv *priv = pci_get_drvdata(pdev);
+	const struct vsec_feature_dependency *deps = priv->info->deps;
+	int consumer_id = priv->info->num_deps;
+
+	while (consumer_id--) {
+		int supplier_id;
+
+		deps = &priv->info->deps[consumer_id];
+
+		for_each_set_bit(supplier_id, &deps->supplier_bitmap, VSEC_FEATURE_COUNT) {
+			if (!(BIT(supplier_id) & priv->found_caps))
+				priv->state[supplier_id] = STATE_SKIP;
+		}
+	}
+}
+
 static int intel_vsec_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct intel_vsec_platform_info *info;
 	struct vsec_priv *priv;
 	bool have_devices = false;
 	int num_caps, ret;
+	int run_once = 0;
 
 	ret = pcim_enable_device(pdev);
 	if (ret)
@@ -593,6 +612,11 @@ static int intel_vsec_pci_probe(struct pci_dev *pdev, const struct pci_device_id
 
 		if (priv->found_caps == priv->info->caps)
 			break;
+
+		if (!run_once) {
+			intel_vsec_skip_missing_dependencies(pdev);
+			run_once = 1;
+		}
 	}
 
 	if (!have_devices)
