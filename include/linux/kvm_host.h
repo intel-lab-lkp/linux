@@ -729,6 +729,17 @@ static inline bool kvm_arch_supports_gmem(struct kvm *kvm)
 }
 #endif
 
+/*
+ * Arch code must define kvm_arch_gmem_supports_shared_mem if support for
+ * private memory is enabled and it supports in-place shared/private conversion.
+ */
+#if !defined(kvm_arch_gmem_supports_shared_mem) && !IS_ENABLED(CONFIG_KVM_GMEM_SHARED_MEM)
+static inline bool kvm_arch_gmem_supports_shared_mem(struct kvm *kvm)
+{
+	return false;
+}
+#endif
+
 #ifndef kvm_arch_has_readonly_mem
 static inline bool kvm_arch_has_readonly_mem(struct kvm *kvm)
 {
@@ -2516,7 +2527,9 @@ static inline bool kvm_mem_is_private(struct kvm *kvm, gfn_t gfn)
 
 static inline bool kvm_mem_from_gmem(struct kvm *kvm, gfn_t gfn)
 {
-	/* For now, only private memory gets consumed from guest_memfd. */
+	if (kvm_arch_gmem_supports_shared_mem(kvm))
+		return true;
+
 	return kvm_mem_is_private(kvm, gfn);
 }
 
