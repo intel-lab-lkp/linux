@@ -709,6 +709,7 @@ static void mock_decoder_reset(struct cxl_decoder *cxld)
 			"%s: out of order reset, expected decoder%d.%d\n",
 			dev_name(&cxld->dev), port->id, port->commit_end);
 	cxld->flags &= ~CXL_DECODER_F_ENABLE;
+	cxld->flags &= ~CXL_DECODER_F_NEED_RESET;
 }
 
 static void default_mock_decoder(struct cxl_decoder *cxld)

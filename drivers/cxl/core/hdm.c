@@ -559,7 +559,8 @@ int cxl_dpa_free(struct cxl_endpoint_decoder *cxled)
 			dev_name(&cxled->cxld.region->dev));
 		return -EBUSY;
 	}
-	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE) {
+	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE &&
+	    !(cxled->cxld.flags & CXL_DECODER_F_NEED_RESET)) {
 		dev_dbg(dev, "decoder enabled\n");
 		return -EBUSY;
 	}
@@ -918,6 +919,7 @@ static void cxl_decoder_reset(struct cxl_decoder *cxld)
 	up_read(&cxl_dpa_rwsem);
 
 	cxld->flags &= ~CXL_DECODER_F_ENABLE;
+	cxld->flags &= ~CXL_DECODER_F_NEED_RESET;
 
 	/* Userspace is now responsible for reconfiguring this decoder */
 	if (is_endpoint_decoder(&cxld->dev)) {

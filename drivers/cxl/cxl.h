@@ -331,7 +331,8 @@ int cxl_dport_map_rcd_linkcap(struct pci_dev *pdev, struct cxl_dport *dport);
 #define CXL_DECODER_F_TYPE3 BIT(3)
 #define CXL_DECODER_F_LOCK  BIT(4)
 #define CXL_DECODER_F_ENABLE    BIT(5)
-#define CXL_DECODER_F_MASK  GENMASK(5, 0)
+#define CXL_DECODER_F_NEED_RESET    BIT(6)
+#define CXL_DECODER_F_MASK  GENMASK(6, 0)
 
 enum cxl_decoder_type {
 	CXL_DECODER_DEVMEM = 2,

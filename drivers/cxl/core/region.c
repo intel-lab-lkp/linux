@@ -2096,7 +2096,8 @@ static int cxl_region_detach(struct cxl_endpoint_decoder *cxled)
 	p = &cxlr->params;
 	get_device(&cxlr->dev);
 
-	if (p->state > CXL_CONFIG_ACTIVE) {
+	if (p->state > CXL_CONFIG_ACTIVE ||
+	    cxled->cxld.flags & CXL_DECODER_F_NEED_RESET) {
 		cxl_region_decode_reset(cxlr, p->interleave_ways);
 		p->state = CXL_CONFIG_ACTIVE;
 	}
@@ -3434,7 +3435,8 @@ int cxl_add_to_region(struct cxl_port *root, struct cxl_endpoint_decoder *cxled)
 		if (device_attach(&cxlr->dev) < 0)
 			dev_err(&cxlr->dev, "failed to enable, range: %pr\n",
 				p->res);
-	}
+	} else
+		cxled->cxld.flags |= CXL_DECODER_F_NEED_RESET;
 
 	put_device(region_dev);
 out:
