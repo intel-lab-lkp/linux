@@ -35,6 +35,9 @@ static int hbg_net_open(struct net_device *netdev)
 	struct hbg_priv *priv = netdev_priv(netdev);
 	int ret;
 
+	if (test_bit(HBG_NIC_STATE_RESET_FAIL, &priv->state))
+		return -EBUSY;
+
 	ret = hbg_txrx_init(priv);
 	if (ret)
 		return ret;
