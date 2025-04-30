@@ -1336,7 +1336,7 @@ static int parse_line_num(char **ptr, int *val, const char *what)
 	const char *start = *ptr;
 
 	errno = 0;
-	*val = strtol(*ptr, ptr, 0);
+	*val = (int)strtol(*ptr, ptr, 0);
 	if (errno || *ptr == start) {
 		semantic_error("'%s' is not a valid number.\n", what);
 		return -EINVAL;
@@ -1620,7 +1620,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 		}
 		switch (c) {
 		case ':':	/* Line number */
-			pp->line = strtoul(arg, &tmp, 0);
+			pp->line = (int)strtoul(arg, &tmp, 0);
 			if (*tmp != '\0') {
 				semantic_error("There is non-digit char"
 					       " in line number.\n");
@@ -2065,8 +2065,8 @@ out:
 static char *synthesize_perf_probe_point(struct perf_probe_point *pp)
 {
 	struct strbuf buf;
-	char *tmp, *ret = NULL;
-	int len, err = 0;
+	char *ret = NULL;
+	int err = 0;
 
 	if (strbuf_init(&buf, 64) < 0)
 		return NULL;
@@ -2084,8 +2084,9 @@ static char *synthesize_perf_probe_point(struct perf_probe_point *pp)
 			goto out;
 	}
 	if (pp->file) {
-		tmp = pp->file;
-		len = strlen(tmp);
+		char *tmp = pp->file;
+		size_t len = strlen(tmp);
+
 		if (len > 30) {
 			tmp = strchr(pp->file + len - 30, '/');
 			tmp = tmp ? tmp + 1 : pp->file + len - 30;

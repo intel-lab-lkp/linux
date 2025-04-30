@@ -167,7 +167,7 @@ int probe_file__open_both(int *kfd, int *ufd, int flag)
 /* Get raw string list of current kprobe_events  or uprobe_events */
 struct strlist *probe_file__get_rawlist(int fd)
 {
-	int ret, idx, fddup;
+	int ret, fddup;
 	FILE *fp;
 	char buf[MAX_CMDLEN];
 	char *p;
@@ -189,6 +189,8 @@ struct strlist *probe_file__get_rawlist(int fd)
 		goto out_close_fddup;
 
 	while (!feof(fp)) {
+		size_t idx;
+
 		p = fgets(buf, MAX_CMDLEN, fp);
 		if (!p)
 			break;
@@ -307,7 +309,7 @@ static int __del_trace_probe_event(int fd, struct str_node *ent)
 	*p = '/';
 
 	pr_debug("Writing event: %s\n", buf);
-	ret = write(fd, buf, strlen(buf));
+	ret = (int)write(fd, buf, strlen(buf));
 	if (ret < 0) {
 		ret = -errno;
 		goto error;
@@ -962,7 +964,7 @@ static int probe_cache_entry__write(struct probe_cache_entry *entry, int fd)
 	iov[0].iov_base = (void *)prefix; iov[0].iov_len = 1;
 	iov[1].iov_base = entry->spev; iov[1].iov_len = strlen(entry->spev);
 	iov[2].iov_base = (void *)"\n"; iov[2].iov_len = 1;
-	ret = writev(fd, iov, 3);
+	ret = (int)writev(fd, iov, 3);
 	if (ret < (int)iov[1].iov_len + 2)
 		goto rollback;
 
@@ -970,7 +972,7 @@ static int probe_cache_entry__write(struct probe_cache_entry *entry, int fd)
 		iov[0].iov_base = (void *)snode->s;
 		iov[0].iov_len = strlen(snode->s);
 		iov[1].iov_base = (void *)"\n"; iov[1].iov_len = 1;
-		ret = writev(fd, iov, 2);
+		ret = (int)writev(fd, iov, 2);
 		if (ret < (int)iov[0].iov_len + 1)
 			goto rollback;
 	}
@@ -992,7 +994,7 @@ int probe_cache__commit(struct probe_cache *pcache)
 	int ret = 0;
 
 	/* TBD: if we do not update existing entries, skip it */
-	ret = lseek(pcache->fd, 0, SEEK_SET);
+	ret = (int)lseek(pcache->fd, 0, SEEK_SET);
 	if (ret < 0)
 		goto out;
 
