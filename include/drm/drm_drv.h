@@ -326,6 +326,9 @@ struct drm_driver {
 				struct dma_buf_attachment *attach,
 				struct sg_table *sgt);
 
+	struct drm_gem_object *(*gem_prime_import_attachment)(
+				struct drm_device *dev,
+				struct dma_buf_attachment *attach);
 	/**
 	 * @dumb_create:
 	 *

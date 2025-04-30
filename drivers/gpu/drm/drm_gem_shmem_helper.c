@@ -799,6 +799,23 @@ drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_import_sg_table);
 
+struct drm_gem_object *
+drm_gem_shmem_prime_import_attachment(struct drm_device *dev,
+				      struct dma_buf_attachment *attach)
+{
+	size_t size = PAGE_ALIGN(attach->dmabuf->size);
+	struct drm_gem_shmem_object *shmem;
+
+	shmem = __drm_gem_shmem_create(dev, size, true, NULL);
+	if (IS_ERR(shmem))
+		return ERR_CAST(shmem);
+
+	drm_dbg_prime(dev, "size = %zu\n", size);
+
+	return &shmem->base;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_import_attachment);
+
 MODULE_DESCRIPTION("DRM SHMEM memory-management helpers");
 MODULE_IMPORT_NS("DMA_BUF");
 MODULE_LICENSE("GPL v2");

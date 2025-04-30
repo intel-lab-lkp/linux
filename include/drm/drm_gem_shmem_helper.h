@@ -274,6 +274,9 @@ struct drm_gem_object *
 drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 				    struct dma_buf_attachment *attach,
 				    struct sg_table *sgt);
+struct drm_gem_object *
+drm_gem_shmem_prime_import_attachment(struct drm_device *dev,
+				      struct dma_buf_attachment *attach);
 int drm_gem_shmem_dumb_create(struct drm_file *file, struct drm_device *dev,
 			      struct drm_mode_create_dumb *args);
 
@@ -287,4 +290,7 @@ int drm_gem_shmem_dumb_create(struct drm_file *file, struct drm_device *dev,
 	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table, \
 	.dumb_create		   = drm_gem_shmem_dumb_create
 
+#define DRM_GEM_SHMEM_SIMPLE_DRIVER_OPS \
+	.gem_prime_import_attachment = drm_gem_shmem_prime_import_attachment, \
+	.dumb_create                 = drm_gem_shmem_dumb_create
 #endif /* __DRM_GEM_SHMEM_HELPER_H__ */

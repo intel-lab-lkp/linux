@@ -912,6 +912,62 @@ struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 EXPORT_SYMBOL(drm_gem_prime_export);
 
 /**
+ * drm_gem_prime_import_dev_skip_map - core implementation of the import callback
+ * @dev: drm_device to import into
+ * @dma_buf: dma-buf object to import
+ * @attach_dev: struct device to dma_buf attach
+ *
+ * This function exports a dma-buf without get it's scatter/gather table.
+ *
+ * Drivers who need to get an scatter/gather table for objects need to call
+ * drm_gem_prime_import_dev() instead.
+ */
+struct drm_gem_object *drm_gem_prime_import_dev_skip_map(struct drm_device *dev,
+							 struct dma_buf *dma_buf,
+							 struct device *attach_dev)
+{
+	struct dma_buf_attachment *attach;
+	struct drm_gem_object *obj;
+	int ret;
+
+	if (dma_buf->ops == &drm_gem_prime_dmabuf_ops) {
+		obj = dma_buf->priv;
+		if (obj->dev == dev) {
+			/*
+			 * Importing dmabuf exported from our own gem increases
+			 * refcount on gem itself instead of f_count of dmabuf.
+			 */
+			drm_gem_object_get(obj);
+			return obj;
+		}
+	}
+
+	attach = dma_buf_attach(dma_buf, attach_dev, true);
+	if (IS_ERR(attach))
+		return ERR_CAST(attach);
+
+	get_dma_buf(dma_buf);
+
+	obj = dev->driver->gem_prime_import_attachment(dev, attach);
+	if (IS_ERR(obj)) {
+		ret = PTR_ERR(obj);
+		goto fail_detach;
+	}
+
+	obj->import_attach = attach;
+	obj->resv = dma_buf->resv;
+
+	return obj;
+
+fail_detach:
+	dma_buf_detach(dma_buf, attach);
+	dma_buf_put(dma_buf);
+
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL(drm_gem_prime_import_dev_skip_map);
+
+/**
  * drm_gem_prime_import_dev - core implementation of the import callback
  * @dev: drm_device to import into
  * @dma_buf: dma-buf object to import
@@ -945,9 +1001,6 @@ struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 			return obj;
 		}
 	}
-
-	if (!dev->driver->gem_prime_import_sg_table)
-		return ERR_PTR(-EINVAL);
 
 	attach = dma_buf_attach(dma_buf, attach_dev, false);
 	if (IS_ERR(attach))
@@ -998,7 +1051,13 @@ EXPORT_SYMBOL(drm_gem_prime_import_dev);
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 					    struct dma_buf *dma_buf)
 {
-	return drm_gem_prime_import_dev(dev, dma_buf, dev->dev);
+	if (dev->driver->gem_prime_import_sg_table)
+		return drm_gem_prime_import_dev(dev, dma_buf, dev->dev);
+	else if (dev->driver->gem_prime_import_attachment)
+		return drm_gem_prime_import_dev_skip_map(dev, dma_buf, dev->dev);
+	else
+		return ERR_PTR(-EINVAL);
+
 }
 EXPORT_SYMBOL(drm_gem_prime_import);
 
