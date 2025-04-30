@@ -780,6 +780,16 @@ static void intel_dp_update_link_bw_set(struct intel_dp *intel_dp,
 				      crtc_state->enhanced_framing);
 }
 
+static bool intel_dp_disable_dpcd_training_pattern(struct intel_dp *intel_dp,
+						   enum drm_dp_phy dp_phy)
+{
+	int reg = intel_dp_training_pattern_set_reg(intel_dp, dp_phy);
+	u8 val = DP_TRAINING_PATTERN_DISABLE;
+
+	return drm_dp_dpcd_write(&intel_dp->aux, reg, &val, 1) == 1;
+}
+
+
 /*
  * Prepare link training by configuring the link parameters. On DDI platforms
  * also enable the port here.
@@ -827,6 +837,7 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 	 * Spec DP2.1 Section 3.5.2.16
 	 * Prior to LT DPTX should set 128b/132b DP Channel coding and then set link rate
 	 */
+	intel_dp_disable_dpcd_training_pattern(intel_dp, DP_PHY_DPRX);
 	intel_dp_update_downspread_ctrl(intel_dp, crtc_state);
 	intel_dp_update_link_bw_set(intel_dp, crtc_state, link_bw,
 				    rate_select);
@@ -1093,15 +1104,6 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp,
 	}
 
 	return channel_eq;
-}
-
-static bool intel_dp_disable_dpcd_training_pattern(struct intel_dp *intel_dp,
-						   enum drm_dp_phy dp_phy)
-{
-	int reg = intel_dp_training_pattern_set_reg(intel_dp, dp_phy);
-	u8 val = DP_TRAINING_PATTERN_DISABLE;
-
-	return drm_dp_dpcd_write(&intel_dp->aux, reg, &val, 1) == 1;
 }
 
 static int
