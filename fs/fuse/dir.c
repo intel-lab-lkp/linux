@@ -1963,6 +1963,8 @@ int fuse_do_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	int err;
 	bool trust_local_cmtime = is_wb;
 	bool fault_blocked = false;
+	bool invalid_attr = false;
+	u64 attr_version;
 
 	if (!fc->default_permissions)
 		attr->ia_valid |= ATTR_FORCE;
@@ -2047,6 +2049,8 @@ int fuse_do_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		if (fc->handle_killpriv_v2 && !capable(CAP_FSETID))
 			inarg.valid |= FATTR_KILL_SUIDGID;
 	}
+
+	attr_version = fuse_get_attr_version(fm->fc);
 	fuse_setattr_fill(fc, &args, inode, &inarg, &outarg);
 	err = fuse_simple_request(fm, &args);
 	if (err) {
@@ -2072,8 +2076,14 @@ int fuse_do_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		/* FIXME: clear I_DIRTY_SYNC? */
 	}
 
+	if (attr_version != 0 && fi->attr_version > attr_version)
+		/* Applying attributes, for example for fsnotify_change(), and
+		 * set i_time with 0 as attributes timeout value.
+		 */
+		invalid_attr = true;
+
 	fuse_change_attributes_common(inode, &outarg.attr, NULL,
-				      ATTR_TIMEOUT(&outarg),
+				      invalid_attr ? 0 : ATTR_TIMEOUT(&outarg),
 				      fuse_get_cache_mask(inode), 0);
 	oldsize = inode->i_size;
 	/* see the comment in fuse_change_attributes() */
