@@ -4433,6 +4433,10 @@ got_allocated_blocks:
 	allocated = map->m_len;
 	ext4_ext_show_leaf(inode, path);
 out:
+	if (flags & EXT4_GET_BLOCKS_QUERY_LEAF_BLOCKS)
+		if (ex && (ex == EXT_LAST_EXTENT(path[depth].p_hdr)))
+			map->m_flags |= EXT4_MAP_LAST_IN_LEAF;
+
 	ext4_free_ext_path(path);
 
 	trace_ext4_ext_map_blocks_exit(inode, flags, map,
@@ -4788,7 +4792,8 @@ int ext4_convert_unwritten_extents_atomic(handle_t *handle, struct inode *inode,
 	struct ext4_map_blocks map;
 	unsigned int blkbits = inode->i_blkbits;
 	unsigned int credits = 0;
-	int flags = EXT4_GET_BLOCKS_IO_CONVERT_EXT;
+	int flags = EXT4_GET_BLOCKS_IO_CONVERT_EXT |
+			EXT4_GET_BLOCKS_QUERY_LEAF_BLOCKS;
 
 	map.m_lblk = offset >> blkbits;
 	max_blocks = EXT4_MAX_BLOCKS(len, offset, blkbits);
@@ -4815,7 +4820,7 @@ int ext4_convert_unwritten_extents_atomic(handle_t *handle, struct inode *inode,
 		map.m_lblk += ret;
 		map.m_len = (max_blocks -= ret);
 		ret = ext4_map_blocks(handle, inode, &map, flags);
-		if (ret != max_blocks)
+		if (!(map.m_flags & EXT4_MAP_LAST_IN_LEAF) && ret != max_blocks)
 			ext4_warning(inode->i_sb,
 				     "inode #%lu: block %u: len %u: "
 				     "split block mapping found for atomic write,"
