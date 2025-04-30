@@ -622,7 +622,7 @@ static void print_metric_only(struct perf_stat_config *config,
 	struct outstate *os = ctx;
 	FILE *out = os->fh;
 	char buf[1024], str[1024];
-	unsigned mlen = config->metric_only_len;
+	size_t mlen = config->metric_only_len;
 	const char *color = metric_threshold_classify__color(thresh);
 
 	if (!valid_only_metric(unit))
@@ -635,7 +635,7 @@ static void print_metric_only(struct perf_stat_config *config,
 		mlen += strlen(color) + sizeof(PERF_COLOR_RESET) - 1;
 
 	color_snprintf(str, sizeof(str), color ?: "", fmt ?: "", val);
-	fprintf(out, "%*s ", mlen, str);
+	fprintf(out, "%*s ", (int)mlen, str);
 	os->first = false;
 }
 
@@ -954,7 +954,7 @@ static void evsel__uniquify_counter(struct evsel *counter)
 
 	config = strchr(name, '/');
 	if (config) {
-		int len = config - name;
+		int len = (int)(config - name);
 
 		if (config[1] == '/') {
 			/* case: event// */
@@ -967,7 +967,7 @@ static void evsel__uniquify_counter(struct evsel *counter)
 		config = strchr(name, ':');
 		if (config) {
 			/* case: event:.. */
-			int len = config - name;
+			int len = (int)(config - name);
 
 			ret = asprintf(&new_name, "%s/%.*s/%s", pmu_name, len, name, config + 1);
 		} else {
@@ -1493,7 +1493,7 @@ static int get_precision(double num)
 	if (num > 1)
 		return 0;
 
-	return lround(ceil(-log10(num)));
+	return (int)lround(ceil(-log10(num)));
 }
 
 static void print_table(struct perf_stat_config *config,

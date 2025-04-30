@@ -256,12 +256,10 @@ out_err:
 	return NULL;
 }
 
-static bool contains_metric_id(struct evsel **metric_events, int num_events,
+static bool contains_metric_id(struct evsel **metric_events, size_t num_events,
 			       const char *metric_id)
 {
-	int i;
-
-	for (i = 0; i < num_events; i++) {
+	for (size_t i = 0; i < num_events; i++) {
 		if (!strcmp(evsel__metric_id(metric_events[i]), metric_id))
 			return true;
 	}
@@ -355,7 +353,7 @@ static int setup_metric_events(const char *pmu, struct hashmap *ids,
 
 static bool match_metric(const char *metric_or_groups, const char *sought)
 {
-	int len;
+	size_t len;
 	char *m;
 
 	if (!sought)
@@ -570,7 +568,7 @@ static int encode_metric_id(struct strbuf *sb, const char *x)
 			if (ret)
 				break;
 
-			ret = strbuf_addch(sb, '0' + (c - code_characters));
+			ret = strbuf_addch(sb, '0' + (int)(c - code_characters));
 			if (ret)
 				break;
 		} else {
@@ -1145,7 +1143,8 @@ static int metric_list_cmp(void *priv __maybe_unused, const struct list_head *l,
 	const struct metric *left = container_of(l, struct metric, nd);
 	const struct metric *right = container_of(r, struct metric, nd);
 	struct expr_id_data *data;
-	int i, left_count, right_count;
+	int i;
+	size_t left_count, right_count;
 
 	left_count = hashmap__size(left->pctx->ids);
 	tool_pmu__for_each_event(i) {
@@ -1159,7 +1158,7 @@ static int metric_list_cmp(void *priv __maybe_unused, const struct list_head *l,
 			right_count--;
 	}
 
-	return right_count - left_count;
+	return (int)right_count - (int)left_count;
 }
 
 /**

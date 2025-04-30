@@ -831,7 +831,7 @@ try_again_reset:
 
 		l = strlen(counter->unit);
 		if (l > stat_config.unit_width)
-			stat_config.unit_width = l;
+			stat_config.unit_width = (unsigned int)l;
 
 		if (evsel__should_store_id(counter) &&
 		    evsel__store_ids(counter, evsel_list)) {
@@ -2099,7 +2099,7 @@ static int __cmd_record(const struct option stat_options[], struct opt_aggr_mode
 	session = perf_session__new(data, NULL);
 	if (IS_ERR(session)) {
 		pr_err("Perf session creation failed\n");
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 	}
 
 	init_features(session);
@@ -2281,7 +2281,7 @@ static int __cmd_report(int argc, const char **argv)
 
 	session = perf_session__new(&perf_stat.data, &perf_stat.tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	perf_stat.session  = session;
 	stat_config.output = stderr;
