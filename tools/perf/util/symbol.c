@@ -111,7 +111,7 @@ static int prefix_underscores_count(const char *str)
 	while (*tail == '_')
 		tail++;
 
-	return tail - str;
+	return (int)(tail - str);
 }
 
 const char * __weak arch__normalize_symbol_name(const char *name)
@@ -481,10 +481,10 @@ int symbol__match_symbol_name(const char *name, const char *str,
 
 	if (includes == SYMBOL_TAG_INCLUDE__DEFAULT_ONLY &&
 	    (versioning = strstr(name, "@@"))) {
-		int len = strlen(str);
+		int len = (int)strlen(str);
 
 		if (len < versioning - name)
-			len = versioning - name;
+			len = (int)(versioning - name);
 
 		return arch__compare_symbol_names_n(name, str, len);
 	} else
@@ -638,7 +638,7 @@ void dso__sort_by_name(struct dso *dso)
  * While we find nice hex chars, build a long_val.
  * Return number of chars processed.
  */
-static int hex2u64(const char *ptr, u64 *long_val)
+static size_t hex2u64(const char *ptr, u64 *long_val)
 {
 	char *p;
 
@@ -1532,7 +1532,7 @@ static int dso__load_perf_map(const char *map_path, struct dso *dso)
 	while (!feof(file)) {
 		u64 start, size;
 		struct symbol *sym;
-		int line_len, len;
+		size_t line_len, len;
 
 		line_len = getline(&line, &n, file);
 		if (line_len < 0)

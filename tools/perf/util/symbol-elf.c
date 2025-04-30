@@ -261,7 +261,7 @@ static int elf_read_program_header(Elf *elf, u64 vaddr, GElf_Phdr *phdr)
 		return -1;
 
 	for (i = 0; i < phdrnum; i++) {
-		if (gelf_getphdr(elf, i, phdr) == NULL)
+		if (gelf_getphdr(elf, (int)i, phdr) == NULL)
 			return -1;
 
 		if (phdr->p_type != PT_LOAD)
@@ -550,7 +550,7 @@ static void get_rela_dyn_info(Elf *elf, GElf_Ehdr *ehdr, struct rela_dyn_info *d
 	if (!scn || !rela_dyn_shdr.sh_link || !rela_dyn_shdr.sh_entsize)
 		return;
 
-	di->nr_entries = rela_dyn_shdr.sh_size / rela_dyn_shdr.sh_entsize;
+	di->nr_entries = (u32)(rela_dyn_shdr.sh_size / rela_dyn_shdr.sh_entsize);
 	di->rela_dyn_data = elf_getdata(scn, NULL);
 
 	scn = elf_getscn(elf, rela_dyn_shdr.sh_link);
@@ -789,7 +789,7 @@ int dso__synthesize_plt_symbols(struct dso *dso, struct symsrc *ss)
 	if (symstrs->d_size == 0)
 		goto out_elf_end;
 
-	ri.nr_entries = shdr_rel_plt.sh_size / shdr_rel_plt.sh_entsize;
+	ri.nr_entries = (u32)(shdr_rel_plt.sh_size / shdr_rel_plt.sh_entsize);
 
 	ri.is_rela = shdr_rel_plt.sh_type == SHT_RELA;
 
@@ -925,7 +925,7 @@ static int elf_read_build_id(Elf *elf, void *bf, size_t size)
 				size_t sz = min(size, descsz);
 				memcpy(bf, ptr, sz);
 				memset(bf + sz, 0, size - sz);
-				err = sz;
+				err = (int)sz;
 				break;
 			}
 		}
@@ -1066,14 +1066,14 @@ int sysfs__read_build_id(const char *filename, struct build_id *bid)
 			} else if (read(fd, bf, descsz) != (ssize_t)descsz)
 				break;
 		} else {
-			int n = namesz + descsz;
+			size_t n = namesz + descsz;
 
-			if (n > (int)sizeof(bf)) {
+			if (n > sizeof(bf)) {
 				n = sizeof(bf);
 				pr_debug("%s: truncating reading of build id in sysfs file %s: n_namesz=%u, n_descsz=%u.\n",
 					 __func__, filename, nhdr.n_namesz, nhdr.n_descsz);
 			}
-			if (read(fd, bf, n) != n)
+			if (read(fd, bf, n) != (ssize_t)n)
 				break;
 		}
 	}
@@ -1426,7 +1426,7 @@ static u64 max_text_section(Elf *elf, GElf_Ehdr *ehdr)
 		if (!gelf_getshdr(sec, &shdr))
 			break;
 
-		if (!is_exe_text(shdr.sh_flags))
+		if (!is_exe_text((int)shdr.sh_flags))
 			continue;
 
 		/* .init and .exit sections are not placed with .text */
@@ -1546,7 +1546,7 @@ static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 	 * perf does not record module section addresses except for .text, but
 	 * some sections can use the same mapping as .text.
 	 */
-	if (kmodule && adjust_kernel_syms && is_exe_text(shdr->sh_flags) &&
+	if (kmodule && adjust_kernel_syms && is_exe_text((int)shdr->sh_flags) &&
 	    shdr->sh_offset <= max_text_sh_offset) {
 		dso__put(*curr_dsop);
 		*curr_dsop = dso__get(dso);
@@ -1672,7 +1672,7 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 	if (secstrs_sym == NULL)
 		goto out_elf_end;
 
-	nr_syms = shdr.sh_size / shdr.sh_entsize;
+	nr_syms = (uint32_t)(shdr.sh_size / shdr.sh_entsize);
 
 	memset(&sym, 0, sizeof(sym));
 
@@ -1734,7 +1734,7 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		}
 
 		if (runtime_ss->opdsec && sym.st_shndx == runtime_ss->opdidx) {
-			u32 offset = sym.st_value - syms_ss->opdshdr.sh_addr;
+			u32 offset = (u32)(sym.st_value - syms_ss->opdshdr.sh_addr);
 			u64 *opd = opddata->d_buf + offset;
 			sym.st_value = DSO__SWAP(dso, u64, *opd);
 			sym.st_shndx = elf_addr_to_index(runtime_ss->elf,
@@ -1946,7 +1946,7 @@ static int elf_read_maps(Elf *elf, bool exe, mapfn_t mapfn, void *data)
 		return -1;
 
 	for (i = 0; i < phdrnum; i++) {
-		if (gelf_getphdr(elf, i, &phdr) == NULL)
+		if (gelf_getphdr(elf, (int)i, &phdr) == NULL)
 			return -1;
 		if (phdr.p_type != PT_LOAD)
 			continue;
@@ -2767,14 +2767,15 @@ static void sdt_adjust_loc(struct sdt_note *tmp, GElf_Addr base_off)
 	if (!base_off)
 		return;
 
-	if (tmp->bit32)
+	if (tmp->bit32) {
 		tmp->addr.a32[SDT_NOTE_IDX_LOC] =
-			tmp->addr.a32[SDT_NOTE_IDX_LOC] + base_off -
-			tmp->addr.a32[SDT_NOTE_IDX_BASE];
-	else
+			(Elf32_Addr)(tmp->addr.a32[SDT_NOTE_IDX_LOC] + base_off -
+				     tmp->addr.a32[SDT_NOTE_IDX_BASE]);
+	} else {
 		tmp->addr.a64[SDT_NOTE_IDX_LOC] =
 			tmp->addr.a64[SDT_NOTE_IDX_LOC] + base_off -
 			tmp->addr.a64[SDT_NOTE_IDX_BASE];
+	}
 }
 
 static void sdt_adjust_refctr(struct sdt_note *tmp, GElf_Addr base_addr,
