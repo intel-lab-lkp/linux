@@ -622,10 +622,7 @@ static ssize_t store_local_boost(struct cpufreq_policy *policy,
 	if (!policy->boost_supported)
 		return -EINVAL;
 
-	cpus_read_lock();
 	ret = policy_set_boost(policy, enable);
-	cpus_read_unlock();
-
 	if (!ret)
 		return count;
 
@@ -1006,16 +1003,28 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
 {
 	struct cpufreq_policy *policy = to_policy(kobj);
 	struct freq_attr *fattr = to_attr(attr);
+	int ret = -EBUSY;
 
 	if (!fattr->store)
 		return -EIO;
 
-	guard(cpufreq_policy_write)(policy);
+	/*
+	 * store_local_boost() requires cpu_hotplug_lock to be held, and must be
+	 * called with that lock acquired *before* taking policy->rwsem to avoid
+	 * lock ordering violations.
+	 */
+	if (fattr == &local_boost)
+		cpus_read_lock();
 
-	if (likely(!policy_is_inactive(policy)))
-		return fattr->store(policy, buf, count);
+	scoped_guard(cpufreq_policy_write, policy) {
+		if (likely(!policy_is_inactive(policy)))
+			ret = fattr->store(policy, buf, count);
+	}
 
-	return -EBUSY;
+	if (fattr == &local_boost)
+		cpus_read_unlock();
+
+	return ret;
 }
 
 static void cpufreq_sysfs_release(struct kobject *kobj)
