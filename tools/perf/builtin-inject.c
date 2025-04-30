@@ -390,7 +390,7 @@ static int perf_event__repipe_sample(const struct perf_tool *tool,
 	if (inject->itrace_synth_opts.set && sample->aux_sample.size) {
 		event = perf_inject__cut_auxtrace_sample(inject, event, sample);
 		if (IS_ERR(event))
-			return PTR_ERR(event);
+			return (int)PTR_ERR(event);
 	}
 
 	return perf_event__repipe_synth(tool, event);
@@ -697,13 +697,13 @@ static struct strlist *perf_inject__parse_known_build_ids(
 {
 	struct str_node *pos, *tmp;
 	struct strlist *known_build_ids;
-	int bid_len;
 
 	known_build_ids = strlist__new(known_build_ids_string, NULL);
 	if (known_build_ids == NULL)
 		return NULL;
 	strlist__for_each_entry_safe(pos, tmp, known_build_ids) {
 		const char *build_id, *dso_name;
+		size_t bid_len;
 
 		build_id = skip_spaces(pos->s);
 		dso_name = strchr(build_id, ' ');
@@ -717,7 +717,7 @@ static struct strlist *perf_inject__parse_known_build_ids(
 			strlist__remove(known_build_ids, pos);
 			continue;
 		}
-		for (int ix = 0; 2 * ix + 1 < bid_len; ++ix) {
+		for (size_t ix = 0; 2 * ix + 1 < bid_len; ++ix) {
 			if (!isxdigit(build_id[2 * ix]) ||
 			    !isxdigit(build_id[2 * ix + 1])) {
 				strlist__remove(known_build_ids, pos);
@@ -732,10 +732,10 @@ static bool perf_inject__lookup_known_build_id(struct perf_inject *inject,
 					       struct dso *dso)
 {
 	struct str_node *pos;
-	int bid_len;
 
 	strlist__for_each_entry(pos, inject->known_build_ids) {
 		const char *build_id, *dso_name;
+		size_t bid_len;
 
 		build_id = skip_spaces(pos->s);
 		dso_name = strchr(build_id, ' ');
@@ -743,7 +743,7 @@ static bool perf_inject__lookup_known_build_id(struct perf_inject *inject,
 		dso_name = skip_spaces(dso_name);
 		if (strcmp(dso__long_name(dso), dso_name))
 			continue;
-		for (int ix = 0; 2 * ix + 1 < bid_len; ++ix) {
+		for (size_t ix = 0; 2 * ix + 1 < bid_len; ++ix) {
 			dso__bid(dso)->data[ix] = (hex(build_id[2 * ix]) << 4 |
 						  hex(build_id[2 * ix + 1]));
 		}
@@ -1006,7 +1006,7 @@ static int perf_inject__sched_stat(const struct perf_tool *tool,
 	union perf_event *event_sw;
 	struct perf_sample sample_sw;
 	struct perf_inject *inject = container_of(tool, struct perf_inject, tool);
-	u32 pid = evsel__intval(evsel, sample, "pid");
+	u32 pid = (u32)evsel__intval(evsel, sample, "pid");
 
 	list_for_each_entry(ent, &inject->samples, node) {
 		if (pid == ent->tid)
@@ -1038,7 +1038,7 @@ static int guest_session__output_bytes(struct guest_session *gs, void *buf, size
 {
 	ssize_t ret = writen(gs->tmp_fd, buf, sz);
 
-	return ret < 0 ? ret : 0;
+	return ret < 0 ? (int)ret : 0;
 }
 
 static int guest_session__repipe(const struct perf_tool *tool,
@@ -1444,7 +1444,7 @@ static int guest_session__start(struct guest_session *gs, const char *name, bool
 
 	session = perf_session__new(&gs->data, &gs->tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 	gs->session = session;
 
 	/*
@@ -1518,7 +1518,7 @@ static void guest_session__exit(struct guest_session *gs)
 static void get_tsc_conv(struct perf_tsc_conversion *tc, struct perf_record_time_conv *time_conv)
 {
 	tc->time_shift		= time_conv->time_shift;
-	tc->time_mult		= time_conv->time_mult;
+	tc->time_mult		= (u32)time_conv->time_mult;
 	tc->time_zero		= time_conv->time_zero;
 	tc->time_cycles		= time_conv->time_cycles;
 	tc->time_mask		= time_conv->time_mask;
@@ -1578,7 +1578,7 @@ static int guest_session__fetch(struct guest_session *gs)
 	hdr = buf;
 	ret = readn(gs->tmp_fd, buf, hdr_sz);
 	if (ret < 0)
-		return ret;
+		return (int)ret;
 
 	if (!ret) {
 		/* Zero size means EOF */
@@ -1590,7 +1590,7 @@ static int guest_session__fetch(struct guest_session *gs)
 
 	ret = readn(gs->tmp_fd, buf, hdr->size - hdr_sz);
 	if (ret < 0)
-		return ret;
+		return (int)ret;
 
 	gs->ev.event = (union perf_event *)gs->ev.event_buf;
 	gs->ev.sample.time = 0;
@@ -1603,7 +1603,7 @@ static int guest_session__fetch(struct guest_session *gs)
 	ret = evlist__parse_sample(gs->session->evlist, gs->ev.event, &gs->ev.sample);
 	if (ret) {
 		pr_err("Parse failed fetching guest event");
-		return ret;
+		return (int)ret;
 	}
 
 	if (!gs->have_tc) {
@@ -1982,7 +1982,7 @@ static int parse_guest_data(const struct option *opt, const char *str, int unset
 	tok = strsep(&s, ",");
 	if (!tok)
 		goto bad_args;
-	gs->machine_pid = strtoul(tok, NULL, 0);
+	gs->machine_pid = (u32)strtoul(tok, NULL, 0);
 	if (!inject->guest_session.machine_pid)
 		goto bad_args;
 
@@ -2535,7 +2535,7 @@ int cmd_inject(int argc, const char **argv)
 					     /*trace_event_repipe=*/inject.output.is_pipe);
 
 	if (IS_ERR(inject.session)) {
-		ret = PTR_ERR(inject.session);
+		ret = (int)PTR_ERR(inject.session);
 		goto out_close_output;
 	}
 
