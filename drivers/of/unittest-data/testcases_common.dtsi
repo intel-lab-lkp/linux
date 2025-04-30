@@ -18,4 +18,5 @@
 #include "tests-address.dtsi"
 #include "tests-platform.dtsi"
 #include "tests-overlay.dtsi"
+#include "tests-export-symbols.dtsi"
 #include "tests-lifecycle.dtsi"
