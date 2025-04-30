@@ -263,7 +263,7 @@ void perf_session__delete(struct perf_session *session)
 static void swap_sample_id_all(union perf_event *event, void *data)
 {
 	void *end = (void *) event + event->header.size;
-	int size = end - data;
+	size_t size = end - data;
 
 	BUG_ON(size % sizeof(u64));
 	mem_bswap_64(data, size);
@@ -912,13 +912,13 @@ static void branch_stack__printf(struct perf_sample *sample,
 
 static void regs_dump__printf(u64 mask, u64 *regs, const char *arch)
 {
-	unsigned rid, i = 0;
+	unsigned int i = 0;
+	size_t rid;
 
 	for_each_set_bit(rid, (unsigned long *) &mask, sizeof(mask) * 8) {
 		u64 val = regs[i++];
 
-		printf(".... %-5s 0x%016" PRIx64 "\n",
-		       perf_reg_name(rid, arch), val);
+		printf(".... %-5s 0x%016" PRIx64 "\n", perf_reg_name((int)rid, arch), val);
 	}
 }
 
@@ -1452,7 +1452,7 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		 */
 		if (!perf_data__is_pipe(session->data))
 			lseek(fd, file_offset + event->header.size, SEEK_SET);
-		err = tool->auxtrace(session, event);
+		err = (int)tool->auxtrace(session, event);
 		break;
 	case PERF_RECORD_AUXTRACE_ERROR:
 		perf_session__auxtrace_error_inc(session, event);
@@ -1506,7 +1506,7 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	events_stats__inc(&evlist->stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
-		return perf_session__process_user_event(session, event, 0, NULL);
+		return (int)perf_session__process_user_event(session, event, 0, NULL);
 
 	return machines__deliver_event(&session->machines, evlist, event, sample, tool, 0, NULL);
 }
@@ -1944,7 +1944,7 @@ out_err:
 		perf_session__warn_about_errors(session);
 	ordered_events__free(&session->ordered_events);
 	auxtrace__free_events(session);
-	return err;
+	return (int)err;
 }
 
 static union perf_event *
@@ -2164,7 +2164,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	event = fetch_mmaped_event(rd->head, rd->mmap_size, rd->mmap_cur,
 				   session->header.needs_swap);
 	if (IS_ERR(event))
-		return PTR_ERR(event);
+		return (int)PTR_ERR(event);
 
 	if (!event)
 		return READER_NODATA;
@@ -2177,8 +2177,8 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	    (skip = rd->process(session, event, rd->file_pos, rd->path)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d [%s]\n",
 		       rd->file_offset + rd->head, event->header.size,
-		       event->header.type, strerror(-skip));
-		err = skip;
+			event->header.type, strerror((int)-skip));
+		err = (int)skip;
 		goto out;
 	}
 
@@ -2692,14 +2692,14 @@ int perf_event__process_id_index(struct perf_session *session,
 		if (!sid)
 			return -ENOENT;
 
-		sid->idx = e->idx;
+		sid->idx = (int)e->idx;
 		sid->cpu.cpu = e->cpu;
-		sid->tid = e->tid;
+		sid->tid = (pid_t)e->tid;
 
 		if (!e2)
 			continue;
 
-		sid->machine_pid = e2->machine_pid;
+		sid->machine_pid = (pid_t)e2->machine_pid;
 		sid->vcpu.cpu = e2->vcpu;
 
 		if (!sid->machine_pid)
@@ -2713,7 +2713,8 @@ int perf_event__process_id_index(struct perf_session *session,
 			perf_guest = true;
 		}
 
-		ret = perf_session__set_guest_cpu(session, sid->machine_pid, e->tid, e2->vcpu);
+		ret = perf_session__set_guest_cpu(session, sid->machine_pid,
+						(pid_t)e->tid, (int)e2->vcpu);
 		if (ret)
 			return ret;
 	}

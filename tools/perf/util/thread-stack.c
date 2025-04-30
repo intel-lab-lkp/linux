@@ -180,7 +180,7 @@ static struct thread_stack *thread_stack__new(struct thread *thread, int cpu,
 	unsigned int new_sz = 1;
 
 	if (thread_stack__per_cpu(thread) && cpu > 0)
-		new_sz = roundup_pow_of_two(cpu + 1);
+		new_sz = (unsigned int)roundup_pow_of_two(cpu + 1);
 
 	if (!ts || new_sz > old_sz) {
 		new_ts = calloc(new_sz, sizeof(*ts));

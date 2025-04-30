@@ -134,7 +134,7 @@ static int skipn(int fd, off_t n)
 	while (n > 0) {
 		ret = read(fd, buf, min(n, (off_t)sizeof(buf)));
 		if (ret <= 0)
-			return ret;
+			return (int)ret;
 		n -= ret;
 	}
 

@@ -317,7 +317,7 @@ static int parse_aliases(const char *str, const char *const names[][EVSEL__MAX_A
 	*longest = -1;
 	for (int i = 0; i < size; i++) {
 		for (int j = 0; j < EVSEL__MAX_ALIASES && names[i][j]; j++) {
-			int n = strlen(names[i][j]);
+			int n = (int)strlen(names[i][j]);
 
 			if (n > *longest && !strncasecmp(str, names[i][j], n))
 				*longest = n;
@@ -532,8 +532,8 @@ static int add_tracepoint(struct parse_events_state *parse_state,
 					       !parse_state->fake_tp);
 
 	if (IS_ERR(evsel)) {
-		tracepoint_error(err, PTR_ERR(evsel), sys_name, evt_name, loc->first_column);
-		return PTR_ERR(evsel);
+		tracepoint_error(err, (int)PTR_ERR(evsel), sys_name, evt_name, loc->first_column);
+		return (int)PTR_ERR(evsel);
 	}
 
 	if (head_config) {
@@ -1153,7 +1153,7 @@ static int get_config_terms(const struct parse_events_terms *head_config,
 #define ADD_CONFIG_TERM_VAL(__type, __name, __val, __weak)	\
 do {								\
 	ADD_CONFIG_TERM(__type, __weak);			\
-	__t->val.__name = __val;				\
+	__t->val.__name = (typeof(__t->val.__name))__val;	\
 } while (0)
 
 #define ADD_CONFIG_TERM_STR(__type, __val, __weak)		\
@@ -2303,12 +2303,12 @@ static void __parse_events_error__print(int err_idx, const char *err_str,
 	const char *str = "invalid or unsupported event: ";
 	char _buf[MAX_WIDTH];
 	char *buf = (char *) event;
-	int idx = 0;
+	size_t idx = 0;
 	if (err_str) {
 		/* -2 for extra '' in the final fprintf */
 		int width       = get_term_width() - 2;
-		int len_event   = strlen(event);
-		int len_str, max_len, cut = 0;
+		size_t len_event   = strlen(event);
+		size_t len_str, max_len, cut = 0;
 
 		/*
 		 * Maximum error index indent, we will cut
@@ -2346,7 +2346,7 @@ static void __parse_events_error__print(int err_idx, const char *err_str,
 
 	fprintf(stderr, "%s'%s'\n", str, buf);
 	if (idx) {
-		fprintf(stderr, "%*s\\___ %s\n", idx + 1, "", err_str);
+		fprintf(stderr, "%*s\\___ %s\n", (int)idx + 1, "", err_str);
 		if (err_help)
 			fprintf(stderr, "\n%s\n", err_help);
 	}

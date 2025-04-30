@@ -476,7 +476,7 @@ int main(int argc, const char **argv)
 	if (!cmd)
 		cmd = "perf-help";
 
-	srandom(time(NULL));
+	srandom((unsigned int)time(NULL));
 
 	/* Setting $PERF_CONFIG makes perf read _only_ the given config file. */
 	config_exclusive_filename = getenv("PERF_CONFIG");

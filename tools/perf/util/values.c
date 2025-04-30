@@ -197,7 +197,7 @@ static void perf_read_values__display_pretty(FILE *fp,
 	tidwidth = 3;
 	pidwidth = 3;
 	for (j = 0; j < values->num_counters; j++)
-		counterwidth[j] = strlen(evsel__name(values->counters[j]));
+		counterwidth[j] = (int)strlen(evsel__name(values->counters[j]));
 	for (i = 0; i < values->threads; i++) {
 		int width;
 
@@ -251,7 +251,7 @@ static void perf_read_values__display_raw(FILE *fp,
 			tidwidth = width;
 	}
 	for (j = 0; j < values->num_counters; j++) {
-		width = strlen(evsel__name(values->counters[j]));
+		width = (int)strlen(evsel__name(values->counters[j]));
 		if (width > namewidth)
 			namewidth = width;
 		width = snprintf(NULL, 0, "%x", values->counters[j]->core.idx);

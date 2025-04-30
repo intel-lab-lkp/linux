@@ -338,10 +338,10 @@ static bool read_proc_maps_line(struct io *io, __u64 *start, __u64 *end,
 
 	if (io__get_hex(io, &temp) != ':')
 		return false;
-	*maj = temp;
+	*maj = (u32)temp;
 	if (io__get_hex(io, &temp) != ' ')
 		return false;
-	*min = temp;
+	*min = (u32)temp;
 
 	ch = io__get_dec(io, inode);
 	if (ch != ' ') {
@@ -433,7 +433,7 @@ int perf_event__synthesize_mmap_events(const struct perf_tool *tool,
 	unsigned long long timeout = proc_map_timeout * 1000000ULL;
 	int rc = 0;
 	const char *hugetlbfs_mnt = hugetlbfs__mountpoint();
-	int hugetlbfs_mnt_len = hugetlbfs_mnt ? strlen(hugetlbfs_mnt) : 0;
+	size_t hugetlbfs_mnt_len = hugetlbfs_mnt ? strlen(hugetlbfs_mnt) : 0;
 
 	if (machine__is_default_guest(machine))
 		return 0;
@@ -815,7 +815,7 @@ static int __event__synthesize_thread(union perf_event *comm_event,
 		if (!isdigit(dent->d_name[0]))
 			continue;
 
-		_pid = strtol(dent->d_name, &end, 10);
+		_pid = (pid_t)strtol(dent->d_name, &end, 10);
 		if (*end)
 			continue;
 
@@ -1043,7 +1043,7 @@ int perf_event__synthesize_threads(const struct perf_tool *tool,
 		return err;
 
 	if (nr_threads_synthesize == UINT_MAX)
-		thread_nr = sysconf(_SC_NPROCESSORS_ONLN);
+		thread_nr = (int)sysconf(_SC_NPROCESSORS_ONLN);
 	else
 		thread_nr = nr_threads_synthesize;
 
@@ -1829,7 +1829,7 @@ int perf_event__synthesize_id_sample(__u64 *array, u64 type, const struct perf_s
 		array++;
 	}
 
-	return (void *)array - (void *)start;
+	return (int)((void *)array - (void *)start);
 }
 
 int __perf_event__synthesize_id_index(const struct perf_tool *tool, perf_event__handler_t process,
@@ -2213,7 +2213,7 @@ int perf_event__synthesize_tracing_data(const struct perf_tool *tool, int fd, st
 	aligned_size = PERF_ALIGN(size, sizeof(u64));
 	padding = aligned_size - size;
 	ev.tracing_data.header.size = sizeof(ev.tracing_data);
-	ev.tracing_data.size = aligned_size;
+	ev.tracing_data.size = (__u32)aligned_size;
 
 	process(tool, &ev, NULL, NULL);
 
@@ -2227,7 +2227,7 @@ int perf_event__synthesize_tracing_data(const struct perf_tool *tool, int fd, st
 	if (write_padded(&ff, NULL, 0, padding))
 		return -1;
 
-	return aligned_size;
+	return (int)aligned_size;
 }
 #endif
 
@@ -2375,8 +2375,8 @@ int perf_event__synthesize_features(const struct perf_tool *tool, struct perf_se
 	struct perf_header *header = &session->header;
 	struct perf_record_header_feature *fe;
 	struct feat_fd ff;
-	size_t sz, sz_hdr;
-	int feat, ret;
+	size_t sz, sz_hdr, feat;
+	int ret;
 
 	sz_hdr = sizeof(fe->header);
 	sz = sizeof(union perf_event);
@@ -2394,7 +2394,7 @@ int perf_event__synthesize_features(const struct perf_tool *tool, struct perf_se
 
 	for_each_set_bit(feat, header->adds_features, HEADER_FEAT_BITS) {
 		if (!feat_ops[feat].synthesize) {
-			pr_debug("No record header feature for header :%d\n", feat);
+			pr_debug("No record header feature for header :%zu\n", feat);
 			continue;
 		}
 

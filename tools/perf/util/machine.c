@@ -809,7 +809,7 @@ int machine__process_text_poke(struct machine *machine, union perf_event *event,
 
 	if (dso) {
 		u8 *new_bytes = event->text_poke.bytes + event->text_poke.old_len;
-		int ret;
+		ssize_t ret;
 
 		/*
 		 * Kernel maps might be changed when loading symbols so loading
@@ -2306,7 +2306,7 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 	struct branch_stack *lbr_stack = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
 	u8 cpumode = PERF_RECORD_MISC_USER;
-	int lbr_nr = lbr_stack->nr;
+	int lbr_nr = (int)lbr_stack->nr;
 	struct branch_flags *flags;
 	int err, i;
 	u64 ip;
@@ -2472,7 +2472,7 @@ static bool has_stitched_lbr(struct thread *thread,
 	 *
 	 * Starts from the base-of-stack of current sample.
 	 */
-	for (i = distance, j = cur_stack->nr - 1; (i >= 0) && (j >= 0); i--, j--) {
+	for (i = (int)distance, j = (int)cur_stack->nr - 1; (i >= 0) && (j >= 0); i--, j--) {
 		if ((prev_entries[i].from != cur_entries[j].from) ||
 		    (prev_entries[i].to != cur_entries[j].to) ||
 		    (prev_entries[i].flags.value != cur_entries[j].flags.value))
@@ -2488,7 +2488,7 @@ static bool has_stitched_lbr(struct thread *thread,
 	 * and the base-of-stack of current sample into lbr_stitch->lists.
 	 * These LBRs will be stitched later.
 	 */
-	for (i = prev_stack->nr - 1; i > (int)distance; i--) {
+	for (i = (int)prev_stack->nr - 1; i > (int)distance; i--) {
 
 		if (!lbr_stitch->prev_lbr_cursor[i].valid)
 			continue;
@@ -2687,7 +2687,7 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 	u64 leaf_frame_caller;
 
 	if (chain)
-		chain_nr = chain->nr;
+		chain_nr = (int)chain->nr;
 
 	if (evsel__has_branch_callstack(evsel)) {
 		struct perf_env *env = evsel__env(evsel);
@@ -2783,7 +2783,7 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 check_calls:
 	if (chain && callchain_param.order != ORDER_CALLEE) {
 		err = find_prev_cpumode(chain, thread, cursor, parent, root_al,
-					&cpumode, chain->nr - first_call, symbols);
+					&cpumode, (int)(chain->nr - first_call), symbols);
 		if (err)
 			return (err < 0) ? err : 0;
 	}
@@ -2794,7 +2794,7 @@ check_calls:
 		if (callchain_param.order == ORDER_CALLEE)
 			j = i;
 		else
-			j = chain->nr - i - 1;
+			j = (int)(chain->nr - i - 1);
 
 #ifdef HAVE_SKIP_CALLCHAIN_IDX
 		if (j == skip_idx)

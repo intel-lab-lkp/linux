@@ -396,7 +396,7 @@ static unsigned int maps__by_address_index(const struct maps *maps, const struct
 				sizeof(*mapp), map__start_cmp);
 
 		if (mapp)
-			return mapp - maps_by_address;
+			return (unsigned int)(mapp - maps_by_address);
 	} else {
 		for (unsigned int i = 0; i < maps__nr_maps(maps); i++) {
 			if (RC_CHK_ACCESS(maps_by_address[i]) == RC_CHK_ACCESS(map))
@@ -417,7 +417,7 @@ static unsigned int maps__by_name_index(const struct maps *maps, const struct ma
 				sizeof(*mapp), map__strcmp);
 
 		if (mapp)
-			return mapp - maps_by_name;
+			return (unsigned int)(mapp - maps_by_name);
 	} else {
 		for (unsigned int i = 0; i < maps__nr_maps(maps); i++) {
 			if (RC_CHK_ACCESS(maps_by_name[i]) == RC_CHK_ACCESS(map))
@@ -1134,7 +1134,7 @@ struct map *maps__find_by_name(struct maps *maps, const char *name)
 
 			if (mapp) {
 				result = map__get(*mapp);
-				i = mapp - maps__maps_by_name(maps);
+				i = (unsigned int)(mapp - maps__maps_by_name(maps));
 				RC_CHK_ACCESS(maps)->last_search_by_name_idx = i;
 			}
 			done = true;

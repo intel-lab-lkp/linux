@@ -156,7 +156,7 @@ void perf_event__read_stat_config(struct perf_stat_config *config,
 		switch (event->data[i].tag) {
 #define CASE(__term, __val)					\
 		case PERF_STAT_CONFIG_TERM__##__term:		\
-			config->__val = event->data[i].val;	\
+			config->__val = (typeof(config->__val))event->data[i].val; \
 			break;
 
 		CASE(AGGR_MODE,  aggr_mode)
@@ -190,7 +190,7 @@ size_t perf_event__fprintf_namespaces(union perf_event *event, FILE *fp)
 	u32 nr_namespaces, idx;
 
 	ns_link_info = event->namespaces.link_info;
-	nr_namespaces = event->namespaces.nr_namespaces;
+	nr_namespaces = (u32)event->namespaces.nr_namespaces;
 
 	ret += fprintf(fp, " %d/%d - nr_namespaces: %u\n\t\t[",
 		       event->namespaces.pid,

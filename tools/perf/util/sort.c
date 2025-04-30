@@ -91,7 +91,7 @@ static int repsep_snprintf(char *bf, size_t size, const char *fmt, ...)
 	va_end(ap);
 
 	if (n >= (int)size)
-		return size - 1;
+		return (int)size - 1;
 	return n;
 }
 
@@ -392,7 +392,7 @@ static int _hist_entry__sym_snprintf(struct map_symbol *ms,
 				       len, ip);
 	}
 
-	return ret;
+	return (int)ret;
 }
 
 int hist_entry__sym_snprintf(struct hist_entry *he, char *bf, size_t size, unsigned int width)
@@ -1339,7 +1339,7 @@ static int _hist_entry__addr_snprintf(struct map_symbol *ms,
 				       len, ip);
 	}
 
-	return ret;
+	return (int)ret;
 }
 
 static int hist_entry__addr_from_snprintf(struct hist_entry *he, char *bf,
@@ -2667,7 +2667,7 @@ static int __sort__hpp_width(struct perf_hpp_fmt *fmt,
 	if (!len)
 		len = hists__col_len(hists, hse->se->se_width_idx);
 
-	return len;
+	return (int)len;
 }
 
 static int __sort__hpp_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
@@ -2681,7 +2681,7 @@ static int __sort__hpp_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	if (!len)
 		len = hists__col_len(he->hists, hse->se->se_width_idx);
 
-	return hse->se->se_snprintf(he, hpp->buf, hpp->size, len);
+	return hse->se->se_snprintf(he, hpp->buf, hpp->size, (unsigned int)len);
 }
 
 static int64_t __sort__hpp_cmp(struct perf_hpp_fmt *fmt,
@@ -2919,7 +2919,7 @@ static int hde_width(struct hpp_dynamic_entry *hde)
 {
 	if (!hde->hpp.len) {
 		int len = hde->dynamic_len;
-		int namelen = strlen(hde->field->name);
+		int namelen = (int)strlen(hde->field->name);
 		int fieldlen = hde->field->size;
 
 		if (namelen > len)
@@ -2969,7 +2969,7 @@ static void update_dynamic_len(struct hpp_dynamic_entry *hde,
 			len = pos - str;
 
 			if (len > hde->dynamic_len)
-				hde->dynamic_len = len;
+				hde->dynamic_len = (unsigned int)len;
 			break;
 		}
 
@@ -3008,7 +3008,7 @@ static int __sort__hde_width(struct perf_hpp_fmt *fmt,
 	if (!len)
 		len = hde_width(hde);
 
-	return len;
+	return (int)len;
 }
 
 bool perf_hpp__defined_dynamic_entry(struct perf_hpp_fmt *fmt, struct hists *hists)
@@ -3257,7 +3257,7 @@ static struct evsel *find_evsel(struct evlist *evlist, char *event_name)
 
 	/* case 1 */
 	if (event_name[0] == '%') {
-		int nr = strtol(event_name+1, NULL, 0);
+		int nr = (int)strtol(event_name+1, NULL, 0);
 
 		if (nr > evlist->core.nr_entries)
 			return NULL;
@@ -4222,7 +4222,7 @@ char *sort_help(const char *prefix, enum sort_mode mode)
 {
 	struct strbuf sb;
 	char *s;
-	int len = strlen(prefix) + INDENT;
+	int len = (int)strlen(prefix) + INDENT;
 
 	strbuf_init(&sb, 300);
 	strbuf_addstr(&sb, prefix);

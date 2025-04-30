@@ -309,7 +309,7 @@ static int __thread__comm_len(struct thread *thread, const char *comm)
 {
 	if (!comm)
 		return 0;
-	thread__set_comm_len(thread, strlen(comm));
+	thread__set_comm_len(thread, (int)strlen(comm));
 
 	return thread__var_comm_len(thread);
 }
@@ -544,7 +544,7 @@ int thread__memcpy(struct thread *thread, struct machine *machine,
 
 	addr_location__exit(&al);
 
-	return dso__data_read_offset(dso, machine, offset, buf, len);
+	return (int)dso__data_read_offset(dso, machine, offset, buf, len);
 }
 
 void thread__free_stitch_list(struct thread *thread)

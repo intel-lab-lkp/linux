@@ -185,7 +185,7 @@ static int do_write_string(struct feat_fd *ff, const char *str)
 	u32 len, olen;
 	int ret;
 
-	olen = strlen(str) + 1;
+	olen = (u32)strlen(str) + 1;
 	len = PERF_ALIGN(olen, NAME_ALIGN);
 
 	/* write len, incl. \0 */
@@ -286,7 +286,7 @@ static int do_read_bitmap(struct feat_fd *ff, unsigned long **pset, u64 *psize)
 	if (ret)
 		return ret;
 
-	set = bitmap_zalloc(size);
+	set = bitmap_zalloc((int)size);
 	if (!set)
 		return -ENOMEM;
 
@@ -1369,7 +1369,9 @@ static int memory_node__sort(const void *a, const void *b)
 	const struct memory_node *na = a;
 	const struct memory_node *nb = b;
 
-	return na->node - nb->node;
+	if (na->node == nb->node)
+		return 0;
+	return na->node < nb->node ? -1 : 1;
 }
 
 static int build_mem_topology(struct memory_node **nodesp, u64 *cntp)
@@ -2144,7 +2146,7 @@ static void print_pmu_mappings(struct feat_fd *ff, FILE *fp)
 	str = ff->ph->env.pmu_mappings;
 
 	while (pmu_num) {
-		type = strtoul(str, &tmp, 0);
+		type = (u32)strtoul(str, &tmp, 0);
 		if (*tmp != ':')
 			goto error;
 
@@ -2214,10 +2216,10 @@ static void memory_node__fprintf(struct memory_node *n,
 	char buf_map[100], buf_size[50];
 	unsigned long long size;
 
-	size = bsize * bitmap_weight(n->set, n->size);
+	size = bsize * bitmap_weight(n->set, (unsigned int)n->size);
 	unit_number__scnprintf(buf_size, 50, size);
 
-	bitmap_scnprintf(n->set, n->size, buf_map, 100);
+	bitmap_scnprintf(n->set, (unsigned int)n->size, buf_map, 100);
 	fprintf(fp, "#  %3" PRIu64 " [%s]: %s\n", n->node, buf_size, buf_map);
 }
 
@@ -2782,7 +2784,7 @@ error:
 
 static int process_group_desc(struct feat_fd *ff, void *data __maybe_unused)
 {
-	size_t ret = -1;
+	int ret = -1;
 	u32 i, nr, nr_groups;
 	struct perf_session *session;
 	struct evsel *evsel, *leader = NULL;
@@ -2996,7 +2998,7 @@ static int process_mem_topology(struct feat_fd *ff,
 
 	ff->ph->env.memory_bsize    = bsize;
 	ff->ph->env.memory_nodes    = nodes;
-	ff->ph->env.nr_memory_nodes = nr;
+	ff->ph->env.nr_memory_nodes = (int)nr;
 	ret = 0;
 
 out:
@@ -3489,7 +3491,8 @@ int perf_header__fprintf_info(struct perf_session *session, FILE *fp, bool full)
 	int fd = perf_data__fd(session->data);
 	struct stat st;
 	time_t stctime;
-	int ret, bit;
+	int ret;
+	size_t bit;
 
 	hd.fp = fp;
 	hd.full = full;
@@ -3586,15 +3589,15 @@ static int perf_header__adds_write(struct perf_header *header,
 				   struct evlist *evlist, int fd,
 				   struct feat_copier *fc)
 {
-	int nr_sections;
+	size_t nr_sections;
 	struct feat_fd ff = {
 		.fd  = fd,
 		.ph = header,
 	};
 	struct perf_file_section *feat_sec, *p;
-	int sec_size;
+	size_t sec_size;
 	u64 sec_start;
-	int feat;
+	size_t feat;
 	int err;
 
 	nr_sections = bitmap_weight(header->adds_features, HEADER_FEAT_BITS);
@@ -3611,8 +3614,8 @@ static int perf_header__adds_write(struct perf_header *header,
 	lseek(fd, sec_start + sec_size, SEEK_SET);
 
 	for_each_set_bit(feat, header->adds_features, HEADER_FEAT_BITS) {
-		if (do_write_feat(&ff, feat, &p, evlist, fc))
-			perf_header__clear_feat(header, feat);
+		if (do_write_feat(&ff, (int)feat, &p, evlist, fc))
+			perf_header__clear_feat(header, (int)feat);
 	}
 
 	lseek(fd, sec_start, SEEK_SET);
@@ -3821,9 +3824,9 @@ int perf_header__process_sections(struct perf_header *header, int fd,
 						 int feat, int fd, void *data))
 {
 	struct perf_file_section *feat_sec, *sec;
-	int nr_sections;
-	int sec_size;
-	int feat;
+	size_t nr_sections;
+	size_t sec_size;
+	size_t feat;
 	int err;
 
 	nr_sections = bitmap_weight(header->adds_features, HEADER_FEAT_BITS);
@@ -3843,7 +3846,7 @@ int perf_header__process_sections(struct perf_header *header, int fd,
 		goto out_free;
 
 	for_each_set_bit(feat, header->adds_features, HEADER_LAST_FEATURE) {
-		err = process(sec++, header, feat, fd, data);
+		err = process(sec++, header, (int)feat, fd, data);
 		if (err < 0)
 			goto out_free;
 	}
@@ -4183,7 +4186,7 @@ static int evsel__prepare_tracepoint_event(struct evsel *evsel, struct tep_handl
 		return -1;
 	}
 
-	event = tep_find_event(pevent, evsel->core.attr.config);
+	event = tep_find_event(pevent, (int)evsel->core.attr.config);
 	if (event == NULL) {
 		pr_debug("cannot find event format for %d\n", (int)evsel->core.attr.config);
 		return -1;
@@ -4221,8 +4224,8 @@ int perf_session__read_header(struct perf_session *session)
 	struct perf_file_header	f_header;
 	struct perf_file_attr	f_attr;
 	u64			f_id;
-	int nr_attrs, nr_ids, i, j, err;
-	int fd = perf_data__fd(data);
+	u64 nr_attrs, nr_ids;
+	int err, fd = perf_data__fd(data);
 
 	session->evlist = evlist__new();
 	if (session->evlist == NULL)
@@ -4271,7 +4274,7 @@ int perf_session__read_header(struct perf_session *session)
 	nr_attrs = f_header.attrs.size / f_header.attr_size;
 	lseek(fd, f_header.attrs.offset, SEEK_SET);
 
-	for (i = 0; i < nr_attrs; i++) {
+	for (u64 i = 0; i < nr_attrs; i++) {
 		struct evsel *evsel;
 		off_t tmp;
 
@@ -4308,7 +4311,7 @@ int perf_session__read_header(struct perf_session *session)
 
 		lseek(fd, f_attr.ids.offset, SEEK_SET);
 
-		for (j = 0; j < nr_ids; j++) {
+		for (int j = 0; j < (int)nr_ids; j++) {
 			if (perf_header__getbuffer64(header, fd, &f_id, sizeof(f_id)))
 				goto out_errno;
 
@@ -4537,7 +4540,8 @@ int perf_event__process_tracing_data(struct perf_session *session,
 		return -1;
 	}
 	if (session->trace_event_repipe) {
-		int retw = write(STDOUT_FILENO, buf, padding);
+		ssize_t retw = write(STDOUT_FILENO, buf, padding);
+
 		if (retw <= 0 || retw != padding) {
 			pr_err("%s: repiping tracing data padding", __func__);
 			return -1;
@@ -4551,7 +4555,7 @@ int perf_event__process_tracing_data(struct perf_session *session,
 
 	evlist__prepare_tracepoint_events(session->evlist, session->tevent.pevent);
 
-	return size_read + padding;
+	return (int)(size_read + padding);
 }
 #endif
 

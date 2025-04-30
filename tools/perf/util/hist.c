@@ -700,7 +700,8 @@ static unsigned random_max(unsigned high)
 {
 	unsigned thresh = -high % high;
 	for (;;) {
-		unsigned r = random();
+		unsigned int r = (unsigned int)random();
+
 		if (r >= thresh)
 			return r % high;
 	}
@@ -929,7 +930,7 @@ iter_prepare_branch_entry(struct hist_entry_iter *iter, struct addr_location *al
 		return -ENOMEM;
 
 	iter->curr = 0;
-	iter->total = sample->branch_stack->nr;
+	iter->total = (int)sample->branch_stack->nr;
 
 	iter->bi = bi;
 	return 0;
@@ -2770,7 +2771,7 @@ void hist__account_cycles(struct branch_stack *bs, struct addr_location *al,
 			 * Note that perf stores branches reversed from
 			 * program order!
 			 */
-			for (int i = bs->nr - 1; i >= 0; i--) {
+			for (int i = (int)bs->nr - 1; i >= 0; i--) {
 				addr_map_symbol__account_cycles(&bi[i].from,
 					nonany_branch_mode ? NULL : prev,
 					bi[i].flags.cycles, evsel,

@@ -596,7 +596,7 @@ char *perf_env__find_pmu_cap(struct perf_env *env, const char *pmu_name,
 			     const char *cap)
 {
 	char *cap_eq;
-	int cap_size;
+	size_t cap_size;
 	char **ptr;
 	int i, j;
 

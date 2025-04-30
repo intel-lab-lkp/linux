@@ -93,7 +93,7 @@ static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
 	while ((dirent = readdir(proc)) != NULL) {
 		char *end;
 		bool grow = false;
-		pid_t pid = strtol(dirent->d_name, &end, 10);
+		pid_t pid = (pid_t)strtol(dirent->d_name, &end, 10);
 
 		if (*end) /* only interested in proper numerical dirents */
 			continue;
@@ -195,7 +195,7 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 		return NULL;
 
 	strlist__for_each_entry(pos, slist) {
-		pid = strtol(pos->s, &end_ptr, 10);
+		pid = (pid_t)strtol(pos->s, &end_ptr, 10);
 
 		if (pid == INT_MIN || pid == INT_MAX ||
 		    (*end_ptr != '\0' && *end_ptr != ','))
@@ -259,7 +259,7 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
 		return NULL;
 
 	strlist__for_each_entry(pos, slist) {
-		tid = strtol(pos->s, &end_ptr, 10);
+		tid = (pid_t)strtol(pos->s, &end_ptr, 10);
 
 		if (tid == INT_MIN || tid == INT_MAX ||
 		    (*end_ptr != '\0' && *end_ptr != ','))

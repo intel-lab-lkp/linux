@@ -332,7 +332,7 @@ process_bpf_image(char *name, u64 addr, struct kallsyms_parse *data)
 			.size = offsetof(struct perf_record_ksymbol, name),
 		},
 		.addr      = addr,
-		.len       = page_size,
+		.len       = (__u32)page_size,
 		.ksym_type = PERF_RECORD_KSYMBOL_TYPE_BPF,
 		.flags     = 0,
 	};

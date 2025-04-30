@@ -112,7 +112,7 @@ enum target_errno target__parse_uid(struct target *target)
 		 * The user name not found. Maybe it's a UID number.
 		 */
 		char *endptr;
-		int uid = strtol(str, &endptr, 10);
+		int uid = (int)strtol(str, &endptr, 10);
 
 		if (*endptr != '\0')
 			return TARGET_ERRNO__INVALID_UID;

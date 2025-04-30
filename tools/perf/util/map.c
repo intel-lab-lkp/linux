@@ -74,8 +74,8 @@ static inline bool replace_android_lib(const char *filename, char *newfilename)
 		if (!(ndk && app))
 			return false;
 
-		ndk_length = strlen(ndk);
-		app_length = strlen(app);
+		ndk_length = (int)strlen(ndk);
+		app_length = (int)strlen(app);
 
 		if (!(ndk_length && app_length && app_abi_length))
 			return false;
