@@ -1008,6 +1008,7 @@ F:	Documentation/devicetree/bindings/w1/amd,axi-1wire-host.yaml
 F:	drivers/w1/masters/amd_axi_w1.c
 
 AMD CDX BUS DRIVER
+M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 M:	Nipun Gupta <nipun.gupta@amd.com>
 M:	Nikhil Agarwal <nikhil.agarwal@amd.com>
 S:	Maintained
