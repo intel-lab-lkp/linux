@@ -724,7 +724,7 @@ out:
 static int perf_sample__fprintf_regs(struct regs_dump *regs, uint64_t mask, const char *arch,
 				     FILE *fp)
 {
-	unsigned i = 0, r;
+	size_t i = 0, r;
 	int printed = 0;
 
 	if (!regs || !regs->regs)
@@ -734,7 +734,7 @@ static int perf_sample__fprintf_regs(struct regs_dump *regs, uint64_t mask, cons
 
 	for_each_set_bit(r, (unsigned long *) &mask, sizeof(mask) * 8) {
 		u64 val = regs->regs[i++];
-		printed += fprintf(fp, "%5s:0x%"PRIx64" ", perf_reg_name(r, arch), val);
+		printed += fprintf(fp, "%5s:0x%"PRIx64" ", perf_reg_name((int)r, arch), val);
 	}
 
 	return printed;
@@ -1150,7 +1150,7 @@ static int grab_bb(u8 *buffer, u64 start, u64 end,
 	if (len <= 0)
 		pr_debug("\tcannot fetch code for block at %" PRIx64 "-%" PRIx64 "\n",
 			start, end);
-	ret = len;
+	ret = (int)len;
 out:
 	addr_location__exit(&al);
 	return ret;
@@ -1270,7 +1270,8 @@ static int ip__fprintf_jump(uint64_t ip, struct branch_entry *en,
 
 	if (PRINT_FIELD(BRCNTR)) {
 		struct evsel *pos = evsel__leader(evsel);
-		unsigned int i = 0, j, num, mask, width;
+		unsigned int i = 0, width;
+		size_t mask, num;
 
 		perf_env__find_br_cntr_info(evsel__env(evsel), NULL, &width);
 		mask = (1L << width) - 1;
@@ -1283,10 +1284,11 @@ static int ip__fprintf_jump(uint64_t ip, struct branch_entry *en,
 
 			num = (br_cntr >> (i++ * width)) & mask;
 			if (!verbose) {
-				for (j = 0; j < num; j++)
+				for (size_t j = 0; j < num; j++)
 					printed += fprintf(fp, "%s", pos->abbr_name);
-			} else
-				printed += fprintf(fp, "%s %d ", pos->name, num);
+			} else {
+				printed += fprintf(fp, "%s %zu ", pos->name, num);
+			}
 		}
 		printed += fprintf(fp, "\t");
 	}
@@ -1328,9 +1330,9 @@ static int ip__fprintf_sym(uint64_t addr, struct thread *thread,
 		goto out;
 
 	if (al.addr < al.sym->end)
-		off = al.addr - al.sym->start;
+		off = (int)(al.addr - al.sym->start);
 	else
-		off = al.addr - map__start(al.map) - al.sym->start;
+		off = (int)(al.addr - map__start(al.map) - al.sym->start);
 	printed += fprintf(fp, "\t%s", al.sym->name);
 	if (off)
 		printed += fprintf(fp, "%+d", off);
@@ -1365,7 +1367,7 @@ static int perf_sample__fprintf_brstackinsn(struct perf_sample *sample,
 
 	if (!(br && br->nr))
 		return 0;
-	nr = br->nr;
+	nr = (int)br->nr;
 	if (max_blocks && nr > max_blocks + 1)
 		nr = max_blocks + 1;
 
@@ -1645,14 +1647,14 @@ static int perf_sample__fprintf_insn(struct perf_sample *sample,
 static int perf_sample__fprintf_ipc(struct perf_sample *sample,
 				    struct evsel *evsel, FILE *fp)
 {
-	unsigned int ipc;
+	u64 ipc;
 
 	if (!PRINT_FIELD(IPC) || !sample->cyc_cnt || !sample->insn_cnt)
 		return 0;
 
 	ipc = (sample->insn_cnt * 100) / sample->cyc_cnt;
 
-	return fprintf(fp, " \t IPC: %u.%02u (%" PRIu64 "/%" PRIu64 ") ",
+	return fprintf(fp, " \t IPC: %" PRIu64 ".%02" PRIu64 " (%" PRIu64 "/%" PRIu64 ") ",
 		       ipc / 100, ipc % 100, sample->insn_cnt, sample->cyc_cnt);
 }
 
@@ -2036,7 +2038,7 @@ static int evlist__max_name_len(struct evlist *evlist)
 	int max = 0;
 
 	evlist__for_each_entry(evlist, evsel) {
-		int len = strlen(evsel__name(evsel));
+		int len = (int)strlen(evsel__name(evsel));
 
 		max = MAX(len, max);
 	}
@@ -2147,7 +2149,7 @@ static bool show_event(struct perf_sample *sample,
 		       struct addr_location *al,
 		       struct addr_location *addr_al)
 {
-	int depth = thread_stack__depth(thread, sample->cpu);
+	int depth = (int)thread_stack__depth(thread, sample->cpu);
 
 	if (!symbol_conf.graph_function)
 		return true;
@@ -2163,13 +2165,14 @@ static bool show_event(struct perf_sample *sample,
 		u64 ip;
 		const char *name = resolve_branch_sym(sample, evsel, thread, al, addr_al,
 				&ip);
-		unsigned nlen;
+		size_t nlen;
 
 		if (!name)
 			return false;
 		nlen = strlen(name);
 		while (*s) {
-			unsigned len = strcspn(s, ",");
+			size_t len = strcspn(s, ",");
+
 			if (nlen == len && !strncmp(name, s, len)) {
 				thread__set_filter(thread, true);
 				thread__set_filter_entry_depth(thread, depth);
@@ -2952,7 +2955,7 @@ static int parse_scriptname(const struct option *opt __maybe_unused,
 {
 	char spec[PATH_MAX];
 	const char *script, *ext;
-	int len;
+	size_t len;
 
 	if (strcmp(str, "lang") == 0) {
 		list_available_languages();
@@ -4097,7 +4100,7 @@ script_found:
 	script.tool.ordering_requires_timestamps = true;
 	session = perf_session__new(&data, &script.tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return (int)PTR_ERR(session);
 
 	if (header || header_only) {
 		script.tool.show_feat_hdr = SHOW_FEAT_HEADER;
