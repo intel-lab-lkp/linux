@@ -23,6 +23,10 @@
  *
  * @compress:	Function performs a compress operation
  * @decompress:	Function performs a de-compress operation
+ * @get_batch_size:	Maximum batch-size for batching compress/decompress
+ *			operations.
+ * @batch_compress:	Function performs a batch compress operation.
+ * @batch_decompress:	Function performs a batch decompress operation.
  * @init:	Initialize the cryptographic transformation object.
  *		This function is used to initialize the cryptographic
  *		transformation object. This function is called only once at
@@ -43,6 +47,22 @@
 struct acomp_alg {
 	int (*compress)(struct acomp_req *req);
 	int (*decompress)(struct acomp_req *req);
+	unsigned int (*get_batch_size)(void);
+	bool (*batch_compress)(
+		struct acomp_req *reqs[],
+		struct page *pages[],
+		u8 *dsts[],
+		unsigned int dlens[],
+		int errors[],
+		int nr_reqs);
+	bool (*batch_decompress)(
+		struct acomp_req *reqs[],
+		u8 *srcs[],
+		struct page *pages[],
+		unsigned int slens[],
+		unsigned int dlens[],
+		int errors[],
+		int nr_reqs);
 	int (*init)(struct crypto_acomp *tfm);
 	void (*exit)(struct crypto_acomp *tfm);
 

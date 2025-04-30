@@ -120,6 +120,10 @@ struct acomp_req {
  *
  * @compress:		Function performs a compress operation
  * @decompress:		Function performs a de-compress operation
+ * @get_batch_size:	Maximum batch-size for batching compress/decompress
+ *			operations.
+ * @batch_compress:	Function performs a batch compress operation.
+ * @batch_decompress:	Function performs a batch decompress operation.
  * @reqsize:		Context size for (de)compression requests
  * @fb:			Synchronous fallback tfm
  * @base:		Common crypto API algorithm data structure
@@ -127,6 +131,22 @@ struct acomp_req {
 struct crypto_acomp {
 	int (*compress)(struct acomp_req *req);
 	int (*decompress)(struct acomp_req *req);
+	unsigned int (*get_batch_size)(void);
+	bool (*batch_compress)(
+		struct acomp_req *reqs[],
+		struct page *pages[],
+		u8 *dsts[],
+		unsigned int dlens[],
+		int errors[],
+		int nr_reqs);
+	bool (*batch_decompress)(
+		struct acomp_req *reqs[],
+		u8 *srcs[],
+		struct page *pages[],
+		unsigned int slens[],
+		unsigned int dlens[],
+		int errors[],
+		int nr_reqs);
 	unsigned int reqsize;
 	struct crypto_acomp *fb;
 	struct crypto_tfm base;
@@ -222,6 +242,13 @@ static inline bool acomp_is_async(struct crypto_acomp *tfm)
 {
 	return crypto_comp_alg_common(tfm)->base.cra_flags &
 	       CRYPTO_ALG_ASYNC;
+}
+
+static inline bool acomp_has_async_batching(struct crypto_acomp *tfm)
+{
+	return (acomp_is_async(tfm) &&
+		(crypto_comp_alg_common(tfm)->base.cra_flags & CRYPTO_ALG_TYPE_ACOMPRESS) &&
+		tfm->get_batch_size && tfm->batch_compress && tfm->batch_decompress);
 }
 
 static inline struct crypto_acomp *crypto_acomp_reqtfm(struct acomp_req *req)
@@ -593,6 +620,86 @@ static inline struct acomp_req *acomp_request_on_stack_init(
 	req->base.flags = CRYPTO_TFM_REQ_ON_STACK;
 
 	return req;
+}
+
+/**
+ * crypto_acomp_batch_size() -- Get the algorithm's batch size
+ *
+ * Function returns the algorithm's batch size for batching operations
+ *
+ * @tfm:	ACOMPRESS tfm handle allocated with crypto_alloc_acomp()
+ *
+ * Return:	crypto_acomp's batch size.
+ */
+static inline unsigned int crypto_acomp_batch_size(struct crypto_acomp *tfm)
+{
+	if (acomp_has_async_batching(tfm))
+		return tfm->get_batch_size();
+
+	return 1;
+}
+
+/**
+ * crypto_acomp_batch_compress() -- Invoke asynchronous compress of a batch
+ * of requests.
+ *
+ * @reqs: @nr_reqs asynchronous compress requests.
+ * @pages: Pages to be compressed by IAA.
+ * @dsts: Pre-allocated destination buffers to store results of compression.
+ *        Each element of @dsts must be of size "PAGE_SIZE * 2".
+ * @dlens: Will contain the compressed lengths for @pages.
+ * @errors: zero on successful compression of the corresponding
+ *          req, or error code in case of error.
+ * @nr_reqs: The number of requests in @reqs, up to IAA_CRYPTO_MAX_BATCH_SIZE,
+ *           to be compressed.
+ *
+ * Returns true if all compress requests in the batch complete successfully,
+ * false otherwise.
+ */
+static inline bool crypto_acomp_batch_compress(
+	struct acomp_req *reqs[],
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs)
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(reqs[0]);
+
+	return tfm->batch_compress(reqs, pages, dsts, dlens, errors, nr_reqs);
+}
+
+/**
+ * crypto_acomp_batch_decompress() -- Invoke asynchronous decompress of a batch
+ * of requests.
+ *
+ * @reqs: @nr_reqs asynchronous decompress requests.
+ * @srcs: Source buffers to to be decompressed.
+ * @pages: Destination pages corresponding to @srcs.
+ * @slens: Buffer lengths for @srcs.
+ * @dlens: Will contain the decompressed lengths for @srcs.
+ *	   For batch decompressions, the caller must enforce additional
+ *	   semantics such as, BUG_ON(dlens[i] != PAGE_SIZE) assertions.
+ * @errors: zero on successful decompression of the corresponding
+ *          req, or error code in case of error.
+ * @nr_reqs: The number of requests in @reqs, up to IAA_CRYPTO_MAX_BATCH_SIZE,
+ *           to be decompressed.
+ *
+ * Returns true if all decompress requests in the batch complete successfully,
+ * false otherwise.
+ */
+static inline bool crypto_acomp_batch_decompress(
+	struct acomp_req *reqs[],
+	u8 *srcs[],
+	struct page *pages[],
+	unsigned int slens[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs)
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(reqs[0]);
+
+	return tfm->batch_decompress(reqs, srcs, pages, slens, dlens, errors, nr_reqs);
 }
 
 #endif
