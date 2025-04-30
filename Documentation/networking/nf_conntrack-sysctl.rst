@@ -64,6 +64,11 @@ nf_conntrack_frag6_timeout - INTEGER (seconds)
 
 	Time to keep an IPv6 fragment in memory.
 
+nf_conntrack_gc_scan_interval_init - INTEGER (seconds)
+	default 60
+
+	Default for garbage collector's initial scan interval.
+
 nf_conntrack_generic_timeout - INTEGER (seconds)
 	default 600
 

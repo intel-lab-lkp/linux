@@ -204,6 +204,8 @@ EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 
 unsigned int nf_conntrack_max __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_max);
+__read_mostly unsigned int nf_conntrack_gc_scan_interval_init = GC_SCAN_INTERVAL_INIT;
+EXPORT_SYMBOL_GPL(nf_conntrack_gc_scan_interval_init);
 seqcount_spinlock_t nf_conntrack_generation __read_mostly;
 static siphash_aligned_key_t nf_conntrack_hash_rnd;
 
@@ -1513,7 +1515,7 @@ static void gc_worker(struct work_struct *work)
 		nf_conntrack_max95 = nf_conntrack_max / 100u * 95u;
 
 	if (i == 0) {
-		gc_work->avg_timeout = GC_SCAN_INTERVAL_INIT;
+		gc_work->avg_timeout = nf_conntrack_gc_scan_interval_init;
 		gc_work->count = GC_SCAN_INITIAL_COUNT;
 		gc_work->start_time = start_time;
 	}
