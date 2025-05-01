@@ -1661,6 +1661,20 @@ config ARCH_FORCE_MAX_ORDER
 
 	  Don't change if unsure.
 
+config ARCH_FORCE_PAGE_BLOCK_ORDER
+	int "Page Block Order"
+	range 1 ARCH_FORCE_MAX_ORDER
+	default ARCH_FORCE_MAX_ORDER
+	help
+	  The page block order refers to the power of two number of pages that
+	  are physically contiguous and can have a migrate type associated to them.
+	  The maximum size of the page block order is limited by ARCH_FORCE_MAX_ORDER.
+
+	  This option allows overriding the default setting when the page
+	  block order requires to be smaller than ARCH_FORCE_MAX_ORDER.
+
+	  Don't change if unsure.
+
 config UNMAP_KERNEL_AT_EL0
 	bool "Unmap kernel when running in userspace (KPTI)" if EXPERT
 	default y
