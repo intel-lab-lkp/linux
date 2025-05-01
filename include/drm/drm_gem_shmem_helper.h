@@ -110,6 +110,8 @@ int drm_gem_shmem_vmap(struct drm_gem_shmem_object *shmem,
 void drm_gem_shmem_vunmap(struct drm_gem_shmem_object *shmem,
 			  struct iosys_map *map);
 int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct *vma);
+struct dma_buf *drm_gem_shmem_prime_export(struct drm_gem_shmem_object *shmem,
+						  int flags);
 
 int drm_gem_shmem_pin_locked(struct drm_gem_shmem_object *shmem);
 void drm_gem_shmem_unpin_locked(struct drm_gem_shmem_object *shmem);
@@ -168,6 +170,18 @@ static inline void drm_gem_shmem_object_print_info(struct drm_printer *p, unsign
 	drm_gem_shmem_print_info(shmem, p, indent);
 }
 
+/**
+ * drm_gem_shmem_object_prime_export - GEM object function for export()
+ * @obj: GEM object
+ *
+ */
+static inline struct dma_buf *drm_gem_shmem_object_prime_export(struct drm_gem_object *obj,
+								int flags)
+{
+	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+
+	return drm_gem_shmem_prime_export(shmem, flags);
+}
 /**
  * drm_gem_shmem_object_pin - GEM object function for drm_gem_shmem_pin()
  * @obj: GEM object
@@ -276,6 +290,8 @@ drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 				    struct sg_table *sgt);
 int drm_gem_shmem_dumb_create(struct drm_file *file, struct drm_device *dev,
 			      struct drm_mode_create_dumb *args);
+struct drm_gem_object *drm_gem_shmem_prime_import(struct drm_device *dev,
+						  struct dma_buf *buf);
 
 /**
  * DRM_GEM_SHMEM_DRIVER_OPS - Default shmem GEM operations
@@ -286,5 +302,13 @@ int drm_gem_shmem_dumb_create(struct drm_file *file, struct drm_device *dev,
 #define DRM_GEM_SHMEM_DRIVER_OPS \
 	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table, \
 	.dumb_create		   = drm_gem_shmem_dumb_create
+
+/**
+ * This macro provides a shmem GEM operations that implementate a simple
+ * gem_prime_import.
+ */
+#define DRM_GEM_SHMEM_SIMPLE_DRIVER_OPS \
+	.gem_prime_import	= drm_gem_shmem_prime_import, \
+	.dumb_create		= drm_gem_shmem_dumb_create
 
 #endif /* __DRM_GEM_SHMEM_HELPER_H__ */
