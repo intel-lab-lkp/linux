@@ -58,6 +58,9 @@ module_param(fuzz_iterations, uint, 0644);
 MODULE_PARM_DESC(fuzz_iterations, "number of fuzz test iterations");
 #endif
 
+/* Multibuffer is unlimited.  Set arbitrary limit for testing. */
+#define MAX_MB_MSGS	16
+
 #ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 
 /* a perfect nop */
@@ -3326,14 +3329,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		      int ctcount, int dtcount)
 {
 	const char *algo = crypto_tfm_alg_driver_name(crypto_acomp_tfm(tfm));
-	unsigned int i;
+	struct scatterlist src[MAX_MB_MSGS], dst[2];
+	ACOMP_REQUEST_ON_STACK(req, tfm);
 	char *output, *decomp_out;
-	int ret;
-	struct scatterlist src, dst;
-	struct acomp_req *req;
 	struct crypto_wait wait;
+	int ret = -ENOMEM;
+	unsigned int i;
 
-	output = kmalloc(COMP_BUF_SIZE, GFP_KERNEL);
+	acomp_request_set_callback(req,
+				   CRYPTO_TFM_REQ_MAY_SLEEP |
+				   CRYPTO_TFM_REQ_MAY_BACKLOG,
+				   NULL, NULL);
+
+	output = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!output)
 		return -ENOMEM;
 
@@ -3346,7 +3354,9 @@ static int test_acomp(struct crypto_acomp *tfm,
 	for (i = 0; i < ctcount; i++) {
 		unsigned int dlen = COMP_BUF_SIZE;
 		int ilen = ctemplate[i].inlen;
+		struct scatterlist *sg;
 		void *input_vec;
+		int j;
 
 		input_vec = kmemdup(ctemplate[i].input, ilen, GFP_KERNEL);
 		if (!input_vec) {
@@ -3354,70 +3364,74 @@ static int test_acomp(struct crypto_acomp *tfm,
 			goto out;
 		}
 
-		memset(output, 0, dlen);
 		crypto_init_wait(&wait);
-		sg_init_one(&src, input_vec, ilen);
-		sg_init_one(&dst, output, dlen);
 
-		req = acomp_request_alloc(tfm);
-		if (!req) {
-			pr_err("alg: acomp: request alloc failed for %s\n",
-			       algo);
-			kfree(input_vec);
-			ret = -ENOMEM;
-			goto out;
+		sg_init_table(src, MAX_MB_MSGS);
+		for (j = 0; j < MAX_MB_MSGS; j++)
+			sg_set_buf(src + j, input_vec, ilen);
+
+		sg_init_one(dst, output, PAGE_SIZE);
+		acomp_request_set_src_unit(req, src, MAX_MB_MSGS * ilen,
+					   dst, ilen);
+
+		ret = crypto_acomp_compress(req);
+		if (ret == -EAGAIN) {
+			req = ACOMP_REQUEST_CLONE(req, GFP_KERNEL);
+			acomp_request_set_callback(req,
+						   CRYPTO_TFM_REQ_MAY_SLEEP |
+						   CRYPTO_TFM_REQ_MAY_BACKLOG,
+						   crypto_req_done, &wait);
+			ret = crypto_acomp_compress(req);
+			ret = crypto_wait_req(ret, &wait);
 		}
-
-		acomp_request_set_params(req, &src, &dst, ilen, dlen);
-		acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
-					   crypto_req_done, &wait);
-
-		ret = crypto_wait_req(crypto_acomp_compress(req), &wait);
 		if (ret) {
 			pr_err("alg: acomp: compression failed on test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
 			kfree(input_vec);
-			acomp_request_free(req);
 			goto out;
 		}
 
-		ilen = req->dlen;
+		sg = dst;
+		ilen = sg->length;
 		dlen = COMP_BUF_SIZE;
-		sg_init_one(&src, output, ilen);
-		sg_init_one(&dst, decomp_out, dlen);
-		crypto_init_wait(&wait);
-		acomp_request_set_params(req, &src, &dst, ilen, dlen);
+		for (j = 0; j < MAX_MB_MSGS; j++) {
+			sg_init_one(src, decomp_out, dlen);
+			acomp_request_set_params(req, sg, src, ilen, dlen);
+			crypto_init_wait(&wait);
+			ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+			if (ret) {
+				pr_err("alg: acomp: re-decompression failed on test %d (%d) for %s: ret=%d\n",
+				       i + 1, j, algo, -ret);
+				acomp_free_sgl(dst);
+				kfree(input_vec);
+				goto out;
+			}
 
-		ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
-		if (ret) {
-			pr_err("alg: acomp: compression failed on test %d for %s: ret=%d\n",
-			       i + 1, algo, -ret);
-			kfree(input_vec);
-			acomp_request_free(req);
-			goto out;
+			if (req->dlen != ctemplate[i].inlen) {
+				pr_err("alg: acomp: Compression test %d (%d) failed for %s: output len = %d\n",
+				       i + 1, j, algo, req->dlen);
+				ret = -EINVAL;
+				acomp_free_sgl(dst);
+				kfree(input_vec);
+				goto out;
+			}
+
+			if (memcmp(input_vec, decomp_out, req->dlen)) {
+				pr_err("alg: acomp: Compression test %d (%d) failed for %s\n",
+				       i + 1, j, algo);
+				hexdump(output, req->dlen);
+				ret = -EINVAL;
+				acomp_free_sgl(dst);
+				kfree(input_vec);
+				goto out;
+			}
+			if (acomp_sgl_split(sg))
+				sg = sg_next(sg);
+			sg = sg_next(sg);
 		}
 
-		if (req->dlen != ctemplate[i].inlen) {
-			pr_err("alg: acomp: Compression test %d failed for %s: output len = %d\n",
-			       i + 1, algo, req->dlen);
-			ret = -EINVAL;
-			kfree(input_vec);
-			acomp_request_free(req);
-			goto out;
-		}
-
-		if (memcmp(input_vec, decomp_out, req->dlen)) {
-			pr_err("alg: acomp: Compression test %d failed for %s\n",
-			       i + 1, algo);
-			hexdump(output, req->dlen);
-			ret = -EINVAL;
-			kfree(input_vec);
-			acomp_request_free(req);
-			goto out;
-		}
-
+		acomp_free_sgl(dst);
 		kfree(input_vec);
-		acomp_request_free(req);
 	}
 
 	for (i = 0; i < dtcount; i++) {
@@ -3431,30 +3445,17 @@ static int test_acomp(struct crypto_acomp *tfm,
 			goto out;
 		}
 
-		memset(output, 0, dlen);
 		crypto_init_wait(&wait);
-		sg_init_one(&src, input_vec, ilen);
-		sg_init_one(&dst, output, dlen);
+		sg_init_one(src, input_vec, ilen);
+		sg_init_one(dst, output, dlen);
 
-		req = acomp_request_alloc(tfm);
-		if (!req) {
-			pr_err("alg: acomp: request alloc failed for %s\n",
-			       algo);
-			kfree(input_vec);
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		acomp_request_set_params(req, &src, &dst, ilen, dlen);
-		acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
-					   crypto_req_done, &wait);
+		acomp_request_set_params(req, src, dst, ilen, dlen);
 
 		ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
 		if (ret) {
 			pr_err("alg: acomp: decompression failed on test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
 			kfree(input_vec);
-			acomp_request_free(req);
 			goto out;
 		}
 
@@ -3463,7 +3464,6 @@ static int test_acomp(struct crypto_acomp *tfm,
 			       i + 1, algo, req->dlen);
 			ret = -EINVAL;
 			kfree(input_vec);
-			acomp_request_free(req);
 			goto out;
 		}
 
@@ -3473,17 +3473,16 @@ static int test_acomp(struct crypto_acomp *tfm,
 			hexdump(output, req->dlen);
 			ret = -EINVAL;
 			kfree(input_vec);
-			acomp_request_free(req);
 			goto out;
 		}
 
 		kfree(input_vec);
-		acomp_request_free(req);
 	}
 
 	ret = 0;
 
 out:
+	acomp_request_free(req);
 	kfree(decomp_out);
 	kfree(output);
 	return ret;
