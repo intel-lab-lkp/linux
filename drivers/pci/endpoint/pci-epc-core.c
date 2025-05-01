@@ -709,7 +709,6 @@ int pci_epc_add_epf(struct pci_epc *epc, struct pci_epf *epf,
 {
 	struct list_head *list;
 	u32 func_no;
-	int ret = 0;
 
 	if (IS_ERR_OR_NULL(epc) || epf->is_vf)
 		return -EINVAL;
@@ -720,36 +719,32 @@ int pci_epc_add_epf(struct pci_epc *epc, struct pci_epf *epf,
 	if (type == SECONDARY_INTERFACE && epf->sec_epc)
 		return -EBUSY;
 
-	mutex_lock(&epc->list_lock);
-	func_no = find_first_zero_bit(&epc->function_num_map,
-				      BITS_PER_LONG);
-	if (func_no >= BITS_PER_LONG) {
-		ret = -EINVAL;
-		goto ret;
+	scoped_guard(mutex, &epc->list_lock) {
+		func_no = find_first_zero_bit(&epc->function_num_map,
+					      BITS_PER_LONG);
+		if (func_no >= BITS_PER_LONG)
+			return -EINVAL;
+
+		if (func_no > epc->max_functions - 1) {
+			dev_err(&epc->dev, "Exceeding max supported Function Number\n");
+			return -EINVAL;
+		}
+
+		set_bit(func_no, &epc->function_num_map);
+		if (type == PRIMARY_INTERFACE) {
+			epf->func_no = func_no;
+			epf->epc = epc;
+			list = &epf->list;
+		} else {
+			epf->sec_epc_func_no = func_no;
+			epf->sec_epc = epc;
+			list = &epf->sec_epc_list;
+		}
+
+		list_add_tail(list, &epc->pci_epf);
 	}
 
-	if (func_no > epc->max_functions - 1) {
-		dev_err(&epc->dev, "Exceeding max supported Function Number\n");
-		ret = -EINVAL;
-		goto ret;
-	}
-
-	set_bit(func_no, &epc->function_num_map);
-	if (type == PRIMARY_INTERFACE) {
-		epf->func_no = func_no;
-		epf->epc = epc;
-		list = &epf->list;
-	} else {
-		epf->sec_epc_func_no = func_no;
-		epf->sec_epc = epc;
-		list = &epf->sec_epc_list;
-	}
-
-	list_add_tail(list, &epc->pci_epf);
-ret:
-	mutex_unlock(&epc->list_lock);
-
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(pci_epc_add_epf);
 
