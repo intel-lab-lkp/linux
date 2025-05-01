@@ -37,6 +37,13 @@ KBUILD_CFLAGS += -Wno-gnu
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=111219
 KBUILD_CFLAGS += $(call cc-disable-warning, format-overflow-non-kprintf)
 KBUILD_CFLAGS += $(call cc-disable-warning, format-truncation-non-kprintf)
+
+# clang emits a warning when a const member of an aggregate type is not
+# initialized but there are several places in the kernel where this is
+# intentional because the field is never used within a particular call path,
+# the field is within a union with other non-const members, or the containing
+# object is not const so the field can be modified via memcpy() / memset().
+KBUILD_CFLAGS += $(call cc-disable-warning, default-const-init-field-unsafe)
 else
 
 # gcc inanely warns about local variables called 'main'
