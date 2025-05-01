@@ -595,7 +595,13 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val)
 	if (!val)
 		return;
 
-	cgroup_rstat_updated(memcg->css.cgroup, cpu);
+	/*
+	 * If called from NMI via kmalloc_nolock -> memcg_slab_post_alloc_hook
+	 * -> obj_cgroup_charge -> mod_memcg_state,
+	 * then delay the update.
+	 */
+	if (!in_nmi())
+		cgroup_rstat_updated(memcg->css.cgroup, cpu);
 	statc = this_cpu_ptr(memcg->vmstats_percpu);
 	for (; statc; statc = statc->parent) {
 		/*
@@ -2895,7 +2901,7 @@ static bool consume_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	unsigned long flags;
 	bool ret = false;
 
-	local_lock_irqsave(&memcg_stock.stock_lock, flags);
+	local_lock_irqsave_check(&memcg_stock.stock_lock, flags);
 
 	stock = this_cpu_ptr(&memcg_stock);
 	if (objcg == READ_ONCE(stock->cached_objcg) && stock->nr_bytes >= nr_bytes) {
@@ -2995,7 +3001,7 @@ static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	unsigned long flags;
 	unsigned int nr_pages = 0;
 
-	local_lock_irqsave(&memcg_stock.stock_lock, flags);
+	local_lock_irqsave_check(&memcg_stock.stock_lock, flags);
 
 	stock = this_cpu_ptr(&memcg_stock);
 	if (READ_ONCE(stock->cached_objcg) != objcg) { /* reset if necessary */
@@ -3088,6 +3094,27 @@ static inline size_t obj_full_size(struct kmem_cache *s)
 	return s->size + sizeof(struct obj_cgroup *);
 }
 
+/*
+ * Try subtract from nr_charged_bytes without making it negative
+ */
+static bool obj_cgroup_charge_atomic(struct obj_cgroup *objcg, gfp_t flags, size_t sz)
+{
+	size_t old = atomic_read(&objcg->nr_charged_bytes);
+	u32 nr_pages = sz >> PAGE_SHIFT;
+	u32 nr_bytes = sz & (PAGE_SIZE - 1);
+
+	if ((ssize_t)(old - sz) >= 0 &&
+	    atomic_cmpxchg(&objcg->nr_charged_bytes, old, old - sz) == old)
+		return true;
+
+	nr_pages++;
+	if (obj_cgroup_charge_pages(objcg, flags, nr_pages))
+		return false;
+
+	atomic_add(PAGE_SIZE - nr_bytes, &objcg->nr_charged_bytes);
+	return true;
+}
+
 bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 				  gfp_t flags, size_t size, void **p)
 {
@@ -3128,6 +3155,21 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 			return false;
 	}
 
+	if (!gfpflags_allow_spinning(flags)) {
+		if (local_lock_is_locked(&memcg_stock.stock_lock)) {
+			/*
+			 * Cannot use
+			 * lockdep_assert_held(this_cpu_ptr(&memcg_stock.stock_lock));
+			 * since lockdep might not have been informed yet
+			 * of lock acquisition.
+			 */
+			return obj_cgroup_charge_atomic(objcg, flags,
+							size * obj_full_size(s));
+		} else {
+			lockdep_assert_not_held(this_cpu_ptr(&memcg_stock.stock_lock));
+		}
+	}
+
 	for (i = 0; i < size; i++) {
 		slab = virt_to_slab(p[i]);
 
@@ -3162,7 +3204,11 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 			    void **p, int objects, struct slabobj_ext *obj_exts)
 {
+	bool lock_held = local_lock_is_locked(&memcg_stock.stock_lock);
 	size_t obj_size = obj_full_size(s);
+
+	if (likely(!lock_held))
+		lockdep_assert_not_held(this_cpu_ptr(&memcg_stock.stock_lock));
 
 	for (int i = 0; i < objects; i++) {
 		struct obj_cgroup *objcg;
@@ -3174,8 +3220,12 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 			continue;
 
 		obj_exts[off].objcg = NULL;
-		refill_obj_stock(objcg, obj_size, true, -obj_size,
-				 slab_pgdat(slab), cache_vmstat_idx(s));
+		if (unlikely(lock_held)) {
+			atomic_add(obj_size, &objcg->nr_charged_bytes);
+		} else {
+			refill_obj_stock(objcg, obj_size, true, -obj_size,
+					 slab_pgdat(slab), cache_vmstat_idx(s));
+		}
 		obj_cgroup_put(objcg);
 	}
 }

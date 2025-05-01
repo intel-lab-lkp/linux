@@ -273,6 +273,7 @@ struct kmem_cache {
 	unsigned int cpu_partial_slabs;
 #endif
 	struct kmem_cache_order_objects oo;
+	struct llist_head defer_free_objects;
 
 	/* Allocation and freeing of slabs */
 	struct kmem_cache_order_objects min;
