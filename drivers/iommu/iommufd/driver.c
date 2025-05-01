@@ -78,6 +78,52 @@ void _iommufd_object_undepend(struct iommufd_object *obj_dependent,
 }
 EXPORT_SYMBOL_NS_GPL(_iommufd_object_undepend, "IOMMUFD");
 
+/* Driver should use a per-structure helper in include/linux/iommufd.h */
+int _iommufd_alloc_mmap(struct iommufd_ctx *ictx, struct iommufd_object *owner,
+			phys_addr_t base, size_t size, unsigned long *immap_id)
+{
+	struct iommufd_mmap *immap;
+	int rc;
+
+	if (WARN_ON_ONCE(!immap_id))
+		return -EINVAL;
+	if (!PAGE_ALIGNED(base))
+		return -EINVAL;
+	if (!size || !PAGE_ALIGNED(size))
+		return -EINVAL;
+
+	immap = kzalloc(sizeof(*immap), GFP_KERNEL);
+	if (!immap)
+		return -ENOMEM;
+	immap->owner = owner;
+	immap->pfn_start = base >> PAGE_SHIFT;
+	immap->pfn_end = immap->pfn_start + (size >> PAGE_SHIFT) - 1;
+
+	rc = mtree_alloc_range(&ictx->mt_mmap, immap_id, immap, sizeof(immap),
+			       0, LONG_MAX >> PAGE_SHIFT, GFP_KERNEL);
+	if (rc < 0) {
+		kfree(immap);
+		return rc;
+	}
+
+	/* mmap() syscall will right-shift the immap_id to vma->vm_pgoff */
+	*immap_id <<= PAGE_SHIFT;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(_iommufd_alloc_mmap, "IOMMUFD");
+
+/* Driver should use a per-structure helper in include/linux/iommufd.h */
+void _iommufd_destroy_mmap(struct iommufd_ctx *ictx,
+			   struct iommufd_object *owner, unsigned long immap_id)
+{
+	struct iommufd_mmap *immap;
+
+	immap = mtree_erase(&ictx->mt_mmap, immap_id >> PAGE_SHIFT);
+	WARN_ON_ONCE(!immap || immap->owner != owner);
+	kfree(immap);
+}
+EXPORT_SYMBOL_NS_GPL(_iommufd_destroy_mmap, "IOMMUFD");
+
 /* Caller should xa_lock(&viommu->vdevs) to protect the return value */
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id)
