@@ -634,6 +634,7 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 	uint32_t idev_id;
 	uint32_t hwpt_id;
 	uint32_t viommu_id;
+	uint32_t vqueue_id;
 	uint32_t vdev_id;
 	__u64 iova;
 
@@ -694,6 +695,11 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 		return -1;
 
 	if (_test_cmd_vdevice_alloc(self->fd, viommu_id, idev_id, 0, &vdev_id))
+		return -1;
+
+	if (_test_cmd_vqueue_alloc(self->fd, viommu_id,
+				   IOMMU_VQUEUE_TYPE_SELFTEST, 0, iova,
+				   PAGE_SIZE, &vqueue_id))
 		return -1;
 
 	if (_test_ioctl_fault_alloc(self->fd, &fault_id, &fault_fd))

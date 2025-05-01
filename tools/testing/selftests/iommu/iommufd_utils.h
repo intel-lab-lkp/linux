@@ -956,6 +956,37 @@ static int _test_cmd_vdevice_alloc(int fd, __u32 viommu_id, __u32 idev_id,
 		     _test_cmd_vdevice_alloc(self->fd, viommu_id, idev_id,   \
 					     virt_id, vdev_id))
 
+static int _test_cmd_vqueue_alloc(int fd, __u32 viommu_id, __u32 type,
+				  __u32 idx, __u64 addr, __u64 length,
+				  __u32 *vqueue_id)
+{
+	struct iommu_vqueue_alloc cmd = {
+		.size = sizeof(cmd),
+		.viommu_id = viommu_id,
+		.type = type,
+		.index = idx,
+		.addr = addr,
+		.length = length,
+	};
+	int ret;
+
+	ret = ioctl(fd, IOMMU_VQUEUE_ALLOC, &cmd);
+	if (ret)
+		return ret;
+	if (vqueue_id)
+		*vqueue_id = cmd.out_vqueue_id;
+	return 0;
+}
+
+#define test_cmd_vqueue_alloc(viommu_id, type, idx, addr, len, vqueue_id)   \
+	ASSERT_EQ(0, _test_cmd_vqueue_alloc(self->fd, viommu_id, type, idx, \
+					    addr, len, vqueue_id))
+#define test_err_vqueue_alloc(_errno, viommu_id, type, idx, addr, len,      \
+			      vqueue_id)                                    \
+	EXPECT_ERRNO(_errno,                                                \
+		     _test_cmd_vqueue_alloc(self->fd, viommu_id, type, idx, \
+					    addr, len, vqueue_id))
+
 static int _test_cmd_veventq_alloc(int fd, __u32 viommu_id, __u32 type,
 				   __u32 *veventq_id, __u32 *veventq_fd)
 {

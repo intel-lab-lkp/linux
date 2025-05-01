@@ -148,11 +148,24 @@ to_mock_nested(struct iommu_domain *domain)
 struct mock_viommu {
 	struct iommufd_viommu core;
 	struct mock_iommu_domain *s2_parent;
+	struct mock_vqueue *mock_vqueue[IOMMU_TEST_VQUEUE_MAX];
 };
 
 static inline struct mock_viommu *to_mock_viommu(struct iommufd_viommu *viommu)
 {
 	return container_of(viommu, struct mock_viommu, core);
+}
+
+struct mock_vqueue {
+	struct iommufd_vqueue core;
+	struct mock_viommu *mock_viommu;
+	struct mock_vqueue *prev;
+	u16 index;
+};
+
+static inline struct mock_vqueue *to_mock_vqueue(struct iommufd_vqueue *vqueue)
+{
+	return container_of(vqueue, struct mock_vqueue, core);
 }
 
 enum selftest_obj_type {
@@ -727,10 +740,64 @@ out:
 	return rc;
 }
 
+/* Test iommufd_vqueue_depend/undepend() */
+static struct iommufd_vqueue *mock_vqueue_alloc(struct iommufd_viommu *viommu,
+						unsigned int type, u32 index,
+						dma_addr_t addr, size_t length)
+{
+	struct mock_viommu *mock_viommu = to_mock_viommu(viommu);
+	struct mock_vqueue *mock_vqueue, *prev = NULL;
+	int rc;
+
+	if (type != IOMMU_VQUEUE_TYPE_SELFTEST)
+		return ERR_PTR(-EOPNOTSUPP);
+	if (index >= IOMMU_TEST_VQUEUE_MAX)
+		return ERR_PTR(-EINVAL);
+	if (mock_viommu->mock_vqueue[index])
+		return ERR_PTR(-EEXIST);
+	if (index) {
+		prev = mock_viommu->mock_vqueue[index - 1];
+		if (!prev)
+			return ERR_PTR(-EIO);
+	}
+
+	mock_vqueue = iommufd_vqueue_alloc(viommu, struct mock_vqueue, core);
+	if (IS_ERR(mock_vqueue))
+		return ERR_CAST(mock_vqueue);
+
+	if (prev) {
+		rc = iommufd_vqueue_depend(mock_vqueue, prev, core);
+		if (rc)
+			goto free_vqueue;
+	}
+	mock_vqueue->prev = prev;
+	mock_vqueue->mock_viommu = mock_viommu;
+	mock_viommu->mock_vqueue[index] = mock_vqueue;
+
+	return &mock_vqueue->core;
+free_vqueue:
+	iommufd_struct_destroy(mock_vqueue, core);
+	return ERR_PTR(rc);
+}
+
+static void mock_vqueue_destroy(struct iommufd_vqueue *vqueue)
+{
+	struct mock_vqueue *mock_vqueue = to_mock_vqueue(vqueue);
+	struct mock_viommu *mock_viommu = mock_vqueue->mock_viommu;
+
+	mock_viommu->mock_vqueue[mock_vqueue->index] = NULL;
+	if (mock_vqueue->prev)
+		iommufd_vqueue_undepend(mock_vqueue, mock_vqueue->prev, core);
+
+	/* iommufd core frees mock_vqueue and vqueue */
+}
+
 static struct iommufd_viommu_ops mock_viommu_ops = {
 	.destroy = mock_viommu_destroy,
 	.alloc_domain_nested = mock_viommu_alloc_domain_nested,
 	.cache_invalidate = mock_viommu_cache_invalidate,
+	.vqueue_alloc = mock_vqueue_alloc,
+	.vqueue_destroy = mock_vqueue_destroy,
 };
 
 static struct iommufd_viommu *
