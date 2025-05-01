@@ -159,6 +159,79 @@ out:
 	bpf_qdisc_fifo__destroy(fifo_skel);
 }
 
+static int get_default_qdisc(char *qdisc_name)
+{
+	FILE *f;
+	int num;
+
+	f = fopen("/proc/sys/net/core/default_qdisc", "r");
+	if (!f)
+		return -errno;
+
+	num = fscanf(f, "%s", qdisc_name);
+	fclose(f);
+
+	return num == 1 ? 0 : -EFAULT;
+}
+
+static void test_default_qdisc_attach_to_mq(void)
+{
+	struct bpf_qdisc_fifo *fifo_skel;
+	char default_qdisc[IFNAMSIZ];
+	struct netns_obj *netns;
+	char tc_qdisc_show[64];
+	struct bpf_link *link;
+	char *str_ret;
+	FILE *tc;
+	int err;
+
+	fifo_skel = bpf_qdisc_fifo__open_and_load();
+	if (!ASSERT_OK_PTR(fifo_skel, "bpf_qdisc_fifo__open_and_load"))
+		return;
+
+	link = bpf_map__attach_struct_ops(fifo_skel->maps.fifo);
+	if (!ASSERT_OK_PTR(link, "bpf_map__attach_struct_ops")) {
+		bpf_qdisc_fifo__destroy(fifo_skel);
+		return;
+	}
+
+	err = get_default_qdisc(default_qdisc);
+	if (!ASSERT_OK(err, "read sysctl net.core.default_qdisc"))
+		goto out;
+
+	err = write_sysctl("/proc/sys/net/core/default_qdisc", "bpf_fifo");
+	if (!ASSERT_OK(err, "write sysctl net.core.default_qdisc"))
+		goto out;
+
+	netns = netns_new("bpf_qdisc_ns", true);
+	if (!ASSERT_OK_PTR(netns, "netns_new"))
+		goto out;
+
+	SYS(out_restore_dflt_qdisc, "ip link add veth0 type veth peer veth1");
+	SYS(out_delete_netns, "tc qdisc add dev veth0 root handle 1: mq");
+
+	tc = popen("tc qdisc show dev veth0 parent 1:1", "r");
+	if (!ASSERT_OK_PTR(tc, "tc qdisc show dev veth0 parent 1:1"))
+		goto out_delete_netns;
+
+	str_ret = fgets(tc_qdisc_show, sizeof(tc_qdisc_show), tc);
+	if (!ASSERT_OK_PTR(str_ret, "tc qdisc show dev veth0 parent 1:1"))
+		goto out_delete_netns;
+
+	str_ret = strstr(tc_qdisc_show, "qdisc bpf_fifo");
+	if (!ASSERT_OK_PTR(str_ret, "check if bpf_fifo is created"))
+		goto out_delete_netns;
+
+	SYS(out_delete_netns, "tc qdisc delete dev veth0 root mq");
+out_delete_netns:
+	netns_free(netns);
+out_restore_dflt_qdisc:
+	write_sysctl("/proc/sys/net/core/default_qdisc", default_qdisc);
+out:
+	bpf_link__destroy(link);
+	bpf_qdisc_fifo__destroy(fifo_skel);
+}
+
 void test_bpf_qdisc(void)
 {
 	struct netns_obj *netns;
@@ -177,4 +250,9 @@ void test_bpf_qdisc(void)
 		test_qdisc_attach_to_non_root();
 
 	netns_free(netns);
+}
+
+void serial_test_bpf_qdisc_default(void)
+{
+	test_default_qdisc_attach_to_mq();
 }
