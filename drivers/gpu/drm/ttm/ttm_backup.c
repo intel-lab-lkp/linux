@@ -18,7 +18,13 @@ static struct file *ttm_backup_to_file(struct ttm_backup *backup)
 
 static struct ttm_backup *ttm_file_to_backup(struct file *file)
 {
-	return (void *)file;
+	/* Explicit union instead of a cast to make randstruct ignore us. */
+	union {
+		struct file *file;
+		struct ttm_backup *backup;
+	} u;
+	u.file = file;
+	return u.backup;
 }
 
 /*
