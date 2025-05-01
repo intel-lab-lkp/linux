@@ -37,6 +37,7 @@ enum iommufd_object_type {
 	IOMMUFD_OBJ_VIOMMU,
 	IOMMUFD_OBJ_VDEVICE,
 	IOMMUFD_OBJ_VEVENTQ,
+	IOMMUFD_OBJ_VQUEUE,
 #ifdef CONFIG_IOMMUFD_TEST
 	IOMMUFD_OBJ_SELFTEST,
 #endif
@@ -112,6 +113,14 @@ struct iommufd_vdevice {
 	u64 id; /* per-vIOMMU virtual ID */
 };
 
+struct iommufd_vqueue {
+	struct iommufd_object obj;
+	struct iommufd_ctx *ictx;
+	struct iommufd_viommu *viommu;
+	dma_addr_t addr; /* in guest physical address space */
+	size_t length;
+};
+
 /**
  * struct iommufd_viommu_ops - vIOMMU specific operations
  * @destroy: Clean up all driver-specific parts of an iommufd_viommu. The memory
@@ -137,6 +146,14 @@ struct iommufd_vdevice {
  * @vdevice_destroy: Clean up all driver-specific parts of an iommufd_vdevice.
  *                   The memory of the vDEVICE will be free-ed by iommufd core
  *                   after calling this op
+ * @vqueue_alloc: Allocate a vQUEUE object for a HW-accelerated queue given the
+ *                @type (must be defined in include/uapi/linux/iommufd.h) for a
+ *                @viommu. @index carries the logical vQUEUE ID per @viommu in a
+ *                guest VM; @addr carries the guest physical base address of the
+ *                queue memory; @length carries the size of the guest queue
+ * @vqueue_destroy: Clean up all driver-specific parts of an iommufd_vqueue. The
+ *                  memory of the iommufd_vqueue will be free-ed by iommufd core
+ *                  after calling this op
  */
 struct iommufd_viommu_ops {
 	void (*destroy)(struct iommufd_viommu *viommu);
@@ -149,6 +166,10 @@ struct iommufd_viommu_ops {
 						 struct device *dev,
 						 u64 virt_id);
 	void (*vdevice_destroy)(struct iommufd_vdevice *vdev);
+	struct iommufd_vqueue *(*vqueue_alloc)(struct iommufd_viommu *viommu,
+					       unsigned int type, u32 index,
+					       dma_addr_t addr, size_t length);
+	void (*vqueue_destroy)(struct iommufd_vqueue *vqueue);
 };
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
@@ -285,6 +306,23 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 		static_assert(offsetof(drv_struct, member.obj) == 0);          \
 		ret = (drv_struct *)_iommufd_object_alloc(                     \
 			viommu->ictx, sizeof(drv_struct), IOMMUFD_OBJ_VDEVICE);\
+		if (!IS_ERR(ret)) {                                            \
+			ret->member.viommu = viommu;                           \
+			ret->member.ictx = viommu->ictx;                       \
+		}                                                              \
+		ret;                                                           \
+	})
+
+#define iommufd_vqueue_alloc(viommu, drv_struct, member)                       \
+	({                                                                     \
+		drv_struct *ret;                                               \
+									       \
+		static_assert(__same_type(struct iommufd_viommu, *viommu));    \
+		static_assert(__same_type(struct iommufd_vqueue,               \
+					  ((drv_struct *)NULL)->member));      \
+		static_assert(offsetof(drv_struct, member.obj) == 0);          \
+		ret = (drv_struct *)_iommufd_object_alloc(                     \
+			viommu->ictx, sizeof(drv_struct), IOMMUFD_OBJ_VQUEUE); \
 		if (!IS_ERR(ret)) {                                            \
 			ret->member.viommu = viommu;                           \
 			ret->member.ictx = viommu->ictx;                       \
