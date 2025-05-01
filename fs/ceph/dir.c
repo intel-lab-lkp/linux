@@ -296,8 +296,8 @@ out:
 			err = ret;
 		dput(last);
 		/* last_name no longer match cache index */
-		if (dfi->readdir_cache_idx >= 0) {
-			dfi->readdir_cache_idx = -1;
+		if (!is_cache_idx_invalid(dfi->readdir_cache_idx)) {
+			dfi->readdir_cache_idx = CEPH_INVALID_CACHE_IDX;
 			dfi->dir_release_count = 0;
 		}
 	}
@@ -483,7 +483,7 @@ more:
 
 		if (test_bit(CEPH_MDS_R_DID_PREPOPULATE, &req->r_req_flags)) {
 			dfi->readdir_cache_idx = req->r_readdir_cache_idx;
-			if (dfi->readdir_cache_idx < 0) {
+			if (is_cache_idx_invalid(dfi->readdir_cache_idx)) {
 				/* preclude from marking dir ordered */
 				dfi->dir_ordered_count = 0;
 			} else if (ceph_frag_is_leftmost(frag) &&
@@ -497,7 +497,7 @@ more:
 			doutc(cl, "%p %llx.%llx !did_prepopulate\n", inode,
 			      ceph_vinop(inode));
 			/* disable readdir cache */
-			dfi->readdir_cache_idx = -1;
+			dfi->readdir_cache_idx = CEPH_INVALID_CACHE_IDX;
 			/* preclude from marking dir complete */
 			dfi->dir_release_count = 0;
 		}
@@ -643,7 +643,7 @@ static void reset_readdir(struct ceph_dir_file_info *dfi)
 	kfree(dfi->last_name);
 	dfi->last_name = NULL;
 	dfi->dir_release_count = 0;
-	dfi->readdir_cache_idx = -1;
+	dfi->readdir_cache_idx = CEPH_INVALID_CACHE_IDX;
 	dfi->next_offset = 2;  /* compensate for . and .. */
 	dfi->file_info.flags &= ~CEPH_F_ATEND;
 }
@@ -703,7 +703,7 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int whence)
 			/* for hash offset, we don't know if a forward seek
 			 * is within same frag */
 			dfi->dir_release_count = 0;
-			dfi->readdir_cache_idx = -1;
+			dfi->readdir_cache_idx = CEPH_INVALID_CACHE_IDX;
 		}
 
 		if (offset != file->f_pos) {

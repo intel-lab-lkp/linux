@@ -842,6 +842,14 @@ struct ceph_file_info {
 	u32 filp_gen;
 };
 
+#define CEPH_INVALID_CACHE_IDX		(-1)
+
+static inline
+bool is_cache_idx_invalid(int cache_idx)
+{
+	return cache_idx <= CEPH_INVALID_CACHE_IDX;
+}
+
 struct ceph_dir_file_info {
 	struct ceph_file_info file_info;
 

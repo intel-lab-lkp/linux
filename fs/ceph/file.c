@@ -220,7 +220,7 @@ static int ceph_init_file_info(struct inode *inode, struct file *file,
 		file->private_data = dfi;
 		fi = &dfi->file_info;
 		dfi->next_offset = 2;
-		dfi->readdir_cache_idx = -1;
+		dfi->readdir_cache_idx = CEPH_INVALID_CACHE_IDX;
 	} else {
 		fi = kmem_cache_zalloc(ceph_file_cachep, GFP_KERNEL);
 		if (!fi)
