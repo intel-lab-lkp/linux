@@ -18,6 +18,7 @@
 #include <linux/scatterlist.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
+#include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
@@ -234,7 +235,7 @@ static int acomp_do_nondma(struct acomp_req *req, bool comp)
 	return err;
 }
 
-static int acomp_do_one_req(struct acomp_req *req, bool comp)
+static int acomp_do_linear(struct acomp_req *req, bool comp)
 {
 	if (acomp_request_isnondma(req))
 		return acomp_do_nondma(req, comp);
@@ -244,9 +245,100 @@ static int acomp_do_one_req(struct acomp_req *req, bool comp)
 		      crypto_acomp_reqtfm(req)->decompress(req);
 }
 
+static void acomp_restore_cur(struct acomp_req *req)
+{
+	req->src->length += req->src->offset - req->chain.osoff;
+	req->src->offset = req->chain.osoff;
+}
+
+static void acomp_restore_unit(struct acomp_req *req)
+{
+	acomp_restore_cur(req);
+	req->src = req->chain.ossg;
+	req->dst = req->chain.odsg;
+	req->slen = req->chain.oslen;
+	req->dlen = req->chain.unit;
+	req->base.flags |= CRYPTO_ACOMP_REQ_SRC_SEG;
+}
+
 static int acomp_reqchain_finish(struct acomp_req *req, int err)
 {
-	acomp_reqchain_virt(req);
+	if (!req->chain.unit) {
+		acomp_reqchain_virt(req);
+		goto out;
+	}
+
+	for (;;) {
+		unsigned int dlen = err ? 0 : req->dlen;
+		unsigned int todo = req->slen;
+		struct page *page = NULL;
+		struct scatterlist *sg;
+		unsigned int remain;
+
+		req->dst->dma_address = 0;
+		if (req->dst->length < dlen) {
+			dlen -= req->dst->length;
+			req->dst->dma_address = 1;
+			req->dst = sg_next(req->dst);
+		}
+		req->dst->length = dlen;
+
+		if (!(req->chain.slen -= todo))
+			break;
+
+		if (req->src->length > todo) {
+			req->src->length -= todo;
+			req->src->offset += todo;
+		}
+
+		remain = todo - req->src->length;
+		acomp_restore_cur(req);
+		req->src = sg_next(req->src);
+		req->chain.osoff = req->src->offset;
+		req->src->length -= remain;
+		req->src->offset += remain;
+
+		todo = min(req->chain.unit, req->chain.slen);
+		req->slen = todo;
+
+		remain = PAGE_SIZE - req->dst->offset - req->dst->length;
+		if (!sg_is_last(req->dst))
+			page = sg_page(req->dst + 1);
+		else if (remain < todo) {
+			page = alloc_page(GFP_ATOMIC);
+			if (!page)
+				break;
+		}
+
+		sg = kmalloc_array(2 - !remain + !!page,
+				   sizeof(*sg), GFP_ATOMIC);
+		if (!sg) {
+			__free_page(page);
+			break;
+		}
+
+		sg_unmark_end(req->dst);
+		sg_chain(req->dst, 2, sg);
+
+		sg_init_table(sg, !!remain + !!page);
+		if (remain)
+			sg_set_page(sg, sg_page(req->dst),
+				    remain, PAGE_SIZE - remain);
+		if (page)
+			sg_set_page(sg + !!remain, page, PAGE_SIZE, 0);
+
+		req->dst = sg;
+		req->dlen = todo;
+
+		err = crypto_acomp_reqtfm(req)->compress(req);
+		if (err == -EINPROGRESS || err == -EBUSY)
+			return err;
+	}
+
+	acomp_restore_unit(req);
+	err = 0;
+
+out:
 	acomp_restore_req(req);
 	return err;
 }
@@ -268,16 +360,61 @@ notify:
 	compl(data, err);
 }
 
+void acomp_free_sgl(struct scatterlist *sg)
+{
+	struct page *page0;
+
+	page0 = sg_page(sg);
+	sg = sg_next(sg);
+	while (sg) {
+		struct scatterlist *nsg = sg_next(sg);
+		struct page *page = sg_page(sg);
+
+		if (page != page0)
+			__free_page(page);
+
+		kfree(sg);
+		sg = nsg;
+	}
+}
+EXPORT_SYMBOL_GPL(acomp_free_sgl);
+
 static int acomp_do_req_chain(struct acomp_req *req, bool comp)
 {
+	unsigned int todo;
 	int err;
 
 	acomp_save_req(req, acomp_reqchain_done);
+	if (!acomp_request_isunit(req)) {
+		req->chain.unit = 0;
+		err = acomp_do_linear(req, comp);
+		goto out;
+	}
 
-	err = acomp_do_one_req(req, comp);
-	if (err == -EBUSY || err == -EINPROGRESS)
+	if (req->dst->offset || req->dst->length != PAGE_SIZE)
+		return -EINVAL;
+	if (!req->dlen)
+		return -EINVAL;
+
+	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_SEG;
+
+	req->chain.ossg = req->src;
+	req->chain.odsg = req->dst;
+	req->chain.oslen = req->slen;
+	req->chain.unit = req->dlen;
+
+	req->chain.osoff = req->src->offset;
+	req->chain.slen = req->slen;
+
+	todo = min(req->chain.unit, req->chain.slen);
+	req->slen = todo;
+	req->dlen = todo;
+
+	err = crypto_acomp_reqtfm(req)->compress(req);
+
+out:
+	if (err == -EINPROGRESS || err == -EBUSY)
 		return err;
-
 	return acomp_reqchain_finish(req, err);
 }
 
@@ -287,7 +424,8 @@ int crypto_acomp_compress(struct acomp_req *req)
 
 	if (acomp_req_on_stack(req) && acomp_is_async(tfm))
 		return -EAGAIN;
-	if (crypto_acomp_req_virt(tfm) || acomp_request_issg(req))
+	if ((crypto_acomp_req_virt(tfm) || acomp_request_issg(req)) &&
+	    (crypto_acomp_req_seg(tfm) || !acomp_request_isunit(req)))
 		return crypto_acomp_reqtfm(req)->compress(req);
 	return acomp_do_req_chain(req, true);
 }
@@ -299,6 +437,8 @@ int crypto_acomp_decompress(struct acomp_req *req)
 
 	if (acomp_req_on_stack(req) && acomp_is_async(tfm))
 		return -EAGAIN;
+	if (acomp_request_isunit(req))
+		return -ENOSYS;
 	if (crypto_acomp_req_virt(tfm) || acomp_request_issg(req))
 		return crypto_acomp_reqtfm(req)->decompress(req);
 	return acomp_do_req_chain(req, false);

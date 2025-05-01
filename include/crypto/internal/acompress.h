@@ -154,6 +154,11 @@ static inline bool acomp_request_issg(struct acomp_req *req)
 				    CRYPTO_ACOMP_REQ_DST_VIRT));
 }
 
+static inline bool acomp_request_isunit(struct acomp_req *req)
+{
+	return req->base.flags & CRYPTO_ACOMP_REQ_SRC_SEG;
+}
+
 static inline bool acomp_request_src_isvirt(struct acomp_req *req)
 {
 	return req->base.flags & CRYPTO_ACOMP_REQ_SRC_VIRT;
@@ -189,6 +194,11 @@ static inline bool acomp_request_isnondma(struct acomp_req *req)
 static inline bool crypto_acomp_req_virt(struct crypto_acomp *tfm)
 {
 	return crypto_tfm_req_virt(&tfm->base);
+}
+
+static inline bool crypto_acomp_req_seg(struct crypto_acomp *tfm)
+{
+	return crypto_tfm_req_seg(&tfm->base);
 }
 
 void crypto_acomp_free_streams(struct crypto_acomp_streams *s);

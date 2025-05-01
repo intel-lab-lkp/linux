@@ -32,9 +32,13 @@
 /* Set this bit for if virtual address destination cannot be used for DMA. */
 #define CRYPTO_ACOMP_REQ_DST_NONDMA	0x00000010
 
+/* Set this bit if request source needs segmentation. */
+#define CRYPTO_ACOMP_REQ_SRC_SEG	0x00000020
+
 /* Private flags that should not be touched by the user. */
 #define CRYPTO_ACOMP_REQ_PRIVATE \
 	(CRYPTO_ACOMP_REQ_SRC_VIRT | CRYPTO_ACOMP_REQ_SRC_NONDMA | \
+	 CRYPTO_ACOMP_REQ_SRC_SEG | \
 	 CRYPTO_ACOMP_REQ_DST_VIRT | CRYPTO_ACOMP_REQ_DST_NONDMA)
 
 #define CRYPTO_ACOMP_DST_MAX		131072
@@ -50,7 +54,6 @@
 #define ACOMP_REQUEST_CLONE(name, gfp) \
 	acomp_request_clone(name, sizeof(__##name##_req), gfp)
 
-struct acomp_req;
 struct folio;
 
 struct acomp_req_chain {
@@ -59,12 +62,18 @@ struct acomp_req_chain {
 	struct scatterlist ssg;
 	struct scatterlist dsg;
 	union {
-		const u8 *src;
-		struct folio *sfolio;
-	};
-	union {
-		u8 *dst;
-		struct folio *dfolio;
+		struct {
+			const u8 *src;
+			u8 *dst;
+		};
+		struct {
+			struct scatterlist *ossg;
+			struct scatterlist *odsg;
+			unsigned int oslen;
+			unsigned int osoff;
+			unsigned int unit;
+			unsigned int slen;
+		};
 	};
 	u32 flags;
 };
@@ -357,8 +366,51 @@ static inline void acomp_request_set_params(struct acomp_req *req,
 
 	req->base.flags &= ~(CRYPTO_ACOMP_REQ_SRC_VIRT |
 			     CRYPTO_ACOMP_REQ_SRC_NONDMA |
+			     CRYPTO_ACOMP_REQ_SRC_SEG |
 			     CRYPTO_ACOMP_REQ_DST_VIRT |
 			     CRYPTO_ACOMP_REQ_DST_NONDMA);
+}
+
+/**
+ * acomp_request_set_src_unit() -- Sets source segmented scatterlist
+ *
+ * Sets source segmented scatterlist required by an acomp operation.
+ *
+ * This is only supported for compression.  The input will be
+ * segmented into units of the specified size, before being sent
+ * for compression.  The output can be retrieved from req->dst.
+ * Each entry in req->dst shall correspond to one input unit, unless
+ * acomp_sgl_split() returns true on that SG entry, in which case
+ * that entry and the next shall correspond to the same input unit.
+ * A zero-length entry in req->dst means that the corresponding input
+ * unit is incompressible.  If the number of entries in req->dst is
+ * less than the number of input units, then the rest were not
+ * processed due to a memory allocation failure.  The caller may
+ * retry the operation with an adjusted src offset.
+ *
+ * @req:	asynchronous compress request
+ * @src:	pointer to input buffer scatterlist
+ * @slen:	size of the input buffer
+ * @dst:	2-element scatterlist, first with a single page and the
+ *		second is reserved for chaining.
+ * @unit:	unit size
+ */
+static inline void acomp_request_set_src_unit(struct acomp_req *req,
+					      struct scatterlist *src,
+					      unsigned int slen,
+					      struct scatterlist dst[2],
+					      int unit)
+{
+	req->src = src;
+	req->slen = slen;
+	req->dst = dst;
+	req->dlen = unit;
+
+	req->base.flags &= ~(CRYPTO_ACOMP_REQ_SRC_VIRT |
+			     CRYPTO_ACOMP_REQ_SRC_NONDMA |
+			     CRYPTO_ACOMP_REQ_DST_VIRT |
+			     CRYPTO_ACOMP_REQ_DST_NONDMA);
+	req->base.flags |= CRYPTO_ACOMP_REQ_SRC_SEG;
 }
 
 /**
@@ -379,6 +431,7 @@ static inline void acomp_request_set_src_sg(struct acomp_req *req,
 
 	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_NONDMA;
 	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_VIRT;
+	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_SEG;
 }
 
 /**
@@ -398,6 +451,7 @@ static inline void acomp_request_set_src_dma(struct acomp_req *req,
 	req->slen = slen;
 
 	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_NONDMA;
+	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_SEG;
 	req->base.flags |= CRYPTO_ACOMP_REQ_SRC_VIRT;
 }
 
@@ -418,6 +472,7 @@ static inline void acomp_request_set_src_nondma(struct acomp_req *req,
 	req->svirt = src;
 	req->slen = slen;
 
+	req->base.flags &= ~CRYPTO_ACOMP_REQ_SRC_SEG;
 	req->base.flags |= CRYPTO_ACOMP_REQ_SRC_NONDMA;
 	req->base.flags |= CRYPTO_ACOMP_REQ_SRC_VIRT;
 }
@@ -439,6 +494,31 @@ static inline void acomp_request_set_src_folio(struct acomp_req *req,
 	sg_init_table(&req->chain.ssg, 1);
 	sg_set_folio(&req->chain.ssg, folio, len, off);
 	acomp_request_set_src_sg(req, &req->chain.ssg, len);
+}
+
+/**
+ * acomp_request_set_src_folio_unit() -- Sets source segmented folio
+ *
+ * Sets source segmented folio required by an acomp operation.
+ *
+ * @req:	asynchronous compress request
+ * @folio:	pointer to input folio
+ * @off:	input folio offset
+ * @len:	size of the input buffer
+ * @dst:	2-element scatterlist, first with a single page and the
+ *		second is reserved for chaining.
+ * @unit:	unit size
+ */
+static inline void acomp_request_set_src_folio_unit(struct acomp_req *req,
+						    struct folio *folio,
+						    size_t off,
+						    unsigned int len,
+						    struct scatterlist dst[2],
+						    unsigned int unit)
+{
+	sg_init_table(&req->chain.ssg, 1);
+	sg_set_folio(&req->chain.ssg, folio, len, off);
+	acomp_request_set_src_unit(req, &req->chain.ssg, len, dst, unit);
 }
 
 /**
@@ -553,5 +633,14 @@ static inline struct acomp_req *acomp_request_on_stack_init(
 
 struct acomp_req *acomp_request_clone(struct acomp_req *req,
 				      size_t total, gfp_t gfp);
+
+/* True if the result entry spans two SG entries. */
+static inline bool acomp_sgl_split(struct scatterlist *sg)
+{
+	return !!sg->dma_address;
+}
+
+/* Free segmented SGL list returned in req->dst. */
+void acomp_free_sgl(struct scatterlist *sg);
 
 #endif

@@ -59,6 +59,9 @@ static int crypto_check_alg(struct crypto_alg *alg)
 	if (alg->cra_priority < 0)
 		return -EINVAL;
 
+	if (alg->cra_flags & CRYPTO_ALG_REQ_SEG)
+		alg->cra_flags |= CRYPTO_ALG_REQ_VIRT;
+
 	refcount_set(&alg->cra_refcnt, 1);
 
 	return 0;

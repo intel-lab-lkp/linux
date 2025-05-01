@@ -136,6 +136,9 @@
 /* Set if the algorithm supports virtual addresses. */
 #define CRYPTO_ALG_REQ_VIRT		0x00040000
 
+/* Set if the algorithm supports segmentation (implies REQ_VIRT). */
+#define CRYPTO_ALG_REQ_SEG		0x00080000
+
 /* The high bits 0xff000000 are reserved for type-specific flags. */
 
 /*
