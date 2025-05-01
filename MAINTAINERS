@@ -24187,6 +24187,13 @@ S:	Supported
 F:	Documentation/devicetree/bindings/iio/adc/ti,ads7924.yaml
 F:	drivers/iio/adc/ti-ads7924.c
 
+TI ADS1262 ADC DRIVER
+M:	Sayyad Abid <sayyad.abid16@gmail.com>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/adc/ti,ads1262.yaml
+F:	drivers/iio/adc/ads1262.c
+
 TI AM437X VPFE DRIVER
 M:	"Lad, Prabhakar" <prabhakar.csengg@gmail.com>
 L:	linux-media@vger.kernel.org
