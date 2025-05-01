@@ -56,6 +56,7 @@ enum {
 	IOMMUFD_CMD_VDEVICE_ALLOC = 0x91,
 	IOMMUFD_CMD_IOAS_CHANGE_PROCESS = 0x92,
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
+	IOMMUFD_CMD_VQUEUE_ALLOC = 0x94,
 };
 
 /**
@@ -1147,4 +1148,47 @@ struct iommu_veventq_alloc {
 	__u32 __reserved;
 };
 #define IOMMU_VEVENTQ_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VEVENTQ_ALLOC)
+
+/**
+ * enum iommu_vqueue_type - Virtual Queue Type
+ * @IOMMU_VQUEUE_TYPE_DEFAULT: Reserved for future use
+ */
+enum iommu_vqueue_type {
+	IOMMU_VQUEUE_TYPE_DEFAULT = 0,
+};
+
+/**
+ * struct iommu_vqueue_alloc - ioctl(IOMMU_VQUEUE_ALLOC)
+ * @size: sizeof(struct iommu_vqueue_alloc)
+ * @flags: Must be 0
+ * @viommu_id: Virtual IOMMU ID to associate the virtual queue with
+ * @type: One of enum iommu_vqueue_type
+ * @index: The logical index to the virtual queue per virtual IOMMU, for a multi
+ *         queue model
+ * @out_vqueue_id: The ID of the new virtual queue
+ * @addr: Base address of the queue memory in the guest physical address space
+ * @length: Length of the queue memory in the guest physical address space
+ *
+ * Allocate a virtual queue object for a vIOMMU-specific HW-acceleration feature
+ * that allows HW to access a guest queue memory described by @addr and @length.
+ * It's suggested for VMM to back the queue memory using a single huge page with
+ * a proper alignment for its contiguity in the host physical address space. The
+ * call will fail, if the queue memory is not contiguous in the physical address
+ * space. Upon success, its underlying physical pages will be pinned to prevent
+ * VMM from unmapping them in the IOAS, until the virtual queue gets destroyed.
+ *
+ * A vIOMMU can allocate multiple queues, but it must use a different @index to
+ * separate each allocation, e.g. VCMDQ0, VCMDQ1, ...
+ */
+struct iommu_vqueue_alloc {
+	__u32 size;
+	__u32 flags;
+	__u32 viommu_id;
+	__u32 type;
+	__u32 index;
+	__u32 out_vqueue_id;
+	__aligned_u64 addr;
+	__aligned_u64 length;
+};
+#define IOMMU_VQUEUE_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VQUEUE_ALLOC)
 #endif
