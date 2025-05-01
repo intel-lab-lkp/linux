@@ -323,57 +323,52 @@ static int pci_epf_mhi_edma_read(struct mhi_ep_cntrl *mhi_cntrl,
 	if (buf_info->size < SZ_4K)
 		return pci_epf_mhi_iatu_read(mhi_cntrl, buf_info);
 
-	mutex_lock(&epf_mhi->lock);
+	scoped_guard(mutex, &epf_mhi->lock) {
+		config.direction = DMA_DEV_TO_MEM;
+		config.src_addr = buf_info->host_addr;
 
-	config.direction = DMA_DEV_TO_MEM;
-	config.src_addr = buf_info->host_addr;
+		ret = dmaengine_slave_config(chan, &config);
+		if (ret) {
+			dev_err(dev, "Failed to configure DMA channel\n");
+			return ret;
+		}
 
-	ret = dmaengine_slave_config(chan, &config);
-	if (ret) {
-		dev_err(dev, "Failed to configure DMA channel\n");
-		goto err_unlock;
+		dst_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
+					  DMA_FROM_DEVICE);
+		ret = dma_mapping_error(dma_dev, dst_addr);
+		if (ret) {
+			dev_err(dev, "Failed to map remote memory\n");
+			return ret;
+		}
+
+		desc = dmaengine_prep_slave_single(chan, dst_addr, buf_info->size,
+						   DMA_DEV_TO_MEM,
+						   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+		if (!desc) {
+			dev_err(dev, "Failed to prepare DMA\n");
+			dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
+			return -EIO;
+		}
+
+		desc->callback = pci_epf_mhi_dma_callback;
+		desc->callback_param = &complete;
+
+		cookie = dmaengine_submit(desc);
+		ret = dma_submit_error(cookie);
+		if (ret) {
+			dev_err(dev, "Failed to do DMA submit\n");
+			dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
+			return ret;
+		}
+
+		dma_async_issue_pending(chan);
+		ret = wait_for_completion_timeout(&complete, msecs_to_jiffies(1000));
+		if (!ret) {
+			dev_err(dev, "DMA transfer timeout\n");
+			dmaengine_terminate_sync(chan);
+			ret = -ETIMEDOUT;
+		}
 	}
-
-	dst_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
-				  DMA_FROM_DEVICE);
-	ret = dma_mapping_error(dma_dev, dst_addr);
-	if (ret) {
-		dev_err(dev, "Failed to map remote memory\n");
-		goto err_unlock;
-	}
-
-	desc = dmaengine_prep_slave_single(chan, dst_addr, buf_info->size,
-					   DMA_DEV_TO_MEM,
-					   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
-	if (!desc) {
-		dev_err(dev, "Failed to prepare DMA\n");
-		ret = -EIO;
-		goto err_unmap;
-	}
-
-	desc->callback = pci_epf_mhi_dma_callback;
-	desc->callback_param = &complete;
-
-	cookie = dmaengine_submit(desc);
-	ret = dma_submit_error(cookie);
-	if (ret) {
-		dev_err(dev, "Failed to do DMA submit\n");
-		goto err_unmap;
-	}
-
-	dma_async_issue_pending(chan);
-	ret = wait_for_completion_timeout(&complete, msecs_to_jiffies(1000));
-	if (!ret) {
-		dev_err(dev, "DMA transfer timeout\n");
-		dmaengine_terminate_sync(chan);
-		ret = -ETIMEDOUT;
-	}
-
-err_unmap:
-	dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
-err_unlock:
-	mutex_unlock(&epf_mhi->lock);
-
 	return ret;
 }
 
@@ -394,57 +389,52 @@ static int pci_epf_mhi_edma_write(struct mhi_ep_cntrl *mhi_cntrl,
 	if (buf_info->size < SZ_4K)
 		return pci_epf_mhi_iatu_write(mhi_cntrl, buf_info);
 
-	mutex_lock(&epf_mhi->lock);
+	scoped_guard(mutex, &epf_mhi->lock) {
+		config.direction = DMA_MEM_TO_DEV;
+		config.dst_addr = buf_info->host_addr;
 
-	config.direction = DMA_MEM_TO_DEV;
-	config.dst_addr = buf_info->host_addr;
+		ret = dmaengine_slave_config(chan, &config);
+		if (ret) {
+			dev_err(dev, "Failed to configure DMA channel\n");
+			return ret;
+		}
 
-	ret = dmaengine_slave_config(chan, &config);
-	if (ret) {
-		dev_err(dev, "Failed to configure DMA channel\n");
-		goto err_unlock;
+		src_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
+					  DMA_TO_DEVICE);
+		ret = dma_mapping_error(dma_dev, src_addr);
+		if (ret) {
+			dev_err(dev, "Failed to map remote memory\n");
+			return ret;
+		}
+
+		desc = dmaengine_prep_slave_single(chan, src_addr, buf_info->size,
+						   DMA_MEM_TO_DEV,
+						   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+		if (!desc) {
+			dev_err(dev, "Failed to prepare DMA\n");
+			dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
+			return -EIO;
+		}
+
+		desc->callback = pci_epf_mhi_dma_callback;
+		desc->callback_param = &complete;
+
+		cookie = dmaengine_submit(desc);
+		ret = dma_submit_error(cookie);
+		if (ret) {
+			dev_err(dev, "Failed to do DMA submit\n");
+			dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
+			return ret;
+		}
+
+		dma_async_issue_pending(chan);
+		ret = wait_for_completion_timeout(&complete, msecs_to_jiffies(1000));
+		if (!ret) {
+			dev_err(dev, "DMA transfer timeout\n");
+			dmaengine_terminate_sync(chan);
+			ret = -ETIMEDOUT;
+		}
 	}
-
-	src_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
-				  DMA_TO_DEVICE);
-	ret = dma_mapping_error(dma_dev, src_addr);
-	if (ret) {
-		dev_err(dev, "Failed to map remote memory\n");
-		goto err_unlock;
-	}
-
-	desc = dmaengine_prep_slave_single(chan, src_addr, buf_info->size,
-					   DMA_MEM_TO_DEV,
-					   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
-	if (!desc) {
-		dev_err(dev, "Failed to prepare DMA\n");
-		ret = -EIO;
-		goto err_unmap;
-	}
-
-	desc->callback = pci_epf_mhi_dma_callback;
-	desc->callback_param = &complete;
-
-	cookie = dmaengine_submit(desc);
-	ret = dma_submit_error(cookie);
-	if (ret) {
-		dev_err(dev, "Failed to do DMA submit\n");
-		goto err_unmap;
-	}
-
-	dma_async_issue_pending(chan);
-	ret = wait_for_completion_timeout(&complete, msecs_to_jiffies(1000));
-	if (!ret) {
-		dev_err(dev, "DMA transfer timeout\n");
-		dmaengine_terminate_sync(chan);
-		ret = -ETIMEDOUT;
-	}
-
-err_unmap:
-	dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
-err_unlock:
-	mutex_unlock(&epf_mhi->lock);
-
 	return ret;
 }
 
@@ -497,67 +487,59 @@ static int pci_epf_mhi_edma_read_async(struct mhi_ep_cntrl *mhi_cntrl,
 	dma_addr_t dst_addr;
 	int ret;
 
-	mutex_lock(&epf_mhi->lock);
+	scoped_guard(mutex, &epf_mhi->lock) {
+		config.direction = DMA_DEV_TO_MEM;
+		config.src_addr = buf_info->host_addr;
 
-	config.direction = DMA_DEV_TO_MEM;
-	config.src_addr = buf_info->host_addr;
+		ret = dmaengine_slave_config(chan, &config);
+		if (ret) {
+			dev_err(dev, "Failed to configure DMA channel\n");
+			return ret;
+		}
 
-	ret = dmaengine_slave_config(chan, &config);
-	if (ret) {
-		dev_err(dev, "Failed to configure DMA channel\n");
-		goto err_unlock;
+		dst_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
+					  DMA_FROM_DEVICE);
+		ret = dma_mapping_error(dma_dev, dst_addr);
+		if (ret) {
+			dev_err(dev, "Failed to map remote memory\n");
+			return ret;
+		}
+
+		desc = dmaengine_prep_slave_single(chan, dst_addr, buf_info->size,
+						   DMA_DEV_TO_MEM,
+						   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+		if (!desc) {
+			dev_err(dev, "Failed to prepare DMA\n");
+			dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
+			return -EIO;
+		}
+
+		transfer = kzalloc(sizeof(*transfer), GFP_KERNEL);
+		if (!transfer) {
+			dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
+			return -ENOMEM;
+		}
+
+		transfer->epf_mhi = epf_mhi;
+		transfer->paddr = dst_addr;
+		transfer->size = buf_info->size;
+		transfer->dir = DMA_FROM_DEVICE;
+		memcpy(&transfer->buf_info, buf_info, sizeof(*buf_info));
+
+		desc->callback = pci_epf_mhi_dma_async_callback;
+		desc->callback_param = transfer;
+
+		cookie = dmaengine_submit(desc);
+		ret = dma_submit_error(cookie);
+		if (ret) {
+			dev_err(dev, "Failed to do DMA submit\n");
+			kfree(transfer);
+			dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
+			return ret;
+		}
+
+		dma_async_issue_pending(chan);
 	}
-
-	dst_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
-				  DMA_FROM_DEVICE);
-	ret = dma_mapping_error(dma_dev, dst_addr);
-	if (ret) {
-		dev_err(dev, "Failed to map remote memory\n");
-		goto err_unlock;
-	}
-
-	desc = dmaengine_prep_slave_single(chan, dst_addr, buf_info->size,
-					   DMA_DEV_TO_MEM,
-					   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
-	if (!desc) {
-		dev_err(dev, "Failed to prepare DMA\n");
-		ret = -EIO;
-		goto err_unmap;
-	}
-
-	transfer = kzalloc(sizeof(*transfer), GFP_KERNEL);
-	if (!transfer) {
-		ret = -ENOMEM;
-		goto err_unmap;
-	}
-
-	transfer->epf_mhi = epf_mhi;
-	transfer->paddr = dst_addr;
-	transfer->size = buf_info->size;
-	transfer->dir = DMA_FROM_DEVICE;
-	memcpy(&transfer->buf_info, buf_info, sizeof(*buf_info));
-
-	desc->callback = pci_epf_mhi_dma_async_callback;
-	desc->callback_param = transfer;
-
-	cookie = dmaengine_submit(desc);
-	ret = dma_submit_error(cookie);
-	if (ret) {
-		dev_err(dev, "Failed to do DMA submit\n");
-		goto err_free_transfer;
-	}
-
-	dma_async_issue_pending(chan);
-
-	goto err_unlock;
-
-err_free_transfer:
-	kfree(transfer);
-err_unmap:
-	dma_unmap_single(dma_dev, dst_addr, buf_info->size, DMA_FROM_DEVICE);
-err_unlock:
-	mutex_unlock(&epf_mhi->lock);
-
 	return ret;
 }
 
@@ -576,67 +558,59 @@ static int pci_epf_mhi_edma_write_async(struct mhi_ep_cntrl *mhi_cntrl,
 	dma_addr_t src_addr;
 	int ret;
 
-	mutex_lock(&epf_mhi->lock);
+	scoped_guard(mutex, &epf_mhi->lock) {
+		config.direction = DMA_MEM_TO_DEV;
+		config.dst_addr = buf_info->host_addr;
 
-	config.direction = DMA_MEM_TO_DEV;
-	config.dst_addr = buf_info->host_addr;
+		ret = dmaengine_slave_config(chan, &config);
+		if (ret) {
+			dev_err(dev, "Failed to configure DMA channel\n");
+			return ret;
+		}
 
-	ret = dmaengine_slave_config(chan, &config);
-	if (ret) {
-		dev_err(dev, "Failed to configure DMA channel\n");
-		goto err_unlock;
+		src_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
+					  DMA_TO_DEVICE);
+		ret = dma_mapping_error(dma_dev, src_addr);
+		if (ret) {
+			dev_err(dev, "Failed to map remote memory\n");
+			return ret;
+		}
+
+		desc = dmaengine_prep_slave_single(chan, src_addr, buf_info->size,
+						   DMA_MEM_TO_DEV,
+						   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+		if (!desc) {
+			dev_err(dev, "Failed to prepare DMA\n");
+			dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
+			return -EIO;
+		}
+
+		transfer = kzalloc(sizeof(*transfer), GFP_KERNEL);
+		if (!transfer) {
+			dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
+			return -ENOMEM;
+		}
+
+		transfer->epf_mhi = epf_mhi;
+		transfer->paddr = src_addr;
+		transfer->size = buf_info->size;
+		transfer->dir = DMA_TO_DEVICE;
+		memcpy(&transfer->buf_info, buf_info, sizeof(*buf_info));
+
+		desc->callback = pci_epf_mhi_dma_async_callback;
+		desc->callback_param = transfer;
+
+		cookie = dmaengine_submit(desc);
+		ret = dma_submit_error(cookie);
+		if (ret) {
+			dev_err(dev, "Failed to do DMA submit\n");
+			kfree(transfer);
+			dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
+			return ret;
+		}
+
+		dma_async_issue_pending(chan);
 	}
-
-	src_addr = dma_map_single(dma_dev, buf_info->dev_addr, buf_info->size,
-				  DMA_TO_DEVICE);
-	ret = dma_mapping_error(dma_dev, src_addr);
-	if (ret) {
-		dev_err(dev, "Failed to map remote memory\n");
-		goto err_unlock;
-	}
-
-	desc = dmaengine_prep_slave_single(chan, src_addr, buf_info->size,
-					   DMA_MEM_TO_DEV,
-					   DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
-	if (!desc) {
-		dev_err(dev, "Failed to prepare DMA\n");
-		ret = -EIO;
-		goto err_unmap;
-	}
-
-	transfer = kzalloc(sizeof(*transfer), GFP_KERNEL);
-	if (!transfer) {
-		ret = -ENOMEM;
-		goto err_unmap;
-	}
-
-	transfer->epf_mhi = epf_mhi;
-	transfer->paddr = src_addr;
-	transfer->size = buf_info->size;
-	transfer->dir = DMA_TO_DEVICE;
-	memcpy(&transfer->buf_info, buf_info, sizeof(*buf_info));
-
-	desc->callback = pci_epf_mhi_dma_async_callback;
-	desc->callback_param = transfer;
-
-	cookie = dmaengine_submit(desc);
-	ret = dma_submit_error(cookie);
-	if (ret) {
-		dev_err(dev, "Failed to do DMA submit\n");
-		goto err_free_transfer;
-	}
-
-	dma_async_issue_pending(chan);
-
-	goto err_unlock;
-
-err_free_transfer:
-	kfree(transfer);
-err_unmap:
-	dma_unmap_single(dma_dev, src_addr, buf_info->size, DMA_TO_DEVICE);
-err_unlock:
-	mutex_unlock(&epf_mhi->lock);
-
 	return ret;
 }
 
