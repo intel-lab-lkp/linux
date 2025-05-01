@@ -754,8 +754,7 @@ static int agilent_82357a_go_to_standby(struct gpib_board *board)
 	return 0;
 }
 
-//FIXME should change prototype to return int
-static void agilent_82357a_request_system_control(struct gpib_board *board,
+static int agilent_82357a_request_system_control(struct gpib_board *board,
 						  int request_control)
 {
 	struct agilent_82357a_priv *a_priv = board->private_data;
@@ -765,7 +764,7 @@ static void agilent_82357a_request_system_control(struct gpib_board *board,
 	int i = 0;
 
 	if (!a_priv->bus_interface)
-		return; // -ENODEV;
+		return -ENODEV;
 
 	usb_dev = interface_to_usbdev(a_priv->bus_interface);
 	/* 82357B needs bit to be set in 9914 AUXCR register */
@@ -785,7 +784,7 @@ static void agilent_82357a_request_system_control(struct gpib_board *board,
 	retval = agilent_82357a_write_registers(a_priv, writes, i);
 	if (retval)
 		dev_err(&usb_dev->dev, "write_registers() returned error\n");
-	return;// retval;
+	return retval;
 }
 
 static void agilent_82357a_interface_clear(struct gpib_board *board, int assert)
