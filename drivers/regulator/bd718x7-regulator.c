@@ -1715,23 +1715,24 @@ static int bd718xx_probe(struct platform_device *pdev)
 					 "rohm,reset-snvs-powered");
 
 	/*
-	 * Change the next stage from poweroff to be READY instead of SNVS
-	 * for all reset types because OTP loading at READY will clear SEL
-	 * bit allowing HW defaults for power rails to be used
+	 * Set next power state from poweroff to be either READY or SNVS for all
+	 * reset types. The default is READY state because OTP loading at READY
+	 * will clear SEL bit allowing HW defaults for power rails to be used.
+	 * Using SNVS power state instead allows SNVS state, such as RTC and
+	 * LPGPR to be persisted over reboots.
 	 */
-	if (!use_snvs) {
-		err = regmap_update_bits(regmap, BD718XX_REG_TRANS_COND1,
-					 BD718XX_ON_REQ_POWEROFF_MASK |
-					 BD718XX_SWRESET_POWEROFF_MASK |
-					 BD718XX_WDOG_POWEROFF_MASK |
-					 BD718XX_KEY_L_POWEROFF_MASK,
-					 BD718XX_POWOFF_TO_RDY);
-		if (err)
-			return dev_err_probe(&pdev->dev, err,
-					     "Failed to change reset target\n");
+	err = regmap_update_bits(regmap, BD718XX_REG_TRANS_COND1,
+				 BD718XX_ON_REQ_POWEROFF_MASK |
+				 BD718XX_SWRESET_POWEROFF_MASK |
+				 BD718XX_WDOG_POWEROFF_MASK |
+				 BD718XX_KEY_L_POWEROFF_MASK,
+				 use_snvs ? 0 : BD718XX_POWOFF_TO_RDY);
+	if (err)
+		return dev_err_probe(&pdev->dev, err,
+				     "Failed to change reset target\n");
 
-		dev_dbg(&pdev->dev, "Changed all resets from SVNS to READY\n");
-	}
+	dev_dbg(&pdev->dev, "Changed all resets from %s to %s\n",
+		use_snvs ? "READY" : "SNVS", use_snvs ? "SNVS" : "READY");
 
 	config.dev = pdev->dev.parent;
 	config.regmap = regmap;
