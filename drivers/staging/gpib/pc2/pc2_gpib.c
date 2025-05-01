@@ -127,11 +127,12 @@ static int pc2_go_to_standby(struct gpib_board *board)
 	return nec7210_go_to_standby(board, &priv->nec7210_priv);
 }
 
-static void pc2_request_system_control(struct gpib_board *board, int request_control)
+static int pc2_request_system_control(struct gpib_board *board, int request_control)
 {
 	struct pc2_priv *priv = board->private_data;
 
 	nec7210_request_system_control(board, &priv->nec7210_priv, request_control);
+	return 0;
 }
 
 static void pc2_interface_clear(struct gpib_board *board, int assert)

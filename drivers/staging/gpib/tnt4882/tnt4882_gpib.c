@@ -642,7 +642,7 @@ static int tnt4882_go_to_standby(struct gpib_board *board)
 	return nec7210_go_to_standby(board, &priv->nec7210_priv);
 }
 
-static void tnt4882_request_system_control(struct gpib_board *board, int request_control)
+static int tnt4882_request_system_control(struct gpib_board *board, int request_control)
 {
 	struct tnt4882_priv *priv = board->private_data;
 
@@ -655,6 +655,7 @@ static void tnt4882_request_system_control(struct gpib_board *board, int request
 		tnt_writeb(priv, CLRSC, CMDR);
 		udelay(1);
 	}
+	return 0;
 }
 
 static void tnt4882_interface_clear(struct gpib_board *board, int assert)

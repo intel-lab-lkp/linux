@@ -339,7 +339,7 @@ static int agilent_82350b_go_to_standby(struct gpib_board *board)
 	return tms9914_go_to_standby(board, &priv->tms9914_priv);
 }
 
-static void agilent_82350b_request_system_control(struct gpib_board *board,
+static int agilent_82350b_request_system_control(struct gpib_board *board,
 						  int request_control)
 
 {
@@ -356,6 +356,7 @@ static void agilent_82350b_request_system_control(struct gpib_board *board,
 	}
 	writeb(a_priv->card_mode_bits, a_priv->gpib_base + CARD_MODE_REG);
 	tms9914_request_system_control(board, &a_priv->tms9914_priv, request_control);
+	return 0;
 }
 
 static void agilent_82350b_interface_clear(struct gpib_board *board, int assert)

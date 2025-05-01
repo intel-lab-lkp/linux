@@ -909,7 +909,7 @@ static void usb_gpib_remote_enable(struct gpib_board *board, int enable)
 
 /* request_system_control */
 
-static void usb_gpib_request_system_control(struct gpib_board *board,
+static int usb_gpib_request_system_control(struct gpib_board *board,
 					    int request_control)
 {
 	if (request_control)
@@ -918,6 +918,7 @@ static void usb_gpib_request_system_control(struct gpib_board *board,
 		clear_bit(CIC_NUM, &board->status);
 
 	DIA_LOG(1, "done with %d -> %lx\n", request_control, board->status);
+	return 0;
 }
 
 /* take_control */
