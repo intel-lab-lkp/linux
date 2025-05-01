@@ -66,6 +66,8 @@
  */
 #define local_trylock(lock)		__local_trylock(lock)
 
+#define local_lock_is_locked(lock)	__local_lock_is_locked(lock)
+
 /**
  * local_trylock_irqsave - Try to acquire a per CPU local lock, save and disable
  *			   interrupts if acquired
