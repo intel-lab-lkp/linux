@@ -249,14 +249,8 @@ out:
 	bpf_qdisc_fifo__destroy(fifo_skel);
 }
 
-void test_bpf_qdisc(void)
+void test_ns_bpf_qdisc(void)
 {
-	struct netns_obj *netns;
-
-	netns = netns_new("bpf_qdisc_ns", true);
-	if (!ASSERT_OK_PTR(netns, "netns_new"))
-		return;
-
 	if (test__start_subtest("fifo"))
 		test_fifo();
 	if (test__start_subtest("fq"))
@@ -267,8 +261,6 @@ void test_bpf_qdisc(void)
 		test_qdisc_attach_to_non_root();
 	if (test__start_subtest("incompl_ops"))
 		test_incompl_ops();
-
-	netns_free(netns);
 }
 
 void serial_test_bpf_qdisc_default(void)
