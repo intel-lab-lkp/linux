@@ -168,6 +168,15 @@ do {								\
 /* preemption or migration must be disabled before calling __local_lock_is_locked */
 #define __local_lock_is_locked(lock) READ_ONCE(this_cpu_ptr(lock)->acquired)
 
+#define __local_lock_irqsave_check(lock, flags)					\
+	do {									\
+		if (IS_ENABLED(CONFIG_DEBUG_LOCK_ALLOC) &&			\
+		    (!__local_lock_is_locked(lock) || in_nmi()))		\
+			WARN_ON_ONCE(!__local_trylock_irqsave(lock, flags));	\
+		else								\
+			__local_lock_irqsave(lock, flags);			\
+	} while (0)
+
 #define __local_lock_release(lock)					\
 	do {								\
 		local_trylock_t *tl;					\
@@ -292,5 +301,15 @@ do {								\
 #include "../../kernel/locking/rtmutex_common.h"
 #define __local_lock_is_locked(__lock)					\
 	(rt_mutex_owner(&this_cpu_ptr(__lock)->lock) == current)
+
+#define __local_lock_irqsave_check(lock, flags)				\
+	do {								\
+		typecheck(unsigned long, flags);			\
+		flags = 0;						\
+		migrate_disable();					\
+		if (IS_ENABLED(CONFIG_DEBUG_LOCK_ALLOC))		\
+			WARN_ON_ONCE(__local_lock_is_locked(lock));	\
+		spin_lock(this_cpu_ptr((lock)));			\
+	} while (0)
 
 #endif /* CONFIG_PREEMPT_RT */

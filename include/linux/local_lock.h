@@ -81,6 +81,19 @@
 #define local_trylock_irqsave(lock, flags)			\
 	__local_trylock_irqsave(lock, flags)
 
+/**
+ * local_lock_irqsave_check - Acquire a per CPU local lock, save and disable
+ *			      interrupts
+ * @lock:	The lock variable
+ * @flags:	Storage for interrupt flags
+ *
+ * This function checks that local_lock is not taken recursively.
+ * In !PREEMPT_RT re-entrance is possible either from NMI or kprobe.
+ * In PREEMPT_RT it checks that current task is not holding it.
+ */
+#define local_lock_irqsave_check(lock, flags)			\
+	__local_lock_irqsave_check(lock, flags)
+
 DEFINE_GUARD(local_lock, local_lock_t __percpu*,
 	     local_lock(_T),
 	     local_unlock(_T))
