@@ -7,17 +7,38 @@
 #include <linux/kobject.h>
 #include <linux/init.h>
 #include <linux/sysfs.h>
+#include <linux/mm.h>
+#include <linux/io.h>
 
 /* See scripts/link-vmlinux.sh, gen_btf() func for details */
 extern char __start_BTF[];
 extern char __stop_BTF[];
 
+struct kobject *btf_kobj;
+
+static int btf_vmlinux_mmap(struct file *filp, struct kobject *kobj,
+			    const struct bin_attribute *attr,
+			    struct vm_area_struct *vma)
+{
+	size_t btf_size = __stop_BTF - __start_BTF;
+
+	if (kobj != btf_kobj)
+		return -EINVAL;
+
+	if (vma->vm_flags & (VM_WRITE|VM_EXEC|VM_MAYSHARE))
+		return -EACCES;
+
+	vm_flags_clear(vma, VM_MAYEXEC);
+	vm_flags_clear(vma, VM_MAYWRITE);
+
+	return vm_iomap_memory(vma, virt_to_phys(__start_BTF), btf_size);
+}
+
 static struct bin_attribute bin_attr_btf_vmlinux __ro_after_init = {
 	.attr = { .name = "vmlinux", .mode = 0444, },
 	.read_new = sysfs_bin_attr_simple_read,
+	.mmap = btf_vmlinux_mmap,
 };
-
-struct kobject *btf_kobj;
 
 static int __init btf_vmlinux_init(void)
 {
