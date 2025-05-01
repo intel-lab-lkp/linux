@@ -1625,7 +1625,13 @@ static int agilent_82357a_driver_resume(struct usb_interface *interface)
 			return retval;
 		}
 		// set/unset system controller
-		agilent_82357a_request_system_control(board, board->master);
+		retval = agilent_82357a_request_system_control(board, board->master);
+		if (retval) {
+			dev_err(&usb_dev->dev, "failed to request system control in resume, retval=%i\n",
+				retval);
+			mutex_unlock(&agilent_82357a_hotplug_lock);
+			return retval;
+		}
 		// toggle ifc if master
 		if (board->master) {
 			agilent_82357a_interface_clear(board, 1);
