@@ -1468,8 +1468,12 @@ int ib_register_device(struct ib_device *device, const char *name,
 		return ret;
 	}
 	dev_set_uevent_suppress(&device->dev, false);
+
+	/* device->dev.kobj->name should be protected by devices_rwsem */
+	down_read(&devices_rwsem);
 	/* Mark for userspace that device is ready */
 	kobject_uevent(&device->dev.kobj, KOBJ_ADD);
+	up_read(&devices_rwsem);
 
 	ib_device_notify_register(device);
 	ib_device_put(device);
