@@ -1163,6 +1163,16 @@ static PyObject *pyrf_evlist__open(struct pyrf_evlist *pevlist,
 	return Py_None;
 }
 
+static PyObject *pyrf_evlist__close(struct pyrf_evlist *pevlist)
+{
+	struct evlist *evlist = &pevlist->evlist;
+
+	evlist__close(evlist);
+
+	Py_INCREF(Py_None);
+	return Py_None;
+}
+
 static PyObject *pyrf_evlist__config(struct pyrf_evlist *pevlist)
 {
 	struct record_opts opts = {
@@ -1202,6 +1212,31 @@ static PyObject *pyrf_evlist__enable(struct pyrf_evlist *pevlist)
 	return Py_None;
 }
 
+static PyObject *pyrf_evlist__next(struct pyrf_evlist *pevlist,
+				   PyObject *args, PyObject *kwargs)
+{
+	struct evlist *evlist = &pevlist->evlist;
+	PyObject *py_evsel;
+	struct perf_evsel *pevsel;
+	struct evsel *evsel;
+	struct pyrf_evsel *next_evsel = PyObject_New(struct pyrf_evsel, &pyrf_evsel__type);
+	static char *kwlist[] = { "evsel", NULL };
+
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O", kwlist,
+					 &py_evsel))
+		return NULL;
+
+	pevsel = (py_evsel == Py_None) ? NULL : &(((struct pyrf_evsel *)py_evsel)->evsel.core);
+	pevsel = perf_evlist__next(&(evlist->core), pevsel);
+	if (pevsel != NULL) {
+		evsel = container_of(pevsel, struct evsel, core);
+		next_evsel = container_of(evsel, struct pyrf_evsel, evsel);
+		return (PyObject *) next_evsel;
+	}
+
+	return Py_None;
+}
+
 static PyMethodDef pyrf_evlist__methods[] = {
 	{
 		.ml_name  = "all_cpus",
@@ -1220,6 +1255,12 @@ static PyMethodDef pyrf_evlist__methods[] = {
 		.ml_meth  = (PyCFunction)pyrf_evlist__open,
 		.ml_flags = METH_VARARGS | METH_KEYWORDS,
 		.ml_doc	  = PyDoc_STR("open the file descriptors.")
+	},
+	{
+		.ml_name  = "close",
+		.ml_meth  = (PyCFunction)pyrf_evlist__close,
+		.ml_flags = METH_NOARGS,
+		.ml_doc	  = PyDoc_STR("close the file descriptors.")
 	},
 	{
 		.ml_name  = "poll",
@@ -1262,6 +1303,12 @@ static PyMethodDef pyrf_evlist__methods[] = {
 		.ml_meth  = (PyCFunction)pyrf_evlist__enable,
 		.ml_flags = METH_NOARGS,
 		.ml_doc	  = PyDoc_STR("Enable the evsels in the evlist.")
+	},
+	{
+		.ml_name  = "next",
+		.ml_meth  = (PyCFunction)pyrf_evlist__next,
+		.ml_flags = METH_VARARGS | METH_KEYWORDS,
+		.ml_doc	  = PyDoc_STR("Return next evsel")
 	},
 	{ .ml_name = NULL, }
 };
