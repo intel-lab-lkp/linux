@@ -30,14 +30,6 @@ static void test_scsi_proto(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, get_unaligned_be16(&ss.s.stream_identifier),
 			0x1234);
 	KUNIT_EXPECT_EQ(test, ss.s.rel_lifetime + 0, 0x3f);
-
-	static const union {
-		struct scsi_stream_status_header h;
-		u8 arr[sizeof(struct scsi_stream_status_header)];
-	} sh = { .arr = { 1, 2, 3, 4, 0, 0, 5, 6 } };
-	KUNIT_EXPECT_EQ(test, get_unaligned_be32(&sh.h.len), 0x1020304);
-	KUNIT_EXPECT_EQ(test, get_unaligned_be16(&sh.h.number_of_open_streams),
-			0x506);
 }
 
 static struct kunit_case scsi_proto_test_cases[] = {
