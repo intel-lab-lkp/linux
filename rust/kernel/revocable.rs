@@ -61,6 +61,15 @@ use core::{
 /// v.revoke();
 /// assert_eq!(add_two(&v), None);
 /// ```
+///
+/// # Invariants
+///
+/// - The wrapped object `data` is valid if and only if `is_available` is `true`.
+/// - Access to `data` must occur only while holding the RCU read-side lock (e.g., via
+///   [`Revocable::try_access`] or [`Revocable::try_access_with_guard`]).
+/// - Once `is_available` is set to `false`, further access to `data` is disallowed,
+///   and the object is dropped either after an RCU grace period (in [`revoke`]),
+///   or immediately (in [`revoke_nosync`]).
 #[pin_data(PinnedDrop)]
 pub struct Revocable<T> {
     is_available: AtomicBool,
