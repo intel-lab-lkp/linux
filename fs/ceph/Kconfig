@@ -50,3 +50,16 @@ config CEPH_FS_SECURITY_LABEL
 
 	  If you are not using a security module that requires using
 	  extended attributes for file security labels, say N.
+
+config CEPH_FS_DEBUG
+	bool "Ceph client debugging"
+	depends on CEPH_FS
+	default n
+	help
+	  If you say Y here, this option enables additional pre-condition
+	  and post-condition checks in functions. Also it could enable
+	  BUG_ON() instead of returning the error code. This option could
+	  save more messages in system log and execute additional computation.
+
+	  If you are going to debug the code, then chose Y here.
+	  If unsure, say N.

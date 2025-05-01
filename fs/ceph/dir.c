@@ -614,13 +614,28 @@ more:
 		spin_lock(&ci->i_ceph_lock);
 		if (dfi->dir_ordered_count ==
 				atomic64_read(&ci->i_ordered_count)) {
+			bool is_invalid;
+			size_t size;
+
 			doutc(cl, " marking %p %llx.%llx complete and ordered\n",
 			      inode, ceph_vinop(inode));
 			/* use i_size to track number of entries in
 			 * readdir cache */
-			BUG_ON(dfi->readdir_cache_idx < 0);
-			i_size_write(inode, dfi->readdir_cache_idx *
-				     sizeof(struct dentry*));
+
+			is_invalid =
+				is_cache_idx_invalid(dfi->readdir_cache_idx);
+
+#ifdef CONFIG_CEPH_FS_DEBUG
+			BUG_ON(is_invalid);
+#else
+			WARN_ON(is_invalid);
+#endif /* CONFIG_CEPH_FS_DEBUG */
+
+			if (!is_invalid) {
+				size = dfi->readdir_cache_idx;
+				size *= sizeof(struct dentry*);
+				i_size_write(inode, size);
+			}
 		} else {
 			doutc(cl, " marking %llx.%llx complete\n",
 			      ceph_vinop(inode));
