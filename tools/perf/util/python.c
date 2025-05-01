@@ -867,6 +867,23 @@ static PyObject *pyrf_evsel__open(struct pyrf_evsel *pevsel,
 	return Py_None;
 }
 
+static PyObject *pyrf_evsel__read(struct pyrf_evsel *pevsel,
+				  PyObject *args, PyObject *kwargs)
+{
+	struct evsel *evsel = &pevsel->evsel;
+	int cpu_map_idx = 0, thread = 0;
+	struct perf_counts_values counts;
+	struct pyrf_counts_values *count_values = PyObject_New(struct pyrf_counts_values,
+							       &pyrf_counts_values__type);
+
+	if (!PyArg_ParseTuple(args, "ii", &cpu_map_idx, &thread))
+		return NULL;
+
+	perf_evsel__read(&(evsel->core), cpu_map_idx, thread, &counts);
+	count_values->values = counts;
+	return (PyObject *)count_values;
+}
+
 static PyObject *pyrf_evsel__str(PyObject *self)
 {
 	struct pyrf_evsel *pevsel = (void *)self;
@@ -884,6 +901,12 @@ static PyMethodDef pyrf_evsel__methods[] = {
 		.ml_meth  = (PyCFunction)pyrf_evsel__open,
 		.ml_flags = METH_VARARGS | METH_KEYWORDS,
 		.ml_doc	  = PyDoc_STR("open the event selector file descriptor table.")
+	},
+	{
+		.ml_name  = "read",
+		.ml_meth  = (PyCFunction)pyrf_evsel__read,
+		.ml_flags = METH_VARARGS | METH_KEYWORDS,
+		.ml_doc	  = PyDoc_STR("read counters")
 	},
 	{ .ml_name = NULL, }
 };
