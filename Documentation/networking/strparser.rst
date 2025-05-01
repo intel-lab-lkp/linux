@@ -81,18 +81,6 @@ Functions
 
      ::
 
-	int strp_process(struct strparser *strp, struct sk_buff *orig_skb,
-			 unsigned int orig_offset, size_t orig_len,
-			 size_t max_msg_size, long timeo)
-
-    strp_process is called in general mode for a stream parser to
-    parse an sk_buff. The number of bytes processed or a negative
-    error number is returned. Note that strp_process does not
-    consume the sk_buff. max_msg_size is maximum size the stream
-    parser will parse. timeo is timeout for completing a message.
-
-    ::
-
 	void strp_data_ready(struct strparser *strp);
 
     The upper layer calls strp_tcp_data_ready when data is ready on

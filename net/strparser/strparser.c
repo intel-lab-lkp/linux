@@ -314,19 +314,6 @@ static int __strp_recv(read_descriptor_t *desc, struct sk_buff *orig_skb,
 	return eaten;
 }
 
-int strp_process(struct strparser *strp, struct sk_buff *orig_skb,
-		 unsigned int orig_offset, size_t orig_len,
-		 size_t max_msg_size, long timeo)
-{
-	read_descriptor_t desc; /* Dummy arg to strp_recv */
-
-	desc.arg.data = strp;
-
-	return __strp_recv(&desc, orig_skb, orig_offset, orig_len,
-			   max_msg_size, timeo);
-}
-EXPORT_SYMBOL_GPL(strp_process);
-
 static int strp_recv(read_descriptor_t *desc, struct sk_buff *orig_skb,
 		     unsigned int orig_offset, size_t orig_len)
 {
