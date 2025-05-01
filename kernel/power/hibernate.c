@@ -772,6 +772,7 @@ int hibernate(void)
 	}
 
 	pr_info("hibernation entry\n");
+	pm_suspend_target_state = PM_SUSPEND_MAX;
 	pm_prepare_console();
 	error = pm_notifier_call_chain_robust(PM_HIBERNATION_PREPARE, PM_POST_HIBERNATION);
 	if (error)
@@ -852,6 +853,7 @@ int hibernate(void)
 	hibernate_release();
  Unlock:
 	unlock_system_sleep(sleep_flags);
+	pm_suspend_target_state = PM_SUSPEND_ON;
 	pr_info("hibernation exit\n");
 
 	return error;
