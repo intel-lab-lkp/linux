@@ -4917,10 +4917,10 @@ static int amdgpu_device_pm_notifier(struct notifier_block *nb, unsigned long mo
 	int r;
 
 	switch (mode) {
-	case PM_HIBERNATION_PREPARE:
+	case PM_HIBERNATION_POST_FREEZE:
 		adev->in_s4 = true;
 		fallthrough;
-	case PM_SUSPEND_PREPARE:
+	case PM_SUSPEND_POST_FREEZE:
 		r = amdgpu_device_evict_resources(adev);
 		/*
 		 * This is considered non-fatal at this time because
