@@ -213,6 +213,7 @@ static inline int iommufd_vfio_compat_set_no_iommu(struct iommufd_ctx *ictx)
 struct iommufd_object *_iommufd_object_alloc(struct iommufd_ctx *ictx,
 					     size_t size,
 					     enum iommufd_object_type type);
+void iommufd_object_abort(struct iommufd_ctx *ictx, struct iommufd_object *obj);
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 int iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
@@ -226,6 +227,11 @@ _iommufd_object_alloc(struct iommufd_ctx *ictx, size_t size,
 		      enum iommufd_object_type type)
 {
 	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void iommufd_object_abort(struct iommufd_ctx *ictx,
+					struct iommufd_object *obj)
+{
 }
 
 static inline struct device *
@@ -284,5 +290,15 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 			ret->member.ictx = viommu->ictx;                       \
 		}                                                              \
 		ret;                                                           \
+	})
+
+/* Helper for IOMMU driver to destroy structures created by allocators above */
+#define iommufd_struct_destroy(drv_struct, member)                             \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_object,               \
+					  drv_struct->member.obj));            \
+		static_assert(offsetof(typeof(*drv_struct), member.obj) == 0); \
+		iommufd_object_abort(drv_struct->member.ictx,                  \
+				     &drv_struct->member.obj);                 \
 	})
 #endif
