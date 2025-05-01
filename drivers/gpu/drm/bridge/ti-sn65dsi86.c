@@ -333,9 +333,11 @@ static void ti_sn65dsi86_enable_comms(struct ti_sn65dsi86 *pdata)
 	 * If HPD somehow makes sense on some future panel we'll have to
 	 * change this to be conditional on someone specifying that HPD should
 	 * be used.
+	 * Only disable HDP if used for eDP.
 	 */
-	regmap_update_bits(pdata->regmap, SN_HPD_DISABLE_REG, HPD_DISABLE,
-			   HPD_DISABLE);
+	if (pdata->bridge.type == DRM_MODE_CONNECTOR_eDP)
+		regmap_update_bits(pdata->regmap, SN_HPD_DISABLE_REG,
+				   HPD_DISABLE, HPD_DISABLE);
 
 	pdata->comms_enabled = true;
 
@@ -356,6 +358,10 @@ static int __maybe_unused ti_sn65dsi86_resume(struct device *dev)
 {
 	struct ti_sn65dsi86 *pdata = dev_get_drvdata(dev);
 	int ret;
+
+	if (pdata->bridge.type == DRM_MODE_CONNECTOR_DisplayPort &&
+	    pdata->comms_enabled)
+		return 0;
 
 	ret = regulator_bulk_enable(SN_REGULATOR_SUPPLY_NUM, pdata->supplies);
 	if (ret) {
@@ -385,6 +391,9 @@ static int __maybe_unused ti_sn65dsi86_suspend(struct device *dev)
 {
 	struct ti_sn65dsi86 *pdata = dev_get_drvdata(dev);
 	int ret;
+
+	if (pdata->bridge.type == DRM_MODE_CONNECTOR_DisplayPort)
+		return 0;
 
 	if (pdata->refclk)
 		ti_sn65dsi86_disable_comms(pdata);
