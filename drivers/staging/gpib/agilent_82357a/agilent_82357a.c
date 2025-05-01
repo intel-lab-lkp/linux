@@ -1590,7 +1590,7 @@ static int agilent_82357a_driver_resume(struct usb_interface *interface)
 {
 	struct usb_device *usb_dev = interface_to_usbdev(interface);
 	struct gpib_board *board;
-	int i, retval;
+	int i, retval = 0;
 
 	mutex_lock(&agilent_82357a_hotplug_lock);
 
@@ -1614,23 +1614,19 @@ static int agilent_82357a_driver_resume(struct usb_interface *interface)
 				dev_err(&usb_dev->dev, "failed to resubmit interrupt urb in resume, retval=%i\n",
 					retval);
 				mutex_unlock(&a_priv->interrupt_alloc_lock);
-				mutex_unlock(&agilent_82357a_hotplug_lock);
-				return retval;
+				goto resume_exit;
 			}
 			mutex_unlock(&a_priv->interrupt_alloc_lock);
 		}
 		retval = agilent_82357a_init(board);
-		if (retval < 0) {
-			mutex_unlock(&agilent_82357a_hotplug_lock);
-			return retval;
-		}
+		if (retval < 0)
+			goto resume_exit;
 		// set/unset system controller
 		retval = agilent_82357a_request_system_control(board, board->master);
 		if (retval) {
 			dev_err(&usb_dev->dev, "failed to request system control in resume, retval=%i\n",
 				retval);
-			mutex_unlock(&agilent_82357a_hotplug_lock);
-			return retval;
+			goto resume_exit;
 		}
 		// toggle ifc if master
 		if (board->master) {
@@ -1649,7 +1645,7 @@ static int agilent_82357a_driver_resume(struct usb_interface *interface)
 resume_exit:
 	mutex_unlock(&agilent_82357a_hotplug_lock);
 
-	return 0;
+	return retval;
 }
 
 static struct usb_driver agilent_82357a_bus_driver = {
