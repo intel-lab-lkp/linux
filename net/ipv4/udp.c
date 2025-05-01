@@ -376,7 +376,8 @@ static int compute_score(struct sock *sk, const struct net *net,
 
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
-	    ipv6_only_sock(sk))
+	    ipv6_only_sock(sk) ||
+	    udp_test_bit(STOP_RCV, sk))
 		return -1;
 
 	if (sk->sk_rcv_saddr != daddr)
@@ -494,7 +495,7 @@ rescore:
 
 			result = inet_lookup_reuseport(net, sk, skb, sizeof(struct udphdr),
 						       saddr, sport, daddr, hnum, udp_ehashfn);
-			if (!result) {
+			if (!result || udp_test_bit(STOP_RCV, result)) {
 				result = sk;
 				continue;
 			}
@@ -3031,7 +3032,9 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 		set_xfrm_gro_udp_encap_rcv(up->encap_type, sk->sk_family, sk);
 		sockopt_release_sock(sk);
 		break;
-
+	case UDP_STOP_RCV:
+		udp_assign_bit(STOP_RCV, sk, valbool);
+		break;
 	/*
 	 * 	UDP-Lite's partial checksum coverage (RFC 3828).
 	 */
@@ -3118,6 +3121,10 @@ int udp_lib_getsockopt(struct sock *sk, int level, int optname,
 
 	case UDP_GRO:
 		val = udp_test_bit(GRO_ENABLED, sk);
+		break;
+
+	case UDP_STOP_RCV:
+		val = udp_test_bit(STOP_RCV, sk);
 		break;
 
 	/* The following two cannot be changed on UDP sockets, the return is

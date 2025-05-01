@@ -42,6 +42,7 @@ enum {
 	UDP_FLAGS_ENCAP_ENABLED, /* This socket enabled encap */
 	UDP_FLAGS_UDPLITE_SEND_CC, /* set via udplite setsockopt */
 	UDP_FLAGS_UDPLITE_RECV_CC, /* set via udplite setsockopt */
+	UDP_FLAGS_STOP_RCV, /* Stop receiving packets */
 };
 
 struct udp_sock {

@@ -137,7 +137,8 @@ static int compute_score(struct sock *sk, const struct net *net,
 
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
-	    sk->sk_family != PF_INET6)
+	    sk->sk_family != PF_INET6 ||
+	    udp_test_bit(STOP_RCV, sk))
 		return -1;
 
 	if (!ipv6_addr_equal(&sk->sk_v6_rcv_saddr, daddr))
@@ -245,7 +246,7 @@ rescore:
 
 			result = inet6_lookup_reuseport(net, sk, skb, sizeof(struct udphdr),
 							saddr, sport, daddr, hnum, udp6_ehashfn);
-			if (!result) {
+			if (!result || udp_test_bit(STOP_RCV, result)) {
 				result = sk;
 				continue;
 			}
