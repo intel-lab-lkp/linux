@@ -1956,8 +1956,6 @@ static void __etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 	if (drvdata->numvmidc > 4)
 		etm4x_relaxed_write32(csa, state->trcvmidcctlr0, TRCVMIDCCTLR1);
 
-	etm4x_relaxed_write32(csa, state->trcclaimset, TRCCLAIMSET);
-
 	if (!drvdata->skip_power_up)
 		etm4x_relaxed_write32(csa, state->trcpdcr, TRCPDCR);
 
