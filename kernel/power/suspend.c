@@ -377,13 +377,18 @@ static int suspend_prepare(suspend_state_t state)
 	trace_suspend_resume(TPS("freeze_processes"), 0, true);
 	error = suspend_freeze_processes();
 	trace_suspend_resume(TPS("freeze_processes"), 0, false);
-	if (!error)
-		return 0;
+	if (error)
+		goto Restore;
+	error = pm_notifier_call_chain_robust(PM_SUSPEND_POST_FREEZE, PM_POST_SUSPEND);
+	if (error)
+		goto Thaw;
 
-	dpm_save_failed_step(SUSPEND_FREEZE);
-	pm_notifier_call_chain(PM_POST_SUSPEND);
+	return 0;
+ Thaw:
+	suspend_thaw_processes();
  Restore:
 	pm_restore_console();
+	dpm_save_failed_step(SUSPEND_FREEZE);
 	return error;
 }
 
