@@ -473,10 +473,11 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 
 	if (dev->port_usb && dev->port_usb->is_suspend) {
 		DBG(dev, "Port suspended. Triggering wakeup\n");
-		netif_stop_queue(net);
-		spin_unlock_irqrestore(&dev->lock, flags);
-		ether_wakeup_host(dev->port_usb);
-		return NETDEV_TX_BUSY;
+		if (!ether_wakeup_host(dev->port_usb)) {
+			netif_stop_queue(net);
+			spin_unlock_irqrestore(&dev->lock, flags);
+			return NETDEV_TX_BUSY;
+		}
 	}
 
 	spin_unlock_irqrestore(&dev->lock, flags);
