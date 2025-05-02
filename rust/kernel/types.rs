@@ -409,6 +409,10 @@ impl<T> Opaque<T> {
 /// Implementers must also ensure that all instances are reference-counted. (Otherwise they
 /// won't be able to honour the requirement that [`AlwaysRefCounted::inc_ref`] keep the object
 /// alive.)
+///
+/// Note: This means that implementers must prevent users from directly
+/// initializing the implementer. Otherwise users could initialize the
+/// implementer on the stack, which would violate the safety requirements.
 pub unsafe trait AlwaysRefCounted {
     /// Increments the reference count on the object.
     fn inc_ref(&self);
