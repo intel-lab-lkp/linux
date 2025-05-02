@@ -2938,6 +2938,12 @@ const struct drm_ioctl_desc amdgpu_ioctls_kms[] = {
 	DRM_IOCTL_DEF_DRV(AMDGPU_GEM_USERPTR, amdgpu_gem_userptr_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
 };
 
+#ifdef CONFIG_CGROUP_DRM
+static const struct drm_cgroup_ops amdgpu_drm_cgroup_ops = {
+	.notify_weight = drm_sched_cgroup_notify_weight,
+};
+#endif
+
 static const struct drm_driver amdgpu_kms_driver = {
 	.driver_features =
 	    DRIVER_ATOMIC |
@@ -2955,6 +2961,9 @@ static const struct drm_driver amdgpu_kms_driver = {
 	.release = &amdgpu_driver_release_kms,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = amdgpu_show_fdinfo,
+#endif
+#ifdef CONFIG_CGROUP_DRM
+	.cg_ops = &amdgpu_drm_cgroup_ops,
 #endif
 
 	.gem_prime_import = amdgpu_gem_prime_import,

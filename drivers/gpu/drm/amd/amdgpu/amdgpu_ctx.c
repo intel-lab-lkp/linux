@@ -22,6 +22,7 @@
  * Authors: monk liu <monk.liu@amd.com>
  */
 
+#include <linux/cgroup_drm.h>
 #include <drm/drm_auth.h>
 #include <drm/drm_drv.h>
 #include "amdgpu.h"
@@ -258,6 +259,8 @@ static int amdgpu_ctx_init_entity(struct amdgpu_ctx *ctx, u32 hw_ip,
 	if (cmpxchg(&ctx->entities[hw_ip][ring], NULL, entity))
 		goto cleanup_entity;
 
+	drm_sched_cgroup_track_sched_entity(ctx->filp, &entity->entity);
+
 	return 0;
 
 cleanup_entity:
@@ -331,6 +334,7 @@ static int amdgpu_ctx_init(struct amdgpu_ctx_mgr *mgr, int32_t priority,
 	memset(ctx, 0, sizeof(*ctx));
 
 	kref_init(&ctx->refcount);
+	ctx->filp = filp;
 	ctx->mgr = mgr;
 	spin_lock_init(&ctx->ring_lock);
 
@@ -511,10 +515,15 @@ static void amdgpu_ctx_do_release(struct kref *ref)
 	ctx = container_of(ref, struct amdgpu_ctx, refcount);
 	for (i = 0; i < AMDGPU_HW_IP_NUM; ++i) {
 		for (j = 0; j < amdgpu_ctx_num_entities[i]; ++j) {
+			struct drm_sched_entity *entity;
+
 			if (!ctx->entities[i][j])
 				continue;
 
-			drm_sched_entity_destroy(&ctx->entities[i][j]->entity);
+			entity = &ctx->entities[i][j]->entity;
+			drm_sched_cgroup_untrack_sched_entity(ctx->filp,
+							      entity);
+			drm_sched_entity_destroy(entity);
 		}
 	}
 
@@ -941,6 +950,8 @@ void amdgpu_ctx_mgr_entity_fini(struct amdgpu_ctx_mgr *mgr)
 					continue;
 
 				entity = &ctx->entities[i][j]->entity;
+				drm_sched_cgroup_untrack_sched_entity(ctx->filp,
+								      entity);
 				drm_sched_entity_fini(entity);
 			}
 		}
