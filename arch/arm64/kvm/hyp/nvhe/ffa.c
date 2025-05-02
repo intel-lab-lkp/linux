@@ -712,7 +712,24 @@ static void do_ffa_version(struct arm_smccc_res *res,
 
 	hyp_spin_lock(&version_lock);
 	if (has_version_negotiated) {
-		res->a0 = hyp_ffa_version;
+		/*
+		 * FF-A implementations with the same major version must
+		 * interoperate with earlier minor versions per DEN0077A 1.2
+		 * REL0 13.2.1 but FF-A version 1.1 broke the ABI on several
+		 * structures and 1.2 relies on SMCCC 1.2 is not backwards
+		 * compatible with SMCCC 1.2 (see DEN0028 1.6 G BET0 Appendix F).
+		 *
+		 * If we return the negotiated hypervisor version when the host
+		 * requests a lesser minor version, the host will rely on the
+		 * aforementioned FF-A interoperability rules. Since the
+		 * hypervisor does not currently have the necessary compatibility
+		 * paths (e.g. to paper over the above-mentioned calling
+		 * convention changes), return NOT_SUPPORTED.
+		 */
+		if (FFA_MINOR_VERSION(ffa_req_version) < FFA_MINOR_VERSION(hyp_ffa_version))
+			res->a0 = FFA_RET_NOT_SUPPORTED;
+		else
+			res->a0 = hyp_ffa_version;
 		goto unlock;
 	}
 
