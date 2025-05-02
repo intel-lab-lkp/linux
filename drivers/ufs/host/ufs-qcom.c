@@ -1903,8 +1903,10 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		break;
 	default:
 		dev_err(hba->dev, "%s: Unsupported clock freq : %lu\n", __func__, freq);
-		break;
+		return gear;
 	}
+
+	gear = min_t(u32, gear, hba->max_pwr_info.info.gear_rx);
 
 	return gear;
 }
