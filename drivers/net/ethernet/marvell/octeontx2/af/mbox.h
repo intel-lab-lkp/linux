@@ -1950,6 +1950,20 @@ enum otx2_cpt_eng_type {
 	OTX2_CPT_MAX_ENG_TYPES,
 };
 
+struct cpt_rx_inline_lf_cfg_msg {
+	struct mbox_msghdr hdr;
+	u16 sso_pf_func;
+	u16 param1;
+	u16 param2;
+	u16 opcode;
+	u32 credit;
+	u32 credit_th;
+	u16 bpid;
+	u32 reserved;
+	u8 ctx_ilen_valid : 1;
+	u8 ctx_ilen : 7;
+};
+
 struct cpt_set_egrp_num {
 	struct mbox_msghdr hdr;
 	bool set;
