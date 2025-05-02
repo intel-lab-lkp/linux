@@ -1137,6 +1137,26 @@ void kvm_tdp_mmu_invalidate_roots(struct kvm *kvm,
 	}
 }
 
+static int tdp_mmu_install_spte(struct kvm_vcpu *vcpu,
+				struct tdp_iter *iter,
+				u64 spte)
+{
+	kvm_pfn_t pfn = 0;
+	int ret = 0;
+
+	if (is_mirror_sptep(iter->sptep) && !is_frozen_spte(spte)) {
+		pfn = spte_to_pfn(spte);
+		ret = static_call(kvm_x86_phys_prepare)(vcpu, pfn);
+	}
+	if (ret)
+		return ret;
+	ret = tdp_mmu_set_spte_atomic(vcpu->kvm, iter, spte);
+	if (pfn && ret)
+		static_call(kvm_x86_phys_cleanup)(pfn);
+
+	return ret;
+}
+
 /*
  * Installs a last-level SPTE to handle a TDP page fault.
  * (NPT/EPT violation/misconfiguration)
@@ -1170,7 +1190,7 @@ static int tdp_mmu_map_handle_target_level(struct kvm_vcpu *vcpu,
 
 	if (new_spte == iter->old_spte)
 		ret = RET_PF_SPURIOUS;
-	else if (tdp_mmu_set_spte_atomic(vcpu->kvm, iter, new_spte))
+	else if (tdp_mmu_install_spte(vcpu, iter, new_spte))
 		return RET_PF_RETRY;
 	else if (is_shadow_present_pte(iter->old_spte) &&
 		 (!is_last_spte(iter->old_spte, iter->level) ||
@@ -1211,7 +1231,7 @@ static int tdp_mmu_map_handle_target_level(struct kvm_vcpu *vcpu,
  * Returns: 0 if the new page table was installed. Non-0 if the page table
  *          could not be installed (e.g. the atomic compare-exchange failed).
  */
-static int tdp_mmu_link_sp(struct kvm *kvm, struct tdp_iter *iter,
+static int __tdp_mmu_link_sp(struct kvm *kvm, struct tdp_iter *iter,
 			   struct kvm_mmu_page *sp, bool shared)
 {
 	u64 spte = make_nonleaf_spte(sp->spt, !kvm_ad_enabled);
@@ -1228,6 +1248,25 @@ static int tdp_mmu_link_sp(struct kvm *kvm, struct tdp_iter *iter,
 	tdp_account_mmu_page(kvm, sp);
 
 	return 0;
+}
+
+static int tdp_mmu_link_sp(struct kvm_vcpu *vcpu, struct tdp_iter *iter,
+			   struct kvm_mmu_page *sp, bool shared)
+{
+	kvm_pfn_t pfn = 0;
+	int ret = 0;
+
+	if (sp->external_spt) {
+		pfn = __pa(sp->external_spt) >> PAGE_SHIFT;
+		ret = static_call(kvm_x86_phys_prepare)(vcpu, pfn);
+		if (ret)
+			return ret;
+	}
+	ret = __tdp_mmu_link_sp(vcpu->kvm, iter, sp, shared);
+	if (pfn && ret)
+		static_call(kvm_x86_phys_cleanup)(pfn);
+
+	return ret;
 }
 
 static int tdp_mmu_split_huge_page(struct kvm *kvm, struct tdp_iter *iter,
@@ -1288,7 +1327,7 @@ int kvm_tdp_mmu_map(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 			KVM_BUG_ON(is_mirror_sptep(iter.sptep), vcpu->kvm);
 			r = tdp_mmu_split_huge_page(kvm, &iter, sp, true);
 		} else {
-			r = tdp_mmu_link_sp(kvm, &iter, sp, true);
+			r = tdp_mmu_link_sp(vcpu, &iter, sp, true);
 		}
 
 		/*
@@ -1514,7 +1553,7 @@ static int tdp_mmu_split_huge_page(struct kvm *kvm, struct tdp_iter *iter,
 	 * correctness standpoint since the translation will be the same either
 	 * way.
 	 */
-	ret = tdp_mmu_link_sp(kvm, iter, sp, shared);
+	ret = __tdp_mmu_link_sp(kvm, iter, sp, shared);
 	if (ret)
 		goto out;
 

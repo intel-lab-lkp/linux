@@ -1813,6 +1813,9 @@ struct kvm_x86_ops {
 	int (*remove_external_spte)(struct kvm *kvm, gfn_t gfn, enum pg_level level,
 				    kvm_pfn_t pfn_for_gfn);
 
+	int (*phys_prepare)(struct kvm_vcpu *vcpu, kvm_pfn_t pfn);
+	void (*phys_cleanup)(kvm_pfn_t pfn);
+
 	bool (*has_wbinvd_exit)(void);
 
 	u64 (*get_l2_tsc_offset)(struct kvm_vcpu *vcpu);
