@@ -760,7 +760,7 @@ void ocfs2_unlock_and_free_folios(struct folio **folios, int num_folios)
 	int i;
 
 	for(i = 0; i < num_folios; i++) {
-		if (!folios[i])
+		if (IS_ERR_OR_NULL(folios[i]))
 			continue;
 		folio_unlock(folios[i]);
 		folio_mark_accessed(folios[i]);
