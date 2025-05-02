@@ -326,9 +326,6 @@ static int cptpf_handle_vf_req(struct otx2_cptpf_dev *cptpf,
 	case MBOX_MSG_GET_KVF_LIMITS:
 		err = handle_msg_kvf_limits(cptpf, vf, req);
 		break;
-	case MBOX_MSG_RX_INLINE_IPSEC_LF_CFG:
-		err = handle_msg_rx_inline_ipsec_lf_cfg(cptpf, req);
-		break;
 
 	default:
 		err = forward_to_af(cptpf, vf, req, size);
