@@ -242,6 +242,17 @@ DEFINE_GUARD(rwsem_read, struct rw_semaphore *, down_read(_T), up_read(_T))
 DEFINE_GUARD_COND(rwsem_read, _try, down_read_trylock(_T))
 DEFINE_GUARD_COND(rwsem_read, _intr, down_read_interruptible(_T) == 0)
 
+DEFINE_DROP(up_read, struct rw_semaphore *, if (!IS_ERR_OR_NULL(_T)) up_read(_T))
+static inline __must_check struct rw_semaphore *
+rwsem_read_intr_acquire(struct rw_semaphore *sem)
+{
+	int ret = down_read_interruptible(sem);
+
+	if (ret)
+		return ERR_PTR(ret);
+	return sem;
+}
+
 DEFINE_GUARD(rwsem_write, struct rw_semaphore *, down_write(_T), up_write(_T))
 DEFINE_GUARD_COND(rwsem_write, _try, down_write_trylock(_T))
 

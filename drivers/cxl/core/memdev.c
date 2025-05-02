@@ -231,15 +231,15 @@ int cxl_trigger_poison_list(struct cxl_memdev *cxlmd)
 	if (!port || !is_cxl_endpoint(port))
 		return -EINVAL;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	struct rw_semaphore *region_rwsem __drop(up_read) =
+		rwsem_read_intr_acquire(&cxl_region_rwsem);
+	if (IS_ERR(region_rwsem))
+		return PTR_ERR(region_rwsem);
 
-	rc = down_read_interruptible(&cxl_dpa_rwsem);
-	if (rc) {
-		up_read(&cxl_region_rwsem);
-		return rc;
-	}
+	struct rw_semaphore *dpa_rwsem __drop(up_read) =
+		rwsem_read_intr_acquire(&cxl_dpa_rwsem);
+	if (IS_ERR(dpa_rwsem))
+		return PTR_ERR(dpa_rwsem);
 
 	if (cxl_num_decoders_committed(port) == 0) {
 		/* No regions mapped to this memdev */
@@ -248,8 +248,6 @@ int cxl_trigger_poison_list(struct cxl_memdev *cxlmd)
 		/* Regions mapped, collect poison by endpoint */
 		rc =  cxl_get_poison_by_endpoint(port);
 	}
-	up_read(&cxl_dpa_rwsem);
-	up_read(&cxl_region_rwsem);
 
 	return rc;
 }

@@ -1394,9 +1394,10 @@ int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 	int nr_records = 0;
 	int rc;
 
-	rc = mutex_lock_interruptible(&mds->poison.lock);
-	if (rc)
-		return rc;
+	struct mutex *lock __drop(mutex_unlock) =
+		mutex_intr_acquire(&mds->poison.lock);
+	if (IS_ERR(lock))
+		return PTR_ERR(lock);
 
 	po = mds->poison.list_out;
 	pi.offset = cpu_to_le64(offset);

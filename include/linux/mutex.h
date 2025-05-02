@@ -202,6 +202,16 @@ DEFINE_GUARD(mutex, struct mutex *, mutex_lock(_T), mutex_unlock(_T))
 DEFINE_GUARD_COND(mutex, _try, mutex_trylock(_T))
 DEFINE_GUARD_COND(mutex, _intr, mutex_lock_interruptible(_T) == 0)
 
+DEFINE_DROP(mutex_unlock, struct mutex *, if (!IS_ERR_OR_NULL(_T)) mutex_unlock(_T))
+static inline __must_check struct mutex *mutex_intr_acquire(struct mutex *lock)
+{
+	int ret = mutex_lock_interruptible(lock);
+
+	if (ret)
+		return ERR_PTR(ret);
+	return lock;
+}
+
 extern unsigned long mutex_get_owner(struct mutex *lock);
 
 #endif /* __LINUX_MUTEX_H */

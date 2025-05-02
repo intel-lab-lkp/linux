@@ -199,6 +199,13 @@
 
 #define __free(_name)	__cleanup(__free_##_name)
 
+/*
+ * For lock "acquire"/"drop" helpers the lock is not "freed", but the
+ * cleanup mechanics are identical
+ */
+#define DEFINE_DROP(_name, _type, _drop) DEFINE_FREE(_name, _type, _drop)
+#define __drop(_name) __free(_name)
+
 #define __get_and_null(p, nullvalue)   \
 	({                                  \
 		__auto_type __ptr = &(p);   \
