@@ -2729,6 +2729,28 @@ HugeTLB Interface Files
         hugetlb pages of <hugepagesize> in this cgroup.  Only active in
         use hugetlb pages are included.  The per-node values are in bytes.
 
+DRM
+---
+
+The controller allows for configuring of scheduling weights of cgroups relative
+to their siblings.
+
+NOTE: This is an optional feature into which individual DRM drivers need to
+      opt-in if they want to support it.
+
+NOTE: Only single GPU systems will work as expected in the current
+      implementation.
+
+DRM Interface Files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  drm.weight
+        A read-write single value file which exists on non-root cgroups. The
+        default is "100".
+
+        The weights are in the range [1, 10000] and specify the relative
+        scheduling weights for cgroups in relation to their siblings.
+
 Misc
 ----
 

@@ -6,6 +6,8 @@
 
 #include <drm/drm_file.h>
 
+#define DRM_CGROUP_WEIGHT_SHIFT 10
+
 #if IS_ENABLED(CONFIG_CGROUP_DRM)
 void drmcgroup_client_open(struct drm_file *file_priv);
 void drmcgroup_client_close(struct drm_file *file_priv);
