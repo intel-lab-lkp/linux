@@ -2610,10 +2610,10 @@ cifs_dentry_needs_reval(struct dentry *dentry)
 
 	if (!open_cached_dir_by_dentry(tcon, dentry->d_parent, &cfid)) {
 		if (cfid->time && cifs_i->time > cfid->time) {
-			close_cached_dir(cfid);
+			cfid_put(cfid);
 			return false;
 		}
-		close_cached_dir(cfid);
+		cfid_put(cfid);
 	}
 	/*
 	 * depending on inode type, check if attribute caching disabled for

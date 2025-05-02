@@ -975,7 +975,7 @@ int smb2_query_path_info(const unsigned int xid,
 						     cfid->fid.volatile_fid,
 						     &data->fi);
 			}
-			close_cached_dir(cfid);
+			cfid_put(cfid);
 			return rc;
 		}
 		cmds[num_cmds++] = SMB2_OP_QUERY_INFO;

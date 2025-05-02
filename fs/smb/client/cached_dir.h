@@ -73,7 +73,7 @@ extern int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon,
 extern int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
 				     struct dentry *dentry,
 				     struct cached_fid **cfid);
-extern void close_cached_dir(struct cached_fid *cfid);
+extern void cfid_put(struct cached_fid *cfid);
 extern void drop_cached_dir_by_name(const unsigned int xid,
 				    struct cifs_tcon *tcon,
 				    const char *name,

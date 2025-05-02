@@ -1093,7 +1093,7 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 	 * find_cifs_entry in case there will be reconnects during
 	 * query_directory.
 	 */
-	close_cached_dir(cfid);
+	cfid_put(cfid);
 	cfid = NULL;
 
  cache_not_found:
@@ -1199,7 +1199,7 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 
 rddir2_exit:
 	if (cfid)
-		close_cached_dir(cfid);
+		cfid_put(cfid);
 	free_dentry_path(page);
 	free_xid(xid);
 	return rc;

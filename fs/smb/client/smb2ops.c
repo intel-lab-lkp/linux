@@ -889,7 +889,7 @@ smb3_qfs_tcon(const unsigned int xid, struct cifs_tcon *tcon,
 	if (cfid == NULL)
 		SMB2_close(xid, tcon, fid.persistent_fid, fid.volatile_fid);
 	else
-		close_cached_dir(cfid);
+		cfid_put(cfid);
 }
 
 static void
@@ -940,10 +940,10 @@ smb2_is_path_accessible(const unsigned int xid, struct cifs_tcon *tcon,
 	rc = open_cached_dir(xid, tcon, full_path, cifs_sb, true, &cfid);
 	if (!rc) {
 		if (cfid->has_lease) {
-			close_cached_dir(cfid);
+			cfid_put(cfid);
 			return 0;
 		}
-		close_cached_dir(cfid);
+		cfid_put(cfid);
 	}
 
 	utf16_path = cifs_convert_path_to_utf16(full_path, cifs_sb);
@@ -2804,7 +2804,7 @@ replay_again:
 	free_rsp_buf(resp_buftype[0], rsp_iov[0].iov_base);
 	free_rsp_buf(resp_buftype[2], rsp_iov[2].iov_base);
 	if (cfid)
-		close_cached_dir(cfid);
+		cfid_put(cfid);
 	kfree(vars);
 out_free_path:
 	kfree(utf16_path);
