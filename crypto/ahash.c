@@ -768,12 +768,28 @@ static int crypto_ahash_init_tfm(struct crypto_tfm *tfm)
 		if (err)
 			goto out_free_sync_hash;
 
+		if (!ahash_is_async(hash) && crypto_ahash_reqsize(hash) >
+					     MAX_SYNC_HASH_REQSIZE) {
+			if (tfm->__crt_alg->cra_exit)
+				tfm->__crt_alg->cra_exit(tfm);
+			err = -EINVAL;
+			goto out_free_sync_hash;
+		}
+
 		return 0;
 	}
 
 	err = alg->init_tfm(hash);
 	if (err)
 		goto out_free_sync_hash;
+
+	if (!ahash_is_async(hash) && crypto_ahash_reqsize(hash) >
+				     MAX_SYNC_HASH_REQSIZE) {
+		if (alg->exit_tfm)
+			alg->exit_tfm(hash);
+		err = -EINVAL;
+		goto out_free_sync_hash;
+	}
 
 	return 0;
 
@@ -952,6 +968,10 @@ static int ahash_prepare_alg(struct ahash_alg *alg)
 		return -EINVAL;
 
 	if (base->cra_reqsize && base->cra_reqsize < alg->halg.statesize)
+		return -EINVAL;
+
+	if (!(base->cra_flags & CRYPTO_ALG_ASYNC) &&
+	    base->cra_reqsize > MAX_SYNC_HASH_REQSIZE)
 		return -EINVAL;
 
 	err = hash_prepare_alg(&alg->halg);
