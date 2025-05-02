@@ -354,6 +354,7 @@ static inline int ext4_getfsmap_fill(struct list_head *meta_list,
 	fsm->fmr_length = len;
 	list_add_tail(&fsm->fmr_list, meta_list);
 
+	kfree(fsm);
 	return 0;
 }
 
