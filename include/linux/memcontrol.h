@@ -1618,6 +1618,11 @@ struct sock;
 bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 			     gfp_t gfp_mask);
 void mem_cgroup_uncharge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages);
+
+bool mem_cgroup_charge_gpu(struct mem_cgroup *memcg, unsigned int nr_pages,
+			   gfp_t gfp_mask);
+void mem_cgroup_uncharge_gpu(struct mem_cgroup *memcg, unsigned int nr_pages);
+
 #ifdef CONFIG_MEMCG
 extern struct static_key_false memcg_sockets_enabled_key;
 #define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)

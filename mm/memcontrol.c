@@ -4958,6 +4958,40 @@ void mem_cgroup_uncharge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 	refill_stock(memcg, nr_pages);
 }
 
+/**
+ * mem_cgroup_charge_gpu - charge GPU memory
+ * @memcg: memcg to charge
+ * @nr_pages: number of pages to charge
+ * @gfp_mask: reclaim mode
+ *
+ * Charges @nr_pages to @memcg. Returns %true if the charge fit within
+ * @memcg's configured limit, %false if it doesn't.
+ */
+bool mem_cgroup_charge_gpu(struct mem_cgroup *memcg, unsigned int nr_pages,
+			   gfp_t gfp_mask)
+{
+	if (try_charge_memcg(memcg, gfp_mask, nr_pages) == 0) {
+		mod_memcg_state(memcg, MEMCG_GPU, nr_pages);
+		return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_charge_gpu);
+
+/**
+ * mem_cgroup_uncharge_gpu - uncharge GPU memory
+ * @memcg: memcg to uncharge
+ * @nr_pages: number of pages to uncharge
+ */
+void mem_cgroup_uncharge_gpu(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	mod_memcg_state(memcg, MEMCG_GPU, -nr_pages);
+
+	refill_stock(memcg, nr_pages);
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_uncharge_gpu);
+
 static int __init cgroup_memory(char *s)
 {
 	char *token;
