@@ -3,6 +3,7 @@
 #ifndef _DRM_GPU_SCHEDULER_INTERNAL_H_
 #define _DRM_GPU_SCHEDULER_INTERNAL_H_
 
+#include <linux/cgroup_drm.h>
 #include <linux/ktime.h>
 #include <linux/kref.h>
 #include <linux/spinlock.h>
@@ -168,14 +169,19 @@ drm_sched_entity_update_vruntime(struct drm_sched_entity *entity)
 	};
 	struct drm_sched_entity_stats *stats = entity->stats;
 	ktime_t runtime, prev;
+	u64 runtime_ns;
 
 	spin_lock(&stats->lock);
 	prev = stats->prev_runtime;
 	runtime = stats->runtime;
 	stats->prev_runtime = runtime;
-	runtime = ktime_add_ns(stats->vruntime,
-			       ktime_to_ns(ktime_sub(runtime, prev)) <<
-			       shift[entity->priority]);
+	runtime_ns = ktime_to_ns(ktime_sub(runtime, prev)) <<
+		     shift[entity->priority];
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+	runtime_ns *= ((1 << DRM_CGROUP_WEIGHT_SHIFT) - entity->cgroup_weight);
+	runtime_ns >>= DRM_CGROUP_WEIGHT_SHIFT;
+#endif
+	runtime = ktime_add_ns(stats->vruntime, runtime_ns);
 	stats->vruntime = runtime;
 	spin_unlock(&stats->lock);
 

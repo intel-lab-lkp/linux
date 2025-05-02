@@ -625,4 +625,20 @@ void drm_sched_cgroup_untrack_sched_entity(struct drm_file *file_priv,
 	spin_unlock(&file_priv->sched_entities.lock);
 }
 EXPORT_SYMBOL(drm_sched_cgroup_untrack_sched_entity);
+
+void drm_sched_cgroup_notify_weight(struct drm_file *file_priv,
+				    unsigned int weight)
+{
+	struct drm_sched_entity *entity;
+
+	spin_lock(&file_priv->sched_entities.lock);
+	list_for_each_entry(entity, &file_priv->sched_entities.list,
+			    drm_file_link) {
+		spin_lock(&entity->lock);
+		entity->cgroup_weight = weight;
+		spin_unlock(&entity->lock);
+	}
+	spin_unlock(&file_priv->sched_entities.lock);
+}
+EXPORT_SYMBOL(drm_sched_cgroup_notify_weight);
 #endif

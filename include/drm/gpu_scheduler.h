@@ -146,6 +146,10 @@ struct drm_sched_entity {
 	 */
 	enum drm_sched_priority         priority;
 
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+	unsigned int			cgroup_weight;
+#endif
+
 	/**
 	 * @job_queue: the list of jobs of this entity.
 	 */
@@ -685,6 +689,9 @@ void drm_sched_cgroup_track_sched_entity(struct drm_file *file_priv,
 				  struct drm_sched_entity *entity);
 void drm_sched_cgroup_untrack_sched_entity(struct drm_file *file_priv,
 				    struct drm_sched_entity *entity);
+
+void drm_sched_cgroup_notify_weight(struct drm_file *file_priv,
+				    unsigned int weight);
 #else
 static inline void drm_sched_cgroup_init_drm_file(struct drm_file *file_priv)
 {
