@@ -571,6 +571,10 @@ enum skb_drop_reason {
 	 */
 	SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE,
 	/**
+	 * @SKB_DROP_REASON_PFMEMALLOC: dropped when under memory pressure
+	 */
+	SKB_DROP_REASON_PFMEMALLOC,
+	/**
 	 * @SKB_DROP_REASON_MAX: the maximum of core drop reasons, which
 	 * shouldn't be used as a real 'reason' - only for tracing code gen
 	 */
