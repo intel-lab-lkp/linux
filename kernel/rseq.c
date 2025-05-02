@@ -456,6 +456,8 @@ bool rseq_delay_resched(void)
 	if (!IS_ENABLED(CONFIG_SCHED_HRTICK))
 		return false;
 
+	if (!sysctl_sched_preempt_delay_us)
+		return false;
 	if (!t->rseq)
 		return false;
 
@@ -489,8 +491,9 @@ void rseq_delay_resched_fini(void)
 	 * If your critical section is longer than 50 us you get to keep the
 	 * pieces.
 	 */
-	if (t->sched_time_delay)
-		hrtick_local_start(50 * NSEC_PER_USEC);
+	if (sysctl_sched_preempt_delay_us && t->sched_time_delay)
+		hrtick_local_start(sysctl_sched_preempt_delay_us *
+							NSEC_PER_USEC);
 #endif
 }
 

@@ -132,9 +132,9 @@ struct rseq {
 	 *     Inhibit instruction sequence block restart on migration for
 	 *     this thread.
 	 * - RSEQ_CS_DELAY_RESCHED
-	 *     Request by user task to try delaying preemption. With
-	 *     use of a timer, extra cpu time upto 50us is granted for this
-	 *     thread before being rescheduled.
+	 *     Request by user task to try delaying its preemption. With
+	 *     use of a timer, extra cpu time upto 'sched_preempt_delay_us'
+	 *     is granted for this thread before being rescheduled.
 	 */
 	__u32 flags;
 
