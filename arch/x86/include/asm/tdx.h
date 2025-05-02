@@ -135,6 +135,8 @@ static inline int tdx_nr_pamt_pages(const struct tdx_sys_info *sysinfo)
 	return sysinfo->tdmr.pamt_4k_entry_size * PTRS_PER_PTE / PAGE_SIZE;
 }
 
+atomic_t *tdx_get_pamt_refcount(unsigned long hpa);
+
 int tdx_guest_keyid_alloc(void);
 u32 tdx_get_nr_guest_keyids(void);
 void tdx_guest_keyid_free(unsigned int keyid);

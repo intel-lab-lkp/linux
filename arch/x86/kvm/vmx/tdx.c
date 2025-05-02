@@ -207,6 +207,10 @@ static bool tdx_operand_busy(u64 err)
 	return (err & TDX_SEAMCALL_STATUS_MASK) == TDX_OPERAND_BUSY;
 }
 
+static bool tdx_hpa_range_not_free(u64 err)
+{
+	return (err & TDX_SEAMCALL_STATUS_MASK) == TDX_HPA_RANGE_NOT_FREE;
+}
 
 /*
  * A per-CPU list of TD vCPUs associated with a given CPU.
@@ -274,6 +278,125 @@ static inline void tdx_disassociate_vp(struct kvm_vcpu *vcpu)
 	smp_wmb();
 
 	vcpu->cpu = -1;
+}
+
+static DEFINE_SPINLOCK(pamt_lock);
+
+static void tdx_free_pamt_pages(struct list_head *pamt_pages)
+{
+	struct page *page;
+
+	while ((page = list_first_entry_or_null(pamt_pages, struct page, lru))) {
+		list_del(&page->lru);
+		__free_page(page);
+	}
+}
+
+static int tdx_alloc_pamt_pages(struct list_head *pamt_pages)
+{
+	for (int i = 0; i < tdx_nr_pamt_pages(tdx_sysinfo); i++) {
+		struct page *page = alloc_page(GFP_KERNEL);
+		if (!page)
+			goto fail;
+		list_add(&page->lru, pamt_pages);
+	}
+	return 0;
+fail:
+	tdx_free_pamt_pages(pamt_pages);
+	return -ENOMEM;
+}
+
+static int tdx_pamt_add(atomic_t *pamt_refcount, unsigned long hpa,
+			struct list_head *pamt_pages)
+{
+	u64 err;
+
+	hpa = ALIGN_DOWN(hpa, SZ_2M);
+
+	spin_lock(&pamt_lock);
+
+	/* Lost race to other tdx_pamt_add() */
+	if (atomic_read(pamt_refcount) != 0) {
+		atomic_inc(pamt_refcount);
+		spin_unlock(&pamt_lock);
+		tdx_free_pamt_pages(pamt_pages);
+		return 0;
+	}
+
+	err = tdh_phymem_pamt_add(hpa | TDX_PS_2M, pamt_pages);
+
+	if (err)
+		tdx_free_pamt_pages(pamt_pages);
+
+	/*
+	 * tdx_hpa_range_not_free() is true if current task won race
+	 * against tdx_pamt_put().
+	 */
+	if (err && !tdx_hpa_range_not_free(err)) {
+		spin_unlock(&pamt_lock);
+		pr_tdx_error(TDH_PHYMEM_PAMT_ADD, err);
+		return -EIO;
+	}
+
+	atomic_set(pamt_refcount, 1);
+	spin_unlock(&pamt_lock);
+	return 0;
+}
+
+static int tdx_pamt_get(struct page *page)
+{
+	unsigned long hpa = page_to_phys(page);
+	atomic_t *pamt_refcount;
+	LIST_HEAD(pamt_pages);
+
+	if (!tdx_supports_dynamic_pamt(tdx_sysinfo))
+		return 0;
+
+	pamt_refcount = tdx_get_pamt_refcount(hpa);
+	WARN_ON_ONCE(atomic_read(pamt_refcount) < 0);
+
+	if (atomic_inc_not_zero(pamt_refcount))
+		return 0;
+
+	if (tdx_alloc_pamt_pages(&pamt_pages))
+		return -ENOMEM;
+
+	return tdx_pamt_add(pamt_refcount, hpa, &pamt_pages);
+}
+
+static void tdx_pamt_put(struct page *page)
+{
+	unsigned long hpa = page_to_phys(page);
+	atomic_t *pamt_refcount;
+	LIST_HEAD(pamt_pages);
+	u64 err;
+
+	if (!tdx_supports_dynamic_pamt(tdx_sysinfo))
+		return;
+
+	hpa = ALIGN_DOWN(hpa, SZ_2M);
+
+	pamt_refcount = tdx_get_pamt_refcount(hpa);
+	if (!atomic_dec_and_test(pamt_refcount))
+		return;
+
+	spin_lock(&pamt_lock);
+
+	/* Lost race against tdx_pamt_add()? */
+	if (atomic_read(pamt_refcount) != 0) {
+		spin_unlock(&pamt_lock);
+		return;
+	}
+
+	err = tdh_phymem_pamt_remove(hpa | TDX_PS_2M, &pamt_pages);
+	spin_unlock(&pamt_lock);
+
+	if (err) {
+		pr_tdx_error(TDH_PHYMEM_PAMT_REMOVE, err);
+		return;
+	}
+
+	tdx_free_pamt_pages(&pamt_pages);
 }
 
 static void tdx_clear_page(struct page *page)
