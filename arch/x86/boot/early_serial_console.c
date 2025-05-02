@@ -66,6 +66,20 @@ static void early_serial_init(unsigned long port, int baud)
 	early_serial_base = port;
 }
 
+static unsigned long parse_serial_port(const char *arg, int off, int *pos)
+{
+	unsigned long port;
+	char *e;
+
+	port = simple_strtoull(arg + off, &e, 16);
+	if (port == 0 || arg + off == e)
+		port = DEFAULT_SERIAL_PORT;
+	else
+		*pos = e - arg;
+
+	return port;
+}
+
 static void parse_earlyprintk(void)
 {
 	int baud = DEFAULT_BAUD;
@@ -91,11 +105,7 @@ static void parse_earlyprintk(void)
 		 *	"ttyS0,115200"
 		 */
 		if (pos == 7 && !strncmp(arg + pos, "0x", 2)) {
-			port = simple_strtoull(arg + pos, &e, 16);
-			if (port == 0 || arg + pos == e)
-				port = DEFAULT_SERIAL_PORT;
-			else
-				pos = e - arg;
+			port = parse_serial_port(arg, pos + 0, &pos);
 			early_serial_use_io_accessors();
 		} else if (!strncmp(arg + pos, "ttyS", 4)) {
 			static const int bases[] = { 0x3f8, 0x2f8 };
