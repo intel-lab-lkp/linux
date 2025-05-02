@@ -111,6 +111,8 @@ struct cn10k_ipsec {
 	struct workqueue_struct *sa_workq;
 
 	/* For Inbound Inline IPSec flows */
+	u16 inb_ipsec_rq;
+	u16 inb_ipsec_pool;
 	u32 sa_tbl_entry_sz;
 	struct qmem *inb_sa;
 	struct list_head inb_sw_ctx_list;
