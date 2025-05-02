@@ -41,7 +41,7 @@
 	ktime_t __timeout = ktime_add_us(ktime_get(), __timeout_us); \
 	might_sleep_if((__sleep_us) != 0); \
 	if (sleep_before_read && __sleep_us) \
-		usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		fsleep((__sleep_us >> 1) + 1); \
 	for (;;) { \
 		(val) = op(args); \
 		if (cond) \
@@ -52,7 +52,7 @@
 			break; \
 		} \
 		if (__sleep_us) \
-			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+			fsleep((__sleep_us >> 1) + 1); \
 		cpu_relax(); \
 	} \
 	(cond) ? 0 : -ETIMEDOUT; \
