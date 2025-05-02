@@ -346,6 +346,67 @@ detach:
 	return ret;
 }
 
+struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
+						     struct nix_rx_sg_s *sg,
+						     struct sk_buff *skb,
+						     int qidx)
+{
+	struct nix_wqe_rx_s *wqe = NULL;
+	u64 *seg_addr = &sg->seg_addr;
+	struct cpt_parse_hdr_s *cptp;
+	struct xfrm_offload *xo;
+	struct otx2_pool *pool;
+	struct xfrm_state *xs;
+	struct sec_path *sp;
+	u64 *va_ptr;
+	void *va;
+	int i;
+
+	/* CPT_PARSE_HDR_S is present in the beginning of the buffer */
+	va = phys_to_virt(otx2_iova_to_phys(pfvf->iommu_domain, *seg_addr));
+
+	/* Convert CPT_PARSE_HDR_S from BE to LE */
+	va_ptr = (u64 *)va;
+	for (i = 0; i < (sizeof(struct cpt_parse_hdr_s) / sizeof(u64)); i++)
+		va_ptr[i] = be64_to_cpu(va_ptr[i]);
+
+	cptp = (struct cpt_parse_hdr_s *)va;
+
+	/* Convert the wqe_ptr from CPT_PARSE_HDR_S to a CPU usable pointer */
+	wqe = (struct nix_wqe_rx_s *)phys_to_virt(otx2_iova_to_phys(pfvf->iommu_domain,
+								    cptp->wqe_ptr));
+
+	/* Get the XFRM state pointer stored in SA context */
+	va_ptr = pfvf->ipsec.inb_sa->base +
+		(cptp->cookie * pfvf->ipsec.sa_tbl_entry_sz) + 1024;
+	xs = (struct xfrm_state *)*va_ptr;
+
+	/* Set XFRM offload status and flags for successful decryption */
+	sp = secpath_set(skb);
+	if (!sp) {
+		netdev_err(pfvf->netdev, "Failed to secpath_set\n");
+		wqe = NULL;
+		goto err_out;
+	}
+
+	rcu_read_lock();
+	xfrm_state_hold(xs);
+	rcu_read_unlock();
+
+	sp->xvec[sp->len++] = xs;
+	sp->olen++;
+
+	xo = xfrm_offload(skb);
+	xo->flags = CRYPTO_DONE;
+	xo->status = CRYPTO_SUCCESS;
+
+err_out:
+	/* Free the metapacket memory here since it's not needed anymore */
+	pool = &pfvf->qset.pool[qidx];
+	otx2_free_bufs(pfvf, pool, *seg_addr - OTX2_HEAD_ROOM, pfvf->rbsize);
+	return wqe;
+}
+
 static int cn10k_inb_alloc_mcam_entry(struct otx2_nic *pfvf,
 				      struct cn10k_inb_sw_ctx_info *inb_ctx_info)
 {
