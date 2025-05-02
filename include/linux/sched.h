@@ -2261,6 +2261,15 @@ static inline void sched_core_fork(struct task_struct *p) { }
 static inline int sched_core_idle_cpu(int cpu) { return idle_cpu(cpu); }
 #endif
 
+#ifdef CONFIG_NUMA_BALANCING
+/* Change a task's numa_preferred_nid */
+int prctl_chg_pref_nid(unsigned long cmd, int nid, pid_t pid,
+		       unsigned long uaddr);
+#else
+static inline int prctl_chg_pref_nid(unsigned long cmd, int nid, pid_t pid,
+				     unsigned long uaddr) { return -ERANGE; }
+#endif
+
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING

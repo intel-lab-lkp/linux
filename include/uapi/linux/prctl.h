@@ -364,4 +364,12 @@ struct prctl_mm_map {
 # define PR_TIMER_CREATE_RESTORE_IDS_ON		1
 # define PR_TIMER_CREATE_RESTORE_IDS_GET	2
 
+/*
+ * Set or get a task's numa_preferred_nid
+ */
+#define PR_PREFERRED_NID		78
+# define PR_PREFERRED_NID_GET		0
+# define PR_PREFERRED_NID_SET		1
+# define PR_PREFERRED_NID_CMD_MAX	2
+
 #endif /* _LINUX_PRCTL_H */
