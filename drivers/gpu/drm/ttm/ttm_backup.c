@@ -9,16 +9,21 @@
 
 /*
  * Casting from randomized struct file * to struct ttm_backup * is fine since
- * struct ttm_backup is never defined nor dereferenced.
+ * struct ttm_backup is never defined nor dereferenced. Use a single-member
+ * struct to avoid cast warnings.
  */
+struct ttm_backup {
+	struct file file;
+};
+
 static struct file *ttm_backup_to_file(struct ttm_backup *backup)
 {
-	return (void *)backup;
+	return &backup->file;
 }
 
 static struct ttm_backup *ttm_file_to_backup(struct file *file)
 {
-	return (void *)file;
+	return container_of(file, struct ttm_backup, file);
 }
 
 /*
