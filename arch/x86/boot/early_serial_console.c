@@ -84,7 +84,7 @@ static void parse_earlyprintk(void)
 {
 	int baud = DEFAULT_BAUD;
 	unsigned long port = 0;
-	char arg[32];
+	char arg[64];
 	int pos = 0;
 
 	if (cmdline_find_option("earlyprintk", arg, sizeof(arg)) > 0) {
