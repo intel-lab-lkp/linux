@@ -487,8 +487,11 @@ static int tdx_reclaim_page(struct page *page)
 	int r;
 
 	r = __tdx_reclaim_page(page);
-	if (!r)
+	if (!r) {
 		tdx_clear_page(page);
+		tdx_pamt_put(page);
+	}
+
 	return r;
 }
 
@@ -737,6 +740,7 @@ static void tdx_reclaim_td_control_pages(struct kvm *kvm)
 		return;
 	}
 	tdx_clear_page(kvm_tdx->td.tdr_page);
+	tdx_pamt_put(kvm_tdx->td.tdr_page);
 
 	__free_page(kvm_tdx->td.tdr_page);
 	kvm_tdx->td.tdr_page = NULL;
@@ -1768,6 +1772,7 @@ static int tdx_sept_drop_private_spte(struct kvm *kvm, gfn_t gfn,
 		return -EIO;
 	}
 	tdx_clear_page(page);
+	tdx_pamt_put(page);
 	tdx_unpin(kvm, page);
 	return 0;
 }
@@ -1848,6 +1853,7 @@ static int tdx_sept_zap_private_spte(struct kvm *kvm, gfn_t gfn,
 	if (tdx_is_sept_zap_err_due_to_premap(kvm_tdx, err, entry, level) &&
 	    !KVM_BUG_ON(!atomic64_read(&kvm_tdx->nr_premapped), kvm)) {
 		atomic64_dec(&kvm_tdx->nr_premapped);
+		tdx_pamt_put(page);
 		tdx_unpin(kvm, page);
 		return 0;
 	}
