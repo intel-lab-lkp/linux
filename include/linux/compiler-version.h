@@ -16,3 +16,6 @@
 #ifdef GCC_PLUGINS_ENABLED
 #include "gcc-plugins-deps.h"
 #endif
+#ifdef RANDSTRUCT
+#include "randstruct_hash.h"
+#endif
