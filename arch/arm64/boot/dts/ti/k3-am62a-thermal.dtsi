@@ -19,7 +19,7 @@ thermal_zones: thermal-zones {
 			};
 
 			main0_crit: main0-crit {
-				temperature = <125000>;	/* milliCelsius */
+				temperature = <105000>;	/* milliCelsius */
 				hysteresis = <2000>;	/* milliCelsius */
 				type = "critical";
 			};
@@ -50,7 +50,7 @@ thermal_zones: thermal-zones {
 			};
 
 			main1_crit: main1-crit {
-				temperature = <125000>;	/* milliCelsius */
+				temperature = <105000>;	/* milliCelsius */
 				hysteresis = <2000>;	/* milliCelsius */
 				type = "critical";
 			};
@@ -81,7 +81,7 @@ thermal_zones: thermal-zones {
 			};
 
 			main2_crit: main2-crit {
-				temperature = <125000>;	/* milliCelsius */
+				temperature = <105000>;	/* milliCelsius */
 				hysteresis = <2000>;	/* milliCelsius */
 				type = "critical";
 			};
