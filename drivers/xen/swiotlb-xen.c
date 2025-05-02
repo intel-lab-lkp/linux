@@ -285,6 +285,20 @@ static void xen_swiotlb_unmap_page(struct device *hwdev, dma_addr_t dev_addr,
 					   attrs, pool);
 }
 
+static dma_addr_t xen_swiotlb_map_resource(struct device *dev, phys_addr_t phys,
+					   size_t size, enum dma_data_direction dir,
+					   unsigned long attrs)
+{
+	dma_addr_t dev_addr = xen_phys_to_dma(dev, phys);
+
+	BUG_ON(dir == DMA_NONE);
+
+	if (!dma_capable(dev, dev_addr, size, false))
+		return DMA_MAPPING_ERROR;
+
+	return dev_addr;
+}
+
 static void
 xen_swiotlb_sync_single_for_cpu(struct device *dev, dma_addr_t dma_addr,
 		size_t size, enum dma_data_direction dir)
@@ -426,4 +440,5 @@ const struct dma_map_ops xen_swiotlb_dma_ops = {
 	.alloc_pages_op = dma_common_alloc_pages,
 	.free_pages = dma_common_free_pages,
 	.max_mapping_size = swiotlb_max_mapping_size,
+	.map_resource = xen_swiotlb_map_resource,
 };
