@@ -190,7 +190,7 @@ static int btrfs_repair_eb_io_failure(const struct extent_buffer *eb,
 	for (int i = 0; i < num_extent_folios(eb); i++) {
 		struct folio *folio = eb->folios[i];
 		u64 start = max_t(u64, eb->start, folio_pos(folio));
-		u64 end = min_t(u64, eb->start + eb->len,
+		u64 end = min_t(u64, eb->start + fs_info->nodesize,
 				folio_pos(folio) + eb->folio_size);
 		u32 len = end - start;
 		phys_addr_t paddr = PFN_PHYS(folio_pfn(folio)) +
@@ -230,7 +230,7 @@ int btrfs_read_extent_buffer(struct extent_buffer *eb,
 			break;
 
 		num_copies = btrfs_num_copies(fs_info,
-					      eb->start, eb->len);
+					      eb->start, fs_info->nodesize);
 		if (num_copies == 1)
 			break;
 
@@ -260,6 +260,7 @@ int btree_csum_one_bio(struct btrfs_bio *bbio)
 {
 	struct extent_buffer *eb = bbio->private;
 	struct btrfs_fs_info *fs_info = eb->fs_info;
+	const u32 nodesize = fs_info->nodesize;
 	u64 found_start = btrfs_header_bytenr(eb);
 	u64 last_trans;
 	u8 result[BTRFS_CSUM_SIZE];
@@ -268,7 +269,7 @@ int btree_csum_one_bio(struct btrfs_bio *bbio)
 	/* Btree blocks are always contiguous on disk. */
 	if (WARN_ON_ONCE(bbio->file_offset != eb->start))
 		return -EIO;
-	if (WARN_ON_ONCE(bbio->bio.bi_iter.bi_size != eb->len))
+	if (WARN_ON_ONCE(bbio->bio.bi_iter.bi_size != fs_info->nodesize))
 		return -EIO;
 
 	/*
@@ -277,7 +278,7 @@ int btree_csum_one_bio(struct btrfs_bio *bbio)
 	 * ordering of I/O without unnecessarily writing out data.
 	 */
 	if (test_bit(EXTENT_BUFFER_ZONED_ZEROOUT, &eb->bflags)) {
-		memzero_extent_buffer(eb, 0, eb->len);
+		memzero_extent_buffer(eb, 0, nodesize);
 		return 0;
 	}
 
@@ -881,7 +882,7 @@ struct btrfs_root *btrfs_create_tree(struct btrfs_trans_handle *trans,
 	btrfs_set_root_generation(&root->root_item, trans->transid);
 	btrfs_set_root_level(&root->root_item, 0);
 	btrfs_set_root_refs(&root->root_item, 1);
-	btrfs_set_root_used(&root->root_item, leaf->len);
+	btrfs_set_root_used(&root->root_item, fs_info->nodesize);
 	btrfs_set_root_last_snapshot(&root->root_item, 0);
 	btrfs_set_root_dirid(&root->root_item, 0);
 	if (is_fstree(objectid))

@@ -76,8 +76,8 @@ void btrfs_extent_buffer_leak_debug_check(struct btrfs_fs_info *fs_info)
 		eb = list_first_entry(&fs_info->allocated_ebs,
 				      struct extent_buffer, leak_list);
 		pr_err(
-	"BTRFS: buffer leak start %llu len %u refs %d bflags %lu owner %llu\n",
-		       eb->start, eb->len, atomic_read(&eb->refs), eb->bflags,
+	"BTRFS: buffer leak start %llu refs %d bflags %lu owner %llu\n",
+		       eb->start, atomic_read(&eb->refs), eb->bflags,
 		       btrfs_header_owner(eb));
 		list_del(&eb->leak_list);
 		WARN_ON_ONCE(1);
@@ -1745,8 +1745,8 @@ static noinline_for_stack bool lock_extent_buffer_for_io(struct extent_buffer *e
 
 		btrfs_set_header_flag(eb, BTRFS_HEADER_FLAG_WRITTEN);
 		percpu_counter_add_batch(&fs_info->dirty_metadata_bytes,
-					 -eb->len,
-					 fs_info->dirty_metadata_batch);
+					 -fs_info->nodesize,
+					  fs_info->dirty_metadata_batch);
 		ret = true;
 	} else {
 		spin_unlock(&eb->refs_lock);
@@ -1943,7 +1943,7 @@ static unsigned int buffer_tree_get_ebs_tag(struct btrfs_fs_info *fs_info,
 	rcu_read_lock();
 	while ((eb = find_get_eb(&xas, end, tag)) != NULL) {
 		if (!eb_batch_add(batch, eb)) {
-			*start = (eb->start + eb->len) >> fs_info->sectorsize_bits;
+			*start = (eb->start + fs_info->nodesize) >> fs_info->sectorsize_bits;
 			goto out;
 		}
 	}
@@ -2007,7 +2007,7 @@ static void prepare_eb_write(struct extent_buffer *eb)
 	nritems = btrfs_header_nritems(eb);
 	if (btrfs_header_level(eb) > 0) {
 		end = btrfs_node_key_ptr_offset(eb, nritems);
-		memzero_extent_buffer(eb, end, eb->len - end);
+		memzero_extent_buffer(eb, end, eb->fs_info->nodesize - end);
 	} else {
 		/*
 		 * Leaf:
@@ -2043,7 +2043,7 @@ static noinline_for_stack void write_one_eb(struct extent_buffer *eb,
 		struct folio *folio = eb->folios[i];
 		u64 range_start = max_t(u64, eb->start, folio_pos(folio));
 		u32 range_len = min_t(u64, folio_pos(folio) + folio_size(folio),
-				      eb->start + eb->len) - range_start;
+				      eb->start + fs_info->nodesize) - range_start;
 
 		folio_lock(folio);
 		btrfs_meta_folio_clear_dirty(folio, eb);
@@ -2157,7 +2157,7 @@ retry:
 			if (ctx.zoned_bg) {
 				/* Mark the last eb in the block group. */
 				btrfs_schedule_zone_finish_bg(ctx.zoned_bg, eb);
-				ctx.zoned_bg->meta_write_pointer += eb->len;
+				ctx.zoned_bg->meta_write_pointer += fs_info->nodesize;
 			}
 			write_one_eb(eb, wbc);
 		}
@@ -2793,7 +2793,6 @@ static struct extent_buffer *__alloc_extent_buffer(struct btrfs_fs_info *fs_info
 
 	eb = kmem_cache_zalloc(extent_buffer_cache, GFP_NOFS|__GFP_NOFAIL);
 	eb->start = start;
-	eb->len = fs_info->nodesize;
 	eb->fs_info = fs_info;
 	init_rwsem(&eb->lock);
 
@@ -2801,8 +2800,6 @@ static struct extent_buffer *__alloc_extent_buffer(struct btrfs_fs_info *fs_info
 
 	spin_lock_init(&eb->refs_lock);
 	atomic_set(&eb->refs, 1);
-
-	ASSERT(eb->len <= BTRFS_MAX_METADATA_BLOCKSIZE);
 
 	return eb;
 }
@@ -3517,7 +3514,7 @@ void btrfs_clear_buffer_dirty(struct btrfs_trans_handle *trans,
 		return;
 
 	buffer_tree_clear_mark(eb, PAGECACHE_TAG_DIRTY);
-	percpu_counter_add_batch(&fs_info->dirty_metadata_bytes, -eb->len,
+	percpu_counter_add_batch(&fs_info->dirty_metadata_bytes, -fs_info->nodesize,
 				 fs_info->dirty_metadata_batch);
 
 	for (int i = 0; i < num_extent_folios(eb); i++) {
@@ -3548,7 +3545,8 @@ void set_extent_buffer_dirty(struct extent_buffer *eb)
 	WARN_ON(test_bit(EXTENT_BUFFER_ZONED_ZEROOUT, &eb->bflags));
 
 	if (!was_dirty) {
-		bool subpage = btrfs_meta_is_subpage(eb->fs_info);
+		struct btrfs_fs_info *fs_info = eb->fs_info;
+		bool subpage = btrfs_meta_is_subpage(fs_info);
 
 		/*
 		 * For subpage case, we can have other extent buffers in the
@@ -3568,9 +3566,9 @@ void set_extent_buffer_dirty(struct extent_buffer *eb)
 		buffer_tree_set_mark(eb, PAGECACHE_TAG_DIRTY);
 		if (subpage)
 			folio_unlock(eb->folios[0]);
-		percpu_counter_add_batch(&eb->fs_info->dirty_metadata_bytes,
-					 eb->len,
-					 eb->fs_info->dirty_metadata_batch);
+		percpu_counter_add_batch(&fs_info->dirty_metadata_bytes,
+					  fs_info->nodesize,
+					  fs_info->dirty_metadata_batch);
 	}
 #ifdef CONFIG_BTRFS_DEBUG
 	for (int i = 0; i < num_extent_folios(eb); i++)
@@ -3682,7 +3680,7 @@ int read_extent_buffer_pages_nowait(struct extent_buffer *eb, int mirror_num,
 		struct folio *folio = eb->folios[i];
 		u64 range_start = max_t(u64, eb->start, folio_pos(folio));
 		u32 range_len = min_t(u64, folio_pos(folio) + folio_size(folio),
-				      eb->start + eb->len) - range_start;
+				      eb->start + eb->fs_info->nodesize) - range_start;
 
 		bio_add_folio_nofail(&bbio->bio, folio, range_len,
 				     offset_in_folio(folio, range_start));
@@ -3710,8 +3708,8 @@ static bool report_eb_range(const struct extent_buffer *eb, unsigned long start,
 			    unsigned long len)
 {
 	btrfs_warn(eb->fs_info,
-		"access to eb bytenr %llu len %u out of range start %lu len %lu",
-		eb->start, eb->len, start, len);
+		"access to eb bytenr %llu out of range start %lu len %lu",
+		eb->start, start, len);
 	DEBUG_WARN();
 
 	return true;
@@ -3729,8 +3727,8 @@ static inline int check_eb_range(const struct extent_buffer *eb,
 {
 	unsigned long offset;
 
-	/* start, start + len should not go beyond eb->len nor overflow */
-	if (unlikely(check_add_overflow(start, len, &offset) || offset > eb->len))
+	/* start, start + len should not go beyond nodesize nor overflow */
+	if (unlikely(check_add_overflow(start, len, &offset) || offset > eb->fs_info->nodesize))
 		return report_eb_range(eb, start, len);
 
 	return false;
@@ -3786,8 +3784,8 @@ int read_extent_buffer_to_user_nofault(const struct extent_buffer *eb,
 	unsigned long i = get_eb_folio_index(eb, start);
 	int ret = 0;
 
-	WARN_ON(start > eb->len);
-	WARN_ON(start + len > eb->start + eb->len);
+	WARN_ON(start > eb->fs_info->nodesize);
+	WARN_ON(start + len > eb->start + eb->fs_info->nodesize);
 
 	if (eb->addr) {
 		if (copy_to_user_nofault(dstv, eb->addr + start, len))
@@ -3878,8 +3876,8 @@ static void assert_eb_folio_uptodate(const struct extent_buffer *eb, int i)
 		folio = eb->folios[0];
 		ASSERT(i == 0);
 		if (WARN_ON(!btrfs_subpage_test_uptodate(fs_info, folio,
-							 eb->start, eb->len)))
-			btrfs_subpage_dump_bitmap(fs_info, folio, eb->start, eb->len);
+							 eb->start, fs_info->nodesize)))
+			btrfs_subpage_dump_bitmap(fs_info, folio, eb->start, fs_info->nodesize);
 	} else {
 		WARN_ON(!folio_test_uptodate(folio));
 	}
@@ -3972,12 +3970,10 @@ void copy_extent_buffer_full(const struct extent_buffer *dst,
 	const int unit_size = src->folio_size;
 	unsigned long cur = 0;
 
-	ASSERT(dst->len == src->len);
-
-	while (cur < src->len) {
+	while (cur < src->fs_info->nodesize) {
 		unsigned long index = get_eb_folio_index(src, cur);
 		unsigned long offset = get_eb_offset_in_folio(src, cur);
-		unsigned long cur_len = min(src->len, unit_size - offset);
+		unsigned long cur_len = min(src->fs_info->nodesize, unit_size - offset);
 		void *addr = folio_address(src->folios[index]) + offset;
 
 		write_extent_buffer(dst, addr, cur, cur_len);
@@ -3992,7 +3988,6 @@ void copy_extent_buffer(const struct extent_buffer *dst,
 			unsigned long len)
 {
 	const int unit_size = dst->folio_size;
-	u64 dst_len = dst->len;
 	size_t cur;
 	size_t offset;
 	char *kaddr;
@@ -4001,8 +3996,6 @@ void copy_extent_buffer(const struct extent_buffer *dst,
 	if (check_eb_range(dst, dst_offset, len) ||
 	    check_eb_range(src, src_offset, len))
 		return;
-
-	WARN_ON(src->len != dst_len);
 
 	offset = get_eb_offset_in_folio(dst, dst_offset);
 
@@ -4274,7 +4267,7 @@ static int try_release_subpage_extent_buffer(struct folio *folio)
 			xa_unlock_irq(&fs_info->buffer_tree);
 			break;
 		}
-		cur = eb->start + eb->len;
+		cur = eb->start + fs_info->nodesize;
 
 		/*
 		 * The same as try_release_extent_buffer(), to ensure the eb

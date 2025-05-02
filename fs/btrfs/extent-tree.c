@@ -2211,7 +2211,7 @@ int btrfs_set_disk_extent_flags(struct btrfs_trans_handle *trans,
 	extent_op->update_flags = true;
 	extent_op->update_key = false;
 
-	ret = btrfs_add_delayed_extent_op(trans, eb->start, eb->len,
+	ret = btrfs_add_delayed_extent_op(trans, eb->start, eb->fs_info->nodesize,
 					  btrfs_header_level(eb), extent_op);
 	if (ret)
 		btrfs_free_delayed_extent_op(extent_op);
@@ -2660,10 +2660,10 @@ int btrfs_pin_extent_for_log_replay(struct btrfs_trans_handle *trans,
 	if (ret)
 		goto out;
 
-	pin_down_extent(trans, cache, eb->start, eb->len, 0);
+	pin_down_extent(trans, cache, eb->start, eb->fs_info->nodesize, 0);
 
 	/* remove us from the free space cache (if we're there at all) */
-	ret = btrfs_remove_free_space(cache, eb->start, eb->len);
+	ret = btrfs_remove_free_space(cache, eb->start, eb->fs_info->nodesize);
 out:
 	btrfs_put_block_group(cache);
 	return ret;
@@ -3463,13 +3463,14 @@ int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_block_group *bg;
+	const u32 nodesize = fs_info->nodesize;
 	int ret;
 
 	if (root_id != BTRFS_TREE_LOG_OBJECTID) {
 		struct btrfs_ref generic_ref = {
 			.action = BTRFS_DROP_DELAYED_REF,
 			.bytenr = buf->start,
-			.num_bytes = buf->len,
+			.num_bytes = nodesize,
 			.parent = parent,
 			.owning_root = btrfs_header_owner(buf),
 			.ref_root = root_id,
@@ -3505,7 +3506,7 @@ int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 	bg = btrfs_lookup_block_group(fs_info, buf->start);
 
 	if (btrfs_header_flag(buf, BTRFS_HEADER_FLAG_WRITTEN)) {
-		pin_down_extent(trans, bg, buf->start, buf->len, 1);
+		pin_down_extent(trans, bg, buf->start, nodesize, 1);
 		btrfs_put_block_group(bg);
 		goto out;
 	}
@@ -3529,17 +3530,17 @@ int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 
 	if (test_bit(BTRFS_FS_TREE_MOD_LOG_USERS, &fs_info->flags)
 		     || btrfs_is_zoned(fs_info)) {
-		pin_down_extent(trans, bg, buf->start, buf->len, 1);
+		pin_down_extent(trans, bg, buf->start, nodesize, 1);
 		btrfs_put_block_group(bg);
 		goto out;
 	}
 
 	WARN_ON(test_bit(EXTENT_BUFFER_DIRTY, &buf->bflags));
 
-	btrfs_add_free_space(bg, buf->start, buf->len);
-	btrfs_free_reserved_bytes(bg, buf->len, 0);
+	btrfs_add_free_space(bg, buf->start, nodesize);
+	btrfs_free_reserved_bytes(bg, nodesize, 0);
 	btrfs_put_block_group(bg);
-	trace_btrfs_reserved_extent_free(fs_info, buf->start, buf->len);
+	trace_btrfs_reserved_extent_free(fs_info, buf->start, nodesize);
 
 out:
 	return 0;
@@ -4795,7 +4796,7 @@ int btrfs_pin_reserved_extent(struct btrfs_trans_handle *trans,
 		return -ENOSPC;
 	}
 
-	ret = pin_down_extent(trans, cache, eb->start, eb->len, 1);
+	ret = pin_down_extent(trans, cache, eb->start, eb->fs_info->nodesize, 1);
 	btrfs_put_block_group(cache);
 	return ret;
 }
@@ -5077,6 +5078,7 @@ btrfs_init_new_buffer(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct extent_buffer *buf;
 	u64 lockdep_owner = owner;
+	const u32 nodesize = fs_info->nodesize;
 
 	buf = btrfs_find_create_tree_block(fs_info, bytenr, owner, level);
 	if (IS_ERR(buf))
@@ -5134,16 +5136,16 @@ btrfs_init_new_buffer(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		 */
 		if (buf->log_index == 0)
 			btrfs_set_extent_bit(&root->dirty_log_pages, buf->start,
-					     buf->start + buf->len - 1,
+					     buf->start + nodesize - 1,
 					     EXTENT_DIRTY, NULL);
 		else
 			btrfs_set_extent_bit(&root->dirty_log_pages, buf->start,
-					     buf->start + buf->len - 1,
+					     buf->start + nodesize - 1,
 					     EXTENT_NEW, NULL);
 	} else {
 		buf->log_index = -1;
 		btrfs_set_extent_bit(&trans->transaction->dirty_pages, buf->start,
-				     buf->start + buf->len - 1, EXTENT_DIRTY, NULL);
+				     buf->start + nodesize - 1, EXTENT_DIRTY, NULL);
 	}
 	/* this returns a buffer locked for blocking */
 	return buf;

@@ -342,7 +342,7 @@ static int check_eb_bitmap(unsigned long *bitmap, struct extent_buffer *eb)
 {
 	unsigned long i;
 
-	for (i = 0; i < eb->len * BITS_PER_BYTE; i++) {
+	for (i = 0; i < eb->fs_info->nodesize * BITS_PER_BYTE; i++) {
 		int bit, bit1;
 
 		bit = !!test_bit(i, bitmap);
@@ -411,7 +411,7 @@ static int test_bitmap_clear(const char *name, unsigned long *bitmap,
 static int __test_eb_bitmaps(unsigned long *bitmap, struct extent_buffer *eb)
 {
 	unsigned long i, j;
-	unsigned long byte_len = eb->len;
+	unsigned long byte_len = eb->fs_info->nodesize;
 	u32 x;
 	int ret;
 
@@ -670,7 +670,7 @@ out:
 static void dump_eb_and_memory_contents(struct extent_buffer *eb, void *memory,
 					const char *test_name)
 {
-	for (int i = 0; i < eb->len; i++) {
+	for (int i = 0; i < eb->fs_info->nodesize; i++) {
 		struct page *page = folio_page(eb->folios[i >> PAGE_SHIFT], 0);
 		void *addr = page_address(page) + offset_in_page(i);
 
@@ -686,7 +686,7 @@ static void dump_eb_and_memory_contents(struct extent_buffer *eb, void *memory,
 static int verify_eb_and_memory(struct extent_buffer *eb, void *memory,
 				const char *test_name)
 {
-	for (int i = 0; i < (eb->len >> PAGE_SHIFT); i++) {
+	for (int i = 0; i < (eb->fs_info->nodesize >> PAGE_SHIFT); i++) {
 		void *eb_addr = folio_address(eb->folios[i]);
 
 		if (memcmp(memory + (i << PAGE_SHIFT), eb_addr, PAGE_SIZE) != 0) {
@@ -703,8 +703,8 @@ static int verify_eb_and_memory(struct extent_buffer *eb, void *memory,
  */
 static void init_eb_and_memory(struct extent_buffer *eb, void *memory)
 {
-	get_random_bytes(memory, eb->len);
-	write_extent_buffer(eb, memory, 0, eb->len);
+	get_random_bytes(memory, eb->fs_info->nodesize);
+	write_extent_buffer(eb, memory, 0, eb->fs_info->nodesize);
 }
 
 static int test_eb_mem_ops(u32 sectorsize, u32 nodesize)

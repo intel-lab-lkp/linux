@@ -16,6 +16,7 @@
 #include "messages.h"
 #include "ulist.h"
 #include "misc.h"
+#include "fs.h"
 
 struct page;
 struct file;
@@ -80,7 +81,6 @@ void __cold extent_buffer_free_cachep(void);
 #define INLINE_EXTENT_BUFFER_PAGES     (BTRFS_MAX_METADATA_BLOCKSIZE / PAGE_SIZE)
 struct extent_buffer {
 	u64 start;
-	u32 len;
 	u32 folio_size;
 	unsigned long bflags;
 	struct btrfs_fs_info *fs_info;
@@ -268,12 +268,12 @@ static inline int __pure num_extent_pages(const struct extent_buffer *eb)
 {
 	/*
 	 * For sectorsize == PAGE_SIZE case, since nodesize is always aligned to
-	 * sectorsize, it's just eb->len >> PAGE_SHIFT.
+	 * sectorsize, it's just nodesize >> PAGE_SHIFT.
 	 *
 	 * For sectorsize < PAGE_SIZE case, we could have nodesize < PAGE_SIZE,
 	 * thus have to ensure we get at least one page.
 	 */
-	return (eb->len >> PAGE_SHIFT) ?: 1;
+	return (eb->fs_info->nodesize >> PAGE_SHIFT) ?: 1;
 }
 
 /*

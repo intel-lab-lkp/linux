@@ -14,10 +14,10 @@ static bool check_setget_bounds(const struct extent_buffer *eb,
 {
 	const unsigned long member_offset = (unsigned long)ptr + off;
 
-	if (unlikely(member_offset + size > eb->len)) {
+	if (unlikely(member_offset + size > eb->fs_info->nodesize)) {
 		btrfs_warn(eb->fs_info,
 		"bad eb member %s: ptr 0x%lx start %llu member offset %lu size %d",
-			(member_offset > eb->len ? "start" : "end"),
+			(member_offset > eb->fs_info->nodesize ? "start" : "end"),
 			(unsigned long)ptr, eb->start, member_offset, size);
 		return false;
 	}
