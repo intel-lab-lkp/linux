@@ -1958,6 +1958,36 @@ int tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 	return tdx_sept_drop_private_spte(kvm, gfn, level, page);
 }
 
+int tdx_phys_prepare(struct kvm_vcpu *vcpu, kvm_pfn_t pfn)
+{
+	unsigned long hpa = pfn << PAGE_SHIFT;
+	atomic_t *pamt_refcount;
+	LIST_HEAD(pamt_pages);
+
+	if (!tdx_supports_dynamic_pamt(tdx_sysinfo))
+		return 0;
+
+	pamt_refcount = tdx_get_pamt_refcount(hpa);
+	if (atomic_inc_not_zero(pamt_refcount))
+		return 0;
+
+	for (int i = 0; i < tdx_nr_pamt_pages(tdx_sysinfo); i++) {
+		struct page *page;
+		void *p;
+
+		p = kvm_mmu_memory_cache_alloc(&vcpu->arch.pamt_page_cache);
+		page = virt_to_page(p);
+		list_add(&page->lru, &pamt_pages);
+	}
+
+	return tdx_pamt_add(pamt_refcount, hpa, &pamt_pages);
+}
+
+void tdx_phys_cleanup(kvm_pfn_t pfn)
+{
+	tdx_pamt_put(pfn_to_page(pfn));
+}
+
 void tdx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,
 			   int trig_mode, int vector)
 {
