@@ -553,10 +553,11 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 			inode->i_size = nfs_size_to_loff_t(fattr->size);
 		else
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_SIZE);
-		if (fattr->valid & NFS_ATTR_FATTR_NLINK)
-			set_nlink(inode, fattr->nlink);
-		else if (fattr_supported & NFS_ATTR_FATTR_NLINK)
+		if (!(fattr->valid & NFS_ATTR_FATTR_NLINK) &&
+			   fattr_supported & NFS_ATTR_FATTR_NLINK)
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_NLINK);
+		else
+			set_nlink(inode, fattr->nlink);
 		if (fattr->valid & NFS_ATTR_FATTR_OWNER)
 			inode->i_uid = fattr->uid;
 		else if (fattr_supported & NFS_ATTR_FATTR_OWNER)
