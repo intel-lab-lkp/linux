@@ -33,6 +33,20 @@ static void io_serial_out(unsigned long addr, int offset, int value)
 	outb(value, addr + offset);
 }
 
+static void mem8_serial_out(unsigned long addr, int offset, int value)
+{
+	u8 __iomem *vaddr = (u8 __iomem *)addr;
+	/* shift implied by pointer type */
+	writeb(value, vaddr + offset);
+}
+
+static unsigned int mem8_serial_in(unsigned long addr, int offset)
+{
+	u8 __iomem *vaddr = (u8 __iomem *)addr;
+	/* shift implied by pointer type */
+	return readb(vaddr + offset);
+}
+
 static void early_serial_configure(unsigned long port, int baud)
 {
 	unsigned char c;
@@ -57,6 +71,13 @@ static void early_serial_use_io_accessors(void)
 	/* These will always be IO based ports */
 	serial_in = io_serial_in;
 	serial_out = io_serial_out;
+}
+
+static void early_serial_use_mmio_accessors(void)
+{
+	/* It is memory mapped - assume 8-bit alignment */
+	serial_in = mem8_serial_in;
+	serial_out = mem8_serial_out;
 }
 
 static void early_serial_init(unsigned long port, int baud)
@@ -101,12 +122,16 @@ static void parse_earlyprintk(void)
 		/*
 		 * make sure we have
 		 *	"serial,0x3f8,115200"
+		 *	"serial,mmio,0xff010180,115200"
 		 *	"serial,ttyS0,115200"
 		 *	"ttyS0,115200"
 		 */
 		if (pos == 7 && !strncmp(arg + pos, "0x", 2)) {
 			port = parse_serial_port(arg, pos + 0, &pos);
 			early_serial_use_io_accessors();
+		} else if (pos == 7 && !strncmp(arg + pos, "mmio,0x", 7)) {
+			port = parse_serial_port(arg, pos + 5, &pos);
+			early_serial_use_mmio_accessors();
 		} else if (!strncmp(arg + pos, "ttyS", 4)) {
 			static const int bases[] = { 0x3f8, 0x2f8 };
 			int idx = 0;
