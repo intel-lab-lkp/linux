@@ -519,16 +519,111 @@ fail:
 	return err;
 }
 
+static void cn10k_ipsec_npa_refill_inb_ipsecq(struct work_struct *work)
+{
+	struct cn10k_ipsec *ipsec = container_of(work, struct cn10k_ipsec,
+						 refill_npa_inline_ipsecq);
+	struct otx2_nic *pfvf = container_of(ipsec, struct otx2_nic, ipsec);
+	struct otx2_pool *pool = NULL;
+	struct otx2_qset *qset = NULL;
+	u64 val, *ptr, op_int = 0, count;
+	int err, pool_id, idx;
+	dma_addr_t bufptr;
+
+	qset = &pfvf->qset;
+
+	val = otx2_read64(pfvf, NPA_LF_QINTX_INT(0));
+	if (!(val & 1))
+		return;
+
+	ptr = otx2_get_regaddr(pfvf, NPA_LF_AURA_OP_INT);
+	val = otx2_atomic64_add(((u64)pfvf->ipsec.inb_ipsec_pool << 44), ptr);
+
+	/* Error interrupt bits */
+	if (val & 0xff)
+		op_int = (val & 0xff);
+
+	/* Refill buffers on a Threshold interrupt */
+	if (val & (1 << 16)) {
+		/* Get the current number of buffers consumed */
+		ptr = otx2_get_regaddr(pfvf, NPA_LF_AURA_OP_CNT);
+		count = otx2_atomic64_add(((u64)pfvf->ipsec.inb_ipsec_pool << 44), ptr);
+		count &= GENMASK_ULL(35, 0);
+
+		/* Refill */
+		pool_id = pfvf->ipsec.inb_ipsec_pool;
+		pool = &pfvf->qset.pool[pool_id];
+
+		for (idx = 0; idx < count; idx++) {
+			err = otx2_alloc_rbuf(pfvf, pool, &bufptr, pool_id, idx);
+			if (err) {
+				netdev_err(pfvf->netdev,
+					   "Insufficient memory for IPsec pool buffers\n");
+				break;
+			}
+			pfvf->hw_ops->aura_freeptr(pfvf, pool_id,
+						    bufptr + OTX2_HEAD_ROOM);
+		}
+
+		op_int |= (1 << 16);
+	}
+
+	/* Clear/ACK Interrupt */
+	if (op_int)
+		otx2_write64(pfvf, NPA_LF_AURA_OP_INT,
+			     ((u64)pfvf->ipsec.inb_ipsec_pool << 44) | op_int);
+}
+
+static irqreturn_t cn10k_ipsec_npa_inb_ipsecq_intr_handler(int irq, void *data)
+{
+	struct otx2_nic *pf = data;
+
+	schedule_work(&pf->ipsec.refill_npa_inline_ipsecq);
+
+	return IRQ_HANDLED;
+}
+
 static int cn10k_inb_cpt_init(struct net_device *netdev)
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
-	int ret = 0;
+	int ret = 0, vec;
+	char *irq_name;
+	void *ptr;
+	u64 val;
 
 	ret = cn10k_ipsec_setup_nix_rx_hw_resources(pfvf);
 	if (ret) {
 		netdev_err(netdev, "Failed to setup NIX HW resources for IPsec\n");
 		return ret;
 	}
+
+	/* Work entry for refilling the NPA queue for ingress inline IPSec */
+	INIT_WORK(&pfvf->ipsec.refill_npa_inline_ipsecq,
+		  cn10k_ipsec_npa_refill_inb_ipsecq);
+
+	/* Register NPA interrupt */
+	vec = pfvf->hw.npa_msixoff;
+	irq_name = &pfvf->hw.irq_name[vec * NAME_SIZE];
+	snprintf(irq_name, NAME_SIZE, "%s-npa-qint", pfvf->netdev->name);
+
+	ret = request_irq(pci_irq_vector(pfvf->pdev, vec),
+			  cn10k_ipsec_npa_inb_ipsecq_intr_handler, 0,
+			  irq_name, pfvf);
+	if (ret) {
+		dev_err(pfvf->dev,
+			"RVUPF%d: IRQ registration failed for NPA QINT%d\n",
+			rvu_get_pf(pfvf->pcifunc), 0);
+		return ret;
+	}
+
+	/* Enable NPA threshold interrupt */
+	ptr = otx2_get_regaddr(pfvf, NPA_LF_AURA_OP_INT);
+	val = BIT_ULL(43) | BIT_ULL(17);
+	otx2_write64(pfvf, NPA_LF_AURA_OP_INT,
+		     ((u64)pfvf->ipsec.inb_ipsec_pool << 44) | val);
+
+	/* Enable interrupt */
+	otx2_write64(pfvf, NPA_LF_QINTX_ENA_W1S(0), BIT_ULL(0));
 
 	return ret;
 }
@@ -1028,6 +1123,8 @@ EXPORT_SYMBOL(cn10k_ipsec_init);
 
 void cn10k_ipsec_clean(struct otx2_nic *pf)
 {
+	int vec;
+
 	if (!is_dev_support_ipsec_offload(pf->pdev))
 		return;
 
@@ -1043,6 +1140,9 @@ void cn10k_ipsec_clean(struct otx2_nic *pf)
 
 	/* Free Ingress SA table */
 	qmem_free(pf->dev, pf->ipsec.inb_sa);
+
+	vec = pci_irq_vector(pf->pdev, pf->hw.npa_msixoff);
+	free_irq(vec, pf);
 }
 EXPORT_SYMBOL(cn10k_ipsec_clean);
 
