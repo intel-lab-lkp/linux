@@ -197,6 +197,28 @@ int dev_pm_opp_get_sharing_cpus(struct device *cpu_dev, struct cpumask *cpumask)
 void dev_pm_opp_remove_table(struct device *dev);
 void dev_pm_opp_cpumask_remove_table(const struct cpumask *cpumask);
 int dev_pm_opp_sync_regulators(struct device *dev);
+
+/*
+ * dev_pm_opp_set_level() - Configure device for a level
+ * @dev: device for which we do this operation
+ * @level: level to set to
+ *
+ * Return: 0 on success, a non-zero value if there is an error otherwise.
+ */
+static inline int dev_pm_opp_set_level(struct device *dev, unsigned int level)
+{
+	struct dev_pm_opp *opp = dev_pm_opp_find_level_exact(dev, level);
+	int ret;
+
+	if (IS_ERR(opp))
+		return IS_ERR(opp);
+
+	ret = dev_pm_opp_set_opp(dev, opp);
+	dev_pm_opp_put(opp);
+
+	return ret;
+}
+
 #else
 static inline struct opp_table *dev_pm_opp_get_opp_table(struct device *dev)
 {
@@ -457,6 +479,11 @@ static inline void dev_pm_opp_cpumask_remove_table(const struct cpumask *cpumask
 }
 
 static inline int dev_pm_opp_sync_regulators(struct device *dev)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int dev_pm_opp_set_level(struct device *dev, unsigned int level)
 {
 	return -EOPNOTSUPP;
 }
