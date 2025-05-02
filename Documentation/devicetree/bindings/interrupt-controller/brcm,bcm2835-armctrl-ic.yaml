@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/brcm,bcm2835-armctrl-ic.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: BCM2835 Top-Level ("ARMCTRL") Interrupt Controller
+
+maintainers:
+  - Stefan Wahren <wahrenst@gmx.net>
+  - Raspberry Pi Kernel Maintenance <kernel-list@raspberrypi.com>
+
+description:
+  The BCM2835 contains a custom top-level interrupt controller, which supports
+  72 interrupt sources using a 2-level register scheme. The interrupt
+  controller, or the HW block containing it, is referred to occasionally
+  as "armctrl" in the SoC documentation, hence naming of this binding.
+
+  The BCM2836 contains the same interrupt controller with the same
+  interrupts, but the per-CPU interrupt controller is the root, and an
+  interrupt there indicates that the ARMCTRL has an interrupt to handle.
+
+allOf:
+  - $ref: /schemas/interrupt-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - brcm,bcm2835-armctrl-ic
+      - brcm,bcm2836-armctrl-ic
+
+  reg:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupt-controller
+  - "#interrupt-cells"
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: brcm,bcm2836-armctrl-ic
+then:
+  required:
+    - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    intc: interrupt-controller@7e00b200 {
+        compatible = "brcm,bcm2835-armctrl-ic";
+        reg = <0x7e00b200 0x200>;
+        interrupt-controller;
+        #interrupt-cells = <2>;
+    };
