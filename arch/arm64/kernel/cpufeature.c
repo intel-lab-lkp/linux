@@ -114,7 +114,7 @@ static struct arm64_cpu_capabilities const __ro_after_init *cpucap_ptrs[ARM64_NC
 
 DECLARE_BITMAP(boot_cpucaps, ARM64_NCAPS);
 
-bool arm64_use_ng_mappings = false;
+bool arm64_use_ng_mappings __ro_after_init = false;
 EXPORT_SYMBOL(arm64_use_ng_mappings);
 
 DEFINE_PER_CPU_READ_MOSTLY(const char *, this_cpu_vector) = vectors;
