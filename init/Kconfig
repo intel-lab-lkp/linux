@@ -1157,6 +1157,11 @@ config CGROUP_DMEM
 	  As an example, it allows you to restrict VRAM usage for applications
 	  in the DRM subsystem.
 
+config CGROUP_DRM
+	bool "DRM controller"
+	help
+	  Provides the DRM subsystem controller.
+
 config CGROUP_FREEZER
 	bool "Freezer controller"
 	help

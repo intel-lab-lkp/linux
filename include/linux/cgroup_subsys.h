@@ -69,6 +69,10 @@ SUBSYS(misc)
 SUBSYS(dmem)
 #endif
 
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+SUBSYS(drm)
+#endif
+
 /*
  * The following subsystems are not supported on the default hierarchy.
  */
