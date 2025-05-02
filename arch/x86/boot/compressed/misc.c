@@ -110,10 +110,10 @@ static void serial_putchar(int ch)
 {
 	unsigned timeout = 0xffff;
 
-	while ((inb(early_serial_base + LSR) & XMTRDY) == 0 && --timeout)
+	while ((serial_in(early_serial_base, LSR) & XMTRDY) == 0 && --timeout)
 		cpu_relax();
 
-	outb(ch, early_serial_base + TXR);
+	serial_out(early_serial_base, TXR, ch);
 }
 
 void __putstr(const char *s)

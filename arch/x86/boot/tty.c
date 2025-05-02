@@ -13,6 +13,9 @@
 
 #include "boot.h"
 
+unsigned int (*serial_in)(unsigned long addr, int offset);
+void (*serial_out)(unsigned long addr, int offset, int value);
+
 unsigned long early_serial_base;
 
 #define XMTRDY          0x20
@@ -29,10 +32,10 @@ static void __section(".inittext") serial_putchar(int ch)
 {
 	unsigned timeout = 0xffff;
 
-	while ((inb(early_serial_base + LSR) & XMTRDY) == 0 && --timeout)
+	while ((serial_in(early_serial_base, LSR) & XMTRDY) == 0 && --timeout)
 		cpu_relax();
 
-	outb(ch, early_serial_base + TXR);
+	serial_out(early_serial_base, TXR, ch);
 }
 
 static void __section(".inittext") bios_putchar(int ch)

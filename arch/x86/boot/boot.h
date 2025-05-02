@@ -274,6 +274,8 @@ int check_knl_erratum(void);
 int validate_cpu(void);
 
 /* early_serial_console.c */
+extern unsigned int (*serial_in)(unsigned long addr, int offset);
+extern void (*serial_out)(unsigned long addr, int offset, int value);
 extern unsigned long early_serial_base;
 void console_init(void);
 

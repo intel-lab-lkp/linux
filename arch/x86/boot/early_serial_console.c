@@ -23,22 +23,45 @@
 
 #define DEFAULT_BAUD 9600
 
-static void early_serial_init(unsigned long port, int baud)
+static unsigned int io_serial_in(unsigned long addr, int offset)
+{
+	return inb(addr + offset);
+}
+
+static void io_serial_out(unsigned long addr, int offset, int value)
+{
+	outb(value, addr + offset);
+}
+
+static void early_serial_configure(unsigned long port, int baud)
 {
 	unsigned char c;
 	unsigned divisor;
 
-	outb(0x3, port + LCR);	/* 8n1 */
-	outb(0, port + IER);	/* no interrupt */
-	outb(0, port + FCR);	/* no fifo */
-	outb(0x3, port + MCR);	/* DTR + RTS */
+	serial_out(port, LCR, 0x3);	/* 8n1 */
+	serial_out(port, IER, 0);	/* no interrupt */
+	serial_out(port, FCR, 0);	/* no fifo */
+	serial_out(port, MCR, 0x3);	/* DTR + RTS */
 
 	divisor	= 115200 / baud;
-	c = inb(port + LCR);
-	outb(c | DLAB, port + LCR);
-	outb(divisor & 0xff, port + DLL);
-	outb((divisor >> 8) & 0xff, port + DLH);
-	outb(c & ~DLAB, port + LCR);
+	c = serial_in(port, LCR);
+	serial_out(port, LCR, c | DLAB);
+	serial_out(port, DLL, divisor & 0xff);
+	serial_out(port, DLH, (divisor >> 8) & 0xff);
+	serial_out(port, LCR, c & ~DLAB);
+}
+
+/* Assign serial I/O accessors */
+static void early_serial_use_io_accessors(void)
+{
+	/* These will always be IO based ports */
+	serial_in = io_serial_in;
+	serial_out = io_serial_out;
+}
+
+static void early_serial_init(unsigned long port, int baud)
+{
+	early_serial_configure(port, baud);
 
 	early_serial_base = port;
 }
@@ -73,6 +96,7 @@ static void parse_earlyprintk(void)
 				port = DEFAULT_SERIAL_PORT;
 			else
 				pos = e - arg;
+			early_serial_use_io_accessors();
 		} else if (!strncmp(arg + pos, "ttyS", 4)) {
 			static const int bases[] = { 0x3f8, 0x2f8 };
 			int idx = 0;
@@ -84,6 +108,7 @@ static void parse_earlyprintk(void)
 				idx = 1;
 
 			port = bases[idx];
+			early_serial_use_io_accessors();
 		}
 
 		if (arg[pos] == ',')
@@ -104,11 +129,11 @@ static unsigned int probe_baud(int port)
 	unsigned char lcr, dll, dlh;
 	unsigned int quot;
 
-	lcr = inb(port + LCR);
-	outb(lcr | DLAB, port + LCR);
-	dll = inb(port + DLL);
-	dlh = inb(port + DLH);
-	outb(lcr, port + LCR);
+	lcr = serial_in(port, LCR);
+	serial_out(port, LCR, lcr | DLAB);
+	dll = serial_in(port, DLL);
+	dlh = serial_in(port, DLH);
+	serial_out(port, LCR, lcr);
 	quot = (dlh << 8) | dll;
 
 	return BASE_BAUD / quot;
@@ -129,11 +154,13 @@ static void parse_console_uart8250(void)
 
 	options = optstr;
 
-	if (!strncmp(options, "uart8250,io,", 12))
+	if (!strncmp(options, "uart8250,io,", 12)) {
 		port = simple_strtoull(options + 12, &options, 0);
-	else if (!strncmp(options, "uart,io,", 8))
+		early_serial_use_io_accessors();
+	} else if (!strncmp(options, "uart,io,", 8)) {
 		port = simple_strtoull(options + 8, &options, 0);
-	else
+		early_serial_use_io_accessors();
+	} else
 		return;
 
 	if (options && (options[0] == ','))
