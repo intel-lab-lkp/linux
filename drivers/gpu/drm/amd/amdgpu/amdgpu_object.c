@@ -632,6 +632,7 @@ int amdgpu_bo_create(struct amdgpu_device *adev,
 	struct ttm_operation_ctx ctx = {
 		.interruptible = (bp->type != ttm_bo_type_kernel),
 		.no_wait_gpu = bp->no_wait_gpu,
+		.account_op = true,
 		/* We opt to avoid OOM on system pages allocations */
 		.gfp_retry_mayfail = true,
 		.allow_res_evict = bp->type != ttm_bo_type_kernel,
@@ -657,16 +658,21 @@ int amdgpu_bo_create(struct amdgpu_device *adev,
 		size = ALIGN(size, PAGE_SIZE);
 	}
 
-	if (!amdgpu_bo_validate_size(adev, size, bp->domain))
+	if (!amdgpu_bo_validate_size(adev, size, bp->domain)) {
+		mem_cgroup_put(bp->memcg);
 		return -ENOMEM;
+	}
 
 	BUG_ON(bp->bo_ptr_size < sizeof(struct amdgpu_bo));
 
 	*bo_ptr = NULL;
 	bo = kvzalloc(bp->bo_ptr_size, GFP_KERNEL);
-	if (bo == NULL)
+	if (bo == NULL) {
+		mem_cgroup_put(bp->memcg);
 		return -ENOMEM;
+	}
 	drm_gem_private_object_init(adev_to_drm(adev), &bo->tbo.base, size);
+	bo->tbo.memcg = bp->memcg;
 	bo->tbo.base.funcs = &amdgpu_gem_object_funcs;
 	bo->vm_bo = NULL;
 	bo->preferred_domains = bp->preferred_domain ? bp->preferred_domain :
@@ -1341,7 +1347,9 @@ out:
 vm_fault_t amdgpu_bo_fault_reserve_notify(struct ttm_buffer_object *bo)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->bdev);
-	struct ttm_operation_ctx ctx = { false, false };
+	struct ttm_operation_ctx ctx = { .interruptible = false,
+					 .no_wait_gpu = false,
+					 .account_op = true };
 	struct amdgpu_bo *abo = ttm_to_amdgpu_bo(bo);
 	int r;
 

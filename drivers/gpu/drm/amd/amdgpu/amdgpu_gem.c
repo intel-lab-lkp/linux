@@ -89,6 +89,7 @@ static void amdgpu_gem_object_free(struct drm_gem_object *gobj)
 	struct amdgpu_bo *aobj = gem_to_amdgpu_bo(gobj);
 
 	amdgpu_hmm_unregister(aobj);
+	mem_cgroup_put(aobj->tbo.memcg);
 	ttm_bo_put(&aobj->tbo);
 }
 
@@ -116,6 +117,7 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 	bp.domain = initial_domain;
 	bp.bo_ptr_size = sizeof(struct amdgpu_bo);
 	bp.xcp_id_plus1 = xcp_id_plus1;
+	bp.memcg = get_mem_cgroup_from_mm(current->mm);
 
 	r = amdgpu_bo_create_user(adev, &bp, &ubo);
 	if (r)
