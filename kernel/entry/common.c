@@ -12,6 +12,7 @@
 
 #include "common.h"
 
+#include <trace/events/sched.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
@@ -100,9 +101,12 @@ __always_inline unsigned long exit_to_user_mode_loop(struct pt_regs *regs,
 		local_irq_enable_exit_to_user(ti_work);
 
 		if (ti_work & (_TIF_NEED_RESCHED | _TIF_NEED_RESCHED_LAZY)) {
-		       if (irq && rseq_delay_resched())
+		       if (irq && rseq_delay_resched()) {
 			       clear_tsk_need_resched(current);
-		       else
+			       trace_sched_delay_resched(current,
+					       ti_work & (_TIF_NEED_RESCHED |
+						       _TIF_NEED_RESCHED_LAZY));
+		       } else
 			       schedule();
 		}
 
