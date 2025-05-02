@@ -11,6 +11,8 @@
 #include <linux/uio.h>
 
 #define BIO_MAX_VECS		256U
+/* BIO_MAX_INLINE_VECS must be at most the size of UIO_MAXIOV */
+#define BIO_MAX_INLINE_VECS	1024
 
 struct queue_limits;
 
