@@ -103,7 +103,8 @@ config PINCTRL_AS3722
 
 config PINCTRL_AT91
 	bool "AT91 pinctrl driver"
-	depends on (OF && ARCH_AT91) || COMPILE_TEST
+	depends on ARCH_AT91 || COMPILE_TEST
+	depends on OF
 	select PINMUX
 	select PINCONF
 	select GPIOLIB
