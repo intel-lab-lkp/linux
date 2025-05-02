@@ -27,6 +27,7 @@
 #include <linux/iosys-map.h>
 #include <linux/scatterlist.h>
 #include <linux/cgroup_dmem.h>
+#include <linux/memcontrol.h>
 
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
@@ -373,12 +374,14 @@ EXPORT_SYMBOL(ttm_resource_fini);
 
 int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
+		       struct ttm_operation_ctx *ctx,
 		       struct ttm_resource **res_ptr,
 		       struct dmem_cgroup_pool_state **ret_limit_pool)
 {
 	struct ttm_resource_manager *man =
 		ttm_manager_type(bo->bdev, place->mem_type);
 	struct dmem_cgroup_pool_state *pool = NULL;
+	struct mem_cgroup *memcg = NULL;
 	int ret;
 
 	if (man->cg) {
@@ -387,13 +390,26 @@ int ttm_resource_alloc(struct ttm_buffer_object *bo,
 			return ret;
 	}
 
+	if ((place->mem_type == TTM_PL_SYSTEM || place->mem_type == TTM_PL_TT) &&
+	    ctx->account_op && bo->memcg) {
+		memcg = bo->memcg;
+		gfp_t gfp_flags = GFP_USER;
+		if (ctx->gfp_retry_mayfail)
+			gfp_flags |= __GFP_RETRY_MAYFAIL;
+
+		if (!mem_cgroup_charge_gpu(memcg, bo->base.size >> PAGE_SHIFT, gfp_flags))
+			return -ENOMEM;
+	}
 	ret = man->func->alloc(man, bo, place, res_ptr);
 	if (ret) {
 		if (pool)
 			dmem_cgroup_uncharge(pool, bo->base.size);
+		if (memcg)
+			mem_cgroup_uncharge_gpu(memcg, bo->base.size >> PAGE_SHIFT);
 		return ret;
 	}
 
+	(*res_ptr)->memcg = memcg;
 	(*res_ptr)->css = pool;
 
 	spin_lock(&bo->bdev->lru_lock);
@@ -407,6 +423,7 @@ void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res)
 {
 	struct ttm_resource_manager *man;
 	struct dmem_cgroup_pool_state *pool;
+	struct mem_cgroup *memcg;
 
 	if (!*res)
 		return;
@@ -416,11 +433,14 @@ void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res)
 	spin_unlock(&bo->bdev->lru_lock);
 
 	pool = (*res)->css;
+	memcg = (*res)->memcg;
 	man = ttm_manager_type(bo->bdev, (*res)->mem_type);
 	man->func->free(man, *res);
 	*res = NULL;
 	if (man->cg)
 		dmem_cgroup_uncharge(pool, bo->base.size);
+	if (memcg)
+		mem_cgroup_uncharge_gpu(memcg, bo->base.size >> PAGE_SHIFT);
 }
 EXPORT_SYMBOL(ttm_resource_free);
 

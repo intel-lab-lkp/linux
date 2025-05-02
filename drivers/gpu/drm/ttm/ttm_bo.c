@@ -537,6 +537,7 @@ static s64 ttm_bo_evict_cb(struct ttm_lru_walk *walk, struct ttm_buffer_object *
 	evict_walk->evicted++;
 	if (evict_walk->res)
 		lret = ttm_resource_alloc(evict_walk->evictor, evict_walk->place,
+					  walk->ctx,
 					  evict_walk->res, NULL);
 	if (lret == 0)
 		return 1;
@@ -733,7 +734,7 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 			continue;
 
 		may_evict = (force_space && place->mem_type != TTM_PL_SYSTEM);
-		ret = ttm_resource_alloc(bo, place, res, force_space ? &limit_pool : NULL);
+		ret = ttm_resource_alloc(bo, place, ctx, res, force_space ? &limit_pool : NULL);
 		if (ret) {
 			if (ret != -ENOSPC && ret != -EAGAIN) {
 				dmem_cgroup_pool_state_put(limit_pool);
@@ -744,8 +745,12 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 				continue;
 			}
 
+			/* we don't want to account evictions at this point */
+			bool old_ctx_account = ctx->account_op;
+			ctx->account_op = false;
 			ret = ttm_bo_evict_alloc(bdev, man, place, bo, ctx,
 						 ticket, res, limit_pool);
+			ctx->account_op = old_ctx_account;
 			dmem_cgroup_pool_state_put(limit_pool);
 			if (ret == -EBUSY)
 				continue;
@@ -1145,7 +1150,7 @@ ttm_bo_swapout_cb(struct ttm_lru_walk *walk, struct ttm_buffer_object *bo)
 
 		memset(&hop, 0, sizeof(hop));
 		place.mem_type = TTM_PL_SYSTEM;
-		ret = ttm_resource_alloc(bo, &place, &evict_mem, NULL);
+		ret = ttm_resource_alloc(bo, &place, ctx, &evict_mem, NULL);
 		if (ret)
 			goto out;
 

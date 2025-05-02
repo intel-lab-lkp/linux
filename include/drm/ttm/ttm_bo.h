@@ -135,6 +135,12 @@ struct ttm_buffer_object {
 	 * reservation lock.
 	 */
 	struct sg_table *sg;
+
+	/**
+	 * @memcg: memory cgroup to charge this to if it ends up using system memory.
+	 * NULL means don't charge.
+	 */
+	struct mem_cgroup *memcg;
 };
 
 #define TTM_BO_MAP_IOMEM_MASK 0x80
@@ -174,6 +180,7 @@ struct ttm_bo_kmap_obj {
  * BOs share the same reservation object.
  * @force_alloc: Don't check the memory account during suspend or CPU page
  * faults. Should only be used by TTM internally.
+ * @account_op: account for any memory allocations by a bo with an memcg.
  * @resv: Reservation object to allow reserved evictions with.
  * @bytes_moved: Statistics on how many bytes have been moved.
  *
@@ -186,6 +193,7 @@ struct ttm_operation_ctx {
 	bool gfp_retry_mayfail;
 	bool allow_res_evict;
 	bool force_alloc;
+	bool account_op;
 	struct dma_resv *resv;
 	uint64_t bytes_moved;
 };

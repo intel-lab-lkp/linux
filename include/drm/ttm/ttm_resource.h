@@ -45,6 +45,7 @@ struct ttm_resource;
 struct ttm_place;
 struct ttm_buffer_object;
 struct ttm_placement;
+struct ttm_operation_ctx;
 struct iosys_map;
 struct io_mapping;
 struct sg_table;
@@ -245,7 +246,8 @@ struct ttm_bus_placement {
  * @placement: Placement flags.
  * @bus: Placement on io bus accessible to the CPU
  * @bo: weak reference to the BO, protected by ttm_device::lru_lock
- * @css: cgroup state this resource is charged to
+ * @css: cgroup state this resource is charged to for dmem
+ * @memcg: memory cgroup this resource is charged to for sysmem
  *
  * Structure indicating the placement and space resources used by a
  * buffer object.
@@ -264,6 +266,7 @@ struct ttm_resource {
 	 * @lru: Least recently used list, see &ttm_resource_manager.lru
 	 */
 	struct ttm_lru_item lru;
+	struct mem_cgroup *memcg;
 };
 
 /**
@@ -444,6 +447,7 @@ void ttm_resource_fini(struct ttm_resource_manager *man,
 
 int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
+		       struct ttm_operation_ctx *ctx,
 		       struct ttm_resource **res,
 		       struct dmem_cgroup_pool_state **ret_limit_pool);
 void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res);
