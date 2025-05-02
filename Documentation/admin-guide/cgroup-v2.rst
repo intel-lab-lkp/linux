@@ -2294,6 +2294,11 @@ PID Interface Files
 	The maximum value that the number of processes in the cgroup and its
 	descendants has ever reached.
 
+  pids.forks
+	A read-only single value file which exists on non-root cgroups.
+
+	The number of fork()/clone() calls (whether successful or not).
+
   pids.events
 	A read-only flat-keyed file which exists on non-root cgroups. Unless
 	specified otherwise, a value change in this file generates a file

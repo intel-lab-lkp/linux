@@ -49,6 +49,9 @@ enum pidcg_event {
 struct pids_cgroup {
 	struct cgroup_subsys_state	css;
 
+	/* the "pids.forks" counter */
+	atomic64_t			forks;
+
 	/*
 	 * Use 64-bit types so that we can safely represent "max" as
 	 * %PIDS_MAX = (%PID_MAX_LIMIT + 1).
@@ -147,6 +150,7 @@ static void pids_charge(struct pids_cgroup *pids, int num)
 	struct pids_cgroup *p;
 
 	for (p = pids; parent_pids(p); p = parent_pids(p)) {
+		atomic64_add(num, &p->forks);
 		int64_t new = atomic64_add_return(num, &p->counter);
 
 		pids_update_watermark(p, new);
@@ -168,6 +172,7 @@ static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup
 	struct pids_cgroup *p, *q;
 
 	for (p = pids; parent_pids(p); p = parent_pids(p)) {
+		atomic64_add(num, &p->forks);
 		int64_t new = atomic64_add_return(num, &p->counter);
 		int64_t limit = atomic64_read(&p->limit);
 
@@ -342,6 +347,14 @@ static int pids_max_show(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static s64 pids_forks_read(struct cgroup_subsys_state *css,
+			   struct cftype *cft)
+{
+	struct pids_cgroup *pids = css_pids(css);
+
+	return atomic64_read(&pids->forks);
+}
+
 static s64 pids_current_read(struct cgroup_subsys_state *css,
 			     struct cftype *cft)
 {
@@ -403,6 +416,11 @@ static struct cftype pids_files[] = {
 		.name = "peak",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_s64 = pids_peak_read,
+	},
+	{
+		.name = "forks",
+		.read_s64 = pids_forks_read,
+		.flags = CFTYPE_NOT_ON_ROOT,
 	},
 	{
 		.name = "events",
