@@ -28,8 +28,13 @@ static struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry, un
 		return ERR_PTR(-ENAMETOOLONG);
 
 	ino = minix_inode_by_name(dentry);
-	if (ino)
+	if (ino) {
 		inode = minix_iget(dir->i_sb, ino);
+		if (S_ISDIR(inode->i_mode) && inode->i_nlink < 2) {
+			iput(inode);
+			return ERR_PTR(-EIO);
+		}
+	}
 	return d_splice_alias(inode, dentry);
 }
 
