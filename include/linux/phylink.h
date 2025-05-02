@@ -715,6 +715,9 @@ int phylink_pcs_pre_init(struct phylink *pl, struct phylink_pcs *pcs);
 void phylink_start(struct phylink *);
 void phylink_stop(struct phylink *);
 
+void phylink_carrier_block(struct phylink *);
+void phylink_carrier_unblock(struct phylink *);
+
 void phylink_rx_clk_stop_block(struct phylink *);
 void phylink_rx_clk_stop_unblock(struct phylink *);
 

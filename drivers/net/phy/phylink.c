@@ -26,6 +26,7 @@
 
 enum {
 	PHYLINK_DISABLE_STOPPED,
+	PHYLINK_DISABLE_CARRIER,
 	PHYLINK_DISABLE_LINK,
 	PHYLINK_DISABLE_MAC_WOL,
 
@@ -83,6 +84,7 @@ struct phylink {
 	bool mac_tx_clk_stop;
 	u32 mac_tx_lpi_timer;
 	u8 mac_rx_clk_stop_blocked;
+	u8 mac_carrier_blocked;
 
 	struct sfp_bus *sfp_bus;
 	bool sfp_may_have_phy;
@@ -2455,6 +2457,54 @@ void phylink_stop(struct phylink *pl)
 	phylink_pcs_disable(pl->pcs);
 }
 EXPORT_SYMBOL_GPL(phylink_stop);
+
+/**
+ * phylink_carrier_block() - unblock carrier state
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ *
+ * Disable the software link, which will call mac_link_down(). This is to
+ * allow network drivers to safely adjust e.g. DMA settings with the
+ * device idle. All calls to phylink_carrier_block() must be balanced by
+ * the appropriate number of calls to phylink_carrier_unblock().
+ */
+void phylink_carrier_block(struct phylink *pl)
+{
+	ASSERT_RTNL();
+
+	if (pl->mac_carrier_blocked == U8_MAX) {
+		phylink_warn(pl, "%s called too many times - ignoring\n",
+			     __func__);
+		dump_stack();
+		return;
+	}
+
+	if (pl->mac_carrier_blocked++ == 0)
+		phylink_run_resolve_and_disable(pl, PHYLINK_DISABLE_CARRIER);
+}
+EXPORT_SYMBOL_GPL(phylink_carrier_block);
+
+/**
+ * phylink_carrier_unblock() - unblock carrier state
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ *
+ * All calls to phylink_carrier_block() must be balanced with a corresponding
+ * call to phylink_carrier_unblock() to restore the carrier state.
+ */
+void phylink_carrier_unblock(struct phylink *pl)
+{
+	ASSERT_RTNL();
+
+	if (pl->mac_carrier_blocked == 0) {
+		phylink_warn(pl, "%s called too many times - ignoring\n",
+			     __func__);
+		dump_stack();
+		return;
+	}
+
+	if (--pl->mac_carrier_blocked == 0)
+		phylink_enable_and_run_resolve(pl, PHYLINK_DISABLE_CARRIER);
+}
+EXPORT_SYMBOL_GPL(phylink_carrier_unblock);
 
 /**
  * phylink_rx_clk_stop_block() - block PHY ability to stop receive clock in LPI
