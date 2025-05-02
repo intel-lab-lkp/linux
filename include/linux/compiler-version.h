@@ -19,3 +19,6 @@
 #ifdef RANDSTRUCT
 #include "randstruct_hash.h"
 #endif
+#ifdef INTEGER_WRAP
+#include "integer-wrap.h"
+#endif
