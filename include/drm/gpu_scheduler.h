@@ -237,6 +237,9 @@ struct drm_sched_entity {
 	 */
 	struct rb_node			rb_tree_node;
 
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+	struct list_head	drm_file_link;
+#endif
 };
 
 /**
@@ -664,5 +667,40 @@ int drm_sched_entity_error(struct drm_sched_entity *entity);
 void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
 				   struct drm_gpu_scheduler **sched_list,
 				   unsigned int num_sched_list);
+
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+#include <linux/list.h>
+#include <linux/spinlock.h>
+
+#include <drm/drm_file.h>
+
+/* Static inline to allow drm.ko and gpu-sched.ko as modules. */
+static inline void drm_sched_cgroup_init_drm_file(struct drm_file *file_priv)
+{
+	spin_lock_init(&file_priv->sched_entities.lock);
+	INIT_LIST_HEAD(&file_priv->sched_entities.list);
+}
+
+void drm_sched_cgroup_track_sched_entity(struct drm_file *file_priv,
+				  struct drm_sched_entity *entity);
+void drm_sched_cgroup_untrack_sched_entity(struct drm_file *file_priv,
+				    struct drm_sched_entity *entity);
+#else
+static inline void drm_sched_cgroup_init_drm_file(struct drm_file *file_priv)
+{
+}
+
+static inline void
+drm_sched_cgroup_track_sched_entity(struct drm_file *file_priv,
+				    struct drm_sched_entity *entity)
+{
+}
+
+static inline void
+drm_sched_cgroup_untrack_sched_entity(struct drm_file *file_priv,
+				      struct drm_sched_entity *entity)
+{
+}
+#endif
 
 #endif

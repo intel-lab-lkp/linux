@@ -46,6 +46,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_print.h>
+#include <drm/gpu_scheduler.h>
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
@@ -159,6 +160,8 @@ struct drm_file *drm_file_alloc(struct drm_minor *minor)
 	spin_lock_init(&file->master_lookup_lock);
 	mutex_init(&file->event_read_lock);
 	mutex_init(&file->client_name_lock);
+
+	drm_sched_cgroup_init_drm_file(file);
 
 	if (drm_core_check_feature(dev, DRIVER_GEM))
 		drm_gem_open(dev, file);

@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/completion.h>
 
+#include <drm/drm_file.h>
 #include <drm/drm_print.h>
 #include <drm/gpu_scheduler.h>
 
@@ -120,6 +121,10 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 
 	atomic_set(&entity->fence_seq, 0);
 	entity->fence_context = dma_fence_context_alloc(2);
+
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+	INIT_LIST_HEAD(&entity->drm_file_link);
+#endif
 
 	return 0;
 }
@@ -601,3 +606,23 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 	}
 }
 EXPORT_SYMBOL(drm_sched_entity_push_job);
+
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+void drm_sched_cgroup_track_sched_entity(struct drm_file *file_priv,
+					 struct drm_sched_entity *entity)
+{
+	spin_lock(&file_priv->sched_entities.lock);
+	list_add_tail(&entity->drm_file_link, &file_priv->sched_entities.list);
+	spin_unlock(&file_priv->sched_entities.lock);
+}
+EXPORT_SYMBOL(drm_sched_cgroup_track_sched_entity);
+
+void drm_sched_cgroup_untrack_sched_entity(struct drm_file *file_priv,
+					   struct drm_sched_entity *entity)
+{
+	spin_lock(&file_priv->sched_entities.lock);
+	list_del(&entity->drm_file_link);
+	spin_unlock(&file_priv->sched_entities.lock);
+}
+EXPORT_SYMBOL(drm_sched_cgroup_untrack_sched_entity);
+#endif
