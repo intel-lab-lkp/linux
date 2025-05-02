@@ -154,9 +154,11 @@ fail:
 }
 
 static struct trace_probe_log trace_probe_log;
+static DEFINE_MUTEX(trace_probe_log_lock);
 
 void trace_probe_log_init(const char *subsystem, int argc, const char **argv)
 {
+	guard(mutex)(&trace_probe_log_lock);
 	trace_probe_log.subsystem = subsystem;
 	trace_probe_log.argc = argc;
 	trace_probe_log.argv = argv;
@@ -165,11 +167,13 @@ void trace_probe_log_init(const char *subsystem, int argc, const char **argv)
 
 void trace_probe_log_clear(void)
 {
+	guard(mutex)(&trace_probe_log_lock);
 	memset(&trace_probe_log, 0, sizeof(trace_probe_log));
 }
 
 void trace_probe_log_set_index(int index)
 {
+	guard(mutex)(&trace_probe_log_lock);
 	trace_probe_log.index = index;
 }
 
@@ -177,6 +181,8 @@ void __trace_probe_log_err(int offset, int err_type)
 {
 	char *command, *p;
 	int i, len = 0, pos = 0;
+
+	guard(mutex)(&trace_probe_log_lock);
 
 	if (!trace_probe_log.argv)
 		return;
