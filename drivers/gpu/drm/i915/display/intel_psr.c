@@ -4227,3 +4227,17 @@ bool intel_psr_needs_alpm(struct intel_dp *intel_dp, const struct intel_crtc_sta
 	return intel_dp_is_edp(intel_dp) && (crtc_state->has_sel_update ||
 					     crtc_state->has_panel_replay);
 }
+
+/**
+ * intel_psr_needs_alpm_aux_less - Check if PSR needs ALPM AUXLess
+ * @intel_dp: Intel DP
+ * @crtc_state: CRTC status
+ *
+ * This returns true if PSR needs AUXLess ALPM. I.e. if it's Panel Replay in
+ * eDP.
+ */
+bool intel_psr_needs_alpm_aux_less(struct intel_dp *intel_dp,
+				   const struct intel_crtc_state *crtc_state)
+{
+	return intel_dp_is_edp(intel_dp) && crtc_state->has_panel_replay;
+}
