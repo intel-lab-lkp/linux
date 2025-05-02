@@ -41,9 +41,6 @@ struct otx2_cptpf_dev {
 	struct work_struct	afpf_mbox_work;
 	struct workqueue_struct *afpf_mbox_wq;
 
-	struct otx2_mbox	afpf_mbox_up;
-	struct work_struct	afpf_mbox_up_work;
-
 	/* VF <=> PF mbox */
 	struct otx2_mbox	vfpf_mbox;
 	struct workqueue_struct *vfpf_mbox_wq;
@@ -56,10 +53,8 @@ struct otx2_cptpf_dev {
 	u8 pf_id;               /* RVU PF number */
 	u8 max_vfs;		/* Maximum number of VFs supported by CPT */
 	u8 enabled_vfs;		/* Number of enabled VFs */
-	u8 sso_pf_func_ovrd;	/* SSO PF_FUNC override bit */
 	u8 kvf_limits;		/* Kernel crypto limits */
 	bool has_cpt1;
-	u8 rsrc_req_blkaddr;
 
 	/* Devlink */
 	struct devlink *dl;
@@ -67,12 +62,7 @@ struct otx2_cptpf_dev {
 
 irqreturn_t otx2_cptpf_afpf_mbox_intr(int irq, void *arg);
 void otx2_cptpf_afpf_mbox_handler(struct work_struct *work);
-void otx2_cptpf_afpf_mbox_up_handler(struct work_struct *work);
 irqreturn_t otx2_cptpf_vfpf_mbox_intr(int irq, void *arg);
 void otx2_cptpf_vfpf_mbox_handler(struct work_struct *work);
-
-int otx2_inline_cptlf_setup(struct otx2_cptpf_dev *cptpf,
-			    struct otx2_cptlfs_info *lfs, u8 egrp, int num_lfs);
-void otx2_inline_cptlf_cleanup(struct otx2_cptlfs_info *lfs);
 
 #endif /* __OTX2_CPTPF_H */

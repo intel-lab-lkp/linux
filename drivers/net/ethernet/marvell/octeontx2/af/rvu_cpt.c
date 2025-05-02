@@ -704,10 +704,6 @@ int rvu_mbox_handler_cpt_inline_ipsec_cfg(struct rvu *rvu,
 		return CPT_AF_ERR_LF_INVALID;
 
 	switch (req->dir) {
-	case CPT_INLINE_INBOUND:
-		ret = cpt_inline_ipsec_cfg_inbound(rvu, blkaddr, cptlf, req);
-		break;
-
 	case CPT_INLINE_OUTBOUND:
 		ret = cpt_inline_ipsec_cfg_outbound(rvu, blkaddr, cptlf, req);
 		break;
