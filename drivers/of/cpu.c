@@ -186,14 +186,41 @@ EXPORT_SYMBOL(of_cpu_node_to_id);
 int of_cpu_phandle_to_id(const struct device_node *node,
 			 struct device_node **cpu_np)
 {
+	int cpu, ret;
+	bool found = false;
+	uint32_t local_thread, thread_index;
+	struct device_node *np;
+	struct of_phandle_args args;
+
 	if (!node)
 		return -1;
 
+	/*
+	 * Two cases which only one occurs at a time:
+	 * 1) cpu = <phandle>
+	 * 2) cpus = <phandle> <thread_index>
+	 */
 	*cpu_np = of_parse_phandle(node, "cpu", 0);
-	if (!cpu_np)
-		return -ENODEV;
+	if (!*cpu_np) {
+		ret = of_parse_phandle_with_fixed_args(node, "cpus", 1, 0,
+						       &args);
+		if (ret < 0)
+			return ret;
 
-	return of_cpu_node_to_id(*cpu_np);
+		*cpu_np = args.np;
+		thread_index = args.args[0];
+		for_each_possible_cpu(cpu) {
+			np = of_get_cpu_node(cpu, &local_thread);
+			found = (*cpu_np == np) && (local_thread == thread_index);
+			of_node_put(np);
+			if (found)
+				return cpu;
+		}
+
+		return -ENODEV;
+	} else {
+		return of_cpu_node_to_id(*cpu_np);
+	}
 }
 EXPORT_SYMBOL(of_cpu_phandle_to_id);
 
