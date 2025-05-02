@@ -32,6 +32,7 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/cgroup_drm.h>
 #include <linux/dma-fence.h>
 #include <linux/file.h>
 #include <linux/module.h>
@@ -275,6 +276,8 @@ static void drm_close_helper(struct file *filp)
 	list_del(&file_priv->lhead);
 	mutex_unlock(&dev->filelist_mutex);
 
+	drmcgroup_client_close(file_priv);
+
 	drm_file_free(file_priv);
 }
 
@@ -338,6 +341,8 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
 	mutex_lock(&dev->filelist_mutex);
 	list_add(&priv->lhead, &dev->filelist);
 	mutex_unlock(&dev->filelist_mutex);
+
+	drmcgroup_client_open(priv);
 
 	return 0;
 }
@@ -464,6 +469,9 @@ void drm_file_update_pid(struct drm_file *filp)
 	get_pid(pid);
 	old = rcu_replace_pointer(filp->pid, pid, 1);
 	mutex_unlock(&dev->filelist_mutex);
+
+	if (pid != old)
+		drmcgroup_client_migrate(filp);
 
 	synchronize_rcu();
 	put_pid(old);

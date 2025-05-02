@@ -30,6 +30,7 @@
 #ifndef _DRM_FILE_H_
 #define _DRM_FILE_H_
 
+#include <linux/cgroup.h>
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/idr.h>
@@ -294,6 +295,11 @@ struct drm_file {
 
 	/** @minor: &struct drm_minor for this file. */
 	struct drm_minor *minor;
+
+#if IS_ENABLED(CONFIG_CGROUP_DRM)
+	struct cgroup_subsys_state *__css;
+	struct list_head clink;
+#endif
 
 	/**
 	 * @object_idr:
