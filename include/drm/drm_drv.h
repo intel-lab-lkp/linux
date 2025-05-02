@@ -170,6 +170,22 @@ enum drm_driver_feature {
 };
 
 /**
+ * struct drm_cgroup_ops
+ *
+ * This structure contains callbacks that drivers can provide if they are able
+ * support the functionalities implemented by the DRM cgroup controller.
+ */
+struct drm_cgroup_ops {
+	/**
+	 * @notify_weight:
+	 *
+	 * Optional callback used by the DRM core to notify clients of their
+	 * scheduling weight.
+	 */
+	void (*notify_weight) (struct drm_file *, unsigned int weight);
+};
+
+/**
  * struct drm_driver - DRM driver structure
  *
  * This structure represent the common code for a family of cards. There will be
@@ -431,6 +447,16 @@ struct drm_driver {
 	 * some examples.
 	 */
 	const struct file_operations *fops;
+
+#ifdef CONFIG_CGROUP_DRM
+	/**
+	 * @cg_ops:
+	 *
+	 * Optional pointer to driver callbacks facilitating integration with
+	 * the DRM cgroup controller.
+	 */
+	const struct drm_cgroup_ops *cg_ops;
+#endif
 };
 
 void *__devm_drm_dev_alloc(struct device *parent,

@@ -7,6 +7,8 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 
+#include <drm/drm_drv.h>
+
 struct drm_cgroup_state {
 	struct cgroup_subsys_state css;
 
@@ -27,6 +29,22 @@ static inline struct drm_cgroup_state *
 css_to_drmcs(struct cgroup_subsys_state *css)
 {
 	return container_of(css, struct drm_cgroup_state, css);
+}
+
+static void __maybe_unused
+drmcs_notify_weight(struct drm_cgroup_state *drmcs)
+{
+	struct drm_file *fpriv;
+
+	lockdep_assert_held(&drmcg_mutex);
+
+	list_for_each_entry(fpriv, &drmcs->clients, clink) {
+		const struct drm_cgroup_ops *cg_ops =
+			fpriv->minor->dev->driver->cg_ops;
+
+		if (cg_ops && cg_ops->notify_weight)
+			cg_ops->notify_weight(fpriv, 0);
+	}
 }
 
 static void drmcs_free(struct cgroup_subsys_state *css)
@@ -59,6 +77,9 @@ void drmcgroup_client_open(struct drm_file *file_priv)
 {
 	struct drm_cgroup_state *drmcs;
 
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
+
 	drmcs = css_to_drmcs(task_get_css(current, drm_cgrp_id));
 
 	mutex_lock(&drmcg_mutex);
@@ -74,6 +95,9 @@ void drmcgroup_client_close(struct drm_file *file_priv)
 
 	drmcs = css_to_drmcs(file_priv->__css);
 
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
+
 	mutex_lock(&drmcg_mutex);
 	list_del(&file_priv->clink);
 	file_priv->__css = NULL;
@@ -87,6 +111,9 @@ void drmcgroup_client_migrate(struct drm_file *file_priv)
 {
 	struct drm_cgroup_state *src, *dst;
 	struct cgroup_subsys_state *old;
+
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
 
 	mutex_lock(&drmcg_mutex);
 
