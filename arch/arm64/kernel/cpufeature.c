@@ -114,7 +114,18 @@ static struct arm64_cpu_capabilities const __ro_after_init *cpucap_ptrs[ARM64_NC
 
 DECLARE_BITMAP(boot_cpucaps, ARM64_NCAPS);
 
-bool arm64_use_ng_mappings = false;
+/*
+ * The variable arm64_use_ng_mappings should be placed in the .rodata section.
+ * Otherwise, it would end up in the .bss section, where it is initialized in
+ * early_map_kernel(). This can cause problems because the PTE_MAYBE_NG macro
+ * uses this variable, and create_init_idmap() — which might run before
+ * early_map_kernel() — could end up generating an incorrect idmap table.
+ *
+ * In other words, accessing variable placed in .bss section before
+ * early_map_kernel() will return garbage,
+ * potentially resulting in a wrong pgprot value.
+ */
+bool arm64_use_ng_mappings __ro_after_init = false;
 EXPORT_SYMBOL(arm64_use_ng_mappings);
 
 DEFINE_PER_CPU_READ_MOSTLY(const char *, this_cpu_vector) = vectors;
