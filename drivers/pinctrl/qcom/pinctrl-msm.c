@@ -149,6 +149,13 @@ static int msm_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
 	struct msm_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
 	struct gpio_chip *chip = &pctrl->chip;
 
+	/*
+	 * hog pins are requested before registering GPIO chip, don't crash in
+	 * gpiochip_line_is_valid().
+	 */
+	if (!chip->gpiodev)
+		return 0;
+
 	return gpiochip_line_is_valid(chip, offset) ? 0 : -EINVAL;
 }
 
