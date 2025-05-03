@@ -486,3 +486,11 @@ int close_procmap(struct procmap_fd *procmap)
 {
 	return close(procmap->fd);
 }
+
+void *sys_mremap(void *old_address, unsigned long old_size,
+		 unsigned long new_size, int flags, void *new_address)
+{
+	return (void *)syscall(__NR_mremap, (unsigned long)old_address,
+			       old_size, new_size, flags,
+			       (unsigned long)new_address);
+}
