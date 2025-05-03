@@ -17,6 +17,7 @@
 #include <linux/pci.h>
 #include <linux/of_pci.h>
 #include <linux/initrd.h>
+#include <linux/smp.h>
 
 #include <asm/irqdomain.h>
 #include <asm/hpet.h>
@@ -128,7 +129,59 @@ static void __init dtb_setup_hpet(void)
 #ifdef CONFIG_X86_LOCAL_APIC
 
 #ifdef CONFIG_SMP
-static const char *dtb_supported_enable_methods[] __initconst = { };
+
+#ifdef CONFIG_X86_64
+
+#define WAKEUP_MAILBOX_SIZE	0x1000
+#define WAKEUP_MAILBOX_ALIGN	0x1000
+
+static int __init dtb_parse_wakeup_mailbox(const char *enable_method)
+{
+	struct device_node *node;
+	struct resource res;
+	int ret = 0;
+
+	if (strcmp(enable_method, "intel,wakeup-mailbox"))
+		return -EINVAL;
+
+	node = of_find_compatible_node(NULL, NULL, "intel,wakeup-mailbox");
+	if (!node)
+		return -ENODEV;
+
+	ret = of_address_to_resource(node, 0, &res);
+	if (ret)
+		goto done;
+
+	/* The mailbox is a 4KB-aligned region.*/
+	if (res.start & (WAKEUP_MAILBOX_ALIGN - 1)) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	/* The mailbox has a size of 4KB. */
+	if (res.end - res.start + 1 != WAKEUP_MAILBOX_SIZE) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	/* Not supported when the mailbox is used. */
+	cpu_hotplug_disable_offlining();
+
+	setup_mp_wakeup_mailbox(res.start);
+done:
+	of_node_put(node);
+	return ret;
+}
+#else /* !CONFIG_X86_64 */
+static inline int dtb_parse_wakeup_mailbox(const char *enable_method)
+{
+	return -ENOTSUPP;
+}
+#endif /* CONFIG_X86_64 */
+
+static const char *dtb_supported_enable_methods[] __initconst = {
+	"intel,wakeup-mailbox"
+};
 
 static bool __init dtb_enable_method_is_valid(const char *enable_method_a,
 					      const char *enable_method_b)
@@ -155,7 +208,7 @@ static int __init dtb_configure_enable_method(const char *enable_method)
 	if (!enable_method || IS_ERR(enable_method))
 		return 0;
 
-	return -ENOTSUPP;
+	return dtb_parse_wakeup_mailbox(enable_method);
 }
 #else /* !CONFIG_SMP */
 static inline bool dtb_enable_method_is_valid(const char *enable_method_a,
