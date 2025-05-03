@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/x86/cpus.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: x86 CPUs
+
+maintainers:
+  - Ricardo Neri <ricardo.neri-calderon@linux.intel.com>
+
+description: |
+  Description of x86 CPUs in a system through the "cpus" node.
+
+  Detailed information about the CPU architecture can be found in the Intel
+  Software Developer's Manual:
+    https://intel.com/sdm
+
+properties:
+  compatible:
+    enum:
+      - intel,x86
+
+  reg:
+    description: |
+      Local APIC ID of the CPU. If the CPU has more than one execution thread,
+      then the property is an array with one element per thread.
+
+  enable-method:
+    $ref: /schemas/types.yaml#/definitions/string
+    description: |
+      The method used to wake up secondary CPUs. This property is not needed if
+      the secondary processors are booted using INIT assert, de-assert followed
+      by Start-Up IPI messages as described in the Volume 3, Section 11.4 of
+      Intel Software Developer's Manual.
+
+      It is also optional for the bootstrap CPU.
+
+    oneOf:
+      - items:
+          - const: intel,wakeup-mailbox
+            description: |
+              CPUs are woken up using the mailbox mechanism. The platform
+              firmware boots the secondary CPUs and puts them in a state
+              to check the mailbox for a wakeup command from the operating
+              system.
+
+required:
+  - reg
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    /*
+     * A system with two CPUs. cpu@0 is the bootstrap CPU and its status is
+     * "okay". It does not have the enable-method property. cpu@1 is a
+     * secondary CPU. Its status is "disabled" and defines the enable-method
+     * property.
+     */
+
+    cpus {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      cpu@0 {
+        reg = <0x0 0x1>;
+        compatible = "intel,x86";
+        status = "okay";
+      };
+
+      cpu@1 {
+        reg = <0x0 0x1>;
+        compatible = "intel,x86";
+        status = "disabled";
+        enable-method = "intel,wakeup-mailbox";
+      };
+    };
+
