@@ -30,7 +30,7 @@ static int ad5592r_spi_wnop_r16(struct ad5592r_state *st, __be16 *buf)
 	return spi_sync_transfer(spi, &t, 1);
 }
 
-static int ad5592r_write_dac(struct ad5592r_state *st, unsigned chan, u16 value)
+static int ad5592r_write_dac(struct ad5592r_state *st, unsigned int chan, u16 value)
 {
 	struct spi_device *spi = container_of(st->dev, struct spi_device, dev);
 
@@ -39,7 +39,7 @@ static int ad5592r_write_dac(struct ad5592r_state *st, unsigned chan, u16 value)
 	return spi_write(spi, &st->spi_msg, sizeof(st->spi_msg));
 }
 
-static int ad5592r_read_adc(struct ad5592r_state *st, unsigned chan, u16 *value)
+static int ad5592r_read_adc(struct ad5592r_state *st, unsigned int chan, u16 *value)
 {
 	struct spi_device *spi = container_of(st->dev, struct spi_device, dev);
 	int ret;

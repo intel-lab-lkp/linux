@@ -40,7 +40,7 @@ static int ad5593r_read_word(struct i2c_client *i2c, u8 reg, u16 *value)
 	return 0;
 }
 
-static int ad5593r_write_dac(struct ad5592r_state *st, unsigned chan, u16 value)
+static int ad5593r_write_dac(struct ad5592r_state *st, unsigned int chan, u16 value)
 {
 	struct i2c_client *i2c = to_i2c_client(st->dev);
 
@@ -48,7 +48,7 @@ static int ad5593r_write_dac(struct ad5592r_state *st, unsigned chan, u16 value)
 			AD5593R_MODE_DAC_WRITE | chan, value);
 }
 
-static int ad5593r_read_adc(struct ad5592r_state *st, unsigned chan, u16 *value)
+static int ad5593r_read_adc(struct ad5592r_state *st, unsigned int chan, u16 *value)
 {
 	struct i2c_client *i2c = to_i2c_client(st->dev);
 	s32 val;
@@ -102,6 +102,7 @@ static const struct ad5592r_rw_ops ad5593r_rw_ops = {
 static int ad5593r_i2c_probe(struct i2c_client *i2c)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(i2c);
+
 	if (!i2c_check_functionality(i2c->adapter,
 				     I2C_FUNC_SMBUS_BYTE | I2C_FUNC_I2C))
 		return -EOPNOTSUPP;

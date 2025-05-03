@@ -42,8 +42,8 @@ enum ad5592r_registers {
 #define AD5592R_REG_CTRL_DAC_RANGE	BIT(4)
 
 struct ad5592r_rw_ops {
-	int (*write_dac)(struct ad5592r_state *st, unsigned chan, u16 value);
-	int (*read_adc)(struct ad5592r_state *st, unsigned chan, u16 *value);
+	int (*write_dac)(struct ad5592r_state *st, unsigned int chan, u16 value);
+	int (*read_adc)(struct ad5592r_state *st, unsigned int chan, u16 *value);
 	int (*reg_write)(struct ad5592r_state *st, u8 reg, u16 value);
 	int (*reg_read)(struct ad5592r_state *st, u8 reg, u16 *value);
 	int (*gpio_read)(struct ad5592r_state *st, u8 *value);

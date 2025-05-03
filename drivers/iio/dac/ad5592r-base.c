@@ -21,7 +21,7 @@
 
 #include "ad5592r-base.h"
 
-static int ad5592r_gpio_get(struct gpio_chip *chip, unsigned offset)
+static int ad5592r_gpio_get(struct gpio_chip *chip, unsigned int offset)
 {
 	struct ad5592r_state *st = gpiochip_get_data(chip);
 	int ret = 0;
@@ -55,7 +55,7 @@ static int ad5592r_gpio_set(struct gpio_chip *chip, unsigned int offset,
 	return st->ops->reg_write(st, AD5592R_REG_GPIO_SET, st->gpio_val);
 }
 
-static int ad5592r_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
+static int ad5592r_gpio_direction_input(struct gpio_chip *chip, unsigned int offset)
 {
 	struct ad5592r_state *st = gpiochip_get_data(chip);
 	int ret;
@@ -73,7 +73,7 @@ static int ad5592r_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
 }
 
 static int ad5592r_gpio_direction_output(struct gpio_chip *chip,
-					 unsigned offset, int value)
+					 unsigned int offset, int value)
 {
 	struct ad5592r_state *st = gpiochip_get_data(chip);
 	int ret;
@@ -99,7 +99,7 @@ static int ad5592r_gpio_direction_output(struct gpio_chip *chip,
 	return st->ops->reg_write(st, AD5592R_REG_GPIO_IN_EN, st->gpio_in);
 }
 
-static int ad5592r_gpio_request(struct gpio_chip *chip, unsigned offset)
+static int ad5592r_gpio_request(struct gpio_chip *chip, unsigned int offset)
 {
 	struct ad5592r_state *st = gpiochip_get_data(chip);
 
@@ -188,7 +188,7 @@ static int ad5592r_set_channel_modes(struct ad5592r_state *st)
 {
 	const struct ad5592r_rw_ops *ops = st->ops;
 	int ret;
-	unsigned i;
+	unsigned int i;
 	u8 pulldown = 0, tristate = 0, dac = 0, adc = 0;
 	u16 read_back;
 
@@ -472,7 +472,7 @@ static const struct iio_chan_spec_ext_info ad5592r_ext_info[] = {
 };
 
 static void ad5592r_setup_channel(struct iio_dev *iio_dev,
-		struct iio_chan_spec *chan, bool output, unsigned id)
+		struct iio_chan_spec *chan, bool output, unsigned int id)
 {
 	chan->type = IIO_VOLTAGE;
 	chan->indexed = 1;
@@ -489,7 +489,7 @@ static void ad5592r_setup_channel(struct iio_dev *iio_dev,
 static int ad5592r_alloc_channels(struct iio_dev *iio_dev)
 {
 	struct ad5592r_state *st = iio_priv(iio_dev);
-	unsigned i, curr_channel = 0,
+	unsigned int i, curr_channel = 0,
 		 num_channels = st->num_channels;
 	struct iio_chan_spec *channels;
 	struct fwnode_handle *child;
