@@ -360,9 +360,19 @@ static int mip4_query_device(struct mip4_ts *ts)
 		dev_dbg(&ts->client->dev, "event_format: %d, event_size: %d\n",
 			ts->event_format, ts->event_size);
 
-		if (ts->event_format == 2 || ts->event_format > 3)
+		switch (ts->event_format) {
+		/* Touchscreens */
+		case 0:
+		case 1:
+		case 3:
+		/* Touchkeys */
+		case 4:
+		case 9:
+			break;
+		default:
 			dev_warn(&ts->client->dev,
 				 "Unknown event format %d\n", ts->event_format);
+		}
 	}
 
 	return 0;
@@ -440,6 +450,8 @@ static void mip4_report_keys(struct mip4_ts *ts, u8 *packet)
 	switch (ts->event_format) {
 	case 0:
 	case 1:
+	case 4:
+	case 9:
 		key = packet[0] & 0x0F;
 		down = packet[0] & 0x80;
 		break;
@@ -552,6 +564,8 @@ static int mip4_handle_packet(struct mip4_ts *ts, u8 *packet)
 	switch (ts->event_format) {
 	case 0:
 	case 1:
+	case 4:
+	case 9:
 		type = (packet[0] & 0x40) >> 6;
 		break;
 
