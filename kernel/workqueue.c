@@ -5670,6 +5670,13 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 			return NULL;
 	}
 
+	/* one among WQ_UNBOUND and WQ_PERCPU should always be present */
+	if (WARN_ON_ONCE(flags & WQ_UNBOUND && flags & WQ_PERCPU))
+		return NULL;
+
+	if (WARN_ON_ONCE(!(flags & WQ_UNBOUND) && !(flags & WQ_PERCPU)))
+		return NULL;
+
 	/* see the comment above the definition of WQ_POWER_EFFICIENT */
 	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)
 		flags |= WQ_UNBOUND;

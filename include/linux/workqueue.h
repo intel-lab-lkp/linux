@@ -374,6 +374,7 @@ enum wq_flags {
 	WQ_HIGHPRI		= 1 << 4, /* high priority */
 	WQ_CPU_INTENSIVE	= 1 << 5, /* cpu intensive workqueue */
 	WQ_SYSFS		= 1 << 6, /* visible in sysfs, see workqueue_sysfs_register() */
+	WQ_PERCPU		= 1 << 7, /* bound to a specific cpu */
 
 	/*
 	 * Per-cpu workqueues are generally preferred because they tend to
