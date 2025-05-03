@@ -7,6 +7,7 @@ Required properties:
 
 Optional properties:
 - ce-gpios: GPIO connected to the CE (chip enable) pin of the chip
+- linux,keycodes: array of keycodes to be reported by touchkeys
 
 Example:
 	i2c@00000000 {
@@ -16,5 +17,6 @@ Example:
 			interrupt-parent = <&gpio>;
 			interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
 			ce-gpios = <&gpio 0 GPIO_ACTIVE_HIGH>;
+			linux,keycodes = <KEY_MENU>, <KEY_BACK>;
 		};
 	};
