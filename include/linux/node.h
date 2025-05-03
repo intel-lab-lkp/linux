@@ -114,10 +114,14 @@ extern struct node *node_devices[];
 void register_memory_blocks_under_node(int nid, unsigned long start_pfn,
 				       unsigned long end_pfn,
 				       enum meminit_context context);
+void register_memory_blocks_under_node_early(int nid);
 #else
 static inline void register_memory_blocks_under_node(int nid, unsigned long start_pfn,
 						     unsigned long end_pfn,
 						     enum meminit_context context)
+{
+}
+static inline void register_memory_blocks_under_node_early(int nid)
 {
 }
 #endif
@@ -134,15 +138,10 @@ static inline int register_one_node(int nid)
 	int error = 0;
 
 	if (node_online(nid)) {
-		struct pglist_data *pgdat = NODE_DATA(nid);
-		unsigned long start_pfn = pgdat->node_start_pfn;
-		unsigned long end_pfn = start_pfn + pgdat->node_spanned_pages;
-
 		error = __register_one_node(nid);
 		if (error)
 			return error;
-		register_memory_blocks_under_node(nid, start_pfn, end_pfn,
-						  MEMINIT_EARLY);
+		register_memory_blocks_under_node_early(nid);
 	}
 
 	return error;
