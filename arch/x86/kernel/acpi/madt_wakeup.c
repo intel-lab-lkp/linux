@@ -227,7 +227,7 @@ int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 
 	acpi_table_print_madt_entry(&header->common);
 
-	acpi_mp_wake_mailbox_paddr = mp_wake->mailbox_address;
+	setup_mp_wakeup_mailbox(mp_wake->mailbox_address);
 
 	if (mp_wake->version >= ACPI_MADT_MP_WAKEUP_VERSION_V1 &&
 	    mp_wake->header.length >= ACPI_MADT_MP_WAKEUP_SIZE_V1) {
@@ -243,7 +243,11 @@ int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 		acpi_mp_disable_offlining(mp_wake);
 	}
 
-	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
-
 	return 0;
+}
+
+void __init setup_mp_wakeup_mailbox(u64 mailbox_paddr)
+{
+	acpi_mp_wake_mailbox_paddr = mailbox_paddr;
+	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
 }

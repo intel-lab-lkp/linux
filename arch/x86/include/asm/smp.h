@@ -146,6 +146,10 @@ static inline struct cpumask *cpu_l2c_shared_mask(int cpu)
 	return per_cpu(cpu_l2c_shared_map, cpu);
 }
 
+#ifdef CONFIG_X86_64
+void setup_mp_wakeup_mailbox(u64 addr);
+#endif
+
 #else /* !CONFIG_SMP */
 #define wbinvd_on_cpu(cpu)     wbinvd()
 static inline int wbinvd_on_all_cpus(void)
