@@ -99,7 +99,7 @@ static void xe_gt_tlb_fence_timeout(struct work_struct *work)
 		invalidation_fence_signal(xe, fence);
 	}
 	if (!list_empty(&gt->tlb_invalidation.pending_fences))
-		queue_delayed_work(system_wq,
+		queue_delayed_work(system_percpu_wq,
 				   &gt->tlb_invalidation.fence_tdr,
 				   tlb_timeout_jiffies(gt));
 	spin_unlock_irq(&gt->tlb_invalidation.pending_lock);
@@ -218,7 +218,7 @@ static int send_tlb_invalidation(struct xe_guc *guc,
 				      &gt->tlb_invalidation.pending_fences);
 
 			if (list_is_singular(&gt->tlb_invalidation.pending_fences))
-				queue_delayed_work(system_wq,
+				queue_delayed_work(system_percpu_wq,
 						   &gt->tlb_invalidation.fence_tdr,
 						   tlb_timeout_jiffies(gt));
 		}
@@ -512,7 +512,7 @@ int xe_guc_tlb_invalidation_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	}
 
 	if (!list_empty(&gt->tlb_invalidation.pending_fences))
-		mod_delayed_work(system_wq,
+		mod_delayed_work(system_percpu_wq,
 				 &gt->tlb_invalidation.fence_tdr,
 				 tlb_timeout_jiffies(gt));
 	else

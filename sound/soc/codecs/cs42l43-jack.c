@@ -301,7 +301,7 @@ irqreturn_t cs42l43_bias_detect_clamp(int irq, void *data)
 {
 	struct cs42l43_codec *priv = data;
 
-	queue_delayed_work(system_wq, &priv->bias_sense_timeout,
+	queue_delayed_work(system_percpu_wq, &priv->bias_sense_timeout,
 			   msecs_to_jiffies(1000));
 
 	return IRQ_HANDLED;
@@ -432,7 +432,7 @@ irqreturn_t cs42l43_button_press(int irq, void *data)
 	struct cs42l43_codec *priv = data;
 
 	// Wait for 2 full cycles of comb filter to ensure good reading
-	queue_delayed_work(system_wq, &priv->button_press_work,
+	queue_delayed_work(system_percpu_wq, &priv->button_press_work,
 			   msecs_to_jiffies(20));
 
 	return IRQ_HANDLED;
@@ -470,7 +470,7 @@ irqreturn_t cs42l43_button_release(int irq, void *data)
 {
 	struct cs42l43_codec *priv = data;
 
-	queue_work(system_wq, &priv->button_release_work);
+	queue_work(system_percpu_wq, &priv->button_release_work);
 
 	return IRQ_HANDLED;
 }

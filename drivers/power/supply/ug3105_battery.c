@@ -276,7 +276,7 @@ static void ug3105_work(struct work_struct *work)
 out:
 	mutex_unlock(&chip->lock);
 
-	queue_delayed_work(system_wq, &chip->work,
+	queue_delayed_work(system_percpu_wq, &chip->work,
 			   (chip->poll_count <= UG3105_INIT_POLL_COUNT) ?
 					UG3105_INIT_POLL_TIME : UG3105_POLL_TIME);
 
@@ -352,7 +352,7 @@ static void ug3105_external_power_changed(struct power_supply *psy)
 	struct ug3105_chip *chip = power_supply_get_drvdata(psy);
 
 	dev_dbg(&chip->client->dev, "external power changed\n");
-	mod_delayed_work(system_wq, &chip->work, UG3105_SETTLE_TIME);
+	mod_delayed_work(system_percpu_wq, &chip->work, UG3105_SETTLE_TIME);
 }
 
 static const struct power_supply_desc ug3105_psy_desc = {
@@ -373,7 +373,7 @@ static void ug3105_init(struct ug3105_chip *chip)
 				  UG3105_MODE_RUN);
 	i2c_smbus_write_byte_data(chip->client, UG3105_REG_CTRL1,
 				  UG3105_CTRL1_RESET_COULOMB_CNT);
-	queue_delayed_work(system_wq, &chip->work, 0);
+	queue_delayed_work(system_percpu_wq, &chip->work, 0);
 	flush_delayed_work(&chip->work);
 }
 

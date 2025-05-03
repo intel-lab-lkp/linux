@@ -1474,7 +1474,7 @@ static void invalidation_fence_cb(struct dma_fence *fence,
 
 	trace_xe_gt_tlb_invalidation_fence_cb(xe, &ifence->base);
 	if (!ifence->fence->error) {
-		queue_work(system_wq, &ifence->work);
+		queue_work(system_percpu_wq, &ifence->work);
 	} else {
 		ifence->base.base.error = ifence->fence->error;
 		xe_gt_tlb_invalidation_fence_signal(&ifence->base);
