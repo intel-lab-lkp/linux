@@ -680,7 +680,7 @@ static int adu_probe(struct usb_interface *interface,
 	in_end_size = usb_endpoint_maxp(dev->interrupt_in_endpoint);
 	out_end_size = usb_endpoint_maxp(dev->interrupt_out_endpoint);
 
-	dev->read_buffer_primary = kmalloc((4 * in_end_size), GFP_KERNEL);
+	dev->read_buffer_primary = kmalloc_array(4, in_end_size, GFP_KERNEL);
 	if (!dev->read_buffer_primary)
 		goto error;
 
@@ -690,7 +690,7 @@ static int adu_probe(struct usb_interface *interface,
 	memset(dev->read_buffer_primary + (2 * in_end_size), 'c', in_end_size);
 	memset(dev->read_buffer_primary + (3 * in_end_size), 'd', in_end_size);
 
-	dev->read_buffer_secondary = kmalloc((4 * in_end_size), GFP_KERNEL);
+	dev->read_buffer_secondary = kmalloc_array(4, in_end_size, GFP_KERNEL);
 	if (!dev->read_buffer_secondary)
 		goto error;
 
