@@ -127,8 +127,59 @@ static void __init dtb_setup_hpet(void)
 
 #ifdef CONFIG_X86_LOCAL_APIC
 
+#ifdef CONFIG_SMP
+static const char *dtb_supported_enable_methods[] __initconst = { };
+
+static bool __init dtb_enable_method_is_valid(const char *enable_method_a,
+					      const char *enable_method_b)
+{
+	int i;
+
+	if (!enable_method_a && !enable_method_b)
+		return true;
+
+	if (strcmp(enable_method_a, enable_method_b))
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(dtb_supported_enable_methods); i++) {
+		if (!strcmp(enable_method_a, dtb_supported_enable_methods[i]))
+			return true;
+	}
+
+	return false;
+}
+
+static int __init dtb_configure_enable_method(const char *enable_method)
+{
+	/* Nothing to do for a missing enable-method or if the system has one CPU */
+	if (!enable_method || IS_ERR(enable_method))
+		return 0;
+
+	return -ENOTSUPP;
+}
+#else /* !CONFIG_SMP */
+static inline bool dtb_enable_method_is_valid(const char *enable_method_a,
+					      const char *enable_method_b)
+{
+	/* No secondary CPUs. We do not care about the enable-method. */
+	return true;
+}
+
+static inline int dtb_configure_enable_method(const char *enable_method)
+{
+	return 0;
+}
+#endif /* CONFIG_SMP */
+
+static void __init dtb_register_apic_id(u32 apic_id, struct device_node *dn)
+{
+	topology_register_apic(apic_id, CPU_ACPIID_INVALID, true);
+	set_apicid_to_node(apic_id, of_node_to_nid(dn));
+}
+
 static void __init dtb_cpu_setup(void)
 {
+	const char *enable_method = ERR_PTR(-EINVAL), *this_em;
 	struct device_node *dn;
 	u32 apic_id;
 
@@ -138,9 +189,42 @@ static void __init dtb_cpu_setup(void)
 			pr_warn("%pOF: missing local APIC ID\n", dn);
 			continue;
 		}
-		topology_register_apic(apic_id, CPU_ACPIID_INVALID, true);
-		set_apicid_to_node(apic_id, of_node_to_nid(dn));
+
+		/*
+		 * Also check the enable-method of the secondary CPUs, if present.
+		 *
+		 * Systems that use the INIT-!INIT-StartUp IPI sequence to boot
+		 * secondary CPUs do not need to define an enable-method.
+		 *
+		 * All CPUs must have the same enable-method. The enable-method
+		 * must be supported. If absent in one secondary CPU, it must be
+		 * absent for all CPUs.
+		 *
+		 * Compare the first secondary CPU with the rest. We do not care
+		 * about the boot CPU, as it is enabled already.
+		 */
+
+		if (apic_id == boot_cpu_physical_apicid) {
+			dtb_register_apic_id(apic_id, dn);
+			continue;
+		}
+
+		this_em = of_get_property(dn, "enable-method", NULL);
+
+		if (IS_ERR(enable_method)) {
+			enable_method = this_em;
+			dtb_register_apic_id(apic_id, dn);
+			continue;
+		}
+
+		if (!dtb_enable_method_is_valid(enable_method, this_em))
+			continue;
+
+		dtb_register_apic_id(apic_id, dn);
 	}
+
+	if (dtb_configure_enable_method(enable_method))
+		pr_err("enable-method '%s' needed but not configured\n", enable_method);
 }
 
 static void __init dtb_lapic_setup(void)
