@@ -39,6 +39,7 @@ DECLARE_RC_STRUCT(thread) {
 	pid_t			ppid;
 	int			cpu;
 	int			guest_cpu; /* For QEMU thread */
+	int			parallelism; /* Valid for group leaders */
 	refcount_t		refcnt;
 	/**
 	 * @exited: Has the thread had an exit event. Such threads are usually
@@ -358,5 +359,27 @@ void thread__free_stitch_list(struct thread *thread);
 
 void thread__resolve(struct thread *thread, struct addr_location *al,
 		     struct perf_sample *sample);
+
+static inline int thread__parallelism(const struct thread *thread)
+{
+	return RC_CHK_ACCESS(thread)->parallelism ? : 1;
+}
+
+static inline void thread__set_parallelism(struct thread *thread, int parallelism)
+{
+	RC_CHK_ACCESS(thread)->parallelism = parallelism;
+}
+
+static inline void thread__inc_parallelism(struct thread *thread)
+{
+	if (thread__pid(thread))
+		RC_CHK_ACCESS(thread)->parallelism++;
+}
+
+static inline void thread__dec_parallelism(struct thread *thread)
+{
+	if (thread__pid(thread) && RC_CHK_ACCESS(thread)->parallelism > 0)
+		RC_CHK_ACCESS(thread)->parallelism--;
+}
 
 #endif	/* __PERF_THREAD_H */

@@ -1280,6 +1280,22 @@ static int process_attr(const struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static bool is_latency_requested(void)
+{
+	if (symbol_conf.parallelism_list_str || symbol_conf.prefer_latency)
+		return true;
+
+	if (sort_order && (strstr(sort_order, "latency") ||
+			   strstr(sort_order, "parallelism")))
+		return true;
+
+	if (field_order && (strstr(field_order, "latency") ||
+			    strstr(field_order, "parallelism")))
+		return true;
+
+	return false;
+}
+
 #define CALLCHAIN_BRANCH_SORT_ORDER	\
 	"srcline,symbol,dso,callchain_branch_predicted," \
 	"callchain_branch_abort,callchain_branch_cycles"
@@ -1735,24 +1751,40 @@ repeat:
 	}
 
 	symbol_conf.enable_latency = true;
-	if (report.disable_order || !perf_session__has_switch_events(session)) {
-		if (symbol_conf.parallelism_list_str ||
-			symbol_conf.prefer_latency ||
-			(sort_order && (strstr(sort_order, "latency") ||
-				strstr(sort_order, "parallelism"))) ||
-			(field_order && (strstr(field_order, "latency") ||
-				strstr(field_order, "parallelism")))) {
-			if (report.disable_order)
-				ui__error("Use of latency profile or parallelism is incompatible with --disable-order.\n");
-			else
-				ui__error("Use of latency profile or parallelism requires --latency flag during record.\n");
-			return -1;
+	if (report.disable_order) {
+		if (is_latency_requested()) {
+			ui__error("Use of latency profile or parallelism is incompatible with --disable-order.\n");
+			goto error;
 		}
 		/*
 		 * If user did not ask for anything related to
 		 * latency/parallelism explicitly, just don't show it.
 		 */
 		symbol_conf.enable_latency = false;
+	}
+
+	if (!perf_session__has_switch_events(session)) {
+		if (evlist__combined_sample_type(session->evlist) & PERF_SAMPLE_CPU) {
+			struct machine *machine = &session->machines.host;
+
+			/*
+			 * Maintain current process for each CPU to track
+			 * parallelism in process level.
+			 */
+			ret = machine__create_current_table(machine);
+			if (ret < 0)
+				goto error;
+		} else if (is_latency_requested()) {
+			ui__error("Use of latency profile or parallelism requires --latency flag during record.\n");
+			goto error;
+		}
+		else {
+			/*
+			 * If user did not ask for anything related to
+			 * latency/parallelism explicitly, just don't show it.
+			 */
+			symbol_conf.enable_latency = false;
+		}
 	}
 
 	if (last_key != K_SWITCH_INPUT_DATA) {

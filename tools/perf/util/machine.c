@@ -117,6 +117,7 @@ int machine__init(struct machine *machine, const char *root_dir, pid_t pid)
 	}
 
 	machine->current_tid = NULL;
+	machine->current = NULL;
 	err = 0;
 
 out:
@@ -182,6 +183,12 @@ void machine__exit(struct machine *machine)
 	zfree(&machine->mmap_name);
 	zfree(&machine->current_tid);
 	zfree(&machine->kallsyms_filename);
+
+	if (machine->current) {
+		for (int i = 0; i < machine__nr_cpus_avail(machine); i++)
+			thread__put(machine->current[i]);
+		zfree(&machine->current);
+	}
 
 	threads__exit(&machine->threads);
 }
@@ -3270,4 +3277,18 @@ bool machine__is_lock_function(struct machine *machine, u64 addr)
 int machine__hit_all_dsos(struct machine *machine)
 {
 	return dsos__hit_all(&machine->dsos);
+}
+
+int machine__create_current_table(struct machine *machine)
+{
+	int nr = machine__nr_cpus_avail(machine);
+
+	if (nr == 0)
+		return -EINVAL;
+
+	machine->current = calloc(nr, sizeof(*machine->current));
+	if (machine->current == NULL)
+		return -ENOMEM;
+
+	return 0;
 }

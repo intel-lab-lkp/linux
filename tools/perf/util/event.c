@@ -767,16 +767,44 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 			al->socket = env->cpu[al->cpu].socket_id;
 	}
 
-	/* Account for possible out-of-order switch events. */
-	al->parallelism = max(1, min(machine->parallelism, machine__nr_cpus_avail(machine)));
-	if (test_bit(al->parallelism, symbol_conf.parallelism_filter))
-		al->filtered |= (1 << HIST_FILTER__PARALLELISM);
-	/*
-	 * Multiply it by some const to avoid precision loss or dealing
-	 * with floats. The multiplier does not matter otherwise since
-	 * we only print it as percents.
-	 */
-	al->latency = sample->period * 1000 / al->parallelism;
+	if (symbol_conf.enable_latency) {
+		if (machine->current && al->cpu >= 0) {
+			struct thread *curr = machine->current[al->cpu];
+
+			if (curr) {
+				thread__dec_parallelism(curr);
+				thread__put(curr);
+			}
+
+			curr = machine__findnew_thread(machine, sample->pid,
+						       sample->pid);
+			if (curr) {
+				machine->current[al->cpu] = curr;
+
+				thread__inc_parallelism(curr);
+				thread__get(curr);
+			}
+
+			al->parallelism = curr ? thread__parallelism(curr) : 1;
+		} else {
+			/* Account for possible out-of-order switch events. */
+			al->parallelism = max(1, min(machine->parallelism,
+						     machine__nr_cpus_avail(machine)));
+		}
+
+		if (test_bit(al->parallelism, symbol_conf.parallelism_filter))
+			al->filtered |= (1 << HIST_FILTER__PARALLELISM);
+		/*
+		 * Multiply it by some const to avoid precision loss or dealing
+		 * with floats. The multiplier does not matter otherwise since
+		 * we only print it as percents.
+		 */
+		al->latency = sample->period * 1000 / al->parallelism;
+
+		/* It won't be exciting to see idle threads in latency profile. */
+		if (sample->pid == 0)
+			al->latency = 0;
+	}
 
 	if (al->map) {
 		if (symbol_conf.dso_list &&

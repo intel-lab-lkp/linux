@@ -64,6 +64,8 @@ struct machine {
 	};
 	struct machines   *machines;
 	bool		  trampolines_mapped;
+	/* per-CPU current process for parallelism */
+	struct thread	  **current;
 };
 
 /*
@@ -331,5 +333,7 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 		     struct perf_sample *sample);
 
 int machine__hit_all_dsos(struct machine *machine);
+
+int machine__create_current_table(struct machine *machine);
 
 #endif /* __PERF_MACHINE_H */

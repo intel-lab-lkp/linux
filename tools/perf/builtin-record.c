@@ -4027,19 +4027,9 @@ int cmd_record(int argc, const char **argv)
 	}
 
 	if (record.latency) {
-		/*
-		 * There is no fundamental reason why latency profiling
-		 * can't work for system-wide mode, but exact semantics
-		 * and details are to be defined.
-		 * See the following thread for details:
-		 * https://lore.kernel.org/all/Z4XDJyvjiie3howF@google.com/
-		 */
-		if (record.opts.target.system_wide) {
-			pr_err("Failed: latency profiling is not supported with system-wide collection.\n");
-			err = -EINVAL;
-			goto out_opts;
-		}
-		record.opts.record_switch_events = true;
+		/* It can use sample->cpu to get process-level parallelism. */
+		if (!target__has_cpu(&record.opts.target))
+			record.opts.record_switch_events = true;
 	}
 
 	if (rec->buildid_mmap) {
