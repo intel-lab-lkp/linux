@@ -451,7 +451,7 @@ void netfs_wake_write_collector(struct netfs_io_request *wreq, bool was_async)
 {
 	if (!work_pending(&wreq->work)) {
 		netfs_get_request(wreq, netfs_rreq_trace_get_work);
-		if (!queue_work(system_unbound_wq, &wreq->work))
+		if (!queue_work(system_dfl_wq, &wreq->work))
 			netfs_put_request(wreq, was_async, netfs_rreq_trace_put_work_nq);
 	}
 }

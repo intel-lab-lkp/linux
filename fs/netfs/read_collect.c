@@ -474,7 +474,7 @@ void netfs_wake_read_collector(struct netfs_io_request *rreq)
 	    !test_bit(NETFS_RREQ_RETRYING, &rreq->flags)) {
 		if (!work_pending(&rreq->work)) {
 			netfs_get_request(rreq, netfs_rreq_trace_get_work);
-			if (!queue_work(system_unbound_wq, &rreq->work))
+			if (!queue_work(system_dfl_wq, &rreq->work))
 				netfs_put_request(rreq, true, netfs_rreq_trace_put_work_nq);
 		}
 	} else {

@@ -822,7 +822,7 @@ int bch2_journal_keys_to_write_buffer_end(struct bch_fs *c, struct journal_keys_
 
 	if (bch2_btree_write_buffer_should_flush(c) &&
 	    __bch2_write_ref_tryget(c, BCH_WRITE_REF_btree_write_buffer) &&
-	    !queue_work(system_unbound_wq, &c->btree_write_buffer.flush_work))
+	    !queue_work(system_dfl_wq, &c->btree_write_buffer.flush_work))
 		bch2_write_ref_put(c, BCH_WRITE_REF_btree_write_buffer);
 
 	if (dst->wb == &wb->flushing)
