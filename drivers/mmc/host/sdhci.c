@@ -4866,7 +4866,7 @@ int __sdhci_add_host(struct sdhci_host *host)
 		mmc->cqe_ops = NULL;
 	}
 
-	host->complete_wq = alloc_workqueue("sdhci", flags, 0);
+	host->complete_wq = alloc_workqueue("sdhci", flags | WQ_PERCPU, 0);
 	if (!host->complete_wq)
 		return -ENOMEM;
 

@@ -2884,7 +2884,8 @@ static noinline_for_stack int scrub_workers_get(struct btrfs_fs_info *fs_info)
 	if (refcount_inc_not_zero(&fs_info->scrub_workers_refcnt))
 		return 0;
 
-	scrub_workers = alloc_workqueue("btrfs-scrub", flags, max_active);
+	scrub_workers = alloc_workqueue("btrfs-scrub", flags | WQ_PERCPU,
+					max_active);
 	if (!scrub_workers)
 		return -ENOMEM;
 

@@ -3023,7 +3023,7 @@ static int __init nvme_tcp_init_module(void)
 	if (wq_unbound)
 		wq_flags |= WQ_UNBOUND;
 
-	nvme_tcp_wq = alloc_workqueue("nvme_tcp_wq", wq_flags, 0);
+	nvme_tcp_wq = alloc_workqueue("nvme_tcp_wq", wq_flags | WQ_PERCPU, 0);
 	if (!nvme_tcp_wq)
 		return -ENOMEM;
 

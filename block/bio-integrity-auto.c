@@ -182,8 +182,9 @@ static int __init blk_integrity_auto_init(void)
 	 * kintegrityd won't block much but may burn a lot of CPU cycles.
 	 * Make it highpri CPU intensive wq with max concurrency of 1.
 	 */
-	kintegrityd_wq = alloc_workqueue("kintegrityd", WQ_MEM_RECLAIM |
-					 WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
+	kintegrityd_wq = alloc_workqueue("kintegrityd",
+					 WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_CPU_INTENSIVE | WQ_PERCPU,
+					 1);
 	if (!kintegrityd_wq)
 		panic("Failed to create kintegrityd\n");
 	return 0;

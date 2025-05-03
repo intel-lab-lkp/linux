@@ -1983,15 +1983,18 @@ static int btrfs_init_workqueues(struct btrfs_fs_info *fs_info)
 		btrfs_alloc_ordered_workqueue(fs_info, "fixup", ordered_flags);
 
 	fs_info->endio_workers =
-		alloc_workqueue("btrfs-endio", flags, max_active);
+		alloc_workqueue("btrfs-endio", flags | WQ_PERCPU, max_active);
 	fs_info->endio_meta_workers =
-		alloc_workqueue("btrfs-endio-meta", flags, max_active);
-	fs_info->rmw_workers = alloc_workqueue("btrfs-rmw", flags, max_active);
+		alloc_workqueue("btrfs-endio-meta", flags | WQ_PERCPU,
+				max_active);
+	fs_info->rmw_workers = alloc_workqueue("btrfs-rmw", flags | WQ_PERCPU,
+					       max_active);
 	fs_info->endio_write_workers =
 		btrfs_alloc_workqueue(fs_info, "endio-write", flags,
 				      max_active, 2);
 	fs_info->compressed_write_workers =
-		alloc_workqueue("btrfs-compressed-write", flags, max_active);
+		alloc_workqueue("btrfs-compressed-write", flags | WQ_PERCPU,
+				max_active);
 	fs_info->endio_freespace_worker =
 		btrfs_alloc_workqueue(fs_info, "freespace-write", flags,
 				      max_active, 0);
