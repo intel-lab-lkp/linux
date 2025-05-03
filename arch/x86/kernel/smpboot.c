@@ -1431,4 +1431,9 @@ struct acpi_madt_multiproc_wakeup_mailbox *get_mp_wakeup_mailbox(void)
 {
 	return acpi_mp_wake_mailbox;
 }
+
+u64 get_mp_wakeup_mailbox_paddr(void)
+{
+	return acpi_mp_wake_mailbox_paddr;
+}
 #endif
