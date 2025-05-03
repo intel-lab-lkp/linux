@@ -7,18 +7,12 @@
  *
  * Note this is still rather experimental and may eat babies.
  *
- * Todo
- * * Protect against connection of devices that 'need' the top half
- *   handler.
- * * Work out how to run top half handlers in this context if it is
- *   safe to do so (timestamp grabbing for example)
- *
  * Tested against a max1363. Used about 33% cpu for the thread and 20%
  * for generic_buffer piping to /dev/null. Watermark set at 64 on a 128
  * element kfifo buffer.
  */
 
-#include <linux/kernel.h>
+#include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -27,8 +21,10 @@
 #include <linux/freezer.h>
 
 #include <linux/iio/iio.h>
-#include <linux/iio/trigger.h>
 #include <linux/iio/sw_trigger.h>
+#include <linux/iio/trigger.h>
+
+#include "linux/iio/trigger_consumer.h"
 
 struct iio_loop_info {
 	struct iio_sw_trigger swt;
@@ -71,8 +67,25 @@ static int iio_loop_trigger_set_state(struct iio_trigger *trig, bool state)
 	return 0;
 }
 
+/*
+ * Protect against connection of devices that 'need' the top half
+ * handler.
+ */
+static int iio_loop_trigger_validate_device(struct iio_trigger *trig,
+						struct iio_dev *indio_dev)
+{
+	struct iio_poll_func *pf = indio_dev->pollfunc;
+
+	/* Only iio timestamp grabbing is allowed. */
+	if (pf->h && pf->h != iio_pollfunc_store_time)
+		return -EINVAL;
+
+	return 0;
+}
+
 static const struct iio_trigger_ops iio_loop_trigger_ops = {
 	.set_trigger_state = iio_loop_trigger_set_state,
+	.validate_device = iio_loop_trigger_validate_device,
 };
 
 static struct iio_sw_trigger *iio_trig_loop_probe(const char *name)
