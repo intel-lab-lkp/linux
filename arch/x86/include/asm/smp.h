@@ -148,6 +148,7 @@ static inline struct cpumask *cpu_l2c_shared_mask(int cpu)
 
 #ifdef CONFIG_X86_64
 void setup_mp_wakeup_mailbox(u64 addr);
+struct acpi_madt_multiproc_wakeup_mailbox *get_mp_wakeup_mailbox(void);
 #endif
 
 #else /* !CONFIG_SMP */

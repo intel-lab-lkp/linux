@@ -37,6 +37,7 @@ static void acpi_mp_play_dead(void)
 
 static void acpi_mp_cpu_die(unsigned int cpu)
 {
+	struct acpi_madt_multiproc_wakeup_mailbox *mailbox = get_mp_wakeup_mailbox();
 	u32 apicid = per_cpu(x86_cpu_to_apicid, cpu);
 	unsigned long timeout;
 
@@ -46,13 +47,13 @@ static void acpi_mp_cpu_die(unsigned int cpu)
 	 *
 	 * BIOS has to clear 'command' field of the mailbox.
 	 */
-	acpi_mp_wake_mailbox->apic_id = apicid;
-	smp_store_release(&acpi_mp_wake_mailbox->command,
+	mailbox->apic_id = apicid;
+	smp_store_release(&mailbox->command,
 			  ACPI_MP_WAKE_COMMAND_TEST);
 
 	/* Don't wait longer than a second. */
 	timeout = USEC_PER_SEC;
-	while (READ_ONCE(acpi_mp_wake_mailbox->command) && --timeout)
+	while (READ_ONCE(mailbox->command) && --timeout)
 		udelay(1);
 
 	if (!timeout)
@@ -250,4 +251,9 @@ void __init setup_mp_wakeup_mailbox(u64 mailbox_paddr)
 {
 	acpi_mp_wake_mailbox_paddr = mailbox_paddr;
 	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
+}
+
+struct acpi_madt_multiproc_wakeup_mailbox *get_mp_wakeup_mailbox(void)
+{
+	return acpi_mp_wake_mailbox;
 }
