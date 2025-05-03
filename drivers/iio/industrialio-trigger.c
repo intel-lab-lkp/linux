@@ -453,24 +453,20 @@ static ssize_t current_trigger_store(struct device *dev,
 	}
 
 	trig = iio_trigger_acquire_by_name(buf);
-	if (oldtrig == trig) {
+	if (!trig || trig == oldtrig) {
 		ret = len;
 		goto out_trigger_put;
 	}
-
-	if (trig && indio_dev->info->validate_trigger) {
+	if (indio_dev->info->validate_trigger) {
 		ret = indio_dev->info->validate_trigger(indio_dev, trig);
 		if (ret)
 			goto out_trigger_put;
 	}
-
-	if (trig && trig->ops && trig->ops->validate_device) {
+	if (trig->ops && trig->ops->validate_device) {
 		ret = trig->ops->validate_device(trig, indio_dev);
 		if (ret)
 			goto out_trigger_put;
 	}
-
-	indio_dev->trig = trig;
 
 	if (oldtrig) {
 		if (indio_dev->modes & INDIO_EVENT_TRIGGERED)
@@ -478,11 +474,11 @@ static ssize_t current_trigger_store(struct device *dev,
 						     indio_dev->pollfunc_event);
 		iio_trigger_put(oldtrig);
 	}
-	if (indio_dev->trig) {
-		if (indio_dev->modes & INDIO_EVENT_TRIGGERED)
-			iio_trigger_attach_poll_func(indio_dev->trig,
-						     indio_dev->pollfunc_event);
-	}
+	if (indio_dev->modes & INDIO_EVENT_TRIGGERED)
+		iio_trigger_attach_poll_func(trig,
+						indio_dev->pollfunc_event);
+
+	indio_dev->trig = trig;
 
 	return len;
 
