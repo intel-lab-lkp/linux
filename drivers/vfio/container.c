@@ -12,6 +12,8 @@
 #include <linux/miscdevice.h>
 #include <linux/vfio.h>
 #include <uapi/linux/vfio.h>
+#include <linux/mm.h>
+#include <linux/sched/mm.h>
 
 #include "vfio.h"
 
@@ -43,12 +45,183 @@ static void vfio_noiommu_release(void *iommu_data)
 {
 }
 
+static int vfio_noiommu_do_map(void *iommu, struct vfio_noiommu_dma_map *map)
+{
+	unsigned long nr_pages = map->size / PAGE_SIZE;
+	unsigned long target_vaddr = map->vaddr;
+	struct vm_area_struct *vma;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	unsigned long paddr;
+	struct page **pages;
+	struct page *page;
+	int ret = 0;
+	int npgs;
+
+	if (target_vaddr >= TASK_SIZE) {
+		page = virt_to_page((void *)target_vaddr);
+		if (!page)
+			return -EINVAL;
+		paddr = page_to_phys(page) + (target_vaddr & (PAGE_SIZE - 1));
+		map->iova = paddr;
+		return 0;
+	}
+
+	rcu_read_lock();
+	task = pid_task(find_vpid(current->tgid), PIDTYPE_PID);
+	if (!task) {
+		rcu_read_unlock();
+		return -ESRCH;
+	}
+
+	mm = get_task_mm(task);
+	rcu_read_unlock();
+	if (!mm)
+		return -EINVAL;
+
+	down_read(&mm->mmap_lock);
+
+	vma = find_vma(mm, target_vaddr);
+	if (!vma || target_vaddr < vma->vm_start) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	pages = kcalloc(nr_pages, sizeof(struct page *), GFP_KERNEL);
+	if (!pages) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	npgs = get_user_pages_remote(mm, target_vaddr, nr_pages, FOLL_GET,
+				     pages, NULL);
+	if (npgs != nr_pages) {
+		if (npgs > 0) {
+			while (npgs--)
+				put_page(pages[ret]);
+		}
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	paddr = page_to_phys(pages[0]) + (target_vaddr & (PAGE_SIZE - 1));
+	map->iova = paddr;
+
+out_free:
+	kfree(pages);
+out:
+	up_read(&mm->mmap_lock);
+	mmput(mm);
+
+	return ret;
+}
+
+static int vfio_noiommu_do_unmap(void *iommu, struct vfio_noiommu_dma_unmap *unmap)
+{
+	unsigned long nr_pages = unmap->size / PAGE_SIZE;
+	unsigned long current_vaddr = unmap->vaddr;
+	unsigned long remaining_pages = nr_pages;
+	unsigned long chunk_size = 1024;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct page **pages;
+	int ret = 0, i;
+
+	pages = kcalloc(chunk_size, sizeof(struct page *), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	task = current;
+	mm = get_task_mm(task);
+	if (!mm) {
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	down_read(&mm->mmap_lock);
+
+	while (remaining_pages > 0) {
+		unsigned long pages_to_unmap = min(remaining_pages, chunk_size);
+
+		ret = get_user_pages_remote(mm, current_vaddr, pages_to_unmap,
+					    FOLL_GET, pages, NULL);
+		if (ret > 0) {
+			for (i = ret - 1; i >= 0; i--) {
+				if (!pages[i])
+					continue;
+				put_page(pages[i]);
+			}
+			ret = 0;
+		} else {
+			ret = -EINVAL;
+			break;
+		}
+
+		remaining_pages -= pages_to_unmap;
+		current_vaddr += pages_to_unmap * PAGE_SIZE;
+	}
+
+	up_read(&mm->mmap_lock);
+	mmput(mm);
+
+out_free:
+	kfree(pages);
+	return ret;
+}
+
+static int vfio_noiommu_map_dma(void *iommu, unsigned long arg)
+{
+	struct vfio_noiommu_dma_map map;
+	unsigned long minsz;
+	int ret;
+
+	minsz = offsetofend(struct vfio_noiommu_dma_map, size);
+
+	if (copy_from_user(&map, (void __user *)arg, minsz))
+		return -EFAULT;
+
+	ret = vfio_noiommu_do_map(iommu, &map);
+	if (ret)
+		return ret;
+
+	if (copy_to_user((void __user *)arg, &map, minsz))
+		return -EFAULT;
+
+	return ret;
+}
+
+static int vfio_noiommu_unmap_dma(void *iommu_data, unsigned long arg)
+{
+	struct vfio_noiommu_dma_unmap unmap;
+	unsigned long minsz;
+	int ret;
+
+	minsz = offsetofend(struct vfio_noiommu_dma_unmap, size);
+
+	if (copy_from_user(&unmap, (void __user *)arg, minsz))
+		return -EFAULT;
+
+	ret = vfio_noiommu_do_unmap(iommu_data, &unmap);
+	if (ret)
+		return ret;
+
+	if (copy_to_user((void __user *)arg, &unmap, minsz))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long vfio_noiommu_ioctl(void *iommu_data,
 			       unsigned int cmd, unsigned long arg)
 {
-	if (cmd == VFIO_CHECK_EXTENSION)
+	switch (cmd) {
+	case VFIO_CHECK_EXTENSION:
 		return vfio_noiommu && (arg == VFIO_NOIOMMU_IOMMU) ? 1 : 0;
-
+	case VFIO_IOMMU_MAP_DMA:
+		return vfio_noiommu_map_dma(iommu_data, arg);
+	case VFIO_IOMMU_UNMAP_DMA:
+		return vfio_noiommu_unmap_dma(iommu_data, arg);
+	}
 	return -ENOTTY;
 }
 

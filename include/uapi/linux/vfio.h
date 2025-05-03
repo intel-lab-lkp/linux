@@ -1565,6 +1565,21 @@ struct vfio_iommu_type1_dma_map {
 	__u64	size;				/* Size of mapping (bytes) */
 };
 
+struct vfio_noiommu_dma_map {
+	__u32	argsz;
+	__u32	flags;
+	__u64	vaddr;				/* Process virtual address */
+	__u64	iova;				/* IO virtual address */
+	__u64	size;				/* Size of mapping (bytes) */
+};
+
+struct vfio_noiommu_dma_unmap {
+	__u32	argsz;
+	__u32	flags;
+	__u64	vaddr;				/* Process virtual address */
+	__u64	size;				/* Size of mapping (bytes) */
+};
+
 #define VFIO_IOMMU_MAP_DMA _IO(VFIO_TYPE, VFIO_BASE + 13)
 
 struct vfio_bitmap {
