@@ -1367,6 +1367,9 @@ static int bam_dma_probe(struct platform_device *pdev)
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
+	if (bdev->controlled_remotely || bdev->powered_remotely)
+		pm_runtime_get_sync(&pdev->dev);
+
 	return 0;
 
 err_unregister_dma:
@@ -1412,6 +1415,16 @@ static void bam_dma_remove(struct platform_device *pdev)
 	tasklet_kill(&bdev->task);
 
 	clk_disable_unprepare(bdev->bamclk);
+}
+
+static void bam_dma_sync_state(struct device *dev)
+{
+	struct bam_device *bdev = dev_get_drvdata(dev);
+
+	if (bdev->controlled_remotely || bdev->powered_remotely) {
+		pm_runtime_mark_last_busy(bdev->dev);
+		pm_runtime_put_autosuspend(bdev->dev);
+	}
 }
 
 static int __maybe_unused bam_dma_runtime_suspend(struct device *dev)
@@ -1474,6 +1487,7 @@ static struct platform_driver bam_dma_driver = {
 		.name = "bam-dma-engine",
 		.pm = &bam_dma_pm_ops,
 		.of_match_table = bam_of_match,
+		.sync_state = bam_dma_sync_state,
 	},
 };
 
