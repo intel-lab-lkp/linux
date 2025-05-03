@@ -3221,7 +3221,8 @@ failed:
 static u8 link_to_bdaddr(u8 link_type, u8 addr_type)
 {
 	switch (link_type) {
-	case ISO_LINK:
+	case ISO_LINK_UCAST:
+	case ISO_LINK_BCAST:
 	case LE_LINK:
 		switch (addr_type) {
 		case ADDR_LE_DEV_PUBLIC:
