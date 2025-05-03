@@ -477,7 +477,7 @@ static int remove_nodes(struct device *dev,
 		BUG_ON(!grp || list_empty(&grp->node[0].entry));
 
 		grp->color++;
-		if (list_empty(&grp->node[1].entry))
+		if (!list_empty(&grp->node[1].entry))
 			grp->color++;
 
 		BUG_ON(grp->color <= 0 || grp->color > 2);
