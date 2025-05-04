@@ -32,6 +32,78 @@ impl FwNode {
         self.0.get()
     }
 
+    /// Returns an object that implements [`Display`](core::fmt::Display) for
+    /// printing the name of a node.
+    pub fn display_name(&self) -> impl core::fmt::Display + '_ {
+        struct FwNodeDisplayName<'a>(&'a FwNode);
+
+        impl core::fmt::Display for FwNodeDisplayName<'_> {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                // SAFETY: self is valid by its type invariant
+                let name = unsafe { bindings::fwnode_get_name(self.0.as_raw()) };
+                if name.is_null() {
+                    return Ok(());
+                }
+                // SAFETY: fwnode_get_name returns null or a valid C string and
+                // name is not null
+                let name = unsafe { CStr::from_char_ptr(name) };
+                write!(f, "{name}")
+            }
+        }
+
+        FwNodeDisplayName(self)
+    }
+
+    /// Returns an object that implements [`Display`](core::fmt::Display) for
+    /// printing the full path of a node.
+    pub fn display_path(&self) -> impl core::fmt::Display + '_ {
+        struct FwNodeDisplayPath<'a>(&'a FwNode);
+
+        impl core::fmt::Display for FwNodeDisplayPath<'_> {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                // The logic here is the same as the one in lib/vsprintf.c
+                // (fwnode_full_name_string).
+
+                // SAFETY: `self.0.as_raw()` is valid by its type invariant
+                let num_parents = unsafe { bindings::fwnode_count_parents(self.0.as_raw()) };
+
+                for depth in (0..=num_parents).rev() {
+                    let fwnode = if depth == 0 {
+                        self.0.as_raw()
+                    } else {
+                        // SAFETY: `self.0.as_raw()` is valid
+                        unsafe { bindings::fwnode_get_nth_parent(self.0.as_raw(), depth) }
+                    };
+
+                    // SAFETY: fwnode is valid, it is either `self.0.as_raw()` or
+                    // the return value of `bindings::fwnode_get_nth_parent` which
+                    // returns a valid pointer to a fwnode_handle if the provided
+                    // depth is within the valid range, which we know to be true.
+                    let prefix = unsafe { bindings::fwnode_get_name_prefix(fwnode) };
+                    if !prefix.is_null() {
+                        // SAFETY: fwnode_get_name_prefix returns null or a
+                        // valid C string
+                        let prefix = unsafe { CStr::from_char_ptr(prefix) };
+                        write!(f, "{prefix}")?;
+                    }
+                    write!(f, "{}", self.0.display_name())?;
+
+                    if depth != 0 {
+                        // SAFETY: `fwnode` is valid, because `depth` is
+                        // a valid depth of a parent of `self.0.as_raw()`.
+                        // `fwnode_get_nth_parent` increments the refcount and
+                        // we are responsible to decrement it.
+                        unsafe { bindings::fwnode_handle_put(fwnode) }
+                    }
+                }
+
+                Ok(())
+            }
+        }
+
+        FwNodeDisplayPath(self)
+    }
+
     /// Checks if property is present or not.
     pub fn property_present(&self, name: &CStr) -> bool {
         // SAFETY: By the invariant of `CStr`, `name` is null-terminated.
