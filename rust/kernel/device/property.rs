@@ -4,9 +4,16 @@
 //!
 //! C header: [`include/linux/property.h`](srctree/include/linux/property.h)
 
-use core::ptr;
+use core::{mem::MaybeUninit, ptr};
 
-use crate::{bindings, str::CStr, types::Opaque};
+use crate::{
+    alloc::KVec,
+    bindings,
+    error::{to_result, Result},
+    prelude::*,
+    str::{CStr, CString},
+    types::Opaque,
+};
 
 /// A reference-counted fwnode_handle.
 ///
@@ -109,6 +116,105 @@ impl FwNode {
         // SAFETY: By the invariant of `CStr`, `name` is null-terminated.
         unsafe { bindings::fwnode_property_present(self.as_raw().cast_const(), name.as_char_ptr()) }
     }
+
+    /// Returns firmware property `name` boolean value
+    pub fn property_read_bool(&self, name: &CStr) -> bool {
+        // SAFETY: `name` is non-null and null-terminated. `self.as_raw()` is valid
+        // because `self` is valid.
+        unsafe { bindings::fwnode_property_read_bool(self.as_raw(), name.as_char_ptr()) }
+    }
+
+    /// Returns the index of matching string `match_str` for firmware string property `name`
+    pub fn property_match_string(&self, name: &CStr, match_str: &CStr) -> Result<usize> {
+        // SAFETY: `name` and `match_str` are non-null and null-terminated. `self.as_raw` is
+        // valid because `self` is valid.
+        let ret = unsafe {
+            bindings::fwnode_property_match_string(
+                self.as_raw(),
+                name.as_char_ptr(),
+                match_str.as_char_ptr(),
+            )
+        };
+        to_result(ret)?;
+        Ok(ret as usize)
+    }
+
+    /// Returns firmware property `name` integer array values in a KVec
+    pub fn property_read_array_vec<'fwnode, 'name, T: PropertyInt>(
+        &'fwnode self,
+        name: &'name CStr,
+        len: usize,
+    ) -> Result<PropertyGuard<'fwnode, 'name, KVec<T>>> {
+        let mut val: KVec<T> = KVec::with_capacity(len, GFP_KERNEL)?;
+
+        // SAFETY: `val.as_mut_ptr()` is valid because `KVec::with_capacity`
+        // didn't return an error and it has at least space for `len` number
+        // of elements.
+        let err = unsafe { read_array_out_param::<T>(self, name, val.as_mut_ptr(), len) };
+        let res = if err < 0 {
+            Err(Error::from_errno(err))
+        } else {
+            // SAFETY: fwnode_property_read_int_array() writes exactly `len`
+            // entries on success
+            unsafe { val.set_len(len) }
+            Ok(val)
+        };
+        Ok(PropertyGuard {
+            inner: res,
+            fwnode: self,
+            name,
+        })
+    }
+
+    /// Returns integer array length for firmware property `name`
+    pub fn property_count_elem<T: PropertyInt>(&self, name: &CStr) -> Result<usize> {
+        // SAFETY: `out_param` is allowed to be null because `len` is zero.
+        let ret = unsafe { read_array_out_param::<T>(self, name, ptr::null_mut(), 0) };
+        to_result(ret)?;
+        Ok(ret as usize)
+    }
+
+    /// Returns the value of firmware property `name`.
+    ///
+    /// This method is generic over the type of value to read. Informally,
+    /// the types that can be read are booleans, strings, unsigned integers and
+    /// arrays of unsigned integers.
+    ///
+    /// Reading a `KVec` of integers is done with the separate
+    /// method [`Self::property_read_array_vec`], because it takes an
+    /// additional `len` argument.
+    ///
+    /// When reading a boolean, this method never fails. A missing property
+    /// is interpreted as `false`, whereas a present property is interpreted
+    /// as `true`.
+    ///
+    /// For more precise documentation about what types can be read, see
+    /// the [implementors of Property][Property#implementors] and [its
+    /// implementations on foreign types][Property#foreign-impls].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{c_str, device::{Device, property::FwNode}, str::CString};
+    /// fn examples(dev: &Device) -> Result {
+    ///     let fwnode = dev.fwnode().ok_or(ENOENT)?;
+    ///     let b: u32 = fwnode.property_read(c_str!("some-number")).required_by(dev)?;
+    ///     if let Some(s) = fwnode.property_read::<CString>(c_str!("some-str")).optional() {
+    ///         // ...
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn property_read<'fwnode, 'name, T: Property>(
+        &'fwnode self,
+        name: &'name CStr,
+    ) -> PropertyGuard<'fwnode, 'name, T> {
+        PropertyGuard {
+            inner: T::read_from_fwnode_property(self, name),
+            fwnode: self,
+            name,
+        }
+    }
 }
 
 // SAFETY: Instances of `FwNode` are always reference-counted.
@@ -121,6 +227,128 @@ unsafe impl crate::types::AlwaysRefCounted for FwNode {
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is non-zero.
         unsafe { bindings::fwnode_handle_put(obj.cast().as_ptr()) }
+    }
+}
+
+/// Implemented for several types that can be read as properties.
+///
+/// Informally, this is implemented for strings, integers and arrays of
+/// integers. It's used to make [`FwNode::property_read`] generic over the
+/// type of property being read. There are also two dedicated methods to read
+/// other types, because they require more specialized function signatures:
+/// - [`property_read_bool`](Device::property_read_bool)
+/// - [`property_read_array_vec`](Device::property_read_array_vec)
+pub trait Property: Sized {
+    /// Used to make [`FwNode::property_read`] generic.
+    fn read_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<Self>;
+}
+
+impl Property for CString {
+    fn read_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<Self> {
+        let mut str: *mut u8 = ptr::null_mut();
+        let pstr: *mut _ = &mut str;
+
+        // SAFETY: `name` is non-null and null-terminated. `fwnode.as_raw` is
+        // valid because `fwnode` is valid.
+        let ret = unsafe {
+            bindings::fwnode_property_read_string(fwnode.as_raw(), name.as_char_ptr(), pstr.cast())
+        };
+        to_result(ret)?;
+
+        // SAFETY: `pstr` contains a non-null ptr on success
+        let str = unsafe { CStr::from_char_ptr(*pstr) };
+        Ok(str.try_into()?)
+    }
+}
+/// Implemented for all integers that can be read as properties.
+///
+/// This helper trait is needed on top of the existing [`Property`]
+/// trait to associate the integer types of various sizes with their
+/// corresponding `fwnode_property_read_*_array` functions.
+pub trait PropertyInt: Copy {
+    /// # Safety
+    ///
+    /// Callers must uphold the same safety invariants as for the various
+    /// `fwnode_property_read_*_array` functions.
+    unsafe fn read_array_from_fwnode_property(
+        fwnode: *const bindings::fwnode_handle,
+        propname: *const ffi::c_char,
+        val: *mut Self,
+        nval: usize,
+    ) -> ffi::c_int;
+}
+// This macro generates implementations of the traits `Property` and
+// `PropertyInt` for integers of various sizes. Its input is a list
+// of pairs separated by commas. The first element of the pair is the
+// type of the integer, the second one is the name of its corresponding
+// `fwnode_property_read_*_array` function.
+macro_rules! impl_property_for_int {
+    ($($int:ty: $f:ident),* $(,)?) => { $(
+        impl PropertyInt for $int {
+            unsafe fn read_array_from_fwnode_property(
+                fwnode: *const bindings::fwnode_handle,
+                propname: *const ffi::c_char,
+                val: *mut Self,
+                nval: usize,
+            ) -> ffi::c_int {
+                // SAFETY: The safety invariants on the trait require
+                // callers to uphold the invariants of the functions
+                // this macro is called with.
+                unsafe {
+                    bindings::$f(fwnode, propname, val.cast(), nval)
+                }
+            }
+        }
+    )* };
+}
+impl_property_for_int! {
+    u8: fwnode_property_read_u8_array,
+    u16: fwnode_property_read_u16_array,
+    u32: fwnode_property_read_u32_array,
+    u64: fwnode_property_read_u64_array,
+    i8: fwnode_property_read_u8_array,
+    i16: fwnode_property_read_u16_array,
+    i32: fwnode_property_read_u32_array,
+    i64: fwnode_property_read_u64_array,
+}
+/// # Safety
+///
+/// Callers must ensure that if `len` is non-zero, `out_param` must be
+/// valid and point to memory that has enough space to hold at least
+/// `len` number of elements.
+unsafe fn read_array_out_param<T: PropertyInt>(
+    fwnode: &FwNode,
+    name: &CStr,
+    out_param: *mut T,
+    len: usize,
+) -> ffi::c_int {
+    // SAFETY: `name` is non-null and null-terminated.
+    // `fwnode.as_raw` is valid because `fwnode` is valid.
+    // `out_param` is valid and has enough space for at least
+    // `len` number of elements as per the safety requirement.
+    unsafe {
+        T::read_array_from_fwnode_property(fwnode.as_raw(), name.as_char_ptr(), out_param, len)
+    }
+}
+impl<T: PropertyInt, const N: usize> Property for [T; N] {
+    fn read_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<Self> {
+        let mut val: [MaybeUninit<T>; N] = [const { MaybeUninit::uninit() }; N];
+
+        // SAFETY: `val.as_mut_ptr()` is valid and points to enough space for
+        // `N` elements. Casting from `*mut MaybeUninit<T>` to `*mut T` is safe
+        // because `MaybeUninit<T>` has the same memory layout as `T`.
+        let ret = unsafe { read_array_out_param::<T>(fwnode, name, val.as_mut_ptr().cast(), N) };
+        to_result(ret)?;
+
+        // SAFETY: `val` is always initialized when
+        // fwnode_property_read_<T>_array is successful.
+        Ok(val.map(|v| unsafe { v.assume_init() }))
+    }
+}
+impl<T: PropertyInt> Property for T {
+    fn read_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<Self> {
+        let val: [_; 1] = <[T; 1] as Property>::read_from_fwnode_property(fwnode, name)?;
+        Ok(val[0])
     }
 }
 
