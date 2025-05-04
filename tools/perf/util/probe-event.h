@@ -10,6 +10,7 @@ struct nsinfo;
 
 /* Probe related configurations */
 struct probe_conf {
+	bool	quiet;
 	bool	show_ext_vars;
 	bool	show_location_range;
 	bool	force_add;

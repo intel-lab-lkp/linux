@@ -391,7 +391,7 @@ static int perf_add_probe_events(struct perf_probe_event *pevs, int npevs)
 	}
 
 	/* Note that it is possible to skip all events because of blacklist */
-	if (event) {
+	if (event && !probe_conf.quiet) {
 #ifndef HAVE_LIBTRACEEVENT
 		pr_info("\nperf is not linked with libtraceevent, to use the new probe you can use tracefs:\n\n");
 		pr_info("\tcd /sys/kernel/tracing/\n");
@@ -467,8 +467,11 @@ static int perf_del_probe_events(struct strfilter *filter)
 
 	ret = probe_file__get_events(kfd, filter, klist);
 	if (ret == 0) {
-		strlist__for_each_entry(ent, klist)
+		strlist__for_each_entry(ent, klist) {
+			if (probe_conf.quiet)
+				continue;
 			pr_info("Removed event: %s\n", ent->s);
+		}
 
 		ret = probe_file__del_strlist(kfd, klist);
 		if (ret < 0)
@@ -478,8 +481,11 @@ static int perf_del_probe_events(struct strfilter *filter)
 
 	ret2 = probe_file__get_events(ufd, filter, ulist);
 	if (ret2 == 0) {
-		strlist__for_each_entry(ent, ulist)
+		strlist__for_each_entry(ent, ulist) {
+			if (probe_conf.quiet)
+				continue;
 			pr_info("Removed event: %s\n", ent->s);
+		}
 
 		ret2 = probe_file__del_strlist(ufd, ulist);
 		if (ret2 < 0)
@@ -531,7 +537,7 @@ __cmd_probe(int argc, const char **argv)
 	struct option options[] = {
 	OPT_INCR('v', "verbose", &verbose,
 		    "be more verbose (show parsed arguments, etc)"),
-	OPT_BOOLEAN('q', "quiet", &quiet,
+	OPT_BOOLEAN('q', "quiet", &probe_conf.quiet,
 		    "be quiet (do not show any warnings or messages)"),
 	OPT_CALLBACK_DEFAULT('l', "list", NULL, "[GROUP:]EVENT",
 			     "list up probe events",
@@ -631,7 +637,7 @@ __cmd_probe(int argc, const char **argv)
 	argc = parse_options(argc, argv, options, probe_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
-	if (quiet) {
+	if (probe_conf.quiet) {
 		if (verbose != 0) {
 			pr_err("  Error: -v and -q are exclusive.\n");
 			return -EINVAL;
