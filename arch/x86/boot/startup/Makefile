@@ -35,9 +35,17 @@ $(patsubst %.o,$(obj)/%.o,$(lib-y)): OBJECT_FILES_NON_STANDARD := y
 # code, or code that has explicitly been made accessible to it via a symbol
 # alias.
 #
-$(obj)/%.pi.o: OBJCOPYFLAGS := --prefix-symbols=__pi_
+$(obj)/%.pi.o: OBJCOPYFLAGS := --prefix-symbols=__pi_ --strip-debug \
+			       --remove-section=.rela__patchable_function_entries
 $(obj)/%.pi.o: $(obj)/%.o FORCE
-	$(call if_changed,objcopy)
+	$(call if_changed,piobjcopy)
+
+quiet_cmd_piobjcopy = $(quiet_cmd_objcopy)
+      cmd_piobjcopy = $(cmd_objcopy);				\
+        if $(READELF) -r $(@) | grep R_X86_64_64; then		\
+                echo "$@: R_X86_64_64 references not allowed in startup code" >&2; \
+                /bin/false;					\
+        fi
 
 extra-y		:= $(obj-y)
 obj-y		:= $(patsubst %.o,%.pi.o,$(obj-y))
