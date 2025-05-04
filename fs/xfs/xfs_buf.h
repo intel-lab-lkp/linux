@@ -383,6 +383,11 @@ int xfs_buf_reverify(struct xfs_buf *bp, const struct xfs_buf_ops *ops);
 bool xfs_verify_magic(struct xfs_buf *bp, __be32 dmagic);
 bool xfs_verify_magic16(struct xfs_buf *bp, __be16 dmagic);
 
+static inline int xfs_buftarg_sync(struct xfs_buftarg *btp)
+{
+	return sync_blockdev(btp->bt_bdev);
+}
+
 /* for xfs_buf_mem.c only: */
 int xfs_init_buftarg(struct xfs_buftarg *btp, size_t logical_sectorsize,
 		const char *descr);

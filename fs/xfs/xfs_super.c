@@ -521,6 +521,35 @@ xfs_open_devices(
 }
 
 /*
+ * Flush and invalidate all devices' pagecaches before reading any metadata
+ * because XFS doesn't use the bdev pagecache.
+ */
+STATIC int
+xfs_preflush_devices(
+	struct xfs_mount	*mp)
+{
+	int			error;
+
+	error = xfs_buftarg_sync(mp->m_ddev_targp);
+	if (error)
+		return error;
+
+	if (mp->m_logdev_targp && mp->m_logdev_targp != mp->m_ddev_targp) {
+		error = xfs_buftarg_sync(mp->m_ddev_targp);
+		if (error)
+			return error;
+	}
+
+	if (mp->m_rtdev_targp) {
+		error = xfs_buftarg_sync(mp->m_rtdev_targp);
+		if (error)
+			return error;
+	}
+
+	return 0;
+}
+
+/*
  * Setup xfs_mount buffer target pointers based on superblock
  */
 STATIC int
@@ -1671,6 +1700,10 @@ xfs_fs_fill_super(
 	error = xfs_open_devices(mp);
 	if (error)
 		return error;
+
+	error = xfs_preflush_devices(mp);
+	if (error)
+		goto out_shutdown_devices;
 
 	if (xfs_debugfs) {
 		mp->m_debugfs = xfs_debugfs_mkdir(mp->m_super->s_id,
