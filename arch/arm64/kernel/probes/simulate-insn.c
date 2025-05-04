@@ -13,6 +13,7 @@
 #include <asm/traps.h>
 
 #include "simulate-insn.h"
+#include "asm/gcs.h"
 
 #define bbl_displacement(insn)		\
 	sign_extend32(((insn) & 0x3ffffff) << 2, 27)
@@ -47,6 +48,20 @@ static inline u64 get_x_reg(struct pt_regs *regs, int reg)
 static inline u32 get_w_reg(struct pt_regs *regs, int reg)
 {
 	return lower_32_bits(pt_regs_read_reg(regs, reg));
+}
+
+static inline void update_lr(struct pt_regs *regs, long addr)
+{
+	int err = 0;
+
+	if (user_mode(regs) && task_gcs_el0_enabled(current)) {
+		push_user_gcs(addr + 4,	 &err);
+		if (err) {
+			force_sig(SIGSEGV);
+			return;
+		}
+	}
+	procedure_link_pointer_set(regs, addr + 4);
 }
 
 static bool __kprobes check_cbz(u32 opcode, struct pt_regs *regs)
@@ -107,9 +122,8 @@ simulate_b_bl(u32 opcode, long addr, struct pt_regs *regs)
 {
 	int disp = bbl_displacement(opcode);
 
-	/* Link register is x30 */
 	if (opcode & (1 << 31))
-		set_x_reg(regs, 30, addr + 4);
+		update_lr(regs, addr);
 
 	instruction_pointer_set(regs, addr + disp);
 }
@@ -133,17 +147,26 @@ simulate_br_blr(u32 opcode, long addr, struct pt_regs *regs)
 	/* update pc first in case we're doing a "blr lr" */
 	instruction_pointer_set(regs, get_x_reg(regs, xn));
 
-	/* Link register is x30 */
 	if (((opcode >> 21) & 0x3) == 1)
-		set_x_reg(regs, 30, addr + 4);
+		update_lr(regs, addr);
 }
 
 void __kprobes
 simulate_ret(u32 opcode, long addr, struct pt_regs *regs)
 {
-	int xn = (opcode >> 5) & 0x1f;
+	u64 ret_addr;
+	int err = 0;
+	unsigned long lr = procedure_link_pointer(regs);
 
-	instruction_pointer_set(regs, get_x_reg(regs, xn));
+	if (user_mode(regs) && task_gcs_el0_enabled(current)) {
+		ret_addr = pop_user_gcs(&err);
+		if (err || ret_addr != lr) {
+			force_sig(SIGSEGV);
+			return;
+		}
+	}
+
+	instruction_pointer_set(regs, lr);
 }
 
 void __kprobes
