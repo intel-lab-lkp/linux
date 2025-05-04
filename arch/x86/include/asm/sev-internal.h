@@ -84,6 +84,6 @@ static __always_inline void sev_es_wr_ghcb_msr(u64 val)
 
 bool sev_es_negotiate_protocol(void);
 bool sev_es_check_cpu_features(void);
-u64 get_hv_features(void);
+void check_hv_features(void);
 
 const struct snp_cpuid_table *snp_cpuid_get_table(void);
