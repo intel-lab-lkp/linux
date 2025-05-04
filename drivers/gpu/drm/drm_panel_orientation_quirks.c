@@ -58,7 +58,7 @@ static const struct drm_dmi_panel_orientation_data gpd_pocket2 = {
 	.width = 1200,
 	.height = 1920,
 	.bios_dates = (const char * const []){ "06/28/2018", "08/28/2018",
-		"12/07/2018", NULL },
+		"12/07/2018", "04/17/2020", NULL },
 	.orientation = DRM_MODE_PANEL_ORIENTATION_RIGHT_UP,
 };
 
