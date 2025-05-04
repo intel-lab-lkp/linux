@@ -32,7 +32,7 @@
  * ranges).
  *
  * There are some hardware limitations:
- * a) You cann't use mixture of unipolar/bipoar ranges or differencial/single
+ * a) You can't use mixture of unipolar/bipolar ranges or differencial/single
  *  ended inputs.
  * b) DMA transfers must have the length aligned to two samples (32 bit),
  *  so there is some problems if cmd->chanlist_len is odd. This driver tries
@@ -227,7 +227,7 @@ struct pci9118_private {
 	struct pci9118_dmabuf dmabuf[2];
 	int softsshdelay;		/*
 					 * >0 use software S&H,
-					 * numer is requested delay in ns
+					 * number is requested delay in ns
 					 */
 	unsigned char softsshsample;	/*
 					 * polarity of S&H signal
@@ -946,8 +946,8 @@ static int pci9118_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 	devpriv->ai_add_back = 0;
 	if (devpriv->master) {
 		devpriv->usedma = 1;
-		if ((cmd->flags & CMDF_WAKE_EOS) &&
-		    (cmd->scan_end_arg == 1)) {
+		if (cmd->flags & CMDF_WAKE_EOS &&
+		    cmd->scan_end_arg == 1) {
 			if (cmd->convert_src == TRIG_NOW)
 				devpriv->ai_add_back = 1;
 			if (cmd->convert_src == TRIG_TIMER) {
@@ -958,9 +958,9 @@ static int pci9118_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 					 */
 			}
 		}
-		if ((cmd->flags & CMDF_WAKE_EOS) &&
-		    (cmd->scan_end_arg & 1) &&
-		    (cmd->scan_end_arg > 1)) {
+		if (cmd->flags & CMDF_WAKE_EOS &&
+		    cmd->scan_end_arg & 1 &&
+		    cmd->scan_end_arg > 1) {
 			if (cmd->scan_begin_src == TRIG_FOLLOW) {
 				devpriv->usedma = 0;
 				/*
@@ -983,7 +983,7 @@ static int pci9118_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 	 */
 	if (cmd->convert_src == TRIG_NOW && devpriv->softsshdelay) {
 		devpriv->ai_add_front = 2;
-		if ((devpriv->usedma == 1) && (devpriv->ai_add_back == 1)) {
+		if (devpriv->usedma == 1 && devpriv->ai_add_back == 1) {
 							/* move it to front */
 			devpriv->ai_add_front++;
 			devpriv->ai_add_back = 0;
@@ -1185,7 +1185,7 @@ static int pci9118_ai_cmdtest(struct comedi_device *dev,
 	    (!(cmd->convert_src & (TRIG_TIMER | TRIG_NOW))))
 		err |= -EINVAL;
 
-	if ((cmd->scan_begin_src == TRIG_FOLLOW) &&
+	if (cmd->scan_begin_src == TRIG_FOLLOW &&
 	    (!(cmd->convert_src & (TRIG_TIMER | TRIG_EXT))))
 		err |= -EINVAL;
 
@@ -1210,8 +1210,8 @@ static int pci9118_ai_cmdtest(struct comedi_device *dev,
 	if (cmd->scan_begin_src & (TRIG_FOLLOW | TRIG_EXT))
 		err |= comedi_check_trigger_arg_is(&cmd->scan_begin_arg, 0);
 
-	if ((cmd->scan_begin_src == TRIG_TIMER) &&
-	    (cmd->convert_src == TRIG_TIMER) && (cmd->scan_end_arg == 1)) {
+	if (cmd->scan_begin_src == TRIG_TIMER &&
+	    cmd->convert_src == TRIG_TIMER && cmd->scan_end_arg == 1) {
 		cmd->scan_begin_src = TRIG_FOLLOW;
 		cmd->convert_arg = cmd->scan_begin_arg;
 		cmd->scan_begin_arg = 0;
@@ -1279,8 +1279,8 @@ static int pci9118_ai_cmdtest(struct comedi_device *dev,
 			} else {
 				arg = cmd->convert_arg * cmd->chanlist_len;
 			}
-			err |= comedi_check_trigger_arg_min(
-				&cmd->scan_begin_arg, arg);
+			err |= comedi_check_trigger_arg_min
+				(&cmd->scan_begin_arg, arg);
 		}
 	}
 
