@@ -9,6 +9,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/aer.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
@@ -1537,6 +1538,17 @@ static int pci_set_low_power_state(struct pci_dev *dev, pci_power_t state, bool 
 	/* Check if this device supports the desired state */
 	if ((state == PCI_D1 && !dev->d1_support)
 	   || (state == PCI_D2 && !dev->d2_support))
+		return -EIO;
+
+	/*
+	 * If error flags are set on an AER capable device, most likely either
+	 * the device recovery is in progress or has already failed. Neither of
+	 * the cases are well suited for power state transition of the device,
+	 * since this can lead to unpredictable consequences like resume
+	 * failure, or in worst case the device is lost because of it. Leave the
+	 * device in its existing power state to avoid such issues.
+	 */
+	if (pci_aer_in_progress(dev))
 		return -EIO;
 
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
