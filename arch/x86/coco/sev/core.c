@@ -501,14 +501,24 @@ static unsigned long __set_pages_state(struct snp_psc_desc *data, unsigned long 
 	return vaddr;
 }
 
+static bool __ref __early_set_pages_state(unsigned long vaddr,
+					  unsigned long npages, int op)
+{
+	/* Use the MSR protocol when a GHCB is not yet available. */
+	if (boot_ghcb || WARN_ON(system_state >= SYSTEM_FREEING_INITMEM))
+		return false;
+
+	early_set_pages_state(vaddr, __pa(vaddr), npages, op);
+	return true;
+}
+
 static void set_pages_state(unsigned long vaddr, unsigned long npages, int op)
 {
 	struct snp_psc_desc desc;
 	unsigned long vaddr_end;
 
-	/* Use the MSR protocol when a GHCB is not available. */
-	if (!boot_ghcb)
-		return early_set_pages_state(vaddr, __pa(vaddr), npages, op);
+	if (__early_set_pages_state(vaddr, npages, op))
+		return;
 
 	vaddr = vaddr & PAGE_MASK;
 	vaddr_end = vaddr + (npages << PAGE_SHIFT);
