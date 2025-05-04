@@ -1157,12 +1157,25 @@ static inline void pgalloc_tag_sub_pages(struct page *page, unsigned int nr)
 		this_cpu_sub(tag->counters->bytes, PAGE_SIZE * nr);
 }
 
+static inline void pgalloc_tag_add_pages(struct page *page, unsigned int nr)
+{
+	struct alloc_tag *tag;
+
+	if (!mem_alloc_profiling_enabled())
+		return;
+
+	tag = __pgalloc_tag_get(page);
+	if (tag)
+		this_cpu_add(tag->counters->bytes, PAGE_SIZE * nr);
+}
+
 #else /* CONFIG_MEM_ALLOC_PROFILING */
 
 static inline void pgalloc_tag_add(struct page *page, struct task_struct *task,
 				   unsigned int nr) {}
 static inline void pgalloc_tag_sub(struct page *page, unsigned int nr) {}
 static inline void pgalloc_tag_sub_pages(struct page *page, unsigned int nr) {}
+static inline void pgalloc_tag_add_pages(struct page *page, unsigned int nr) {}
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */
 
@@ -5062,11 +5075,28 @@ static void ___free_pages(struct page *page, unsigned int order,
 {
 	/* get PageHead before we drop reference */
 	int head = PageHead(page);
+	/*
+	 * For remaining pages other than the first page of
+	 * a non-compound allocation, we decrease its tag
+	 * pages in advance, in case the first page is released
+	 * by other thread inbetween our put_page_testzero and any
+	 * accounting behavior afterwards.
+	 */
+	unsigned int remaining_tag_pages = 0;
 
-	if (put_page_testzero(page))
+	if (order > 0 && !head) {
+		if (unlikely(page_ref_count(page) > 1)) {
+			remaining_tag_pages = (1 << order) - 1;
+			pgalloc_tag_sub_pages(page, remaining_tag_pages);
+		}
+	}
+
+	if (put_page_testzero(page)) {
+		/* no need special treat for remaining pages, add it back. */
+		if (unlikely(remaining_tag_pages > 0))
+			pgalloc_tag_add_pages(page, remaining_tag_pages);
 		__free_frozen_pages(page, order, fpi_flags);
-	else if (!head) {
-		pgalloc_tag_sub_pages(page, (1 << order) - 1);
+	} else if (!head) {
 		while (order-- > 0)
 			__free_frozen_pages(page + (1 << order), order,
 					    fpi_flags);
