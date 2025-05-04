@@ -6,7 +6,10 @@
 
 #ifndef __ASSEMBLER__
 #include <linux/types.h>
+#include <asm/alternative.h>
+#include <asm/cpufeatures.h>
 #include <asm/kaslr.h>
+#include <asm/processor-flags.h>
 
 /*
  * These are used to make use of C type-checking..
@@ -21,28 +24,24 @@ typedef unsigned long	pgprotval_t;
 typedef struct { pteval_t pte; } pte_t;
 typedef struct { pmdval_t pmd; } pmd_t;
 
-extern unsigned int __pgtable_l5_enabled;
-
-#ifdef CONFIG_X86_5LEVEL
-#ifdef USE_EARLY_PGTABLE_L5
-/*
- * cpu_feature_enabled() is not available in early boot code.
- * Use variable instead.
- */
-static inline bool pgtable_l5_enabled(void)
+static __always_inline __pure bool pgtable_l5_enabled(void)
 {
-	return __pgtable_l5_enabled;
+	unsigned long r;
+	bool ret;
+
+	if (!IS_ENABLED(CONFIG_X86_5LEVEL))
+		return false;
+
+	asm(ALTERNATIVE_TERNARY(
+		 "movq %%cr4, %[reg] \n\t btl %[la57], %k[reg]" CC_SET(c),
+		 %P[feat], "stc", "clc")
+		 : [reg] "=&r" (r), CC_OUT(c) (ret)
+		 : [feat] "i"  (X86_FEATURE_LA57),
+		   [la57] "i"  (X86_CR4_LA57_BIT)
+		 : "cc");
+
+	return ret;
 }
-#else
-#define pgtable_l5_enabled() cpu_feature_enabled(X86_FEATURE_LA57)
-#endif /* USE_EARLY_PGTABLE_L5 */
-
-#else
-#define pgtable_l5_enabled() 0
-#endif /* CONFIG_X86_5LEVEL */
-
-extern unsigned int pgdir_shift;
-extern unsigned int ptrs_per_p4d;
 
 #endif	/* !__ASSEMBLER__ */
 
@@ -53,7 +52,7 @@ extern unsigned int ptrs_per_p4d;
 /*
  * PGDIR_SHIFT determines what a top-level page table entry can map
  */
-#define PGDIR_SHIFT	pgdir_shift
+#define PGDIR_SHIFT	(pgtable_l5_enabled() ? 48 : 39)
 #define PTRS_PER_PGD	512
 
 /*
@@ -61,7 +60,7 @@ extern unsigned int ptrs_per_p4d;
  */
 #define P4D_SHIFT		39
 #define MAX_PTRS_PER_P4D	512
-#define PTRS_PER_P4D		ptrs_per_p4d
+#define PTRS_PER_P4D		(pgtable_l5_enabled() ? 512 : 1)
 #define P4D_SIZE		(_AC(1, UL) << P4D_SHIFT)
 #define P4D_MASK		(~(P4D_SIZE - 1))
 
@@ -75,6 +74,8 @@ extern unsigned int ptrs_per_p4d;
 #define PGDIR_SHIFT		39
 #define PTRS_PER_PGD		512
 #define MAX_PTRS_PER_P4D	1
+
+#define MAX_POSSIBLE_PHYSMEM_BITS      46
 
 #endif /* CONFIG_X86_5LEVEL */
 

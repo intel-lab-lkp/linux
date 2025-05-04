@@ -16,19 +16,9 @@ extern unsigned int next_early_pgt;
 
 static inline bool check_la57_support(void)
 {
-	if (!IS_ENABLED(CONFIG_X86_5LEVEL))
+	if (!pgtable_l5_enabled())
 		return false;
 
-	/*
-	 * 5-level paging is detected and enabled at kernel decompression
-	 * stage. Only check if it has been enabled there.
-	 */
-	if (!(native_read_cr4() & X86_CR4_LA57))
-		return false;
-
-	__pgtable_l5_enabled	= 1;
-	pgdir_shift		= 48;
-	ptrs_per_p4d		= 512;
 	page_offset_base	= __PAGE_OFFSET_BASE_L5;
 	vmalloc_base		= __VMALLOC_BASE_L5;
 	vmemmap_base		= __VMEMMAP_BASE_L5;
