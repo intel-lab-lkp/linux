@@ -1240,18 +1240,18 @@ void amd_check_microcode(void)
 }
 
 static const char * const s5_reset_reason_txt[] = {
-	[0] = "thermal pin BP_THERMTRIP_L was tripped",
-	[1] = "power button was pressed for 4 seconds",
-	[2] = "shutdown pin was shorted",
-	[4] = "remote ASF power off command was received",
-	[9] = "internal CPU thermal limit was tripped",
+	[0]  = "thermal pin BP_THERMTRIP_L was tripped",
+	[1]  = "power button was pressed for 4 seconds",
+	[2]  = "shutdown pin was tripped",
+	[4]  = "remote ASF power off command was received",
+	[9]  = "internal CPU thermal limit was tripped",
 	[16] = "system reset pin BP_SYS_RST_L was tripped",
 	[17] = "software issued PCI reset",
 	[18] = "software wrote 0x4 to reset control register 0xCF9",
 	[19] = "software wrote 0x6 to reset control register 0xCF9",
 	[20] = "software wrote 0xE to reset control register 0xCF9",
 	[21] = "ACPI power state transition occurred",
-	[22] = "keyboard reset pin KB_RST_L was asserted",
+	[22] = "keyboard reset pin KB_RST_L was tripped",
 	[23] = "internal CPU shutdown event occurred",
 	[24] = "system failed to boot before failed boot timer expired",
 	[25] = "hardware watchdog timer expired",
@@ -1282,9 +1282,10 @@ static __init int print_s5_reset_status_mmio(void)
 		if (!(value & BIT(i)))
 			continue;
 
-		if (s5_reset_reason_txt[i])
+		if (s5_reset_reason_txt[i]) {
 			pr_info("x86/amd: Previous system reset reason [0x%08lx]: %s\n",
 				value, s5_reset_reason_txt[i]);
+		}
 	}
 
 	return 0;
