@@ -5968,8 +5968,7 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 		return STRIPE_FAIL;
 	}
 
-	if (unlikely(previous) &&
-	    stripe_ahead_of_reshape(mddev, conf, sh)) {
+	if (unlikely(previous && !stripe_ahead_of_reshape(mddev, conf, sh))) {
 		/*
 		 * Expansion moved on while waiting for a stripe.
 		 * Expansion could still move past after this
