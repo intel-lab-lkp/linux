@@ -480,8 +480,9 @@
 			reg = <0x0 0x23400000 0x0 0x400000>;
 			clocks = <&cru CLK_REF_USB3OTG1>,
 				 <&cru CLK_SUSPEND_USB3OTG1>,
-				 <&cru ACLK_USB3OTG1>;
-			clock-names = "ref_clk", "suspend_clk", "bus_clk";
+				 <&cru ACLK_USB3OTG1>,
+				 <&u2phy1>;
+			clock-names = "ref_clk", "suspend_clk", "bus_clk", "utmi";
 			interrupts = <GIC_SPI 260 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&power RK3576_PD_PHP>;
 			resets = <&cru SRST_A_USB3OTG1>;
