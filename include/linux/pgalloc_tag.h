@@ -188,6 +188,13 @@ static inline struct alloc_tag *__pgalloc_tag_get(struct page *page)
 	return tag;
 }
 
+static inline struct alloc_tag *pgalloc_tag_get(struct page *page)
+{
+	if (mem_alloc_profiling_enabled())
+		return __pgalloc_tag_get(page);
+	return NULL;
+}
+
 void pgalloc_tag_split(struct folio *folio, int old_order, int new_order);
 void pgalloc_tag_swap(struct folio *new, struct folio *old);
 
