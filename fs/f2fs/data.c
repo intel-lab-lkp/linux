@@ -2930,10 +2930,10 @@ redirty_out:
 	 * file_write_and_wait_range() will see EIO error, which is critical
 	 * to return value of fsync() followed by atomic_write failure to user.
 	 */
-	if (!err || wbc->for_reclaim)
-		return AOP_WRITEPAGE_ACTIVATE;
 	folio_unlock(folio);
-	return err;
+	if (err && !wbc->for_reclaim)
+		return err;
+	return 0;
 }
 
 /*
@@ -3146,8 +3146,6 @@ continue_unlock:
 			ret = f2fs_write_single_data_page(folio,
 					&submitted, &bio, &last_block,
 					wbc, io_type, 0, true);
-			if (ret == AOP_WRITEPAGE_ACTIVATE)
-				folio_unlock(folio);
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 result:
 #endif
@@ -3159,10 +3157,7 @@ result:
 				 * keep nr_to_write, since vfs uses this to
 				 * get # of written pages.
 				 */
-				if (ret == AOP_WRITEPAGE_ACTIVATE) {
-					ret = 0;
-					goto next;
-				} else if (ret == -EAGAIN) {
+				if (ret == -EAGAIN) {
 					ret = 0;
 					if (wbc->sync_mode == WB_SYNC_ALL) {
 						f2fs_io_schedule_timeout(

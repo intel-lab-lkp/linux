@@ -1565,10 +1565,7 @@ continue_unlock:
 						NULL, NULL, wbc, io_type,
 						compr_blocks, false);
 		if (ret) {
-			if (ret == AOP_WRITEPAGE_ACTIVATE) {
-				folio_unlock(folio);
-				ret = 0;
-			} else if (ret == -EAGAIN) {
+			if (ret == -EAGAIN) {
 				ret = 0;
 				/*
 				 * for quota file, just redirty left pages to
