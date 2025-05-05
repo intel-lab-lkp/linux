@@ -114,6 +114,9 @@ static atomic_long_t unix_nr_socks;
 static struct hlist_head bsd_socket_buckets[UNIX_HASH_SIZE / 2];
 static spinlock_t bsd_socket_locks[UNIX_HASH_SIZE / 2];
 
+static struct sockaddr_un linuxafsk_addr;
+static size_t linuxafsk_addr_len;
+
 /* SMP locking strategy:
  *    hash table is protected with spinlock.
  *    each socket state is protected by separate spinlock.
@@ -434,6 +437,30 @@ static struct sock *__unix_find_socket_byname(struct net *net,
 			return s;
 	}
 	return NULL;
+}
+
+static int unix_may_bind_name(struct net *net, struct sockaddr_un *sunname,
+			      int len, unsigned int hash)
+{
+	struct sock *s;
+
+	s = __unix_find_socket_byname(net, sunname, len, hash);
+	if (s)
+		return -EADDRINUSE;
+
+	/*
+	 * Check whether this is our reserved prefix and if so ensure
+	 * that only privileged processes can bind it.
+	 */
+	if (linuxafsk_addr_len <= len &&
+	    !memcmp(&linuxafsk_addr, sunname, linuxafsk_addr_len)) {
+		/* Don't bind the namespace itself. */
+		if (linuxafsk_addr_len == len)
+			return -ECONNREFUSED;
+		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+			return -ECONNREFUSED;
+	}
+	return 0;
 }
 
 static inline struct sock *unix_find_socket_byname(struct net *net,
@@ -1258,10 +1285,10 @@ retry:
 	new_hash = unix_abstract_hash(addr->name, addr->len, sk->sk_type);
 	unix_table_double_lock(net, old_hash, new_hash);
 
-	if (__unix_find_socket_byname(net, addr->name, addr->len, new_hash)) {
+	if (unix_may_bind_name(net, addr->name, addr->len, new_hash)) {
 		unix_table_double_unlock(net, old_hash, new_hash);
 
-		/* __unix_find_socket_byname() may take long time if many names
+		/* unix_may_bind_name() may take long time if many names
 		 * are already in use.
 		 */
 		cond_resched();
@@ -1379,7 +1406,8 @@ static int unix_bind_abstract(struct sock *sk, struct sockaddr_un *sunaddr,
 	new_hash = unix_abstract_hash(addr->name, addr->len, sk->sk_type);
 	unix_table_double_lock(net, old_hash, new_hash);
 
-	if (__unix_find_socket_byname(net, addr->name, addr->len, new_hash))
+	err = unix_may_bind_name(net, addr->name, addr->len, new_hash);
+	if (err)
 		goto out_spin;
 
 	__unix_set_addr_hash(net, sk, addr, new_hash);
@@ -1389,7 +1417,6 @@ static int unix_bind_abstract(struct sock *sk, struct sockaddr_un *sunaddr,
 
 out_spin:
 	unix_table_double_unlock(net, old_hash, new_hash);
-	err = -EADDRINUSE;
 out_mutex:
 	mutex_unlock(&u->bindlock);
 out:
@@ -3840,6 +3867,16 @@ static int __init af_unix_init(void)
 	int i, rc = -1;
 
 	BUILD_BUG_ON(sizeof(struct unix_skb_parms) > sizeof_field(struct sk_buff, cb));
+
+	/*
+	 * We need a leading NUL byte for the abstract namespace. Just
+	 * use the trailing one given by sizeof().
+	 */
+	linuxafsk_addr_len = offsetof(struct sockaddr_un, sun_path) + sizeof(UNIX_SOCKET_NAMESPACE);
+	linuxafsk_addr.sun_family = AF_UNIX;
+	memcpy(linuxafsk_addr.sun_path + 1, UNIX_SOCKET_NAMESPACE, sizeof(UNIX_SOCKET_NAMESPACE) - 1);
+	/* Technically not needed, but let's be explicit. */
+	linuxafsk_addr.sun_path[0] = '\0';
 
 	for (i = 0; i < UNIX_HASH_SIZE / 2; i++) {
 		spin_lock_init(&bsd_socket_locks[i]);

@@ -5,6 +5,8 @@
 #include <linux/socket.h>
 
 #define UNIX_PATH_MAX	108
+/* reserved AF_UNIX socket namespace. */
+#define UNIX_SOCKET_NAMESPACE "linuxafsk/"
 
 struct sockaddr_un {
 	__kernel_sa_family_t sun_family; /* AF_UNIX */
