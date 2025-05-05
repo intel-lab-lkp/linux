@@ -100,15 +100,6 @@ out:
 	return state;
 }
 
-static void vgetrandom_put_state(void *state)
-{
-	if (!state)
-		return;
-	pthread_mutex_lock(&vgrnd.lock);
-	vgrnd.states[vgrnd.len++] = state;
-	pthread_mutex_unlock(&vgrnd.lock);
-}
-
 static void vgetrandom_init(void)
 {
 	const char *version = versions[VDSO_VERSION];
@@ -264,7 +255,7 @@ static void kselftest(void)
 	}
 	for (;;) {
 		struct ptrace_syscall_info info = { 0 };
-		int status, ret;
+		int status;
 		ksft_assert(waitpid(child, &status, 0) >= 0);
 		if (WIFEXITED(status)) {
 			ksft_assert(WEXITSTATUS(status) == 0);
