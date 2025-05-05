@@ -1,0 +1,149 @@
+What:		/sys/bus/iio/devices/iio:deviceX/events/self_cal
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The device offers self-calibration for the gyroscope sensitivity error and the gyroscope offset. 
+		self-calibration to reduce the gyroscope sensitivity error is also known as component re-trim (CRT).
+		The self-calibration ABI will run the calibration routine and update the data path registers in the device.
+		Before initiating the self-calibration, the accelerometer is required to be enabled in high performance
+		mode with a sample rate preferred in the range of 25 Hz up to 200 Hz and the alternative sensor
+		configurations for accelerometer and gyroscope must be disabled.
+		If these preconditions are not fulfilled, the driver will make sure they are fulfilled by changing appropriate 
+		register values and then restore the configuration after the self-calibration has been performed.
+		The self-calibration can be triggered by writing '1' to the sysfs entry.
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/self_test
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The self-test of the device checks for a correct function of the accelerometer as well as the gyroscope. 
+		The execution of the self-test expects the following prerequisites to be fulfilled. 
+		For the self-test, the accelerometer must be configured to high performance mode at least, and the
+		alternative sensor configurations for accelerometer and gyroscope must be disabled. If these preconditions 
+		are not fulfilled, the driver will make sure they are fulfilled by changing appropriate register values 
+		and then restore the configuration after the self-test has been performed.
+		Once a self test is initiated, the output of data of the device to the registers and FIFO data buffer 
+		as well as all features are disabled. While the self-test is in progress, the host is not allowed to modify 
+		the configuration of the device.
+		The self-test can be triggered by writing '1' to the sysfs entry.
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/soft_reset
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The softreset performs a fundamental reset to the device which is largely equivalent to a power cycle. 
+ 		Following a delay, all user configuration settings are overwritten with their default state wherever applicable. 
+ 		To access the serial interface after a soft reset, the same timing constraints apply as for power on.
+ 		The soft-reset can be triggered by writing '1' to the sysfs entry.
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/control_auto_op_mode
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The auto-operation mode change is a built-in feature to support the smart power management of the device. 
+		The function provides automatic switching among two sets of operation modes for its accelerometer and gyroscope. 
+		In the following, the one set of configurations consists of ACC_CONF and GYR_CONF for the accelerometer and gyroscope 
+		and is called user configuration. The other set sensor of configurations consists of ALT_ACC_CONF and ALT_GYR_CONF, 
+		and is called alternative configuration. The switching is initiated by events of enabled advanced features 
+		or by commands sent from the host to switch from alternative configuration to user configuration.
+		The advanced feature engine and interrupts must be enabled for the auto-operation mode to take effect. 
+		Available options:
+		0 - Enables switching possiblility to alternate configuration for accelerometer
+		1 - Enables switching possiblility to alternate configuration for gyroscope
+		2 - Enables switching possiblility to alternate configuration for accelerometer and gyroscope
+		3 - Disables auto-operation mode change
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/set_auto_op_mode_cond
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The conditions to switch operation mode must be configured by selecting one of the advanced features 
+		that will trigger the auto-operation mode change. 
+		The same advanced feature cannot be selected as a trigger for both user configuration and alternative configuration.
+		Available options:
+		0 - Change to user settings by A_NO_MOTION
+		1 - Change to user settings by A_ANY_MOTION
+		2 - Change to user settings by H_TILT_DETECTION
+		3 - Change to alternative settings by A_NO_MOTION
+		4 - Change to alternative settings by A_ANY_MOTION
+		5 - Change to alternative settings by H_TILT_DETECTION
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/config_user_overwrite
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		The configurations of the sensors can be instantly reset to the user configuration by directly writing 
+		to either ACC_CONF or GYR_CONF, if the option is enabled.
+		Available options:
+		0 - No mode change when writing to ACC_CONF or GYR_CONF
+		1 - Any write to ACC_CONF or GYR_CONF will instanly switch back to associated user configuration
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_status
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Reports the active configuration for the accelerometer and gyroscope.
+		Available options:
+		0x00 - ACC_CONF and GYR_CONF are used
+		0x01 - ALT_ACC_CONF and GYR_CONF are used
+		0x10 - ACC_CONF and ALT_GYR_CONF are used
+		0x11 - ALT_ACC_CONF and ALT_GYR_CONF are used
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_odr
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Set alternative output data rate (for accelerometer and gyroscope).
+		Available options:
+		0 - 0.78125 Hz
+		1 - 1.5625 Hz
+		3 - 3.125 Hz
+		6 - 6.25 Hz
+		12 - 12.5 Hz
+		25 - 25 Hz
+		50 - 50 Hz
+		100 - 100 Hz
+		200 - 200 Hz
+		400 - 400 Hz
+		800 - 800 Hz
+		1600 - 1600 Hz
+		3200 - 3200 Hz
+		6400 - 6400 Hz
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_acc_mode
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Set alternative accelerometer power mode.
+		Available options:
+		0 - Suspend
+		3 - Low power
+		4 - Normal
+		7 - Performance
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_gyr_mode
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Set alternative gyroscope power mode.
+		Available options:
+		0 - Suspend
+		3 - Low power
+		4 - Normal
+		7 - Performance
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_acc_avg_num
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Set alternative accelerometer averaging number.
+		Available options:
+		1, 2, 4, 8, 16, 32, 64
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/alt_gyr_avg_num
+KernelVersion:	6.16
+Contact:	Stefan.Gutmann@de.bosch.com
+Description:
+		Set alternative gyroscope averaging number.
+		Available options:
+		1, 2, 4, 8, 16, 32, 64
