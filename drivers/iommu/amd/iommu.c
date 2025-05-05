@@ -241,7 +241,8 @@ static inline int get_acpihid_device_id(struct device *dev,
 					struct acpihid_map_entry **entry)
 {
 	struct acpi_device *adev = ACPI_COMPANION(dev);
-	struct acpihid_map_entry *p;
+	struct acpihid_map_entry *p, *p1;
+	bool fw_bug;
 
 	if (!adev)
 		return -ENODEV;
@@ -249,11 +250,26 @@ static inline int get_acpihid_device_id(struct device *dev,
 	list_for_each_entry(p, &acpihid_map, list) {
 		if (acpi_dev_hid_uid_match(adev, p->hid,
 					   p->uid[0] ? p->uid : NULL)) {
-			if (entry)
-				*entry = p;
-			return p->devid;
+			p1 = p;
+			fw_bug = false;
+			break;
+		}
+
+		/* In ase there is no UID match, but exactly one HID match */
+		if (acpi_dev_hid_match(adev, p->hid)) {
+			p1 = p;
+			fw_bug = true;
 		}
 	}
+
+	if (p1) {
+		if (fw_bug)
+			dev_err_once(dev, FW_BUG "No matching UID in ACPI tables, but found matching HID.\n");
+		if (entry)
+			*entry = p1;
+		return p1->devid;
+	}
+
 	return -EINVAL;
 }
 
