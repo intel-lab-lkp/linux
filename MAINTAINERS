@@ -3065,10 +3065,10 @@ F:	arch/arm64/boot/dts/renesas/
 F:	arch/arm64/configs/renesas_defconfig
 F:	arch/riscv/boot/dts/renesas/
 F:	arch/riscv/configs/rzfive_defconfig
-F:	drivers/nvmem/rcar-efuse.c
 F:	drivers/pmdomain/renesas/
 F:	drivers/soc/renesas/
 F:	include/linux/soc/renesas/
+N:	rcar
 K:	\brenesas,
 
 ARM/RISCPC ARCHITECTURE
@@ -22742,9 +22742,15 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/broonie/sound.git
 F:	Documentation/devicetree/bindings/sound/
 F:	Documentation/sound/soc/
 F:	include/dt-bindings/sound/
+F:	include/sound/cs-amp-lib.h
+F:	include/sound/cs35l*
+F:	include/sound/cs4271.h
+F:	include/sound/cs42l*
+F:	include/sound/madera-pdata.h
 F:	include/sound/soc*
 F:	include/sound/sof.h
 F:	include/sound/sof/
+F:	include/sound/wm*.h
 F:	include/trace/events/sof*.h
 F:	include/uapi/sound/asoc.h
 F:	sound/soc/
