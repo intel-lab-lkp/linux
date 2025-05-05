@@ -82,6 +82,9 @@ void __cold extent_buffer_free_cachep(void);
 struct extent_buffer {
 	u64 start;
 	u32 folio_size;
+	u8 folio_shift;
+	/* >= 0 if eb belongs to a log tree, -1 otherwise */
+	s8 log_index;
 	unsigned long bflags;
 	struct btrfs_fs_info *fs_info;
 
@@ -94,9 +97,6 @@ struct extent_buffer {
 	spinlock_t refs_lock;
 	atomic_t refs;
 	int read_mirror;
-	/* >= 0 if eb belongs to a log tree, -1 otherwise */
-	s8 log_index;
-	u8 folio_shift;
 	struct rcu_head rcu_head;
 
 	struct rw_semaphore lock;
