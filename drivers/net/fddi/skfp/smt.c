@@ -1857,7 +1857,8 @@ static void smt_string_swap(char *data, const char *format, int len)
 			open_paren = format ;
 			break ;
 		case ']' :
-			format = open_paren ;
+			if (open_paren)
+				format = open_paren ;
 			break ;
 		case '1' :
 		case '2' :
