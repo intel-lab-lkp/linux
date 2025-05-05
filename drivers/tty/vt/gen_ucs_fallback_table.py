@@ -666,12 +666,11 @@ def collect_drawing_character_mappings():
     fallback_map[0x2746] = ord('*')  # ❆ HEAVY CHEVRON SNOWFLAKE
     fallback_map[0x2698] = ord('*')  # ⚘ FLOWER
 
-    # Add special ASCII characters with full-width equivalents
-    # Map between full-width and ASCII forms
-    for i, cp in enumerate(range(0xFF01, 0xFF5E+1)):
-        # Full-width to ASCII mapping (covering all printable ASCII 33-126)
-        # 0xFF01 (！) to 0xFF5E (～) -> ASCII 33 (!) to 126 (~)
-        fallback_map[cp] = 33 + i
+    # Full-width to ASCII mapping (covering all printable ASCII 33-126)
+    # 0xFF01 (！) to 0xFF5E (～) -> ASCII 33 (!) to 126 (~)
+    # Those are not included here to reduce the table size.
+    # It is more efficient to process them programmatically in
+    # ucs.c:ucs_get_fallback().
 
     return fallback_map
 
