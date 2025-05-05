@@ -631,7 +631,8 @@ void btrfs_meta_folio_set_##name(struct folio *folio, const struct extent_buffer
 		folio_set_func(folio);					\
 		return;							\
 	}								\
-	btrfs_subpage_set_##name(eb->fs_info, folio, eb->start, eb->len); \
+	btrfs_subpage_set_##name(eb->fs_info, folio, eb->start,		\
+				 eb->fs_info->nodesize);		\
 }									\
 void btrfs_meta_folio_clear_##name(struct folio *folio, const struct extent_buffer *eb) \
 {									\
@@ -639,13 +640,15 @@ void btrfs_meta_folio_clear_##name(struct folio *folio, const struct extent_buff
 		folio_clear_func(folio);				\
 		return;							\
 	}								\
-	btrfs_subpage_clear_##name(eb->fs_info, folio, eb->start, eb->len); \
+	btrfs_subpage_clear_##name(eb->fs_info, folio, eb->start,	\
+				   eb->fs_info->nodesize);		\
 }									\
 bool btrfs_meta_folio_test_##name(struct folio *folio, const struct extent_buffer *eb) \
 {									\
 	if (!btrfs_meta_is_subpage(eb->fs_info))			\
 		return folio_test_func(folio);				\
-	return btrfs_subpage_test_##name(eb->fs_info, folio, eb->start, eb->len); \
+	return btrfs_subpage_test_##name(eb->fs_info, folio, eb->start,	\
+					 eb->fs_info->nodesize);	\
 }
 IMPLEMENT_BTRFS_PAGE_OPS(uptodate, folio_mark_uptodate, folio_clear_uptodate,
 			 folio_test_uptodate);
@@ -765,7 +768,8 @@ bool btrfs_meta_folio_clear_and_test_dirty(struct folio *folio, const struct ext
 		return true;
 	}
 
-	last = btrfs_subpage_clear_and_test_dirty(eb->fs_info, folio, eb->start, eb->len);
+	last = btrfs_subpage_clear_and_test_dirty(eb->fs_info, folio, eb->start,
+						  eb->fs_info->nodesize);
 	if (last) {
 		folio_clear_dirty_for_io(folio);
 		return true;

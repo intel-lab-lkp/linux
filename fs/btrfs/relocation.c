@@ -4352,7 +4352,7 @@ int btrfs_reloc_cow_block(struct btrfs_trans_handle *trans,
 			mark_block_processed(rc, node);
 
 		if (first_cow && level > 0)
-			rc->nodes_relocated += buf->len;
+			rc->nodes_relocated += fs_info->nodesize;
 	}
 
 	if (level == 0 && first_cow && rc->stage == UPDATE_DATA_PTRS)
