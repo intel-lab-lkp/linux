@@ -5,10 +5,13 @@
 #include <linux/limits.h>
 #include <pthread.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "../kselftest_harness.h"
+#include "../pidfd/pidfd.h"
 
 #define STACKDUMP_FILE "stack_values"
 #define STACKDUMP_SCRIPT "stackdump"
@@ -35,6 +38,7 @@ static void crashing_child(void)
 FIXTURE(coredump)
 {
 	char original_core_pattern[256];
+	pid_t pid_socat;
 };
 
 FIXTURE_SETUP(coredump)
@@ -44,6 +48,7 @@ FIXTURE_SETUP(coredump)
 	char *dir;
 	int ret;
 
+	self->pid_socat = -ESRCH;
 	file = fopen("/proc/sys/kernel/core_pattern", "r");
 	ASSERT_NE(NULL, file);
 
@@ -61,9 +66,14 @@ FIXTURE_TEARDOWN(coredump)
 {
 	const char *reason;
 	FILE *file;
-	int ret;
+	int ret, status;
 
 	unlink(STACKDUMP_FILE);
+
+	if (self->pid_socat > 0) {
+		kill(self->pid_socat, SIGTERM);
+		waitpid(self->pid_socat, &status, 0);
+	}
 
 	file = fopen("/proc/sys/kernel/core_pattern", "w");
 	if (!file) {
@@ -152,6 +162,65 @@ TEST_F_TIMEOUT(coredump, stackdump, 120)
 	ASSERT_EQ(i, 1 + NUM_THREAD_SPAWN);
 
 	fclose(file);
+}
+
+TEST_F(coredump, socket)
+{
+	int fd, pidfd, ret, status;
+	FILE *file;
+	pid_t pid, pid_socat;
+	struct stat st;
+	char core_file[PATH_MAX];
+	struct pidfd_info info = {};
+
+	ASSERT_EQ(unshare(CLONE_NEWNS), 0);
+	ASSERT_EQ(mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL), 0);
+	ASSERT_EQ(mount(NULL, "/tmp", "tmpfs", 0, NULL), 0);
+
+	pid_socat = fork();
+	ASSERT_GE(pid_socat, 0);
+	if (pid_socat == 0) {
+		execlp("socat", "socat",
+		       "abstract-listen:linuxafsk/coredump.socket,fork",
+		       "FILE:/tmp/coredump_file,create,append,trunc",
+		       (char *)NULL);
+		_exit(EXIT_FAILURE);
+	}
+	self->pid_socat = pid_socat;
+
+	file = fopen("/proc/sys/kernel/core_pattern", "w");
+	ASSERT_NE(NULL, file);
+
+	ret = fprintf(file, "@linuxafsk/coredump.socket");
+	ASSERT_EQ(ret, strlen("@linuxafsk/coredump.socket"));
+	ASSERT_EQ(fclose(file), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+	if (pid == 0)
+		crashing_child();
+
+	pidfd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(pidfd, 0);
+
+	waitpid(pid, &status, 0);
+	ASSERT_TRUE(WIFSIGNALED(status));
+	ASSERT_TRUE(WCOREDUMP(status));
+
+	info.mask = PIDFD_INFO_EXIT | PIDFD_INFO_COREDUMP;
+	ASSERT_EQ(ioctl(pidfd, PIDFD_GET_INFO, &info), 0);
+	ASSERT_GT((info.mask & PIDFD_INFO_COREDUMP), 0);
+	ASSERT_GT((info.coredump_mask & PIDFD_COREDUMPED), 0);
+
+	ASSERT_EQ(kill(pid_socat, SIGTERM), 0);
+	waitpid(pid_socat, &status, 0);
+	self->pid_socat = -ESRCH;
+	ASSERT_TRUE(WIFEXITED(status));
+	ASSERT_EQ(WEXITSTATUS(status), 143);
+
+	/* We should somehow validate the produced core file. */
+	ASSERT_EQ(stat("/tmp/coredump_file", &st), 0);
+	ASSERT_GT(st.st_size, 0);
 }
 
 TEST_HARNESS_MAIN
