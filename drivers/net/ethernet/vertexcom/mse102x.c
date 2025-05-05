@@ -522,9 +522,24 @@ static irqreturn_t mse102x_irq(int irq, void *_mse)
 
 static int mse102x_net_open(struct net_device *ndev)
 {
+	struct irq_data *irq_data = irq_get_irq_data(ndev->irq);
 	struct mse102x_net *mse = netdev_priv(ndev);
 	struct mse102x_net_spi *mses = to_mse102x_spi(mse);
 	int ret;
+
+	if (!irq_data) {
+		netdev_err(ndev, "Invalid IRQ: %d\n", ndev->irq);
+		return -EINVAL;
+	}
+
+	switch (irqd_get_trigger_type(irq_data)) {
+	case IRQ_TYPE_LEVEL_HIGH:
+	case IRQ_TYPE_LEVEL_LOW:
+		break;
+	default:
+		netdev_warn_once(ndev, "Only IRQ type level recommended, please update your firmware.\n");
+		break;
+	}
 
 	ret = request_threaded_irq(ndev->irq, NULL, mse102x_irq, IRQF_ONESHOT,
 				   ndev->name, mse);
