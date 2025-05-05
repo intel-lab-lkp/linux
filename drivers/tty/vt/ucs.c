@@ -44,13 +44,20 @@ static int interval32_cmp(const void *key, const void *element)
 	return 0;
 }
 
-static bool cp_in_range16(u16 cp, const struct ucs_interval16 *ranges, size_t size)
+static const struct ucs_interval16 *find_cp_in_range16(u16 cp,
+						       const struct ucs_interval16 *ranges,
+						       size_t size)
 {
 	if (cp < ranges[0].first || cp > ranges[size - 1].last)
-		return false;
+		return NULL;
 
 	return __inline_bsearch(&cp, ranges, size, sizeof(*ranges),
-				interval16_cmp) != NULL;
+				interval16_cmp);
+}
+
+static bool cp_in_range16(u16 cp, const struct ucs_interval16 *ranges, size_t size)
+{
+	return find_cp_in_range16(cp, ranges, size) != NULL;
 }
 
 static bool cp_in_range32(u32 cp, const struct ucs_interval32 *ranges, size_t size)
@@ -156,4 +163,64 @@ u32 ucs_recompose(u32 base, u32 mark)
 				 recomposition_cmp);
 
 	return result ? result->recomposed : 0;
+}
+
+/*
+ * The fallback tables are using struct ucs_interval16 or plain literals
+ * directly. We reuse interval16_cmp() for the former, but another compare
+ * function is needed in the singles case.
+ */
+
+#include "ucs_fallback_table.h"
+
+static int u16_cmp(const void *key, const void *element)
+{
+	u16 cp = *(u16 *)key;
+	u16 entry = *(u16 *)element;
+
+	if (cp < entry)
+		return -1;
+	if (cp > entry)
+		return 1;
+	return 0;
+}
+
+static u16 *find_cp_in_table16(u16 cp, const u16 *table, size_t size)
+{
+	if (cp < table[0] || cp > table[size - 1])
+		return NULL;
+
+	return __inline_bsearch(&cp, table, size, sizeof(u16), u16_cmp);
+}
+
+/**
+ * ucs_get_fallback() - Get a substitution for the provided Unicode character
+ * @base: Base Unicode code point (UCS-4)
+ *
+ * Get a simpler fallback character for the provided Unicode character.
+ * This is used for terminal display when corresponding glyph is unavailable.
+ * The substitution may not be as good as the actual glyph for the original
+ * character but still way more helpful than a squared question mark.
+ *
+ * Return: Fallback Unicode code point, or 0 if none is available
+ */
+u32 ucs_get_fallback(u32 cp)
+{
+	const struct ucs_interval16 *interval;
+	u16 *single;
+
+	if (!UCS_IS_BMP(cp))
+		return 0;
+
+	interval = find_cp_in_range16(cp, ucs_fallback_intervals,
+				      ARRAY_SIZE(ucs_fallback_intervals));
+	if (interval)
+		return ucs_fallback_intervals_subs[interval - ucs_fallback_intervals];
+
+	single = find_cp_in_table16(cp, ucs_fallback_singles,
+				    ARRAY_SIZE(ucs_fallback_singles));
+	if (single)
+		return ucs_fallback_singles_subs[single - ucs_fallback_singles];
+
+	return 0;
 }
