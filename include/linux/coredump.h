@@ -7,6 +7,8 @@
 #include <linux/fs.h>
 #include <asm/siginfo.h>
 
+struct sockaddr_un;
+
 #ifdef CONFIG_COREDUMP
 struct core_vma_metadata {
 	unsigned long start, end;
@@ -44,6 +46,9 @@ extern int dump_align(struct coredump_params *cprm, int align);
 int dump_user_range(struct coredump_params *cprm, unsigned long start,
 		    unsigned long len);
 extern void do_coredump(const kernel_siginfo_t *siginfo);
+bool unix_use_coredump_socket(const struct net *net, const struct pid *pid,
+			      const struct sockaddr_un *sunname,
+			      unsigned int len);
 
 /*
  * Logging for the coredump code, ratelimited.
@@ -64,6 +69,13 @@ extern void do_coredump(const kernel_siginfo_t *siginfo);
 
 #else
 static inline void do_coredump(const kernel_siginfo_t *siginfo) {}
+static inline bool unix_use_coredump_socket(const struct net *net,
+					    const struct pid *pid,
+					    const struct sockaddr_un *sunname,
+					    unsigned int len)
+{
+	return true;
+}
 
 #define coredump_report(...)
 #define coredump_report_failure(...)

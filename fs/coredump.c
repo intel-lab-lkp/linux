@@ -630,6 +630,31 @@ struct sockaddr_un coredump_unix_socket = {
 #define COREDUMP_UNIX_SOCKET_ADDR_SIZE            \
 	(offsetof(struct sockaddr_un, sun_path) + \
 	 sizeof("\0linuxafsk/coredump.socket") - 1)
+
+static inline bool is_coredump_socket(const struct sockaddr_un *sunname,
+				      unsigned int len)
+{
+	return (COREDUMP_UNIX_SOCKET_ADDR_SIZE == len) &&
+	       !memcmp(&coredump_unix_socket, sunname, len);
+}
+
+/*
+ * For the coredump socket in the initial network namespace we only
+ * allow actual coredumping processes to connect to it, i.e., the kernel
+ * itself.
+ */
+bool unix_use_coredump_socket(const struct net *net, const struct pid *pid,
+			      const struct sockaddr_un *sunname,
+			      unsigned int len)
+{
+	if (net != &init_net)
+		return true;
+
+	if (!is_coredump_socket(sunname, len))
+		return true;
+
+	return pidfs_pid_coredumped(pid);
+}
 #endif
 
 void do_coredump(const kernel_siginfo_t *siginfo)

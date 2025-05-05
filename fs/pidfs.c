@@ -258,6 +258,19 @@ static __u32 pidfs_coredump_mask(unsigned long mm_flags)
 	return 0;
 }
 
+bool pidfs_pid_coredumped(const struct pid *pid)
+{
+	struct inode *inode;
+
+	if (!pid)
+		return false;
+
+	/* We expect the caller to hold a reference to @pid->stashed. */
+	VFS_WARN_ON_ONCE(!pid->stashed);
+	inode = d_inode(pid->stashed);
+	return (READ_ONCE(pidfs_i(inode)->__pei.coredump_mask) & PIDFD_COREDUMPED);
+}
+
 static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct pidfd_info __user *uinfo = (struct pidfd_info __user *)arg;

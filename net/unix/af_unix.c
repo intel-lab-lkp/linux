@@ -101,6 +101,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <linux/coredump.h>
 #include <net/af_unix.h>
 #include <net/net_namespace.h>
 #include <net/scm.h>
@@ -1217,12 +1218,16 @@ fail:
 }
 
 static struct sock *unix_find_abstract(struct net *net,
+				       const struct pid *peer_pid,
 				       struct sockaddr_un *sunaddr,
 				       int addr_len, int type)
 {
 	unsigned int hash = unix_abstract_hash(sunaddr, addr_len, type);
 	struct dentry *dentry;
 	struct sock *sk;
+
+	if (!unix_use_coredump_socket(net, peer_pid, sunaddr, addr_len))
+		return ERR_PTR(-ECONNREFUSED);
 
 	sk = unix_find_socket_byname(net, sunaddr, addr_len, hash);
 	if (!sk)
@@ -1236,15 +1241,16 @@ static struct sock *unix_find_abstract(struct net *net,
 }
 
 static struct sock *unix_find_other(struct net *net,
-				    struct sockaddr_un *sunaddr,
-				    int addr_len, int type)
+				    const struct pid *peer_pid,
+				    struct sockaddr_un *sunaddr, int addr_len,
+				    int type)
 {
 	struct sock *sk;
 
 	if (sunaddr->sun_path[0])
 		sk = unix_find_bsd(sunaddr, addr_len, type);
 	else
-		sk = unix_find_abstract(net, sunaddr, addr_len, type);
+		sk = unix_find_abstract(net, peer_pid, sunaddr, addr_len, type);
 
 	return sk;
 }
@@ -1500,7 +1506,7 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 		}
 
 restart:
-		other = unix_find_other(sock_net(sk), sunaddr, alen, sock->type);
+		other = unix_find_other(sock_net(sk), NULL, sunaddr, alen, sock->type);
 		if (IS_ERR(other)) {
 			err = PTR_ERR(other);
 			goto out;
@@ -1647,7 +1653,8 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 
 restart:
 	/*  Find listening sock. */
-	other = unix_find_other(net, sunaddr, addr_len, sk->sk_type);
+	other = unix_find_other(net, peercred.peer_pid, sunaddr, addr_len,
+				sk->sk_type);
 	if (IS_ERR(other)) {
 		err = PTR_ERR(other);
 		goto out_free_skb;
@@ -2115,7 +2122,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 
 	if (msg->msg_namelen) {
 lookup:
-		other = unix_find_other(sock_net(sk), msg->msg_name,
+		other = unix_find_other(sock_net(sk), NULL, msg->msg_name,
 					msg->msg_namelen, sk->sk_type);
 		if (IS_ERR(other)) {
 			err = PTR_ERR(other);
