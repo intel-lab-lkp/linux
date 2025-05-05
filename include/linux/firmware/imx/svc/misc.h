@@ -55,6 +55,8 @@ int imx_sc_misc_get_control(struct imx_sc_ipc *ipc, u32 resource,
 
 int imx_sc_pm_cpu_start(struct imx_sc_ipc *ipc, u32 resource,
 			bool enable, u64 phys_addr);
+
+int imx_sc_pm_get_resource_power_mode(struct imx_sc_ipc *ipc, u32 resource);
 #else
 static inline int imx_sc_misc_set_control(struct imx_sc_ipc *ipc,
 					  u32 resource, u8 ctrl, u32 val)
@@ -70,6 +72,12 @@ static inline int imx_sc_misc_get_control(struct imx_sc_ipc *ipc,
 
 static inline int imx_sc_pm_cpu_start(struct imx_sc_ipc *ipc, u32 resource,
 				      bool enable, u64 phys_addr)
+{
+	return -ENOTSUPP;
+}
+
+static inline int imx_sc_pm_get_resource_power_mode(struct imx_sc_ipc *ipc,
+						    u32 resource)
 {
 	return -ENOTSUPP;
 }
