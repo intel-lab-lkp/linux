@@ -957,6 +957,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 	int length;
 	u8 req;
 	u8 *data;
+	int ret = 0;
 
 	data = kmalloc(256, GFP_KERNEL);
 	if (!data)
@@ -976,12 +977,13 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 			req = 0xBE;
 			index = 0;
 			if (msg[i].len < 1) {
-				i = -EOPNOTSUPP;
+				ret = -EOPNOTSUPP;
 				break;
 			}
 			value = msg[i].buf[0] & 0x00ff;
 			length = 1;
 			az6027_usb_out_op(d, req, value, index, data, length);
+			ret++;
 		}
 
 		if (msg[i].addr == 0xd0) {
@@ -1001,12 +1003,13 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 					msg[i + 1].buf[j] = data[j + 5];
 
 				i++;
+				ret++;
 			} else {
 
 				/* demod 16bit addr */
 				req = 0xBD;
 				if (msg[i].len < 1) {
-					i = -EOPNOTSUPP;
+					ret = -EOPNOTSUPP;
 					break;
 				}
 				index = (((msg[i].buf[0] << 8) & 0xff00) | (msg[i].buf[1] & 0x00ff));
@@ -1017,6 +1020,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 					data[j] = msg[i].buf[j + 2];
 				az6027_usb_out_op(d, req, value, index, data, length);
 			}
+			ret++;
 		}
 
 		if (msg[i].addr == 0xc0) {
@@ -1035,7 +1039,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 
 				req = 0xBD;
 				if (msg[i].len < 1) {
-					i = -EOPNOTSUPP;
+					ret = -EOPNOTSUPP;
 					break;
 				}
 				index = msg[i].buf[0] & 0x00FF;
@@ -1048,12 +1052,13 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 
 				az6027_usb_out_op(d, req, value, index, data, length);
 			}
+			ret++;
 		}
 	}
 	mutex_unlock(&d->i2c_mutex);
 	kfree(data);
 
-	return i;
+	return ret;
 }
 
 
