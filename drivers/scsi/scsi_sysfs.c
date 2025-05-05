@@ -182,7 +182,7 @@ shost_rd_attr2(field, field, format_string)
  */
 
 static ssize_t
-store_scan(struct device *dev, struct device_attribute *attr,
+scan_store(struct device *dev, struct device_attribute *attr,
 	   const char *buf, size_t count)
 {
 	struct Scsi_Host *shost = class_to_shost(dev);
@@ -193,7 +193,7 @@ store_scan(struct device *dev, struct device_attribute *attr,
 		res = count;
 	return res;
 };
-static DEVICE_ATTR(scan, S_IWUSR, NULL, store_scan);
+static DEVICE_ATTR_WO(scan);
 
 static ssize_t
 store_shost_state(struct device *dev, struct device_attribute *attr,
@@ -292,7 +292,7 @@ static int check_reset_type(const char *str)
 }
 
 static ssize_t
-store_host_reset(struct device *dev, struct device_attribute *attr,
+host_reset_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t count)
 {
 	struct Scsi_Host *shost = class_to_shost(dev);
@@ -315,7 +315,7 @@ exit_store_host_reset:
 	return ret;
 }
 
-static DEVICE_ATTR(host_reset, S_IWUSR, NULL, store_host_reset);
+static DEVICE_ATTR_WO(host_reset);
 
 static ssize_t
 show_shost_eh_deadline(struct device *dev,
@@ -379,29 +379,29 @@ shost_rd_attr(prot_guard_type, "%hd\n");
 shost_rd_attr2(proc_name, hostt->proc_name, "%s\n");
 
 static ssize_t
-show_host_busy(struct device *dev, struct device_attribute *attr, char *buf)
+host_busy_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(dev);
 	return snprintf(buf, 20, "%d\n", scsi_host_busy(shost));
 }
-static DEVICE_ATTR(host_busy, S_IRUGO, show_host_busy, NULL);
+static DEVICE_ATTR_RO(host_busy);
 
 static ssize_t
-show_use_blk_mq(struct device *dev, struct device_attribute *attr, char *buf)
+use_blk_mq_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "1\n");
 }
-static DEVICE_ATTR(use_blk_mq, S_IRUGO, show_use_blk_mq, NULL);
+static DEVICE_ATTR_RO(use_blk_mq);
 
 static ssize_t
-show_nr_hw_queues(struct device *dev, struct device_attribute *attr, char *buf)
+nr_hw_queues_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct blk_mq_tag_set *tag_set = &shost->tag_set;
 
 	return snprintf(buf, 20, "%d\n", tag_set->nr_hw_queues);
 }
-static DEVICE_ATTR(nr_hw_queues, S_IRUGO, show_nr_hw_queues, NULL);
+static DEVICE_ATTR_RO(nr_hw_queues);
 
 static struct attribute *scsi_sysfs_shost_attrs[] = {
 	&dev_attr_use_blk_mq.attr,
