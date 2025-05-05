@@ -179,15 +179,17 @@ pecompat_fstart:
 #else
 	.set	pecompat_fstart, setup_size
 #endif
-	.ascii	".text"
-	.byte	0
-	.byte	0
-	.byte	0
-	.long	ZO__data
-	.long	setup_size
-	.long	ZO__data			# Size of initialized data
-						# on disk
-	.long	setup_size
+	.ascii	".text\0\0\0"
+#ifdef CONFIG_EFI_SBAT
+	.long	ZO__sbat            		# VirtualSize
+	.long	setup_size			# VirtualAddress
+	.long	ZO__sbat			# SizeOfRawData
+#else
+	.long	ZO__data            		# VirtualSize
+	.long	setup_size			# VirtualAddress
+	.long	ZO__data			# SizeOfRawData
+#endif
+	.long	setup_size			# PointerToRawData
 	.long	0				# PointerToRelocations
 	.long	0				# PointerToLineNumbers
 	.word	0				# NumberOfRelocations
@@ -195,6 +197,19 @@ pecompat_fstart:
 	.long	IMAGE_SCN_CNT_CODE		| \
 		IMAGE_SCN_MEM_READ		| \
 		IMAGE_SCN_MEM_EXECUTE		# Characteristics
+
+#ifdef CONFIG_EFI_SBAT
+	.ascii ".sbat\0\0\0"
+	.long   ZO__esbat - ZO__sbat            # VirtualSize
+	.long   setup_size + ZO__sbat           # VirtualAddress
+	.long   ZO__esbat - ZO__sbat            # SizeOfRawData
+	.long   setup_size + ZO__sbat           # PointerToRawData
+
+	.long	0, 0, 0
+	.long	IMAGE_SCN_CNT_INITIALIZED_DATA	| \
+		IMAGE_SCN_MEM_READ		| \
+		IMAGE_SCN_MEM_DISCARDABLE	# Characteristics
+#endif
 
 	.ascii	".data\0\0\0"
 	.long	ZO__end - ZO__data		# VirtualSize
