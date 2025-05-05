@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/firmware/imx/sci.h>
+#include <linux/firmware/imx/svc/misc.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
@@ -906,6 +907,21 @@ static int imx_rproc_attach_pd(struct imx_rproc *priv)
 	return ret < 0 ? ret : 0;
 }
 
+static bool imx_rproc_is_on(struct device *dev, struct imx_sc_ipc *ipc,
+			    u32 resource)
+{
+	int ret;
+
+	ret = imx_sc_pm_get_resource_power_mode(ipc, resource);
+	if (ret < 0) {
+		dev_err(dev, "failed to get power resource %d mode, ret %d\n",
+			resource, ret);
+		return false;
+	}
+
+	return ret == IMX_SC_PM_PW_MODE_ON;
+}
+
 static int imx_rproc_detect_mode(struct imx_rproc *priv)
 {
 	struct regmap_config config = { .name = "imx-rproc" };
@@ -948,6 +964,13 @@ static int imx_rproc_detect_mode(struct imx_rproc *priv)
 		if (imx_sc_rm_is_resource_owned(priv->ipc_handle, priv->rsrc_id)) {
 			if (of_property_read_u32(dev->of_node, "fsl,entry-address", &priv->entry))
 				return -EINVAL;
+
+			/*
+			 * If remote core is already running (e.g. kicked by
+			 * the bootloader), attach to it.
+			 */
+			if (imx_rproc_is_on(dev, priv->ipc_handle, priv->rsrc_id))
+				priv->rproc->state = RPROC_DETACHED;
 
 			return imx_rproc_attach_pd(priv);
 		}
