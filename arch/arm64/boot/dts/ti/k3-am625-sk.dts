@@ -193,6 +193,74 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&main_gpio1_ioexp_intr_pins_default>;
 	};
+
+	power-sensor@40 {
+		compatible = "ti,ina231";
+		reg = <0x40>;
+		#io-channel-cells = <1>;
+		label = "vdd_core";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	power-sensor@41 {
+		compatible = "ti,ina231";
+		reg = <0x41>;
+		#io-channel-cells = <1>;
+		label = "vddr_core";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	power-sensor@45 {
+		compatible = "ti,ina231";
+		reg = <0x45>;
+		#io-channel-cells = <1>;
+		label = "dvdd_1v8";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	power-sensor@47 {
+		compatible = "ti,ina231";
+		reg = <0x47>;
+		#io-channel-cells = <1>;
+		label = "vdd_ddr";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	temperature-sensor@48 {
+		compatible = "ti,tmp100";
+		reg = <0x48>;
+		label = "soc";
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	temperature-sensor@49 {
+		compatible = "ti,tmp100";
+		reg = <0x49>;
+		label = "ddr";
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	power-sensor@4c {
+		compatible = "ti,ina231";
+		reg = <0x4c>;
+		#io-channel-cells = <1>;
+		label = "dvdd_3v3";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
+
+	power-sensor@4d {
+		compatible = "ti,ina231";
+		reg = <0x4d>;
+		#io-channel-cells = <1>;
+		label = "vdda_1v8";
+		shunt-resistor = <10000>;
+		vs-supply = <&vcc_3v3_sys>;
+	};
 };
 
 &sdhci1 {
