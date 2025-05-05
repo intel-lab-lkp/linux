@@ -611,6 +611,12 @@ static const char * const pd_rev[] = {
 #define tcpm_port_is_sink(port) \
 	(tcpm_cc_is_sink((port)->cc1) || tcpm_cc_is_sink((port)->cc2))
 
+#define tcpm_port_is_debug_pol_cc1(port) \
+	((tcpm_port_is_sink(port) && \
+	 (port->cc2 == TYPEC_CC_RP_DEF && port->cc1 == TYPEC_CC_RP_1_5)) || \
+	 (!tcpm_port_is_sink(port) && \
+	 (port->cc2 == TYPEC_CC_RA && port->cc1 == TYPEC_CC_RD)))
+
 #define tcpm_cc_is_source(cc) ((cc) == TYPEC_CC_RD)
 #define tcpm_cc_is_audio(cc) ((cc) == TYPEC_CC_RA)
 #define tcpm_cc_is_open(cc) ((cc) == TYPEC_CC_OPEN)
@@ -4569,8 +4575,11 @@ static int tcpm_acc_attach(struct tcpm_port *port)
 	if (tcpm_port_is_audio(port))
 		state = TYPEC_MODE_AUDIO;
 
-	if (tcpm_port_is_debug(port))
+	if (tcpm_port_is_debug(port)) {
+		port->polarity = tcpm_port_is_debug_pol_cc1(port) ?
+					TYPEC_POLARITY_CC1 : TYPEC_POLARITY_CC2;
 		state = TYPEC_MODE_DEBUG;
+	}
 
 	ret = tcpm_set_roles(port, true, state, role, data);
 	if (ret < 0)
