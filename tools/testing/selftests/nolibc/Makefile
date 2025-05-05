@@ -180,8 +180,8 @@ Q=@
 endif
 
 CFLAGS_i386 = $(call cc-option,-m32)
-CFLAGS_arm = -marm
-CFLAGS_armthumb = -mthumb -march=armv6t2
+CFLAGS_arm = -marm -march=armv7-a
+CFLAGS_armthumb = -mthumb -march=armv7
 CFLAGS_ppc = -m32 -mbig-endian -mno-vsx $(call cc-option,-mmultiple)
 CFLAGS_ppc64 = -m64 -mbig-endian -mno-vsx $(call cc-option,-mmultiple)
 CFLAGS_ppc64le = -m64 -mlittle-endian -mno-vsx $(call cc-option,-mabi=elfv2)
@@ -195,9 +195,11 @@ CFLAGS_XARCH = $(CFLAGS_$(XARCH))
 endif
 CFLAGS_STACKPROTECTOR ?= $(call cc-option,-mstack-protector-guard=global $(call cc-option,-fstack-protector-all))
 CFLAGS_SANITIZER ?= $(call cc-option,-fsanitize=undefined -fsanitize-trap=all)
-CFLAGS  ?= -Os -fno-ident -fno-asynchronous-unwind-tables -std=c89 -W -Wall -Wextra \
+CFLAGS  ?= -Os -fno-ident -fno-asynchronous-unwind-tables -std=c89 -W -Wall -Wextra -ggdb -ffreestanding \
+	        -ffile-prefix-map=./= \
 		$(call cc-option,-fno-stack-protector) $(call cc-option,-Wmissing-prototypes) \
-		$(CFLAGS_XARCH) $(CFLAGS_STACKPROTECTOR) $(CFLAGS_SANITIZER) $(CFLAGS_EXTRA)
+		$(call cc-option,-mno-outline-atomics) \
+		$(CFLAGS_$(XARCH)) $(CFLAGS_STACKPROTECTOR) $(CFLAGS_SANITIZER) $(CFLAGS_EXTRA)
 LDFLAGS :=
 
 LIBGCC := -lgcc
@@ -213,10 +215,7 @@ include $(srctree)/tools/scripts/Makefile.include
 # GCC uses "s390", clang "systemz"
 CLANG_CROSS_FLAGS := $(subst --target=s390-linux,--target=systemz-linux,$(CLANG_CROSS_FLAGS))
 
-REPORT  ?= awk '/\[OK\][\r]*$$/{p++} /\[FAIL\][\r]*$$/{if (!f) printf("\n"); f++; print;} /\[SKIPPED\][\r]*$$/{s++} \
-		END{ printf("\n%3d test(s): %3d passed, %3d skipped, %3d failed => status: ", p+s+f, p, s, f); \
-		if (f || !p) printf("failure\n"); else if (s) printf("warning\n"); else printf("success\n");; \
-		printf("\nSee all results in %s\n", ARGV[1]); }'
+REPORT  = sed -i -e '/^\[/d' -e 's/\x0d//' run.out; cmp ../kselftest_harness/harness-selftest.expected run.out && echo ok; true
 
 help:
 	@echo "Supported targets under selftests/nolibc:"
