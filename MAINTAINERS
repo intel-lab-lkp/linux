@@ -17535,6 +17535,7 @@ NXP RTC PCF85053A DRIVER
 M:	Pankit Garg<pankit.garg@nxp.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
+F:	drivers/rtc/rtc-pcf85053a.c
 
 NZXT-KRAKEN2 HARDWARE MONITORING DRIVER
 M:	Jonas Malaco <jonas@protocubo.io>
