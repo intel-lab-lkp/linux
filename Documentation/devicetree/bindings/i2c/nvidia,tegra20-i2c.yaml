@@ -97,7 +97,9 @@ properties:
 
   resets:
     items:
-      - description: module reset
+      - description: |
+          Module reset. This property is optional for controllers in Tegra194 and later
+          chips where an internal software reset is available as an alternative.
 
   reset-names:
     items:
