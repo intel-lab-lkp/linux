@@ -25,6 +25,7 @@
 struct faux_object {
 	struct faux_device faux_dev;
 	const struct faux_device_ops *faux_ops;
+	bool probe_successed_or_deferred;
 };
 #define to_faux_object(dev) container_of_const(dev, struct faux_object, faux_dev.dev)
 
@@ -47,6 +48,8 @@ static int faux_probe(struct device *dev)
 
 	if (faux_ops && faux_ops->probe)
 		ret = faux_ops->probe(faux_dev);
+
+	faux_obj->probe_successed_or_deferred = !ret || ret == -EPROBE_DEFER;
 
 	return ret;
 }
@@ -150,12 +153,13 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 	}
 
 	/*
-	 * Verify that we did bind the driver to the device (i.e. probe worked),
+	 * Verify that we either did bind the driver to the device (i.e. probe worked),
+	 * or probe is deferred and tried later,
 	 * if not, let's fail the creation as trying to guess if probe was
 	 * successful is almost impossible to determine by the caller.
 	 */
-	if (!dev->driver) {
-		dev_err(dev, "probe did not succeed, tearing down the device\n");
+	if (!faux_obj->probe_successed_or_deferred) {
+		dev_err(dev, "probe did not succeed and it's not deferred, tearing down the device\n");
 		faux_device_destroy(faux_dev);
 		faux_dev = NULL;
 	}
