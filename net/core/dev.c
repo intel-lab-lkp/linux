@@ -10620,8 +10620,11 @@ sync_lower:
 	/* some features must be disabled on lower devices when disabled
 	 * on an upper device (think: bonding master or bridge)
 	 */
-	netdev_for_each_lower_dev(dev, lower, iter)
+	netdev_for_each_lower_dev(dev, lower, iter) {
+		netdev_lock_ops(lower);
 		netdev_sync_lower_features(dev, lower, features);
+		netdev_unlock_ops(lower);
+	}
 
 	if (!err) {
 		netdev_features_t diff = features ^ dev->features;
