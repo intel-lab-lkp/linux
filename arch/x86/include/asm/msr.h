@@ -103,14 +103,7 @@ static __always_inline u64 native_rdmsrq(u32 msr)
 
 static inline u64 native_read_msr(u32 msr)
 {
-	u64 val;
-
-	val = __rdmsr(msr);
-
-	if (tracepoint_enabled(read_msr))
-		do_trace_read_msr(msr, val, 0);
-
-	return val;
+	return __rdmsr(msr);
 }
 
 static inline int native_read_msr_safe(u32 msr, u64 *p)
@@ -123,8 +116,6 @@ static inline int native_read_msr_safe(u32 msr, u64 *p)
 		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_RDMSR_SAFE, %[err])
 		     : [err] "=r" (err), EAX_EDX_RET(val, low, high)
 		     : "c" (msr));
-	if (tracepoint_enabled(read_msr))
-		do_trace_read_msr(msr, EAX_EDX_VAL(val, low, high), err);
 
 	*p = EAX_EDX_VAL(val, low, high);
 
@@ -135,9 +126,6 @@ static inline int native_read_msr_safe(u32 msr, u64 *p)
 static inline void notrace native_write_msr(u32 msr, u64 val)
 {
 	native_wrmsrq(msr, val);
-
-	if (tracepoint_enabled(write_msr))
-		do_trace_write_msr(msr, val, 0);
 }
 
 /* Can be uninlined because referenced by paravirt */
@@ -151,8 +139,6 @@ static inline int notrace native_write_msr_safe(u32 msr, u64 val)
 		     : [err] "=a" (err)
 		     : "c" (msr), "0" ((u32)val), "d" ((u32)(val >> 32))
 		     : "memory");
-	if (tracepoint_enabled(write_msr))
-		do_trace_write_msr(msr, val, err);
 	return err;
 }
 
@@ -173,51 +159,24 @@ static inline u64 native_read_pmc(int counter)
 #include <asm/paravirt.h>
 #else
 #include <linux/errno.h>
-/*
- * Access to machine-specific registers (available on 586 and better only)
- * Note: the rd* operations modify the parameters directly (without using
- * pointer indirection), this allows gcc to optimize better
- */
-
-#define rdmsr(msr, low, high)					\
-do {								\
-	u64 __val = native_read_msr((msr));			\
-	(void)((low) = (u32)__val);				\
-	(void)((high) = (u32)(__val >> 32));			\
-} while (0)
-
-static inline void wrmsr(u32 msr, u32 low, u32 high)
+static __always_inline u64 read_msr(u32 msr)
 {
-	native_write_msr(msr, (u64)high << 32 | low);
+	return native_read_msr(msr);
 }
 
-#define rdmsrq(msr, val)			\
-	((val) = native_read_msr((msr)))
+static __always_inline int read_msr_safe(u32 msr, u64 *p)
+{
+	return native_read_msr_safe(msr, p);
+}
 
-static inline void wrmsrq(u32 msr, u64 val)
+static __always_inline void write_msr(u32 msr, u64 val)
 {
 	native_write_msr(msr, val);
 }
 
-/* wrmsr with exception handling */
-static inline int wrmsrq_safe(u32 msr, u64 val)
+static __always_inline int write_msr_safe(u32 msr, u64 val)
 {
 	return native_write_msr_safe(msr, val);
-}
-
-/* rdmsr with exception handling */
-#define rdmsr_safe(msr, low, high)				\
-({								\
-	u64 __val;						\
-	int __err = native_read_msr_safe((msr), &__val);	\
-	(*low) = (u32)__val;					\
-	(*high) = (u32)(__val >> 32);				\
-	__err;							\
-})
-
-static inline int rdmsrq_safe(u32 msr, u64 *p)
-{
-	return native_read_msr_safe(msr, p);
 }
 
 static __always_inline u64 rdpmc(int counter)
@@ -226,6 +185,70 @@ static __always_inline u64 rdpmc(int counter)
 }
 
 #endif	/* !CONFIG_PARAVIRT_XXL */
+
+/*
+ * Access to machine-specific registers (available on 586 and better only)
+ * Note: the rd* operations modify the parameters directly (without using
+ * pointer indirection), this allows gcc to optimize better
+ */
+
+#define rdmsrq(msr, val)			\
+do {						\
+	(val) = read_msr(msr);			\
+	if (tracepoint_enabled(read_msr))	\
+		do_trace_read_msr(msr, val, 0);	\
+} while (0)
+
+#define rdmsr(msr, low, high)					\
+do {								\
+	u64 __val;						\
+	rdmsrq(msr, __val);					\
+	(void)((low) = (u32)__val);				\
+	(void)((high) = (u32)(__val >> 32));			\
+} while (0)
+
+/* rdmsr with exception handling */
+static inline int rdmsrq_safe(u32 msr, u64 *p)
+{
+	int err;
+
+	err = read_msr_safe(msr, p);
+
+	if (tracepoint_enabled(read_msr))
+		do_trace_read_msr(msr, *p, err);
+
+	return err;
+}
+
+#define rdmsr_safe(msr, low, high)				\
+({								\
+	u64 __val;						\
+	int __err = rdmsrq_safe((msr), &__val);			\
+	(*low) = (u32)__val;					\
+	(*high) = (u32)(__val >> 32);				\
+	__err;							\
+})
+
+static inline void wrmsrq(u32 msr, u64 val)
+{
+	write_msr(msr, val);
+
+	if (tracepoint_enabled(write_msr))
+		do_trace_write_msr(msr, val, 0);
+}
+
+/* wrmsr with exception handling */
+static inline int wrmsrq_safe(u32 msr, u64 val)
+{
+	int err;
+
+	err = write_msr_safe(msr, val);
+
+	if (tracepoint_enabled(write_msr))
+		do_trace_write_msr(msr, val, err);
+
+	return err;
+}
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
@@ -240,6 +263,11 @@ static __always_inline void wrmsrns(u32 msr, u64 val)
 	asm volatile("1: " ALTERNATIVE("ds wrmsr", WRMSRNS, X86_FEATURE_WRMSRNS)
 		     "2: " _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_WRMSR)
 		     : : "c" (msr), "a" ((u32)val), "d" ((u32)(val >> 32)));
+}
+
+static inline void wrmsr(u32 msr, u32 low, u32 high)
+{
+	wrmsrq(msr, (u64)high << 32 | low);
 }
 
 /*
