@@ -439,6 +439,25 @@ end_section:
 	return error;
 }
 
+/**
+ * aa_profile_load_current_ns - load a profile into the current namespace
+ * @buf buffer containing the user-provided policy
+ * @size size of @buf
+ * @ppos position pointer in the file
+ *
+ * Returns: 0 on success, negative value on error
+ */
+ssize_t aa_profile_load_current_ns(const void __user *buf, size_t size,
+				   loff_t *ppos)
+{
+	struct aa_ns *ns = aa_get_current_ns();
+	int error = policy_update(AA_MAY_LOAD_POLICY, buf, size, ppos, ns);
+
+	aa_put_ns(ns);
+
+	return error >= 0 ? 0 : error;
+}
+
 /* .load file hook fn to load policy */
 static ssize_t profile_load(struct file *f, const char __user *buf, size_t size,
 			    loff_t *pos)
