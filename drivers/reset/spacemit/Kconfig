@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config RESET_SPACEMIT
+	bool
+
+config RESET_SPACEMIT_K1
+	tristate "SpacemiT K1 reset driver"
+	depends on ARCH_SPACEMIT || COMPILE_TEST
+	select RESET_SPACEMIT
+	default ARCH_SPACEMIT
+	help
+	  This enables the reset controller driver for the SpacemiT K1 SoC.
