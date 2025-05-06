@@ -1222,7 +1222,6 @@ void mark_buffer_write_io_error(struct buffer_head *bh)
 		mapping_set_error(bh->b_folio->mapping, -EIO);
 	if (bh->b_assoc_map) {
 		mapping_set_error(bh->b_assoc_map, -EIO);
-		errseq_set(&bh->b_assoc_map->host->i_sb->s_wb_err, -EIO);
 	}
 }
 EXPORT_SYMBOL(mark_buffer_write_io_error);
