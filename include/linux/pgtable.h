@@ -369,6 +369,22 @@ static inline pgd_t pgdp_get(pgd_t *pgdp)
 }
 #endif
 
+/* Caller must ensure that ptep + 1 exists */
+static inline bool maybe_contiguous_pte_pfns(pte_t *ptep, pte_t pte)
+{
+	pte_t *next_ptep, next_pte;
+
+	if (pte_batch_hint(ptep, pte) != 1)
+		return true;
+
+	next_ptep = ptep + 1;
+	next_pte = ptep_get(next_ptep);
+	if (!pte_present(next_pte))
+		return false;
+
+	return unlikely(pte_pfn(next_pte) - pte_pfn(pte) == PAGE_SIZE);
+}
+
 #ifndef __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
 static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
 					    unsigned long address,
