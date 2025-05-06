@@ -2163,10 +2163,13 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 		struct sk_buff *skb = ptr;
 
 		ret = tun_put_user(tun, tfile, skb, to);
-		if (unlikely(ret < 0))
+		if (ret >= 0) {
+			local_bh_disable();
+			napi_consume_skb(skb, 1);
+			local_bh_enable();
+		} else {
 			kfree_skb(skb);
-		else
-			consume_skb(skb);
+		}
 	}
 
 	return ret;
