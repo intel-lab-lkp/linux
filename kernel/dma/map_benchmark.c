@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
 
@@ -110,8 +111,109 @@ static struct map_benchmark_ops dma_single_map_benchmark_ops = {
 	.do_unmap = dma_single_map_benchmark_do_unmap,
 };
 
+struct dma_sg_map_param {
+	struct sg_table sgt;
+	struct device *dev;
+	void **buf;
+	u32 npages;
+	u32 dma_dir;
+};
+
+static void *dma_sg_map_benchmark_prepare(struct map_benchmark_data *map)
+{
+	struct scatterlist *sg;
+	int i = 0;
+
+	struct dma_sg_map_param *mparam __free(kfree) = kzalloc(sizeof(*mparam), GFP_KERNEL);
+	if (!mparam)
+		return NULL;
+
+	/*
+	 * Set the number of scatterlist entries based on the granule.
+	 * In SG mode, 'granule' represents the number of scatterlist entries.
+	 * Each scatterlist entry corresponds to a single page.
+	 */
+	mparam->npages = map->bparam.granule;
+	mparam->dma_dir = map->bparam.dma_dir;
+	mparam->dev = map->dev;
+	mparam->buf = kmalloc_array(mparam->npages, sizeof(*mparam->buf),
+				    GFP_KERNEL);
+	if (!mparam->buf)
+		goto out;
+
+	if (sg_alloc_table(&mparam->sgt, mparam->npages, GFP_KERNEL))
+		goto free_buf;
+
+	for_each_sgtable_sg(&mparam->sgt, sg, i) {
+		mparam->buf[i] = (void *)__get_free_page(GFP_KERNEL);
+		if (!mparam->buf[i])
+			goto free_page;
+
+		if (mparam->dma_dir != DMA_FROM_DEVICE)
+			memset(mparam->buf[i], 0x66, PAGE_SIZE);
+
+		sg_set_buf(sg, mparam->buf[i], PAGE_SIZE);
+	}
+
+	return_ptr(mparam);
+
+free_page:
+	while (i-- > 0)
+		free_page((unsigned long)mparam->buf[i]);
+
+	sg_free_table(&mparam->sgt);
+free_buf:
+	kfree(mparam->buf);
+out:
+	return NULL;
+}
+
+static void dma_sg_map_benchmark_unprepare(void *arg)
+{
+	struct dma_sg_map_param *mparam = arg;
+	int i;
+
+	for (i = 0; i < mparam->npages; i++)
+		free_page((unsigned long)mparam->buf[i]);
+
+	sg_free_table(&mparam->sgt);
+
+	kfree(mparam->buf);
+	kfree(mparam);
+}
+
+static int dma_sg_map_benchmark_do_map(void *arg)
+{
+	struct dma_sg_map_param *mparam = arg;
+
+	int sg_mapped = dma_map_sg(mparam->dev, mparam->sgt.sgl,
+				   mparam->npages, mparam->dma_dir);
+	if (!sg_mapped) {
+		pr_err("dma_map_sg failed on %s\n", dev_name(mparam->dev));
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void dma_sg_map_benchmark_do_unmap(void *arg)
+{
+	struct dma_sg_map_param *mparam = arg;
+
+	dma_unmap_sg(mparam->dev, mparam->sgt.sgl, mparam->npages,
+		     mparam->dma_dir);
+}
+
+static struct map_benchmark_ops dma_sg_map_benchmark_ops = {
+	.prepare = dma_sg_map_benchmark_prepare,
+	.unprepare = dma_sg_map_benchmark_unprepare,
+	.do_map = dma_sg_map_benchmark_do_map,
+	.do_unmap = dma_sg_map_benchmark_do_unmap,
+};
+
 static struct map_benchmark_ops *dma_map_benchmark_ops[DMA_MAP_MODE_MAX] = {
 	[DMA_MAP_SINGLE_MODE] = &dma_single_map_benchmark_ops,
+	[DMA_MAP_SG_MODE] = &dma_sg_map_benchmark_ops,
 };
 
 static int map_benchmark_thread(void *data)
