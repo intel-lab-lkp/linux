@@ -92,6 +92,7 @@ struct cpuid_scan_entry {
 	/*	   leaf		subleaf		reader */			\
 	SCAN_ENTRY(0x0,		0,		generic),			\
 	SCAN_ENTRY(0x1,		0,		generic),			\
+	SCAN_ENTRY(0x80000000,  0,              0x80000000),
 
 /**
  * struct cpuid_scan_info - Parameters for generic CPUID scan logic
