@@ -103,6 +103,11 @@
  */
 #define POSTED_MSI_NOTIFICATION_VECTOR	0xeb
 
+/*
+ * RAR (remote action request) TLB flush
+ */
+#define RAR_VECTOR			0xe0
+
 #define NR_VECTORS			 256
 
 #ifdef CONFIG_X86_LOCAL_APIC

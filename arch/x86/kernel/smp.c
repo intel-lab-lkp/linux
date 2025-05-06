@@ -297,5 +297,8 @@ struct smp_ops smp_ops = {
 
 	.send_call_func_ipi	= native_send_call_func_ipi,
 	.send_call_func_single_ipi = native_send_call_func_single_ipi,
+
+	.send_rar_ipi		= native_send_rar_ipi,
+	.send_rar_single_ipi	= native_send_rar_single_ipi,
 };
 EXPORT_SYMBOL_GPL(smp_ops);

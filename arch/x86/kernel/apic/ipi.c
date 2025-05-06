@@ -79,7 +79,7 @@ void native_send_call_func_single_ipi(int cpu)
 	__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 }
 
-void native_send_call_func_ipi(const struct cpumask *mask)
+static void do_native_send_ipi(const struct cpumask *mask, int vector)
 {
 	if (static_branch_likely(&apic_use_ipi_shorthand)) {
 		unsigned int cpu = smp_processor_id();
@@ -88,14 +88,19 @@ void native_send_call_func_ipi(const struct cpumask *mask)
 			goto sendmask;
 
 		if (cpumask_test_cpu(cpu, mask))
-			__apic_send_IPI_all(CALL_FUNCTION_VECTOR);
+			__apic_send_IPI_all(vector);
 		else if (num_online_cpus() > 1)
-			__apic_send_IPI_allbutself(CALL_FUNCTION_VECTOR);
+			__apic_send_IPI_allbutself(vector);
 		return;
 	}
 
 sendmask:
-	__apic_send_IPI_mask(mask, CALL_FUNCTION_VECTOR);
+	__apic_send_IPI_mask(mask, vector);
+}
+
+void native_send_call_func_ipi(const struct cpumask *mask)
+{
+	do_native_send_ipi(mask, CALL_FUNCTION_VECTOR);
 }
 
 void apic_send_nmi_to_offline_cpu(unsigned int cpu)
@@ -105,6 +110,16 @@ void apic_send_nmi_to_offline_cpu(unsigned int cpu)
 	if (WARN_ON_ONCE(!cpumask_test_cpu(cpu, &cpus_booted_once_mask)))
 		return;
 	apic->send_IPI(cpu, NMI_VECTOR);
+}
+
+void native_send_rar_single_ipi(int cpu)
+{
+	apic->send_IPI_mask(cpumask_of(cpu), RAR_VECTOR);
+}
+
+void native_send_rar_ipi(const struct cpumask *mask)
+{
+	do_native_send_ipi(mask, RAR_VECTOR);
 }
 #endif /* CONFIG_SMP */
 
