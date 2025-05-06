@@ -189,6 +189,12 @@ int kernfs_iop_getattr(struct mnt_idmap *idmap,
 	struct kernfs_root *root = kernfs_root(kn);
 
 	down_read(&root->kernfs_iattr_rwsem);
+
+	if (request_mask & STATX_BTIME) {
+		stat->result_mask |= STATX_BTIME;
+		stat->btime = kn->btime;
+	}
+
 	kernfs_refresh_inode(kn, inode);
 	generic_fillattr(&nop_mnt_idmap, request_mask, inode, stat);
 	up_read(&root->kernfs_iattr_rwsem);

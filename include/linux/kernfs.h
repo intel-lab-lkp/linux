@@ -229,6 +229,13 @@ struct kernfs_node {
 	void			*priv;
 	struct kernfs_iattrs	*iattr;
 
+	/*
+	 * The birth time (for STATX_BTIME).  It lives here and not in
+	 * struct kernfs_iattrs because the latter is only created on
+	 * demand, not at actual node birth time.
+	 */
+	struct timespec64	btime;
+
 	struct rcu_head		rcu;
 };
 

@@ -678,6 +678,8 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 			goto err_out3;
 	}
 
+	ktime_get_real_ts64(&kn->btime);
+
 	return kn;
 
  err_out3:
