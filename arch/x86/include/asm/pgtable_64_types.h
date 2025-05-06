@@ -24,19 +24,25 @@ typedef struct { pmdval_t pmd; } pmd_t;
 extern unsigned int __pgtable_l5_enabled;
 
 #ifdef CONFIG_X86_5LEVEL
-#ifdef USE_EARLY_PGTABLE_L5
-/*
- * cpu_feature_enabled() is not available in early boot code.
- * Use variable instead.
- */
+#include <asm/alternative.h>
+#include <asm/cpufeatures.h>
+
 static inline bool pgtable_l5_enabled(void)
 {
-	return __pgtable_l5_enabled;
+	asm goto(ALTERNATIVE_TERNARY("jmp 6f", %c[feat], "", "jmp %l[t_no]")
+		"	.pushsection .altinstr_aux,\"ax\"	\n"
+		"6:	testb	$1, %a[l5en]			\n"
+		"	jnz	%l[t_yes]			\n"
+		"	jmp	%l[t_no]			\n"
+		"	.popsection				\n"
+		: : [feat] "i" (X86_FEATURE_LA57),
+		    [l5en] "i" (&__pgtable_l5_enabled)
+		: : t_yes, t_no);
+t_yes:
+	return true;
+t_no:
+	return false;
 }
-#else
-#define pgtable_l5_enabled() cpu_feature_enabled(X86_FEATURE_LA57)
-#endif /* USE_EARLY_PGTABLE_L5 */
-
 #else
 #define pgtable_l5_enabled() 0
 #endif /* CONFIG_X86_5LEVEL */
