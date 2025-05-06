@@ -467,10 +467,6 @@ void intel_alpm_post_plane_update(struct intel_atomic_state *state,
 		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_encoder *encoder;
 
-	if ((!crtc_state->has_lobf ||
-	     crtc_state->has_lobf == old_crtc_state->has_lobf) && !crtc_state->has_psr)
-		return;
-
 	for_each_intel_encoder_mask(display->drm, encoder,
 				    crtc_state->uapi.encoder_mask) {
 		struct intel_dp *intel_dp;
@@ -479,6 +475,10 @@ void intel_alpm_post_plane_update(struct intel_atomic_state *state,
 			continue;
 
 		intel_dp = enc_to_intel_dp(encoder);
+
+		if ((!crtc_state->has_lobf && !intel_psr_needs_alpm(intel_dp, crtc_state)) ||
+		    (old_crtc_state->has_lobf || intel_psr_needs_alpm(intel_dp, old_crtc_state)))
+			continue;
 
 		if (intel_dp_is_edp(intel_dp)) {
 			intel_alpm_enable_sink(intel_dp, crtc_state);
