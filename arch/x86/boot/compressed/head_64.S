@@ -454,6 +454,12 @@ SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 	shrq	$3, %rcx
 	rep	stosq
 
+#ifdef CONFIG_X86_5LEVEL
+	movq	%cr4, %rax
+	shrl	$X86_CR4_LA57_BIT, %eax
+	andl	%eax, __pgtable_l5_enabled(%rip)
+#endif
+
 	call	load_stage2_idt
 
 	/* Pass boot_params to initialize_identity_maps() */

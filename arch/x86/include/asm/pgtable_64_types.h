@@ -27,7 +27,7 @@ extern unsigned int __pgtable_l5_enabled;
 #include <asm/alternative.h>
 #include <asm/cpufeatures.h>
 
-static inline bool pgtable_l5_enabled(void)
+static inline bool __attribute_const__ pgtable_l5_enabled(void)
 {
 	asm goto(ALTERNATIVE_TERNARY("jmp 6f", %c[feat], "", "jmp %l[t_no]")
 		"	.pushsection .altinstr_aux,\"ax\"	\n"

@@ -61,6 +61,13 @@ SYM_CODE_START_NOALIGN(startup_64)
 	/* Set up the stack for verify_cpu() */
 	leaq	__top_init_kernel_stack(%rip), %rsp
 
+#ifdef CONFIG_X86_5LEVEL
+	/* __pgtable_l5_enabled needs to be correct before calling C code */
+	movq	%cr4, %rax
+	shrl	$X86_CR4_LA57_BIT, %eax
+	andl	%eax, __pgtable_l5_enabled(%rip)
+#endif
+
 	/*
 	 * Set up GSBASE.
 	 * Note that on SMP the boot CPU uses the init data section until

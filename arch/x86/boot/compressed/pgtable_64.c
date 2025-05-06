@@ -11,8 +11,9 @@
 #define BIOS_START_MAX		0x9f000U	/* 640K, absolute maximum */
 
 #ifdef CONFIG_X86_5LEVEL
-/* __pgtable_l5_enabled needs to be in .data to avoid being cleared along with .bss */
-unsigned int __section(".data") __pgtable_l5_enabled;
+unsigned int __pgtable_l5_enabled = 1;
+
+/* These need to be in .data to avoid being cleared along with .bss */
 unsigned int __section(".data") pgdir_shift = 39;
 unsigned int __section(".data") ptrs_per_p4d = 1;
 #endif
@@ -129,7 +130,6 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 		l5_required = true;
 
 		/* Initialize variables for 5-level paging */
-		__pgtable_l5_enabled = 1;
 		pgdir_shift = 48;
 		ptrs_per_p4d = 512;
 	}
