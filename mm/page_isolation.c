@@ -169,7 +169,7 @@ static int set_migratetype_isolate(struct page *page, int migratetype, int isol_
 	 * If it is already set, then someone else must have raced and
 	 * set it before us.
 	 */
-	if (is_migrate_isolate_page(page)) {
+	if (is_migrate_isolate_folio(page_folio(page))) {
 		spin_unlock_irqrestore(&zone->lock, flags);
 		return -EBUSY;
 	}
@@ -219,7 +219,7 @@ static void unset_migratetype_isolate(struct page *page, int migratetype)
 
 	zone = page_zone(page);
 	spin_lock_irqsave(&zone->lock, flags);
-	if (!is_migrate_isolate_page(page))
+	if (!is_migrate_isolate_folio(page_folio(page)))
 		goto out;
 
 	/*
@@ -235,7 +235,7 @@ static void unset_migratetype_isolate(struct page *page, int migratetype)
 		if (order >= pageblock_order && order < MAX_PAGE_ORDER) {
 			buddy = find_buddy_page_pfn(page, page_to_pfn(page),
 						    order, NULL);
-			if (buddy && !is_migrate_isolate_page(buddy)) {
+			if (buddy && !is_migrate_isolate_folio(page_folio(buddy))) {
 				isolated_page = !!__isolate_free_page(page, order);
 				/*
 				 * Isolating a free page in an isolated pageblock
@@ -546,7 +546,7 @@ void undo_isolate_page_range(unsigned long start_pfn, unsigned long end_pfn,
 	     pfn < isolate_end;
 	     pfn += pageblock_nr_pages) {
 		page = __first_valid_page(pfn, pageblock_nr_pages);
-		if (!page || !is_migrate_isolate_page(page))
+		if (!page || !is_migrate_isolate_folio(page_folio(page)))
 			continue;
 		unset_migratetype_isolate(page, migratetype);
 	}
@@ -631,7 +631,7 @@ int test_pages_isolated(unsigned long start_pfn, unsigned long end_pfn,
 	 */
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
 		page = __first_valid_page(pfn, pageblock_nr_pages);
-		if (page && !is_migrate_isolate_page(page))
+		if (page && !is_migrate_isolate_folio(page_folio(page)))
 			break;
 	}
 	page = __first_valid_page(start_pfn, end_pfn - start_pfn);
