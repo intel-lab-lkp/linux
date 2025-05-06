@@ -255,6 +255,7 @@ struct sddr09_card_info {
 	int		*pba_to_lba;	/* physical to logical map */
 	int		lbact;		/* number of available pages */
 	int		flags;
+	unsigned char   *blockbuffer;
 #define	SDDR09_WP	1		/* write protected */
 };
 
@@ -850,7 +851,7 @@ sddr09_find_unused_pba(struct sddr09_card_info *info, unsigned int lba) {
 static int
 sddr09_write_lba(struct us_data *us, unsigned int lba,
 		 unsigned int page, unsigned int pages,
-		 unsigned char *ptr, unsigned char *blockbuffer) {
+		 unsigned char *ptr) {
 
 	struct sddr09_card_info *info = (struct sddr09_card_info *) us->extra;
 	unsigned long address;
@@ -890,13 +891,13 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	/* read old contents */
 	address = (pba << (info->pageshift + info->blockshift));
 	result = sddr09_read22(us, address>>1, info->blocksize,
-			       info->pageshift, blockbuffer, 0);
+			       info->pageshift, info->blockbuffer, 0);
 	if (result)
 		return result;
 
 	/* check old contents and fill lba */
 	for (i = 0; i < info->blocksize; i++) {
-		bptr = blockbuffer + i*pagelen;
+		bptr = info->blockbuffer + i*pagelen;
 		cptr = bptr + info->pagesize;
 		nand_compute_ecc(bptr, ecc);
 		if (!nand_compare_ecc(cptr+13, ecc)) {
@@ -917,7 +918,7 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	/* copy in new stuff and compute ECC */
 	xptr = ptr;
 	for (i = page; i < page+pages; i++) {
-		bptr = blockbuffer + i*pagelen;
+		bptr = info->blockbuffer + i*pagelen;
 		cptr = bptr + info->pagesize;
 		memcpy(bptr, xptr, info->pagesize);
 		xptr += info->pagesize;
@@ -930,7 +931,7 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	usb_stor_dbg(us, "Rewrite PBA %d (LBA %d)\n", pba, lba);
 
 	result = sddr09_write_inplace(us, address>>1, info->blocksize,
-				      info->pageshift, blockbuffer, 0);
+				      info->pageshift, info->blockbuffer, 0);
 
 	usb_stor_dbg(us, "sddr09_write_inplace returns %d\n", result);
 
@@ -961,8 +962,6 @@ sddr09_write_data(struct us_data *us,
 
 	struct sddr09_card_info *info = (struct sddr09_card_info *) us->extra;
 	unsigned int lba, maxlba, page, pages;
-	unsigned int pagelen, blocklen;
-	unsigned char *blockbuffer;
 	unsigned char *buffer;
 	unsigned int len, offset;
 	struct scatterlist *sg;
@@ -975,21 +974,6 @@ sddr09_write_data(struct us_data *us,
 	if (lba >= maxlba)
 		return -EIO;
 
-	/*
-	 * blockbuffer is used for reading in the old data, overwriting
-	 * with the new data, and performing ECC calculations
-	 */
-
-	/*
-	 * TODO: instead of doing kmalloc/kfree for each write,
-	 * add a bufferpointer to the info structure
-	 */
-
-	pagelen = (1 << info->pageshift) + (1 << CONTROL_SHIFT);
-	blocklen = (pagelen << info->blockshift);
-	blockbuffer = kmalloc(blocklen, GFP_NOIO);
-	if (!blockbuffer)
-		return -ENOMEM;
 
 	/*
 	 * Since we don't write the user data directly to the device,
@@ -999,10 +983,8 @@ sddr09_write_data(struct us_data *us,
 
 	len = min_t(unsigned int, sectors, info->blocksize) * info->pagesize;
 	buffer = kmalloc(len, GFP_NOIO);
-	if (!buffer) {
-		kfree(blockbuffer);
+	if (!buffer)
 		return -ENOMEM;
-	}
 
 	result = 0;
 	offset = 0;
@@ -1028,7 +1010,7 @@ sddr09_write_data(struct us_data *us,
 				&sg, &offset, FROM_XFER_BUF);
 
 		result = sddr09_write_lba(us, lba, page, pages,
-				buffer, blockbuffer);
+				buffer);
 		if (result)
 			break;
 
@@ -1036,9 +1018,6 @@ sddr09_write_data(struct us_data *us,
 		lba++;
 		sectors -= pages;
 	}
-
-	kfree(buffer);
-	kfree(blockbuffer);
 
 	return result;
 }
@@ -1405,6 +1384,7 @@ sddr09_card_info_destructor(void *extra) {
 
 	kfree(info->lba_to_pba);
 	kfree(info->pba_to_lba);
+	kfree(info->blockbuffer);
 }
 
 static int
@@ -1585,6 +1565,8 @@ static int sddr09_transport(struct scsi_cmnd *srb, struct us_data *us)
 
 	if (srb->cmnd[0] == READ_CAPACITY) {
 		const struct nand_flash_dev *cardinfo;
+		unsigned int pagelen;
+		unsigned int blocklen;
 
 		sddr09_get_wp(us, info);	/* read WP bit */
 
@@ -1603,6 +1585,26 @@ static int sddr09_transport(struct scsi_cmnd *srb, struct us_data *us)
 		info->blockshift = cardinfo->blockshift;
 		info->blocksize = (1 << info->blockshift);
 		info->blockmask = info->blocksize - 1;
+		
+		pagelen = (1 << info->pageshift) + (1 << CONTROL_SHIFT);
+		blocklen = (pagelen << info->blockshift);
+
+		/*
+		 * If it has already been allocated and is changed 
+		 * (i.e. a new card is inserted), we want to free
+		 * it and reallocate it with the updates size
+		 */
+
+		kfree(info->blockbuffer);
+
+		/*
+		 * blockbuffer is used for reading in the old data, overwriting
+		 * with the new data, and performing ECC calculations
+		 */
+
+		info->blockbuffer = kmalloc(blocklen, GFP_NOIO);
+		if (!info->blockbuffer)
+			return -ENOMEM;
 
 		// map initialization, must follow get_cardinfo()
 		if (sddr09_read_map(us)) {
