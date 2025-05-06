@@ -95,6 +95,8 @@ struct cpuid_scan_entry {
 	SCAN_ENTRY(0x2,		0,		0x2),				\
 	SCAN_ENTRY(0x4,		0,		deterministic_cache),		\
 	SCAN_ENTRY(0x80000000,  0,              0x80000000),			\
+	SCAN_ENTRY(0x80000005,  0,              generic),			\
+	SCAN_ENTRY(0x80000006,  0,              generic),			\
 	SCAN_ENTRY(0x8000001d,  0,              deterministic_cache),		\
 
 /**
