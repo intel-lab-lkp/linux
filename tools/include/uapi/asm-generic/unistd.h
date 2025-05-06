@@ -851,9 +851,11 @@ __SYSCALL(__NR_listxattrat, sys_listxattrat)
 __SYSCALL(__NR_removexattrat, sys_removexattrat)
 #define __NR_open_tree_attr 467
 __SYSCALL(__NR_open_tree_attr, sys_open_tree_attr)
+#define __NR_lsm_manage_policy 468
+__SYSCALL(__NR_lsm_manage_policy, lsm_manage_policy)
 
 #undef __NR_syscalls
-#define __NR_syscalls 468
+#define __NR_syscalls 469
 
 /*
  * 32 bit systems traditionally used different

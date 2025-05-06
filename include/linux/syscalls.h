@@ -989,6 +989,10 @@ asmlinkage long sys_lsm_set_self_attr(unsigned int attr, struct lsm_ctx __user *
 				      u32 size, u32 flags);
 asmlinkage long sys_lsm_list_modules(u64 __user *ids, u32 __user *size, u32 flags);
 
+asmlinkage long sys_lsm_manage_policy(u32 lsm_id, u32 op, void __user *buf,
+		u32 __user *size, u32 flags);
+
+
 /*
  * Architecture-specific system calls
  */
