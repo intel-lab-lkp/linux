@@ -2083,7 +2083,7 @@ int dtDelete(tid_t tid,
 	struct metapage *mp, *imp;
 	dtpage_t *p;
 	int index;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct dt_lock *dtlck;
 	struct tlock *tlck;
 	struct lv *lv;
@@ -2727,7 +2727,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 	dtpage_t *p;
 	int index;
 	s8 *stbl;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	int i, next;
 	struct ldtentry *d;
 	struct dtslot *t;
@@ -4249,7 +4249,7 @@ int dtModify(tid_t tid, struct inode *ip,
 	struct metapage *mp;
 	dtpage_t *p;
 	int index;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct tlock *tlck;
 	struct dt_lock *dtlck;
 	struct lv *lv;

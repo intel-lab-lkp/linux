@@ -123,7 +123,7 @@ int xtLookup(struct inode *ip, s64 lstart,
 	     s64 llen, int *pflag, s64 * paddr, s32 * plen, int no_check)
 {
 	int rc = 0;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	int cmp;
 	s64 bn;
 	struct metapage *mp;
@@ -520,7 +520,7 @@ int xtInsert(tid_t tid,		/* transaction id */
 	xtpage_t *p;		/* base B+-tree index page */
 	s64 bn;
 	int index, nextindex;
-	struct btstack btstack;	/* traverse stack */
+	struct btstack btstack = {0};	/* traverse stack */
 	struct xtsplit split;	/* split information */
 	xad_t *xad;
 	int cmp;
@@ -1344,7 +1344,7 @@ int xtExtend(tid_t tid,		/* transaction id */
 	xtpage_t *p;		/* base B+-tree index page */
 	s64 bn;
 	int index, nextindex, len;
-	struct btstack btstack;	/* traverse stack */
+	struct btstack btstack = {0};	/* traverse stack */
 	struct xtsplit split;	/* split information */
 	xad_t *xad;
 	s64 xaddr;
@@ -1503,7 +1503,7 @@ int xtUpdate(tid_t tid, struct inode *ip, xad_t * nxad)
 	xtpage_t *p;		/* base B+-tree index page */
 	s64 bn;
 	int index0, index, newindex, nextindex;
-	struct btstack btstack;	/* traverse stack */
+	struct btstack btstack = {0};	/* traverse stack */
 	struct xtsplit split;	/* split information */
 	xad_t *xad, *lxad, *rxad;
 	int xflag;
@@ -1949,7 +1949,7 @@ int xtAppend(tid_t tid,		/* transaction id */
 	xtpage_t *p;		/* base B+-tree index page */
 	s64 bn, xaddr;
 	int index, nextindex;
-	struct btstack btstack;	/* traverse stack */
+	struct btstack btstack = {0};	/* traverse stack */
 	struct xtsplit split;	/* split information */
 	xad_t *xad;
 	int cmp;
@@ -2196,7 +2196,7 @@ s64 xtTruncate(tid_t tid, struct inode *ip, s64 newsize, int flag)
 	xad_t *xad;
 	s64 xoff, xaddr;
 	int xlen, len, freexlen;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct btframe *parent;
 	struct tblock *tblk = NULL;
 	struct tlock *tlck = NULL;
@@ -2744,7 +2744,7 @@ s64 xtTruncate(tid_t tid, struct inode *ip, s64 newsize, int flag)
 s64 xtTruncate_pmap(tid_t tid, struct inode *ip, s64 committed_size)
 {
 	s64 bn;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	int cmp;
 	int index;
 	int locked_leaves = 0;

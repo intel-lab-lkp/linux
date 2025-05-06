@@ -67,7 +67,7 @@ static int jfs_create(struct mnt_idmap *idmap, struct inode *dip,
 	struct inode *ip = NULL;	/* child directory inode */
 	ino_t ino;
 	struct component_name dname;	/* child directory name */
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct inode *iplist[2];
 	struct tblock *tblk;
 
@@ -200,7 +200,7 @@ static struct dentry *jfs_mkdir(struct mnt_idmap *idmap, struct inode *dip,
 	struct inode *ip = NULL;	/* child directory inode */
 	ino_t ino;
 	struct component_name dname;	/* child directory name */
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct inode *iplist[2];
 	struct tblock *tblk;
 
@@ -791,7 +791,7 @@ static int jfs_link(struct dentry *old_dentry,
 	struct inode *ip = d_inode(old_dentry);
 	ino_t ino;
 	struct component_name dname;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct inode *iplist[2];
 
 	jfs_info("jfs_link: %pd %pd", old_dentry, dentry);
@@ -883,7 +883,7 @@ static int jfs_symlink(struct mnt_idmap *idmap, struct inode *dip,
 	ino_t ino = 0;
 	struct component_name dname;
 	u32 ssize;		/* source pathname size */
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct inode *ip;
 	s64 xlen = 0;
 	int bmask = 0, xsize;
@@ -1069,7 +1069,7 @@ static int jfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		      struct dentry *old_dentry, struct inode *new_dir,
 		      struct dentry *new_dentry, unsigned int flags)
 {
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	ino_t ino;
 	struct component_name new_dname;
 	struct inode *new_ip;
@@ -1356,7 +1356,7 @@ static int jfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 		     struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct jfs_inode_info *jfs_ip;
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	struct component_name dname;
 	ino_t ino;
 	struct inode *ip;
@@ -1448,7 +1448,7 @@ static int jfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 
 static struct dentry *jfs_lookup(struct inode *dip, struct dentry *dentry, unsigned int flags)
 {
-	struct btstack btstack;
+	struct btstack btstack = {0};
 	ino_t inum;
 	struct inode *ip;
 	struct component_name key;
