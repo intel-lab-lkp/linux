@@ -409,6 +409,10 @@ impl<T> Opaque<T> {
 /// Implementers must also ensure that all instances are reference-counted. (Otherwise they
 /// won't be able to honour the requirement that [`AlwaysRefCounted::inc_ref`] keep the object
 /// alive.)
+///
+/// Implementers of this trait must ensure that values of types implementing this trait can never be
+/// owned by value. Instead, values must be owned and used through a pointer type. That is, a type
+/// that implements [`Deref`].
 pub unsafe trait AlwaysRefCounted {
     /// Increments the reference count on the object.
     fn inc_ref(&self);
