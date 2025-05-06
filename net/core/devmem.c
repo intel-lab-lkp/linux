@@ -167,6 +167,7 @@ err_close_rxq:
 
 struct net_devmem_dmabuf_binding *
 net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
+		       struct netdev_nl_sock *priv,
 		       struct netlink_ext_ack *extack)
 {
 	struct net_devmem_dmabuf_binding *binding;
@@ -189,6 +190,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 	}
 
 	binding->dev = dev;
+	binding->priv = priv;
 
 	err = xa_alloc_cyclic(&net_devmem_dmabuf_bindings, &binding->id,
 			      binding, xa_limit_32b, &id_alloc_next,
@@ -376,12 +378,16 @@ static void mp_dmabuf_devmem_uninstall(void *mp_priv,
 	struct netdev_rx_queue *bound_rxq;
 	unsigned long xa_idx;
 
+	mutex_lock(&binding->priv->lock);
 	xa_for_each(&binding->bound_rxqs, xa_idx, bound_rxq) {
 		if (bound_rxq == rxq) {
 			xa_erase(&binding->bound_rxqs, xa_idx);
+			if (xa_empty(&binding->bound_rxqs))
+				binding->dev = NULL;
 			break;
 		}
 	}
+	mutex_unlock(&binding->priv->lock);
 }
 
 static const struct memory_provider_ops dmabuf_devmem_ops = {

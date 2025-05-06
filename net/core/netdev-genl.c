@@ -859,13 +859,11 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_genlmsg_free;
 	}
 
-	mutex_lock(&priv->lock);
-
 	err = 0;
 	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
 	if (!netdev) {
 		err = -ENODEV;
-		goto err_unlock_sock;
+		goto err_genlmsg_free;
 	}
 	if (!netif_device_present(netdev))
 		err = -ENODEV;
@@ -877,10 +875,11 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_unlock;
 	}
 
-	binding = net_devmem_bind_dmabuf(netdev, dmabuf_fd, info->extack);
+	mutex_lock(&priv->lock);
+	binding = net_devmem_bind_dmabuf(netdev, dmabuf_fd, priv, info->extack);
 	if (IS_ERR(binding)) {
 		err = PTR_ERR(binding);
-		goto err_unlock;
+		goto err_unlock_sock;
 	}
 
 	nla_for_each_attr_type(attr, NETDEV_A_DMABUF_QUEUES,
@@ -921,18 +920,17 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		goto err_unbind;
 
-	netdev_unlock(netdev);
-
 	mutex_unlock(&priv->lock);
+	netdev_unlock(netdev);
 
 	return 0;
 
 err_unbind:
 	net_devmem_unbind_dmabuf(binding);
-err_unlock:
-	netdev_unlock(netdev);
 err_unlock_sock:
 	mutex_unlock(&priv->lock);
+err_unlock:
+	netdev_unlock(netdev);
 err_genlmsg_free:
 	nlmsg_free(rsp);
 	return err;
@@ -948,14 +946,25 @@ void netdev_nl_sock_priv_destroy(struct netdev_nl_sock *priv)
 {
 	struct net_devmem_dmabuf_binding *binding;
 	struct net_devmem_dmabuf_binding *temp;
+	netdevice_tracker dev_tracker;
 	struct net_device *dev;
 
 	mutex_lock(&priv->lock);
 	list_for_each_entry_safe(binding, temp, &priv->bindings, list) {
 		dev = binding->dev;
+		if (!dev) {
+			net_devmem_unbind_dmabuf(binding);
+			continue;
+		}
+		netdev_hold(dev, &dev_tracker, GFP_KERNEL);
+		mutex_unlock(&priv->lock);
 		netdev_lock(dev);
+		mutex_lock(&priv->lock);
 		net_devmem_unbind_dmabuf(binding);
+		mutex_unlock(&priv->lock);
 		netdev_unlock(dev);
+		netdev_put(dev, &dev_tracker);
+		mutex_lock(&priv->lock);
 	}
 	mutex_unlock(&priv->lock);
 }
