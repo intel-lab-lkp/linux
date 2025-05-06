@@ -5883,6 +5883,27 @@ int security_bdev_setintegrity(struct block_device *bdev,
 }
 EXPORT_SYMBOL(security_bdev_setintegrity);
 
+/**
+ * security_lsm_manage_policy() - Manage the policies of LSMs
+ * @lsm_id: id of the lsm to target
+ * @op: Operation to perform (one of the LSM_POLICY_XXX values)
+ * @buf:  userspace pointer to policy data
+ * @size: size of @buf
+ * @flags: lsm policy management flags
+ *
+ * Manage the policies of a LSM. This notably allows to update them even when
+ * the lsmfs is unavailable is restricted. Currently, only LSM_POLICY_LOAD is
+ * supported.
+ *
+ * Return: Returns 0 on success, error on failure.
+ */
+int security_lsm_manage_policy(u32 lsm_id, u32 op, void __user *buf,
+			       size_t size, u32 flags)
+{
+	return call_int_hook(lsm_manage_policy, lsm_id, op, buf, size, flags);
+}
+EXPORT_SYMBOL(security_lsm_manage_policy);
+
 #ifdef CONFIG_PERF_EVENTS
 /**
  * security_perf_event_open() - Check if a perf event open is allowed

@@ -581,6 +581,8 @@ void security_bdev_free(struct block_device *bdev);
 int security_bdev_setintegrity(struct block_device *bdev,
 			       enum lsm_integrity_type type, const void *value,
 			       size_t size);
+int security_lsm_manage_policy(u32 lsm_id, u32 op, void __user *buf,
+			       size_t size, u32 flags);
 #else /* CONFIG_SECURITY */
 
 /**
@@ -1601,6 +1603,11 @@ static inline int security_bdev_setintegrity(struct block_device *bdev,
 					     const void *value, size_t size)
 {
 	return 0;
+}
+static int security_lsm_manage_policy(u32 lsm_id, u32 op, void __user *buf,
+				      size_t size, u32 flags)
+
+	return -EOPNOTSUPP;
 }
 
 #endif	/* CONFIG_SECURITY */
