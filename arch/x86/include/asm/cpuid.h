@@ -5,5 +5,6 @@
 
 #include <asm/cpuid/api.h>
 #include <asm/cpuid/leaf_0x2_api.h>
+#include <asm/cpuid/table_api.h>
 
 #endif /* _ASM_X86_CPUID_H */
