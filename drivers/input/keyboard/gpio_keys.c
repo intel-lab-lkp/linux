@@ -426,6 +426,8 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 			 * handler to run.
 			 */
 			input_report_key(bdata->input, button->code, 1);
+			input_sync(bdata->input);
+			return IRQ_HANDLED;
 		}
 	}
 
