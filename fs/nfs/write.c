@@ -635,9 +635,10 @@ static void nfs_write_error(struct nfs_page *req, int error)
 static int nfs_do_writepage(struct folio *folio, struct writeback_control *wbc,
 		struct nfs_pageio_descriptor *pgio)
 {
-	nfs_pageio_cond_complete(pgio, folio->index);
 	struct nfs_page *req;
 	int ret = 0;
+
+	nfs_pageio_cond_complete(pgio, folio->index);
 
 	req = nfs_lock_and_join_requests(folio);
 	if (!req)
