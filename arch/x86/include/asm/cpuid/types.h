@@ -5,6 +5,8 @@
 #include <linux/build_bug.h>
 #include <linux/types.h>
 
+#include <asm/cpuid/leaves.h>
+
 /*
  * Types for raw CPUID access:
  */
@@ -124,5 +126,64 @@ extern const struct leaf_0x2_table cpuid_0x2_table[256];
  * count for dTLB 1GB pages is already encoded at the cpuid_0x2_table[]'s mapping.
  */
 #define TLB_0x63_2M_4M_ENTRIES		32
+
+/*
+ * Types for centralized CPUID tables:
+ */
+
+/**
+ * struct leaf_query_info - Info for a CPUID leaf/subleaf query
+ * @nr_entries:	Number of filled entries by the CPUID scanner for leaf/subleaf
+ *
+ * Each leaf/subleaf entry in a CPUID table (struct cpuid_leaves) has this
+ * dedicated query info.
+ */
+struct leaf_query_info {
+	unsigned int		nr_entries;
+};
+
+/**
+ * __CPUID_LEAF() - Define CPUID storage entries as <cpuid/leaves.h> structures
+ * @_name:	leaf_0xN_M structure name and type as found in <cpuid/leaves.h>,
+ *		where N is the leaf and M is the subleaf.
+ * @_count:	Max storage capacity for the combined leaf/subleaf @_name entry
+ *
+ * Define an array of storage entries for each leaf/subleaf combination.
+ * Use an array to accommodate leaves which produce the same output format
+ * for a large subleaf range, which is common for hierarchical objects
+ * enumeration; e.g., leaf 0x4, 0xd, and 0x12.
+ */
+#define __CPUID_LEAF(_name, _count)				\
+	struct _name		_name[_count];			\
+	struct leaf_query_info	_name ## _ ## info
+
+/**
+ * CPUID_LEAF() - Define CPUID storage entries for @_leaf/@_subleaf
+ * @_leaf:	Leaf number in the 0xN format
+ * @_subleaf:	Subleaf number in decimal
+ * @_count:	Number of repeated storage entries for @_leaf/@_subleaf
+ */
+#define CPUID_LEAF(_leaf, _subleaf, _count)			\
+	__CPUID_LEAF(leaf_ ## _leaf ## _ ## _subleaf, _count)
+
+/*
+ * struct cpuid_leaves - CPUID leaf/subleaf output storage
+ */
+struct cpuid_leaves {
+	/*         leaf		subleaf		count */
+	CPUID_LEAF(0x0,		0,		1);
+	CPUID_LEAF(0x1,		0,		1);
+};
+
+/**
+ * struct cpuid_table - System CPUID data table
+ * @leaves:	Leaf/subleaf output storage space
+ *
+ * struct cpuinfo_x86 embeds an instance of this table so that CPUID
+ * data can be extracted using a CPU capability structure reference.
+ */
+struct cpuid_table {
+	struct cpuid_leaves	leaves;
+};
 
 #endif /* _ASM_X86_CPUID_TYPES_H */
