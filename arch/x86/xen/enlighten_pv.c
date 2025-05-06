@@ -1160,36 +1160,66 @@ static void xen_do_write_msr(u32 msr, u64 val, int *err)
 	}
 }
 
-static int xen_read_msr_safe(u32 msr, u64 *val)
-{
+/*
+ * Prototypes for functions called via PV_CALLEE_SAVE_REGS_THUNK() in order
+ * to avoid warnings with "-Wmissing-prototypes".
+ */
+struct xen_rdmsr_safe_ret {
+	u64 val;
 	int err;
+};
+struct xen_rdmsr_safe_ret xen_read_msr_safe(u32 msr);
+int xen_write_msr_safe(u32 msr, u32 low, u32 high);
+u64 xen_read_msr(u32 msr);
+void xen_write_msr(u32 msr, u32 low, u32 high);
 
-	*val = xen_do_read_msr(msr, &err);
-	return err;
+__visible struct xen_rdmsr_safe_ret xen_read_msr_safe(u32 msr)
+{
+	struct xen_rdmsr_safe_ret ret;
+
+	ret.val = xen_do_read_msr(msr, &ret.err);
+	return ret;
 }
+#define PV_PROLOGUE_MSR_xen_read_msr_safe	"mov %ecx, %edi;"
+#define PV_EPILOGUE_MSR_xen_read_msr_safe	\
+	"mov %edx, %ecx; mov %rax, %rdx; mov %eax, %eax; shr $0x20, %rdx;"
+PV_CALLEE_SAVE_REGS_MSR_THUNK(xen_read_msr_safe);
 
-static int xen_write_msr_safe(u32 msr, u64 val)
+__visible int xen_write_msr_safe(u32 msr, u32 low, u32 high)
 {
 	int err = 0;
 
-	xen_do_write_msr(msr, val, &err);
+	xen_do_write_msr(msr, (u64)high << 32 | low, &err);
 
 	return err;
 }
+#define PV_PROLOGUE_MSR_xen_write_msr_safe	\
+	"mov %ecx, %edi; mov %eax, %esi;"
+#define PV_EPILOGUE_MSR_xen_write_msr_safe
+PV_CALLEE_SAVE_REGS_MSR_THUNK(xen_write_msr_safe);
 
-static u64 xen_read_msr(u32 msr)
+__visible u64 xen_read_msr(u32 msr)
 {
 	int err;
 
 	return xen_do_read_msr(msr, xen_msr_safe ? &err : NULL);
 }
+#define PV_PROLOGUE_MSR_xen_read_msr	"mov %ecx, %edi;"
+#define PV_EPILOGUE_MSR_xen_read_msr	\
+	"mov %rax, %rdx; mov %eax, %eax; shr $0x20, %rdx;"
+PV_CALLEE_SAVE_REGS_MSR_THUNK(xen_read_msr);
 
-static void xen_write_msr(u32 msr, u64 val)
+__visible void xen_write_msr(u32 msr, u32 low, u32 high)
 {
 	int err;
 
-	xen_do_write_msr(msr, val, xen_msr_safe ? &err : NULL);
+	xen_do_write_msr(msr, (u64)high << 32 | low,
+			 xen_msr_safe ? &err : NULL);
 }
+#define PV_PROLOGUE_MSR_xen_write_msr	\
+	"mov %ecx, %edi; mov %eax, %esi;"
+#define PV_EPILOGUE_MSR_xen_write_msr
+PV_CALLEE_SAVE_REGS_MSR_THUNK(xen_write_msr);
 
 /* This is called once we have the cpu_possible_mask */
 void __init xen_setup_vcpu_info_placement(void)
@@ -1225,11 +1255,11 @@ static const typeof(pv_ops) xen_cpu_ops __initconst = {
 
 		.write_cr4 = xen_write_cr4,
 
-		.read_msr = xen_read_msr,
-		.write_msr = xen_write_msr,
+		.read_msr = PV_CALLEE_SAVE(xen_read_msr),
+		.write_msr = PV_CALLEE_SAVE(xen_write_msr),
 
-		.read_msr_safe = xen_read_msr_safe,
-		.write_msr_safe = xen_write_msr_safe,
+		.read_msr_safe = PV_CALLEE_SAVE(xen_read_msr_safe),
+		.write_msr_safe = PV_CALLEE_SAVE(xen_write_msr_safe),
 
 		.read_pmc = xen_read_pmc,
 

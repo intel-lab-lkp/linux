@@ -175,24 +175,72 @@ static inline void __write_cr4(unsigned long x)
 	PVOP_VCALL1(cpu.write_cr4, x);
 }
 
-static inline u64 paravirt_read_msr(u32 msr)
+static __always_inline u64 paravirt_read_msr(u32 msr)
 {
-	return PVOP_CALL1(u64, cpu.read_msr, msr);
+	EAX_EDX_DECLARE_ARGS(val, low, high);
+
+	PVOP_TEST_NULL(cpu.read_msr);
+	asm volatile("1: "ALTERNATIVE_2(PARAVIRT_CALL,
+					"rdmsr", ALT_NOT_XEN,
+					ALT_CALL_INSTR, ALT_XENPV_CALL)
+		     "2:\n"
+		     _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_RDMSR)
+		     : EAX_EDX_RET(val, low, high), ASM_CALL_CONSTRAINT
+		     : paravirt_ptr(cpu.read_msr), "c" (msr));
+
+	return EAX_EDX_VAL(val, low, high);
 }
 
-static inline void paravirt_write_msr(u32 msr, u64 val)
+static __always_inline void paravirt_write_msr(u32 msr, u64 val)
 {
-	PVOP_VCALL2(cpu.write_msr, msr, val);
+	PVOP_TEST_NULL(cpu.write_msr);
+	asm volatile("1: "ALTERNATIVE_2(PARAVIRT_CALL,
+					"wrmsr", ALT_NOT_XEN,
+					ALT_CALL_INSTR, ALT_XENPV_CALL)
+		      "2:\n"
+		      _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_WRMSR)
+		      : ASM_CALL_CONSTRAINT
+		      : paravirt_ptr(cpu.write_msr),
+			  "c" (msr), "a" ((u32)val), "d" ((u32)(val >> 32))
+		      : "memory");
 }
 
-static inline int paravirt_read_msr_safe(u32 msr, u64 *val)
+static __always_inline int paravirt_read_msr_safe(u32 msr, u64 *p)
 {
-	return PVOP_CALL2(int, cpu.read_msr_safe, msr, val);
+	int err;
+	EAX_EDX_DECLARE_ARGS(val, low, high);
+
+	PVOP_TEST_NULL(cpu.read_msr_safe);
+	asm volatile("1: "ALTERNATIVE_2(PARAVIRT_CALL,
+					"rdmsr; xor %[err],%[err]", ALT_NOT_XEN,
+					ALT_CALL_INSTR, ALT_XENPV_CALL)
+		     "2:\n"
+		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_RDMSR_SAFE, %[err])
+		     : [err] "=c" (err), EAX_EDX_RET(val, low, high),
+		       ASM_CALL_CONSTRAINT
+		     : paravirt_ptr(cpu.read_msr_safe), "0" (msr));
+
+	*p = EAX_EDX_VAL(val, low, high);
+
+	return err;
 }
 
-static inline int paravirt_write_msr_safe(u32 msr, u64 val)
+static __always_inline int paravirt_write_msr_safe(u32 msr, u64 val)
 {
-	return PVOP_CALL2(int, cpu.write_msr_safe, msr, val);
+	int err;
+
+	PVOP_TEST_NULL(cpu.write_msr_safe);
+	asm volatile("1: "ALTERNATIVE_2(PARAVIRT_CALL,
+					"wrmsr; xor %[err],%[err]", ALT_NOT_XEN,
+					ALT_CALL_INSTR, ALT_XENPV_CALL)
+		     "2:\n"
+		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_WRMSR_SAFE, %[err])
+		     : [err] "=a" (err), ASM_CALL_CONSTRAINT
+		     : paravirt_ptr(cpu.write_msr_safe),
+		       "c" (msr), "0" ((u32)val), "d" ((u32)(val >> 32))
+		     : "memory");
+
+	return err;
 }
 
 static __always_inline u64 read_msr(u32 msr)
@@ -573,26 +621,42 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
 #define PV_SAVE_ALL_CALLER_REGS		"pushl %ecx;"
 #define PV_RESTORE_ALL_CALLER_REGS	"popl  %ecx;"
 #else
+/* save and restore caller-save registers, except %rax, %rcx and %rdx. */
+#define PV_SAVE_COMMON_CALLER_REGS	\
+	"push %rsi;"			\
+	"push %rdi;"			\
+	"push %r8;"			\
+	"push %r9;"			\
+	"push %r10;"			\
+	"push %r11;"
+#define PV_RESTORE_COMMON_CALLER_REGS	\
+	"pop %r11;"			\
+	"pop %r10;"			\
+	"pop %r9;"			\
+	"pop %r8;"			\
+	"pop %rdi;"			\
+	"pop %rsi;"
+
+#define PV_PROLOGUE_MSR(func)		\
+	PV_SAVE_COMMON_CALLER_REGS	\
+	PV_PROLOGUE_MSR_##func
+#define PV_EPILOGUE_MSR(func)		\
+	PV_EPILOGUE_MSR_##func		\
+	PV_RESTORE_COMMON_CALLER_REGS
+
 /* save and restore all caller-save registers, except return value */
 #define PV_SAVE_ALL_CALLER_REGS						\
 	"push %rcx;"							\
 	"push %rdx;"							\
-	"push %rsi;"							\
-	"push %rdi;"							\
-	"push %r8;"							\
-	"push %r9;"							\
-	"push %r10;"							\
-	"push %r11;"
+	PV_SAVE_COMMON_CALLER_REGS
 #define PV_RESTORE_ALL_CALLER_REGS					\
-	"pop %r11;"							\
-	"pop %r10;"							\
-	"pop %r9;"							\
-	"pop %r8;"							\
-	"pop %rdi;"							\
-	"pop %rsi;"							\
+	PV_RESTORE_COMMON_CALLER_REGS					\
 	"pop %rdx;"							\
 	"pop %rcx;"
 #endif
+
+#define PV_PROLOGUE_ALL(func)	PV_SAVE_ALL_CALLER_REGS
+#define PV_EPILOGUE_ALL(func)	PV_RESTORE_ALL_CALLER_REGS
 
 /*
  * Generate a thunk around a function which saves all caller-save
@@ -607,7 +671,7 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
  * functions.
  */
 #define PV_THUNK_NAME(func) "__raw_callee_save_" #func
-#define __PV_CALLEE_SAVE_REGS_THUNK(func, section)			\
+#define __PV_CALLEE_SAVE_REGS_THUNK(func, section, helper)		\
 	extern typeof(func) __raw_callee_save_##func;			\
 									\
 	asm(".pushsection " section ", \"ax\";"				\
@@ -617,16 +681,18 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
 	    PV_THUNK_NAME(func) ":"					\
 	    ASM_ENDBR							\
 	    FRAME_BEGIN							\
-	    PV_SAVE_ALL_CALLER_REGS					\
+	    PV_PROLOGUE_##helper(func)					\
 	    "call " #func ";"						\
-	    PV_RESTORE_ALL_CALLER_REGS					\
+	    PV_EPILOGUE_##helper(func)					\
 	    FRAME_END							\
 	    ASM_RET							\
 	    ".size " PV_THUNK_NAME(func) ", .-" PV_THUNK_NAME(func) ";"	\
 	    ".popsection")
 
 #define PV_CALLEE_SAVE_REGS_THUNK(func)			\
-	__PV_CALLEE_SAVE_REGS_THUNK(func, ".text")
+	__PV_CALLEE_SAVE_REGS_THUNK(func, ".text", ALL)
+#define PV_CALLEE_SAVE_REGS_MSR_THUNK(func)		\
+	__PV_CALLEE_SAVE_REGS_THUNK(func, ".text", MSR)
 
 /* Get a reference to a callee-save function */
 #define PV_CALLEE_SAVE(func)						\
