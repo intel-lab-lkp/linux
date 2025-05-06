@@ -564,6 +564,8 @@ void intel_alpm_disable(struct intel_dp *intel_dp)
 	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
 	intel_de_write(display, PORT_ALPM_CTL(dp_to_dig_port(intel_dp)->base.port), 0);
 
+	drm_dp_dpcd_writeb(&intel_dp->aux, DP_RECEIVER_ALPM_CONFIG, 0);
+
 	drm_dbg_kms(display->drm, "Disabling ALPM\n");
 	mutex_unlock(&intel_dp->alpm_parameters.lock);
 }
