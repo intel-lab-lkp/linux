@@ -710,14 +710,14 @@ static void intel_tlb_lookup(const struct leaf_0x2_table *entry)
 static void intel_detect_tlb(struct cpuinfo_x86 *c)
 {
 	const struct leaf_0x2_table *entry;
-	union leaf_0x2_regs regs;
+	struct cpuid_regs *regs;
 	u8 *ptr;
 
-	if (c->cpuid_level < 2)
+	regs = cpudata_cpuid_regs(c, 0x2);
+	if (!regs)
 		return;
 
-	cpuid_get_leaf_0x2_regs(&regs);
-	for_each_leaf_0x2_entry(regs, ptr, entry)
+	for_each_scanned_leaf_0x2_entry(regs, ptr, entry)
 		intel_tlb_lookup(entry);
 }
 
