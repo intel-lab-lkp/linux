@@ -62,9 +62,11 @@ static bool cpuid_leaf_valid(const struct cpuid_leaves *l, unsigned int leaf)
 		cpuid_range_valid(l, leaf, CPUID_EXT_START, CPUID_EXT_END);
 }
 
-static const struct cpuid_scan_entry cpuid_common_scan_entries[] = {
+const struct cpuid_scan_entry cpuid_common_scan_entries[] = {
 	CPUID_SCAN_ENTRIES
 };
+
+const int cpuid_common_scan_entries_size = ARRAY_SIZE(cpuid_common_scan_entries);
 
 static void cpuid_scan(const struct cpuid_scan_info *info)
 {
@@ -97,7 +99,7 @@ void cpuid_scan_cpu(struct cpuinfo_x86 *c)
 	const struct cpuid_scan_info info = {
 		.cpuid_table	= &c->cpuid_table,
 		.entries	= cpuid_common_scan_entries,
-		.nr_entries	= ARRAY_SIZE(cpuid_common_scan_entries),
+		.nr_entries	= cpuid_common_scan_entries_size,
 	};
 
 	cpuid_scan(&info);

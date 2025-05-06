@@ -106,4 +106,7 @@ struct cpuid_scan_info {
 	unsigned int			nr_entries;
 };
 
+extern const struct cpuid_scan_entry cpuid_common_scan_entries[];
+extern const int cpuid_common_scan_entries_size;
+
 #endif /* _ARCH_X86_CPUID_SCANNER_H */
