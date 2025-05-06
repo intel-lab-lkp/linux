@@ -21,7 +21,7 @@
 #include <linux/input.h>
 #include <linux/irq_work.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/serial_core.h>
 
 #define MAX_CONFIG_LEN		40
@@ -42,7 +42,7 @@ static int kgdboc_use_kms;  /* 1 if we use kernel mode switching */
 static struct tty_driver	*kgdb_tty_driver;
 static int			kgdb_tty_line;
 
-static struct platform_device *kgdboc_pdev;
+static struct faux_device *kgdboc_fdev;
 
 #if IS_BUILTIN(CONFIG_KGDB_SERIAL_CONSOLE)
 static struct kgdb_io		kgdboc_earlycon_io_ops;
@@ -259,7 +259,7 @@ noconfig:
 	return err;
 }
 
-static int kgdboc_probe(struct platform_device *pdev)
+static int kgdboc_probe(struct faux_device *fdev)
 {
 	int ret = 0;
 
@@ -276,47 +276,26 @@ static int kgdboc_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static struct platform_driver kgdboc_platform_driver = {
+struct faux_device_ops kgdboc_driver = {
 	.probe = kgdboc_probe,
-	.driver = {
-		.name = "kgdboc",
-		.suppress_bind_attrs = true,
-	},
 };
 
 static int __init init_kgdboc(void)
 {
-	int ret;
 
 	/*
-	 * kgdboc is a little bit of an odd "platform_driver".  It can be
-	 * up and running long before the platform_driver object is
-	 * created and thus doesn't actually store anything in it.  There's
-	 * only one instance of kgdb so anything is stored as global state.
-	 * The platform_driver is only created so that we can leverage the
+	 * There's only one instance of kgdb so anything is stored as global
+	 * state.
+	 * The faux_device is only created so that we can leverage the
 	 * kernel's mechanisms (like -EPROBE_DEFER) to call us when our
-	 * underlying tty is ready.  Here we init our platform driver and
-	 * then create the single kgdboc instance.
+	 * underlying tty is ready. Here we init our faux device kgdboc
+	 * instance.
 	 */
-	ret = platform_driver_register(&kgdboc_platform_driver);
-	if (ret)
-		return ret;
+	kgdboc_fdev = faux_device_create("kgdboc", NULL, &kgdboc_driver);
+	if (!kgdboc_fdev)
+		return -ENOMEM;
 
-	kgdboc_pdev = platform_device_alloc("kgdboc", PLATFORM_DEVID_NONE);
-	if (!kgdboc_pdev) {
-		ret = -ENOMEM;
-		goto err_did_register;
-	}
-
-	ret = platform_device_add(kgdboc_pdev);
-	if (!ret)
-		return 0;
-
-	platform_device_put(kgdboc_pdev);
-
-err_did_register:
-	platform_driver_unregister(&kgdboc_platform_driver);
-	return ret;
+	return 0;
 }
 
 static void exit_kgdboc(void)
@@ -325,8 +304,7 @@ static void exit_kgdboc(void)
 	cleanup_kgdboc();
 	mutex_unlock(&config_mutex);
 
-	platform_device_unregister(kgdboc_pdev);
-	platform_driver_unregister(&kgdboc_platform_driver);
+	faux_device_destroy(kgdboc_fdev);
 }
 
 static int kgdboc_get_char(void)
