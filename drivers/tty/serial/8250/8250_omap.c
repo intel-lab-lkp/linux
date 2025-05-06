@@ -1152,9 +1152,11 @@ static int omap_8250_tx_dma(struct uart_8250_port *p)
 	struct omap8250_priv		*priv = p->port.private_data;
 	struct tty_port			*tport = &p->port.state->port;
 	struct dma_async_tx_descriptor	*desc;
-	struct scatterlist sg;
+	struct scatterlist *sg;
+	struct scatterlist sgl[2];
 	int skip_byte = -1;
 	int ret;
+	int i;
 
 	if (dma->tx_running)
 		return 0;
@@ -1208,18 +1210,22 @@ static int omap_8250_tx_dma(struct uart_8250_port *p)
 		skip_byte = c;
 	}
 
-	sg_init_table(&sg, 1);
-	kfifo_dma_out_prepare_mapped(&tport->xmit_fifo, &sg, 1,
-				     UART_XMIT_SIZE, dma->tx_addr);
+	sg_init_table(sgl, ARRAY_SIZE(sgl));
+	ret = kfifo_dma_out_prepare_mapped(&tport->xmit_fifo, sgl, ARRAY_SIZE(sgl),
+					   UART_XMIT_SIZE, dma->tx_addr);
 
-	desc = dmaengine_prep_slave_sg(dma->txchan, &sg, 1, DMA_MEM_TO_DEV,
+	desc = dmaengine_prep_slave_sg(dma->txchan, sgl, ret, DMA_MEM_TO_DEV,
 			DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!desc) {
 		ret = -EBUSY;
 		goto err;
 	}
 
-	dma->tx_size = sg_dma_len(&sg);
+	dma->tx_size = 0;
+
+	for_each_sg(sgl, sg, ret, i)
+		dma->tx_size += sg_dma_len(sg);
+
 	dma->tx_running = 1;
 
 	desc->callback = omap_8250_dma_tx_complete;
