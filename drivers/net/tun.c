@@ -3537,6 +3537,57 @@ static void tun_get_channels(struct net_device *dev,
 	channels->max_combined = tun->flags & IFF_MULTI_QUEUE ? MAX_TAP_QUEUES : 1;
 }
 
+static void tun_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
+{
+	char *p = (char *)buf;
+	int i;
+
+	switch (stringset) {
+	case ETH_SS_STATS:
+		for (i = 0; i < dev->real_num_tx_queues; i++) {
+			snprintf(p, ETH_GSTRING_LEN, "tx_queue_usage_%u", i);
+			p += ETH_GSTRING_LEN;
+		}
+		break;
+	}
+}
+
+static int tun_get_sset_count(struct net_device *dev, int sset)
+{
+	switch (sset) {
+	case ETH_SS_STATS:
+		return dev->real_num_tx_queues;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static void tun_get_ethtool_stats(struct net_device *dev,
+				  struct ethtool_stats *stats, u64 *data)
+{
+	struct tun_struct *tun = netdev_priv(dev);
+	struct tun_file *tfile;
+	int i;
+	int producer, consumer, size, usage;
+
+	rcu_read_lock();
+	for (i = 0; i < dev->real_num_tx_queues; i++) {
+		tfile = rcu_dereference(tun->tfiles[i]);
+
+		producer = READ_ONCE(tfile->tx_ring.producer);
+		consumer = READ_ONCE(tfile->tx_ring.consumer_head);
+		size = READ_ONCE(tfile->tx_ring.size);
+
+		if (producer >= consumer)
+			usage = producer - consumer;
+		else
+			usage = size - (consumer - producer);
+
+		data[i] = usage;
+	}
+	rcu_read_unlock();
+}
+
 static const struct ethtool_ops tun_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_RX_MAX_FRAMES,
 	.get_drvinfo	= tun_get_drvinfo,
@@ -3549,6 +3600,9 @@ static const struct ethtool_ops tun_ethtool_ops = {
 	.set_coalesce   = tun_set_coalesce,
 	.get_link_ksettings = tun_get_link_ksettings,
 	.set_link_ksettings = tun_set_link_ksettings,
+	.get_strings	    = tun_get_strings,
+	.get_sset_count	    = tun_get_sset_count,
+	.get_ethtool_stats  = tun_get_ethtool_stats,
 };
 
 static int tun_queue_resize(struct tun_struct *tun)
