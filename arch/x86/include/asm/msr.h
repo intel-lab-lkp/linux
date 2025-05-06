@@ -101,12 +101,7 @@ static __always_inline u64 native_rdmsrq(u32 msr)
 #define native_wrmsrq(msr, val)				\
 	__wrmsrq((msr), (val))
 
-static inline u64 native_read_msr(u32 msr)
-{
-	return __rdmsr(msr);
-}
-
-static inline int native_read_msr_safe(u32 msr, u64 *p)
+static __always_inline int native_read_msr_safe(u32 msr, u64 *p)
 {
 	int err;
 	EAX_EDX_DECLARE_ARGS(val, low, high);
@@ -122,14 +117,7 @@ static inline int native_read_msr_safe(u32 msr, u64 *p)
 	return err;
 }
 
-/* Can be uninlined because referenced by paravirt */
-static inline void notrace native_write_msr(u32 msr, u64 val)
-{
-	native_wrmsrq(msr, val);
-}
-
-/* Can be uninlined because referenced by paravirt */
-static inline int notrace native_write_msr_safe(u32 msr, u64 val)
+static __always_inline int notrace native_write_msr_safe(u32 msr, u64 val)
 {
 	int err;
 
@@ -161,7 +149,7 @@ static inline u64 native_read_pmc(int counter)
 #include <linux/errno.h>
 static __always_inline u64 read_msr(u32 msr)
 {
-	return native_read_msr(msr);
+	return native_rdmsrq(msr);
 }
 
 static __always_inline int read_msr_safe(u32 msr, u64 *p)
@@ -171,7 +159,7 @@ static __always_inline int read_msr_safe(u32 msr, u64 *p)
 
 static __always_inline void write_msr(u32 msr, u64 val)
 {
-	native_write_msr(msr, val);
+	native_wrmsrq(msr, val);
 }
 
 static __always_inline int write_msr_safe(u32 msr, u64 val)
