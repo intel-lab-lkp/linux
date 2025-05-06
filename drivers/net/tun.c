@@ -2354,12 +2354,12 @@ static int tun_xdp_one(struct tun_struct *tun,
 		       struct tun_file *tfile,
 		       struct xdp_buff *xdp, int *flush,
 		       struct tun_page *tpage,
-		       struct bpf_prog *xdp_prog)
+		       struct bpf_prog *xdp_prog,
+		       struct sk_buff *skb)
 {
 	unsigned int datasize = xdp->data_end - xdp->data;
 	struct tun_xdp_hdr *hdr = xdp->data_hard_start;
 	struct virtio_net_hdr *gso = &hdr->gso;
-	struct sk_buff *skb = NULL;
 	struct sk_buff_head *queue;
 	u32 rxhash = 0, act;
 	int buflen = hdr->buflen;
@@ -2381,16 +2381,15 @@ static int tun_xdp_one(struct tun_struct *tun,
 
 		act = bpf_prog_run_xdp(xdp_prog, xdp);
 		ret = tun_xdp_act(tun, xdp_prog, xdp, act);
-		if (ret < 0) {
-			put_page(virt_to_head_page(xdp->data));
+		if (ret < 0)
 			return ret;
-		}
 
 		switch (ret) {
 		case XDP_REDIRECT:
 			*flush = true;
 			fallthrough;
 		case XDP_TX:
+			napi_consume_skb(skb, 1);
 			return 0;
 		case XDP_PASS:
 			break;
@@ -2403,13 +2402,14 @@ static int tun_xdp_one(struct tun_struct *tun,
 				tpage->page = page;
 				tpage->count = 1;
 			}
+			napi_consume_skb(skb, 1);
 			return 0;
 		}
 	}
 
 build:
-	skb = build_skb(xdp->data_hard_start, buflen);
-	if (!skb) {
+	skb = build_skb_around(skb, xdp->data_hard_start, buflen);
+	if (unlikely(!skb)) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -2427,7 +2427,6 @@ build:
 
 	if (tun_vnet_hdr_to_skb(tun->flags, skb, gso)) {
 		atomic_long_inc(&tun->rx_frame_errors);
-		kfree_skb(skb);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2455,7 +2454,6 @@ build:
 
 		if (unlikely(tfile->detached)) {
 			spin_unlock(&queue->lock);
-			kfree_skb(skb);
 			return -EBUSY;
 		}
 
@@ -2496,7 +2494,9 @@ static int tun_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 		struct bpf_prog *xdp_prog;
 		struct tun_page tpage;
 		int n = ctl->num;
-		int flush = 0, queued = 0;
+		int flush = 0, queued = 0, num_skbs = 0;
+		/* Max size of VHOST_NET_BATCH */
+		void *skbs[64];
 
 		memset(&tpage, 0, sizeof(tpage));
 
@@ -2505,12 +2505,27 @@ static int tun_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 		bpf_net_ctx = bpf_net_ctx_set(&__bpf_net_ctx);
 		xdp_prog = rcu_dereference(tun->xdp_prog);
 
-		for (i = 0; i < n; i++) {
+		num_skbs = napi_skb_cache_get_bulk(skbs, n);
+
+		for (i = 0; i < num_skbs; i++) {
+			struct sk_buff *skb = skbs[i];
 			xdp = &((struct xdp_buff *)ctl->ptr)[i];
 			ret = tun_xdp_one(tun, tfile, xdp, &flush, &tpage,
-					  xdp_prog);
+					  xdp_prog, skb);
 			if (ret > 0)
 				queued += ret;
+			else if (ret < 0) {
+				dev_core_stats_rx_dropped_inc(tun->dev);
+				napi_consume_skb(skb, 1);
+				put_page(virt_to_head_page(xdp->data));
+			}
+		}
+
+		/* Handle remaining xdp_buff entries if num_skbs < ctl->num */
+		for (i = num_skbs; i < ctl->num; i++) {
+			xdp = &((struct xdp_buff *)ctl->ptr)[i];
+			dev_core_stats_rx_dropped_inc(tun->dev);
+			put_page(virt_to_head_page(xdp->data));
 		}
 
 		if (flush)
