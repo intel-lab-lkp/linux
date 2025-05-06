@@ -2275,7 +2275,7 @@ static inline void kvm_load_ldt(u16 sel)
 }
 
 #ifdef CONFIG_X86_64
-static inline unsigned long read_msr(unsigned long msr)
+static inline unsigned long kvm_read_msr(unsigned long msr)
 {
 	u64 value;
 
