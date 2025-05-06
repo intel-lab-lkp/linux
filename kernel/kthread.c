@@ -45,6 +45,7 @@ struct kthread_create_info
 	int (*threadfn)(void *data);
 	void *data;
 	int node;
+	bool move_to_root;
 
 	/* Result passed back to kthread_create() from kthreadd. */
 	struct task_struct *result;
@@ -409,6 +410,9 @@ static void kthread_affine_node(void)
 	}
 }
 
+int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
+		       bool threadgroup);
+
 static int kthread(void *_create)
 {
 	static const struct sched_param param = { .sched_priority = 0 };
@@ -418,6 +422,7 @@ static int kthread(void *_create)
 	void *data = create->data;
 	struct completion *done;
 	struct kthread *self;
+	bool move_to_root = create->move_to_root;
 	int ret;
 
 	self = to_kthread(current);
@@ -453,6 +458,42 @@ static int kthread(void *_create)
 	preempt_enable();
 
 	self->started = 1;
+
+#ifdef CONFIG_CPUSETS
+	/*
+	 * With the kthreads in cgroup feature, kthreadd can be optionally put
+	 * into a non root cpuset (such that newly created kernel threads are
+	 * automatically restricted). Certain kernel threads that must to be in
+	 * the root cpuset are moved to root here.
+	 *
+	 * This code is called after the schedule() above, thus kthread_bind
+	 * or kthread_bind_mask should have already been called if present.
+	 * PF_NO_SETAFFINITY set by these functions implicitly triggers the
+	 * move to root action. It can also be explicitly triggered with the
+	 * move_to_root flag.
+	 *
+	 * Potential races between the conditional and cgroup mutex lock:
+	 *
+	 * current can be out of root then moved into root before mutex lock,
+	 * which is ok because cgroup_attach_task should be able to handle
+	 * src == dst. There are checks in cgroup_migrate_prepare_dst etc.
+	 *
+	 * current can be in root then moved out of root before mutex lock,
+	 * which is also ok: For threads with PF_NO_SETAFFINITY the move is
+	 * disallowed so we can't have this race. For other threads, we allow
+	 * users to move them out of the root cgroup and there is no guarantee
+	 * on the order of actions.
+	 */
+	if ((current->flags & PF_NO_SETAFFINITY || move_to_root) &&
+	  !task_css_is_root(current, cpuset_cgrp_id)) {
+		mutex_lock(&cgroup_mutex);
+		percpu_down_write(&cgroup_threadgroup_rwsem);
+		if (cgroup_attach_task(&cpuset_cgrp_subsys.root->cgrp, current, false))
+			WARN_ONCE(1, "Cannot move newly created kernel thread to root cpuset");
+		percpu_up_write(&cgroup_threadgroup_rwsem);
+		mutex_unlock(&cgroup_mutex);
+	}
+#endif
 
 	if (!(current->flags & PF_NO_SETAFFINITY) && !self->preferred_affinity)
 		kthread_affine_node();
@@ -504,7 +545,8 @@ static __printf(4, 0)
 struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 						    void *data, int node,
 						    const char namefmt[],
-						    va_list args)
+						    va_list args,
+						    bool move_to_root)
 {
 	DECLARE_COMPLETION_ONSTACK(done);
 	struct task_struct *task;
@@ -516,6 +558,7 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	create->threadfn = threadfn;
 	create->data = data;
 	create->node = node;
+	create->move_to_root = move_to_root;
 	create->done = &done;
 	create->full_name = kvasprintf(GFP_KERNEL, namefmt, args);
 	if (!create->full_name) {
@@ -585,14 +628,40 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 	va_list args;
 
 	va_start(args, namefmt);
-	task = __kthread_create_on_node(threadfn, data, node, namefmt, args);
+	task = __kthread_create_on_node(threadfn, data, node, namefmt, args, false);
 	va_end(args);
 
 	return task;
 }
 EXPORT_SYMBOL(kthread_create_on_node);
 
-static void __kthread_bind_mask(struct task_struct *p, const struct cpumask *mask, unsigned int state)
+/*
+ * Move the newly created kthread to root cpuset if it is not already there.
+ * This happens if kthreadd is moved out of root cpuset by user. Otherwise same
+ * as the regular version.
+ */
+struct task_struct *kthread_create_on_node_root_cpuset(
+					   int (*threadfn)(void *data),
+					   void *data, int node,
+					   const char namefmt[],
+					   ...)
+
+{
+	struct task_struct *task;
+	va_list args;
+
+	va_start(args, namefmt);
+	task = __kthread_create_on_node(threadfn, data, node, namefmt, args, true);
+	va_end(args);
+
+	return task;
+}
+EXPORT_SYMBOL(kthread_create_on_node_root_cpuset);
+
+
+static void __kthread_bind_mask(struct task_struct *p, const struct cpumask *mask,
+  unsigned int state, bool no_setaffinity)
+
 {
 	unsigned long flags;
 
@@ -604,20 +673,26 @@ static void __kthread_bind_mask(struct task_struct *p, const struct cpumask *mas
 	/* It's safe because the task is inactive. */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	do_set_cpus_allowed(p, mask);
-	p->flags |= PF_NO_SETAFFINITY;
+	if (no_setaffinity)
+		p->flags |= PF_NO_SETAFFINITY;
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
 }
 
 static void __kthread_bind(struct task_struct *p, unsigned int cpu, unsigned int state)
 {
-	__kthread_bind_mask(p, cpumask_of(cpu), state);
+	__kthread_bind_mask(p, cpumask_of(cpu), state, true);
 }
 
 void kthread_bind_mask(struct task_struct *p, const struct cpumask *mask)
 {
 	struct kthread *kthread = to_kthread(p);
-	__kthread_bind_mask(p, mask, TASK_UNINTERRUPTIBLE);
+	__kthread_bind_mask(p, mask, TASK_UNINTERRUPTIBLE, true);
 	WARN_ON_ONCE(kthread->started);
+}
+
+void kthread_bind_mask_cpuset(struct task_struct *p, const struct cpumask *mask)
+{
+	set_cpus_allowed_ptr(p, mask);
 }
 
 /**
@@ -1044,7 +1119,7 @@ __kthread_create_worker_on_node(unsigned int flags, int node,
 	kthread_init_worker(worker);
 
 	task = __kthread_create_on_node(kthread_worker_fn, worker,
-					node, namefmt, args);
+					node, namefmt, args, true);
 	if (IS_ERR(task))
 		goto fail_task;
 

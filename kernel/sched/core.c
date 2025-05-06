@@ -2393,7 +2393,7 @@ void migrate_enable(void)
 	struct task_struct *p = current;
 	struct affinity_context ac = {
 		.new_mask  = &p->cpus_mask,
-		.flags     = SCA_MIGRATE_ENABLE,
+		.flags     = SCA_MIGRATE_ENABLE | SCA_NO_CPUSET,
 	};
 
 #ifdef CONFIG_DEBUG_PREEMPT
@@ -3153,7 +3153,7 @@ out:
  * task must not exit() & deallocate itself prematurely. The
  * call is not atomic; no spinlocks may be held.
  */
-int __set_cpus_allowed_ptr(struct task_struct *p, struct affinity_context *ctx)
+static int do_set_cpus_allowed_ptr(struct task_struct *p, struct affinity_context *ctx)
 {
 	struct rq_flags rf;
 	struct rq *rq;
@@ -3171,6 +3171,79 @@ int __set_cpus_allowed_ptr(struct task_struct *p, struct affinity_context *ctx)
 	return __set_cpus_allowed_ptr_locked(p, ctx, rq, &rf);
 }
 
+int __set_cpus_allowed_ptr(struct task_struct *p,
+				  struct affinity_context *ctx)
+{
+	int retval;
+	cpumask_var_t cpus_allowed, new_mask;
+
+	/*
+	 * Don't restrict the thread to cpuset if explicitly specified or if locked.
+	 */
+	if ((ctx->flags & SCA_NO_CPUSET) || (p->flags & PF_NO_SETAFFINITY))
+		return do_set_cpus_allowed_ptr(p, ctx);
+
+	if (!alloc_cpumask_var(&cpus_allowed, GFP_KERNEL)) {
+		WARN_ONCE(!(ctx->flags & SCA_USER),
+		  "Unable to restrict kernel thread to cpuset due to low memory");
+		return -ENOMEM;
+	}
+
+	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL)) {
+		WARN_ONCE(!(ctx->flags & SCA_USER),
+		  "Unable to restrict kernel thread to cpuset due to low memory");
+		retval = -ENOMEM;
+		goto out_free_cpus_allowed;
+	}
+
+	cpuset_cpus_allowed(p, cpus_allowed);
+	cpumask_and(new_mask, ctx->new_mask, cpus_allowed);
+
+	ctx->new_mask = new_mask;
+	ctx->flags |= SCA_CHECK;
+
+	retval = dl_task_check_affinity(p, new_mask);
+	if (retval)
+		goto out_free_new_mask;
+
+	retval = do_set_cpus_allowed_ptr(p, ctx);
+	if (retval)
+		goto out_free_new_mask;
+
+	cpuset_cpus_allowed(p, cpus_allowed);
+	if (!cpumask_subset(new_mask, cpus_allowed)) {
+		/*
+		 * We must have raced with a concurrent cpuset update.
+		 * Just reset the cpumask to the cpuset's cpus_allowed.
+		 */
+		cpumask_copy(new_mask, cpus_allowed);
+
+		/*
+		 * If SCA_USER is set, a 2nd call to __set_cpus_allowed_ptr()
+		 * will restore the previous user_cpus_ptr value.
+		 *
+		 * In the unlikely event a previous user_cpus_ptr exists,
+		 * we need to further restrict the mask to what is allowed
+		 * by that old user_cpus_ptr.
+		 */
+		if (unlikely((ctx->flags & SCA_USER) && ctx->user_mask)) {
+			bool empty = !cpumask_and(new_mask, new_mask,
+						  ctx->user_mask);
+
+			if (empty)
+				cpumask_copy(new_mask, cpus_allowed);
+		}
+		__set_cpus_allowed_ptr(p, ctx);
+		retval = -EINVAL;
+	}
+
+out_free_new_mask:
+	free_cpumask_var(new_mask);
+out_free_cpus_allowed:
+	free_cpumask_var(cpus_allowed);
+	return retval;
+}
+
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 {
 	struct affinity_context ac = {
@@ -3181,6 +3254,17 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 	return __set_cpus_allowed_ptr(p, &ac);
 }
 EXPORT_SYMBOL_GPL(set_cpus_allowed_ptr);
+
+int set_cpus_allowed_ptr_flags(struct task_struct *p, const struct cpumask *new_mask, u32 flags)
+{
+	struct affinity_context ac = {
+		.new_mask  = new_mask,
+		.flags     = flags,
+	};
+
+	return __set_cpus_allowed_ptr(p, &ac);
+}
+EXPORT_SYMBOL_GPL(set_cpus_allowed_ptr_flags);
 
 /*
  * Change a given task's CPU affinity to the intersection of its current
@@ -3283,15 +3367,15 @@ void relax_compatible_cpus_allowed_ptr(struct task_struct *p)
 {
 	struct affinity_context ac = {
 		.new_mask  = task_user_cpus(p),
-		.flags     = 0,
+		.flags     = SCA_NO_CPUSET,
 	};
 	int ret;
 
 	/*
-	 * Try to restore the old affinity mask with __sched_setaffinity().
+	 * Try to restore the old affinity mask with __set_cpus_allowed_ptr().
 	 * Cpuset masking will be done there too.
 	 */
-	ret = __sched_setaffinity(p, &ac);
+	ret = __set_cpus_allowed_ptr(p, &ac);
 	WARN_ON_ONCE(ret);
 }
 
@@ -7286,6 +7370,7 @@ out_unlock:
 	preempt_enable();
 }
 #endif
+
 
 #if !defined(CONFIG_PREEMPTION) || defined(CONFIG_PREEMPT_DYNAMIC)
 int __sched __cond_resched(void)

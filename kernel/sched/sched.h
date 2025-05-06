@@ -2576,11 +2576,6 @@ static inline bool sched_fair_runnable(struct rq *rq)
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 extern struct task_struct *pick_task_idle(struct rq *rq);
 
-#define SCA_CHECK		0x01
-#define SCA_MIGRATE_DISABLE	0x02
-#define SCA_MIGRATE_ENABLE	0x04
-#define SCA_USER		0x08
-
 #ifdef CONFIG_SMP
 
 extern void update_group_capacity(struct sched_domain *sd, int cpu);
@@ -3939,7 +3934,6 @@ static inline int rt_effective_prio(struct task_struct *p, int prio)
 #endif /* !CONFIG_RT_MUTEXES */
 
 extern int __sched_setscheduler(struct task_struct *p, const struct sched_attr *attr, bool user, bool pi);
-extern int __sched_setaffinity(struct task_struct *p, struct affinity_context *ctx);
 extern const struct sched_class *__setscheduler_class(int policy, int prio);
 extern void set_load_weight(struct task_struct *p, bool update_load);
 extern void enqueue_task(struct rq *rq, struct task_struct *p, int flags);

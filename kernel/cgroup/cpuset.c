@@ -1103,6 +1103,13 @@ void cpuset_update_tasks_cpumask(struct cpuset *cs, struct cpumask *new_cpus)
 	while ((task = css_task_iter_next(&it))) {
 		const struct cpumask *possible_mask = task_cpu_possible_mask(task);
 
+		/*
+		 * See also cpuset_can_attach. A thead with the flag could temporarily
+		 * reside in a non root cpuset. Don't change its affinity.
+		 */
+		if (task->flags & PF_NO_SETAFFINITY)
+			continue;
+
 		if (top_cs) {
 			/*
 			 * Percpu kthreads in top_cpuset are ignored
@@ -2933,7 +2940,14 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	mems_updated = !nodes_equal(cs->effective_mems, oldcs->effective_mems);
 
 	cgroup_taskset_for_each(task, css, tset) {
-		ret = task_can_attach(task);
+		/*
+		 * With the kthreads in cpuset feature, kthreadd can be moved to a
+		 * non root cpuset. We want to allow a PF_NO_SETAFFINITY task to be
+		 * spawned and then moved to root, which needs to be allowed here.
+		 */
+		ret = !(cs == &top_cpuset && task->flags & PF_NO_SETAFFINITY);
+		/* Check regular threads */
+		ret = ret && task_can_attach(task);
 		if (ret)
 			goto out_unlock;
 
@@ -3026,7 +3040,7 @@ static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 	 * can_attach beforehand should guarantee that this doesn't
 	 * fail.  TODO: have a better way to handle failure here
 	 */
-	WARN_ON_ONCE(set_cpus_allowed_ptr(task, cpus_attach));
+	WARN_ON_ONCE(set_cpus_allowed_ptr_flags(task, cpus_attach, SCA_NO_CPUSET));
 
 	cpuset_change_task_nodemask(task, &cpuset_attach_nodemask_to);
 	cpuset1_update_task_spread_flags(cs, task);
@@ -3063,8 +3077,19 @@ static void cpuset_attach(struct cgroup_taskset *tset)
 
 	guarantee_online_mems(cs, &cpuset_attach_nodemask_to);
 
-	cgroup_taskset_for_each(task, css, tset)
+	cgroup_taskset_for_each(task, css, tset) {
+		/*
+		 * See cpuset_can_attach.
+		 * With the kthreads in cpuset feature, kthreadd can be moved to a
+		 * non root cpuset. We want to allow a PF_NO_SETAFFINITY task to be
+		 * spawned and then moved to root as it starts running. Don't reset the
+		 * cpu affinity in this case because the thread could have already been
+		 * pinned to a cpu with kthread_bind and we want to preserve that.
+		 */
+		if (task->flags & PF_NO_SETAFFINITY)
+			continue;
 		cpuset_attach_task(cs, task);
+	}
 
 	/*
 	 * Change mm for all threadgroup leaders. This is expensive and may

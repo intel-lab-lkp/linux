@@ -1847,6 +1847,13 @@ extern int cpuset_cpumask_can_shrink(const struct cpumask *cur, const struct cpu
 extern int task_can_attach(struct task_struct *p);
 extern int dl_bw_alloc(int cpu, u64 dl_bw);
 extern void dl_bw_free(int cpu, u64 dl_bw);
+
+#define SCA_CHECK		0x01
+#define SCA_MIGRATE_DISABLE	0x02
+#define SCA_MIGRATE_ENABLE	0x04
+#define SCA_USER		0x08
+#define SCA_NO_CPUSET	0x10
+
 #ifdef CONFIG_SMP
 
 /* do_set_cpus_allowed() - consider using set_cpus_allowed_ptr() instead */
@@ -1860,6 +1867,9 @@ extern void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new
  * Return: zero if successful, or a negative error code
  */
 extern int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
+extern int set_cpus_allowed_ptr_no_cpuset(struct task_struct *p, const struct cpumask *new_mask);
+extern int set_cpus_allowed_ptr_flags(
+	struct task_struct *p, const struct cpumask *new_mask, u32 flags);
 extern int dup_user_cpus_ptr(struct task_struct *dst, struct task_struct *src, int node);
 extern void release_user_cpus_ptr(struct task_struct *p);
 extern int dl_task_check_affinity(struct task_struct *p, const struct cpumask *mask);
@@ -1876,6 +1886,7 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p, const struct cpuma
 		return -EINVAL;
 	return 0;
 }
+
 static inline int dup_user_cpus_ptr(struct task_struct *dst, struct task_struct *src, int node)
 {
 	if (src->user_cpus_ptr)

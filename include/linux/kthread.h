@@ -13,6 +13,14 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   int node,
 					   const char namefmt[], ...);
 
+__printf(4, 5)
+struct task_struct *kthread_create_on_node_root_cpuset(
+					   int (*threadfn)(void *data),
+					   void *data,
+					   int node,
+					   const char namefmt[], ...);
+
+
 /**
  * kthread_create - create a kthread on the current node
  * @threadfn: the function to run in the thread
@@ -26,7 +34,6 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
  */
 #define kthread_create(threadfn, data, namefmt, arg...) \
 	kthread_create_on_node(threadfn, data, NUMA_NO_NODE, namefmt, ##arg)
-
 
 struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
 					  void *data,
@@ -85,6 +92,7 @@ kthread_run_on_cpu(int (*threadfn)(void *data), void *data,
 void free_kthread_struct(struct task_struct *k);
 void kthread_bind(struct task_struct *k, unsigned int cpu);
 void kthread_bind_mask(struct task_struct *k, const struct cpumask *mask);
+void kthread_bind_mask_cpuset(struct task_struct *k, const struct cpumask *mask);
 int kthread_affine_preferred(struct task_struct *p, const struct cpumask *mask);
 int kthread_stop(struct task_struct *k);
 int kthread_stop_put(struct task_struct *k);

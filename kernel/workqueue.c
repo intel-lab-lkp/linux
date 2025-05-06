@@ -2813,7 +2813,10 @@ static struct worker *create_worker(struct worker_pool *pool)
 		}
 
 		set_user_nice(worker->task, pool->attrs->nice);
-		kthread_bind_mask(worker->task, pool_allowed_cpus(pool));
+		if (!pool || (!worker->rescue_wq && pool->cpu >= 0))
+			kthread_bind_mask(worker->task, pool_allowed_cpus(pool));
+		else
+			kthread_bind_mask_cpuset(worker->task, pool_allowed_cpus(pool));
 	}
 
 	/* successful, attach the worker to the pool */
@@ -5585,7 +5588,7 @@ static int init_rescuer(struct workqueue_struct *wq)
 	if (wq->flags & WQ_UNBOUND)
 		kthread_bind_mask(rescuer->task, unbound_effective_cpumask(wq));
 	else
-		kthread_bind_mask(rescuer->task, cpu_possible_mask);
+		kthread_bind_mask_cpuset(rescuer->task, cpu_possible_mask);
 	wake_up_process(rescuer->task);
 
 	return 0;
