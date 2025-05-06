@@ -2647,6 +2647,38 @@ void perf_event_disable_inatomic(struct perf_event *event)
 static void perf_log_throttle(struct perf_event *event, int enable);
 static void perf_log_itrace_start(struct perf_event *event);
 
+static void perf_event_group_unthrottle(struct perf_event *event, bool start_event)
+{
+	struct perf_event *leader = event->group_leader;
+	struct perf_event *sibling;
+
+	if (leader != event || start_event)
+		leader->pmu->start(leader, 0);
+	leader->hw.interrupts = 0;
+
+	for_each_sibling_event(sibling, leader) {
+		if (sibling != event || start_event)
+			sibling->pmu->start(sibling, 0);
+		sibling->hw.interrupts = 0;
+	}
+
+	perf_log_throttle(leader, 1);
+}
+
+static void perf_event_group_throttle(struct perf_event *event)
+{
+	struct perf_event *leader = event->group_leader;
+	struct perf_event *sibling;
+
+	leader->hw.interrupts = MAX_INTERRUPTS;
+	leader->pmu->stop(leader, 0);
+
+	for_each_sibling_event(sibling, leader)
+		sibling->pmu->stop(sibling, 0);
+
+	perf_log_throttle(leader, 0);
+}
+
 static int
 event_sched_in(struct perf_event *event, struct perf_event_context *ctx)
 {
@@ -4257,10 +4289,8 @@ static void perf_adjust_freq_unthr_events(struct list_head *event_list)
 		hwc = &event->hw;
 
 		if (hwc->interrupts == MAX_INTERRUPTS) {
-			hwc->interrupts = 0;
-			perf_log_throttle(event, 1);
-			if (!event->attr.freq || !event->attr.sample_freq)
-				event->pmu->start(event, 0);
+			perf_event_group_unthrottle(event,
+				!event->attr.freq || !event->attr.sample_freq);
 		}
 
 		if (!event->attr.freq || !event->attr.sample_freq)
@@ -6167,14 +6197,6 @@ static void __perf_event_period(struct perf_event *event,
 	active = (event->state == PERF_EVENT_STATE_ACTIVE);
 	if (active) {
 		perf_pmu_disable(event->pmu);
-		/*
-		 * We could be throttled; unthrottle now to avoid the tick
-		 * trying to unthrottle while we already re-started the event.
-		 */
-		if (event->hw.interrupts == MAX_INTERRUPTS) {
-			event->hw.interrupts = 0;
-			perf_log_throttle(event, 1);
-		}
 		event->pmu->stop(event, PERF_EF_UPDATE);
 	}
 
@@ -6182,6 +6204,12 @@ static void __perf_event_period(struct perf_event *event,
 
 	if (active) {
 		event->pmu->start(event, PERF_EF_RELOAD);
+		/*
+		 * We could be throttled; unthrottle now to avoid the tick
+		 * trying to unthrottle while we already re-started the event.
+		 */
+		if (event->group_leader->hw.interrupts == MAX_INTERRUPTS)
+			perf_event_group_unthrottle(event, false);
 		perf_pmu_enable(event->pmu);
 	}
 }
@@ -10070,8 +10098,7 @@ __perf_event_account_interrupt(struct perf_event *event, int throttle)
 	if (unlikely(throttle && hwc->interrupts >= max_samples_per_tick)) {
 		__this_cpu_inc(perf_throttled_count);
 		tick_dep_set_cpu(smp_processor_id(), TICK_DEP_BIT_PERF_EVENTS);
-		hwc->interrupts = MAX_INTERRUPTS;
-		perf_log_throttle(event, 0);
+		perf_event_group_throttle(event);
 		ret = 1;
 	}
 
