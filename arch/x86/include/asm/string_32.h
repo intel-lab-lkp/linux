@@ -52,7 +52,7 @@ static __always_inline void *__memcpy(void *to, const void *from, size_t n)
 static __always_inline void *__constant_memcpy(void *to, const void *from,
 					       size_t n)
 {
-	long esi, edi;
+	unsigned long esi, edi;
 	if (!n)
 		return to;
 
@@ -84,60 +84,51 @@ static __always_inline void *__constant_memcpy(void *to, const void *from,
 		return to;
 	}
 
-	esi = (long)from;
-	edi = (long)to;
+	esi = (unsigned long)from;
+	edi = (unsigned long)to;
 	if (n >= 5 * 4) {
 		/* large block: use rep prefix */
-		int ecx;
+		unsigned long ecx = n >> 2;
 		asm volatile("rep movsl"
-			     : "=&c" (ecx), "=&D" (edi), "=&S" (esi)
-			     : "0" (n / 4), "1" (edi), "2" (esi)
-			     : "memory"
-		);
+			     : "+D" (edi), "+S" (esi), "+c" (ecx)
+			     : : "memory");
 	} else {
 		/* small block: don't clobber ecx + smaller code */
 		if (n >= 4 * 4)
 			asm volatile("movsl"
-				     : "=&D"(edi), "=&S"(esi)
-				     : "0"(edi), "1"(esi)
-				     : "memory");
+				     : "+D" (edi), "+S" (esi)
+				     : : "memory");
 		if (n >= 3 * 4)
 			asm volatile("movsl"
-				     : "=&D"(edi), "=&S"(esi)
-				     : "0"(edi), "1"(esi)
-				     : "memory");
+				     : "+D" (edi), "+S" (esi)
+				     : : "memory");
 		if (n >= 2 * 4)
 			asm volatile("movsl"
-				     : "=&D"(edi), "=&S"(esi)
-				     : "0"(edi), "1"(esi)
-				     : "memory");
+				     : "+D" (edi), "+S" (esi)
+				     : : "memory");
 		if (n >= 1 * 4)
 			asm volatile("movsl"
-				     : "=&D"(edi), "=&S"(esi)
-				     : "0"(edi), "1"(esi)
-				     : "memory");
+				     : "+D" (edi), "+S" (esi)
+				     : : "memory");
 	}
-	switch (n % 4) {
+	switch (n & 3) {
 		/* tail */
 	case 0:
 		return to;
 	case 1:
 		asm volatile("movsb"
-			     : "=&D"(edi), "=&S"(esi)
-			     : "0"(edi), "1"(esi)
-			     : "memory");
+			     : "+D" (edi), "+S" (esi)
+			     : : "memory");
 		return to;
 	case 2:
 		asm volatile("movsw"
-			     : "=&D"(edi), "=&S"(esi)
-			     : "0"(edi), "1"(esi)
-			     : "memory");
+			     : "+D" (edi), "+S" (esi)
+			     : : "memory");
 		return to;
 	default:
 		asm volatile("movsw\n\tmovsb"
-			     : "=&D"(edi), "=&S"(esi)
-			     : "0"(edi), "1"(esi)
-			     : "memory");
+			     : "+D" (edi), "+S" (esi)
+			     : : "memory");
 		return to;
 	}
 }
