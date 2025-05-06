@@ -1334,6 +1334,8 @@ static void update_exclusion_cpumasks(bool isolcpus_updated)
 
 	ret = workqueue_unbound_exclude_cpumask(isolated_cpus);
 	WARN_ON_ONCE(ret < 0);
+
+	tmigr_isolated_exclude_cpumask(isolated_cpus);
 }
 
 /**
