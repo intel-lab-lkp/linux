@@ -43,6 +43,28 @@ t_yes:
 t_no:
 	return false;
 }
+
+static inline int __attribute_const__ choose_l5_enabled(int yes, int no)
+{
+	int ret = no;
+
+	asm_inline(ALTERNATIVE_TERNARY("jmp 6f; 8:", %c[feat], "movl %[yes], %[ret]", "")
+		"	.pushsection .altinstr_aux,\"ax\"	\n"
+		"6:	pushfq					\n"
+		"	testb	$1, %a[l5en]			\n"
+		"	jz	7f				\n"
+		"	movl	%[yes], %[ret]			\n"
+		"7:	popfq					\n"
+		"	jmp	8b				\n"
+		"	.popsection				\n"
+		: [ret]  "+rm" (ret)
+		: [feat] "i" (X86_FEATURE_LA57),
+		  [yes]	 "i" (yes),
+		  [l5en] "i" (&__pgtable_l5_enabled));
+
+	return ret;
+}
+
 #else
 #define pgtable_l5_enabled() 0
 #endif /* CONFIG_X86_5LEVEL */
@@ -59,7 +81,7 @@ extern unsigned int ptrs_per_p4d;
 /*
  * PGDIR_SHIFT determines what a top-level page table entry can map
  */
-#define PGDIR_SHIFT	pgdir_shift
+#define PGDIR_SHIFT	choose_l5_enabled(48, 39)
 #define PTRS_PER_PGD	512
 
 /*
@@ -67,7 +89,7 @@ extern unsigned int ptrs_per_p4d;
  */
 #define P4D_SHIFT		39
 #define MAX_PTRS_PER_P4D	512
-#define PTRS_PER_P4D		ptrs_per_p4d
+#define PTRS_PER_P4D		choose_l5_enabled(MAX_PTRS_PER_P4D, 1)
 #define P4D_SIZE		(_AC(1, UL) << P4D_SHIFT)
 #define P4D_MASK		(~(P4D_SIZE - 1))
 
@@ -138,7 +160,7 @@ extern unsigned int ptrs_per_p4d;
 
 #ifdef CONFIG_DYNAMIC_MEMORY_LAYOUT
 # define VMALLOC_START		vmalloc_base
-# define VMALLOC_SIZE_TB	(pgtable_l5_enabled() ? VMALLOC_SIZE_TB_L5 : VMALLOC_SIZE_TB_L4)
+# define VMALLOC_SIZE_TB	((unsigned long)choose_l5_enabled(VMALLOC_SIZE_TB_L5, VMALLOC_SIZE_TB_L4))
 # define VMEMMAP_START		vmemmap_base
 #else
 # define VMALLOC_START		__VMALLOC_BASE_L4
