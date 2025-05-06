@@ -20,6 +20,41 @@ static void cpuid_read_generic(const struct cpuid_scan_entry *e, struct cpuid_re
 		cpuid_subleaf(e->leaf, e->subleaf + i, output->leaf);
 }
 
+static void cpuid_read_0x2(const struct cpuid_scan_entry *e, struct cpuid_read_output *output)
+{
+	union leaf_0x2_regs *regs = (union leaf_0x2_regs *)output->leaf;
+	struct leaf_0x2_0 *l2 = (struct leaf_0x2_0 *)output->leaf;
+	int invalid_regs = 0;
+
+	/*
+	 * All Intel CPUs must report an iteration count of 1.	In case of
+	 * bogus hardware, keep the leaf marked as invalid at the CPUID table.
+	 */
+	cpuid_subleaf(e->leaf, e->subleaf, l2);
+	if (l2->iteration_count != 0x01)
+		return;
+
+	/*
+	 * The most significant bit (MSB) of each register must be clear.
+	 * If a register is malformed, replace its descriptors with NULL.
+	 */
+	for (int i = 0; i < 4; i++) {
+		if (regs->reg[i].invalid) {
+			regs->regv[i] = 0;
+			invalid_regs++;
+		}
+	}
+
+	/*
+	 * If all the output registers were malformed, keep the leaf marked
+	 * as invalid at the CPUID table.
+	 */
+	if (invalid_regs == 4)
+		return;
+
+	output->info->nr_entries = 1;
+}
+
 static void cpuid_read_0x80000000(const struct cpuid_scan_entry *e, struct cpuid_read_output *output)
 {
 	struct leaf_0x80000000_0 *el0 = (struct leaf_0x80000000_0 *)output->leaf;
