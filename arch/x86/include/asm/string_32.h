@@ -164,12 +164,12 @@ extern void *memchr(const void *cs, int c, size_t count);
 
 static inline void *__memset_generic(void *s, char c, size_t count)
 {
-	int d0, d1;
+	const __auto_type s0 = s;
 	asm volatile("rep stosb"
-		     : "=&c" (d0), "=&D" (d1)
-		     : "a" (c), "1" (s), "0" (count)
+		     : "+D" (s), "+c" (count)
+		     : "a" (c)
 		     : "memory");
-	return s;
+	return s0;
 }
 
 /* we might want to write optimized versions of these later */
@@ -197,23 +197,23 @@ extern void *memset(void *, int, size_t);
 #define __HAVE_ARCH_MEMSET16
 static inline void *memset16(uint16_t *s, uint16_t v, size_t n)
 {
-	int d0, d1;
+	const __auto_type s0 = s;
 	asm volatile("rep stosw"
-		     : "=&c" (d0), "=&D" (d1)
-		     : "a" (v), "1" (s), "0" (n)
+		     : "+D" (s), "+c" (n)
+		     : "a" (v)
 		     : "memory");
-	return s;
+	return s0;
 }
 
 #define __HAVE_ARCH_MEMSET32
 static inline void *memset32(uint32_t *s, uint32_t v, size_t n)
 {
-	int d0, d1;
+	const __auto_type s0 = s;
 	asm volatile("rep stosl"
-		     : "=&c" (d0), "=&D" (d1)
-		     : "a" (v), "1" (s), "0" (n)
+		     : "+D" (s), "+c" (n)
+		     : "a" (v)
 		     : "memory");
-	return s;
+	return s0;
 }
 
 /*
