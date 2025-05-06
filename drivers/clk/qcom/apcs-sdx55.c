@@ -79,7 +79,7 @@ static int qcom_apcs_sdx55_clk_probe(struct platform_device *pdev)
 	a7cc->src_shift = 8;
 	a7cc->parent_map = apcs_mux_clk_parent_map;
 
-	a7cc->pclk = devm_clk_get(parent, "pll");
+	a7cc->pclk = devm_clk_get(dev, "pll");
 	if (IS_ERR(a7cc->pclk))
 		return dev_err_probe(dev, PTR_ERR(a7cc->pclk),
 				     "Failed to get PLL clk\n");
