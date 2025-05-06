@@ -149,6 +149,36 @@ static void cpuid_scan(const struct cpuid_scan_info *info)
 	}
 }
 
+/*
+ * @c: CPU capability structure associated with the current CPU
+ * @clear_cpuid_table: Zero out the CPUID table before populating it.
+ *
+ * The CPUID scanner code expects a zeroed table since the accessor macros at
+ * <cpuid/table_api.h> use the leaf's "nr_entries" field as a marker for its
+ * validity (otherwise NULL is returned.)
+ *
+ * At boot time, all CPUID tables within the CPU capability structure(s) are
+ * already zeroed.  For subsequent CPUID table scans, which are normally done
+ * after hardware state changes, the table might contain stale data that must
+ * be cleared beforehand; e.g., a CPUID leaf that is no longer available, but
+ * with a "nr_entries" value bigger than zero.
+ */
+static void __cpuid_scan_cpu(struct cpuinfo_x86 *c, bool clear_cpuid_table)
+{
+	struct cpuid_table *table = &c->cpuid_table;
+
+	const struct cpuid_scan_info info = {
+		.cpuid_table	= table,
+		.entries	= cpuid_common_scan_entries,
+		.nr_entries	= cpuid_common_scan_entries_size,
+	};
+
+	if (clear_cpuid_table)
+		memset(table, 0, sizeof(*table));
+
+	cpuid_scan(&info);
+}
+
 /**
  * cpuid_scan_cpu() - Populate CPUID data for the current CPU
  * @c:		CPU capability structure associated with the current CPU
@@ -159,11 +189,21 @@ static void cpuid_scan(const struct cpuid_scan_info *info)
  */
 void cpuid_scan_cpu(struct cpuinfo_x86 *c)
 {
-	const struct cpuid_scan_info info = {
-		.cpuid_table	= &c->cpuid_table,
-		.entries	= cpuid_common_scan_entries,
-		.nr_entries	= cpuid_common_scan_entries_size,
-	};
+	__cpuid_scan_cpu(c, false);
+}
 
-	cpuid_scan(&info);
+/**
+ * cpuid_rescan_cpu() - Re-populate CPUID data for the current CPU
+ * @c:		CPU capability structure associated with the current CPU
+ *
+ * Zero-out the CPUID table embedded within @c, then re-populate it using
+ * a fresh CPUID scan.  Since all the CPUID instructions are run locally,
+ * this function must be called on the CPU associated with @c.
+ *
+ * A CPUID table rescan is usually required after system changes that can
+ * affect CPUID state; e.g., Processor Serial Number (PSN) disable.
+ */
+void cpuid_rescan_cpu(struct cpuinfo_x86 *c)
+{
+	__cpuid_scan_cpu(c, true);
 }

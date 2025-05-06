@@ -115,5 +115,6 @@
 	(struct cpuid_regs *)cpudata_cpuid_index(_cpuinfo, _leaf, _idx)
 
 void cpuid_scan_cpu(struct cpuinfo_x86 *c);
+void cpuid_rescan_cpu(struct cpuinfo_x86 *c);
 
 #endif /* _ASM_X86_CPUID_TABLE_API_H */
