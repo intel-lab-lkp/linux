@@ -717,7 +717,7 @@ static void intel_detect_tlb(struct cpuinfo_x86 *c)
 	if (!regs)
 		return;
 
-	for_each_scanned_leaf_0x2_entry(regs, ptr, entry)
+	for_each_leaf_0x2_entry(regs, ptr, entry)
 		intel_tlb_lookup(entry);
 }
 
