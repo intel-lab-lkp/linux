@@ -336,6 +336,7 @@ bool __percpu_counter_limited_add(struct percpu_counter *fbc,
 		return true;
 
 	local_irq_save(flags);
+	raw_spin_lock(&fbc->lock);
 	unknown = batch * num_online_cpus();
 	count = __this_cpu_read(*fbc->counters);
 
@@ -344,11 +345,10 @@ bool __percpu_counter_limited_add(struct percpu_counter *fbc,
 	    ((amount > 0 && fbc->count + unknown <= limit) ||
 	     (amount < 0 && fbc->count - unknown >= limit))) {
 		this_cpu_add(*fbc->counters, amount);
-		local_irq_restore(flags);
-		return true;
+		good = true;
+		goto out;
 	}
 
-	raw_spin_lock(&fbc->lock);
 	count = fbc->count + amount;
 
 	/* Skip percpu_counter_sum() when safe */
