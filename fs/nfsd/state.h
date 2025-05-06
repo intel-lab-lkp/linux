@@ -546,9 +546,11 @@ struct nfs4_replay {
 	__be32			rp_status;
 	unsigned int		rp_buflen;
 	char			*rp_buf;
-	struct knfsd_fh		rp_openfh;
 	int			rp_locked;
 	char			rp_ibuf[NFSD4_REPLAY_ISIZE];
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		rp_openfh;
 };
 
 struct nfs4_stateowner;
@@ -666,12 +668,14 @@ struct nfs4_file {
 	u32			fi_share_deny;
 	struct nfsd_file	*fi_deleg_file;
 	int			fi_delegees;
-	struct knfsd_fh		fi_fhandle;
 	bool			fi_had_conflict;
 #ifdef CONFIG_NFSD_PNFS
 	struct list_head	fi_lo_states;
 	atomic_t		fi_lo_recalls;
 #endif
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		fi_fhandle;
 };
 
 /*
@@ -760,9 +764,11 @@ struct nfsd4_blocked_lock {
 	struct list_head	nbl_lru;
 	time64_t		nbl_time;
 	struct file_lock	nbl_lock;
-	struct knfsd_fh		nbl_fh;
 	struct nfsd4_callback	nbl_cb;
 	struct kref		nbl_kref;
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		nbl_fh;
 };
 
 struct nfsd4_compound_state;

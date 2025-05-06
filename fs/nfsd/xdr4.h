@@ -675,11 +675,13 @@ struct nfsd4_cb_offload {
 	struct nfsd42_write_res	co_res;
 	__be32			co_nfserr;
 	unsigned int		co_retries;
-	struct knfsd_fh		co_fh;
 
 	struct nfs4_sessionid	co_referring_sessionid;
 	u32			co_referring_slotid;
 	u32			co_referring_seqno;
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		co_fh;
 };
 
 struct nfsd4_copy {
@@ -702,7 +704,6 @@ struct nfsd4_copy {
 	/* response */
 	__be32			nfserr;
 	struct nfsd42_write_res	cp_res;
-	struct knfsd_fh		fh;
 
 	/* offload callback */
 	struct nfsd4_cb_offload	cp_cb_offload;
@@ -723,6 +724,9 @@ struct nfsd4_copy {
 	struct nfs_fh		c_fh;
 	nfs4_stateid		stateid;
 	struct nfsd_net		*cp_nn;
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		fh;
 };
 
 static inline void nfsd4_copy_set_sync(struct nfsd4_copy *copy, bool sync)

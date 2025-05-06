@@ -76,7 +76,6 @@ static inline ino_t u32_to_ino_t(__u32 uino)
  * pre_mtime/post_version will be used to support wcc_attr's in NFSv3.
  */
 typedef struct svc_fh {
-	struct knfsd_fh		fh_handle;	/* FH data */
 	int			fh_maxsize;	/* max size for fh_handle */
 	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
@@ -107,6 +106,9 @@ typedef struct svc_fh {
 	/* Post-op attributes saved in fh_fill_post_attrs() */
 	struct kstat		fh_post_attr;	/* full attrs after operation */
 	u64			fh_post_change; /* nfsv4 change; see above */
+
+	/* Must be last -ends in a flexible-array member. */
+	struct knfsd_fh		fh_handle;	/* FH data */
 } svc_fh;
 #define NFSD4_FH_FOREIGN (1<<0)
 #define SET_FH_FLAG(c, f) ((c)->fh_flags |= (f))
