@@ -7,7 +7,6 @@
 #include <linux/acpi_iort.h>
 #include <linux/pci.h>
 
-#include "irq-gic-common.h"
 #include "irq-msi-lib.h"
 
 #define ITS_MSI_FLAGS_REQUIRED  (MSI_FLAG_USE_DEF_DOM_OPS |	\
@@ -200,7 +199,7 @@ static bool its_init_dev_msi_info(struct device *dev, struct irq_domain *domain,
 	return true;
 }
 
-const struct msi_parent_ops gic_v3_its_msi_parent_ops = {
+const struct msi_parent_ops gic_its_msi_parent_ops = {
 	.supported_flags	= ITS_MSI_FLAGS_SUPPORTED,
 	.required_flags		= ITS_MSI_FLAGS_REQUIRED,
 	.chip_flags		= MSI_CHIP_FLAG_SET_EOI | MSI_CHIP_FLAG_SET_ACK,
