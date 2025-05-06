@@ -28,7 +28,6 @@ struct fsi_device;
 struct i2c_client;
 struct i3c_device;
 struct irq_domain;
-struct mdio_device;
 struct slim_device;
 struct spi_device;
 struct spmi_device;
@@ -37,14 +36,6 @@ struct regmap_range_cfg;
 struct regmap_field;
 struct snd_ac97;
 struct sdw_slave;
-
-/*
- * regmap_mdio address encoding. IEEE 802.3ae clause 45 addresses consist of a
- * device address and a register address.
- */
-#define REGMAP_MDIO_C45_DEVAD_SHIFT	16
-#define REGMAP_MDIO_C45_DEVAD_MASK	GENMASK(20, 16)
-#define REGMAP_MDIO_C45_REGNUM_MASK	GENMASK(15, 0)
 
 /*
  * regmap.reg_shift indicates by how much we must shift registers prior to
@@ -635,10 +626,6 @@ struct regmap *__regmap_init_i2c(struct i2c_client *i2c,
 				 const struct regmap_config *config,
 				 struct lock_class_key *lock_key,
 				 const char *lock_name);
-struct regmap *__regmap_init_mdio(struct mdio_device *mdio_dev,
-				 const struct regmap_config *config,
-				 struct lock_class_key *lock_key,
-				 const char *lock_name);
 struct regmap *__regmap_init_sccb(struct i2c_client *i2c,
 				  const struct regmap_config *config,
 				  struct lock_class_key *lock_key,
@@ -697,10 +684,6 @@ struct regmap *__devm_regmap_init(struct device *dev,
 				  struct lock_class_key *lock_key,
 				  const char *lock_name);
 struct regmap *__devm_regmap_init_i2c(struct i2c_client *i2c,
-				      const struct regmap_config *config,
-				      struct lock_class_key *lock_key,
-				      const char *lock_name);
-struct regmap *__devm_regmap_init_mdio(struct mdio_device *mdio_dev,
 				      const struct regmap_config *config,
 				      struct lock_class_key *lock_key,
 				      const char *lock_name);
@@ -812,19 +795,6 @@ int regmap_attach_dev(struct device *dev, struct regmap *map,
 #define regmap_init_i2c(i2c, config)					\
 	__regmap_lockdep_wrapper(__regmap_init_i2c, #config,		\
 				i2c, config)
-
-/**
- * regmap_init_mdio() - Initialise register map
- *
- * @mdio_dev: Device that will be interacted with
- * @config: Configuration for register map
- *
- * The return value will be an ERR_PTR() on error or a valid pointer to
- * a struct regmap.
- */
-#define regmap_init_mdio(mdio_dev, config)				\
-	__regmap_lockdep_wrapper(__regmap_init_mdio, #config,		\
-				mdio_dev, config)
 
 /**
  * regmap_init_sccb() - Initialise register map
@@ -1044,20 +1014,6 @@ bool regmap_ac97_default_volatile(struct device *dev, unsigned int reg);
 #define devm_regmap_init_i2c(i2c, config)				\
 	__regmap_lockdep_wrapper(__devm_regmap_init_i2c, #config,	\
 				i2c, config)
-
-/**
- * devm_regmap_init_mdio() - Initialise managed register map
- *
- * @mdio_dev: Device that will be interacted with
- * @config: Configuration for register map
- *
- * The return value will be an ERR_PTR() on error or a valid pointer
- * to a struct regmap.  The regmap will be automatically freed by the
- * device management code.
- */
-#define devm_regmap_init_mdio(mdio_dev, config)				\
-	__regmap_lockdep_wrapper(__devm_regmap_init_mdio, #config,	\
-				mdio_dev, config)
 
 /**
  * devm_regmap_init_sccb() - Initialise managed register map
