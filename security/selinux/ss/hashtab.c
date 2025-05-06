@@ -30,6 +30,21 @@ static u32 hashtab_compute_size(u32 nel)
 	return nel == 0 ? 0 : roundup_pow_of_two(nel);
 }
 
+static bool is_order_out_of_range(u32 size, struct hashtab *h)
+{
+	size_t bytes;
+	u32 order;
+
+	if (unlikely(check_mul_overflow(size, sizeof(*h->htable), &bytes)))
+		return true;
+
+	order = get_order(bytes);
+	if (order > MAX_PAGE_ORDER)
+		return true;
+
+	return false;
+}
+
 int hashtab_init(struct hashtab *h, u32 nel_hint)
 {
 	u32 size = hashtab_compute_size(nel_hint);
@@ -40,6 +55,9 @@ int hashtab_init(struct hashtab *h, u32 nel_hint)
 	h->htable = NULL;
 
 	if (size) {
+		if (is_order_out_of_range(size, h))
+			return -ENOMEM;
+
 		h->htable = kcalloc(size, sizeof(*h->htable), GFP_KERNEL);
 		if (!h->htable)
 			return -ENOMEM;
