@@ -2173,13 +2173,8 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 		intel_snps_phy_update_psr_power_state(&dp_to_dig_port(intel_dp)->base, false);
 
 	/* Disable PSR on Sink */
-	if (!intel_dp->psr.panel_replay_enabled) {
+	if (!intel_dp->psr.panel_replay_enabled)
 		drm_dp_dpcd_writeb(&intel_dp->aux, DP_PSR_EN_CFG, 0);
-
-		if (intel_dp->psr.sel_update_enabled)
-			drm_dp_dpcd_writeb(&intel_dp->aux,
-					   DP_RECEIVER_ALPM_CONFIG, 0);
-	}
 
 	/* Wa_16025596647 */
 	if ((DISPLAY_VER(display) == 20 ||
