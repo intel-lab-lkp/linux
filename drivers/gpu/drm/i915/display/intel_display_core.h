@@ -458,6 +458,9 @@ struct intel_display {
 	} ips;
 
 	struct {
+		/* protects the irq masks */
+		spinlock_t lock;
+
 		/*
 		 * Most platforms treat the display irq block as an always-on
 		 * power domain. vlv/chv can disable it at runtime and need
