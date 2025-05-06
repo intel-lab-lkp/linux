@@ -260,12 +260,21 @@ properties:
 
               See ../connector/usb-connector.yaml.
 
+          role-switch-default-mode:
+            description:
+              Indicates if usb-role-switch is enabled, the device default operation
+              mode of controller while usb role is USB_ROLE_NONE.
+            $ref: /schemas/types.yaml#/definitions/string
+            enum: [host, peripheral]
+            default: peripheral
+
           vbus-supply:
             description: A phandle to the regulator supplying the VBUS
               voltage.
 
         dependencies:
           usb-role-switch: [ connector ]
+          role-switch-default-mode: [ usb-role-switch ]
 
       usb2-1:
         type: object
@@ -298,12 +307,21 @@ properties:
 
               See ../connector/usb-connector.yaml.
 
+          role-switch-default-mode:
+            description:
+              Indicates if usb-role-switch is enabled, the device default operation
+              mode of controller while usb role is USB_ROLE_NONE.
+            $ref: /schemas/types.yaml#/definitions/string
+            enum: [host, peripheral]
+            default: peripheral
+
           vbus-supply:
             description: A phandle to the regulator supplying the VBUS
               voltage.
 
         dependencies:
           usb-role-switch: [ connector ]
+          role-switch-default-mode: [ usb-role-switch ]
 
       usb2-2:
         type: object
@@ -336,12 +354,21 @@ properties:
 
               See ../connector/usb-connector.yaml.
 
+          role-switch-default-mode:
+            description:
+              Indicates if usb-role-switch is enabled, the device default operation
+              mode of controller while usb role is USB_ROLE_NONE.
+            $ref: /schemas/types.yaml#/definitions/string
+            enum: [host, peripheral]
+            default: peripheral
+
           vbus-supply:
             description: A phandle to the regulator supplying the VBUS
               voltage.
 
         dependencies:
           usb-role-switch: [ connector ]
+          role-switch-default-mode: [ usb-role-switch ]
 
       hsic-0:
         type: object
