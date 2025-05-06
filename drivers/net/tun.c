@@ -2353,12 +2353,12 @@ static void tun_put_page(struct tun_page *tpage)
 static int tun_xdp_one(struct tun_struct *tun,
 		       struct tun_file *tfile,
 		       struct xdp_buff *xdp, int *flush,
-		       struct tun_page *tpage)
+		       struct tun_page *tpage,
+		       struct bpf_prog *xdp_prog)
 {
 	unsigned int datasize = xdp->data_end - xdp->data;
 	struct tun_xdp_hdr *hdr = xdp->data_hard_start;
 	struct virtio_net_hdr *gso = &hdr->gso;
-	struct bpf_prog *xdp_prog;
 	struct sk_buff *skb = NULL;
 	struct sk_buff_head *queue;
 	u32 rxhash = 0, act;
@@ -2371,7 +2371,6 @@ static int tun_xdp_one(struct tun_struct *tun,
 	if (unlikely(datasize < ETH_HLEN))
 		return -EINVAL;
 
-	xdp_prog = rcu_dereference(tun->xdp_prog);
 	if (xdp_prog) {
 		if (gso->gso_type) {
 			skb_xdp = true;
@@ -2494,6 +2493,7 @@ static int tun_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 	if (m->msg_controllen == sizeof(struct tun_msg_ctl) &&
 	    ctl && ctl->type == TUN_MSG_PTR) {
 		struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
+		struct bpf_prog *xdp_prog;
 		struct tun_page tpage;
 		int n = ctl->num;
 		int flush = 0, queued = 0;
@@ -2503,10 +2503,12 @@ static int tun_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 		local_bh_disable();
 		rcu_read_lock();
 		bpf_net_ctx = bpf_net_ctx_set(&__bpf_net_ctx);
+		xdp_prog = rcu_dereference(tun->xdp_prog);
 
 		for (i = 0; i < n; i++) {
 			xdp = &((struct xdp_buff *)ctl->ptr)[i];
-			ret = tun_xdp_one(tun, tfile, xdp, &flush, &tpage);
+			ret = tun_xdp_one(tun, tfile, xdp, &flush, &tpage,
+					  xdp_prog);
 			if (ret > 0)
 				queued += ret;
 		}
