@@ -388,6 +388,25 @@ void intel_alpm_configure(struct intel_dp *intel_dp,
 	intel_dp->alpm_parameters.transcoder = crtc_state->cpu_transcoder;
 }
 
+void intel_alpm_disable(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	enum transcoder cpu_transcoder = intel_dp->alpm_parameters.transcoder;
+
+	if (DISPLAY_VER(display) < 20 || !intel_dp->alpm_dpcd)
+		return;
+
+	mutex_lock(&intel_dp->alpm_parameters.lock);
+
+	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
+	intel_de_write(display, PORT_ALPM_CTL(dp_to_dig_port(intel_dp)->base.port), 0);
+
+	drm_dp_dpcd_writeb(&intel_dp->aux, DP_RECEIVER_ALPM_CONFIG, 0);
+
+	drm_dbg_kms(display->drm, "Disabling ALPM\n");
+	mutex_unlock(&intel_dp->alpm_parameters.lock);
+}
+
 void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 				 struct intel_crtc *crtc)
 {
@@ -396,13 +415,9 @@ void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
-	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	struct intel_encoder *encoder;
 
 	if (DISPLAY_VER(display) < 20)
-		return;
-
-	if (crtc_state->has_lobf || crtc_state->has_lobf == old_crtc_state->has_lobf)
 		return;
 
 	for_each_intel_encoder_mask(display->drm, encoder,
@@ -417,12 +432,11 @@ void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 		if (!intel_dp_is_edp(intel_dp))
 			continue;
 
-		if (old_crtc_state->has_lobf) {
-			mutex_lock(&intel_dp->alpm_parameters.lock);
-			intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
-			drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
-			mutex_unlock(&intel_dp->alpm_parameters.lock);
-		}
+		if (crtc_state->has_lobf || intel_psr_needs_alpm(intel_dp, crtc_state) ||
+		    (!old_crtc_state->has_lobf && !intel_psr_needs_alpm(intel_dp, old_crtc_state)))
+			continue;
+
+		intel_alpm_disable(intel_dp);
 	}
 }
 
@@ -549,25 +563,6 @@ void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
 
 	debugfs_create_file("i915_edp_lobf_info", 0444, root,
 			    connector, &i915_edp_lobf_info_fops);
-}
-
-void intel_alpm_disable(struct intel_dp *intel_dp)
-{
-	struct intel_display *display = to_intel_display(intel_dp);
-	enum transcoder cpu_transcoder = intel_dp->alpm_parameters.transcoder;
-
-	if (DISPLAY_VER(display) < 20 || !intel_dp->alpm_dpcd)
-		return;
-
-	mutex_lock(&intel_dp->alpm_parameters.lock);
-
-	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
-	intel_de_write(display, PORT_ALPM_CTL(dp_to_dig_port(intel_dp)->base.port), 0);
-
-	drm_dp_dpcd_writeb(&intel_dp->aux, DP_RECEIVER_ALPM_CONFIG, 0);
-
-	drm_dbg_kms(display->drm, "Disabling ALPM\n");
-	mutex_unlock(&intel_dp->alpm_parameters.lock);
 }
 
 bool intel_alpm_get_error(struct intel_dp *intel_dp)
