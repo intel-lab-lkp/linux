@@ -1538,7 +1538,11 @@ static struct sk_buff *__tun_build_skb(struct tun_file *tfile,
 				       int buflen, int len, int pad,
 				       int metasize)
 {
-	struct sk_buff *skb = build_skb(buf, buflen);
+	struct sk_buff *skb;
+
+	local_bh_disable();
+	skb = napi_build_skb(buf, buflen);
+	local_bh_enable();
 
 	if (!skb)
 		return ERR_PTR(-ENOMEM);
