@@ -726,7 +726,8 @@ struct perf_pmu *evsel__find_pmu(const struct evsel *evsel)
 	pmu = perf_pmus__find_by_type(evsel->core.attr.type);
 	legacy_core_type =
 		evsel->core.attr.type == PERF_TYPE_HARDWARE ||
-		evsel->core.attr.type == PERF_TYPE_HW_CACHE;
+		evsel->core.attr.type == PERF_TYPE_HW_CACHE ||
+		evsel->core.attr.type == PERF_TYPE_RAW;
 	if (!pmu && legacy_core_type) {
 		if (perf_pmus__supports_extended_type()) {
 			u32 type = evsel->core.attr.config >> PERF_PMU_TYPE_SHIFT;
