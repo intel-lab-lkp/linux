@@ -177,7 +177,7 @@ static int apple_wdt_probe(struct platform_device *pdev)
 
 	wdt->wdd.ops = &apple_wdt_ops;
 	wdt->wdd.info = &apple_wdt_info;
-	wdt->wdd.max_timeout = U32_MAX / wdt->clk_rate;
+	wdt->wdd.max_hw_heartbeat_ms = U32_MAX / wdt->clk_rate * 1000;
 	wdt->wdd.timeout = APPLE_WDT_TIMEOUT_DEFAULT;
 
 	wdt_ctrl = readl_relaxed(wdt->regs + APPLE_WDT_WD1_CTRL);
