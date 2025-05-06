@@ -726,18 +726,15 @@ static int tegra_xusb_setup_usb_role_switch(struct tegra_xusb_port *port)
 
 static void tegra_xusb_parse_usb_role_default_mode(struct tegra_xusb_port *port)
 {
-	enum usb_role role = USB_ROLE_NONE;
+	/* Most switchable usb ports are normally used in device mode */
+	enum usb_role role = USB_ROLE_DEVICE;
 	enum usb_dr_mode mode = usb_get_role_switch_default_mode(&port->dev);
 
 	if (mode == USB_DR_MODE_HOST)
 		role = USB_ROLE_HOST;
-	else if (mode == USB_DR_MODE_PERIPHERAL)
-		role = USB_ROLE_DEVICE;
 
-	if (role != USB_ROLE_NONE) {
-		usb_role_switch_set_role(port->usb_role_sw, role);
-		dev_dbg(&port->dev, "usb role default mode is %s", modes[mode]);
-	}
+	usb_role_switch_set_role(port->usb_role_sw, role);
+	dev_dbg(&port->dev, "usb role default mode is %s", modes[mode]);
 }
 
 static int tegra_xusb_usb2_port_parse_dt(struct tegra_xusb_usb2_port *usb2)
