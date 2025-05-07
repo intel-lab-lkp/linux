@@ -271,13 +271,15 @@ err:
 static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
 	struct vm_struct *vm_area;
+	int nr_pages;
 	void *stack;
-	int i;
+	int i, j;
 
 	for (i = 0; i < NR_CACHED_STACKS; i++) {
 		vm_area = this_cpu_xchg(cached_stacks[i], NULL);
 		if (!vm_area)
 			continue;
+		nr_pages = vm_area->nr_pages;
 
 		if (memcg_charge_kernel_stack(vm_area)) {
 			vfree(vm_area->addr);
@@ -290,7 +292,8 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		stack = kasan_reset_tag(vm_area->addr);
 
 		/* Clear stale pointers from reused stack. */
-		memset(stack, 0, THREAD_SIZE);
+		for (j = 0; j < nr_pages; j++)
+			clear_page(page_address(vm_area->pages[j]));
 
 		tsk->stack_vm_area = vm_area;
 		tsk->stack = stack;
