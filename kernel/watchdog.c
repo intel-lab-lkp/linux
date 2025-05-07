@@ -53,6 +53,14 @@ static int __read_mostly watchdog_hardlockup_available;
 struct cpumask watchdog_cpumask __read_mostly;
 unsigned long *watchdog_cpumask_bits = cpumask_bits(&watchdog_cpumask);
 
+/*
+ * A bitmask to control what kinds of system info to be printed when a
+ * software/hardware lockup is detected, it could be task, memory, lock etc.
+ * Refer panic.h for details of bit definition.
+ */
+unsigned long lockup_print;
+core_param(lockup_print, lockup_print, ulong, 0644);
+
 #ifdef CONFIG_HARDLOCKUP_DETECTOR
 
 # ifdef CONFIG_SMP
@@ -240,6 +248,7 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 				clear_bit_unlock(0, &hard_lockup_nmi_warn);
 		}
 
+		sys_show_info(lockup_print);
 		if (hardlockup_panic)
 			nmi_panic(regs, "Hard LOCKUP");
 
@@ -828,6 +837,8 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		}
 
 		add_taint(TAINT_SOFTLOCKUP, LOCKDEP_STILL_OK);
+
+		sys_show_info(lockup_print);
 		if (softlockup_panic)
 			panic("softlockup: hung tasks");
 	}
