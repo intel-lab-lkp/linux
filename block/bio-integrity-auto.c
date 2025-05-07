@@ -69,6 +69,16 @@ bool __bio_integrity_endio(struct bio *bio)
 	return true;
 }
 
+static inline void bio_set_bip_flags(struct blk_integrity *bi, u16 *bip_flags)
+{
+	if (bi->csum_type == BLK_INTEGRITY_CSUM_IP)
+		*bip_flags |= BIP_IP_CHECKSUM;
+	if (bi->csum_type)
+		*bip_flags |= BIP_CHECK_GUARD;
+	if (bi->flags & BLK_INTEGRITY_REF_TAG)
+		*bip_flags |= BIP_CHECK_REFTAG;
+}
+
 /**
  * bio_integrity_prep - Prepare bio for integrity I/O
  * @bio:	bio to prepare
@@ -83,6 +93,7 @@ bool __bio_integrity_endio(struct bio *bio)
 bool bio_integrity_prep(struct bio *bio)
 {
 	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
+	unsigned short bip_flags = BIP_BLOCK_INTEGRITY;
 	struct bio_integrity_data *bid;
 	gfp_t gfp = GFP_NOIO;
 	unsigned int len;
@@ -101,19 +112,22 @@ bool bio_integrity_prep(struct bio *bio)
 	switch (bio_op(bio)) {
 	case REQ_OP_READ:
 		if (bi->flags & BLK_INTEGRITY_NOVERIFY)
-			return true;
+			break;
+		bio_set_bip_flags(bi, &bip_flags);
 		break;
 	case REQ_OP_WRITE:
-		if (bi->flags & BLK_INTEGRITY_NOGENERATE)
-			return true;
-
 		/*
 		 * Zero the memory allocated to not leak uninitialized kernel
 		 * memory to disk for non-integrity metadata where nothing else
 		 * initializes the memory.
 		 */
+		if (bi->flags & BLK_INTEGRITY_NOGENERATE) {
+			gfp |= __GFP_ZERO;
+			break;
+		}
 		if (bi->csum_type == BLK_INTEGRITY_CSUM_NONE)
 			gfp |= __GFP_ZERO;
+		bio_set_bip_flags(bi, &bip_flags);
 		break;
 	default:
 		return true;
@@ -134,15 +148,8 @@ bool bio_integrity_prep(struct bio *bio)
 
 	bid->bio = bio;
 
-	bid->bip.bip_flags |= BIP_BLOCK_INTEGRITY;
+	bid->bip.bip_flags = bip_flags;
 	bip_set_seed(&bid->bip, bio->bi_iter.bi_sector);
-
-	if (bi->csum_type == BLK_INTEGRITY_CSUM_IP)
-		bid->bip.bip_flags |= BIP_IP_CHECKSUM;
-	if (bi->csum_type)
-		bid->bip.bip_flags |= BIP_CHECK_GUARD;
-	if (bi->flags & BLK_INTEGRITY_REF_TAG)
-		bid->bip.bip_flags |= BIP_CHECK_REFTAG;
 
 	if (bio_integrity_add_page(bio, virt_to_page(buf), len,
 			offset_in_page(buf)) < len)

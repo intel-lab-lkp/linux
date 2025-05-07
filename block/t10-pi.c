@@ -380,6 +380,9 @@ void blk_integrity_generate(struct bio *bio)
 	struct bvec_iter bviter;
 	struct bio_vec bv;
 
+	if (bi->flags & BLK_INTEGRITY_NOGENERATE)
+		return;
+
 	iter.disk_name = bio->bi_bdev->bd_disk->disk_name;
 	iter.interval = 1 << bi->interval_exp;
 	iter.seed = bio->bi_iter.bi_sector;
@@ -412,6 +415,8 @@ void blk_integrity_verify_iter(struct bio *bio, struct bvec_iter *saved_iter)
 	struct bvec_iter bviter;
 	struct bio_vec bv;
 
+	if (bi->flags & BLK_INTEGRITY_NOVERIFY)
+		return;
 	/*
 	 * At the moment verify is called bi_iter has been advanced during split
 	 * and completion, so use the copy created during submission here.
