@@ -424,5 +424,67 @@ __DEFINE_LOCK_GUARD_0(_name, _lock)
 	static inline void * class_##_name##_ext##_lock_ptr(class_##_name##_t *_T) \
 	{ return class_##_name##_lock_ptr(_T); }
 
+/*
+ * DEFINE_ACQUIRE(acquire_class_name, lock_type, unlock, cond_lock):
+ *	Define a CLASS() that instantiates and acquires a conditional lock
+ *	within an existing scope. In contrast to DEFINE_GUARD[_COND](), which
+ *	hides the variable tracking the lock scope, CLASS(@acquire_class_name,
+ *	@lock) instantiates @lock as either an ERR_PTR() or a cookie that drops
+ *	the lock when it goes out of scope. An "_acquire" suffix is appended to
+ *	@lock_type to provide type-safety against mixing explicit and implicit
+ *	(scope-based) cleanup.
+ *
+ * Ex.
+ *
+ * DEFINE_ACQUIRE(mutex_intr_acquire, mutex, mutex_unlock,
+ *                mutex_lock_interruptible)
+ *
+ *	int interruptible_operation(...)
+ *	{
+ *		...
+ *		CLASS(mutex_intr_acquire, lock)(&obj->lock);
+ *	     if (IS_ERR(lock))
+ *			return PTR_ERR(lock);
+ *		...
+ *	} <= obj->lock dropped here.
+ *
+ * Attempts to perform:
+ *
+ * mutex_unlock(&obj->lock);
+ *
+ * ...fail because obj->lock is a 'struct mutex_acquire' not 'struct mutex'
+ * instance.
+ *
+ * Also, attempts to use the CLASS() conditionally require the ambiguous
+ * scope to be clarified (compiler enforced):
+ *
+ *	if (...)
+ *		CLASS(mutex_intr_acquire, lock)(&obj->lock); // <-- "error: expected expression"
+ *		if (IS_ERR(lock))
+ *			return PTR_ERR(lock);
+ *
+ * vs:
+ *
+ *	if (...) {
+ *		CLASS(mutex_intr_acquire, lock)(&obj->lock);
+ *		if (IS_ERR(lock))
+ *			return PTR_ERR(lock);
+ *	} // <-- lock released here
+ */
+#define DEFINE_ACQUIRE(_name, _locktype, _unlock, _cond_lock)                \
+	DEFINE_CLASS(_name, struct _locktype##_acquire *,                    \
+		     if (!IS_ERR_OR_NULL(_T)) _unlock(&_T->_locktype), ({    \
+			     struct _locktype##_acquire *lock_result;        \
+			     int ret = _cond_lock(&to_lock->_locktype);      \
+                                                                             \
+			     if (ret)                                        \
+				     lock_result = ERR_PTR(ret);             \
+			     else                                            \
+				     lock_result =                           \
+					     (struct _locktype##_acquire     \
+						      *)&to_lock->_locktype; \
+			     lock_result;                                    \
+		     }),                                                     \
+		     struct _locktype##_acquire *to_lock)
 
 #endif /* _LINUX_CLEANUP_H */

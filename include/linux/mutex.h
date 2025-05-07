@@ -64,6 +64,8 @@ do {									\
 	__mutex_init((mutex), #mutex, &__key);				\
 } while (0)
 
+#define mutex_acquire_init(lock) mutex_init(&(lock)->mutex)
+
 /**
  * mutex_init_with_key - initialize a mutex with a given lockdep key
  * @mutex: the mutex to be initialized
@@ -201,6 +203,28 @@ extern int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock);
 DEFINE_GUARD(mutex, struct mutex *, mutex_lock(_T), mutex_unlock(_T))
 DEFINE_GUARD_COND(mutex, _try, mutex_trylock(_T))
 DEFINE_GUARD_COND(mutex, _intr, mutex_lock_interruptible(_T) == 0)
+
+/* mutex type that only implements scope-based unlock */
+struct mutex_acquire {
+	/* private: */
+	struct mutex mutex;
+};
+DEFINE_GUARD(mutex_acquire, struct mutex_acquire *, mutex_lock(&_T->mutex),
+	     mutex_unlock(&_T->mutex))
+DEFINE_GUARD_COND(mutex_acquire, _try, mutex_trylock(&_T->mutex))
+DEFINE_GUARD_COND(mutex_acquire, _intr, mutex_lock_interruptible(&_T->mutex) == 0)
+DEFINE_ACQUIRE(mutex_intr_acquire, mutex, mutex_unlock,
+	       mutex_lock_interruptible)
+
+static inline int mutex_try_or_busy(struct mutex *lock)
+{
+	int ret[] = { -EBUSY, 0 };
+
+	return ret[mutex_trylock(lock)];
+}
+
+DEFINE_ACQUIRE(mutex_try_acquire, mutex, mutex_unlock,
+	       mutex_try_or_busy)
 
 extern unsigned long mutex_get_owner(struct mutex *lock);
 
