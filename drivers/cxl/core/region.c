@@ -2122,27 +2122,52 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	return 0;
 }
 
-static int cxl_region_detach(struct cxl_endpoint_decoder *cxled)
+/*
+ * Cleanup a decoder's interest in a region. There are 2 cases to
+ * handle, removing an unknown @cxled from a known position in a region
+ * (detach_target()) or removing a known @cxled from an unknown @cxlr
+ * (cxld_unregister())
+ *
+ * When the detachment finds a region, the caller is responsible for
+ * releasing the region driver.
+ */
+struct cxl_region *cxl_decoder_detach(struct cxl_region *cxlr,
+				      struct cxl_endpoint_decoder *cxled,
+				      int pos, enum cxl_detach_mode mode)
 {
-	struct cxl_port *iter, *ep_port = cxled_to_port(cxled);
-	struct cxl_region *cxlr = cxled->cxld.region;
 	struct cxl_region_params *p;
-	int rc = 0;
 
 	lockdep_assert_held_write(&cxl_region_rwsem);
 
-	if (!cxlr)
-		return 0;
+	if (!cxled) {
+		p = &cxlr->params;
 
-	p = &cxlr->params;
-	get_device(&cxlr->dev);
+		if (pos >= p->interleave_ways) {
+			dev_dbg(&cxlr->dev, "position %d out of range %d\n",
+				pos, p->interleave_ways);
+			return ERR_PTR(-ENXIO);
+		}
+
+		if (!p->targets[pos])
+			return NULL;
+		cxled = p->targets[pos];
+	} else {
+		cxlr = cxled->cxld.region;
+		if (!cxlr)
+			return NULL;
+		p = &cxlr->params;
+	}
+
+
+	if (mode == DETACH_INVALIDATE)
+		cxled->part = -1;
 
 	if (p->state > CXL_CONFIG_ACTIVE) {
 		cxl_region_decode_reset(cxlr, p->interleave_ways);
 		p->state = CXL_CONFIG_ACTIVE;
 	}
 
-	for (iter = ep_port; !is_cxl_root(iter);
+	for (struct cxl_port *iter = cxled_to_port(cxled); !is_cxl_root(iter);
 	     iter = to_cxl_port(iter->dev.parent))
 		cxl_port_detach_region(iter, cxlr, cxled);
 
@@ -2153,7 +2178,7 @@ static int cxl_region_detach(struct cxl_endpoint_decoder *cxled)
 		dev_WARN_ONCE(&cxlr->dev, 1, "expected %s:%s at position %d\n",
 			      dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			      cxled->pos);
-		goto out;
+		return NULL;
 	}
 
 	if (p->state == CXL_CONFIG_ACTIVE) {
@@ -2167,21 +2192,7 @@ static int cxl_region_detach(struct cxl_endpoint_decoder *cxled)
 		.end = -1,
 	};
 
-	/* notify the region driver that one of its targets has departed */
-	up_write(&cxl_region_rwsem);
-	device_release_driver(&cxlr->dev);
-	down_write(&cxl_region_rwsem);
-out:
-	put_device(&cxlr->dev);
-	return rc;
-}
-
-void cxl_decoder_kill_region(struct cxl_endpoint_decoder *cxled)
-{
-	down_write(&cxl_region_rwsem);
-	cxled->part = -1;
-	cxl_region_detach(cxled);
-	up_write(&cxl_region_rwsem);
+	return cxlr;
 }
 
 static int attach_target(struct cxl_region *cxlr,
@@ -2206,29 +2217,10 @@ static int attach_target(struct cxl_region *cxlr,
 
 static int detach_target(struct cxl_region *cxlr, int pos)
 {
-	struct cxl_region_params *p = &cxlr->params;
-	int rc;
-
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-
-	if (pos >= p->interleave_ways) {
-		dev_dbg(&cxlr->dev, "position %d out of range %d\n", pos,
-			p->interleave_ways);
-		rc = -ENXIO;
-		goto out;
-	}
-
-	if (!p->targets[pos]) {
-		rc = 0;
-		goto out;
-	}
-
-	rc = cxl_region_detach(p->targets[pos]);
-out:
-	up_write(&cxl_region_rwsem);
-	return rc;
+	CLASS(cxl_decoder_detach, ret)(cxlr, NULL, pos, DETACH_ONLY);
+	if (IS_ERR(ret))
+		return PTR_ERR(ret);
+	return 0;
 }
 
 static size_t store_targetN(struct cxl_region *cxlr, const char *buf, int pos,

@@ -12,6 +12,11 @@ extern const struct device_type cxl_pmu_type;
 
 extern struct attribute_group cxl_base_attribute_group;
 
+enum cxl_detach_mode {
+	DETACH_ONLY,
+	DETACH_INVALIDATE,
+};
+
 #ifdef CONFIG_CXL_REGION
 extern struct device_attribute dev_attr_create_pmem_region;
 extern struct device_attribute dev_attr_create_ram_region;
@@ -20,7 +25,11 @@ extern struct device_attribute dev_attr_region;
 extern const struct device_type cxl_pmem_region_type;
 extern const struct device_type cxl_dax_region_type;
 extern const struct device_type cxl_region_type;
-void cxl_decoder_kill_region(struct cxl_endpoint_decoder *cxled);
+
+struct cxl_region *cxl_decoder_detach(struct cxl_region *cxlr,
+				      struct cxl_endpoint_decoder *cxled,
+				      int pos, enum cxl_detach_mode mode);
+
 #define CXL_REGION_ATTR(x) (&dev_attr_##x.attr)
 #define CXL_REGION_TYPE(x) (&cxl_region_type)
 #define SET_CXL_REGION_ATTR(x) (&dev_attr_##x.attr),
@@ -48,7 +57,9 @@ static inline int cxl_get_poison_by_endpoint(struct cxl_port *port)
 {
 	return 0;
 }
-static inline void cxl_decoder_kill_region(struct cxl_endpoint_decoder *cxled)
+static inline struct cxl_region *
+cxl_decoder_detach(struct cxl_region *cxlr, struct cxl_endpoint_decoder *cxled,
+		   int pos, enum cxl_detach_mode mode)
 {
 }
 static inline int cxl_region_init(void)
@@ -98,6 +109,34 @@ u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb);
 
 extern struct rw_semaphore cxl_dpa_rwsem;
 extern struct rw_semaphore cxl_region_rwsem;
+
+DEFINE_CLASS(
+	cxl_decoder_detach, struct cxl_region *,
+	if (!IS_ERR_OR_NULL(_T)) {
+		device_release_driver(&_T->dev);
+		put_device(&_T->dev);
+	},
+	({
+		int rc = 0;
+
+		/* when the decoder is being destroyed lock unconditionally */
+		if (mode == DETACH_INVALIDATE)
+			down_write(&cxl_region_rwsem);
+		else
+			rc = down_write_killable(&cxl_region_rwsem);
+
+		if (rc)
+			cxlr = ERR_PTR(rc);
+		else {
+			cxlr = cxl_decoder_detach(cxlr, cxled, pos, mode);
+			get_device(&cxlr->dev);
+		}
+		up_write(&cxl_region_rwsem);
+
+		cxlr;
+	}),
+	struct cxl_region *cxlr, struct cxl_endpoint_decoder *cxled, int pos,
+	enum cxl_detach_mode mode)
 
 int cxl_memdev_init(void);
 void cxl_memdev_exit(void);
