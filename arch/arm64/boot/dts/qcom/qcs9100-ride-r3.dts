@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /dts-v1/;
 
-#include "sa8775p-ride-r3.dts"
+#include "qcs9100-som.dtsi"
+
+#include "sa8775p-ride-common.dtsi"
+#include "sa8775p-ride-ethernet-aqr115c.dtsi"
+
 / {
 	model = "Qualcomm QCS9100 Ride Rev3";
-	compatible = "qcom,qcs9100-ride-r3", "qcom,qcs9100", "qcom,sa8775p";
+	compatible = "qcom,qcs9100-ride-r3", "qcom,qcs9100-som", "qcom,qcs9100", "qcom,sa8775p";
 };
