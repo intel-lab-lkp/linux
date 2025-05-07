@@ -501,7 +501,7 @@ static int cdat_sslbis_handler(union acpi_subtable_headers *header, void *arg,
 
 		xa_for_each(&port->dports, index, dport) {
 			if (dsp_id == ACPI_CDAT_SSLBIS_ANY_PORT ||
-			    dsp_id == dport->port_id) {
+			    dsp_id == dport->port_num) {
 				cxl_access_coordinate_set(dport->coord,
 							  sslbis->data_type,
 							  val);

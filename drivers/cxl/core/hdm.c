@@ -69,7 +69,7 @@ int devm_cxl_add_passthrough_decoder(struct cxl_port *port)
 
 	xa_for_each(&port->dports, index, dport)
 		break;
-	single_port_map[0] = dport->port_id;
+	single_port_map[0] = dport->port_num;
 
 	return add_hdm_decoder(port, &cxlsd->cxld, single_port_map);
 }
@@ -720,21 +720,21 @@ static void cxlsd_set_targets(struct cxl_switch_decoder *cxlsd, u64 *tgt)
 	struct cxl_dport **t = &cxlsd->target[0];
 	int ways = cxlsd->cxld.interleave_ways;
 
-	*tgt = FIELD_PREP(GENMASK(7, 0), t[0]->port_id);
+	*tgt = FIELD_PREP(GENMASK(7, 0), t[0]->port_num);
 	if (ways > 1)
-		*tgt |= FIELD_PREP(GENMASK(15, 8), t[1]->port_id);
+		*tgt |= FIELD_PREP(GENMASK(15, 8), t[1]->port_num);
 	if (ways > 2)
-		*tgt |= FIELD_PREP(GENMASK(23, 16), t[2]->port_id);
+		*tgt |= FIELD_PREP(GENMASK(23, 16), t[2]->port_num);
 	if (ways > 3)
-		*tgt |= FIELD_PREP(GENMASK(31, 24), t[3]->port_id);
+		*tgt |= FIELD_PREP(GENMASK(31, 24), t[3]->port_num);
 	if (ways > 4)
-		*tgt |= FIELD_PREP(GENMASK_ULL(39, 32), t[4]->port_id);
+		*tgt |= FIELD_PREP(GENMASK_ULL(39, 32), t[4]->port_num);
 	if (ways > 5)
-		*tgt |= FIELD_PREP(GENMASK_ULL(47, 40), t[5]->port_id);
+		*tgt |= FIELD_PREP(GENMASK_ULL(47, 40), t[5]->port_num);
 	if (ways > 6)
-		*tgt |= FIELD_PREP(GENMASK_ULL(55, 48), t[6]->port_id);
+		*tgt |= FIELD_PREP(GENMASK_ULL(55, 48), t[6]->port_num);
 	if (ways > 7)
-		*tgt |= FIELD_PREP(GENMASK_ULL(63, 56), t[7]->port_id);
+		*tgt |= FIELD_PREP(GENMASK_ULL(63, 56), t[7]->port_num);
 }
 
 /*
