@@ -16,6 +16,18 @@ extern void oops_enter(void);
 extern void oops_exit(void);
 extern bool oops_may_print(void);
 
+/* Currently SYS_PRINT_ALL_PRINTK_MSG is only used for panic case */
+#define SYS_PRINT_TASK_INFO		0x00000001
+#define SYS_PRINT_MEM_INFO		0x00000002
+#define SYS_PRINT_TIMER_INFO		0x00000004
+#define SYS_PRINT_LOCK_INFO		0x00000008
+#define SYS_PRINT_FTRACE_INFO		0x00000010
+#define SYS_PRINT_ALL_PRINTK_MSG	0x00000020
+#define SYS_PRINT_ALL_CPU_BT		0x00000040
+#define SYS_PRINT_BLOCKED_TASKS		0x00000080
+
+extern void sys_show_info(unsigned long info_mask);
+
 extern bool panic_triggering_all_cpu_backtrace;
 extern int panic_timeout;
 extern unsigned long panic_print;
