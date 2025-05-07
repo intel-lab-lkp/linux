@@ -115,15 +115,15 @@ managing and controlling ublk devices with help of several control commands:
 
 - ``UBLK_CMD_START_DEV``
 
-  After the server prepares userspace resources (such as creating per-queue
-  pthread & io_uring for handling ublk IO), this command is sent to the
+  After the server prepares userspace resources (such as creating I/O handler
+  threads & io_uring for handling ublk IO), this command is sent to the
   driver for allocating & exposing ``/dev/ublkb*``. Parameters set via
   ``UBLK_CMD_SET_PARAMS`` are applied for creating the device.
 
 - ``UBLK_CMD_STOP_DEV``
 
   Halt IO on ``/dev/ublkb*`` and remove the device. When this command returns,
-  ublk server will release resources (such as destroying per-queue pthread &
+  ublk server will release resources (such as destroying I/O handler threads &
   io_uring).
 
 - ``UBLK_CMD_DEL_DEV``
@@ -208,15 +208,15 @@ managing and controlling ublk devices with help of several control commands:
   modify how I/O is handled while the ublk server is dying/dead (this is called
   the ``nosrv`` case in the driver code).
 
-  With just ``UBLK_F_USER_RECOVERY`` set, after one ubq_daemon(ublk server's io
-  handler) is dying, ublk does not delete ``/dev/ublkb*`` during the whole
+  With just ``UBLK_F_USER_RECOVERY`` set, after the ublk server exits,
+  ublk does not delete ``/dev/ublkb*`` during the whole
   recovery stage and ublk device ID is kept. It is ublk server's
   responsibility to recover the device context by its own knowledge.
   Requests which have not been issued to userspace are requeued. Requests
   which have been issued to userspace are aborted.
 
-  With ``UBLK_F_USER_RECOVERY_REISSUE`` additionally set, after one ubq_daemon
-  (ublk server's io handler) is dying, contrary to ``UBLK_F_USER_RECOVERY``,
+  With ``UBLK_F_USER_RECOVERY_REISSUE`` additionally set, after the ublk server
+  exits, contrary to ``UBLK_F_USER_RECOVERY``,
   requests which have been issued to userspace are requeued and will be
   re-issued to the new process after handling ``UBLK_CMD_END_USER_RECOVERY``.
   ``UBLK_F_USER_RECOVERY_REISSUE`` is designed for backends who tolerate
@@ -241,10 +241,11 @@ can be controlled/accessed just inside this container.
 Data plane
 ----------
 
-ublk server needs to create per-queue IO pthread & io_uring for handling IO
-commands via io_uring passthrough. The per-queue IO pthread
-focuses on IO handling and shouldn't handle any control & management
-tasks.
+The ublk server should create dedicated threads for handling I/O. Each
+thread should have its own io_uring through which it is notified of new
+I/O, and through which it can complete I/O. These dedicated threads
+should focus on IO handling and shouldn't handle any control &
+management tasks.
 
 The's IO is assigned by a unique tag, which is 1:1 mapping with IO
 request of ``/dev/ublkb*``.
@@ -264,6 +265,13 @@ with specified IO tag in the command data:
   Sent from the server IO pthread for fetching future incoming IO requests
   destined to ``/dev/ublkb*``. This command is sent only once from the server
   IO pthread for ublk driver to setup IO forward environment.
+
+  Once a thread issues this command against a given (qid,tag) pair, the thread
+  registers itself as that I/O's daemon. In the future, only that I/O's daemon
+  is allowed to issue commands against the I/O. If any other thread attempts
+  to issue a command against a (qid,tag) pair for which the thread is not the
+  daemon, the command will fail. Daemons can be reset only be going through
+  recovery.
 
 - ``UBLK_IO_COMMIT_AND_FETCH_REQ``
 
@@ -308,6 +316,59 @@ with specified IO tag in the command data:
   When the server handles READ request and sends
   ``UBLK_IO_COMMIT_AND_FETCH_REQ`` to the server, ublkdrv needs to copy
   the server buffer (pages) read to the IO request pages.
+
+Load balancing
+--------------
+
+A simple approach to designing a ublk server might involve selecting a
+number of I/O handler threads N, creating devices with N queues, and
+pairing up I/O handler threads with queues, so that each thread gets a
+unique qid, and it issues ``FETCH_REQ``s against all tags for that qid.
+Indeed, before the introduction of the ``UBLK_F_RR_TAGS`` feature, this
+was essentially the only option (*)
+
+This approach can run into performance issues under imbalanced load.
+This architecture taken together with the `blk-mq architecture
+<https://docs.kernel.org/block/blk-mq.html>`_ implies that there is a
+fixed mapping from I/O submission CPU to the ublk server thread that
+handles it. If the workload is CPU-bottlenecked, only allowing one ublk
+server thread to handle all the I/O generated from a single CPU can
+limit peak bandwidth.
+
+To address this issue, two changes were made:
+
+- ublk servers can now pair up threads with I/Os (i.e. (qid,tag) pairs)
+  arbitrarily. In particular, the preexisting restriction that all I/Os
+  in one queue must be served by the same thread is lifted.
+- ublk servers can now specify ``UBLK_F_RR_TAGS`` when creating a ublk
+  device to get round-robin tag allocation on each queue
+
+The ublk server can check for the presence of these changes by testing
+for the ``UBLK_F_RR_TAGS`` feature.
+
+With these changes, a ublk server can balance load as follows:
+
+- create the device with ``UBLK_F_RR_TAGS`` set in
+  ``ublksrv_ctrl_dev_info::flags`` when issuing the ``ADD_DEV`` command
+- issue ``FETCH_REQ``s from ublk server threads to (qid,tag) pairs in
+  a round-robin manner. For example, for a device configured with
+  ``nr_hw_queues=2`` and ``queue_depth=4``, and a ublk server having 4
+  I/O handling threads, ``FETCH_REQ``s could be issued as follows, where
+  each entry in the table is the pair (``ublksrv_io_cmd::q_id``,
+  ``ublksrv_io_cmd::tag``) in the payload of the ``FETCH_REQ``.
+
+  ======== ======== ======== ========
+  thread 0 thread 1 thread 2 thread 3
+  ======== ======== ======== ========
+  (0, 0)   (0, 1)   (0, 2)   (0, 3)
+  (1, 3)   (1, 0)   (1, 1)   (1, 2)
+
+With this setup, I/O submitted on a CPU which maps to queue 0 will be
+balanced across all threads instead of all landing on the same thread.
+Thus, a potential bottleneck is avoided.
+
+(*) technically, one I/O handling thread could service multiple queues
+if it wanted to, but that doesn't help with imbalanced load
 
 Zero copy
 ---------
