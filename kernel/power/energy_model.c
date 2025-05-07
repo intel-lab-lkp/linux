@@ -14,6 +14,7 @@
 #include <linux/cpumask.h>
 #include <linux/debugfs.h>
 #include <linux/energy_model.h>
+#include <linux/fsnotify.h>
 #include <linux/sched/topology.h>
 #include <linux/slab.h>
 
@@ -156,9 +157,18 @@ static int __init em_debug_init(void)
 	return 0;
 }
 fs_initcall(em_debug_init);
+
+static void em_debug_update(struct device *dev)
+{
+	struct dentry *d;
+
+	d = debugfs_lookup(dev_name(dev), rootdir);
+	fsnotify_dentry(d, FS_MODIFY);
+}
 #else /* CONFIG_DEBUG_FS */
 static void em_debug_create_pd(struct device *dev) {}
 static void em_debug_remove_pd(struct device *dev) {}
+static void em_debug_update(struct device *dev) {}
 #endif
 
 static void em_release_table_kref(struct kref *kref)
@@ -324,6 +334,8 @@ int em_dev_update_perf_domain(struct device *dev,
 	em_table_free(old_table);
 
 	mutex_unlock(&em_pd_mutex);
+
+	em_debug_update(dev);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(em_dev_update_perf_domain);
