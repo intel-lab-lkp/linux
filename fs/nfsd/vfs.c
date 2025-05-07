@@ -1142,9 +1142,8 @@ static int wait_for_concurrent_writes(struct file *file)
 
 __be32
 nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
-				loff_t offset, struct kvec *vec, int vlen,
-				unsigned long *cnt, int stable,
-				__be32 *verf)
+		loff_t offset, struct xdr_buf *payload, unsigned long *cnt,
+		int stable, __be32 *verf)
 {
 	struct nfsd_net		*nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct file		*file = nf->nf_file;
@@ -1159,8 +1158,13 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	unsigned int		pflags = current->flags;
 	rwf_t			flags = 0;
 	bool			restore_flags = false;
+	unsigned int		nvecs;
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
+
+	nvecs = svc_fill_write_vector(rqstp, payload);
+	if (WARN_ON_ONCE(nvecs > ARRAY_SIZE(rqstp->rq_vec)))
+		return -EIO;
 
 	if (sb->s_export_op)
 		exp_op_flags = sb->s_export_op->flags;
@@ -1186,7 +1190,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	if (stable && !fhp->fh_use_wgather)
 		flags |= RWF_SYNC;
 
-	iov_iter_kvec(&iter, ITER_SOURCE, vec, vlen, *cnt);
+	iov_iter_kvec(&iter, ITER_SOURCE, rqstp->rq_vec, nvecs, *cnt);
 	since = READ_ONCE(file->f_wb_err);
 	if (verf)
 		nfsd_copy_write_verifier(verf, nn);
@@ -1291,7 +1295,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  */
 __be32
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
-	   struct kvec *vec, int vlen, unsigned long *cnt, int stable,
+	   struct xdr_buf *payload, unsigned long *cnt, int stable,
 	   __be32 *verf)
 {
 	struct nfsd_file *nf;
@@ -1303,8 +1307,8 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	if (err)
 		goto out;
 
-	err = nfsd_vfs_write(rqstp, fhp, nf, offset, vec,
-			vlen, cnt, stable, verf);
+	err = nfsd_vfs_write(rqstp, fhp, nf, offset, payload, cnt, stable,
+			verf);
 	nfsd_file_put(nf);
 out:
 	trace_nfsd_write_done(rqstp, fhp, offset, *cnt);
