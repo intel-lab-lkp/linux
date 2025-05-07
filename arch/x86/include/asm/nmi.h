@@ -58,6 +58,38 @@ struct nmiaction {
 };
 
 /**
+ * NMI-source vectors are used to identify the origin of an NMI and to
+ * route the NMI directly to the appropriate handler.
+ *
+ * On CPUs that support NMI-source reporting with FRED, receiving an NMI
+ * with a valid vector sets the corresponding bit in the NMI-source
+ * bitmap. The bitmap is delivered as FRED event data on the stack.
+ * Multiple NMIs are coalesced in the NMI-source bitmap until the next
+ * NMI delivery.
+ *
+ * If an NMI is received without a vector or beyond the defined range,
+ * the CPU sets bit 0 of the NMI-source bitmap.
+ *
+ * Vector 2 is reserved for external NMIs related to the Local APIC -
+ * LINT1. Some third-party chipsets may send NMI messages with a
+ * hardcoded vector of 2, which would result in bit 2 being set in the
+ * NMI-source bitmap.
+ *
+ * The vectors are in no particular priority order. Add new vector
+ * assignments sequentially in the list below.
+ */
+#define NMIS_VECTOR_NONE	0	/* Reserved - Set for all unidentified sources */
+#define NMIS_VECTOR_TEST	1	/* NMI selftest */
+#define NMIS_VECTOR_EXTERNAL	2	/* Reserved - Match External NMI vector 2 */
+#define NMIS_VECTOR_SMP_STOP	3	/* Panic stop CPU */
+#define NMIS_VECTOR_BT		4	/* CPU backtrace */
+#define NMIS_VECTOR_KGDB	5	/* Kernel debugger */
+#define NMIS_VECTOR_MCE		6	/* MCE injection */
+#define NMIS_VECTOR_PMI		7	/* PerfMon counters */
+
+#define NMIS_VECTORS_MAX	16	/* Maximum number of NMI-source vectors */
+
+/**
  * register_nmi_handler - Register a handler for a specific NMI type
  * @t:    NMI type (e.g. NMI_LOCAL)
  * @fn:   The NMI handler
