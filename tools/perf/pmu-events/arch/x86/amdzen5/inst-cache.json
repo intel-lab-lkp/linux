@@ -34,24 +34,6 @@
     "UMask": "0x10"
   },
   {
-    "EventName": "ic_tag_hit_miss.instruction_cache_hit",
-    "EventCode": "0x18e",
-    "BriefDescription": "Instruction cache hits.",
-    "UMask": "0x07"
-  },
-  {
-    "EventName": "ic_tag_hit_miss.instruction_cache_miss",
-    "EventCode": "0x18e",
-    "BriefDescription": "Instruction cache misses.",
-    "UMask": "0x18"
-  },
-  {
-    "EventName": "ic_tag_hit_miss.all_instruction_cache_accesses",
-    "EventCode": "0x18e",
-    "BriefDescription": "Instruction cache accesses of all types.",
-    "UMask": "0x1f"
-  },
-  {
     "EventName": "op_cache_hit_miss.op_cache_hit",
     "EventCode": "0x28f",
     "BriefDescription": "Op cache hits.",

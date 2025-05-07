@@ -137,12 +137,6 @@
     "ScaleUnit": "100%"
   },
   {
-    "MetricName": "ic_fetch_miss_ratio",
-    "BriefDescription": "Instruction cache miss ratio for all fetches. An instruction cache miss will not be counted by this metric if it is an OC hit.",
-    "MetricExpr": "d_ratio(ic_tag_hit_miss.instruction_cache_miss, ic_tag_hit_miss.all_instruction_cache_accesses)",
-    "ScaleUnit": "100%"
-  },
-  {
     "MetricName": "l1_data_cache_fills_from_memory_pti",
     "BriefDescription": "L1 data cache fills from DRAM or MMIO in any NUMA node per thousand instructions.",
     "MetricExpr": "ls_any_fills_from_sys.dram_io_all / instructions",
