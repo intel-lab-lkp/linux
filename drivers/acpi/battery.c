@@ -242,6 +242,18 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			val->intval = battery->voltage_now * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		if (battery->rate_now == ACPI_BATTERY_VALUE_UNKNOWN)
+			ret = -ENODEV;
+		else if ((battery->state & ACPI_BATTERY_STATE_DISCHARGING) &&
+			 acpi_battery_handle_discharging(battery)
+				== POWER_SUPPLY_STATUS_DISCHARGING)
+			/* ACPI specifies battery rate should always be
+			 * positive, but this prop is negative when discharging.
+			 */
+			val->intval = battery->rate_now * -1000;
+		else
+			val->intval = battery->rate_now * 1000;
+		break;
 	case POWER_SUPPLY_PROP_POWER_NOW:
 		if (battery->rate_now == ACPI_BATTERY_VALUE_UNKNOWN)
 			ret = -ENODEV;
