@@ -665,44 +665,43 @@ static int vhost_net_build_xdp(struct vhost_net_virtqueue *nvq,
 	struct vhost_virtqueue *vq = &nvq->vq;
 	struct vhost_net *net = container_of(vq->dev, struct vhost_net,
 					     dev);
-	struct socket *sock = vhost_vq_get_backend(vq);
-	struct virtio_net_hdr *gso;
+	int copied, headroom, ret, sock_hlen = nvq->sock_hlen;
 	struct xdp_buff *xdp = &nvq->xdp[nvq->batched_xdp];
+	struct socket *sock = vhost_vq_get_backend(vq);
+	size_t data_len = iov_iter_count(from);
+	struct virtio_net_hdr *gso;
 	struct tun_xdp_hdr *hdr;
-	size_t len = iov_iter_count(from);
-	int headroom = vhost_sock_xdp(sock) ? XDP_PACKET_HEADROOM : 0;
-	int buflen = SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
-	int pad = SKB_DATA_ALIGN(VHOST_NET_RX_PAD + headroom + nvq->sock_hlen);
-	int sock_hlen = nvq->sock_hlen;
-	void *buf;
-	int copied;
-	int ret;
+	void *hard_start;
+	u32 frame_sz;
 
-	if (unlikely(len < nvq->sock_hlen))
+	if (unlikely(data_len < sock_hlen))
 		return -EFAULT;
 
-	if (SKB_DATA_ALIGN(len + pad) +
-	    SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) > PAGE_SIZE)
+	headroom = SKB_DATA_ALIGN(VHOST_NET_RX_PAD + sock_hlen +
+				  vhost_sock_xdp(sock) ? XDP_PACKET_HEADROOM : 0);
+
+	frame_sz = SKB_HEAD_ALIGN(headroom + data_len);
+
+	if (frame_sz > PAGE_SIZE)
 		return -ENOSPC;
 
-	buflen += SKB_DATA_ALIGN(len + pad);
-	buf = page_frag_alloc_align(&net->pf_cache, buflen, GFP_KERNEL,
-				    SMP_CACHE_BYTES);
-	if (unlikely(!buf))
+	hard_start = page_frag_alloc_align(&net->pf_cache, frame_sz,
+					   GFP_KERNEL, SMP_CACHE_BYTES);
+	if (unlikely(!hard_start))
 		return -ENOMEM;
 
-	copied = copy_from_iter(buf + offsetof(struct tun_xdp_hdr, gso),
+	copied = copy_from_iter(hard_start + offsetof(struct tun_xdp_hdr, gso),
 				sock_hlen, from);
 	if (copied != sock_hlen) {
 		ret = -EFAULT;
 		goto err;
 	}
 
-	hdr = buf;
+	hdr = hard_start;
 	gso = &hdr->gso;
 
 	if (!sock_hlen)
-		memset(buf, 0, pad);
+		memset(hard_start, 0, headroom);
 
 	if ((gso->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM) &&
 	    vhost16_to_cpu(vq, gso->csum_start) +
@@ -712,29 +711,29 @@ static int vhost_net_build_xdp(struct vhost_net_virtqueue *nvq,
 			       vhost16_to_cpu(vq, gso->csum_start) +
 			       vhost16_to_cpu(vq, gso->csum_offset) + 2);
 
-		if (vhost16_to_cpu(vq, gso->hdr_len) > len) {
+		if (vhost16_to_cpu(vq, gso->hdr_len) > data_len) {
 			ret = -EINVAL;
 			goto err;
 		}
 	}
 
-	len -= sock_hlen;
-	copied = copy_from_iter(buf + pad, len, from);
-	if (copied != len) {
+	data_len -= sock_hlen;
+	copied = copy_from_iter(hard_start + headroom, data_len, from);
+	if (copied != data_len) {
 		ret = -EFAULT;
 		goto err;
 	}
 
-	xdp_init_buff(xdp, buflen, NULL);
-	xdp_prepare_buff(xdp, buf, pad, len, true);
-	hdr->buflen = buflen;
+	xdp_init_buff(xdp, frame_sz, NULL);
+	xdp_prepare_buff(xdp, hard_start, headroom, data_len, true);
+	hdr->buflen = frame_sz;
 
 	++nvq->batched_xdp;
 
 	return 0;
 
 err:
-	page_frag_free(buf);
+	page_frag_free(hard_start);
 	return ret;
 }
 
