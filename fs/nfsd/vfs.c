@@ -1162,8 +1162,12 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
-	nvecs = svc_fill_write_vector(rqstp, payload);
-	if (WARN_ON_ONCE(nvecs > ARRAY_SIZE(rqstp->rq_vec)))
+	if (WARN_ON_ONCE(payload->tail->iov_len))
+		return -EIO;
+
+	nvecs = xdr_buf_to_bvec(rqstp->rq_bvec, ARRAY_SIZE(rqstp->rq_bvec),
+			payload);
+	if (WARN_ON_ONCE(nvecs > ARRAY_SIZE(rqstp->rq_bvec)))
 		return -EIO;
 
 	if (sb->s_export_op)
@@ -1190,7 +1194,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	if (stable && !fhp->fh_use_wgather)
 		flags |= RWF_SYNC;
 
-	iov_iter_kvec(&iter, ITER_SOURCE, rqstp->rq_vec, nvecs, *cnt);
+	iov_iter_bvec(&iter, ITER_SOURCE, rqstp->rq_bvec, nvecs, *cnt);
 	since = READ_ONCE(file->f_wb_err);
 	if (verf)
 		nfsd_copy_write_verifier(verf, nn);
