@@ -949,6 +949,11 @@ static int at91_gpio_request_enable(struct pinctrl_dev *pctldev,
 
 	dev_dbg(npct->dev, "enable pin %u as GPIO\n", offset);
 
+	/*
+	 * The GPIO chip base is an internal detail that will
+	 * eventually go away alongside sysfs and the global numberspace.
+	 * FIXME: stop reading it back here
+	 */
 	mask = 1 << (offset - chip->base);
 
 	dev_dbg(npct->dev, "enable pin %u as PIO%c%d 0x%x\n",
