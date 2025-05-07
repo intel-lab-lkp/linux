@@ -2849,11 +2849,6 @@ static bool smu_v13_0_6_is_mode1_reset_supported(struct smu_context *smu)
 	return true;
 }
 
-static bool smu_v13_0_6_is_mode2_reset_supported(struct smu_context *smu)
-{
-	return true;
-}
-
 static int smu_v13_0_6_smu_send_hbm_bad_page_num(struct smu_context *smu,
 						 uint32_t size)
 {
@@ -3586,7 +3581,6 @@ static const struct pptable_funcs smu_v13_0_6_ppt_funcs = {
 	.get_pm_metrics = smu_v13_0_6_get_pm_metrics,
 	.get_thermal_temperature_range = smu_v13_0_6_get_thermal_temperature_range,
 	.mode1_reset_is_support = smu_v13_0_6_is_mode1_reset_supported,
-	.mode2_reset_is_support = smu_v13_0_6_is_mode2_reset_supported,
 	.mode1_reset = smu_v13_0_6_mode1_reset,
 	.mode2_reset = smu_v13_0_6_mode2_reset,
 	.wait_for_event = smu_v13_0_wait_for_event,
