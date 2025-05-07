@@ -964,6 +964,7 @@ properties:
       - items:
           - enum:
               - qcom,qcs9100-ride-r3
+          - const: qcom,qcs9100-som
           - const: qcom,qcs9100
           - const: qcom,sa8775p
 
