@@ -1264,21 +1264,27 @@ static void test_unsent_bytes_client(const struct test_opts *opts, int type)
 	send_buf(fd, buf, sizeof(buf), 0, sizeof(buf));
 	control_expectln("RECEIVED");
 
-	ret = ioctl(fd, SIOCOUTQ, &sock_bytes_unsent);
-	if (ret < 0) {
-		if (errno == EOPNOTSUPP) {
-			fprintf(stderr, "Test skipped, SIOCOUTQ not supported.\n");
-		} else {
+	/* SIOCOUTQ isn't guaranteed to instantly track sent data */
+	for (int i = 0; i < 10; i++) {
+		ret = ioctl(fd, SIOCOUTQ, &sock_bytes_unsent);
+		if (ret == 0 && sock_bytes_unsent == 0)
+			goto success;
+
+		if (ret < 0) {
+			if (errno == EOPNOTSUPP) {
+				fprintf(stderr, "Test skipped, SIOCOUTQ not supported.\n");
+				goto success;
+			}
 			perror("ioctl");
 			exit(EXIT_FAILURE);
 		}
-	} else if (ret == 0 && sock_bytes_unsent != 0) {
-		fprintf(stderr,
-			"Unexpected 'SIOCOUTQ' value, expected 0, got %i\n",
-			sock_bytes_unsent);
-		exit(EXIT_FAILURE);
+		usleep(10 * 1000);
 	}
 
+	fprintf(stderr, "Unexpected 'SIOCOUTQ' value, expected 0, got %i\n",
+		sock_bytes_unsent);
+	exit(EXIT_FAILURE);
+success:
 	close(fd);
 }
 
