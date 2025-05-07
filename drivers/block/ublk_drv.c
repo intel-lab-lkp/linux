@@ -66,7 +66,8 @@
 		| UBLK_F_USER_COPY \
 		| UBLK_F_ZONED \
 		| UBLK_F_USER_RECOVERY_FAIL_IO \
-		| UBLK_F_UPDATE_SIZE)
+		| UBLK_F_UPDATE_SIZE \
+		| UBLK_F_AUTO_BUF_REG)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -146,7 +147,16 @@ struct ublk_uring_cmd_pdu {
 
 struct ublk_io {
 	/* userspace buffer address from io cmd */
-	__u64	addr;
+	union {
+		__u64	addr;
+
+		/*
+		 * Shared space with `addr`, see comment on
+		 * `struct ublksrv_io_cmd` for the reason why it is safe to
+		 * reuse '->addr' space
+		 */
+		struct ublk_auto_buf_reg buf;
+	};
 	unsigned int flags;
 	int res;
 
@@ -631,7 +641,7 @@ static inline bool ublk_support_zero_copy(const struct ublk_queue *ubq)
 
 static inline bool ublk_support_auto_buf_reg(const struct ublk_queue *ubq)
 {
-	return false;
+	return ubq->flags & UBLK_F_AUTO_BUF_REG;
 }
 
 static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
@@ -1176,16 +1186,31 @@ static inline void __ublk_abort_rq(struct ublk_queue *ubq,
 		blk_mq_end_request(rq, BLK_STS_IOERR);
 }
 
+static void ublk_auto_buf_reg_fallback(struct request *req, struct ublk_io *io,
+				       unsigned int issue_flags)
+{
+	const struct ublk_queue *ubq = req->mq_hctx->driver_data;
+	struct ublksrv_io_desc *iod = ublk_get_iod(ubq, req->tag);
+	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
+
+	iod->op_flags |= UBLK_IO_F_NEED_REG_BUF;
+	refcount_set(&data->ref, 1);
+	ublk_complete_io_cmd(io, req, UBLK_IO_RES_OK, issue_flags);
+}
+
 static bool ublk_auto_buf_reg(struct request *req, struct ublk_io *io,
 			      unsigned int issue_flags)
 {
 	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
 	int ret;
 
-	ret = io_buffer_register_bvec(io->cmd, req, ublk_io_release, 0,
-				      issue_flags);
+	ret = io_buffer_register_bvec(io->cmd, req, ublk_io_release,
+				      io->buf.index, issue_flags);
 	if (ret) {
-		blk_mq_end_request(req, BLK_STS_IOERR);
+		if (io->buf.flags & UBLK_AUTO_BUF_REG_FALLBACK)
+			ublk_auto_buf_reg_fallback(req, io, issue_flags);
+		else
+			blk_mq_end_request(req, BLK_STS_IOERR);
 		return false;
 	}
 	/* one extra reference is dropped by ublk_io_release */
@@ -2028,7 +2053,7 @@ static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_queue *ubq,
 		 */
 		if (!buf_addr && !ublk_need_get_data(ubq))
 			goto out;
-	} else if (buf_addr) {
+	} else if (buf_addr && !ublk_support_auto_buf_reg(ubq)) {
 		/* User copy requires addr to be unset */
 		ret = -EINVAL;
 		goto out;
@@ -2044,7 +2069,7 @@ out:
 static void ublk_auto_buf_unreg(struct ublk_io *io, struct io_uring_cmd *cmd,
 				struct request *req, unsigned int issue_flags)
 {
-	WARN_ON_ONCE(io_buffer_unregister_bvec(cmd, 0, issue_flags));
+	WARN_ON_ONCE(io_buffer_unregister_bvec(cmd, io->buf.index, issue_flags));
 	io->flags &= ~UBLK_IO_FLAG_AUTO_BUF_REG;
 }
 
@@ -2063,7 +2088,8 @@ static int ublk_commit_and_fetch(const struct ublk_queue *ubq,
 		if (!ub_cmd->addr && (!ublk_need_get_data(ubq) ||
 					req_op(req) == REQ_OP_READ))
 			return -EINVAL;
-	} else if (req_op(req) != REQ_OP_ZONE_APPEND && ub_cmd->addr) {
+	} else if ((req_op(req) != REQ_OP_ZONE_APPEND &&
+				!ublk_support_auto_buf_reg(ubq)) && ub_cmd->addr) {
 		/*
 		 * User copy requires addr to be unset when command is
 		 * not zone append
@@ -2807,8 +2833,11 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		 * For USER_COPY, we depends on userspace to fill request
 		 * buffer by pwrite() to ublk char device, which can't be
 		 * used for unprivileged device
+		 *
+		 * Same with zero copy or auto buffer register.
 		 */
-		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY))
+		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
+					UBLK_F_AUTO_BUF_REG))
 			return -EINVAL;
 	}
 
@@ -2866,17 +2895,22 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		UBLK_F_URING_CMD_COMP_IN_TASK;
 
 	/* GET_DATA isn't needed any more with USER_COPY or ZERO COPY */
-	if (ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY))
+	if (ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
+				UBLK_F_AUTO_BUF_REG))
 		ub->dev_info.flags &= ~UBLK_F_NEED_GET_DATA;
 
 	/*
 	 * Zoned storage support requires reuse `ublksrv_io_cmd->addr` for
 	 * returning write_append_lba, which is only allowed in case of
 	 * user copy or zero copy
+	 *
+	 * UBLK_F_AUTO_BUF_REG can't be enabled for zoned because it need
+	 * the space for getting ring_fd and buffer index.
 	 */
 	if (ublk_dev_is_zoned(ub) &&
 	    (!IS_ENABLED(CONFIG_BLK_DEV_ZONED) || !(ub->dev_info.flags &
-	     (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY)))) {
+	     (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY)) ||
+	     (ub->dev_info.flags & UBLK_F_AUTO_BUF_REG))) {
 		ret = -EINVAL;
 		goto out_free_dev_number;
 	}
@@ -3393,6 +3427,7 @@ static int __init ublk_init(void)
 
 	BUILD_BUG_ON((u64)UBLKSRV_IO_BUF_OFFSET +
 			UBLKSRV_IO_BUF_TOTAL_SIZE < UBLKSRV_IO_BUF_OFFSET);
+	BUILD_BUG_ON(sizeof(struct ublk_auto_buf_reg) > sizeof(__u64));
 
 	init_waitqueue_head(&ublk_idr_wq);
 
