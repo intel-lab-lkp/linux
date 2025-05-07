@@ -181,6 +181,17 @@ config VT8500_TIMER
 	help
 	  Enables support for the VT8500 driver.
 
+config VT8500_TIMER_WATCHDOG
+	bool "Enable VT8500 watchdog functionality"
+	depends on VT8500_TIMER
+	depends on WATCHDOG && WATCHDOG_CORE=y
+	help
+	  VIA/WonderMedia SoCs can use their system timer as a hardware
+	  watchdog, as long as the first timer channel is free from other
+	  uses and respective function is enabled in its registers. To
+	  make use of it, say Y here and ensure that the device tree
+	  lists at least two interrupts for the VT8500 timer device
+
 config NPCM7XX_TIMER
 	bool "NPCM7xx timer driver" if COMPILE_TEST
 	depends on HAS_IOMEM
