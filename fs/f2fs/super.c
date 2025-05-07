@@ -79,10 +79,10 @@ int f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned long rate,
 	}
 
 	if (fo & FAULT_RATE) {
-		if (rate > INT_MAX)
+		if (rate > UINT_MAX)
 			return -EINVAL;
 		atomic_set(&ffi->inject_ops, 0);
-		ffi->inject_rate = (int)rate;
+		ffi->inject_rate = (unsigned int)rate;
 		f2fs_info(sbi, "build fault injection rate: %lu", rate);
 	}
 
@@ -1379,7 +1379,7 @@ static int f2fs_default_check(struct f2fs_sb_info *sbi)
 #endif
 
 	if (test_opt(sbi, INLINE_XATTR_SIZE)) {
-		int min_size, max_size;
+		unsigned int min_size, max_size;
 
 		if (!f2fs_sb_has_extra_attr(sbi) ||
 			!f2fs_sb_has_flexible_inline_xattr(sbi)) {
@@ -1396,7 +1396,7 @@ static int f2fs_default_check(struct f2fs_sb_info *sbi)
 
 		if (F2FS_OPTION(sbi).inline_xattr_size < min_size ||
 				F2FS_OPTION(sbi).inline_xattr_size > max_size) {
-			f2fs_err(sbi, "inline xattr size is out of range: %d ~ %d",
+			f2fs_err(sbi, "inline xattr size is out of range: %u ~ %u",
 				 min_size, max_size);
 			return -EINVAL;
 		}
