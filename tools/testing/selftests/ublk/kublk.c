@@ -478,8 +478,11 @@ static int ublk_thread_init(struct ublk_thread *t)
 	}
 
 	if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+		unsigned nr_ios = dev->dev_info.queue_depth * dev->dev_info.nr_hw_queues;
+		unsigned max_nr_ios_per_thread = nr_ios / dev->nthreads;
+		max_nr_ios_per_thread += !!(nr_ios % dev->nthreads);
 		ret = io_uring_register_buffers_sparse(
-			&t->ring, dev->dev_info.queue_depth);
+			&t->ring, max_nr_ios_per_thread);
 		if (ret) {
 			ublk_err("ublk dev %d thread %d register spare buffers failed %d",
 					dev->dev_info.dev_id, t->idx, ret);
@@ -612,18 +615,42 @@ int ublk_queue_io_cmd(struct ublk_io *io)
 
 static void ublk_submit_fetch_commands(struct ublk_thread *t)
 {
-	/*
-	 * Service exclusively the queue whose q_id matches our thread
-	 * index. This may change in the future.
-	 */
-	struct ublk_queue *q = &t->dev->q[t->idx];
+	struct ublk_queue *q;
 	struct ublk_io *io;
-	int i = 0;
+	int i = 0, j = 0;
 
-	for (i = 0; i < q->q_depth; i++) {
-		io = &q->ios[i];
-		io->t = t;
-		ublk_queue_io_cmd(io);
+	if (t->dev->dev_info.flags & UBLK_F_RR_TAGS) {
+		/*
+		 * Lexicographically order all the (qid,tag) pairs, with
+		 * qid taking priority, and give this thread every Nth
+		 * entry, where N is the total number of threads. The
+		 * offset is controlled by the thread index. This takes
+		 * load which may be imbalanced across the queues and
+		 * balances it across the threads.
+		 */
+		const struct ublksrv_ctrl_dev_info *dinfo = &t->dev->dev_info;
+		int nr_ios = dinfo->nr_hw_queues * dinfo->queue_depth;
+		for (i = t->idx; i < nr_ios; i += t->dev->nthreads, j++) {
+			int q_id = i / dinfo->queue_depth;
+			int tag = i % dinfo->queue_depth;
+			q = &t->dev->q[q_id];
+			io = &q->ios[tag];
+			io->t = t;
+			io->buf_index = j;
+			ublk_queue_io_cmd(io);
+		}
+	} else {
+		/*
+		 * Service exclusively the queue whose q_id matches our
+		 * thread index.
+		 */
+		struct ublk_queue *q = &t->dev->q[t->idx];
+		for (i = 0; i < q->q_depth; i++) {
+			io = &q->ios[i];
+			io->t = t;
+			io->buf_index = i;
+			ublk_queue_io_cmd(io);
+		}
 	}
 }
 
@@ -778,7 +805,8 @@ static void *ublk_io_handler_fn(void *data)
 		return NULL;
 	}
 	/* IO perf is sensitive with queue pthread affinity on NUMA machine*/
-	ublk_thread_set_sched_affinity(t, info->affinity);
+	if (info->affinity)
+		ublk_thread_set_sched_affinity(t, info->affinity);
 	sem_post(info->ready);
 
 	ublk_dbg(UBLK_DBG_THREAD, "tid %d: ublk dev %d thread %u started\n",
@@ -844,7 +872,7 @@ static int ublk_start_daemon(const struct dev_ctx *ctx, struct ublk_dev *dev)
 
 	ublk_dbg(UBLK_DBG_DEV, "%s enter\n", __func__);
 
-	tinfo = calloc(sizeof(struct ublk_thread_info), dinfo->nr_hw_queues);
+	tinfo = calloc(sizeof(struct ublk_thread_info), dev->nthreads);
 	if (!tinfo)
 		return -ENOMEM;
 
@@ -867,17 +895,24 @@ static int ublk_start_daemon(const struct dev_ctx *ctx, struct ublk_dev *dev)
 				 dinfo->dev_id, i);
 			goto fail;
 		}
+	}
 
+	for (i = 0; i < dev->nthreads; i++) {
 		tinfo[i].dev = dev;
 		tinfo[i].idx = i;
 		tinfo[i].ready = &ready;
-		tinfo[i].affinity = &affinity_buf[i];
+		/*
+		 * If threads are not tied to queues, setting thread
+		 * affinity based on queue affinity makes no sense.
+		 */
+		if (!(dinfo->flags & UBLK_F_RR_TAGS))
+			tinfo[i].affinity = &affinity_buf[i];
 		pthread_create(&dev->threads[i].thread, NULL,
 				ublk_io_handler_fn,
 				&tinfo[i]);
 	}
 
-	for (i = 0; i < dinfo->nr_hw_queues; i++)
+	for (i = 0; i < dev->nthreads; i++)
 		sem_wait(&ready);
 	free(tinfo);
 	free(affinity_buf);
@@ -901,7 +936,7 @@ static int ublk_start_daemon(const struct dev_ctx *ctx, struct ublk_dev *dev)
 		ublk_send_dev_event(ctx, dev, dev->dev_info.dev_id);
 
 	/* wait until we are terminated */
-	for (i = 0; i < dinfo->nr_hw_queues; i++)
+	for (i = 0; i < dev->nthreads; i++)
 		pthread_join(dev->threads[i].thread, &thread_ret);
  fail:
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
@@ -1011,6 +1046,7 @@ wait:
 
 static int __cmd_dev_add(const struct dev_ctx *ctx)
 {
+	unsigned nthreads = ctx->nthreads;
 	unsigned nr_queues = ctx->nr_hw_queues;
 	const char *tgt_type = ctx->tgt_type;
 	unsigned depth = ctx->queue_depth;
@@ -1034,6 +1070,23 @@ static int __cmd_dev_add(const struct dev_ctx *ctx)
 		return -EINVAL;
 	}
 
+	/* default to 1:1 threads:queues if nthreads is unspecified */
+	if (nthreads == -1)
+		nthreads = nr_queues;
+
+	if (nthreads > UBLK_MAX_THREADS) {
+		ublk_err("%s: %u is too many threads (max %u)\n",
+				__func__, nthreads, UBLK_MAX_THREADS);
+		return -EINVAL;
+	}
+
+	if (nthreads != nr_queues && !(ctx->flags & UBLK_F_RR_TAGS)) {
+		ublk_err("%s: threads %u must be same as queues %u if "
+			"not using round robin\n",
+			__func__, nthreads, nr_queues);
+		return -EINVAL;
+	}
+
 	dev = ublk_ctrl_init();
 	if (!dev) {
 		ublk_err("%s: can't alloc dev id %d, type %s\n",
@@ -1054,6 +1107,7 @@ static int __cmd_dev_add(const struct dev_ctx *ctx)
 	info->nr_hw_queues = nr_queues;
 	info->queue_depth = depth;
 	info->flags = ctx->flags;
+	dev->nthreads = nthreads;
 	dev->tgt.ops = ops;
 	dev->tgt.sq_depth = depth;
 	dev->tgt.cq_depth = depth;
@@ -1249,6 +1303,7 @@ static int cmd_dev_get_features(void)
 		[const_ilog2(UBLK_F_USER_COPY)] = "USER_COPY",
 		[const_ilog2(UBLK_F_ZONED)] = "ZONED",
 		[const_ilog2(UBLK_F_USER_RECOVERY_FAIL_IO)] = "RECOVERY_FAIL_IO",
+		[const_ilog2(UBLK_F_RR_TAGS)] = "RR_TAGS",
 	};
 	struct ublk_dev *dev;
 	__u64 features = 0;
@@ -1290,8 +1345,10 @@ static void __cmd_create_help(char *exe, bool recovery)
 			exe, recovery ? "recover" : "add");
 	printf("\t[--foreground] [--quiet] [-z] [--debug_mask mask] [-r 0|1 ] [-g]\n");
 	printf("\t[-e 0|1 ] [-i 0|1]\n");
+	printf("\t[--nthreads threads] [--round_robin]\n");
 	printf("\t[target options] [backfile1] [backfile2] ...\n");
 	printf("\tdefault: nr_queues=2(max 32), depth=128(max 1024), dev_id=-1(auto allocation)\n");
+	printf("\tdefault: nthreads=nr_queues");
 
 	for (i = 0; i < sizeof(tgt_ops_list) / sizeof(tgt_ops_list[0]); i++) {
 		const struct ublk_tgt_ops *ops = tgt_ops_list[i];
@@ -1343,6 +1400,8 @@ int main(int argc, char *argv[])
 		{ "recovery_fail_io",	1,	NULL, 'e'},
 		{ "recovery_reissue",	1,	NULL, 'i'},
 		{ "get_data",		1,	NULL, 'g'},
+		{ "nthreads",		1,	NULL,  0 },
+		{ "round_robin",	0,	NULL,  0 },
 		{ 0, 0, 0, 0 }
 	};
 	const struct ublk_tgt_ops *ops = NULL;
@@ -1351,6 +1410,7 @@ int main(int argc, char *argv[])
 	struct dev_ctx ctx = {
 		.queue_depth	=	128,
 		.nr_hw_queues	=	2,
+		.nthreads	=	-1,
 		.dev_id		=	-1,
 		.tgt_type	=	"unknown",
 	};
@@ -1411,6 +1471,10 @@ int main(int argc, char *argv[])
 				ublk_dbg_mask = 0;
 			if (!strcmp(longopts[option_idx].name, "foreground"))
 				ctx.fg = 1;
+			if (!strcmp(longopts[option_idx].name, "nthreads"))
+				ctx.nthreads = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_idx].name, "round_robin"))
+				ctx.flags |= UBLK_F_RR_TAGS;
 			break;
 		case '?':
 			/*

@@ -1,0 +1,9 @@
+/*
+	$1: 	dev_t
+*/
+tracepoint:block:block_rq_complete
+{
+	if ((int64)args.dev == $1 && !strncmp(args.rwbs, "W", 1)) {
+		@[tid] = count();
+	}
+}
