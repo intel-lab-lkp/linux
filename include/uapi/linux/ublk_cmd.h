@@ -219,6 +219,14 @@
  */
 #define UBLK_F_UPDATE_SIZE		 (1ULL << 10)
 
+/*
+ * Force tags to be allocated round-robin on each queue. If ublk server
+ * threads also issue FETCH_REQs against the queues in a round-robin
+ * manner, load can be balanced across all threads even if it is issued
+ * to the queues in an imbalanced way.
+ */
+#define UBLK_F_RR_TAGS (1ULL << 11)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
