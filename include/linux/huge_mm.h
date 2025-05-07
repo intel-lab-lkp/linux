@@ -293,7 +293,8 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 		if (vm_flags & VM_HUGEPAGE)
 			mask |= READ_ONCE(huge_anon_orders_madvise);
 		if (hugepage_global_always() ||
-		    ((vm_flags & VM_HUGEPAGE) && hugepage_global_enabled()))
+		    ((vm_flags & VM_HUGEPAGE) && hugepage_global_enabled()) ||
+		    test_bit(MMF_THP_ALWAYS, &vma->vm_mm->flags))
 			mask |= READ_ONCE(huge_anon_orders_inherit);
 
 		orders &= mask;
