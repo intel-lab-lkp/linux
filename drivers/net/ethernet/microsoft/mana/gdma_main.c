@@ -352,11 +352,52 @@ void mana_gd_ring_cq(struct gdma_queue *cq, u8 arm_bit)
 }
 EXPORT_SYMBOL_NS(mana_gd_ring_cq, "NET_MANA");
 
+#define MANA_SERVICE_PERIOD 10
+
+struct mana_serv_work {
+	struct work_struct serv_work;
+	struct pci_dev *pdev;
+};
+
+static void mana_serv_func(struct work_struct *w)
+{
+	struct mana_serv_work *mns_wk = container_of(w, struct mana_serv_work, serv_work);
+	struct pci_dev *pdev = mns_wk->pdev;
+	struct pci_bus *bus, *parent;
+
+	if (!pdev)
+		goto out;
+
+	bus = pdev->bus;
+	if (!bus) {
+		dev_err(&pdev->dev, "MANA service: no bus\n");
+		goto out;
+	}
+
+	parent = bus->parent;
+	if (!parent) {
+		dev_err(&pdev->dev, "MANA service: no parent bus\n");
+		goto out;
+	}
+
+	pci_stop_and_remove_bus_device_locked(bus->self);
+
+	msleep(MANA_SERVICE_PERIOD * 1000);
+
+	pci_lock_rescan_remove();
+	pci_rescan_bus(parent);
+	pci_unlock_rescan_remove();
+
+out:
+	kfree(mns_wk);
+}
+
 static void mana_gd_process_eqe(struct gdma_queue *eq)
 {
 	u32 head = eq->head % (eq->queue_size / GDMA_EQE_SIZE);
 	struct gdma_context *gc = eq->gdma_dev->gdma_context;
 	struct gdma_eqe *eq_eqe_ptr = eq->queue_mem_ptr;
+	struct mana_serv_work *mns_wk;
 	union gdma_eqe_info eqe_info;
 	enum gdma_eqe_type type;
 	struct gdma_event event;
@@ -398,6 +439,26 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 		event.type = type;
 		memcpy(&event.details, &eqe->details, GDMA_EVENT_DATA_SIZE);
 		eq->eq.callback(eq->eq.context, eq, &event);
+		break;
+
+	case GDMA_EQE_HWC_FPGA_RECONFIG:
+	case GDMA_EQE_HWC_SOCMANA_CRASH:
+		if (gc->in_service) {
+			dev_info(gc->dev, "Already in service\n");
+			break;
+		}
+
+		mns_wk = kzalloc(sizeof(*mns_wk), GFP_ATOMIC);
+		if (!mns_wk) {
+			dev_err(gc->dev, "Fail to alloc mana_serv_work\n");
+			break;
+		}
+
+		dev_info(gc->dev, "Start MANA service\n");
+		gc->in_service = true;
+		mns_wk->pdev = to_pci_dev(gc->dev);
+		INIT_WORK(&mns_wk->serv_work, mana_serv_func);
+		schedule_work(&mns_wk->serv_work);
 		break;
 
 	default:
