@@ -568,6 +568,9 @@ static inline void get_dma_buf(struct dma_buf *dmabuf)
 	get_file(dmabuf->file);
 }
 
+struct dma_buf *get_first_dmabuf(void);
+struct dma_buf *get_next_dmabuf(struct dma_buf *dmbuf);
+
 /**
  * dma_buf_is_dynamic - check if a DMA-buf uses dynamic mappings.
  * @dmabuf: the DMA-buf to check
