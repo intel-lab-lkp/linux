@@ -15,6 +15,7 @@
 #include <linux/sysfs.h>
 #include <linux/vmalloc.h>
 #include <asm/sgx.h>
+#include <asm/archrandom.h>
 #include "driver.h"
 #include "encl.h"
 #include "encls.h"
@@ -914,6 +915,73 @@ int sgx_set_attribute(unsigned long *allowed_attributes,
 }
 EXPORT_SYMBOL_GPL(sgx_set_attribute);
 
+static bool sgx_has_eupdatesvn;
+static atomic_t sgx_usage_count;
+static DEFINE_MUTEX(sgx_svn_lock);
+
+/**
+ * sgx_updatesvn() - Issue ENCLS[EUPDATESVN]
+ * If EPC is empty, this instruction will update CPUSVN to the currently
+ * loaded microcode update SVN and generate new cryptographic assets.
+ *
+ * Return:
+ * 0: Success or not supported
+ * errno on error
+ */
+static int sgx_update_svn(void)
+{
+	int retry = RDRAND_RETRY_LOOPS;
+	int ret;
+
+	if (!sgx_has_eupdatesvn)
+		return 0;
+
+	do {
+		ret = __eupdatesvn();
+	} while (ret == SGX_INSUFFICIENT_ENTROPY && --retry);
+
+	if (!ret || ret == SGX_NO_UPDATE) {
+		/*
+		 * SVN successfully updated, or it was already up-to-date.
+		 * Let users know when the update was successful.
+		 */
+		if (!ret)
+			pr_info("SVN updated successfully\n");
+		return 0;
+	}
+
+	/*
+	 * EUPDATESVN was called when EPC is empty, all other error
+	 * codes are unexcepted except running out of entropy.
+	 */
+	if (ret != SGX_INSUFFICIENT_ENTROPY)
+		ENCLS_WARN(ret, "EUPDATESVN");
+	return ret;
+}
+
+int sgx_inc_usage_count(void)
+{
+	int ret;
+
+	if (atomic_inc_not_zero(&sgx_usage_count))
+		return 0;
+
+	guard(mutex)(&sgx_svn_lock);
+
+	if (atomic_inc_not_zero(&sgx_usage_count))
+		return 0;
+
+	ret = sgx_update_svn();
+	if (!ret)
+		atomic_inc(&sgx_usage_count);
+	return ret;
+}
+
+void sgx_dec_usage_count(void)
+{
+	atomic_dec(&sgx_usage_count);
+}
+
 static int __init sgx_init(void)
 {
 	int ret;
@@ -946,6 +1014,8 @@ static int __init sgx_init(void)
 
 	if (sgx_vepc_init() && ret)
 		goto err_provision;
+
+	sgx_has_eupdatesvn = (cpuid_eax(SGX_CPUID) & SGX_CPUID_EUPDATESVN);
 
 	return 0;
 
