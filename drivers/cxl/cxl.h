@@ -810,9 +810,17 @@ struct cxl_endpoint_dvsec_info {
 struct cxl_hdm;
 struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 				   struct cxl_endpoint_dvsec_info *info);
+struct cxl_hdm *__devm_cxl_setup_hdm(struct cxl_port *port,
+				     struct cxl_endpoint_dvsec_info *info);
+
 int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 				struct cxl_endpoint_dvsec_info *info);
+int __devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
+				  struct cxl_endpoint_dvsec_info *info);
+
 int devm_cxl_add_passthrough_decoder(struct cxl_port *port);
+int __devm_cxl_add_passthrough_decoder(struct cxl_port *port);
+
 struct cxl_dev_state;
 int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 			struct cxl_endpoint_dvsec_info *info);
@@ -920,5 +928,22 @@ bool dev_is_cxl_root_child(struct device *dev);
 #endif
 
 u16 cxl_gpf_get_dvsec(struct device *dev);
+
+/*
+ * Declaration for functions that are mocked by cxl_test that are called by
+ * cxl_core. The respective functions are defined as __foo() and called by
+ * cxl_core as foo(). The macros below ensures that those functions would
+ * exist as foo(). See tools/testing/cxl/cxl_core_exports.c and
+ * tools/testing/cxl/exports.h for setting up the mock functions. The dance
+ * is done to avoid a circular dependency where cxl_core calls a function that
+ * ends up being a mock function and goes to * cxl_test where it calls a
+ * cxl_core function.
+ */
+#ifndef CXL_TEST_ENABLE
+#define DECLARE_TESTABLE(x) __##x
+#define devm_cxl_enumerate_decoders DECLARE_TESTABLE(devm_cxl_enumerate_decoders)
+#define devm_cxl_setup_hdm DECLARE_TESTABLE(devm_cxl_setup_hdm)
+#define devm_cxl_add_passthrough_decoder DECLARE_TESTABLE(devm_cxl_add_passthrough_decoder)
+#endif
 
 #endif /* __CXL_H__ */

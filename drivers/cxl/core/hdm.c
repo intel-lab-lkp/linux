@@ -39,14 +39,19 @@ static int add_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 	return 0;
 }
 
-/*
+/**
+ * __devm_cxl_add_passthrough_decoder - Add passthrough decoder
+ * @port: The cxl_port context
+ *
+ * Return 0 on success or errno on failure.
+ *
  * Per the CXL specification (8.2.5.12 CXL HDM Decoder Capability Structure)
  * single ported host-bridges need not publish a decoder capability when a
  * passthrough decode can be assumed, i.e. all transactions that the uport sees
  * are claimed and passed to the single dport. Disable the range until the first
  * CXL region is enumerated / activated.
  */
-int devm_cxl_add_passthrough_decoder(struct cxl_port *port)
+int __devm_cxl_add_passthrough_decoder(struct cxl_port *port)
 {
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_dport *dport = NULL;
@@ -73,7 +78,7 @@ int devm_cxl_add_passthrough_decoder(struct cxl_port *port)
 
 	return add_hdm_decoder(port, &cxlsd->cxld, single_port_map);
 }
-EXPORT_SYMBOL_NS_GPL(devm_cxl_add_passthrough_decoder, "CXL");
+EXPORT_SYMBOL_NS_GPL(__devm_cxl_add_passthrough_decoder, "CXL");
 
 static void parse_hdm_decoder_caps(struct cxl_hdm *cxlhdm)
 {
@@ -139,12 +144,12 @@ static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 }
 
 /**
- * devm_cxl_setup_hdm - map HDM decoder component registers
+ * __devm_cxl_setup_hdm - map HDM decoder component registers
  * @port: cxl_port to map
  * @info: cached DVSEC range register info
  */
-struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
-				   struct cxl_endpoint_dvsec_info *info)
+struct cxl_hdm *__devm_cxl_setup_hdm(struct cxl_port *port,
+				     struct cxl_endpoint_dvsec_info *info)
 {
 	struct cxl_register_map *reg_map = &port->reg_map;
 	struct device *dev = &port->dev;
@@ -199,7 +204,7 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 
 	return cxlhdm;
 }
-EXPORT_SYMBOL_NS_GPL(devm_cxl_setup_hdm, "CXL");
+EXPORT_SYMBOL_NS_GPL(__devm_cxl_setup_hdm, "CXL");
 
 static void __cxl_dpa_debug(struct seq_file *file, struct resource *r, int depth)
 {
@@ -1150,12 +1155,12 @@ static void cxl_settle_decoders(struct cxl_hdm *cxlhdm)
 }
 
 /**
- * devm_cxl_enumerate_decoders - add decoder objects per HDM register set
+ * __devm_cxl_enumerate_decoders - add decoder objects per HDM register set
  * @cxlhdm: Structure to populate with HDM capabilities
  * @info: cached DVSEC range register info
  */
-int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
-				struct cxl_endpoint_dvsec_info *info)
+int __devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
+				  struct cxl_endpoint_dvsec_info *info)
 {
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
 	struct cxl_port *port = cxlhdm->port;
@@ -1212,4 +1217,4 @@ int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 
 	return 0;
 }
-EXPORT_SYMBOL_NS_GPL(devm_cxl_enumerate_decoders, "CXL");
+EXPORT_SYMBOL_NS_GPL(__devm_cxl_enumerate_decoders, "CXL");
