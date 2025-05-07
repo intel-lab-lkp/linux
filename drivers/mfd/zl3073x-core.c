@@ -7,6 +7,7 @@
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/math64.h>
+#include <linux/mfd/core.h>
 #include <linux/mfd/zl3073x.h>
 #include <linux/module.h>
 #include <linux/netlink.h>
@@ -755,6 +756,23 @@ static void zl3073x_devlink_unregister(void *ptr)
 	devlink_unregister(ptr);
 }
 
+#define ZL3073X_PDATA(_channel)			\
+	(&(const struct zl3073x_pdata) {	\
+		.channel = _channel,		\
+	})
+
+#define ZL3073X_CELL(_name, _channel)				\
+	MFD_CELL_BASIC(_name, NULL, ZL3073X_PDATA(_channel),	\
+		       sizeof(struct zl3073x_pdata), 0)
+
+static const struct mfd_cell zl3073x_devs[] = {
+	ZL3073X_CELL("zl3073x-dpll", 0),
+	ZL3073X_CELL("zl3073x-dpll", 1),
+	ZL3073X_CELL("zl3073x-dpll", 2),
+	ZL3073X_CELL("zl3073x-dpll", 3),
+	ZL3073X_CELL("zl3073x-dpll", 4),
+};
+
 /**
  * zl3073x_dev_probe - initialize zl3073x device
  * @zldev: pointer to zl3073x device
@@ -825,6 +843,15 @@ int zl3073x_dev_probe(struct zl3073x_dev *zldev,
 	rc = zl3073x_dev_state_fetch(zldev);
 	if (rc)
 		return rc;
+
+	/* Add DPLL sub-device cell for each DPLL channel */
+	rc = devm_mfd_add_devices(zldev->dev, PLATFORM_DEVID_AUTO, zl3073x_devs,
+				  chip_info->num_channels, NULL, 0, NULL);
+	if (rc) {
+		dev_err_probe(zldev->dev, rc,
+			      "Failed to add DPLL sub-device\n");
+		return rc;
+	}
 
 	/* Register the device as devlink device */
 	devlink = priv_to_devlink(zldev);
