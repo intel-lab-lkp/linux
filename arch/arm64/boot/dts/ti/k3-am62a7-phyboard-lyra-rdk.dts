@@ -10,6 +10,7 @@
 #include "k3-am62a7.dtsi"
 #include "k3-am62a-phycore-som.dtsi"
 #include "k3-am62x-phyboard-lyra.dtsi"
+#include "k3-am62a-thermal-industrial.dtsi"
 
 / {
 	compatible = "phytec,am62a7-phyboard-lyra-rdk",
