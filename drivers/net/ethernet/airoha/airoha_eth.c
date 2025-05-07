@@ -5,6 +5,7 @@
  */
 #include <linux/of.h>
 #include <linux/of_net.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/tcp.h>
 #include <linux/u64_stats_sync.h>
@@ -1076,9 +1077,11 @@ static void airoha_qdma_cleanup_tx_queue(struct airoha_queue *q)
 static int airoha_qdma_init_hfwd_queues(struct airoha_qdma *qdma)
 {
 	struct airoha_eth *eth = qdma->eth;
+	int id = qdma - &eth->qdma[0];
 	dma_addr_t dma_addr;
-	u32 status;
-	int size;
+	const char *name;
+	int size, index;
+	u32 status, val;
 
 	size = HW_DSCP_NUM * sizeof(struct airoha_qdma_fwd_desc);
 	qdma->hfwd.desc = dmam_alloc_coherent(eth->dev, size, &dma_addr,
@@ -1088,11 +1091,35 @@ static int airoha_qdma_init_hfwd_queues(struct airoha_qdma *qdma)
 
 	airoha_qdma_wr(qdma, REG_FWD_DSCP_BASE, dma_addr);
 
-	size = AIROHA_MAX_PACKET_SIZE * HW_DSCP_NUM;
-	qdma->hfwd.q = dmam_alloc_coherent(eth->dev, size, &dma_addr,
-					   GFP_KERNEL);
-	if (!qdma->hfwd.q)
+	name = devm_kasprintf(eth->dev, GFP_KERNEL, "qdma%d-buf", id);
+	if (!name)
 		return -ENOMEM;
+
+	index = of_property_match_string(eth->dev->of_node,
+					 "memory-region-names", name);
+	if (index >= 0) { /* buffers in sram */
+		struct reserved_mem *rmem;
+		struct device_node *np;
+
+		np = of_parse_phandle(eth->dev->of_node, "memory-region",
+				      index);
+		if (!np)
+			return -ENODEV;
+
+		rmem = of_reserved_mem_lookup(np);
+		of_node_put(np);
+
+		dma_addr = rmem->base;
+		qdma->hfwd.q = devm_ioremap(eth->dev, rmem->base, rmem->size);
+		if (!qdma->hfwd.q)
+			return -ENOMEM;
+	} else {
+		size = AIROHA_MAX_PACKET_SIZE * HW_DSCP_NUM;
+		qdma->hfwd.q = dmam_alloc_coherent(eth->dev, size, &dma_addr,
+						   GFP_KERNEL);
+		if (!qdma->hfwd.q)
+			return -ENOMEM;
+	}
 
 	airoha_qdma_wr(qdma, REG_FWD_BUF_BASE, dma_addr);
 
@@ -1101,11 +1128,14 @@ static int airoha_qdma_init_hfwd_queues(struct airoha_qdma *qdma)
 			FIELD_PREP(HW_FWD_DSCP_PAYLOAD_SIZE_MASK, 0));
 	airoha_qdma_rmw(qdma, REG_FWD_DSCP_LOW_THR, FWD_DSCP_LOW_THR_MASK,
 			FIELD_PREP(FWD_DSCP_LOW_THR_MASK, 128));
+
+	val = FIELD_PREP(HW_FWD_DESC_NUM_MASK, HW_DSCP_NUM) |
+	      LMGR_INIT_START;
+	if (index >= 0)
+		val |= LMGR_SRAM_MODE_MASK;
 	airoha_qdma_rmw(qdma, REG_LMGR_INIT_CFG,
 			LMGR_INIT_START | LMGR_SRAM_MODE_MASK |
-			HW_FWD_DESC_NUM_MASK,
-			FIELD_PREP(HW_FWD_DESC_NUM_MASK, HW_DSCP_NUM) |
-			LMGR_INIT_START);
+			HW_FWD_DESC_NUM_MASK, val);
 
 	return read_poll_timeout(airoha_qdma_rr, status,
 				 !(status & LMGR_INIT_START), USEC_PER_MSEC,
