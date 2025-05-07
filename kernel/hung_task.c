@@ -59,11 +59,19 @@ static unsigned long __read_mostly sysctl_hung_task_check_interval_secs;
 static int __read_mostly sysctl_hung_task_warnings = 10;
 
 static int __read_mostly did_panic;
-static bool hung_task_show_lock;
 static bool hung_task_call_panic;
-static bool hung_task_show_all_bt;
 
 static struct task_struct *watchdog_task;
+
+/*
+ * A bitmask to control what kinds of system info to be printed when a
+ * hung task is detected, it could be task, memory, lock etc. Refer panic.h
+ * for details of bit definition.
+ */
+unsigned long hungtask_print;
+core_param(hungtask_print, hungtask_print, ulong, 0644);
+
+static unsigned long cur_hungtask_print;
 
 #ifdef CONFIG_SMP
 /*
@@ -196,11 +204,12 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 	 */
 	sysctl_hung_task_detect_count++;
 
+	cur_hungtask_print = hungtask_print;
 	trace_sched_process_hang(t);
 
 	if (sysctl_hung_task_panic) {
 		console_verbose();
-		hung_task_show_lock = true;
+		cur_hungtask_print |= SYS_PRINT_LOCK_INFO;
 		hung_task_call_panic = true;
 	}
 
@@ -223,10 +232,10 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 			" disables this message.\n");
 		sched_show_task(t);
 		debug_show_blocker(t);
-		hung_task_show_lock = true;
+		cur_hungtask_print |= SYS_PRINT_LOCK_INFO;
 
 		if (sysctl_hung_task_all_cpu_backtrace)
-			hung_task_show_all_bt = true;
+			cur_hungtask_print |= SYS_PRINT_ALL_CPU_BT;
 		if (!sysctl_hung_task_warnings)
 			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
 	}
@@ -275,7 +284,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	if (test_taint(TAINT_DIE) || did_panic)
 		return;
 
-	hung_task_show_lock = false;
+	cur_hungtask_print = 0;
 	rcu_read_lock();
 	for_each_process_thread(g, t) {
 		unsigned int state;
@@ -299,14 +308,8 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	}
  unlock:
 	rcu_read_unlock();
-	if (hung_task_show_lock)
-		debug_show_all_locks();
 
-	if (hung_task_show_all_bt) {
-		hung_task_show_all_bt = false;
-		trigger_all_cpu_backtrace();
-	}
-
+	sys_show_info(cur_hungtask_print);
 	if (hung_task_call_panic)
 		panic("hung_task: blocked tasks");
 }
