@@ -51,7 +51,7 @@ static inline void update_alloc_hint_after_get(struct sbitmap *sb,
 	} else if (nr == hint || unlikely(sb->round_robin)) {
 		/* Only update the hint if we used it. */
 		hint = nr + 1;
-		if (hint >= depth - 1)
+		if (hint >= depth)
 			hint = 0;
 		this_cpu_write(*sb->alloc_hint, hint);
 	}
@@ -182,7 +182,7 @@ static int __sbitmap_get_word(unsigned long *word, unsigned long depth,
 			break;
 
 		hint = nr + 1;
-		if (hint >= depth - 1)
+		if (hint >= depth)
 			hint = 0;
 	}
 
