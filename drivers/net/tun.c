@@ -1993,7 +1993,7 @@ static ssize_t tun_put_user_xdp(struct tun_struct *tun,
 				struct iov_iter *iter)
 {
 	int vnet_hdr_sz = 0;
-	size_t size = xdp_frame->len;
+	size_t size = xdp_get_frame_len(xdp_frame);
 	ssize_t ret;
 
 	if (tun->flags & IFF_VNET_HDR) {
@@ -2579,7 +2579,7 @@ static int tun_ptr_peek_len(void *ptr)
 		if (tun_is_xdp_frame(ptr)) {
 			struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
-			return xdpf->len;
+			return xdp_get_frame_len(xdpf);
 		}
 		return __skb_array_len_with_tag(ptr);
 	} else {
