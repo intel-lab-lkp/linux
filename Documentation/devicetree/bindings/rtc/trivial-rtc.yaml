@@ -65,6 +65,8 @@ properties:
       - microcrystal,rv8523
       # NXP LPC32xx SoC Real-time Clock
       - nxp,lpc3220-rtc
+      # NXP PCF85053A Real Time Clock Module with I2C-Bus
+      - nxp,pcf85053a
       # I2C bus SERIAL INTERFACE REAL-TIME CLOCK IC
       - ricoh,r2025sd
       # I2C bus SERIAL INTERFACE REAL-TIME CLOCK IC
