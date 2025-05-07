@@ -754,7 +754,17 @@ void elevator_set_none(struct request_queue *q)
 		.name	= "none",
 		.quiesce_queue = true,
 	};
+	bool need_change;
 	int err;
+
+	WARN_ON_ONCE(blk_queue_registered(q));
+
+	/* queue has been unregisted, elevator can't be switched anymore */
+	mutex_lock(&q->elevator_lock);
+	need_change = !!q->elevator;
+	mutex_unlock(&q->elevator_lock);
+	if (!need_change)
+		return;
 
 	err = elevator_change(q, &ctx);
 	if (err < 0)
