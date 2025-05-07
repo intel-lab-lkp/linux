@@ -35,7 +35,6 @@ struct stm32_firewall {
 	u32 firewall_id;
 };
 
-#if IS_ENABLED(CONFIG_STM32_FIREWALL)
 /**
  * stm32_firewall_get_firewall - Get the firewall(s) associated to given device.
  *				 The firewall controller reference is always the first argument
@@ -111,6 +110,15 @@ int stm32_firewall_grant_access_by_id(struct stm32_firewall *firewall, u32 subsy
  * @subsystem_id:		Firewall ID of the subsystem resource
  */
 void stm32_firewall_release_access_by_id(struct stm32_firewall *firewall, u32 subsystem_id);
+
+#if IS_ENABLED(CONFIG_STM32_FIREWALL)
+
+extern int stm32_firewall_get_firewall(struct device_node *np, struct stm32_firewall *firewall,
+				unsigned int nb_firewall);
+extern int stm32_firewall_grant_access(struct stm32_firewall *firewall);
+extern void stm32_firewall_release_access(struct stm32_firewall *firewall);
+extern int stm32_firewall_grant_access_by_id(struct stm32_firewall *firewall, u32 subsystem_id);
+extern void stm32_firewall_release_access_by_id(struct stm32_firewall *firewall, u32 subsystem_id);
 
 #else /* CONFIG_STM32_FIREWALL */
 
