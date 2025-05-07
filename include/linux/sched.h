@@ -316,6 +316,7 @@ struct user_event_mm;
  */
 enum {
 	TASK_COMM_LEN = 16,
+	REAL_TASK_COMM_LEN = 64,
 };
 
 extern void sched_tick(void);
@@ -1156,7 +1157,10 @@ struct task_struct {
 	 *   - logic inside set_task_comm() will ensure it is always NUL-terminated and
 	 *     zero-padded
 	 */
-	char				comm[TASK_COMM_LEN];
+	union {
+		char			comm[TASK_COMM_LEN];
+		char			real_comm[REAL_TASK_COMM_LEN];
+	};
 
 	struct nameidata		*nameidata;
 
@@ -1994,7 +1998,7 @@ extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec
  */
 #define get_task_comm(buf, tsk) ({			\
 	BUILD_BUG_ON(sizeof(buf) < TASK_COMM_LEN);	\
-	strscpy_pad(buf, (tsk)->comm);			\
+	strscpy_pad(buf, (tsk)->real_comm);		\
 	buf;						\
 })
 
