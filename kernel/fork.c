@@ -253,10 +253,9 @@ static int memcg_charge_kernel_stack(struct vm_struct *vm_area)
 	int i;
 	int ret;
 	int nr_charged = 0;
+	int nr_pages = vm_area->nr_pages;
 
-	BUG_ON(vm_area->nr_pages != THREAD_SIZE / PAGE_SIZE);
-
-	for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++) {
+	for (i = 0; i < nr_pages; i++) {
 		ret = memcg_kmem_charge_page(vm_area->pages[i], GFP_KERNEL, 0);
 		if (ret)
 			goto err;
@@ -516,9 +515,10 @@ static void account_kernel_stack(struct task_struct *tsk, int account)
 {
 	if (IS_ENABLED(CONFIG_VMAP_STACK)) {
 		struct vm_struct *vm_area = task_stack_vm_area(tsk);
+		int nr_pages = vm_area->nr_pages;
 		int i;
 
-		for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++)
+		for (i = 0; i < nr_pages; i++)
 			mod_lruvec_page_state(vm_area->pages[i], NR_KERNEL_STACK_KB,
 					      account * (PAGE_SIZE / 1024));
 	} else {
@@ -535,11 +535,11 @@ void exit_task_stack_account(struct task_struct *tsk)
 	account_kernel_stack(tsk, -1);
 
 	if (IS_ENABLED(CONFIG_VMAP_STACK)) {
-		struct vm_struct *vm_area;
+		struct vm_struct *vm_area = task_stack_vm_area(tsk);
+		int nr_pages = vm_area->nr_pages;
 		int i;
 
-		vm_area = task_stack_vm_area(tsk);
-		for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++)
+		for (i = 0; i < nr_pages; i++)
 			memcg_kmem_uncharge_page(vm_area->pages[i], 0);
 	}
 }
