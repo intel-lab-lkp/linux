@@ -127,9 +127,25 @@ static void nmi_check_duration(struct nmiaction *action, u64 duration)
 			    action->handler, duration, decimal_msecs);
 }
 
+/*
+ * Match the NMI-source vector saved during registration with the source
+ * bitmap.
+ *
+ * Always return true when bit 0 of the source bitmap is set.
+ */
+static inline bool match_nmi_source(unsigned long source_bitmap, struct nmiaction *action)
+{
+	unsigned long match_vector;
+
+	match_vector = BIT(NMIS_VECTOR_NONE) | BIT(action->source_vector);
+
+	return (source_bitmap & match_vector);
+}
+
 static int nmi_handle(unsigned int type, struct pt_regs *regs)
 {
 	struct nmi_desc *desc = nmi_to_desc(type);
+	unsigned long source_bitmap = 0;
 	nmi_handler_t ehandler;
 	struct nmiaction *a;
 	int handled=0;
@@ -149,14 +165,38 @@ static int nmi_handle(unsigned int type, struct pt_regs *regs)
 	rcu_read_lock();
 
 	/*
+	 * Activate NMI source-based filtering only for Local NMIs.
+	 *
+	 * Platform NMI types (such as SERR and IOCHK) have only one
+	 * handler registered per type, so there is no need to
+	 * disambiguate between multiple handlers.
+	 *
+	 * Also, if a platform source ends up setting bit 2 in the
+	 * source bitmap, the local NMI handlers would be skipped since
+	 * none of them use this reserved vector.
+	 *
+	 * For Unknown NMIs, avoid using the source bitmap to ensure all
+	 * potential handlers have a chance to claim responsibility.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_NMI_SOURCE) && type == NMI_LOCAL)
+		source_bitmap = fred_event_data(regs);
+
+	/*
 	 * NMIs are edge-triggered, which means if you have enough
 	 * of them concurrently, you can lose some because only one
 	 * can be latched at any given time.  Walk the whole list
 	 * to handle those situations.
+	 *
+	 * However, NMI-source reporting does not have this limitation.
+	 * When NMI-source information is available, only run the
+	 * handlers that match the reported vectors.
 	 */
 	list_for_each_entry_rcu(a, &desc->head, list) {
 		int thishandled;
 		u64 delta;
+
+		if (source_bitmap && !match_nmi_source(source_bitmap, a))
+			continue;
 
 		delta = sched_clock();
 		thishandled = a->handler(type, regs);
