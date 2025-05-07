@@ -2571,12 +2571,25 @@ static struct pernet_operations nfs_net_ops = {
 	.size = sizeof(struct nfs_net),
 };
 
+static struct key *nfs_keyring;
+
 /*
  * Initialize NFS
  */
 static int __init init_nfs_fs(void)
 {
 	int err;
+
+	if (IS_ENABLED(CONFIG_NFS_V4)) {
+		nfs_keyring = keyring_alloc(".nfs",
+				     GLOBAL_ROOT_UID, GLOBAL_ROOT_GID,
+				     current_cred(),
+				     (KEY_POS_ALL & ~KEY_POS_SETATTR) |
+				     (KEY_USR_ALL & ~KEY_USR_SETATTR),
+				     KEY_ALLOC_NOT_IN_QUOTA, NULL, NULL);
+		if (IS_ERR(nfs_keyring))
+			return PTR_ERR(nfs_keyring);
+	}
 
 	err = nfs_sysfs_init();
 	if (err < 0)
@@ -2653,6 +2666,8 @@ static void __exit exit_nfs_fs(void)
 	nfs_fs_proc_exit();
 	nfsiod_stop();
 	nfs_sysfs_exit();
+	if (IS_ENABLED(CONFIG_NFS_V4))
+		key_put(nfs_keyring);
 }
 
 /* Not quite true; I just maintain it */
