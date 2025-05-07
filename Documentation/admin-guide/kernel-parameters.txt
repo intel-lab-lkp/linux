@@ -7023,6 +7023,13 @@
 			/sys/power/pm_test). Only available when CONFIG_PM_DEBUG
 			is set. Default value is 5.
 
+	hibernate.pm_test_delay=
+			[hibernate]
+			Sets the number of seconds to remain in a hibernation test
+			mode before resuming the system (see
+			/sys/power/pm_test). Only available when CONFIG_PM_DEBUG
+			is set. Default value is 5.
+
 	svm=		[PPC]
 			Format: { on | off | y | n | 1 | 0 }
 			This parameter controls use of the Protected
