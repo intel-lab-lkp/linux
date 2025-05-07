@@ -6,7 +6,10 @@
 
 /dts-v1/;
 
-#include "sa8775p-ride.dtsi"
+#include "sa8775p.dtsi"
+#include "sa8775p-pmics.dtsi"
+
+#include "sa8775p-ride-common.dtsi"
 #include "sa8775p-ride-ethernet-aqr115c.dtsi"
 
 / {
