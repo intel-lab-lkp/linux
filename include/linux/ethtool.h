@@ -215,12 +215,24 @@ static inline u8 *ethtool_rxfh_context_key(struct ethtool_rxfh_context *ctx)
 void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id);
 
 struct link_mode_info {
-	int                             speed;
-	u8                              lanes;
-	u8                              duplex;
+	int	speed;
+	u8	min_lanes;
+	u8	lanes;
+	u8	duplex;
+	u16	mediums;
 };
 
 extern const struct link_mode_info link_mode_params[];
+
+extern const char ethtool_link_medium_names[][ETH_GSTRING_LEN];
+
+static inline const char *phy_mediums(enum ethtool_link_medium medium)
+{
+	if (medium >= __ETHTOOL_LINK_MEDIUM_LAST)
+		return "unknown";
+
+	return ethtool_link_medium_names[medium];
+}
 
 /* declare a link mode bitmap */
 #define __ETHTOOL_DECLARE_LINK_MODE_MASK(name)		\
