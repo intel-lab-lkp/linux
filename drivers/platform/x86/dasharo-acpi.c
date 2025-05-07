@@ -101,10 +101,10 @@ static int dasharo_read_channel(struct dasharo_data *data, char *method, enum da
 	acpi_status status;
 	u64 val;
 
-	if (feat > ARRAY_SIZE(data->capabilities))
+	if (feat >= ARRAY_SIZE(data->capabilities))
 		return -EINVAL;
 
-	if (channel > data->caps_found[feat])
+	if (channel >= data->caps_found[feat])
 		return -EINVAL;
 
 	obj[0].type = ACPI_TYPE_INTEGER;
