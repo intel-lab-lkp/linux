@@ -641,11 +641,12 @@ static struct sock *iso_get_sock(bdaddr_t *src, bdaddr_t *dst,
 			continue;
 
 		/* Exact match. */
-		if (!bacmp(&iso_pi(sk)->src, src)) {
+		if (!bacmp(&iso_pi(sk)->src, src)
+		     && !bacmp(&iso_pi(sk)->dst, dst)
+			){
 			sock_hold(sk);
 			break;
 		}
-
 		/* Closest match */
 		if (!bacmp(&iso_pi(sk)->src, BDADDR_ANY)) {
 			if (sk1)
@@ -1962,7 +1963,7 @@ static void iso_conn_ready(struct iso_conn *conn)
 		}
 
 		if (!parent)
-			parent = iso_get_sock(&hcon->src, BDADDR_ANY,
+			parent = iso_get_sock(&hcon->src, &hcon->dst,
 					      BT_LISTEN, NULL, NULL);
 
 		if (!parent)
@@ -2203,6 +2204,11 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 	} else {
 		sk = iso_get_sock(&hdev->bdaddr, BDADDR_ANY,
 				  BT_LISTEN, NULL, NULL);
+		if (!sk)
+			sk = iso_get_sock(&hdev->bdaddr, bdaddr,
+					  BT_LISTEN, NULL, NULL);
+		else
+			iso_pi(sk)->dst = *bdaddr;
 	}
 
 done:

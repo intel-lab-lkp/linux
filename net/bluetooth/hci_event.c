@@ -6413,6 +6413,8 @@ static void hci_le_pa_sync_estabilished_evt(struct hci_dev *hdev, void *data,
 
 	conn->sync_handle = le16_to_cpu(ev->handle);
 	conn->sid = HCI_SID_INVALID;
+	conn->dst = ev->bdaddr;
+	conn->dst_type = ev->bdaddr_type;
 
 	mask |= hci_proto_connect_ind(hdev, &ev->bdaddr, BIS_LINK,
 				      &flags);
@@ -6425,7 +6427,8 @@ static void hci_le_pa_sync_estabilished_evt(struct hci_dev *hdev, void *data,
 		goto unlock;
 
 	/* Add connection to indicate PA sync event */
-	pa_sync = hci_conn_add_unset(hdev, BIS_LINK, BDADDR_ANY,
+
+	pa_sync = hci_conn_add_unset(hdev, BIS_LINK, &ev->bdaddr,
 				     HCI_ROLE_SLAVE);
 
 	if (IS_ERR(pa_sync))
@@ -6456,18 +6459,18 @@ static void hci_le_per_adv_report_evt(struct hci_dev *hdev, void *data,
 
 	hci_dev_lock(hdev);
 
-	mask |= hci_proto_connect_ind(hdev, BDADDR_ANY, BIS_LINK, &flags);
-	if (!(mask & HCI_LM_ACCEPT))
-		goto unlock;
-
-	if (!(flags & HCI_PROTO_DEFER))
-		goto unlock;
-
 	pa_sync = hci_conn_hash_lookup_pa_sync_handle
 			(hdev,
 			le16_to_cpu(ev->sync_handle));
 
 	if (!pa_sync)
+		goto unlock;
+
+	mask |= hci_proto_connect_ind(hdev, &pa_sync->dst, ISO_LINK, &flags);
+	if (!(mask & HCI_LM_ACCEPT))
+		goto unlock;
+
+	if (!(flags & HCI_PROTO_DEFER))
 		goto unlock;
 
 	if (ev->data_status == LE_PA_DATA_COMPLETE &&
@@ -6993,6 +6996,8 @@ static void hci_le_big_sync_established_evt(struct hci_dev *hdev, void *data,
 			set_bit(HCI_CONN_PA_SYNC, &bis->flags);
 
 		bis->sync_handle = conn->sync_handle;
+		bis->dst = conn->dst;
+		bis->dst_type = conn->dst_type;
 		bis->iso_qos.bcast.big = ev->handle;
 		memset(&interval, 0, sizeof(interval));
 		memcpy(&interval, ev->latency, sizeof(ev->latency));
@@ -7038,13 +7043,6 @@ static void hci_le_big_info_adv_report_evt(struct hci_dev *hdev, void *data,
 
 	hci_dev_lock(hdev);
 
-	mask |= hci_proto_connect_ind(hdev, BDADDR_ANY, BIS_LINK, &flags);
-	if (!(mask & HCI_LM_ACCEPT))
-		goto unlock;
-
-	if (!(flags & HCI_PROTO_DEFER))
-		goto unlock;
-
 	pa_sync = hci_conn_hash_lookup_pa_sync_handle
 			(hdev,
 			le16_to_cpu(ev->sync_handle));
@@ -7053,6 +7051,13 @@ static void hci_le_big_info_adv_report_evt(struct hci_dev *hdev, void *data,
 		goto unlock;
 
 	pa_sync->iso_qos.bcast.encryption = ev->encryption;
+
+	mask |= hci_proto_connect_ind(hdev, &pa_sync->dst, ISO_LINK, &flags);
+	if (!(mask & HCI_LM_ACCEPT))
+		goto unlock;
+
+	if (!(flags & HCI_PROTO_DEFER))
+		goto unlock;
 
 	/* Notify iso layer */
 	hci_connect_cfm(pa_sync, 0);
