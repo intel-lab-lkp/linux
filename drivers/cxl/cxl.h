@@ -404,6 +404,7 @@ struct cxl_endpoint_decoder {
  * struct cxl_switch_decoder - Switch specific CXL HDM Decoder
  * @cxld: base cxl_decoder object
  * @nr_targets: number of elements in @target
+ * @target_map: array of expected dport port_id mirror the target
  * @target: active ordered target list in current decoder configuration
  *
  * The 'switch' decoder type represents the decoder instances of cxl_port's that
@@ -415,6 +416,7 @@ struct cxl_endpoint_decoder {
 struct cxl_switch_decoder {
 	struct cxl_decoder cxld;
 	int nr_targets;
+	int target_map[CXL_DECODER_MAX_INTERLEAVE];
 	struct cxl_dport *target[];
 };
 
@@ -906,6 +908,8 @@ void cxl_coordinates_combine(struct access_coordinate *out,
 			     struct access_coordinate *c2);
 
 bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
+int devm_cxl_port_setup_decoders(struct cxl_port *port);
+bool dev_is_cxl_root_child(struct device *dev);
 
 /*
  * Unit test builds overrides this to __weak, find the 'strong' version

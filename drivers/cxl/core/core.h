@@ -134,4 +134,8 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 		    u16 *return_code);
 #endif
 
+int cxl_dport_setup(struct cxl_dport *dport);
+int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
+			 resource_size_t component_reg_phys);
+
 #endif /* __CXL_CORE_H__ */
