@@ -209,5 +209,5 @@ DEFINE_EVENT(cmdq, hns_cmdq_resp,
 #undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE hns_roce_trace
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_PATH ../../drivers/infiniband/hw/hns
 #include <trace/define_trace.h>
