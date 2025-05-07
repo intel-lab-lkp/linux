@@ -1045,7 +1045,7 @@ void put_cxl_root(struct cxl_root *cxl_root)
 }
 EXPORT_SYMBOL_NS_GPL(put_cxl_root, "CXL");
 
-static struct cxl_dport *find_dport(struct cxl_port *port, int port_num)
+static struct cxl_dport *find_dport_by_num(struct cxl_port *port, int port_num)
 {
 	struct cxl_dport *dport;
 	unsigned long index;
@@ -1063,7 +1063,7 @@ static int add_dport(struct cxl_port *port, struct cxl_dport *dport)
 	int rc;
 
 	device_lock_assert(&port->dev);
-	dup = find_dport(port, dport->port_num);
+	dup = find_dport_by_num(port, dport->port_num);
 	if (dup) {
 		dev_err(&port->dev,
 			"unable to add dport%d-%s non-unique port num (%s)\n",
@@ -1275,13 +1275,13 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport, "CXL");
  * devm_cxl_add_rch_dport - append RCH downstream port data to a cxl_port
  * @port: the cxl_port that references this dport
  * @dport_dev: firmware or PCI device representing the dport
- * @port_id: identifier for this dport in a decoder's target list
+ * @port_num: identifier for this dport in a decoder's target list
  * @rcrb: mandatory location of a Root Complex Register Block
  *
  * See CXL 3.0 9.11.8 CXL Devices Attached to an RCH
  */
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
-					 struct device *dport_dev, int port_id,
+					 struct device *dport_dev, int port_num,
 					 resource_size_t rcrb)
 {
 	struct cxl_dport *dport;
@@ -1291,7 +1291,7 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 		return ERR_PTR(-EINVAL);
 	}
 
-	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
+	dport = __devm_cxl_add_dport(port, dport_dev, port_num,
 				     CXL_RESOURCE_NONE, rcrb);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add RCH dport to %s: %ld\n",
@@ -1764,7 +1764,7 @@ static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 
 	guard(rwsem_write)(&cxl_region_rwsem);
 	for (i = 0; i < cxlsd->cxld.interleave_ways; i++) {
-		struct cxl_dport *dport = find_dport(port, target_map[i]);
+		struct cxl_dport *dport = find_dport_by_num(port, target_map[i]);
 
 		if (!dport)
 			return -ENXIO;
