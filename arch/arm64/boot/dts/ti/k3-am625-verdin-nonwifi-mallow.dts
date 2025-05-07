@@ -12,6 +12,7 @@
 #include "k3-am62-verdin.dtsi"
 #include "k3-am62-verdin-nonwifi.dtsi"
 #include "k3-am62-verdin-mallow.dtsi"
+#include "k3-am62-thermal-industrial.dtsi"
 
 / {
 	model = "Toradex Verdin AM62 on Mallow Board";
