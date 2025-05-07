@@ -23,6 +23,13 @@
 #define APIC_EXTNMI_ALL		1
 #define APIC_EXTNMI_NONE	2
 
+/* Trigger NMIs with source information */
+#define TEST_NMI		(APIC_DM_NMI | NMIS_VECTOR_TEST)
+#define SMP_STOP_NMI		(APIC_DM_NMI | NMIS_VECTOR_SMP_STOP)
+#define BT_NMI			(APIC_DM_NMI | NMIS_VECTOR_BT)
+#define KGDB_NMI		(APIC_DM_NMI | NMIS_VECTOR_KGDB)
+#define MCE_NMI			(APIC_DM_NMI | NMIS_VECTOR_MCE)
+
 /*
  * Debugging macros
  */
