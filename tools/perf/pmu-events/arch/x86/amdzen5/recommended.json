@@ -242,13 +242,6 @@
     "ScaleUnit": "1e3per_1k_instr"
   },
   {
-    "MetricName": "all_tlbs_flushed_pti",
-    "BriefDescription": "All TLBs flushed per thousand instructions.",
-    "MetricExpr": "ls_tlb_flush.all / instructions",
-    "MetricGroup": "tlb",
-    "ScaleUnit": "1e3per_1k_instr"
-  },
-  {
     "MetricName": "macro_ops_dispatched",
     "BriefDescription": "Macro-ops dispatched.",
     "MetricExpr": "de_src_op_disp.all",

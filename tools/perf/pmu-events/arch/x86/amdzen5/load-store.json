@@ -503,12 +503,6 @@
     "BriefDescription": "Core cycles not in halt."
   },
   {
-    "EventName": "ls_tlb_flush.all",
-    "EventCode": "0x78",
-    "BriefDescription": "All TLB Flushes.",
-    "UMask": "0xff"
-  },
-  {
     "EventName": "ls_not_halted_p0_cyc.p0_freq_cyc",
     "EventCode": "0x120",
     "BriefDescription": "Reference cycles (P0 frequency) not in halt .",
