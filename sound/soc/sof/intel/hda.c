@@ -1049,7 +1049,13 @@ static void hda_generic_machine_select(struct snd_sof_dev *sdev,
 		if (!*mach && codec_num <= 2) {
 			bool tplg_fixup = false;
 
-			hda_mach = snd_soc_acpi_intel_hda_machines;
+			/* make a copy so we can modify it below */
+			hda_mach = devm_kmemdup(sdev->dev,
+						snd_soc_acpi_intel_hda_machines,
+						sizeof(*hda_mach),
+						GFP_KERNEL);
+			if (!hda_mach)
+				return;
 
 			dev_info(bus->dev, "using HDA machine driver %s now\n",
 				 hda_mach->drv_name);
