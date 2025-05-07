@@ -4270,31 +4270,14 @@ void memmove_extent_buffer(const struct extent_buffer *dst,
 static int try_release_subpage_extent_buffer(struct folio *folio)
 {
 	struct btrfs_fs_info *fs_info = folio_to_fs_info(folio);
-	u64 cur = folio_pos(folio);
-	const u64 end = cur + PAGE_SIZE;
+	struct extent_buffer *eb;
+	unsigned long start = folio_pos(folio) >> fs_info->sectorsize_bits;
+	unsigned long index = start;
+	unsigned long end = index + (PAGE_SIZE >> fs_info->sectorsize_bits) - 1;
 	int ret;
 
-	while (cur < end) {
-		unsigned long index = cur >> fs_info->sectorsize_bits;
-		struct extent_buffer *eb = NULL;
-
-		/*
-		 * Unlike try_release_extent_buffer() which uses folio private
-		 * to grab buffer, for subpage case we rely on xarray, thus we
-		 * need to ensure xarray tree consistency.
-		 *
-		 * We also want an atomic snapshot of the xarray tree, thus go
-		 * with spinlock rather than RCU.
-		 */
-		xa_lock_irq(&fs_info->buffer_tree);
-		eb = xa_load(&fs_info->buffer_tree, index);
-		if (!eb) {
-			/* No more eb in the page range after or at cur */
-			xa_unlock_irq(&fs_info->buffer_tree);
-			break;
-		}
-		cur = eb->start + eb->len;
-
+	xa_lock_irq(&fs_info->buffer_tree);
+	xa_for_each_range(&fs_info->buffer_tree, index, eb, start, end) {
 		/*
 		 * The same as try_release_extent_buffer(), to ensure the eb
 		 * won't disappear out from under us.
@@ -4302,8 +4285,7 @@ static int try_release_subpage_extent_buffer(struct folio *folio)
 		spin_lock(&eb->refs_lock);
 		if (atomic_read(&eb->refs) != 1 || extent_buffer_under_io(eb)) {
 			spin_unlock(&eb->refs_lock);
-			xa_unlock_irq(&fs_info->buffer_tree);
-			break;
+			continue;
 		}
 		xa_unlock_irq(&fs_info->buffer_tree);
 
@@ -4323,7 +4305,10 @@ static int try_release_subpage_extent_buffer(struct folio *folio)
 		 * release_extent_buffer() will release the refs_lock.
 		 */
 		release_extent_buffer(eb);
+		xa_lock_irq(&fs_info->buffer_tree);
 	}
+	xa_unlock_irq(&fs_info->buffer_tree);
+
 	/*
 	 * Finally to check if we have cleared folio private, as if we have
 	 * released all ebs in the page, the folio private should be cleared now.
