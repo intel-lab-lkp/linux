@@ -239,7 +239,7 @@ nouveau_check_bl_size(struct nouveau_drm *drm, struct nouveau_bo *nvbo,
 	bh = nouveau_get_height_in_blocks(h, gobs_in_block, drm->client.device.info.family);
 	gob_size = nouveau_get_gob_size(drm->client.device.info.family);
 
-	bl_size = bw * bh * gobs_in_block * gob_size;
+	bl_size = (uint64_t)bw * bh * gobs_in_block * gob_size;
 
 	DRM_DEBUG_KMS("offset=%u stride=%u h=%u gobs_in_block=%u bw=%u bh=%u gob_size=%u bl_size=%llu size=%zu\n",
 		      offset, stride, h, gobs_in_block, bw, bh, gob_size,
