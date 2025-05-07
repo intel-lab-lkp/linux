@@ -762,6 +762,11 @@ static int __init alloc_tag_init(void)
 	};
 	int res;
 
+	if (!mem_profiling_support) {
+		pr_info("Memory allocation profiling is not supported!\n");
+		return 0;
+	}
+
 	res = alloc_mod_tags_mem();
 	if (res)
 		return res;
