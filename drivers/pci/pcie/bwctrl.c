@@ -53,7 +53,6 @@ struct pcie_bwctrl_data {
  * (using just one rwsem triggers "possible recursive locking detected"
  * warning).
  */
-static DECLARE_RWSEM(pcie_bwctrl_lbms_rwsem);
 static DECLARE_RWSEM(pcie_bwctrl_setspeed_rwsem);
 
 static bool pcie_valid_speed(enum pci_bus_speed speed)
