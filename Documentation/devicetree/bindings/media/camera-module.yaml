@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2025 Intel Corporation
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/camera-module.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Camera modules
+
+maintainers:
+  - Sakari Ailus <sakari.ailus@linux.intel.com>
+
+description: |
+  Camera modules are devices that embed one or more active devices, including
+  Camera Sensors, Voice Coil Motor (VCM) and possibly a flash LED as well as
+  other passive devices such as lenses and Ultra-Violet (UV) filters. While the
+  camera modules themselves have no OF nodes and have generally no module
+  specific functions, it still does matter for the software stack as a whole
+  which module the devices are a part of.
+
+  Two properties are used for this, depending on what is known of the module:
+
+  1. The model of the module is known. In this case the name of the module uses
+  the format "vendor,model[,version]" where "vendor" is the manufacturer of the
+  module and "model" the name of the model. The version part is optional. In
+  such cases the property "camera-module-canonical" will be used. If the vendor
+  is not known, the "gpio" vendor prefix is used.
+
+  2. The model of the module is unknown. In this case, the module has an
+  identifier only, and will be described in detail in the camera module
+  database. The property "camera-module-casual" is used to denote such modules.
+
+  Before including in this binding documentation, all modules shall also be
+  documented in add-URL-here.
+
+  All camera modules listed below shall have the name of the sensor as well as
+  other devices included in the module as DT compatible string mentioned in a
+  comment after the enumeration, separated by a whitespace (" ").
+
+  Always keep the enumeration alphabetically (1) or numerically (2) sorted.
+
+properties:
+  camera-module-canonical:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - "dell,0BF122N3" # onnn,ov01a10
+  camera-module-casual:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 1 # st,vs6555
+
+additionalProperties: true
