@@ -28,12 +28,6 @@
     "UMask": "0x08"
   },
   {
-    "EventName": "ic_fetch_ibs_events.sample_valid",
-    "EventCode": "0x188",
-    "BriefDescription": "Fetches tagged by Fetch IBS that result in a valid sample and an IBS interrupt.",
-    "UMask": "0x10"
-  },
-  {
     "EventName": "op_cache_hit_miss.op_cache_hit",
     "EventCode": "0x28f",
     "BriefDescription": "Op cache hits.",
