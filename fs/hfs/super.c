@@ -452,16 +452,20 @@ static int __init init_hfs_fs(void)
 		SLAB_HWCACHE_ALIGN|SLAB_ACCOUNT, hfs_init_once);
 	if (!hfs_inode_cachep)
 		return -ENOMEM;
+	hfs_debug_init();
 	err = register_filesystem(&hfs_fs_type);
-	if (err)
+	if (err) {
+		hfs_debug_exit();
 		kmem_cache_destroy(hfs_inode_cachep);
-	return err;
+	}
+	return 0;
 }
 
 static void __exit exit_hfs_fs(void)
 {
 	unregister_filesystem(&hfs_fs_type);
 
+	hfs_debug_exit();
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we
 	 * destroy cache.

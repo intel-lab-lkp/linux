@@ -27,6 +27,7 @@
 
 #include "hfs.h"
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 #define DBG_BNODE_REFS	0x00000001
 #define DBG_BNODE_MOD	0x00000002
 #define DBG_CAT_MOD	0x00000004
@@ -35,23 +36,23 @@
 #define DBG_EXTENT	0x00000020
 #define DBG_BITMAP	0x00000040
 
-//#define DBG_MASK	(DBG_EXTENT|DBG_INODE|DBG_BNODE_MOD|DBG_CAT_MOD|DBG_BITMAP)
-//#define DBG_MASK	(DBG_BNODE_MOD|DBG_CAT_MOD|DBG_INODE)
-//#define DBG_MASK	(DBG_CAT_MOD|DBG_BNODE_REFS|DBG_INODE|DBG_EXTENT)
-#define DBG_MASK	(0)
+extern u8 dbg_flags;
 
 #define hfs_dbg(flg, fmt, ...)					\
 do {								\
-	if (DBG_##flg & DBG_MASK)				\
+	if (DBG_##flg & dbg_flags)				\
 		printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__);	\
 } while (0)
 
 #define hfs_dbg_cont(flg, fmt, ...)				\
 do {								\
-	if (DBG_##flg & DBG_MASK)				\
+	if (DBG_##flg & dbg_flags)				\
 		pr_cont(fmt, ##__VA_ARGS__);			\
 } while (0)
-
+#else
+#define hfs_dbg(flg, fmt, ...) do {} while (0)
+#define hfs_dbg_cont(flg, fmt, ...) do {} while (0)
+#endif
 
 /*
  * struct hfs_inode_info
@@ -183,6 +184,10 @@ extern int hfs_cat_delete(u32, struct inode *, const struct qstr *);
 extern int hfs_cat_move(u32, struct inode *, const struct qstr *,
 			struct inode *, const struct qstr *);
 extern void hfs_cat_build_key(struct super_block *, btree_key *, u32, const struct qstr *);
+
+/* debug.c */
+extern void __init hfs_debug_init(void);
+extern void hfs_debug_exit(void);
 
 /* dir.c */
 extern const struct file_operations hfs_dir_operations;
