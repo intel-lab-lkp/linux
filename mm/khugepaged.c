@@ -1479,7 +1479,7 @@ static int set_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
 	VM_BUG_ON(!folio_test_large(folio));
 	mmap_assert_locked(vma->vm_mm);
 
-	if (do_set_pmd(&vmf, &folio->page))
+	if (do_set_pmd(&vmf, folio))
 		return SCAN_FAIL;
 
 	folio_get(folio);
