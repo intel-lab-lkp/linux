@@ -148,8 +148,8 @@ static __initconst const u64 amd_hw_cache_event_ids_f17h
 },
 [C(L1I)] = {
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)] = 0x0080, /* Instruction cache fetches  */
-		[C(RESULT_MISS)]   = 0x0081, /* Instruction cache misses   */
+		[C(RESULT_ACCESS)] = 0,
+		[C(RESULT_MISS)]   = 0x1060, /* L2$ access from IC Miss */
 	},
 	[C(OP_WRITE)] = {
 		[C(RESULT_ACCESS)] = -1,
