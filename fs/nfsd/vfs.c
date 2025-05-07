@@ -1079,26 +1079,31 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		      struct file *file, loff_t offset, unsigned long *count,
 		      unsigned int base, u32 *eof)
 {
-	unsigned long v, total;
+	unsigned long total = *count;
 	struct iov_iter iter;
 	loff_t ppos = offset;
-	struct page *page;
+	unsigned int v = 0;
 	ssize_t host_err;
 
-	v = 0;
-	total = *count;
+	/*
+	 * Note: if this request is served through the socket transport, rq_bvec
+	 * will be rebuilt again in the transport, including the XDR header and
+	 * trailer.  It would be nice to fully build it in one place, but that
+	 * needs more work.
+	 */
 	while (total) {
-		page = *(rqstp->rq_next_page++);
-		rqstp->rq_vec[v].iov_base = page_address(page) + base;
-		rqstp->rq_vec[v].iov_len = min_t(size_t, total, PAGE_SIZE - base);
-		total -= rqstp->rq_vec[v].iov_len;
-		++v;
+		unsigned int len = min(total, PAGE_SIZE - base);
+		struct page *page = *(rqstp->rq_next_page++);
+
+		bvec_set_page(&rqstp->rq_bvec[v++], page, len, base);
+		if (WARN_ON_ONCE(v > ARRAY_SIZE(rqstp->rq_bvec)))
+			return -EIO;
+		total -= len;
 		base = 0;
 	}
-	WARN_ON_ONCE(v > ARRAY_SIZE(rqstp->rq_vec));
 
 	trace_nfsd_read_vector(rqstp, fhp, offset, *count);
-	iov_iter_kvec(&iter, ITER_DEST, rqstp->rq_vec, v, *count);
+	iov_iter_bvec(&iter, ITER_DEST, rqstp->rq_bvec, v, *count);
 	host_err = vfs_iter_read(file, &iter, &ppos, 0);
 	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err);
 }
