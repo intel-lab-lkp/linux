@@ -49,6 +49,7 @@
 struct elv_change_ctx {
 	const char *name;
 	bool no_uevent;
+	bool quiesce_queue;
 
 	/* for unregistering old elevator */
 	struct elevator_queue *old;
@@ -658,12 +659,17 @@ static int elevator_change_done(struct request_queue *q,
  */
 static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 {
+	bool quiesce_queue = ctx->quiesce_queue;
 	unsigned int memflags;
 	int ret = 0;
 
 	lockdep_assert_held(&q->tag_set->update_nr_hwq_lock);
 
+	WARN_ON_ONCE(blk_queue_quiesced(q));
+
 	memflags = blk_mq_freeze_queue(q);
+	if (quiesce_queue)
+		blk_mq_quiesce_queue(q);
 	/*
 	 * May be called before adding disk, when there isn't any FS I/O,
 	 * so freezing queue plus canceling dispatch work is enough to
@@ -678,6 +684,8 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	if (!(q->elevator && elevator_match(q->elevator->type, ctx->name)))
 		ret = elevator_switch(q, ctx);
 	mutex_unlock(&q->elevator_lock);
+	if (quiesce_queue)
+		blk_mq_unquiesce_queue(q);
 	blk_mq_unfreeze_queue(q, memflags);
 	if (!ret)
 		ret = elevator_change_done(q, ctx);
@@ -744,6 +752,7 @@ void elevator_set_none(struct request_queue *q)
 {
 	struct elv_change_ctx ctx = {
 		.name	= "none",
+		.quiesce_queue = true,
 	};
 	int err;
 
