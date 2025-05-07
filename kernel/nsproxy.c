@@ -124,9 +124,11 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 	return new_nsp;
 
 out_time:
-	put_net(new_nsp->net_ns);
+	if (new_nsp->net_ns)
+		put_net(new_nsp->net_ns);
 out_net:
-	put_cgroup_ns(new_nsp->cgroup_ns);
+	if (new_nsp->cgroup_ns)
+		put_cgroup_ns(new_nsp->cgroup_ns);
 out_cgroup:
 	if (new_nsp->pid_ns_for_children)
 		put_pid_ns(new_nsp->pid_ns_for_children);
@@ -201,8 +203,10 @@ void free_nsproxy(struct nsproxy *ns)
 		put_time_ns(ns->time_ns);
 	if (ns->time_ns_for_children)
 		put_time_ns(ns->time_ns_for_children);
-	put_cgroup_ns(ns->cgroup_ns);
-	put_net(ns->net_ns);
+	if (ns->cgroup_ns)
+		put_cgroup_ns(ns->cgroup_ns);
+	if (ns->net_ns)
+		put_net(ns->net_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
 }
 
