@@ -61,6 +61,9 @@ struct as102_dev_t {
 	/* timer handle to trig ts stream download */
 	struct timer_list timer_handle;
 
+	/* used to reset private data on device release */
+	struct file *file;
+
 	struct mutex sem;
 	dma_addr_t dma_addr;
 	void *stream;

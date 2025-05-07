@@ -304,6 +304,8 @@ static void as102_usb_release(struct kref *kref)
 
 	as102_dev = container_of(kref, struct as102_dev_t, kref);
 	usb_put_dev(as102_dev->bus_adap.usb_dev);
+	if (as102_dev->file)
+		as102_dev->file->private_data = NULL;
 	kfree(as102_dev);
 }
 
@@ -438,6 +440,9 @@ static int as102_open(struct inode *inode, struct file *file)
 
 	/* save our device object in the file's private structure */
 	file->private_data = dev;
+
+	/* save file's pointer to reset private data on release */
+	dev->file = file;
 
 	/* increment our usage count for the device */
 	kref_get(&dev->kref);
