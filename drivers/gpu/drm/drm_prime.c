@@ -910,6 +910,38 @@ struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 }
 EXPORT_SYMBOL(drm_gem_prime_export);
 
+
+/**
+ * drm_gem_prime_import_self - Import a DMA-BUF exported from the same DRM device.
+ * @dev: drm_device to check against
+ * @dma_buf: dma-buf object to import
+ *
+ * This function checks if the DMA-BUF was exported from a GEM object belonging
+ * to @dev. If so, it increments the GEM object's refcount and returns it directly.
+ *
+ * Return: GEM object if it belongs to @dev, NULL otherwise.
+ */
+struct drm_gem_object *drm_gem_prime_import_self(struct drm_device *dev,
+						 struct dma_buf *dma_buf)
+{
+	struct drm_gem_object *obj;
+
+	if (dma_buf->ops == &drm_gem_prime_dmabuf_ops) {
+		obj = dma_buf->priv;
+		if (obj->dev == dev) {
+			/*
+			 * Importing dmabuf exported from our own gem increases
+			 * refcount on gem itself instead of f_count of dmabuf.
+			 */
+			drm_gem_object_get(obj);
+			return obj;
+		}
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL(drm_gem_prime_import_self);
+
 /**
  * drm_gem_prime_import_dev - core implementation of the import callback
  * @dev: drm_device to import into
@@ -933,17 +965,9 @@ struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	int ret;
 
-	if (dma_buf->ops == &drm_gem_prime_dmabuf_ops) {
-		obj = dma_buf->priv;
-		if (obj->dev == dev) {
-			/*
-			 * Importing dmabuf exported from our own gem increases
-			 * refcount on gem itself instead of f_count of dmabuf.
-			 */
-			drm_gem_object_get(obj);
-			return obj;
-		}
-	}
+	obj = drm_gem_prime_import_self(dev, dma_buf);
+	if (obj)
+		return obj;
 
 	if (!dev->driver->gem_prime_import_sg_table)
 		return ERR_PTR(-EINVAL);
