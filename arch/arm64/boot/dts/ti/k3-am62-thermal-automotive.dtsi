@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0-only OR MIT
+/*
+ * Copyright (C) 2025 PHYTEC Messtechnik GmbH
+ */
+
+&main0_alert {
+	temperature = <115000>;
+};
+
+&main0_crit {
+	temperature = <125000>;
+};
+
+&main1_alert {
+	temperature = <115000>;
+};
+
+&main1_crit {
+	temperature = <125000>;
+};
