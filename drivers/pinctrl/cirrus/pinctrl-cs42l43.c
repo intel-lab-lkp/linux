@@ -561,7 +561,7 @@ static int cs42l43_pin_probe(struct platform_device *pdev)
 		fwnode = fwnode_get_named_child_node(fwnode, "pinctrl");
 
 		if (fwnode && !fwnode->dev)
-			fwnode->dev = priv->dev;
+			fw_devlink_set_device(fwnode, priv->dev);
 	}
 
 	priv->gpio_chip.fwnode = fwnode;
