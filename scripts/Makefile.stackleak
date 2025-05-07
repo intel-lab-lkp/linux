@@ -8,6 +8,12 @@ stackleak-cflags-$(CONFIG_GCC_PLUGIN_STACKLEAK_VERBOSE) += -fplugin-arg-stacklea
 DISABLE_STACKLEAK  := -fplugin-arg-stackleak_plugin-disable
 endif
 
+ifdef CONFIG_CC_IS_CLANG
+stackleak-cflags-y += -fsanitize-coverage=stack-depth
+stackleak-cflags-y += -fsanitize-coverage-stack-depth-callback-min=$(CONFIG_STACKLEAK_TRACK_MIN_SIZE)
+DISABLE_STACKLEAK  := -fno-sanitize-coverage=stack-depth
+endif
+
 STACKLEAK_CFLAGS   := $(stackleak-cflags-y)
 
 export STACKLEAK_CFLAGS DISABLE_STACKLEAK
