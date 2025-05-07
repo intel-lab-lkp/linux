@@ -1389,11 +1389,11 @@ nicvf_sq_add_hdr_subdesc(struct nicvf *nic, struct snd_queue *sq, int qentry,
 		this_cpu_inc(nic->pnicvf->drv_stats->tx_tso);
 	}
 
+	skb_tx_timestamp(skb);
+
 	/* Check if timestamp is requested */
-	if (!(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
-		skb_tx_timestamp(skb);
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))
 		return;
-	}
 
 	/* Tx timestamping not supported along with TSO, so ignore request */
 	if (skb_shinfo(skb)->gso_size)
