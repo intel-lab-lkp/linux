@@ -12,6 +12,7 @@ struct regmap;
 /*
  * Hardware limits for ZL3073x chip family
  */
+#define ZL3073X_MAX_CHANNELS	5
 #define ZL3073X_NUM_INPUTS	10
 #define ZL3073X_NUM_OUTPUTS	10
 #define ZL3073X_NUM_SYNTHS	5
@@ -46,6 +47,14 @@ struct zl3073x_output {
 struct zl3073x_synth {
 	u64	freq;
 	u8	dpll;
+};
+
+/**
+ * struct zl3073x_pdata - zl3073x sub-device platform data
+ * @channel: channel to use
+ */
+struct zl3073x_pdata {
+	u8	channel;
 };
 
 /**
