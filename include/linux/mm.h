@@ -299,42 +299,22 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_MERGEABLE	0x80000000	/* KSM may merge identical pages */
 
 #ifdef CONFIG_64BIT
-#define VM_HIGH_ARCH_BIT_0	32	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_1	33	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_2	34	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_3	35	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_4	36	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_5	37	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_6	38	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_7	39	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_8	40	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_9	41	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_BIT_10	42	/* bit only usable on 64-bit architectures */
-#define VM_HIGH_ARCH_0	BIT(VM_HIGH_ARCH_BIT_0)
-#define VM_HIGH_ARCH_1	BIT(VM_HIGH_ARCH_BIT_1)
-#define VM_HIGH_ARCH_2	BIT(VM_HIGH_ARCH_BIT_2)
-#define VM_HIGH_ARCH_3	BIT(VM_HIGH_ARCH_BIT_3)
-#define VM_HIGH_ARCH_4	BIT(VM_HIGH_ARCH_BIT_4)
-#define VM_HIGH_ARCH_5	BIT(VM_HIGH_ARCH_BIT_5)
-#define VM_HIGH_ARCH_6	BIT(VM_HIGH_ARCH_BIT_6)
-#define VM_HIGH_ARCH_7	BIT(VM_HIGH_ARCH_BIT_7)
-#define VM_HIGH_ARCH_8	BIT(VM_HIGH_ARCH_BIT_8)
-#define VM_HIGH_ARCH_9	BIT(VM_HIGH_ARCH_BIT_9)
-#define VM_HIGH_ARCH_10	BIT(VM_HIGH_ARCH_BIT_10)
+#define VM_HIGH_ARCH_BIT(i)	(32+i)	/* bit only usable on 64-bit architectures */
+#define VM_HIGH_ARCH(i)		BIT(VM_HIGH_ARCH_BIT(i))
 #endif /* CONFIG_64BIT */
 
 #ifdef CONFIG_ARCH_HAS_PKEYS
-# define VM_PKEY_SHIFT VM_HIGH_ARCH_BIT_0
-# define VM_PKEY_BIT0  VM_HIGH_ARCH_0
-# define VM_PKEY_BIT1  VM_HIGH_ARCH_1
-# define VM_PKEY_BIT2  VM_HIGH_ARCH_2
+# define VM_PKEY_SHIFT VM_HIGH_ARCH_BIT(0)
+# define VM_PKEY_BIT0  VM_HIGH_ARCH(0)
+# define VM_PKEY_BIT1  VM_HIGH_ARCH(1)
+# define VM_PKEY_BIT2  VM_HIGH_ARCH(2)
 #if CONFIG_ARCH_PKEY_BITS > 3
-# define VM_PKEY_BIT3  VM_HIGH_ARCH_3
+# define VM_PKEY_BIT3  VM_HIGH_ARCH(3)
 #else
 # define VM_PKEY_BIT3  0
 #endif
 #if CONFIG_ARCH_PKEY_BITS > 4
-# define VM_PKEY_BIT4  VM_HIGH_ARCH_4
+# define VM_PKEY_BIT4  VM_HIGH_ARCH(4)
 #else
 # define VM_PKEY_BIT4  0
 #endif
@@ -350,7 +330,7 @@ extern unsigned int kobjsize(const void *objp);
  * (x86). See the comments near alloc_shstk() in arch/x86/kernel/shstk.c
  * for more details on the guard size.
  */
-# define VM_SHADOW_STACK	VM_HIGH_ARCH_5
+# define VM_SHADOW_STACK	VM_HIGH_ARCH(5)
 #endif
 
 #if defined(CONFIG_ARM64_GCS)
@@ -358,7 +338,7 @@ extern unsigned int kobjsize(const void *objp);
  * arm64's Guarded Control Stack implements similar functionality and
  * has similar constraints to shadow stacks.
  */
-# define VM_SHADOW_STACK	VM_HIGH_ARCH_6
+# define VM_SHADOW_STACK	VM_HIGH_ARCH(6)
 #endif
 
 #ifndef VM_SHADOW_STACK
@@ -382,8 +362,8 @@ extern unsigned int kobjsize(const void *objp);
 #endif
 
 #if defined(CONFIG_ARM64_MTE)
-# define VM_MTE		VM_HIGH_ARCH_4	/* Use Tagged memory for access control */
-# define VM_MTE_ALLOWED	VM_HIGH_ARCH_5	/* Tagged memory permitted */
+# define VM_MTE		VM_HIGH_ARCH(4)	/* Use Tagged memory for access control */
+# define VM_MTE_ALLOWED	VM_HIGH_ARCH(5)	/* Tagged memory permitted */
 #else
 # define VM_MTE		VM_NONE
 # define VM_MTE_ALLOWED	VM_NONE
@@ -394,7 +374,7 @@ extern unsigned int kobjsize(const void *objp);
 #endif
 
 #ifdef CONFIG_HAVE_ARCH_USERFAULTFD_MINOR
-# define VM_UFFD_MINOR		VM_HIGH_ARCH_9	/* UFFD minor faults */
+# define VM_UFFD_MINOR		VM_HIGH_ARCH(9)	/* UFFD minor faults */
 #else /* !CONFIG_HAVE_ARCH_USERFAULTFD_MINOR */
 # define VM_UFFD_MINOR		VM_NONE
 #endif /* CONFIG_HAVE_ARCH_USERFAULTFD_MINOR */
@@ -407,13 +387,13 @@ extern unsigned int kobjsize(const void *objp);
  * if KVM does not lock down the memory type.
  */
 #ifdef CONFIG_64BIT
-#define VM_ALLOW_ANY_UNCACHED		VM_HIGH_ARCH_7
+#define VM_ALLOW_ANY_UNCACHED		VM_HIGH_ARCH(7)
 #else
 #define VM_ALLOW_ANY_UNCACHED		VM_NONE
 #endif
 
 #ifdef CONFIG_64BIT
-#define VM_DROPPABLE		VM_HIGH_ARCH_8
+#define VM_DROPPABLE		VM_HIGH_ARCH(8)
 #elif defined(CONFIG_PPC32)
 #define VM_DROPPABLE		VM_ARCH_1
 #else
@@ -422,7 +402,7 @@ extern unsigned int kobjsize(const void *objp);
 
 #ifdef CONFIG_64BIT
 /* VM is sealed, in vm_flags */
-#define VM_SEALED	VM_HIGH_ARCH_10
+#define VM_SEALED	VM_HIGH_ARCH(10)
 #endif
 
 /* Bits set in the VMA until the stack is in its final location */
