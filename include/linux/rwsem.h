@@ -242,8 +242,45 @@ DEFINE_GUARD(rwsem_read, struct rw_semaphore *, down_read(_T), up_read(_T))
 DEFINE_GUARD_COND(rwsem_read, _try, down_read_trylock(_T))
 DEFINE_GUARD_COND(rwsem_read, _intr, down_read_interruptible(_T) == 0)
 
+struct rw_semaphore_acquire {
+	struct rw_semaphore rw_semaphore;
+};
+
+#define DECLARE_RWSEM_ACQUIRE(name)                               \
+	struct rw_semaphore_acquire name = { __RWSEM_INITIALIZER( \
+		name.rw_semaphore) }
+
+DEFINE_GUARD(rwsem_read_acquire, struct rw_semaphore_acquire *,
+	     down_read(&_T->rw_semaphore), up_read(&_T->rw_semaphore))
+DEFINE_GUARD(rwsem_write_acquire, struct rw_semaphore_acquire *,
+	     down_write(&_T->rw_semaphore), up_write(&_T->rw_semaphore))
+DEFINE_ACQUIRE(rwsem_read_intr_acquire, rw_semaphore, up_read,
+	       down_read_interruptible)
+DEFINE_ACQUIRE(rwsem_write_kill_acquire, rw_semaphore, up_write,
+	       down_write_killable)
+
+static inline int down_read_try_or_busy(struct rw_semaphore *rwsem)
+{
+	int ret[] = { -EBUSY, 0 };
+
+	return ret[down_read_trylock(rwsem)];
+}
+
+DEFINE_ACQUIRE(rwsem_read_try_acquire, rw_semaphore, up_read,
+	       down_read_try_or_busy)
+
 DEFINE_GUARD(rwsem_write, struct rw_semaphore *, down_write(_T), up_write(_T))
 DEFINE_GUARD_COND(rwsem_write, _try, down_write_trylock(_T))
+
+static inline int down_write_try_or_busy(struct rw_semaphore *rwsem)
+{
+	int ret[] = { -EBUSY, 0 };
+
+	return ret[down_write_trylock(rwsem)];
+}
+
+DEFINE_ACQUIRE(rwsem_write_try_acquire, rw_semaphore, up_write,
+	       down_write_try_or_busy)
 
 /*
  * downgrade write lock to read lock

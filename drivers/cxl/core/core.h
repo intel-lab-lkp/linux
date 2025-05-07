@@ -107,8 +107,8 @@ u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb);
 #define PCI_RCRB_CAP_HDR_NEXT_MASK	GENMASK(15, 8)
 #define PCI_CAP_EXP_SIZEOF		0x3c
 
-extern struct rw_semaphore cxl_dpa_rwsem;
-extern struct rw_semaphore cxl_region_rwsem;
+extern struct rw_semaphore_acquire cxl_dpa_rwsem;
+extern struct rw_semaphore_acquire cxl_region_rwsem;
 
 DEFINE_CLASS(
 	cxl_decoder_detach, struct cxl_region *,
@@ -117,22 +117,24 @@ DEFINE_CLASS(
 		put_device(&_T->dev);
 	},
 	({
-		int rc = 0;
-
 		/* when the decoder is being destroyed lock unconditionally */
-		if (mode == DETACH_INVALIDATE)
-			down_write(&cxl_region_rwsem);
-		else
-			rc = down_write_killable(&cxl_region_rwsem);
-
-		if (rc)
-			cxlr = ERR_PTR(rc);
-		else {
-			cxlr = cxl_decoder_detach(cxlr, cxled, pos, mode);
-			get_device(&cxlr->dev);
+		if (mode == DETACH_INVALIDATE) {
+			scoped_guard(rwsem_write_acquire, &cxl_region_rwsem) {
+				cxlr = cxl_decoder_detach(cxlr, cxled, pos,
+							  mode);
+				if (!IS_ERR_OR_NULL(cxlr))
+					get_device(&cxlr->dev);
+			}
+		} else {
+			CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+			if (IS_ERR(rwsem))
+				cxlr = ERR_CAST(rwsem);
+			else
+				cxlr = cxl_decoder_detach(cxlr, cxled, pos,
+							  mode);
+			if (!IS_ERR_OR_NULL(cxlr))
+				get_device(&cxlr->dev);
 		}
-		up_write(&cxl_region_rwsem);
-
 		cxlr;
 	}),
 	struct cxl_region *cxlr, struct cxl_endpoint_decoder *cxled, int pos,

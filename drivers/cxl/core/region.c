@@ -139,18 +139,13 @@ static ssize_t uuid_show(struct device *dev, struct device_attribute *attr,
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_read_intr_acquire, region_rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(region_rwsem))
+		return PTR_ERR(region_rwsem);
 	if (cxlr->mode != CXL_PARTMODE_PMEM)
-		rc = sysfs_emit(buf, "\n");
-	else
-		rc = sysfs_emit(buf, "%pUb\n", &p->uuid);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+		return sysfs_emit(buf, "\n");
+	return sysfs_emit(buf, "%pUb\n", &p->uuid);
 }
 
 static int is_dup(struct device *match, void *data)
@@ -162,7 +157,7 @@ static int is_dup(struct device *match, void *data)
 	if (!is_cxl_region(match))
 		return 0;
 
-	lockdep_assert_held(&cxl_region_rwsem);
+	lockdep_assert_held(&cxl_region_rwsem.rw_semaphore);
 	cxlr = to_cxl_region(match);
 	p = &cxlr->params;
 
@@ -192,27 +187,22 @@ static ssize_t uuid_store(struct device *dev, struct device_attribute *attr,
 	if (uuid_is_null(&temp))
 		return -EINVAL;
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_write_kill_acquire, region_rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(region_rwsem))
+		return PTR_ERR(region_rwsem);
 
 	if (uuid_equal(&p->uuid, &temp))
-		goto out;
+		return len;
 
-	rc = -EBUSY;
 	if (p->state >= CXL_CONFIG_ACTIVE)
-		goto out;
+		return -EBUSY;
 
 	rc = bus_for_each_dev(&cxl_bus_type, NULL, &temp, is_dup);
 	if (rc < 0)
-		goto out;
+		return rc;
 
 	uuid_copy(&p->uuid, &temp);
-out:
-	up_write(&cxl_region_rwsem);
 
-	if (rc)
-		return rc;
 	return len;
 }
 static DEVICE_ATTR_RW(uuid);
@@ -353,22 +343,18 @@ err:
 static int queue_reset(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
-	int rc;
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 
 	/* Already in the requested state? */
 	if (p->state < CXL_CONFIG_COMMIT)
-		goto out;
+		return 0;
 
 	p->state = CXL_CONFIG_RESET_PENDING;
 
-out:
-	up_write(&cxl_region_rwsem);
-
-	return rc;
+	return 0;
 }
 
 static int __commit(struct cxl_region *cxlr)
@@ -376,19 +362,17 @@ static int __commit(struct cxl_region *cxlr)
 	struct cxl_region_params *p = &cxlr->params;
 	int rc;
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 
 	/* Already in the requested state? */
 	if (p->state >= CXL_CONFIG_COMMIT)
-		goto out;
+		return 0;
 
 	/* Not ready to commit? */
-	if (p->state < CXL_CONFIG_ACTIVE) {
-		rc = -ENXIO;
-		goto out;
-	}
+	if (p->state < CXL_CONFIG_ACTIVE)
+		return -ENXIO;
 
 	/*
 	 * Invalidate caches before region setup to drop any speculative
@@ -396,16 +380,15 @@ static int __commit(struct cxl_region *cxlr)
 	 */
 	rc = cxl_region_invalidate_memregion(cxlr);
 	if (rc)
-		goto out;
+		return rc;
 
 	rc = cxl_region_decode_commit(cxlr);
-	if (rc == 0)
-		p->state = CXL_CONFIG_COMMIT;
+	if (rc)
+		return rc;
 
-out:
-	up_write(&cxl_region_rwsem);
+	p->state = CXL_CONFIG_COMMIT;
 
-	return rc;
+	return 0;
 }
 
 static ssize_t commit_store(struct device *dev, struct device_attribute *attr,
@@ -441,7 +424,7 @@ static ssize_t commit_store(struct device *dev, struct device_attribute *attr,
 	 * With the reset pending take cxl_region_rwsem unconditionally
 	 * to ensure the reset gets handled before returning.
 	 */
-	guard(rwsem_write)(&cxl_region_rwsem);
+	guard(rwsem_write_acquire)(&cxl_region_rwsem);
 
 	/*
 	 * Revalidate that the reset is still pending in case another
@@ -460,15 +443,11 @@ static ssize_t commit_show(struct device *dev, struct device_attribute *attr,
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-	rc = sysfs_emit(buf, "%d\n", p->state >= CXL_CONFIG_COMMIT);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+	return sysfs_emit(buf, "%d\n", p->state >= CXL_CONFIG_COMMIT);
 }
 static DEVICE_ATTR_RW(commit);
 
@@ -492,15 +471,11 @@ static ssize_t interleave_ways_show(struct device *dev,
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-	rc = sysfs_emit(buf, "%d\n", p->interleave_ways);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+	return sysfs_emit(buf, "%d\n", p->interleave_ways);
 }
 
 static const struct attribute_group *get_cxl_region_target_group(void);
@@ -535,23 +510,21 @@ static ssize_t interleave_ways_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE) {
-		rc = -EBUSY;
-		goto out;
-	}
+	CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+
+	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE)
+		return -EBUSY;
 
 	save = p->interleave_ways;
 	p->interleave_ways = val;
 	rc = sysfs_update_group(&cxlr->dev.kobj, get_cxl_region_target_group());
-	if (rc)
+	if (rc) {
 		p->interleave_ways = save;
-out:
-	up_write(&cxl_region_rwsem);
-	if (rc)
 		return rc;
+	}
+
 	return len;
 }
 static DEVICE_ATTR_RW(interleave_ways);
@@ -562,15 +535,11 @@ static ssize_t interleave_granularity_show(struct device *dev,
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-	rc = sysfs_emit(buf, "%d\n", p->interleave_granularity);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+	return sysfs_emit(buf, "%d\n", p->interleave_granularity);
 }
 
 static ssize_t interleave_granularity_store(struct device *dev,
@@ -603,19 +572,15 @@ static ssize_t interleave_granularity_store(struct device *dev,
 	if (cxld->interleave_ways > 1 && val != cxld->interleave_granularity)
 		return -EINVAL;
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE) {
-		rc = -EBUSY;
-		goto out;
-	}
+	CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+
+	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE)
+		return -EBUSY;
 
 	p->interleave_granularity = val;
-out:
-	up_write(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+
 	return len;
 }
 static DEVICE_ATTR_RW(interleave_granularity);
@@ -626,17 +591,14 @@ static ssize_t resource_show(struct device *dev, struct device_attribute *attr,
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
 	u64 resource = -1ULL;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
+
 	if (p->res)
 		resource = p->res->start;
-	rc = sysfs_emit(buf, "%#llx\n", resource);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+	return sysfs_emit(buf, "%#llx\n", resource);
 }
 static DEVICE_ATTR_RO(resource);
 
@@ -664,7 +626,7 @@ static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 	struct resource *res;
 	u64 remainder = 0;
 
-	lockdep_assert_held_write(&cxl_region_rwsem);
+	lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 
 	/* Nothing to do... */
 	if (p->res && resource_size(p->res) == size)
@@ -706,7 +668,7 @@ static void cxl_region_iomem_release(struct cxl_region *cxlr)
 	struct cxl_region_params *p = &cxlr->params;
 
 	if (device_is_registered(&cxlr->dev))
-		lockdep_assert_held_write(&cxl_region_rwsem);
+		lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 	if (p->res) {
 		/*
 		 * Autodiscovered regions may not have been able to insert their
@@ -723,7 +685,7 @@ static int free_hpa(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
 
-	lockdep_assert_held_write(&cxl_region_rwsem);
+	lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 
 	if (!p->res)
 		return 0;
@@ -747,15 +709,14 @@ static ssize_t size_store(struct device *dev, struct device_attribute *attr,
 	if (rc)
 		return rc;
 
-	rc = down_write_killable(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 
 	if (val)
 		rc = alloc_hpa(cxlr, val);
 	else
 		rc = free_hpa(cxlr);
-	up_write(&cxl_region_rwsem);
 
 	if (rc)
 		return rc;
@@ -769,17 +730,13 @@ static ssize_t size_show(struct device *dev, struct device_attribute *attr,
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
 	u64 size = 0;
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 	if (p->res)
 		size = resource_size(p->res);
-	rc = sysfs_emit(buf, "%#llx\n", size);
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+	return sysfs_emit(buf, "%#llx\n", size);
 }
 static DEVICE_ATTR_RW(size);
 
@@ -803,28 +760,21 @@ static size_t show_targetN(struct cxl_region *cxlr, char *buf, int pos)
 {
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_endpoint_decoder *cxled;
-	int rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 
 	if (pos >= p->interleave_ways) {
 		dev_dbg(&cxlr->dev, "position %d out of range %d\n", pos,
 			p->interleave_ways);
-		rc = -ENXIO;
-		goto out;
+		return -ENXIO;
 	}
 
 	cxled = p->targets[pos];
 	if (!cxled)
-		rc = sysfs_emit(buf, "\n");
-	else
-		rc = sysfs_emit(buf, "%s\n", dev_name(&cxled->cxld.dev));
-out:
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+		return sysfs_emit(buf, "\n");
+	return sysfs_emit(buf, "%s\n", dev_name(&cxled->cxld.dev));
 }
 
 static int check_commit_order(struct device *dev, void *data)
@@ -1127,7 +1077,7 @@ static int cxl_port_attach_region(struct cxl_port *port,
 	unsigned long index;
 	int rc = -EBUSY;
 
-	lockdep_assert_held_write(&cxl_region_rwsem);
+	lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 
 	cxl_rr = cxl_rr_load(port, cxlr);
 	if (cxl_rr) {
@@ -1228,7 +1178,7 @@ static void cxl_port_detach_region(struct cxl_port *port,
 	struct cxl_region_ref *cxl_rr;
 	struct cxl_ep *ep = NULL;
 
-	lockdep_assert_held_write(&cxl_region_rwsem);
+	lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 
 	cxl_rr = cxl_rr_load(port, cxlr);
 	if (!cxl_rr)
@@ -2137,7 +2087,7 @@ struct cxl_region *cxl_decoder_detach(struct cxl_region *cxlr,
 {
 	struct cxl_region_params *p;
 
-	lockdep_assert_held_write(&cxl_region_rwsem);
+	lockdep_assert_held_write(&cxl_region_rwsem.rw_semaphore);
 
 	if (!cxled) {
 		p = &cxlr->params;
@@ -2199,20 +2149,17 @@ static int attach_target(struct cxl_region *cxlr,
 			 struct cxl_endpoint_decoder *cxled, int pos,
 			 unsigned int state)
 {
-	int rc = 0;
+	if (state == TASK_INTERRUPTIBLE) {
+		CLASS(rwsem_write_kill_acquire, rwsem)(&cxl_region_rwsem);
+		if (IS_ERR(rwsem))
+			return PTR_ERR(rwsem);
+		guard(rwsem_read_acquire)(&cxl_dpa_rwsem);
+		return cxl_region_attach(cxlr, cxled, pos);
+	}
 
-	if (state == TASK_INTERRUPTIBLE)
-		rc = down_write_killable(&cxl_region_rwsem);
-	else
-		down_write(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-
-	down_read(&cxl_dpa_rwsem);
-	rc = cxl_region_attach(cxlr, cxled, pos);
-	up_read(&cxl_dpa_rwsem);
-	up_write(&cxl_region_rwsem);
-	return rc;
+	guard(rwsem_write_acquire)(&cxl_region_rwsem);
+	guard(rwsem_read_acquire)(&cxl_dpa_rwsem);
+	return cxl_region_attach(cxlr, cxled, pos);
 }
 
 static int detach_target(struct cxl_region *cxlr, int pos)
@@ -2644,19 +2591,14 @@ static ssize_t region_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	struct cxl_decoder *cxld = to_cxl_decoder(dev);
-	ssize_t rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem))
+		return PTR_ERR(rwsem);
 
 	if (cxld->region)
-		rc = sysfs_emit(buf, "%s\n", dev_name(&cxld->region->dev));
-	else
-		rc = sysfs_emit(buf, "\n");
-	up_read(&cxl_region_rwsem);
-
-	return rc;
+		return sysfs_emit(buf, "%s\n", dev_name(&cxld->region->dev));
+	return sysfs_emit(buf, "\n");
 }
 DEVICE_ATTR_RO(region);
 
@@ -2995,7 +2937,7 @@ static int cxl_pmem_region_alloc(struct cxl_region *cxlr)
 	struct device *dev;
 	int i;
 
-	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read_acquire)(&cxl_region_rwsem);
 	if (p->state != CXL_CONFIG_COMMIT)
 		return -ENXIO;
 
@@ -3084,7 +3026,7 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	struct cxl_dax_region *cxlr_dax;
 	struct device *dev;
 
-	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read_acquire)(&cxl_region_rwsem);
 	if (p->state != CXL_CONFIG_COMMIT)
 		return ERR_PTR(-ENXIO);
 
@@ -3255,7 +3197,7 @@ static int match_region_by_range(struct device *dev, const void *data)
 	cxlr = to_cxl_region(dev);
 	p = &cxlr->params;
 
-	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read_acquire)(&cxl_region_rwsem);
 	if (p->res && p->res->start == r->start && p->res->end == r->end)
 		return 1;
 
@@ -3315,7 +3257,7 @@ static int __construct_region(struct cxl_region *cxlr,
 	struct resource *res;
 	int rc;
 
-	guard(rwsem_write)(&cxl_region_rwsem);
+	guard(rwsem_write_acquire)(&cxl_region_rwsem);
 	p = &cxlr->params;
 	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE) {
 		dev_err(cxlmd->dev.parent,
@@ -3453,10 +3395,10 @@ int cxl_add_to_region(struct cxl_port *root, struct cxl_endpoint_decoder *cxled)
 
 	attach_target(cxlr, cxled, -1, TASK_UNINTERRUPTIBLE);
 
-	down_read(&cxl_region_rwsem);
-	p = &cxlr->params;
-	attach = p->state == CXL_CONFIG_COMMIT;
-	up_read(&cxl_region_rwsem);
+	scoped_guard(rwsem_read_acquire, &cxl_region_rwsem) {
+		p = &cxlr->params;
+		attach = p->state == CXL_CONFIG_COMMIT;
+	}
 
 	if (attach) {
 		/*
@@ -3484,7 +3426,7 @@ u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa)
 	if (!endpoint)
 		return ~0ULL;
 
-	guard(rwsem_write)(&cxl_region_rwsem);
+	guard(rwsem_write_acquire)(&cxl_region_rwsem);
 
 	xa_for_each(&endpoint->regions, index, iter) {
 		struct cxl_region_params *p = &iter->region->params;
@@ -3524,32 +3466,24 @@ static void shutdown_notifiers(void *_cxlr)
 static int cxl_region_can_probe(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
-	int rc;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc) {
+	CLASS(rwsem_read_intr_acquire, rwsem)(&cxl_region_rwsem);
+	if (IS_ERR(rwsem)) {
 		dev_dbg(&cxlr->dev, "probe interrupted\n");
-		return rc;
+		return PTR_ERR(rwsem);
 	}
 
 	if (p->state < CXL_CONFIG_COMMIT) {
 		dev_dbg(&cxlr->dev, "config state: %d\n", p->state);
-		rc = -ENXIO;
-		goto out;
+		return -ENXIO;
 	}
 
 	if (test_bit(CXL_REGION_F_NEEDS_RESET, &cxlr->flags)) {
 		dev_err(&cxlr->dev,
 			"failed to activate, re-commit region and retry\n");
-		rc = -ENXIO;
-		goto out;
+		return -ENXIO;
 	}
 
-out:
-	up_read(&cxl_region_rwsem);
-
-	if (rc)
-		return rc;
 	return 0;
 }
 
