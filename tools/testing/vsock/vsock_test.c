@@ -1074,9 +1074,13 @@ static void test_stream_check_sigpipe(int fd)
 	do {
 		res = send(fd, "A", 1, 0);
 		timeout_check("send");
-	} while (res != -1);
+	} while (res != -1 && errno == EINTR);
 	timeout_end();
 
+	if (errno != EPIPE) {
+		fprintf(stderr, "unexpected send(2) errno %d\n", errno);
+		exit(EXIT_FAILURE);
+	}
 	if (!have_sigpipe) {
 		fprintf(stderr, "SIGPIPE expected\n");
 		exit(EXIT_FAILURE);
@@ -1088,9 +1092,13 @@ static void test_stream_check_sigpipe(int fd)
 	do {
 		res = send(fd, "A", 1, MSG_NOSIGNAL);
 		timeout_check("send");
-	} while (res != -1);
+	} while (res != -1 && errno == EINTR);
 	timeout_end();
 
+	if (errno != EPIPE) {
+		fprintf(stderr, "unexpected send(2) errno %d\n", errno);
+		exit(EXIT_FAILURE);
+	}
 	if (have_sigpipe) {
 		fprintf(stderr, "SIGPIPE not expected\n");
 		exit(EXIT_FAILURE);
