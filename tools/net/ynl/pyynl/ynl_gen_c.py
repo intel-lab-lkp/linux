@@ -163,7 +163,7 @@ class Type(SpecAttr):
         return False
 
     def _free_lines(self, ri, var, ref):
-        if self.is_multi_val() or self.presence_type() == 'len':
+        if self.is_multi_val() or self.presence_type() in {'count', 'len'}:
             return [f'free({var}->{ref}{self.c_name});']
         return []
 
@@ -516,13 +516,21 @@ class TypeString(Type):
 
 class TypeBinary(Type):
     def arg_member(self, ri):
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            return [f'__{self.get("sub-type")} *{self.c_name}', 'size_t count']
         return [f"const void *{self.c_name}", 'size_t len']
 
     def presence_type(self):
-        return 'len'
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            return 'count'
+        else:
+            return 'len'
 
     def struct_member(self, ri):
-        ri.cw.p(f"void *{self.c_name};")
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            ri.cw.p(f'__{self.get("sub-type")} *{self.c_name};')
+        else:
+            ri.cw.p(f"void *{self.c_name};")
 
     def _attr_typol(self):
         return f'.type = YNL_PT_BINARY,'
@@ -549,18 +557,46 @@ class TypeBinary(Type):
         return mem
 
     def attr_put(self, ri, var):
-        self._attr_put_line(ri, var, f"ynl_attr_put(nlh, {self.enum_name}, " +
-                            f"{var}->{self.c_name}, {var}->_len.{self.c_name})")
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            presence = self.presence_type()
+            ri.cw.block_start(line=f"if ({var}->_{presence}.{self.c_name})")
+            ri.cw.p(f"i = {var}->_{presence}.{self.c_name} * sizeof(__{self.get('sub-type')});")
+            ri.cw.p(f"ynl_attr_put(nlh, {self.enum_name}, " +
+                    f"{var}->{self.c_name}, i);")
+            ri.cw.block_end()
+            pass
+        else:
+            self._attr_put_line(ri, var, f"ynl_attr_put(nlh, {self.enum_name}, "
+                                f"{var}->{self.c_name}, {var}->_len.{self.c_name})")
 
     def _attr_get(self, ri, var):
-        len_mem = var + '->_len.' + self.c_name
-        return [f"{len_mem} = len;",
-                f"{var}->{self.c_name} = malloc(len);",
-                f"memcpy({var}->{self.c_name}, ynl_attr_data(attr), len);"], \
+        get_lines = []
+        len_mem = var + '->_' + self.presence_type() + '.' + self.c_name
+
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            get_lines = [
+                f"{len_mem} = len / sizeof(__{self.get('sub-type')});",
+                f"len = {len_mem} * sizeof(__{self.get('sub-type')});",
+            ]
+        else:
+            get_lines += [f"{len_mem} = len;"]
+
+        get_lines += [
+            f"{var}->{self.c_name} = malloc(len);",
+            f"memcpy({var}->{self.c_name}, ynl_attr_data(attr), len);"
+        ]
+
+        return get_lines, \
                ['len = ynl_attr_data_len(attr);'], \
                ['unsigned int len;']
 
     def _setter_lines(self, ri, member, presence):
+        if self.get('sub-type') and self.get('sub-type') in scalars:
+            return [f"{presence} = count;",
+                    f"count *= sizeof(__{self.get('sub-type')});",
+                    f"{member} = malloc(count);",
+                    f'memcpy({member}, {self.c_name}, count);']
+
         return [f"{presence} = len;",
                 f"{member} = malloc({presence});",
                 f'memcpy({member}, {self.c_name}, {presence});']
@@ -672,7 +708,7 @@ class TypeMultiAttr(Type):
         lines = []
         if self.attr['type'] in scalars:
             lines += [f"free({var}->{ref}{self.c_name});"]
-        elif self.attr['type'] == 'binary' and 'struct' in self.attr:
+        elif self.attr['type'] == 'binary':
             lines += [f"free({var}->{ref}{self.c_name});"]
         elif self.attr['type'] == 'string':
             lines += [
