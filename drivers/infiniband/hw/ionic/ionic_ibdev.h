@@ -6,7 +6,10 @@
 
 #include <rdma/ib_umem.h>
 #include <rdma/ib_verbs.h>
+#include <rdma/ib_pack.h>
+#include <rdma/uverbs_ioctl.h>
 
+#include <rdma/ionic-abi.h>
 #include <ionic_api.h>
 #include <ionic_regs.h>
 
@@ -30,8 +33,23 @@
 #define IONIC_EQ_ISR_BUDGET 10
 #define IONIC_EQ_WORK_BUDGET 1000
 #define IONIC_MAX_PD 1024
+#define IONIC_SPEC_HIGH 8
+#define IONIC_SQCMB_ORDER 5
+#define IONIC_RQCMB_ORDER 0
+
+#define IONIC_META_LAST		((void *)1ul)
+#define IONIC_META_POSTED	((void *)2ul)
 
 #define IONIC_CQ_GRACE 100
+
+#define IONIC_ROCE_UDP_SPORT	28272
+
+#define IONIC_CMB_SUPPORTED \
+	(IONIC_CMB_ENABLE | IONIC_CMB_REQUIRE | IONIC_CMB_EXPDB | \
+	 IONIC_CMB_WC | IONIC_CMB_UC)
+
+/* resource is not reserved on the device, indicated in tbl_order */
+#define IONIC_RES_INVALID	-1
 
 struct ionic_aq;
 struct ionic_cq;
@@ -48,14 +66,6 @@ enum ionic_admin_flags {
 	IONIC_ADMIN_F_BUSYWAIT  = BIT(0),	/* Don't sleep */
 	IONIC_ADMIN_F_TEARDOWN  = BIT(1),	/* In destroy path */
 	IONIC_ADMIN_F_INTERRUPT = BIT(2),	/* Interruptible w/timeout */
-};
-
-struct ionic_qdesc {
-	__aligned_u64 addr;
-	__u32 size;
-	__u16 mask;
-	__u8 depth_log2;
-	__u8 stride_log2;
 };
 
 struct ionic_mmap_info {
@@ -78,6 +88,7 @@ struct ionic_ibdev {
 	struct xarray		cq_tbl;
 	rwlock_t		qp_tbl_rw;
 	rwlock_t		cq_tbl_rw;
+
 	struct mutex		inuse_lock; /* for id reservation */
 	spinlock_t		inuse_splock; /* for ahid reservation */
 
@@ -183,6 +194,12 @@ struct ionic_tbl_buf {
 	u8		page_size_log2;
 };
 
+struct ionic_pd {
+	struct ib_pd		ibpd;
+
+	u32			pdid;
+};
+
 struct ionic_cq {
 	struct ionic_vcq	*vcq;
 
@@ -216,9 +233,191 @@ struct ionic_vcq {
 	u8			poll_idx;
 };
 
+struct ionic_sq_meta {
+	u64			wrid;
+	u32			len;
+	u16			seq;
+	u8			ibop;
+	u8			ibsts;
+	bool			remote;
+	bool			signal;
+	bool			local_comp;
+};
+
+struct ionic_rq_meta {
+	struct ionic_rq_meta	*next;
+	u64			wrid;
+};
+
+struct ionic_qp {
+	struct ib_qp		ibqp;
+	enum ib_qp_state	state;
+
+	u32			qpid;
+	u32			ahid;
+	u32			sq_cqid;
+	u32			rq_cqid;
+
+	u8			udma_idx;
+
+	bool			has_ah;
+	bool			has_sq;
+	bool			has_rq;
+
+	bool			sig_all;
+
+	struct list_head	qp_list_ent;
+	struct list_head	qp_list_counter;
+
+	struct list_head	cq_poll_sq;
+	struct list_head	cq_flush_sq;
+	struct list_head	cq_flush_rq;
+
+	spinlock_t		sq_lock; /* for posting and polling */
+	bool			sq_flush;
+	bool			sq_flush_rcvd;
+	struct ionic_queue	sq;
+	u8			sq_cmb;
+	struct ionic_sq_meta	*sq_meta;
+	u16			*sq_msn_idx;
+
+	int			sq_spec;
+	u16			sq_old_prod;
+	u16			sq_msn_prod;
+	u16			sq_msn_cons;
+
+	spinlock_t		rq_lock; /* for posting and polling */
+	bool			rq_flush;
+	struct ionic_queue	rq;
+	u8			rq_cmb;
+	struct ionic_rq_meta	*rq_meta;
+	struct ionic_rq_meta	*rq_meta_head;
+
+	int			rq_spec;
+	u16			rq_old_prod;
+
+	struct kref		qp_kref;
+	struct completion	qp_rel_comp;
+
+	/* infrequently accessed, keep at end */
+	int			sgid_index;
+	int			sq_cmb_order;
+	u32			sq_cmb_pgid;
+	phys_addr_t		sq_cmb_addr;
+	struct ionic_mmap_info	sq_cmb_mmap;
+
+	struct ib_umem		*sq_umem;
+
+	int			rq_cmb_order;
+	u32			rq_cmb_pgid;
+	phys_addr_t		rq_cmb_addr;
+	struct ionic_mmap_info	rq_cmb_mmap;
+
+	struct ib_umem		*rq_umem;
+
+	int			dcqcn_profile;
+
+	struct ib_ud_header	*hdr;
+};
+
+struct ionic_ah {
+	struct ib_ah		ibah;
+	u32			ahid;
+	int			sgid_index;
+	struct ib_ud_header	hdr;
+};
+
+struct ionic_mr {
+	union {
+		struct ib_mr	ibmr;
+		struct ib_mw	ibmw;
+	};
+
+	u32			mrid;
+	int			flags;
+
+	struct ib_umem		*umem;
+	struct ionic_tbl_buf	buf;
+	bool			created;
+};
+
 static inline struct ionic_ibdev *to_ionic_ibdev(struct ib_device *ibdev)
 {
 	return container_of(ibdev, struct ionic_ibdev, ibdev);
+}
+
+static inline struct ionic_ctx *to_ionic_ctx(struct ib_ucontext *ibctx)
+{
+	return container_of(ibctx, struct ionic_ctx, ibctx);
+}
+
+static inline struct ionic_ctx *to_ionic_ctx_uobj(struct ib_uobject *uobj)
+{
+	if (!uobj)
+		return NULL;
+
+	if (!uobj->context)
+		return NULL;
+
+	return to_ionic_ctx(uobj->context);
+}
+
+static inline struct ionic_pd *to_ionic_pd(struct ib_pd *ibpd)
+{
+	return container_of(ibpd, struct ionic_pd, ibpd);
+}
+
+static inline struct ionic_mr *to_ionic_mr(struct ib_mr *ibmr)
+{
+	return container_of(ibmr, struct ionic_mr, ibmr);
+}
+
+static inline struct ionic_mr *to_ionic_mw(struct ib_mw *ibmw)
+{
+	return container_of(ibmw, struct ionic_mr, ibmw);
+}
+
+static inline struct ionic_vcq *to_ionic_vcq(struct ib_cq *ibcq)
+{
+	return container_of(ibcq, struct ionic_vcq, ibcq);
+}
+
+static inline struct ionic_cq *to_ionic_vcq_cq(struct ib_cq *ibcq,
+					       uint8_t udma_idx)
+{
+	return &to_ionic_vcq(ibcq)->cq[udma_idx];
+}
+
+static inline struct ionic_qp *to_ionic_qp(struct ib_qp *ibqp)
+{
+	return container_of(ibqp, struct ionic_qp, ibqp);
+}
+
+static inline struct ionic_ah *to_ionic_ah(struct ib_ah *ibah)
+{
+	return container_of(ibah, struct ionic_ah, ibah);
+}
+
+static inline u32 ionic_ctx_dbid(struct ionic_ibdev *dev,
+				 struct ionic_ctx *ctx)
+{
+	if (!ctx)
+		return dev->lif_cfg.dbid;
+
+	return ctx->dbid;
+}
+
+static inline u32 ionic_obj_dbid(struct ionic_ibdev *dev,
+				 struct ib_uobject *uobj)
+{
+	return ionic_ctx_dbid(dev, to_ionic_ctx_uobj(uobj));
+}
+
+static inline void ionic_qp_complete(struct kref *kref)
+{
+	struct ionic_qp *qp = container_of(kref, struct ionic_qp, qp_kref);
+
+	complete(&qp->qp_rel_comp);
 }
 
 static inline void ionic_cq_complete(struct kref *kref)
@@ -241,6 +440,7 @@ void ionic_destroy_rdma_admin(struct ionic_ibdev *dev);
 void ionic_kill_rdma_admin(struct ionic_ibdev *dev, bool fatal_path);
 
 /* ionic_controlpath.c */
+void ionic_controlpath_setops(struct ionic_ibdev *dev);
 int ionic_create_cq_common(struct ionic_vcq *vcq,
 			   struct ionic_tbl_buf *buf,
 			   const struct ib_cq_init_attr *attr,
@@ -250,8 +450,11 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 			   __u32 *resp_cqid,
 			   int udma_idx);
 void ionic_destroy_cq_common(struct ionic_ibdev *dev, struct ionic_cq *cq);
+void ionic_flush_qp(struct ionic_ibdev *dev, struct ionic_qp *qp);
+void ionic_notify_flush_cq(struct ionic_cq *cq);
 
 /* ionic_pgtbl.c */
+__le64 ionic_pgtbl_dma(struct ionic_tbl_buf *buf, u64 va);
 int ionic_pgtbl_page(struct ionic_tbl_buf *buf, u64 dma);
 int ionic_pgtbl_init(struct ionic_ibdev *dev,
 		     struct ionic_tbl_buf *buf,

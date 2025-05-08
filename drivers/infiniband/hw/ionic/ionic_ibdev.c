@@ -114,6 +114,7 @@ static void ionic_destroy_ibdev(struct ionic_ibdev *dev)
 	ib_unregister_device(&dev->ibdev);
 	ionic_destroy_rdma_admin(dev);
 	ionic_destroy_resids(dev);
+	xa_destroy(&dev->qp_tbl);
 	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 }
@@ -135,6 +136,9 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	}
 
 	ionic_fill_lif_cfg(ionic_adev->lif, &dev->lif_cfg);
+
+	xa_init_flags(&dev->qp_tbl, GFP_ATOMIC);
+	rwlock_init(&dev->qp_tbl_rw);
 
 	xa_init_flags(&dev->cq_tbl, GFP_ATOMIC);
 	rwlock_init(&dev->cq_tbl_rw);
@@ -170,6 +174,8 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	if (rc)
 		goto err_admin;
 
+	ionic_controlpath_setops(dev);
+
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
 	if (rc)
 		goto err_register;
@@ -183,6 +189,7 @@ err_admin:
 err_reset:
 	ionic_destroy_resids(dev);
 err_resids:
+	xa_destroy(&dev->qp_tbl);
 	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 err_dev:
