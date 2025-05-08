@@ -12,20 +12,28 @@
  *	> amixer set "Headphone" on
  *	> amixer set "Mixout Left DAC Left"  on
  *	> amixer set "Mixout Right DAC Right" on
+ *	> aplay xxx.wav
  *
  * for Capture (Aux/Mic)
- *	> amixer set "Aux" on
- *	> amixer set "Aux" 80%
+ *
+ *		on/off (B)
+ *	CONN3 (HeadSet) ---+----> MSIOF1
+ *			   |
+ *	CONN4 AUX ---------+ on/off (A)
+ *
  *	> amixer set "Mixin PGA" on
  *	> amixer set "Mixin PGA" 50%
  *	> amixer set "ADC" on
  *	> amixer set "ADC" 80%
- *	> amixer set "Mixin Left Aux Left" on
- *	> amixer set "Mixin Right Aux Right" on
- *	> amixer set "Mic 1" on
- *	> amixer set "Mic 1" 80%
- *	> amixer set "Mixin Left Mic 1" on
- *	> amixer set "Mixin Right Mic 1" on
+ *	> amixer set "Aux" on				^
+ *	> amixer set "Aux" 80%				| (A)
+ *	> amixer set "Mixin Left Aux Left" on		|
+ *	> amixer set "Mixin Right Aux Right" on		v
+ *	> amixer set "Mic 1" on				^
+ *	> amixer set "Mic 1" 80%			| (B)
+ *	> amixer set "Mixin Left Mic 1" on		|
+ *	> amixer set "Mixin Right Mic 1" on		v
+ *	> arecord -f cd xxx.wav
  */
 
 /dts-v1/;
