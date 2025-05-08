@@ -6,6 +6,7 @@
  */
 #include <asm/switch_to.h>
 #include <crypto/internal/poly1305.h>
+#include <crypto/internal/simd.h>
 #include <linux/cpufeature.h>
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
@@ -51,7 +52,7 @@ void poly1305_blocks_arch(struct poly1305_block_state *state, const u8 *src,
 	if (!static_key_enabled(&have_p10))
 		return poly1305_blocks_generic(state, src, len, padbit);
 	vsx_begin();
-	if (len >= POLY1305_BLOCK_SIZE * 4) {
+	if (crypto_simd_usable() && len >= POLY1305_BLOCK_SIZE * 4) {
 		poly1305_p10le_4blocks(state, src, len);
 		src += len - (len % (POLY1305_BLOCK_SIZE * 4));
 		len %= POLY1305_BLOCK_SIZE * 4;
