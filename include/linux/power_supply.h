@@ -801,9 +801,12 @@ extern void power_supply_unreg_notifier(struct notifier_block *nb);
 #if IS_ENABLED(CONFIG_POWER_SUPPLY)
 extern struct power_supply *power_supply_get_by_name(const char *name);
 extern void power_supply_put(struct power_supply *psy);
+extern struct power_supply *power_supply_get_by_fwnode(struct fwnode_handle *fwnode);
 #else
 static inline void power_supply_put(struct power_supply *psy) {}
 static inline struct power_supply *power_supply_get_by_name(const char *name)
+{ return NULL; }
+static inline struct power_supply *power_supply_get_by_fwnode(struct fwnode_handle *fwnode)
 { return NULL; }
 #endif
 #ifdef CONFIG_OF

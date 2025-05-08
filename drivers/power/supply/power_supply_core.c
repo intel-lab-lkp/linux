@@ -496,6 +496,36 @@ struct power_supply *power_supply_get_by_name(const char *name)
 }
 EXPORT_SYMBOL_GPL(power_supply_get_by_name);
 
+static int power_supply_match_device_by_fwnode(struct device *dev, const void *data)
+{
+	return dev->parent && dev_fwnode(dev->parent) == data;
+}
+
+/**
+ * power_supply_get_by_fwnode() - Search for power supply given a fwnode ref.
+ * @fwnode: fwnode reference
+ *
+ * If power supply was found, it increases reference count for the internal
+ * power supply's device. The user should power_supply_put() after use.
+ *
+ * Return: Reference to power_supply node matching the fwnode on success or
+ * NULL on failure.
+ */
+struct power_supply *power_supply_get_by_fwnode(struct fwnode_handle *fwnode)
+{
+	struct power_supply *psy = NULL;
+	struct device *dev = class_find_device(&power_supply_class, NULL, fwnode,
+					       power_supply_match_device_by_fwnode);
+
+	if (dev) {
+		psy = dev_get_drvdata(dev);
+		atomic_inc(&psy->use_cnt);
+	}
+
+	return psy;
+}
+EXPORT_SYMBOL_GPL(power_supply_get_by_fwnode);
+
 /**
  * power_supply_put() - Drop reference obtained with power_supply_get_by_name
  * @psy: Reference to put
