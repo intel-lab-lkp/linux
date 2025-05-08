@@ -1745,8 +1745,8 @@ int mtd_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 }
 EXPORT_SYMBOL_GPL(mtd_read_oob);
 
-int mtd_write_oob(struct mtd_info *mtd, loff_t to,
-				struct mtd_oob_ops *ops)
+static int _mtd_write_oob(struct mtd_info *mtd, loff_t to,
+			  struct mtd_oob_ops *ops)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
 	int ret;
@@ -1770,6 +1770,53 @@ int mtd_write_oob(struct mtd_info *mtd, loff_t to,
 		return mtd_io_emulated_slc(mtd, to, false, ops);
 
 	return mtd_write_oob_std(mtd, to, ops);
+}
+
+static int _mtd_verify(struct mtd_info *mtd, loff_t to, size_t len, const u8 *buf)
+{
+	struct device *dev = &mtd->dev;
+	u_char *verify_buf;
+	size_t r_retlen;
+	int ret;
+
+	verify_buf = devm_kmalloc(dev, len, GFP_KERNEL);
+	if (!verify_buf)
+		return -ENOMEM;
+
+	ret = mtd_read(mtd, to, len, &r_retlen, verify_buf);
+	if (ret < 0)
+		goto err;
+
+	if (len != r_retlen) {
+		/* We shouldn't see short reads */
+		dev_err(dev, "Verify failed, written %zd but only read %zd",
+			len, r_retlen);
+		ret = -EIO;
+		goto err;
+	}
+
+	if (memcmp(verify_buf, buf, len)) {
+		dev_err(dev, "Verify failed, compare mismatch!");
+		ret = -EIO;
+	}
+
+err:
+	devm_kfree(dev, verify_buf);
+	return ret;
+}
+
+int mtd_write_oob(struct mtd_info *mtd, loff_t to,
+		  struct mtd_oob_ops *ops)
+{
+	int ret = _mtd_write_oob(mtd, to, ops);
+
+#if IS_ENABLED(CONFIG_MTD_PARANOID)
+	if (ret < 0)
+		return ret;
+
+	ret = _mtd_verify(mtd, to, ops->retlen, ops->datbuf);
+#endif // CONFIG_MTD_PARANOID
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mtd_write_oob);
 
