@@ -16,7 +16,11 @@ description: |
 
 properties:
   compatible:
-    const: nvidia,tegra210-emc
+    oneOf:
+      - const: nvidia,tegra210-emc
+      - items:
+          - const: nvidia,tegra210-emc
+          - const: nvidia,tegra21-emc
 
   reg:
     maxItems: 3
