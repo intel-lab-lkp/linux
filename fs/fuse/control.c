@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs_context.h>
+#include <linux/seq_file.h>
 
 #define FUSE_CTL_SUPER_MAGIC 0x65735543
 
@@ -180,6 +181,136 @@ out:
 	return ret;
 }
 
+struct fuse_backing_files_seq_state {
+	struct fuse_conn *fc;
+	int backing_id;
+};
+
+static void *fuse_backing_files_seq_start(struct seq_file *seq, loff_t *pos)
+{
+	struct fuse_backing *fb;
+	struct fuse_backing_files_seq_state *state;
+	struct fuse_conn *fc;
+	int backing_id;
+	void *ret;
+
+	if (*pos + 1 > INT_MAX)
+		return ERR_PTR(-EINVAL);
+
+	backing_id = *pos + 1;
+
+	fc = fuse_ctl_file_conn_get(seq->file);
+	if (!fc)
+		return ERR_PTR(-ENOTCONN);
+
+	rcu_read_lock();
+
+	fb = idr_get_next(&fc->backing_files_map, &backing_id);
+
+	rcu_read_unlock();
+
+	if (!fb) {
+		ret = NULL;
+		goto err;
+	}
+
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	if (!state) {
+		ret = ERR_PTR(-ENOMEM);
+		goto err;
+	}
+
+	state->fc = fc;
+	state->backing_id = backing_id;
+
+	ret = state;
+	return ret;
+
+err:
+	fuse_conn_put(fc);
+	return ret;
+}
+
+static void *fuse_backing_files_seq_next(struct seq_file *seq, void *v,
+					 loff_t *pos)
+{
+	struct fuse_backing_files_seq_state *state = v;
+	struct fuse_backing *fb;
+
+	(*pos)++;
+	state->backing_id++;
+
+	rcu_read_lock();
+
+	fb = idr_get_next(&state->fc->backing_files_map, &state->backing_id);
+
+	rcu_read_unlock();
+
+	if (!fb)
+		return NULL;
+
+
+	return state;
+}
+
+static int fuse_backing_files_seq_show(struct seq_file *seq, void *v)
+{
+	struct fuse_backing_files_seq_state *state = v;
+	struct fuse_conn *fc = state->fc;
+	struct fuse_backing *fb;
+
+	rcu_read_lock();
+
+	fb = idr_find(&fc->backing_files_map, state->backing_id);
+	fb = fuse_backing_get(fb);
+	if (!fb)
+		goto out;
+
+	if (!fb->file)
+		goto out_put_fb;
+
+	seq_printf(seq, "%5u: ", state->backing_id);
+	seq_file_path(seq, fb->file, " \t\n\\");
+	seq_puts(seq, "\n");
+
+out_put_fb:
+	fuse_backing_put(fb);
+out:
+	rcu_read_unlock();
+	return 0;
+}
+
+static void fuse_backing_files_seq_stop(struct seq_file *seq, void *v)
+{
+	struct fuse_backing_files_seq_state *state;
+
+	if (!v)
+		return;
+
+	state = v;
+	fuse_conn_put(state->fc);
+	kvfree(state);
+}
+
+static const struct seq_operations fuse_backing_files_seq_ops = {
+	.start = fuse_backing_files_seq_start,
+	.next = fuse_backing_files_seq_next,
+	.stop = fuse_backing_files_seq_stop,
+	.show = fuse_backing_files_seq_show,
+};
+
+static int fuse_backing_files_seq_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &fuse_backing_files_seq_ops);
+}
+
+static const struct file_operations fuse_conn_backing_files_ops = {
+	.open = fuse_backing_files_seq_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
 static const struct file_operations fuse_ctl_abort_ops = {
 	.open = nonseekable_open,
 	.write = fuse_conn_abort_write,
@@ -270,7 +401,10 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 				 1, NULL, &fuse_conn_max_background_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
 				 S_IFREG | 0600, 1, NULL,
-				 &fuse_conn_congestion_threshold_ops))
+				 &fuse_conn_congestion_threshold_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "backing_files", S_IFREG | 0400, 1,
+				 NULL,
+				 &fuse_conn_backing_files_ops))
 		goto err;
 
 	return 0;
