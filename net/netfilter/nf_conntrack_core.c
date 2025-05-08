@@ -1659,7 +1659,8 @@ __nf_conntrack_alloc(struct net *net,
 			if (!conntrack_gc_work.early_drop)
 				conntrack_gc_work.early_drop = true;
 			atomic_dec(&cnet->count);
-			net_warn_ratelimited("nf_conntrack: table full, dropping packet\n");
+			net_warn_ratelimited("nf_conntrack: table full in netns %u, dropping packet\n",
+					     net->ns.inum);
 			return ERR_PTR(-ENOMEM);
 		}
 	}
