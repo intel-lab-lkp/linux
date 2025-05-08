@@ -813,7 +813,7 @@ static int __init tlclk_init(void)
 		goto out3;
 	}
 
-	tlclk_device = faux_device_create_with_groups("telco_clock", NULL, NULL, tlclk_groups);
+	tlclk_device = faux_device_create_with_groups("telco_clock", NULL, NULL, tlclk_groups, NULL);
 	if (!tlclk_device) {
 		ret = -ENODEV;
 		goto out4;

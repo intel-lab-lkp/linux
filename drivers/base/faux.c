@@ -94,6 +94,8 @@ static void faux_device_release(struct device *dev)
  *		into, can be NULL.
  * @groups:	The set of sysfs attributes that will be created for this
  *		device when it is registered with the driver core.
+ * @plat_data:	The specific data that want to associated with this new device,
+ * 		can be NULL.Just call 'dev_get_platdata()' to get the data.
  *
  * Create a new faux device and register it in the driver core properly.
  * If present, callbacks in @faux_ops will be called with the device that
@@ -113,7 +115,8 @@ static void faux_device_release(struct device *dev)
 struct faux_device *faux_device_create_with_groups(const char *name,
 						   struct device *parent,
 						   const struct faux_device_ops *faux_ops,
-						   const struct attribute_group **groups)
+						   const struct attribute_group **groups,
+						   void *plat_data)
 {
 	struct faux_object *faux_obj;
 	struct faux_device *faux_dev;
@@ -140,6 +143,8 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 	dev->bus = &faux_bus_type;
 	dev->groups = groups;
 	dev_set_name(dev, "%s", name);
+
+	dev->platform_data = plat_data;
 
 	ret = device_add(dev);
 	if (ret) {
@@ -191,7 +196,7 @@ struct faux_device *faux_device_create(const char *name,
 				       struct device *parent,
 				       const struct faux_device_ops *faux_ops)
 {
-	return faux_device_create_with_groups(name, parent, faux_ops, NULL);
+	return faux_device_create_with_groups(name, parent, faux_ops, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(faux_device_create);
 

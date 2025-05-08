@@ -864,7 +864,7 @@ ATTRIBUTE_GROUPS(lis3lv02d);
 
 static int lis3lv02d_add_fs(struct lis3lv02d *lis3)
 {
-	lis3->fdev = faux_device_create_with_groups(DRIVER_NAME, NULL, NULL, lis3lv02d_groups);
+	lis3->fdev = faux_device_create_with_groups(DRIVER_NAME, NULL, NULL, lis3lv02d_groups, NULL);
 	if (!lis3->fdev)
 		return -ENODEV;
 
