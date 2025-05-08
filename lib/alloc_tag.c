@@ -762,14 +762,16 @@ static int __init alloc_tag_init(void)
 	};
 	int res;
 
-	res = alloc_mod_tags_mem();
-	if (res)
-		return res;
+	if (mem_profiling_support) {
+		res = alloc_mod_tags_mem();
+		if (res)
+			return res;
 
-	alloc_tag_cttype = codetag_register_type(&desc);
-	if (IS_ERR(alloc_tag_cttype)) {
-		free_mod_tags_mem();
-		return PTR_ERR(alloc_tag_cttype);
+		alloc_tag_cttype = codetag_register_type(&desc);
+		if (IS_ERR(alloc_tag_cttype)) {
+			free_mod_tags_mem();
+			return PTR_ERR(alloc_tag_cttype);
+		}
 	}
 
 	sysctl_init();
