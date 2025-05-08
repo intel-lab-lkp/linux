@@ -8,6 +8,8 @@
 
 #include "fuse_i.h"
 
+#include "linux/idr.h"
+#include "linux/rcupdate.h"
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -3392,6 +3394,35 @@ static ssize_t fuse_copy_file_range(struct file *src_file, loff_t src_off,
 	return ret;
 }
 
+static void fuse_file_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct fuse_file *ff = f->private_data;
+	struct fuse_conn *fc = ff->fm->fc;
+	struct fuse_inode *fi = get_fuse_inode(file_inode(f));
+
+	seq_printf(m, "fuse_conn:\t%u\n", fc->dev);
+
+#ifdef CONFIG_FUSE_PASSTHROUGH
+	struct fuse_backing *fb;
+	struct fuse_backing *backing;
+	int backing_id;
+
+	if (ff->open_flags & FOPEN_PASSTHROUGH) {
+		fb = fuse_inode_backing(fi);
+		if (fb) {
+			rcu_read_lock();
+			idr_for_each_entry(&fc->backing_files_map, backing, backing_id) {
+				if (backing == fb) {
+					seq_printf(m, "fuse_backing_id:\t%d\n", backing_id);
+					break;
+				}
+			}
+			rcu_read_unlock();
+		}
+	}
+#endif
+}
+
 static const struct file_operations fuse_file_operations = {
 	.llseek		= fuse_file_llseek,
 	.read_iter	= fuse_file_read_iter,
@@ -3411,6 +3442,9 @@ static const struct file_operations fuse_file_operations = {
 	.poll		= fuse_file_poll,
 	.fallocate	= fuse_file_fallocate,
 	.copy_file_range = fuse_copy_file_range,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo	= fuse_file_show_fdinfo,
+#endif
 };
 
 static const struct address_space_operations fuse_file_aops  = {
