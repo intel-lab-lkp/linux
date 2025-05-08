@@ -174,6 +174,7 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	if (rc)
 		goto err_admin;
 
+	ionic_datapath_setops(dev);
 	ionic_controlpath_setops(dev);
 
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
