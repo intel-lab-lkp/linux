@@ -321,7 +321,7 @@ static int ad4851_set_oversampling_ratio(struct iio_dev *indio_dev,
 			return ret;
 	}
 
-	ret = iio_backend_oversampling_ratio_set(st->back, osr);
+	ret = iio_backend_oversampling_ratio_set(st->back, chan, osr);
 	if (ret)
 		return ret;
 
