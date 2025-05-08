@@ -604,6 +604,13 @@ void __init tick_nohz_full_setup(cpumask_var_t cpumask)
 	tick_nohz_full_running = true;
 }
 
+/* Called if boot-time nohz CPU list changes during initialisation. */
+void __init tick_nohz_full_clear_cpu(unsigned int cpu)
+{
+	if (tick_nohz_full_running)
+		cpumask_clear_cpu(cpu, tick_nohz_full_mask);
+}
+
 bool tick_nohz_cpu_hotpluggable(unsigned int cpu)
 {
 	/*

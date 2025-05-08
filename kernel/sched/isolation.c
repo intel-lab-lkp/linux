@@ -165,6 +165,26 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 			}
 		}
 
+		/* Check in combination with the previously set cpumask */
+		type = find_first_bit(&housekeeping.flags, HK_TYPE_MAX);
+		first_cpu = cpumask_first_and_and(cpu_present_mask,
+						  housekeeping_staging,
+						  housekeeping.cpumasks[type]);
+		if (first_cpu >= nr_cpu_ids || first_cpu >= setup_max_cpus) {
+			pr_warn("Housekeeping: must include one present CPU neither "
+				"in nohz_full= nor in isolcpus=, using boot CPU:%d\n",
+				smp_processor_id());
+			for_each_set_bit(type, &housekeeping.flags, HK_TYPE_MAX)
+				__cpumask_set_cpu(smp_processor_id(),
+						  housekeeping.cpumasks[type]);
+			__cpumask_set_cpu(smp_processor_id(), housekeeping_staging);
+			__cpumask_clear_cpu(smp_processor_id(), non_housekeeping_mask);
+			tick_nohz_full_clear_cpu(smp_processor_id());
+
+			if (cpumask_empty(non_housekeeping_mask))
+				goto free_housekeeping_staging;
+		}
+
 		iter_flags = flags & ~housekeeping.flags;
 
 		for_each_set_bit(type, &iter_flags, HK_TYPE_MAX)
