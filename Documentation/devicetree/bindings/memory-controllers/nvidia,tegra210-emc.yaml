@@ -44,6 +44,44 @@ properties:
     description:
       phandle of the memory controller node
 
+  nvidia,use-ram-code:
+    description:
+      If set, timings are split per ram code and expected to be in
+      subnodes per ram-code
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^emc-table@[0-9]+$":
+    type: object
+    additionalProperties: true
+    properties:
+      reg:
+        maxItems: 1
+        description:
+          Ram code for this timing set
+
+      nvidia,ram-code:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          value of the RAM_CODE field in the PMC_STRAPPING_OPT_A register that
+          this timing set is used for
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    required:
+      - reg
+      - nvidia,ram-code
+
+
 required:
   - compatible
   - reg
