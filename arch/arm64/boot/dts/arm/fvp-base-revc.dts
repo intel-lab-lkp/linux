@@ -227,6 +227,68 @@
 		interrupts = <GIC_PPI 5 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
+	ete0 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu0>;
+		status = "disabled";
+	};
+
+	ete1 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu1>;
+		status = "disabled";
+	};
+
+	ete2 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu2>;
+		status = "disabled";
+	};
+
+	ete3 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu3>;
+		status = "disabled";
+	};
+
+	ete4 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu4>;
+		status = "disabled";
+	};
+
+	ete5 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu5>;
+		status = "disabled";
+	};
+
+	ete6 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu6>;
+		status = "disabled";
+	};
+
+	ete7 {
+		compatible = "arm,embedded-trace-extension";
+		arm,coresight-loses-context-with-cpu;
+		cpu = <&cpu7>;
+		status = "disabled";
+	};
+
+	trbe {
+		compatible = "arm,trace-buffer-extension";
+		interrupts = <GIC_PPI 15 IRQ_TYPE_LEVEL_LOW>;
+		status = "disabled";
+	};
+
 	pci: pci@40000000 {
 		#address-cells = <0x3>;
 		#size-cells = <0x2>;
