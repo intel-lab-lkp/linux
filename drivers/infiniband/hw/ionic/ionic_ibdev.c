@@ -22,9 +22,99 @@ static const struct auxiliary_device_id ionic_aux_id_table[] = {
 
 MODULE_DEVICE_TABLE(auxiliary, ionic_aux_id_table);
 
+void ionic_port_event(struct ionic_ibdev *dev, enum ib_event_type event)
+{
+	struct ib_event ev;
+
+	ev.device = &dev->ibdev;
+	ev.element.port_num = 1;
+	ev.event = event;
+
+	ib_dispatch_event(&ev);
+}
+
+static int ionic_init_resids(struct ionic_ibdev *dev)
+{
+	int rc;
+
+	rc = ionic_resid_init(&dev->inuse_cqid, dev->lif_cfg.cq_count);
+	if (rc)
+		return rc;
+
+	dev->next_cqid[0] = 0;
+	dev->next_cqid[1] = dev->lif_cfg.cq_count / dev->lif_cfg.udma_count;
+	dev->half_cqid_udma_shift =
+		order_base_2(dev->lif_cfg.cq_count / dev->lif_cfg.udma_count);
+
+	rc = ionic_resid_init(&dev->inuse_pdid, IONIC_MAX_PD);
+	if (rc)
+		goto err_pdid;
+
+	rc = ionic_resid_init(&dev->inuse_ahid, dev->lif_cfg.nahs_per_lif);
+	if (rc)
+		goto err_ahid;
+
+	rc = ionic_resid_init(&dev->inuse_mrid, dev->lif_cfg.nmrs_per_lif);
+	if (rc)
+		goto err_mrid;
+
+	/* skip reserved lkey */
+	dev->inuse_mrid.next_id = 1;
+	dev->next_mrkey = 1;
+
+	rc = ionic_resid_init(&dev->inuse_qpid, dev->lif_cfg.qp_count);
+	if (rc)
+		goto err_qpid;
+
+	/* skip reserved SMI and GSI qpids */
+	dev->next_qpid[0] = 2;
+	dev->next_qpid[1] = dev->lif_cfg.qp_count / dev->lif_cfg.udma_count;
+	dev->half_qpid_udma_shift =
+		order_base_2(dev->lif_cfg.qp_count / dev->lif_cfg.udma_count);
+
+	rc = ionic_resid_init(&dev->inuse_dbid, dev->lif_cfg.dbid_count);
+	if (rc)
+		goto err_dbid;
+
+	/* Reserve dbid zero for kernel pid */
+	dev->inuse_dbid.next_id = 1;
+
+	mutex_init(&dev->inuse_lock);
+	spin_lock_init(&dev->inuse_splock);
+
+	return 0;
+
+err_dbid:
+	ionic_resid_destroy(&dev->inuse_qpid);
+err_qpid:
+	ionic_resid_destroy(&dev->inuse_mrid);
+err_mrid:
+	ionic_resid_destroy(&dev->inuse_ahid);
+err_ahid:
+	ionic_resid_destroy(&dev->inuse_pdid);
+err_pdid:
+	ionic_resid_destroy(&dev->inuse_cqid);
+
+	return rc;
+}
+
+static void ionic_destroy_resids(struct ionic_ibdev *dev)
+{
+	ionic_resid_destroy(&dev->inuse_cqid);
+	ionic_resid_destroy(&dev->inuse_pdid);
+	ionic_resid_destroy(&dev->inuse_ahid);
+	ionic_resid_destroy(&dev->inuse_mrid);
+	ionic_resid_destroy(&dev->inuse_qpid);
+	ionic_resid_destroy(&dev->inuse_dbid);
+}
+
 static void ionic_destroy_ibdev(struct ionic_ibdev *dev)
 {
+	ionic_kill_rdma_admin(dev, false);
 	ib_unregister_device(&dev->ibdev);
+	ionic_destroy_rdma_admin(dev);
+	ionic_destroy_resids(dev);
+	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 }
 
@@ -45,6 +135,21 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	}
 
 	ionic_fill_lif_cfg(ionic_adev->lif, &dev->lif_cfg);
+
+	xa_init_flags(&dev->cq_tbl, GFP_ATOMIC);
+	rwlock_init(&dev->cq_tbl_rw);
+
+	rc = ionic_init_resids(dev);
+	if (rc)
+		goto err_resids;
+
+	rc = ionic_rdma_reset_devcmd(dev);
+	if (rc)
+		goto err_reset;
+
+	rc = ionic_create_rdma_admin(dev);
+	if (rc)
+		goto err_admin;
 
 	ibdev = &dev->ibdev;
 	ibdev->dev.parent = dev->lif_cfg.hwdev;
@@ -73,6 +178,12 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 
 err_register:
 err_admin:
+	ionic_kill_rdma_admin(dev, false);
+	ionic_destroy_rdma_admin(dev);
+err_reset:
+	ionic_destroy_resids(dev);
+err_resids:
+	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 err_dev:
 	return ERR_PTR(rc);
@@ -116,6 +227,10 @@ static int __init ionic_mod_init(void)
 {
 	int rc;
 
+	ionic_evt_workq = create_workqueue(DRIVER_NAME "-evt");
+	if (!ionic_evt_workq)
+		return -ENOMEM;
+
 	rc = auxiliary_driver_register(&ionic_aux_r_driver);
 	if (rc)
 		goto err_aux;
@@ -123,12 +238,15 @@ static int __init ionic_mod_init(void)
 	return 0;
 
 err_aux:
+	destroy_workqueue(ionic_evt_workq);
+
 	return rc;
 }
 
 static void __exit ionic_mod_exit(void)
 {
 	auxiliary_driver_unregister(&ionic_aux_r_driver);
+	destroy_workqueue(ionic_evt_workq);
 }
 
 module_init(ionic_mod_init);
