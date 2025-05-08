@@ -966,6 +966,7 @@ enum sock_flags {
 	SOCK_TIMESTAMPING_ANY, /* Copy of sk_tsflags & TSFLAGS_ANY */
 	SOCK_PASSCRED, /* Receive SCM_CREDENTIALS ancillary data with packet */
 	SOCK_PASSPIDFD, /* Receive SCM_PIDFD ancillary data with packet */
+	SOCK_PASSRIGHTS, /* Receive SCM_RIGHTS ancillary data with packet */
 	SOCK_PASSSEC, /* Receive SCM_SECURITY ancillary data with packet */
 	SOCK_FLAG_MAX,
 };

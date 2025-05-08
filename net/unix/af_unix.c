@@ -1015,6 +1015,7 @@ static struct sock *unix_create1(struct net *net, struct socket *sock, int kern,
 	}
 
 	sock_init_data(sock, sk);
+	sock_set_flag(sk, SOCK_PASSRIGHTS);
 
 	sk->sk_hash		= unix_unbound_hash(sk);
 	sk->sk_allocation	= GFP_KERNEL_ACCOUNT;
@@ -2073,6 +2074,11 @@ restart_locked:
 		goto out_unlock;
 	}
 
+	if (UNIXCB(skb).fp && !sock_flag(other, SOCK_PASSRIGHTS)) {
+		err = -EPERM;
+		goto out_unlock;
+	}
+
 	if (sk->sk_type != SOCK_SEQPACKET) {
 		err = security_unix_may_send(sk->sk_socket, other->sk_socket);
 		if (err)
@@ -2174,9 +2180,13 @@ static int queue_oob(struct sock *sk, struct msghdr *msg, struct sock *other,
 
 	if (sock_flag(other, SOCK_DEAD) ||
 	    (other->sk_shutdown & RCV_SHUTDOWN)) {
-		unix_state_unlock(other);
 		err = -EPIPE;
-		goto out;
+		goto out_unlock;
+	}
+
+	if (UNIXCB(skb).fp && !sock_flag(other, SOCK_PASSRIGHTS)) {
+		err = -EPERM;
+		goto out_unlock;
 	}
 
 	maybe_add_creds(skb, sk, other);
@@ -2192,6 +2202,8 @@ static int queue_oob(struct sock *sk, struct msghdr *msg, struct sock *other,
 	other->sk_data_ready(other);
 
 	return 0;
+out_unlock:
+	unix_state_unlock(other);
 out:
 	consume_skb(skb);
 	return err;
@@ -2294,6 +2306,12 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 		if (sock_flag(other, SOCK_DEAD) ||
 		    (other->sk_shutdown & RCV_SHUTDOWN))
 			goto out_pipe_unlock;
+
+		if (UNIXCB(skb).fp && !sock_flag(other, SOCK_PASSRIGHTS)) {
+			unix_state_unlock(other);
+			err = -EPERM;
+			goto out_free;
+		}
 
 		maybe_add_creds(skb, sk, other);
 		scm_stat_add(other, skb);

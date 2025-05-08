@@ -1229,6 +1229,12 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 	case SO_PASSPIDFD:
 		sock_valbool_flag(sk, SOCK_PASSPIDFD, valbool);
 		return 0;
+	case SO_PASSRIGHTS:
+		if (sk->sk_family != AF_UNIX)
+			return -EINVAL;
+
+		sock_valbool_flag(sk, SOCK_PASSRIGHTS, valbool);
+		return 0;
 	case SO_TYPE:
 	case SO_PROTOCOL:
 	case SO_DOMAIN:
@@ -1858,6 +1864,13 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 
 	case SO_PASSPIDFD:
 		v.val = sock_flag(sk, SOCK_PASSPIDFD);
+		break;
+
+	case SO_PASSRIGHTS:
+		if (sk->sk_family != AF_UNIX)
+			return -EINVAL;
+
+		v.val = sock_flag(sk, SOCK_PASSRIGHTS);
 		break;
 
 	case SO_PEERCRED:
