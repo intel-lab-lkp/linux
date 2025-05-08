@@ -964,6 +964,10 @@ enum sock_flags {
 	SOCK_RCVMARK, /* Receive SO_MARK  ancillary data with packet */
 	SOCK_RCVPRIORITY, /* Receive SO_PRIORITY ancillary data with packet */
 	SOCK_TIMESTAMPING_ANY, /* Copy of sk_tsflags & TSFLAGS_ANY */
+	SOCK_PASSCRED, /* Receive SCM_CREDENTIALS ancillary data with packet */
+	SOCK_PASSPIDFD, /* Receive SCM_PIDFD ancillary data with packet */
+	SOCK_PASSSEC, /* Receive SCM_SECURITY ancillary data with packet */
+	SOCK_FLAG_MAX,
 };
 
 #define SK_FLAGS_TIMESTAMP ((1UL << SOCK_TIMESTAMP) | (1UL << SOCK_TIMESTAMPING_RX_SOFTWARE))
@@ -981,6 +985,7 @@ static inline void sock_copy_flags(struct sock *nsk, const struct sock *osk)
 
 static inline void sock_set_flag(struct sock *sk, enum sock_flags flag)
 {
+	BUILD_BUG_ON(BYTES_TO_BITS(sizeof(sk->sk_flags)) <= SOCK_FLAG_MAX);
 	__set_bit(flag, &sk->sk_flags);
 }
 

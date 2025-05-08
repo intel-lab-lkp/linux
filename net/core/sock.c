@@ -1221,13 +1221,13 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 		}
 		return -EPERM;
 	case SO_PASSSEC:
-		assign_bit(SOCK_PASSSEC, &sock->flags, valbool);
+		sock_valbool_flag(sk, SOCK_PASSSEC, valbool);
 		return 0;
 	case SO_PASSCRED:
-		assign_bit(SOCK_PASSCRED, &sock->flags, valbool);
+		sock_valbool_flag(sk, SOCK_PASSCRED, valbool);
 		return 0;
 	case SO_PASSPIDFD:
-		assign_bit(SOCK_PASSPIDFD, &sock->flags, valbool);
+		sock_valbool_flag(sk, SOCK_PASSPIDFD, valbool);
 		return 0;
 	case SO_TYPE:
 	case SO_PROTOCOL:
@@ -1853,11 +1853,11 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case SO_PASSCRED:
-		v.val = !!test_bit(SOCK_PASSCRED, &sock->flags);
+		v.val = sock_flag(sk, SOCK_PASSCRED);
 		break;
 
 	case SO_PASSPIDFD:
-		v.val = !!test_bit(SOCK_PASSPIDFD, &sock->flags);
+		v.val = sock_flag(sk, SOCK_PASSPIDFD);
 		break;
 
 	case SO_PEERCRED:
@@ -1954,7 +1954,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case SO_PASSSEC:
-		v.val = !!test_bit(SOCK_PASSSEC, &sock->flags);
+		v.val = sock_flag(sk, SOCK_PASSSEC);
 		break;
 
 	case SO_PEERSEC:

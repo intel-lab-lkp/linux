@@ -411,7 +411,7 @@ static void scm_passec(struct socket *sock, struct msghdr *msg, struct scm_cooki
 	struct lsm_context ctx;
 	int err;
 
-	if (test_bit(SOCK_PASSSEC, &sock->flags)) {
+	if (sock_flag(sock->sk, SOCK_PASSSEC)) {
 		err = security_secid_to_secctx(scm->secid, &ctx);
 
 		if (err >= 0) {
@@ -425,7 +425,7 @@ static void scm_passec(struct socket *sock, struct msghdr *msg, struct scm_cooki
 
 static bool scm_has_secdata(struct socket *sock)
 {
-	return test_bit(SOCK_PASSSEC, &sock->flags);
+	return sock_flag(sock->sk, SOCK_PASSSEC);
 }
 #else
 static inline void scm_passec(struct socket *sock, struct msghdr *msg, struct scm_cookie *scm)
@@ -476,9 +476,11 @@ static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm)
 static bool __scm_recv_common(struct socket *sock, struct msghdr *msg,
 			      struct scm_cookie *scm, int flags)
 {
+	struct sock *sk = sock->sk;
+
 	if (!msg->msg_control) {
-		if (test_bit(SOCK_PASSCRED, &sock->flags) ||
-		    test_bit(SOCK_PASSPIDFD, &sock->flags) ||
+		if (sock_flag(sk, SOCK_PASSCRED) ||
+		    sock_flag(sk, SOCK_PASSPIDFD) ||
 		    scm->fp || scm_has_secdata(sock))
 			msg->msg_flags |= MSG_CTRUNC;
 
@@ -486,7 +488,7 @@ static bool __scm_recv_common(struct socket *sock, struct msghdr *msg,
 		return false;
 	}
 
-	if (test_bit(SOCK_PASSCRED, &sock->flags)) {
+	if (sock_flag(sock->sk, SOCK_PASSCRED)) {
 		struct user_namespace *current_ns = current_user_ns();
 		struct ucred ucreds = {
 			.pid = scm->creds.pid,
@@ -521,7 +523,7 @@ void scm_recv_unix(struct socket *sock, struct msghdr *msg,
 	if (!__scm_recv_common(sock, msg, scm, flags))
 		return;
 
-	if (test_bit(SOCK_PASSPIDFD, &sock->flags))
+	if (sock_flag(sock->sk, SOCK_PASSPIDFD))
 		scm_pidfd_recv(msg, scm);
 
 	scm_destroy_cred(scm);
