@@ -81,6 +81,7 @@ struct acomp_req_chain {
  * @doff:	Destination folio offset
  * @slen:	Size of the input buffer
  * @dlen:	Size of the output buffer and number of bytes produced
+ * @data:	Private API code data, do not use
  * @chain:	Private API code data, do not use
  * @__ctx:	Start of private context data
  */
@@ -101,6 +102,7 @@ struct acomp_req {
 	unsigned int slen;
 	unsigned int dlen;
 
+	void *data;
 	struct acomp_req_chain chain;
 
 	void *__ctx[] CRYPTO_MINALIGN_ATTR;
