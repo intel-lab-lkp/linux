@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/timerqueue.h>
 #include <trace/events/ipi.h>
+#include <linux/sched/isolation.h>
 
 #include "timer_migration.h"
 #include "tick-internal.h"
@@ -1478,6 +1479,16 @@ static int tmigr_cpu_available(unsigned int cpu)
 	if (WARN_ON_ONCE(!tmc->tmgroup))
 		return -EINVAL;
 
+	/*
+	 * Domain isolated CPUs don't participate in timer migration.
+	 * Checking here guarantees that CPUs isolated at boot (e.g. isolcpus)
+	 * are not marked as available when they first become online.
+	 * During runtime, any offline isolated CPU is also not incorrectly
+	 * marked as available once it gets back online.
+	 */
+	if (!housekeeping_test_cpu(cpu, HK_TYPE_DOMAIN) ||
+	    cpuset_cpu_is_isolated(cpu))
+		return 0;
 	raw_spin_lock_irq(&tmc->lock);
 	trace_tmigr_cpu_available(tmc);
 	tmc->idle = timer_base_is_idle();
@@ -1487,6 +1498,38 @@ static int tmigr_cpu_available(unsigned int cpu)
 	cpumask_set_cpu(cpu, tmigr_available_cpumask);
 	raw_spin_unlock_irq(&tmc->lock);
 	return 0;
+}
+
+static void tmigr_remote_cpu_unavailable(void *ignored)
+{
+	tmigr_cpu_unavailable(smp_processor_id());
+}
+
+static void tmigr_remote_cpu_available(void *ignored)
+{
+	tmigr_cpu_available(smp_processor_id());
+}
+
+int tmigr_isolated_exclude_cpumask(cpumask_var_t exclude_cpumask)
+{
+	cpumask_var_t cpumask;
+	int ret = 0;
+
+	lockdep_assert_cpus_held();
+
+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_and(cpumask, exclude_cpumask, tmigr_available_cpumask);
+	cpumask_and(cpumask, cpumask, housekeeping_cpumask(HK_TYPE_TICK));
+	on_each_cpu_mask(cpumask, tmigr_remote_cpu_unavailable, NULL, 0);
+
+	cpumask_andnot(cpumask, cpu_online_mask, exclude_cpumask);
+	cpumask_andnot(cpumask, cpumask, tmigr_available_cpumask);
+	on_each_cpu_mask(cpumask, tmigr_remote_cpu_available, NULL, 0);
+
+	free_cpumask_var(cpumask);
+	return ret;
 }
 
 static void tmigr_init_group(struct tmigr_group *group, unsigned int lvl,
