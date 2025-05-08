@@ -4798,8 +4798,13 @@ static void run_state_machine(struct tcpm_port *port)
 		typec_set_pwr_opmode(port->typec_port, opmode);
 		port->pwr_opmode = TYPEC_PWR_MODE_USB;
 		port->caps_count = 0;
-		port->negotiated_rev = PD_MAX_REV;
-		port->negotiated_rev_prime = PD_MAX_REV;
+		if (port->pd_rev.rev_major > 0 && port->pd_rev.rev_major <= PD_MAX_REV + 1) {
+			port->negotiated_rev = port->pd_rev.rev_major - 1;
+			port->negotiated_rev_prime = port->pd_rev.rev_major - 1;
+		} else {
+			port->negotiated_rev = PD_MAX_REV;
+			port->negotiated_rev_prime = PD_MAX_REV;
+		}
 		port->message_id = 0;
 		port->message_id_prime = 0;
 		port->rx_msgid = -1;
@@ -5076,8 +5081,13 @@ static void run_state_machine(struct tcpm_port *port)
 					      port->cc2 : port->cc1);
 		typec_set_pwr_opmode(port->typec_port, opmode);
 		port->pwr_opmode = TYPEC_PWR_MODE_USB;
-		port->negotiated_rev = PD_MAX_REV;
-		port->negotiated_rev_prime = PD_MAX_REV;
+		if (port->pd_rev.rev_major > 0 && port->pd_rev.rev_major <= PD_MAX_REV + 1) {
+			port->negotiated_rev = port->pd_rev.rev_major - 1;
+			port->negotiated_rev_prime = port->pd_rev.rev_major - 1;
+		} else {
+			port->negotiated_rev = PD_MAX_REV;
+			port->negotiated_rev_prime = PD_MAX_REV;
+		}
 		port->message_id = 0;
 		port->message_id_prime = 0;
 		port->rx_msgid = -1;
