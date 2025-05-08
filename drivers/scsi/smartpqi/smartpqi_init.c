@@ -6581,6 +6581,8 @@ static void pqi_sdev_destroy(struct scsi_device *sdev)
 	struct pqi_scsi_dev *device;
 	int mutex_acquired;
 	unsigned long flags;
+	unsigned int lun;
+	struct pqi_tmf_work *tmf_work;
 
 	ctrl_info = shost_to_hba(sdev->host);
 
@@ -6607,6 +6609,8 @@ static void pqi_sdev_destroy(struct scsi_device *sdev)
 	mutex_unlock(&ctrl_info->scan_mutex);
 
 	pqi_dev_info(ctrl_info, "removed", device);
+	for (lun = 0, tmf_work = device->tmf_work; lun < PQI_MAX_LUNS_PER_DEVICE; lun++, tmf_work++)
+		cancel_work_sync(&tmf_work->work_struct);
 	pqi_free_device(device);
 }
 
