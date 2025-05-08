@@ -31,7 +31,8 @@
 				 (1ULL << VIRTIO_BLK_F_TOPOLOGY) | \
 				 (1ULL << VIRTIO_BLK_F_MQ)       | \
 				 (1ULL << VIRTIO_BLK_F_DISCARD)  | \
-				 (1ULL << VIRTIO_BLK_F_WRITE_ZEROES))
+				 (1ULL << VIRTIO_BLK_F_WRITE_ZEROES)  | \
+				 (1ULL << VIRTIO_BLK_F_OUT_FUA))
 
 #define VDPASIM_BLK_CAPACITY	0x40000
 #define VDPASIM_BLK_SIZE_MAX	0x1000
@@ -158,7 +159,7 @@ static bool vdpasim_blk_handle_req(struct vdpasim *vdpasim,
 	status = VIRTIO_BLK_S_OK;
 
 	if (type != VIRTIO_BLK_T_IN && type != VIRTIO_BLK_T_OUT &&
-	    sector != 0) {
+	    type != VIRTIO_BLK_T_OUT_FUA && sector != 0) {
 		dev_dbg(&vdpasim->vdpa.dev,
 			"sector must be 0 for %u request - sector: 0x%llx\n",
 			type, sector);
@@ -191,6 +192,7 @@ static bool vdpasim_blk_handle_req(struct vdpasim *vdpasim,
 		break;
 
 	case VIRTIO_BLK_T_OUT:
+	case VIRTIO_BLK_T_OUT_FUA:
 		if (!vdpasim_blk_check_range(vdpasim, sector,
 					     to_pull >> SECTOR_SHIFT,
 					     VDPASIM_BLK_SIZE_MAX * VDPASIM_BLK_SEG_MAX)) {
