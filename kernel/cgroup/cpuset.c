@@ -81,6 +81,12 @@ static cpumask_var_t	subpartitions_cpus;
 static cpumask_var_t	isolated_cpus;
 
 /*
+ * Housekeeping CPUs for both HK_TYPE_DOMAIN and HK_TYPE_KERNEL_NOISE
+ */
+static cpumask_var_t	full_hk_cpus;
+static bool		have_boot_nohz_full;
+
+/*
  * Housekeeping (HK_TYPE_DOMAIN) CPUs at boot
  */
 static cpumask_var_t	boot_hk_cpus;
@@ -1253,10 +1259,26 @@ static void reset_partition_data(struct cpuset *cs)
 static void isolated_cpus_update(int old_prs, int new_prs, struct cpumask *xcpus)
 {
 	WARN_ON_ONCE(old_prs == new_prs);
-	if (new_prs == PRS_ISOLATED)
+	if (new_prs == PRS_ISOLATED) {
 		cpumask_or(isolated_cpus, isolated_cpus, xcpus);
-	else
+		cpumask_andnot(full_hk_cpus, full_hk_cpus, xcpus);
+	} else {
 		cpumask_andnot(isolated_cpus, isolated_cpus, xcpus);
+		cpumask_or(full_hk_cpus, full_hk_cpus, xcpus);
+	}
+}
+
+/*
+ * isolated_cpus_should_update - Returns if the isolated_cpus mask needs update
+ * @prs: new or old partition_root_state
+ * @parent: parent cpuset
+ * Return: true if isolated_cpus needs modification, false otherwise
+ */
+static bool isolated_cpus_should_update(int prs, struct cpuset *parent)
+{
+	if (!parent)
+		parent = &top_cpuset;
+	return prs != parent->partition_root_state;
 }
 
 /*
@@ -1321,6 +1343,25 @@ static bool partition_xcpus_del(int old_prs, struct cpuset *parent,
 	cpumask_and(xcpus, xcpus, cpu_active_mask);
 	cpumask_or(parent->effective_cpus, parent->effective_cpus, xcpus);
 	return isolcpus_updated;
+}
+
+/*
+ * isolcpus_nohz_conflict - check for isolated & nohz_full conflicts
+ * @new_cpus: cpu mask
+ * Return: true if there is conflict, false otherwise
+ *
+ * If nohz_full is enabled and we have isolated CPUs, their combination must
+ * still leave housekeeping CPUs.
+ */
+static bool isolcpus_nohz_conflict(struct cpumask *new_cpus)
+{
+	if (!have_boot_nohz_full)
+		return false;
+
+	if (!cpumask_weight_andnot(full_hk_cpus, new_cpus))
+		return true;
+
+	return false;
 }
 
 static void update_exclusion_cpumasks(bool isolcpus_updated)
@@ -1448,6 +1489,9 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	    cpumask_intersects(tmp->new_cpus, subpartitions_cpus) ||
 	    cpumask_subset(top_cpuset.effective_cpus, tmp->new_cpus))
 		return PERR_INVCPUS;
+	if (isolated_cpus_should_update(new_prs, NULL) &&
+	    isolcpus_nohz_conflict(tmp->new_cpus))
+		return PERR_HKEEPING;
 
 	spin_lock_irq(&callback_lock);
 	isolcpus_updated = partition_xcpus_add(new_prs, NULL, tmp->new_cpus);
@@ -1546,6 +1590,9 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 		else if (cpumask_intersects(tmp->addmask, subpartitions_cpus) ||
 			 cpumask_subset(top_cpuset.effective_cpus, tmp->addmask))
 			cs->prs_err = PERR_NOCPUS;
+		else if (isolated_cpus_should_update(prs, NULL) &&
+			 isolcpus_nohz_conflict(tmp->addmask))
+			cs->prs_err = PERR_HKEEPING;
 		if (cs->prs_err)
 			goto invalidate;
 	}
@@ -1875,6 +1922,12 @@ write_error:
 
 		if (err)
 			return err;
+	}
+
+	if (deleting && isolated_cpus_should_update(new_prs, parent) &&
+	    isolcpus_nohz_conflict(tmp->delmask)) {
+		cs->prs_err = PERR_HKEEPING;
+		return PERR_HKEEPING;
 	}
 
 	/*
@@ -2897,6 +2950,8 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		 * Need to update isolated_cpus.
 		 */
 		isolcpus_updated = true;
+		if (isolcpus_nohz_conflict(cs->effective_xcpus))
+			err = PERR_HKEEPING;
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
@@ -3715,6 +3770,7 @@ int __init cpuset_init(void)
 	BUG_ON(!alloc_cpumask_var(&top_cpuset.exclusive_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
+	BUG_ON(!alloc_cpumask_var(&full_hk_cpus, GFP_KERNEL));
 
 	cpumask_setall(top_cpuset.cpus_allowed);
 	nodes_setall(top_cpuset.mems_allowed);
@@ -3722,17 +3778,24 @@ int __init cpuset_init(void)
 	cpumask_setall(top_cpuset.effective_xcpus);
 	cpumask_setall(top_cpuset.exclusive_cpus);
 	nodes_setall(top_cpuset.effective_mems);
+	cpumask_copy(full_hk_cpus, cpu_present_mask);
 
 	fmeter_init(&top_cpuset.fmeter);
 	INIT_LIST_HEAD(&remote_children);
 
 	BUG_ON(!alloc_cpumask_var(&cpus_attach, GFP_KERNEL));
 
+	have_boot_nohz_full = housekeeping_enabled(HK_TYPE_KERNEL_NOISE);
+	if (have_boot_nohz_full)
+		cpumask_and(full_hk_cpus, cpu_possible_mask,
+			    housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+
 	have_boot_isolcpus = housekeeping_enabled(HK_TYPE_DOMAIN);
 	if (have_boot_isolcpus) {
 		BUG_ON(!alloc_cpumask_var(&boot_hk_cpus, GFP_KERNEL));
 		cpumask_copy(boot_hk_cpus, housekeeping_cpumask(HK_TYPE_DOMAIN));
 		cpumask_andnot(isolated_cpus, cpu_possible_mask, boot_hk_cpus);
+		cpumask_and(full_hk_cpus, full_hk_cpus, boot_hk_cpus);
 	}
 
 	return 0;
