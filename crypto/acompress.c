@@ -310,21 +310,13 @@ static int acomp_do_req_chain(struct acomp_req *req, bool comp)
 
 int crypto_acomp_compress(struct acomp_req *req)
 {
-	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
-
-	if (crypto_acomp_req_chain(tfm) || acomp_request_issg(req))
-		crypto_acomp_reqtfm(req)->compress(req);
-	return acomp_do_req_chain(req, true);
+	return crypto_acomp_reqtfm(req)->compress(req);
 }
 EXPORT_SYMBOL_GPL(crypto_acomp_compress);
 
 int crypto_acomp_decompress(struct acomp_req *req)
 {
-	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
-
-	if (crypto_acomp_req_chain(tfm) || acomp_request_issg(req))
-		crypto_acomp_reqtfm(req)->decompress(req);
-	return acomp_do_req_chain(req, false);
+	return crypto_acomp_reqtfm(req)->decompress(req);
 }
 EXPORT_SYMBOL_GPL(crypto_acomp_decompress);
 
