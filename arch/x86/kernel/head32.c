@@ -146,7 +146,7 @@ void __init __no_stack_protector mk_early_pgtbl_32(void)
 
 #ifdef CONFIG_MICROCODE_INITRD32
 	/* Running on a hypervisor? */
-	if (native_cpuid_ecx(1) & BIT(31))
+	if (cpuid_native_ecx(1) & BIT(31))
 		return;
 
 	params = (struct boot_params *)__pa_nodebug(&boot_params);

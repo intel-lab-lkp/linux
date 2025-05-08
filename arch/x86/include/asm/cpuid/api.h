@@ -35,8 +35,8 @@ static inline void cpuid_native(u32 *eax, u32 *ebx,
 	    : "memory");
 }
 
-#define NATIVE_CPUID_REG(reg)					\
-static inline u32 native_cpuid_##reg(u32 op)			\
+#define __CPUID_NATIVE_REG(reg)					\
+static inline u32 cpuid_native_##reg(u32 op)			\
 {								\
 	u32 eax = op, ebx, ecx = 0, edx;			\
 								\
@@ -48,10 +48,10 @@ static inline u32 native_cpuid_##reg(u32 op)			\
 /*
  * Native CPUID functions returning a single datum:
  */
-NATIVE_CPUID_REG(eax)
-NATIVE_CPUID_REG(ebx)
-NATIVE_CPUID_REG(ecx)
-NATIVE_CPUID_REG(edx)
+__CPUID_NATIVE_REG(eax)
+__CPUID_NATIVE_REG(ebx)
+__CPUID_NATIVE_REG(ecx)
+__CPUID_NATIVE_REG(edx)
 
 #ifdef CONFIG_PARAVIRT_XXL
 # include <asm/paravirt.h>

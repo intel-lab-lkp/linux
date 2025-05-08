@@ -106,7 +106,7 @@ static bool __init check_loader_disabled_bsp(void)
 	 * completely accurate as xen pv guests don't see that CPUID bit set but
 	 * that's good enough as they don't land on the BSP path anyway.
 	 */
-	if (native_cpuid_ecx(1) & BIT(31))
+	if (cpuid_native_ecx(1) & BIT(31))
 		return true;
 
 	if (x86_cpuid_vendor() == X86_VENDOR_AMD) {
@@ -128,7 +128,7 @@ void __init load_ucode_bsp(void)
 	if (!cpuid_feature())
 		return;
 
-	cpuid_1_eax = native_cpuid_eax(1);
+	cpuid_1_eax = cpuid_native_eax(1);
 
 	switch (x86_cpuid_vendor()) {
 	case X86_VENDOR_INTEL:
@@ -162,7 +162,7 @@ void load_ucode_ap(void)
 	if (dis_ucode_ldr)
 		return;
 
-	cpuid_1_eax = native_cpuid_eax(1);
+	cpuid_1_eax = cpuid_native_eax(1);
 
 	switch (x86_cpuid_vendor()) {
 	case X86_VENDOR_INTEL:

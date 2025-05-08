@@ -34,8 +34,8 @@ efi_status_t efi_setup_5level_paging(void)
 		return EFI_SUCCESS;
 
 	/* check for 5 level paging support */
-	if (native_cpuid_eax(0) < 7 ||
-	    !(native_cpuid_ecx(7) & (1 << (X86_FEATURE_LA57 & 31))))
+	if (cpuid_native_eax(0) < 7 ||
+	    !(cpuid_native_ecx(7) & (1 << (X86_FEATURE_LA57 & 31))))
 		return EFI_SUCCESS;
 
 	/* allocate some 32-bit addressable memory for code and a page table */

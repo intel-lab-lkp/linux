@@ -125,8 +125,8 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 	 */
 	if (IS_ENABLED(CONFIG_X86_5LEVEL) &&
 			!cmdline_find_option_bool("no5lvl") &&
-			native_cpuid_eax(0) >= 7 &&
-			(native_cpuid_ecx(7) & (1 << (X86_FEATURE_LA57 & 31)))) {
+			cpuid_native_eax(0) >= 7 &&
+			(cpuid_native_ecx(7) & (1 << (X86_FEATURE_LA57 & 31)))) {
 		l5_required = true;
 
 		/* Initialize variables for 5-level paging */
