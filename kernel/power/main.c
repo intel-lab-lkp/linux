@@ -20,6 +20,9 @@
 
 #include "power.h"
 
+suspend_state_t pm_suspend_target_state;
+EXPORT_SYMBOL_GPL(pm_suspend_target_state);
+
 #ifdef CONFIG_PM_SLEEP
 /*
  * The following functions are used by the suspend/hibernate code to temporarily

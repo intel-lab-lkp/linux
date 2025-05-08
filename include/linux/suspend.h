@@ -142,8 +142,13 @@ struct platform_s2idle_ops {
 	void (*end)(void);
 };
 
-#ifdef CONFIG_SUSPEND
+#if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
 extern suspend_state_t pm_suspend_target_state;
+#else
+#define pm_suspend_target_state	(PM_SUSPEND_ON)
+#endif
+
+#ifdef CONFIG_SUSPEND
 extern suspend_state_t mem_sleep_current;
 extern suspend_state_t mem_sleep_default;
 
@@ -278,8 +283,6 @@ extern int pm_suspend(suspend_state_t state);
 extern bool sync_on_suspend_enabled;
 #else /* !CONFIG_SUSPEND */
 #define suspend_valid_only_mem	NULL
-
-#define pm_suspend_target_state	(PM_SUSPEND_ON)
 
 static inline void pm_suspend_clear_flags(void) {}
 static inline void pm_set_suspend_via_firmware(void) {}
