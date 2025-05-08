@@ -1201,9 +1201,11 @@ static void nvme_poll_irqdisable(struct nvme_queue *nvmeq)
 
 	WARN_ON_ONCE(test_bit(NVMEQ_POLLED, &nvmeq->flags));
 
+	spin_lock(&nvmeq->cq_poll_lock);
 	disable_irq(pci_irq_vector(pdev, nvmeq->cq_vector));
 	nvme_poll_cq(nvmeq, NULL);
 	enable_irq(pci_irq_vector(pdev, nvmeq->cq_vector));
+	spin_unlock(&nvmeq->cq_poll_lock);
 }
 
 static int nvme_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
