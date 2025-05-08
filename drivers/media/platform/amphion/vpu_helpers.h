@@ -70,4 +70,9 @@ int vpu_color_get_default(u32 primaries, u32 *ptransfers, u32 *pmatrix, u32 *pfu
 
 int vpu_find_dst_by_src(struct vpu_pair *pairs, u32 cnt, u32 src);
 int vpu_find_src_by_dst(struct vpu_pair *pairs, u32 cnt, u32 dst);
+
+u32 vpu_get_h264_v4l2_profile(struct vpu_dec_codec_info *hdr);
+u32 vpu_get_h264_v4l2_level(struct vpu_dec_codec_info *hdr);
+u32 vpu_get_hevc_v4l2_profile(struct vpu_dec_codec_info *hdr);
+u32 vpu_get_hevc_v4l2_level(struct vpu_dec_codec_info *hdr);
 #endif
