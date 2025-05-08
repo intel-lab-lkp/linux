@@ -83,7 +83,7 @@ static bool iaa_distribute_decomps = true;
 static bool iaa_distribute_comps = true;
 
 /* Verify results of IAA compress or not */
-static bool iaa_verify_compress = true;
+static bool iaa_verify_compress = false;
 
 /*
  * The iaa crypto driver supports three 'sync' methods determining how
