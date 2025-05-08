@@ -125,7 +125,7 @@ void __init load_ucode_bsp(void)
 	unsigned int cpuid_1_eax;
 	bool intel = true;
 
-	if (!have_cpuid_p())
+	if (!cpuid_feature())
 		return;
 
 	cpuid_1_eax = native_cpuid_eax(1);
