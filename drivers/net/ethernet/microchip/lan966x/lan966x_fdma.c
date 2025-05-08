@@ -730,7 +730,6 @@ int lan966x_fdma_xmit(struct sk_buff *skb, __be32 *ifh, struct net_device *dev)
 		}
 	}
 
-	skb_tx_timestamp(skb);
 	skb_push(skb, IFH_LEN_BYTES);
 	memcpy(skb->data, ifh, IFH_LEN_BYTES);
 	skb_put(skb, 4);
@@ -768,6 +767,7 @@ int lan966x_fdma_xmit(struct sk_buff *skb, __be32 *ifh, struct net_device *dev)
 		next_dcb_buf->ptp = true;
 
 	/* Start the transmission */
+	skb_tx_timestamp(skb);
 	lan966x_fdma_tx_start(tx);
 
 	return NETDEV_TX_OK;
