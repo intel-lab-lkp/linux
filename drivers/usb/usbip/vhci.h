@@ -93,7 +93,7 @@ enum hub_speed {
 struct vhci {
 	spinlock_t lock;
 
-	struct platform_device *pdev;
+	struct faux_device *fdev;
 
 	struct vhci_hcd *vhci_hcd_hs;
 	struct vhci_hcd *vhci_hcd_ss;
@@ -141,7 +141,7 @@ static inline __u32 port_to_rhport(__u32 port)
 	return port % VHCI_HC_PORTS;
 }
 
-static inline int port_to_pdev_nr(__u32 port)
+static inline int port_to_fdev_nr(__u32 port)
 {
 	return port / VHCI_PORTS;
 }

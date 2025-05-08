@@ -11,7 +11,7 @@
 
 #include "usbip_common.h"
 
-#define USBIP_VHCI_BUS_TYPE "platform"
+#define USBIP_VHCI_BUS_TYPE "faux"
 #define USBIP_VHCI_DEVICE_NAME "vhci_hcd.0"
 
 enum hub_speed {

@@ -9,7 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>
 
@@ -1143,7 +1143,7 @@ static int hcd_name_to_id(const char *name)
 
 static int vhci_setup(struct usb_hcd *hcd)
 {
-	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
+	struct vhci *vhci = dev_get_platdata(hcd->self.controller);
 
 	if (usb_hcd_is_primary_hcd(hcd)) {
 		vhci->vhci_hcd_hs = hcd_to_vhci_hcd(hcd);
@@ -1257,7 +1257,7 @@ static int vhci_get_frame_number(struct usb_hcd *hcd)
 /* FIXME: suspend/resume */
 static int vhci_bus_suspend(struct usb_hcd *hcd)
 {
-	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
+	struct vhci *vhci = dev_get_platdata(hcd->self.controller);
 	unsigned long flags;
 
 	dev_dbg(&hcd->self.root_hub->dev, "%s\n", __func__);
@@ -1271,7 +1271,7 @@ static int vhci_bus_suspend(struct usb_hcd *hcd)
 
 static int vhci_bus_resume(struct usb_hcd *hcd)
 {
-	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
+	struct vhci *vhci = dev_get_platdata(hcd->self.controller);
 	int rc = 0;
 	unsigned long flags;
 
@@ -1336,20 +1336,19 @@ static const struct hc_driver vhci_hc_driver = {
 	.free_streams	= vhci_free_streams,
 };
 
-static int vhci_hcd_probe(struct platform_device *pdev)
+static int vhci_hcd_probe(struct faux_device *fdev)
 {
-	struct vhci             *vhci = *((void **)dev_get_platdata(&pdev->dev));
+	struct vhci             *vhci = dev_get_platdata(&fdev->dev);
 	struct usb_hcd		*hcd_hs;
 	struct usb_hcd		*hcd_ss;
 	int			ret;
 
-	usbip_dbg_vhci_hc("name %s id %d\n", pdev->name, pdev->id);
 
 	/*
 	 * Allocate and initialize hcd.
 	 * Our private data is also allocated automatically.
 	 */
-	hcd_hs = usb_create_hcd(&vhci_hc_driver, &pdev->dev, dev_name(&pdev->dev));
+	hcd_hs = usb_create_hcd(&vhci_hc_driver, &fdev->dev, dev_name(&fdev->dev));
 	if (!hcd_hs) {
 		pr_err("create primary hcd failed\n");
 		return -ENOMEM;
@@ -1366,8 +1365,8 @@ static int vhci_hcd_probe(struct platform_device *pdev)
 		goto put_usb2_hcd;
 	}
 
-	hcd_ss = usb_create_shared_hcd(&vhci_hc_driver, &pdev->dev,
-				       dev_name(&pdev->dev), hcd_hs);
+	hcd_ss = usb_create_shared_hcd(&vhci_hc_driver, &fdev->dev,
+				       dev_name(&fdev->dev), hcd_hs);
 	if (!hcd_ss) {
 		ret = -ENOMEM;
 		pr_err("create shared hcd failed\n");
@@ -1394,9 +1393,9 @@ put_usb2_hcd:
 	return ret;
 }
 
-static void vhci_hcd_remove(struct platform_device *pdev)
+static void vhci_hcd_remove(struct faux_device *fdev)
 {
-	struct vhci *vhci = *((void **)dev_get_platdata(&pdev->dev));
+	struct vhci *vhci = dev_get_platdata(&fdev->dev);
 
 	/*
 	 * Disconnects the root hub,
@@ -1416,7 +1415,7 @@ static void vhci_hcd_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 
 /* what should happen for USB/IP under suspend/resume? */
-static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
+static int vhci_hcd_suspend(struct faux_device *fdev, pm_message_t state)
 {
 	struct usb_hcd *hcd;
 	struct vhci *vhci;
@@ -1425,13 +1424,13 @@ static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
 	int ret = 0;
 	unsigned long flags;
 
-	dev_dbg(&pdev->dev, "%s\n", __func__);
+	dev_dbg(&fdev->dev, "%s\n", __func__);
 
-	hcd = platform_get_drvdata(pdev);
+	hcd = faux_device_get_drvdata(fdev);
 	if (!hcd)
 		return 0;
 
-	vhci = *((void **)dev_get_platdata(hcd->self.controller));
+	vhci = dev_get_platdata(hcd->self.controller);
 
 	spin_lock_irqsave(&vhci->lock, flags);
 
@@ -1448,25 +1447,25 @@ static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
 	spin_unlock_irqrestore(&vhci->lock, flags);
 
 	if (connected > 0) {
-		dev_info(&pdev->dev,
+		dev_info(&fdev->dev,
 			 "We have %d active connection%s. Do not suspend.\n",
 			 connected, str_plural(connected));
 		ret =  -EBUSY;
 	} else {
-		dev_info(&pdev->dev, "suspend vhci_hcd");
+		dev_info(&fdev->dev, "suspend vhci_hcd");
 		clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 	}
 
 	return ret;
 }
 
-static int vhci_hcd_resume(struct platform_device *pdev)
+static int vhci_hcd_resume(struct faux_device *fdev)
 {
 	struct usb_hcd *hcd;
 
-	dev_dbg(&pdev->dev, "%s\n", __func__);
+	dev_dbg(&fdev->dev, "%s\n", __func__);
 
-	hcd = platform_get_drvdata(pdev);
+	hcd = faux_device_get_drvdata(fdev);
 	if (!hcd)
 		return 0;
 	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
@@ -1482,25 +1481,19 @@ static int vhci_hcd_resume(struct platform_device *pdev)
 
 #endif
 
-static struct platform_driver vhci_driver = {
+static struct faux_device_ops vhci_driver = {
 	.probe	= vhci_hcd_probe,
 	.remove = vhci_hcd_remove,
-	.suspend = vhci_hcd_suspend,
-	.resume	= vhci_hcd_resume,
-	.driver	= {
-		.name = driver_name,
-	},
 };
 
-static void del_platform_devices(void)
+static void del_faux_devices(void)
 {
 	int i;
 
 	for (i = 0; i < vhci_num_controllers; i++) {
-		platform_device_unregister(vhcis[i].pdev);
-		vhcis[i].pdev = NULL;
+		faux_device_destroy(vhcis[i].fdev);
+		vhcis[i].fdev = NULL;
 	}
-	sysfs_remove_link(&platform_bus.kobj, driver_name);
 }
 
 static int __init vhci_hcd_init(void)
@@ -1517,24 +1510,16 @@ static int __init vhci_hcd_init(void)
 	if (vhcis == NULL)
 		return -ENOMEM;
 
-	ret = platform_driver_register(&vhci_driver);
-	if (ret)
-		goto err_driver_register;
-
 	for (i = 0; i < vhci_num_controllers; i++) {
 		void *vhci = &vhcis[i];
-		struct platform_device_info pdevinfo = {
-			.name = driver_name,
-			.id = i,
-			.data = &vhci,
-			.size_data = sizeof(void *),
-		};
+		char vhci_name[16];
 
-		vhcis[i].pdev = platform_device_register_full(&pdevinfo);
-		ret = PTR_ERR_OR_ZERO(vhcis[i].pdev);
-		if (ret < 0) {
+		snprintf(vhci_name, 16, "%s.%d", driver_name, i);
+
+		vhcis[i].fdev = faux_device_create_with_groups(vhci_name, NULL, &vhci_driver, NULL, vhci);
+		if (!vhcis[i].fdev) {
 			while (i--)
-				platform_device_unregister(vhcis[i].pdev);
+				faux_device_destroy(vhcis[i].fdev);
 			goto err_add_hcd;
 		}
 	}
@@ -1542,16 +1527,13 @@ static int __init vhci_hcd_init(void)
 	return 0;
 
 err_add_hcd:
-	platform_driver_unregister(&vhci_driver);
-err_driver_register:
 	kfree(vhcis);
 	return ret;
 }
 
 static void __exit vhci_hcd_exit(void)
 {
-	del_platform_devices();
-	platform_driver_unregister(&vhci_driver);
+	del_faux_devices();
 	kfree(vhcis);
 }
 

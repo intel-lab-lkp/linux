@@ -7,7 +7,7 @@
 #include <linux/kthread.h>
 #include <linux/file.h>
 #include <linux/net.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/slab.h>
 
 /* Hardening for Spectre-v1 */
@@ -28,7 +28,7 @@
  *
  * Output includes socket fd instead of socket pointer address to avoid
  * leaking kernel memory address in:
- *	/sys/devices/platform/vhci_hcd.0/status and in debug output.
+ *	/sys/devices/faux/vhci_hcd.0/status and in debug output.
  * The socket pointer address is not used at the moment and it was made
  * visible as a convenient way to find IP address from socket pointer
  * address by looking up /proc/net/{tcp,tcp6}. As this opens a security
@@ -60,9 +60,9 @@ static void port_show_vhci(char **out, int hub, int port, struct vhci_device *vd
 }
 
 /* Sysfs entry to show port status */
-static ssize_t status_show_vhci(int pdev_nr, char *out)
+static ssize_t status_show_vhci(int fdev_nr, char *out)
 {
-	struct platform_device *pdev = vhcis[pdev_nr].pdev;
+	struct faux_device *fdev = vhcis[fdev_nr].fdev;
 	struct vhci *vhci;
 	struct usb_hcd *hcd;
 	struct vhci_hcd *vhci_hcd;
@@ -70,12 +70,12 @@ static ssize_t status_show_vhci(int pdev_nr, char *out)
 	int i;
 	unsigned long flags;
 
-	if (!pdev || !out) {
+	if (!fdev || !out) {
 		usbip_dbg_vhci_sysfs("show status error\n");
 		return 0;
 	}
 
-	hcd = platform_get_drvdata(pdev);
+	hcd = faux_device_get_drvdata(fdev);
 	vhci_hcd = hcd_to_vhci_hcd(hcd);
 	vhci = vhci_hcd->vhci;
 
@@ -86,7 +86,7 @@ static ssize_t status_show_vhci(int pdev_nr, char *out)
 
 		spin_lock(&vdev->ud.lock);
 		port_show_vhci(&out, HUB_SPEED_HIGH,
-			       pdev_nr * VHCI_PORTS + i, vdev);
+			       fdev_nr * VHCI_PORTS + i, vdev);
 		spin_unlock(&vdev->ud.lock);
 	}
 
@@ -95,7 +95,7 @@ static ssize_t status_show_vhci(int pdev_nr, char *out)
 
 		spin_lock(&vdev->ud.lock);
 		port_show_vhci(&out, HUB_SPEED_SUPER,
-			       pdev_nr * VHCI_PORTS + VHCI_HC_PORTS + i, vdev);
+			       fdev_nr * VHCI_PORTS + VHCI_HC_PORTS + i, vdev);
 		spin_unlock(&vdev->ud.lock);
 	}
 
@@ -104,14 +104,14 @@ static ssize_t status_show_vhci(int pdev_nr, char *out)
 	return out - s;
 }
 
-static ssize_t status_show_not_ready(int pdev_nr, char *out)
+static ssize_t status_show_not_ready(int fdev_nr, char *out)
 {
 	char *s = out;
 	int i = 0;
 
 	for (i = 0; i < VHCI_HC_PORTS; i++) {
 		out += sprintf(out, "hs  %04u %03u ",
-				    (pdev_nr * VHCI_PORTS) + i,
+				    (fdev_nr * VHCI_PORTS) + i,
 				    VDEV_ST_NOTASSIGNED);
 		out += sprintf(out, "000 00000000 0000000000000000 0-0");
 		out += sprintf(out, "\n");
@@ -119,7 +119,7 @@ static ssize_t status_show_not_ready(int pdev_nr, char *out)
 
 	for (i = 0; i < VHCI_HC_PORTS; i++) {
 		out += sprintf(out, "ss  %04u %03u ",
-				    (pdev_nr * VHCI_PORTS) + VHCI_HC_PORTS + i,
+				    (fdev_nr * VHCI_PORTS) + VHCI_HC_PORTS + i,
 				    VDEV_ST_NOTASSIGNED);
 		out += sprintf(out, "000 00000000 0000000000000000 0-0");
 		out += sprintf(out, "\n");
@@ -148,16 +148,16 @@ static ssize_t status_show(struct device *dev,
 			   struct device_attribute *attr, char *out)
 {
 	char *s = out;
-	int pdev_nr;
+	int fdev_nr;
 
 	out += sprintf(out,
 		       "hub port sta spd dev      sockfd local_busid\n");
 
-	pdev_nr = status_name_to_id(attr->attr.name);
-	if (pdev_nr < 0)
-		out += status_show_not_ready(pdev_nr, out);
+	fdev_nr = status_name_to_id(attr->attr.name);
+	if (fdev_nr < 0)
+		out += status_show_not_ready(fdev_nr, out);
 	else
-		out += status_show_vhci(pdev_nr, out);
+		out += status_show_vhci(fdev_nr, out);
 
 	return out - s;
 }
@@ -213,13 +213,13 @@ static int vhci_port_disconnect(struct vhci_hcd *vhci_hcd, __u32 rhport)
 	return 0;
 }
 
-static int valid_port(__u32 *pdev_nr, __u32 *rhport)
+static int valid_port(__u32 *fdev_nr, __u32 *rhport)
 {
-	if (*pdev_nr >= vhci_num_controllers) {
-		pr_err("pdev %u\n", *pdev_nr);
+	if (*fdev_nr >= vhci_num_controllers) {
+		pr_err("fdev %u\n", *fdev_nr);
 		return 0;
 	}
-	*pdev_nr = array_index_nospec(*pdev_nr, vhci_num_controllers);
+	*fdev_nr = array_index_nospec(*fdev_nr, vhci_num_controllers);
 
 	if (*rhport >= VHCI_HC_PORTS) {
 		pr_err("rhport %u\n", *rhport);
@@ -233,7 +233,7 @@ static int valid_port(__u32 *pdev_nr, __u32 *rhport)
 static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
-	__u32 port = 0, pdev_nr = 0, rhport = 0;
+	__u32 port = 0, fdev_nr = 0, rhport = 0;
 	struct usb_hcd *hcd;
 	struct vhci_hcd *vhci_hcd;
 	int ret;
@@ -241,13 +241,13 @@ static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
 	if (kstrtoint(buf, 10, &port) < 0)
 		return -EINVAL;
 
-	pdev_nr = port_to_pdev_nr(port);
+	fdev_nr = port_to_fdev_nr(port);
 	rhport = port_to_rhport(port);
 
-	if (!valid_port(&pdev_nr, &rhport))
+	if (!valid_port(&fdev_nr, &rhport))
 		return -EINVAL;
 
-	hcd = platform_get_drvdata(vhcis[pdev_nr].pdev);
+	hcd = faux_device_get_drvdata(vhcis[fdev_nr].fdev);
 	if (hcd == NULL) {
 		dev_err(dev, "port is not ready %u\n", port);
 		return -EAGAIN;
@@ -270,10 +270,10 @@ static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_WO(detach);
 
-static int valid_args(__u32 *pdev_nr, __u32 *rhport,
+static int valid_args(__u32 *fdev_nr, __u32 *rhport,
 		      enum usb_device_speed speed)
 {
-	if (!valid_port(pdev_nr, rhport)) {
+	if (!valid_port(fdev_nr, rhport)) {
 		return 0;
 	}
 
@@ -311,7 +311,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 {
 	struct socket *socket;
 	int sockfd = 0;
-	__u32 port = 0, pdev_nr = 0, rhport = 0, devid = 0, speed = 0;
+	__u32 port = 0, fdev_nr = 0, rhport = 0, devid = 0, speed = 0;
 	struct usb_hcd *hcd;
 	struct vhci_hcd *vhci_hcd;
 	struct vhci_device *vdev;
@@ -329,19 +329,19 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	 */
 	if (sscanf(buf, "%u %u %u %u", &port, &sockfd, &devid, &speed) != 4)
 		return -EINVAL;
-	pdev_nr = port_to_pdev_nr(port);
+	fdev_nr = port_to_fdev_nr(port);
 	rhport = port_to_rhport(port);
 
-	usbip_dbg_vhci_sysfs("port(%u) pdev(%d) rhport(%u)\n",
-			     port, pdev_nr, rhport);
+	usbip_dbg_vhci_sysfs("port(%u) fdev(%d) rhport(%u)\n",
+			     port, fdev_nr, rhport);
 	usbip_dbg_vhci_sysfs("sockfd(%u) devid(%u) speed(%u)\n",
 			     sockfd, devid, speed);
 
 	/* check received parameters */
-	if (!valid_args(&pdev_nr, &rhport, speed))
+	if (!valid_args(&fdev_nr, &rhport, speed))
 		return -EINVAL;
 
-	hcd = platform_get_drvdata(vhcis[pdev_nr].pdev);
+	hcd = faux_device_get_drvdata(vhcis[fdev_nr].fdev);
 	if (hcd == NULL) {
 		dev_err(dev, "port %d is not ready\n", port);
 		return -EAGAIN;
@@ -413,8 +413,8 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 		goto unlock_mutex;
 	}
 
-	dev_info(dev, "pdev(%u) rhport(%u) sockfd(%d)\n",
-		 pdev_nr, rhport, sockfd);
+	dev_info(dev, "fdev(%u) rhport(%u) sockfd(%d)\n",
+		 fdev_nr, rhport, sockfd);
 	dev_info(dev, "devid(%u) speed(%u) speed_str(%s)\n",
 		 devid, speed, usb_speed_string(speed));
 
