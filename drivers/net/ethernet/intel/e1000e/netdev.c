@@ -5192,9 +5192,8 @@ static void e1000_watchdog(struct timer_list *t)
 	struct e1000_adapter *adapter = from_timer(adapter, t, watchdog_timer);
 
 	/* Do the rest outside of interrupt context */
-	schedule_work(&adapter->watchdog_task);
+	queue_delayed_work(adapter->watchdog_wq, &adapter->watchdog_dq, 0);
 
-	/* TODO: make this use queue_delayed_work() */
 }
 
 static void e1000_watchdog_task(struct work_struct *work)
