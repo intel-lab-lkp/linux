@@ -21,4 +21,5 @@ menuconfig I3C
 
 if I3C
 source "drivers/i3c/master/Kconfig"
+source "drivers/i3c/hub/Kconfig"
 endif # I3C
