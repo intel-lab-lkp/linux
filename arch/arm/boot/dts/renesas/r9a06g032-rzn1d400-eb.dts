@@ -238,3 +238,7 @@
 	status = "okay";
 	uart-has-rtscts;
 };
+
+&pci_usb {
+	status = "okay";
+};
