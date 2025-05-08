@@ -181,16 +181,16 @@ properties:
 
   port:
     $ref: /schemas/graph.yaml#/properties/port
-    description: OF graph bindings modeling a data bus to the connector, e.g.
-      there is a single High Speed (HS) port present in this connector. If there
-      is more than one bus (several port, with 'reg' property), they can be grouped
-      under 'ports'.
+    description: OF graph binding to model a logical connection between a device
+      and connector. This connection may represent a data bus or power line. For
+      e.g. a High Speed (HS) data port present in this connector or VBUS line.
+      If there is more than one connection (several port, with 'reg' property),
+      they can be grouped under 'ports'.
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
-    description: OF graph bindings modeling any data bus to the connector
-      unless the bus is between parent node and the connector. Since a single
-      connector can have multiple data buses every bus has an assigned OF graph
+    description: OF graph bindings to model multiple "port". Since a connector
+      may have multiple logical connections each one has an assigned OF graph
       port number as described below.
 
     properties:
@@ -206,6 +206,12 @@ properties:
         $ref: /schemas/graph.yaml#/properties/port
         description: Sideband Use (SBU), present in USB-C. This describes the
           alternate mode connection of which SBU is a part.
+
+      port@3:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: VBUS/VCHGIN present in USB-C connector to model power line
+          going in and/or out of the charger/battery. If there are multiple
+          batteries then this port should contain those many endpoints.
 
     required:
       - port@0
