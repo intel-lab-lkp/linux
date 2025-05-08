@@ -942,7 +942,7 @@ static const struct attribute_group *memory_root_attr_groups[] = {
 void __init memory_dev_init(void)
 {
 	int ret;
-	unsigned long block_sz, block_id, nr;
+	unsigned long block_sz, nr;
 
 	/* Validate the configured memory block size */
 	block_sz = memory_block_size_bytes();
@@ -956,22 +956,22 @@ void __init memory_dev_init(void)
 
 	/*
 	 * Create entries for memory sections that were found during boot
-	 * and have been initialized. Use @block_id to track the last
-	 * handled block and initialize it to an invalid value (ULONG_MAX)
-	 * to bypass the block ID matching check for the first present
-	 * block so that it can be covered.
+	 * and have been initialized.
 	 */
-	block_id = ULONG_MAX;
 	for_each_present_section_nr(0, nr) {
-		if (block_id != ULONG_MAX && memory_block_id(nr) == block_id)
-			continue;
-
-		block_id = memory_block_id(nr);
-		ret = add_memory_block(block_id, MEM_ONLINE, NULL, NULL);
+		ret = add_memory_block(memory_block_id(nr), MEM_ONLINE,
+				       NULL, NULL);
 		if (ret) {
 			panic("%s() failed to add memory block: %d\n",
 			      __func__, ret);
 		}
+
+		/*
+		 * Forward to the last section in this block so that we will
+		 * process the first section of the next block in the next
+		 * iteration.
+		 */
+		nr = ALIGN(nr + 1, sections_per_block) - 1;
 	}
 }
 
