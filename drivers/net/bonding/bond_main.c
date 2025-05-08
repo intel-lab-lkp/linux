@@ -2672,6 +2672,17 @@ static int __bond_release_one(struct net_device *bond_dev,
 	return 0;
 }
 
+/* helper to free arp_target.tags */
+static void free_tags(struct net_device *bond_dev)
+{
+	struct bonding *bond = netdev_priv(bond_dev);
+	struct arp_target *targets = bond->params.arp_targets;
+	int i;
+
+	for (i = 0; i < BOND_MAX_ARP_TARGETS && targets[i].tags; i++)
+		kfree(targets[i].tags);
+}
+
 /* A wrapper used because of ndo_del_link */
 int bond_release(struct net_device *bond_dev, struct net_device *slave_dev)
 {
@@ -3159,9 +3170,6 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 		target_ip = targets[i].target_ip;
 		tags = targets[i].tags;
 
-		slave_dbg(bond->dev, slave->dev, "%s: target %pI4\n",
-			  __func__, &target_ip);
-
 		/* Find out through which dev should the packet go */
 		rt = ip_route_output(dev_net(bond->dev), target_ip, 0, 0, 0,
 				     RT_SCOPE_LINK);
@@ -3182,9 +3190,13 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 		if (rt->dst.dev == bond->dev)
 			goto found;
 
-		rcu_read_lock();
-		tags = bond_verify_device_path(bond->dev, rt->dst.dev, 0);
-		rcu_read_unlock();
+		if (!tags) {
+			rcu_read_lock();
+			tags = bond_verify_device_path(bond->dev, rt->dst.dev, 0);
+			/* cache the tags */
+			targets[i].tags = tags;
+			rcu_read_unlock();
+		}
 
 		if (!IS_ERR_OR_NULL(tags))
 			goto found;
@@ -3200,7 +3212,6 @@ found:
 		addr = bond_confirm_addr(rt->dst.dev, target_ip, 0);
 		ip_rt_put(rt);
 		bond_arp_send(slave, ARPOP_REQUEST, target_ip, addr, tags);
-		kfree(tags);
 	}
 }
 
@@ -6082,6 +6093,7 @@ static void bond_uninit(struct net_device *bond_dev)
 	/* Release the bonded slaves */
 	bond_for_each_slave(bond, slave, iter)
 		__bond_release_one(bond_dev, slave->dev, true, true);
+	free_tags(bond_dev);
 	netdev_info(bond_dev, "Released all slaves\n");
 
 #ifdef CONFIG_XFRM_OFFLOAD
@@ -6093,6 +6105,96 @@ static void bond_uninit(struct net_device *bond_dev)
 	list_del_rcu(&bond->bond_list);
 
 	bond_debug_unregister(bond);
+}
+
+/* Convert vlan_list into struct bond_vlan_tag.
+ * Inspired by bond_verify_device_path();
+ */
+static struct bond_vlan_tag *vlan_tags_parse(char *vlan_list, int level)
+{
+	struct bond_vlan_tag *tags;
+	char *vlan;
+
+	if (!vlan_list || strlen(vlan_list) == 0) {
+		tags = kcalloc(level + 1, sizeof(*tags), GFP_ATOMIC);
+		if (!tags)
+			return ERR_PTR(-ENOMEM);
+		tags[level].vlan_proto = BOND_VLAN_PROTO_NONE;
+		return tags;
+	}
+
+	for (vlan = strsep(&vlan_list, "/"); (vlan != 0); level++) {
+		tags = vlan_tags_parse(vlan_list, level + 1);
+		if (IS_ERR_OR_NULL(tags)) {
+			if (IS_ERR(tags))
+				return tags;
+			continue;
+		}
+
+		tags[level].vlan_proto = __cpu_to_be16(ETH_P_8021Q);
+		if (kstrtou16(vlan, 0, &tags[level].vlan_id))
+			return ERR_PTR(-EINVAL);
+
+		if (tags[level].vlan_id < 1 || tags[level].vlan_id > 4094) {
+			kfree(tags);
+			return ERR_PTR(-EINVAL);
+		}
+
+		return tags;
+	}
+
+	return NULL;
+}
+
+/**
+ * arp_ip_target_opt_parse - parse a single arp_ip_target option value string
+ * @src: the option value to be parsed
+ * @dest: struct arp_target to place the results.
+ *
+ * This function parses a single arp_ip_target string in the form:
+ * x.x.x.x[tag/....] into a struct arp_target.
+ * Returns 0 on success.
+ */
+static int arp_ip_target_opt_parse(char *src, struct arp_target *dest)
+{
+	char *ipv4, *vlan_list;
+	char target[128], *args;
+	struct bond_vlan_tag *tags = NULL;
+	__be32 ip;
+
+	/* Prevent buffer overflow */
+	if (strlen(src) > 128)
+		return -E2BIG;
+
+	pr_debug("Parsing arp_ip_target (%s)\n", src);
+
+	/* copy arp_ip_target[i] to local array, strsep works
+	 * destructively...
+	 */
+	args = strcpy(target, src);
+	ipv4 = strsep(&args, "[");
+
+	/* not a complete check, but good enough to catch mistakes */
+	if (!in4_pton(ipv4, -1, (u8 *)&ip, -1, NULL) ||
+	    !bond_is_ip_target_ok(ip)) {
+		return -EINVAL;
+	}
+
+	/* extract vlan tags */
+	vlan_list = strsep(&args, "]");
+
+	/* If a vlan list was not supplied skip the processing of the list.
+	 * A value of "[]" is a valid list and should be handled a such.
+	 */
+	if (vlan_list) {
+		tags = vlan_tags_parse(vlan_list, 0);
+		if (IS_ERR(tags))
+			return PTR_ERR(tags);
+	}
+
+	dest->target_ip = ip;
+	dest->tags = tags;
+	return 0;
 }
 
 /*------------------------- Module initialization ---------------------------*/
@@ -6289,21 +6391,25 @@ static int __init bond_check_params(struct bond_params *params)
 
 	for (arp_ip_count = 0, i = 0;
 	     (arp_ip_count < BOND_MAX_ARP_TARGETS) && arp_ip_target[i]; i++) {
-		__be32 ip;
+		struct arp_target tmp_arp_target;
 
-		/* not a complete check, but good enough to catch mistakes */
-		if (!in4_pton(arp_ip_target[i], -1, (u8 *)&ip, -1, NULL) ||
-		    !bond_is_ip_target_ok(ip)) {
+		if (arp_ip_target_opt_parse(arp_ip_target[i], &tmp_arp_target)) {
 			pr_warn("Warning: bad arp_ip_target module parameter (%s), ARP monitoring will not be performed\n",
 				arp_ip_target[i]);
 			arp_interval = 0;
-		} else {
-			if (bond_get_targets_ip(arp_target, ip) == -1)
-				arp_target[arp_ip_count++].target_ip = ip;
-			else
-				pr_warn("Warning: duplicate address %pI4 in arp_ip_target, skipping\n",
-					&ip);
+			break;
 		}
+
+		if (bond_get_targets_ip(arp_target, tmp_arp_target.target_ip) != -1) {
+			pr_warn("Warning: duplicate address %pI4 in arp_ip_target, skipping\n",
+				&tmp_arp_target.target_ip);
+			kfree(tmp_arp_target.tags);
+			continue;
+		}
+
+		arp_target[i].target_ip = tmp_arp_target.target_ip;
+		arp_target[i].tags = tmp_arp_target.tags;
+		++arp_ip_count;
 	}
 
 	if (arp_interval && !arp_ip_count) {
