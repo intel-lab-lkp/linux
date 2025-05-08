@@ -553,4 +553,38 @@ void usb_power_delivery_unlink_device(struct usb_power_delivery *pd, struct devi
 
 #endif /* CONFIG_TYPEC */
 
+/* Battery Status Data Object */
+#define BSDO_PRESENT_CAPACITY_SHIFT			16
+#define BSDO_PRESENT_CAPACITY_MASK			GENMASK(31, 16)
+#define BSDO_CHG_STATUS_SHIFT				10
+#define BSDO_CHG_STATUS_MASK				GENMASK(11, 10)
+#define BSDO_BATTERY_PRESENT				BIT(9)
+#define BSDO_INVALID_BATTERY_REFERENCE			BIT(8)
+
+/*
+ * Battery Charge Status: Battery Charging Status Values as defined in
+ * "USB PD Spec Rev3.1 Ver1.8", "Table 6-46 Battery Status Data Object (BSDO)".
+ */
+#define BSDO_BATTERY_INFO_CHARGING			0x0
+#define BSDO_BATTERY_INFO_DISCHARGING			0x1
+#define BSDO_BATTERY_INFO_IDLE				0x2
+#define BSDO_BATTERY_INFO_RSVD				0x3
+
+/**
+ * BSDO() - Pack data into Battery Status Data Object format
+ * @batt_charge: Battery's present state of charge in 0.1WH increment
+ * @chg_status: Battery charge status
+ * @batt_present: When set, this indicates battery is present/attached.
+ *   Otherwise:
+ *     - Non hot-swappable battery: Indicates absence of battery
+ *     - Hot-swappable battery: Indicates battery is unattached
+ * @invalid_ref: Set when invalid battery reference is made in
+ *   Get_Battery_Status request, else 0
+ */
+#define BSDO(batt_charge, chg_status, batt_present, invalid_ref)				\
+	((((batt_charge) << BSDO_PRESENT_CAPACITY_SHIFT) & BSDO_PRESENT_CAPACITY_MASK) |	\
+	 (((chg_status) << BSDO_CHG_STATUS_SHIFT) & BSDO_CHG_STATUS_MASK) |			\
+	 ((batt_present) ? BSDO_BATTERY_PRESENT : 0) |						\
+	 ((invalid_ref) ? BSDO_INVALID_BATTERY_REFERENCE : 0))
+
 #endif /* __LINUX_USB_PD_H */

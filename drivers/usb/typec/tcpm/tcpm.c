@@ -228,6 +228,7 @@ enum pd_msg_request {
 	PD_MSG_DATA_SINK_CAP,
 	PD_MSG_DATA_SOURCE_CAP,
 	PD_MSG_DATA_REV,
+	PD_MSG_DATA_BATT_STATUS
 };
 
 enum adev_actions {
@@ -331,6 +332,17 @@ struct pd_timings {
 	u32 cc_debounce_time;
 	u32 snk_bc12_cmpletion_time;
 };
+
+/*
+ * As per USB PD Spec Rev 3.18 (Sec. 6.5.13.11), a sink can have a maximum
+ * of 4 fixed batteries indexed [0, 3].
+ */
+#define MAX_NUM_FIXED_BATT				4
+
+#define BATTERY_PROPERTY_UNKNOWN			0xffff
+
+/* Convert microwatt to watt */
+#define UWH_TO_WH(pow)					((pow) / 1000000)
 
 struct tcpm_port {
 	struct device *dev;
@@ -580,6 +592,15 @@ struct tcpm_port {
 
 	/* Indicates maximum (revision, version) supported */
 	struct pd_revision_info pd_rev;
+
+	struct power_supply *fixed_batt[MAX_NUM_FIXED_BATT];
+	u8 fixed_batt_cnt;
+
+	/*
+	 * Variable used to store battery_ref from the Get_Battery_Status
+	 * request to process Battery_Status messages.
+	 */
+	u8 batt_request;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dentry;
 	struct mutex logbuffer_lock;	/* log buffer access lock */
@@ -1336,6 +1357,60 @@ static int tcpm_pd_send_sink_caps(struct tcpm_port *port)
 					  nr_pdo);
 	}
 
+	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+}
+
+static int tcpm_pd_send_batt_status(struct tcpm_port *port)
+{
+	struct pd_message msg;
+	struct power_supply *batt;
+	u32 bsdo;
+	u32 batt_id = port->batt_request;
+	union power_supply_propval val;
+	int ret;
+	bool batt_present = false;
+	u8 charging_status = BSDO_BATTERY_INFO_RSVD;
+	u16 present_charge = BATTERY_PROPERTY_UNKNOWN;
+
+	memset(&msg, 0, sizeof(msg));
+	if (batt_id < MAX_NUM_FIXED_BATT && port->fixed_batt[batt_id]) {
+		batt_present = true;
+		batt = port->fixed_batt[batt_id];
+		ret = power_supply_get_property(batt, POWER_SUPPLY_PROP_ENERGY_NOW, &val);
+		/* Battery Present Charge is reported in increments of 0.1WH */
+		if (!ret)
+			present_charge = (u16)UWH_TO_WH(val.intval * 10);
+
+		ret = power_supply_get_property(batt, POWER_SUPPLY_PROP_STATUS,
+						&val);
+		if (!ret) {
+			switch (val.intval) {
+			case POWER_SUPPLY_STATUS_CHARGING:
+			case POWER_SUPPLY_STATUS_FULL:
+				charging_status = BSDO_BATTERY_INFO_CHARGING;
+				break;
+			case POWER_SUPPLY_STATUS_DISCHARGING:
+				charging_status = BSDO_BATTERY_INFO_DISCHARGING;
+				break;
+			case POWER_SUPPLY_STATUS_NOT_CHARGING:
+				charging_status = BSDO_BATTERY_INFO_IDLE;
+				break;
+			default:
+				charging_status = BSDO_BATTERY_INFO_RSVD;
+				break;
+			}
+		}
+	}
+
+	bsdo = BSDO(present_charge, batt_present ? charging_status : 0,
+		    batt_present, !batt_present);
+	msg.payload[0] = cpu_to_le32(bsdo);
+	msg.header = PD_HEADER_LE(PD_DATA_BATT_STATUS,
+				  port->pwr_role,
+				  port->data_role,
+				  port->negotiated_rev,
+				  port->message_id,
+				  1);
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
 }
 
@@ -3597,6 +3672,7 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 {
 	enum pd_ext_msg_type type = pd_header_type_le(msg->header);
 	unsigned int data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
+	const struct pd_chunked_ext_message_data *ext_msg = &msg->ext_msg;
 
 	/* stopping VDM state machine if interrupted by other Messages */
 	if (tcpm_vdm_ams(port)) {
@@ -3605,7 +3681,7 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 		mod_vdm_delayed_work(port, 0);
 	}
 
-	if (!(le16_to_cpu(msg->ext_msg.header) & PD_EXT_HDR_CHUNKED)) {
+	if (!(le16_to_cpu(ext_msg->header) & PD_EXT_HDR_CHUNKED)) {
 		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
 		tcpm_log(port, "Unchunked extended messages unsupported");
 		return;
@@ -3630,9 +3706,13 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 					     NONE_AMS, 0);
 		}
 		break;
+	case PD_EXT_GET_BATT_STATUS:
+		port->batt_request = ext_msg->data[0];
+		tcpm_pd_handle_msg(port, PD_MSG_DATA_BATT_STATUS,
+				   GETTING_BATTERY_STATUS);
+		break;
 	case PD_EXT_SOURCE_CAP_EXT:
 	case PD_EXT_GET_BATT_CAP:
-	case PD_EXT_GET_BATT_STATUS:
 	case PD_EXT_BATT_CAP:
 	case PD_EXT_GET_MANUFACTURER_INFO:
 	case PD_EXT_MANUFACTURER_INFO:
@@ -3830,6 +3910,14 @@ static bool tcpm_send_queued_message(struct tcpm_port *port)
 			if (ret)
 				tcpm_log(port,
 					 "Unable to send revision msg, ret=%d",
+					 ret);
+			tcpm_ams_finish(port);
+			break;
+		case PD_MSG_DATA_BATT_STATUS:
+			ret = tcpm_pd_send_batt_status(port);
+			if (ret)
+				tcpm_log(port,
+					 "Failed to send battery status ret=%d",
 					 ret);
 			tcpm_ams_finish(port);
 			break;
@@ -7164,6 +7252,26 @@ static void tcpm_fw_get_timings(struct tcpm_port *port, struct fwnode_handle *fw
 		port->timings.snk_bc12_cmpletion_time = val;
 }
 
+static void tcpm_fw_get_batt(struct tcpm_port *port, struct fwnode_handle *fwnode)
+{
+	struct fwnode_handle *ep = NULL, *fwnode_batt;
+	struct power_supply *psy;
+
+	fwnode_graph_for_each_endpoint(fwnode, ep) {
+		fwnode_batt = fwnode_graph_get_remote_port_parent(ep);
+		if (!fwnode_batt)
+			continue;
+
+		psy = power_supply_get_by_fwnode(fwnode_batt);
+		if (psy && psy->desc->type == POWER_SUPPLY_TYPE_BATTERY)
+			port->fixed_batt[port->fixed_batt_cnt++] = psy;
+
+		fwnode_handle_put(fwnode_batt);
+		if (port->fixed_batt_cnt == MAX_NUM_FIXED_BATT)
+			break;
+	}
+}
+
 static int tcpm_fw_get_caps(struct tcpm_port *port, struct fwnode_handle *fwnode)
 {
 	struct fwnode_handle *capabilities, *child, *caps = NULL;
@@ -7746,6 +7854,7 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 
 	tcpm_fw_get_timings(port, tcpc->fwnode);
 	tcpm_fw_get_pd_revision(port, tcpc->fwnode);
+	tcpm_fw_get_batt(port, tcpc->fwnode);
 
 	port->try_role = port->typec_caps.prefer_role;
 
@@ -7826,6 +7935,11 @@ void tcpm_unregister_port(struct tcpm_port *port)
 	hrtimer_cancel(&port->enable_frs_timer);
 	hrtimer_cancel(&port->vdm_state_machine_timer);
 	hrtimer_cancel(&port->state_machine_timer);
+
+	for (i = 0; i < port->fixed_batt_cnt; i++) {
+		if (port->fixed_batt[i])
+			power_supply_put(port->fixed_batt[i]);
+	}
 
 	tcpm_reset_port(port);
 
