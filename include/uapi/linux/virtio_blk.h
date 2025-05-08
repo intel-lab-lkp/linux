@@ -42,6 +42,7 @@
 #define VIRTIO_BLK_F_WRITE_ZEROES	14	/* WRITE ZEROES is supported */
 #define VIRTIO_BLK_F_SECURE_ERASE	16 /* Secure Erase is supported */
 #define VIRTIO_BLK_F_ZONED		17	/* Zoned block device */
+#define VIRTIO_BLK_F_OUT_FUA		18	/* FUA write is supported */
 
 /* Legacy feature bits */
 #ifndef VIRTIO_BLK_NO_LEGACY
@@ -205,6 +206,9 @@ struct virtio_blk_config {
 
 /* Reset All zones command */
 #define VIRTIO_BLK_T_ZONE_RESET_ALL 26
+
+/* FUA write command */
+#define VIRTIO_BLK_T_OUT_FUA        27
 
 #ifndef VIRTIO_BLK_NO_LEGACY
 /* Barrier before this op. */
