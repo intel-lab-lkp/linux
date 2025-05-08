@@ -45,15 +45,7 @@ struct pcie_bwctrl_data {
 	struct thermal_cooling_device *cdev;
 };
 
-/*
- * Prevent port removal during LBMS count accessors and Link Speed changes.
- *
- * These have to be differentiated because pcie_bwctrl_change_speed() calls
- * pcie_retrain_link() which uses LBMS count reset accessor on success
- * (using just one rwsem triggers "possible recursive locking detected"
- * warning).
- */
-static DECLARE_RWSEM(pcie_bwctrl_lbms_rwsem);
+/* Prevent port removal during Link Speed changes. */
 static DECLARE_RWSEM(pcie_bwctrl_setspeed_rwsem);
 
 static bool pcie_valid_speed(enum pci_bus_speed speed)
