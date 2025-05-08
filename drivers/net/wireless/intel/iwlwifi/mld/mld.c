@@ -26,6 +26,8 @@
 #include "hcmd.h"
 #include "fw/api/location.h"
 
+#include "iwl-nvm-parse.h"
+
 #define DRV_DESCRIPTION "Intel(R) MLD wireless driver for Linux"
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_LICENSE("GPL");
@@ -286,7 +288,9 @@ static const struct iwl_hcmd_names iwl_mld_statistics_names[] = {
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mld_prot_offload_names[] = {
-	HCMD_NAME(STORED_BEACON_NTF),
+	HCMD_NAME(WOWLAN_WAKE_PKT_NOTIFICATION),
+	HCMD_NAME(WOWLAN_INFO_NOTIFICATION),
+	HCMD_NAME(D3_END_NOTIFICATION),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -410,12 +414,24 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 			break;
 	}
 
+	if (!ret) {
+		mld->nvm_data = iwl_get_nvm(mld->trans, mld->fw, 0, 0);
+		if (IS_ERR(mld->nvm_data)) {
+			IWL_ERR(mld, "Failed to read NVM: %d\n", ret);
+			ret = PTR_ERR(mld->nvm_data);
+		}
+	}
+
 	if (ret) {
 		wiphy_unlock(mld->wiphy);
 		rtnl_unlock();
-		iwl_fw_flush_dumps(&mld->fwrt);
-		goto free_hw;
+		goto err;
 	}
+
+	/* We are about to stop the FW. Notifications may require an
+	 * operational FW, so handle them all here before we stop.
+	 */
+	wiphy_work_flush(mld->wiphy, &mld->async_handlers_wk);
 
 	iwl_mld_stop_fw(mld);
 
@@ -455,7 +471,8 @@ leds_exit:
 	iwl_mld_leds_exit(mld);
 free_nvm:
 	kfree(mld->nvm_data);
-free_hw:
+err:
+	iwl_trans_op_mode_leave(mld->trans);
 	ieee80211_free_hw(mld->hw);
 	return ERR_PTR(ret);
 }

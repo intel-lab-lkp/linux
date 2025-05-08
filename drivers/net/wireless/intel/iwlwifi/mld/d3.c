@@ -1099,7 +1099,8 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 		if (!match)
 			return;
 
-		netdetect_info->matches[netdetect_info->n_matches++] = match;
+		netdetect_info->matches[netdetect_info->n_matches] = match;
+		netdetect_info->n_matches++;
 
 		/* We inverted the order of the SSIDs in the scan
 		 * request, so invert the index here.
@@ -1116,9 +1117,11 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 
 		for_each_set_bit(j,
 				 (unsigned long *)&matches[i].matching_channels[0],
-				 sizeof(matches[i].matching_channels))
-			match->channels[match->n_channels++] =
+				 sizeof(matches[i].matching_channels)) {
+			match->channels[match->n_channels] =
 				netdetect_cfg->channels[j]->center_freq;
+			match->n_channels++;
+		}
 	}
 }
 
@@ -1344,6 +1347,8 @@ int iwl_mld_no_wowlan_suspend(struct iwl_mld *mld)
 	if (ret) {
 		IWL_ERR(mld, "d3 suspend: trans_d3_suspend failed %d\n", ret);
 	} else {
+		/* Async notification might send hcmds, which is not allowed in suspend */
+		iwl_mld_cancel_async_notifications(mld);
 		mld->trans->system_pm_mode = IWL_PLAT_PM_MODE_D3;
 		mld->fw_status.in_d3 = true;
 	}

@@ -583,7 +583,7 @@ u32 emac_xmit_xdp_frame(struct prueth_emac *emac,
 	first_desc = k3_cppi_desc_pool_alloc(tx_chn->desc_pool);
 	if (!first_desc) {
 		netdev_dbg(ndev, "xdp tx: failed to allocate descriptor\n");
-		goto drop_free_descs;	/* drop */
+		return ICSSG_XDP_CONSUMED;	/* drop */
 	}
 
 	if (page) { /* already DMA mapped by page_pool */
@@ -671,8 +671,10 @@ static u32 emac_run_xdp(struct prueth_emac *emac, struct xdp_buff *xdp,
 
 		q_idx = smp_processor_id() % emac->tx_ch_num;
 		result = emac_xmit_xdp_frame(emac, xdpf, page, q_idx);
-		if (result == ICSSG_XDP_CONSUMED)
+		if (result == ICSSG_XDP_CONSUMED) {
+			ndev->stats.tx_dropped++;
 			goto drop;
+		}
 
 		dev_sw_netstats_rx_add(ndev, xdpf->len);
 		return result;
@@ -1215,9 +1217,6 @@ void prueth_reset_rx_chan(struct prueth_rx_chn *chn,
 					  prueth_rx_cleanup);
 	if (disable)
 		k3_udma_glue_disable_rx_chn(chn->rx_chn);
-
-	page_pool_destroy(chn->pg_pool);
-	chn->pg_pool = NULL;
 }
 EXPORT_SYMBOL_GPL(prueth_reset_rx_chan);
 
@@ -1319,10 +1318,28 @@ void icssg_ndo_get_stats64(struct net_device *ndev,
 	stats->rx_over_errors = emac_get_stat_by_name(emac, "rx_over_errors");
 	stats->multicast      = emac_get_stat_by_name(emac, "rx_multicast_frames");
 
-	stats->rx_errors  = ndev->stats.rx_errors;
-	stats->rx_dropped = ndev->stats.rx_dropped;
+	stats->rx_errors  = ndev->stats.rx_errors +
+			    emac_get_stat_by_name(emac, "FW_RX_ERROR") +
+			    emac_get_stat_by_name(emac, "FW_RX_EOF_SHORT_FRMERR") +
+			    emac_get_stat_by_name(emac, "FW_RX_B0_DROP_EARLY_EOF") +
+			    emac_get_stat_by_name(emac, "FW_RX_EXP_FRAG_Q_DROP") +
+			    emac_get_stat_by_name(emac, "FW_RX_FIFO_OVERRUN");
+	stats->rx_dropped = ndev->stats.rx_dropped +
+			    emac_get_stat_by_name(emac, "FW_DROPPED_PKT") +
+			    emac_get_stat_by_name(emac, "FW_INF_PORT_DISABLED") +
+			    emac_get_stat_by_name(emac, "FW_INF_SAV") +
+			    emac_get_stat_by_name(emac, "FW_INF_SA_DL") +
+			    emac_get_stat_by_name(emac, "FW_INF_PORT_BLOCKED") +
+			    emac_get_stat_by_name(emac, "FW_INF_DROP_TAGGED") +
+			    emac_get_stat_by_name(emac, "FW_INF_DROP_PRIOTAGGED") +
+			    emac_get_stat_by_name(emac, "FW_INF_DROP_NOTAG") +
+			    emac_get_stat_by_name(emac, "FW_INF_DROP_NOTMEMBER");
 	stats->tx_errors  = ndev->stats.tx_errors;
-	stats->tx_dropped = ndev->stats.tx_dropped;
+	stats->tx_dropped = ndev->stats.tx_dropped +
+			    emac_get_stat_by_name(emac, "FW_RTU_PKT_DROP") +
+			    emac_get_stat_by_name(emac, "FW_TX_DROPPED_PACKET") +
+			    emac_get_stat_by_name(emac, "FW_TX_TS_DROPPED_PACKET") +
+			    emac_get_stat_by_name(emac, "FW_TX_JUMBO_FRM_CUTOFF");
 }
 EXPORT_SYMBOL_GPL(icssg_ndo_get_stats64);
 
