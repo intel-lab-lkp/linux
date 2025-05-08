@@ -347,7 +347,7 @@ static __init bool load_builtin_intel_microcode(struct cpio_data *cp)
 	if (IS_ENABLED(CONFIG_X86_32))
 		return false;
 
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 
 	sprintf(name, "intel-ucode/%02x-%02x-%02x",
 		x86_family(eax), x86_model(eax), x86_stepping(eax));

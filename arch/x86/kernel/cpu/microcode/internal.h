@@ -73,7 +73,7 @@ static inline int x86_cpuid_vendor(void)
 	u32 eax = 0x00000000;
 	u32 ebx, ecx = 0, edx;
 
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 
 	if (CPUID_IS(CPUID_INTEL1, CPUID_INTEL2, CPUID_INTEL3, ebx, ecx, edx))
 		return X86_VENDOR_INTEL;
@@ -89,7 +89,7 @@ static inline unsigned int x86_cpuid_family(void)
 	u32 eax = 0x00000001;
 	u32 ebx, ecx = 0, edx;
 
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 
 	return x86_family(eax);
 }

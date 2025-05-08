@@ -494,7 +494,7 @@ static int sev_check_cpu_support(void)
 	/* Check for the SME/SEV support leaf */
 	eax = 0x80000000;
 	ecx = 0;
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 	if (eax < 0x8000001f)
 		return -ENODEV;
 
@@ -508,7 +508,7 @@ static int sev_check_cpu_support(void)
 	 */
 	eax = 0x8000001f;
 	ecx = 0;
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 	/* Check whether SEV is supported */
 	if (!(eax & BIT(1)))
 		return -ENODEV;
@@ -666,7 +666,7 @@ bool early_is_sevsnp_guest(void)
 		 */
 		eax = 0x8000001f;
 		ecx = 0;
-		native_cpuid(&eax, &ebx, &ecx, &edx);
+		cpuid_native(&eax, &ebx, &ecx, &edx);
 		if (eax & BIT(28)) {
 			struct msr m;
 

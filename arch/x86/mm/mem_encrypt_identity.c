@@ -501,7 +501,7 @@ void __head sme_enable(struct boot_params *bp)
 	/* Check for the SME/SEV support leaf */
 	eax = 0x80000000;
 	ecx = 0;
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 	if (eax < 0x8000001f)
 		return;
 
@@ -518,7 +518,7 @@ void __head sme_enable(struct boot_params *bp)
 	 */
 	eax = 0x8000001f;
 	ecx = 0;
-	native_cpuid(&eax, &ebx, &ecx, &edx);
+	cpuid_native(&eax, &ebx, &ecx, &edx);
 	/* Check whether SEV or SME is supported */
 	if (!(eax & (AMD_SEV_BIT | AMD_SME_BIT)))
 		return;
@@ -552,7 +552,7 @@ void __head sme_enable(struct boot_params *bp)
 		 */
 		eax = 1;
 		ecx = 0;
-		native_cpuid(&eax, &ebx, &ecx, &edx);
+		cpuid_native(&eax, &ebx, &ecx, &edx);
 		if (ecx & BIT(31))
 			return;
 

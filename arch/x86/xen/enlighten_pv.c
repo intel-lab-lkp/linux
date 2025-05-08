@@ -327,7 +327,7 @@ static bool __init xen_check_mwait(void)
 	ax = 1;
 	cx = 0;
 
-	native_cpuid(&ax, &bx, &cx, &dx);
+	cpuid_native(&ax, &bx, &cx, &dx);
 
 	mwait_mask = (1 << (X86_FEATURE_EST % 32)) |
 		     (1 << (X86_FEATURE_MWAIT % 32));
@@ -344,7 +344,7 @@ static bool __init xen_check_mwait(void)
 	cx = 0;
 	dx = 0;
 
-	native_cpuid(&ax, &bx, &cx, &dx);
+	cpuid_native(&ax, &bx, &cx, &dx);
 
 	/* Ask the Hypervisor whether to clear ACPI_PROC_CAP_C_C2C3_FFH. If so,
 	 * don't expose MWAIT_LEAF and let ACPI pick the IOPORT version of C3.

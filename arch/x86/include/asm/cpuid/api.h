@@ -22,7 +22,7 @@ static inline bool cpuid_feature(void)
 }
 #endif
 
-static inline void native_cpuid(u32 *eax, u32 *ebx,
+static inline void cpuid_native(u32 *eax, u32 *ebx,
 				u32 *ecx, u32 *edx)
 {
 	/* ecx is often an input as well as an output. */
@@ -40,7 +40,7 @@ static inline u32 native_cpuid_##reg(u32 op)			\
 {								\
 	u32 eax = op, ebx, ecx = 0, edx;			\
 								\
-	native_cpuid(&eax, &ebx, &ecx, &edx);			\
+	cpuid_native(&eax, &ebx, &ecx, &edx);			\
 								\
 	return reg;						\
 }
@@ -56,7 +56,7 @@ NATIVE_CPUID_REG(edx)
 #ifdef CONFIG_PARAVIRT_XXL
 # include <asm/paravirt.h>
 #else
-# define __cpuid native_cpuid
+# define __cpuid	cpuid_native
 #endif
 
 /*

@@ -122,7 +122,7 @@ struct paravirt_patch_template pv_ops = {
 	.cpu.io_delay		= native_io_delay,
 
 #ifdef CONFIG_PARAVIRT_XXL
-	.cpu.cpuid		= native_cpuid,
+	.cpu.cpuid		= cpuid_native,
 	.cpu.get_debugreg	= pv_native_get_debugreg,
 	.cpu.set_debugreg	= pv_native_set_debugreg,
 	.cpu.read_cr0		= native_read_cr0,
