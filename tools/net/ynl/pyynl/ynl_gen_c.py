@@ -529,6 +529,8 @@ class TypeBinary(Type):
     def struct_member(self, ri):
         if self.get('sub-type') and self.get('sub-type') in scalars:
             ri.cw.p(f'__{self.get("sub-type")} *{self.c_name};')
+        elif self.get('struct'):
+            ri.cw.p(f'struct {c_lower(self.get("struct"))} *{self.c_name};')
         else:
             ri.cw.p(f"void *{self.c_name};")
 
@@ -581,6 +583,13 @@ class TypeBinary(Type):
         else:
             get_lines += [f"{len_mem} = len;"]
 
+        if self.get('struct'):
+            struct_sz = 'sizeof(struct ' + c_lower(self.get("struct")) + ')'
+            get_lines += [
+                f"if (len < {struct_sz})",
+                f"{var}->{self.c_name} = calloc(1, {struct_sz});",
+                "else",
+            ]
         get_lines += [
             f"{var}->{self.c_name} = malloc(len);",
             f"memcpy({var}->{self.c_name}, ynl_attr_data(attr), len);"
