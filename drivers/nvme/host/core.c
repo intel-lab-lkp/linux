@@ -1867,6 +1867,9 @@ static bool nvme_init_integrity(struct nvme_ns_head *head,
 		break;
 	}
 
+	if (!nvme_ns_has_pi(head))
+		bi->flags |= BLK_INTEGRITY_BUFFER_REQUIRED;
+
 	bi->tuple_size = head->ms;
 	bi->pi_offset = info->pi_offset;
 	return true;
