@@ -4203,8 +4203,7 @@ void intel_ddi_get_clock(struct intel_encoder *encoder,
 
 	icl_set_active_port_dpll(crtc_state, port_dpll_id);
 
-	crtc_state->port_clock = intel_dpll_get_freq(display, crtc_state->intel_dpll,
-						     &crtc_state->dpll_hw_state);
+	crtc_state->port_clock = intel_dpll_get_freq(crtc_state, encoder);
 }
 
 static void mtl_ddi_get_config(struct intel_encoder *encoder,
@@ -4316,8 +4315,7 @@ static void icl_ddi_tc_get_clock(struct intel_encoder *encoder,
 	if (icl_ddi_tc_pll_is_tbt(crtc_state->intel_dpll))
 		crtc_state->port_clock = icl_calc_tbt_pll_link(display, encoder->port);
 	else
-		crtc_state->port_clock = intel_dpll_get_freq(display, crtc_state->intel_dpll,
-							     &crtc_state->dpll_hw_state);
+		crtc_state->port_clock = intel_dpll_get_freq(crtc_state, encoder);
 }
 
 static void icl_ddi_tc_get_config(struct intel_encoder *encoder,
