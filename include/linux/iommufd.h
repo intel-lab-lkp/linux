@@ -241,6 +241,10 @@ struct iommufd_object *_iommufd_object_alloc(struct iommufd_ctx *ictx,
 					     size_t size,
 					     enum iommufd_object_type type);
 void iommufd_object_abort(struct iommufd_ctx *ictx, struct iommufd_object *obj);
+int _iommufd_object_depend(struct iommufd_object *obj_dependent,
+			   struct iommufd_object *obj_depended);
+void _iommufd_object_undepend(struct iommufd_object *obj_dependent,
+			      struct iommufd_object *obj_depended);
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 int iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
@@ -258,6 +262,18 @@ _iommufd_object_alloc(struct iommufd_ctx *ictx, size_t size,
 
 static inline void iommufd_object_abort(struct iommufd_ctx *ictx,
 					struct iommufd_object *obj)
+{
+}
+
+static inline int _iommufd_object_depend(struct iommufd_object *obj_dependent,
+					 struct iommufd_object *obj_depended)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void
+_iommufd_object_undepend(struct iommufd_object *obj_dependent,
+			 struct iommufd_object *obj_depended)
 {
 }
 
@@ -345,5 +361,33 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 		static_assert(offsetof(typeof(*drv_struct), member.obj) == 0); \
 		iommufd_object_abort(drv_struct->member.ictx,                  \
 				     &drv_struct->member.obj);                 \
+	})
+
+/*
+ * Helpers for IOMMU driver to build/destroy a dependency between two sibling
+ * structures created by one of the allocators above
+ */
+#define iommufd_hw_queue_depend(dependent, depended, member)                   \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_hw_queue,             \
+					  dependent->member));                 \
+		static_assert(offsetof(typeof(*dependent), member.obj) == 0);  \
+		static_assert(__same_type(struct iommufd_hw_queue,             \
+					  depended->member));                  \
+		static_assert(offsetof(typeof(*depended), member.obj) == 0);   \
+		_iommufd_object_depend(&dependent->member.obj,                 \
+				       &depended->member.obj);                 \
+	})
+
+#define iommufd_hw_queue_undepend(dependent, depended, member)                 \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_hw_queue,             \
+					  dependent->member));                 \
+		static_assert(offsetof(typeof(*dependent), member.obj) == 0);  \
+		static_assert(__same_type(struct iommufd_hw_queue,             \
+					  depended->member));                  \
+		static_assert(offsetof(typeof(*depended), member.obj) == 0);   \
+		_iommufd_object_undepend(&dependent->member.obj,               \
+					 &depended->member.obj);               \
 	})
 #endif
