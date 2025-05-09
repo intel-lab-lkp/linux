@@ -24,19 +24,6 @@
  * implementation and should do their own copy.
  */
 
-#ifndef HAVE_ARCH_PIO_SIZE
-/*
- * We encode the physical PIO addresses (0-0xffff) into the
- * pointer by offsetting them with a constant (0x10000) and
- * assuming that all the low addresses are always PIO. That means
- * we can do some sanity checks on the low bits, and don't
- * need to just take things for granted.
- */
-#define PIO_OFFSET	0x10000UL
-#define PIO_MASK	0x0ffffUL
-#define PIO_RESERVED	0x40000UL
-#endif
-
 static void bad_io_access(unsigned long port, const char *access)
 {
 	static int count = 10;
