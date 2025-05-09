@@ -150,6 +150,10 @@ static inline netmem_ref page_pool_dev_alloc_netmem(struct page_pool *pool,
 {
 	gfp_t gfp = GFP_ATOMIC | __GFP_NOWARN;
 
+	WARN_ON((!offset && size) || (offset && !size));
+	if (!offset || !size)
+		return page_pool_alloc_netmems(pool, gfp);
+
 	return page_pool_alloc_netmem(pool, offset, size, gfp);
 }
 

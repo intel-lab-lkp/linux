@@ -3882,6 +3882,20 @@ static inline bool skb_can_coalesce(struct sk_buff *skb, int i,
 	return false;
 }
 
+static inline bool skb_can_coalesce_netmem(struct sk_buff *skb, int i,
+				    const netmem_ref netmem, int off)
+{
+	if (skb_zcopy(skb))
+		return false;
+	if (i) {
+		const skb_frag_t *frag = &skb_shinfo(skb)->frags[i - 1];
+
+		return netmem == skb_frag_netmem(frag) &&
+		       off == skb_frag_off(frag) + skb_frag_size(frag);
+	}
+	return false;
+}
+
 static inline int __skb_linearize(struct sk_buff *skb)
 {
 	return __pskb_pull_tail(skb, skb->data_len) ? 0 : -ENOMEM;

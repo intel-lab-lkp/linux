@@ -61,7 +61,7 @@ static inline bool
 mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 		    struct xdp_buff *xdp)
 {
-	struct page *page = virt_to_page(xdp->data);
+	netmem_ref netmem = virt_to_netmem(xdp->data);
 	struct mlx5e_xmit_data_frags xdptxdf = {};
 	struct mlx5e_xmit_data *xdptxd;
 	struct xdp_frame *xdpf;
@@ -122,7 +122,7 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 	 * mode.
 	 */
 
-	dma_addr = page_pool_get_dma_addr(page) + (xdpf->data - (void *)xdpf);
+	dma_addr = page_pool_get_dma_addr_netmem(netmem) + (xdpf->data - (void *)xdpf);
 	dma_sync_single_for_device(sq->pdev, dma_addr, xdptxd->len, DMA_BIDIRECTIONAL);
 
 	if (xdptxd->has_frags) {
@@ -134,7 +134,7 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 			dma_addr_t addr;
 			u32 len;
 
-			addr = page_pool_get_dma_addr(skb_frag_page(frag)) +
+			addr = page_pool_get_dma_addr_netmem(skb_frag_netmem(frag)) +
 				skb_frag_off(frag);
 			len = skb_frag_size(frag);
 			dma_sync_single_for_device(sq->pdev, addr, len,
@@ -157,19 +157,19 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 				     (union mlx5e_xdp_info)
 				     { .page.num = 1 + xdptxdf.sinfo->nr_frags });
 		mlx5e_xdpi_fifo_push(&sq->db.xdpi_fifo,
-				     (union mlx5e_xdp_info) { .page.page = page });
+				     (union mlx5e_xdp_info) { .page.netmem = netmem });
 		for (i = 0; i < xdptxdf.sinfo->nr_frags; i++) {
 			skb_frag_t *frag = &xdptxdf.sinfo->frags[i];
 
 			mlx5e_xdpi_fifo_push(&sq->db.xdpi_fifo,
 					     (union mlx5e_xdp_info)
-					     { .page.page = skb_frag_page(frag) });
+					     { .page.netmem = skb_frag_netmem(frag) });
 		}
 	} else {
 		mlx5e_xdpi_fifo_push(&sq->db.xdpi_fifo,
 				     (union mlx5e_xdp_info) { .page.num = 1 });
 		mlx5e_xdpi_fifo_push(&sq->db.xdpi_fifo,
-				     (union mlx5e_xdp_info) { .page.page = page });
+				     (union mlx5e_xdp_info) { .page.netmem = netmem });
 	}
 
 	return true;
@@ -702,15 +702,15 @@ static void mlx5e_free_xdpsq_desc(struct mlx5e_xdpsq *sq,
 			num = xdpi.page.num;
 
 			do {
-				struct page *page;
+				netmem_ref netmem;
 
 				xdpi = mlx5e_xdpi_fifo_pop(xdpi_fifo);
-				page = xdpi.page.page;
+				netmem = xdpi.page.netmem;
 
 				/* No need to check ((page->pp_magic & ~0x3UL) == PP_SIGNATURE)
 				 * as we know this is a page_pool page.
 				 */
-				page_pool_recycle_direct(page->pp, page);
+				page_pool_recycle_direct_netmem(netmem_get_pp(netmem), netmem);
 			} while (++n < num);
 
 			break;

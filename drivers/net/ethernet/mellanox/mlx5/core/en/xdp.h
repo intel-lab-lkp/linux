@@ -96,7 +96,7 @@ union mlx5e_xdp_info {
 	union {
 		struct mlx5e_rq *rq;
 		u8 num;
-		struct page *page;
+		netmem_ref netmem;
 	} page;
 	struct xsk_tx_metadata_compl xsk_meta;
 };
