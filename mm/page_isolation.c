@@ -15,6 +15,17 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/page_isolation.h>
 
+static inline bool __maybe_unused get_pageblock_isolate(struct page *page)
+{
+	return get_pfnblock_flags_mask(page, page_to_pfn(page),
+			PB_migrate_isolate_bit);
+}
+static inline void clear_pageblock_isolate(struct page *page)
+{
+	set_pfnblock_flags_mask(page, 0, page_to_pfn(page),
+			PB_migrate_isolate_bit);
+}
+
 /*
  * This function checks whether the range [start_pfn, end_pfn) includes
  * unmovable pages or not. The range must fall into a single pageblock and
