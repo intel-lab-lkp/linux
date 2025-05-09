@@ -54,6 +54,7 @@ struct codetag_iterator {
 	struct codetag_module *cmod;
 	unsigned long mod_id;
 	struct codetag *ct;
+	unsigned long timestamp;
 };
 
 #ifdef MODULE
