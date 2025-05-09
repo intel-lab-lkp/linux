@@ -8,6 +8,8 @@
 
 #include "fuse_i.h"
 
+#include "linux/idr.h"
+#include "linux/rcupdate.h"
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -3392,6 +3394,21 @@ static ssize_t fuse_copy_file_range(struct file *src_file, loff_t src_off,
 	return ret;
 }
 
+static void fuse_file_show_fdinfo(struct seq_file *seq, struct file *f)
+{
+	struct fuse_file *ff = f->private_data;
+	struct fuse_conn *fc = ff->fm->fc;
+	struct file *backing_file = fuse_file_passthrough(ff);
+
+	seq_printf(seq, "fuse conn:%u open_flags:%u\n", fc->dev, ff->open_flags);
+
+	if (backing_file) {
+		seq_puts(seq, "fuse backing_file: ");
+		seq_file_path(seq, backing_file, " \t\n\\");
+		seq_puts(seq, "\n");
+	}
+}
+
 static const struct file_operations fuse_file_operations = {
 	.llseek		= fuse_file_llseek,
 	.read_iter	= fuse_file_read_iter,
@@ -3411,6 +3428,9 @@ static const struct file_operations fuse_file_operations = {
 	.poll		= fuse_file_poll,
 	.fallocate	= fuse_file_fallocate,
 	.copy_file_range = fuse_copy_file_range,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo	= fuse_file_show_fdinfo,
+#endif
 };
 
 static const struct address_space_operations fuse_file_aops  = {
