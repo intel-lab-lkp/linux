@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/proximity/nicera,d3323aa.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nicera D3-323-AA PIR sensor
+
+maintainers:
+  - Waqar Hameed <waqar.hameed@axis.com>
+
+description: |
+  PIR sensor for human detection.
+  Datasheet: https://www.endrich.com/Datenbl%C3%A4tter/Sensoren/D3-323-AA_e.pdf
+
+properties:
+  compatible:
+    const: nicera,d3323aa
+
+  vdd-gpio:
+    maxItems: 1
+    description:
+      GPIO for supply voltage (1.8 to 5.5 V).
+      This GPIO will be driven low by the driver in order to cut the supply and
+      reset the device (driving it then back to high to power it on).
+
+  clk-vout-gpio:
+    maxItems: 1
+    description:
+      GPIO for clock and detection.
+      After reset, the device signals with two falling edges on this pin that it
+      is ready for configuration (within 1.2 s), which the driver listens for as
+      interrupts.
+      During configuration, it is used as clock for data reading and writing (on
+      data-gpio). The driver drives this pin with the frequency of 1 kHz (bit
+      banging).
+      After all this, the device is now in operational mode and signals on this
+      pin for any detections. The driver listens for this as interrupts.
+
+  data-gpio:
+    maxItems: 1
+    description:
+      GPIO for data reading and writing.
+      During configuration, configuration data will be written and read back
+      with bit banging (together with clk-vout-gpio as clock).
+      After this, during operational mode, the device will output serial data on
+      this GPIO. However, the driver currently doesn't read this.
+
+required:
+  - compatible
+  - vdd-gpio
+  - clk-vout-gpio
+  - data-gpio
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    proximity {
+        compatible = "nicera,d3323aa";
+        vdd-gpio = <&gpio 73 0>;
+        clk-vout-gpio = <&gpio 78 0>;
+        data-gpio = <&gpio 76 0>;
+    };
+...
