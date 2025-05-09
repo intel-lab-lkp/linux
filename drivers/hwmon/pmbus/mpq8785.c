@@ -8,7 +8,9 @@
 #include <linux/of_device.h>
 #include "pmbus.h"
 
-enum chips { mpq8785 };
+#define PMBUS_READ_TEMPERATURE_1_SIGN	BIT(9)
+
+enum chips { mpq8785, mpm82504 };
 
 static int mpq8785_identify(struct i2c_client *client,
 			    struct pmbus_driver_info *info)
@@ -36,6 +38,23 @@ static int mpq8785_identify(struct i2c_client *client,
 	return 0;
 };
 
+static int mpm82504_read_word_data(struct i2c_client *client, int page,
+				   int phase, int reg)
+{
+	int ret;
+
+	ret = pmbus_read_word_data(client, page, phase, reg);
+
+	if (ret < 0 || reg != PMBUS_READ_TEMPERATURE_1)
+		return ret;
+
+	/* Fix PMBUS_READ_TEMPERATURE_1 signedness */
+	if (ret & PMBUS_READ_TEMPERATURE_1_SIGN)
+		ret |= GENMASK(15, 10);
+
+	return ret;
+}
+
 static struct pmbus_driver_info mpq8785_info = {
 	.pages = 1,
 	.format[PSC_VOLTAGE_IN] = direct,
@@ -59,12 +78,14 @@ static struct pmbus_driver_info mpq8785_info = {
 
 static const struct i2c_device_id mpq8785_id[] = {
 	{ "mpq8785", mpq8785 },
+	{ "mpm82504", mpm82504 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, mpq8785_id);
 
 static const struct of_device_id __maybe_unused mpq8785_of_match[] = {
 	{ .compatible = "mps,mpq8785", .data = (void *)mpq8785 },
+	{ .compatible = "mps,mpm82504", .data = (void *)mpm82504 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, mpq8785_of_match);
@@ -87,6 +108,13 @@ static int mpq8785_probe(struct i2c_client *client)
 	switch (chip_id) {
 	case mpq8785:
 		info->identify = mpq8785_identify;
+		break;
+	case mpm82504:
+		info->format[PSC_VOLTAGE_OUT] = direct;
+		info->m[PSC_VOLTAGE_OUT] = 8;
+		info->b[PSC_VOLTAGE_OUT] = 0;
+		info->R[PSC_VOLTAGE_OUT] = 2;
+		info->read_word_data = mpm82504_read_word_data;
 		break;
 	default:
 		return -ENODEV;
