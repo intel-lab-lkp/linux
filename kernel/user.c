@@ -65,6 +65,8 @@ struct user_namespace init_user_ns = {
 			.nr_extents = 1,
 		},
 	},
+	.ns_node = LIST_HEAD_INIT(init_user_ns.ns_node),
+	.children = LIST_HEAD_INIT(init_user_ns.children),
 	.ns.count = REFCOUNT_INIT(3),
 	.owner = GLOBAL_ROOT_UID,
 	.group = GLOBAL_ROOT_GID,
