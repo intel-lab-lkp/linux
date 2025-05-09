@@ -1027,7 +1027,7 @@ Out_no_poly1305_64:
 SYM_FUNC_END(poly1305_64s)
 
 #
-# Input: r3 = h, r4 = s, r5 = mac
+# Input: r3 = h, r4 = mac, r5 = s
 # mac = h + s
 #
 SYM_FUNC_START(poly1305_emit_arch)
@@ -1051,14 +1051,14 @@ SYM_FUNC_START(poly1305_emit_arch)
 	mr	12, 8
 
 Skip_h64:
-	ld	6, 0(4)
-	ld	7, 8(4)
+	ld	6, 0(5)
+	ld	7, 8(5)
 	addc	10, 10, 6
 	adde	11, 11, 7
 	addze	12, 12
 
-	std	10, 0(5)
-	std	11, 8(5)
+	std	10, 0(4)
+	std	11, 8(4)
 	blr
 SYM_FUNC_END(poly1305_emit_arch)
 
