@@ -7,6 +7,7 @@ Supported chips:
 
   * MPS MPQ8785
   * MPS MPM82504
+  * MPS MPM3695 family
 
     Prefix: 'mpq8785'
 
@@ -29,6 +30,14 @@ The device can also operate in parallel with the MPM3695-100 and additional
 MPM82504 devices to provide a higher output current. The MPM82504 operates
 at high efficiency across a wide load range.
 
+The MPM3695 family is a scalable, ultra-thin, fully integrated power module with
+a PMBus interface. It offers a complete power solution that achieves up to
+10A (-10 variant), 20A (-25 variant), 25A (-20 variant), 100A (-100 variant)
+of output current with excellent load and line regulation across a wide input
+voltage range. It operates at high efficiency over a wide load range, and can
+be parallled to deliver higher current. Variants -10,-20 and -100 have different
+voltage scale configuration register range (10 bits) than -25 version (11 bits).
+
 The PMBus interface provides converter configurations and key parameters
 monitoring.
 
@@ -41,10 +50,6 @@ applications.
 Fully integrated protection features include over-current protection (OCP),
 over-voltage protection (OVP), under-voltage protection (UVP), and
 over-temperature protection (OTP).
-
-All supported modules require a minimal number of readily available, standard
-external components. The MPQ8785 is available in a TLGA (5mmx6mm) package
-and the MPM82504 is available in a BGA (15mmx30mmx5.18mm) package.
 
 Device compliant with:
 
