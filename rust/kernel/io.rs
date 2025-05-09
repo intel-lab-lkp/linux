@@ -483,3 +483,89 @@ unsafe impl<const SIZE: usize> IoAccess<SIZE> for PortIo<SIZE> {
         read32_unchecked, inl, write32_unchecked, outl, u32;
     );
 }
+
+/// Io that can be either PortIo or MMIo,
+/// starting at the base address [`addr`] and spanning [`maxsize`] bytes.
+///
+/// The creator (usually a subsystem / bus such as PCI) is responsible for creating the
+/// mapping, performing an additional region request, etc.
+///
+/// # Invariants
+///
+/// [`addr`] is the start and [`maxsize`] the length of a valid io region of size [`maxsize`].
+///
+/// [`addr`] is valid to access with the C [`ioread`]/[`iowrite`] family of functions.
+///
+/// [`addr`]: IoAccess::addr
+/// [`maxsize`]: IoAccess::maxsize
+/// [`ioread`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
+/// [`iowrite`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct Io<const SIZE: usize = 0>(IoRaw<SIZE>);
+
+impl<const SIZE: usize> Io<SIZE> {
+    /// Convert a [`IoRaw`] into an [`Io`] instance, providing the accessors to the
+    /// Io mapping.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that `addr` is the start of a valid I/O region of size `maxsize`.
+    ///
+    /// ```
+    /// use kernel::io::{IoRaw, Io, IoAccess};
+    ///
+    /// let raw = IoRaw::<2>::new(0xDEADBEEFC0DE, 2).unwrap();
+    /// // SAFETY: test, value is not actually written to.
+    /// let io: Io<2> = unsafe { Io::from_raw(raw) };
+    /// # assert_eq!(0xDEADBEEFC0DE, io.addr());
+    /// # assert_eq!(2, io.maxsize());
+    /// ```
+    pub unsafe fn from_raw(raw: IoRaw<SIZE>) -> Self {
+        Self(raw)
+    }
+
+    /// Convert a ref to [`IoRaw`] into an [`Io`] instance, providing the accessors to
+    /// the Io mapping.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of
+    /// size `maxsize`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::io::{IoRaw, Io, IoAccess};
+    ///
+    /// let raw = IoRaw::<2>::new(0xDEADBEEFC0DE, 2).unwrap();
+    /// // SAFETY: test, value is not actually written to.
+    /// let io: &Io<2> = unsafe { Io::from_raw_ref(&raw) };
+    /// # assert_eq!(raw.addr(), io.addr());
+    /// # assert_eq!(raw.maxsize(), io.maxsize());
+    /// ```
+    #[inline]
+    pub unsafe fn from_raw_ref(raw: &IoRaw<SIZE>) -> &Self {
+        // SAFETY: `Io` is a transparent wrapper around `IoRaw`.
+        unsafe { &*core::ptr::from_ref(raw).cast() }
+    }
+}
+
+// SAFETY: as per invariant `raw` is valid
+unsafe impl<const SIZE: usize> IoAccess<SIZE> for Io<SIZE> {
+    #[inline]
+    fn addr(&self) -> usize {
+        self.0.addr()
+    }
+
+    #[inline]
+    fn maxsize(&self) -> usize {
+        self.0.maxsize()
+    }
+
+    impl_accessor_fn!(
+        read8_unchecked, ioread8, write8_unchecked, iowrite8, u8;
+        read16_unchecked, ioread16, write16_unchecked, iowrite16, u16;
+        read32_unchecked, ioread32, write32_unchecked, iowrite32, u32;
+    );
+}

@@ -71,3 +71,11 @@ define_rust_pio_read_helper(inl, u32);
 define_rust_pio_write_helper(outb, u8);
 define_rust_pio_write_helper(outw, u16);
 define_rust_pio_write_helper(outl, u32);
+
+define_rust_mmio_read_helper(ioread8, u8);
+define_rust_mmio_read_helper(ioread16, u16);
+define_rust_mmio_read_helper(ioread32, u32);
+
+define_rust_mmio_write_helper(iowrite8, u8);
+define_rust_mmio_write_helper(iowrite16, u16);
+define_rust_mmio_write_helper(iowrite32, u32);
