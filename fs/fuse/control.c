@@ -20,7 +20,7 @@
  */
 static struct super_block *fuse_control_sb;
 
-static struct fuse_conn *fuse_ctl_file_conn_get(struct file *file)
+static struct fuse_conn *fuse_ctl_file_conn_get(const struct file *file)
 {
 	struct fuse_conn *fc;
 	mutex_lock(&fuse_mutex);
