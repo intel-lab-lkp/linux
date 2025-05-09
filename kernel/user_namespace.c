@@ -196,6 +196,15 @@ int unshare_userns(unsigned long unshare_flags, struct cred **new_cred)
 	return err;
 }
 
+static void __free_user_ns(struct rcu_head *p)
+{
+	struct user_namespace *ns =
+		container_of(p, struct user_namespace, rcu);
+
+	list_del_rcu(&ns->ns_node);
+	kmem_cache_free(user_ns_cachep, ns);
+}
+
 static void free_user_ns(struct work_struct *work)
 {
 	struct user_namespace *parent, *ns =
@@ -220,10 +229,9 @@ static void free_user_ns(struct work_struct *work)
 		kfree(ns->binfmt_misc);
 #endif
 		retire_userns_sysctls(ns);
-		list_del_rcu(&ns->ns_node);
 		key_free_user_ns(ns);
 		ns_free_inum(&ns->ns);
-		kmem_cache_free(user_ns_cachep, ns);
+		call_rcu(&ns->rcu, __free_user_ns);
 		dec_user_namespaces(ucounts);
 		ns = parent;
 	} while (refcount_dec_and_test(&parent->ns.count));
