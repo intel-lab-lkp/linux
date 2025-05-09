@@ -350,7 +350,7 @@ static void cm_free_priv_msg(struct ib_mad_send_buf *msg)
 
 	lockdep_assert_held(&cm_id_priv->lock);
 
-	if (!WARN_ON(cm_id_priv->msg != msg))
+	if (cm_id_priv->msg == msg)
 		cm_id_priv->msg = NULL;
 
 	if (msg->ah)
