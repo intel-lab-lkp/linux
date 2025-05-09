@@ -7,6 +7,8 @@
 #include <linux/fs.h>
 #include <asm/siginfo.h>
 
+struct sockaddr_un;
+
 #ifdef CONFIG_COREDUMP
 struct core_vma_metadata {
 	unsigned long start, end;
@@ -74,6 +76,18 @@ static inline void do_coredump(const kernel_siginfo_t *siginfo) {}
 extern void validate_coredump_safety(void);
 #else
 static inline void validate_coredump_safety(void) {}
+#endif
+
+#if defined(CONFIG_COREDUMP) && defined(CONFIG_UNIX)
+int unix_may_bind_coredump_addr(struct net *net, struct sockaddr_un *sunname,
+				int len);
+#elif defined(CONFIG_UNIX)
+static inline int unix_may_bind_coredump_addr(struct net *net,
+					      struct sockaddr_un *sunname,
+					      int len)
+{
+	return 0;
+}
 #endif
 
 #endif /* _LINUX_COREDUMP_H */

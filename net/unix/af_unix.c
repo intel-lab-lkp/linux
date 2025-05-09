@@ -101,6 +101,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <linux/coredump.h>
 #include <net/af_unix.h>
 #include <net/net_namespace.h>
 #include <net/scm.h>
@@ -434,6 +435,18 @@ static struct sock *__unix_find_socket_byname(struct net *net,
 			return s;
 	}
 	return NULL;
+}
+
+static int unix_may_bind_name(struct net *net, struct sockaddr_un *sunname,
+			      int len, unsigned int hash)
+{
+	struct sock *s;
+
+	s = __unix_find_socket_byname(net, sunname, len, hash);
+	if (s)
+		return -EADDRINUSE;
+
+	return unix_may_bind_coredump_addr(net, sunname, len);
 }
 
 static inline struct sock *unix_find_socket_byname(struct net *net,
@@ -1258,10 +1271,10 @@ retry:
 	new_hash = unix_abstract_hash(addr->name, addr->len, sk->sk_type);
 	unix_table_double_lock(net, old_hash, new_hash);
 
-	if (__unix_find_socket_byname(net, addr->name, addr->len, new_hash)) {
+	if (unix_may_bind_name(net, addr->name, addr->len, new_hash)) {
 		unix_table_double_unlock(net, old_hash, new_hash);
 
-		/* __unix_find_socket_byname() may take long time if many names
+		/* unix_may_bind_name() may take long time if many names
 		 * are already in use.
 		 */
 		cond_resched();
@@ -1379,7 +1392,8 @@ static int unix_bind_abstract(struct sock *sk, struct sockaddr_un *sunaddr,
 	new_hash = unix_abstract_hash(addr->name, addr->len, sk->sk_type);
 	unix_table_double_lock(net, old_hash, new_hash);
 
-	if (__unix_find_socket_byname(net, addr->name, addr->len, new_hash))
+	err = unix_may_bind_name(net, addr->name, addr->len, new_hash);
+	if (err)
 		goto out_spin;
 
 	__unix_set_addr_hash(net, sk, addr, new_hash);
@@ -1389,7 +1403,6 @@ static int unix_bind_abstract(struct sock *sk, struct sockaddr_un *sunaddr,
 
 out_spin:
 	unix_table_double_unlock(net, old_hash, new_hash);
-	err = -EADDRINUSE;
 out_mutex:
 	mutex_unlock(&u->bindlock);
 out:

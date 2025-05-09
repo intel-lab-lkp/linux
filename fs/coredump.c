@@ -44,7 +44,11 @@
 #include <linux/sysctl.h>
 #include <linux/elf.h>
 #include <linux/pidfs.h>
+#include <linux/net.h>
+#include <linux/socket.h>
+#include <net/net_namespace.h>
 #include <uapi/linux/pidfd.h>
+#include <uapi/linux/un.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -79,6 +83,7 @@ unsigned int core_file_note_size_limit = CORE_FILE_NOTE_SIZE_DEFAULT;
 enum coredump_type_t {
 	COREDUMP_FILE = 1,
 	COREDUMP_PIPE = 2,
+	COREDUMP_SOCK = 3,
 };
 
 struct core_name {
@@ -232,13 +237,16 @@ static int format_corename(struct core_name *cn, struct coredump_params *cprm,
 	cn->corename = NULL;
 	if (*pat_ptr == '|')
 		cn->core_type = COREDUMP_PIPE;
+	else if (*pat_ptr == '@')
+		cn->core_type = COREDUMP_SOCK;
 	else
 		cn->core_type = COREDUMP_FILE;
 	if (expand_corename(cn, core_name_size))
 		return -ENOMEM;
 	cn->corename[0] = '\0';
 
-	if (cn->core_type == COREDUMP_PIPE) {
+	switch (cn->core_type) {
+	case COREDUMP_PIPE: {
 		int argvs = sizeof(core_pattern) / 2;
 		(*argv) = kmalloc_array(argvs, sizeof(**argv), GFP_KERNEL);
 		if (!(*argv))
@@ -247,6 +255,34 @@ static int format_corename(struct core_name *cn, struct coredump_params *cprm,
 		++pat_ptr;
 		if (!(*pat_ptr))
 			return -ENOMEM;
+		break;
+	}
+	case COREDUMP_SOCK: {
+		err = cn_printf(cn, "%s", pat_ptr);
+		if (err)
+			return err;
+
+		/*
+		 * We can potentially allow this to be changed later but
+		 * I currently see no reason to.
+		 */
+		if (strcmp(cn->corename, "@linuxafsk/coredump.socket"))
+			return -EINVAL;
+
+		/*
+		 * Currently no need to parse any other options.
+		 * Relevant information can be retrieved from the peer
+		 * pidfd retrievable via SO_PEERPIDFD by the receiver or
+		 * via /proc/<pid>, using the SO_PEERPIDFD to guard
+		 * against pid recycling when opening /proc/<pid>.
+		 */
+		return 0;
+	}
+	case COREDUMP_FILE:
+		break;
+	default:
+		WARN_ON_ONCE(true);
+		return -EINVAL;
 	}
 
 	/* Repeat as long as we have more pattern to process and more output
@@ -393,11 +429,20 @@ out:
 	 * If core_pattern does not include a %p (as is the default)
 	 * and core_uses_pid is set, then .%pid will be appended to
 	 * the filename. Do not do this for piped commands. */
-	if (!(cn->core_type == COREDUMP_PIPE) && !pid_in_pattern && core_uses_pid) {
-		err = cn_printf(cn, ".%d", task_tgid_vnr(current));
-		if (err)
-			return err;
+	if (!pid_in_pattern && core_uses_pid) {
+		switch (cn->core_type) {
+		case COREDUMP_FILE:
+			return cn_printf(cn, ".%d", task_tgid_vnr(current));
+		case COREDUMP_PIPE:
+			break;
+		case COREDUMP_SOCK:
+			break;
+		default:
+			WARN_ON_ONCE(true);
+			return -EINVAL;
+		}
 	}
+
 	return 0;
 }
 
@@ -582,6 +627,37 @@ static int umh_coredump_setup(struct subprocess_info *info, struct cred *new)
 
 	return 0;
 }
+
+#ifdef CONFIG_UNIX
+static const struct sockaddr_un coredump_unix_socket = {
+	.sun_family = AF_UNIX,
+	.sun_path = "\0linuxafsk/coredump.socket",
+};
+/* Without trailing NUL byte. */
+#define COREDUMP_UNIX_SOCKET_ADDR_SIZE            \
+	(offsetof(struct sockaddr_un, sun_path) + \
+	 sizeof("\0linuxafsk/coredump.socket") - 1)
+
+/*
+ * Ensure that only a process privileged over the initial network
+ * namespace can bind the coredump server address. Protect us against
+ * the coredump server crashing, or intentionally restarting and an
+ * unprivileged process binding the coredump server address to receive
+ * coredumps.
+ */
+int unix_may_bind_coredump_addr(struct net *net, struct sockaddr_un *sunname, int len)
+{
+	if (net != &init_net)
+		return 0;
+	if (COREDUMP_UNIX_SOCKET_ADDR_SIZE != len)
+		return 0;
+	if (memcmp(&coredump_unix_socket, sunname, len))
+		return 0;
+	if (ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return 0;
+	return -ECONNREFUSED;
+}
+#endif
 
 void do_coredump(const kernel_siginfo_t *siginfo)
 {
@@ -801,6 +877,45 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		}
 		break;
 	}
+	case COREDUMP_SOCK: {
+#ifdef CONFIG_UNIX
+		struct file *file __free(fput) = NULL;
+		struct socket *socket;
+
+		/*
+		 * It is possible that the userspace process which is
+		 * supposed to handle the coredump and is listening on
+		 * the AF_UNIX socket coredumps. Userspace should just
+		 * mark itself non dumpable.
+		 */
+
+		retval = sock_create_kern(&init_net, AF_UNIX, SOCK_STREAM, 0, &socket);
+		if (retval < 0)
+			goto close_fail;
+
+		file = sock_alloc_file(socket, 0, NULL);
+		if (IS_ERR(file)) {
+			sock_release(socket);
+			goto close_fail;
+		}
+
+		retval = kernel_connect(socket,
+					(struct sockaddr *)(&coredump_unix_socket),
+					COREDUMP_UNIX_SOCKET_ADDR_SIZE, O_NONBLOCK);
+		if (retval) {
+			if (retval == -EAGAIN)
+				coredump_report_failure("Skipping as coredump socket connection %s couldn't complete immediately", cn.corename);
+			goto close_fail;
+		}
+
+		cprm.limit = RLIM_INFINITY;
+		cprm.file = no_free_ptr(file);
+#else
+		coredump_report_failure("Core dump socket support %s disabled", cn.corename);
+		goto close_fail;
+#endif
+		break;
+	}
 	default:
 		WARN_ON_ONCE(true);
 		goto close_fail;
@@ -838,8 +953,32 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		file_end_write(cprm.file);
 		free_vma_snapshot(&cprm);
 	}
-	if ((cn.core_type == COREDUMP_PIPE) && core_pipe_limit)
-		wait_for_dump_helpers(cprm.file);
+
+	/*
+	 * When core_pipe_limit is set we wait for the coredump server
+	 * or usermodehelper to finish before exiting so it can e.g.,
+	 * inspect /proc/<pid>.
+	 */
+	if (core_pipe_limit) {
+		switch (cn.core_type) {
+		case COREDUMP_PIPE:
+			wait_for_dump_helpers(cprm.file);
+			break;
+		case COREDUMP_SOCK: {
+			/*
+			 * We use a simple read to wait for the coredump
+			 * processing to finish. Either the socket is
+			 * closed or we get sent unexpected data. In
+			 * both cases, we're done.
+			 */
+			__kernel_read(cprm.file, &(char){}, 1, NULL);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
 close_fail:
 	if (cprm.file)
 		filp_close(cprm.file, NULL);
@@ -1069,7 +1208,7 @@ EXPORT_SYMBOL(dump_align);
 void validate_coredump_safety(void)
 {
 	if (suid_dumpable == SUID_DUMP_ROOT &&
-	    core_pattern[0] != '/' && core_pattern[0] != '|') {
+	    core_pattern[0] != '/' && core_pattern[0] != '|' && core_pattern[0] != '@') {
 
 		coredump_report_failure("Unsafe core_pattern used with fs.suid_dumpable=2: "
 			"pipe handler or fully qualified core dump path required. "
