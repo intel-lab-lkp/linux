@@ -655,8 +655,7 @@ static void mipi_csis_set_params(struct mipi_csis_device *csis,
 	val = mipi_csis_read(csis, MIPI_CSIS_CMN_CTRL);
 	val &= ~MIPI_CSIS_CMN_CTRL_LANE_NR_MASK;
 	val |= (lanes - 1) << MIPI_CSIS_CMN_CTRL_LANE_NR_OFFSET;
-	if (csis->info->version == MIPI_CSIS_V3_3)
-		val |= MIPI_CSIS_CMN_CTRL_INTER_MODE;
+	val |= MIPI_CSIS_CMN_CTRL_INTER_MODE; /* enable filtering by DT */
 	mipi_csis_write(csis, MIPI_CSIS_CMN_CTRL, val);
 
 	__mipi_csis_set_format(csis, format, csis_fmt);
