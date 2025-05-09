@@ -55,6 +55,7 @@
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
+#include <net/page_pool/types.h> /* for page pool checking */
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -899,7 +900,7 @@ static inline bool page_expected_state(struct page *page,
 			page->memcg_data |
 #endif
 #ifdef CONFIG_PAGE_POOL
-			((page->pp_magic & ~0x3UL) == PP_SIGNATURE) |
+			(is_pp_page(page)) |
 #endif
 			(page->flags & check_flags)))
 		return false;
@@ -928,7 +929,7 @@ static const char *page_bad_reason(struct page *page, unsigned long flags)
 		bad_reason = "page still charged to cgroup";
 #endif
 #ifdef CONFIG_PAGE_POOL
-	if (unlikely((page->pp_magic & ~0x3UL) == PP_SIGNATURE))
+	if (unlikely(is_pp_page(page)))
 		bad_reason = "page_pool leak";
 #endif
 	return bad_reason;
