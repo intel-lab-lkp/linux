@@ -66,7 +66,8 @@
 		| UBLK_F_USER_COPY \
 		| UBLK_F_ZONED \
 		| UBLK_F_USER_RECOVERY_FAIL_IO \
-		| UBLK_F_UPDATE_SIZE)
+		| UBLK_F_UPDATE_SIZE \
+		| UBLK_F_AUTO_BUF_REG)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -80,6 +81,9 @@
 
 struct ublk_rq_data {
 	refcount_t ref;
+
+	/* for auto-unregister buffer in case of UBLK_F_AUTO_BUF_REG */
+	unsigned short buf_index;
 };
 
 struct ublk_uring_cmd_pdu {
@@ -101,6 +105,9 @@ struct ublk_uring_cmd_pdu {
 	 * setup in ublk uring_cmd handler
 	 */
 	struct ublk_queue *ubq;
+
+	struct ublk_auto_buf_reg buf;
+
 	u16 tag;
 };
 
@@ -630,7 +637,7 @@ static inline bool ublk_support_zero_copy(const struct ublk_queue *ubq)
 
 static inline bool ublk_support_auto_buf_reg(const struct ublk_queue *ubq)
 {
-	return false;
+	return ubq->flags & UBLK_F_AUTO_BUF_REG;
 }
 
 static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
@@ -1175,20 +1182,38 @@ static inline void __ublk_abort_rq(struct ublk_queue *ubq,
 		blk_mq_end_request(rq, BLK_STS_IOERR);
 }
 
+static void ublk_auto_buf_reg_fallback(struct request *req, struct ublk_io *io,
+				       unsigned int issue_flags)
+{
+	const struct ublk_queue *ubq = req->mq_hctx->driver_data;
+	struct ublksrv_io_desc *iod = ublk_get_iod(ubq, req->tag);
+	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
+
+	iod->op_flags |= UBLK_IO_F_NEED_REG_BUF;
+	refcount_set(&data->ref, 1);
+	ublk_complete_io_cmd(io, req, UBLK_IO_RES_OK, issue_flags);
+}
+
 static bool ublk_auto_buf_reg(struct request *req, struct ublk_io *io,
 			      unsigned int issue_flags)
 {
+	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(io->cmd);
 	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
 	int ret;
 
-	ret = io_buffer_register_bvec(io->cmd, req, ublk_io_release, 0,
-				      issue_flags);
+	ret = io_buffer_register_bvec(io->cmd, req, ublk_io_release,
+				      pdu->buf.index, issue_flags);
 	if (ret) {
-		blk_mq_end_request(req, BLK_STS_IOERR);
+		if (pdu->buf.flags & UBLK_AUTO_BUF_REG_FALLBACK)
+			ublk_auto_buf_reg_fallback(req, io, issue_flags);
+		else
+			blk_mq_end_request(req, BLK_STS_IOERR);
 		return false;
 	}
 	/* one extra reference is dropped by ublk_io_release */
 	refcount_set(&data->ref, 2);
+	/* store buffer index in request payload */
+	data->buf_index = pdu->buf.index;
 	io->flags |= UBLK_IO_FLAG_AUTO_BUF_REG;
 	return true;
 }
@@ -1952,6 +1977,20 @@ static inline void ublk_prep_cancel(struct io_uring_cmd *cmd,
 	io_uring_cmd_mark_cancelable(cmd, issue_flags);
 }
 
+static inline bool ublk_set_auto_buf_reg(struct io_uring_cmd *cmd)
+{
+	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+
+	pdu->buf = ublk_sqe_addr_to_auto_buf_reg(READ_ONCE(cmd->sqe->addr));
+
+	if (pdu->buf.reserved0 || pdu->buf.reserved1)
+		return false;
+
+	if (pdu->buf.flags & ~UBLK_AUTO_BUF_REG_F_MASK)
+		return false;
+	return true;
+}
+
 static void ublk_io_release(void *priv)
 {
 	struct request *rq = priv;
@@ -2041,9 +2080,13 @@ out:
 	return ret;
 }
 
-static void ublk_auto_buf_unreg(struct ublk_io *io, unsigned int issue_flags)
+static void ublk_auto_buf_unreg(struct ublk_io *io, struct request *req,
+				unsigned int issue_flags)
 {
-	WARN_ON_ONCE(io_buffer_unregister_bvec(io->cmd, 0, issue_flags));
+	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
+
+	WARN_ON_ONCE(io_buffer_unregister_bvec(io->cmd, data->buf_index,
+				issue_flags));
 	io->flags &= ~UBLK_IO_FLAG_AUTO_BUF_REG;
 }
 
@@ -2080,7 +2123,7 @@ static int ublk_commit_and_fetch(const struct ublk_queue *ubq,
 		req->__sector = ub_cmd->zone_append_lba;
 
 	if (io->flags & UBLK_IO_FLAG_AUTO_BUF_REG)
-		ublk_auto_buf_unreg(io, issue_flags);
+		ublk_auto_buf_unreg(io, req, issue_flags);
 
 	if (likely(!blk_should_fake_timeout(req->q)))
 		ublk_put_req_ref(ubq, req);
@@ -2196,6 +2239,10 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	default:
 		goto out;
 	}
+
+	if (ublk_support_auto_buf_reg(ubq) && !ublk_set_auto_buf_reg(cmd))
+		return -EINVAL;
+
 	ublk_prep_cancel(cmd, issue_flags, ubq, tag);
 	return -EIOCBQUEUED;
 
@@ -2806,8 +2853,11 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		 * For USER_COPY, we depends on userspace to fill request
 		 * buffer by pwrite() to ublk char device, which can't be
 		 * used for unprivileged device
+		 *
+		 * Same with zero copy or auto buffer register.
 		 */
-		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY))
+		if (info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
+					UBLK_F_AUTO_BUF_REG))
 			return -EINVAL;
 	}
 
@@ -2865,7 +2915,8 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 		UBLK_F_URING_CMD_COMP_IN_TASK;
 
 	/* GET_DATA isn't needed any more with USER_COPY or ZERO COPY */
-	if (ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY))
+	if (ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
+				UBLK_F_AUTO_BUF_REG))
 		ub->dev_info.flags &= ~UBLK_F_NEED_GET_DATA;
 
 	/*
