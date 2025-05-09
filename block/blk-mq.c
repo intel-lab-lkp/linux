@@ -1386,6 +1386,30 @@ static inline unsigned short blk_plug_max_rq_count(struct blk_plug *plug)
 	return BLK_MAX_REQUEST_COUNT;
 }
 
+/*
+ * If a bio is split, the bio fragments are submitted in opposite order. Hence
+ * this function that inserts in LBA order in the plug list.
+ */
+static inline void rq_list_insert_sorted(struct rq_list *rl, struct request *rq)
+{
+	sector_t rq_pos = rq->bio->bi_iter.bi_sector;
+	struct request *next, *prev;
+
+	for (prev = NULL, next = rl->head; next;
+	     prev = next, next = next->rq_next)
+		if (next->q == rq->q && rq_pos < next->bio->bi_iter.bi_sector)
+			break;
+
+	if (!prev) {
+		rq_list_add_head(rl, rq);
+	} else if (!next) {
+		rq_list_add_tail(rl, rq);
+	} else {
+		prev->rq_next = rq;
+		rq->rq_next = next;
+	}
+}
+
 static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 {
 	struct request *last = rq_list_peek(&plug->mq_list);
@@ -1408,7 +1432,7 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 	 */
 	if (!plug->has_elevator && (rq->rq_flags & RQF_SCHED_TAGS))
 		plug->has_elevator = true;
-	rq_list_add_tail(&plug->mq_list, rq);
+	rq_list_insert_sorted(&plug->mq_list, rq);
 	plug->rq_count++;
 }
 
