@@ -93,7 +93,8 @@ struct intel_dpll_funcs {
 	 */
 	bool (*get_hw_state)(struct intel_display *display,
 			     struct intel_dpll *pll,
-			     struct intel_dpll_hw_state *dpll_hw_state);
+			     struct intel_dpll_hw_state *dpll_hw_state,
+			     struct intel_encoder *encoder);
 
 	/*
 	 * Hook for calculating the pll's output frequency based on its passed
@@ -534,7 +535,8 @@ void intel_dpll_swap_state(struct intel_atomic_state *state)
 
 static bool ibx_pch_dpll_get_hw_state(struct intel_display *display,
 				      struct intel_dpll *pll,
-				      struct intel_dpll_hw_state *dpll_hw_state)
+				      struct intel_dpll_hw_state *dpll_hw_state,
+				      struct intel_encoder *encoder)
 {
 	struct i9xx_dpll_hw_state *hw_state = &dpll_hw_state->i9xx;
 	const enum intel_dpll_id id = pll->info->id;
@@ -757,7 +759,8 @@ static void hsw_ddi_spll_disable(struct intel_display *display,
 
 static bool hsw_ddi_wrpll_get_hw_state(struct intel_display *display,
 				       struct intel_dpll *pll,
-				       struct intel_dpll_hw_state *dpll_hw_state)
+				       struct intel_dpll_hw_state *dpll_hw_state,
+				       struct intel_encoder *encoder)
 {
 	struct hsw_dpll_hw_state *hw_state = &dpll_hw_state->hsw;
 	const enum intel_dpll_id id = pll->info->id;
@@ -779,7 +782,8 @@ static bool hsw_ddi_wrpll_get_hw_state(struct intel_display *display,
 
 static bool hsw_ddi_spll_get_hw_state(struct intel_display *display,
 				      struct intel_dpll *pll,
-				      struct intel_dpll_hw_state *dpll_hw_state)
+				      struct intel_dpll_hw_state *dpll_hw_state,
+				      struct intel_encoder *encoder)
 {
 	struct hsw_dpll_hw_state *hw_state = &dpll_hw_state->hsw;
 	intel_wakeref_t wakeref;
@@ -1305,7 +1309,8 @@ static void hsw_ddi_lcpll_disable(struct intel_display *display,
 
 static bool hsw_ddi_lcpll_get_hw_state(struct intel_display *display,
 				       struct intel_dpll *pll,
-				       struct intel_dpll_hw_state *dpll_hw_state)
+				       struct intel_dpll_hw_state *dpll_hw_state,
+				       struct intel_encoder *encoder)
 {
 	return true;
 }
@@ -1436,7 +1441,8 @@ static void skl_ddi_dpll0_disable(struct intel_display *display,
 
 static bool skl_ddi_pll_get_hw_state(struct intel_display *display,
 				     struct intel_dpll *pll,
-				     struct intel_dpll_hw_state *dpll_hw_state)
+				     struct intel_dpll_hw_state *dpll_hw_state,
+				     struct intel_encoder *encoder)
 {
 	struct skl_dpll_hw_state *hw_state = &dpll_hw_state->skl;
 	const struct skl_dpll_regs *regs = skl_dpll_regs;
@@ -1474,7 +1480,8 @@ out:
 
 static bool skl_ddi_dpll0_get_hw_state(struct intel_display *display,
 				       struct intel_dpll *pll,
-				       struct intel_dpll_hw_state *dpll_hw_state)
+				       struct intel_dpll_hw_state *dpll_hw_state,
+				       struct intel_encoder *encoder)
 {
 	struct skl_dpll_hw_state *hw_state = &dpll_hw_state->skl;
 	const struct skl_dpll_regs *regs = skl_dpll_regs;
@@ -2172,7 +2179,8 @@ static void bxt_ddi_pll_disable(struct intel_display *display,
 
 static bool bxt_ddi_pll_get_hw_state(struct intel_display *display,
 				     struct intel_dpll *pll,
-				     struct intel_dpll_hw_state *dpll_hw_state)
+				     struct intel_dpll_hw_state *dpll_hw_state,
+				     struct intel_encoder *encoder)
 {
 	struct bxt_dpll_hw_state *hw_state = &dpll_hw_state->bxt;
 	enum port port = (enum port)pll->info->id; /* 1:1 port->PLL mapping */
@@ -3550,7 +3558,8 @@ static void icl_put_dplls(struct intel_atomic_state *state,
 
 static bool mg_pll_get_hw_state(struct intel_display *display,
 				struct intel_dpll *pll,
-				struct intel_dpll_hw_state *dpll_hw_state)
+				struct intel_dpll_hw_state *dpll_hw_state,
+				struct intel_encoder *encoder)
 {
 	struct icl_dpll_hw_state *hw_state = &dpll_hw_state->icl;
 	const enum intel_dpll_id id = pll->info->id;
@@ -3617,7 +3626,8 @@ out:
 
 static bool dkl_pll_get_hw_state(struct intel_display *display,
 				 struct intel_dpll *pll,
-				 struct intel_dpll_hw_state *dpll_hw_state)
+				 struct intel_dpll_hw_state *dpll_hw_state,
+				 struct intel_encoder *encoder)
 {
 	struct icl_dpll_hw_state *hw_state = &dpll_hw_state->icl;
 	const enum intel_dpll_id id = pll->info->id;
@@ -3750,7 +3760,8 @@ out:
 
 static bool combo_pll_get_hw_state(struct intel_display *display,
 				   struct intel_dpll *pll,
-				   struct intel_dpll_hw_state *dpll_hw_state)
+				   struct intel_dpll_hw_state *dpll_hw_state,
+				   struct intel_encoder *encoder)
 {
 	i915_reg_t enable_reg = intel_combo_pll_enable_reg(display, pll);
 
@@ -3759,7 +3770,8 @@ static bool combo_pll_get_hw_state(struct intel_display *display,
 
 static bool tbt_pll_get_hw_state(struct intel_display *display,
 				 struct intel_dpll *pll,
-				 struct intel_dpll_hw_state *dpll_hw_state)
+				 struct intel_dpll_hw_state *dpll_hw_state,
+				 struct intel_encoder *encoder)
 {
 	return icl_pll_get_hw_state(display, pll, dpll_hw_state, TBT_PLL_ENABLE);
 }
@@ -4516,7 +4528,7 @@ bool intel_dpll_get_hw_state(struct intel_display *display,
 			     struct intel_dpll *pll,
 			     struct intel_dpll_hw_state *dpll_hw_state)
 {
-	return pll->info->funcs->get_hw_state(display, pll, dpll_hw_state);
+	return pll->info->funcs->get_hw_state(display, pll, dpll_hw_state, NULL);
 }
 
 static void readout_dpll_hw_state(struct intel_display *display,
