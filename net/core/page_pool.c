@@ -523,7 +523,7 @@ static netmem_ref __page_pool_alloc_large_netmem(struct page_pool *pool,
 }
 
 /* slow path */
-static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
+static noinline netmem_ref __page_pool_alloc_netmems_slow(struct page_pool *pool,
 							gfp_t gfp)
 {
 	const int bulk = PP_ALLOC_CACHE_REFILL;
@@ -595,7 +595,7 @@ netmem_ref page_pool_alloc_netmems(struct page_pool *pool, gfp_t gfp)
 	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
 		netmem = pool->mp_ops->alloc_netmems(pool, gfp);
 	else
-		netmem = __page_pool_alloc_pages_slow(pool, gfp);
+		netmem = __page_pool_alloc_netmems_slow(pool, gfp);
 	return netmem;
 }
 EXPORT_SYMBOL(page_pool_alloc_netmems);
