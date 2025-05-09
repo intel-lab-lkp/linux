@@ -113,6 +113,9 @@ struct mem_cgroup_per_node {
 	CACHELINE_PADDING(_pad2_);
 	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 	struct mem_cgroup_reclaim_iter	iter;
+	/* slab stats for nmi context */
+	atomic64_t		slab_reclaimable;
+	atomic64_t		slab_unreclaimable;
 };
 
 struct mem_cgroup_threshold {
@@ -235,6 +238,9 @@ struct mem_cgroup {
 	/* memory.events */
 	atomic_long_t		memory_events[MEMCG_NR_MEMORY_EVENTS];
 	atomic_long_t		memory_events_local[MEMCG_NR_MEMORY_EVENTS];
+
+	/* MEMCG_KMEM for nmi context */
+	atomic64_t		kmem_stat;
 
 	/*
 	 * Hint of reclaim pressure for socket memroy management. Note
