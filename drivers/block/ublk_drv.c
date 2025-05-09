@@ -2057,6 +2057,12 @@ static bool ublk_get_data(const struct ublk_queue *ubq, struct ublk_io *io)
 	return ublk_start_io(ubq, req, io);
 }
 
+static bool is_io_buf_reg_unreg_cmd(unsigned int cmd_op)
+{
+	return _IOC_NR(cmd_op) == UBLK_IO_REGISTER_IO_BUF ||
+		_IOC_NR(cmd_op) == UBLK_IO_UNREGISTER_IO_BUF;
+}
+
 static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 			       unsigned int issue_flags,
 			       const struct ublksrv_io_cmd *ub_cmd)
@@ -2076,8 +2082,15 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		goto out;
 
 	ubq = ublk_get_queue(ub, ub_cmd->q_id);
-	if (ubq->ubq_daemon && ubq->ubq_daemon != current)
-		goto out;
+	/*
+	 * Both `ublk_io` and block layer request are read-only for IO
+	 * buffer register/unregister command, so the two are allowed to be
+	 * issued from other task contexts
+	 */
+	if (!is_io_buf_reg_unreg_cmd(cmd_op)) {
+		if (ubq->ubq_daemon && ubq->ubq_daemon != current)
+			goto out;
+	}
 
 	if (tag >= ubq->q_depth)
 		goto out;
