@@ -12,6 +12,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
+#include <linux/overflow.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -911,7 +912,8 @@ int regmap_add_irq_chip_fwnode(struct fwnode_handle *fwnode,
 		if (ret < 0)
 			goto err_alloc;
 
-		memcpy(d->prev_status_buf, d->status_buf, array_size(d->prev_status_buf));
+		memcpy(d->prev_status_buf, d->status_buf,
+		       array_size(d->chip->num_regs, sizeof(d->prev_status_buf[0])));
 	}
 
 	ret = regmap_irq_create_domain(fwnode, irq_base, chip, d);
