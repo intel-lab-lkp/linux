@@ -10,6 +10,7 @@
 
 #include <linux/mm.h>
 #include <net/net_debug.h>
+#include <net/netmem_type.h>
 
 /* net_iov */
 
@@ -20,15 +21,6 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
  */
 #define NET_IOV 0x01UL
 
-struct netmem_desc {
-	unsigned long __unused_padding;
-	unsigned long pp_magic;
-	struct page_pool *pp;
-	struct net_iov_area *owner;
-	unsigned long dma_addr;
-	atomic_long_t pp_ref_count;
-};
-
 struct net_iov_area {
 	/* Array of net_iovs for this area. */
 	struct netmem_desc *niovs;
@@ -37,31 +29,6 @@ struct net_iov_area {
 	/* Offset into the dma-buf where this chunk starts.  */
 	unsigned long base_virtual;
 };
-
-/* These fields in struct page are used by the page_pool and net stack:
- *
- *        struct {
- *                unsigned long pp_magic;
- *                struct page_pool *pp;
- *                unsigned long _pp_mapping_pad;
- *                unsigned long dma_addr;
- *                atomic_long_t pp_ref_count;
- *        };
- *
- * We mirror the page_pool fields here so the page_pool can access these fields
- * without worrying whether the underlying fields belong to a page or net_iov.
- *
- * The non-net stack fields of struct page are private to the mm stack and must
- * never be mirrored to net_iov.
- */
-#define NET_IOV_ASSERT_OFFSET(pg, iov)             \
-	static_assert(offsetof(struct page, pg) == \
-		      offsetof(struct netmem_desc, iov))
-NET_IOV_ASSERT_OFFSET(pp_magic, pp_magic);
-NET_IOV_ASSERT_OFFSET(pp, pp);
-NET_IOV_ASSERT_OFFSET(dma_addr, dma_addr);
-NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
-#undef NET_IOV_ASSERT_OFFSET
 
 static inline struct net_iov_area *net_iov_owner(const struct netmem_desc *niov)
 {
