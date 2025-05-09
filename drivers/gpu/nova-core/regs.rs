@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 use crate::driver::Bar0;
+use kernel::io::IoAccess;
 
 // TODO
 //
