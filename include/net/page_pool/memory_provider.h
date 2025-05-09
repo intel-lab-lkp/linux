@@ -19,9 +19,9 @@ struct memory_provider_ops {
 	void (*uninstall)(void *mp_priv, struct netdev_rx_queue *rxq);
 };
 
-bool net_mp_niov_set_dma_addr(struct net_iov *niov, dma_addr_t addr);
-void net_mp_niov_set_page_pool(struct page_pool *pool, struct net_iov *niov);
-void net_mp_niov_clear_page_pool(struct net_iov *niov);
+bool net_mp_niov_set_dma_addr(struct netmem_desc *niov, dma_addr_t addr);
+void net_mp_niov_set_page_pool(struct page_pool *pool, struct netmem_desc *niov);
+void net_mp_niov_clear_page_pool(struct netmem_desc *niov);
 
 int net_mp_open_rxq(struct net_device *dev, unsigned ifq_idx,
 		    struct pp_memory_provider_params *p);

@@ -34,7 +34,7 @@ static void __io_zcrx_unmap_area(struct io_zcrx_ifq *ifq,
 	int i;
 
 	for (i = 0; i < nr_mapped; i++) {
-		struct net_iov *niov = &area->nia.niovs[i];
+		struct netmem_desc *niov = &area->nia.niovs[i];
 		dma_addr_t dma;
 
 		dma = page_pool_get_dma_addr_netmem(net_iov_to_netmem(niov));
@@ -55,7 +55,7 @@ static int io_zcrx_map_area(struct io_zcrx_ifq *ifq, struct io_zcrx_area *area)
 	int i;
 
 	for (i = 0; i < area->nia.num_niovs; i++) {
-		struct net_iov *niov = &area->nia.niovs[i];
+		struct netmem_desc *niov = &area->nia.niovs[i];
 		dma_addr_t dma;
 
 		dma = dma_map_page_attrs(ifq->dev, area->pages[i], 0, PAGE_SIZE,
@@ -79,7 +79,7 @@ static int io_zcrx_map_area(struct io_zcrx_ifq *ifq, struct io_zcrx_area *area)
 }
 
 static void io_zcrx_sync_for_device(const struct page_pool *pool,
-				    struct net_iov *niov)
+				    struct netmem_desc *niov)
 {
 #if defined(CONFIG_HAS_DMA) && defined(CONFIG_DMA_NEED_SYNC)
 	dma_addr_t dma_addr;
@@ -106,21 +106,21 @@ struct io_zcrx_args {
 
 static const struct memory_provider_ops io_uring_pp_zc_ops;
 
-static inline struct io_zcrx_area *io_zcrx_iov_to_area(const struct net_iov *niov)
+static inline struct io_zcrx_area *io_zcrx_iov_to_area(const struct netmem_desc *niov)
 {
 	struct net_iov_area *owner = net_iov_owner(niov);
 
 	return container_of(owner, struct io_zcrx_area, nia);
 }
 
-static inline atomic_t *io_get_user_counter(struct net_iov *niov)
+static inline atomic_t *io_get_user_counter(struct netmem_desc *niov)
 {
 	struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
 
 	return &area->user_refs[net_iov_idx(niov)];
 }
 
-static bool io_zcrx_put_niov_uref(struct net_iov *niov)
+static bool io_zcrx_put_niov_uref(struct netmem_desc *niov)
 {
 	atomic_t *uref = io_get_user_counter(niov);
 
@@ -130,12 +130,12 @@ static bool io_zcrx_put_niov_uref(struct net_iov *niov)
 	return true;
 }
 
-static void io_zcrx_get_niov_uref(struct net_iov *niov)
+static void io_zcrx_get_niov_uref(struct netmem_desc *niov)
 {
 	atomic_inc(io_get_user_counter(niov));
 }
 
-static inline struct page *io_zcrx_iov_page(const struct net_iov *niov)
+static inline struct page *io_zcrx_iov_page(const struct netmem_desc *niov)
 {
 	struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
 
@@ -242,7 +242,7 @@ static int io_zcrx_create_area(struct io_zcrx_ifq *ifq,
 		goto err;
 
 	for (i = 0; i < nr_iovs; i++) {
-		struct net_iov *niov = &area->nia.niovs[i];
+		struct netmem_desc *niov = &area->nia.niovs[i];
 
 		niov->owner = &area->nia;
 		area->freelist[i] = i;
@@ -435,7 +435,7 @@ void io_unregister_zcrx_ifqs(struct io_ring_ctx *ctx)
 	io_zcrx_ifq_free(ifq);
 }
 
-static struct net_iov *__io_zcrx_get_free_niov(struct io_zcrx_area *area)
+static struct netmem_desc *__io_zcrx_get_free_niov(struct io_zcrx_area *area)
 {
 	unsigned niov_idx;
 
@@ -445,7 +445,7 @@ static struct net_iov *__io_zcrx_get_free_niov(struct io_zcrx_area *area)
 	return &area->nia.niovs[niov_idx];
 }
 
-static void io_zcrx_return_niov_freelist(struct net_iov *niov)
+static void io_zcrx_return_niov_freelist(struct netmem_desc *niov)
 {
 	struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
 
@@ -454,7 +454,7 @@ static void io_zcrx_return_niov_freelist(struct net_iov *niov)
 	spin_unlock_bh(&area->freelist_lock);
 }
 
-static void io_zcrx_return_niov(struct net_iov *niov)
+static void io_zcrx_return_niov(struct netmem_desc *niov)
 {
 	netmem_ref netmem = net_iov_to_netmem(niov);
 
@@ -476,7 +476,7 @@ static void io_zcrx_scrub(struct io_zcrx_ifq *ifq)
 
 	/* Reclaim back all buffers given to the user space. */
 	for (i = 0; i < area->nia.num_niovs; i++) {
-		struct net_iov *niov = &area->nia.niovs[i];
+		struct netmem_desc *niov = &area->nia.niovs[i];
 		int nr;
 
 		if (!atomic_read(io_get_user_counter(niov)))
@@ -532,7 +532,7 @@ static void io_zcrx_ring_refill(struct page_pool *pp,
 	do {
 		struct io_uring_zcrx_rqe *rqe = io_zcrx_get_rqe(ifq, mask);
 		struct io_zcrx_area *area;
-		struct net_iov *niov;
+		struct netmem_desc *niov;
 		unsigned niov_idx, area_idx;
 
 		area_idx = rqe->off >> IORING_ZCRX_AREA_SHIFT;
@@ -573,7 +573,7 @@ static void io_zcrx_refill_slow(struct page_pool *pp, struct io_zcrx_ifq *ifq)
 
 	spin_lock_bh(&area->freelist_lock);
 	while (area->free_count && pp->alloc.count < PP_ALLOC_CACHE_REFILL) {
-		struct net_iov *niov = __io_zcrx_get_free_niov(area);
+		struct netmem_desc *niov = __io_zcrx_get_free_niov(area);
 		netmem_ref netmem = net_iov_to_netmem(niov);
 
 		net_mp_niov_set_page_pool(pp, niov);
@@ -604,7 +604,7 @@ out_return:
 
 static bool io_pp_zc_release_netmem(struct page_pool *pp, netmem_ref netmem)
 {
-	struct net_iov *niov;
+	struct netmem_desc *niov;
 
 	if (WARN_ON_ONCE(!netmem_is_net_iov(netmem)))
 		return false;
@@ -678,7 +678,7 @@ static const struct memory_provider_ops io_uring_pp_zc_ops = {
 	.uninstall		= io_pp_uninstall,
 };
 
-static bool io_zcrx_queue_cqe(struct io_kiocb *req, struct net_iov *niov,
+static bool io_zcrx_queue_cqe(struct io_kiocb *req, struct netmem_desc *niov,
 			      struct io_zcrx_ifq *ifq, int off, int len)
 {
 	struct io_uring_zcrx_cqe *rcqe;
@@ -701,9 +701,9 @@ static bool io_zcrx_queue_cqe(struct io_kiocb *req, struct net_iov *niov,
 	return true;
 }
 
-static struct net_iov *io_zcrx_alloc_fallback(struct io_zcrx_area *area)
+static struct netmem_desc *io_zcrx_alloc_fallback(struct io_zcrx_area *area)
 {
-	struct net_iov *niov = NULL;
+	struct netmem_desc *niov = NULL;
 
 	spin_lock_bh(&area->freelist_lock);
 	if (area->free_count)
@@ -726,7 +726,7 @@ static ssize_t io_zcrx_copy_chunk(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 	while (len) {
 		size_t copy_size = min_t(size_t, PAGE_SIZE, len);
 		const int dst_off = 0;
-		struct net_iov *niov;
+		struct netmem_desc *niov;
 		struct page *dst_page;
 		void *dst_addr;
 
@@ -784,7 +784,7 @@ static int io_zcrx_copy_frag(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 static int io_zcrx_recv_frag(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 			     const skb_frag_t *frag, int off, int len)
 {
-	struct net_iov *niov;
+	struct netmem_desc *niov;
 
 	if (unlikely(!skb_frag_is_net_iov(frag)))
 		return io_zcrx_copy_frag(req, ifq, frag, off, len);

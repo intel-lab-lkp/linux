@@ -28,7 +28,7 @@ static DEFINE_XARRAY_FLAGS(net_devmem_dmabuf_bindings, XA_FLAGS_ALLOC1);
 
 static const struct memory_provider_ops dmabuf_devmem_ops;
 
-bool net_is_devmem_iov(struct net_iov *niov)
+bool net_is_devmem_iov(struct netmem_desc *niov)
 {
 	return niov->pp->mp_ops == &dmabuf_devmem_ops;
 }
@@ -43,7 +43,7 @@ static void net_devmem_dmabuf_free_chunk_owner(struct gen_pool *genpool,
 	kfree(owner);
 }
 
-static dma_addr_t net_devmem_get_dma_addr(const struct net_iov *niov)
+static dma_addr_t net_devmem_get_dma_addr(const struct netmem_desc *niov)
 {
 	struct dmabuf_genpool_chunk_owner *owner;
 
@@ -74,12 +74,12 @@ void __net_devmem_dmabuf_binding_free(struct net_devmem_dmabuf_binding *binding)
 	kfree(binding);
 }
 
-struct net_iov *
+struct netmem_desc *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding)
 {
 	struct dmabuf_genpool_chunk_owner *owner;
 	unsigned long dma_addr;
-	struct net_iov *niov;
+	struct netmem_desc *niov;
 	ssize_t offset;
 	ssize_t index;
 
@@ -99,7 +99,7 @@ net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding)
 	return niov;
 }
 
-void net_devmem_free_dmabuf(struct net_iov *niov)
+void net_devmem_free_dmabuf(struct netmem_desc *niov)
 {
 	struct net_devmem_dmabuf_binding *binding = net_devmem_iov_binding(niov);
 	unsigned long dma_addr = net_devmem_get_dma_addr(niov);
@@ -233,7 +233,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 		dma_addr_t dma_addr = sg_dma_address(sg);
 		struct dmabuf_genpool_chunk_owner *owner;
 		size_t len = sg_dma_len(sg);
-		struct net_iov *niov;
+		struct netmem_desc *niov;
 
 		owner = kzalloc_node(sizeof(*owner), GFP_KERNEL,
 				     dev_to_node(&dev->dev));
@@ -319,7 +319,7 @@ int mp_dmabuf_devmem_init(struct page_pool *pool)
 netmem_ref mp_dmabuf_devmem_alloc_netmems(struct page_pool *pool, gfp_t gfp)
 {
 	struct net_devmem_dmabuf_binding *binding = pool->mp_priv;
-	struct net_iov *niov;
+	struct netmem_desc *niov;
 	netmem_ref netmem;
 
 	niov = net_devmem_alloc_dmabuf(binding);

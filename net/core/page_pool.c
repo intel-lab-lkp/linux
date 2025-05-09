@@ -1198,7 +1198,7 @@ void page_pool_update_nid(struct page_pool *pool, int new_nid)
 }
 EXPORT_SYMBOL(page_pool_update_nid);
 
-bool net_mp_niov_set_dma_addr(struct net_iov *niov, dma_addr_t addr)
+bool net_mp_niov_set_dma_addr(struct netmem_desc *niov, dma_addr_t addr)
 {
 	return page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov), addr);
 }
@@ -1206,7 +1206,7 @@ bool net_mp_niov_set_dma_addr(struct net_iov *niov, dma_addr_t addr)
 /* Associate a niov with a page pool. Should follow with a matching
  * net_mp_niov_clear_page_pool()
  */
-void net_mp_niov_set_page_pool(struct page_pool *pool, struct net_iov *niov)
+void net_mp_niov_set_page_pool(struct page_pool *pool, struct netmem_desc *niov)
 {
 	netmem_ref netmem = net_iov_to_netmem(niov);
 
@@ -1219,7 +1219,7 @@ void net_mp_niov_set_page_pool(struct page_pool *pool, struct net_iov *niov)
 /* Disassociate a niov from a page pool. Should only be used in the
  * ->release_netmem() path.
  */
-void net_mp_niov_clear_page_pool(struct net_iov *niov)
+void net_mp_niov_clear_page_pool(struct netmem_desc *niov)
 {
 	netmem_ref netmem = net_iov_to_netmem(niov);
 

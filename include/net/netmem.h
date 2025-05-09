@@ -20,7 +20,7 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
  */
 #define NET_IOV 0x01UL
 
-struct net_iov {
+struct netmem_desc {
 	unsigned long __unused_padding;
 	unsigned long pp_magic;
 	struct page_pool *pp;
@@ -31,7 +31,7 @@ struct net_iov {
 
 struct net_iov_area {
 	/* Array of net_iovs for this area. */
-	struct net_iov *niovs;
+	struct netmem_desc *niovs;
 	size_t num_niovs;
 
 	/* Offset into the dma-buf where this chunk starts.  */
@@ -56,19 +56,19 @@ struct net_iov_area {
  */
 #define NET_IOV_ASSERT_OFFSET(pg, iov)             \
 	static_assert(offsetof(struct page, pg) == \
-		      offsetof(struct net_iov, iov))
+		      offsetof(struct netmem_desc, iov))
 NET_IOV_ASSERT_OFFSET(pp_magic, pp_magic);
 NET_IOV_ASSERT_OFFSET(pp, pp);
 NET_IOV_ASSERT_OFFSET(dma_addr, dma_addr);
 NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
 #undef NET_IOV_ASSERT_OFFSET
 
-static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
+static inline struct net_iov_area *net_iov_owner(const struct netmem_desc *niov)
 {
 	return niov->owner;
 }
 
-static inline unsigned int net_iov_idx(const struct net_iov *niov)
+static inline unsigned int net_iov_idx(const struct netmem_desc *niov)
 {
 	return niov - net_iov_owner(niov)->niovs;
 }
@@ -118,17 +118,17 @@ static inline struct page *netmem_to_page(netmem_ref netmem)
 	return __netmem_to_page(netmem);
 }
 
-static inline struct net_iov *netmem_to_net_iov(netmem_ref netmem)
+static inline struct netmem_desc *netmem_to_net_iov(netmem_ref netmem)
 {
 	if (netmem_is_net_iov(netmem))
-		return (struct net_iov *)((__force unsigned long)netmem &
+		return (struct netmem_desc *)((__force unsigned long)netmem &
 					  ~NET_IOV);
 
 	DEBUG_NET_WARN_ON_ONCE(true);
 	return NULL;
 }
 
-static inline netmem_ref net_iov_to_netmem(struct net_iov *niov)
+static inline netmem_ref net_iov_to_netmem(struct netmem_desc *niov)
 {
 	return (__force netmem_ref)((unsigned long)niov | NET_IOV);
 }
@@ -168,9 +168,9 @@ static inline unsigned long netmem_pfn_trace(netmem_ref netmem)
 	return page_to_pfn(netmem_to_page(netmem));
 }
 
-static inline struct net_iov *__netmem_clear_lsb(netmem_ref netmem)
+static inline struct netmem_desc *__netmem_clear_lsb(netmem_ref netmem)
 {
-	return (struct net_iov *)((__force unsigned long)netmem & ~NET_IOV);
+	return (struct netmem_desc *)((__force unsigned long)netmem & ~NET_IOV);
 }
 
 /**

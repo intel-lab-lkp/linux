@@ -70,7 +70,7 @@ int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 				    struct netlink_ext_ack *extack);
 
 static inline struct dmabuf_genpool_chunk_owner *
-net_devmem_iov_to_chunk_owner(const struct net_iov *niov)
+net_devmem_iov_to_chunk_owner(const struct netmem_desc *niov)
 {
 	struct net_iov_area *owner = net_iov_owner(niov);
 
@@ -78,17 +78,17 @@ net_devmem_iov_to_chunk_owner(const struct net_iov *niov)
 }
 
 static inline struct net_devmem_dmabuf_binding *
-net_devmem_iov_binding(const struct net_iov *niov)
+net_devmem_iov_binding(const struct netmem_desc *niov)
 {
 	return net_devmem_iov_to_chunk_owner(niov)->binding;
 }
 
-static inline u32 net_devmem_iov_binding_id(const struct net_iov *niov)
+static inline u32 net_devmem_iov_binding_id(const struct netmem_desc *niov)
 {
 	return net_devmem_iov_binding(niov)->id;
 }
 
-static inline unsigned long net_iov_virtual_addr(const struct net_iov *niov)
+static inline unsigned long net_iov_virtual_addr(const struct netmem_desc *niov)
 {
 	struct net_iov_area *owner = net_iov_owner(niov);
 
@@ -111,11 +111,11 @@ net_devmem_dmabuf_binding_put(struct net_devmem_dmabuf_binding *binding)
 	__net_devmem_dmabuf_binding_free(binding);
 }
 
-struct net_iov *
+struct netmem_desc *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding);
-void net_devmem_free_dmabuf(struct net_iov *ppiov);
+void net_devmem_free_dmabuf(struct netmem_desc *ppiov);
 
-bool net_is_devmem_iov(struct net_iov *niov);
+bool net_is_devmem_iov(struct netmem_desc *niov);
 
 #else
 struct net_devmem_dmabuf_binding;
@@ -146,27 +146,27 @@ net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 	return -EOPNOTSUPP;
 }
 
-static inline struct net_iov *
+static inline struct netmem_desc *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding)
 {
 	return NULL;
 }
 
-static inline void net_devmem_free_dmabuf(struct net_iov *ppiov)
+static inline void net_devmem_free_dmabuf(struct netmem_desc *ppiov)
 {
 }
 
-static inline unsigned long net_iov_virtual_addr(const struct net_iov *niov)
-{
-	return 0;
-}
-
-static inline u32 net_devmem_iov_binding_id(const struct net_iov *niov)
+static inline unsigned long net_iov_virtual_addr(const struct netmem_desc *niov)
 {
 	return 0;
 }
 
-static inline bool net_is_devmem_iov(struct net_iov *niov)
+static inline u32 net_devmem_iov_binding_id(const struct netmem_desc *niov)
+{
+	return 0;
+}
+
+static inline bool net_is_devmem_iov(struct netmem_desc *niov)
 {
 	return false;
 }
