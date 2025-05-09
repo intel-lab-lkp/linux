@@ -6,6 +6,62 @@
 
 use crate::error::{code::EINVAL, Result};
 use crate::{bindings, build_assert};
+use io_backend::*;
+
+/// `io_backend` is private and implements the config specific logic for
+/// `IoAccess::from_raw_cookie`.
+#[cfg(CONFIG_GENERIC_IOMAP)]
+mod io_backend {
+    // if generic_iomap is enabled copy the logic from IO_COND in `lib/iomap.c`
+
+    #[inline]
+    pub(super) fn is_mmio(addr: usize) -> bool {
+        addr >= bindings::PIO_RESERVED as usize
+    }
+
+    #[inline]
+    pub(super) fn is_portio(addr: usize) -> bool {
+        !is_mmio(addr) && addr > bindings::PIO_OFFSET as usize
+    }
+
+    #[inline]
+    pub(super) fn cookie_to_pio(addr: usize) -> usize {
+        addr & bindings::PIO_MASK as usize
+    }
+
+    #[inline]
+    pub(super) fn cookie_to_mmio(cookie: usize) -> usize {
+        cookie
+    }
+}
+#[cfg(not(CONFIG_GENERIC_IOMAP))]
+mod io_backend {
+    // for everyone who does not use generic iomap
+    // except for alpha and parisc, neither of which has a rust compiler,
+    // ioread/iowrite is defined in `include/asm-generic/io.h`.
+    //
+    // for these ioread/iowrite, maps to read/write.
+    // so allow any io to be converted  because they use the same backend
+    #[inline]
+    pub(super) fn is_mmio(_addr: usize) -> bool {
+        true
+    }
+
+    #[inline]
+    pub(super) fn is_portio(_addr: usize) -> bool {
+        false
+    }
+
+    #[inline]
+    pub(super) fn cookie_to_pio(cookie: usize) -> usize {
+        cookie
+    }
+
+    #[inline]
+    pub(super) fn cookie_to_mmio(cookie: usize) -> usize {
+        cookie
+    }
+}
 
 /// Private macro to define the [`IoAccess`] functions.
 macro_rules! define_io_access_function {
@@ -160,7 +216,17 @@ pub unsafe trait IoAccess<const SIZE: usize = 0> {
     fn maxsize(&self) -> usize;
 
     /// Returns the base address of the accessed IO area.
+    /// if `self` was created by ['from_raw_cookie'], `addr` might not be equal to the original
+    /// address.
     fn addr(&self) -> usize;
+
+    /// Attempts to create a `Self` from a [`IoRaw`].
+    ///
+    /// # Safety
+    /// `raw` should be a io cookie that can be accessed by the C `ioread`/`iowrite` functions
+    unsafe fn from_raw_cookie(raw: IoRaw<SIZE>) -> Result<Self>
+    where
+        Self: Sized;
 
     define_io_access_function!(@read
         read8_unchecked, read8, try_read8, u8;
@@ -367,6 +433,19 @@ unsafe impl<const SIZE: usize> IoAccess<SIZE> for MMIo<SIZE> {
         self.0.addr()
     }
 
+    unsafe fn from_raw_cookie(mut raw: IoRaw<SIZE>) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if is_mmio(raw.addr()) {
+            // INVARIANT: `addr` is decoded so it should be ok to access with read/write
+            raw.addr = cookie_to_mmio(raw.addr());
+            Ok(Self(raw))
+        } else {
+            Err(EINVAL)
+        }
+    }
+
     impl_accessor_fn!(
         read8_unchecked, readb, write8_unchecked, writeb, u8;
         read16_unchecked, readw, write16_unchecked, writew, u16;
@@ -476,6 +555,19 @@ unsafe impl<const SIZE: usize> IoAccess<SIZE> for PortIo<SIZE> {
         self.0.addr()
     }
 
+    unsafe fn from_raw_cookie(mut raw: IoRaw<SIZE>) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if is_portio(raw.addr()) {
+            // INVARIANT: `addr` is decoded so it should be ok to access with in/out
+            raw.addr = cookie_to_pio(raw.addr());
+            Ok(Self(raw))
+        } else {
+            Err(EINVAL)
+        }
+    }
+
     #[rustfmt::skip]
     impl_accessor_fn!(
         read8_unchecked, inb, write8_unchecked, outb, u8;
@@ -561,6 +653,18 @@ unsafe impl<const SIZE: usize> IoAccess<SIZE> for Io<SIZE> {
     #[inline]
     fn maxsize(&self) -> usize {
         self.0.maxsize()
+    }
+
+    unsafe fn from_raw_cookie(raw: IoRaw<SIZE>) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if is_mmio(raw.addr()) || is_portio(raw.addr()) {
+            // INVARIANT: `addr` is not touched so it should be able to be read with ioread/iowrite
+            Ok(Self(raw))
+        } else {
+            Err(EINVAL)
+        }
     }
 
     impl_accessor_fn!(
