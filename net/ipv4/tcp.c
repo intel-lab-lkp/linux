@@ -2483,7 +2483,7 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 		 */
 		for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 			skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
-			struct net_iov *niov;
+			struct netmem_desc *niov;
 			u64 frag_offset;
 			int end;
 

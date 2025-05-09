@@ -3598,10 +3598,10 @@ static inline bool skb_frag_is_net_iov(const skb_frag_t *frag)
  * skb_frag_net_iov - retrieve the net_iov referred to by fragment
  * @frag: the fragment
  *
- * Return: the &struct net_iov associated with @frag. Returns NULL if this
+ * Return: the &struct netmem_desc associated with @frag. Returns NULL if this
  * frag has no associated net_iov.
  */
-static inline struct net_iov *skb_frag_net_iov(const skb_frag_t *frag)
+static inline struct netmem_desc *skb_frag_net_iov(const skb_frag_t *frag)
 {
 	if (!skb_frag_is_net_iov(frag))
 		return NULL;
