@@ -281,10 +281,11 @@ static int sca3000_write_reg(struct sca3000_state *st, u8 address, u8 val)
 	return spi_write(st->us, st->tx, 2);
 }
 
-static int sca3000_read_data_short(struct sca3000_state *st,
-				   u8 reg_address_high,
-				   int len)
+static int sca3000_read_data(struct sca3000_state *st,
+			     u8 reg_address_high,
+			     int len)
 {
+	int ret;
 	struct spi_transfer xfer[2] = {
 		{
 			.len = 1,
@@ -296,7 +297,10 @@ static int sca3000_read_data_short(struct sca3000_state *st,
 	};
 	st->tx[0] = SCA3000_READ_REG(reg_address_high);
 
-	return spi_sync_transfer(st->us, xfer, ARRAY_SIZE(xfer));
+	ret = spi_sync_transfer(st->us, xfer, ARRAY_SIZE(xfer));
+	if (ret)
+		dev_err(&st->us->dev, "problem reading register\n");
+	return ret;
 }
 
 /**
@@ -309,11 +313,11 @@ static int sca3000_reg_lock_on(struct sca3000_state *st)
 {
 	int ret;
 
-	ret = sca3000_read_data_short(st, SCA3000_REG_STATUS_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_STATUS_ADDR));
 	if (ret < 0)
 		return ret;
 
-	return !(st->rx[0] & SCA3000_LOCKED);
+	return !(ret & SCA3000_LOCKED);
 }
 
 /**
@@ -412,10 +416,11 @@ static int sca3000_read_ctrl_reg(struct sca3000_state *st,
 	ret = sca3000_write_reg(st, SCA3000_REG_CTRL_SEL_ADDR, ctrl_reg);
 	if (ret)
 		goto error_ret;
-	ret = sca3000_read_data_short(st, SCA3000_REG_CTRL_DATA_ADDR, 1);
+
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_CTRL_DATA_ADDR));
 	if (ret)
 		goto error_ret;
-	return st->rx[0];
+	return ret;
 error_ret:
 	return ret;
 }
@@ -432,13 +437,13 @@ static int sca3000_print_rev(struct iio_dev *indio_dev)
 	struct sca3000_state *st = iio_priv(indio_dev);
 
 	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_REVID_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_REVID_ADDR));
 	if (ret < 0)
 		goto error_ret;
 	dev_info(&indio_dev->dev,
 		 "sca3000 revision major=%lu, minor=%lu\n",
-		 st->rx[0] & SCA3000_REG_REVID_MAJOR_MASK,
-		 st->rx[0] & SCA3000_REG_REVID_MINOR_MASK);
+		 ret & SCA3000_REG_REVID_MAJOR_MASK,
+		 ret & SCA3000_REG_REVID_MINOR_MASK);
 error_ret:
 	mutex_unlock(&st->lock);
 
@@ -575,10 +580,10 @@ static inline int __sca3000_get_base_freq(struct sca3000_state *st,
 {
 	int ret;
 
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		goto error_ret;
-	switch (SCA3000_REG_MODE_MODE_MASK & st->rx[0]) {
+	switch (SCA3000_REG_MODE_MODE_MASK & ret) {
 	case SCA3000_REG_MODE_MEAS_MODE_NORMAL:
 		*base_freq = info->measurement_mode_freq;
 		break;
@@ -665,13 +670,13 @@ static int sca3000_read_3db_freq(struct sca3000_state *st, int *val)
 {
 	int ret;
 
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		return ret;
 
 	/* mask bottom 2 bits - only ones that are relevant */
-	st->rx[0] &= SCA3000_REG_MODE_MODE_MASK;
-	switch (st->rx[0]) {
+	ret &= SCA3000_REG_MODE_MODE_MASK;
+	switch (ret) {
 	case SCA3000_REG_MODE_MEAS_MODE_NORMAL:
 		*val = st->info->measurement_mode_3db_freq;
 		return IIO_VAL_INT;
@@ -703,14 +708,14 @@ static int sca3000_write_3db_freq(struct sca3000_state *st, int val)
 		mode = SCA3000_REG_MODE_MEAS_MODE_OP_2;
 	else
 		return -EINVAL;
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		return ret;
 
-	st->rx[0] &= ~SCA3000_REG_MODE_MODE_MASK;
-	st->rx[0] |= (mode & SCA3000_REG_MODE_MODE_MASK);
+	ret &= ~SCA3000_REG_MODE_MODE_MASK;
+	ret |= (mode & SCA3000_REG_MODE_MODE_MASK);
 
-	return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR, st->rx[0]);
+	return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR, ret);
 }
 
 static int sca3000_read_raw(struct iio_dev *indio_dev,
@@ -732,24 +737,23 @@ static int sca3000_read_raw(struct iio_dev *indio_dev,
 				return -EBUSY;
 			}
 			address = sca3000_addresses[chan->address][0];
-			ret = sca3000_read_data_short(st, address, 2);
+			ret = spi_w8r16(st->us, SCA3000_READ_REG(address));
 			if (ret < 0) {
 				mutex_unlock(&st->lock);
 				return ret;
 			}
-			*val = sign_extend32(be16_to_cpup((__be16 *)st->rx) >>
+			*val = sign_extend32(be16_to_cpu((__be16) ret) >>
 					     chan->scan_type.shift,
 					     chan->scan_type.realbits - 1);
 		} else {
 			/* get the temperature when available */
-			ret = sca3000_read_data_short(st,
-						      SCA3000_REG_TEMP_MSB_ADDR,
-						      2);
+			ret = spi_w8r16(st->us,
+						SCA3000_READ_REG(SCA3000_REG_TEMP_MSB_ADDR));
 			if (ret < 0) {
 				mutex_unlock(&st->lock);
 				return ret;
 			}
-			*val = (be16_to_cpup((__be16 *)st->rx) >>
+			*val = (be16_to_cpu((__be16) ret) >>
 				chan->scan_type.shift) &
 				GENMASK(chan->scan_type.realbits - 1, 0);
 		}
@@ -827,16 +831,15 @@ static ssize_t sca3000_read_av_freq(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct sca3000_state *st = iio_priv(indio_dev);
-	int len = 0, ret, val;
+	int len = 0, ret;
 
 	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
-	val = st->rx[0];
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	mutex_unlock(&st->lock);
 	if (ret)
 		goto error_ret;
 
-	switch (val & SCA3000_REG_MODE_MODE_MASK) {
+	switch (ret & SCA3000_REG_MODE_MODE_MASK) {
 	case SCA3000_REG_MODE_MEAS_MODE_NORMAL:
 		len += sprintf(buf + len, "%d %d %d\n",
 			       st->info->measurement_mode_freq,
@@ -969,32 +972,6 @@ static const struct attribute_group sca3000_attribute_group = {
 	.attrs = sca3000_attributes,
 };
 
-static int sca3000_read_data(struct sca3000_state *st,
-			     u8 reg_address_high,
-			     u8 *rx,
-			     int len)
-{
-	int ret;
-	struct spi_transfer xfer[2] = {
-		{
-			.len = 1,
-			.tx_buf = st->tx,
-		}, {
-			.len = len,
-			.rx_buf = rx,
-		}
-	};
-
-	st->tx[0] = SCA3000_READ_REG(reg_address_high);
-	ret = spi_sync_transfer(st->us, xfer, ARRAY_SIZE(xfer));
-	if (ret) {
-		dev_err(&st->us->dev, "problem reading register\n");
-		return ret;
-	}
-
-	return 0;
-}
-
 /**
  * sca3000_ring_int_process() - ring specific interrupt handling.
  * @val: Value of the interrupt status register.
@@ -1008,16 +985,15 @@ static void sca3000_ring_int_process(u8 val, struct iio_dev *indio_dev)
 	mutex_lock(&st->lock);
 
 	if (val & SCA3000_REG_INT_STATUS_HALF) {
-		ret = sca3000_read_data_short(st, SCA3000_REG_BUF_COUNT_ADDR,
-					      1);
+		ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_BUF_COUNT_ADDR));
 		if (ret)
 			goto error_ret;
-		num_available = st->rx[0];
+		num_available = ret;
 		/*
 		 * num_available is the total number of samples available
 		 * i.e. number of time points * number of channels.
 		 */
-		ret = sca3000_read_data(st, SCA3000_REG_RING_OUT_ADDR, st->rx,
+		ret = sca3000_read_data(st, SCA3000_REG_RING_OUT_ADDR,
 					num_available * 2);
 		if (ret)
 			goto error_ret;
@@ -1060,8 +1036,8 @@ static irqreturn_t sca3000_event_handler(int irq, void *private)
 	 * but ensures no interrupt is missed.
 	 */
 	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_STATUS_ADDR, 1);
-	val = st->rx[0];
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_STATUS_ADDR));
+	val = ret;
 	mutex_unlock(&st->lock);
 	if (ret)
 		goto done;
@@ -1121,13 +1097,13 @@ static int sca3000_read_event_config(struct iio_dev *indio_dev,
 	/* read current value of mode register */
 	mutex_lock(&st->lock);
 
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		goto error_ret;
 
 	switch (chan->channel2) {
 	case IIO_MOD_X_AND_Y_AND_Z:
-		ret = !!(st->rx[0] & SCA3000_REG_MODE_FREE_FALL_DETECT);
+		ret = !!(ret & SCA3000_REG_MODE_FREE_FALL_DETECT);
 		break;
 	case IIO_MOD_X:
 	case IIO_MOD_Y:
@@ -1136,7 +1112,7 @@ static int sca3000_read_event_config(struct iio_dev *indio_dev,
 		 * Motion detection mode cannot run at the same time as
 		 * acceleration data being read.
 		 */
-		if ((st->rx[0] & SCA3000_REG_MODE_MODE_MASK)
+		if ((ret & SCA3000_REG_MODE_MODE_MASK)
 		    != SCA3000_REG_MODE_MEAS_MODE_MOT_DET) {
 			ret = 0;
 		} else {
@@ -1164,18 +1140,18 @@ static int sca3000_freefall_set_state(struct iio_dev *indio_dev, bool state)
 	int ret;
 
 	/* read current value of mode register */
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		return ret;
 
 	/* if off and should be on */
-	if (state && !(st->rx[0] & SCA3000_REG_MODE_FREE_FALL_DETECT))
+	if (state && !(ret & SCA3000_REG_MODE_FREE_FALL_DETECT))
 		return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR,
-					 st->rx[0] | SCA3000_REG_MODE_FREE_FALL_DETECT);
+					 ret | SCA3000_REG_MODE_FREE_FALL_DETECT);
 	/* if on and should be off */
-	else if (!state && (st->rx[0] & SCA3000_REG_MODE_FREE_FALL_DETECT))
+	else if (!state && (ret & SCA3000_REG_MODE_FREE_FALL_DETECT))
 		return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR,
-					 st->rx[0] & ~SCA3000_REG_MODE_FREE_FALL_DETECT);
+					 ret & ~SCA3000_REG_MODE_FREE_FALL_DETECT);
 	else
 		return 0;
 }
@@ -1214,22 +1190,22 @@ static int sca3000_motion_detect_set_state(struct iio_dev *indio_dev, int axis,
 	}
 
 	/* read current value of mode register */
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		return ret;
 	/* if off and should be on */
 	if ((st->mo_det_use_count) &&
-	    ((st->rx[0] & SCA3000_REG_MODE_MODE_MASK)
+	    ((ret & SCA3000_REG_MODE_MODE_MASK)
 	     != SCA3000_REG_MODE_MEAS_MODE_MOT_DET))
 		return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR,
-			(st->rx[0] & ~SCA3000_REG_MODE_MODE_MASK)
+			(ret & ~SCA3000_REG_MODE_MODE_MASK)
 			| SCA3000_REG_MODE_MEAS_MODE_MOT_DET);
 	/* if on and should be off */
 	else if (!(st->mo_det_use_count) &&
-		 ((st->rx[0] & SCA3000_REG_MODE_MODE_MASK)
+		 ((ret & SCA3000_REG_MODE_MODE_MASK)
 		  == SCA3000_REG_MODE_MEAS_MODE_MOT_DET))
 		return sca3000_write_reg(st, SCA3000_REG_MODE_ADDR,
-			st->rx[0] & SCA3000_REG_MODE_MODE_MASK);
+			ret & SCA3000_REG_MODE_MODE_MASK);
 	else
 		return 0;
 }
@@ -1287,18 +1263,18 @@ int __sca3000_hw_ring_state_set(struct iio_dev *indio_dev, bool state)
 	int ret;
 
 	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		goto error_ret;
 	if (state) {
 		dev_info(&indio_dev->dev, "supposedly enabling ring buffer\n");
 		ret = sca3000_write_reg(st,
 			SCA3000_REG_MODE_ADDR,
-			(st->rx[0] | SCA3000_REG_MODE_RING_BUF_ENABLE));
+			(ret | SCA3000_REG_MODE_RING_BUF_ENABLE));
 	} else
 		ret = sca3000_write_reg(st,
 			SCA3000_REG_MODE_ADDR,
-			(st->rx[0] & ~SCA3000_REG_MODE_RING_BUF_ENABLE));
+			(ret & ~SCA3000_REG_MODE_RING_BUF_ENABLE));
 error_ret:
 	mutex_unlock(&st->lock);
 
@@ -1322,12 +1298,12 @@ static int sca3000_hw_ring_preenable(struct iio_dev *indio_dev)
 	mutex_lock(&st->lock);
 
 	/* Enable the 50% full interrupt */
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_MASK_ADDR));
 	if (ret)
 		goto error_unlock;
 	ret = sca3000_write_reg(st,
 				SCA3000_REG_INT_MASK_ADDR,
-				st->rx[0] | SCA3000_REG_INT_MASK_RING_HALF);
+				ret | SCA3000_REG_INT_MASK_RING_HALF);
 	if (ret)
 		goto error_unlock;
 
@@ -1353,12 +1329,12 @@ static int sca3000_hw_ring_postdisable(struct iio_dev *indio_dev)
 	/* Disable the 50% full interrupt */
 	mutex_lock(&st->lock);
 
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_MASK_ADDR));
 	if (ret)
 		goto unlock;
 	ret = sca3000_write_reg(st,
 				SCA3000_REG_INT_MASK_ADDR,
-				st->rx[0] & ~SCA3000_REG_INT_MASK_RING_HALF);
+				ret & ~SCA3000_REG_INT_MASK_RING_HALF);
 unlock:
 	mutex_unlock(&st->lock);
 	return ret;
@@ -1383,7 +1359,7 @@ static int sca3000_clean_setup(struct sca3000_state *st)
 
 	mutex_lock(&st->lock);
 	/* Ensure all interrupts have been acknowledged */
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_STATUS_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_MASK_ADDR));
 	if (ret)
 		goto error_ret;
 
@@ -1409,7 +1385,7 @@ static int sca3000_clean_setup(struct sca3000_state *st)
 	if (ret)
 		goto error_ret;
 	/* Enable interrupts, relevant to mode and set up as active low */
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_MASK_ADDR));
 	if (ret)
 		goto error_ret;
 	ret = sca3000_write_reg(st,
@@ -1423,11 +1399,11 @@ static int sca3000_clean_setup(struct sca3000_state *st)
 	 * Ring in 12 bit mode - it is fine to overwrite reserved bits 3,5
 	 * as that occurs in one of the example on the datasheet
 	 */
-	ret = sca3000_read_data_short(st, SCA3000_REG_MODE_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_MODE_ADDR));
 	if (ret)
 		goto error_ret;
 	ret = sca3000_write_reg(st, SCA3000_REG_MODE_ADDR,
-				(st->rx[0] & SCA3000_MODE_PROT_MASK));
+				(ret & SCA3000_MODE_PROT_MASK));
 
 error_ret:
 	mutex_unlock(&st->lock);
@@ -1510,11 +1486,12 @@ static int sca3000_stop_all_interrupts(struct sca3000_state *st)
 	int ret;
 
 	mutex_lock(&st->lock);
-	ret = sca3000_read_data_short(st, SCA3000_REG_INT_MASK_ADDR, 1);
+	ret = spi_w8r8(st->us, SCA3000_READ_REG(SCA3000_REG_INT_MASK_ADDR));
+
 	if (ret)
 		goto error_ret;
 	ret = sca3000_write_reg(st, SCA3000_REG_INT_MASK_ADDR,
-				(st->rx[0] &
+				(ret &
 				 ~(SCA3000_REG_INT_MASK_RING_THREE_QUARTER |
 				   SCA3000_REG_INT_MASK_RING_HALF |
 				   SCA3000_REG_INT_MASK_ALL_INTS)));
