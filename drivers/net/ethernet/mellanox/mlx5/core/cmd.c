@@ -1714,7 +1714,8 @@ static void mlx5_cmd_comp_handler(struct mlx5_core_dev *dev, u64 vec, bool force
 
 			if (!forced || /* Real FW completion */
 			     mlx5_cmd_is_down(dev) || /* No real FW completion is expected */
-			     !opcode_allowed(cmd, ent->op))
+			     !opcode_allowed(cmd, ent->op) ||
+			     ent->ret == -ETIMEDOUT)
 				cmd_ent_put(ent);
 
 			ent->ts2 = ktime_get_ns();
