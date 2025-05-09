@@ -6,25 +6,35 @@ Crypto Engine
 Overview
 --------
 The crypto engine (CE) API is a crypto queue manager.
+It is the in-kernel crypto way to enqueue asynchronous crypto requests
+instead of instantiating your own workqueue.
 
 Requirement
 -----------
-You must put, at the start of your transform context your_tfm_ctx, the structure
-crypto_engine:
+For registration with the use of an crypto engine instance the
+transformation needs to implement the respective ``struct *_engine_alg``.
+For example a skcipher transformation implements
+``struct skcipher_engine_alg``. This struct consists of the usual
+transformation struct (for example ``struct skcipher_alg``) plus a
+``struct crypto_engine_op`` which provides the callback used by the
+crypto engine to run the asynchronous requests.
 
-::
-
-	struct your_tfm_ctx {
-		struct crypto_engine engine;
-		...
-	};
-
-The crypto engine only manages asynchronous requests in the form of
-crypto_async_request. It cannot know the underlying request type and thus only
-has access to the transform structure. It is not possible to access the context
-using container_of. In addition, the engine knows nothing about your
-structure "``struct your_tfm_ctx``". The engine assumes (requires) the placement
-of the known member ``struct crypto_engine`` at the beginning.
+The transformation implements the callback function
+``int (*do_one_request)(struct crypto_engine *engine, void *areq)``.
+This callback is invoked by the engine to process asynchronous
+requests which have been previously pushed to the engine with one of
+the ``crypto_transfer_*_request_to_engine()``.
+The ``do_one_request()`` implementation needs to handle the request
+and on successful processing completes the request with a call to
+``crypto_finalize_*_request()`` and a return value of 0. A return
+value other than 0 indicates an error condition and the request is
+unsuccessful marked as completed with this error value by the engine.
+A special treatment is done for the return value ``-ENOSPC``. At
+allocation of the engine instance via
+``crypto_engine_alloc_init_and_set(..., bool retry_support, ...)``
+with the ``retry_support`` parameter set to true, the engine instance
+handles the ``-ENOSPC`` by re-queuing the request into the backlog and
+at a later time the callback is invoked again to process this request.
 
 Order of operations
 -------------------
@@ -33,35 +43,19 @@ Start it via ``crypto_engine_start()``. When finished with your work, shut down 
 engine using ``crypto_engine_stop()`` and destroy the engine with
 ``crypto_engine_exit()``.
 
-Before transferring any request, you have to fill the context enginectx by
-providing functions for the following:
+Before transferring any request, you may provide additional callback
+functions within the ``struct engine`` instance you got from the alloc
+call:
 
-* ``prepare_crypt_hardware``: Called once before any prepare functions are
-  called.
+* ``prepare_crypt_hardware``: Called once before any
+  ``do_one_request()`` invocations are done.
 
-* ``unprepare_crypt_hardware``: Called once after all unprepare functions have
-  been called.
+* ``unprepare_crypt_hardware``: Called once after the
+  ``do_one_request()`` are done.
 
-* ``prepare_cipher_request``/``prepare_hash_request``: Called before each
-  corresponding request is performed. If some processing or other preparatory
-  work is required, do it here.
-
-* ``unprepare_cipher_request``/``unprepare_hash_request``: Called after each
-  request is handled. Clean up / undo what was done in the prepare function.
-
-* ``cipher_one_request``/``hash_one_request``: Handle the current request by
-  performing the operation.
-
-Note that these functions access the crypto_async_request structure
-associated with the received request. You are able to retrieve the original
-request by using:
-
-::
-
-	container_of(areq, struct yourrequesttype_request, base);
-
-When your driver receives a crypto_request, you must to transfer it to
-the crypto engine via one of:
+When your driver receives a crypto_request, and you want this request
+to be processed asynchronously, you must transfer it to the crypto
+engine via one of:
 
 * crypto_transfer_aead_request_to_engine()
 
