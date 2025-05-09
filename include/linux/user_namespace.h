@@ -78,6 +78,8 @@ struct user_namespace {
 	struct uid_gid_map	gid_map;
 	struct uid_gid_map	projid_map;
 	struct user_namespace	*parent;
+	struct list_head	ns_node;
+	struct list_head	children;
 	int			level;
 	kuid_t			owner;
 	kgid_t			group;
