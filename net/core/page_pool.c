@@ -1225,3 +1225,13 @@ void net_mp_niov_clear_page_pool(struct netmem_desc *niov)
 
 	page_pool_clear_pp_info(netmem);
 }
+
+bool is_pp_netmem(netmem_ref netmem)
+{
+	return (netmem_get_pp_magic(netmem) & ~0x3UL) == PP_SIGNATURE;
+}
+
+bool is_pp_page(struct page *page)
+{
+	return is_pp_netmem(page_to_netmem(page));
+}
