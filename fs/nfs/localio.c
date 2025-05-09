@@ -279,14 +279,9 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		if (IS_ERR(new))
 			return NULL;
 		/* try to swap in the pointer */
-		spin_lock(&clp->cl_uuid.lock);
-		nf = rcu_dereference_protected(*pnf, 1);
-		if (!nf) {
-			nf = new;
-			new = NULL;
-			rcu_assign_pointer(*pnf, nf);
-		}
-		spin_unlock(&clp->cl_uuid.lock);
+		nf = unrcu_pointer(cmpxchg(pnf, NULL, RCU_INITIALIZER(new)));
+		if (!nf)
+			swap(nf, new);
 		rcu_read_lock();
 	}
 	nf = nfs_local_file_get(nf);
