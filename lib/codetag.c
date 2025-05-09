@@ -13,6 +13,8 @@ struct codetag_type {
 	struct idr mod_idr;
 	struct rw_semaphore mod_lock; /* protects mod_idr */
 	struct codetag_type_desc desc;
+	/* generates timestamp for module load */
+	unsigned long clock;
 };
 
 struct codetag_range {
@@ -23,6 +25,7 @@ struct codetag_range {
 struct codetag_module {
 	struct module *mod;
 	struct codetag_range range;
+	unsigned long timestamp;
 };
 
 static DEFINE_MUTEX(codetag_lock);
@@ -48,6 +51,7 @@ struct codetag_iterator codetag_get_ct_iter(struct codetag_type *cttype)
 		.cmod = NULL,
 		.mod_id = 0,
 		.ct = NULL,
+		.timestamp = 0,
 	};
 
 	return iter;
@@ -91,11 +95,13 @@ struct codetag *codetag_next_ct(struct codetag_iterator *iter)
 		if (!cmod)
 			break;
 
-		if (cmod != iter->cmod) {
+		if (!iter->cmod || iter->timestamp != cmod->timestamp) {
 			iter->cmod = cmod;
+			iter->timestamp = cmod->timestamp;
 			ct = get_first_module_ct(cmod);
-		} else
+		} else {
 			ct = get_next_module_ct(iter);
+		}
 
 		if (ct)
 			break;
@@ -190,6 +196,8 @@ static int codetag_module_init(struct codetag_type *cttype, struct module *mod)
 	cmod->range = range;
 
 	down_write(&cttype->mod_lock);
+	cttype->clock++;
+	cmod->timestamp = cttype->clock;
 	err = idr_alloc(&cttype->mod_idr, cmod, 0, 0, GFP_KERNEL);
 	if (err >= 0) {
 		cttype->count += range_size(cttype, &range);
