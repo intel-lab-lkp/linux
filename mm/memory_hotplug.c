@@ -1178,6 +1178,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	const int nid = zone_to_nid(zone);
 	int ret;
 	struct memory_notify arg;
+	unsigned long isol_pfn;
 
 	/*
 	 * {on,off}lining is constrained to full memory sections (or more
@@ -1192,7 +1193,11 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 
 
 	/* associate pfn range with the zone */
-	move_pfn_range_to_zone(zone, pfn, nr_pages, NULL, MIGRATE_ISOLATE);
+	move_pfn_range_to_zone(zone, pfn, nr_pages, NULL, MIGRATE_MOVABLE);
+	for (isol_pfn = pfn;
+	     isol_pfn < pfn + nr_pages;
+	     isol_pfn += pageblock_nr_pages)
+		set_pageblock_isolate(pfn_to_page(isol_pfn));
 
 	arg.start_pfn = pfn;
 	arg.nr_pages = nr_pages;

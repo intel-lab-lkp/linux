@@ -107,8 +107,10 @@ static inline bool migratetype_is_mergeable(int mt)
 extern int page_group_by_mobility_disabled;
 
 #ifdef CONFIG_MEMORY_ISOLATION
-#define MIGRATETYPE_MASK ((BIT(PB_migratetype_bits) - 1) | PB_migrate_isolate_bit)
+#define MIGRATETYPE_NO_ISO_MASK (BIT(PB_migratetype_bits) - 1)
+#define MIGRATETYPE_MASK (MIGRATETYPE_NO_ISO_MASK | PB_migrate_isolate_bit)
 #else
+#define MIGRATETYPE_NO_ISO_MASK MIGRATETYPE_MASK
 #define MIGRATETYPE_MASK (BIT(PB_migratetype_bits) - 1)
 #endif
 
