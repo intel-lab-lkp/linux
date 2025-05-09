@@ -259,7 +259,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <0>;
@@ -285,7 +285,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <1>;
@@ -311,7 +311,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <2>;
@@ -337,7 +337,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <3>;
@@ -363,7 +363,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <4>;
@@ -389,7 +389,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <5>;
@@ -415,7 +415,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <6>;
@@ -441,7 +441,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <7>;
@@ -467,7 +467,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <8>;
@@ -493,7 +493,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <9>;
@@ -519,7 +519,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <10>;
@@ -545,7 +545,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <11>;
@@ -571,7 +571,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <12>;
@@ -597,7 +597,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <13>;
@@ -623,7 +623,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <14>;
@@ -649,7 +649,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <15>;
@@ -675,7 +675,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <16>;
@@ -701,7 +701,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <17>;
@@ -727,7 +727,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <18>;
@@ -753,7 +753,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <19>;
@@ -779,7 +779,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <20>;
@@ -805,7 +805,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <21>;
@@ -831,7 +831,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <22>;
@@ -857,7 +857,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <23>;
@@ -883,7 +883,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <24>;
@@ -909,7 +909,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <25>;
@@ -935,7 +935,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <26>;
@@ -961,7 +961,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <27>;
@@ -987,7 +987,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <28>;
@@ -1013,7 +1013,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <29>;
@@ -1039,7 +1039,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <30>;
@@ -1065,7 +1065,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <31>;
@@ -1091,7 +1091,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <32>;
@@ -1117,7 +1117,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <33>;
@@ -1143,7 +1143,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <34>;
@@ -1169,7 +1169,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <35>;
@@ -1195,7 +1195,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <36>;
@@ -1221,7 +1221,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <37>;
@@ -1247,7 +1247,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <38>;
@@ -1273,7 +1273,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <39>;
@@ -1299,7 +1299,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <40>;
@@ -1325,7 +1325,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <41>;
@@ -1351,7 +1351,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <42>;
@@ -1377,7 +1377,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <43>;
@@ -1403,7 +1403,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <44>;
@@ -1429,7 +1429,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <45>;
@@ -1455,7 +1455,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <46>;
@@ -1481,7 +1481,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <47>;
@@ -1507,7 +1507,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <48>;
@@ -1533,7 +1533,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <49>;
@@ -1559,7 +1559,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <50>;
@@ -1585,7 +1585,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <51>;
@@ -1611,7 +1611,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <52>;
@@ -1637,7 +1637,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <53>;
@@ -1663,7 +1663,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <54>;
@@ -1689,7 +1689,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <55>;
@@ -1715,7 +1715,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <56>;
@@ -1741,7 +1741,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <57>;
@@ -1767,7 +1767,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <58>;
@@ -1793,7 +1793,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <59>;
@@ -1819,7 +1819,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <60>;
@@ -1845,7 +1845,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <61>;
@@ -1871,7 +1871,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <62>;
@@ -1897,7 +1897,7 @@
 			riscv,isa = "rv64imafdc";
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
-					       "zicntr", "zicsr", "zifencei",
+					       "ziccrse", "zicntr", "zicsr", "zifencei",
 					       "zihpm", "xtheadvector";
 			thead,vlenb = <128>;
 			reg = <63>;
