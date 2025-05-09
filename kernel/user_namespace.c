@@ -30,6 +30,50 @@ static bool new_idmap_permitted(const struct file *file,
 				struct uid_gid_map *map);
 static void free_user_ns(struct work_struct *work);
 
+struct user_namespace *ns_next_child(struct user_namespace *pos,
+					   struct user_namespace *parent)
+{
+	struct user_namespace *next;
+
+	if (!pos)
+		/* Get the first child of the parent. */
+		next = list_entry_rcu(parent->children.next, struct user_namespace, ns_node);
+	else
+		next = list_entry_rcu(pos->ns_node.next, struct user_namespace, ns_node);
+
+	if (&next->ns_node != &parent->children)
+		return next;
+
+	return NULL;
+}
+
+/* Should be called under rcu_read_lock() */
+struct user_namespace *ns_next_child_pre(struct user_namespace *pos,
+						    struct user_namespace *root)
+{
+	struct user_namespace *next;
+
+
+	/* if first iteration, visit @root */
+	if (!pos)
+		return root;
+
+	/* visit the first child if exists */
+	next = ns_next_child(NULL, pos);
+	if (next)
+		return next;
+
+	/* no child, visit my or the closest ancestor's next ns_node */
+	while (pos != root) {
+		next = ns_next_child(pos, pos->parent);
+		if (next)
+			return next;
+		pos = pos->parent;
+	}
+
+	return NULL;
+}
+
 static struct ucounts *inc_user_namespaces(struct user_namespace *ns, kuid_t uid)
 {
 	return inc_ucount(ns, uid, UCOUNT_USER_NAMESPACES);
