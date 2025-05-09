@@ -2965,6 +2965,9 @@ static bool consume_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	unsigned long flags;
 	bool ret = false;
 
+	if (unlikely(in_nmi()))
+		return ret;
+
 	local_lock_irqsave(&obj_stock.lock, flags);
 
 	stock = this_cpu_ptr(&obj_stock);
@@ -3068,6 +3071,15 @@ static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	unsigned long flags;
 	unsigned int nr_pages = 0;
 
+	if (unlikely(in_nmi())) {
+		if (pgdat)
+			__mod_objcg_mlstate(objcg, pgdat, idx, nr_bytes);
+		nr_pages = nr_bytes >> PAGE_SHIFT;
+		nr_bytes = nr_bytes & (PAGE_SIZE - 1);
+		atomic_add(nr_bytes, &objcg->nr_charged_bytes);
+		goto out;
+	}
+
 	local_lock_irqsave(&obj_stock.lock, flags);
 
 	stock = this_cpu_ptr(&obj_stock);
@@ -3091,7 +3103,7 @@ static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	}
 
 	local_unlock_irqrestore(&obj_stock.lock, flags);
-
+out:
 	if (nr_pages)
 		obj_cgroup_uncharge_pages(objcg, nr_pages);
 }
