@@ -169,6 +169,15 @@ static inline void set_userns_rlimit_max(struct user_namespace *ns,
 	ns->rlimit_max[type] = max <= LONG_MAX ? max : LONG_MAX;
 }
 
+struct user_namespace *ns_next_child(struct user_namespace *pos,
+					   struct user_namespace *parent);
+struct user_namespace *ns_next_child_pre(struct user_namespace *pos,
+						    struct user_namespace *root);
+
+#define ns_for_each_child_pre(pos, ns)				\
+	for ((pos) = ns_next_child_pre(NULL, (ns)); (pos);	\
+	     (pos) = ns_next_child_pre((pos), (ns)))
+
 #ifdef CONFIG_USER_NS
 
 static inline struct user_namespace *get_user_ns(struct user_namespace *ns)
