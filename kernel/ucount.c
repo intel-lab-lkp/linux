@@ -16,6 +16,8 @@ struct ucounts init_ucounts = {
 
 #define UCOUNTS_HASHTABLE_BITS 10
 #define UCOUNTS_HASHTABLE_ENTRIES (1 << UCOUNTS_HASHTABLE_BITS)
+#define UCOUNT_BATCH_SIZE 16
+
 static struct hlist_nulls_head ucounts_hashtable[UCOUNTS_HASHTABLE_ENTRIES] = {
 	[0 ... UCOUNTS_HASHTABLE_ENTRIES - 1] = HLIST_NULLS_HEAD_INIT(0)
 };
@@ -315,24 +317,143 @@ static void do_dec_rlimit_put_ucounts(struct ucounts *ucounts,
 
 void dec_rlimit_put_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 {
-	do_dec_rlimit_put_ucounts(ucounts, NULL, type, 1);
+	struct user_namespace *ns = ucounts->ns;
+	int cache;
+
+	if (ns != &init_user_ns) {
+		__dec_rlimit_put_ucounts(ucounts, type, 1);
+		cache = atomic_add_return(1, &ns->rlimit_cache[type]);
+		if (cache > UCOUNT_BATCH_SIZE) {
+			cache = atomic_sub_return(UCOUNT_BATCH_SIZE,
+						  &ns->rlimit_cache[type]);
+			if (cache > 0)
+				do_dec_rlimit_put_ucounts(ns->ucounts, NULL,
+							  type, UCOUNT_BATCH_SIZE);
+			else
+				atomic_add(UCOUNT_BATCH_SIZE, &ns->rlimit_cache[type]);
+		}
+	} else {
+		do_dec_rlimit_put_ucounts(ucounts, NULL, type, 1);
+	}
+}
+
+/* Drain the root cache, return how many cache have been relcaimed */
+static int rlimit_drain_type_cache(struct user_namespace *root, enum rlimit_type type)
+{
+	struct user_namespace *child;
+	int reclaim_cache = 0;
+
+	rcu_read_lock();
+	ns_for_each_child_pre(child, root) {
+		int cache;
+retry:
+		cache = atomic_read(&child->rlimit_cache[type]);
+		if (cache > 0) {
+			int old = atomic_cmpxchg(&child->rlimit_cache[type], cache, 0);
+
+			if (cache == old) {
+				reclaim_cache += cache;
+				do_dec_rlimit_put_ucounts(child->ucounts, NULL, type, cache);
+			} else {
+				goto retry;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return reclaim_cache;
+}
+
+void rlimit_drain_cache(struct user_namespace *root)
+{
+	for (int i = 0; i < UCOUNT_RLIMIT_COUNTS; i++)
+		rlimit_drain_type_cache(root, i);
+}
+
+static bool rlimit_charge_cache(struct ucounts *ucounts, enum rlimit_type type)
+{
+	struct ucounts *iter;
+	long max = LONG_MAX;
+	long new;
+	struct user_namespace *ns = ucounts->ns;
+
+	for (iter = ns->ucounts; iter; iter = iter->ns->ucounts) {
+		max = get_userns_rlimit_max(iter->ns, type);
+		new = __inc_rlimit_get_ucounts(iter, type, UCOUNT_BATCH_SIZE);
+		if (new <= 0 || new > max)
+			goto dec_unwind;
+	}
+
+	/* charge ok, add the ns's cache */
+	atomic_add_return(UCOUNT_BATCH_SIZE, &ucounts->ns->rlimit_cache[type]);
+	return true;
+
+dec_unwind:
+	do_dec_rlimit_put_ucounts(ns->ucounts, iter, type, UCOUNT_BATCH_SIZE);
+	return false;
 }
 
 long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
-			    bool override_rlimit)
+			    bool override_rlimit, long tlimit)
 {
 	/* Caller must hold a reference to ucounts */
 	struct ucounts *iter;
 	long max = LONG_MAX;
 	long ret = 0;
+	struct user_namespace *ns = ucounts->ns;
+	bool is_trying = false;
+	bool non_cache = false;
+	long new;
+
+try_cache:
+	/* If the ucounts.ns is not init_user_ns, and it has cache in its ns, consume cache */
+	if (ns != &init_user_ns) {
+		if (atomic_dec_return(&ns->rlimit_cache[type]) >= 0) {
+			new =  __inc_rlimit_get_ucounts(ucounts, type, 1);
+			/*
+			 * If new is below tlimit, return success
+			 * Otherwise, goto non-cache logic. It should keep the
+			 * rlimit below the tlimit as much as possible
+			 */
+			if (new <= tlimit)
+				return new;
+			non_cache = true;
+		}
+		/* Restore the previously incremented value */
+		atomic_inc(&ns->rlimit_cache[type]);
+
+		if (!non_cache && !is_trying &&
+		    rlimit_charge_cache(ucounts, type)) {
+			is_trying = true;
+			goto try_cache;
+		}
+	}
 
 	for (iter = ucounts; iter; iter = iter->ns->ucounts) {
-		long new = __inc_rlimit_get_ucounts(iter, type, 1);
+retry_inc:
+		new = __inc_rlimit_get_ucounts(iter, type, 1);
+
+		/*
+		 * When the 'iter' is equal to 'ucounts', the 'new' value is what will be returned.
+		 *
+		 * Case 1: If the return value is larger than 'tlimit'.
+		 * Case 2: If the 'new' value is larger than the maximum of 'rlimit_max'.
+		 *
+		 * In both cases, we need to drain the cache. This is because when the cache is
+		 * present, the value might exceed the acceptable threshold. However, when the
+		 * cache is removed,the value should fall within the allowed limit
+		 */
+		if (iter == ucounts)
+			ret = new;
+
+		if ((new > max || ret > tlimit) &&
+			rlimit_drain_type_cache(iter->ns, type) > 0) {
+			__dec_rlimit_put_ucounts(iter, type, 1);
+			goto retry_inc;
+		}
 
 		if (new <= 0 || new > max)
 			goto dec_unwind;
-		if (iter == ucounts)
-			ret = new;
+
 		if (!override_rlimit)
 			max = get_userns_rlimit_max(iter->ns, type);
 	}

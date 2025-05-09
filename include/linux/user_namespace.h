@@ -113,6 +113,7 @@ struct user_namespace {
 	struct ucounts		*ucounts;
 	long ucount_max[UCOUNT_COUNTS];
 	long rlimit_max[UCOUNT_RLIMIT_COUNTS];
+	atomic_t rlimit_cache[UCOUNT_RLIMIT_COUNTS];
 
 #if IS_ENABLED(CONFIG_BINFMT_MISC)
 	struct binfmt_misc *binfmt_misc;
@@ -139,6 +140,8 @@ void dec_ucount(struct ucounts *ucounts, enum ucount_type type);
 struct ucounts *alloc_ucounts(struct user_namespace *ns, kuid_t uid);
 void put_ucounts(struct ucounts *ucounts);
 
+void rlimit_drain_cache(struct user_namespace *root);
+
 static inline struct ucounts * __must_check get_ucounts(struct ucounts *ucounts)
 {
 	if (rcuref_get(&ucounts->count))
@@ -154,7 +157,7 @@ static inline long get_rlimit_value(struct ucounts *ucounts, enum rlimit_type ty
 long inc_rlimit_ucounts(struct ucounts *ucounts, enum rlimit_type type, long v);
 bool dec_rlimit_ucounts(struct ucounts *ucounts, enum rlimit_type type, long v);
 long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
-			    bool override_rlimit);
+			    bool override_rlimit, long tlimit);
 void dec_rlimit_put_ucounts(struct ucounts *ucounts, enum rlimit_type type);
 bool is_rlimit_overlimit(struct ucounts *ucounts, enum rlimit_type type, unsigned long max);
 
@@ -167,6 +170,12 @@ static inline void set_userns_rlimit_max(struct user_namespace *ns,
 		enum rlimit_type type, unsigned long max)
 {
 	ns->rlimit_max[type] = max <= LONG_MAX ? max : LONG_MAX;
+}
+
+static inline void init_userns_rlimit_cache(struct user_namespace *ns)
+{
+	for (int i = 0; i < UCOUNT_RLIMIT_COUNTS; ++i)
+		atomic_set(&ns->rlimit_cache[i], 0);
 }
 
 struct user_namespace *ns_next_child(struct user_namespace *pos,
