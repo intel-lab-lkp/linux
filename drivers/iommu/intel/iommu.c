@@ -2760,6 +2760,34 @@ out:
 	return satcu;
 }
 
+static bool integrated_device_ats_supported(struct pci_dev *dev, struct intel_iommu *iommu)
+{
+	struct dmar_satc_unit *satcu = dmar_find_matched_satc_unit(dev);
+
+	/*
+	 * This device supports ATS as it is in SATC table. When IOMMU is in
+	 * legacy mode, enabling ATS is done automatically by HW for the device
+	 * that requires ATS, hence OS should not enable this device ATS to
+	 * avoid duplicated TLB invalidation.
+	 */
+	if (satcu)
+		return !(satcu->atc_required && !sm_supported(iommu));
+
+	/*
+	 * The integrated device isn't enumerated in the SATC structure. For
+	 * example, it has ATS PCI capability implemented but not validated per
+	 * the requirements described in the VT-d specification, specifically
+	 * in the "Device TLB in System-on-Chip (SoC) Integrated Devices"
+	 * section. Therefore, it does not appear in the SATC structure. Return
+	 * false in this case.
+	 *
+	 * On older machines that do not support SATC (i.e., no SATC structure
+	 * present), ATS is considered to be "always" supported for integrated
+	 * endpoints.
+	 */
+	return !list_empty(&dmar_satc_units);
+}
+
 static bool dmar_ats_supported(struct pci_dev *dev, struct intel_iommu *iommu)
 {
 	int i;
@@ -2769,25 +2797,13 @@ static bool dmar_ats_supported(struct pci_dev *dev, struct intel_iommu *iommu)
 	struct device *tmp;
 	struct acpi_dmar_atsr *atsr;
 	struct dmar_atsr_unit *atsru;
-	struct dmar_satc_unit *satcu;
 
 	dev = pci_physfn(dev);
-	satcu = dmar_find_matched_satc_unit(dev);
-	if (satcu)
-		/*
-		 * This device supports ATS as it is in SATC table.
-		 * When IOMMU is in legacy mode, enabling ATS is done
-		 * automatically by HW for the device that requires
-		 * ATS, hence OS should not enable this device ATS
-		 * to avoid duplicated TLB invalidation.
-		 */
-		return !(satcu->atc_required && !sm_supported(iommu));
 
 	for (bus = dev->bus; bus; bus = bus->parent) {
 		bridge = bus->self;
-		/* If it's an integrated device, allow ATS */
 		if (!bridge)
-			return true;
+			return integrated_device_ats_supported(dev, iommu);
 		/* Connected via non-PCIe: no ATS */
 		if (!pci_is_pcie(bridge) ||
 		    pci_pcie_type(bridge) == PCI_EXP_TYPE_PCI_BRIDGE)
