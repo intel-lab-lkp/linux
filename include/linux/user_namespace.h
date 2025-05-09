@@ -80,6 +80,7 @@ struct user_namespace {
 	struct user_namespace	*parent;
 	struct list_head	ns_node;
 	struct list_head	children;
+	struct rcu_head		rcu;
 	int			level;
 	kuid_t			owner;
 	kgid_t			group;
