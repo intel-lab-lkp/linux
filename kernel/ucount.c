@@ -276,22 +276,46 @@ bool dec_rlimit_ucounts(struct ucounts *ucounts, enum rlimit_type type, long v)
 	return (new == 0);
 }
 
+static void __dec_rlimit_put_ucounts(struct ucounts *ucounts,
+				enum rlimit_type type, long v)
+{
+	long dec = atomic_long_sub_return(v, &ucounts->rlimit[type]);
+
+	WARN_ON_ONCE(dec < 0);
+	if (dec == 0)
+		put_ucounts(ucounts);
+}
+
+static long __inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type, long v)
+{
+	long new = atomic_long_add_return(v, &ucounts->rlimit[type]);
+
+	/*
+	 * Grab an extra ucount reference for the caller when
+	 * the rlimit count was previously 0.
+	 */
+	if (new == v && !get_ucounts(ucounts)) {
+		long dec = atomic_long_sub_return(v, &ucounts->rlimit[type]);
+
+		WARN_ON_ONCE(dec < 0);
+		return 0;
+	}
+	return new;
+}
+
 static void do_dec_rlimit_put_ucounts(struct ucounts *ucounts,
-				struct ucounts *last, enum rlimit_type type)
+				struct ucounts *last, enum rlimit_type type, long v)
 {
 	struct ucounts *iter, *next;
 	for (iter = ucounts; iter != last; iter = next) {
-		long dec = atomic_long_sub_return(1, &iter->rlimit[type]);
-		WARN_ON_ONCE(dec < 0);
 		next = iter->ns->ucounts;
-		if (dec == 0)
-			put_ucounts(iter);
+		__dec_rlimit_put_ucounts(ucounts, type, v);
 	}
 }
 
 void dec_rlimit_put_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 {
-	do_dec_rlimit_put_ucounts(ucounts, NULL, type);
+	do_dec_rlimit_put_ucounts(ucounts, NULL, type, 1);
 }
 
 long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
@@ -300,30 +324,22 @@ long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
 	/* Caller must hold a reference to ucounts */
 	struct ucounts *iter;
 	long max = LONG_MAX;
-	long dec, ret = 0;
+	long ret = 0;
 
 	for (iter = ucounts; iter; iter = iter->ns->ucounts) {
-		long new = atomic_long_add_return(1, &iter->rlimit[type]);
-		if (new < 0 || new > max)
+		long new = __inc_rlimit_get_ucounts(iter, type, 1);
+
+		if (new <= 0 || new > max)
 			goto dec_unwind;
 		if (iter == ucounts)
 			ret = new;
 		if (!override_rlimit)
 			max = get_userns_rlimit_max(iter->ns, type);
-		/*
-		 * Grab an extra ucount reference for the caller when
-		 * the rlimit count was previously 0.
-		 */
-		if (new != 1)
-			continue;
-		if (!get_ucounts(iter))
-			goto dec_unwind;
 	}
 	return ret;
+
 dec_unwind:
-	dec = atomic_long_sub_return(1, &iter->rlimit[type]);
-	WARN_ON_ONCE(dec < 0);
-	do_dec_rlimit_put_ucounts(ucounts, iter, type);
+	do_dec_rlimit_put_ucounts(ucounts, iter, type, 1);
 	return 0;
 }
 
