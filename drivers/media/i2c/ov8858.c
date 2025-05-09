@@ -77,6 +77,14 @@
 
 #define REG_NULL			0xffff
 
+/* OV8858 native and active pixel array size */
+#define OV8858_NATIVE_WIDTH		3296U
+#define OV8858_NATIVE_HEIGHT		2528U
+#define OV8858_PIXEL_ARRAY_LEFT		16U
+#define OV8858_PIXEL_ARRAY_TOP		40U
+#define OV8858_PIXEL_ARRAY_WIDTH	3264U
+#define OV8858_PIXEL_ARRAY_HEIGHT	2448U
+
 static const char * const ov8858_supply_names[] = {
 	"avdd",		/* Analog power */
 	"dovdd",	/* Digital I/O power */
@@ -1492,11 +1500,40 @@ static int ov8858_init_state(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int ov8858_get_selection(struct v4l2_subdev *sd,
+				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_selection *sel)
+{
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		sel->r = *v4l2_subdev_state_get_crop(sd_state, 0);
+		return 0;
+
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+		sel->r.top = 0;
+		sel->r.left = 0;
+		sel->r.width = OV8858_NATIVE_WIDTH;
+		sel->r.height = OV8858_NATIVE_HEIGHT;
+		return 0;
+
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		sel->r.top = OV8858_PIXEL_ARRAY_TOP;
+		sel->r.left = OV8858_PIXEL_ARRAY_LEFT;
+		sel->r.width = OV8858_PIXEL_ARRAY_WIDTH;
+		sel->r.height = OV8858_PIXEL_ARRAY_HEIGHT;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static const struct v4l2_subdev_pad_ops ov8858_pad_ops = {
 	.enum_mbus_code = ov8858_enum_mbus_code,
 	.enum_frame_size = ov8858_enum_frame_sizes,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = ov8858_set_fmt,
+	.get_selection = ov8858_get_selection,
 };
 
 static const struct v4l2_subdev_ops ov8858_subdev_ops = {
