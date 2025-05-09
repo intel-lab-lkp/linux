@@ -295,6 +295,9 @@ struct drm_sched_fence {
         /**
          * @sched: the scheduler instance to which the job having this struct
          * belongs to.
+         *
+         * Some care must be taken as to where the sched is derefed, as the
+         * fence can outlive the sched.
          */
 	struct drm_gpu_scheduler	*sched;
         /**
@@ -305,6 +308,14 @@ struct drm_sched_fence {
          * @owner: job owner for debugging
          */
 	void				*owner;
+
+	/**
+	 * @name: the timeline name
+	 *
+	 * This comes from the @sched, but since the fence can outlive the
+	 * sched, we need to keep our own copy.
+	 */
+	const char			*name;
 };
 
 struct drm_sched_fence *to_drm_sched_fence(struct dma_fence *f);
