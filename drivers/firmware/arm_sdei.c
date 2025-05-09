@@ -299,6 +299,12 @@ static int sdei_api_get_version(u64 *version)
 	return invoke_sdei_fn(SDEI_1_0_FN_SDEI_VERSION, 0, 0, 0, 0, 0, version);
 }
 
+int sdei_event_signal(u32 event_num)
+{
+	return invoke_sdei_fn(SDEI_1_0_FN_SDEI_EVENT_SIGNAL, event_num, 0, 0, 0,
+			      0, NULL);
+}
+
 int sdei_mask_local_cpu(void)
 {
 	int err;
