@@ -73,12 +73,12 @@ struct intel_dpll_funcs {
 		       struct intel_encoder *encoder);
 
 	/*
-	 * Hook for disabling the pll, called from intel_disable_dpll()
+	 * Hook for disabling the shared pll, called from _intel_disable_shared_dpll()
 	 * only when it is safe to disable the pll, i.e., there are no more
 	 * tracked users for it.
 	 */
-	void (*disable)(struct intel_display *display,
-			struct intel_dpll *pll);
+	void (*shared_dpll_disable)(struct intel_display *display,
+				    struct intel_dpll *pll);
 
 	/*
 	 * Hook for reading the values currently programmed to the DPLL
@@ -243,7 +243,7 @@ static void _intel_enable_shared_dpll(const struct intel_crtc_state *crtc_state)
 static void _intel_disable_shared_dpll(struct intel_display *display,
 				       struct intel_dpll *pll)
 {
-	pll->info->funcs->disable(display, pll);
+	pll->info->funcs->shared_dpll_disable(display, pll);
 	pll->on = false;
 
 	if (pll->info->power_domain)
@@ -674,7 +674,7 @@ static bool ibx_compare_hw_state(const struct intel_dpll_hw_state *_a,
 
 static const struct intel_dpll_funcs ibx_pch_dpll_funcs = {
 	.enable = ibx_pch_dpll_enable,
-	.disable = ibx_pch_dpll_disable,
+	.shared_dpll_disable = ibx_pch_dpll_disable,
 	.get_hw_state = ibx_pch_dpll_get_hw_state,
 };
 
@@ -1275,14 +1275,14 @@ static bool hsw_compare_hw_state(const struct intel_dpll_hw_state *_a,
 
 static const struct intel_dpll_funcs hsw_ddi_wrpll_funcs = {
 	.enable = hsw_ddi_wrpll_enable,
-	.disable = hsw_ddi_wrpll_disable,
+	.shared_dpll_disable = hsw_ddi_wrpll_disable,
 	.get_hw_state = hsw_ddi_wrpll_get_hw_state,
 	.get_freq = hsw_ddi_wrpll_get_freq,
 };
 
 static const struct intel_dpll_funcs hsw_ddi_spll_funcs = {
 	.enable = hsw_ddi_spll_enable,
-	.disable = hsw_ddi_spll_disable,
+	.shared_dpll_disable = hsw_ddi_spll_disable,
 	.get_hw_state = hsw_ddi_spll_get_hw_state,
 	.get_freq = hsw_ddi_spll_get_freq,
 };
@@ -1306,7 +1306,7 @@ static bool hsw_ddi_lcpll_get_hw_state(struct intel_display *display,
 
 static const struct intel_dpll_funcs hsw_ddi_lcpll_funcs = {
 	.enable = hsw_ddi_lcpll_enable,
-	.disable = hsw_ddi_lcpll_disable,
+	.shared_dpll_disable = hsw_ddi_lcpll_disable,
 	.get_hw_state = hsw_ddi_lcpll_get_hw_state,
 	.get_freq = hsw_ddi_lcpll_get_freq,
 };
@@ -2010,14 +2010,14 @@ static bool skl_compare_hw_state(const struct intel_dpll_hw_state *_a,
 
 static const struct intel_dpll_funcs skl_ddi_pll_funcs = {
 	.enable = skl_ddi_pll_enable,
-	.disable = skl_ddi_pll_disable,
+	.shared_dpll_disable = skl_ddi_pll_disable,
 	.get_hw_state = skl_ddi_pll_get_hw_state,
 	.get_freq = skl_ddi_pll_get_freq,
 };
 
 static const struct intel_dpll_funcs skl_ddi_dpll0_funcs = {
 	.enable = skl_ddi_dpll0_enable,
-	.disable = skl_ddi_dpll0_disable,
+	.shared_dpll_disable = skl_ddi_dpll0_disable,
 	.get_hw_state = skl_ddi_dpll0_get_hw_state,
 	.get_freq = skl_ddi_pll_get_freq,
 };
@@ -2493,7 +2493,7 @@ static bool bxt_compare_hw_state(const struct intel_dpll_hw_state *_a,
 
 static const struct intel_dpll_funcs bxt_ddi_pll_funcs = {
 	.enable = bxt_ddi_pll_enable,
-	.disable = bxt_ddi_pll_disable,
+	.shared_dpll_disable = bxt_ddi_pll_disable,
 	.get_hw_state = bxt_ddi_pll_get_hw_state,
 	.get_freq = bxt_ddi_pll_get_freq,
 };
@@ -4138,21 +4138,21 @@ static bool icl_compare_hw_state(const struct intel_dpll_hw_state *_a,
 
 static const struct intel_dpll_funcs combo_pll_funcs = {
 	.enable = combo_pll_enable,
-	.disable = combo_pll_disable,
+	.shared_dpll_disable = combo_pll_disable,
 	.get_hw_state = combo_pll_get_hw_state,
 	.get_freq = icl_ddi_combo_pll_get_freq,
 };
 
 static const struct intel_dpll_funcs tbt_pll_funcs = {
 	.enable = tbt_pll_enable,
-	.disable = tbt_pll_disable,
+	.shared_dpll_disable = tbt_pll_disable,
 	.get_hw_state = tbt_pll_get_hw_state,
 	.get_freq = icl_ddi_tbt_pll_get_freq,
 };
 
 static const struct intel_dpll_funcs mg_pll_funcs = {
 	.enable = mg_pll_enable,
-	.disable = mg_pll_disable,
+	.shared_dpll_disable = mg_pll_disable,
 	.get_hw_state = mg_pll_get_hw_state,
 	.get_freq = icl_ddi_mg_pll_get_freq,
 };
@@ -4200,7 +4200,7 @@ static const struct intel_dpll_mgr ehl_pll_mgr = {
 
 static const struct intel_dpll_funcs dkl_pll_funcs = {
 	.enable = mg_pll_enable,
-	.disable = mg_pll_disable,
+	.shared_dpll_disable = mg_pll_disable,
 	.get_hw_state = dkl_pll_get_hw_state,
 	.get_freq = icl_ddi_mg_pll_get_freq,
 };
