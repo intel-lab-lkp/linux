@@ -134,4 +134,28 @@ struct clk_regmap _name = {						\
 
 #define MESON_PCLK_RO(_name, _reg, _bit, _pname)	\
 	__MESON_PCLK(_name, _reg, _bit, &clk_regmap_gate_ro_ops, _pname)
+
+#define __MESON_PCLK_V2(_name, _reg, _bit, _ops, _pname)		\
+struct clk_regmap _name = {						\
+	.data = &(struct clk_regmap_gate_data){				\
+		.offset = (_reg),					\
+		.bit_idx = (_bit),					\
+	},								\
+	.hw.init = &(struct clk_init_data) {				\
+		.name = #_name,						\
+		.ops = _ops,						\
+		.parent_data = &(const struct clk_parent_data) {	\
+			.fw_name = #_pname,				\
+		},							\
+		.num_parents = 1,					\
+		.flags = (CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED),	\
+	},								\
+}
+
+#define MESON_PCLK_V2(_name, _reg, _bit, _pname)	\
+	__MESON_PCLK_V2(_name, _reg, _bit, &clk_regmap_gate_ops, _pname)
+
+#define MESON_PCLK_RO_V2(_name, _reg, _bit, _pname)	\
+	__MESON_PCLK_V2(_name, _reg, _bit, &clk_regmap_gate_ro_ops, _pname)
+
 #endif /* __CLK_REGMAP_H */
