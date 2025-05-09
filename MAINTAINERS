@@ -24991,9 +24991,8 @@ S:	Maintained
 F:	Documentation/ABI/testing/configfs-tsm-report
 F:	Documentation/driver-api/coco/
 F:	drivers/virt/coco/guest/
-F:	drivers/virt/coco/tsm*.c
 F:	include/linux/tsm*.h
-F:	samples/tsm/
+F:	samples/tsm-mr/
 
 TRUSTED SERVICES TEE DRIVER
 M:	Balint Dobszay <balint.dobszay@arm.com>
