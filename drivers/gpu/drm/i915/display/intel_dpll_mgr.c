@@ -69,9 +69,8 @@ struct intel_dpll_funcs {
 	 * Hook for enabling the pll, called from intel_enable_dpll() if
 	 * the pll is not already enabled.
 	 */
-	void (*enable)(struct intel_display *display,
-		       struct intel_dpll *pll,
-		       const struct intel_dpll_hw_state *dpll_hw_state);
+	void (*enable)(const struct intel_crtc_state *state,
+		       struct intel_encoder *encoder);
 
 	/*
 	 * Hook for disabling the pll, called from intel_disable_dpll()
@@ -229,13 +228,15 @@ intel_tc_pll_enable_reg(struct intel_display *display,
 	return MG_PLL_ENABLE(tc_port);
 }
 
-static void _intel_enable_shared_dpll(struct intel_display *display,
-				      struct intel_dpll *pll)
+static void _intel_enable_shared_dpll(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+
 	if (pll->info->power_domain)
 		pll->wakeref = intel_display_power_get(display, pll->info->power_domain);
 
-	pll->info->funcs->enable(display, pll, &pll->state.hw_state);
+	pll->info->funcs->enable(crtc_state, NULL);
 	pll->on = true;
 }
 
@@ -289,7 +290,7 @@ void intel_enable_dpll(const struct intel_crtc_state *crtc_state)
 
 	drm_dbg_kms(display->drm, "enabling %s\n", pll->info->name);
 
-	_intel_enable_shared_dpll(display, pll);
+	_intel_enable_shared_dpll(crtc_state);
 
 out:
 	mutex_unlock(&display->dpll.lock);
@@ -561,11 +562,12 @@ static void ibx_assert_pch_refclk_enabled(struct intel_display *display)
 				 "PCH refclk assertion failure, should be active but is disabled\n");
 }
 
-static void ibx_pch_dpll_enable(struct intel_display *display,
-				struct intel_dpll *pll,
-				const struct intel_dpll_hw_state *dpll_hw_state)
+static void ibx_pch_dpll_enable(const struct intel_crtc_state *crtc_state,
+				struct intel_encoder *encoder)
 {
-	const struct i9xx_dpll_hw_state *hw_state = &dpll_hw_state->i9xx;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct i9xx_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.i9xx;
 	const enum intel_dpll_id id = pll->info->id;
 
 	/* PCH refclock must be enabled first */
@@ -691,11 +693,12 @@ static const struct intel_dpll_mgr pch_pll_mgr = {
 	.compare_hw_state = ibx_compare_hw_state,
 };
 
-static void hsw_ddi_wrpll_enable(struct intel_display *display,
-				 struct intel_dpll *pll,
-				 const struct intel_dpll_hw_state *dpll_hw_state)
+static void hsw_ddi_wrpll_enable(const struct intel_crtc_state *crtc_state,
+				 struct intel_encoder *encoder)
 {
-	const struct hsw_dpll_hw_state *hw_state = &dpll_hw_state->hsw;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct hsw_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.hsw;
 	const enum intel_dpll_id id = pll->info->id;
 
 	intel_de_write(display, WRPLL_CTL(id), hw_state->wrpll);
@@ -703,11 +706,11 @@ static void hsw_ddi_wrpll_enable(struct intel_display *display,
 	udelay(20);
 }
 
-static void hsw_ddi_spll_enable(struct intel_display *display,
-				struct intel_dpll *pll,
-				const struct intel_dpll_hw_state *dpll_hw_state)
+static void hsw_ddi_spll_enable(const struct intel_crtc_state *crtc_state,
+				struct intel_encoder *encoder)
 {
-	const struct hsw_dpll_hw_state *hw_state = &dpll_hw_state->hsw;
+	struct intel_display *display = to_intel_display(crtc_state);
+	const struct hsw_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.hsw;
 
 	intel_de_write(display, SPLL_CTL, hw_state->spll);
 	intel_de_posting_read(display, SPLL_CTL);
@@ -1284,9 +1287,8 @@ static const struct intel_dpll_funcs hsw_ddi_spll_funcs = {
 	.get_freq = hsw_ddi_spll_get_freq,
 };
 
-static void hsw_ddi_lcpll_enable(struct intel_display *display,
-				 struct intel_dpll *pll,
-				 const struct intel_dpll_hw_state *hw_state)
+static void hsw_ddi_lcpll_enable(const struct intel_crtc_state *crtc_state,
+				 struct intel_encoder *encoder)
 {
 }
 
@@ -1377,11 +1379,12 @@ static void skl_ddi_pll_write_ctrl1(struct intel_display *display,
 	intel_de_posting_read(display, DPLL_CTRL1);
 }
 
-static void skl_ddi_pll_enable(struct intel_display *display,
-			       struct intel_dpll *pll,
-			       const struct intel_dpll_hw_state *dpll_hw_state)
+static void skl_ddi_pll_enable(const struct intel_crtc_state *crtc_state,
+			       struct intel_encoder *encoder)
 {
-	const struct skl_dpll_hw_state *hw_state = &dpll_hw_state->skl;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct skl_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.skl;
 	const struct skl_dpll_regs *regs = skl_dpll_regs;
 	const enum intel_dpll_id id = pll->info->id;
 
@@ -1399,11 +1402,12 @@ static void skl_ddi_pll_enable(struct intel_display *display,
 		drm_err(display->drm, "DPLL %d not locked\n", id);
 }
 
-static void skl_ddi_dpll0_enable(struct intel_display *display,
-				 struct intel_dpll *pll,
-				 const struct intel_dpll_hw_state *dpll_hw_state)
+static void skl_ddi_dpll0_enable(const struct intel_crtc_state *crtc_state,
+				 struct intel_encoder *encoder)
 {
-	const struct skl_dpll_hw_state *hw_state = &dpll_hw_state->skl;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct skl_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.skl;
 
 	skl_ddi_pll_write_ctrl1(display, pll, hw_state);
 }
@@ -2037,11 +2041,12 @@ static const struct intel_dpll_mgr skl_pll_mgr = {
 	.compare_hw_state = skl_compare_hw_state,
 };
 
-static void bxt_ddi_pll_enable(struct intel_display *display,
-			       struct intel_dpll *pll,
-			       const struct intel_dpll_hw_state *dpll_hw_state)
+static void bxt_ddi_pll_enable(const struct intel_crtc_state *crtc_state,
+			       struct intel_encoder *encoder)
 {
-	const struct bxt_dpll_hw_state *hw_state = &dpll_hw_state->bxt;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct bxt_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.bxt;
 	enum port port = (enum port)pll->info->id; /* 1:1 port->PLL mapping */
 	enum dpio_phy phy = DPIO_PHY0;
 	enum dpio_channel ch = DPIO_CH0;
@@ -3953,11 +3958,12 @@ static void adlp_cmtg_clock_gating_wa(struct intel_display *display, struct inte
 		drm_dbg_kms(display->drm, "Unexpected flags in TRANS_CMTG_CHICKEN: %08x\n", val);
 }
 
-static void combo_pll_enable(struct intel_display *display,
-			     struct intel_dpll *pll,
-			     const struct intel_dpll_hw_state *dpll_hw_state)
+static void combo_pll_enable(const struct intel_crtc_state *crtc_state,
+			     struct intel_encoder *encoder)
 {
-	const struct icl_dpll_hw_state *hw_state = &dpll_hw_state->icl;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct icl_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.icl;
 	i915_reg_t enable_reg = intel_combo_pll_enable_reg(display, pll);
 
 	icl_pll_power_enable(display, pll, enable_reg);
@@ -3977,11 +3983,12 @@ static void combo_pll_enable(struct intel_display *display,
 	/* DVFS post sequence would be here. See the comment above. */
 }
 
-static void tbt_pll_enable(struct intel_display *display,
-			   struct intel_dpll *pll,
-			   const struct intel_dpll_hw_state *dpll_hw_state)
+static void tbt_pll_enable(const struct intel_crtc_state *crtc_state,
+			   struct intel_encoder *encoder)
 {
-	const struct icl_dpll_hw_state *hw_state = &dpll_hw_state->icl;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct icl_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.icl;
 
 	icl_pll_power_enable(display, pll, TBT_PLL_ENABLE);
 
@@ -3998,11 +4005,12 @@ static void tbt_pll_enable(struct intel_display *display,
 	/* DVFS post sequence would be here. See the comment above. */
 }
 
-static void mg_pll_enable(struct intel_display *display,
-			  struct intel_dpll *pll,
-			  const struct intel_dpll_hw_state *dpll_hw_state)
+static void mg_pll_enable(const struct intel_crtc_state *crtc_state,
+			  struct intel_encoder *encoder)
 {
-	const struct icl_dpll_hw_state *hw_state = &dpll_hw_state->icl;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dpll *pll = crtc_state->intel_dpll;
+	const struct icl_dpll_hw_state *hw_state = &crtc_state->dpll_hw_state.icl;
 	i915_reg_t enable_reg = intel_tc_pll_enable_reg(display, pll);
 
 	icl_pll_power_enable(display, pll, enable_reg);
