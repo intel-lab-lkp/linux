@@ -26,6 +26,7 @@ EXPORT_SYMBOL_GPL(firmware_attributes_class);
 
 static const char * const fwat_type_labels[] = {
 	[fwat_type_integer]		= "integer",
+	[fwat_type_boolean]		= "boolean",
 	[fwat_type_string]		= "string",
 	[fwat_type_enumeration]		= "enumeration",
 };
@@ -72,6 +73,7 @@ fwat_current_value_show(struct device *dev, const struct fwat_attribute *attr, c
 	const struct fwat_attribute_ext *ext = to_fwat_attribute_ext(attr);
 	const struct fwat_attr_config *config = ext->config;
 	const char *str;
+	bool bool_val;
 	long int_val;
 	int ret;
 
@@ -82,6 +84,12 @@ fwat_current_value_show(struct device *dev, const struct fwat_attribute *attr, c
 			return ret;
 
 		return sysfs_emit(buf, "%ld\n", int_val);
+	case fwat_type_boolean:
+		ret = config->ops->boolean_read(dev, config->aux, &bool_val);
+		if (ret)
+			return ret;
+
+		return sysfs_emit(buf, "%u\n", bool_val);
 	case fwat_type_string:
 		ret = config->ops->string_read(dev, config->aux, &str);
 		if (ret)
@@ -105,6 +113,7 @@ fwat_current_value_store(struct device *dev, const struct fwat_attribute *attr,
 {
 	const struct fwat_attribute_ext *ext = to_fwat_attribute_ext(attr);
 	const struct fwat_attr_config *config = ext->config;
+	bool bool_val;
 	long int_val;
 	int ret;
 
@@ -115,6 +124,13 @@ fwat_current_value_store(struct device *dev, const struct fwat_attribute *attr,
 			return ret;
 
 		ret = config->ops->integer_write(dev, config->aux, int_val);
+		break;
+	case fwat_type_boolean:
+		ret = kstrtobool(buf, &bool_val);
+		if (ret)
+			return ret;
+
+		ret = config->ops->boolean_write(dev, config->aux, bool_val);
 		break;
 	case fwat_type_string:
 		ret = config->ops->string_write(dev, config->aux, buf);

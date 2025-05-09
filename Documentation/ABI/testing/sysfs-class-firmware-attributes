@@ -21,6 +21,7 @@ Description:
 			- enumeration: a set of pre-defined valid values
 			- integer: a range of numerical values
 			- string
+			- bool
 
 		HP specific types
 		-----------------

@@ -49,6 +49,7 @@ struct fwat_attribute {
 
 enum fwat_attr_type {
 	fwat_type_integer,
+	fwat_type_boolean,
 	fwat_type_string,
 	fwat_type_enumeration,
 };
@@ -77,6 +78,10 @@ struct fwat_attr_config;
  *                type *integer*.
  * @integer_write: Callback for writing the current_value of an attribute of
  *                 type *integer*.
+ * @boolean_read: Callback for reading the current_value of an attribute of type
+ *                *boolean*.
+ * @boolean_write: Callback for writing the current_value of an attribute of
+ *                 type *boolean*.
  * @string_read: Callback for reading the current_value of an attribute of type
  *               *string*.
  * @string_write: Callback for writing the current_value of an attribute of type
@@ -95,6 +100,12 @@ struct fwat_attr_ops {
 					    long *val);
 			int (*integer_write)(struct device *dev, long aux,
 					     long val);
+		};
+		struct {
+			int (*boolean_read)(struct device *dev, long aux,
+					    bool *val);
+			int (*boolean_write)(struct device *dev, long aux,
+					     bool val);
 		};
 		struct {
 			int (*string_read)(struct device *dev, long aux,
