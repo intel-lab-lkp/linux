@@ -2257,7 +2257,7 @@ static inline int ext4_emergency_ro(struct super_block *sb)
 
 static inline int ext4_emergency_state(struct super_block *sb)
 {
-	if (unlikely(ext4_forced_shutdown(sb)))
+	if (unlikely(ext4_forced_shutdown(sb)) || sb->s_writers.frozen == SB_FREEZE_COMPLETE)
 		return -EIO;
 	if (unlikely(ext4_emergency_ro(sb)))
 		return -EROFS;
