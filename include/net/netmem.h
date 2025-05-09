@@ -138,6 +138,24 @@ static inline netmem_ref page_to_netmem(struct page *page)
 	return (__force netmem_ref)page;
 }
 
+static inline netmem_ref alloc_netmems_node(int nid, gfp_t gfp_mask,
+		unsigned int order)
+{
+	return page_to_netmem(alloc_pages_node(nid, gfp_mask, order));
+}
+
+static inline unsigned long alloc_netmems_bulk_node(gfp_t gfp, int nid,
+		unsigned long nr_netmems, netmem_ref *netmem_array)
+{
+	return alloc_pages_bulk_node(gfp, nid, nr_netmems,
+			(struct page **)netmem_array);
+}
+
+static inline void put_netmem(netmem_ref netmem)
+{
+	put_page(netmem_to_page(netmem));
+}
+
 /**
  * virt_to_netmem - convert virtual memory pointer to a netmem reference
  * @data: host memory pointer to convert
