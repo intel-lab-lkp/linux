@@ -34,8 +34,36 @@ static inline enum cache_type get_cache_type(int level)
 static void ci_leaf_init(struct cacheinfo *this_leaf,
 			 enum cache_type type, unsigned int level)
 {
+	u64 val;
+
 	this_leaf->level = level;
 	this_leaf->type = type;
+	if (type == CACHE_TYPE_NOCACHE)
+		return;
+
+	val = FIELD_PREP(CSSELR_EL1_Level, level - 1);
+	if (type == CACHE_TYPE_INST)
+		val |= CSSELR_EL1_InD;
+	write_sysreg(val, csselr_el1);
+
+	val = read_sysreg(ccsidr_el1);
+	this_leaf->coherency_line_size =
+		BIT(FIELD_GET(CCSIDR_EL1_LineSize, val) + 4);
+	if (FIELD_GET(ID_MMFR4_EL1_CCIDX,
+		      read_sanitised_ftr_reg(SYS_ID_AA64MMFR4_EL1))) {
+		this_leaf->number_of_sets =
+			FIELD_GET(CCSIDR_CCIDX_NumSets, val) + 1;
+		this_leaf->ways_of_associativity =
+			FIELD_GET(CCSIDR_CCIDX_Associativity, val) + 1;
+	} else {
+		this_leaf->number_of_sets =
+			FIELD_GET(CCSIDR_EL1_NumSets, val) + 1;
+		this_leaf->ways_of_associativity =
+			FIELD_GET(CCSIDR_EL1_Associativity, val) + 1;
+	}
+	this_leaf->size = this_leaf->coherency_line_size *
+			  this_leaf->number_of_sets *
+			  this_leaf->ways_of_associativity;
 }
 
 static void detect_cache_level(unsigned int *level_p, unsigned int *leaves_p)

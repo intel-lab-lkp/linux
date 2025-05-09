@@ -8,6 +8,9 @@
 #define L1_CACHE_SHIFT		(6)
 #define L1_CACHE_BYTES		(1 << L1_CACHE_SHIFT)
 
+#define CCSIDR_CCIDX_NumSets		GENMASK_ULL(55, 32)
+#define CCSIDR_CCIDX_Associativity	GENMASK_ULL(23, 3)
+
 #define CLIDR_LOUU_SHIFT	27
 #define CLIDR_LOC_SHIFT		24
 #define CLIDR_LOUIS_SHIFT	21
