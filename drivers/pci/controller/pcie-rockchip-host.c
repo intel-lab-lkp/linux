@@ -36,6 +36,45 @@
 #include "../pci.h"
 #include "pcie-rockchip.h"
 
+struct rockchip_irq_info {
+	u32 bit;
+	const char *msg;
+};
+
+static const struct rockchip_irq_info pcie_subsys_irq_info[] = {
+	{ PCIE_CORE_INT_PRFPE,
+	  "parity error detected while reading from the PNP receive FIFO RAM" },
+	{ PCIE_CORE_INT_CRFPE,
+	  "parity error detected while reading from the Completion Receive FIFO RAM" },
+	{ PCIE_CORE_INT_RRPE,
+	  "parity error detected while reading from replay buffer RAM" },
+	{ PCIE_CORE_INT_PRFO, "overflow occurred in the PNP receive FIFO" },
+	{ PCIE_CORE_INT_CRFO,
+	  "overflow occurred in the completion receive FIFO" },
+	{ PCIE_CORE_INT_RT, "replay timer timed out" },
+	{ PCIE_CORE_INT_RTR,
+	  "replay timer rolled over after 4 transmissions of the same TLP" },
+	{ PCIE_CORE_INT_PE, "phy error detected on receive side" },
+	{ PCIE_CORE_INT_MTR, "malformed TLP received from the link" },
+	{ PCIE_CORE_INT_UCR, "Unexpected Completion received from the link" },
+	{ PCIE_CORE_INT_FCE,
+	  "an error was observed in the flow control advertisements from the other side" },
+	{ PCIE_CORE_INT_CT, "a request timed out waiting for completion" },
+	{ PCIE_CORE_INT_UTC, "unmapped TC error" },
+	{ PCIE_CORE_INT_MMVC, "MSI mask register changes" },
+};
+
+static const struct rockchip_irq_info pcie_client_irq_info[] = {
+	{ PCIE_CLIENT_INT_LEGACY_DONE, "legacy done" },
+	{ PCIE_CLIENT_INT_MSG, "message done" },
+	{ PCIE_CLIENT_INT_HOT_RST, "hot reset" },
+	{ PCIE_CLIENT_INT_DPA, "dpa" },
+	{ PCIE_CLIENT_INT_FATAL_ERR, "fatal error" },
+	{ PCIE_CLIENT_INT_NFATAL_ERR, "Non fatal error" },
+	{ PCIE_CLIENT_INT_CORR_ERR, "correctable error" },
+	{ PCIE_CLIENT_INT_PHY, "phy" },
+};
+
 static void rockchip_pcie_enable_bw_int(struct rockchip_pcie *rockchip)
 {
 	u32 status;
@@ -411,47 +450,11 @@ static irqreturn_t rockchip_pcie_subsys_irq_handler(int irq, void *arg)
 	if (reg & PCIE_CLIENT_INT_LOCAL) {
 		dev_dbg(dev, "local interrupt received\n");
 		sub_reg = rockchip_pcie_read(rockchip, PCIE_CORE_INT_STATUS);
-		if (sub_reg & PCIE_CORE_INT_PRFPE)
-			dev_dbg(dev, "parity error detected while reading from the PNP receive FIFO RAM\n");
 
-		if (sub_reg & PCIE_CORE_INT_CRFPE)
-			dev_dbg(dev, "parity error detected while reading from the Completion Receive FIFO RAM\n");
-
-		if (sub_reg & PCIE_CORE_INT_RRPE)
-			dev_dbg(dev, "parity error detected while reading from replay buffer RAM\n");
-
-		if (sub_reg & PCIE_CORE_INT_PRFO)
-			dev_dbg(dev, "overflow occurred in the PNP receive FIFO\n");
-
-		if (sub_reg & PCIE_CORE_INT_CRFO)
-			dev_dbg(dev, "overflow occurred in the completion receive FIFO\n");
-
-		if (sub_reg & PCIE_CORE_INT_RT)
-			dev_dbg(dev, "replay timer timed out\n");
-
-		if (sub_reg & PCIE_CORE_INT_RTR)
-			dev_dbg(dev, "replay timer rolled over after 4 transmissions of the same TLP\n");
-
-		if (sub_reg & PCIE_CORE_INT_PE)
-			dev_dbg(dev, "phy error detected on receive side\n");
-
-		if (sub_reg & PCIE_CORE_INT_MTR)
-			dev_dbg(dev, "malformed TLP received from the link\n");
-
-		if (sub_reg & PCIE_CORE_INT_UCR)
-			dev_dbg(dev, "Unexpected Completion received from the link\n");
-
-		if (sub_reg & PCIE_CORE_INT_FCE)
-			dev_dbg(dev, "an error was observed in the flow control advertisements from the other side\n");
-
-		if (sub_reg & PCIE_CORE_INT_CT)
-			dev_dbg(dev, "a request timed out waiting for completion\n");
-
-		if (sub_reg & PCIE_CORE_INT_UTC)
-			dev_dbg(dev, "unmapped TC error\n");
-
-		if (sub_reg & PCIE_CORE_INT_MMVC)
-			dev_dbg(dev, "MSI mask register changes\n");
+		for (int i = 0; i < ARRAY_SIZE(pcie_subsys_irq_info); i++) {
+			if (sub_reg & pcie_subsys_irq_info[i].bit)
+				dev_dbg(dev, "%s\n", pcie_subsys_irq_info[i].msg);
+		}
 
 		rockchip_pcie_write(rockchip, sub_reg, PCIE_CORE_INT_STATUS);
 	} else if (reg & PCIE_CLIENT_INT_PHY) {
@@ -473,29 +476,12 @@ static irqreturn_t rockchip_pcie_client_irq_handler(int irq, void *arg)
 	u32 reg;
 
 	reg = rockchip_pcie_read(rockchip, PCIE_CLIENT_INT_STATUS);
-	if (reg & PCIE_CLIENT_INT_LEGACY_DONE)
-		dev_dbg(dev, "legacy done interrupt received\n");
 
-	if (reg & PCIE_CLIENT_INT_MSG)
-		dev_dbg(dev, "message done interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_HOT_RST)
-		dev_dbg(dev, "hot reset interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_DPA)
-		dev_dbg(dev, "dpa interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_FATAL_ERR)
-		dev_dbg(dev, "fatal error interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_NFATAL_ERR)
-		dev_dbg(dev, "non fatal error interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_CORR_ERR)
-		dev_dbg(dev, "correctable error interrupt received\n");
-
-	if (reg & PCIE_CLIENT_INT_PHY)
-		dev_dbg(dev, "phy interrupt received\n");
+	for (int i = 0; i < ARRAY_SIZE(pcie_client_irq_info); i++) {
+		if (reg & pcie_client_irq_info[i].bit)
+			dev_dbg(dev, "%s interrupt received\n",
+				pcie_client_irq_info[i].msg);
+	}
 
 	rockchip_pcie_write(rockchip, reg & (PCIE_CLIENT_INT_LEGACY_DONE |
 			      PCIE_CLIENT_INT_MSG | PCIE_CLIENT_INT_HOT_RST |
