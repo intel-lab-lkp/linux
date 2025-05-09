@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/sifive,tmc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SiFive Domain Management Controller
+
+maintainers:
+  - Cyan Yang <cyan.yang@sifive.com>
+  - Nick Hu <nick.hu@sifive.com>
+  - Samuel Holland <samuel.holland@sifive.com>
+
+description: |
+  This is the device tree binding for the following SiFive Domain Management Controllers.
+  - Tile Management Controller
+      - TMC0
+      - TMC1
+      - TMC2
+      - TMC3
+  - Subsystem Management Controller
+      - SMC0
+      - SMC1
+      - SMC2
+      - SMC3
+  - Cluster Management Controller
+      - CMC2
+      - CMC3
+  SiFive Domain Management Controllers support the SiFive Quiet Interface
+  Protocol (SQIP) starting from the Version 1. The control method is
+  different from the Version 0, making them incompatible.
+
+allOf:
+  - $ref: power-domain.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - {}
+          - pattern: "^sifive,[ts]mc0$"
+      - items:
+          - {}
+          - pattern: "^sifive,[ts]mc3$"
+          - pattern: "^sifive,[ts]mc2$"
+          - pattern: "^sifive,[ts]mc1$"
+      - items:
+          - {}
+          - pattern: "^sifive,[ts]mc2$"
+          - pattern: "^sifive,[ts]mc1$"
+      - items:
+          - {}
+          - pattern: "^sifive,[ts]mc1$"
+      - items:
+          - {}
+          - const: sifive,cmc3
+          - const: sifive,cmc2
+      - items:
+          - {}
+          - const: sifive,cmc2
+
+  reg:
+    maxItems: 1
+
+  sifive,feature-level:
+    description: |
+      Supported power features. This property is absent if the full set of features
+      is supported
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: ["nopg", "ceasepg", "runonlypg"]
+
+  "#power-domain-cells":
+    const: 0
+
+if:
+  not:
+    properties:
+      compatible:
+        contains:
+          pattern: "^sifive,[tsc]mc3$"
+then:
+  properties:
+    sifive,feature-level: false
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
