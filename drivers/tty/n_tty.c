@@ -2449,6 +2449,8 @@ static __poll_t n_tty_poll(struct tty_struct *tty, struct file *file,
 
 	poll_wait(file, &tty->read_wait, wait);
 	poll_wait(file, &tty->write_wait, wait);
+
+	down_read(&tty->termios_rwsem);
 	if (input_available_p(tty, 1))
 		mask |= EPOLLIN | EPOLLRDNORM;
 	else {
@@ -2456,6 +2458,8 @@ static __poll_t n_tty_poll(struct tty_struct *tty, struct file *file,
 		if (input_available_p(tty, 1))
 			mask |= EPOLLIN | EPOLLRDNORM;
 	}
+	up_read(&tty->termios_rwsem);
+
 	if (tty->ctrl.packet && tty->link->ctrl.pktstatus)
 		mask |= EPOLLPRI | EPOLLIN | EPOLLRDNORM;
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
