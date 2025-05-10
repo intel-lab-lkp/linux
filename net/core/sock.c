@@ -1224,19 +1224,19 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 		if (!sk_may_scm_recv(sk))
 			return -EOPNOTSUPP;
 
-		assign_bit(SOCK_PASSSEC, &sock->flags, valbool);
+		sk->sk_scm_security = valbool;
 		return 0;
 	case SO_PASSCRED:
 		if (!sk_may_scm_recv(sk))
 			return -EOPNOTSUPP;
 
-		assign_bit(SOCK_PASSCRED, &sock->flags, valbool);
+		sk->sk_scm_credentials = valbool;
 		return 0;
 	case SO_PASSPIDFD:
 		if (!sk_is_unix(sk))
 			return -EOPNOTSUPP;
 
-		assign_bit(SOCK_PASSPIDFD, &sock->flags, valbool);
+		sk->sk_scm_pidfd = valbool;
 		return 0;
 	case SO_TYPE:
 	case SO_PROTOCOL:
@@ -1865,14 +1865,14 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 
 	case SO_PASSCRED:
 		if (sk_may_scm_recv(sk))
-			v.val = !!test_bit(SOCK_PASSCRED, &sock->flags);
+			v.val = sk->sk_scm_credentials;
 		else
 			v.val = 0;
 		break;
 
 	case SO_PASSPIDFD:
 		if (sk_is_unix(sk))
-			v.val = !!test_bit(SOCK_PASSPIDFD, &sock->flags);
+			v.val = sk->sk_scm_pidfd;
 		else
 			v.val = 0;
 		break;
@@ -1972,7 +1972,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 
 	case SO_PASSSEC:
 		if (sk_may_scm_recv(sk))
-			v.val = !!test_bit(SOCK_PASSSEC, &sock->flags);
+			v.val = sk->sk_scm_security;
 		else
 			v.val = 0;
 		break;
