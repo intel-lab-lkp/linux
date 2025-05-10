@@ -1238,6 +1238,12 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 
 		sk->sk_scm_pidfd = valbool;
 		return 0;
+	case SO_PASSRIGHTS:
+		if (!sk_is_unix(sk))
+			return -EOPNOTSUPP;
+
+		sk->sk_scm_rights = valbool;
+		return 0;
 	case SO_TYPE:
 	case SO_PROTOCOL:
 	case SO_DOMAIN:
@@ -1873,6 +1879,13 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 	case SO_PASSPIDFD:
 		if (sk_is_unix(sk))
 			v.val = sk->sk_scm_pidfd;
+		else
+			v.val = 0;
+		break;
+
+	case SO_PASSRIGHTS:
+		if (sk_is_unix(sk))
+			v.val = sk->sk_scm_rights;
 		else
 			v.val = 0;
 		break;
