@@ -513,7 +513,7 @@ static int qla4xxx_fw_ready(struct scsi_qla_host *ha)
 			      "seconds expired= %d\n", ha->host_no, __func__,
 			      ha->firmware_state, ha->addl_fw_state,
 			      timeout_count));
-		if (is_qla4032(ha) &&
+		if ((is_qla4022(ha) || is_qla4032(ha)) &&
 			!(ha->addl_fw_state & FW_ADDSTATE_LINK_UP) &&
 			(timeout_count < ADAPTER_INIT_TOV - 5)) {
 			break;
