@@ -38,7 +38,7 @@ struct cppi_rx_stateram {
 };
 
 /* hw_options bits in CPPI buffer descriptors */
-#define CPPI_SOP_SET	((u32)(1 << 31))
+#define CPPI_SOP_SET	((u32)1 << 31)
 #define CPPI_EOP_SET	((u32)(1 << 30))
 #define CPPI_OWN_SET	((u32)(1 << 29))	/* owned by cppi */
 #define CPPI_EOQ_MASK	((u32)(1 << 28))
@@ -48,7 +48,7 @@ struct cppi_rx_stateram {
 #define CPPI_RECV_PKTLEN_MASK 0xFFFF
 #define CPPI_BUFFER_LEN_MASK 0xFFFF
 
-#define CPPI_TEAR_READY ((u32)(1 << 31))
+#define CPPI_TEAR_READY ((u32)1 << 31)
 
 /* CPPI data structure definitions */
 
