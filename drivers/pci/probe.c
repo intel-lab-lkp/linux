@@ -2149,6 +2149,37 @@ int pci_setup_device(struct pci_dev *dev)
 	return 0;
 }
 
+static void pcie_write_mps(struct pci_dev *dev, int mps)
+{
+	int rc;
+
+	if (pcie_bus_config == PCIE_BUS_PERFORMANCE) {
+		mps = 128 << dev->pcie_mpss;
+
+		if (pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT &&
+		    dev->bus->self)
+
+			/*
+			 * For "Performance", the assumption is made that
+			 * downstream communication will never be larger than
+			 * the MRRS.  So, the MPS only needs to be configured
+			 * for the upstream communication.  This being the case,
+			 * walk from the top down and set the MPS of the child
+			 * to that of the parent bus.
+			 *
+			 * Configure the device MPS with the smaller of the
+			 * device MPSS or the bridge MPS (which is assumed to be
+			 * properly configured at this point to the largest
+			 * allowable MPS based on its parent bus).
+			 */
+			mps = min(mps, pcie_get_mps(dev->bus->self));
+	}
+
+	rc = pcie_set_mps(dev, mps);
+	if (rc)
+		pci_err(dev, "Failed attempting to set the MPS\n");
+}
+
 static void pci_configure_mps(struct pci_dev *dev)
 {
 	struct pci_dev *bridge = pci_upstream_bridge(dev);
@@ -2177,6 +2208,16 @@ static void pci_configure_mps(struct pci_dev *dev)
 		}
 		return;
 	}
+
+	/*
+	 * Unless MPS strategy is PCIE_BUS_TUNE_OFF (don't touch MPS at all),
+	 * start off by setting root ports' MPS to MPSS. Depending on the MPS
+	 * strategy, and the MPSS of the devices below the root port, the MPS
+	 * of the root port might get overridden later.
+	 */
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT &&
+	    pcie_bus_config != PCIE_BUS_TUNE_OFF)
+		pcie_write_mps(dev, 128 << dev->pcie_mpss);
 
 	if (!bridge || !pci_is_pcie(bridge))
 		return;
@@ -2873,37 +2914,6 @@ static int pcie_find_smpss(struct pci_dev *dev, void *data)
 		*smpss = dev->pcie_mpss;
 
 	return 0;
-}
-
-static void pcie_write_mps(struct pci_dev *dev, int mps)
-{
-	int rc;
-
-	if (pcie_bus_config == PCIE_BUS_PERFORMANCE) {
-		mps = 128 << dev->pcie_mpss;
-
-		if (pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT &&
-		    dev->bus->self)
-
-			/*
-			 * For "Performance", the assumption is made that
-			 * downstream communication will never be larger than
-			 * the MRRS.  So, the MPS only needs to be configured
-			 * for the upstream communication.  This being the case,
-			 * walk from the top down and set the MPS of the child
-			 * to that of the parent bus.
-			 *
-			 * Configure the device MPS with the smaller of the
-			 * device MPSS or the bridge MPS (which is assumed to be
-			 * properly configured at this point to the largest
-			 * allowable MPS based on its parent bus).
-			 */
-			mps = min(mps, pcie_get_mps(dev->bus->self));
-	}
-
-	rc = pcie_set_mps(dev, mps);
-	if (rc)
-		pci_err(dev, "Failed attempting to set the MPS\n");
 }
 
 static void pcie_write_mrrs(struct pci_dev *dev)
