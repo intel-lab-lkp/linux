@@ -24,6 +24,7 @@ properties:
       - enum:
           - apple,t8103-efuses
           - apple,t6000-efuses
+          - apple,t8112-efuses
       - const: apple,efuses
 
   reg:
