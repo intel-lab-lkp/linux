@@ -240,6 +240,15 @@
 					enable-reg = <0x250>;
 					enable-bit = <9>;
 				};
+
+				clksf: clock {
+					#clock-cells = <0>;
+					compatible = "via,vt8500-device-clock";
+					clocks = <&pllb>;
+					divisor-reg = <0x314>;
+					enable-reg = <0x254>;
+					enable-bit = <23>;
+				};
 			};
 		};
 
@@ -254,6 +263,18 @@
 			compatible = "via,vt8500-timer";
 			reg = <0xd8130100 0x28>;
 			interrupts = <36>;
+		};
+
+		sflash: spi-nor-controller@d8002000 {
+			compatible = "wm,wm8750-sflash";
+			reg = <0xd8002000 0x400>,
+			      <0xff800000 0x800000>,
+			      <0xef800000 0x800000>;
+			reg-names = "io", "chip0-mmap", "chip1-mmap";
+			clocks = <&clksf>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
 		};
 
 		usb@d8007900 {
