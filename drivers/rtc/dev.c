@@ -195,7 +195,9 @@ static __poll_t rtc_dev_poll(struct file *file, poll_table *wait)
 
 	poll_wait(file, &rtc->irq_queue, wait);
 
+	spin_lock_irq(&rtc->irq_lock);
 	data = rtc->irq_data;
+	spin_unlock_irq(&rtc->irq_lock);
 
 	return (data != 0) ? (EPOLLIN | EPOLLRDNORM) : 0;
 }
