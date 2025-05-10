@@ -193,6 +193,7 @@ struct adxl345_state {
 	u32 tap_duration_us;
 	u32 tap_latent_us;
 	u32 tap_window_us;
+	u32 ff_time_ms;
 
 	__le16 fifo_buf[ADXL345_DIRS * ADXL345_FIFO_SIZE + 1] __aligned(IIO_DMA_MINALIGN);
 };
@@ -823,6 +824,63 @@ static int adxl345_set_tap_latent(struct adxl345_state *st, u32 val_int,
 		return -EINVAL;
 
 	return _adxl345_set_tap_time(st, ADXL345_TAP_TIME_LATENT, val_fract_us);
+}
+
+/* free-fall */
+
+static int adxl345_is_ff_en(struct adxl345_state *st, bool *en)
+{
+	int ret;
+	unsigned int regval;
+
+	ret = regmap_read(st->regmap, ADXL345_REG_INT_ENABLE, &regval);
+	if (ret)
+		return ret;
+
+	*en = FIELD_GET(ADXL345_INT_FREE_FALL, regval) > 0;
+
+	return 0;
+}
+
+static int adxl345_set_ff_en(struct adxl345_state *st, bool cmd_en)
+{
+	unsigned int regval, ff_threshold;
+	bool en;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADXL345_REG_THRESH_FF, &ff_threshold);
+	if (ret)
+		return ret;
+
+	en = cmd_en && ff_threshold > 0 && st->ff_time_ms > 0;
+
+	regval = en ? ADXL345_INT_FREE_FALL : 0x00;
+
+	return regmap_update_bits(st->regmap, ADXL345_REG_INT_ENABLE,
+				  ADXL345_INT_FREE_FALL, regval);
+}
+
+static int adxl345_set_ff_time(struct adxl345_state *st, u32 val_int,
+			       u32 val_fract_us)
+{
+	unsigned int regval;
+	int val_ms;
+
+	/*
+	 * max value is 255 * 5000 us = 1.275000 seconds
+	 *
+	 * Note: the scaling is similar to the scaling in the ADXL380
+	 */
+	if (1000000 * val_int + val_fract_us > 1275000)
+		return -EINVAL;
+
+	val_ms = val_int * 1000 + DIV_ROUND_UP(val_fract_us, 1000);
+	st->ff_time_ms = val_ms;
+
+	regval = DIV_ROUND_CLOSEST(val_ms, 5);
+
+	/* Values between 100ms and 350ms (0x14 to 0x46) are recommended. */
+	return regmap_write(st->regmap, ADXL345_REG_TIME_FF, min(regval, 0xff));
 }
 
 static int adxl345_find_odr(struct adxl345_state *st, int val,
@@ -1689,6 +1747,17 @@ static int adxl345_push_event(struct iio_dev *indio_dev, int int_stat,
 			return ret;
 	}
 
+	if (FIELD_GET(ADXL345_INT_FREE_FALL, int_stat)) {
+		ret = iio_push_event(indio_dev,
+				     IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
+							IIO_MOD_X_AND_Y_AND_Z,
+							IIO_EV_TYPE_MAG,
+							IIO_EV_DIR_FALLING),
+				     ts);
+		if (ret)
+			return ret;
+	}
+
 	if (FIELD_GET(ADXL345_INT_WATERMARK, int_stat)) {
 		samples = adxl345_get_samples(st);
 		if (samples < 0)
@@ -1763,7 +1832,156 @@ err:
 	return IRQ_HANDLED;
 }
 
+/* free-fall sysfs */
+
+static ssize_t in_accel_mag_freefall_en_show(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	bool en;
+	int val, ret;
+
+	ret = adxl345_is_ff_en(st, &en);
+	if (ret)
+		return ret;
+
+	val = en ? 1 : 0;
+
+	return iio_format_value(buf, IIO_VAL_INT, 1, &val);
+}
+
+static ssize_t in_accel_mag_freefall_en_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	int val, ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_measure_en(st, false);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_ff_en(st, val > 0);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_measure_en(st, true);
+	if (ret)
+		return ret;
+
+	return len;
+}
+static IIO_DEVICE_ATTR_RW(in_accel_mag_freefall_en, 0);
+
+static ssize_t in_accel_mag_freefall_value_show(struct device *dev,
+						struct device_attribute *attr,
+						char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADXL345_REG_THRESH_FF, &val);
+	if (ret)
+		return ret;
+
+	return iio_format_value(buf, IIO_VAL_INT, 1, &val);
+}
+
+static ssize_t in_accel_mag_freefall_value_store(struct device *dev,
+						 struct device_attribute *attr,
+						 const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	int val, ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val < 0 || val > 255)
+		return -EINVAL;
+
+	ret = adxl345_set_measure_en(st, false);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->regmap, ADXL345_REG_THRESH_FF, val);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_measure_en(st, true);
+	if (ret)
+		return ret;
+
+	return len;
+}
+static IIO_DEVICE_ATTR_RW(in_accel_mag_freefall_value, 0);
+
+static ssize_t in_accel_mag_freefall_period_show(struct device *dev,
+						 struct device_attribute *attr,
+						 char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	int vals[2];
+
+	vals[0] = st->ff_time_ms;
+	vals[1] = 1000;
+
+	return iio_format_value(buf, IIO_VAL_FRACTIONAL, 2, vals);
+}
+
+static ssize_t in_accel_mag_freefall_period_store(struct device *dev,
+						  struct device_attribute *attr,
+						  const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl345_state *st = iio_priv(indio_dev);
+	int val_int, val_fract_us, ret;
+
+	ret = iio_str_to_fixpoint(buf, 100000, &val_int, &val_fract_us);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_measure_en(st, false);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_ff_time(st, val_int, val_fract_us);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_measure_en(st, true);
+	if (ret)
+		return ret;
+
+	return len;
+}
+static IIO_DEVICE_ATTR_RW(in_accel_mag_freefall_period, 0);
+
+static struct attribute *adxl345_event_attrs[] = {
+	&iio_dev_attr_in_accel_mag_freefall_en.dev_attr.attr,
+	&iio_dev_attr_in_accel_mag_freefall_value.dev_attr.attr,
+	&iio_dev_attr_in_accel_mag_freefall_period.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group adxl345_event_attrs_group = {
+	.attrs = adxl345_event_attrs,
+};
+
 static const struct iio_info adxl345_info = {
+	.event_attrs    = &adxl345_event_attrs_group,
 	.read_raw	= adxl345_read_raw,
 	.write_raw	= adxl345_write_raw,
 	.read_avail	= adxl345_read_avail,
@@ -1806,6 +2024,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 					 ADXL345_DATA_FORMAT_FULL_RES |
 					 ADXL345_DATA_FORMAT_SELF_TEST);
 	unsigned int tap_threshold;
+	unsigned int ff_threshold;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -1824,6 +2043,9 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	st->tap_duration_us = 16;		/*   16 [0x10] -> .010    */
 	st->tap_window_us = 64;			/*   64 [0x40] -> .080    */
 	st->tap_latent_us = 16;			/*   16 [0x10] -> .020    */
+
+	ff_threshold = 8;			/*    8 [0x08]            */
+	st->ff_time_ms = 32;			/*   32 [0x20] -> 0.16    */
 
 	indio_dev->name = st->info->name;
 	indio_dev->info = &adxl345_info;
@@ -1933,6 +2155,10 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 			return ret;
 
 		ret = regmap_write(st->regmap, ADXL345_REG_THRESH_TAP, tap_threshold);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(st->regmap, ADXL345_REG_THRESH_FF, ff_threshold);
 		if (ret)
 			return ret;
 
