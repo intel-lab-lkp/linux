@@ -30,6 +30,10 @@
 #define RTSX_USB_USE_LEDS_CLASS
 #endif
 
+static bool always_poll = false;
+module_param(always_poll, bool, 0444);
+MODULE_PARM_DESC(always_poll, "always poll for card presence");
+
 struct rtsx_usb_sdmmc {
 	struct platform_device	*pdev;
 	struct rtsx_ucr	*ucr;
@@ -1306,6 +1310,14 @@ static void rtsx_usb_init_host(struct rtsx_usb_sdmmc *host)
 	mmc->caps2 = MMC_CAP2_NO_PRESCAN_POWERUP | MMC_CAP2_FULL_PWR_CYCLE |
 		MMC_CAP2_NO_SDIO;
 
+	/*
+	 * Some RTS5179 implementations have broken remote wake-up, preventing the
+	 * runtime_resume calback from being called and breaking card insertion.
+	 * In that case, we always need to poll.
+	 */
+	if (always_poll)
+		mmc->caps |= MMC_CAP_NEEDS_POLL;
+
 	mmc->max_current_330 = 400;
 	mmc->max_current_180 = 800;
 	mmc->ops = &rtsx_usb_sdmmc_ops;
@@ -1419,7 +1431,9 @@ static int rtsx_usb_sdmmc_runtime_suspend(struct device *dev)
 {
 	struct rtsx_usb_sdmmc *host = dev_get_drvdata(dev);
 
-	host->mmc->caps &= ~MMC_CAP_NEEDS_POLL;
+	if (!always_poll)
+		host->mmc->caps &= ~MMC_CAP_NEEDS_POLL;
+
 	return 0;
 }
 
@@ -1427,9 +1441,12 @@ static int rtsx_usb_sdmmc_runtime_resume(struct device *dev)
 {
 	struct rtsx_usb_sdmmc *host = dev_get_drvdata(dev);
 
-	host->mmc->caps |= MMC_CAP_NEEDS_POLL;
-	if (sdmmc_get_cd(host->mmc) == 1)
-		mmc_detect_change(host->mmc, 0);
+	if (!always_poll) {
+		host->mmc->caps |= MMC_CAP_NEEDS_POLL;
+		if (sdmmc_get_cd(host->mmc) == 1)
+			mmc_detect_change(host->mmc, 0);
+	}
+
 	return 0;
 }
 #endif
