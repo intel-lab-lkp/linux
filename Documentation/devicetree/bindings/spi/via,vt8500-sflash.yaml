@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/spi/via,vt8500-sflash.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: VIA/WonderMedia serial flash controller
+
+description:
+  This controller is used on VIA/WonderMedia SoCs such as VIA VT8500,
+  WonderMedia WM8850 and similar. It provides a semi-transparent interface
+  for reading and writing SPI NOR chip contents via a physical memory map,
+  abstracting away all SPI communication, while also providing a direct
+  mechanism for issuing "programmable commands" to the underlying SPI chip
+
+maintainers:
+  - Alexey Charkov <alchark@gmail.com>
+
+properties:
+  compatible:
+    enum:
+      - via,vt8500-sflash
+      - wm,wm8505-sflash
+      - wm,wm8650-sflash
+      - wm,wm8750-sflash
+      - wm,wm8850-sflash
+
+  reg:
+    items:
+      - description: MMIO registers region of the controller
+      - description:
+          Physical memory region within which the controller will map the
+          flash contents of chip 0 for reading and writing. If the flash
+          size is smaller than this region, it will be mapped at its end.
+          Note that if this chip is used as the boot device (as is most
+          often the case), the boot ROM maps it at the very end of the
+          CPU address space (i.e. ending at 0xffffffff)
+      - description:
+          Physical memory region within which the controller will map the
+          flash contents of chip 1 for reading and writing. If the flash
+          size is smaller than this region, it will be mapped at its end
+
+  reg-names:
+    items:
+      - const: io
+      - const: chip0-mmap
+      - const: chip1-mmap
+
+  clocks:
+    maxItems: 1
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^flash@[0-1]$":
+    type: object
+    additionalProperties: true
+
+    properties:
+      reg:
+        minimum: 0
+        maximum: 1
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    sflash: spi-nor-controller@d8002000 {
+        compatible = "wm,wm8850-sflash";
+        reg = <0xd8002000 0x400>,
+              <0xff800000 0x800000>,
+              <0xef800000 0x800000>;
+        reg-names = "io", "chip0-mmap", "chip1-mmap";
+        clocks = <&clksf>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        flash@0 {
+            compatible = "jedec,spi-nor";
+            reg = <0>;
+
+            partitions {
+                compatible = "fixed-partitions";
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                partition@0 {
+                    label = "U-boot";
+                    reg = <0 0x50000>;
+                    read-only;
+                };
+
+                partition@1 {
+                    label = "U-boot environment 1";
+                    reg = <0x50000 0x10000>;
+                };
+
+                partition@2 {
+                    label = "U-boot environment 2";
+                    reg = <0x60000 0x10000>;
+                };
+
+                partition@3 {
+                    label = "W-load";
+                    reg = <0x70000 0x10000>;
+                    read-only;
+                };
+            };
+        };
+    };
+
+...
