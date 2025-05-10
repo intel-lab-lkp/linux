@@ -2483,7 +2483,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (!*name)
 			goto OK;
 		/*
-		 * If it wasn't NUL, we know it was '/'. Skip that
+		 * If it wasn't NULL, we know it was '/'. Skip that
 		 * slash, and continue until no more slashes.
 		 */
 		do {
