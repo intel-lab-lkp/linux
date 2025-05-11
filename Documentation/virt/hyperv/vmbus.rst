@@ -324,3 +324,44 @@ rescinded, neither Hyper-V nor Linux retains any state about
 its previous existence. Such a device might be re-added later,
 in which case it is treated as an entirely new device. See
 vmbus_onoffer_rescind().
+
+Confidential VMBus
+------------------
+
+The confidential VMBus provides the control and data planes where
+the guest doesn't talk to either the hypervisor or the host. Instead,
+it relies on the trusted paravisor. The hardware (SNP or TDX) encrypts
+the guest memory and the register state also measuring the paravisor
+image via using the platform security processor to ensure trusted and
+confidential computing.
+
+To support confidential communication with the paravisor, a VMBus client
+will first attempt to use regular, non-isolated mechanisms for communication.
+To do this, it must:
+
+* Configure the paravisor SIMP with an encrypted page. The paravisor SIMP is
+  configured by setting the relevant MSR directly, without using GHCB or tdcall.
+
+* Enable SINT 2 on both the paravisor and hypervisor, without setting the proxy
+  flag on the paravisor SINT. Enable interrupts on the paravisor SynIC.
+
+* Configure both the paravisor and hypervisor event flags page.
+  Both pages will need to be scanned when VMBus receives a channel interrupt.
+
+* Send messages to the paravisor by calling HvPostMessage directly, without using
+  GHCB or tdcall.
+
+* Set the EOM MSR directly in the paravisor, without using GHCB or tdcall.
+
+If sending the InitiateContact message using non-isolated HvPostMessage fails,
+the client must fall back to using the hypervisor synic, by using the GHCB/tdcall
+as appropriate.
+
+To fall back, the client will have to reconfigure the following:
+
+* Configure the hypervisor SIMP with a host-visible page.
+  Since the hypervisor SIMP is not used when in confidential mode,
+  this can be done up front, or only when needed, whichever makes sense for
+  the particular implementation.
+
+* Set the proxy flag on SINT 2 for the paravisor.
