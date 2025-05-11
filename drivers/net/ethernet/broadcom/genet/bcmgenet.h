@@ -517,6 +517,8 @@ struct bcmgenet_tx_ring {
 	struct napi_struct napi;	/* NAPI per tx queue */
 	unsigned long	packets;
 	unsigned long	bytes;
+	unsigned long	errors;
+	unsigned long	dropped;
 	unsigned int	index;		/* ring index */
 	struct enet_cb	*cbs;		/* tx ring buffer control block*/
 	unsigned int	size;		/* size of each tx ring */
@@ -544,6 +546,14 @@ struct bcmgenet_rx_ring {
 	unsigned long	packets;
 	unsigned long	errors;
 	unsigned long	dropped;
+	unsigned long	multicast;
+	unsigned long	missed;
+	unsigned long	length_errors;
+	unsigned long	over_errors;
+	unsigned long	crc_errors;
+	unsigned long	frame_errors;
+	unsigned long	fragmented_errors;
+	unsigned long	broadcast;
 	unsigned int	index;		/* Rx ring index */
 	struct enet_cb	*cbs;		/* Rx ring buffer control block */
 	unsigned int	size;		/* Rx ring size */

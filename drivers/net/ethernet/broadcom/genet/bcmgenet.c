@@ -1018,6 +1018,8 @@ struct bcmgenet_stats {
 			tx_rings[num].packets), \
 	STAT_GENET_SOFT_MIB("txq" __stringify(num) "_bytes", \
 			tx_rings[num].bytes), \
+	STAT_GENET_SOFT_MIB("txq" __stringify(num) "_errors", \
+			tx_rings[num].errors), \
 	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_bytes", \
 			rx_rings[num].bytes),	 \
 	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_packets", \
@@ -1025,7 +1027,23 @@ struct bcmgenet_stats {
 	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_errors", \
 			rx_rings[num].errors), \
 	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_dropped", \
-			rx_rings[num].dropped)
+			rx_rings[num].dropped), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_multicast", \
+			rx_rings[num].multicast), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_missed", \
+			rx_rings[num].missed), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_length_errors", \
+			rx_rings[num].length_errors), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_over_errors", \
+			rx_rings[num].over_errors), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_crc_errors", \
+			rx_rings[num].crc_errors), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_frame_errors", \
+			rx_rings[num].frame_errors), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_fragmented_errors", \
+			rx_rings[num].fragmented_errors), \
+	STAT_GENET_SOFT_MIB("rxq" __stringify(num) "_broadcast", \
+			rx_rings[num].broadcast)
 
 /* There is a 0xC gap between the end of RX and beginning of TX stats and then
  * between the end of TX stats and the beginning of the RX RUNT
@@ -1046,6 +1064,11 @@ static const struct bcmgenet_stats bcmgenet_gstrings_stats[] = {
 	STAT_NETDEV(rx_dropped),
 	STAT_NETDEV(tx_dropped),
 	STAT_NETDEV(multicast),
+	STAT_NETDEV(rx_missed_errors),
+	STAT_NETDEV(rx_length_errors),
+	STAT_NETDEV(rx_over_errors),
+	STAT_NETDEV(rx_crc_errors),
+	STAT_NETDEV(rx_frame_errors),
 	/* UniMAC RSV counters */
 	STAT_GENET_MIB_RX("rx_64_octets", mib.rx.pkt_cnt.cnt_64),
 	STAT_GENET_MIB_RX("rx_65_127_oct", mib.rx.pkt_cnt.cnt_127),
@@ -1983,7 +2006,8 @@ static void bcmgenet_tx_reclaim_all(struct net_device *dev)
  * the transmit checksum offsets in the descriptors
  */
 static struct sk_buff *bcmgenet_add_tsb(struct net_device *dev,
-					struct sk_buff *skb)
+					struct sk_buff *skb,
+					struct bcmgenet_tx_ring *ring)
 {
 	struct bcmgenet_priv *priv = netdev_priv(dev);
 	struct status_64 *status = NULL;
@@ -2001,7 +2025,7 @@ static struct sk_buff *bcmgenet_add_tsb(struct net_device *dev,
 		if (!new_skb) {
 			dev_kfree_skb_any(skb);
 			priv->mib.tx_realloc_tsb_failed++;
-			dev->stats.tx_dropped++;
+			ring->dropped++;
 			return NULL;
 		}
 		dev_consume_skb_any(skb);
@@ -2089,7 +2113,7 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 	GENET_CB(skb)->bytes_sent = skb->len;
 
 	/* add the Transmit Status Block */
-	skb = bcmgenet_add_tsb(dev, skb);
+	skb = bcmgenet_add_tsb(dev, skb, ring);
 	if (!skb) {
 		ret = NETDEV_TX_OK;
 		goto out;
@@ -2253,7 +2277,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		   DMA_P_INDEX_DISCARD_CNT_MASK;
 	if (discards > ring->old_discards) {
 		discards = discards - ring->old_discards;
-		ring->errors += discards;
+		ring->missed += discards;
 		ring->old_discards += discards;
 
 		/* Clear HW register when we reach 75% of maximum 0xFFFF */
@@ -2306,8 +2330,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 
 		if (unlikely(len > RX_BUF_LENGTH)) {
 			netif_err(priv, rx_status, dev, "oversized packet\n");
-			dev->stats.rx_length_errors++;
-			dev->stats.rx_errors++;
+			ring->length_errors++;
 			dev_kfree_skb_any(skb);
 			goto next;
 		}
@@ -2315,7 +2338,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		if (unlikely(!(dma_flag & DMA_EOP) || !(dma_flag & DMA_SOP))) {
 			netif_err(priv, rx_status, dev,
 				  "dropping fragmented packet!\n");
-			ring->errors++;
+			ring->fragmented_errors++;
 			dev_kfree_skb_any(skb);
 			goto next;
 		}
@@ -2329,14 +2352,19 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 			netif_err(priv, rx_status, dev, "dma_flag=0x%x\n",
 				  (unsigned int)dma_flag);
 			if (dma_flag & DMA_RX_CRC_ERROR)
-				dev->stats.rx_crc_errors++;
+				ring->crc_errors++;
 			if (dma_flag & DMA_RX_OV)
-				dev->stats.rx_over_errors++;
+				ring->over_errors++;
 			if (dma_flag & DMA_RX_NO)
-				dev->stats.rx_frame_errors++;
+				ring->frame_errors++;
 			if (dma_flag & DMA_RX_LG)
-				dev->stats.rx_length_errors++;
-			dev->stats.rx_errors++;
+				ring->length_errors++;
+			if ((dma_flag & (DMA_RX_CRC_ERROR |
+						DMA_RX_OV |
+						DMA_RX_NO |
+						DMA_RX_LG |
+						DMA_RX_RXER)) == DMA_RX_RXER)
+				ring->errors++;
 			dev_kfree_skb_any(skb);
 			goto next;
 		} /* error packet */
@@ -2359,7 +2387,9 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		ring->packets++;
 		ring->bytes += len;
 		if (dma_flag & DMA_RX_MULT)
-			dev->stats.multicast++;
+			ring->multicast++;
+		else if (dma_flag & DMA_RX_BRDCAST)
+			ring->broadcast++;
 
 		/* Notify kernel */
 		napi_gro_receive(&ring->napi, skb);
@@ -3420,7 +3450,7 @@ static void bcmgenet_timeout(struct net_device *dev, unsigned int txqueue)
 
 	netif_trans_update(dev);
 
-	dev->stats.tx_errors++;
+	priv->tx_rings[txqueue].errors++;
 
 	netif_tx_wake_all_queues(dev);
 }
@@ -3513,8 +3543,13 @@ static struct net_device_stats *bcmgenet_get_stats(struct net_device *dev)
 {
 	struct bcmgenet_priv *priv = netdev_priv(dev);
 	unsigned long tx_bytes = 0, tx_packets = 0;
+	unsigned long tx_errors = 0, tx_dropped = 0;
 	unsigned long rx_bytes = 0, rx_packets = 0;
 	unsigned long rx_errors = 0, rx_dropped = 0;
+	unsigned long rx_missed = 0, rx_length_errors = 0;
+	unsigned long rx_over_errors = 0, rx_crc_errors = 0;
+	unsigned long rx_frame_errors = 0, rx_fragmented_errors = 0;
+	unsigned long multicast = 0, broadcast = 0;
 	struct bcmgenet_tx_ring *tx_ring;
 	struct bcmgenet_rx_ring *rx_ring;
 	unsigned int q;
@@ -3523,6 +3558,8 @@ static struct net_device_stats *bcmgenet_get_stats(struct net_device *dev)
 		tx_ring = &priv->tx_rings[q];
 		tx_bytes += tx_ring->bytes;
 		tx_packets += tx_ring->packets;
+		tx_errors += tx_ring->errors;
+		tx_dropped += tx_ring->dropped;
 	}
 
 	for (q = 0; q <= priv->hw_params->rx_queues; q++) {
@@ -3532,15 +3569,35 @@ static struct net_device_stats *bcmgenet_get_stats(struct net_device *dev)
 		rx_packets += rx_ring->packets;
 		rx_errors += rx_ring->errors;
 		rx_dropped += rx_ring->dropped;
+		rx_missed += rx_ring->missed;
+		rx_length_errors += rx_ring->length_errors;
+		rx_over_errors += rx_ring->over_errors;
+		rx_crc_errors += rx_ring->crc_errors;
+		rx_frame_errors += rx_ring->frame_errors;
+		rx_fragmented_errors += rx_ring->fragmented_errors;
+		multicast += rx_ring->multicast;
+		broadcast += rx_ring->broadcast;
 	}
+
+	rx_errors += rx_length_errors;
+	rx_errors += rx_crc_errors;
+	rx_errors += rx_frame_errors;
+	rx_errors += rx_fragmented_errors;
 
 	dev->stats.tx_bytes = tx_bytes;
 	dev->stats.tx_packets = tx_packets;
+	dev->stats.tx_errors = tx_errors;
+	dev->stats.tx_dropped = tx_dropped;
 	dev->stats.rx_bytes = rx_bytes;
 	dev->stats.rx_packets = rx_packets;
 	dev->stats.rx_errors = rx_errors;
-	dev->stats.rx_missed_errors = rx_errors;
 	dev->stats.rx_dropped = rx_dropped;
+	dev->stats.rx_missed_errors = rx_missed;
+	dev->stats.rx_length_errors = rx_length_errors;
+	dev->stats.rx_over_errors = rx_over_errors;
+	dev->stats.rx_crc_errors = rx_crc_errors;
+	dev->stats.rx_frame_errors = rx_frame_errors;
+	dev->stats.multicast = multicast;
 	return &dev->stats;
 }
 
