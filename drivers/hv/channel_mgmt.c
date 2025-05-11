@@ -843,14 +843,14 @@ static void vmbus_wait_for_unload(void)
 				= per_cpu_ptr(hv_context.cpu_context, cpu);
 
 			/*
-			 * In a CoCo VM the synic_message_page is not allocated
+			 * In a CoCo VM the hv_synic_message_page is not allocated
 			 * in hv_synic_alloc(). Instead it is set/cleared in
 			 * hv_synic_enable_regs() and hv_synic_disable_regs()
 			 * such that it is set only when the CPU is online. If
 			 * not all present CPUs are online, the message page
 			 * might be NULL, so skip such CPUs.
 			 */
-			page_addr = hv_cpu->synic_message_page;
+			page_addr = hv_cpu->hv_synic_message_page;
 			if (!page_addr)
 				continue;
 
@@ -891,7 +891,7 @@ completed:
 		struct hv_per_cpu_context *hv_cpu
 			= per_cpu_ptr(hv_context.cpu_context, cpu);
 
-		page_addr = hv_cpu->synic_message_page;
+		page_addr = hv_cpu->hv_synic_message_page;
 		if (!page_addr)
 			continue;
 
@@ -1021,6 +1021,7 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 	struct vmbus_channel_offer_channel *offer;
 	struct vmbus_channel *oldchannel, *newchannel;
 	size_t offer_sz;
+	bool confidential_ring_buffer, confidential_external_memory;
 
 	offer = (struct vmbus_channel_offer_channel *)hdr;
 
@@ -1031,6 +1032,18 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 				   offer->child_relid);
 		atomic_dec(&vmbus_connection.offer_in_progress);
 		return;
+	}
+
+	confidential_ring_buffer = is_confidential_ring_buffer(offer);
+	if (confidential_ring_buffer) {
+		if (vmbus_proto_version < VERSION_WIN_COPPER || !vmbus_is_confidential())
+			return;
+	}
+
+	confidential_external_memory = is_confidential_external_memory(offer);
+	if (is_confidential_external_memory(offer)) {
+		if (vmbus_proto_version < VERSION_WIN_COPPER || !vmbus_is_confidential())
+			return;
 	}
 
 	oldchannel = find_primary_channel_by_offer(offer);
@@ -1068,6 +1081,14 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 		mutex_lock(&vmbus_connection.channel_mutex);
 
 		atomic_dec(&vmbus_connection.offer_in_progress);
+
+		if ((oldchannel->confidential_ring_buffer && !confidential_ring_buffer) ||
+				(oldchannel->confidential_external_memory &&
+				!confidential_external_memory)) {
+			pr_err_ratelimited("Offer %d changes the confidential state\n",
+				offer->child_relid);
+			return;
+		}
 
 		WARN_ON(oldchannel->offermsg.child_relid != INVALID_RELID);
 		/* Fix up the relid. */
@@ -1111,6 +1132,8 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 		pr_err("Unable to allocate channel object\n");
 		return;
 	}
+	newchannel->confidential_ring_buffer = confidential_ring_buffer;
+	newchannel->confidential_external_memory = confidential_external_memory;
 
 	vmbus_setup_channel_state(newchannel, offer);
 
