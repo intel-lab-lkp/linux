@@ -81,7 +81,7 @@ patternProperties:
     description: Aldec, Inc.
   "^alfa-network,.*":
     description: ALFA Network Inc.
-  "^allegro,.*":
+  "^(allegro|allegrodvt),.*":
     description: Allegro DVT
   "^allegromicro,.*":
     description: Allegro MicroSystems, Inc.
