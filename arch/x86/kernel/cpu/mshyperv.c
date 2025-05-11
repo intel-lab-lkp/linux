@@ -89,6 +89,34 @@ void hv_set_non_nested_msr(unsigned int reg, u64 value)
 }
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
 
+/*
+ * Not every paravisor supports getting SynIC registers, and
+ * this function may fail. The caller has to make sure that this function
+ * runs on the CPU of interest.
+ */
+u64 hv_pv_get_synic_register(unsigned int reg, int *err)
+{
+	if (!hv_is_synic_msr(reg)) {
+		*err = -ENODEV;
+		return !0ULL;
+	}
+	return native_read_msr_safe(reg, err);
+}
+EXPORT_SYMBOL_GPL(hv_pv_get_synic_register);
+
+/*
+ * Not every paravisor supports setting SynIC registers, and
+ * this function may fail. The caller has to make sure that this function
+ * runs on the CPU of interest.
+ */
+int hv_pv_set_synic_register(unsigned int reg, u64 val)
+{
+	if (!hv_is_synic_msr(reg))
+		return -ENODEV;
+	return wrmsrl_safe(reg, val);
+}
+EXPORT_SYMBOL_GPL(hv_pv_set_synic_register);
+
 u64 hv_get_msr(unsigned int reg)
 {
 	if (hv_nested)

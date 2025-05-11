@@ -134,3 +134,22 @@ bool hv_is_hyperv_initialized(void)
 	return hyperv_initialized;
 }
 EXPORT_SYMBOL_GPL(hv_is_hyperv_initialized);
+
+/*
+ * Not supported yet.
+ */
+u64 hv_pv_get_synic_register(unsigned int reg, int *err)
+{
+	*err = -ENODEV;
+	return !0ULL;
+}
+EXPORT_SYMBOL_GPL(hv_pv_get_synic_register);
+
+/*
+ * Not supported yet.
+ */
+int hv_pv_set_synic_register(unsigned int reg, u64 val)
+{
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(hv_pv_set_synic_register);
