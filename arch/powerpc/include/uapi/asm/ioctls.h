@@ -23,10 +23,10 @@
 #define TCSETSW		_IOW('t', 21, struct termios)
 #define TCSETSF		_IOW('t', 22, struct termios)
 
-#define TCGETA		_IOR('t', 23, struct termio)
-#define TCSETA		_IOW('t', 24, struct termio)
-#define TCSETAW		_IOW('t', 25, struct termio)
-#define TCSETAF		_IOW('t', 28, struct termio)
+#define TCGETA		0x80147417 /* _IOR('t', 23, struct termio) */
+#define TCSETA		0x40147418 /* _IOW('t', 24, struct termio) */
+#define TCSETAW		0x40147419 /* _IOW('t', 25, struct termio) */
+#define TCSETAF		0x4014741c /* _IOW('t', 28, struct termio) */
 
 #define TCSBRK		_IO('t', 29)
 #define TCXONC		_IO('t', 30)
