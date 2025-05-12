@@ -20,10 +20,24 @@ static void cpc_ep_release(struct device *dev)
 {
 	struct cpc_endpoint *ep = cpc_endpoint_from_dev(dev);
 
+	skb_queue_purge(&ep->pending_ack_queue);
 	skb_queue_purge(&ep->holding_queue);
 
 	cpc_interface_put(ep->intf);
 	kfree(ep);
+}
+
+/**
+ * cpc_endpoint_tcb_reset() - Reset endpoint's TCB to initial values.
+ * @ep: endpoint pointer
+ */
+static void cpc_endpoint_tcb_reset(struct cpc_endpoint *ep)
+{
+	ep->tcb.seq = ep->id;
+	ep->tcb.ack = 0;
+	ep->tcb.send_nxt = ep->id;
+	ep->tcb.send_una = ep->id;
+	ep->tcb.send_wnd = 1;
 }
 
 /**
@@ -55,6 +69,10 @@ struct cpc_endpoint *cpc_endpoint_alloc(struct cpc_interface *intf, u8 id)
 	ep->dev.bus = &cpc_bus;
 	ep->dev.release = cpc_ep_release;
 
+	mutex_init(&ep->tcb.lock);
+	cpc_endpoint_tcb_reset(ep);
+
+	skb_queue_head_init(&ep->pending_ack_queue);
 	skb_queue_head_init(&ep->holding_queue);
 
 	device_initialize(&ep->dev);
@@ -195,6 +213,8 @@ int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb)
 	struct cpc_header hdr;
 	int err;
 
+	mutex_lock(&ep->tcb.lock);
+
 	if (ep->intf->ops->csum)
 		ep->intf->ops->csum(skb);
 
@@ -202,10 +222,12 @@ int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb)
 	hdr.ctrl = cpc_header_get_ctrl(CPC_FRAME_TYPE_DATA, true);
 	hdr.ep_id = ep->id;
 	hdr.recv_wnd = CPC_HEADER_MAX_RX_WINDOW;
-	hdr.seq = 0;
+	hdr.seq = ep->tcb.seq;
 	hdr.dat.payload_len = skb->len;
 
 	err = __cpc_protocol_write(ep, &hdr, skb);
+
+	mutex_unlock(&ep->tcb.lock);
 
 	return err;
 }

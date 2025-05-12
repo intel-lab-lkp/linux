@@ -18,6 +18,27 @@ struct cpc_endpoint;
 
 extern const struct bus_type cpc_bus;
 
+/**
+ * struct cpc_endpoint_tcb - endpoint's transmission control block
+ * @lock: synchronize tcb access
+ * @send_wnd: send window, maximum number of frames that the remote can accept
+ *            TX frames should have a sequence in the range
+ *            [send_una; send_una + send_wnd].
+ * @send_nxt: send next, the next sequence number that will be used for transmission
+ * @send_una: send unacknowledged, the oldest unacknowledged sequence number
+ * @ack: current acknowledge number
+ * @seq: current sequence number
+ * @mtu: maximum transmission unit
+ */
+struct cpc_endpoint_tcb {
+	struct mutex lock; /* Synchronize access to all other attributes. */
+	u8 send_wnd;
+	u8 send_nxt;
+	u8 send_una;
+	u8 ack;
+	u8 seq;
+};
+
 /** struct cpc_endpoint_ops - Endpoint's callbacks.
  * @rx: Data availability is provided with a skb owned by the driver.
  */
@@ -32,6 +53,8 @@ struct cpc_endpoint_ops {
  * @id: Endpoint id, uniquely identifies an endpoint within a CPC device.
  * @intf: Pointer to CPC device this endpoint belongs to.
  * @list_node: list_head member for linking in a CPC device.
+ * @tcb: Transmission control block.
+ * @pending_ack_queue: Contain frames pending on an acknowledge.
  * @holding_queue: Contains frames that were not pushed to the transport layer
  *                 due to having insufficient space in the transmit window.
  *
@@ -48,6 +71,9 @@ struct cpc_endpoint {
 	struct list_head list_node;
 	struct cpc_endpoint_ops *ops;
 
+	struct cpc_endpoint_tcb tcb;
+
+	struct sk_buff_head pending_ack_queue;
 	struct sk_buff_head holding_queue;
 };
 
