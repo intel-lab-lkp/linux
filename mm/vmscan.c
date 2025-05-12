@@ -4698,6 +4698,11 @@ retry:
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false);
 	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
 	sc->nr_reclaimed += reclaimed;
+	sc->nr.dirty += stat.nr_dirty;
+	sc->nr.congested += stat.nr_congested;
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
+	sc->nr.writeback += stat.nr_writeback;
+	sc->nr.immediate += stat.nr_immediate;
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
 			scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
@@ -6010,10 +6015,36 @@ static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 	unsigned long nr_reclaimed, nr_scanned, nr_node_reclaimed;
 	struct lruvec *target_lruvec;
 	bool reclaimable = false;
+	unsigned long flags;
 
 	if (lru_gen_enabled() && root_reclaim(sc)) {
 		memset(&sc->nr, 0, sizeof(sc->nr));
 		lru_gen_shrink_node(pgdat, sc);
+		/*
+		 * Tag a node/memcg as congested if all the dirty pages were marked
+		 * for writeback and immediate reclaim (counted in nr.congested).
+		 *
+		 * Legacy memcg will stall in page writeback so avoid forcibly
+		 * stalling in reclaim_throttle().
+		 */
+		if (sc->nr.dirty && sc->nr.dirty == sc->nr.congested) {
+			set_bit(LRUVEC_CGROUP_CONGESTED, &flags);
+
+			if (current_is_kswapd())
+				set_bit(LRUVEC_NODE_CONGESTED, &flags);
+		}
+
+		/*
+		 * Stall direct reclaim for IO completions if the lruvec is
+		 * node is congested. Allow kswapd to continue until it
+		 * starts encountering unqueued dirty pages or cycling through
+		 * the LRU too quickly.
+		 */
+		if (!current_is_kswapd() && current_may_throttle() &&
+				!sc->hibernation_mode &&
+				(test_bit(LRUVEC_CGROUP_CONGESTED, &flags) ||
+				 test_bit(LRUVEC_NODE_CONGESTED, &flags)))
+			reclaim_throttle(pgdat, VMSCAN_THROTTLE_CONGESTED);
 		return;
 	}
 
