@@ -39,6 +39,21 @@ static void __cpc_protocol_process_pending_tx_frames(struct cpc_endpoint *ep)
 	}
 }
 
+void cpc_protocol_on_data(struct cpc_endpoint *ep, struct sk_buff *skb)
+{
+	if (skb->len > CPC_HEADER_SIZE) {
+		/* Strip header. */
+		skb_pull(skb, CPC_HEADER_SIZE);
+
+		if (ep->ops && ep->ops->rx)
+			ep->ops->rx(ep, skb);
+		else
+			kfree_skb(skb);
+	} else {
+		kfree_skb(skb);
+	}
+}
+
 /**
  * __cpc_protocol_write() - Write a frame.
  * @ep: Endpoint handle.

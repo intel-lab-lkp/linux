@@ -18,6 +18,13 @@ struct cpc_endpoint;
 
 extern const struct bus_type cpc_bus;
 
+/** struct cpc_endpoint_ops - Endpoint's callbacks.
+ * @rx: Data availability is provided with a skb owned by the driver.
+ */
+struct cpc_endpoint_ops {
+	void (*rx)(struct cpc_endpoint *ep, struct sk_buff *skb);
+};
+
 /**
  * struct cpc_endpoint - Representation of CPC endpointl
  * @dev: Driver model representation of the device.
@@ -39,6 +46,7 @@ struct cpc_endpoint {
 
 	struct cpc_interface *intf;
 	struct list_head list_node;
+	struct cpc_endpoint_ops *ops;
 
 	struct sk_buff_head holding_queue;
 };
@@ -50,6 +58,7 @@ struct cpc_endpoint *cpc_endpoint_new(struct cpc_interface *intf, u8 id, const c
 void cpc_endpoint_unregister(struct cpc_endpoint *ep);
 
 int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb);
+void cpc_endpoint_set_ops(struct cpc_endpoint *ep, struct cpc_endpoint_ops *ops);
 
 /**
  * cpc_endpoint_from_dev() - Upcast from a device pointer.

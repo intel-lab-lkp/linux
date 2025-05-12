@@ -22,6 +22,9 @@ struct cpc_interface_ops;
  * @index: Device index.
  * @lock: Protect access to endpoint list.
  * @eps: List of endpoints managed by this device.
+ * @workq: Interface-specific work queue.
+ * @rx_work: work struct for processing received frames
+ * @rx_queue: list of sk_buff that were received
  * @tx_queue: Transmit queue to be consumed by the interface.
  */
 struct cpc_interface {
@@ -36,6 +39,10 @@ struct cpc_interface {
 
 	struct mutex lock;	/* Protect eps from concurrent access. */
 	struct list_head eps;
+
+	struct workqueue_struct *workq;
+	struct work_struct rx_work;
+	struct sk_buff_head rx_queue;
 
 	struct sk_buff_head tx_queue;
 };
@@ -61,6 +68,7 @@ void cpc_interface_unregister(struct cpc_interface *intf);
 
 struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 ep_id);
 
+void cpc_interface_receive_frame(struct cpc_interface *intf, struct sk_buff *skb);
 void cpc_interface_send_frame(struct cpc_interface *intf, struct sk_buff *skb);
 struct sk_buff *cpc_interface_dequeue(struct cpc_interface *intf);
 bool cpc_interface_tx_queue_empty(struct cpc_interface *intf);

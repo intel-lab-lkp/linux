@@ -6,11 +6,43 @@
 #include <linux/module.h>
 
 #include "cpc.h"
+#include "header.h"
 #include "interface.h"
+#include "protocol.h"
 
 #define to_cpc_interface(d) container_of(d, struct cpc_interface, dev)
 
 static DEFINE_IDA(cpc_ida);
+
+static void cpc_interface_rx_work(struct work_struct *work)
+{
+	struct cpc_interface *intf = container_of(work, struct cpc_interface, rx_work);
+	enum cpc_frame_type type;
+	struct cpc_endpoint *ep;
+	struct sk_buff *skb;
+	u8 ep_id;
+
+	while ((skb = skb_dequeue(&intf->rx_queue))) {
+		cpc_header_get_type(skb->data, &type);
+		ep_id = cpc_header_get_ep_id(skb->data);
+
+		ep = cpc_interface_get_endpoint(intf, ep_id);
+		if (!ep) {
+			kfree_skb(skb);
+			continue;
+		}
+
+		switch (type) {
+		case CPC_FRAME_TYPE_DATA:
+			cpc_protocol_on_data(ep, skb);
+			break;
+		default:
+			kfree_skb(skb);
+		}
+
+		cpc_endpoint_put(ep);
+	}
+}
 
 /**
  * cpc_intf_release() - Actual release of interface.
@@ -22,6 +54,10 @@ static DEFINE_IDA(cpc_ida);
 static void cpc_intf_release(struct device *dev)
 {
 	struct cpc_interface *intf = to_cpc_interface(dev);
+
+	flush_work(&intf->rx_work);
+
+	destroy_workqueue(intf->workq);
 
 	ida_free(&cpc_ida, intf->index);
 	kfree(intf);
@@ -54,10 +90,20 @@ struct cpc_interface *cpc_interface_alloc(struct device *parent,
 		return NULL;
 	}
 
+	intf->workq = alloc_workqueue(KBUILD_MODNAME "_wq", WQ_HIGHPRI, 0);
+	if (!intf->workq) {
+		ida_free(&cpc_ida, intf->index);
+		kfree(intf);
+
+		return ERR_PTR(-ENOMEM);
+	}
+
 	mutex_init(&intf->add_lock);
 	mutex_init(&intf->lock);
 	INIT_LIST_HEAD(&intf->eps);
 
+	INIT_WORK(&intf->rx_work, cpc_interface_rx_work);
+	skb_queue_head_init(&intf->rx_queue);
 	skb_queue_head_init(&intf->tx_queue);
 
 	intf->ops = ops;
@@ -155,6 +201,19 @@ struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 e
 	mutex_unlock(&intf->lock);
 
 	return ep;
+}
+
+/**
+ * cpc_interface_receive_frame - queue a received frame for processing
+ * @intf: pointer to the CPC device
+ * @skb: received frame
+ *
+ * Context: This queues the sk_buff in a list and schedule the work task to process the list.
+ */
+void cpc_interface_receive_frame(struct cpc_interface *intf, struct sk_buff *skb)
+{
+	skb_queue_tail(&intf->rx_queue, skb);
+	queue_work(intf->workq, &intf->rx_work);
 }
 
 /**

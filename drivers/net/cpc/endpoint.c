@@ -173,6 +173,17 @@ void cpc_endpoint_unregister(struct cpc_endpoint *ep)
 }
 
 /**
+ * cpc_endpoint_set_ops() - Set callbacks for this endpoint.
+ * @ep: Endpoint
+ * @ops: New callbacks to set. If already set, override pre-existing value.
+ */
+void cpc_endpoint_set_ops(struct cpc_endpoint *ep, struct cpc_endpoint_ops *ops)
+{
+	if (ep)
+		ep->ops = ops;
+}
+
+/**
  * cpc_endpoint_write - Write a DATA frame.
  * @ep: Endpoint handle.
  * @skb: Frame to send.
