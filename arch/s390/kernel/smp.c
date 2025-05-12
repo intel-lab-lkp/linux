@@ -688,6 +688,11 @@ void smp_set_core_capacity(int cpu, unsigned long val)
 		smp_cpu_set_capacity(i, val);
 }
 
+bool smp_cpu_parked(int cpu)
+{
+	return smp_cpu_get_polarization(cpu) == POLARIZATION_VL;
+}
+
 int smp_cpu_get_cpu_address(int cpu)
 {
 	return per_cpu(pcpu_devices, cpu).address;

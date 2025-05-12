@@ -31,6 +31,7 @@ static __always_inline unsigned int raw_smp_processor_id(void)
 }
 
 #define arch_scale_cpu_capacity smp_cpu_get_capacity
+#define arch_cpu_parked smp_cpu_parked
 
 extern struct mutex smp_cpu_state_mutex;
 extern unsigned int smp_cpu_mt_shift;
@@ -56,6 +57,7 @@ extern int smp_cpu_get_polarization(int cpu);
 extern void smp_cpu_set_capacity(int cpu, unsigned long val);
 extern void smp_set_core_capacity(int cpu, unsigned long val);
 extern unsigned long smp_cpu_get_capacity(int cpu);
+extern bool smp_cpu_parked(int cpu);
 extern int smp_cpu_get_cpu_address(int cpu);
 extern void smp_fill_possible_mask(void);
 extern void smp_detect_cpus(void);
