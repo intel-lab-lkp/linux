@@ -17,15 +17,24 @@ struct cpc_interface_ops;
 /**
  * struct cpc_interface - Representation of a CPC interface.
  * @dev: Device structure for bookkeeping..
+ * @add_lock: Lock to serialize addition of new endpoints.
  * @ops: Callbacks for this device.
  * @index: Device index.
+ * @lock: Protect access to endpoint list.
+ * @eps: List of endpoints managed by this device.
  */
 struct cpc_interface {
 	struct device dev;
 
+	/* Prevent concurrent addition of new devices */
+	struct mutex add_lock;
+
 	const struct cpc_interface_ops *ops;
 
 	int index;
+
+	struct mutex lock;	/* Protect eps from concurrent access. */
+	struct list_head eps;
 };
 
 /**
@@ -46,6 +55,8 @@ struct cpc_interface *cpc_interface_alloc(struct device *parent,
 
 int cpc_interface_register(struct cpc_interface *intf);
 void cpc_interface_unregister(struct cpc_interface *intf);
+
+struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 ep_id);
 
 /**
  * cpc_interface_get() - Get a reference to interface and return its pointer.
