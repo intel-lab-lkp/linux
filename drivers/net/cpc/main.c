@@ -7,6 +7,7 @@
 #include <linux/module.h>
 
 #include "cpc.h"
+#include "ble.h"
 #include "header.h"
 #include "spi.h"
 #include "system.h"
@@ -125,13 +126,24 @@ static int __init cpc_init(void)
 
 	err = cpc_system_drv_register();
 	if (err)
-		bus_unregister(&cpc_bus);
+		goto unregister_bus;
+
+	err = cpc_ble_drv_register();
+	if (err)
+		goto unregister_system_driver;
 
 	err = cpc_spi_register_driver();
-	if (err) {
-		cpc_system_drv_unregister();
-		bus_unregister(&cpc_bus);
-	}
+	if (err)
+		goto unregister_ble_driver;
+
+	return 0;
+
+unregister_ble_driver:
+	cpc_ble_drv_unregister();
+unregister_system_driver:
+	cpc_system_drv_unregister();
+unregister_bus:
+	bus_unregister(&cpc_bus);
 
 	return err;
 }
@@ -140,6 +152,7 @@ module_init(cpc_init);
 static void __exit cpc_exit(void)
 {
 	cpc_spi_unregister_driver();
+	cpc_ble_drv_unregister();
 	cpc_system_drv_unregister();
 	bus_unregister(&cpc_bus);
 }

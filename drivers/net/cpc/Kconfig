@@ -2,7 +2,7 @@
 
 menuconfig CPC
 	tristate "Silicon Labs Co-Processor Communication (CPC) Protocol"
-	depends on NET && SPI
+	depends on NET && SPI && BT
 	select CRC_ITU_T
 	help
 	  Provide support for the CPC protocol to Silicon Labs EFR32 devices.
