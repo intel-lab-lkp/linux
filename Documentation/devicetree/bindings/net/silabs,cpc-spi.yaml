@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2024 Silicon Labs Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/silabs,cpc-spi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SPI driver for CPC
+
+maintainers:
+  - Damien Riégel <damien.riegel@silabs.com>
+
+description: |
+  This binding is for the implementation of CPC protocol over SPI. The protocol
+  consists of a chain of header+payload frames. The interrupt is used by the
+  device to signal it has a frame to transmit, but also between headers and
+  payloads to signal that it is ready to receive payload.
+
+properties:
+  compatible:
+    enum:
+      - silabs,cpc-spi
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupt
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    spi {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            cpcspi@0 {
+                  compatible = "silabs,cpc-spi";
+                  reg = <0>;
+                  spi-max-frequency = <1000000>;
+                  interrupt-parent = <&gpio>;
+                  interrupts = <23 IRQ_TYPE_EDGE_FALLING>;
+            };
+    };
