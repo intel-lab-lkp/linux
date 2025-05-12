@@ -1282,9 +1282,13 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 	csdev->access = desc->access;
 	csdev->orphan = true;
 
+	/*
+	 * 'csdev->dev' is a device present on the CoreSight bus. The device
+	 * node in the device tree is assigned as the parent device.
+	 */
+	csdev->dev.parent = desc->dev;
 	csdev->dev.type = &coresight_dev_type[desc->type];
 	csdev->dev.groups = desc->groups;
-	csdev->dev.parent = desc->dev;
 	csdev->dev.release = coresight_device_release;
 	csdev->dev.bus = &coresight_bustype;
 
@@ -1303,7 +1307,7 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 	 * Hold the reference to our parent device. This will be
 	 * dropped only in coresight_device_release().
 	 */
-	csdev->dev.fwnode = fwnode_handle_get(dev_fwnode(desc->dev));
+	csdev->dev.fwnode = fwnode_handle_get(dev_fwnode(csdev->dev.parent));
 	dev_set_name(&csdev->dev, "%s", desc->name);
 
 	/*
@@ -1362,7 +1366,7 @@ out_unlock:
 
 err_out:
 	/* Cleanup the connection information */
-	coresight_release_platform_data(NULL, desc->dev, desc->pdata);
+	coresight_release_platform_data(NULL, csdev->dev.parent, desc->pdata);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(coresight_register);
