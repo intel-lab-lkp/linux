@@ -189,16 +189,41 @@ int of_cpu_phandle_to_id(const struct device_node *node,
 			 struct device_node **cpu_np,
 			 uint8_t cpu_idx)
 {
+	bool found = false;
+	int cpu, ret = -1, i, j;
+	uint32_t local_thread, thread_index;
+	struct device_node *np;
+	struct of_phandle_args args;
+	static const char * const phandle_names[] = { "cpus", "cpu" };
+	static const char * const cpu_cells[] = { "#cpu-cells", NULL };
+
 	if (!node)
-		return -1;
+		return ret;
 
-	*cpu_np = of_parse_phandle(node, "cpu", 0);
-	if (!*cpu_np)
-		*cpu_np = of_parse_phandle(node, "cpus", cpu_idx);
-			if (!*cpu_np)
-				return -ENODEV;
+	for (i = 0; i < ARRAY_SIZE(phandle_names); i++) {
+		for (j = 0; j < ARRAY_SIZE(cpu_cells); j++) {
+			ret = of_parse_phandle_with_args(node, phandle_names[i],
+							 cpu_cells[j], cpu_idx,
+							 &args);
+				if (ret >= 0)
+					goto success;
+		}
+	}
 
-	return of_cpu_node_to_id(*cpu_np);
+	if (ret < 0)
+		return ret;
+success:
+	*cpu_np = args.np;
+	thread_index = args.args_count == 1 ? args.args[0] : 0;
+	for_each_possible_cpu(cpu) {
+		np = of_get_cpu_node(cpu, &local_thread);
+		found = (*cpu_np == np) && (local_thread == thread_index);
+		of_node_put(np);
+		if (found)
+			return cpu;
+	}
+
+	return -ENODEV;
 }
 EXPORT_SYMBOL(of_cpu_phandle_to_id);
 
@@ -206,7 +231,7 @@ EXPORT_SYMBOL(of_cpu_phandle_to_id);
  * of_get_cpu_state_node - Get CPU's idle state node at the given index
  *
  * @cpu_node: The device node for the CPU
- * @index: The index in the list of the idle states
+g* @index: The index in the list of the idle states
  *
  * Two generic methods can be used to describe a CPU's idle states, either via
  * a flattened description through the "cpu-idle-states" binding or via the
