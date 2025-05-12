@@ -21,6 +21,7 @@ extern const struct bus_type cpc_bus;
 /* CPC endpoint flags */
 enum {
 	CPC_ENDPOINT_UP,	/* Connection is established with remote counterpart. */
+	CPC_ENDPOINT_RECEIVING,	/* Interface RX work is processing a frame for this endpoint. */
 };
 
 /**

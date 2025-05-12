@@ -36,6 +36,8 @@ static void cpc_interface_rx_work(struct work_struct *work)
 			continue;
 		}
 
+		set_bit(CPC_ENDPOINT_RECEIVING, &ep->flags);
+
 		switch (type) {
 		case CPC_FRAME_TYPE_DATA:
 			cpc_protocol_on_data(ep, skb);
@@ -49,6 +51,8 @@ static void cpc_interface_rx_work(struct work_struct *work)
 			cpc_protocol_on_rst(ep);
 			break;
 		}
+
+		clear_and_wake_up_bit(CPC_ENDPOINT_RECEIVING, &ep->flags);
 
 		cpc_endpoint_put(ep);
 	}

@@ -260,8 +260,25 @@ void __cpc_endpoint_disconnect(struct cpc_endpoint *ep, bool send_rst)
 
 	cpc_interface_remove_rx_endpoint(ep);
 
-	if (send_rst)
+	if (send_rst) {
+		/*
+		 * It makes sense to wait on the RECEIVING bit only when send_rst is true as this
+		 * means the operation was initiated by the user and can happen concurrently with
+		 * the RX work function. If a RST is received from the remote and
+		 * __cpc_endpoint_disconnect from the RX work function, then it's safe to assume
+		 * that this frame won't trigger a call to ep->ops->rx function.
+		 */
+		int err;
+
+		err = wait_on_bit_timeout(&ep->flags,
+					  CPC_ENDPOINT_RECEIVING,
+					  TASK_INTERRUPTIBLE,
+					  msecs_to_jiffies(1000));
+		if (!err)
+			dev_warn(&ep->dev, "Timeout when disconnecting.\n");
+
 		cpc_protocol_send_rst(ep->intf, ep->id);
+	}
 }
 
 /**
