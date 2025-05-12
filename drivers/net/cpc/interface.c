@@ -9,6 +9,7 @@
 #include "header.h"
 #include "interface.h"
 #include "protocol.h"
+#include "system.h"
 
 #define to_cpc_interface(d) container_of(d, struct cpc_interface, dev)
 
@@ -143,13 +144,25 @@ struct cpc_interface *cpc_interface_alloc(struct device *parent,
  */
 int cpc_interface_register(struct cpc_interface *intf)
 {
+	struct cpc_endpoint *system_ep;
 	int err;
 
 	err = device_add(&intf->dev);
 	if (err)
 		return err;
 
+	system_ep = cpc_endpoint_new(intf, 0, CPC_SYSTEM_ENDPOINT_NAME);
+	if (!system_ep) {
+		err = -ENOMEM;
+		goto unregister_intf;
+	}
+
 	return 0;
+
+unregister_intf:
+	cpc_interface_unregister(intf);
+
+	return err;
 }
 
 static int cpc_intf_unregister_ep(struct device *dev, void *null)
