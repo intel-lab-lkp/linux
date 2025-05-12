@@ -158,7 +158,7 @@ void amdgpu_bo_placement_from_domain(struct amdgpu_bo *abo, u32 domain)
 		places[c].mem_type =
 			abo->flags & AMDGPU_GEM_CREATE_PREEMPTIBLE ?
 			AMDGPU_PL_PREEMPT : TTM_PL_TT;
-		places[c].flags = 0;
+		places[c].flags = TTM_PL_FLAG_MEMCG;
 		/*
 		 * When GTT is just an alternative to VRAM make sure that we
 		 * only use it as fallback and still try to fill up VRAM first.
@@ -173,7 +173,7 @@ void amdgpu_bo_placement_from_domain(struct amdgpu_bo *abo, u32 domain)
 		places[c].fpfn = 0;
 		places[c].lpfn = 0;
 		places[c].mem_type = TTM_PL_SYSTEM;
-		places[c].flags = 0;
+		places[c].flags = TTM_PL_FLAG_MEMCG;
 		c++;
 	}
 
@@ -657,16 +657,21 @@ int amdgpu_bo_create(struct amdgpu_device *adev,
 		size = ALIGN(size, PAGE_SIZE);
 	}
 
-	if (!amdgpu_bo_validate_size(adev, size, bp->domain))
+	if (!amdgpu_bo_validate_size(adev, size, bp->domain)) {
+		mem_cgroup_put(bp->memcg);
 		return -ENOMEM;
+	}
 
 	BUG_ON(bp->bo_ptr_size < sizeof(struct amdgpu_bo));
 
 	*bo_ptr = NULL;
 	bo = kvzalloc(bp->bo_ptr_size, GFP_KERNEL);
-	if (bo == NULL)
+	if (bo == NULL) {
+		mem_cgroup_put(bp->memcg);
 		return -ENOMEM;
+	}
 	drm_gem_private_object_init(adev_to_drm(adev), &bo->tbo.base, size);
+	bo->tbo.memcg = bp->memcg;
 	bo->tbo.base.funcs = &amdgpu_gem_object_funcs;
 	bo->vm_bo = NULL;
 	bo->preferred_domains = bp->preferred_domain ? bp->preferred_domain :
@@ -1341,7 +1346,8 @@ out:
 vm_fault_t amdgpu_bo_fault_reserve_notify(struct ttm_buffer_object *bo)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->bdev);
-	struct ttm_operation_ctx ctx = { false, false };
+	struct ttm_operation_ctx ctx = { .interruptible = false,
+					 .no_wait_gpu = false };
 	struct amdgpu_bo *abo = ttm_to_amdgpu_bo(bo);
 	int r;
 
