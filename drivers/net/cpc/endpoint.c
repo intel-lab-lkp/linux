@@ -253,6 +253,17 @@ remove_from_ep_list:
 	return err;
 }
 
+void __cpc_endpoint_disconnect(struct cpc_endpoint *ep, bool send_rst)
+{
+	if (!test_and_clear_bit(CPC_ENDPOINT_UP, &ep->flags))
+		return;
+
+	cpc_interface_remove_rx_endpoint(ep);
+
+	if (send_rst)
+		cpc_protocol_send_rst(ep->intf, ep->id);
+}
+
 /**
  * cpc_endpoint_disconnect - Disconnect endpoint from remote.
  * @ep: Endpoint handle.
@@ -264,10 +275,7 @@ remove_from_ep_list:
  */
 void cpc_endpoint_disconnect(struct cpc_endpoint *ep)
 {
-	if (!test_and_clear_bit(CPC_ENDPOINT_UP, &ep->flags))
-		return;
-
-	cpc_interface_remove_rx_endpoint(ep);
+	__cpc_endpoint_disconnect(ep, true);
 }
 
 /**

@@ -28,6 +28,10 @@ static void cpc_interface_rx_work(struct work_struct *work)
 
 		ep = cpc_interface_get_endpoint(intf, ep_id);
 		if (!ep) {
+			if (type != CPC_FRAME_TYPE_RST) {
+				dev_dbg(&intf->dev, "ep%u not allocated (%d)\n", ep_id, type);
+				cpc_protocol_send_rst(intf, ep_id);
+			}
 			kfree_skb(skb);
 			continue;
 		}
@@ -39,8 +43,11 @@ static void cpc_interface_rx_work(struct work_struct *work)
 		case CPC_FRAME_TYPE_SYN:
 			cpc_protocol_on_syn(ep, skb);
 			break;
-		default:
+		case CPC_FRAME_TYPE_RST:
+			dev_dbg(&ep->dev, "reset\n");
 			kfree_skb(skb);
+			cpc_protocol_on_rst(ep);
+			break;
 		}
 
 		cpc_endpoint_put(ep);

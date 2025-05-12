@@ -60,6 +60,28 @@ static void __cpc_protocol_send_ack(struct cpc_endpoint *ep)
 	cpc_interface_send_frame(ep->intf, skb);
 }
 
+/**
+ * cpc_protocol_send_rst - send a RST frame
+ * @intf: interface pointer
+ * @ep_id: endpoint id
+ */
+void cpc_protocol_send_rst(struct cpc_interface *intf, u8 ep_id)
+{
+	struct cpc_header hdr = {
+		.ctrl = cpc_header_get_ctrl(CPC_FRAME_TYPE_RST, false),
+		.ep_id = ep_id,
+	};
+	struct sk_buff *skb;
+
+	skb = cpc_skb_alloc(0, GFP_KERNEL);
+	if (!skb)
+		return;
+
+	memcpy(skb_push(skb, sizeof(hdr)), &hdr, sizeof(hdr));
+
+	cpc_interface_send_frame(intf, skb);
+}
+
 static void cpc_protocol_on_tx_complete(struct sk_buff *skb)
 {
 	struct cpc_endpoint *ep = cpc_skb_get_ctx(skb);
@@ -228,8 +250,11 @@ void cpc_protocol_on_syn(struct cpc_endpoint *ep, struct sk_buff *skb)
 {
 	mutex_lock(&ep->tcb.lock);
 
-	if (!__cpc_protocol_is_syn_ack_valid(ep, skb))
+	if (!__cpc_protocol_is_syn_ack_valid(ep, skb)) {
+		cpc_protocol_send_rst(ep->intf, ep->id);
+
 		goto out;
+	}
 
 	__cpc_protocol_receive_ack(ep,
 				   cpc_header_get_recv_wnd(skb->data),
@@ -251,6 +276,11 @@ out:
 	mutex_unlock(&ep->tcb.lock);
 
 	kfree_skb(skb);
+}
+
+void cpc_protocol_on_rst(struct cpc_endpoint *ep)
+{
+	__cpc_endpoint_disconnect(ep, false);
 }
 
 /**

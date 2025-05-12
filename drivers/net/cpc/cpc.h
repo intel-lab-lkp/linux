@@ -94,6 +94,7 @@ struct cpc_endpoint *cpc_endpoint_new(struct cpc_interface *intf, u8 id, const c
 void cpc_endpoint_unregister(struct cpc_endpoint *ep);
 
 int cpc_endpoint_connect(struct cpc_endpoint *ep);
+void __cpc_endpoint_disconnect(struct cpc_endpoint *ep, bool send_rst);
 void cpc_endpoint_disconnect(struct cpc_endpoint *ep);
 int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb);
 void cpc_endpoint_set_ops(struct cpc_endpoint *ep, struct cpc_endpoint_ops *ops);
