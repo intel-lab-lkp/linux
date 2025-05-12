@@ -87,6 +87,7 @@ nouveau_gem_object_del(struct drm_gem_object *gem)
 		return;
 	}
 
+	mem_cgroup_put(nvbo->bo.memcg);
 	ttm_bo_put(&nvbo->bo);
 
 	pm_runtime_mark_last_busy(dev);
@@ -254,6 +255,7 @@ nouveau_gem_new(struct nouveau_cli *cli, u64 size, int align, uint32_t domain,
 	if (IS_ERR(nvbo))
 		return PTR_ERR(nvbo);
 
+	nvbo->bo.memcg = get_mem_cgroup_from_mm(current->mm);
 	nvbo->bo.base.funcs = &nouveau_gem_object_funcs;
 	nvbo->no_share = domain & NOUVEAU_GEM_DOMAIN_NO_SHARE;
 

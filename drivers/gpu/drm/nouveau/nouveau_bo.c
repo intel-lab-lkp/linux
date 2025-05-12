@@ -450,13 +450,13 @@ nouveau_bo_placement_set(struct nouveau_bo *nvbo, uint32_t domain,
 	if (domain & NOUVEAU_GEM_DOMAIN_GART) {
 		pl[*n].mem_type = TTM_PL_TT;
 		pl[*n].flags = busy & NOUVEAU_GEM_DOMAIN_GART ?
-			TTM_PL_FLAG_FALLBACK : 0;
+			TTM_PL_FLAG_FALLBACK : TTM_PL_FLAG_MEMCG;
 		(*n)++;
 	}
 	if (domain & NOUVEAU_GEM_DOMAIN_CPU) {
 		pl[*n].mem_type = TTM_PL_SYSTEM;
 		pl[*n].flags = busy & NOUVEAU_GEM_DOMAIN_CPU ?
-			TTM_PL_FLAG_FALLBACK : 0;
+			TTM_PL_FLAG_FALLBACK : TTM_PL_FLAG_MEMCG;
 		(*n)++;
 	}
 
@@ -814,6 +814,7 @@ nouveau_bo_evict_flags(struct ttm_buffer_object *bo, struct ttm_placement *pl)
 	case TTM_PL_VRAM:
 		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART,
 					 NOUVEAU_GEM_DOMAIN_CPU);
+		nvbo->placements[0].flags &= ~TTM_PL_FLAG_MEMCG;
 		break;
 	default:
 		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_CPU, 0);
