@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menuconfig CPC
+	tristate "Silicon Labs Co-Processor Communication (CPC) Protocol"
+	depends on NET
+	help
+	  Provide support for the CPC protocol to Silicon Labs EFR32 devices.
+
+	  CPC provides a way to multiplex data channels over a shared physical
+	  link. These data channels can carry Bluetooth, Wi-Fi, or any arbitrary
+	  data. Depending on the part and the firmware, the set of available
+	  channels may differ.
+
+	  Say Y here to compile support for CPC into the kernel or say M to
+	  compile as a module.

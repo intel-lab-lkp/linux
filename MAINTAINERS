@@ -22137,6 +22137,12 @@ S:	Maintained
 F:	drivers/input/touchscreen/silead.c
 F:	drivers/platform/x86/touchscreen_dmi.c
 
+SILICON LABS CPC DRIVERS
+M:	Damien Riégel <damien.riegel@silabs.com>
+R:	Silicon Labs Kernel Team <linux-devel@silabs.com>
+S:	Supported
+F:	drivers/net/cpc/*
+
 SILICON LABS WIRELESS DRIVERS (for WFxxx series)
 M:	Jérôme Pouiller <jerome.pouiller@silabs.com>
 S:	Supported
