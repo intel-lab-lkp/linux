@@ -943,10 +943,15 @@ __bpf_kfunc s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 
 	if (!check_builtin_idle_enabled())
 		return -EBUSY;
 
-	if (!scx_kf_allowed(SCX_KF_SELECT_CPU | SCX_KF_ENQUEUE))
-		return -EPERM;
-
 #ifdef CONFIG_SMP
+	/*
+	 * If called from an unlocked context, try to acquire
+	 * cpus_read_lock() to avoid races with CPU hotplug.
+	 */
+	if (scx_kf_allowed_if_unlocked())
+		if (!cpus_read_trylock())
+			return -EBUSY;
+
 	/*
 	 * This may also be called from ops.enqueue(), so we need to handle
 	 * per-CPU tasks as well. For these tasks, we can skip all idle CPU
@@ -956,10 +961,16 @@ __bpf_kfunc s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 
 	if (p->nr_cpus_allowed == 1) {
 		if (cpumask_test_cpu(prev_cpu, cpus_allowed) &&
 		    scx_idle_test_and_clear_cpu(prev_cpu))
-			return prev_cpu;
-		return -EBUSY;
+			cpu = prev_cpu;
+		else
+			cpu = -EBUSY;
+		goto out_unlock;
 	}
 	cpu = scx_select_cpu_dfl(p, prev_cpu, wake_flags, cpus_allowed, flags);
+
+out_unlock:
+	if (scx_kf_allowed_if_unlocked())
+		cpus_read_unlock();
 #else
 	cpu = -EBUSY;
 #endif
@@ -1266,6 +1277,7 @@ BTF_ID_FLAGS(func, scx_bpf_pick_idle_cpu_node, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_idle_cpu, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_any_cpu_node, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_any_cpu, KF_RCU)
+BTF_ID_FLAGS(func, scx_bpf_select_cpu_and, KF_RCU)
 BTF_KFUNCS_END(scx_kfunc_ids_idle)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_idle = {
@@ -1275,7 +1287,6 @@ static const struct btf_kfunc_id_set scx_kfunc_set_idle = {
 
 BTF_KFUNCS_START(scx_kfunc_ids_select_cpu)
 BTF_ID_FLAGS(func, scx_bpf_select_cpu_dfl, KF_RCU)
-BTF_ID_FLAGS(func, scx_bpf_select_cpu_and, KF_RCU)
 BTF_KFUNCS_END(scx_kfunc_ids_select_cpu)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_select_cpu = {
