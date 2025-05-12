@@ -48,6 +48,7 @@ struct cpc_endpoint *cpc_endpoint_alloc(struct cpc_interface *intf, u8 id)
 	ep->id = id;
 
 	ep->dev.parent = &intf->dev;
+	ep->dev.bus = &cpc_bus;
 	ep->dev.release = cpc_ep_release;
 
 	device_initialize(&ep->dev);

@@ -15,6 +15,8 @@ struct cpc_driver;
 struct cpc_interface;
 struct cpc_endpoint;
 
+extern const struct bus_type cpc_bus;
+
 /**
  * struct cpc_endpoint - Representation of CPC endpointl
  * @dev: Driver model representation of the device.
@@ -96,6 +98,43 @@ static inline void *cpc_endpoint_get_drvdata(struct cpc_endpoint *ep)
 static inline void cpc_endpoint_set_drvdata(struct cpc_endpoint *ep, void *data)
 {
 	dev_set_drvdata(&ep->dev, data);
+}
+
+/*---------------------------------------------------------------------------*/
+
+/**
+ * struct cpc_driver - CPC endpoint driver.
+ * @driver: Internal driver for the device driver model.
+ * @probe: Binds this driver to the endpoint.
+ * @remove: Unbinds this driver from the endpoint.
+ *
+ * This represents a device driver that uses an endpoint to communicate with a remote application at
+ * the other side of the CPC interface. The way to communicate with the remote is abstracted by the
+ * interface, and drivers don't have to care if other endpoints are present or not.
+ */
+struct cpc_driver {
+	struct device_driver driver;
+
+	int (*probe)(struct cpc_endpoint *ep);
+	void (*remove)(struct cpc_endpoint *ep);
+};
+
+int __cpc_driver_register(struct cpc_driver *cpc_drv, struct module *owner);
+void cpc_driver_unregister(struct cpc_driver *cpc_drv);
+
+/* Convenience macro with THIS_MODULE */
+#define cpc_driver_register(driver) \
+	__cpc_driver_register(driver, THIS_MODULE)
+
+/**
+ * cpc_driver_from_drv - Upcast from a device driver.
+ * @drv: Reference to a device driver.
+ *
+ * @return: Reference to the cpc driver.
+ */
+static inline struct cpc_driver *cpc_driver_from_drv(const struct device_driver *drv)
+{
+	return container_of(drv, struct cpc_driver, driver);
 }
 
 #endif
