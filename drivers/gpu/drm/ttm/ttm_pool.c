@@ -130,6 +130,16 @@ static struct list_head shrinker_list;
 static struct shrinker *mm_shrinker;
 static DECLARE_RWSEM(pool_shrink_rwsem);
 
+/* helper to get a current valid node id from a pool */
+static int ttm_pool_nid(struct ttm_pool *pool) {
+	int nid = NUMA_NO_NODE;
+	if (pool)
+		nid = pool->nid;
+	if (nid == NUMA_NO_NODE)
+		nid = numa_node_id();
+	return nid;
+}
+
 /* Allocate pages of size 1 << order with the given gfp_flags */
 static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 					unsigned int order)
@@ -149,8 +159,10 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 
 	if (!pool->use_dma_alloc) {
 		p = alloc_pages_node(pool->nid, gfp_flags, order);
-		if (p)
+		if (p) {
 			p->private = order;
+			mod_node_page_state(NODE_DATA(ttm_pool_nid(pool)), NR_GPU_ACTIVE, (1 << order));
+		}
 		return p;
 	}
 
@@ -201,6 +213,7 @@ static void ttm_pool_free_page(struct ttm_pool *pool, enum ttm_caching caching,
 
 	if (!pool || !pool->use_dma_alloc) {
 		__free_pages(p, order);
+		mod_node_page_state(NODE_DATA(ttm_pool_nid(pool)), NR_GPU_ACTIVE, -(1 << order));
 		return;
 	}
 
@@ -275,6 +288,7 @@ static void ttm_pool_unmap(struct ttm_pool *pool, dma_addr_t dma_addr,
 static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 {
 	unsigned int i, num_pages = 1 << pt->order;
+	int nid = ttm_pool_nid(pt->pool);
 
 	for (i = 0; i < num_pages; ++i) {
 		if (PageHighMem(p))
@@ -287,17 +301,23 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 	list_add(&p->lru, &pt->pages);
 	spin_unlock(&pt->lock);
 	atomic_long_add(1 << pt->order, &allocated_pages);
+
+	mod_node_page_state(NODE_DATA(nid), NR_GPU_ACTIVE, -(1 << pt->order));
+	mod_node_page_state(NODE_DATA(nid), NR_GPU_RECLAIM, (1 << pt->order));
 }
 
 /* Take pages from a specific pool_type, return NULL when nothing available */
 static struct page *ttm_pool_type_take(struct ttm_pool_type *pt)
 {
 	struct page *p;
+	int nid = ttm_pool_nid(pt->pool);
 
 	spin_lock(&pt->lock);
 	p = list_first_entry_or_null(&pt->pages, typeof(*p), lru);
 	if (p) {
 		atomic_long_sub(1 << pt->order, &allocated_pages);
+		mod_node_page_state(NODE_DATA(nid), NR_GPU_ACTIVE, (1 << pt->order));
+		mod_node_page_state(NODE_DATA(nid), NR_GPU_RECLAIM, -(1 << pt->order));
 		list_del(&p->lru);
 	}
 	spin_unlock(&pt->lock);
