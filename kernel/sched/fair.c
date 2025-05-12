@@ -9931,6 +9931,8 @@ struct sg_lb_stats {
 	unsigned int sum_nr_running;		/* Nr of all tasks running in the group */
 	unsigned int sum_h_nr_running;		/* Nr of CFS tasks running in the group */
 	unsigned int sum_nr_parked;
+	unsigned int parked_cpus;
+	unsigned int parked_capacity;
 	unsigned int idle_cpus;                 /* Nr of idle CPUs         in the group */
 	unsigned int group_weight;
 	enum group_type group_type;
@@ -10387,6 +10389,8 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 			*sg_overutilized = 1;
 
 		sgs->sum_nr_parked += arch_cpu_parked(i) * rq->cfs.h_nr_queued;
+		sgs->parked_capacity += arch_cpu_parked(i) * capacity_of(i);
+		sgs->parked_cpus += arch_cpu_parked(i);
 
 		/*
 		 * No need to call idle_cpu() if nr_running is not 0
@@ -10424,9 +10428,11 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		}
 	}
 
-	sgs->group_capacity = group->sgc->capacity;
+	sgs->group_capacity = group->sgc->capacity - sgs->parked_capacity;
+	if (!sgs->group_capacity)
+		sgs->group_capacity = 1;
 
-	sgs->group_weight = group->group_weight;
+	sgs->group_weight = group->group_weight - sgs->parked_cpus;
 
 	/* Check if dst CPU is idle and preferred to this group */
 	if (!local_group && env->idle && sgs->sum_h_nr_running &&
@@ -10711,6 +10717,8 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 		sgs->sum_nr_running += nr_running;
 
 		sgs->sum_nr_parked += arch_cpu_parked(i) * rq->cfs.h_nr_queued;
+		sgs->parked_capacity += arch_cpu_parked(i) * capacity_of(i);
+		sgs->parked_cpus += arch_cpu_parked(i);
 
 		/*
 		 * No need to call idle_cpu_without() if nr_running is not 0
@@ -10726,9 +10734,11 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 
 	}
 
-	sgs->group_capacity = group->sgc->capacity;
+	sgs->group_capacity = group->sgc->capacity - sgs->parked_capacity;
+	if (!sgs->group_capacity)
+		sgs->group_capacity = 1;
 
-	sgs->group_weight = group->group_weight;
+	sgs->group_weight = group->group_weight - sgs->parked_cpus;
 
 	sgs->group_type = group_classify(sd->imbalance_pct, group, sgs);
 
