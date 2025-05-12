@@ -433,9 +433,7 @@ static int armada_37xx_gpio_direction_output(struct gpio_chip *chip,
 	armada_37xx_update_reg(&reg, &val_offset);
 
 	val = value ? mask : 0;
-	regmap_update_bits(info->regmap, reg, mask, val);
-
-	return 0;
+	return regmap_update_bits(info->regmap, reg, mask, val);
 }
 
 static int armada_37xx_gpio_get(struct gpio_chip *chip, unsigned int offset)
