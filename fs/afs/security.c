@@ -477,6 +477,58 @@ error:
 	return ret;
 }
 
+/*
+ * Perform the ownership checks for a file in a sticky directory on AFS.
+ *
+ * In the case of AFS, this means that:
+ *
+ * (1) the file and the directory have the same AFS ownership or
+ *
+ * (2) the file is owned by the AFS user represented by the token (e.g. from a
+ *     kerberos server) held in a key.
+ *
+ * Returns 0 if owned by me or has same owner as parent dir, 1 if not; can also
+ * return an error.
+ */
+int afs_may_create_in_sticky(struct mnt_idmap *idmap, struct inode *inode,
+			     struct path *path)
+{
+	struct afs_vnode *dvnode, *vnode = AFS_FS_I(inode);
+	struct dentry *parent;
+	struct key *key;
+	afs_access_t access;
+	int ret;
+	s64 owner;
+
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key))
+		return PTR_ERR(key);
+
+	/* Get the owner's ID for the directory.  Ideally, we'd use RCU to
+	 * access the parent rather than getting a ref.
+	 */
+	parent = dget_parent(path->dentry);
+	dvnode = AFS_FS_I(d_backing_inode(parent));
+	owner = dvnode->status.owner;
+	dput(parent);
+
+	if (vnode->status.owner == owner) {
+		ret = 0;
+		goto error;
+	}
+
+	/* Get the access rights for the key on this file. */
+	ret = afs_check_permit(vnode, key, &access);
+	if (ret < 0)
+		goto error;
+
+	/* We get the ADMINISTER bit if we own the file. */
+	ret = (access & AFS_ACE_ADMINISTER) ? 1 : 0;
+error:
+	key_put(key);
+	return ret;
+}
+
 void __exit afs_clean_up_permit_cache(void)
 {
 	int i;

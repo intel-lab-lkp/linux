@@ -65,6 +65,7 @@ const struct inode_operations afs_dir_inode_operations = {
 	.permission	= afs_permission,
 	.getattr	= afs_getattr,
 	.setattr	= afs_setattr,
+	.may_create_in_sticky = afs_may_create_in_sticky,
 };
 
 const struct address_space_operations afs_dir_aops = {

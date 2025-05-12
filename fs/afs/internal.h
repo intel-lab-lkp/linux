@@ -1495,6 +1495,8 @@ extern struct key *afs_request_key(struct afs_cell *);
 extern struct key *afs_request_key_rcu(struct afs_cell *);
 extern int afs_check_permit(struct afs_vnode *, struct key *, afs_access_t *);
 extern int afs_permission(struct mnt_idmap *, struct inode *, int);
+int afs_may_create_in_sticky(struct mnt_idmap *idmap, struct inode *inode,
+			     struct path *path);
 extern void __exit afs_clean_up_permit_cache(void);
 
 /*

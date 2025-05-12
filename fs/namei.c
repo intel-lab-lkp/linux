@@ -1316,13 +1316,20 @@ static int may_create_in_sticky(struct mnt_idmap *idmap, struct nameidata *nd,
 	if (S_ISFIFO(inode->i_mode) && !sysctl_protected_fifos)
 		return 0;
 
-	i_vfsuid = i_uid_into_vfsuid(idmap, inode);
+	if (unlikely(inode->i_op->may_create_in_sticky)) {
+		int ret = inode->i_op->may_create_in_sticky(idmap, inode, &nd->path);
 
-	if (vfsuid_eq(i_vfsuid, dir_vfsuid))
-		return 0;
+		if (ret <= 0) /* 1 if not owned by me or by parent dir. */
+			return ret;
+	} else {
+		i_vfsuid = i_uid_into_vfsuid(idmap, inode);
 
-	if (vfsuid_eq_kuid(i_vfsuid, current_fsuid()))
-		return 0;
+		if (vfsuid_eq(i_vfsuid, dir_vfsuid))
+			return 0;
+
+		if (vfsuid_eq_kuid(i_vfsuid, current_fsuid()))
+			return 0;
+	}
 
 	if (likely(dir_mode & 0002)) {
 		audit_log_path_denied(AUDIT_ANOM_CREAT, "sticky_create");
