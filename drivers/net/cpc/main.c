@@ -8,6 +8,7 @@
 
 #include "cpc.h"
 #include "header.h"
+#include "spi.h"
 #include "system.h"
 
 /**
@@ -126,12 +127,19 @@ static int __init cpc_init(void)
 	if (err)
 		bus_unregister(&cpc_bus);
 
+	err = cpc_spi_register_driver();
+	if (err) {
+		cpc_system_drv_unregister();
+		bus_unregister(&cpc_bus);
+	}
+
 	return err;
 }
 module_init(cpc_init);
 
 static void __exit cpc_exit(void)
 {
+	cpc_spi_unregister_driver();
 	cpc_system_drv_unregister();
 	bus_unregister(&cpc_bus);
 }
