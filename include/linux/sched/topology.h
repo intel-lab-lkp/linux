@@ -257,6 +257,25 @@ unsigned long arch_scale_cpu_capacity(int cpu)
 }
 #endif
 
+#ifndef arch_cpu_parked
+/**
+ * arch_cpu_parked - Check if a given CPU is currently parked.
+ *
+ * A parked CPU cannot run any kind of workload since underlying
+ * physical CPU should not be used at the moment .
+ *
+ * @cpu: the CPU in question.
+ *
+ * By default assume CPU is not parked
+ *
+ * Return: Parked state of CPU
+ */
+static __always_inline bool arch_cpu_parked(int cpu)
+{
+	return false;
+}
+#endif
+
 #ifndef arch_scale_hw_pressure
 static __always_inline
 unsigned long arch_scale_hw_pressure(int cpu)

@@ -214,6 +214,9 @@ int idle_cpu(int cpu)
 		return 0;
 #endif
 
+	if (arch_cpu_parked(cpu))
+		return 0;
+
 	return 1;
 }
 
