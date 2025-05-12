@@ -348,6 +348,7 @@
 
 			scmi_iomuxc: protocol@19 {
 				reg = <0x19>;
+				nxp,iomuxc-daisy-off = <0x408>;
 			};
 
 			scmi_bbm: protocol@81 {
