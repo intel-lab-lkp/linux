@@ -1540,6 +1540,7 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	unsigned int *ep_state;
 	struct urb_priv	*urb_priv;
 	int num_tds;
+	size_t private_size;
 
 	ep_index = xhci_get_endpoint_index(&urb->ep->desc);
 
@@ -1553,7 +1554,13 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	else
 		num_tds = 1;
 
-	urb_priv = kzalloc(struct_size(urb_priv, td, num_tds), mem_flags);
+	private_size = struct_size(urb_priv, td, num_tds);
+	if (private_size <= sizeof(urb->hcpriv_buffer)) {
+		memset(urb->hcpriv_buffer, 0, sizeof(urb->hcpriv_buffer));
+		urb_priv = (struct urb_priv *)urb->hcpriv_buffer;
+	} else {
+		urb_priv = kzalloc(private_size, mem_flags);
+	}
 	if (!urb_priv)
 		return -ENOMEM;
 
@@ -1627,7 +1634,8 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 
 	if (ret) {
 free_priv:
-		xhci_urb_free_priv(urb_priv);
+		if (urb_priv != (void *)urb->hcpriv_buffer)
+			xhci_urb_free_priv(urb_priv);
 		urb->hcpriv = NULL;
 	}
 	spin_unlock_irqrestore(&xhci->lock, flags);
@@ -1790,7 +1798,7 @@ done:
 	return ret;
 
 err_giveback:
-	if (urb_priv)
+	if (urb_priv &&  urb_priv != (void *)urb->hcpriv_buffer)
 		xhci_urb_free_priv(urb_priv);
 	usb_hcd_unlink_urb_from_ep(hcd, urb);
 	spin_unlock_irqrestore(&xhci->lock, flags);
