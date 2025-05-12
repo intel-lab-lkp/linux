@@ -2405,9 +2405,10 @@ int ext4_ext_index_trans_blocks(struct inode *inode, int extents)
 	depth = ext_depth(inode);
 
 	if (extents <= 1)
-		index = depth * 2;
+		index = depth * 2 + extents;
 	else
-		index = depth * 3;
+		index = depth * 3 +
+			DIV_ROUND_UP(extents, ext4_ext_space_block(inode, 0));
 
 	return index;
 }
