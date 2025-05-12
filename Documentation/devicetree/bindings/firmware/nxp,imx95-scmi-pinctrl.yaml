@@ -13,6 +13,11 @@ maintainers:
 allOf:
   - $ref: /schemas/pinctrl/pinctrl.yaml
 
+properties:
+  nxp,iomuxc-daisy-off:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Specify the IOMUX Controller first Daisy register's offset
+
 patternProperties:
   'grp$':
     type: object
@@ -51,3 +56,6 @@ patternProperties:
       - fsl,pins
 
 additionalProperties: true
+
+required:
+  - nxp,iomuxc-daisy-off
