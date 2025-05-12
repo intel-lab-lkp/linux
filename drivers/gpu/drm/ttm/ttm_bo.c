@@ -140,7 +140,7 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 			goto out_err;
 
 		if (mem->mem_type != TTM_PL_SYSTEM) {
-			ret = ttm_bo_populate(bo, ctx);
+			ret = ttm_bo_populate(bo, mem->placement & TTM_PL_FLAG_MEMCG, ctx);
 			if (ret)
 				goto out_err;
 		}
@@ -1237,6 +1237,7 @@ void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
 /**
  * ttm_bo_populate() - Ensure that a buffer object has backing pages
  * @bo: The buffer object
+ * @memcg_account: account this memory with memcg if needed
  * @ctx: The ttm_operation_ctx governing the operation.
  *
  * For buffer objects in a memory type whose manager uses
@@ -1250,6 +1251,7 @@ void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
  * is set to true.
  */
 int ttm_bo_populate(struct ttm_buffer_object *bo,
+		    bool memcg_account,
 		    struct ttm_operation_ctx *ctx)
 {
 	struct ttm_tt *tt = bo->ttm;
@@ -1262,7 +1264,7 @@ int ttm_bo_populate(struct ttm_buffer_object *bo,
 		return 0;
 
 	swapped = ttm_tt_is_swapped(tt);
-	ret = ttm_tt_populate(bo->bdev, tt, ctx);
+	ret = ttm_tt_populate(bo->bdev, tt, memcg_account, ctx);
 	if (ret)
 		return ret;
 

@@ -90,6 +90,8 @@ struct ttm_tt {
 	 * TTM_TT_FLAG_BACKED_UP: TTM internal only. This is set if the
 	 * struct ttm_tt has been (possibly partially) backed up.
 	 *
+	 * TTM_TT_FLAG_ACCOUNTED: TTM internal. This tt has been accounted.
+	 *
 	 * TTM_TT_FLAG_PRIV_POPULATED: TTM internal only. DO NOT USE. This is
 	 * set by TTM after ttm_tt_populate() has successfully returned, and is
 	 * then unset when TTM calls ttm_tt_unpopulate().
@@ -101,8 +103,9 @@ struct ttm_tt {
 #define TTM_TT_FLAG_EXTERNAL_MAPPABLE	BIT(3)
 #define TTM_TT_FLAG_DECRYPTED		BIT(4)
 #define TTM_TT_FLAG_BACKED_UP	        BIT(5)
+#define TTM_TT_FLAG_ACCOUNTED	        BIT(6)
 
-#define TTM_TT_FLAG_PRIV_POPULATED	BIT(6)
+#define TTM_TT_FLAG_PRIV_POPULATED	BIT(7)
 	uint32_t page_flags;
 	/** @num_pages: Number of pages in the page array. */
 	uint32_t num_pages;
@@ -126,6 +129,8 @@ struct ttm_tt {
 	enum ttm_caching caching;
 	/** @restore: Partial restoration from backup state. TTM private */
 	struct ttm_pool_tt_restore *restore;
+	/** @memcg: Memory cgroup for this TT allocation */
+	struct mem_cgroup *memcg;
 };
 
 /**
@@ -245,11 +250,13 @@ int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
  *
  * @bdev: the ttm_device this object belongs to
  * @ttm: Pointer to the ttm_tt structure
+ * @mem_account_tt: Account this population to the memcg
  * @ctx: operation context for populating the tt object.
  *
  * Calls the driver method to allocate pages for a ttm
  */
 int ttm_tt_populate(struct ttm_device *bdev, struct ttm_tt *ttm,
+		    bool mem_account_tt,
 		    struct ttm_operation_ctx *ctx);
 
 /**

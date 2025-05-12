@@ -135,6 +135,12 @@ struct ttm_buffer_object {
 	 * reservation lock.
 	 */
 	struct sg_table *sg;
+
+	/**
+	 * @memcg: memory cgroup to charge this to if it ends up using system memory.
+	 * NULL means don't charge.
+	 */
+	struct mem_cgroup *memcg;
 };
 
 #define TTM_BO_MAP_IOMEM_MASK 0x80
@@ -486,6 +492,7 @@ pgprot_t ttm_io_prot(struct ttm_buffer_object *bo, struct ttm_resource *res,
 		     pgprot_t tmp);
 void ttm_bo_tt_destroy(struct ttm_buffer_object *bo);
 int ttm_bo_populate(struct ttm_buffer_object *bo,
+		    bool memcg_account,
 		    struct ttm_operation_ctx *ctx);
 
 /* Driver LRU walk helpers initially targeted for shrinking. */

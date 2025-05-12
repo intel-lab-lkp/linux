@@ -161,6 +161,7 @@ static void ttm_tt_init_fields(struct ttm_tt *ttm,
 	ttm->caching = caching;
 	ttm->restore = NULL;
 	ttm->backup = NULL;
+	ttm->memcg = bo->memcg;
 }
 
 int ttm_tt_init(struct ttm_tt *ttm, struct ttm_buffer_object *bo,
@@ -365,7 +366,9 @@ out_err:
 EXPORT_SYMBOL_FOR_TESTS_ONLY(ttm_tt_swapout);
 
 int ttm_tt_populate(struct ttm_device *bdev,
-		    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+		    struct ttm_tt *ttm,
+		    bool memcg_account_tt,
+		    struct ttm_operation_ctx *ctx)
 {
 	int ret;
 
@@ -376,6 +379,14 @@ int ttm_tt_populate(struct ttm_device *bdev,
 		return 0;
 
 	if (!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
+		if (ttm->memcg && memcg_account_tt) {
+			gfp_t gfp_flags = GFP_USER;
+			if (ctx->gfp_retry_mayfail)
+				gfp_flags |= __GFP_RETRY_MAYFAIL;
+			if (!mem_cgroup_charge_gpu(ttm->memcg, ttm->num_pages, gfp_flags))
+				return -ENOMEM;
+			ttm->page_flags |= TTM_TT_FLAG_ACCOUNTED;
+		}
 		atomic_long_add(ttm->num_pages, &ttm_pages_allocated);
 		if (bdev->pool.use_dma32)
 			atomic_long_add(ttm->num_pages,
@@ -437,6 +448,10 @@ void ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)
 		ttm_pool_free(&bdev->pool, ttm);
 
 	if (!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
+		if (ttm->page_flags & TTM_TT_FLAG_ACCOUNTED) {
+			mem_cgroup_uncharge_gpu(ttm->memcg, ttm->num_pages);
+			ttm->page_flags &= ~TTM_TT_FLAG_ACCOUNTED;
+		}
 		atomic_long_sub(ttm->num_pages, &ttm_pages_allocated);
 		if (bdev->pool.use_dma32)
 			atomic_long_sub(ttm->num_pages,
