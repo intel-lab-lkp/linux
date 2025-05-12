@@ -474,6 +474,9 @@ static inline bool rt_task_fits_capacity(struct task_struct *p, int cpu)
 	unsigned int max_cap;
 	unsigned int cpu_cap;
 
+	if (arch_cpu_parked(cpu))
+		return false;
+
 	/* Only heterogeneous systems can benefit from this check */
 	if (!sched_asym_cpucap_active())
 		return true;
@@ -488,6 +491,9 @@ static inline bool rt_task_fits_capacity(struct task_struct *p, int cpu)
 #else
 static inline bool rt_task_fits_capacity(struct task_struct *p, int cpu)
 {
+	if (arch_cpu_parked(cpu))
+		return false;
+
 	return true;
 }
 #endif
@@ -1810,6 +1816,8 @@ static int find_lowest_rq(struct task_struct *task)
 	int this_cpu = smp_processor_id();
 	int cpu      = task_cpu(task);
 	int ret;
+	int parked_cpu = 0;
+	int tmp_cpu;
 
 	/* Make sure the mask is initialized first */
 	if (unlikely(!lowest_mask))
@@ -1818,11 +1826,18 @@ static int find_lowest_rq(struct task_struct *task)
 	if (task->nr_cpus_allowed == 1)
 		return -1; /* No other targets possible */
 
+	for_each_cpu(tmp_cpu, cpu_online_mask) {
+		if (arch_cpu_parked(tmp_cpu)) {
+			parked_cpu = tmp_cpu;
+			break;
+		}
+	}
+
 	/*
 	 * If we're on asym system ensure we consider the different capacities
 	 * of the CPUs when searching for the lowest_mask.
 	 */
-	if (sched_asym_cpucap_active()) {
+	if (sched_asym_cpucap_active() || parked_cpu > -1) {
 
 		ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri,
 					  task, lowest_mask,
@@ -1844,14 +1859,14 @@ static int find_lowest_rq(struct task_struct *task)
 	 * We prioritize the last CPU that the task executed on since
 	 * it is most likely cache-hot in that location.
 	 */
-	if (cpumask_test_cpu(cpu, lowest_mask))
+	if (cpumask_test_cpu(cpu, lowest_mask) && !arch_cpu_parked(cpu))
 		return cpu;
 
 	/*
 	 * Otherwise, we consult the sched_domains span maps to figure
 	 * out which CPU is logically closest to our hot cache data.
 	 */
-	if (!cpumask_test_cpu(this_cpu, lowest_mask))
+	if (!cpumask_test_cpu(this_cpu, lowest_mask) || arch_cpu_parked(this_cpu))
 		this_cpu = -1; /* Skip this_cpu opt if not among lowest */
 
 	rcu_read_lock();
@@ -1871,7 +1886,7 @@ static int find_lowest_rq(struct task_struct *task)
 
 			best_cpu = cpumask_any_and_distribute(lowest_mask,
 							      sched_domain_span(sd));
-			if (best_cpu < nr_cpu_ids) {
+			if (best_cpu < nr_cpu_ids && !arch_cpu_parked(best_cpu)) {
 				rcu_read_unlock();
 				return best_cpu;
 			}
@@ -1888,7 +1903,7 @@ static int find_lowest_rq(struct task_struct *task)
 		return this_cpu;
 
 	cpu = cpumask_any_distribute(lowest_mask);
-	if (cpu < nr_cpu_ids)
+	if (cpu < nr_cpu_ids && !arch_cpu_parked(cpu))
 		return cpu;
 
 	return -1;
