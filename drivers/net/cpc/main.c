@@ -8,6 +8,7 @@
 
 #include "cpc.h"
 #include "header.h"
+#include "system.h"
 
 /**
  * cpc_skb_alloc() - Allocate an skb with a specific headroom for CPC headers.
@@ -118,6 +119,12 @@ static int __init cpc_init(void)
 	int err;
 
 	err = bus_register(&cpc_bus);
+	if (err)
+		return err;
+
+	err = cpc_system_drv_register();
+	if (err)
+		bus_unregister(&cpc_bus);
 
 	return err;
 }
@@ -125,6 +132,7 @@ module_init(cpc_init);
 
 static void __exit cpc_exit(void)
 {
+	cpc_system_drv_unregister();
 	bus_unregister(&cpc_bus);
 }
 module_exit(cpc_exit);
