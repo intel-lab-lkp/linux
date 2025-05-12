@@ -11,6 +11,36 @@
 #include "interface.h"
 #include "protocol.h"
 
+int cpc_protocol_send_syn(struct cpc_endpoint *ep)
+{
+	struct cpc_header hdr;
+	struct sk_buff *skb;
+	int err;
+
+	skb = cpc_skb_alloc(0, GFP_KERNEL);
+	if (!skb)
+		return -ENOMEM;
+
+	memset(&hdr, 0, sizeof(hdr));
+
+	mutex_lock(&ep->tcb.lock);
+
+	hdr.ctrl = cpc_header_get_ctrl(CPC_FRAME_TYPE_SYN, true);
+	hdr.ep_id = ep->id;
+	hdr.recv_wnd = CPC_HEADER_MAX_RX_WINDOW;
+	hdr.seq = ep->tcb.seq;
+	hdr.syn.mtu = cpu_to_le16(U16_MAX);
+
+	err = __cpc_protocol_write(ep, &hdr, skb);
+
+	mutex_unlock(&ep->tcb.lock);
+
+	if (err)
+		kfree_skb(skb);
+
+	return err;
+}
+
 static void __cpc_protocol_send_ack(struct cpc_endpoint *ep)
 {
 	struct cpc_header hdr;
@@ -116,6 +146,42 @@ out:
 	__cpc_protocol_process_pending_tx_frames(ep);
 }
 
+static bool __cpc_protocol_is_syn_ack_valid(struct cpc_endpoint *ep, struct sk_buff *skb)
+{
+	enum cpc_frame_type type;
+	struct sk_buff *syn_skb;
+	u8 syn_seq;
+	u8 ack;
+
+	/* Fetch the previously sent frame. */
+	syn_skb = skb_peek(&ep->pending_ack_queue);
+	if (!syn_skb) {
+		dev_warn(&ep->dev, "cannot validate syn-ack, no frame was sent\n");
+		return false;
+	}
+
+	cpc_header_get_type(syn_skb->data, &type);
+
+	/* Verify if this frame is SYN. */
+	if (type != CPC_FRAME_TYPE_SYN) {
+		dev_warn(&ep->dev, "cannot validate syn-ack, no syn frame was sent (%d)\n", type);
+		return false;
+	}
+
+	syn_seq = cpc_header_get_seq(syn_skb->data);
+	ack = cpc_header_get_ack(skb->data);
+
+	/* Validate received ACK with the SEQ used in the initial SYN. */
+	if (!cpc_header_is_syn_ack_valid(syn_seq, ack)) {
+		dev_warn(&ep->dev,
+			 "syn-ack (%d) is not valid with previously sent syn-seq (%d)\n",
+			 ack, syn_seq);
+		return false;
+	}
+
+	return true;
+}
+
 void cpc_protocol_on_data(struct cpc_endpoint *ep, struct sk_buff *skb)
 {
 	bool expected_seq;
@@ -149,13 +215,42 @@ void cpc_protocol_on_data(struct cpc_endpoint *ep, struct sk_buff *skb)
 		/* Strip header. */
 		skb_pull(skb, CPC_HEADER_SIZE);
 
-		if (ep->ops && ep->ops->rx)
+		if (test_bit(CPC_ENDPOINT_UP, &ep->flags))
 			ep->ops->rx(ep, skb);
 		else
 			kfree_skb(skb);
 	} else {
 		kfree_skb(skb);
 	}
+}
+
+void cpc_protocol_on_syn(struct cpc_endpoint *ep, struct sk_buff *skb)
+{
+	mutex_lock(&ep->tcb.lock);
+
+	if (!__cpc_protocol_is_syn_ack_valid(ep, skb))
+		goto out;
+
+	__cpc_protocol_receive_ack(ep,
+				   cpc_header_get_recv_wnd(skb->data),
+				   cpc_header_get_ack(skb->data));
+
+	/* On SYN-ACK, the remote's SEQ becomes our starting ACK. */
+	ep->tcb.ack = cpc_header_get_seq(skb->data);
+	ep->tcb.mtu = cpc_header_get_mtu(skb->data);
+	ep->tcb.ack++;
+
+	complete(&ep->conn);
+
+	__cpc_protocol_send_ack(ep);
+
+	set_bit(CPC_ENDPOINT_UP, &ep->flags);
+	complete(&ep->conn);
+
+out:
+	mutex_unlock(&ep->tcb.lock);
+
+	kfree_skb(skb);
 }
 
 /**

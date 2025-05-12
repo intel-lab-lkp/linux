@@ -18,6 +18,11 @@ struct cpc_endpoint;
 
 extern const struct bus_type cpc_bus;
 
+/* CPC endpoint flags */
+enum {
+	CPC_ENDPOINT_UP,	/* Connection is established with remote counterpart. */
+};
+
 /**
  * struct cpc_endpoint_tcb - endpoint's transmission control block
  * @lock: synchronize tcb access
@@ -37,6 +42,7 @@ struct cpc_endpoint_tcb {
 	u8 send_una;
 	u8 ack;
 	u8 seq;
+	u16 mtu;
 };
 
 /** struct cpc_endpoint_ops - Endpoint's callbacks.
@@ -54,6 +60,8 @@ struct cpc_endpoint_ops {
  * @intf: Pointer to CPC device this endpoint belongs to.
  * @list_node: list_head member for linking in a CPC device.
  * @tcb: Transmission control block.
+ * @conn: Completion structure for connection.
+ * @flags: Endpoint state flags.
  * @pending_ack_queue: Contain frames pending on an acknowledge.
  * @holding_queue: Contains frames that were not pushed to the transport layer
  *                 due to having insufficient space in the transmit window.
@@ -72,6 +80,8 @@ struct cpc_endpoint {
 	struct cpc_endpoint_ops *ops;
 
 	struct cpc_endpoint_tcb tcb;
+	struct completion conn;
+	unsigned long flags;
 
 	struct sk_buff_head pending_ack_queue;
 	struct sk_buff_head holding_queue;
@@ -83,6 +93,8 @@ struct cpc_endpoint *cpc_endpoint_new(struct cpc_interface *intf, u8 id, const c
 
 void cpc_endpoint_unregister(struct cpc_endpoint *ep);
 
+int cpc_endpoint_connect(struct cpc_endpoint *ep);
+void cpc_endpoint_disconnect(struct cpc_endpoint *ep);
 int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb);
 void cpc_endpoint_set_ops(struct cpc_endpoint *ep, struct cpc_endpoint_ops *ops);
 

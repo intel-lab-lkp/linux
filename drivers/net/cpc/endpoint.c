@@ -35,6 +35,7 @@ static void cpc_endpoint_tcb_reset(struct cpc_endpoint *ep)
 {
 	ep->tcb.seq = ep->id;
 	ep->tcb.ack = 0;
+	ep->tcb.mtu = 0;
 	ep->tcb.send_nxt = ep->id;
 	ep->tcb.send_una = ep->id;
 	ep->tcb.send_wnd = 1;
@@ -72,6 +73,7 @@ struct cpc_endpoint *cpc_endpoint_alloc(struct cpc_interface *intf, u8 id)
 	mutex_init(&ep->tcb.lock);
 	cpc_endpoint_tcb_reset(ep);
 
+	init_completion(&ep->conn);
 	skb_queue_head_init(&ep->pending_ack_queue);
 	skb_queue_head_init(&ep->holding_queue);
 
@@ -197,8 +199,75 @@ void cpc_endpoint_unregister(struct cpc_endpoint *ep)
  */
 void cpc_endpoint_set_ops(struct cpc_endpoint *ep, struct cpc_endpoint_ops *ops)
 {
+	if (test_bit(CPC_ENDPOINT_UP, &ep->flags))
+		return;
+
 	if (ep)
 		ep->ops = ops;
+}
+
+/**
+ * cpc_endpoint_connect - Connect to the remote endpoint.
+ * @ep: Endpoint handle.
+ *
+ * @return: 0 on success, otherwise a negative error code.
+ */
+int cpc_endpoint_connect(struct cpc_endpoint *ep)
+{
+	unsigned long timeout = msecs_to_jiffies(2000);
+	int err;
+
+	if (!ep->ops || !ep->ops->rx)
+		return -EINVAL;
+
+	if (test_bit(CPC_ENDPOINT_UP, &ep->flags))
+		return 0;
+
+	cpc_interface_add_rx_endpoint(ep);
+
+	mutex_lock(&ep->tcb.lock);
+	skb_queue_purge(&ep->pending_ack_queue);
+	skb_queue_purge(&ep->holding_queue);
+	cpc_endpoint_tcb_reset(ep);
+	mutex_unlock(&ep->tcb.lock);
+
+	err = cpc_protocol_send_syn(ep);
+	if (err)
+		goto remove_from_ep_list;
+
+	timeout = wait_for_completion_timeout(&ep->conn, timeout);
+	if (timeout == 0) {
+		err = -ETIMEDOUT;
+		mutex_lock(&ep->tcb.lock);
+		skb_queue_purge(&ep->pending_ack_queue);
+		mutex_unlock(&ep->tcb.lock);
+
+		goto remove_from_ep_list;
+	}
+
+	return 0;
+
+remove_from_ep_list:
+	cpc_interface_remove_rx_endpoint(ep);
+
+	return err;
+}
+
+/**
+ * cpc_endpoint_disconnect - Disconnect endpoint from remote.
+ * @ep: Endpoint handle.
+ *
+ * Close the connection with the remote device. When that function returns, no more packets will be
+ * received from the remote.
+ *
+ * Context: Must be called from process context, endpoint's interface lock is held.
+ */
+void cpc_endpoint_disconnect(struct cpc_endpoint *ep)
+{
+	if (!test_and_clear_bit(CPC_ENDPOINT_UP, &ep->flags))
+		return;
+
+	cpc_interface_remove_rx_endpoint(ep);
 }
 
 /**
@@ -215,6 +284,11 @@ int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb)
 
 	mutex_lock(&ep->tcb.lock);
 
+	if (skb->len > ep->tcb.mtu) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	if (ep->intf->ops->csum)
 		ep->intf->ops->csum(skb);
 
@@ -227,6 +301,7 @@ int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb)
 
 	err = __cpc_protocol_write(ep, &hdr, skb);
 
+out:
 	mutex_unlock(&ep->tcb.lock);
 
 	return err;

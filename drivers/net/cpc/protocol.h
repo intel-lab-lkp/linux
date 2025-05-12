@@ -13,9 +13,13 @@
 
 struct cpc_endpoint;
 struct cpc_header;
+struct cpc_interface;
 
 int __cpc_protocol_write(struct cpc_endpoint *ep, struct cpc_header *hdr, struct sk_buff *skb);
 
 void cpc_protocol_on_data(struct cpc_endpoint *ep, struct sk_buff *skb);
+void cpc_protocol_on_syn(struct cpc_endpoint *ep, struct sk_buff *skb);
+
+int cpc_protocol_send_syn(struct cpc_endpoint *ep);
 
 #endif

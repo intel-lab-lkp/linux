@@ -68,6 +68,9 @@ void cpc_interface_unregister(struct cpc_interface *intf);
 
 struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 ep_id);
 
+void cpc_interface_add_rx_endpoint(struct cpc_endpoint *ep);
+void cpc_interface_remove_rx_endpoint(struct cpc_endpoint *ep);
+
 void cpc_interface_receive_frame(struct cpc_interface *intf, struct sk_buff *skb);
 void cpc_interface_send_frame(struct cpc_interface *intf, struct sk_buff *skb);
 struct sk_buff *cpc_interface_dequeue(struct cpc_interface *intf);

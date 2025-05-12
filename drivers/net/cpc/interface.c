@@ -36,6 +36,9 @@ static void cpc_interface_rx_work(struct work_struct *work)
 		case CPC_FRAME_TYPE_DATA:
 			cpc_protocol_on_data(ep, skb);
 			break;
+		case CPC_FRAME_TYPE_SYN:
+			cpc_protocol_on_syn(ep, skb);
+			break;
 		default:
 			kfree_skb(skb);
 		}
@@ -201,6 +204,32 @@ struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 e
 	mutex_unlock(&intf->lock);
 
 	return ep;
+}
+
+/**
+ * cpc_interface_add_rx_endpoint() - Set an endpoint as being available for receiving frames.
+ * @ep: Endpoint.
+ */
+void cpc_interface_add_rx_endpoint(struct cpc_endpoint *ep)
+{
+	struct cpc_interface *intf = ep->intf;
+
+	mutex_lock(&intf->lock);
+	list_add_tail(&ep->list_node, &intf->eps);
+	mutex_unlock(&intf->lock);
+}
+
+/**
+ * cpc_interface_remove_rx_endpoint() - Unet an endpoint as being available for receiving frames.
+ * @ep: Endpoint.
+ */
+void cpc_interface_remove_rx_endpoint(struct cpc_endpoint *ep)
+{
+	struct cpc_interface *intf = ep->intf;
+
+	mutex_lock(&intf->lock);
+	list_del(&ep->list_node);
+	mutex_unlock(&intf->lock);
 }
 
 /**
