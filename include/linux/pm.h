@@ -490,6 +490,9 @@ const struct dev_pm_ops name = { \
  * HIBERNATE	Hibernation image has been saved, call ->prepare() and
  *		->poweroff() for all devices.
  *
+ * SHUTDOWN	System is going to shut down, call ->prepare() and ->poweroff()
+ * 		for all devices.
+ *
  * QUIESCE	Contents of main memory are going to be restored from a (loaded)
  *		hibernation image, call ->prepare() and ->freeze() for all
  *		devices.
@@ -536,6 +539,7 @@ const struct dev_pm_ops name = { \
 #define PM_EVENT_USER		0x0100
 #define PM_EVENT_REMOTE		0x0200
 #define PM_EVENT_AUTO		0x0400
+#define PM_EVENT_SHUTDOWN	0x0800
 
 #define PM_EVENT_SLEEP		(PM_EVENT_SUSPEND | PM_EVENT_HIBERNATE)
 #define PM_EVENT_USER_SUSPEND	(PM_EVENT_USER | PM_EVENT_SUSPEND)
@@ -550,6 +554,7 @@ const struct dev_pm_ops name = { \
 #define PMSG_QUIESCE	((struct pm_message){ .event = PM_EVENT_QUIESCE, })
 #define PMSG_SUSPEND	((struct pm_message){ .event = PM_EVENT_SUSPEND, })
 #define PMSG_HIBERNATE	((struct pm_message){ .event = PM_EVENT_HIBERNATE, })
+#define PMSG_SHUTDOWN	((struct pm_message){ .event = PM_EVENT_SHUTDOWN, })
 #define PMSG_RESUME	((struct pm_message){ .event = PM_EVENT_RESUME, })
 #define PMSG_THAW	((struct pm_message){ .event = PM_EVENT_THAW, })
 #define PMSG_RESTORE	((struct pm_message){ .event = PM_EVENT_RESTORE, })

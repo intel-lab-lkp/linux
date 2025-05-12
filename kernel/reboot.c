@@ -13,6 +13,7 @@
 #include <linux/kexec.h>
 #include <linux/kmod.h>
 #include <linux/kmsg_dump.h>
+#include <linux/pm.h>
 #include <linux/reboot.h>
 #include <linux/suspend.h>
 #include <linux/syscalls.h>
@@ -305,7 +306,12 @@ static void kernel_shutdown_prepare(enum system_states state)
 		(state == SYSTEM_HALT) ? SYS_HALT : SYS_POWER_OFF, NULL);
 	system_state = state;
 	usermodehelper_disable();
+#ifdef CONFIG_PM_SLEEP
+	dpm_suspend_start(PMSG_SHUTDOWN);
+	dpm_suspend_end(PMSG_SHUTDOWN);
+#else
 	device_shutdown();
+#endif
 }
 /**
  *	kernel_halt - halt the system

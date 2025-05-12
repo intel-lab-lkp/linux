@@ -363,6 +363,8 @@ static pm_callback_t pm_op(const struct dev_pm_ops *ops, pm_message_t state)
 	case PM_EVENT_RESTORE:
 		return ops->restore;
 #endif /* CONFIG_HIBERNATE_CALLBACKS */
+	case PM_EVENT_SHUTDOWN:
+		return ops->poweroff;
 	}
 
 	return NULL;
@@ -397,6 +399,8 @@ static pm_callback_t pm_late_early_op(const struct dev_pm_ops *ops,
 	case PM_EVENT_RESTORE:
 		return ops->restore_early;
 #endif /* CONFIG_HIBERNATE_CALLBACKS */
+	case PM_EVENT_SHUTDOWN:
+		return ops->poweroff_late;
 	}
 
 	return NULL;
@@ -431,6 +435,8 @@ static pm_callback_t pm_noirq_op(const struct dev_pm_ops *ops, pm_message_t stat
 	case PM_EVENT_RESTORE:
 		return ops->restore_noirq;
 #endif /* CONFIG_HIBERNATE_CALLBACKS */
+	case PM_EVENT_SHUTDOWN:
+		return ops->poweroff_noirq;
 	}
 
 	return NULL;
