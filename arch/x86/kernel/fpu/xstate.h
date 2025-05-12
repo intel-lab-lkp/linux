@@ -62,6 +62,11 @@ static inline u64 xfeatures_mask_supervisor(void)
 	return fpu_kernel_cfg.max_features & XFEATURE_MASK_SUPERVISOR_SUPPORTED;
 }
 
+static inline u64 xfeatures_mask_guest_supervisor(void)
+{
+	return fpu_kernel_cfg.max_features & XFEATURE_MASK_GUEST_SUPERVISOR;
+}
+
 static inline u64 xfeatures_mask_independent(void)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_ARCH_LBR))

@@ -782,14 +782,22 @@ static void __init init_default_features(u64 kernel_max_features, u64 user_max_f
 	u64 kfeatures = kernel_max_features;
 	u64 ufeatures = user_max_features;
 
-	/* Default feature sets should not include dynamic xfeatures. */
-	kfeatures &= ~XFEATURE_MASK_USER_DYNAMIC;
+	/*
+	 * Default feature sets should not include dynamic and guest-only
+	 * xfeatures at all.
+	 */
+	kfeatures &= ~(XFEATURE_MASK_USER_DYNAMIC | XFEATURE_MASK_GUEST_SUPERVISOR);
 	ufeatures &= ~XFEATURE_MASK_USER_DYNAMIC;
 
 	fpu_kernel_cfg.default_features = kfeatures;
 	fpu_user_cfg.default_features   = ufeatures;
 
-	guest_default_cfg.features      = kfeatures;
+	/*
+	 * Ensure VCPU FPU container only reserves a space for guest-only
+	 * xfeatures. This distinction can save kernel memory by
+	 * maintaining a necessary amount of XSAVE buffer.
+	 */
+	guest_default_cfg.features      = kfeatures | xfeatures_mask_guest_supervisor();
 }
 
 /*
