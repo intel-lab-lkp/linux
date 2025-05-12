@@ -678,7 +678,7 @@ static int ixgbe_ipsec_add_sa(struct xfrm_state *xs,
 		} else {
 			/* no match and no empty slot */
 			NL_SET_ERR_MSG_MOD(extack, "No space for SA in Rx IP SA table");
-			memset(&rsa, 0, sizeof(rsa));
+			memzero_explicit(&rsa, sizeof(rsa));
 			return -ENOSPC;
 		}
 
@@ -727,7 +727,7 @@ static int ixgbe_ipsec_add_sa(struct xfrm_state *xs,
 		ret = ixgbe_ipsec_parse_proto_keys(xs, tsa.key, &tsa.salt);
 		if (ret) {
 			NL_SET_ERR_MSG_MOD(extack, "Failed to get key data for Tx SA table");
-			memset(&tsa, 0, sizeof(tsa));
+			memzero_explicit(&tsa, sizeof(tsa));
 			return ret;
 		}
 
