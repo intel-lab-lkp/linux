@@ -85,7 +85,7 @@ static u64 efi_pa_va_lookup(efi_guid_t *guid, u64 pa)
 		}
 	}
 
-	pr_warn("Failed to find VA for GUID: %pUL, PA: 0x%llx", guid, pa);
+	pr_info("VA for GUID: %pUL, PA: 0x%llx not found\n", guid, pa);
 
 	return 0;
 }
