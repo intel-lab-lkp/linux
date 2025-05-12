@@ -6,7 +6,9 @@
 #include <linux/string.h>
 
 #include "cpc.h"
+#include "header.h"
 #include "interface.h"
+#include "protocol.h"
 
 /**
  * cpc_ep_release() - Actual release of the CPC endpoint.
@@ -17,6 +19,8 @@
 static void cpc_ep_release(struct device *dev)
 {
 	struct cpc_endpoint *ep = cpc_endpoint_from_dev(dev);
+
+	skb_queue_purge(&ep->holding_queue);
 
 	cpc_interface_put(ep->intf);
 	kfree(ep);
@@ -50,6 +54,8 @@ struct cpc_endpoint *cpc_endpoint_alloc(struct cpc_interface *intf, u8 id)
 	ep->dev.parent = &intf->dev;
 	ep->dev.bus = &cpc_bus;
 	ep->dev.release = cpc_ep_release;
+
+	skb_queue_head_init(&ep->holding_queue);
 
 	device_initialize(&ep->dev);
 
@@ -164,4 +170,31 @@ void cpc_endpoint_unregister(struct cpc_endpoint *ep)
 {
 	device_del(&ep->dev);
 	put_device(&ep->dev);
+}
+
+/**
+ * cpc_endpoint_write - Write a DATA frame.
+ * @ep: Endpoint handle.
+ * @skb: Frame to send.
+ *
+ * @return: 0 on success, otherwise a negative error code.
+ */
+int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb)
+{
+	struct cpc_header hdr;
+	int err;
+
+	if (ep->intf->ops->csum)
+		ep->intf->ops->csum(skb);
+
+	memset(&hdr, 0, sizeof(hdr));
+	hdr.ctrl = cpc_header_get_ctrl(CPC_FRAME_TYPE_DATA, true);
+	hdr.ep_id = ep->id;
+	hdr.recv_wnd = CPC_HEADER_MAX_RX_WINDOW;
+	hdr.seq = 0;
+	hdr.dat.payload_len = skb->len;
+
+	err = __cpc_protocol_write(ep, &hdr, skb);
+
+	return err;
 }

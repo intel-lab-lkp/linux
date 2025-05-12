@@ -7,6 +7,56 @@
 #include <linux/module.h>
 
 #include "cpc.h"
+#include "header.h"
+
+/**
+ * cpc_skb_alloc() - Allocate an skb with a specific headroom for CPC headers.
+ * @payload_len: Length of the payload.
+ * @priority: GFP priority to use for memory allocation.
+ *
+ * Return: Pointer to the skb on success, otherwise NULL.
+ */
+struct sk_buff *cpc_skb_alloc(size_t payload_len, gfp_t priority)
+{
+	struct sk_buff *skb;
+
+	skb = alloc_skb(payload_len + CPC_HEADER_SIZE, priority);
+	if (skb)
+		skb_reserve(skb, CPC_HEADER_SIZE);
+
+	return skb;
+}
+
+/**
+ * cpc_skb_set_ctx() - Set the skb context.
+ * @skb: Frame.
+ * @destructor: Destructor callback.
+ * @ctx: Context pointer, might be NULL.
+ */
+void cpc_skb_set_ctx(struct sk_buff *skb,
+		     void (*destructor)(struct sk_buff *skb),
+		     void *ctx)
+{
+	skb->destructor = destructor;
+
+	if (ctx)
+		memcpy(&skb->cb[0], &ctx, sizeof(void *));
+}
+
+/**
+ * cpc_skb_get_ctx() - Get the skb context.
+ * @skb: Frame.
+ *
+ * Return: Context pointer.
+ */
+void *cpc_skb_get_ctx(struct sk_buff *skb)
+{
+	void *ctx;
+
+	memcpy(&ctx, &skb->cb[0], sizeof(void *));
+
+	return ctx;
+}
 
 static int cpc_bus_match(struct device *dev, const struct device_driver *driver)
 {

@@ -22,6 +22,7 @@ struct cpc_interface_ops;
  * @index: Device index.
  * @lock: Protect access to endpoint list.
  * @eps: List of endpoints managed by this device.
+ * @tx_queue: Transmit queue to be consumed by the interface.
  */
 struct cpc_interface {
 	struct device dev;
@@ -35,6 +36,8 @@ struct cpc_interface {
 
 	struct mutex lock;	/* Protect eps from concurrent access. */
 	struct list_head eps;
+
+	struct sk_buff_head tx_queue;
 };
 
 /**
@@ -57,6 +60,10 @@ int cpc_interface_register(struct cpc_interface *intf);
 void cpc_interface_unregister(struct cpc_interface *intf);
 
 struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 ep_id);
+
+void cpc_interface_send_frame(struct cpc_interface *intf, struct sk_buff *skb);
+struct sk_buff *cpc_interface_dequeue(struct cpc_interface *intf);
+bool cpc_interface_tx_queue_empty(struct cpc_interface *intf);
 
 /**
  * cpc_interface_get() - Get a reference to interface and return its pointer.

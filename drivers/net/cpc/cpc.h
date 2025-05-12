@@ -7,6 +7,7 @@
 #define __CPC_H
 
 #include <linux/device.h>
+#include <linux/skbuff.h>
 #include <linux/types.h>
 
 #define CPC_ENDPOINT_NAME_MAX_LEN 128
@@ -24,6 +25,8 @@ extern const struct bus_type cpc_bus;
  * @id: Endpoint id, uniquely identifies an endpoint within a CPC device.
  * @intf: Pointer to CPC device this endpoint belongs to.
  * @list_node: list_head member for linking in a CPC device.
+ * @holding_queue: Contains frames that were not pushed to the transport layer
+ *                 due to having insufficient space in the transmit window.
  *
  * Each endpoint can send and receive data without consideration of the other endpoints sharing the
  * same physical link.
@@ -36,6 +39,8 @@ struct cpc_endpoint {
 
 	struct cpc_interface *intf;
 	struct list_head list_node;
+
+	struct sk_buff_head holding_queue;
 };
 
 struct cpc_endpoint *cpc_endpoint_alloc(struct cpc_interface *intf, u8 id);
@@ -43,6 +48,8 @@ int cpc_endpoint_register(struct cpc_endpoint *ep);
 struct cpc_endpoint *cpc_endpoint_new(struct cpc_interface *intf, u8 id, const char *ep_name);
 
 void cpc_endpoint_unregister(struct cpc_endpoint *ep);
+
+int cpc_endpoint_write(struct cpc_endpoint *ep, struct sk_buff *skb);
 
 /**
  * cpc_endpoint_from_dev() - Upcast from a device pointer.
@@ -136,5 +143,13 @@ static inline struct cpc_driver *cpc_driver_from_drv(const struct device_driver 
 {
 	return container_of(drv, struct cpc_driver, driver);
 }
+
+/*---------------------------------------------------------------------------*/
+
+struct sk_buff *cpc_skb_alloc(size_t payload_len, gfp_t priority);
+void cpc_skb_set_ctx(struct sk_buff *skb,
+		     void (*destructor)(struct sk_buff *skb),
+		     void *ctx);
+void *cpc_skb_get_ctx(struct sk_buff *skb);
 
 #endif

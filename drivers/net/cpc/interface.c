@@ -58,6 +58,8 @@ struct cpc_interface *cpc_interface_alloc(struct device *parent,
 	mutex_init(&intf->lock);
 	INIT_LIST_HEAD(&intf->eps);
 
+	skb_queue_head_init(&intf->tx_queue);
+
 	intf->ops = ops;
 
 	intf->dev.parent = parent;
@@ -153,4 +155,42 @@ struct cpc_endpoint *cpc_interface_get_endpoint(struct cpc_interface *intf, u8 e
 	mutex_unlock(&intf->lock);
 
 	return ep;
+}
+
+/**
+ * cpc_interface_send_frame() - Queue a socket buffer for transmission.
+ * @intf: Interface to send SKB over.
+ * @ops: SKB to send.
+ *
+ * Queue SKB in interface's transmit queue and signal the interface. Interface is expected to use
+ * cpc_interface_dequeue() to get the next SKB to transmit.
+ */
+void cpc_interface_send_frame(struct cpc_interface *intf, struct sk_buff *skb)
+{
+	skb_queue_tail(&intf->tx_queue, skb);
+	intf->ops->wake_tx(intf);
+}
+
+/**
+ * cpc_interface_dequeue() - Get the next SKB that was queued for transmission.
+ * @intf: Interface.
+ *
+ * Get an SKB that was previously queued by cpc_interface_send_frame().
+ *
+ * Return: An SKB, or %NULL if queue was empty.
+ */
+struct sk_buff *cpc_interface_dequeue(struct cpc_interface *intf)
+{
+	return skb_dequeue(&intf->tx_queue);
+}
+
+/**
+ * cpc_interface_tx_queue_empty() - Check if transmit queue is empty.
+ * @intf: Interface.
+ *
+ * Return: True if transmit queue is empty, false otherwise.
+ */
+bool cpc_interface_tx_queue_empty(struct cpc_interface *intf)
+{
+	return skb_queue_empty_lockless(&intf->tx_queue);
 }
