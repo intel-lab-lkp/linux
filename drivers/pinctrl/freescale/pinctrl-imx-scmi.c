@@ -35,6 +35,7 @@ struct scmi_pinctrl_imx {
 	struct pinctrl_dev *pctldev;
 	struct pinctrl_desc pctl_desc;
 	const struct scmi_pinctrl_proto_ops *ops;
+	uint32_t daisy_off;
 };
 
 /* SCMI pin control types, aligned with SCMI firmware */
@@ -57,6 +58,7 @@ static int pinctrl_scmi_imx_dt_node_to_map(struct pinctrl_dev *pctldev,
 					   struct pinctrl_map **map,
 					   unsigned int *num_maps)
 {
+	struct scmi_pinctrl_imx *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct pinctrl_map *new_map;
 	const __be32 *list;
 	unsigned long *configs = NULL;
@@ -65,16 +67,6 @@ static int pinctrl_scmi_imx_dt_node_to_map(struct pinctrl_dev *pctldev,
 	int mux_reg, conf_reg, input_reg, mux_val, conf_val, input_val;
 	int i, j;
 	uint32_t ncfg;
-	static uint32_t daisy_off;
-
-	if (!daisy_off) {
-		if (of_machine_is_compatible("fsl,imx95")) {
-			daisy_off = IMX95_DAISY_OFF;
-		} else {
-			dev_err(pctldev->dev, "platform not support scmi pinctrl\n");
-			return -EINVAL;
-		}
-	}
 
 	list = of_get_property(np, "fsl,pins", &size);
 	if (!list) {
@@ -126,7 +118,7 @@ static int pinctrl_scmi_imx_dt_node_to_map(struct pinctrl_dev *pctldev,
 			ncfg -= 2;
 		} else {
 			cfg[j++] = pinconf_to_config_packed(IMX_SCMI_PIN_DAISY_ID,
-							    (input_reg - daisy_off) / 4);
+							    (input_reg - pmx->daisy_off) / 4);
 			cfg[j++] = pinconf_to_config_packed(IMX_SCMI_PIN_DAISY_CFG, input_val);
 		}
 
@@ -314,6 +306,18 @@ static int scmi_pinctrl_imx_probe(struct scmi_device *sdev)
 	pmx = devm_kzalloc(dev, sizeof(*pmx), GFP_KERNEL);
 	if (!pmx)
 		return -ENOMEM;
+
+	ret = device_property_read_u32(dev, "nxp,iomuxc-daisy-off", &pmx->daisy_off);
+	if (ret) {
+		/*
+		 * To keep backwards compatible, new chips should specify
+		 * nxp,iomuxc-daisy_off
+		 */
+		if (of_machine_is_compatible("fsl,imx95"))
+			pmx->daisy_off = IMX95_DAISY_OFF;
+		else
+			return dev_err_probe(dev, ret, "Failed to get daisy off value\n");
+	}
 
 	pmx->ph = ph;
 	pmx->ops = pinctrl_ops;
