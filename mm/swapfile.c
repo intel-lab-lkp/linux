@@ -3550,13 +3550,17 @@ static int __swap_duplicate(swp_entry_t entry, unsigned char usage, int nr)
 
 	offset = swp_offset(entry);
 	VM_WARN_ON(nr > SWAPFILE_CLUSTER - offset % SWAPFILE_CLUSTER);
-	VM_WARN_ON(usage == 1 && nr > 1);
 	ci = lock_cluster(si, offset);
 
 	err = 0;
 	for (i = 0; i < nr; i++) {
 		count = si->swap_map[offset + i];
 
+		/*
+		 * We only support batched swap_duplicate() for unmapping
+		 * exclusive large folios where count should be zero
+		 */
+		VM_WARN_ON(usage == 1 && nr > 1 && swap_count(count));
 		/*
 		 * swapin_readahead() doesn't check if a swap entry is valid, so the
 		 * swap entry could be SWAP_MAP_BAD. Check here with lock held.
@@ -3626,11 +3630,11 @@ void swap_shmem_alloc(swp_entry_t entry, int nr)
  * if __swap_duplicate() fails for another reason (-EINVAL or -ENOENT), which
  * might occur if a page table entry has got corrupted.
  */
-int swap_duplicate(swp_entry_t entry)
+int swap_duplicate(swp_entry_t entry, int nr)
 {
 	int err = 0;
 
-	while (!err && __swap_duplicate(entry, 1, 1) == -ENOMEM)
+	while (!err && __swap_duplicate(entry, 1, nr) == -ENOMEM)
 		err = add_swap_count_continuation(entry, GFP_ATOMIC);
 	return err;
 }

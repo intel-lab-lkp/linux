@@ -803,7 +803,7 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	swp_entry_t entry = pte_to_swp_entry(orig_pte);
 
 	if (likely(!non_swap_entry(entry))) {
-		if (swap_duplicate(entry) < 0)
+		if (swap_duplicate(entry, 1) < 0)
 			return -EIO;
 
 		/* make sure dst_mm is on swapoff's mmlist. */

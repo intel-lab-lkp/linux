@@ -1845,23 +1845,42 @@ void folio_remove_rmap_pud(struct folio *folio, struct page *page,
 #endif
 }
 
-/* We support batch unmapping of PTEs for lazyfree large folios */
+/*
+ * We support batch unmapping of PTEs for lazyfree or exclusive anon large
+ * folios
+ */
 static inline bool can_batch_unmap_folio_ptes(unsigned long addr,
-			struct folio *folio, pte_t *ptep)
+		struct folio *folio, pte_t *ptep, bool exclusive)
 {
 	const fpb_t fpb_flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
 	int max_nr = folio_nr_pages(folio);
+#ifndef __HAVE_ARCH_UNMAP_ONE
+	bool no_arch_unmap = true;
+#else
+	bool no_arch_unmap = false;
+#endif
 	pte_t pte = ptep_get(ptep);
+	int mapped_nr;
 
-	if (!folio_test_anon(folio) || folio_test_swapbacked(folio))
+	if (!folio_test_anon(folio))
 		return false;
 	if (pte_unused(pte))
 		return false;
 	if (pte_pfn(pte) != folio_pfn(folio))
 		return false;
 
-	return folio_pte_batch(folio, addr, ptep, pte, max_nr, fpb_flags, NULL,
-			       NULL, NULL) == max_nr;
+	mapped_nr = folio_pte_batch(folio, addr, ptep, pte, max_nr, fpb_flags, NULL,
+			NULL, NULL);
+	if (mapped_nr != max_nr)
+		return false;
+	if (!folio_test_swapbacked(folio))
+		return true;
+
+	/*
+	 * The large folio is fully mapped and its mapcount is the same as its
+	 * number of pages, it must be exclusive.
+	 */
+	return no_arch_unmap && exclusive && folio_mapcount(folio) == max_nr;
 }
 
 /*
@@ -2025,7 +2044,8 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				folio_mark_dirty(folio);
 		} else if (likely(pte_present(pteval))) {
 			if (folio_test_large(folio) && !(flags & TTU_HWPOISON) &&
-			    can_batch_unmap_folio_ptes(address, folio, pvmw.pte))
+			    can_batch_unmap_folio_ptes(address, folio, pvmw.pte,
+			    anon_exclusive))
 				nr_pages = folio_nr_pages(folio);
 			end_addr = address + nr_pages * PAGE_SIZE;
 			flush_cache_range(vma, address, end_addr);
@@ -2141,8 +2161,8 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				goto discard;
 			}
 
-			if (swap_duplicate(entry) < 0) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
+			if (swap_duplicate(entry, nr_pages) < 0) {
+				set_ptes(mm, address, pvmw.pte, pteval, nr_pages);
 				goto walk_abort;
 			}
 
@@ -2159,9 +2179,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 
 			/* See folio_try_share_anon_rmap(): clear PTE first. */
 			if (anon_exclusive &&
-			    folio_try_share_anon_rmap_pte(folio, subpage)) {
-				swap_free(entry);
-				set_pte_at(mm, address, pvmw.pte, pteval);
+			    __folio_try_share_anon_rmap(folio, subpage, nr_pages,
+							RMAP_LEVEL_PTE)) {
+				swap_free_nr(entry, nr_pages);
+				set_ptes(mm, address, pvmw.pte, pteval, nr_pages);
 				goto walk_abort;
 			}
 			if (list_empty(&mm->mmlist)) {
@@ -2170,23 +2191,27 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 					list_add(&mm->mmlist, &init_mm.mmlist);
 				spin_unlock(&mmlist_lock);
 			}
-			dec_mm_counter(mm, MM_ANONPAGES);
-			inc_mm_counter(mm, MM_SWAPENTS);
-			swp_pte = swp_entry_to_pte(entry);
-			if (anon_exclusive)
-				swp_pte = pte_swp_mkexclusive(swp_pte);
-			if (likely(pte_present(pteval))) {
-				if (pte_soft_dirty(pteval))
-					swp_pte = pte_swp_mksoft_dirty(swp_pte);
-				if (pte_uffd_wp(pteval))
-					swp_pte = pte_swp_mkuffd_wp(swp_pte);
-			} else {
-				if (pte_swp_soft_dirty(pteval))
-					swp_pte = pte_swp_mksoft_dirty(swp_pte);
-				if (pte_swp_uffd_wp(pteval))
-					swp_pte = pte_swp_mkuffd_wp(swp_pte);
+			add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
+			add_mm_counter(mm, MM_SWAPENTS, nr_pages);
+			/* TODO: let set_ptes() support swp_offset advance */
+			for (pte_t *ptep = pvmw.pte; address < end_addr;
+			     entry.val++, address += PAGE_SIZE, ptep++) {
+				swp_pte = swp_entry_to_pte(entry);
+				if (anon_exclusive)
+					swp_pte = pte_swp_mkexclusive(swp_pte);
+				if (likely(pte_present(pteval))) {
+					if (pte_soft_dirty(pteval))
+						swp_pte = pte_swp_mksoft_dirty(swp_pte);
+					if (pte_uffd_wp(pteval))
+						swp_pte = pte_swp_mkuffd_wp(swp_pte);
+				} else {
+					if (pte_swp_soft_dirty(pteval))
+						swp_pte = pte_swp_mksoft_dirty(swp_pte);
+					if (pte_swp_uffd_wp(pteval))
+						swp_pte = pte_swp_mkuffd_wp(swp_pte);
+				}
+				set_pte_at(mm, address, ptep, swp_pte);
 			}
-			set_pte_at(mm, address, pvmw.pte, swp_pte);
 		} else {
 			/*
 			 * This is a locked file-backed folio,
