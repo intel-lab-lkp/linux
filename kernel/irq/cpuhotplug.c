@@ -217,8 +217,10 @@ static void irq_restore_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
 	if (desc->istate & IRQS_SUSPENDED)
 		return;
 
-	if (irqd_is_managed_and_shutdown(data))
+	if (irqd_is_managed_and_shutdown(data)) {
+		desc->depth = 1;
 		irq_startup(desc, IRQ_RESEND, IRQ_START_COND);
+	}
 
 	/*
 	 * If the interrupt can only be directed to a single target

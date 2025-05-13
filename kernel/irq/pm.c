@@ -85,8 +85,8 @@ static bool suspend_device_irq(struct irq_desc *desc)
 			 * Enable interrupt here to unmask/enable in irqchip
 			 * to be able to resume with such interrupts.
 			 */
-			__enable_irq(desc);
 			irqd_set(irqd, IRQD_IRQ_ENABLED_ON_SUSPEND);
+			__enable_irq(desc);
 		}
 		/*
 		 * We return true here to force the caller to issue

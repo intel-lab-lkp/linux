@@ -653,7 +653,14 @@ EXPORT_SYMBOL_GPL(irq_set_vcpu_affinity);
 
 void __disable_irq(struct irq_desc *desc)
 {
-	if (!desc->depth++)
+	struct irq_data *irqd = &desc->irq_data;
+
+	/*
+	 * Always increase the disable depth; actually do the disable if
+	 * the depth was 0 _or_ we temporarily enabled during the suspend
+	 * path.
+	 */
+	if (!desc->depth++ || irqd_is_enabled_on_suspend(irqd))
 		irq_disable(desc);
 }
 
@@ -747,15 +754,12 @@ void disable_nmi_nosync(unsigned int irq)
 
 void __enable_irq(struct irq_desc *desc)
 {
-	switch (desc->depth) {
-	case 0:
- err_out:
+	struct irq_data *irqd = &desc->irq_data;
+
+	if (desc->depth == 0 || desc->istate & IRQS_SUSPENDED) {
 		WARN(1, KERN_WARNING "Unbalanced enable for IRQ %d\n",
 		     irq_desc_get_irq(desc));
-		break;
-	case 1: {
-		if (desc->istate & IRQS_SUSPENDED)
-			goto err_out;
+	} else if (desc->depth == 1 || irqd_is_enabled_on_suspend(irqd)) {
 		/* Prevent probing on this irq: */
 		irq_settings_set_noprobe(desc);
 		/*
@@ -770,9 +774,7 @@ void __enable_irq(struct irq_desc *desc)
 		 * invoke irq_enable() under the hood.
 		 */
 		irq_startup(desc, IRQ_RESEND, IRQ_START_FORCE);
-		break;
-	}
-	default:
+	} else {
 		desc->depth--;
 	}
 }
@@ -1708,6 +1710,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
 		}
 
+		/* Undo nested disables: */
+		desc->depth = 1;
+
 		if (!(new->flags & IRQF_NO_AUTOEN) &&
 		    irq_settings_can_autoenable(desc)) {
 			irq_startup(desc, IRQ_RESEND, IRQ_START_COND);
@@ -1719,8 +1724,6 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			 * interrupts forever.
 			 */
 			WARN_ON_ONCE(new->flags & IRQF_SHARED);
-			/* Undo nested disables: */
-			desc->depth = 1;
 		}
 
 	} else if (new->flags & IRQF_TRIGGER_MASK) {

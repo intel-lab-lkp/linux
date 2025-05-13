@@ -251,7 +251,7 @@ int irq_startup(struct irq_desc *desc, bool resend, bool force)
 	const struct cpumask *aff = irq_data_get_affinity_mask(d);
 	int ret = 0;
 
-	desc->depth = 0;
+	desc->depth--;
 
 	if (irqd_is_started(d)) {
 		irq_enable(desc);
@@ -292,6 +292,7 @@ int irq_activate_and_startup(struct irq_desc *desc, bool resend)
 {
 	if (WARN_ON(irq_activate(desc)))
 		return 0;
+	desc->depth = 1;
 	return irq_startup(desc, resend, IRQ_START_FORCE);
 }
 
