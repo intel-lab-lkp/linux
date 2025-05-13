@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0
-// test ir decoder
-//
-// Copyright (C) 2018 Sean Young <sean@mess.org>
-
-// When sending LIRC_MODE_SCANCODE, the IR will be encoded. rc-loopback
-// will send this IR to the receiver side, where we try to read the decoded
-// IR. Decoding happens in a separate kernel thread, so we will need to
-// wait until that is scheduled, hence we use poll to check for read
-// readiness.
-
+/* Copyright (C) 2018 Sean Young <sean@mess.org>
+ * 
+ * Selftest for IR decoder 
+ *
+ *
+ * When sending LIRC_MODE_SCANCODE, the IR will be encoded. rc-loopback
+ * will send this IR to the receiver side, where we try to read the decoded
+ * IR. Decoding happens in a separate kernel thread, so we will need to
+ * wait until that is scheduled, hence we use poll to check for read
+ * readiness.
+*/
 #include <linux/lirc.h>
 #include <errno.h>
 #include <stdio.h>
