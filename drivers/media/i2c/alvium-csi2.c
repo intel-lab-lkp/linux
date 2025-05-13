@@ -2367,6 +2367,9 @@ error_out:
 static int alvium_set_power(struct alvium_dev *alvium, bool on)
 {
 	int ret;
+	int alvium_boot_time_timout = 7000;
+	const int alvium_poll_interval = 500;
+	u64 val = 0;
 
 	if (!on)
 		return regulator_disable(alvium->reg_vcc);
@@ -2375,8 +2378,22 @@ static int alvium_set_power(struct alvium_dev *alvium, bool on)
 	if (ret)
 		return ret;
 
-	/* alvium boot time 7s */
-	msleep(7000);
+	/* alvium boot time is less than 7s, but eventually it's already on */
+	do {
+		alvium_read(alvium, REG_BCRM_HEARTBEAT_RW, &val, &ret);
+		if (ret >= 0)
+			break;
+
+		msleep(alvium_poll_interval);
+		alvium_boot_time_timout -= alvium_poll_interval;
+	} while (alvium_boot_time_timout > 0);
+
+	if (ret < 0)
+		return ret;
+
+	if (alvium_boot_time_timout <= 0)
+		return -ETIMEDOUT;
+
 	return 0;
 }
 
