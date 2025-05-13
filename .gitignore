@@ -42,7 +42,7 @@
 *.patch
 *.rmeta
 *.rpm
-*.rsi
+*.expanded.rs
 *.s
 *.so
 *.so.dbg

@@ -298,7 +298,7 @@ no-dot-config-targets := $(clean-targets) \
 			 outputmakefile rustavailable rustfmt rustfmtcheck
 no-sync-config-targets := $(no-dot-config-targets) %install modules_sign kernelrelease \
 			  image_name
-single-targets := %.a %.i %.ko %.lds %.ll %.lst %.mod %.o %.rsi %.s %/
+single-targets := %.a %.i %.ko %.lds %.ll %.lst %.mod %.o %.expanded.rs %.s %/
 
 config-build	:=
 mixed-build	:=
@@ -1714,7 +1714,7 @@ help:
 	@echo  '  rust-analyzer	  - Generate rust-project.json rust-analyzer support file'
 	@echo  '		    (requires kernel .config)'
 	@echo  '  dir/file.[os]   - Build specified target only'
-	@echo  '  dir/file.rsi    - Build macro expanded source, similar to C preprocessing.'
+	@echo  '  dir/file.expanded.rs    - Build macro expanded source, similar to C preprocessing.'
 	@echo  '                    Run with RUSTFMT=n to skip reformatting if needed.'
 	@echo  '                    The output is not intended to be compilable.'
 	@echo  '  dir/file.ll     - Build the LLVM assembly file'
@@ -2011,7 +2011,7 @@ $(clean-dirs):
 clean: $(clean-dirs)
 	$(call cmd,rmfiles)
 	@find . $(RCS_FIND_IGNORE) \
-		\( -name '*.[aios]' -o -name '*.rsi' -o -name '*.ko' -o -name '.*.cmd' \
+		\( -name '*.[aios]' -o -name '*.expanded.rs' -o -name '*.ko' -o -name '.*.cmd' \
 		-o -name '*.ko.*' \
 		-o -name '*.dtb' -o -name '*.dtbo' \
 		-o -name '*.dtb.S' -o -name '*.dtbo.S' \
