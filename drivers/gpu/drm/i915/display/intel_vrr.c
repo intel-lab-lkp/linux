@@ -277,6 +277,9 @@ void intel_vrr_compute_vrr_timings(struct intel_crtc_state *crtc_state)
 {
 	crtc_state->vrr.enable = true;
 	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
+
+	if (intel_vrr_dc_balance_possible(crtc_state))
+		crtc_state->vrr.dc_balance.enable = true;
 }
 
 /*
@@ -663,6 +666,8 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 
 	if (crtc_state->vrr.dc_balance.enable) {
 		intel_dmc_configure_dc_balance_ctl_regs(display, pipe, true);
+		intel_de_write(display, TRANS_ADAPTIVE_SYNC_DCB_CTL(display, cpu_transcoder),
+			       ADAPTIVE_SYNC_COUNTER_EN);
 		intel_pipedmc_dcb_enable(NULL, crtc);
 	}
 }
@@ -680,6 +685,7 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 
 	if (old_crtc_state->vrr.dc_balance.enable) {
 		intel_pipedmc_dcb_disable(NULL, crtc);
+		intel_de_write(display, TRANS_ADAPTIVE_SYNC_DCB_CTL(display, cpu_transcoder), 0);
 		intel_dmc_configure_dc_balance_ctl_regs(display, pipe, false);
 	}
 
