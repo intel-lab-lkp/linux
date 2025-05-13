@@ -1681,8 +1681,17 @@ offload_dev:
 		} else if (is_prefix(*argv, "autoattach")) {
 			auto_attach = true;
 			NEXT_ARG();
+		} else if (is_prefix(*argv, "custom_btf")) {
+			NEXT_ARG();
+
+			if (!REQ_ARGS(1))
+				goto err_free_reuse_maps;
+
+			open_opts.btf_custom_path = GET_ARG();
 		} else {
-			p_err("expected no more arguments, 'type', 'map' or 'dev', got: '%s'?",
+			p_err("expected no more arguments, "
+			      "'type', 'map', 'dev', 'offload_dev', 'xdpmeta_dev', 'pinmaps', "
+			      "'autoattach', or 'custom_btf', got: '%s'?",
 			      *argv);
 			goto err_free_reuse_maps;
 		}
