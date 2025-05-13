@@ -23,6 +23,7 @@ static void urb_destroy(struct kref *kref)
 
 	if (urb->transfer_flags & URB_FREE_BUFFER)
 		kfree(urb->transfer_buffer);
+	kfree(urb->hcpriv_mempool);
 
 	kfree(urb);
 }
@@ -1037,3 +1038,25 @@ int usb_anchor_empty(struct usb_anchor *anchor)
 
 EXPORT_SYMBOL_GPL(usb_anchor_empty);
 
+/**
+ * urb_hcpriv_mempool_zalloc - alloc memory from mempool for hcpriv
+ * @urb: pointer to URB being used
+ * @size: memory size requested by current host controller
+ * @mem_flags: the type of memory to allocate
+ *
+ * Return: NULL if out of memory, otherwise memory are zeroed
+ */
+void *urb_hcpriv_mempool_zalloc(struct urb *urb, size_t size, gfp_t mem_flags)
+{
+	if (urb->hcpriv_mempool_size < size) {
+		kfree(urb->hcpriv_mempool);
+		urb->hcpriv_mempool_size = size;
+		urb->hcpriv_mempool = kmalloc(size, mem_flags);
+	}
+	if (urb->hcpriv_mempool)
+		memset(urb->hcpriv_mempool, 0, size);
+	else
+		urb->hcpriv_mempool_size = 0;
+	return urb->hcpriv_mempool;
+}
+EXPORT_SYMBOL_GPL(urb_hcpriv_mempool_zalloc);
