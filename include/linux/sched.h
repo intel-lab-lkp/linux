@@ -407,6 +407,9 @@ static inline void sched_domains_mutex_lock(void) { }
 static inline void sched_domains_mutex_unlock(void) { }
 #endif
 
+/* Scheduler time slice extension */
+extern unsigned int sysctl_sched_preempt_delay_us;
+
 struct sched_param {
 	int sched_priority;
 };
