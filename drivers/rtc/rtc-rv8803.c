@@ -62,7 +62,8 @@ enum rv8803_type {
 	rv_8803,
 	rx_8803,
 	rx_8804,
-	rx_8900
+	rx_8900,
+	rx_8901,
 };
 
 struct rv8803_data {
@@ -173,7 +174,8 @@ static int rv8803_regs_reset(struct rv8803_data *rv8803, bool full)
 	 * The RV-8803 resets all registers to POR defaults after voltage-loss,
 	 * the Epson RTCs don't, so we manually reset the remainder here.
 	 */
-	if (full || rv8803->type == rx_8803 || rv8803->type == rx_8900) {
+	if (full || rv8803->type == rx_8803 || rv8803->type == rx_8900 ||
+	    rv8803->type == rx_8901) {
 		int ret = rv8803_regs_init(rv8803);
 		if (ret)
 			return ret;
@@ -635,6 +637,7 @@ static const struct i2c_device_id rv8803_id[] = {
 	{ "rv8804", rx_8804 },
 	{ "rx8803", rx_8803 },
 	{ "rx8900", rx_8900 },
+	{ "rx8901", rx_8901 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rv8803_id);
@@ -759,6 +762,10 @@ static const __maybe_unused struct of_device_id rv8803_of_match[] = {
 	{
 		.compatible = "epson,rx8900",
 		.data = (void *)rx_8900
+	},
+	{
+		.compatible = "epson,rx8901",
+		.data = (void *)rx_8901
 	},
 	{ }
 };
