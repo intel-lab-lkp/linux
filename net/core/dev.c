@@ -6888,6 +6888,18 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static void dev_stop_napi_threads(struct net_device *dev)
+{
+	struct napi_struct *napi;
+
+	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		if (napi->thread) {
+			kthread_stop(napi->thread);
+			napi->thread = NULL;
+		}
+	}
+}
+
 int dev_set_threaded(struct net_device *dev, bool threaded)
 {
 	struct napi_struct *napi;
@@ -6925,6 +6937,12 @@ int dev_set_threaded(struct net_device *dev, bool threaded)
 	 */
 	list_for_each_entry(napi, &dev->napi_list, dev_list)
 		assign_bit(NAPI_STATE_THREADED, &napi->state, threaded);
+
+	/* Calling kthread_stop on napi threads should be safe now as the
+	 * threaded state is disabled.
+	 */
+	if (!threaded)
+		dev_stop_napi_threads(dev);
 
 	return err;
 }
@@ -7451,7 +7469,8 @@ static int napi_thread_wait(struct napi_struct *napi)
 {
 	set_current_state(TASK_INTERRUPTIBLE);
 
-	while (!kthread_should_stop()) {
+	/* Wait until we are scheduled or asked to stop. */
+	while (true) {
 		/* Testing SCHED_THREADED bit here to make sure the current
 		 * kthread owns this napi and could poll on this napi.
 		 * Testing SCHED bit is not enough because SCHED bit might be
@@ -7462,6 +7481,15 @@ static int napi_thread_wait(struct napi_struct *napi)
 			__set_current_state(TASK_RUNNING);
 			return 0;
 		}
+
+		/* Since the SCHED_THREADED is not set so we do not own this
+		 * napi and it is safe to stop here if we are asked to. Checking
+		 * the SCHED_THREADED before stopping here makes sure that this
+		 * napi was not schedule again while napi threaded was being
+		 * disabled.
+		 */
+		if (kthread_should_stop())
+			break;
 
 		schedule();
 		set_current_state(TASK_INTERRUPTIBLE);
