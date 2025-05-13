@@ -337,6 +337,30 @@ static struct vfio_pfn *vfio_find_vpfn(struct vfio_dma *dma, dma_addr_t iova)
 	return NULL;
 }
 
+/*
+ * Find a random vfio_pfn that belongs to the range
+ * [iova, iova + PAGE_SIZE * npage)
+ */
+static struct vfio_pfn *vfio_find_vpfn_range(struct vfio_dma *dma,
+		dma_addr_t iova, unsigned long npage)
+{
+	struct vfio_pfn *vpfn;
+	struct rb_node *node = dma->pfn_list.rb_node;
+	dma_addr_t end_iova = iova + PAGE_SIZE * npage;
+
+	while (node) {
+		vpfn = rb_entry(node, struct vfio_pfn, node);
+
+		if (end_iova <= vpfn->iova)
+			node = node->rb_left;
+		else if (iova > vpfn->iova)
+			node = node->rb_right;
+		else
+			return vpfn;
+	}
+	return NULL;
+}
+
 static void vfio_link_pfn(struct vfio_dma *dma,
 			  struct vfio_pfn *new)
 {
@@ -668,6 +692,31 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 				npage -= ret;
 				vaddr += (PAGE_SIZE * ret);
 				iova += (PAGE_SIZE * ret);
+				continue;
+			}
+
+		}
+		/* Handle hugetlbfs page */
+		if (likely(!disable_hugepages) &&
+				folio_test_hugetlb(page_folio(batch->pages[batch->offset]))) {
+			if (pfn != *pfn_base + pinned)
+				goto out;
+
+			if (!rsvd && !vfio_find_vpfn_range(dma, iova, batch->size)) {
+				if (!dma->lock_cap &&
+				    mm->locked_vm + lock_acct + batch->size > limit) {
+					pr_warn("%s: RLIMIT_MEMLOCK (%ld) exceeded\n",
+						__func__, limit << PAGE_SHIFT);
+					ret = -ENOMEM;
+					goto unpin_out;
+				}
+				pinned += batch->size;
+				npage -= batch->size;
+				vaddr += PAGE_SIZE * batch->size;
+				iova += PAGE_SIZE * batch->size;
+				lock_acct += batch->size;
+				batch->offset += batch->size;
+				batch->size = 0;
 				continue;
 			}
 		}
