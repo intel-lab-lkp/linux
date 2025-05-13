@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/serial/ti,pruss-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI PRUSS serial UART
+
+maintainers:
+  - Bin Liu <b-liu@ti.com>
+
+description: |
+  The PRU subsystem has a serial UART peripheral based on the industry
+  standard TL16C550, with 16-byte TX/RX FIFOs.
+
+allOf:
+  - $ref: /schemas/serial.yaml#
+
+properties:
+  compatible:
+    items:
+      - const: ti,pruss-uart
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description: |
+      PRU UART interrupt mappings, containing an entry of 3 cell-values.
+      The first is the PRU System Event ID for PRU UART Interrupt Request.
+      The second is the PRU interrupt channel ID.
+      The third is the PRU host interrupt ID.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    pruss_uart: serial@28000 {
+        compatible = "ti,pruss-uart";
+        reg = <0x28000 0x40>;
+        clocks = <&k3_clks 81 13>;
+        interrupt-parent = <&pruss_intc>;
+        interrupts = <6 4 4>;
+    };
