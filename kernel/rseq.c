@@ -576,6 +576,23 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len,
 		return 0;
 	}
 
+	/*
+	 * return supported rseq_cs flags
+	 * It is an or of all the rseq_cs_flags;
+	 */
+	if (flags & RSEQ_FLAG_QUERY_CS_FLAGS) {
+		u32 rseq_csflags = RSEQ_CS_FLAG_NO_RESTART_ON_PREEMPT |
+				   RSEQ_CS_FLAG_NO_RESTART_ON_SIGNAL  |
+				   RSEQ_CS_FLAG_NO_RESTART_ON_MIGRATE |
+				   RSEQ_CS_FLAG_DELAY_RESCHED |
+				   RSEQ_CS_FLAG_RESCHEDULED;
+		if (!rseq)
+			return -EINVAL;
+		if (copy_to_user(&rseq->flags, &rseq_csflags, sizeof(u32)))
+			return -EFAULT;
+		return 0;
+	}
+
 	if (unlikely(flags))
 		return -EINVAL;
 
