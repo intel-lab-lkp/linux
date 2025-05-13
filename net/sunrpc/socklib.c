@@ -158,7 +158,6 @@ no_checksum:
 		return -1;
 	return 0;
 }
-EXPORT_SYMBOL_GPL(csum_partial_copy_to_xdr);
 
 static inline int xprt_sendmsg(struct socket *sock, struct msghdr *msg,
 			       size_t seek)
