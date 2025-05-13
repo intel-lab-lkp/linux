@@ -3,6 +3,10 @@
 #include <linux/security.h>
 #include <linux/fscrypt.h>
 #include <linux/fileattr.h>
+#include <linux/syscalls.h>
+#include <linux/namei.h>
+
+#include "internal.h"
 
 /**
  * fileattr_fill_xflags - initialize fileattr with xflags
@@ -354,3 +358,118 @@ int ioctl_fssetxattr(struct file *file, void __user *argp)
 	return err;
 }
 EXPORT_SYMBOL(ioctl_fssetxattr);
+
+SYSCALL_DEFINE5(file_getattr, int, dfd, const char __user *, filename,
+		struct fsxattr __user *, ufsx, size_t, usize,
+		unsigned int, at_flags)
+{
+	struct fileattr fa = {};
+	struct path filepath __free(path_put) = {};
+	int error;
+	unsigned int lookup_flags = 0;
+	struct filename *name;
+	struct fsxattr fsx = {};
+
+	BUILD_BUG_ON(sizeof(struct fsxattr) < FSXATTR_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(struct fsxattr) != FSXATTR_SIZE_LATEST);
+
+	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
+		return -EINVAL;
+
+	if (!(at_flags & AT_SYMLINK_NOFOLLOW))
+		lookup_flags |= LOOKUP_FOLLOW;
+
+	if (usize > PAGE_SIZE)
+		return -E2BIG;
+
+	if (usize < FSXATTR_SIZE_VER0)
+		return -EINVAL;
+
+	name = getname_maybe_null(filename, at_flags);
+	if (IS_ERR(name))
+		return PTR_ERR(name);
+
+	if (!name && dfd >= 0) {
+		CLASS(fd, f)(dfd);
+
+		filepath = fd_file(f)->f_path;
+		path_get(&filepath);
+	} else {
+		error = filename_lookup(dfd, name, lookup_flags, &filepath,
+					NULL);
+		putname(name);
+		if (error)
+			return error;
+	}
+
+	error = vfs_fileattr_get(filepath.dentry, &fa);
+	if (error)
+		return error;
+
+	fileattr_to_fsxattr(&fa, &fsx);
+	error = copy_struct_to_user(ufsx, usize, &fsx, sizeof(struct fsxattr),
+				    NULL);
+
+	return error;
+}
+
+SYSCALL_DEFINE5(file_setattr, int, dfd, const char __user *, filename,
+		struct fsxattr __user *, ufsx, size_t, usize,
+		unsigned int, at_flags)
+{
+	struct fileattr fa;
+	struct path filepath __free(path_put) = {};
+	int error;
+	unsigned int lookup_flags = 0;
+	struct filename *name;
+	struct fsxattr fsx = {};
+
+	BUILD_BUG_ON(sizeof(struct fsxattr) < FSXATTR_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(struct fsxattr) != FSXATTR_SIZE_LATEST);
+
+	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
+		return -EINVAL;
+
+	if (!(at_flags & AT_SYMLINK_NOFOLLOW))
+		lookup_flags |= LOOKUP_FOLLOW;
+
+	if (usize > PAGE_SIZE)
+		return -E2BIG;
+
+	if (usize < FSXATTR_SIZE_VER0)
+		return -EINVAL;
+
+	error = copy_struct_from_user(&fsx, sizeof(struct fsxattr), ufsx, usize);
+	if (error)
+		return error;
+
+	error = fsxattr_to_fileattr(&fsx, &fa);
+	if (error)
+		return error;
+
+	name = getname_maybe_null(filename, at_flags);
+	if (IS_ERR(name))
+		return PTR_ERR(name);
+
+	if (!name && dfd >= 0) {
+		CLASS(fd, f)(dfd);
+
+		filepath = fd_file(f)->f_path;
+		path_get(&filepath);
+	} else {
+		error = filename_lookup(dfd, name, lookup_flags, &filepath,
+					NULL);
+		putname(name);
+		if (error)
+			return error;
+	}
+
+	error = mnt_want_write(filepath.mnt);
+	if (!error) {
+		error = vfs_fileattr_set(mnt_idmap(filepath.mnt),
+					 filepath.dentry, &fa);
+		mnt_drop_write(filepath.mnt);
+	}
+
+	return error;
+}
