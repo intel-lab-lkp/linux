@@ -210,3 +210,8 @@ msm/msm_mapping@ring
 # [  229.752499] CPU features: 0x18,00000017,00200928,4200720b
 # [  229.758095] Memory Limit: none
 # [  229.761291] ---[ end Kernel panic - not syncing: softlockup: hung tasks ]---
+
+# Protection doesn't seem to be enforced, don't perform write which might get through
+# https://gitlab.freedesktop.org/drm/msm/-/issues/77
+msm/msm_mapping@shadow
+
