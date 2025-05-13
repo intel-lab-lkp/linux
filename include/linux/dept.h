@@ -107,6 +107,12 @@ struct dept_class {
 			 * not an explicit map
 			 */
 			bool		sched_map;
+
+			/*
+			 * for avoiding this class involved in report
+			 * more than once
+			 */
+			bool		reported;
 		};
 	};
 };

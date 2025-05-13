@@ -501,6 +501,7 @@ static void initialize_class(struct dept_class *c)
 		iw->touched = false;
 	}
 	c->bfs_gen = 0U;
+	c->reported = false;
 
 	INIT_LIST_HEAD(&c->all_node);
 	INIT_LIST_HEAD(&c->dep_head);
@@ -913,6 +914,12 @@ static void print_circle(struct dept_class *c)
 	dump_stack();
 
 	dept_outworld_exit();
+
+	do {
+		tc->reported = true;
+		tc = fc;
+		fc = fc->bfs_parent;
+	} while (tc != c);
 }
 
 /*
@@ -1224,6 +1231,9 @@ static enum bfs_ret cb_check_dl(void *node, void *in, void **out)
 {
 	struct dept_class *cur = (struct dept_class *)node;
 	struct dept_dep *new = (struct dept_dep *)in;
+
+	if (cur->reported)
+		return BFS_SKIP;
 
 	if (cur == dep_fc(new)) {
 		print_circle(dep_tc(new));
