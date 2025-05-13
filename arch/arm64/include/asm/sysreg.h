@@ -1085,6 +1085,7 @@
 #define GICV5_OP_GIC_CDAFF		sys_insn(1, 0, 12, 1, 3)
 #define GICV5_OP_GIC_CDDI		sys_insn(1, 0, 12, 2, 0)
 #define GICV5_OP_GIC_CDDIS		sys_insn(1, 0, 12, 1, 0)
+#define GICV5_OP_GIC_CDHM		sys_insn(1, 0, 12, 2, 1)
 #define GICV5_OP_GIC_CDEN		sys_insn(1, 0, 12, 1, 1)
 #define GICV5_OP_GIC_CDEOI		sys_insn(1, 0, 12, 1, 7)
 #define GICV5_OP_GIC_CDPEND		sys_insn(1, 0, 12, 1, 4)
@@ -1107,6 +1108,11 @@
 #define GICV5_GIC_CDDIS_TYPE(r)		FIELD_GET(GICV5_GIC_CDDIS_TYPE_MASK, r)
 #define GICV5_GIC_CDDIS_ID_MASK		GENMASK_ULL(23, 0)
 #define GICV5_GIC_CDDIS_ID(r)		FIELD_GET(GICV5_GIC_CDDIS_ID_MASK, r)
+
+/* Shift and mask definitions for GIC CDHM */
+#define GICV5_GIC_CDHM_HM_MASK		BIT_ULL(32)
+#define GICV5_GIC_CDHM_TYPE_MASK	GENMASK_ULL(31, 29)
+#define GICV5_GIC_CDHM_ID_MASK		GENMASK_ULL(23, 0)
 
 /* Shift and mask definitions for GIC CDEN */
 #define GICV5_GIC_CDEN_TYPE_MASK	GENMASK_ULL(31, 29)
