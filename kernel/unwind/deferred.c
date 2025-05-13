@@ -13,10 +13,11 @@
 
 #define UNWIND_MAX_ENTRIES 512
 
-/* Guards adding to and reading the list of callbacks */
+/* Guards adding to or removing from the list of callbacks */
 static DEFINE_MUTEX(callback_mutex);
 static LIST_HEAD(callbacks);
 static unsigned long unwind_mask;
+DEFINE_STATIC_SRCU(unwind_srcu);
 
 /*
  * Read the task context timestamp, if this is the first caller then
@@ -108,6 +109,7 @@ static void unwind_deferred_task_work(struct callback_head *head)
 	struct unwind_work *work;
 	u64 timestamp;
 	struct task_struct *task = current;
+	int idx;
 
 	if (WARN_ON_ONCE(!info->pending))
 		return;
@@ -133,13 +135,15 @@ static void unwind_deferred_task_work(struct callback_head *head)
 
 	timestamp = info->timestamp;
 
-	guard(mutex)(&callback_mutex);
-	list_for_each_entry(work, &callbacks, list) {
+	idx = srcu_read_lock(&unwind_srcu);
+	list_for_each_entry_srcu(work, &callbacks, list,
+				 srcu_read_lock_held(&unwind_srcu)) {
 		if (task->unwind_mask & (1UL << work->bit)) {
 			work->func(work, &trace, timestamp);
 			clear_bit(work->bit, &current->unwind_mask);
 		}
 	}
+	srcu_read_unlock(&unwind_srcu, idx);
 }
 
 static int unwind_deferred_request_nmi(struct unwind_work *work, u64 *timestamp)
@@ -216,6 +220,7 @@ int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 {
 	struct unwind_task_info *info = &current->unwind_info;
 	int pending;
+	int bit;
 	int ret;
 
 	*timestamp = 0;
@@ -227,12 +232,17 @@ int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 	if (in_nmi())
 		return unwind_deferred_request_nmi(work, timestamp);
 
+	/* Do not allow cancelled works to request again */
+	bit = READ_ONCE(work->bit);
+	if (WARN_ON_ONCE(bit < 0))
+		return -EINVAL;
+
 	guard(irqsave)();
 
 	*timestamp = get_timestamp(info);
 
 	/* This is already queued */
-	if (current->unwind_mask & (1UL << work->bit))
+	if (current->unwind_mask & (1UL << bit))
 		return 1;
 
 	/* callback already pending? */
@@ -258,19 +268,26 @@ int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 void unwind_deferred_cancel(struct unwind_work *work)
 {
 	struct task_struct *g, *t;
+	int bit;
 
 	if (!work)
 		return;
 
 	guard(mutex)(&callback_mutex);
-	list_del(&work->list);
+	list_del_rcu(&work->list);
+	bit = work->bit;
 
-	clear_bit(work->bit, &unwind_mask);
+	/* Do not allow any more requests and prevent callbacks */
+	work->bit = -1;
+
+	clear_bit(bit, &unwind_mask);
+
+	synchronize_srcu(&unwind_srcu);
 
 	guard(rcu)();
 	/* Clear this bit from all threads */
 	for_each_process_thread(g, t) {
-		clear_bit(work->bit, &t->unwind_mask);
+		clear_bit(bit, &t->unwind_mask);
 	}
 }
 
@@ -287,7 +304,7 @@ int unwind_deferred_init(struct unwind_work *work, unwind_callback_t func)
 	work->bit = ffz(unwind_mask);
 	unwind_mask |= 1UL << work->bit;
 
-	list_add(&work->list, &callbacks);
+	list_add_rcu(&work->list, &callbacks);
 	work->func = func;
 	return 0;
 }
