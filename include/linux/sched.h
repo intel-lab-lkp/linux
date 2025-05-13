@@ -1657,6 +1657,7 @@ struct task_struct {
 
 #ifdef CONFIG_UNWIND_USER
 	struct unwind_task_info		unwind_info;
+	unsigned long			unwind_mask;
 #endif
 
 	/* CPU-specific state of this task: */
