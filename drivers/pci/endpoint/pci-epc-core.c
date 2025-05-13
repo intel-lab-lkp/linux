@@ -382,7 +382,7 @@ int pci_epc_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 		return 0;
 
 	mutex_lock(&epc->lock);
-	ret = epc->ops->set_msix(epc, func_no, vfunc_no, interrupts - 1, bir,
+	ret = epc->ops->set_msix(epc, func_no, vfunc_no, interrupts, bir,
 				 offset);
 	mutex_unlock(&epc->lock);
 
