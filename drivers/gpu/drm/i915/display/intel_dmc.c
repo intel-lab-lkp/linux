@@ -534,6 +534,26 @@ void intel_dmc_block_pkgc(struct intel_display *display, enum pipe pipe,
 		     PIPEDMC_BLOCK_PKGC_SW_BLOCK_PKGC_ALWAYS : 0);
 }
 
+void intel_dmc_configure_dc_balance_ctl_regs(struct intel_display *display,
+					     enum pipe pipe, bool enable)
+{
+	u32 val;
+
+	if (enable)
+		val = DMC_EVT_CTL_ENABLE | DMC_EVT_CTL_RECURRING |
+			REG_FIELD_PREP(DMC_EVT_CTL_TYPE_MASK,
+				       DMC_EVT_CTL_TYPE_EDGE_0_1) |
+			REG_FIELD_PREP(DMC_EVT_CTL_EVENT_ID_MASK,
+				       DMC_EVT_CTL_EVENT_ID_ADAPTIVE_DC_BALANCE_TRIGGER);
+	else
+		val = REG_FIELD_PREP(DMC_EVT_CTL_EVENT_ID_MASK,
+				     DMC_EVT_CTL_EVENT_ID_FALSE) |
+		      REG_FIELD_PREP(DMC_EVT_CTL_TYPE_MASK,
+				     DMC_EVT_CTL_TYPE_EDGE_0_1);
+
+	intel_de_write(display, PIPEDMC_EVT_CTL_3(pipe), val);
+}
+
 /**
  * intel_dmc_start_pkgc_exit_at_start_of_undelayed_vblank() - start of PKG
  * C-state exit
