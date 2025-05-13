@@ -1601,13 +1601,9 @@ static int cxusb_probe(struct usb_interface *intf,
 	int ret;
 
 	/* Medion 95700 */
-	if (!dvb_usb_device_init(intf, &cxusb_medion_properties,
+	if (cxusb_medion_check_intf(intf) &&
+	    !dvb_usb_device_init(intf, &cxusb_medion_properties,
 				 THIS_MODULE, &dvbdev, adapter_nr)) {
-		if (!cxusb_medion_check_intf(intf)) {
-			ret = -ENODEV;
-			goto ret_uninit;
-		}
-
 		_cxusb_power_ctrl(dvbdev, 1);
 		ret = cxusb_medion_set_mode(dvbdev, false);
 		if (ret)
