@@ -18,4 +18,11 @@ Description:	(RO) Attribute to read the stored timestamps form buffer FIFO.
 		- "1234.567 EVIN1=1" for a trigger from EVIN1 changed from low to high
 		- "1234.567 EVIN1=0 EVIN2=1 for a simultaneous trigger of EVIN1 changed to low and
 		  EVIN2 changed to high.
+		- "1234.567 CMD=0" for a internal trigger
 
+What:		/sys/class/rtc/rtcX/tamper/trigger
+Date:		January 2025
+KernelVersion:	6.13
+Contact:	Markus Burri <markus.burri@mt.com>
+Description:	(WO) Attribute to trigger an internal timestamp event
+		Write a '1' to trigger an internal event and store a timestamp.
