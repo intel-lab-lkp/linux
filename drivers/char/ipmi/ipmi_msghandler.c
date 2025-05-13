@@ -1246,18 +1246,18 @@ int ipmi_create_user(unsigned int          if_num,
  found:
 	if (atomic_add_return(1, &intf->nr_users) > max_users) {
 		rv = -EBUSY;
-		goto out_kfree;
+		goto out_dec;
 	}
 
 	INIT_WORK(&new_user->remove_work, free_user_work);
 
 	rv = init_srcu_struct(&new_user->release_barrier);
 	if (rv)
-		goto out_kfree;
+		goto out_dec;
 
 	if (!try_module_get(intf->owner)) {
 		rv = -ENODEV;
-		goto out_kfree;
+		goto out_dec;
 	}
 
 	/* Note that each existing user holds a refcount to the interface. */
@@ -1281,8 +1281,9 @@ int ipmi_create_user(unsigned int          if_num,
 	*user = new_user;
 	return 0;
 
-out_kfree:
+out_dec:
 	atomic_dec(&intf->nr_users);
+out_kfree:
 	srcu_read_unlock(&ipmi_interfaces_srcu, index);
 	vfree(new_user);
 	return rv;
