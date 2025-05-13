@@ -2,9 +2,9 @@
 #ifndef _ASM_X86_CPUFEATURE_H
 #define _ASM_X86_CPUFEATURE_H
 
+#ifdef __KERNEL__
+#ifndef __ASSEMBLER__
 #include <asm/processor.h>
-
-#if defined(__KERNEL__) && !defined(__ASSEMBLER__)
 
 #include <asm/asm.h>
 #include <linux/bitops.h>
@@ -137,5 +137,11 @@ t_no:
 #define CPU_FEATURE_TYPEVAL		boot_cpu_data.x86_vendor, boot_cpu_data.x86, \
 					boot_cpu_data.x86_model
 
-#endif /* defined(__KERNEL__) && !defined(__ASSEMBLER__) */
+#else /* !defined(__ASSEMBLER__) */
+	.macro	setup_force_cpu_cap, cap:req
+	btsl	$\cap % 32, boot_cpu_data+CPUINFO_x86_capability+4*(\cap / 32)(%rip)
+	btsl	$\cap % 32, cpu_caps_set+4*(\cap / 32)(%rip)
+	.endm
+#endif /* !defined(__ASSEMBLER__) */
+#endif /* defined(__KERNEL__) */
 #endif /* _ASM_X86_CPUFEATURE_H */
