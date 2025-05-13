@@ -13,5 +13,6 @@
 
 int hyp_ffa_init(void *pages);
 bool kvm_host_ffa_handler(struct kvm_cpu_context *host_ctxt, u32 func_id);
+u32 ffa_get_hypervisor_version(void);
 
 #endif /* __KVM_HYP_FFA_H */
