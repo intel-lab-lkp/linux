@@ -79,6 +79,7 @@ static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
 
 static HLIST_HEAD(binder_devices);
+static DEFINE_SPINLOCK(binder_devices_lock);
 static HLIST_HEAD(binder_procs);
 static DEFINE_MUTEX(binder_procs_lock);
 
@@ -6929,7 +6930,14 @@ const struct binder_debugfs_entry binder_debugfs_entries[] = {
 
 void binder_add_device(struct binder_device *device)
 {
+	guard(spinlock)(&binder_devices_lock);
 	hlist_add_head(&device->hlist, &binder_devices);
+}
+
+void binder_del_device(struct binder_device *device)
+{
+	guard(spinlock)(&binder_devices_lock);
+	hlist_del_init(&device->hlist);
 }
 
 static int __init init_binder_device(const char *name)
