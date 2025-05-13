@@ -24,7 +24,7 @@ enum {
  * stored in either the first or last 2 dwords.
  */
 #define FANOTIFY_INLINE_FH_LEN	(3 << 2)
-#define FANOTIFY_FH_HDR_LEN	offsetof(struct fanotify_fh, buf)
+#define FANOTIFY_FH_HDR_LEN	sizeof(struct fanotify_fh)
 
 /* Fixed size struct for file handle */
 struct fanotify_fh {
@@ -33,7 +33,6 @@ struct fanotify_fh {
 #define FANOTIFY_FH_FLAG_EXT_BUF 1
 	u8 flags;
 	u8 pad;
-	unsigned char buf[];
 } __aligned(4);
 
 /* Variable size struct for dir file handle + child file handle + name */
@@ -91,7 +90,7 @@ static inline char **fanotify_fh_ext_buf_ptr(struct fanotify_fh *fh)
 	BUILD_BUG_ON(FANOTIFY_FH_HDR_LEN % 4);
 	BUILD_BUG_ON(__alignof__(char *) - 4 + sizeof(char *) >
 		     FANOTIFY_INLINE_FH_LEN);
-	return (char **)ALIGN((unsigned long)(fh->buf), __alignof__(char *));
+	return (char **)ALIGN((unsigned long)(fh + 1), __alignof__(char *));
 }
 
 static inline void *fanotify_fh_ext_buf(struct fanotify_fh *fh)
@@ -101,7 +100,7 @@ static inline void *fanotify_fh_ext_buf(struct fanotify_fh *fh)
 
 static inline void *fanotify_fh_buf(struct fanotify_fh *fh)
 {
-	return fanotify_fh_has_ext_buf(fh) ? fanotify_fh_ext_buf(fh) : fh->buf;
+	return fanotify_fh_has_ext_buf(fh) ? fanotify_fh_ext_buf(fh) : fh + 1;
 }
 
 static inline int fanotify_info_dir_fh_len(struct fanotify_info *info)
@@ -276,7 +275,7 @@ static inline void fanotify_init_event(struct fanotify_event *event,
 #define FANOTIFY_INLINE_FH(name, size)					\
 struct {								\
 	struct fanotify_fh name;					\
-	/* Space for object_fh.buf[] - access with fanotify_fh_buf() */	\
+	/* Space for filehandle - access with fanotify_fh_buf() */	\
 	unsigned char _inline_fh_buf[size];				\
 }
 
