@@ -163,6 +163,19 @@ static inline u16 serial_lsr_in(struct uart_8250_port *up)
 }
 
 /*
+ * To avoid PSLVERR, check UART_LSR_DR in UART_LSR before
+ * reading UART_RX.
+ */
+static inline void serial8250_discard_data(struct uart_8250_port *up)
+{
+	u16 lsr;
+
+	lsr = serial_in(up, UART_LSR);
+	if (lsr & UART_LSR_DR)
+		serial_in(up, UART_RX);
+}
+
+/*
  * For the 16C950
  */
 static void serial_icr_write(struct uart_8250_port *up, int offset, int value)
