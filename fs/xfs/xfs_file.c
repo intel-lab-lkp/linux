@@ -1618,7 +1618,11 @@ xfs_file_release(
 	 */
 	if (xfs_iflags_test_and_clear(ip, XFS_ITRUNCATED)) {
 		xfs_iflags_clear(ip, XFS_EOFBLOCKS_RELEASED);
-		if (ip->i_delayed_blks > 0)
+		/*
+		 * Don't bother with the ILOCK as this is best-effort and thus
+		 * a racy access is ok.
+		 */
+		if (data_race(ip->i_delayed_blks) > 0)
 			filemap_flush(inode->i_mapping);
 	}
 
