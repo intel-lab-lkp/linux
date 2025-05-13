@@ -2,6 +2,7 @@
 /*
  * Analog Devices AD7466/7/8 AD7476/5/7/8 (A) SPI ADC driver
  * TI ADC081S/ADC101S/ADC121S 8/10/12-bit SPI ADC driver
+ * ROHM BU79100G 12-bit SPI ADC driver
  *
  * Copyright 2010 Analog Devices Inc.
  */
@@ -72,6 +73,7 @@ enum ad7476_supported_device_ids {
 	ID_ADS7866,
 	ID_ADS7867,
 	ID_ADS7868,
+	ID_BU79100G,
 	ID_LTC2314_14,
 };
 
@@ -281,6 +283,10 @@ static const struct ad7476_chip_info ad7476_chip_info_tbl[] = {
 		.channel[0] = ADS786X_CHAN(8),
 		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	},
+	[ID_BU79100G] = {
+		.channel[0] = ADS786X_CHAN(12),
+		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	},
 	[ID_LTC2314_14] = {
 		.channel[0] = AD7940_CHAN(14),
 		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
@@ -311,6 +317,7 @@ static int ad7476_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
+
 	st->chip_info =
 		&ad7476_chip_info_tbl[spi_get_device_id(spi)->driver_data];
 
@@ -435,6 +442,7 @@ static const struct spi_device_id ad7476_id[] = {
 	{ "ads7866", ID_ADS7866 },
 	{ "ads7867", ID_ADS7867 },
 	{ "ads7868", ID_ADS7868 },
+	{ "bu79100g", ID_BU79100G },
 	{ "ltc2314-14", ID_LTC2314_14 },
 	{ }
 };
