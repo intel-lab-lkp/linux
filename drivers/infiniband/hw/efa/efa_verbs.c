@@ -427,7 +427,7 @@ int efa_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	struct efa_pd *pd = to_epd(ibpd);
 	int err;
 
-	if (udata->inlen &&
+	if (udata && udata->inlen &&
 	    !ib_is_udata_cleared(udata, 0, udata->inlen)) {
 		ibdev_dbg(&dev->ibdev,
 			  "Incompatible ABI params, udata not cleared\n");
@@ -442,7 +442,7 @@ int efa_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	pd->pdn = result.pdn;
 	resp.pdn = result.pdn;
 
-	if (udata->outlen) {
+	if (udata && udata->outlen) {
 		err = ib_copy_to_udata(udata, &resp,
 				       min(sizeof(resp), udata->outlen));
 		if (err) {
