@@ -9,9 +9,6 @@ title: EPSON RX8900 / Microcrystal RV8803 Real-Time Clock
 maintainers:
   - Marek Vasut <marex@denx.de>
 
-allOf:
-  - $ref: rtc.yaml#
-
 properties:
   compatible:
     enum:
@@ -32,6 +29,43 @@ properties:
   trickle-diode-disable: true
 
   wakeup-source: true
+
+  tamper:
+    description: Subnode for tamper configuration. This
+      subnode is only available for epson,rx8901.
+    type: object
+    additionalProperties: false
+    properties:
+      buffer-mode:
+        description: Set the buffer mode to inhibit (0) or overwrite (1).
+        minimum: 0
+        maximum: 1
+    patternProperties:
+      "^evin-[0-3]$":
+        $ref: /schemas/types.yaml#/definitions/uint32-array
+        minItems: 3
+        maxItems: 3
+        description: |
+          Event input pin configuration.
+          The configuration is an array of tree values and contains
+          "pull-resistore", "trigger" and "filter".
+          For a detaild description, see epson-rx8901 datasheet.
+
+allOf:
+  - $ref: rtc.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - epson,rx8901
+    then:
+      properties:
+        tamper: true
+    else:
+      # property is not allowed:
+      properties:
+        tamper: false
 
 required:
   - compatible
