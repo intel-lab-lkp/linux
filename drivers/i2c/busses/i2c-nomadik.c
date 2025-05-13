@@ -968,6 +968,9 @@ static int nmk_i2c_runtime_resume(struct device *dev)
 	struct nmk_i2c_dev *priv = amba_get_drvdata(adev);
 	int ret;
 
+	if (!priv)
+		return -EINVAL;
+
 	ret = clk_prepare_enable(priv->clk);
 	if (ret) {
 		dev_err(dev, "can't prepare_enable clock\n");
