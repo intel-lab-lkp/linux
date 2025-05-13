@@ -1190,6 +1190,7 @@ static int otx2_get_link_ksettings(struct net_device *netdev,
 	cmd->base.duplex  = pfvf->linfo.full_duplex;
 	cmd->base.speed   = pfvf->linfo.speed;
 	cmd->base.autoneg = pfvf->linfo.an;
+	cmd->base.port    = rsp->fwdata.port;
 
 	rsp = otx2_get_fwdata(pfvf);
 	if (IS_ERR(rsp))
@@ -1198,6 +1199,10 @@ static int otx2_get_link_ksettings(struct net_device *netdev,
 	if (rsp->fwdata.supported_an)
 		ethtool_link_ksettings_add_link_mode(cmd,
 						     supported,
+						     Autoneg);
+	if (rsp->fwdata.advertised_an)
+		ethtool_link_ksettings_add_link_mode(cmd,
+						     advertising,
 						     Autoneg);
 
 	otx2_get_link_mode_info(rsp->fwdata.advertised_link_modes,
