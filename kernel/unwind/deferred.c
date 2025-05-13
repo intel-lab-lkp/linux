@@ -25,8 +25,27 @@ static u64 get_timestamp(struct unwind_task_info *info)
 {
 	lockdep_assert_irqs_disabled();
 
-	if (!info->timestamp)
-		info->timestamp = local_clock();
+	/*
+	 * Note, the timestamp is generated on the first request.
+	 * If it exists here, then the timestamp is earlier than
+	 * this request and it means that this request will be
+	 * valid for the stracktrace.
+	 */
+	if (!info->timestamp) {
+		WRITE_ONCE(info->timestamp, local_clock());
+		barrier();
+		/*
+		 * If an NMI came in and set a timestamp, it means that
+		 * it happened before this timestamp was set (otherwise
+		 * the NMI would have used this one). Use the NMI timestamp
+		 * instead.
+		 */
+		if (unlikely(info->nmi_timestamp)) {
+			WRITE_ONCE(info->timestamp, info->nmi_timestamp);
+			barrier();
+			WRITE_ONCE(info->nmi_timestamp, 0);
+		}
+	}
 
 	return info->timestamp;
 }
@@ -103,12 +122,61 @@ static void unwind_deferred_task_work(struct callback_head *head)
 
 	unwind_deferred_trace(&trace);
 
+	/* Check if the timestamp was only set by NMI */
+	if (info->nmi_timestamp) {
+		WRITE_ONCE(info->timestamp, info->nmi_timestamp);
+		barrier();
+		WRITE_ONCE(info->nmi_timestamp, 0);
+	}
+
 	timestamp = info->timestamp;
 
 	guard(mutex)(&callback_mutex);
 	list_for_each_entry(work, &callbacks, list) {
 		work->func(work, &trace, timestamp);
 	}
+}
+
+static int unwind_deferred_request_nmi(struct unwind_work *work, u64 *timestamp)
+{
+	struct unwind_task_info *info = &current->unwind_info;
+	bool inited_timestamp = false;
+	int ret;
+
+	/* Always use the nmi_timestamp first */
+	*timestamp = info->nmi_timestamp ? : info->timestamp;
+
+	if (!*timestamp) {
+		/*
+		 * This is the first unwind request since the most recent entry
+		 * from user space. Initialize the task timestamp.
+		 *
+		 * Don't write to info->timestamp directly, otherwise it may race
+		 * with an interruption of get_timestamp().
+		 */
+		info->nmi_timestamp = local_clock();
+		*timestamp = info->nmi_timestamp;
+		inited_timestamp = true;
+	}
+
+	if (info->pending)
+		return 1;
+
+	ret = task_work_add(current, &info->work, TWA_NMI_CURRENT);
+	if (ret) {
+		/*
+		 * If this set nmi_timestamp and is not using it,
+		 * there's no guarantee that it will be used.
+		 * Set it back to zero.
+		 */
+		if (inited_timestamp)
+			info->nmi_timestamp = 0;
+		return ret;
+	}
+
+	info->pending = 1;
+
+	return 0;
 }
 
 /**
@@ -139,31 +207,38 @@ static void unwind_deferred_task_work(struct callback_head *head)
 int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 {
 	struct unwind_task_info *info = &current->unwind_info;
+	int pending;
 	int ret;
 
 	*timestamp = 0;
 
-	if (WARN_ON_ONCE(in_nmi()))
-		return -EINVAL;
-
 	if ((current->flags & (PF_KTHREAD | PF_EXITING)) ||
 	    !user_mode(task_pt_regs(current)))
 		return -EINVAL;
+
+	if (in_nmi())
+		return unwind_deferred_request_nmi(work, timestamp);
 
 	guard(irqsave)();
 
 	*timestamp = get_timestamp(info);
 
 	/* callback already pending? */
-	if (info->pending)
+	pending = READ_ONCE(info->pending);
+	if (pending)
+		return 1;
+
+	/* Claim the work unless an NMI just now swooped in to do so. */
+	if (!try_cmpxchg(&info->pending, &pending, 1))
 		return 1;
 
 	/* The work has been claimed, now schedule it. */
 	ret = task_work_add(current, &info->work, TWA_RESUME);
-	if (WARN_ON_ONCE(ret))
+	if (WARN_ON_ONCE(ret)) {
+		WRITE_ONCE(info->pending, 0);
 		return ret;
+	}
 
-	info->pending = 1;
 	return 0;
 }
 

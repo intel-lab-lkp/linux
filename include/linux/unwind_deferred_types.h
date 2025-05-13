@@ -11,6 +11,7 @@ struct unwind_task_info {
 	struct unwind_cache	*cache;
 	struct callback_head	work;
 	u64			timestamp;
+	u64			nmi_timestamp;
 	int			pending;
 };
 
