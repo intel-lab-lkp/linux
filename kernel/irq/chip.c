@@ -251,7 +251,9 @@ int irq_startup(struct irq_desc *desc, bool resend, bool force)
 	const struct cpumask *aff = irq_data_get_affinity_mask(d);
 	int ret = 0;
 
-	desc->depth = 0;
+	desc->depth--;
+	if (desc->depth)
+		return 0;
 
 	if (irqd_is_started(d)) {
 		irq_enable(desc);
@@ -269,6 +271,7 @@ int irq_startup(struct irq_desc *desc, bool resend, bool force)
 			ret = __irq_startup(desc);
 			break;
 		case IRQ_STARTUP_ABORT:
+			desc->depth++;
 			irqd_set_managed_shutdown(d);
 			return 0;
 		}
@@ -301,7 +304,7 @@ void irq_shutdown(struct irq_desc *desc)
 {
 	if (irqd_is_started(&desc->irq_data)) {
 		clear_irq_resend(desc);
-		desc->depth = 1;
+		desc->depth++;
 		if (desc->irq_data.chip->irq_shutdown) {
 			desc->irq_data.chip->irq_shutdown(&desc->irq_data);
 			irq_state_set_disabled(desc);
