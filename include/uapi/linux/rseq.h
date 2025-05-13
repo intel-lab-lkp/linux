@@ -27,6 +27,7 @@ enum rseq_cs_flags_bit {
 	RSEQ_CS_FLAG_NO_RESTART_ON_SIGNAL_BIT	= 1,
 	RSEQ_CS_FLAG_NO_RESTART_ON_MIGRATE_BIT	= 2,
 	RSEQ_CS_FLAG_DELAY_RESCHED_BIT		= 3,
+	RSEQ_CS_FLAG_RESCHEDULED_BIT		= 4,
 };
 
 enum rseq_cs_flags {
@@ -38,6 +39,9 @@ enum rseq_cs_flags {
 		(1U << RSEQ_CS_FLAG_NO_RESTART_ON_MIGRATE_BIT),
 	RSEQ_CS_FLAG_DELAY_RESCHED		=
 		(1U << RSEQ_CS_FLAG_DELAY_RESCHED_BIT),
+	RSEQ_CS_FLAG_RESCHEDULED		=
+		(1U << RSEQ_CS_FLAG_RESCHEDULED_BIT),
+
 };
 
 /*
@@ -135,6 +139,12 @@ struct rseq {
 	 *     Request by user thread to delay preemption. With use
 	 *     of a timer, kernel grants extra cpu time upto 30us for this
 	 *     thread before being rescheduled.
+	 * - RSEQ_CS_FLAG_RESCHEDULED
+	 *     Set by kernel if the thread was rescheduled in the extra time
+	 *     granted due to request RSEQ_CS_DELAY_RESCHED. This bit is
+	 *     checked by the thread before calling sched_yield() to yield
+	 *     cpu. User thread sets this bit to 0, when setting
+	 *     RSEQ_CS_DELAY_RESCHED to request preemption delay.
 	 */
 	__u32 flags;
 

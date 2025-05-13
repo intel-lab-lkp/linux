@@ -504,6 +504,26 @@ void rseq_delay_resched_tick(void)
 #endif
 }
 
+void rseq_delay_schedule(void)
+{
+#ifdef CONFIG_SCHED_HRTICK
+	struct task_struct *t = current;
+	u32 flags;
+
+	if (t->sched_time_delay) {
+		t->sched_time_delay = 0;
+		if (!t->rseq)
+			return;
+		if (copy_from_user_nofault(&flags, &t->rseq->flags,
+                        sizeof(flags)))
+                        return;
+                flags |= RSEQ_CS_FLAG_RESCHEDULED;
+                copy_to_user_nofault(&t->rseq->flags, &flags,
+                        sizeof(flags));
+	}
+#endif
+}
+
 #ifdef CONFIG_DEBUG_RSEQ
 
 /*

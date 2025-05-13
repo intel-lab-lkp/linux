@@ -6742,8 +6742,7 @@ static void __sched notrace __schedule(int sched_mode)
 picked:
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
-	if (IS_ENABLED(CONFIG_RSEQ))
-		prev->sched_time_delay = 0;
+	rseq_delay_schedule();
 	rq->last_seen_need_resched_ns = 0;
 
 	is_switch = prev != next;
