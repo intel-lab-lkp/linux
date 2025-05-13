@@ -52,7 +52,7 @@ static uint64_t calc_supported_cr4_feature_bits(void)
 
 	if (kvm_cpu_has(X86_FEATURE_UMIP))
 		cr4 |= X86_CR4_UMIP;
-	if (kvm_cpu_has(X86_FEATURE_LA57))
+	if (kvm_cpu_has(X86_FEATURE_5LEVEL_PAGING))
 		cr4 |= X86_CR4_LA57;
 	if (kvm_cpu_has(X86_FEATURE_VMX))
 		cr4 |= X86_CR4_VMXE;

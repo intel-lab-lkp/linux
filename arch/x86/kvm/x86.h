@@ -243,7 +243,7 @@ static inline u8 vcpu_virt_addr_bits(struct kvm_vcpu *vcpu)
 
 static inline u8 max_host_virt_addr_bits(void)
 {
-	return kvm_cpu_cap_has(X86_FEATURE_LA57) ? 57 : 48;
+	return kvm_cpu_cap_has(X86_FEATURE_5LEVEL_PAGING) ? 57 : 48;
 }
 
 /*
@@ -603,7 +603,7 @@ static inline bool __kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		__reserved_bits |= X86_CR4_FSGSBASE;    \
 	if (!__cpu_has(__c, X86_FEATURE_PKU))           \
 		__reserved_bits |= X86_CR4_PKE;         \
-	if (!__cpu_has(__c, X86_FEATURE_LA57))          \
+	if (!__cpu_has(__c, X86_FEATURE_5LEVEL_PAGING))          \
 		__reserved_bits |= X86_CR4_LA57;        \
 	if (!__cpu_has(__c, X86_FEATURE_UMIP))          \
 		__reserved_bits |= X86_CR4_UMIP;        \
