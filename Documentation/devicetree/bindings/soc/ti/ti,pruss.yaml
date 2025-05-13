@@ -324,6 +324,13 @@ patternProperties:
     $ref: /schemas/net/ti,davinci-mdio.yaml#
     type: object
 
+  serial@[a-f0-9]+$:
+    description: |
+      Serial UART sub-module. A PRUSS can have a serial UART sub-module based
+      on the industry standard TL16C550 asynchronous communications element.
+    $ref: /schemas/serial/ti,pruss-uart.yaml#
+    type: object
+
   "^(pru|rtu|txpru)@[0-9a-f]+$":
     description: |
       PRU Node. Each PRUSS has dual PRU cores, each represented as a RemoteProc
