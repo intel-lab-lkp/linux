@@ -128,14 +128,17 @@ required:
   - power-domains
   - ports
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
+    #include <dt-bindings/gpio/gpio.h>
     #include <dt-bindings/clock/r9a07g044-cpg.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
 
     dsi0: dsi@10850000 {
+        #address-cells = <1>;
+        #size-cells = <0>;
         compatible = "renesas,r9a07g044-mipi-dsi", "renesas,rzg2l-mipi-dsi";
         reg = <0x10850000 0x20000>;
         interrupts = <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
@@ -160,6 +163,20 @@ examples:
         reset-names = "rst", "arst", "prst";
         power-domains = <&cpg>;
 
+        panel@0 {
+            compatible = "rocktech,jh057n00900";
+            reg = <0>;
+            vcc-supply = <&reg_2v8_p>;
+            iovcc-supply = <&reg_1v8_p>;
+            reset-gpios = <&gpio3 13 GPIO_ACTIVE_LOW>;
+
+            port {
+                panel_in: endpoint {
+                    remote-endpoint = <&dsi0_out>;
+                };
+            };
+        };
+
         ports {
             #address-cells = <1>;
             #size-cells = <0>;
@@ -175,7 +192,7 @@ examples:
                 reg = <1>;
                 dsi0_out: endpoint {
                     data-lanes = <1 2 3 4>;
-                    remote-endpoint = <&adv7535_in>;
+                    remote-endpoint = <&panel_in>;
                 };
             };
         };
