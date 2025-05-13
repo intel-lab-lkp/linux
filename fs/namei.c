@@ -5020,7 +5020,7 @@ int vfs_rename(struct renamedata *rd)
 	struct name_snapshot old_name;
 	bool lock_old_subdir, lock_new_subdir;
 
-	if (source == target)
+	if (source == target || old_dir == target)
 		return 0;
 
 	error = may_delete(rd->old_mnt_idmap, old_dir, old_dentry, is_dir);
