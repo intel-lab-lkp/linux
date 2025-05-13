@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# SMI330 IMU driver
+#
+
+config SMI330
+	tristate "Bosch Sensor SMI330 Inertial Measurement Unit"
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Enable support for the Bosch SMI330 IMU.
+
+	  The driver supports different operation modes like polling,
+	  data ready or fifo mode and advanced features like no-motion,
+	  no-motion, any-motion or tilt detection.
+
+if SMI330
+
+choice
+	prompt "Select communication interface"
+	help
+	  Choose communication interface for the sensor.
+
+	  Make sure the sensor is connected accordingly.
+	  SPI and I2C are not supported at the same time,
+	  choose either SPI or I2C to build the driver.
+
+	config SMI330_SPI
+		bool "Enable SPI connection"
+		depends on SPI
+		select REGMAP_SPI
+		help
+		  Enables SPI communication interface.
+
+		  Make sure the sensor is connected to the SPI bus.
+		  To specifiy further parameters like max frequency
+		  use the device tree.
+
+	config SMI330_I2C
+		bool "Enable I2C connection"
+		depends on I2C
+		select REGMAP_I2C
+		help
+		  Enables I2C communication interface.
+
+		  Make sure the sensor is connected to the I2C bus.
+		  To specifiy further parameters like the address
+		  use the device tree.
+endchoice
+
+choice
+	prompt "Map data interrupt"
+	default SMI330_IRQ_DATA_INT1
+	help
+	  Map data interrupt to INT1 or INT2.
+
+	  NONE: data interrupt disabled
+	  INT1: data interrupt mapped to INT1
+	  INT2: data interrupt mapped to INT2
+
+	config SMI330_IRQ_DATA_NONE
+		bool "NONE"
+		help
+		  Data interrupt disabled.
+
+		  In this mode only polling is possible.
+		  To activate data ready of fifo mode choose
+		  INT1 or INT2.
+
+	config SMI330_IRQ_DATA_INT1
+		bool "INT1"
+		help
+		  Data interrupt mapped to INT1.
+
+		  In this mode data ready is the default mode.
+		  The interrupt is triggered when new data is available.
+		  When fifo watermark is set, fifo mode is activated.
+		  The interrupt is triggered when fifo watermark level is reached.
+
+	config SMI330_IRQ_DATA_INT2
+		bool "INT2"
+		help
+		  Data interrupt mapped to INT2.
+
+		  In this mode data ready is the default mode.
+		  The interrupt is triggered when new data is available.
+		  When fifo watermark is set, fifo mode is activated.
+		  The interrupt is triggered when fifo watermark level is reached.
+endchoice
+
+endif  # SMI330
