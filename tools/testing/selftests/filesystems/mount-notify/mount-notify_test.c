@@ -452,7 +452,9 @@ TEST_F(fanotify, rmdir)
 	ASSERT_GE(ret, 0);
 
 	if (ret == 0) {
-		chdir("/");
+		// Suppress -Wunused-result
+		// Ref: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=66425#c34
+		(void) !chdir("/");
 		unshare(CLONE_NEWNS);
 		mount("", "/", NULL, MS_REC|MS_PRIVATE, NULL);
 		umount2("/a", MNT_DETACH);
