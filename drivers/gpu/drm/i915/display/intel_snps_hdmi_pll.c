@@ -46,7 +46,7 @@ static s64 interp(s64 x, s64 x1, s64 x2, s64 y1, s64 y2)
 	return (y1 + DIV_ROUND_UP_ULL(dydx * (x - x1), 100000));
 }
 
-static void get_ana_cp_int_prop(u32 vco_clk,
+static void get_ana_cp_int_prop(u64 vco_clk,
 				u32 refclk_postscalar,
 				int mpll_ana_v2i,
 				int c, int a,
