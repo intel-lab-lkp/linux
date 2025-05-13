@@ -12,7 +12,6 @@ struct unwind_task_info {
 	struct callback_head	work;
 	u64			timestamp;
 	u64			nmi_timestamp;
-	int			pending;
 };
 
 #endif /* _LINUX_UNWIND_USER_DEFERRED_TYPES_H */

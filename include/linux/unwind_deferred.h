@@ -18,6 +18,14 @@ struct unwind_work {
 
 #ifdef CONFIG_UNWIND_USER
 
+#define UNWIND_PENDING_BIT	(BITS_PER_LONG - 1)
+#define UNWIND_PENDING		(1UL << UNWIND_PENDING_BIT)
+
+enum {
+	UNWIND_ALREADY_PENDING	= 1,
+	UNWIND_ALREADY_EXECUTED	= 2,
+};
+
 void unwind_task_init(struct task_struct *task);
 void unwind_task_free(struct task_struct *task);
 
@@ -29,7 +37,20 @@ void unwind_deferred_cancel(struct unwind_work *work);
 
 static __always_inline void unwind_exit_to_user_mode(void)
 {
-	if (unlikely(current->unwind_info.cache))
+	unsigned long bits;
+
+	/* Was there any unwinding? */
+	if (likely(!current->unwind_mask))
+		return;
+
+	bits = current->unwind_mask;
+	do {
+		/* Is a task_work going to run again before going back */
+		if (bits & UNWIND_PENDING)
+			return;
+	} while (!try_cmpxchg(&current->unwind_mask, &bits, 0UL));
+
+	if (likely(current->unwind_info.cache))
 		current->unwind_info.cache->nr_entries = 0;
 	current->unwind_info.timestamp = 0;
 }
