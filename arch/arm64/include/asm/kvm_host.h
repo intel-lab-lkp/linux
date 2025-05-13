@@ -1593,4 +1593,14 @@ static inline bool kvm_arch_has_irq_bypass(void)
 	return true;
 }
 
+static inline bool kvm_arch_supports_gmem(struct kvm *kvm)
+{
+	return IS_ENABLED(CONFIG_KVM_GMEM);
+}
+
+static inline bool kvm_arch_vm_supports_gmem_shared_mem(struct kvm *kvm)
+{
+	return IS_ENABLED(CONFIG_KVM_GMEM_SHARED_MEM);
+}
+
 #endif /* __ARM64_KVM_HOST_H__ */
