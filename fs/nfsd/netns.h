@@ -113,6 +113,7 @@ struct nfsd_net {
 
 	struct file *rec_file;
 	bool in_grace;
+	bool client_tracking_init_done;
 	const struct nfsd4_client_tracking_ops *client_tracking_ops;
 
 	time64_t nfsd4_lease;

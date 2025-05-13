@@ -2097,7 +2097,11 @@ out:
 		pr_warn("NFSD: Unable to initialize client recovery tracking! (%d)\n", status);
 		pr_warn("NFSD: Is nfsdcld running? If not, enable CONFIG_NFSD_LEGACY_CLIENT_TRACKING.\n");
 		nn->client_tracking_ops = NULL;
+		nn->client_tracking_init_done = false;
+	} else {
+		nn->client_tracking_init_done = true;
 	}
+
 	return status;
 }
 
@@ -2106,6 +2110,7 @@ nfsd4_client_tracking_exit(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
+	nn->client_tracking_init_done = false;
 	if (nn->client_tracking_ops) {
 		if (nn->client_tracking_ops->exit)
 			nn->client_tracking_ops->exit(net);
@@ -2118,7 +2123,7 @@ nfsd4_client_record_create(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
-	if (nn->client_tracking_ops)
+	if (nn->client_tracking_ops && nn->client_tracking_init_done)
 		nn->client_tracking_ops->create(clp);
 }
 
@@ -2127,7 +2132,7 @@ nfsd4_client_record_remove(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
-	if (nn->client_tracking_ops)
+	if (nn->client_tracking_ops && nn->client_tracking_init_done)
 		nn->client_tracking_ops->remove(clp);
 }
 
@@ -2136,7 +2141,7 @@ nfsd4_client_record_check(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
-	if (nn->client_tracking_ops)
+	if (nn->client_tracking_ops && nn->client_tracking_init_done)
 		return nn->client_tracking_ops->check(clp);
 
 	return -EOPNOTSUPP;
@@ -2145,7 +2150,7 @@ nfsd4_client_record_check(struct nfs4_client *clp)
 void
 nfsd4_record_grace_done(struct nfsd_net *nn)
 {
-	if (nn->client_tracking_ops)
+	if (nn->client_tracking_ops && nn->client_tracking_init_done)
 		nn->client_tracking_ops->grace_done(nn);
 }
 
