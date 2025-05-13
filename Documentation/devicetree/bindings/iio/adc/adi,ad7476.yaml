@@ -46,6 +46,7 @@ properties:
       - ti,ads7867
       - ti,ads7868
       - lltc,ltc2314-14
+      - rohm,bu79100g
 
   reg:
     maxItems: 1
@@ -96,6 +97,7 @@ allOf:
               - ti,adc121s
               - ti,ads7866
               - ti,ads7868
+              - rohm,bu79100g
     then:
       required:
         - vcc-supply
