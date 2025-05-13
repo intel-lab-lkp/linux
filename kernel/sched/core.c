@@ -7282,14 +7282,10 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 
 	check_class_changed(rq, p, prev_class, oldprio);
 out_unlock:
-	/* Avoid rq from going away on us: */
-	preempt_disable();
 
 	rq_unpin_lock(rq, &rf);
 	__balance_callbacks(rq);
 	raw_spin_rq_unlock(rq);
-
-	preempt_enable();
 }
 #endif
 
