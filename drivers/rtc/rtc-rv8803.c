@@ -113,6 +113,11 @@ enum evin_trigger {
 	both_edges = 0b10,
 };
 
+enum evin_buffer_mode {
+	inhibit = 0,
+	overwrite = 1,
+};
+
 struct cfg_val_txt {
 	char *txt;
 	u8 val;
@@ -163,6 +168,15 @@ static const u8 evin_flt_regs[] = {
 	RX8901_EVIN3_FLT
 };
 
+struct tamper_cfg {
+	struct {
+		u8 pull_resistor;
+		u8 trigger;
+		u8 filter;
+	} evin[NO_OF_EVIN];
+	u8 buffer_mode;
+};
+
 struct rv8803_data {
 	struct i2c_client *client;
 	struct rtc_device *rtc;
@@ -170,6 +184,7 @@ struct rv8803_data {
 	u8 ctrl;
 	u8 backup;
 	u8 alarm_invalid:1;
+	struct tamper_cfg tamper_cfg;
 	enum rv8803_type type;
 };
 
@@ -772,7 +787,10 @@ static ssize_t enable_store(struct device *dev, struct device_attribute *attr, c
 
 	/* 3. set EVENTx pull-up edge trigger and noise filter */
 	for (i = 0; i < NO_OF_EVIN; ++i) {
-		ret = rv8803_ts_event_write_evin(i, rv8803, pull_up_1M, falling_edge, 0);
+		ret = rv8803_ts_event_write_evin(i, rv8803,
+						 rv8803->tamper_cfg.evin[i].pull_resistor,
+						 rv8803->tamper_cfg.evin[i].trigger,
+						 rv8803->tamper_cfg.evin[i].filter);
 		if (ret < 0)
 			return ret;
 	}
@@ -790,10 +808,11 @@ static ssize_t enable_store(struct device *dev, struct device_attribute *attr, c
 	}
 
 	/*
-	 * 5. set BUF1 inhibit and interrupt every 1 event
+	 * 5. set BUF1 inhibit/overwrite mode and interrupt every 1 event
 	 *    NOTE: BUF2-3 are not used in FIFO-mode
 	 */
-	ret = rv8803_write_reg(client, RX8901_BUF1_CFG1, 0x01);
+	reg_mask = 0x01 | FIELD_PREP(BIT(6), rv8803->tamper_cfg.buffer_mode);
+	ret = rv8803_write_reg(client, RX8901_BUF1_CFG1, reg_mask);
 	if (ret < 0)
 		return ret;
 
@@ -1091,6 +1110,66 @@ static int rx8900_trickle_charger_init(struct rv8803_data *rv8803)
 					 flags);
 }
 
+static int rx8900_tamper_init(struct rv8803_data *rv8803)
+{
+	int i;
+	int err;
+	u8 flags;
+	struct device_node *of_tamper;
+	struct i2c_client *client = rv8803->client;
+	struct tamper_cfg *tamper_cfg = &rv8803->tamper_cfg;
+
+	rv8803->tamper_cfg.buffer_mode = inhibit;
+	for (i = 0; i < NO_OF_EVIN; ++i) {
+		tamper_cfg->evin[i].pull_resistor = pull_up_1M;
+		tamper_cfg->evin[i].trigger = falling_edge;
+		tamper_cfg->evin[i].filter = 0;
+	}
+
+	of_tamper = of_get_child_by_name(client->dev.of_node, "tamper");
+	if (of_tamper) {
+		u32 node_value;
+
+		if (of_property_read_u32(of_tamper, "buffer-mode", &node_value))
+			tamper_cfg->buffer_mode = node_value;
+
+		for (i = 0; i < NO_OF_EVIN; ++i) {
+			char of_evin_name[10];
+			u32 evin_val[3];
+
+			snprintf(of_evin_name, sizeof(of_evin_name), "evin-%d", i + 1);
+			if (!of_property_read_u32_array(of_tamper, of_evin_name, evin_val,
+							ARRAY_SIZE(evin_val))) {
+				tamper_cfg->evin[i].pull_resistor = evin_val[0];
+				tamper_cfg->evin[i].trigger = evin_val[1];
+				tamper_cfg->evin[i].filter = evin_val[2];
+			}
+		}
+		of_node_put(of_tamper);
+	}
+
+	scoped_guard(mutex, &rv8803->flags_lock) {
+		err = rv8803_read_reg(client, RX8901_BUF1_CFG1);
+		if (err < 0)
+			return err;
+		flags = (err & ~BIT(6)) | FIELD_PREP(BIT(6), tamper_cfg->buffer_mode);
+		err = rv8803_write_reg(client, RX8901_BUF1_CFG1, flags);
+		if (err < 0)
+			return err;
+	}
+
+	for (i = 0; i < NO_OF_EVIN; ++i) {
+		err = rv8803_ts_event_write_evin(i, rv8803,
+						 tamper_cfg->evin[i].pull_resistor,
+						 tamper_cfg->evin[i].trigger,
+						 tamper_cfg->evin[i].filter);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 /* configure registers with values different than the Power-On reset defaults */
 static int rv8803_regs_configure(struct rv8803_data *rv8803)
 {
@@ -1232,6 +1311,10 @@ static int rv8803_probe(struct i2c_client *client)
 		return err;
 
 	if (rv8803->type == rx_8901) {
+		err = rx8900_tamper_init(rv8803);
+		if (err)
+			return err;
+
 		err = rtc_add_group(rv8803->rtc, &rv8803_rtc_sysfs_event_files);
 		if (err)
 			return err;
