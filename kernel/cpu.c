@@ -655,7 +655,7 @@ static int __init smt_cmdline_disable(char *str)
 early_param("nosmt", smt_cmdline_disable);
 
 /*
- * For Archicture supporting partial SMT states check if the thread is allowed.
+ * For Architecture supporting partial SMT states check if the thread is allowed.
  * Otherwise this has already been checked through cpu_smt_max_threads when
  * setting the SMT level.
  */
