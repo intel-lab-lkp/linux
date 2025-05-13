@@ -105,8 +105,8 @@ void btrfs_submit_compressed_read(struct btrfs_bio *bbio);
 
 int btrfs_compress_str2level(unsigned int type, const char *str);
 
-struct folio *btrfs_alloc_compr_folio(void);
-void btrfs_free_compr_folio(struct folio *folio);
+struct folio *btrfs_alloc_compr_folio(struct btrfs_fs_info *fs_info);
+void btrfs_free_compr_folio(struct btrfs_fs_info *fs_info, struct folio *folio);
 
 enum btrfs_compression_type {
 	BTRFS_COMPRESS_NONE  = 0,
@@ -188,5 +188,7 @@ struct list_head *zstd_alloc_workspace(int level);
 void zstd_free_workspace(struct list_head *ws);
 struct list_head *zstd_get_workspace(int level);
 void zstd_put_workspace(struct list_head *ws);
+void btrfs_inc_compressed_io_folios(struct btrfs_fs_info *fs_info);
+void btrfs_dec_compressed_io_folios(struct btrfs_fs_info *fs_info);
 
 #endif

@@ -1132,6 +1132,20 @@ static ssize_t btrfs_sectorsize_show(struct kobject *kobj,
 	return sysfs_emit(buf, "%u\n", fs_info->sectorsize);
 }
 
+static ssize_t btrfs_memory_stats_show(struct kobject *kobj,
+                                        struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(kobj);
+	struct btrfs_memory_stats *memory_stats = &fs_info->memory_stats;
+
+	return sysfs_emit(buf,
+			  "compressed_io_folios %lu\n"
+			  "extent_buffer_folios %lu\n",
+			  memory_stats->nr_compressed_io_folios,
+			  memory_stats->nr_extent_buffer_folios);
+}
+
+BTRFS_ATTR(, memory_stats, btrfs_memory_stats_show);
 BTRFS_ATTR(, sectorsize, btrfs_sectorsize_show);
 
 static ssize_t btrfs_commit_stats_show(struct kobject *kobj,
@@ -1588,6 +1602,7 @@ static const struct attribute *btrfs_attrs[] = {
 	BTRFS_ATTR_PTR(, bg_reclaim_threshold),
 	BTRFS_ATTR_PTR(, commit_stats),
 	BTRFS_ATTR_PTR(, temp_fsid),
+	BTRFS_ATTR_PTR(, memory_stats),
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	BTRFS_ATTR_PTR(, offload_csum),
 #endif

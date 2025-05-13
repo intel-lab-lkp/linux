@@ -611,6 +611,22 @@ int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
 	return 0;
 }
 
+static void inc_extent_buffer_folios(struct btrfs_fs_info *fs_info)
+{
+	spin_lock(&fs_info->memory_stats_lock);
+	fs_info->memory_stats.nr_extent_buffer_folios++;
+	spin_unlock(&fs_info->memory_stats_lock);
+}
+
+static void dec_extent_buffer_folios(struct btrfs_fs_info *fs_info)
+{
+	spin_lock(&fs_info->memory_stats_lock);
+	ASSERT(fs_info->memory_stats.nr_extent_buffer_folios > 0,
+	       "%lu", fs_info->memory_stats.nr_extent_buffer_folios);
+	fs_info->memory_stats.nr_extent_buffer_folios--;
+	spin_unlock(&fs_info->memory_stats_lock);
+}
+
 /*
  * Populate needed folios for the extent buffer.
  *
@@ -626,8 +642,10 @@ static int alloc_eb_folio_array(struct extent_buffer *eb, bool nofail)
 	if (ret < 0)
 		return ret;
 
-	for (int i = 0; i < num_pages; i++)
+	for (int i = 0; i < num_pages; i++) {
 		eb->folios[i] = page_folio(page_array[i]);
+		inc_extent_buffer_folios(eb->fs_info);
+	}
 	eb->folio_size = PAGE_SIZE;
 	eb->folio_shift = PAGE_SHIFT;
 	return 0;
@@ -2816,6 +2834,7 @@ static void btrfs_release_extent_buffer_folios(const struct extent_buffer *eb)
 			continue;
 
 		detach_extent_buffer_folio(eb, folio);
+		dec_extent_buffer_folios(eb->fs_info);
 	}
 }
 
@@ -2865,6 +2884,7 @@ static void cleanup_extent_buffer_folios(struct extent_buffer *eb)
 		detach_extent_buffer_folio(eb, eb->folios[i]);
 		folio_put(eb->folios[i]);
 		eb->folios[i] = NULL;
+		dec_extent_buffer_folios(eb->fs_info);
 	}
 }
 
@@ -3418,6 +3438,7 @@ out:
 		ASSERT(!folio_test_private(folio));
 		folio_put(folio);
 		eb->folios[i] = NULL;
+		dec_extent_buffer_folios(eb->fs_info);
 	}
 	btrfs_release_extent_buffer(eb);
 	if (ret < 0)

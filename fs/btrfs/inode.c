@@ -1026,13 +1026,14 @@ free_pages:
 	if (folios) {
 		for (i = 0; i < nr_folios; i++) {
 			WARN_ON(folios[i]->mapping);
-			btrfs_free_compr_folio(folios[i]);
+			btrfs_free_compr_folio(fs_info, folios[i]);
 		}
 		kfree(folios);
 	}
 }
 
-static void free_async_extent_pages(struct async_extent *async_extent)
+static void free_async_extent_pages(struct btrfs_fs_info *fs_info,
+				    struct async_extent *async_extent)
 {
 	int i;
 
@@ -1041,7 +1042,7 @@ static void free_async_extent_pages(struct async_extent *async_extent)
 
 	for (i = 0; i < async_extent->nr_folios; i++) {
 		WARN_ON(async_extent->folios[i]->mapping);
-		btrfs_free_compr_folio(async_extent->folios[i]);
+		btrfs_free_compr_folio(fs_info, async_extent->folios[i]);
 	}
 	kfree(async_extent->folios);
 	async_extent->nr_folios = 0;
@@ -1175,7 +1176,7 @@ done:
 	if (async_chunk->blkcg_css)
 		kthread_associate_blkcg(NULL);
 	if (free_pages)
-		free_async_extent_pages(async_extent);
+		free_async_extent_pages(fs_info, async_extent);
 	kfree(async_extent);
 	return;
 
@@ -1190,7 +1191,7 @@ out_free_reserve:
 				     EXTENT_DEFRAG | EXTENT_DO_ACCOUNTING,
 				     PAGE_UNLOCK | PAGE_START_WRITEBACK |
 				     PAGE_END_WRITEBACK);
-	free_async_extent_pages(async_extent);
+	free_async_extent_pages(fs_info, async_extent);
 	if (async_chunk->blkcg_css)
 		kthread_associate_blkcg(NULL);
 	btrfs_debug(fs_info,
@@ -9723,6 +9724,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			ret = -ENOMEM;
 			goto out_folios;
 		}
+		btrfs_inc_compressed_io_folios(fs_info);
 		kaddr = kmap_local_folio(folios[i], 0);
 		if (copy_from_iter(kaddr, bytes, from) != bytes) {
 			kunmap_local(kaddr);
@@ -9845,8 +9847,10 @@ out_unlock:
 	btrfs_unlock_extent(io_tree, start, end, &cached_state);
 out_folios:
 	for (i = 0; i < nr_folios; i++) {
-		if (folios[i])
+		if (folios[i]) {
 			folio_put(folios[i]);
+			btrfs_dec_compressed_io_folios(fs_info);
+		}
 	}
 	kvfree(folios);
 out:

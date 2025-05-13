@@ -3,6 +3,7 @@
 #ifndef BTRFS_FS_H
 #define BTRFS_FS_H
 
+#include "compression.h"
 #include <linux/blkdev.h>
 #include <linux/sizes.h>
 #include <linux/time64.h>
@@ -420,6 +421,11 @@ struct btrfs_commit_stats {
 	u64 last_commit_dur;
 	/* The total commit duration in ns */
 	u64 total_commit_dur;
+};
+
+struct btrfs_memory_stats {
+	unsigned long nr_compressed_io_folios;
+	unsigned long nr_extent_buffer_folios;
 };
 
 struct btrfs_fs_info {
@@ -866,6 +872,9 @@ struct btrfs_fs_info {
 	/* Updates are not protected by any lock */
 	struct btrfs_commit_stats commit_stats;
 
+	spinlock_t memory_stats_lock;
+	struct btrfs_memory_stats memory_stats;
+
 	/*
 	 * Last generation where we dropped a non-relocation root.
 	 * Use btrfs_set_last_root_drop_gen() and btrfs_get_last_root_drop_gen()
@@ -896,6 +905,7 @@ struct btrfs_fs_info {
 	struct list_head allocated_ebs;
 #endif
 };
+
 
 #define folio_to_inode(_folio)	(BTRFS_I(_Generic((_folio),			\
 					  struct folio *: (_folio))->mapping->host))

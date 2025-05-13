@@ -160,8 +160,10 @@ static int compression_decompress(int type, struct list_head *ws,
 
 static void btrfs_free_compressed_folios(struct compressed_bio *cb)
 {
+	struct btrfs_fs_info *fs_info = cb->bbio.inode->root->fs_info;
+
 	for (unsigned int i = 0; i < cb->nr_folios; i++)
-		btrfs_free_compr_folio(cb->compressed_folios[i]);
+		btrfs_free_compr_folio(fs_info, cb->compressed_folios[i]);
 	kfree(cb->compressed_folios);
 }
 
@@ -223,7 +225,7 @@ static unsigned long btrfs_compr_pool_scan(struct shrinker *sh, struct shrink_co
 /*
  * Common wrappers for page allocation from compression wrappers
  */
-struct folio *btrfs_alloc_compr_folio(void)
+struct folio *btrfs_alloc_compr_folio(struct btrfs_fs_info *fs_info)
 {
 	struct folio *folio = NULL;
 
@@ -238,10 +240,13 @@ struct folio *btrfs_alloc_compr_folio(void)
 	if (folio)
 		return folio;
 
-	return folio_alloc(GFP_NOFS, 0);
+	folio = folio_alloc(GFP_NOFS, 0);
+	if (folio)
+		btrfs_inc_compressed_io_folios(fs_info);
+	return folio;
 }
 
-void btrfs_free_compr_folio(struct folio *folio)
+void btrfs_free_compr_folio(struct btrfs_fs_info *fs_info, struct folio *folio)
 {
 	bool do_free = false;
 
@@ -259,6 +264,22 @@ void btrfs_free_compr_folio(struct folio *folio)
 
 	ASSERT(folio_ref_count(folio) == 1);
 	folio_put(folio);
+	btrfs_dec_compressed_io_folios(fs_info);
+}
+
+void btrfs_inc_compressed_io_folios(struct btrfs_fs_info *fs_info) {
+	spin_lock(&fs_info->memory_stats_lock);
+	fs_info->memory_stats.nr_compressed_io_folios++;
+	spin_unlock(&fs_info->memory_stats_lock);
+}
+
+void btrfs_dec_compressed_io_folios(struct btrfs_fs_info *fs_info)
+{
+	spin_lock(&fs_info->memory_stats_lock);
+	ASSERT(fs_info->memory_stats.nr_compressed_io_folios > 0,
+	       "%lu", fs_info->memory_stats.nr_compressed_io_folios);
+	fs_info->memory_stats.nr_compressed_io_folios--;
+	spin_unlock(&fs_info->memory_stats_lock);
 }
 
 static void end_bbio_compressed_read(struct btrfs_bio *bbio)
@@ -617,6 +638,8 @@ void btrfs_submit_compressed_read(struct btrfs_bio *bbio)
 		status = BLK_STS_RESOURCE;
 		goto out_free_compressed_pages;
 	}
+	for (int i = 0; i < cb->nr_folios; i++)
+		btrfs_inc_compressed_io_folios(fs_info);
 
 	add_ra_bio_pages(&inode->vfs_inode, em_start + em_len, cb, &memstall,
 			 &pflags);
