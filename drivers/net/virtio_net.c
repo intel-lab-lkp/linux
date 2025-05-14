@@ -4845,7 +4845,7 @@ static int __virtnet_get_hw_stats(struct virtnet_info *vi,
 					&sgs_out, &sgs_in);
 
 	if (!ok)
-		return ok;
+		return 1;
 
 	for (p = reply; p - reply < res_size; p += le16_to_cpu(hdr->size)) {
 		hdr = p;
@@ -4885,7 +4885,7 @@ static int virtnet_get_hw_stats(struct virtnet_info *vi,
 	int ok;
 
 	if (!virtio_has_feature(vi->vdev, VIRTIO_NET_F_DEVICE_STATS))
-		return 0;
+		return -EOPNOTSUPP;
 
 	if (qid == -1) {
 		last_vq = vi->curr_queue_pairs * 2 - 1;
@@ -4986,10 +4986,12 @@ static void virtnet_get_ethtool_stats(struct net_device *dev,
 	struct virtnet_stats_ctx ctx = {0};
 	unsigned int start, i;
 	const u8 *stats_base;
+	int ret;
 
 	virtnet_stats_ctx_init(vi, &ctx, data, false);
-	if (virtnet_get_hw_stats(vi, &ctx, -1))
-		dev_warn(&vi->dev->dev, "Failed to get hw stats.\n");
+	ret = virtnet_get_hw_stats(vi, &ctx, -1);
+	if (ret)
+		dev_warn(&vi->dev->dev, "Failed to get hw stats. err code:%d\n", ret);
 
 	for (i = 0; i < vi->curr_queue_pairs; i++) {
 		struct receive_queue *rq = &vi->rq[i];
