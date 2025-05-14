@@ -113,7 +113,7 @@ TRACE_EVENT(erofs_read_folio,
 		__entry->raw)
 );
 
-TRACE_EVENT(erofs_readpages,
+TRACE_EVENT(erofs_readahead,
 
 	TP_PROTO(struct inode *inode, pgoff_t start, unsigned int nrpage,
 		bool raw),
@@ -138,7 +138,7 @@ TRACE_EVENT(erofs_readpages,
 
 	TP_printk("dev = (%d,%d), nid = %llu, start = %lu nrpage = %u raw = %d",
 		show_dev_nid(__entry),
-		(unsigned long)__entry->start,
+		(unsigned long)__entry->start,`
 		__entry->nrpage,
 		__entry->raw)
 );
