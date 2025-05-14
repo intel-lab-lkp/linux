@@ -364,4 +364,7 @@ struct prctl_mm_map {
 # define PR_TIMER_CREATE_RESTORE_IDS_ON		1
 # define PR_TIMER_CREATE_RESTORE_IDS_GET	2
 
+#define PR_SET_FADE_ON_DEATH			78
+#define PR_GET_FADE_ON_DEATH			79
+
 #endif /* _LINUX_PRCTL_H */

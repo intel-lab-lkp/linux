@@ -2205,6 +2205,7 @@ static inline void zap_deposited_table(struct mm_struct *mm, pmd_t *pmd)
 int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 pmd_t *pmd, unsigned long addr)
 {
+	bool drop_recency = false;
 	pmd_t orig_pmd;
 	spinlock_t *ptl;
 
@@ -2261,13 +2262,20 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			add_mm_counter(tlb->mm, mm_counter_file(folio),
 				       -HPAGE_PMD_NR);
 
+			drop_recency = zap_need_to_drop_recency(tlb->mm);
 			/*
 			 * Use flush_needed to indicate whether the PMD entry
 			 * is present, instead of checking pmd_present() again.
 			 */
-			if (flush_needed && pmd_young(orig_pmd) &&
-			    likely(vma_has_recency(vma)))
+			if (flush_needed && pmd_young(orig_pmd) && !drop_recency &&
+					likely(vma_has_recency(vma)))
 				folio_mark_accessed(folio);
+			/*
+			 * Userspace explicitly marks recency to fade when the process
+			 * dies; demote exclusive file folios to aid reclamation.
+			 */
+			if (drop_recency && !folio_maybe_mapped_shared(folio))
+				deactivate_file_folio(folio);
 		}
 
 		spin_unlock(ptl);

@@ -11,6 +11,7 @@
 #include <linux/khugepaged.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
+#include <linux/oom.h>
 #include <linux/pagemap.h>
 #include <linux/pagewalk.h>
 #include <linux/rmap.h>
@@ -128,6 +129,19 @@ static inline int folio_nr_pages_mapped(const struct folio *folio)
 	if (IS_ENABLED(CONFIG_NO_PAGE_MAPCOUNT))
 		return -1;
 	return atomic_read(&folio->_nr_pages_mapped) & FOLIO_PAGES_MAPPED;
+}
+
+/*
+ * Returns true if the process attached to the mm is dying or undergoing
+ * OOM reaping, and its recency—explicitly marked by userspace—will also
+ * fade; otherwise, returns false.
+ */
+static inline bool zap_need_to_drop_recency(struct mm_struct *mm)
+{
+	if (!atomic_read(&mm->mm_users) || check_stable_address_space(mm))
+		return !!test_bit(MMF_FADE_ON_DEATH, &mm->flags);
+
+	return false;
 }
 
 /*

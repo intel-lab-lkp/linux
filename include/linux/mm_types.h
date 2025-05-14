@@ -1744,6 +1744,7 @@ enum {
  * on NFS restore
  */
 //#define MMF_EXE_FILE_CHANGED	18	/* see prctl_set_mm_exe_file() */
+#define MMF_FADE_ON_DEATH	18	/* Recency is discarded on process exit */
 
 #define MMF_HAS_UPROBES		19	/* has uprobes */
 #define MMF_RECALC_UPROBES	20	/* MMF_HAS_UPROBES can be wrong */

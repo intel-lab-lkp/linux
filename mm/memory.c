@@ -1497,6 +1497,7 @@ static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
 		bool *force_flush, bool *force_break, bool *any_skipped)
 {
 	struct mm_struct *mm = tlb->mm;
+	bool drop_recency = false;
 	bool delay_rmap = false;
 
 	if (!folio_test_anon(folio)) {
@@ -1508,9 +1509,18 @@ static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
 				*force_flush = true;
 			}
 		}
-		if (pte_young(ptent) && likely(vma_has_recency(vma)))
+
+		drop_recency = zap_need_to_drop_recency(mm);
+		if (pte_young(ptent) && !drop_recency &&
+				likely(vma_has_recency(vma)))
 			folio_mark_accessed(folio);
 		rss[mm_counter(folio)] -= nr;
+		/*
+		 * Userspace explicitly marks recency to fade when the process dies;
+		 * demote exclusive file folios to aid reclamation.
+		 */
+		if (drop_recency && !folio_maybe_mapped_shared(folio))
+			deactivate_file_folio(folio);
 	} else {
 		/* We don't need up-to-date accessed/dirty bits. */
 		clear_full_ptes(mm, addr, pte, nr, tlb->fullmm);
