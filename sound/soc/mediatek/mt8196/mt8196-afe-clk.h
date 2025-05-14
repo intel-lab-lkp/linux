@@ -1,0 +1,142 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * mt8196-afe-clk.h  --  Mediatek 8196 afe clock ctrl definition
+ *
+ * Copyright (c) 2024 MediaTek Inc.
+ *  Author: Darren Ye <darren.ye@mediatek.com>
+ */
+
+#ifndef _MT8196_AFE_CLOCK_CTRL_H_
+#define _MT8196_AFE_CLOCK_CTRL_H_
+
+/* vlp_cksys_clk: 0x1c016000 */
+#define VLP_APLL1_TUNER_CON0 0x02a4
+#define VLP_APLL2_TUNER_CON0 0x02a8
+
+/* vlp apll1 tuner default value*/
+#define VLP_APLL1_TUNER_CON0_VALUE 0x6f28bd4d
+/* vlp apll2 tuner default value + 1*/
+#define VLP_APLL2_TUNER_CON0_VALUE 0x78fd5265
+
+/* APLL */
+#define APLL1_W_NAME "APLL1"
+#define APLL2_W_NAME "APLL2"
+
+enum {
+	MT8196_APLL1 = 0,
+	MT8196_APLL2,
+};
+
+enum {
+	/* vlp clk */
+	MT8196_CLK_VLP_MUX_AUDIOINTBUS,
+	MT8196_CLK_VLP_MUX_AUD_ENG1,
+	MT8196_CLK_VLP_MUX_AUD_ENG2,
+	MT8196_CLK_VLP_MUX_AUDIO_H,
+	MT8196_CLK_VLP_CLK26M,
+	/* pll */
+	MT8196_CLK_TOP_APLL1_CK,
+	MT8196_CLK_TOP_APLL2_CK,
+	/* divider */
+	MT8196_CLK_TOP_APLL1_D4,
+	MT8196_CLK_TOP_APLL2_D4,
+	MT8196_CLK_TOP_APLL12_DIV_I2SIN0,
+	MT8196_CLK_TOP_APLL12_DIV_I2SIN1,
+	MT8196_CLK_TOP_APLL12_DIV_FMI2S,
+	MT8196_CLK_TOP_APLL12_DIV_TDMOUT_M,
+	MT8196_CLK_TOP_APLL12_DIV_TDMOUT_B,
+	/* mux */
+	MT8196_CLK_TOP_MUX_AUD_1,
+	MT8196_CLK_TOP_MUX_AUD_2,
+	MT8196_CLK_TOP_I2SIN0_M_SEL,
+	MT8196_CLK_TOP_I2SIN1_M_SEL,
+	MT8196_CLK_TOP_FMI2S_M_SEL,
+	MT8196_CLK_TOP_TDMOUT_M_SEL,
+	MT8196_CLK_TOP_ADSP_SEL,
+	/* top 26m */
+	MT8196_CLK_TOP_CLK26M,
+	/* clock gate */
+	MT8196_CLK_AFE_PCM1,
+	MT8196_CLK_AFE_PCM0,
+	MT8196_CLK_AFE_CM2,
+	MT8196_CLK_AFE_CM1,
+	MT8196_CLK_AFE_CM0,
+	MT8196_CLK_AFE_STF,
+	MT8196_CLK_AFE_HW_GAIN23,
+	MT8196_CLK_AFE_HW_GAIN01,
+	MT8196_CLK_AFE_FM_I2S,
+	MT8196_CLK_AFE_MTKAIFV4,
+	MT8196_CLK_AFE_UL2_ADC_HIRES_TML,
+	MT8196_CLK_AFE_UL2_ADC_HIRES,
+	MT8196_CLK_AFE_UL2_TML,
+	MT8196_CLK_AFE_UL2_ADC,
+	MT8196_CLK_AFE_UL1_ADC_HIRES_TML,
+	MT8196_CLK_AFE_UL1_ADC_HIRES,
+	MT8196_CLK_AFE_UL1_TML,
+	MT8196_CLK_AFE_UL1_ADC,
+	MT8196_CLK_AFE_UL0_ADC_HIRES_TML,
+	MT8196_CLK_AFE_UL0_ADC_HIRES,
+	MT8196_CLK_AFE_UL0_TML,
+	MT8196_CLK_AFE_UL0_ADC,
+	MT8196_CLK_AFE_ETDM_IN6,
+	MT8196_CLK_AFE_ETDM_IN5,
+	MT8196_CLK_AFE_ETDM_IN4,
+	MT8196_CLK_AFE_ETDM_IN3,
+	MT8196_CLK_AFE_ETDM_IN2,
+	MT8196_CLK_AFE_ETDM_IN1,
+	MT8196_CLK_AFE_ETDM_IN0,
+	MT8196_CLK_AFE_ETDM_OUT6,
+	MT8196_CLK_AFE_ETDM_OUT5,
+	MT8196_CLK_AFE_ETDM_OUT4,
+	MT8196_CLK_AFE_ETDM_OUT3,
+	MT8196_CLK_AFE_ETDM_OUT2,
+	MT8196_CLK_AFE_ETDM_OUT1,
+	MT8196_CLK_AFE_ETDM_OUT0,
+	MT8196_CLK_AFE_TDM_OUT,
+	MT8196_CLK_AFE_GENERAL15_ASRC,
+	MT8196_CLK_AFE_GENERAL14_ASRC,
+	MT8196_CLK_AFE_GENERAL13_ASRC,
+	MT8196_CLK_AFE_GENERAL12_ASRC,
+	MT8196_CLK_AFE_GENERAL11_ASRC,
+	MT8196_CLK_AFE_GENERAL10_ASRC,
+	MT8196_CLK_AFE_GENERAL9_ASRC,
+	MT8196_CLK_AFE_GENERAL8_ASRC,
+	MT8196_CLK_AFE_GENERAL7_ASRC,
+	MT8196_CLK_AFE_GENERAL6_ASRC,
+	MT8196_CLK_AFE_GENERAL5_ASRC,
+	MT8196_CLK_AFE_GENERAL4_ASRC,
+	MT8196_CLK_AFE_GENERAL3_ASRC,
+	MT8196_CLK_AFE_GENERAL2_ASRC,
+	MT8196_CLK_AFE_GENERAL1_ASRC,
+	MT8196_CLK_AFE_GENERAL0_ASRC,
+	MT8196_CLK_AFE_CONNSYS_I2S_ASRC,
+	MT8196_CLK_AFE_AUDIO_HOPPING,
+	MT8196_CLK_AFE_AUDIO_F26M,
+	MT8196_CLK_AFE_APLL1,
+	MT8196_CLK_AFE_APLL2,
+	MT8196_CLK_AFE_H208M,
+	MT8196_CLK_AFE_APLL_TUNER2,
+	MT8196_CLK_AFE_APLL_TUNER1,
+	MT8196_CLK_NUM,
+};
+
+struct mtk_base_afe;
+
+int mt8196_mck_enable(struct mtk_base_afe *afe, int mck_id, int rate);
+int mt8196_mck_disable(struct mtk_base_afe *afe, int mck_id);
+int mt8196_get_apll_rate(struct mtk_base_afe *afe, int apll);
+int mt8196_get_apll_by_rate(struct mtk_base_afe *afe, int rate);
+int mt8196_get_apll_by_name(struct mtk_base_afe *afe, const char *name);
+int mt8196_init_clock(struct mtk_base_afe *afe);
+int mt8196_afe_enable_clk(struct mtk_base_afe *afe, struct clk *clk);
+void mt8196_afe_disable_clk(struct mtk_base_afe *afe, struct clk *clk);
+int mt8196_apll1_enable(struct mtk_base_afe *afe);
+void mt8196_apll1_disable(struct mtk_base_afe *afe);
+int mt8196_apll2_enable(struct mtk_base_afe *afe);
+void mt8196_apll2_disable(struct mtk_base_afe *afe);
+int mt8196_afe_enable_main_clock(struct mtk_base_afe *afe);
+int mt8196_afe_disable_main_clock(struct mtk_base_afe *afe);
+int mt8196_afe_enable_reg_rw_clk(struct mtk_base_afe *afe);
+int mt8196_afe_disable_reg_rw_clk(struct mtk_base_afe *afe);
+
+#endif
