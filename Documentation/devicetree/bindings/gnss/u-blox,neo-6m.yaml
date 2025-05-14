@@ -22,6 +22,7 @@ properties:
       - u-blox,neo-6m
       - u-blox,neo-8
       - u-blox,neo-m8
+      - u-blox,neo-m9
 
   reg:
     description: >
