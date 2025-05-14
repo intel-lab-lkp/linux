@@ -2528,10 +2528,14 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
  * point number (mult + frac * 2^(-N)).
  *
  * N equals to kvm_caps.tsc_scaling_ratio_frac_bits.
+ *
+ * return 1 if _tsc is 0.
  */
 static inline u64 __scale_tsc(u64 ratio, u64 tsc)
 {
-	return mul_u64_u64_shr(tsc, ratio, kvm_caps.tsc_scaling_ratio_frac_bits);
+	u64 _tsc = mul_u64_u64_shr(tsc, ratio, kvm_caps.tsc_scaling_ratio_frac_bits);
+
+	return  !_tsc ? 1 : _tsc;
 }
 
 u64 kvm_scale_tsc(u64 tsc, u64 ratio)
