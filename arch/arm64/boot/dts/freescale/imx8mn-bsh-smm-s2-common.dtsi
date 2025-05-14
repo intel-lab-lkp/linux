@@ -277,6 +277,8 @@
 	mmc-pwrseq = <&usdhc2_pwrseq>;
 	bus-width = <4>;
 	non-removable;
+	keep-power-in-suspend;
+
 	status = "okay";
 
 	brcmf: bcrmf@1 {
