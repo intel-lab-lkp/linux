@@ -9,6 +9,8 @@
 
 #include <linux/device.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
+#include <linux/irq.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/pm_domain.h>
@@ -373,6 +375,149 @@ int __auxiliary_driver_register(struct auxiliary_driver *auxdrv,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(__auxiliary_driver_register);
+
+/**
+ * auxiliary_get_resource - get a resource for auxiliary device
+ * @auxdev: auxiliary device
+ * @type: resource type
+ * @num: resource index
+ *
+ * Return: a pointer to the resource or NULL on failure.
+ */
+struct resource *auxiliary_get_resource(struct auxiliary_device *auxdev, unsigned int type,
+					unsigned int num)
+{
+	u32 i;
+
+	for (i = 0; i < auxdev->num_resources; i++) {
+		struct resource *r = &auxdev->resource[i];
+
+		if (type == resource_type(r) && num-- == 0)
+			return r;
+	}
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(auxiliary_get_resource);
+
+#ifdef CONFIG_HAS_IOMEM
+/**
+ * devm_auxiliary_get_and_ioremap_resource - get resource and call devm_ioremap_resource()
+ *					     for auxiliary device
+ *
+ * @auxdev: auxiliary device to use both for memory resource lookup as well as
+ *	    resource management
+ * @index: resource index
+ * @res: optional output parameter to store a pointer to the obtained resource.
+ *
+ * Return: a pointer to the remapped memory or an ERR_PTR() encoded error code
+ * on failure.
+ */
+void __iomem *devm_auxiliary_get_and_ioremap_resource(struct auxiliary_device *auxdev,
+						      unsigned int index, struct resource **res)
+{
+	struct resource *r;
+
+	r = auxiliary_get_resource(auxdev, IORESOURCE_MEM, index);
+	if (res)
+		*res = r;
+	return devm_ioremap_resource(&auxdev->dev, r);
+}
+EXPORT_SYMBOL_GPL(devm_auxiliary_get_and_ioremap_resource);
+
+/**
+ * devm_auxiliary_ioremap_resource - call devm_ioremap_resource() for auxiliary device
+ *
+ * @auxdev: auxiliary device to use both for memory resource lookup as well as
+ *	    resource management
+ * @index: resource index
+ *
+ * Return: a pointer to the remapped memory or an ERR_PTR() encoded error code
+ * on failure.
+ */
+void __iomem *devm_auxiliary_ioremap_resource(struct auxiliary_device *auxdev, unsigned int index)
+{
+	return devm_auxiliary_get_and_ioremap_resource(auxdev, index, NULL);
+}
+EXPORT_SYMBOL_GPL(devm_auxiliary_ioremap_resource);
+#endif
+
+/**
+ * auxiliary_get_irq_optional - get an optional IRQ for auxiliary device
+ * @auxdev: auxiliary device
+ * @num: IRQ number index
+ *
+ * Gets an IRQ for a auxiliary device. Device drivers should check the return value
+ * for errors so as to not pass a negative integer value to the request_irq()
+ * APIs. This is the same as auxiliary_get_irq(), except that it does not print an
+ * error message if an IRQ can not be obtained.
+ *
+ * For example::
+ *
+ *		int irq = auxiliary_get_irq_optional(auxdev, 0);
+ *		if (irq < 0)
+ *			return irq;
+ *
+ * Return: non-zero IRQ number on success, negative error number on failure.
+ */
+int auxiliary_get_irq_optional(struct auxiliary_device *auxdev, unsigned int num)
+{
+	struct resource *r;
+	int ret = -ENXIO;
+
+	r = auxiliary_get_resource(auxdev, IORESOURCE_IRQ, num);
+	if (!r)
+		goto out;
+
+	/*
+	 * The resources may pass trigger flags to the irqs that need to be
+	 * set up. It so happens that the trigger flags for IORESOURCE_BITS
+	 * correspond 1-to-1 to the IRQF_TRIGGER* settings.
+	 */
+	if (r->flags & IORESOURCE_BITS) {
+		struct irq_data *irqd;
+
+		irqd = irq_get_irq_data(r->start);
+		if (!irqd)
+			goto out;
+		irqd_set_trigger_type(irqd, r->flags & IORESOURCE_BITS);
+	}
+
+	ret = r->start;
+	if (WARN(!ret, "0 is an invalid IRQ number\n"))
+		ret = -EINVAL;
+out:
+	return ret;
+}
+EXPORT_SYMBOL_GPL(auxiliary_get_irq_optional);
+
+/**
+ * auxiliary_get_irq - get an IRQ for auxiliary device
+ * @auxdev: auxiliary device
+ * @num: IRQ number index
+ *
+ * Gets an IRQ for a auxiliary device and prints an error message if finding the IRQ
+ * fails. Device drivers should check the return value for errors so as to not pass
+ * a negative integer value to the request_irq() APIs.
+ *
+ * For example::
+ *
+ *		int irq = auxiliary_get_irq(auxdev, 0);
+ *		if (irq < 0)
+ *			return irq;
+ *
+ * Return: non-zero IRQ number on success, negative error number on failure.
+ */
+int auxiliary_get_irq(struct auxiliary_device *auxdev, unsigned int num)
+{
+	int ret;
+
+	ret = auxiliary_get_irq_optional(auxdev, num);
+	if (ret < 0)
+		return dev_err_probe(&auxdev->dev, ret, "IRQ index %u not found\n", num);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(auxiliary_get_irq);
 
 /**
  * auxiliary_driver_unregister - unregister a driver

@@ -11,6 +11,8 @@
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
 
+struct resource;
+
 /**
  * DOC: DEVICE_LIFESPAN
  *
@@ -148,6 +150,8 @@ struct auxiliary_device {
 		struct mutex lock; /* Synchronize irq sysfs creation */
 		bool irq_dir_exists;
 	} sysfs;
+	u32 num_resources;
+	struct resource	*resource;
 };
 
 /**
@@ -238,6 +242,9 @@ auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq) {}
 
 static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 {
+	if (auxdev->resource)
+		kfree(auxdev->resource);
+
 	mutex_destroy(&auxdev->sysfs.lock);
 	put_device(&auxdev->dev);
 }
@@ -268,5 +275,16 @@ void auxiliary_driver_unregister(struct auxiliary_driver *auxdrv);
  */
 #define module_auxiliary_driver(__auxiliary_driver) \
 	module_driver(__auxiliary_driver, auxiliary_driver_register, auxiliary_driver_unregister)
+
+struct resource *auxiliary_get_resource(struct auxiliary_device *auxdev, unsigned int type,
+					unsigned int num);
+int auxiliary_get_irq_optional(struct auxiliary_device *auxdev, unsigned int num);
+int auxiliary_get_irq(struct auxiliary_device *auxdev, unsigned int num);
+
+#ifdef CONFIG_HAS_IOMEM
+void __iomem *devm_auxiliary_get_and_ioremap_resource(struct auxiliary_device *auxdev,
+						      unsigned int index, struct resource **res);
+void __iomem *devm_auxiliary_ioremap_resource(struct auxiliary_device *auxdev, unsigned int index);
+#endif
 
 #endif /* _AUXILIARY_BUS_H_ */
