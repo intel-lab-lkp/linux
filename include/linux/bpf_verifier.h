@@ -839,6 +839,12 @@ __printf(3, 4) void verbose_linfo(struct bpf_verifier_env *env,
 				  u32 insn_off,
 				  const char *prefix_fmt, ...);
 
+#define verifier_bug(env, fmt, args...)					\
+	do {								\
+		BPF_WARN_ONCE(1, "verifier bug: " fmt, ##args);		\
+		bpf_log(&env->log, "verifier bug: " fmt, ##args);	\
+	} while (0)
+
 static inline struct bpf_func_state *cur_func(struct bpf_verifier_env *env)
 {
 	struct bpf_verifier_state *cur = env->cur_state;
