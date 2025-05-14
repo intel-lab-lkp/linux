@@ -18,7 +18,7 @@ impl Regs {
     const END: usize = 0x10;
 }
 
-type Bar0 = pci::Bar<{ Regs::END }>;
+type Bar0 = pci::IoBar<{ Regs::END }>;
 
 #[derive(Debug)]
 struct TestIndex(u8);

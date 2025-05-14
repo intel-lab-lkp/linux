@@ -11,8 +11,7 @@ use crate::{
     devres::Devres,
     driver,
     error::{to_result, Result},
-    io::Io,
-    io::IoRaw,
+    io::{Io, IoAccess, IoRaw, MMIo},
     str::CStr,
     types::{ARef, ForeignOwnable, Opaque},
     ThisModule,
@@ -259,15 +258,21 @@ pub struct Device<Ctx: device::DeviceContext = device::Normal>(
 ///
 /// # Invariants
 ///
-/// `Bar` always holds an `IoRaw` inststance that holds a valid pointer to the start of the I/O
+/// `Bar` always holds an `I` inststance that holds a valid pointer to the start of the I/O
 /// memory mapped PCI bar and its size.
-pub struct Bar<const SIZE: usize = 0> {
+pub struct RawBar<const SIZE: usize = 0, I: IoAccess<SIZE> = Io<SIZE>> {
     pdev: ARef<Device>,
-    io: IoRaw<SIZE>,
+    io: I,
     num: i32,
 }
 
-impl<const SIZE: usize> Bar<SIZE> {
+/// a pci bar that can be either PortIo or MMIo
+pub type IoBar<const SIZE: usize = 0> = RawBar<SIZE, Io<SIZE>>;
+
+/// a pci bar that maps a [`MMIo`].
+pub type MMIoBar<const SIZE: usize = 0> = RawBar<SIZE, MMIo<SIZE>>;
+
+impl<const SIZE: usize, I: IoAccess<SIZE>> RawBar<SIZE, I> {
     fn new(pdev: &Device, num: u32, name: &CStr) -> Result<Self> {
         let len = pdev.resource_len(num)?;
         if len == 0 {
@@ -299,7 +304,7 @@ impl<const SIZE: usize> Bar<SIZE> {
             return Err(ENOMEM);
         }
 
-        let io = match IoRaw::new(ioptr, len as usize) {
+        let raw = match IoRaw::new(ioptr, len as usize) {
             Ok(io) => io,
             Err(err) => {
                 // SAFETY:
@@ -311,7 +316,22 @@ impl<const SIZE: usize> Bar<SIZE> {
             }
         };
 
-        Ok(Bar {
+        // SAFETY:
+        // - `raw` is from `pci_iomap`
+        // - addresses from `pci_iomap` should be accesed through ioread/iowrite
+        let io = match unsafe { I::from_raw_cookie(raw) } {
+            Ok(io) => io,
+            Err(err) => {
+                // SAFETY:
+                // `pdev` is valid by the invariants of `Device`.
+                // `ioptr` is guaranteed to be the start of a valid I/O mapped memory region.
+                // `num` is checked for validity by a previous call to `Device::resource_len`.
+                unsafe { Self::do_release(pdev, ioptr, num) };
+                return Err(err);
+            }
+        };
+
+        Ok(RawBar {
             pdev: pdev.into(),
             io,
             num,
@@ -338,25 +358,24 @@ impl<const SIZE: usize> Bar<SIZE> {
     }
 }
 
-impl Bar {
+impl RawBar {
     fn index_is_valid(index: u32) -> bool {
         // A `struct pci_dev` owns an array of resources with at most `PCI_NUM_RESOURCES` entries.
         index < bindings::PCI_NUM_RESOURCES
     }
 }
 
-impl<const SIZE: usize> Drop for Bar<SIZE> {
+impl<const SIZE: usize, I: IoAccess<SIZE>> Drop for RawBar<SIZE, I> {
     fn drop(&mut self) {
         self.release();
     }
 }
 
-impl<const SIZE: usize> Deref for Bar<SIZE> {
-    type Target = Io<SIZE>;
+impl<const SIZE: usize, I: IoAccess<SIZE>> Deref for RawBar<SIZE, I> {
+    type Target = I;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: By the type invariant of `Self`, the MMIO range in `self.io` is properly mapped.
-        unsafe { Io::from_raw_ref(&self.io) }
+        &self.io
     }
 }
 
@@ -379,7 +398,7 @@ impl Device {
 
     /// Returns the size of the given PCI bar resource.
     pub fn resource_len(&self, bar: u32) -> Result<bindings::resource_size_t> {
-        if !Bar::index_is_valid(bar) {
+        if !RawBar::index_is_valid(bar) {
             return Err(EINVAL);
         }
 
@@ -389,22 +408,62 @@ impl Device {
         Ok(unsafe { bindings::pci_resource_len(self.as_raw(), bar.try_into()?) })
     }
 
-    /// Mapps an entire PCI-BAR after performing a region-request on it. I/O operation bound checks
+    /// Maps an entire PCI-BAR after performing a region-request on it. I/O operation bound checks
     /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
     pub fn iomap_region_sized<const SIZE: usize>(
         &self,
         bar: u32,
         name: &CStr,
-    ) -> Result<Devres<Bar<SIZE>>> {
-        let bar = Bar::<SIZE>::new(self, bar, name)?;
+    ) -> Result<Devres<IoBar<SIZE>>> {
+        self.iomap_region_sized_hint::<SIZE, Io<SIZE>>(bar, name)
+    }
+
+    /// Maps an entire PCI-BAR after performing a region-request on it.
+    pub fn iomap_region(&self, bar: u32, name: &CStr) -> Result<Devres<IoBar>> {
+        self.iomap_region_sized::<0>(bar, name)
+    }
+
+    /// Maps an entire PCI-BAR after performing a region-request on it. I/O operation bound checks
+    /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
+    /// where it is known that the bar is [`MMIo`]
+    pub fn iomap_region_sized_mmio<const SIZE: usize>(
+        &self,
+        bar: u32,
+        name: &CStr,
+    ) -> Result<Devres<MMIoBar<SIZE>>> {
+        self.iomap_region_sized_hint::<SIZE, MMIo<SIZE>>(bar, name)
+    }
+
+    /// Maps an entire PCI-BAR after performing a region-request on it.
+    /// where it is known that the bar is [`MMIo`]
+    pub fn iomap_region_mmio(&self, bar: u32, name: &CStr) -> Result<Devres<MMIoBar>> {
+        self.iomap_region_sized_hint::<0, MMIo<0>>(bar, name)
+    }
+
+    /// Maps an entire PCI-BAR after performing a region-request where the
+    /// type of Io backend is known at compile time.
+    pub fn iomap_region_hint<I: IoAccess>(
+        &self,
+        bar: u32,
+        name: &CStr,
+    ) -> Result<Devres<RawBar<0, I>>> {
+        let bar = RawBar::<0, I>::new(self, bar, name)?;
         let devres = Devres::new(self.as_ref(), bar, GFP_KERNEL)?;
 
         Ok(devres)
     }
+    /// Maps an entire PCI-BAR after performing a region-request where the
+    /// type of Io backend is known at compile time. I/O operation bound checks
+    /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
+    pub fn iomap_region_sized_hint<const SIZE: usize, I: IoAccess<SIZE>>(
+        &self,
+        bar: u32,
+        name: &CStr,
+    ) -> Result<Devres<RawBar<SIZE, I>>> {
+        let bar = RawBar::<SIZE, I>::new(self, bar, name)?;
+        let devres = Devres::new(self.as_ref(), bar, GFP_KERNEL)?;
 
-    /// Mapps an entire PCI-BAR after performing a region-request on it.
-    pub fn iomap_region(&self, bar: u32, name: &CStr) -> Result<Devres<Bar>> {
-        self.iomap_region_sized::<0>(bar, name)
+        Ok(devres)
     }
 }
 
