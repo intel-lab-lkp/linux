@@ -7,6 +7,7 @@ digraph state_automaton {
 	{node [shape = plaintext] "thread_context"};
 	"__init_thread_context" -> "thread_context";
 	"scheduling_context" [label = "scheduling_context"];
+	"scheduling_context" -> "scheduling_context" [ label = "sched_set_state_runnable_signal" ];
 	"scheduling_context" -> "thread_context" [ label = "schedule_exit" ];
 	"thread_context" [label = "thread_context", color = green3];
 	"thread_context" -> "scheduling_context" [ label = "schedule_entry" ];

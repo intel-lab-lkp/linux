@@ -64,22 +64,25 @@ Monitor sco
 ~~~~~~~~~~~
 
 The scheduling context operations (sco) monitor ensures changes in a task state
-happen only in thread context::
+happen only in thread context, the only exception is a special kind of set
+state that occurs if a task about to sleep has a pending signal. This set state
+is not called by the thread but by the scheduler itself::
 
-
-                        |
-                        |
-                        v
-    sched_set_state   +------------------+
-  +------------------ |                  |
-  |                   |  thread_context  |
-  +-----------------> |                  | <+
-                      +------------------+  |
-                        |                   |
-                        | schedule_entry    | schedule_exit
-                        v                   |
-                                            |
-                       scheduling_context  -+
+                                        |
+                                        |
+                                        v
+    sched_set_state                   +------------------+
+  +---------------------------------- |                  |
+  |                                   |  thread_context  |
+  +---------------------------------> |                  | <+
+                                      +------------------+  |
+                                        |                   |
+                                        | schedule_entry    | schedule_exit
+                                        v                   |
+    sched_set_state_runnable_signal                         |
+  +----------------------------------                       |
+  |                                    scheduling_context   |
+  +--------------------------------->                      -+
 
 Monitor snroc
 ~~~~~~~~~~~~~
