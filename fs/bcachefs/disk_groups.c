@@ -413,7 +413,7 @@ void bch2_disk_path_to_text(struct printbuf *out, struct bch_fs *c, unsigned v)
 {
 	out->atomic++;
 	rcu_read_lock();
-	__bch2_disk_path_to_text(out, rcu_dereference(c->disk_groups), v),
+	__bch2_disk_path_to_text(out, rcu_dereference(c->disk_groups), v);
 	rcu_read_unlock();
 	--out->atomic;
 }
