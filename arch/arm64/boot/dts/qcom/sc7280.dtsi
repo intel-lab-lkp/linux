@@ -3879,12 +3879,14 @@
 						compatible = "qcom,fastrpc-compute-cb";
 						reg = <3>;
 						iommus = <&apps_smmu 0x1803 0x0>;
+						dma-coherent;
 					};
 
 					compute-cb@4 {
 						compatible = "qcom,fastrpc-compute-cb";
 						reg = <4>;
 						iommus = <&apps_smmu 0x1804 0x0>;
+						dma-coherent;
 					};
 
 					compute-cb@5 {
@@ -3892,6 +3894,7 @@
 						reg = <5>;
 						iommus = <&apps_smmu 0x1805 0x0>;
 						qcom,nsessions = <5>;
+						dma-coherent;
 					};
 				};
 			};
@@ -4119,6 +4122,7 @@
 						reg = <1>;
 						iommus = <&apps_smmu 0x11a1 0x0420>,
 							 <&apps_smmu 0x1181 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@2 {
@@ -4126,6 +4130,7 @@
 						reg = <2>;
 						iommus = <&apps_smmu 0x11a2 0x0420>,
 							 <&apps_smmu 0x1182 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@3 {
@@ -4133,6 +4138,7 @@
 						reg = <3>;
 						iommus = <&apps_smmu 0x11a3 0x0420>,
 							 <&apps_smmu 0x1183 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@4 {
@@ -4140,6 +4146,7 @@
 						reg = <4>;
 						iommus = <&apps_smmu 0x11a4 0x0420>,
 							 <&apps_smmu 0x1184 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@5 {
@@ -4147,6 +4154,7 @@
 						reg = <5>;
 						iommus = <&apps_smmu 0x11a5 0x0420>,
 							 <&apps_smmu 0x1185 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@6 {
@@ -4154,6 +4162,7 @@
 						reg = <6>;
 						iommus = <&apps_smmu 0x11a6 0x0420>,
 							 <&apps_smmu 0x1186 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@7 {
@@ -4161,6 +4170,7 @@
 						reg = <7>;
 						iommus = <&apps_smmu 0x11a7 0x0420>,
 							 <&apps_smmu 0x1187 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@8 {
@@ -4168,6 +4178,7 @@
 						reg = <8>;
 						iommus = <&apps_smmu 0x11a8 0x0420>,
 							 <&apps_smmu 0x1188 0x0420>;
+						dma-coherent;
 					};
 
 					/* note: secure cb9 in downstream */
@@ -4177,6 +4188,7 @@
 						reg = <11>;
 						iommus = <&apps_smmu 0x11ab 0x0420>,
 							 <&apps_smmu 0x118b 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@12 {
@@ -4184,6 +4196,7 @@
 						reg = <12>;
 						iommus = <&apps_smmu 0x11ac 0x0420>,
 							 <&apps_smmu 0x118c 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@13 {
@@ -4191,6 +4204,7 @@
 						reg = <13>;
 						iommus = <&apps_smmu 0x11ad 0x0420>,
 							 <&apps_smmu 0x118d 0x0420>;
+						dma-coherent;
 					};
 
 					compute-cb@14 {
@@ -4198,6 +4212,7 @@
 						reg = <14>;
 						iommus = <&apps_smmu 0x11ae 0x0420>,
 							 <&apps_smmu 0x118e 0x0420>;
+						dma-coherent;
 					};
 				};
 			};
