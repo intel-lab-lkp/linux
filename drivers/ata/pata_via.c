@@ -182,6 +182,7 @@ static int via_cable_detect(struct ata_port *ap) {
 	const struct via_isa_bridge *config = ap->host->private_data;
 	struct pci_dev *pdev = to_pci_dev(ap->host->dev);
 	u32 ata66;
+	const struct ata_acpi_gtm *gtm;
 
 	if (via_cable_override(pdev))
 		return ATA_CBL_PATA40_SHORT;
@@ -202,9 +203,15 @@ static int via_cable_detect(struct ata_port *ap) {
 	if (ata66 & (0x10100000 >> (16 * ap->port_no)))
 		return ATA_CBL_PATA80;
 	/* Check with ACPI so we can spot BIOS reported SATA bridges */
-	if (ata_acpi_init_gtm(ap) &&
-	    ata_acpi_cbl_80wire(ap, ata_acpi_init_gtm(ap)))
-		return ATA_CBL_PATA80;
+	gtm = ata_acpi_init_gtm(ap);
+	if (gtm) {
+		int cbl = ata_acpi_cbl_80wire(ap, gtm);
+
+		if (cbl < 0)
+			return ATA_CBL_PATA_UNK;
+		else if (cbl == 1)
+			return ATA_CBL_PATA80;
+	}
 	return ATA_CBL_PATA40;
 }
 

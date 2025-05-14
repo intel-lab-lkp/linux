@@ -523,6 +523,7 @@ EXPORT_SYMBOL_GPL(ata_acpi_gtm_xfermask);
 int ata_acpi_cbl_80wire(struct ata_port *ap, const struct ata_acpi_gtm *gtm)
 {
 	struct ata_device *dev;
+	int ret = -EAGAIN;
 
 	ata_for_each_dev(dev, &ap->link, ENABLED) {
 		unsigned int xfer_mask, udma_mask;
@@ -530,11 +531,15 @@ int ata_acpi_cbl_80wire(struct ata_port *ap, const struct ata_acpi_gtm *gtm)
 		xfer_mask = ata_acpi_gtm_xfermask(dev, gtm);
 		ata_unpack_xfermask(xfer_mask, NULL, NULL, &udma_mask);
 
-		if (udma_mask & ~ATA_UDMA_MASK_40C)
-			return 1;
+		ret = 0;
+
+		if (udma_mask & ~ATA_UDMA_MASK_40C) {
+			ret = 1;
+			break;
+		}
 	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(ata_acpi_cbl_80wire);
 
