@@ -1119,11 +1119,13 @@ struct nft_chain {
 	struct nft_rule_blob		__rcu *blob_gen_1;
 	struct list_head		rules;
 	struct list_head		list;
+	struct list_head		validate_list;
 	struct rhlist_head		rhlhead;
 	struct nft_table		*table;
 	u64				handle;
 	u32				use;
-	u8				flags:5,
+	u8				flags:4,
+					validate:1,
 					bound:1,
 					genmask:2;
 	char				*name;
@@ -1910,6 +1912,7 @@ struct nftables_pernet {
 	struct list_head	binding_list;
 	struct list_head	module_list;
 	struct list_head	notify_list;
+	struct list_head	validate_list;
 	struct mutex		commit_mutex;
 	u64			table_handle;
 	u64			tstamp;
