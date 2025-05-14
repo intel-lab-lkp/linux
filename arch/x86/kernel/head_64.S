@@ -27,6 +27,7 @@
 #include <asm/fixmap.h>
 #include <asm/smp.h>
 #include <asm/thread_info.h>
+#include <asm/cpufeature.h>
 
 /*
  * We are not able to switch in one step to the final KERNEL ADDRESS SPACE
@@ -57,6 +58,20 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 * tables and then reload them.
 	 */
 	mov	%rsi, %r15
+
+#ifdef CONFIG_X86_5LEVEL
+	/*
+	 * Set the X86_FEATURE_5LEVEL_PAGING capability before calling into the
+	 * C code, to give it a consistent view of any global pseudo-constants
+	 * that are derived from pgtable_l5_enabled().
+	 */
+	mov	%cr4, %rax
+	btl	$X86_CR4_LA57_BIT, %eax
+	jnc	0f
+
+	setup_force_cpu_cap X86_FEATURE_5LEVEL_PAGING
+0:
+#endif
 
 	/* Set up the stack for verify_cpu() */
 	leaq	__top_init_kernel_stack(%rip), %rsp
