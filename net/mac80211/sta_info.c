@@ -2724,9 +2724,7 @@ static void sta_set_link_sinfo(struct sta_info *sta,
 
 	ether_addr_copy(link_sinfo->addr, link_sta_info->addr);
 
-	/* TODO: add drv_link_sta_statistics() ops to fill link_station
-	 * statistics of station.
-	 */
+	drv_link_sta_statistics(sta->local, sdata, &sta->sta, link_sinfo);
 
 	link_sinfo->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME) |
 			 BIT_ULL(NL80211_STA_INFO_BSS_PARAM) |
