@@ -144,6 +144,7 @@
 				regulator-max-microvolt = <3300000>;
 				regulator-boot-on;
 				regulator-always-on;
+				rohm,no-regulator-enable-control;
 			};
 
 			buck5_reg: BUCK5 {
@@ -153,6 +154,7 @@
 				regulator-max-microvolt = <1995000>;
 				regulator-boot-on;
 				regulator-always-on;
+				rohm,no-regulator-enable-control;
 			};
 
 			buck6_reg: BUCK6 {
@@ -162,6 +164,7 @@
 				regulator-max-microvolt = <1400000>;
 				regulator-boot-on;
 				regulator-always-on;
+				rohm,no-regulator-enable-control;
 			};
 
 			ldo1_reg: LDO1 {
