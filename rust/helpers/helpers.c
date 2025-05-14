@@ -15,6 +15,7 @@
 #include "cred.c"
 #include "device.c"
 #include "err.c"
+#include "irq.c"
 #include "fs.c"
 #include "io.c"
 #include "jump_label.c"
