@@ -22,7 +22,7 @@
  *   for_each_possible_cpu(cpu)
  *	nr_active += cpu_of(cpu)->nr_running + cpu_of(cpu)->nr_uninterruptible;
  *
- *   avenrun[n] = avenrun[0] * exp_n + nr_active * (1 - exp_n)
+ *   avenrun[n] = avenrun[n] * exp_n + nr_active * (1 - exp_n)
  *
  * Due to a number of reasons the above turns in the mess below:
  *
