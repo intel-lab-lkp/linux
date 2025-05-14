@@ -105,6 +105,12 @@
 				regulator-boot-on;
 				regulator-always-on;
 				regulator-ramp-delay = <1250>;
+
+				/* enable autosuspend threshold */
+				rohm,dvs-run-voltage = <850000>;
+				rohm,dvs-idle-voltage = <850000>;
+				rohm,dvs-suspend-voltage = <850000>;
+				rohm,no-regulator-enable-control;
 			};
 
 			buck2_reg: BUCK2 {
@@ -115,6 +121,11 @@
 				regulator-boot-on;
 				regulator-always-on;
 				regulator-ramp-delay = <1250>;
+
+				/* enable autosuspend threshold */
+				rohm,dvs-run-voltage = <960000>;
+				rohm,dvs-idle-voltage = <860000>;
+				rohm,no-regulator-enable-control;
 			};
 
 			buck3_reg: BUCK3 {
