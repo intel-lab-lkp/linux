@@ -704,9 +704,9 @@ static void __submit_bio_noacct(struct bio *bio)
 		/*
 		 * Now assemble so we handle the lowest level first.
 		 */
+		bio_list_on_stack[0] = bio_list_on_stack[1];
 		bio_list_merge(&bio_list_on_stack[0], &lower);
 		bio_list_merge(&bio_list_on_stack[0], &same);
-		bio_list_merge(&bio_list_on_stack[0], &bio_list_on_stack[1]);
 	} while ((bio = bio_list_pop(&bio_list_on_stack[0])));
 
 	current->bio_list = NULL;
