@@ -637,6 +637,10 @@ static int a6xx_calc_ubwc_config(struct adreno_gpu *gpu)
 	if (adreno_is_a702(gpu))
 		cfg->highest_bank_bit = 14;
 
+	if (cfg->highest_bank_bit != common_cfg->highest_bank_bit)
+		DRM_WARN_ONCE("Inconclusive highest_bank_bit value: %u (GPU) vs %u (UBWC_CFG)\n",
+			      cfg->highest_bank_bit, common_cfg->highest_bank_bit);
+
 	gpu->ubwc_config = &gpu->_ubwc_config;
 
 	return 0;
