@@ -6051,6 +6051,7 @@ int nf_tables_bind_set(const struct nft_ctx *ctx, struct nft_set *set,
 {
 	struct nft_set_binding *i;
 	struct nft_set_iter iter;
+	int err;
 
 	if (!list_empty(&set->bindings) && nft_set_is_anonymous(set))
 		return -EBUSY;
@@ -6083,6 +6084,12 @@ bind:
 	if (!nft_use_inc(&set->use))
 		return -EMFILE;
 
+	err = nft_add_chain_set_binding(ctx->chain, set);
+	if (err < 0) {
+		nft_use_dec_restore(&set->use);
+		return err;
+	}
+
 	binding->chain = ctx->chain;
 	list_add_tail_rcu(&binding->list, &set->bindings);
 	nft_set_trans_bind(ctx, set);
@@ -6091,14 +6098,27 @@ bind:
 }
 EXPORT_SYMBOL_GPL(nf_tables_bind_set);
 
+static void nft_del_set_chain_binding_all(struct nft_set *set)
+{
+	struct nft_binding *binding, *next;
+	struct nft_chain *chain;
+
+	list_for_each_entry_safe(binding, next, &set->binding_list, list) {
+		chain = (struct nft_chain *)binding->to.chain;
+		nft_del_set_chain_binding(set, chain);
+	}
+}
+
 static void nf_tables_unbind_set(const struct nft_ctx *ctx, struct nft_set *set,
 				 struct nft_set_binding *binding, bool event)
 {
 	list_del_rcu(&binding->list);
+	nft_del_chain_set_binding(ctx->chain, set);
 
 	if (list_empty(&set->bindings) && nft_set_is_anonymous(set)) {
 		list_del_rcu(&set->list);
 		set->dead = 1;
+		nft_del_set_chain_binding_all(set);
 		if (event)
 			nf_tables_set_notify(ctx, set, NFT_MSG_DELSET,
 					     GFP_KERNEL);
@@ -6106,7 +6126,7 @@ static void nf_tables_unbind_set(const struct nft_ctx *ctx, struct nft_set *set,
 }
 
 static void nft_setelem_data_activate(const struct net *net,
-				      const struct nft_set *set,
+				      struct nft_set *set,
 				      struct nft_elem_priv *elem_priv);
 
 static int nft_mapelem_activate(const struct nft_ctx *ctx,
@@ -6167,6 +6187,7 @@ void nf_tables_activate_set(const struct nft_ctx *ctx, struct nft_set *set)
 		nft_clear(ctx->net, set);
 	}
 
+	nft_activate_chain_set_binding(ctx->chain, set);
 	nft_use_inc_restore(&set->use);
 }
 EXPORT_SYMBOL_GPL(nf_tables_activate_set);
@@ -6185,6 +6206,8 @@ void nf_tables_deactivate_set(const struct nft_ctx *ctx, struct nft_set *set,
 		else
 			list_del_rcu(&binding->list);
 
+		nft_deactivate_chain_set_binding(ctx->chain, set);
+		nft_del_chain_set_binding(ctx->chain, set);
 		nft_use_dec(&set->use);
 		break;
 	case NFT_TRANS_PREPARE:
@@ -6194,6 +6217,7 @@ void nf_tables_deactivate_set(const struct nft_ctx *ctx, struct nft_set *set,
 
 			nft_deactivate_next(ctx->net, set);
 		}
+		nft_deactivate_chain_set_binding(ctx->chain, set);
 		nft_use_dec(&set->use);
 		return;
 	case NFT_TRANS_ABORT:
@@ -6202,6 +6226,7 @@ void nf_tables_deactivate_set(const struct nft_ctx *ctx, struct nft_set *set,
 		    set->flags & (NFT_SET_MAP | NFT_SET_OBJECT))
 			nft_map_deactivate(ctx, set);
 
+		nft_deactivate_chain_set_binding(ctx->chain, set);
 		nft_use_dec(&set->use);
 		fallthrough;
 	default:
@@ -7098,6 +7123,7 @@ static void __nft_set_elem_destroy(const struct nft_ctx *ctx,
 	nft_data_release(nft_set_ext_key(ext), NFT_DATA_VALUE);
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_DATA))
 		nft_data_release(nft_set_ext_data(ext), set->dtype);
+		// XXX gc
 	if (destroy_expr && nft_set_ext_exists(ext, NFT_SET_EXT_EXPRESSIONS))
 		nft_set_elem_expr_destroy(ctx, nft_set_ext_expr(ext));
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_OBJREF))
@@ -7428,6 +7454,27 @@ static void nft_setelem_remove(const struct net *net,
 		set->ops->remove(net, set, elem_priv);
 }
 
+static void nft_setelem_data_binding_remove(struct nft_set *set,
+					    struct nft_elem_priv *elem_priv)
+{
+	struct nft_set_ext *ext;
+
+	ext = nft_set_elem_ext(set, elem_priv);
+	if (set->dtype == NFT_DATA_VERDICT &&
+	    nft_set_ext_exists(ext, NFT_SET_EXT_DATA)) {
+		struct nft_data *data = nft_set_ext_data(ext);
+		struct nft_chain *chain;
+
+		switch (data->verdict.code) {
+		case NFT_JUMP:
+		case NFT_GOTO:
+			chain = data->verdict.chain;
+			nft_del_set_chain_binding(set, chain);
+			break;
+		}
+	}
+}
+
 static void nft_trans_elems_remove(const struct nft_ctx *ctx,
 				   const struct nft_trans_elem *te)
 {
@@ -7445,6 +7492,8 @@ static void nft_trans_elems_remove(const struct nft_ctx *ctx,
 			atomic_dec(&te->set->nelems);
 			te->set->ndeact--;
 		}
+
+		nft_setelem_data_binding_remove(te->set, te->elems[i].priv);
 	}
 }
 
@@ -7742,9 +7791,17 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 				nft_validate_chain_need(ctx, elem.data.val.verdict.chain);
 		}
 
+		if (desc.type == NFT_DATA_VERDICT &&
+		    (elem.data.val.verdict.code == NFT_GOTO ||
+		     elem.data.val.verdict.code == NFT_JUMP)) {
+			err = nft_add_set_chain_binding(set, elem.data.val.verdict.chain);
+			if (err < 0)
+				goto err_parse_data;
+		}
+
 		err = nft_set_ext_add_length(&tmpl, NFT_SET_EXT_DATA, desc.len);
 		if (err < 0)
-			goto err_parse_data;
+			goto err_binding;
 	}
 
 	/* The full maximum length of userdata can exceed the maximum
@@ -7758,7 +7815,7 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			err = nft_set_ext_add_length(&tmpl, NFT_SET_EXT_USERDATA,
 						     ulen);
 			if (err < 0)
-				goto err_parse_data;
+				goto err_binding;
 		}
 	}
 
@@ -7767,7 +7824,7 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 				      timeout, expiration, GFP_KERNEL_ACCOUNT);
 	if (IS_ERR(elem.priv)) {
 		err = PTR_ERR(elem.priv);
-		goto err_parse_data;
+		goto err_binding;
 	}
 
 	ext = nft_set_elem_ext(set, elem.priv);
@@ -7877,6 +7934,15 @@ err_element_clash:
 	kfree(trans);
 err_elem_free:
 	nf_tables_set_elem_destroy(ctx, set, elem.priv);
+err_binding:
+	if (nla[NFTA_SET_ELEM_DATA] != NULL) {
+		if (desc.type == NFT_DATA_VERDICT &&
+		    (elem.data.val.verdict.code == NFT_GOTO ||
+		     elem.data.val.verdict.code == NFT_JUMP)) {
+			nft_deactivate_set_chain_binding(set, elem.data.val.verdict.chain);
+			nft_del_set_chain_binding(set, elem.data.val.verdict.chain);
+		}
+	}
 err_parse_data:
 	if (nla[NFTA_SET_ELEM_DATA] != NULL)
 		nft_data_release(&elem.data.val, desc.type);
@@ -7981,28 +8047,88 @@ static int nft_setelem_active_next(const struct net *net,
 	return nft_set_elem_active(ext, genmask);
 }
 
+static void nft_setelem_data_hold(const struct net *net,
+				  const struct nft_set *set,
+				  const struct nft_set_ext *ext)
+{
+	if (set->dtype == NFT_DATA_VERDICT) {
+		struct nft_data *data = nft_set_ext_data(ext);
+		struct nft_chain *chain;
+
+		switch (data->verdict.code) {
+		case NFT_JUMP:
+		case NFT_GOTO:
+			chain = data->verdict.chain;
+			nft_activate_set_chain_binding((struct nft_set *)set, chain);
+			nft_use_inc_restore(&chain->use);
+			break;
+		}
+	}
+}
+
 static void nft_setelem_data_activate(const struct net *net,
-				      const struct nft_set *set,
+				      struct nft_set *set,
 				      struct nft_elem_priv *elem_priv)
 {
 	const struct nft_set_ext *ext = nft_set_elem_ext(set, elem_priv);
 
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_DATA))
-		nft_data_hold(nft_set_ext_data(ext), set->dtype);
+		nft_setelem_data_hold(net, set, ext);
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_OBJREF))
 		nft_use_inc_restore(&(*nft_set_ext_obj(ext))->use);
 }
 
+static void nft_setelem_data_release(struct nft_set *set,
+				     const struct nft_set_ext *ext)
+{
+	struct nft_data *data = nft_set_ext_data(ext);
+
+	if (set->dtype == NFT_DATA_VERDICT) {
+		struct nft_chain *chain;
+
+		switch (data->verdict.code) {
+		case NFT_JUMP:
+		case NFT_GOTO:
+			chain = data->verdict.chain;
+			nft_deactivate_set_chain_binding(set, chain);
+			nft_use_dec(&chain->use);
+			break;
+		}
+	}
+}
+
 void nft_setelem_data_deactivate(const struct net *net,
-				 const struct nft_set *set,
+				 struct nft_set *set,
 				 struct nft_elem_priv *elem_priv)
 {
 	const struct nft_set_ext *ext = nft_set_elem_ext(set, elem_priv);
 
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_DATA))
-		nft_data_release(nft_set_ext_data(ext), set->dtype);
+		nft_setelem_data_release(set, ext);
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_OBJREF))
 		nft_use_dec(&(*nft_set_ext_obj(ext))->use);
+}
+
+static void nft_setelem_data_abort(struct nft_set *set,
+				   struct nft_elem_priv *elem_priv)
+{
+	struct nft_set_ext *ext;
+
+	ext = nft_set_elem_ext(set, elem_priv);
+	if (set->dtype == NFT_DATA_VERDICT &&
+	    nft_set_ext_exists(ext, NFT_SET_EXT_DATA)) {
+		struct nft_data *data = nft_set_ext_data(ext);
+		struct nft_chain *chain;
+
+		switch (data->verdict.code) {
+		case NFT_JUMP:
+		case NFT_GOTO:
+			chain = data->verdict.chain;
+			nft_deactivate_set_chain_binding(set, chain);
+			nft_del_set_chain_binding(set, chain);
+			break;
+		}
+	}
 }
 
 /* similar to nft_trans_elems_remove, but called from abort path to undo newsetelem.
@@ -8031,6 +8157,7 @@ static bool nft_trans_elems_new_abort(const struct nft_ctx *ctx,
 		if (!nft_setelem_is_catchall(te->set, te->elems[i].priv))
 			atomic_dec(&te->set->nelems);
 
+		nft_setelem_data_abort(te->set, te->elems[i].priv);
 		removed = true;
 	}
 
@@ -11264,6 +11391,7 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 		case NFT_MSG_DESTROYSET:
 			nft_trans_set(trans)->dead = 1;
 			list_del_rcu(&nft_trans_set(trans)->list);
+			nft_del_set_chain_binding_all(nft_trans_set(trans));
 			nf_tables_set_notify(&ctx, nft_trans_set(trans),
 					     trans->msg_type, GFP_KERNEL);
 			break;
@@ -12232,9 +12360,10 @@ static void __nft_release_table(struct net *net, struct nft_table *table)
 	list_for_each_entry_safe(set, ns, &table->sets, list) {
 		list_del(&set->list);
 		nft_use_dec(&table->use);
-		if (set->flags & (NFT_SET_MAP | NFT_SET_OBJECT))
+		if (set->flags & (NFT_SET_MAP | NFT_SET_OBJECT)) {
 			nft_map_deactivate(&ctx, set);
-
+			nft_del_set_chain_binding_all(set);
+		}
 		nft_set_destroy(&ctx, set);
 	}
 	list_for_each_entry_safe(obj, ne, &table->objects, list) {

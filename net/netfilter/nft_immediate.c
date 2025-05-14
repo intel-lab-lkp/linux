@@ -76,9 +76,16 @@ static int nft_immediate_init(const struct nft_ctx *ctx,
 		switch (priv->data.verdict.code) {
 		case NFT_JUMP:
 		case NFT_GOTO:
-			err = nf_tables_bind_chain(ctx, chain);
+			err = nft_add_chain_binding(ctx->chain, chain);
 			if (err < 0)
 				goto err1;
+
+			err = nf_tables_bind_chain(ctx, chain);
+			if (err < 0) {
+				nft_deactivate_chain_binding(ctx->chain, chain);
+				nft_del_chain_binding(ctx->chain, chain);
+				goto err1;
+			}
 			break;
 		default:
 			break;
@@ -106,6 +113,8 @@ static void nft_immediate_activate(const struct nft_ctx *ctx,
 		case NFT_JUMP:
 		case NFT_GOTO:
 			chain = data->verdict.chain;
+			nft_activate_chain_binding(ctx->chain, chain);
+
 			if (!nft_chain_binding(chain))
 				break;
 
@@ -152,6 +161,20 @@ static void nft_immediate_deactivate(const struct nft_ctx *ctx,
 		case NFT_JUMP:
 		case NFT_GOTO:
 			chain = data->verdict.chain;
+			switch (phase) {
+			case NFT_TRANS_PREPARE_ERROR:
+			case NFT_TRANS_PREPARE:
+				nft_deactivate_chain_binding(ctx->chain, chain);
+				break;
+			case NFT_TRANS_ABORT:
+			case NFT_TRANS_RELEASE:
+				nft_deactivate_chain_binding(ctx->chain, chain);
+				fallthrough;
+			case NFT_TRANS_COMMIT:
+				nft_del_chain_binding(ctx->chain, chain);
+				break;
+			}
+
 			if (!nft_chain_binding(chain))
 				break;
 
