@@ -22,6 +22,7 @@
 #include <asm/page-states.h>
 #include <asm/pgalloc.h>
 #include <asm/machine.h>
+#include <asm/gmap_helpers.h>
 #include <asm/gmap.h>
 #include <asm/page.h>
 
@@ -619,58 +620,33 @@ EXPORT_SYMBOL(__gmap_link);
  */
 void __gmap_zap(struct gmap *gmap, unsigned long gaddr)
 {
-	struct vm_area_struct *vma;
 	unsigned long vmaddr;
-	spinlock_t *ptl;
-	pte_t *ptep;
+
+	mmap_assert_locked(gmap->mm);
 
 	/* Find the vm address for the guest address */
 	vmaddr = (unsigned long) radix_tree_lookup(&gmap->guest_to_host,
 						   gaddr >> PMD_SHIFT);
 	if (vmaddr) {
 		vmaddr |= gaddr & ~PMD_MASK;
-
-		vma = vma_lookup(gmap->mm, vmaddr);
-		if (!vma || is_vm_hugetlb_page(vma))
-			return;
-
-		/* Get pointer to the page table entry */
-		ptep = get_locked_pte(gmap->mm, vmaddr, &ptl);
-		if (likely(ptep)) {
-			ptep_zap_unused(gmap->mm, vmaddr, ptep, 0);
-			pte_unmap_unlock(ptep, ptl);
-		}
+		__gmap_helper_zap_one(gmap->mm, vmaddr);
 	}
 }
 EXPORT_SYMBOL_GPL(__gmap_zap);
 
 void gmap_discard(struct gmap *gmap, unsigned long from, unsigned long to)
 {
-	unsigned long gaddr, vmaddr, size;
-	struct vm_area_struct *vma;
+	unsigned long vmaddr, next, start, end;
 
 	mmap_read_lock(gmap->mm);
-	for (gaddr = from; gaddr < to;
-	     gaddr = (gaddr + PMD_SIZE) & PMD_MASK) {
-		/* Find the vm address for the guest address */
-		vmaddr = (unsigned long)
-			radix_tree_lookup(&gmap->guest_to_host,
-					  gaddr >> PMD_SHIFT);
+	for ( ; from < to; from = next) {
+		next = ALIGN(from + 1, PMD_SIZE);
+		vmaddr = (unsigned long)radix_tree_lookup(&gmap->guest_to_host, from >> PMD_SHIFT);
 		if (!vmaddr)
 			continue;
-		vmaddr |= gaddr & ~PMD_MASK;
-		/* Find vma in the parent mm */
-		vma = find_vma(gmap->mm, vmaddr);
-		if (!vma)
-			continue;
-		/*
-		 * We do not discard pages that are backed by
-		 * hugetlbfs, so we don't have to refault them.
-		 */
-		if (is_vm_hugetlb_page(vma))
-			continue;
-		size = min(to - gaddr, PMD_SIZE - (gaddr & ~PMD_MASK));
-		zap_page_range_single(vma, vmaddr, size, NULL);
+		start = vmaddr | (from & ~PMD_MASK);
+		end = (vmaddr | (min(to - 1, next - 1) & ~PMD_MASK)) + 1;
+		__gmap_helper_discard(gmap->mm, start, end);
 	}
 	mmap_read_unlock(gmap->mm);
 }
