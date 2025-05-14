@@ -135,7 +135,7 @@
 			buck3_reg: BUCK3 {
 				/* PMIC_BUCK5 - VDD_DRAM_VPU_GPU */
 				regulator-name = "buck3";
-				regulator-min-microvolt = <700000>;
+				regulator-min-microvolt = <550000>;
 				regulator-max-microvolt = <1350000>;
 				regulator-boot-on;
 				regulator-always-on;
