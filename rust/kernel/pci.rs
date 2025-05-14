@@ -356,7 +356,7 @@ impl<const SIZE: usize> Deref for Bar<SIZE> {
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: By the type invariant of `Self`, the MMIO range in `self.io` is properly mapped.
-        unsafe { Io::from_raw(&self.io) }
+        unsafe { Io::from_raw_ref(&self.io) }
     }
 }
 
