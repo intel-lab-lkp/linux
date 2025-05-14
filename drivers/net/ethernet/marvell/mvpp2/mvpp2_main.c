@@ -4003,6 +4003,12 @@ static int mvpp2_rx(struct mvpp2_port *port, struct napi_struct *napi,
 			metasize = xdp.data - xdp.data_meta;
 		}
 
+		err = mvpp2_rx_refill(port, bm_pool, pp, pool);
+		if (err) {
+			netdev_err(port->dev, "failed to refill BM pools\n");
+			goto err_drop_frame;
+		}
+
 		if (frag_size)
 			skb = build_skb(data, frag_size);
 		else
@@ -4019,13 +4025,6 @@ static int mvpp2_rx(struct mvpp2_port *port, struct napi_struct *napi,
 			timestamp = le32_to_cpu(rx_desc->pp22.timestamp);
 			mvpp22_tai_tstamp(port->priv->tai, timestamp,
 					 skb_hwtstamps(skb));
-		}
-
-		err = mvpp2_rx_refill(port, bm_pool, pp, pool);
-		if (err) {
-			netdev_err(port->dev, "failed to refill BM pools\n");
-			dev_kfree_skb_any(skb);
-			goto err_drop_frame;
 		}
 
 		if (pp)
