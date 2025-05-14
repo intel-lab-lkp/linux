@@ -7,6 +7,7 @@
 #include <linux/rtc.h>
 #include <linux/vt_kern.h>
 #include <linux/interrupt.h>
+#include <linux/string.h>
 
 #include <asm/setup.h>
 #include <asm/bootinfo.h>
@@ -218,7 +219,7 @@ static void dn_dummy_reset(void)
 
 static void dn_get_model(char *model)
 {
-    strcpy(model, "Apollo ");
+    strscpy(model, "Apollo ");
     if (apollo_model >= APOLLO_DN3000 && apollo_model <= APOLLO_DN4500)
         strcat(model, apollo_models[apollo_model - APOLLO_DN3000]);
 }
