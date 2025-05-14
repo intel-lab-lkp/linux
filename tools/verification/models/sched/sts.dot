@@ -1,0 +1,29 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = circle] "disable_to_switch"};
+	{node [shape = circle] "enable_to_exit"};
+	{node [shape = circle] "scheduling"};
+	{node [shape = circle] "switching"};
+	{node [shape = plaintext, style=invis, label=""] "__init_thread"};
+	{node [shape = doublecircle] "thread"};
+	{node [shape = circle] "thread"};
+	"__init_thread" -> "thread";
+	"disable_to_switch" [label = "disable_to_switch"];
+	"disable_to_switch" -> "scheduling" [ label = "irq_enable" ];
+	"disable_to_switch" -> "switching" [ label = "sched_switch\nsched_switch_vain" ];
+	"enable_to_exit" [label = "enable_to_exit"];
+	"enable_to_exit" -> "enable_to_exit" [ label = "irq_disable\nirq_enable" ];
+	"enable_to_exit" -> "thread" [ label = "schedule_exit" ];
+	"scheduling" [label = "scheduling"];
+	"scheduling" -> "disable_to_switch" [ label = "irq_disable" ];
+	"switching" [label = "switching"];
+	"switching" -> "enable_to_exit" [ label = "irq_enable" ];
+	"thread" [label = "thread", color = green3];
+	"thread" -> "scheduling" [ label = "schedule_entry" ];
+	"thread" -> "thread" [ label = "irq_disable\nirq_enable" ];
+	{ rank = min ;
+		"__init_thread";
+		"thread";
+	}
+}

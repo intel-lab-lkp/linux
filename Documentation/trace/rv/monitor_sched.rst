@@ -40,26 +40,6 @@ defined in by Daniel Bristot in [1].
 
 Currently we included the following:
 
-Monitor tss
-~~~~~~~~~~~
-
-The task switch while scheduling (tss) monitor ensures a task switch happens
-only in scheduling context, that is inside a call to `__schedule`::
-
-                     |
-                     |
-                     v
-                   +-----------------+
-                   |     thread      | <+
-                   +-----------------+  |
-                     |                  |
-                     | schedule_entry   | schedule_exit
-                     v                  |
-    sched_switch                        |
-  +---------------                      |
-  |                       sched         |
-  +-------------->                     -+
-
 Monitor sco
 ~~~~~~~~~~~
 
@@ -169,6 +149,54 @@ schedule is not called with interrupt disabled::
                        v               |
                                        |
                         cant_sched    -+
+
+Monitor sts
+~~~~~~~~~~~
+
+The schedule implies task switch (sts) monitor ensures a task switch happens in
+every scheduling context, that is inside a call to ``__schedule``, as well as no
+task switch can happen without scheduling and before interrupts are disabled.
+This require the special type of switch called vain, which occurs when the next
+task picked for execution is the same as the previously running one, in fact no
+real task switch occurs::
+
+                    |
+                    |
+                    v
+                  #====================#   irq_disable
+                  H                    H   irq_enable
+                  H       thread       H --------------+
+                  H                    H               |
+  +-------------> H                    H <-------------+
+  |               #====================#
+  |                 |
+  |                 | schedule_entry
+  |                 v
+  |               +--------------------+
+  |               |     scheduling     | <+
+  |               +--------------------+  |
+  |                 |                     |
+  |                 | irq_disable         | irq_enable
+  |                 v                     |
+  |               +--------------------+  |
+  |               | disable_to_switch  | -+
+  | schedule_exit +--------------------+
+  |                 |
+  |                 | sched_switch
+  |                 | sched_switch_vain
+  |                 v
+  |               +--------------------+
+  |               |     switching      |
+  |               +--------------------+
+  |                 |
+  |                 | irq_enable
+  |                 v
+  |               +--------------------+   irq_disable
+  |               |                    |   irq_enable
+  |               |   enable_to_exit   | --------------+
+  |               |                    |               |
+  +-------------- |                    | <-------------+
+                  +--------------------+
 
 References
 ----------
