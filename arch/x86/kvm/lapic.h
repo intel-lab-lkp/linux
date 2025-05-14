@@ -145,9 +145,6 @@ void kvm_lapic_exit(void);
 
 u64 kvm_lapic_readable_reg_mask(struct kvm_lapic *apic);
 
-#define VEC_POS(v) APIC_VECTOR_TO_BIT_NUMBER(v)
-#define REG_POS(v) APIC_VECTOR_TO_REG_OFFSET(v)
-
 static inline void kvm_lapic_set_irr(int vec, struct kvm_lapic *apic)
 {
 	apic_set_vector(vec, apic->regs + APIC_IRR);

@@ -57,6 +57,9 @@
 #define APIC_VERSION			0x14UL
 #define LAPIC_MMIO_LENGTH		(1 << 12)
 
+#define VEC_POS(v) APIC_VECTOR_TO_BIT_NUMBER(v)
+#define REG_POS(v) APIC_VECTOR_TO_REG_OFFSET(v)
+
 /*
  * Enable local APIC timer advancement (tscdeadline mode only) with adaptive
  * tuning.  When enabled, KVM programs the host timer event to fire early, i.e.
