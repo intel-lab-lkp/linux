@@ -2242,7 +2242,7 @@ static int vgic_its_save_itt(struct vgic_its *its, struct its_device *device)
 		 * have direct access to that state without GICv4.1.
 		 * Let's simply fail the save operation...
 		 */
-		if (ite->irq->hw && !kvm_vgic_global_state.has_gicv4_1)
+		if (ite->irq->hw && !kvm_vm_has_gicv4_1(its->dev->kvm))
 			return -EACCES;
 
 		ret = vgic_its_save_ite(its, device, ite, gpa);

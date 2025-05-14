@@ -296,6 +296,8 @@ struct vgic_dist {
 	 * else.
 	 */
 	struct its_vm		its_vm;
+
+	u8			gicv4_config;
 };
 
 struct vgic_v2_cpu_if {
@@ -446,5 +448,8 @@ bool vgic_state_is_nested(struct kvm_vcpu *vcpu);
 /* CPU HP callbacks */
 void kvm_vgic_cpu_up(void);
 void kvm_vgic_cpu_down(void);
+
+int kvm_vm_has_gicv4(struct kvm *kvm);
+int kvm_vm_has_gicv4_1(struct kvm *kvm);
 
 #endif /* __KVM_ARM_VGIC_H */

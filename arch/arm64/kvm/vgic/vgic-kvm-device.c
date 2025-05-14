@@ -279,6 +279,33 @@ static int vgic_set_common_attr(struct kvm_device *dev,
 			unlock_all_vcpus(dev->kvm);
 			mutex_unlock(&dev->kvm->lock);
 			return r;
+		case KVM_DEV_ARM_VGIC_CONFIG_GICV4: {
+			u8 __user *uaddr = (u8 __user *)(long)attr->addr;
+			u8 val;
+
+			if (!kvm_vgic_global_state.has_gicv4)
+				return -ENXIO;
+
+			if (get_user(val, uaddr))
+				return -EFAULT;
+
+			if (vgic_initialized(dev->kvm) &&
+				val != dev->kvm->arch.vgic.gicv4_config)
+				return -EBUSY;
+
+			switch (val) {
+			case KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE:
+			case KVM_DEV_ARM_VGIC_CONFIG_GICV4_DISABLE:
+				mutex_lock(&dev->kvm->arch.config_lock);
+				dev->kvm->arch.vgic.gicv4_config = val;
+				mutex_unlock(&dev->kvm->arch.config_lock);
+				break;
+			default:
+				return -EINVAL;
+			}
+
+			return 0;
+		}
 		}
 		break;
 	}
@@ -308,6 +335,16 @@ static int vgic_get_common_attr(struct kvm_device *dev,
 
 		r = put_user(dev->kvm->arch.vgic.mi_intid, uaddr);
 		break;
+	}
+	case KVM_DEV_ARM_VGIC_GRP_CTRL: {
+		switch (attr->attr) {
+		case KVM_DEV_ARM_VGIC_CONFIG_GICV4: {
+			u8 __user *uaddr = (u8 __user *)(long)attr->addr;
+
+			r = put_user(dev->kvm->arch.vgic.gicv4_config, uaddr);
+			break;
+		}
+		}
 	}
 	}
 
@@ -683,6 +720,8 @@ static int vgic_v3_has_attr(struct kvm_device *dev,
 		case KVM_DEV_ARM_VGIC_CTRL_INIT:
 			return 0;
 		case KVM_DEV_ARM_VGIC_SAVE_PENDING_TABLES:
+			return 0;
+		case KVM_DEV_ARM_VGIC_CONFIG_GICV4:
 			return 0;
 		}
 	}

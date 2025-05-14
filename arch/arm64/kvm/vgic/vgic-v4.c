@@ -86,7 +86,7 @@ static irqreturn_t vgic_v4_doorbell_handler(int irq, void *info)
 	struct kvm_vcpu *vcpu = info;
 
 	/* We got the message, no need to fire again */
-	if (!kvm_vgic_global_state.has_gicv4_1 &&
+	if (!kvm_vm_has_gicv4_1(vcpu->kvm) &&
 	    !irqd_irq_disabled(&irq_to_desc(irq)->irq_data))
 		disable_irq_nosync(irq);
 
@@ -245,7 +245,7 @@ int vgic_v4_init(struct kvm *kvm)
 
 	lockdep_assert_held(&kvm->arch.config_lock);
 
-	if (!kvm_vgic_global_state.has_gicv4)
+	if (!kvm_vm_has_gicv4(kvm))
 		return 0; /* Nothing to see here... move along. */
 
 	if (dist->its_vm.vpes)
@@ -286,7 +286,7 @@ int vgic_v4_init(struct kvm *kvm)
 		 * On GICv4.1, the doorbell is managed in HW and must
 		 * be left enabled.
 		 */
-		if (kvm_vgic_global_state.has_gicv4_1)
+		if (kvm_vm_has_gicv4_1(kvm))
 			irq_flags &= ~IRQ_NOAUTOEN;
 		irq_set_status_flags(irq, irq_flags);
 
@@ -392,7 +392,7 @@ int vgic_v4_load(struct kvm_vcpu *vcpu)
 	 * doorbell interrupt that would still be pending. This is a
 	 * GICv4.0 only "feature"...
 	 */
-	if (!kvm_vgic_global_state.has_gicv4_1)
+	if (!kvm_vm_has_gicv4_1(vcpu->kvm))
 		err = irq_set_irqchip_state(vpe->irq, IRQCHIP_STATE_PENDING, false);
 
 	return err;

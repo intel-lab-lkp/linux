@@ -20,6 +20,18 @@ static bool common_trap;
 static bool dir_trap;
 static bool gicv4_enable;
 
+int kvm_vm_has_gicv4(struct kvm *kvm)
+{
+	return kvm->arch.vgic.gicv4_config ==
+		KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE;
+}
+
+int kvm_vm_has_gicv4_1(struct kvm *kvm)
+{
+	return (kvm_vm_has_gicv4(kvm) &&
+		kvm_vgic_global_state.has_gicv4_1);
+}
+
 void vgic_v3_set_underflow(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v3_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v3;
@@ -404,7 +416,7 @@ int vgic_v3_save_pending_tables(struct kvm *kvm)
 	 * The above vgic initialized check also ensures that the allocation
 	 * and enabling of the doorbells have already been done.
 	 */
-	if (kvm_vgic_global_state.has_gicv4_1) {
+	if (kvm_vm_has_gicv4_1(kvm)) {
 		unmap_all_vpes(kvm);
 		vlpi_avail = true;
 	}
@@ -581,7 +593,7 @@ int vgic_v3_map_resources(struct kvm *kvm)
 		return -EBUSY;
 	}
 
-	if (kvm_vgic_global_state.has_gicv4_1)
+	if (kvm_vm_has_gicv4_1(kvm))
 		vgic_v4_configure_vsgis(kvm);
 
 	return 0;

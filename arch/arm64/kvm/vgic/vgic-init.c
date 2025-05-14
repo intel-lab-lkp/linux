@@ -132,6 +132,9 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 
 	kvm->arch.vgic.in_kernel = true;
 	kvm->arch.vgic.vgic_model = type;
+	kvm->arch.vgic.gicv4_config = kvm_vgic_global_state.has_gicv4 ?
+				      KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE :
+				      KVM_DEV_ARM_VGIC_CONFIG_GICV4_UNAVAILABLE;
 
 	kvm->arch.vgic.vgic_dist_base = VGIC_ADDR_UNDEF;
 
