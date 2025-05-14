@@ -367,6 +367,15 @@ config RESET_ZYNQMP
 	help
 	  This enables the reset controller driver for Xilinx ZynqMP SoCs.
 
+config RESET_EIC7700
+	bool "Reset controller driver for Eswin SoCs"
+	default ARCH_ESWIN
+	help
+	  This enables the reset controller driver for Eswin SoCs. This driver is
+	  specific to Eswin SoCs and should only be enabled if using such hardware.
+	  The driver supports eic7700 series chips and provides functionality for
+	  asserting and deasserting resets on the chip.
+
 source "drivers/reset/amlogic/Kconfig"
 source "drivers/reset/starfive/Kconfig"
 source "drivers/reset/sti/Kconfig"
