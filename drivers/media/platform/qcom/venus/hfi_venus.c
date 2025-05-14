@@ -295,6 +295,9 @@ static int venus_read_queue(struct venus_hfi_device *hdev,
 	new_rd_idx = rd_idx + dwords;
 	if (((dwords << 2) <= IFACEQ_VAR_HUGE_PKT_SIZE) && rd_idx <= qsize) {
 		if (new_rd_idx < qsize) {
+			if ((*rd_ptr >> 2) != dwords)
+				return -EINVAL;
+
 			memcpy(pkt, rd_ptr, dwords << 2);
 		} else {
 			size_t len;
