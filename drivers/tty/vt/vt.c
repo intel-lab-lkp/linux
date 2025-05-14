@@ -152,6 +152,7 @@ static void con_driver_unregister_callback(struct work_struct *ignored);
 static void blank_screen_t(struct timer_list *unused);
 static void set_palette(struct vc_data *vc);
 static void unblank_screen(void);
+static int get_cursor_pos(struct tty_struct *tty);
 
 #define vt_get_kmsg_redirect() vt_kmsg_redirect(-1)
 
@@ -3473,6 +3474,8 @@ int tioclinux(struct tty_struct *tty, unsigned long arg)
 		return console_blanked;
 	case TIOCL_GETBRACKETEDPASTE:
 		return get_bracketed_paste(tty);
+	case TIOCL_GETCURSORPOS:
+		return get_cursor_pos(tty);
 	default:
 		return -EINVAL;
 	}
@@ -4964,6 +4967,25 @@ void putconsxy(struct vc_data *vc, unsigned char xy[static const 2])
 	hide_cursor(vc);
 	gotoxy(vc, xy[0], xy[1]);
 	set_cursor(vc);
+}
+
+/* invoked via ioctl(TIOCLINUX) */
+static int get_cursor_pos(struct tty_struct *tty)
+{
+	struct vc_data *vc = tty->driver_data;
+	unsigned int x, y;
+
+	console_lock();
+	x = vc->state.x;
+	y = vc->state.y;
+	console_unlock();
+
+	/*
+	 * Clamp x to 16 bits, y to 15 bits. A display larger than 65535x32767
+	 * characters won't be a concern for the foreseeable future.
+	 * Bit 31 is reserved to represent negative error codes elsewhere.
+	 */
+	return min(x, 0xFFFFu) | (min(y, 0x7FFFu) << 16);
 }
 
 u16 vcs_scr_readw(const struct vc_data *vc, const u16 *org)

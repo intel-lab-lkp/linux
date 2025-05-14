@@ -38,4 +38,8 @@ struct tiocl_selection {
 #define TIOCL_GETKMSGREDIRECT	17	/* get the vt the kernel messages are restricted to */
 #define TIOCL_GETBRACKETEDPASTE	18	/* get whether paste may be bracketed */
 
+#define TIOCL_GETCURSORPOS	20	/* Get screen cursor position */
+	/* If return value >= 0: x = lower 16 bits, y = upper 16 bits. */
+	/* Negative error code otherwise. */
+
 #endif /* _LINUX_TIOCL_H */
