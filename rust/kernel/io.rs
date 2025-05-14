@@ -226,6 +226,33 @@ pub struct IoRaw<const SIZE: usize = 0> {
 
 impl<const SIZE: usize> IoRaw<SIZE> {
     /// Returns a new `IoRaw` instance on success, an error otherwise.
+    ///
+    /// # Examples
+    ///
+    /// Const generic size 0, only allowing runtime checks:
+    /// ```
+    /// use kernel::io::IoRaw;
+    ///
+    /// let raw: IoRaw<0> = IoRaw::new(0xDEADBEEFC0DE, 8).unwrap();
+    /// # assert_eq!(raw.addr(), 0xDEADBEEFC0DE);
+    /// # assert_eq!(raw.maxsize(), 8);
+    /// ```
+    ///
+    /// Const generic size equals maxsize:
+    /// ```
+    /// use kernel::io::IoRaw;
+    ///
+    /// let raw: IoRaw<8> = IoRaw::new(0xDEADBEEFC0DE, 8).unwrap();
+    /// # assert_eq!(raw.addr(), 0xDEADBEEFC0DE);
+    /// # assert_eq!(raw.maxsize(), 8);
+    /// ```
+    ///
+    /// Const generic size bigger then maxsize:
+    /// ```
+    /// use kernel::io::IoRaw;
+    ///
+    /// IoRaw::<16>::new(0xDEADBEEFC0DE, 8).unwrap_err();
+    /// ```
     pub fn new(addr: usize, maxsize: usize) -> Result<Self> {
         if maxsize < SIZE {
             return Err(EINVAL);
@@ -247,6 +274,16 @@ impl<const SIZE: usize> IoRaw<SIZE> {
     }
 }
 
+impl<const SIZE: usize> core::fmt::Debug for IoRaw<SIZE> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IoRaw")
+            .field("SIZE", &SIZE)
+            .field("addr", &self.addr)
+            .field("maxsize", &self.maxsize)
+            .finish()
+    }
+}
+
 /// IO-mapped memory, starting at the base address [`addr`] and spanning [`maxsize`] bytes.
 ///
 /// The creator (usually a subsystem / bus such as PCI) is responsible for creating the
@@ -263,6 +300,7 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 /// [`maxsize`]: IoAccess::maxsize
 /// [`read`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
 /// [`write`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct MMIo<const SIZE: usize = 0>(IoRaw<SIZE>);
 
@@ -273,6 +311,18 @@ impl<const SIZE: usize> MMIo<SIZE> {
     ///
     /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of
     /// size `maxsize`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::io::{IoRaw, MMIo, IoAccess};
+    ///
+    /// let raw = IoRaw::<2>::new(0xDEADBEEFC0DE, 2).unwrap();
+    /// // SAFETY: test, value is not actually written to.
+    /// let mmio: MMIo<2> = unsafe { MMIo::from_raw(raw) };
+    /// # assert_eq!(0xDEADBEEFC0DE, mmio.addr());
+    /// # assert_eq!(2, mmio.maxsize());
+    /// ```
     #[inline]
     pub unsafe fn from_raw(raw: IoRaw<SIZE>) -> Self {
         Self(raw)
@@ -285,6 +335,18 @@ impl<const SIZE: usize> MMIo<SIZE> {
     ///
     /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of
     /// size `maxsize`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::io::{IoRaw, MMIo, IoAccess};
+    ///
+    /// let raw = IoRaw::<2>::new(0xDEADBEEFC0DE, 2).unwrap();
+    /// // SAFETY: test, value is not actually written to.
+    /// let mmio: &MMIo<2> = unsafe { MMIo::from_raw_ref(&raw) };
+    /// # assert_eq!(raw.addr(), mmio.addr());
+    /// # assert_eq!(raw.maxsize(), mmio.maxsize());
+    /// ```
     #[inline]
     pub unsafe fn from_raw_ref(raw: &IoRaw<SIZE>) -> &Self {
         // SAFETY: `MMIo` is a transparent wrapper around `IoRaw`.
@@ -349,6 +411,7 @@ impl<const SIZE: usize> IoAccess64Relaxed<SIZE> for MMIo<SIZE> {
 /// [`maxsize`]: IoAccess::maxsize
 /// [`ioread`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
 /// [`iowrite`]: https://docs.kernel.org/driver-api/device-io.html#differences-between-i-o-access-functions
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct Io<const SIZE: usize = 0>(IoRaw<SIZE>);
 
