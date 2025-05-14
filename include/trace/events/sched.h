@@ -889,10 +889,23 @@ DECLARE_TRACE(sched_exit_tp,
 	TP_PROTO(bool is_switch, unsigned long ip),
 	TP_ARGS(is_switch, ip));
 
+/*
+ * Tracepoint called when setting the state of a task;
+ * this tracepoint is guaranteed to be called from the waking context of the
+ * task setting the state.
+ */
 DECLARE_TRACE_CONDITION(sched_set_state_tp,
-	TP_PROTO(struct task_struct *tsk, int state),
-	TP_ARGS(tsk, state),
+	TP_PROTO(struct task_struct *tsk, int state, bool from_signal),
+	TP_ARGS(tsk, state, from_signal),
 	TP_CONDITION(!!(tsk->__state) != !!state));
+
+DECLARE_TRACE(sched_set_need_resched_tp,
+	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
+	TP_ARGS(tsk, cpu, tif));
+
+DECLARE_TRACE(sched_switch_vain_tp,
+	TP_PROTO(bool preempt, struct task_struct *tsk, unsigned int prev_state),
+	TP_ARGS(preempt, tsk, prev_state));
 
 #endif /* _TRACE_SCHED_H */
 

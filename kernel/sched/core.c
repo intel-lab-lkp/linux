@@ -494,7 +494,7 @@ EXPORT_TRACEPOINT_SYMBOL(sched_set_state_tp);
 /* Call via the helper macro trace_set_current_state. */
 void __trace_set_current_state(int state_value)
 {
-	trace_sched_set_state_tp(current, state_value);
+	trace_sched_set_state_tp(current, state_value, false);
 }
 EXPORT_SYMBOL(__trace_set_current_state);
 
@@ -1109,6 +1109,7 @@ static void __resched_curr(struct rq *rq, int tif)
 
 	cpu = cpu_of(rq);
 
+	trace_sched_set_need_resched_tp(curr, cpu, tif);
 	if (cpu == smp_processor_id()) {
 		set_ti_thread_flag(cti, tif);
 		if (tif == TIF_NEED_RESCHED)
@@ -1122,6 +1123,11 @@ static void __resched_curr(struct rq *rq, int tif)
 	} else {
 		trace_sched_wake_idle_without_ipi(cpu);
 	}
+}
+
+void __trace_set_need_resched(struct task_struct *curr, int tif)
+{
+	trace_sched_set_need_resched_tp(curr, smp_processor_id(), tif);
 }
 
 void resched_curr(struct rq *rq)
@@ -6587,6 +6593,7 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 	int flags = DEQUEUE_NOCLOCK;
 
 	if (signal_pending_state(task_state, p)) {
+		trace_sched_set_state_tp(p, TASK_RUNNING, true);
 		WRITE_ONCE(p->__state, TASK_RUNNING);
 		*task_state_p = TASK_RUNNING;
 		return false;
@@ -6779,6 +6786,7 @@ picked:
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq_unpin_lock(rq, &rf);
+		trace_sched_switch_vain_tp(preempt, prev, prev_state);
 		__balance_callbacks(rq);
 		raw_spin_rq_unlock_irq(rq);
 	}
