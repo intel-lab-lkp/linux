@@ -46,8 +46,6 @@
 
 #include "dmub/inc/dmub_cmd.h"
 
-#include <drm/drm_edid.h>
-
 struct abm_save_restore;
 
 /* forward declaration */
