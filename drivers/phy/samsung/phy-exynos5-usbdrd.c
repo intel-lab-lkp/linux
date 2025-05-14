@@ -177,6 +177,9 @@
 #define HSPHYPLLTUNE_PLL_P_TUNE			GENMASK(3, 0)
 
 /* Exynos850: USB DRD PHY registers */
+#define EXYNOSAUTOv920_DRD_CTRL_VER		0x00
+#define GET_CTRL_MAJOR_VERSION(_x)		(((_x) >> 24) & 0xff)
+
 #define EXYNOS850_DRD_LINKCTRL			0x04
 #define LINKCTRL_FORCE_RXELECIDLE		BIT(18)
 #define LINKCTRL_FORCE_PHYSTATUS		BIT(17)
@@ -1772,6 +1775,10 @@ static const char * const exynos5_regulator_names[] = {
 	"vbus", "vbus-boost",
 };
 
+static const char * const exynosautov920_clk_names[] = {
+	"ext_xtal",
+};
+
 static const struct exynos5_usbdrd_phy_drvdata exynos5420_usbdrd_phy = {
 	.phy_cfg		= phy_cfg_exynos5,
 	.phy_ops		= &exynos5_usbdrd_phy_ops,
@@ -1845,6 +1852,81 @@ static const struct exynos5_usbdrd_phy_drvdata exynos850_usbdrd_phy = {
 	.n_core_clks		= ARRAY_SIZE(exynos5_core_clk_names),
 	.regulator_names	= exynos5_regulator_names,
 	.n_regulators		= ARRAY_SIZE(exynos5_regulator_names),
+};
+
+static void exynosautov920_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
+{
+	u32 version;
+
+	version = readl(phy_drd->reg_phy + EXYNOSAUTOv920_DRD_CTRL_VER);
+	dev_info(phy_drd->dev, "usbphy: version:0x%x\n", version);
+
+	if (GET_CTRL_MAJOR_VERSION(version) == 0x3)
+		/* utmi init for exynosautov920 HS phy */
+		exynos850_usbdrd_utmi_init(phy_drd);
+}
+
+static int exynosautov920_usbdrd_phy_init(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	int ret = 0;
+
+	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
+	if (ret)
+		return ret;
+
+	/* UTMI or PIPE3 specific init */
+	inst->phy_cfg->phy_init(phy_drd);
+
+	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
+
+	return 0;
+}
+
+static void exynosautov920_v3p1_phy_dis(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	void __iomem *reg_phy = phy_drd->reg_phy;
+	u32 version;
+
+	version = readl(reg_phy + EXYNOSAUTOv920_DRD_CTRL_VER);
+
+	if (GET_CTRL_MAJOR_VERSION(version) == 0x3)
+		exynos850_usbdrd_phy_exit(phy);
+}
+
+static int exynosautov920_usbdrd_phy_exit(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+
+	if (inst->phy_cfg->id == EXYNOS5_DRDPHY_UTMI)
+		exynosautov920_v3p1_phy_dis(phy);
+
+	return 0;
+}
+
+static const struct phy_ops exynosautov920_usbdrd_phy_ops = {
+	.init		= exynosautov920_usbdrd_phy_init,
+	.exit		= exynosautov920_usbdrd_phy_exit,
+	.owner		= THIS_MODULE,
+};
+
+static const struct exynos5_usbdrd_phy_config phy_cfg_exynosautov920[] = {
+	{
+		.id		= EXYNOS5_DRDPHY_UTMI,
+		.phy_init	= exynosautov920_usbdrd_utmi_init,
+	},
+};
+
+static const struct exynos5_usbdrd_phy_drvdata exynosautov920_usb31drd_phy = {
+	.phy_cfg		= phy_cfg_exynosautov920,
+	.phy_ops		= &exynosautov920_usbdrd_phy_ops,
+	.clk_names		= exynosautov920_clk_names,
+	.n_clks			= ARRAY_SIZE(exynosautov920_clk_names),
+	.core_clk_names		= exynos5_core_clk_names,
+	.n_core_clks		= ARRAY_SIZE(exynos5_core_clk_names),
 };
 
 static const struct exynos5_usbdrd_phy_config phy_cfg_gs101[] = {
@@ -2047,6 +2129,9 @@ static const struct of_device_id exynos5_usbdrd_phy_of_match[] = {
 	}, {
 		.compatible = "samsung,exynos850-usbdrd-phy",
 		.data = &exynos850_usbdrd_phy
+	}, {
+		.compatible = "samsung,exynosautov920-usb31drd-phy",
+		.data = &exynosautov920_usb31drd_phy
 	},
 	{ },
 };
