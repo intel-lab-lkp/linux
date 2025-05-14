@@ -170,12 +170,53 @@ int intel_dp_link_symbol_clock(int rate)
 	return DIV_ROUND_CLOSEST(rate * 10, intel_dp_link_symbol_size(rate));
 }
 
+static bool detected_hbr3_tps4_quirk(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct drm_dp_aux *aux = &intel_dp->aux;
+	struct drm_dp_desc desc;
+
+	if (drm_dp_read_desc(aux, &desc, drm_dp_is_branch(intel_dp->dpcd)) < 0)
+		return false;
+
+	if (!drm_dp_has_quirk(&desc, DP_DPCD_QUIRK_HBR3_WITHOUT_TPS4))
+		return false;
+
+	drm_dbg_kms(display->drm,
+		    "[CONNECTOR:%d:%s] HBR3 without TPS4 quirk detected\n",
+		    connector->base.base.id, connector->base.name);
+
+	return true;
+}
+
 static int max_dprx_rate(struct intel_dp *intel_dp)
 {
-	if (intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))
-		return drm_dp_tunnel_max_dprx_rate(intel_dp->tunnel);
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	int max_rate;
 
-	return drm_dp_bw_code_to_link_rate(intel_dp->dpcd[DP_MAX_LINK_RATE]);
+	if (intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))
+		max_rate = drm_dp_tunnel_max_dprx_rate(intel_dp->tunnel);
+	else
+		max_rate = drm_dp_bw_code_to_link_rate(intel_dp->dpcd[DP_MAX_LINK_RATE]);
+
+	/*
+	 * For DP TPS4 is a requirement for supporting HBR3, but for eDP its a
+	 * bit ambiguous. Some broken eDP sinks declare support for HBR3 without
+	 * TPS4, but are unable to produce a stable output. For these panels
+	 * reject HBR3 when TPS4 is not available.
+	 */
+	if (max_rate >= 810000 &&
+	    !drm_dp_tps4_supported(intel_dp->dpcd) &&
+	    detected_hbr3_tps4_quirk(intel_dp)) {
+		drm_dbg_kms(display->drm,
+			    "[ENCODER:%d:%s] Rejecting HBR3 due to missing TPS4 support\n",
+			    encoder->base.base.id, encoder->base.name);
+		max_rate = 540000;
+	}
+
+	return max_rate;
 }
 
 static int max_dprx_lane_count(struct intel_dp *intel_dp)
@@ -4171,6 +4212,9 @@ static void intel_edp_mso_init(struct intel_dp *intel_dp)
 static void
 intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+
 	intel_dp->num_sink_rates = 0;
 
 	if (intel_dp->edp_dpcd[0] >= DP_EDP_14) {
@@ -4181,10 +4225,7 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 				 sink_rates, sizeof(sink_rates));
 
 		for (i = 0; i < ARRAY_SIZE(sink_rates); i++) {
-			int val = le16_to_cpu(sink_rates[i]);
-
-			if (val == 0)
-				break;
+			int rate;
 
 			/* Value read multiplied by 200kHz gives the per-lane
 			 * link rate in kHz. The source rates are, however,
@@ -4192,7 +4233,26 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 			 * back to symbols is
 			 * (val * 200kHz)*(8/10 ch. encoding)*(1/8 bit to Byte)
 			 */
-			intel_dp->sink_rates[i] = (val * 200) / 10;
+			rate = le16_to_cpu(sink_rates[i]) * 200 / 10;
+
+			if (rate == 0)
+				break;
+			/*
+			 * For DP TPS4 is a requirement for supporting HBR3, but for eDP its a
+			 * bit ambiugous. Some broken eDP sinks declare support for HBR3 without
+			 * TPS4, but are unable to produce a stable output. For these panels
+			 * reject HBR3 when TPS4 is not available.
+			 */
+			if (rate >= 810000 &&
+			    !drm_dp_tps4_supported(intel_dp->dpcd) &&
+			    detected_hbr3_tps4_quirk(intel_dp)) {
+				drm_dbg_kms(display->drm,
+					    "[ENCODER:%d:%s] Rejecting HBR3 due to missing TPS4 support\n",
+					    encoder->base.base.id, encoder->base.name);
+				break;
+			}
+
+			intel_dp->sink_rates[i] = rate;
 		}
 		intel_dp->num_sink_rates = i;
 	}

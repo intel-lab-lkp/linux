@@ -719,6 +719,14 @@ enum drm_dp_quirk {
 	 * requires enabling DSC.
 	 */
 	DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC,
+
+	/**
+	 * @DP_DPCD_QUIRK_HBR3_WITHOUT_TPS4:
+	 *
+	 * The device supports HBR3 without TPS4 but is unable to produce
+	 * stable output.
+	 */
+	DP_DPCD_QUIRK_HBR3_WITHOUT_TPS4,
 };
 
 /**
