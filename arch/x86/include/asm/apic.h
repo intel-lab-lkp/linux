@@ -547,17 +547,17 @@ static __always_inline void apic_set_reg64(char *regs, int reg, u64 val)
 	*((u64 *) (regs + reg)) = val;
 }
 
-static inline void apic_clear_vector(int vec, void *bitmap)
+static inline void apic_clear_vector(unsigned int vec, void *bitmap)
 {
 	clear_bit(APIC_VECTOR_TO_BIT_NUMBER(vec), bitmap + APIC_VECTOR_TO_REG_OFFSET(vec));
 }
 
-static inline void apic_set_vector(int vec, void *bitmap)
+static inline void apic_set_vector(unsigned int vec, void *bitmap)
 {
 	set_bit(APIC_VECTOR_TO_BIT_NUMBER(vec), bitmap + APIC_VECTOR_TO_REG_OFFSET(vec));
 }
 
-static inline int apic_test_vector(int vec, void *bitmap)
+static inline int apic_test_vector(unsigned int vec, void *bitmap)
 {
 	return test_bit(APIC_VECTOR_TO_BIT_NUMBER(vec), bitmap + APIC_VECTOR_TO_REG_OFFSET(vec));
 }
