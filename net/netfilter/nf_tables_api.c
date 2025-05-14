@@ -9859,6 +9859,7 @@ static int nf_tables_validate(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
 	struct nft_table *table;
+	int err;
 
 	list_for_each_entry(table, &nft_net->tables, list) {
 		switch (table->validate_state) {
@@ -9868,15 +9869,24 @@ static int nf_tables_validate(struct net *net)
 			nft_validate_state_update(table, NFT_VALIDATE_DO);
 			fallthrough;
 		case NFT_VALIDATE_DO:
-			if (nft_table_validate(net, table) < 0)
-				return -EAGAIN;
+			err = nft_table_validate(net, table);
+			if (err < 0) {
+				if (err == EINTR)
+					goto err_eintr;
 
+				return -EAGAIN;
+			}
 			nft_validate_state_update(table, NFT_VALIDATE_SKIP);
 			break;
 		}
 	}
 
 	return 0;
+err_eintr:
+	list_for_each_entry(table, &nft_net->tables, list)
+		nft_validate_state_update(table, NFT_VALIDATE_SKIP);
+
+	return -EINTR;
 }
 
 /* a drop policy has to be deferred until all rules have been activated,
@@ -10684,7 +10694,11 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 	}
 
 	/* 0. Validate ruleset, otherwise roll back for error reporting. */
-	if (nf_tables_validate(net) < 0) {
+	err = nf_tables_validate(net);
+	if (err < 0) {
+		if (err == -EINTR)
+			return -EINTR;
+
 		nft_net->validate_state = NFT_VALIDATE_DO;
 		return -EAGAIN;
 	}
@@ -11028,9 +11042,11 @@ static int __nf_tables_abort(struct net *net, enum nfnl_abort_action action)
 	};
 	int err = 0;
 
-	if (action == NFNL_ABORT_VALIDATE &&
-	    nf_tables_validate(net) < 0)
-		err = -EAGAIN;
+	if (action == NFNL_ABORT_VALIDATE) {
+		err = nf_tables_validate(net);
+		if (err < 0 && err != -EINTR)
+			err = -EAGAIN;
+	}
 
 	list_for_each_entry_safe_reverse(trans, next, &nft_net->commit_list,
 					 list) {
