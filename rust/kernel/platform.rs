@@ -188,6 +188,58 @@ impl Device {
     fn as_raw(&self) -> *mut bindings::platform_device {
         self.0.get()
     }
+
+    /// Returns an IRQ for the device by index.
+    pub fn irq_by_index(&self, index: u32) -> Result<u32> {
+        // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+        let res = unsafe { bindings::platform_get_irq(self.as_raw(), index) };
+
+        if res < 0 {
+            return Err(Error::from_errno(res));
+        }
+
+        Ok(res as u32)
+    }
+
+    /// Same as [`Self::irq_by_index`] but does not print an error message if an IRQ
+    /// cannot be obtained.
+    pub fn optional_irq_by_index(&self, index: u32) -> Result<u32> {
+        // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+        let res = unsafe { bindings::platform_get_irq_optional(self.as_raw(), index) };
+
+        if res < 0 {
+            return Err(Error::from_errno(res));
+        }
+
+        Ok(res as u32)
+    }
+
+    /// Returns an IRQ for the device by name.
+    pub fn irq_by_name(&self, name: &CStr) -> Result<u32> {
+        // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+        let res = unsafe { bindings::platform_get_irq_byname(self.as_raw(), name.as_char_ptr()) };
+
+        if res < 0 {
+            return Err(Error::from_errno(res));
+        }
+
+        Ok(res as u32)
+    }
+
+    /// Same as [`Self::irq_by_name`] but does not print an error message if an IRQ
+    /// cannot be obtained.
+    pub fn optional_irq_by_name(&self, name: &CStr) -> Result<u32> {
+        // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+        let res = unsafe {
+            bindings::platform_get_irq_byname_optional(self.as_raw(), name.as_char_ptr())
+        };
+
+        if res < 0 {
+            return Err(Error::from_errno(res));
+        }
+
+        Ok(res as u32)
+    }
 }
 
 impl Deref for Device<device::Core> {
