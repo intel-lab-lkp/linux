@@ -240,17 +240,33 @@ Groups:
       save all LPI pending bits into guest RAM pending tables.
 
       The first kB of the pending table is not altered by this operation.
+    KVM_DEV_ARM_VGIC_CONFIG_GICV4
+      attribute to enable/disable vGICv4 for a VM. It supports three values:
+      KVM_DEV_ARM_VGIC_CONFIG_GICV4_UNAVAILABLE: Kernel is not booted with
+      'kvm-arm.vgic_v4_enable=1' cmdline, and hence vGICv4 is unavailable to
+      the VM. The value can only be read by the userspace, but cannot be set.
+      KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE: Kernel is booted with
+      'kvm-arm.vgic_v4_enable=1' cmdline, and vGICv4 is available and enabled
+      for the VM (default config). Userspace can get and set this value.
+      KVM_DEV_ARM_VGIC_CONFIG_GICV4_DISABLE: Kernel is booted with
+      'kvm-arm.vgic_v4_enable=1' cmdline, and vGICv4 is available and disabled
+      for the VM. Userspace can get and set this value.
+
 
   Errors:
 
-    =======  ========================================================
+    =======  ==================================================================
     -ENXIO   VGIC not properly configured as required prior to calling
-             this attribute
+             this attribute or trying to enable/disable vGICv4 for the VM
+             on a vGICv3 configuration in the case of
+             KVM_DEV_ARM_VGIC_CONFIG_GICV4
+    -EINVAL  Invalid configuration supplied by userspace
     -ENODEV  no online VCPU
     -ENOMEM  memory shortage when allocating vgic internal data
     -EFAULT  Invalid guest ram access
-    -EBUSY   One or more VCPUS are running
-    =======  ========================================================
+    -EBUSY   One or more VCPUS are running or vGIC has already been initialized
+             in the case of KVM_DEV_ARM_VGIC_CONFIG_GICV4
+    =======  ==================================================================
 
 
   KVM_DEV_ARM_VGIC_GRP_LEVEL_INFO
