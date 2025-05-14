@@ -17,6 +17,7 @@ enum events_snroc {
 	sched_set_state_snroc = 0,
 	sched_switch_in_snroc,
 	sched_switch_out_snroc,
+	sched_switch_vain_snroc,
 	event_max_snroc
 };
 
@@ -36,11 +37,12 @@ static const struct automaton_snroc automaton_snroc = {
 	.event_names = {
 		"sched_set_state",
 		"sched_switch_in",
-		"sched_switch_out"
+		"sched_switch_out",
+		"sched_switch_vain"
 	},
 	.function = {
-		{      INVALID_STATE,  own_context_snroc,       INVALID_STATE },
-		{  own_context_snroc,      INVALID_STATE, other_context_snroc },
+		{       INVALID_STATE,   own_context_snroc,       INVALID_STATE,       INVALID_STATE },
+		{   own_context_snroc,       INVALID_STATE, other_context_snroc,   own_context_snroc },
 	},
 	.initial_state = other_context_snroc,
 	.final_states = { 1, 0 },

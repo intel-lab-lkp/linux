@@ -10,7 +10,7 @@ digraph state_automaton {
 	"other_context" -> "own_context" [ label = "sched_switch_in" ];
 	"own_context" [label = "own_context"];
 	"own_context" -> "other_context" [ label = "sched_switch_out" ];
-	"own_context" -> "own_context" [ label = "sched_set_state" ];
+	"own_context" -> "own_context" [ label = "sched_set_state\nsched_switch_vain" ];
 	{ rank = min ;
 		"__init_other_context";
 		"other_context";
