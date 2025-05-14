@@ -587,64 +587,62 @@ static void a6xx_set_cp_protect(struct msm_gpu *gpu)
 
 static int a6xx_calc_ubwc_config(struct adreno_gpu *gpu)
 {
+	const struct qcom_ubwc_cfg_data *common_cfg;
+	struct qcom_ubwc_cfg_data *cfg = &gpu->_ubwc_config;
+
 	/* Inherit the common config and make some necessary fixups */
-	gpu->common_ubwc_cfg = qcom_ubwc_config_get_data();
-	if (IS_ERR(gpu->common_ubwc_cfg))
+	common_cfg = qcom_ubwc_config_get_data();
+	if (IS_ERR(common_cfg))
 		return -EINVAL;
 
-	gpu->ubwc_config.ubwc_swizzle = 0x6;
-	gpu->ubwc_config.macrotile_mode = 0;
-	gpu->ubwc_config.highest_bank_bit = 15;
+	/* Copy the data into the internal struct to drop the const qualifier (temporarily) */
+	*cfg = *common_cfg;
+
+	cfg->ubwc_swizzle = 0x6;
+	cfg->highest_bank_bit = 15;
 
 	if (adreno_is_a610(gpu)) {
-		gpu->ubwc_config.highest_bank_bit = 13;
-		gpu->ubwc_config.ubwc_swizzle = 0x7;
+		cfg->highest_bank_bit = 13;
+		cfg->ubwc_swizzle = 0x7;
 	}
 
 	if (adreno_is_a618(gpu))
-		gpu->ubwc_config.highest_bank_bit = 14;
+		cfg->highest_bank_bit = 14;
 
 	if (adreno_is_a619(gpu))
 		/* TODO: Should be 14 but causes corruption at e.g. 1920x1200 on DP */
-		gpu->ubwc_config.highest_bank_bit = 13;
+		cfg->highest_bank_bit = 13;
 
 	if (adreno_is_a619_holi(gpu))
-		gpu->ubwc_config.highest_bank_bit = 13;
+		cfg->highest_bank_bit = 13;
 
 	if (adreno_is_a621(gpu))
-		gpu->ubwc_config.highest_bank_bit = 13;
+		cfg->highest_bank_bit = 13;
 
-	if (adreno_is_a623(gpu)) {
-		gpu->ubwc_config.highest_bank_bit = 16;
-		gpu->ubwc_config.macrotile_mode = 1;
-	}
-
-	if (adreno_is_a680(gpu))
-		gpu->ubwc_config.macrotile_mode = 1;
+	if (adreno_is_a623(gpu))
+		cfg->highest_bank_bit = 16;
 
 	if (adreno_is_a650(gpu) ||
 	    adreno_is_a660(gpu) ||
 	    adreno_is_a690(gpu) ||
 	    adreno_is_a730(gpu) ||
 	    adreno_is_a740_family(gpu)) {
-		/* TODO: get ddr type from bootloader and use 2 for LPDDR4 */
-		gpu->ubwc_config.highest_bank_bit = 16;
-		gpu->ubwc_config.macrotile_mode = 1;
+		/* TODO: get ddr type from bootloader and use 15 for LPDDR4 */
+		cfg->highest_bank_bit = 16;
 	}
 
 	if (adreno_is_a663(gpu)) {
-		gpu->ubwc_config.highest_bank_bit = 13;
-		gpu->ubwc_config.macrotile_mode = 1;
-		gpu->ubwc_config.ubwc_swizzle = 0x4;
+		cfg->highest_bank_bit = 13;
+		cfg->ubwc_swizzle = 0x4;
 	}
 
-	if (adreno_is_7c3(gpu)) {
-		gpu->ubwc_config.highest_bank_bit = 14;
-		gpu->ubwc_config.macrotile_mode = 1;
-	}
+	if (adreno_is_7c3(gpu))
+		cfg->highest_bank_bit = 14;
 
 	if (adreno_is_a702(gpu))
-		gpu->ubwc_config.highest_bank_bit = 14;
+		cfg->highest_bank_bit = 14;
+
+	gpu->ubwc_config = &gpu->_ubwc_config;
 
 	return 0;
 }
@@ -654,14 +652,14 @@ static void a6xx_set_ubwc_config(struct msm_gpu *gpu)
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	u8 uavflagprd_inv = adreno_is_a650_family(adreno_gpu) || adreno_is_a7xx(adreno_gpu) ? 2 : 0;
 	bool min_acc_len_64b = adreno_is_a610(adreno_gpu) || adreno_is_a702(adreno_gpu);
-	const struct qcom_ubwc_cfg_data *cfg = adreno_gpu->common_ubwc_cfg;
+	const struct qcom_ubwc_cfg_data *cfg = adreno_gpu->ubwc_config;
 	/*
 	 * We subtract 13 from the highest bank bit (13 is the minimum value
 	 * allowed by hw) and write the lowest two bits of the remaining value
 	 * as hbb_lo and the one above it as hbb_hi to the hardware.
 	 */
-	BUG_ON(adreno_gpu->ubwc_config.highest_bank_bit < 13);
-	u32 hbb = adreno_gpu->ubwc_config.highest_bank_bit - 13;
+	BUG_ON(cfg->highest_bank_bit < 13);
+	u32 hbb = cfg->highest_bank_bit - 13;
 	bool rgb565_predicator = cfg->ubwc_enc_version >= UBWC_4_0;
 	u32 level2_swizzling_dis = !(cfg->ubwc_swizzle & BIT(1));
 	bool ubwc_mode = qcom_ubwc_get_ubwc_mode(cfg);
@@ -695,7 +693,7 @@ static void a6xx_set_ubwc_config(struct msm_gpu *gpu)
 		  min_acc_len_64b << 23 | hbb_lo << 21);
 
 	gpu_write(gpu, REG_A6XX_RBBM_NC_MODE_CNTL,
-		  adreno_gpu->ubwc_config.macrotile_mode);
+		  cfg->macrotile_mode);
 }
 
 static void a7xx_patch_pwrup_reglist(struct msm_gpu *gpu)
