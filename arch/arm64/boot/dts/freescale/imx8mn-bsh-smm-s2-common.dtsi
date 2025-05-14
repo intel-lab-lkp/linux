@@ -144,7 +144,7 @@
 			buck4_reg: BUCK4 {
 				/* PMIC_BUCK6 - VDD_3V3 */
 				regulator-name = "buck4";
-				regulator-min-microvolt = <3000000>;
+				regulator-min-microvolt = <2600000>;
 				regulator-max-microvolt = <3300000>;
 				regulator-boot-on;
 				regulator-always-on;
