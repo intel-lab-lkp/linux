@@ -709,6 +709,8 @@ enum sev_cmd_id {
 	KVM_SEV_SNP_LAUNCH_UPDATE,
 	KVM_SEV_SNP_LAUNCH_FINISH,
 
+	KVM_SEV_SNP_SET_REQUEST_THROTTLE_RATE,
+
 	KVM_SEV_NR_MAX,
 };
 
@@ -876,6 +878,11 @@ struct kvm_sev_snp_launch_finish {
 	__u8 pad0[3];
 	__u16 flags;
 	__u64 pad1[4];
+};
+
+struct kvm_sev_snp_set_request_throttle_rate {
+	__u32 interval_ms;
+	__u32 burst;
 };
 
 #define KVM_X2APIC_API_USE_32BIT_IDS            (1ULL << 0)
