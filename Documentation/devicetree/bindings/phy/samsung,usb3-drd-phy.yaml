@@ -32,6 +32,7 @@ properties:
       - samsung,exynos7-usbdrd-phy
       - samsung,exynos7870-usbdrd-phy
       - samsung,exynos850-usbdrd-phy
+      - samsung,exynosautov920-usb31drd-phy
 
   clocks:
     minItems: 2
@@ -203,6 +204,32 @@ allOf:
 
         reg-names:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: samsung,exynosautov920-usb31drd-phy
+    then:
+      $ref: /schemas/usb/usb-switch.yaml#
+
+      properties:
+        clocks:
+          items:
+            - description: ext_xtal clock
+            - description: reference clock
+
+        clock-names:
+          items:
+            - const: ext_xtal
+            - const: ref
+
+        reg:
+          minItems: 1
+          maxItems: 1
+
+        reg-names:
+          minItems: 1
 
 unevaluatedProperties: false
 
