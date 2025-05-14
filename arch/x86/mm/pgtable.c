@@ -614,7 +614,7 @@ pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
 
 /**
  * reserve_top_address - reserves a hole in the top of kernel address space
- * @reserve - size of hole to reserve
+ * @reserve: Size of hole to reserve.
  *
  * Can be used to relocate the fixmap area and poke a hole in the top
  * of kernel address space to make room for a hypervisor.
@@ -665,6 +665,9 @@ void native_set_fixmap(unsigned /* enum fixed_addresses */ idx,
 #ifdef CONFIG_X86_5LEVEL
 /**
  * p4d_set_huge - setup kernel P4D mapping
+ * @p4d: Pointer to a p4d entry.
+ * @addr: Virtual Address associated with p4d.
+ * @prot: Protection bits to use.
  *
  * No 512GB pages yet -- always return 0
  */
@@ -675,8 +678,9 @@ int p4d_set_huge(p4d_t *p4d, phys_addr_t addr, pgprot_t prot)
 
 /**
  * p4d_clear_huge - clear kernel P4D mapping when it is set
+ * @p4d: Pointer to the p4d entry to clear.
  *
- * No 512GB pages yet -- always return 0
+ * No 512GB pages yet -- do nothing
  */
 void p4d_clear_huge(p4d_t *p4d)
 {
@@ -685,6 +689,9 @@ void p4d_clear_huge(p4d_t *p4d)
 
 /**
  * pud_set_huge - setup kernel PUD mapping
+ * @pud: Pointer to a pud entry.
+ * @addr: Virtual Address associated with pud.
+ * @prot: Protection bits to use.
  *
  * MTRRs can override PAT memory types with 4KiB granularity. Therefore, this
  * function sets up a huge page only if the complete range has the same MTRR
@@ -716,6 +723,9 @@ int pud_set_huge(pud_t *pud, phys_addr_t addr, pgprot_t prot)
 
 /**
  * pmd_set_huge - setup kernel PMD mapping
+ * @pmd: Pointer to a pmd entry.
+ * @addr: Virtual Address associated with pmd.
+ * @prot: Protection bits to use.
  *
  * See text over pud_set_huge() above.
  *
@@ -745,6 +755,7 @@ int pmd_set_huge(pmd_t *pmd, phys_addr_t addr, pgprot_t prot)
 
 /**
  * pud_clear_huge - clear kernel PUD mapping when it is set
+ * @pud: Pointer to the pud entry to clear.
  *
  * Returns 1 on success and 0 on failure (no PUD map is found).
  */
@@ -760,6 +771,7 @@ int pud_clear_huge(pud_t *pud)
 
 /**
  * pmd_clear_huge - clear kernel PMD mapping when it is set
+ * @pmd: Pointer to the pmd entry to clear.
  *
  * Returns 1 on success and 0 on failure (no PMD map is found).
  */
