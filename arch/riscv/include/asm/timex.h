@@ -7,31 +7,25 @@
 #define _ASM_RISCV_TIMEX_H
 
 #include <asm/csr.h>
+#include <asm/mmio.h>
+
+#include <linux/jump_label.h>
 
 typedef unsigned long cycles_t;
+
+extern u64 __iomem *riscv_time_val;
+extern cycles_t (*get_cycles_ptr)(void);
+extern u32 (*get_cycles_hi_ptr)(void);
+
+#define riscv_time_val riscv_time_val
 
 #ifdef CONFIG_RISCV_M_MODE
 
 #include <asm/clint.h>
 
-#ifdef CONFIG_64BIT
-static inline cycles_t get_cycles(void)
-{
-	return readq_relaxed(clint_time_val);
-}
-#else /* !CONFIG_64BIT */
-static inline u32 get_cycles(void)
-{
-	return readl_relaxed(((u32 *)clint_time_val));
-}
-#define get_cycles get_cycles
+#undef riscv_time_val
 
-static inline u32 get_cycles_hi(void)
-{
-	return readl_relaxed(((u32 *)clint_time_val) + 1);
-}
-#define get_cycles_hi get_cycles_hi
-#endif /* CONFIG_64BIT */
+#define riscv_time_val clint_time_val
 
 /*
  * Much like MIPS, we may not have a viable counter to use at an early point
@@ -45,29 +39,17 @@ static inline unsigned long random_get_entropy(void)
 	return get_cycles();
 }
 #define random_get_entropy()	random_get_entropy()
+#endif
 
-#else /* CONFIG_RISCV_M_MODE */
-
-static inline cycles_t get_cycles(void)
-{
-	return csr_read(CSR_TIME);
-}
-#define get_cycles get_cycles
-
-static inline u32 get_cycles_hi(void)
-{
-	return csr_read(CSR_TIMEH);
-}
-#define get_cycles_hi get_cycles_hi
-
-#endif /* !CONFIG_RISCV_M_MODE */
+#define get_cycles get_cycles_ptr
+#define get_cycles_hi get_cycles_ptr_hi
 
 #ifdef CONFIG_64BIT
 static inline u64 get_cycles64(void)
 {
 	return get_cycles();
 }
-#else /* CONFIG_64BIT */
+#else /* !CONFIG_64BIT */
 static inline u64 get_cycles64(void)
 {
 	u32 hi, lo;
