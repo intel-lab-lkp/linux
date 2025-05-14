@@ -517,6 +517,14 @@ static struct inode *V1_minix_iget(struct inode *inode)
 		iget_failed(inode);
 		return ERR_PTR(-ESTALE);
 	}
+	if (S_ISDIR(raw_inode->i_mode) && raw_inode->i_nlinks < 2) {
+		printk("MINIX-fs: inode directory with corrupted number of links");
+		if (!sb_rdonly(inode->i_sb)) {
+			brelse(bh);
+			iget_failed(inode);
+			return ERR_PTR(-EUCLEAN);
+		}
+	}
 	inode->i_mode = raw_inode->i_mode;
 	i_uid_write(inode, raw_inode->i_uid);
 	i_gid_write(inode, raw_inode->i_gid);
@@ -554,6 +562,14 @@ static struct inode *V2_minix_iget(struct inode *inode)
 		brelse(bh);
 		iget_failed(inode);
 		return ERR_PTR(-ESTALE);
+	}
+	if (S_ISDIR(raw_inode->i_mode) && raw_inode->i_nlinks < 2) {
+		printk("MINIX-fs: inode directory with corrupted number of links");
+		if (!sb_rdonly(inode->i_sb)) {
+			brelse(bh);
+			iget_failed(inode);
+			return ERR_PTR(-EUCLEAN);
+		}
 	}
 	inode->i_mode = raw_inode->i_mode;
 	i_uid_write(inode, raw_inode->i_uid);
