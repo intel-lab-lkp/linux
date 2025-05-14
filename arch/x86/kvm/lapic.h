@@ -148,19 +148,9 @@ u64 kvm_lapic_readable_reg_mask(struct kvm_lapic *apic);
 #define VEC_POS(v) APIC_VECTOR_TO_BIT_NUMBER(v)
 #define REG_POS(v) APIC_VECTOR_TO_REG_OFFSET(v)
 
-static inline void kvm_lapic_clear_vector(int vec, void *bitmap)
-{
-	clear_bit(VEC_POS(vec), (bitmap) + REG_POS(vec));
-}
-
-static inline void kvm_lapic_set_vector(int vec, void *bitmap)
-{
-	set_bit(VEC_POS(vec), (bitmap) + REG_POS(vec));
-}
-
 static inline void kvm_lapic_set_irr(int vec, struct kvm_lapic *apic)
 {
-	kvm_lapic_set_vector(vec, apic->regs + APIC_IRR);
+	apic_set_vector(vec, apic->regs + APIC_IRR);
 	/*
 	 * irr_pending must be true if any interrupt is pending; set it after
 	 * APIC_IRR to avoid race with apic_clear_irr
