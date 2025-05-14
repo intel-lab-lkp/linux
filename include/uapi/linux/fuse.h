@@ -899,7 +899,8 @@ struct fuse_init_in {
 	uint32_t	max_readahead;
 	uint32_t	flags;
 	uint32_t	flags2;
-	uint32_t	unused[11];
+	uint32_t	max_stack_depth;
+	uint32_t	unused[10];
 };
 
 #define FUSE_COMPAT_INIT_OUT_SIZE 8

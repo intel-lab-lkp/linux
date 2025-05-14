@@ -1498,8 +1498,10 @@ void fuse_send_init(struct fuse_mount *fm)
 #endif
 	if (fm->fc->auto_submounts)
 		flags |= FUSE_SUBMOUNTS;
-	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
+	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH)) {
 		flags |= FUSE_PASSTHROUGH;
+		ia->in.max_stack_depth = FILESYSTEM_MAX_STACK_DEPTH;
+	}
 
 	/*
 	 * This is just an information flag for fuse server. No need to check
