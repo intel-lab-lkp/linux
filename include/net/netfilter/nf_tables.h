@@ -585,6 +585,8 @@ struct nft_set_elem_expr {
 struct nft_set {
 	struct list_head		list;
 	struct list_head		bindings;
+	struct list_head		binding_list;
+	struct list_head		backbinding_list;
 	refcount_t			refs;
 	struct nft_table		*table;
 	possible_net_t			net;
@@ -1117,6 +1119,8 @@ struct nft_rule_blob {
 struct nft_chain {
 	struct nft_rule_blob		__rcu *blob_gen_0;
 	struct nft_rule_blob		__rcu *blob_gen_1;
+	struct list_head		binding_list;
+	struct list_head		backbinding_list;
 	struct list_head		rules;
 	struct list_head		list;
 	struct list_head		validate_list;
@@ -1293,6 +1297,7 @@ struct nft_table {
 	struct list_head		sets;
 	struct list_head		objects;
 	struct list_head		flowtables;
+	struct rhashtable		bindings_ht;
 	u64				hgenerator;
 	u64				handle;
 	u32				use;
@@ -1627,6 +1632,46 @@ static inline int nft_set_elem_is_dead(const struct nft_set_ext *ext)
 	BUILD_BUG_ON(offsetof(struct nft_set_ext, genmask) != 0);
 	return test_bit(NFT_SET_ELEM_DEAD_BIT, word);
 }
+
+enum nft_binding_type {
+        NFT_BIND_CHAIN	= 0,
+        NFT_BIND_SET,
+};
+
+/* Bindings. */
+struct nft_binding_key {
+	union {
+		const struct nft_chain	*chain;
+		const struct nft_set	*set;
+		const void		*ptr;
+	};
+	enum nft_binding_type		type;
+};
+
+struct nft_binding {
+	struct rhash_head		node;
+	struct list_head		list;
+	struct list_head		backlist;
+	struct nft_binding_key		from;
+	struct nft_binding_key		to;
+	uint32_t			use;
+};
+
+struct nft_chain;
+struct nft_set;
+
+int nft_add_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2);
+void nft_activate_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2);
+void nft_deactivate_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2);
+void nft_del_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2);
+int nft_add_chain_set_binding(struct nft_chain *chain, struct nft_set *set);
+void nft_deactivate_chain_set_binding(struct nft_chain *chain, struct nft_set *set);
+void nft_activate_chain_set_binding(struct nft_chain *chain, struct nft_set *set);
+void nft_del_chain_set_binding(struct nft_chain *chain, struct nft_set *set);
+int nft_add_set_chain_binding(struct nft_set *set, struct nft_chain *chain);
+void nft_deactivate_set_chain_binding(struct nft_set *set, struct nft_chain *chain);
+void nft_activate_set_chain_binding(struct nft_set *set, struct nft_chain *chain);
+void nft_del_set_chain_binding(struct nft_set *set, struct nft_chain *chain);
 
 /**
  * struct nft_trans - nf_tables object update in transaction

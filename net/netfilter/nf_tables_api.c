@@ -954,6 +954,347 @@ void __nft_reg_track_cancel(struct nft_regs_track *track, u8 dreg)
 }
 EXPORT_SYMBOL_GPL(__nft_reg_track_cancel);
 
+struct nft_binding_cmp_key {
+	const struct nft_binding_key	*from;
+	const struct nft_binding_key	*to;
+};
+
+static u32 nft_binding_hash(const void *data, u32 len, u32 seed)
+{
+	const struct nft_binding_cmp_key *key = data;
+	unsigned long tuple[4];
+
+	tuple[0] = (unsigned long)key->from->ptr;
+	tuple[1] = (unsigned long)key->from->type;
+	tuple[2] = (unsigned long)key->to->ptr;
+	tuple[3] = (unsigned long)key->to->type;
+
+	return jhash(tuple, sizeof(tuple), seed);
+}
+
+static u32 nft_binding_hash_obj(const void *data, u32 len, u32 seed)
+{
+	const struct nft_binding *binding = data;
+	unsigned long tuple[4];
+
+	tuple[0] = (unsigned long)binding->from.ptr;
+	tuple[1] = (unsigned long)binding->from.type;
+	tuple[2] = (unsigned long)binding->to.ptr;
+	tuple[3] = (unsigned long)binding->to.type;
+
+	return jhash(tuple, sizeof(tuple), seed);
+}
+
+static int nft_binding_hash_cmp(struct rhashtable_compare_arg *arg,
+				const void *ptr)
+{
+	const struct nft_binding_cmp_key *key = arg->key;
+	const struct nft_binding *binding = ptr;
+
+	return key->from->ptr != binding->from.ptr ||
+	       key->from->type != binding->from.type ||
+	       key->to->ptr != binding->to.ptr ||
+	       key->to->type != binding->to.type;
+}
+
+static const struct rhashtable_params nft_binding_ht_params = {
+	.head_offset		= offsetof(struct nft_binding, node),
+	.hashfn			= nft_binding_hash,
+	.obj_hashfn		= nft_binding_hash_obj,
+	.obj_cmpfn		= nft_binding_hash_cmp,
+	.automatic_shrinking	= true,
+};
+
+static struct nft_binding *nft_binding_lookup(struct nft_table *table,
+					      const struct nft_binding_key *from,
+					      const struct nft_binding_key *to)
+{
+	struct nft_binding_cmp_key key = {
+		.from	= from,
+		.to	= to,
+	};
+
+	return rhashtable_lookup_fast(&table->bindings_ht, &key,
+				      nft_binding_ht_params);
+}
+
+static void nft_deactivate_binding(struct nft_table *table,
+				   const struct nft_binding_key *from,
+				   const struct nft_binding_key *to)
+{
+	struct nft_binding *binding;
+
+	binding = nft_binding_lookup(table, from, to);
+	if (WARN_ON_ONCE(!binding))
+		return;
+	if (WARN_ON_ONCE(binding->use == 0))
+		return;
+
+	binding->use--;
+}
+
+void nft_deactivate_chain_binding(struct nft_chain *chain1,
+				  struct nft_chain *chain2)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain1,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain2,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_deactivate_binding(chain1->table, &from, &to);
+}
+
+void nft_deactivate_chain_set_binding(struct nft_chain *chain,
+				      struct nft_set *set)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+
+	nft_deactivate_binding(chain->table, &from, &to);
+}
+
+void nft_deactivate_set_chain_binding(struct nft_set *set,
+				      struct nft_chain *chain)
+{
+	struct nft_binding_key from = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_deactivate_binding(chain->table, &from, &to);
+}
+
+static void nft_activate_binding(struct nft_table *table,
+				 const struct nft_binding_key *from,
+				 const struct nft_binding_key *to)
+{
+	struct nft_binding *binding;
+
+	binding = nft_binding_lookup(table, from, to);
+	if (WARN_ON_ONCE(!binding))
+		return;
+
+	binding->use++;
+}
+
+void nft_activate_chain_binding(struct nft_chain *chain1,
+				struct nft_chain *chain2)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain1,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain2,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_activate_binding(chain1->table, &from, &to);
+}
+
+void nft_activate_chain_set_binding(struct nft_chain *chain,
+				    struct nft_set *set)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+
+	nft_activate_binding(chain->table, &from, &to);
+}
+
+void nft_activate_set_chain_binding(struct nft_set *set,
+				    struct nft_chain *chain)
+{
+	struct nft_binding_key from = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_activate_binding(chain->table, &from, &to);
+}
+
+static void nft_del_binding(struct nft_table *table,
+			    const struct nft_binding_key *from,
+			    const struct nft_binding_key *to)
+{
+	struct nft_binding *binding;
+	int err;
+
+	binding = nft_binding_lookup(table, from, to);
+	/* With several references to object, deactivate deals to zero use,
+	 * then first delete binding call remove it.
+	 */
+	if (!binding)
+		return;
+
+	if (binding->use != 0)
+		return;
+
+	list_del(&binding->list);
+	list_del(&binding->backlist);
+
+	err = rhashtable_remove_fast(&table->bindings_ht,
+				     &binding->node, nft_binding_ht_params);
+	if (WARN_ON_ONCE(err < 0))
+		return;
+
+	kfree(binding);
+}
+
+void nft_del_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain1,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain2,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_del_binding(chain1->table, &from, &to);
+}
+
+void nft_del_chain_set_binding(struct nft_chain *chain, struct nft_set *set)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+
+	nft_del_binding(chain->table, &from, &to);
+}
+
+void nft_del_set_chain_binding(struct nft_set *set, struct nft_chain *chain)
+{
+	struct nft_binding_key from = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	nft_del_binding(chain->table, &from, &to);
+}
+
+static int __nft_add_binding(struct nft_table *table,
+			     const struct nft_binding_key *from,
+			     const struct nft_binding_key *to,
+			     struct list_head *binding_list,
+			     struct list_head *backbinding_list)
+{
+	struct nft_binding *binding;
+
+	binding = kzalloc(sizeof(struct nft_binding), GFP_KERNEL);
+	if (!binding)
+		return -ENOMEM;
+
+	binding->from = *from;
+	binding->to = *to;
+	binding->use++;
+
+	list_add_tail(&binding->list, binding_list);
+	list_add_tail(&binding->backlist, backbinding_list);
+
+	return rhashtable_insert_fast(&table->bindings_ht, &binding->node,
+				      nft_binding_ht_params);
+}
+
+static int nft_add_binding(struct nft_table *table,
+			   const struct nft_binding_key *from,
+			   const struct nft_binding_key *to,
+			   struct list_head *binding_list,
+			   struct list_head *backbinding_list)
+{
+	struct nft_binding *binding;
+
+	binding = nft_binding_lookup(table, from, to);
+	if (!binding)
+		return __nft_add_binding(table, from, to,
+					 binding_list, backbinding_list);
+
+	if (binding->use == UINT_MAX)
+		return -EOVERFLOW;
+
+	binding->use++;
+
+	return 0;
+}
+
+int nft_add_chain_binding(struct nft_chain *chain1, struct nft_chain *chain2)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain1,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain2,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	return nft_add_binding(chain1->table, &from, &to,
+			       &chain1->binding_list, &chain2->backbinding_list);
+}
+
+int nft_add_chain_set_binding(struct nft_chain *chain, struct nft_set *set)
+{
+	struct nft_binding_key from = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+	struct nft_binding_key to = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+
+	return nft_add_binding(chain->table, &from, &to,
+			       &chain->binding_list, &set->backbinding_list);
+}
+
+int nft_add_set_chain_binding(struct nft_set *set, struct nft_chain *chain)
+{
+	struct nft_binding_key from = {
+		.ptr	= set,
+		.type	= NFT_BIND_SET,
+	};
+	struct nft_binding_key to = {
+		.ptr	= chain,
+		.type	= NFT_BIND_CHAIN,
+	};
+
+	return nft_add_binding(chain->table, &from, &to,
+			       &set->binding_list, &chain->backbinding_list);
+}
+
 /*
  * Tables
  */
@@ -1611,6 +1952,10 @@ static int nf_tables_newtable(struct sk_buff *skb, const struct nfnl_info *info,
 	if (err)
 		goto err_chain_ht;
 
+	err = rhashtable_init(&table->bindings_ht, &nft_binding_ht_params);
+	if (err)
+		goto err_binding_ht;
+
 	INIT_LIST_HEAD(&table->chains);
 	INIT_LIST_HEAD(&table->sets);
 	INIT_LIST_HEAD(&table->objects);
@@ -1629,6 +1974,8 @@ static int nf_tables_newtable(struct sk_buff *skb, const struct nfnl_info *info,
 	list_add_tail_rcu(&table->list, &nft_net->tables);
 	return 0;
 err_trans:
+	rhashtable_destroy(&table->bindings_ht);
+err_binding_ht:
 	rhltable_destroy(&table->chains_ht);
 err_chain_ht:
 	kfree(table->udata);
@@ -1794,6 +2141,7 @@ static void nf_tables_table_destroy(struct nft_table *table)
 	if (WARN_ON(table->use > 0))
 		return;
 
+	rhashtable_destroy(&table->bindings_ht);
 	rhltable_destroy(&table->chains_ht);
 	kfree(table->name);
 	kfree(table->udata);
@@ -2691,6 +3039,8 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 policy,
 	ctx->chain = chain;
 
 	INIT_LIST_HEAD(&chain->rules);
+	INIT_LIST_HEAD(&chain->binding_list);
+	INIT_LIST_HEAD(&chain->backbinding_list);
 	chain->handle = nf_tables_alloc_handle(table);
 	chain->table = table;
 
@@ -5497,6 +5847,8 @@ static int nf_tables_newset(struct sk_buff *skb, const struct nfnl_info *info,
 	}
 
 	INIT_LIST_HEAD(&set->bindings);
+	INIT_LIST_HEAD(&set->binding_list);
+	INIT_LIST_HEAD(&set->backbinding_list);
 	INIT_LIST_HEAD(&set->catchall_list);
 	refcount_set(&set->refs, 1);
 	set->table = table;
