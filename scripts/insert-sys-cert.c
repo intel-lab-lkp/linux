@@ -250,6 +250,7 @@ static char *read_file(char *file_name, int *size)
 	}
 	if (read(fd, buf, *size) != *size) {
 		perror("File read failed");
+		free(buf);
 		close(fd);
 		return NULL;
 	}
@@ -285,6 +286,7 @@ int main(int argc, char **argv)
 	int opt;
 	Elf_Shdr *symtab = NULL;
 	struct sym cert_sym, lsize_sym, used_sym;
+	int ret = EXIT_FAILURE;
 
 	while ((opt = getopt(argc, argv, "b:c:s:")) != -1) {
 		switch (opt) {
@@ -304,20 +306,20 @@ int main(int argc, char **argv)
 
 	if (!vmlinux_file || !cert_file) {
 		print_usage(argv[0]);
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	cert = read_file(cert_file, &cert_size);
 	if (!cert)
-		exit(EXIT_FAILURE);
+		goto cleanup;
 
 	hdr = map_file(vmlinux_file, &vmlinux_size);
 	if (!hdr)
-		exit(EXIT_FAILURE);
+		goto cleanup;
 
 	if (vmlinux_size < sizeof(*hdr)) {
 		err("Invalid ELF file.\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	if ((hdr->e_ident[EI_MAG0] != ELFMAG0) ||
@@ -325,22 +327,22 @@ int main(int argc, char **argv)
 	    (hdr->e_ident[EI_MAG2] != ELFMAG2) ||
 	    (hdr->e_ident[EI_MAG3] != ELFMAG3)) {
 		err("Invalid ELF magic.\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	if (hdr->e_ident[EI_CLASS] != CURRENT_ELFCLASS) {
 		err("ELF class mismatch.\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	if (hdr->e_ident[EI_DATA] != endianness()) {
 		err("ELF endian mismatch.\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	if (hdr->e_shoff > vmlinux_size) {
 		err("Could not find section header.\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	symtab = get_symbol_table(hdr);
@@ -349,13 +351,13 @@ int main(int argc, char **argv)
 		if (!system_map_file) {
 			err("Please provide a System.map file.\n");
 			print_usage(argv[0]);
-			exit(EXIT_FAILURE);
+			goto cleanup;
 		}
 
 		system_map = fopen(system_map_file, "r");
 		if (!system_map) {
 			perror(system_map_file);
-			exit(EXIT_FAILURE);
+			goto cleanup;
 		}
 		get_symbol_from_map(hdr, system_map, CERT_SYM, &cert_sym);
 		get_symbol_from_map(hdr, system_map, USED_SYM, &used_sym);
@@ -371,7 +373,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!cert_sym.offset || !lsize_sym.offset || !used_sym.offset)
-		exit(EXIT_FAILURE);
+		goto cleanup;
 
 	print_sym(hdr, &cert_sym);
 	print_sym(hdr, &used_sym);
@@ -382,14 +384,15 @@ int main(int argc, char **argv)
 
 	if (cert_sym.size < cert_size) {
 		err("Certificate is larger than the reserved area!\n");
-		exit(EXIT_FAILURE);
+		goto cleanup;
 	}
 
 	/* If the existing cert is the same, don't overwrite */
 	if (cert_size == *used &&
 	    strncmp(cert_sym.content, cert, cert_size) == 0) {
 		warn("Certificate was already inserted.\n");
-		exit(EXIT_SUCCESS);
+		ret = EXIT_SUCCESS;
+		goto cleanup;
 	}
 
 	if (*used > 0)
@@ -406,5 +409,18 @@ int main(int argc, char **argv)
 						cert_sym.address);
 	info("Used %d bytes out of %d bytes reserved.\n", *used,
 						 cert_sym.size);
-	exit(EXIT_SUCCESS);
+
+	ret = EXIT_SUCCESS;
+
+cleanup:
+	if (cert)
+		free(cert);
+
+	if (hdr)
+		munmap(hdr, vmlinux_size);
+
+	if (system_map)
+		free(system_map);
+
+	return ret;
 }
