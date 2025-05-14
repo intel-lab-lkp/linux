@@ -675,6 +675,63 @@ static void test_v3_its_region(void)
 	vm_gic_destroy(&v);
 }
 
+static void test_v3_vgicv4_config(void)
+{
+	struct kvm_vcpu *vcpus[NR_VCPUS];
+	uint8_t gicv4_config;
+	struct vm_gic v;
+	int ret;
+
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	if (__kvm_has_device_attr(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+					KVM_DEV_ARM_VGIC_CONFIG_GICV4))
+		return;
+
+	kvm_device_attr_get(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+				KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+
+	if (gicv4_config == KVM_DEV_ARM_VGIC_CONFIG_GICV4_UNAVAILABLE) {
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_DISABLE;
+		ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+				KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+		TEST_ASSERT(ret && errno == ENXIO,
+			"vGICv4 allowed to be disabled even though it's unavailable");
+
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE;
+		ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+				KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+		TEST_ASSERT(ret && errno == ENXIO,
+			"vGICv4 allowed to be enabled even though it's unavailable");
+	} else { /* kvm-arm.vgic_v4_enable=1 */
+		TEST_ASSERT(gicv4_config == KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE,
+				"Expected vGICv4 to be enabled by default");
+
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_DISABLE;
+		kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+				KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE;
+		kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+				KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_ENABLE + 1;
+		ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+			KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+		TEST_ASSERT(ret && errno == EINVAL,
+			"vGICv4 allowed to be configured with unknown value");
+
+		kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+					KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
+		gicv4_config = KVM_DEV_ARM_VGIC_CONFIG_GICV4_DISABLE;
+		ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+			KVM_DEV_ARM_VGIC_CONFIG_GICV4, &gicv4_config);
+		TEST_ASSERT(ret && errno == EBUSY,
+			"Changing vGICv4 config allowed after vGIC initialization");
+	}
+
+	vm_gic_destroy(&v);
+}
+
 /*
  * Returns 0 if it's possible to create GIC device of a given type (V2 or V3).
  */
@@ -730,6 +787,7 @@ void run_tests(uint32_t gic_dev_type)
 		test_v3_last_bit_single_rdist();
 		test_v3_redist_ipa_range_check_at_vcpu_run();
 		test_v3_its_region();
+		test_v3_vgicv4_config();
 	}
 }
 
