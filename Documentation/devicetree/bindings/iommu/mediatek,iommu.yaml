@@ -97,7 +97,8 @@ properties:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 5
 
   clocks:
     items:
@@ -200,6 +201,21 @@ allOf:
     then:
       required:
         - mediatek,infracfg
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8195-iommu-infra
+    then:
+      properties:
+        interrupts:
+          minItems: 5
+    else:
+      properties:
+        interrupts:
+          maxItems: 1
 
   - if: # The IOMMUs don't have larbs.
       not:
