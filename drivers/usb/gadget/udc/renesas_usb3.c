@@ -1920,11 +1920,13 @@ static void usb3_irq_epc_pipe0_setup(struct renesas_usb3 *usb3)
 {
 	struct usb_ctrlrequest ctrl;
 	struct renesas_usb3_ep *usb3_ep = usb3_get_ep(usb3, 0);
+	struct renesas_usb3_request *usb3_req = usb3_get_request(usb3_ep);
 
 	/* Call giveback function if previous transfer is not completed */
+	if (!usb3_req)
+		return;
 	if (usb3_ep->started)
-		usb3_request_done(usb3_ep, usb3_get_request(usb3_ep),
-				  -ECONNRESET);
+		usb3_request_done(usb3_ep, usb3_req, -ECONNRESET);
 
 	usb3_p0_con_clear_buffer(usb3);
 	usb3_get_setup_data(usb3, &ctrl);
