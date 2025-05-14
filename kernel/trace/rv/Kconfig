@@ -34,6 +34,8 @@ source "kernel/trace/rv/monitors/scpd/Kconfig"
 source "kernel/trace/rv/monitors/snep/Kconfig"
 source "kernel/trace/rv/monitors/sncid/Kconfig"
 source "kernel/trace/rv/monitors/sts/Kconfig"
+source "kernel/trace/rv/monitors/nrp/Kconfig"
+source "kernel/trace/rv/monitors/sssw/Kconfig"
 # Add new monitors here
 
 config RV_REACTORS

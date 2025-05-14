@@ -25,7 +25,7 @@ struct da_monitor {
  * adding more or developing a dynamic method. So far, none of
  * these are justified.
  */
-#define RV_PER_TASK_MONITORS		1
+#define RV_PER_TASK_MONITORS		3
 #define RV_PER_TASK_MONITOR_INIT	(RV_PER_TASK_MONITORS)
 
 /*

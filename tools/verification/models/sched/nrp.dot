@@ -1,0 +1,19 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = plaintext, style=invis, label=""] "__init_any_thread_running"};
+	{node [shape = doublecircle] "any_thread_running"};
+	{node [shape = circle] "any_thread_running"};
+	{node [shape = circle] "rescheduling"};
+	"__init_any_thread_running" -> "any_thread_running";
+	"any_thread_running" [label = "any_thread_running", color = green3];
+	"any_thread_running" -> "any_thread_running" [ label = "sched_switch_other\nsched_switch_vain" ];
+	"any_thread_running" -> "rescheduling" [ label = "sched_need_resched" ];
+	"rescheduling" [label = "rescheduling"];
+	"rescheduling" -> "any_thread_running" [ label = "sched_switch_preempt\nsched_switch_vain_preempt\nsched_switch_other\nsched_switch_vain" ];
+	"rescheduling" -> "rescheduling" [ label = "sched_need_resched" ];
+	{ rank = min ;
+		"__init_any_thread_running";
+		"any_thread_running";
+	}
+}
