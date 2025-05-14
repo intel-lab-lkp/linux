@@ -12,90 +12,43 @@ void rust_helper_iounmap(void __iomem *addr)
 	iounmap(addr);
 }
 
-u8 rust_helper_readb(const void __iomem *addr)
-{
-	return readb(addr);
-}
+#define define_rust_io_read_helper(rust_name, name, type) \
+	type rust_name(void __iomem *addr)                \
+	{                                                 \
+		return name(addr);                        \
+	}
 
-u16 rust_helper_readw(const void __iomem *addr)
-{
-	return readw(addr);
-}
+#define define_rust_io_write_helper(rust_name, name, type) \
+	void rust_name(type value, void __iomem *addr)     \
+	{                                                  \
+		name(value, addr);                         \
+	}
 
-u32 rust_helper_readl(const void __iomem *addr)
-{
-	return readl(addr);
-}
-
+define_rust_io_read_helper(rust_helper_readb, readb, u8);
+define_rust_io_read_helper(rust_helper_readw, readw, u16);
+define_rust_io_read_helper(rust_helper_readl, readl, u32);
 #ifdef CONFIG_64BIT
-u64 rust_helper_readq(const void __iomem *addr)
-{
-	return readq(addr);
-}
+define_rust_io_read_helper(rust_helper_readq, readq, u64);
 #endif
 
-void rust_helper_writeb(u8 value, void __iomem *addr)
-{
-	writeb(value, addr);
-}
-
-void rust_helper_writew(u16 value, void __iomem *addr)
-{
-	writew(value, addr);
-}
-
-void rust_helper_writel(u32 value, void __iomem *addr)
-{
-	writel(value, addr);
-}
-
+define_rust_io_write_helper(rust_helper_writeb, writeb, u8);
+define_rust_io_write_helper(rust_helper_writew, writew, u16);
+define_rust_io_write_helper(rust_helper_writel, writel, u32);
 #ifdef CONFIG_64BIT
-void rust_helper_writeq(u64 value, void __iomem *addr)
-{
-	writeq(value, addr);
-}
+define_rust_io_write_helper(rust_helper_writeq, writeq, u64);
 #endif
 
-u8 rust_helper_readb_relaxed(const void __iomem *addr)
-{
-	return readb_relaxed(addr);
-}
-
-u16 rust_helper_readw_relaxed(const void __iomem *addr)
-{
-	return readw_relaxed(addr);
-}
-
-u32 rust_helper_readl_relaxed(const void __iomem *addr)
-{
-	return readl_relaxed(addr);
-}
-
+define_rust_io_read_helper(rust_helper_readb_relaxed, readb_relaxed, u8);
+define_rust_io_read_helper(rust_helper_readw_relaxed, readw_relaxed, u16);
+define_rust_io_read_helper(rust_helper_readl_relaxed, readl_relaxed, u32);
 #ifdef CONFIG_64BIT
-u64 rust_helper_readq_relaxed(const void __iomem *addr)
-{
-	return readq_relaxed(addr);
-}
+define_rust_io_read_helper(rust_helper_readq_relaxed, readq_relaxed, u64);
 #endif
 
-void rust_helper_writeb_relaxed(u8 value, void __iomem *addr)
-{
-	writeb_relaxed(value, addr);
-}
-
-void rust_helper_writew_relaxed(u16 value, void __iomem *addr)
-{
-	writew_relaxed(value, addr);
-}
-
-void rust_helper_writel_relaxed(u32 value, void __iomem *addr)
-{
-	writel_relaxed(value, addr);
-}
-
+define_rust_io_write_helper(rust_helper_writeb_relaxed, writeb_relaxed, u8);
+define_rust_io_write_helper(rust_helper_writew_relaxed, writew_relaxed, u16);
+define_rust_io_write_helper(rust_helper_writel_relaxed, writel_relaxed, u32);
 #ifdef CONFIG_64BIT
-void rust_helper_writeq_relaxed(u64 value, void __iomem *addr)
-{
-	writeq_relaxed(value, addr);
-}
+define_rust_io_write_helper(rust_helper_writeq_relaxed, writeq_relaxed, u64);
 #endif
+
