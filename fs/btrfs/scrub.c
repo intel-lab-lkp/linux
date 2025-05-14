@@ -1658,7 +1658,8 @@ static int scrub_find_fill_first_stripe(struct btrfs_block_group *bg,
 	int ret;
 
 	if (unlikely(!extent_root || !csum_root)) {
-		btrfs_err(fs_info, "no valid extent or csum root for scrub");
+		btrfs_err(fs_info,
+			  "scrub: no valid extent or csum root for scrub");
 		return -EUCLEAN;
 	}
 	memset(stripe->sectors, 0, sizeof(struct scrub_sector_verification) *
