@@ -111,7 +111,16 @@ void (*x86_return_thunk)(void) __ro_after_init = __x86_return_thunk;
 
 static void __init set_return_thunk(void *thunk)
 {
-	if (x86_return_thunk != __x86_return_thunk)
+	/*
+	 * There can only be one return thunk enabled at a time, so issue a
+	 * warning when overwriting it. retbleed_return_thunk is a special case
+	 * which is safe to be overwritten with srso_return_thunk since it
+	 * provides a superset of the functionality and is handled correctly in
+	 * entry_untrain_ret().
+	 */
+	if ((x86_return_thunk != __x86_return_thunk) &&
+	    (thunk != srso_return_thunk ||
+	     x86_return_thunk != retbleed_return_thunk))
 		pr_warn("x86/bugs: return thunk changed\n");
 
 	x86_return_thunk = thunk;
