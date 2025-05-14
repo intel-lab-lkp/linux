@@ -244,6 +244,9 @@ static int avs_card_suspend_pre(struct snd_soc_card *card)
 {
 	struct snd_soc_dai *codec_dai = snd_soc_card_get_codec_dai(card, ES8336_CODEC_DAI);
 
+	if (!codec_dai)
+		return -EINVAL;
+
 	return snd_soc_component_set_jack(codec_dai->component, NULL, NULL);
 }
 
@@ -251,6 +254,9 @@ static int avs_card_resume_post(struct snd_soc_card *card)
 {
 	struct snd_soc_dai *codec_dai = snd_soc_card_get_codec_dai(card, ES8336_CODEC_DAI);
 	struct avs_card_drvdata *data = snd_soc_card_get_drvdata(card);
+
+	if (!codec_dai)
+		return -EINVAL;
 
 	return snd_soc_component_set_jack(codec_dai->component, &data->jack, NULL);
 }
