@@ -97,7 +97,7 @@ failed:
 	return -ENOMEM;
 }
 
-static int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
+static int __z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
 				      struct page **pgpl)
 {
 	struct super_block *sb = rq->sb;
@@ -176,6 +176,18 @@ failed_zinit:
 	spin_unlock(&z_erofs_deflate_lock);
 	wake_up(&z_erofs_deflate_wq);
 	return err;
+}
+
+static int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
+				struct page **pgpl)
+{
+	struct crypto_acomp *erofs_tfm = NULL;
+
+	erofs_tfm = z_erofs_crypto_get_enbale_engine(Z_EROFS_COMPRESSION_DEFLATE);
+	if (erofs_tfm && !rq->partial_decoding)
+		return z_erofs_crypto_decompress(rq, erofs_tfm, pgpl);
+	else
+		return __z_erofs_deflate_decompress(rq, pgpl);
 }
 
 const struct z_erofs_decompressor z_erofs_deflate_decomp = {

@@ -7,12 +7,15 @@
 #include <linux/kobject.h>
 
 #include "internal.h"
+#include "compress.h"
 
 enum {
 	attr_feature,
 	attr_drop_caches,
 	attr_pointer_ui,
 	attr_pointer_bool,
+	attr_crypto_enable,
+	attr_crypto_disable,
 };
 
 enum {
@@ -59,6 +62,8 @@ static struct erofs_attr erofs_attr_##_name = {			\
 #ifdef CONFIG_EROFS_FS_ZIP
 EROFS_ATTR_RW_UI(sync_decompress, erofs_mount_opts);
 EROFS_ATTR_FUNC(drop_caches, 0200);
+EROFS_ATTR_FUNC(crypto_enable, 0644);
+EROFS_ATTR_FUNC(crypto_disable, 0644);
 #endif
 
 static struct attribute *erofs_attrs[] = {
@@ -95,6 +100,8 @@ static struct attribute *erofs_feat_attrs[] = {
 	ATTR_LIST(fragments),
 	ATTR_LIST(dedupe),
 	ATTR_LIST(48bit),
+	ATTR_LIST(crypto_enable),
+	ATTR_LIST(crypto_disable),
 	NULL,
 };
 ATTRIBUTE_GROUPS(erofs_feat);
@@ -180,6 +187,18 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 			z_erofs_shrink_scan(sbi, ~0UL);
 		if (t & 1)
 			invalidate_mapping_pages(MNGD_MAPPING(sbi), 0, -1);
+		return len;
+	case attr_crypto_enable:
+		buf = skip_spaces(buf);
+		if (z_erofs_crypto_enable_engine(buf))
+			return -EINVAL;
+
+		return len;
+	case attr_crypto_disable:
+		buf = skip_spaces(buf);
+		if (z_erofs_crypto_disable_engine(buf))
+			return -EINVAL;
+
 		return len;
 #endif
 	}
