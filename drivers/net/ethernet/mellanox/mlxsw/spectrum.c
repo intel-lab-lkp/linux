@@ -694,6 +694,7 @@ static int mlxsw_sp_port_change_mtu(struct net_device *dev, int mtu)
 
 	hdroom = orig_hdroom;
 	hdroom.mtu = mtu;
+	mlxsw_sp_hdroom_bufs_reset_lossiness(&hdroom);
 	mlxsw_sp_hdroom_bufs_reset_sizes(mlxsw_sp_port, &hdroom);
 
 	err = mlxsw_sp_hdroom_configure(mlxsw_sp_port, &hdroom);
