@@ -598,13 +598,10 @@ static int a6xx_calc_ubwc_config(struct adreno_gpu *gpu)
 	/* Copy the data into the internal struct to drop the const qualifier (temporarily) */
 	*cfg = *common_cfg;
 
-	cfg->ubwc_swizzle = 0x6;
 	cfg->highest_bank_bit = 15;
 
-	if (adreno_is_a610(gpu)) {
+	if (adreno_is_a610(gpu))
 		cfg->highest_bank_bit = 13;
-		cfg->ubwc_swizzle = 0x7;
-	}
 
 	if (adreno_is_a618(gpu))
 		cfg->highest_bank_bit = 14;
@@ -631,10 +628,8 @@ static int a6xx_calc_ubwc_config(struct adreno_gpu *gpu)
 		cfg->highest_bank_bit = 16;
 	}
 
-	if (adreno_is_a663(gpu)) {
+	if (adreno_is_a663(gpu))
 		cfg->highest_bank_bit = 13;
-		cfg->ubwc_swizzle = 0x4;
-	}
 
 	if (adreno_is_7c3(gpu))
 		cfg->highest_bank_bit = 14;
