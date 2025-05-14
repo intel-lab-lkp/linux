@@ -1,12 +1,12 @@
-/* Make sure timers don't return early
- *              by: john stultz (johnstul@us.ibm.com)
- *		    John Stultz (john.stultz@linaro.org)
- *              (C) Copyright IBM 2012
- *              (C) Copyright Linaro 2013 2015
- *              Licensed under the GPLv2
+ /*
+ * Ensure timers do not return early.
+ * Author: John Stultz (john.stultz@linaro.org)
+ * Copyright (C) IBM 2012
+ * Copyright (C) Linaro 2013, 2015
+ * Licensed under the GPLv2
  *
- *  To build:
- *	$ gcc nanosleep.c -o nanosleep -lrt
+ * To build:
+ *     $ gcc nanosleep.c -o nanosleep -lrt
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -61,7 +61,7 @@ char *clockstring(int clockid)
 	case CLOCK_TAI:
 		return "CLOCK_TAI";
 	};
-	return "UNKNOWN_CLOCKID";
+	return "UNKNOWN_CLOCKID"; // Could not identify clockid
 }
 
 /* returns 1 if a <= b, 0 otherwise */
@@ -90,7 +90,7 @@ int nanosleep_test(int clockid, long long ns)
 {
 	struct timespec now, target, rel;
 
-	/* First check abs time */
+	/* First, check absolute time using clock_nanosleep with TIMER_ABSTIME */
 	if (clock_gettime(clockid, &now))
 		return UNSUPPORTED;
 	target = timespec_add(now, ns);
@@ -102,7 +102,7 @@ int nanosleep_test(int clockid, long long ns)
 	if (!in_order(target, now))
 		return -1;
 
-	/* Second check reltime */
+	/* Then, test relative time sleep */
 	clock_gettime(clockid, &now);
 	rel.tv_sec = 0;
 	rel.tv_nsec = 0;
