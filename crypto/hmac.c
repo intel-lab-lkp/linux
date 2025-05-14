@@ -314,6 +314,21 @@ static int hmac_import_ahash(struct ahash_request *preq, const void *in)
 	return crypto_ahash_import(req, in);
 }
 
+static int hmac_export_core_ahash(struct ahash_request *preq, void *out)
+{
+	return crypto_ahash_export_core(ahash_request_ctx(preq), out);
+}
+
+static int hmac_import_core_ahash(struct ahash_request *preq, const void *in)
+{
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(preq);
+	struct ahash_hmac_ctx *tctx = crypto_ahash_ctx(tfm);
+	struct ahash_request *req = ahash_request_ctx(preq);
+
+	ahash_request_set_tfm(req, tctx->hash);
+	return crypto_ahash_import_core(req, in);
+}
+
 static int hmac_init_ahash(struct ahash_request *preq)
 {
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(preq);
@@ -443,6 +458,7 @@ static int __hmac_create_ahash(struct crypto_template *tmpl,
 		return -ENOMEM;
 	spawn = ahash_instance_ctx(inst);
 
+	mask |= CRYPTO_AHASH_ALG_NO_EXPORT_CORE;
 	err = crypto_grab_ahash(spawn, ahash_crypto_instance(inst),
 				crypto_attr_alg_name(tb[1]), 0, mask);
 	if (err)
@@ -483,6 +499,8 @@ static int __hmac_create_ahash(struct crypto_template *tmpl,
 	inst->alg.digest = hmac_digest_ahash;
 	inst->alg.export = hmac_export_ahash;
 	inst->alg.import = hmac_import_ahash;
+	inst->alg.export_core = hmac_export_core_ahash;
+	inst->alg.import_core = hmac_import_core_ahash;
 	inst->alg.setkey = hmac_setkey_ahash;
 	inst->alg.init_tfm = hmac_init_ahash_tfm;
 	inst->alg.clone_tfm = hmac_clone_ahash_tfm;
