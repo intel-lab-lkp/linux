@@ -49,9 +49,7 @@
 #include "t7xx_netdev.h"
 #include "t7xx_pci.h"
 
-#define DPMAIF_BAT_COUNT		8192
-#define DPMAIF_FRG_COUNT		4814
-#define DPMAIF_PIT_COUNT		(DPMAIF_BAT_COUNT * 2)
+#define DPMAIF_PIT_COUNT		(dpmaif_bat_count * 2)
 
 #define DPMAIF_BAT_CNT_THRESHOLD	30
 #define DPMAIF_PIT_CNT_THRESHOLD	60
@@ -279,7 +277,7 @@ static int t7xx_frag_bat_cur_bid_check(struct dpmaif_rx_queue *rxq,
 	struct dpmaif_bat_request *bat_frag = rxq->bat_frag;
 	struct dpmaif_bat_page *bat_page;
 
-	if (cur_bid >= DPMAIF_FRG_COUNT)
+	if (cur_bid >= dpmaif_frg_count)
 		return -EINVAL;
 
 	bat_page = bat_frag->bat_skb + cur_bid;
@@ -448,7 +446,7 @@ static int t7xx_bat_cur_bid_check(struct dpmaif_rx_queue *rxq, const unsigned in
 	struct dpmaif_bat_skb *bat_skb = rxq->bat_req->bat_skb;
 
 	bat_skb += cur_bid;
-	if (cur_bid >= DPMAIF_BAT_COUNT || !bat_skb->skb)
+	if (cur_bid >= dpmaif_bat_count || !bat_skb->skb)
 		return -EINVAL;
 
 	return 0;
@@ -944,11 +942,11 @@ int t7xx_dpmaif_bat_alloc(const struct dpmaif_ctrl *dpmaif_ctrl, struct dpmaif_b
 
 	if (buf_type == BAT_TYPE_FRAG) {
 		sw_buf_size = sizeof(struct dpmaif_bat_page);
-		bat_req->bat_size_cnt = DPMAIF_FRG_COUNT;
+		bat_req->bat_size_cnt = dpmaif_frg_count;
 		bat_req->pkt_buf_sz = DPMAIF_HW_FRG_PKTBUF;
 	} else {
 		sw_buf_size = sizeof(struct dpmaif_bat_skb);
-		bat_req->bat_size_cnt = DPMAIF_BAT_COUNT;
+		bat_req->bat_size_cnt = dpmaif_bat_count;
 		bat_req->pkt_buf_sz = DPMAIF_HW_BAT_PKTBUF;
 	}
 

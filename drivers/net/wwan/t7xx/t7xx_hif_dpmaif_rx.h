@@ -22,6 +22,9 @@
 
 #include "t7xx_hif_dpmaif.h"
 
+extern uint dpmaif_bat_count;
+extern uint dpmaif_frg_count;
+
 #define NETIF_MASK		GENMASK(4, 0)
 
 #define PKT_TYPE_IP4		0

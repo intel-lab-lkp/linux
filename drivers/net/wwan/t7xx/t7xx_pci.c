@@ -28,6 +28,7 @@
 #include <linux/jiffies.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/pm.h>
@@ -53,6 +54,15 @@
 #define PM_AUTOSUSPEND_MS		5000
 #define PM_RESOURCE_POLL_TIMEOUT_US	10000
 #define PM_RESOURCE_POLL_STEP_US	100
+
+uint dpmaif_bat_count = 8192;
+uint dpmaif_frg_count = 4814;
+
+module_param(dpmaif_bat_count, uint, 0644);
+MODULE_PARM_DESC(dpmaif_bat_count, "BAT entry count");
+
+module_param(dpmaif_frg_count, uint, 0644);
+MODULE_PARM_DESC(dpmaif_frg_count, "FRG entry count");
 
 static const char * const t7xx_mode_names[] = {
 	[T7XX_UNKNOWN] = "unknown",
