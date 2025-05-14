@@ -1061,7 +1061,7 @@ static int cxl_rcrb_get_comp_regs(struct pci_dev *pdev,
 }
 
 int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
-		       struct cxl_register_map *map)
+		       struct cxl_register_map *map, unsigned long *caps)
 {
 	int rc;
 
@@ -1091,7 +1091,7 @@ int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 		return rc;
 	}
 
-	return cxl_setup_regs(map);
+	return cxl_setup_regs(map, caps);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_pci_setup_regs, "CXL");
 
@@ -1218,3 +1218,40 @@ int cxl_gpf_port_setup(struct cxl_dport *dport)
 
 	return 0;
 }
+
+/**
+ * cxl_check_caps - check expected caps are included in the found caps.
+ *
+ * @pdev: device checking the caps
+ * @expected: capabilities expected by the driver
+ * @found: capabilities found
+ *
+ * Returns 0 if check is positive, -1 otherwise.
+ */
+int cxl_check_caps(struct pci_dev *pdev, unsigned long *expected,
+		   unsigned long *found)
+{
+	static const char * const cap_name[CXL_MAX_CAPS] = {
+		[CXL_DEV_CAP_RAS]		= "CXL_DEV_CAP_RAS",
+		[CXL_DEV_CAP_HDM]		= "CXL_DEV_CAP_HDM",
+		[CXL_DEV_CAP_DEV_STATUS]	= "CXL_DEV_CAP_DEV_STATUS",
+		[CXL_DEV_CAP_MAILBOX_PRIMARY]	= "CXL_DEV_CAP_MAILBOX_PRIMARY",
+		[CXL_DEV_CAP_MEMDEV]		= "CXL_DEV_CAP_MEMDEV"
+	};
+	DECLARE_BITMAP(missing, CXL_MAX_CAPS);
+
+	if (bitmap_subset(expected, found, CXL_MAX_CAPS))
+		/* all good */
+		return 0;
+
+	bitmap_andnot(missing, expected, found, CXL_MAX_CAPS);
+
+	for (int i = 0; i < CXL_MAX_CAPS; i++) {
+		if (test_bit(i, missing))
+			dev_err(&pdev->dev, "%s capability not found\n",
+				cap_name[i]);
+	}
+
+	return -1;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_check_caps, "CXL");
