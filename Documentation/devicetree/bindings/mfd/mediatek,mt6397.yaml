@@ -30,6 +30,9 @@ description: |
   See the following for pwrap node definitions:
   Documentation/devicetree/bindings/soc/mediatek/mediatek,pwrap.yaml
 
+allOf:
+  - $ref: /schemas/sound/dai-common.yaml#
+
 properties:
   compatible:
     oneOf:
@@ -52,6 +55,9 @@ properties:
 
   "#interrupt-cells":
     const: 2
+
+  '#sound-dai-cells':
+    const: 1
 
   rtc:
     type: object
