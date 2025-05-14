@@ -84,4 +84,13 @@ struct vt_setactivate {
 
 #define VT_SETACTIVATE	0x560F	/* Activate and set the mode of a console */
 
+struct vt_consizecsrpos {
+	unsigned short con_rows;	/* number of console rows */
+	unsigned short con_cols;	/* number of console columns */
+	unsigned short csr_row;		/* current cursor's row */
+	unsigned short csr_col;		/* current cursor's column */
+};
+
+#define VT_GETCONSIZECSRPOS 0x5610  /* get console size and cursor position */
+
 #endif /* _UAPI_LINUX_VT_H */
