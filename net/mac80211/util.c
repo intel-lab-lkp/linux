@@ -3953,6 +3953,34 @@ static u8 ieee80211_chanctx_radar_detect(struct ieee80211_local *local,
 	return radar_detect;
 }
 
+bool ieee80211_is_radio_idx_in_scan_req(struct wiphy *wiphy,
+					struct cfg80211_scan_request *scan_req,
+					int radio_idx)
+{
+	struct ieee80211_channel *chan;
+	int i, chan_radio_idx;
+
+	if (!scan_req)
+		return false;
+
+	for (i = 0; i < scan_req->n_channels; i++) {
+		chan = scan_req->channels[i];
+		chan_radio_idx = cfg80211_get_radio_idx_by_chan(wiphy, chan);
+		/*
+		 * Skip channels with an invalid radio index and continue
+		 * checking. If any channel in the scan request matches the
+		 * given radio index, return true.
+		 */
+		if (chan_radio_idx < 0)
+			continue;
+
+		if (chan_radio_idx == radio_idx)
+			return true;
+	}
+
+	return false;
+}
+
 static u32
 __ieee80211_get_radio_mask(struct ieee80211_sub_if_data *sdata)
 {
