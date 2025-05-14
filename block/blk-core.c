@@ -621,6 +621,13 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 	return BLK_STS_OK;
 }
 
+/*
+ * Do not call bio_queue_enter() if the BIO_ZONE_WRITE_PLUGGING flag has been
+ * set because this causes blk_mq_freeze_queue() to deadlock if
+ * blk_zone_wplug_bio_work() submits a bio. Calling bio_queue_enter() for bios
+ * on the plug list is not necessary since a q_usage_counter reference is held
+ * while a bio is on the plug list.
+ */
 static void __submit_bio(struct bio *bio)
 {
 	/* If plug is not used, add new plug here to cache nsecs time. */
@@ -633,7 +640,8 @@ static void __submit_bio(struct bio *bio)
 
 	if (!bdev_test_flag(bio->bi_bdev, BD_HAS_SUBMIT_BIO)) {
 		blk_mq_submit_bio(bio);
-	} else if (likely(bio_queue_enter(bio) == 0)) {
+	} else if (likely(bio_zone_write_plugging(bio) ||
+			  bio_queue_enter(bio) == 0)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
 	
 		if ((bio->bi_opf & REQ_POLLED) &&
@@ -643,7 +651,8 @@ static void __submit_bio(struct bio *bio)
 		} else {
 			disk->fops->submit_bio(bio);
 		}
-		blk_queue_exit(disk->queue);
+		if (!bio_zone_write_plugging(bio))
+			blk_queue_exit(disk->queue);
 	}
 
 	blk_finish_plug(&plug);
