@@ -124,6 +124,7 @@ static const struct of_device_id ubx_of_match[] = {
 	{ .compatible = "u-blox,neo-6m" },
 	{ .compatible = "u-blox,neo-8" },
 	{ .compatible = "u-blox,neo-m8" },
+	{ .compatible = "u-blox,neo-m9" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, ubx_of_match);
