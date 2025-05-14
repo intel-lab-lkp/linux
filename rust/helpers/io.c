@@ -52,3 +52,10 @@ define_rust_io_write_helper(rust_helper_writel_relaxed, writel_relaxed, u32);
 define_rust_io_write_helper(rust_helper_writeq_relaxed, writeq_relaxed, u64);
 #endif
 
+define_rust_io_read_helper(rust_helper_ioread8, ioread8, u8);
+define_rust_io_read_helper(rust_helper_ioread16, ioread16, u16);
+define_rust_io_read_helper(rust_helper_ioread32, ioread32, u32);
+
+define_rust_io_write_helper(rust_helper_iowrite8, iowrite8, u8);
+define_rust_io_write_helper(rust_helper_iowrite16, iowrite16, u16);
+define_rust_io_write_helper(rust_helper_iowrite32, iowrite32, u32);
