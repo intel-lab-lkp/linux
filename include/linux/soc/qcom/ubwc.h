@@ -26,6 +26,8 @@ struct qcom_ubwc_cfg_data {
 	 * controls level 2, and BIT(2) enables level 3.
 	 */
 	u32 ubwc_swizzle;
+#define UBWC_SWIZZLE_ENABLE_ALL		GENMASK(2, 0)
+#define UBWC_SWIZZLE_ENABLE_LVL(n)	BIT(((n) - 1))
 
 	/**
 	 * @highest_bank_bit: Highest Bank Bit
