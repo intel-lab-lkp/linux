@@ -306,6 +306,8 @@ static void test_uc(struct rs_control *rs, int len, int errs,
 
 		if (memcmp(r, c, len * sizeof(*r)))
 			stat->dwrong++;
+
+		cond_resched();
 	}
 	stat->nwords += trials;
 }
@@ -400,6 +402,8 @@ static void test_bc(struct rs_control *rs, int len, int errs,
 		} else {
 			stat->rfail++;
 		}
+
+		cond_resched();
 	}
 	stat->nwords += trials;
 }
