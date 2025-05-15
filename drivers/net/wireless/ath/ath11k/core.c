@@ -2163,7 +2163,9 @@ int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
 		break;
 	default:
 		ath11k_info(ab, "invalid crypto_mode: %d\n", ath11k_crypto_mode);
-		return -EINVAL;
+		ret = -EINVAL;
+		ath11k_dp_free(ab);
+		goto err_firmware_stop;
 	}
 
 	if (ath11k_frame_mode == ATH11K_HW_TXRX_RAW)
