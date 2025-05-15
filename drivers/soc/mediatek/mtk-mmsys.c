@@ -24,6 +24,7 @@
 #include "mt8188-mmsys.h"
 #include "mt8192-mmsys.h"
 #include "mt8195-mmsys.h"
+#include "mt8196-mmsys.h"
 #include "mt8365-mmsys.h"
 
 #define MMSYS_SW_RESET_PER_REG 32
@@ -145,6 +146,54 @@ static const struct mtk_mmsys_driver_data mt8195_vppsys0_driver_data = {
 static const struct mtk_mmsys_driver_data mt8195_vppsys1_driver_data = {
 	.clk_driver = "clk-mt8195-vpp1",
 	.is_vppsys = true,
+};
+
+static const struct mtk_mmsys_driver_data mt8196_dispsys0_driver_data = {
+	.clk_driver = "clk-mt8196-disp0",
+	.routes = mmsys_mt8196_disp0_routing_table,
+	.num_routes = ARRAY_SIZE(mmsys_mt8196_disp0_routing_table),
+	.async_info = mmsys_mt8196_disp0_async_comp_table,
+	.num_async_info = ARRAY_SIZE(mmsys_mt8196_disp0_async_comp_table),
+	.def_config = mmsys_mt8196_disp0_default_table,
+	.num_def_config = ARRAY_SIZE(mmsys_mt8196_disp0_default_table),
+	.num_top_clk = 1,
+};
+
+static const struct mtk_mmsys_driver_data mt8196_dispsys1_driver_data = {
+	.clk_driver = "clk-mt8196-disp1",
+	.routes = mmsys_mt8196_disp1_routing_table,
+	.num_routes = ARRAY_SIZE(mmsys_mt8196_disp1_routing_table),
+	.async_info = mmsys_mt8196_disp1_async_comp_table,
+	.num_async_info = ARRAY_SIZE(mmsys_mt8196_disp1_async_comp_table),
+	.def_config = mmsys_mt8196_disp1_default_table,
+	.num_def_config = ARRAY_SIZE(mmsys_mt8196_disp1_default_table),
+	.num_top_clk = 1,
+};
+
+static const struct mtk_mmsys_driver_data mt8196_ovlsys0_driver_data = {
+	.clk_driver = "clk-mt8196-ovl0",
+	.routes = mmsys_mt8196_ovl0_routing_table,
+	.num_routes = ARRAY_SIZE(mmsys_mt8196_ovl0_routing_table),
+	.async_info = mmsys_mt8196_ovl0_async_comp_table,
+	.num_async_info = ARRAY_SIZE(mmsys_mt8196_ovl0_async_comp_table),
+	.def_config = mmsys_mt8196_ovl0_default_table,
+	.num_def_config = ARRAY_SIZE(mmsys_mt8196_ovl0_default_table),
+};
+
+static const struct mtk_mmsys_driver_data mt8196_ovlsys1_driver_data = {
+	.clk_driver = "clk-mt8196-ovl1",
+	.routes = mmsys_mt8196_ovl1_routing_table,
+	.num_routes = ARRAY_SIZE(mmsys_mt8196_ovl1_routing_table),
+	.async_info = mmsys_mt8196_ovl1_async_comp_table,
+	.num_async_info = ARRAY_SIZE(mmsys_mt8196_ovl1_async_comp_table),
+	.def_config = mmsys_mt8196_ovl0_default_table,
+	.num_def_config = ARRAY_SIZE(mmsys_mt8196_ovl0_default_table),
+};
+
+static const struct mtk_mmsys_driver_data mt8196_vdisp_ao_driver_data = {
+	.clk_driver = "clk-mt8196-vdisp_ao",
+	.def_config = mmsys_mt8196_vdisp_ao_default_table,
+	.num_def_config = ARRAY_SIZE(mmsys_mt8196_vdisp_ao_default_table),
 };
 
 static const struct mtk_mmsys_driver_data mt8365_mmsys_driver_data = {
@@ -626,6 +675,11 @@ static const struct of_device_id of_match_mtk_mmsys[] = {
 	{ .compatible = "mediatek,mt8195-vdosys1", .data = &mt8195_vdosys1_driver_data },
 	{ .compatible = "mediatek,mt8195-vppsys0", .data = &mt8195_vppsys0_driver_data },
 	{ .compatible = "mediatek,mt8195-vppsys1", .data = &mt8195_vppsys1_driver_data },
+	{ .compatible = "mediatek,mt8196-dispsys0", .data = &mt8196_dispsys0_driver_data },
+	{ .compatible = "mediatek,mt8196-dispsys1", .data = &mt8196_dispsys1_driver_data },
+	{ .compatible = "mediatek,mt8196-ovlsys0", .data = &mt8196_ovlsys0_driver_data },
+	{ .compatible = "mediatek,mt8196-ovlsys1", .data = &mt8196_ovlsys1_driver_data },
+	{ .compatible = "mediatek,mt8196-vdisp-ao", .data = &mt8196_vdisp_ao_driver_data },
 	{ .compatible = "mediatek,mt8365-mmsys", .data = &mt8365_mmsys_driver_data },
 	{ /* sentinel */ }
 };
