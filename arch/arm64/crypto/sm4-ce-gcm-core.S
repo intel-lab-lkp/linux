@@ -13,15 +13,7 @@
 #include <asm/assembler.h>
 #include "sm4-ce-asm.h"
 
-.arch	armv8-a+crypto
-
-.irp b, 0, 1, 2, 3, 24, 25, 26, 27, 28, 29, 30, 31
-	.set .Lv\b\().4s, \b
-.endr
-
-.macro sm4e, vd, vn
-	.inst 0xcec08400 | (.L\vn << 5) | .L\vd
-.endm
+	.arch		armv8-a+sm4+aes
 
 /* Register macros */
 

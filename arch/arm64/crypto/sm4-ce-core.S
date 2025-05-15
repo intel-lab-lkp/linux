@@ -12,20 +12,7 @@
 #include <asm/assembler.h>
 #include "sm4-ce-asm.h"
 
-.arch	armv8-a+crypto
-
-.irp b, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, \
-		20, 24, 25, 26, 27, 28, 29, 30, 31
-	.set .Lv\b\().4s, \b
-.endr
-
-.macro sm4e, vd, vn
-	.inst 0xcec08400 | (.L\vn << 5) | .L\vd
-.endm
-
-.macro sm4ekey, vd, vn, vm
-	.inst 0xce60c800 | (.L\vm << 16) | (.L\vn << 5) | .L\vd
-.endm
+.arch	armv8-a+sm4
 
 /* Register macros */
 

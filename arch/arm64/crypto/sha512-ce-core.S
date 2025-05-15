@@ -12,26 +12,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 
-	.irp		b,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
-	.set		.Lq\b, \b
-	.set		.Lv\b\().2d, \b
-	.endr
-
-	.macro		sha512h, rd, rn, rm
-	.inst		0xce608000 | .L\rd | (.L\rn << 5) | (.L\rm << 16)
-	.endm
-
-	.macro		sha512h2, rd, rn, rm
-	.inst		0xce608400 | .L\rd | (.L\rn << 5) | (.L\rm << 16)
-	.endm
-
-	.macro		sha512su0, rd, rn
-	.inst		0xcec08000 | .L\rd | (.L\rn << 5)
-	.endm
-
-	.macro		sha512su1, rd, rn, rm
-	.inst		0xce608800 | .L\rd | (.L\rn << 5) | (.L\rm << 16)
-	.endm
+	.arch	armv8-a+sha3
 
 	/*
 	 * The SHA-512 round constants

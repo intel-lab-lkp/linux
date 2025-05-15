@@ -12,29 +12,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 
-	.irp	b,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-	.set	.Lv\b\().2d, \b
-	.set	.Lv\b\().16b, \b
-	.endr
-
-	/*
-	 * ARMv8.2 Crypto Extensions instructions
-	 */
-	.macro	eor3, rd, rn, rm, ra
-	.inst	0xce000000 | .L\rd | (.L\rn << 5) | (.L\ra << 10) | (.L\rm << 16)
-	.endm
-
-	.macro	rax1, rd, rn, rm
-	.inst	0xce608c00 | .L\rd | (.L\rn << 5) | (.L\rm << 16)
-	.endm
-
-	.macro	bcax, rd, rn, rm, ra
-	.inst	0xce200000 | .L\rd | (.L\rn << 5) | (.L\ra << 10) | (.L\rm << 16)
-	.endm
-
-	.macro	xar, rd, rn, rm, imm6
-	.inst	0xce800000 | .L\rd | (.L\rn << 5) | ((\imm6) << 10) | (.L\rm << 16)
-	.endm
+	.arch	armv8-a+sha3
 
 	/*
 	 * int sha3_ce_transform(u64 *st, const u8 *data, int blocks, int dg_size)
