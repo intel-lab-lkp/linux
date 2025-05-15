@@ -218,6 +218,46 @@ to "always" or "madvise"), and it'll be automatically shutdown when
 PMD-sized THP is disabled (when both the per-size anon control and the
 top-level control are "never")
 
+process THP controls
+--------------------
+
+Transparent Hugepage behaviour of a process can be modified/obtained by
+using the prctl system call. The following operations are supported:
+
+PR_SET_THP_DISABLE
+	This will set the MMF_DISABLE_THP process flag which will result
+	in no hugepages being faulted in or collapsed by khugepaged,
+	irrespective of global THP controls.
+
+PR_GET_THP_DISABLE
+	This will return the MMF_DISABLE_THP process flag, which will be
+	set if the process has previously been set with PR_SET_THP_DISABLE.
+
+PR_SET_THP_POLICY
+	This is used to change the behaviour of existing and future VMAs.
+	It has support for the following policies:
+
+	PR_THP_POLICY_DEFAULT_HUGE
+		This will set the MMF2_THP_VMA_DEFAULT_HUGE process flag which
+		changes the default of new VMAs to be VM_HUGEPAGE. The call
+		also modifies all existing VMAs that are not VM_NOHUGEPAGE
+		to be VM_HUGEPAGE. The policy is inherited during fork+exec.
+
+	PR_THP_POLICY_DEFAULT_NOHUGE
+		This will set the MMF2_THP_VMA_DEFAULT_NOHUGE process flag which
+		changes the default of new VMAs to be VM_NOHUGEPAGE. The call
+		also modifies all existing VMAs that are not VM_HUGEPAGE
+		to be VM_NOHUGEPAGE. The policy is inherited during fork+exec.
+
+	PR_THP_POLICY_DEFAULT_SYSTEM
+		This will clear both MMF2_THP_VMA_DEFAULT_HUGE and
+		MMF2_THP_VMA_DEFAULT_NOHUGE process flags.
+
+PR_SET_THP_POLICY
+	This will return the current THP policy of the process, i.e.
+	PR_THP_POLICY_DEFAULT_HUGE, PR_THP_POLICY_DEFAULT_NOHUGE or
+	PR_THP_POLICY_DEFAULT_SYSTEM.
+
 Khugepaged controls
 -------------------
 
