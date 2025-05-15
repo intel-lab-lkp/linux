@@ -18,6 +18,22 @@
 /delete-node/ &cpu_pd10;
 /delete-node/ &cpu_pd11;
 /delete-node/ &pcie3_phy;
+/delete-node/ &aoss3_thermal;
+/delete-node/ &nsp0_thermal;
+/delete-node/ &nsp1_thermal;
+/delete-node/ &nsp2_thermal;
+/delete-node/ &nsp3_thermal;
+/delete-node/ &gpuss_0_thermal;
+/delete-node/ &gpuss_1_thermal;
+/delete-node/ &gpuss_2_thermal;
+/delete-node/ &gpuss_3_thermal;
+/delete-node/ &gpuss_4_thermal;
+/delete-node/ &gpuss_5_thermal;
+/delete-node/ &gpuss_6_thermal;
+/delete-node/ &gpuss_7_thermal;
+/delete-node/ &camera0_thermal;
+/delete-node/ &camera1_thermal;
+/delete-node/ &tsens3;
 
 &gcc {
 	compatible = "qcom,x1p42100-gcc", "qcom,x1e80100-gcc";
