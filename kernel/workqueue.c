@@ -6475,9 +6475,12 @@ void wq_worker_comm(char *buf, size_t size, struct task_struct *task)
 			 * current, prepend '+', otherwise '-'.
 			 */
 			if (worker->desc[0] != '\0') {
-				if (worker->current_work)
-					scnprintf(buf + off, size - off, "+%s",
-						  worker->desc);
+				if (worker->current_func)
+					scnprintf(buf + off, size - off, "+%s:%ps",
+						  worker->desc, worker->current_func);
+				else if (worker->last_func)
+					scnprintf(buf + off, size - off, "-%s:%ps",
+						  worker->desc, worker->last_func);
 				else
 					scnprintf(buf + off, size - off, "-%s",
 						  worker->desc);
