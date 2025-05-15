@@ -299,6 +299,228 @@ static int reset_tracing_files(struct perf_ftrace *ftrace __maybe_unused)
 	return 0;
 }
 
+static int read_tracing_file(const char *name, char *buf, size_t size)
+{
+	int ret = -1;
+	char *file;
+	int fd;
+
+	file = get_tracing_file(name);
+	if (!file) {
+		pr_debug("cannot get tracing file: %s\n", name);
+		return -1;
+	}
+
+	fd = open(file, O_RDONLY);
+	if (fd < 0) {
+		pr_debug("cannot open tracing file: %s: %s\n",
+			 name, str_error_r(errno, buf, size));
+		goto out;
+	}
+
+	/* read contents to stdout */
+	while (true) {
+		int n = read(fd, buf, size);
+
+		if (n == 0)
+			break;
+		else if (n < 0)
+			goto out_close;
+		buf += n;
+		size -= n;
+	}
+	ret = 0;
+
+out_close:
+	close(fd);
+out:
+	put_tracing_file(file);
+	return ret;
+}
+
+static int read_tracing_option_file(const char *name, char *val, size_t size)
+{
+	char *file;
+	int ret;
+
+	if (asprintf(&file, "options/%s", name) < 0)
+		return -1;
+
+	ret = read_tracing_file(file, val, size);
+	free(file);
+	return ret;
+}
+
+/*
+ * Save the initial trace file setting to restore them after the tests.
+ * This ensures the setting are the same as before the invocation
+ * of the program.
+ */
+static struct trace_file_list {		/* List of tracing files */
+	const char *filename;		/* File name */
+	char *contents;			/* Contents to restore */
+	int (*read_fct)(const char *fn, char *buf, size_t buf_sz);		/* Read function */
+	int (*write_fct)(const char *fn, const char *buf);		/* Write function */
+} trace_file_list[] = {
+	[0] = {
+		.filename = "tracing_on",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[1] = {
+		.filename = "current_tracer",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[2] = {
+		.filename = "set_ftrace_pid",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[3] = {
+		.write_fct = write_tracing_file,
+		.read_fct = read_tracing_file,
+		.filename = "max_graph_depth",
+	},
+	[4] = {
+		.filename = "tracing_thresh",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[5] = {
+		.filename = "tracing_cpumask",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[6] = {
+		.filename = "set_ftrace_filter",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[7] = {
+		.filename = "set_ftrace_notrace",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[8] = {
+		.filename = "set_graph_function",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+	[9] = {
+		.filename = "set_graph_notrace",
+		.read_fct = read_tracing_file,
+		.write_fct = write_tracing_file,
+	},
+			/* Files in .../options/ directory */
+	[10] = {
+		.filename = "function-fork",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[11] = {
+		.filename = "func_stack_trace",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[12] = {
+		.filename = "sleep-time",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[13] = {
+		.filename = "funcgraph-irqs",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[14] = {
+		.filename = "funcgraph-proc",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[15] = {
+		.filename = "funcgraph-abstime",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[16] = {
+		.filename = "funcgraph-tail",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[17] = {
+		.filename = "latency-format",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+	[18] = {
+		.filename = "irq-info",
+		.read_fct = read_tracing_option_file,
+		.write_fct = write_tracing_option_file,
+	},
+};
+
+static void free_tracing_content(void)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(trace_file_list); ++i)
+		zfree(&trace_file_list[i].contents);
+}
+
+/*
+ * Return a copy of the input string.
+ * Remove a trailing newline. It will be appended in the write
+ * function when values are restored before program termination.
+ * Change "no pid" or comment sign '#' at the beginning and replace it
+ * by an empty string. This resets to the default behavior indicated
+ * by the output. Those strings are not accepted as file input.
+ */
+static char *copy_tracing_file(char *buf)
+{
+	char *c = strrchr(buf, '\n');
+
+	if (c)
+		*c = '\0';
+	if (*buf == '#' || !strncmp(buf, "no pid", 6))
+		*buf = '\0';
+	return strdup(buf);
+}
+
+static int save_tracing_files(void)
+{
+	char buf[4096];
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(trace_file_list); ++i) {
+		struct trace_file_list *tp = &trace_file_list[i];
+
+		memset(buf, 0, sizeof(buf));
+		if ((*tp->read_fct)(tp->filename, buf, sizeof(buf)) < 0)
+			goto out;
+		tp->contents = copy_tracing_file(buf);
+		if (!tp->contents)
+			goto out;
+	}
+	return 0;
+
+out:
+	free_tracing_content();
+	return -1;
+}
+
+static void restore_tracing_files(void)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(trace_file_list); ++i) {
+		struct trace_file_list *tp = &trace_file_list[i];
+
+		(*tp->write_fct)(tp->filename, tp->contents);
+	}
+	free_tracing_content();
+}
+
 static int set_tracing_pid(struct perf_ftrace *ftrace)
 {
 	int i;
@@ -1687,6 +1909,9 @@ int cmd_ftrace(int argc, const char **argv)
 	};
 	enum perf_ftrace_subcommand subcmd = PERF_FTRACE_NONE;
 
+	if (save_tracing_files())
+		return -1;
+
 	INIT_LIST_HEAD(&ftrace.filters);
 	INIT_LIST_HEAD(&ftrace.notrace);
 	INIT_LIST_HEAD(&ftrace.graph_funcs);
@@ -1839,5 +2064,6 @@ out_delete_filters:
 	delete_filter_func(&ftrace.graph_funcs);
 	delete_filter_func(&ftrace.nograph_funcs);
 
+	restore_tracing_files();
 	return ret;
 }
