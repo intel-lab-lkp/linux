@@ -469,8 +469,65 @@ static struct kunit_suite drm_sched_credits = {
 	.test_cases = drm_sched_credits_tests,
 };
 
+static void drm_sched_test_prealloc(struct kunit *test)
+{
+	struct dma_fence *stub = dma_fence_get_stub();
+	struct drm_mock_sched_entity *entity;
+	struct drm_mock_scheduler *sched;
+	struct drm_mock_sched_job *job;
+	u32 id1, id2;
+	bool done;
+	int ret;
+
+	/*
+	 * Check if preallocation of dependency slots work
+	 */
+
+	sched = drm_mock_sched_new(test, MAX_SCHEDULE_TIMEOUT);
+
+	entity = drm_mock_sched_entity_new(test,
+					   DRM_SCHED_PRIORITY_NORMAL,
+					   sched);
+
+	job = drm_mock_sched_job_new(test, entity);
+
+	ret = drm_sched_job_add_dependency(&job->base, dma_fence_get(stub));
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	ret = drm_sched_job_prealloc_dependency_slot(&job->base, &id1);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	ret = drm_sched_job_prealloc_dependency_slot(&job->base, &id2);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	KUNIT_ASSERT_NE(test, id1, id2);
+
+	drm_sched_job_add_prealloc_dep(&job->base, id1, dma_fence_get(stub));
+	drm_sched_job_add_prealloc_dep(&job->base, id2, dma_fence_get(stub));
+
+	drm_mock_sched_job_submit(job);
+
+	done = drm_mock_sched_job_wait_scheduled(job, HZ);
+	KUNIT_ASSERT_TRUE(test, done);
+
+	drm_mock_sched_entity_free(entity);
+	drm_mock_sched_fini(sched);
+	dma_fence_put(stub);
+}
+
+static struct kunit_case drm_sched_prealloc_tests[] = {
+	KUNIT_CASE(drm_sched_test_prealloc),
+	{}
+};
+
+static struct kunit_suite drm_sched_prealloc = {
+	.name = "drm_sched_basic_prealloc_tests",
+	.test_cases = drm_sched_prealloc_tests,
+};
+
 kunit_test_suites(&drm_sched_basic,
 		  &drm_sched_timeout,
 		  &drm_sched_priority,
 		  &drm_sched_modify_sched,
-		  &drm_sched_credits);
+		  &drm_sched_credits,
+		  &drm_sched_prealloc);
