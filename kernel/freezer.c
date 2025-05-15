@@ -164,6 +164,9 @@ bool freeze_task(struct task_struct *p)
 {
 	unsigned long flags;
 
+	if (p->exit_state == EXIT_ZOMBIE)
+		return false;
+
 	spin_lock_irqsave(&freezer_lock, flags);
 	if (!freezing(p) || frozen(p) || __freeze_task(p)) {
 		spin_unlock_irqrestore(&freezer_lock, flags);
@@ -202,6 +205,9 @@ static int __restore_freezer_state(struct task_struct *p, void *arg)
 void __thaw_task(struct task_struct *p)
 {
 	unsigned long flags;
+
+	if (p->exit_state == EXIT_ZOMBIE)
+		return;
 
 	spin_lock_irqsave(&freezer_lock, flags);
 	if (WARN_ON_ONCE(freezing(p)))
