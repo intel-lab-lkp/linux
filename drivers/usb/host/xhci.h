@@ -1735,6 +1735,23 @@ static inline bool xhci_has_one_roothub(struct xhci_hcd *xhci)
 	       (!xhci->usb2_rhub.num_ports || !xhci->usb3_rhub.num_ports);
 }
 
+/*
+ * USB 2.0 specification, chapter 5.6.4 Isochronous Transfer Bus Access
+ * Constraint. A high speed endpoint can move up to 3072 bytes per microframe
+ * (or 192Mb/s).
+ */
+#define MAX_ISOC_XFER_SIZE_HS  3072
+
+static inline bool xhci_eusb2_is_isoc_bw_double(struct usb_device *udev,
+						struct usb_host_endpoint *ep)
+{
+	return le16_to_cpu(udev->descriptor.bcdUSB) == 0x220 &&
+		usb_endpoint_xfer_isoc(&ep->desc) &&
+		le16_to_cpu(ep->desc.wMaxPacketSize) == 0 &&
+		le32_to_cpu(ep->eusb2_isoc_ep_comp.dwBytesPerInterval) >
+		MAX_ISOC_XFER_SIZE_HS;
+}
+
 #define xhci_dbg(xhci, fmt, args...) \
 	dev_dbg(xhci_to_hcd(xhci)->self.controller , fmt , ## args)
 #define xhci_err(xhci, fmt, args...) \
@@ -1958,6 +1975,8 @@ void xhci_update_erst_dequeue(struct xhci_hcd *xhci,
 			      struct xhci_interrupter *ir,
 			      bool clear_ehb);
 void xhci_add_interrupter(struct xhci_hcd *xhci, unsigned int intr_num);
+int xhci_usb_endpoint_maxp(struct usb_device *udev,
+			   struct usb_host_endpoint *host_ep);
 
 /* xHCI roothub code */
 void xhci_set_link_state(struct xhci_hcd *xhci, struct xhci_port *port,
