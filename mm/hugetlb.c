@@ -1823,6 +1823,23 @@ struct hstate *size_to_hstate(unsigned long size)
 	return NULL;
 }
 
+static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
+{
+#ifdef CONFIG_NUMA
+	struct mempolicy *mpol = get_task_policy(current);
+
+	/*
+	 * Only enforce MPOL_BIND policy which overlaps with cpuset policy
+	 * (from policy_nodemask) specifically for hugetlb case
+	 */
+	if (mpol->mode == MPOL_BIND &&
+		(apply_policy_zone(mpol, gfp_zone(gfp)) &&
+		 cpuset_nodemask_valid_mems_allowed(&mpol->nodes)))
+		return &mpol->nodes;
+#endif
+	return NULL;
+}
+
 void free_huge_folio(struct folio *folio)
 {
 	/*
@@ -1834,6 +1851,8 @@ void free_huge_folio(struct folio *folio)
 	struct hugepage_subpool *spool = hugetlb_folio_subpool(folio);
 	bool restore_reserve;
 	unsigned long flags;
+	int node;
+	nodemask_t *mbind_nodemask, alloc_nodemask;
 
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
 	VM_BUG_ON_FOLIO(folio_mapcount(folio), folio);
@@ -1882,6 +1901,25 @@ void free_huge_folio(struct folio *folio)
 	} else if (h->surplus_huge_pages_node[nid]) {
 		/* remove the page from active list */
 		remove_hugetlb_folio(h, folio, true);
+		spin_unlock_irqrestore(&hugetlb_lock, flags);
+		update_and_free_hugetlb_folio(h, folio, true);
+	} else if (h->surplus_huge_pages) {
+		mbind_nodemask = policy_mbind_nodemask(htlb_alloc_mask(h));
+		if (mbind_nodemask)
+			nodes_and(alloc_nodemask, *mbind_nodemask,
+					cpuset_current_mems_allowed);
+		else
+			alloc_nodemask = cpuset_current_mems_allowed;
+
+		for_each_node_mask(node, alloc_nodemask) {
+			if (h->surplus_huge_pages_node[node]) {
+				h->surplus_huge_pages_node[node]--;
+				h->surplus_huge_pages--;
+				break;
+			}
+		}
+
+		remove_hugetlb_folio(h, folio, false);
 		spin_unlock_irqrestore(&hugetlb_lock, flags);
 		update_and_free_hugetlb_folio(h, folio, true);
 	} else {
@@ -2373,23 +2411,6 @@ struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 		gfp_mask |= __GFP_THISNODE;
 
 	return alloc_migrate_hugetlb_folio(h, gfp_mask, preferred_nid, nmask);
-}
-
-static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
-{
-#ifdef CONFIG_NUMA
-	struct mempolicy *mpol = get_task_policy(current);
-
-	/*
-	 * Only enforce MPOL_BIND policy which overlaps with cpuset policy
-	 * (from policy_nodemask) specifically for hugetlb case
-	 */
-	if (mpol->mode == MPOL_BIND &&
-		(apply_policy_zone(mpol, gfp_zone(gfp)) &&
-		 cpuset_nodemask_valid_mems_allowed(&mpol->nodes)))
-		return &mpol->nodes;
-#endif
-	return NULL;
 }
 
 /*
