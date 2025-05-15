@@ -2886,7 +2886,6 @@ free_metadata_dst:
 
 static int airoha_probe(struct platform_device *pdev)
 {
-	struct device_node *np;
 	struct airoha_eth *eth;
 	int i, err;
 
@@ -2948,7 +2947,7 @@ static int airoha_probe(struct platform_device *pdev)
 		airoha_qdma_start_napi(&eth->qdma[i]);
 
 	i = 0;
-	for_each_child_of_node(pdev->dev.of_node, np) {
+	for_each_child_of_node_scoped(pdev->dev.of_node, np) {
 		if (!of_device_is_compatible(np, "airoha,eth-mac"))
 			continue;
 
@@ -2956,10 +2955,8 @@ static int airoha_probe(struct platform_device *pdev)
 			continue;
 
 		err = airoha_alloc_gdm_port(eth, np, i++);
-		if (err) {
-			of_node_put(np);
+		if (err)
 			goto error_napi_stop;
-		}
 	}
 
 	return 0;
