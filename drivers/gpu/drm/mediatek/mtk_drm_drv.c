@@ -374,7 +374,7 @@ static int mtk_drm_match(struct device *dev, const void *data)
 static bool mtk_drm_get_all_drm_priv(struct device *dev)
 {
 	struct mtk_drm_private *drm_priv = dev_get_drvdata(dev);
-	struct mtk_drm_private *all_drm_priv[MAX_CRTC];
+	struct mtk_drm_private *all_drm_priv[MAX_MMSYS] = {NULL};
 	struct mtk_drm_private *temp_drm_priv;
 	struct device_node *phandle = dev->parent->of_node;
 	const struct of_device_id *of_id;
@@ -402,26 +402,22 @@ static bool mtk_drm_get_all_drm_priv(struct device *dev)
 		if (!temp_drm_priv)
 			continue;
 
-		if (temp_drm_priv->data->main_len)
-			all_drm_priv[CRTC_MAIN] = temp_drm_priv;
-		else if (temp_drm_priv->data->ext_len)
-			all_drm_priv[CRTC_EXT] = temp_drm_priv;
-		else if (temp_drm_priv->data->third_len)
-			all_drm_priv[CRTC_THIRD] = temp_drm_priv;
+		all_drm_priv[temp_drm_priv->data->mmsys_id] = temp_drm_priv;
 
 		if (temp_drm_priv->mtk_drm_bound)
 			cnt++;
 
-		if (cnt == MAX_CRTC) {
+		if (cnt == temp_drm_priv->data->mmsys_dev_num) {
 			of_node_put(node);
 			break;
 		}
 	}
 
 	if (drm_priv->data->mmsys_dev_num == cnt) {
-		for (i = 0; i < cnt; i++)
-			for (j = 0; j < cnt; j++)
-				all_drm_priv[j]->all_drm_private[i] = all_drm_priv[i];
+		for (i = 0; i < MAX_MMSYS; i++)
+			for (j = 0; j < MAX_MMSYS; j++)
+				if (all_drm_priv[j])
+					all_drm_priv[j]->all_drm_private[i] = all_drm_priv[i];
 
 		return true;
 	}
@@ -494,7 +490,10 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	drm->mode_config.funcs = &mtk_drm_mode_config_funcs;
 	drm->mode_config.helper_private = &mtk_drm_mode_config_helpers;
 
-	for (i = 0; i < private->data->mmsys_dev_num; i++) {
+	for (i = 0; i < MAX_MMSYS; i++) {
+		if (!private->all_drm_private[i])
+			continue;
+
 		drm->dev_private = private->all_drm_private[i];
 		ret = component_bind_all(private->all_drm_private[i]->dev, drm);
 		if (ret)
@@ -517,8 +516,10 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 *    third path.
 	 */
 	for (i = 0; i < MAX_CRTC; i++) {
-		for (j = 0; j < private->data->mmsys_dev_num; j++) {
+		for (j = 0; j < MAX_MMSYS; j++) {
 			priv_n = private->all_drm_private[j];
+			if (!priv_n)
+				continue;
 
 			if (priv_n->data->max_width)
 				drm->mode_config.max_width = priv_n->data->max_width;
@@ -530,28 +531,23 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 				drm->mode_config.min_height = priv_n->data->min_height;
 
 			if (i == CRTC_MAIN && priv_n->data->main_len) {
-				ret = mtk_crtc_create(drm, priv_n->data->main_path,
-						      priv_n->data->main_len, j,
-						      priv_n->data->conn_routes,
-						      priv_n->data->num_conn_routes);
+				ret = mtk_crtc_create(drm, CRTC_MAIN);
 				if (ret)
 					goto err_component_unbind;
 
-				continue;
+				break;
 			} else if (i == CRTC_EXT && priv_n->data->ext_len) {
-				ret = mtk_crtc_create(drm, priv_n->data->ext_path,
-						      priv_n->data->ext_len, j, NULL, 0);
+				ret = mtk_crtc_create(drm, CRTC_EXT);
 				if (ret)
 					goto err_component_unbind;
 
-				continue;
+				break;
 			} else if (i == CRTC_THIRD && priv_n->data->third_len) {
-				ret = mtk_crtc_create(drm, priv_n->data->third_path,
-						      priv_n->data->third_len, j, NULL, 0);
+				ret = mtk_crtc_create(drm, CRTC_THIRD);
 				if (ret)
 					goto err_component_unbind;
 
-				continue;
+				break;
 			}
 		}
 	}
@@ -570,8 +566,9 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 		goto err_component_unbind;
 	}
 
-	for (i = 0; i < private->data->mmsys_dev_num; i++)
-		private->all_drm_private[i]->dma_dev = dma_dev;
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (private->all_drm_private[i])
+			private->all_drm_private[i]->dma_dev = dma_dev;
 
 	/*
 	 * Configure the DMA segment size to make sure we get contiguous IOVA
@@ -589,11 +586,13 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	return 0;
 
 err_component_unbind:
-	for (i = 0; i < private->data->mmsys_dev_num; i++)
-		component_unbind_all(private->all_drm_private[i]->dev, drm);
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (private->all_drm_private[i])
+			component_unbind_all(private->all_drm_private[i]->dev, drm);
 put_mutex_dev:
-	for (i = 0; i < private->data->mmsys_dev_num; i++)
-		put_device(private->all_drm_private[i]->mutex_dev);
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (private->all_drm_private[i])
+			put_device(private->all_drm_private[i]->mutex_dev);
 
 	return ret;
 }
@@ -657,6 +656,19 @@ static int mtk_drm_bind(struct device *dev)
 	}
 
 	private->mutex_dev = &pdev->dev;
+
+	if (private->vdisp_ao_node) {
+		pdev = of_find_device_by_node(private->vdisp_ao_node);
+		if (!pdev) {
+			dev_err(dev, "Waiting for vdisp_ao device %pOF\n",
+				private->vdisp_ao_node);
+			of_node_put(private->mutex_node);
+			of_node_put(private->vdisp_ao_node);
+			return -EPROBE_DEFER;
+		}
+		private->vdisp_ao_dev = &pdev->dev;
+	}
+
 	private->mtk_drm_bound = true;
 	private->dev = dev;
 
@@ -669,8 +681,9 @@ static int mtk_drm_bind(struct device *dev)
 
 	private->drm_master = true;
 	drm->dev_private = private;
-	for (i = 0; i < private->data->mmsys_dev_num; i++)
-		private->all_drm_private[i]->drm = drm;
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (private->all_drm_private[i])
+			private->all_drm_private[i]->drm = drm;
 
 	ret = mtk_drm_kms_init(drm);
 	if (ret < 0)
@@ -1132,7 +1145,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		private->data = mtk_drm_data;
 	}
 
-	private->all_drm_private = devm_kmalloc_array(dev, private->data->mmsys_dev_num,
+	private->all_drm_private = devm_kmalloc_array(dev, MAX_MMSYS,
 						      sizeof(*private->all_drm_private),
 						      GFP_KERNEL);
 	if (!private->all_drm_private)
@@ -1167,6 +1180,12 @@ static int mtk_drm_probe(struct platform_device *pdev)
 				private->mutex_node = of_node_get(node);
 				dev_dbg(dev, "get mutex for mmsys %d", private->data->mmsys_id);
 			}
+			continue;
+		}
+
+		if (comp_type == MTK_VDISP_AO) {
+			private->vdisp_ao_node = of_node_get(node);
+			dev_dbg(dev, "get vdisp_ao node");
 			continue;
 		}
 
@@ -1245,6 +1264,7 @@ static void mtk_drm_remove(struct platform_device *pdev)
 	component_master_del(&pdev->dev, &mtk_drm_ops);
 	pm_runtime_disable(&pdev->dev);
 	of_node_put(private->mutex_node);
+	of_node_put(private->vdisp_ao_node);
 	for (i = 0; i < DDP_COMPONENT_DRM_ID_MAX; i++)
 		of_node_put(private->comp_node[i]);
 }

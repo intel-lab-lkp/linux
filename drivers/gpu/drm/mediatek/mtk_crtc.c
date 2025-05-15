@@ -58,13 +58,17 @@ struct mtk_crtc {
 	wait_queue_head_t		cb_blocking_queue;
 #endif
 
-	struct device			*mmsys_dev;
+	struct device			*mmsys_dev[MAX_MMSYS];
 	struct device			*dma_dev;
-	struct mtk_mutex		*mutex;
+	struct device			*vdisp_ao_dev;
+	struct mtk_mutex		*mutex[MAX_MMSYS];
 	unsigned int			ddp_comp_nr;
 	struct mtk_ddp_comp		**ddp_comp;
+	enum mtk_drm_mmsys		*ddp_comp_sys;
+	bool				exist[MAX_MMSYS];
 	unsigned int			num_conn_routes;
 	const struct mtk_drm_route	*conn_routes;
+	enum mtk_drm_mmsys		conn_routes_sys;
 
 	/* lock for display hardware access */
 	struct mutex			hw_lock;
@@ -80,6 +84,11 @@ struct mtk_crtc_state {
 	unsigned int			pending_width;
 	unsigned int			pending_height;
 	unsigned int			pending_vrefresh;
+};
+
+struct mtk_crtc_comp_info {
+	enum mtk_drm_mmsys sys;
+	unsigned int comp_id;
 };
 
 static inline struct mtk_crtc *to_mtk_crtc(struct drm_crtc *c)
@@ -130,7 +139,10 @@ static void mtk_crtc_destroy(struct drm_crtc *crtc)
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	int i;
 
-	mtk_mutex_put(mtk_crtc->mutex);
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->mutex[i])
+			mtk_mutex_put(mtk_crtc->mutex[i]);
+
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (mtk_crtc->cmdq_client.chan) {
 		cmdq_pkt_destroy(&mtk_crtc->cmdq_client, &mtk_crtc->cmdq_handle);
@@ -228,7 +240,14 @@ static int mtk_crtc_ddp_clk_enable(struct mtk_crtc *mtk_crtc)
 	int i;
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		enum mtk_drm_mmsys mmsys;
+
 		ret = mtk_ddp_comp_clk_enable(mtk_crtc->ddp_comp[i]);
+		if (mtk_ddp_comp_get_type(mtk_crtc->ddp_comp[i]->id) == MTK_DISP_VIRTUAL) {
+			mmsys = mtk_crtc->ddp_comp_sys[i];
+			ret = mtk_mmsys_ddp_clk_enable(mtk_crtc->mmsys_dev[mmsys],
+						       mtk_crtc->ddp_comp[i]->id);
+		}
 		if (ret) {
 			DRM_ERROR("Failed to enable clock %d: %d\n", i, ret);
 			goto err;
@@ -237,17 +256,28 @@ static int mtk_crtc_ddp_clk_enable(struct mtk_crtc *mtk_crtc)
 
 	return 0;
 err:
-	while (--i >= 0)
+	while (--i >= 0) {
 		mtk_ddp_comp_clk_disable(mtk_crtc->ddp_comp[i]);
+		if (mtk_ddp_comp_get_type(mtk_crtc->ddp_comp[i]->id) == MTK_DISP_VIRTUAL)
+			mtk_mmsys_ddp_clk_disable(mtk_crtc->mmsys_dev[mtk_crtc->ddp_comp_sys[i]],
+						  mtk_crtc->ddp_comp[i]->id);
+	}
 	return ret;
 }
 
 static void mtk_crtc_ddp_clk_disable(struct mtk_crtc *mtk_crtc)
 {
 	int i;
+	enum mtk_drm_mmsys mmsys;
 
-	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++)
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		mtk_ddp_comp_clk_disable(mtk_crtc->ddp_comp[i]);
+		if (mtk_ddp_comp_get_type(mtk_crtc->ddp_comp[i]->id) == MTK_DISP_VIRTUAL) {
+			mmsys = mtk_crtc->ddp_comp_sys[i];
+			mtk_mmsys_ddp_clk_disable(mtk_crtc->mmsys_dev[mmsys],
+						  mtk_crtc->ddp_comp[i]->id);
+		}
+	}
 }
 
 static
@@ -340,7 +370,8 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	struct drm_connector_list_iter conn_iter;
 	unsigned int width, height, vrefresh, bpc = MTK_MAX_BPC;
 	int ret;
-	int i;
+	int i, j;
+	enum mtk_drm_mmsys mmsys;
 
 	if (WARN_ON(!crtc->state))
 		return -EINVAL;
@@ -370,10 +401,18 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		return ret;
 	}
 
-	ret = mtk_mutex_prepare(mtk_crtc->mutex);
-	if (ret < 0) {
-		DRM_ERROR("Failed to enable mutex clock: %d\n", ret);
-		goto err_pm_runtime_put;
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			mtk_mmsys_top_clk_enable(mtk_crtc->mmsys_dev[i]);
+
+	for (i = 0; i < MAX_MMSYS; i++) {
+		if (!mtk_crtc->mutex[i] || !mtk_crtc->exist[i])
+			continue;
+		ret = mtk_mutex_prepare(mtk_crtc->mutex[i]);
+		if (ret < 0) {
+			DRM_ERROR("Failed to enable mmsys%d mutex clock: %d\n", i, ret);
+			goto err_pm_runtime_put;
+		}
 	}
 
 	ret = mtk_crtc_ddp_clk_enable(mtk_crtc);
@@ -382,19 +421,36 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		goto err_mutex_unprepare;
 	}
 
+	if (mtk_crtc->vdisp_ao_dev)
+		mtk_mmsys_default_config(mtk_crtc->vdisp_ao_dev);
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			mtk_mmsys_default_config(mtk_crtc->mmsys_dev[i]);
+
 	for (i = 0; i < mtk_crtc->ddp_comp_nr - 1; i++) {
-		if (!mtk_ddp_comp_connect(mtk_crtc->ddp_comp[i], mtk_crtc->mmsys_dev,
+		mmsys = mtk_crtc->ddp_comp_sys[i];
+		if (!mtk_ddp_comp_connect(mtk_crtc->ddp_comp[i], mtk_crtc->mmsys_dev[mmsys],
 					  mtk_crtc->ddp_comp[i + 1]->id))
-			mtk_mmsys_ddp_connect(mtk_crtc->mmsys_dev,
+			mtk_mmsys_ddp_connect(mtk_crtc->mmsys_dev[mmsys],
 					      mtk_crtc->ddp_comp[i]->id,
 					      mtk_crtc->ddp_comp[i + 1]->id);
-		if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
-			mtk_mutex_add_comp(mtk_crtc->mutex,
+		if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex[mmsys]))
+			mtk_mutex_add_comp(mtk_crtc->mutex[mmsys],
 					   mtk_crtc->ddp_comp[i]->id);
 	}
-	if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
-		mtk_mutex_add_comp(mtk_crtc->mutex, mtk_crtc->ddp_comp[i]->id);
-	mtk_mutex_enable(mtk_crtc->mutex);
+	mmsys = mtk_crtc->ddp_comp_sys[i];
+	if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex[mmsys]))
+		mtk_mutex_add_comp(mtk_crtc->mutex[mmsys], mtk_crtc->ddp_comp[i]->id);
+
+	/* Need to set sof source for all mmsys mutexes in this crtc */
+	for (j = 0; j < MAX_MMSYS; j++)
+		if (mtk_crtc->exist[j] && mtk_crtc->mutex[j])
+			mtk_mutex_add_comp_sof(mtk_crtc->mutex[j], mtk_crtc->ddp_comp[i]->id);
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i] && mtk_crtc->mutex[i])
+			mtk_mutex_enable(mtk_crtc->mutex[i]);
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
@@ -402,7 +458,11 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		if (i == 1)
 			mtk_ddp_comp_bgclr_in_on(comp);
 
-		mtk_ddp_comp_config(comp, width, height, vrefresh, bpc, NULL);
+		if (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_VIRTUAL)
+			mtk_mmsys_ddp_config(mtk_crtc->mmsys_dev[mtk_crtc->ddp_comp_sys[i]],
+					     comp->id, width, height, NULL);
+		else
+			mtk_ddp_comp_config(comp, width, height, vrefresh, bpc, NULL);
 		mtk_ddp_comp_start(comp);
 	}
 
@@ -426,7 +486,10 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	return 0;
 
 err_mutex_unprepare:
-	mtk_mutex_unprepare(mtk_crtc->mutex);
+	while (--i >= 0)
+		if (mtk_crtc->exist[i] && mtk_crtc->mutex[i])
+			mtk_mutex_unprepare(mtk_crtc->mutex[i]);
+
 err_pm_runtime_put:
 	pm_runtime_put(crtc->dev->dev);
 	return ret;
@@ -437,7 +500,8 @@ static void mtk_crtc_ddp_hw_fini(struct mtk_crtc *mtk_crtc)
 	struct drm_device *drm = mtk_crtc->base.dev;
 	struct drm_crtc *crtc = &mtk_crtc->base;
 	unsigned long flags;
-	int i;
+	int i, j;
+	enum mtk_drm_mmsys mmsys;
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		mtk_ddp_comp_stop(mtk_crtc->ddp_comp[i]);
@@ -445,27 +509,47 @@ static void mtk_crtc_ddp_hw_fini(struct mtk_crtc *mtk_crtc)
 			mtk_ddp_comp_bgclr_in_off(mtk_crtc->ddp_comp[i]);
 	}
 
-	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++)
-		if (!mtk_ddp_comp_remove(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
-			mtk_mutex_remove_comp(mtk_crtc->mutex,
-					      mtk_crtc->ddp_comp[i]->id);
-	mtk_mutex_disable(mtk_crtc->mutex);
-	for (i = 0; i < mtk_crtc->ddp_comp_nr - 1; i++) {
-		if (!mtk_ddp_comp_disconnect(mtk_crtc->ddp_comp[i], mtk_crtc->mmsys_dev,
-					     mtk_crtc->ddp_comp[i + 1]->id))
-			mtk_mmsys_ddp_disconnect(mtk_crtc->mmsys_dev,
-						 mtk_crtc->ddp_comp[i]->id,
-						 mtk_crtc->ddp_comp[i + 1]->id);
-		if (!mtk_ddp_comp_remove(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
-			mtk_mutex_remove_comp(mtk_crtc->mutex,
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		mmsys = mtk_crtc->ddp_comp_sys[i];
+		if (!mtk_ddp_comp_remove(mtk_crtc->ddp_comp[i], mtk_crtc->mutex[mmsys]))
+			mtk_mutex_remove_comp(mtk_crtc->mutex[mtk_crtc->ddp_comp_sys[i]],
 					      mtk_crtc->ddp_comp[i]->id);
 	}
-	if (!mtk_ddp_comp_remove(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
-		mtk_mutex_remove_comp(mtk_crtc->mutex, mtk_crtc->ddp_comp[i]->id);
-	mtk_crtc_ddp_clk_disable(mtk_crtc);
-	mtk_mutex_unprepare(mtk_crtc->mutex);
+	for (i = 0; i < mtk_crtc->ddp_comp_nr - 1; i++) {
+		struct mtk_ddp_comp *comp;
+		unsigned int curr, next;
 
-	pm_runtime_put(drm->dev);
+		comp = mtk_crtc->ddp_comp[i];
+		curr = mtk_crtc->ddp_comp[i]->id;
+		next = mtk_crtc->ddp_comp[i + 1]->id;
+		mmsys = mtk_crtc->ddp_comp_sys[i];
+		if (!mtk_ddp_comp_disconnect(comp, mtk_crtc->mmsys_dev[mmsys], next))
+			mtk_mmsys_ddp_disconnect(mtk_crtc->mmsys_dev[mmsys], curr, next);
+		if (!mtk_ddp_comp_remove(comp, mtk_crtc->mutex[mmsys]))
+			mtk_mutex_remove_comp(mtk_crtc->mutex[mtk_crtc->ddp_comp_sys[i]],
+					      mtk_crtc->ddp_comp[i]->id);
+
+	}
+
+	mmsys = mtk_crtc->ddp_comp_sys[i];
+	if (!mtk_ddp_comp_remove(mtk_crtc->ddp_comp[i], mtk_crtc->mutex[mmsys]))
+		mtk_mutex_remove_comp(mtk_crtc->mutex[mmsys], mtk_crtc->ddp_comp[i]->id);
+
+	/* Need to remove sof source for all mmsys mutexes in this crtc */
+	for (j = 0; j < MAX_MMSYS; j++)
+		if (mtk_crtc->exist[j] && mtk_crtc->mutex[j])
+			mtk_mutex_remove_comp_sof(mtk_crtc->mutex[j], mtk_crtc->ddp_comp[i]->id);
+
+	mtk_crtc_ddp_clk_disable(mtk_crtc);
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i] && mtk_crtc->mutex[i])
+			mtk_mutex_unprepare(mtk_crtc->mutex[i]);
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			mtk_mmsys_top_clk_disable(mtk_crtc->mmsys_dev[i]);
+
+	pm_runtime_put_sync(drm->dev);
 
 	if (crtc->state->event && !crtc->state->active) {
 		spin_lock_irqsave(&crtc->dev->event_lock, flags);
@@ -589,9 +673,15 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		mtk_crtc->pending_async_planes = true;
 
 	if (priv->data->shadow_register) {
-		mtk_mutex_acquire(mtk_crtc->mutex);
+		for (i = 0; i < MAX_MMSYS; i++)
+			if (mtk_crtc->exist[i] && mtk_crtc->mutex[i])
+				mtk_mutex_acquire(mtk_crtc->mutex[i]);
+
 		mtk_crtc_ddp_config(crtc, NULL);
-		mtk_mutex_release(mtk_crtc->mutex);
+
+		for (i = 0; i < MAX_MMSYS; i++)
+			if (mtk_crtc->exist[i] && mtk_crtc->mutex[i])
+				mtk_mutex_release(mtk_crtc->mutex[i]);
 	}
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (mtk_crtc->cmdq_client.chan) {
@@ -675,6 +765,7 @@ static void mtk_crtc_update_output(struct drm_crtc *crtc,
 {
 	int crtc_index = drm_crtc_index(crtc);
 	int i;
+	unsigned int mmsys;
 	struct device *dev;
 	struct drm_crtc_state *crtc_state = state->crtcs[crtc_index].new_state;
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
@@ -687,7 +778,8 @@ static void mtk_crtc_update_output(struct drm_crtc *crtc,
 	if (!mtk_crtc->num_conn_routes)
 		return;
 
-	priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[crtc_index];
+	mmsys = mtk_crtc->conn_routes_sys;
+	priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[mmsys];
 	dev = priv->dev;
 
 	dev_dbg(dev, "connector change:%d, encoder mask:0x%x for crtc:%d\n",
@@ -700,6 +792,8 @@ static void mtk_crtc_update_output(struct drm_crtc *crtc,
 		if (comp->encoder_index >= 0 &&
 		    (encoder_mask & BIT(comp->encoder_index))) {
 			mtk_crtc->ddp_comp[mtk_crtc->ddp_comp_nr - 1] = comp;
+			mtk_crtc->ddp_comp_sys[mtk_crtc->ddp_comp_nr - 1] = mmsys;
+			mtk_crtc->exist[mmsys] = true;
 			dev_dbg(dev, "Add comp_id: %d at path index %d\n",
 				comp->id, mtk_crtc->ddp_comp_nr - 1);
 			break;
@@ -736,8 +830,30 @@ static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
 	int ret;
+	int i, j;
+	int mmsys_cnt = 0;
 
 	DRM_DEBUG_DRIVER("%s %d\n", __func__, crtc->base.id);
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			mmsys_cnt++;
+
+	if (mmsys_cnt > 1) {
+		for (i = 0; i < MAX_MMSYS; i++) {
+			if (!mtk_crtc->exist[i])
+				continue;
+			ret = pm_runtime_resume_and_get(mtk_crtc->mmsys_dev[i]);
+			if (ret < 0) {
+				DRM_DEV_ERROR(mtk_crtc->mmsys_dev[i],
+					      "Failed to enable power domain: %d\n", ret);
+				for (j = i - 1; j >= 0; j--)
+					if (mtk_crtc->exist[i])
+						pm_runtime_put(mtk_crtc->mmsys_dev[j]);
+				return;
+			}
+		}
+	}
 
 	ret = mtk_ddp_comp_power_on(comp);
 	if (ret < 0) {
@@ -762,7 +878,8 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
-	int i;
+	int i, ret;
+	int mmsys_cnt = 0;
 
 	DRM_DEBUG_DRIVER("%s %d\n", __func__, crtc->base.id);
 	if (!mtk_crtc->enabled)
@@ -793,6 +910,22 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 	drm_crtc_vblank_off(crtc);
 	mtk_crtc_ddp_hw_fini(mtk_crtc);
 	mtk_ddp_comp_power_off(comp);
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			mmsys_cnt++;
+
+	if (mmsys_cnt > 1) {
+		for (i = 0; i < MAX_MMSYS; i++) {
+			if (mtk_crtc->exist[i]) {
+				ret = pm_runtime_put(mtk_crtc->mmsys_dev[i]);
+				if (ret < 0)
+					DRM_DEV_ERROR(mtk_crtc->mmsys_dev[i],
+						      "Failed to disable power domain: %d\n",
+						      ret);
+			}
+		}
+	}
 
 	mtk_crtc->enabled = false;
 }
@@ -953,49 +1086,108 @@ struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc)
 	return mtk_crtc->dma_dev;
 }
 
-int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
-		    unsigned int path_len, int priv_data_index,
-		    const struct mtk_drm_route *conn_routes,
-		    unsigned int num_conn_routes)
+int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 {
 	struct mtk_drm_private *priv = drm_dev->dev_private;
 	struct device *dev = drm_dev->dev;
 	struct mtk_crtc *mtk_crtc;
 	unsigned int num_comp_planes = 0;
 	int ret;
-	int i;
+	int i, j, k;
 	bool has_ctm = false;
 	uint gamma_lut_size = 0;
 	struct drm_crtc *tmp;
 	int crtc_i = 0;
-
-	if (!path)
-		return 0;
-
-	priv = priv->all_drm_private[priv_data_index];
+	struct mtk_drm_private *subsys_priv;
+	struct mtk_crtc_comp_info path[DDP_COMPONENT_ID_MAX];
+	unsigned int path_len = 0;
+	const struct mtk_drm_route *conn_routes = NULL;
+	unsigned int num_conn_routes = 0;
+	enum mtk_drm_mmsys conn_mmsys;
 
 	drm_for_each_crtc(tmp, drm_dev)
 		crtc_i++;
 
+	for (j = 0; j < priv->data->mmsys_dev_num; j++) {
+		for (k = 0; k < MAX_MMSYS; k++) {
+			const unsigned int *subsys_path;
+			unsigned int subsys_path_len = 0;
+			unsigned int order = 0;
+
+			subsys_priv = priv->all_drm_private[k];
+			if (!subsys_priv)
+				continue;
+
+			if (path_sel == CRTC_MAIN) {
+				subsys_path = subsys_priv->data->main_path;
+				subsys_path_len = subsys_priv->data->main_len;
+				order = subsys_priv->data->main_order;
+			} else if (path_sel == CRTC_EXT) {
+				subsys_path = subsys_priv->data->ext_path;
+				subsys_path_len = subsys_priv->data->ext_len;
+				order = subsys_priv->data->ext_order;
+			} else if (path_sel == CRTC_THIRD) {
+				subsys_path = subsys_priv->data->third_path;
+				subsys_path_len = subsys_priv->data->third_len;
+				order = subsys_priv->data->third_order;
+			}
+
+			if (subsys_priv->data->num_conn_routes) {
+				conn_routes = subsys_priv->data->conn_routes;
+				num_conn_routes = subsys_priv->data->num_conn_routes;
+				conn_mmsys = subsys_priv->data->mmsys_id;
+			}
+
+			if (j != order)
+				continue;
+			if (!subsys_path_len)
+				continue;
+
+			for (i = 0; i < subsys_path_len; i++) {
+				path[path_len].sys = subsys_priv->data->mmsys_id;
+				path[path_len].comp_id = subsys_path[i];
+				path_len++;
+			}
+		}
+	}
+
+	if (!path_len)
+		return 0;
+
+	if (num_conn_routes) {
+		for (i = 0; i < num_conn_routes; i++)
+			if (conn_routes->crtc_id == crtc_i)
+				break;
+		if (i == num_conn_routes) {
+			num_conn_routes = 0;
+			conn_routes = NULL;
+		}
+	}
+
 	for (i = 0; i < path_len; i++) {
-		enum mtk_ddp_comp_id comp_id = path[i];
+		enum mtk_ddp_comp_id comp_id = path[i].comp_id;
 		struct device_node *node;
 		struct mtk_ddp_comp *comp;
 
+		priv = priv->all_drm_private[path[i].sys];
 		node = priv->comp_node[comp_id];
 		comp = &priv->ddp_comp[comp_id];
 
 		/* Not all drm components have a DTS device node, such as ovl_adaptor,
 		 * which is the drm bring up sub driver
 		 */
-		if (!node && comp_id != DDP_COMPONENT_DRM_OVL_ADAPTOR) {
+		if (!node && comp_id != DDP_COMPONENT_DRM_OVL_ADAPTOR &&
+		    comp_id != DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0 &&
+		    comp_id != DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1 &&
+		    comp_id != DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2 &&
+		    mtk_ddp_comp_get_type(comp_id) != MTK_DISP_VIRTUAL) {
 			dev_info(dev,
 				"Not creating crtc %d because component %d is disabled or missing\n",
 				crtc_i, comp_id);
 			return 0;
 		}
 
-		if (!comp->dev) {
+		if (!comp->dev && mtk_ddp_comp_get_type(comp_id) != MTK_DISP_VIRTUAL) {
 			dev_err(dev, "Component %pOF not initialized\n", node);
 			return -ENODEV;
 		}
@@ -1005,7 +1197,9 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 	if (!mtk_crtc)
 		return -ENOMEM;
 
-	mtk_crtc->mmsys_dev = priv->mmsys_dev;
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (priv->all_drm_private[i])
+			mtk_crtc->mmsys_dev[i] = priv->all_drm_private[i]->mmsys_dev;
 	mtk_crtc->ddp_comp_nr = path_len;
 	mtk_crtc->ddp_comp = devm_kcalloc(dev,
 					  mtk_crtc->ddp_comp_nr + (conn_routes ? 1 : 0),
@@ -1014,19 +1208,36 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 	if (!mtk_crtc->ddp_comp)
 		return -ENOMEM;
 
-	mtk_crtc->mutex = mtk_mutex_get(priv->mutex_dev);
-	if (IS_ERR(mtk_crtc->mutex)) {
-		ret = PTR_ERR(mtk_crtc->mutex);
-		dev_err(dev, "Failed to get mutex: %d\n", ret);
-		return ret;
+	mtk_crtc->ddp_comp_sys = devm_kmalloc_array(dev, mtk_crtc->ddp_comp_nr +
+						    (conn_routes ? 1 : 0),
+						    sizeof(*mtk_crtc->ddp_comp_sys), GFP_KERNEL);
+	if (!mtk_crtc->ddp_comp_sys)
+		return -ENOMEM;
+
+	for (i = 0; i < MAX_MMSYS; i++) {
+		if (!priv->all_drm_private[i])
+			continue;
+
+		priv = priv->all_drm_private[i];
+		mtk_crtc->mutex[i] = mtk_mutex_get(priv->mutex_dev);
+		if (IS_ERR(mtk_crtc->mutex[i])) {
+			ret = PTR_ERR(mtk_crtc->mutex[i]);
+			dev_err(dev, "Failed to get mutex: %d\n", ret);
+			return ret;
+		}
 	}
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
-		unsigned int comp_id = path[i];
+		unsigned int comp_id = path[i].comp_id;
 		struct mtk_ddp_comp *comp;
 
+		priv = priv->all_drm_private[path[i].sys];
 		comp = &priv->ddp_comp[comp_id];
+		if (mtk_ddp_comp_get_type(comp_id) == MTK_DISP_VIRTUAL)
+			comp->id = comp_id;
 		mtk_crtc->ddp_comp[i] = comp;
+		mtk_crtc->ddp_comp_sys[i] = path[i].sys;
+		mtk_crtc->exist[path[i].sys] = true;
 
 		if (comp->funcs) {
 			if (comp->funcs->gamma_set && comp->funcs->gamma_get_lut_size) {
@@ -1063,8 +1274,10 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 	 * In the case of ovl_adaptor sub driver, it needs to use the
 	 * dma_dev_get function to get representative dma dev.
 	 */
-	mtk_crtc->dma_dev = mtk_ddp_comp_dma_dev_get(&priv->ddp_comp[path[0]]);
+	priv = priv->all_drm_private[path[0].sys];
+	mtk_crtc->dma_dev = mtk_ddp_comp_dma_dev_get(&priv->ddp_comp[path[0].comp_id]);
 
+	mtk_crtc->vdisp_ao_dev = priv->vdisp_ao_dev;
 	ret = mtk_crtc_init(drm_dev, mtk_crtc, crtc_i);
 	if (ret < 0)
 		return ret;
@@ -1077,7 +1290,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	i = priv->mbox_index++;
-	mtk_crtc->cmdq_client.client.dev = mtk_crtc->mmsys_dev;
+	mtk_crtc->cmdq_client.client.dev = mtk_crtc->mmsys_dev[priv->data->mmsys_id];
 	mtk_crtc->cmdq_client.client.tx_block = false;
 	mtk_crtc->cmdq_client.client.knows_txdone = true;
 	mtk_crtc->cmdq_client.client.rx_callback = ddp_cmdq_cb;
@@ -1117,6 +1330,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 #endif
 
 	if (conn_routes) {
+		priv = priv->all_drm_private[conn_mmsys];
 		for (i = 0; i < num_conn_routes; i++) {
 			unsigned int comp_id = conn_routes[i].route_ddp;
 			struct device_node *node = priv->comp_node[comp_id];
@@ -1133,12 +1347,18 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 			mtk_ddp_comp_encoder_index_set(&priv->ddp_comp[comp_id]);
 		}
 
+		mtk_crtc->conn_routes_sys = conn_mmsys;
 		mtk_crtc->num_conn_routes = num_conn_routes;
 		mtk_crtc->conn_routes = conn_routes;
 
 		/* increase ddp_comp_nr at the end of mtk_crtc_create */
 		mtk_crtc->ddp_comp_nr++;
 	}
+
+	for (i = 0; i < MAX_MMSYS; i++)
+		if (mtk_crtc->exist[i])
+			device_link_add(mtk_crtc->base.dev->dev,
+					priv->all_drm_private[i]->mutex_dev, 0);
 
 	return 0;
 }

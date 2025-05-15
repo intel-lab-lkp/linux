@@ -467,6 +467,7 @@ static const char * const mtk_ddp_comp_stem[MTK_DDP_COMP_TYPE_MAX] = {
 	[MTK_DISP_PWM] = "pwm",
 	[MTK_DISP_RDMA] = "rdma",
 	[MTK_DISP_UFOE] = "ufoe",
+	[MTK_DISP_VIRTUAL] = "virtual",
 	[MTK_DISP_WDMA] = "wdma",
 	[MTK_DP_INTF] = "dp-intf",
 	[MTK_DPI] = "dpi",
@@ -490,6 +491,15 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_COLOR0]		= { MTK_DISP_COLOR,		0, &ddp_color },
 	[DDP_COMPONENT_COLOR1]		= { MTK_DISP_COLOR,		1, &ddp_color },
 	[DDP_COMPONENT_DITHER0]		= { MTK_DISP_DITHER,		0, &ddp_dither },
+	[DDP_COMPONENT_DLI_ASYNC0]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC1]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC8]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC21]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC22]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC23]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC1]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC2]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC3]      = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_DP_INTF0]	= { MTK_DP_INTF,		0, &ddp_dpi },
 	[DDP_COMPONENT_DP_INTF1]	= { MTK_DP_INTF,		1, &ddp_dpi },
 	[DDP_COMPONENT_DPI0]		= { MTK_DPI,			0, &ddp_dpi },
@@ -497,6 +507,7 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_DRM_OVL_ADAPTOR]	= { MTK_DISP_OVL_ADAPTOR,	0, &ddp_ovl_adaptor },
 	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0] = { MTK_DISP_OVLSYS_ADAPTOR, 0, &ddp_ovlsys_adaptor},
 	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1] = { MTK_DISP_OVLSYS_ADAPTOR, 1, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2] = { MTK_DISP_OVLSYS_ADAPTOR, 2, &ddp_ovlsys_adaptor},
 	[DDP_COMPONENT_DSC0]		= { MTK_DISP_DSC,		0, &ddp_dsc },
 	[DDP_COMPONENT_DSC1]		= { MTK_DISP_DSC,		1, &ddp_dsc },
 	[DDP_COMPONENT_DSI0]		= { MTK_DSI,			0, &ddp_dsi },
@@ -513,7 +524,10 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_OD0]		= { MTK_DISP_OD,		0, &ddp_od },
 	[DDP_COMPONENT_OD1]		= { MTK_DISP_OD,		1, &ddp_od },
 	[DDP_COMPONENT_OVL0]		= { MTK_DISP_OVL,		0, &ddp_ovl },
+	[DDP_COMPONENT_OVL0_DLO_ASYNC5] = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_OVL0_DLO_ASYNC6] = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_OVL1]		= { MTK_DISP_OVL,		1, &ddp_ovl },
+	[DDP_COMPONENT_OVL1_DLO_ASYNC5] = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_OVL_2L0]		= { MTK_DISP_OVL_2L,		0, &ddp_ovl },
 	[DDP_COMPONENT_OVL_2L1]		= { MTK_DISP_OVL_2L,		1, &ddp_ovl },
 	[DDP_COMPONENT_OVL_2L2]		= { MTK_DISP_OVL_2L,		2, &ddp_ovl },
@@ -564,18 +578,24 @@ static int mtk_ddp_comp_find_in_route(struct device *dev,
 	return -ENODEV;
 }
 
+enum mtk_ddp_comp_type mtk_ddp_comp_get_type(unsigned int comp_id)
+{
+	return mtk_ddp_matches[comp_id].type;
+}
+
 static bool mtk_ddp_path_available(const unsigned int *path,
 				   unsigned int path_len,
 				   struct device_node **comp_node)
 {
 	unsigned int i;
 
-	if (!path || !path_len)
-		return false;
-
 	for (i = 0U; i < path_len; i++) {
 		/* OVL_ADAPTOR doesn't have a device node */
-		if (path[i] == DDP_COMPONENT_DRM_OVL_ADAPTOR)
+		if (path[i] == DDP_COMPONENT_DRM_OVL_ADAPTOR ||
+		    path[i] == DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0 ||
+		    path[i] == DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1 ||
+		    path[i] == DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2 ||
+		    mtk_ddp_comp_get_type(path[i]) == MTK_DISP_VIRTUAL)
 			continue;
 
 		if (!comp_node[path[i]])
@@ -605,39 +625,52 @@ int mtk_find_possible_crtcs(struct drm_device *drm, struct device *dev)
 	struct mtk_drm_private *private = drm->dev_private;
 	const struct mtk_mmsys_driver_data *data;
 	struct mtk_drm_private *priv_n;
-	int i = 0, j;
-	int ret;
+	int i, j, count = 0, ret;
 
-	for (j = 0; j < private->data->mmsys_dev_num; j++) {
-		priv_n = private->all_drm_private[j];
-		data = priv_n->data;
+	/* search each path in private data */
+	for (i = 0; i < MAX_CRTC; i++) {
+		bool found = false;
+		int avail_mmsys_num = 0;
 
-		if (mtk_ddp_path_available(data->main_path, data->main_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->main_path,
-					      data->main_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
+		for (j = 0; j < private->data->mmsys_dev_num; j++) {
+			const unsigned int *path = NULL;
+			unsigned int path_len = 0;
 
-		if (mtk_ddp_path_available(data->ext_path, data->ext_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->ext_path,
-					      data->ext_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
+			priv_n = private->all_drm_private[j];
+			data = priv_n->data;
 
-		if (mtk_ddp_path_available(data->third_path, data->third_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->third_path,
-					      data->third_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
+			if (i == CRTC_MAIN) {
+				path = data->main_path;
+				path_len = data->main_len;
+			} else if (i == CRTC_EXT) {
+				path = data->ext_path;
+				path_len = data->ext_len;
+			} else if (i == CRTC_THIRD) {
+				path = data->third_path;
+				path_len = data->third_len;
+			}
+
+			/* skip if no path data in current mmsys */
+			if (path_len == 0 || !path) {
+				avail_mmsys_num++;
+				continue;
+			}
+
+			if (mtk_ddp_path_available(path, path_len, priv_n->comp_node))
+				avail_mmsys_num++;
+
+			if (mtk_ddp_comp_find(dev, path, path_len, priv_n->ddp_comp))
+				found = true;
+	}
+
+		/* skip invalid path */
+		if (avail_mmsys_num != private->data->mmsys_dev_num)
+			continue;
+
+		if (found)
+			return BIT(count);
+
+			count++;
 	}
 
 	ret = mtk_ddp_comp_find_in_route(dev,
