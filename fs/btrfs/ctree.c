@@ -2331,7 +2331,8 @@ done:
  * This may release the path, and so you may lose any locks held at the
  * time you call it.
  */
-static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
+int btrfs_prev_leaf(struct btrfs_trans_handle *trans, struct btrfs_root *root,
+		    struct btrfs_path *path, int ins_len, int cow)
 {
 	struct btrfs_key key;
 	struct btrfs_key orig_key;
@@ -2355,7 +2356,7 @@ static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
 	}
 
 	btrfs_release_path(path);
-	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+	ret = btrfs_search_slot(trans, root, &key, path, ins_len, cow);
 	if (ret <= 0)
 		return ret;
 
@@ -2454,7 +2455,7 @@ again:
 		}
 	} else {
 		if (p->slots[0] == 0) {
-			ret = btrfs_prev_leaf(root, p);
+			ret = btrfs_prev_leaf(NULL, root, p, 0, 0);
 			if (ret < 0)
 				return ret;
 			if (!ret) {
@@ -5003,7 +5004,7 @@ int btrfs_previous_item(struct btrfs_root *root,
 
 	while (1) {
 		if (path->slots[0] == 0) {
-			ret = btrfs_prev_leaf(root, path);
+			ret = btrfs_prev_leaf(NULL, root, path, 0, 0);
 			if (ret != 0)
 				return ret;
 		} else {
@@ -5044,7 +5045,7 @@ int btrfs_previous_extent_item(struct btrfs_root *root,
 
 	while (1) {
 		if (path->slots[0] == 0) {
-			ret = btrfs_prev_leaf(root, path);
+			ret = btrfs_prev_leaf(NULL, root, path, 0, 0);
 			if (ret != 0)
 				return ret;
 		} else {

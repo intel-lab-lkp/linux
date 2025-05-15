@@ -721,6 +721,9 @@ static inline int btrfs_next_leaf(struct btrfs_root *root, struct btrfs_path *pa
 	return btrfs_next_old_leaf(root, path, 0);
 }
 
+int btrfs_prev_leaf(struct btrfs_trans_handle *trans, struct btrfs_root *root,
+		    struct btrfs_path *path, int ins_len, int cow);
+
 static inline int btrfs_next_item(struct btrfs_root *root, struct btrfs_path *p)
 {
 	return btrfs_next_old_item(root, p, 0);

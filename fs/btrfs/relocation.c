@@ -3897,6 +3897,81 @@ static const char *stage_to_string(enum reloc_stage stage)
 	return "unknown";
 }
 
+int btrfs_translate_remap(struct btrfs_fs_info *fs_info, u64 *logical,
+			  u64 *length)
+{
+	int ret;
+	struct btrfs_key key, found_key;
+	struct extent_buffer *leaf;
+	struct btrfs_remap *remap;
+	BTRFS_PATH_AUTO_FREE(path);
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	key.objectid = *logical;
+	key.type = BTRFS_IDENTITY_REMAP_KEY;
+	key.offset = 0;
+
+	ret = btrfs_search_slot(NULL, fs_info->remap_root, &key, path,
+				0, 0);
+	if (ret < 0)
+		return ret;
+
+	leaf = path->nodes[0];
+
+	if (path->slots[0] >= btrfs_header_nritems(leaf)) {
+		ret = btrfs_next_leaf(fs_info->remap_root, path);
+		if (ret < 0)
+			return ret;
+
+		leaf = path->nodes[0];
+	}
+
+	btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
+
+	if (found_key.objectid > *logical) {
+		if (path->slots[0] == 0) {
+			ret = btrfs_prev_leaf(NULL, fs_info->remap_root, path,
+					      0, 0);
+			if (ret) {
+				if (ret == 1)
+					ret = -ENOENT;
+				return ret;
+			}
+
+			leaf = path->nodes[0];
+		} else {
+			path->slots[0]--;
+		}
+
+		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
+	}
+
+	if (found_key.type != BTRFS_REMAP_KEY &&
+	    found_key.type != BTRFS_IDENTITY_REMAP_KEY) {
+		return -ENOENT;
+	}
+
+	if (found_key.objectid > *logical ||
+	    found_key.objectid + found_key.offset <= *logical) {
+		return -ENOENT;
+	}
+
+	if (*logical + *length > found_key.objectid + found_key.offset)
+		*length = found_key.objectid + found_key.offset - *logical;
+
+	if (found_key.type == BTRFS_IDENTITY_REMAP_KEY)
+		return 0;
+
+	remap = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_remap);
+
+	*logical = *logical - found_key.objectid + btrfs_remap_address(leaf, remap);
+
+	return 0;
+}
+
 /*
  * function to relocate all extents in a block group.
  */
