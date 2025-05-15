@@ -40,6 +40,7 @@
 #include "orphan.h"
 #include "tree-checker.h"
 #include "raid-stripe-tree.h"
+#include "relocation.h"
 
 #undef SCRAMBLE_DELAYED_REFS
 
@@ -2975,6 +2976,8 @@ static int do_free_extent_accounting(struct btrfs_trans_handle *trans,
 				     u64 bytenr, struct btrfs_squota_delta *delta)
 {
 	int ret;
+	struct btrfs_block_group *bg;
+	bool bg_is_remapped = false;
 	u64 num_bytes = delta->num_bytes;
 
 	if (delta->is_data) {
@@ -3000,10 +3003,22 @@ static int do_free_extent_accounting(struct btrfs_trans_handle *trans,
 		return ret;
 	}
 
-	ret = add_to_free_space_tree(trans, bytenr, num_bytes);
-	if (ret) {
-		btrfs_abort_transaction(trans, ret);
-		return ret;
+	if (btrfs_fs_incompat(trans->fs_info, REMAP_TREE)) {
+		bg = btrfs_lookup_block_group(trans->fs_info, bytenr);
+		bg_is_remapped = bg->flags & BTRFS_BLOCK_GROUP_REMAPPED;
+		btrfs_put_block_group(bg);
+	}
+
+	/*
+	 * If remapped, FST has already been taken care of in
+	 * remove_range_from_remap_tree().
+	 */
+	if (!bg_is_remapped) {
+		ret = add_to_free_space_tree(trans, bytenr, num_bytes);
+		if (ret) {
+			btrfs_abort_transaction(trans, ret);
+			return ret;
+		}
 	}
 
 	ret = btrfs_update_block_group(trans, bytenr, num_bytes, false);
@@ -3368,6 +3383,13 @@ static int __btrfs_free_extent(struct btrfs_trans_handle *trans,
 			goto out;
 		}
 		btrfs_release_path(path);
+
+		ret = btrfs_remove_extent_from_remap_tree(trans, path, bytenr,
+							  num_bytes);
+		if (ret) {
+			btrfs_abort_transaction(trans, ret);
+			goto out;
+		}
 
 		ret = do_free_extent_accounting(trans, bytenr, &delta);
 	}

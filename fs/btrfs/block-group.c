@@ -1048,6 +1048,32 @@ static int remove_block_group_item(struct btrfs_trans_handle *trans,
 	return ret;
 }
 
+void btrfs_remove_bg_from_sinfo(struct btrfs_block_group *block_group)
+{
+	int factor = btrfs_bg_type_to_factor(block_group->flags);
+
+	spin_lock(&block_group->space_info->lock);
+
+	if (btrfs_test_opt(block_group->fs_info, ENOSPC_DEBUG)) {
+		WARN_ON(block_group->space_info->total_bytes
+			< block_group->length);
+		WARN_ON(block_group->space_info->bytes_readonly
+			< block_group->length - block_group->zone_unusable);
+		WARN_ON(block_group->space_info->bytes_zone_unusable
+			< block_group->zone_unusable);
+		WARN_ON(block_group->space_info->disk_total
+			< block_group->length * factor);
+	}
+	block_group->space_info->total_bytes -= block_group->length;
+	block_group->space_info->bytes_readonly -=
+		(block_group->length - block_group->zone_unusable);
+	btrfs_space_info_update_bytes_zone_unusable(block_group->space_info,
+						    -block_group->zone_unusable);
+	block_group->space_info->disk_total -= block_group->length * factor;
+
+	spin_unlock(&block_group->space_info->lock);
+}
+
 int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 			     struct btrfs_chunk_map *map)
 {
@@ -1059,7 +1085,6 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	struct kobject *kobj = NULL;
 	int ret;
 	int index;
-	int factor;
 	struct btrfs_caching_control *caching_ctl = NULL;
 	bool remove_map;
 	bool remove_rsv = false;
@@ -1068,7 +1093,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	if (!block_group)
 		return -ENOENT;
 
-	BUG_ON(!block_group->ro);
+	BUG_ON(!block_group->ro && !(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED));
 
 	trace_btrfs_remove_block_group(block_group);
 	/*
@@ -1080,7 +1105,6 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 				  block_group->length);
 
 	index = btrfs_bg_flags_to_raid_index(block_group->flags);
-	factor = btrfs_bg_type_to_factor(block_group->flags);
 
 	/* make sure this block group isn't part of an allocation cluster */
 	cluster = &fs_info->data_alloc_cluster;
@@ -1204,25 +1228,10 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 
 	spin_lock(&block_group->space_info->lock);
 	list_del_init(&block_group->ro_list);
-
-	if (btrfs_test_opt(fs_info, ENOSPC_DEBUG)) {
-		WARN_ON(block_group->space_info->total_bytes
-			< block_group->length);
-		WARN_ON(block_group->space_info->bytes_readonly
-			< block_group->length - block_group->zone_unusable);
-		WARN_ON(block_group->space_info->bytes_zone_unusable
-			< block_group->zone_unusable);
-		WARN_ON(block_group->space_info->disk_total
-			< block_group->length * factor);
-	}
-	block_group->space_info->total_bytes -= block_group->length;
-	block_group->space_info->bytes_readonly -=
-		(block_group->length - block_group->zone_unusable);
-	btrfs_space_info_update_bytes_zone_unusable(block_group->space_info,
-						    -block_group->zone_unusable);
-	block_group->space_info->disk_total -= block_group->length * factor;
-
 	spin_unlock(&block_group->space_info->lock);
+
+	if (!(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED))
+		btrfs_remove_bg_from_sinfo(block_group);
 
 	/*
 	 * Remove the free space for the block group from the free space tree
@@ -1508,6 +1517,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 	while (!list_empty(&fs_info->unused_bgs)) {
 		u64 used;
 		int trimming;
+		bool made_ro = false;
 
 		block_group = list_first_entry(&fs_info->unused_bgs,
 					       struct btrfs_block_group,
@@ -1544,7 +1554,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 
 		spin_lock(&space_info->lock);
 		spin_lock(&block_group->lock);
-		if (btrfs_is_block_group_used(block_group) || block_group->ro ||
+		if (btrfs_is_block_group_used(block_group) ||
+		    (block_group->ro && !(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)) ||
 		    list_is_singular(&block_group->list)) {
 			/*
 			 * We want to bail if we made new allocations or have
@@ -1587,7 +1598,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		 */
 		used = btrfs_space_info_used(space_info, true);
 		if (space_info->total_bytes - block_group->length < used &&
-		    block_group->zone_unusable < block_group->length) {
+		    block_group->zone_unusable < block_group->length &&
+		    !(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)) {
 			/*
 			 * Add a reference for the list, compensate for the ref
 			 * drop under the "next" label for the
@@ -1605,8 +1617,14 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		spin_unlock(&block_group->lock);
 		spin_unlock(&space_info->lock);
 
-		/* We don't want to force the issue, only flip if it's ok. */
-		ret = inc_block_group_ro(block_group, 0);
+		if (!(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)) {
+			/* We don't want to force the issue, only flip if it's ok. */
+			ret = inc_block_group_ro(block_group, 0);
+			made_ro = true;
+		} else {
+			ret = 0;
+		}
+
 		up_write(&space_info->groups_sem);
 		if (ret < 0) {
 			ret = 0;
@@ -1615,7 +1633,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 
 		ret = btrfs_zone_finish(block_group);
 		if (ret < 0) {
-			btrfs_dec_block_group_ro(block_group);
+			if (made_ro)
+				btrfs_dec_block_group_ro(block_group);
 			if (ret == -EAGAIN)
 				ret = 0;
 			goto next;
@@ -1628,7 +1647,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		trans = btrfs_start_trans_remove_block_group(fs_info,
 						     block_group->start);
 		if (IS_ERR(trans)) {
-			btrfs_dec_block_group_ro(block_group);
+			if (made_ro)
+				btrfs_dec_block_group_ro(block_group);
 			ret = PTR_ERR(trans);
 			goto next;
 		}
@@ -1638,7 +1658,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		 * just delete them, we don't care about them anymore.
 		 */
 		if (!clean_pinned_extents(trans, block_group)) {
-			btrfs_dec_block_group_ro(block_group);
+			if (made_ro)
+				btrfs_dec_block_group_ro(block_group);
 			goto end_trans;
 		}
 
@@ -1652,7 +1673,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		spin_lock(&fs_info->discard_ctl.lock);
 		if (!list_empty(&block_group->discard_list)) {
 			spin_unlock(&fs_info->discard_ctl.lock);
-			btrfs_dec_block_group_ro(block_group);
+			if (made_ro)
+				btrfs_dec_block_group_ro(block_group);
 			btrfs_discard_queue_work(&fs_info->discard_ctl,
 						 block_group);
 			goto end_trans;
