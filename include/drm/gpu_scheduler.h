@@ -632,6 +632,10 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		       u32 credits, void *owner);
 void drm_sched_job_arm(struct drm_sched_job *job);
 void drm_sched_entity_push_job(struct drm_sched_job *sched_job);
+int drm_sched_job_prealloc_dependency_slot(struct drm_sched_job *job,
+					   u32 *id);
+void drm_sched_job_add_prealloc_dep(struct drm_sched_job *job, u32 id,
+				    struct dma_fence *fence);
 int drm_sched_job_add_dependency(struct drm_sched_job *job,
 				 struct dma_fence *fence);
 int drm_sched_job_add_syncobj_dependency(struct drm_sched_job *job,

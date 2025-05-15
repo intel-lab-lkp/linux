@@ -857,6 +857,51 @@ void drm_sched_job_arm(struct drm_sched_job *job)
 EXPORT_SYMBOL(drm_sched_job_arm);
 
 /**
+ * drm_sched_job_prealloc_dependency_slot - avoid ENOMEM on adding dependencies
+ * @job: scheduler job where dependencies will be added
+ * @id: id for the allocated slot
+  *
+ * Sometimes drivers need to be able to submit multiple jobs which depend on
+ * each other to different schedulers at the same time, but using
+ * drm_sched_job_add_dependency() can't fail any more after the first job is
+ * initialized.
+ *
+ * This function preallocate memory for a dependency slot so that no ENOMEM can
+ * come later while adding dependencies. The index of the preallocated slot is
+ * returned in @id.
+ *
+ * Return:
+ * 0 on success, or an error on failing to expand the array.
+ */
+int drm_sched_job_prealloc_dependency_slot(struct drm_sched_job *job,
+					   u32 *id)
+{
+	return xa_alloc(&job->dependencies, id, NULL, xa_limit_32b, GFP_KERNEL);
+}
+EXPORT_SYMBOL(drm_sched_job_prealloc_dependency_slot);
+
+/**
+ * drm_sched_job_add_prealloc_dep - add dependency to preallocated slot
+ * @job: scheduler job where dependencies will be added
+ * @id: the preallocated slot index
+ * @fence: the dependency to add
+ *
+ * Consumes @fence and adds it to the preallocated slot dependency.
+ */
+void drm_sched_job_add_prealloc_dep(struct drm_sched_job *job, u32 id,
+				    struct dma_fence *fence)
+{
+	fence = xa_store(&job->dependencies, id, fence, GFP_ATOMIC);
+	/*
+	 * Be defensive just in case driver messed it up and used preallocated
+	 * slot twice.
+	 */
+	if (WARN_ON(fence))
+		dma_fence_put(fence);
+}
+EXPORT_SYMBOL(drm_sched_job_add_prealloc_dep);
+
+/**
  * drm_sched_job_add_dependency - adds the fence as a job dependency
  * @job: scheduler job to add the dependencies to
  * @fence: the dma_fence to add to the list of dependencies.
