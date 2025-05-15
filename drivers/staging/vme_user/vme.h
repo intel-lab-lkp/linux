@@ -3,6 +3,11 @@
 #define _VME_H_
 
 #include <linux/bitops.h>
+#include <linux/types.h>
+#include <linux/device.h>
+#include <linux/list.h>
+#include <linux/mm.h>
+#include <linux/dma-mapping.h>
 
 /* Resource Type */
 enum vme_resource_type {

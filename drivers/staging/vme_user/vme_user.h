@@ -2,6 +2,8 @@
 #ifndef _VME_USER_H_
 #define _VME_USER_H_
 
+#include <linux/types.h>
+
 #define VME_USER_BUS_MAX	1
 
 /*
