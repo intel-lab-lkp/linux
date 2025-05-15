@@ -324,6 +324,7 @@ static void t7xx_ccmni_wwan_dellink(void *ctxt, struct net_device *dev, struct l
 	if (WARN_ON(ctlb->ccmni_inst[if_id] != ccmni))
 		return;
 
+	ctlb->ccmni_inst[if_id] = NULL;
 	unregister_netdevice(dev);
 }
 
