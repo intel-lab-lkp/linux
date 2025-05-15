@@ -1719,7 +1719,7 @@ static void css_clear_dir(struct cgroup_subsys_state *css)
 
 	css->flags &= ~CSS_VISIBLE;
 
-	if (css_is_cgroup(css)) {
+	if (css_is_self(css)) {
 		if (cgroup_on_dfl(cgrp)) {
 			cgroup_addrm_files(css, cgrp,
 					   cgroup_base_files, false);
@@ -1751,7 +1751,7 @@ static int css_populate_dir(struct cgroup_subsys_state *css)
 	if (css->flags & CSS_VISIBLE)
 		return 0;
 
-	if (css_is_cgroup(css)) {
+	if (css_is_self(css)) {
 		if (cgroup_on_dfl(cgrp)) {
 			ret = cgroup_addrm_files(css, cgrp,
 						 cgroup_base_files, true);
@@ -5449,7 +5449,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 
 	percpu_ref_exit(&css->refcnt);
 
-	if (ss) {
+	if (!css_is_self(css)) {
 		/* css free path */
 		struct cgroup_subsys_state *parent = css->parent;
 		int id = css->id;
@@ -5503,7 +5503,7 @@ static void css_release_work_fn(struct work_struct *work)
 	css->flags |= CSS_RELEASED;
 	list_del_rcu(&css->sibling);
 
-	if (ss) {
+	if (!css_is_self(css)) {
 		struct cgroup *parent_cgrp;
 
 		/* css release path */
