@@ -35,10 +35,17 @@ properties:
       - const: tei
 
   clocks:
-    maxItems: 1
+    minItems: 2
+    maxItems: 3
 
   clock-names:
-    const: fck # UART functional clock
+    minItems: 2
+    maxItems: 3
+    items:
+      enum:
+        - operation
+        - bus
+        - sck # optional external clock input
 
   power-domains:
     maxItems: 1
@@ -58,11 +65,7 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/interrupt-controller/arm-gic.h>
-    #include <dt-bindings/clock/renesas-cpg-mssr.h>
-
-    aliases {
-        serial0 = &sci0;
-    };
+    #include <dt-bindings/clock/renesas,r9a09g077-cpg-mssr.h>
 
     sci0: serial@80005000 {
         compatible = "renesas,r9a09g077-rsci";
@@ -72,7 +75,7 @@ examples:
                      <GIC_SPI 592 IRQ_TYPE_EDGE_RISING>,
                      <GIC_SPI 593 IRQ_TYPE_LEVEL_HIGH>;
         interrupt-names = "eri", "rxi", "txi", "tei";
-        clocks = <&cpg CPG_MOD 108>;
-        clock-names = "fck";
+        clocks = <&cpg CPG_MOD 8>, <&cpg CPG_CORE 13>;
+        clock-names = "operation", "bus";
         power-domains = <&cpg>;
     };
