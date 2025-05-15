@@ -115,6 +115,9 @@ static int squashfs_bio_read_cached(struct bio *fullbio,
 			struct bio *new = bio_alloc_clone(bdev, fullbio,
 							  GFP_NOIO, &fs_bio_set);
 
+			if (!new)
+				return -ENOMEM;
+
 			if (bio) {
 				bio_trim(bio, start_idx * PAGE_SECTORS,
 					 (end_idx - start_idx) * PAGE_SECTORS);
