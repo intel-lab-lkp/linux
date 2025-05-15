@@ -66,18 +66,6 @@ static const char *i915_fence_get_timeline_name(struct dma_fence *fence)
 {
 	const struct i915_gem_context *ctx;
 
-	/*
-	 * The timeline struct (as part of the ppgtt underneath a context)
-	 * may be freed when the request is no longer in use by the GPU.
-	 * We could extend the life of a context to beyond that of all
-	 * fences, possibly keeping the hw resource around indefinitely,
-	 * or we just give them a false name. Since
-	 * dma_fence_ops.get_timeline_name is a debug feature, the occasional
-	 * lie seems justifiable.
-	 */
-	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
-		return "signaled";
-
 	ctx = i915_request_gem_context(to_request(fence));
 	if (!ctx)
 		return "[" DRIVER_NAME "]";
@@ -2184,7 +2172,6 @@ void i915_request_show(struct drm_printer *m,
 		       const char *prefix,
 		       int indent)
 {
-	const char *name = dma_fence_timeline_name((struct dma_fence *)&rq->fence);
 	char buf[80] = "";
 	int x = 0;
 
@@ -2220,6 +2207,7 @@ void i915_request_show(struct drm_printer *m,
 
 	x = print_sched_attr(&rq->sched.attr, buf, x, sizeof(buf));
 
+	dma_fence_access_begin();
 	drm_printf(m, "%s%.*s%c %llx:%lld%s%s %s @ %dms: %s\n",
 		   prefix, indent, "                ",
 		   queue_status(rq),
@@ -2228,7 +2216,8 @@ void i915_request_show(struct drm_printer *m,
 		   fence_status(rq),
 		   buf,
 		   jiffies_to_msecs(jiffies - rq->emitted_jiffies),
-		   name);
+		   dma_fence_timeline_name((struct dma_fence *)&rq->fence));
+	dma_fence_access_end();
 }
 
 static bool engine_match_ring(struct intel_engine_cs *engine, struct i915_request *rq)
