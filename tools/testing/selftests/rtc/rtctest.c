@@ -138,10 +138,10 @@ TEST_F_TIMEOUT(rtc, date_read_loop, READ_LOOP_DURATION_SEC + 2) {
 		rtc_read = rtc_time_to_timestamp(&rtc_tm);
 		/* Time should not go backwards */
 		ASSERT_LE(prev_rtc_read, rtc_read);
-		/* Time should not increase more then 1s at a time */
+		/* Time should not increase more than 1s per read */
 		ASSERT_GE(prev_rtc_read + 1, rtc_read);
 
-		/* Sleep 11ms to avoid killing / overheating the RTC */
+		/* Sleep 11ms to avoid overheating the RTC */
 		nanosleep_with_retries(READ_LOOP_SLEEP_MS * 1000000);
 
 		prev_rtc_read = rtc_read;
@@ -236,7 +236,7 @@ TEST_F(rtc, alarm_alm_set) {
 	if (alarm_state == RTC_ALARM_DISABLED)
 		SKIP(return, "Skipping test since alarms are not supported.");
 	if (alarm_state == RTC_ALARM_RES_MINUTE)
-		SKIP(return, "Skipping test since alarms has only minute granularity.");
+		SKIP(return, "Skipping test since alarms have only minute granularity.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &tm);
 	ASSERT_NE(-1, rc);
@@ -306,7 +306,7 @@ TEST_F(rtc, alarm_wkalm_set) {
 	if (alarm_state == RTC_ALARM_DISABLED)
 		SKIP(return, "Skipping test since alarms are not supported.");
 	if (alarm_state == RTC_ALARM_RES_MINUTE)
-		SKIP(return, "Skipping test since alarms has only minute granularity.");
+		SKIP(return, "Skipping test since alarms have only minute granularity.");
 
 	rc = ioctl(self->fd, RTC_RD_TIME, &alarm.time);
 	ASSERT_NE(-1, rc);
@@ -502,7 +502,7 @@ int main(int argc, char **argv)
 	if (access(rtc_file, R_OK) == 0)
 		ret = test_harness_run(argc, argv);
 	else
-		ksft_exit_skip("[SKIP]: Cannot access rtc file %s - Exiting\n",
+		ksft_exit_skip("Cannot access RTC file %s - exiting\n",
 						rtc_file);
 
 	return ret;
