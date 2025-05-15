@@ -1369,6 +1369,9 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SPEC_CTRL, 1, 1);
 
+	if (boot_cpu_has(X86_FEATURE_ERAPS) && npt_enabled)
+		vmcb_enable_extended_rap(svm->vmcb);
+
 	if (kvm_vcpu_apicv_active(vcpu))
 		avic_init_vmcb(svm, vmcb);
 
@@ -3422,6 +3425,7 @@ static void dump_vmcb(struct kvm_vcpu *vcpu)
 	pr_err("%-20s%016llx\n", "tsc_offset:", control->tsc_offset);
 	pr_err("%-20s%d\n", "asid:", control->asid);
 	pr_err("%-20s%d\n", "tlb_ctl:", control->tlb_ctl);
+	pr_err("%-20s%d\n", "erap_ctl:", control->erap_ctl);
 	pr_err("%-20s%08x\n", "int_ctl:", control->int_ctl);
 	pr_err("%-20s%08x\n", "int_vector:", control->int_vector);
 	pr_err("%-20s%08x\n", "int_state:", control->int_state);
@@ -3603,6 +3607,11 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 		trace_kvm_nested_vmexit(vcpu, KVM_ISA_SVM);
 
+		if (vmcb_is_extended_rap(svm->vmcb01.ptr)) {
+			vmcb_set_flush_guest_rap(svm->vmcb01.ptr);
+			vmcb_clr_flush_guest_rap(svm->nested.vmcb02.ptr);
+		}
+
 		vmexit = nested_svm_exit_special(svm);
 
 		if (vmexit == NESTED_EXIT_CONTINUE)
@@ -3610,6 +3619,11 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 		if (vmexit == NESTED_EXIT_DONE)
 			return 1;
+	} else {
+		if (vmcb_is_extended_rap(svm->vmcb01.ptr) && svm->nested.initialized) {
+			vmcb_set_flush_guest_rap(svm->nested.vmcb02.ptr);
+			vmcb_clr_flush_guest_rap(svm->vmcb01.ptr);
+		}
 	}
 
 	if (svm->vmcb->control.exit_code == SVM_EXIT_ERR) {

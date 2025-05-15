@@ -491,6 +491,26 @@ static inline bool svm_is_intercept(struct vcpu_svm *svm, int bit)
 	return vmcb_is_intercept(&svm->vmcb->control, bit);
 }
 
+static inline void vmcb_set_flush_guest_rap(struct vmcb *vmcb)
+{
+	vmcb->control.erap_ctl |= ERAP_CONTROL_FLUSH_RAP;
+}
+
+static inline void vmcb_clr_flush_guest_rap(struct vmcb *vmcb)
+{
+	vmcb->control.erap_ctl &= ~ERAP_CONTROL_FLUSH_RAP;
+}
+
+static inline void vmcb_enable_extended_rap(struct vmcb *vmcb)
+{
+	vmcb->control.erap_ctl |= ERAP_CONTROL_ALLOW_LARGER_RAP;
+}
+
+static inline bool vmcb_is_extended_rap(struct vmcb *vmcb)
+{
+	return !!(vmcb->control.erap_ctl & ERAP_CONTROL_ALLOW_LARGER_RAP);
+}
+
 static inline bool nested_vgif_enabled(struct vcpu_svm *svm)
 {
 	return guest_cpu_cap_has(&svm->vcpu, X86_FEATURE_VGIF) &&
