@@ -7,6 +7,7 @@
 #include "protos.h"
 #include "puda.h"
 #include "ws.h"
+#include "user.h"
 
 static void irdma_ieq_receive(struct irdma_sc_vsi *vsi,
 			      struct irdma_puda_buf *buf);
@@ -443,6 +444,8 @@ int irdma_puda_send(struct irdma_sc_qp *qp, struct irdma_puda_send_info *info)
 	wqe = irdma_puda_get_next_send_wqe(&qp->qp_uk, &wqe_idx);
 	if (!wqe)
 		return -ENOMEM;
+
+	irdma_clr_wqes(qp, wqe_idx);
 
 	qp->qp_uk.sq_wrtrk_array[wqe_idx].wrid = (uintptr_t)info->scratch;
 	/* Third line of WQE descriptor */
