@@ -22,10 +22,10 @@ static enum led_brightness led_test_brightness_get(struct led_classdev *cdev)
 	return LED_TEST_POST_REG_BRIGHTNESS;
 }
 
-static void led_test_class_register(struct kunit *test)
+static void led_test_class_register_helper(struct kunit *test)
 {
 	struct led_test_ddata *ddata = test->priv;
-	struct led_classdev *cdev_clash, *cdev = &ddata->cdev;
+	struct led_classdev *cdev = &ddata->cdev;
 	struct device *dev = ddata->dev;
 	int ret;
 
@@ -36,6 +36,17 @@ static void led_test_class_register(struct kunit *test)
 
 	ret = devm_led_classdev_register(dev, cdev);
 	KUNIT_ASSERT_EQ(test, ret, 0);
+}
+
+static void led_test_class_register(struct kunit *test)
+{
+	struct led_test_ddata *ddata = test->priv;
+	struct led_classdev *cdev_clash, *cdev = &ddata->cdev;
+	struct device *dev = ddata->dev;
+	int ret;
+
+	/* Register initial device - same as always */
+	led_test_class_register_helper(test);
 
 	KUNIT_EXPECT_EQ(test, cdev->max_brightness, LED_FULL);
 	KUNIT_EXPECT_EQ(test, cdev->brightness, LED_TEST_POST_REG_BRIGHTNESS);
@@ -63,12 +74,9 @@ static void led_test_class_add_lookup_and_get(struct kunit *test)
 	struct led_classdev *cdev = &ddata->cdev, *cdev_get;
 	struct device *dev = ddata->dev;
 	struct led_lookup_data lookup;
-	int ret;
 
 	/* First, register a LED class device */
-	cdev->name = "led-test";
-	ret = devm_led_classdev_register(dev, cdev);
-	KUNIT_ASSERT_EQ(test, ret, 0);
+	led_test_class_register_helper(test);
 
 	/* Then make the LED available for lookup */
 	lookup.provider = cdev->name;
