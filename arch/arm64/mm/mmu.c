@@ -1255,7 +1255,7 @@ int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
 
 	pmd = READ_ONCE(*pmdp);
 
-	if (!pmd_table(pmd)) {
+	if (pmd_leaf(pmd)) {
 		VM_WARN_ON(1);
 		return 1;
 	}
@@ -1276,7 +1276,7 @@ int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
 
 	pud = READ_ONCE(*pudp);
 
-	if (!pud_table(pud)) {
+	if (pud_leaf(pud)) {
 		VM_WARN_ON(1);
 		return 1;
 	}
