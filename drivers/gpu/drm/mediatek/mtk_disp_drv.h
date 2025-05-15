@@ -39,6 +39,15 @@ void mtk_color_config(struct device *dev, unsigned int w,
 		      unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
 void mtk_color_start(struct device *dev);
 
+int mtk_disp_exdma_clk_enable(struct device *dev);
+void mtk_disp_exdma_clk_disable(struct device *dev);
+void mtk_disp_exdma_start(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_exdma_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *state,
+				 struct cmdq_pkt *cmdq_pkt);
+const u32 *mtk_disp_exdma_get_formats(struct device *dev);
+size_t mtk_disp_exdma_get_num_formats(struct device *dev);
+
 void mtk_dither_set_common(void __iomem *regs, struct cmdq_client_reg *cmdq_reg,
 			   unsigned int bpc, unsigned int cfg,
 			   unsigned int dither_en, struct cmdq_pkt *cmdq_pkt);
