@@ -3,8 +3,6 @@
  * Copyright (c) 2015 MediaTek Inc.
  */
 
-#include <drm/drm_blend.h>
-#include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 
 #include <linux/clk.h>
@@ -18,6 +16,7 @@
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
 #include "mtk_disp_drv.h"
+#include "mtk_disp_ovl.h"
 #include "mtk_drm_drv.h"
 
 #define DISP_REG_OVL_INTEN			0x0004
@@ -62,22 +61,15 @@
 /* OVL_CON_RGB_SWAP works only if OVL_CON_CLRFMT_MAN is enabled */
 #define OVL_CON_RGB_SWAP	BIT(25)
 
-#define OVL_CON_CLRFMT_RGB	(1 << 12)
-#define OVL_CON_CLRFMT_ARGB8888	(2 << 12)
-#define OVL_CON_CLRFMT_RGBA8888	(3 << 12)
-#define OVL_CON_CLRFMT_ABGR8888	(OVL_CON_CLRFMT_ARGB8888 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_BGRA8888	(OVL_CON_CLRFMT_RGBA8888 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_UYVY	(4 << 12)
-#define OVL_CON_CLRFMT_YUYV	(5 << 12)
-#define OVL_CON_MTX_YUV_TO_RGB	(6 << 16)
-#define OVL_CON_CLRFMT_PARGB8888 ((3 << 12) | OVL_CON_CLRFMT_MAN)
-#define OVL_CON_CLRFMT_PABGR8888 (OVL_CON_CLRFMT_PARGB8888 | OVL_CON_RGB_SWAP)
-#define OVL_CON_CLRFMT_PBGRA8888 (OVL_CON_CLRFMT_PARGB8888 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_PRGBA8888 (OVL_CON_CLRFMT_PABGR8888 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_RGB565(ovl)	((ovl)->data->fmt_rgb565_is_0 ? \
-					0 : OVL_CON_CLRFMT_RGB)
-#define OVL_CON_CLRFMT_RGB888(ovl)	((ovl)->data->fmt_rgb565_is_0 ? \
-					OVL_CON_CLRFMT_RGB : 0)
+#define OVL_CON_CLRFMT_RGB565(shift)	(0 << (shift))
+#define OVL_CON_CLRFMT_RGB888(shift)	(1 << (shift))
+#define OVL_CON_CLRFMT_ARGB8888(shift)	(2 << (shift))
+#define OVL_CON_CLRFMT_RGBA8888(shift)	(3 << (shift))
+#define OVL_CON_CLRFMT_UYVY(shift)	(4 << (shift))
+#define OVL_CON_CLRFMT_YUYV(shift)	(5 << (shift))
+#define OVL_CON_MTX_YUV_TO_RGB		(6 << 16)
+#define OVL_CON_CLRFMT_PARGB8888(shift, man) ((3 << (shift)) | (man))
+
 #define	OVL_CON_AEN		BIT(8)
 #define	OVL_CON_ALPHA		0xff
 #define	OVL_CON_VIRT_FLIP	BIT(9)
@@ -85,23 +77,7 @@
 
 #define OVL_COLOR_ALPHA		GENMASK(31, 24)
 
-static inline bool is_10bit_rgb(u32 fmt)
-{
-	switch (fmt) {
-	case DRM_FORMAT_XRGB2101010:
-	case DRM_FORMAT_ARGB2101010:
-	case DRM_FORMAT_RGBX1010102:
-	case DRM_FORMAT_RGBA1010102:
-	case DRM_FORMAT_XBGR2101010:
-	case DRM_FORMAT_ABGR2101010:
-	case DRM_FORMAT_BGRX1010102:
-	case DRM_FORMAT_BGRA1010102:
-		return true;
-	}
-	return false;
-}
-
-static const u32 mt8173_formats[] = {
+const u32 mt8173_ovl_formats[] = {
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_BGRX8888,
@@ -115,7 +91,9 @@ static const u32 mt8173_formats[] = {
 	DRM_FORMAT_YUYV,
 };
 
-static const u32 mt8195_formats[] = {
+const size_t mt8173_ovl_formats_len = ARRAY_SIZE(mt8173_ovl_formats);
+
+const u32 mt8195_ovl_formats[] = {
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XRGB2101010,
@@ -138,6 +116,8 @@ static const u32 mt8195_formats[] = {
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_YUYV,
 };
+
+const size_t mt8195_ovl_formats_len = ARRAY_SIZE(mt8195_ovl_formats);
 
 struct mtk_disp_ovl_data {
 	unsigned int addr;
@@ -166,6 +146,22 @@ struct mtk_disp_ovl {
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
 };
+
+bool mtk_ovl_is_10bit_rgb(unsigned int fmt)
+{
+	switch (fmt) {
+	case DRM_FORMAT_XRGB2101010:
+	case DRM_FORMAT_ARGB2101010:
+	case DRM_FORMAT_RGBX1010102:
+	case DRM_FORMAT_RGBA1010102:
+	case DRM_FORMAT_XBGR2101010:
+	case DRM_FORMAT_ABGR2101010:
+	case DRM_FORMAT_BGRX1010102:
+	case DRM_FORMAT_BGRA1010102:
+		return true;
+	}
+	return false;
+}
 
 static irqreturn_t mtk_disp_ovl_irq_handler(int irq, void *dev_id)
 {
@@ -295,7 +291,7 @@ static void mtk_ovl_set_bit_depth(struct device *dev, int idx, u32 format,
 	if (!ovl->data->supports_clrfmt_ext)
 		return;
 
-	if (is_10bit_rgb(format))
+	if (mtk_ovl_is_10bit_rgb(format))
 		bit_depth = OVL_CON_CLRFMT_10_BIT;
 
 	mtk_ddp_write_mask(cmdq_pkt, OVL_CON_CLRFMT_BIT_DEPTH(bit_depth, idx),
@@ -394,10 +390,8 @@ void mtk_ovl_layer_off(struct device *dev, unsigned int idx,
 		      DISP_REG_OVL_RDMA_CTRL(idx));
 }
 
-static unsigned int mtk_ovl_fmt_convert(struct mtk_disp_ovl *ovl,
-					struct mtk_plane_state *state)
+unsigned int mtk_ovl_get_blend_mode(struct mtk_plane_state *state, unsigned int blend_modes)
 {
-	unsigned int fmt = state->pending.format;
 	unsigned int blend_mode = DRM_MODE_BLEND_COVERAGE;
 
 	/*
@@ -412,52 +406,102 @@ static unsigned int mtk_ovl_fmt_convert(struct mtk_disp_ovl *ovl,
 	 * will get an error return from drm_plane_create_blend_mode_property() and
 	 * state->base.pixel_blend_mode should not be used.
 	 */
-	if (ovl->data->blend_modes & BIT(DRM_MODE_BLEND_PREMULTI))
+	if (blend_modes & BIT(DRM_MODE_BLEND_PREMULTI))
 		blend_mode = state->base.pixel_blend_mode;
+
+	return blend_mode;
+}
+
+unsigned int mtk_ovl_fmt_convert(unsigned int fmt, unsigned int blend_mode,
+				 bool fmt_rgb565_is_0, bool color_convert,
+				 u8 clrfmt_shift, u32 clrfmt_man, u32 byte_swap, u32 rgb_swap)
+{
+	unsigned int con = 0;
+	bool need_byte_swap = false, need_rgb_swap = false;
 
 	switch (fmt) {
 	default:
 	case DRM_FORMAT_RGB565:
-		return OVL_CON_CLRFMT_RGB565(ovl);
+		con = fmt_rgb565_is_0 ?
+			OVL_CON_CLRFMT_RGB565(clrfmt_shift) : OVL_CON_CLRFMT_RGB888(clrfmt_shift);
+	break;
 	case DRM_FORMAT_BGR565:
-		return OVL_CON_CLRFMT_RGB565(ovl) | OVL_CON_BYTE_SWAP;
+		con = fmt_rgb565_is_0 ?
+			OVL_CON_CLRFMT_RGB565(clrfmt_shift) : OVL_CON_CLRFMT_RGB888(clrfmt_shift);
+		need_byte_swap = true;	/* RGB565 -> BGR565 */
+	break;
 	case DRM_FORMAT_RGB888:
-		return OVL_CON_CLRFMT_RGB888(ovl);
+		con = fmt_rgb565_is_0 ?
+			OVL_CON_CLRFMT_RGB888(clrfmt_shift) : OVL_CON_CLRFMT_RGB565(clrfmt_shift);
+	break;
 	case DRM_FORMAT_BGR888:
-		return OVL_CON_CLRFMT_RGB888(ovl) | OVL_CON_BYTE_SWAP;
+		con = fmt_rgb565_is_0 ?
+			OVL_CON_CLRFMT_RGB888(clrfmt_shift) : OVL_CON_CLRFMT_RGB565(clrfmt_shift);
+		need_byte_swap = true;	/* RGB888 -> BGR888 */
+	break;
 	case DRM_FORMAT_RGBX8888:
 	case DRM_FORMAT_RGBA8888:
 	case DRM_FORMAT_RGBX1010102:
 	case DRM_FORMAT_RGBA1010102:
-		return blend_mode == DRM_MODE_BLEND_COVERAGE ?
-		       OVL_CON_CLRFMT_RGBA8888 :
-		       OVL_CON_CLRFMT_PRGBA8888;
+		if (blend_mode == DRM_MODE_BLEND_COVERAGE) {
+			con = OVL_CON_CLRFMT_RGBA8888(clrfmt_shift);
+		} else {
+			con = OVL_CON_CLRFMT_PARGB8888(clrfmt_shift, clrfmt_man);
+			need_byte_swap = true;	/* PARGB8888 -> PBGRA8888 */
+			need_rgb_swap = true;	/* PBGRA8888 -> PRGBA8888 */
+		}
+	break;
 	case DRM_FORMAT_BGRX8888:
 	case DRM_FORMAT_BGRA8888:
 	case DRM_FORMAT_BGRX1010102:
 	case DRM_FORMAT_BGRA1010102:
-		return blend_mode == DRM_MODE_BLEND_COVERAGE ?
-		       OVL_CON_CLRFMT_BGRA8888 :
-		       OVL_CON_CLRFMT_PBGRA8888;
+		if (blend_mode == DRM_MODE_BLEND_COVERAGE) {
+			con = OVL_CON_CLRFMT_RGBA8888(clrfmt_shift);
+			need_byte_swap = true;	/* RGB8888 -> BGR8888 */
+		} else {
+			con = OVL_CON_CLRFMT_PARGB8888(clrfmt_shift, clrfmt_man);
+			need_byte_swap = true;	/* PARGB8888 -> PBGRA8888 */
+		}
+	break;
 	case DRM_FORMAT_XRGB8888:
 	case DRM_FORMAT_ARGB8888:
 	case DRM_FORMAT_XRGB2101010:
 	case DRM_FORMAT_ARGB2101010:
-		return blend_mode == DRM_MODE_BLEND_COVERAGE ?
-		       OVL_CON_CLRFMT_ARGB8888 :
-		       OVL_CON_CLRFMT_PARGB8888;
+		if (blend_mode == DRM_MODE_BLEND_COVERAGE)
+			con = OVL_CON_CLRFMT_ARGB8888(clrfmt_shift);
+		else
+			con = OVL_CON_CLRFMT_PARGB8888(clrfmt_shift, clrfmt_man);
+	break;
 	case DRM_FORMAT_XBGR8888:
 	case DRM_FORMAT_ABGR8888:
 	case DRM_FORMAT_XBGR2101010:
 	case DRM_FORMAT_ABGR2101010:
-		return blend_mode == DRM_MODE_BLEND_COVERAGE ?
-		       OVL_CON_CLRFMT_ABGR8888 :
-		       OVL_CON_CLRFMT_PABGR8888;
+		if (blend_mode == DRM_MODE_BLEND_COVERAGE) {
+			con = OVL_CON_CLRFMT_ARGB8888(clrfmt_shift);
+			need_rgb_swap = true;	/* ARGB8888 -> ABGR8888 */
+		} else {
+			con = OVL_CON_CLRFMT_PARGB8888(clrfmt_shift, clrfmt_man);
+			need_rgb_swap = true;	/* PARGB8888 -> PABGR8888 */
+		}
+	break;
 	case DRM_FORMAT_UYVY:
-		return OVL_CON_CLRFMT_UYVY | OVL_CON_MTX_YUV_TO_RGB;
+		con = OVL_CON_CLRFMT_UYVY(clrfmt_shift);
+	break;
 	case DRM_FORMAT_YUYV:
-		return OVL_CON_CLRFMT_YUYV | OVL_CON_MTX_YUV_TO_RGB;
+		con = OVL_CON_CLRFMT_YUYV(clrfmt_shift);
+	break;
 	}
+
+	if (color_convert)
+		con |= OVL_CON_MTX_YUV_TO_RGB;
+
+	if (need_byte_swap)
+		con |= byte_swap;
+
+	if (need_rgb_swap)
+		con |= rgb_swap;
+
+	return con;
 }
 
 static void mtk_ovl_afbc_layer_config(struct mtk_disp_ovl *ovl,
@@ -504,7 +548,8 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 		return;
 	}
 
-	con = mtk_ovl_fmt_convert(ovl, state);
+	con = mtk_ovl_fmt_convert(fmt, blend_mode, ovl->data->fmt_rgb565_is_0, true,
+				  12, OVL_CON_CLRFMT_MAN, OVL_CON_BYTE_SWAP, OVL_CON_RGB_SWAP);
 	if (state->base.fb) {
 		con |= state->base.alpha & OVL_CON_ALPHA;
 
@@ -514,15 +559,6 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 		 */
 		if (blend_mode || state->base.fb->format->has_alpha)
 			con |= OVL_CON_AEN;
-
-		/*
-		 * Although the alpha channel can be ignored, CONST_BLD must be enabled
-		 * for XRGB format, otherwise OVL will still read the value from memory.
-		 * For RGB888 related formats, whether CONST_BLD is enabled or not won't
-		 * affect the result. Therefore we use !has_alpha as the condition.
-		 */
-		if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE || !state->base.fb->format->has_alpha)
-			ignore_pixel_alpha = OVL_CONST_BLEND;
 	}
 
 	/*
@@ -660,8 +696,8 @@ static const struct mtk_disp_ovl_data mt2701_ovl_driver_data = {
 	.gmc_bits = 8,
 	.layer_nr = 4,
 	.fmt_rgb565_is_0 = false,
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8173_ovl_driver_data = {
@@ -669,8 +705,8 @@ static const struct mtk_disp_ovl_data mt8173_ovl_driver_data = {
 	.gmc_bits = 8,
 	.layer_nr = 4,
 	.fmt_rgb565_is_0 = true,
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8183_ovl_driver_data = {
@@ -678,8 +714,8 @@ static const struct mtk_disp_ovl_data mt8183_ovl_driver_data = {
 	.gmc_bits = 10,
 	.layer_nr = 4,
 	.fmt_rgb565_is_0 = true,
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8183_ovl_2l_driver_data = {
@@ -687,8 +723,8 @@ static const struct mtk_disp_ovl_data mt8183_ovl_2l_driver_data = {
 	.gmc_bits = 10,
 	.layer_nr = 2,
 	.fmt_rgb565_is_0 = true,
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8192_ovl_driver_data = {
@@ -697,11 +733,9 @@ static const struct mtk_disp_ovl_data mt8192_ovl_driver_data = {
 	.layer_nr = 4,
 	.fmt_rgb565_is_0 = true,
 	.smi_id_en = true,
-	.blend_modes = BIT(DRM_MODE_BLEND_PREMULTI) |
-		       BIT(DRM_MODE_BLEND_COVERAGE) |
-		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.blend_modes = MTK_OVL_SUPPORT_BLEND_MODES,
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8192_ovl_2l_driver_data = {
@@ -710,11 +744,9 @@ static const struct mtk_disp_ovl_data mt8192_ovl_2l_driver_data = {
 	.layer_nr = 2,
 	.fmt_rgb565_is_0 = true,
 	.smi_id_en = true,
-	.blend_modes = BIT(DRM_MODE_BLEND_PREMULTI) |
-		       BIT(DRM_MODE_BLEND_COVERAGE) |
-		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
-	.formats = mt8173_formats,
-	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.blend_modes = MTK_OVL_SUPPORT_BLEND_MODES,
+	.formats = mt8173_ovl_formats,
+	.num_formats = mt8173_ovl_formats_len,
 };
 
 static const struct mtk_disp_ovl_data mt8195_ovl_driver_data = {
@@ -724,11 +756,9 @@ static const struct mtk_disp_ovl_data mt8195_ovl_driver_data = {
 	.fmt_rgb565_is_0 = true,
 	.smi_id_en = true,
 	.supports_afbc = true,
-	.blend_modes = BIT(DRM_MODE_BLEND_PREMULTI) |
-		       BIT(DRM_MODE_BLEND_COVERAGE) |
-		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
-	.formats = mt8195_formats,
-	.num_formats = ARRAY_SIZE(mt8195_formats),
+	.blend_modes = MTK_OVL_SUPPORT_BLEND_MODES,
+	.formats = mt8195_ovl_formats,
+	.num_formats = mt8195_ovl_formats_len,
 	.supports_clrfmt_ext = true,
 };
 
