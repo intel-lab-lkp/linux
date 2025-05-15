@@ -337,6 +337,27 @@ static struct counter_comp mchp_tc_count_ext[] = {
 	COUNTER_COMP_COMPARE(mchp_tc_count_compare_read, mchp_tc_count_compare_write),
 };
 
+static int mchp_tc_watch_validate(struct counter_device *counter,
+				  const struct counter_watch *watch)
+{
+	switch (watch->channel) {
+	case COUNTER_MCHP_EVCHN_RA:
+	case COUNTER_MCHP_EVCHN_RB:
+	case COUNTER_MCHP_EVCHN_RC:
+		switch (watch->event) {
+		case COUNTER_EVENT_CAPTURE:
+		case COUNTER_EVENT_CHANGE_OF_STATE:
+		case COUNTER_EVENT_OVERFLOW:
+		case COUNTER_EVENT_THRESHOLD:
+			return 0;
+		default:
+			return -EINVAL;
+		}
+	default:
+		return -EINVAL;
+	}
+}
+
 static struct counter_count mchp_tc_counts[] = {
 	{
 		.id = 0,
@@ -351,12 +372,13 @@ static struct counter_count mchp_tc_counts[] = {
 };
 
 static const struct counter_ops mchp_tc_ops = {
-	.signal_read    = mchp_tc_count_signal_read,
+	.action_read    = mchp_tc_count_action_read,
+	.action_write   = mchp_tc_count_action_write,
 	.count_read     = mchp_tc_count_read,
 	.function_read  = mchp_tc_count_function_read,
 	.function_write = mchp_tc_count_function_write,
-	.action_read    = mchp_tc_count_action_read,
-	.action_write   = mchp_tc_count_action_write
+	.signal_read    = mchp_tc_count_signal_read,
+	.watch_validate = mchp_tc_watch_validate,
 };
 
 static const struct atmel_tcb_config tcb_rm9200_config = {
