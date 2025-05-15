@@ -3881,6 +3881,7 @@ static int ci_enable_uvd_dpm(struct radeon_device *rdev, bool enable)
 	struct ci_power_info *pi = ci_get_pi(rdev);
 	const struct radeon_clock_and_voltage_limits *max_limits;
 	int i;
+	PPSMC_Result result;
 
 	if (rdev->pm.dpm.ac_power)
 		max_limits = &rdev->pm.dpm.dyn_state.max_clock_voltage_on_ac;
@@ -3899,24 +3900,30 @@ static int ci_enable_uvd_dpm(struct radeon_device *rdev, bool enable)
 			}
 		}
 
-		ci_send_msg_to_smc_with_parameter(rdev,
+		result = ci_send_msg_to_smc_with_parameter(rdev,
 						  PPSMC_MSG_UVDDPM_SetEnabledMask,
 						  pi->dpm_level_enable_mask.uvd_dpm_enable_mask);
+		if (result != PPSMC_Result_OK)
+			return -EINVAL;
 
 		if (pi->last_mclk_dpm_enable_mask & 0x1) {
 			pi->uvd_enabled = true;
 			pi->dpm_level_enable_mask.mclk_dpm_enable_mask &= 0xFFFFFFFE;
-			ci_send_msg_to_smc_with_parameter(rdev,
+			result = ci_send_msg_to_smc_with_parameter(rdev,
 							  PPSMC_MSG_MCLKDPM_SetEnabledMask,
 							  pi->dpm_level_enable_mask.mclk_dpm_enable_mask);
+			if (result != PPSMC_Result_OK)
+				return -EINVAL;
 		}
 	} else {
 		if (pi->last_mclk_dpm_enable_mask & 0x1) {
 			pi->uvd_enabled = false;
 			pi->dpm_level_enable_mask.mclk_dpm_enable_mask |= 1;
-			ci_send_msg_to_smc_with_parameter(rdev,
+			result = ci_send_msg_to_smc_with_parameter(rdev,
 							  PPSMC_MSG_MCLKDPM_SetEnabledMask,
 							  pi->dpm_level_enable_mask.mclk_dpm_enable_mask);
+			if (result != PPSMC_Result_OK)
+				return -EINVAL;
 		}
 	}
 
