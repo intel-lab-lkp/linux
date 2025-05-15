@@ -198,6 +198,7 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 	u32 command;
 	u32 state;
 	int ret;
+	unsigned int exit_state;
 
 	state = readl(&xhci->op_regs->status);
 
@@ -226,8 +227,13 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 	if (xhci->quirks & XHCI_INTEL_HOST)
 		udelay(1000);
 
+	if (xhci->quirks & XHCI_FULL_RESET_ON_REMOVE)
+		exit_state = 0;
+	else
+		exit_state = XHCI_STATE_REMOVING;
+
 	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->command,
-				CMD_RESET, 0, timeout_us, XHCI_STATE_REMOVING);
+				CMD_RESET, 0, timeout_us, exit_state);
 	if (ret)
 		return ret;
 
