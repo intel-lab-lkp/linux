@@ -413,7 +413,9 @@ static inline void vmx_set_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr,
 		vmx_disable_intercept_for_msr(vcpu, msr, type);
 }
 
+
 void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu);
+u64 vmx_get_supported_debugctl(struct kvm_vcpu *vcpu, bool host_initiated);
 
 /*
  * Note, early Intel manuals have the write-low and read-high bitmap offsets
