@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/ata/eswin,eic7700-sata.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Eswin EIC7700 SoC SATA Controller
+
+maintainers:
+  - Yulin Lu <luyulin@eswincomputing.com>
+  - Huan He <hehuan1@eswincomputing.com>
+
+description: |
+  This binding describes the SATA controller integrated in the Eswin EIC7700 SoC.
+  The controller is compatible with the AHCI (Advanced Host Controller Interface)
+  specification and supports up to 1 port.
+
+properties:
+  compatible:
+    const: eswin,eic7700-ahci
+
+  reg:
+    maxItems: 1
+    description: Address range of the SATA registers
+
+  interrupt-names:
+    items:
+      - const: intrq
+      - const: msi
+      - const: pme
+
+  interrupts:
+    maxItems: 3
+    description: The SATA interrupt numbers
+
+  ports-implemented:
+    maximum: 0x1
+
+  resets:
+    maxItems: 1
+    description: resets to be used by the controller.
+
+  reset-names:
+    const: apb
+
+  '#address-cells':
+    const: 2
+
+  '#size-cells':
+    const: 2
+
+  eswin,hsp_sp_csr:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: hsp_sp_csr regs to be used by the controller.
+
+required:
+  - compatible
+  - reg
+  - interrupt-names
+  - interrupts
+  - resets
+  - reset-names
+  - eswin,hsp_sp_csr
+
+additionalProperties: false
+
+examples:
+  - |
+    sata: sata@50420000 {
+      compatible = "eswin,eic7700-ahci";
+      reg = <0x50420000 0x10000>;
+      interrupt-parent = <&plic>;
+      interrupt-names = "intrq", "msi", "pme";
+      interrupts = <58>, <59>, <60>;
+      ports-implemented = <0x1>;
+      resets = <&reset 7 (1 << 27)>;
+      reset-names = "apb";
+      #size-cells = <2>;
+      eswin,hsp_sp_csr = <&hsp_sp_csr 0x1050>;
+    };
