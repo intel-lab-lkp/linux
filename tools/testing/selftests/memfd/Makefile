@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0
-CFLAGS += -D_FILE_OFFSET_BITS=64
 CFLAGS += $(KHDR_INCLUDES)
 
 TEST_GEN_PROGS := memfd_test
@@ -16,10 +15,9 @@ ifeq ($(VAR_LDLIBS),)
 VAR_LDLIBS := -lfuse -pthread
 endif
 
-fuse_mnt.o: CFLAGS += $(VAR_CFLAGS)
-
 include ../lib.mk
 
+$(OUTPUT)/fuse_mnt: CFLAGS += $(VAR_CFLAGS)
 $(OUTPUT)/fuse_mnt: LDLIBS += $(VAR_LDLIBS)
 
 $(OUTPUT)/memfd_test: memfd_test.c common.c
