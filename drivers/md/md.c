@@ -606,15 +606,13 @@ static inline struct mddev *mddev_get(struct mddev *mddev)
 }
 
 static void mddev_delayed_delete(struct work_struct *ws);
+static bool can_delete_gendisk(struct mddev *mddev);
 
 static void __mddev_put(struct mddev *mddev)
 {
-	if (mddev->raid_disks || !list_empty(&mddev->disks) ||
-	    mddev->ctime || mddev->hold_active)
-		return;
 
-	/* Array is not configured at all, and not held active, so destroy it */
-	set_bit(MD_DELETED, &mddev->flags);
+	if (can_delete_gendisk(mddev) == false)
+		return;
 
 	/*
 	 * Call queue_work inside the spinlock so that flush_workqueue() after
@@ -4400,6 +4398,7 @@ array_state_show(struct mddev *mddev, char *page)
 	return sprintf(page, "%s\n", array_states[st]);
 }
 
+static void delete_gendisk(struct mddev *mddev);
 static int do_md_stop(struct mddev *mddev, int ro);
 static int md_set_readonly(struct mddev *mddev);
 static int restart_array(struct mddev *mddev);
@@ -4532,6 +4531,9 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	if (st == readonly || st == read_auto || st == inactive ||
 	    (err && st == clear))
 		clear_bit(MD_CLOSING, &mddev->flags);
+
+	if ((st == clear || st == inactive) && !err)
+		delete_gendisk(mddev);
 
 	return err ?: len;
 }
@@ -5721,19 +5723,30 @@ md_attr_store(struct kobject *kobj, struct attribute *attr,
 	struct md_sysfs_entry *entry = container_of(attr, struct md_sysfs_entry, attr);
 	struct mddev *mddev = container_of(kobj, struct mddev, kobj);
 	ssize_t rv;
+	struct kernfs_node *kn = NULL;
 
 	if (!entry->store)
 		return -EIO;
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
+
+	if (entry->store == array_state_store && cmd_match(page, "clear"))
+		kn = sysfs_break_active_protection(kobj, attr);
+
 	spin_lock(&all_mddevs_lock);
 	if (!mddev_get(mddev)) {
 		spin_unlock(&all_mddevs_lock);
+		if (kn)
+			sysfs_unbreak_active_protection(kn);
 		return -EBUSY;
 	}
 	spin_unlock(&all_mddevs_lock);
 	rv = entry->store(mddev, page, length);
 	mddev_put(mddev);
+
+	if (kn)
+		sysfs_unbreak_active_protection(kn);
+
 	return rv;
 }
 
@@ -5746,7 +5759,6 @@ static void md_kobj_release(struct kobject *ko)
 	if (mddev->sysfs_level)
 		sysfs_put(mddev->sysfs_level);
 
-	del_gendisk(mddev->gendisk);
 	put_disk(mddev->gendisk);
 }
 
@@ -6526,6 +6538,28 @@ out:
 	return err;
 }
 
+static bool can_delete_gendisk(struct mddev *mddev)
+{
+	if (mddev->raid_disks || !list_empty(&mddev->disks) ||
+	    mddev->ctime || mddev->hold_active)
+		return false;
+
+	return true;
+}
+
+/* Call this function after do_md_stop with mode 0.
+ * And it can't call this function under reconfig_mutex to
+ * avoid deadlock(e.g. call del_gendisk under the lock and
+ * an access to sysfs files waits the lock)
+ */
+static void delete_gendisk(struct mddev *mddev)
+{
+	if (can_delete_gendisk(mddev) == false)
+		return;
+
+	del_gendisk(mddev->gendisk);
+}
+
 /* mode:
  *   0 - completely stop and dis-assemble array
  *   2 - stop but do not disassemble array
@@ -6588,8 +6622,8 @@ static int do_md_stop(struct mddev *mddev, int mode)
 		mddev->bitmap_info.offset = 0;
 
 		export_array(mddev);
-
 		md_clean(mddev);
+		set_bit(MD_DELETED, &mddev->flags);
 	}
 	md_new_event();
 	sysfs_notify_dirent_safe(mddev->sysfs_state);
@@ -6616,6 +6650,7 @@ static void autorun_array(struct mddev *mddev)
 	if (err) {
 		pr_warn("md: do_md_run() returned %d\n", err);
 		do_md_stop(mddev, 0);
+		delete_gendisk(mddev);
 	}
 }
 
@@ -7886,6 +7921,10 @@ unlock:
 out:
 	if (cmd == STOP_ARRAY_RO || (err && cmd == STOP_ARRAY))
 		clear_bit(MD_CLOSING, &mddev->flags);
+
+	if (cmd == STOP_ARRAY && err == 0)
+		delete_gendisk(mddev);
+
 	return err;
 }
 #ifdef CONFIG_COMPAT
