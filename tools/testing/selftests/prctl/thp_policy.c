@@ -203,6 +203,77 @@ err_out:
 		return -1;
 }
 
+/* Global policy is madvise, process is changed to HUGE (process becomes always) */
+static int test_global_madvise_process_huge(void)
+{
+	int is_anonhuge = 0, res = 0, status = 0;
+	pid_t pid;
+
+	if (prctl(PR_SET_THP_POLICY, PR_THP_POLICY_DEFAULT_HUGE, NULL, NULL, NULL) != 0) {
+		perror("prctl failed to set process policy to always");
+		return -1;
+	}
+
+	/* Make sure prctl changes are carried across fork */
+	pid = fork();
+	if (pid < 0) {
+		perror("fork");
+		exit(EXIT_FAILURE);
+	}
+
+	res = prctl(PR_GET_THP_POLICY, NULL, NULL, NULL, NULL);
+	if (res != PR_THP_POLICY_DEFAULT_HUGE) {
+		printf("prctl PR_GET_THP_POLICY returned %d pid %d\n", res, pid);
+		goto err_out;
+	}
+
+	/* global = madvise, process = always, we should get HPs irrespective of MADV_HUGEPAGE */
+	is_anonhuge = test_mmap_thp(0);
+	if (!is_anonhuge) {
+		printf("PR_THP_POLICY_DEFAULT_HUGE set but didn't get hugepages\n");
+		goto err_out;
+	}
+
+	is_anonhuge = test_mmap_thp(1);
+	if (!is_anonhuge) {
+		printf("PR_THP_POLICY_DEFAULT_HUGE set but did't get hugepages\n");
+		goto err_out;
+	}
+
+	/* Reset to system policy */
+	if (prctl(PR_SET_THP_POLICY, PR_THP_POLICY_SYSTEM, NULL, NULL, NULL) != 0) {
+		perror("prctl failed to set policy to system");
+		goto err_out;
+	}
+
+	is_anonhuge = test_mmap_thp(0);
+	if (is_anonhuge) {
+		printf("global policy is madvise\n");
+		goto err_out;
+	}
+
+	is_anonhuge = test_mmap_thp(1);
+	if (!is_anonhuge) {
+		printf("global policy is madvise\n");
+		goto err_out;
+	}
+
+	if (pid == 0) {
+		exit(EXIT_SUCCESS);
+	} else {
+		wait(&status);
+		if (WIFEXITED(status))
+			return 0;
+		else
+			return -1;
+	}
+err_out:
+	if (pid == 0)
+		exit(EXIT_FAILURE);
+	else
+		return -1;
+}
+
 int main(void)
 {
 	if (sysfs_check())
@@ -210,5 +281,6 @@ int main(void)
 
 	if (system_thp_policy == SYSTEM_POLICY_ALWAYS)
 		return test_global_always_process_nohuge();
-
+	else
+		return test_global_madvise_process_huge();
 }
