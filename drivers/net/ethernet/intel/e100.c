@@ -147,6 +147,7 @@
 #include <linux/firmware.h>
 #include <linux/rtnetlink.h>
 #include <linux/unaligned.h>
+#include <linux/string_choices.h>
 
 
 #define DRV_NAME		"e100"
@@ -946,7 +947,7 @@ static u16 mdio_ctrl_hw(struct nic *nic, u32 addr, u32 dir, u32 reg, u16 data)
 	spin_unlock_irqrestore(&nic->mdio_lock, flags);
 	netif_printk(nic, hw, KERN_DEBUG, nic->netdev,
 		     "%s:addr=%d, reg=%d, data_in=0x%04X, data_out=0x%04X\n",
-		     dir == mdi_read ? "READ" : "WRITE",
+		     str_read_write(dir == mdi_read),
 		     addr, reg, data, data_out);
 	return (u16)data_out;
 }
@@ -1009,7 +1010,7 @@ static u16 mdio_ctrl_phy_mii_emulated(struct nic *nic,
 		default:
 			netif_printk(nic, hw, KERN_DEBUG, nic->netdev,
 				     "%s:addr=%d, reg=%d, data=0x%04X: unimplemented emulation!\n",
-				     dir == mdi_read ? "READ" : "WRITE",
+				     str_read_write(dir == mdi_read),
 				     addr, reg, data);
 			return 0xFFFF;
 		}
@@ -1018,7 +1019,7 @@ static u16 mdio_ctrl_phy_mii_emulated(struct nic *nic,
 		default:
 			netif_printk(nic, hw, KERN_DEBUG, nic->netdev,
 				     "%s:addr=%d, reg=%d, data=0x%04X: unimplemented emulation!\n",
-				     dir == mdi_read ? "READ" : "WRITE",
+				     str_read_write(dir == mdi_read),
 				     addr, reg, data);
 			return 0xFFFF;
 		}
