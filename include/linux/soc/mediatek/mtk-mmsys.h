@@ -84,6 +84,14 @@ enum mtk_ddp_comp_id {
 	DDP_COMPONENT_ID_MAX,
 };
 
+int mtk_mmsys_top_clk_enable(struct device *dev);
+void mtk_mmsys_top_clk_disable(struct device *dev);
+int mtk_mmsys_ddp_clk_enable(struct device *dev, enum mtk_ddp_comp_id comp_id);
+void mtk_mmsys_ddp_clk_disable(struct device *dev, enum mtk_ddp_comp_id comp_id);
+void mtk_mmsys_ddp_config(struct device *dev, enum mtk_ddp_comp_id comp_id,
+			  int width, int height, struct cmdq_pkt *cmdq_pkt);
+void mtk_mmsys_default_config(struct device *dev);
+
 void mtk_mmsys_ddp_connect(struct device *dev,
 			   enum mtk_ddp_comp_id cur,
 			   enum mtk_ddp_comp_id next);

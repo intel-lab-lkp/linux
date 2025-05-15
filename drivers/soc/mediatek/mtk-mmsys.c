@@ -4,12 +4,15 @@
  * Author: James Liao <jamesjj.liao@mediatek.com>
  */
 
+#include <linux/bitfield.h>
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/reset-controller.h>
 #include <linux/soc/mediatek/mtk-mmsys.h>
 
@@ -158,6 +161,9 @@ struct mtk_mmsys {
 	spinlock_t lock; /* protects mmsys_sw_rst_b reg */
 	struct reset_controller_dev rcdev;
 	struct cmdq_client_reg cmdq_base;
+	struct clk **async_clk;
+	int num_async_clk;
+	struct clk **top_clk;
 };
 
 static void mtk_mmsys_update_bits(struct mtk_mmsys *mmsys, u32 offset, u32 mask, u32 val,
@@ -179,6 +185,101 @@ static void mtk_mmsys_update_bits(struct mtk_mmsys *mmsys, u32 offset, u32 mask,
 	tmp = (tmp & ~mask) | (val & mask);
 	writel_relaxed(tmp, mmsys->regs + offset);
 }
+
+int mtk_mmsys_top_clk_enable(struct device *dev)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	int ret, i;
+
+	if (!mmsys->data->num_top_clk)
+		return 0;
+
+	for (i = 0; i < mmsys->data->num_top_clk; i++)
+		ret = clk_prepare_enable(mmsys->top_clk[i]);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_top_clk_enable);
+
+void mtk_mmsys_top_clk_disable(struct device *dev)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	int i;
+
+	for (i = 0; i < mmsys->data->num_top_clk; i++)
+		clk_disable_unprepare(mmsys->top_clk[i]);
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_top_clk_disable);
+
+int mtk_mmsys_ddp_clk_enable(struct device *dev, enum mtk_ddp_comp_id comp_id)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	const struct mtk_mmsys_async_info *async = mmsys->data->async_info;
+
+	int i;
+
+	if (!mmsys->data->num_async_info)
+		return 0;
+
+	for (i = 0; i < mmsys->data->num_async_info; i++)
+		if (comp_id == async[i].comp_id)
+			return clk_prepare_enable(mmsys->async_clk[async[i].index]);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_ddp_clk_enable);
+
+void mtk_mmsys_ddp_clk_disable(struct device *dev, enum mtk_ddp_comp_id comp_id)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	const struct mtk_mmsys_async_info *async = mmsys->data->async_info;
+	int i;
+
+	if (!mmsys->data->num_async_info)
+		return;
+
+	for (i = 0; i < mmsys->data->num_async_info; i++)
+		if (comp_id == async[i].comp_id)
+			clk_disable_unprepare(mmsys->async_clk[async[i].index]);
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_ddp_clk_disable);
+
+void mtk_mmsys_ddp_config(struct device *dev, enum mtk_ddp_comp_id comp_id,
+			  int width, int height, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	const struct mtk_mmsys_async_info *async = mmsys->data->async_info;
+	int i;
+	u32 val;
+
+	if (!mmsys->data->num_async_info)
+		return;
+
+	for (i = 0; i < mmsys->data->num_async_info; i++)
+		if (comp_id == async[i].comp_id)
+			break;
+
+	if (i == mmsys->data->num_async_info)
+		return;
+
+	val = FIELD_PREP(GENMASK(31, 16), height);
+	val |= FIELD_PREP(GENMASK(15, 0), width);
+	mtk_mmsys_update_bits(mmsys, async[i].offset, async[i].mask, val, cmdq_pkt);
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_ddp_config);
+
+void mtk_mmsys_default_config(struct device *dev)
+{
+	struct mtk_mmsys *mmsys = dev_get_drvdata(dev);
+	const struct mtk_mmsys_default *def_config = mmsys->data->def_config;
+	int i;
+
+	if (!mmsys->data->num_def_config)
+		return;
+
+	for (i = 0; i < mmsys->data->num_def_config; i++)
+		mtk_mmsys_update_bits(mmsys, def_config[i].offset, def_config[i].mask,
+				      def_config[i].val, NULL);
+}
+EXPORT_SYMBOL_GPL(mtk_mmsys_default_config);
 
 void mtk_mmsys_ddp_connect(struct device *dev,
 			   enum mtk_ddp_comp_id cur,
@@ -390,7 +491,7 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 	struct platform_device *clks;
 	struct platform_device *drm;
 	struct mtk_mmsys *mmsys;
-	int ret;
+	int ret, i;
 
 	mmsys = devm_kzalloc(dev, sizeof(*mmsys), GFP_KERNEL);
 	if (!mmsys)
@@ -432,6 +533,49 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 		return PTR_ERR(clks);
 	mmsys->clks_pdev = clks;
 
+	if (mmsys->data->num_top_clk) {
+		struct device_node *node;
+
+		node = of_get_child_by_name(dev->of_node, "top");
+		if (!node) {
+			dev_err(&pdev->dev, "Couldn't find top node\n");
+			return -EINVAL;
+		}
+
+		mmsys->top_clk = devm_kmalloc_array(dev, mmsys->data->num_top_clk,
+						    sizeof(*mmsys->top_clk), GFP_KERNEL);
+		if (!mmsys->top_clk)
+			return -ENOMEM;
+
+		for (i = 0; i < mmsys->data->num_top_clk; i++) {
+			mmsys->top_clk[i] = of_clk_get(node, i);
+			if (IS_ERR(mmsys->top_clk[i]))
+				return PTR_ERR(mmsys->top_clk[i]);
+		}
+	}
+
+	if (mmsys->data->num_async_info) {
+		struct device_node *node;
+
+		node = of_get_child_by_name(dev->of_node, "async");
+		if (!node) {
+			dev_err(&pdev->dev, "Couldn't find async node\n");
+			return -EINVAL;
+		}
+
+		mmsys->async_clk = devm_kmalloc_array(dev, mmsys->data->num_async_info,
+						      sizeof(*mmsys->async_clk), GFP_KERNEL);
+		if (!mmsys->async_clk)
+			return -ENOMEM;
+		mmsys->num_async_clk = mmsys->data->num_async_info;
+
+		for (i = 0; i < mmsys->num_async_clk; i++) {
+			mmsys->async_clk[i] = of_clk_get(node, i);
+			if (IS_ERR(mmsys->async_clk[i]))
+				return PTR_ERR(mmsys->async_clk[i]);
+		}
+	}
+
 	if (mmsys->data->is_vppsys)
 		goto out_probe_done;
 
@@ -443,6 +587,9 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 	}
 	mmsys->drm_pdev = drm;
 
+	if (of_property_present(dev->of_node, "power-domains"))
+		pm_runtime_enable(dev);
+
 out_probe_done:
 	return 0;
 }
@@ -453,6 +600,9 @@ static void mtk_mmsys_remove(struct platform_device *pdev)
 
 	platform_device_unregister(mmsys->drm_pdev);
 	platform_device_unregister(mmsys->clks_pdev);
+
+	if (of_property_present(pdev->dev.of_node, "power-domains"))
+		pm_runtime_disable(&pdev->dev);
 }
 
 static const struct of_device_id of_match_mtk_mmsys[] = {
