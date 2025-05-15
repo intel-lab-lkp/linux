@@ -1159,21 +1159,12 @@ static int ff_layout_async_handle_error_v4(struct rpc_task *task,
 		if (test_bit(NFS_CS_NETUNREACH_FATAL, &clp->cl_flags))
 			return -NFS4ERR_FATAL_IOERROR;
 		fallthrough;
-	case -ECONNREFUSED:
-	case -EHOSTDOWN:
-	case -EHOSTUNREACH:
-	case -EIO:
-	case -ETIMEDOUT:
-	case -EPIPE:
-	case -EPROTO:
-	case -ENODEV:
+	default:
 		dprintk("%s DS connection error %d\n", __func__,
 			task->tk_status);
 		nfs4_delete_deviceid(devid->ld, devid->nfs_client,
 				&devid->deviceid);
 		rpc_wake_up(&tbl->slot_tbl_waitq);
-		fallthrough;
-	default:
 		if (ff_layout_avoid_mds_available_ds(lseg))
 			return -NFS4ERR_RESET_TO_PNFS;
 reset:
