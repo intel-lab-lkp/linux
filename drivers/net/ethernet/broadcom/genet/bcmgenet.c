@@ -1029,6 +1029,10 @@ struct bcmgenet_stats {
 			tx_rings[num].stats64, packets), \
 	STAT_GENET_SOFT_MIB64("txq" __stringify(num) "_bytes", \
 			tx_rings[num].stats64, bytes), \
+	STAT_GENET_SOFT_MIB64("txq" __stringify(num) "_errors", \
+			tx_rings[num].stats64, errors), \
+	STAT_GENET_SOFT_MIB64("txq" __stringify(num) "_dropped", \
+			tx_rings[num].stats64, dropped), \
 	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_bytes", \
 			rx_rings[num].stats64, bytes),	 \
 	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_packets", \
@@ -1036,7 +1040,23 @@ struct bcmgenet_stats {
 	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_errors", \
 			rx_rings[num].stats64, errors), \
 	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_dropped", \
-			rx_rings[num].stats64, dropped)
+			rx_rings[num].stats64, dropped), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_multicast", \
+			rx_rings[num].stats64, multicast), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_missed", \
+			rx_rings[num].stats64, missed), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_length_errors", \
+			rx_rings[num].stats64, length_errors), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_over_errors", \
+			rx_rings[num].stats64, over_errors), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_crc_errors", \
+			rx_rings[num].stats64, crc_errors), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_frame_errors", \
+			rx_rings[num].stats64, frame_errors), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_fragmented_errors", \
+			rx_rings[num].stats64, fragmented_errors), \
+	STAT_GENET_SOFT_MIB64("rxq" __stringify(num) "_broadcast", \
+			rx_rings[num].stats64, broadcast)
 
 /* There is a 0xC gap between the end of RX and beginning of TX stats and then
  * between the end of TX stats and the beginning of the RX RUNT
@@ -1057,6 +1077,11 @@ static const struct bcmgenet_stats bcmgenet_gstrings_stats[] = {
 	STAT_RTNL(rx_dropped),
 	STAT_RTNL(tx_dropped),
 	STAT_RTNL(multicast),
+	STAT_RTNL(rx_missed_errors),
+	STAT_RTNL(rx_length_errors),
+	STAT_RTNL(rx_over_errors),
+	STAT_RTNL(rx_crc_errors),
+	STAT_RTNL(rx_frame_errors),
 	/* UniMAC RSV counters */
 	STAT_GENET_MIB_RX("rx_64_octets", mib.rx.pkt_cnt.cnt_64),
 	STAT_GENET_MIB_RX("rx_65_127_oct", mib.rx.pkt_cnt.cnt_127),
@@ -2412,6 +2437,8 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		u64_stats_add(&stats->bytes, len);
 		if (dma_flag & DMA_RX_MULT)
 			u64_stats_inc(&stats->multicast);
+		else if (dma_flag & DMA_RX_BRDCAST)
+			u64_stats_inc(&stats->broadcast);
 		u64_stats_update_end(&stats->syncp);
 
 		/* Notify kernel */
