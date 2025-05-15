@@ -126,7 +126,7 @@ out:
 
 int dwc3_host_init(struct dwc3 *dwc)
 {
-	struct property_entry	props[6];
+	struct property_entry	props[7];
 	struct platform_device	*xhci;
 	int			ret, irq;
 	int			prop_idx = 0;
@@ -181,6 +181,9 @@ int dwc3_host_init(struct dwc3 *dwc)
 	 */
 	if (DWC3_VER_IS_WITHIN(DWC3, ANY, 300A))
 		props[prop_idx++] = PROPERTY_ENTRY_BOOL("quirk-broken-port-ped");
+
+	if (dwc->dr_mode == USB_DR_MODE_OTG)
+		props[prop_idx++] = PROPERTY_ENTRY_BOOL("xhci-full-reset-on-remove-quirk");
 
 	if (prop_idx) {
 		ret = device_create_managed_software_node(&xhci->dev, props, NULL);
