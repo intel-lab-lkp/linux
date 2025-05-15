@@ -69,9 +69,12 @@ static void cppc_ffh_csr_read(void *read_data)
 	struct sbi_cppc_data *data = (struct sbi_cppc_data *)read_data;
 
 	switch (data->reg) {
-	/* Support only TIME CSR for now */
 	case CSR_TIME:
 		data->ret.value = csr_read(CSR_TIME);
+		data->ret.error = 0;
+		break;
+	case CSR_CYCLE:
+		data->ret.value = csr_read(CSR_CYCLE);
 		data->ret.error = 0;
 		break;
 	default:
