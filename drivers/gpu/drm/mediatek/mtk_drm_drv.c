@@ -429,32 +429,41 @@ static bool mtk_drm_get_all_drm_priv(struct device *dev)
 	return false;
 }
 
-static bool mtk_drm_find_mmsys_comp(struct mtk_drm_private *private, int comp_id)
+static bool mtk_drm_find_mmsys_comp(struct mtk_drm_private *private, int comp_id, int *use_path)
 {
 	const struct mtk_mmsys_driver_data *drv_data = private->data;
-	int i;
+	int i, path = MAX_CRTC;
 
 	if (drv_data->main_path)
 		for (i = 0; i < drv_data->main_len; i++)
-			if (drv_data->main_path[i] == comp_id)
-				return true;
+			if (drv_data->main_path[i] == comp_id) {
+				path = CRTC_MAIN;
+				goto found;
+			}
 
 	if (drv_data->ext_path)
 		for (i = 0; i < drv_data->ext_len; i++)
-			if (drv_data->ext_path[i] == comp_id)
-				return true;
-
+			if (drv_data->ext_path[i] == comp_id) {
+				path = CRTC_EXT;
+				goto found;
+			}
 	if (drv_data->third_path)
 		for (i = 0; i < drv_data->third_len; i++)
-			if (drv_data->third_path[i] == comp_id)
-				return true;
+			if (drv_data->third_path[i] == comp_id) {
+				path = CRTC_THIRD;
+				goto found;
+			}
 
 	if (drv_data->num_conn_routes)
 		for (i = 0; i < drv_data->num_conn_routes; i++)
 			if (drv_data->conn_routes[i].route_ddp == comp_id)
-				return true;
+				goto found;
 
 	return false;
+found:
+	if (use_path)
+		*use_path = path;
+	return true;
 }
 
 static int mtk_drm_kms_init(struct drm_device *drm)
@@ -1055,6 +1064,26 @@ static int mtk_drm_of_ddp_path_build(struct device *dev, struct device_node *nod
 	return 0;
 }
 
+static void mtk_drm_ovl_adaptor_probe(struct device *dev, struct mtk_drm_private *private,
+				      struct component_match **match, enum mtk_ddp_comp_id id)
+{
+	struct platform_device *ovl_adaptor;
+	struct mtk_drm_ovlsys_private ovlsys_priv;
+	bool is_ovlsys = (id != DDP_COMPONENT_DRM_OVL_ADAPTOR);
+	char *dev_name = is_ovlsys ? "mediatek-disp-ovlsys-adaptor" : "mediatek-disp-ovl-adaptor";
+	void *drv_data = is_ovlsys ? (void *)&ovlsys_priv : (void *)private->mmsys_dev;
+	size_t data_size = is_ovlsys ? sizeof(ovlsys_priv) : sizeof(*private->mmsys_dev);
+
+	if (mtk_drm_find_mmsys_comp(private, id, &ovlsys_priv.use_path)) {
+		ovlsys_priv.mmsys_dev = private->mmsys_dev;
+		ovl_adaptor = platform_device_register_data(dev, dev_name, PLATFORM_DEVID_AUTO,
+							    drv_data, data_size);
+		private->ddp_comp[id].dev = &ovl_adaptor->dev;
+		mtk_ddp_comp_init(NULL, &private->ddp_comp[id], id);
+		component_match_add(dev, match, compare_dev, &ovl_adaptor->dev);
+	}
+}
+
 static int mtk_drm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1064,7 +1093,6 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	struct mtk_mmsys_driver_data *mtk_drm_data;
 	struct device_node *node;
 	struct component_match *match = NULL;
-	struct platform_device *ovl_adaptor;
 	int ret;
 	int i;
 
@@ -1110,17 +1138,11 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	if (!private->all_drm_private)
 		return -ENOMEM;
 
-	/* Bringup ovl_adaptor */
-	if (mtk_drm_find_mmsys_comp(private, DDP_COMPONENT_DRM_OVL_ADAPTOR)) {
-		ovl_adaptor = platform_device_register_data(dev, "mediatek-disp-ovl-adaptor",
-							    PLATFORM_DEVID_AUTO,
-							    (void *)private->mmsys_dev,
-							    sizeof(*private->mmsys_dev));
-		private->ddp_comp[DDP_COMPONENT_DRM_OVL_ADAPTOR].dev = &ovl_adaptor->dev;
-		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVL_ADAPTOR],
-				  DDP_COMPONENT_DRM_OVL_ADAPTOR);
-		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
-	}
+	/* Bringup ovl_adaptor and ovlsys_adaptor*/
+	mtk_drm_ovl_adaptor_probe(dev, private, &match, DDP_COMPONENT_DRM_OVL_ADAPTOR);
+	mtk_drm_ovl_adaptor_probe(dev, private, &match, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0);
+	mtk_drm_ovl_adaptor_probe(dev, private, &match, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1);
+	mtk_drm_ovl_adaptor_probe(dev, private, &match, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2);
 
 	/* Iterate over sibling DISP function blocks */
 	for_each_child_of_node(phandle->parent, node) {
@@ -1155,7 +1177,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 			continue;
 		}
 
-		if (!mtk_drm_find_mmsys_comp(private, comp_id))
+		if (!mtk_drm_find_mmsys_comp(private, comp_id, NULL))
 			continue;
 
 		private->comp_node[comp_id] = of_node_get(node);
@@ -1283,6 +1305,7 @@ static struct platform_driver * const mtk_drm_drivers[] = {
 	&mtk_disp_outproc_driver,
 	&mtk_disp_ovl_adaptor_driver,
 	&mtk_disp_ovl_driver,
+	&mtk_disp_ovlsys_adaptor_driver,
 	&mtk_disp_rdma_driver,
 	&mtk_dpi_driver,
 	&mtk_drm_platform_driver,

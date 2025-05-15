@@ -9,6 +9,7 @@ mediatek-drm-y := mtk_crtc.o \
 		  mtk_disp_exdma.o \
 		  mtk_disp_gamma.o \
 		  mtk_disp_merge.o \
+		  mtk_disp_ovlsys_adaptor.o \
 		  mtk_disp_ovl.o \
 		  mtk_disp_outproc.o \
 		  mtk_disp_ovl_adaptor.o \

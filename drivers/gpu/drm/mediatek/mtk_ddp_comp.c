@@ -368,6 +368,31 @@ static const struct mtk_ddp_comp_funcs ddp_ovl = {
 	.get_num_formats = mtk_ovl_get_num_formats,
 };
 
+static const struct mtk_ddp_comp_funcs ddp_ovlsys_adaptor = {
+	.power_on = mtk_ovlsys_adaptor_power_on,
+	.power_off = mtk_ovlsys_adaptor_power_off,
+	.clk_enable = mtk_ovlsys_adaptor_clk_enable,
+	.clk_disable = mtk_ovlsys_adaptor_clk_disable,
+	.config = mtk_ovlsys_adaptor_config,
+	.start = mtk_ovlsys_adaptor_start,
+	.stop = mtk_ovlsys_adaptor_stop,
+	.layer_check = mtk_ovlsys_adaptor_layer_check,
+	.layer_nr = mtk_ovlsys_adaptor_layer_nr,
+	.layer_config = mtk_ovlsys_adaptor_layer_config,
+	.register_vblank_cb = mtk_ovlsys_adaptor_register_vblank_cb,
+	.unregister_vblank_cb = mtk_ovlsys_adaptor_unregister_vblank_cb,
+	.enable_vblank = mtk_ovlsys_adaptor_enable_vblank,
+	.disable_vblank = mtk_ovlsys_adaptor_disable_vblank,
+	.dma_dev_get = mtk_ovlsys_adaptor_dma_dev_get,
+	.connect = mtk_ovlsys_adaptor_connect,
+	.disconnect = mtk_ovlsys_adaptor_disconnect,
+	.add = mtk_ovlsys_adaptor_add_comp,
+	.remove = mtk_ovlsys_adaptor_remove_comp,
+	.get_blend_modes = mtk_ovlsys_adaptor_get_blend_modes,
+	.get_formats = mtk_ovlsys_adaptor_get_formats,
+	.get_num_formats = mtk_ovlsys_adaptor_get_num_formats,
+};
+
 static const struct mtk_ddp_comp_funcs ddp_postmask = {
 	.clk_enable = mtk_ddp_clk_enable,
 	.clk_disable = mtk_ddp_clk_disable,
@@ -437,6 +462,7 @@ static const char * const mtk_ddp_comp_stem[MTK_DDP_COMP_TYPE_MAX] = {
 	[MTK_DISP_OVL] = "ovl",
 	[MTK_DISP_OVL_2L] = "ovl-2l",
 	[MTK_DISP_OVL_ADAPTOR] = "ovl_adaptor",
+	[MTK_DISP_OVLSYS_ADAPTOR] = "ovlsys_adaptor",
 	[MTK_DISP_POSTMASK] = "postmask",
 	[MTK_DISP_PWM] = "pwm",
 	[MTK_DISP_RDMA] = "rdma",
@@ -469,6 +495,8 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_DPI0]		= { MTK_DPI,			0, &ddp_dpi },
 	[DDP_COMPONENT_DPI1]		= { MTK_DPI,			1, &ddp_dpi },
 	[DDP_COMPONENT_DRM_OVL_ADAPTOR]	= { MTK_DISP_OVL_ADAPTOR,	0, &ddp_ovl_adaptor },
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0] = { MTK_DISP_OVLSYS_ADAPTOR, 0, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1] = { MTK_DISP_OVLSYS_ADAPTOR, 1, &ddp_ovlsys_adaptor},
 	[DDP_COMPONENT_DSC0]		= { MTK_DISP_DSC,		0, &ddp_dsc },
 	[DDP_COMPONENT_DSC1]		= { MTK_DISP_DSC,		1, &ddp_dsc },
 	[DDP_COMPONENT_DSI0]		= { MTK_DSI,			0, &ddp_dsi },
