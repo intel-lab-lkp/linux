@@ -1447,6 +1447,11 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 		unsigned int ep_state;
 		unsigned int slot_state;
 
+		xhci_warn(xhci, "Set TR Deq error for TRB 0x%llx in slot %d ep %u\n",
+			  (unsigned long long)xhci_trb_virt_to_dma(ep->queued_deq_seg,
+								   ep->queued_deq_ptr),
+			  slot_id, ep_index);
+
 		switch (cmd_comp_code) {
 		case COMP_TRB_ERROR:
 			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd invalid because of stream ID configuration\n");
