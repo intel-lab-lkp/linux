@@ -162,6 +162,30 @@ static int mdiobus_create_device(struct mii_bus *bus,
 	return ret;
 }
 
+/**
+ * mdiobus_setup_mdiodev_from_board_info - create and setup MDIO devices
+ * from pre-collected board specific MDIO information
+ * @bus: Bus the board_info belongs to
+ * Context: can sleep
+ */
+static void mdiobus_setup_mdiodev_from_board_info(struct mii_bus *bus)
+{
+	struct mdio_board_entry *be, *tmp;
+
+	mutex_lock(&mdio_board_lock);
+	list_for_each_entry_safe(be, tmp, &mdio_board_list, list) {
+		struct mdio_board_info *bi = &be->board_info;
+
+		if (strcmp(bus->id, bi->bus_id))
+			continue;
+
+		mutex_unlock(&mdio_board_lock);
+		mdiobus_create_device(bus, bi);
+		mutex_lock(&mdio_board_lock);
+	}
+	mutex_unlock(&mdio_board_lock);
+}
+
 static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
 {
 	struct phy_device *phydev = ERR_PTR(-ENODEV);
@@ -405,7 +429,7 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 			goto error;
 	}
 
-	mdiobus_setup_mdiodev_from_board_info(bus, mdiobus_create_device);
+	mdiobus_setup_mdiodev_from_board_info(bus);
 
 	bus->state = MDIOBUS_REGISTERED;
 	dev_dbg(&bus->dev, "probed\n");

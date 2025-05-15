@@ -11,43 +11,10 @@
 
 #include "mdio-boardinfo.h"
 
-static LIST_HEAD(mdio_board_list);
-static DEFINE_MUTEX(mdio_board_lock);
-
-/**
- * mdiobus_setup_mdiodev_from_board_info - create and setup MDIO devices
- * from pre-collected board specific MDIO information
- * @bus: Bus the board_info belongs to
- * @cb: Callback to create device on bus
- * Context: can sleep
- */
-void mdiobus_setup_mdiodev_from_board_info(struct mii_bus *bus,
-					   int (*cb)
-					   (struct mii_bus *bus,
-					    struct mdio_board_info *bi))
-{
-	struct mdio_board_entry *be;
-	struct mdio_board_entry *tmp;
-	struct mdio_board_info *bi;
-	int ret;
-
-	mutex_lock(&mdio_board_lock);
-	list_for_each_entry_safe(be, tmp, &mdio_board_list, list) {
-		bi = &be->board_info;
-
-		if (strcmp(bus->id, bi->bus_id))
-			continue;
-
-		mutex_unlock(&mdio_board_lock);
-		ret = cb(bus, bi);
-		mutex_lock(&mdio_board_lock);
-		if (ret)
-			continue;
-
-	}
-	mutex_unlock(&mdio_board_lock);
-}
-EXPORT_SYMBOL(mdiobus_setup_mdiodev_from_board_info);
+LIST_HEAD(mdio_board_list);
+EXPORT_SYMBOL_GPL(mdio_board_list);
+DEFINE_MUTEX(mdio_board_lock);
+EXPORT_SYMBOL_GPL(mdio_board_lock);
 
 /**
  * mdiobus_register_board_info - register MDIO devices for a given board
