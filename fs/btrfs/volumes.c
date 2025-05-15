@@ -6133,6 +6133,12 @@ struct btrfs_discard_stripe *btrfs_map_discard(struct btrfs_fs_info *fs_info,
 		goto out_free_map;
 	}
 
+	/* avoid divide by zero on fully-remapped chunks */
+	if (map->num_stripes == 0) {
+		ret = -EOPNOTSUPP;
+		goto out_free_map;
+	}
+
 	offset = logical - map->start;
 	length = min_t(u64, map->start + map->chunk_len - logical, length);
 	*length_ret = length;
@@ -6953,7 +6959,7 @@ u64 btrfs_calc_stripe_length(const struct btrfs_chunk_map *map)
 {
 	const int data_stripes = calc_data_stripes(map->type, map->num_stripes);
 
-	return div_u64(map->chunk_len, data_stripes);
+	return data_stripes ? div_u64(map->chunk_len, data_stripes) : 0;
 }
 
 #if BITS_PER_LONG == 32
