@@ -1,0 +1,486 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright 2025 NXP
+ *
+ * audio-graph-card2 DPCM/C2C link test scenarios
+ *
+ * IMPORTANT:
+ *
+ *	1) DO NOT use this alongside the other test scenarios as the
+ *	node names are not unique across test DTSIs.
+ *
+ *	2) The test topologies used here are adapted from
+ *	"audio-graph-card2-custom-sample2.dtsi"
+ */
+
+/ {
+	/*
+	 * Testcase 00:
+	 *
+	 * DESCRIPTION: test DPCM links with CODEC disabled.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *			      ****
+	 *	TEST_CPU0/P0 <---@----*  * ----@---> TEST_CODEC0
+	 *	TEST_CPU0/P1 <---@----*  *
+	 *                            ****
+	 *
+	 *	TEST_CPU0 => ENABLED
+	 *	TEST_CODEC0 => DISABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with only the FEs being
+	 *	created. Attempting to play a song on any of the FEs should
+	 *	result in an error since there's no BE attached.
+	 */
+	test-case-00 {
+		compatible = "audio-graph-card2";
+		label = "test-case-00";
+		links = <&fe0_port0>, <&fe0_port1>, <&be0_port0>;
+		routing = "TC DAI0 Playback", "DAI0 Playback",
+			  "TC DAI0 Playback", "DAI1 Playback",
+			  "DAI0 Capture",     "TC DAI0 Capture",
+			  "DAI1 Capture",     "TC DAI0 Capture";
+
+		dpcm {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			/* FEs */
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				fe0_port0: port@0 {
+					reg = <0>;
+
+					fe0_port0_ep: endpoint {
+						remote-endpoint = <&cpu0_port0_ep>;
+					};
+				};
+
+				fe0_port1: port@1 {
+					reg = <1>;
+
+					fe0_port1_ep: endpoint {
+						remote-endpoint = <&cpu0_port1_ep>;
+					};
+				};
+			};
+
+			/* BEs */
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				be0_port0: port@0 {
+					reg = <0>;
+
+					be0_port0_ep: endpoint {
+						remote-endpoint = <&codec0_port_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu0 {
+		compatible = "test-cpu";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				cpu0_port0_ep: endpoint {
+					remote-endpoint = <&fe0_port0_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				cpu0_port1_ep: endpoint {
+					remote-endpoint = <&fe0_port1_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec0 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		port {
+			prefix = "TC";
+
+			codec0_port_ep: endpoint {
+				remote-endpoint = <&be0_port0_ep>;
+			};
+		};
+	};
+
+	/*
+	 * Testcase 01:
+	 *
+	 * DESCRIPTION: test DPCM links with CPU disabled.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *			      ****
+	 *	TEST_CPU1/P0 <---@----*  * ----@---> TEST_CODEC1
+	 *	TEST_CPU1/P1 <---@----*  *
+	 *                            ****
+	 *
+	 *	TEST_CPU0 => DISABLED
+	 *	TEST_CODEC0 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with only the BE
+	 *	being created.
+	 */
+	test-case-01 {
+		compatible = "audio-graph-card2";
+		label = "test-case-01";
+		links = <&fe1_port0>, <&fe1_port1>, <&be1_port0>;
+		routing = "TC DAI0 Playback", "DAI0 Playback",
+			  "TC DAI0 Playback", "DAI1 Playback",
+			  "DAI0 Capture",     "TC DAI0 Capture",
+			  "DAI1 Capture",     "TC DAI0 Capture";
+
+		dpcm {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			/* FEs */
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				fe1_port0: port@0 {
+					reg = <0>;
+
+					fe1_port0_ep: endpoint {
+						remote-endpoint = <&cpu1_port0_ep>;
+					};
+				};
+
+				fe1_port1: port@1 {
+					reg = <1>;
+
+					fe1_port1_ep: endpoint {
+						remote-endpoint = <&cpu1_port1_ep>;
+					};
+				};
+			};
+
+			/* BEs */
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				be1_port0: port@0 {
+					reg = <0>;
+
+					be1_port0_ep: endpoint {
+						remote-endpoint = <&codec1_port_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu1 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				cpu1_port0_ep: endpoint {
+					remote-endpoint = <&fe1_port0_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				cpu1_port1_ep: endpoint {
+					remote-endpoint = <&fe1_port1_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec1 {
+		compatible = "test-codec";
+
+		port {
+			prefix = "TC";
+
+			codec1_port_ep: endpoint {
+				remote-endpoint = <&be1_port0_ep>;
+			};
+		};
+	};
+
+	/*
+	 * Testcase 02
+	 *
+	 * DESCRIPTION: test DPCM links with multi BE with CODEC disabled.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *			      ****           +---+
+	 *	TEST_CPU2/P0 <---@----*  * ----@---> |   | -> TEST_CODEC2/P0
+	 *	TEST_CPU2/P1 <---@----*  *           |   | -> TEST_CODEC2/P1
+	 *                            ****           +---+
+	 *
+	 *	TEST_CPU2 => ENABLED
+	 *	TEST_CODEC2 => DISABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with only the FEs being
+	 *	created.
+	 */
+	test-case-02 {
+		compatible = "audio-graph-card2";
+		label = "test-case-02";
+		links = <&fe2_port0>, <&fe2_port1>, <&multi0_be_port0>;
+
+		dpcm {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			/* FEs */
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				fe2_port0: port@0 {
+					reg = <0>;
+
+					fe2_port0_ep: endpoint {
+						remote-endpoint = <&cpu2_port0_ep>;
+					};
+				};
+
+				fe2_port1: port@1 {
+					reg = <1>;
+
+					fe2_port1_ep: endpoint {
+						remote-endpoint = <&cpu2_port1_ep>;
+					};
+				};
+			};
+
+			/* BEs */
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi0_be_port0: port@0 {
+					reg = <0>;
+
+					multi0_be_port0_ep: endpoint {
+						remote-endpoint = <&multi0_codec_port0_ep>;
+					};
+				};
+			};
+		};
+
+		multi {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					multi0_codec_port0_ep: endpoint {
+						remote-endpoint = <&multi0_be_port0_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					multi0_codec_port1_ep: endpoint {
+						remote-endpoint = <&codec2_port0_ep>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					multi0_codec_port2_ep: endpoint {
+						remote-endpoint = <&codec2_port1_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu2 {
+		compatible = "test-cpu";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				cpu2_port0_ep: endpoint {
+					remote-endpoint = <&fe2_port0_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				cpu2_port1_ep: endpoint {
+					remote-endpoint = <&fe2_port1_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec2 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				codec2_port0_ep: endpoint {
+					remote-endpoint = <&multi0_codec_port1_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				codec2_port1_ep: endpoint {
+					remote-endpoint = <&multi0_codec_port2_ep>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Testcase 03
+	 *
+	 * DESCRIPTION: test C2C links with codec disabled
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	+---@----> TEST_CODEC3/P0
+	 *	|
+	 *	+--------> TEST_CODEC3/P1
+	 *
+	 *	TEST_CPU3 <---@----> TEST_CODEC4
+	 *
+	 *	TEST_CPU3 => ENABLED
+	 *	TEST_CODEC3 => DISABLED
+	 *	TEST_CODEC4 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 1 disabled link.
+	 */
+	test-case-03 {
+		compatible = "audio-graph-card2";
+		label = "test-case-03";
+		links = <&c2c0_port0>, <&cpu3_port>;
+
+		codec2codec {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				c2c0_port0: port@0 {
+					reg = <0>;
+
+					c2c0_port0_ep: endpoint {
+						remote-endpoint = <&codec3_port0_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					c2c0_port1_ep: endpoint {
+						remote-endpoint = <&codec3_port1_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu3 {
+		compatible = "test-cpu";
+
+		cpu3_port: port {
+			cpu3_port_ep: endpoint {
+				remote-endpoint = <&codec4_port_ep>;
+			};
+		};
+	};
+
+	test-codec3 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				codec3_port0_ep: endpoint {
+					remote-endpoint = <&c2c0_port0_ep>;
+				};
+			};
+
+			port@1 {
+				codec3_port1_ep: endpoint {
+					remote-endpoint = <&c2c0_port1_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec4 {
+		compatible = "test-codec";
+
+		port {
+			codec4_port_ep: endpoint {
+				remote-endpoint = <&cpu3_port_ep>;
+			};
+		};
+	};
+};

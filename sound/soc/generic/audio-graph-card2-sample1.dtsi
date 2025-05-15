@@ -1,0 +1,278 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright 2025 NXP
+ *
+ * audio-graph-card2 simple link test scenarios
+ *
+ * IMPORTANT:
+ *
+ *	1) DO NOT use this alongside the other test scenarios as the
+ *	node names are not unique across test DTSIs.
+ */
+
+/ {
+	/*
+	 * Testcase 00
+	 *
+	 * DESCRIPTION: test simple CPU-CODEC with no routing specified. Each
+	 * endpoint device has only one available port.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	CPU0 <---@----> CODEC0
+	 *	CPU1 <---@----> CODEC1
+	 *	CPU2 <---@----> CODEC2
+	 *
+	 *	CPU0 => ENABLED
+	 *	CPU1 => DISABLED
+	 *	CPU2 => ENABLED
+	 *	CODEC0 => ENABLED
+	 *	CODEC1 => ENABLED
+	 *	CODEC2 => DISABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 2 explicitly disabled links.
+	 */
+	test-case-00 {
+		compatible = "audio-graph-card2";
+		label = "test-case-00";
+		links = <&simple_cpu0_port>,
+			<&simple_cpu1_port>,
+			<&simple_cpu2_port>;
+	};
+
+	test-cpu0 {
+		compatible = "test-cpu";
+
+		simple_cpu0_port: port {
+			biclock-master;
+			frame-master;
+
+			test_cpu_0_ep: endpoint {
+				remote-endpoint = <&test_codec_0_ep>;
+			};
+		};
+	};
+
+	test-cpu1 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		simple_cpu1_port: port {
+			biclock-master;
+			frame-master;
+
+			test_cpu_1_ep: endpoint {
+				remote-endpoint = <&test_codec_1_ep>;
+			};
+		};
+	};
+
+	test-cpu2 {
+		compatible = "test-cpu";
+
+		simple_cpu2_port: port {
+			bitclock-master;
+			frame-master;
+
+			test_cpu_2_ep: endpoint {
+				remote-endpoint = <&test_codec_2_ep>;
+			};
+		};
+	};
+
+	test-codec0 {
+		compatible = "test-codec";
+
+		port {
+			test_codec_0_ep: endpoint {
+				remote-endpoint = <&test_cpu_0_ep>;
+			};
+		};
+	};
+
+	test-codec1 {
+		compatible = "test-codec";
+
+		port {
+			test_codec_1_ep: endpoint {
+				remote-endpoint = <&test_cpu_1_ep>;
+			};
+		};
+	};
+
+	test-codec2 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		port {
+			test_codec_2_ep: endpoint {
+				remote-endpoint = <&test_cpu_2_ep>;
+			};
+		};
+	};
+
+	/*
+	 * Testcase 01
+	 *
+	 * DESCRIPTION: test simple CPU-CODEC with no routing specified. Each
+	 * endpoint device has one or more available ports.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	CPU3/P0 <---@----> CODEC3
+	 *	CPU3/P1 <---@----> CODEC4
+	 *	CPU4    <---@----> CODEC5/P0
+	 *	CPU3/P2 <---@----> CODEC5/P1
+	 *
+	 *	CPU3 => ENABLED
+	 *	CPU4 => DISABLED
+	 *	CODEC3 => ENABLED
+	 *	CODEC4 => DISABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 2 explicitly disabled links
+	 */
+	test-case-01 {
+		compatible = "audio-graph-card2";
+		label = "test-case-01";
+		links = <&test_cpu3_port0>,
+			<&test_cpu3_port1>,
+			<&test_cpu4_port>,
+			<&test_cpu3_port2>;
+	};
+
+	test-cpu3 {
+		compatible = "test-cpu";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			test_cpu3_port0: port@0 {
+				reg = <0>;
+
+				test_cpu3_p0_ep: endpoint {
+					remote-endpoint = <&test_codec3_ep>;
+				};
+			};
+
+			test_cpu3_port1: port@1 {
+				reg = <1>;
+
+				test_cpu3_p1_ep: endpoint {
+					remote-endpoint = <&test_codec4_ep>;
+				};
+			};
+
+			test_cpu3_port2: port@2 {
+				reg = <2>;
+
+				test_cpu3_p2_ep: endpoint {
+					remote-endpoint = <&test_codec5_p1_ep>;
+				};
+			};
+		};
+	};
+
+	test-cpu4 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		test_cpu4_port: port {
+			test_cpu4_ep: endpoint {
+				remote-endpoint = <&test_codec5_p0_ep>;
+			};
+		};
+	};
+
+	test-codec3 {
+		compatible = "test-codec";
+
+		port {
+			test_codec3_ep: endpoint {
+				remote-endpoint = <&test_cpu3_p0_ep>;
+			};
+		};
+	};
+
+	test-codec4 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		port {
+			test_codec4_ep: endpoint {
+				remote-endpoint = <&test_cpu3_p1_ep>;
+			};
+		};
+	};
+
+	test-codec5 {
+		compatible = "test-codec";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			test_codec5_port0: port@0 {
+				reg = <0>;
+
+				test_codec5_p0_ep: endpoint {
+					remote-endpoint = <&test_cpu4_ep>;
+				};
+			};
+
+			test_codec5_port1: port@1 {
+				reg = <1>;
+
+				test_codec5_p1_ep: endpoint {
+					remote-endpoint = <&test_cpu3_p2_ep>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Testcase 02
+	 *
+	 * DESCRIPTION: test simple CPU-CODEC with no routing specified. The
+	 * CPU-CODEC link is disabled.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	CPU5 <---@-----> CODEC6
+	 *
+	 *	CPU5 => DISABLED
+	 *	CODEC6 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should fail since all of its links are
+	 *	explicitly disabled.
+	 */
+	test-case-02 {
+		compatible = "audio-graph-card2";
+		label = "test-case-02";
+		links = <&test_cpu5_port>;
+	};
+
+	test-cpu5 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		test_cpu5_port: port {
+			test_cpu5_port_ep: endpoint {
+				remote-endpoint = <&test_codec6_port_ep>;
+			};
+		};
+	};
+
+	test-codec6 {
+		compatible = "test-codec";
+
+		port {
+			test_codec6_port_ep: endpoint {
+				remote-endpoint = <&test_cpu5_port_ep>;
+			};
+		};
+	};
+};

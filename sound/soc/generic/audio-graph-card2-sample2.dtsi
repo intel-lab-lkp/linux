@@ -1,0 +1,878 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright 2025 NXP
+ *
+ * audio-graph-card2 multi link test scenarios
+ *
+ * IMPORTANT:
+ *
+ *	1) DO NOT use this alongside the other test scenarios as the
+ *	node names are not unique across test DTSIs.
+ *
+ *	2) The test topologies used here are adapted from
+ *	"audio-graph-card2-custom-sample1.dtsi".
+ */
+
+/ {
+	/*
+	 * Testcase 00
+	 *
+	 * DESCRIPTION: test disabled semi-multi link
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	                          +-+
+	 *      TEST_CPU0/P0 <-@--------> | |-> TEST_CODEC0/P0
+	 *                                | |-> TEST_CODEC0/P1
+	 *                                +-+
+	 *
+	 *	TEST_CODEC0 => DISABLED
+	 *	TEST_CPU0 => ENABLED
+	 *
+	 *
+	 * RESULT:
+	 *	- sound card creation should fail as all of its links are
+	 *	explicitly disabled.
+	 */
+	test-case-00 {
+		compatible = "audio-graph-card2";
+		label = "test-case-00";
+		links = <&cpu0_port0>;
+
+		multi {
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				/* SM link port */
+				port@0 {
+					reg = <0>;
+
+					smcodec0_port0_ep: endpoint {
+						remote-endpoint = <&cpu0_port0_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					smcodec0_port1_ep: endpoint {
+						remote-endpoint = <&codec0_port0_ep>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					smcodec0_port2_ep: endpoint {
+						remote-endpoint = <&codec0_port1_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu0 {
+		compatible = "test-cpu";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			cpu0_port0: port@0 {
+				reg = <0>;
+
+				cpu0_port0_ep: endpoint {
+					remote-endpoint = <&smcodec0_port0_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec0 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				codec0_port0_ep: endpoint {
+					remote-endpoint = <&smcodec0_port1_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				codec0_port1_ep: endpoint {
+					remote-endpoint = <&smcodec0_port2_ep>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Testcase 01
+	 *
+	 * DESCRIPTION: test semi-multi link with explicitly disabled CPU.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	                       +-+
+	 *      TEST_CPU1 <-@--------> | |-> TEST_CODEC1/P0
+	 *                             | |-> TEST_CODEC1/P1
+	 *                             +-+
+	 *
+	 *      TEST_CPU2 <---@----> TEST_CODEC2 (ACTIVE)
+	 *
+	 *
+	 *	TEST_CPU1 => DISABLED
+	 *	TEST_CPU2 => ENABLED
+	 *	TEST_CODEC1 => ENABLED
+	 *	TEST_CODEC2 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 1 explicitly disabled link.
+	 */
+	 test-case-01 {
+		compatible = "audio-graph-card2";
+		label = "test-case-01";
+		links = <&cpu1_port>, <&cpu2_port>;
+
+		multi {
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				/* SM link port */
+				port@0 {
+					reg = <0>;
+
+					smcodec1_port0_ep: endpoint {
+						remote-endpoint = <&cpu1_port_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					smcodec1_port1_ep: endpoint {
+						remote-endpoint = <&codec1_port0_ep>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					smcodec1_port2_ep: endpoint {
+						remote-endpoint = <&codec1_port1_ep>;
+					};
+				};
+			};
+		};
+	 };
+
+	test-cpu1 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		cpu1_port: port {
+			cpu1_port_ep: endpoint {
+				remote-endpoint = <&smcodec1_port0_ep>;
+			};
+		};
+	};
+
+	test-cpu2 {
+		compatible = "test-cpu";
+
+		cpu2_port: port {
+			cpu2_port_ep: endpoint {
+				remote-endpoint = <&codec2_port_ep>;
+			};
+		};
+	};
+
+	test-codec1 {
+		compatible = "test-codec";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				codec1_port0_ep: endpoint {
+					remote-endpoint = <&smcodec1_port1_ep>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				codec1_port1_ep: endpoint {
+					remote-endpoint = <&smcodec1_port2_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec2 {
+		compatible = "test-codec";
+
+		port {
+			codec2_port_ep: endpoint {
+				remote-endpoint = <&cpu2_port_ep>;
+			};
+		};
+	};
+
+	/*
+	 * Testcase 02
+	 *
+	 * DESCRIPTION: test semi-multi link with one explicitly disabled codec.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *	                       +-+
+	 *      TEST_CPU3 <-@--------> | |-> TEST_CODEC3 (ACTIVE)
+	 *       (ACTIVE)              | |-> TEST_CODEC4 (DISABLED)
+	 *                             +-+
+	 *
+	 *      TEST_CPU4 <---@----> TEST_CODEC5 (ACTIVE)
+	 *       (ACTIVE)
+	 *
+	 *
+	 *	TEST_CPU3 => ENABLED
+	 *	TEST_CPU4 => ENABLED
+	 *	TEST_CODEC3 => ENABLED
+	 *	TEST_CODEC4 => DISABLED
+	 *	TEST_CODEC5 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 1 explicitly disabled link.
+	 */
+	 test-case-02 {
+		compatible = "audio-graph-card2";
+		label = "test-case-02";
+		links = <&cpu3_port>, <&cpu4_port>;
+
+		multi {
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				/* SM link port */
+				port@0 {
+					reg = <0>;
+
+					smcodec2_port0_ep: endpoint {
+						remote-endpoint = <&cpu3_port_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					smcodec2_port1_ep: endpoint {
+						remote-endpoint = <&codec3_port_ep>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					smcodec2_port2_ep: endpoint {
+						remote-endpoint = <&codec4_port_ep>;
+					};
+				};
+			};
+		};
+	 };
+
+	test-cpu3 {
+		compatible = "test-cpu";
+
+		cpu3_port: port {
+			cpu3_port_ep: endpoint {
+				remote-endpoint = <&smcodec2_port0_ep>;
+			};
+		};
+	};
+
+	test-cpu4 {
+		compatible = "test-cpu";
+
+		cpu4_port: port {
+			cpu4_port_ep: endpoint {
+				remote-endpoint = <&codec5_port_ep>;
+			};
+		};
+	};
+
+	test-codec3 {
+		compatible = "test-codec";
+
+		port {
+			codec3_port_ep: endpoint {
+				remote-endpoint = <&smcodec2_port1_ep>;
+			};
+		};
+	};
+
+	test-codec4 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		port {
+			codec4_port_ep: endpoint {
+				remote-endpoint = <&smcodec2_port2_ep>;
+			};
+		};
+	};
+
+	test-codec5 {
+		compatible = "test-codec";
+
+		port {
+			codec5_port_ep: endpoint {
+				remote-endpoint = <&cpu4_port_ep>;
+			};
+		};
+	};
+
+	/*
+	 * Testcase 03
+	 *
+	 * DESCRIPTION: test disabled multi link.
+	 *
+	 * TOPOLOGY:
+	 *                      +---+            +---+
+	 *      TEST_CPU5/P0 <- |   | <---@----> |   | -> TEST_CODEC6/P0
+	 *      TEST_CPU5/P1 <- |   |            |   | -> TEST_CODEC6/P1
+	 *                      +---+            +---+
+	 *
+	 *
+	 *	TEST_CPU5 => DISABLED
+	 *	TEST_CODEC6 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should fail since all of its links are
+	 *	explicitly disabled.
+	 */
+	test-case-03 {
+		compatible = "audio-graph-card2";
+		label = "test-case-03";
+		links = <&multi0_cpu_port0>;
+
+		multi {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi0_cpu_port0: port@0 {
+					reg = <0>;
+
+					multi0_cpu_port0_ep: endpoint {
+						remote-endpoint = <&multi0_codec_port0_ep>;
+					};
+				};
+
+				multi0_cpu_port1: port@1 {
+					reg = <1>;
+
+					multi0_cpu_port1_ep: endpoint {
+						remote-endpoint = <&cpu6_port0_ep>;
+					};
+				};
+
+				multi0_cpu_port2: port@2 {
+					reg = <2>;
+
+					multi0_cpu_port2_ep: endpoint {
+						remote-endpoint = <&cpu6_port1_ep>;
+					};
+				};
+			};
+
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi0_codec_port0: port@0 {
+					reg = <0>;
+
+					multi0_codec_port0_ep: endpoint {
+						remote-endpoint = <&multi0_cpu_port0_ep>;
+					};
+				};
+
+				multi0_codec_port1: port@1 {
+					reg = <1>;
+
+					multi0_codec_port1_ep: endpoint {
+						remote-endpoint = <&codec6_port0_ep>;
+					};
+				};
+
+				multi0_codec_port2: port@2 {
+					reg = <2>;
+
+					multi0_codec_port2_ep: endpoint {
+						remote-endpoint = <&codec6_port1_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu5 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			cpu6_port0: port@0 {
+				reg = <0>;
+
+				cpu6_port0_ep: endpoint {
+					remote-endpoint = <&multi0_cpu_port1_ep>;
+				};
+			};
+
+			cpu6_port1: port@1 {
+				reg = <1>;
+
+				cpu6_port1_ep: endpoint {
+					remote-endpoint = <&multi0_cpu_port2_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec6 {
+		compatible = "test-codec";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			codec6_port0: port@0 {
+				reg = <0>;
+
+				codec6_port0_ep: endpoint {
+					remote-endpoint = <&multi0_codec_port1_ep>;
+				};
+			};
+
+			codec6_port1: port@1 {
+				reg = <1>;
+
+				codec6_port1_ep: endpoint {
+					remote-endpoint = <&multi0_codec_port2_ep>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Testcase 04
+	 *
+	 * DESCRIPTION: test multi link with disabled CPU.
+	 *
+	 * TOPOLOGY:
+	 *                      +---+            +---+
+	 *      TEST_CPU7/P0 <- |   | <---@----> |   | -> TEST_CODEC8/P0
+	 *      TEST_CPU7/P1 <- |   |            |   | -> TEST_CODEC8/P1
+	 *                      +---+            +---+
+	 *
+	 *      TEST_CPU6 <---@-----> TEST_CODEC7
+	 *
+	 *
+	 *	TEST_CPU6 => ENABLED
+	 *	TEST_CPU7 => DISABLED
+	 *	TEST_CODEC7 => ENABLED
+	 *	TEST_CODEC8 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 1 explicitly disabled link.
+	 */
+	test-case-04 {
+		compatible = "audio-graph-card2";
+		label = "test-case-04";
+		links = <&cpu6_port>, <&multi1_cpu_port0>;
+
+		multi {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi1_cpu_port0: port@0 {
+					reg = <0>;
+
+					multi1_cpu_port0_ep: endpoint {
+						remote-endpoint = <&multi1_codec_port0_ep>;
+					};
+				};
+
+				multi1_cpu_port1: port@1 {
+					reg = <1>;
+
+					multi1_cpu_port1_ep: endpoint {
+						remote-endpoint = <&cpu7_port0_ep>;
+					};
+				};
+
+				multi1_cpu_port2: port@2 {
+					reg = <2>;
+
+					multi1_cpu_port2_ep: endpoint {
+						remote-endpoint = <&cpu7_port1_ep>;
+					};
+				};
+			};
+
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi1_codec_port0: port@0 {
+					reg = <0>;
+
+					multi1_codec_port0_ep: endpoint {
+						remote-endpoint = <&multi1_cpu_port0_ep>;
+					};
+				};
+
+				multi1_codec_port1: port@1 {
+					reg = <1>;
+
+					multi1_codec_port1_ep: endpoint {
+						remote-endpoint = <&codec8_port0_ep>;
+					};
+				};
+
+				multi1_codec_port2: port@2 {
+					reg = <2>;
+
+					multi1_codec_port2_ep: endpoint {
+						remote-endpoint = <&codec8_port1_ep>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu6 {
+		compatible = "test-cpu";
+
+		cpu6_port: port {
+			cpu6_port_ep: endpoint {
+				remote-endpoint = <&codec7_port_ep>;
+			};
+		};
+	};
+
+	test-cpu7 {
+		compatible = "test-cpu";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			cpu7_port0: port@0 {
+				reg = <0>;
+
+				cpu7_port0_ep: endpoint {
+					remote-endpoint = <&multi1_cpu_port1_ep>;
+				};
+			};
+
+			cpu7_port1: port@1 {
+				reg = <1>;
+
+				cpu7_port1_ep: endpoint {
+					remote-endpoint = <&multi1_cpu_port2_ep>;
+				};
+			};
+		};
+	};
+
+	test-codec7 {
+		compatible = "test-codec";
+
+		port {
+			codec7_port_ep: endpoint {
+				remote-endpoint = <&cpu6_port_ep>;
+			};
+		};
+	};
+
+	test-codec8 {
+		compatible = "test-codec";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			codec8_port0: port@0 {
+				reg = <0>;
+
+				codec8_port0_ep: endpoint {
+					remote-endpoint = <&multi1_codec_port1_ep>;
+				};
+			};
+
+			codec8_port1: port@1 {
+				reg = <1>;
+
+				codec8_port1_ep: endpoint {
+					remote-endpoint = <&multi1_codec_port2_ep>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Testcase 05
+	 *
+	 * DESCRIPTION: test N:M (CPUS:CODECS), N < M multi link with disabled codec.
+	 *
+	 * TOPOLOGY:
+	 *
+	 *			+---+            +---+
+	 *                      |   | <---@----> |   |
+	 *                      |   |            |   |
+	 *      TEST_CPU8/P0 <- |   | <--------> |   | -> TEST_CODEC9/P0
+	 *      TEST_CPU8/P1 <- |   | <---+----> |   | -> TEST_CODEC9/P1
+	 *                      |   |     \----> |   | -> TEST_CODEC9/P2
+	 *                      +---+            +---+
+	 *
+	 *
+	 *	TEST_CPU9 <---@----> TEST_CODEC10
+	 *
+	 *      TEST_CPU8 => ENABLED
+	 *      TEST_CODEC9 => DISABLED
+	 *	TEST_CPU9 => ENABLED
+	 *	TEST_CODEC10 => ENABLED
+	 *
+	 * RESULT:
+	 *	- sound card creation should succeed with 1 disabled link.
+	 */
+	test-case-05 {
+		compatible = "audio-graph-card2";
+		label = "test-case-05";
+		links = <&multi2_cpu_port0>, <&cpu9_port>;
+
+		multi {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ports@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				multi2_cpu_port0: port@0 {
+					reg = <0>;
+
+					multi2_cpu_port0_ep: endpoint {
+						remote-endpoint = <&multi2_codec_port0_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					multi2_cpu_port1_ep0: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&cpu8_port0_ep>;
+					};
+
+					multi2_cpu_port1_ep1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&multi2_codec_port1_ep1>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					multi2_cpu_port2_ep0: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&cpu8_port1_ep>;
+					};
+
+					multi2_cpu_port2_ep1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&multi2_codec_port2_ep1>;
+					};
+
+					multi2_cpu_port2_ep2: endpoint@2 {
+						reg = <2>;
+						remote-endpoint = <&multi2_codec_port3_ep1>;
+					};
+				};
+			};
+
+			ports@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					multi2_codec_port0_ep: endpoint {
+						remote-endpoint = <&multi2_cpu_port0_ep>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					multi2_codec_port1_ep0: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&codec9_port0_ep>;
+					};
+
+					multi2_codec_port1_ep1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&multi2_cpu_port1_ep1>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					multi2_codec_port2_ep0: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&codec9_port1_ep>;
+					};
+
+					multi2_codec_port2_ep1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&multi2_cpu_port2_ep1>;
+					};
+				};
+
+				port@3 {
+					reg = <3>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					multi2_codec_port3_ep0: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&codec9_port2_ep>;
+					};
+
+					multi2_codec_port3_ep1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&multi2_cpu_port2_ep2>;
+					};
+				};
+			};
+		};
+	};
+
+	test-cpu8 {
+		compatible = "test-cpu";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				cpu8_port0_ep: endpoint {
+					remote-endpoint = <&multi2_cpu_port1_ep0>;
+				};
+			};
+
+			port@1 {
+				cpu8_port1_ep: endpoint {
+					remote-endpoint = <&multi2_cpu_port2_ep0>;
+				};
+			};
+		};
+	};
+
+	test-cpu9 {
+		compatible = "test-cpu";
+
+		cpu9_port: port {
+			cpu9_port_ep: endpoint {
+				remote-endpoint = <&codec10_port_ep>;
+			};
+		};
+	};
+
+	test-codec9 {
+		compatible = "test-codec";
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				codec9_port0_ep: endpoint {
+					remote-endpoint = <&multi2_codec_port1_ep0>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				codec9_port1_ep: endpoint {
+					remote-endpoint = <&multi2_codec_port2_ep0>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				codec9_port2_ep: endpoint {
+					remote-endpoint = <&multi2_codec_port3_ep0>;
+				};
+			};
+		};
+	};
+
+	test-codec10 {
+		compatible = "test-codec";
+
+		port {
+			codec10_port_ep: endpoint {
+				remote-endpoint = <&cpu9_port_ep>;
+			};
+		};
+	};
+};
