@@ -2245,8 +2245,16 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 
 	ret = snd_soc_dapm_add_routes(&card->dapm, card->of_dapm_routes,
 				      card->num_of_dapm_routes);
-	if (ret < 0)
-		goto probe_end;
+	if (ret < 0) {
+		if (card->disable_of_route_checks) {
+			ret = 0;
+			dev_info(card->dev,
+				 "%s: disable_of_route_checks set, ignoring errors on add_routes\n",
+				 __func__);
+		} else {
+			goto probe_end;
+		}
+	}
 
 	/* try to set some sane longname if DMI is available */
 	snd_soc_set_dmi_name(card);

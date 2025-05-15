@@ -1077,6 +1077,7 @@ struct snd_soc_card {
 	unsigned int instantiated:1;
 	unsigned int topology_shortname_created:1;
 	unsigned int fully_routed:1;
+	unsigned int disable_of_route_checks:1;
 	unsigned int probed:1;
 	unsigned int component_chaining:1;
 	struct device *devres_dev;
