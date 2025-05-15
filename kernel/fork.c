@@ -1054,6 +1054,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 
 	if (current->mm) {
 		mm->flags = mmf_init_flags(current->mm->flags);
+		mm->flags2 = mmf2_init_flags(current->mm->flags2);
 		mm->def_flags = current->mm->def_flags & VM_INIT_DEF_MASK;
 	} else {
 		mm->flags = default_dump_filter;

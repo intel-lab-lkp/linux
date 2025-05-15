@@ -2658,6 +2658,27 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			clear_bit(MMF_DISABLE_THP, &me->mm->flags);
 		mmap_write_unlock(me->mm);
 		break;
+	case PR_GET_THP_POLICY:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (!!test_bit(MMF2_THP_VMA_DEFAULT_HUGE, &me->mm->flags2))
+			error = PR_THP_POLICY_DEFAULT_HUGE;
+		break;
+	case PR_SET_THP_POLICY:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (mmap_write_lock_killable(me->mm))
+			return -EINTR;
+		switch (arg2) {
+		case PR_THP_POLICY_DEFAULT_HUGE:
+			set_bit(MMF2_THP_VMA_DEFAULT_HUGE, &me->mm->flags2);
+			process_vmas_thp_default_huge(me->mm);
+			break;
+		default:
+			return -EINVAL;
+		}
+		mmap_write_unlock(me->mm);
+		break;
 	case PR_MPX_ENABLE_MANAGEMENT:
 	case PR_MPX_DISABLE_MANAGEMENT:
 		/* No longer implemented: */

@@ -328,4 +328,8 @@ struct prctl_mm_map {
 # define PR_PPC_DEXCR_CTRL_CLEAR_ONEXEC	0x10 /* Clear the aspect on exec */
 # define PR_PPC_DEXCR_CTRL_MASK		0x1f
 
+#define PR_SET_THP_POLICY		78
+#define PR_GET_THP_POLICY		79
+#define PR_THP_POLICY_DEFAULT_HUGE	0
+
 #endif /* _LINUX_PRCTL_H */

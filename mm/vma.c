@@ -2483,6 +2483,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 	if (!vma_is_anonymous(vma))
 		khugepaged_enter_vma(vma, map->flags);
 	ksm_add_vma(vma);
+	vma_set_thp_policy(vma);
 	*vmap = vma;
 	return 0;
 
@@ -2757,6 +2758,7 @@ int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	mm->map_count++;
 	validate_mm(mm);
 	ksm_add_vma(vma);
+	vma_set_thp_policy(vma);
 out:
 	perf_event_mmap(vma);
 	mm->total_vm += len >> PAGE_SHIFT;

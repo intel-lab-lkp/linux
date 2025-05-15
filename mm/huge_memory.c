@@ -98,6 +98,38 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 	return !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
 
+void vma_set_thp_policy(struct vm_area_struct *vma)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if (test_bit(MMF2_THP_VMA_DEFAULT_HUGE, &mm->flags2))
+		vm_flags_set(vma, VM_HUGEPAGE);
+}
+
+static void vmas_thp_default_huge(struct mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+	unsigned long vm_flags;
+
+	VMA_ITERATOR(vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		vm_flags = vma->vm_flags;
+		if (vm_flags & VM_NOHUGEPAGE)
+			continue;
+		vm_flags_set(vma, VM_HUGEPAGE);
+	}
+}
+
+void process_vmas_thp_default_huge(struct mm_struct *mm)
+{
+	if (test_bit(MMF2_THP_VMA_DEFAULT_HUGE, &mm->flags2))
+		return;
+
+	set_bit(MMF2_THP_VMA_DEFAULT_HUGE, &mm->flags2);
+	vmas_thp_default_huge(mm);
+}
+
+
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
 					 unsigned long tva_flags,

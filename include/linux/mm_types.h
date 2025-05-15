@@ -1101,6 +1101,7 @@ struct mm_struct {
 		mm_context_t context;
 
 		unsigned long flags; /* Must use atomic bitops to access */
+		unsigned long flags2;
 
 #ifdef CONFIG_AIO
 		spinlock_t			ioctx_lock;
@@ -1779,12 +1780,22 @@ enum {
 				 MMF_DISABLE_THP_MASK | MMF_HAS_MDWE_MASK |\
 				 MMF_VM_MERGE_ANY_MASK | MMF_TOPDOWN_MASK)
 
+#define MMF2_THP_VMA_DEFAULT_HUGE		0
+#define MMF2_THP_VMA_DEFAULT_HUGE_MASK		(1 << MMF2_THP_VMA_DEFAULT_HUGE)
+
+#define MMF2_INIT_MASK		(MMF2_THP_VMA_DEFAULT_HUGE_MASK)
+
 static inline unsigned long mmf_init_flags(unsigned long flags)
 {
 	if (flags & (1UL << MMF_HAS_MDWE_NO_INHERIT))
 		flags &= ~((1UL << MMF_HAS_MDWE) |
 			   (1UL << MMF_HAS_MDWE_NO_INHERIT));
 	return flags & MMF_INIT_MASK;
+}
+
+static inline unsigned long mmf2_init_flags(unsigned long flags)
+{
+	return flags & MMF2_INIT_MASK;
 }
 
 #endif /* _LINUX_MM_TYPES_H */

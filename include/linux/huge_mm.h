@@ -260,6 +260,9 @@ static inline unsigned long thp_vma_suitable_orders(struct vm_area_struct *vma,
 	return orders;
 }
 
+void vma_set_thp_policy(struct vm_area_struct *vma);
+void process_vmas_thp_default_huge(struct mm_struct *mm);
+
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
 					 unsigned long tva_flags,
