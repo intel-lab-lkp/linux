@@ -10,9 +10,15 @@
  */
 
 #include <linux/phy.h>
+#include <net/checksum.h>
 #include <net/selftests.h>
 #include <net/tcp.h>
 #include <net/udp.h>
+
+enum net_test_checksum_mode {
+	NET_TEST_CHECKSUM_COMPLETE,
+	NET_TEST_CHECKSUM_PARTIAL,
+};
 
 struct net_packet_attrs {
 	const unsigned char *src;
@@ -27,6 +33,7 @@ struct net_packet_attrs {
 	int max_size;
 	u8 id;
 	u16 queue_mapping;
+	enum net_test_checksum_mode csum_mode;
 };
 
 struct net_test_priv {
@@ -51,6 +58,133 @@ static u8 net_test_next_id;
 #define NET_TEST_PKT_MAGIC	0xdeadcafecafedeadULL
 #define NET_LB_TIMEOUT		msecs_to_jiffies(200)
 
+/**
+ * net_test_setup_sw_csum - Compute and apply software checksum
+ *                          (CHECKSUM_COMPLETE)
+ * @skb: Socket buffer with transport header set
+ * @iph: Pointer to IPv4 header inside skb
+ *
+ * This function computes and fills the transport layer checksum (TCP or UDP),
+ * and sets skb->ip_summed = CHECKSUM_COMPLETE.
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
+static int net_test_setup_sw_csum(struct sk_buff *skb,
+				  struct iphdr *iph)
+{
+	int transport_offset = skb_transport_offset(skb);
+	int transport_len = skb->len - transport_offset;
+	__sum16 final_csum;
+	__wsum csum;
+
+	switch (iph->protocol) {
+	case IPPROTO_TCP:
+		if (!pskb_may_pull(skb,
+				   transport_offset + sizeof(struct tcphdr)))
+			return -EFAULT;
+
+		tcp_hdr(skb)->check = 0;
+		break;
+	case IPPROTO_UDP:
+		if (!pskb_may_pull(skb,
+				   transport_offset + sizeof(struct udphdr)))
+			return -EFAULT;
+
+		udp_hdr(skb)->check = 0;
+		break;
+	default:
+		pr_err("net_selftest: unsupported proto for sw csum: %u\n",
+		       iph->protocol);
+		return -EINVAL;
+	}
+
+	csum = skb_checksum(skb, transport_offset, transport_len, 0);
+	final_csum = csum_tcpudp_magic(iph->saddr, iph->daddr, transport_len,
+				       iph->protocol, csum);
+
+	if (iph->protocol == IPPROTO_UDP && final_csum == 0)
+		final_csum = CSUM_MANGLED_0;
+
+	if (iph->protocol == IPPROTO_TCP)
+		tcp_hdr(skb)->check = final_csum;
+	else
+		udp_hdr(skb)->check = final_csum;
+
+	skb->ip_summed = CHECKSUM_COMPLETE;
+
+	return 0;
+}
+
+/**
+ * net_test_setup_hw_csum - Setup skb for hardware checksum offload
+ *			    (CHECKSUM_PARTIAL)
+ * @skb: Socket buffer to prepare
+ * @iph: Pointer to IPv4 header inside skb
+ *
+ * This function sets skb fields and clears transport checksum field
+ * so that the NIC or driver can compute the checksum during transmit.
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
+static int net_test_setup_hw_csum(struct sk_buff *skb, struct iphdr *iph)
+{
+	u16 csum_offset;
+
+	skb->ip_summed = CHECKSUM_PARTIAL;
+	skb->csum = 0;
+
+	switch (iph->protocol) {
+	case IPPROTO_TCP:
+		if (!tcp_hdr(skb))
+			return -EINVAL;
+		tcp_hdr(skb)->check = 0;
+		csum_offset = offsetof(struct tcphdr, check);
+		break;
+	case IPPROTO_UDP:
+		if (!udp_hdr(skb))
+			return -EINVAL;
+		udp_hdr(skb)->check = 0;
+		csum_offset = offsetof(struct udphdr, check);
+		break;
+	default:
+		pr_err("net_selftest: unsupported proto for hw csum: %u\n",
+		       iph->protocol);
+		return -EINVAL;
+	}
+
+	skb->csum_start = skb_transport_header(skb) - skb->head;
+	skb->csum_offset = csum_offset;
+
+	return 0;
+}
+
+/**
+ * net_test_set_checksum - Apply requested checksum mode to skb
+ * @skb: Socket buffer containing the packet
+ * @attr: Packet attributes including desired checksum mode
+ * @iph: Pointer to the IP header within skb
+ *
+ * This function sets up the skb's checksum handling based on
+ * attr->csum_mode by calling the appropriate helper.
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
+static int net_test_set_checksum(struct sk_buff *skb,
+				 struct net_packet_attrs *attr,
+				 struct iphdr *iph)
+{
+	switch (attr->csum_mode) {
+	case NET_TEST_CHECKSUM_COMPLETE:
+		return net_test_setup_sw_csum(skb, iph);
+	case NET_TEST_CHECKSUM_PARTIAL:
+		return net_test_setup_hw_csum(skb, iph);
+	default:
+		pr_err("net_selftest: invalid checksum mode: %d\n",
+		       attr->csum_mode);
+		return -EINVAL;
+	}
+}
+
 static struct sk_buff *net_test_get_skb(struct net_device *ndev,
 					struct net_packet_attrs *attr)
 {
@@ -61,6 +195,7 @@ static struct sk_buff *net_test_get_skb(struct net_device *ndev,
 	struct ethhdr *ehdr;
 	struct iphdr *ihdr;
 	int iplen, size;
+	int ret;
 
 	size = attr->size + NET_TEST_PKT_SIZE;
 
@@ -157,15 +292,10 @@ static struct sk_buff *net_test_get_skb(struct net_device *ndev,
 		memset(pad, 0, pad_len);
 	}
 
-	skb->csum = 0;
-	skb->ip_summed = CHECKSUM_PARTIAL;
-	if (attr->tcp) {
-		thdr->check = ~tcp_v4_check(skb->len, ihdr->saddr,
-					    ihdr->daddr, 0);
-		skb->csum_start = skb_transport_header(skb) - skb->head;
-		skb->csum_offset = offsetof(struct tcphdr, check);
-	} else {
-		udp4_hwcsum(skb, ihdr->saddr, ihdr->daddr);
+	ret = net_test_set_checksum(skb, attr, ihdr);
+	if (ret < 0) {
+		kfree_skb(skb);
+		return ERR_PTR(ret);
 	}
 
 	skb->protocol = htons(ETH_P_IP);
@@ -318,29 +448,94 @@ static int net_test_phy_loopback_disable(struct net_device *ndev)
 	return phy_loopback(ndev->phydev, false, 0);
 }
 
+/**
+ * net_test_phy_loopback_udp - Basic PHY loopback test using UDP with SW
+ *                             checksum
+ * @ndev: The network device to test
+ *
+ * Sends and receives a minimal UDP packet through the device's internal
+ * PHY loopback path. The transport checksum is computed in software
+ * (CHECKSUM_COMPLETE), ensuring test validity regardless of hardware
+ * checksum offload support.
+ *
+ * Expected packet path:
+ *   Test code → MAC driver → MAC HW → xMII → PHY →
+ *   internal PHY loopback → xMII → MAC HW → MAC driver → test code
+ *
+ * The test frame includes Ethernet (14B), IPv4 (20B), UDP (8B), and a
+ * minimal payload (13B), totaling 55 bytes before padding/FCS. Most
+ * MACs will pad this to 60 bytes before appending the FCS.
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
 static int net_test_phy_loopback_udp(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
+	attr.tcp = false;
+	attr.csum_mode = NET_TEST_CHECKSUM_COMPLETE;
+
 	return __net_test_loopback(ndev, &attr);
 }
 
+/**
+ * net_test_phy_loopback_udp_mtu - PHY loopback test using UDP MTU-sized frame
+ *                                 with SW checksum
+ * @ndev: The network device to test
+ *
+ * Sends and receives a UDP packet through the device's internal PHY loopback
+ * path. The packet uses software checksum calculation (CHECKSUM_COMPLETE),
+ * and the total L2 frame size is padded to match the device MTU.
+ *
+ * This tests the loopback path with larger frames and ensures checksum
+ * correctness regardless of hardware offload support.
+ *
+ * Expected packet path:
+ *   Test code → MAC driver → MAC HW → xMII → PHY →
+ *   internal PHY loopback → xMII → MAC HW → MAC driver → test code
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
 static int net_test_phy_loopback_udp_mtu(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
 	attr.max_size = ndev->mtu;
+	attr.tcp = false;
+	attr.csum_mode = NET_TEST_CHECKSUM_COMPLETE;
+
 	return __net_test_loopback(ndev, &attr);
 }
 
+/**
+ * net_test_phy_loopback_tcp - PHY loopback test using TCP with SW checksum
+ * @ndev: The network device to test
+ *
+ * Sends and receives a minimal TCP packet through the device's internal
+ * PHY loopback path. The checksum is computed in software
+ * (CHECKSUM_COMPLETE), avoiding reliance on hardware checksum offload,
+ * which may behave inconsistently with TCP in some loopback setups.
+ *
+ * Expected packet path:
+ *   Test code → MAC driver → MAC HW → xMII → PHY →
+ *   internal PHY loopback → xMII → MAC HW → MAC driver → test code
+ *
+ * The generated test frame includes Ethernet (14B), IPv4 (20B), TCP (20B),
+ * and a small payload (13B), totaling 67 bytes before FCS. Since the total
+ * exceeds the Ethernet minimum, MAC padding is typically not applied.
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
 static int net_test_phy_loopback_tcp(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
 	attr.tcp = true;
+	attr.csum_mode = NET_TEST_CHECKSUM_COMPLETE;
+
 	return __net_test_loopback(ndev, &attr);
 }
 
@@ -359,13 +554,13 @@ static const struct net_test {
 		.name = "PHY internal loopback, enable ",
 		.fn = net_test_phy_loopback_enable,
 	}, {
-		.name = "PHY internal loopback, UDP    ",
+		.name = "PHY loopback UDP (SW csum)    ",
 		.fn = net_test_phy_loopback_udp,
 	}, {
-		.name = "PHY internal loopback, MTU    ",
+		.name = "PHY loopback UDP MTU (SW csum)",
 		.fn = net_test_phy_loopback_udp_mtu,
 	}, {
-		.name = "PHY internal loopback, TCP    ",
+		.name = "PHY loopback TCP (SW csum)    ",
 		.fn = net_test_phy_loopback_tcp,
 	}, {
 		/* This test should be done after all PHY loopback test */
