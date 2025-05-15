@@ -2663,6 +2663,8 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			return -EINVAL;
 		if (!!test_bit(MMF2_THP_VMA_DEFAULT_HUGE, &me->mm->flags2))
 			error = PR_THP_POLICY_DEFAULT_HUGE;
+		else if (!!test_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &me->mm->flags2))
+			error = PR_THP_POLICY_DEFAULT_NOHUGE;
 		break;
 	case PR_SET_THP_POLICY:
 		if (arg3 || arg4 || arg5)
@@ -2672,7 +2674,13 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		switch (arg2) {
 		case PR_THP_POLICY_DEFAULT_HUGE:
 			set_bit(MMF2_THP_VMA_DEFAULT_HUGE, &me->mm->flags2);
+			clear_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &me->mm->flags2);
 			process_vmas_thp_default_huge(me->mm);
+			break;
+		case PR_THP_POLICY_DEFAULT_NOHUGE:
+			clear_bit(MMF2_THP_VMA_DEFAULT_HUGE, &me->mm->flags2);
+			set_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &me->mm->flags2);
+			process_vmas_thp_default_nohuge(me->mm);
 			break;
 		default:
 			return -EINVAL;

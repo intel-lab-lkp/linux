@@ -104,6 +104,8 @@ void vma_set_thp_policy(struct vm_area_struct *vma)
 
 	if (test_bit(MMF2_THP_VMA_DEFAULT_HUGE, &mm->flags2))
 		vm_flags_set(vma, VM_HUGEPAGE);
+	else if (test_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &mm->flags2))
+		vm_flags_set(vma, VM_NOHUGEPAGE);
 }
 
 static void vmas_thp_default_huge(struct mm_struct *mm)
@@ -129,6 +131,28 @@ void process_vmas_thp_default_huge(struct mm_struct *mm)
 	vmas_thp_default_huge(mm);
 }
 
+static void vmas_thp_default_nohuge(struct mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+	unsigned long vm_flags;
+
+	VMA_ITERATOR(vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		vm_flags = vma->vm_flags;
+		if (vm_flags & VM_HUGEPAGE)
+			continue;
+		vm_flags_set(vma, VM_NOHUGEPAGE);
+	}
+}
+
+void process_vmas_thp_default_nohuge(struct mm_struct *mm)
+{
+	if (test_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &mm->flags2))
+		return;
+
+	set_bit(MMF2_THP_VMA_DEFAULT_NOHUGE, &mm->flags2);
+	vmas_thp_default_nohuge(mm);
+}
 
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
