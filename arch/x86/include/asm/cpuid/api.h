@@ -252,15 +252,15 @@ static inline void cpuid_leaf_0x2(union leaf_0x2_regs *regs)
 
 /**
  * for_each_cpuid_0x2_desc() - Iterator for parsed CPUID(0x2) descriptors
- * @regs:   CPUID(0x2) register output, as returned by cpuid_leaf_0x2()
- * @__ptr:  u8 pointer, for macro internal use only
- * @desc:   Pointer to parsed CPUID(0x2) descriptor at each iteration
+ * @_regs:	CPUID(0x2) register output, as returned by cpuid_leaf_0x2()
+ * @_ptr:	u8 pointer, for macro internal use only
+ * @_desc:	Pointer to the parsed CPUID(0x2) descriptor at each iteration
  *
  * Loop over the 1-byte descriptors in the passed CPUID(0x2) output registers
- * @regs.  Provide the parsed information for each descriptor through @desc.
+ * @_regs.  Provide the parsed information for each descriptor through @_desc.
  *
- * To handle cache-specific descriptors, switch on @entry->c_type.  For TLB
- * descriptors, switch on @entry->t_type.
+ * To handle cache-specific descriptors, switch on @_desc->c_type.  For TLB
+ * descriptors, switch on @_desc->t_type.
  *
  * Example usage for cache descriptors::
  *
