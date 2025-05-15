@@ -161,8 +161,12 @@ static int minix_unlink(struct inode * dir, struct dentry *dentry)
 static int minix_rmdir(struct inode * dir, struct dentry *dentry)
 {
 	struct inode * inode = d_inode(dentry);
-	int err = -ENOTEMPTY;
+	int err = -EUCLEAN;
 
+	if (inode->i_nlink < 2)
+		return err;
+
+	err = -ENOTEMPTY;
 	if (minix_empty_dir(inode)) {
 		err = minix_unlink(dir, dentry);
 		if (!err) {
@@ -235,6 +239,10 @@ static int minix_rename(struct mnt_idmap *idmap,
 	mark_inode_dirty(old_inode);
 
 	if (dir_de) {
+		if (old_dir->i_nlink <= 2) {
+			err = -EUCLEAN;
+			goto out_dir;
+		}
 		err = minix_set_link(dir_de, dir_folio, new_dir);
 		if (!err)
 			inode_dec_link_count(old_dir);
