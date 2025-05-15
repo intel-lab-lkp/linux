@@ -1269,6 +1269,226 @@ err:
 	return graph_ret(priv, ret);
 }
 
+static bool single_port_device_is_disabled(struct device_node *port)
+{
+	struct device_node *port_device __free(device_node) = NULL;
+	struct device_node *ports __free(device_node) = port_to_ports(port);
+
+	if (!ports)
+		port_device = of_get_parent(port);
+	else
+		port_device = of_get_parent(ports);
+
+	return !of_device_is_available(port_device);
+}
+
+static bool multi_nm_port_device_is_disabled(struct device_node *port)
+{
+	struct device_node *ep, *prev = NULL;
+	struct device_node *remote_ep __free(device_node) = NULL;
+	struct device_node *remote_port __free(device_node) = NULL;
+	struct device_node *remote_device __free(device_node) = NULL;
+
+	while (1) {
+		ep = of_graph_get_next_port_endpoint(port, prev);
+		if (!ep)
+			break;
+
+		/* first endpoint is special because it points to the remote device */
+		if (!prev) {
+			remote_device = of_graph_get_remote_port(ep);
+
+			if (single_port_device_is_disabled(remote_device))
+				return true;
+
+			prev = ep;
+
+			continue;
+		}
+
+		/* first get the remote port associated with the current endpoint */
+		remote_port = of_graph_get_remote_port(ep);
+		if (!remote_port)
+			break;
+
+		/* ... then get the first endpoint in remote port */
+		remote_ep = of_graph_get_next_port_endpoint(remote_port, NULL);
+		if (!remote_ep)
+			break;
+
+		/* ... and finally get the remote device node */
+		remote_device = of_graph_get_remote_port(remote_ep);
+		if (!remote_device)
+			break;
+
+		if (single_port_device_is_disabled(remote_device))
+			return true;
+
+		prev = ep;
+	}
+
+	return false;
+}
+
+static int graph_get_port_endpoint_count(struct device_node *port)
+{
+	int num = 0;
+
+	for_each_of_graph_port_endpoint(port, it)
+		num++;
+
+	return num;
+}
+
+static bool multi_port_device_is_disabled(struct device_node *lnk)
+{
+	int i, ep_count;
+	struct device_node *port __free(device_node) = NULL;
+	struct device_node *port_ep __free(device_node) = NULL;
+	struct device_node *remote_port __free(device_node) = NULL;
+	struct device_node *ports __free(device_node) = port_to_ports(lnk);
+
+	if (!ports)
+		return false;
+
+	for (i = 0;; i++) {
+		port = of_graph_get_port_by_id(ports, i + 1);
+		if (!port)
+			break;
+
+		/* N CPUs to M CODECs will have the endpoint count > 1 */
+		ep_count = graph_get_port_endpoint_count(port);
+		if (!ep_count)
+			break;
+
+		if (ep_count > 1) {
+			if (multi_nm_port_device_is_disabled(port))
+				return true;
+
+			continue;
+		}
+
+		port_ep = of_graph_get_next_port_endpoint(port, NULL);
+		if (!port_ep)
+			break;
+
+		remote_port = of_graph_get_remote_port(port_ep);
+		if (!remote_port)
+			break;
+
+		/*
+		 * if one port device is disabled then the whole link will
+		 * be disabled, thus we can stop at the first disabled device.
+		 */
+		if (single_port_device_is_disabled(remote_port))
+			return true;
+	}
+
+	return false;
+}
+
+static bool normal_port_device_is_disabled(struct device_node *port)
+{
+	if (graph_lnk_is_multi(port))
+		return multi_port_device_is_disabled(port);
+	else
+		return single_port_device_is_disabled(port);
+}
+
+static bool _dpcm_c2c_link_is_disabled(struct snd_soc_card *card,
+				       struct device_node *lnk)
+{
+	struct device_node *ep __free(device_node) = NULL;
+	struct device_node *remote_port __free(device_node) = NULL;
+
+	ep = of_graph_get_next_port_endpoint(lnk, NULL);
+	if (!ep) {
+		dev_err(card->dev, "port has no endpoint\n");
+		return false;
+	}
+
+	remote_port = of_graph_get_remote_port(ep);
+	if (!remote_port) {
+		dev_err(card->dev, "failed to fetch remote port\n");
+		return false;
+	}
+
+	if (__graph_get_type(remote_port) == GRAPH_MULTI)
+		return multi_port_device_is_disabled(remote_port);
+	else
+		return single_port_device_is_disabled(remote_port);
+}
+
+static bool c2c_link_is_disabled(struct snd_soc_card *card,
+				 struct device_node *lnk)
+{
+	struct device_node *ports __free(device_node) = NULL;
+
+	ports = port_to_ports(lnk);
+
+	if (!ports) {
+		dev_err(card->dev, "C2C port should be child of 'ports'\n");
+		return false;
+	}
+
+	for_each_of_graph_port(ports, it) {
+		if (_dpcm_c2c_link_is_disabled(card, it))
+			return true;
+	};
+
+	return false;
+}
+
+static bool normal_link_is_disabled(struct snd_soc_card *card,
+				    struct device_node *lnk)
+{
+	struct device_node *cpu_port;
+	struct device_node *cpu_ep __free(device_node) = NULL;
+	struct device_node *codec_port  __free(device_node) = NULL;
+
+	cpu_port = lnk;
+
+	cpu_ep = of_graph_get_next_port_endpoint(cpu_port, NULL);
+	if (!cpu_ep) {
+		dev_err(card->dev, "CPU port has no endpoint\n");
+		return false;
+	}
+
+	codec_port = of_graph_get_remote_port(cpu_ep);
+	if (!codec_port) {
+		dev_err(card->dev, "unable to find remote codec port\n");
+		return false;
+	}
+
+	return normal_port_device_is_disabled(codec_port) ||
+		normal_port_device_is_disabled(cpu_port);
+}
+
+static bool graph_link_is_disabled(struct simple_util_priv *priv,
+				   enum graph_type gtype,
+				   struct device_node *lnk,
+				   struct link_info *li)
+{
+	bool link_disabled = false;
+	struct snd_soc_card *card = simple_priv_to_card(priv);
+
+	switch (gtype) {
+	case GRAPH_NORMAL:
+		link_disabled = normal_link_is_disabled(card, lnk);
+		break;
+	case GRAPH_DPCM:
+		link_disabled = _dpcm_c2c_link_is_disabled(card, lnk);
+		break;
+	case GRAPH_C2C:
+		link_disabled = c2c_link_is_disabled(card, lnk);
+		break;
+	default:
+		break;
+	}
+
+	return link_disabled;
+}
+
 static int graph_for_each_link(struct simple_util_priv *priv,
 			       struct graph2_custom_hooks *hooks,
 			       struct link_info *li,
@@ -1290,6 +1510,12 @@ static int graph_for_each_link(struct simple_util_priv *priv,
 		lnk = it.node;
 
 		gtype = graph_get_type(priv, lnk);
+
+		if (graph_link_is_disabled(priv, gtype, lnk, li)) {
+			if (!li->disabled_link)
+				li->disabled_link = true;
+			continue;
+		}
 
 		ret = func(priv, hooks, gtype, lnk, li);
 		if (ret < 0)
@@ -1324,6 +1550,11 @@ int audio_graph2_parse_of(struct simple_util_priv *priv, struct device *dev,
 		ret = -EINVAL;
 	if (ret < 0)
 		goto err;
+
+	if (li->disabled_link) {
+		dev_info(dev, "detected disabled link(s) - route creation may fail\n");
+		card->disable_of_route_checks = 1;
+	}
 
 	ret = simple_util_init_priv(priv, li);
 	if (ret < 0)

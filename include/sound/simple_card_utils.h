@@ -132,9 +132,10 @@ struct simple_util_priv {
 #define SNDRV_MAX_LINKS 512
 
 struct link_info {
-	int link; /* number of link */
+	int link; /* number of available links */
 	int cpu;  /* turn for CPU / Codec */
 	struct prop_nums num[SNDRV_MAX_LINKS];
+	bool disabled_link; /* true if there's at least one explicitly disabled link */
 };
 
 int simple_util_parse_daifmt(struct device *dev,
