@@ -1045,10 +1045,10 @@ static int snd_compr_task_new(struct snd_compr_stream *stream, struct snd_compr_
 		retval = -EINVAL;
 		goto cleanup;
 	}
-	fd_i = get_unused_fd_flags(O_WRONLY|O_CLOEXEC);
+	fd_i = get_unused_fd(O_WRONLY|O_CLOEXEC);
 	if (fd_i < 0)
 		goto cleanup;
-	fd_o = get_unused_fd_flags(O_RDONLY|O_CLOEXEC);
+	fd_o = get_unused_fd(O_RDONLY|O_CLOEXEC);
 	if (fd_o < 0) {
 		put_unused_fd(fd_i);
 		goto cleanup;

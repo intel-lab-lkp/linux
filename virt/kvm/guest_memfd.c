@@ -410,7 +410,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	struct file *file;
 	int fd, err;
 
-	fd = get_unused_fd_flags(0);
+	fd = get_unused_fd(0);
 	if (fd < 0)
 		return fd;
 

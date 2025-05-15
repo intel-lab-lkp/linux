@@ -54,7 +54,7 @@ The caller pass the out-fence and gets back the sync_file. That is just the
 first step, next it needs to install an fd on sync_file->file. So it gets an
 fd::
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 
 and installs it on sync_file->file::
 

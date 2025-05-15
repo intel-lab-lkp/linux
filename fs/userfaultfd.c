@@ -2112,7 +2112,7 @@ static int new_userfaultfd(int flags)
 	atomic_set(&ctx->mmap_changing, 0);
 	ctx->mm = current->mm;
 
-	fd = get_unused_fd_flags(flags & UFFD_SHARED_FCNTL_FLAGS);
+	fd = get_unused_fd(flags & UFFD_SHARED_FCNTL_FLAGS);
 	if (fd < 0)
 		goto err_out;
 

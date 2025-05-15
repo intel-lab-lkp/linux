@@ -5687,7 +5687,7 @@ static int sctp_getsockopt_peeloff_common(struct sock *sk, sctp_peeloff_arg_t *p
 		goto out;
 
 	/* Map the socket to an unused fd that can be returned to the user.  */
-	retval = get_unused_fd_flags(flags & SOCK_CLOEXEC);
+	retval = get_unused_fd(flags & SOCK_CLOEXEC);
 	if (retval < 0) {
 		sock_release(newsock);
 		goto out;

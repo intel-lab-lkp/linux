@@ -3110,7 +3110,7 @@ static int unix_open_file(struct sock *sk)
 
 	path_get(&path);
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0)
 		goto out;
 

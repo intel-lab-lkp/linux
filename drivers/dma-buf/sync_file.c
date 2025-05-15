@@ -207,7 +207,7 @@ static __poll_t sync_file_poll(struct file *file, poll_table *wait)
 static long sync_file_ioctl_merge(struct sync_file *sync_file,
 				  unsigned long arg)
 {
-	int fd = get_unused_fd_flags(O_CLOEXEC);
+	int fd = get_unused_fd(O_CLOEXEC);
 	int err;
 	struct sync_file *fence2, *fence3;
 	struct sync_merge_data data;

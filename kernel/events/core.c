@@ -13154,7 +13154,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & PERF_FLAG_FD_CLOEXEC)
 		f_flags |= O_CLOEXEC;
 
-	event_fd = get_unused_fd_flags(f_flags);
+	event_fd = get_unused_fd(f_flags);
 	if (event_fd < 0)
 		return event_fd;
 

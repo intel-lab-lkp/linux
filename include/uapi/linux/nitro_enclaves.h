@@ -41,7 +41,7 @@
  *					  bookkeeping variables.
  * * NE_ERR_NO_CPUS_AVAIL_IN_POOL	- No NE CPU pool set / no CPUs available
  *					  in the pool.
- * * Error codes from get_unused_fd_flags() and anon_inode_getfile().
+ * * Error codes from get_unused_fd() and anon_inode_getfile().
  * * Error codes from the NE PCI device request.
  */
 #define NE_CREATE_VM			_IOR(0xAE, 0x20, __u64)

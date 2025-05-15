@@ -43,7 +43,7 @@ int bch2_run_thread_with_file(struct thread_with_file *thr,
 	if (ret)
 		return ret;
 
-	ret = get_unused_fd_flags(fd_flags);
+	ret = get_unused_fd(fd_flags);
 	if (ret < 0)
 		goto err;
 	fd = ret;

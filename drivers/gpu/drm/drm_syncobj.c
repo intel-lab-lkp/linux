@@ -674,7 +674,7 @@ int drm_syncobj_get_fd(struct drm_syncobj *syncobj, int *p_fd)
 	struct file *file;
 	int fd;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 
@@ -767,7 +767,7 @@ static int drm_syncobj_export_sync_file(struct drm_file *file_private,
 	int ret;
 	struct dma_fence *fence;
 	struct sync_file *sync_file;
-	int fd = get_unused_fd_flags(O_CLOEXEC);
+	int fd = get_unused_fd(O_CLOEXEC);
 
 	if (fd < 0)
 		return fd;

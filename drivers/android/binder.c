@@ -4618,7 +4618,7 @@ static int binder_apply_fd_fixups(struct binder_proc *proc,
 	int ret = 0;
 
 	list_for_each_entry(fixup, &t->fd_fixups, fixup_entry) {
-		int fd = get_unused_fd_flags(O_CLOEXEC);
+		int fd = get_unused_fd(O_CLOEXEC);
 
 		if (fd < 0) {
 			binder_debug(BINDER_DEBUG_TRANSACTION,

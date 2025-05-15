@@ -279,7 +279,7 @@ xfs_open_by_handle(
 		goto out_dput;
 	}
 
-	fd = get_unused_fd_flags(0);
+	fd = get_unused_fd(0);
 	if (fd < 0) {
 		error = fd;
 		goto out_dput;

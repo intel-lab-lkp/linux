@@ -642,7 +642,7 @@ int bpf_iter_new_fd(struct bpf_link *link)
 		return -EINVAL;
 
 	flags = O_RDONLY | O_CLOEXEC;
-	fd = get_unused_fd_flags(flags);
+	fd = get_unused_fd(flags);
 	if (fd < 0)
 		return fd;
 

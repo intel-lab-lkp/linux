@@ -297,7 +297,7 @@ int media_request_alloc(struct media_device *mdev, int *alloc_fd)
 	if (!req)
 		return -ENOMEM;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0) {
 		ret = fd;
 		goto err_free_req;

@@ -271,7 +271,7 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 
 		ctx->sigmask = *mask;
 
-		ufd = get_unused_fd_flags(flags & O_CLOEXEC);
+		ufd = get_unused_fd(flags & O_CLOEXEC);
 		if (ufd < 0) {
 			kfree(ctx);
 			return ufd;

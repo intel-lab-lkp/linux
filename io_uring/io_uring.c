@@ -3542,7 +3542,7 @@ static int io_uring_install_fd(struct file *file)
 {
 	int fd;
 
-	fd = get_unused_fd_flags(O_RDWR | O_CLOEXEC);
+	fd = get_unused_fd(O_RDWR | O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 	fd_install(fd, file);

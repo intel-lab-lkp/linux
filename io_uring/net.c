@@ -1611,7 +1611,7 @@ int io_accept(struct io_kiocb *req, unsigned int issue_flags)
 
 retry:
 	if (!fixed) {
-		fd = __get_unused_fd_flags(accept->flags, accept->nofile);
+		fd = __get_unused_fd(accept->flags, accept->nofile);
 		if (unlikely(fd < 0))
 			return fd;
 	}
@@ -1683,7 +1683,7 @@ int io_socket(struct io_kiocb *req, unsigned int issue_flags)
 	int ret, fd;
 
 	if (!fixed) {
-		fd = __get_unused_fd_flags(sock->flags, sock->nofile);
+		fd = __get_unused_fd(sock->flags, sock->nofile);
 		if (unlikely(fd < 0))
 			return fd;
 	}

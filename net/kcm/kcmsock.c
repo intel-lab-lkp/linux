@@ -1557,7 +1557,7 @@ static int kcm_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		struct kcm_clone info;
 		struct file *file;
 
-		info.fd = get_unused_fd_flags(0);
+		info.fd = get_unused_fd(0);
 		if (unlikely(info.fd < 0))
 			return info.fd;
 

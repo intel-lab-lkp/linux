@@ -314,7 +314,7 @@ static int vfio_group_ioctl_get_device_fd(struct vfio_group *group,
 	if (IS_ERR(device))
 		return PTR_ERR(device);
 
-	fdno = get_unused_fd_flags(O_CLOEXEC);
+	fdno = get_unused_fd(O_CLOEXEC);
 	if (fdno < 0) {
 		ret = fdno;
 		goto err_put_device;

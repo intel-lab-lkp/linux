@@ -724,7 +724,7 @@ static int ntsync_obj_get_fd(struct ntsync_obj *obj)
 	struct file *file;
 	int fd;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 	file = anon_inode_getfile("ntsync", &ntsync_obj_fops, obj, O_RDWR);

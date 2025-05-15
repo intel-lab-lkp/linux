@@ -491,7 +491,7 @@ EXPORT_SYMBOL(sock_alloc_file);
 static int sock_map_fd(struct socket *sock, int flags)
 {
 	struct file *newfile;
-	int fd = get_unused_fd_flags(flags);
+	int fd = get_unused_fd(flags);
 	if (unlikely(fd < 0)) {
 		sock_release(sock);
 		return fd;
@@ -1720,11 +1720,11 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 	 * reserve descriptors and make sure we won't fail
 	 * to return them to userland.
 	 */
-	fd1 = get_unused_fd_flags(flags);
+	fd1 = get_unused_fd(flags);
 	if (unlikely(fd1 < 0))
 		return fd1;
 
-	fd2 = get_unused_fd_flags(flags);
+	fd2 = get_unused_fd(flags);
 	if (unlikely(fd2 < 0)) {
 		put_unused_fd(fd1);
 		return fd2;
@@ -1957,7 +1957,7 @@ static int __sys_accept4_file(struct file *file, struct sockaddr __user *upeer_s
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
-	newfd = get_unused_fd_flags(flags);
+	newfd = get_unused_fd(flags);
 	if (unlikely(newfd < 0))
 		return newfd;
 

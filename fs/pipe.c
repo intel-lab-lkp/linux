@@ -985,12 +985,12 @@ static int __do_pipe_flags(int *fd, struct file **files, int flags)
 	if (error)
 		return error;
 
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd(flags);
 	if (error < 0)
 		goto err_read_pipe;
 	fdr = error;
 
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd(flags);
 	if (error < 0)
 		goto err_fdr;
 	fdw = error;

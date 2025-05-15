@@ -471,7 +471,7 @@ alloc_begin_fd_uobject(const struct uverbs_api_object *obj,
 		goto err_fd;
 	}
 
-	new_fd = get_unused_fd_flags(O_CLOEXEC);
+	new_fd = get_unused_fd(O_CLOEXEC);
 	if (new_fd < 0) {
 		ret = ERR_PTR(new_fd);
 		goto err_fd;

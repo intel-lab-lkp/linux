@@ -3304,7 +3304,7 @@ int bpf_link_prime(struct bpf_link *link, struct bpf_link_primer *primer)
 	struct file *file;
 	int fd, id;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 

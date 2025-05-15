@@ -505,7 +505,7 @@ int etnaviv_ioctl_gem_submit(struct drm_device *dev, void *data,
 	}
 
 	if (args->flags & ETNA_SUBMIT_FENCE_FD_OUT) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
+		out_fence_fd = get_unused_fd(O_CLOEXEC);
 		if (out_fence_fd < 0) {
 			ret = out_fence_fd;
 			goto err_submit_cmds;

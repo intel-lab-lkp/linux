@@ -3195,7 +3195,7 @@ SYSCALL_DEFINE3(open_tree, int, dfd, const char __user *, filename, unsigned, fl
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 
-	fd = get_unused_fd_flags(flags & O_CLOEXEC);
+	fd = get_unused_fd(flags & O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 
@@ -4575,7 +4575,7 @@ SYSCALL_DEFINE3(fsmount, int, fs_fd, unsigned int, flags,
 	}
 	file->f_mode |= FMODE_NEED_UNMOUNT;
 
-	ret = get_unused_fd_flags((flags & FSMOUNT_CLOEXEC) ? O_CLOEXEC : 0);
+	ret = get_unused_fd((flags & FSMOUNT_CLOEXEC) ? O_CLOEXEC : 0);
 	if (ret >= 0)
 		fd_install(ret, file);
 	else
@@ -5293,7 +5293,7 @@ SYSCALL_DEFINE5(open_tree_attr, int, dfd, const char __user *, filename,
 		finish_mount_kattr(&kattr);
 	}
 
-	fd = get_unused_fd_flags(flags & O_CLOEXEC);
+	fd = get_unused_fd(flags & O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 

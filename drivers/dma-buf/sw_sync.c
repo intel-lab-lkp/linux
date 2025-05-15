@@ -359,7 +359,7 @@ static int sw_sync_debugfs_release(struct inode *inode, struct file *file)
 static long sw_sync_ioctl_create_fence(struct sync_timeline *obj,
 				       unsigned long arg)
 {
-	int fd = get_unused_fd_flags(O_CLOEXEC);
+	int fd = get_unused_fd(O_CLOEXEC);
 	int err;
 	struct sync_pt *pt;
 	struct sync_file *sync_file;

@@ -546,7 +546,7 @@ static struct file *vtpm_proxy_create_device(
 	proxy_dev->flags = vtpm_new_dev->flags;
 
 	/* setup an anonymous file for the server-side */
-	fd = get_unused_fd_flags(O_RDWR);
+	fd = get_unused_fd(O_RDWR);
 	if (fd < 0) {
 		rc = fd;
 		goto err_delete_proxy_dev;

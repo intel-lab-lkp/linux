@@ -432,7 +432,7 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 
 	ctx->moffs = ktime_mono_to_real(0);
 
-	ufd = get_unused_fd_flags(flags & TFD_SHARED_FCNTL_FLAGS);
+	ufd = get_unused_fd(flags & TFD_SHARED_FCNTL_FLAGS);
 	if (ufd < 0) {
 		kfree(ctx);
 		return ufd;

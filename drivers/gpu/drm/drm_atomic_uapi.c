@@ -1178,7 +1178,7 @@ struct drm_out_fence_state {
 static int setup_out_fence(struct drm_out_fence_state *fence_state,
 			   struct dma_fence *fence)
 {
-	fence_state->fd = get_unused_fd_flags(O_CLOEXEC);
+	fence_state->fd = get_unused_fd(O_CLOEXEC);
 	if (fence_state->fd < 0)
 		return fence_state->fd;
 

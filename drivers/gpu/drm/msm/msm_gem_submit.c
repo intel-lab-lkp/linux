@@ -686,7 +686,7 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 	ring = gpu->rb[queue->ring_nr];
 
 	if (args->flags & MSM_SUBMIT_FENCE_FD_OUT) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
+		out_fence_fd = get_unused_fd(O_CLOEXEC);
 		if (out_fence_fd < 0) {
 			ret = out_fence_fd;
 			goto out_post_unlock;

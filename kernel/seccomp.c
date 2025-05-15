@@ -1976,7 +1976,7 @@ static long seccomp_set_mode_filter(unsigned int flags,
 		return PTR_ERR(prepared);
 
 	if (flags & SECCOMP_FILTER_FLAG_NEW_LISTENER) {
-		listener = get_unused_fd_flags(O_CLOEXEC);
+		listener = get_unused_fd(O_CLOEXEC);
 		if (listener < 0) {
 			ret = listener;
 			goto out_free;

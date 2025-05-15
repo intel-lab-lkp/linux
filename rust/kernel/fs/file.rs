@@ -384,7 +384,7 @@ pub struct FileDescriptorReservation {
     /// Prevent values of this type from being moved to a different task.
     ///
     /// The `fd_install` and `put_unused_fd` functions assume that the value of `current` is
-    /// unchanged since the call to `get_unused_fd_flags`. By adding this marker to this type, we
+    /// unchanged since the call to `get_unused_fd`. By adding this marker to this type, we
     /// prevent it from being moved across task boundaries, which ensures that `current` does not
     /// change while this value exists.
     _not_send: NotThreadSafe,
@@ -393,9 +393,9 @@ pub struct FileDescriptorReservation {
 impl FileDescriptorReservation {
     /// Creates a new file descriptor reservation.
     #[inline]
-    pub fn get_unused_fd_flags(flags: u32) -> Result<Self> {
+    pub fn get_unused_fd(flags: u32) -> Result<Self> {
         // SAFETY: FFI call, there are no safety requirements on `flags`.
-        let fd: i32 = unsafe { bindings::get_unused_fd_flags(flags) };
+        let fd: i32 = unsafe { bindings::get_unused_fd(flags) };
         if fd < 0 {
             return Err(Error::from_errno(fd));
         }
@@ -417,7 +417,7 @@ impl FileDescriptorReservation {
     /// [`FileDescriptorReservation`], so it will not be usable after this call.
     #[inline]
     pub fn fd_install(self, file: ARef<File>) {
-        // SAFETY: `self.fd` was previously returned by `get_unused_fd_flags`. We have not yet used
+        // SAFETY: `self.fd` was previously returned by `get_unused_fd`. We have not yet used
         // the fd, so it is still valid, and `current` still refers to the same task, as this type
         // cannot be moved across task boundaries.
         //
@@ -439,7 +439,7 @@ impl Drop for FileDescriptorReservation {
     #[inline]
     fn drop(&mut self) {
         // SAFETY: By the type invariants of this type, `self.fd` was previously returned by
-        // `get_unused_fd_flags`. We have not yet used the fd, so it is still valid, and `current`
+        // `get_unused_fd`. We have not yet used the fd, so it is still valid, and `current`
         // still refers to the same task, as this type cannot be moved across task boundaries.
         unsafe { bindings::put_unused_fd(self.fd) };
     }

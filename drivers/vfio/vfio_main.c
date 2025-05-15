@@ -861,7 +861,7 @@ static int vfio_ioct_mig_return_fd(struct file *filp, void __user *arg,
 	int ret;
 	int fd;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0) {
 		ret = fd;
 		goto out_fput;

@@ -226,7 +226,7 @@ static int __anon_inode_getfd(const char *name,
 	int error, fd;
 	struct file *file;
 
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd(flags);
 	if (error < 0)
 		return error;
 	fd = error;

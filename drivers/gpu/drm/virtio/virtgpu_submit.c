@@ -418,7 +418,7 @@ static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
 		return PTR_ERR(submit->buf);
 
 	if (exbuf->flags & VIRTGPU_EXECBUF_FENCE_FD_OUT) {
-		err = get_unused_fd_flags(O_CLOEXEC);
+		err = get_unused_fd(O_CLOEXEC);
 		if (err < 0)
 			return err;
 

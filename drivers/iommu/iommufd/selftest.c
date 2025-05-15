@@ -1366,7 +1366,7 @@ static int iommufd_test_create_access(struct iommufd_ucmd *ucmd,
 	if (IS_ERR(staccess))
 		return PTR_ERR(staccess);
 
-	fdno = get_unused_fd_flags(O_CLOEXEC);
+	fdno = get_unused_fd(O_CLOEXEC);
 	if (fdno < 0) {
 		rc = -ENOMEM;
 		goto out_free_staccess;

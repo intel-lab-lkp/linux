@@ -311,7 +311,7 @@ static int cachefiles_ondemand_get_fd(struct cachefiles_req *req,
 	if (ret < 0)
 		goto err;
 
-	anon_file->fd = get_unused_fd_flags(O_WRONLY);
+	anon_file->fd = get_unused_fd(O_WRONLY);
 	if (anon_file->fd < 0) {
 		ret = anon_file->fd;
 		goto err_free_id;

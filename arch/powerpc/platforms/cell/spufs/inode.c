@@ -281,7 +281,7 @@ static int spufs_context_open(const struct path *path)
 	int ret;
 	struct file *filp;
 
-	ret = get_unused_fd_flags(0);
+	ret = get_unused_fd(0);
 	if (ret < 0)
 		return ret;
 
@@ -497,7 +497,7 @@ static int spufs_gang_open(const struct path *path)
 	int ret;
 	struct file *filp;
 
-	ret = get_unused_fd_flags(0);
+	ret = get_unused_fd(0);
 	if (ret < 0)
 		return ret;
 

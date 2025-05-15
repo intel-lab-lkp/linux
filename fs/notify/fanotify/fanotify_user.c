@@ -259,7 +259,7 @@ static int create_fd(struct fsnotify_group *group, const struct path *path,
 	int client_fd;
 	struct file *new_file;
 
-	client_fd = get_unused_fd_flags(group->fanotify_data.f_flags);
+	client_fd = get_unused_fd(group->fanotify_data.f_flags);
 	if (client_fd < 0)
 		return client_fd;
 
@@ -1658,7 +1658,7 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 			goto out_destroy_group;
 	}
 
-	fd = get_unused_fd_flags(f_flags);
+	fd = get_unused_fd(f_flags);
 	if (fd < 0)
 		goto out_destroy_group;
 

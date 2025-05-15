@@ -476,7 +476,7 @@ static long papr_vpd_create_handle(struct papr_location_code __user *ulc)
 	if (IS_ERR(blob))
 		return PTR_ERR(blob);
 
-	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
+	fd = get_unused_fd(O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		err = fd;
 		goto free_blob;

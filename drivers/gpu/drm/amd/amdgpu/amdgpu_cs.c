@@ -1596,7 +1596,7 @@ int amdgpu_cs_fence_to_handle_ioctl(struct drm_device *dev, void *data,
 		return r;
 
 	case AMDGPU_FENCE_TO_HANDLE_GET_SYNC_FILE_FD:
-		fd = get_unused_fd_flags(O_CLOEXEC);
+		fd = get_unused_fd(O_CLOEXEC);
 		if (fd < 0) {
 			dma_fence_put(fence);
 			return fd;

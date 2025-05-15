@@ -4104,7 +4104,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	DECLARE_VAL_CONTEXT(val_ctx, sw_context, 1);
 
 	if (flags & DRM_VMW_EXECBUF_FLAG_EXPORT_FENCE_FD) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
+		out_fence_fd = get_unused_fd(O_CLOEXEC);
 		if (out_fence_fd < 0) {
 			VMW_DEBUG_USER("Failed to get a fence fd.\n");
 			return out_fence_fd;

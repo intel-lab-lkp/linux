@@ -510,7 +510,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 			       int *prime_fd)
 {
 	struct dma_buf *dmabuf;
-	int fd = get_unused_fd_flags(flags);
+	int fd = get_unused_fd(flags);
 
 	if (fd < 0)
 		return fd;

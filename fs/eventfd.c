@@ -402,7 +402,7 @@ static int do_eventfd(unsigned int count, int flags)
 
 	flags &= EFD_SHARED_FCNTL_FLAGS;
 	flags |= O_RDWR;
-	fd = get_unused_fd_flags(flags);
+	fd = get_unused_fd(flags);
 	if (fd < 0)
 		goto err;
 

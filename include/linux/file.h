@@ -88,12 +88,12 @@ extern int f_dupfd(unsigned int from, struct file *file, unsigned flags);
 extern int replace_fd(unsigned fd, struct file *file, unsigned flags);
 extern void set_close_on_exec(unsigned int fd, int flag);
 extern bool get_close_on_exec(unsigned int fd);
-extern int __get_unused_fd_flags(unsigned flags, unsigned long nofile);
-extern int get_unused_fd_flags(unsigned flags);
+extern int __get_unused_fd(unsigned flags, unsigned long nofile);
+extern int get_unused_fd(unsigned flags);
 extern void put_unused_fd(unsigned int fd);
 
 DEFINE_CLASS(get_unused_fd, int, if (_T >= 0) put_unused_fd(_T),
-	     get_unused_fd_flags(flags), unsigned flags)
+	     get_unused_fd(flags), unsigned flags)
 DEFINE_FREE(fput, struct file *, if (!IS_ERR_OR_NULL(_T)) fput(_T))
 
 /*

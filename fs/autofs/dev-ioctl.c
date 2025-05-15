@@ -233,7 +233,7 @@ static int autofs_dev_ioctl_open_mountpoint(const char *name, dev_t devid)
 {
 	int err, fd;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (likely(fd >= 0)) {
 		struct file *filp;
 		struct path path;

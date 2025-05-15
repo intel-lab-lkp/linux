@@ -3432,7 +3432,7 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 #undef IN_FENCES
 
 	if (args->flags & I915_EXEC_FENCE_OUT) {
-		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
+		out_fence_fd = get_unused_fd(O_CLOEXEC);
 		if (out_fence_fd < 0) {
 			err = out_fence_fd;
 			goto err_in_fence;

@@ -132,7 +132,7 @@ int io_openat2(struct io_kiocb *req, unsigned int issue_flags)
 	}
 
 	if (!fixed) {
-		ret = __get_unused_fd_flags(open->how.flags, open->nofile);
+ ret = __get_unused_fd(open->how.flags, open->nofile);
 		if (ret < 0)
 			goto err;
 	}

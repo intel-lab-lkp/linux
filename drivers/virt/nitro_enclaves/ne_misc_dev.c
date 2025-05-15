@@ -1651,7 +1651,7 @@ static int ne_create_vm_ioctl(struct ne_pci_dev *ne_pci_dev, u64 __user *slot_ui
 		goto free_cpumask;
 	}
 
-	enclave_fd = get_unused_fd_flags(O_CLOEXEC);
+	enclave_fd = get_unused_fd(O_CLOEXEC);
 	if (enclave_fd < 0) {
 		rc = enclave_fd;
 

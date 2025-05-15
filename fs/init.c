@@ -262,7 +262,7 @@ int __init init_dup(struct file *file)
 {
 	int fd;
 
-	fd = get_unused_fd_flags(0);
+	fd = get_unused_fd(0);
 	if (fd < 0)
 		return fd;
 	fd_install(fd, get_file(file));

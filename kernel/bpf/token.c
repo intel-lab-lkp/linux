@@ -192,7 +192,7 @@ int bpf_token_create(union bpf_attr *attr)
 	if (err)
 		goto out_token;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
+	fd = get_unused_fd(O_CLOEXEC);
 	if (fd < 0) {
 		err = fd;
 		goto out_token;

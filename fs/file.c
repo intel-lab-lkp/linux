@@ -597,16 +597,16 @@ out:
 	return error;
 }
 
-int __get_unused_fd_flags(unsigned flags, unsigned long nofile)
+int __get_unused_fd(unsigned flags, unsigned long nofile)
 {
 	return alloc_fd(0, nofile, flags);
 }
 
-int get_unused_fd_flags(unsigned flags)
+int get_unused_fd(unsigned flags)
 {
-	return __get_unused_fd_flags(flags, rlimit(RLIMIT_NOFILE));
+	return __get_unused_fd(flags, rlimit(RLIMIT_NOFILE));
 }
-EXPORT_SYMBOL(get_unused_fd_flags);
+EXPORT_SYMBOL(get_unused_fd);
 
 static void __put_unused_fd(struct files_struct *files, unsigned int fd)
 {
@@ -1257,7 +1257,7 @@ __releases(&files->file_lock)
 	 * not populate it yet.
 	 *
 	 * Broadly speaking we may be racing against the following:
-	 * fd = get_unused_fd_flags();     // fd slot reserved, ->fd[fd] == NULL
+	 * fd = get_unused_fd();     // fd slot reserved, ->fd[fd] == NULL
 	 * file = hard_work_goes_here();
 	 * fd_install(fd, file);           // only now ->fd[fd] == file
 	 *
@@ -1342,7 +1342,7 @@ int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
 	if (error)
 		return error;
 
-	new_fd = get_unused_fd_flags(o_flags);
+	new_fd = get_unused_fd(o_flags);
 	if (new_fd < 0)
 		return new_fd;
 
@@ -1438,7 +1438,7 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 	struct file *file = fget_raw(fildes);
 
 	if (file) {
-		ret = get_unused_fd_flags(0);
+		ret = get_unused_fd(0);
 		if (ret >= 0)
 			fd_install(ret, file);
 		else

@@ -454,7 +454,7 @@ static int iommufd_eventq_init(struct iommufd_eventq *eventq, char *name,
 	eventq->filep = filep;
 	refcount_inc(&eventq->obj.users);
 
-	fdno = get_unused_fd_flags(O_CLOEXEC);
+	fdno = get_unused_fd(O_CLOEXEC);
 	if (fdno < 0)
 		fput(filep);
 	return fdno;
