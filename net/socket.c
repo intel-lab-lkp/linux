@@ -1459,11 +1459,12 @@ EXPORT_SYMBOL(sock_wake_async);
  *	@type: communication type (SOCK_STREAM, ...)
  *	@protocol: protocol (0, ...)
  *	@res: new socket
- *	@kern: boolean for kernel space sockets
+ *	@kern: hint for netns refcounting (%SOCK_NETNS_REFCNT_USER, ...)
  *
  *	Creates a new socket and assigns it to @res, passing through LSM.
  *	Returns 0 or an error. On failure @res is set to %NULL. @kern must
- *	be set to true if the socket resides in kernel space.
+ *	be set to %SOCK_NETNS_REFCNT_* -- handled as boolean in most places,
+ *	effectively handled only in sk_alloc().
  *	This function internally uses GFP_KERNEL.
  */
 
@@ -1609,6 +1610,7 @@ EXPORT_SYMBOL(sock_create);
  *	@res: new socket
  *
  *	A wrapper around __sock_create().
+ *	Created socket will not hold a reference on @net.
  *	Returns 0 or an error. This function internally uses GFP_KERNEL.
  */
 
@@ -1617,6 +1619,27 @@ int sock_create_kern(struct net *net, int family, int type, int protocol, struct
 	return __sock_create(net, family, type, protocol, res, 1);
 }
 EXPORT_SYMBOL(sock_create_kern);
+
+/**
+ *	sock_create_netns - creates a socket (kernel space)
+ *	@net: net namespace
+ *	@family: protocol family (AF_INET, ...)
+ *	@type: communication type (SOCK_STREAM, ...)
+ *	@protocol: protocol (0, ...)
+ *	@res: new socket
+ *
+ *	A wrapper around __sock_create().
+ *	If @net == %init_net (checked in sk_alloc), created socket will
+ *	not hold a reference on @net (i.e. same as sock_create_kern).
+ *	Otherwise, created socket will hold a reference on @net.
+ *	Returns 0 or an error. This function internally uses GFP_KERNEL.
+ */
+
+int sock_create_netns(struct net *net, int family, int type, int protocol, struct socket **res)
+{
+	return __sock_create(net, family, type, protocol, res, SOCK_NETNS_REFCNT_KERN_ANY);
+}
+EXPORT_SYMBOL(sock_create_netns);
 
 static struct socket *__sys_socket_create(int family, int type, int protocol)
 {

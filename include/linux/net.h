@@ -247,6 +247,20 @@ enum {
 	SOCK_WAKE_URG,
 };
 
+/*
+ * sock netns refcounting modes:
+ *
+ * @SOCK_NETNS_REFCNT_USER: user sockets always hold a netns reference
+ * @SOCK_NETNS_REFCNT_KERN_NONE: kernel socket will not hold active netns reference
+ * @SOCK_NETNS_REFCNT_KERN_ANY: kernel socket will hold active reference for any netns
+ *				(but init_net)
+ */
+enum {
+	SOCK_NETNS_REFCNT_USER,
+	SOCK_NETNS_REFCNT_KERN_NONE,
+	SOCK_NETNS_REFCNT_KERN_ANY,
+};
+
 int sock_wake_async(struct socket_wq *sk_wq, int how, int band);
 int sock_register(const struct net_proto_family *fam);
 void sock_unregister(int family);
@@ -255,6 +269,7 @@ int __sock_create(struct net *net, int family, int type, int proto,
 		  struct socket **res, int kern);
 int sock_create(int family, int type, int proto, struct socket **res);
 int sock_create_kern(struct net *net, int family, int type, int proto, struct socket **res);
+int sock_create_netns(struct net *net, int family, int type, int protocol, struct socket **res);
 int sock_create_lite(int family, int type, int proto, struct socket **res);
 struct socket *sock_alloc(void);
 void sock_release(struct socket *sock);

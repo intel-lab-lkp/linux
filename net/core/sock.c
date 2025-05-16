@@ -2244,7 +2244,7 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
  *	@family: protocol family
  *	@priority: for allocation (%GFP_KERNEL, %GFP_ATOMIC, etc)
  *	@prot: struct proto associated with this new sock instance
- *	@kern: is this to be a kernel socket?
+ *	@kern: hint for netns refcounting (%SOCK_NETNS_REFCNT_USER, ...)
  */
 struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 		      struct proto *prot, int kern)
@@ -2259,13 +2259,15 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 		 * why we need sk_prot_creator -acme
 		 */
 		sk->sk_prot = sk->sk_prot_creator = prot;
-		sk->sk_kern_sock = kern;
+		sk->sk_kern_sock = !!kern;
 		sock_lock_init(sk);
-		sk->sk_net_refcnt = kern ? 0 : 1;
-		if (likely(sk->sk_net_refcnt)) {
+		if (likely(kern == SOCK_NETNS_REFCNT_USER) ||
+		    (kern == SOCK_NETNS_REFCNT_KERN_ANY && !net_eq(net, &init_net))) {
+			sk->sk_net_refcnt = 1;
 			get_net_track(net, &sk->ns_tracker, priority);
 			sock_inuse_add(net, 1);
 		} else {
+			sk->sk_net_refcnt = 0;
 			net_passive_inc(net);
 			__netns_tracker_alloc(net, &sk->ns_tracker,
 					      false, priority);
