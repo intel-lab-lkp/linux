@@ -32,7 +32,7 @@ static inline void sha256_choose_blocks(
 	if (!IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_SHA256) || force_generic)
 		sha256_blocks_generic(state, data, nblocks);
 	else if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_SHA256_SIMD) &&
-		 (force_simd || crypto_simd_usable()))
+		 force_simd)
 		sha256_blocks_simd(state, data, nblocks);
 	else
 		sha256_blocks_arch(state, data, nblocks);
