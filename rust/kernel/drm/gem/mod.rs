@@ -12,7 +12,7 @@ use crate::{
     prelude::*,
     types::{ARef, AlwaysRefCounted, Opaque},
 };
-use core::{mem, ops::Deref, ptr::NonNull};
+use core::{ops::Deref, ptr::NonNull};
 
 /// A type alias for the Object type in use by a [`drm::Driver`].
 pub type DriverObject<T> = <<T as BaseDriverObject>::Driver as drm::Driver>::Object;
@@ -196,9 +196,6 @@ pub struct Object<T: BaseDriverObject + Send + Sync> {
 }
 
 impl<T: BaseDriverObject> Object<T> {
-    /// The size of this object's structure.
-    pub const SIZE: usize = mem::size_of::<Self>();
-
     const OBJECT_FUNCS: bindings::drm_gem_object_funcs = bindings::drm_gem_object_funcs {
         free: Some(Self::free_callback),
         open: Some(open_callback::<T>),
