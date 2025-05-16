@@ -20,7 +20,7 @@
 ///
 /// ```
 /// static_assert!(42 > 24);
-/// static_assert!(core::mem::size_of::<u8>() == 1);
+/// static_assert!(::core::mem::size_of::<u8>() == 1);
 ///
 /// const X: &[u8] = b"bar";
 /// static_assert!(X[1] == b'a');
@@ -34,6 +34,6 @@
 #[macro_export]
 macro_rules! static_assert {
     ($condition:expr $(,$arg:literal)?) => {
-        const _: () = core::assert!($condition $(,$arg)?);
+        const _: () = ::core::assert!($condition $(,$arg)?);
     };
 }
