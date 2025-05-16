@@ -36,6 +36,10 @@
 #include "sd_ops.h"
 #include "mmc_ops.h"
 
+#define DRIVER_NAME "sd_uhs2"
+#define DBG(f, x...) \
+	pr_debug(DRIVER_NAME " [%s()]: " f, __func__, ## x)
+
 #define UHS2_WAIT_CFG_COMPLETE_PERIOD_US  (1 * 1000)
 #define UHS2_WAIT_CFG_COMPLETE_TIMEOUT_MS 100
 
@@ -91,8 +95,8 @@ static int sd_uhs2_phy_init(struct mmc_host *host)
 
 	err = host->ops->uhs2_control(host, UHS2_PHY_INIT);
 	if (err) {
-		pr_err("%s: failed to initial phy for UHS-II!\n",
-		       mmc_hostname(host));
+		DBG("%s: failed to initial phy for UHS-II!\n",
+		    mmc_hostname(host));
 	}
 
 	return err;
