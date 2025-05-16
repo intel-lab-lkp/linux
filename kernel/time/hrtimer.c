@@ -577,24 +577,15 @@ static ktime_t __hrtimer_next_event_base(struct hrtimer_cpu_base *cpu_base,
 static ktime_t
 __hrtimer_get_next_event(struct hrtimer_cpu_base *cpu_base, unsigned int active_mask)
 {
-	unsigned int active;
-	struct hrtimer *next_timer = NULL;
 	ktime_t expires_next = KTIME_MAX;
 
-	if (!cpu_base->softirq_activated && (active_mask & HRTIMER_ACTIVE_SOFT)) {
-		active = cpu_base->active_bases & HRTIMER_ACTIVE_SOFT;
-		cpu_base->softirq_next_timer = NULL;
-		expires_next = __hrtimer_next_event_base(cpu_base, NULL,
-							 active, KTIME_MAX);
+	if (cpu_base->softirq_activated)
+		active_mask &= ~HRTIMER_ACTIVE_SOFT;
 
-		next_timer = cpu_base->softirq_next_timer;
-	}
-
-	if (active_mask & HRTIMER_ACTIVE_HARD) {
-		active = cpu_base->active_bases & HRTIMER_ACTIVE_HARD;
-		cpu_base->next_timer = next_timer;
-		expires_next = __hrtimer_next_event_base(cpu_base, NULL, active,
-							 expires_next);
+	active_mask &= cpu_base->active_bases;
+	if (active_mask) {
+		expires_next = __hrtimer_next_event_base(cpu_base, NULL, active_mask,
+							 KTIME_MAX);
 	}
 
 	return expires_next;
