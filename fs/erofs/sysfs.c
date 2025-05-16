@@ -7,12 +7,14 @@
 #include <linux/kobject.h>
 
 #include "internal.h"
+#include "compress.h"
 
 enum {
 	attr_feature,
 	attr_drop_caches,
 	attr_pointer_ui,
 	attr_pointer_bool,
+	attr_crypto,
 };
 
 enum {
@@ -60,6 +62,9 @@ static struct erofs_attr erofs_attr_##_name = {			\
 EROFS_ATTR_RW_UI(sync_decompress, erofs_mount_opts);
 EROFS_ATTR_FUNC(drop_caches, 0200);
 #endif
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+EROFS_ATTR_FUNC(crypto, 0644);
+#endif
 
 static struct attribute *erofs_attrs[] = {
 #ifdef CONFIG_EROFS_FS_ZIP
@@ -95,6 +100,9 @@ static struct attribute *erofs_feat_attrs[] = {
 	ATTR_LIST(fragments),
 	ATTR_LIST(dedupe),
 	ATTR_LIST(48bit),
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	ATTR_LIST(crypto),
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(erofs_feat);
@@ -128,6 +136,10 @@ static ssize_t erofs_attr_show(struct kobject *kobj,
 		if (!ptr)
 			return 0;
 		return sysfs_emit(buf, "%d\n", *(bool *)ptr);
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	case attr_crypto:
+		return z_erofs_crypto_engine_format(buf);
+#endif
 	}
 	return 0;
 }
@@ -141,6 +153,10 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 	unsigned char *ptr = __struct_ptr(sbi, a->struct_type, a->offset);
 	unsigned long t;
 	int ret;
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	char *crypto_name;
+	size_t sz;
+#endif
 
 	switch (a->attr_id) {
 	case attr_pointer_ui:
@@ -180,6 +196,26 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 			z_erofs_shrink_scan(sbi, ~0UL);
 		if (t & 1)
 			invalidate_mapping_pages(MNGD_MAPPING(sbi), 0, -1);
+		return len;
+#endif
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	case attr_crypto:
+		buf = skip_spaces(buf);
+		sz = strlen(buf);
+		crypto_name = kstrdup(buf, GFP_KERNEL);
+		if (!crypto_name)
+			return -ENOMEM;
+
+		/* ignore trailing newline */
+		if (sz > 0 && crypto_name[sz - 1] == '\n')
+			crypto_name[sz - 1] = 0x00;
+
+		if (strlen(crypto_name) > 0) {
+			ret = z_erofs_crypto_enable_engine(crypto_name);
+			if (ret < 0)
+				return ret;
+		} else
+			z_erofs_crypto_disable_engine();
 		return len;
 #endif
 	}

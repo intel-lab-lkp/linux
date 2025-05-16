@@ -144,6 +144,20 @@ config EROFS_FS_ZIP_ZSTD
 
 	  If unsure, say N.
 
+config EROFS_FS_ZIP_CRYPTO
+	bool "EROFS hardware decompression support (crypto interface)"
+	depends on EROFS_FS_ZIP
+	help
+	  Saying Y here includes support for reading EROFS file systems
+	  containing crypto compressed data.  It gives better decompression
+	  speed than the software-implemented compression, and it costs
+	  lower CPU overhead.
+
+	  Crypto support is an experimental feature for now and so most
+	  file systems will be readable without selecting this option.
+
+	  If unsure, say N.
+
 config EROFS_FS_ONDEMAND
 	bool "EROFS fscache-based on-demand read support (deprecated)"
 	depends on EROFS_FS
