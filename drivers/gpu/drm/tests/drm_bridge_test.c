@@ -8,6 +8,7 @@
 #include <drm/drm_bridge_helper.h>
 #include <drm/drm_kunit_helpers.h>
 
+#include <kunit/device.h>
 #include <kunit/test.h>
 
 /*
@@ -21,6 +22,7 @@ struct dummy_drm_bridge {
 	unsigned int enable_count;
 	unsigned int disable_count;
 	struct drm_bridge bridge;
+	void *data;
 };
 
 struct drm_bridge_init_priv {
@@ -422,11 +424,93 @@ static struct kunit_suite drm_bridge_helper_reset_crtc_test_suite = {
 	.test_cases = drm_bridge_helper_reset_crtc_tests,
 };
 
+struct drm_bridge_alloc_test_ctx {
+	struct device *dev;
+	struct dummy_drm_bridge *dummy_br;
+	bool destroyed;
+};
+
+static void dummy_drm_bridge_destroy(struct drm_bridge *bridge)
+{
+	struct dummy_drm_bridge *dummy_br = bridge_to_dummy_bridge(bridge);
+	struct drm_bridge_alloc_test_ctx *ctx = (struct drm_bridge_alloc_test_ctx *)dummy_br->data;
+
+	ctx->destroyed = true;
+}
+
+static const struct drm_bridge_funcs drm_bridge_dummy_funcs = {
+	.destroy = dummy_drm_bridge_destroy,
+};
+
+static int drm_test_bridge_alloc_init(struct kunit *test)
+{
+	struct drm_bridge_alloc_test_ctx *ctx;
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
+
+	ctx->dev = kunit_device_register(test, "drm-bridge-dev");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->dev);
+
+	test->priv = ctx;
+
+	ctx->dummy_br = devm_drm_bridge_alloc(ctx->dev, struct dummy_drm_bridge, bridge,
+					      &drm_bridge_dummy_funcs);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->dummy_br);
+
+	ctx->dummy_br->data = ctx;
+
+	KUNIT_ASSERT_FALSE(test, ctx->destroyed);
+
+	return 0;
+}
+
+static void drm_test_drm_bridge_alloc_basic(struct kunit *test)
+{
+	struct drm_bridge_alloc_test_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_FALSE(test, ctx->destroyed);
+
+	kunit_device_unregister(test, ctx->dev);
+	KUNIT_ASSERT_TRUE(test, ctx->destroyed);
+}
+
+static void drm_test_drm_bridge_alloc_get_put(struct kunit *test)
+{
+	struct drm_bridge_alloc_test_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_FALSE(test, ctx->destroyed);
+
+	drm_bridge_get(&ctx->dummy_br->bridge);
+	KUNIT_ASSERT_FALSE(test, ctx->destroyed);
+
+	kunit_device_unregister(test, ctx->dev);
+	KUNIT_ASSERT_FALSE(test, ctx->destroyed);
+
+	drm_bridge_put(&ctx->dummy_br->bridge);
+	KUNIT_ASSERT_TRUE(test, ctx->destroyed);
+}
+
+static struct kunit_case drm_bridge_alloc_tests[] = {
+	KUNIT_CASE(drm_test_drm_bridge_alloc_basic),
+	KUNIT_CASE(drm_test_drm_bridge_alloc_get_put),
+	{ }
+};
+
+static struct kunit_suite drm_bridge_alloc_test_suite = {
+	.name = "drm_bridge_alloc",
+	.init = drm_test_bridge_alloc_init,
+	.test_cases = drm_bridge_alloc_tests,
+};
+
 kunit_test_suites(
 	&drm_bridge_get_current_state_test_suite,
 	&drm_bridge_helper_reset_crtc_test_suite,
+	&drm_bridge_alloc_test_suite,
 );
 
 MODULE_AUTHOR("Maxime Ripard <mripard@kernel.org>");
+MODULE_AUTHOR("Luca Ceresoli <luca.ceresoli@bootlin.com>");
+
 MODULE_DESCRIPTION("Kunit test for drm_bridge functions");
 MODULE_LICENSE("GPL");
