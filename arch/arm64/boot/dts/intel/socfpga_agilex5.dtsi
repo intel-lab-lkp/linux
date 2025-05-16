@@ -272,6 +272,8 @@
 			interrupts = <GIC_SPI 97 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkmgr AGILEX5_NAND_NF_CLK>;
 			cdns,board-delay-ps = <4830>;
+			iommus = <&smmu 4>;
+			dma-coherent;
 			status = "disabled";
 		};
 
@@ -291,6 +293,7 @@
 			clock-names = "core-clk", "cfgr-clk";
 			interrupt-parent = <&intc>;
 			interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_HIGH>;
+			iommus = <&smmu 8>;
 			#dma-cells = <1>;
 			dma-channels = <4>;
 			snps,dma-masters = <1>;
@@ -298,6 +301,8 @@
 			snps,block-size = <32767 32767 32767 32767>;
 			snps,priority = <0 1 2 3>;
 			snps,axi-max-burst-len = <8>;
+			snps,dma-bit-mask = <40>;
+			dma-coherent;
 		};
 
 		dmac1: dma-controller@10dc0000 {
@@ -308,6 +313,7 @@
 			clock-names = "core-clk", "cfgr-clk";
 			interrupt-parent = <&intc>;
 			interrupts = <GIC_SPI 171 IRQ_TYPE_LEVEL_HIGH>;
+			iommus = <&smmu 9>;
 			#dma-cells = <1>;
 			dma-channels = <4>;
 			snps,dma-masters = <1>;
@@ -315,12 +321,26 @@
 			snps,block-size = <32767 32767 32767 32767>;
 			snps,priority = <0 1 2 3>;
 			snps,axi-max-burst-len = <8>;
+			snps,dma-bit-mask = <40>;
+			dma-coherent;
 		};
 
 		rst: rstmgr@10d11000 {
 			compatible = "altr,stratix10-rst-mgr", "altr,rst-mgr";
 			reg = <0x10d11000 0x1000>;
 			#reset-cells = <1>;
+		};
+
+		smmu: iommu@16000000 {
+			compatible = "arm,smmu-v3";
+			reg = <0x16000000 0x30000>;
+			interrupts = <GIC_SPI 134 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 129 IRQ_TYPE_EDGE_RISING>,
+				     <GIC_SPI 132 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "eventq", "gerror", "priq";
+			dma-coherent;
+			#iommu-cells = <1>;
+			status = "disabled";
 		};
 
 		spi0: spi@10da4000 {
@@ -423,8 +443,10 @@
 			phy-names = "usb2-phy";
 			resets = <&rst USB0_RESET>, <&rst USB0_OCP_RESET>;
 			reset-names = "dwc2", "dwc2-ecc";
+			iommus = <&smmu 6>;
 			clocks = <&clkmgr AGILEX5_USB2OTG_HCLK>;
 			clock-names = "otg";
+			otg-rev = <0x0200>;
 			status = "disabled";
 		};
 
