@@ -418,15 +418,18 @@ impl<T: Driver> Adapter<T> {
 
     /// # Safety
     ///
-    /// `phydev` must be passed by the corresponding callback in `phy_driver`.
+    /// `phydev` and `phydrv` must be passed by the corresponding callback in
+    //  `phy_driver`.
     unsafe extern "C" fn match_phy_device_callback(
         phydev: *mut bindings::phy_device,
+        phydrv: *const bindings::phy_driver,
     ) -> crate::ffi::c_int {
         // SAFETY: This callback is called only in contexts
         // where we hold `phy_device->lock`, so the accessors on
         // `Device` are okay to call.
         let dev = unsafe { Device::from_raw(phydev) };
-        T::match_phy_device(dev) as i32
+        let drv = unsafe { T::from_raw(phydrv) };
+        T::match_phy_device(dev, drv) as i32
     }
 
     /// # Safety
@@ -574,6 +577,19 @@ pub const fn create_phy_driver<T: Driver>() -> DriverVTable {
 /// This trait is used to create a [`DriverVTable`].
 #[vtable]
 pub trait Driver {
+    /// # Safety
+    ///
+    /// For the duration of `'a`, the pointer must point at a valid
+    /// `phy_driver`, and the caller must be in a context where all
+    /// methods defined on this struct are safe to call.
+    unsafe fn from_raw<'a>(ptr: *const bindings::phy_driver) -> &'a DriverVTable {
+        // CAST: `DriverVTable` is a `repr(transparent)` wrapper around `bindings::phy_driver`.
+        let ptr = ptr.cast::<DriverVTable>();
+        // SAFETY: by the function requirements the pointer is const and is
+        // always valid to access for the duration of `'a`.
+        unsafe { &*ptr }
+    }
+
     /// Defines certain other features this PHY supports.
     /// It is a combination of the flags in the [`flags`] module.
     const FLAGS: u32 = 0;
@@ -602,7 +618,7 @@ pub trait Driver {
 
     /// Returns true if this is a suitable driver for the given phydev.
     /// If not implemented, matching is based on [`Driver::PHY_DEVICE_ID`].
-    fn match_phy_device(_dev: &Device) -> bool {
+    fn match_phy_device(_dev: &mut Device, _drv: &DriverVTable) -> bool {
         false
     }
 
