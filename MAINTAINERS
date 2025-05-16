@@ -17477,6 +17477,17 @@ F:	Documentation/devicetree/bindings/clock/imx*
 F:	drivers/clk/imx/
 F:	include/dt-bindings/clock/imx*
 
+NXP PF1550 PMIC MFD DRIVER
+M:	Samuel Kayode <samuel.kayode@savoirfairelinux.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/*/*pf1550.yaml
+F:	Documentation/devicetree/bindings/*/pf1550*.yaml
+F:	drivers/input/keyboard/pf1550_onkey.c
+F:	drivers/mfd/pf1550.c
+F:	drivers/power/supply/pf1550_charger.c
+F:	drivers/regulator/pf1550_regulator.c
+F:	include/linux/mfd/pfd1550.h
+
 NXP PF8100/PF8121A/PF8200 PMIC REGULATOR DEVICE DRIVER
 M:	Jagan Teki <jagan@amarulasolutions.com>
 S:	Maintained
