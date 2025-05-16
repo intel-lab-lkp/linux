@@ -1708,8 +1708,22 @@ static int __pskb_trim_head(struct sk_buff *skb, int len)
 	struct skb_shared_info *shinfo;
 	int i, k, eat;
 
-	DEBUG_NET_WARN_ON_ONCE(skb_headlen(skb));
-	eat = len;
+	eat = skb_headlen(skb);
+	if (unlikely(eat)) {
+		if (len < eat)
+			eat = len;
+		skb->head += eat;
+		skb->len -= eat;
+		if (skb->data_len)
+			skb->data_len -= eat;
+
+		eat = len - eat;
+		if (eat == 0)
+			return len;
+	} else {
+		eat = len;
+	}
+
 	k = 0;
 	shinfo = skb_shinfo(skb);
 	for (i = 0; i < shinfo->nr_frags; i++) {
