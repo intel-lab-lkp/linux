@@ -87,6 +87,16 @@ struct drm_bridge_funcs {
 	void (*detach)(struct drm_bridge *bridge);
 
 	/**
+	 * @destroy:
+	 *
+	 * This callback is invoked when the bridge is about to be
+	 * deallocated.
+	 *
+	 * The @destroy callback is optional.
+	 */
+	void (*destroy)(struct drm_bridge *bridge);
+
+	/**
 	 * @mode_valid:
 	 *
 	 * This callback is used to check if a specific mode is valid in this
