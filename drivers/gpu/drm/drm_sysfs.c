@@ -198,7 +198,7 @@ static ssize_t status_store(struct device *device,
 	old_force = connector->force;
 
 	if (sysfs_streq(buf, "detect"))
-		connector->force = 0;
+		connector->force = DRM_FORCE_UNSPECIFIED;
 	else if (sysfs_streq(buf, "on"))
 		connector->force = DRM_FORCE_ON;
 	else if (sysfs_streq(buf, "on-digital"))
