@@ -19,6 +19,7 @@
 #include "panthor_fw.h"
 #include "panthor_gpu.h"
 #include "panthor_mmu.h"
+#include "panthor_perf.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
 
@@ -256,6 +257,10 @@ int panthor_device_init(struct panthor_device *ptdev)
 		goto err_unplug_mmu;
 
 	ret = panthor_sched_init(ptdev);
+	if (ret)
+		goto err_unplug_fw;
+
+	ret = panthor_perf_init(ptdev);
 	if (ret)
 		goto err_unplug_fw;
 
