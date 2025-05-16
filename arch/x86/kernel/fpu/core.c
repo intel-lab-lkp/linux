@@ -68,38 +68,27 @@ struct fpu *x86_task_fpu(struct task_struct *task)
  */
 bool irq_fpu_usable(void)
 {
-	if (WARN_ON_ONCE(in_nmi()))
+	/*
+	 * To ensure that (non-explicitly-nested) kernel-mode FPU is always
+	 * usable in task and softirq contexts, kernel_fpu_begin() disables
+	 * preemption and softirqs, and kernel_fpu_end() re-enables them.  That
+	 * is not compatible with hardirqs being disabled (including hardirq
+	 * context), or with NMI context.  Support for kernel-mode FPU is not
+	 * needed in those contexts anyway.  Return false in those contexts.
+	 *
+	 * Returning false when irqs_disabled() also eliminates the need to
+	 * explicitly check whether the FPU has been initialized yet during CPU
+	 * initialization.  Before then, hardirqs are still disabled.
+	 */
+	if (irqs_disabled() || WARN_ON_ONCE(in_nmi()))
 		return false;
 
-	/*
-	 * In kernel FPU usage already active?  This detects any explicitly
-	 * nested usage in task or softirq context, which is unsupported.  It
-	 * also detects attempted usage in a hardirq that has interrupted a
-	 * kernel-mode FPU section.
-	 */
+	/* Catch any explicitly nested usage, which should never happen. */
 	if (this_cpu_read(in_kernel_fpu)) {
-		WARN_ON_FPU(!in_hardirq());
+		WARN_ON_FPU(1);
 		return false;
 	}
-
-	/*
-	 * When not in NMI or hard interrupt context, FPU can be used in:
-	 *
-	 * - Task context except from within fpregs_lock()'ed critical
-	 *   regions.
-	 *
-	 * - Soft interrupt processing context which cannot happen
-	 *   while in a fpregs_lock()'ed critical region.
-	 */
-	if (!in_hardirq())
-		return true;
-
-	/*
-	 * In hard interrupt context it's safe when soft interrupts
-	 * are enabled, which means the interrupt did not hit in
-	 * a fpregs_lock()'ed critical region.
-	 */
-	return !softirq_count();
+	return true;
 }
 EXPORT_SYMBOL(irq_fpu_usable);
 
@@ -445,8 +434,7 @@ static __always_inline void __fpu_save_state(void)
 
 void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 {
-	if (!irqs_disabled())
-		fpregs_lock();
+	fpregs_lock();
 
 	WARN_ON_FPU(!irq_fpu_usable());
 	WARN_ON_FPU(this_cpu_read(in_kernel_fpu));
@@ -469,8 +457,7 @@ void kernel_fpu_end(void)
 	WARN_ON_FPU(!this_cpu_read(in_kernel_fpu));
 
 	this_cpu_write(in_kernel_fpu, false);
-	if (!irqs_disabled())
-		fpregs_unlock();
+	fpregs_unlock();
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_end);
 
