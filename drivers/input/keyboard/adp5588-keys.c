@@ -164,6 +164,9 @@
 #define KEY_EV_PRESSED		BIT(7)
 #define KEY_EV_MASK		GENMASK(6, 0)
 
+#define KEY_EVENT_MIN		1
+#define KEY_EVENT_MAX		80
+
 #define KP_SEL(x)		(BIT(x) - 1)	/* 2^x-1 */
 
 #define KEYP_MAX_EVENT		10
@@ -531,7 +534,7 @@ static void adp5588_report_events(struct adp5588_kpad *kpad, int ev_cnt)
 		if (key_val >= GPI_PIN_BASE && key_val <= GPI_PIN_END) {
 			/* gpio line used as IRQ source */
 			adp5588_gpio_irq_handle(kpad, key_val, key_press);
-		} else {
+		} else if (key_val >= KEY_EVENT_MIN && key_val <= KEY_EVENT_MAX) {
 			int row = (key_val - 1) / ADP5588_COLS_MAX;
 			int col =  (key_val - 1) % ADP5588_COLS_MAX;
 			int code = MATRIX_SCAN_CODE(row, col, kpad->row_shift);
@@ -542,6 +545,8 @@ static void adp5588_report_events(struct adp5588_kpad *kpad, int ev_cnt)
 
 			input_report_key(kpad->input,
 					 kpad->keycode[code], key_press);
+		} else {
+			dev_err_ratelimited(&kpad->client->dev, "invalid report key value %d", key);
 		}
 	}
 }
