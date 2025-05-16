@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/pf1550.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: PF1550 low power PMIC from NXP.
+
+maintainers:
+  - Samuel Kayode <samuel.kayode@savoirfairelinux.com>
+
+description: |
+  PF1550 is a low power PMIC providing battery charging and power supply for
+  low power IoT and wearable applications.
+
+  For device-tree bindings of other sub-modules (regulator, power supply and
+  onkey) refer to the binding documents under the respective sub-system
+  directories.
+
+properties:
+  compatible:
+    const: fsl,pf1550
+
+  reg:
+    description:
+      I2C device address.
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  regulators:
+    $ref: /schemas/regulator/pf1550.yaml
+
+  charger:
+    $ref: /schemas/power/supply/pf1550_charger.yaml
+
+  onkey:
+    $ref: /schemas/input/pf1550_onkey.yaml
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/input/linux-event-codes.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        pmic@8 {
+            compatible = "fsl,pf1550";
+            reg = <0x8>;
+
+            interrupt-parent = <&gpio1>;
+            interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
+
+            onkey {
+                compatible = "fsl,pf1550-onkey";
+                linux,keycodes = <KEY_POWER>;
+            };
+
+            charger {
+                compatible = "fsl,pf1550-charger";
+                
+                fsl,min-system-microvolt = <3700000>;
+                fsl,thermal-regulation = <75>;
+            };
+
+            regulators {
+                compatible = "fsl,pf1550-regulator";
+ 
+                sw1_reg: SW1 {
+                    regulator-name = "SW1";
+                    regulator-min-microvolt = <600000>;
+                    regulator-max-microvolt = <1387500>;
+                    regulator-always-on;
+                    regulator-ramp-delay = <6250>;
+                };
+
+                sw2_reg: SW2 {
+                    regulator-name = "SW2";
+                    regulator-min-microvolt = <600000>;
+                    regulator-max-microvolt = <1387500>;
+                    regulator-always-on;
+                };
+
+                sw3_reg: SW3 {
+                    regulator-name = "SW3";
+                    regulator-min-microvolt = <1800000>;
+                    regulator-max-microvolt = <3300000>;
+                    regulator-always-on;
+                };
+
+                vldo1_reg: LDO1 {
+                    regulator-name = "LDO1";
+                    regulator-min-microvolt = <750000>;
+                    regulator-max-microvolt = <3300000>;
+                    regulator-always-on;
+                };
+
+                vldo2_reg: LDO2 {
+                    regulator-name = "LDO2";
+                    regulator-min-microvolt = <1800000>;
+                    regulator-max-microvolt = <3300000>;
+                    regulator-always-on;
+                };
+
+                vldo3_reg: LDO3 {
+                    regulator-name = "LDO3";
+                    regulator-min-microvolt = <750000>;
+                    regulator-max-microvolt = <3300000>;
+                    regulator-always-on;
+                };
+            };
+        };
+    };
