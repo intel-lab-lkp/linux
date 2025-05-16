@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/pf1550_charger.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Battery charger driver for PF1550 PMIC from NXP.
+
+maintainers:
+  - Samuel Kayode <samuel.kayode@savoirfairelinux.com>
+
+description: |
+  This module is part of the PF1550 MFD device. For more details
+  see Documentation/devicetree/bindings/mfd/pf1550.yaml.
+
+  The charger is represented as a sub-node of the PMIC node on the device tree.
+
+properties:
+  compatible:
+    const: fsl,pf1550-charger
+
+  fsl,constant-microvolt:
+    description:
+      Constant charge voltage (in microvolts).
+    minimum: 3500000
+    maximum: 4400000
+
+  fsl,min-system-microvolt:
+    description:
+      Minimum charge voltage (in microvolts).
+    enum: [ 3500000, 3700000, 4300000 ]
+
+  fsl,thermal-regulation:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Temperature (in degrees Celsius) threshold past which the charging
+      current is reduced.
+    enum: [ 60, 75, 90, 105 ]
+
+required:
+  - compatible
+additionalProperties: false
+
+...
