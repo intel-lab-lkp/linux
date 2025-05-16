@@ -38,10 +38,11 @@ static void trigger_fw(const char *fw_name, const char *sys_path)
 
 	fd = open(sys_path, O_WRONLY);
 	if (fd < 0)
-		die("open failed: %s\n",
+		die("open of sys_path failed: %s\n",
 		    strerror(errno));
 	if (write(fd, fw_name, strlen(fw_name)) != strlen(fw_name))
-		exit(EXIT_FAILURE);
+		die("write to sys_path failed: %s\n",
+		    strerror(errno));
 	close(fd);
 }
 
@@ -52,10 +53,10 @@ static void setup_fw(const char *fw_path)
 
 	fd = open(fw_path, O_WRONLY | O_CREAT, 0600);
 	if (fd < 0)
-		die("open failed: %s\n",
+		die("open of firmware file failed: %s\n",
 		    strerror(errno));
 	if (write(fd, fw, sizeof(fw) -1) != sizeof(fw) -1)
-		die("write failed: %s\n",
+		die("write to firmware file failed: %s\n",
 		    strerror(errno));
 	close(fd);
 }
@@ -66,7 +67,7 @@ static bool test_fw_in_ns(const char *fw_name, const char *sys_path, bool block_
 
 	if (block_fw_in_parent_ns)
 		if (mount("test", "/lib/firmware", "tmpfs", MS_RDONLY, NULL) == -1)
-			die("blocking firmware in parent ns failed\n");
+			die("blocking firmware in parent namespace failed\n");
 
 	child = fork();
 	if (child == -1) {
@@ -99,11 +100,11 @@ static bool test_fw_in_ns(const char *fw_name, const char *sys_path, bool block_
 			strerror(errno));
 	}
 	if (mount(NULL, "/", NULL, MS_SLAVE|MS_REC, NULL) == -1)
-		die("remount root in child ns failed\n");
+		die("remount root in child namespace failed\n");
 
 	if (!block_fw_in_parent_ns) {
 		if (mount("test", "/lib/firmware", "tmpfs", MS_RDONLY, NULL) == -1)
-			die("blocking firmware in child ns failed\n");
+			die("blocking firmware in child namespace failed\n");
 	} else
 		umount("/lib/firmware");
 
@@ -129,8 +130,8 @@ int main(int argc, char **argv)
 		die("error: failed to build full fw_path\n");
 
 	setup_fw(fw_path);
-
 	setvbuf(stdout, NULL, _IONBF, 0);
+
 	/* Positive case: firmware in PID1 mount namespace */
 	printf("Testing with firmware in parent namespace (assumed to be same file system as PID1)\n");
 	if (!test_fw_in_ns(fw_name, sys_path, false))
