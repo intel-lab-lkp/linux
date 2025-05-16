@@ -3900,7 +3900,8 @@ static void tcp_xmit_recovery(struct sock *sk, int rexmit)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (rexmit == REXMIT_NONE || sk->sk_state == TCP_SYN_SENT)
+	if ((rexmit == REXMIT_NONE && sk->sk_state != TCP_SYN_RECV) ||
+	    sk->sk_state == TCP_SYN_SENT)
 		return;
 
 	if (unlikely(rexmit == REXMIT_NEW)) {
