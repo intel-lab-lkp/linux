@@ -120,7 +120,7 @@ static void update_avx_timestamp(struct fpu *fpu)
  * Save the FPU register state in fpu->fpstate->regs. The register state is
  * preserved.
  *
- * Must be called with fpregs_lock() held.
+ * Must be called with fpregs_lock() held or hardirqs disabled.
  *
  * The legacy FNSAVE instruction clears all FPU state unconditionally, so
  * register state has to be reloaded. That might be a pointless exercise
@@ -433,6 +433,16 @@ int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf,
 EXPORT_SYMBOL_GPL(fpu_copy_uabi_to_guest_fpstate);
 #endif /* CONFIG_KVM */
 
+static __always_inline void __fpu_save_state(void)
+{
+	if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
+	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		set_thread_flag(TIF_NEED_FPU_LOAD);
+		save_fpregs_to_fpstate(x86_task_fpu(current));
+	}
+	__cpu_invalidate_fpregs_state();
+}
+
 void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 {
 	if (!irqs_disabled())
@@ -443,12 +453,7 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 
 	this_cpu_write(in_kernel_fpu, true);
 
-	if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
-	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
-		set_thread_flag(TIF_NEED_FPU_LOAD);
-		save_fpregs_to_fpstate(x86_task_fpu(current));
-	}
-	__cpu_invalidate_fpregs_state();
+	__fpu_save_state();
 
 	/* Put sane initial values into the control registers. */
 	if (likely(kfpu_mask & KFPU_MXCSR) && boot_cpu_has(X86_FEATURE_XMM))
@@ -468,6 +473,30 @@ void kernel_fpu_end(void)
 		fpregs_unlock();
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_end);
+
+#ifdef CONFIG_PM_SLEEP
+/*
+ * If the FPU registers are live for the current task, save them to current's
+ * memory register state and set TIF_NEED_FPU_LOAD.  This is used by the suspend
+ * and kexec code to prepare for the FPU registers being clobbered.  Unlike
+ * kernel_fpu_begin(), this function can be called with hardirqs disabled, and
+ * it does not initialize the FPU control registers for kernel-mode FPU use.
+ */
+void fpu_save_state(void)
+{
+	unsigned long flags;
+
+	WARN_ON_FPU(this_cpu_read(in_kernel_fpu));
+
+	/*
+	 * This is sometimes called with hardirqs disabled, so we need to use
+	 * local_irq_save/restore() instead of fpregs_lock/unlock().
+	 */
+	local_irq_save(flags);
+	__fpu_save_state();
+	local_irq_restore(flags);
+}
+#endif /* CONFIG_PM_SLEEP */
 
 /*
  * Sync the FPU register state to current's memory register state when the
