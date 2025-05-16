@@ -238,12 +238,13 @@ void vfio_df_group_close(struct vfio_device_file *df)
 	mutex_lock(&device->group->group_lock);
 	mutex_lock(&device->dev_set->lock);
 
-	vfio_df_close(df);
-	df->iommufd = NULL;
-
 	if (device->open_count == 0)
 		vfio_device_put_kvm(device);
 
+	if (!vfio_device_is_noiommu(device))
+		vfio_df_close(df);
+
+	df->iommufd = NULL;
 	mutex_unlock(&device->dev_set->lock);
 	mutex_unlock(&device->group->group_lock);
 }
