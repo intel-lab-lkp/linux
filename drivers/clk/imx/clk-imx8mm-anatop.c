@@ -37,12 +37,29 @@ static const char * const clkout_sels[] = {"audio_pll1_out", "audio_pll2_out", "
 static struct clk_hw_onecell_data *clk_hw_data;
 static struct clk_hw **hws;
 
+static int is_really_imx8mm(struct device_node *np)
+{
+	const char *compat;
+	struct property *p;
+
+	of_property_for_each_string(np, "compatible", p, compat) {
+		if (strcmp(compat, "fsl,imx8mm-anatop"))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
 static int imx8mm_anatop_clocks_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	void __iomem *base;
 	int ret;
+
+	ret = is_really_imx8mm(np);
+	if (ret)
+		return ret;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base)) {
