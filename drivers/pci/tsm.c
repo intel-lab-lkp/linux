@@ -50,9 +50,64 @@ static struct mutex *tsm_ops_lock(struct pci_tsm_pf0 *tsm)
 }
 DEFINE_FREE(tsm_ops_unlock, struct mutex *, if (_T) mutex_unlock(_T))
 
+static int __pci_tsm_unbind(struct pci_dev *pdev);
+static void pci_tsm_unbind_all_vfs(struct pci_dev *pdev)
+{
+	struct pci_dev *virtfn;
+
+	for (int i = 0; i < pci_num_vf(pdev); i++) {
+		virtfn = pci_get_domain_bus_and_slot(pci_domain_nr(pdev->bus),
+						     pci_iov_virtfn_bus(pdev, i),
+						     pci_iov_virtfn_devfn(pdev, i));
+		if (virtfn) {
+			__pci_tsm_unbind(virtfn);
+			pci_dev_put(virtfn);
+		}
+	}
+}
+
+static void pci_tsm_unbind_all_mfds(struct pci_dev *pdev)
+{
+	struct pci_dev *phyfn;
+
+	for (int i = 0; i < 8; i++) {
+		phyfn = pci_get_slot(pdev->bus, PCI_DEVFN(PCI_SLOT(pdev->devfn), i));
+		if (phyfn) {
+			__pci_tsm_unbind(phyfn);
+			pci_dev_put(phyfn);
+		}
+	}
+}
+
+static int unbind_downstream(struct pci_dev *pdev, void *uport_subordinate)
+{
+	if (pdev->bus->parent != uport_subordinate)
+		return 0;
+
+	if (pdev->tsm && pdev->tsm->type == PCI_TSM_DOWNSTREAM)
+		__pci_tsm_unbind(pdev);
+
+	return 0;
+}
+
+static void pci_tsm_unbind_all_downstream(struct pci_dev *pdev)
+{
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_UPSTREAM)
+		return;
+
+	if (!pdev->tsm)
+		return;
+
+	pci_walk_bus(pdev->subordinate, unbind_downstream, pdev->subordinate);
+}
+
 static int pci_tsm_disconnect(struct pci_dev *pdev)
 {
 	struct pci_tsm_pf0 *tsm = to_pci_tsm_pf0(pdev->tsm);
+
+	pci_tsm_unbind_all_downstream(pdev);
+	pci_tsm_unbind_all_vfs(pdev);
+	pci_tsm_unbind_all_mfds(pdev);
 
 	struct mutex *lock __free(tsm_ops_unlock) = tsm_ops_lock(tsm);
 	if (!lock)
@@ -392,8 +447,12 @@ static void __pci_tsm_destroy(struct pci_dev *pdev)
 
 	lockdep_assert_held_write(&pci_tsm_rwsem);
 
-	if (is_pci_tsm_pf0(pdev))
+	if (is_pci_tsm_pf0(pdev)) {
 		pci_tsm_pf0_destroy(pdev);
+	} else {
+		__pci_tsm_unbind(pdev);
+		pdev->tsm = NULL;
+	}
 	tsm_ops->remove(pci_tsm);
 }
 
@@ -435,3 +494,169 @@ int pci_tsm_doe_transfer(struct pci_dev *pdev, enum pci_doe_proto type,
 		       resp, resp_sz);
 }
 EXPORT_SYMBOL_GPL(pci_tsm_doe_transfer);
+
+/* lookup the 'DSM' pf0 for @pdev */
+static struct pci_dev *tsm_pf0_get(struct pci_dev *pdev)
+{
+	struct pci_dev *uport_pf0;
+
+	struct pci_dev *pf0 __free(pci_dev_put) = pf0_dev_get(pdev);
+	if (!pf0)
+		return NULL;
+
+	/* Check that @pf0 was not initialized as PCI_TSM_DOWNSTREAM */
+	if (pf0->tsm && pf0->tsm->type == PCI_TSM_PF0)
+		return no_free_ptr(pf0);
+
+	/*
+	 * For cases where a switch may be hosting TDISP services on
+	 * behalf of downstream devices, check the first usptream port
+	 * relative to this endpoint.
+	 */
+	if (!pdev->dev.parent || !pdev->dev.parent->parent)
+		return NULL;
+
+	uport_pf0 = to_pci_dev(pdev->dev.parent->parent);
+	if (!uport_pf0->tsm)
+		return NULL;
+	return pci_dev_get(uport_pf0);
+}
+
+/* Only implement non-interruptible lock for now */
+static struct mutex *tdi_ops_lock(struct pci_dev *pf0_dev)
+{
+	struct pci_tsm_pf0 *pf0_tsm;
+
+	lockdep_assert_held(&pci_tsm_rwsem);
+
+	if (!pf0_dev->tsm)
+		return ERR_PTR(-EINVAL);
+
+	pf0_tsm = to_pci_tsm_pf0(pf0_dev->tsm);
+	mutex_lock(&pf0_tsm->lock);
+
+	if (pf0_tsm->state < PCI_TSM_CONNECT) {
+		mutex_unlock(&pf0_tsm->lock);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return &pf0_tsm->lock;
+}
+DEFINE_FREE(tdi_ops_unlock, struct mutex *, if (!IS_ERR(_T)) mutex_unlock(_T))
+
+int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u64 tdi_id)
+{
+	struct pci_tdi *tdi;
+
+	if (!kvm)
+		return -EINVAL;
+
+	struct rw_semaphore *lock __free(tsm_read_unlock) = tsm_read_lock();
+	if (!lock)
+		return -EINTR;
+
+	if (!pdev->tsm)
+		return -EINVAL;
+
+	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
+	if (!pf0_dev)
+		return -EINVAL;
+
+	struct mutex *ops_lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	if (IS_ERR(ops_lock))
+		return PTR_ERR(ops_lock);
+
+	if (pdev->tsm->tdi) {
+		if (pdev->tsm->tdi->kvm == kvm)
+			return 0;
+		else
+			return -EBUSY;
+	}
+
+	tdi = tsm_ops->bind(pdev, pf0_dev, kvm, tdi_id);
+	if (!tdi)
+		return -ENXIO;
+
+	pdev->tsm->tdi = tdi;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_bind);
+
+static int __pci_tsm_unbind(struct pci_dev *pdev)
+{
+	struct pci_tdi *tdi;
+
+	lockdep_assert_held(&pci_tsm_rwsem);
+
+	if (!pdev->tsm)
+		return -EINVAL;
+
+	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
+	if (!pf0_dev)
+		return -EINVAL;
+
+	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	if (IS_ERR(lock))
+		return PTR_ERR(lock);
+
+	tdi = pdev->tsm->tdi;
+	if (!tdi)
+		return 0;
+
+	tsm_ops->unbind(tdi);
+	pdev->tsm->tdi = NULL;
+
+	return 0;
+}
+
+int pci_tsm_unbind(struct pci_dev *pdev)
+{
+	struct rw_semaphore *lock __free(tsm_read_unlock) = tsm_read_lock();
+	if (!lock)
+		return -EINTR;
+
+	return __pci_tsm_unbind(pdev);
+}
+EXPORT_SYMBOL_GPL(pci_tsm_unbind);
+
+/**
+ * pci_tsm_guest_req - VFIO/IOMMUFD helper to handle guest requests
+ * @pdev: @pdev representing a bound tdi
+ * @info: envelope for the request
+ *
+ * Expected flow is guest low-level TSM driver initiates a guest request
+ * like "transition TDISP state to RUN", "fetch report" via a
+ * technology specific guest-host-interface and KVM exit reason. KVM
+ * posts to userspace (e.g. QEMU) that holds the host-to-guest RID
+ * mapping.
+ */
+int pci_tsm_guest_req(struct pci_dev *pdev, struct pci_tsm_guest_req_info *info)
+{
+	struct pci_tdi *tdi;
+	int rc;
+
+	lockdep_assert_held_read(&pci_tsm_rwsem);
+
+	if (!pdev->tsm)
+		return -ENODEV;
+
+	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
+	if (!pf0_dev)
+		return -EINVAL;
+
+	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	if (IS_ERR(lock))
+		return -ENODEV;
+
+	tdi = pdev->tsm->tdi;
+	if (!tdi)
+		return -ENODEV;
+
+	rc = tsm_ops->guest_req(pdev, info);
+	if (rc)
+		return -EIO;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_guest_req);
