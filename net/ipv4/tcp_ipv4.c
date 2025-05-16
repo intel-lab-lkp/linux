@@ -1747,8 +1747,8 @@ EXPORT_IPV6_MOD(tcp_v4_conn_request);
 
 
 /*
- * The three way handshake has completed - we got a valid synack -
- * now create the new socket.
+ * The three way handshake has completed - we got a valid synack
+ * (or a FASTOPEN syn) - now create the new socket.
  */
 struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 				  struct request_sock *req,
