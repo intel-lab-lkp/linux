@@ -2,6 +2,7 @@
 /* Copyright (C) 2025 Intel Corporation */
 
 #include "ixd.h"
+#include "ixd_virtchnl.h"
 
 #define IXD_DFLT_MBX_Q_LEN 64
 
@@ -94,6 +95,8 @@ int ixd_init_dflt_mbx(struct ixd_adapter *adapter)
 		return -ENOENT;
 	}
 
+	queue_delayed_work(system_unbound_wq, &adapter->mbx_task, 0);
+
 	return 0;
 }
 
@@ -103,6 +106,8 @@ int ixd_init_dflt_mbx(struct ixd_adapter *adapter)
  */
 void ixd_deinit_dflt_mbx(struct ixd_adapter *adapter)
 {
+	cancel_delayed_work_sync(&adapter->mbx_task);
+
 	if (adapter->arq || adapter->asq)
 		libie_ctlq_xn_deinit(adapter->xnm, &adapter->cp_ctx);
 
@@ -136,8 +141,26 @@ void ixd_init_task(struct work_struct *work)
 
 	adapter->init_task.reset_retries = 0;
 	err = ixd_init_dflt_mbx(adapter);
-	if (err)
+	if (err) {
 		dev_err(ixd_to_dev(adapter),
 			"Failed to initialize the default mailbox: %pe\n",
 			ERR_PTR(err));
+		return;
+	}
+
+	if (!ixd_vc_dev_init(adapter)) {
+		adapter->init_task.vc_retries = 0;
+		return;
+	}
+
+	ixd_deinit_dflt_mbx(adapter);
+	if (++adapter->init_task.vc_retries > 5) {
+		dev_err(ixd_to_dev(adapter),
+			"Failed to establish mailbox communications with the hardware\n");
+		return;
+	}
+
+	ixd_trigger_reset(adapter);
+	queue_delayed_work(system_unbound_wq, &adapter->init_task.init_work,
+			   msecs_to_jiffies(500));
 }
