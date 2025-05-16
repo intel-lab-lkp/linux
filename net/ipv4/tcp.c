@@ -1136,12 +1136,13 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 
 	tcp_rate_check_app_limited(sk);  /* is sending application-limited? */
 
-	/* Wait for a connection to finish. One exception is TCP Fast Open
+	/* Wait for a connection to finish. Exceptions are TCP Fast Open
 	 * (passive side) where data is allowed to be sent before a connection
-	 * is fully established.
+	 * is fully established, and a message marked as preload which is
+	 * allowed to be placed in the send queue of a listening socket.
 	 */
 	if (((1 << sk->sk_state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT)) &&
-	    !tcp_passive_fastopen(sk)) {
+	    !tcp_passive_fastopen(sk) && !(flags & MSG_PRELOAD)) {
 		err = sk_stream_wait_connect(sk, &timeo);
 		if (err != 0)
 			goto do_error;
@@ -1226,7 +1227,13 @@ new_segment:
 		if (copy > msg_data_left(msg))
 			copy = msg_data_left(msg);
 
-		if (zc == 0) {
+		if (unlikely(flags & MSG_PRELOAD)) {
+			copy = min_t(int, copy, skb_tailroom(skb));
+			err = skb_add_data_nocache(sk, skb, &msg->msg_iter,
+						   copy);
+			if (err)
+				goto do_error;
+		} else if (zc == 0) {
 			bool merge = true;
 			int i = skb_shinfo(skb)->nr_frags;
 			struct page_frag *pfrag = sk_page_frag(sk);
@@ -1330,6 +1337,8 @@ new_segment:
 		if (!msg_data_left(msg)) {
 			if (unlikely(flags & MSG_EOR))
 				TCP_SKB_CB(skb)->eor = 1;
+			if (unlikely(flags & MSG_PRELOAD))
+				goto out_nopush;
 			goto out;
 		}
 
