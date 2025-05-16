@@ -9,6 +9,10 @@ obj-$(CONFIG_LIBIE_ADMINQ) 	+= libie_adminq.o
 
 libie_adminq-y			:= adminq.o
 
+obj-$(CONFIG_LIBIE_CP)		+= libie_cp.o
+
+libie_cp-y			:= controlq.o
+
 obj-$(CONFIG_LIBIE_PCI)		+= libie_pci.o
 
 libie_pci-y			:= pci.o
