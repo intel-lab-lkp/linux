@@ -37,6 +37,7 @@
 #include <linux/user_namespace.h>
 #include <linux/fs_context.h>
 #include <uapi/linux/mount.h>
+#include <linux/mtd/mtd.h>
 #include "internal.h"
 
 static int thaw_super_locked(struct super_block *sb, enum freeze_holder who);
@@ -1612,6 +1613,26 @@ int get_tree_bdev_flags(struct fs_context *fc,
 	if (!fc->source)
 		return invalf(fc, "No source specified");
 
+#ifdef CONFIG_MTD_BLOCK
+	if (!strncmp(fc->source, "mtd:", 4)) {
+		struct mtd_info *mtd;
+		char *blk_source;
+
+		/* mount by MTD device name */
+		pr_debug("Block SB: name \"%s\"\n", fc->source);
+
+		mtd = get_mtd_device_nm(fc->source + 4);
+		if (IS_ERR(mtd))
+			return -EINVAL;
+		blk_source = kmalloc(20, GFP_KERNEL);
+		if (!blk_source)
+			return -ENOMEM;
+		sprintf(blk_source, "/dev/mtdblock%d", mtd->index);
+		kfree(fc->source);
+		fc->source = blk_source;
+		pr_debug("MTD device:%s found\n", fc->source);
+	}
+#endif
 	error = lookup_bdev(fc->source, &dev);
 	if (error) {
 		if (!(flags & GET_TREE_BDEV_QUIET_LOOKUP))
