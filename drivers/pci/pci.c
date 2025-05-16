@@ -6713,9 +6713,50 @@ static void pci_no_domains(void)
 #endif
 }
 
+#ifdef CONFIG_PCI_DOMAINS
+static DEFINE_IDA(pci_domain_nr_dynamic_ida);
+
+/*
+ * Find a free domain_nr either allocated by pci_domain_nr_dynamic_ida or
+ * fallback to the first free domain number above the last ACPI segment number.
+ * Caller may have a specific domain number in mind, in which case try to
+ * reserve it.
+ *
+ * Note that this allocation is freed by pci_release_host_bridge_dev().
+ */
+int pci_bus_find_emul_domain_nr(int hint)
+{
+	if (hint >= 0) {
+		hint = ida_alloc_range(&pci_domain_nr_dynamic_ida, hint, hint,
+				       GFP_KERNEL);
+
+		if (hint >= 0)
+			return hint;
+	}
+
+	if (acpi_disabled)
+		return ida_alloc(&pci_domain_nr_dynamic_ida, GFP_KERNEL);
+
+	/*
+	 * Emulated domains start at 0x10000 to not clash with ACPI _SEG
+	 * domains.  Per ACPI r6.0, sec 6.5.6,  _SEG returns an integer, of
+	 * which the lower 16 bits are the PCI Segment Group (domain) number.
+	 * Other bits are currently reserved.
+	 */
+	return ida_alloc_range(&pci_domain_nr_dynamic_ida, 0x10000, INT_MAX,
+			       GFP_KERNEL);
+}
+EXPORT_SYMBOL_GPL(pci_bus_find_emul_domain_nr);
+
+void pci_bus_release_emul_domain_nr(int domain_nr)
+{
+	ida_free(&pci_domain_nr_dynamic_ida, domain_nr);
+}
+EXPORT_SYMBOL_GPL(pci_bus_release_emul_domain_nr);
+#endif
+
 #ifdef CONFIG_PCI_DOMAINS_GENERIC
 static DEFINE_IDA(pci_domain_nr_static_ida);
-static DEFINE_IDA(pci_domain_nr_dynamic_ida);
 
 static void of_pci_reserve_static_domain_nr(void)
 {
