@@ -211,8 +211,8 @@ static void __blkdev_issue_zero_pages(struct block_device *bdev,
 			unsigned int len, added;
 
 			len = min_t(sector_t,
-				PAGE_SIZE, nr_sects << SECTOR_SHIFT);
-			added = bio_add_page(bio, ZERO_PAGE(0), len, 0);
+				ZERO_LARGE_PAGE_SIZE, nr_sects << SECTOR_SHIFT);
+			added = bio_add_page(bio, ZERO_LARGE_PAGE(0), len, 0);
 			if (added < len)
 				break;
 			nr_sects -= added >> SECTOR_SHIFT;
