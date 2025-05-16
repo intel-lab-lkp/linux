@@ -65,8 +65,9 @@ TEST(watermark_signal)
 
 	child = fork();
 	EXPECT_GE(child, 0);
-	if (child == 0)
+	if (child == 0) {
 		do_child();
+	}
 	else if (child < 0) {
 		perror("fork()");
 		goto cleanup;
@@ -75,7 +76,7 @@ TEST(watermark_signal)
 	if (waitpid(child, &child_status, WSTOPPED) != child ||
 	    !(WIFSTOPPED(child_status) && WSTOPSIG(child_status) == SIGSTOP)) {
 		fprintf(stderr,
-			"failed to sycnhronize with child errno=%d status=%x\n",
+			"failed to synchronize with child errno=%d status=%x\n",
 			errno,
 			child_status);
 		goto cleanup;
@@ -84,7 +85,7 @@ TEST(watermark_signal)
 	fd = syscall(__NR_perf_event_open, &attr, child, -1, -1,
 		     PERF_FLAG_FD_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "failed opening event %llx\n", attr.config);
+		fprintf(stderr, "failed to setup performance monitoring %llx\n", attr.config);
 		goto cleanup;
 	}
 
