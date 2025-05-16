@@ -218,6 +218,14 @@ config USER_RETURN_NOTIFIER
 	  Provide a kernel-internal notification when a cpu is about to
 	  switch to user mode.
 
+config LARGE_ZERO_PAGE
+	bool "Large zero pages"
+	def_bool n
+	help
+	  2M sized zero pages for zeroing. This will reserve 2M sized
+	  physical pages for zeroing. Not suitable for memory constrained
+	  systems.
+
 config HAVE_IOREMAP_PROT
 	bool
 

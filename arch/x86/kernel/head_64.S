@@ -14,6 +14,7 @@
 #include <linux/threads.h>
 #include <linux/init.h>
 #include <linux/pgtable.h>
+#include <linux/sizes.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/msr.h>
@@ -708,8 +709,14 @@ EXPORT_SYMBOL(phys_base)
 #include "../xen/xen-head.S"
 
 	__PAGE_ALIGNED_BSS
+#ifdef CONFIG_LARGE_ZERO_PAGE
+SYM_DATA_START_PAGE_ALIGNED(empty_large_zero_page)
+	.skip SZ_2M
+SYM_DATA_END(empty_large_zero_page)
+EXPORT_SYMBOL(empty_large_zero_page)
+#else
 SYM_DATA_START_PAGE_ALIGNED(empty_zero_page)
 	.skip PAGE_SIZE
 SYM_DATA_END(empty_zero_page)
 EXPORT_SYMBOL(empty_zero_page)
-
+#endif

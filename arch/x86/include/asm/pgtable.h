@@ -17,6 +17,7 @@
 
 #ifndef __ASSEMBLER__
 #include <linux/spinlock.h>
+#include <linux/sizes.h>
 #include <asm/x86_init.h>
 #include <asm/pkru.h>
 #include <asm/fpu/api.h>
@@ -47,13 +48,30 @@ void ptdump_walk_user_pgd_level_checkwx(void);
 #define debug_checkwx_user()	do { } while (0)
 #endif
 
+#ifdef CONFIG_LARGE_ZERO_PAGE
+/*
+ * LARGE_ZERO_PAGE is a global shared page that is always zero: used
+ * for zero-mapped memory areas etc..
+ */
+extern unsigned long empty_large_zero_page[(SZ_2M) / sizeof(unsigned long)]
+	__visible;
+#define ZERO_LARGE_PAGE(vaddr) ((void)(vaddr),virt_to_page(empty_large_zero_page))
+
+#define ZERO_PAGE(vaddr) ZERO_LARGE_PAGE(vaddr)
+#define ZERO_LARGE_PAGE_SIZE SZ_2M
+#else
 /*
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
  */
-extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)]
+extern unsigned long empty_zero_page[(PAGE_SIZE) / sizeof(unsigned long)]
 	__visible;
 #define ZERO_PAGE(vaddr) ((void)(vaddr),virt_to_page(empty_zero_page))
+
+#define ZERO_LARGE_PAGE(vaddr) ZERO_PAGE(vaddr)
+
+#define ZERO_LARGE_PAGE_SIZE PAGE_SIZE
+#endif
 
 extern spinlock_t pgd_lock;
 extern struct list_head pgd_list;
