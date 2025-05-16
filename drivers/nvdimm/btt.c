@@ -801,17 +801,22 @@ static struct arena_info *alloc_arena(struct btt *btt, size_t size,
 	return arena;
 }
 
+static void free_arena(struct arena_info *arena)
+{
+	kfree(arena->rtt);
+	kfree(arena->map_locks);
+	kfree(arena->freelist);
+	debugfs_remove_recursive(arena->debugfs_dir);
+	kfree(arena);
+}
+
 static void free_arenas(struct btt *btt)
 {
 	struct arena_info *arena, *next;
 
 	list_for_each_entry_safe(arena, next, &btt->arena_list, list) {
 		list_del(&arena->list);
-		kfree(arena->rtt);
-		kfree(arena->map_locks);
-		kfree(arena->freelist);
-		debugfs_remove_recursive(arena->debugfs_dir);
-		kfree(arena);
+		free_arena(arena);
 	}
 }
 
@@ -848,7 +853,7 @@ static void parse_arena_meta(struct arena_info *arena, struct btt_sb *super,
 static int discover_arenas(struct btt *btt)
 {
 	int ret = 0;
-	struct arena_info *arena;
+	struct arena_info *arena = NULL;
 	size_t remaining = btt->rawsize;
 	u64 cur_nlba = 0;
 	size_t cur_off = 0;
@@ -861,8 +866,10 @@ static int discover_arenas(struct btt *btt)
 	while (remaining) {
 		/* Alloc memory for arena */
 		arena = alloc_arena(btt, 0, 0, 0);
-		if (!arena)
-			return -ENOMEM;
+		if (!arena) {
+			ret = -ENOMEM;
+			goto out;
+		}
 
 		arena->infooff = cur_off;
 		ret = btt_info_read(arena, super);
@@ -921,7 +928,8 @@ static int discover_arenas(struct btt *btt)
 	return ret;
 
  out:
-	kfree(arena);
+	if (arena)
+		free_arena(arena);
 	free_arenas(btt);
 	return ret;
 }
