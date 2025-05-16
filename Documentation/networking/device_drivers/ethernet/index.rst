@@ -38,6 +38,7 @@ Contents:
    intel/igbvf
    intel/ixgbe
    intel/ixgbevf
+   intel/ixd
    intel/i40e
    intel/iavf
    intel/ice
