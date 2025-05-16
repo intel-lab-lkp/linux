@@ -83,7 +83,13 @@ static void __save_processor_state(struct saved_context *ctxt)
 #ifdef CONFIG_X86_32
 	mtrr_save_fixed_ranges(NULL);
 #endif
-	kernel_fpu_begin();
+
+	/*
+	 * The FPU registers may be live for the current task, so save them to
+	 * current's memory register state.  The corresponding restore happens
+	 * lazily when returning to userspace, not in restore_processor_state().
+	 */
+	fpu_save_state();
 
 	/*
 	 * descriptor tables
@@ -101,7 +107,6 @@ static void __save_processor_state(struct saved_context *ctxt)
 
 	store_tr(ctxt->tr);
 
-	/* XMM0..XMM15 should be handled by kernel_fpu_begin(). */
 	/*
 	 * segment registers
 	 */
@@ -140,14 +145,6 @@ void save_processor_state(void)
 #ifdef CONFIG_X86_32
 EXPORT_SYMBOL(save_processor_state);
 #endif
-
-static void do_fpu_end(void)
-{
-	/*
-	 * Restore FPU regs if necessary.
-	 */
-	kernel_fpu_end();
-}
 
 static void fix_processor_context(void)
 {
@@ -274,7 +271,6 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	loadsegment(gs, ctxt->gs);
 #endif
 
-	do_fpu_end();
 	tsc_verify_tsc_adjust(true);
 	x86_platform.restore_sched_clock_state();
 	cache_bp_restore();
