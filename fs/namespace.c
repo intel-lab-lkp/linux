@@ -484,7 +484,7 @@ static int mnt_is_readonly(struct vfsmount *mnt)
  */
 /**
  * mnt_get_write_access - get write access to a mount without freeze protection
- * @m: the mount on which to take a write
+ * @mnt: the mount on which to take a write
  *
  * This tells the low-level filesystem that a write is about to be performed to
  * it, and makes sure that writes are allowed (mnt it read-write) before
@@ -492,13 +492,13 @@ static int mnt_is_readonly(struct vfsmount *mnt)
  * frozen. When the write operation is finished, mnt_put_write_access() must be
  * called. This is effectively a refcount.
  */
-int mnt_get_write_access(struct vfsmount *m)
+int mnt_get_write_access(struct vfsmount *mnt)
 {
-	struct mount *mnt = real_mount(m);
+	struct mount *m = real_mount(mnt);
 	int ret = 0;
 
 	preempt_disable();
-	mnt_inc_writers(mnt);
+	mnt_inc_writers(m);
 	/*
 	 * The store to mnt_inc_writers must be visible before we pass
 	 * MNT_WRITE_HOLD loop below, so that the slowpath can see our
@@ -506,7 +506,7 @@ int mnt_get_write_access(struct vfsmount *m)
 	 */
 	smp_mb();
 	might_lock(&mount_lock.lock);
-	while (READ_ONCE(mnt->mnt.mnt_flags) & MNT_WRITE_HOLD) {
+	while (READ_ONCE(m->mnt.mnt_flags) & MNT_WRITE_HOLD) {
 		if (!IS_ENABLED(CONFIG_PREEMPT_RT)) {
 			cpu_relax();
 		} else {
@@ -531,8 +531,8 @@ int mnt_get_write_access(struct vfsmount *m)
 	 * read-only.
 	 */
 	smp_rmb();
-	if (mnt_is_readonly(m)) {
-		mnt_dec_writers(mnt);
+	if (mnt_is_readonly(mnt)) {
+		mnt_dec_writers(m);
 		ret = -EROFS;
 	}
 	preempt_enable();
