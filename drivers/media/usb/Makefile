@@ -4,17 +4,18 @@
 #
 
 # DVB USB-only drivers. Please keep it alphabetically sorted by directory name
-# (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-y += b2c2/
-obj-y += dvb-usb/
 obj-y += dvb-usb-v2/
+obj-y += dvb-usb/
 obj-y += s2255/
 obj-y += siano/
 obj-y += ttusb-budget/
 obj-y += ttusb-dec/
+# keep-sorted end
 
 # Please keep it alphabetically sorted by Kconfig name
-# (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-$(CONFIG_DVB_AS102) += as102/
 obj-$(CONFIG_USB_AIRSPY) += airspy/
 obj-$(CONFIG_USB_GSPCA) += gspca/
@@ -30,3 +31,4 @@ obj-$(CONFIG_VIDEO_HDPVR) += hdpvr/
 obj-$(CONFIG_VIDEO_PVRUSB2) += pvrusb2/
 obj-$(CONFIG_VIDEO_STK1160) += stk1160/
 obj-$(CONFIG_VIDEO_USBTV) += usbtv/
+# keep-sorted end

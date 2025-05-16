@@ -10,7 +10,7 @@ rc-core-$(CONFIG_BPF_LIRC_MODE2) += bpf-lirc.o
 obj-$(CONFIG_RC_CORE) += rc-core.o
 
 # IR decoders - please keep it alphabetically sorted by Kconfig name
-# (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-$(CONFIG_IR_IMON_DECODER) += ir-imon-decoder.o
 obj-$(CONFIG_IR_JVC_DECODER) += ir-jvc-decoder.o
 obj-$(CONFIG_IR_MCE_KBD_DECODER) += ir-mce_kbd-decoder.o
@@ -22,9 +22,10 @@ obj-$(CONFIG_IR_SANYO_DECODER) += ir-sanyo-decoder.o
 obj-$(CONFIG_IR_SHARP_DECODER) += ir-sharp-decoder.o
 obj-$(CONFIG_IR_SONY_DECODER) += ir-sony-decoder.o
 obj-$(CONFIG_IR_XMP_DECODER) += ir-xmp-decoder.o
+# keep-sorted end
 
 # stand-alone IR receivers/transmitters  - please keep it alphabetically
-# sorted by Kconfig name (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-$(CONFIG_IR_ENE) += ene_ir.o
 obj-$(CONFIG_IR_FINTEK) += fintek-cir.o
 obj-$(CONFIG_IR_GPIO_CIR) += gpio-ir-recv.o
@@ -54,3 +55,4 @@ obj-$(CONFIG_RC_ATI_REMOTE) += ati_remote.o
 obj-$(CONFIG_RC_LOOPBACK) += rc-loopback.o
 obj-$(CONFIG_RC_ST) += st_rc.o
 obj-$(CONFIG_RC_XBOX_DVD) += xbox_remote.o
+# keep-sorted end

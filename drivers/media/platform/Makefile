@@ -4,7 +4,7 @@
 #
 
 # Place here, alphabetically sorted by directory
-# (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-y += allegro-dvt/
 obj-y += amlogic/
 obj-y += amphion/
@@ -33,9 +33,11 @@ obj-y += ti/
 obj-y += verisilicon/
 obj-y += via/
 obj-y += xilinx/
+# keep-sorted end
 
 # Please place here only ancillary drivers that aren't SoC-specific
 # Please keep it alphabetically sorted by Kconfig name
-# (e. g. LC_ALL=C sort Makefile)
+# keep-sorted start
 obj-$(CONFIG_VIDEO_MEM2MEM_DEINTERLACE)	+= m2m-deinterlace.o
 obj-$(CONFIG_VIDEO_MUX)			+= video-mux.o
+# keep-sorted end

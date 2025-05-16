@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 # Please keep keymaps alphabetically sorted by directory name
-#(e. g. LC_ALL=C sort Makefile)
+# keep-sorted start skip_lines=1
 obj-$(CONFIG_RC_MAP) += \
 			rc-adstech-dvb-t-pci.o \
 			rc-alink-dtu-m.o \
@@ -17,8 +17,8 @@ obj-$(CONFIG_RC_MAP) += \
 			rc-avermedia-dvbt.o \
 			rc-avermedia-m135a.o \
 			rc-avermedia-m733a-rm-k6.o \
-			rc-avermedia.o \
 			rc-avermedia-rm-ks.o \
+			rc-avermedia.o \
 			rc-avertv-303.o \
 			rc-azurewave-ad-tu700.o \
 			rc-beelink-gs1.o \
@@ -44,9 +44,9 @@ obj-$(CONFIG_RC_MAP) += \
 			rc-dvico-mce.o \
 			rc-dvico-portable.o \
 			rc-em-terratec.o \
-			rc-encore-enltv2.o \
 			rc-encore-enltv-fm53.o \
 			rc-encore-enltv.o \
+			rc-encore-enltv2.o \
 			rc-evga-indtube.o \
 			rc-eztv.o \
 			rc-flydvb.o \
@@ -74,16 +74,16 @@ obj-$(CONFIG_RC_MAP) += \
 			rc-leadtek-y04g0051.o \
 			rc-lme2510.o \
 			rc-manli.o \
-			rc-mecool-kiii-pro.o \
 			rc-mecool-kii-pro.o \
+			rc-mecool-kiii-pro.o \
 			rc-medion-x10-digitainer.o \
-			rc-medion-x10.o \
 			rc-medion-x10-or2x.o \
+			rc-medion-x10.o \
 			rc-minix-neo.o \
-			rc-msi-digivox-iii.o \
 			rc-msi-digivox-ii.o \
-			rc-msi-tvanywhere.o \
+			rc-msi-digivox-iii.o \
 			rc-msi-tvanywhere-plus.o \
+			rc-msi-tvanywhere.o \
 			rc-mygica-utv3.o \
 			rc-nebula.o \
 			rc-nec-terratec-cinergy-xs.o \
@@ -126,8 +126,8 @@ obj-$(CONFIG_RC_MAP) += \
 			rc-total-media-in-hand.o \
 			rc-trekstor.o \
 			rc-tt-1500.o \
-			rc-twinhan1027.o \
 			rc-twinhan-dtv-cab-ci.o \
+			rc-twinhan1027.o \
 			rc-vega-s9x.o \
 			rc-videomate-m1f.o \
 			rc-videomate-s350.o \
@@ -135,9 +135,10 @@ obj-$(CONFIG_RC_MAP) += \
 			rc-videostrong-kii-pro.o \
 			rc-wetek-hub.o \
 			rc-wetek-play2.o \
-			rc-winfast.o \
 			rc-winfast-usbii-deluxe.o \
+			rc-winfast.o \
 			rc-x96max.o \
 			rc-xbox-360.o \
 			rc-xbox-dvd.o \
 			rc-zx-irdec.o
+# keep-sorted end
