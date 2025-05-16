@@ -572,8 +572,10 @@ static int max14577_charger_probe(struct platform_device *pdev)
 	chg->max14577 = max14577;
 
 	chg->pdata = max14577_charger_dt_init(pdev);
-	if (IS_ERR_OR_NULL(chg->pdata))
+	if (IS_ERR(chg->pdata))
 		return PTR_ERR(chg->pdata);
+	else if (!chg->pdata)
+		return -ENODATA;
 
 	ret = max14577_charger_reg_init(chg);
 	if (ret)
