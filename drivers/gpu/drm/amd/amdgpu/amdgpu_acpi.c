@@ -876,7 +876,7 @@ static inline uint64_t amdgpu_acpi_get_numa_size(int nid)
 
 static struct amdgpu_numa_info *amdgpu_acpi_get_numa_info(uint32_t pxm)
 {
-	struct amdgpu_numa_info *numa_info;
+	struct amdgpu_numa_info *numa_info, *old;
 	int nid;
 
 	numa_info = xa_load(&numa_info_xa, pxm);
@@ -898,7 +898,11 @@ static struct amdgpu_numa_info *amdgpu_acpi_get_numa_info(uint32_t pxm)
 		} else {
 			numa_info->size = amdgpu_acpi_get_numa_size(nid);
 		}
-		xa_store(&numa_info_xa, numa_info->pxm, numa_info, GFP_KERNEL);
+		old  = xa_store(&numa_info_xa, numa_info->pxm, numa_info, GFP_KERNEL);
+		if (xa_is_err(old)) {
+			kfree(numa_info);
+			return NULL;
+		}
 	}
 
 	return numa_info;
