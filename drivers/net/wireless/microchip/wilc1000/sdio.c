@@ -776,6 +776,8 @@ static int wilc_sdio_read_size(struct wilc *wilc, u32 *size)
 {
 	u32 tmp;
 	struct sdio_cmd52 cmd;
+	struct sdio_func *func = dev_to_sdio_func(wilc->dev);
+	int ret;
 
 	/**
 	 *      Read DMA count in words
@@ -785,12 +787,20 @@ static int wilc_sdio_read_size(struct wilc *wilc, u32 *size)
 	cmd.raw = 0;
 	cmd.address = WILC_SDIO_INTERRUPT_DATA_SZ_REG;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->devm, "Fail cmd 52, interrupt data register...\n");
+		return ret;
+	}
 	tmp = cmd.data;
 
 	cmd.address = WILC_SDIO_INTERRUPT_DATA_SZ_REG + 1;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->devm, "Fail cmd 52, interrupt data register...\n");
+		return ret;
+	}
 	tmp |= (cmd.data << 8);
 
 	*size = tmp;
