@@ -30,6 +30,7 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 		.send_buf.iov_len = sizeof(send_ptp_caps_msg),
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
+	struct libie_mmio_info	*mmio_info = &adapter->ctlq_ctx.mmio_info;
 	struct virtchnl2_ptp_clk_adj_reg_offsets clk_adj_offsets;
 	struct virtchnl2_ptp_clk_reg_offsets clock_offsets;
 	struct idpf_ptp_secondary_mbx *scnd_mbx;
@@ -76,19 +77,20 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 	clock_offsets = recv_ptp_caps_msg->clk_offsets;
 
 	temp_offset = le32_to_cpu(clock_offsets.dev_clk_ns_l);
-	ptp->dev_clk_regs.dev_clk_ns_l = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.dev_clk_ns_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clock_offsets.dev_clk_ns_h);
-	ptp->dev_clk_regs.dev_clk_ns_h = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.dev_clk_ns_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clock_offsets.phy_clk_ns_l);
-	ptp->dev_clk_regs.phy_clk_ns_l = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.phy_clk_ns_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clock_offsets.phy_clk_ns_h);
-	ptp->dev_clk_regs.phy_clk_ns_h = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.phy_clk_ns_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clock_offsets.cmd_sync_trigger);
-	ptp->dev_clk_regs.cmd_sync = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.cmd_sync =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 
 discipline_clock:
 	access_type = ptp->adj_dev_clk_time_access;
@@ -99,29 +101,37 @@ discipline_clock:
 
 	/* Device clock offsets */
 	temp_offset = le32_to_cpu(clk_adj_offsets.dev_clk_cmd_type);
-	ptp->dev_clk_regs.cmd = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.cmd =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.dev_clk_incval_l);
-	ptp->dev_clk_regs.incval_l = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.incval_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.dev_clk_incval_h);
-	ptp->dev_clk_regs.incval_h = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.incval_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.dev_clk_shadj_l);
-	ptp->dev_clk_regs.shadj_l = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.shadj_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.dev_clk_shadj_h);
-	ptp->dev_clk_regs.shadj_h = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.shadj_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 
 	/* PHY clock offsets */
 	temp_offset = le32_to_cpu(clk_adj_offsets.phy_clk_cmd_type);
-	ptp->dev_clk_regs.phy_cmd = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.phy_cmd =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.phy_clk_incval_l);
-	ptp->dev_clk_regs.phy_incval_l = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.phy_incval_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.phy_clk_incval_h);
-	ptp->dev_clk_regs.phy_incval_h = idpf_get_reg_addr(adapter,
-							   temp_offset);
+	ptp->dev_clk_regs.phy_incval_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.phy_clk_shadj_l);
-	ptp->dev_clk_regs.phy_shadj_l = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.phy_shadj_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clk_adj_offsets.phy_clk_shadj_h);
-	ptp->dev_clk_regs.phy_shadj_h = idpf_get_reg_addr(adapter, temp_offset);
+	ptp->dev_clk_regs.phy_shadj_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 
 	return 0;
 }

@@ -1163,7 +1163,7 @@ static int __idpf_queue_reg_init(struct idpf_vport *vport,
 				 struct idpf_q_vec_rsrc *rsrc, u32 *reg_vals,
 				 int num_regs, u32 q_type)
 {
-	struct idpf_adapter *adapter = vport->adapter;
+	struct libie_mmio_info *mmio = &vport->adapter->ctlq_ctx.mmio_info;
 	int i, j, k = 0;
 
 	switch (q_type) {
@@ -1173,7 +1173,8 @@ static int __idpf_queue_reg_init(struct idpf_vport *vport,
 
 			for (j = 0; j < tx_qgrp->num_txq && k < num_regs; j++, k++)
 				tx_qgrp->txqs[j]->tail =
-					idpf_get_reg_addr(adapter, reg_vals[k]);
+					libie_pci_get_mmio_addr(mmio,
+								reg_vals[k]);
 		}
 		break;
 	case VIRTCHNL2_QUEUE_TYPE_RX:
@@ -1185,8 +1186,8 @@ static int __idpf_queue_reg_init(struct idpf_vport *vport,
 				struct idpf_rx_queue *q;
 
 				q = rx_qgrp->singleq.rxqs[j];
-				q->tail = idpf_get_reg_addr(adapter,
-							    reg_vals[k]);
+				q->tail = libie_pci_get_mmio_addr(mmio,
+								  reg_vals[k]);
 			}
 		}
 		break;
@@ -1199,8 +1200,8 @@ static int __idpf_queue_reg_init(struct idpf_vport *vport,
 				struct idpf_buf_queue *q;
 
 				q = &rx_qgrp->splitq.bufq_sets[j].bufq;
-				q->tail = idpf_get_reg_addr(adapter,
-							    reg_vals[k]);
+				q->tail = libie_pci_get_mmio_addr(mmio,
+								  reg_vals[k]);
 			}
 		}
 		break;
