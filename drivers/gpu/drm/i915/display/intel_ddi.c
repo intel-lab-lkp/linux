@@ -77,6 +77,7 @@
 #include "intel_psr.h"
 #include "intel_quirks.h"
 #include "intel_snps_phy.h"
+#include "intel_step.h"
 #include "intel_tc.h"
 #include "intel_vdsc.h"
 #include "intel_vdsc_regs.h"
@@ -1438,6 +1439,21 @@ static void tgl_dkl_phy_set_signal_levels(struct intel_encoder *encoder,
 					  DKL_TX_DPCNTL2_CFG_LOADGENSELECT_TX1_MASK |
 					  DKL_TX_DPCNTL2_CFG_LOADGENSELECT_TX2_MASK,
 					  val);
+		}
+
+		/* Wa_16011342517:adl-p */
+		if (display->platform.alderlake_p &&
+		    IS_DISPLAY_STEP(display, STEP_A0, STEP_D0)) {
+			if ((intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) &&
+			     crtc_state->port_clock == 594000) ||
+			     (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP) &&
+			     crtc_state->port_clock == 162000)) {
+				intel_dkl_phy_rmw(display, DKLP_TX_DPCNTL2(tc_port),
+						  LOADGEN_SHARING_PMD_DISABLE, 1);
+			} else {
+				intel_dkl_phy_rmw(display, DKLP_TX_DPCNTL2(tc_port),
+						  LOADGEN_SHARING_PMD_DISABLE, 0);
+			}
 		}
 	}
 }

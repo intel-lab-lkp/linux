@@ -188,6 +188,10 @@ struct intel_dkl_phy_reg {
 								 _DKL_CMN_UC_DW27)
 #define  DKL_CMN_UC_DW27_UC_HEALTH			(0x1 << 15)
 
+#define _DKLP_PCS_GLUE_TX_DPCNTL2                       0xB68
+#define DKLP_TX_DPCNTL2(tc_port)			_DKL_REG(tc_port, \
+								 _DKLP_PCS_GLUE_TX_DPCNTL2)
+#define LOADGEN_SHARING_PMD_DISABLE                     REG_BIT(12)
 /*
  * Each Dekel PHY is addressed through a 4KB aperture. Each PHY has more than
  * 4KB of register space, so a separate index is programmed in HIP_INDEX_REG0
