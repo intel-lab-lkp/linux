@@ -119,6 +119,7 @@ static int recv_request_import(int sockfd)
 	if (found) {
 		/* should set TCP_NODELAY for usbip */
 		usbip_net_set_nodelay(sockfd);
+		usbip_net_set_keepalive(sockfd);
 
 		/* export device needs a TCP/IP socket descriptor */
 		status = usbip_export_device(edev, sockfd);
