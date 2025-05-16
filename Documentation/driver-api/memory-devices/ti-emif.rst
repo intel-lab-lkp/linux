@@ -29,7 +29,7 @@ This driver is for the EMIF module available in Texas Instruments
 SoCs. EMIF is an SDRAM controller that, based on its revision,
 supports one or more of DDR2, DDR3, and LPDDR2 SDRAM protocols.
 This driver takes care of only LPDDR2 memories presently. The
-functions of the driver includes re-configuring AC timing
+functions of the driver include re-configuring AC timing
 parameters and other settings during frequency, voltage and
 temperature changes
 
