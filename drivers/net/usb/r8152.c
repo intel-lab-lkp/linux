@@ -4005,10 +4005,12 @@ static void rtl_runtime_suspend_enable(struct r8152 *tp, bool enable)
 static void rtl8153_runtime_enable(struct r8152 *tp, bool enable)
 {
 	if (enable) {
+		r8153_queue_wake(tp, true);
 		r8153_u1u2en(tp, false);
 		r8153_u2p3en(tp, false);
 		rtl_runtime_suspend_enable(tp, true);
 	} else {
+		r8153_queue_wake(tp, false);
 		rtl_runtime_suspend_enable(tp, false);
 
 		switch (tp->version) {
