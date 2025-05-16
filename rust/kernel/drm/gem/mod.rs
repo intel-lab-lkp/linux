@@ -14,6 +14,9 @@ use crate::{
 };
 use core::{mem, ops::Deref, ptr::NonNull};
 
+/// A type alias for the Object type in use by a [`drm::Driver`].
+pub type DriverObject<T> = <<T as BaseDriverObject>::Driver as drm::Driver>::Object;
+
 /// GEM object functions, which must be implemented by drivers.
 pub trait BaseDriverObject: Sync + Send + Sized {
     /// Parent `Driver` for this object.
@@ -24,18 +27,14 @@ pub trait BaseDriverObject: Sync + Send + Sized {
 
     /// Open a new handle to an existing object, associated with a File.
     fn open(
-        _obj: &<Self::Driver as drm::Driver>::Object,
+        _obj: &DriverObject<Self>,
         _file: &drm::File<<Self::Driver as drm::Driver>::File>,
     ) -> Result {
         Ok(())
     }
 
     /// Close a handle to an existing object, associated with a File.
-    fn close(
-        _obj: &<Self::Driver as drm::Driver>::Object,
-        _file: &drm::File<<Self::Driver as drm::Driver>::File>,
-    ) {
-    }
+    fn close(_obj: &DriverObject<Self>, _file: &drm::File<<Self::Driver as drm::Driver>::File>) {}
 }
 
 /// Trait that represents a GEM object subtype
@@ -82,7 +81,7 @@ extern "C" fn open_callback<T: BaseDriverObject>(
     let file = unsafe { drm::File::<<T::Driver as drm::Driver>::File>::as_ref(raw_file) };
     // SAFETY: `open_callback` is specified in the AllocOps structure for `DriverObject<T>`,
     // ensuring that `raw_obj` is contained within a `DriverObject<T>`
-    let obj = unsafe { <<T::Driver as drm::Driver>::Object as IntoGEMObject>::as_ref(raw_obj) };
+    let obj = unsafe { DriverObject::<T>::as_ref(raw_obj) };
 
     match T::open(obj, file) {
         Err(e) => e.to_errno(),
@@ -99,7 +98,7 @@ extern "C" fn close_callback<T: BaseDriverObject>(
 
     // SAFETY: `close_callback` is specified in the AllocOps structure for `Object<T>`, ensuring
     // that `raw_obj` is indeed contained within a `Object<T>`.
-    let obj = unsafe { <<T::Driver as drm::Driver>::Object as IntoGEMObject>::as_ref(raw_obj) };
+    let obj = unsafe { DriverObject::<T>::as_ref(raw_obj) };
 
     T::close(obj, file);
 }
