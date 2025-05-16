@@ -62,9 +62,15 @@ struct mem_cgroup_reclaim_cookie {
 
 #ifdef CONFIG_MEMCG
 
-#if defined(CONFIG_ARCH_HAS_NMI_SAFE_THIS_CPU_OPS) || \
-	!defined(CONFIG_HAVE_NMI) || defined(ARCH_HAVE_NMI_SAFE_CMPXCHG)
+#if defined(CONFIG_ARCH_HAS_NMI_SAFE_THIS_CPU_OPS) || !defined(CONFIG_HAVE_NMI)
+
 #define MEMCG_SUPPORTS_NMI_CHARGING
+
+#elif defined(ARCH_HAVE_NMI_SAFE_CMPXCHG)
+
+#define MEMCG_SUPPORTS_NMI_CHARGING
+#define MEMCG_NMI_NEED_ATOMIC
+
 #endif
 
 #define MEM_CGROUP_ID_SHIFT	16
@@ -118,6 +124,12 @@ struct mem_cgroup_per_node {
 	CACHELINE_PADDING(_pad2_);
 	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 	struct mem_cgroup_reclaim_iter	iter;
+
+#ifdef MEMCG_NMI_NEED_ATOMIC
+	/* slab stats for nmi context */
+	atomic_t		slab_reclaimable;
+	atomic_t		slab_unreclaimable;
+#endif
 };
 
 struct mem_cgroup_threshold {
@@ -241,6 +253,10 @@ struct mem_cgroup {
 	atomic_long_t		memory_events[MEMCG_NR_MEMORY_EVENTS];
 	atomic_long_t		memory_events_local[MEMCG_NR_MEMORY_EVENTS];
 
+#ifdef MEMCG_NMI_NEED_ATOMIC
+	/* MEMCG_KMEM for nmi context */
+	atomic_t		kmem_stat;
+#endif
 	/*
 	 * Hint of reclaim pressure for socket memroy management. Note
 	 * that this indicator should NOT be used in legacy cgroup mode
