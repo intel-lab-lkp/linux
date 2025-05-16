@@ -18,6 +18,17 @@ extern int usbip_port;
 extern char *usbip_port_string;
 void usbip_setup_port_number(char *arg);
 
+/**
+ * usbip_to_int - convert string to positive integer
+ * @name:	name of the @val for logging
+ * @val:	string to convert to integer using base 10
+ * @maxval:	max allowed result value
+ *
+ * Return: positive integer on success, zero if conversion
+ *	   is not possible or value is out of range [1...maxval].
+ */
+int usbip_to_int(const char *name, const char *val, int maxval);
+
 /* ---------------------------------------------------------------------- */
 /* Common header for all the kinds of PDUs. */
 struct op_common {
@@ -172,6 +183,9 @@ int usbip_net_recv_op_common(int sockfd, uint16_t *code, int *status);
 int usbip_net_set_reuseaddr(int sockfd);
 int usbip_net_set_nodelay(int sockfd);
 int usbip_net_set_keepalive(int sockfd);
+int usbip_net_set_keepidle(int sockfd, int seconds);
+int usbip_net_set_keepcnt(int sockfd, int cnt);
+int usbip_net_set_keepintvl(int sockfd, int seconds);
 int usbip_net_set_v6only(int sockfd);
 int usbip_net_tcp_connect(char *hostname, char *port);
 

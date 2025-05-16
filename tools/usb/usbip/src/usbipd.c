@@ -46,6 +46,10 @@
 
 #define DEFAULT_PID_FILE "/var/run/" PROGNAME ".pid"
 
+static int tcp_keepidle;
+static int tcp_keepcnt;
+static int tcp_keepintvl;
+
 static const char usbip_version_string[] = PACKAGE_STRING;
 
 static const char usbipd_help_string[] =
@@ -75,6 +79,19 @@ static const char usbipd_help_string[] =
 	"	-tPORT, --tcp-port PORT\n"
 	"		Listen on TCP/IP port PORT.\n"
 	"\n"
+#if HAVE_KEEPALIVE_OPTS
+	"	--tcp-keepidle SECONDS\n"
+	"		Number of SECONDS a connection needs to be idle\n"
+	"		before TCP begins sending out keep-alive probes.\n"
+	"\n"
+	"	--tcp-keepcnt PROBES\n"
+	"		Max. number of TCP keep-alive PROBES to send\n"
+	"		before killing the connection.\n"
+	"\n"
+	"	--tcp-keepintvl SECONDS\n"
+	"		Number of SECONDS between TCP keep-alive probes.\n"
+	"\n"
+#endif
 	"	-h, --help\n"
 	"		Print this help.\n"
 	"\n"
@@ -86,6 +103,24 @@ static struct usbip_host_driver *driver;
 static void usbipd_help(void)
 {
 	printf("%s\n", usbipd_help_string);
+}
+
+static void set_socket_options(int sockfd)
+{
+	/* should set TCP_NODELAY for usbip */
+	usbip_net_set_nodelay(sockfd);
+
+	if (usbip_net_set_keepalive(sockfd) < 0)
+		return;
+
+	if (tcp_keepidle)
+		usbip_net_set_keepidle(sockfd, tcp_keepidle);
+
+	if (tcp_keepcnt)
+		usbip_net_set_keepcnt(sockfd, tcp_keepcnt);
+
+	if (tcp_keepintvl)
+		usbip_net_set_keepintvl(sockfd, tcp_keepintvl);
 }
 
 static int recv_request_import(int sockfd)
@@ -117,9 +152,7 @@ static int recv_request_import(int sockfd)
 	}
 
 	if (found) {
-		/* should set TCP_NODELAY for usbip */
-		usbip_net_set_nodelay(sockfd);
-		usbip_net_set_keepalive(sockfd);
+		set_socket_options(sockfd);
 
 		/* export device needs a TCP/IP socket descriptor */
 		status = usbip_export_device(edev, sockfd);
@@ -586,15 +619,21 @@ static int do_standalone_mode(int daemonize, int ipv4, int ipv6)
 
 int main(int argc, char *argv[])
 {
+	enum { KEEPIDLE = 1, KEEPCNT, KEEPINTVL };
+
 	static const struct option longopts[] = {
 		{ "ipv4",     no_argument,       NULL, '4' },
 		{ "ipv6",     no_argument,       NULL, '6' },
-		{ "daemon",   no_argument,       NULL, 'D' },
 		{ "daemon",   no_argument,       NULL, 'D' },
 		{ "debug",    no_argument,       NULL, 'd' },
 		{ "device",   no_argument,       NULL, 'e' },
 		{ "pid",      optional_argument, NULL, 'P' },
 		{ "tcp-port", required_argument, NULL, 't' },
+#if HAVE_KEEPALIVE_OPTS
+		{ "tcp-keepidle",  required_argument, NULL, KEEPIDLE },
+		{ "tcp-keepcnt",   required_argument, NULL, KEEPCNT },
+		{ "tcp-keepintvl", required_argument, NULL, KEEPINTVL },
+#endif
 		{ "help",     no_argument,       NULL, 'h' },
 		{ "version",  no_argument,       NULL, 'v' },
 		{ NULL,	      0,                 NULL,  0  }
@@ -609,6 +648,7 @@ int main(int argc, char *argv[])
 	int daemonize = 0;
 	int ipv4 = 0, ipv6 = 0;
 	int opt, rc = -1;
+	int longidx = 0;
 
 	pid_file = NULL;
 
@@ -621,7 +661,7 @@ int main(int argc, char *argv[])
 	cmd = cmd_standalone_mode;
 	driver = &host_driver;
 	for (;;) {
-		opt = getopt_long(argc, argv, "46DdeP::t:hv", longopts, NULL);
+		opt = getopt_long(argc, argv, "46DdeP::t:hv", longopts, &longidx);
 
 		if (opt == -1)
 			break;
@@ -653,6 +693,15 @@ int main(int argc, char *argv[])
 			break;
 		case 'e':
 			driver = &device_driver;
+			break;
+		case KEEPIDLE:
+			tcp_keepidle = usbip_to_int(longopts[longidx].name, optarg, UINT16_MAX);
+			break;
+		case KEEPCNT:
+			tcp_keepcnt = usbip_to_int(longopts[longidx].name, optarg, UINT16_MAX);
+			break;
+		case KEEPINTVL:
+			tcp_keepintvl = usbip_to_int(longopts[longidx].name, optarg, UINT16_MAX);
 			break;
 		case '?':
 			usbipd_help();
