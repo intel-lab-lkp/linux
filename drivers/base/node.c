@@ -21,6 +21,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
 
 static const struct bus_type node_subsys = {
 	.name = "node",
@@ -859,6 +860,43 @@ void unregister_memory_block_under_nodes(struct memory_block *mem_blk)
 			  kobject_name(&node_devices[mem_blk->nid]->dev.kobj));
 }
 
+/*
+ * register_memory_blocks_under_node_early : Register the memory
+ *		  blocks under the current node.
+ * @nid : Current node under registration
+ *
+ * This function iterates over all memblock regions and identifies the regions
+ * that belong to the current node. For each region which belongs to current
+ * node, it calculates the start and end memory blocks based on the region's
+ * start and end PFNs. It then registers all memory blocks within that range
+ * under the current node.
+ */
+static void register_memory_blocks_under_node_early(int nid)
+{
+	struct memblock_region *r;
+
+	for_each_mem_region(r) {
+		if (r->nid != nid)
+			continue;
+
+		const unsigned long start_block_id = phys_to_block_id(r->base);
+		const unsigned long end_block_id = phys_to_block_id(r->base + r->size - 1);
+		unsigned long block_id;
+
+		for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
+			struct memory_block *mem;
+
+			mem = find_memory_block_by_id(block_id);
+			if (!mem)
+				continue;
+
+			do_register_memory_block_under_node(nid, mem, MEMINIT_EARLY);
+			put_device(&mem->dev);
+		}
+
+	}
+}
+
 void register_memory_blocks_under_node(int nid, unsigned long start_pfn,
 				       unsigned long end_pfn,
 				       enum meminit_context context)
@@ -983,8 +1021,9 @@ void __init node_dev_init(void)
 	 * to applicable memory block devices and already created cpu devices.
 	 */
 	for_each_online_node(i) {
-		ret = register_one_node(i);
+		ret =  __register_one_node(i);
 		if (ret)
 			panic("%s() failed to add node: %d\n", __func__, ret);
+		register_memory_blocks_under_node_early(i);
 	}
 }

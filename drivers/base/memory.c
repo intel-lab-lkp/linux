@@ -60,7 +60,7 @@ static inline unsigned long pfn_to_block_id(unsigned long pfn)
 	return memory_block_id(pfn_to_section_nr(pfn));
 }
 
-static inline unsigned long phys_to_block_id(unsigned long phys)
+unsigned long phys_to_block_id(unsigned long phys)
 {
 	return pfn_to_block_id(PFN_DOWN(phys));
 }
@@ -683,7 +683,7 @@ int __weak arch_get_memory_phys_device(unsigned long start_pfn)
  *
  * Called under device_hotplug_lock.
  */
-static struct memory_block *find_memory_block_by_id(unsigned long block_id)
+struct memory_block *find_memory_block_by_id(unsigned long block_id)
 {
 	struct memory_block *mem;
 
