@@ -62,6 +62,11 @@ struct mem_cgroup_reclaim_cookie {
 
 #ifdef CONFIG_MEMCG
 
+#if defined(CONFIG_ARCH_HAS_NMI_SAFE_THIS_CPU_OPS) || \
+	!defined(CONFIG_HAVE_NMI) || defined(ARCH_HAVE_NMI_SAFE_CMPXCHG)
+#define MEMCG_SUPPORTS_NMI_CHARGING
+#endif
+
 #define MEM_CGROUP_ID_SHIFT	16
 
 struct mem_cgroup_id {

@@ -2647,10 +2647,25 @@ static struct obj_cgroup *current_objcg_update(void)
 	return objcg;
 }
 
+#ifdef MEMCG_SUPPORTS_NMI_CHARGING
+static inline bool nmi_charging_allowed(void)
+{
+	return true;
+}
+#else
+static inline bool nmi_charging_allowed(void)
+{
+	return false;
+}
+#endif
+
 __always_inline struct obj_cgroup *current_obj_cgroup(void)
 {
 	struct mem_cgroup *memcg;
 	struct obj_cgroup *objcg;
+
+	if (!nmi_charging_allowed() && in_nmi())
+		return NULL;
 
 	if (in_task()) {
 		memcg = current->active_memcg;
