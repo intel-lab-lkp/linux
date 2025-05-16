@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/pf1550.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Regulators for PF1550 PMIC from NXP.
+
+maintainers:
+  - Samuel Kayode <samuel.kayode@savoirfairelinux.com>
+
+description: |
+  This module is part of the PF1550 MFD device. For more details
+  see Documentation/devicetree/bindings/mfd/pf1550.yaml.
+
+  The regulator controller is represented as a sub-node of the PMIC node
+  on the device tree.
+
+  The device has three LDO regulators, three buck converters and a DDR
+  termination reference voltage.
+
+properties:
+  compatible:
+    const: fsl,pf1550-regulator
+
+patternProperties:
+  "^(LDO[1-3]|SW[1-3]|VREFADDR)$":
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+
+required:
+  - compatible
+additionalProperties: false
+
+...
