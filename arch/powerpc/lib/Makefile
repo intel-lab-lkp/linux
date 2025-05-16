@@ -85,3 +85,5 @@ obj-$(CONFIG_CRC_T10DIF_ARCH) += crc-t10dif-powerpc.o
 crc-t10dif-powerpc-y := crc-t10dif-glue.o crct10dif-vpmsum_asm.o
 
 obj-$(CONFIG_PPC64) += $(obj64-y)
+
+obj-$(CONFIG_ARCH_SUPPORTS_INT128) += tishift.o
