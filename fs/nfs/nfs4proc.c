@@ -5274,13 +5274,17 @@ static struct dentry *nfs4_proc_mkdir(struct inode *dir, struct dentry *dentry,
 		sattr->ia_mode &= ~current_umask();
 	do {
 		alias = _nfs4_proc_mkdir(dir, dentry, sattr, label);
-		err = PTR_ERR_OR_ZERO(alias);
+		err = PTR_ERR(alias);
+		if (err > 0)
+			err = 0;
 		trace_nfs4_mkdir(dir, &dentry->d_name, err);
 		err = nfs4_handle_exception(NFS_SERVER(dir), err,
 				&exception);
 	} while (exception.retry);
 	nfs4_label_release_security(label);
 
+	if (err != 0)
+		return ERR_PTR(err);
 	return alias;
 }
 
