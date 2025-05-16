@@ -30,9 +30,9 @@ static int counter;
 # define PR_FUTEX_HASH_GET_IMMUTABLE	3
 #endif
 
-static int futex_hash_slots_set(unsigned int slots, int immutable)
+static int futex_hash_slots_set(unsigned int slots, int flags)
 {
-	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, slots, immutable);
+	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, slots, flags);
 }
 
 static int futex_hash_slots_get(void)
@@ -63,11 +63,11 @@ static void futex_hash_slots_set_verify(int slots)
 	ksft_test_result_pass("SET and GET slots %d passed\n", slots);
 }
 
-static void futex_hash_slots_set_must_fail(int slots, int immutable)
+static void futex_hash_slots_set_must_fail(int slots, int flags)
 {
 	int ret;
 
-	ret = futex_hash_slots_set(slots, immutable);
+	ret = futex_hash_slots_set(slots, flags);
 	ksft_test_result(ret < 0, "futex_hash_slots_set(%d, %d)\n",
 			 slots, immutable);
 }
@@ -254,18 +254,18 @@ int main(int argc, char *argv[])
 		ret = futex_hash_slots_set(0, 0);
 		ksft_test_result(ret == 0, "Global hash request\n");
 	} else {
-		ret = futex_hash_slots_set(4, 1);
+		ret = futex_hash_slots_set(4, FH_FLAG_IMMUTABLE);
 		ksft_test_result(ret == 0, "Immutable resize to 4\n");
 	}
 	if (ret != 0)
 		goto out;
 
 	futex_hash_slots_set_must_fail(4, 0);
-	futex_hash_slots_set_must_fail(4, 1);
+	futex_hash_slots_set_must_fail(4, FH_FLAG_IMMUTABLE);
 	futex_hash_slots_set_must_fail(8, 0);
-	futex_hash_slots_set_must_fail(8, 1);
-	futex_hash_slots_set_must_fail(0, 1);
-	futex_hash_slots_set_must_fail(6, 1);
+	futex_hash_slots_set_must_fail(8, FH_FLAG_IMMUTABLE);
+	futex_hash_slots_set_must_fail(0, FH_FLAG_IMMUTABLE);
+	futex_hash_slots_set_must_fail(6, FH_FLAG_IMMUTABLE);
 
 	ret = pthread_barrier_init(&barrier_main, NULL, MAX_THREADS);
 	if (ret != 0) {
