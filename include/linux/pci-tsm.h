@@ -11,6 +11,7 @@ enum pci_tsm_state {
 	PCI_TSM_ERR = -1,
 	PCI_TSM_INIT,
 	PCI_TSM_CONNECT,
+	PCI_TSM_ACCEPT,
 };
 
 /**
@@ -32,12 +33,12 @@ enum pci_tsm_type {
 /**
  * struct pci_tdi - TDI context
  * @pdev: host side representation of guest-side TDI
- * @dsm: PF0 PCI device that can modify TDISP state for the TDI
+ * @dsm_dev: PF0 PCI device that can modify TDISP state for the TDI
  * @kvm: TEE VM context of bound TDI
  */
 struct pci_tdi {
 	struct pci_dev *pdev;
-	struct pci_dev *dsm;
+	struct pci_dev *dsm_dev;
 	struct kvm *kvm;
 };
 
@@ -69,7 +70,12 @@ struct pci_tsm_pf0 {
 	struct pci_tsm tsm;
 	enum pci_tsm_state state;
 	struct mutex lock;
-	struct pci_doe_mb *doe_mb;
+	union {
+		struct {	/* host pf0 tsm */
+			struct pci_doe_mb *doe_mb;
+		};
+		/* To be added: guest tsm */
+	};
 };
 
 /* physical function0 and capable of 'connect' */
@@ -135,6 +141,8 @@ struct pci_tsm_guest_req_info {
  * @bind: establish a secure binding with the TVM
  * @unbind: teardown the secure binding
  * @guest_req: handle the vendor specific requests from TVM when bound
+ * @accept: TVM-only operation to confirm that system policy allows
+ *	    device to access private memory and be mapped with private mmio.
  *
  * @probe and @remove run in pci_tsm_rwsem held for write context. All
  * other ops run under the @pdev->tsm->lock mutex and pci_tsm_rwsem held
@@ -150,6 +158,7 @@ struct pci_tsm_ops {
 	void (*unbind)(struct pci_tdi *tdi);
 	int (*guest_req)(struct pci_dev *pdev,
 			 struct pci_tsm_guest_req_info *info);
+	int (*accept)(struct pci_dev *pdev);
 };
 
 enum pci_doe_proto {

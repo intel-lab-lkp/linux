@@ -124,6 +124,29 @@ static int pci_tsm_disconnect(struct pci_dev *pdev)
 	return 0;
 }
 
+/*
+ * TDISP locked state temporarily makes the device inaccessible, do not
+ * surprise live attached drivers
+ */
+static int __driver_idle_connect(struct pci_dev *pdev)
+{
+	guard(device)(&pdev->dev);
+	if (pdev->dev.driver)
+		return -EBUSY;
+	return tsm_ops->connect(pdev);
+}
+
+/*
+ * When the registered ops support accept it indicates that this is a
+ * TVM-side (guest) TSM operations structure. In this mode ->connect()
+ * arranges for the TDI to enter TDISP LOCKED state, and ->accept()
+ * transitions the device to RUN state.
+ */
+static bool tvm_mode(void)
+{
+	return !!tsm_ops->accept;
+}
+
 static int pci_tsm_connect(struct pci_dev *pdev)
 {
 	struct pci_tsm_pf0 *tsm = to_pci_tsm_pf0(pdev->tsm);
@@ -138,10 +161,44 @@ static int pci_tsm_connect(struct pci_dev *pdev)
 	if (tsm->state >= PCI_TSM_CONNECT)
 		return 0;
 
-	rc = tsm_ops->connect(pdev);
+	if (tvm_mode())
+		rc = __driver_idle_connect(pdev);
+	else
+		rc = tsm_ops->connect(pdev);
 	if (rc)
 		return rc;
 	tsm->state = PCI_TSM_CONNECT;
+	return 0;
+}
+
+static int pci_tsm_accept(struct pci_dev *pdev)
+{
+	struct pci_tsm_pf0 *tsm = to_pci_tsm_pf0(pdev->tsm);
+	int rc;
+
+	struct mutex *lock __free(tsm_ops_unlock) = tsm_ops_lock(tsm);
+	if (!lock)
+		return -EINTR;
+
+	if (tsm->state < PCI_TSM_CONNECT)
+		return -ENXIO;
+	if (tsm->state >= PCI_TSM_ACCEPT)
+		return 0;
+
+	/*
+	 * "Accept" transitions a device to the run state, it is only suitable
+	 * to make that transition from a known DMA-idle (no active mappings)
+	 * state.  The "driver detached" state is a coarse way to assert that
+	 * requirement.
+	 */
+	guard(device)(&pdev->dev);
+	if (pdev->dev.driver)
+		return -EBUSY;
+
+	rc = tsm_ops->accept(pdev);
+	if (rc)
+		return rc;
+	tsm->state = PCI_TSM_ACCEPT;
 	return 0;
 }
 
@@ -196,6 +253,61 @@ static ssize_t connect_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(connect);
 
+static ssize_t accept_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t len)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	bool accept;
+	int rc;
+
+	rc = kstrtobool(buf, &accept);
+	if (rc)
+		return rc;
+
+	if (!accept)
+		return -EINVAL;
+
+	struct rw_semaphore *lock __free(tsm_read_unlock) = tsm_read_lock();
+	if (!lock)
+		return -EINTR;
+
+	rc = pci_tsm_accept(pdev);
+	if (rc)
+		return rc;
+
+	return len;
+}
+
+static ssize_t accept_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct pci_tsm_pf0 *tsm;
+
+	struct rw_semaphore *lock __free(tsm_read_unlock) = tsm_read_lock();
+	if (!lock)
+		return -EINTR;
+
+	if (!pdev->tsm)
+		return -ENXIO;
+
+	tsm = to_pci_tsm_pf0(pdev->tsm);
+	return sysfs_emit(buf, "%d\n", tsm->state >= PCI_TSM_ACCEPT);
+}
+static DEVICE_ATTR_RW(accept);
+
+static umode_t pci_tsm_pf0_attr_visible(struct kobject *kobj,
+					struct attribute *a, int n)
+{
+	if (!tvm_mode()) {
+		/* Host context, filter out guest only attributes */
+		if (a == &dev_attr_accept.attr)
+			return 0;
+	}
+
+	return a->mode;
+}
+
 static bool pci_tsm_pf0_group_visible(struct kobject *kobj)
 {
 	struct device *dev = kobj_to_dev(kobj);
@@ -205,10 +317,11 @@ static bool pci_tsm_pf0_group_visible(struct kobject *kobj)
 		return true;
 	return false;
 }
-DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(pci_tsm_pf0);
+DEFINE_SYSFS_GROUP_VISIBLE(pci_tsm_pf0);
 
 static struct attribute *pci_tsm_pf0_attrs[] = {
 	&dev_attr_connect.attr,
+	&dev_attr_accept.attr,
 	NULL
 };
 
@@ -322,11 +435,15 @@ EXPORT_SYMBOL_GPL(pci_tsm_initialize);
 int pci_tsm_pf0_initialize(struct pci_dev *pdev, struct pci_tsm_pf0 *tsm)
 {
 	mutex_init(&tsm->lock);
-	tsm->doe_mb = pci_find_doe_mailbox(pdev, PCI_VENDOR_ID_PCI_SIG,
-					   PCI_DOE_PROTO_CMA);
-	if (!tsm->doe_mb) {
-		pci_warn(pdev, "TSM init failure, no CMA mailbox\n");
-		return -ENODEV;
+
+	/* Assigned pci device in guest won't have IDE and DOE exposed. */
+	if (!tvm_mode()) {
+		tsm->doe_mb = pci_find_doe_mailbox(pdev, PCI_VENDOR_ID_PCI_SIG,
+						   PCI_DOE_PROTO_CMA);
+		if (!tsm->doe_mb) {
+			pci_warn(pdev, "TSM init failure, no CMA mailbox\n");
+			return -ENODEV;
+		}
 	}
 
 	tsm->state = PCI_TSM_INIT;
@@ -483,7 +600,7 @@ int pci_tsm_doe_transfer(struct pci_dev *pdev, enum pci_doe_proto type,
 {
 	struct pci_tsm_pf0 *tsm;
 
-	if (!pdev->tsm || !is_pci_tsm_pf0(pdev))
+	if (!pdev->tsm || !is_pci_tsm_pf0(pdev) || tvm_mode())
 		return -ENXIO;
 
 	tsm = to_pci_tsm_pf0(pdev->tsm);
@@ -495,8 +612,8 @@ int pci_tsm_doe_transfer(struct pci_dev *pdev, enum pci_doe_proto type,
 }
 EXPORT_SYMBOL_GPL(pci_tsm_doe_transfer);
 
-/* lookup the 'DSM' pf0 for @pdev */
-static struct pci_dev *tsm_pf0_get(struct pci_dev *pdev)
+/* lookup the Device Security Manager (DSM) pf0 for @pdev */
+static struct pci_dev *dsm_dev_get(struct pci_dev *pdev)
 {
 	struct pci_dev *uport_pf0;
 
@@ -558,11 +675,11 @@ int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u64 tdi_id)
 	if (!pdev->tsm)
 		return -EINVAL;
 
-	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
-	if (!pf0_dev)
+	struct pci_dev *dsm_dev __free(pci_dev_put) = dsm_dev_get(pdev);
+	if (!dsm_dev)
 		return -EINVAL;
 
-	struct mutex *ops_lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	struct mutex *ops_lock __free(tdi_ops_unlock) = tdi_ops_lock(dsm_dev);
 	if (IS_ERR(ops_lock))
 		return PTR_ERR(ops_lock);
 
@@ -573,10 +690,13 @@ int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u64 tdi_id)
 			return -EBUSY;
 	}
 
-	tdi = tsm_ops->bind(pdev, pf0_dev, kvm, tdi_id);
+	tdi = tsm_ops->bind(pdev, dsm_dev, kvm, tdi_id);
 	if (!tdi)
 		return -ENXIO;
 
+	tdi->pdev = pdev;
+	tdi->dsm_dev = dsm_dev;
+	tdi->kvm = kvm;
 	pdev->tsm->tdi = tdi;
 
 	return 0;
@@ -592,11 +712,11 @@ static int __pci_tsm_unbind(struct pci_dev *pdev)
 	if (!pdev->tsm)
 		return -EINVAL;
 
-	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
-	if (!pf0_dev)
+	struct pci_dev *dsm_dev __free(pci_dev_put) = dsm_dev_get(pdev);
+	if (!dsm_dev)
 		return -EINVAL;
 
-	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(dsm_dev);
 	if (IS_ERR(lock))
 		return PTR_ERR(lock);
 
@@ -641,11 +761,11 @@ int pci_tsm_guest_req(struct pci_dev *pdev, struct pci_tsm_guest_req_info *info)
 	if (!pdev->tsm)
 		return -ENODEV;
 
-	struct pci_dev *pf0_dev __free(pci_dev_put) = tsm_pf0_get(pdev);
-	if (!pf0_dev)
+	struct pci_dev *dsm_dev __free(pci_dev_put) = dsm_dev_get(pdev);
+	if (!dsm_dev)
 		return -EINVAL;
 
-	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(pf0_dev);
+	struct mutex *lock __free(tdi_ops_unlock) = tdi_ops_lock(dsm_dev);
 	if (IS_ERR(lock))
 		return -ENODEV;
 
