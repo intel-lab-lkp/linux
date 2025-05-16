@@ -99,16 +99,29 @@ static inline void netdev_unlock_ops_compat(struct net_device *dev)
 static inline int netdev_lock_cmp_fn(const struct lockdep_map *a,
 				     const struct lockdep_map *b)
 {
-	/* Only lower devices currently grab the instance lock, so no
-	 * real ordering issues can occur. In the near future, only
-	 * hardware devices will grab instance lock which also does not
-	 * involve any ordering. Suppress lockdep ordering warnings
-	 * until (if) we start grabbing instance lock on pure SW
-	 * devices (bond/team/veth/etc).
-	 */
+#ifdef CONFIG_DEBUG_NET_SMALL_RTNL
+	const struct net_device *dev_a, *dev_b;
+
+	dev_a = container_of(a, struct net_device, lock.dep_map);
+	dev_b = container_of(b, struct net_device, lock.dep_map);
+#endif
+
 	if (a == b)
 		return 0;
-	return -1;
+
+	/* Locking multiple devices usually happens under rtnl_lock */
+	if (lockdep_rtnl_is_held())
+		return -1;
+
+#ifdef CONFIG_DEBUG_NET_SMALL_RTNL
+	/* It's okay to use per-netns rtnl_lock if devices share netns */
+	if (net_eq(dev_net(dev_a), dev_net(dev_b)) &&
+	    lockdep_rtnl_net_is_held(dev_net(dev_a)))
+		return -1;
+#endif
+
+	/* Otherwise taking two instance locks is not allowed */
+	return 1;
 }
 
 #define netdev_lockdep_set_classes(dev)				\
