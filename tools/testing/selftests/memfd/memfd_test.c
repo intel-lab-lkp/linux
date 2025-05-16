@@ -1359,7 +1359,7 @@ static int sysctl_nested_child(void *arg)
 
 	printf("%s nested sysctl 0\n", memfd_str);
 	sysctl_assert_write("0");
-	/* A further nested pidns works the same. */
+	/* A further nested pid-namespace works the same. */
 	pid = spawn_thread(CLONE_NEWPID, sysctl_simple_child, NULL);
 	join_thread(pid);
 
