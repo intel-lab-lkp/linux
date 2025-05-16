@@ -225,6 +225,11 @@ patternProperties:
         minItems: 2
         maxItems: 2
 
+      dma-32bit-quirk:
+        type: boolean
+        description:
+          Set when supported addressable range is only 32 bits.
+
     required:
       - compatible
       - msi-controller
