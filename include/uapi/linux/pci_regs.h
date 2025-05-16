@@ -1286,6 +1286,8 @@
 /* Selective IDE Stream Status Register */
 #define  PCI_IDE_SEL_STS		 8
 #define   PCI_IDE_SEL_STS_STATE_MASK	 __GENMASK(3, 0) /* Selective IDE Stream State */
+#define   PCI_IDE_SEL_STS_STATE_INSECURE 0
+#define   PCI_IDE_SEL_STS_STATE_SECURE   2
 #define   PCI_IDE_SEL_STS_RECVD_INTEGRITY_CHECK	0x80000000 /* Received Integrity Check Fail Msg */
 /* IDE RID Association Register 1 */
 #define  PCI_IDE_SEL_RID_1		 0xc
