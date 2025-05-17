@@ -27,7 +27,7 @@ links from one node to another outside of the natural tree structure.
 
 Conceptually, a common set of usage conventions, called 'bindings',
 is defined for how data should appear in the tree to describe typical
-hardware characteristics including data busses, interrupt lines, GPIO
+hardware characteristics including data buses, interrupt lines, GPIO
 connections, and peripheral devices.
 
 As much as possible, hardware is described using existing bindings to
@@ -36,7 +36,7 @@ names are simply text strings, it is easy to extend existing bindings
 or create new ones by defining new nodes and properties.  Be wary,
 however, of creating a new binding without first doing some homework
 about what already exists.  There are currently two different,
-incompatible, bindings for i2c busses that came about because the new
+incompatible, bindings for i2c buses that came about because the new
 binding was created without first investigating how i2c devices were
 already being enumerated in existing systems.
 
