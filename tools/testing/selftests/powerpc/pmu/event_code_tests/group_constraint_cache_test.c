@@ -31,7 +31,7 @@ static int group_constraint_cache(void)
 	/* Check for platform support for the test */
 	SKIP_IF(platform_check_for_tests());
 
-	/* Init the events for the group contraint check for l1 cache select bits */
+	/* Init the events for the group constraint check for l1 cache select bits */
 	event_init(&leader, EventCode_1);
 	FAIL_IF(event_open(&leader));
 
@@ -42,7 +42,7 @@ static int group_constraint_cache(void)
 
 	event_close(&event);
 
-	/* Init the event for the group contraint l1 cache select test */
+	/* Init the event for the group constraint l1 cache select test */
 	event_init(&event, EventCode_3);
 
 	/* Expected to succeed as sibling event request same l1 cache select bits as leader */
