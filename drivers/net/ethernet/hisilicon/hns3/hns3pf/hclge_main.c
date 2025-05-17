@@ -10141,15 +10141,23 @@ static void hclge_rm_vport_vlan_table(struct hclge_vport *vport, u16 vlan_id,
 {
 	struct hclge_vport_vlan_cfg *vlan, *tmp;
 	struct hclge_dev *hdev = vport->back;
+	int ret;
 
 	list_for_each_entry_safe(vlan, tmp, &vport->vlan_list, node) {
 		if (vlan->vlan_id == vlan_id) {
-			if (is_write_tbl && vlan->hd_tbl_status)
-				hclge_set_vlan_filter_hw(hdev,
-							 htons(ETH_P_8021Q),
-							 vport->vport_id,
-							 vlan_id,
-							 true);
+			if (is_write_tbl && vlan->hd_tbl_status) {
+				ret = hclge_set_vlan_filter_hw(hdev,
+							       htons(ETH_P_8021Q),
+							       vport->vport_id,
+							       vlan_id,
+							       true);
+				if (ret) {
+					dev_err(&hdev->pdev->dev,
+						"restore vport vlan list failed, ret=%d\n",
+						ret);
+					return;
+				}
+			}
 
 			list_del(&vlan->node);
 			kfree(vlan);
