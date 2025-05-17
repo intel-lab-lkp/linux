@@ -128,7 +128,7 @@ properties:
     minimum: 1000000  # In case anyone thought this was MHz.
     description:
       When the DRAM type is DDR3, this parameter defines the ODT disable
-      frequency in Hz. When the DDR frequency is less then ddr3_odt_dis_freq,
+      frequency in Hz. When the DDR frequency is less than ddr3_odt_dis_freq,
       the ODT on the DRAM side and controller side are both disabled.
 
   rockchip,ddr3_drv:
@@ -176,7 +176,7 @@ properties:
     minimum: 1000000  # In case anyone thought this was MHz.
     description:
       When the DRAM type is LPDDR3, this parameter defines then ODT disable
-      frequency in Hz. When DDR frequency is less then ddr3_odt_dis_freq, the
+      frequency in Hz. When DDR frequency is less than ddr3_odt_dis_freq, the
       ODT on the DRAM side and controller side are both disabled.
 
   rockchip,lpddr3_drv:
@@ -223,7 +223,7 @@ properties:
     minimum: 1000000  # In case anyone thought this was MHz.
     description:
       When the DRAM type is LPDDR4, this parameter defines the ODT disable
-      frequency in Hz. When the DDR frequency is less then ddr3_odt_dis_freq,
+      frequency in Hz. When the DDR frequency is less than ddr3_odt_dis_freq,
       the ODT on the DRAM side and controller side are both disabled.
 
   rockchip,lpddr4_drv:
