@@ -26,7 +26,7 @@ Arguments
     File descriptor returned by :c:func:`open()`.
 
 ``tone``
-    an integer enumered value described at :c:type:`fe_sec_tone_mode`
+    An integer enumerated value described at :c:type:`fe_sec_tone_mode`
 
 Description
 ===========
@@ -41,7 +41,7 @@ this is done using the DiSEqC ioctls.
 
 .. attention:: If more than one device is connected to the same antenna,
    setting a tone may interfere on other devices, as they may lose the
-   capability of selecting the band. So, it is recommended that applications
+   capability of selecting the band. It is recommended that applications
    would change to SEC_TONE_OFF when the device is not used.
 
 Return Value

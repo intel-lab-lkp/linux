@@ -26,7 +26,7 @@ Arguments
     File descriptor returned by :c:func:`open()`.
 
 ``voltage``
-    an integer enumered value described at :c:type:`fe_sec_voltage`
+    An integer enumerated value described at :c:type:`fe_sec_voltage`
 
 Description
 ===========
@@ -44,7 +44,7 @@ power up the LNBf.
 
 .. attention:: if more than one device is connected to the same antenna,
    setting a voltage level may interfere on other devices, as they may lose
-   the capability of setting polarization or IF. So, on those cases, setting
+   the capability of setting polarization or IF. In those cases, setting
    the voltage to SEC_VOLTAGE_OFF while the device is not is used is
    recommended.
 
