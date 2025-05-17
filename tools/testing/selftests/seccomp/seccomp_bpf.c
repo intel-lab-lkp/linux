@@ -4511,7 +4511,11 @@ static char get_proc_stat(struct __test_metadata *_metadata, pid_t pid)
 
 	snprintf(proc_path, sizeof(proc_path), "/proc/%d/stat", pid);
 	ASSERT_EQ(get_nth(_metadata, proc_path, 3, &line), 1);
-
+	int rc = get_nth(_metadata, proc_path, 3, &line);
+    	if (rc != 1) {
+        	printf("[ERROR] user_notification_fifo: failed to read stat for PID %d (rc=%d)\n", pid, rc);
+    	}
+    	ASSERT_EQ(rc, 1);
 	status = *line;
 	free(line);
 
@@ -4521,6 +4525,7 @@ static char get_proc_stat(struct __test_metadata *_metadata, pid_t pid)
 TEST(user_notification_fifo)
 {
 	struct seccomp_notif_resp resp = {};
+	ksft_print_msg("[INFO] Starting FIFO notification test\n");
 	struct seccomp_notif req = {};
 	int i, status, listener;
 	pid_t pid, pids[3];
@@ -4538,6 +4543,7 @@ TEST(user_notification_fifo)
 	listener = user_notif_syscall(__NR_getppid,
 				      SECCOMP_FILTER_FLAG_NEW_LISTENER);
 	ASSERT_GE(listener, 0);
+	ksft_print_msg("[INFO] user_notification_fifo: listener PID is %d\n", listener);
 
 	pid = fork();
 	ASSERT_GE(pid, 0);
