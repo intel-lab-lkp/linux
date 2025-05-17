@@ -41,7 +41,7 @@ FM_TX Control IDs
     description of the correct character encoding for Programme Service
     name strings. Also from RDS specification, PS is usually a single
     eight character text. However, it is also possible to find receivers
-    which can scroll strings sized as 8 x N characters. So, this control
+    which can scroll strings sized as 8 x N characters. Therefore this control
     must be configured with steps of 8 characters. The result is it must
     always contain a string with size multiple of 8.
 
@@ -55,7 +55,7 @@ FM_TX Control IDs
     E of :ref:`iec62106`. The length of Radio Text strings depends on
     which RDS Block is being used to transmit it, either 32 (2A block)
     or 64 (2B block). However, it is also possible to find receivers
-    which can scroll strings sized as 32 x N or 64 x N characters. So,
+    which can scroll strings sized as 32 x N or 64 x N characters. Therefore
     this control must be configured with steps of 32 or 64 characters.
     The result is it must always contain a string with size multiple of
     32 or 64.
@@ -94,8 +94,8 @@ FM_TX Control IDs
 
 ``V4L2_CID_RDS_TX_ALT_FREQS (__u32 array)``
     The alternate frequencies in kHz units. The RDS standard allows for
-    up to 25 frequencies to be defined. Drivers may support fewer
-    frequencies so check the array size.
+    up to 25 frequencies to be defined. Because drivers may support fewer
+    frequencies, check the array size.
 
 ``V4L2_CID_AUDIO_LIMITER_ENABLED (boolean)``
     Enables or disables the audio deviation limiter feature. The limiter
@@ -104,7 +104,7 @@ FM_TX Control IDs
 
 ``V4L2_CID_AUDIO_LIMITER_RELEASE_TIME (integer)``
     Sets the audio deviation limiter feature release time. Unit is in
-    useconds. Step and range are driver-specific.
+    microseconds. Step and range are driver-specific.
 
 ``V4L2_CID_AUDIO_LIMITER_DEVIATION (integer)``
     Configures audio frequency deviation level in Hz. The range and step
@@ -121,16 +121,16 @@ FM_TX Control IDs
     range and step are driver-specific.
 
 ``V4L2_CID_AUDIO_COMPRESSION_THRESHOLD (integer)``
-    Sets the threshold level for audio compression freature. It is a dB
+    Sets the threshold level for audio compression feature. It is a dB
     value. The range and step are driver-specific.
 
 ``V4L2_CID_AUDIO_COMPRESSION_ATTACK_TIME (integer)``
-    Sets the attack time for audio compression feature. It is a useconds
+    Sets the attack time for audio compression feature. It is a microseconds
     value. The range and step are driver-specific.
 
 ``V4L2_CID_AUDIO_COMPRESSION_RELEASE_TIME (integer)``
     Sets the release time for audio compression feature. It is a
-    useconds value. The range and step are driver-specific.
+    microseconds value. The range and step are driver-specific.
 
 ``V4L2_CID_PILOT_TONE_ENABLED (boolean)``
     Enables or disables the pilot tone generation feature.
@@ -143,17 +143,12 @@ FM_TX Control IDs
     Configures pilot tone frequency value. Unit is in Hz. The range and
     step are driver-specific.
 
-``V4L2_CID_TUNE_PREEMPHASIS``
-    (enum)
-
-enum v4l2_preemphasis -
+``V4L2_CID_TUNE_PREEMPHASIS (enum)``
     Configures the pre-emphasis value for broadcasting. A pre-emphasis
     filter is applied to the broadcast to accentuate the high audio
     frequencies. Depending on the region, a time constant of either 50
-    or 75 useconds is used. The enum v4l2_preemphasis defines possible
-    values for pre-emphasis. Here they are:
-
-
+    or 75 microseconds is used. The enum v4l2_preemphasis defines possible
+    values for pre-emphasis. They are:
 
 .. flat-table::
     :header-rows:  0
@@ -165,8 +160,6 @@ enum v4l2_preemphasis -
       - A pre-emphasis of 50 uS is used.
     * - ``V4L2_PREEMPHASIS_75_uS``
       - A pre-emphasis of 75 uS is used.
-
-
 
 ``V4L2_CID_TUNE_POWER_LEVEL (integer)``
     Sets the output power level for signal transmission. Unit is in

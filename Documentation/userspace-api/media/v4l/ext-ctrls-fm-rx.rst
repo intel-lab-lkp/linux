@@ -35,7 +35,7 @@ FM_RX Control IDs
     description of the correct character encoding for Programme Service
     name strings. Also from RDS specification, PS is usually a single
     eight character text. However, it is also possible to find receivers
-    which can scroll strings sized as 8 x N characters. So, this control
+    which can scroll strings sized as 8 x N characters. Therefore this control
     must be configured with steps of 8 characters. The result is it must
     always contain a string with size multiple of 8.
 
@@ -49,7 +49,7 @@ FM_RX Control IDs
     Radio Text strings depends on which RDS Block is being used to
     transmit it, either 32 (2A block) or 64 (2B block). However, it is
     also possible to find receivers which can scroll strings sized as 32
-    x N or 64 x N characters. So, this control must be configured with
+    x N or 64 x N characters. Therefore this control must be configured with
     steps of 32 or 64 characters. The result is it must always contain a
     string with size multiple of 32 or 64.
 
@@ -64,17 +64,12 @@ FM_RX Control IDs
     broadcasts speech. If the transmitter doesn't make this distinction,
     then it will be set.
 
-``V4L2_CID_TUNE_DEEMPHASIS``
-    (enum)
-
-enum v4l2_deemphasis -
+``V4L2_CID_TUNE_DEEMPHASIS (enum)``
     Configures the de-emphasis value for reception. A de-emphasis filter
     is applied to the broadcast to accentuate the high audio
     frequencies. Depending on the region, a time constant of either 50
-    or 75 useconds is used. The enum v4l2_deemphasis defines possible
-    values for de-emphasis. Here they are:
-
-
+    or 75 microseconds is used. The enum v4l2_deemphasis defines possible
+    values for de-emphasis. They are:
 
 .. flat-table::
     :header-rows:  0
