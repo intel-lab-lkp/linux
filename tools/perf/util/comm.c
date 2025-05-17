@@ -213,6 +213,7 @@ int comm__override(struct comm *comm, const char *str, u64 timestamp, bool exec)
 	new = comm_strs__findnew(str);
 	if (!new)
 		return -ENOMEM;
+	printf("[OVERRIDE] old %s new %s str %s\n", old->str, new->str, str);
 
 	comm_str__put(old);
 	comm->comm_str = new;

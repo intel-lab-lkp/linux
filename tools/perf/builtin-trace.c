@@ -4204,6 +4204,7 @@ static int trace__deliver_event(struct trace *trace, union perf_event *event)
 {
 	int err;
 
+	printf("[debug] deliver\n");
 	if (!trace->sort_events)
 		return __trace__deliver_event(trace, event);
 
