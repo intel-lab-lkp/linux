@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- *
  * A test for the patch "Allow compaction of unevictable pages".
  * With this patch we should be able to allocate at least 1/4
  * of RAM in huge pages. Without the patch much less is
@@ -94,8 +93,10 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 	snprintf(init_nr_hugepages, sizeof(init_nr_hugepages),
 		 "%lu", initial_nr_hugepages);
 
-	/* We want to test with 80% of available memory. Else, OOM killer comes
-	   in to play */
+	/*
+	 * We want to test with 80% of available memory. Else, OOM killer comes
+	 * in to play
+	 */
 	mem_free = mem_free * 0.8;
 
 	fd = open("/proc/sys/vm/nr_hugepages", O_RDWR | O_NONBLOCK);
@@ -106,8 +107,10 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 		goto out;
 	}
 
-	/* Request a large number of huge pages. The Kernel will allocate
-	   as much as it can */
+	/*
+	 * Request a large number of huge pages. The Kernel will allocate
+	 * as much as it can
+	 */
 	if (write(fd, "100000", (6*sizeof(char))) != (6*sizeof(char))) {
 		ksft_print_msg("Failed to write 100000 to /proc/sys/vm/nr_hugepages: %s\n",
 			       strerror(errno));
@@ -122,8 +125,10 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 		goto close_fd;
 	}
 
-	/* We should have been able to request at least 1/3 rd of the memory in
-	   huge pages */
+	/*
+	 * We should have been able to request at least 1/3 rd of the memory in
+	 * huge pages
+	 */
 	nr_hugepages_ul = strtoul(nr_hugepages, NULL, 10);
 	if (!nr_hugepages_ul) {
 		ksft_print_msg("ERROR: No memory is available as huge pages\n");
@@ -243,7 +248,8 @@ int main(int argc, char **argv)
 		entry->next = list;
 		list = entry;
 
-		/* Write something (in this case the address of the map) to
+		/*
+		 * Write something (in this case the address of the map) to
 		 * ensure that KSM can't merge the mapped pages
 		 */
 		for (i = 0; i < MAP_SIZE; i += page_size)
