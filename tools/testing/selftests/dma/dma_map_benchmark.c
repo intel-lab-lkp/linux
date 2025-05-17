@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	/* suppose the mininum DMA zone is 1MB in the world */
+	/* suppose the minimum DMA zone is 1MB in the world */
 	if (bits < 20 || bits > 64) {
 		fprintf(stderr, "invalid dma mask bit, must be in 20-64\n");
 		exit(1);
