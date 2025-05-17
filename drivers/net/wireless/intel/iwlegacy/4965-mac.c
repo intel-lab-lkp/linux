@@ -1567,16 +1567,19 @@ il4965_tx_cmd_build_rate(struct il_priv *il,
 	/**
 	 * If the current TX rate stored in mac80211 has the MCS bit set, it's
 	 * not really a TX rate.  Thus, we use the lowest supported rate for
-	 * this band.  Also use the lowest supported rate if the stored rate
-	 * idx is invalid.
+	 * this band.
 	 */
 	rate_idx = info->control.rates[0].idx;
-	if ((info->control.rates[0].flags & IEEE80211_TX_RC_MCS) || rate_idx < 0
-	    || rate_idx > RATE_COUNT_LEGACY)
+	if (info->control.rates[0].flags & IEEE80211_TX_RC_MCS)
 		rate_idx = rate_lowest_index(&il->bands[info->band], sta);
-	/* For 5 GHZ band, remap mac80211 rate indices into driver indices */
-	if (info->band == NL80211_BAND_5GHZ)
+	else if (info->band == NL80211_BAND_5GHZ)
+		/* For 5 GHZ band, remap mac80211 rate indices into driver indices */
 		rate_idx += IL_FIRST_OFDM_RATE;
+
+	/* Use the lowest supported rate if the stored rate idx is invalid. */
+	if (rate_idx < 0 || rate_idx >= RATE_COUNT)
+		rate_idx = rate_lowest_index(&il->bands[info->band], sta);
+
 	/* Get PLCP rate for tx_cmd->rate_n_flags */
 	rate_plcp = il_rates[rate_idx].plcp;
 	/* Zero out flags for this packet */
