@@ -49,6 +49,7 @@ struct fwat_attribute {
 
 enum fwat_attr_type {
 	fwat_type_integer,
+	fwat_type_boolean,
 	fwat_type_string,
 	fwat_type_enumeration,
 };
@@ -80,11 +81,17 @@ struct str_ops {
 	int (*write)(struct device *dev, long aux, const char *str, size_t count);
 };
 
+struct bool_ops {
+	int (*read)(struct device *dev, long aux, bool *val);
+	int (*write)(struct device *dev, long aux, bool val);
+};
+
 /**
  * struct fwat_attr_ops - Operations for a firmware *attribute*
  * @type: Type of callbacks.
  * @prop_read: Callback for retrieving each configured property of an attribute.
  * @integer: Integer type callbacks.
+ * @boolean: Boolean type callbacks.
  * @string: String type callbacks.
  * @enumeration: Enumeration type callbacks.
  */
@@ -94,6 +101,7 @@ struct fwat_attr_ops {
 			     enum fwat_property prop, char *buf);
 	union {
 		struct long_ops integer;
+		struct bool_ops boolean;
 		struct str_ops string;
 		struct str_ops enumeration;
 	};
