@@ -138,10 +138,10 @@ TEST_F_TIMEOUT(rtc, date_read_loop, READ_LOOP_DURATION_SEC + 2) {
 		rtc_read = rtc_time_to_timestamp(&rtc_tm);
 		/* Time should not go backwards */
 		ASSERT_LE(prev_rtc_read, rtc_read);
-		/* Time should not increase more then 1s at a time */
+		/* Time should not increase by more than 1s at a time */
 		ASSERT_GE(prev_rtc_read + 1, rtc_read);
 
-		/* Sleep 11ms to avoid killing / overheating the RTC */
+		/* Sleep for 11ms to avoid overloading or overheating the RTC */
 		nanosleep_with_retries(READ_LOOP_SLEEP_MS * 1000000);
 
 		prev_rtc_read = rtc_read;
@@ -163,7 +163,7 @@ TEST_F_TIMEOUT(rtc, uie_read, NUM_UIE + 2) {
 	rc = ioctl(self->fd, RTC_UIE_ON, 0);
 	if (rc == -1) {
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip update IRQs not supported.");
+		TH_LOG("Skipping test since update IRQs are not supported.");
 		return;
 	}
 
@@ -192,7 +192,7 @@ TEST_F(rtc, uie_select) {
 	rc = ioctl(self->fd, RTC_UIE_ON, 0);
 	if (rc == -1) {
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip update IRQs not supported.");
+		TH_LOG("Skipping test since update IRQs are not supported.");
 		return;
 	}
 
@@ -252,7 +252,7 @@ TEST_F(rtc, alarm_alm_set) {
 		 */
 		ASSERT_EQ(RTC_ALARM_UNKNOWN, alarm_state);
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
+		TH_LOG("Skipping test since alarms are not supported.");
 		return;
 	}
 
@@ -324,7 +324,7 @@ TEST_F(rtc, alarm_wkalm_set) {
 		 */
 		ASSERT_EQ(RTC_ALARM_UNKNOWN, alarm_state);
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
+		TH_LOG("Skipping test since alarms are not supported.");
 		return;
 	}
 
@@ -384,7 +384,7 @@ TEST_F_TIMEOUT(rtc, alarm_alm_set_minute, 65) {
 		 */
 		ASSERT_EQ(RTC_ALARM_UNKNOWN, alarm_state);
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
+		TH_LOG("Skipping test since alarms are not supported.");
 		return;
 	}
 
@@ -454,7 +454,7 @@ TEST_F_TIMEOUT(rtc, alarm_wkalm_set_minute, 65) {
 		 */
 		ASSERT_EQ(RTC_ALARM_UNKNOWN, alarm_state);
 		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
+		TH_LOG("Skipping test since alarms are not supported.");
 		return;
 	}
 
@@ -494,7 +494,7 @@ int main(int argc, char **argv)
 	case 1:
 		break;
 	default:
-		fprintf(stderr, "usage: %s [rtcdev]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [rtcdev]\n", argv[0]);
 		return 1;
 	}
 
