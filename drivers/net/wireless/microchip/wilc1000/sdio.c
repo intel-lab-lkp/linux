@@ -804,6 +804,7 @@ static int wilc_sdio_read_int(struct wilc *wilc, u32 *int_status)
 	u32 tmp;
 	u8 irq_flags;
 	struct sdio_cmd52 cmd;
+	int ret;
 
 	wilc_sdio_read_size(wilc, &tmp);
 
@@ -822,7 +823,12 @@ static int wilc_sdio_read_int(struct wilc *wilc, u32 *int_status)
 	cmd.raw = 0;
 	cmd.read_write = 0;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->devm, "Fail cmd 52, get IRQ register...\n");
+		return ret;
+	}
+
 	irq_flags = cmd.data;
 
 	if (sdio_priv->irq_gpio)
