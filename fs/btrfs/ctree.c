@@ -4592,8 +4592,9 @@ int btrfs_del_items(struct btrfs_trans_handle *trans, struct btrfs_root *root,
  * into min_key, so you can call btrfs_search_slot with cow=1 on the
  * key and get a writable path.
  *
- * This honors path->lowest_level to prevent descent past a given level
- * of the tree.
+ * This does not honor path->lowest_level any more because this
+ * function is never called with a nonzero path->lowest_level and the
+ * implementation of handling it in this function is broken for years.
  *
  * min_trans indicates the oldest transaction that you are interested
  * in walking through.  Any nodes or leaves older than min_trans are
@@ -4615,6 +4616,7 @@ int btrfs_search_forward(struct btrfs_root *root, struct btrfs_key *min_key,
 	int keep_locks = path->keep_locks;
 
 	ASSERT(!path->nowait);
+	WARN_ON(path->lowest_level > 0);
 	path->keep_locks = 1;
 again:
 	cur = btrfs_read_lock_root_node(root);
@@ -4636,38 +4638,29 @@ again:
 			goto out;
 		}
 
-		/* at the lowest level, we're done, setup the path and exit */
-		if (level == path->lowest_level) {
-			if (slot >= nritems)
-				goto find_next_key;
-			ret = 0;
-			path->slots[level] = slot;
-			/* Save our key for returning back. */
-			btrfs_item_key_to_cpu(cur, min_key, slot);
-			goto out;
-		}
-		if (sret && slot > 0)
-			slot--;
-		/*
-		 * check this node pointer against the min_trans parameters.
-		 * If it is too old, skip to the next one.
-		 */
-		while (slot < nritems) {
-			u64 gen;
-
-			gen = btrfs_node_ptr_generation(cur, slot);
-			if (gen < min_trans) {
+		if (level > 0) {
+			/*
+			 * Not at the lowest level and not a perfect match,
+			 * go one slot back if possible to search lower level.
+			 */
+			if (sret && slot > 0)
+				slot--;
+			/*
+			 * Check this node pointer against the min_trans parameters.
+			 * If it is too old, skip to the next one.
+			 */
+			while (slot < nritems) {
+				if (btrfs_node_ptr_generation(cur, slot) >= min_trans)
+					break;
 				slot++;
-				continue;
 			}
-			break;
 		}
-find_next_key:
-		/*
-		 * we didn't find a candidate key in this node, walk forward
-		 * and find another one
-		 */
+
 		path->slots[level] = slot;
+		/*
+		 * We didn't find a candidate key in this node, walk forward
+		 * and find another one.
+		 */
 		if (slot >= nritems) {
 			sret = btrfs_find_next_key(root, path, min_key, level,
 						  min_trans);
@@ -4678,12 +4671,13 @@ find_next_key:
 				goto out;
 			}
 		}
-		if (level == path->lowest_level) {
+		/* At the lowest level, we're done. Set the key and exit. */
+		if (level == 0) {
 			ret = 0;
-			/* Save our key for returning back. */
-			btrfs_node_key_to_cpu(cur, min_key, slot);
+			btrfs_item_key_to_cpu(cur, min_key, slot);
 			goto out;
 		}
+		/* Search down to a lower level. */
 		cur = btrfs_read_node_slot(cur, slot);
 		if (IS_ERR(cur)) {
 			ret = PTR_ERR(cur);
