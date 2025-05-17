@@ -579,8 +579,6 @@ __xfs_getfsmap_datadev(
 		if (pag_agno(pag) == end_ag) {
 			info->last = true;
 			error = query_fn(tp, info, &bt_cur, priv);
-			if (error)
-				break;
 		}
 		info->group = NULL;
 	}
@@ -813,8 +811,6 @@ xfs_getfsmap_rtdev_rtbitmap(
 			info->last = true;
 			error = xfs_getfsmap_rtdev_rtbitmap_helper(rtg, tp,
 					&ahigh, info);
-			if (error)
-				break;
 		}
 
 		xfs_rtgroup_unlock(rtg, XFS_RTGLOCK_BITMAP_SHARED);
@@ -1018,8 +1014,6 @@ xfs_getfsmap_rtdev_rmapbt(
 			info->last = true;
 			error = xfs_getfsmap_rtdev_rmapbt_helper(bt_cur,
 					&info->high, info);
-			if (error)
-				break;
 		}
 		info->group = NULL;
 	}
