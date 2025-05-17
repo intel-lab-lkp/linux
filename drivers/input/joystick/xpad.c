@@ -123,6 +123,10 @@ static bool auto_poweroff = true;
 module_param(auto_poweroff, bool, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(auto_poweroff, "Power off wireless controllers on suspend");
 
+static bool disable_xboxone;
+module_param(disable_xboxone, bool, 0644);
+MODULE_PARM_DESC(disable_xboxone, "Disable all Xbox One devices (XTYPE_XBOXONE)");
+
 static const struct xpad_device {
 	u16 idVendor;
 	u16 idProduct;
@@ -2113,6 +2117,14 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 			xpad->mapping |= MAP_TRIGGERS_TO_BUTTONS;
 		if (sticks_to_null)
 			xpad->mapping |= MAP_STICKS_TO_NULL;
+	}
+
+	if (xpad->xtype == XTYPE_XBOXONE && disable_xboxone) {
+		/*
+		 * Disable XTYPE_XBOXONE based on module parameter.
+		 */
+		error = -ENODEV;
+		goto err_free_in_urb;
 	}
 
 	if (xpad->xtype == XTYPE_XBOXONE &&
