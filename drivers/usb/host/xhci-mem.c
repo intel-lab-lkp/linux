@@ -1745,6 +1745,7 @@ struct xhci_command *xhci_alloc_command_with_ctx(struct xhci_hcd *xhci,
 
 void xhci_urb_free_priv(struct urb_priv *urb_priv)
 {
+	WARN_ONCE(1, "xhci private data should be managed by urb");
 	kfree(urb_priv);
 }
 
