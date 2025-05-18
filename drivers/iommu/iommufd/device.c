@@ -1352,6 +1352,7 @@ EXPORT_SYMBOL_NS_GPL(iommufd_access_rw, "IOMMUFD");
 
 int iommufd_get_hw_info(struct iommufd_ucmd *ucmd)
 {
+	const u32 SUPPORTED_FLAGS = IOMMU_HW_INFO_FLAG_INPUT_TYPE;
 	struct iommu_hw_info *cmd = ucmd->cmd;
 	void __user *user_ptr = u64_to_user_ptr(cmd->data_uptr);
 	const struct iommu_ops *ops;
@@ -1361,12 +1362,14 @@ int iommufd_get_hw_info(struct iommufd_ucmd *ucmd)
 	void *data;
 	int rc;
 
-	if (cmd->flags || cmd->__reserved[0] || cmd->__reserved[1] ||
-	    cmd->__reserved[2])
+	if (cmd->flags & ~SUPPORTED_FLAGS)
+		return -EOPNOTSUPP;
+	if (cmd->__reserved[0] || cmd->__reserved[1] || cmd->__reserved[2])
 		return -EOPNOTSUPP;
 
 	/* Clear the type field since drivers don't support a random input */
-	cmd->out_data_type = IOMMU_HW_INFO_TYPE_DEFAULT;
+	if (!(cmd->flags & IOMMU_HW_INFO_FLAG_INPUT_TYPE))
+		cmd->data_type = IOMMU_HW_INFO_TYPE_DEFAULT;
 
 	idev = iommufd_get_device(ucmd, cmd->dev_id);
 	if (IS_ERR(idev))
@@ -1374,7 +1377,7 @@ int iommufd_get_hw_info(struct iommufd_ucmd *ucmd)
 
 	ops = dev_iommu_ops(idev->dev);
 	if (ops->hw_info) {
-		data = ops->hw_info(idev->dev, &data_len, &cmd->out_data_type);
+		data = ops->hw_info(idev->dev, &data_len, &cmd->data_type);
 		if (IS_ERR(data)) {
 			rc = PTR_ERR(data);
 			goto out_put;
@@ -1384,13 +1387,12 @@ int iommufd_get_hw_info(struct iommufd_ucmd *ucmd)
 		 * drivers that have hw_info callback should have a unique
 		 * iommu_hw_info_type.
 		 */
-		if (WARN_ON_ONCE(cmd->out_data_type ==
-				 IOMMU_HW_INFO_TYPE_NONE)) {
+		if (WARN_ON_ONCE(cmd->data_type == IOMMU_HW_INFO_TYPE_NONE)) {
 			rc = -ENODEV;
 			goto out_free;
 		}
 	} else {
-		cmd->out_data_type = IOMMU_HW_INFO_TYPE_NONE;
+		cmd->data_type = IOMMU_HW_INFO_TYPE_NONE;
 		data_len = 0;
 		data = NULL;
 	}
