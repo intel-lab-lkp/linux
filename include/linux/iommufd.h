@@ -276,6 +276,11 @@ int _iommufd_object_depend(struct iommufd_object *obj_dependent,
 			   struct iommufd_object *obj_depended);
 void _iommufd_object_undepend(struct iommufd_object *obj_dependent,
 			      struct iommufd_object *obj_depended);
+int _iommufd_alloc_mmap(struct iommufd_ctx *ictx, struct iommufd_object *owner,
+			phys_addr_t mmio_addr, size_t length,
+			unsigned long *offset);
+void _iommufd_destroy_mmap(struct iommufd_ctx *ictx,
+			   struct iommufd_object *owner, unsigned long offset);
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 int iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
@@ -307,6 +312,20 @@ static inline int _iommufd_object_depend(struct iommufd_object *obj_dependent,
 static inline void
 _iommufd_object_undepend(struct iommufd_object *obj_dependent,
 			 struct iommufd_object *obj_depended)
+{
+}
+
+static inline int _iommufd_alloc_mmap(struct iommufd_ctx *ictx,
+				      struct iommufd_object *owner,
+				      phys_addr_t mmio_addr, size_t length,
+				      unsigned long *offset)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void _iommufd_destroy_mmap(struct iommufd_ctx *ictx,
+					 struct iommufd_object *owner,
+					 unsigned long offset)
 {
 }
 
@@ -402,5 +421,31 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 		WARN_ON_ONCE(dependent->member.ictx != depended->member.ictx); \
 		_iommufd_object_undepend(&dependent->member.obj,               \
 					 &depended->member.obj);               \
+	})
+
+/*
+ * Helpers for IOMMU driver to alloc/destroy an mmapable area for a structure.
+ *
+ * To support an mmappable MMIO region, kernel driver must first register it to
+ * iommufd core to allocate an @out_offset, in the context of an driver-struct
+ * allocation (e.g. viommu_alloc op). Then, it should report to user space this
+ * @out_offset and the @length of the MMIO region for mmap syscall.
+ */
+#define iommufd_viommu_alloc_mmap(viommu, member, mmio, length, out_offset)    \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_viommu,               \
+					  viommu->member));                    \
+		static_assert(offsetof(typeof(*viommu), member.obj) == 0);     \
+		_iommufd_alloc_mmap(viommu->member.ictx, &viommu->member.obj,  \
+				    mmio, length, out_offset);                 \
+	})
+
+#define iommufd_viommu_destroy_mmap(viommu, member, offset)                    \
+	({                                                                     \
+		static_assert(__same_type(struct iommufd_viommu,               \
+					  viommu->member));                    \
+		static_assert(offsetof(typeof(*viommu), member.obj) == 0);     \
+		_iommufd_destroy_mmap(viommu->member.ictx,                     \
+				      &viommu->member.obj, offset);            \
 	})
 #endif
