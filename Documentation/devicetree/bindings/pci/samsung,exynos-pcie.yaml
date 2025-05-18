@@ -11,78 +11,113 @@ maintainers:
   - Jaehoon Chung <jh80.chung@samsung.com>
 
 description: |+
-  Exynos5433 SoC PCIe host controller is based on the Synopsys DesignWare
+  Samsung SoCs PCIe host controller is based on the Synopsys DesignWare
   PCIe IP and thus inherits all the common properties defined in
   snps,dw-pcie.yaml.
 
-allOf:
-  - $ref: /schemas/pci/snps,dw-pcie.yaml#
-
 properties:
   compatible:
-    const: samsung,exynos5433-pcie
+    oneOf:
+      - enum:
+          - samsung,exynos5433-pcie
+          - tesla,fsd-pcie
 
-  reg:
-    items:
-      - description: Data Bus Interface (DBI) registers.
-      - description: External Local Bus interface (ELBI) registers.
-      - description: PCIe configuration space region.
+allOf:
+  - $ref: /schemas/pci/snps,dw-pcie.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - tesla,fsd-pcie
+    then:
+      properties:
+        samsung,syscon-pcie:
+          description: phandle for system control registers, used to
+                       control signals at system level
 
-  reg-names:
-    items:
-      - const: dbi
-      - const: elbi
-      - const: config
+      required:
+        - samsung,syscon-pcie
 
-  interrupts:
-    maxItems: 1
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - samsung,exynos5433-pcie
+    then:
+      properties:
+        reg:
+          items:
+            - description: controller's own configuration registers
+                           are available.
+            - description: controller's application logic registers
+            - description: configuration registers
 
-  clocks:
-    items:
-      - description: PCIe bridge clock
-      - description: PCIe bus clock
+        reg-names:
+          items:
+            - const: dbi
+            - const: elbi
+            - const: config
 
-  clock-names:
-    items:
-      - const: pcie
-      - const: pcie_bus
+        interrupts:
+          maxItems: 1
 
-  phys:
-    maxItems: 1
+        clocks:
+          items:
+            - description: pcie bridge clock
+            - description: pcie bus clock
 
-  vdd10-supply:
-    description:
-      Phandle to a regulator that provides 1.0V power to the PCIe block.
+        clock-names:
+          items:
+            - const: pcie
+            - const: pcie_bus
 
-  vdd18-supply:
-    description:
-      Phandle to a regulator that provides 1.8V power to the PCIe block.
+        phys:
+          maxItems: 1
 
-  num-lanes:
-    const: 1
+        vdd10-supply:
+          description:
+            phandle to a regulator that provides 1.0v power to the pcie block.
 
-  num-viewport:
-    const: 3
+        vdd18-supply:
+          description:
+            phandle to a regulator that provides 1.8v power to the pcie block.
 
-required:
-  - reg
-  - reg-names
-  - interrupts
-  - "#address-cells"
-  - "#size-cells"
-  - "#interrupt-cells"
-  - interrupt-map
-  - interrupt-map-mask
-  - ranges
-  - bus-range
-  - device_type
-  - num-lanes
-  - num-viewport
-  - clocks
-  - clock-names
-  - phys
-  - vdd10-supply
-  - vdd18-supply
+        num-lanes:
+          const: 1
+
+        num-viewport:
+          const: 3
+
+        assigned-clocks:
+          maxItems: 2
+
+        assigned-clock-parents:
+          maxItems: 2
+
+        assigned-clock-rates:
+          maxItems: 2
+
+      required:
+        - reg
+        - reg-names
+        - interrupts
+        - "#address-cells"
+        - "#size-cells"
+        - "#interrupt-cells"
+        - interrupt-map
+        - interrupt-map-mask
+        - ranges
+        - bus-range
+        - device_type
+        - num-lanes
+        - num-viewport
+        - clocks
+        - clock-names
+        - phys
+        - vdd10-supply
+        - vdd18-supply
 
 unevaluatedProperties: false
 
@@ -115,5 +150,35 @@ examples:
         vdd18-supply = <&ldo7_reg>;
         interrupt-map-mask = <0 0 0 0>;
         interrupt-map = <0 0 0 0 &gic GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH>;
+    };
+  - |
+    #include <dt-bindings/clock/fsd-clk.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        pcierc0: pcie@16a00000 {
+            compatible = "tesla,fsd-pcie";
+            reg = <0x0 0x16a00000 0x0 0x2000>,
+                  <0x0 0x168b0000 0x0 0x1000>,
+                  <0x0 0x17000000 0x0 0x1000>;
+            reg-names = "dbi", "elbi", "config";
+            ranges =  <0x82000000 0 0x17001000 0 0x17001000 0 0xffefff>;
+            clocks = <&clock_fsys1 PCIE_LINK0_IPCLKPORT_AUX_ACLK>,
+                     <&clock_fsys1 PCIE_LINK0_IPCLKPORT_DBI_ACLK>,
+                     <&clock_fsys1 PCIE_LINK0_IPCLKPORT_MSTR_ACLK>,
+                     <&clock_fsys1 PCIE_LINK0_IPCLKPORT_SLV_ACLK>;
+            clock-names = "aux", "dbi", "mstr", "slv";
+            #address-cells = <3>;
+            #size-cells = <2>;
+            dma-coherent;
+            device_type = "pci";
+            interrupts = <GIC_SPI 115 IRQ_TYPE_EDGE_RISING>;
+            num-lanes = <4>;
+            samsung,syscon-pcie = <&sysreg_fsys1 0x50c>;
+            phys = <&pciephy1>;
+            iommu-map = <0x0 &smmu_imem 0x0 0x10000>;
+            iommu-map-mask = <0x0>;
+        };
     };
 ...
