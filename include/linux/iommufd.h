@@ -38,6 +38,7 @@ enum iommufd_object_type {
 	IOMMUFD_OBJ_VIOMMU,
 	IOMMUFD_OBJ_VDEVICE,
 	IOMMUFD_OBJ_VEVENTQ,
+	IOMMUFD_OBJ_HW_QUEUE,
 #ifdef CONFIG_IOMMUFD_TEST
 	IOMMUFD_OBJ_SELFTEST,
 #endif
@@ -133,6 +134,24 @@ struct iommufd_vdevice {
 	u64 id; /* per-vIOMMU virtual ID */
 };
 
+struct iommufd_hw_queue {
+	struct iommufd_object obj;
+	struct iommufd_ctx *ictx;
+	struct iommufd_viommu *viommu;
+	u64 base_addr; /* in guest physical address space */
+	size_t length;
+};
+
+enum iommufd_viommu_flags {
+	/*
+	 * The HW does not go through an address translation table but reads the
+	 * physical address space directly: iommufd core should pin the physical
+	 * pages backing the queue memory that's allocated for the HW QUEUE, and
+	 * ensure those physical pages are contiguous in the physical space.
+	 */
+	IOMMUFD_VIOMMU_FLAG_HW_QUEUE_READS_PA = 1 << 0,
+};
+
 /**
  * struct iommufd_viommu_ops - vIOMMU specific operations
  * @destroy: Clean up all driver-specific parts of an iommufd_viommu. The memory
@@ -158,8 +177,18 @@ struct iommufd_vdevice {
  * @vdevice_destroy: Clean up all driver-specific parts of an iommufd_vdevice.
  *                   The memory of the vDEVICE will be free-ed by iommufd core
  *                   after calling this op
+ * @hw_queue_alloc: Allocate a HW QUEUE object for a HW-accelerated queue given
+ *                  the @type (must be defined in include/uapi/linux/iommufd.h)
+ *                  for the @viommu. @index carries the logical HW QUEUE ID per
+ *                  @viommu in a guest VM, for a multi-queue model; @base_addr
+ *                  carries the guest physical base address of the queue memory;
+ *                  @length carries the size of the queue
+ * @hw_queue_destroy: Clean up all driver-specific parts of an iommufd_hw_queue.
+ *                    The memory of the HW QUEUE will be free-ed by iommufd core
+ *                    after calling this op
  */
 struct iommufd_viommu_ops {
+	u32 flags;
 	void (*destroy)(struct iommufd_viommu *viommu);
 	struct iommu_domain *(*alloc_domain_nested)(
 		struct iommufd_viommu *viommu, u32 flags,
@@ -171,6 +200,10 @@ struct iommufd_viommu_ops {
 						 struct device *dev,
 						 u64 virt_id);
 	void (*vdevice_destroy)(struct iommufd_vdevice *vdev);
+	struct iommufd_hw_queue *(*hw_queue_alloc)(
+		struct iommufd_ucmd *ucmd, struct iommufd_viommu *viommu,
+		unsigned int type, u32 index, u64 base_addr, size_t length);
+	void (*hw_queue_destroy)(struct iommufd_hw_queue *hw_queue);
 };
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
@@ -306,6 +339,20 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 		static_assert(__same_type(struct iommufd_viommu, *viommu));    \
 		ret = (drv_struct *)__iommufd_object_alloc_ucmd(               \
 			ucmd, ret, IOMMUFD_OBJ_VDEVICE, member.obj);           \
+		if (!IS_ERR(ret)) {                                            \
+			ret->member.viommu = viommu;                           \
+			ret->member.ictx = viommu->ictx;                       \
+		}                                                              \
+		ret;                                                           \
+	})
+
+#define iommufd_hw_queue_alloc(ucmd, viommu, drv_struct, member)               \
+	({                                                                     \
+		drv_struct *ret;                                               \
+									       \
+		static_assert(__same_type(struct iommufd_viommu, *viommu));    \
+		ret = (drv_struct *)__iommufd_object_alloc_ucmd(               \
+			ucmd, ret, IOMMUFD_OBJ_HW_QUEUE, member.obj);          \
 		if (!IS_ERR(ret)) {                                            \
 			ret->member.viommu = viommu;                           \
 			ret->member.ictx = viommu->ictx;                       \
