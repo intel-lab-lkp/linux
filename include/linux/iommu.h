@@ -607,8 +607,10 @@ __iommu_copy_struct_to_user(const struct iommu_user_data *dst_data,
  * @capable: check capability
  * @hw_info: report iommu hardware information. The data buffer returned by this
  *           op is allocated in the iommu driver and freed by the caller after
- *           use. The information type is one of enum iommu_hw_info_type defined
- *           in include/uapi/linux/iommufd.h.
+ *           use. @type can input a requested type and output a supported type,
+ *           either of which must be defined in enum iommu_hw_info_type in
+ *           include/uapi/linux/iommufd.h. Driver should reject an unsupported
+ *           data @type input
  * @domain_alloc: allocate and return an iommu domain if success. Otherwise
  *                NULL is returned. The domain is not fully initialized until
  *                the caller iommu_domain_alloc() returns.
