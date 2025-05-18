@@ -24,6 +24,7 @@
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
 #include <linux/init.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -197,6 +198,7 @@ static void mca_fe_early_trigger(struct snd_pcm_substream *substream, int cmd,
 	int serdes_unit = is_tx ? CLUSTER_TX_OFF : CLUSTER_RX_OFF;
 	int serdes_conf =
 		serdes_unit + (is_tx ? REG_TX_SERDES_CONF : REG_RX_SERDES_CONF);
+	int ret, status;
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -211,11 +213,15 @@ static void mca_fe_early_trigger(struct snd_pcm_substream *substream, int cmd,
 			   SERDES_STATUS_RST);
 		/*
 		 * Experiments suggest that it takes at most ~1 us
-		 * for the bit to clear, so wait 2 us for good measure.
+		 * for the bit to clear, however this has been seen to fail.
+		 * Wait up to 50 us for the reset bit to clear.
 		 */
-		udelay(2);
-		WARN_ON(readl_relaxed(cl->base + serdes_unit + REG_SERDES_STATUS) &
-			SERDES_STATUS_RST);
+		ret = readx_poll_timeout(readl_relaxed,
+					 cl->base + serdes_unit + REG_SERDES_STATUS,
+					 status, !(status & SERDES_STATUS_RST), 2, 50);
+		if (ret || (status & SERDES_STATUS_RST))
+			dev_warn(cl->host->dev, "MCA cluster failed to reset\n");
+
 		mca_modify(cl, serdes_conf, SERDES_CONF_SYNC_SEL,
 			   FIELD_PREP(SERDES_CONF_SYNC_SEL, 0));
 		mca_modify(cl, serdes_conf, SERDES_CONF_SYNC_SEL,
