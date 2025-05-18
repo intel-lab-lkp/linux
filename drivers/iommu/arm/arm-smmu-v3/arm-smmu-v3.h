@@ -727,6 +727,7 @@ struct arm_smmu_impl_ops {
 		struct arm_smmu_domain *smmu_domain, struct iommufd_ucmd *ucmd,
 		unsigned int viommu_type,
 		const struct iommu_user_data *user_data);
+	void *(*hw_info)(struct arm_smmu_device *smmu, u32 *length, u32 *type);
 };
 
 /* An SMMUv3 instance */
