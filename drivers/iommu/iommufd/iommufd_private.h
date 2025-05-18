@@ -136,14 +136,6 @@ int iopt_pin_pages(struct io_pagetable *iopt, unsigned long iova,
 void iopt_unpin_pages(struct io_pagetable *iopt, unsigned long iova,
 		      unsigned long length, bool is_owner);
 
-struct iommufd_ucmd {
-	struct iommufd_ctx *ictx;
-	void __user *ubuffer;
-	u32 user_size;
-	void *cmd;
-	struct iommufd_object *new_obj;
-};
-
 int iommufd_vfio_ioctl(struct iommufd_ctx *ictx, unsigned int cmd,
 		       unsigned long arg);
 

@@ -52,6 +52,14 @@ struct iommufd_object {
 	unsigned int id;
 };
 
+struct iommufd_ucmd {
+	struct iommufd_ctx *ictx;
+	void __user *ubuffer;
+	u32 user_size;
+	void *cmd;
+	struct iommufd_object *new_obj;
+};
+
 #define __iommufd_object_alloc_ucmd(ucmd, ptr, type, obj)                      \
 	container_of(_iommufd_object_alloc_ucmd(                               \
 			     ucmd,                                             \
@@ -262,8 +270,10 @@ static inline int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 									       \
 		ret = (drv_struct *)__iommufd_object_alloc_ucmd(               \
 			ucmd, ret, IOMMUFD_OBJ_VIOMMU, member.obj);            \
-		if (!IS_ERR(ret))                                              \
+		if (!IS_ERR(ret)) {                                            \
 			ret->member.ops = viommu_ops;                          \
+			ret->member.ictx = ucmd->ictx;                         \
+		}                                                              \
 		ret;                                                           \
 	})
 #endif
