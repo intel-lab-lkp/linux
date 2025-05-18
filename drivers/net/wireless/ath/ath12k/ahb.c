@@ -935,7 +935,7 @@ static int ath12k_ahb_resource_init(struct ath12k_base *ab)
 			goto err_mem_unmap;
 		}
 		ab->ce_remap = true;
-		ab->ce_remap_base_addr = HAL_IPQ5332_CE_WFSS_REG_BASE;
+		ab->ce_remap_base_addr = ce_remap->base;
 	}
 
 	ab_ahb->xo_clk = devm_clk_get(ab->dev, "xo");
