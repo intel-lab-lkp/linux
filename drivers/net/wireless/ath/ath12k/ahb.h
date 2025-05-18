@@ -43,6 +43,21 @@ enum ath12k_ahb_userpd_irq {
 
 struct ath12k_base;
 
+struct ath12k_ahb_ops {
+	int (*mdt_load)(struct device *dev, const struct firmware *fw,
+			const char *firmware, int pas_id, void *mem_region,
+			phys_addr_t mem_phys, size_t mem_size,
+			phys_addr_t *reloc_base);
+};
+
+struct ath12k_ahb_probe_data {
+	enum ath12k_hw_rev hw_rev;
+	u32 userpd_id;
+	bool scm_auth_enabled;
+	const struct ath12k_ahb_ops *ahb_ops;
+	const struct ath12k_hif_ops *hif_ops;
+};
+
 struct ath12k_ahb {
 	struct ath12k_base *ab;
 	struct rproc *tgt_rproc;
@@ -55,10 +70,10 @@ struct ath12k_ahb {
 	struct completion userpd_spawned;
 	struct completion userpd_ready;
 	struct completion userpd_stopped;
-	u32 userpd_id;
 	u32 spawn_bit;
 	u32 stop_bit;
 	int userpd_irq_num[ATH12K_USERPD_MAX_IRQ];
+	const struct ath12k_ahb_probe_data *ahb_data;
 };
 
 static inline struct ath12k_ahb *ath12k_ab_to_ahb(struct ath12k_base *ab)
