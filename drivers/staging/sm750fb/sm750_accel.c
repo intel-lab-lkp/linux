@@ -29,7 +29,7 @@ static inline u32 read_dpr(struct lynx_accel *accel, int offset)
 
 static inline void write_dpPort(struct lynx_accel *accel, u32 data)
 {
-	writel(data, accel->dpPortBase);
+	writel(data, accel->dp_port_base);
 }
 
 void sm750_hw_de_init(struct lynx_accel *accel)
