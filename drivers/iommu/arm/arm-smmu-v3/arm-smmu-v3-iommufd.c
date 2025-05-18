@@ -396,10 +396,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 		iommu_get_iommu_dev(dev, struct arm_smmu_device, iommu);
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	struct arm_smmu_domain *s2_parent = to_smmu_domain(parent);
-	struct arm_vsmmu *vsmmu;
-
-	if (viommu_type != IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
-		return ERR_PTR(-EOPNOTSUPP);
+	struct arm_vsmmu *vsmmu = ERR_PTR(-EOPNOTSUPP);
 
 	if (!(smmu->features & ARM_SMMU_FEAT_NESTING))
 		return ERR_PTR(-EOPNOTSUPP);
@@ -427,8 +424,13 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	    !(smmu->features & ARM_SMMU_FEAT_S2FWB))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	vsmmu = iommufd_viommu_alloc(ucmd, struct arm_vsmmu, core,
-				     &arm_vsmmu_ops);
+	if (smmu->impl_ops && smmu->impl_ops->vsmmu_alloc &&
+	    viommu_type == smmu->impl_ops->supported_vsmmu_type)
+		vsmmu = smmu->impl_ops->vsmmu_alloc(smmu, s2_parent, ucmd,
+						    viommu_type, user_data);
+	else if (viommu_type == IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
+		vsmmu = iommufd_viommu_alloc(ucmd, struct arm_vsmmu, core,
+					     &arm_vsmmu_ops);
 	if (IS_ERR(vsmmu))
 		return ERR_CAST(vsmmu);
 
