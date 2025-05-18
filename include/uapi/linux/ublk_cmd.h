@@ -328,6 +328,17 @@ struct ublksrv_ctrl_dev_info {
 #define		UBLK_IO_F_FUA			(1U << 13)
 #define		UBLK_IO_F_NOUNMAP		(1U << 15)
 #define		UBLK_IO_F_SWAP			(1U << 16)
+/*
+ * For UBLK_F_AUTO_BUF_REG & UBLK_AUTO_BUF_REG_FALLBACK only.
+ *
+ * This flag is set if auto buffer register is failed & ublk server passes
+ * UBLK_AUTO_BUF_REG_FALLBACK, and ublk server need to register buffer
+ * manually for handling the delivered IO command if this flag is observed
+ *
+ * ublk server has to check this flag if UBLK_AUTO_BUF_REG_FALLBACK is
+ * passed in.
+ */
+#define		UBLK_IO_F_NEED_REG_BUF		(1U << 17)
 
 /*
  * io cmd is described by this structure, and stored in share memory, indexed
@@ -362,10 +373,23 @@ static inline __u32 ublksrv_get_flags(const struct ublksrv_io_desc *iod)
 	return iod->op_flags >> 8;
 }
 
+/*
+ * If this flag is set, fallback by completing the uring_cmd and setting
+ * `UBLK_IO_F_NEED_REG_BUF` in case of auto-buf-register failure;
+ * otherwise the client ublk request is failed silently
+ *
+ * If ublk server passes this flag, it has to check if UBLK_IO_F_NEED_REG_BUF
+ * is set in `ublksrv_io_desc.op_flags`. If UBLK_IO_F_NEED_REG_BUF is set,
+ * ublk server needs to register io buffer manually for handling IO command.
+ */
+#define UBLK_AUTO_BUF_REG_FALLBACK 	(1 << 0)
+#define UBLK_AUTO_BUF_REG_F_MASK 	UBLK_AUTO_BUF_REG_FALLBACK
+
 struct ublk_auto_buf_reg {
 	/* index for registering the delivered request buffer */
 	__u16  index;
-	__u16   reserved0;
+	__u8   flags;
+	__u8   reserved0;
 
 	/*
 	 * io_ring FD can be passed via the reserve field in future for
@@ -379,6 +403,7 @@ struct ublk_auto_buf_reg {
  * uring_cmd's sqe->addr:
  *
  * 	- bit0 ~ bit15: buffer index
+ * 	- bit16 ~ bit23: flags
  * 	- bit24 ~ bit31: reserved0
  * 	- bit32 ~ bit63: reserved1
  */
@@ -387,7 +412,8 @@ static inline struct ublk_auto_buf_reg ublk_sqe_addr_to_auto_buf_reg(
 {
 	struct ublk_auto_buf_reg reg = {
 		.index = sqe_addr & 0xffff,
-		.reserved0 = (sqe_addr >> 16) & 0xffff,
+		.flags = (sqe_addr >> 16) & 0xff,
+		.reserved0 = (sqe_addr >> 24) & 0xff,
 		.reserved1 = sqe_addr >> 32,
 	};
 
@@ -397,7 +423,7 @@ static inline struct ublk_auto_buf_reg ublk_sqe_addr_to_auto_buf_reg(
 static inline __u64
 ublk_auto_buf_reg_to_sqe_addr(const struct ublk_auto_buf_reg *buf)
 {
-	__u64 addr = buf->index | (__u64)buf->reserved0 << 16 |
+	__u64 addr = buf->index | (__u64)buf->flags << 16 | (__u64)buf->reserved0 << 24 |
 		(__u64)buf->reserved1 << 32;
 
 	return addr;
