@@ -1466,6 +1466,15 @@ static bool kvm_vma_mte_allowed(struct vm_area_struct *vma)
 	return vma->vm_flags & VM_MTE_ALLOWED;
 }
 
+/*
+ * Determine the memory region cacheability from VMA's pgprot. This
+ * is used to set the stage 2 PTEs.
+ */
+static unsigned long mapping_type(pgprot_t page_prot)
+{
+	return FIELD_GET(PTE_ATTRINDX_MASK, pgprot_val(page_prot));
+}
+
 static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 			  struct kvm_s2_trans *nested,
 			  struct kvm_memory_slot *memslot, unsigned long hva,
@@ -1611,6 +1620,10 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	mte_allowed = kvm_vma_mte_allowed(vma);
 
 	vfio_allow_any_uc = vma->vm_flags & VM_ALLOW_ANY_UNCACHED;
+
+	if ((vma->vm_flags & VM_PFNMAP) &&
+	    mapping_type(vma->vm_page_prot) == MT_NORMAL)
+		return -EINVAL;
 
 	/* Don't use the VMA after the unlock -- it may have vanished */
 	vma = NULL;
@@ -2211,6 +2224,12 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 		if (vma->vm_flags & VM_PFNMAP) {
 			/* IO region dirty page logging not allowed */
 			if (new->flags & KVM_MEM_LOG_DIRTY_PAGES) {
+				ret = -EINVAL;
+				break;
+			}
+
+			/* Cacheable PFNMAP is not allowed */
+			if (mapping_type(vma->vm_page_prot) == MT_NORMAL) {
 				ret = -EINVAL;
 				break;
 			}
