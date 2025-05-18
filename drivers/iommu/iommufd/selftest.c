@@ -735,7 +735,7 @@ static struct iommufd_viommu_ops mock_viommu_ops = {
 
 static struct iommufd_viommu *mock_viommu_alloc(struct device *dev,
 						struct iommu_domain *domain,
-						struct iommufd_ctx *ictx,
+						struct iommufd_ucmd *ucmd,
 						unsigned int viommu_type)
 {
 	struct mock_iommu_device *mock_iommu =
@@ -745,7 +745,7 @@ static struct iommufd_viommu *mock_viommu_alloc(struct device *dev,
 	if (viommu_type != IOMMU_VIOMMU_TYPE_SELFTEST)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	mock_viommu = iommufd_viommu_alloc(ictx, struct mock_viommu, core,
+	mock_viommu = iommufd_viommu_alloc(ucmd, struct mock_viommu, core,
 					   &mock_viommu_ops);
 	if (IS_ERR(mock_viommu))
 		return ERR_CAST(mock_viommu);

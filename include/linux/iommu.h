@@ -43,7 +43,7 @@ struct iommu_sva;
 struct iommu_dma_cookie;
 struct iommu_dma_msi_cookie;
 struct iommu_fault_param;
-struct iommufd_ctx;
+struct iommufd_ucmd;
 struct iommufd_viommu;
 struct msi_desc;
 struct msi_msg;
@@ -609,7 +609,7 @@ iommu_copy_struct_from_full_user_array(void *kdst, size_t kdst_entry_size,
  *                include/uapi/linux/iommufd.h
  *                It is required to call iommufd_viommu_alloc() helper for
  *                a bundled allocation of the core and the driver structures,
- *                using the given @ictx pointer.
+ *                using the given @ucmd pointer.
  * @pgsize_bitmap: bitmap of all possible supported page sizes
  * @owner: Driver module providing these ops
  * @identity_domain: An always available, always attachable identity
@@ -662,7 +662,7 @@ struct iommu_ops {
 
 	struct iommufd_viommu *(*viommu_alloc)(
 		struct device *dev, struct iommu_domain *parent_domain,
-		struct iommufd_ctx *ictx, unsigned int viommu_type);
+		struct iommufd_ucmd *ucmd, unsigned int viommu_type);
 
 	const struct iommu_domain_ops *default_domain_ops;
 	unsigned long pgsize_bitmap;

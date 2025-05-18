@@ -384,7 +384,7 @@ static const struct iommufd_viommu_ops arm_vsmmu_ops = {
 
 struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 				       struct iommu_domain *parent,
-				       struct iommufd_ctx *ictx,
+				       struct iommufd_ucmd *ucmd,
 				       unsigned int viommu_type)
 {
 	struct arm_smmu_device *smmu =
@@ -422,7 +422,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	    !(smmu->features & ARM_SMMU_FEAT_S2FWB))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	vsmmu = iommufd_viommu_alloc(ictx, struct arm_vsmmu, core,
+	vsmmu = iommufd_viommu_alloc(ucmd, struct arm_vsmmu, core,
 				     &arm_vsmmu_ops);
 	if (IS_ERR(vsmmu))
 		return ERR_CAST(vsmmu);
