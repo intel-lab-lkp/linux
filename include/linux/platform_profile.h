@@ -54,7 +54,18 @@ void platform_profile_remove(struct device *dev);
 struct device *devm_platform_profile_register(struct device *dev, const char *name,
 					      void *drvdata,
 					      const struct platform_profile_ops *ops);
+#ifdef CONFIG_ACPI_PLATFORM_PROFILE
 int platform_profile_cycle(void);
+#else
+/*
+ * This stub is needed to allow USB/Bluetooth HID drivers to cycle through
+ * platform profiles.
+ */
+static inline int platform_profile_cycle(void)
+{
+	return 0;
+}
+#endif /* CONFIG_ACPI_PLATFORM_PROFILE */
 void platform_profile_notify(struct device *dev);
 
 #endif  /*_PLATFORM_PROFILE_H_*/
