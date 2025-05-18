@@ -186,6 +186,9 @@ EXPORT_SYMBOL(iter_div_u64_rem);
 #ifndef mul_u64_u64_div_u64
 u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 d)
 {
+	/* Trigger exception if divisor is zero */
+	BUG_ON(!d);
+
 	if (ilog2(a) + ilog2(b) <= 62)
 		return div64_u64(a * b, d);
 
@@ -211,13 +214,6 @@ u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 d)
 	u64 n_lo = x, n_hi = z;
 
 #endif
-
-	/* make sure d is not zero, trigger exception otherwise */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdiv-by-zero"
-	if (unlikely(d == 0))
-		return 1/0;
-#pragma GCC diagnostic pop
 
 	int shift = __builtin_ctzll(d);
 
