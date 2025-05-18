@@ -164,3 +164,108 @@ out_put_viommu:
 	iommufd_put_object(ucmd->ictx, &viommu->obj);
 	return rc;
 }
+
+void iommufd_hw_queue_destroy(struct iommufd_object *obj)
+{
+	struct iommufd_hw_queue *hw_queue =
+		container_of(obj, struct iommufd_hw_queue, obj);
+	struct iommufd_viommu *viommu = hw_queue->viommu;
+
+	if (viommu->ops->hw_queue_destroy)
+		viommu->ops->hw_queue_destroy(hw_queue);
+	iopt_unpin_pages(&viommu->hwpt->ioas->iopt, hw_queue->base_addr,
+			 hw_queue->length, true);
+	refcount_dec(&viommu->obj.users);
+}
+
+int iommufd_hw_queue_alloc_ioctl(struct iommufd_ucmd *ucmd)
+{
+	struct iommu_hw_queue_alloc *cmd = ucmd->cmd;
+	struct iommufd_hw_queue *hw_queue;
+	struct iommufd_viommu *viommu;
+	struct page **pages;
+	int max_npages, i;
+	u64 last, offset;
+	int rc;
+
+	if (cmd->flags || cmd->type == IOMMU_HW_QUEUE_TYPE_DEFAULT)
+		return -EOPNOTSUPP;
+	if (!cmd->nesting_parent_iova || !cmd->length)
+		return -EINVAL;
+	if (check_add_overflow(cmd->nesting_parent_iova, cmd->length - 1,
+			       &last))
+		return -EOVERFLOW;
+
+	viommu = iommufd_get_viommu(ucmd, cmd->viommu_id);
+	if (IS_ERR(viommu))
+		return PTR_ERR(viommu);
+
+	if (!viommu->ops || !viommu->ops->hw_queue_alloc) {
+		rc = -EOPNOTSUPP;
+		goto out_put_viommu;
+	}
+
+	offset =
+		cmd->nesting_parent_iova - PAGE_ALIGN(cmd->nesting_parent_iova);
+	max_npages = DIV_ROUND_UP(offset + cmd->length, PAGE_SIZE);
+	pages = kcalloc(max_npages, sizeof(*pages), GFP_KERNEL);
+	if (!pages) {
+		rc = -ENOMEM;
+		goto out_put_viommu;
+	}
+
+	/*
+	 * The underlying physical pages must be pinned to prevent them from
+	 * being unmapped (via IOMMUFD_CMD_IOAS_UNMAP) during the life cycle
+	 * of the HW QUEUE object. And the pages should be contiguous too.
+	 */
+	if (viommu->ops->flags & IOMMUFD_VIOMMU_FLAG_HW_QUEUE_READS_PA) {
+		rc = iopt_pin_pages(&viommu->hwpt->ioas->iopt,
+				    cmd->nesting_parent_iova, cmd->length,
+				    pages, 0, true);
+		if (rc)
+			goto out_free;
+
+		/* Validate if the underlying physical pages are contiguous */
+		for (i = 1; i < max_npages && pages[i]; i++) {
+			if (page_to_pfn(pages[i]) ==
+			    page_to_pfn(pages[i - 1]) + 1)
+				continue;
+			rc = -EFAULT;
+			goto out_unpin;
+		}
+	}
+
+	hw_queue = viommu->ops->hw_queue_alloc(ucmd, viommu, cmd->type,
+					       cmd->index,
+					       cmd->nesting_parent_iova,
+					       cmd->length);
+	if (IS_ERR(hw_queue)) {
+		rc = PTR_ERR(hw_queue);
+		goto out_unpin;
+	}
+
+	/* The iommufd_hw_queue_alloc helper saves ictx in hw_queue->ictx */
+	if (WARN_ON_ONCE(hw_queue->ictx != ucmd->ictx)) {
+		rc = -EINVAL;
+		goto out_unpin;
+	}
+
+	hw_queue->viommu = viommu;
+	refcount_inc(&viommu->obj.users);
+	hw_queue->length = cmd->length;
+	hw_queue->base_addr = cmd->nesting_parent_iova;
+	cmd->out_hw_queue_id = hw_queue->obj.id;
+	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
+	goto out_put_viommu;
+
+out_unpin:
+	if (viommu->ops->flags & IOMMUFD_VIOMMU_FLAG_HW_QUEUE_READS_PA)
+		iopt_unpin_pages(&viommu->hwpt->ioas->iopt,
+				 cmd->nesting_parent_iova, cmd->length, true);
+out_free:
+	kfree(pages);
+out_put_viommu:
+	iommufd_put_object(ucmd->ictx, &viommu->obj);
+	return rc;
+}
