@@ -717,6 +717,9 @@ const unsigned long *gpiochip_query_valid_mask(const struct gpio_chip *gc);
 /* get driver data */
 void *gpiochip_get_data(struct gpio_chip *gc);
 
+/* gpiochip set data */
+void gpiochip_set_data(struct gpio_chip *gc, void *data);
+
 struct bgpio_pdata {
 	const char *label;
 	int base;

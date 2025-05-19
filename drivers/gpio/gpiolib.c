@@ -940,10 +940,16 @@ static void gpiochip_setup_devs(void)
 	}
 }
 
-static void gpiochip_set_data(struct gpio_chip *gc, void *data)
+/**
+ * gpiochip_set_data() - set per-subdriver data for the chip
+ * @gc: GPIO chip
+ * @data: Data for GPIO chip
+ */
+void gpiochip_set_data(struct gpio_chip *gc, void *data)
 {
 	gc->gpiodev->data = data;
 }
+EXPORT_SYMBOL_GPL(gpiochip_set_data);
 
 /**
  * gpiochip_get_data() - get per-subdriver data for the chip
