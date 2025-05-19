@@ -14,7 +14,10 @@
 #include "i915_sysfs.h"
 #include "i915_ttm_buddy_manager.h"
 
+static u32 intel_memory_info_paranoid = 1;
+
 static struct kobject *memory_info_dir;
+static struct ctl_table_header *memory_info_header;
 
 static const struct {
 	u16 class;
@@ -428,6 +431,18 @@ void intel_memory_regions_driver_release(struct drm_i915_private *i915)
 	}
 }
 
+static const struct ctl_table intel_memory_info_table[] = {
+	{
+		.procname	= "memory_info_paranoid",
+		.data		= &intel_memory_info_paranoid,
+		.maxlen		= sizeof(intel_memory_info_paranoid),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+};
+
 static ssize_t
 vram_total_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
@@ -436,7 +451,10 @@ vram_total_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 
 	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
 
-	return sysfs_emit(buf, "%llu\n", mr->total);
+	if (perfmon_capable() || !intel_memory_info_paranoid)
+		return sysfs_emit(buf, "%llu\n", mr->total);
+
+	return sysfs_emit(buf, "0\n");
 }
 
 static const struct kobj_attribute vram_total_attr =
@@ -453,7 +471,10 @@ vram_avail_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
 	intel_memory_region_avail(mr, &unallocated_size, &dummy);
 
-	return sysfs_emit(buf, "%llu\n", unallocated_size);
+	if (perfmon_capable() || !intel_memory_info_paranoid)
+		return sysfs_emit(buf, "%llu\n", unallocated_size);
+
+	return sysfs_emit(buf, "0\n");
 }
 
 static const struct kobj_attribute vram_avail_attr =
@@ -468,7 +489,10 @@ vram_total_visible_show(struct kobject *kobj, struct kobj_attribute *attr, char 
 
 	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
 
-	return sysfs_emit(buf, "%llu\n", resource_size(&mr->io));
+	if (perfmon_capable() || !intel_memory_info_paranoid)
+		return sysfs_emit(buf, "%llu\n", resource_size(&mr->io));
+
+	return sysfs_emit(buf, "0\n");
 }
 
 static const struct kobj_attribute vram_total_visible_attr =
@@ -485,7 +509,10 @@ vram_avail_visible_show(struct kobject *kobj, struct kobj_attribute *attr, char 
 	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
 	intel_memory_region_avail(mr, &dummy, &unallocated_cpu_visible_size);
 
-	return sysfs_emit(buf, "%llu\n", unallocated_cpu_visible_size);
+	if (perfmon_capable() || !intel_memory_info_paranoid)
+		return sysfs_emit(buf, "%llu\n", unallocated_cpu_visible_size);
+
+	return sysfs_emit(buf, "0\n");
 }
 
 static const struct kobj_attribute vram_avail_visible_attr =
@@ -507,6 +534,8 @@ int intel_memory_region_setup_sysfs(struct drm_i915_private *i915)
 	if(!intel_memory_region_by_type(i915, INTEL_MEMORY_LOCAL))
 		return 0;
 
+	memory_info_header = register_sysctl("dev/i915", intel_memory_info_table);
+
 	memory_info_dir = kobject_create_and_add("memory_info", &kdev->kobj);
 	if (!memory_info_dir) {
 		drm_warn(&i915->drm, "Failed to create memory_info sysfs directory\n");
@@ -526,6 +555,7 @@ int intel_memory_region_setup_sysfs(struct drm_i915_private *i915)
 int intel_memory_region_teardown_sysfs(void)
 {
 	kobject_put(memory_info_dir);
+	unregister_sysctl_table(memory_info_header);
 	return 0;
 }
 
