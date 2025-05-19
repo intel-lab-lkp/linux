@@ -207,6 +207,12 @@ struct taskstats {
 	/* v15: add Delay max and Delay min */
 
 	/* v16: move Delay max and Delay min to the end of taskstat */
+	/*
+	 *
+	 * xxx_delay_max is the max number of delay values recorded
+	 * xxx_delay_min is the min number of delay values recorded
+	 *
+	 */
 	__u64	cpu_delay_max;
 	__u64	cpu_delay_min;
 
@@ -225,11 +231,11 @@ struct taskstats {
 	__u64	compact_delay_max;
 	__u64	compact_delay_min;
 
-	__u64    wpcopy_delay_max;
-	__u64    wpcopy_delay_min;
+	__u64	wpcopy_delay_max;
+	__u64	wpcopy_delay_min;
 
-	__u64    irq_delay_max;
-	__u64    irq_delay_min;
+	__u64	irq_delay_max;
+	__u64	irq_delay_min;
 };
 
 
