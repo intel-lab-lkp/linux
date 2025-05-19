@@ -30,4 +30,11 @@
 #define   INDEX_VALUE_MASK             REG_GENMASK(4, 0)
 #define   INDEX_VALUE(x)               REG_FIELD_PREP(INDEX_VALUE_MASK, (x))
 
+/* Scaler Coefficient structure */
+#define SIGN                           REG_BIT(15)
+#define EXPONENT_MASK                  REG_GENMASK(13, 12)
+#define EXPONENT(x)                    REG_FIELD_PREP(EXPONENT_MASK, (x))
+#define MANTISSA_MASK                  REG_GENMASK(11, 3)
+#define MANTISSA(x)                    REG_FIELD_PREP(MANTISSA_MASK, (x))
+
 #endif /* __INTEL_CASF_REGS__ */
