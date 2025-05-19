@@ -75,8 +75,10 @@ int kvm_cpu_has_extint(struct kvm_vcpu *v)
 	if (!kvm_apic_accept_pic_intr(v))
 		return 0;
 
+#ifdef CONFIG_KVM_IOAPIC
 	if (pic_in_kernel(v->kvm))
 		return v->kvm->arch.vpic->output;
+#endif
 
 	WARN_ON_ONCE(!irqchip_split(v->kvm));
 	return pending_userspace_extint(v);
@@ -135,8 +137,10 @@ int kvm_cpu_get_extint(struct kvm_vcpu *v)
 		return v->kvm->arch.xen.upcall_vector;
 #endif
 
+#ifdef CONFIG_KVM_IOAPIC
 	if (pic_in_kernel(v->kvm))
 		return kvm_pic_read_irq(v->kvm); /* PIC */
+#endif
 
 	WARN_ON_ONCE(!irqchip_split(v->kvm));
 	return get_userspace_extint(v);
@@ -170,7 +174,9 @@ void kvm_inject_pending_timer_irqs(struct kvm_vcpu *vcpu)
 void __kvm_migrate_timers(struct kvm_vcpu *vcpu)
 {
 	__kvm_migrate_apic_timer(vcpu);
+#ifdef CONFIG_KVM_IOAPIC
 	__kvm_migrate_pit_timer(vcpu);
+#endif
 	kvm_x86_call(migrate_timers)(vcpu);
 }
 
