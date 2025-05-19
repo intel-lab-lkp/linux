@@ -26,6 +26,7 @@
 #include <linux/pkeys.h>
 #include <linux/preempt.h>
 #include <linux/hugetlb.h>
+#include <linux/dept.h>
 
 #include <asm/acpi.h>
 #include <asm/bug.h>
@@ -615,6 +616,12 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 
 	if (!(mm_flags & FAULT_FLAG_USER))
 		goto lock_mmap;
+
+	/*
+	 * This fault comes from user mode.  Make dept work with a new
+	 * kernel mode context.
+	 */
+	dept_update_cxt();
 
 	vma = lock_vma_under_rcu(mm, addr);
 	if (!vma)
