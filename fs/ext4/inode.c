@@ -2620,8 +2620,7 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 			ret = PTR_ERR(handle);
 			goto out_writepages;
 		}
-		BUG_ON(ext4_test_inode_state(inode,
-				EXT4_STATE_MAY_INLINE_DATA));
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 		ext4_destroy_inline_data(handle, inode);
 		ext4_journal_stop(handle);
 	}
@@ -6221,10 +6220,6 @@ vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 	file_update_time(vma->vm_file);
 
 	filemap_invalidate_lock_shared(mapping);
-
-	err = ext4_convert_inline_data(inode);
-	if (err)
-		goto out_ret;
 
 	/*
 	 * On data journalling we skip straight to the transaction handle:
