@@ -62,6 +62,7 @@ static int set_raw_ingress_record(struct aq_hw_s *hw, u16 *packed_record,
 {
 	struct mss_ingress_lut_addr_ctl_register lut_sel_reg;
 	struct mss_ingress_lut_ctl_register lut_op_reg;
+	int ret;
 
 	unsigned int i;
 
@@ -105,11 +106,15 @@ static int set_raw_ingress_record(struct aq_hw_s *hw, u16 *packed_record,
 	lut_op_reg.bits_0.lut_read = 0;
 	lut_op_reg.bits_0.lut_write = 1;
 
-	aq_mss_mdio_write(hw, MDIO_MMD_VEND1,
-			  MSS_INGRESS_LUT_ADDR_CTL_REGISTER_ADDR,
-			  lut_sel_reg.word_0);
-	aq_mss_mdio_write(hw, MDIO_MMD_VEND1, MSS_INGRESS_LUT_CTL_REGISTER_ADDR,
-			  lut_op_reg.word_0);
+	ret = aq_mss_mdio_write(hw, MDIO_MMD_VEND1,
+				MSS_INGRESS_LUT_ADDR_CTL_REGISTER_ADDR,
+				lut_sel_reg.word_0);
+	if (unlikely(ret))
+		return ret;
+	ret = aq_mss_mdio_write(hw, MDIO_MMD_VEND1, MSS_INGRESS_LUT_CTL_REGISTER_ADDR,
+				lut_op_reg.word_0);
+	if (unlikely(ret))
+		return ret;
 
 	return 0;
 }
