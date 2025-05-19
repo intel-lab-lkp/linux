@@ -473,7 +473,9 @@ static int ovl_check_origin(struct ovl_fs *ofs, struct dentry *upperdentry,
 	struct ovl_fh *fh = ovl_get_fh(ofs, upperdentry, OVL_XATTR_ORIGIN);
 	int err;
 
-	if (IS_ERR_OR_NULL(fh))
+	if (!fh)
+		return -ENODATA;
+	else if (IS_ERR(fh))
 		return PTR_ERR(fh);
 
 	err = ovl_check_origin_fh(ofs, fh, false, upperdentry, stackp);
@@ -575,7 +577,9 @@ struct dentry *ovl_index_upper(struct ovl_fs *ofs, struct dentry *index,
 		return dget(index);
 
 	fh = ovl_get_fh(ofs, index, OVL_XATTR_UPPER);
-	if (IS_ERR_OR_NULL(fh))
+	if (!fh)
+		return ERR_PTR(-ENODATA);
+	else if (IS_ERR(fh))
 		return ERR_CAST(fh);
 
 	upper = ovl_decode_real_fh(ofs, fh, ovl_upper_mnt(ofs), connected);
