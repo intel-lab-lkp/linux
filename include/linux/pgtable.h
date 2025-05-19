@@ -828,6 +828,10 @@ extern pte_t ptep_clear_flush(struct vm_area_struct *vma,
 			      pte_t *ptep);
 #endif
 
+extern pte_t clear_flush_ptes(struct vm_area_struct *vma,
+			      unsigned long address,
+			      pte_t *ptep, unsigned int nr);
+
 #ifndef __HAVE_ARCH_PMDP_HUGE_CLEAR_FLUSH
 extern pmd_t pmdp_huge_clear_flush(struct vm_area_struct *vma,
 			      unsigned long address,
