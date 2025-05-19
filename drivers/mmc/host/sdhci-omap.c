@@ -1438,6 +1438,7 @@ static int __maybe_unused sdhci_omap_runtime_suspend(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_omap_host *omap_host = sdhci_pltfm_priv(pltfm_host);
+	int ret;
 
 	if (host->tuning_mode != SDHCI_TUNING_MODE_3)
 		mmc_retune_needed(host->mmc);
@@ -1445,7 +1446,9 @@ static int __maybe_unused sdhci_omap_runtime_suspend(struct device *dev)
 	if (omap_host->con != -EINVAL)
 		sdhci_runtime_suspend_host(host);
 
-	sdhci_omap_context_save(omap_host);
+	ret = sdhci_omap_context_save(omap_host);
+	if (ret)
+		return ret;
 
 	pinctrl_pm_select_idle_state(dev);
 
