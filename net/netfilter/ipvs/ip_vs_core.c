@@ -1260,6 +1260,8 @@ handle_response(int af, struct sk_buff *skb, struct ip_vs_proto_data *pd,
 		unsigned int hooknum)
 {
 	struct ip_vs_protocol *pp = pd->pp;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 
 	if (IP_VS_FWD_METHOD(cp) != IP_VS_CONN_F_MASQ)
 		goto after_nat;
@@ -1270,6 +1272,12 @@ handle_response(int af, struct sk_buff *skb, struct ip_vs_proto_data *pd,
 		goto drop;
 
 	/* mangle the packet */
+	if (ct != NULL &&
+	    hooknum == NF_INET_FORWARD &&
+	    !ip_vs_addr_equal(af,
+		    &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,
+		    &cp->vaddr))
+		return NF_ACCEPT;
 	if (pp->snat_handler &&
 	    !SNAT_CALL(pp->snat_handler, skb, pp, cp, iph))
 		goto drop;
