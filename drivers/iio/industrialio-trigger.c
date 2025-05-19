@@ -362,6 +362,39 @@ irqreturn_t iio_pollfunc_store_time(int irq, void *p)
 EXPORT_SYMBOL(iio_pollfunc_store_time);
 
 struct iio_poll_func
+*iio_alloc_pollfunc_new(irqreturn_t (*thread)(int irq, void *p),
+			bool timestamp_enabled,
+			int type,
+			struct iio_dev *indio_dev,
+			const char *fmt,
+			...)
+{
+	va_list vargs;
+	struct iio_poll_func *pf;
+
+	pf = kmalloc(sizeof(*pf), GFP_KERNEL);
+	if (!pf)
+		return NULL;
+	va_start(vargs, fmt);
+	pf->name = kvasprintf(GFP_KERNEL, fmt, vargs);
+	va_end(vargs);
+	if (pf->name == NULL) {
+		kfree(pf);
+		return NULL;
+	}
+	pf->timestamp_enabled = timestamp_enabled;
+	pf->h = NULL;
+	pf->thread = thread;
+	pf->type = type;
+	pf->indio_dev = indio_dev;
+
+	pf->timestamp = 0;
+	pf->timestamp_type = 0;
+	return pf;
+}
+EXPORT_SYMBOL_GPL(iio_alloc_pollfunc_new);
+
+struct iio_poll_func
 *iio_alloc_pollfunc(irqreturn_t (*h)(int irq, void *p),
 		    irqreturn_t (*thread)(int irq, void *p),
 		    int type,

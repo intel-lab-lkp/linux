@@ -50,6 +50,13 @@ struct iio_poll_func {
 	bool timestamp_enabled;
 };
 
+__printf(5, 6) struct iio_poll_func
+*iio_alloc_pollfunc_new(irqreturn_t (*thread)(int irq, void *p),
+			bool timestamp_enabled,
+			int type,
+			struct iio_dev *indio_dev,
+			const char *fmt,
+			...);
 
 __printf(5, 6) struct iio_poll_func
 *iio_alloc_pollfunc(irqreturn_t (*h)(int irq, void *p),

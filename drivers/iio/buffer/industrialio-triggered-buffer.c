@@ -14,6 +14,68 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
 
+int iio_triggered_buffer_setup_ext_new(struct iio_dev *indio_dev,
+					irqreturn_t (*thread)(int irq, void *p),
+					bool timestamp_enabled,
+					enum iio_buffer_direction direction,
+					const struct iio_buffer_setup_ops *setup_ops,
+					const struct iio_dev_attr **buffer_attrs)
+{
+	struct iio_buffer *buffer;
+	int ret;
+
+	/*
+	 * iio_triggered_buffer_cleanup() assumes that the buffer allocated here
+	 * is assigned to indio_dev->buffer but this is only the case if this
+	 * function is the first caller to iio_device_attach_buffer(). If
+	 * indio_dev->buffer is already set then we can't proceed otherwise the
+	 * cleanup function will try to free a buffer that was not allocated here.
+	 */
+	if (indio_dev->buffer)
+		return -EADDRINUSE;
+
+	buffer = iio_kfifo_allocate();
+	if (!buffer) {
+		ret = -ENOMEM;
+		goto error_ret;
+	}
+
+	indio_dev->pollfunc = iio_alloc_pollfunc_new(thread,
+							timestamp_enabled,
+							IRQF_ONESHOT,
+							indio_dev,
+							"%s_consumer%d",
+							indio_dev->name,
+							iio_device_id(indio_dev));
+	if (indio_dev->pollfunc == NULL) {
+		ret = -ENOMEM;
+		goto error_kfifo_free;
+	}
+
+	/* Ring buffer functions - here trigger setup related */
+	indio_dev->setup_ops = setup_ops;
+
+	/* Flag that polled ring buffering is possible */
+	indio_dev->modes |= INDIO_BUFFER_TRIGGERED;
+
+	buffer->direction = direction;
+	buffer->attrs = buffer_attrs;
+
+	ret = iio_device_attach_buffer(indio_dev, buffer);
+	if (ret < 0)
+		goto error_dealloc_pollfunc;
+
+	return 0;
+
+error_dealloc_pollfunc:
+	iio_dealloc_pollfunc(indio_dev->pollfunc);
+error_kfifo_free:
+	iio_kfifo_free(buffer);
+error_ret:
+	return ret;
+}
+EXPORT_SYMBOL(iio_triggered_buffer_setup_ext_new);
+
 /**
  * iio_triggered_buffer_setup_ext() - Setup triggered buffer and pollfunc
  * @indio_dev:		IIO device structure
@@ -113,6 +175,26 @@ static void devm_iio_triggered_buffer_clean(void *indio_dev)
 {
 	iio_triggered_buffer_cleanup(indio_dev);
 }
+
+int devm_iio_triggered_buffer_setup_ext_new(struct device *dev,
+						struct iio_dev *indio_dev,
+						irqreturn_t (*thread)(int irq, void *p),
+						bool timestamp_enabled,
+						enum iio_buffer_direction direction,
+						const struct iio_buffer_setup_ops *ops,
+						const struct iio_dev_attr **buffer_attrs)
+{
+	int ret;
+
+	ret = iio_triggered_buffer_setup_ext_new(indio_dev, thread, timestamp_enabled, direction,
+						     ops, buffer_attrs);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, devm_iio_triggered_buffer_clean,
+					indio_dev);
+}
+EXPORT_SYMBOL_GPL(devm_iio_triggered_buffer_setup_ext_new);
 
 int devm_iio_triggered_buffer_setup_ext(struct device *dev,
 					struct iio_dev *indio_dev,
