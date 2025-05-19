@@ -10758,6 +10758,24 @@ static int bnxt_set_vnic_mru_p5(struct bnxt *bp, struct bnxt_vnic_info *vnic,
 	return 0;
 }
 
+static int bnxt_set_rss_ctx_vnic_mru(struct bnxt *bp, u16 mru)
+{
+	struct ethtool_rxfh_context *ctx;
+	unsigned long context;
+	int rc;
+
+	xa_for_each(&bp->dev->ethtool->rss_ctx, context, ctx) {
+		struct bnxt_rss_ctx *rss_ctx = ethtool_rxfh_context_priv(ctx);
+		struct bnxt_vnic_info *vnic = &rss_ctx->vnic;
+
+		rc = bnxt_set_vnic_mru_p5(bp, vnic, mru);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
 static void bnxt_hwrm_realloc_rss_ctx_vnic(struct bnxt *bp)
 {
 	bool set_tpa = !!(bp->flags & BNXT_FLAG_TPA);
@@ -15904,6 +15922,7 @@ static int bnxt_queue_start(struct net_device *dev, void *qmem, int idx)
 	struct bnxt_vnic_info *vnic;
 	struct bnxt_napi *bnapi;
 	int i, rc;
+	u16 mru;
 
 	rxr = &bp->rx_ring[idx];
 	clone = qmem;
@@ -15953,16 +15972,15 @@ static int bnxt_queue_start(struct net_device *dev, void *qmem, int idx)
 	napi_enable_locked(&bnapi->napi);
 	bnxt_db_nq_arm(bp, &cpr->cp_db, cpr->cp_raw_cons);
 
+	mru = bp->dev->mtu + ETH_HLEN + VLAN_HLEN;
 	for (i = 0; i < bp->nr_vnics; i++) {
 		vnic = &bp->vnic_info[i];
 
-		rc = bnxt_set_vnic_mru_p5(bp, vnic,
-					  bp->dev->mtu + ETH_HLEN + VLAN_HLEN);
+		rc = bnxt_set_vnic_mru_p5(bp, vnic, mru);
 		if (rc)
 			return rc;
 	}
-
-	return 0;
+	return bnxt_set_rss_ctx_vnic_mru(bp, mru);
 
 err_reset:
 	netdev_err(bp->dev, "Unexpected HWRM error during queue start rc: %d\n",
@@ -15987,6 +16005,7 @@ static int bnxt_queue_stop(struct net_device *dev, void *qmem, int idx)
 
 		bnxt_set_vnic_mru_p5(bp, vnic, 0);
 	}
+	bnxt_set_rss_ctx_vnic_mru(bp, 0);
 	/* Make sure NAPI sees that the VNIC is disabled */
 	synchronize_net();
 	rxr = &bp->rx_ring[idx];
