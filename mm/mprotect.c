@@ -40,25 +40,36 @@
 
 #include "internal.h"
 
-bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t pte)
+bool can_change_ptes_writable(struct vm_area_struct *vma, unsigned long addr,
+			     pte_t pte, int max_len, int *len)
 {
 	struct page *page;
+	bool temp_ret;
+	bool ret;
+	int i;
 
-	if (WARN_ON_ONCE(!(vma->vm_flags & VM_WRITE)))
-		return false;
+	if (WARN_ON_ONCE(!(vma->vm_flags & VM_WRITE))) {
+		ret = false;
+		goto out;
+	}
 
 	/* Don't touch entries that are not even readable. */
-	if (pte_protnone(pte))
-		return false;
+	if (pte_protnone(pte)) {
+		ret = false;
+		goto out;
+	}
 
 	/* Do we need write faults for softdirty tracking? */
-	if (pte_needs_soft_dirty_wp(vma, pte))
-		return false;
+	if (pte_needs_soft_dirty_wp(vma, pte)) {
+		ret = false;
+		goto out;
+	}
 
 	/* Do we need write faults for uffd-wp tracking? */
-	if (userfaultfd_pte_wp(vma, pte))
-		return false;
+	if (userfaultfd_pte_wp(vma, pte)) {
+		ret = false;
+		goto out;
+	}
 
 	if (!(vma->vm_flags & VM_SHARED)) {
 		/*
@@ -68,7 +79,19 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 		 * any additional checks while holding the PT lock.
 		 */
 		page = vm_normal_page(vma, addr, pte);
-		return page && PageAnon(page) && PageAnonExclusive(page);
+		ret = (page && PageAnon(page) && PageAnonExclusive(page));
+		if (!len)
+			return ret;
+
+		/* Check how many consecutive pages are AnonExclusive or not */
+		for (i = 1; i < max_len; ++i) {
+			++page;
+			temp_ret = (page && PageAnon(page) && PageAnonExclusive(page));
+			if (temp_ret != ret)
+				break;
+		}
+		*len = i;
+		return ret;
 	}
 
 	VM_WARN_ON_ONCE(is_zero_pfn(pte_pfn(pte)) && pte_dirty(pte));
@@ -80,19 +103,53 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 	 * FS was already notified and we can simply mark the PTE writable
 	 * just like the write-fault handler would do.
 	 */
-	return pte_dirty(pte);
+	ret = pte_dirty(pte);
+
+out:
+	/* The entire batch is guaranteed to have the same return value */
+	if (len)
+		*len = max_len;
+	return ret;
 }
 
 static int mprotect_batch(struct folio *folio, unsigned long addr, pte_t *ptep,
-		pte_t pte, int max_nr_ptes)
+		pte_t pte, int max_nr_ptes, bool ignore_soft_dirty)
 {
-	const fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
+	fpb_t flags = FPB_IGNORE_DIRTY;
 
-	if (!folio_test_large(folio) || (max_nr_ptes == 1))
+	if (ignore_soft_dirty)
+		flags |= FPB_IGNORE_SOFT_DIRTY;
+
+	if (!folio || !folio_test_large(folio) || (max_nr_ptes == 1))
 		return 1;
 
 	return folio_pte_batch(folio, addr, ptep, pte, max_nr_ptes, flags,
 			       NULL, NULL, NULL);
+}
+
+/**
+ * modify_sub_batch - Identifies a sub-batch which has the same return value
+ * of can_change_pte_writable(), from within a folio batch. max_len is the
+ * max length of the possible sub-batch. sub_batch_idx is the offset from
+ * the start of the original folio batch.
+ */
+static int modify_sub_batch(struct vm_area_struct *vma, struct mmu_gather *tlb,
+		unsigned long addr, pte_t *ptep, pte_t oldpte, pte_t ptent,
+		int max_len, int sub_batch_idx)
+{
+	unsigned long new_addr = addr + sub_batch_idx * PAGE_SIZE;
+	pte_t new_oldpte = pte_advance_pfn(oldpte, sub_batch_idx);
+	pte_t new_ptent = pte_advance_pfn(ptent, sub_batch_idx);
+	pte_t *new_ptep = ptep + sub_batch_idx;
+	int len = 1;
+
+	if (can_change_ptes_writable(vma, new_addr, new_ptent, max_len, &len))
+		new_ptent = pte_mkwrite(new_ptent, vma);
+
+	modify_prot_commit_ptes(vma, new_addr, new_ptep, new_oldpte, new_ptent, len);
+	if (pte_needs_flush(new_oldpte, new_ptent))
+		tlb_flush_pte_range(tlb, new_addr, len * PAGE_SIZE);
+	return len;
 }
 
 static long change_pte_range(struct mmu_gather *tlb,
@@ -106,7 +163,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 	bool prot_numa = cp_flags & MM_CP_PROT_NUMA;
 	bool uffd_wp = cp_flags & MM_CP_UFFD_WP;
 	bool uffd_wp_resolve = cp_flags & MM_CP_UFFD_WP_RESOLVE;
-	int nr_ptes;
+	int sub_batch_idx, max_len, len, nr_ptes;
 
 	tlb_change_page_size(tlb, PAGE_SIZE);
 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
@@ -121,10 +178,12 @@ static long change_pte_range(struct mmu_gather *tlb,
 	flush_tlb_batched_pending(vma->vm_mm);
 	arch_enter_lazy_mmu_mode();
 	do {
+		sub_batch_idx = 0;
 		nr_ptes = 1;
 		oldpte = ptep_get(pte);
 		if (pte_present(oldpte)) {
 			int max_nr_ptes = (end - addr) >> PAGE_SHIFT;
+			struct folio *folio = NULL;
 			pte_t ptent;
 
 			/*
@@ -132,7 +191,6 @@ static long change_pte_range(struct mmu_gather *tlb,
 			 * pages. See similar comment in change_huge_pmd.
 			 */
 			if (prot_numa) {
-				struct folio *folio;
 				int nid;
 				bool toptier;
 
@@ -180,7 +238,8 @@ static long change_pte_range(struct mmu_gather *tlb,
 				    toptier) {
 skip_batch:
 					nr_ptes = mprotect_batch(folio, addr, pte,
-								 oldpte, max_nr_ptes);
+								 oldpte, max_nr_ptes,
+								 true);
 					continue;
 				}
 				if (folio_use_access_time(folio))
@@ -188,6 +247,11 @@ skip_batch:
 						jiffies_to_msecs(jiffies));
 			}
 
+			if (!folio)
+				folio = vm_normal_folio(vma, addr, oldpte);
+
+			nr_ptes = mprotect_batch(folio, addr, pte, oldpte,
+						 max_nr_ptes, false);
 			oldpte = modify_prot_start_ptes(vma, addr, pte, nr_ptes);
 			ptent = pte_modify(oldpte, newprot);
 
@@ -209,15 +273,23 @@ skip_batch:
 			 * example, if a PTE is already dirty and no other
 			 * COW or special handling is required.
 			 */
-			if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) &&
-			    !pte_write(ptent) &&
-			    can_change_pte_writable(vma, addr, ptent))
-				ptent = pte_mkwrite(ptent, vma);
+			if (cp_flags & MM_CP_TRY_CHANGE_WRITABLE) {
+				max_len = nr_ptes;
+				while (sub_batch_idx < nr_ptes) {
 
-			modify_prot_commit_ptes(vma, addr, pte, oldpte, ptent, nr_ptes);
-			if (pte_needs_flush(oldpte, ptent))
-				tlb_flush_pte_range(tlb, addr, PAGE_SIZE);
-			pages++;
+					/* Get length of sub batch */
+					len = modify_sub_batch(vma, tlb, addr, pte,
+							       oldpte, ptent, max_len,
+							       sub_batch_idx);
+					sub_batch_idx += len;
+					max_len -= len;
+				}
+			} else {
+				modify_prot_commit_ptes(vma, addr, pte, oldpte, ptent, nr_ptes);
+				if (pte_needs_flush(oldpte, ptent))
+					tlb_flush_pte_range(tlb, addr, nr_ptes * PAGE_SIZE);
+			}
+			pages += nr_ptes;
 		} else if (is_swap_pte(oldpte)) {
 			swp_entry_t entry = pte_to_swp_entry(oldpte);
 			pte_t newpte;
