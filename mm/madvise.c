@@ -1869,6 +1869,40 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 	return do_madvise(current->mm, start, len_in, behavior);
 }
 
+/*
+ * Are we permitted to set an madvise() behavior by default across the virtual
+ * address space, surviving fork/exec?
+ */
+static bool can_set_default_behavior(int behavior)
+{
+	switch (behavior) {
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	case MADV_HUGEPAGE:
+	case MADV_NOHUGEPAGE:
+		return true;
+#endif
+	default:
+		return false;
+	}
+}
+
+static void set_default_behavior(struct mm_struct *mm, int behavior)
+{
+	switch (behavior) {
+	case MADV_HUGEPAGE:
+		mm->def_flags &= ~VM_NOHUGEPAGE;
+		mm->def_flags |= VM_HUGEPAGE;
+		break;
+	case MADV_NOHUGEPAGE:
+		mm->def_flags &= ~VM_HUGEPAGE;
+		mm->def_flags |= VM_NOHUGEPAGE;
+		break;
+	default:
+		WARN_ON(1);
+		break;
+	}
+}
+
 /* Perform an madvise operation over a vector of addresses and lengths. */
 static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 			      int behavior, int flags)
@@ -1882,7 +1916,11 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 		.flags = flags,
 	};
 	bool can_skip = flags & PMADV_SKIP_ERRORS;
+	bool set_default = flags & PMADV_SET_FORK_EXEC_DEFAULT;
 	size_t skipped = 0;
+
+	if (set_default && !can_set_default_behavior(behavior))
+		return -EINVAL;
 
 	total_len = iov_iter_count(iter);
 
@@ -1931,6 +1969,8 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 		if (can_skip && madv_behavior.saw_error) {
 			skipped++;
 			madv_behavior.saw_error = false;
+		} else if (set_default) {
+			set_default_behavior(mm, behavior);
 		}
 
 		iov_iter_advance(iter, iter_iov_len(iter));
@@ -1951,7 +1991,8 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 
 static bool check_process_madvise_flags(unsigned int flags)
 {
-	unsigned int mask = PMADV_SKIP_ERRORS | PMADV_NO_ERROR_ON_UNMAPPED;
+	unsigned int mask = PMADV_SKIP_ERRORS | PMADV_NO_ERROR_ON_UNMAPPED |
+		PMADV_SET_FORK_EXEC_DEFAULT;
 
 	if (flags & ~mask)
 		return false;
