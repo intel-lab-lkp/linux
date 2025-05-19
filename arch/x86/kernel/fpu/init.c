@@ -51,6 +51,19 @@ void fpu__init_cpu(void)
 {
 	fpu__init_cpu_generic();
 	fpu__init_cpu_xstate();
+
+	/* Start allowing kernel-mode FPU: */
+	WARN_ON_FPU(this_cpu_read(kernel_fpu_allowed));
+	this_cpu_write(kernel_fpu_allowed, true);
+}
+
+/*
+ * Stop allowing kernel-mode FPU. Called when a CPU is brought offline:
+ */
+void fpu__disable_cpu(void)
+{
+	WARN_ON_FPU(!this_cpu_read(kernel_fpu_allowed));
+	this_cpu_write(kernel_fpu_allowed, false);
 }
 
 static bool __init fpu__probe_without_cpuid(void)

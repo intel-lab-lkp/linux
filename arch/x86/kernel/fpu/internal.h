@@ -4,6 +4,8 @@
 
 extern struct fpstate init_fpstate;
 
+DECLARE_PER_CPU(bool, kernel_fpu_allowed);
+
 /* CPU feature check wrappers */
 static __always_inline __pure bool use_xsave(void)
 {
