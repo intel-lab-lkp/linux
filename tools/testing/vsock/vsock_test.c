@@ -1286,6 +1286,78 @@ static void test_unsent_bytes_client(const struct test_opts *opts, int type)
 	close(fd);
 }
 
+static void test_unread_bytes_server(const struct test_opts *opts, int type)
+{
+	unsigned char buf[MSG_BUF_IOCTL_LEN];
+	int client_fd;
+
+	client_fd = vsock_accept(VMADDR_CID_ANY, opts->peer_port, NULL, type);
+	if (client_fd < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	for (int i = 0; i < sizeof(buf); i++)
+		buf[i] = rand() & 0xFF;
+
+	send_buf(client_fd, buf, sizeof(buf), 0, sizeof(buf));
+	control_writeln("SENT");
+	control_expectln("RECEIVED");
+
+	close(client_fd);
+}
+
+static void test_unread_bytes_client(const struct test_opts *opts, int type)
+{
+	unsigned char buf[MSG_BUF_IOCTL_LEN];
+	int ret, fd;
+	int sock_bytes_unread;
+
+	fd = vsock_connect(opts->peer_cid, opts->peer_port, type);
+	if (fd < 0) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+
+	control_expectln("SENT");
+	// The data have come in but is not read, the expected value is
+	// MSG_BUF_IOCTL_LEN.
+	ret = ioctl(fd, SIOCINQ, &sock_bytes_unread);
+	if (ret < 0) {
+		if (errno == EOPNOTSUPP) {
+			fprintf(stderr,
+				"Test skipped, SIOCINQ not supported.\n");
+			goto out;
+		} else {
+			perror("ioctl");
+			exit(EXIT_FAILURE);
+		}
+	} else if (ret == 0 && sock_bytes_unread != MSG_BUF_IOCTL_LEN) {
+		fprintf(stderr,
+			"Unexpected 'SIOCOUTQ' value, expected %d, got %i\n",
+			MSG_BUF_IOCTL_LEN, sock_bytes_unread);
+		exit(EXIT_FAILURE);
+	}
+
+	recv_buf(fd, buf, sizeof(buf), 0, sizeof(buf));
+	// The data is consumed, so the expected is 0.
+	ret = ioctl(fd, SIOCINQ, &sock_bytes_unread);
+	if (ret < 0) {
+		// Don't ignore EOPNOTSUPP since we have already checked it!
+		perror("ioctl");
+		exit(EXIT_FAILURE);
+	} else if (ret == 0 && sock_bytes_unread != 0) {
+		fprintf(stderr,
+			"Unexpected 'SIOCOUTQ' value, expected 0, got %i\n",
+			sock_bytes_unread);
+		exit(EXIT_FAILURE);
+	}
+	control_writeln("RECEIVED");
+
+out:
+	close(fd);
+}
+
 static void test_stream_unsent_bytes_client(const struct test_opts *opts)
 {
 	test_unsent_bytes_client(opts, SOCK_STREAM);
@@ -1304,6 +1376,26 @@ static void test_seqpacket_unsent_bytes_client(const struct test_opts *opts)
 static void test_seqpacket_unsent_bytes_server(const struct test_opts *opts)
 {
 	test_unsent_bytes_server(opts, SOCK_SEQPACKET);
+}
+
+static void test_stream_unread_bytes_client(const struct test_opts *opts)
+{
+	test_unread_bytes_client(opts, SOCK_STREAM);
+}
+
+static void test_stream_unread_bytes_server(const struct test_opts *opts)
+{
+	test_unread_bytes_server(opts, SOCK_STREAM);
+}
+
+static void test_seqpacket_unread_bytes_client(const struct test_opts *opts)
+{
+	test_unread_bytes_client(opts, SOCK_SEQPACKET);
+}
+
+static void test_seqpacket_unread_bytes_server(const struct test_opts *opts)
+{
+	test_unread_bytes_server(opts, SOCK_SEQPACKET);
 }
 
 #define RCVLOWAT_CREDIT_UPD_BUF_SIZE	(1024 * 128)
@@ -1957,6 +2049,16 @@ static struct test_case test_cases[] = {
 		.name = "SOCK_SEQPACKET ioctl(SIOCOUTQ) 0 unsent bytes",
 		.run_client = test_seqpacket_unsent_bytes_client,
 		.run_server = test_seqpacket_unsent_bytes_server,
+	},
+	{
+		.name = "SOCK_STREAM ioctl(SIOCINQ) functionality",
+		.run_client = test_stream_unread_bytes_client,
+		.run_server = test_stream_unread_bytes_server,
+	},
+	{
+		.name = "SOCK_SEQPACKET ioctl(SIOCINQ) functionality",
+		.run_client = test_seqpacket_unread_bytes_client,
+		.run_server = test_seqpacket_unread_bytes_server,
 	},
 	{
 		.name = "SOCK_STREAM leak accept queue",
