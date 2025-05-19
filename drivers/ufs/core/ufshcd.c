@@ -10322,6 +10322,7 @@ static void ufshcd_wl_shutdown(struct device *dev)
 		scsi_device_set_state(sdev, SDEV_OFFLINE);
 		mutex_unlock(&sdev->state_mutex);
 	}
+	ufshcd_wait_for_doorbell_clr(hba, 5 * USEC_PER_SEC);
 	__ufshcd_wl_suspend(hba, UFS_SHUTDOWN_PM);
 
 	/*
