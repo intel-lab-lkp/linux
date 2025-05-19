@@ -346,8 +346,7 @@ struct attribute_group khugepaged_attr_group = {
 };
 #endif /* CONFIG_SYSFS */
 
-int hugepage_madvise(struct vm_area_struct *vma,
-		     unsigned long *vm_flags, int advice)
+int hugepage_set_vmflags(unsigned long *vm_flags, int advice)
 {
 	switch (advice) {
 	case MADV_HUGEPAGE:
@@ -358,16 +357,10 @@ int hugepage_madvise(struct vm_area_struct *vma,
 		 * ignore the madvise to prevent qemu from causing a SIGSEGV.
 		 */
 		if (mm_has_pgste(vma->vm_mm))
-			return 0;
+			return -EPERM;
 #endif
 		*vm_flags &= ~VM_NOHUGEPAGE;
 		*vm_flags |= VM_HUGEPAGE;
-		/*
-		 * If the vma become good for khugepaged to scan,
-		 * register it here without waiting a page fault that
-		 * may not happen any time soon.
-		 */
-		khugepaged_enter_vma(vma, *vm_flags);
 		break;
 	case MADV_NOHUGEPAGE:
 		*vm_flags &= ~VM_HUGEPAGE;
@@ -378,6 +371,21 @@ int hugepage_madvise(struct vm_area_struct *vma,
 		 * it got registered before VM_NOHUGEPAGE was set.
 		 */
 		break;
+	}
+
+	return 0;
+}
+
+int hugepage_madvise(struct vm_area_struct *vma,
+		     unsigned long *vm_flags, int advice)
+{
+	if (advice == MADV_HUGEPAGE && !hugepage_set_vmflags(vm_flags, advice)) {
+		/*
+		 * If the vma become good for khugepaged to scan,
+		 * register it here without waiting a page fault that
+		 * may not happen any time soon.
+		 */
+		khugepaged_enter_vma(vma, *vm_flags);
 	}
 
 	return 0;
