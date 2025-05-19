@@ -15,6 +15,7 @@
 #include <linux/sysfs.h>
 #include <linux/vmalloc.h>
 #include <asm/sgx.h>
+#include <asm/archrandom.h>
 #include "driver.h"
 #include "encl.h"
 #include "encls.h"
@@ -918,6 +919,62 @@ EXPORT_SYMBOL_GPL(sgx_set_attribute);
 
 /* Counter to count the active SGX users */
 static atomic64_t sgx_usage_count;
+
+/**
+ * sgx_updatesvn() - Attempt to call ENCLS[EUPDATESVN]
+ * If EPC is empty, this instruction attempts to update CPUSVN to the
+ * currently loaded microcode update SVN and generate new
+ * cryptographic assets.sgx_updatesvn() Most of the time, there will
+ * be no update and that's OK.
+ *
+ * Return:
+ * 0: Success, not supported or run out of entropy
+ */
+static int sgx_update_svn(void)
+{
+	int ret;
+
+	/*
+	 * If EUPDATESVN is not available, it is ok to
+	 * silently skip it to comply with legacy behavior.
+	 */
+	if (!X86_FEATURE_SGX_EUPDATESVN)
+		return 0;
+
+	for (int i = 0; i < RDRAND_RETRY_LOOPS; i++) {
+		ret = __eupdatesvn();
+
+		/* Stop on success or unexpected errors: */
+		if (ret != SGX_INSUFFICIENT_ENTROPY)
+			break;
+	}
+
+	/*
+	 * SVN either was up-to-date or SVN update failed due
+	 * to lack of entropy. In both cases, we want to return
+	 * 0 in order not to break sgx_(vepc_)open. We dont expect
+	 * SGX_INSUFFICIENT_ENTROPY error unless underlying RDSEED
+	 * is under heavy pressure.
+	 */
+	if ((ret == SGX_NO_UPDATE) || (ret == SGX_INSUFFICIENT_ENTROPY))
+		return 0;
+
+	if (!ret) {
+		/*
+		 * SVN successfully updated.
+		 * Let users know when the update was successful.
+		 */
+		pr_info("SVN updated successfully\n");
+		return 0;
+	}
+
+	/*
+	 * EUPDATESVN was called when EPC is empty, all other error
+	 * codes are unexpected.
+	 */
+	ENCLS_WARN(ret, "EUPDATESVN");
+	return ret;
+}
 
 int sgx_inc_usage_count(void)
 {
