@@ -1992,7 +1992,7 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 static bool check_process_madvise_flags(unsigned int flags)
 {
 	unsigned int mask = PMADV_SKIP_ERRORS | PMADV_NO_ERROR_ON_UNMAPPED |
-		PMADV_SET_FORK_EXEC_DEFAULT;
+		PMADV_SET_FORK_EXEC_DEFAULT | PMADV_ENTIRE_ADDRESS_SPACE;
 
 	if (flags & ~mask)
 		return false;
@@ -2010,15 +2010,30 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 	struct task_struct *task;
 	struct mm_struct *mm;
 	unsigned int f_flags;
+	bool entire_address_space = flags & PMADV_ENTIRE_ADDRESS_SPACE;
 
 	if (!check_process_madvise_flags(flags)) {
 		ret = -EINVAL;
 		goto out;
 	}
 
-	ret = import_iovec(ITER_DEST, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
-	if (ret < 0)
-		goto out;
+	if (entire_address_space) {
+		/* The user must specify NULL, -1 vec, vlen parameters. */
+		if (vec != NULL || vlen != (size_t)-1)
+			return -EINVAL;
+
+		/*
+		 * Ignore the input and simply add a single entry spanning the
+		 * whole address space.
+		 */
+		iovstack[0].iov_base = 0;
+		iovstack[0].iov_len = TASK_SIZE_MAX;
+		iov_iter_init(&iter, ITER_DEST, iov, 1, 1);
+	} else {
+		ret = import_iovec(ITER_DEST, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
+		if (ret < 0)
+			goto out;
+	}
 
 	task = pidfd_get_task(pidfd, &f_flags);
 	if (IS_ERR(task)) {

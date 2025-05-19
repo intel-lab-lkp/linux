@@ -95,5 +95,6 @@
 #define PMADV_SKIP_ERRORS (1U << 0) /* Skip VMAs on errors, but carry on. Implies no error on unmapped. */
 #define PMADV_NO_ERROR_ON_UNMAPPED (1U << 1) /* Never report an error on unmapped ranges. */
 #define PMADV_SET_FORK_EXEC_DEFAULT (1U << 2) /* Set the behavior as a default that survives fork/exec. */
+#define PMADV_ENTIRE_ADDRESS_SPACE (1U << 3) /* Ignore input iovec and apply to entire address space. */
 
 #endif /* __ASM_GENERIC_MMAN_COMMON_H */
