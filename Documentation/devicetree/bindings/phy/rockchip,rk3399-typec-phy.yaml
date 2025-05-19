@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/rockchip,rk3399-typec-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rockchip RK3399 USBDP Combo PHY
+
+maintainers:
+  - Frank Wang <frank.wang@rock-chips.com>
+  - Zhang Yubing <yubing.zhang@rock-chips.com>
+
+properties:
+  compatible:
+    items:
+      - const: rockchip,rk3399-typec-phy
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: tcpdcore
+      - const: tcpdphy-ref
+
+  extcon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      extcon specifier for the Power Delivery
+
+  power-domains:
+    maxItems: 1
+
+  resets:
+    maxItems: 3
+
+  reset-names:
+    items:
+      - const: uphy
+      - const: uphy-pipe
+      - const: uphy-tcphy
+
+  rockchip,grf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Some additional phy settings are access through GRF regs.
+
+  dp-port:
+    description: A sub-node to identify the dp phy provides.
+    type: object
+    additionalProperties: false
+    properties:
+      port:
+        $ref: /schemas/graph.yaml#/properties/port
+      "#phy-cells":
+        const: 0
+
+  usb3-port:
+    description: A sub-node to identify the usb3 phy provides.
+    type: object
+    additionalProperties: false
+    properties:
+      port:
+        $ref: /schemas/graph.yaml#/properties/port
+      "#phy-cells":
+        const: 0
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - rockchip,grf
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/rk3399-cru.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/power/rk3399-power.h>
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        phy@ff7c0000 {
+            compatible = "rockchip,rk3399-typec-phy";
+            reg = <0x0 0xff7c0000 0x0 0x40000>;
+            extcon = <&fusb0>;
+            clocks = <&cru SCLK_UPHY0_TCPDCORE>, <&cru SCLK_UPHY0_TCPDPHY_REF>;
+            clock-names = "tcpdcore", "tcpdphy-ref";
+            assigned-clocks = <&cru SCLK_UPHY0_TCPDCORE>;
+            assigned-clock-rates = <50000000>;
+            resets = <&cru SRST_UPHY0>, <&cru SRST_UPHY0_PIPE_L00>, <&cru SRST_P_UPHY0_TCPHY>;
+            reset-names = "uphy", "uphy-pipe", "uphy-tcphy";
+            rockchip,grf = <&grf>;
+
+            tcphy0_dp: dp-port {
+                #phy-cells = <0>;
+            };
+
+            tcphy0_usb3: usb3-port {
+                #phy-cells = <0>;
+            };
+        };
+    };
