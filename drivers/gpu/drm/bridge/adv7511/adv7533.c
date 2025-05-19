@@ -7,6 +7,10 @@
 
 #include "adv7511.h"
 
+static bool test_mode;
+module_param(test_mode, bool, 0644);
+MODULE_PARM_DESC(test_mode, "Enable test mode");
+
 static const struct reg_sequence adv7533_fixed_registers[] = {
 	{ 0x16, 0x20 },
 	{ 0x9a, 0xe0 },
@@ -85,8 +89,10 @@ void adv7533_dsi_power_on(struct adv7511 *adv)
 
 	/* enable hdmi */
 	regmap_write(adv->regmap_cec, 0x03, 0x89);
-	/* disable test mode */
-	regmap_write(adv->regmap_cec, 0x55, 0x00);
+	if (test_mode)
+		regmap_write(adv->regmap_cec, 0x55, 0x80);
+	else
+		regmap_write(adv->regmap_cec, 0x55, 0x00);
 
 	regmap_register_patch(adv->regmap_cec, adv7533_cec_fixed_registers,
 			      ARRAY_SIZE(adv7533_cec_fixed_registers));
