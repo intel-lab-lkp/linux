@@ -518,20 +518,23 @@ int mlx5_query_nic_vport_qkey_viol_cntr(struct mlx5_core_dev *mdev,
 					u16 *qkey_viol_cntr)
 {
 	u32 *out;
-	int outlen = MLX5_ST_SZ_BYTES(query_nic_vport_context_out);
+	int ret, outlen = MLX5_ST_SZ_BYTES(query_nic_vport_context_out);
 
 	out = kvzalloc(outlen, GFP_KERNEL);
 	if (!out)
 		return -ENOMEM;
 
-	mlx5_query_nic_vport_context(mdev, 0, out);
+	ret = mlx5_query_nic_vport_context(mdev, 0, out);
+	if (ret)
+		goto out;
 
 	*qkey_viol_cntr = MLX5_GET(query_nic_vport_context_out, out,
 				   nic_vport_context.qkey_violation_counter);
-
+	ret = 0;
+out:
 	kvfree(out);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mlx5_query_nic_vport_qkey_viol_cntr);
 
