@@ -36,6 +36,10 @@ struct iio_trigger_ops {
 			       struct iio_dev *indio_dev);
 };
 
+#define IIO_TRIG_TYPE_POLL		BIT(0)
+#define IIO_TRIG_TYPE_POLL_NESTED	BIT(1)
+#define IIO_TRIG_TYPE_BOTH		(IIO_TRIG_TYPE_POLL | \
+					IIO_TRIG_TYPE_POLL_NESTED)
 
 /**
  * struct iio_trigger - industrial I/O trigger device
@@ -56,7 +60,10 @@ struct iio_trigger_ops {
  *			i.e. if we registered a poll function to the same
  *			device as the one providing the trigger.
  * @reenable_work:	[INTERN] work item used to ensure reenable can sleep.
+ * @trig_type:		[DRIVER] specifies whether the trigger calls poll(), poll_nested(), or both.
+ * @early_timestamp:	[DRIVER] set to true if the trigger supports grabbing timestamp.
  **/
+
 struct iio_trigger {
 	const struct iio_trigger_ops	*ops;
 	struct module			*owner;
@@ -76,8 +83,13 @@ struct iio_trigger {
 	struct mutex			pool_lock;
 	bool				attached_own_device;
 	struct work_struct		reenable_work;
-};
 
+	/* RFC, exists to access the consumer device’s pollfunc. */
+	struct iio_poll_func *consumer_pf[CONFIG_IIO_CONSUMERS_PER_TRIGGER];
+
+	int trig_type;
+	bool early_timestamp;
+};
 
 static inline struct iio_trigger *to_iio_trigger(struct device *d)
 {
