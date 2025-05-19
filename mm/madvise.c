@@ -1530,7 +1530,7 @@ static bool process_madvise_remote_valid(int behavior)
  */
 static
 int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
-		      unsigned long end, void *arg,
+		      unsigned long end, bool err_on_unmapped, void *arg,
 		      int (*visit)(struct vm_area_struct *vma,
 				   struct vm_area_struct **prev, unsigned long start,
 				   unsigned long end, void *arg))
@@ -1584,7 +1584,7 @@ int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 			vma = find_vma(mm, start);
 	}
 
-	return unmapped_error;
+	return err_on_unmapped ? unmapped_error : 0;
 }
 
 #ifdef CONFIG_ANON_VMA_NAME
@@ -1632,8 +1632,8 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
 	if (end == start)
 		return 0;
 
-	return madvise_walk_vmas(mm, start, end, anon_name,
-				 madvise_vma_anon_name);
+	return madvise_walk_vmas(mm, start, end, /* err_on_unmapped= */true,
+				 anon_name, madvise_vma_anon_name);
 }
 #endif /* CONFIG_ANON_VMA_NAME */
 
@@ -1752,6 +1752,7 @@ static int madvise_do_behavior(struct mm_struct *mm,
 	struct blk_plug plug;
 	unsigned long end;
 	int error;
+	bool err_on_unmapped = !(madv_behavior->flags & PMADV_NO_ERROR_ON_UNMAPPED);
 
 	if (is_memory_failure(behavior))
 		return madvise_inject_error(madv_behavior, start,
@@ -1763,8 +1764,8 @@ static int madvise_do_behavior(struct mm_struct *mm,
 	if (is_madvise_populate(behavior))
 		error = madvise_populate(mm, start, end, madv_behavior);
 	else
-		error = madvise_walk_vmas(mm, start, end, madv_behavior,
-					  madvise_vma_behavior);
+		error = madvise_walk_vmas(mm, start, end, err_on_unmapped,
+					  madv_behavior, madvise_vma_behavior);
 	blk_finish_plug(&plug);
 	return error;
 }
@@ -1950,7 +1951,7 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 
 static bool check_process_madvise_flags(unsigned int flags)
 {
-	unsigned int mask = PMADV_SKIP_ERRORS;
+	unsigned int mask = PMADV_SKIP_ERRORS | PMADV_NO_ERROR_ON_UNMAPPED;
 
 	if (flags & ~mask)
 		return false;

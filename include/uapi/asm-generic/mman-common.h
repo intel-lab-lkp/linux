@@ -92,6 +92,7 @@
 				 PKEY_DISABLE_WRITE)
 
 /* process_madvise() flags */
-#define PMADV_SKIP_ERRORS (1U << 0) /* Skip VMAs on errors, but carry on. */
+#define PMADV_SKIP_ERRORS (1U << 0) /* Skip VMAs on errors, but carry on. Implies no error on unmapped. */
+#define PMADV_NO_ERROR_ON_UNMAPPED (1U << 1) /* Never report an error on unmapped ranges. */
 
 #endif /* __ASM_GENERIC_MMAN_COMMON_H */
