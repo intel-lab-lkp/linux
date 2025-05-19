@@ -1328,19 +1328,19 @@ static void b53_adjust_63xx_rgmii(struct dsa_switch *ds, int port,
 
 	switch (interface) {
 	case PHY_INTERFACE_MODE_RGMII_ID:
-		rgmii_ctrl |= (RGMII_CTRL_DLL_RXC | RGMII_CTRL_DLL_TXC);
+		rgmii_ctrl &= ~(RGMII_CTRL_DLL_RXC | RGMII_CTRL_DLL_TXC);
 		break;
 	case PHY_INTERFACE_MODE_RGMII_RXID:
-		rgmii_ctrl &= ~(RGMII_CTRL_DLL_TXC);
-		rgmii_ctrl |= RGMII_CTRL_DLL_RXC;
+		rgmii_ctrl |= RGMII_CTRL_DLL_TXC;
+		rgmii_ctrl &= ~RGMII_CTRL_DLL_RXC;
 		break;
 	case PHY_INTERFACE_MODE_RGMII_TXID:
-		rgmii_ctrl &= ~(RGMII_CTRL_DLL_RXC);
-		rgmii_ctrl |= RGMII_CTRL_DLL_TXC;
+		rgmii_ctrl |= RGMII_CTRL_DLL_RXC;
+		rgmii_ctrl &= ~RGMII_CTRL_DLL_TXC;
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
 	default:
-		rgmii_ctrl &= ~(RGMII_CTRL_DLL_RXC | RGMII_CTRL_DLL_TXC);
+		rgmii_ctrl |= RGMII_CTRL_DLL_RXC | RGMII_CTRL_DLL_TXC;
 		break;
 	}
 
@@ -1350,6 +1350,7 @@ static void b53_adjust_63xx_rgmii(struct dsa_switch *ds, int port,
 
 		rgmii_ctrl |= RGMII_CTRL_ENABLE_GMII;
 	}
+	rgmii_ctrl |= RGMII_CTRL_TIMING_SEL;
 
 	b53_write8(dev, B53_CTRL_PAGE, off, rgmii_ctrl);
 
