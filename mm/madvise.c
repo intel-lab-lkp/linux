@@ -967,32 +967,33 @@ static long madvise_populate(struct mm_struct *mm, unsigned long start,
 	int locked = 1;
 	long pages;
 
-	while (start < end) {
+	for (; start < end; start += pages * PAGE_SIZE) {
 		/* Populate (prefault) page tables readable/writable. */
 		pages = faultin_page_range(mm, start, end, write, &locked);
 		if (!locked) {
 			mmap_read_lock(mm);
 			locked = 1;
 		}
-		if (pages < 0) {
-			switch (pages) {
-			case -EINTR:
-				return -EINTR;
-			case -EINVAL: /* Incompatible mappings / permissions. */
-				return -EINVAL;
-			case -EHWPOISON:
-				return -EHWPOISON;
-			case -EFAULT: /* VM_FAULT_SIGBUS or VM_FAULT_SIGSEGV */
-				return -EFAULT;
-			default:
-				pr_warn_once("%s: unhandled return value: %ld\n",
-					     __func__, pages);
-				fallthrough;
-			case -ENOMEM: /* No VMA or out of memory. */
-				return -ENOMEM;
-			}
+
+		if (pages >= 0)
+			continue;
+
+		switch (pages) {
+		case -EINTR:
+			return -EINTR;
+		case -EINVAL: /* Incompatible mappings / permissions. */
+			return -EINVAL;
+		case -EHWPOISON:
+			return -EHWPOISON;
+		case -EFAULT: /* VM_FAULT_SIGBUS or VM_FAULT_SIGSEGV */
+			return -EFAULT;
+		default:
+			pr_warn_once("%s: unhandled return value: %ld\n",
+				     __func__, pages);
+			fallthrough;
+		case -ENOMEM: /* No VMA or out of memory. */
+			return -ENOMEM;
 		}
-		start += pages * PAGE_SIZE;
 	}
 	return 0;
 }
