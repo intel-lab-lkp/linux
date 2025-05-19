@@ -9,10 +9,12 @@
  */
 
 #include <linux/compat.h>
+#include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/idr.h>
 #include <linux/ioctl.h>
 #include <linux/media.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/pci.h>
@@ -25,6 +27,9 @@
 #include <media/media-request.h>
 
 #ifdef CONFIG_MEDIA_CONTROLLER
+
+static unsigned int kaboom;
+module_param(kaboom, int, 0600);
 
 /*
  * Legacy defines from linux/media.h. This is the only place we need this
@@ -440,6 +445,9 @@ static long media_device_ioctl(struct file *filp, unsigned int cmd,
 	void __user *arg = (void __user *)__arg;
 	char __karg[256], *karg = __karg;
 	long ret;
+
+	if (kaboom)
+		msleep(5000);
 
 	if (_IOC_NR(cmd) >= ARRAY_SIZE(ioctl_info)
 	    || ioctl_info[_IOC_NR(cmd)].cmd != cmd)
