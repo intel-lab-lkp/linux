@@ -317,17 +317,20 @@ static void vfio_dma_bitmap_free_all(struct vfio_iommu *iommu)
 }
 
 /*
- * Helper Functions for host iova-pfn list
+ * Find the first vfio_pfn that overlapping the range
+ * [iova, iova + PAGE_SIZE * npage) in rb tree
  */
-static struct vfio_pfn *vfio_find_vpfn(struct vfio_dma *dma, dma_addr_t iova)
+static struct vfio_pfn *vfio_find_vpfn_range(struct vfio_dma *dma,
+		dma_addr_t iova, unsigned long npage)
 {
 	struct vfio_pfn *vpfn;
 	struct rb_node *node = dma->pfn_list.rb_node;
+	dma_addr_t end_iova = iova + PAGE_SIZE * npage;
 
 	while (node) {
 		vpfn = rb_entry(node, struct vfio_pfn, node);
 
-		if (iova < vpfn->iova)
+		if (end_iova <= vpfn->iova)
 			node = node->rb_left;
 		else if (iova > vpfn->iova)
 			node = node->rb_right;
@@ -335,6 +338,14 @@ static struct vfio_pfn *vfio_find_vpfn(struct vfio_dma *dma, dma_addr_t iova)
 			return vpfn;
 	}
 	return NULL;
+}
+
+/*
+ * Helper Functions for host iova-pfn list
+ */
+static inline struct vfio_pfn *vfio_find_vpfn(struct vfio_dma *dma, dma_addr_t iova)
+{
+	return vfio_find_vpfn_range(dma, iova, 1);
 }
 
 static void vfio_link_pfn(struct vfio_dma *dma,
@@ -681,32 +692,67 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 		 * and rsvd here, and therefore continues to use the batch.
 		 */
 		while (true) {
+			int page_step = 1;
+			long lock_acct_step = 1;
+			struct folio *folio = page_folio(batch->pages[batch->offset]);
+			bool found_vpfn;
+
 			if (pfn != *pfn_base + pinned ||
 			    rsvd != is_invalid_reserved_pfn(pfn))
 				goto out;
+
+			/* Handle hugetlbfs page */
+			if (folio_test_hugetlb(folio)) {
+				unsigned long start_pfn = PHYS_PFN(vaddr);
+
+				/*
+				 * Note: The current page_step does not achieve the optimal
+				 * performance in scenarios where folio_nr_pages() exceeds
+				 * batch->capacity. It is anticipated that future enhancements
+				 * will address this limitation.
+				 */
+				page_step = min(batch->size,
+					ALIGN(start_pfn + 1, folio_nr_pages(folio)) - start_pfn);
+				found_vpfn = !!vfio_find_vpfn_range(dma, iova, page_step);
+				if (rsvd || !found_vpfn) {
+					lock_acct_step = page_step;
+				} else {
+					dma_addr_t tmp_iova = iova;
+					int i;
+
+					lock_acct_step = 0;
+					for (i = 0; i < page_step; ++i, tmp_iova += PAGE_SIZE)
+						if (!vfio_find_vpfn(dma, tmp_iova))
+							lock_acct_step++;
+					if (lock_acct_step)
+						found_vpfn = false;
+				}
+			} else {
+				found_vpfn = vfio_find_vpfn(dma, iova);
+			}
 
 			/*
 			 * Reserved pages aren't counted against the user,
 			 * externally pinned pages are already counted against
 			 * the user.
 			 */
-			if (!rsvd && !vfio_find_vpfn(dma, iova)) {
+			if (!rsvd && !found_vpfn) {
 				if (!dma->lock_cap &&
-				    mm->locked_vm + lock_acct + 1 > limit) {
+				    mm->locked_vm + lock_acct + lock_acct_step > limit) {
 					pr_warn("%s: RLIMIT_MEMLOCK (%ld) exceeded\n",
 						__func__, limit << PAGE_SHIFT);
 					ret = -ENOMEM;
 					goto unpin_out;
 				}
-				lock_acct++;
+				lock_acct += lock_acct_step;
 			}
 
-			pinned++;
-			npage--;
-			vaddr += PAGE_SIZE;
-			iova += PAGE_SIZE;
-			batch->offset++;
-			batch->size--;
+			pinned += page_step;
+			npage -= page_step;
+			vaddr += PAGE_SIZE * page_step;
+			iova += PAGE_SIZE * page_step;
+			batch->offset += page_step;
+			batch->size -= page_step;
 
 			if (!batch->size)
 				break;
