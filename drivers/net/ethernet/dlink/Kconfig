@@ -32,4 +32,22 @@ config DL2K
 	  To compile this driver as a module, choose M here: the
 	  module will be called dl2k.
 
+if DL2K
+
+config DL2K_MMIO
+	bool "RMON MMIO"
+	depends on DL2K
+	default n
+	help
+	  Enable memory-mapped I/O for RMON registers.
+
+	  Since this feature may have potential issues,
+	  it should default to 'no'.
+
+	  If unsure, say N.
+
+endif # DL2K
+
 endif # NET_VENDOR_DLINK
+
+

@@ -578,7 +578,9 @@ static void rio_hw_init(struct net_device *dev)
 	dw8(TxDMAPollPeriod, 0xff);
 	dw8(RxDMABurstThresh, 0x30);
 	dw8(RxDMAUrgentThresh, 0x30);
+#ifndef MEM_MAPPING
 	dw32(RmonStatMask, 0x0007ffff);
+#endif
 	/* clear statistics */
 	clear_stats (dev);
 
