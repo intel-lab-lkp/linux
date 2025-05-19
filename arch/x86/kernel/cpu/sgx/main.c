@@ -919,6 +919,8 @@ EXPORT_SYMBOL_GPL(sgx_set_attribute);
 
 /* Counter to count the active SGX users */
 static atomic64_t sgx_usage_count;
+/* Mutex to ensure EUPDATESVN is called when EPC is empty */
+static DEFINE_MUTEX(sgx_svn_lock);
 
 /**
  * sgx_updatesvn() - Attempt to call ENCLS[EUPDATESVN]
@@ -978,8 +980,38 @@ static int sgx_update_svn(void)
 
 int sgx_inc_usage_count(void)
 {
-	atomic64_inc(&sgx_usage_count);
-	return 0;
+	int ret;
+
+	/*
+	 * Increments from non-zero indicate EPC other
+	 * active EPC users and EUPDATESVN is not attempted.
+	 */
+	if (atomic64_inc_not_zero(&sgx_usage_count))
+		return 0;
+
+	/*
+	 * Ensure no other concurrent threads can start
+	 * touching EPC while EUPDATESVN is running.
+	 */
+	guard(mutex)(&sgx_svn_lock);
+
+	if (atomic64_inc_not_zero(&sgx_usage_count))
+		return 0;
+
+	/*
+	 * Attempt to call EUPDATESVN since EPC must be
+	 * empty at this point.
+	 */
+	ret = sgx_update_svn();
+
+	/*
+	 * If EUPDATESVN failed with a non-expected error
+	 * code, return failure to sgx_(vepc_)open and
+	 * do not increment the sgx_usage_count.
+	 */
+	if (!ret)
+		atomic64_inc(&sgx_usage_count);
+	return ret;
 }
 
 void sgx_dec_usage_count(void)

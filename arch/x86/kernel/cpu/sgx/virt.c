@@ -262,17 +262,27 @@ static int sgx_vepc_release(struct inode *inode, struct file *file)
 static int sgx_vepc_open(struct inode *inode, struct file *file)
 {
 	struct sgx_vepc *vepc;
+	int ret;
 
-	sgx_inc_usage_count();
+	ret = sgx_inc_usage_count();
+	if (ret)
+		return -EBUSY;
+
 	vepc = kzalloc(sizeof(struct sgx_vepc), GFP_KERNEL);
-	if (!vepc)
-		return -ENOMEM;
+	if (!vepc) {
+		ret = -ENOMEM;
+		goto err_usage_count;
+	}
 	mutex_init(&vepc->lock);
 	xa_init(&vepc->page_array);
 
 	file->private_data = vepc;
 
 	return 0;
+
+err_usage_count:
+		sgx_dec_usage_count();
+		return ret;
 }
 
 static long sgx_vepc_ioctl(struct file *file,

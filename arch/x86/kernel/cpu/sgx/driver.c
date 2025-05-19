@@ -19,10 +19,15 @@ static int sgx_open(struct inode *inode, struct file *file)
 	struct sgx_encl *encl;
 	int ret;
 
-	sgx_inc_usage_count();
+	ret = sgx_inc_usage_count();
+	if (ret)
+		return -EBUSY;
+
 	encl = kzalloc(sizeof(*encl), GFP_KERNEL);
-	if (!encl)
-		return -ENOMEM;
+	if (!encl) {
+		ret = -ENOMEM;
+		goto err_usage_count;
+	}
 
 	kref_init(&encl->refcount);
 	xa_init(&encl->page_array);
@@ -32,14 +37,18 @@ static int sgx_open(struct inode *inode, struct file *file)
 	spin_lock_init(&encl->mm_lock);
 
 	ret = init_srcu_struct(&encl->srcu);
-	if (ret) {
-		kfree(encl);
-		return ret;
-	}
+	if (ret)
+		goto err_encl;
 
 	file->private_data = encl;
 
 	return 0;
+
+err_encl:
+		kfree(encl);
+err_usage_count:
+		sgx_dec_usage_count();
+		return ret;
 }
 
 static int sgx_release(struct inode *inode, struct file *file)
