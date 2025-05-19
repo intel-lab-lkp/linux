@@ -649,8 +649,8 @@ static void btrfs_dio_end_io(struct btrfs_bio *bbio)
 
 	if (bio->bi_status) {
 		btrfs_warn(inode->root->fs_info,
-		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
-			   btrfs_ino(inode), bio->bi_opf,
+		"direct IO failed root %llu ino %llu op 0x%0x offset %#llx len %u err no %d",
+			   btrfs_root_id(inode->root), btrfs_ino(inode), bio->bi_opf,
 			   dip->file_offset, dip->bytes, bio->bi_status);
 	}
 
