@@ -85,9 +85,11 @@ struct netdev_queue_stats_tx {
  * for some of the events is not maintained, and reliable "total" cannot
  * be provided).
  *
+ * Ops are called under the instance lock if netdev_need_ops_lock()
+ * returns true, otherwise under rtnl_lock.
  * Device drivers can assume that when collecting total device stats,
  * the @get_base_stats and subsequent per-queue calls are performed
- * "atomically" (without releasing the rtnl_lock).
+ * "atomically" (without releasing the relevant lock).
  *
  * Device drivers are encouraged to reset the per-queue statistics when
  * number of queues change. This is because the primary use case for
@@ -102,6 +104,12 @@ struct netdev_stat_ops {
 			       struct netdev_queue_stats_rx *rx,
 			       struct netdev_queue_stats_tx *tx);
 };
+
+void netdev_stat_queue_sum(struct net_device *netdev,
+			   int rx_start, int rx_end,
+			   struct netdev_queue_stats_rx *rx_sum,
+			   int tx_start, int tx_end,
+			   struct netdev_queue_stats_tx *tx_sum);
 
 /**
  * struct netdev_queue_mgmt_ops - netdev ops for queue management
