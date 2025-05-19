@@ -398,6 +398,12 @@ int iio_trigger_detach_poll_func(struct iio_trigger *trig,
 	return ret;
 }
 
+s64 iio_pollfunc_get_timestamp(struct iio_poll_func *pf)
+{
+	return pf->timestamp;
+}
+EXPORT_SYMBOL(iio_pollfunc_get_timestamp);
+
 /*
  * Will be deprecated.
  * We do not need to set this as a top half manually to grab a timestamp.

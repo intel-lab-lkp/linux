@@ -65,8 +65,11 @@ __printf(5, 6) struct iio_poll_func
 		    struct iio_dev *indio_dev,
 		    const char *fmt,
 		    ...);
+
 void iio_dealloc_pollfunc(struct iio_poll_func *pf);
+
 irqreturn_t iio_pollfunc_store_time(int irq, void *p);
+s64 iio_pollfunc_get_timestamp(struct iio_poll_func *pf);
 
 void iio_trigger_notify_done(struct iio_trigger *trig);
 
