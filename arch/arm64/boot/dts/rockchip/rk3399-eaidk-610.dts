@@ -803,7 +803,6 @@
 };
 
 &tcphy0_usb3 {
-	orientation-switch;
 	port {
 		tcphy0_typec_ss: endpoint {
 			remote-endpoint = <&usbc_ss>;
