@@ -10,11 +10,15 @@
 #include <test_util.h>
 #include <kvm_util.h>
 #include <processor.h>
+#include <pthread.h>
 
 /* Arbitrarily chosen values */
 #define TEST_SIZE		(SZ_2M + PAGE_SIZE)
 #define TEST_NPAGES		(TEST_SIZE / PAGE_SIZE)
 #define TEST_SLOT		10
+
+static bool prefault_ready;
+static bool delete_thread_ready;
 
 static void guest_code(uint64_t base_gpa)
 {
@@ -30,16 +34,41 @@ static void guest_code(uint64_t base_gpa)
 	GUEST_DONE();
 }
 
-static void pre_fault_memory(struct kvm_vcpu *vcpu, u64 gpa, u64 size,
-			     u64 left)
+static void *remove_slot_worker(void *data)
+{
+	struct kvm_vcpu *vcpu = (struct kvm_vcpu *)data;
+
+	WRITE_ONCE(delete_thread_ready, true);
+
+	while (!READ_ONCE(prefault_ready))
+		cpu_relax();
+
+	vm_mem_region_delete(vcpu->vm, TEST_SLOT);
+
+	WRITE_ONCE(delete_thread_ready, false);
+	return NULL;
+}
+
+static void pre_fault_memory(struct kvm_vcpu *vcpu, u64 base_gpa, u64 offset,
+			     u64 size, u64 left, bool private, bool remove_slot)
 {
 	struct kvm_pre_fault_memory range = {
-		.gpa = gpa,
+		.gpa = base_gpa + offset,
 		.size = size,
 		.flags = 0,
 	};
 	u64 prev;
 	int ret, save_errno;
+	pthread_t remove_thread;
+
+	if (remove_slot) {
+		pthread_create(&remove_thread, NULL, remove_slot_worker, vcpu);
+
+		while (!READ_ONCE(delete_thread_ready))
+			cpu_relax();
+
+		WRITE_ONCE(prefault_ready, true);
+	}
 
 	do {
 		prev = range.size;
@@ -51,16 +80,35 @@ static void pre_fault_memory(struct kvm_vcpu *vcpu, u64 gpa, u64 size,
 			    ret < 0 ? "failure" : "success");
 	} while (ret >= 0 ? range.size : save_errno == EINTR);
 
-	TEST_ASSERT(range.size == left,
-		    "Completed with %lld bytes left, expected %" PRId64,
-		    range.size, left);
-
-	if (left == 0)
-		__TEST_ASSERT_VM_VCPU_IOCTL(!ret, "KVM_PRE_FAULT_MEMORY", ret, vcpu->vm);
-	else
-		/* No memory slot causes RET_PF_EMULATE. it results in -ENOENT. */
-		__TEST_ASSERT_VM_VCPU_IOCTL(ret && save_errno == ENOENT,
+	if (remove_slot) {
+		/*
+		 * ENOENT is expected if slot removal is performed earlier or
+		 * during KVM_PRE_FAULT_MEMORY;
+		 * On rare condition, ret could be 0 if KVM_PRE_FAULT_MEMORY
+		 * completes earlier than slot removal.
+		 */
+		__TEST_ASSERT_VM_VCPU_IOCTL((ret && save_errno == ENOENT) || !ret,
 					    "KVM_PRE_FAULT_MEMORY", ret, vcpu->vm);
+
+		pthread_join(remove_thread, NULL);
+		WRITE_ONCE(prefault_ready, false);
+
+		vm_userspace_mem_region_add(vcpu->vm, VM_MEM_SRC_ANONYMOUS,
+					    base_gpa, TEST_SLOT, TEST_NPAGES,
+					    private ? KVM_MEM_GUEST_MEMFD : 0);
+	} else {
+		TEST_ASSERT(range.size == left,
+			    "Completed with %lld bytes left, expected %" PRId64,
+			    range.size, left);
+
+		if (left == 0)
+			__TEST_ASSERT_VM_VCPU_IOCTL(!ret, "KVM_PRE_FAULT_MEMORY",
+						    ret, vcpu->vm);
+		else
+			/* No memory slot causes RET_PF_EMULATE. it results in -ENOENT. */
+			__TEST_ASSERT_VM_VCPU_IOCTL(ret && save_errno == ENOENT,
+						    "KVM_PRE_FAULT_MEMORY", ret, vcpu->vm);
+	}
 }
 
 static void __test_pre_fault_memory(unsigned long vm_type, bool private)
@@ -97,9 +145,13 @@ static void __test_pre_fault_memory(unsigned long vm_type, bool private)
 
 	if (private)
 		vm_mem_set_private(vm, guest_test_phys_mem, TEST_SIZE);
-	pre_fault_memory(vcpu, guest_test_phys_mem, SZ_2M, 0);
-	pre_fault_memory(vcpu, guest_test_phys_mem + SZ_2M, PAGE_SIZE * 2, PAGE_SIZE);
-	pre_fault_memory(vcpu, guest_test_phys_mem + TEST_SIZE, PAGE_SIZE, PAGE_SIZE);
+
+	pre_fault_memory(vcpu, guest_test_phys_mem, 0, SZ_2M, 0, private, true);
+	pre_fault_memory(vcpu, guest_test_phys_mem, 0, SZ_2M, 0, private, false);
+	pre_fault_memory(vcpu, guest_test_phys_mem, SZ_2M, PAGE_SIZE * 2, PAGE_SIZE,
+			 private, false);
+	pre_fault_memory(vcpu, guest_test_phys_mem, TEST_SIZE, PAGE_SIZE, PAGE_SIZE,
+			 private, false);
 
 	vcpu_args_set(vcpu, 1, guest_test_virt_mem);
 	vcpu_run(vcpu);
