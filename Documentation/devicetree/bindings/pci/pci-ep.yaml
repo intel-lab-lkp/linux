@@ -33,7 +33,7 @@ properties:
 
   max-link-speed:
     $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [ 1, 2, 3, 4 ]
+    enum: [ 1, 2, 3, 4, 5, 6]
 
   num-lanes:
     description: maximum number of lanes
