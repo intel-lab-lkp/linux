@@ -1567,7 +1567,7 @@ static int qup_i2c_xfer_v2(struct i2c_adapter *adap,
 			   int num)
 {
 	struct qup_i2c_dev *qup = i2c_get_adapdata(adap);
-	int ret, idx = 0;
+	int ret, err, idx = 0;
 
 	qup->bus_err = 0;
 	qup->qup_err = 0;
@@ -1617,7 +1617,9 @@ static int qup_i2c_xfer_v2(struct i2c_adapter *adap,
 		ret = qup_i2c_bus_active(qup, ONE_BYTE);
 
 	if (!ret)
-		qup_i2c_change_state(qup, QUP_RESET_STATE);
+		err = qup_i2c_change_state(qup, QUP_RESET_STATE);
+	if (err)
+		return err;
 
 	if (ret == 0)
 		ret = num;
