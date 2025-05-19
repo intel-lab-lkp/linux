@@ -331,7 +331,8 @@ static inline void crypto_free_skcipher(struct crypto_skcipher *tfm)
 
 static inline void crypto_free_sync_skcipher(struct crypto_sync_skcipher *tfm)
 {
-	crypto_free_skcipher(&tfm->base);
+	if (tfm)
+		crypto_free_skcipher(&tfm->base);
 }
 
 /**
