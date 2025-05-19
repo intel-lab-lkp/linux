@@ -83,6 +83,18 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 	return pte_dirty(pte);
 }
 
+static int mprotect_batch(struct folio *folio, unsigned long addr, pte_t *ptep,
+		pte_t pte, int max_nr_ptes)
+{
+	const fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
+
+	if (!folio_test_large(folio) || (max_nr_ptes == 1))
+		return 1;
+
+	return folio_pte_batch(folio, addr, ptep, pte, max_nr_ptes, flags,
+			       NULL, NULL, NULL);
+}
+
 static long change_pte_range(struct mmu_gather *tlb,
 		struct vm_area_struct *vma, pmd_t *pmd, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
@@ -94,6 +106,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 	bool prot_numa = cp_flags & MM_CP_PROT_NUMA;
 	bool uffd_wp = cp_flags & MM_CP_UFFD_WP;
 	bool uffd_wp_resolve = cp_flags & MM_CP_UFFD_WP_RESOLVE;
+	int nr_ptes;
 
 	tlb_change_page_size(tlb, PAGE_SIZE);
 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
@@ -108,8 +121,10 @@ static long change_pte_range(struct mmu_gather *tlb,
 	flush_tlb_batched_pending(vma->vm_mm);
 	arch_enter_lazy_mmu_mode();
 	do {
+		nr_ptes = 1;
 		oldpte = ptep_get(pte);
 		if (pte_present(oldpte)) {
+			int max_nr_ptes = (end - addr) >> PAGE_SHIFT;
 			pte_t ptent;
 
 			/*
@@ -126,15 +141,18 @@ static long change_pte_range(struct mmu_gather *tlb,
 					continue;
 
 				folio = vm_normal_folio(vma, addr, oldpte);
-				if (!folio || folio_is_zone_device(folio) ||
-				    folio_test_ksm(folio))
+				if (!folio)
 					continue;
+
+				if (folio_is_zone_device(folio) ||
+				    folio_test_ksm(folio))
+					goto skip_batch;
 
 				/* Also skip shared copy-on-write pages */
 				if (is_cow_mapping(vma->vm_flags) &&
 				    (folio_maybe_dma_pinned(folio) ||
 				     folio_maybe_mapped_shared(folio)))
-					continue;
+					goto skip_batch;
 
 				/*
 				 * While migration can move some dirty pages,
@@ -143,7 +161,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				 */
 				if (folio_is_file_lru(folio) &&
 				    folio_test_dirty(folio))
-					continue;
+					goto skip_batch;
 
 				/*
 				 * Don't mess with PTEs if page is already on the node
@@ -151,7 +169,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				 */
 				nid = folio_nid(folio);
 				if (target_node == nid)
-					continue;
+					goto skip_batch;
 				toptier = node_is_toptier(nid);
 
 				/*
@@ -159,8 +177,12 @@ static long change_pte_range(struct mmu_gather *tlb,
 				 * balancing is disabled
 				 */
 				if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) &&
-				    toptier)
+				    toptier) {
+skip_batch:
+					nr_ptes = mprotect_batch(folio, addr, pte,
+								 oldpte, max_nr_ptes);
 					continue;
+				}
 				if (folio_use_access_time(folio))
 					folio_xchg_access_time(folio,
 						jiffies_to_msecs(jiffies));
@@ -280,7 +302,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				pages++;
 			}
 		}
-	} while (pte++, addr += PAGE_SIZE, addr != end);
+	} while (pte += nr_ptes, addr += nr_ptes * PAGE_SIZE, addr != end);
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(pte - 1, ptl);
 
