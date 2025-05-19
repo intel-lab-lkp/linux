@@ -874,6 +874,11 @@ struct dept_task {
 	int				missing_ecxt;
 
 	/*
+	 * not to track events
+	 */
+	int				disable_event_track_cnt;
+
+	/*
 	 * for tracking IRQ-enable state
 	 */
 	bool				hardirqs_enabled;
@@ -910,6 +915,7 @@ struct dept_task {
 	.stage_wait_stack = NULL,				\
 	.stage_lock = (arch_spinlock_t)__ARCH_SPIN_LOCK_UNLOCKED,\
 	.missing_ecxt = 0,					\
+	.disable_event_track_cnt = 0,				\
 	.hardirqs_enabled = false,				\
 	.softirqs_enabled = false,				\
 	.task_exit = false,					\
