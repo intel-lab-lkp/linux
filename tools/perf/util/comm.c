@@ -209,13 +209,16 @@ struct comm *comm__new(const char *str, u64 timestamp, bool exec)
 int comm__override(struct comm *comm, const char *str, u64 timestamp, bool exec)
 {
 	struct comm_str *new, *old = comm->comm_str;
+	struct comm_strs *comm_strs = comm_strs__get();
 
 	new = comm_strs__findnew(str);
 	if (!new)
 		return -ENOMEM;
 
+	down_write(&comm_strs->lock);
 	comm_str__put(old);
 	comm->comm_str = new;
+	up_write(&comm_strs->lock);
 	comm->start = timestamp;
 	if (exec)
 		comm->exec = true;
@@ -225,11 +228,22 @@ int comm__override(struct comm *comm, const char *str, u64 timestamp, bool exec)
 
 void comm__free(struct comm *comm)
 {
+	struct comm_strs *comm_strs = comm_strs__get();
+
+	down_write(&comm_strs->lock);
 	comm_str__put(comm->comm_str);
 	free(comm);
+	up_write(&comm_strs->lock);
 }
 
 const char *comm__str(const struct comm *comm)
 {
-	return comm_str__str(comm->comm_str);
+	struct comm_strs *comm_strs = comm_strs__get();
+	char *p;
+
+	down_read(&comm_strs->lock);
+	p = comm_str__str(comm->comm_str);
+	up_read(&comm_strs->lock);
+
+	return p;
 }
