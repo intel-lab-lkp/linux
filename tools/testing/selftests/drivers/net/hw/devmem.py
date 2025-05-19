@@ -6,7 +6,6 @@ from lib.py import ksft_run, ksft_exit
 from lib.py import ksft_eq, KsftSkipEx
 from lib.py import NetDrvEpEnv
 from lib.py import bkg, cmd, rand_port, wait_port_listen
-from lib.py import ksft_disruptive
 
 
 def require_devmem(cfg):
@@ -19,7 +18,6 @@ def require_devmem(cfg):
         raise KsftSkipEx("Test requires devmem support")
 
 
-@ksft_disruptive
 def check_rx(cfg) -> None:
     cfg.require_ipver("6")
     require_devmem(cfg)
@@ -34,7 +32,6 @@ def check_rx(cfg) -> None:
     ksft_eq(socat.stdout.strip(), "hello\nworld")
 
 
-@ksft_disruptive
 def check_tx(cfg) -> None:
     cfg.require_ipver("6")
     require_devmem(cfg)
