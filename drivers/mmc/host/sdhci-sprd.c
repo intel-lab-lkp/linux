@@ -922,9 +922,12 @@ static int sdhci_sprd_runtime_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+	int ret;
 
 	mmc_hsq_suspend(host->mmc);
-	sdhci_runtime_suspend_host(host);
+	ret = sdhci_runtime_suspend_host(host);
+	if (ret)
+		return ret;
 
 	clk_disable_unprepare(sprd_host->clk_sdio);
 	clk_disable_unprepare(sprd_host->clk_enable);
