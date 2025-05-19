@@ -4599,7 +4599,7 @@ static int kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	 * be zapped before KVM inserts a new MMIO SPTE for the gfn.
 	 */
 	if (slot->flags & KVM_MEMSLOT_INVALID)
-		return RET_PF_RETRY;
+		return RET_PF_RETRY_INVALID_SLOT;
 
 	if (slot->id == APIC_ACCESS_PAGE_PRIVATE_MEMSLOT) {
 		/*
@@ -4879,6 +4879,7 @@ int kvm_tdp_map_page(struct kvm_vcpu *vcpu, gpa_t gpa, u64 error_code, u8 *level
 		return 0;
 
 	case RET_PF_EMULATE:
+	case RET_PF_RETRY_INVALID_SLOT:
 		return -ENOENT;
 
 	case RET_PF_RETRY:
