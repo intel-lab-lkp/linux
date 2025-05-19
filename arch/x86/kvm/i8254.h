@@ -6,6 +6,8 @@
 
 #include <kvm/iodev.h>
 
+#include "ioapic.h"
+
 struct kvm_kpit_channel_state {
 	u32 count; /* can be 65536 */
 	u16 latched_count;
