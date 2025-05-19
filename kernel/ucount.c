@@ -185,18 +185,61 @@ struct ucounts *alloc_ucounts(struct user_namespace *ns, kuid_t uid)
 	return new;
 }
 
-void put_ucounts(struct ucounts *ucounts)
+/*
+ * Whether all the rlimits are zero.
+ * For now, only UCOUNT_RLIMIT_SIGPENDING is considered.
+ * Other rlimit can be added.
+ */
+static bool rlimits_are_zero(struct ucounts *ucounts)
+{
+	int rtypes[] = { UCOUNT_RLIMIT_SIGPENDING };
+	int rtype;
+
+	for (int i = 0; i < sizeof(rtypes)/sizeof(int); ++i) {
+		rtype = rtypes[i];
+		if (atomic_long_read(&ucounts->rlimit[rtype]) > 0)
+			return false;
+	}
+	return true;
+}
+
+/*
+ * Ucounts can be freed only when the ucount->count is released
+ * and the rlimits are zero.
+ * The caller should hold rcu_read_lock();
+ */
+static bool ucounts_can_be_freed(struct ucounts *ucounts)
+{
+	if (rcuref_read(&ucounts->count) > 0)
+		return false;
+	if (!rlimits_are_zero(ucounts))
+		return false;
+	/* Prevent double free */
+	return atomic_long_cmpxchg(&ucounts->freed, 0, 1) == 0;
+}
+
+static void free_ucounts(struct ucounts *ucounts)
 {
 	unsigned long flags;
 
-	if (rcuref_put(&ucounts->count)) {
-		spin_lock_irqsave(&ucounts_lock, flags);
-		hlist_nulls_del_rcu(&ucounts->node);
-		spin_unlock_irqrestore(&ucounts_lock, flags);
+	spin_lock_irqsave(&ucounts_lock, flags);
+	hlist_nulls_del_rcu(&ucounts->node);
+	spin_unlock_irqrestore(&ucounts_lock, flags);
 
-		put_user_ns(ucounts->ns);
-		kfree_rcu(ucounts, rcu);
+	put_user_ns(ucounts->ns);
+	kfree_rcu(ucounts, rcu);
+}
+
+void put_ucounts(struct ucounts *ucounts)
+{
+	rcu_read_lock();
+	if (rcuref_put(&ucounts->count) &&
+	    ucounts_can_be_freed(ucounts)) {
+		rcu_read_unlock();
+		free_ucounts(ucounts);
+		return;
 	}
+	rcu_read_unlock();
 }
 
 static inline bool atomic_long_inc_below(atomic_long_t *v, int u)
@@ -281,11 +324,17 @@ static void do_dec_rlimit_put_ucounts(struct ucounts *ucounts,
 {
 	struct ucounts *iter, *next;
 	for (iter = ucounts; iter != last; iter = next) {
+		bool to_free;
+
+		rcu_read_lock();
 		long dec = atomic_long_sub_return(1, &iter->rlimit[type]);
 		WARN_ON_ONCE(dec < 0);
 		next = iter->ns->ucounts;
-		if (dec == 0)
-			put_ucounts(iter);
+		to_free = ucounts_can_be_freed(iter);
+		rcu_read_unlock();
+		/* If ucounts->count is zero and the rlimits are zero, free ucounts */
+		if (to_free)
+			free_ucounts(iter);
 	}
 }
 
@@ -310,14 +359,6 @@ long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
 			ret = new;
 		if (!override_rlimit)
 			max = get_userns_rlimit_max(iter->ns, type);
-		/*
-		 * Grab an extra ucount reference for the caller when
-		 * the rlimit count was previously 0.
-		 */
-		if (new != 1)
-			continue;
-		if (!get_ucounts(iter))
-			goto dec_unwind;
 	}
 	return ret;
 dec_unwind:

@@ -122,6 +122,7 @@ struct ucounts {
 	kuid_t uid;
 	struct rcu_head rcu;
 	rcuref_t count;
+	atomic_long_t freed;
 	atomic_long_t ucount[UCOUNT_COUNTS];
 	atomic_long_t rlimit[UCOUNT_RLIMIT_COUNTS];
 };
