@@ -171,6 +171,8 @@ struct vsock_transport {
 
 	/* SIOCOUTQ ioctl */
 	ssize_t (*unsent_bytes)(struct vsock_sock *vsk);
+	/* SIOCINQ ioctl */
+	ssize_t (*unread_bytes)(struct vsock_sock *vsk);
 
 	/* Shutdown. */
 	int (*shutdown)(struct vsock_sock *, int);
