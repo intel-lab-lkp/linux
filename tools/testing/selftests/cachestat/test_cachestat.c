@@ -76,7 +76,7 @@ bool write_exactly(int fd, size_t filesize)
 		ssize_t write_len = write(fd, cursor, remained);
 
 		if (write_len <= 0) {
-			ksft_print_msg("Unable write random data to file.\n");
+			ksft_print_msg("Unable to write random data to file.\n");
 			ret = false;
 			goto out_free_data;
 		}
