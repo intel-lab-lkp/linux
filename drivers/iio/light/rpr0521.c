@@ -186,7 +186,6 @@ struct rpr0521_data {
 	bool pxs_dev_en;
 
 	struct iio_trigger *drdy_trigger0;
-	s64 irq_timestamp;
 
 	/* optimize runtime pm ops - enable/disable device only if needed */
 	bool als_ps_need_en;
@@ -416,7 +415,7 @@ static irqreturn_t rpr0521_drdy_irq_handler(int irq, void *private)
 	struct iio_dev *indio_dev = private;
 	struct rpr0521_data *data = iio_priv(indio_dev);
 
-	data->irq_timestamp = iio_get_time_ns(indio_dev);
+	iio_trigger_store_time(data->drdy_trigger0);
 	/*
 	 * We need to wake the thread to read the interrupt reg. It
 	 * is not possible to do that here because regmap_read takes a
@@ -446,15 +445,6 @@ static irqreturn_t rpr0521_trigger_consumer_handler(int irq, void *p)
 	struct rpr0521_data *data = iio_priv(indio_dev);
 	int err;
 
-	/* Use irq timestamp when reasonable. */
-	if (iio_trigger_using_own(indio_dev) && data->irq_timestamp) {
-		pf->timestamp = data->irq_timestamp;
-		data->irq_timestamp = 0;
-	}
-	/* Other chained trigger polls get timestamp only here. */
-	if (!pf->timestamp)
-		pf->timestamp = iio_get_time_ns(indio_dev);
-
 	err = regmap_bulk_read(data->regmap, RPR0521_REG_PXS_DATA,
 		data->scan.channels,
 		(3 * 2) + 1);	/* 3 * 16-bit + (discarded) int clear reg. */
@@ -464,7 +454,6 @@ static irqreturn_t rpr0521_trigger_consumer_handler(int irq, void *p)
 	else
 		dev_err(&data->client->dev,
 			"Trigger consumer can't read from sensor.\n");
-	pf->timestamp = 0;
 
 	iio_trigger_notify_done(indio_dev->trig);
 
@@ -867,8 +856,6 @@ static int rpr0521_init(struct rpr0521_data *data)
 		return ret;
 #endif
 
-	data->irq_timestamp = 0;
-
 	return 0;
 }
 
@@ -984,6 +971,9 @@ static int rpr0521_probe(struct i2c_client *client)
 			goto err_pm_disable;
 		}
 		data->drdy_trigger0->ops = &rpr0521_trigger_ops;
+		data->drdy_trigger0->early_timestamp = true;
+		data->drdy_trigger0->trig_type = IIO_TRIG_TYPE_POLL_NESTED;
+
 		indio_dev->available_scan_masks = rpr0521_available_scan_masks;
 		iio_trigger_set_drvdata(data->drdy_trigger0, indio_dev);
 
@@ -1011,10 +1001,10 @@ static int rpr0521_probe(struct i2c_client *client)
 		 */
 
 		/* Trigger consumer setup */
-		ret = devm_iio_triggered_buffer_setup(indio_dev->dev.parent,
+		ret = devm_iio_triggered_buffer_setup_new(indio_dev->dev.parent,
 			indio_dev,
-			iio_pollfunc_store_time,
 			rpr0521_trigger_consumer_handler,
+			true,
 			&rpr0521_buffer_setup_ops);
 		if (ret < 0) {
 			dev_err(&client->dev, "iio triggered buffer setup failed\n");
