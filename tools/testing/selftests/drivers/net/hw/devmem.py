@@ -18,30 +18,36 @@ def require_devmem(cfg):
         raise KsftSkipEx("Test requires devmem support")
 
 
-def check_rx(cfg) -> None:
-    cfg.require_ipver("6")
+def check_rx(cfg, ipver) -> None:
     require_devmem(cfg)
+
+    addr = cfg.addr_v[ipver]
+    if ipver == "6":
+        addr = "[" + addr + "]"
+
+    socat = f"socat -u - TCP{ipver}:{addr}:{port}"
 
     port = rand_port()
     listen_cmd = f"{cfg.bin_local} -l -f {cfg.ifname} -s {cfg.addr_v['6']} -p {port}"
 
-    with bkg(listen_cmd) as socat:
+    with bkg(listen_cmd) as ncdevmem:
         wait_port_listen(port)
-        cmd(f"echo -e \"hello\\nworld\"| socat -u - TCP6:[{cfg.addr_v['6']}]:{port}", host=cfg.remote, shell=True)
+        cmd(f"echo -e \"hello\\nworld\"| {socat}", host=cfg.remote, shell=True)
 
-    ksft_eq(socat.stdout.strip(), "hello\nworld")
+    ksft_eq(ncdevmem.stdout.strip(), "hello\nworld")
 
 
-def check_tx(cfg) -> None:
-    cfg.require_ipver("6")
+def check_tx(cfg, ipver) -> None:
     require_devmem(cfg)
 
     port = rand_port()
-    listen_cmd = f"socat -U - TCP6-LISTEN:{port}"
+    listen_cmd = f"socat -U - TCP{ipver}-LISTEN:{port}"
 
-    with bkg(listen_cmd, exit_wait=True) as socat:
+    addr = cfg.addr_v[ipver]
+
+    with bkg(listen_cmd) as socat:
         wait_port_listen(port)
-        cmd(f"echo -e \"hello\\nworld\"| {cfg.bin_remote} -f {cfg.ifname} -s {cfg.addr_v['6']} -p {port}", host=cfg.remote, shell=True)
+        cmd(f"echo -e \"hello\\nworld\"| {cfg.bin_remote} -f {cfg.ifname} -s {addr} -p {port}", host=cfg.remote, shell=True)
 
     ksft_eq(socat.stdout.strip(), "hello\nworld")
 
@@ -51,8 +57,13 @@ def main() -> None:
         cfg.bin_local = path.abspath(path.dirname(__file__) + "/ncdevmem")
         cfg.bin_remote = cfg.remote.deploy(cfg.bin_local)
 
+        if "4" in cfg.addr_v:
+            ipver = "4"
+        else:
+            ipver = "6"
+
         ksft_run([check_rx, check_tx],
-                 args=(cfg, ))
+                 args=(cfg, ipver))
     ksft_exit()
 
 
