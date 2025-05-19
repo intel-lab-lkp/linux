@@ -1007,8 +1007,9 @@ static void bgx_poll_for_link(struct work_struct *work)
 	/* Receive link is latching low. Force it high and verify it */
 	bgx_reg_modify(lmac->bgx, lmac->lmacid,
 		       BGX_SPUX_STATUS1, SPU_STATUS1_RCV_LNK);
-	bgx_poll_reg(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1,
-		     SPU_STATUS1_RCV_LNK, false);
+	if (bgx_poll_reg(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1,
+			 SPU_STATUS1_RCV_LNK, false))
+		dev_err(lmac->bgx->pdev->dev, "BXG verification fail with time out.\n");
 
 	spu_link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1);
 	smu_link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SMUX_RX_CTL);
