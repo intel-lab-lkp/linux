@@ -982,6 +982,8 @@ static void print_fields(struct trace_iterator *iter, struct trace_event_call *c
 							  iter->fmt_size);
 			if (ret < 0)
 				trace_seq_printf(&iter->seq, "(0x%px)", pos);
+			else if (ret == 0)
+				trace_seq_printf(&iter->seq, "(0x%px:<NULL>)", pos);
 			else
 				trace_seq_printf(&iter->seq, "(0x%px:%s)",
 						 pos, iter->fmt);

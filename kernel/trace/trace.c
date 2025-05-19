@@ -3656,6 +3656,10 @@ char *trace_iter_expand_format(struct trace_iterator *iter)
 	if (!iter->tr || iter->fmt == static_fmt_buf)
 		return NULL;
 
+	/* Protection against overflow and ZERO_SIZE_PTR returned from krealloc */
+	if (check_add_overflow(iter->fmt_size, STATIC_FMT_BUF_SIZE, &iter->fmt_size))
+		return NULL;
+
 	tmp = krealloc(iter->fmt, iter->fmt_size + STATIC_FMT_BUF_SIZE,
 		       GFP_KERNEL);
 	if (tmp) {
