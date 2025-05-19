@@ -82,4 +82,13 @@ enum imx_sc_pm_func {
 #define IMX_SC_PM_PARENT_PLL2	3	/* Parent in PLL2 or PLL0/4 */
 #define IMX_SC_PM_PARENT_BYPS	4	/* Parent is a bypass clock. */
 
+#if IS_ENABLED(CONFIG_IMX_SCU)
+int imx_sc_pm_get_resource_power_mode(struct imx_sc_ipc *ipc, u32 resource);
+#else
+static inline int imx_sc_pm_get_resource_power_mode(struct imx_sc_ipc *ipc,
+						    u32 resource)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 #endif /* _SC_PM_API_H */
