@@ -4754,15 +4754,18 @@ int weight_p __read_mostly = 64;           /* old backlog weight */
 int dev_weight_rx_bias __read_mostly = 1;  /* bias for backlog weight */
 int dev_weight_tx_bias __read_mostly = 1;  /* bias for output_queue quota */
 
-/* Called with irq disabled */
-static inline void ____napi_schedule(struct softnet_data *sd,
-				     struct napi_struct *napi)
+static inline bool ____try_napi_schedule_threaded(struct softnet_data *sd,
+						  struct napi_struct *napi)
 {
 	struct task_struct *thread;
+	unsigned long new, val;
 
-	lockdep_assert_irqs_disabled();
+	do {
+		val = READ_ONCE(napi->state);
 
-	if (test_bit(NAPI_STATE_THREADED, &napi->state)) {
+		if (!(val & NAPIF_STATE_THREADED))
+			return false;
+
 		/* Paired with smp_mb__before_atomic() in
 		 * napi_enable()/dev_set_threaded().
 		 * Use READ_ONCE() to guarantee a complete
@@ -4770,17 +4773,30 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 		 * wake_up_process() when it's not NULL.
 		 */
 		thread = READ_ONCE(napi->thread);
-		if (thread) {
-			if (use_backlog_threads() && thread == raw_cpu_read(backlog_napi))
-				goto use_local_napi;
+		if (!thread)
+			return false;
 
-			set_bit(NAPI_STATE_SCHED_THREADED, &napi->state);
-			wake_up_process(thread);
-			return;
-		}
-	}
+		if (use_backlog_threads() &&
+		    thread == raw_cpu_read(backlog_napi))
+			return false;
 
-use_local_napi:
+		new = val | NAPIF_STATE_SCHED_THREADED;
+	} while (!try_cmpxchg(&napi->state, &val, new));
+
+	wake_up_process(thread);
+	return true;
+}
+
+/* Called with irq disabled */
+static inline void ____napi_schedule(struct softnet_data *sd,
+				     struct napi_struct *napi)
+{
+	lockdep_assert_irqs_disabled();
+
+	/* try to schedule threaded napi if enabled */
+	if (____try_napi_schedule_threaded(sd, napi))
+		return;
+
 	list_add_tail(&napi->poll_list, &sd->poll_list);
 	WRITE_ONCE(napi->list_owner, smp_processor_id());
 	/* If not called from net_rx_action()
@@ -6888,6 +6904,18 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static void dev_stop_napi_threads(struct net_device *dev)
+{
+	struct napi_struct *napi;
+
+	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		if (napi->thread) {
+			kthread_stop(napi->thread);
+			napi->thread = NULL;
+		}
+	}
+}
+
 int dev_set_threaded(struct net_device *dev, bool threaded)
 {
 	struct napi_struct *napi;
@@ -6925,6 +6953,15 @@ int dev_set_threaded(struct net_device *dev, bool threaded)
 	 */
 	list_for_each_entry(napi, &dev->napi_list, dev_list)
 		assign_bit(NAPI_STATE_THREADED, &napi->state, threaded);
+
+	/* Calling kthread_stop on napi threads should be safe now as the
+	 * threaded state is disabled.
+	 */
+	if (!threaded) {
+		/* Make sure the state is set before stopping threads.*/
+		smp_mb__before_atomic();
+		dev_stop_napi_threads(dev);
+	}
 
 	return err;
 }
@@ -7451,7 +7488,8 @@ static int napi_thread_wait(struct napi_struct *napi)
 {
 	set_current_state(TASK_INTERRUPTIBLE);
 
-	while (!kthread_should_stop()) {
+	/* Wait until we are scheduled or asked to stop. */
+	while (true) {
 		/* Testing SCHED_THREADED bit here to make sure the current
 		 * kthread owns this napi and could poll on this napi.
 		 * Testing SCHED bit is not enough because SCHED bit might be
@@ -7462,6 +7500,15 @@ static int napi_thread_wait(struct napi_struct *napi)
 			__set_current_state(TASK_RUNNING);
 			return 0;
 		}
+
+		/* Since the SCHED_THREADED is not set so this napi kthread does
+		 * not own this napi and it is safe to stop here. Checking the
+		 * SCHED_THREADED before stopping here makes sure that this napi
+		 * was not scheduled again while napi threaded was being
+		 * disabled.
+		 */
+		if (kthread_should_stop())
+			break;
 
 		schedule();
 		set_current_state(TASK_INTERRUPTIBLE);
