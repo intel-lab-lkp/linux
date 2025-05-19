@@ -3,13 +3,18 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/kobject.h>
 #include <linux/prandom.h>
+#include <linux/sysfs.h>
 
 #include <uapi/drm/i915_drm.h>
 
 #include "intel_memory_region.h"
 #include "i915_drv.h"
+#include "i915_sysfs.h"
 #include "i915_ttm_buddy_manager.h"
+
+static struct kobject *memory_info_dir;
 
 static const struct {
 	u16 class;
@@ -421,6 +426,107 @@ void intel_memory_regions_driver_release(struct drm_i915_private *i915)
 		if (region)
 			intel_memory_region_destroy(region);
 	}
+}
+
+static ssize_t
+vram_total_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct device *dev = kobj_to_dev(kobj->parent);
+	struct intel_memory_region *mr;
+
+	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
+
+	return sysfs_emit(buf, "%llu\n", mr->total);
+}
+
+static const struct kobj_attribute vram_total_attr =
+__ATTR(vram_total, 0444, vram_total_show, NULL);
+
+static ssize_t
+vram_avail_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct device *dev = kobj_to_dev(kobj->parent);
+	struct intel_memory_region *mr;
+	u64 unallocated_size;
+	u64 dummy;
+
+	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
+	intel_memory_region_avail(mr, &unallocated_size, &dummy);
+
+	return sysfs_emit(buf, "%llu\n", unallocated_size);
+}
+
+static const struct kobj_attribute vram_avail_attr =
+__ATTR(vram_available, 0444, vram_avail_show, NULL);
+
+
+static ssize_t
+vram_total_visible_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct device *dev = kobj_to_dev(kobj->parent);
+	struct intel_memory_region *mr;
+
+	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
+
+	return sysfs_emit(buf, "%llu\n", resource_size(&mr->io));
+}
+
+static const struct kobj_attribute vram_total_visible_attr =
+__ATTR(vram_total_cpu_visible, 0444, vram_total_visible_show, NULL);
+
+static ssize_t
+vram_avail_visible_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct device *dev = kobj_to_dev(kobj->parent);
+	struct intel_memory_region *mr;
+	u64 unallocated_cpu_visible_size;
+	u64 dummy;
+
+	mr = intel_memory_region_by_type(kdev_minor_to_i915(dev), INTEL_MEMORY_LOCAL);
+	intel_memory_region_avail(mr, &dummy, &unallocated_cpu_visible_size);
+
+	return sysfs_emit(buf, "%llu\n", unallocated_cpu_visible_size);
+}
+
+static const struct kobj_attribute vram_avail_visible_attr =
+__ATTR(vram_available_cpu_visible, 0444, vram_avail_visible_show, NULL);
+
+int intel_memory_region_setup_sysfs(struct drm_i915_private *i915)
+{
+	static const struct attribute *const files[] = {
+		&vram_total_attr.attr,
+		&vram_avail_attr.attr,
+		&vram_total_visible_attr.attr,
+		&vram_avail_visible_attr.attr,
+		NULL
+	};
+	struct device *kdev = i915->drm.primary->kdev;
+	int err;
+
+	/* Skip this function completely if the system does not support lmem */
+	if(!intel_memory_region_by_type(i915, INTEL_MEMORY_LOCAL))
+		return 0;
+
+	memory_info_dir = kobject_create_and_add("memory_info", &kdev->kobj);
+	if (!memory_info_dir) {
+		drm_warn(&i915->drm, "Failed to create memory_info sysfs directory\n");
+		return -EAGAIN;
+	}
+
+	err = sysfs_create_files(memory_info_dir, files);
+	if (err) {
+		drm_warn(&i915->drm, "Failed to create memory info sysfs files: %d\n", err);
+		kobject_put(memory_info_dir);
+		return err;
+	}
+
+	return 0;
+}
+
+int intel_memory_region_teardown_sysfs(void)
+{
+	kobject_put(memory_info_dir);
+	return 0;
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

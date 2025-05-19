@@ -35,6 +35,8 @@
 #include "gt/intel_rps.h"
 #include "gt/sysfs_engines.h"
 
+#include "intel_memory_region.h"
+
 #include "i915_drv.h"
 #include "i915_sysfs.h"
 
@@ -182,12 +184,16 @@ void i915_setup_sysfs(struct drm_i915_private *dev_priv)
 
 	i915_gpu_error_sysfs_setup(dev_priv);
 
+	intel_memory_region_setup_sysfs(dev_priv);
+
 	intel_engines_add_sysfs(dev_priv);
 }
 
 void i915_teardown_sysfs(struct drm_i915_private *dev_priv)
 {
 	struct device *kdev = dev_priv->drm.primary->kdev;
+
+	intel_memory_region_teardown_sysfs();
 
 	i915_gpu_error_sysfs_teardown(dev_priv);
 

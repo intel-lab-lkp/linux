@@ -132,4 +132,7 @@ struct intel_memory_region *
 i915_gem_shmem_setup(struct drm_i915_private *i915,
 		     u16 type, u16 instance);
 
+int intel_memory_region_setup_sysfs(struct drm_i915_private *i915);
+int intel_memory_region_teardown_sysfs(void);
+
 #endif
