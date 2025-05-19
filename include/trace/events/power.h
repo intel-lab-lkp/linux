@@ -62,6 +62,30 @@ TRACE_EVENT(cpu_idle_miss,
 		(unsigned long)__entry->state, (__entry->below)?"below":"above")
 );
 
+TRACE_EVENT(cpuidle_find_deepest_state,
+
+	TP_PROTO(unsigned int cpu_id, bool s2idle, unsigned int deepest_state),
+
+	TP_ARGS(cpu_id, s2idle, deepest_state),
+
+	TP_STRUCT__entry(
+		__field(u32,            cpu_id)
+		__field(bool,           s2idle)
+		__field(u32,            deepest_state)
+	),
+
+	TP_fast_assign(
+		__entry->cpu_id = cpu_id;
+		__entry->s2idle = s2idle;
+		__entry->deepest_state = deepest_state;
+	),
+
+	TP_printk("cpu_id=%lu is_s2idle=%s deepest_state=%lu",
+		 (unsigned long)__entry->cpu_id,
+		 (__entry->s2idle)?"yes":"no",
+		 (unsigned long)__entry->deepest_state)
+);
+
 DECLARE_EVENT_CLASS(psci_domain_idle,
 
 	TP_PROTO(unsigned int cpu_id, unsigned int state, bool s2idle),
