@@ -13,6 +13,13 @@
 struct iio_dev;
 struct iio_trigger;
 
+enum iio_timestamp_type {
+	IIO_TIMESTAMP_TYPE_NONE,
+	IIO_TIMESTAMP_TYPE_CONSUMER_TOP_HALF,
+	IIO_TIMESTAMP_TYPE_CONSUMER_BOTTOM_HALF,
+	IIO_TIMESTAMP_TYPE_TRIGGER,
+};
+
 /**
  * struct iio_poll_func - poll function pair
  *
@@ -26,7 +33,10 @@ struct iio_trigger;
  * @timestamp:			some devices need a timestamp grabbed as soon
  *				as possible after the trigger - hence handler
  *				passes it via here.
+ * @timestamp_type:		indicates which handler grabs the timestamp.
+ * @timestamp_enabled:		if true, automatically grabs the timestamp.
  **/
+
 struct iio_poll_func {
 	struct iio_dev *indio_dev;
 	irqreturn_t (*h)(int irq, void *p);
@@ -35,6 +45,9 @@ struct iio_poll_func {
 	char *name;
 	int irq;
 	s64 timestamp;
+
+	enum iio_timestamp_type timestamp_type;
+	bool timestamp_enabled;
 };
 
 
