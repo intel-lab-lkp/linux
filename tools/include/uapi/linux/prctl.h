@@ -331,5 +331,6 @@ struct prctl_mm_map {
 #define PR_SET_THP_POLICY		78
 #define PR_GET_THP_POLICY		79
 #define PR_THP_POLICY_DEFAULT_HUGE	0
+#define PR_THP_POLICY_DEFAULT_NOHUGE	1
 
 #endif /* _LINUX_PRCTL_H */

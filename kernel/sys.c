@@ -2666,6 +2666,8 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			return -EINTR;
 		if (mm->def_flags & VM_HUGEPAGE)
 			error = PR_DEFAULT_MADV_HUGEPAGE;
+		else if (mm->def_flags & VM_NOHUGEPAGE)
+			error = PR_DEFAULT_MADV_NOHUGEPAGE;
 		mmap_write_unlock(mm);
 		break;
 	case PR_SET_THP_POLICY:
@@ -2680,6 +2682,11 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			error = hugepage_set_vmflags(&mm->def_flags, MADV_HUGEPAGE);
 			if (!error)
 				process_default_madv_hugepage(mm, MADV_HUGEPAGE);
+			break;
+		case PR_DEFAULT_MADV_NOHUGEPAGE:
+			error = hugepage_set_vmflags(&mm->def_flags, MADV_NOHUGEPAGE);
+			if (!error)
+				process_default_madv_hugepage(mm, MADV_NOHUGEPAGE);
 			break;
 		default:
 			error = -EINVAL;
