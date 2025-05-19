@@ -288,6 +288,22 @@ static void iio_trigger_put_irq(struct iio_trigger *trig, int irq)
 	clear_bit(irq - trig->subirq_base, trig->pool);
 }
 
+void iio_trigger_store_time(struct iio_trigger *trig)
+{
+	WARN_ON(!trig->early_timestamp);
+
+	for (int i = 0; i < CONFIG_IIO_CONSUMERS_PER_TRIGGER; i++) {
+		struct iio_poll_func *pf = trig->consumer_pf[i];
+
+		if (pf) {
+			WARN_ON(pf->timestamp_type != IIO_TIMESTAMP_TYPE_TRIGGER);
+
+			pf->timestamp = iio_get_time_ns(pf->indio_dev);
+		}
+	}
+}
+EXPORT_SYMBOL(iio_trigger_store_time);
+
 static int iio_trigger_attach_timestamp(struct iio_trigger *trig,
 					  struct iio_poll_func *pf)
 {
