@@ -531,9 +531,7 @@ int mtk_eint_do_init(struct mtk_eint *eint)
 			eint->pins[i].index = i;
 			eint->pins[i].debounce = (i < eint->hw->db_cnt) ? 1 : 0;
 		}
-	}
-
-	if (hw && hw->soc && hw->soc->eint_pin) {
+	} else if (hw && hw->soc && hw->soc->eint_pin) {
 		eint->pins = hw->soc->eint_pin;
 		for (i = 0; i < eint->hw->ap_num; i++) {
 			inst = eint->pins[i].instance;
