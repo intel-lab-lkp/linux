@@ -65,6 +65,24 @@ ATTRIBUTE_GROUPS(iio_trig_dev);
 
 static struct iio_trigger *__iio_trigger_find_by_name(const char *name);
 
+/* Only be invoked in consumer top-half */
+static irqreturn_t iio_pollfunc_top_half_wrapper(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+
+	pf->timestamp = iio_get_time_ns(pf->indio_dev);
+	return IRQ_WAKE_THREAD;
+}
+
+/* Only be invoked in consumer botom-half */
+static irqreturn_t iio_pollfunc_bottom_half_wrapper(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+
+	pf->timestamp = iio_get_time_ns(pf->indio_dev);
+	return pf->thread(irq, p);
+}
+
 int iio_trigger_register(struct iio_trigger *trig_info)
 {
 	int ret;
@@ -270,6 +288,36 @@ static void iio_trigger_put_irq(struct iio_trigger *trig, int irq)
 	clear_bit(irq - trig->subirq_base, trig->pool);
 }
 
+static int iio_poll_func_register(struct iio_poll_func *pf,
+				  struct iio_trigger *trig)
+{
+	irq_handler_t tophalf = NULL;
+	irq_handler_t bottomhalf = pf->thread;
+	int ret;
+
+	/*
+	 * The consumer does not need timestamp.
+	 * Just request raw irq handler.
+	 */
+	if (!pf->timestamp_enabled)
+		goto out_request_irq;
+
+	if (trig->trig_type & IIO_TRIG_TYPE_POLL_NESTED) {
+		bottomhalf = iio_pollfunc_bottom_half_wrapper;
+		pf->timestamp_type = IIO_TIMESTAMP_TYPE_CONSUMER_BOTTOM_HALF;
+	} else if (trig->trig_type & IIO_TRIG_TYPE_POLL) {
+		tophalf = iio_pollfunc_top_half_wrapper;
+		pf->timestamp_type = IIO_TIMESTAMP_TYPE_CONSUMER_TOP_HALF;
+	} else {
+		pr_err("Trigger does not set valid trig_type.");
+		return -EINVAL;
+	}
+
+out_request_irq:
+	return request_threaded_irq(pf->irq, tophalf, bottomhalf,
+				    pf->type, pf->name, pf);
+}
+
 /* Complexity in here.  With certain triggers (datardy) an acknowledgement
  * may be needed if the pollfuncs do not include the data read for the
  * triggering device.
@@ -296,10 +344,8 @@ int iio_trigger_attach_poll_func(struct iio_trigger *trig,
 		goto out_put_module;
 	}
 
-	/* Request irq */
-	ret = request_threaded_irq(pf->irq, pf->h, pf->thread,
-				   pf->type, pf->name,
-				   pf);
+	/* Register consumer handlers */
+	ret = iio_poll_func_register(pf, trig);
 	if (ret < 0)
 		goto out_put_irq;
 
@@ -352,6 +398,10 @@ int iio_trigger_detach_poll_func(struct iio_trigger *trig,
 	return ret;
 }
 
+/*
+ * Will be deprecated.
+ * We do not need to set this as a top half manually to grab a timestamp.
+ */
 irqreturn_t iio_pollfunc_store_time(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
