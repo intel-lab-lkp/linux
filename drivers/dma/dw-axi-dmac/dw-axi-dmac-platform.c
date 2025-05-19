@@ -265,13 +265,23 @@ static inline bool axi_chan_is_hw_enable(struct axi_dma_chan *chan)
 static void axi_dma_hw_init(struct axi_dma_chip *chip)
 {
 	int ret;
-	u32 i;
+	u32 i, tmp;
 
 	for (i = 0; i < chip->dw->hdata->nr_channels; i++) {
 		axi_chan_irq_disable(&chip->dw->chan[i], DWAXIDMAC_IRQ_ALL);
 		axi_chan_disable(&chip->dw->chan[i]);
 	}
-	ret = dma_set_mask_and_coherent(chip->dev, DMA_BIT_MASK(64));
+
+	ret = device_property_read_u32(chip->dev, "snps,dma-bit-mask", &tmp);
+	if (ret)
+		ret = dma_set_mask_and_coherent(chip->dev, DMA_BIT_MASK(64));
+	else {
+		if (tmp == 0 || tmp < 32 || tmp > 64)
+			dev_err(chip->dev, "Invalid dma bit mask\n");
+
+		ret = dma_set_mask_and_coherent(chip->dev, DMA_BIT_MASK(tmp));
+	}
+
 	if (ret)
 		dev_warn(chip->dev, "Unable to set coherent mask\n");
 }
