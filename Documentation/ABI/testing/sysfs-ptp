@@ -140,3 +140,11 @@ Description:
 		PPS events to the Linux PPS subsystem. To enable PPS
 		events, write a "1" into the file. To disable events,
 		write a "0" into the file.
+
+What:		/sys/class/ptp/ptp<N>/ro_safe
+Date:		May 2025
+Contact:	Wojtek Wasko <wwasko@nvidia.com>
+Description:
+        This read-only file conveys whether the kernel
+        implements necessary permissions checks to allow
+        safe readonly access to PTP devices.

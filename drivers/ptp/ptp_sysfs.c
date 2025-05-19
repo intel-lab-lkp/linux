@@ -28,6 +28,8 @@ static ssize_t max_phase_adjustment_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(max_phase_adjustment);
 
+static DEVICE_STRING_ATTR_RO(ro_safe, 0444, "1\n");
+
 #define PTP_SHOW_INT(name, var)						\
 static ssize_t var##_show(struct device *dev,				\
 			   struct device_attribute *attr, char *page)	\
@@ -320,6 +322,7 @@ static DEVICE_ATTR_RW(max_vclocks);
 
 static struct attribute *ptp_attrs[] = {
 	&dev_attr_clock_name.attr,
+	&dev_attr_ro_safe.attr.attr,
 
 	&dev_attr_max_adjustment.attr,
 	&dev_attr_max_phase_adjustment.attr,
