@@ -327,6 +327,158 @@ Call :c:func:`media_device_register()`, if media devnode isn't registered
 Call :c:func:`media_device_delete()` to free the media_device. Freeing is
 handled by the kref put handler.
 
+Media Jobs Framework
+^^^^^^^^^^^^^^^^^^^^
+
+The media jobs framework exists to facilitate situations in which multiple
+drivers must work together to properly operate a media pipeline in a driver
+agnostic way. The archetypical example is of a memory to memory ISP that does
+not include its own DMA input engine, and which must interact with the driver
+for one that has been integrated. Because the DMA engine and its driver may be
+different between each implementation, hardcoding calls of functions exported by
+the DMA engine driver would not be appropriate. The media jobs framework allows
+the drivers to define the steps that each must execute to correctly push data
+through the pipeline and then schedule the sequence of steps to run in a work
+queue.
+
+To start with each driver must acquire a reference to a
+:c:type:`media_jobs_scheduler` by calling :c:func:`media_jobs_get_scheduler()`,
+passing the pointer to their :c:type:`media_device`. This ensures that all of
+the drivers are working with the same scheduler. Drivers must then call
+:c:func:`media_jobs_add_job_setup_func()` to register a function that populates
+each job with the dependencies that must be cleared to allow it to operate, and
+the steps that must be carried out to execute it. For example:
+
+.. code-block:: c
+
+   static void isp_driver_run_step(void *data)
+   {
+       struct isp *isp = data;
+
+       /*
+        * Logic here to actually execute the necessary steps, for example we
+        * might configure some hardware registers.
+        */
+       ...;
+   }
+
+   static struct media_job_dep_ops ops = {
+       ...,
+   };
+
+   static int isp_driver_add_job_setup_func(struct media_job *job, void *data)
+   {
+       int ret;
+
+       ret = media_jobs_add_job_dep(job, &ops, data);
+       if (ret)
+           return ret;
+
+       ret = media_jobs_add_job_step(job, isp_driver_run_step, data,
+                                     MEDIA_JOBS_FL_STEP_ANYWHERE, 0);
+       if (ret)
+           return ret;
+
+       return 0;
+   }
+
+The flags parameter of `media_jobs_add_job_step()` must be one of
+:c:macro:`MEDIA_JOBS_FL_STEP_ANYWHERE`, :c:macro:`MEDIA_JOBS_FL_STEP_FROM_FRONT`
+or :c:macro:`MEDIA_JOBS_FL_STEP_FROM_BACK`. The flag and pos parameters together
+define the order of the step within the job. Steps added with
+`MEDIA_JOBS_FL_STEP_ANYWHERE` will go after all steps that are added with
+`MEDIA_JOBS_FL_STEP_FROM_FRONT` and all steps with `MEDIA_JOBS_FL_STEP_ANYWHERE`
+that either have a lower `pos` or were previously added. They will go before all
+those added with `MEDIA_JOBS_FL_STEP_FROM_BACK` and all steps with
+`MEDIA_JOBS_FL_STEP_ANYWHERE` that have a higher `pos`. Steps added with
+`MEDIA_JOBS_FL_STEP_FROM_FRONT` will go `pos` places from the front of the list,
+and steps added with `flags` set to `MEDIA_JOBS_FL_STEP_FROM_BACK`` will go
+`pos` places from the end of the list. This allows multiple drivers to quite
+precisely define which steps need to be executed and what order they should be
+executed in.
+
+Adding a step with the same `flags` and `pos` as a previously added step will
+result in an error.
+
+The functions held in :c:type:`media_job_dep_ops` define how the media jobs
+framework handles job dependencies. It is expected that there will be some hard
+dependencies before a job can be executed; for example pushing a buffer of image
+data through an ISP pipeline necessarily requires that an input buffer be ready
+and an output buffer be ready to accept the processed data. The operations ask
+the driver if the dependencies are met, tell the driver that a job has been
+queued and reset the dependencies in the event the job is cancelled:
+
+.. code-block:: c
+
+   struct isp {
+
+       ...;
+
+       struct {
+           struct list_head pending;
+	   struct list_head processing;
+       } buffers;
+   }
+
+   static bool isp_driver_check_dep(void *data)
+   {
+       struct isp *isp = data;
+
+       /*
+        * Do we have a buffer queued ready to accept the ISP's output data?
+        */
+       if (list_empty(isp->buffers.pending))
+           return false;
+
+       return true;
+   }
+
+   static void isp_driver_clear_dep(void *data)
+   {
+       struct isp *isp = data;
+       struct buf *buf;
+
+       /*
+        * We need to "consume" the buffer so that it's not also considered as
+        * meeting this dependency for the next attempt to queue a job
+        */
+       buf = list_first_entry(&isp->buffers.pending, struct buf, list);
+       list_move_tail(&buf->list, isp->buffers.processing);
+   }
+
+   static void isp_driver_reset_dep(void *data)
+   {
+       struct isp *isp = data;
+       struct buf *buf;
+
+       /*
+        * If a queued job is cancelled then we need to return the dependency to
+        * its original state, which in this example means returning it to the
+        * pending queue.
+        */
+       buf = list_first_entry(&isp->buffers.pending, struct buf, list);
+       list_move_tail(&buf->list, isp->buffers.pending);
+   }
+
+   static struct media_job_dep_ops ops = {
+       .check_dep = isp_driver_check_dep,
+       .clear_dep = isp_driver_clear_dep,
+       .reset_dep = isp_driver_reset_dep,
+   };
+
+The actual creation and queueing of the jobs should be done by the drivers by
+calling :c:func:`media_jobs_try_queue_job()` at any time a dependency of the
+job is met - for example (following the earlier example) when a buffer is queued
+to either the ISP or DMA engine's driver. When all of the dependencies that are
+necessary for a job to be queued are met, this function will push a job to the
+scheduler's queue.
+
+The scheduler has a workqueue that runs the jobs. This is triggered by calls to
+the :c:func:`media_jobs_run_jobs()` function, which must be called periodically
+as the pipeline is running. When the streaming is finished the drivers should
+shut down the workqueue and cancel the queued jobs by calling
+:c:func:`media_jobs_cancel_jobs()`.
+
 API Definitions
 ^^^^^^^^^^^^^^^
 
@@ -335,6 +487,8 @@ API Definitions
 .. kernel-doc:: include/media/media-devnode.h
 
 .. kernel-doc:: include/media/media-entity.h
+
+.. kernel-doc:: include/media/media-jobs.h
 
 .. kernel-doc:: include/media/media-request.h
 
