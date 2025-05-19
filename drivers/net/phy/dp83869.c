@@ -25,6 +25,7 @@
 #define DP83869_CFG2		0x14
 #define DP83869_CTRL		0x1f
 #define DP83869_CFG4		0x1e
+#define DP83869_FX_INT_STS	0xc19
 
 /* Extended Registers */
 #define DP83869_GEN_CFG3        0x0031
@@ -194,6 +195,12 @@ static int dp83869_ack_interrupt(struct phy_device *phydev)
 
 	if (err < 0)
 		return err;
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, phydev->supported)) {
+		err = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_INT_STS);
+		if (err < 0)
+			return err;		
+	}
 
 	return 0;
 }
