@@ -1072,6 +1072,7 @@ void start_kernel(void)
 		efi_enter_virtual_mode();
 #endif
 	thread_stack_cache_init();
+	ucounts_init();
 	cred_init();
 	fork_init();
 	proc_caches_init();

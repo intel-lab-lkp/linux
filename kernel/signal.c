@@ -416,13 +416,9 @@ static struct ucounts *sig_get_ucounts(struct task_struct *t, int sig,
 	rcu_read_lock();
 	ucounts = task_ucounts(t);
 	sigpending = inc_rlimit_get_ucounts(ucounts, UCOUNT_RLIMIT_SIGPENDING,
-					    override_rlimit);
+					    override_rlimit, task_rlimit(t, RLIMIT_SIGPENDING));
 	rcu_read_unlock();
-	if (!sigpending)
-		return NULL;
-
-	if (unlikely(!override_rlimit && sigpending > task_rlimit(t, RLIMIT_SIGPENDING))) {
-		dec_rlimit_put_ucounts(ucounts, UCOUNT_RLIMIT_SIGPENDING);
+	if (!sigpending) {
 		print_dropped_signal(sig);
 		return NULL;
 	}
