@@ -288,6 +288,15 @@ static void iio_trigger_put_irq(struct iio_trigger *trig, int irq)
 	clear_bit(irq - trig->subirq_base, trig->pool);
 }
 
+static int iio_trigger_attach_timestamp(struct iio_trigger *trig,
+					  struct iio_poll_func *pf)
+{
+	/* RFC */
+	trig->consumer_pf[pf->irq - trig->subirq_base] = pf;
+
+	return 0;
+}
+
 static int iio_poll_func_register(struct iio_poll_func *pf,
 				  struct iio_trigger *trig)
 {
@@ -301,6 +310,16 @@ static int iio_poll_func_register(struct iio_poll_func *pf,
 	 */
 	if (!pf->timestamp_enabled)
 		goto out_request_irq;
+
+	/*
+	 * The trigger supports grabbing timestamp.
+	 * Just request raw irq handler.
+	 */
+	if (trig->early_timestamp) {
+		ret = iio_trigger_attach_timestamp(trig, pf);
+		pf->timestamp_type = IIO_TIMESTAMP_TYPE_TRIGGER;
+		goto out_request_irq;
+	}
 
 	if (trig->trig_type & IIO_TRIG_TYPE_POLL_NESTED) {
 		bottomhalf = iio_pollfunc_bottom_half_wrapper;
@@ -394,6 +413,9 @@ int iio_trigger_detach_poll_func(struct iio_trigger *trig,
 	free_irq(pf->irq, pf);
 	module_put(iio_dev_opaque->driver_module);
 	pf->irq = 0;
+
+	/* RFC */
+	trig->consumer_pf[pf->irq - trig->subirq_base] = NULL;
 
 	return ret;
 }
