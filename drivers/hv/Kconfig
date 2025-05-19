@@ -72,4 +72,24 @@ config MSHV_ROOT
 
 	  If unsure, say N.
 
+config MSHV_VTL
+	tristate "Microsoft Hyper-V VTL driver"
+	depends on HYPERV && X86_64
+	depends on TRANSPARENT_HUGEPAGE
+	# MTRRs are controlled by VTL0, and are not specific to individual VTLs.
+	# Therefore, do not attempt to access or modify MTRRs here.
+	depends on !MTRR
+	select CPUMASK_OFFSTACK
+	select HYPERV_VTL_MODE
+	default n
+	help
+	  Select this option to enable Hyper-V VTL driver support.
+	  This driver provides interfaces for Virtual Machine Manager (VMM) running in VTL2
+	  userspace to create VTLs and partitions, setup and manage VTL0 memory and
+	  allow userspace to make direct hypercalls. This also allows to map VTL0's address
+	  space to a usermode process in VTL2 and supports getting new VMBus messages and channel
+	  events in VTL2.
+
+	  If unsure, say N.
+
 endmenu
