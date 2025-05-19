@@ -91,4 +91,7 @@
 #define PKEY_ACCESS_MASK	(PKEY_DISABLE_ACCESS |\
 				 PKEY_DISABLE_WRITE)
 
+/* process_madvise() flags */
+#define PMADV_SKIP_ERRORS (1U << 0) /* Skip VMAs on errors, but carry on. */
+
 #endif /* __ASM_GENERIC_MMAN_COMMON_H */

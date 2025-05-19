@@ -51,6 +51,8 @@ struct madvise_walk_private {
 struct madvise_behavior {
 	int behavior;
 	struct mmu_gather *tlb;
+	int flags;
+	bool saw_error;
 };
 
 /*
@@ -961,8 +963,10 @@ static long madvise_dontneed_free(struct vm_area_struct *vma,
 }
 
 static long madvise_populate(struct mm_struct *mm, unsigned long start,
-		unsigned long end, int behavior)
+		unsigned long end, struct madvise_behavior *madv_behavior)
 {
+	int behavior = madv_behavior->behavior;
+	bool can_skip = madv_behavior->flags & PMADV_SKIP_ERRORS;
 	const bool write = behavior == MADV_POPULATE_WRITE;
 	int locked = 1;
 	long pages;
@@ -977,6 +981,13 @@ static long madvise_populate(struct mm_struct *mm, unsigned long start,
 
 		if (pages >= 0)
 			continue;
+
+		if (can_skip) {
+			/* Simply try the next page. */
+			pages = 1;
+			madv_behavior->saw_error = true;
+			continue;
+		}
 
 		switch (pages) {
 		case -EINTR:
@@ -1254,12 +1265,11 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
  * will handle splitting a vm area into separate areas, each area with its own
  * behavior.
  */
-static int madvise_vma_behavior(struct vm_area_struct *vma,
+static int __madvise_vma_behavior(struct vm_area_struct *vma,
 				struct vm_area_struct **prev,
 				unsigned long start, unsigned long end,
-				void *behavior_arg)
+				struct madvise_behavior *arg)
 {
-	struct madvise_behavior *arg = behavior_arg;
 	int behavior = arg->behavior;
 	int error;
 	struct anon_vma_name *anon_name;
@@ -1354,18 +1364,37 @@ out:
 	return error;
 }
 
+static int madvise_vma_behavior(struct vm_area_struct *vma,
+				struct vm_area_struct **prev,
+				unsigned long start, unsigned long end,
+				void *behavior_arg)
+{
+	struct madvise_behavior *madv_behavior = behavior_arg;
+	int ret = __madvise_vma_behavior(vma, prev, start, end, madv_behavior);
+	bool can_skip = madv_behavior->flags & PMADV_SKIP_ERRORS;
+
+	/* We must propagate the restart no matter what. */
+	if (can_skip && ret && ret != -ERESTARTNOINTR) {
+		madv_behavior->saw_error = true;
+		return 0;
+	}
+
+	return ret;
+}
+
 #ifdef CONFIG_MEMORY_FAILURE
 /*
  * Error injection support for memory error handling.
  */
-static int madvise_inject_error(int behavior,
+static int madvise_inject_error(struct madvise_behavior *madv_behavior,
 		unsigned long start, unsigned long end)
 {
+	int behavior = madv_behavior->behavior;
+	bool can_skip = madv_behavior->flags & PMADV_SKIP_ERRORS;
 	unsigned long size;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
-
 
 	for (; start < end; start += size) {
 		unsigned long pfn;
@@ -1396,8 +1425,12 @@ static int madvise_inject_error(int behavior,
 				ret = 0;
 		}
 
-		if (ret)
-			return ret;
+		if (ret) {
+			if (can_skip)
+				madv_behavior->saw_error = true;
+			else
+				return ret;
+		}
 	}
 
 	return 0;
@@ -1416,7 +1449,7 @@ static bool is_memory_failure(int behavior)
 
 #else
 
-static int madvise_inject_error(int behavior,
+static int madvise_inject_error(struct madvise_behavior *madv_behavior,
 		unsigned long start, unsigned long end)
 {
 	return 0;
@@ -1721,13 +1754,14 @@ static int madvise_do_behavior(struct mm_struct *mm,
 	int error;
 
 	if (is_memory_failure(behavior))
-		return madvise_inject_error(behavior, start, start + len_in);
+		return madvise_inject_error(madv_behavior, start,
+					    start + len_in);
 	start = untagged_addr_remote(mm, start);
 	end = start + PAGE_ALIGN(len_in);
 
 	blk_start_plug(&plug);
 	if (is_madvise_populate(behavior))
-		error = madvise_populate(mm, start, end, behavior);
+		error = madvise_populate(mm, start, end, madv_behavior);
 	else
 		error = madvise_walk_vmas(mm, start, end, madv_behavior,
 					  madvise_vma_behavior);
@@ -1836,7 +1870,7 @@ SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 
 /* Perform an madvise operation over a vector of addresses and lengths. */
 static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
-			      int behavior)
+			      int behavior, int flags)
 {
 	ssize_t ret = 0;
 	size_t total_len;
@@ -1844,7 +1878,10 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 	struct madvise_behavior madv_behavior = {
 		.behavior = behavior,
 		.tlb = &tlb,
+		.flags = flags,
 	};
+	bool can_skip = flags & PMADV_SKIP_ERRORS;
+	size_t skipped = 0;
 
 	total_len = iov_iter_count(iter);
 
@@ -1886,16 +1923,39 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 			madvise_init_tlb(&madv_behavior, mm);
 			continue;
 		}
-		if (ret < 0)
+		if (ret < 0 && !can_skip)
 			break;
+
+		/* All skip cases will return 0. */
+		if (can_skip && madv_behavior.saw_error) {
+			skipped++;
+			madv_behavior.saw_error = false;
+		}
+
 		iov_iter_advance(iter, iter_iov_len(iter));
 	}
 	madvise_finish_tlb(&madv_behavior);
 	madvise_unlock(mm, behavior);
 
-	ret = (total_len - iov_iter_count(iter)) ? : ret;
+	/*
+	 * Since we ignore errors in this case, simply report the number of
+	 * entries in the iovec which were totally successful.
+	 */
+	if (can_skip)
+		return total_len - skipped;
 
+	ret = (total_len - iov_iter_count(iter)) ? : ret;
 	return ret;
+}
+
+static bool check_process_madvise_flags(unsigned int flags)
+{
+	unsigned int mask = PMADV_SKIP_ERRORS;
+
+	if (flags & ~mask)
+		return false;
+
+	return true;
 }
 
 SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
@@ -1909,7 +1969,7 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 	struct mm_struct *mm;
 	unsigned int f_flags;
 
-	if (flags != 0) {
+	if (!check_process_madvise_flags(flags)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1950,7 +2010,7 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 		goto release_mm;
 	}
 
-	ret = vector_madvise(mm, &iter, behavior);
+	ret = vector_madvise(mm, &iter, behavior, flags);
 
 release_mm:
 	mmput(mm);
