@@ -42,6 +42,9 @@ properties:
     minItems: 1
     maxItems: 8
 
+  iommus:
+    maxItems: 1
+
   clocks:
     items:
       - description: Bus Clock
@@ -60,6 +63,8 @@ properties:
     maximum: 8
 
   dma-noncoherent: true
+
+  dma-coherent: true
 
   resets:
     minItems: 1
@@ -100,6 +105,14 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     minimum: 1
     maximum: 256
+
+  snps,dma-bit-mask:
+    description:
+      Defines the number of addressable bits for DMA.
+      If this property is missing, the default 64bit will be used.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 32
+    maximum: 64
 
 required:
   - compatible
