@@ -632,6 +632,7 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	free_space = vvs->buf_alloc - fwd_cnt_delta;
 	low_rx_bytes = (vvs->rx_bytes <
 			sock_rcvlowat(sk_vsock(vsk), 0, INT_MAX));
+	vvs->bytes_unread -= total;
 
 	spin_unlock_bh(&vvs->rx_lock);
 
@@ -782,6 +783,7 @@ static int virtio_transport_seqpacket_do_dequeue(struct vsock_sock *vsk,
 		}
 
 		virtio_transport_dec_rx_pkt(vvs, pkt_len);
+		vvs->bytes_unread -= pkt_len;
 		kfree_skb(skb);
 	}
 
@@ -1132,6 +1134,19 @@ ssize_t virtio_transport_unsent_bytes(struct vsock_sock *vsk)
 }
 EXPORT_SYMBOL_GPL(virtio_transport_unsent_bytes);
 
+ssize_t virtio_transport_unread_bytes(struct vsock_sock *vsk)
+{
+	struct virtio_vsock_sock *vvs = vsk->trans;
+	size_t ret;
+
+	spin_lock_bh(&vvs->rx_lock);
+	ret = vvs->bytes_unread;
+	spin_unlock_bh(&vvs->rx_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(virtio_transport_unread_bytes);
+
 static int virtio_transport_reset(struct vsock_sock *vsk,
 				  struct sk_buff *skb)
 {
@@ -1364,6 +1379,8 @@ virtio_transport_recv_enqueue(struct vsock_sock *vsk,
 		free_pkt = true;
 		goto out;
 	}
+
+	vvs->bytes_unread += len;
 
 	if (le32_to_cpu(hdr->flags) & VIRTIO_VSOCK_SEQ_EOM)
 		vvs->msg_count++;

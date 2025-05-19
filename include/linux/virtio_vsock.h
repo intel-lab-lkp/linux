@@ -142,6 +142,7 @@ struct virtio_vsock_sock {
 	u32 buf_alloc;
 	struct sk_buff_head rx_queue;
 	u32 msg_count;
+	size_t bytes_unread;
 };
 
 struct virtio_vsock_pkt_info {
@@ -195,6 +196,7 @@ s64 virtio_transport_stream_has_space(struct vsock_sock *vsk);
 u32 virtio_transport_seqpacket_has_data(struct vsock_sock *vsk);
 
 ssize_t virtio_transport_unsent_bytes(struct vsock_sock *vsk);
+ssize_t virtio_transport_unread_bytes(struct vsock_sock *vsk);
 
 void virtio_transport_consume_skb_sent(struct sk_buff *skb,
 				       bool consume);
