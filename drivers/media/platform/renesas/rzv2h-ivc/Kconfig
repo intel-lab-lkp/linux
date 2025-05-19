@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config VIDEO_RZV2H_IVC
+	tristate "Renesas RZ/V2H Input Video Control block driver"
+	depends on V4L_PLATFORM_DRIVERS
+	depends on VIDEO_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  Support for the Video Input Block found in the RZ/V2H SoC. Enable this
+	  to support the block, and by extension the Arm Mali-C55 ISP to which
+	  it feeds data.
