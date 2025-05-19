@@ -2668,6 +2668,8 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			error = PR_DEFAULT_MADV_HUGEPAGE;
 		else if (mm->def_flags & VM_NOHUGEPAGE)
 			error = PR_DEFAULT_MADV_NOHUGEPAGE;
+		else
+			error = PR_THP_POLICY_SYSTEM;
 		mmap_write_unlock(mm);
 		break;
 	case PR_SET_THP_POLICY:
@@ -2687,6 +2689,21 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			error = hugepage_set_vmflags(&mm->def_flags, MADV_NOHUGEPAGE);
 			if (!error)
 				process_default_madv_hugepage(mm, MADV_NOHUGEPAGE);
+			break;
+		case PR_THP_POLICY_SYSTEM:
+#ifdef CONFIG_S390
+			/*
+			 * When s390 switches on pgstes for its userspace
+			 * process (for kvm), it sets VM_NOHUGEPAGE.
+			 * Do not clear it with system policy.
+			 */
+			if (mm_has_pgste(mm))
+				mm->def_flags &= ~VM_HUGEPAGE;
+			else
+				mm->def_flags &= ~(VM_HUGEPAGE | VM_NOHUGEPAGE);
+#else
+			mm->def_flags &= ~(VM_HUGEPAGE | VM_NOHUGEPAGE);
+#endif
 			break;
 		default:
 			error = -EINVAL;
