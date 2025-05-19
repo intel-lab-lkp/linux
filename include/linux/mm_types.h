@@ -1738,6 +1738,7 @@ enum {
 					/* leave room for more dump flags */
 #define MMF_VM_MERGEABLE	16	/* KSM may merge identical pages */
 #define MMF_VM_HUGEPAGE		17	/* set when mm is available for khugepaged */
+#define MMF_VM_HUGEPAGE_MASK	(1 << MMF_VM_HUGEPAGE)
 
 /*
  * This one-shot flag is dropped due to necessity of changing exe once again
@@ -1777,7 +1778,8 @@ enum {
 
 #define MMF_INIT_MASK		(MMF_DUMPABLE_MASK | MMF_DUMP_FILTER_MASK |\
 				 MMF_DISABLE_THP_MASK | MMF_HAS_MDWE_MASK |\
-				 MMF_VM_MERGE_ANY_MASK | MMF_TOPDOWN_MASK)
+				 MMF_VM_MERGE_ANY_MASK | MMF_TOPDOWN_MASK |\
+				 MMF_VM_HUGEPAGE_MASK)
 
 static inline unsigned long mmf_init_flags(unsigned long flags)
 {

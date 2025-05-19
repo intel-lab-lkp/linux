@@ -98,6 +98,19 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 	return !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
 
+void process_default_madv_hugepage(struct mm_struct *mm, int advice)
+{
+	struct vm_area_struct *vma;
+	unsigned long vm_flags;
+
+	mmap_assert_write_locked(mm);
+	VMA_ITERATOR(vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		vm_flags = vma->vm_flags;
+		hugepage_madvise(vma, &vm_flags, advice);
+	}
+}
+
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
 					 unsigned long tva_flags,

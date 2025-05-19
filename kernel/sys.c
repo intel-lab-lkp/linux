@@ -2474,6 +2474,7 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		unsigned long, arg4, unsigned long, arg5)
 {
 	struct task_struct *me = current;
+	struct mm_struct *mm = me->mm;
 	unsigned char comm[sizeof(me->comm)];
 	long error;
 
@@ -2657,6 +2658,34 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		else
 			clear_bit(MMF_DISABLE_THP, &me->mm->flags);
 		mmap_write_unlock(me->mm);
+		break;
+	case PR_GET_THP_POLICY:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (mmap_write_lock_killable(mm))
+			return -EINTR;
+		if (mm->def_flags & VM_HUGEPAGE)
+			error = PR_DEFAULT_MADV_HUGEPAGE;
+		mmap_write_unlock(mm);
+		break;
+	case PR_SET_THP_POLICY:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (mmap_write_lock_killable(mm))
+			return -EINTR;
+		switch (arg2) {
+		case PR_DEFAULT_MADV_HUGEPAGE:
+			if (!hugepage_global_enabled())
+				error = -EPERM;
+			error = hugepage_set_vmflags(&mm->def_flags, MADV_HUGEPAGE);
+			if (!error)
+				process_default_madv_hugepage(mm, MADV_HUGEPAGE);
+			break;
+		default:
+			error = -EINVAL;
+			break;
+		}
+		mmap_write_unlock(mm);
 		break;
 	case PR_MPX_ENABLE_MANAGEMENT:
 	case PR_MPX_DISABLE_MANAGEMENT:
