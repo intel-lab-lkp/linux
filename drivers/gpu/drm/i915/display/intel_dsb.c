@@ -94,6 +94,10 @@ struct intel_dsb {
 /* see DSB_REG_VALUE_MASK */
 #define DSB_OPCODE_POLL			0xA
 /* see DSB_REG_VALUE_MASK */
+#define DSB_OPCODE_GOSUB		0xC /* ptl+ */
+#define   DSB_GOSUB_HEAD_SHIFT		26
+#define   DSB_GOSUB_TAIL_SHIFT		0
+#define   DSB_GOSUB_CONVERT_ADDR(x)	((x) >> 6)
 
 static bool pre_commit_is_vrr_active(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc)
@@ -532,6 +536,59 @@ static void intel_dsb_align_tail(struct intel_dsb *dsb)
 					aligned_tail - tail);
 
 	dsb->free_pos = aligned_tail / 4;
+}
+
+static void intel_dsb_gosub_align(struct intel_dsb *dsb)
+{
+	u32 aligned_tail, tail;
+
+	intel_dsb_ins_align(dsb);
+
+	tail = dsb->free_pos * 4;
+	aligned_tail = ALIGN(tail, CACHELINE_BYTES);
+
+	/*
+	 * "The GOSUB instruction cannot be placed in
+	 *  cacheline QW slot 6 or 7 (numbered 0-7)"
+	 */
+	if (aligned_tail - tail <= 2 * 8)
+		intel_dsb_buffer_memset(&dsb->dsb_buf, dsb->free_pos, 0,
+					aligned_tail - tail);
+
+	dsb->free_pos = aligned_tail / 4;
+}
+
+void intel_dsb_gosub(struct intel_dsb *dsb,
+		     struct intel_dsb *sub_dsb)
+{
+	struct intel_crtc *crtc = dsb->crtc;
+	struct intel_display *display = to_intel_display(crtc->base.dev);
+	unsigned int head, tail;
+	u64 head_tail;
+
+	if (drm_WARN_ON(display->drm, dsb->id != sub_dsb->id))
+		return;
+
+	if (!assert_dsb_tail_is_aligned(sub_dsb))
+		return;
+
+	intel_dsb_gosub_align(dsb);
+
+	head = intel_dsb_head(sub_dsb);
+	tail = intel_dsb_tail(sub_dsb);
+
+	head_tail = ((u64)(DSB_GOSUB_CONVERT_ADDR(head)) << DSB_GOSUB_HEAD_SHIFT) |
+		((u64)(DSB_GOSUB_CONVERT_ADDR(tail)) << DSB_GOSUB_TAIL_SHIFT);
+
+	intel_dsb_emit(dsb, lower_32_bits(head_tail),
+		       (DSB_OPCODE_GOSUB << DSB_OPCODE_SHIFT) |
+		       upper_32_bits(head_tail));
+
+	/*
+	 * "NOTE: the instructions within the cacheline
+	 *  FOLLOWING the GOSUB instruction must be NOPs."
+	 */
+	intel_dsb_align_tail(dsb);
 }
 
 void intel_dsb_finish(struct intel_dsb *dsb)
