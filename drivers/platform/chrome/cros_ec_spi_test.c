@@ -27,6 +27,7 @@ struct cros_ec_spi_test_priv {
 	struct device dev;
 	struct spi_controller *fake_ctlr;
 	struct spi_device *fake_spi_device;
+	struct spi_driver *spi_drv;
 
 	int fake_cros_ec_register_called;
 	struct cros_ec_device *ec_dev;
@@ -117,15 +118,11 @@ static int find_target_driver(struct device_driver *drv, void *data)
 static int cros_ec_spi_test_init(struct kunit *test)
 {
 	struct cros_ec_spi_test_priv *priv;
-	struct spi_board_info board_info = {};
 	int ret;
 	struct device_driver *drv;
-	enum probe_type orig;
 
 	kunit_activate_ftrace_stub(test, cros_ec_register, fake_cros_ec_register);
 	kunit_activate_ftrace_stub(test, cros_ec_unregister, fake_cros_ec_unregister);
-
-	sized_strscpy(board_info.modalias, "cros-ec-spi", SPI_NAME_SIZE);
 
 	priv = kunit_kzalloc(test, sizeof(*priv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, priv);
@@ -151,20 +148,16 @@ static int cros_ec_spi_test_init(struct kunit *test)
 	ret = spi_register_controller(priv->fake_ctlr);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	/*
-	 * Force to use synchronous probe so that the upcoming SPI device gets
-	 * probed correctly and synchronously.
-	 */
 	ret = bus_for_each_drv(&spi_bus_type, NULL, &drv, find_target_driver);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 	KUNIT_ASSERT_NOT_NULL(test, drv);
-	orig = drv->probe_type;
-	drv->probe_type = PROBE_FORCE_SYNCHRONOUS;
 
-	priv->fake_spi_device = spi_new_device(priv->fake_ctlr, &board_info);
-	/* Restore to original probe type. */
-	drv->probe_type = orig;
+	priv->fake_spi_device = spi_alloc_device(priv->fake_ctlr);
 	KUNIT_ASSERT_NOT_NULL(test, priv->fake_spi_device);
+
+	priv->spi_drv = container_of(drv, struct spi_driver, driver);
+	ret = priv->spi_drv->probe(priv->fake_spi_device);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	KUNIT_EXPECT_EQ(test, priv->fake_cros_ec_register_called, 1);
 	KUNIT_ASSERT_NOT_NULL(test, priv->ec_dev);
@@ -180,9 +173,10 @@ static void cros_ec_spi_test_exit(struct kunit *test)
 {
 	struct cros_ec_spi_test_priv *priv = test->priv;
 
-	spi_unregister_device(priv->fake_spi_device);
+	priv->spi_drv->remove(priv->fake_spi_device);
 	KUNIT_EXPECT_EQ(test, priv->fake_cros_ec_unregister_called, 1);
 
+	spi_dev_put(priv->fake_spi_device);
 	spi_unregister_controller(priv->fake_ctlr);
 	device_del(&priv->dev);
 	class_destroy(priv->fake_class);
