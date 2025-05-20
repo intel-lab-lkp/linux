@@ -71,6 +71,7 @@
 #include <asm/tdx.h>
 #include <asm/posted_intr.h>
 #include <asm/runtime-const.h>
+#include <asm/rar.h>
 
 #include "cpu.h"
 
@@ -2437,6 +2438,9 @@ void cpu_init(void)
 
 	if (is_uv_system())
 		uv_cpu_init();
+
+	if (cpu_feature_enabled(X86_FEATURE_RAR))
+		rar_cpu_init();
 
 	load_fixmap_gdt(cpu);
 }
