@@ -140,6 +140,17 @@ config DMA_BCM2835
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 
+config DMA_FAKE
+	tristate "Fake DMA Engine"
+	select DMA_ENGINE
+	select DMA_VIRTUAL_CHANNELS
+	help
+	  This implements a fake DMA engine. Useful for testing the DMA API
+	  without any hardware requirements, on any architecture which just
+	  supporst the DMA engine. Enable this if you want to easily run custom
+	  tests on the DMA API without a real DMA engine or the requirement for
+	  things like qemu to virtualize it for you.
+
 config DMA_JZ4780
 	tristate "JZ4780 DMA support"
 	depends on MIPS || COMPILE_TEST
