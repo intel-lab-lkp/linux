@@ -856,11 +856,12 @@ void __init poking_init(void)
 	pte_unmap_unlock(ptep, ptl);
 }
 
+#ifdef CONFIG_X86_32
 /*
  * devmem_is_allowed() checks to see if /dev/mem access to a certain address
  * is valid. The argument is a physical page number.
  *
- * On x86, access has to be given to the first megabyte of RAM because that
+ * On x86-32, access has to be given to the first megabyte of RAM because that
  * area traditionally contains BIOS code and data regions used by X, dosemu,
  * and similar apps. Since they map the entire memory range, the whole range
  * must be allowed (for mapping), but any areas that would otherwise be
@@ -897,6 +898,7 @@ int devmem_is_allowed(unsigned long pagenr)
 
 	return 1;
 }
+#endif
 
 void free_init_pages(const char *what, unsigned long begin, unsigned long end)
 {

@@ -323,11 +323,12 @@ BUILDIO(l, u32)
 #define outsw outsw
 #define outsl outsl
 
+#ifdef CONFIG_X86_32
 extern void *xlate_dev_mem_ptr(phys_addr_t phys);
 extern void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr);
-
 #define xlate_dev_mem_ptr xlate_dev_mem_ptr
 #define unxlate_dev_mem_ptr unxlate_dev_mem_ptr
+#endif
 
 extern int ioremap_change_attr(unsigned long vaddr, unsigned long size,
 				enum page_cache_mode pcm);

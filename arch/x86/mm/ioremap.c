@@ -510,6 +510,7 @@ void *arch_memremap_wb(phys_addr_t phys_addr, size_t size, unsigned long flags)
 	return (void __force *)ioremap_encrypted(phys_addr, size);
 }
 
+#ifdef CONFIG_X86_32
 /*
  * Convert a physical pointer to a virtual kernel pointer for /dev/mem
  * access
@@ -534,6 +535,7 @@ void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr)
 {
 	memunmap((void *)((unsigned long)addr & PAGE_MASK));
 }
+#endif
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 /*
