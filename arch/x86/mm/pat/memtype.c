@@ -781,21 +781,6 @@ static inline void pgprot_set_cachemode(pgprot_t *prot, enum page_cache_mode pcm
 			 cachemode2protval(pcm));
 }
 
-int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
-				unsigned long size, pgprot_t *vma_prot)
-{
-	enum page_cache_mode pcm = _PAGE_CACHE_MODE_WB;
-
-	if (!pat_enabled())
-		return 1;
-
-	if (file->f_flags & O_DSYNC)
-		pcm = _PAGE_CACHE_MODE_UC_MINUS;
-
-	pgprot_set_cachemode(vma_prot, pcm);
-	return 1;
-}
-
 /*
  * Change the memory type for the physical address range in kernel identity
  * mapping space if that range is a part of identity map.
