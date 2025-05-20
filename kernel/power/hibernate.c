@@ -1448,9 +1448,11 @@ static const char * const comp_alg_enabled[] = {
 static int hibernate_compressor_param_set(const char *compressor,
 		const struct kernel_param *kp)
 {
+	unsigned int sleep_flags;
 	int index, ret;
 
-	if (!mutex_trylock(&system_transition_mutex))
+	sleep_flags = try_lock_system_sleep();
+	if (!sleep_flags)
 		return -EBUSY;
 
 	index = sysfs_match_string(comp_alg_enabled, compressor);
@@ -1463,7 +1465,7 @@ static int hibernate_compressor_param_set(const char *compressor,
 		ret = index;
 	}
 
-	mutex_unlock(&system_transition_mutex);
+	unlock_system_sleep(sleep_flags);
 
 	if (ret)
 		pr_debug("Cannot set specified compressor %s\n",
