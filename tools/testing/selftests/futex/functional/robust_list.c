@@ -35,16 +35,45 @@
 #include <stddef.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <stdint.h>
 
 #define STACK_SIZE (1024 * 1024)
 
 #define FUTEX_TIMEOUT 3
 
+#define SYS_set_robust_list2 468
+
+enum robust_list2_type {
+        ROBUST_LIST_32BIT,
+        ROBUST_LIST_64BIT,
+};
+
 static pthread_barrier_t barrier, barrier2;
+
+bool robust2 = false;
 
 int set_robust_list(struct robust_list_head *head, size_t len)
 {
-	return syscall(SYS_set_robust_list, head, len);
+	int ret, flags;
+
+	if (!robust2) {
+		return syscall(SYS_set_robust_list, head, len);
+	}
+
+	if (sizeof(head) == 8)
+		flags = ROBUST_LIST_64BIT;
+	else
+		flags = ROBUST_LIST_32BIT;
+
+	/*
+	 * We act as we have just one list here. We try to use the first slot,
+	 * but if it hasn't been alocated yet we allocate it.
+	 */
+	ret = syscall(SYS_set_robust_list2, head, 0, flags);
+	if (ret == -1 && errno == ENOENT)
+		ret = syscall(SYS_set_robust_list2, head, -1, flags);
+
+	return ret;
 }
 
 int get_robust_list(int pid, struct robust_list_head **head, size_t *len_ptr)
@@ -246,6 +275,11 @@ static void test_set_robust_list_invalid_size(void)
 	size_t head_size = sizeof(struct robust_list_head);
 	int ret;
 
+	if (robust2) {
+		ksft_test_result_skip("This test is only for old robust interface\n");
+		return;
+	}
+
 	ret = set_robust_list(&head, head_size);
 	ASSERT_EQ(ret, 0);
 
@@ -321,6 +355,11 @@ static void test_get_robust_list_child(void)
 	struct robust_list_head head, *get_head;
 	size_t len_ptr;
 
+	if (robust2) {
+		ksft_test_result_skip("Not implemented in the new robust interface\n");
+		return;
+	}
+
 	ret = pthread_barrier_init(&barrier, NULL, 2);
 	ret = pthread_barrier_init(&barrier2, NULL, 2);
 	ASSERT_EQ(ret, 0);
@@ -332,7 +371,7 @@ static void test_get_robust_list_child(void)
 
 	ret = get_robust_list(tid, &get_head, &len_ptr);
 	ASSERT_EQ(ret, 0);
-	ASSERT_EQ(&head, get_head);
+	ASSERT_EQ(get_head, &head);
 
 	pthread_barrier_wait(&barrier2);
 
@@ -507,11 +546,119 @@ static void test_circular_list(void)
 	ksft_test_result_pass("%s\n", __func__);
 }
 
+#define ROBUST_LIST_LIMIT	2048
+#define CHILD_LIST_LIMIT (ROBUST_LIST_LIMIT + 10)
+
+static int child_robust_list_limit(void *arg)
+{
+	struct lock_struct *locks;
+	struct robust_list *list;
+	struct robust_list_head head;
+	int ret, i;
+
+	locks = (struct lock_struct *) arg;
+
+	ret = set_list(&head);
+	if (ret)
+		ksft_test_result_fail("set_list error\n");
+
+	/*
+	 * Create a very long list of locks
+	 */
+	head.list.next = &locks[0].list;
+
+	list = head.list.next;
+	for (i = 0; i < CHILD_LIST_LIMIT - 1; i++) {
+		list->next = &locks[i+1].list;
+		list = list->next;
+	}
+	list->next = &head.list;
+
+	/*
+	 * Grab the lock in the last one, and die without releasing it
+	 */
+	mutex_lock(&locks[CHILD_LIST_LIMIT], &head, false);
+	pthread_barrier_wait(&barrier);
+
+	sleep(1);
+
+	return 0;
+}
+
+/*
+ * The old robust list used to have a limit of 2048 items from the kernel side.
+ * After this limit the kernel stops walking the list and ignore the other
+ * futexes, causing deadlocks.
+ *
+ * For the new interface, test if we can wait for a list of more than 2048
+ * elements.
+ */
+static void test_robust_list_limit(void)
+{
+	struct lock_struct locks[CHILD_LIST_LIMIT + 1];
+	_Atomic(unsigned int) *futex = &locks[CHILD_LIST_LIMIT].futex;
+	struct robust_list_head head;
+	int ret;
+
+	if (!robust2) {
+		ksft_test_result_skip("This test is only for new robust interface\n");
+		return;
+	}
+
+	*futex = 0;
+
+	ret = set_list(&head);
+	ASSERT_EQ(ret, 0);
+
+	ret = pthread_barrier_init(&barrier, NULL, 2);
+	ASSERT_EQ(ret, 0);
+
+	create_child(child_robust_list_limit, locks);
+
+	/*
+	 * After the child thread creates the very long list of locks, wait on
+	 * the last one.
+	 */
+	pthread_barrier_wait(&barrier);
+	ret = mutex_lock(&locks[CHILD_LIST_LIMIT], &head, false);
+
+	if (ret != 0)
+		printf("futex wait returned %d\n", errno);
+	ASSERT_EQ(ret, 0);
+
+	ASSERT_TRUE(*futex | FUTEX_OWNER_DIED);
+
+	wait(NULL);
+	pthread_barrier_destroy(&barrier);
+
+	ksft_test_result_pass("%s\n", __func__);
+}
+
+/*
+ * The kernel should refuse an unaligned head pointer
+ */
+static void test_unaligned_address(void)
+{
+	struct robust_list_head head, *h;
+	int ret;
+
+	if (!robust2) {
+		ksft_test_result_skip("This test is only for new robust interface\n");
+		return;
+	}
+
+	h = (struct robust_list_head *) ((uintptr_t) &head + 1);
+	ret = set_list(h);
+	ASSERT_EQ(ret, -1);
+	ASSERT_EQ(errno, EINVAL);
+}
+
 void usage(char *prog)
 {
 	printf("Usage: %s\n", prog);
 	printf("  -c	Use color\n");
 	printf("  -h	Display this help message\n");
+	printf("  -n	Use robust2 syscall\n");
 	printf("  -v L	Verbosity level: %d=QUIET %d=CRITICAL %d=INFO\n",
 	       VQUIET, VCRITICAL, VINFO);
 }
@@ -520,7 +667,7 @@ int main(int argc, char *argv[])
 {
 	int c;
 
-	while ((c = getopt(argc, argv, "cht:v:")) != -1) {
+	while ((c = getopt(argc, argv, "chnt:v:")) != -1) {
 		switch (c) {
 		case 'c':
 			log_color(1);
@@ -531,6 +678,9 @@ int main(int argc, char *argv[])
 		case 'v':
 			log_verbosity(atoi(optarg));
 			break;
+		case 'n':
+			robust2 = true;
+			break;
 		default:
 			usage(basename(argv[0]));
 			exit(1);
@@ -538,7 +688,7 @@ int main(int argc, char *argv[])
 	}
 
 	ksft_print_header();
-	ksft_set_plan(7);
+	ksft_set_plan(8);
 
 	test_robustness();
 
@@ -548,6 +698,8 @@ int main(int argc, char *argv[])
 	test_set_list_op_pending();
 	test_robust_list_multiple_elements();
 	test_circular_list();
+	test_robust_list_limit();
+	test_unaligned_address();
 
 	ksft_print_cnts();
 	return 0;
