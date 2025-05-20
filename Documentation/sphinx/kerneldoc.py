@@ -278,14 +278,27 @@ class KernelDocDirective(Directive):
 
         node = nodes.section()
 
-        kfiles.parse(**self.parse_args)
-        filenames = self.parse_args["file_list"]
+        try:
+            kfiles.parse(**self.parse_args)
+            filenames = self.parse_args["file_list"]
+            msgs = kfiles.msg(**self.msg_args, filenames=filenames)
 
-        for filename, out in kfiles.msg(**self.msg_args, filenames=filenames):
+        except Exception as e:  # pylint: disable=W0703
+            logger.warning("kernel-doc '%s' processing failed with: %s" %
+                           (cmd_str(cmd), str(e)))
+
+        for filename, out in msgs:
             if self.verbose >= 1:
                 print(cmd_str(cmd))
 
-            ret = self.parse_msg(filename, node, out, cmd)
+            try:
+                ret = self.parse_msg(filename, node, out, cmd)
+
+            except Exception as e:  # pylint: disable=W0703
+                logger.warning("kernel-doc '%s' processing failed with: %s" %
+                               (cmd_str(cmd), str(e)))
+                return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+
             if ret:
                 return ret
 
