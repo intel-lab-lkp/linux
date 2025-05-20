@@ -93,4 +93,15 @@ config KUNIT_AUTORUN_ENABLED
 	  In most cases this should be left as Y. Only if additional opt-in
 	  behavior is needed should this be set to N.
 
+config KUNIT_FTRACE_STUBS
+	bool "Support for stubbing out functions in KUnit tests with ftrace and kernel livepatch"
+	depends on FTRACE=y && FUNCTION_TRACER=y && MODULES=y && DEBUG_KERNEL=y && KALLSYMS_ALL=y && LIVEPATCH=y
+	help
+	  Builds support for stubbing out functions for the duration of KUnit
+	  test cases or suites using ftrace and kernel livepatch.
+	  See KUNIT_EXAMPLE_TEST for an example.
+
+	  NOTE: this does not work on all architectures (like UML, arm64) and
+	  relies on a lot of magic (see the dependencies list).
+
 endif # KUNIT

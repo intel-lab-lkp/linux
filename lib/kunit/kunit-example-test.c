@@ -8,6 +8,7 @@
 
 #include <kunit/test.h>
 #include <kunit/static_stub.h>
+#include <kunit/ftrace_stub.h>
 
 /*
  * This is the most fundamental element of KUnit, the test case. A test case
@@ -152,7 +153,7 @@ static void example_all_expect_macros_test(struct kunit *test)
 }
 
 /* This is a function we'll replace with static stubs. */
-static int add_one(int i)
+static KUNIT_STUBBABLE int add_one(int i)
 {
 	/* This will trigger the stub if active. */
 	KUNIT_STATIC_STUB_REDIRECT(add_one, i);
@@ -278,6 +279,29 @@ static void example_slow_test(struct kunit *test)
 }
 
 /*
+ * This test shows the use of ftrace stubs.
+ */
+static void example_ftrace_stub_test(struct kunit *test)
+{
+#if !IS_ENABLED(CONFIG_KUNIT_FTRACE_STUBS)
+	kunit_skip(test, "KUNIT_FTRACE_STUBS not enabled");
+#else
+	/* By default, function is not stubbed. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+
+	/* Replace add_one() with subtract_one(). */
+	kunit_activate_ftrace_stub(test, add_one, subtract_one);
+
+	/* add_one() is now replaced. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 0);
+
+	/* Return add_one() to normal. */
+	kunit_deactivate_ftrace_stub(test, add_one);
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+#endif
+}
+
+/*
  * Here we make a list of all the test cases we want to add to the test suite
  * below.
  */
@@ -297,6 +321,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_priv_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
+	KUNIT_CASE(example_ftrace_stub_test),
 	{}
 };
 
