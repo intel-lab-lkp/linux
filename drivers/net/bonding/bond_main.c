@@ -1110,8 +1110,7 @@ static void bond_do_fail_over_mac(struct bonding *bond,
 			ss.ss_family = bond->dev->type;
 		}
 
-		rv = dev_set_mac_address(new_active->dev,
-					 (struct sockaddr *)&ss, NULL);
+		rv = dev_set_mac_address(new_active->dev, &ss, NULL);
 		if (rv) {
 			slave_err(bond->dev, new_active->dev, "Error %d setting MAC of new active slave\n",
 				  -rv);
@@ -1125,8 +1124,7 @@ static void bond_do_fail_over_mac(struct bonding *bond,
 				  new_active->dev->addr_len);
 		ss.ss_family = old_active->dev->type;
 
-		rv = dev_set_mac_address(old_active->dev,
-					 (struct sockaddr *)&ss, NULL);
+		rv = dev_set_mac_address(old_active->dev, &ss, NULL);
 		if (rv)
 			slave_err(bond->dev, old_active->dev, "Error %d setting MAC of old active slave\n",
 				  -rv);
@@ -2442,7 +2440,7 @@ err_restore_mac:
 		bond_hw_addr_copy(ss.__data, new_slave->perm_hwaddr,
 				  new_slave->dev->addr_len);
 		ss.ss_family = slave_dev->type;
-		dev_set_mac_address(slave_dev, (struct sockaddr *)&ss, NULL);
+		dev_set_mac_address(slave_dev, &ss, NULL);
 	}
 
 err_restore_mtu:
@@ -2636,7 +2634,7 @@ static int __bond_release_one(struct net_device *bond_dev,
 		bond_hw_addr_copy(ss.__data, slave->perm_hwaddr,
 				  slave->dev->addr_len);
 		ss.ss_family = slave_dev->type;
-		dev_set_mac_address(slave_dev, (struct sockaddr *)&ss, NULL);
+		dev_set_mac_address(slave_dev, &ss, NULL);
 	}
 
 	if (unregister) {
