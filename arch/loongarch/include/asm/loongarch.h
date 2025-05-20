@@ -9,14 +9,6 @@
 #include <linux/linkage.h>
 #include <linux/types.h>
 
-#ifndef __ASSEMBLY__
-#include <larchintrin.h>
-
-/* CPUCFG */
-#define read_cpucfg(reg) __cpucfg(reg)
-
-#endif /* !__ASSEMBLY__ */
-
 #ifdef __ASSEMBLY__
 
 /* LoongArch Registers */
@@ -173,19 +165,22 @@
 
 #ifndef __ASSEMBLY__
 
+/* CPUCFG */
+#define read_cpucfg(reg) __builtin_loongarch_cpucfg(reg)
+
 /* CSR */
-#define csr_read32(reg) __csrrd_w(reg)
-#define csr_read64(reg) __csrrd_d(reg)
-#define csr_write32(val, reg) __csrwr_w(val, reg)
-#define csr_write64(val, reg) __csrwr_d(val, reg)
-#define csr_xchg32(val, mask, reg) __csrxchg_w(val, mask, reg)
-#define csr_xchg64(val, mask, reg) __csrxchg_d(val, mask, reg)
+#define csr_read32(reg) __builtin_loongarch_csrrd_w(reg)
+#define csr_read64(reg) __builtin_loongarch_csrrd_d(reg)
+#define csr_write32(val, reg) __builtin_loongarch_csrwr_w(val, reg)
+#define csr_write64(val, reg) __builtin_loongarch_csrwr_d(val, reg)
+#define csr_xchg32(val, mask, reg) __builtin_loongarch_csrxchg_w(val, mask, reg)
+#define csr_xchg64(val, mask, reg) __builtin_loongarch_csrxchg_d(val, mask, reg)
 
 /* IOCSR */
-#define iocsr_read32(reg) __iocsrrd_w(reg)
-#define iocsr_read64(reg) __iocsrrd_d(reg)
-#define iocsr_write32(val, reg) __iocsrwr_w(val, reg)
-#define iocsr_write64(val, reg) __iocsrwr_d(val, reg)
+#define iocsr_read32(reg) __builtin_loongarch_iocsrrd_w(reg)
+#define iocsr_read64(reg) __builtin_loongarch_iocsrrd_d(reg)
+#define iocsr_write32(val, reg) __builtin_loongarch_iocsrwr_w(val, reg)
+#define iocsr_write64(val, reg) __builtin_loongarch_iocsrwr_d(val, reg)
 
 #endif /* !__ASSEMBLY__ */
 
