@@ -298,22 +298,11 @@ __udp_tunnel_nic_device_sync(struct net_device *dev, struct udp_tunnel_nic *utn)
 static void
 udp_tunnel_nic_device_sync(struct net_device *dev, struct udp_tunnel_nic *utn)
 {
-	const struct udp_tunnel_nic_info *info = dev->udp_tunnel_nic_info;
-	bool may_sleep;
-
 	if (!utn->need_sync)
 		return;
 
-	/* Drivers which sleep in the callback need to update from
-	 * the workqueue, if we come from the tunnel driver's notification.
-	 */
-	may_sleep = info->flags & UDP_TUNNEL_NIC_INFO_MAY_SLEEP;
-	if (!may_sleep)
-		__udp_tunnel_nic_device_sync(dev, utn);
-	if (may_sleep || utn->need_replay) {
-		queue_work(udp_tunnel_nic_workqueue, &utn->work);
-		utn->work_pending = 1;
-	}
+	queue_work(udp_tunnel_nic_workqueue, &utn->work);
+	utn->work_pending = 1;
 }
 
 static bool
@@ -554,11 +543,11 @@ static void __udp_tunnel_nic_reset_ntf(struct net_device *dev)
 	struct udp_tunnel_nic *utn;
 	unsigned int i, j;
 
-	ASSERT_RTNL();
+	mutex_lock(&udp_tunnel_nic_lock);
 
 	utn = dev->udp_tunnel_nic;
 	if (!utn)
-		return;
+		goto unlock;
 
 	utn->need_sync = false;
 	for (i = 0; i < utn->n_tables; i++)
@@ -569,7 +558,7 @@ static void __udp_tunnel_nic_reset_ntf(struct net_device *dev)
 
 			entry->flags &= ~(UDP_TUNNEL_NIC_ENTRY_DEL |
 					  UDP_TUNNEL_NIC_ENTRY_OP_FAIL);
-			/* We don't release rtnl across ops */
+			/* We don't release udp_tunnel_nic_lock across ops */
 			WARN_ON(entry->flags & UDP_TUNNEL_NIC_ENTRY_FROZEN);
 			if (!entry->use_cnt)
 				continue;
@@ -579,6 +568,9 @@ static void __udp_tunnel_nic_reset_ntf(struct net_device *dev)
 		}
 
 	__udp_tunnel_nic_device_sync(dev, utn);
+
+unlock:
+	mutex_unlock(&udp_tunnel_nic_lock);
 }
 
 static size_t
@@ -709,13 +701,16 @@ static void udp_tunnel_nic_device_sync_work(struct work_struct *work)
 	struct udp_tunnel_nic *utn =
 		container_of(work, struct udp_tunnel_nic, work);
 
-	rtnl_lock();
+	mutex_lock(&udp_tunnel_nic_lock);
 	utn->work_pending = 0;
 	__udp_tunnel_nic_device_sync(utn->dev, utn);
 
-	if (utn->need_replay)
+	if (utn->need_replay) {
+		rtnl_lock();
 		udp_tunnel_nic_replay(utn->dev, utn);
-	rtnl_unlock();
+		rtnl_unlock();
+	}
+	mutex_unlock(&udp_tunnel_nic_lock);
 }
 
 static struct udp_tunnel_nic *
