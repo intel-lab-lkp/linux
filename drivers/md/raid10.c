@@ -399,6 +399,9 @@ static void raid10_end_read_request(struct bio *bio)
 		 * wait for the 'master' bio.
 		 */
 		set_bit(R10BIO_Uptodate, &r10_bio->state);
+	} else if (bio->bi_opf & REQ_RAHEAD) {
+		/* don't handle readahead error, which can fail at anytime. */
+		uptodate = 1;
 	} else {
 		/* If all other devices that store this block have
 		 * failed, we want to return the error upwards rather
