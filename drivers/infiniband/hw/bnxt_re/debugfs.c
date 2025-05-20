@@ -277,7 +277,7 @@ static int bnxt_re_configure_cc(struct bnxt_re_dev *rdev, u32 gen_ext, u32 offse
 		if (rc)
 			return rc;
 	} else {
-		return -EINVAL;
+		return -EOPNOTSUPP;
 	}
 
 	bnxt_qplib_modify_cc(&rdev->qplib_res, &ccparam);
