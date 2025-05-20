@@ -44,8 +44,11 @@ struct fpu_state_config fpu_user_cfg __ro_after_init;
  */
 struct fpstate init_fpstate __ro_after_init;
 
-/* Track in-kernel FPU usage */
-static DEFINE_PER_CPU(bool, kernel_fpu_allowed) = true;
+/*
+ * Track FPU initialization and kernel-mode usage. 'true' means the FPU is
+ * initialized and is not currently being used by the kernel:
+ */
+DEFINE_PER_CPU(bool, kernel_fpu_allowed);
 
 /*
  * Track which context is using the FPU on the CPU:
@@ -72,15 +75,18 @@ bool irq_fpu_usable(void)
 		return false;
 
 	/*
-	 * In kernel FPU usage already active?  This detects any explicitly
-	 * nested usage in task or softirq context, which is unsupported.  It
-	 * also detects attempted usage in a hardirq that has interrupted a
-	 * kernel-mode FPU section.
+	 * Return false in the following cases:
+	 *
+	 * - FPU is not yet initialized. This can happen only when the call is
+	 *   coming from CPU onlining, for example for microcode checksumming.
+	 * - The kernel is already using the FPU, either because of explicit
+	 *   nesting (which should never be done), or because of implicit
+	 *   nesting when a hardirq interrupted a kernel-mode FPU section.
+	 *
+	 * The single boolean check below handles both cases:
 	 */
-	if (!this_cpu_read(kernel_fpu_allowed)) {
-		WARN_ON_FPU(!in_hardirq());
+	if (!this_cpu_read(kernel_fpu_allowed))
 		return false;
-	}
 
 	/*
 	 * When not in NMI or hard interrupt context, FPU can be used in:
