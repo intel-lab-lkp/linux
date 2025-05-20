@@ -280,9 +280,26 @@ static int axi_pwmgen_probe(struct platform_device *pdev)
 	ddata = pwmchip_get_drvdata(chip);
 	ddata->regmap = regmap;
 
-	clk = devm_clk_get_enabled(dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk), "failed to get clock\n");
+	/* When clock-names is present, there is a separate ext clock. */
+	if (device_property_present(dev, "clock-names")) {
+		struct clk *axi_clk;
+
+		axi_clk = devm_clk_get_enabled(dev, "axi");
+		if (IS_ERR(axi_clk))
+			return dev_err_probe(dev, PTR_ERR(axi_clk),
+					     "failed to get axi clock\n");
+
+		clk = devm_clk_get_enabled(dev, "ext");
+		if (IS_ERR(clk))
+			return dev_err_probe(dev, PTR_ERR(clk),
+					     "failed to get ext clock\n");
+	} else {
+		/* Otherwise, a single clock does everything. */
+		clk = devm_clk_get_enabled(dev, NULL);
+		if (IS_ERR(clk))
+			return dev_err_probe(dev, PTR_ERR(clk),
+					     "failed to get clock\n");
+	}
 
 	ret = devm_clk_rate_exclusive_get(dev, clk);
 	if (ret)
