@@ -33,6 +33,15 @@ mod bindings_raw {
     type __kernel_ssize_t = isize;
     type __kernel_ptrdiff_t = isize;
 
+    // `bindgen` doesn't automatically do this, see
+    // <https://github.com/rust-lang/rust-bindgen/issues/3196>
+    //
+    // SAFETY: `__BindgenBitfieldUnit<Storage>` is a newtype around `Storage`.
+    unsafe impl<Storage> pin_init::Zeroable for __BindgenBitfieldUnit<Storage> where
+        Storage: pin_init::Zeroable
+    {
+    }
+
     // Use glob import here to expose all helpers.
     // Symbols defined within the module will take precedence to the glob import.
     pub use super::bindings_helper::*;
