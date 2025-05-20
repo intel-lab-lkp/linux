@@ -5019,7 +5019,7 @@ fallback:
 
 	/* elv_update_nr_hw_queues() unfreeze queue for us */
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
-		elv_update_nr_hw_queues(q);
+		elv_update_nr_hw_queues(q, prev_nr_hw_queues);
 
 reregister:
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
