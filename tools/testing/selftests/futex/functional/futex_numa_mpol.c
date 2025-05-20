@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
 	test_futex(futex_ptr, 0);
 
 	if (futex_numa->numa == FUTEX_NO_NODE) {
-		fail("NUMA node is left unitiliazed\n");
+		fail("NUMA node is left uninitialized\n");
 		return 1;
 	}
 
