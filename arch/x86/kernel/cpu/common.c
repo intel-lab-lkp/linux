@@ -1545,6 +1545,18 @@ static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 	setup_force_cpu_bug(X86_BUG_L1TF);
 }
 
+static void __init detect_rar(struct cpuinfo_x86 *c)
+{
+	u64 msr;
+
+	if (cpu_has(c, X86_FEATURE_CORE_CAPABILITIES)) {
+		rdmsrl(MSR_IA32_CORE_CAPABILITIES, msr);
+
+		if (msr & CORE_CAP_RAR)
+			setup_force_cpu_cap(X86_FEATURE_RAR);
+	}
+}
+
 /*
  * The NOPL instruction is supposed to exist on all CPUs of family >= 6;
  * unfortunately, that's not true in practice because of early VIA
@@ -1771,6 +1783,7 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 		setup_clear_cpu_cap(X86_FEATURE_LA57);
 
 	detect_nopl();
+	detect_rar(c);
 }
 
 void __init init_cpu_devs(void)
