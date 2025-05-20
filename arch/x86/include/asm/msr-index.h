@@ -220,6 +220,12 @@
 						     * their affected status.
 						     */
 
+#define MSR_IA32_CORE_CAPABILITIES	0x000000cf
+#define CORE_CAP_RAR			BIT(1)	/*
+						 * Remote Action Request. Used to directly
+						 * flush the TLB on remote CPUs.
+						 */
+
 #define MSR_IA32_FLUSH_CMD		0x0000010b
 #define L1D_FLUSH			BIT(0)	/*
 						 * Writeback and invalidate the
