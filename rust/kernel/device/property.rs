@@ -6,7 +6,7 @@
 
 use core::ptr;
 
-use crate::{bindings, types::Opaque};
+use crate::{bindings, str::CStr, types::Opaque};
 
 /// A reference-counted fwnode_handle.
 ///
@@ -30,6 +30,12 @@ impl FwNode {
     /// Obtain the raw `struct fwnode_handle *`.
     pub(crate) fn as_raw(&self) -> *mut bindings::fwnode_handle {
         self.0.get()
+    }
+
+    /// Checks if property is present or not.
+    pub fn property_present(&self, name: &CStr) -> bool {
+        // SAFETY: By the invariant of `CStr`, `name` is null-terminated.
+        unsafe { bindings::fwnode_property_present(self.as_raw().cast_const(), name.as_char_ptr()) }
     }
 }
 
