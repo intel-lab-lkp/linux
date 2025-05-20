@@ -58,6 +58,9 @@
 				 <&clk IMX93_CLK_SYS_PLL_PFD1_DIV2>,
 				 <&clk IMX93_CLK_SYS_PLL_PFD1_DIV2>;
 	assigned-clock-rates = <100000000>, <50000000>, <50000000>;
+	phy-reset-gpios = <&gpio4 23 GPIO_ACTIVE_HIGH>;
+	phy-reset-duration = <1>;
+	phy-reset-post-delay = <0>;
 	status = "okay";
 
 	mdio: mdio {
@@ -186,14 +189,17 @@
 		fsl,pins = <
 			MX93_PAD_ENET2_MDC__ENET1_MDC			0x50e
 			MX93_PAD_ENET2_MDIO__ENET1_MDIO			0x502
-			MX93_PAD_ENET2_RD0__ENET1_RGMII_RD0		0x57e
-			MX93_PAD_ENET2_RD1__ENET1_RGMII_RD1		0x57e
-			MX93_PAD_ENET2_RXC__ENET1_RX_ER			0x5fe
+			/* the three pins below are connected to PHYs straps,
+			 * that is what the pull-up/down setting is for.
+			 */
+			MX93_PAD_ENET2_RD0__ENET1_RGMII_RD0		0x37e
+			MX93_PAD_ENET2_RD1__ENET1_RGMII_RD1		0x37e
 			MX93_PAD_ENET2_RX_CTL__ENET1_RGMII_RX_CTL	0x57e
 			MX93_PAD_ENET2_TD0__ENET1_RGMII_TD0		0x50e
 			MX93_PAD_ENET2_TD1__ENET1_RGMII_TD1		0x50e
 			MX93_PAD_ENET2_TX_CTL__ENET1_RGMII_TX_CTL	0x50e
 			MX93_PAD_ENET2_TD2__ENET1_TX_CLK		0x4000050e
+			MX93_PAD_ENET2_RXC__GPIO4_IO23			0x51e
 		>;
 	};
 
