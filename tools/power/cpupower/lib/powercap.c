@@ -70,6 +70,22 @@ out:
 	return ret;
 }
 
+static int sysfs_set_enabled(const char *path, int mode)
+{
+	int fd;
+	char buf[2] = { mode ? '1' : '0', '\n' };
+	ssize_t ret;
+
+	fd = open(path, O_WRONLY);
+	if (fd == -1)
+		return -1;
+
+	ret = write(fd, buf, sizeof(buf));
+	close(fd);
+
+	return ret == sizeof(buf) ? 0 : -1;
+}
+
 int powercap_get_enabled(int *mode)
 {
 	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/intel-rapl/enabled";
@@ -77,12 +93,10 @@ int powercap_get_enabled(int *mode)
 	return sysfs_get_enabled(path, mode);
 }
 
-/*
- * TODO: implement function. Returns dummy 0 for now.
- */
 int powercap_set_enabled(int mode)
 {
-	return 0;
+	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/intel-rapl/enabled";
+	return sysfs_set_enabled(path, mode);
 }
 
 /*
