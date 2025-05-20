@@ -2694,39 +2694,37 @@ irqreturn_t ice_ptp_ts_irq(struct ice_pf *pf)
 
 	switch (hw->mac_type) {
 	case ICE_MAC_E810:
+	{
+		struct ice_ptp_tx *tx = &pf->ptp.port.tx;
+		u8 idx;
+
+		if (!ice_pf_state_is_nominal(pf))
+			return IRQ_HANDLED;
+
 		/* E810 capable of low latency timestamping with interrupt can
 		 * request a single timestamp in the top half and wait for
 		 * a second LL TS interrupt from the FW when it's ready.
 		 */
-		if (hw->dev_caps.ts_dev_info.ts_ll_int_read) {
-			struct ice_ptp_tx *tx = &pf->ptp.port.tx;
-			u8 idx;
-
-			if (!ice_pf_state_is_nominal(pf))
+		if (!hw->dev_caps.ts_dev_info.ts_ll_int_read) {
+			if (!ice_ptp_pf_handles_tx_interrupt(pf))
 				return IRQ_HANDLED;
 
-			spin_lock(&tx->lock);
-			idx = find_next_bit_wrap(tx->in_use, tx->len,
-						 tx->last_ll_ts_idx_read + 1);
-			if (idx != tx->len)
-				ice_ptp_req_tx_single_tstamp(tx, idx);
-			spin_unlock(&tx->lock);
-
-			return IRQ_HANDLED;
+			set_bit(ICE_MISC_THREAD_TX_TSTAMP, pf->misc_thread);
+			return IRQ_WAKE_THREAD;
 		}
-		fallthrough; /* non-LL_TS E810 */
+
+		spin_lock(&tx->lock);
+		idx = find_next_bit_wrap(tx->in_use, tx->len,
+					 tx->last_ll_ts_idx_read + 1);
+		if (idx != tx->len)
+			ice_ptp_req_tx_single_tstamp(tx, idx);
+		spin_unlock(&tx->lock);
+
+		return IRQ_HANDLED;
+	}
+	case ICE_MAC_E830:
 	case ICE_MAC_GENERIC:
 	case ICE_MAC_GENERIC_3K_E825:
-		/* All other devices process timestamps in the bottom half due
-		 * to sleeping or polling.
-		 */
-		if (!ice_ptp_pf_handles_tx_interrupt(pf))
-			return IRQ_HANDLED;
-
-		set_bit(ICE_MISC_THREAD_TX_TSTAMP, pf->misc_thread);
-		return IRQ_WAKE_THREAD;
-	case ICE_MAC_E830:
-		/* E830 can read timestamps in the top half using rd32() */
 		if (ice_ptp_process_ts(pf) == ICE_TX_TSTAMP_WORK_PENDING) {
 			/* Process outstanding Tx timestamps. If there
 			 * is more work, re-arm the interrupt to trigger again.
