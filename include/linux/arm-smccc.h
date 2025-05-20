@@ -315,7 +315,14 @@ enum arm_smccc_conduit {
  *
  * When SMCCCv1.1 is not present, returns SMCCC_CONDUIT_NONE.
  */
+#ifdef CONFIG_HAVE_ARM_SMCCC_DISCOVERY
 enum arm_smccc_conduit arm_smccc_1_1_get_conduit(void);
+#else
+static inline enum arm_smccc_conduit arm_smccc_1_1_get_conduit(void)
+{
+	return SMCCC_CONDUIT_NONE;
+}
+#endif
 
 /**
  * arm_smccc_get_version()
