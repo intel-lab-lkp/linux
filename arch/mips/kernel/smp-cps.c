@@ -40,6 +40,7 @@ static u64 core_entry_reg;
 static phys_addr_t cps_vec_pa;
 
 struct cluster_boot_config *mips_cps_cluster_bootcfg;
+struct cpumask __cpu_primary_cluster_mask __read_mostly;
 
 static void power_up_other_cluster(unsigned int cluster)
 {
@@ -225,6 +226,7 @@ static void __init cps_smp_setup(void)
 		if (mips_cm_revision() >= CM_REV_CM3_5)
 			power_up_other_cluster(cl);
 
+		cpumask_set_cpu(nvpes, &__cpu_primary_cluster_mask);
 		ncores = mips_cps_numcores(cl);
 		for (c = 0; c < ncores; c++) {
 			core_vpes = core_vpe_count(cl, c);
@@ -279,6 +281,24 @@ static void __init cps_smp_setup(void)
 	if (cpu_has_fpu)
 		cpumask_set_cpu(0, &mt_fpu_cpumask);
 #endif /* CONFIG_MIPS_MT_FPAFF */
+}
+
+unsigned long calibrate_delay_is_known(void)
+{
+	int i, this_cpu = smp_processor_id(), primary_cpu_cluster = 0;
+
+	/* The calibration has to be done on the primary CPU of the cluster */
+	if (cpumask_test_cpu(this_cpu, &__cpu_primary_cluster_mask))
+		return 0;
+
+	/* Look for the primary CPU of the cluster this CPU belongs to */
+	for_each_cpu(i, &__cpu_primary_cluster_mask) {
+		/* we reach the next cluster */
+		if (i > this_cpu)
+			break;
+		primary_cpu_cluster = i;
+	}
+	return cpu_data[primary_cpu_cluster].udelay_val;
 }
 
 static void __init cps_prepare_cpus(unsigned int max_cpus)
