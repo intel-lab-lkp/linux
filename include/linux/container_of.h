@@ -13,7 +13,8 @@
  * @type:	the type of the container struct this is embedded in.
  * @member:	the name of the member within the struct.
  *
- * WARNING: any const qualifier of @ptr is lost.
+ * WARNING: any const qualifier of @ptr is lost. DO NOT USE container_of() IN
+ * NEW CODE.
  */
 #define container_of(ptr, type, member) ({				\
 	void *__mptr = (void *)(ptr);					\
@@ -28,6 +29,8 @@
  * @ptr:		the pointer to the member
  * @type:		the type of the container struct this is embedded in.
  * @member:		the name of the member within the struct.
+ *
+ * Always prefer container_of_const() over container_of() in new code.
  */
 #define container_of_const(ptr, type, member)				\
 	_Generic(ptr,							\
