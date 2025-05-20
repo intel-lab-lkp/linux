@@ -331,7 +331,6 @@ config CROS_KUNIT_EC_I2C_TEST
 	tristate "Kunit tests for ChromeOS EC over I2C" if !KUNIT_ALL_TESTS
 	depends on KUNIT && CROS_EC
 	default KUNIT_ALL_TESTS
-	depends on KUNIT_FTRACE_STUBS
 	depends on CROS_EC_I2C
 	help
 	  Kunit tests for ChromeOS EC over I2C.

@@ -18,6 +18,8 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 
+#include <kunit/static_stub.h>
+
 #include "cros_ec.h"
 
 static struct cros_ec_platform ec_p = {
@@ -179,6 +181,8 @@ static int cros_ec_ready_event(struct notifier_block *nb,
  */
 int cros_ec_register(struct cros_ec_device *ec_dev)
 {
+	KUNIT_STATIC_STUB_REDIRECT(cros_ec_register, ec_dev);
+
 	struct device *dev = ec_dev->dev;
 	int err = 0;
 
@@ -318,6 +322,8 @@ EXPORT_SYMBOL(cros_ec_register);
  */
 void cros_ec_unregister(struct cros_ec_device *ec_dev)
 {
+	KUNIT_STATIC_STUB_REDIRECT(cros_ec_unregister, ec_dev);
+
 	platform_device_unregister(ec_dev->pd);
 	platform_device_unregister(ec_dev->ec);
 	mutex_destroy(&ec_dev->lock);

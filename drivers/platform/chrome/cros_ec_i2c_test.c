@@ -3,7 +3,7 @@
  * Kunit tests for ChromeOS Embedded Controller I2C interface.
  */
 #include <kunit/test.h>
-#include <kunit/ftrace_stub.h>
+#include <kunit/static_stub.h>
 
 #include <linux/i2c.h>
 #include <linux/platform_data/cros_ec_proto.h>
@@ -106,8 +106,8 @@ static int cros_ec_i2c_test_init(struct kunit *test)
 		I2C_BOARD_INFO("cros-ec-i2c", I2C_ADDR),
 	};
 
-	kunit_activate_ftrace_stub(test, cros_ec_register, fake_cros_ec_register);
-	kunit_activate_ftrace_stub(test, cros_ec_unregister, fake_cros_ec_unregister);
+	kunit_activate_static_stub(test, cros_ec_register, fake_cros_ec_register);
+	kunit_activate_static_stub(test, cros_ec_unregister, fake_cros_ec_unregister);
 
 	priv = kunit_kzalloc(test, sizeof(*priv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, priv);
@@ -142,8 +142,8 @@ static void cros_ec_i2c_test_exit(struct kunit *test)
 
 	i2c_del_adapter(priv->fake_adap);
 
-	kunit_deactivate_ftrace_stub(test, cros_ec_register);
-	kunit_deactivate_ftrace_stub(test, cros_ec_unregister);
+	kunit_deactivate_static_stub(test, cros_ec_register);
+	kunit_deactivate_static_stub(test, cros_ec_unregister);
 }
 
 static int cros_ec_i2c_test_cmd_xfer_init(struct kunit *test)
