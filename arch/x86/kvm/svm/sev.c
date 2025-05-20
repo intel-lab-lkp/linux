@@ -59,6 +59,10 @@ static bool sev_es_debug_swap_enabled = true;
 module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
 static u64 sev_supported_vmsa_features;
 
+static int ciphertext_hiding_nr_asids;
+module_param(ciphertext_hiding_nr_asids, int, 0444);
+MODULE_PARM_DESC(max_snp_asid, "  Number of ASIDs available for SEV-SNP guests when CipherTextHiding is enabled");
+
 #define AP_RESET_HOLD_NONE		0
 #define AP_RESET_HOLD_NAE_EVENT		1
 #define AP_RESET_HOLD_MSR_PROTO		2
@@ -200,6 +204,9 @@ static int sev_asid_new(struct kvm_sev_info *sev, unsigned long vm_type)
 	/*
 	 * The min ASID can end up larger than the max if basic SEV support is
 	 * effectively disabled by disallowing use of ASIDs for SEV guests.
+	 * Similarly for SEV-ES guests the min ASID can end up larger than the
+	 * max when CipherTextHiding is enabled, effectively disabling SEV-ES
+	 * support.
 	 */
 
 	if (min_asid > max_asid)
@@ -2955,6 +2962,7 @@ void __init sev_hardware_setup(void)
 {
 	unsigned int eax, ebx, ecx, edx, sev_asid_count, sev_es_asid_count;
 	struct sev_platform_init_args init_args = {0};
+	bool snp_cipher_text_hiding = false;
 	bool sev_snp_supported = false;
 	bool sev_es_supported = false;
 	bool sev_supported = false;
@@ -3052,6 +3060,27 @@ void __init sev_hardware_setup(void)
 	if (min_sev_asid == 1)
 		goto out;
 
+	/*
+	 * The ASID space is basically split into legacy SEV and SEV-ES+.
+	 * CipherTextHiding feature further partitions the SEV-ES+ ASID space
+	 * into ASIDs for SEV-ES and SEV-SNP guests.
+	 */
+	if (ciphertext_hiding_nr_asids && sev_is_snp_ciphertext_hiding_supported()) {
+		/* Do sanity checks on user-defined ciphertext_hiding_nr_asids */
+		if (ciphertext_hiding_nr_asids != -1 &&
+		    ciphertext_hiding_nr_asids >= min_sev_asid) {
+			pr_info("ciphertext_hiding_nr_asids module parameter invalid, limiting SEV-SNP ASIDs to %d\n",
+				 min_sev_asid);
+			ciphertext_hiding_nr_asids = min_sev_asid - 1;
+		}
+
+		min_sev_es_asid = ciphertext_hiding_nr_asids == -1 ? (min_sev_asid - 1) / 2 :
+				  ciphertext_hiding_nr_asids + 1;
+		max_snp_asid = min_sev_es_asid - 1;
+		snp_cipher_text_hiding = true;
+		pr_info("SEV-SNP CipherTextHiding feature support enabled\n");
+	}
+
 	sev_es_asid_count = min_sev_asid - 1;
 	WARN_ON_ONCE(misc_cg_set_capacity(MISC_CG_RES_SEV_ES, sev_es_asid_count));
 	sev_es_supported = true;
@@ -3092,6 +3121,8 @@ out:
 	 * Do both SNP and SEV initialization at KVM module load.
 	 */
 	init_args.probe = true;
+	if (snp_cipher_text_hiding)
+		init_args.snp_max_snp_asid = max_snp_asid;
 	sev_platform_init(&init_args);
 }
 

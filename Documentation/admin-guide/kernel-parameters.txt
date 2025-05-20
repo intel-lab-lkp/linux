@@ -2891,6 +2891,16 @@
 			(enabled). Disable by KVM if hardware lacks support
 			for NPT.
 
+	kvm-amd.ciphertext_hiding_nr_asids=
+			[KVM,AMD] Enables SEV-SNP CipherTextHiding feature and
+			controls show many ASIDs are available for SEV-SNP guests.
+			The ASID space is basically split into legacy SEV and
+			SEV-ES+. CipherTextHiding feature further splits the
+			SEV-ES+ ASID space into SEV-ES and SEV-SNP.
+			If the value is -1, then it is used as an auto flag
+			and splits the ASID space equally between SEV-ES and
+			SEV-SNP ASIDs.
+
 	kvm-arm.mode=
 			[KVM,ARM,EARLY] Select one of KVM/arm64's modes of
 			operation.
