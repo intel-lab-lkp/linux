@@ -3243,7 +3243,18 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 		retval = update_exclusive_cpumask(cs, trialcs, buf);
 		break;
 	case FILE_MEMLIST:
+		bool skip_migrate_once = false;
+
+		if ((of->file->f_flags & O_NONBLOCK) &&
+			is_memory_migrate(cs) &&
+			!cpuset_update_flag(CS_MEMORY_MIGRATE, cs, 0))
+			skip_migrate_once = true;
+
 		retval = update_nodemask(cs, trialcs, buf);
+
+		/* Restore the migrate flag */
+		if (skip_migrate_once)
+			cpuset_update_flag(CS_MEMORY_MIGRATE, cs, 1);
 		break;
 	default:
 		retval = -EINVAL;
