@@ -2280,6 +2280,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_RQ_SELECTED		0x80 /* ->select_task_rq() was called */
 
 #define WF_ON_CPU		0x0100
+#define WF_DELAYED		0x0200
 
 static_assert(WF_EXEC == SD_BALANCE_EXEC);
 static_assert(WF_FORK == SD_BALANCE_FORK);

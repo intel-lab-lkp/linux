@@ -675,7 +675,12 @@ struct rq *__task_rq_lock(struct task_struct *p, struct rq_flags *rf)
 {
 	struct rq *rq;
 
-	lockdep_assert_held(&p->pi_lock);
+	/*
+	 * TASK_WAKING is used to serialize the remote end of wakeup, rather
+	 * than p->pi_lock.
+	 */
+	lockdep_assert(p->__state == TASK_WAKING ||
+		       lockdep_is_held(&p->pi_lock) != LOCK_STATE_NOT_HELD);
 
 	for (;;) {
 		rq = task_rq(p);
@@ -3727,6 +3732,8 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 	}
 }
 
+static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags);
+
 /*
  * Consider @p being inside a wait loop:
  *
@@ -3754,6 +3761,35 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
  */
 static int ttwu_runnable(struct task_struct *p, int wake_flags)
 {
+	if (sched_feat(TTWU_QUEUE_DELAYED) && READ_ONCE(p->se.sched_delayed)) {
+		/*
+		 * Similar to try_to_block_task():
+		 *
+		 * __schedule()				ttwu()
+		 *   prev_state = prev->state		  if (p->sched_delayed)
+		 *   if (prev_state)			     smp_acquire__after_ctrl_dep()
+		 *     try_to_block_task()		     p->state = TASK_WAKING
+		 *       ... set_delayed()
+		 *         RELEASE p->sched_delayed = 1
+		 *
+		 * __schedule() and ttwu() have matching control dependencies.
+		 *
+		 * Notably, once we observe sched_delayed we know the task has
+		 * passed try_to_block_task() and p->state is ours to modify.
+		 *
+		 * TASK_WAKING controls ttwu() concurrency.
+		 */
+		smp_acquire__after_ctrl_dep();
+		WRITE_ONCE(p->__state, TASK_WAKING);
+		/*
+		 * Bit of a hack, see select_task_rq_fair()'s WF_DELAYED case.
+		 */
+		p->wake_cpu = smp_processor_id();
+
+		if (ttwu_queue_wakelist(p, task_cpu(p), wake_flags | WF_DELAYED))
+			return 1;
+	}
+
 	CLASS(__task_rq_lock, guard)(p);
 	struct rq *rq = guard.rq;
 
@@ -3775,6 +3811,8 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	ttwu_do_wakeup(p);
 	return 1;
 }
+
+static void __ttwu_queue_wakelist(struct task_struct *p, int cpu);
 
 static inline bool ttwu_do_migrate(struct rq *rq, struct task_struct *p, int cpu)
 {
@@ -3801,6 +3839,53 @@ static inline bool ttwu_do_migrate(struct rq *rq, struct task_struct *p, int cpu
 	return true;
 }
 
+static int ttwu_delayed(struct rq *rq, struct task_struct *p, int wake_flags,
+			struct rq_flags *rf)
+{
+	struct rq *p_rq = task_rq(p);
+	int cpu;
+
+	/*
+	 * Notably it is possible for on-rq entities to get migrated -- even
+	 * sched_delayed ones. This should be rare though, so flip the locks
+	 * rather than IPI chase after it.
+	 */
+	if (unlikely(rq != p_rq)) {
+		rq_unlock(rq, rf);
+		p_rq = __task_rq_lock(p, rf);
+		update_rq_clock(p_rq);
+	}
+
+	if (task_on_rq_queued(p))
+		dequeue_task(p_rq, p, DEQUEUE_NOCLOCK | DEQUEUE_SLEEP | DEQUEUE_DELAYED);
+
+	/*
+	 * NOTE: unlike the regular try_to_wake_up() path, this runs both
+	 * select_task_rq() and ttwu_do_migrate() while holding rq->lock
+	 * rather than p->pi_lock.
+	 */
+	cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
+	if (ttwu_do_migrate(rq, p, cpu))
+		wake_flags |= WF_MIGRATED;
+
+	if (unlikely(rq != p_rq)) {
+		__task_rq_unlock(p_rq, rf);
+		rq_lock(rq, rf);
+		update_rq_clock(p_rq);
+	}
+
+	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+	p->sched_remote_delayed = 0;
+
+	/* it wants to run here */
+	if (cpu_of(rq) == cpu)
+		return 0;
+
+	/* shoot it to the CPU it wants to run on */
+	__ttwu_queue_wakelist(p, cpu);
+	return 1;
+}
+
 void sched_ttwu_pending(void *arg)
 {
 	struct llist_node *llist = arg;
@@ -3819,11 +3904,12 @@ void sched_ttwu_pending(void *arg)
 		if (WARN_ON_ONCE(p->on_cpu))
 			smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
-			set_task_cpu(p, cpu_of(rq));
-
 		if (p->sched_remote_wakeup)
 			wake_flags |= WF_MIGRATED;
+
+		if (p->sched_remote_delayed &&
+		    ttwu_delayed(rq, p, wake_flags | WF_DELAYED, &guard.rf))
+			continue;
 
 		ttwu_do_activate(rq, p, wake_flags, &guard.rf);
 	}
@@ -3964,12 +4050,13 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu, bool def)
 
 static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 {
-	bool def = sched_feat(TTWU_QUEUE_DEFAULT);
+	bool def = sched_feat(TTWU_QUEUE_DEFAULT) || (wake_flags & WF_DELAYED);
 
 	if (!ttwu_queue_cond(p, cpu, def))
 		return false;
 
 	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+	p->sched_remote_delayed = !!(wake_flags & WF_DELAYED);
 
 	__ttwu_queue_wakelist(p, cpu);
 	return true;
