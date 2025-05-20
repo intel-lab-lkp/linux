@@ -311,7 +311,11 @@ def setup_kfiles(app):
     if kerneldoc_bin and kerneldoc_bin.endswith("kernel-doc.py"):
         print("Using Python kernel-doc")
         out_style = RestFormat()
-        kfiles = KernelFiles(out_style=out_style, logger=logger)
+
+        # Ideally, we should be using Sphinx logger here, but its filtering
+        # rules ending filtering out warnings and errors. So, let's use
+        # Python default logger instead.
+        kfiles = KernelFiles(out_style=out_style)
     else:
         print(f"Using {kerneldoc_bin}")
 
