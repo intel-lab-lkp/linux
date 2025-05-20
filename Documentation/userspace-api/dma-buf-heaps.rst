@@ -23,3 +23,22 @@ following heaps:
    `linux,cma-default` property set, or through the `CMA_SIZE_MBYTES` or
    `CMA_SIZE_PERCENTAGE` Kconfig options. Depending on the platform, it
    might be called ``reserved``, ``linux,cma``, or ``default-pool``.
+
+Naming Convention
+=================
+
+A good heap name is a name that:
+
+- Is stable, and won't change from one version to the other;
+
+- Describes the memory region the heap will allocate from, and will
+  uniquely identify it in a given platform;
+
+- Doesn't use implementation details, such as the allocator;
+
+- Can describe intended usage.
+
+For example, assuming a platform with a reserved memory region located
+at the RAM address 0x42000000, intended to allocate video framebuffers,
+and backed by the CMA kernel allocator. Good names would be
+`memory@42000000` or `video@42000000`, but `cma-video` wouldn't.
