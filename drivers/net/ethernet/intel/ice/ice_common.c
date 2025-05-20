@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2018-2023, Intel Corporation. */
+/* Copyright (c) 2018-2025, Intel Corporation. */
 
 #include "ice_common.h"
 #include "ice_sched.h"
@@ -1627,8 +1627,10 @@ ice_sq_send_cmd_retry(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 
 		memcpy(desc, &desc_cpy, sizeof(desc_cpy));
 
-		msleep(ICE_SQ_SEND_DELAY_TIME_MS);
-
+		if (cq->qtype == ICE_CTL_Q_SB)
+			udelay(ICE_CTL_Q_SQ_CMD_TIMEOUT_SPIN);
+		else
+			fsleep(ICE_CTL_Q_SQ_CMD_TIMEOUT);
 	} while (++idx < ICE_SQ_SEND_MAX_EXECUTE);
 
 	return status;

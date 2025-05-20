@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2018, Intel Corporation. */
+/* Copyright (c) 2018-2025, Intel Corporation. */
 
 #ifndef _ICE_COMMON_H_
 #define _ICE_COMMON_H_
@@ -15,6 +15,7 @@
 #include "ice_switch.h"
 #include "ice_fdir.h"
 
+#define ICE_SQ_SEND_ATOMIC_DELAY_TIME_US 100
 #define ICE_SQ_SEND_DELAY_TIME_MS	10
 #define ICE_SQ_SEND_MAX_EXECUTE		3
 

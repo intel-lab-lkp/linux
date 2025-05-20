@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2018, Intel Corporation. */
+/* Copyright (c) 2018-2025, Intel Corporation. */
 
 #ifndef _ICE_CONTROLQ_H_
 #define _ICE_CONTROLQ_H_
@@ -44,6 +44,7 @@ enum ice_ctl_q {
 
 /* Control Queue timeout settings - max delay 1s */
 #define ICE_CTL_Q_SQ_CMD_TIMEOUT	USEC_PER_SEC
+#define ICE_CTL_Q_SQ_CMD_TIMEOUT_SPIN	100
 #define ICE_CTL_Q_ADMIN_INIT_TIMEOUT	10    /* Count 10 times */
 #define ICE_CTL_Q_ADMIN_INIT_MSEC	100   /* Check every 100msec */
 
@@ -88,6 +89,19 @@ struct ice_rq_event_info {
 	u8 *msg_buf;
 };
 
+union ice_sq_lock {
+	struct mutex sq_mutex;	/* Non-atomic SQ lock. */
+	struct {
+		spinlock_t sq_spinlock;	/* Atomic SQ lock. */
+		unsigned long sq_flags;		/* Send queue IRQ flags. */
+	};
+};
+
+struct ice_sq_ops {
+	void (*lock)(union ice_sq_lock *lock);
+	void (*unlock)(union ice_sq_lock *lock);
+};
+
 /* Control Queue information */
 struct ice_ctl_q_info {
 	enum ice_ctl_q qtype;
@@ -98,7 +112,8 @@ struct ice_ctl_q_info {
 	u16 rq_buf_size;		/* receive queue buffer size */
 	u16 sq_buf_size;		/* send queue buffer size */
 	enum libie_aq_err sq_last_status;	/* last status on send queue */
-	struct mutex sq_lock;		/* Send queue lock */
+	union ice_sq_lock sq_lock;	/* Send queue lock. */
+	struct ice_sq_ops sq_ops;	/* Send queue ops. */
 	struct mutex rq_lock;		/* Receive queue lock */
 };
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2018, Intel Corporation. */
+/* Copyright (c) 2018-2025, Intel Corporation. */
 
 #include "ice_common.h"
 
@@ -467,7 +467,7 @@ static int ice_shutdown_sq(struct ice_hw *hw, struct ice_ctl_q_info *cq)
 	if (!cq->sq.count)
 		return -EBUSY;
 
-	mutex_lock(&cq->sq_lock);
+	cq->sq_ops.lock(&cq->sq_lock);
 
 	/* Stop processing of the control queue */
 	wr32(hw, cq->sq.head, 0);
@@ -477,7 +477,7 @@ static int ice_shutdown_sq(struct ice_hw *hw, struct ice_ctl_q_info *cq)
 	wr32(hw, cq->sq.bah, 0);
 	cq->sq.count = 0;	/* to indicate uninitialized queue */
 
-	mutex_unlock(&cq->sq_lock);
+	cq->sq_ops.unlock(&cq->sq_lock);
 
 	/* free ring buffers and the ring itself */
 	ICE_FREE_CQ_BUFS(hw, cq, sq);
@@ -777,14 +777,74 @@ int ice_init_all_ctrlq(struct ice_hw *hw)
 }
 
 /**
+ * ice_sq_spin_lock - Call spin_lock_irqsave for union ice_sq_lock
+ * @lock: lock handle
+ */
+static void ice_sq_spin_lock(union ice_sq_lock *lock)
+	__acquires(&lock->sq_spinlock)
+{
+	spin_lock_irqsave(&lock->sq_spinlock, lock->sq_flags);
+}
+
+/**
+ * ice_sq_spin_unlock - Call spin_unlock_irqrestore for union ice_sq_lock
+ * @lock: lock handle
+ */
+static void ice_sq_spin_unlock(union ice_sq_lock *lock)
+	__releases(&lock->sq_spinlock)
+{
+	spin_unlock_irqrestore(&lock->sq_spinlock, lock->sq_flags);
+}
+
+/**
+ * ice_sq_mutex_lock - Call mutex_lock for union ice_sq_lock
+ * @lock: lock handle
+ */
+static void ice_sq_mutex_lock(union ice_sq_lock *lock)
+	__acquires(&lock->sq_mutex)
+{
+	mutex_lock(&lock->sq_mutex);
+}
+
+/**
+ * ice_sq_mutex_unlock - Call mutex_unlock for union ice_sq_lock
+ * @lock: lock handle
+ */
+static void ice_sq_mutex_unlock(union ice_sq_lock *lock)
+	__releases(&lock->sq_mutex)
+{
+	mutex_unlock(&lock->sq_mutex);
+}
+
+static struct ice_sq_ops ice_spin_ops = {
+	.lock = ice_sq_spin_lock,
+	.unlock = ice_sq_spin_unlock,
+};
+
+static struct ice_sq_ops ice_mutex_ops = {
+	.lock = ice_sq_mutex_lock,
+	.unlock = ice_sq_mutex_unlock,
+};
+
+/**
  * ice_init_ctrlq_locks - Initialize locks for a control queue
+ * @hw: pointer to the hardware structure
  * @cq: pointer to the control queue
+ * @q_type: specific control queue type
  *
  * Initializes the send and receive queue locks for a given control queue.
  */
-static void ice_init_ctrlq_locks(struct ice_ctl_q_info *cq)
+static void ice_init_ctrlq_locks(struct ice_hw *hw, struct ice_ctl_q_info *cq,
+				 enum ice_ctl_q q_type)
 {
-	mutex_init(&cq->sq_lock);
+	if (q_type == ICE_CTL_Q_SB) {
+		cq->sq_ops = ice_spin_ops;
+		spin_lock_init(&cq->sq_lock.sq_spinlock);
+	} else {
+		cq->sq_ops = ice_mutex_ops;
+		mutex_init(&cq->sq_lock.sq_mutex);
+	}
+
 	mutex_init(&cq->rq_lock);
 }
 
@@ -806,23 +866,26 @@ static void ice_init_ctrlq_locks(struct ice_ctl_q_info *cq)
  */
 int ice_create_all_ctrlq(struct ice_hw *hw)
 {
-	ice_init_ctrlq_locks(&hw->adminq);
+	ice_init_ctrlq_locks(hw, &hw->adminq, ICE_CTL_Q_ADMIN);
 	if (ice_is_sbq_supported(hw))
-		ice_init_ctrlq_locks(&hw->sbq);
-	ice_init_ctrlq_locks(&hw->mailboxq);
+		ice_init_ctrlq_locks(hw, &hw->sbq, ICE_CTL_Q_SB);
+	ice_init_ctrlq_locks(hw, &hw->mailboxq, ICE_CTL_Q_MAILBOX);
 
 	return ice_init_all_ctrlq(hw);
 }
 
 /**
  * ice_destroy_ctrlq_locks - Destroy locks for a control queue
+ * @hw: pointer to the hardware structure
  * @cq: pointer to the control queue
  *
  * Destroys the send and receive queue locks for a given control queue.
  */
-static void ice_destroy_ctrlq_locks(struct ice_ctl_q_info *cq)
+static void ice_destroy_ctrlq_locks(struct ice_hw *hw,
+				    struct ice_ctl_q_info *cq)
 {
-	mutex_destroy(&cq->sq_lock);
+	if (cq->qtype != ICE_CTL_Q_SB)
+		mutex_destroy(&cq->sq_lock.sq_mutex);
 	mutex_destroy(&cq->rq_lock);
 }
 
@@ -840,10 +903,10 @@ void ice_destroy_all_ctrlq(struct ice_hw *hw)
 	/* shut down all the control queues first */
 	ice_shutdown_all_ctrlq(hw, true);
 
-	ice_destroy_ctrlq_locks(&hw->adminq);
+	ice_destroy_ctrlq_locks(hw, &hw->adminq);
 	if (ice_is_sbq_supported(hw))
-		ice_destroy_ctrlq_locks(&hw->sbq);
-	ice_destroy_ctrlq_locks(&hw->mailboxq);
+		ice_destroy_ctrlq_locks(hw, &hw->sbq);
+	ice_destroy_ctrlq_locks(hw, &hw->mailboxq);
 }
 
 /**
@@ -972,9 +1035,15 @@ static bool ice_sq_done(struct ice_hw *hw, struct ice_ctl_q_info *cq)
 	 */
 	udelay(5);
 
-	return !rd32_poll_timeout(hw, cq->sq.head,
-				  head, head == cq->sq.next_to_use,
-				  20, ICE_CTL_Q_SQ_CMD_TIMEOUT);
+	if (cq->qtype == ICE_CTL_Q_SB)
+		return !read_poll_timeout_atomic(rd32, head,
+						 head == cq->sq.next_to_use, 5,
+						 ICE_CTL_Q_SQ_CMD_TIMEOUT_SPIN,
+						 false, hw, cq->sq.head);
+
+	return !rd32_poll_timeout(hw, cq->sq.head, head,
+				  head == cq->sq.next_to_use, 20,
+				  ICE_CTL_Q_SQ_CMD_TIMEOUT);
 }
 
 /**
@@ -1011,7 +1080,7 @@ int ice_sq_send_cmd(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 	if (!buf && buf_size)
 		return -EINVAL;
 
-	mutex_lock(&cq->sq_lock);
+	cq->sq_ops.lock(&cq->sq_lock);
 	cq->sq_last_status = LIBIE_AQ_RC_OK;
 
 	if (!cq->sq.count) {
@@ -1132,7 +1201,7 @@ int ice_sq_send_cmd(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 	}
 
 err:
-	mutex_unlock(&cq->sq_lock);
+	cq->sq_ops.unlock(&cq->sq_lock);
 	return err;
 }
 
