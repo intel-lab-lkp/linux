@@ -1046,8 +1046,8 @@ static int fanotify_release(struct inode *ignored, struct file *file)
 	}
 	spin_unlock(&group->notification_lock);
 
-	/* Response for all permission events it set, wakeup waiters */
-	wake_up(&group->fanotify_data.access_waitq);
+	/* Response for all permission events is set, wakeup waiters */
+	wake_up_all(&group->fanotify_data.access_waitq);
 
 	/* matches the fanotify_init->fsnotify_alloc_group */
 	fsnotify_destroy_group(group);
