@@ -3788,6 +3788,8 @@ static int __ttwu_runnable(struct rq *rq, struct task_struct *p, int wake_flags)
 	return 1;
 }
 
+static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags);
+
 /*
  * Consider @p being inside a wait loop:
  *
@@ -3815,6 +3817,33 @@ static int __ttwu_runnable(struct rq *rq, struct task_struct *p, int wake_flags)
  */
 static int ttwu_runnable(struct task_struct *p, int wake_flags)
 {
+#ifdef CONFIG_SMP
+	if (sched_feat(TTWU_QUEUE_DELAYED) && READ_ONCE(p->se.sched_delayed)) {
+		/*
+		 * Similar to try_to_block_task():
+		 *
+		 * __schedule()				ttwu()
+		 *   prev_state = prev->state		  if (p->sched_delayed)
+		 *   if (prev_state)			     smp_acquire__after_ctrl_dep()
+		 *     try_to_block_task()		     p->state = TASK_WAKING
+		 *       ... set_delayed()
+		 *         RELEASE p->sched_delayed = 1
+		 *
+		 * __schedule() and ttwu() have matching control dependencies.
+		 *
+		 * Notably, once we observe sched_delayed we know the task has
+		 * passed try_to_block_task() and p->state is ours to modify.
+		 *
+		 * TASK_WAKING controls ttwu() concurrency.
+		 */
+		smp_acquire__after_ctrl_dep();
+		WRITE_ONCE(p->__state, TASK_WAKING);
+
+		if (ttwu_queue_wakelist(p, task_cpu(p), wake_flags | WF_DELAYED))
+			return 1;
+	}
+#endif
+
 	CLASS(__task_rq_lock, guard)(p);
 	return __ttwu_runnable(guard.rq, p, wake_flags);
 }
@@ -3825,22 +3854,48 @@ void sched_ttwu_pending(void *arg)
 	struct llist_node *llist = arg;
 	struct rq *rq = this_rq();
 	struct task_struct *p, *t;
-	struct rq_flags rf;
 
 	if (!llist)
 		return;
 
-	rq_lock_irqsave(rq, &rf);
+	CLASS(rq_lock_irqsave, guard)(rq);
 	update_rq_clock(rq);
 
 	llist_for_each_entry_safe(p, t, llist, wake_entry.llist) {
+		struct rq *p_rq = task_rq(p);
+		int ret;
+
+		/*
+		 * This is the ttwu_runnable() case. Notably it is possible for
+		 * on-rq entities to get migrated -- even sched_delayed ones.
+		 */
+		if (unlikely(p_rq != rq)) {
+			rq_unlock(rq, &guard.rf);
+			p_rq = __task_rq_lock(p, &guard.rf);
+		}
+
+		ret = __ttwu_runnable(p_rq, p, WF_TTWU);
+
+		if (unlikely(p_rq != rq)) {
+			if (!ret)
+				set_task_cpu(p, cpu_of(rq));
+
+			__task_rq_unlock(p_rq, &guard.rf);
+			rq_lock(rq, &guard.rf);
+			update_rq_clock(rq);
+		}
+
+		if (ret)
+			continue;
+
+		/*
+		 * This is the 'normal' case where the task is blocked.
+		 */
+
 		if (WARN_ON_ONCE(p->on_cpu))
 			smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
-			set_task_cpu(p, cpu_of(rq));
-
-		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &guard.rf);
 	}
 
 	/*
@@ -3854,7 +3909,6 @@ void sched_ttwu_pending(void *arg)
 	 * Since now nr_running > 0, idle_cpu() will always get correct result.
 	 */
 	WRITE_ONCE(rq->ttwu_pending, 0);
-	rq_unlock_irqrestore(rq, &rf);
 }
 
 /*
@@ -3978,7 +4032,7 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu, bool def)
 
 static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 {
-	bool def = sched_feat(TTWU_QUEUE_DEFAULT);
+	bool def = sched_feat(TTWU_QUEUE_DEFAULT) || (wake_flags & WF_DELAYED);
 
 	if (!ttwu_queue_cond(p, cpu, def))
 		return false;
@@ -4273,8 +4327,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 * __schedule().  See the comment for smp_mb__after_spinlock().
 		 *
 		 * Form a control-dep-acquire with p->on_rq == 0 above, to ensure
-		 * schedule()'s deactivate_task() has 'happened' and p will no longer
-		 * care about it's own p->state. See the comment in __schedule().
+		 * schedule()'s try_to_block_task() has 'happened' and p will no longer
+		 * care about it's own p->state. See the comment in try_to_block_task().
 		 */
 		smp_acquire__after_ctrl_dep();
 
@@ -6718,8 +6772,8 @@ static void __sched notrace __schedule(int sched_mode)
 	preempt = sched_mode == SM_PREEMPT;
 
 	/*
-	 * We must load prev->state once (task_struct::state is volatile), such
-	 * that we form a control dependency vs deactivate_task() below.
+	 * We must load prev->state once, such that we form a control
+	 * dependency vs try_to_block_task() below.
 	 */
 	prev_state = READ_ONCE(prev->__state);
 	if (sched_mode == SM_IDLE) {

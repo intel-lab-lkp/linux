@@ -5395,7 +5395,10 @@ static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
 
 static void set_delayed(struct sched_entity *se)
 {
-	se->sched_delayed = 1;
+	/*
+	 * See TTWU_QUEUE_DELAYED in ttwu_runnable().
+	 */
+	smp_store_release(&se->sched_delayed, 1);
 
 	/*
 	 * Delayed se of cfs_rq have no tasks queued on them.
