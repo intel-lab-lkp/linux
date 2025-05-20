@@ -14,6 +14,9 @@ enum test_mode {
 
 #define DEFAULT_PEER_PORT	1234
 
+/* Half of the default to not risk timing out the control channel */
+#define LINGER_TIMEOUT		(TIMEOUT / 2)
+
 /* Test runner options */
 struct test_opts {
 	enum test_mode mode;
@@ -80,4 +83,5 @@ void setsockopt_int_check(int fd, int level, int optname, int val,
 void setsockopt_timeval_check(int fd, int level, int optname,
 			      struct timeval val, char const *errmsg);
 void enable_so_zerocopy_check(int fd);
+void enable_so_linger(int fd);
 #endif /* UTIL_H */
