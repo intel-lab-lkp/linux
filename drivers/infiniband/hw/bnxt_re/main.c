@@ -2410,6 +2410,8 @@ static int bnxt_re_suspend(struct auxiliary_device *adev, pm_message_t state)
 	struct bnxt_re_dev *rdev;
 
 	rdev = en_info->rdev;
+	if (!rdev)
+		return 0;
 	en_dev = en_info->en_dev;
 	mutex_lock(&bnxt_re_mutex);
 
