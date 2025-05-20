@@ -261,10 +261,10 @@ config DMA_API_DEBUG
 	  If unsure, say N.
 
 config DMA_MAP_BENCHMARK
-	bool "Enable benchmarking of streaming DMA mapping"
+	bool "Enable benchmarking of streaming and IOVA DMA mapping"
 	depends on DEBUG_FS
 	help
 	  Provides /sys/kernel/debug/dma_map_benchmark that helps with testing
-	  performance of dma_(un)map_page.
+	  performance of the streaming DMA dma_(un)map_page and IOVA API.
 
 	  See tools/testing/selftests/dma/dma_map_benchmark.c

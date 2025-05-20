@@ -7,6 +7,7 @@
 #define _KERNEL_DMA_BENCHMARK_H
 
 #define DMA_MAP_BENCHMARK       _IOWR('d', 1, struct map_benchmark)
+#define DMA_MAP_BENCHMARK_IOVA	_IOWR('d', 2, struct map_benchmark)
 #define DMA_MAP_MAX_THREADS     1024
 #define DMA_MAP_MAX_SECONDS     300
 #define DMA_MAP_MAX_TRANS_DELAY (10 * NSEC_PER_MSEC)
@@ -27,5 +28,15 @@ struct map_benchmark {
 	__u32 dma_dir; /* DMA data direction */
 	__u32 dma_trans_ns; /* time for DMA transmission in ns */
 	__u32 granule;  /* how many PAGE_SIZE will do map/unmap once a time */
+	__u32 has_iommu_dma;
+	__u64 avg_iova_alloc_100ns;
+	__u64 avg_iova_link_100ns;
+	__u64 avg_iova_sync_100ns;
+	__u64 avg_iova_destroy_100ns;
+	__u64 iova_alloc_stddev;
+	__u64 iova_link_stddev;
+	__u64 iova_sync_stddev;
+	__u64 iova_destroy_stddev;
+	__u32 use_iova; /* 0=regular, 1=IOVA, 2=both */
 };
 #endif /* _KERNEL_DMA_BENCHMARK_H */
