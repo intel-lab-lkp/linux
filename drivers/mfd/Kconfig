@@ -1437,6 +1437,18 @@ config MFD_SC27XX_PMIC
 	  This driver provides common support for accessing the SC27xx PMICs,
 	  and it also adds the irq_chip parts for handling the PMIC chip events.
 
+config MFD_NVVRS_PSEQ
+	tristate "NVIDIA Voltage Regulator Specification Power Sequencer"
+	depends on I2C=y
+	select MFD_CORE
+	select REGMAP_I2C
+	select REGMAP_IRQ
+	help
+	  Say Y here to add support for NVIDIA Voltage Regulator Specification
+	  Power Sequencer. NVVRS_PSEQ supports ON/OFF, suspend/resume sequence of
+	  system power rails. It provides 32kHz RTC clock support with backup
+	  battery for system timing.
+
 config RZ_MTU3
 	tristate "Renesas RZ/G2L MTU3a core driver"
 	depends on (ARCH_RZG2L && OF) || COMPILE_TEST
