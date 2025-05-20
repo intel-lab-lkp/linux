@@ -31,6 +31,14 @@ struct pci_controller;
 #define DRM_WEDGE_RECOVERY_BUS_RESET	BIT(2)	/* unbind + reset bus device + bind */
 
 /**
+ * struct drm_wedge_task_info - information about the guilty app of a wedge dev
+ */
+struct drm_wedge_task_info {
+	pid_t pid;
+	char *comm;
+};
+
+/**
  * enum switch_power_state - power state of drm device
  */
 
