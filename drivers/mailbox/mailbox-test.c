@@ -200,11 +200,13 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
 
 		if (filp->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
+			__set_current_state(TASK_RUNNING);
 			goto waitq_err;
 		}
 
 		if (signal_pending(current)) {
 			ret = -ERESTARTSYS;
+			__set_current_state(TASK_RUNNING);
 			goto waitq_err;
 		}
 		schedule();
@@ -231,9 +233,9 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
 
 	spin_unlock_irqrestore(&tdev->lock, flags);
 
+	__set_current_state(TASK_RUNNING);
 	ret = simple_read_from_buffer(userbuf, count, ppos, touser, MBOX_HEXDUMP_MAX_LEN);
 waitq_err:
-	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&tdev->waitq, &wait);
 kfree_err:
 	kfree(touser);
