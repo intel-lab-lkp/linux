@@ -123,6 +123,13 @@ static const struct resource tps6594_rtc_resources[] = {
 	DEFINE_RES_IRQ_NAMED(TPS6594_IRQ_POWER_UP, TPS6594_IRQ_NAME_POWERUP),
 };
 
+
+static const struct resource tps6594_pwrbutton_resources[] = {
+	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_FALL, TPS65224_IRQ_NAME_PB_FALL),
+	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_RISE, TPS65224_IRQ_NAME_PB_RISE),
+	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_SHORT, TPS65224_IRQ_NAME_PB_SHORT),
+};
+
 static const struct mfd_cell tps6594_common_cells[] = {
 	MFD_CELL_RES("tps6594-regulator", tps6594_regulator_resources),
 	MFD_CELL_RES("tps6594-pinctrl", tps6594_pinctrl_resources),
@@ -313,8 +320,6 @@ static const struct resource tps65224_pfsm_resources[] = {
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_REG_UNLOCK, TPS65224_IRQ_NAME_REG_UNLOCK),
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_TWARN, TPS65224_IRQ_NAME_TWARN),
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_LONG, TPS65224_IRQ_NAME_PB_LONG),
-	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_FALL, TPS65224_IRQ_NAME_PB_FALL),
-	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_PB_RISE, TPS65224_IRQ_NAME_PB_RISE),
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_TSD_ORD, TPS65224_IRQ_NAME_TSD_ORD),
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_BIST_FAIL, TPS65224_IRQ_NAME_BIST_FAIL),
 	DEFINE_RES_IRQ_NAMED(TPS65224_IRQ_REG_CRC_ERR, TPS65224_IRQ_NAME_REG_CRC_ERR),
@@ -340,6 +345,12 @@ static const struct mfd_cell tps65224_common_cells[] = {
 	MFD_CELL_RES("tps6594-pfsm", tps65224_pfsm_resources),
 	MFD_CELL_RES("tps6594-pinctrl", tps65224_pinctrl_resources),
 	MFD_CELL_RES("tps6594-regulator", tps65224_regulator_resources),
+};
+
+static const struct mfd_cell tps6594_pwrbutton_cell = {
+	.name = "tps6594-pwrbutton",
+	.resources = tps6594_pwrbutton_resources,
+	.num_resources = ARRAY_SIZE(tps6594_pwrbutton_resources),
 };
 
 static const struct regmap_irq tps65224_irqs[] = {
@@ -611,6 +622,7 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 	struct regmap_irq_chip *irq_chip;
 	const struct mfd_cell *cells;
 	int n_cells;
+	bool pwr_button;
 
 	if (enable_crc) {
 		ret = tps6594_enable_crc(tps);
@@ -650,6 +662,15 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 				   regmap_irq_get_domain(tps->irq_data));
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to add common child devices\n");
+
+	pwr_button = of_property_read_bool(dev->of_node, "ti,power-button");
+	if (pwr_button) {
+		ret = devm_mfd_add_devices(dev, PLATFORM_DEVID_AUTO,
+						&tps6594_pwrbutton_cell, 1, NULL, 0,
+						regmap_irq_get_domain(tps->irq_data));
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to add power-button: %d\n", ret);
+	}
 
 	/* No RTC for LP8764 and TPS65224 */
 	if (tps->chip_id != LP8764 && tps->chip_id != TPS65224) {
