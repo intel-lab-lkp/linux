@@ -137,7 +137,6 @@ int meson_card_set_be_link(struct snd_soc_card *card,
 			   struct device_node *node)
 {
 	struct snd_soc_dai_link_component *codec;
-	struct device_node *np;
 	int ret, num_codecs;
 
 	num_codecs = of_get_child_count(node);
@@ -154,12 +153,10 @@ int meson_card_set_be_link(struct snd_soc_card *card,
 	link->codecs = codec;
 	link->num_codecs = num_codecs;
 
-	for_each_child_of_node(node, np) {
+	for_each_child_of_node_scoped(node, np) {
 		ret = meson_card_parse_dai(card, np, codec);
-		if (ret) {
-			of_node_put(np);
+		if (ret)
 			return ret;
-		}
 
 		codec++;
 	}
@@ -198,7 +195,6 @@ static int meson_card_add_links(struct snd_soc_card *card)
 {
 	struct meson_card *priv = snd_soc_card_get_drvdata(card);
 	struct device_node *node = card->dev->of_node;
-	struct device_node *np;
 	int num, i, ret;
 
 	num = of_get_child_count(node);
@@ -212,12 +208,10 @@ static int meson_card_add_links(struct snd_soc_card *card)
 		return ret;
 
 	i = 0;
-	for_each_child_of_node(node, np) {
+	for_each_child_of_node_scoped(node, np) {
 		ret = priv->match_data->add_link(card, np, &i);
-		if (ret) {
-			of_node_put(np);
+		if (ret)
 			return ret;
-		}
 
 		i++;
 	}
