@@ -323,29 +323,29 @@ static int hibmc_load(struct drm_device *dev)
 
 	ret = hibmc_hw_init(priv);
 	if (ret)
-		goto err;
+		goto err_return;
 
 	ret = drmm_vram_helper_init(dev, pci_resource_start(pdev, 0),
 				    pci_resource_len(pdev, 0));
 	if (ret) {
 		drm_err(dev, "Error initializing VRAM MM; %d\n", ret);
-		goto err;
+		goto err_return;
 	}
 
 	ret = hibmc_kms_init(priv);
 	if (ret)
-		goto err;
+		goto err_return;
 
 	ret = drm_vblank_init(dev, dev->mode_config.num_crtc);
 	if (ret) {
 		drm_err(dev, "failed to initialize vblank: %d\n", ret);
-		goto err;
+		goto err_unload;
 	}
 
 	ret = hibmc_msi_init(dev);
 	if (ret) {
 		drm_err(dev, "hibmc msi init failed, ret:%d\n", ret);
-		goto err;
+		goto err_unload;
 	}
 
 	/* reset all the states of crtc/plane/encoder/connector */
@@ -353,8 +353,9 @@ static int hibmc_load(struct drm_device *dev)
 
 	return 0;
 
-err:
+err_unload:
 	hibmc_unload(dev);
+err_return:
 	drm_err(dev, "failed to initialize drm driver: %d\n", ret);
 	return ret;
 }
