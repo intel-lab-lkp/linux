@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/reboot.h>
 
 #include <linux/mfd/core.h>
 #include <linux/mfd/tps6594.h>
@@ -615,6 +616,19 @@ static int tps6594_enable_crc(struct tps6594 *tps)
 	return ret;
 }
 
+static int tps6594_soft_shutdown(struct tps6594 *tps)
+{
+	return regmap_update_bits(tps->regmap, TPS6594_REG_FSM_I2C_TRIGGERS,
+				TPS6594_BIT_TRIGGER_I2C(0),
+				TPS6594_BIT_TRIGGER_I2C(0));
+}
+
+static int tps6594_power_off_handler(struct sys_off_data *data)
+{
+	tps6594_soft_shutdown(data->cb_data);
+	return NOTIFY_DONE;
+}
+
 int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 {
 	struct device *dev = tps->dev;
@@ -623,6 +637,7 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 	const struct mfd_cell *cells;
 	int n_cells;
 	bool pwr_button;
+	bool system_power_controller;
 
 	if (enable_crc) {
 		ret = tps6594_enable_crc(tps);
@@ -679,6 +694,15 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 					   regmap_irq_get_domain(tps->irq_data));
 		if (ret)
 			return dev_err_probe(dev, ret, "Failed to add RTC child device\n");
+	}
+
+	system_power_controller = of_property_read_bool(dev->of_node, "system-power-controller");
+	if (system_power_controller) {
+		ret = devm_register_power_off_handler(tps->dev,
+								tps6594_power_off_handler,
+								tps);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to register power-off handler\n");
 	}
 
 	return 0;
