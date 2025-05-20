@@ -1444,25 +1444,30 @@ struct cmd_lookup {
 static void settings_rsp(struct mgmt_pending_cmd *cmd, void *data)
 {
 	struct cmd_lookup *match = data;
+	struct sock *sk = cmd->sk;
 
-	send_settings_rsp(cmd->sk, cmd->opcode, match->hdev);
+	sock_hold(sk);
 
-	list_del(&cmd->list);
+	send_settings_rsp(sk, cmd->opcode, match->hdev);
+	mgmt_pending_remove(cmd);
 
-	if (match->sk == NULL) {
-		match->sk = cmd->sk;
-		sock_hold(match->sk);
-	}
-
-	mgmt_pending_free(cmd);
+	if (match->sk == NULL)
+		match->sk = sk;
+	else
+		sock_put(sk);
 }
 
 static void cmd_status_rsp(struct mgmt_pending_cmd *cmd, void *data)
 {
+	struct sock *sk = cmd->sk;
 	u8 *status = data;
+
+	sock_hold(sk);
 
 	mgmt_cmd_status(cmd->sk, cmd->index, cmd->opcode, *status);
 	mgmt_pending_remove(cmd);
+
+	sock_put(sk);
 }
 
 static void cmd_complete_rsp(struct mgmt_pending_cmd *cmd, void *data)
@@ -2598,18 +2603,25 @@ static int mgmt_hci_cmd_sync(struct sock *sk, struct hci_dev *hdev,
 static bool pending_eir_or_class(struct hci_dev *hdev)
 {
 	struct mgmt_pending_cmd *cmd;
+	bool found = false;
 
-	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(cmd, &hdev->mgmt_pending, list) {
+		if (atomic_read(&cmd->deleted))
+		    continue;
 		switch (cmd->opcode) {
 		case MGMT_OP_ADD_UUID:
 		case MGMT_OP_REMOVE_UUID:
 		case MGMT_OP_SET_DEV_CLASS:
 		case MGMT_OP_SET_POWERED:
-			return true;
+			found = true;
+			break;
 		}
 	}
 
-	return false;
+	rcu_read_unlock();
+	return found;
 }
 
 static const u8 bluetooth_base_uuid[] = {
@@ -3401,19 +3413,23 @@ static int set_io_capability(struct sock *sk, struct hci_dev *hdev, void *data,
 static struct mgmt_pending_cmd *find_pairing(struct hci_conn *conn)
 {
 	struct hci_dev *hdev = conn->hdev;
-	struct mgmt_pending_cmd *cmd;
+	struct mgmt_pending_cmd *tmp, *cmd = NULL;
 
-	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
-		if (cmd->opcode != MGMT_OP_PAIR_DEVICE)
+	rcu_read_lock();
+
+	list_for_each_entry(tmp, &hdev->mgmt_pending, list) {
+		if (atomic_read(&tmp->deleted))
 			continue;
-
-		if (cmd->user_data != conn)
+		if (tmp->opcode != MGMT_OP_PAIR_DEVICE)
 			continue;
-
-		return cmd;
+		if (tmp->user_data != conn)
+			continue;
+		cmd = tmp;
+		break;
 	}
 
-	return NULL;
+	rcu_read_unlock();
+	return cmd;
 }
 
 static int pairing_complete(struct mgmt_pending_cmd *cmd, u8 status)
@@ -10475,4 +10491,15 @@ void mgmt_cleanup(struct sock *sk)
 	}
 
 	read_unlock(&hci_dev_list_lock);
+}
+
+void mgmt_pending_cleanup(struct hci_dev *hdev)
+{
+	struct mgmt_pending_cmd *cmd, *tmp;
+
+	list_for_each_entry_safe(cmd, tmp, &hdev->mgmt_pending, list) {
+		BUG_ON(atomic_read(&cmd->deleted) == 0);
+		list_del_rcu(&cmd->list);
+		mgmt_pending_free(cmd);
+	}
 }

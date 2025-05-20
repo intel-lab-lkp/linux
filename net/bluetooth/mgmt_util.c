@@ -217,30 +217,45 @@ int mgmt_cmd_complete(struct sock *sk, u16 index, u16 cmd, u8 status,
 struct mgmt_pending_cmd *mgmt_pending_find(unsigned short channel, u16 opcode,
 					   struct hci_dev *hdev)
 {
-	struct mgmt_pending_cmd *cmd;
+	struct mgmt_pending_cmd *tmp, *cmd = NULL;
 
-	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
-		if (hci_sock_get_channel(cmd->sk) != channel)
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(tmp, &hdev->mgmt_pending, list) {
+		if (atomic_read(&tmp->deleted))
 			continue;
-		if (cmd->opcode == opcode)
-			return cmd;
+		if (hci_sock_get_channel(tmp->sk) != channel)
+			continue;
+		if (tmp->opcode == opcode) {
+			cmd = tmp;
+			break;
+		}
 	}
 
-	return NULL;
+	rcu_read_unlock();
+	return cmd;
 }
 
 void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev,
 			  void (*cb)(struct mgmt_pending_cmd *cmd, void *data),
 			  void *data)
 {
-	struct mgmt_pending_cmd *cmd, *tmp;
+	struct mgmt_pending_cmd *cmd;
 
-	list_for_each_entry_safe(cmd, tmp, &hdev->mgmt_pending, list) {
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(cmd, &hdev->mgmt_pending, list) {
+		if (atomic_read(&cmd->deleted))
+			continue;
 		if (opcode > 0 && cmd->opcode != opcode)
 			continue;
 
+		rcu_read_unlock();
 		cb(cmd, data);
+		rcu_read_lock();
 	}
+
+	rcu_read_unlock();
 }
 
 struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
@@ -270,17 +285,34 @@ struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
 	return cmd;
 }
 
+static void mgmt_pending_delayed_free(struct rcu_head *rcu)
+{
+	struct mgmt_pending_cmd *cmd =
+		container_of(rcu, struct mgmt_pending_cmd, head);
+	kfree(cmd->param);
+	kfree(cmd);
+}
+
 struct mgmt_pending_cmd *mgmt_pending_add(struct sock *sk, u16 opcode,
 					  struct hci_dev *hdev,
 					  void *data, u16 len)
 {
-	struct mgmt_pending_cmd *cmd;
+	struct mgmt_pending_cmd *cmd, *old, *tmp;
 
 	cmd = mgmt_pending_new(sk, opcode, hdev, data, len);
 	if (!cmd)
 		return NULL;
 
-	list_add_tail(&cmd->list, &hdev->mgmt_pending);
+	mutex_lock(&hdev->mgmt_lock);
+	list_for_each_entry_safe(old, tmp, &hdev->mgmt_pending, list)
+		if (atomic_read(&old->deleted)) {
+			list_del_rcu(&old->list);
+			sock_put(old->sk);
+			call_rcu(&old->head, mgmt_pending_delayed_free);
+		}
+
+	list_add_tail_rcu(&cmd->list, &hdev->mgmt_pending);
+	mutex_unlock(&hdev->mgmt_lock);
 
 	return cmd;
 }
@@ -294,8 +326,7 @@ void mgmt_pending_free(struct mgmt_pending_cmd *cmd)
 
 void mgmt_pending_remove(struct mgmt_pending_cmd *cmd)
 {
-	list_del(&cmd->list);
-	mgmt_pending_free(cmd);
+	atomic_set(&cmd->deleted, 1);
 }
 
 void mgmt_mesh_foreach(struct hci_dev *hdev,

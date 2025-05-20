@@ -2492,6 +2492,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 
 	INIT_LIST_HEAD(&hdev->mesh_pending);
 	INIT_LIST_HEAD(&hdev->mgmt_pending);
+	mutex_init(&hdev->mgmt_lock);
 	INIT_LIST_HEAD(&hdev->reject_list);
 	INIT_LIST_HEAD(&hdev->accept_list);
 	INIT_LIST_HEAD(&hdev->uuids);
@@ -2685,10 +2686,7 @@ void hci_unregister_dev(struct hci_dev *hdev)
 		hci_dev_unlock(hdev);
 	}
 
-	/* mgmt_index_removed should take care of emptying the
-	 * pending list */
-	BUG_ON(!list_empty(&hdev->mgmt_pending));
-
+	mgmt_pending_cleanup(hdev);
 	hci_sock_dev_event(hdev, HCI_DEV_UNREG);
 
 	if (hdev->rfkill) {

@@ -546,6 +546,7 @@ struct hci_dev {
 
 	struct list_head	mesh_pending;
 	struct list_head	mgmt_pending;
+	struct mutex		mgmt_lock;
 	struct list_head	reject_list;
 	struct list_head	accept_list;
 	struct list_head	uuids;

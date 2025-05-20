@@ -32,6 +32,8 @@ struct mgmt_mesh_tx {
 
 struct mgmt_pending_cmd {
 	struct list_head list;
+	struct rcu_head head;
+	atomic_t deleted;
 	u16 opcode;
 	int index;
 	void *param;
@@ -65,6 +67,7 @@ struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
 					  void *data, u16 len);
 void mgmt_pending_free(struct mgmt_pending_cmd *cmd);
 void mgmt_pending_remove(struct mgmt_pending_cmd *cmd);
+void mgmt_pending_cleanup(struct hci_dev *hdev);
 void mgmt_mesh_foreach(struct hci_dev *hdev,
 		       void (*cb)(struct mgmt_mesh_tx *mesh_tx, void *data),
 		       void *data, struct sock *sk);

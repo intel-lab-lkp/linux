@@ -655,6 +655,7 @@ static inline bool iso_enabled(void)
 int mgmt_init(void);
 void mgmt_exit(void);
 void mgmt_cleanup(struct sock *sk);
+void mgmt_pending_cleanup(struct hci_dev *hdev);
 
 void bt_sock_reclassify_lock(struct sock *sk, int proto);
 
