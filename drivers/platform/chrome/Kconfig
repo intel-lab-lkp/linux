@@ -335,4 +335,13 @@ config CROS_KUNIT_EC_I2C_TEST
 	help
 	  Kunit tests for ChromeOS EC over I2C.
 
+config CROS_KUNIT_EC_SPI_TEST
+	tristate "Kunit tests for ChromeOS EC over SPI" if !KUNIT_ALL_TESTS
+	depends on KUNIT && CROS_EC
+	default KUNIT_ALL_TESTS
+	depends on KUNIT_FTRACE_STUBS
+	depends on CROS_EC_SPI
+	help
+	  Kunit tests for ChromeOS EC over SPI.
+
 endif # CHROMEOS_PLATFORMS

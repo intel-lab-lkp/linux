@@ -45,3 +45,4 @@ obj-$(CONFIG_WILCO_EC)			+= wilco_ec/
 obj-$(CONFIG_CROS_KUNIT_EC_PROTO_TEST)	+= cros_kunit_proto_test.o
 cros_kunit_proto_test-objs		:= cros_ec_proto_test_util.o cros_ec_proto_test.o
 obj-$(CONFIG_CROS_KUNIT_EC_I2C_TEST)	+= cros_ec_i2c_test.o
+obj-$(CONFIG_CROS_KUNIT_EC_SPI_TEST)	+= cros_ec_spi_test.o
