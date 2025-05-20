@@ -71,15 +71,17 @@ extern const struct qstr dotdot_name;
  */
 #ifdef CONFIG_64BIT
 # define DNAME_INLINE_WORDS 5 /* 192 bytes */
+# define DNAME_INLINE_LEN 40
 #else
 # ifdef CONFIG_SMP
 #  define DNAME_INLINE_WORDS 9 /* 128 bytes */
+#  define DNAME_INLINE_LEN 36
 # else
 #  define DNAME_INLINE_WORDS 11 /* 128 bytes */
+#  define DNAME_INLINE_LEN 44
 # endif
 #endif
 
-#define DNAME_INLINE_LEN (DNAME_INLINE_WORDS*sizeof(unsigned long))
 
 union shortname_store {
 	unsigned char string[DNAME_INLINE_LEN];
