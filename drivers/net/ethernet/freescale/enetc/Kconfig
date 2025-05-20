@@ -16,7 +16,7 @@ config NXP_ENETC_PF_COMMON
 	  If compiled as module (M), the module name is nxp-enetc-pf-common.
 
 config NXP_NETC_LIB
-	tristate
+	bool
 	help
 	  This module provides common functionalities for both ENETC and NETC
 	  Switch, such as NETC Table Management Protocol (NTMP) 2.0, common tc
