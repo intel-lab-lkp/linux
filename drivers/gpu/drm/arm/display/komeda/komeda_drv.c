@@ -4,6 +4,7 @@
  * Author: James.Qian.Wang <james.qian.wang@arm.com>
  *
  */
+#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
@@ -19,6 +20,55 @@ struct komeda_drv {
 	struct komeda_dev *mdev;
 	struct komeda_kms_dev *kms;
 };
+
+static ssize_t
+aclk_hz_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct komeda_dev *mdev = dev_to_mdev(dev);
+
+	return sysfs_emit(buf, "%lu\n", clk_get_rate(mdev->aclk));
+}
+static DEVICE_ATTR_RO(aclk_hz);
+
+static ssize_t
+config_id_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct komeda_dev *mdev = dev_to_mdev(dev);
+	struct komeda_pipeline *pipe = mdev->pipelines[0];
+	union komeda_config_id config_id;
+	int i;
+
+	memset(&config_id, 0, sizeof(config_id));
+
+	config_id.max_line_sz = pipe->layers[0]->hsize_in.end;
+	config_id.n_pipelines = mdev->n_pipelines;
+	config_id.n_scalers = pipe->n_scalers;
+	config_id.n_layers = pipe->n_layers;
+	config_id.n_richs = 0;
+	for (i = 0; i < pipe->n_layers; i++) {
+		if (pipe->layers[i]->layer_type == KOMEDA_FMT_RICH_LAYER)
+			config_id.n_richs++;
+	}
+	return sysfs_emit(buf, "0x%08x\n", config_id.value);
+}
+static DEVICE_ATTR_RO(config_id);
+
+static ssize_t
+core_id_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct komeda_dev *mdev = dev_to_mdev(dev);
+
+	return sysfs_emit(buf, "0x%08x\n", mdev->chip.core_id);
+}
+static DEVICE_ATTR_RO(core_id);
+
+static struct attribute *komeda_sysfs_attrs[] = {
+	&dev_attr_aclk_hz.attr,
+	&dev_attr_config_id.attr,
+	&dev_attr_core_id.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(komeda_sysfs);
 
 struct komeda_dev *dev_to_mdev(struct device *dev)
 {
@@ -158,6 +208,7 @@ static struct platform_driver komeda_platform_driver = {
 	.driver	= {
 		.name = "komeda",
 		.of_match_table	= komeda_of_match,
+		.dev_groups	= komeda_sysfs_groups,
 		.pm = &komeda_pm_ops,
 	},
 };

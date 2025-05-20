@@ -53,58 +53,6 @@ static void komeda_debugfs_init(struct komeda_dev *mdev)
 			   &mdev->err_verbosity);
 }
 
-static ssize_t
-core_id_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct komeda_dev *mdev = dev_to_mdev(dev);
-
-	return sysfs_emit(buf, "0x%08x\n", mdev->chip.core_id);
-}
-static DEVICE_ATTR_RO(core_id);
-
-static ssize_t
-config_id_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct komeda_dev *mdev = dev_to_mdev(dev);
-	struct komeda_pipeline *pipe = mdev->pipelines[0];
-	union komeda_config_id config_id;
-	int i;
-
-	memset(&config_id, 0, sizeof(config_id));
-
-	config_id.max_line_sz = pipe->layers[0]->hsize_in.end;
-	config_id.n_pipelines = mdev->n_pipelines;
-	config_id.n_scalers = pipe->n_scalers;
-	config_id.n_layers = pipe->n_layers;
-	config_id.n_richs = 0;
-	for (i = 0; i < pipe->n_layers; i++) {
-		if (pipe->layers[i]->layer_type == KOMEDA_FMT_RICH_LAYER)
-			config_id.n_richs++;
-	}
-	return sysfs_emit(buf, "0x%08x\n", config_id.value);
-}
-static DEVICE_ATTR_RO(config_id);
-
-static ssize_t
-aclk_hz_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct komeda_dev *mdev = dev_to_mdev(dev);
-
-	return sysfs_emit(buf, "%lu\n", clk_get_rate(mdev->aclk));
-}
-static DEVICE_ATTR_RO(aclk_hz);
-
-static struct attribute *komeda_sysfs_entries[] = {
-	&dev_attr_core_id.attr,
-	&dev_attr_config_id.attr,
-	&dev_attr_aclk_hz.attr,
-	NULL,
-};
-
-static struct attribute_group komeda_sysfs_attr_group = {
-	.attrs = komeda_sysfs_entries,
-};
-
 static int komeda_parse_pipe_dt(struct komeda_pipeline *pipe)
 {
 	struct device_node *np = pipe->of_node;
@@ -253,12 +201,6 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 
 	clk_disable_unprepare(mdev->aclk);
 
-	err = sysfs_create_group(&dev->kobj, &komeda_sysfs_attr_group);
-	if (err) {
-		DRM_ERROR("create sysfs group failed.\n");
-		goto err_cleanup;
-	}
-
 	mdev->err_verbosity = KOMEDA_DEV_PRINT_ERR_EVENTS;
 
 	komeda_debugfs_init(mdev);
@@ -277,8 +219,6 @@ void komeda_dev_destroy(struct komeda_dev *mdev)
 	struct device *dev = mdev->dev;
 	const struct komeda_dev_funcs *funcs = mdev->funcs;
 	int i;
-
-	sysfs_remove_group(&dev->kobj, &komeda_sysfs_attr_group);
 
 	debugfs_remove_recursive(mdev->debugfs_root);
 
