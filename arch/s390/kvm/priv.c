@@ -253,29 +253,64 @@ static int try_handle_skey(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static inline void replace_selected_bits(u64 *w, unsigned long mask, unsigned long val)
+{
+	*w = (*w & ~mask) | (val & mask);
+}
+
+struct skeys_ops_state {
+	int reg1;
+	int reg2;
+	u64 *r1;
+	u64 *r2;
+	unsigned long effective;
+	unsigned long absolute;
+};
+
+static void get_regs_rre_ptr(struct kvm_vcpu *vcpu, int *reg1, int *reg2, u64 **r1, u64 **r2)
+{
+	kvm_s390_get_regs_rre(vcpu, reg1, reg2);
+	*r1 = vcpu->run->s.regs.gprs + *reg1;
+	*r2 = vcpu->run->s.regs.gprs + *reg2;
+}
+
+static int skeys_common_checks(struct kvm_vcpu *vcpu, struct skeys_ops_state *state)
+{
+	int rc;
+
+	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE) {
+		rc = kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
+		return rc ? rc : -EAGAIN;
+	}
+
+	rc = try_handle_skey(vcpu);
+	if (rc)
+		return rc;
+
+	get_regs_rre_ptr(vcpu, &state->reg1, &state->reg2, &state->r1, &state->r2);
+
+	state->effective = vcpu->run->s.regs.gprs[state->reg2] & PAGE_MASK;
+	state->effective = kvm_s390_logical_to_effective(vcpu, state->effective);
+	state->absolute = kvm_s390_real_to_abs(vcpu, state->effective);
+
+	return 0;
+}
+
 static int handle_iske(struct kvm_vcpu *vcpu)
 {
-	unsigned long gaddr, vmaddr;
+	struct skeys_ops_state state;
+	unsigned long vmaddr;
 	unsigned char key;
-	int reg1, reg2;
 	bool unlocked;
 	int rc;
 
 	vcpu->stat.instruction_iske++;
 
-	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
-
-	rc = try_handle_skey(vcpu);
+	rc = skeys_common_checks(vcpu, &state);
 	if (rc)
 		return rc != -EAGAIN ? rc : 0;
 
-	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
-
-	gaddr = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
-	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
-	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
-	vmaddr = gfn_to_hva(vcpu->kvm, gpa_to_gfn(gaddr));
+	vmaddr = gfn_to_hva(vcpu->kvm, gpa_to_gfn(state.absolute));
 	if (kvm_is_error_hva(vmaddr))
 		return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 retry:
@@ -296,33 +331,24 @@ retry:
 		return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 	if (rc < 0)
 		return rc;
-	vcpu->run->s.regs.gprs[reg1] &= ~0xff;
-	vcpu->run->s.regs.gprs[reg1] |= key;
+	replace_selected_bits(state.r1, 0xff, key);
 	return 0;
 }
 
 static int handle_rrbe(struct kvm_vcpu *vcpu)
 {
-	unsigned long vmaddr, gaddr;
-	int reg1, reg2;
+	struct skeys_ops_state state;
+	unsigned long vmaddr;
 	bool unlocked;
 	int rc;
 
 	vcpu->stat.instruction_rrbe++;
 
-	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
-
-	rc = try_handle_skey(vcpu);
+	rc = skeys_common_checks(vcpu, &state);
 	if (rc)
 		return rc != -EAGAIN ? rc : 0;
 
-	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
-
-	gaddr = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
-	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
-	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
-	vmaddr = gfn_to_hva(vcpu->kvm, gpa_to_gfn(gaddr));
+	vmaddr = gfn_to_hva(vcpu->kvm, gpa_to_gfn(state.absolute));
 	if (kvm_is_error_hva(vmaddr))
 		return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 retry:
@@ -353,40 +379,28 @@ retry:
 static int handle_sske(struct kvm_vcpu *vcpu)
 {
 	unsigned char m3 = vcpu->arch.sie_block->ipb >> 28;
+	struct skeys_ops_state state;
 	unsigned long start, end;
 	unsigned char key, oldkey;
-	int reg1, reg2;
+	bool nq, mr, mc, mb;
 	bool unlocked;
 	int rc;
 
 	vcpu->stat.instruction_sske++;
 
-	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
+	mb = test_kvm_facility(vcpu->kvm, 8) && (m3 & SSKE_MB);
+	mr = test_kvm_facility(vcpu->kvm, 10) && (m3 & SSKE_MR);
+	mc = test_kvm_facility(vcpu->kvm, 10) && (m3 & SSKE_MC);
+	nq = test_kvm_facility(vcpu->kvm, 14) && (m3 & SSKE_NQ);
 
-	rc = try_handle_skey(vcpu);
+	rc = skeys_common_checks(vcpu, &state);
 	if (rc)
 		return rc != -EAGAIN ? rc : 0;
 
-	if (!test_kvm_facility(vcpu->kvm, 8))
-		m3 &= ~SSKE_MB;
-	if (!test_kvm_facility(vcpu->kvm, 10))
-		m3 &= ~(SSKE_MC | SSKE_MR);
-	if (!test_kvm_facility(vcpu->kvm, 14))
-		m3 &= ~SSKE_NQ;
-
-	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
-
-	key = vcpu->run->s.regs.gprs[reg1] & 0xfe;
-	start = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
-	start = kvm_s390_logical_to_effective(vcpu, start);
-	if (m3 & SSKE_MB) {
-		/* start already designates an absolute address */
-		end = (start + _SEGMENT_SIZE) & ~(_SEGMENT_SIZE - 1);
-	} else {
-		start = kvm_s390_real_to_abs(vcpu, start);
-		end = start + PAGE_SIZE;
-	}
+	/* start already designates an absolute address if MB is set */
+	start = mb ? state.effective : state.absolute;
+	end = mb ? ALIGN(start + 1, _SEGMENT_SIZE) : start + PAGE_SIZE;
+	key = *state.r1 & 0xfe;
 
 	while (start != end) {
 		unsigned long vmaddr = gfn_to_hva(vcpu->kvm, gpa_to_gfn(start));
@@ -396,9 +410,7 @@ static int handle_sske(struct kvm_vcpu *vcpu)
 			return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 
 		mmap_read_lock(current->mm);
-		rc = cond_set_guest_storage_key(current->mm, vmaddr, key, &oldkey,
-						m3 & SSKE_NQ, m3 & SSKE_MR,
-						m3 & SSKE_MC);
+		rc = cond_set_guest_storage_key(current->mm, vmaddr, key, &oldkey, nq, mr, mc);
 
 		if (rc < 0) {
 			rc = fixup_user_fault(current->mm, vmaddr,
@@ -415,23 +427,21 @@ static int handle_sske(struct kvm_vcpu *vcpu)
 		start += PAGE_SIZE;
 	}
 
-	if (m3 & (SSKE_MC | SSKE_MR)) {
-		if (m3 & SSKE_MB) {
+	if (mc || mr) {
+		if (mb) {
 			/* skey in reg1 is unpredictable */
 			kvm_s390_set_psw_cc(vcpu, 3);
 		} else {
 			kvm_s390_set_psw_cc(vcpu, rc);
-			vcpu->run->s.regs.gprs[reg1] &= ~0xff00UL;
-			vcpu->run->s.regs.gprs[reg1] |= (u64) oldkey << 8;
+			replace_selected_bits(state.r1, 0xff00, oldkey << 8);
 		}
 	}
-	if (m3 & SSKE_MB) {
-		if (psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_64BIT)
-			vcpu->run->s.regs.gprs[reg2] &= ~PAGE_MASK;
-		else
-			vcpu->run->s.regs.gprs[reg2] &= ~0xfffff000UL;
+	if (mb) {
 		end = kvm_s390_logical_to_effective(vcpu, end);
-		vcpu->run->s.regs.gprs[reg2] |= end;
+		if (kvm_s390_is_amode_64(vcpu))
+			replace_selected_bits(state.r2, PAGE_MASK, end);
+		else
+			replace_selected_bits(state.r2, 0xfffff000, end);
 	}
 	return 0;
 }
@@ -773,19 +783,14 @@ int kvm_s390_handle_lpsw(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
-static int handle_lpswe(struct kvm_vcpu *vcpu)
+static int handle_lpswe_y(struct kvm_vcpu *vcpu, u8 ar, unsigned long addr)
 {
 	psw_t new_psw;
-	u64 addr;
 	int rc;
-	u8 ar;
-
-	vcpu->stat.instruction_lpswe++;
 
 	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
 		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
 
-	addr = kvm_s390_get_base_disp_s(vcpu, &ar);
 	if (addr & 7)
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
 	rc = read_guest(vcpu, addr, ar, &new_psw, sizeof(new_psw));
@@ -799,9 +804,7 @@ static int handle_lpswe(struct kvm_vcpu *vcpu)
 
 static int handle_lpswey(struct kvm_vcpu *vcpu)
 {
-	psw_t new_psw;
-	u64 addr;
-	int rc;
+	unsigned long addr;
 	u8 ar;
 
 	vcpu->stat.instruction_lpswey++;
@@ -809,22 +812,19 @@ static int handle_lpswey(struct kvm_vcpu *vcpu)
 	if (!test_kvm_facility(vcpu->kvm, 193))
 		return kvm_s390_inject_program_int(vcpu, PGM_OPERATION);
 
-	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
-
 	addr = kvm_s390_get_base_disp_siy(vcpu, &ar);
-	if (addr & 7)
-		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
+	return handle_lpswe_y(vcpu, ar, addr);
+}
 
-	rc = read_guest(vcpu, addr, ar, &new_psw, sizeof(new_psw));
-	if (rc)
-		return kvm_s390_inject_prog_cond(vcpu, rc);
+static int handle_lpswe(struct kvm_vcpu *vcpu)
+{
+	unsigned long addr;
+	u8 ar;
 
-	vcpu->arch.sie_block->gpsw = new_psw;
-	if (!is_valid_psw(&vcpu->arch.sie_block->gpsw))
-		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
+	vcpu->stat.instruction_lpswe++;
 
-	return 0;
+	addr = kvm_s390_get_base_disp_s(vcpu, &ar);
+	return handle_lpswe_y(vcpu, ar, addr);
 }
 
 static int handle_stidp(struct kvm_vcpu *vcpu)
@@ -1043,42 +1043,49 @@ int kvm_s390_handle_b2(struct kvm_vcpu *vcpu)
 static int handle_epsw(struct kvm_vcpu *vcpu)
 {
 	int reg1, reg2;
+	u64 *r1, *r2;
 
 	vcpu->stat.instruction_epsw++;
 
-	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
+	get_regs_rre_ptr(vcpu, &reg1, &reg2, &r1, &r2);
 
 	/* This basically extracts the mask half of the psw. */
-	vcpu->run->s.regs.gprs[reg1] &= 0xffffffff00000000UL;
-	vcpu->run->s.regs.gprs[reg1] |= vcpu->arch.sie_block->gpsw.mask >> 32;
-	if (reg2) {
-		vcpu->run->s.regs.gprs[reg2] &= 0xffffffff00000000UL;
-		vcpu->run->s.regs.gprs[reg2] |=
-			vcpu->arch.sie_block->gpsw.mask & 0x00000000ffffffffUL;
-	}
+	replace_selected_bits(r1, 0xffffffff, vcpu->arch.sie_block->gpsw.mask >> 32);
+	if (reg2)
+		replace_selected_bits(r2, 0xffffffff, vcpu->arch.sie_block->gpsw.mask);
 	return 0;
 }
 
 #define PFMF_RESERVED   0xfffc0101UL
-#define PFMF_SK         0x00020000UL
-#define PFMF_CF         0x00010000UL
-#define PFMF_UI         0x00008000UL
-#define PFMF_FSC        0x00007000UL
-#define PFMF_NQ         0x00000800UL
-#define PFMF_MR         0x00000400UL
-#define PFMF_MC         0x00000200UL
-#define PFMF_KEY        0x000000feUL
+union pfmf_r1 {
+	unsigned long val;
+	struct {
+		unsigned long    :46;
+		unsigned long sk : 1;
+		unsigned long cf : 1;
+		unsigned long ui : 1;
+		unsigned long fsc: 3;
+		unsigned long nq : 1;
+		unsigned long mr : 1;
+		unsigned long mc : 1;
+		unsigned long    : 1;
+		unsigned char skey;
+	} __packed;
+};
+
+static_assert(sizeof(union pfmf_r1) == sizeof(unsigned long));
 
 static int handle_pfmf(struct kvm_vcpu *vcpu)
 {
-	bool mr = false, mc = false, nq;
-	int reg1, reg2;
 	unsigned long start, end;
-	unsigned char key;
+	union pfmf_r1 r1;
+	u64 *dummy, *r2;
+	int reg1, reg2;
 
 	vcpu->stat.instruction_pfmf++;
 
-	kvm_s390_get_regs_rre(vcpu, &reg1, &reg2);
+	get_regs_rre_ptr(vcpu, &reg1, &reg2, &dummy, &r2);
+	r1.val = vcpu->run->s.regs.gprs[reg1];
 
 	if (!test_kvm_facility(vcpu->kvm, 8))
 		return kvm_s390_inject_program_int(vcpu, PGM_OPERATION);
@@ -1086,47 +1093,38 @@ static int handle_pfmf(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
 		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
 
-	if (vcpu->run->s.regs.gprs[reg1] & PFMF_RESERVED)
+	if (r1.val & PFMF_RESERVED)
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
 
 	/* Only provide non-quiescing support if enabled for the guest */
-	if (vcpu->run->s.regs.gprs[reg1] & PFMF_NQ &&
-	    !test_kvm_facility(vcpu->kvm, 14))
+	if (r1.nq && !test_kvm_facility(vcpu->kvm, 14))
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
 
 	/* Only provide conditional-SSKE support if enabled for the guest */
-	if (vcpu->run->s.regs.gprs[reg1] & PFMF_SK &&
-	    test_kvm_facility(vcpu->kvm, 10)) {
-		mr = vcpu->run->s.regs.gprs[reg1] & PFMF_MR;
-		mc = vcpu->run->s.regs.gprs[reg1] & PFMF_MC;
-	}
+	if (!r1.sk || !test_kvm_facility(vcpu->kvm, 10))
+		r1.mr = r1.mc = 0;
 
-	nq = vcpu->run->s.regs.gprs[reg1] & PFMF_NQ;
-	key = vcpu->run->s.regs.gprs[reg1] & PFMF_KEY;
 	start = vcpu->run->s.regs.gprs[reg2] & PAGE_MASK;
 	start = kvm_s390_logical_to_effective(vcpu, start);
 
-	if (vcpu->run->s.regs.gprs[reg1] & PFMF_CF) {
-		if (kvm_s390_check_low_addr_prot_real(vcpu, start))
-			return kvm_s390_inject_prog_irq(vcpu, &vcpu->arch.pgm);
-	}
+	if (r1.cf && kvm_s390_check_low_addr_prot_real(vcpu, start))
+		return kvm_s390_inject_prog_irq(vcpu, &vcpu->arch.pgm);
 
-	switch (vcpu->run->s.regs.gprs[reg1] & PFMF_FSC) {
-	case 0x00000000:
+	switch (r1.fsc) {
+	case 0:
 		/* only 4k frames specify a real address */
 		start = kvm_s390_real_to_abs(vcpu, start);
-		end = (start + PAGE_SIZE) & ~(PAGE_SIZE - 1);
+		end = ALIGN(start + 1, PAGE_SIZE);
 		break;
-	case 0x00001000:
-		end = (start + _SEGMENT_SIZE) & ~(_SEGMENT_SIZE - 1);
+	case 1:
+		end = ALIGN(start + 1, _SEGMENT_SIZE);
 		break;
-	case 0x00002000:
+	case 2:
 		/* only support 2G frame size if EDAT2 is available and we are
 		   not in 24-bit addressing mode */
-		if (!test_kvm_facility(vcpu->kvm, 78) ||
-		    psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_24BIT)
+		if (!test_kvm_facility(vcpu->kvm, 78) || kvm_s390_is_amode_24(vcpu))
 			return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
-		end = (start + _REGION3_SIZE) & ~(_REGION3_SIZE - 1);
+		end = ALIGN(start + 1, _REGION3_SIZE);
 		break;
 	default:
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
@@ -1141,19 +1139,17 @@ static int handle_pfmf(struct kvm_vcpu *vcpu)
 		if (kvm_is_error_hva(vmaddr))
 			return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 
-		if (vcpu->run->s.regs.gprs[reg1] & PFMF_CF) {
-			if (kvm_clear_guest(vcpu->kvm, start, PAGE_SIZE))
-				return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
-		}
+		if (r1.cf && kvm_clear_guest(vcpu->kvm, start, PAGE_SIZE))
+			return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 
-		if (vcpu->run->s.regs.gprs[reg1] & PFMF_SK) {
+		if (r1.sk) {
 			int rc = kvm_s390_skey_check_enable(vcpu);
 
 			if (rc)
 				return rc;
 			mmap_read_lock(current->mm);
-			rc = cond_set_guest_storage_key(current->mm, vmaddr,
-							key, NULL, nq, mr, mc);
+			rc = cond_set_guest_storage_key(current->mm, vmaddr, r1.skey, NULL,
+							r1.nq, r1.mr, r1.mc);
 			if (rc < 0) {
 				rc = fixup_user_fault(current->mm, vmaddr,
 						      FAULT_FLAG_WRITE, &unlocked);
@@ -1169,14 +1165,12 @@ static int handle_pfmf(struct kvm_vcpu *vcpu)
 		}
 		start += PAGE_SIZE;
 	}
-	if (vcpu->run->s.regs.gprs[reg1] & PFMF_FSC) {
-		if (psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_64BIT) {
-			vcpu->run->s.regs.gprs[reg2] = end;
-		} else {
-			vcpu->run->s.regs.gprs[reg2] &= ~0xffffffffUL;
-			end = kvm_s390_logical_to_effective(vcpu, end);
-			vcpu->run->s.regs.gprs[reg2] |= end;
-		}
+	if (r1.fsc) {
+		end = kvm_s390_logical_to_effective(vcpu, end);
+		if (kvm_s390_is_amode_64(vcpu))
+			replace_selected_bits(r2, PAGE_MASK, end);
+		else
+			replace_selected_bits(r2, 0xfffff000, end);
 	}
 	return 0;
 }
@@ -1363,8 +1357,9 @@ int kvm_s390_handle_lctl(struct kvm_vcpu *vcpu)
 	reg = reg1;
 	nr_regs = 0;
 	do {
-		vcpu->arch.sie_block->gcr[reg] &= 0xffffffff00000000ul;
-		vcpu->arch.sie_block->gcr[reg] |= ctl_array[nr_regs++];
+		u64 *cr = vcpu->arch.sie_block->gcr + reg;
+
+		replace_selected_bits(cr, 0xffffffff, ctl_array[nr_regs++]);
 		if (reg == reg3)
 			break;
 		reg = (reg + 1) % 16;

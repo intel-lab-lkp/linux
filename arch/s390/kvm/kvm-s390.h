@@ -22,6 +22,21 @@
 
 #define KVM_S390_UCONTROL_MEMSLOT (KVM_USER_MEM_SLOTS + 0)
 
+static inline bool kvm_s390_is_amode_24(struct kvm_vcpu *vcpu)
+{
+	return psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_24BIT;
+}
+
+static inline bool kvm_s390_is_amode_31(struct kvm_vcpu *vcpu)
+{
+	return psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_31BIT;
+}
+
+static inline bool kvm_s390_is_amode_64(struct kvm_vcpu *vcpu)
+{
+	return psw_bits(vcpu->arch.sie_block->gpsw).eaba == PSW_BITS_AMODE_64BIT;
+}
+
 static inline void kvm_s390_fpu_store(struct kvm_run *run)
 {
 	fpu_stfpc(&run->s.regs.fpc);
