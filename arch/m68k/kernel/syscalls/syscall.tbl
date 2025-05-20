@@ -467,3 +467,4 @@
 465	common	listxattrat			sys_listxattrat
 466	common	removexattrat			sys_removexattrat
 467	common	open_tree_attr			sys_open_tree_attr
+468	common  set_robust_list2		sys_set_robust_list2
