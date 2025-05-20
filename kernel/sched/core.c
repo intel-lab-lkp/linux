@@ -3888,7 +3888,7 @@ bool cpus_share_resources(int this_cpu, int that_cpu)
 	return per_cpu(sd_share_id, this_cpu) == per_cpu(sd_share_id, that_cpu);
 }
 
-static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
+static inline bool ttwu_queue_cond(struct task_struct *p, int cpu, bool def)
 {
 	/* See SCX_OPS_ALLOW_QUEUED_WAKEUP. */
 	if (!scx_allow_ttwu_queue(p))
@@ -3929,18 +3929,19 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
 	if (!cpu_rq(cpu)->nr_running)
 		return true;
 
-	return false;
+	return def;
 }
 
 static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 {
-	if (sched_feat(TTWU_QUEUE) && ttwu_queue_cond(p, cpu)) {
-		sched_clock_cpu(cpu); /* Sync clocks across CPUs */
-		__ttwu_queue_wakelist(p, cpu, wake_flags);
-		return true;
-	}
+	bool def = sched_feat(TTWU_QUEUE_DEFAULT);
 
-	return false;
+	if (!ttwu_queue_cond(p, cpu, def))
+		return false;
+
+	sched_clock_cpu(cpu); /* Sync clocks across CPUs */
+	__ttwu_queue_wakelist(p, cpu, wake_flags);
+	return true;
 }
 
 static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
@@ -3948,7 +3949,7 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	struct rq *rq = cpu_rq(cpu);
 	struct rq_flags rf;
 
-	if (ttwu_queue_wakelist(p, cpu, wake_flags))
+	if (sched_feat(TTWU_QUEUE) && ttwu_queue_wakelist(p, cpu, wake_flags))
 		return;
 
 	rq_lock(rq, &rf);
@@ -4251,7 +4252,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 * scheduling.
 		 */
 		if (smp_load_acquire(&p->on_cpu) &&
-		    ttwu_queue_wakelist(p, task_cpu(p), wake_flags))
+		    sched_feat(TTWU_QUEUE_ON_CPU) &&
+		    ttwu_queue_wakelist(p, task_cpu(p), wake_flags | WF_ON_CPU))
 			break;
 
 		cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
