@@ -789,9 +789,6 @@ int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
 	if (!pat_enabled())
 		return 1;
 
-	if (!range_is_allowed(pfn, size))
-		return 0;
-
 	if (file->f_flags & O_DSYNC)
 		pcm = _PAGE_CACHE_MODE_UC_MINUS;
 
