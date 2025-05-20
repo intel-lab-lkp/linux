@@ -33,3 +33,7 @@ obj-$(CONFIG_KUNIT_EXAMPLE_TEST) +=	kunit-example-test.o
 ifeq ($(CONFIG_KUNIT_FTRACE_STUBS),y)
 kunit-objs +=				ftrace_stub.o
 endif
+
+ifeq ($(CONFIG_KUNIT_KPROBES_STUBS),y)
+kunit-objs +=				kprobes_stub.o
+endif

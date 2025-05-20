@@ -104,4 +104,11 @@ config KUNIT_FTRACE_STUBS
 	  NOTE: this does not work on all architectures (like UML, arm64) and
 	  relies on a lot of magic (see the dependencies list).
 
+config KUNIT_KPROBES_STUBS
+	bool "Support for stubbing out functions in KUnit tests with kprobes"
+	depends on KPROBES
+	help
+	  Builds support for stubbing out functions for the duration of KUnit
+	  test cases or suites using kprobes.
+
 endif # KUNIT
