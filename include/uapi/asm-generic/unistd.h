@@ -852,6 +852,8 @@ __SYSCALL(__NR_removexattrat, sys_removexattrat)
 #define __NR_open_tree_attr 467
 __SYSCALL(__NR_open_tree_attr, sys_open_tree_attr)
 
+#define __NR_set_robust_list2 467
+
 #undef __NR_syscalls
 #define __NR_syscalls 468
 

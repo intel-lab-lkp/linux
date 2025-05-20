@@ -20,6 +20,18 @@
  * the list. There can only be one such pending lock.
  */
 
+#ifdef CONFIG_64BIT
+static inline int robust_list_native_type(void)
+{
+	return ROBUST_LIST_64BIT;
+}
+#else
+static inline int robust_list_native_type(void)
+{
+	return ROBUST_LIST_32BIT;
+}
+#endif
+
 /**
  * sys_set_robust_list() - Set the robust-futex list head of a task
  * @head:	pointer to the list-head
@@ -28,15 +40,61 @@
 SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 		size_t, len)
 {
+	unsigned int type = robust_list_native_type();
+	int ret;
+
 	/*
 	 * The kernel knows only one size for now:
 	 */
 	if (unlikely(len != sizeof(*head)))
 		return -EINVAL;
 
-	current->robust_list = head;
+	ret = do_set_robust_list2(head, current->robust_list_index, type);
+	if (ret < 0)
+		return ret;
+
+	current->robust_list_index = ret;
 
 	return 0;
+}
+
+#define ROBUST_LIST_FLAGS ROBUST_LIST_TYPE_MASK
+
+/*
+ * sys_set_robust_list2()
+ *
+ * When index == -1, create a new list for user. When index >= 0, try to find
+ * the corresponding list and re-set the head there.
+ *
+ * Return values:
+ *  >= 0: success, index of the robust list
+ *  -EINVAL: invalid flags, invalid index
+ *  -ENOENT: requested index no where to be found
+ *  -ENOMEM: error allocating new list
+ *  -ESRCH: too many allocated lists
+ */
+SYSCALL_DEFINE3(set_robust_list2, struct robust_list_head __user *, head,
+		int, index, unsigned int, flags)
+{
+	unsigned int type;
+
+	type = flags & ROBUST_LIST_TYPE_MASK;
+
+	if (index < -1 || index >= ROBUST_LISTS_PER_TASK)
+		return -EINVAL;
+
+	if ((flags & ~ROBUST_LIST_FLAGS) != 0)
+		return -EINVAL;
+
+	if (((uintptr_t) head % sizeof(u32)) != 0)
+		return -EINVAL;
+
+#ifndef CONFIG_64BIT
+	if (type == ROBUST_LIST_64BIT)
+		return -EINVAL;
+#endif
+
+	return do_set_robust_list2(head, index, type);
 }
 
 /**
@@ -52,6 +110,7 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 	struct robust_list_head __user *head;
 	unsigned long ret;
 	struct task_struct *p;
+	int index;
 
 	rcu_read_lock();
 
@@ -68,8 +127,10 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
 		goto err_unlock;
 
-	head = p->robust_list;
+	index = p->robust_list_index;
 	rcu_read_unlock();
+
+	head = get_robust_list2(index, p);
 
 	if (put_user(sizeof(*head), len_ptr))
 		return -EFAULT;
@@ -443,10 +504,19 @@ COMPAT_SYSCALL_DEFINE2(set_robust_list,
 		struct robust_list_head32 __user *, head,
 		compat_size_t, len)
 {
+	unsigned int type = ROBUST_LIST_32BIT;
+	int ret;
+
 	if (unlikely(len != sizeof(*head)))
 		return -EINVAL;
 
-	current->compat_robust_list = head;
+	ret = do_set_robust_list2((struct robust_list_head __user *) head,
+				  current->robust_list_index, type);
+	if (ret < 0)
+		return ret;
+
+	current->robust_list_index = ret;
+
 
 	return 0;
 }
@@ -458,6 +528,7 @@ COMPAT_SYSCALL_DEFINE3(get_robust_list, int, pid,
 	struct robust_list_head32 __user *head;
 	unsigned long ret;
 	struct task_struct *p;
+	int index;
 
 	rcu_read_lock();
 
@@ -474,8 +545,10 @@ COMPAT_SYSCALL_DEFINE3(get_robust_list, int, pid,
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
 		goto err_unlock;
 
-	head = p->compat_robust_list;
+	index = p->compat_robust_list_index;
 	rcu_read_unlock();
+
+	head = (struct robust_list_head32 __user *) get_robust_list2(index, p);
 
 	if (put_user(sizeof(*head), len_ptr))
 		return -EFAULT;
