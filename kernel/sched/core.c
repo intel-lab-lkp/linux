@@ -4309,6 +4309,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		    ttwu_queue_wakelist(p, task_cpu(p), wake_flags))
 			break;
 
+		cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
+
 		/*
 		 * If the owning (remote) CPU is still in the middle of schedule() with
 		 * this task as prev, wait until it's done referencing the task.
@@ -4320,7 +4322,6 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 */
 		smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-		cpu = select_task_rq(p, p->wake_cpu, &wake_flags);
 		if (task_cpu(p) != cpu) {
 			if (p->in_iowait) {
 				delayacct_blkio_end(p);
