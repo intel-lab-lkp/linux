@@ -3997,16 +3997,8 @@ static void nf_tables_rule_release(const struct nft_ctx *ctx, struct nft_rule *r
 	nf_tables_rule_destroy(ctx, rule);
 }
 
-/** nft_chain_validate - loop detection and hook validation
- *
- * @ctx: context containing call depth and base chain
- * @chain: chain to validate
- *
- * Walk through the rules of the given chain and chase all jumps/gotos
- * and set lookups until either the jump limit is hit or all reachable
- * chains have been validated.
- */
-int nft_chain_validate(const struct nft_ctx *ctx, const struct nft_chain *chain)
+static int __nft_chain_validate(const struct nft_ctx *ctx,
+				const struct nft_chain *chain)
 {
 	struct nft_expr *expr, *last;
 	struct nft_rule *rule;
@@ -4037,6 +4029,30 @@ int nft_chain_validate(const struct nft_ctx *ctx, const struct nft_chain *chain)
 
 	return 0;
 }
+
+/** nft_chain_validate - loop detection and hook validation
+ *
+ * @ctx: context containing call depth and base chain
+ * @chain: chain to validate
+ *
+ * Walk through the rules of the given chain and chase all jumps/gotos and set
+ * lookups until either the jump limit is hit or all reachable chains have been
+ * validated.
+ *
+ * This function is called from preparation phase: initial state is SKIP which
+ * means that validation can be skipped entirely. However, in case of a new rule
+ * or set element needs validation, then the NEED state is entered and the
+ * validation is performed from the commit/abort phase. In case this fails, the
+ * transaction is aborted and it is replayed in the DO validation state, then
+ * incremental validation is performed for error reporting.
+ */
+int nft_chain_validate(const struct nft_ctx *ctx, const struct nft_chain *chain)
+{
+	if (ctx->table->validate_state != NFT_VALIDATE_DO)
+		return 0;
+
+	return __nft_chain_validate(ctx, chain);
+}
 EXPORT_SYMBOL_GPL(nft_chain_validate);
 
 static int nft_table_validate(struct net *net, const struct nft_table *table)
@@ -4044,6 +4060,7 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 	struct nft_chain *chain;
 	struct nft_ctx ctx = {
 		.net	= net,
+		.table	= (struct nft_table *)table,
 		.family	= table->family,
 	};
 	int err;
@@ -4053,7 +4070,7 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 			continue;
 
 		ctx.chain = chain;
-		err = nft_chain_validate(&ctx, chain);
+		err = __nft_chain_validate(&ctx, chain);
 		if (err < 0)
 			return err;
 
@@ -11037,15 +11054,24 @@ static int __nf_tables_abort(struct net *net, enum nfnl_abort_action action)
 	struct nft_trans *trans, *next;
 	LIST_HEAD(set_update_list);
 	struct nft_trans_elem *te;
+	struct nft_table *table;
 	struct nft_ctx ctx = {
 		.net = net,
 	};
 	int err = 0;
 
-	if (action == NFNL_ABORT_VALIDATE) {
+	switch (action) {
+	case NFNL_ABORT_NONE:
+		list_for_each_entry(table, &nft_net->tables, list)
+			nft_validate_state_update(table, NFT_VALIDATE_SKIP);
+		break;
+	case NFNL_ABORT_AUTOLOAD:
+		break;
+	case NFNL_ABORT_VALIDATE:
 		err = nf_tables_validate(net);
 		if (err < 0 && err != -EINTR)
 			err = -EAGAIN;
+		break;
 	}
 
 	list_for_each_entry_safe_reverse(trans, next, &nft_net->commit_list,
