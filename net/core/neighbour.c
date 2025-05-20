@@ -1517,7 +1517,7 @@ out:
 	return rc;
 out_kfree_skb:
 	rc = -EINVAL;
-	kfree_skb(skb);
+	kfree_skb_reason(skb, SKB_DROP_REASON_NEIGH_HH_FILLFAIL);
 	goto out;
 }
 EXPORT_SYMBOL(neigh_resolve_output);
