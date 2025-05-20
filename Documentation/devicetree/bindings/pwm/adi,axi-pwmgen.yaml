@@ -16,8 +16,7 @@ description:
 
   https://analogdevicesinc.github.io/hdl/library/axi_pwm_gen/index.html
 
-allOf:
-  - $ref: pwm.yaml#
+$ref: pwm.yaml#
 
 properties:
   compatible:
@@ -30,7 +29,13 @@ properties:
     const: 3
 
   clocks:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: axi
+      - const: ext
 
 required:
   - reg
@@ -38,11 +43,24 @@ required:
 
 unevaluatedProperties: false
 
+allOf:
+  - if:
+      required: [clock-names]
+    then:
+      properties:
+        clocks:
+          minItems: 2
+    else:
+      properties:
+        clocks:
+          maxItems: 1
+
 examples:
   - |
     pwm@44b00000 {
         compatible = "adi,axi-pwmgen-2.00.a";
         reg = <0x44b00000 0x1000>;
-        clocks = <&spi_clk>;
+        clocks = <&fpga_clk>, <&spi_clk>;
+        clock-names = "axi", "ext";
         #pwm-cells = <3>;
     };
