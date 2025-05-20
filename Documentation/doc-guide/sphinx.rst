@@ -46,7 +46,8 @@ or ``virtualenv``, depending on how your distribution packaged Python 3.
 
    #) It is recommended to use the RTD theme for html output. Depending
       on the Sphinx version, it should be installed separately,
-      with ``pip install sphinx_rtd_theme``.
+      with ``pip install sphinx_rtd_theme``. You can then pass
+      ``DOCS_THEME=sphinx_rtd_theme`` in your Makeflags to use it.
 
 In summary, if you want to install the latest version of Sphinx, you
 should do::
