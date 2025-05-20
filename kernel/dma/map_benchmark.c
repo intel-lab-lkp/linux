@@ -196,6 +196,55 @@ out:
 	return ret;
 }
 
+static int validate_benchmark_params(struct map_benchmark_data *map)
+{
+	if (map->bparam.threads == 0 ||
+	    map->bparam.threads > DMA_MAP_MAX_THREADS) {
+		pr_err("invalid thread number\n");
+		return -EINVAL;
+	}
+
+	if (map->bparam.seconds == 0 ||
+	    map->bparam.seconds > DMA_MAP_MAX_SECONDS) {
+		pr_err("invalid duration seconds\n");
+		return -EINVAL;
+	}
+
+	if (map->bparam.dma_trans_ns > DMA_MAP_MAX_TRANS_DELAY) {
+		pr_err("invalid transmission delay\n");
+		return -EINVAL;
+	}
+
+	if (map->bparam.node != NUMA_NO_NODE &&
+	    (map->bparam.node < 0 || map->bparam.node >= MAX_NUMNODES ||
+	     !node_possible(map->bparam.node))) {
+		pr_err("invalid numa node\n");
+		return -EINVAL;
+	}
+
+	if (map->bparam.granule < 1 || map->bparam.granule > 1024) {
+		pr_err("invalid granule size\n");
+		return -EINVAL;
+	}
+
+	switch (map->bparam.dma_dir) {
+	case DMA_MAP_BIDIRECTIONAL:
+		map->dir = DMA_BIDIRECTIONAL;
+		break;
+	case DMA_MAP_FROM_DEVICE:
+		map->dir = DMA_FROM_DEVICE;
+		break;
+	case DMA_MAP_TO_DEVICE:
+		map->dir = DMA_TO_DEVICE;
+		break;
+	default:
+		pr_err("invalid DMA direction\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static long map_benchmark_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
@@ -207,54 +256,13 @@ static long map_benchmark_ioctl(struct file *file, unsigned int cmd,
 	if (copy_from_user(&map->bparam, argp, sizeof(map->bparam)))
 		return -EFAULT;
 
+	ret = validate_benchmark_params(map);
+	if (ret)
+		return ret;
+
 	switch (cmd) {
 	case DMA_MAP_BENCHMARK:
-		if (map->bparam.threads == 0 ||
-		    map->bparam.threads > DMA_MAP_MAX_THREADS) {
-			pr_err("invalid thread number\n");
-			return -EINVAL;
-		}
-
-		if (map->bparam.seconds == 0 ||
-		    map->bparam.seconds > DMA_MAP_MAX_SECONDS) {
-			pr_err("invalid duration seconds\n");
-			return -EINVAL;
-		}
-
-		if (map->bparam.dma_trans_ns > DMA_MAP_MAX_TRANS_DELAY) {
-			pr_err("invalid transmission delay\n");
-			return -EINVAL;
-		}
-
-		if (map->bparam.node != NUMA_NO_NODE &&
-		    (map->bparam.node < 0 || map->bparam.node >= MAX_NUMNODES ||
-		     !node_possible(map->bparam.node))) {
-			pr_err("invalid numa node\n");
-			return -EINVAL;
-		}
-
-		if (map->bparam.granule < 1 || map->bparam.granule > 1024) {
-			pr_err("invalid granule size\n");
-			return -EINVAL;
-		}
-
-		switch (map->bparam.dma_dir) {
-		case DMA_MAP_BIDIRECTIONAL:
-			map->dir = DMA_BIDIRECTIONAL;
-			break;
-		case DMA_MAP_FROM_DEVICE:
-			map->dir = DMA_FROM_DEVICE;
-			break;
-		case DMA_MAP_TO_DEVICE:
-			map->dir = DMA_TO_DEVICE;
-			break;
-		default:
-			pr_err("invalid DMA direction\n");
-			return -EINVAL;
-		}
-
 		old_dma_mask = dma_get_mask(map->dev);
-
 		ret = dma_set_mask(map->dev,
 				   DMA_BIT_MASK(map->bparam.dma_bits));
 		if (ret) {
@@ -263,6 +271,7 @@ static long map_benchmark_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 
+		/* Run streaming DMA benchmark */
 		ret = do_map_benchmark(map);
 
 		/*
