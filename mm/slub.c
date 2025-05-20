@@ -2084,7 +2084,7 @@ prepare_slab_obj_exts_hook(struct kmem_cache *s, gfp_t flags, void *p)
 
 	slab = virt_to_slab(p);
 	if (!slab_obj_exts(slab) &&
-	    WARN(alloc_slab_obj_exts(slab, s, flags, false),
+	    WARN_ONCE(alloc_slab_obj_exts(slab, s, flags, false),
 		 "%s, %s: Failed to create slab extension vector!\n",
 		 __func__, s->name))
 		return NULL;
