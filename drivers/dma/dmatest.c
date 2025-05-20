@@ -92,6 +92,8 @@ static bool polled;
 module_param(polled, bool, 0644);
 MODULE_PARM_DESC(polled, "Use polling for completion instead of interrupts");
 
+static DEFINE_MUTEX(stats_mutex);
+
 /**
  * struct dmatest_params - test parameters.
  * @nobounce:		prevent using swiotlb buffer
@@ -239,6 +241,12 @@ struct dmatest_thread {
 	bool			done;
 	bool			pending;
 	u8			*pq_coefs;
+
+	/* Streaming DMA statistics */
+	unsigned int streaming_tests;
+	unsigned int streaming_failures;
+	unsigned long long streaming_total_len;
+	ktime_t streaming_runtime;
 };
 
 struct dmatest_chan {
@@ -898,6 +906,30 @@ error_unmap:
 	return ret;
 }
 
+static void dmatest_print_detailed_stats(struct dmatest_thread *thread)
+{
+	unsigned long long streaming_iops, streaming_kbs;
+	s64 streaming_runtime_us;
+
+	mutex_lock(&stats_mutex);
+
+	streaming_runtime_us = ktime_to_us(thread->streaming_runtime);
+	streaming_iops = dmatest_persec(streaming_runtime_us, thread->streaming_tests);
+	streaming_kbs = dmatest_KBs(streaming_runtime_us, thread->streaming_total_len);
+
+	pr_info("=== %s: DMA Test Results ===\n", current->comm);
+
+	/* Streaming DMA statistics */
+	pr_info("%s: STREAMINMG DMA: %u tests, %u failures\n",
+		current->comm, thread->streaming_tests, thread->streaming_failures);
+	pr_info("%s: STREAMING DMA: %llu.%02llu iops, %llu KB/s, %lld us total\n",
+		current->comm, FIXPT_TO_INT(streaming_iops), FIXPT_GET_FRAC(streaming_iops),
+		streaming_kbs, streaming_runtime_us);
+
+	pr_info("=== %s: End Results ===\n", current->comm);
+	mutex_unlock(&stats_mutex);
+}
+
 /*
  * This function repeatedly tests DMA transfers of various lengths and
  * offsets for a given operation type until it is told to exit by
@@ -921,19 +953,21 @@ static int dmatest_func(void *data)
 	unsigned int buf_size;
 	u8 align;
 	bool is_memset;
-	unsigned int failed_tests = 0;
-	unsigned int total_tests = 0;
-	ktime_t ktime, start;
+	unsigned int total_iterations = 0;
+	ktime_t start_time, streaming_start;
 	ktime_t filltime = 0;
 	ktime_t comparetime = 0;
-	s64 runtime = 0;
-	unsigned long long total_len = 0;
-	unsigned long long iops = 0;
 	int ret;
 
 	set_freezable();
 	smp_rmb();
 	thread->pending = false;
+
+	/* Initialize statistics */
+	thread->streaming_tests = 0;
+	thread->streaming_failures = 0;
+	thread->streaming_total_len = 0;
+	thread->streaming_runtime = 0;
 
 	/* Setup test parameters and allocate buffers */
 	ret = dmatest_setup_test(thread, &buf_size, &align, &is_memset);
@@ -942,34 +976,39 @@ static int dmatest_func(void *data)
 
 	set_user_nice(current, 10);
 
-	ktime = start = ktime_get();
+	start_time = ktime_get();
 	while (!(kthread_should_stop() ||
-		(params->iterations && total_tests >= params->iterations))) {
+		(params->iterations && total_iterations >= params->iterations))) {
 
+		/* Test streaming DMA path */
+		streaming_start = ktime_get();
 		ret = dmatest_do_dma_test(thread, buf_size, align, is_memset,
-					  &total_tests, &failed_tests, &total_len,
+					  &thread->streaming_tests, &thread->streaming_failures,
+					  &thread->streaming_total_len,
 					  &filltime, &comparetime);
+		thread->streaming_runtime = ktime_add(thread->streaming_runtime,
+						    ktime_sub(ktime_get(), streaming_start));
 		if (ret < 0)
 			break;
+
+		total_iterations++;
 	}
 
-	ktime = ktime_sub(ktime_get(), ktime);
-	ktime = ktime_sub(ktime, comparetime);
-	ktime = ktime_sub(ktime, filltime);
-	runtime = ktime_to_us(ktime);
+	/* Subtract fill and compare time from both paths */
+	thread->streaming_runtime = ktime_sub(thread->streaming_runtime,
+					   ktime_divns(filltime, 2));
+	thread->streaming_runtime = ktime_sub(thread->streaming_runtime,
+					   ktime_divns(comparetime, 2));
 
 	ret = 0;
 	dmatest_cleanup_test(thread);
 
 err_thread_type:
-	iops = dmatest_persec(runtime, total_tests);
-	pr_info("%s: summary %u tests, %u failures %llu.%02llu iops %llu KB/s (%d)\n",
-		current->comm, total_tests, failed_tests,
-		FIXPT_TO_INT(iops), FIXPT_GET_FRAC(iops),
-		dmatest_KBs(runtime, total_len), ret);
+	/* Print detailed statistics */
+	dmatest_print_detailed_stats(thread);
 
 	/* terminate all transfers on specified channels */
-	if (ret || failed_tests)
+	if (ret || (thread->streaming_failures))
 		dmaengine_terminate_sync(chan);
 
 	thread->done = true;
