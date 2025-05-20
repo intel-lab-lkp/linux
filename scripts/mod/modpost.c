@@ -1075,7 +1075,7 @@ static void check_export_symbol(struct module *mod, struct elf_info *elf,
 	label_name = sym_name(elf, label);
 
 	if (!strstarts(label_name, prefix)) {
-		error("%s: .export_symbol section contains strange symbol '%s'\n",
+		warn("%s: .export_symbol section contains strange symbol '%s'\n",
 		      mod->name, label_name);
 		return;
 	}
