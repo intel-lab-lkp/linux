@@ -10,7 +10,9 @@
 #include <linux/device.h>
 #include <linux/clocksource.h>
 #include <linux/init.h>
+#include <linux/log2.h>
 #include <linux/module.h>
+#include <linux/nodemask.h>
 #include <linux/sched.h> /* for spin_unlock_irq() using preempt_count() m68k */
 #include <linux/tick.h>
 #include <linux/kthread.h>
@@ -133,9 +135,12 @@ static u64 suspend_start;
  * under test is not permitted to go below the 500ppm minimum defined
  * by MAX_SKEW_USEC.  This 500ppm minimum may be overridden using the
  * CLOCKSOURCE_WATCHDOG_MAX_SKEW_US Kconfig option.
+ *
+ * If overridden, linearly scale this value by the log2 of the number of
+ * online NUMA nodes for a reasonable upper bound on system latency.
  */
 #ifdef CONFIG_CLOCKSOURCE_WATCHDOG_MAX_SKEW_US
-#define MAX_SKEW_USEC	CONFIG_CLOCKSOURCE_WATCHDOG_MAX_SKEW_US
+#define MAX_SKEW_USEC	(CONFIG_CLOCKSOURCE_WATCHDOG_MAX_SKEW_US * max(ilog2(nr_online_nodes), 1))
 #else
 #define MAX_SKEW_USEC	(125 * WATCHDOG_INTERVAL / HZ)
 #endif
@@ -1195,6 +1200,8 @@ void __clocksource_update_freq_scale(struct clocksource *cs, u32 scale, u32 freq
 	 * comment preceding CONFIG_CLOCKSOURCE_WATCHDOG_MAX_SKEW_US above.
 	 */
 	if (scale && freq && !cs->uncertainty_margin) {
+		pr_info("Using clocksource watchdog maximum skew of %uus\n", MAX_SKEW_USEC);
+
 		cs->uncertainty_margin = NSEC_PER_SEC / (scale * freq);
 		if (cs->uncertainty_margin < 2 * WATCHDOG_MAX_SKEW)
 			cs->uncertainty_margin = 2 * WATCHDOG_MAX_SKEW;
