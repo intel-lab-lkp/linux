@@ -38,7 +38,7 @@ enum {
 struct perf_dlfilter_sample {
 	__u32 size; /* Size of this structure (for compatibility checking) */
 	__u16 ins_lat;		/* Refer PERF_SAMPLE_WEIGHT_TYPE in <linux/perf_event.h> */
-	__u16 p_stage_cyc;	/* Refer PERF_SAMPLE_WEIGHT_TYPE in <linux/perf_event.h> */
+	__u16 p_stage_cyc_or_retire_lat; /* Refer PERF_SAMPLE_WEIGHT_TYPE in <linux/perf_event.h> */
 	__u64 ip;
 	__s32 pid;
 	__s32 tid;

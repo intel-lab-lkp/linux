@@ -202,8 +202,8 @@ static int process_sample_event(const struct perf_tool *tool __maybe_unused,
 	 * latency value will be used. Save the number of samples and the sum of
 	 * retire latency value for each event.
 	 */
-	t->last = sample->retire_lat;
-	update_stats(&t->stats, sample->retire_lat);
+	t->last = sample->p_stage_cyc_or_retire_lat;
+	update_stats(&t->stats, sample->p_stage_cyc_or_retire_lat);
 	mutex_unlock(tpebs_mtx_get());
 	return 0;
 }
