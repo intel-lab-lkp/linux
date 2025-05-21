@@ -31,6 +31,7 @@
 					 * Register Map Offsets for Multi-Chip
 					 * SPI Memory Devices.
 					 */
+#define SFDP_MCHP_SST_ID	0x01bf
 
 #define SFDP_SIGNATURE		0x50444653U
 
@@ -1344,6 +1345,163 @@ out:
 	return ret;
 }
 
+#define SFDP_MCHP_PARAM_TABLE_LEN	28
+#define SFDP_SST26VF064BEUI_ID		0xFF4326BFU
+
+#define SFDP_MCHP_EUI48			0x30
+#define SFDP_MCHP_EUI48_MASK		GENMASK(7, 0)
+#define SFDP_MCHP_EUI48_MAC_LEN		6
+
+#define SFDP_MCHP_EUI64			0x40
+#define SFDP_MCHP_EUI64_MASK		GENMASK(31, 24)
+#define SFDP_MCHP_EUI64_MAC_LEN		8
+
+/**
+ * spi_nor_mchp_sfdp_read_addr()- read callback to copy the EUI-48 or EUI-68
+ *				  Addresses for device that request via NVMEM
+ *
+ * @priv: User context passed to read callbacks.
+ * @offset: Offset within the NVMEM device.
+ * @val: pointer where to fill the ethernet address
+ * @bytes: Length of the NVMEM cell
+ *
+ * Return: 0 on success, -EINVAL  otherwise.
+ */
+static int spi_nor_mchp_sfdp_read_addr(void *priv, unsigned int off,
+				       void *val, size_t bytes)
+{
+	struct spi_nor *nor = priv;
+
+	if (SFDP_MCHP_PARAM_TABLE_LEN == nor->mchp_eui->vendor_param_length) {
+		switch (bytes) {
+		case SFDP_MCHP_EUI48_MAC_LEN:
+			memcpy(val, nor->mchp_eui->ethaddr_eui48, SFDP_MCHP_EUI48_MAC_LEN);
+			break;
+		case SFDP_MCHP_EUI64_MAC_LEN:
+			memcpy(val, nor->mchp_eui->ethaddr_eui64, SFDP_MCHP_EUI64_MAC_LEN);
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * spi_nor_parse_mchp_sfdp() - Parse the Microchip vendor specific parameter table
+ *			       Read and store the EUI-48 and EUI-64 address to
+ *			       struct spi_nor_sst_mchp_eui_info if the addresses are
+ *			       programmed in the SST26VF064BEUI sst flag
+ *
+ * @nor:		pointer to a 'struct spi_nor'
+ * @sccr_header:	pointer to the 'struct sfdp_parameter_header' describing
+ *			the Microchip vendor parameter header length and version.
+ *
+ * Return: 0 on success of if addresses are not programmed, -errno otherwise.
+ */
+static int spi_nor_parse_mchp_sfdp(struct spi_nor *nor,
+				   const struct sfdp_parameter_header *mchp_header)
+{
+	struct nvmem_device *nvmem;
+	struct nvmem_config nvmem_config = { };
+	struct spi_nor_sst_mchp_eui_info *mchp_eui;
+	u32 *dwords, addr, sst_flash_id;
+	size_t len;
+	int ret = 0, size = 0;
+
+	if (SFDP_MCHP_PARAM_TABLE_LEN != mchp_header->length)
+		return -EINVAL;
+
+	addr = SFDP_PARAM_HEADER_PTP(mchp_header);
+	/* Get the SST SPI NOR FLASH ID */
+	ret = spi_nor_read_sfdp_dma_unsafe(nor, addr, sizeof(sst_flash_id),
+					   &sst_flash_id);
+	if (ret < 0)
+		return ret;
+
+	/* Check the SPI NOR FLASH ID */
+	if (le32_to_cpu(sst_flash_id) != SFDP_SST26VF064BEUI_ID)
+		return -EINVAL;
+
+	len = mchp_header->length * sizeof(*dwords);
+	dwords = kmalloc(len, GFP_KERNEL);
+	if (!dwords)
+		return -ENOMEM;
+
+	ret = spi_nor_read_sfdp(nor, addr, len, dwords);
+	if (ret)
+		goto out;
+
+	le32_to_cpu_array(dwords, mchp_header->length);
+
+	mchp_eui = devm_kzalloc(nor->dev, sizeof(*mchp_eui), GFP_KERNEL);
+	if (!mchp_eui) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	if (SFDP_MCHP_EUI48 == FIELD_GET(SFDP_MCHP_EUI48_MASK,
+					 dwords[SFDP_DWORD(25)])) {
+		mchp_eui->ethaddr_eui48 = devm_kcalloc(nor->dev,
+						       SFDP_MCHP_EUI48_MAC_LEN,
+						       sizeof(u8), GFP_KERNEL);
+		if (!mchp_eui->ethaddr_eui48) {
+			ret = -ENOMEM;
+			devm_kfree(nor->dev, mchp_eui);
+			goto out;
+		}
+		memcpy(mchp_eui->ethaddr_eui48, (u8 *)&dwords[SFDP_DWORD(25)] + 1,
+		       SFDP_MCHP_EUI48_MAC_LEN);
+		size = SFDP_MCHP_EUI48_MAC_LEN;
+	}
+
+	if (SFDP_MCHP_EUI64 == FIELD_GET(SFDP_MCHP_EUI64_MASK,
+					 dwords[SFDP_DWORD(26)])) {
+		mchp_eui->ethaddr_eui64 = devm_kcalloc(nor->dev,
+						       SFDP_MCHP_EUI64_MAC_LEN,
+						       sizeof(u8), GFP_KERNEL);
+		if (!mchp_eui->ethaddr_eui64) {
+			ret = -ENOMEM;
+			devm_kfree(nor->dev, mchp_eui->ethaddr_eui48);
+			devm_kfree(nor->dev, mchp_eui);
+			goto out;
+		}
+		memcpy(mchp_eui->ethaddr_eui64, (u8 *)&dwords[SFDP_DWORD(27)],
+		       SFDP_MCHP_EUI64_MAC_LEN);
+		size += SFDP_MCHP_EUI64_MAC_LEN;
+	}
+
+	/*
+	 * Return if SST26VF064BEUI sst flash is not programmed
+	 * with EUI-48 or EUI-64 information
+	 */
+	if (!size) {
+		devm_kfree(nor->dev, mchp_eui);
+		goto out;
+	}
+
+	mchp_eui->vendor_param_length = mchp_header->length;
+	nor->mchp_eui = mchp_eui;
+	nvmem_config.word_size = 1;
+	nvmem_config.stride = 1;
+	nvmem_config.dev = nor->dev;
+	nvmem_config.size = size;
+	nvmem_config.priv = nor;
+	nvmem_config.reg_read = spi_nor_mchp_sfdp_read_addr;
+
+	nvmem = devm_nvmem_register(nor->dev, &nvmem_config);
+	if (IS_ERR(nvmem)) {
+		dev_err(nor->dev, "failed to register NVMEM device: %ld\n",
+			PTR_ERR(nvmem));
+		ret = PTR_ERR(nvmem);
+	}
+
+out:
+	kfree(dwords);
+	return ret;
+}
+
 /**
  * spi_nor_post_sfdp_fixups() - Updates the flash's parameters and settings
  * after SFDP has been parsed. Called only for flashes that define JESD216 SFDP
@@ -1564,6 +1722,9 @@ int spi_nor_parse_sfdp(struct spi_nor *nor)
 			err = spi_nor_parse_sccr_mc(nor, param_header);
 			break;
 
+		case SFDP_MCHP_SST_ID:
+			err = spi_nor_parse_mchp_sfdp(nor, param_header);
+			break;
 		default:
 			break;
 		}

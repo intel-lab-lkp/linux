@@ -339,6 +339,12 @@ struct flash_info;
 struct spi_nor_manufacturer;
 struct spi_nor_flash_parameter;
 
+struct spi_nor_sst_mchp_eui_info {
+	u8 vendor_param_length;
+	u8 *ethaddr_eui48;
+	u8 *ethaddr_eui64;
+};
+
 /**
  * struct spi_nor - Structure for defining the SPI NOR layer
  * @mtd:		an mtd_info structure
@@ -408,6 +414,7 @@ struct spi_nor {
 	u32			flags;
 	enum spi_nor_cmd_ext	cmd_ext_type;
 	struct sfdp		*sfdp;
+	struct spi_nor_sst_mchp_eui_info *mchp_eui;
 	struct dentry		*debugfs_root;
 
 	const struct spi_nor_controller_ops *controller_ops;
