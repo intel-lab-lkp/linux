@@ -888,6 +888,52 @@ static blk_status_t nvme_setup_discard(struct nvme_ns *ns, struct request *req,
 	return BLK_STS_OK;
 }
 
+static inline blk_status_t nvme_setup_copy(struct nvme_ns *ns,
+		struct request *req, struct nvme_command *cmnd)
+{
+	struct nvme_copy_range *range;
+	struct req_iterator iter;
+	struct bio_vec bvec;
+	u16 control = 0;
+	int i = 0;
+
+	static const size_t alloc_size = sizeof(*range) * NVME_COPY_MAX_RANGES;
+
+	if (WARN_ON_ONCE(blk_rq_nr_phys_segments(req) >= NVME_COPY_MAX_RANGES))
+		return BLK_STS_IOERR;
+
+	range = kzalloc(alloc_size, GFP_ATOMIC | __GFP_NOWARN);
+	if (!range)
+		return BLK_STS_RESOURCE;
+
+	if (req->cmd_flags & REQ_FUA)
+	        control |= NVME_RW_FUA;
+	if (req->cmd_flags & REQ_FAILFAST_DEV)
+	        control |= NVME_RW_LR;
+
+	rq_for_each_copy_bvec(bvec, req, iter) {
+		u64 slba = nvme_sect_to_lba(ns->head, bvec.bv_sector);
+		u64 nlb = nvme_sect_to_lba(ns->head, bvec.bv_sectors) - 1;
+
+		range[i].slba = cpu_to_le64(slba);
+		range[i].nlb = cpu_to_le16(nlb);
+	        i++;
+	}
+
+	memset(cmnd, 0, sizeof(*cmnd));
+	cmnd->copy.opcode = nvme_cmd_copy;
+	cmnd->copy.nsid = cpu_to_le32(ns->head->ns_id);
+	cmnd->copy.nr_range = i - 1;
+	cmnd->copy.sdlba = cpu_to_le64(nvme_sect_to_lba(ns->head,
+						blk_rq_pos(req)));
+	cmnd->copy.control = cpu_to_le16(control);
+
+	bvec_set_virt(&req->special_vec, range, alloc_size);
+	req->rq_flags |= RQF_SPECIAL_PAYLOAD;
+
+	return BLK_STS_OK;
+}
+
 static void nvme_set_app_tag(struct request *req, struct nvme_command *cmnd)
 {
 	cmnd->rw.lbat = cpu_to_le16(bio_integrity(req->bio)->app_tag);
@@ -1105,6 +1151,9 @@ blk_status_t nvme_setup_cmd(struct nvme_ns *ns, struct request *req)
 		break;
 	case REQ_OP_DISCARD:
 		ret = nvme_setup_discard(ns, req, cmd);
+		break;
+	case REQ_OP_COPY:
+		ret = nvme_setup_copy(ns, req, cmd);
 		break;
 	case REQ_OP_READ:
 		ret = nvme_setup_rw(ns, req, cmd, nvme_cmd_read);
@@ -2119,6 +2168,15 @@ static bool nvme_update_disk_info(struct nvme_ns *ns, struct nvme_id_ns *id,
 		lim->max_write_zeroes_sectors = UINT_MAX;
 	else
 		lim->max_write_zeroes_sectors = ns->ctrl->max_zeroes_sectors;
+
+	if (ns->ctrl->oncs & NVME_CTRL_ONCS_NVMCPYS && id->mssrl && id->mcl) {
+		u32 mcss = bs * le16_to_cpu(id->mssrl) >> SECTOR_SHIFT;
+		u32 mcs = bs * le32_to_cpu(id->mcl) >> SECTOR_SHIFT;
+
+		lim->max_copy_segment_sectors = mcss;
+		lim->max_copy_sectors = mcs;
+		lim->max_copy_segments = id->msrc + 1;
+	}
 	return valid;
 }
 
@@ -2526,6 +2584,9 @@ static int nvme_update_ns_info(struct nvme_ns *ns, struct nvme_ns_info *info)
 			nvme_init_integrity(ns->head, &lim, info);
 		lim.max_write_streams = ns_lim->max_write_streams;
 		lim.write_stream_granularity = ns_lim->write_stream_granularity;
+		lim.max_copy_segment_sectors = ns_lim->max_copy_segment_sectors;
+		lim.max_copy_sectors = ns_lim->max_copy_sectors;
+		lim.max_copy_segments = ns_lim->max_copy_segments;
 		ret = queue_limits_commit_update(ns->head->disk->queue, &lim);
 
 		set_capacity_and_notify(ns->head->disk, get_capacity(ns->disk));
