@@ -6227,6 +6227,12 @@ retry_avoidcopy:
 
 			folio_put(old_folio);
 			/*
+			 * The pagecache_folio needs to be unlocked to avoid
+			 * deadlock when the child unmaps the folio.
+			 */
+			if (pagecache_folio)
+				folio_unlock(pagecache_folio);
+			/*
 			 * Drop hugetlb_fault_mutex and vma_lock before
 			 * unmapping.  unmapping needs to hold vma_lock
 			 * in write mode.  Dropping vma_lock in read mode
@@ -6823,8 +6829,13 @@ out_put_page:
 out_ptl:
 	spin_unlock(vmf.ptl);
 
+	/*
+	 * hugetlb_wp() might have already unlocked pagecache_folio, so
+	 * skip it if that is the case.
+	 */
 	if (pagecache_folio) {
-		folio_unlock(pagecache_folio);
+		if (folio_test_locked(pagecache_folio))
+			folio_unlock(pagecache_folio);
 		folio_put(pagecache_folio);
 	}
 out_mutex:
