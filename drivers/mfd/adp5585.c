@@ -147,6 +147,13 @@ out_error:
 	return ret;
 }
 
+static void adp5585_osc_disable(void *data)
+{
+	const struct adp5585_dev *adp5585 = data;
+
+	regmap_write(adp5585->regmap, ADP5585_GENERAL_CFG, 0);
+}
+
 static int adp5585_i2c_probe(struct i2c_client *i2c)
 {
 	const struct regmap_config *regmap_config;
@@ -174,6 +181,22 @@ static int adp5585_i2c_probe(struct i2c_client *i2c)
 	if ((id & ADP5585_MAN_ID_MASK) != ADP5585_MAN_ID_VALUE)
 		return dev_err_probe(&i2c->dev, -ENODEV,
 				     "Invalid device ID 0x%02x\n", id);
+
+	/*
+	 * Enable the internal oscillator, as it's shared between multiple
+	 * functions.
+	 *
+	 * As a future improvement, power consumption could possibly be
+	 * decreased in some use cases by enabling and disabling the oscillator
+	 * dynamically based on the needs of the child drivers.
+	 */
+	ret = regmap_set_bits(adp5585->regmap, ADP5585_GENERAL_CFG, ADP5585_OSC_EN);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(&i2c->dev, adp5585_osc_disable, adp5585);
+	if (ret)
+		return ret;
 
 	return adp5585_add_devices(&i2c->dev);
 }
