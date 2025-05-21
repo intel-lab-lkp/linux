@@ -155,3 +155,9 @@ Image Source Control IDs
     is provided as well.
 
     This is a read-only control.
+
+``V4L2_CID_METADATA_LAYOUT (integer)``
+    The metadata layout control defines the metadata layout on the device's data
+    interface for metadata streams. The control is used in conjunction with
+    :ref:`generic metadata formats <media-bus-format-generic-meta>` formats to
+    specify the layout of the data.

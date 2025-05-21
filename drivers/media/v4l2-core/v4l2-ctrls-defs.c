@@ -1160,6 +1160,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_NOTIFY_GAINS:		return "Notify Gains";
 	case V4L2_CID_CFA_PATTERN:		return "Color Filter Array Pattern";
 	case V4L2_CID_CFA_PATTERN_FLIP:		return "CFA Pattern Flip";
+	case V4L2_CID_METADATA_LAYOUT:		return "Metadata Layout";
 
 	/* Image processing controls */
 	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
@@ -1323,6 +1324,12 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		*type = V4L2_CTRL_TYPE_BOOLEAN;
 		*min = 0;
 		*max = *step = 1;
+		break;
+	case V4L2_CID_METADATA_LAYOUT:
+		*type = V4L2_CTRL_TYPE_INTEGER;
+		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
+		*min = 0;
+		*step = 1;
 		break;
 	case V4L2_CID_ROTATE:
 		*type = V4L2_CTRL_TYPE_INTEGER;
