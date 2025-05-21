@@ -3810,8 +3810,13 @@ static int regulator_set_voltage_unlocked(struct regulator *regulator,
 	/* If we're setting the same range as last time the change
 	 * should be a noop (some cpufreq implementations use the same
 	 * voltage for multiple frequencies, for example).
+	 *
+	 * This isn't true for regulator devices with a "max_uV_step"
+	 * constraint, as they can progressively step their voltage with each
+	 * subsequent request.
 	 */
-	if (voltage->min_uV == min_uV && voltage->max_uV == max_uV)
+	if (voltage->min_uV == min_uV && voltage->max_uV == max_uV &&
+	    !rdev->constraints->max_uV_step)
 		goto out;
 
 	/* If we're trying to set a range that overlaps the current voltage,
