@@ -404,10 +404,12 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		}
 		break;
 	case Opt_barrier:
-		if (result.negated)
+		if (result.negated) {
 			btrfs_set_opt(ctx->mount_opt, NOBARRIER);
-		else
+			btrfs_warn(NULL, "turning off barriers, use with care");
+		} else {
 			btrfs_clear_opt(ctx->mount_opt, NOBARRIER);
+		}
 		break;
 	case Opt_thread_pool:
 		if (result.uint_32 == 0) {
@@ -1431,7 +1433,6 @@ static void btrfs_emit_options(struct btrfs_fs_info *info,
 	btrfs_info_if_set(info, old, NODATASUM, "setting nodatasum");
 	btrfs_info_if_set(info, old, SSD, "enabling ssd optimizations");
 	btrfs_info_if_set(info, old, SSD_SPREAD, "using spread ssd allocation scheme");
-	btrfs_info_if_set(info, old, NOBARRIER, "turning off barriers");
 	btrfs_info_if_set(info, old, NOTREELOG, "disabling tree log");
 	btrfs_info_if_set(info, old, NOLOGREPLAY, "disabling log replay at mount time");
 	btrfs_info_if_set(info, old, FLUSHONCOMMIT, "turning on flush-on-commit");
