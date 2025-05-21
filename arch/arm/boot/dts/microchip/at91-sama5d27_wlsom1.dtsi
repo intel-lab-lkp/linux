@@ -210,6 +210,9 @@
 	#size-cells = <0>;
 	phy-mode = "rmii";
 
+	nvmem-cells = <&mac_address_eui48>;
+	nvmem-cell-names = "mac-address";
+
 	ethernet-phy@0 {
 		reg = <0x0>;
 		interrupt-parent = <&pioA>;
@@ -237,6 +240,16 @@
 		spi-tx-bus-width = <4>;
 		m25p,fast-read;
 		status = "disabled";
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_address_eui48: mac-address@0 {
+				reg = <0x0 0x6>;
+			};
+		};
 
 		partitions {
 			compatible = "fixed-partitions";
