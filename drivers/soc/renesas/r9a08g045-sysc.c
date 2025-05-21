@@ -5,10 +5,20 @@
  * Copyright (C) 2024 Renesas Electronics Corp.
  */
 
+#include <linux/array_size.h>
 #include <linux/bits.h>
 #include <linux/init.h>
 
 #include "rz-sysc.h"
+
+static const struct rz_sysc_signal_init_data rzg3s_sysc_signals_init_data[] __initconst = {
+	{
+		.name = "usb-pwrrdy",
+		.offset = 0xd70,
+		.mask = BIT(0),
+		.refcnt_incr_val = 0
+	}
+};
 
 static const struct rz_sysc_soc_id_init_data rzg3s_sysc_soc_id_init_data __initconst = {
 	.family = "RZ/G3S",
@@ -33,4 +43,6 @@ static const struct regmap_config rzg3s_sysc_regmap __initconst = {
 const struct rz_sysc_init_data rzg3s_sysc_init_data __initconst = {
 	.soc_id_init_data = &rzg3s_sysc_soc_id_init_data,
 	.regmap_cfg = &rzg3s_sysc_regmap,
+	.signals_init_data = rzg3s_sysc_signals_init_data,
+	.num_signals = ARRAY_SIZE(rzg3s_sysc_signals_init_data),
 };
