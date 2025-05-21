@@ -18,7 +18,7 @@
 #include "virtio_pci_common.h"
 
 /* virtio config->get_features() implementation */
-static u64 vp_get_features(struct virtio_device *vdev)
+static virtio_features_t vp_get_features(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 

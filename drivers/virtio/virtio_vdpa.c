@@ -409,7 +409,7 @@ err_setup_vq:
 	return err;
 }
 
-static u64 virtio_vdpa_get_features(struct virtio_device *vdev)
+static virtio_features_t virtio_vdpa_get_features(struct virtio_device *vdev)
 {
 	struct vdpa_device *vdpa = vd_get_vdpa(vdev);
 	const struct vdpa_config_ops *ops = vdpa->config;

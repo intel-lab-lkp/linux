@@ -22,7 +22,7 @@
 
 #define VIRTIO_AVQ_SGS_MAX	4
 
-static u64 vp_get_features(struct virtio_device *vdev)
+static virtio_features_t vp_get_features(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 
@@ -353,7 +353,8 @@ static void vp_modern_avq_cleanup(struct virtio_device *vdev)
 	}
 }
 
-static void vp_transport_features(struct virtio_device *vdev, u64 features)
+static void vp_transport_features(struct virtio_device *vdev,
+				  virtio_features_t features)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct pci_dev *pci_dev = vp_dev->pci_dev;
@@ -409,7 +410,7 @@ static int vp_check_common_size(struct virtio_device *vdev)
 static int vp_finalize_features(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
-	u64 features = vdev->features;
+	virtio_features_t features = vdev->features;
 
 	/* Give virtio_ring a chance to accept features. */
 	vring_transport_features(vdev);

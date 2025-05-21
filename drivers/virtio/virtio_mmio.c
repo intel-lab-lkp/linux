@@ -106,10 +106,10 @@ struct virtio_mmio_vq_info {
 
 /* Configuration interface */
 
-static u64 vm_get_features(struct virtio_device *vdev)
+static virtio_features_t vm_get_features(struct virtio_device *vdev)
 {
 	struct virtio_mmio_device *vm_dev = to_virtio_mmio_device(vdev);
-	u64 features;
+	virtio_features_t features;
 
 	writel(1, vm_dev->base + VIRTIO_MMIO_DEVICE_FEATURES_SEL);
 	features = readl(vm_dev->base + VIRTIO_MMIO_DEVICE_FEATURES);
