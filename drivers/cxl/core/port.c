@@ -1740,7 +1740,7 @@ static int cxl_switch_port_dport_setup(struct cxl_port *port,
 	if (IS_ERR(dport))
 		return PTR_ERR(dport);
 
-	cxl_switch_parse_cdat(port);
+	cxl_switch_parse_cdat(dport);
 
 	/* Make sure that no decoders have been allocated before proceeding. */
 	if (ida_is_empty(&port->decoder_ida))
