@@ -168,7 +168,7 @@ static ssize_t emit_target_list(struct cxl_switch_decoder *cxlsd, char *buf)
 
 		if (i + 1 < cxld->interleave_ways)
 			next = cxlsd->target[i + 1];
-		rc = sysfs_emit_at(buf, offset, "%d%s", dport->port_id,
+		rc = sysfs_emit_at(buf, offset, "%d%s", dport->id,
 				   next ? "," : "");
 		if (rc < 0)
 			return rc;
@@ -748,6 +748,7 @@ static struct cxl_port *cxl_port_alloc(struct device *uport_dev,
 		dev->parent = uport_dev;
 
 	ida_init(&port->decoder_ida);
+	ida_init(&port->dport_ida);
 	port->hdm_end = -1;
 	port->commit_end = -1;
 	xa_init(&port->dports);
@@ -1053,14 +1054,14 @@ void put_cxl_root(struct cxl_root *cxl_root)
 }
 EXPORT_SYMBOL_NS_GPL(put_cxl_root, "CXL");
 
-static struct cxl_dport *find_dport(struct cxl_port *port, int id)
+static struct cxl_dport *find_dport_by_num(struct cxl_port *port, int port_num)
 {
 	struct cxl_dport *dport;
 	unsigned long index;
 
 	device_lock_assert(&port->dev);
 	xa_for_each(&port->dports, index, dport)
-		if (dport->port_id == id)
+		if (dport->port_num == port_num)
 			return dport;
 	return NULL;
 }
@@ -1071,11 +1072,11 @@ static int add_dport(struct cxl_port *port, struct cxl_dport *dport)
 	int rc;
 
 	device_lock_assert(&port->dev);
-	dup = find_dport(port, dport->port_id);
+	dup = find_dport_by_num(port, dport->port_num);
 	if (dup) {
 		dev_err(&port->dev,
-			"unable to add dport%d-%s non-unique port id (%s)\n",
-			dport->port_id, dev_name(dport->dport_dev),
+			"unable to add dport%d-%s non-unique port num (%s)\n",
+			dport->port_num, dev_name(dport->dport_dev),
 			dev_name(dup->dport_dev));
 		return -EBUSY;
 	}
@@ -1123,13 +1124,43 @@ static void cxl_dport_unlink(void *data)
 	struct cxl_port *port = dport->port;
 	char link_name[CXL_TARGET_STRLEN];
 
-	sprintf(link_name, "dport%d", dport->port_id);
+	sprintf(link_name, "dport%d", dport->id);
 	sysfs_remove_link(&port->dev.kobj, link_name);
+}
+
+static void free_dport(void *data)
+{
+	struct cxl_dport *dport = data;
+	struct cxl_port *port = dport->port;
+
+	ida_free(&port->dport_ida, dport->id);
+	kfree(dport);
+}
+
+static struct cxl_dport *cxl_alloc_dport(struct cxl_port *port,
+					 struct device *dport_dev)
+{
+	int id;
+
+	struct cxl_dport *dport __free(kfree) =
+		kzalloc(sizeof(*dport), GFP_KERNEL);
+	if (!dport)
+		return NULL;
+
+	id = ida_alloc(&port->dport_ida, GFP_KERNEL);
+	if (id < 0)
+		return NULL;
+
+	dport->dport_dev = dport_dev;
+	dport->port = port;
+	dport->id = id;
+
+	return no_free_ptr(dport);
 }
 
 static struct cxl_dport *
 __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
-		     int port_id, resource_size_t component_reg_phys,
+		     int port_num, resource_size_t component_reg_phys,
 		     resource_size_t rcrb)
 {
 	char link_name[CXL_TARGET_STRLEN];
@@ -1148,17 +1179,19 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 		return ERR_PTR(-ENXIO);
 	}
 
-	if (snprintf(link_name, CXL_TARGET_STRLEN, "dport%d", port_id) >=
-	    CXL_TARGET_STRLEN)
-		return ERR_PTR(-EINVAL);
-
-	dport = devm_kzalloc(host, sizeof(*dport), GFP_KERNEL);
+	dport = cxl_alloc_dport(port, dport_dev);
 	if (!dport)
 		return ERR_PTR(-ENOMEM);
 
-	dport->dport_dev = dport_dev;
-	dport->port_id = port_id;
-	dport->port = port;
+	rc = devm_add_action_or_reset(&port->dev, free_dport, dport);
+	if (rc)
+		return ERR_PTR(rc);
+
+	if (snprintf(link_name, CXL_TARGET_STRLEN, "dport%d", dport->id) >=
+	    CXL_TARGET_STRLEN)
+		return ERR_PTR(-EINVAL);
+
+	dport->port_num = port_num;
 
 	if (rcrb == CXL_RESOURCE_NONE) {
 		rc = cxl_dport_setup_regs(&port->dev, dport,
@@ -1220,7 +1253,7 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
  * devm_cxl_add_dport - append VH downstream port data to a cxl_port
  * @port: the cxl_port that references this dport
  * @dport_dev: firmware or PCI device representing the dport
- * @port_id: identifier for this dport in a decoder's target list
+ * @port_num: hardware identifier for this dport in a decoder's target list
  * @component_reg_phys: optional location of CXL component registers
  *
  * Note that dports are appended to the devm release action's of the
@@ -1228,12 +1261,12 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
  * switch ports)
  */
 struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
-				     struct device *dport_dev, int port_id,
+				     struct device *dport_dev, int port_num,
 				     resource_size_t component_reg_phys)
 {
 	struct cxl_dport *dport;
 
-	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
+	dport = __devm_cxl_add_dport(port, dport_dev, port_num,
 				     component_reg_phys, CXL_RESOURCE_NONE);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add dport to %s: %ld\n",
@@ -1251,13 +1284,13 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport, "CXL");
  * devm_cxl_add_rch_dport - append RCH downstream port data to a cxl_port
  * @port: the cxl_port that references this dport
  * @dport_dev: firmware or PCI device representing the dport
- * @port_id: identifier for this dport in a decoder's target list
+ * @port_num: hardware identifier for this dport in a decoder's target list
  * @rcrb: mandatory location of a Root Complex Register Block
  *
  * See CXL 3.0 9.11.8 CXL Devices Attached to an RCH
  */
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
-					 struct device *dport_dev, int port_id,
+					 struct device *dport_dev, int port_num,
 					 resource_size_t rcrb)
 {
 	struct cxl_dport *dport;
@@ -1267,7 +1300,7 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 		return ERR_PTR(-EINVAL);
 	}
 
-	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
+	dport = __devm_cxl_add_dport(port, dport_dev, port_num,
 				     CXL_RESOURCE_NONE, rcrb);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add RCH dport to %s: %ld\n",
@@ -1464,7 +1497,7 @@ static void reap_dports(struct cxl_port *port)
 	xa_for_each(&port->dports, index, dport) {
 		devm_release_action(&port->dev, cxl_dport_unlink, dport);
 		devm_release_action(&port->dev, cxl_dport_remove, dport);
-		devm_kfree(&port->dev, dport);
+		devm_release_action(&port->dev, free_dport, dport);
 	}
 }
 
@@ -1736,7 +1769,7 @@ static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 
 	guard(rwsem_write)(&cxl_region_rwsem);
 	for (i = 0; i < cxlsd->cxld.interleave_ways; i++) {
-		struct cxl_dport *dport = find_dport(port, target_map[i]);
+		struct cxl_dport *dport = find_dport_by_num(port, target_map[i]);
 
 		if (!dport)
 			return -ENXIO;

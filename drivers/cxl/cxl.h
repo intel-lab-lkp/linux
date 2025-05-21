@@ -583,6 +583,7 @@ struct cxl_dax_region {
  * @regions: cxl_region_ref instances, regions mapped by this port
  * @parent_dport: dport that points to this port in the parent
  * @decoder_ida: allocator for decoder ids
+ * @dport_ida: allocator for dport ids
  * @reg_map: component and ras register mapping parameters
  * @nr_dports: number of entries in @dports
  * @hdm_end: track last allocated HDM decoder instance for allocation ordering
@@ -603,6 +604,7 @@ struct cxl_port {
 	struct xarray regions;
 	struct cxl_dport *parent_dport;
 	struct ida decoder_ida;
+	struct ida dport_ida;
 	struct cxl_register_map reg_map;
 	int nr_dports;
 	int hdm_end;
@@ -655,7 +657,8 @@ struct cxl_rcrb_info {
  * struct cxl_dport - CXL downstream port
  * @dport_dev: PCI bridge or firmware device representing the downstream link
  * @reg_map: component and ras register mapping parameters
- * @port_id: unique hardware identifier for dport in decoder target list
+ * @id: Linux id to enumerate dport instances per port
+ * @port_num: unique hardware identifier for dport in decoder target list
  * @rcrb: Data about the Root Complex Register Block layout
  * @rch: Indicate whether this dport was enumerated in RCH or VH mode
  * @port: reference to cxl_port that contains this downstream port
@@ -667,7 +670,8 @@ struct cxl_rcrb_info {
 struct cxl_dport {
 	struct device *dport_dev;
 	struct cxl_register_map reg_map;
-	int port_id;
+	int id;
+	int port_num;
 	struct cxl_rcrb_info rcrb;
 	bool rch;
 	struct cxl_port *port;
@@ -750,10 +754,10 @@ struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd);
 
 struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
-				     struct device *dport, int port_id,
+				     struct device *dport, int port_num,
 				     resource_size_t component_reg_phys);
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
-					 struct device *dport_dev, int port_id,
+					 struct device *dport_dev, int port_num,
 					 resource_size_t rcrb);
 
 #ifdef CONFIG_PCIEAER_CXL
