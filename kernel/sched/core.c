@@ -1039,6 +1039,19 @@ void wake_q_add(struct wake_q_head *head, struct task_struct *task)
 }
 
 /**
+ * wake_q_add_ret() - queue a wakeup for 'later' waking. record status.
+ */
+bool wake_q_add_ret(struct wake_q_head *head, struct task_struct *task)
+{
+	bool ret = false;
+
+	ret = __wake_q_add(head, task);
+	if (ret)
+		get_task_struct(task);
+	return ret;
+}
+
+/**
  * wake_q_add_safe() - safely queue a wakeup for 'later' waking.
  * @head: the wake_q_head to add @task to
  * @task: the task to queue for 'later' wakeup
@@ -8074,7 +8087,7 @@ static void balance_push(struct rq *rq)
 	 */
 	preempt_disable();
 	raw_spin_rq_unlock(rq);
-	stop_one_cpu_nowait(rq->cpu, __balance_push_cpu_stop, push_task,
+	stop_one_cpu_nowait_rec(rq->cpu, __balance_push_cpu_stop, push_task,
 			    this_cpu_ptr(&push_work));
 	preempt_enable();
 	/*

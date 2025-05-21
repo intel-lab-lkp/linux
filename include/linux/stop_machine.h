@@ -21,18 +21,38 @@ typedef int (*cpu_stop_fn_t)(void *arg);
 
 #ifdef CONFIG_SMP
 
+enum work_state {
+	WORK_INIT = 0,
+	WORK_READY,
+	WORK_QUEUE,
+	WORK_PREP_EXEC,
+};
+
+enum stopper_wakeq_state {
+	WAKEQ_ADD_FAIL = 0,
+	WAKEQ_ADD_OK,
+};
+
+enum work_rec {
+	WORK_NO_REC = 0,
+	WORK_REC,
+};
 struct cpu_stop_work {
 	struct list_head	list;		/* cpu_stopper->works */
 	cpu_stop_fn_t		fn;
 	unsigned long		caller;
 	void			*arg;
 	struct cpu_stop_done	*done;
+	enum work_rec		rec;
+	enum work_state exec_state;
 };
 
 int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg);
 int stop_two_cpus(unsigned int cpu1, unsigned int cpu2, cpu_stop_fn_t fn, void *arg);
 bool stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
 			 struct cpu_stop_work *work_buf);
+bool stop_one_cpu_nowait_rec(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
+			struct cpu_stop_work *work_buf);
 void stop_machine_park(int cpu);
 void stop_machine_unpark(int cpu);
 void stop_machine_yield(const struct cpumask *cpumask);
