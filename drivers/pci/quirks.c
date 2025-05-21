@@ -4205,6 +4205,55 @@ reset_complete:
 	return 0;
 }
 
+#define MSFT_PCIE_RESET_READY_POLL_MS 60000 /* msec */
+#define MICROSOFT_2051_SVC 0xb210
+#define MICROSOFT_2051_MANA_MGMT 0x00b8
+#define MICROSOFT_2051_MANA_MGMT_GFT 0xb290
+
+/* Device specific reset for msft GFT and gdma devices */
+static int msft_pcie_flr(struct pci_dev *dev)
+{
+	if (!pci_wait_for_pending_transaction(dev))
+		pci_err(dev, "timed out waiting for pending transaction; "
+			"performing function level reset anyway\n");
+
+	pcie_capability_set_word(dev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_BCR_FLR);
+
+	if (dev->imm_ready)
+		return 0;
+
+	/*
+	 * Per PCIe r4.0, sec 6.6.2, a device must complete an FLR within
+	 * 100ms, but may silently discard requests while the FLR is in
+	 * progress. However, 100ms is much longer than required for modern
+	 * devices, so we can afford to reduce the timeout to 10ms.
+	 */
+	usleep_range(10000, 10001);
+
+	return pci_dev_wait(dev, "FLR", MSFT_PCIE_RESET_READY_POLL_MS);
+}
+
+/*
+ * msft_pcie_reset_flr - initiate a PCIe function level reset
+ * @dev: device to reset
+ * @probe: if true, return 0 if device can be reset this way
+ *
+ * Initiate a function level reset on @dev.
+ */
+static int msft_pcie_reset_flr(struct pci_dev *dev, bool probe)
+{
+	if (dev->dev_flags & PCI_DEV_FLAGS_NO_FLR_RESET)
+		return -ENOTTY;
+
+	if (!(dev->devcap & PCI_EXP_DEVCAP_FLR))
+		return -ENOTTY;
+
+	if (probe)
+		return 0;
+
+	return msft_pcie_flr(dev);
+}
+
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
 		 reset_intel_82599_sfp_virtfn },
@@ -4220,6 +4269,12 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_chelsio_generic_dev },
 	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HINIC_VF,
 		reset_hinic_vf_dev },
+	{ PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_SVC,
+		msft_pcie_reset_flr},
+	{ PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_MANA_MGMT,
+		msft_pcie_reset_flr},
+	{ PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_MANA_MGMT_GFT,
+		msft_pcie_reset_flr},
 	{ 0 }
 };
 
