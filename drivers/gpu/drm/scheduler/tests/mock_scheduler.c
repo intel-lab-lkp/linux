@@ -35,7 +35,7 @@ drm_mock_sched_entity_new(struct kunit *test,
 	ret = drm_sched_entity_init(&entity->base,
 				    priority,
 				    &drm_sched, 1,
-				    NULL);
+				    NULL, 1);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	entity->test = test;
