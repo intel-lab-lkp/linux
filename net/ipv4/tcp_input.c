@@ -4069,6 +4069,18 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 				      &rexmit);
 	}
 
+	/* On receiving a 3rd-ack, if we never sent a packet via
+	 * the normal means (which counts them), yet there is data
+	 * remaining for retransmit, it was data-on-synack not acked;
+	 * mark the skb for retransmission.
+	 */
+	if (sk->sk_state == TCP_SYN_RECV && tp->segs_out == 0) {
+		struct sk_buff *skb = tcp_rtx_queue_head(sk);
+
+		if (skb)
+			tcp_mark_skb_lost(sk, skb);
+	}
+
 	/* If needed, reset TLP/RTO timer when RACK doesn't set. */
 	if (flag & FLAG_SET_XMIT_TIMER)
 		tcp_set_xmit_timer(sk);
