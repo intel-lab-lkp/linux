@@ -38,6 +38,8 @@ netdev_nl_dev_fill(struct net_device *netdev, struct sk_buff *rsp,
 	u64 xdp_rx_meta = 0;
 	void *hdr;
 
+	netdev_assert_locked(netdev); /* note: rtnl_lock may not be held! */
+
 	hdr = genlmsg_iput(rsp, info);
 	if (!hdr)
 		return -EMSGSIZE;
@@ -122,15 +124,14 @@ int netdev_nl_dev_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (!rsp)
 		return -ENOMEM;
 
-	rtnl_lock();
-
-	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
-	if (netdev)
-		err = netdev_nl_dev_fill(netdev, rsp, info);
-	else
+	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
+	if (!netdev) {
 		err = -ENODEV;
+		goto err_free_msg;
+	}
 
-	rtnl_unlock();
+	err = netdev_nl_dev_fill(netdev, rsp, info);
+	netdev_unlock(netdev);
 
 	if (err)
 		goto err_free_msg;
@@ -146,18 +147,15 @@ int netdev_nl_dev_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct netdev_nl_dump_ctx *ctx = netdev_dump_ctx(cb);
 	struct net *net = sock_net(skb->sk);
-	struct net_device *netdev;
-	int err = 0;
+	int err;
 
-	rtnl_lock();
-	for_each_netdev_dump(net, netdev, ctx->ifindex) {
+	for_each_netdev_lock_scoped(net, netdev, ctx->ifindex) {
 		err = netdev_nl_dev_fill(netdev, skb, genl_info_dump(cb));
 		if (err < 0)
-			break;
+			return err;
 	}
-	rtnl_unlock();
 
-	return err;
+	return 0;
 }
 
 static int
@@ -481,17 +479,14 @@ int netdev_nl_queue_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (!rsp)
 		return -ENOMEM;
 
-	rtnl_lock();
-
-	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
+	netdev = netdev_get_by_index_lock_ops_compat(genl_info_net(info),
+						     ifindex);
 	if (netdev) {
 		err = netdev_nl_queue_fill(rsp, netdev, q_id, q_type, info);
-		netdev_unlock(netdev);
+		netdev_unlock_ops_compat(netdev);
 	} else {
 		err = -ENODEV;
 	}
-
-	rtnl_unlock();
 
 	if (err)
 		goto err_free_msg;
@@ -541,17 +536,17 @@ int netdev_nl_queue_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	if (info->attrs[NETDEV_A_QUEUE_IFINDEX])
 		ifindex = nla_get_u32(info->attrs[NETDEV_A_QUEUE_IFINDEX]);
 
-	rtnl_lock();
 	if (ifindex) {
-		netdev = netdev_get_by_index_lock(net, ifindex);
+		netdev = netdev_get_by_index_lock_ops_compat(net, ifindex);
 		if (netdev) {
 			err = netdev_nl_queue_dump_one(netdev, skb, info, ctx);
-			netdev_unlock(netdev);
+			netdev_unlock_ops_compat(netdev);
 		} else {
 			err = -ENODEV;
 		}
 	} else {
-		for_each_netdev_lock_scoped(net, netdev, ctx->ifindex) {
+		for_each_netdev_lock_ops_compat_scoped(net, netdev,
+						       ctx->ifindex) {
 			err = netdev_nl_queue_dump_one(netdev, skb, info, ctx);
 			if (err < 0)
 				break;
@@ -559,7 +554,6 @@ int netdev_nl_queue_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 			ctx->txq_idx = 0;
 		}
 	}
-	rtnl_unlock();
 
 	return err;
 }
@@ -708,25 +702,66 @@ netdev_nl_stats_by_queue(struct net_device *netdev, struct sk_buff *rsp,
 	return 0;
 }
 
+/**
+ * netdev_stat_queue_sum() - add up queue stats from range of queues
+ * @netdev:	net_device
+ * @rx_start:	index of the first Rx queue to query
+ * @rx_end:	index after the last Rx queue (first *not* to query)
+ * @rx_sum:	output Rx stats, should be already initialized
+ * @tx_start:	index of the first Tx queue to query
+ * @tx_end:	index after the last Tx queue (first *not* to query)
+ * @tx_sum:	output Tx stats, should be already initialized
+ *
+ * Add stats from [start, end) range of queue IDs to *x_sum structs.
+ * The sum structs must be already initialized. Usually this
+ * helper is invoked from the .get_base_stats callbacks of drivers
+ * to account for stats of disabled queues. In that case the ranges
+ * are usually [netdev->real_num_*x_queues, netdev->num_*x_queues).
+ */
+void netdev_stat_queue_sum(struct net_device *netdev,
+			   int rx_start, int rx_end,
+			   struct netdev_queue_stats_rx *rx_sum,
+			   int tx_start, int tx_end,
+			   struct netdev_queue_stats_tx *tx_sum)
+{
+	const struct netdev_stat_ops *ops;
+	struct netdev_queue_stats_rx rx;
+	struct netdev_queue_stats_tx tx;
+	int i;
+
+	ops = netdev->stat_ops;
+
+	for (i = rx_start; i < rx_end; i++) {
+		memset(&rx, 0xff, sizeof(rx));
+		if (ops->get_queue_stats_rx)
+			ops->get_queue_stats_rx(netdev, i, &rx);
+		netdev_nl_stats_add(rx_sum, &rx, sizeof(rx));
+	}
+	for (i = tx_start; i < tx_end; i++) {
+		memset(&tx, 0xff, sizeof(tx));
+		if (ops->get_queue_stats_tx)
+			ops->get_queue_stats_tx(netdev, i, &tx);
+		netdev_nl_stats_add(tx_sum, &tx, sizeof(tx));
+	}
+}
+EXPORT_SYMBOL(netdev_stat_queue_sum);
+
 static int
 netdev_nl_stats_by_netdev(struct net_device *netdev, struct sk_buff *rsp,
 			  const struct genl_info *info)
 {
-	struct netdev_queue_stats_rx rx_sum, rx;
-	struct netdev_queue_stats_tx tx_sum, tx;
-	const struct netdev_stat_ops *ops;
+	struct netdev_queue_stats_rx rx_sum;
+	struct netdev_queue_stats_tx tx_sum;
 	void *hdr;
-	int i;
 
-	ops = netdev->stat_ops;
 	/* Netdev can't guarantee any complete counters */
-	if (!ops->get_base_stats)
+	if (!netdev->stat_ops->get_base_stats)
 		return 0;
 
 	memset(&rx_sum, 0xff, sizeof(rx_sum));
 	memset(&tx_sum, 0xff, sizeof(tx_sum));
 
-	ops->get_base_stats(netdev, &rx_sum, &tx_sum);
+	netdev->stat_ops->get_base_stats(netdev, &rx_sum, &tx_sum);
 
 	/* The op was there, but nothing reported, don't bother */
 	if (!memchr_inv(&rx_sum, 0xff, sizeof(rx_sum)) &&
@@ -739,18 +774,8 @@ netdev_nl_stats_by_netdev(struct net_device *netdev, struct sk_buff *rsp,
 	if (nla_put_u32(rsp, NETDEV_A_QSTATS_IFINDEX, netdev->ifindex))
 		goto nla_put_failure;
 
-	for (i = 0; i < netdev->real_num_rx_queues; i++) {
-		memset(&rx, 0xff, sizeof(rx));
-		if (ops->get_queue_stats_rx)
-			ops->get_queue_stats_rx(netdev, i, &rx);
-		netdev_nl_stats_add(&rx_sum, &rx, sizeof(rx));
-	}
-	for (i = 0; i < netdev->real_num_tx_queues; i++) {
-		memset(&tx, 0xff, sizeof(tx));
-		if (ops->get_queue_stats_tx)
-			ops->get_queue_stats_tx(netdev, i, &tx);
-		netdev_nl_stats_add(&tx_sum, &tx, sizeof(tx));
-	}
+	netdev_stat_queue_sum(netdev, 0, netdev->real_num_rx_queues, &rx_sum,
+			      0, netdev->real_num_tx_queues, &tx_sum);
 
 	if (netdev_nl_stats_write_rx(rsp, &rx_sum) ||
 	    netdev_nl_stats_write_tx(rsp, &tx_sum))
@@ -801,26 +826,31 @@ int netdev_nl_qstats_get_dumpit(struct sk_buff *skb,
 	if (info->attrs[NETDEV_A_QSTATS_IFINDEX])
 		ifindex = nla_get_u32(info->attrs[NETDEV_A_QSTATS_IFINDEX]);
 
-	rtnl_lock();
 	if (ifindex) {
-		netdev = __dev_get_by_index(net, ifindex);
-		if (netdev && netdev->stat_ops) {
+		netdev = netdev_get_by_index_lock_ops_compat(net, ifindex);
+		if (!netdev) {
+			NL_SET_BAD_ATTR(info->extack,
+					info->attrs[NETDEV_A_QSTATS_IFINDEX]);
+			return -ENODEV;
+		}
+		if (netdev->stat_ops) {
 			err = netdev_nl_qstats_get_dump_one(netdev, scope, skb,
 							    info, ctx);
 		} else {
 			NL_SET_BAD_ATTR(info->extack,
 					info->attrs[NETDEV_A_QSTATS_IFINDEX]);
-			err = netdev ? -EOPNOTSUPP : -ENODEV;
+			err = -EOPNOTSUPP;
 		}
-	} else {
-		for_each_netdev_dump(net, netdev, ctx->ifindex) {
-			err = netdev_nl_qstats_get_dump_one(netdev, scope, skb,
-							    info, ctx);
-			if (err < 0)
-				break;
-		}
+		netdev_unlock_ops_compat(netdev);
+		return err;
 	}
-	rtnl_unlock();
+
+	for_each_netdev_lock_ops_compat_scoped(net, netdev, ctx->ifindex) {
+		err = netdev_nl_qstats_get_dump_one(netdev, scope, skb,
+						    info, ctx);
+		if (err < 0)
+			break;
+	}
 
 	return err;
 }
@@ -861,14 +891,17 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 
 	mutex_lock(&priv->lock);
 
+	err = 0;
 	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
-	if (!netdev || !netif_device_present(netdev)) {
+	if (!netdev) {
 		err = -ENODEV;
 		goto err_unlock_sock;
 	}
-
-	if (!netdev_need_ops_lock(netdev)) {
+	if (!netif_device_present(netdev))
+		err = -ENODEV;
+	else if (!netdev_need_ops_lock(netdev))
 		err = -EOPNOTSUPP;
+	if (err) {
 		NL_SET_BAD_ATTR(info->extack,
 				info->attrs[NETDEV_A_DEV_IFINDEX]);
 		goto err_unlock;
@@ -964,10 +997,14 @@ static int netdev_genl_netdevice_event(struct notifier_block *nb,
 
 	switch (event) {
 	case NETDEV_REGISTER:
+		netdev_lock_ops_to_full(netdev);
 		netdev_genl_dev_notify(netdev, NETDEV_CMD_DEV_ADD_NTF);
+		netdev_unlock_full_to_ops(netdev);
 		break;
 	case NETDEV_UNREGISTER:
+		netdev_lock(netdev);
 		netdev_genl_dev_notify(netdev, NETDEV_CMD_DEV_DEL_NTF);
+		netdev_unlock(netdev);
 		break;
 	case NETDEV_XDP_FEAT_CHANGE:
 		netdev_genl_dev_notify(netdev, NETDEV_CMD_DEV_CHANGE_NTF);
