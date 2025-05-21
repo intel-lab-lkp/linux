@@ -133,7 +133,7 @@ struct vhost_virtqueue {
 	struct vhost_iotlb *umem;
 	struct vhost_iotlb *iotlb;
 	void *private_data;
-	u64 acked_features;
+	virtio_features_t acked_features;
 	u64 acked_backend_features;
 	/* Log write descriptors */
 	void __user *log_base;

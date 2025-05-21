@@ -77,6 +77,10 @@ enum {
 			 (1ULL << VIRTIO_F_RING_RESET)
 };
 
+#ifdef VIRTIO_HAS_EXTENDED_FEATURES
+#define VHOST_NET_FEATURES_EX VHOST_NET_FEATURES
+#endif
+
 enum {
 	VHOST_NET_BACKEND_FEATURES = (1ULL << VHOST_BACKEND_F_IOTLB_MSG_V2)
 };
@@ -1614,7 +1618,7 @@ done:
 	return err;
 }
 
-static int vhost_net_set_features(struct vhost_net *n, u64 features)
+static int vhost_net_set_features(struct vhost_net *n, virtio_features_t features)
 {
 	size_t vhost_hlen, sock_hlen, hdr_len;
 	int i;
@@ -1704,6 +1708,26 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 		if (features & ~VHOST_NET_FEATURES)
 			return -EOPNOTSUPP;
 		return vhost_net_set_features(n, features);
+#ifdef VIRTIO_HAS_EXTENDED_FEATURES
+	case VHOST_GET_FEATURES_EX:
+	{
+		virtio_features_t features_ex = VHOST_NET_FEATURES_EX;
+
+		if (copy_to_user(featurep, &features_ex, sizeof(features_ex)))
+			return -EFAULT;
+		return 0;
+	}
+	case VHOST_SET_FEATURES_EX:
+	{
+		virtio_features_t features_ex;
+
+		if (copy_from_user(&features_ex, featurep, sizeof(features_ex)))
+			return -EFAULT;
+		if (features_ex & ~VHOST_NET_FEATURES_EX)
+			return -EOPNOTSUPP;
+		return vhost_net_set_features(n, features_ex);
+	}
+#endif
 	case VHOST_GET_BACKEND_FEATURES:
 		features = VHOST_NET_BACKEND_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof(features)))

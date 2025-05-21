@@ -235,4 +235,12 @@
  */
 #define VHOST_VDPA_GET_VRING_SIZE	_IOWR(VHOST_VIRTIO, 0x82,	\
 					      struct vhost_vring_state)
+
+/* Extended features manipulation
+ */
+#ifdef __SIZEOF_INT128__
+#define VHOST_GET_FEATURES_EX  _IOR(VHOST_VIRTIO, 0x83, __u128)
+#define VHOST_SET_FEATURES_EX  _IOW(VHOST_VIRTIO, 0x83, __u128)
+#endif
+
 #endif
