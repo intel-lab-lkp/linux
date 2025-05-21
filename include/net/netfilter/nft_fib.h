@@ -2,6 +2,7 @@
 #ifndef _NFT_FIB_H_
 #define _NFT_FIB_H_
 
+#include <net/l3mdev.h>
 #include <net/netfilter/nf_tables.h>
 
 struct nft_fib {
@@ -37,6 +38,21 @@ static inline bool nft_fib_can_skip(const struct nft_pktinfo *pkt)
 	       return sk->sk_rx_dst_ifindex == indev->ifindex;
 
 	return nft_fib_is_loopback(pkt->skb, indev);
+}
+
+/**
+ * nft_fib_l3mdev_get_rcu - return ifindex of l3 master device
+ * @pkt: pktinfo container passed to nft_fib_eval function
+ * @iif: input interface, can be NULL
+ *
+ * Return: interface index or 0.
+ */
+static inline int nft_fib_l3mdev_master_ifindex_rcu(const struct nft_pktinfo *pkt,
+						    const struct net_device *iif)
+{
+	const struct net_device *dev = iif ? iif : pkt->skb->dev;
+
+	return l3mdev_master_ifindex_rcu(dev);
 }
 
 int nft_fib_dump(struct sk_buff *skb, const struct nft_expr *expr, bool reset);
