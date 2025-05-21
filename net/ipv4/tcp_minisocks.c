@@ -529,7 +529,7 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	struct inet_connection_sock *newicsk;
 	const struct tcp_sock *oldtp;
 	struct tcp_sock *newtp;
-	u32 seq;
+	u32 seq, a_seq, n_seq;
 
 	if (!newsk)
 		return NULL;
@@ -550,9 +550,55 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	newtp->segs_in = 1;
 
 	seq = treq->snt_isn + 1;
-	newtp->snd_sml = newtp->snd_una = seq;
-	WRITE_ONCE(newtp->snd_nxt, seq);
-	newtp->snd_up = seq;
+	n_seq = seq;
+	a_seq = seq;
+	newtp->write_seq = seq;
+	newtp->snd_una = seq;
+
+	/* If there is write-data sitting on the listen socket, copy it to
+	 * the accept socket. If FASTOPEN we will send it on the synack,
+	 * otherwise it sits there until 3rd-ack arrives.
+	 */
+
+	if (unlikely(!skb_queue_empty(&sk->sk_write_queue))) {
+		struct sk_buff *l_skb = tcp_send_head(sk),
+				*a_skb = tcp_write_queue_tail(newsk);
+		ssize_t copy = 0;
+
+		if (a_skb)
+			copy = l_skb->len - a_skb->len;
+
+		if (copy <= 0 || !tcp_skb_can_collapse_to(a_skb)) {
+			bool first_skb = tcp_rtx_and_write_queues_empty(newsk);
+
+			a_skb = tcp_stream_alloc_skb(newsk,
+						     newsk->sk_allocation,
+						     first_skb);
+			if (!a_skb) {
+				/* is this the correct free? */
+				bh_unlock_sock(newsk);
+				sk_free(newsk);
+				return NULL;
+			}
+
+			tcp_skb_entail(newsk, a_skb);
+		}
+		copy = min_t(int, l_skb->len, skb_tailroom(a_skb));
+		skb_put_data(a_skb, l_skb->data, copy);
+
+		TCP_SKB_CB(a_skb)->end_seq += copy;
+
+		a_seq += l_skb->len;
+
+		if (treq->tfo_listener)
+			seq = a_seq;
+
+		/* assumes only one skb on the listen write queue */
+	}
+
+	newtp->snd_sml = seq;
+	WRITE_ONCE(newtp->snd_nxt, a_seq);
+	newtp->snd_up = n_seq;
 
 	INIT_LIST_HEAD(&newtp->tsq_node);
 	INIT_LIST_HEAD(&newtp->tsorted_sent_queue);
@@ -567,7 +613,9 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	newtp->total_retrans = req->num_retrans;
 
 	tcp_init_xmit_timers(newsk);
-	WRITE_ONCE(newtp->write_seq, newtp->pushed_seq = treq->snt_isn + 1);
+
+	newtp->pushed_seq = n_seq;
+	WRITE_ONCE(newtp->write_seq, a_seq);
 
 	if (sock_flag(newsk, SOCK_KEEPOPEN))
 		tcp_reset_keepalive_timer(newsk, keepalive_time_when(newtp));
