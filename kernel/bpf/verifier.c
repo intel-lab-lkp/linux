@@ -3739,6 +3739,22 @@ static int check_reg_arg(struct bpf_verifier_env *env, u32 regno,
 	return __check_reg_arg(env, state->regs, regno, t);
 }
 
+static int insn_reg_access_flags(bool dreg_stack_ptr, bool sreg_stack_ptr)
+{
+	return (dreg_stack_ptr ? INSN_F_DST_REG_STACK : 0) |
+	       (sreg_stack_ptr ? INSN_F_SRC_REG_STACK : 0);
+}
+
+static bool insn_dreg_stack_ptr(int insn_flags)
+{
+	return !!(insn_flags & INSN_F_DST_REG_STACK);
+}
+
+static bool insn_sreg_stack_ptr(int insn_flags)
+{
+	return !!(insn_flags & INSN_F_SRC_REG_STACK);
+}
+
 static int insn_stack_access_flags(int frameno, int spi)
 {
 	return INSN_F_STACK_ACCESS | (spi << INSN_F_SPI_SHIFT) | frameno;
@@ -4402,6 +4418,8 @@ static int backtrack_insn(struct bpf_verifier_env *env, int idx, int subseq_idx,
 			 */
 			return 0;
 		} else if (BPF_SRC(insn->code) == BPF_X) {
+			bool dreg_precise, sreg_precise;
+
 			if (!bt_is_reg_set(bt, dreg) && !bt_is_reg_set(bt, sreg))
 				return 0;
 			/* dreg <cond> sreg
@@ -4410,8 +4428,16 @@ static int backtrack_insn(struct bpf_verifier_env *env, int idx, int subseq_idx,
 			 * before it would be equally necessary to
 			 * propagate it to dreg.
 			 */
-			bt_set_reg(bt, dreg);
-			bt_set_reg(bt, sreg);
+			if (!hist)
+				return 0;
+			dreg_precise = !insn_dreg_stack_ptr(hist->flags);
+			sreg_precise = !insn_sreg_stack_ptr(hist->flags);
+			if (!dreg_precise && !sreg_precise)
+				return 0;
+			if (dreg_precise)
+				bt_set_reg(bt, dreg);
+			if (sreg_precise)
+				bt_set_reg(bt, sreg);
 		} else if (BPF_SRC(insn->code) == BPF_K) {
 			 /* dreg <cond> K
 			  * Only dreg still needs precision before
@@ -16397,6 +16423,29 @@ static void sync_linked_regs(struct bpf_verifier_state *vstate, struct bpf_reg_s
 	}
 }
 
+static int push_cond_jmp_history(struct bpf_verifier_env *env, struct bpf_verifier_state *state,
+				 struct bpf_reg_state *dst_reg, struct bpf_reg_state *src_reg,
+				 u64 linked_regs)
+{
+	bool dreg_stack_ptr, sreg_stack_ptr;
+	int insn_flags;
+
+	if (!src_reg) {
+		if (linked_regs)
+			return push_insn_history(env, state, 0, linked_regs);
+		return 0;
+	}
+
+	dreg_stack_ptr = dst_reg->type == PTR_TO_STACK;
+	sreg_stack_ptr = src_reg->type == PTR_TO_STACK;
+
+	if (!dreg_stack_ptr && !sreg_stack_ptr && !linked_regs)
+		return 0;
+
+	insn_flags = insn_reg_access_flags(dreg_stack_ptr, sreg_stack_ptr);
+	return push_insn_history(env, state, insn_flags, linked_regs);
+}
+
 static int check_cond_jmp_op(struct bpf_verifier_env *env,
 			     struct bpf_insn *insn, int *insn_idx)
 {
@@ -16500,6 +16549,9 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 		    !sanitize_speculative_path(env, insn, *insn_idx + 1,
 					       *insn_idx))
 			return -EFAULT;
+		err = push_cond_jmp_history(env, this_branch, dst_reg, src_reg, 0);
+		if (err)
+			return err;
 		if (env->log.level & BPF_LOG_LEVEL)
 			print_insn_state(env, this_branch, this_branch->curframe);
 		*insn_idx += insn->off;
@@ -16514,6 +16566,9 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 					       *insn_idx + insn->off + 1,
 					       *insn_idx))
 			return -EFAULT;
+		err = push_cond_jmp_history(env, this_branch, dst_reg, src_reg, 0);
+		if (err)
+			return err;
 		if (env->log.level & BPF_LOG_LEVEL)
 			print_insn_state(env, this_branch, this_branch->curframe);
 		return 0;
@@ -16528,11 +16583,10 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 		collect_linked_regs(this_branch, src_reg->id, &linked_regs);
 	if (dst_reg->type == SCALAR_VALUE && dst_reg->id)
 		collect_linked_regs(this_branch, dst_reg->id, &linked_regs);
-	if (linked_regs.cnt > 1) {
-		err = push_insn_history(env, this_branch, 0, linked_regs_pack(&linked_regs));
-		if (err)
-			return err;
-	}
+	err = push_cond_jmp_history(env, this_branch, dst_reg, src_reg,
+				    linked_regs.cnt > 1 ? linked_regs_pack(&linked_regs) : 0);
+	if (err)
+		return err;
 
 	other_branch = push_stack(env, *insn_idx + insn->off + 1, *insn_idx,
 				  false);
