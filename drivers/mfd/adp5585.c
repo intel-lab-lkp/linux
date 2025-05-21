@@ -17,6 +17,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <linux/types.h>
 
 enum {
@@ -710,6 +711,10 @@ static int adp5585_i2c_probe(struct i2c_client *i2c)
 		return -ENODEV;
 
 	ret = adp5585_fill_variant_config(adp5585, &regmap_config);
+	if (ret)
+		return ret;
+
+	ret = devm_regulator_get_enable(&i2c->dev, "vdd");
 	if (ret)
 		return ret;
 
