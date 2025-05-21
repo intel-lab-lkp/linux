@@ -229,7 +229,7 @@ static void *pidfd_info_pause_thread(void *arg)
 
 	close(ipc_socket);
 
-	/* Sleep untill we're killed. */
+	/* Sleep until we're killed. */
 	pause();
 	return NULL;
 }
@@ -518,7 +518,7 @@ TEST_F(pidfd_info, thread_group_exec)
 	EXPECT_EQ(sys_pidfd_send_signal(pidfd_leader, SIGKILL, NULL, 0), 0);
 
 	/*
-	 * Afte the exec we're dealing with an empty thread-group so now
+	 * After the exec we're dealing with an empty thread-group so now
 	 * we must see an exit notification on the thread-specific pidfd
 	 * for the thread-group leader as there's no subthread that can
 	 * revive the struct pid.
@@ -665,7 +665,7 @@ TEST_F(pidfd_info, thread_group_exec_thread)
 	EXPECT_EQ(sys_pidfd_send_signal(pidfd_leader, SIGKILL, NULL, 0), 0);
 
 	/*
-	 * Afte the exec we're dealing with an empty thread-group so now
+	 * After the exec we're dealing with an empty thread-group so now
 	 * we must see an exit notification on the thread-specific pidfd
 	 * for the thread-group leader as there's no subthread that can
 	 * revive the struct pid.
