@@ -294,6 +294,14 @@ netdev_txq_completed_mb(struct netdev_queue *dev_queue,
 		netif_txq_try_stop(_txq, get_desc, start_thrs);		\
 	})
 
+#define netif_subqueue_sent(dev, idx, bytes)				\
+	({								\
+		struct netdev_queue *_txq;				\
+									\
+		_txq = netdev_get_tx_queue(dev, idx);			\
+		netdev_tx_sent_queue(_txq, bytes);			\
+	})
+
 #define netif_subqueue_maybe_stop(dev, idx, get_desc, stop_thrs, start_thrs) \
 	({								\
 		struct netdev_queue *_txq;				\
