@@ -145,6 +145,7 @@ const struct movable_operations *page_movable_ops(struct page *page)
 int migrate_misplaced_folio_prepare(struct folio *folio,
 		struct vm_area_struct *vma, int node);
 int migrate_misplaced_folio(struct folio *folio, int node);
+int migrate_misplaced_folio_batch(struct list_head *foliolist, int node);
 #else
 static inline int migrate_misplaced_folio_prepare(struct folio *folio,
 		struct vm_area_struct *vma, int node)
@@ -152,6 +153,11 @@ static inline int migrate_misplaced_folio_prepare(struct folio *folio,
 	return -EAGAIN; /* can't migrate now */
 }
 static inline int migrate_misplaced_folio(struct folio *folio, int node)
+{
+	return -EAGAIN; /* can't migrate now */
+}
+static inline int migrate_misplaced_folio_batch(struct list_head *foliolist,
+						int node)
 {
 	return -EAGAIN; /* can't migrate now */
 }
