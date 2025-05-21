@@ -1747,7 +1747,14 @@ int cmd_top(int argc, const char **argv)
 
 	setup_browser(false);
 
-	if (setup_sorting(top.evlist) < 0) {
+	top.session = perf_session__new(/*data=*/NULL, /*tool=*/NULL);
+	if (IS_ERR(top.session)) {
+		status = PTR_ERR(top.session);
+		top.session = NULL;
+		goto out_delete_evlist;
+	}
+
+	if (setup_sorting(top.evlist, &top.session->header.env) < 0) {
 		if (sort_order)
 			parse_options_usage(top_usage, options, "s", 1);
 		if (field_order)
@@ -1818,13 +1825,6 @@ int cmd_top(int argc, const char **argv)
 	if (top.print_entries == 0) {
 		perf_top__update_print_entries(&top);
 		signal(SIGWINCH, winch_sig);
-	}
-
-	top.session = perf_session__new(NULL, NULL);
-	if (IS_ERR(top.session)) {
-		status = PTR_ERR(top.session);
-		top.session = NULL;
-		goto out_delete_evlist;
 	}
 
 	if (!evlist__needs_bpf_sb_event(top.evlist))
