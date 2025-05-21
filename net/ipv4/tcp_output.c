@@ -3702,7 +3702,7 @@ int tcp_send_synack(struct sock *sk)
 
 /**
  * tcp_make_synack - Allocate one skb and build a SYNACK packet.
- * @sk: listener socket
+ * @sk: listener socket (or child socket for fastopen)
  * @dst: dst entry attached to the SYNACK. It is consumed and caller
  *       should not use it again.
  * @req: request_sock pointer
@@ -3719,6 +3719,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	struct inet_request_sock *ireq = inet_rsk(req);
 	const struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_out_options opts;
+	struct sock *fastopen_sk = (struct sock *)sk;
 	struct tcp_key key = {};
 	struct sk_buff *skb;
 	int tcp_header_size;
@@ -3748,7 +3749,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 		 * cpu might call us concurrently.
 		 * sk->sk_wmem_alloc in an atomic, we can promote to rw.
 		 */
-		skb_set_owner_w(skb, (struct sock *)sk);
+		skb_set_owner_w(skb, fastopen_sk);
 		break;
 	}
 	skb_dst_set(skb, dst);
@@ -3831,6 +3832,33 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	th->window = htons(min(req->rsk_rcv_wnd, 65535U));
 	tcp_options_write(th, NULL, tcp_rsk(req), &opts, &key);
 	th->doff = (tcp_header_size >> 2);
+
+	/* If this is a FASTOPEN, and there is write-data on the accept socket,
+	 * re-copy it to the synack segment. If not FASTOPEN. any data waits
+	 * until 3rd-ack arrival.
+	 */
+
+	if (synack_type == TCP_SYNACK_FASTOPEN &&
+	    !skb_queue_empty(&sk->sk_write_queue)) {
+		struct sk_buff *a_skb = tcp_write_queue_tail(sk);
+		int copy = min_t(int, a_skb->len, skb_tailroom(skb));
+
+		skb_put_data(skb, a_skb->data, copy);
+		TCP_SKB_CB(skb)->end_seq += copy;
+
+		tcp_skb_pcount_set(a_skb, 1);
+		WRITE_ONCE(tcp_sk(fastopen_sk)->write_seq,
+			   TCP_SKB_CB(a_skb)->end_seq);
+
+		skb_set_delivery_time(a_skb, now, SKB_CLOCK_MONOTONIC);
+
+		/* Move the data to the retransmit queue.
+		 * Code elsewhere implies this is a full child socket and
+		 * can be treated as writeable - permitting the cast.
+		 */
+		tcp_event_new_data_sent(fastopen_sk, a_skb);
+	}
+
 	TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTSEGS);
 
 	/* Okay, we have all we need - do the md5 hash if needed */
