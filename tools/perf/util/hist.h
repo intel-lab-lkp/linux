@@ -255,7 +255,7 @@ struct hist_entry {
 	u64			code_page_size;
 	u64			weight;
 	u64			ins_lat;
-	u64			p_stage_cyc;
+	u64			p_stage_cyc_or_retire_lat;
 	s32			socket;
 	s32			cpu;
 	int			parallelism;
