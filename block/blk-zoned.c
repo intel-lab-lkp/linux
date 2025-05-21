@@ -624,14 +624,19 @@ static void disk_zone_wplug_abort(struct blk_zone_wplug *zwplug)
  */
 static void disk_zone_wplug_set_wp_offset(struct gendisk *disk,
 					  struct blk_zone_wplug *zwplug,
-					  unsigned int wp_offset)
+					  unsigned int wp_offset,
+					  bool only_if_update_needed)
 {
-	lockdep_assert_held(&zwplug->lock);
+	scoped_guard(spinlock_irqsave, &zwplug->lock) {
+		if (only_if_update_needed &&
+		    !(zwplug->flags & BLK_ZONE_WPLUG_NEED_WP_UPDATE))
+			return;
 
-	/* Update the zone write pointer and abort all plugged BIOs. */
-	zwplug->flags &= ~BLK_ZONE_WPLUG_NEED_WP_UPDATE;
-	zwplug->wp_offset = wp_offset;
-	disk_zone_wplug_abort(zwplug);
+		/* Update the zone write pointer and abort all plugged BIOs. */
+		zwplug->flags &= ~BLK_ZONE_WPLUG_NEED_WP_UPDATE;
+		zwplug->wp_offset = wp_offset;
+		disk_zone_wplug_abort(zwplug);
+	}
 
 	/*
 	 * The zone write plug now has no BIO plugged: remove it from the
@@ -669,18 +674,13 @@ static void disk_zone_wplug_sync_wp_offset(struct gendisk *disk,
 					   struct blk_zone *zone)
 {
 	struct blk_zone_wplug *zwplug;
-	unsigned long flags;
 
 	zwplug = disk_get_zone_wplug(disk, zone->start);
 	if (!zwplug)
 		return;
 
-	spin_lock_irqsave(&zwplug->lock, flags);
-	if (zwplug->flags & BLK_ZONE_WPLUG_NEED_WP_UPDATE)
-		disk_zone_wplug_set_wp_offset(disk, zwplug,
-					      blk_zone_wp_offset(zone));
-	spin_unlock_irqrestore(&zwplug->lock, flags);
-
+	disk_zone_wplug_set_wp_offset(disk, zwplug, blk_zone_wp_offset(zone),
+				      true);
 	disk_put_zone_wplug(zwplug);
 }
 
@@ -700,7 +700,6 @@ static bool blk_zone_wplug_handle_reset_or_finish(struct bio *bio,
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	sector_t sector = bio->bi_iter.bi_sector;
 	struct blk_zone_wplug *zwplug;
-	unsigned long flags;
 
 	/* Conventional zones cannot be reset nor finished. */
 	if (!bdev_zone_is_seq(bio->bi_bdev, sector)) {
@@ -726,9 +725,7 @@ static bool blk_zone_wplug_handle_reset_or_finish(struct bio *bio,
 	 */
 	zwplug = disk_get_zone_wplug(disk, sector);
 	if (zwplug) {
-		spin_lock_irqsave(&zwplug->lock, flags);
-		disk_zone_wplug_set_wp_offset(disk, zwplug, wp_offset);
-		spin_unlock_irqrestore(&zwplug->lock, flags);
+		disk_zone_wplug_set_wp_offset(disk, zwplug, wp_offset, false);
 		disk_put_zone_wplug(zwplug);
 	}
 
@@ -739,7 +736,6 @@ static bool blk_zone_wplug_handle_reset_all(struct bio *bio)
 {
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	struct blk_zone_wplug *zwplug;
-	unsigned long flags;
 	sector_t sector;
 
 	/*
@@ -751,9 +747,7 @@ static bool blk_zone_wplug_handle_reset_all(struct bio *bio)
 	     sector += disk->queue->limits.chunk_sectors) {
 		zwplug = disk_get_zone_wplug(disk, sector);
 		if (zwplug) {
-			spin_lock_irqsave(&zwplug->lock, flags);
-			disk_zone_wplug_set_wp_offset(disk, zwplug, 0);
-			spin_unlock_irqrestore(&zwplug->lock, flags);
+			disk_zone_wplug_set_wp_offset(disk, zwplug, 0, false);
 			disk_put_zone_wplug(zwplug);
 		}
 	}
