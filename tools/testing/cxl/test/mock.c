@@ -246,7 +246,6 @@ EXPORT_SYMBOL_NS_GPL(__wrap_cxl_dvsec_rr_decode, "CXL");
 
 struct cxl_dport *__wrap_devm_cxl_add_rch_dport(struct cxl_port *port,
 						struct device *dport_dev,
-						int port_id,
 						resource_size_t rcrb)
 {
 	int index;
@@ -254,14 +253,14 @@ struct cxl_dport *__wrap_devm_cxl_add_rch_dport(struct cxl_port *port,
 	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
 
 	if (ops && ops->is_mock_port(dport_dev)) {
-		dport = devm_cxl_add_dport(port, dport_dev, port_id,
+		dport = devm_cxl_add_dport(port, dport_dev,
 					   CXL_RESOURCE_NONE);
 		if (!IS_ERR(dport)) {
 			dport->rcrb.base = rcrb;
 			dport->rch = true;
 		}
 	} else
-		dport = devm_cxl_add_rch_dport(port, dport_dev, port_id, rcrb);
+		dport = devm_cxl_add_rch_dport(port, dport_dev, rcrb);
 	put_cxl_mock_ops(index);
 
 	return dport;
