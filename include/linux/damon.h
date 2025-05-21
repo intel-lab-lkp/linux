@@ -808,7 +808,7 @@ static inline struct damon_region *damon_first_region(struct damon_target *t)
 
 static inline unsigned long damon_sz_region(struct damon_region *r)
 {
-	return r->ar.end - r->ar.start;
+	return r->ar.end - r->ar.start + 1;
 }
 
 
