@@ -164,6 +164,14 @@ static const struct regmap_config adp5589_regmap_config_template = {
 	.num_reg_defaults_raw = ADP5589_MAX_REG + 1,
 };
 
+static const struct adp5585_regs adp5585_regs = {
+	.ext_cfg = ADP5585_PIN_CONFIG_C,
+};
+
+static const struct adp5585_regs adp5589_regs = {
+	.ext_cfg = ADP5589_PIN_CONFIG_D,
+};
+
 static int adp5585_fill_variant_config(struct adp5585_dev *adp5585,
 				       struct regmap_config *regmap_config)
 {
@@ -175,12 +183,14 @@ static int adp5585_fill_variant_config(struct adp5585_dev *adp5585,
 	case ADP5585_04:
 		*regmap_config = adp5585_regmap_config_template;
 		adp5585->id = ADP5585_MAN_ID_VALUE;
+		adp5585->regs = &adp5585_regs;
 		break;
 	case ADP5589_00:
 	case ADP5589_01:
 	case ADP5589_02:
 		*regmap_config = adp5589_regmap_config_template;
 		adp5585->id = ADP5589_MAN_ID_VALUE;
+		adp5585->regs = &adp5589_regs;
 		break;
 	default:
 		return -ENODEV;
