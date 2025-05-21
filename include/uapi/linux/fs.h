@@ -215,6 +215,9 @@ struct fsxattr {
 /* 130-136 are used by zoned block device ioctls (uapi/linux/blkzoned.h) */
 /* 137-141 are used by blk-crypto ioctls (uapi/linux/blk-crypto.h) */
 
+/* [0] = destination lba, [1] = source lba, [2] = number of sectors */
+#define BLKCPY _IOWR(0x12,142,__u64[3])
+
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
 #define FIGETBSZ   _IO(0x00,2)	/* get the block size used for bmap */

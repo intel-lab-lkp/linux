@@ -212,6 +212,34 @@ static int blk_ioctl_secure_erase(struct block_device *bdev, blk_mode_t mode,
 	return err;
 }
 
+static int blk_ioctl_copy(struct block_device *bdev, blk_mode_t mode,
+		void __user *argp)
+{
+	unsigned int lbs = bdev_logical_block_size(bdev) >> SECTOR_SHIFT;
+	uint64_t dst, src, end, nr, range[3];
+
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (copy_from_user(range, argp, sizeof(range)))
+		return -EFAULT;
+
+	dst = range[0];
+	src = range[1];
+	nr = range[2];
+
+	if (!(IS_ALIGNED(dst | src | nr, lbs)))
+		return -EINVAL;
+	if (check_add_overflow(src, nr - 1, &end))
+		return -EINVAL;
+	if (end >= bdev_nr_sectors(bdev))
+		return -EINVAL;
+	if (src < dst && src + nr > dst)
+		return -EINVAL;
+	if (dst < src && dst + nr > src)
+		return -EINVAL;
+
+	return blkdev_copy(bdev, dst, src, nr, GFP_KERNEL);
+}
 
 static int blk_ioctl_zeroout(struct block_device *bdev, blk_mode_t mode,
 		unsigned long arg)
@@ -575,6 +603,8 @@ static int blkdev_common_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return blk_ioctl_discard(bdev, mode, arg);
 	case BLKSECDISCARD:
 		return blk_ioctl_secure_erase(bdev, mode, argp);
+	case BLKCPY:
+		return blk_ioctl_copy(bdev, mode, argp);
 	case BLKZEROOUT:
 		return blk_ioctl_zeroout(bdev, mode, arg);
 	case BLKGETDISKSEQ:
