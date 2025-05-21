@@ -424,26 +424,46 @@ static int __blkdev_copy(struct block_device *bdev, sector_t dst_sector,
 }
 
 static int blkdev_copy_offload(struct block_device *bdev, sector_t dst_sector,
-		sector_t src_sector, sector_t nr_sects, gfp_t gfp)
+		struct bio_vec *bv, int nr_vecs, gfp_t gfp)
 {
+	unsigned size = 0;
 	struct bio *bio;
-	int ret;
+	int ret, i;
 
-	struct bio_vec bv = {
-		.bv_sector = src_sector,
-		.bv_sectors = nr_sects,
-	};
-
-	bio = bio_alloc(bdev, 1, REQ_OP_COPY, gfp);
-	bio_add_copy_src(bio, &bv);
+	bio = bio_alloc(bdev, nr_vecs, REQ_OP_COPY, gfp);
+	for (i = 0; i < nr_vecs; i++) {
+		size += bv[i].bv_sectors << SECTOR_SHIFT;
+		bio_add_copy_src(bio, &bv[i]);
+	}
 	bio->bi_iter.bi_sector = dst_sector;
-	bio->bi_iter.bi_size = nr_sects << SECTOR_SHIFT;
+	bio->bi_iter.bi_size = size;
 
 	ret = submit_bio_wait(bio);
 	bio_put(bio);
 	return ret;
-
 }
+
+/**
+ * blkdev_copy_range - copy range of sectors to a destination
+ * @dst_sector:	start sector of the destination to copy to
+ * @bv:		vector of source sectors
+ * @nr_vecs:	number of source sector vectors
+ * @gfp:	allocation flags to use
+ */
+int blkdev_copy_range(struct block_device *bdev, sector_t dst_sector,
+		struct bio_vec *bv, int nr_vecs, gfp_t gfp)
+{
+	int ret, i;
+
+	if (bdev_copy_sectors(bdev))
+		return blkdev_copy_offload(bdev, dst_sector, bv, nr_vecs, gfp);
+
+	for (i = 0, ret = 0; i < nr_vecs && !ret; i++)
+		ret = __blkdev_copy(bdev, dst_sector, bv[i].bv_sector,
+				bv[i].bv_sectors, gfp);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(blkdev_copy_range);
 
 /**
  * blkdev_copy - copy source sectors to a destination on the same block device
@@ -455,9 +475,11 @@ static int blkdev_copy_offload(struct block_device *bdev, sector_t dst_sector,
 int blkdev_copy(struct block_device *bdev, sector_t dst_sector,
 		sector_t src_sector, sector_t nr_sects, gfp_t gfp)
 {
-	if (bdev_copy_sectors(bdev))
-		return blkdev_copy_offload(bdev, dst_sector, src_sector,
-					nr_sects, gfp);
-	return __blkdev_copy(bdev, dst_sector, src_sector, nr_sects, gfp);
+	struct bio_vec bv = {
+		.bv_sector = src_sector,
+		.bv_sectors = nr_sects,
+	};
+
+	return blkdev_copy_range(bdev, dst_sector, &bv, 1, gfp);
 }
 EXPORT_SYMBOL_GPL(blkdev_copy);

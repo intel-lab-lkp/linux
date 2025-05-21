@@ -218,6 +218,20 @@ struct fsxattr {
 /* [0] = destination lba, [1] = source lba, [2] = number of sectors */
 #define BLKCPY _IOWR(0x12,142,__u64[3])
 
+struct copy_source {
+	__u64 src_sector;
+	__u64 nr_sectors;
+};
+
+struct copy_range {
+	__u64	dst_sector;
+	__u16	nr_ranges;
+	__u8	rsvd[6];
+	__u64	sources; /* user space pointer to struct copy_source[] */
+};
+#define BLKCPY_VEC _IOWR(0x12,143,struct copy_range)
+
+
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
 #define FIGETBSZ   _IO(0x00,2)	/* get the block size used for bmap */

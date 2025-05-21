@@ -241,6 +241,63 @@ static int blk_ioctl_copy(struct block_device *bdev, blk_mode_t mode,
 	return blkdev_copy(bdev, dst, src, nr, GFP_KERNEL);
 }
 
+static int blk_ioctl_copy_vec(struct block_device *bdev, blk_mode_t mode,
+		void __user *argp)
+{
+	sector_t align = bdev_logical_block_size(bdev) >> SECTOR_SHIFT;
+	struct bio_vec *bv, fast_bv[UIO_FASTIOV];
+	struct copy_range cr;
+	int i, nr, ret;
+	__u64 dst;
+
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (copy_from_user(&cr, argp, sizeof(cr)))
+		return -EFAULT;
+	if (!(IS_ALIGNED(cr.dst_sector, align)))
+		return -EINVAL;
+
+	nr = cr.nr_ranges;
+	if (nr <= UIO_FASTIOV) {
+		bv = fast_bv;
+	} else {
+		bv = kmalloc_array(nr, sizeof(*bv), GFP_KERNEL);
+		if (!bv)
+			return -ENOMEM;
+	}
+
+	dst = cr.dst_sector;
+	for (i = 0; i < nr; i++) {
+		struct copy_source csrc;
+		__u64 nr_sects, src;
+
+		if (copy_from_user(&csrc,
+				(void __user *)(cr.sources + i * sizeof(csrc)),
+				sizeof(csrc))) {
+			ret = -EFAULT;
+			goto out;
+		}
+
+		nr_sects = csrc.nr_sectors;
+		src = csrc.src_sector;
+		if (!(IS_ALIGNED(src | nr_sects, align)) ||
+		    (src < dst && src + nr_sects > dst) ||
+		    (dst < src && dst + nr_sects > src)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		bv[i].bv_sectors = nr_sects;
+		bv[i].bv_sector = src;
+	}
+
+	ret = blkdev_copy_range(bdev, dst, bv, nr, GFP_KERNEL);
+out:
+	if (bv != fast_bv)
+		kfree(bv);
+	return ret;
+}
+
 static int blk_ioctl_zeroout(struct block_device *bdev, blk_mode_t mode,
 		unsigned long arg)
 {
@@ -605,6 +662,8 @@ static int blkdev_common_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return blk_ioctl_secure_erase(bdev, mode, argp);
 	case BLKCPY:
 		return blk_ioctl_copy(bdev, mode, argp);
+	case BLKCPY_VEC:
+		return blk_ioctl_copy_vec(bdev, mode, argp);
 	case BLKZEROOUT:
 		return blk_ioctl_zeroout(bdev, mode, arg);
 	case BLKGETDISKSEQ:
