@@ -162,6 +162,9 @@ struct cpuset {
 	/* partition root state */
 	int partition_root_state;
 
+	/* Do not migrate memory when modifying cpuset.mems this time */
+	bool skip_migration_once;
+
 	/*
 	 * number of SCHED_DEADLINE tasks attached to this cpuset, so that we
 	 * know when to rebuild associated root domain bandwidth information.
@@ -227,6 +230,9 @@ static inline int is_sched_load_balance(const struct cpuset *cs)
 
 static inline int is_memory_migrate(const struct cpuset *cs)
 {
+	if (cs->skip_migration_once)
+		return 0;
+
 	return test_bit(CS_MEMORY_MIGRATE, &cs->flags);
 }
 

@@ -2408,6 +2408,13 @@ Cpuset Interface Files
 	a need to change "cpuset.mems" with active tasks, it shouldn't
 	be done frequently.
 
+	If cpuset.mems is opened with O_NONBLOCK then the migration is
+	bypassed. This is useful for admin processes that need to adjust
+	the cpuset.mems dynamically without blocking. However, there is
+	a risk that previously allocated pages are not within the new
+	cpuset.mems range, which may be altered by move_pages syscall or
+	numa_balance.
+
   cpuset.mems.effective
 	A read-only multiple values file which exists on all
 	cpuset-enabled cgroups.
