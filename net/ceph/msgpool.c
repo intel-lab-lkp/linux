@@ -74,6 +74,10 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msgpool *pool, int front_len,
 	}
 
 	msg = mempool_alloc(pool->pool, GFP_NOFS);
+	if (!msg) {
+		dout("msgpool_get %s failed\n", pool->name);
+		return NULL;
+	}
 	dout("msgpool_get %s %p\n", pool->name, msg);
 	return msg;
 }
