@@ -57,6 +57,7 @@ extern "C" {
 #define DRM_AMDGPU_USERQ		0x16
 #define DRM_AMDGPU_USERQ_SIGNAL		0x17
 #define DRM_AMDGPU_USERQ_WAIT		0x18
+#define DRM_AMDGPU_CRIU_OP		0x19
 
 #define DRM_IOCTL_AMDGPU_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_GEM_CREATE, union drm_amdgpu_gem_create)
 #define DRM_IOCTL_AMDGPU_GEM_MMAP	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_GEM_MMAP, union drm_amdgpu_gem_mmap)
@@ -77,6 +78,7 @@ extern "C" {
 #define DRM_IOCTL_AMDGPU_USERQ		DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ, union drm_amdgpu_userq)
 #define DRM_IOCTL_AMDGPU_USERQ_SIGNAL	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ_SIGNAL, struct drm_amdgpu_userq_signal)
 #define DRM_IOCTL_AMDGPU_USERQ_WAIT	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ_WAIT, struct drm_amdgpu_userq_wait)
+#define DRM_IOCTL_AMDGPU_CRIU_OP	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_CRIU_OP, struct drm_amdgpu_criu_args)
 
 /**
  * DOC: memory domains
@@ -1624,6 +1626,49 @@ struct drm_color_ctm_3x4 {
 	 * (not two's complement!) format.
 	 */
 	__u64 matrix[12];
+};
+
+/* CRIU ioctl
+ *
+ * When checkpointing a process, the CRIU amdgpu plugin will perform:
+ * 1. INFO op to get information about state that needs to be saved. This
+ *    pauses execution until the checkpoint is done.
+ * 2. CHECKPOINT op to save state
+ *
+ * Restore uses other ioctls.
+ */
+enum drm_amdgpu_criu_op {
+	AMDGPU_CRIU_OP_PROCESS_INFO,
+	AMDGPU_CRIU_OP_CHECKPOINT,
+};
+
+struct drm_amdgpu_criu_args {
+	__u64 bos; /* user pointer to bos array */
+	__u64 vms; /* user pointer to private data */
+	__u32 num_bos;
+	__u32 num_vms;
+	__u32 pid;
+	__u32 op;
+};
+
+#define AMDGPU_CRIU_BO_FLAG_IS_IMPORT	(1 << 0)
+
+struct drm_amdgpu_criu_bo_bucket {
+	__u64 addr;
+	__u64 size;
+	__u64 offset;
+	__u64 alloc_flags;
+	__u32 preferred_domains;
+	__u32 dmabuf_fd;
+	__u32 flags;
+};
+
+struct drm_amdgpu_criu_vm_bucket {
+	__u64 start;
+	__u64 last;
+	__u64 offset;
+	__u64 flags;
+	__u32 gem_handle;
 };
 
 #if defined(__cplusplus)
