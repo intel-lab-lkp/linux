@@ -25,6 +25,9 @@ static const struct regmap_config rzg3s_sysc_regmap __initconst = {
 	.val_bits = 32,
 	.fast_io = true,
 	.max_register = 0xe20,
+	.reg_read = rz_sysc_reg_read,
+	.reg_write = rz_sysc_reg_write,
+	.reg_update_bits = rz_sysc_reg_update_bits,
 };
 
 const struct rz_sysc_init_data rzg3s_sysc_init_data __initconst = {
