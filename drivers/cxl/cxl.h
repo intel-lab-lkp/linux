@@ -643,6 +643,8 @@ struct cxl_root_ops {
 	int (*qos_class)(struct cxl_root *cxl_root,
 			 struct access_coordinate *coord, int entries,
 			 int *qos_class);
+	int (*setup_hostbridge_uport)(struct cxl_root *cxl_root,
+				      struct device *bridge_dev);
 };
 
 static inline struct cxl_dport *

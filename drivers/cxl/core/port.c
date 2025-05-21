@@ -1802,6 +1802,57 @@ static int cxl_switch_port_dport_setup(struct cxl_port *port,
 	return update_decoders_with_dport(port, dport);
 }
 
+static int get_hostbridge_port_devices(struct cxl_memdev *cxlmd,
+				       struct device **hb_uport_dev,
+				       struct device **hb_dport_dev)
+{
+	struct device *dev = &cxlmd->dev;
+	struct device *iter;
+
+	for (iter = dev; iter; iter = grandparent(iter)) {
+		struct device *dport_dev = grandparent(iter);
+		struct device *uport_dev = dport_dev->parent;
+
+		if (is_cxl_hierarchy_head(uport_dev->parent)) {
+			*hb_uport_dev = uport_dev;
+			*hb_dport_dev = dport_dev;
+			return 0;
+		}
+	}
+
+	return -ENODEV;
+}
+
+static int cxl_hostbridge_port_setup(struct cxl_memdev *cxlmd)
+{
+	struct device *hb_uport_dev, *hb_dport_dev;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+	int rc;
+
+	rc = get_hostbridge_port_devices(cxlmd, &hb_uport_dev, &hb_dport_dev);
+	if (rc)
+		return -ENODEV;
+
+	struct cxl_root *cxl_root __free(put_cxl_root) =
+		cxl_hb_uport_dev_to_root(hb_uport_dev);
+	if (!cxl_root)
+		return -ENODEV;
+
+	guard(device)(&cxl_root->port.dev);
+	port = find_cxl_port(hb_dport_dev, &dport);
+	if (port) {
+		/* Nothing to do if a port has been created already */
+		put_device(&port->dev);
+		return 0;
+	}
+
+	if (!cxl_root->ops || !cxl_root->ops->setup_hostbridge_uport)
+		return -EOPNOTSUPP;
+
+	return cxl_root->ops->setup_hostbridge_uport(cxl_root, hb_uport_dev);
+}
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
@@ -1814,6 +1865,10 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 */
 	if (cxlmd->cxlds->rcd)
 		return 0;
+
+	rc = cxl_hostbridge_port_setup(cxlmd);
+	if (rc)
+		return rc;
 
 	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
 	if (rc)

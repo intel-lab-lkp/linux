@@ -298,8 +298,79 @@ static int cxl_acpi_qos_class(struct cxl_root *cxl_root,
 	return cxl_acpi_evaluate_qtg_dsm(handle, coord, entries, qos_class);
 }
 
+/* Note, @dev is used by mock_acpi_table_parse_cedt() */
+struct cxl_chbs_context {
+	struct device *dev;
+	unsigned long long uid;
+	resource_size_t base;
+	u32 cxl_version;
+	int nr_versions;
+	u32 saved_version;
+};
+
+static int cxl_get_chbs(struct device *dev, struct acpi_device *hb,
+			struct cxl_chbs_context *ctx);
+
+/*
+ * A host bridge is a dport to a CFMWS decoder and it is a uport to the
+ * dport (PCIe Root Ports) in the host bridge.
+ */
+static int cxl_acpi_setup_hostbridge_uport(struct cxl_root *cxl_root,
+					   struct device *bridge_dev)
+{
+	struct cxl_port *root_port = &cxl_root->port;
+	struct device *host = root_port->dev.parent;
+	struct acpi_device *hb = ACPI_COMPANION(bridge_dev);
+	resource_size_t component_reg_phys;
+	struct acpi_pci_root *pci_root;
+	struct cxl_chbs_context ctx;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+	int rc;
+
+	pci_root = acpi_pci_find_root(hb->handle);
+	dport = cxl_find_dport_by_dev(root_port, bridge_dev);
+	if (!dport) {
+		dev_dbg(host, "Host bridge expected and not found\n");
+		return -ENODEV;
+	}
+
+	if (dport->rch) {
+		dev_info(bridge_dev, "host supports CXL (restricted)\n");
+		return 0;
+	}
+
+	rc = cxl_get_chbs(&hb->dev, hb, &ctx);
+	if (rc)
+		return rc;
+
+	if (ctx.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11) {
+		dev_warn(bridge_dev,
+			 "CXL CHBS version mismatch, skip port registration\n");
+		return 0;
+	}
+
+	component_reg_phys = ctx.base;
+	if (component_reg_phys != CXL_RESOURCE_NONE)
+		dev_dbg(&hb->dev, "CHBRC found for UID %lld: %pa\n",
+			ctx.uid, &component_reg_phys);
+
+	rc = devm_cxl_register_pci_bus(host, bridge_dev, pci_root->bus);
+	if (rc && rc != -EBUSY)
+		return rc;
+
+	port = devm_cxl_add_port(host, bridge_dev, component_reg_phys, dport);
+	if (IS_ERR(port))
+		return PTR_ERR(port);
+
+	dev_info(bridge_dev, "host supports CXL\n");
+
+	return 0;
+}
+
 static const struct cxl_root_ops acpi_root_ops = {
 	.qos_class = cxl_acpi_qos_class,
+	.setup_hostbridge_uport = cxl_acpi_setup_hostbridge_uport,
 };
 
 static void del_cxl_resource(struct resource *res)
@@ -460,16 +531,6 @@ __mock struct acpi_device *to_cxl_host_bridge(struct device *host,
 	return NULL;
 }
 
-/* Note, @dev is used by mock_acpi_table_parse_cedt() */
-struct cxl_chbs_context {
-	struct device *dev;
-	unsigned long long uid;
-	resource_size_t base;
-	u32 cxl_version;
-	int nr_versions;
-	u32 saved_version;
-};
-
 static int cxl_get_chbs_iter(union acpi_subtable_headers *header, void *arg,
 			     const unsigned long end)
 {
@@ -588,7 +649,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	/*
 	 * In RCH mode, bind the component regs base to the dport. In
 	 * VH mode it will be bound to the CXL host bridge's port
-	 * object later in add_host_bridge_uport().
+	 * object later in cxl_acpi_setup_hostbridge_uport().
 	 */
 	if (ctx.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11) {
 		dev_dbg(match, "RCRB found for UID %lld: %pa\n", ctx.uid,
@@ -611,22 +672,14 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	return 0;
 }
 
-/*
- * A host bridge is a dport to a CFMWS decode and it is a uport to the
- * dport (PCIe Root Ports) in the host bridge.
- */
-static int add_host_bridge_uport(struct device *match, void *arg)
+static int set_cxl_root_to_hostbridge(struct device *match, void *arg)
 {
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
 	struct acpi_device *hb = to_cxl_host_bridge(host, match);
-	struct acpi_pci_root *pci_root;
 	struct cxl_dport *dport;
-	struct cxl_port *port;
+	struct acpi_pci_root *pci_root;
 	struct device *bridge;
-	struct cxl_chbs_context ctx;
-	resource_size_t component_reg_phys;
-	int rc;
 
 	if (!hb)
 		return 0;
@@ -639,37 +692,12 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 		return 0;
 	}
 
-	if (dport->rch) {
-		dev_info(bridge, "host supports CXL (restricted)\n");
+	if (dport->rch)
 		return 0;
-	}
 
-	rc = cxl_get_chbs(match, hb, &ctx);
-	if (rc)
-		return rc;
-
-	if (ctx.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11) {
-		dev_warn(bridge,
-			 "CXL CHBS version mismatch, skip port registration\n");
-		return 0;
-	}
-
-	component_reg_phys = ctx.base;
-	if (component_reg_phys != CXL_RESOURCE_NONE)
-		dev_dbg(match, "CHBCR found for UID %lld: %pa\n",
-			ctx.uid, &component_reg_phys);
-
-	rc = devm_cxl_register_pci_bus(host, bridge, pci_root->bus);
-	if (rc)
-		return rc;
-
-	port = devm_cxl_add_port(host, bridge, component_reg_phys, dport);
-	if (IS_ERR(port))
-		return PTR_ERR(port);
-
-	dev_info(bridge, "host supports CXL\n");
-
-	return 0;
+	bridge = pci_root->bus->bridge;
+	return devm_cxl_register_hb_uport_root_port(host, bridge,
+						    to_cxl_root(root_port));
 }
 
 static int add_root_nvdimm_bridge(struct device *match, void *data)
@@ -843,6 +871,7 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 		return PTR_ERR(cxl_root);
 	root_port = &cxl_root->port;
 
+	 /* Root level scanned with host-bridge as dports */
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
 			      add_host_bridge_dport);
 	if (rc < 0)
@@ -871,12 +900,9 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	 */
 	device_for_each_child(&root_port->dev, cxl_res, pair_cxl_resource);
 
-	/*
-	 * Root level scanned with host-bridge as dports, now scan host-bridges
-	 * for their role as CXL uports to their CXL-capable PCIe Root Ports.
-	 */
+	/* Scan host-bridges and point the cxl root port struct to it */
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
-			      add_host_bridge_uport);
+			      set_cxl_root_to_hostbridge);
 	if (rc < 0)
 		return rc;
 
