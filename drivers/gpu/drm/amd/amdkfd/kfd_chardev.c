@@ -2572,7 +2572,7 @@ static int criu_restore(struct file *filep,
 		 args->num_devices, args->num_bos, args->num_objects, args->priv_data_size);
 
 	if (!args->bos || !args->devices || !args->priv_data || !args->priv_data_size ||
-	    !args->num_devices || !args->num_bos)
+	    !args->num_devices)
 		return -EINVAL;
 
 	mutex_lock(&p->mutex);
