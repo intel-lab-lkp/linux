@@ -43,6 +43,10 @@ struct lost_count {
 	__uint(max_entries, 1);
 } dropped SEC(".maps");
 
+// This is used by tests/shell/record_bpf_metadata.sh
+// to verify that BPF metadata generation works.
+const int bpf_metadata_test_value SEC(".rodata") = 42;
+
 volatile const int use_idx_hash;
 
 void *bpf_cast_to_kern_ctx(void *) __ksym;
