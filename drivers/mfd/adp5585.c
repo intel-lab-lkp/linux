@@ -22,17 +22,20 @@
 enum {
 	ADP5585_DEV_GPIO,
 	ADP5585_DEV_PWM,
+	ADP5585_DEV_INPUT,
 	ADP5585_DEV_MAX
 };
 
 static const struct mfd_cell adp5585_devs[ADP5585_DEV_MAX] = {
 	MFD_CELL_NAME("adp5585-gpio"),
 	MFD_CELL_NAME("adp5585-pwm"),
+	MFD_CELL_NAME("adp5585-keys"),
 };
 
 static const struct mfd_cell adp5589_devs[] = {
 	MFD_CELL_NAME("adp5589-gpio"),
 	MFD_CELL_NAME("adp5589-pwm"),
+	MFD_CELL_NAME("adp5589-keys"),
 };
 
 static const struct regmap_range adp5585_volatile_ranges[] = {
@@ -173,6 +176,7 @@ static const struct adp5585_regs adp5585_regs = {
 	.reset_cfg = ADP5585_RESET_CFG,
 	.reset1_event_a = ADP5585_RESET1_EVENT_A,
 	.reset2_event_a = ADP5585_RESET2_EVENT_A,
+	.pin_cfg_a = ADP5585_PIN_CONFIG_A,
 };
 
 static const struct adp5585_regs adp5589_regs = {
@@ -183,6 +187,7 @@ static const struct adp5585_regs adp5589_regs = {
 	.reset_cfg = ADP5589_RESET_CFG,
 	.reset1_event_a = ADP5589_RESET1_EVENT_A,
 	.reset2_event_a = ADP5589_RESET2_EVENT_A,
+	.pin_cfg_a = ADP5589_PIN_CONFIG_A,
 };
 
 static int adp5585_validate_event(const struct adp5585_dev *adp5585, unsigned int ev)
@@ -236,6 +241,8 @@ static int adp5585_fill_variant_config(struct adp5585_dev *adp5585,
 		*regmap_config = adp5585_regmap_config_template;
 		adp5585->id = ADP5585_MAN_ID_VALUE;
 		adp5585->regs = &adp5585_regs;
+		adp5585->n_pins = ADP5585_PIN_MAX;
+		adp5585->reset2_out = ADP5585_RESET2_OUT;
 		if (adp5585->variant == ADP5585_01)
 			adp5585->has_pin6 = true;
 		break;
@@ -247,6 +254,8 @@ static int adp5585_fill_variant_config(struct adp5585_dev *adp5585,
 		adp5585->regs = &adp5589_regs;
 		adp5585->has_unlock = true;
 		adp5585->has_pin6 = true;
+		adp5585->n_pins = ADP5589_PIN_MAX;
+		adp5585->reset2_out = ADP5589_RESET2_OUT;
 		break;
 	default:
 		return -ENODEV;
@@ -434,6 +443,8 @@ static int adp5585_add_devices(const struct adp5585_dev *adp5585)
 		cells = adp5589_devs;
 
 	if (device_property_present(adp5585->dev, "#pwm-cells")) {
+		/* Make sure the PWM output pin is not used by the GPIO or INPUT  devices */
+		__set_bit(ADP5585_PWM_OUT, adp5585->pin_usage);
 		ret = mfd_add_devices(adp5585->dev, PLATFORM_DEVID_AUTO,
 				      &cells[ADP5585_DEV_PWM], 1, NULL, 0, NULL);
 		if (ret)
@@ -445,6 +456,15 @@ static int adp5585_add_devices(const struct adp5585_dev *adp5585)
 				      &cells[ADP5585_DEV_GPIO], 1, NULL, 0, NULL);
 		if (ret) {
 			ret = dev_err_probe(adp5585->dev, ret, "Failed to add gpio device\n");
+			goto out_error;
+		}
+	}
+
+	if (device_property_present(adp5585->dev, "adi,keypad-pins")) {
+		ret = mfd_add_devices(adp5585->dev, PLATFORM_DEVID_AUTO,
+				      &cells[ADP5585_DEV_INPUT], 1, NULL, 0, NULL);
+		if (ret) {
+			ret = dev_err_probe(adp5585->dev, ret, "Failed to add input device\n");
 			goto out_error;
 		}
 	}
@@ -518,6 +538,10 @@ static int adp5585_setup(struct adp5585_dev *adp5585)
 	unsigned int reg_val, i;
 	int ret;
 
+	/* if pin_6 (ROW5/GPI6) is not available, make sure to mark it as "busy" */
+	if (!adp5585->has_pin6)
+		__set_bit(5, adp5585->pin_usage);
+
 	/* Configure the device with reset and unlock events */
 	for (i = 0; i < adp5585->nkeys_unlock; i++) {
 		ret = regmap_write(adp5585->regmap, ADP5589_UNLOCK1 + i,
@@ -542,6 +566,9 @@ static int adp5585_setup(struct adp5585_dev *adp5585)
 				   adp5585->reset1_keys[i] | ADP5585_RESET_EV_PRESS);
 		if (ret)
 			return ret;
+
+		/* mark that pin as not usable for the input and gpio devices */
+		__set_bit(ADP5585_RESET1_OUT, adp5585->pin_usage);
 	}
 
 	for (i = 0; i < adp5585->nkeys_reset2; i++) {
@@ -549,6 +576,8 @@ static int adp5585_setup(struct adp5585_dev *adp5585)
 				   adp5585->reset2_keys[i] | ADP5585_RESET_EV_PRESS);
 		if (ret)
 			return ret;
+
+		__set_bit(adp5585->reset2_out, adp5585->pin_usage);
 	}
 
 	if (adp5585->nkeys_reset1 || adp5585->nkeys_reset2) {
@@ -702,6 +731,10 @@ static int adp5585_i2c_probe(struct i2c_client *i2c)
 	if (id != adp5585->id)
 		return dev_err_probe(&i2c->dev, -ENODEV,
 				     "Invalid device ID 0x%02x\n", id);
+
+	adp5585->pin_usage = devm_bitmap_zalloc(&i2c->dev, adp5585->n_pins, GFP_KERNEL);
+	if (!adp5585->pin_usage)
+		return -ENOMEM;
 
 	ret = adp5585_parse_fw(adp5585);
 	if (ret)
