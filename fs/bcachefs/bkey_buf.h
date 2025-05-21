@@ -16,6 +16,8 @@ static inline void bch2_bkey_buf_realloc(struct bkey_buf *s,
 	if (s->k == (void *) s->onstack &&
 	    u64s > ARRAY_SIZE(s->onstack)) {
 		s->k = mempool_alloc(&c->large_bkey_pool, GFP_NOFS);
+		if (!s->k)
+			return;
 		memcpy(s->k, s->onstack, sizeof(s->onstack));
 	}
 }
