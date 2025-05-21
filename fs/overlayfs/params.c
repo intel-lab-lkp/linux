@@ -600,15 +600,6 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		 */
 		if (fc->oldapi)
 			return 0;
-
-		/*
-		 * Give us the freedom to allow changing mount options
-		 * with the new mount api in the future. So instead of
-		 * silently ignoring everything we report a proper
-		 * error. This is only visible for users of the new
-		 * mount api.
-		 */
-		return invalfc(fc, "No changes allowed in reconfigure");
 	}
 
 	opt = fs_parse(fc, ovl_parameter_spec, param, &result);
