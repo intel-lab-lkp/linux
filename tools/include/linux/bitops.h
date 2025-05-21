@@ -90,6 +90,16 @@ static inline __u32 rol32(__u32 word, unsigned int shift)
 }
 
 /**
+ * ror32 - rotate a 32-bit value right
+ * @word: value to rotate
+ * @shift: bits to roll
+ */
+static inline __u32 ror32(__u32 word, unsigned int shift)
+{
+	return (word >> (shift & 31)) | (word << ((-shift) & 31));
+}
+
+/**
  * sign_extend64 - sign extend a 64-bit value using specified bit as sign-bit
  * @value: value to sign extend
  * @index: 0 based bit index (0<=index<64) to sign bit
