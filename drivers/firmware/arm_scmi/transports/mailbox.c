@@ -8,6 +8,7 @@
 
 #include <linux/err.h>
 #include <linux/device.h>
+#include <linux/dev_printk.h>
 #include <linux/mailbox_client.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -214,31 +215,24 @@ static int mailbox_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 
 	smbox->chan = mbox_request_channel(cl, tx ? 0 : p2a_chan);
 	if (IS_ERR(smbox->chan)) {
-		ret = PTR_ERR(smbox->chan);
-		if (ret != -EPROBE_DEFER)
-			dev_err(cdev,
-				"failed to request SCMI %s mailbox\n", desc);
-		return ret;
+		return dev_err_probe(cdev, PTR_ERR(smbox->chan),
+				     "failed to request SCMI %s mailbox\n", desc);
 	}
 
 	/* Additional unidirectional channel for TX if needed */
 	if (tx && a2p_rx_chan) {
 		smbox->chan_receiver = mbox_request_channel(cl, a2p_rx_chan);
 		if (IS_ERR(smbox->chan_receiver)) {
-			ret = PTR_ERR(smbox->chan_receiver);
-			if (ret != -EPROBE_DEFER)
-				dev_err(cdev, "failed to request SCMI Tx Receiver mailbox\n");
-			return ret;
+			return dev_err_probe(cdev, PTR_ERR(smbox->chan_receiver),
+					     "failed to request SCMI Tx Receiver mailbox\n");
 		}
 	}
 
 	if (!tx && p2a_rx_chan) {
 		smbox->chan_platform_receiver = mbox_request_channel(cl, p2a_rx_chan);
 		if (IS_ERR(smbox->chan_platform_receiver)) {
-			ret = PTR_ERR(smbox->chan_platform_receiver);
-			if (ret != -EPROBE_DEFER)
-				dev_err(cdev, "failed to request SCMI P2A Receiver mailbox\n");
-			return ret;
+			return dev_err_probe(cdev, PTR_ERR(smbox->chan_platform_receiver),
+					     "failed to request SCMI P2A Receiver mailbox\n");
 		}
 	}
 
