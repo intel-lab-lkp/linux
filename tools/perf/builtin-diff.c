@@ -2003,7 +2003,7 @@ int cmd_diff(int argc, const char **argv)
 		sort__mode = SORT_MODE__DIFF;
 	}
 
-	if (setup_sorting(NULL) < 0)
+	if (setup_sorting(/*evlist=*/NULL, &data__files[0].session->header.env) < 0)
 		usage_with_options(diff_usage, options);
 
 	setup_pager();
