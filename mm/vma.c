@@ -325,7 +325,7 @@ static void vma_prepare(struct vma_prepare *vp)
  * @mm: The mm_struct
  */
 static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
-			 struct mm_struct *mm)
+			 struct mm_struct *mm, bool handle_vma_uprobe)
 {
 	if (vp->file) {
 		if (vp->adj_next)
@@ -358,7 +358,8 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 
 	if (vp->file) {
 		i_mmap_unlock_write(vp->mapping);
-		uprobe_mmap(vp->vma);
+		if (handle_vma_uprobe)
+			uprobe_mmap(vp->vma);
 
 		if (vp->adj_next)
 			uprobe_mmap(vp->adj_next);
@@ -549,7 +550,7 @@ __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	}
 
 	/* vma_complete stores the new vma */
-	vma_complete(&vp, vmi, vma->vm_mm);
+	vma_complete(&vp, vmi, vma->vm_mm, true);
 	validate_mm(vma->vm_mm);
 
 	/* Success. */
@@ -715,6 +716,7 @@ static int commit_merge(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *vma;
 	struct vma_prepare vp;
+	bool handle_vma_uprobe = !!vma_lookup(vmg->mm, vmg->start);
 
 	if (vmg->__adjust_next_start) {
 		/* We manipulate middle and adjust next, which is the target. */
@@ -748,7 +750,7 @@ static int commit_merge(struct vma_merge_struct *vmg)
 	vmg_adjust_set_range(vmg);
 	vma_iter_store_overwrite(vmg->vmi, vmg->target);
 
-	vma_complete(&vp, vmg->vmi, vma->vm_mm);
+	vma_complete(&vp, vmg->vmi, vma->vm_mm, handle_vma_uprobe);
 
 	return 0;
 }
@@ -1201,7 +1203,7 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	vma_iter_clear(vmi);
 	vma_set_range(vma, start, end, pgoff);
-	vma_complete(&vp, vmi, vma->vm_mm);
+	vma_complete(&vp, vmi, vma->vm_mm, true);
 	validate_mm(vma->vm_mm);
 	return 0;
 }
