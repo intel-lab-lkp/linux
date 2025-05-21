@@ -2323,6 +2323,10 @@ static void pkt_make_request_read(struct pktcdvd_device *pd, struct bio *bio)
 {
 	struct bio *cloned_bio = bio_alloc_clone(file_bdev(pd->bdev_file), bio,
 		GFP_NOIO, &pkt_bio_set);
+	if (!cloned_bio) {
+		bio_io_error(bio);
+		return;
+	}
 	struct packet_stacked_data *psd = mempool_alloc(&psd_pool, GFP_NOIO);
 
 	psd->pd = pd;
