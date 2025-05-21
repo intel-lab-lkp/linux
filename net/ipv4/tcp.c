@@ -1057,6 +1057,118 @@ int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg, int *copied,
 	return err;
 }
 
+/* Cut-down version of tcp_sendmsg_locked(), for writing on a listen socket
+ */
+static int tcp_sendmsg_preload(struct sock *sk, struct msghdr *msg)
+{
+	struct sk_buff *skb;
+	struct sockcm_cookie sockc;
+	int flags, err, copied = 0;
+	int size_goal;
+	int process_backlog = 0;
+	long timeo;
+
+	if (sk->sk_state != TCP_LISTEN)
+		return -EINVAL;
+
+	flags = msg->msg_flags;
+
+	sockc = (struct sockcm_cookie){ .tsflags = READ_ONCE(sk->sk_tsflags) };
+
+	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
+
+	/* Ok commence sending. */
+restart:
+	/* Use a arbitrary "mss" value */
+	size_goal = 1000;
+
+	err = -EPIPE;
+	if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
+		goto do_error;
+
+	while (msg_data_left(msg)) {
+		ssize_t copy = 0;
+
+		skb = tcp_write_queue_tail(sk);
+		if (skb)
+			copy = size_goal - skb->len;
+
+		trace_tcp_sendmsg_locked(sk, msg, skb, size_goal);
+
+		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
+			bool first_skb = !skb;
+
+			/* Limit to only one skb on the sk write queue */
+
+			if (!first_skb)
+				goto out_nopush;
+
+			if (!sk_stream_memory_free(sk))
+				goto wait_for_space;
+
+			if (unlikely(process_backlog >= 16)) {
+				process_backlog = 0;
+				if (sk_flush_backlog(sk))
+					goto restart;
+			}
+
+			skb = tcp_stream_alloc_skb(sk, sk->sk_allocation,
+						   first_skb);
+			if (!skb)
+				goto wait_for_space;
+
+			process_backlog++;
+
+#ifdef CONFIG_SKB_DECRYPTED
+			skb->decrypted = !!(flags & MSG_SENDPAGE_DECRYPTED);
+#endif
+			tcp_skb_entail(sk, skb);
+			copy = size_goal;
+		}
+
+		/* Try to append data to the end of skb. */
+		if (copy > msg_data_left(msg))
+			copy = msg_data_left(msg);
+
+		copy = min_t(int, copy, skb_tailroom(skb));
+		err = skb_add_data_nocache(sk, skb, &msg->msg_iter, copy);
+		if (err)
+			goto do_error;
+
+		TCP_SKB_CB(skb)->end_seq += copy;
+		tcp_skb_pcount_set(skb, 0);
+
+		copied += copy;
+		goto out_nopush;
+
+wait_for_space:
+		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		tcp_remove_empty_skb(sk);
+
+		err = sk_stream_wait_memory(sk, &timeo);
+		if (err != 0)
+			goto do_error;
+	}
+
+out_nopush:
+	return copied;
+
+do_error:
+	tcp_remove_empty_skb(sk);
+
+	if (copied)
+		goto out_nopush;
+
+	err = sk_stream_error(sk, flags, err);
+	/* make sure we wake any epoll edge trigger waiter */
+	if (unlikely(tcp_rtx_and_write_queues_empty(sk) && err == -EAGAIN)) {
+		sk->sk_write_space(sk);
+		tcp_chrono_stop(sk, TCP_CHRONO_SNDBUF_LIMITED);
+	}
+
+	return err;
+}
+
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	struct net_devmem_dmabuf_binding *binding = NULL;
@@ -1131,6 +1243,9 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 		else if (err)
 			goto out_err;
 	}
+
+	if (unlikely(flags & MSG_PRELOAD))
+		return tcp_sendmsg_preload(sk, msg);
 
 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 

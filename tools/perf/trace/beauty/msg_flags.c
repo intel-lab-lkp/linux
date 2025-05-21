@@ -20,6 +20,9 @@
 #ifndef MSG_SPLICE_PAGES
 #define MSG_SPLICE_PAGES	0x8000000
 #endif
+#ifndef MSG_PRELOAD
+#define MSG_PRELOAD		0x10000000
+#endif
 #ifndef MSG_FASTOPEN
 #define MSG_FASTOPEN		0x20000000
 #endif
