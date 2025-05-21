@@ -1298,7 +1298,8 @@ exit:
 	return ret;
 }
 
-static int cfg80211_rtw_set_wiphy_params(struct wiphy *wiphy, u32 changed)
+static int cfg80211_rtw_set_wiphy_params(struct wiphy *wiphy, int radio_id,
+					 u32 changed)
 {
 	return 0;
 }
