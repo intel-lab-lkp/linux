@@ -625,6 +625,15 @@ struct drm_gem_open {
 	__u64 size;
 };
 
+/* DRM_IOCTL_GEM_CHANGE_HANDLE ioctl argument type */
+struct drm_gem_change_handle {
+	/** Current handle of object */
+	__u32 handle;
+
+	/** Handle to change that object to */
+	__u32 new_handle;
+};
+
 /**
  * DRM_CAP_DUMB_BUFFER
  *
@@ -1308,6 +1317,14 @@ extern "C" {
  * The call will fail if the name contains whitespaces or non-printable chars.
  */
 #define DRM_IOCTL_SET_CLIENT_NAME	DRM_IOWR(0xD1, struct drm_set_client_name)
+
+/**
+ * DRM_IOCTL_GEM_CHANGE_HANDLE - Move an object to a different handle
+ *
+ * Some applications (notably CRIU) need objects to have specific gem handles.
+ * This ioctl changes the object at one gem handle to use a new gem handle.
+ */
+#define DRM_IOCTL_GEM_CHANGE_HANDLE    DRM_IOWR(0xD2, struct drm_gem_change_handle)
 
 /*
  * Device specific ioctls should only be in their respective headers

@@ -282,7 +282,12 @@ drm_gem_object_release_handle(int id, void *ptr, void *data)
 	if (obj->funcs->close)
 		obj->funcs->close(obj, file_priv);
 
+	mutex_lock(&file_priv->prime.lock);
+
 	drm_prime_remove_buf_handle(&file_priv->prime, id);
+
+	mutex_unlock(&file_priv->prime.lock);
+
 	drm_vma_node_revoke(&obj->vma_node, file_priv);
 
 	drm_gem_object_handle_put_unlocked(obj);
@@ -885,6 +890,53 @@ drm_gem_flink_ioctl(struct drm_device *dev, void *data,
 err:
 	mutex_unlock(&dev->object_name_lock);
 	drm_gem_object_put(obj);
+	return ret;
+}
+
+/**
+ * drm_gem_open_ioctl - implementation of the GEM_CHANGE_HANDLE ioctl
+ * @dev: drm_device
+ * @data: ioctl data
+ * @file_priv: drm file-private structure
+ *
+ * find the object at the specified gem handle. Remove it from that handle, and assign it
+ * the specified new handle.
+ */
+int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file_priv)
+{
+	struct drm_gem_change_handle *args = data;
+	struct drm_gem_object *obj;
+	int ret;
+
+	obj = drm_gem_object_lookup(file_priv, args->handle);
+	if (!obj)
+		return -ENOENT;
+
+	if (args->handle == args->new_handle)
+		return 0;
+
+	get_dma_buf(obj->dma_buf);
+	mutex_lock(&file_priv->prime.lock);
+	spin_lock(&file_priv->table_lock);
+
+	ret = idr_alloc(&file_priv->object_idr, obj, args->new_handle, args->new_handle + 1, GFP_NOWAIT);
+	if (ret < 0)
+		goto out_unlock;
+
+	ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf, args->new_handle);
+	if (ret < 0)
+		goto out_unlock;
+
+	drm_prime_remove_buf_handle(&file_priv->prime, args->handle);
+
+	idr_remove(&file_priv->object_idr, args->handle);
+
+out_unlock:
+	spin_unlock(&file_priv->table_lock);
+	mutex_unlock(&file_priv->prime.lock);
+	dma_buf_put(obj->dma_buf);
+
 	return ret;
 }
 
