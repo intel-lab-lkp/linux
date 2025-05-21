@@ -24,6 +24,53 @@ static unsigned short media_ready_timeout = 60;
 module_param(media_ready_timeout, ushort, 0644);
 MODULE_PARM_DESC(media_ready_timeout, "seconds to wait for media ready");
 
+int cxl_dport_setup(struct cxl_dport *dport)
+{
+	struct device *dport_dev = dport->dport_dev;
+	struct cxl_port *port = dport->port;
+	struct cxl_register_map map;
+	struct pci_dev *pdev;
+	u32 lnkcap, port_num;
+	int rc;
+
+	/* Skipping for cxl_test since it's platform device */
+	if (!dev_is_pci(dport_dev))
+		return 0;
+
+	/*
+	 * dport->port_id is valid means that dport has been probed and is
+	 * setup.
+	 */
+	if (dport->port_num != CXL_DPORT_NUM_INVALID)
+		return 0;
+
+	pdev = to_pci_dev(dport_dev);
+	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
+				  &lnkcap))
+		return -ENODEV;
+	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+
+	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
+	if (rc) {
+		dev_dbg(&port->dev, "failed to find component registers\n");
+		return -ENODEV;
+	}
+
+	rc = cxl_dport_setup_regs(&port->dev, dport, map.resource);
+	if (rc)
+		return rc;
+
+	if (map.resource != CXL_RESOURCE_NONE) {
+		dev_dbg(dport->dport_dev,
+			"Component Register found for dport: %pa\n",
+			&map.resource);
+	}
+
+	dport->port_num = port_num;
+
+	return 0;
+}
+
 struct cxl_walk_context {
 	struct pci_bus *bus;
 	struct cxl_port *port;
@@ -37,10 +84,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	struct cxl_walk_context *ctx = data;
 	struct cxl_port *port = ctx->port;
 	int type = pci_pcie_type(pdev);
-	struct cxl_register_map map;
 	struct cxl_dport *dport;
-	u32 lnkcap, port_num;
-	int rc;
 
 	if (pdev->bus != ctx->bus)
 		return 0;
@@ -48,22 +92,13 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 		return 0;
 	if (type != ctx->type)
 		return 0;
-	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
-				  &lnkcap))
-		return 0;
 
-	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
-	if (rc)
-		dev_dbg(&port->dev, "failed to find component registers\n");
-
-	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
-	dport = devm_cxl_add_dport(port, &pdev->dev, map.resource);
+	dport = devm_cxl_add_dport(port, &pdev->dev, CXL_RESOURCE_NONE);
 	if (IS_ERR(dport)) {
 		ctx->error = PTR_ERR(dport);
 		return PTR_ERR(dport);
 	}
 
-	dport->port_num = port_num;
 	ctx->count++;
 
 	return 0;
@@ -73,8 +108,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
  * devm_cxl_port_enumerate_dports - enumerate downstream ports of the upstream port
  * @port: cxl_port whose ->uport_dev is the upstream of dports to be enumerated
  *
- * Returns a positive number of dports enumerated or a negative error
- * code.
+ * Returns 0 on success or a negative error code.
  */
 int devm_cxl_port_enumerate_dports(struct cxl_port *port)
 {
@@ -101,7 +135,7 @@ int devm_cxl_port_enumerate_dports(struct cxl_port *port)
 		return -ENODEV;
 	if (ctx.error)
 		return ctx.error;
-	return ctx.count;
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_enumerate_dports, "CXL");
 

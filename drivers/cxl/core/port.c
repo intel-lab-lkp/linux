@@ -791,8 +791,8 @@ static int cxl_port_setup_regs(struct cxl_port *port,
 				   component_reg_phys);
 }
 
-static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
-				resource_size_t component_reg_phys)
+int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
+			 resource_size_t component_reg_phys)
 {
 	int rc;
 
@@ -1013,7 +1013,7 @@ int devm_cxl_register_pci_bus(struct device *host, struct device *uport_dev,
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_register_pci_bus, "CXL");
 
-static bool dev_is_cxl_root_child(struct device *dev)
+bool dev_is_cxl_root_child(struct device *dev)
 {
 	struct cxl_port *port, *parent;
 
@@ -1030,6 +1030,7 @@ static bool dev_is_cxl_root_child(struct device *dev)
 
 	return false;
 }
+EXPORT_SYMBOL_NS_GPL(dev_is_cxl_root_child, "CXL");
 
 struct cxl_root *find_cxl_root(struct cxl_port *port)
 {
@@ -1068,19 +1069,9 @@ static struct cxl_dport *find_dport_by_num(struct cxl_port *port, int port_num)
 
 static int add_dport(struct cxl_port *port, struct cxl_dport *dport)
 {
-	struct cxl_dport *dup;
 	int rc;
 
 	device_lock_assert(&port->dev);
-	dup = find_dport_by_num(port, dport->port_num);
-	if (dup) {
-		dev_err(&port->dev,
-			"unable to add dport%d-%s non-unique port num (%s)\n",
-			dport->port_num, dev_name(dport->dport_dev),
-			dev_name(dup->dport_dev));
-		return -EBUSY;
-	}
-
 	rc = xa_insert(&port->dports, (unsigned long)dport->dport_dev, dport,
 		       GFP_KERNEL);
 	if (rc)
@@ -1652,6 +1643,112 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 	return rc;
 }
 
+static struct cxl_dport *port_probe_dport(struct cxl_port *port,
+					  struct device *dport_dev)
+{
+	struct cxl_dport *dport;
+	unsigned long index;
+	int rc;
+
+	device_lock_assert(&port->dev);
+	xa_for_each(&port->dports, index, dport) {
+		if (dport->dport_dev != dport_dev)
+			continue;
+
+		rc = cxl_dport_setup(dport);
+		if (rc)
+			return ERR_PTR(rc);
+
+		return dport;
+	}
+
+	return ERR_PTR(-ENODEV);
+}
+
+static int update_switch_decoder(struct device *dev, void *data)
+{
+	struct cxl_dport *dport = data;
+	struct cxl_switch_decoder *cxlsd;
+	struct cxl_decoder *cxld;
+	int i;
+
+	if (!is_switch_decoder(dev))
+		return 0;
+
+	cxlsd = to_cxl_switch_decoder(dev);
+	cxld = &cxlsd->cxld;
+	guard(rwsem_write)(&cxl_region_rwsem);
+	for (i = 0; i < cxld->interleave_ways; i++) {
+		if (cxlsd->target_map[i] == dport->port_num) {
+			cxlsd->target[i] = dport;
+			return 0;
+		}
+	}
+
+	dev_dbg(dev, "Updating decoder target_map with %s and none found\n",
+		dev_name(dport->dport_dev));
+
+	return 0;
+}
+
+static int update_decoders_with_dport(struct cxl_port *port, struct cxl_dport *dport)
+{
+	device_lock_assert(&port->dev);
+	return device_for_each_child(&port->dev, dport, update_switch_decoder);
+}
+
+int devm_cxl_port_setup_decoders(struct cxl_port *port)
+{
+	struct cxl_dport *dport;
+	struct cxl_hdm *cxlhdm;
+	unsigned long index;
+	int dports = 0;
+
+	cxlhdm = devm_cxl_setup_hdm(port, NULL);
+	if (!IS_ERR(cxlhdm))
+		return devm_cxl_enumerate_decoders(cxlhdm, NULL);
+
+	if (PTR_ERR(cxlhdm) != -ENODEV) {
+		dev_err(&port->dev, "Failed to map HDM decoder capability\n");
+		return PTR_ERR(cxlhdm);
+	}
+
+	xa_for_each(&port->dports, index, dport)
+		dports++;
+
+	if (dports == 1) {
+		dev_dbg(&port->dev, "Fallback to passthrough decoder\n");
+		return devm_cxl_add_passthrough_decoder(port);
+	}
+
+	dev_err(&port->dev, "HDM decoder capability not found\n");
+	return -ENXIO;
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_port_setup_decoders, "CXL");
+
+static int cxl_switch_port_dport_setup(struct cxl_port *port,
+				       struct device *dport_dev)
+{
+	struct cxl_dport *dport;
+
+	device_lock_assert(&port->dev);
+
+	if (!port->dev.driver)
+		return -ENODEV;
+
+	dport = port_probe_dport(port, dport_dev);
+	if (IS_ERR(dport))
+		return PTR_ERR(dport);
+
+	cxl_switch_parse_cdat(port);
+
+	/* Make sure that no decoders have been allocated before proceeding. */
+	if (ida_is_empty(&port->decoder_ida))
+		return devm_cxl_port_setup_decoders(port);
+
+	return update_decoders_with_dport(port, dport);
+}
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
@@ -1700,6 +1797,19 @@ retry:
 				"found already registered port %s:%s\n",
 				dev_name(&port->dev),
 				dev_name(port->uport_dev));
+
+			/*
+			 * Attempt to do single pass dport setup by checking here
+			 * instead of doing it during port creation. Otherwise
+			 * it still needs to check here for dports that are
+			 * being probed with a port already created.
+			 */
+			scoped_guard(device, &port->dev) {
+				rc = cxl_switch_port_dport_setup(port, dport_dev);
+				if (rc)
+					return rc;
+			}
+
 			rc = cxl_add_ep(dport, &cxlmd->dev);
 
 			/*
@@ -1765,10 +1875,14 @@ static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 
 	guard(rwsem_write)(&cxl_region_rwsem);
 	for (i = 0; i < cxlsd->cxld.interleave_ways; i++) {
-		struct cxl_dport *dport = find_dport_by_num(port, target_map[i]);
+		struct cxl_dport *dport;
 
-		if (!dport)
-			return -ENXIO;
+		cxlsd->target_map[i] = target_map[i];
+		dport = find_dport_by_num(port, target_map[i]);
+		if (!dport) {
+			/* dport may be activated later */
+			continue;
+		}
 		cxlsd->target[i] = dport;
 	}
 
