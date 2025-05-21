@@ -1049,6 +1049,11 @@ struct req_iterator {
 	struct bio *bio;
 };
 
+#define rq_for_each_copy_bvec(bvl, _rq, _iter)			\
+	__rq_for_each_bio(_iter.bio, _rq)			\
+		bio_for_each_copy_bvec(bvl, _iter.bio, _iter.iter, \
+			_rq->q->limits.max_copy_segment_sectors)
+
 #define __rq_for_each_bio(_bio, rq)	\
 	if ((rq->bio))			\
 		for (_bio = (rq)->bio; _bio; _bio = _bio->bi_next)

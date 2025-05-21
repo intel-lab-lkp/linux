@@ -54,6 +54,7 @@ static inline bool bio_has_data(struct bio *bio)
 	if (bio &&
 	    bio->bi_iter.bi_size &&
 	    bio_op(bio) != REQ_OP_DISCARD &&
+	    bio_op(bio) != REQ_OP_COPY &&
 	    bio_op(bio) != REQ_OP_SECURE_ERASE &&
 	    bio_op(bio) != REQ_OP_WRITE_ZEROES)
 		return true;
@@ -66,6 +67,11 @@ static inline bool bio_no_advance_iter(const struct bio *bio)
 	return bio_op(bio) == REQ_OP_DISCARD ||
 	       bio_op(bio) == REQ_OP_SECURE_ERASE ||
 	       bio_op(bio) == REQ_OP_WRITE_ZEROES;
+}
+
+static inline bool bio_sector_advance_iter(const struct bio *bio)
+{
+	return bio_op(bio) == REQ_OP_COPY;
 }
 
 static inline void *bio_data(struct bio *bio)
@@ -100,6 +106,8 @@ static inline void bio_advance_iter(const struct bio *bio,
 
 	if (bio_no_advance_iter(bio))
 		iter->bi_size -= bytes;
+	else if (bio_sector_advance_iter(bio))
+		bvec_iter_sector_advance(bio->bi_io_vec, iter, bytes);
 	else
 		bvec_iter_advance(bio->bi_io_vec, iter, bytes);
 		/* TODO: It is reasonable to complete bio with error here. */
@@ -114,6 +122,8 @@ static inline void bio_advance_iter_single(const struct bio *bio,
 
 	if (bio_no_advance_iter(bio))
 		iter->bi_size -= bytes;
+	else if (bio_sector_advance_iter(bio))
+		bvec_iter_sector_advance_single(bio->bi_io_vec, iter, bytes);
 	else
 		bvec_iter_advance_single(bio->bi_io_vec, iter, bytes);
 }
@@ -154,6 +164,15 @@ static inline void bio_advance(struct bio *bio, unsigned int nbytes)
 	     (iter).bi_size &&						\
 		((bvl = mp_bvec_iter_bvec((bio)->bi_io_vec, (iter))), 1); \
 	     bio_advance_iter_single((bio), &(iter), (bvl).bv_len))
+
+#define __bio_for_each_copy_bvec(bvl, bio, iter, start, max)		\
+	for (iter = (start);						\
+	     (iter).bi_size &&						\
+		((bvl = copy_bvec_iter_bvec((bio)->bi_io_vec, (iter), max)), 1); \
+	     bio_advance_iter_single((bio), &(iter), (bvl).bv_sectors << SECTOR_SHIFT))
+
+#define bio_for_each_copy_bvec(bvl, bio, iter, max)			\
+	__bio_for_each_copy_bvec(bvl, bio, iter, (bio)->bi_iter, max)
 
 /* iterate over multi-page bvec */
 #define bio_for_each_bvec(bvl, bio, iter)			\
@@ -409,6 +428,7 @@ extern void bio_uninit(struct bio *);
 void bio_reset(struct bio *bio, struct block_device *bdev, blk_opf_t opf);
 void bio_chain(struct bio *, struct bio *);
 
+int bio_add_copy_src(struct bio *bio, struct bio_vec *src);
 int __must_check bio_add_page(struct bio *bio, struct page *page, unsigned len,
 			      unsigned off);
 bool __must_check bio_add_folio(struct bio *bio, struct folio *folio,

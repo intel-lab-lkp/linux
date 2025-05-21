@@ -21,6 +21,8 @@ struct page;
  * @bv_page:   First page associated with the address range.
  * @bv_len:    Number of bytes in the address range.
  * @bv_offset: Start of the address range relative to the start of @bv_page.
+ * @bv_sector: Start sector associated with the source block range
+ * @bv_sectors: Number of sectors in the block range
  *
  * The following holds for a bvec if n * PAGE_SIZE < bv_offset + bv_len:
  *
@@ -29,9 +31,17 @@ struct page;
  * This holds because page_is_mergeable() checks the above property.
  */
 struct bio_vec {
-	struct page	*bv_page;
-	unsigned int	bv_len;
-	unsigned int	bv_offset;
+	union {
+		struct {
+			struct page	*bv_page;
+			unsigned int	bv_len;
+			unsigned int	bv_offset;
+		};
+		struct {
+			sector_t	bv_sector;
+			sector_t	bv_sectors;
+		};
+	};
 };
 
 /**
@@ -118,6 +128,21 @@ struct bvec_iter_all {
 	.bv_offset	= mp_bvec_iter_offset((bvec), (iter)),	\
 })
 
+/* sector based bvec helpers */
+#define copy_bvec_iter_sector(bvec, iter)			\
+	(__bvec_iter_bvec((bvec), (iter))->bv_sector) + 	\
+		((iter).bi_bvec_done >> 9)
+
+#define copy_bvec_iter_sectors(bvec, iter)			\
+	(__bvec_iter_bvec((bvec), (iter))->bv_sectors) -	\
+		((iter).bi_bvec_done >> 9)
+
+#define copy_bvec_iter_bvec(bvec, iter, max)			\
+((struct bio_vec) {						\
+	.bv_sector	= copy_bvec_iter_sector((bvec), (iter)),	\
+	.bv_sectors	= min(max, copy_bvec_iter_sectors((bvec), (iter))),	\
+})
+
 /* For building single-page bvec in flight */
  #define bvec_iter_offset(bvec, iter)				\
 	(mp_bvec_iter_offset((bvec), (iter)) % PAGE_SIZE)
@@ -161,6 +186,30 @@ static inline bool bvec_iter_advance(const struct bio_vec *bv,
 	return true;
 }
 
+static inline bool bvec_iter_sector_advance(const struct bio_vec *bv,
+		struct bvec_iter *iter, unsigned bytes)
+{
+	unsigned int idx = iter->bi_idx;
+
+	if (WARN_ONCE(bytes > iter->bi_size,
+			"Attempted to advance past end of bvec iter\n")) {
+		iter->bi_size = 0;
+		return false;
+	}
+
+	iter->bi_size -= bytes;
+	bytes += iter->bi_bvec_done;
+
+	while (bytes && bytes >> 9 >= bv[idx].bv_sectors) {
+		bytes -= bv[idx].bv_sectors << 9;
+		idx++;
+	}
+
+	iter->bi_idx = idx;
+	iter->bi_bvec_done = bytes;
+	return true;
+}
+
 /*
  * A simpler version of bvec_iter_advance(), @bytes should not span
  * across multiple bvec entries, i.e. bytes <= bv[i->bi_idx].bv_len
@@ -171,6 +220,19 @@ static inline void bvec_iter_advance_single(const struct bio_vec *bv,
 	unsigned int done = iter->bi_bvec_done + bytes;
 
 	if (done == bv[iter->bi_idx].bv_len) {
+		done = 0;
+		iter->bi_idx++;
+	}
+	iter->bi_bvec_done = done;
+	iter->bi_size -= bytes;
+}
+
+static inline void bvec_iter_sector_advance_single(const struct bio_vec *bv,
+		struct bvec_iter *iter, unsigned bytes)
+{
+	unsigned int done = iter->bi_bvec_done + bytes;
+
+	if (done == bv[iter->bi_idx].bv_sectors << 9) {
 		done = 0;
 		iter->bi_idx++;
 	}

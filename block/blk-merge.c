@@ -399,6 +399,31 @@ struct bio *bio_split_write_zeroes(struct bio *bio,
 	return bio_submit_split(bio, max_sectors);
 }
 
+struct bio *bio_split_copy(struct bio *bio, const struct queue_limits *lim,
+		unsigned *nr_segs)
+{
+	unsigned nsegs = 0, sectors = 0, mcss = lim->max_copy_segment_sectors;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	bio_for_each_copy_bvec(bv, bio, iter, mcss) {
+		unsigned s;
+
+		s = min(lim->max_copy_sectors - sectors, bv.bv_sectors);
+		nsegs += 1;
+		sectors += s;
+
+		if (nsegs >= lim->max_copy_segments || sectors >= lim->max_copy_sectors)
+			break;
+	}
+
+	if (sectors == bio_sectors(bio))
+		sectors = 0;
+
+	*nr_segs = nsegs;
+	return bio_submit_split(bio, sectors);
+}
+
 /**
  * bio_split_to_limits - split a bio to fit the queue limits
  * @bio:     bio to be split
@@ -467,6 +492,7 @@ static inline unsigned int blk_rq_get_max_sectors(struct request *rq,
 
 	if (!boundary_sectors ||
 	    req_op(rq) == REQ_OP_DISCARD ||
+	    req_op(rq) == REQ_OP_COPY ||
 	    req_op(rq) == REQ_OP_SECURE_ERASE)
 		return max_sectors;
 	return min(max_sectors,
@@ -753,7 +779,7 @@ static struct request *attempt_merge(struct request_queue *q,
 
 	req->__data_len += blk_rq_bytes(next);
 
-	if (!blk_discard_mergable(req))
+	if (!blk_discard_mergable(req) && !blk_copy_mergable(req))
 		elv_merge_requests(q, req, next);
 
 	blk_crypto_rq_put_keyslot(next);

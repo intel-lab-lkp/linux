@@ -399,9 +399,13 @@ struct queue_limits {
 	unsigned int		atomic_write_hw_unit_max;
 	unsigned int		atomic_write_unit_max;
 
+	unsigned int		max_copy_sectors;
+	unsigned int		max_copy_segment_sectors;
+
 	unsigned short		max_segments;
 	unsigned short		max_integrity_segments;
 	unsigned short		max_discard_segments;
+	unsigned short		max_copy_segments;
 
 	unsigned short		max_write_streams;
 	unsigned int		write_stream_granularity;
@@ -1271,6 +1275,11 @@ static inline unsigned short queue_max_discard_segments(const struct request_que
 	return q->limits.max_discard_segments;
 }
 
+static inline unsigned short queue_max_copy_segments(const struct request_queue *q)
+{
+	return q->limits.max_copy_segments;
+}
+
 static inline unsigned int queue_max_segment_size(const struct request_queue *q)
 {
 	return q->limits.max_segment_size;
@@ -1378,6 +1387,11 @@ bdev_max_secure_erase_sectors(struct block_device *bdev)
 static inline unsigned int bdev_write_zeroes_sectors(struct block_device *bdev)
 {
 	return bdev_limits(bdev)->max_write_zeroes_sectors;
+}
+
+static inline unsigned int bdev_copy_sectors(struct block_device *bdev)
+{
+	return bdev_limits(bdev)->max_copy_sectors;
 }
 
 static inline bool bdev_nonrot(struct block_device *bdev)

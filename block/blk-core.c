@@ -837,6 +837,10 @@ void submit_bio_noacct(struct bio *bio)
 		if (!bdev_max_discard_sectors(bdev))
 			goto not_supported;
 		break;
+	case REQ_OP_COPY:
+		if (!bdev_copy_sectors(bdev))
+			goto not_supported;
+		break;
 	case REQ_OP_SECURE_ERASE:
 		if (!bdev_max_secure_erase_sectors(bdev))
 			goto not_supported;

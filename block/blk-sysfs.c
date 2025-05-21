@@ -132,6 +132,7 @@ static ssize_t queue_##_field##_show(struct gendisk *disk, char *page)	\
 
 QUEUE_SYSFS_LIMIT_SHOW(max_segments)
 QUEUE_SYSFS_LIMIT_SHOW(max_discard_segments)
+QUEUE_SYSFS_LIMIT_SHOW(max_copy_segments)
 QUEUE_SYSFS_LIMIT_SHOW(max_integrity_segments)
 QUEUE_SYSFS_LIMIT_SHOW(max_segment_size)
 QUEUE_SYSFS_LIMIT_SHOW(max_write_streams)
@@ -160,6 +161,8 @@ static ssize_t queue_##_field##_show(struct gendisk *disk, char *page)	\
 
 QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(max_discard_sectors)
 QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(max_hw_discard_sectors)
+QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(max_copy_sectors)
+QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(max_copy_segment_sectors)
 QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(max_write_zeroes_sectors)
 QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(atomic_write_max_sectors)
 QUEUE_SYSFS_LIMIT_SHOW_SECTORS_TO_BYTES(atomic_write_boundary_sectors)
@@ -501,10 +504,13 @@ QUEUE_LIM_RO_ENTRY(queue_io_min, "minimum_io_size");
 QUEUE_LIM_RO_ENTRY(queue_io_opt, "optimal_io_size");
 
 QUEUE_LIM_RO_ENTRY(queue_max_discard_segments, "max_discard_segments");
+QUEUE_LIM_RO_ENTRY(queue_max_copy_segments, "max_copy_segments");
 QUEUE_LIM_RO_ENTRY(queue_discard_granularity, "discard_granularity");
 QUEUE_LIM_RO_ENTRY(queue_max_hw_discard_sectors, "discard_max_hw_bytes");
 QUEUE_LIM_RW_ENTRY(queue_max_discard_sectors, "discard_max_bytes");
 QUEUE_RO_ENTRY(queue_discard_zeroes_data, "discard_zeroes_data");
+QUEUE_RO_ENTRY(queue_max_copy_sectors, "copy_max_bytes");
+QUEUE_RO_ENTRY(queue_max_copy_segment_sectors, "copy_segment_max_bytes");
 
 QUEUE_LIM_RO_ENTRY(queue_atomic_write_max_sectors, "atomic_write_max_bytes");
 QUEUE_LIM_RO_ENTRY(queue_atomic_write_boundary_sectors,
@@ -644,6 +650,7 @@ static struct attribute *queue_attrs[] = {
 	&queue_max_sectors_entry.attr,
 	&queue_max_segments_entry.attr,
 	&queue_max_discard_segments_entry.attr,
+	&queue_max_copy_segments_entry.attr,
 	&queue_max_integrity_segments_entry.attr,
 	&queue_max_segment_size_entry.attr,
 	&queue_max_write_streams_entry.attr,
@@ -657,6 +664,8 @@ static struct attribute *queue_attrs[] = {
 	&queue_discard_granularity_entry.attr,
 	&queue_max_discard_sectors_entry.attr,
 	&queue_max_hw_discard_sectors_entry.attr,
+	&queue_max_copy_sectors_entry.attr,
+	&queue_max_copy_segment_sectors_entry.attr,
 	&queue_atomic_write_max_sectors_entry.attr,
 	&queue_atomic_write_boundary_sectors_entry.attr,
 	&queue_atomic_write_unit_min_entry.attr,

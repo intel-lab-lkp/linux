@@ -185,10 +185,20 @@ static inline bool blk_discard_mergable(struct request *req)
 	return false;
 }
 
+static inline bool blk_copy_mergable(struct request *req)
+{
+	if (req_op(req) == REQ_OP_COPY &&
+	    queue_max_copy_segments(req->q) > 1)
+		return true;
+	return false;
+}
+
 static inline unsigned int blk_rq_get_max_segments(struct request *rq)
 {
 	if (req_op(rq) == REQ_OP_DISCARD)
 		return queue_max_discard_segments(rq->q);
+	if (req_op(rq) == REQ_OP_COPY)
+		return queue_max_copy_segments(rq->q);
 	return queue_max_segments(rq->q);
 }
 
@@ -200,7 +210,8 @@ static inline unsigned int blk_queue_get_max_sectors(struct request *rq)
 	if (unlikely(op == REQ_OP_DISCARD || op == REQ_OP_SECURE_ERASE))
 		return min(q->limits.max_discard_sectors,
 			   UINT_MAX >> SECTOR_SHIFT);
-
+	if (unlikely(op == REQ_OP_COPY))
+		return q->limits.max_copy_sectors;
 	if (unlikely(op == REQ_OP_WRITE_ZEROES))
 		return q->limits.max_write_zeroes_sectors;
 
@@ -347,6 +358,8 @@ struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 		unsigned *nr_segs);
 struct bio *bio_split_zone_append(struct bio *bio,
 		const struct queue_limits *lim, unsigned *nr_segs);
+struct bio *bio_split_copy(struct bio *bio, const struct queue_limits *lim,
+		unsigned *nsegs);
 
 /*
  * All drivers must accept single-segments bios that are smaller than PAGE_SIZE.
@@ -397,6 +410,8 @@ static inline struct bio *__bio_split_to_limits(struct bio *bio,
 		return bio_split_discard(bio, lim, nr_segs);
 	case REQ_OP_WRITE_ZEROES:
 		return bio_split_write_zeroes(bio, lim, nr_segs);
+	case REQ_OP_COPY:
+		return bio_split_copy(bio, lim, nr_segs);
 	default:
 		/* other operations can't be split */
 		*nr_segs = 0;
