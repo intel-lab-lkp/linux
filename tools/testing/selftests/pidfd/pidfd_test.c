@@ -492,7 +492,7 @@ static int child_poll_exec_test(void *args)
 	return 0;
 }
 
-static void test_pidfd_poll_exec(int use_waitpid)
+static int test_pidfd_poll_exec(int use_waitpid)
 {
 	int pid, pidfd = 0;
 	int status, ret;
@@ -528,6 +528,7 @@ static void test_pidfd_poll_exec(int use_waitpid)
 		ksft_exit_fail_msg("%s test: Failed\n", test_name);
 	else
 		ksft_test_result_pass("%s test: Passed\n", test_name);
+	return 0;
 }
 
 static void *test_pidfd_poll_leader_exit_thread(void *priv)
@@ -558,7 +559,7 @@ static int child_poll_leader_exit_test(void *args)
 	exit(0);
 }
 
-static void test_pidfd_poll_leader_exit(int use_waitpid)
+static int test_pidfd_poll_leader_exit(int use_waitpid)
 {
 	int pid, pidfd = 0;
 	int status, ret = 0;
@@ -608,6 +609,7 @@ static void test_pidfd_poll_leader_exit(int use_waitpid)
 		ksft_exit_fail_msg("%s test: Failed\n", test_name);
 	else
 		ksft_test_result_pass("%s test: Passed\n", test_name);
+	return 0;
 }
 
 int main(int argc, char **argv)
