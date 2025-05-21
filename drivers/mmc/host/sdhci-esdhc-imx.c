@@ -1670,6 +1670,9 @@ sdhci_esdhc_imx_probe_dt(struct platform_device *pdev,
 						ESDHC_PINCTRL_STATE_100MHZ);
 		imx_data->pins_200mhz = pinctrl_lookup_state(imx_data->pinctrl,
 						ESDHC_PINCTRL_STATE_200MHZ);
+
+		if (IS_ERR_OR_NULL(imx_data->pins_100mhz))
+			imx_data->pins_100mhz = imx_data->pins_200mhz;
 	}
 
 	/* call to generic mmc_of_parse to support additional capabilities */
