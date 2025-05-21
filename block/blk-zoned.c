@@ -607,13 +607,20 @@ static void disk_zone_wplug_abort(struct blk_zone_wplug *zwplug)
 {
 	struct bio *bio;
 
-	if (bio_list_empty(&zwplug->bio_list))
-		return;
+	scoped_guard(spinlock_irqsave, &zwplug->lock)
+		if (bio_list_empty(&zwplug->bio_list))
+			return;
 
 	pr_warn_ratelimited("%s: zone %u: Aborting plugged BIOs\n",
 			    zwplug->disk->disk_name, zwplug->zone_no);
-	while ((bio = bio_list_pop(&zwplug->bio_list)))
-		blk_zone_wplug_bio_io_error(zwplug, bio);
+	for (;;) {
+		scoped_guard(spinlock_irqsave, &zwplug->lock) {
+			bio = bio_list_pop(&zwplug->bio_list);
+			if (!bio)
+				break;
+			blk_zone_wplug_bio_io_error(zwplug, bio);
+		}
+	}
 }
 
 /*
@@ -635,8 +642,9 @@ static void disk_zone_wplug_set_wp_offset(struct gendisk *disk,
 		/* Update the zone write pointer and abort all plugged BIOs. */
 		zwplug->flags &= ~BLK_ZONE_WPLUG_NEED_WP_UPDATE;
 		zwplug->wp_offset = wp_offset;
-		disk_zone_wplug_abort(zwplug);
 	}
+
+	disk_zone_wplug_abort(zwplug);
 
 	/*
 	 * The zone write plug now has no BIO plugged: remove it from the
@@ -1086,7 +1094,9 @@ static void blk_zone_wplug_handle_native_zone_append(struct bio *bio)
 	if (!bio_list_empty(&zwplug->bio_list)) {
 		pr_warn_ratelimited("%s: zone %u: Invalid mix of zone append and regular writes\n",
 				    disk->disk_name, zwplug->zone_no);
+		spin_unlock_irqrestore(&zwplug->lock, flags);
 		disk_zone_wplug_abort(zwplug);
+		spin_lock_irqsave(&zwplug->lock, flags);
 	}
 	disk_remove_zone_wplug(disk, zwplug);
 	spin_unlock_irqrestore(&zwplug->lock, flags);
