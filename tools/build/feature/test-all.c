@@ -138,10 +138,6 @@
 # include "test-bpf.c"
 #undef main
 
-#define main main_test_libcrypto
-# include "test-libcrypto.c"
-#undef main
-
 #define main main_test_sdt
 # include "test-sdt.c"
 #undef main
@@ -206,7 +202,6 @@ int main(int argc, char *argv[])
 	main_test_lzma();
 	main_test_get_cpuid();
 	main_test_bpf();
-	main_test_libcrypto();
 	main_test_scandirat();
 	main_test_sched_getcpu();
 	main_test_sdt();
