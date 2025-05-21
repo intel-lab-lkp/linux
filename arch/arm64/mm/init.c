@@ -292,6 +292,7 @@ void __init arm64_memblock_init(void)
 void __init bootmem_init(void)
 {
 	unsigned long min, max;
+	phys_addr_t cma_limit;
 
 	min = PFN_UP(memblock_start_of_DRAM());
 	max = PFN_DOWN(memblock_end_of_DRAM());
@@ -323,8 +324,14 @@ void __init bootmem_init(void)
 
 	/*
 	 * Reserve the CMA area after arm64_dma_phys_limit was initialised.
+	 *
+	 * When CONFIG_DMA_NUMA_CMA is enabled, system may have CMA reserved
+	 * area in different NUMA nodes, which likely goes beyond the 32bit
+	 * limit, thus use (PHYS_MASK+1) as cma limit.
 	 */
-	dma_contiguous_reserve(arm64_dma_phys_limit);
+	cma_limit = IS_ENABLED(CONFIG_DMA_NUMA_CMA) ?
+			(PHYS_MASK + 1) : arm64_dma_phys_limit;
+	dma_contiguous_reserve(cma_limit);
 
 	/*
 	 * request_standard_resources() depends on crashkernel's memory being
