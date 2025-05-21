@@ -3464,8 +3464,13 @@ static inline void wp_page_reuse(struct vm_fault *vmf, struct folio *folio)
 		 * Clear the folio's cpupid information as the existing
 		 * information potentially belongs to a now completely
 		 * unrelated process.
+		 *
+		 * If the page is found to be isolated pending migration,
+		 * then don't reset as last_cpupid will be holding the
+		 * target_nid information.
 		 */
-		folio_xchg_last_cpupid(folio, (1 << LAST_CPUPID_SHIFT) - 1);
+		if (folio_test_lru(folio))
+			folio_xchg_last_cpupid(folio, (1 << LAST_CPUPID_SHIFT) - 1);
 	}
 
 	flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
@@ -5856,12 +5861,13 @@ static void numa_rebuild_large_mapping(struct vm_fault *vmf, struct vm_area_stru
 
 static vm_fault_t do_numa_page(struct vm_fault *vmf)
 {
+	struct task_struct *task = current;
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio = NULL;
 	int nid = NUMA_NO_NODE;
 	bool writable = false, ignore_writable = false;
 	bool pte_write_upgrade = vma_wants_manual_pte_write_upgrade(vma);
-	int last_cpupid;
+	int last_cpupid = (-1 & LAST_CPUPID_MASK);
 	int target_nid;
 	pte_t pte, old_pte;
 	int flags = 0, nr_pages;
@@ -5897,6 +5903,13 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	nid = folio_nid(folio);
 	nr_pages = folio_nr_pages(folio);
 
+	/*
+	 * If it is a non-LRU folio, it has been already
+	 * isolated and is in migration list.
+	 */
+	if (!folio_test_lru(folio))
+		goto out_map;
+
 	target_nid = numa_migrate_check(folio, vmf, vmf->address, &flags,
 					writable, &last_cpupid);
 	if (target_nid == NUMA_NO_NODE)
@@ -5905,28 +5918,17 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		flags |= TNF_MIGRATE_FAIL;
 		goto out_map;
 	}
-	/* The folio is isolated and isolation code holds a folio reference. */
-	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	writable = false;
 	ignore_writable = true;
+	nid = target_nid;
 
-	/* Migrate to the requested node */
-	if (!migrate_misplaced_folio(folio, target_nid)) {
-		nid = target_nid;
-		flags |= TNF_MIGRATED;
-		task_numa_fault(last_cpupid, nid, nr_pages, flags);
-		return 0;
-	}
-
-	flags |= TNF_MIGRATE_FAIL;
-	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-				       vmf->address, &vmf->ptl);
-	if (unlikely(!vmf->pte))
-		return 0;
-	if (unlikely(!pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		return 0;
-	}
+	/*
+	 * Store target_nid in last_cpupid field for the isolated
+	 * folios.
+	 */
+	folio_xchg_last_cpupid(folio, target_nid);
+	list_add_tail(&folio->lru, &task->migrate_list);
+	task->migrate_count += nr_pages;
 out_map:
 	/*
 	 * Make it present again, depending on how arch implements

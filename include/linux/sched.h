@@ -1368,6 +1368,8 @@ struct task_struct {
 	u64				last_task_numa_placement;
 	u64				last_sum_exec_runtime;
 	struct callback_head		numa_work;
+	struct callback_head		numa_mig_work;
+	unsigned long			numa_mig_interval;
 
 	/*
 	 * This pointer is only modified for current in syscall and
@@ -1405,6 +1407,8 @@ struct task_struct {
 	unsigned long			numa_faults_locality[3];
 
 	unsigned long			numa_pages_migrated;
+	struct list_head		migrate_list;
+	unsigned long			migrate_count;
 #endif /* CONFIG_NUMA_BALANCING */
 
 #ifdef CONFIG_RSEQ

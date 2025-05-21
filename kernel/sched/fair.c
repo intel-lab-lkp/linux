@@ -49,6 +49,7 @@
 #include <linux/ratelimit.h>
 #include <linux/task_work.h>
 #include <linux/rbtree_augmented.h>
+#include <linux/migrate.h>
 
 #include <asm/switch_to.h>
 
@@ -1462,6 +1463,8 @@ unsigned int sysctl_numa_balancing_scan_delay = 1000;
 
 /* The page with hint page fault latency < threshold in ms is considered hot */
 unsigned int sysctl_numa_balancing_hot_threshold = MSEC_PER_SEC;
+
+#define NUMAB_BATCH_MIGRATION_THRESHOLD	512
 
 struct numa_group {
 	refcount_t refcount;
@@ -3299,6 +3302,46 @@ static bool vma_is_accessed(struct mm_struct *mm, struct vm_area_struct *vma)
 #define VMA_PID_RESET_PERIOD (4 * sysctl_numa_balancing_scan_delay)
 
 /*
+ * TODO: Feed failed migration count back to scan period update
+ * mechanism.
+ */
+static void migrate_queued_pages(struct list_head *migrate_list)
+{
+	int cur_nid, nid;
+	struct folio *folio, *tmp;
+	LIST_HEAD(nid_list);
+
+	folio = list_entry(migrate_list, struct folio, lru);
+	cur_nid = folio_last_cpupid(folio);
+
+	list_for_each_entry_safe(folio, tmp, migrate_list, lru) {
+		nid = folio_xchg_last_cpupid(folio, -1);
+
+		if (cur_nid != nid) {
+			migrate_misplaced_folio_batch(&nid_list, cur_nid);
+			cur_nid = nid;
+		}
+		list_move(&folio->lru, &nid_list);
+	}
+	migrate_misplaced_folio_batch(&nid_list, cur_nid);
+}
+
+static void task_migration_work(struct callback_head *work)
+{
+	struct task_struct *p = current;
+
+	WARN_ON_ONCE(p != container_of(work, struct task_struct, numa_mig_work));
+
+	work->next = work;
+
+	if (list_empty(&p->migrate_list))
+		return;
+
+	migrate_queued_pages(&p->migrate_list);
+	p->migrate_count = 0;
+}
+
+/*
  * The expensive part of numa migration is done from task_work context.
  * Triggered from task_tick_numa().
  */
@@ -3577,14 +3620,19 @@ void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 	p->numa_migrate_retry		= 0;
 	/* Protect against double add, see task_tick_numa and task_numa_work */
 	p->numa_work.next		= &p->numa_work;
+	p->numa_mig_work.next		= &p->numa_mig_work;
+	p->numa_mig_interval			= 0;
 	p->numa_faults			= NULL;
 	p->numa_pages_migrated		= 0;
 	p->total_numa_faults		= 0;
 	RCU_INIT_POINTER(p->numa_group, NULL);
 	p->last_task_numa_placement	= 0;
 	p->last_sum_exec_runtime	= 0;
+	p->migrate_count		= 0;
+	INIT_LIST_HEAD(&p->migrate_list);
 
 	init_task_work(&p->numa_work, task_numa_work);
+	init_task_work(&p->numa_mig_work, task_migration_work);
 
 	/* New address space, reset the preferred nid */
 	if (!(clone_flags & CLONE_VM)) {
@@ -3606,6 +3654,20 @@ void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 	}
 }
 
+static void task_check_pending_migrations(struct task_struct *curr)
+{
+	struct callback_head *work = &curr->numa_mig_work;
+
+	if (work->next != work)
+		return;
+
+	if (time_after(jiffies, curr->numa_mig_interval) ||
+	    (curr->migrate_count > NUMAB_BATCH_MIGRATION_THRESHOLD)) {
+		curr->numa_mig_interval = jiffies + HZ;
+		task_work_add(curr, work, TWA_RESUME);
+	}
+}
+
 /*
  * Drive the periodic memory faults..
  */
@@ -3619,6 +3681,8 @@ static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 	 */
 	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) || work->next != work)
 		return;
+
+	task_check_pending_migrations(curr);
 
 	/*
 	 * Using runtime rather than walltime has the dual advantage that
