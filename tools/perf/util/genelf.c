@@ -28,24 +28,7 @@
 #define NT_GNU_BUILD_ID 3
 #endif
 
-#define BUILD_ID_URANDOM /* different uuid for each run */
-
-#ifdef HAVE_LIBCRYPTO_SUPPORT
-
-#define BUILD_ID_MD5
-#undef BUILD_ID_SHA	/* does not seem to work well when linked with Java */
-#undef BUILD_ID_URANDOM /* different uuid for each run */
-
-#ifdef BUILD_ID_SHA
-#include <openssl/sha.h>
-#endif
-
-#ifdef BUILD_ID_MD5
-#include <openssl/evp.h>
-#include <openssl/md5.h>
-#endif
-#endif
-
+#include "sha1_base.h"
 
 typedef struct {
   unsigned int namesz;  /* Size of entry's owner string */
@@ -92,64 +75,21 @@ static Elf_Sym symtab[]={
 	}
 };
 
-#ifdef BUILD_ID_URANDOM
-static void
-gen_build_id(struct buildid_note *note,
-	     unsigned long load_addr __maybe_unused,
-	     const void *code __maybe_unused,
-	     size_t csize __maybe_unused)
-{
-	int fd;
-	size_t sz = sizeof(note->build_id);
-	ssize_t sret;
-
-	fd = open("/dev/urandom", O_RDONLY);
-	if (fd == -1)
-		err(1, "cannot access /dev/urandom for buildid");
-
-	sret = read(fd, note->build_id, sz);
-
-	close(fd);
-
-	if (sret != (ssize_t)sz)
-		memset(note->build_id, 0, sz);
-}
-#endif
-
-#ifdef BUILD_ID_SHA
 static void
 gen_build_id(struct buildid_note *note,
 	     unsigned long load_addr __maybe_unused,
 	     const void *code,
 	     size_t csize)
 {
-	if (sizeof(note->build_id) < SHA_DIGEST_LENGTH)
+	struct sha1_state sctx;
+
+	if (sizeof(note->build_id) < SHA1_DIGEST_SIZE)
 		errx(1, "build_id too small for SHA1");
 
-	SHA1(code, csize, (unsigned char *)note->build_id);
+	sha1_base_init(&sctx);
+
+	crypto_sha1_finup(&sctx, code, csize, (unsigned char *)note->build_id);
 }
-#endif
-
-#ifdef BUILD_ID_MD5
-static void
-gen_build_id(struct buildid_note *note, unsigned long load_addr, const void *code, size_t csize)
-{
-	EVP_MD_CTX *mdctx;
-
-	if (sizeof(note->build_id) < 16)
-		errx(1, "build_id too small for MD5");
-
-	mdctx = EVP_MD_CTX_new();
-	if (!mdctx)
-		errx(2, "failed to create EVP_MD_CTX");
-
-	EVP_DigestInit_ex(mdctx, EVP_md5(), NULL);
-	EVP_DigestUpdate(mdctx, &load_addr, sizeof(load_addr));
-	EVP_DigestUpdate(mdctx, code, csize);
-	EVP_DigestFinal_ex(mdctx, (unsigned char *)note->build_id, NULL);
-	EVP_MD_CTX_free(mdctx);
-}
-#endif
 
 static int
 jit_add_eh_frame_info(Elf *e, void* unwinding, uint64_t unwinding_header_size,
