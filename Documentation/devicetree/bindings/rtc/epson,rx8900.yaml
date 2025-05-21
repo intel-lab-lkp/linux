@@ -15,8 +15,10 @@ allOf:
 properties:
   compatible:
     enum:
+      - epson,rx8803
       - epson,rx8804
       - epson,rx8900
+      - epson,rx8901
       - microcrystal,rv8803
 
   reg:
