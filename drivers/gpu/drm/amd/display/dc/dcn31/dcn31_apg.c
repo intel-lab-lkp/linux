@@ -101,7 +101,7 @@ static struct apg_funcs dcn31_apg_funcs = {
 	.disable_apg			= apg31_disable,
 };
 
-void apg31_construct(struct dcn31_apg *apg31,
+void dcn31_apg_construct(struct dcn31_apg *apg31,
 	struct dc_context *ctx,
 	uint32_t inst,
 	const struct dcn31_apg_registers *apg_regs,
