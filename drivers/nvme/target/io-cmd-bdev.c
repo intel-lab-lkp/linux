@@ -46,6 +46,11 @@ void nvmet_bdev_set_limits(struct block_device *bdev, struct nvme_id_ns *id)
 	id->npda = id->npdg;
 	/* NOWS = Namespace Optimal Write Size */
 	id->nows = to0based(bdev_io_opt(bdev) / bdev_logical_block_size(bdev));
+
+	/* Copy offload support */
+	id->mssrl = cpu_to_le16(U16_MAX);
+	id->mcl = cpu_to_le32(U32_MAX);
+	id->msrc = U8_MAX;
 }
 
 void nvmet_bdev_ns_disable(struct nvmet_ns *ns)
@@ -412,6 +417,50 @@ static void nvmet_bdev_execute_discard(struct nvmet_req *req)
 	}
 }
 
+static void nvmet_bdev_execute_copy(struct nvmet_req *req)
+{
+	struct bio_vec *bv, fast_bv[UIO_FASTIOV];
+	struct nvme_copy_range range;
+	u64 dst_sector, slba;
+	u16 status, nlb, nr;
+	int ret, i;
+
+	nr = req->cmd->copy.nr_range + 1;
+	if (nr <= UIO_FASTIOV) {
+		bv = fast_bv;
+	} else {
+		bv = kmalloc_array(nr, sizeof(*bv), GFP_KERNEL);
+		if (!bv) {
+			status = NVME_SC_INTERNAL;
+			goto done;
+		}
+	}
+
+	for (i = 0; i < nr; i++) {
+		status = nvmet_copy_from_sgl(req, i * sizeof(range), &range,
+				sizeof(range));
+		if (status)
+			goto done;
+
+		slba = le64_to_cpu(range.slba);
+		nlb = le16_to_cpu(range.nlb) + 1;
+		bv[i].bv_sector = nvmet_lba_to_sect(req->ns, slba);
+		bv[i].bv_sectors = nvmet_lba_to_sect(req->ns, nlb);
+	}
+
+	dst_sector = nvmet_lba_to_sect(req->ns, req->cmd->copy.sdlba);
+	ret = blkdev_copy_range(req->ns->bdev, dst_sector, bv, nr, GFP_KERNEL);
+	if (ret) {
+		req->error_slba = le64_to_cpu(dst_sector);
+		status = errno_to_nvme_status(req, ret);
+	} else
+		status = NVME_SC_SUCCESS;
+done:
+	nvmet_req_complete(req, status);
+	if (bv != fast_bv)
+		kfree(bv);
+}
+
 static void nvmet_bdev_execute_dsm(struct nvmet_req *req)
 {
 	if (!nvmet_check_data_len_lte(req, nvmet_dsm_len(req)))
@@ -473,6 +522,9 @@ u16 nvmet_bdev_parse_io_cmd(struct nvmet_req *req)
 		return 0;
 	case nvme_cmd_write_zeroes:
 		req->execute = nvmet_bdev_execute_write_zeroes;
+		return 0;
+	case nvme_cmd_copy:
+		req->execute = nvmet_bdev_execute_copy;
 		return 0;
 	default:
 		return nvmet_report_invalid_opcode(req);
