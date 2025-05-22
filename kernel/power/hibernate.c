@@ -988,6 +988,7 @@ static int __init find_resume_device(void)
 
 static int software_resume(void)
 {
+	unsigned int sleep_flags;
 	int error;
 
 	pm_pr_dbg("Hibernation image partition %d:%d present\n",
@@ -995,7 +996,7 @@ static int software_resume(void)
 
 	pm_pr_dbg("Looking for hibernation image.\n");
 
-	mutex_lock(&system_transition_mutex);
+	sleep_flags = lock_system_sleep();
 	error = swsusp_check(true);
 	if (error)
 		goto Unlock;
@@ -1050,7 +1051,7 @@ static int software_resume(void)
 	hibernate_release();
 	/* For success case, the suspend path will release the lock */
  Unlock:
-	mutex_unlock(&system_transition_mutex);
+	unlock_system_sleep(sleep_flags);
 	pm_pr_dbg("Hibernation image not present or could not be loaded.\n");
 	return error;
  Close_Finish:
