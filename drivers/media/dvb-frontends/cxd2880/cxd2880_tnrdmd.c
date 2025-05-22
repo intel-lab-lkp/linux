@@ -1709,7 +1709,7 @@ static int set_ts_clk_mode_and_freq(struct cxd2880_tnrdmd *tnr_dmd,
 	struct cxd2880_tnrdmd_ts_clk_cfg ts_clk_cfg;
 	u8 ts_rate_ctrl_off = 0;
 	u8 ts_in_off = 0;
-	u8 ts_clk_manaul_on = 0;
+	u8 ts_clk_manual_on = 0;
 	u8 data = 0;
 
 	static const struct cxd2880_tnrdmd_ts_clk_cfg srl_ts_clk_stgs[2][2] = {
@@ -1742,7 +1742,7 @@ static int set_ts_clk_mode_and_freq(struct cxd2880_tnrdmd *tnr_dmd,
 	}
 
 	if (tnr_dmd->ts_byte_clk_manual_setting) {
-		ts_clk_manaul_on = 1;
+		ts_clk_manual_on = 1;
 		ts_rate_ctrl_off = 0;
 	}
 
@@ -1760,7 +1760,7 @@ static int set_ts_clk_mode_and_freq(struct cxd2880_tnrdmd *tnr_dmd,
 
 	ret = cxd2880_io_set_reg_bits(tnr_dmd->io,
 				      CXD2880_IO_TGT_DMD,
-				      0xda, ts_clk_manaul_on, 0x01);
+				      0xda, ts_clk_manual_on, 0x01);
 	if (ret)
 		return ret;
 
