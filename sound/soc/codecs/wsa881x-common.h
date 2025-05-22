@@ -2,6 +2,7 @@
 #ifndef __WSA881x_COMMON_H__
 #define __WSA881x_COMMON_H__
 
+#include <linux/i2c.h>
 #include <linux/soundwire/sdw.h>
 #include <sound/soc.h>
 
@@ -245,6 +246,25 @@ struct wsa881x_priv {
 	bool port_enable[WSA881X_MAX_SWR_PORTS];
 #endif
 
+#if IS_ENABLED(CONFIG_SND_SOC_WSA881X_I2C)
+	/* i2c interace for analog mode */
+	struct regmap *regmap_analog;
+	/*
+	 * First client is for the digital part,
+	 * the second one is for analog part
+	 */
+	struct i2c_client *client[2];
+	struct i2c_msg xfer_msg[2];
+	struct snd_soc_component *component;
+	struct snd_soc_dai_driver *dai_driver;
+	const struct snd_soc_component_driver *driver;
+	struct gpio_desc *mclk_pin;
+	struct clk *wsa_mclk;
+	bool regmap_flag;
+	bool boost_enable;
+	int spk_pa_gain;
+	int version;
+#endif
 	struct gpio_desc *sd_n;
 	/*
 	 * Logical state for SD_N GPIO: high for shutdown, low for enable.
