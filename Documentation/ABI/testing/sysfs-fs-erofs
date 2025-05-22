@@ -27,3 +27,15 @@ Description:	Writing to this will drop compression-related caches,
 		- 1 : invalidate cached compressed folios
 		- 2 : drop in-memory pclusters
 		- 3 : drop in-memory pclusters and cached compressed folios
+
+What:		/sys/fs/erofs/accel
+Date:		May 2025
+Contact:	"Bo Liu" <liubo03@inspur.com>
+Description:	The accel file is read-write and allows to set or show
+		hardware decompression accelerators, and it supports writing
+		multiple accelerators separated by ‘\n’.
+		Currently supported accelerators:
+		qat_deflate.
+
+		- "qat_deflate" : enable hardware decompression accelerators.
+		- "" : disable all hardware decompression accelerators.
