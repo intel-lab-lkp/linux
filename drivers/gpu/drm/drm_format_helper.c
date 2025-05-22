@@ -236,13 +236,13 @@ static int drm_fb_xfrm(struct iosys_map *dst,
 		dst_pitch = default_dst_pitch;
 
 	/* TODO: handle src in I/O memory here */
-	if (dst[0].is_iomem)
-		return __drm_fb_xfrm_toio(dst[0].vaddr_iomem, dst_pitch[0], dst_pixsize[0],
-					  src[0].vaddr, fb, clip, vaddr_cached_hint, state,
+	if (iosys_map_is_iomem(&dst[0]))
+		return __drm_fb_xfrm_toio(iosys_map_ioptr(&dst[0]), dst_pitch[0], dst_pixsize[0],
+					  iosys_map_ptr(&src[0]), fb, clip, vaddr_cached_hint, state,
 					  xfrm_line);
 	else
-		return __drm_fb_xfrm(dst[0].vaddr, dst_pitch[0], dst_pixsize[0],
-				     src[0].vaddr, fb, clip, vaddr_cached_hint, state,
+		return __drm_fb_xfrm(iosys_map_ptr(&dst[0]), dst_pitch[0], dst_pixsize[0],
+				     iosys_map_ptr(&src[0]), fb, clip, vaddr_cached_hint, state,
 				     xfrm_line);
 }
 
@@ -438,7 +438,7 @@ void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 		iosys_map_incr(&src_i, clip_offset(clip, fb->pitches[i], cpp_i));
 		for (y = 0; y < lines; y++) {
 			/* TODO: handle src_i in I/O memory here */
-			iosys_map_memcpy_to(&dst_i, 0, src_i.vaddr, len_i);
+			iosys_map_memcpy_to(&dst_i, 0, iosys_map_ptr(&src_i), len_i);
 			iosys_map_incr(&src_i, fb->pitches[i]);
 			iosys_map_incr(&dst_i, dst_pitch_i);
 		}
@@ -1204,10 +1204,10 @@ void drm_fb_xrgb8888_to_mono(struct iosys_map *dst, const unsigned int *dst_pitc
 	unsigned int cpp = fb->format->cpp[0];
 	unsigned int len_src32 = linepixels * cpp;
 	struct drm_device *dev = fb->dev;
-	void *vaddr = src[0].vaddr;
+	void *vaddr = iosys_map_ptr(&src[0]);
 	unsigned int dst_pitch_0;
 	unsigned int y;
-	u8 *mono = dst[0].vaddr, *gray8;
+	u8 *mono = iosys_map_ptr(&dst[0]), *gray8;
 	u32 *src32;
 
 	if (drm_WARN_ON(dev, fb->format->format != DRM_FORMAT_XRGB8888))

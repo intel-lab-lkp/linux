@@ -159,7 +159,7 @@ int drm_fbdev_shmem_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	ret = drm_client_buffer_vmap(buffer, &map);
 	if (ret) {
 		goto err_drm_client_buffer_delete;
-	} else if (drm_WARN_ON(dev, map.is_iomem)) {
+	} else if (drm_WARN_ON(dev, iosys_map_is_iomem(&map))) {
 		ret = -ENODEV; /* I/O memory not supported; use generic emulation */
 		goto err_drm_client_buffer_delete;
 	}
@@ -183,7 +183,7 @@ int drm_fbdev_shmem_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	if (!shmem->map_wc)
 		info->flags |= FBINFO_READS_FAST; /* signal caching */
 	info->screen_size = sizes->surface_height * fb->pitches[0];
-	info->screen_buffer = map.vaddr;
+	info->screen_buffer = iosys_map_ptr(&map);
 	info->fix.smem_len = info->screen_size;
 
 	/* deferred I/O */

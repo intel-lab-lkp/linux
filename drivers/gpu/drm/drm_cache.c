@@ -215,12 +215,12 @@ static void memcpy_fallback(struct iosys_map *dst,
 			    const struct iosys_map *src,
 			    unsigned long len)
 {
-	if (!dst->is_iomem && !src->is_iomem) {
-		memcpy(dst->vaddr, src->vaddr, len);
-	} else if (!src->is_iomem) {
-		iosys_map_memcpy_to(dst, 0, src->vaddr, len);
-	} else if (!dst->is_iomem) {
-		memcpy_fromio(dst->vaddr, src->vaddr_iomem, len);
+	if (!iosys_map_is_iomem(dst) && !iosys_map_is_iomem(src)) {
+		memcpy(iosys_map_ptr(dst), iosys_map_ptr(src), len);
+	} else if (iosys_map_is_iomem(src)) {
+		iosys_map_memcpy_to(dst, 0, iosys_map_ptr(src), len);
+	} else if (!iosys_map_is_iomem(dst)) {
+		memcpy_fromio(iosys_map_ptr(dst), iosys_map_ioptr(src), len);
 	} else {
 		/*
 		 * Bounce size is not performance tuned, but using a
@@ -228,8 +228,8 @@ static void memcpy_fallback(struct iosys_map *dst,
 		 * resorting to ioreadxx() + iowritexx().
 		 */
 		char bounce[MEMCPY_BOUNCE_SIZE];
-		void __iomem *_src = src->vaddr_iomem;
-		void __iomem *_dst = dst->vaddr_iomem;
+		void __iomem *_src = iosys_map_ioptr(src);
+		void __iomem *_dst = iosys_map_ioptr(dst);
 
 		while (len >= MEMCPY_BOUNCE_SIZE) {
 			memcpy_fromio(bounce, _src, MEMCPY_BOUNCE_SIZE);
@@ -312,12 +312,12 @@ void drm_memcpy_from_wc(struct iosys_map *dst,
 	}
 
 	if (static_branch_likely(&has_movntdqa)) {
-		__drm_memcpy_from_wc(dst->is_iomem ?
-				     (void __force *)dst->vaddr_iomem :
-				     dst->vaddr,
-				     src->is_iomem ?
-				     (void const __force *)src->vaddr_iomem :
-				     src->vaddr,
+		__drm_memcpy_from_wc(iosys_map_is_iomem(dst) ?
+				     (void __force *)iosys_map_ioptr(dst) :
+				     iosys_map_ptr(dst),
+				     iosys_map_is_iomem(src) ?
+				     (void const __force *)iosys_map_ioptr(src) :
+				     iosys_map_ptr(src),
 				     len);
 		return;
 	}

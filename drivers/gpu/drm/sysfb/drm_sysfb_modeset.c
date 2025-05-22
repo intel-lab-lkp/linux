@@ -138,7 +138,7 @@ void drm_sysfb_plane_helper_atomic_disable(struct drm_plane *plane,
 	struct drm_sysfb_device *sysfb = to_drm_sysfb_device(dev);
 	struct iosys_map dst = sysfb->fb_addr;
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
-	void __iomem *dst_vmap = dst.vaddr_iomem; /* TODO: Use mapping abstraction */
+	void __iomem *dst_vmap = iosys_map_ioptr(&dst); /* TODO: Use mapping abstraction */
 	unsigned int dst_pitch = sysfb->fb_pitch;
 	const struct drm_format_info *dst_format = sysfb->fb_format;
 	struct drm_rect dst_clip;

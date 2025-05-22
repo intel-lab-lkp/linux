@@ -739,13 +739,13 @@ static void drm_test_fb_xrgb8888_to_rgb565(struct kunit *test)
 	buf = le16buf_to_cpu(test, (__force const __le16 *)buf, dst_size / sizeof(__le16));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	drm_fb_xrgb8888_to_rgb565(&dst, &result->dst_pitch, &src, &fb, &params->clip,
 				  &fmtcnv_state, true);
 	buf = le16buf_to_cpu(test, (__force const __le16 *)buf, dst_size / sizeof(__le16));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected_swab, dst_size);
 
-	buf = dst.vaddr;
+	buf = iosys_map_ptr(&dst);
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -792,7 +792,7 @@ static void drm_test_fb_xrgb8888_to_xrgb1555(struct kunit *test)
 	buf = le16buf_to_cpu(test, (__force const __le16 *)buf, dst_size / sizeof(__le16));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -839,7 +839,7 @@ static void drm_test_fb_xrgb8888_to_argb1555(struct kunit *test)
 	buf = le16buf_to_cpu(test, (__force const __le16 *)buf, dst_size / sizeof(__le16));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -886,7 +886,7 @@ static void drm_test_fb_xrgb8888_to_rgba5551(struct kunit *test)
 	buf = le16buf_to_cpu(test, (__force const __le16 *)buf, dst_size / sizeof(__le16));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -936,7 +936,7 @@ static void drm_test_fb_xrgb8888_to_rgb888(struct kunit *test)
 	drm_fb_xrgb8888_to_rgb888(&dst, dst_pitch, &src, &fb, &params->clip, &fmtcnv_state);
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -982,7 +982,7 @@ static void drm_test_fb_xrgb8888_to_bgr888(struct kunit *test)
 				  &fmtcnv_state);
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -1027,7 +1027,7 @@ static void drm_test_fb_xrgb8888_to_argb8888(struct kunit *test)
 	buf = le32buf_to_cpu(test, (__force const __le32 *)buf, dst_size / sizeof(u32));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -1074,7 +1074,7 @@ static void drm_test_fb_xrgb8888_to_xrgb2101010(struct kunit *test)
 	buf = le32buf_to_cpu(test, buf, dst_size / sizeof(u32));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -1119,7 +1119,7 @@ static void drm_test_fb_xrgb8888_to_argb2101010(struct kunit *test)
 	buf = le32buf_to_cpu(test, (__force const __le32 *)buf, dst_size / sizeof(u32));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result = 0;
@@ -1199,7 +1199,7 @@ static void drm_test_fb_swab(struct kunit *test)
 	buf = le32buf_to_cpu(test, (__force const __le32 *)buf, dst_size / sizeof(u32));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr; /* restore original value of buf */
+	buf = iosys_map_ptr(&dst); /* restore original value of buf */
 	memset(buf, 0, dst_size);
 
 	int blit_result;
@@ -1211,7 +1211,7 @@ static void drm_test_fb_swab(struct kunit *test)
 	KUNIT_EXPECT_FALSE(test, blit_result);
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr;
+	buf = iosys_map_ptr(&dst);
 	memset(buf, 0, dst_size);
 
 	blit_result = drm_fb_blit(&dst, dst_pitch, DRM_FORMAT_BGRX8888, &src, &fb, &params->clip,
@@ -1221,7 +1221,7 @@ static void drm_test_fb_swab(struct kunit *test)
 	KUNIT_EXPECT_FALSE(test, blit_result);
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 
-	buf = dst.vaddr;
+	buf = iosys_map_ptr(&dst);
 	memset(buf, 0, dst_size);
 
 	struct drm_format_info mock_format = *fb.format;
