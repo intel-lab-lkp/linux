@@ -14,6 +14,7 @@ perf-test-y += amd-ibs-period.o
 
 ifdef SHELLCHECK
   SHELL_TESTS := gen-insn-x86-dat.sh
+  SHELL_TESTS += $(shell find shell -executable -type f -name '*.sh')
   SHELL_TEST_LOGS := $(SHELL_TESTS:%=%.shellcheck_log)
 else
   SHELL_TESTS :=
