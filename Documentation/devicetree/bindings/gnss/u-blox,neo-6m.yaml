@@ -6,10 +6,6 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: U-blox GNSS Receiver
 
-allOf:
-  - $ref: gnss-common.yaml#
-  - $ref: /schemas/serial/serial-peripheral-props.yaml#
-
 maintainers:
   - Johan Hovold <johan@kernel.org>
 
@@ -32,6 +28,9 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  safeboot-gpios:
+    maxItems: 1
+
   vcc-supply:
     description: >
       Main voltage regulator
@@ -49,6 +48,18 @@ required:
   - compatible
   - vcc-supply
 
+allOf:
+  - $ref: gnss-common.yaml#
+  - $ref: /schemas/serial/serial-peripheral-props.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: u-blox,neo-6m
+    then:
+      properties:
+        safeboot-gpios: false
+
 unevaluatedProperties: false
 
 examples:
@@ -61,5 +72,6 @@ examples:
             v-bckp-supply = <&gnss_v_bckp_reg>;
             vcc-supply = <&gnss_vcc_reg>;
             reset-gpios = <&gpio 1 GPIO_ACTIVE_LOW>;
+            safeboot-gpios = <&gpio 2 GPIO_ACTIVE_LOW>;
         };
     };
