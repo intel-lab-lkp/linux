@@ -1624,6 +1624,113 @@ destroy_out:
 	return err;
 }
 
+int f2fs_estimate_compress(struct inode *inode,
+					struct f2fs_comp_estimate *estimate)
+{
+	unsigned long step, cluster_idx, nr_cluster;
+	block_t i, k;
+	pgoff_t page_idx;
+	int ret = 0;
+	__u64 saved_blocks = 0, compressible_clusters = 0;
+	struct page *page;
+	DEFINE_READAHEAD(ractl, NULL, NULL, inode->i_mapping, 0);
+	struct compress_ctx cc = {
+		.inode = inode,
+		.log_cluster_size = 0,
+		.cluster_size = 0,
+		.cluster_idx = NULL_CLUSTER,
+		.rpages = NULL,
+		.nr_rpages = 0,
+		.cpages = NULL,
+		.rbuf = NULL,
+		.cbuf = NULL,
+		.rlen = 0,
+		.private = NULL,
+	};
+
+	inode_lock_shared(inode);
+
+	cc.log_cluster_size = F2FS_I(inode)->i_log_cluster_size;
+	cc.cluster_size = F2FS_I(inode)->i_cluster_size;
+	cc.rlen = PAGE_SIZE * F2FS_I(inode)->i_cluster_size;
+
+	nr_cluster = (i_size_read(inode) + F2FS_BLKSIZE - 1) >>
+			(F2FS_BLKSIZE_BITS + cc.log_cluster_size);
+
+	if (!(nr_cluster >> (1 + estimate->log_sample_density))) {
+		ret = -EINVAL;
+		goto unlock_out;
+	}
+
+	if (f2fs_init_compress_ctx(&cc)) {
+		ret = -ENOMEM;
+		goto unlock_out;
+	}
+
+	step = nr_cluster >> estimate->log_sample_density;
+
+	for (cluster_idx = 0; cluster_idx < nr_cluster;
+		cluster_idx += step) {
+		page_idx = cluster_idx << F2FS_I(inode)->i_log_cluster_size;
+
+		if (f2fs_is_compressed_cluster(inode, page_idx))
+			continue;
+
+		ractl._index = page_idx;
+		page_cache_ra_unbounded(&ractl, cc.cluster_size, 0);
+
+		for (i = 0; i < cc.cluster_size; ++i) {
+			page = read_cache_page(inode->i_mapping, page_idx + i, NULL, NULL);
+			if (IS_ERR(page)) {
+				ret = PTR_ERR(page);
+				goto err_out;
+			}
+			f2fs_compress_ctx_add_page(&cc, page_folio(page));
+		}
+
+		ret = f2fs_compress_pages(&cc);
+		if (ret) {
+			if (ret == -EAGAIN)
+				goto free_rpages;
+			else
+				goto err_out;
+		}
+
+		saved_blocks += cc.cluster_size - cc.valid_nr_cpages;
+		compressible_clusters++;
+
+		for (k = 0; k < cc.nr_cpages; ++k) {
+			f2fs_compress_free_page(cc.cpages[k]);
+			cc.cpages[k] = NULL;
+		}
+
+		page_array_free(cc.inode, cc.cpages, cc.nr_cpages);
+free_rpages:
+		f2fs_put_rpages(&cc);
+		cc.nr_rpages = 0;
+		cc.cluster_idx = NULL_CLUSTER;
+	}
+
+	f2fs_destroy_compress_ctx(&cc, false);
+	inode_unlock_shared(inode);
+
+	estimate->saved_blocks = saved_blocks;
+	estimate->compressible_clusters = compressible_clusters;
+
+	if (ret == -EAGAIN)
+		ret = 0;
+
+	return ret;
+
+err_out:
+	f2fs_drop_rpages(&cc, i, 0);
+	f2fs_destroy_compress_ctx(&cc, false);
+
+unlock_out:
+	inode_unlock_shared(inode);
+	return ret;
+}
+
 static inline bool allow_memalloc_for_decomp(struct f2fs_sb_info *sbi,
 		bool pre_alloc)
 {

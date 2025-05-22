@@ -24,6 +24,7 @@
 #include <linux/quotaops.h>
 #include <linux/part_stat.h>
 #include <linux/rw_hint.h>
+#include <uapi/linux/f2fs.h>
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -4452,6 +4453,7 @@ int f2fs_write_multi_pages(struct compress_ctx *cc,
 						struct writeback_control *wbc,
 						enum iostat_type io_type);
 int f2fs_is_compressed_cluster(struct inode *inode, pgoff_t index);
+int f2fs_estimate_compress(struct inode *inode, struct f2fs_comp_estimate *estimate);
 bool f2fs_is_sparse_cluster(struct inode *inode, pgoff_t index);
 void f2fs_update_read_extent_tree_range_compressed(struct inode *inode,
 				pgoff_t fofs, block_t blkaddr,
@@ -4543,6 +4545,9 @@ static inline void f2fs_invalidate_compress_pages(struct f2fs_sb_info *sbi,
 static inline int f2fs_is_compressed_cluster(
 				struct inode *inode,
 				pgoff_t index) { return 0; }
+static inline int f2fs_estimate_compress(
+				struct inode *inode,
+				struct f2fs_comp_estimate *estimate) { return 0; }
 static inline bool f2fs_is_sparse_cluster(
 				struct inode *inode,
 				pgoff_t index) { return true; }

@@ -33,7 +33,6 @@
 #include "gc.h"
 #include "iostat.h"
 #include <trace/events/f2fs.h>
-#include <uapi/linux/f2fs.h>
 
 static vm_fault_t f2fs_filemap_fault(struct vm_fault *vmf)
 {
@@ -3537,6 +3536,40 @@ static int f2fs_ioc_io_prio(struct file *filp, unsigned long arg)
 	return 0;
 }
 
+static int f2fs_ioc_estimate_compress(struct file *filp, unsigned long arg)
+{
+	struct inode *inode = file_inode(filp);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct f2fs_comp_estimate estimate;
+	int ret = 0;
+
+	if (!f2fs_sb_has_compression(sbi) ||
+			F2FS_OPTION(sbi).compress_mode != COMPR_MODE_USER)
+		return -EOPNOTSUPP;
+
+	if (!f2fs_is_compress_backend_ready(inode))
+		return -EOPNOTSUPP;
+
+	if (!f2fs_compressed_file(inode) ||
+		is_inode_flag_set(inode, FI_COMPRESS_RELEASED))
+		return -EINVAL;
+
+	if (copy_from_user(&estimate, (struct f2fs_comp_estimate __user *)arg,
+		sizeof(struct f2fs_comp_estimate)))
+		return -EFAULT;
+
+	ret = f2fs_estimate_compress(inode, &estimate);
+
+	if (ret < 0)
+		return ret;
+
+	if (copy_to_user((struct f2fs_comp_estimate __user *)arg, &estimate,
+		sizeof(struct f2fs_comp_estimate)))
+		return -EFAULT;
+
+	return 0;
+}
+
 int f2fs_precache_extents(struct inode *inode)
 {
 	struct f2fs_inode_info *fi = F2FS_I(inode);
@@ -4642,6 +4675,8 @@ static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return f2fs_ioc_get_dev_alias_file(filp, arg);
 	case F2FS_IOC_IO_PRIO:
 		return f2fs_ioc_io_prio(filp, arg);
+	case F2FS_IOC_ESTIMATE_COMPRESS:
+		return f2fs_ioc_estimate_compress(filp, arg);
 	default:
 		return -ENOTTY;
 	}
@@ -5361,6 +5396,7 @@ long f2fs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case F2FS_IOC_COMPRESS_FILE:
 	case F2FS_IOC_GET_DEV_ALIAS_FILE:
 	case F2FS_IOC_IO_PRIO:
+	case F2FS_IOC_ESTIMATE_COMPRESS:
 		break;
 	default:
 		return -ENOIOCTLCMD;
