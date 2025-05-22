@@ -1236,9 +1236,7 @@ static int of_q6asm_parse_dai_data(struct device *dev,
 {
 	struct snd_soc_dai_driver *dai_drv;
 	struct snd_soc_pcm_stream empty_stream;
-	struct device_node *node;
 	int ret, id, dir, idx = 0;
-
 
 	pdata->num_dais = of_get_child_count(dev->of_node);
 	if (!pdata->num_dais) {
@@ -1253,7 +1251,7 @@ static int of_q6asm_parse_dai_data(struct device *dev,
 
 	memset(&empty_stream, 0, sizeof(empty_stream));
 
-	for_each_child_of_node(dev->of_node, node) {
+	for_each_child_of_node_scoped(dev->of_node, node) {
 		ret = of_property_read_u32(node, "reg", &id);
 		if (ret || id >= MAX_SESSIONS || id < 0) {
 			dev_err(dev, "valid dai id not found:%d\n", ret);
