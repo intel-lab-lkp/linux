@@ -742,7 +742,7 @@ retry:
 static void ttm_kmap_iter_iomap_unmap_local(struct ttm_kmap_iter *iter,
 					    struct iosys_map *map)
 {
-	io_mapping_unmap_local(map->vaddr_iomem);
+	io_mapping_unmap_local(iosys_map_ioptr(map));
 }
 
 static const struct ttm_kmap_iter_ops ttm_kmap_iter_io_ops = {
@@ -886,10 +886,10 @@ ttm_kmap_iter_linear_io_fini(struct ttm_kmap_iter_linear_io *iter_io,
 			     struct ttm_resource *mem)
 {
 	if (iter_io->needs_unmap && iosys_map_is_set(&iter_io->dmap)) {
-		if (iter_io->dmap.is_iomem)
-			iounmap(iter_io->dmap.vaddr_iomem);
+		if (iosys_map_is_iomem(&iter_io->dmap))
+			iounmap(iosys_map_ioptr(&iter_io->dmap));
 		else
-			memunmap(iter_io->dmap.vaddr);
+			memunmap(iosys_map_ptr(&iter_io->dmap));
 	}
 
 	ttm_mem_io_free(bdev, mem);

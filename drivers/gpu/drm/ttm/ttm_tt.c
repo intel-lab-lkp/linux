@@ -495,7 +495,7 @@ static void ttm_kmap_iter_tt_map_local(struct ttm_kmap_iter *iter,
 static void ttm_kmap_iter_tt_unmap_local(struct ttm_kmap_iter *iter,
 					 struct iosys_map *map)
 {
-	kunmap_local(map->vaddr);
+	kunmap_local(iosys_map_ptr(map));
 }
 
 static const struct ttm_kmap_iter_ops ttm_kmap_iter_tt_ops = {

@@ -99,10 +99,10 @@ void ttm_move_memcpy(bool clear,
 	if (clear) {
 		for (i = 0; i < num_pages; ++i) {
 			dst_ops->map_local(dst_iter, &dst_map, i);
-			if (dst_map.is_iomem)
-				memset_io(dst_map.vaddr_iomem, 0, PAGE_SIZE);
+			if (iosys_map_is_iomem(&dst_map))
+				memset_io(iosys_map_ioptr(&dst_map), 0, PAGE_SIZE);
 			else
-				memset(dst_map.vaddr, 0, PAGE_SIZE);
+				memset(iosys_map_ptr(&dst_map), 0, PAGE_SIZE);
 			if (dst_ops->unmap_local)
 				dst_ops->unmap_local(dst_iter, &dst_map);
 		}
@@ -544,10 +544,10 @@ void ttm_bo_vunmap(struct ttm_buffer_object *bo, struct iosys_map *map)
 	if (iosys_map_is_null(map))
 		return;
 
-	if (!map->is_iomem)
-		vunmap(map->vaddr);
+	if (!iosys_map_is_iomem(map))
+		vunmap(iosys_map_ptr(map));
 	else if (!mem->bus.addr)
-		iounmap(map->vaddr_iomem);
+		iounmap(iosys_map_ioptr(map));
 	iosys_map_clear(map);
 
 	ttm_mem_io_free(bo->bdev, bo->resource);
