@@ -712,8 +712,12 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 	dev->pma_extable = -ENODATA;
 	dev->is_c45 = is_c45;
 	dev->phy_id = phy_id;
-	if (c45_ids)
+	if (c45_ids) {
 		dev->c45_ids = *c45_ids;
+		dev->phy_id = dev->c45_ids.device_ids[MDIO_MMD_PMAPMD];
+		if (!dev->phy_id)
+			dev->phy_id = dev->c45_ids.device_ids[MDIO_MMD_PCS];
+	}
 	dev->irq = bus->irq[addr];
 
 	dev_set_name(&mdiodev->dev, PHY_ID_FMT, bus->id, addr);
