@@ -18,10 +18,16 @@ description: >
 
 properties:
   compatible:
-    enum:
-      - u-blox,neo-6m
-      - u-blox,neo-8
-      - u-blox,neo-m8
+    oneOf:
+      - items:
+          - enum:
+              - u-blox,neo-6m
+              - u-blox,neo-8
+              - u-blox,neo-m8
+
+      - items:
+          - const: u-blox,neo-m9
+          - const: u-blox,neo-m8
 
   reg:
     description: >
@@ -58,6 +64,17 @@ examples:
     serial {
         gnss {
             compatible = "u-blox,neo-8";
+            v-bckp-supply = <&gnss_v_bckp_reg>;
+            vcc-supply = <&gnss_vcc_reg>;
+            reset-gpios = <&gpio 1 GPIO_ACTIVE_LOW>;
+        };
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    serial {
+        gnss {
+            compatible = "u-blox,neo-m9", "u-blox,neo-m8";
             v-bckp-supply = <&gnss_v_bckp_reg>;
             vcc-supply = <&gnss_vcc_reg>;
             reset-gpios = <&gpio 1 GPIO_ACTIVE_LOW>;
