@@ -1249,7 +1249,7 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
 			unmap = true;
 		}
 
-		xe_map_memcpy_from(xe, backup->vmap.vaddr, &bo->vmap, 0,
+		xe_map_memcpy_from(xe, iosys_map_ptr(&backup->vmap), &bo->vmap, 0,
 				   bo->size);
 	}
 
@@ -1342,7 +1342,7 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
 			unmap = true;
 		}
 
-		xe_map_memcpy_to(xe, &bo->vmap, 0, backup->vmap.vaddr,
+		xe_map_memcpy_to(xe, &bo->vmap, 0, iosys_map_ptr(&backup->vmap),
 				 bo->size);
 	}
 
@@ -2226,9 +2226,9 @@ int xe_managed_bo_reinit_in_vram(struct xe_device *xe, struct xe_tile *tile, str
 				      XE_BO_FLAG_PINNED_NORESTORE);
 
 	xe_assert(xe, IS_DGFX(xe));
-	xe_assert(xe, !(*src)->vmap.is_iomem);
+	xe_assert(xe, !iosys_map_is_iomem(&(*src)->vmap));
 
-	bo = xe_managed_bo_create_from_data(xe, tile, (*src)->vmap.vaddr,
+	bo = xe_managed_bo_create_from_data(xe, tile, iosys_map_ptr(&(*src)->vmap),
 					    (*src)->size, dst_flags);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);

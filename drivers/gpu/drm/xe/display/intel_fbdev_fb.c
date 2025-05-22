@@ -101,7 +101,7 @@ int intel_fbdev_fb_fill_info(struct intel_display *display, struct fb_info *info
 	}
 	XE_WARN_ON(iosys_map_is_null(&obj->vmap));
 
-	info->screen_base = obj->vmap.vaddr_iomem;
+	info->screen_base = iosys_map_ioptr(&obj->vmap);
 	info->screen_size = obj->ttm.base.size;
 
 	return 0;

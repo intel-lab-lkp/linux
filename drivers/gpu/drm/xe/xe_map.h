@@ -49,10 +49,10 @@ static inline u32 xe_map_read32(struct xe_device *xe, struct iosys_map *map)
 {
 	xe_device_assert_mem_access(xe);
 
-	if (map->is_iomem)
-		return readl(map->vaddr_iomem);
+	if (iosys_map_is_iomem(map))
+		return readl(iosys_map_ioptr(map));
 	else
-		return READ_ONCE(*(u32 *)map->vaddr);
+		return READ_ONCE(*(u32 *)iosys_map_ptr(map));
 }
 
 static inline void xe_map_write32(struct xe_device *xe, struct iosys_map *map,
@@ -60,10 +60,10 @@ static inline void xe_map_write32(struct xe_device *xe, struct iosys_map *map,
 {
 	xe_device_assert_mem_access(xe);
 
-	if (map->is_iomem)
-		writel(val, map->vaddr_iomem);
+	if (iosys_map_is_iomem(map))
+		writel(val, iosys_map_ioptr(map));
 	else
-		*(u32 *)map->vaddr = val;
+		*(u32 *)iosys_map_ptr(map) = val;
 }
 
 #define xe_map_rd(xe__, map__, offset__, type__) ({			\

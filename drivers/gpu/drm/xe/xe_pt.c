@@ -1723,12 +1723,12 @@ xe_migrate_clear_pgtable_callback(struct xe_migrate_pt_update *pt_update,
 	u64 empty = __xe_pt_empty_pte(tile, vm, update->pt->level);
 	int i;
 
-	if (map && map->is_iomem)
+	if (map && iosys_map_is_iomem(map))
 		for (i = 0; i < num_qwords; ++i)
 			xe_map_wr(tile_to_xe(tile), map, (qword_ofs + i) *
 				  sizeof(u64), u64, empty);
 	else if (map)
-		memset64(map->vaddr + qword_ofs * sizeof(u64), empty,
+		memset64(iosys_map_ptr(map) + qword_ofs * sizeof(u64), empty,
 			 num_qwords);
 	else
 		memset64(ptr, empty, num_qwords);

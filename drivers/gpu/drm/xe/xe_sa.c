@@ -68,15 +68,15 @@ struct xe_sa_manager *__xe_sa_bo_manager_init(struct xe_tile *tile, u32 size, u3
 		return ERR_CAST(bo);
 	}
 	sa_manager->bo = bo;
-	sa_manager->is_iomem = bo->vmap.is_iomem;
+	sa_manager->is_iomem = iosys_map_is_iomem(&bo->vmap);
 	sa_manager->gpu_addr = xe_bo_ggtt_addr(bo);
 
-	if (bo->vmap.is_iomem) {
+	if (iosys_map_is_iomem(&bo->vmap)) {
 		sa_manager->cpu_ptr = kvzalloc(managed_size, GFP_KERNEL);
 		if (!sa_manager->cpu_ptr)
 			return ERR_PTR(-ENOMEM);
 	} else {
-		sa_manager->cpu_ptr = bo->vmap.vaddr;
+		sa_manager->cpu_ptr = iosys_map_ptr(&bo->vmap);
 		memset(sa_manager->cpu_ptr, 0, bo->ttm.base.size);
 	}
 
@@ -116,7 +116,7 @@ void xe_sa_bo_flush_write(struct drm_suballoc *sa_bo)
 	struct xe_sa_manager *sa_manager = to_xe_sa_manager(sa_bo->manager);
 	struct xe_device *xe = tile_to_xe(sa_manager->bo->tile);
 
-	if (!sa_manager->bo->vmap.is_iomem)
+	if (!iosys_map_is_iomem(&sa_manager->bo->vmap))
 		return;
 
 	xe_map_memcpy_to(xe, &sa_manager->bo->vmap, drm_suballoc_soffset(sa_bo),

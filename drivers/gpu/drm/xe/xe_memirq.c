@@ -198,9 +198,9 @@ static int memirq_alloc_pages(struct xe_memirq *memirq)
 	memirq->status = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_STATUS_OFFSET(0));
 	memirq->mask = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_ENABLE_OFFSET);
 
-	memirq_assert(memirq, !memirq->source.is_iomem);
-	memirq_assert(memirq, !memirq->status.is_iomem);
-	memirq_assert(memirq, !memirq->mask.is_iomem);
+	memirq_assert(memirq, !iosys_map_is_iomem(&memirq->source));
+	memirq_assert(memirq, !iosys_map_is_iomem(&memirq->status));
+	memirq_assert(memirq, !iosys_map_is_iomem(&memirq->mask));
 
 	memirq_debug(memirq, "page offsets: bo %#x bo_size %zu source %#x status %#x\n",
 		     xe_bo_ggtt_addr(bo), bo_size, XE_MEMIRQ_SOURCE_OFFSET(0),
@@ -418,7 +418,7 @@ static bool memirq_received(struct xe_memirq *memirq, struct iosys_map *vector,
 static void memirq_dispatch_engine(struct xe_memirq *memirq, struct iosys_map *status,
 				   struct xe_hw_engine *hwe)
 {
-	memirq_debug(memirq, "STATUS %s %*ph\n", hwe->name, 16, status->vaddr);
+	memirq_debug(memirq, "STATUS %s %*ph\n", hwe->name, 16, iosys_map_ptr(status));
 
 	if (memirq_received(memirq, status, ilog2(GT_RENDER_USER_INTERRUPT), hwe->name))
 		xe_hw_engine_handle_irq(hwe, GT_RENDER_USER_INTERRUPT);
@@ -429,7 +429,7 @@ static void memirq_dispatch_guc(struct xe_memirq *memirq, struct iosys_map *stat
 {
 	const char *name = guc_name(guc);
 
-	memirq_debug(memirq, "STATUS %s %*ph\n", name, 16, status->vaddr);
+	memirq_debug(memirq, "STATUS %s %*ph\n", name, 16, iosys_map_ptr(status));
 
 	if (memirq_received(memirq, status, ilog2(GUC_INTR_GUC2HOST), name))
 		xe_guc_irq_handler(guc, GUC_INTR_GUC2HOST);
@@ -479,9 +479,9 @@ void xe_memirq_handler(struct xe_memirq *memirq)
 	if (!memirq->bo)
 		return;
 
-	memirq_assert(memirq, !memirq->source.is_iomem);
-	memirq_debug(memirq, "SOURCE %*ph\n", 32, memirq->source.vaddr);
-	memirq_debug(memirq, "SOURCE %*ph\n", 32, memirq->source.vaddr + 32);
+	memirq_assert(memirq, !iosys_map_is_iomem(&memirq->source));
+	memirq_debug(memirq, "SOURCE %*ph\n", 32, iosys_map_ptr(&memirq->source));
+	memirq_debug(memirq, "SOURCE %*ph\n", 32, iosys_map_ptr(&memirq->source) + 32);
 
 	for_each_gt(gt, xe, gtid) {
 		if (gt->tile != tile)

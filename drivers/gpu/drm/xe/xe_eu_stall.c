@@ -741,7 +741,7 @@ static int xe_eu_stall_stream_init(struct xe_eu_stall_data_stream *stream,
 	for_each_dss_steering(xecore, gt, group, instance) {
 		xecore_buf = &stream->xecore_buf[xecore];
 		vaddr_offset = xecore * stream->per_xecore_buf_size;
-		xecore_buf->vaddr = stream->bo->vmap.vaddr + vaddr_offset;
+		xecore_buf->vaddr = iosys_map_ptr(&stream->bo->vmap) + vaddr_offset;
 	}
 	return 0;
 }

@@ -880,8 +880,8 @@ static int xe_oa_alloc_oa_buffer(struct xe_oa_stream *stream, size_t size)
 
 	stream->oa_buffer.bo = bo;
 	/* mmap implementation requires OA buffer to be in system memory */
-	xe_assert(stream->oa->xe, bo->vmap.is_iomem == 0);
-	stream->oa_buffer.vaddr = bo->vmap.vaddr;
+	xe_assert(stream->oa->xe, iosys_map_is_iomem(&bo->vmap) == 0);
+	stream->oa_buffer.vaddr = iosys_map_ptr(&bo->vmap);
 	return 0;
 }
 
