@@ -3,3 +3,17 @@ perf-test-$(CONFIG_DWARF_UNWIND) += dwarf-unwind.o
 
 perf-test-y += arch-tests.o
 perf-test-y += cpuid-match.o
+
+ifdef SHELLCHECK
+  SHELL_TESTS := $(shell find shell -executable -type f -name '*.sh')
+  SHELL_TEST_LOGS := $(SHELL_TESTS:tests/shell/%=shell/%.shellcheck_log)
+else
+  SHELL_TESTS :=
+  SHELL_TEST_LOGS :=
+endif
+
+$(OUTPUT)%.shellcheck_log: %
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,test)shellcheck -a -S warning "$<" > $@ || (cat $@ && rm $@ && false)
+
+perf-test-y += $(SHELL_TEST_LOGS)
