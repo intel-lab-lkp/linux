@@ -1294,14 +1294,14 @@ static void __init retbleed_update_mitigation(void)
 			if (retbleed_mitigation != RETBLEED_MITIGATION_STUFF)
 				pr_err(RETBLEED_INTEL_MSG);
 		}
-		/* If nothing has set the mitigation yet, default to NONE. */
-		if (retbleed_mitigation == RETBLEED_MITIGATION_AUTO)
-			retbleed_mitigation = RETBLEED_MITIGATION_NONE;
 	}
+
+	/* If nothing has set the mitigation yet, default to NONE. */
+	if (retbleed_mitigation == RETBLEED_MITIGATION_AUTO)
+		retbleed_mitigation = RETBLEED_MITIGATION_NONE;
 out:
 	pr_info("%s\n", retbleed_strings[retbleed_mitigation]);
 }
-
 
 static void __init retbleed_apply_mitigation(void)
 {
