@@ -145,7 +145,7 @@ static void vunmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
 
 	dma_resv_assert_held(buf->resv);
 
-	vm_unmap_ram(map->vaddr, ubuf->pagecount);
+	vm_unmap_ram(iosys_map_ptr(map), ubuf->pagecount);
 }
 
 static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
