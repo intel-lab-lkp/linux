@@ -638,6 +638,21 @@ static int qcom_spi_check_error(struct qcom_nand_controller *snandc)
 			unsigned int stat;
 
 			stat = buffer & BS_CORRECTABLE_ERR_MSK;
+
+			if (stat && stat != ecc_cfg->strength) {
+				/*
+				 * The exact number of the corrected bits is
+				 * unknown because the hardware only reports
+				 * the number of the corrected bytes.
+				 *
+				 * Assume the worst case scenario and use
+				 * the maximum.
+				 */
+				dev_warn(snandc->dev,
+					 "the number of corrected bits may be inaccurate\n");
+				stat = ecc_cfg->strength;
+			}
+
 			snandc->qspi->ecc_stats.corrected += stat;
 			max_bitflips = max(max_bitflips, stat);
 		}
