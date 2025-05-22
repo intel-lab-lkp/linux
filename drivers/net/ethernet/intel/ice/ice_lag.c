@@ -2805,6 +2805,9 @@ bool ice_lag_is_switchdev_running(struct ice_pf *pf)
 	if (!ice_is_feature_supported(pf, ICE_F_SRIOV_LAG) || !lag)
 		return false;
 
+	if (!lag->upper_netdev)
+		return false;
+
 	rcu_read_lock();
 	for_each_netdev_in_bond_rcu(lag->upper_netdev, tmp_nd) {
 		struct ice_netdev_priv *priv = netdev_priv(tmp_nd);
