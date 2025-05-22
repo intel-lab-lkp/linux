@@ -1138,6 +1138,27 @@ static int br_ip6_multicast_check_active(struct net_bridge_mcast *brmctx,
 #endif
 }
 
+static int br_multicast_notify_active(struct net_bridge_mcast *brmctx,
+				      bool ip4_active, bool ip6_active,
+				      bool ip4_changed, bool ip6_changed,
+				      struct netlink_ext_ack *extack)
+{
+	struct switchdev_attr attr = {
+		.orig_dev = brmctx->br->dev,
+		.id = SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE,
+		.flags = SWITCHDEV_F_DEFER,
+		.u.mc_active = {
+			.vid = brmctx->vlan ? brmctx->vlan->vid : -1,
+			.ip4 = ip4_active,
+			.ip6 = ip6_active,
+			.ip4_changed = ip4_changed,
+			.ip6_changed = ip6_changed,
+		},
+	};
+
+	return switchdev_port_attr_set(brmctx->br->dev, &attr, extack);
+}
+
 /**
  * __br_multicast_update_active() - update mcast active state
  * @brmctx: the bridge multicast context to check
@@ -1158,6 +1179,8 @@ static int br_ip6_multicast_check_active(struct net_bridge_mcast *brmctx,
  *
  * This function should be called by anything that changes one of the
  * above prerequisites.
+ *
+ * Any multicast active state toggling is further notified to switchdev.
  *
  * Return: 0 on success, a negative value otherwise.
  */
@@ -1182,11 +1205,21 @@ static int __br_multicast_update_active(struct net_bridge_mcast *brmctx,
 	ip4_changed = br_ip4_multicast_check_active(brmctx, &ip4_active);
 	ip6_changed = br_ip6_multicast_check_active(brmctx, &ip6_active);
 
+	if (!ip4_changed && !ip6_changed)
+		goto out;
+
+	ret = br_multicast_notify_active(brmctx, ip4_active, ip6_active,
+					 ip4_changed, ip6_changed,
+					 extack);
+	if (ret && ret != -EOPNOTSUPP)
+		goto out;
+
 	if (ip4_changed)
 		brmctx->ip4_active = ip4_active;
 	if (ip6_changed)
 		brmctx->ip6_active = ip6_active;
 
+out:
 	return ret;
 }
 
