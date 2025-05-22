@@ -93,6 +93,7 @@
 #include <asm/traps.h>
 #include <asm/vectors.h>
 #include <asm/virt.h>
+#include <asm/exception_mask.h>
 
 /* Kernel representation of AT_HWCAP and AT_HWCAP2 */
 static DECLARE_BITMAP(elf_hwcap, MAX_CPU_FEATURES) __read_mostly;
@@ -2289,6 +2290,8 @@ static bool can_use_gic_priorities(const struct arm64_cpu_capabilities *entry,
 	BUILD_BUG_ON(ARM64_HAS_GIC_PRIO_MASKING <= ARM64_HAS_GIC_CPUIF_SYSREGS);
 	if (!cpus_have_cap(ARM64_HAS_GIC_CPUIF_SYSREGS))
 		return false;
+
+	set_exception_mask_handler(enable_pseudo_nmi ? 1 : 0);
 
 	return enable_pseudo_nmi;
 }
