@@ -399,6 +399,11 @@ struct mt9m114 {
 		struct v4l2_ctrl *gain;
 		struct v4l2_ctrl *hblank;
 		struct v4l2_ctrl *vblank;
+		struct {
+			/* horizonal / vertical flip cluster */
+			struct v4l2_ctrl *hflip;
+			struct v4l2_ctrl *vflip;
+		};
 	} pa;
 
 	/* Image Flow Processor */
@@ -1059,6 +1064,7 @@ static int mt9m114_pa_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct v4l2_subdev_state *state;
 	int ret = 0;
 	u64 mask;
+	u64 val;
 
 	/* V4L2 controls values are applied only when power is up. */
 	if (!pm_runtime_get_if_in_use(&sensor->client->dev))
@@ -1095,17 +1101,25 @@ static int mt9m114_pa_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_HFLIP:
-		mask = MT9M114_CAM_SENSOR_CONTROL_HORZ_MIRROR_EN;
+		mask = MT9M114_CAM_SENSOR_CONTROL_HORZ_MIRROR_EN |
+		       MT9M114_CAM_SENSOR_CONTROL_VERT_FLIP_EN;
+		val = (sensor->pa.hflip->val ?
+		       MT9M114_CAM_SENSOR_CONTROL_HORZ_MIRROR_EN : 0) &
+		      (sensor->pa.vflip->val ?
+		       MT9M114_CAM_SENSOR_CONTROL_VERT_FLIP_EN : 0);
 		ret = cci_update_bits(sensor->regmap,
 				      MT9M114_CAM_SENSOR_CONTROL_READ_MODE,
-				      mask, ctrl->val ? mask : 0, NULL);
-		break;
+				      mask, val, NULL);
+		/*
+		 * A Config-Change needs to be issued for the change to take
+		 * effect. If we're not streaming ignore this, the change will
+		 * be applied when the stream is started.
+		 */
+		if (ret || !sensor->streaming)
+			break;
 
-	case V4L2_CID_VFLIP:
-		mask = MT9M114_CAM_SENSOR_CONTROL_VERT_FLIP_EN;
-		ret = cci_update_bits(sensor->regmap,
-				      MT9M114_CAM_SENSOR_CONTROL_READ_MODE,
-				      mask, ctrl->val ? mask : 0, NULL);
+		ret = mt9m114_set_state(sensor,
+					MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
 		break;
 
 	default:
@@ -1406,12 +1420,13 @@ static int mt9m114_pa_init(struct mt9m114 *sensor)
 			  sensor->pixrate, sensor->pixrate, 1,
 			  sensor->pixrate);
 
-	v4l2_ctrl_new_std(hdl, &mt9m114_pa_ctrl_ops,
-			  V4L2_CID_HFLIP,
-			  0, 1, 1, 0);
-	v4l2_ctrl_new_std(hdl, &mt9m114_pa_ctrl_ops,
-			  V4L2_CID_VFLIP,
-			  0, 1, 1, 0);
+	sensor->pa.hflip = v4l2_ctrl_new_std(hdl, &mt9m114_pa_ctrl_ops,
+					     V4L2_CID_HFLIP,
+					     0, 1, 1, 0);
+	sensor->pa.vflip = v4l2_ctrl_new_std(hdl, &mt9m114_pa_ctrl_ops,
+					     V4L2_CID_VFLIP,
+					     0, 1, 1, 0);
+	v4l2_ctrl_cluster(2, &sensor->pa.hflip);
 
 	if (hdl->error) {
 		ret = hdl->error;
