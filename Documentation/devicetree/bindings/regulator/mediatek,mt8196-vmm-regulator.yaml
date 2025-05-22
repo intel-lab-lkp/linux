@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/regulator/mediatek,mt8196-vmm-regulator.yaml#"
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT8196 VMM (Vcore for MultiMedia) Regulator Controller
+
+maintainers:
+  - Nancy Lin <nancy.lin@mediatek.com>
+
+description: |
+  The MediaTek MT8196 VMM (Vcore for Multi Media) controller acts as the
+  main power supplier for multimedia power domains, such as those used by
+  display, video encode and decode subsystems. The VMM hardware block
+  provides virtual regulators that serve as the power sources (suppliers)
+  for various multimedia IPs. It coordinates with the MediaTek hardware
+  common clock framework (HWCCF) and the Video Companion Processor (VCP)
+  to manage the power domains of these multimedia components.
+
+  Each child node under the VMM node represents a virtual regulator
+  (e.g., vdisp, vdec-vcore) and must specify a 'regulator-name'.
+
+properties:
+  compatible:
+    const: "mediatek,mt8196-vmm"
+
+  mediatek,hw-ccf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the hardware common clock framework syscon controller.
+
+  mediatek,vcp:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the Video Co-Processor (VCP) node.
+
+patternProperties:
+  "^(vdisp|vdec-vcore)$":
+    type: object
+    description: |
+      Virtual regulator for a specific multimedia domain.
+      The node name should match the supported regulator (e.g., vdisp, vdec-vcore).
+    properties:
+      regulator-name:
+        type: string
+        description: The name of the virtual regulator.
+    required:
+      - regulator-name
+    additionalProperties: false
+
+required:
+  - compatible
+  - mediatek,hw-ccf
+  - mediatek,vcp
+
+additionalProperties: false
+
+examples:
+  - |
+    vmm: vmm {
+      compatible = "mediatek,mt8196-vmm";
+      mediatek,hw-ccf = <&mm_hwv>;
+      mediatek,vcp = <&vcp>;
+
+      vdisp: vdisp {
+        regulator-name = "vdisp";
+      };
+      vdec_vcore: vdec-vcore {
+        regulator-name = "vdec-vcore";
+      };
+    };
