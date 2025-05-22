@@ -632,6 +632,16 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config BOOTSTAGE
+	tristate "Bootstage stash support"
+	depends on OF_RESERVED_MEM
+	help
+	  This enables the support for a bootstage stash.
+
+	  A bootstage stash can be created by some bootloaders (e.g.: U-Boot) to
+	  store information on its boot timings. This driver provides access to
+	  these information through sysfs and debugsfs interfaces.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

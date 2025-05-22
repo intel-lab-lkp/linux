@@ -28,3 +28,4 @@ fit into other categories.
    tps6594-pfsm
    uacce
    xilinx_sdfec
+   bootstage

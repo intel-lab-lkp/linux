@@ -4203,6 +4203,13 @@ F:	Documentation/ABI/stable/sysfs-class-bluetooth
 F:	include/net/bluetooth/
 F:	net/bluetooth/
 
+BOOTSTAGE DRIVER
+M:	Francesco Valla <francesco@valla.it>
+L:	linux-embedded@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/reserved-memory/bootstage.yaml
+F:	drivers/misc/bootstage.c
+
 BONDING DRIVER
 M:	Jay Vosburgh <jv@jvosburgh.net>
 L:	netdev@vger.kernel.org
