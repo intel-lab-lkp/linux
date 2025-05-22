@@ -374,6 +374,7 @@ static void sysctl_test_register_sysctl_sz_invalid_extra_value(
 		struct kunit *test)
 {
 	unsigned char data = 0;
+	struct ctl_table_header *header;
 	const struct ctl_table table_foo[] = {
 		{
 			.procname	= "foo",
@@ -412,7 +413,9 @@ static void sysctl_test_register_sysctl_sz_invalid_extra_value(
 
 	KUNIT_EXPECT_NULL(test, register_sysctl("foo", table_foo));
 	KUNIT_EXPECT_NULL(test, register_sysctl("foo", table_bar));
-	KUNIT_EXPECT_NOT_NULL(test, register_sysctl("foo", table_qux));
+	header = register_sysctl("foo", table_qux);
+	KUNIT_EXPECT_NOT_NULL(test, header);
+	unregister_sysctl_table(header);
 }
 
 static struct kunit_case sysctl_test_cases[] = {
