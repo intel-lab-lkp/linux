@@ -397,8 +397,15 @@ policy limits change after that.
 -------------
 
 This governor does not do anything by itself.  Instead, it allows user space
-to set the CPU frequency for the policy it is attached to by writing to the
-``scaling_setspeed`` attribute of that policy.
+to set a target CPU frequency for the policy it is attached to by writing to the
+``scaling_setspeed`` attribute of that policy. The actual frequency will be
+greater than or equal to ``scaling_setspeed``, depending on the cpufreq driver.
+For example, if hardware-managed P-states are enabled, then the ``intel_pstate``
+driver will set the minimum frequency to the value of ``scaling_setspeed`` and
+the maximum frequency to the value of ``scaling_max_freq``.  The hardware is
+free to select any frequency between those two values. If this behavior is not
+desired, then ``scaling_max_freq`` should be set to the same value as
+``scaling_setspeed``.
 
 ``schedutil``
 -------------
