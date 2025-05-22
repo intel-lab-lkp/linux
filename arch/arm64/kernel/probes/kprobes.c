@@ -23,7 +23,7 @@
 #include <linux/vmalloc.h>
 
 #include <asm/cacheflush.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/debug-monitors.h>
 #include <asm/insn.h>
 #include <asm/irq.h>

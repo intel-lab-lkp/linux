@@ -16,7 +16,7 @@
 #include <linux/thread_info.h>
 
 #include <asm/cpufeature.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/esr.h>
 #include <asm/exception.h>
 #include <asm/irq_regs.h>

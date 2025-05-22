@@ -19,7 +19,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/gcs.h>
 #include <asm/proc-fns.h>
 #include <asm/cputype.h>

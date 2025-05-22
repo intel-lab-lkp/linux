@@ -17,7 +17,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/cpu_ops.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/memory.h>
 #include <asm/mmu.h>
 #include <asm/mmu_context.h>
@@ -176,7 +176,7 @@ void machine_kexec(struct kimage *kimage)
 
 	pr_info("Bye!\n");
 
-	local_daif_mask();
+	local_exception_mask();
 
 	/*
 	 * Both restart and kernel_reloc will shutdown the MMU, disable data

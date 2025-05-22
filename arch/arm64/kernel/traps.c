@@ -33,7 +33,7 @@
 #include <asm/atomic.h>
 #include <asm/bug.h>
 #include <asm/cpufeature.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/debug-monitors.h>
 #include <asm/efi.h>
 #include <asm/esr.h>

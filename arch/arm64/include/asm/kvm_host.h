@@ -23,7 +23,7 @@
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
 #include <asm/cputype.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/fpsimd.h>
 #include <asm/kvm.h>
 #include <asm/kvm_asm.h>

@@ -42,7 +42,7 @@
 #include <asm/cpu.h>
 #include <asm/cputype.h>
 #include <asm/cpu_ops.h>
-#include <asm/daifflags.h>
+#include <asm/exception_mask.h>
 #include <asm/kvm_mmu.h>
 #include <asm/mmu_context.h>
 #include <asm/numa.h>
@@ -271,7 +271,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 * as the root irqchip has already been detected and initialized we can
 	 * unmask IRQ and FIQ at the same time.
 	 */
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(procctx.flags);
 
 	/*
 	 * OK, it's off to the idle thread for us
@@ -378,7 +378,7 @@ void __noreturn cpu_die(void)
 
 	idle_task_exit();
 
-	local_daif_mask();
+	local_exception_mask();
 
 	/* Tell cpuhp_bp_sync_dead() that this CPU is now safe to dispose of */
 	cpuhp_ap_report_dead();
@@ -873,7 +873,7 @@ static void __noreturn local_cpu_stop(unsigned int cpu)
 {
 	set_cpu_online(cpu, false);
 
-	local_daif_mask();
+	local_exception_mask();
 	sdei_mask_local_cpu();
 	cpu_park_loop();
 }
@@ -899,7 +899,7 @@ static void __noreturn ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs
 	 * interrupt us. It's better to prevent the NMI and let the IRQ
 	 * finish since the pt_regs will be better.
 	 */
-	local_daif_mask();
+	local_exception_mask();
 
 	crash_save_cpu(regs, cpu);
 
