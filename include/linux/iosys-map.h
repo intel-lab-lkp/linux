@@ -114,6 +114,21 @@ struct iosys_map {
 	bool is_iomem;
 };
 
+static inline bool iosys_map_is_iomem(const struct iosys_map *map)
+{
+	return map->is_iomem;
+}
+
+static inline void __iomem *iosys_map_ioptr(const struct iosys_map *map)
+{
+	return map->vaddr_iomem;
+}
+
+static inline void *iosys_map_ptr(const struct iosys_map *map)
+{
+       return map->vaddr;
+}
+
 /**
  * IOSYS_MAP_INIT_VADDR - Initializes struct iosys_map to an address in system memory
  * @vaddr_:	A system-memory address
@@ -234,9 +249,9 @@ static inline bool iosys_map_is_equal(const struct iosys_map *lhs,
  */
 static inline bool iosys_map_is_null(const struct iosys_map *map)
 {
-	if (map->is_iomem)
-		return !map->vaddr_iomem;
-	return !map->vaddr;
+	if (iosys_map_is_iomem(map))
+		return !iosys_map_ioptr(map);
+	return !iosys_map_ptr(map);
 }
 
 /**
@@ -286,10 +301,10 @@ static inline void iosys_map_clear(struct iosys_map *map)
 static inline void iosys_map_memcpy_to(struct iosys_map *dst, size_t dst_offset,
 				       const void *src, size_t len)
 {
-	if (dst->is_iomem)
-		memcpy_toio(dst->vaddr_iomem + dst_offset, src, len);
+	if (iosys_map_is_iomem(dst))
+		memcpy_toio(iosys_map_ioptr(dst) + dst_offset, src, len);
 	else
-		memcpy(dst->vaddr + dst_offset, src, len);
+		memcpy(iosys_map_ptr(dst) + dst_offset, src, len);
 }
 
 /**
@@ -306,10 +321,10 @@ static inline void iosys_map_memcpy_to(struct iosys_map *dst, size_t dst_offset,
 static inline void iosys_map_memcpy_from(void *dst, const struct iosys_map *src,
 					 size_t src_offset, size_t len)
 {
-	if (src->is_iomem)
-		memcpy_fromio(dst, src->vaddr_iomem + src_offset, len);
+	if (iosys_map_is_iomem(src))
+		memcpy_fromio(dst, iosys_map_ioptr(src) + src_offset, len);
 	else
-		memcpy(dst, src->vaddr + src_offset, len);
+		memcpy(dst, iosys_map_ptr(src) + src_offset, len);
 }
 
 /**
@@ -322,7 +337,7 @@ static inline void iosys_map_memcpy_from(void *dst, const struct iosys_map *src,
  */
 static inline void iosys_map_incr(struct iosys_map *map, size_t incr)
 {
-	if (map->is_iomem)
+	if (iosys_map_is_iomem(map))
 		map->vaddr_iomem += incr;
 	else
 		map->vaddr += incr;
@@ -341,10 +356,10 @@ static inline void iosys_map_incr(struct iosys_map *map, size_t incr)
 static inline void iosys_map_memset(struct iosys_map *dst, size_t offset,
 				    int value, size_t len)
 {
-	if (dst->is_iomem)
-		memset_io(dst->vaddr_iomem + offset, value, len);
+	if (iosys_map_is_iomem(dst))
+		memset_io(iosys_map_ioptr(dst) + offset, value, len);
 	else
-		memset(dst->vaddr + offset, value, len);
+		memset(iosys_map_ptr(dst) + offset, value, len);
 }
 
 #ifdef CONFIG_64BIT
@@ -393,10 +408,10 @@ static inline void iosys_map_memset(struct iosys_map *dst, size_t offset,
  */
 #define iosys_map_rd(map__, offset__, type__) ({					\
 	type__ val_;									\
-	if ((map__)->is_iomem) {							\
-		__iosys_map_rd_io(val_, (map__)->vaddr_iomem + (offset__), type__);	\
+	if (iosys_map_is_iomem(map__)) {						\
+		__iosys_map_rd_io(val_, iosys_map_ioptr(map__) + (offset__), type__);	\
 	} else {									\
-		__iosys_map_rd_sys(val_, (map__)->vaddr + (offset__), type__);		\
+		__iosys_map_rd_sys(val_, iosys_map_ptr(map__) + (offset__), type__);	\
 	}										\
 	val_;										\
 })
@@ -415,10 +430,10 @@ static inline void iosys_map_memset(struct iosys_map *dst, size_t offset,
  */
 #define iosys_map_wr(map__, offset__, type__, val__) ({					\
 	type__ val_ = (val__);								\
-	if ((map__)->is_iomem) {							\
-		__iosys_map_wr_io(val_, (map__)->vaddr_iomem + (offset__), type__);	\
+	if (iosys_map_is_iomem(map__)) {						\
+		__iosys_map_wr_io(val_, iosys_map_ioptr(map__) + (offset__), type__);	\
 	} else {									\
-		__iosys_map_wr_sys(val_, (map__)->vaddr + (offset__), type__);		\
+		__iosys_map_wr_sys(val_, iosys_map_ptr(map__) + (offset__), type__);	\
 	}										\
 })
 
