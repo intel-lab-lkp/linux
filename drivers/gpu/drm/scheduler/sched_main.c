@@ -857,6 +857,43 @@ void drm_sched_job_arm(struct drm_sched_job *job)
 EXPORT_SYMBOL(drm_sched_job_arm);
 
 /**
+ * drm_sched_job_prealloc_dependency_slots - avoid ENOMEM on adding dependencies
+ * @job: scheduler job where dependencies will be added
+ * @num_slots: number of slots to reserve
+  *
+ * Sometimes drivers need to be able to submit multiple jobs which depend on
+ * each other to different schedulers at the same time, but using
+ * drm_sched_job_add_dependency() can't fail any more after the first job is
+ * initialized.
+ *
+ * This function preallocate memory for dependency slots so that no ENOMEM can
+ * come later while adding dependencies.
+ *
+ * Return:
+ * 0 on success, or an error on failing to expand the array.
+ */
+int drm_sched_job_prealloc_dependency_slots(struct drm_sched_job *job,
+					    unsigned int num_slots)
+{
+	int ret;
+	u32 id;
+
+	/*
+	 * This works because NULL entries are not returned by xa_for_each. So
+	 * drm_sched_job_add_dependency() will ignore those while checking for
+	 * duplicates, but can then use the entry when storing the new fence.
+	 */
+	while (num_slots--) {
+		ret = xa_alloc(&job->dependencies, &id, NULL, xa_limit_32b,
+			       GFP_KERNEL);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(drm_sched_job_prealloc_dependency_slots);
+
+/**
  * drm_sched_job_add_dependency - adds the fence as a job dependency
  * @job: scheduler job to add the dependencies to
  * @fence: the dma_fence to add to the list of dependencies.
