@@ -12,10 +12,11 @@
 
 check_vmlinux()
 {
-	# Use readelf to check if it's a valid ELF
-	# TODO: find a better to way to check that it's really vmlinux
-	#       and not just an elf
-	readelf -h $1 > /dev/null 2>&1 || return 1
+	file $1 |grep 'Linux kernel.*boot executable Image' > /dev/null
+	if [ "$?" -ne "0" ]; then
+		# Use readelf to check if it's a valid ELF, if 'file' fails
+		readelf -h $1 > /dev/null 2>&1 || return 1
+	fi
 
 	cat $1
 	exit 0
