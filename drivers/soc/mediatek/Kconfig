@@ -69,6 +69,18 @@ config MTK_MMSYS
 	  Say yes here to add support for the MediaTek Multimedia
 	  Subsystem (MMSYS).
 
+config MTK_VMM
+	tristate "MediaTek VMM driver"
+	help
+	  Say Y here to enable support for the MediaTek VMM (Vcore for
+	  MultiMedia) controller, which acts as the main power supplier
+	  for multimedia power domains such as display, video encode and
+	  decode on MediaTek SoCs. The VMM controller provides virtual
+	  regulators for multimedia IPs and coordinates with the hardware
+	  common clock framework (hwccf) and the Video Companion Processor
+	  (VCP) to manage power domains. The VMM driver uses hardware voter
+	  through hwccf to notify VCP to turn on/off VMM-related bucks.
+
 config MTK_SVS
 	tristate "MediaTek Smart Voltage Scaling(SVS)"
 	depends on NVMEM_MTK_EFUSE && NVMEM
