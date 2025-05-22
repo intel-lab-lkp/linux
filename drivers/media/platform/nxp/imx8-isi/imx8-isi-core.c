@@ -154,7 +154,7 @@ static int mxc_isi_v4l2_init(struct mxc_isi_dev *isi)
 		if (ret < 0) {
 			dev_err(isi->dev, "Failed to register pipe%u: %d\n", i,
 				ret);
-			goto err_v4l2;
+			goto err_cleanup_pipe;
 		}
 
 		ret = media_create_pad_link(&isi->crossbar.sd.entity,
@@ -164,14 +164,14 @@ static int mxc_isi_v4l2_init(struct mxc_isi_dev *isi)
 					    MEDIA_LNK_FL_IMMUTABLE |
 					    MEDIA_LNK_FL_ENABLED);
 		if (ret < 0)
-			goto err_v4l2;
+			goto err_cleanup_pipe;
 	}
 
 	/* Register the M2M device. */
 	ret = mxc_isi_m2m_register(isi, v4l2_dev);
 	if (ret < 0) {
 		dev_err(isi->dev, "Failed to register M2M device: %d\n", ret);
-		goto err_v4l2;
+		goto err_cleanup_pipe;
 	}
 
 	/* Initialize, fill and register the async notifier. */
@@ -212,6 +212,9 @@ static int mxc_isi_v4l2_init(struct mxc_isi_dev *isi)
 err_m2m:
 	mxc_isi_m2m_unregister(isi);
 	v4l2_async_nf_cleanup(&isi->notifier);
+err_cleanup_pipe:
+	for (i = 0; i < isi->pdata->num_channels; ++i)
+		mxc_isi_pipe_unregister(&isi->pipes[i]);
 err_v4l2:
 	v4l2_device_unregister(v4l2_dev);
 err_media:
