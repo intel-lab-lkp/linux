@@ -196,6 +196,12 @@ static void __blkdev_issue_zero_pages(struct block_device *bdev,
 		sector_t sector, sector_t nr_sects, gfp_t gfp_mask,
 		struct bio **biop, unsigned int flags)
 {
+	struct folio *zero_folio;
+
+	zero_folio = mm_get_huge_zero_folio(NULL);
+	if (!zero_folio)
+		zero_folio = page_folio(ZERO_PAGE(0));
+
 	while (nr_sects) {
 		unsigned int nr_vecs = __blkdev_sectors_to_bio_pages(nr_sects);
 		struct bio *bio;
@@ -208,11 +214,12 @@ static void __blkdev_issue_zero_pages(struct block_device *bdev,
 			break;
 
 		do {
-			unsigned int len, added;
+			unsigned int len, added = 0;
 
-			len = min_t(sector_t,
-				PAGE_SIZE, nr_sects << SECTOR_SHIFT);
-			added = bio_add_page(bio, ZERO_PAGE(0), len, 0);
+			len = min_t(sector_t, folio_size(zero_folio),
+				    nr_sects << SECTOR_SHIFT);
+			if (bio_add_folio(bio, zero_folio, len, 0))
+				added = len;
 			if (added < len)
 				break;
 			nr_sects -= added >> SECTOR_SHIFT;
