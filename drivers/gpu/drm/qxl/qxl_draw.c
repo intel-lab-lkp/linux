@@ -52,7 +52,7 @@ static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 	ret = qxl_bo_vmap_locked(clips_bo, &map);
 	if (ret)
 		return NULL;
-	dev_clips = map.vaddr; /* TODO: Use mapping abstraction properly */
+	dev_clips = iosys_map_ptr(&map); /* TODO: Use mapping abstraction properly */
 
 	dev_clips->num_rects = num_clips;
 	dev_clips->chunk.next_chunk = 0;
@@ -206,7 +206,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	ret = qxl_bo_vmap_locked(bo, &surface_map);
 	if (ret)
 		goto out_release_backoff;
-	surface_base = surface_map.vaddr; /* TODO: Use mapping abstraction properly */
+	surface_base = iosys_map_ptr(&surface_map); /* TODO: Use mapping abstraction properly */
 
 	ret = qxl_image_init(qdev, release, dimage, surface_base,
 			     left - dumb_shadow_offset,

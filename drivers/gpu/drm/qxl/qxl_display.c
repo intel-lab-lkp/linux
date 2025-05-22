@@ -602,16 +602,16 @@ static struct qxl_bo *qxl_create_cursor(struct qxl_device *qdev,
 	cursor.chunk.next_chunk = 0;
 	cursor.chunk.prev_chunk = 0;
 	cursor.chunk.data_size = size;
-	if (cursor_map.is_iomem) {
-		memcpy_toio(cursor_map.vaddr_iomem,
+	if (iosys_map_is_iomem(&cursor_map)) {
+		memcpy_toio(iosys_map_ioptr(&cursor_map),
 			    &cursor, sizeof(cursor));
-		memcpy_toio(cursor_map.vaddr_iomem + sizeof(cursor),
-			    user_map.vaddr, size);
+		memcpy_toio(iosys_map_ioptr(&cursor_map) + sizeof(cursor),
+			    iosys_map_ptr(&user_map), size);
 	} else {
-		memcpy(cursor_map.vaddr,
+		memcpy(iosys_map_ptr(&cursor_map),
 		       &cursor, sizeof(cursor));
-		memcpy(cursor_map.vaddr + sizeof(cursor),
-		       user_map.vaddr, size);
+		memcpy(iosys_map_ptr(&cursor_map) + sizeof(cursor),
+		       iosys_map_ptr(&user_map), size);
 	}
 
 	qxl_bo_vunmap_and_unpin(user_bo);

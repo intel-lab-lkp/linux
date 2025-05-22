@@ -172,10 +172,10 @@ int qxl_bo_vmap_locked(struct qxl_bo *bo, struct iosys_map *map)
 	bo->map_count = 1;
 
 	/* TODO: Remove kptr in favor of map everywhere. */
-	if (bo->map.is_iomem)
-		bo->kptr = (void *)bo->map.vaddr_iomem;
+	if (iosys_map_is_iomem(&bo->map))
+		bo->kptr = (void *)iosys_map_ioptr(&bo->map);
 	else
-		bo->kptr = bo->map.vaddr;
+		bo->kptr = iosys_map_ptr(&bo->map);
 
 out:
 	*map = bo->map;
@@ -230,7 +230,7 @@ fallback:
 	ret = qxl_bo_vmap_locked(bo, &bo_map);
 	if (ret)
 		return NULL;
-	rptr = bo_map.vaddr; /* TODO: Use mapping abstraction properly */
+	rptr = iosys_map_ptr(&bo_map); /* TODO: Use mapping abstraction properly */
 
 	rptr += page_offset * PAGE_SIZE;
 	return rptr;
