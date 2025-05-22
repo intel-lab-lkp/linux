@@ -742,6 +742,16 @@ enum in6_addr_gen_mode {
  * @IFLA_BR_FDB_MAX_LEARNED
  *   Set the number of max dynamically learned FDB entries for the current
  *   bridge.
+ *
+ * @IFLA_BR_MCAST_ACTIVE_V4
+ *   Bridge IPv4 mcast active state, read only.
+ *
+ *   1 if an IGMP querier is present, 0 otherwise.
+ *
+ * @IFLA_BR_MCAST_ACTIVE_V6
+ *   Bridge IPv4 mcast active state, read only.
+ *
+ *   1 if an MLD querier is present, 0 otherwise.
  */
 enum {
 	IFLA_BR_UNSPEC,
@@ -794,6 +804,8 @@ enum {
 	IFLA_BR_MCAST_QUERIER_STATE,
 	IFLA_BR_FDB_N_LEARNED,
 	IFLA_BR_FDB_MAX_LEARNED,
+	IFLA_BR_MCAST_ACTIVE_V4,
+	IFLA_BR_MCAST_ACTIVE_V6,
 	__IFLA_BR_MAX,
 };
 
