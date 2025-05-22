@@ -912,6 +912,8 @@ patternProperties:
     description: Maxim Integrated Products
   "^maxlinear,.*":
     description: MaxLinear Inc.
+  "^mayqueen,.*":
+    description: Mayqueen Technologies Ltd.
   "^mbvl,.*":
     description: Mobiveil Inc.
   "^mcube,.*":
@@ -1080,8 +1082,6 @@ patternProperties:
   "^numonyx,.*":
     description: Numonyx (deprecated, use micron)
     deprecated: true
-  "^nutsboard,.*":
-    description: NutsBoard
   "^nuvoton,.*":
     description: Nuvoton Technology Corporation
   "^nvd,.*":
