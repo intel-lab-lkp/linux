@@ -629,18 +629,18 @@ static inline void iosys_map_copy(struct iosys_map *dst, const struct iosys_map 
 
 static inline unsigned long iosys_map_get_address(const struct iosys_map *map)
 {
-	if (map->is_iomem)
-		return (unsigned long)map->vaddr_iomem;
+	if (iosys_map_is_iomem(map)
+		return (unsigned long)iosys_map_ioptr(map);
 
-	return (unsigned long)map->vaddr;
+	return (unsigned long)iosys_map_ptr(map);
 }
 
 static inline void *iosys_map_get_vaddr(const struct iosys_map *map)
 {
-	if (WARN_ON(map->is_iomem))
+	if (WARN_ON(iosys_map_is_iomem(map)))
 		return NULL;
 
-	return map->vaddr;
+	return iosys_map_ptr(map);
 }
 
 int tegra_ivc_init(struct tegra_ivc *ivc, struct device *peer, const struct iosys_map *rx,
