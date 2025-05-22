@@ -7,8 +7,10 @@
 #include <linux/numa.h>
 #include <linux/overflow.h>
 #include <linux/stdarg.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <asm/bug.h>
+#include <asm/percpu.h>
 
 struct device;
 struct device_node;
@@ -166,5 +168,27 @@ static inline int __devm_add_action_or_reset(struct device *dev, void (*action)(
 	__devm_add_action_or_reset(dev, action, data, #action)
 
 bool devm_is_action_added(struct device *dev, void (*action)(void *), void *data);
+
+/**
+ * devm_alloc_percpu - Resource-managed alloc_percpu
+ * @dev: Device to allocate per-cpu memory for
+ * @type: Type to allocate per-cpu memory for
+ *
+ * Managed alloc_percpu. Per-cpu memory allocated with this function is
+ * automatically freed on driver detach.
+ *
+ * RETURNS:
+ * Pointer to allocated memory on success, NULL on failure.
+ */
+#define devm_alloc_percpu(dev, type)      \
+	((typeof(type) __percpu *)__devm_alloc_percpu((dev), sizeof(type), \
+						      __alignof__(type)))
+
+void __percpu *__devm_alloc_percpu(struct device *dev, size_t size,
+				   size_t align);
+void devm_free_percpu(struct device *dev, void __percpu *pdata);
+
+int __must_check devm_device_add_group(struct device *dev,
+				       const struct attribute_group *grp);
 
 #endif /* _DEVICE_DEVRES_H_ */
