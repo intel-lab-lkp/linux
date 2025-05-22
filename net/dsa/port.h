@@ -75,6 +75,9 @@ int dsa_port_bridge_host_mdb_add(const struct dsa_port *dp,
 				 const struct switchdev_obj_port_mdb *mdb);
 int dsa_port_bridge_host_mdb_del(const struct dsa_port *dp,
 				 const struct switchdev_obj_port_mdb *mdb);
+int dsa_port_bridge_mdb_active(const struct dsa_port *dp,
+			       const struct switchdev_mc_active mc_active,
+			       struct netlink_ext_ack *extack, bool handled);
 int dsa_port_pre_bridge_flags(const struct dsa_port *dp,
 			      struct switchdev_brport_flags flags,
 			      struct netlink_ext_ack *extack);

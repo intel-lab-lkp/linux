@@ -1080,6 +1080,11 @@ struct dsa_switch_ops {
 	int	(*port_mdb_del)(struct dsa_switch *ds, int port,
 				const struct switchdev_obj_port_mdb *mdb,
 				struct dsa_db db);
+	int	(*port_mdb_active)(struct dsa_switch *ds, int port,
+				   const struct switchdev_mc_active mc_active,
+				   struct netlink_ext_ack *extack,
+				   bool handled);
+
 	/*
 	 * RXNFC
 	 */

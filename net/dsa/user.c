@@ -603,7 +603,7 @@ static int dsa_user_port_attr_set(struct net_device *dev, const void *ctx,
 	struct dsa_port *dp = dsa_user_to_port(dev);
 	int ret;
 
-	if (ctx && ctx != dp)
+	if (ctx && ctx != dp && attr->id != SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE)
 		return 0;
 
 	switch (attr->id) {
@@ -656,6 +656,15 @@ static int dsa_user_port_attr_set(struct net_device *dev, const void *ctx,
 			return -EOPNOTSUPP;
 
 		ret = dsa_port_vlan_msti(dp, &attr->u.vlan_msti);
+		break;
+	case SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE:
+		const bool *handled = ctx;
+
+		if (!dsa_port_offloads_bridge_dev(dp, attr->orig_dev))
+			return -EOPNOTSUPP;
+
+		ret = dsa_port_bridge_mdb_active(dp, attr->u.mc_active, extack,
+						 *handled);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -3758,6 +3767,11 @@ static int dsa_user_switchdev_event(struct notifier_block *unused,
 
 	switch (event) {
 	case SWITCHDEV_PORT_ATTR_SET:
+		struct switchdev_notifier_port_attr_info *item = ptr;
+
+		if (item && item->attr->id == SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE)
+			item->info.ctx = &item->handled;
+
 		err = switchdev_handle_port_attr_set(dev, ptr,
 						     dsa_user_dev_check,
 						     dsa_user_port_attr_set);
@@ -3796,6 +3810,11 @@ static int dsa_user_switchdev_blocking_event(struct notifier_block *unused,
 							    dsa_user_port_obj_del);
 		return notifier_from_errno(err);
 	case SWITCHDEV_PORT_ATTR_SET:
+		struct switchdev_notifier_port_attr_info *item = ptr;
+
+		if (item && item->attr->id == SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE)
+			item->info.ctx = &item->handled;
+
 		err = switchdev_handle_port_attr_set(dev, ptr,
 						     dsa_user_dev_check,
 						     dsa_user_port_attr_set);
