@@ -169,6 +169,22 @@
 				sound-dai = <&q6routing>;
 			};
 		};
+
+		va-dai-link {
+			link-name = "VA Capture";
+
+			codec {
+				sound-dai = <&vamacro 0>;
+			};
+
+			cpu {
+				sound-dai = <&q6afedai VA_CODEC_DMA_TX_0>;
+			};
+
+			platform {
+				sound-dai = <&q6routing>;
+			};
+		};
 	};
 
 	wcd937x: codec {
@@ -831,6 +847,12 @@
 
 &usb_qmpphy_out {
 	remote-endpoint = <&pmi632_ss_in>;
+};
+
+&vamacro {
+	pinctrl-0 = <&lpass_dmic01_active>;
+	pinctrl-names = "default";
+	qcom,dmic-sample-rate = <2400000>;
 };
 
 &wifi {
