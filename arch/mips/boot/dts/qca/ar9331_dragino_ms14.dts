@@ -98,3 +98,7 @@
 		reg = <0>;
 	};
 };
+
+&wmac {
+	status = "okay";
+};
