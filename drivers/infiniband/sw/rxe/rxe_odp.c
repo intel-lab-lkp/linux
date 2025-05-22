@@ -137,7 +137,7 @@ static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp,
 	while (addr < iova + length) {
 		idx = (addr - ib_umem_start(umem_odp)) >> umem_odp->page_shift;
 
-		if (!(umem_odp->map.pfn_list[idx] & perm)) {
+		if (!(umem_odp->map.pfn_list[idx] & HMM_PFN_VALID)) {
 			need_fault = true;
 			break;
 		}
