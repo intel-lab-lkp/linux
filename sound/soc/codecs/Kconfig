@@ -2543,10 +2543,14 @@ config SND_SOC_WM9713
 	select REGMAP_AC97
 	select AC97_BUS_COMPAT if AC97_BUS_NEW
 
+config SND_SOC_WSA881X_COMMON
+	tristate
+
 config SND_SOC_WSA881X
 	tristate "WSA881X Codec"
 	depends on SOUNDWIRE
 	select REGMAP_SOUNDWIRE
+	select SND_SOC_WSA881X_COMMON
 	help
 	  This enables support for Qualcomm WSA8810/WSA8815 Class-D
 	  Smart Speaker Amplifier.
