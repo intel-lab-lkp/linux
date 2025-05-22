@@ -1111,7 +1111,7 @@ static long lan743x_ptpci_do_aux_work(struct ptp_clock_info *ptpci)
 							PTP_INT_IO_FE_MASK_) >>
 							PTP_INT_IO_FE_SHIFT_);
 				if (channel >= 0 &&
-				    channel < PCI11X1X_PTP_IO_MAX_CHANNELS) {
+				    channel < LAN743X_PTP_N_EXTTS) {
 					lan743x_ptp_io_event_clock_get(adapter,
 								       true,
 								       channel,
@@ -1144,7 +1144,7 @@ static long lan743x_ptpci_do_aux_work(struct ptp_clock_info *ptpci)
 						       PTP_INT_IO_RE_MASK_) >>
 						       PTP_INT_IO_RE_SHIFT_);
 				if (channel >= 0 &&
-				    channel < PCI11X1X_PTP_IO_MAX_CHANNELS) {
+				    channel < LAN743X_PTP_N_EXTTS) {
 					lan743x_ptp_io_event_clock_get(adapter,
 								       false,
 								       channel,
