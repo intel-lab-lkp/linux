@@ -247,9 +247,16 @@ static void put_huge_zero_page(void)
 	BUG_ON(atomic_dec_and_test(&huge_zero_refcount));
 }
 
+/*
+ * If THP_ZERO_PAGE_ALWAYS is enabled, @mm can be NULL, i.e, the huge_zero_folio
+ * is not associated with any mm_struct.
+ */
 struct folio *mm_get_huge_zero_folio(struct mm_struct *mm)
 {
-	if (test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
+	if (!IS_ENABLED(CONFIG_THP_ZERO_PAGE_ALWAYS) && !mm)
+		return NULL;
+
+	if (IS_ENABLED(CONFIG_THP_ZERO_PAGE_ALWAYS) || test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
 		return READ_ONCE(huge_zero_folio);
 
 	if (!get_huge_zero_page())
@@ -263,6 +270,9 @@ struct folio *mm_get_huge_zero_folio(struct mm_struct *mm)
 
 void mm_put_huge_zero_folio(struct mm_struct *mm)
 {
+	if (IS_ENABLED(CONFIG_THP_ZERO_PAGE_ALWAYS))
+		return;
+
 	if (test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
 		put_huge_zero_page();
 }
@@ -274,14 +284,21 @@ static unsigned long shrink_huge_zero_page_count(struct shrinker *shrink,
 	return atomic_read(&huge_zero_refcount) == 1 ? HPAGE_PMD_NR : 0;
 }
 
+static void _put_huge_zero_folio(void)
+{
+	struct folio *zero_folio;
+
+	zero_folio = xchg(&huge_zero_folio, NULL);
+	BUG_ON(zero_folio == NULL);
+	WRITE_ONCE(huge_zero_pfn, ~0UL);
+	folio_put(zero_folio);
+}
+
 static unsigned long shrink_huge_zero_page_scan(struct shrinker *shrink,
 				       struct shrink_control *sc)
 {
 	if (atomic_cmpxchg(&huge_zero_refcount, 1, 0) == 1) {
-		struct folio *zero_folio = xchg(&huge_zero_folio, NULL);
-		BUG_ON(zero_folio == NULL);
-		WRITE_ONCE(huge_zero_pfn, ~0UL);
-		folio_put(zero_folio);
+		_put_huge_zero_folio();
 		return HPAGE_PMD_NR;
 	}
 
@@ -850,10 +867,6 @@ static inline void hugepage_exit_sysfs(struct kobject *hugepage_kobj)
 
 static int __init thp_shrinker_init(void)
 {
-	huge_zero_page_shrinker = shrinker_alloc(0, "thp-zero");
-	if (!huge_zero_page_shrinker)
-		return -ENOMEM;
-
 	deferred_split_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE |
 						 SHRINKER_MEMCG_AWARE |
 						 SHRINKER_NONSLAB,
@@ -863,13 +876,20 @@ static int __init thp_shrinker_init(void)
 		return -ENOMEM;
 	}
 
-	huge_zero_page_shrinker->count_objects = shrink_huge_zero_page_count;
-	huge_zero_page_shrinker->scan_objects = shrink_huge_zero_page_scan;
-	shrinker_register(huge_zero_page_shrinker);
-
 	deferred_split_shrinker->count_objects = deferred_split_count;
 	deferred_split_shrinker->scan_objects = deferred_split_scan;
 	shrinker_register(deferred_split_shrinker);
+
+	if (IS_ENABLED(CONFIG_THP_ZERO_PAGE_ALWAYS))
+		return 0;
+
+	huge_zero_page_shrinker = shrinker_alloc(0, "thp-zero");
+	if (!huge_zero_page_shrinker)
+		return -ENOMEM;
+
+	huge_zero_page_shrinker->count_objects = shrink_huge_zero_page_count;
+	huge_zero_page_shrinker->scan_objects = shrink_huge_zero_page_scan;
+	shrinker_register(huge_zero_page_shrinker);
 
 	return 0;
 }
@@ -878,6 +898,17 @@ static void __init thp_shrinker_exit(void)
 {
 	shrinker_free(huge_zero_page_shrinker);
 	shrinker_free(deferred_split_shrinker);
+}
+
+static int __init huge_zero_page_init(void) {
+
+	if (!IS_ENABLED(CONFIG_THP_ZERO_PAGE_ALWAYS))
+		return 0;
+
+	if (!get_huge_zero_page()) {
+		return -ENOMEM;
+	}
+	return 0;
 }
 
 static int __init hugepage_init(void)
@@ -903,6 +934,10 @@ static int __init hugepage_init(void)
 	if (err)
 		goto err_slab;
 
+	err = huge_zero_page_init();
+	if (err)
+		goto err_huge_zero_page;
+
 	err = thp_shrinker_init();
 	if (err)
 		goto err_shrinker;
@@ -925,6 +960,8 @@ static int __init hugepage_init(void)
 err_khugepaged:
 	thp_shrinker_exit();
 err_shrinker:
+	_put_huge_zero_folio();
+err_huge_zero_page:
 	khugepaged_destroy();
 err_slab:
 	hugepage_exit_sysfs(hugepage_kobj);

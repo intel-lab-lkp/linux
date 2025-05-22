@@ -823,6 +823,9 @@ config ARCH_WANT_GENERAL_HUGETLB
 config ARCH_WANTS_THP_SWAP
 	def_bool n
 
+config ARCH_WANTS_THP_ZERO_PAGE_ALWAYS
+	def_bool n
+
 config MM_ID
 	def_bool n
 
@@ -894,6 +897,15 @@ config READ_ONLY_THP_FOR_FS
 	  This is marked experimental because it is a new feature. Write
 	  support of file THPs will be developed in the next few release
 	  cycles.
+
+config THP_ZERO_PAGE_ALWAYS
+	def_bool y
+	depends on TRANSPARENT_HUGEPAGE && ARCH_WANTS_THP_ZERO_PAGE_ALWAYS
+	help
+	  Typically huge_zero_folio, which is a THP of zeroes, is allocated
+	  on demand and deallocated when not in use. This option will always
+	  allocate huge_zero_folio for zeroing and it is never deallocated.
+	  Not suitable for memory constrained systems.
 
 config NO_PAGE_MAPCOUNT
 	bool "No per-page mapcount (EXPERIMENTAL)"
