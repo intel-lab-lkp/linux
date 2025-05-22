@@ -5,5 +5,6 @@
 #include "tests.h"
 
 struct test_suite **create_script_test_suites(void);
+struct test_suite **create_script_test_suites_arch(void);
 
 #endif /* TESTS_SCRIPTS_H */

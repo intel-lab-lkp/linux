@@ -650,6 +650,7 @@ static struct test_suite **build_suites(void)
 		generic_tests,
 		arch_tests,
 		NULL,
+		NULL,
 	};
 	struct test_suite **result;
 	struct test_suite *t;
@@ -657,6 +658,8 @@ static struct test_suite **build_suites(void)
 
 	if (suites[2] == NULL)
 		suites[2] = create_script_test_suites();
+	if (suites[3] == NULL)
+		suites[3] = create_script_test_suites_arch();
 
 #define for_each_suite(suite)						\
 	for (size_t i = 0, j = 0; i < ARRAY_SIZE(suites); i++, j = 0)	\

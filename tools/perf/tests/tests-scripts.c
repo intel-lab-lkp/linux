@@ -24,6 +24,7 @@
 #include "string2.h"
 #include "symbol.h"
 #include "tests.h"
+#include "util/env.h"
 #include "util/rlimit.h"
 #include "util/util.h"
 
@@ -71,6 +72,52 @@ static int shell_tests__dir_fd(void)
 	/* Then installed path. */
 	exec_path = get_argv_exec_path();
 	scnprintf(path, sizeof(path), "%s/tests/shell", exec_path);
+	free(exec_path);
+	return open(path, O_PATH);
+}
+
+static int shell_tests__arch_dir_fd(void)
+{
+	struct stat st;
+	const char *arch;
+	char path[PATH_MAX], path2[PATH_MAX], *exec_path;
+	int fd;
+	char *p;
+
+	arch = perf_env__arch(NULL);
+	if (arch == NULL)
+		return -1;
+
+	scnprintf(path, sizeof(path), "./arch/%s/tests/shell", arch);
+	fd = open(path, O_PATH);
+	if (fd >= 0)
+		return fd;
+
+	/* Use directory of executable */
+	if (readlink("/proc/self/exe", path2, sizeof path2) < 0)
+		return -1;
+	/* Follow another level of symlink if there */
+	if (lstat(path2, &st) == 0 && (st.st_mode & S_IFMT) == S_IFLNK) {
+		scnprintf(path, sizeof(path), path2);
+		if (readlink(path, path2, sizeof path2) < 0)
+			return -1;
+	}
+	/* Get directory */
+	p = strrchr(path2, '/');
+	if (p)
+		*p = 0;
+	scnprintf(path, sizeof(path), "%s/arch/%s/tests/shell", path2, arch);
+	fd = open(path, O_PATH);
+	if (fd >= 0)
+		return fd;
+	scnprintf(path, sizeof(path), "%s/source/arch/%s/tests/shell", path2, arch);
+	fd = open(path, O_PATH);
+	if (fd >= 0)
+		return fd;
+
+	/* Then installed path. */
+	exec_path = get_argv_exec_path();
+	scnprintf(path, sizeof(path), "%s/arch/%s/tests/shell", exec_path, arch);
 	free(exec_path);
 	return open(path, O_PATH);
 }
@@ -271,6 +318,32 @@ struct test_suite **create_script_test_suites(void)
 	struct test_suite **result = NULL, **result_tmp;
 	size_t result_sz = 0;
 	int dir_fd = shell_tests__dir_fd(); /* Walk  dir */
+
+	/*
+	 * Append scripts if fd is good, otherwise return a NULL terminated zero
+	 * length array.
+	 */
+	if (dir_fd >= 0)
+		append_scripts_in_dir(dir_fd, &result, &result_sz);
+
+	result_tmp = realloc(result, (result_sz + 1) * sizeof(*result_tmp));
+	if (result_tmp == NULL) {
+		pr_err("Out of memory while building script test suite list\n");
+		abort();
+	}
+	/* NULL terminate the test suite array. */
+	result = result_tmp;
+	result[result_sz] = NULL;
+	if (dir_fd >= 0)
+		close(dir_fd);
+	return result;
+}
+
+struct test_suite **create_script_test_suites_arch(void)
+{
+	struct test_suite **result = NULL, **result_tmp;
+	size_t result_sz = 0;
+	int dir_fd = shell_tests__arch_dir_fd(); /* Walk dir */
 
 	/*
 	 * Append scripts if fd is good, otherwise return a NULL terminated zero
