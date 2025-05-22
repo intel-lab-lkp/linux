@@ -249,6 +249,7 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 							unsigned long arg)
 {
+	unsigned int sleep_flags;
 	int error = 0;
 	struct snapshot_data *data;
 	loff_t size;
@@ -266,7 +267,8 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (!mutex_trylock(&system_transition_mutex))
+	sleep_flags = try_lock_system_sleep();
+	if (!sleep_flags)
 		return -EBUSY;
 
 	lock_device_hotplug();
@@ -417,7 +419,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 	}
 
 	unlock_device_hotplug();
-	mutex_unlock(&system_transition_mutex);
+	unlock_system_sleep(sleep_flags);
 
 	return error;
 }

@@ -564,6 +564,7 @@ static void suspend_finish(void)
  */
 static int enter_state(suspend_state_t state)
 {
+	unsigned int sleep_flags;
 	int error;
 
 	trace_suspend_resume(TPS("suspend_enter"), state, true);
@@ -577,7 +578,9 @@ static int enter_state(suspend_state_t state)
 	} else if (!valid_state(state)) {
 		return -EINVAL;
 	}
-	if (!mutex_trylock(&system_transition_mutex))
+
+	sleep_flags = try_lock_system_sleep();
+	if (!sleep_flags)
 		return -EBUSY;
 
 	if (state == PM_SUSPEND_TO_IDLE)
@@ -609,7 +612,7 @@ static int enter_state(suspend_state_t state)
 	pm_pr_dbg("Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
-	mutex_unlock(&system_transition_mutex);
+	unlock_system_sleep(sleep_flags);
 	return error;
 }
 
