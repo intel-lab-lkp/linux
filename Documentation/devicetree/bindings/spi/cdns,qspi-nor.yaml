@@ -17,6 +17,13 @@ allOf:
           contains:
             const: xlnx,versal-ospi-1.0
     then:
+      properties:
+        resets:
+          maxItems: 1
+
+        reset-names:
+          items:
+            enum: [ qspi ]
       required:
         - power-domains
   - if:
@@ -137,11 +144,11 @@ properties:
     maxItems: 1
 
   resets:
-    minItems: 2
+    minItems: 1
     maxItems: 3
 
   reset-names:
-    minItems: 2
+    minItems: 1
     maxItems: 3
     items:
       enum: [ qspi, qspi-ocp, rstc_ref ]
