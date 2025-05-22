@@ -647,9 +647,21 @@ static void lkdtm_DOUBLE_FAULT(void)
 	asm volatile ("movw %0, %%ss; addl $0, (%%esp)" ::
 		      "r" ((unsigned short)(GDT_ENTRY_TLS_MIN << 3)));
 
-	pr_err("FAIL: tried to double fault but didn't die\n");
+	pr_err("FAIL: tried to double fault on x86_32 but didn't die\n");
+#elif IS_ENABLED(CONFIG_X86_64) && !IS_ENABLED(CONFIG_UML)
+	local_irq_disable();
+	/*
+	 * Trigger #DF on x86_64:
+	 * 1. Set RSP to an invalid address (e.g., NULL).
+	 * 2. Execute an instruction that causes a fault (e.g., 'int3' for #BP).
+	 * 3. The CPU attempts to deliver the #BP. This involves pushing an
+	 *    exception frame onto the stack pointed to by RSP.
+	 * 4. Since RSP is invalid, the push operation itself faults (e.g., #PF).
+	 */
+	asm volatile ("movq $0, %%rsp; int3" :: );
+	pr_err("FAIL: tried to double fault on x86_64 but didn't die\n");
 #else
-	pr_err("XFAIL: this test is ia32-only\n");
+	pr_err("XFAIL: this test is x86_64 and x86_32 only\n");
 #endif
 }
 
