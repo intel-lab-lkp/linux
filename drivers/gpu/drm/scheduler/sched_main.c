@@ -869,10 +869,8 @@ EXPORT_SYMBOL(drm_sched_job_arm);
 int drm_sched_job_add_dependency(struct drm_sched_job *job,
 				 struct dma_fence *fence)
 {
+	unsigned long index = -1;
 	struct dma_fence *entry;
-	unsigned long index;
-	u32 id = 0;
-	int ret;
 
 	if (!fence)
 		return 0;
@@ -894,11 +892,13 @@ int drm_sched_job_add_dependency(struct drm_sched_job *job,
 		return 0;
 	}
 
-	ret = xa_alloc(&job->dependencies, &id, fence, xa_limit_32b, GFP_KERNEL);
-	if (ret != 0)
+	entry = xa_store(&job->dependencies, index + 1, fence, GFP_KERNEL);
+	if (xa_is_err(entry))
 		dma_fence_put(fence);
+	else
+		WARN_ON(entry);
 
-	return ret;
+	return xa_err(entry);
 }
 EXPORT_SYMBOL(drm_sched_job_add_dependency);
 
