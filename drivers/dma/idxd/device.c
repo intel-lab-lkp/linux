@@ -188,16 +188,32 @@ int idxd_wq_enable(struct idxd_wq *wq)
 		return 0;
 	}
 
+	/*
+	 * A device reset command disables all WQs in hardware. If issued
+	 * while a WQ is being enabled, it can cause a mismatch between the
+	 * software and hardware states.
+	 *
+	 * When a hardware error occurs, the IDXD driver calls
+	 * idxd_device_reset() to send a reset command and clear the state
+	 * (wq->state) of all WQs. It then uses wq_enable_map to re-enable
+	 * them and ensure consistency between the software and hardware states.
+	 *
+	 * To avoid inconsistency between software and hardware states,
+	 * issue the IDXD_CMD_ENABLE_WQ command as the final step.
+	 */
+	wq->state = IDXD_WQ_ENABLED;
+	set_bit(wq->id, idxd->wq_enable_map);
+
 	idxd_cmd_exec(idxd, IDXD_CMD_ENABLE_WQ, wq->id, &status);
 
 	if (status != IDXD_CMDSTS_SUCCESS &&
 	    status != IDXD_CMDSTS_ERR_WQ_ENABLED) {
+		clear_bit(wq->id, idxd->wq_enable_map);
+		wq->state = IDXD_WQ_DISABLED;
 		dev_dbg(dev, "WQ enable failed: %#x\n", status);
 		return -ENXIO;
 	}
 
-	wq->state = IDXD_WQ_ENABLED;
-	set_bit(wq->id, idxd->wq_enable_map);
 	dev_dbg(dev, "WQ %d enabled\n", wq->id);
 	return 0;
 }
