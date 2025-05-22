@@ -1602,6 +1602,9 @@ struct urb {
 	struct kref kref;		/* reference count of the URB */
 	int unlinked;			/* unlink error code */
 	void *hcpriv;			/* private data for host controller */
+	void *hcpriv_mempool;           /* a single slot of cache for HCD's private data */
+	size_t hcpriv_mempool_size;     /* current size of the memory pool */
+	bool hcpriv_mempool_activated;  /* flag the mempool usage */
 	atomic_t use_count;		/* concurrent submissions counter */
 	atomic_t reject;		/* submissions will fail */
 
@@ -1790,6 +1793,8 @@ extern int usb_wait_anchor_empty_timeout(struct usb_anchor *anchor,
 extern struct urb *usb_get_from_anchor(struct usb_anchor *anchor);
 extern void usb_scuttle_anchored_urbs(struct usb_anchor *anchor);
 extern int usb_anchor_empty(struct usb_anchor *anchor);
+extern void *urb_hcpriv_mempool_zalloc(struct urb *urb, size_t size, gfp_t mem_flags);
+extern void urb_free_hcpriv(struct urb *urb);
 
 #define usb_unblock_urb	usb_unpoison_urb
 
