@@ -508,7 +508,7 @@ static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end
 		return;
 	}
 
-	dsb(ishst);
+	/* dsb(ishst) not needed as callers (set_pxd) have that */
 	__flush_tlb_range_op(vaale1is, start, pages, stride, 0,
 			     TLBI_TTL_UNKNOWN, false, lpa2_is_enabled());
 	dsb(ish);
@@ -523,7 +523,7 @@ static inline void __flush_tlb_kernel_pgtable(unsigned long kaddr)
 {
 	unsigned long addr = __TLBI_VADDR(kaddr, 0);
 
-	dsb(ishst);
+	/* dsb(ishst) not needed as callers (set_pxd) have that */
 	__tlbi(vaae1is, addr);
 	dsb(ish);
 	isb();
