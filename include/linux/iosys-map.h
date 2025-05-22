@@ -99,29 +99,27 @@
  *	iosys_map_incr(&map, len); // go to first byte after the memcpy
  */
 
+#define _IOSYS_MAP_IS_IOMEM 1
 /**
  * struct iosys_map - Pointer to IO/system memory
  * @vaddr_iomem:	The buffer's address if in I/O memory
  * @vaddr:		The buffer's address if in system memory
- * @is_iomem:		True if the buffer is located in I/O memory, or false
- *			otherwise.
  */
 struct iosys_map {
 	union {
 		void __iomem *_vaddr_iomem;
 		void *_vaddr;
 	};
-	bool _is_iomem;
 };
 
 static inline bool iosys_map_is_iomem(const struct iosys_map *map)
 {
-	return map->_is_iomem;
+	return ((unsigned long)map->_vaddr) & _IOSYS_MAP_IS_IOMEM;
 }
 
 static inline void __iomem *iosys_map_ioptr(const struct iosys_map *map)
 {
-	return map->_vaddr_iomem;
+	return (void __iomem *)((unsigned long)map->_vaddr_iomem & ~_IOSYS_MAP_IS_IOMEM);
 }
 
 static inline void *iosys_map_ptr(const struct iosys_map *map)
@@ -136,7 +134,6 @@ static inline void *iosys_map_ptr(const struct iosys_map *map)
 #define IOSYS_MAP_INIT_VADDR(vaddr_)	\
 	{				\
 		._vaddr = (vaddr_),	\
-		._is_iomem = false,	\
 	}
 
 /**
@@ -145,8 +142,7 @@ static inline void *iosys_map_ptr(const struct iosys_map *map)
  */
 #define IOSYS_MAP_INIT_VADDR_IOMEM(vaddr_iomem_)	\
 	{						\
-		._vaddr_iomem = (vaddr_iomem_),		\
-		._is_iomem = true,			\
+		._vaddr_iomem = (void __iomem *)(((unsigned long)(vaddr_iomem_) | _IOSYS_MAP_IS_IOMEM)), \
 	}
 
 /**
@@ -198,7 +194,6 @@ static inline void *iosys_map_ptr(const struct iosys_map *map)
 static inline void iosys_map_set_vaddr(struct iosys_map *map, void *vaddr)
 {
 	map->_vaddr = vaddr;
-	map->_is_iomem = false;
 }
 
 /**
@@ -211,8 +206,7 @@ static inline void iosys_map_set_vaddr(struct iosys_map *map, void *vaddr)
 static inline void iosys_map_set_vaddr_iomem(struct iosys_map *map,
 					     void __iomem *vaddr_iomem)
 {
-	map->_vaddr_iomem = vaddr_iomem;
-	map->_is_iomem = true;
+	map->_vaddr_iomem = (void __iomem *)((unsigned long)vaddr_iomem | _IOSYS_MAP_IS_IOMEM);
 }
 
 /**
@@ -229,12 +223,9 @@ static inline void iosys_map_set_vaddr_iomem(struct iosys_map *map,
 static inline bool iosys_map_is_equal(const struct iosys_map *lhs,
 				      const struct iosys_map *rhs)
 {
-	if (lhs->_is_iomem != rhs->_is_iomem)
+	if (lhs->_vaddr != rhs->_vaddr)
 		return false;
-	else if (lhs->_is_iomem)
-		return lhs->_vaddr_iomem == rhs->_vaddr_iomem;
-	else
-		return lhs->_vaddr == rhs->_vaddr;
+	return true;
 }
 
 /**
@@ -279,12 +270,7 @@ static inline bool iosys_map_is_set(const struct iosys_map *map)
  */
 static inline void iosys_map_clear(struct iosys_map *map)
 {
-	if (map->_is_iomem) {
-		map->_vaddr_iomem = NULL;
-		map->_is_iomem = false;
-	} else {
-		map->_vaddr = NULL;
-	}
+	map->_vaddr = NULL;
 }
 
 /**
