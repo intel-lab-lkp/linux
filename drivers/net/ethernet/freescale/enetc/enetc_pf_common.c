@@ -4,6 +4,7 @@
 #include <linux/fsl/enetc_mdio.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/pcs.h>
 
 #include "enetc_pf_common.h"
 
@@ -248,8 +249,7 @@ free_mdio_bus:
 
 static void enetc_imdio_remove(struct enetc_pf *pf)
 {
-	if (pf->pcs && pf->ops->destroy_pcs)
-		pf->ops->destroy_pcs(pf->pcs);
+	pcs_put(pf->pcs);
 
 	if (pf->imdio) {
 		mdiobus_unregister(pf->imdio);

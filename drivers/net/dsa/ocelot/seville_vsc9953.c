@@ -10,6 +10,7 @@
 #include <linux/mdio/mdio-mscc-miim.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of_mdio.h>
+#include <linux/pcs.h>
 #include <linux/pcs-lynx.h>
 #include <linux/dsa/ocelot.h>
 #include <linux/iopoll.h>
@@ -926,7 +927,7 @@ static int vsc9953_mdio_bus_alloc(struct ocelot *ocelot)
 		if (ocelot_port->phy_mode == PHY_INTERFACE_MODE_INTERNAL)
 			continue;
 
-		phylink_pcs = lynx_pcs_create_mdiodev(felix->imdio, addr);
+		phylink_pcs = lynx_pcs_create_mdiodev(dev, felix->imdio, addr);
 		if (IS_ERR(phylink_pcs))
 			continue;
 
@@ -943,12 +944,8 @@ static void vsc9953_mdio_bus_free(struct ocelot *ocelot)
 	struct felix *felix = ocelot_to_felix(ocelot);
 	int port;
 
-	for (port = 0; port < ocelot->num_phys_ports; port++) {
-		struct phylink_pcs *phylink_pcs = felix->pcs[port];
-
-		if (phylink_pcs)
-			lynx_pcs_destroy(phylink_pcs);
-	}
+	for (port = 0; port < ocelot->num_phys_ports; port++)
+		pcs_put(felix->pcs[port]);
 
 	/* mdiobus_unregister and mdiobus_free handled by devres */
 }

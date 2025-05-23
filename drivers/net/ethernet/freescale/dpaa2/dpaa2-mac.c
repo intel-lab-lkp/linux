@@ -2,6 +2,7 @@
 /* Copyright 2019 NXP */
 
 #include <linux/acpi.h>
+#include <linux/pcs.h>
 #include <linux/pcs-lynx.h>
 #include <linux/phy/phy.h>
 #include <linux/property.h>
@@ -262,7 +263,7 @@ static int dpaa2_pcs_create(struct dpaa2_mac *mac,
 		return 0;
 	}
 
-	pcs = lynx_pcs_create_fwnode(node);
+	pcs = lynx_pcs_create_fwnode(&mac->mc_dev->dev, node);
 	fwnode_handle_put(node);
 
 	if (pcs == ERR_PTR(-EPROBE_DEFER)) {
@@ -288,12 +289,8 @@ static int dpaa2_pcs_create(struct dpaa2_mac *mac,
 
 static void dpaa2_pcs_destroy(struct dpaa2_mac *mac)
 {
-	struct phylink_pcs *phylink_pcs = mac->pcs;
-
-	if (phylink_pcs) {
-		lynx_pcs_destroy(phylink_pcs);
-		mac->pcs = NULL;
-	}
+	pcs_put(mac->pcs);
+	mac->pcs = NULL;
 }
 
 static void dpaa2_mac_set_supported_interfaces(struct dpaa2_mac *mac)
