@@ -151,7 +151,7 @@ void hisi_acc_free_sgl_pool(struct device *dev, struct hisi_acc_sgl_pool *pool)
 		dma_free_coherent(dev, block[i].size, block[i].sgl,
 				  block[i].sgl_dma);
 
-	kfree(pool);
+	kfree_sensitive(pool);
 }
 EXPORT_SYMBOL_GPL(hisi_acc_free_sgl_pool);
 
