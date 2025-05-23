@@ -775,6 +775,7 @@ xlog_cil_ail_insert(
 	xfs_trans_ail_cursor_last(ailp, &cur, ctx->start_lsn);
 	old_head = ailp->ail_head_lsn;
 	ailp->ail_head_lsn = ctx->commit_lsn;
+	ailp->ail_tail_lsn = ctx->start_lsn;
 	/* xfs_ail_update_finish() drops the ail_lock */
 	xfs_ail_update_finish(ailp, NULLCOMMITLSN);
 
@@ -857,6 +858,7 @@ xlog_cil_ail_insert(
 
 	spin_lock(&ailp->ail_lock);
 	xfs_trans_ail_cursor_done(&cur);
+	ailp->ail_tail_lsn = ctx->commit_lsn;
 	spin_unlock(&ailp->ail_lock);
 }
 

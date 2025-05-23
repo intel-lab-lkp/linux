@@ -740,7 +740,7 @@ __xfs_ail_assign_tail_lsn(
 
 	tail_lsn = __xfs_ail_min_lsn(ailp);
 	if (!tail_lsn)
-		tail_lsn = ailp->ail_head_lsn;
+		tail_lsn = ailp->ail_tail_lsn;
 
 	WRITE_ONCE(log->l_tail_space,
 			xlog_lsn_sub(log, ailp->ail_head_lsn, tail_lsn));

@@ -1179,6 +1179,8 @@ xlog_check_unmount_rec(
 					log->l_curr_cycle, after_umount_blk);
 			log->l_ailp->ail_head_lsn =
 					atomic64_read(&log->l_tail_lsn);
+			log->l_ailp->ail_tail_lsn =
+					atomic64_read(&log->l_tail_lsn);
 			*tail_blk = after_umount_blk;
 
 			*clean = true;
@@ -1212,6 +1214,7 @@ xlog_set_state(
 	if (bump_cycle)
 		log->l_curr_cycle++;
 	atomic64_set(&log->l_tail_lsn, be64_to_cpu(rhead->h_tail_lsn));
+	log->l_ailp->ail_tail_lsn = be64_to_cpu(rhead->h_lsn);
 	log->l_ailp->ail_head_lsn = be64_to_cpu(rhead->h_lsn);
 }
 

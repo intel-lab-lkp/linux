@@ -56,6 +56,7 @@ struct xfs_ail {
 	spinlock_t		ail_lock;
 	xfs_lsn_t		ail_last_pushed_lsn;
 	xfs_lsn_t		ail_head_lsn;
+	xfs_lsn_t		ail_tail_lsn;
 	int			ail_log_flush;
 	unsigned long		ail_opstate;
 	struct list_head	ail_buf_list;
