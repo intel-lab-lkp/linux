@@ -714,27 +714,47 @@ static int spi_nor_ready(struct spi_nor *nor)
 static int spi_nor_wait_till_ready_with_timeout(struct spi_nor *nor,
 						unsigned long timeout_jiffies)
 {
-	unsigned long deadline;
-	int timeout = 0, ret;
+	unsigned long deadline = jiffies + timeout_jiffies;
+	unsigned long sleep = nor->ready_sleep;
+	int ret, sleeps = 0;
 
-	deadline = jiffies + timeout_jiffies;
-
-	while (!timeout) {
-		if (time_after_eq(jiffies, deadline))
-			timeout = 1;
-
+	while (true) {
 		ret = spi_nor_ready(nor);
 		if (ret < 0)
 			return ret;
-		if (ret)
+		if (ret) {
+			/*
+			 * We want to decrease the polling interval in cases
+			 * where multiple requests finish in a single iteration
+			 * or less. We don't want to do it for single outliers,
+			 * but we give more weight to short transactions.
+			 */
+			if (sleeps < 2)
+				nor->ready_sleep_down += 2;
+			else if (nor->ready_sleep_down > 0)
+				nor->ready_sleep_down--;
+
+			if (nor->ready_sleep_down >= 5) {
+				nor->ready_sleep >>= 1;
+				nor->ready_sleep_down = 0;
+			}
 			return 0;
+		}
+		if (time_after_eq(jiffies, deadline)) {
+			dev_dbg(nor->dev, "flash operation timed out\n");
+			return -ETIMEDOUT;
+		}
 
-		cond_resched();
+		fsleep(sleep);
+		sleeps++;
+
+		/*
+		 * Exponentially backoff the sleep, but hard limit at
+		 * 1ms to avoid responsiveness issues.
+		 */
+		if (sleep < 1000)
+			sleep += (sleep >> 1) + 1;
 	}
-
-	dev_dbg(nor->dev, "flash operation timed out\n");
-
-	return -ETIMEDOUT;
 }
 
 /**
@@ -3448,6 +3468,14 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 		return PTR_ERR(info);
 
 	nor->info = info;
+
+	/*
+	 * Pick an initial sleep value that will get downtuned.
+	 * We want this value to be higher than needed for most flashes
+	 * as it will clamp down to the fastest transactions.
+	 */
+	nor->ready_sleep = 127;
+	nor->ready_sleep_down = 0;
 
 	mutex_init(&nor->lock);
 
