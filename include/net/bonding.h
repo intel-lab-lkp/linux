@@ -385,7 +385,14 @@ static inline void bond_set_slave_state(struct slave *slave,
 	if (slave->backup == slave_state)
 		return;
 
+	if (slave_state == BOND_STATE_ACTIVE)
+		bond_slave_ns_maddrs_del(slave->bond, slave);
+
 	slave->backup = slave_state;
+
+	if (slave_state == BOND_STATE_BACKUP)
+		bond_slave_ns_maddrs_add(slave->bond, slave);
+
 	if (notify) {
 		bond_lower_state_changed(slave);
 		bond_queue_slave_event(slave);
