@@ -450,7 +450,8 @@ struct phylink_pcs_ops;
  * @supported_interfaces: describing which PHY_INTERFACE_MODE_xxx
  *                        are supported by this PCS.
  * @ops: a pointer to the &struct phylink_pcs_ops structure
- * @phylink: pointer to &struct phylink_config
+ * @link_change: callback for when the link changes
+ * @link_change_priv: first argument to @link_change
  * @poll: poll the PCS for link changes
  * @rxc_always_on: The MAC driver requires the reference clock
  *                 to always be on. Standalone PCS drivers which
@@ -460,13 +461,14 @@ struct phylink_pcs_ops;
  * This structure is designed to be embedded within the PCS private data,
  * and will be passed between phylink and the PCS.
  *
- * The @phylink member is private to phylink and must not be touched by
- * the PCS driver.
+ * @link_change, @link_change_priv, and @rxc_always_on will be filled in by
+ * phylink.
  */
 struct phylink_pcs {
 	DECLARE_PHY_INTERFACE_MASK(supported_interfaces);
 	const struct phylink_pcs_ops *ops;
-	struct phylink *phylink;
+	void (*link_change)(void *priv, bool up);
+	void *link_change_priv;
 	bool poll;
 	bool rxc_always_on;
 };
@@ -708,7 +710,22 @@ int phylink_set_fixed_link(struct phylink *,
 			   const struct phylink_link_state *);
 
 void phylink_mac_change(struct phylink *, bool up);
-void phylink_pcs_change(struct phylink_pcs *, bool up);
+/**
+ * phylink_pcs_change() - notify phylink of a change to PCS link state
+ * @pcs: pointer to &struct phylink_pcs
+ * @up: indicates whether the link is currently up.
+ *
+ * The PCS driver should call this when the state of its link changes
+ * (e.g. link failure, new negotiation results, etc.) Note: it should
+ * not determine "up" by reading the BMSR. If in doubt about the link
+ * state at interrupt time, then pass true if pcs_get_state() returns
+ * the latched link-down state, otherwise pass false.
+ */
+static inline void phylink_pcs_change(struct phylink_pcs *pcs, bool up)
+{
+	if (pcs->link_change)
+		pcs->link_change(pcs->link_change_priv, up);
+}
 
 int phylink_pcs_pre_init(struct phylink *pl, struct phylink_pcs *pcs);
 
