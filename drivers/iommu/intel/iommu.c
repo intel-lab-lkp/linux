@@ -1366,15 +1366,7 @@ static void free_dmar_iommu(struct intel_iommu *iommu)
  */
 static bool first_level_by_default(struct intel_iommu *iommu)
 {
-	/* Only SL is available in legacy mode */
-	if (!sm_supported(iommu))
-		return false;
-
-	/* Only level (either FL or SL) is available, just use it */
-	if (ecap_flts(iommu->ecap) ^ ecap_slts(iommu->ecap))
-		return ecap_flts(iommu->ecap);
-
-	return true;
+	return sm_supported(iommu) && ecap_flts(iommu->ecap);
 }
 
 int domain_attach_iommu(struct dmar_domain *domain, struct intel_iommu *iommu)
