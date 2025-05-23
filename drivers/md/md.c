@@ -1002,6 +1002,8 @@ void md_super_write(struct mddev *mddev, struct md_rdev *rdev,
 			      REQ_OP_WRITE | REQ_SYNC | REQ_IDLE | REQ_META
 				  | REQ_PREFLUSH | REQ_FUA,
 			      GFP_NOIO, &mddev->sync_set);
+	if (!bio)
+		return;
 
 	atomic_inc(&rdev->nr_pending);
 
