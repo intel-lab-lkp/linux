@@ -1098,10 +1098,13 @@ static int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 {
 	int err;
 	struct folio *folio = *foliop;
-	size_t size = folio_size(folio);
+	size_t size;
 
-	if (folio && zeroing && count < size)
-		folio_zero_range(folio, 0, size);
+	if (folio) {
+		size = folio_size(folio);
+		if (zeroing && count < size)
+			folio_zero_range(folio, 0, size);
+	}
 
 	while (count) {
 		if (cs->write && cs->pipebufs && folio) {
@@ -1118,7 +1121,7 @@ static int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 			}
 		} else if (!cs->len) {
 			if (cs->move_folios && folio &&
-			    offset == 0 && count == folio_size(folio)) {
+			    offset == 0 && count == size) {
 				err = fuse_try_move_folio(cs, foliop);
 				if (err <= 0)
 					return err;
