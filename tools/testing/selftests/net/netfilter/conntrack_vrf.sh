@@ -236,9 +236,9 @@ EOF
 	ip netns exec "$ns1" ping -q -w 1 -c 1 "$DUMMYNET".2 > /dev/null
 
 	if ip netns exec "$ns0" nft list counter t fibcount | grep -q "packets 1"; then
-		echo "PASS: fib lookup returned exepected output interface"
+		echo "PASS: fib lookup returned expected output interface"
 	else
-		echo "FAIL: fib lookup did not return exepected output interface"
+		echo "FAIL: fib lookup did not return expected output interface"
 		ret=1
 		return
 	fi
