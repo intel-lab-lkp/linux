@@ -9,13 +9,11 @@ title: Maxim MAX17201 fuel gauge
 maintainers:
   - Dimitri Fedrau <dima.fedrau@gmail.com>
 
-allOf:
-  - $ref: power-supply.yaml#
-
 properties:
   compatible:
     oneOf:
       - const: maxim,max17201
+      - const: maxim,max77759-fg
       - items:
           - enum:
               - maxim,max17205
@@ -25,11 +23,18 @@ properties:
     items:
       - description: ModelGauge m5 registers
       - description: Nonvolatile registers
+    minItems: 1
+    maxItems: 2
 
   reg-names:
     items:
       - const: m5
       - const: nvmem
+    minItems: 1
+    maxItems: 2
+
+  shunt-resistor-micro-ohms:
+    description: The value of current sense resistor in microohms.
 
   interrupts:
     maxItems: 1
@@ -38,6 +43,37 @@ required:
   - compatible
   - reg
   - reg-names
+
+allOf:
+  - $ref: power-supply.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max17201
+    then:
+      properties:
+        reg:
+          minItems: 2
+        reg-names:
+          minItems: 2
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max77759-fg
+    then:
+      properties:
+        reg:
+          maxItems: 1
+        reg-names:
+          maxItems: 1
+      required:
+        - shunt-resistor-micro-ohms
 
 unevaluatedProperties: false
 
