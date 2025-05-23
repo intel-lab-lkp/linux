@@ -1284,3 +1284,8 @@ void net_mp_niov_clear_page_pool(struct net_iov *niov)
 
 	page_pool_clear_pp_info(netmem);
 }
+
+bool page_pool_page_is_pp(struct page *page)
+{
+	return netmem_is_pp(page_to_netmem(page));
+}
