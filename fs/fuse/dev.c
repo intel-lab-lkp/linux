@@ -1100,14 +1100,18 @@ static int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 	struct folio *folio = *foliop;
 	size_t size;
 
-	if (folio) {
-		size = folio_size(folio);
-		if (zeroing && count < size)
-			folio_zero_range(folio, 0, size);
-	}
+	if (WARN_ON(!folio))
+		return 0;
+
+	size = folio_size(folio);
+	if (zeroing && count < size)
+		folio_zero_range(folio, 0, size);
 
 	while (count) {
-		if (cs->write && cs->pipebufs && folio) {
+		void *mapaddr, *buf;
+		unsigned int copy, bytes_copied;
+
+		if (cs->write && cs->pipebufs) {
 			/*
 			 * Can't control lifetime of pipe buffers, so always
 			 * copy user pages.
@@ -1120,8 +1124,7 @@ static int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 				return fuse_ref_folio(cs, folio, offset, count);
 			}
 		} else if (!cs->len) {
-			if (cs->move_folios && folio &&
-			    offset == 0 && count == size) {
+			if (cs->move_folios && offset == 0 && count == size) {
 				err = fuse_try_move_folio(cs, foliop);
 				if (err <= 0)
 					return err;
@@ -1131,23 +1134,20 @@ static int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 					return err;
 			}
 		}
-		if (folio) {
-			void *mapaddr = kmap_local_folio(folio, offset);
-			void *buf = mapaddr;
-			unsigned int copy = count;
-			unsigned int bytes_copied;
 
-			if (folio_test_highmem(folio) && count > PAGE_SIZE - offset_in_page(offset))
-				copy = PAGE_SIZE - offset_in_page(offset);
+		mapaddr = kmap_local_folio(folio, offset);
+		buf = mapaddr;
+		copy = count;
 
-			bytes_copied = fuse_copy_do(cs, &buf, &copy);
-			kunmap_local(mapaddr);
-			offset += bytes_copied;
-			count -= bytes_copied;
-		} else
-			offset += fuse_copy_do(cs, NULL, &count);
+		if (folio_test_highmem(folio) && count > PAGE_SIZE - offset_in_page(offset))
+			copy = PAGE_SIZE - offset_in_page(offset);
+
+		bytes_copied = fuse_copy_do(cs, &buf, &copy);
+		kunmap_local(mapaddr);
+		offset += bytes_copied;
+		count -= bytes_copied;
 	}
-	if (folio && !cs->write)
+	if (!cs->write)
 		flush_dcache_folio(folio);
 	return 0;
 }
