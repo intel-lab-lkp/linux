@@ -149,6 +149,7 @@ static noinstr void enter_s2idle_proper(struct cpuidle_driver *drv,
 
 	instrumentation_begin();
 
+	trace_cpu_idle(index, dev->cpu);
 	time_start = ns_to_ktime(local_clock_noinstr());
 
 	tick_freeze();
@@ -174,6 +175,7 @@ static noinstr void enter_s2idle_proper(struct cpuidle_driver *drv,
 	start_critical_timings();
 
 	time_end = ns_to_ktime(local_clock_noinstr());
+	trace_cpu_idle(PWR_EVENT_EXIT, dev->cpu);
 
 	dev->states_usage[index].s2idle_time += ktime_us_delta(time_end, time_start);
 	dev->states_usage[index].s2idle_usage++;
