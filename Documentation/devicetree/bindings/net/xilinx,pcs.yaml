@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/xilinx,pcs.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx 1G/2.5G Ethernet PCS/PMA or SGMII LogiCORE IP
+
+maintainers:
+  - Sean Anderson <sean.anderson@seco.com>
+
+description: >
+  This is a soft device which implements the PCS and (depending on
+  configuration) PMA layers of an IEEE Ethernet PHY. On the MAC side, it
+  implements GMII. It may have an attached SERDES (internal or external), or
+  may directly use LVDS IO resources. Depending on the configuration, it may
+  implement 1000BASE-X, SGMII, 2500BASE-X, or 2.5G SGMII.
+
+  This device has a notion of "shared logic" such as reset and clocking
+  resources which must be shared between multiple PCSs using the same I/O
+  banks. Each PCS can be configured to have the shared logic in the "core"
+  (instantiated internally and made available to other PCSs) or in the "example
+  design" (provided by another PCS). PCSs with shared logic in the core provide
+  a clock for other PCSs in the same bank.
+
+properties:
+  compatible:
+    items:
+      - const: xlnx,pcs-16.2
+      - const: xlnx,pcs
+
+  reg:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 0
+
+  clocks:
+    items:
+      - description:
+          The reference clock for the PCS. Depending on your setup, this may be
+          the gtrefclk, refclk, clk125m signal, or clocks from another PCS.
+
+  clock-names:
+    const: refclk
+
+  done-gpios:
+    maxItems: 1
+    description:
+      GPIO connected to the reset-done output, if present.
+
+  interrupts:
+    items:
+      - description:
+          The an_interrupt autonegotiation-complete interrupt.
+
+  interrupt-names:
+    const: an
+
+  xlnx,pcs-modes:
+    description:
+      The interfaces that the PCS supports. Multiple interfaces may be
+      specified if dynamic reconfiguration is enabled.
+    oneOf:
+      - const: sgmii
+      - const: 1000base-x
+      - const: 2500base-x
+      - items:
+          - const: sgmii
+          - const: 1000base-x
+
+  reset-gpios:
+    maxItems: 1
+    description:
+      GPIO connected to the reset input.
+
+required:
+  - compatible
+  - reg
+  - xlnx,pcs-modes
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        pcs0: ethernet-pcs@0 {
+            compatible = "xlnx,pcs-16.2", "xlnx,pcs";
+            reg = <0>;
+            #clock-cells = <0>;
+            clocks = <&si570>;
+            clock-names = "refclk";
+            interrupts-extended = <&gic GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "an";
+            reset-gpios = <&gpio 5 GPIO_ACTIVE_HIGH>;
+            done-gpios = <&gpio 6 GPIO_ACTIVE_HIGH>;
+            xlnx,pcs-modes = "sgmii", "1000base-x";
+        };
+
+        pcs1: ethernet-pcs@1 {
+            compatible = "xlnx,pcs-16.2", "xlnx,pcs";
+            reg = <1>;
+            xlnx,pcs-modes = "sgmii";
+            clocks = <&pcs0>;
+            clock-names = "refclk";
+        };
+    };
