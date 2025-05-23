@@ -3115,6 +3115,9 @@ EXPORT_SYMBOL(__cpu_dying_mask);
 atomic_t __num_online_cpus __read_mostly;
 EXPORT_SYMBOL(__num_online_cpus);
 
+struct cpumask __cpu_parked_mask __read_mostly;
+EXPORT_SYMBOL(__cpu_parked_mask);
+
 void init_cpu_present(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_present_mask, src);

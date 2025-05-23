@@ -84,6 +84,7 @@ static __always_inline void set_nr_cpu_ids(unsigned int nr)
  *     cpu_enabled_mask - has bit 'cpu' set iff cpu can be brought online
  *     cpu_online_mask  - has bit 'cpu' set iff cpu available to scheduler
  *     cpu_active_mask  - has bit 'cpu' set iff cpu available to migration
+ *     cpu_parked_mask  - has bit 'cpu' set iff cpu is parked
  *
  *  If !CONFIG_HOTPLUG_CPU, present == possible, and active == online.
  *
@@ -93,6 +94,11 @@ static __always_inline void set_nr_cpu_ids(unsigned int nr)
  *  representing which CPUs are currently plugged in.  And
  *  cpu_online_mask is the dynamic subset of cpu_present_mask,
  *  indicating those CPUs available for scheduling.
+ *
+ *  A CPU is said to be parked when underlying physical CPU(pCPU) is not
+ *  available at the moment. It is recommended not to run any workload on
+ *  that CPU.
+
  *
  *  If HOTPLUG is enabled, then cpu_present_mask varies dynamically,
  *  depending on what ACPI reports as currently plugged in, otherwise
@@ -118,12 +124,14 @@ extern struct cpumask __cpu_enabled_mask;
 extern struct cpumask __cpu_present_mask;
 extern struct cpumask __cpu_active_mask;
 extern struct cpumask __cpu_dying_mask;
+extern struct cpumask __cpu_parked_mask;
 #define cpu_possible_mask ((const struct cpumask *)&__cpu_possible_mask)
 #define cpu_online_mask   ((const struct cpumask *)&__cpu_online_mask)
 #define cpu_enabled_mask   ((const struct cpumask *)&__cpu_enabled_mask)
 #define cpu_present_mask  ((const struct cpumask *)&__cpu_present_mask)
 #define cpu_active_mask   ((const struct cpumask *)&__cpu_active_mask)
 #define cpu_dying_mask    ((const struct cpumask *)&__cpu_dying_mask)
+#define cpu_parked_mask    ((const struct cpumask *)&__cpu_parked_mask)
 
 extern atomic_t __num_online_cpus;
 
@@ -1079,6 +1087,7 @@ void init_cpu_possible(const struct cpumask *src);
 #define set_cpu_present(cpu, present)	assign_cpu((cpu), &__cpu_present_mask, (present))
 #define set_cpu_active(cpu, active)	assign_cpu((cpu), &__cpu_active_mask, (active))
 #define set_cpu_dying(cpu, dying)	assign_cpu((cpu), &__cpu_dying_mask, (dying))
+#define set_cpu_parked(cpu, parked)    assign_cpu((cpu), &__cpu_parked_mask, (parked))
 
 void set_cpu_online(unsigned int cpu, bool online);
 
@@ -1166,6 +1175,11 @@ static __always_inline bool cpu_active(unsigned int cpu)
 static __always_inline bool cpu_dying(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_dying_mask);
+}
+
+static __always_inline bool cpu_parked(unsigned int cpu)
+{
+	return cpumask_test_cpu(cpu, cpu_parked_mask);
 }
 
 #else
