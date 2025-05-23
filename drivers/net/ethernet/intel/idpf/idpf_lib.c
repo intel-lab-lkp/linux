@@ -1190,6 +1190,7 @@ void idpf_statistics_task(struct work_struct *work)
  */
 void idpf_mbx_task(struct work_struct *work)
 {
+	struct libie_ctlq_xn_recv_params xn_params = {};
 	struct idpf_adapter *adapter;
 
 	adapter = container_of(work, struct idpf_adapter, mbx_task.work);
@@ -1200,7 +1201,11 @@ void idpf_mbx_task(struct work_struct *work)
 		queue_delayed_work(adapter->mbx_wq, &adapter->mbx_task,
 				   msecs_to_jiffies(300));
 
-	idpf_recv_mb_msg(adapter, adapter->hw.arq);
+	xn_params.xnm = adapter->xn_init_params.xnm;
+	xn_params.ctlq = adapter->arq;
+	xn_params.ctlq_msg_handler = idpf_recv_event_msg;
+
+	libie_ctlq_xn_recv(&xn_params);
 }
 
 /**
@@ -1757,7 +1762,6 @@ static int idpf_init_hard_reset(struct idpf_adapter *adapter)
 		idpf_vc_core_deinit(adapter);
 		if (!is_reset)
 			reg_ops->trigger_reset(adapter, IDPF_HR_FUNC_RESET);
-		idpf_deinit_dflt_mbx(adapter);
 	} else {
 		dev_err(dev, "Unhandled hard reset cause\n");
 		err = -EBADRQC;
@@ -1825,7 +1829,7 @@ void idpf_vc_event_task(struct work_struct *work)
 	return;
 
 func_reset:
-	idpf_vc_xn_shutdown(adapter->vcxn_mngr);
+	idpf_deinit_dflt_mbx(adapter);
 drv_load:
 	set_bit(IDPF_HR_RESET_IN_PROG, adapter->flags);
 	idpf_init_hard_reset(adapter);
@@ -2322,44 +2326,6 @@ unlock_mutex:
 	idpf_vport_ctrl_unlock(netdev);
 
 	return err;
-}
-
-/**
- * idpf_alloc_dma_mem - Allocate dma memory
- * @hw: pointer to hw struct
- * @mem: pointer to dma_mem struct
- * @size: size of the memory to allocate
- */
-void *idpf_alloc_dma_mem(struct idpf_hw *hw, struct idpf_dma_mem *mem, u64 size)
-{
-	struct idpf_adapter *adapter = hw->back;
-	size_t sz = ALIGN(size, 4096);
-
-	/* The control queue resources are freed under a spinlock, contiguous
-	 * pages will avoid IOMMU remapping and the use vmap (and vunmap in
-	 * dma_free_*() path.
-	 */
-	mem->va = dma_alloc_attrs(&adapter->pdev->dev, sz, &mem->pa,
-				  GFP_KERNEL, DMA_ATTR_FORCE_CONTIGUOUS);
-	mem->size = sz;
-
-	return mem->va;
-}
-
-/**
- * idpf_free_dma_mem - Free the allocated dma memory
- * @hw: pointer to hw struct
- * @mem: pointer to dma_mem struct
- */
-void idpf_free_dma_mem(struct idpf_hw *hw, struct idpf_dma_mem *mem)
-{
-	struct idpf_adapter *adapter = hw->back;
-
-	dma_free_attrs(&adapter->pdev->dev, mem->size,
-		       mem->va, mem->pa, DMA_ATTR_FORCE_CONTIGUOUS);
-	mem->size = 0;
-	mem->va = NULL;
-	mem->pa = 0;
 }
 
 static int idpf_hwtstamp_set(struct net_device *netdev,
