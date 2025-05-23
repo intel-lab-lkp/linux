@@ -7241,6 +7241,9 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 					(BIT(priv->dma_cap.hash_tb_sz) << 5);
 			priv->hw->mcast_bits_log2 =
 					ilog2(priv->hw->multicast_filter_bins);
+		} else {
+			priv->hw->multicast_filter_bins = 0;
+			priv->hw->mcast_bits_log2 = 0;
 		}
 
 		/* TXCOE doesn't work in thresh DMA mode */
