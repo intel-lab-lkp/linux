@@ -347,6 +347,8 @@ static struct drm_mm_node *find_hole_addr(struct drm_mm *mm, u64 addr, u64 size)
 			rb = node->rb_hole_addr.rb_right;
 		else
 			break;
+
+		node = NULL;
 	}
 
 	return node;
