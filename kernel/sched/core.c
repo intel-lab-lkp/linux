@@ -3526,7 +3526,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 		nodemask = cpumask_of_node(nid);
 
 		/* Look for allowed, online CPU in same node. */
-		for_each_cpu(dest_cpu, nodemask) {
+		for_each_cpu_andnot(dest_cpu, nodemask, cpu_parked_mask) {
 			if (is_cpu_allowed(p, dest_cpu))
 				return dest_cpu;
 		}
@@ -3534,7 +3534,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 
 	for (;;) {
 		/* Any allowed, online CPU? */
-		for_each_cpu(dest_cpu, p->cpus_ptr) {
+		for_each_cpu_andnot(dest_cpu, p->cpus_ptr, cpu_parked_mask) {
 			if (!is_cpu_allowed(p, dest_cpu))
 				continue;
 
