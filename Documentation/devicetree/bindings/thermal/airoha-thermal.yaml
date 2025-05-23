@@ -1,17 +1,19 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
 %YAML 1.2
 ---
-$id: http://devicetree.org/schemas/thermal/airoha,en7581-thermal.yaml#
+$id: http://devicetree.org/schemas/thermal/airoha-thermal.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Airoha EN7581 Thermal Sensor and Monitor
+title: Airoha Thermal Sensor and Monitor
 
 maintainers:
   - Christian Marangi <ansuelsmth@gmail.com>
 
 properties:
   compatible:
-    const: airoha,en7581-thermal
+    enum:
+      - airoha,en7581-thermal
+      - airoha,an7583-thermal
 
   reg:
     maxItems: 1
@@ -28,9 +30,30 @@ properties:
 
 required:
   - compatible
-  - reg
-  - interrupts
-  - airoha,chip-scu
+  - '#thermal-sensor-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: airoha,en7581-thermal
+    then:
+      required:
+        - reg
+        - interrupts
+        - airoha,chip-scu
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: airoha,an7583-thermal
+    then:
+      properties:
+        reg: false
+        interrupts: false
+        airoha,chip-scu: false
 
 additionalProperties: false
 
@@ -43,6 +66,13 @@ examples:
         reg = <0x1efbd000 0xd5c>;
         interrupts = <GIC_SPI 23 IRQ_TYPE_LEVEL_HIGH>;
         airoha,chip-scu = <&chip_scu>;
+
+        #thermal-sensor-cells = <0>;
+    };
+
+  - |
+    thermal-sensor {
+        compatible = "airoha,an7583-thermal";
 
         #thermal-sensor-cells = <0>;
     };
