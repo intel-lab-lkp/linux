@@ -202,25 +202,21 @@ static int idpf_add_flow_steer(struct net_device *netdev,
 		idpf_fsteer_fill_tcp(hdrs, fsp, true);
 		break;
 	default:
-		err = -EINVAL;
-		goto out;
+		kfree(rule);
+		return -EINVAL;
 	}
 
 	err = idpf_add_del_fsteer_filters(vport->adapter, rule,
 					  VIRTCHNL2_OP_ADD_FLOW_RULE);
 	if (err)
-		goto out;
+		return err;
 
-	if (info->status != cpu_to_le32(VIRTCHNL2_FLOW_RULE_SUCCESS)) {
-		err = -EIO;
-		goto out;
-	}
+	if (info->status != cpu_to_le32(VIRTCHNL2_FLOW_RULE_SUCCESS))
+		return -EIO;
 
 	fltr = kzalloc(sizeof(*fltr), GFP_KERNEL);
-	if (!fltr) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!fltr)
+		return -ENOMEM;
 
 	fltr->loc = fsp->location;
 	fltr->q_index = q_index;
@@ -235,9 +231,7 @@ static int idpf_add_flow_steer(struct net_device *netdev,
 
 	user_config->num_fsteer_fltrs++;
 
-out:
-	kfree(rule);
-	return err;
+	return 0;
 }
 
 /**
@@ -279,12 +273,10 @@ static int idpf_del_flow_steer(struct net_device *netdev,
 	err = idpf_add_del_fsteer_filters(vport->adapter, rule,
 					  VIRTCHNL2_OP_DEL_FLOW_RULE);
 	if (err)
-		goto out;
+		return err;
 
-	if (info->status != cpu_to_le32(VIRTCHNL2_FLOW_RULE_SUCCESS)) {
-		err = -EIO;
-		goto out;
-	}
+	if (info->status != cpu_to_le32(VIRTCHNL2_FLOW_RULE_SUCCESS))
+		return -EIO;
 
 	list_for_each_entry_safe(f, iter,
 				 &user_config->flow_steer_list, list) {
@@ -292,14 +284,11 @@ static int idpf_del_flow_steer(struct net_device *netdev,
 			list_del(&f->list);
 			kfree(f);
 			user_config->num_fsteer_fltrs--;
-			goto out;
+			return 0;
 		}
 	}
-	err = -EINVAL;
 
-out:
-	kfree(rule);
-	return err;
+	return -EINVAL;
 }
 
 static int idpf_set_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd)
