@@ -26,28 +26,13 @@ char *usbip_port_string = "3240";
 void usbip_setup_port_number(char *arg)
 {
 	dbg("parsing port arg '%s'", arg);
-	char *end;
-	unsigned long int port = strtoul(arg, &end, 10);
+	int port = usbip_to_int("port", arg, UINT16_MAX);
 
-	if (end == arg) {
-		err("port: could not parse '%s' as a decimal integer", arg);
-		return;
+	if (port > 0) {
+		usbip_port = port;
+		usbip_port_string = arg;
+		info("using port %d (\"%s\")", usbip_port, usbip_port_string);
 	}
-
-	if (*end != '\0') {
-		err("port: garbage at end of '%s'", arg);
-		return;
-	}
-
-	if (port > UINT16_MAX) {
-		err("port: %s too high (max=%d)",
-		    arg, UINT16_MAX);
-		return;
-	}
-
-	usbip_port = port;
-	usbip_port_string = arg;
-	info("using port %d (\"%s\")", usbip_port, usbip_port_string);
 }
 
 int usbip_to_int(const char *name, const char *val, int maxval)
