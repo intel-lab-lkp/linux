@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/eswin,eic7700-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Eswin EIC7700 SoC clock controller
+
+maintainers:
+  - Yifeng Huang <huangyifeng@eswincomputing.com>
+  - Xuyang Dong <dongxuyang@eswincomputing.com>
+
+description:
+  The clock controller registers are part of the syscrg block on eic7700 SoC.
+
+properties:
+  compatible:
+    items:
+      - const: eswin,eic7700-clock
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/eswin,eic7700-clock.h>
+
+    clock-controller@51828000 {
+        compatible = "eswin,eic7700-clock", "syscon", "simple-mfd";
+        reg = <0x51828000 0x80000>;
+        #clock-cells = <1>;
+    };
