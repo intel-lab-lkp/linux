@@ -7822,6 +7822,11 @@ void ftrace_free_mem(struct module *mod, void *start_ptr, void *end_ptr)
 
 	mutex_lock(&ftrace_lock);
 
+	if (ftrace_disabled || (mod && !mod->num_ftrace_callsites)) {
+		mutex_unlock(&ftrace_lock);
+		return;
+	}
+
 	/*
 	 * If we are freeing module init memory, then check if
 	 * any tracer is active. If so, we need to save a mapping of
