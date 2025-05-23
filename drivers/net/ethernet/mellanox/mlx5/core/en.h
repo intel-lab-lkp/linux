@@ -557,7 +557,7 @@ struct mlx5e_icosq {
 } ____cacheline_aligned_in_smp;
 
 struct mlx5e_frag_page {
-	struct page *page;
+	netmem_ref netmem;
 	u16 frags;
 };
 
@@ -629,7 +629,7 @@ struct mlx5e_dma_info {
 	dma_addr_t addr;
 	union {
 		struct mlx5e_frag_page *frag_page;
-		struct page *page;
+		netmem_ref netmem;
 	};
 };
 
