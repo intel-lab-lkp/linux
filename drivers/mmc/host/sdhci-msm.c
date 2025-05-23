@@ -147,6 +147,8 @@
 /* Max load for SD Vdd-io supply */
 #define SD_VQMMC_MAX_LOAD_UA	22000
 
+#define LEVEL_SHIFTER_HIGH_SPEED_FREQ	37500000
+
 #define msm_host_readl(msm_host, host, offset) \
 	msm_host->var_ops->msm_readl_relaxed(host, offset)
 
@@ -262,6 +264,7 @@ struct sdhci_msm_variant_ops {
 struct sdhci_msm_variant_info {
 	bool mci_removed;
 	bool restore_dll_config;
+	bool uses_level_shifter;
 	const struct sdhci_msm_variant_ops *var_ops;
 	const struct sdhci_msm_offset *offset;
 };
@@ -296,6 +299,7 @@ struct sdhci_msm_host {
 	bool use_cdr;
 	u32 transfer_mode;
 	bool updated_ddr_cfg;
+	bool uses_level_shifter;
 	bool uses_tassadar_dll;
 	u32 dll_config;
 	u32 ddr_config;
@@ -375,6 +379,12 @@ static void msm_set_clock_rate_for_bus_mode(struct sdhci_host *host,
 
 	mult = msm_get_clock_mult_for_bus_mode(host);
 	desired_rate = clock * mult;
+
+	if (curr_ios.timing == MMC_TIMING_SD_HS &&
+	    desired_rate > LEVEL_SHIFTER_HIGH_SPEED_FREQ &&
+	    msm_host->uses_level_shifter)
+		desired_rate = LEVEL_SHIFTER_HIGH_SPEED_FREQ;
+
 	rc = dev_pm_opp_set_rate(mmc_dev(host->mmc), desired_rate);
 	if (rc) {
 		pr_err("%s: Failed to set clock at rate %u at timing %d\n",
@@ -2424,6 +2434,13 @@ static const struct sdhci_msm_variant_info sdm845_sdhci_var = {
 	.offset = &sdhci_msm_v5_offset,
 };
 
+static const struct sdhci_msm_variant_info sm8550_sdhci_var = {
+	.mci_removed = true,
+	.uses_level_shifter = true,
+	.var_ops = &v5_var_ops,
+	.offset = &sdhci_msm_v5_offset,
+};
+
 static const struct of_device_id sdhci_msm_dt_match[] = {
 	/*
 	 * Do not add new variants to the driver which are compatible with
@@ -2434,6 +2451,7 @@ static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdm670-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sdm845-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sc7180-sdhci", .data = &sdm845_sdhci_var},
+	{.compatible = "qcom,sm8550-sdhci", .data = &sm8550_sdhci_var},
 	{},
 };
 
@@ -2555,6 +2573,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	msm_host->mci_removed = var_info->mci_removed;
 	msm_host->restore_dll_config = var_info->restore_dll_config;
+	msm_host->uses_level_shifter = var_info->uses_level_shifter;
 	msm_host->var_ops = var_info->var_ops;
 	msm_host->offset = var_info->offset;
 
