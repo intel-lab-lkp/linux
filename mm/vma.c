@@ -1834,6 +1834,8 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	return new_vma;
 
 out_vma_link:
+	if (is_vm_hugetlb_page(new_vma))
+		clear_vma_resv_huge_pages(new_vma);
 	vma_close(new_vma);
 
 	if (new_vma->vm_file)
