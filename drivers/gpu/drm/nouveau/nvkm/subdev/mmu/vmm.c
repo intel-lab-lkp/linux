@@ -1383,7 +1383,7 @@ next:
 			 */
 			while (size) {
 				pfn[pi++] = NVKM_VMM_PFN_NONE;
-				size -= 1 << page->shift;
+				size -= 1ULL << page->shift;
 			}
 		} else {
 			pi += size >> page->shift;
