@@ -147,7 +147,14 @@ extern void *memcpy(void *, const void *, size_t);
 
 #ifndef CONFIG_FORTIFY_SOURCE
 
-#define memcpy(t, f, n) __builtin_memcpy(t, f, n)
+#define memcpy(t, f, n)					\
+	({						\
+		typeof(n) __n = (n);			\
+		/* Skip impossible sizes. */		\
+		if (!(__n < 0 || __n == SIZE_MAX))	\
+			__builtin_memcpy(t, f, __n);	\
+		(t);					\
+	})
 
 #endif /* !CONFIG_FORTIFY_SOURCE */
 
