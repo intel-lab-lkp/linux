@@ -31,12 +31,41 @@ enum net_iov_type {
 };
 
 struct net_iov {
-	enum net_iov_type type;
-	unsigned long pp_magic;
-	struct page_pool *pp;
-	struct net_iov_area *owner;
-	unsigned long dma_addr;
-	atomic_long_t pp_ref_count;
+	/*
+	 * XXX: Now that struct netmem_desc overlays on struct page,
+	 * struct_group_tagged() should cover all of them.  However,
+	 * a separate struct netmem_desc should be declared and embedded,
+	 * once struct netmem_desc is no longer overlayed but it has its
+	 * own instance from slab.  The final form should be:
+	 *
+	 *    struct netmem_desc {
+	 *	   unsigned long pp_magic;
+	 *	   struct page_pool *pp;
+	 *	   unsigned long dma_addr;
+	 *	   atomic_long_t pp_ref_count;
+	 *    };
+	 *
+	 *    struct net_iov {
+	 *	   enum net_iov_type type;
+	 *	   struct net_iov_area *owner;
+	 *	   struct netmem_desc;
+	 *    };
+	 */
+	struct_group_tagged(netmem_desc, desc,
+		/*
+		 * only for struct net_iov
+		 */
+		enum net_iov_type type;
+		struct net_iov_area *owner;
+
+		/*
+		 * actually for struct netmem_desc
+		 */
+		unsigned long pp_magic;
+		struct page_pool *pp;
+		unsigned long dma_addr;
+		atomic_long_t pp_ref_count;
+	);
 };
 
 struct net_iov_area {
@@ -51,9 +80,9 @@ struct net_iov_area {
 /* These fields in struct page are used by the page_pool and net stack:
  *
  *        struct {
+ *                unsigned long _pp_mapping_pad;
  *                unsigned long pp_magic;
  *                struct page_pool *pp;
- *                unsigned long _pp_mapping_pad;
  *                unsigned long dma_addr;
  *                atomic_long_t pp_ref_count;
  *        };

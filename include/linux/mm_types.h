@@ -120,13 +120,13 @@ struct page {
 			unsigned long private;
 		};
 		struct {	/* page_pool used by netstack */
+			unsigned long _pp_mapping_pad;
 			/**
 			 * @pp_magic: magic value to avoid recycling non
 			 * page_pool allocated pages.
 			 */
 			unsigned long pp_magic;
 			struct page_pool *pp;
-			unsigned long _pp_mapping_pad;
 			unsigned long dma_addr;
 			atomic_long_t pp_ref_count;
 		};
