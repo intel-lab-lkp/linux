@@ -604,6 +604,23 @@ phy_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 static DEVICE_ATTR_RO(phy_id);
 
 static ssize_t
+c45_phy_ids_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct phy_device *phydev = to_phy_device(dev);
+	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
+	unsigned int i;
+	size_t len = 0;
+
+	for (i = 1; i < num_ids; i++)
+		len += sysfs_emit_at(buf, len, "0x%.8lx ",
+				(unsigned long)phydev->c45_ids.device_ids[i]);
+	buf[len - 1] = '\n';
+
+	return len;
+}
+static DEVICE_ATTR_RO(c45_phy_ids);
+
+static ssize_t
 phy_interface_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct phy_device *phydev = to_phy_device(dev);
@@ -640,6 +657,7 @@ static DEVICE_ATTR_RO(phy_dev_flags);
 
 static struct attribute *phy_dev_attrs[] = {
 	&dev_attr_phy_id.attr,
+	&dev_attr_c45_phy_ids.attr,
 	&dev_attr_phy_interface.attr,
 	&dev_attr_phy_has_fixups.attr,
 	&dev_attr_phy_dev_flags.attr,
