@@ -38,8 +38,19 @@ static inline void set_pageblock_isolate(struct page *page)
 }
 #endif
 
-#define MEMORY_OFFLINE	0x1
-#define REPORT_FAILURE	0x2
+/*
+ * Pageblock isolation modes:
+ * MEMORY_OFFLINE      - isolate to offline (!allocate) memory e.g., skip over
+ *		         PageHWPoison() pages and PageOffline() pages.
+ *		         Unmovable pages will be reported in this mode.
+ * CMA_ALLOCATION      - isolate for CMA allocations
+ * ISOLATE_MODE_OTHERS - isolate for other purposes
+ */
+enum pb_isolate_mode {
+	MEMORY_OFFLINE,
+	CMA_ALLOCATION,
+	ISOLATE_MODE_OTHERS,
+};
 
 void __meminit init_pageblock_migratetype(struct page *page,
 					  enum migratetype migratetype,
@@ -49,10 +60,10 @@ bool pageblock_isolate_and_move_free_pages(struct zone *zone, struct page *page)
 bool pageblock_unisolate_and_move_free_pages(struct zone *zone, struct page *page);
 
 int start_isolate_page_range(unsigned long start_pfn, unsigned long end_pfn,
-			     int migratetype, int flags);
+			     enum pb_isolate_mode mode);
 
 void undo_isolate_page_range(unsigned long start_pfn, unsigned long end_pfn);
 
 int test_pages_isolated(unsigned long start_pfn, unsigned long end_pfn,
-			int isol_flags);
+			enum pb_isolate_mode mode);
 #endif

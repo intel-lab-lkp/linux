@@ -2008,9 +2008,7 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	lru_cache_disable();
 
 	/* set above range as isolated */
-	ret = start_isolate_page_range(start_pfn, end_pfn,
-				       MIGRATE_MOVABLE,
-				       MEMORY_OFFLINE | REPORT_FAILURE);
+	ret = start_isolate_page_range(start_pfn, end_pfn, MEMORY_OFFLINE);
 	if (ret) {
 		reason = "failure to isolate range";
 		goto failed_removal_pcplists_disabled;
