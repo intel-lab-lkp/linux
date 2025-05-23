@@ -697,6 +697,11 @@ xfs_zone_gc_start_chunk(
 	}
 
 	bio = bio_alloc_bioset(bdev, 1, REQ_OP_READ, GFP_NOFS, &data->bio_set);
+	if (!bio) {
+		xfs_irele(ip);
+		xfs_open_zone_put(oz);
+		return false;
+	}
 
 	chunk = container_of(bio, struct xfs_gc_bio, bio);
 	chunk->ip = ip;
