@@ -1229,8 +1229,11 @@ static int mt798x_phy_led_blink_set(struct phy_device *phydev, u8 index,
 	if (err)
 		return err;
 
-	return mtk_phy_hw_led_on_set(phydev, index, MTK_GPHY_LED_ON_MASK,
-				     false);
+	if (blinking)
+		mtk_phy_hw_led_on_set(phydev, index, MTK_GPHY_LED_ON_MASK,
+				      false);
+
+	return 0;
 }
 
 static int mt798x_phy_led_brightness_set(struct phy_device *phydev,
