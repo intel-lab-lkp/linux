@@ -869,10 +869,8 @@ EXPORT_SYMBOL(drm_sched_job_arm);
 int drm_sched_job_add_dependency(struct drm_sched_job *job,
 				 struct dma_fence *fence)
 {
+	XA_STATE(xas, &job->dependencies, 0);
 	struct dma_fence *entry;
-	unsigned long index;
-	u32 id = 0;
-	int ret;
 
 	if (!fence)
 		return 0;
@@ -881,24 +879,37 @@ int drm_sched_job_add_dependency(struct drm_sched_job *job,
 	 * This lets the size of the array of deps scale with the number of
 	 * engines involved, rather than the number of BOs.
 	 */
-	xa_for_each(&job->dependencies, index, entry) {
+	xa_lock(&job->dependencies);
+	xas_for_each(&xas, entry, ULONG_MAX) {
 		if (entry->context != fence->context)
 			continue;
 
 		if (dma_fence_is_later(fence, entry)) {
 			dma_fence_put(entry);
-			xa_store(&job->dependencies, index, fence, GFP_KERNEL);
+			xas_store(&xas, fence);
 		} else {
 			dma_fence_put(fence);
 		}
-		return 0;
+		xa_unlock(&job->dependencies);
+		return xas_error(&xas);
 	}
 
-	ret = xa_alloc(&job->dependencies, &id, fence, xa_limit_32b, GFP_KERNEL);
-	if (ret != 0)
-		dma_fence_put(fence);
+retry:
+	entry = xas_store(&xas, fence);
+	xa_unlock(&job->dependencies);
 
-	return ret;
+	/* There shouldn't be any concurrent add, so no need to loop again */
+	if (xas_nomem(&xas, GFP_KERNEL)) {
+		xa_lock(&job->dependencies);
+		goto retry;
+	}
+
+	if (xas_error(&xas))
+		dma_fence_put(fence);
+	else
+		WARN_ON(entry);
+
+	return xas_error(&xas);
 }
 EXPORT_SYMBOL(drm_sched_job_add_dependency);
 
