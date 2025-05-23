@@ -5656,6 +5656,10 @@ void sched_tick(void)
 
 	sched_clock_tick();
 
+	/* push the current task out if cpu is parked */
+	if (cpu_parked(cpu))
+		push_current_task(rq);
+
 	rq_lock(rq, &rf);
 	donor = rq->donor;
 
@@ -8481,6 +8485,41 @@ void __init sched_init_smp(void)
 	sched_init_granularity();
 }
 #endif /* CONFIG_SMP */
+
+#if defined(CONFIG_SMP) && defined(CONFIG_HOTPLUG_CPU)
+static DEFINE_PER_CPU(struct cpu_stop_work, push_task_work);
+
+/* A parked CPU is when underlying physical CPU is not available.
+ * Scheduling on such CPU is going to cause OS preemption.
+ * In case any task is scheduled on such CPU, move it out. In
+ * select_fallback_rq a non parked CPU will be chosen and henceforth
+ * task shouldn't come back to this CPU
+ */
+void push_current_task(struct rq *rq)
+{
+	struct task_struct *push_task = rq->curr;
+	unsigned long flags;
+
+	/* idle task can't be pused out */
+	if (rq->curr == rq->idle || !cpu_parked(rq->cpu))
+		return;
+
+	if (kthread_is_per_cpu(push_task) ||
+	    is_migration_disabled(push_task))
+		return;
+
+	local_irq_save(flags);
+	get_task_struct(push_task);
+	preempt_disable();
+
+	stop_one_cpu_nowait(rq->cpu, __balance_push_cpu_stop, push_task,
+			    this_cpu_ptr(&push_task_work));
+	preempt_enable();
+	local_irq_restore(flags);
+}
+#else
+void push_current_task(struct rq *rq) { };
+#endif
 
 int in_sched_functions(unsigned long addr)
 {
