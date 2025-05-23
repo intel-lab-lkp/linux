@@ -682,11 +682,19 @@ int get_msr(int cpu, int offset, unsigned long long *msr)
 	int retval;
 	char pathname[32];
 	int fd;
-
+#if defined(ANDROID)
+	sprintf(pathname, "/dev/msr%d", cpu);
+#else
 	sprintf(pathname, "/dev/cpu/%d/msr", cpu);
+#endif
 	fd = open(pathname, O_RDONLY);
 	if (fd < 0)
+#if defined(ANDROID)
+		err(-1, "%s open failed, try chown or chmod +r /dev/msr*, or run as root",
+		    pathname);
+#else
 		err(-1, "%s open failed, try chown or chmod +r /dev/cpu/*/msr, or run as root", pathname);
+#endif
 
 	retval = pread(fd, msr, sizeof(*msr), offset);
 	if (retval != sizeof(*msr)) {
@@ -706,11 +714,19 @@ int put_msr(int cpu, int offset, unsigned long long new_msr)
 	char pathname[32];
 	int retval;
 	int fd;
-
+#if defined(ANDROID)
+	sprintf(pathname, "/dev/msr%d", cpu);
+#else
 	sprintf(pathname, "/dev/cpu/%d/msr", cpu);
+#endif
 	fd = open(pathname, O_RDWR);
 	if (fd < 0)
+#if defined(ANDROID)
+		err(-1, "%s open failed, try chown or chmod +r /dev//msr*, or run as root",
+		    pathname);
+#else
 		err(-1, "%s open failed, try chown or chmod +r /dev/cpu/*/msr, or run as root", pathname);
+#endif
 
 	retval = pwrite(fd, &new_msr, sizeof(new_msr), offset);
 	if (retval != sizeof(new_msr))
@@ -1385,10 +1401,18 @@ void probe_dev_msr(void)
 	struct stat sb;
 	char pathname[32];
 
+#if defined(ANDROID)
+	sprintf(pathname, "/dev/msr%d", base_cpu);
+#else
 	sprintf(pathname, "/dev/cpu/%d/msr", base_cpu);
+#endif
 	if (stat(pathname, &sb))
 		if (system("/sbin/modprobe msr > /dev/null 2>&1"))
+#if defined(ANDROID)
+			err(-5, "no /dev/msr0, Try \"# modprobe msr\" ");
+#else
 			err(-5, "no /dev/cpu/0/msr, Try \"# modprobe msr\" ");
+#endif
 }
 
 static void get_cpuid_or_exit(unsigned int leaf,
