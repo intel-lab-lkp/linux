@@ -77,30 +77,12 @@ struct net_iov_area {
 	unsigned long base_virtual;
 };
 
-/* These fields in struct page are used by the page_pool and net stack:
- *
- *        struct {
- *                unsigned long _pp_mapping_pad;
- *                unsigned long pp_magic;
- *                struct page_pool *pp;
- *                unsigned long dma_addr;
- *                atomic_long_t pp_ref_count;
- *        };
- *
- * We mirror the page_pool fields here so the page_pool can access these fields
- * without worrying whether the underlying fields belong to a page or net_iov.
- *
- * The non-net stack fields of struct page are private to the mm stack and must
- * never be mirrored to net_iov.
+/* XXX: The page pool fields in struct page have been removed but they
+ * might still use the space in struct page.  Thus, the size of struct
+ * netmem_desc should be under control until struct netmem_desc has its
+ * own instance from slab.
  */
-#define NET_IOV_ASSERT_OFFSET(pg, iov)             \
-	static_assert(offsetof(struct page, pg) == \
-		      offsetof(struct net_iov, iov))
-NET_IOV_ASSERT_OFFSET(pp_magic, pp_magic);
-NET_IOV_ASSERT_OFFSET(pp, pp);
-NET_IOV_ASSERT_OFFSET(dma_addr, dma_addr);
-NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
-#undef NET_IOV_ASSERT_OFFSET
+static_assert(sizeof(struct netmem_desc) <= offsetof(struct page, _refcount));
 
 static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
 {
