@@ -946,10 +946,8 @@ void redraw_screen(struct vc_data *vc, int is_switch)
 		*vc->vc_display_fg = vc;
 		fg_console = vc->vc_num;
 		hide_cursor(old_vc);
-		if (!con_is_visible(old_vc)) {
-			save_screen(old_vc);
-			set_origin(old_vc);
-		}
+		save_screen(old_vc);
+		set_origin(old_vc);
 		if (tty0dev)
 			sysfs_notify(&tty0dev->kobj, NULL, "active");
 	} else {
