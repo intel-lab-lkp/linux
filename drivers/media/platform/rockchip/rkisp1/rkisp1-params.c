@@ -819,8 +819,8 @@ static void rkisp1_hst_config_v10(struct rkisp1_params *params,
 		     arg->meas_window.v_offs);
 
 	block_hsize = arg->meas_window.h_size /
-		      RKISP1_CIF_ISP_HIST_COLUMN_NUM_V10 - 1;
-	block_vsize = arg->meas_window.v_size / RKISP1_CIF_ISP_HIST_ROW_NUM_V10 - 1;
+		      RKISP1_CIF_ISP_HIST_COLUMN_NUM_V10;
+	block_vsize = arg->meas_window.v_size / RKISP1_CIF_ISP_HIST_ROW_NUM_V10;
 
 	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_HIST_H_SIZE_V10,
 		     block_hsize);
