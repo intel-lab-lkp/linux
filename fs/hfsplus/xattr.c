@@ -746,9 +746,16 @@ ssize_t hfsplus_listxattr(struct dentry *dentry, char *buffer, size_t size)
 			if (size < (res + name_len(strbuf, xattr_name_len))) {
 				res = -ERANGE;
 				goto end_listxattr;
-			} else
-				res += copy_name(buffer + res,
-						strbuf, xattr_name_len);
+			} else {
+				err = copy_name(buffer + res,
+					strbuf, xattr_name_len);
+				if (err < 0) {
+					res = err;
+					goto end_listxattr;
+				}
+				else
+					res += err;
+			}
 		}
 
 		if (hfs_brec_goto(&fd, 1))

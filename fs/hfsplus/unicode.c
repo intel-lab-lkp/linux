@@ -246,6 +246,7 @@ done:
 	res = 0;
 out:
 	*len_p = (char *)op - astr;
+	*op = '\0';
 	return res;
 }
 
