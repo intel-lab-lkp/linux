@@ -50,6 +50,34 @@ void usbip_setup_port_number(char *arg)
 	info("using port %d (\"%s\")", usbip_port, usbip_port_string);
 }
 
+int usbip_to_int(const char *name, const char *val, int maxval)
+{
+	char *end;
+	long value = strtol(val, &end, 10);
+
+	if (end == val) {
+		err("%s: could not parse '%s' as a decimal integer", name, val);
+		return 0;
+	}
+
+	if (*end != '\0') {
+		err("%s: garbage at end of '%s'", name, val);
+		return 0;
+	}
+
+	if (value <= 0) {
+		err("%s: must be greater than zero, actual %s", name, val);
+		return 0;
+	}
+
+	if (value > maxval) {
+		err("%s: %s is too high, max=%d", name, val, maxval);
+		return 0;
+	}
+
+	return value;
+}
+
 uint32_t usbip_net_pack_uint32_t(int pack, uint32_t num)
 {
 	uint32_t i;
@@ -242,6 +270,63 @@ int usbip_net_set_keepalive(int sockfd)
 
 	return ret;
 }
+
+#if HAVE_KEEPALIVE_OPTS
+
+int usbip_net_set_keepidle(int sockfd, int seconds)
+{
+	int ret;
+
+	ret = setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &seconds, sizeof(seconds));
+	if (ret < 0)
+		dbg("setsockopt: TCP_KEEPIDLE");
+
+	return ret;
+}
+
+int usbip_net_set_keepcnt(int sockfd, int cnt)
+{
+	int ret;
+
+	ret = setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+	if (ret < 0)
+		dbg("setsockopt: TCP_KEEPCNT");
+
+	return ret;
+}
+
+int usbip_net_set_keepintvl(int sockfd, int seconds)
+{
+	int ret;
+
+	ret = setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &seconds, sizeof(seconds));
+	if (ret < 0)
+		dbg("setsockopt: TCP_KEEPINTVL");
+
+	return ret;
+}
+
+#else
+
+int usbip_net_set_keepidle(int, int)
+{
+	dbg("setsockopt: TCP_KEEPIDLE is not supported");
+	return -1;
+}
+
+int usbip_net_set_keepcnt(int, int)
+{
+	dbg("setsockopt: TCP_KEEPCNT is not supported");
+	return -1;
+}
+
+int usbip_net_set_keepintvl(int, int)
+{
+	dbg("setsockopt: TCP_KEEPINTVL is not supported");
+	return -1;
+}
+
+#endif /* HAVE_KEEPALIVE_OPTS */
 
 int usbip_net_set_v6only(int sockfd)
 {

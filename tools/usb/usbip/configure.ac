@@ -29,7 +29,7 @@ AC_PROG_MAKE_SET
 AC_HEADER_DIRENT
 AC_HEADER_STDC
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h stdlib.h dnl
-		  string.h sys/socket.h syslog.h unistd.h])
+		  string.h sys/socket.h syslog.h unistd.h netinet/tcp.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_INT32_T
@@ -106,6 +106,28 @@ AC_ARG_WITH([fortify],
 			    ],
 			    dnl [ACTION-IF-NOT-GIVEN]
 			    [AC_MSG_RESULT([default])])
+
+AC_MSG_CHECKING([whether tcp keepalive options are available])
+AC_COMPILE_IFELSE(
+	[AC_LANG_PROGRAM(
+		[ #include <sys/socket.h>
+		  #include <arpa/inet.h>
+		  #include <netinet/tcp.h> ],
+		[
+			int n = 0;
+			setsockopt(-1, IPPROTO_TCP, TCP_KEEPIDLE, &n, sizeof(n));
+			setsockopt(-1, IPPROTO_TCP, TCP_KEEPCNT, &n, sizeof(n));
+			setsockopt(-1, IPPROTO_TCP, TCP_KEEPINTVL, &n, sizeof(n));
+		]
+	)],
+	[
+		AC_MSG_RESULT([yes])
+		AC_DEFINE([HAVE_KEEPALIVE_OPTS], [1],
+			  [Define to 1 if TCP_KEEPIDLE/TCP_KEEPCNT/TCP_KEEPINTVL
+			   socket-level options are available.])
+	],
+	[ AC_MSG_RESULT([no]) ],
+)
 
 AC_CONFIG_FILES([Makefile libsrc/Makefile src/Makefile])
 AC_OUTPUT
