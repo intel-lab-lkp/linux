@@ -2864,6 +2864,30 @@ int ib_dma_virt_map_sg(struct ib_device *dev, struct scatterlist *sg, int nents)
 	return nents;
 }
 EXPORT_SYMBOL(ib_dma_virt_map_sg);
+int ib_dma_virt_map_alloc(struct device *dev, struct hmm_dma_map *map,
+			  size_t nr_entries, size_t dma_entry_size)
+{
+	if (!(nr_entries * PAGE_SIZE / dma_entry_size))
+		return -EINVAL;
+
+	map->dma_entry_size = dma_entry_size;
+	map->pfn_list = kvcalloc(nr_entries, sizeof(*map->pfn_list),
+				 GFP_KERNEL | __GFP_NOWARN);
+	if (!map->pfn_list)
+		return -ENOMEM;
+
+	map->dma_list = kvcalloc(nr_entries, sizeof(*map->dma_list),
+				 GFP_KERNEL | __GFP_NOWARN);
+	if (!map->dma_list)
+		goto err_dma;
+
+	return 0;
+
+err_dma:
+	kvfree(map->pfn_list);
+	return -ENOMEM;
+}
+EXPORT_SYMBOL(ib_dma_virt_map_alloc);
 #endif /* CONFIG_INFINIBAND_VIRT_DMA */
 
 static const struct rdma_nl_cbs ibnl_ls_cb_table[RDMA_NL_LS_NUM_OPS] = {
