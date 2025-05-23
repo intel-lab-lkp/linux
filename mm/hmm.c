@@ -638,7 +638,7 @@ int hmm_dma_map_alloc(struct device *dev, struct hmm_dma_map *map,
 		      size_t nr_entries, size_t dma_entry_size)
 {
 	bool dma_need_sync = false;
-	bool use_iova;
+	bool use_iova = false;
 
 	if (!(nr_entries * PAGE_SIZE / dma_entry_size))
 		return -EINVAL;
@@ -649,9 +649,9 @@ int hmm_dma_map_alloc(struct device *dev, struct hmm_dma_map *map,
 	 * best approximation to ensure no swiotlb buffering happens.
 	 */
 #ifdef CONFIG_DMA_NEED_SYNC
-	dma_need_sync = !dev->dma_skip_sync;
+	dma_need_sync = dev ? !dev->dma_skip_sync : false;
 #endif /* CONFIG_DMA_NEED_SYNC */
-	if (dma_need_sync || dma_addressing_limited(dev))
+	if (dev && (dma_need_sync || dma_addressing_limited(dev)))
 		return -EOPNOTSUPP;
 
 	map->dma_entry_size = dma_entry_size;
@@ -660,9 +660,11 @@ int hmm_dma_map_alloc(struct device *dev, struct hmm_dma_map *map,
 	if (!map->pfn_list)
 		return -ENOMEM;
 
-	use_iova = dma_iova_try_alloc(dev, &map->state, 0,
-			nr_entries * PAGE_SIZE);
-	if (!use_iova && dma_need_unmap(dev)) {
+	if (dev)
+		use_iova = dma_iova_try_alloc(dev, &map->state, 0,
+					      nr_entries * PAGE_SIZE);
+
+	if (!dev || (!use_iova && dma_need_unmap(dev))) {
 		map->dma_list = kvcalloc(nr_entries, sizeof(*map->dma_list),
 					 GFP_KERNEL | __GFP_NOWARN);
 		if (!map->dma_list)
