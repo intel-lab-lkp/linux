@@ -15,7 +15,6 @@
  */
 int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 {
-	struct virtchnl2_ptp_get_caps *recv_ptp_caps_msg __free(kfree) = NULL;
 	struct virtchnl2_ptp_get_caps send_ptp_caps_msg = {
 		.caps = cpu_to_le32(VIRTCHNL2_CAP_PTP_GET_DEVICE_CLK_TIME |
 				    VIRTCHNL2_CAP_PTP_GET_DEVICE_CLK_TIME_MB |
@@ -24,10 +23,9 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 				    VIRTCHNL2_CAP_PTP_ADJ_DEVICE_CLK_MB |
 				    VIRTCHNL2_CAP_PTP_TX_TSTAMPS_MB)
 	};
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_GET_CAPS,
-		.send_buf.iov_base = &send_ptp_caps_msg,
-		.send_buf.iov_len = sizeof(send_ptp_caps_msg),
+	struct virtchnl2_ptp_get_caps *recv_ptp_caps_msg;
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_GET_CAPS,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
 	struct libie_mmio_info	*mmio_info = &adapter->ctlq_ctx.mmio_info;
@@ -37,21 +35,21 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 	struct idpf_ptp *ptp = adapter->ptp;
 	enum idpf_ptp_access access_type;
 	u32 temp_offset;
-	int reply_sz;
+	size_t reply_sz;
+	int err;
 
-	recv_ptp_caps_msg = kzalloc(sizeof(struct virtchnl2_ptp_get_caps),
-				    GFP_KERNEL);
-	if (!recv_ptp_caps_msg)
-		return -ENOMEM;
+	err = idpf_send_mb_msg(adapter, &xn_params, &send_ptp_caps_msg,
+			       sizeof(send_ptp_caps_msg));
+	if (err)
+		return err;
 
-	xn_params.recv_buf.iov_base = recv_ptp_caps_msg;
-	xn_params.recv_buf.iov_len = sizeof(*recv_ptp_caps_msg);
+	reply_sz = xn_params.recv_mem.iov_len;
+	if (reply_sz != sizeof(*recv_ptp_caps_msg)) {
+		err = -EIO;
+		goto free_resp;
+	}
 
-	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
-	if (reply_sz < 0)
-		return reply_sz;
-	else if (reply_sz != sizeof(*recv_ptp_caps_msg))
-		return -EIO;
+	recv_ptp_caps_msg = xn_params.recv_mem.iov_base;
 
 	ptp->caps = le32_to_cpu(recv_ptp_caps_msg->caps);
 	ptp->base_incval = le64_to_cpu(recv_ptp_caps_msg->base_incval);
@@ -95,7 +93,7 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 discipline_clock:
 	access_type = ptp->adj_dev_clk_time_access;
 	if (access_type != IDPF_PTP_DIRECT)
-		return 0;
+		goto free_resp;
 
 	clk_adj_offsets = recv_ptp_caps_msg->clk_adj_offsets;
 
@@ -133,7 +131,9 @@ discipline_clock:
 	ptp->dev_clk_regs.phy_shadj_h =
 		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 
-	return 0;
+free_resp:
+	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
+	return err;
 }
 
 /**
@@ -148,28 +148,34 @@ discipline_clock:
 int idpf_ptp_get_dev_clk_time(struct idpf_adapter *adapter,
 			      struct idpf_ptp_dev_timers *dev_clk_time)
 {
+	struct virtchnl2_ptp_get_dev_clk_time *get_dev_clk_time_resp;
 	struct virtchnl2_ptp_get_dev_clk_time get_dev_clk_time_msg;
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_GET_DEV_CLK_TIME,
-		.send_buf.iov_base = &get_dev_clk_time_msg,
-		.send_buf.iov_len = sizeof(get_dev_clk_time_msg),
-		.recv_buf.iov_base = &get_dev_clk_time_msg,
-		.recv_buf.iov_len = sizeof(get_dev_clk_time_msg),
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_GET_DEV_CLK_TIME,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
-	int reply_sz;
+	size_t reply_sz;
 	u64 dev_time;
+	int err;
 
-	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
-	if (reply_sz < 0)
-		return reply_sz;
-	if (reply_sz != sizeof(get_dev_clk_time_msg))
-		return -EIO;
+	err = idpf_send_mb_msg(adapter, &xn_params, &get_dev_clk_time_msg,
+			       sizeof(get_dev_clk_time_msg));
+	if (err)
+		return err;
 
-	dev_time = le64_to_cpu(get_dev_clk_time_msg.dev_time_ns);
+	reply_sz = xn_params.recv_mem.iov_len;
+	if (reply_sz != sizeof(*get_dev_clk_time_resp)) {
+		err = -EIO;
+		goto free_resp;
+	}
+
+	get_dev_clk_time_resp = xn_params.recv_mem.iov_base;
+	dev_time = le64_to_cpu(get_dev_clk_time_resp->dev_time_ns);
 	dev_clk_time->dev_clk_time_ns = dev_time;
 
-	return 0;
+free_resp:
+	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
+	return err;
 }
 
 /**
@@ -186,23 +192,18 @@ int idpf_ptp_set_dev_clk_time(struct idpf_adapter *adapter, u64 time)
 	struct virtchnl2_ptp_set_dev_clk_time set_dev_clk_time_msg = {
 		.dev_time_ns = cpu_to_le64(time),
 	};
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_SET_DEV_CLK_TIME,
-		.send_buf.iov_base = &set_dev_clk_time_msg,
-		.send_buf.iov_len = sizeof(set_dev_clk_time_msg),
-		.recv_buf.iov_base = &set_dev_clk_time_msg,
-		.recv_buf.iov_len = sizeof(set_dev_clk_time_msg),
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_SET_DEV_CLK_TIME,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
-	int reply_sz;
+	int err;
 
-	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
-	if (reply_sz < 0)
-		return reply_sz;
-	if (reply_sz != sizeof(set_dev_clk_time_msg))
-		return -EIO;
+	err = idpf_send_mb_msg(adapter, &xn_params, &set_dev_clk_time_msg,
+			       sizeof(set_dev_clk_time_msg));
+	if (!err)
+		libie_ctlq_release_rx_buf(&xn_params.recv_mem);
 
-	return 0;
+	return err;
 }
 
 /**
@@ -219,23 +220,18 @@ int idpf_ptp_adj_dev_clk_time(struct idpf_adapter *adapter, s64 delta)
 	struct virtchnl2_ptp_adj_dev_clk_time adj_dev_clk_time_msg = {
 		.delta = cpu_to_le64(delta),
 	};
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_ADJ_DEV_CLK_TIME,
-		.send_buf.iov_base = &adj_dev_clk_time_msg,
-		.send_buf.iov_len = sizeof(adj_dev_clk_time_msg),
-		.recv_buf.iov_base = &adj_dev_clk_time_msg,
-		.recv_buf.iov_len = sizeof(adj_dev_clk_time_msg),
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_ADJ_DEV_CLK_TIME,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
-	int reply_sz;
+	int err;
 
-	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
-	if (reply_sz < 0)
-		return reply_sz;
-	if (reply_sz != sizeof(adj_dev_clk_time_msg))
-		return -EIO;
+	err = idpf_send_mb_msg(adapter, &xn_params, &adj_dev_clk_time_msg,
+			       sizeof(adj_dev_clk_time_msg));
+	if (!err)
+		libie_ctlq_release_rx_buf(&xn_params.recv_mem);
 
-	return 0;
+	return err;
 }
 
 /**
@@ -253,23 +249,18 @@ int idpf_ptp_adj_dev_clk_fine(struct idpf_adapter *adapter, u64 incval)
 	struct virtchnl2_ptp_adj_dev_clk_fine adj_dev_clk_fine_msg = {
 		.incval = cpu_to_le64(incval),
 	};
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_ADJ_DEV_CLK_FINE,
-		.send_buf.iov_base = &adj_dev_clk_fine_msg,
-		.send_buf.iov_len = sizeof(adj_dev_clk_fine_msg),
-		.recv_buf.iov_base = &adj_dev_clk_fine_msg,
-		.recv_buf.iov_len = sizeof(adj_dev_clk_fine_msg),
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_ADJ_DEV_CLK_FINE,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
-	int reply_sz;
+	int err;
 
-	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
-	if (reply_sz < 0)
-		return reply_sz;
-	if (reply_sz != sizeof(adj_dev_clk_fine_msg))
-		return -EIO;
+	err = idpf_send_mb_msg(adapter, &xn_params, &adj_dev_clk_fine_msg,
+			       sizeof(adj_dev_clk_fine_msg));
+	if (!err)
+		libie_ctlq_release_rx_buf(&xn_params.recv_mem);
 
-	return 0;
+	return err;
 }
 
 /**
@@ -288,18 +279,16 @@ int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport)
 	struct virtchnl2_ptp_tx_tstamp_latch_caps tx_tstamp_latch_caps;
 	struct idpf_ptp_vport_tx_tstamp_caps *tstamp_caps;
 	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp, *tmp;
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_GET_VPORT_TX_TSTAMP_CAPS,
-		.send_buf.iov_base = &send_tx_tstamp_caps,
-		.send_buf.iov_len = sizeof(send_tx_tstamp_caps),
-		.recv_buf.iov_len = IDPF_CTLQ_MAX_BUF_LEN,
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_GET_VPORT_TX_TSTAMP_CAPS,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
 	enum idpf_ptp_access tstamp_access, get_dev_clk_access;
 	struct idpf_ptp *ptp = vport->adapter->ptp;
 	struct list_head *head;
-	int err = 0, reply_sz;
+	size_t reply_sz;
 	u16 num_latches;
+	int err = 0;
 	u32 size;
 
 	if (!ptp)
@@ -311,19 +300,15 @@ int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport)
 	    get_dev_clk_access == IDPF_PTP_NONE)
 		return -EOPNOTSUPP;
 
-	rcv_tx_tstamp_caps = kzalloc(IDPF_CTLQ_MAX_BUF_LEN, GFP_KERNEL);
-	if (!rcv_tx_tstamp_caps)
-		return -ENOMEM;
-
 	send_tx_tstamp_caps.vport_id = cpu_to_le32(vport->vport_id);
-	xn_params.recv_buf.iov_base = rcv_tx_tstamp_caps;
 
-	reply_sz = idpf_vc_xn_exec(vport->adapter, &xn_params);
-	if (reply_sz < 0) {
-		err = reply_sz;
-		goto get_tstamp_caps_out;
-	}
+	err = idpf_send_mb_msg(vport->adapter, &xn_params, &send_tx_tstamp_caps,
+			       sizeof(send_tx_tstamp_caps));
+	if (err)
+		return err;
 
+	rcv_tx_tstamp_caps = xn_params.recv_mem.iov_base;
+	reply_sz = xn_params.recv_mem.iov_len;
 	num_latches = le16_to_cpu(rcv_tx_tstamp_caps->num_latches);
 	size = struct_size(rcv_tx_tstamp_caps, tstamp_latches, num_latches);
 	if (reply_sz != size) {
@@ -378,7 +363,7 @@ skip_offsets:
 	}
 
 	vport->tx_tstamp_caps = tstamp_caps;
-	kfree(rcv_tx_tstamp_caps);
+	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
 
 	return 0;
 
@@ -391,7 +376,7 @@ err_free_ptp_tx_stamp_list:
 
 	kfree(tstamp_caps);
 get_tstamp_caps_out:
-	kfree(rcv_tx_tstamp_caps);
+	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
 
 	return err;
 }
@@ -483,9 +468,9 @@ idpf_ptp_get_tstamp_value(struct idpf_vport *vport,
 
 /**
  * idpf_ptp_get_tx_tstamp_async_handler - Async callback for getting Tx tstamps
- * @adapter: Driver specific private structure
- * @xn: transaction for message
- * @ctlq_msg: received message
+ * @ctx: adapter pointer
+ * @mem: address and size of the response
+ * @status: return value of the request
  *
  * Read the tstamps Tx tstamp values from a received message and put them
  * directly to the skb. The number of timestamps to read is specified by
@@ -493,22 +478,21 @@ idpf_ptp_get_tstamp_value(struct idpf_vport *vport,
  *
  * Return: 0 on success, -errno otherwise.
  */
-static int
-idpf_ptp_get_tx_tstamp_async_handler(struct idpf_adapter *adapter,
-				     struct idpf_vc_xn *xn,
-				     const struct idpf_ctlq_msg *ctlq_msg)
+static void
+idpf_ptp_get_tx_tstamp_async_handler(void *ctx, struct kvec *mem, int status)
 {
 	struct virtchnl2_ptp_get_vport_tx_tstamp_latches *recv_tx_tstamp_msg;
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
 	struct virtchnl2_ptp_tx_tstamp_latch tstamp_latch;
 	struct idpf_ptp_tx_tstamp *tx_tstamp, *tmp;
 	struct idpf_vport *tstamp_vport = NULL;
+	struct idpf_adapter *adapter = ctx;
 	struct list_head *head;
 	u16 num_latches;
 	u32 vport_id;
 	int err = 0;
 
-	recv_tx_tstamp_msg = ctlq_msg->ctx.indirect.payload->va;
+	recv_tx_tstamp_msg = mem->iov_base;
 	vport_id = le32_to_cpu(recv_tx_tstamp_msg->vport_id);
 
 	idpf_for_each_vport(adapter, vport) {
@@ -522,7 +506,7 @@ idpf_ptp_get_tx_tstamp_async_handler(struct idpf_adapter *adapter,
 	}
 
 	if (!tstamp_vport || !tstamp_vport->tx_tstamp_caps)
-		return -EINVAL;
+		goto free_resp;
 
 	tx_tstamp_caps = tstamp_vport->tx_tstamp_caps;
 	num_latches = le16_to_cpu(recv_tx_tstamp_msg->num_latches);
@@ -557,8 +541,8 @@ idpf_ptp_get_tx_tstamp_async_handler(struct idpf_adapter *adapter,
 
 unlock:
 	spin_unlock_bh(&tx_tstamp_caps->latches_lock);
-
-	return err;
+free_resp:
+	libie_ctlq_release_rx_buf(mem);
 }
 
 /**
@@ -574,15 +558,15 @@ int idpf_ptp_get_tx_tstamp(struct idpf_vport *vport)
 {
 	struct virtchnl2_ptp_get_vport_tx_tstamp_latches *send_tx_tstamp_msg;
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
-	struct idpf_vc_xn_params xn_params = {
-		.vc_op = VIRTCHNL2_OP_PTP_GET_VPORT_TX_TSTAMP,
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_GET_VPORT_TX_TSTAMP,
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
-		.async = true,
-		.async_handler = idpf_ptp_get_tx_tstamp_async_handler,
+		.resp_cb = idpf_ptp_get_tx_tstamp_async_handler,
+		.send_ctx = vport->adapter,
 	};
 	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp;
-	int reply_sz, size, msg_size;
 	struct list_head *head;
+	int size, msg_size;
 	bool state_upd;
 	u16 id = 0;
 
@@ -615,11 +599,7 @@ int idpf_ptp_get_tx_tstamp(struct idpf_vport *vport)
 	msg_size = struct_size(send_tx_tstamp_msg, tstamp_latches, id);
 	send_tx_tstamp_msg->vport_id = cpu_to_le32(vport->vport_id);
 	send_tx_tstamp_msg->num_latches = cpu_to_le16(id);
-	xn_params.send_buf.iov_base = send_tx_tstamp_msg;
-	xn_params.send_buf.iov_len = msg_size;
 
-	reply_sz = idpf_vc_xn_exec(vport->adapter, &xn_params);
-	kfree(send_tx_tstamp_msg);
-
-	return min(reply_sz, 0);
+	return idpf_send_mb_msg(vport->adapter, &xn_params, send_tx_tstamp_msg,
+				msg_size);
 }
