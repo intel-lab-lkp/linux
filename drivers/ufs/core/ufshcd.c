@@ -6392,6 +6392,46 @@ static inline bool ufshcd_is_saved_err_fatal(struct ufs_hba *hba)
 	       (hba->saved_err & (INT_FATAL_ERRORS | UFSHCD_UIC_HIBERN8_MASK));
 }
 
+static bool ufshcd_is_linereset_fatal(struct ufs_hba *hba)
+{
+	bool needs_reset = true;
+	unsigned long flags;
+	int err;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+
+	if (ufshcd_is_saved_err_fatal(hba)) {
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+		goto out;
+	}
+
+	/*
+	 * Wait for 100ms to ensure the PA_INIT flow is complete,
+	 * and check for PA_INIT_ERR or other fatal errors.
+	 */
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	msleep(100);
+	spin_lock_irqsave(hba->host->host_lock, flags);
+
+	if (ufshcd_is_saved_err_fatal(hba)) {
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+		goto out;
+	}
+
+	/*
+	 * PA_INIT_ERR on the device side will not trigger UIC
+	 * error interrupt.
+	 * Send NOP to check if the link is alive.
+	 */
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	err = ufshcd_verify_dev_init(hba);
+	if (!err)
+		needs_reset = false;
+
+out:
+	return needs_reset;
+}
+
 void ufshcd_schedule_eh_work(struct ufs_hba *hba)
 {
 	lockdep_assert_held(hba->host->host_lock);
@@ -6688,6 +6728,11 @@ again:
 		if (!hba->saved_uic_err)
 			hba->saved_err &= ~UIC_ERROR;
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
+		if (ufshcd_is_linereset_fatal(hba)) {
+			needs_reset = true;
+			spin_lock_irqsave(hba->host->host_lock, flags);
+			goto do_reset;
+		}
 		if (ufshcd_is_pwr_mode_restore_needed(hba))
 			needs_restore = true;
 		spin_lock_irqsave(hba->host->host_lock, flags);
