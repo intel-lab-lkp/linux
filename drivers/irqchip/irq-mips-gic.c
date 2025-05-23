@@ -378,8 +378,17 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *cpumask,
 	 * the first online CPU in the mask.
 	 */
 	cpu = cpumask_first_and(cpumask, cpu_online_mask);
-	if (cpu >= NR_CPUS)
+
+	if ((cpu >= NR_CPUS) && !force)
+		/* In normal mode allow only online CPUs. */
 		return -EINVAL;
+
+	if (cpu >= NR_CPUS) {
+		/* In force mode allow current not yet online CPU for hotplug handlers. */
+		cpu = cpumask_first(cpumask);
+		if (cpu != get_cpu())
+			return -EINVAL;
+	}
 
 	old_cpu = cpumask_first(irq_data_get_effective_affinity_mask(d));
 	old_cl = cpu_cluster(&cpu_data[old_cpu]);
