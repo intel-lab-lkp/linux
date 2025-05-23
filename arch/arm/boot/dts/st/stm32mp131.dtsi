@@ -951,6 +951,12 @@
 			clocks = <&rcc DTS>;
 			clock-names = "pclk";
 			#thermal-sensor-cells = <0>;
+		};
+
+		hdp: pinctrl@5002a000 {
+			compatible = "st,stm32mp131-hdp";
+			reg = <0x5002a000 0x400>;
+			clocks = <&rcc HDP>;
 			status = "disabled";
 		};
 
