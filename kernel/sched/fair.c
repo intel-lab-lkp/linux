@@ -11763,6 +11763,7 @@ static int sched_balance_rq(int this_cpu, struct rq *this_rq,
 	};
 
 	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
+	cpumask_andnot(cpus, cpus, cpu_parked_mask);
 
 	schedstat_inc(sd->lb_count[idle]);
 
