@@ -1535,6 +1535,9 @@ static int check_memory_region_flags(struct kvm *kvm,
 {
 	u32 valid_flags = KVM_MEM_LOG_DIRTY_PAGES;
 
+	if (kvm_arch_supports_cacheable_pfnmap())
+		valid_flags |= KVM_MEM_ENABLE_CACHEABLE_PFNMAP;
+
 	if (kvm_arch_has_private_mem(kvm))
 		valid_flags |= KVM_MEM_GUEST_MEMFD;
 
