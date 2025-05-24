@@ -973,6 +973,9 @@ static int fxls8962af_fifo_flush(struct iio_dev *indio_dev)
 	if (ret)
 		return ret;
 
+	if (iio_device_claim_buffer_mode(indio_dev) < 0)
+		return 0;
+
 	/* Demux hw FIFO into kfifo. */
 	for (i = 0; i < count; i++) {
 		int j, bit;
@@ -988,6 +991,8 @@ static int fxls8962af_fifo_flush(struct iio_dev *indio_dev)
 
 		tstamp += sample_period;
 	}
+
+	iio_device_release_buffer_mode(indio_dev);
 
 	return count;
 }
