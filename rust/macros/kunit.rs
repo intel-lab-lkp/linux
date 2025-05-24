@@ -89,8 +89,8 @@ pub(crate) fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
     // unsafe extern "C" fn kunit_rust_wrapper_bar(_test: *mut kernel::bindings::kunit) { bar(); }
     //
     // static mut TEST_CASES: [kernel::bindings::kunit_case; 3] = [
-    //     kernel::kunit::kunit_case(kernel::c_str!("foo"), kunit_rust_wrapper_foo),
-    //     kernel::kunit::kunit_case(kernel::c_str!("bar"), kunit_rust_wrapper_bar),
+    //     kernel::kunit::kunit_case(c"foo", kunit_rust_wrapper_foo),
+    //     kernel::kunit::kunit_case(c"bar", kunit_rust_wrapper_bar),
     //     kernel::kunit::kunit_case_null(),
     // ];
     //
@@ -106,7 +106,7 @@ pub(crate) fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
         writeln!(kunit_macros, "{kunit_wrapper}").unwrap();
         writeln!(
             test_cases,
-            "    kernel::kunit::kunit_case(kernel::c_str!(\"{test}\"), {kunit_wrapper_fn_name}),"
+            "    kernel::kunit::kunit_case(c\"{test}\", {kunit_wrapper_fn_name}),",
         )
         .unwrap();
     }
