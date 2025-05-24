@@ -3659,7 +3659,6 @@ static struct fw_event_work *dequeue_next_fw_event(struct MPT3SAS_ADAPTER *ioc)
 		fw_event = list_first_entry(&ioc->fw_event_list,
 				struct fw_event_work, list);
 		list_del_init(&fw_event->list);
-		fw_event_work_put(fw_event);
 	}
 	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 
@@ -3679,6 +3678,7 @@ static void
 _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 {
 	struct fw_event_work *fw_event;
+	bool from_queue;
 
 	if ((list_empty(&ioc->fw_event_list) && !ioc->current_event) ||
 	    !ioc->firmware_event_thread)
@@ -3693,8 +3693,17 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		ioc->current_event->ignore = 1;
 
 	ioc->fw_events_cleanup = 1;
-	while ((fw_event = dequeue_next_fw_event(ioc)) ||
-	     (fw_event = ioc->current_event)) {
+	while (true) {
+		from_queue = false;
+
+		fw_event = dequeue_next_fw_event(ioc);
+		if (fw_event) {
+			from_queue = true;
+		} else {
+			fw_event = ioc->current_event;
+			if (!fw_event)
+				break;
+		}
 
 		/*
 		 * Don't call cancel_work_sync() for current_event
@@ -3713,6 +3722,8 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		if (fw_event == ioc->current_event &&
 		    ioc->current_event->event !=
 		    MPT3SAS_REMOVE_UNRESPONDING_DEVICES) {
+			if (from_queue)
+				fw_event_work_put(fw_event);
 			ioc->current_event = NULL;
 			continue;
 		}
@@ -3741,6 +3752,8 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		if (cancel_work_sync(&fw_event->work))
 			fw_event_work_put(fw_event);
 
+		if (from_queue)
+			fw_event_work_put(fw_event);
 	}
 	ioc->fw_events_cleanup = 0;
 }
