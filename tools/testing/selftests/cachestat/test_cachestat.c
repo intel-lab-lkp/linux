@@ -22,7 +22,7 @@
 
 static const char * const dev_files[] = {
 	"/dev/zero", "/dev/null", "/dev/urandom",
-	"/proc/version", "/proc"
+	"/proc/version","/proc/cpuinfo","/proc"
 };
 
 void print_cachestat(struct cachestat *cs)
@@ -202,6 +202,65 @@ out:
 	return ret;
 }
 
+bool test_cachestat_mmap(void){
+
+	size_t PS = sysconf(_SC_PAGESIZE);
+	size_t filesize = PS * 512 * 2;;
+	int syscall_ret;
+	size_t compute_len = PS * 512;
+	struct cachestat_range cs_range = { PS, compute_len };
+	char *filename = "tmpshmcstat";
+	unsigned long num_pages = compute_len / PS;
+	struct cachestat cs;
+	bool ret = true;
+	int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0) {
+		ksft_print_msg("Unable to create mmap file.\n");
+		ret = false;
+		goto out;
+	}
+	if (ftruncate(fd, filesize)) {
+		ksft_print_msg("Unable to truncate mmap file.\n");
+		ret = false;
+		goto close_fd;
+	}
+	if (!write_exactly(fd, filesize)) {
+		ksft_print_msg("Unable to write to mmap file.\n");
+		ret = false;
+		goto close_fd;
+	}
+	char *map = mmap(NULL, filesize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (map == MAP_FAILED) {
+		ksft_print_msg("mmap failed.\n");
+		ret = false;
+		goto close_fd;
+	}
+
+	for (int i = 0; i < filesize; i++) {
+		map[i] = 'A';
+	}
+	map[filesize - 1] = 'X';
+	
+	syscall_ret = syscall(__NR_cachestat, fd, &cs_range, &cs, 0);
+	
+	if (syscall_ret) {
+		ksft_print_msg("Cachestat returned non-zero.\n");
+		ret = false;
+	} else {
+		print_cachestat(&cs);
+		if (cs.nr_cache + cs.nr_evicted != num_pages) {
+			ksft_print_msg("Total number of cached and evicted pages is off.\n");
+			ret = false;
+		}
+	}
+
+close_fd:
+	close(fd);
+	unlink(filename);
+out:
+	return ret;
+}
+
 bool test_cachestat_shmem(void)
 {
 	size_t PS = sysconf(_SC_PAGESIZE);
@@ -274,7 +333,7 @@ int main(void)
 		ret = 1;
 	}
 
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < 6; i++) {
 		const char *dev_filename = dev_files[i];
 
 		if (test_cachestat(dev_filename, false, false, false,
@@ -315,5 +374,11 @@ int main(void)
 		ret = 1;
 	}
 
+	if (test_cachestat_mmap())
+		ksft_test_result_pass("cachestat works with a mmap file\n");
+	else {
+		ksft_test_result_fail("cachestat fails with a mmap file\n");
+		ret = 1;
+	}
 	return ret;
 }
