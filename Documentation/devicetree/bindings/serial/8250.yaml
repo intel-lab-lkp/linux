@@ -45,9 +45,13 @@ allOf:
                   - ns16550
                   - ns16550a
     then:
-      anyOf:
-        - required: [ clock-frequency ]
-        - required: [ clocks ]
+      oneOf:
+        - allOf:
+            - required: [ clock-frequency ]
+            - properties: { clocks: false }
+        - allOf:
+            - required: [ clocks ]
+            - properties: { clock-frequency: false }
 
 properties:
   compatible:
