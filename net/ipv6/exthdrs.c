@@ -504,6 +504,15 @@ static int ipv6_rpl_srh_rcv(struct sk_buff *skb)
 	}
 
 looped_back:
+
+	if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct ipv6_rpl_sr_hdr)))
+		goto error;
+	// Check if there is enough memory available for the header and hdrlen is in valid range
+	if (skb_tailroom(skb) < ((hdr->hdrlen + 1) << 3) ||
+	    hdr->hdrlen == 0 ||
+	    hdr->hdrlen > U8_MAX)
+		goto error;
+
 	hdr = (struct ipv6_rpl_sr_hdr *)skb_transport_header(skb);
 
 	if (hdr->segments_left == 0) {
@@ -534,7 +543,18 @@ looped_back:
 		return 1;
 	}
 
+	// Check if cmpri and cmpre are valid and do not exceed 15
+	if (hdr->cmpri > 15 || hdr->cmpre > 15)
+		goto error;
+	// Check if pad value is valid and does not exceed 15
+	if (hdr->pad > 15)
+		goto error;
+
 	n = (hdr->hdrlen << 3) - hdr->pad - (16 - hdr->cmpre);
+	// Check if n is non-negative
+	if (n <= 0)
+		goto error;
+
 	r = do_div(n, (16 - hdr->cmpri));
 	/* checks if calculation was without remainder and n fits into
 	 * unsigned char which is segments_left field. Should not be
@@ -637,6 +657,9 @@ looped_back:
 
 	dst_input(skb);
 
+	return -1;
+
+error:
 	return -1;
 }
 
