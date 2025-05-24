@@ -173,10 +173,13 @@ static inline int sys_mount_setattr(int dfd, const char *path, unsigned int flag
 #define AT_RECURSIVE 0x8000 /* Apply to the entire subtree */
 #endif
 
+/* Do not define sys_open_tree if it's already defined in overlayfs/wrappers.h */
+#if !defined(__SELFTEST_OVERLAYFS_WRAPPERS_H__)
 static inline int sys_open_tree(int dfd, const char *filename, unsigned int flags)
 {
 	return syscall(__NR_open_tree, dfd, filename, flags);
 }
+#endif
 
 static ssize_t write_nointr(int fd, const void *buf, size_t count)
 {
