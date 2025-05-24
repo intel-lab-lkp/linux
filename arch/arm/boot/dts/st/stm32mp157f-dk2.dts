@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
+/*
+ * Copyright (C) 2025 Silicon Signals Pvt. Ltd.
+ *
+ * Author: Himanshu Bhavani <himanshu.bhavani@siliconsignals.io>
+ */
+
+/dts-v1/;
+
+#include "stm32mp157c-dk2.dts"
+
+/ {
+	model = "STMicroelectronics STM32MP157F-DK2 Discovery Board";
+	compatible = "st,stm32mp157f-dk2", "st,stm32mp157";
+};
