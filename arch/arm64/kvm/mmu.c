@@ -1499,6 +1499,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	bool write_fault, writable, force_pte = false;
 	bool exec_fault, mte_allowed;
 	bool device = false, vfio_allow_any_uc = false;
+	bool cacheable_devmem = false;
 	unsigned long mmu_seq;
 	phys_addr_t ipa = fault_ipa;
 	struct kvm *kvm = vcpu->kvm;
@@ -1636,9 +1637,19 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	vfio_allow_any_uc = vma->vm_flags & VM_ALLOW_ANY_UNCACHED;
 
-	if ((vma->vm_flags & VM_PFNMAP) &&
-	    !mapping_type_noncacheable(vma->vm_page_prot))
-		return -EINVAL;
+	if (vma->vm_flags & VM_PFNMAP) {
+		/* Reject COW VM_PFNMAP */
+		if (is_cow_mapping(vma->vm_flags))
+			return -EINVAL;
+
+		/*
+		 * If the VM_PFNMAP is set in VMA flags, do a KVM sanity
+		 * check to see if pgprot mapping type is MT_NORMAL and a
+		 * safely cacheable device memory.
+		 */
+		if (!mapping_type_noncacheable(vma->vm_page_prot))
+			cacheable_devmem = true;
+	}
 
 	/* Don't use the VMA after the unlock -- it may have vanished */
 	vma = NULL;
@@ -1671,10 +1682,13 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		 * via __kvm_faultin_pfn(), vma_pagesize is set to PAGE_SIZE
 		 * and must not be upgraded.
 		 *
-		 * In both cases, we don't let transparent_hugepage_adjust()
+		 * Do not set device as the device memory is cacheable. Note
+		 * that such mapping is safe as the KVM S2 will have the same
+		 * Normal memory type as the VMA has in the S1.
 		 * change things at the last minute.
 		 */
-		device = true;
+		if (!cacheable_devmem)
+			device = true;
 	} else if (logging_active && !write_fault) {
 		/*
 		 * Only actually map the page as writable if this was a write
@@ -1754,6 +1768,19 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	} else if (cpus_have_final_cap(ARM64_HAS_CACHE_DIC) &&
 		   (!nested || kvm_s2_trans_executable(nested))) {
 		prot |= KVM_PGTABLE_PROT_X;
+	}
+
+	/*
+	 *  When FWB is unsupported KVM needs to do cache flushes
+	 *  (via dcache_clean_inval_poc()) of the underlying memory. This is
+	 *  only possible if the memory is already mapped into the kernel map.
+	 *
+	 *  Outright reject as the cacheable device memory is not present in
+	 *  the kernel map and not suitable for cache management.
+	 */
+	if (cacheable_devmem && !kvm_arch_supports_cacheable_pfnmap()) {
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	/*
@@ -2243,8 +2270,13 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 				break;
 			}
 
-			/* Cacheable PFNMAP is not allowed */
-			if (!mapping_type_noncacheable(vma->vm_page_prot)) {
+			/*
+			 * Cacheable PFNMAP is allowed only if the hardware
+			 * supports it and userspace asks for it.
+			 */
+			if (!mapping_type_noncacheable(vma->vm_page_prot) &&
+			    (!(new->flags & KVM_MEM_ENABLE_CACHEABLE_PFNMAP) ||
+			     !kvm_arch_supports_cacheable_pfnmap())) {
 				ret = -EINVAL;
 				break;
 			}
