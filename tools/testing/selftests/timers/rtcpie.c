@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 	fflush(stderr);
 
 	/* The frequencies 128Hz, 256Hz, ... 8192Hz are only allowed for root. */
-	for (tmp=2; tmp<=64; tmp*=2) {
+	for (tmp = 2; tmp <= 64; tmp *= 2) {
 
 		retval = ioctl(fd, RTC_IRQP_SET, tmp);
 		if (retval == -1) {
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 			exit(errno);
 		}
 
-		for (i=1; i<21; i++) {
+		for (i = 1; i < 21; i++) {
 			gettimeofday(&start, NULL);
 			/* This blocks */
 			retval = read(fd, &data, sizeof(unsigned long));
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
 				exit(-1);
 			}
 
-			fprintf(stderr, " %d",i);
+			fprintf(stderr, " %d", i);
 			fflush(stderr);
 		}
 
