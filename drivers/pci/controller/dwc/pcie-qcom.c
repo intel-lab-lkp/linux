@@ -291,7 +291,7 @@ struct qcom_pcie {
 };
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
-static int qcom_pcie_reset_slot(struct pci_host_bridge *bridge,
+static int qcom_pcie_reset_root_port(struct pci_host_bridge *bridge,
 				  struct pci_dev *pdev);
 
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
@@ -1277,7 +1277,7 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 			goto err_assert_reset;
 	}
 
-	pp->bridge->reset_slot = qcom_pcie_reset_slot;
+	pp->bridge->reset_root_port = qcom_pcie_reset_root_port;
 
 	return 0;
 
@@ -1533,7 +1533,7 @@ static void qcom_pcie_icc_opp_update(struct qcom_pcie *pcie)
 	}
 }
 
-static int qcom_pcie_reset_slot(struct pci_host_bridge *bridge,
+static int qcom_pcie_reset_root_port(struct pci_host_bridge *bridge,
 				  struct pci_dev *pdev)
 {
 	struct pci_bus *bus = bridge->bus;
@@ -1589,7 +1589,7 @@ static int qcom_pcie_reset_slot(struct pci_host_bridge *bridge,
 
 	qcom_pcie_start_link(pci);
 
-	dev_dbg(dev, "Slot reset completed\n");
+	dev_dbg(dev, "Root port reset completed\n");
 
 	return 0;
 

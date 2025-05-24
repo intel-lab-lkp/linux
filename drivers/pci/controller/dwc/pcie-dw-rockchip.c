@@ -85,7 +85,7 @@ struct rockchip_pcie_of_data {
 	const struct pci_epc_features *epc_features;
 };
 
-static int rockchip_pcie_rc_reset_slot(struct pci_host_bridge *bridge,
+static int rockchip_pcie_rc_reset_root_port(struct pci_host_bridge *bridge,
 				       struct pci_dev *pdev);
 
 static int rockchip_pcie_readl_apb(struct rockchip_pcie *rockchip, u32 reg)
@@ -261,7 +261,7 @@ static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 					 rockchip);
 
 	rockchip_pcie_enable_l0s(pci);
-	pp->bridge->reset_slot = rockchip_pcie_rc_reset_slot;
+	pp->bridge->reset_root_port = rockchip_pcie_rc_reset_slot;
 
 	return 0;
 }
@@ -700,7 +700,7 @@ disable_regulator:
 	return ret;
 }
 
-static int rockchip_pcie_rc_reset_slot(struct pci_host_bridge *bridge,
+static int rockchip_pcie_rc_reset_root_port(struct pci_host_bridge *bridge,
 				       struct pci_dev *pdev)
 {
 	struct pci_bus *bus = bridge->bus;
@@ -759,7 +759,7 @@ static int rockchip_pcie_rc_reset_slot(struct pci_host_bridge *bridge,
 
 	/* Ignore errors, the link may come up later. */
 	dw_pcie_wait_for_link(pci);
-	dev_dbg(dev, "slot reset completed\n");
+	dev_dbg(dev, "Root port reset completed\n");
 	return ret;
 
 deinit_clk:

@@ -107,22 +107,22 @@ void pci_host_common_remove(struct platform_device *pdev)
 EXPORT_SYMBOL_GPL(pci_host_common_remove);
 
 #if IS_ENABLED(CONFIG_PCIEAER)
-static pci_ers_result_t pci_host_reset_slot(struct pci_dev *dev)
+static pci_ers_result_t pci_host_reset_root_port(struct pci_dev *dev)
 {
 	int ret;
 
 	ret = pci_bus_error_reset(dev);
 	if (ret) {
-		pci_err(dev, "Failed to reset slot: %d\n", ret);
+		pci_err(dev, "Failed to reset root port: %d\n", ret);
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
 
-	pci_info(dev, "Slot has been reset\n");
+	pci_info(dev, "Root port has been reset\n");
 
 	return PCI_ERS_RESULT_RECOVERED;
 }
 
-static void pci_host_recover_slots(struct pci_host_bridge *host)
+static void pci_host_reset_root_ports(struct pci_host_bridge *host)
 {
 	struct pci_bus *bus = host->bus;
 	struct pci_dev *dev;
@@ -132,11 +132,11 @@ static void pci_host_recover_slots(struct pci_host_bridge *host)
 			continue;
 
 		pcie_do_recovery(dev, pci_channel_io_frozen,
-				 pci_host_reset_slot);
+				 pci_host_reset_root_port);
 	}
 }
 #else
-static void pci_host_recover_slots(struct pci_host_bridge *host)
+static void pci_host_reset_root_ports(struct pci_host_bridge *host)
 {
 	struct pci_bus *bus = host->bus;
 	struct pci_dev *dev;
@@ -148,17 +148,17 @@ static void pci_host_recover_slots(struct pci_host_bridge *host)
 
 		ret = pci_bus_error_reset(dev);
 		if (ret)
-			pci_err(dev, "Failed to reset slot: %d\n", ret);
+			pci_err(dev, "Failed to reset root port: %d\n", ret);
 		else
-			pci_info(dev, "Slot has been reset\n");
+			pci_info(dev, "Root port has been reset\n");
 	}
 }
 #endif
 
 void pci_host_handle_link_down(struct pci_host_bridge *bridge)
 {
-	dev_info(&bridge->dev, "Recovering slots due to Link Down\n");
-	pci_host_recover_slots(bridge);
+	dev_info(&bridge->dev, "Recovering root ports due to Link Down\n");
+	pci_host_reset_root_ports(bridge);
 }
 EXPORT_SYMBOL_GPL(pci_host_handle_link_down);
 
