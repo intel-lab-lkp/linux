@@ -36,6 +36,7 @@
 #include <linux/irqflags.h>
 #include <linux/preempt.h>
 #include <linux/dim.h>
+#include <linux/hmm-dma.h>
 #include <uapi/rdma/ib_user_verbs.h>
 #include <rdma/rdma_counter.h>
 #include <rdma/restrack.h>
@@ -4219,6 +4220,16 @@ static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
 	if (!ib_uses_virt_dma(dev))
 		dma_unmap_sg_attrs(dev->dma_device, sg, nents, direction,
 				   dma_attrs);
+}
+
+int ib_dma_virt_map_alloc(struct hmm_dma_map *map, size_t nr_entries,
+			  size_t dma_entry_size);
+static inline int ib_dma_map_alloc(struct ib_device *dev, struct hmm_dma_map *map,
+				   size_t nr_entries, size_t dma_entry_size)
+{
+	if (ib_uses_virt_dma(dev))
+		return ib_dma_virt_map_alloc(map, nr_entries, dma_entry_size);
+	return hmm_dma_map_alloc(dev->dma_device, map, nr_entries, dma_entry_size);
 }
 
 /**
