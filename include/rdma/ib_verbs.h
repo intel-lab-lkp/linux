@@ -36,6 +36,7 @@
 #include <linux/irqflags.h>
 #include <linux/preempt.h>
 #include <linux/dim.h>
+#include <linux/hmm-dma.h>
 #include <uapi/rdma/ib_user_verbs.h>
 #include <rdma/rdma_counter.h>
 #include <rdma/restrack.h>
@@ -4220,6 +4221,9 @@ static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
 		dma_unmap_sg_attrs(dev->dma_device, sg, nents, direction,
 				   dma_attrs);
 }
+
+int ib_dma_virt_map_alloc(struct hmm_dma_map *map, size_t nr_entries,
+			  size_t dma_entry_size);
 
 /**
  * ib_dma_map_sgtable_attrs - Map a scatter/gather table to DMA addresses

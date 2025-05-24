@@ -75,9 +75,14 @@ static int ib_init_umem_odp(struct ib_umem_odp *umem_odp,
 	if (unlikely(end < page_size))
 		return -EOVERFLOW;
 
-	ret = hmm_dma_map_alloc(dev->dma_device, &umem_odp->map,
-				(end - start) >> PAGE_SHIFT,
-				1 << umem_odp->page_shift);
+	if (ib_uses_virt_dma(dev))
+		ret = ib_dma_virt_map_alloc(&umem_odp->map,
+					    (end - start) >> PAGE_SHIFT,
+					    1 << umem_odp->page_shift);
+	else
+		ret = hmm_dma_map_alloc(dev->dma_device, &umem_odp->map,
+					(end - start) >> PAGE_SHIFT,
+					1 << umem_odp->page_shift);
 	if (ret)
 		return ret;
 
