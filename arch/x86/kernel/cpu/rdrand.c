@@ -11,6 +11,7 @@
 #include <asm/processor.h>
 #include <asm/archrandom.h>
 #include <asm/sections.h>
+#include <asm/msr.h>
 
 /*
  * RDRAND has Built-In-Self-Test (BIST) that runs on every invocation.
@@ -46,5 +47,13 @@ void x86_init_rdrand(struct cpuinfo_x86 *c)
 		clear_cpu_cap(c, X86_FEATURE_RDRAND);
 		clear_cpu_cap(c, X86_FEATURE_RDSEED);
 		pr_emerg("RDRAND is not reliable on this platform; disabling.\n");
+	}
+
+	/* disable RDSEED on AMD Cyan Skillfish because of hw bug */
+	if (c->x86_vendor == X86_VENDOR_AMD && c->x86 == 0x17 &&
+	    c->x86_model == 0x47 && c->x86_stepping == 0x0) {
+		clear_cpu_cap(c, X86_FEATURE_RDSEED);
+		msr_clear_bit(MSR_AMD64_CPUID_FN_7, 18);
+		pr_emerg("RDSEED is not reliable on this platform; disabling.\n");
 	}
 }
