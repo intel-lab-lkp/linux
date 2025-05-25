@@ -3804,8 +3804,8 @@ static int mlx5e_setup_tc_mqprio(struct mlx5e_priv *priv,
 	 * simultaneously with the offloaded HTB.
 	 */
 	if (mlx5e_selq_is_htb_enabled(&priv->selq)) {
-		NL_SET_ERR_MSG_MOD(mqprio->extack,
-				   "MQPRIO cannot be configured when HTB offload is enabled.");
+		MLX5_NL_SET_ERR_MSG_MOD(mqprio->extack,
+					"MQPRIO cannot be configured when HTB offload is enabled.");
 		return -EOPNOTSUPP;
 	}
 

@@ -162,7 +162,7 @@ static int esw_qos_node_create_sched_element(struct mlx5_esw_sched_node *node, v
 						 &node->ix);
 	if (err) {
 		esw_qos_sched_elem_warn(node, err, "create");
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch create scheduling element failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch create scheduling element failed");
 	}
 
 	return err;
@@ -178,7 +178,7 @@ static int esw_qos_node_destroy_sched_element(struct mlx5_esw_sched_node *node,
 						  node->ix);
 	if (err) {
 		esw_qos_sched_elem_warn(node, err, "destroy");
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch destroying scheduling element failed.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch destroying scheduling element failed.");
 	}
 
 	return err;
@@ -218,7 +218,7 @@ static int esw_qos_sched_elem_config(struct mlx5_esw_sched_node *node, u32 max_r
 						 bitmask);
 	if (err) {
 		esw_qos_sched_elem_warn(node, err, "modify");
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch modify scheduling element failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch modify scheduling element failed");
 
 		return err;
 	}
@@ -415,13 +415,13 @@ __esw_qos_create_vports_sched_node(struct mlx5_eswitch *esw, struct mlx5_esw_sch
 	err = esw_qos_create_node_sched_elem(esw->dev, esw->qos.root_tsar_ix, 0,
 					     0, &tsar_ix);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch create TSAR for node failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch create TSAR for node failed");
 		return ERR_PTR(err);
 	}
 
 	node = __esw_qos_alloc_node(esw, tsar_ix, SCHED_NODE_TYPE_VPORTS_TSAR, parent);
 	if (!node) {
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch alloc node failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch alloc node failed");
 		err = -ENOMEM;
 		goto err_alloc_node;
 	}
@@ -435,7 +435,7 @@ err_alloc_node:
 	if (mlx5_destroy_scheduling_element_cmd(esw->dev,
 						SCHEDULING_HIERARCHY_E_SWITCH,
 						tsar_ix))
-		NL_SET_ERR_MSG_MOD(extack, "E-Switch destroy TSAR for node failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "E-Switch destroy TSAR for node failed");
 	return ERR_PTR(err);
 }
 
@@ -768,7 +768,7 @@ static int mlx5_esw_qos_max_link_speed_get(struct mlx5_core_dev *mdev, u32 *link
 skip_lag:
 	err = mlx5_port_max_linkspeed(mdev, link_speed_max);
 	if (err)
-		NL_SET_ERR_MSG_MOD(extack, "Failed to get link maximum speed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed to get link maximum speed");
 
 	return err;
 }
@@ -780,7 +780,7 @@ static int mlx5_esw_qos_link_speed_verify(struct mlx5_core_dev *mdev,
 	if (value > link_speed_max) {
 		pr_err("%s rate value %lluMbps exceed link maximum speed %u.\n",
 		       name, value, link_speed_max);
-		NL_SET_ERR_MSG_MOD(extack, "TX rate value exceed link maximum speed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "TX rate value exceed link maximum speed");
 		return -EINVAL;
 	}
 
@@ -832,7 +832,7 @@ static int esw_qos_devlink_rate_to_mbps(struct mlx5_core_dev *mdev, const char *
 	if (remainder) {
 		pr_err("%s rate value %lluBps not in link speed units of 1Mbps.\n",
 		       name, *rate);
-		NL_SET_ERR_MSG_MOD(extack, "TX rate value not in link speed units of 1Mbps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "TX rate value not in link speed units of 1Mbps");
 		return -EINVAL;
 	}
 
@@ -953,8 +953,8 @@ int mlx5_esw_devlink_rate_node_new(struct devlink_rate *rate_node, void **priv,
 
 	esw_qos_lock(esw);
 	if (esw->mode != MLX5_ESWITCH_OFFLOADS) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Rate node creation supported only in switchdev mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Rate node creation supported only in switchdev mode");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
@@ -991,7 +991,7 @@ int mlx5_esw_qos_vport_update_parent(struct mlx5_vport *vport, struct mlx5_esw_s
 	int err = 0;
 
 	if (parent && parent->esw != esw) {
-		NL_SET_ERR_MSG_MOD(extack, "Cross E-Switch scheduling is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cross E-Switch scheduling is not supported");
 		return -EOPNOTSUPP;
 	}
 

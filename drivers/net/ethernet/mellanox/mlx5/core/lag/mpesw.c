@@ -205,7 +205,7 @@ int mlx5_lag_mpesw_do_mirred(struct mlx5_core_dev *mdev,
 	if (ldev->mode != MLX5_LAG_MODE_MPESW)
 		return 0;
 
-	NL_SET_ERR_MSG_MOD(extack, "can't forward to bond in mpesw mode");
+	MLX5_NL_SET_ERR_MSG_MOD(extack, "can't forward to bond in mpesw mode");
 	return -EOPNOTSUPP;
 }
 

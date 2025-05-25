@@ -20,8 +20,8 @@ tc_act_can_offload_mirred_nic(struct mlx5e_tc_act_parse_state *parse_state,
 
 	if (priv->netdev->netdev_ops != out_dev->netdev_ops ||
 	    !mlx5e_same_hw_devs(priv, netdev_priv(out_dev))) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "devices are not on same switch HW, can't offload forwarding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"devices are not on same switch HW, can't offload forwarding");
 		netdev_warn(priv->netdev,
 			    "devices %s %s not on same switch HW, can't offload forwarding\n",
 			    netdev_name(priv->netdev),

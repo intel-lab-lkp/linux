@@ -199,7 +199,7 @@ mlx5e_htb_root_add(struct mlx5e_htb *htb, u16 htb_maj_id, u16 htb_defcls,
 
 	err = mlx5_qos_create_root_node(htb->mdev, &root->hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error. Try upgrading firmware.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error. Try upgrading firmware.");
 		goto err_sw_node_delete;
 	}
 
@@ -297,7 +297,7 @@ mlx5e_htb_leaf_alloc_queue(struct mlx5e_htb *htb, u16 classid,
 
 	qid = mlx5e_htb_find_unused_qos_qid(htb);
 	if (qid < 0) {
-		NL_SET_ERR_MSG_MOD(extack, "Maximum amount of leaf classes is reached.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Maximum amount of leaf classes is reached.");
 		return qid;
 	}
 
@@ -317,7 +317,7 @@ mlx5e_htb_leaf_alloc_queue(struct mlx5e_htb *htb, u16 classid,
 					node->bw_share, node->max_average_bw,
 					&node->hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
 		qos_err(htb->mdev, "Failed to create a leaf node (class %04x), err = %d\n",
 			classid, err);
 		mlx5e_htb_node_delete(htb, node);
@@ -327,7 +327,7 @@ mlx5e_htb_leaf_alloc_queue(struct mlx5e_htb *htb, u16 classid,
 	if (test_bit(MLX5E_STATE_OPENED, &priv->state)) {
 		err = mlx5e_open_qos_sq(priv, &priv->channels, node->qid, node->hw_id);
 		if (err) {
-			NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
 			qos_warn(htb->mdev, "Failed to create a QoS SQ (class %04x), err = %d\n",
 				 classid, err);
 		} else {
@@ -359,7 +359,7 @@ mlx5e_htb_leaf_to_inner(struct mlx5e_htb *htb, u16 classid, u16 child_classid,
 					 node->bw_share, node->max_average_bw,
 					 &new_hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating an inner node.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating an inner node.");
 		qos_err(htb->mdev, "Failed to create an inner node (class %04x), err = %d\n",
 			classid, err);
 		return err;
@@ -379,7 +379,7 @@ mlx5e_htb_leaf_to_inner(struct mlx5e_htb *htb, u16 classid, u16 child_classid,
 	err = mlx5_qos_create_leaf_node(htb->mdev, new_hw_id, child->bw_share,
 					child->max_average_bw, &child->hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
 		qos_err(htb->mdev, "Failed to create a leaf node (class %04x), err = %d\n",
 			classid, err);
 		goto err_delete_sw_node;
@@ -406,7 +406,7 @@ mlx5e_htb_leaf_to_inner(struct mlx5e_htb *htb, u16 classid, u16 child_classid,
 	if (test_bit(MLX5E_STATE_OPENED, &priv->state)) {
 		err = mlx5e_open_qos_sq(priv, &priv->channels, child->qid, child->hw_id);
 		if (err) {
-			NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
 			qos_warn(htb->mdev, "Failed to create a QoS SQ (class %04x), err = %d\n",
 				 classid, err);
 		} else {
@@ -520,7 +520,7 @@ int mlx5e_htb_leaf_del(struct mlx5e_htb *htb, u16 *classid,
 	if (test_bit(MLX5E_STATE_OPENED, &priv->state)) {
 		err = mlx5e_open_qos_sq(priv, &priv->channels, node->qid, node->hw_id);
 		if (err) {
-			NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
 			qos_warn(htb->mdev, "Failed to create a QoS SQ (class %04x) while moving qid %u to %u, err = %d\n",
 				 node->classid, moved_qid, qid, err);
 		} else {
@@ -558,7 +558,7 @@ mlx5e_htb_leaf_del_last(struct mlx5e_htb *htb, u16 classid, bool force,
 					node->parent->max_average_bw,
 					&new_hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when creating a leaf node.");
 		qos_err(htb->mdev, "Failed to create a leaf node (class %04x), err = %d\n",
 			classid, err);
 		if (!force)
@@ -602,7 +602,7 @@ mlx5e_htb_leaf_del_last(struct mlx5e_htb *htb, u16 classid, bool force,
 	if (test_bit(MLX5E_STATE_OPENED, &priv->state)) {
 		err = mlx5e_open_qos_sq(priv, &priv->channels, node->qid, node->hw_id);
 		if (err) {
-			NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Error creating an SQ.");
 			qos_warn(htb->mdev, "Failed to create a QoS SQ (class %04x), err = %d\n",
 				 classid, err);
 		} else {
@@ -642,7 +642,7 @@ mlx5e_htb_update_children(struct mlx5e_htb *htb, struct mlx5e_qos_node *node,
 		if (!err && err_one) {
 			err = err_one;
 
-			NL_SET_ERR_MSG_MOD(extack, "Firmware error when modifying a child node.");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when modifying a child node.");
 			qos_err(htb->mdev, "Failed to modify a child node (class %04x), err = %d\n",
 				node->classid, err);
 		}
@@ -674,7 +674,7 @@ mlx5e_htb_node_modify(struct mlx5e_htb *htb, u16 classid, u64 rate, u64 ceil,
 	err = mlx5_qos_update_node(htb->mdev, bw_share,
 				   max_average_bw, node->hw_id);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Firmware error when modifying a node.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Firmware error when modifying a node.");
 		qos_err(htb->mdev, "Failed to modify a node (class %04x), err = %d\n",
 			classid, err);
 		return err;

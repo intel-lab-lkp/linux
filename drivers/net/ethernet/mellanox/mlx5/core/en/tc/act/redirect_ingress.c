@@ -22,26 +22,26 @@ tc_act_can_offload_redirect_ingress(struct mlx5e_tc_act_parse_state *parse_state
 		return false;
 
 	if (!netif_is_ovs_master(out_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "redirect to ingress is supported only for OVS internal ports");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"redirect to ingress is supported only for OVS internal ports");
 		return false;
 	}
 
 	if (netif_is_ovs_master(parse_attr->filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "redirect to ingress is not supported from internal port");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"redirect to ingress is not supported from internal port");
 		return false;
 	}
 
 	if (!parse_state->ptype_host) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "redirect to int port ingress requires ptype=host action");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"redirect to int port ingress requires ptype=host action");
 		return false;
 	}
 
 	if (esw_attr->out_count) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "redirect to int port ingress is supported only as single destination");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"redirect to int port ingress is supported only as single destination");
 		return false;
 	}
 

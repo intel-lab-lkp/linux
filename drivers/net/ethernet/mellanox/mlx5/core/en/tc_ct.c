@@ -1493,8 +1493,8 @@ mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
 		return 0;
 
 	if (!priv) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "offload of ct matching isn't available");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"offload of ct matching isn't available");
 		return -EOPNOTSUPP;
 	}
 
@@ -1512,8 +1512,8 @@ mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
 			      TCA_FLOWER_KEY_CT_FLAGS_REPLY |
 			      TCA_FLOWER_KEY_CT_FLAGS_RELATED |
 			      TCA_FLOWER_KEY_CT_FLAGS_INVALID)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "only ct_state trk, est, new and rpl are supported for offload");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"only ct_state trk, est, new and rpl are supported for offload");
 		return -EOPNOTSUPP;
 	}
 
@@ -1544,14 +1544,14 @@ mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
 	ctstate_mask |= uninv ? MLX5_CT_STATE_INVALID_BIT : 0;
 
 	if (rel) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "matching on ct_state +rel isn't supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"matching on ct_state +rel isn't supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (inv) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "matching on ct_state +inv isn't supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"matching on ct_state +inv isn't supported");
 		return -EOPNOTSUPP;
 	}
 
@@ -1586,8 +1586,8 @@ mlx5_tc_ct_parse_action(struct mlx5_tc_ct_priv *priv,
 			struct netlink_ext_ack *extack)
 {
 	if (!priv) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "offload of ct action isn't available");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"offload of ct action isn't available");
 		return -EOPNOTSUPP;
 	}
 

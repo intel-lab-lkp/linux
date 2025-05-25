@@ -16,16 +16,16 @@ csum_offload_supported(struct mlx5e_priv *priv,
 
 	/*  The HW recalcs checksums only if re-writing headers */
 	if (!(action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "TC csum action is only offloaded with pedit");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"TC csum action is only offloaded with pedit");
 		netdev_warn(priv->netdev,
 			    "TC csum action is only offloaded with pedit\n");
 		return false;
 	}
 
 	if (update_flags & ~prot_flags) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "can't offload TC csum action for some header/s");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"can't offload TC csum action for some header/s");
 		netdev_warn(priv->netdev,
 			    "can't offload TC csum action for some header/s - flags %#x\n",
 			    update_flags);

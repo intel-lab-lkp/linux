@@ -12,8 +12,8 @@ tc_act_can_offload_tun_encap(struct mlx5e_tc_act_parse_state *parse_state,
 			     struct mlx5_flow_attr *attr)
 {
 	if (!act->tunnel) {
-		NL_SET_ERR_MSG_MOD(parse_state->extack,
-				   "Zero tunnel attributes is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(parse_state->extack,
+					"Zero tunnel attributes is not supported");
 		return false;
 	}
 

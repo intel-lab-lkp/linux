@@ -1615,13 +1615,13 @@ static int mlx5_esw_bridge_vport_link_with_flags(struct net_device *br_netdev, u
 
 	bridge = mlx5_esw_bridge_lookup(br_netdev, br_offloads);
 	if (IS_ERR(bridge)) {
-		NL_SET_ERR_MSG_MOD(extack, "Error checking for existing bridge with same ifindex");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Error checking for existing bridge with same ifindex");
 		return PTR_ERR(bridge);
 	}
 
 	err = mlx5_esw_bridge_vport_init(vport_num, esw_owner_vhca_id, flags, br_offloads, bridge);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Error initializing port");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Error initializing port");
 		goto err_vport;
 	}
 	return 0;
@@ -1649,17 +1649,17 @@ int mlx5_esw_bridge_vport_unlink(struct net_device *br_netdev, u16 vport_num,
 
 	port = mlx5_esw_bridge_port_lookup(vport_num, esw_owner_vhca_id, br_offloads);
 	if (!port) {
-		NL_SET_ERR_MSG_MOD(extack, "Port is not attached to any bridge");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Port is not attached to any bridge");
 		return -EINVAL;
 	}
 	if (port->bridge->ifindex != br_netdev->ifindex) {
-		NL_SET_ERR_MSG_MOD(extack, "Port is attached to another bridge");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Port is attached to another bridge");
 		return -EINVAL;
 	}
 
 	err = mlx5_esw_bridge_vport_cleanup(br_offloads, port);
 	if (err)
-		NL_SET_ERR_MSG_MOD(extack, "Port cleanup failed");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Port cleanup failed");
 	return err;
 }
 
@@ -1706,7 +1706,7 @@ int mlx5_esw_bridge_port_vlan_add(u16 vport_num, u16 esw_owner_vhca_id, u16 vid,
 	vlan = mlx5_esw_bridge_vlan_create(port->bridge->vlan_proto, vid, flags, port,
 					   br_offloads->esw);
 	if (IS_ERR(vlan)) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed to create VLAN entry");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed to create VLAN entry");
 		return PTR_ERR(vlan);
 	}
 	return 0;
@@ -1862,9 +1862,9 @@ int mlx5_esw_bridge_port_mdb_add(struct net_device *dev, u16 vport_num, u16 esw_
 		esw_warn(br_offloads->esw->dev,
 			 "Failed to lookup bridge port to add MDB (MAC=%pM,vport=%u)\n",
 			 addr, vport_num);
-		NL_SET_ERR_MSG_FMT_MOD(extack,
-				       "Failed to lookup bridge port to add MDB (MAC=%pM,vport=%u)",
-				       addr, vport_num);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+					    "Failed to lookup bridge port to add MDB (MAC=%pM,vport=%u)",
+					    addr, vport_num);
 		return -EINVAL;
 	}
 
@@ -1875,17 +1875,17 @@ int mlx5_esw_bridge_port_mdb_add(struct net_device *dev, u16 vport_num, u16 esw_
 			esw_warn(br_offloads->esw->dev,
 				 "Failed to lookup bridge port vlan metadata to create MDB (MAC=%pM,vid=%u,vport=%u)\n",
 				 addr, vid, vport_num);
-			NL_SET_ERR_MSG_FMT_MOD(extack,
-					       "Failed to lookup vlan metadata for MDB (MAC=%pM,vid=%u,vport=%u)",
-					       addr, vid, vport_num);
+			MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+						    "Failed to lookup vlan metadata for MDB (MAC=%pM,vid=%u,vport=%u)",
+						    addr, vid, vport_num);
 			return -EINVAL;
 		}
 	}
 
 	err = mlx5_esw_bridge_port_mdb_attach(dev, port, addr, vid);
 	if (err) {
-		NL_SET_ERR_MSG_FMT_MOD(extack, "Failed to add MDB (MAC=%pM,vid=%u,vport=%u)",
-				       addr, vid, vport_num);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack, "Failed to add MDB (MAC=%pM,vid=%u,vport=%u)",
+					    addr, vid, vport_num);
 		return err;
 	}
 

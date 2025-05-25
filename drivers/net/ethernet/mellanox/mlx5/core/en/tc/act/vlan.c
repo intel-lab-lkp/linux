@@ -40,12 +40,12 @@ parse_tc_vlan_action(struct mlx5e_priv *priv,
 	u8 vlan_idx = attr->total_vlan;
 
 	if (vlan_idx >= MLX5_FS_VLAN_DEPTH) {
-		NL_SET_ERR_MSG_MOD(extack, "Total vlans used is greater than supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Total vlans used is greater than supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (!mlx5_eswitch_vlan_actions_supported(priv->mdev, vlan_idx)) {
-		NL_SET_ERR_MSG_MOD(extack, "firmware vlan actions is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "firmware vlan actions is not supported");
 		return -EOPNOTSUPP;
 	}
 
@@ -79,7 +79,7 @@ parse_tc_vlan_action(struct mlx5e_priv *priv,
 		memcpy(attr->eth.h_source, act->vlan_push_eth.src, ETH_ALEN);
 		break;
 	default:
-		NL_SET_ERR_MSG_MOD(extack, "Unexpected action id for VLAN");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Unexpected action id for VLAN");
 		return -EINVAL;
 	}
 

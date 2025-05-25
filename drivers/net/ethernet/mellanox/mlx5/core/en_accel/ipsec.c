@@ -413,94 +413,94 @@ static int mlx5e_xfrm_validate_state(struct mlx5_core_dev *mdev,
 				     struct netlink_ext_ack *extack)
 {
 	if (x->props.aalgo != SADB_AALG_NONE) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload authenticated xfrm states");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload authenticated xfrm states");
 		return -EINVAL;
 	}
 	if (x->props.ealgo != SADB_X_EALG_AES_GCM_ICV16) {
-		NL_SET_ERR_MSG_MOD(extack, "Only AES-GCM-ICV16 xfrm state may be offloaded");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Only AES-GCM-ICV16 xfrm state may be offloaded");
 		return -EINVAL;
 	}
 	if (x->props.calgo != SADB_X_CALG_NONE) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload compressed xfrm states");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload compressed xfrm states");
 		return -EINVAL;
 	}
 	if (x->props.flags & XFRM_STATE_ESN &&
 	    !(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_ESN)) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload ESN xfrm states");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload ESN xfrm states");
 		return -EINVAL;
 	}
 	if (x->props.family != AF_INET &&
 	    x->props.family != AF_INET6) {
-		NL_SET_ERR_MSG_MOD(extack, "Only IPv4/6 xfrm states may be offloaded");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Only IPv4/6 xfrm states may be offloaded");
 		return -EINVAL;
 	}
 	if (x->id.proto != IPPROTO_ESP) {
-		NL_SET_ERR_MSG_MOD(extack, "Only ESP xfrm state may be offloaded");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Only ESP xfrm state may be offloaded");
 		return -EINVAL;
 	}
 	if (x->encap) {
 		if (!(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_ESPINUDP)) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Encapsulation is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Encapsulation is not supported");
 			return -EINVAL;
 		}
 
 		if (x->encap->encap_type != UDP_ENCAP_ESPINUDP) {
-			NL_SET_ERR_MSG_MOD(extack, "Encapsulation other than UDP is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Encapsulation other than UDP is not supported");
 			return -EINVAL;
 		}
 
 		if (x->xso.type != XFRM_DEV_OFFLOAD_PACKET) {
-			NL_SET_ERR_MSG_MOD(extack, "Encapsulation is supported in packet offload mode only");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Encapsulation is supported in packet offload mode only");
 			return -EINVAL;
 		}
 
 		if (x->props.mode != XFRM_MODE_TRANSPORT) {
-			NL_SET_ERR_MSG_MOD(extack, "Encapsulation is supported in transport mode only");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Encapsulation is supported in transport mode only");
 			return -EINVAL;
 		}
 	}
 	if (!x->aead) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states without aead");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states without aead");
 		return -EINVAL;
 	}
 	if (x->aead->alg_icv_len != 128) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with AEAD ICV length other than 128bit");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with AEAD ICV length other than 128bit");
 		return -EINVAL;
 	}
 	if ((x->aead->alg_key_len != 128 + 32) &&
 	    (x->aead->alg_key_len != 256 + 32)) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with AEAD key length other than 128/256 bit");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with AEAD key length other than 128/256 bit");
 		return -EINVAL;
 	}
 	if (x->tfcpad) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with tfc padding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with tfc padding");
 		return -EINVAL;
 	}
 	if (!x->geniv) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states without geniv");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states without geniv");
 		return -EINVAL;
 	}
 	if (strcmp(x->geniv, "seqiv")) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with geniv other than seqiv");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload xfrm states with geniv other than seqiv");
 		return -EINVAL;
 	}
 
 	if (x->sel.proto != IPPROTO_IP && x->sel.proto != IPPROTO_UDP &&
 	    x->sel.proto != IPPROTO_TCP) {
-		NL_SET_ERR_MSG_MOD(extack, "Device does not support upper protocol other than TCP/UDP");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device does not support upper protocol other than TCP/UDP");
 		return -EINVAL;
 	}
 
 	if (x->props.mode != XFRM_MODE_TRANSPORT && x->props.mode != XFRM_MODE_TUNNEL) {
-		NL_SET_ERR_MSG_MOD(extack, "Only transport and tunnel xfrm states may be offloaded");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Only transport and tunnel xfrm states may be offloaded");
 		return -EINVAL;
 	}
 
 	switch (x->xso.type) {
 	case XFRM_DEV_OFFLOAD_CRYPTO:
 		if (!(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_CRYPTO)) {
-			NL_SET_ERR_MSG_MOD(extack, "Crypto offload is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Crypto offload is not supported");
 			return -EINVAL;
 		}
 
@@ -508,13 +508,13 @@ static int mlx5e_xfrm_validate_state(struct mlx5_core_dev *mdev,
 	case XFRM_DEV_OFFLOAD_PACKET:
 		if (!(mlx5_ipsec_device_caps(mdev) &
 		      MLX5_IPSEC_CAP_PACKET_OFFLOAD)) {
-			NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported");
 			return -EINVAL;
 		}
 
 		if (x->props.mode == XFRM_MODE_TUNNEL &&
 		    !(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_TUNNEL)) {
-			NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported for tunnel mode");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported for tunnel mode");
 			return -EINVAL;
 		}
 
@@ -523,41 +523,41 @@ static int mlx5e_xfrm_validate_state(struct mlx5_core_dev *mdev,
 		    x->replay_esn->replay_window != 64 &&
 		    x->replay_esn->replay_window != 128 &&
 		    x->replay_esn->replay_window != 256) {
-			NL_SET_ERR_MSG_MOD(extack, "Unsupported replay window size");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Unsupported replay window size");
 			return -EINVAL;
 		}
 
 		if (!x->props.reqid) {
-			NL_SET_ERR_MSG_MOD(extack, "Cannot offload without reqid");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload without reqid");
 			return -EINVAL;
 		}
 
 		if (x->lft.soft_byte_limit >= x->lft.hard_byte_limit &&
 		    x->lft.hard_byte_limit != XFRM_INF) {
 			/* XFRM stack doesn't prevent such configuration :(. */
-			NL_SET_ERR_MSG_MOD(extack, "Hard byte limit must be greater than soft one");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Hard byte limit must be greater than soft one");
 			return -EINVAL;
 		}
 
 		if (!x->lft.soft_byte_limit || !x->lft.hard_byte_limit) {
-			NL_SET_ERR_MSG_MOD(extack, "Soft/hard byte limits can't be 0");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Soft/hard byte limits can't be 0");
 			return -EINVAL;
 		}
 
 		if (x->lft.soft_packet_limit >= x->lft.hard_packet_limit &&
 		    x->lft.hard_packet_limit != XFRM_INF) {
 			/* XFRM stack doesn't prevent such configuration :(. */
-			NL_SET_ERR_MSG_MOD(extack, "Hard packet limit must be greater than soft one");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Hard packet limit must be greater than soft one");
 			return -EINVAL;
 		}
 
 		if (!x->lft.soft_packet_limit || !x->lft.hard_packet_limit) {
-			NL_SET_ERR_MSG_MOD(extack, "Soft/hard packet limits can't be 0");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Soft/hard packet limits can't be 0");
 			return -EINVAL;
 		}
 		break;
 	default:
-		NL_SET_ERR_MSG_MOD(extack, "Unsupported xfrm offload type");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Unsupported xfrm offload type");
 		return -EINVAL;
 	}
 	return 0;
@@ -759,7 +759,7 @@ static int mlx5e_xfrm_add_state(struct xfrm_state *x,
 	if (x->props.mode == XFRM_MODE_TUNNEL &&
 	    x->xso.type == XFRM_DEV_OFFLOAD_PACKET &&
 	    !mlx5e_ipsec_fs_tunnel_enabled(sa_entry)) {
-		NL_SET_ERR_MSG_MOD(extack, "Packet offload tunnel mode is disabled due to encap settings");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Packet offload tunnel mode is disabled due to encap settings");
 		err = -EINVAL;
 		goto err_add_rule;
 	}
@@ -1086,55 +1086,55 @@ static int mlx5e_xfrm_validate_policy(struct mlx5_core_dev *mdev,
 	struct xfrm_selector *sel = &x->selector;
 
 	if (x->type != XFRM_POLICY_TYPE_MAIN) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload non-main policy types");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload non-main policy types");
 		return -EINVAL;
 	}
 
 	/* Please pay attention that we support only one template */
 	if (x->xfrm_nr > 1) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload more than one template");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload more than one template");
 		return -EINVAL;
 	}
 
 	if (x->xdo.dir != XFRM_DEV_OFFLOAD_IN &&
 	    x->xdo.dir != XFRM_DEV_OFFLOAD_OUT) {
-		NL_SET_ERR_MSG_MOD(extack, "Cannot offload forward policy");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Cannot offload forward policy");
 		return -EINVAL;
 	}
 
 	if (!x->xfrm_vec[0].reqid && sel->proto == IPPROTO_IP &&
 	    addr6_all_zero(sel->saddr.a6) && addr6_all_zero(sel->daddr.a6)) {
-		NL_SET_ERR_MSG_MOD(extack, "Unsupported policy with reqid 0 without at least one of upper protocol or ip addr(s) different than 0");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Unsupported policy with reqid 0 without at least one of upper protocol or ip addr(s) different than 0");
 		return -EINVAL;
 	}
 
 	if (x->xdo.type != XFRM_DEV_OFFLOAD_PACKET) {
-		NL_SET_ERR_MSG_MOD(extack, "Unsupported xfrm offload type");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Unsupported xfrm offload type");
 		return -EINVAL;
 	}
 
 	if (x->selector.proto != IPPROTO_IP &&
 	    x->selector.proto != IPPROTO_UDP &&
 	    x->selector.proto != IPPROTO_TCP) {
-		NL_SET_ERR_MSG_MOD(extack, "Device does not support upper protocol other than TCP/UDP");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device does not support upper protocol other than TCP/UDP");
 		return -EINVAL;
 	}
 
 	if (x->priority) {
 		if (!(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_PRIO)) {
-			NL_SET_ERR_MSG_MOD(extack, "Device does not support policy priority");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Device does not support policy priority");
 			return -EINVAL;
 		}
 
 		if (x->priority == U32_MAX) {
-			NL_SET_ERR_MSG_MOD(extack, "Device does not support requested policy priority");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Device does not support requested policy priority");
 			return -EINVAL;
 		}
 	}
 
 	if (x->xdo.type == XFRM_DEV_OFFLOAD_PACKET &&
 	    !(mlx5_ipsec_device_caps(mdev) & MLX5_IPSEC_CAP_PACKET_OFFLOAD)) {
-		NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Packet offload is not supported");
 		return -EINVAL;
 	}
 
@@ -1177,7 +1177,7 @@ static int mlx5e_xfrm_add_policy(struct xfrm_policy *x,
 
 	priv = netdev_priv(netdev);
 	if (!priv->ipsec) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPsec packet offload");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPsec packet offload");
 		return -EOPNOTSUPP;
 	}
 
@@ -1209,7 +1209,7 @@ err_fs:
 	mlx5_eswitch_unblock_ipsec(priv->mdev);
 ipsec_busy:
 	kfree(pol_entry);
-	NL_SET_ERR_MSG_MOD(extack, "Device failed to offload this policy");
+	MLX5_NL_SET_ERR_MSG_MOD(extack, "Device failed to offload this policy");
 	return err;
 }
 

@@ -1212,11 +1212,11 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 		return changed;
 
 	if (!mlx5_lag_is_ready(ldev))
-		NL_SET_ERR_MSG_MOD(info->info.extack,
-				   "Can't activate LAG offload, PF is configured with more than 64 VFs");
+		MLX5_NL_SET_ERR_MSG_MOD(info->info.extack,
+					"Can't activate LAG offload, PF is configured with more than 64 VFs");
 	else if (!mode_supported)
-		NL_SET_ERR_MSG_MOD(info->info.extack,
-				   "Can't activate LAG offload, TX type isn't supported");
+		MLX5_NL_SET_ERR_MSG_MOD(info->info.extack,
+					"Can't activate LAG offload, TX type isn't supported");
 
 	return changed;
 }

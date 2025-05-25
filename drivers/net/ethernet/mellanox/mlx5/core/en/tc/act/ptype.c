@@ -13,7 +13,7 @@ tc_act_parse_ptype(struct mlx5e_tc_act_parse_state *parse_state,
 	struct netlink_ext_ack *extack = parse_state->extack;
 
 	if (act->ptype != PACKET_HOST) {
-		NL_SET_ERR_MSG_MOD(extack, "skbedit ptype is only supported with type host");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "skbedit ptype is only supported with type host");
 		return -EOPNOTSUPP;
 	}
 

@@ -707,7 +707,7 @@ static bool is_duplicated_encap_entry(struct mlx5e_priv *priv,
 	for (i = 0; i < out_index; i++) {
 		if (flow->encaps[i].e != e)
 			continue;
-		NL_SET_ERR_MSG_MOD(extack, "can't duplicate encap action");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "can't duplicate encap action");
 		netdev_err(priv->netdev, "can't duplicate encap action\n");
 		return true;
 	}
@@ -845,7 +845,7 @@ int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	key.ip_tun_key = &tun_info->key;
 	key.tc_tunnel = mlx5e_get_tc_tun(mirred_dev);
 	if (!key.tc_tunnel) {
-		NL_SET_ERR_MSG_MOD(extack, "Unsupported tunnel");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Unsupported tunnel");
 		return -EOPNOTSUPP;
 	}
 
@@ -956,8 +956,8 @@ int mlx5e_attach_decap(struct mlx5e_priv *priv,
 	int err = 0;
 
 	if (sizeof(attr->eth) > MLX5_CAP_ESW(priv->mdev, max_encap_header_size)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "encap header larger than max supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"encap header larger than max supported");
 		return -EOPNOTSUPP;
 	}
 
@@ -1053,7 +1053,7 @@ int mlx5e_tc_tun_encap_dests_set(struct mlx5e_priv *priv,
 		mirred_ifindex = parse_attr->mirred_ifindex[out_index];
 		out_dev = dev_get_by_index(dev_net(priv->netdev), mirred_ifindex);
 		if (!out_dev) {
-			NL_SET_ERR_MSG_MOD(extack, "Requested mirred device not found");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Requested mirred device not found");
 			err = -ENODEV;
 			goto out;
 		}
@@ -1076,7 +1076,7 @@ int mlx5e_tc_tun_encap_dests_set(struct mlx5e_priv *priv,
 	}
 
 	if (*vf_tun && esw_attr->out_count > 1) {
-		NL_SET_ERR_MSG_MOD(extack, "VF tunnel encap with mirroring is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "VF tunnel encap with mirroring is not supported");
 		err = -EOPNOTSUPP;
 		goto out;
 	}
@@ -1844,7 +1844,7 @@ static int mlx5e_tc_tun_fib_event(struct notifier_block *nb, unsigned long event
 		if (!IS_ERR_OR_NULL(fib_work)) {
 			queue_work(priv->wq, &fib_work->work);
 		} else if (IS_ERR(fib_work)) {
-			NL_SET_ERR_MSG_MOD(info->extack, "Failed to init fib work");
+			MLX5_NL_SET_ERR_MSG_MOD(info->extack, "Failed to init fib work");
 			mlx5_core_warn(priv->mdev, "Failed to init fib work, %ld\n",
 				       PTR_ERR(fib_work));
 		}

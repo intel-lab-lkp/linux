@@ -44,12 +44,12 @@ verify_uplink_forwarding(struct mlx5e_priv *priv,
 
 	if (!MLX5_CAP_ESW_FLOWTABLE_FDB(esw->dev,
 					termination_table_raw_traffic)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "devices are both uplink, can't offload forwarding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"devices are both uplink, can't offload forwarding");
 			return -EOPNOTSUPP;
 	} else if (out_dev != rep_priv->netdev) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "devices are not the same uplink, can't offload forwarding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"devices are not the same uplink, can't offload forwarding");
 		return -EOPNOTSUPP;
 	}
 	return 0;
@@ -65,7 +65,7 @@ is_duplicated_output_device(struct net_device *dev,
 
 	for (i = 0; i < if_count; i++) {
 		if (ifindexes[i] == out_dev->ifindex) {
-			NL_SET_ERR_MSG_MOD(extack, "can't duplicate output to same device");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "can't duplicate output to same device");
 			netdev_err(dev, "can't duplicate output to same device: %s\n",
 				   out_dev->name);
 			return true;
@@ -122,17 +122,17 @@ tc_act_can_offload_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 	}
 
 	if (parse_state->mpls_push && !netif_is_bareudp(out_dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "mpls is supported only through a bareudp device");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "mpls is supported only through a bareudp device");
 		return false;
 	}
 
 	if (parse_state->eth_pop && !parse_state->mpls_push) {
-		NL_SET_ERR_MSG_MOD(extack, "vlan pop eth is supported only with mpls push");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "vlan pop eth is supported only with mpls push");
 		return false;
 	}
 
 	if (flow_flag_test(parse_state->flow, L3_TO_L2_DECAP) && !parse_state->eth_push) {
-		NL_SET_ERR_MSG_MOD(extack, "mpls pop is only supported with vlan eth push");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "mpls pop is only supported with vlan eth push");
 		return false;
 	}
 
@@ -145,8 +145,8 @@ tc_act_can_offload_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 	}
 
 	if (esw_attr->out_count >= MLX5_MAX_FLOW_FWD_VPORTS) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "can't support more output ports, can't offload forwarding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"can't support more output ports, can't offload forwarding");
 		netdev_warn(priv->netdev,
 			    "can't support more than %d output ports, can't offload forwarding\n",
 			    esw_attr->out_count);
@@ -167,7 +167,7 @@ tc_act_can_offload_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 		return false;
 	}
 
-	NL_SET_ERR_MSG_MOD(extack, "devices are not on same switch HW, can't offload forwarding");
+	MLX5_NL_SET_ERR_MSG_MOD(extack, "devices are not on same switch HW, can't offload forwarding");
 
 	return false;
 }
@@ -258,13 +258,13 @@ parse_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 		return err;
 
 	if (!mlx5e_is_valid_eswitch_fwd_dev(priv, out_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "devices are not on same switch HW, can't offload forwarding");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"devices are not on same switch HW, can't offload forwarding");
 		return -EOPNOTSUPP;
 	}
 
 	if (same_vf_reps(priv, out_dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "can't forward from a VF to itself");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "can't forward from a VF to itself");
 		return -EOPNOTSUPP;
 	}
 

@@ -393,16 +393,16 @@ int mlx5e_ethtool_set_ringparam(struct mlx5e_priv *priv,
 	int err = 0;
 
 	if (param->rx_pending < (1 << MLX5E_PARAMS_MINIMUM_LOG_RQ_SIZE)) {
-		NL_SET_ERR_MSG_FMT_MOD(extack, "rx (%d) < min (%d)",
-				       param->rx_pending,
-				       1 << MLX5E_PARAMS_MINIMUM_LOG_RQ_SIZE);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack, "rx (%d) < min (%d)",
+					    param->rx_pending,
+					    1 << MLX5E_PARAMS_MINIMUM_LOG_RQ_SIZE);
 		return -EINVAL;
 	}
 
 	if (param->tx_pending < (1 << MLX5E_PARAMS_MINIMUM_LOG_SQ_SIZE)) {
-		NL_SET_ERR_MSG_FMT_MOD(extack, "tx (%d) < min (%d)",
-				       param->tx_pending,
-				       1 << MLX5E_PARAMS_MINIMUM_LOG_SQ_SIZE);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack, "tx (%d) < min (%d)",
+					    param->tx_pending,
+					    1 << MLX5E_PARAMS_MINIMUM_LOG_SQ_SIZE);
 		return -EINVAL;
 	}
 
@@ -574,7 +574,7 @@ int mlx5e_ethtool_get_coalesce(struct mlx5e_priv *priv,
 	struct dim_cq_moder *rx_moder, *tx_moder;
 
 	if (!MLX5_CAP_GEN(priv->mdev, cq_moderation)) {
-		NL_SET_ERR_MSG_MOD(extack, "CQ moderation not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "CQ moderation not supported");
 		return -EOPNOTSUPP;
 	}
 
@@ -723,33 +723,33 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 
 	if (!MLX5_CAP_GEN(mdev, cq_moderation) ||
 	    !MLX5_CAP_GEN(mdev, cq_period_mode_modify)) {
-		NL_SET_ERR_MSG_MOD(extack, "CQ moderation not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "CQ moderation not supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (coal->tx_coalesce_usecs > MLX5E_MAX_COAL_TIME ||
 	    coal->rx_coalesce_usecs > MLX5E_MAX_COAL_TIME) {
-		NL_SET_ERR_MSG_FMT_MOD(
-			extack,
-			"Max coalesce time %lu usecs, tx-usecs (%u) rx-usecs (%u)",
-			MLX5E_MAX_COAL_TIME, coal->tx_coalesce_usecs,
-			coal->rx_coalesce_usecs);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+					    "Max coalesce time %lu usecs, tx-usecs (%u) rx-usecs (%u)",
+					    MLX5E_MAX_COAL_TIME,
+					    coal->tx_coalesce_usecs,
+					    coal->rx_coalesce_usecs);
 		return -ERANGE;
 	}
 
 	if (coal->tx_max_coalesced_frames > MLX5E_MAX_COAL_FRAMES ||
 	    coal->rx_max_coalesced_frames > MLX5E_MAX_COAL_FRAMES) {
-		NL_SET_ERR_MSG_FMT_MOD(
-			extack,
-			"Max coalesce frames %lu, tx-frames (%u) rx-frames (%u)",
-			MLX5E_MAX_COAL_FRAMES, coal->tx_max_coalesced_frames,
-			coal->rx_max_coalesced_frames);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+					    "Max coalesce frames %lu, tx-frames (%u) rx-frames (%u)",
+					    MLX5E_MAX_COAL_FRAMES,
+					    coal->tx_max_coalesced_frames,
+					    coal->rx_max_coalesced_frames);
 		return -ERANGE;
 	}
 
 	if ((kernel_coal->use_cqe_mode_rx || kernel_coal->use_cqe_mode_tx) &&
 	    !MLX5_CAP_GEN(priv->mdev, cq_period_start_from_cqe)) {
-		NL_SET_ERR_MSG_MOD(extack, "cqe-mode-rx/tx is not supported on this device");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "cqe-mode-rx/tx is not supported on this device");
 		return -EOPNOTSUPP;
 	}
 
@@ -2031,10 +2031,9 @@ static int mlx5e_get_module_eeprom_by_page(struct net_device *netdev,
 		if (size_read == -EINVAL)
 			return -EINVAL;
 		if (size_read < 0) {
-			NL_SET_ERR_MSG_FMT_MOD(
-				extack,
-				"Query module eeprom by page failed, read %u bytes, err %d",
-				i, size_read);
+			MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+						    "Query module eeprom by page failed, read %u bytes, err %d",
+						    i, size_read);
 			return i;
 		}
 

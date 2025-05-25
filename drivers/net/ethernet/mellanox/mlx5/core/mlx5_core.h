@@ -98,6 +98,20 @@ do {								\
 			     __func__, __LINE__, current->pid,	\
 			     ##__VA_ARGS__)
 
+#define MLX5_NL_SET_ERR_MSG_MOD(extack, msg) do {		\
+	if (extack)						\
+		NL_SET_ERR_MSG_MOD(extack, msg);		\
+	else							\
+		pr_err(KBUILD_MODNAME ": %s\n", msg);		\
+} while (0)
+
+#define MLX5_NL_SET_ERR_MSG_FMT_MOD(extack, fmt, ...) do {		\
+	if (extack)							\
+		NL_SET_ERR_MSG_FMT_MOD(extack, fmt, ##__VA_ARGS__);	\
+	else								\
+		pr_err(KBUILD_MODNAME ": " fmt "\n", ##__VA_ARGS__);	\
+} while (0)
+
 #define ACCESS_KEY_LEN  32
 #define FT_ID_FT_TYPE_OFFSET 24
 

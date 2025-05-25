@@ -2357,8 +2357,8 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 	esw_mode_change(esw, MLX5_ESWITCH_OFFLOADS);
 	err = mlx5_eswitch_enable_locked(esw, esw->dev->priv.sriov.num_vfs);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Failed setting eswitch to offloads");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Failed setting eswitch to offloads");
 		esw_mode_change(esw, MLX5_ESWITCH_LEGACY);
 		return err;
 	}
@@ -2366,8 +2366,8 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 		if (mlx5_eswitch_inline_mode_get(esw,
 						 &esw->offloads.inline_mode)) {
 			esw->offloads.inline_mode = MLX5_INLINE_MODE_L2;
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Inline mode is different between vports");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Inline mode is different between vports");
 		}
 	}
 	return 0;
@@ -2480,8 +2480,8 @@ static int esw_port_metadata_validate(struct devlink *devlink, u32 id,
 
 	esw_mode = mlx5_eswitch_mode(dev);
 	if (esw_mode == MLX5_ESWITCH_OFFLOADS) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "E-Switch must either disabled or non switchdev mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"E-Switch must either disabled or non switchdev mode");
 		return -EBUSY;
 	}
 	return 0;
@@ -3616,7 +3616,7 @@ static int esw_offloads_stop(struct mlx5_eswitch *esw,
 
 	err = mlx5_eswitch_enable_locked(esw, MLX5_ESWITCH_IGNORE_NUM_VFS);
 	if (err)
-		NL_SET_ERR_MSG_MOD(extack, "Failed setting eswitch to legacy");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed setting eswitch to legacy");
 
 	return err;
 }
@@ -3754,15 +3754,15 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		return -EINVAL;
 
 	if (mode == DEVLINK_ESWITCH_MODE_SWITCHDEV && mlx5_get_sd(esw->dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't change E-Switch mode to switchdev when multi-PF netdev (Socket Direct) is configured.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Can't change E-Switch mode to switchdev when multi-PF netdev (Socket Direct) is configured.");
 		return -EPERM;
 	}
 
 	mlx5_lag_disable_change(esw->dev);
 	err = mlx5_esw_try_lock(esw);
 	if (err < 0) {
-		NL_SET_ERR_MSG_MOD(extack, "Can't change mode, E-Switch is busy");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Can't change mode, E-Switch is busy");
 		goto enable_lag;
 	}
 	cur_mlx5_mode = err;
@@ -3772,8 +3772,8 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		goto unlock;
 
 	if (esw->offloads.num_block_mode) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't change eswitch mode when IPsec SA and/or policies are configured");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Can't change eswitch mode when IPsec SA and/or policies are configured");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
@@ -3786,8 +3786,8 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	mlx5_eswitch_disable_locked(esw);
 	if (mode == DEVLINK_ESWITCH_MODE_SWITCHDEV) {
 		if (mlx5_devlink_trap_get_num_active(esw->dev)) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Can't change mode while devlink traps are active");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Can't change mode while devlink traps are active");
 			err = -EOPNOTSUPP;
 			goto skip;
 		}
@@ -3832,8 +3832,8 @@ static int mlx5_esw_vports_inline_set(struct mlx5_eswitch *esw, u8 mlx5_mode,
 		err = mlx5_modify_nic_vport_min_inline(dev, vport->vport, mlx5_mode);
 		if (err) {
 			err_vport_num = vport->vport;
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Failed to set min inline on vport");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Failed to set min inline on vport");
 			goto revert_inline_mode;
 		}
 	}
@@ -3842,8 +3842,8 @@ static int mlx5_esw_vports_inline_set(struct mlx5_eswitch *esw, u8 mlx5_mode,
 			err = mlx5_modify_nic_vport_min_inline(dev, vport->vport, mlx5_mode);
 			if (err) {
 				err_vport_num = vport->vport;
-				NL_SET_ERR_MSG_MOD(extack,
-						   "Failed to set min inline on vport");
+				MLX5_NL_SET_ERR_MSG_MOD(extack,
+							"Failed to set min inline on vport");
 				goto revert_ec_vf_inline_mode;
 			}
 		}
@@ -3892,7 +3892,7 @@ int mlx5_devlink_eswitch_inline_mode_set(struct devlink *devlink, u8 mode,
 
 		fallthrough;
 	case MLX5_CAP_INLINE_MODE_L2:
-		NL_SET_ERR_MSG_MOD(extack, "Inline mode can't be set");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Inline mode can't be set");
 		err = -EOPNOTSUPP;
 		goto out;
 	case MLX5_CAP_INLINE_MODE_VPORT_CONTEXT:
@@ -3900,8 +3900,8 @@ int mlx5_devlink_eswitch_inline_mode_set(struct devlink *devlink, u8 mode,
 	}
 
 	if (atomic64_read(&esw->offloads.num_flows) > 0) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't set inline mode when flows are configured");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Can't set inline mode when flows are configured");
 		err = -EOPNOTSUPP;
 		goto out;
 	}
@@ -4004,15 +4004,15 @@ int mlx5_devlink_eswitch_encap_mode_set(struct devlink *devlink,
 		goto unlock;
 
 	if (atomic64_read(&esw->offloads.num_flows) > 0) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't set encapsulation when flows are configured");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Can't set encapsulation when flows are configured");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
 
 	if (esw->offloads.num_block_encap) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't set encapsulation when IPsec SA and/or policies are configured");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Can't set encapsulation when IPsec SA and/or policies are configured");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
@@ -4027,8 +4027,8 @@ int mlx5_devlink_eswitch_encap_mode_set(struct devlink *devlink,
 	err = esw_create_offloads_fdb_tables(esw);
 
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Failed re-creating fast FDB table");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Failed re-creating fast FDB table");
 		esw->offloads.encap = !encap;
 		(void)esw_create_offloads_fdb_tables(esw);
 	}
@@ -4255,12 +4255,12 @@ int mlx5_devlink_port_fn_migratable_get(struct devlink_port *port, bool *is_enab
 	struct mlx5_vport *vport = mlx5_devlink_port_vport_get(port);
 
 	if (!MLX5_CAP_GEN(esw->dev, migration)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support migration");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support migration");
 		return -EOPNOTSUPP;
 	}
 
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
@@ -4281,12 +4281,12 @@ int mlx5_devlink_port_fn_migratable_set(struct devlink_port *port, bool enable,
 	int err;
 
 	if (!MLX5_CAP_GEN(esw->dev, migration)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support migration");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support migration");
 		return -EOPNOTSUPP;
 	}
 
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
@@ -4306,7 +4306,7 @@ int mlx5_devlink_port_fn_migratable_set(struct devlink_port *port, bool enable,
 	err = mlx5_vport_get_other_func_cap(esw->dev, vport->vport, query_ctx,
 					    MLX5_CAP_GENERAL_2);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
 		goto out_free;
 	}
 
@@ -4316,7 +4316,7 @@ int mlx5_devlink_port_fn_migratable_set(struct devlink_port *port, bool enable,
 	err = mlx5_vport_set_other_func_cap(esw->dev, hca_caps, vport->vport,
 					    MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA migratable cap");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA migratable cap");
 		goto out_free;
 	}
 
@@ -4336,7 +4336,7 @@ int mlx5_devlink_port_fn_roce_get(struct devlink_port *port, bool *is_enabled,
 	struct mlx5_vport *vport = mlx5_devlink_port_vport_get(port);
 
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
@@ -4358,7 +4358,7 @@ int mlx5_devlink_port_fn_roce_set(struct devlink_port *port, bool enable,
 	int err;
 
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
@@ -4378,7 +4378,7 @@ int mlx5_devlink_port_fn_roce_set(struct devlink_port *port, bool enable,
 	err = mlx5_vport_get_other_func_cap(esw->dev, vport_num, query_ctx,
 					    MLX5_CAP_GENERAL);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
 		goto out_free;
 	}
 
@@ -4388,7 +4388,7 @@ int mlx5_devlink_port_fn_roce_set(struct devlink_port *port, bool enable,
 	err = mlx5_vport_set_other_func_cap(esw->dev, hca_caps, vport_num,
 					    MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA roce cap");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA roce cap");
 		goto out_free;
 	}
 
@@ -4430,7 +4430,7 @@ int mlx5_devlink_port_fn_ipsec_crypto_get(struct devlink_port *port, bool *is_en
 		return PTR_ERR(esw);
 
 	if (!mlx5_esw_ipsec_vf_offload_supported(esw->dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPSec crypto");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPSec crypto");
 		return -EOPNOTSUPP;
 	}
 
@@ -4463,8 +4463,8 @@ int mlx5_devlink_port_fn_ipsec_crypto_set(struct devlink_port *port, bool enable
 	vport_num = mlx5_esw_devlink_port_index_to_vport_num(port->index);
 	err = mlx5_esw_ipsec_vf_crypto_offload_supported(esw->dev, vport_num);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support IPsec crypto");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support IPsec crypto");
 		return err;
 	}
 
@@ -4473,7 +4473,7 @@ int mlx5_devlink_port_fn_ipsec_crypto_set(struct devlink_port *port, bool enable
 	mutex_lock(&esw->state_lock);
 	if (!vport->enabled) {
 		err = -EOPNOTSUPP;
-		NL_SET_ERR_MSG_MOD(extack, "Eswitch vport is disabled");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Eswitch vport is disabled");
 		goto unlock;
 	}
 
@@ -4487,7 +4487,7 @@ int mlx5_devlink_port_fn_ipsec_crypto_set(struct devlink_port *port, bool enable
 
 	err = mlx5_esw_ipsec_vf_crypto_offload_set(esw, vport, enable);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed to set IPsec crypto");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed to set IPsec crypto");
 		goto unlock;
 	}
 
@@ -4513,7 +4513,7 @@ int mlx5_devlink_port_fn_ipsec_packet_get(struct devlink_port *port, bool *is_en
 		return PTR_ERR(esw);
 
 	if (!mlx5_esw_ipsec_vf_offload_supported(esw->dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPsec packet");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support IPsec packet");
 		return -EOPNOTSUPP;
 	}
 
@@ -4547,8 +4547,8 @@ int mlx5_devlink_port_fn_ipsec_packet_set(struct devlink_port *port,
 	vport_num = mlx5_esw_devlink_port_index_to_vport_num(port->index);
 	err = mlx5_esw_ipsec_vf_packet_offload_supported(esw->dev, vport_num);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support IPsec packet mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support IPsec packet mode");
 		return err;
 	}
 
@@ -4556,7 +4556,7 @@ int mlx5_devlink_port_fn_ipsec_packet_set(struct devlink_port *port,
 	mutex_lock(&esw->state_lock);
 	if (!vport->enabled) {
 		err = -EOPNOTSUPP;
-		NL_SET_ERR_MSG_MOD(extack, "Eswitch vport is disabled");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Eswitch vport is disabled");
 		goto unlock;
 	}
 
@@ -4570,8 +4570,8 @@ int mlx5_devlink_port_fn_ipsec_packet_set(struct devlink_port *port,
 
 	err = mlx5_esw_ipsec_vf_packet_offload_set(esw, vport, enable);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Failed to set IPsec packet mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Failed to set IPsec packet mode");
 		goto unlock;
 	}
 
@@ -4601,14 +4601,14 @@ mlx5_devlink_port_fn_max_io_eqs_get(struct devlink_port *port, u32 *max_io_eqs,
 
 	esw = mlx5_devlink_eswitch_nocheck_get(port->devlink);
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
 	if (!MLX5_CAP_GEN_2(esw->dev, max_num_eqs_24b)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support getting the max number of EQs");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support getting the max number of EQs");
 		return -EOPNOTSUPP;
 	}
 
@@ -4620,7 +4620,7 @@ mlx5_devlink_port_fn_max_io_eqs_get(struct devlink_port *port, u32 *max_io_eqs,
 	err = mlx5_vport_get_other_func_cap(esw->dev, vport_num, query_ctx,
 					    MLX5_CAP_GENERAL_2);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
 		goto out;
 	}
 
@@ -4651,19 +4651,19 @@ mlx5_devlink_port_fn_max_io_eqs_set(struct devlink_port *port, u32 max_io_eqs,
 
 	esw = mlx5_devlink_eswitch_nocheck_get(port->devlink);
 	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support VHCA management");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support VHCA management");
 		return -EOPNOTSUPP;
 	}
 
 	if (!MLX5_CAP_GEN_2(esw->dev, max_num_eqs_24b)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Device doesn't support changing the max number of EQs");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Device doesn't support changing the max number of EQs");
 		return -EOPNOTSUPP;
 	}
 
 	if (check_add_overflow(max_io_eqs, MLX5_ESW_MAX_CTRL_EQS, &max_eqs)) {
-		NL_SET_ERR_MSG_MOD(extack, "Supplied value out of range");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Supplied value out of range");
 		return -EINVAL;
 	}
 
@@ -4675,7 +4675,7 @@ mlx5_devlink_port_fn_max_io_eqs_set(struct devlink_port *port, u32 max_io_eqs,
 	err = mlx5_vport_get_other_func_cap(esw->dev, vport_num, query_ctx,
 					    MLX5_CAP_GENERAL_2);
 	if (err) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed getting HCA caps");
 		goto out;
 	}
 
@@ -4688,7 +4688,7 @@ mlx5_devlink_port_fn_max_io_eqs_set(struct devlink_port *port, u32 max_io_eqs,
 	err = mlx5_vport_set_other_func_cap(esw->dev, hca_caps, vport_num,
 					    MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE2);
 	if (err)
-		NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA caps");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Failed setting HCA caps");
 	vport->max_eqs_set = true;
 out:
 	mutex_unlock(&esw->state_lock);

@@ -162,7 +162,7 @@ mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
 	if (!flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_CT))
 		return 0;
 
-	NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
+	MLX5_NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
 	return -EOPNOTSUPP;
 }
 
@@ -178,7 +178,7 @@ mlx5_tc_ct_parse_action(struct mlx5_tc_ct_priv *priv,
 			const struct flow_action_entry *act,
 			struct netlink_ext_ack *extack)
 {
-	NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
+	MLX5_NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
 	return -EOPNOTSUPP;
 }
 

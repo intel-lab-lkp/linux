@@ -926,8 +926,8 @@ int mlx5e_tc_tun_parse(struct net_device *filter_dev,
 		    !MLX5_CAP_ESW_FLOWTABLE_FDB
 			(priv->mdev,
 			 ft_field_support.outer_ipv4_ttl)) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Matching on TTL is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Matching on TTL is not supported");
 			err = -EOPNOTSUPP;
 			goto out;
 		}
@@ -956,8 +956,8 @@ int mlx5e_tc_tun_parse_udp_ports(struct mlx5e_priv *priv,
 	/* Full udp dst port must be given */
 
 	if (!flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_PORTS)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "UDP tunnel decap filter must include enc_dst_port condition");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"UDP tunnel decap filter must include enc_dst_port condition");
 		netdev_warn(priv->netdev,
 			    "UDP tunnel decap filter must include enc_dst_port condition\n");
 		return -EOPNOTSUPP;
@@ -967,8 +967,8 @@ int mlx5e_tc_tun_parse_udp_ports(struct mlx5e_priv *priv,
 
 	if (memchr_inv(&enc_ports.mask->dst, 0xff,
 		       sizeof(enc_ports.mask->dst))) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "UDP tunnel decap filter must match enc_dst_port fully");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"UDP tunnel decap filter must match enc_dst_port fully");
 		netdev_warn(priv->netdev,
 			    "UDP tunnel decap filter must match enc_dst_port fully\n");
 		return -EOPNOTSUPP;

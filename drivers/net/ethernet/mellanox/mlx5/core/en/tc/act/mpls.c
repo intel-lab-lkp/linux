@@ -16,7 +16,7 @@ tc_act_can_offload_mpls_push(struct mlx5e_tc_act_parse_state *parse_state,
 
 	if (!MLX5_CAP_ESW_FLOWTABLE_FDB(priv->mdev, reformat_l2_to_l3_tunnel) ||
 	    act->mpls_push.proto != htons(ETH_P_MPLS_UC)) {
-		NL_SET_ERR_MSG_MOD(extack, "mpls push is supported only for mpls_uc protocol");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "mpls push is supported only for mpls_uc protocol");
 		return false;
 	}
 
@@ -63,12 +63,12 @@ tc_act_can_offload_mpls_pop(struct mlx5e_tc_act_parse_state *parse_state,
 	 * egress redirect.
 	 */
 	if ((act_index == 1 && !parse_state->decap) || act_index > 1) {
-		NL_SET_ERR_MSG_MOD(extack, "mpls pop supported only as first action or with decap");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "mpls pop supported only as first action or with decap");
 		return false;
 	}
 
 	if (!netif_is_bareudp(filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "mpls pop supported only on bareudp devices");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "mpls pop supported only on bareudp devices");
 		return false;
 	}
 

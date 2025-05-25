@@ -3705,28 +3705,28 @@ static int mlx5_fs_mode_validate(struct devlink *devlink, u32 id,
 		bool smfs_cap = mlx5_fs_dr_is_supported(dev);
 
 		if (!smfs_cap) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Software managed steering is not supported by current device");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Software managed steering is not supported by current device");
 			return -EOPNOTSUPP;
 		}
 	} else if (!strcmp(value, "hmfs")) {
 		bool hmfs_cap = mlx5_fs_hws_is_supported(dev);
 
 		if (!hmfs_cap) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "Hardware steering is not supported by current device");
+			MLX5_NL_SET_ERR_MSG_MOD(extack,
+						"Hardware steering is not supported by current device");
 			return -EOPNOTSUPP;
 		}
 	} else {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Bad parameter: supported values are [\"dmfs\", \"smfs\", \"hmfs\"]");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Bad parameter: supported values are [\"dmfs\", \"smfs\", \"hmfs\"]");
 		return -EINVAL;
 	}
 
 	eswitch_mode = mlx5_eswitch_mode(dev);
 	if (eswitch_mode == MLX5_ESWITCH_OFFLOADS) {
-		NL_SET_ERR_MSG_FMT_MOD(extack,
-				       "Moving to %s is not supported when eswitch offloads enabled.",
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+					    "Moving to %s is not supported when eswitch offloads enabled.",
 				       value);
 		return -EOPNOTSUPP;
 	}

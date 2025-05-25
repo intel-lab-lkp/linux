@@ -393,16 +393,16 @@ int mlx5e_htb_setup_tc(struct mlx5e_priv *priv, struct tc_htb_qopt_offload *htb_
 		return -EINVAL;
 
 	if (htb_qopt->prio || htb_qopt->quantum) {
-		NL_SET_ERR_MSG_MOD(htb_qopt->extack,
-				   "prio and quantum parameters are not supported by device with HTB offload enabled.");
+		MLX5_NL_SET_ERR_MSG_MOD(htb_qopt->extack,
+					"prio and quantum parameters are not supported by device with HTB offload enabled.");
 		return -EOPNOTSUPP;
 	}
 
 	switch (htb_qopt->command) {
 	case TC_HTB_CREATE:
 		if (!mlx5_qos_is_supported(priv->mdev)) {
-			NL_SET_ERR_MSG_MOD(htb_qopt->extack,
-					   "Missing QoS capabilities. Try disabling SRIOV or use a supported device.");
+			MLX5_NL_SET_ERR_MSG_MOD(htb_qopt->extack,
+						"Missing QoS capabilities. Try disabling SRIOV or use a supported device.");
 			return -EOPNOTSUPP;
 		}
 		priv->htb = mlx5e_htb_alloc();

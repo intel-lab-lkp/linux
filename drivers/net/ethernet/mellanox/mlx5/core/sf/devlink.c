@@ -63,7 +63,7 @@ mlx5_sf_alloc(struct mlx5_sf_table *table, struct mlx5_eswitch *esw,
 	int err;
 
 	if (!mlx5_esw_offloads_controller_valid(esw, controller)) {
-		NL_SET_ERR_MSG_MOD(extack, "Invalid controller number");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Invalid controller number");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -98,7 +98,7 @@ alloc_err:
 	mlx5_sf_hw_table_sf_free(table->dev, controller, id_err);
 id_err:
 	if (err == -EEXIST)
-		NL_SET_ERR_MSG_MOD(extack, "SF already exist. Choose different sfnum");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "SF already exist. Choose different sfnum");
 	return ERR_PTR(err);
 }
 
@@ -167,7 +167,7 @@ static int mlx5_sf_activate(struct mlx5_core_dev *dev, struct mlx5_sf *sf,
 	if (mlx5_sf_is_active(sf))
 		return 0;
 	if (sf->hw_state != MLX5_VHCA_STATE_ALLOCATED) {
-		NL_SET_ERR_MSG_MOD(extack, "SF is inactivated but it is still attached");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "SF is inactivated but it is still attached");
 		return -EBUSY;
 	}
 
@@ -267,26 +267,25 @@ mlx5_sf_new_check_attr(struct mlx5_core_dev *dev, const struct devlink_port_new_
 		       struct netlink_ext_ack *extack)
 {
 	if (new_attr->flavour != DEVLINK_PORT_FLAVOUR_PCI_SF) {
-		NL_SET_ERR_MSG_MOD(extack, "Driver supports only SF port addition");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Driver supports only SF port addition");
 		return -EOPNOTSUPP;
 	}
 	if (new_attr->port_index_valid) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Driver does not support user defined port index assignment");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Driver does not support user defined port index assignment");
 		return -EOPNOTSUPP;
 	}
 	if (!new_attr->sfnum_valid) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "User must provide unique sfnum. Driver does not support auto assignment");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"User must provide unique sfnum. Driver does not support auto assignment");
 		return -EOPNOTSUPP;
 	}
 	if (new_attr->controller_valid && new_attr->controller &&
 	    !mlx5_core_is_ecpf_esw_manager(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "External controller is unsupported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "External controller is unsupported");
 		return -EOPNOTSUPP;
 	}
 	if (new_attr->pfnum != PCI_FUNC(dev->pdev->devfn)) {
-		NL_SET_ERR_MSG_MOD(extack, "Invalid pfnum supplied");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Invalid pfnum supplied");
 		return -EOPNOTSUPP;
 	}
 	return 0;
@@ -312,13 +311,13 @@ int mlx5_devlink_sf_port_new(struct devlink *devlink,
 		return err;
 
 	if (!mlx5_sf_table_supported(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "SF ports are not supported.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "SF ports are not supported.");
 		return -EOPNOTSUPP;
 	}
 
 	if (!is_mdev_switchdev_mode(dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "SF ports are only supported in eswitch switchdev mode.");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"SF ports are only supported in eswitch switchdev mode.");
 		return -EOPNOTSUPP;
 	}
 

@@ -296,7 +296,7 @@ mlx5_esw_bridge_port_obj_attr_set(struct net_device *dev,
 	switch (attr->id) {
 	case SWITCHDEV_ATTR_ID_PORT_PRE_BRIDGE_FLAGS:
 		if (attr->u.brport_flags.mask & ~(BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD)) {
-			NL_SET_ERR_MSG_MOD(extack, "Flag is not supported");
+			MLX5_NL_SET_ERR_MSG_MOD(extack, "Flag is not supported");
 			err = -EINVAL;
 		}
 		break;

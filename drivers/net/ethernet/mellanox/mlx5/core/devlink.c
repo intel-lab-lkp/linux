@@ -94,7 +94,7 @@ static int mlx5_devlink_reload_fw_activate(struct devlink *devlink, struct netli
 	if (err)
 		return err;
 	if (!(reset_level & MLX5_MFRL_REG_RESET_LEVEL3)) {
-		NL_SET_ERR_MSG_MOD(extack, "FW activate requires reboot");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "FW activate requires reboot");
 		return -EINVAL;
 	}
 
@@ -110,7 +110,7 @@ static int mlx5_devlink_reload_fw_activate(struct devlink *devlink, struct netli
 	mlx5_unload_one_devl_locked(dev, true);
 	err = mlx5_health_wait_pci_up(dev);
 	if (err)
-		NL_SET_ERR_MSG_MOD(extack, "FW activate aborted, PCI reads fail after reset");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "FW activate aborted, PCI reads fail after reset");
 
 	return err;
 }
@@ -126,8 +126,8 @@ static int mlx5_devlink_trigger_fw_live_patch(struct devlink *devlink,
 	if (err)
 		return err;
 	if (!(reset_level & MLX5_MFRL_REG_RESET_LEVEL0)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "FW upgrade to the stored FW can't be done by FW live patching");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"FW upgrade to the stored FW can't be done by FW live patching");
 		return -EINVAL;
 	}
 
@@ -151,23 +151,23 @@ static int mlx5_devlink_reload_down(struct devlink *devlink, bool netns_change,
 	}
 
 	if (mlx5_lag_is_active(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "reload is unsupported in Lag mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "reload is unsupported in Lag mode");
 		return -EOPNOTSUPP;
 	}
 
 	if (mlx5_core_is_mp_slave(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "reload is unsupported for multi port slave");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "reload is unsupported for multi port slave");
 		return -EOPNOTSUPP;
 	}
 
 	if (action == DEVLINK_RELOAD_ACTION_FW_ACTIVATE &&
 	    !dev->priv.fw_reset) {
-		NL_SET_ERR_MSG_MOD(extack, "FW activate is unsupported for this function");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "FW activate is unsupported for this function");
 		return -EOPNOTSUPP;
 	}
 
 	if (mlx5_core_is_pf(dev) && pci_num_vf(pdev))
-		NL_SET_ERR_MSG_MOD(extack, "reload while VFs are present is unfavorable");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "reload while VFs are present is unfavorable");
 
 	switch (action) {
 	case DEVLINK_RELOAD_ACTION_DRIVER_REINIT:
@@ -285,7 +285,7 @@ static int mlx5_devlink_trap_action_set(struct devlink *devlink,
 	int err;
 
 	if (is_mdev_switchdev_mode(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "Devlink traps can't be set in switchdev mode");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Devlink traps can't be set in switchdev mode");
 		return -EOPNOTSUPP;
 	}
 
@@ -413,11 +413,11 @@ static int mlx5_devlink_enable_roce_validate(struct devlink *devlink, u32 id,
 
 	if (new_state && !MLX5_CAP_GEN(dev, roce) &&
 	    !(MLX5_CAP_GEN(dev, roce_rw_supported) && MLX5_CAP_GEN_MAX(dev, roce))) {
-		NL_SET_ERR_MSG_MOD(extack, "Device doesn't support RoCE");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Device doesn't support RoCE");
 		return -EOPNOTSUPP;
 	}
 	if (mlx5_core_is_mp_slave(dev) || mlx5_lag_is_active(dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "Multi port slave/Lag device can't configure RoCE");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Multi port slave/Lag device can't configure RoCE");
 		return -EOPNOTSUPP;
 	}
 
@@ -432,8 +432,8 @@ static int mlx5_devlink_large_group_num_validate(struct devlink *devlink, u32 id
 	int group_num = val.vu32;
 
 	if (group_num < 1 || group_num > 1024) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Unsupported group number, supported range is 1-1024");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Unsupported group number, supported range is 1-1024");
 		return -EOPNOTSUPP;
 	}
 
@@ -465,14 +465,14 @@ mlx5_devlink_hairpin_queue_size_validate(struct devlink *devlink, u32 id,
 	u32 val32 = val.vu32;
 
 	if (!is_power_of_2(val32)) {
-		NL_SET_ERR_MSG_MOD(extack, "Value is not power of two");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Value is not power of two");
 		return -EINVAL;
 	}
 
 	if (val32 > BIT(MLX5_CAP_GEN(dev, log_max_hairpin_num_packets))) {
-		NL_SET_ERR_MSG_FMT_MOD(
-			extack, "Maximum hairpin queue size is %lu",
-			BIT(MLX5_CAP_GEN(dev, log_max_hairpin_num_packets)));
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack,
+					    "Maximum hairpin queue size is %lu",
+					    BIT(MLX5_CAP_GEN(dev, log_max_hairpin_num_packets)));
 		return -EINVAL;
 	}
 
@@ -717,18 +717,18 @@ static int mlx5_devlink_max_uc_list_validate(struct devlink *devlink, u32 id,
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
 
 	if (val.vu32 == 0) {
-		NL_SET_ERR_MSG_MOD(extack, "max_macs value must be greater than 0");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "max_macs value must be greater than 0");
 		return -EINVAL;
 	}
 
 	if (!is_power_of_2(val.vu32)) {
-		NL_SET_ERR_MSG_MOD(extack, "Only power of 2 values are supported for max_macs");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Only power of 2 values are supported for max_macs");
 		return -EINVAL;
 	}
 
 	if (ilog2(val.vu32) >
 	    MLX5_CAP_GEN_MAX(dev, log_max_current_uc_list)) {
-		NL_SET_ERR_MSG_MOD(extack, "max_macs value is out of the supported range");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "max_macs value is out of the supported range");
 		return -EINVAL;
 	}
 

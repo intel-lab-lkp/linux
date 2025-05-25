@@ -32,8 +32,8 @@ static int mlx5e_tc_tun_check_udp_dport_vxlan(struct mlx5e_priv *priv,
 
 	if (!mlx5_vxlan_lookup_port(priv->mdev->vxlan,
 				    be16_to_cpu(enc_ports.key->dst))) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matched UDP dst port is not registered as a VXLAN port");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Matched UDP dst port is not registered as a VXLAN port");
 		netdev_warn(priv->netdev,
 			    "UDP port %d is not registered as a VXLAN port\n",
 			    be16_to_cpu(enc_ports.key->dst));
@@ -68,8 +68,8 @@ static int mlx5e_tc_tun_init_encap_attr_vxlan(struct net_device *tunnel_dev,
 	e->tunnel = &vxlan_tunnel;
 
 	if (!mlx5_vxlan_lookup_port(priv->mdev->vxlan, dst_port)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "vxlan udp dport was not registered with the HW");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"vxlan udp dport was not registered with the HW");
 		netdev_warn(priv->netdev,
 			    "%d isn't an offloaded vxlan udp dport\n",
 			    dst_port);
@@ -121,18 +121,18 @@ static int mlx5e_tc_tun_parse_vxlan_gbp_option(struct mlx5e_priv *priv,
 
 	if (memchr_inv(&enc_opts.mask->data, 0, sizeof(enc_opts.mask->data)) &&
 	    !MLX5_CAP_ESW_FT_FIELD_SUPPORT_2(priv->mdev, tunnel_header_0_1)) {
-		NL_SET_ERR_MSG_MOD(extack, "Matching on VxLAN GBP is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Matching on VxLAN GBP is not supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (enc_opts.key->dst_opt_type != IP_TUNNEL_VXLAN_OPT_BIT) {
-		NL_SET_ERR_MSG_MOD(extack, "Wrong VxLAN option type: not GBP");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "Wrong VxLAN option type: not GBP");
 		return -EOPNOTSUPP;
 	}
 
 	if (enc_opts.key->len != sizeof(*gbp) ||
 	    enc_opts.mask->len != sizeof(*gbp_mask)) {
-		NL_SET_ERR_MSG_MOD(extack, "VxLAN GBP option/mask len is not 32 bits");
+		MLX5_NL_SET_ERR_MSG_MOD(extack, "VxLAN GBP option/mask len is not 32 bits");
 		return -EINVAL;
 	}
 
@@ -140,7 +140,7 @@ static int mlx5e_tc_tun_parse_vxlan_gbp_option(struct mlx5e_priv *priv,
 	gbp_mask = (u32 *)&enc_opts.mask->data[0];
 
 	if (*gbp_mask & ~VXLAN_GBP_MASK) {
-		NL_SET_ERR_MSG_FMT_MOD(extack, "Wrong VxLAN GBP mask(0x%08X)", *gbp_mask);
+		MLX5_NL_SET_ERR_MSG_FMT_MOD(extack, "Wrong VxLAN GBP mask(0x%08X)", *gbp_mask);
 		return -EINVAL;
 	}
 
@@ -209,8 +209,8 @@ static int mlx5e_tc_tun_parse_vxlan(struct mlx5e_priv *priv,
 
 	if (!MLX5_CAP_ESW_FLOWTABLE_FDB(priv->mdev,
 					ft_field_support.outer_vxlan_vni)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matching on VXLAN VNI is not supported");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Matching on VXLAN VNI is not supported");
 		netdev_warn(priv->netdev,
 			    "Matching on VXLAN VNI is not supported\n");
 		return -EOPNOTSUPP;

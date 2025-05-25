@@ -12,8 +12,8 @@ static bool police_act_validate_control(enum flow_action_id act_id,
 	    act_id != FLOW_ACTION_ACCEPT &&
 	    act_id != FLOW_ACTION_JUMP &&
 	    act_id != FLOW_ACTION_DROP) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Offload not supported when conform-exceed action is not pipe, ok, jump or drop");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Offload not supported when conform-exceed action is not pipe, ok, jump or drop");
 		return false;
 	}
 
@@ -29,8 +29,8 @@ static int police_act_validate(const struct flow_action_entry *act,
 
 	if (act->police.peakrate_bytes_ps ||
 	    act->police.avrate || act->police.overhead) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Offload not supported when peakrate/avrate/overhead is configured");
+		MLX5_NL_SET_ERR_MSG_MOD(extack,
+					"Offload not supported when peakrate/avrate/overhead is configured");
 		return -EOPNOTSUPP;
 	}
 
@@ -138,7 +138,7 @@ tc_act_police_offload(struct mlx5e_priv *priv,
 	}
 
 	if (IS_ERR(meter)) {
-		NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
+		MLX5_NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
 		mlx5_core_err(priv->mdev, "Failed to get flow meter %d\n", params.index);
 		err = PTR_ERR(meter);
 	}
@@ -156,7 +156,7 @@ tc_act_police_destroy(struct mlx5e_priv *priv,
 	params.index = fl_act->index;
 	meter = mlx5e_tc_meter_get(priv->mdev, &params);
 	if (IS_ERR(meter)) {
-		NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
+		MLX5_NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
 		mlx5_core_err(priv->mdev, "Failed to get flow meter %d\n", params.index);
 		return PTR_ERR(meter);
 	}
@@ -177,7 +177,7 @@ tc_act_police_stats(struct mlx5e_priv *priv,
 	params.index = fl_act->index;
 	meter = mlx5e_tc_meter_get(priv->mdev, &params);
 	if (IS_ERR(meter)) {
-		NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
+		MLX5_NL_SET_ERR_MSG_MOD(fl_act->extack, "Failed to get flow meter");
 		return PTR_ERR(meter);
 	}
 
