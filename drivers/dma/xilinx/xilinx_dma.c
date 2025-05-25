@@ -159,6 +159,9 @@
 		 XILINX_DMA_DMASR_SOF_EARLY_ERR | \
 		 XILINX_DMA_DMASR_DMA_INT_ERR)
 
+/* Constant to convert delay counts to microseconds */
+#define XILINX_DMA_DELAY_SCALE		(125ULL * USEC_PER_SEC)
+
 /* Axi VDMA Flush on Fsync bits */
 #define XILINX_DMA_FLUSH_S2MM		3
 #define XILINX_DMA_FLUSH_MM2S		2
@@ -403,6 +406,7 @@ struct xilinx_dma_tx_descriptor {
  * @terminating: Check for channel being synchronized by user
  * @tasklet: Cleanup work after irq
  * @config: Device configuration info
+ * @slave_cfg: Device configuration info from Dmaengine
  * @flush_on_fsync: Flush on Frame sync
  * @desc_pendingcount: Descriptor pending count
  * @ext_addr: Indicates 64 bit addressing is supported by dma channel
@@ -442,6 +446,7 @@ struct xilinx_dma_chan {
 	bool terminating;
 	struct tasklet_struct tasklet;
 	struct xilinx_vdma_config config;
+	struct dma_slave_config slave_cfg;
 	bool flush_on_fsync;
 	u32 desc_pendingcount;
 	bool ext_addr;
@@ -1540,7 +1545,9 @@ static void xilinx_dma_start_transfer(struct xilinx_dma_chan *chan)
 {
 	struct xilinx_dma_tx_descriptor *head_desc, *tail_desc;
 	struct xilinx_axidma_tx_segment *tail_segment;
-	u32 reg;
+	struct dma_slave_config *slave_cfg = &chan->slave_cfg;
+	u64 clk_rate;
+	u32 reg, usec, timer;
 
 	if (chan->err)
 		return;
@@ -1560,19 +1567,38 @@ static void xilinx_dma_start_transfer(struct xilinx_dma_chan *chan)
 
 	reg = dma_ctrl_read(chan, XILINX_DMA_REG_DMACR);
 
-	if (chan->desc_pendingcount <= XILINX_DMA_COALESCE_MAX) {
-		reg &= ~XILINX_DMA_CR_COALESCE_MAX;
+	reg &= ~XILINX_DMA_CR_COALESCE_MAX;
+	reg  &= ~XILINX_DMA_CR_DELAY_MAX;
+
+	/* Use dma_slave_config if it has valid values */
+	if (slave_cfg->coalesce_cnt &&
+	    slave_cfg->coalesce_cnt <= XILINX_DMA_COALESCE_MAX)
+		reg |= slave_cfg->coalesce_cnt <<
+			XILINX_DMA_CR_COALESCE_SHIFT;
+	else if (chan->desc_pendingcount <= XILINX_DMA_COALESCE_MAX)
 		reg |= chan->desc_pendingcount <<
 				  XILINX_DMA_CR_COALESCE_SHIFT;
-		dma_ctrl_write(chan, XILINX_DMA_REG_DMACR, reg);
-	}
+
+	if (slave_cfg->coalesce_usecs <= XILINX_DMA_DMACR_DELAY_MAX)
+		usec = slave_cfg->coalesce_usecs;
+	else
+		usec = chan->irq_delay;
+
+	/* Scale with SG clock rate rather than being a fixed number of
+	 * clock cycles.
+	 * 1 Timeout Interval = 125 * (clock period of SG clock)
+	 */
+	clk_rate = clk_get_rate(chan->xdev->rx_clk);
+	timer = DIV64_U64_ROUND_CLOSEST((u64)usec * clk_rate,
+					XILINX_DMA_DELAY_SCALE);
+	timer = min(timer, FIELD_MAX(XILINX_DMA_DMACR_DELAY_MASK));
+	reg |= timer << XILINX_DMA_CR_DELAY_SHIFT;
+
+	dma_ctrl_write(chan, XILINX_DMA_REG_DMACR, reg);
 
 	if (chan->has_sg)
 		xilinx_write(chan, XILINX_DMA_REG_CURDESC,
 			     head_desc->async_tx.phys);
-	reg  &= ~XILINX_DMA_CR_DELAY_MAX;
-	reg  |= chan->irq_delay << XILINX_DMA_CR_DELAY_SHIFT;
-	dma_ctrl_write(chan, XILINX_DMA_REG_DMACR, reg);
 
 	xilinx_dma_start(chan);
 
@@ -1703,7 +1729,26 @@ static void xilinx_dma_issue_pending(struct dma_chan *dchan)
 static int xilinx_dma_device_config(struct dma_chan *dchan,
 				    struct dma_slave_config *config)
 {
+	struct xilinx_dma_chan *chan = to_xilinx_chan(dchan);
+
+	if (!config->coalesce_cnt ||
+	    config->coalesce_cnt > XILINX_DMA_DMACR_FRAME_COUNT_MAX ||
+	    config->coalesce_usecs > XILINX_DMA_DMACR_DELAY_MAX)
+		return -EINVAL;
+
+	chan->slave_cfg.coalesce_cnt = config->coalesce_cnt;
+	chan->slave_cfg.coalesce_usecs = config->coalesce_usecs;
+
 	return 0;
+}
+
+static void xilinx_dma_device_caps(struct dma_chan *dchan,
+				   struct dma_slave_caps *caps)
+{
+	struct xilinx_dma_chan *chan = to_xilinx_chan(dchan);
+
+	caps->coalesce_cnt = chan->slave_cfg.coalesce_cnt;
+	caps->coalesce_usecs = chan->slave_cfg.coalesce_usecs;
 }
 
 /**
@@ -3178,6 +3223,7 @@ static int xilinx_dma_probe(struct platform_device *pdev)
 	xdev->common.device_tx_status = xilinx_dma_tx_status;
 	xdev->common.device_issue_pending = xilinx_dma_issue_pending;
 	xdev->common.device_config = xilinx_dma_device_config;
+	xdev->common.device_caps = xilinx_dma_device_caps;
 	if (xdev->dma_config->dmatype == XDMA_TYPE_AXIDMA) {
 		dma_cap_set(DMA_CYCLIC, xdev->common.cap_mask);
 		xdev->common.device_prep_slave_sg = xilinx_dma_prep_slave_sg;
