@@ -365,7 +365,8 @@ struct backlight_device *backlight_device_register(const char *name,
 	struct device *parent, void *devdata, const struct backlight_ops *ops,
 	const struct backlight_properties *props)
 {
-	struct backlight_device *new_bd;
+	struct backlight_device *new_bd, *prev_bd;
+	const char *new_name = NULL;
 	int rc;
 
 	pr_debug("backlight_device_register: name=%s\n", name);
@@ -377,10 +378,23 @@ struct backlight_device *backlight_device_register(const char *name,
 	mutex_init(&new_bd->update_lock);
 	mutex_init(&new_bd->ops_lock);
 
+	/*
+	 * If there is an instance with the same name already, then rename it.
+	 * We also can use an auto-increment field, but it seems that there is
+	 * no triple or quad case.
+	 */
+	prev_bd = backlight_device_get_by_name(name);
+	if (!IS_ERR_OR_NULL(prev_bd)) {
+		new_name = kasprintf(GFP_KERNEL, "%s-secondary", name);
+		if (!new_name)
+			return ERR_PTR(-ENOMEM);
+		put_device(&prev_bd->dev);
+	}
+
 	new_bd->dev.class = &backlight_class;
 	new_bd->dev.parent = parent;
 	new_bd->dev.release = bl_device_release;
-	dev_set_name(&new_bd->dev, "%s", name);
+	dev_set_name(&new_bd->dev, "%s", new_name ? new_name : name);
 	dev_set_drvdata(&new_bd->dev, devdata);
 
 	/* Set default properties */
@@ -413,6 +427,8 @@ struct backlight_device *backlight_device_register(const char *name,
 	mutex_lock(&backlight_dev_list_mutex);
 	list_add(&new_bd->entry, &backlight_dev_list);
 	mutex_unlock(&backlight_dev_list_mutex);
+
+	kfree(new_name);
 
 	return new_bd;
 }
