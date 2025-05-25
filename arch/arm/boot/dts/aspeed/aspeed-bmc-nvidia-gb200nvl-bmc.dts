@@ -421,7 +421,8 @@
 
 // I2C4
 &i2c3 {
-	status = "disabled";
+	status = "okay";
+	vcc-supply = <&standby_power_regulator>;
 };
 
 // I2C5
