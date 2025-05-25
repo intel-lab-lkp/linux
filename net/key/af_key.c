@@ -3474,15 +3474,17 @@ static int set_sadb_address(struct sk_buff *skb, int sasize, int type,
 	switch (type) {
 	case SADB_EXT_ADDRESS_SRC:
 		addr->sadb_address_prefixlen = sel->prefixlen_s;
-		pfkey_sockaddr_fill(&sel->saddr, 0,
-				    (struct sockaddr *)(addr + 1),
-				    sel->family);
+		if (!pfkey_sockaddr_fill(&sel->saddr, 0,
+					 (struct sockaddr *)(addr + 1),
+					 sel->family))
+			return -EINVAL;
 		break;
 	case SADB_EXT_ADDRESS_DST:
 		addr->sadb_address_prefixlen = sel->prefixlen_d;
-		pfkey_sockaddr_fill(&sel->daddr, 0,
-				    (struct sockaddr *)(addr + 1),
-				    sel->family);
+		if (!pfkey_sockaddr_fill(&sel->daddr, 0,
+					 (struct sockaddr *)(addr + 1),
+					 sel->family))
+			return -EINVAL;
 		break;
 	default:
 		return -EINVAL;
