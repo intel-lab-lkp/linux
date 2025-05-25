@@ -388,7 +388,6 @@ struct backlight_device *backlight_device_register(const char *name,
 		new_name = kasprintf(GFP_KERNEL, "%s-secondary", name);
 		if (!new_name)
 			return ERR_PTR(-ENOMEM);
-		put_device(&prev_bd->dev);
 	}
 
 	new_bd->dev.class = &backlight_class;
@@ -427,6 +426,14 @@ struct backlight_device *backlight_device_register(const char *name,
 	mutex_lock(&backlight_dev_list_mutex);
 	list_add(&new_bd->entry, &backlight_dev_list);
 	mutex_unlock(&backlight_dev_list_mutex);
+
+	/* set them until the secondary device is available */
+	if (prev_bd) {
+		prev_bd->secondary = new_bd;
+		new_bd->primary = prev_bd;
+		new_bd->is_secondary = true;
+		put_device(&prev_bd->dev);
+	}
 
 	kfree(new_name);
 

@@ -291,13 +291,42 @@ struct backlight_device {
 	 * @use_count: The number of unblanked displays.
 	 */
 	int use_count;
+
+	/**
+	 * @is_secondary: Indicates whether this backlight device is secondary.
+	 */
+	bool is_secondary;
+
+	/**
+	 * @secondary: Pointer to the secondary backlight device.
+	 */
+	struct backlight_device *secondary;
+
+	/**
+	 * @primary: Pointer to the primary backlight device.
+	 *
+	 * Non-NULL only for secondary devices.
+	 */
+	struct backlight_device *primary;
 };
 
+static inline struct backlight_device *
+to_primary_backlight_device(struct backlight_device *bd)
+{
+	return bd->is_secondary ? bd->primary : bd;
+}
+
+static inline struct backlight_device *
+to_secondary_backlight_device(struct backlight_device *bd)
+{
+	return bd->is_secondary ? bd : bd->secondary;
+}
+
 /**
- * backlight_update_status - force an update of the backlight device status
+ * backlight_update_status_single - force an update of the backlight device status
  * @bd: the backlight device
  */
-static inline int backlight_update_status(struct backlight_device *bd)
+static inline int backlight_update_status_single(struct backlight_device *bd)
 {
 	int ret = -ENOENT;
 
@@ -307,6 +336,23 @@ static inline int backlight_update_status(struct backlight_device *bd)
 	mutex_unlock(&bd->update_lock);
 
 	return ret;
+}
+
+/**
+ * backlight_update_status - update primary and secondary backlight devices
+ * @bd: the backlight device
+ */
+static inline int backlight_update_status(struct backlight_device *bd)
+{
+	struct backlight_device *primary = to_primary_backlight_device(bd);
+	struct backlight_device *secondary = to_secondary_backlight_device(bd);
+	int ret;
+
+	ret = backlight_update_status_single(primary);
+	if (!secondary || ret)
+		return ret;
+
+	return backlight_update_status_single(secondary);
 }
 
 /**
