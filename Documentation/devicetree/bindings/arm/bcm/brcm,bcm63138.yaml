@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/bcm/brcm,bcm63138.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM63138 DSL SoC
+
+maintainers:
+  - Shankari Anand <shankari.ak0208@gmail.com>
+
+description: |
+  The Broadcom BCM63138 DSL System-on-a-Chip is designed for DSL platforms.
+  It supports multi-core ARM Cortex-A9 CPUs, a boot lookup table (BootLUT),
+  and software-controlled resets using a system timer.
+
+select:
+  properties:
+    compatible:
+      contains:
+        const: brcm,bcm63138
+  required:
+    - compatible
+
+properties:
+  compatible:
+    const: brcm,bcm63138
+
+patternProperties:
+  "^bootlut(@[0-9a-f]+)?$":
+    type: object
+    properties:
+      compatible:
+        const: brcm,bcm63138-bootlut
+
+      reg:
+        maxItems: 1
+
+    required:
+      - compatible
+      - reg
+
+additionalProperties: true
