@@ -74,7 +74,7 @@
 #define SOR_CAP 0x14
 
 #define SOR_PWR 0x15
-#define  SOR_PWR_TRIGGER			(1 << 31)
+#define  SOR_PWR_TRIGGER			BIT(31)
 #define  SOR_PWR_MODE_SAFE			(1 << 28)
 #define  SOR_PWR_NORMAL_STATE_PU		(1 << 0)
 
@@ -154,7 +154,7 @@
 #define  SOR_SEQ_CTL_PU_PC(x)		(((x) & 0xf) <<  0)
 
 #define SOR_LANE_SEQ_CTL 0x21
-#define  SOR_LANE_SEQ_CTL_TRIGGER		(1 << 31)
+#define  SOR_LANE_SEQ_CTL_TRIGGER		BIT(31)
 #define  SOR_LANE_SEQ_CTL_STATE_BUSY		(1 << 28)
 #define  SOR_LANE_SEQ_CTL_SEQUENCE_UP		(0 << 20)
 #define  SOR_LANE_SEQ_CTL_SEQUENCE_DOWN		(1 << 20)
@@ -163,7 +163,7 @@
 #define  SOR_LANE_SEQ_CTL_DELAY(x)		(((x) & 0xf) << 12)
 
 #define SOR_SEQ_INST(x) (0x22 + (x))
-#define  SOR_SEQ_INST_PLL_PULLDOWN (1 << 31)
+#define  SOR_SEQ_INST_PLL_PULLDOWN BIT(31)
 #define  SOR_SEQ_INST_POWERDOWN_MACRO (1 << 30)
 #define  SOR_SEQ_INST_ASSERT_PLL_RESET (1 << 29)
 #define  SOR_SEQ_INST_BLANK_V (1 << 28)
@@ -192,7 +192,7 @@
 #define  SOR_PWM_DIV_MASK			0xffffff
 
 #define SOR_PWM_CTL 0x33
-#define  SOR_PWM_CTL_TRIGGER			(1 << 31)
+#define  SOR_PWM_CTL_TRIGGER			BIT(31)
 #define  SOR_PWM_CTL_CLK_SEL			(1 << 30)
 #define  SOR_PWM_CTL_DUTY_CYCLE_MASK		0xffffff
 
@@ -261,7 +261,7 @@
 #define  SOR_LANE_POSTCURSOR_LANE0(x) (((x) & 0xff) << 0)
 
 #define SOR_DP_CONFIG0 0x58
-#define SOR_DP_CONFIG_DISPARITY_NEGATIVE	(1 << 31)
+#define SOR_DP_CONFIG_DISPARITY_NEGATIVE	BIT(31)
 #define SOR_DP_CONFIG_ACTIVE_SYM_ENABLE		(1 << 26)
 #define SOR_DP_CONFIG_ACTIVE_SYM_POLARITY	(1 << 24)
 #define SOR_DP_CONFIG_ACTIVE_SYM_FRAC_MASK	(0xf << 16)
@@ -370,7 +370,7 @@
 #define  SOR_HDMI_ACR_SUBPACK_LOW_SB1(x) (((x) & 0xff) << 24)
 
 #define SOR_HDMI_ACR_0320_SUBPACK_HIGH 0xb3
-#define  SOR_HDMI_ACR_SUBPACK_HIGH_ENABLE (1 << 31)
+#define  SOR_HDMI_ACR_SUBPACK_HIGH_ENABLE BIT(31)
 
 #define SOR_HDMI_ACR_0441_SUBPACK_LOW 0xb4
 #define SOR_HDMI_ACR_0441_SUBPACK_HIGH 0xb5
@@ -382,7 +382,7 @@
 #define  SOR_HDMI_CTRL_REKEY(x) (((x) & 0x7f) << 0)
 
 #define SOR_HDMI_SPARE 0xcb
-#define  SOR_HDMI_SPARE_ACR_PRIORITY_HIGH (1 << 31)
+#define  SOR_HDMI_SPARE_ACR_PRIORITY_HIGH BIT(31)
 #define  SOR_HDMI_SPARE_CTS_RESET(x) (((x) & 0x7) << 16)
 #define  SOR_HDMI_SPARE_HW_CTS_ENABLE (1 << 0)
 

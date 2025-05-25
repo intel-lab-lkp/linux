@@ -2172,7 +2172,7 @@ static void tegra_crtc_atomic_enable(struct drm_crtc *crtc,
 		u32 syncpt = host1x_syncpt_id(dc->syncpt), enable;
 
 		if (dc->soc->has_nvdisplay)
-			enable = 1 << 31;
+			enable = BIT(31);
 		else
 			enable = 1 << 8;
 

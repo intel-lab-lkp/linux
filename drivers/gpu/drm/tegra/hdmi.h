@@ -119,7 +119,7 @@
 
 #define ACR_SUBPACK_CTS(x) (((x) & 0xffffff) << 8)
 #define ACR_SUBPACK_N(x)   (((x) & 0xffffff) << 0)
-#define ACR_ENABLE         (1 << 31)
+#define ACR_ENABLE         BIT(31)
 
 #define HDMI_NV_PDISP_HDMI_CTRL					0x44
 #define HDMI_CTRL_REKEY(x)         (((x) & 0x7f) <<  0)
@@ -130,7 +130,7 @@
 #define HDMI_NV_PDISP_HDMI_VSYNC_WINDOW				0x46
 #define VSYNC_WINDOW_END(x)   (((x) & 0x3ff) <<  0)
 #define VSYNC_WINDOW_START(x) (((x) & 0x3ff) << 16)
-#define VSYNC_WINDOW_ENABLE   (1 << 31)
+#define VSYNC_WINDOW_ENABLE   BIT(31)
 
 #define HDMI_NV_PDISP_HDMI_GCP_CTRL				0x47
 #define HDMI_NV_PDISP_HDMI_GCP_STATUS				0x48
@@ -158,8 +158,8 @@
 #define SOR_PWR_SAFE_STATE_PD       (0 << 16)
 #define SOR_PWR_SAFE_STATE_PU       (1 << 16)
 #define SOR_PWR_SETTING_NEW_DONE    (0 << 31)
-#define SOR_PWR_SETTING_NEW_PENDING (1 << 31)
-#define SOR_PWR_SETTING_NEW_TRIGGER (1 << 31)
+#define SOR_PWR_SETTING_NEW_PENDING BIT(31)
+#define SOR_PWR_SETTING_NEW_TRIGGER BIT(31)
 
 #define HDMI_NV_PDISP_SOR_TEST					0x56
 #define HDMI_NV_PDISP_SOR_PLL0					0x57
