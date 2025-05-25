@@ -126,6 +126,12 @@
 #define XAXIDMA_DFT_TX_USEC		50
 #define XAXIDMA_DFT_RX_USEC		16
 
+/* Default TX/RX Threshold and delay timer values for SGDMA mode with DMAEngine */
+#define XAXIDMAENGINE_DFT_TX_THRESHOLD	16
+#define XAXIDMAENGINE_DFT_TX_USEC	5
+#define XAXIDMAENGINE_DFT_RX_THRESHOLD	24
+#define XAXIDMAENGINE_DFT_RX_USEC	16
+
 #define XAXIDMA_BD_CTRL_TXSOF_MASK	0x08000000 /* First tx packet */
 #define XAXIDMA_BD_CTRL_TXEOF_MASK	0x04000000 /* Last tx packet */
 #define XAXIDMA_BD_CTRL_ALL_MASK	0x0C000000 /* All control bits */

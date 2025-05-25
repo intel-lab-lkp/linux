@@ -1505,6 +1505,7 @@ static int axienet_init_dmaengine(struct net_device *ndev)
 {
 	struct axienet_local *lp = netdev_priv(ndev);
 	struct skbuf_dma_descriptor *skbuf_dma;
+	struct dma_slave_config tx_config, rx_config;
 	int i, ret;
 
 	lp->tx_chan = dma_request_chan(lp->dev, "tx_chan0");
@@ -1517,6 +1518,22 @@ static int axienet_init_dmaengine(struct net_device *ndev)
 	if (IS_ERR(lp->rx_chan)) {
 		ret = PTR_ERR(lp->rx_chan);
 		dev_err(lp->dev, "No Ethernet DMA (RX) channel found\n");
+		goto err_dma_release_tx;
+	}
+
+	tx_config.coalesce_cnt = XAXIDMAENGINE_DFT_TX_THRESHOLD;
+	tx_config.coalesce_usecs = XAXIDMAENGINE_DFT_TX_USEC;
+	rx_config.coalesce_cnt = XAXIDMAENGINE_DFT_RX_THRESHOLD;
+	rx_config.coalesce_usecs =  XAXIDMAENGINE_DFT_RX_USEC;
+
+	ret = dmaengine_slave_config(lp->tx_chan, &tx_config);
+	if (ret) {
+		dev_err(lp->dev, "Failed to configure Tx coalesce parameters\n");
+		goto err_dma_release_tx;
+	}
+	ret = dmaengine_slave_config(lp->rx_chan, &rx_config);
+	if (ret) {
+		dev_err(lp->dev, "Failed to configure Rx coalesce parameters\n");
 		goto err_dma_release_tx;
 	}
 
@@ -2170,6 +2187,19 @@ axienet_ethtools_get_coalesce(struct net_device *ndev,
 	struct axienet_local *lp = netdev_priv(ndev);
 	u32 cr;
 
+	if (lp->use_dmaengine) {
+		struct dma_slave_caps tx_caps, rx_caps;
+
+		dma_get_slave_caps(lp->tx_chan, &tx_caps);
+		dma_get_slave_caps(lp->rx_chan, &rx_caps);
+
+		ecoalesce->tx_max_coalesced_frames = tx_caps.coalesce_cnt;
+		ecoalesce->tx_coalesce_usecs = tx_caps.coalesce_usecs;
+		ecoalesce->rx_max_coalesced_frames = rx_caps.coalesce_cnt;
+		ecoalesce->rx_coalesce_usecs = rx_caps.coalesce_usecs;
+		return 0;
+	}
+
 	ecoalesce->use_adaptive_rx_coalesce = lp->rx_dim_enabled;
 
 	spin_lock_irq(&lp->rx_cr_lock);
@@ -2231,6 +2261,29 @@ axienet_ethtools_set_coalesce(struct net_device *ndev,
 		NL_SET_ERR_MSG(extack,
 			       "usecs must be non-zero when frames is greater than one");
 		return -EINVAL;
+	}
+
+	if (lp->use_dmaengine)	{
+		struct dma_slave_config tx_cfg, rx_cfg;
+		int ret;
+
+		tx_cfg.coalesce_cnt = ecoalesce->tx_max_coalesced_frames;
+		tx_cfg.coalesce_usecs = ecoalesce->tx_coalesce_usecs;
+		rx_cfg.coalesce_cnt = ecoalesce->rx_max_coalesced_frames;
+		rx_cfg.coalesce_usecs = ecoalesce->rx_coalesce_usecs;
+
+		ret = dmaengine_slave_config(lp->tx_chan, &tx_cfg);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "failed to set tx coalesce parameters");
+			return ret;
+		}
+
+		ret = dmaengine_slave_config(lp->rx_chan, &rx_cfg);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "failed to set rx coalesce parameters");
+			return ret;
+		}
+		return 0;
 	}
 
 	if (new_dim && !old_dim) {
