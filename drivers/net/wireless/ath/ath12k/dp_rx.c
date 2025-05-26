@@ -2826,6 +2826,9 @@ int ath12k_dp_rx_process(struct ath12k_base *ab, int ring_id,
 try_again:
 	ath12k_hal_srng_access_begin(ab, srng);
 
+	/* Make sure descriptor is read after the head pointer. */
+	dma_rmb();
+
 	while ((desc = ath12k_hal_srng_dst_get_next_entry(ab, srng))) {
 		struct rx_mpdu_desc *mpdu_info;
 		struct rx_msdu_desc *msdu_info;
@@ -3686,6 +3689,9 @@ int ath12k_dp_rx_process_err(struct ath12k_base *ab, struct napi_struct *napi,
 
 	ath12k_hal_srng_access_begin(ab, srng);
 
+	/* Make sure descriptor is read after the head pointer. */
+	dma_rmb();
+
 	while (budget &&
 	       (reo_desc = ath12k_hal_srng_dst_get_next_entry(ab, srng))) {
 		drop = false;
@@ -4045,6 +4051,9 @@ int ath12k_dp_rx_process_wbm_err(struct ath12k_base *ab,
 
 	ath12k_hal_srng_access_begin(ab, srng);
 
+	/* Make sure descriptor is read after the head pointer. */
+	dma_rmb();
+
 	while (budget) {
 		rx_desc = ath12k_hal_srng_dst_get_next_entry(ab, srng);
 		if (!rx_desc)
@@ -4231,6 +4240,9 @@ void ath12k_dp_rx_process_reo_status(struct ath12k_base *ab)
 	spin_lock_bh(&srng->lock);
 
 	ath12k_hal_srng_access_begin(ab, srng);
+
+	/* Make sure descriptor is read after the head pointer. */
+	dma_rmb();
 
 	while ((hdr = ath12k_hal_srng_dst_get_next_entry(ab, srng))) {
 		tag = le64_get_bits(hdr->tl, HAL_SRNG_TLV_HDR_TAG);
