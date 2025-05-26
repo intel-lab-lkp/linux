@@ -87,7 +87,7 @@ modules to access this symbol. Simple tail-globs are supported.
 
 For example:
 
-  EXPORT_SYMBOL_GPL_FOR_MODULES(preempt_notifier_inc, "kvm,kvm-*")
+  EXPORT_SYMBOL_GPL_FOR_MODULES(preempt_notifier_inc, "kvm,kvm-\*")
 
 will limit usage of this symbol to modules whoes name matches the given
 patterns.
