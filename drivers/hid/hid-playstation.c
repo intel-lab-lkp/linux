@@ -178,6 +178,7 @@ struct dualsense {
 	struct input_dev *gamepad;
 	struct input_dev *sensors;
 	struct input_dev *touchpad;
+	struct input_dev *jack;
 
 	/* Update version is used as a feature/capability version. */
 	u16 update_version;
@@ -958,6 +959,25 @@ static struct input_dev *ps_touchpad_create(struct hid_device *hdev, int width,
 	return touchpad;
 }
 
+static struct input_dev *ps_headset_jack_create(struct hid_device *hdev)
+{
+	struct input_dev *jack;
+	int ret;
+
+	jack = ps_allocate_input_dev(hdev, "Headset Jack");
+	if (IS_ERR(jack))
+		return ERR_CAST(jack);
+
+	input_set_capability(jack, EV_SW, SW_HEADPHONE_INSERT);
+	input_set_capability(jack, EV_SW, SW_MICROPHONE_INSERT);
+
+	ret = input_register_device(jack);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return jack;
+}
+
 static ssize_t firmware_version_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -1360,8 +1380,15 @@ static void dualsense_output_worker(struct work_struct *work)
 				common->audio_flags2 =
 					FIELD_PREP(DS_OUTPUT_AUDIO_FLAGS2_SP_PREAMP_GAIN, 0x2);
 			}
+
+			input_report_switch(ds->jack, SW_HEADPHONE_INSERT, val);
 		}
 
+		val = ds->plugged_state & DS_STATUS_PLUGGED_MIC;
+		if (val != (ds->prev_plugged_state & DS_STATUS_PLUGGED_MIC))
+			input_report_switch(ds->jack, SW_MICROPHONE_INSERT, val);
+
+		input_sync(ds->jack);
 		ds->prev_plugged_state = ds->plugged_state;
 	}
 
@@ -1772,6 +1799,12 @@ static struct ps_device *dualsense_create(struct hid_device *hdev)
 	ds->touchpad = ps_touchpad_create(hdev, DS_TOUCHPAD_WIDTH, DS_TOUCHPAD_HEIGHT, 2);
 	if (IS_ERR(ds->touchpad)) {
 		ret = PTR_ERR(ds->touchpad);
+		goto err;
+	}
+
+	ds->jack = ps_headset_jack_create(hdev);
+	if (IS_ERR(ds->jack)) {
+		ret = PTR_ERR(ds->jack);
 		goto err;
 	}
 
