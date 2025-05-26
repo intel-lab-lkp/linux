@@ -2,6 +2,7 @@
 /*
  * Supplementary group IDs
  */
+#include <linux/bsearch.h>
 #include <linux/cred.h>
 #include <linux/export.h>
 #include <linux/slab.h>
@@ -91,23 +92,13 @@ EXPORT_SYMBOL(groups_sort);
 /* a simple bsearch */
 int groups_search(const struct group_info *group_info, kgid_t grp)
 {
-	unsigned int left, right;
+	void *result;
 
 	if (!group_info)
 		return 0;
-
-	left = 0;
-	right = group_info->ngroups;
-	while (left < right) {
-		unsigned int mid = (left+right)/2;
-		if (gid_gt(grp, group_info->gid[mid]))
-			left = mid + 1;
-		else if (gid_lt(grp, group_info->gid[mid]))
-			right = mid;
-		else
-			return 1;
-	}
-	return 0;
+	result = bsearch(&grp, group_info->gid, group_info->ngroups,
+			 sizeof(*group_info->gid), gid_cmp);
+	return !!result;
 }
 
 /**
