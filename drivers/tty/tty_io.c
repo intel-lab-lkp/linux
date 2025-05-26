@@ -3232,6 +3232,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	struct ktermios *tp;
 	struct device *dev;
 	int retval;
+	bool cdev_added = false;
 
 	if (index >= driver->num) {
 		pr_err("%s: Attempt to register invalid tty line number (%d)\n",
@@ -3244,23 +3245,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	else
 		tty_line_name(driver, index, name);
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev)
-		return ERR_PTR(-ENOMEM);
-
-	dev->devt = devt;
-	dev->class = &tty_class;
-	dev->parent = device;
-	dev->release = tty_device_create_release;
-	dev_set_name(dev, "%s", name);
-	dev->groups = attr_grp;
-	dev_set_drvdata(dev, drvdata);
-
-	dev_set_uevent_suppress(dev, 1);
-
-	retval = device_register(dev);
-	if (retval)
-		goto err_put;
+	mutex_lock(&tty_mutex);
 
 	if (!(driver->flags & TTY_DRIVER_DYNAMIC_ALLOC)) {
 		/*
@@ -3275,18 +3260,48 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 
 		retval = tty_cdev_add(driver, devt, index, 1);
 		if (retval)
-			goto err_del;
+			goto err_unlock;
+
+		cdev_added = true;
 	}
 
-	dev_set_uevent_suppress(dev, 0);
-	kobject_uevent(&dev->kobj, KOBJ_ADD);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev) {
+		retval = -ENOMEM;
+		goto err_del_cdev;
+	}
+
+	dev->devt = devt;
+	dev->class = &tty_class;
+	dev->parent = device;
+	dev->release = tty_device_create_release;
+	dev_set_name(dev, "%s", name);
+	dev->groups = attr_grp;
+	dev_set_drvdata(dev, drvdata);
+
+	retval = device_register(dev);
+	if (retval)
+		goto err_put;
+
+	mutex_unlock(&tty_mutex);
 
 	return dev;
 
-err_del:
-	device_del(dev);
 err_put:
+	/*
+	 * device_register() calls device_add(), after which
+	 * we must use put_device() instead of kfree().
+	 */
 	put_device(dev);
+
+err_del_cdev:
+	if (cdev_added) {
+		cdev_del(driver->cdevs[index]);
+		driver->cdevs[index] = NULL;
+	}
+
+err_unlock:
+	mutex_unlock(&tty_mutex);
 
 	return ERR_PTR(retval);
 }
