@@ -1312,8 +1312,15 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	 * Clear battery interrupt flags which can block new trigger events.
 	 * Note: This is the default chip behaviour but added to ensure
 	 * correct tamper timestamp and interrupt function.
+	 *
+	 * Power management functions set to:
+	 * - battery switch-over function is enabled in standard mode;
+	 * - battery low detection function is enabled;
+	 * - extra power fail detection function is enabled.
+	 * Note: This is the default configuration except for pcf2131.
 	 */
 	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 PCF2127_CTRL3_PM |
 				 PCF2127_BIT_CTRL3_BTSE |
 				 PCF2127_BIT_CTRL3_BIE |
 				 PCF2127_BIT_CTRL3_BLIE, 0);
