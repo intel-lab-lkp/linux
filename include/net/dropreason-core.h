@@ -118,6 +118,8 @@
 	FN(TUNNEL_TXINFO)		\
 	FN(LOCAL_MAC)			\
 	FN(ARP_PVLAN_DISABLE)		\
+	FN(ARP_HLEN_MISMATCH)		\
+	FN(ARP_PLEN_INVALID)		\
 	FN(MAC_IEEE_MAC_CONTROL)	\
 	FN(BRIDGE_INGRESS_STP_STATE)	\
 	FNe(MAX)
@@ -560,6 +562,16 @@ enum skb_drop_reason {
 	 * enabled.
 	 */
 	SKB_DROP_REASON_ARP_PVLAN_DISABLE,
+	/**
+	 * @SKB_DROP_REASON_ARP_HLEN_MISMATCH: ARP header hardware address
+	 * length mismatch.
+	 */
+	SKB_DROP_REASON_ARP_HLEN_MISMATCH,
+	/**
+	 * @SKB_DROP_REASON_ARP_PLEN_INVALID: ARP header protocol address
+	 * length is invalid.
+	 */
+	SKB_DROP_REASON_ARP_PLEN_INVALID,
 	/**
 	 * @SKB_DROP_REASON_MAC_IEEE_MAC_CONTROL: the destination MAC address
 	 * is an IEEE MAC Control address.
