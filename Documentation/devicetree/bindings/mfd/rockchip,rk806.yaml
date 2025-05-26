@@ -31,6 +31,30 @@ properties:
 
   system-power-controller: true
 
+  rockchip,rst-fun:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2, 3]
+    description:
+      RST_FUN value to set for the PMIC.
+
+      This is the value in the RST_FUN bitfield according to the
+      datasheet. I.e. if RST_FUN is bits 6 and 7 and the desired value
+      of RST_FUN is 1, this property needs to be set to 1 (and not 64,
+      0x40, or BIT(6)).
+
+      The meaning of this value is specific to the PMIC and is
+      explained in the datasheet.
+
+      For RK806, the following applies
+
+      0b00 means "restart PMU"
+      0b01 means "Reset all the power off reset registers, forcing
+                  the state to switch to ACTIVE mode"
+      0b10 means "Reset all the power off reset registers, forcing
+                  the state to switch to ACTIVE mode, and simultaneously
+                  pull down the RESETB PIN for 5mS before releasing"
+      0b11 means the same as for 0b10 just above.
+
   vcc1-supply:
     description:
       The input supply for dcdc-reg1.
