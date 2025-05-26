@@ -381,6 +381,10 @@ struct media_v2_topology {
  */
 #define MEDIA_REQUEST_IOC_QUEUE		_IO('|',  0x80)
 #define MEDIA_REQUEST_IOC_REINIT	_IO('|',  0x81)
+/*
+ * Don't allocate new IOCTL numbers past 0x8f, MC IOCTL number assignment ends
+ * there!
+ */
 
 #ifndef __KERNEL__
 
