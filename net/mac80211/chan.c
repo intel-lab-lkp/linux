@@ -1510,6 +1510,10 @@ static int ieee80211_chsw_switch_vifs(struct ieee80211_local *local,
 				continue;
 
 			old_ctx = ieee80211_link_get_chanctx(link);
+			if (WARN_ON(!old_ctx)) {
+				err = -EINVAL;
+				goto out;
+			}
 			vif_chsw[i].vif = &link->sdata->vif;
 			vif_chsw[i].old_ctx = &old_ctx->conf;
 			vif_chsw[i].new_ctx = &ctx->conf;
