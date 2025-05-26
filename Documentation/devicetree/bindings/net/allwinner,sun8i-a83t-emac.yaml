@@ -18,6 +18,7 @@ properties:
       - const: allwinner,sun8i-r40-gmac
       - const: allwinner,sun8i-v3s-emac
       - const: allwinner,sun50i-a64-emac
+      - const: allwinner,sun50i-h616-emac1
       - items:
           - enum:
               - allwinner,sun20i-d1-emac
@@ -27,6 +28,14 @@ properties:
 
   reg:
     maxItems: 1
+
+  nvmem-cells:
+    maxItems: 1
+    description: NVMEM cell with the ac300 efuse.
+
+  nvmem-cell-names:
+    items:
+      - const: ac300
 
   interrupts:
     maxItems: 1
@@ -317,6 +326,39 @@ examples:
 
             ext_rgmii_phy1: ethernet-phy@1 {
                 reg = <1>;
+            };
+        };
+    };
+
+  - |
+    ethernet@5030000 {
+        compatible = "allwinner,sun50i-h616-emac1";
+        reg = <0x05030000 0x10000>;
+        interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-names = "macirq";
+        resets = <&ccu RST_BUS_EMAC1>;
+        reset-names = "stmmaceth";
+        clocks = <&ccu CLK_BUS_EMAC1>;
+        clock-names = "stmmaceth";
+        phys = <&ac200_rmii_phy>, <&ac300_rmii_phy>;
+        phy-names = "ac200", "ac300";
+        phy-mode = "rgmii";
+        nvmem-cells = <&ephy_acx00>;
+        nvmem-cell-names = "ac300";
+
+        mdio {
+            compatible = "snps,dwmac-mdio";
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            ac300_rmii_phy: ac300-ethernet-phy@0 {
+              compatible = "ethernet-phy-ieee802.3-c22";
+              reg = <0>;
+            };
+
+            ac200_rmii_phy: ac200-ethernet-phy@1 {
+              compatible = "ethernet-phy-ieee802.3-c22";
+              reg = <1>;
             };
         };
     };
