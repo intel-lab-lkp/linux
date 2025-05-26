@@ -21,6 +21,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
 
 static const struct bus_type node_subsys = {
 	.name = "node",
@@ -859,6 +860,47 @@ void unregister_memory_block_under_nodes(struct memory_block *mem_blk)
 			  kobject_name(&node_devices[mem_blk->nid]->dev.kobj));
 }
 
+/*
+ * register_memory_blocks_under_nodes : Register the memory blocks
+ *                 under the nodes.
+ *
+ * This function registers all memory blocks to their corresponding nodes
+ * based on the associated memory regions. Each memory region is tied to
+ * a specific node and does not span multiple nodes. Therefore, all memory
+ * blocks within a given region are considered to belong to that node. The
+ * function iterates through each memory region and registers the memory
+ * blocks contained within that region to the respective node. Since memory
+ * blocks can span across multiple regions (and hence multiple nodes), a
+ * single memory block may be registered under more than one node if it
+ * overlaps with regions belonging to different nodes.
+ */
+static void register_memory_blocks_under_nodes(void)
+{
+	struct memblock_region *r;
+
+	for_each_mem_region(r) {
+		const unsigned long start_block_id = phys_to_block_id(r->base);
+		const unsigned long end_block_id = phys_to_block_id(r->base + r->size - 1);
+		unsigned long block_id;
+		int nid = memblock_get_region_node(r);
+
+		if (!node_online(nid))
+			continue;
+
+		for (block_id = start_block_id; block_id <= end_block_id; block_id++) {
+			struct memory_block *mem;
+
+			mem = find_memory_block_by_id(block_id);
+			if (!mem)
+				continue;
+
+			do_register_memory_block_under_node(nid, mem, MEMINIT_EARLY);
+			put_device(&mem->dev);
+		}
+
+	}
+}
+
 void register_memory_blocks_under_node(int nid, unsigned long start_pfn,
 				       unsigned long end_pfn,
 				       enum meminit_context context)
@@ -980,11 +1022,16 @@ void __init node_dev_init(void)
 
 	/*
 	 * Create all node devices, which will properly link the node
-	 * to applicable memory block devices and already created cpu devices.
+	 * to already created cpu devices.
 	 */
 	for_each_online_node(i) {
-		ret = register_one_node(i);
+		ret =  __register_one_node(i);
 		if (ret)
 			panic("%s() failed to add node: %d\n", __func__, ret);
 	}
+
+	/*
+	 * Link the node to memory block devices
+	 */
+	register_memory_blocks_under_nodes();
 }
