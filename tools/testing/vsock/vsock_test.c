@@ -1058,17 +1058,22 @@ static void sigpipe(int signo)
 	have_sigpipe = 1;
 }
 
+static void test_for_send_failure(int fd, int send_flags)
+{
+	timeout_begin(TIMEOUT);
+	while (true) {
+		if (send(fd, "A", 1, send_flags) == -1)
+			return;
+		timeout_check("expected send(2) failure");
+	}
+	timeout_end();
+}
+
 static void test_stream_check_sigpipe(int fd)
 {
-	ssize_t res;
-
 	have_sigpipe = 0;
 
-	res = send(fd, "A", 1, 0);
-	if (res != -1) {
-		fprintf(stderr, "expected send(2) failure, got %zi\n", res);
-		exit(EXIT_FAILURE);
-	}
+	test_for_send_failure(fd, 0);
 
 	if (!have_sigpipe) {
 		fprintf(stderr, "SIGPIPE expected\n");
@@ -1077,11 +1082,7 @@ static void test_stream_check_sigpipe(int fd)
 
 	have_sigpipe = 0;
 
-	res = send(fd, "A", 1, MSG_NOSIGNAL);
-	if (res != -1) {
-		fprintf(stderr, "expected send(2) failure, got %zi\n", res);
-		exit(EXIT_FAILURE);
-	}
+	test_for_send_failure(fd, MSG_NOSIGNAL);
 
 	if (have_sigpipe) {
 		fprintf(stderr, "SIGPIPE not expected\n");
