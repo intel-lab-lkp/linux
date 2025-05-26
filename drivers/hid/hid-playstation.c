@@ -117,6 +117,12 @@ struct ps_led_info {
 #define DS_STATUS_BATTERY_CHARGING		GENMASK(7, 4)
 #define DS_STATUS_BATTERY_CHARGING_SHIFT	4
 
+/* Plugged status field of DualSense input report. */
+#define DS_STATUS_PLUGGED_HEADPHONES		BIT(0)
+#define DS_STATUS_PLUGGED_MIC			BIT(1)
+#define DS_STATUS_PLUGGED_JACK			(DS_STATUS_PLUGGED_HEADPHONES | \
+						 DS_STATUS_PLUGGED_MIC)
+
 /* Feature version from DualSense Firmware Info report. */
 #define DS_FEATURE_VERSION_MINOR		GENMASK(7, 0)
 #define DS_FEATURE_VERSION_MAJOR		GENMASK(15, 8)
@@ -144,13 +150,18 @@ struct ps_led_info {
 /* Flags for DualSense output report. */
 #define DS_OUTPUT_VALID_FLAG0_COMPATIBLE_VIBRATION		BIT(0)
 #define DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT			BIT(1)
+#define DS_OUTPUT_VALID_FLAG0_SPEAKER_VOLUME_ENABLE		BIT(5)
+#define DS_OUTPUT_VALID_FLAG0_AUDIO_CONTROL_ENABLE		BIT(7)
 #define DS_OUTPUT_VALID_FLAG1_MIC_MUTE_LED_CONTROL_ENABLE	BIT(0)
 #define DS_OUTPUT_VALID_FLAG1_POWER_SAVE_CONTROL_ENABLE		BIT(1)
 #define DS_OUTPUT_VALID_FLAG1_LIGHTBAR_CONTROL_ENABLE		BIT(2)
 #define DS_OUTPUT_VALID_FLAG1_RELEASE_LEDS			BIT(3)
 #define DS_OUTPUT_VALID_FLAG1_PLAYER_INDICATOR_CONTROL_ENABLE	BIT(4)
+#define DS_OUTPUT_VALID_FLAG1_AUDIO_CONTROL2_ENABLE		BIT(7)
 #define DS_OUTPUT_VALID_FLAG2_LIGHTBAR_SETUP_CONTROL_ENABLE	BIT(1)
 #define DS_OUTPUT_VALID_FLAG2_COMPATIBLE_VIBRATION2		BIT(2)
+#define DS_OUTPUT_AUDIO_FLAGS_OUTPUT_PATH_SEL			GENMASK(5, 4)
+#define DS_OUTPUT_AUDIO_FLAGS2_SP_PREAMP_GAIN			GENMASK(2, 0)
 #define DS_OUTPUT_POWER_SAVE_CONTROL_MIC_MUTE			BIT(4)
 #define DS_OUTPUT_LIGHTBAR_SETUP_LIGHT_OUT			BIT(1)
 
@@ -192,6 +203,11 @@ struct dualsense {
 	u8 lightbar_red;
 	u8 lightbar_green;
 	u8 lightbar_blue;
+
+	/* Audio Jack plugged state */
+	u8 plugged_state;
+	u8 prev_plugged_state;
+	bool prev_plugged_state_valid;
 
 	/* Microphone */
 	bool update_mic_mute;
@@ -237,7 +253,8 @@ struct dualsense_input_report {
 
 	u8 reserved3[12];
 	u8 status_battery;
-	u8 reserved4[10];
+	u8 status_plugged;
+	u8 reserved4[9];
 } __packed;
 /* Common input report size shared equals the size of the USB report minus 1 byte for ReportID. */
 static_assert(sizeof(struct dualsense_input_report) == DS_INPUT_REPORT_USB_SIZE - 1);
@@ -252,11 +269,15 @@ struct dualsense_output_report_common {
 	u8 motor_left;
 
 	/* Audio controls */
-	u8 reserved[4];
+	u8 headphone_audio_volume;		/* 0-0x7f */
+	u8 speaker_audio_volume;		/* 0-0xff */
+	u8 internal_microphone_volume;	/* 0-0x40 */
+	u8 audio_flags;
 	u8 mute_button_led;
 
 	u8 power_save_control;
-	u8 reserved2[28];
+	u8 reserved2[27];
+	u8 audio_flags2;
 
 	/* LEDs and lightbar */
 	u8 valid_flag2;
@@ -1304,6 +1325,46 @@ static void dualsense_output_worker(struct work_struct *work)
 		ds->update_player_leds = false;
 	}
 
+	if (ds->plugged_state != ds->prev_plugged_state) {
+		u8 val = ds->plugged_state & DS_STATUS_PLUGGED_HEADPHONES;
+
+		if (val != (ds->prev_plugged_state & DS_STATUS_PLUGGED_HEADPHONES)) {
+			common->valid_flag0 = DS_OUTPUT_VALID_FLAG0_AUDIO_CONTROL_ENABLE;
+			/*
+			 *  _--------> Output path setup in audio_flag0
+			 * /  _------> Headphone (HP) Left channel sink
+			 * | /  _----> Headphone (HP) Right channel sink
+			 * | | /  _--> Internal Speaker (SP) sink
+			 * | | | /
+			 * | | | |     L/R - Left/Right channel source
+			 * 0 L-R X       X - Unrouted (muted) channel source
+			 * 1 L-L X
+			 * 2 L-L R
+			 * 3 X-X R
+			 */
+			if (val) {
+				/* Mute SP and route L+R channels to HP */
+				common->audio_flags = 0;
+			} else {
+				/* Mute HP and route R channel to SP */
+				common->audio_flags =
+					FIELD_PREP(DS_OUTPUT_AUDIO_FLAGS_OUTPUT_PATH_SEL, 0x3);
+				/*
+				 * Set SP hardware volume to 100%.
+				 * Note the accepted range seems to be [0x3d..0x64]
+				 */
+				common->valid_flag0 |= DS_OUTPUT_VALID_FLAG0_SPEAKER_VOLUME_ENABLE;
+				common->speaker_audio_volume = 0x64;
+				/* Set SP preamp gain to ~30% */
+				common->valid_flag1 = DS_OUTPUT_VALID_FLAG1_AUDIO_CONTROL2_ENABLE;
+				common->audio_flags2 =
+					FIELD_PREP(DS_OUTPUT_AUDIO_FLAGS2_SP_PREAMP_GAIN, 0x2);
+			}
+		}
+
+		ds->prev_plugged_state = ds->plugged_state;
+	}
+
 	if (ds->update_mic_mute) {
 		common->valid_flag1 |= DS_OUTPUT_VALID_FLAG1_MIC_MUTE_LED_CONTROL_ENABLE;
 		common->mute_button_led = ds->mic_muted;
@@ -1406,6 +1467,25 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 		dualsense_schedule_work(ds);
 	}
 	ds->last_btn_mic_state = btn_mic_state;
+
+	/* Parse HP/MIC plugged state data */
+	value = ds_report->status_plugged & DS_STATUS_PLUGGED_JACK;
+	if (!ds->prev_plugged_state_valid) {
+		/* Initial handling of the plugged state report */
+		scoped_guard(spinlock_irqsave, &ps_dev->lock) {
+			ds->plugged_state = (~value) & DS_STATUS_PLUGGED_JACK;
+			ds->prev_plugged_state_valid = true;
+		}
+	}
+	if (value != ds->plugged_state) {
+		scoped_guard(spinlock_irqsave, &ps_dev->lock) {
+			ds->prev_plugged_state = ds->plugged_state;
+			ds->plugged_state = value;
+		}
+
+		/* Schedule audio routing towards active endpoint. */
+		dualsense_schedule_work(ds);
+	}
 
 	/* Parse and calibrate gyroscope data. */
 	for (i = 0; i < ARRAY_SIZE(ds_report->gyro); i++) {
