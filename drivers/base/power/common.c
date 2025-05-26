@@ -116,6 +116,65 @@ int dev_pm_domain_attach(struct device *dev, bool power_on)
 EXPORT_SYMBOL_GPL(dev_pm_domain_attach);
 
 /**
+ * devm_pm_domain_detach_off - devres action for devm_pm_domain_attach() to
+ * detach a device and power it off.
+ * @dev: device to detach.
+ *
+ * This function reverse the actions from devm_pm_domain_attach().
+ * It will be invoked during the remove phase from drivers implicitly.
+ */
+static void devm_pm_domain_detach_off(void *dev)
+{
+	dev_pm_domain_detach(dev, true);
+}
+
+/**
+ * devm_pm_domain_detach_on - devres action for devm_pm_domain_attach() to
+ * detach a device and power it on.
+ * @dev: device to detach.
+ *
+ * This function reverse the actions from devm_pm_domain_attach().
+ * It will be invoked during the remove phase from drivers implicitly.
+ */
+static void devm_pm_domain_detach_on(void *dev)
+{
+	dev_pm_domain_detach(dev, false);
+}
+
+/**
+ * devm_pm_domain_attach - devres-enabled version of dev_pm_domain_attach()
+ * @dev: Device to attach.
+ * @attach_power_on: Use to indicate whether we should power on the device
+ *                   when attaching (true indicates the device is powered on
+ *                   when attaching).
+ * @detach_power_off: Used to indicate whether we should power off the device
+ *                    when detaching (true indicates the device is powered off
+ *                    when detaching).
+ *
+ * NOTE: this will also handle calling dev_pm_domain_detach() for
+ * you during remove phase.
+ *
+ * Returns 0 on successfully attached PM domain, or a negative error code in
+ * case of a failure.
+ */
+int devm_pm_domain_attach(struct device *dev, bool attach_power_on,
+			  bool detach_power_off)
+{
+	int ret;
+
+	ret = dev_pm_domain_attach(dev, attach_power_on);
+	if (ret)
+		return ret;
+
+	if (detach_power_off)
+		return devm_add_action_or_reset(dev, devm_pm_domain_detach_off,
+						dev);
+
+	return devm_add_action_or_reset(dev, devm_pm_domain_detach_on, dev);
+}
+EXPORT_SYMBOL_GPL(devm_pm_domain_attach);
+
+/**
  * dev_pm_domain_attach_by_id - Associate a device with one of its PM domains.
  * @dev: The device used to lookup the PM domain.
  * @index: The index of the PM domain.
