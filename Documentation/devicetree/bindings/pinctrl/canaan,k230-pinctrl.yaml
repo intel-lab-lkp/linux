@@ -22,7 +22,7 @@ properties:
     maxItems: 1
 
 patternProperties:
-  '-pins$':
+  '-cfg$':
     type: object
     additionalProperties: false
     description:
@@ -30,7 +30,7 @@ patternProperties:
       pinctrl groups available on the machine.
 
     patternProperties:
-      '-cfg$':
+      '-pins$':
         type: object
         allOf:
           - $ref: /schemas/pinctrl/pincfg-node.yaml
@@ -112,8 +112,8 @@ examples:
         compatible = "canaan,k230-pinctrl";
         reg = <0x91105000 0x100>;
 
-        uart2-pins {
-            uart2-pins-cfg {
+        uart2-cfg {
+            uart2-pins {
                 pinmux = <0x503>, /* uart2 txd */
                          <0x603>; /* uart2 rxd */
                 slew-rate = <0>;
