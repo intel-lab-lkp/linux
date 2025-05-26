@@ -6222,10 +6222,6 @@ vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 
 	filemap_invalidate_lock_shared(mapping);
 
-	err = ext4_convert_inline_data(inode);
-	if (err)
-		goto out_ret;
-
 	/*
 	 * On data journalling we skip straight to the transaction handle:
 	 * there's no delalloc; page truncated will be checked later; the
