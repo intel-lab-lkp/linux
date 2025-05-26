@@ -22,6 +22,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>
 #include <drm/drm_edid.h>
@@ -946,9 +947,10 @@ static int analogix_dp_disable_psr(struct analogix_dp_device *dp)
 	return analogix_dp_send_psr_spd(dp, &psr_vsc, true);
 }
 
-static int analogix_dp_get_modes(struct drm_connector *connector)
+static int analogix_dp_bridge_get_modes(struct drm_bridge *bridge,
+					struct drm_connector *connector)
 {
-	struct analogix_dp_device *dp = to_dp(connector);
+	struct analogix_dp_device *dp = to_dp(bridge);
 	const struct drm_edid *drm_edid;
 	int num_modes = 0;
 
@@ -957,10 +959,10 @@ static int analogix_dp_get_modes(struct drm_connector *connector)
 	} else {
 		drm_edid = drm_edid_read_ddc(connector, &dp->aux.ddc);
 
-		drm_edid_connector_update(&dp->connector, drm_edid);
+		drm_edid_connector_update(connector, drm_edid);
 
 		if (drm_edid) {
-			num_modes += drm_edid_connector_add_modes(&dp->connector);
+			num_modes += drm_edid_connector_add_modes(connector);
 			drm_edid_free(drm_edid);
 		}
 	}
@@ -971,34 +973,14 @@ static int analogix_dp_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
-static struct drm_encoder *
-analogix_dp_best_encoder(struct drm_connector *connector)
+static int analogix_dp_bridge_atomic_check(struct drm_bridge *bridge,
+					   struct drm_bridge_state *bridge_state,
+					   struct drm_crtc_state *crtc_state,
+					   struct drm_connector_state *conn_state)
 {
-	struct analogix_dp_device *dp = to_dp(connector);
-
-	return dp->encoder;
-}
-
-
-static int analogix_dp_atomic_check(struct drm_connector *connector,
-				    struct drm_atomic_state *state)
-{
-	struct analogix_dp_device *dp = to_dp(connector);
-	struct drm_connector_state *conn_state;
-	struct drm_crtc_state *crtc_state;
-
-	conn_state = drm_atomic_get_new_connector_state(state, connector);
-	if (WARN_ON(!conn_state))
-		return -ENODEV;
+	struct analogix_dp_device *dp = to_dp(bridge);
 
 	conn_state->self_refresh_aware = true;
-
-	if (!conn_state->crtc)
-		return 0;
-
-	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
-	if (!crtc_state)
-		return 0;
 
 	if (crtc_state->self_refresh_active && !dp->psr_supported)
 		return -EINVAL;
@@ -1006,16 +988,10 @@ static int analogix_dp_atomic_check(struct drm_connector *connector,
 	return 0;
 }
 
-static const struct drm_connector_helper_funcs analogix_dp_connector_helper_funcs = {
-	.get_modes = analogix_dp_get_modes,
-	.best_encoder = analogix_dp_best_encoder,
-	.atomic_check = analogix_dp_atomic_check,
-};
-
 static enum drm_connector_status
-analogix_dp_detect(struct drm_connector *connector, bool force)
+analogix_dp_bridge_detect(struct drm_bridge *bridge)
 {
-	struct analogix_dp_device *dp = to_dp(connector);
+	struct analogix_dp_device *dp = to_dp(bridge);
 	enum drm_connector_status status = connector_status_disconnected;
 
 	if (dp->plat_data->panel)
@@ -1027,20 +1003,11 @@ analogix_dp_detect(struct drm_connector *connector, bool force)
 	return status;
 }
 
-static const struct drm_connector_funcs analogix_dp_connector_funcs = {
-	.fill_modes = drm_helper_probe_single_connector_modes,
-	.detect = analogix_dp_detect,
-	.destroy = drm_connector_cleanup,
-	.reset = drm_atomic_helper_connector_reset,
-	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
-};
-
 static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 				     struct drm_encoder *encoder,
 				     enum drm_bridge_attach_flags flags)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct drm_connector *connector = NULL;
 	int ret = 0;
 
@@ -1049,22 +1016,14 @@ static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 		return -EINVAL;
 	}
 
-	if (!dp->plat_data->skip_connector) {
-		connector = &dp->connector;
-		connector->polled = DRM_CONNECTOR_POLL_HPD;
-
-		ret = drm_connector_init(dp->drm_dev, connector,
-					 &analogix_dp_connector_funcs,
-					 DRM_MODE_CONNECTOR_eDP);
-		if (ret) {
-			DRM_ERROR("Failed to initialize connector with drm\n");
-			return ret;
-		}
-
-		drm_connector_helper_add(connector,
-					 &analogix_dp_connector_helper_funcs);
-		drm_connector_attach_encoder(connector, encoder);
+	connector = drm_bridge_connector_init(dp->drm_dev, encoder);
+	if (IS_ERR(connector)) {
+		ret = PTR_ERR(connector);
+		dev_err(dp->dev, "Failed to initialize connector with drm\n");
+		return ret;
 	}
+
+	drm_connector_attach_encoder(connector, encoder);
 
 	/*
 	 * NOTE: the connector registration is implemented in analogix
@@ -1124,7 +1083,7 @@ struct drm_crtc *analogix_dp_get_new_crtc(struct analogix_dp_device *dp,
 static void analogix_dp_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 						 struct drm_atomic_state *old_state)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state;
 
@@ -1177,13 +1136,20 @@ out_dp_init:
 }
 
 static void analogix_dp_bridge_mode_set(struct drm_bridge *bridge,
+					struct drm_atomic_state *state,
 					const struct drm_display_mode *mode)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
-	struct drm_display_info *display_info = &dp->connector.display_info;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct video_info *video = &dp->video_info;
 	struct device_node *dp_node = dp->dev->of_node;
+	struct drm_connector *connector;
+	struct drm_display_info *display_info;
 	int vic;
+
+	connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
+	if (!connector)
+		return;
+	display_info = &connector->display_info;
 
 	/* Input video interlaces & hsync pol & vsync pol */
 	video->interlaced = !!(mode->flags & DRM_MODE_FLAG_INTERLACE);
@@ -1255,7 +1221,7 @@ static void analogix_dp_bridge_mode_set(struct drm_bridge *bridge,
 static void analogix_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 					     struct drm_atomic_state *old_state)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
 	int timeout_loop = 0;
@@ -1268,7 +1234,7 @@ static void analogix_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 	new_crtc_state = drm_atomic_get_new_crtc_state(old_state, crtc);
 	if (!new_crtc_state)
 		return;
-	analogix_dp_bridge_mode_set(bridge, &new_crtc_state->adjusted_mode);
+	analogix_dp_bridge_mode_set(bridge, old_state, &new_crtc_state->adjusted_mode);
 
 	old_crtc_state = drm_atomic_get_old_crtc_state(old_state, crtc);
 	/* Not a full enable, just disable PSR and continue */
@@ -1297,7 +1263,7 @@ static void analogix_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 
 static void analogix_dp_bridge_disable(struct drm_bridge *bridge)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 
 	if (dp->dpms_mode != DRM_MODE_DPMS_ON)
 		return;
@@ -1320,7 +1286,7 @@ static void analogix_dp_bridge_disable(struct drm_bridge *bridge)
 static void analogix_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 					      struct drm_atomic_state *old_state)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct drm_crtc *old_crtc, *new_crtc;
 	struct drm_crtc_state *old_crtc_state = NULL;
 	struct drm_crtc_state *new_crtc_state = NULL;
@@ -1358,7 +1324,7 @@ out:
 static void analogix_dp_bridge_atomic_post_disable(struct drm_bridge *bridge,
 						   struct drm_atomic_state *old_state)
 {
-	struct analogix_dp_device *dp = bridge->driver_private;
+	struct analogix_dp_device *dp = to_dp(bridge);
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *new_crtc_state;
 	int ret;
@@ -1384,24 +1350,27 @@ static const struct drm_bridge_funcs analogix_dp_bridge_funcs = {
 	.atomic_enable = analogix_dp_bridge_atomic_enable,
 	.atomic_disable = analogix_dp_bridge_atomic_disable,
 	.atomic_post_disable = analogix_dp_bridge_atomic_post_disable,
+	.atomic_check = analogix_dp_bridge_atomic_check,
 	.attach = analogix_dp_bridge_attach,
+	.get_modes = analogix_dp_bridge_get_modes,
+	.detect = analogix_dp_bridge_detect,
 };
 
 static int analogix_dp_create_bridge(struct drm_device *drm_dev,
 				     struct analogix_dp_device *dp)
 {
-	struct drm_bridge *bridge;
+	struct drm_bridge *bridge = &dp->bridge;
+	int ret;
 
-	bridge = devm_kzalloc(drm_dev->dev, sizeof(*bridge), GFP_KERNEL);
-	if (!bridge) {
-		DRM_ERROR("failed to allocate for drm bridge\n");
-		return -ENOMEM;
-	}
+	bridge->ops = DRM_BRIDGE_OP_DETECT |
+		      DRM_BRIDGE_OP_HPD |
+		      DRM_BRIDGE_OP_MODES;
+	bridge->of_node = dp->dev->of_node;
+	bridge->type = DRM_MODE_CONNECTOR_eDP;
 
-	dp->bridge = bridge;
-
-	bridge->driver_private = dp;
-	bridge->funcs = &analogix_dp_bridge_funcs;
+	ret = devm_drm_bridge_add(dp->dev, &dp->bridge);
+	if (ret)
+		return ret;
 
 	return drm_bridge_attach(dp->encoder, bridge, NULL, 0);
 }
@@ -1493,9 +1462,10 @@ analogix_dp_probe(struct device *dev, struct analogix_dp_plat_data *plat_data)
 		return ERR_PTR(-EINVAL);
 	}
 
-	dp = devm_kzalloc(dev, sizeof(struct analogix_dp_device), GFP_KERNEL);
-	if (!dp)
-		return ERR_PTR(-ENOMEM);
+	dp = devm_drm_bridge_alloc(dev, struct analogix_dp_device, bridge,
+				   &analogix_dp_bridge_funcs);
+	if (IS_ERR(dp))
+		return ERR_CAST(dp);
 
 	dp->dev = &pdev->dev;
 	dp->dpms_mode = DRM_MODE_DPMS_OFF;
@@ -1670,8 +1640,7 @@ EXPORT_SYMBOL_GPL(analogix_dp_bind);
 
 void analogix_dp_unbind(struct analogix_dp_device *dp)
 {
-	analogix_dp_bridge_disable(dp->bridge);
-	dp->connector.funcs->destroy(&dp->connector);
+	analogix_dp_bridge_disable(&dp->bridge);
 
 	drm_panel_unprepare(dp->plat_data->panel);
 
@@ -1681,7 +1650,8 @@ EXPORT_SYMBOL_GPL(analogix_dp_unbind);
 
 int analogix_dp_start_crc(struct drm_connector *connector)
 {
-	struct analogix_dp_device *dp = to_dp(connector);
+	struct analogix_dp_device *dp;
+	struct drm_bridge *bridge;
 
 	if (!connector->state->crtc) {
 		DRM_ERROR("Connector %s doesn't currently have a CRTC.\n",
@@ -1689,13 +1659,26 @@ int analogix_dp_start_crc(struct drm_connector *connector)
 		return -EINVAL;
 	}
 
+	bridge = drm_bridge_chain_get_first_bridge(connector->encoder);
+	if (bridge->type != DRM_MODE_CONNECTOR_eDP)
+		return -EINVAL;
+
+	dp = to_dp(bridge);
+
 	return drm_dp_start_crc(&dp->aux, connector->state->crtc);
 }
 EXPORT_SYMBOL_GPL(analogix_dp_start_crc);
 
 int analogix_dp_stop_crc(struct drm_connector *connector)
 {
-	struct analogix_dp_device *dp = to_dp(connector);
+	struct analogix_dp_device *dp;
+	struct drm_bridge *bridge;
+
+	bridge = drm_bridge_chain_get_first_bridge(connector->encoder);
+	if (bridge->type != DRM_MODE_CONNECTOR_eDP)
+		return -EINVAL;
+
+	dp = to_dp(bridge);
 
 	return drm_dp_stop_crc(&dp->aux);
 }
