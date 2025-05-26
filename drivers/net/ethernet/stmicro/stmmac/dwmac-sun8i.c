@@ -11,6 +11,7 @@
 #include <linux/mdio-mux.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
@@ -279,6 +280,8 @@ static const struct emac_variant emac_variant_h6 = {
 #define SYSCON_ETCS_MII		0x0
 #define SYSCON_ETCS_EXT_GMII	0x1
 #define SYSCON_ETCS_INT_GMII	0x2
+
+#define AC300_KEY		BIT(8)
 
 /* sun8i_dwmac_dma_reset() - reset the EMAC
  * Called from stmmac via stmmac_dma_ops->reset
@@ -1159,6 +1162,7 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 	struct net_device *ndev;
 	struct regmap *regmap;
 	int ret;
+	u16 val;
 
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
@@ -1221,6 +1225,21 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
 	if (IS_ERR(plat_dat))
 		return PTR_ERR(plat_dat);
+
+	if (!nvmem_cell_read_u16(dev, "ac300", &val)) {
+		const char *phy_name = (val & AC300_KEY) ? "ac300" : "ac200";
+		int index = of_property_match_string(dev->of_node, "phy-names", phy_name);
+		if (index < 0) {
+			dev_err(dev, "PHY name not found in device tree\n");
+			return -EINVAL;
+		}
+
+		plat_dat->phy_node = of_parse_phandle(dev->of_node, "phys", index);
+		if (!plat_dat->phy_node) {
+			dev_err(dev, "Failed to get PHY node from phys property\n");
+			return -EINVAL;
+		}
+	}
 
 	/* platform data specifying hardware features and callbacks.
 	 * hardware features were copied from Allwinner drivers.
