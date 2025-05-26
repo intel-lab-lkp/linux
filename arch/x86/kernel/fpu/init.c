@@ -30,7 +30,7 @@ static void fpu__init_cpu_generic(void)
 		cr4_set_bits(cr4_mask);
 
 	cr0 = read_cr0();
-	cr0 &= ~(X86_CR0_TS|X86_CR0_EM); /* clear TS and EM */
+	cr0 &= ~(X86_CR0_TS|X86_CR0_EM|X86_CR0_MP); /* clear TS, EM and MP*/
 	if (!boot_cpu_has(X86_FEATURE_FPU))
 		cr0 |= X86_CR0_EM;
 	write_cr0(cr0);
