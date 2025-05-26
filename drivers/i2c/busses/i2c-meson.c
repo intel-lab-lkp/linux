@@ -95,6 +95,7 @@ struct meson_i2c {
 	int			count;
 	int			pos;
 	int			error;
+	bool			recv_len;
 
 	spinlock_t		lock;
 	struct completion	done;
@@ -259,7 +260,7 @@ static void meson_i2c_prepare_xfer(struct meson_i2c *i2c)
 		meson_i2c_add_token(i2c, TOKEN_DATA);
 
 	if (i2c->count) {
-		if (write || i2c->pos + i2c->count < i2c->msg->len)
+		if (write || i2c->pos + i2c->count < i2c->msg->len || i2c->recv_len)
 			meson_i2c_add_token(i2c, TOKEN_DATA);
 		else
 			meson_i2c_add_token(i2c, TOKEN_DATA_LAST);
@@ -268,7 +269,7 @@ static void meson_i2c_prepare_xfer(struct meson_i2c *i2c)
 	if (write)
 		meson_i2c_put_data(i2c, i2c->msg->buf + i2c->pos, i2c->count);
 
-	if (i2c->last && i2c->pos + i2c->count >= i2c->msg->len)
+	if (i2c->last && i2c->pos + i2c->count >= i2c->msg->len && !i2c->recv_len)
 		meson_i2c_add_token(i2c, TOKEN_STOP);
 
 	writel(i2c->tokens[0], i2c->regs + REG_TOK_LIST0);
@@ -288,9 +289,26 @@ static void meson_i2c_transfer_complete(struct meson_i2c *i2c, u32 ctrl)
 		i2c->error = -ENXIO;
 		i2c->state = STATE_IDLE;
 	} else {
-		if (i2c->state == STATE_READ && i2c->count)
+		if (i2c->state == STATE_READ && i2c->count) {
 			meson_i2c_get_data(i2c, i2c->msg->buf + i2c->pos,
 					   i2c->count);
+			if (i2c->recv_len) {
+				unsigned int len = i2c->msg->buf[0];
+
+				if (unlikely(len > I2C_SMBUS_BLOCK_MAX)) {
+					dev_dbg(i2c->dev,
+						"smbus block size %d is too big\n",
+						len);
+
+					i2c->error = -EPROTO;
+					i2c->state = STATE_IDLE;
+					return;
+				}
+
+				i2c->recv_len = false;
+				i2c->msg->len += len;
+			}
+		}
 
 		i2c->pos += i2c->count;
 
@@ -371,6 +389,7 @@ static int meson_i2c_xfer_msg(struct meson_i2c *i2c, struct i2c_msg *msg,
 		meson_i2c_do_start(i2c, msg);
 
 	i2c->state = (msg->flags & I2C_M_RD) ? STATE_READ : STATE_WRITE;
+	i2c->recv_len = (msg->flags & I2C_M_RD) && (i2c->msg->flags & I2C_M_RECV_LEN);
 	meson_i2c_prepare_xfer(i2c);
 
 	if (!atomic)
@@ -444,7 +463,7 @@ static int meson_i2c_xfer_atomic(struct i2c_adapter *adap,
 
 static u32 meson_i2c_func(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_SMBUS_READ_BLOCK_DATA;
 }
 
 static const struct i2c_algorithm meson_i2c_algorithm = {
