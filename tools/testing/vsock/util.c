@@ -798,3 +798,14 @@ void enable_so_zerocopy_check(int fd)
 	setsockopt_int_check(fd, SOL_SOCKET, SO_ZEROCOPY, 1,
 			     "setsockopt SO_ZEROCOPY");
 }
+
+void vsock_test_for_send_failure(int fd, int send_flags)
+{
+	timeout_begin(TIMEOUT);
+	while (true) {
+		if (send(fd, "A", 1, send_flags) == -1)
+			return;
+		timeout_check("expected send(2) failure");
+	}
+	timeout_end();
+}

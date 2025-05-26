@@ -79,4 +79,5 @@ void setsockopt_int_check(int fd, int level, int optname, int val,
 void setsockopt_timeval_check(int fd, int level, int optname,
 			      struct timeval val, char const *errmsg);
 void enable_so_zerocopy_check(int fd);
+void vsock_test_for_send_failure(int fd, int send_flags);
 #endif /* UTIL_H */
