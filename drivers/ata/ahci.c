@@ -1411,7 +1411,10 @@ static bool ahci_broken_suspend(struct pci_dev *pdev)
 static bool ahci_broken_lpm(struct pci_dev *pdev)
 {
 	static const struct dmi_system_id sysids[] = {
-		/* Various Lenovo 50 series have LPM issues with older BIOSen */
+		/*
+		 * Various Lenovo 50 series and some ASUS boards have LPM issues
+		 * with older BIOS versions.
+		 */
 		{
 			.matches = {
 				DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
@@ -1445,6 +1448,13 @@ static bool ahci_broken_lpm(struct pci_dev *pdev)
 			 * TODO: fix this.
 			 */
 			.driver_data = "20180310", /* 2.35 */
+		},
+		{
+			.matches = {
+				DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+				DMI_MATCH(DMI_PRODUCT_VERSION, "ASUSPRO D840MB_M840SA/D840MB"),
+			},
+			.driver_data = "20230208", /* 320 */
 		},
 		{ }	/* terminate list */
 	};
