@@ -100,7 +100,7 @@ EXPORT_SYMBOL_GPL(devfreq_event_disable_edev);
  * @edev	: the devfreq-event device
  *
  * Note that this function check whether devfreq-event dev is enabled or not.
- * If return true, the devfreq-event dev is enabeld. If return false, the
+ * If return true, the devfreq-event dev is enabled. If return false, the
  * devfreq-event dev is disabled.
  */
 bool devfreq_event_is_enabled(struct devfreq_event_dev *edev)
