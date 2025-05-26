@@ -5636,6 +5636,11 @@ static void mpi3mr_shutdown(struct pci_dev *pdev)
 	if (wq)
 		destroy_workqueue(wq);
 
+	if (mrioc->sas_transport_enabled)
+		sas_remove_host(shost);
+	else
+		scsi_remove_host(shost);
+
 	mpi3mr_stop_watchdog(mrioc);
 	mpi3mr_cleanup_ioc(mrioc);
 	mpi3mr_cleanup_resources(mrioc);
