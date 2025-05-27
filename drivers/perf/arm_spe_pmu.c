@@ -309,15 +309,22 @@ static u64 arm_spe_event_to_pmscr(struct perf_event *event)
 static void arm_spe_event_sanitise_period(struct perf_event *event)
 {
 	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
+	struct device *dev = &spe_pmu->pdev->dev;
 	u64 period = event->hw.sample_period;
 	u64 max_period = PMSIRR_EL1_INTERVAL_MASK;
 
-	if (period < spe_pmu->min_period)
-		period = spe_pmu->min_period;
-	else if (period > max_period)
+	if (period < spe_pmu->min_period) {
+		/* Period must set to a non-zero value */
+		if (!period)
+			period = 1;
+
+		dev_warn_ratelimited(dev, "Period %llu < %u (recommended minimum interval).\n",
+				     period, spe_pmu->min_period);
+	} else if (period > max_period) {
 		period = max_period;
-	else
+	} else {
 		period &= max_period;
+	}
 
 	event->hw.sample_period = period;
 }
