@@ -203,9 +203,17 @@ static void put_huge_zero_page(void)
 	BUG_ON(atomic_dec_and_test(&huge_zero_refcount));
 }
 
+/*
+ * If STATIC_PMD_ZERO_PAGE is enabled, @mm can be NULL, i.e, the huge_zero_folio
+ * is not associated with any mm_struct.
+*/
 struct folio *mm_get_huge_zero_folio(struct mm_struct *mm)
 {
-	if (test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
+	if (!IS_ENABLED(CONFIG_STATIC_PMD_ZERO_PAGE) && !mm)
+		return NULL;
+
+	if (IS_ENABLED(CONFIG_STATIC_PMD_ZERO_PAGE) ||
+	    test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
 		return READ_ONCE(huge_zero_folio);
 
 	if (!get_huge_zero_page())
@@ -219,6 +227,9 @@ struct folio *mm_get_huge_zero_folio(struct mm_struct *mm)
 
 void mm_put_huge_zero_folio(struct mm_struct *mm)
 {
+	if (IS_ENABLED(CONFIG_STATIC_PMD_ZERO_PAGE))
+		return;
+
 	if (test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
 		put_huge_zero_page();
 }
@@ -246,15 +257,26 @@ static unsigned long shrink_huge_zero_page_scan(struct shrinker *shrink,
 
 static int __init init_huge_zero_page(void)
 {
+	int ret = 0;
+
+	if (IS_ENABLED(CONFIG_STATIC_PMD_ZERO_PAGE)) {
+		if (!get_huge_zero_page())
+			ret = -ENOMEM;
+		goto out;
+	}
+
 	huge_zero_page_shrinker = shrinker_alloc(0, "thp-zero");
-	if (!huge_zero_page_shrinker)
-		return -ENOMEM;
+	if (!huge_zero_page_shrinker) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	huge_zero_page_shrinker->count_objects = shrink_huge_zero_page_count;
 	huge_zero_page_shrinker->scan_objects = shrink_huge_zero_page_scan;
 	shrinker_register(huge_zero_page_shrinker);
 
-	return 0;
+out:
+	return ret;
 }
 early_initcall(init_huge_zero_page);
 
