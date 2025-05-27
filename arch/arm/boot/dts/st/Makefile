@@ -61,6 +61,7 @@ dtb-$(CONFIG_ARCH_STM32) += \
 	stm32mp157c-dhcom-picoitx.dtb \
 	stm32mp157c-dk2.dtb \
 	stm32mp157c-dk2-scmi.dtb \
+	stm32mp157f-dk2.dtb \
 	stm32mp157c-ed1.dtb \
 	stm32mp157c-ed1-scmi.dtb \
 	stm32mp157c-emsbc-argon.dtb \
