@@ -4,17 +4,19 @@
 $id: http://devicetree.org/schemas/pinctrl/airoha,en7581-pinctrl.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Airoha EN7581 Pin Controller
+title: Airoha EN7581/AN7583 Pin Controller
 
 maintainers:
   - Lorenzo Bianconi <lorenzo@kernel.org>
 
 description:
-  The Airoha's EN7581 Pin controller is used to control SoC pins.
+  The Airoha's EN7581/AN7583 Pin controller is used to control SoC pins.
 
 properties:
   compatible:
-    const: airoha,en7581-pinctrl
+    enum:
+      - airoha,en7581-pinctrl
+      - airoha,an7583-pinctrl
 
   interrupts:
     maxItems: 1
@@ -31,9 +33,6 @@ properties:
 
   '#interrupt-cells':
     const: 2
-
-allOf:
-  - $ref: pinctrl.yaml#
 
 required:
   - compatible
@@ -154,18 +153,6 @@ patternProperties:
           - if:
               properties:
                 function:
-                  const: pcm_spi
-            then:
-              properties:
-                groups:
-                  items:
-                    enum: [pcm_spi, pcm_spi_int, pcm_spi_rst, pcm_spi_cs1,
-                           pcm_spi_cs2_p156, pcm_spi_cs2_p128, pcm_spi_cs3,
-                           pcm_spi_cs4]
-                  maxItems: 7
-          - if:
-              properties:
-                function:
                   const: i2c
             then:
               properties:
@@ -190,14 +177,6 @@ patternProperties:
           - if:
               properties:
                 function:
-                  const: pcie_reset
-            then:
-              properties:
-                groups:
-                  enum: [pcie_reset0, pcie_reset1, pcie_reset2]
-          - if:
-              properties:
-                function:
                   const: pwm
             then:
               properties:
@@ -209,70 +188,6 @@ patternProperties:
                          gpio26, gpio27, gpio28, gpio29, gpio30, gpio31,
                          gpio36, gpio37, gpio38, gpio39, gpio40, gpio41,
                          gpio42, gpio43, gpio44, gpio45, gpio46, gpio47]
-          - if:
-              properties:
-                function:
-                  const: phy1_led0
-            then:
-              properties:
-                groups:
-                  enum: [gpio33, gpio34, gpio35, gpio42]
-          - if:
-              properties:
-                function:
-                  const: phy2_led0
-            then:
-              properties:
-                groups:
-                  enum: [gpio33, gpio34, gpio35, gpio42]
-          - if:
-              properties:
-                function:
-                  const: phy3_led0
-            then:
-              properties:
-                groups:
-                  enum: [gpio33, gpio34, gpio35, gpio42]
-          - if:
-              properties:
-                function:
-                  const: phy4_led0
-            then:
-              properties:
-                groups:
-                  enum: [gpio33, gpio34, gpio35, gpio42]
-          - if:
-              properties:
-                function:
-                  const: phy1_led1
-            then:
-              properties:
-                groups:
-                  enum: [gpio43, gpio44, gpio45, gpio46]
-          - if:
-              properties:
-                function:
-                  const: phy2_led1
-            then:
-              properties:
-                groups:
-                  enum: [gpio43, gpio44, gpio45, gpio46]
-          - if:
-              properties:
-                function:
-                  const: phy3_led1
-            then:
-              properties:
-                groups:
-                  enum: [gpio43, gpio44, gpio45, gpio46]
-          - if:
-              properties:
-                function:
-                  const: phy4_led1
-            then:
-              properties:
-                groups:
-                  enum: [gpio43, gpio44, gpio45, gpio46]
 
         additionalProperties: false
 
@@ -330,6 +245,208 @@ patternProperties:
     additionalProperties: false
 
 additionalProperties: false
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: airoha,en7581-pinctrl
+    then:
+      patternProperties:
+        '-pins$':
+          type: object
+
+          patternProperties:
+            '^mux(-|$)':
+              type: object
+
+              allOf:
+                - if:
+                    properties:
+                      function:
+                        const: pcm_spi
+                  then:
+                    properties:
+                      groups:
+                        items:
+                          enum: [pcm_spi, pcm_spi_int, pcm_spi_rst, pcm_spi_cs1,
+                                 pcm_spi_cs2_p156, pcm_spi_cs2_p128, pcm_spi_cs3,
+                                 pcm_spi_cs4]
+                        maxItems: 7
+                - if:
+                    properties:
+                      function:
+                        const: pcie_reset
+                  then:
+                    properties:
+                      groups:
+                        enum: [pcie_reset0, pcie_reset1, pcie_reset2]
+                - if:
+                    properties:
+                      function:
+                        const: phy1_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio33, gpio34, gpio35, gpio42]
+                - if:
+                    properties:
+                      function:
+                        const: phy2_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio33, gpio34, gpio35, gpio42]
+                - if:
+                    properties:
+                      function:
+                        const: phy3_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio33, gpio34, gpio35, gpio42]
+                - if:
+                    properties:
+                      function:
+                        const: phy4_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio33, gpio34, gpio35, gpio42]
+                - if:
+                    properties:
+                      function:
+                        const: phy1_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio43, gpio44, gpio45, gpio46]
+                - if:
+                    properties:
+                      function:
+                        const: phy2_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio43, gpio44, gpio45, gpio46]
+                - if:
+                    properties:
+                      function:
+                        const: phy3_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio43, gpio44, gpio45, gpio46]
+                - if:
+                    properties:
+                      function:
+                        const: phy4_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio43, gpio44, gpio45, gpio46]
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: airoha,an7583-pinctrl
+    then:
+      patternProperties:
+        '-pins$':
+          type: object
+
+          patternProperties:
+            '^mux(-|$)':
+              type: object
+
+              allOf:
+                - if:
+                    properties:
+                      function:
+                        const: pcm_spi
+                  then:
+                    properties:
+                      groups:
+                        items:
+                          enum: [pcm_spi, pcm_spi_int, pcm_spi_rst, pcm_spi_cs1,
+                                 pcm_spi_cs2, pcm_spi_cs3, pcm_spi_cs4]
+                        maxItems: 7
+                - if:
+                    properties:
+                      function:
+                        const: pcie_reset
+                  then:
+                    properties:
+                      groups:
+                        enum: [pcie_reset0, pcie_reset1]
+                - if:
+                    properties:
+                      function:
+                        const: phy1_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio1, gpio2, gpio3, gpio4]
+                - if:
+                    properties:
+                      function:
+                        const: phy2_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio1, gpio2, gpio3, gpio4]
+                - if:
+                    properties:
+                      function:
+                        const: phy3_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio1, gpio2, gpio3, gpio4]
+                - if:
+                    properties:
+                      function:
+                        const: phy4_led0
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio1, gpio2, gpio3, gpio4]
+                - if:
+                    properties:
+                      function:
+                        const: phy1_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio8, gpio9, gpio10, gpio11]
+                - if:
+                    properties:
+                      function:
+                        const: phy2_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio8, gpio9, gpio10, gpio11]
+                - if:
+                    properties:
+                      function:
+                        const: phy3_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio8, gpio9, gpio10, gpio11]
+                - if:
+                    properties:
+                      function:
+                        const: phy4_led1
+                  then:
+                    properties:
+                      groups:
+                        enum: [gpio8, gpio9, gpio10, gpio11]
 
 examples:
   - |
