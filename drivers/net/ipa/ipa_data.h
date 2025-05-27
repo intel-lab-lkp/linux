@@ -185,8 +185,12 @@ struct ipa_resource_data {
 struct ipa_mem_data {
 	u32 local_count;
 	const struct ipa_mem *local;
+
+	/* DEPRECATED (now passed via DT) fallback data,
+	 * varies per chip and not per IPA version */
 	u32 imem_addr;
 	u32 imem_size;
+
 	u32 smem_size;
 };
 
