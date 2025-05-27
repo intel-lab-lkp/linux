@@ -591,6 +591,13 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 	list_for_each_entry(block, &vres->blocks, link) {
 		unsigned long start;
 
+		/*
+		 * Allocated blocks may be dirtied as soon as we return.
+		 * Mark all blocks as dirty here, otherwise we might
+		 * incorrectly assume the memory is still zeroed.
+		 */
+		drm_buddy_block_set_dirty(block);
+
 		start = amdgpu_vram_mgr_block_start(block) +
 			amdgpu_vram_mgr_block_size(block);
 		start >>= PAGE_SHIFT;
