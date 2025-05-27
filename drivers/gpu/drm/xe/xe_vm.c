@@ -2930,13 +2930,22 @@ static int prefetch_ranges(struct xe_vm *vm, struct xe_vma_op *op)
 	ctx.read_only = xe_vma_read_only(vma);
 	ctx.devmem_possible = devmem_possible;
 	ctx.check_pages_threshold = devmem_possible ? SZ_64K : 0;
+	ctx.devmem_only = xe_vma_need_vram_migrate_for_atomic(vm->xe, vma) &&
+			  IS_ENABLED(CONFIG_DRM_XE_DEVMEM_MIRROR);
 
 	/* TODO: Threading the migration */
 	xa_for_each(&op->prefetch_range.range, i, svm_range) {
-		if (!region)
-			xe_svm_range_migrate_to_smem(vm, svm_range);
+		bool needs_vram = xe_svm_range_needs_migrate_to_vram(svm_range, vma, region);
 
-		if (xe_svm_range_needs_migrate_to_vram(svm_range, vma, region)) {
+		if (!needs_vram) {
+			xe_svm_range_migrate_to_smem(vm, svm_range);
+		} else if (needs_vram) {
+			/* If  migration is mandated by atomic attributes
+			 * in vma and prefetch region is smem force prefetch
+			 * in vram of root tile.
+			 */
+			region = region ? region : 1;
+
 			tile = &vm->xe->tiles[region_to_mem_type[region] - XE_PL_VRAM0];
 			err = xe_svm_alloc_vram(vm, tile, svm_range, &ctx);
 			if (err) {
@@ -4176,6 +4185,31 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
 			mmput(snap->snap[i].mm);
 	}
 	kvfree(snap);
+}
+
+/**
+ * xe_vma_need_vram_migrate_for_atomic - Check if VMA needs VRAM migration for atomic operations
+ * @xe: Pointer to the XE device structure
+ * @vma: Pointer to the virtual memory area (VMA) structure
+ *
+ * This function determines whether the given VMA needs to be migrated to
+ * VRAM in order to do atomic GPU operation.
+ *
+ * Return: true if migration to VRAM is required, false otherwise.
+ */
+bool xe_vma_need_vram_migrate_for_atomic(struct xe_device *xe, struct xe_vma *vma)
+{
+	/* Note: The checks implemented here are platform-specific. For instance,
+	 * on a device supporting CXL atomics, these would ideally work universally
+	 * without additional handling.
+	 */
+	if (!IS_DGFX(xe) || vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_UNDEFINED ||
+	    vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_CPU ||
+	    (xe->info.has_device_atomics_on_smem &&
+	     vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_DEVICE))
+		return false;
+
+	return true;
 }
 
 /**
