@@ -59,20 +59,20 @@ struct vcpu_vt {
 
 #ifdef CONFIG_KVM_INTEL_TDX
 
-static __always_inline bool is_td(struct kvm *kvm)
+static noinstr __always_inline bool is_td(struct kvm *kvm)
 {
 	return kvm->arch.vm_type == KVM_X86_TDX_VM;
 }
 
-static __always_inline bool is_td_vcpu(struct kvm_vcpu *vcpu)
+static noinstr __always_inline bool is_td_vcpu(struct kvm_vcpu *vcpu)
 {
 	return is_td(vcpu->kvm);
 }
 
 #else
 
-static inline bool is_td(struct kvm *kvm) { return false; }
-static inline bool is_td_vcpu(struct kvm_vcpu *vcpu) { return false; }
+static noinstr bool is_td(struct kvm *kvm) { return false; }
+static noinstr bool is_td_vcpu(struct kvm_vcpu *vcpu) { return false; }
 
 #endif
 
