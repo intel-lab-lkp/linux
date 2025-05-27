@@ -37,7 +37,7 @@ pub struct GlobalLock<B: GlobalLockBackend> {
     inner: Lock<B::Item, B::Backend>,
 }
 
-impl<B: GlobalLockBackend> GlobalLock<B> {
+impl<'a, B: GlobalLockBackend> GlobalLock<B> {
     /// Creates a global lock.
     ///
     /// # Safety
@@ -77,14 +77,14 @@ impl<B: GlobalLockBackend> GlobalLock<B> {
     }
 
     /// Lock this global lock.
-    pub fn lock(&'static self) -> GlobalGuard<B> {
+    pub fn lock(&'static self) -> GlobalGuard<'static, B> {
         GlobalGuard {
             inner: self.inner.lock(),
         }
     }
 
     /// Try to lock this global lock.
-    pub fn try_lock(&'static self) -> Option<GlobalGuard<B>> {
+    pub fn try_lock(&'static self) -> Option<GlobalGuard<'static, B>> {
         Some(GlobalGuard {
             inner: self.inner.try_lock()?,
         })
@@ -94,11 +94,11 @@ impl<B: GlobalLockBackend> GlobalLock<B> {
 /// A guard for a [`GlobalLock`].
 ///
 /// See [`global_lock!`] for examples.
-pub struct GlobalGuard<B: GlobalLockBackend> {
-    inner: Guard<'static, B::Item, B::Backend>,
+pub struct GlobalGuard<'a, B: GlobalLockBackend> {
+    inner: Guard<'a, B::Item, B::Backend>,
 }
 
-impl<B: GlobalLockBackend> core::ops::Deref for GlobalGuard<B> {
+impl<'a, B: GlobalLockBackend> core::ops::Deref for GlobalGuard<'a, B> {
     type Target = B::Item;
 
     fn deref(&self) -> &Self::Target {
@@ -106,7 +106,7 @@ impl<B: GlobalLockBackend> core::ops::Deref for GlobalGuard<B> {
     }
 }
 
-impl<B: GlobalLockBackend> core::ops::DerefMut for GlobalGuard<B> {
+impl<'a, B: GlobalLockBackend> core::ops::DerefMut for GlobalGuard<'a, B> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -154,7 +154,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
     /// Access the value immutably.
     ///
     /// The caller must prove shared access to the lock.
-    pub fn as_ref<'a>(&'a self, _guard: &'a GlobalGuard<B>) -> &'a T {
+    pub fn as_ref<'a>(&'a self, _guard: &'a GlobalGuard<'_, B>) -> &'a T {
         // SAFETY: The lock is globally unique, so there can only be one guard.
         unsafe { &*self.value.get() }
     }
@@ -162,7 +162,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
     /// Access the value mutably.
     ///
     /// The caller must prove shared exclusive to the lock.
-    pub fn as_mut<'a>(&'a self, _guard: &'a mut GlobalGuard<B>) -> &'a mut T {
+    pub fn as_mut<'a>(&'a self, _guard: &'a mut GlobalGuard<'_, B>) -> &'a mut T {
         // SAFETY: The lock is globally unique, so there can only be one guard.
         unsafe { &mut *self.value.get() }
     }
@@ -232,7 +232,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 ///     /// Increment the counter in this instance.
 ///     ///
 ///     /// The caller must hold the `MY_MUTEX` mutex.
-///     fn increment(&self, guard: &mut GlobalGuard<MY_MUTEX>) -> u32 {
+///     fn increment(&self, guard: &mut GlobalGuard<'_, MY_MUTEX>) -> u32 {
 ///         let my_counter = self.my_counter.as_mut(guard);
 ///         *my_counter += 1;
 ///         *my_counter
