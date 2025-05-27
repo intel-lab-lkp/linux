@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0+ OR MIT
 
-TEST_GEN_FILES = iou-zcrx
+TEST_GEN_FILES = \
+	iou-zcrx \
+	xsk_receive \
+	#
 
 TEST_PROGS = \
 	csum.py \
@@ -20,6 +23,7 @@ TEST_PROGS = \
 	rss_input_xfrm.py \
 	tso.py \
 	xsk_reconfig.py \
+	xsk_receive.py \
 	#
 
 TEST_FILES := \
@@ -48,3 +52,9 @@ include ../../../net/ynl.mk
 include ../../../net/bpf.mk
 
 $(OUTPUT)/iou-zcrx: LDLIBS += -luring
+
+$(OUTPUT)/xsk_receive.skel.h: xsk_receive.bpf.o
+	bpftool gen skeleton xsk_receive.bpf.o > xsk_receive.skel.h
+
+$(OUTPUT)/xsk_receive: xsk_receive.skel.h
+$(OUTPUT)/xsk_receive: LDLIBS += -lbpf
