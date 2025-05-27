@@ -194,17 +194,15 @@ static void iio_trigger_notify_done_atomic(struct iio_trigger *trig)
  */
 void iio_trigger_poll(struct iio_trigger *trig)
 {
-	int i;
+	if (atomic_cmpxchg_relaxed(&trig->use_count, 0,
+				   CONFIG_IIO_CONSUMERS_PER_TRIGGER))
+		return;
 
-	if (!atomic_read(&trig->use_count)) {
-		atomic_set(&trig->use_count, CONFIG_IIO_CONSUMERS_PER_TRIGGER);
-
-		for (i = 0; i < CONFIG_IIO_CONSUMERS_PER_TRIGGER; i++) {
-			if (trig->subirqs[i].enabled)
-				generic_handle_irq(trig->subirq_base + i);
-			else
-				iio_trigger_notify_done_atomic(trig);
-		}
+	for (int i = 0; i < CONFIG_IIO_CONSUMERS_PER_TRIGGER; i++) {
+		if (trig->subirqs[i].enabled)
+			generic_handle_irq(trig->subirq_base + i);
+		else
+			iio_trigger_notify_done_atomic(trig);
 	}
 }
 EXPORT_SYMBOL(iio_trigger_poll);
@@ -225,17 +223,15 @@ EXPORT_SYMBOL(iio_trigger_generic_data_rdy_poll);
  */
 void iio_trigger_poll_nested(struct iio_trigger *trig)
 {
-	int i;
+	if (atomic_cmpxchg_relaxed(&trig->use_count, 0,
+				   CONFIG_IIO_CONSUMERS_PER_TRIGGER))
+		return;
 
-	if (!atomic_read(&trig->use_count)) {
-		atomic_set(&trig->use_count, CONFIG_IIO_CONSUMERS_PER_TRIGGER);
-
-		for (i = 0; i < CONFIG_IIO_CONSUMERS_PER_TRIGGER; i++) {
-			if (trig->subirqs[i].enabled)
-				handle_nested_irq(trig->subirq_base + i);
-			else
-				iio_trigger_notify_done(trig);
-		}
+	for (int i = 0; i < CONFIG_IIO_CONSUMERS_PER_TRIGGER; i++) {
+		if (trig->subirqs[i].enabled)
+			handle_nested_irq(trig->subirq_base + i);
+		else
+			iio_trigger_notify_done(trig);
 	}
 }
 EXPORT_SYMBOL(iio_trigger_poll_nested);
