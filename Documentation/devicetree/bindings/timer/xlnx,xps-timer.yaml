@@ -82,7 +82,7 @@ examples:
     };
 
     timer@800f0000 {
-        #pwm-cells = <0>;
+        #pwm-cells = <3>;
         clock-names = "s_axi_aclk";
         clocks = <&zynqmp_clk 71>;
         compatible = "xlnx,xps-timer-1.00.a";
