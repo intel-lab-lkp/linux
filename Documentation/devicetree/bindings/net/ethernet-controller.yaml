@@ -45,14 +45,6 @@ properties:
     description:
       Specifies maximum speed in Mbit/s supported by the device.
 
-  nvmem-cells:
-    maxItems: 1
-    description:
-      Reference to an nvmem node for the MAC address
-
-  nvmem-cell-names:
-    const: mac-address
-
   phy-connection-type:
     description:
       Specifies interface type between the Ethernet device and a physical
@@ -262,6 +254,24 @@ dependencies:
   pcs-handle-names: [pcs-handle]
 
 allOf:
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - allwinner,sun50i-h616-emac1
+
+    then:
+      properties:
+        nvmem-cells:
+          maxItems: 1
+          description:
+            Reference to an nvmem node for the MAC address
+
+        nvmem-cell-names:
+          const: mac-address
+
   - if:
       properties:
         phy-mode:
