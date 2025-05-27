@@ -823,6 +823,17 @@ struct drm_pagemap *xe_vma_resolve_pagemap(struct xe_vma *vma, struct xe_tile *t
 }
 
 /**
+ * xe_tile_from_dpagemap - Find xe_tile from drm_pagemap
+ * @dpagemap: pointer to struct drm_pagemap
+ *
+ * Return: Pointer to xe_tile
+ */
+struct xe_tile *xe_tile_from_dpagemap(struct drm_pagemap *dpagemap)
+{
+	return container_of(dpagemap, struct xe_tile, mem.vram.dpagemap);
+}
+
+/**
  * xe_svm_handle_pagefault() - SVM handle page fault
  * @vm: The VM.
  * @vma: The CPU address mirror VMA.
