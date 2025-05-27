@@ -61,7 +61,20 @@ static int madvise_preferred_mem_loc(struct xe_device *xe, struct xe_vm *vm,
 				     struct xe_vma **vmas, int num_vmas,
 				     struct drm_xe_madvise_ops ops)
 {
-	/* Implementation pending */
+	int i;
+
+	xe_assert(vm->xe, ops.type == DRM_XE_VMA_ATTR_PREFERRED_LOC);
+
+	for (i = 0; i < num_vmas; i++) {
+		vmas[i]->attr.preferred_loc.devmem_fd = ops.preferred_mem_loc.devmem_fd;
+
+		/* Till multi-device support is not added migration_policy
+		 * is of no use and can be ignored.
+		 */
+		//vmas[i]->attr.preferred_loc.migration_policy =
+		//				ops.preferred_mem_loc.migration_policy;
+	}
+
 	return 0;
 }
 
