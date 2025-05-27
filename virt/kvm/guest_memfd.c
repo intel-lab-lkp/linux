@@ -555,6 +555,7 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	loff_t size = slot->npages << PAGE_SHIFT;
 	unsigned long start, end;
 	struct kvm_gmem *gmem;
+	bool supports_shared;
 	struct inode *inode;
 	struct file *file;
 	int r = -EINVAL;
@@ -578,8 +579,9 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	    offset + size > i_size_read(inode))
 		goto err;
 
-	if (kvm_gmem_supports_shared(inode) &&
-	    !kvm_arch_supports_gmem_shared_mem(kvm))
+	supports_shared = kvm_gmem_supports_shared(inode);
+
+	if (supports_shared && !kvm_arch_supports_gmem_shared_mem(kvm))
 		goto err;
 
 	filemap_invalidate_lock(inode->i_mapping);
@@ -600,6 +602,8 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	 */
 	WRITE_ONCE(slot->gmem.file, file);
 	slot->gmem.pgoff = start;
+	if (supports_shared)
+		slot->flags |= KVM_MEMSLOT_SUPPORTS_SHARED;
 
 	xa_store_range(&gmem->bindings, start, end - 1, slot, GFP_KERNEL);
 	filemap_invalidate_unlock(inode->i_mapping);
