@@ -118,7 +118,10 @@ static int afs_parse_address(char *p, struct afs_addr_preference *pref)
 
 	if (*p == '/') {
 		p++;
-		tmp = simple_strtoul(p, &p, 10);
+		if (kstrtoul(p, 10, &tmp)) {
+			pr_warn("Invalid address\n");
+			return -EINVAL;
+		}
 		if (tmp > mask) {
 			pr_warn("Subnet mask too large\n");
 			return -EINVAL;
@@ -128,11 +131,6 @@ static int afs_parse_address(char *p, struct afs_addr_preference *pref)
 			return -EINVAL;
 		}
 		mask = tmp;
-	}
-
-	if (*p) {
-		pr_warn("Invalid address\n");
-		return -EINVAL;
 	}
 
 	pref->subnet_mask = mask;
