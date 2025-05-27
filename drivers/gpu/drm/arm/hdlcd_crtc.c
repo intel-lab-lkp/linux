@@ -11,8 +11,8 @@
 
 #include <linux/clk.h>
 #include <linux/of_graph.h>
-#include <linux/platform_data/simplefb.h>
 
+#include <video/pixel_format.h>
 #include <video/videomode.h>
 
 #include <drm/drm_atomic.h>
@@ -27,6 +27,25 @@
 
 #include "hdlcd_drv.h"
 #include "hdlcd_regs.h"
+
+struct hdlcd_format {
+	u32 fourcc;
+	struct pixel_format pixel;
+};
+
+static const struct hdlcd_format supported_formats[] = {
+	{ DRM_FORMAT_XRGB8888, PIXEL_FORMAT_XRGB8888 },
+	{ DRM_FORMAT_ARGB8888, PIXEL_FORMAT_ARGB8888 },
+	{ DRM_FORMAT_XBGR8888, PIXEL_FORMAT_XBGR8888 },
+	{ DRM_FORMAT_ABGR8888, PIXEL_FORMAT_ABGR8888 },
+	{ DRM_FORMAT_XRGB2101010, PIXEL_FORMAT_XRGB2101010},
+	{ DRM_FORMAT_ARGB2101010, PIXEL_FORMAT_ARGB2101010},
+	{ DRM_FORMAT_RGB565, PIXEL_FORMAT_RGB565 },
+	{ DRM_FORMAT_RGBA5551, PIXEL_FORMAT_RGBA5551 },
+	{ DRM_FORMAT_XRGB1555, PIXEL_FORMAT_XRGB1555 },
+	{ DRM_FORMAT_ARGB1555, PIXEL_FORMAT_ARGB1555 },
+	{ DRM_FORMAT_RGB888, PIXEL_FORMAT_RGB888 },
+};
 
 /*
  * The HDLCD controller is a dumb RGB streamer that gets connected to
@@ -73,8 +92,6 @@ static const struct drm_crtc_funcs hdlcd_crtc_funcs = {
 	.disable_vblank = hdlcd_crtc_disable_vblank,
 };
 
-static struct simplefb_format supported_formats[] = SIMPLEFB_FORMATS;
-
 /*
  * Setup the HDLCD registers for decoding the pixels out of the framebuffer
  */
@@ -83,15 +100,12 @@ static int hdlcd_set_pxl_fmt(struct drm_crtc *crtc)
 	unsigned int btpp;
 	struct hdlcd_drm_private *hdlcd = crtc_to_hdlcd_priv(crtc);
 	const struct drm_framebuffer *fb = crtc->primary->state->fb;
-	uint32_t pixel_format;
-	struct simplefb_format *format = NULL;
+	const struct pixel_format *format = NULL;
 	int i;
 
-	pixel_format = fb->format->format;
-
 	for (i = 0; i < ARRAY_SIZE(supported_formats); i++) {
-		if (supported_formats[i].fourcc == pixel_format)
-			format = &supported_formats[i];
+		if (supported_formats[i].fourcc == fb->format->format)
+			format = &supported_formats[i].pixel;
 	}
 
 	if (WARN_ON(!format))
