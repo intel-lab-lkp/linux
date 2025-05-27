@@ -19,6 +19,8 @@ struct vma_prepare {
 	struct vm_area_struct *insert;
 	struct vm_area_struct *remove;
 	struct vm_area_struct *remove2;
+	/* Whether to skip uprobe_mmap on vma */
+	bool skip_vma_uprobe;
 };
 
 struct unlink_vma_file_batch {
@@ -119,6 +121,11 @@ struct vma_merge_struct {
 	 * execute the merge, returning NULL.
 	 */
 	bool give_up_on_oom :1;
+
+	/*
+	 * Whether to skip uprobe_mmap on merged vma.
+	 */
+	bool skip_vma_uprobe :1;
 
 	/* Internal flags set during merge process: */
 

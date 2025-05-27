@@ -358,7 +358,8 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 
 	if (vp->file) {
 		i_mmap_unlock_write(vp->mapping);
-		uprobe_mmap(vp->vma);
+		if (!vp->skip_vma_uprobe)
+			uprobe_mmap(vp->vma);
 
 		if (vp->adj_next)
 			uprobe_mmap(vp->adj_next);
@@ -737,6 +738,7 @@ static int commit_merge(struct vma_merge_struct *vmg)
 	if (vma_iter_prealloc(vmg->vmi, vma))
 		return -ENOMEM;
 
+	vp.skip_vma_uprobe = vmg->skip_vma_uprobe;
 	vma_prepare(&vp);
 	/*
 	 * THP pages may need to do additional splits if we increase
@@ -1150,6 +1152,9 @@ int vma_expand(struct vma_merge_struct *vmg)
 	vmg->target = middle;
 	if (remove_next)
 		vmg->__remove_next = true;
+
+	/* skip uprobe_mmap on expanded vma */
+	vmg->skip_vma_uprobe = true;
 
 	if (commit_merge(vmg))
 		goto nomem;
