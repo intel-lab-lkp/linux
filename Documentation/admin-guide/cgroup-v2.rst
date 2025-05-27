@@ -438,8 +438,8 @@ Controlling Controllers
 Enabling and Disabling
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Each cgroup has a "cgroup.controllers" file which lists all
-controllers available for the cgroup to enable::
+Each cgroup has a cgroup.controllers file, which lists all the controllers
+available for that cgroup and which can be enabled for its children.
 
   # cat cgroup.controllers
   cpu io memory
