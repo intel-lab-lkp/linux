@@ -596,6 +596,9 @@ static int e1000_set_eeprom(struct net_device *netdev,
 	for (i = 0; i < last_word - first_word + 1; i++)
 		le16_to_cpus(&eeprom_buff[i]);
 
+        if (eeprom->len > max_len ||
+            eeprom->offset > max_len - eeprom->len)
+                return -EINVAL;
 	memcpy(ptr, bytes, eeprom->len);
 
 	for (i = 0; i < last_word - first_word + 1; i++)
