@@ -153,7 +153,8 @@ static inline void invlpgb_flush_all(void)
 /* Flush addr, including globals, for all PCIDs. */
 static inline void invlpgb_flush_addr_nosync(unsigned long addr, u16 nr)
 {
-	__invlpgb(0, 0, addr, nr, PTE_STRIDE, INVLPGB_FLAG_INCLUDE_GLOBAL);
+	__invlpgb(0, 0, addr, nr, PTE_STRIDE,
+			INVLPGB_FLAG_VA | INVLPGB_FLAG_INCLUDE_GLOBAL);
 }
 
 /* Flush all mappings for all PCIDs except globals. */
