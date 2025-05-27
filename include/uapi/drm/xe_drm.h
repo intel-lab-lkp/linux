@@ -1111,6 +1111,10 @@ struct drm_xe_vm_bind_op {
 	/** @flags: Bind flags */
 	__u32 flags;
 
+	/** DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC as prefetch_mem_region_instance
+	 * ensures prefetching in madvise-advised memory region.
+	 */
+#define DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC	-1
 	/**
 	 * @prefetch_mem_region_instance: Memory region to prefetch VMA to.
 	 * It is a region instance, not a mask.
