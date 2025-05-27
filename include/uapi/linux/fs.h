@@ -91,6 +91,29 @@ struct fs_sysfs_path {
 	__u8			name[128];
 };
 
+#define	FILE_PI_CAP_INTEGRITY		(1 << 0)
+#define	FILE_PI_CAP_REFTAG		(1 << 1)
+
+/*
+ * struct fs_pi_cap - protection information(PI) capability descriptor
+ * @flags:			Bitmask of capability flags
+ * @interval:			Number of bytes of data per PI tuple
+ * @csum_type:			Checksum type
+ * @tuple_size:			Size in bytes of the PI tuple
+ * @tag_size:			Size of the tag area within the tuple
+ * @pi_offset:			Offset in bytes of the PI metadata within the tuple
+ * @rsvd:			Reserved for future use
+ */
+struct fs_pi_cap {
+	__u32	flags;
+	__u16	interval;
+	__u8	csum_type;
+	__u8	tuple_size;
+	__u8	tag_size;
+	__u8	pi_offset;
+	__u8	rsvd[6];
+};
+
 /* extent-same (dedupe) ioctls; these MUST match the btrfs ioctl definitions */
 #define FILE_DEDUPE_RANGE_SAME		0
 #define FILE_DEDUPE_RANGE_DIFFERS	1
@@ -247,6 +270,8 @@ struct fsxattr {
  * also /sys/kernel/debug/ for filesystems with debugfs exports
  */
 #define FS_IOC_GETFSSYSFSPATH		_IOR(0x15, 1, struct fs_sysfs_path)
+/* Get protection info capability details */
+#define FS_IOC_GETPICAP			_IOR('f', 3, struct fs_pi_cap)
 
 /*
  * Inode flags (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS)

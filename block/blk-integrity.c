@@ -54,6 +54,30 @@ new_segment:
 	return segments;
 }
 
+int blk_get_pi_cap(struct block_device *bdev, struct fs_pi_cap __user *argp)
+{
+	struct blk_integrity *bi = blk_get_integrity(bdev->bd_disk);
+	struct fs_pi_cap pi_cap = {};
+
+	if (!bi)
+		goto out;
+
+	if (bi->flags & BLK_INTEGRITY_DEVICE_CAPABLE)
+		pi_cap.flags |= FILE_PI_CAP_INTEGRITY;
+	if (bi->flags & BLK_INTEGRITY_REF_TAG)
+		pi_cap.flags |= FILE_PI_CAP_REFTAG;
+	pi_cap.csum_type = bi->csum_type;
+	pi_cap.tuple_size = bi->tuple_size;
+	pi_cap.tag_size = bi->tag_size;
+	pi_cap.interval = 1 << bi->interval_exp;
+	pi_cap.pi_offset = bi->pi_offset;
+
+out:
+	if (copy_to_user(argp, &pi_cap, sizeof(struct fs_pi_cap)))
+		return -EFAULT;
+	return 0;
+}
+
 /**
  * blk_rq_map_integrity_sg - Map integrity metadata into a scatterlist
  * @rq:		request to map
