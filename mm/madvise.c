@@ -1817,6 +1817,39 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 
 	if (madvise_should_skip(start, len_in, behavior, &error))
 		return error;
+
+	/*
+	 * MADV_DONTNEED is commonly used with userspace heaps and most often
+	 * affects a single VMA. In these cases, we can use per-VMA locks to
+	 * reduce contention on the mmap_lock.
+	 */
+	if (behavior == MADV_DONTNEED || behavior == MADV_DONTNEED_LOCKED) {
+		struct vm_area_struct *prev, *vma;
+		unsigned long untagged_start, end;
+
+		untagged_start = untagged_addr(start);
+		end = untagged_start + len_in;
+		vma = lock_vma_under_rcu(mm, untagged_start);
+		if (!vma)
+			goto lock;
+		if (end > vma->vm_end || userfaultfd_armed(vma)) {
+			vma_end_read(vma);
+			goto lock;
+		}
+		if (unlikely(!can_modify_vma_madv(vma, behavior))) {
+			error = -EPERM;
+			vma_end_read(vma);
+			goto out;
+		}
+		madvise_init_tlb(&madv_behavior, mm);
+		error = madvise_dontneed_free(vma, &prev, untagged_start,
+				end, &madv_behavior);
+		madvise_finish_tlb(&madv_behavior);
+		vma_end_read(vma);
+		goto out;
+	}
+
+lock:
 	error = madvise_lock(mm, behavior);
 	if (error)
 		return error;
@@ -1825,6 +1858,7 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 	madvise_finish_tlb(&madv_behavior);
 	madvise_unlock(mm, behavior);
 
+out:
 	return error;
 }
 
