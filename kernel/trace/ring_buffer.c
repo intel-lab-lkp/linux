@@ -7325,10 +7325,25 @@ consume:
 		}
 	} else {
 		/*
-		 * There really shouldn't be any missed events if the commit
+		 * There really shouldn't be any missed events if the tail_page
 		 * is on the reader page.
 		 */
-		WARN_ON_ONCE(missed_events);
+		if (missed_events) {
+			if (!WARN_ONCE(cpu_buffer->reader_page == cpu_buffer->tail_page,
+				       "Reader on commit with %ld missed events",
+				       missed_events)) {
+				/*
+				 * If the tail page is not on the reader page but
+				 * the commit_page is, that would mean that there's
+				 * a commit_overrun (an interrupt preempted an
+				 * addition of an event and then filled the buffer
+				 * with new events). In this case it's not an
+				 * error, but it should still be reported.
+				 */
+				pr_info("Ring buffer commit overrun lost %ld events at timestamp:%lld\n",
+					missed_events, cpu_buffer->reader_page->page->time_stamp);
+			}
+		}
 	}
 
 	cpu_buffer->lost_events = 0;
