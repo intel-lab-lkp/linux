@@ -312,8 +312,8 @@ Code  Seq#    Include File                                           Comments
 'z'   40-7F                                                          CAN bus card conflict!
                                                                      <mailto:oe@port.de>
 'z'   10-4F  drivers/s390/crypto/zcrypt_api.h                        conflict!
-'|'   00-7F  linux/media.h
-'|'   80-9F  samples/                                                Any sample and example drivers
+'|'   00-8F  linux/media.h
+'|'   90-AF  samples/                                                Any sample and example drivers
 0x80  00-1F  linux/fb.h
 0x81  00-1F  linux/vduse.h
 0x89  00-06  arch/x86/include/asm/sockios.h
