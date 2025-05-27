@@ -142,6 +142,12 @@ drm_buddy_block_size(struct drm_buddy *mm,
 	return mm->chunk_size << drm_buddy_block_order(block);
 }
 
+static inline void
+drm_buddy_block_set_dirty(struct drm_buddy_block *block)
+{
+	block->header &= ~DRM_BUDDY_HEADER_CLEAR;
+}
+
 int drm_buddy_init(struct drm_buddy *mm, u64 size, u64 chunk_size);
 
 void drm_buddy_fini(struct drm_buddy *mm);
