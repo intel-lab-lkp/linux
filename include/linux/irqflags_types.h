@@ -19,4 +19,10 @@ struct irqtrace_events {
 
 #endif
 
+/* Per-cpu interrupt disabling state for local_interrupt_{disable,enable}() */
+struct interrupt_disable_state {
+	unsigned long flags;
+	long count;
+};
+
 #endif /* _LINUX_IRQFLAGS_TYPES_H */
