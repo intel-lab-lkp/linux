@@ -14,10 +14,10 @@
 //! #include <unistd.h>
 //! #include <sys/ioctl.h>
 //!
-//! #define RUST_MISC_DEV_FAIL _IO('|', 0)
-//! #define RUST_MISC_DEV_HELLO _IO('|', 0x80)
-//! #define RUST_MISC_DEV_GET_VALUE _IOR('|', 0x81, int)
-//! #define RUST_MISC_DEV_SET_VALUE _IOW('|', 0x82, int)
+//! #define RUST_MISC_DEV_FAIL _IO('|', 0xaf)
+//! #define RUST_MISC_DEV_HELLO _IO('|', 0x90)
+//! #define RUST_MISC_DEV_GET_VALUE _IOR('|', 0x91, int)
+//! #define RUST_MISC_DEV_SET_VALUE _IOW('|', 0x92, int)
 //!
 //! int main() {
 //!   int value, new_value;
@@ -110,9 +110,9 @@ use kernel::{
     uaccess::{UserSlice, UserSliceReader, UserSliceWriter},
 };
 
-const RUST_MISC_DEV_HELLO: u32 = _IO('|' as u32, 0x80);
-const RUST_MISC_DEV_GET_VALUE: u32 = _IOR::<i32>('|' as u32, 0x81);
-const RUST_MISC_DEV_SET_VALUE: u32 = _IOW::<i32>('|' as u32, 0x82);
+const RUST_MISC_DEV_HELLO: u32 = _IO('|' as u32, 0x90);
+const RUST_MISC_DEV_GET_VALUE: u32 = _IOR::<i32>('|' as u32, 0x91);
+const RUST_MISC_DEV_SET_VALUE: u32 = _IOW::<i32>('|' as u32, 0x92);
 
 module! {
     type: RustMiscDeviceModule,
