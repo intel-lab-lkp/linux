@@ -222,8 +222,12 @@ struct irq_domain *irq_domain_create_sim_full(struct fwnode_handle *fwnode,
 	work_ctx->pending = no_free_ptr(pending);
 	work_ctx->user_data = data;
 
-	if (ops)
+	if (ops) {
 		memcpy(&work_ctx->ops, ops, sizeof(*ops));
+	} else {
+		work_ctx->ops.irq_sim_irq_released = NULL;
+		work_ctx->ops.irq_sim_irq_requested = NULL;
+	}
 
 	return no_free_ptr(work_ctx)->domain;
 }
