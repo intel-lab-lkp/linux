@@ -83,7 +83,7 @@ void intel_dp_audio_compute_config(struct intel_encoder *encoder,
 bool intel_dp_has_hdmi_sink(struct intel_dp *intel_dp);
 bool intel_dp_is_edp(struct intel_dp *intel_dp);
 bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state);
-bool intel_dp_has_dsc(const struct intel_connector *connector);
+bool intel_dp_has_dsc(struct intel_dp *intel_dp, const struct intel_connector *connector);
 int intel_dp_link_symbol_size(int rate);
 int intel_dp_link_symbol_clock(int rate);
 bool intel_dp_is_port_edp(struct intel_display *display, enum port port);

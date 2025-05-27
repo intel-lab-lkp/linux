@@ -3548,6 +3548,14 @@ bool intel_bios_get_dsc_params(struct intel_encoder *encoder,
 	return false;
 }
 
+bool intel_bios_encoder_ext_display_dsc_disabled(const struct intel_bios_encoder_data *devdata)
+{
+	if (!devdata || devdata->display->vbt.version < 251)
+		return false;
+
+	return devdata->child.disable_compression_for_ext_disp;
+}
+
 static const u8 adlp_aux_ch_map[] = {
 	[AUX_CH_A] = DP_AUX_A,
 	[AUX_CH_B] = DP_AUX_B,

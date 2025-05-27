@@ -1389,9 +1389,11 @@ int intel_dp_num_joined_pipes(struct intel_dp *intel_dp,
 	return 1;
 }
 
-bool intel_dp_has_dsc(const struct intel_connector *connector)
+bool intel_dp_has_dsc(struct intel_dp *intel_dp,
+		      const struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 
 	if (!HAS_DSC(display))
 		return false;
@@ -1401,6 +1403,10 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 
 	if (connector->base.connector_type == DRM_MODE_CONNECTOR_eDP &&
 	    connector->panel.vbt.edp.dsc_disable)
+		return false;
+
+	if (connector->base.connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+	    intel_bios_encoder_ext_display_dsc_disabled(encoder->devdata))
 		return false;
 
 	if (!drm_dp_sink_supports_dsc(connector->dp.dsc_dpcd))
@@ -1463,7 +1469,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	mode_rate = intel_dp_link_required(target_clock,
 					   intel_dp_mode_min_output_bpp(connector, mode));
 
-	if (intel_dp_has_dsc(connector)) {
+	if (intel_dp_has_dsc(intel_dp, connector)) {
 		enum intel_output_format sink_format, output_format;
 		int pipe_bpp;
 
@@ -1650,7 +1656,7 @@ bool intel_dp_supports_dsc(struct intel_dp *intel_dp,
 			   const struct intel_connector *connector,
 			   const struct intel_crtc_state *crtc_state)
 {
-	if (!intel_dp_has_dsc(connector))
+	if (!intel_dp_has_dsc(intel_dp, connector))
 		return false;
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP) &&
