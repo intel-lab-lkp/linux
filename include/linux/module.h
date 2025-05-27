@@ -170,6 +170,9 @@ struct module_kobject *lookup_or_create_module_kobject(const char *name);
 /* For userspace: you can also call me... */
 #define MODULE_ALIAS(_alias) MODULE_INFO(alias, _alias)
 
+#define MODULE_ALIAS_MODNAME(_modname, _alias) \
+	__MODULE_INFO_WITH_PREFIX(_modname ".", alias, alias, _alias)
+
 /* Soft module dependencies. See man modprobe.d for details.
  * Example: MODULE_SOFTDEP("pre: module-foo module-bar post: module-baz")
  */
