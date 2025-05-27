@@ -80,6 +80,7 @@ struct dev_ctx {
 	char tgt_type[16];
 	unsigned long flags;
 	unsigned nr_hw_queues;
+	unsigned nthreads;
 	unsigned queue_depth;
 	int dev_id;
 	int nr_files;
@@ -89,6 +90,7 @@ struct dev_ctx {
 	unsigned int	fg:1;
 	unsigned int	recovery:1;
 	unsigned int	auto_zc_fallback:1;
+	unsigned int	per_io_tasks:1;
 
 	int _evtfd;
 	int _shmid;
@@ -128,6 +130,7 @@ struct ublk_io {
 	unsigned short refs;		/* used by target code only */
 
 	int tag;
+	int buf_index;
 
 	int result;
 
@@ -203,6 +206,8 @@ struct ublk_dev {
 	struct ublksrv_ctrl_dev_info  dev_info;
 	struct ublk_queue q[UBLK_MAX_QUEUES];
 	struct ublk_thread threads[UBLK_MAX_THREADS];
+	unsigned nthreads;
+	unsigned per_io_tasks;
 
 	int fds[MAX_BACK_FILES + 1];	/* fds[0] points to /dev/ublkcN */
 	int nr_fds;
