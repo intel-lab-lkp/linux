@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <sched.h>
+#include <signal.h>
 
 #include "timerlat.h"
 
@@ -124,6 +125,47 @@ timerlat_apply_config(struct osnoise_tool *tool, struct timerlat_params *params)
 
 out_err:
 	return -1;
+}
+
+/*
+ * timerlat_execute_actions - execute actions at threshold overflow
+ */
+int
+timerlat_execute_actions(struct osnoise_tool *record, struct action_options *action_opts)
+{
+	int i, pid, retval;
+
+	for (i = 0; i < action_opts->actions_length; i++) {
+		switch (action_opts->actions[i]) {
+		case ACTION_TRACE_OUTPUT:
+			retval = save_trace_to_file(record->trace.inst, action_opts->trace_output);
+			if (retval) {
+				err_msg("Error saving trace\n");
+				return retval;
+			}
+			break;
+		case ACTION_SIGNAL:
+			if (action_opts->pid == -1)
+				pid = getppid();
+			else
+				pid = action_opts->pid;
+			retval = kill(pid, action_opts->signal);
+			if (retval) {
+				err_msg("Error sending signal\n");
+				return retval;
+			}
+			break;
+		case ACTION_EXEC:
+			retval = system(action_opts->command);
+			if (retval)
+				return retval;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return 0;
 }
 
 static void timerlat_usage(int err)

@@ -513,6 +513,7 @@ static void timerlat_top_usage(char *usage)
 		"	  -u/--user-threads: use rtla user-space threads instead of kernel-space timerlat threads",
 		"	  -k/--kernel-threads: use timerlat kernel-space threads instead of rtla user-space threads",
 		"	  -U/--user-load: enable timerlat for user-defined user-space workload",
+		"         -A/--action-on-overflow <action>: trigger action on threshold overflow, multiple -A are allowed",
 		"	     --warm-up s: let the workload run for s seconds before collecting data",
 		"	     --trace-buffer-size kB: set the per-cpu trace buffer size in kB",
 		"	     --deepest-idle-state n: only go down to idle state n on cpus used by timerlat to reduce exit from idle latency",
@@ -545,10 +546,13 @@ static struct timerlat_params
 	long long auto_thresh;
 	int retval;
 	int c;
+	char *trace_output;
 
 	params = calloc(1, sizeof(*params));
 	if (!params)
 		exit(1);
+
+	action_options_init(&params->action_opts);
 
 	/* disabled by default */
 	params->dma_latency = -1;
@@ -564,6 +568,7 @@ static struct timerlat_params
 
 	while (1) {
 		static struct option long_options[] = {
+			{"action-on-overflow",  required_argument,      0, 'A'},
 			{"auto",		required_argument,	0, 'a'},
 			{"cpus",		required_argument,	0, 'c'},
 			{"cgroup",		optional_argument,	0, 'C'},
@@ -598,7 +603,7 @@ static struct timerlat_params
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "a:c:C::d:De:hH:i:knp:P:qs:t::T:uU0:1:2:345:6:7:",
+		c = getopt_long(argc, argv, "A:a:c:C::d:De:hH:i:knp:P:qs:t::T:uU0:1:2:345:6:7:",
 				 long_options, &option_index);
 
 		/* detect the end of the options. */
@@ -617,7 +622,14 @@ static struct timerlat_params
 			params->print_stack = auto_thresh;
 
 			/* set trace */
-			params->trace_output = "timerlat_trace.txt";
+			action_add_trace_output(&params->action_opts, "timerlat_trace.txt");
+			break;
+		case 'A':
+			retval = action_parse(&params->action_opts, optarg);
+			if (retval) {
+				err_msg("Invalid action %s\n", optarg);
+				exit(EXIT_FAILURE);
+			}
 			break;
 		case '5':
 			/* it is here because it is similar to -a */
@@ -712,14 +724,14 @@ static struct timerlat_params
 		case 't':
 			if (optarg) {
 				if (optarg[0] == '=')
-					params->trace_output = &optarg[1];
+					trace_output = &optarg[1];
 				else
-					params->trace_output = &optarg[0];
+					trace_output = &optarg[0];
 			} else if (optind < argc && argv[optind][0] != '-')
-				params->trace_output = argv[optind];
+				trace_output = argv[optind];
 			else
-				params->trace_output = "timerlat_trace.txt";
-
+				trace_output = "timerlat_trace.txt";
+			action_add_trace_output(&params->action_opts, trace_output);
 			break;
 		case 'u':
 			params->user_workload = true;
@@ -797,7 +809,8 @@ static struct timerlat_params
 	 * If auto-analysis or trace output is enabled, switch from BPF mode to
 	 * mixed mode
 	 */
-	if (params->mode == TRACING_MODE_BPF && params->trace_output && !params->no_aa)
+	if (params->mode == TRACING_MODE_BPF &&
+	    (params->action_opts.action_present[ACTION_TRACE_OUTPUT] || !params->no_aa))
 		params->mode = TRACING_MODE_MIXED;
 
 	return params;
@@ -1099,7 +1112,7 @@ int timerlat_top_main(int argc, char *argv[])
 		}
 	}
 
-	if (params->trace_output) {
+	if (params->action_opts.action_present[ACTION_TRACE_OUTPUT]) {
 		record = osnoise_init_trace_tool("timerlat");
 		if (!record) {
 			err_msg("Failed to enable the trace instance\n");
@@ -1171,7 +1184,7 @@ int timerlat_top_main(int argc, char *argv[])
 	 * tracing while enabling other instances. The trace instance is the
 	 * one with most valuable information.
 	 */
-	if (params->trace_output)
+	if (params->action_opts.action_present[ACTION_TRACE_OUTPUT])
 		trace_instance_start(&record->trace);
 	if (!params->no_aa)
 		trace_instance_start(&aa->trace);
@@ -1214,8 +1227,7 @@ int timerlat_top_main(int argc, char *argv[])
 		if (!params->no_aa)
 			timerlat_auto_analysis(params->stop_us, params->stop_total_us);
 
-		save_trace_to_file(record ? record->trace.inst : NULL,
-				   params->trace_output);
+		timerlat_execute_actions(record, &params->action_opts);
 	} else if (params->aa_only) {
 		/*
 		 * If the trace did not stop with --aa-only, at least print the
