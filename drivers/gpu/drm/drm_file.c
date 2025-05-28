@@ -892,6 +892,58 @@ void drm_print_memory_stats(struct drm_printer *p,
 }
 EXPORT_SYMBOL(drm_print_memory_stats);
 
+struct drm_bo_print_data {
+	struct drm_memory_stats status;
+	enum drm_gem_object_status supported_status;
+};
+
+static int
+drm_bo_memory_stats(int id, void *ptr, void *data)
+{
+	struct drm_bo_print_data *drm_data;
+	struct drm_gem_object *obj = ptr;
+	enum drm_gem_object_status s = 0;
+	size_t add_size;
+
+	if (!obj)
+		return 0;
+
+	add_size = (obj->funcs && obj->funcs->rss) ?
+		obj->funcs->rss(obj) : obj->size;
+
+	if (obj->funcs && obj->funcs->status) {
+		s = obj->funcs->status(obj);
+		drm_data->supported_status |= s;
+	}
+
+	if (drm_gem_object_is_shared_for_memory_stats(obj))
+		drm_data->status.shared += obj->size;
+	else
+		drm_data->status.private += obj->size;
+
+	if (s & DRM_GEM_OBJECT_RESIDENT) {
+		drm_data->status.resident += add_size;
+	} else {
+		/* If already purged or not yet backed by pages, don't
+		 * count it as purgeable:
+		 */
+		s &= ~DRM_GEM_OBJECT_PURGEABLE;
+	}
+
+	if (!dma_resv_test_signaled(obj->resv, dma_resv_usage_rw(true))) {
+		drm_data->status.active += add_size;
+		drm_data->supported_status |= DRM_GEM_OBJECT_ACTIVE;
+
+		/* If still active, don't count as purgeable: */
+		s &= ~DRM_GEM_OBJECT_PURGEABLE;
+	}
+
+	if (s & DRM_GEM_OBJECT_PURGEABLE)
+		drm_data->status.purgeable += add_size;
+
+	return 0;
+}
+
 /**
  * drm_show_memory_stats - Helper to collect and show standard fdinfo memory stats
  * @p: the printer to print output to
@@ -902,50 +954,13 @@ EXPORT_SYMBOL(drm_print_memory_stats);
  */
 void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
 {
-	struct drm_gem_object *obj;
-	struct drm_memory_stats status = {};
-	enum drm_gem_object_status supported_status = 0;
-	int id;
+	struct drm_bo_print_data data = {};
 
 	spin_lock(&file->table_lock);
-	idr_for_each_entry (&file->object_idr, obj, id) {
-		enum drm_gem_object_status s = 0;
-		size_t add_size = (obj->funcs && obj->funcs->rss) ?
-			obj->funcs->rss(obj) : obj->size;
-
-		if (obj->funcs && obj->funcs->status) {
-			s = obj->funcs->status(obj);
-			supported_status |= s;
-		}
-
-		if (drm_gem_object_is_shared_for_memory_stats(obj))
-			status.shared += obj->size;
-		else
-			status.private += obj->size;
-
-		if (s & DRM_GEM_OBJECT_RESIDENT) {
-			status.resident += add_size;
-		} else {
-			/* If already purged or not yet backed by pages, don't
-			 * count it as purgeable:
-			 */
-			s &= ~DRM_GEM_OBJECT_PURGEABLE;
-		}
-
-		if (!dma_resv_test_signaled(obj->resv, dma_resv_usage_rw(true))) {
-			status.active += add_size;
-			supported_status |= DRM_GEM_OBJECT_ACTIVE;
-
-			/* If still active, don't count as purgeable: */
-			s &= ~DRM_GEM_OBJECT_PURGEABLE;
-		}
-
-		if (s & DRM_GEM_OBJECT_PURGEABLE)
-			status.purgeable += add_size;
-	}
+	idr_for_each(&file->object_idr, &drm_bo_memory_stats, &data);
 	spin_unlock(&file->table_lock);
 
-	drm_print_memory_stats(p, &status, supported_status, "memory");
+	drm_print_memory_stats(p, &data.status, data.supported_status, "memory");
 }
 EXPORT_SYMBOL(drm_show_memory_stats);
 
