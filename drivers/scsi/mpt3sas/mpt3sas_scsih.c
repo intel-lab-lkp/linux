@@ -3659,7 +3659,6 @@ static struct fw_event_work *dequeue_next_fw_event(struct MPT3SAS_ADAPTER *ioc)
 		fw_event = list_first_entry(&ioc->fw_event_list,
 				struct fw_event_work, list);
 		list_del_init(&fw_event->list);
-		fw_event_work_put(fw_event);
 	}
 	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 
@@ -3679,10 +3678,15 @@ static void
 _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 {
 	struct fw_event_work *fw_event;
+	unsigned long flags;
 
+	spin_lock_irqsave(&ioc->fw_event_lock, flags);
 	if ((list_empty(&ioc->fw_event_list) && !ioc->current_event) ||
-	    !ioc->firmware_event_thread)
+	    !ioc->firmware_event_thread) {
+		spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 		return;
+	}
+
 	/*
 	 * Set current running event as ignore, so that
 	 * current running event will exit quickly.
@@ -3691,10 +3695,21 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 	 */
 	if (ioc->shost_recovery && ioc->current_event)
 		ioc->current_event->ignore = 1;
+	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 
 	ioc->fw_events_cleanup = 1;
-	while ((fw_event = dequeue_next_fw_event(ioc)) ||
-	     (fw_event = ioc->current_event)) {
+	while (true) {
+		fw_event = dequeue_next_fw_event(ioc);
+
+		spin_lock_irqsave(&ioc->fw_event_lock, flags);
+		if (!fw_event) {
+			fw_event = ioc->current_event;
+			if (!fw_event) {
+				spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
+				break;
+			}
+			fw_event_work_get(fw_event);
+		}
 
 		/*
 		 * Don't call cancel_work_sync() for current_event
@@ -3714,8 +3729,11 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		    ioc->current_event->event !=
 		    MPT3SAS_REMOVE_UNRESPONDING_DEVICES) {
 			ioc->current_event = NULL;
+			spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
+			fw_event_work_put(fw_event);
 			continue;
 		}
+		spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 
 		/*
 		 * Driver has to clear ioc->start_scan flag when
@@ -3741,6 +3759,7 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		if (cancel_work_sync(&fw_event->work))
 			fw_event_work_put(fw_event);
 
+		fw_event_work_put(fw_event);
 	}
 	ioc->fw_events_cleanup = 0;
 }
@@ -10690,15 +10709,16 @@ mpt3sas_scsih_reset_done_handler(struct MPT3SAS_ADAPTER *ioc)
 static void
 _mpt3sas_fw_work(struct MPT3SAS_ADAPTER *ioc, struct fw_event_work *fw_event)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioc->fw_event_lock, flags);
 	ioc->current_event = fw_event;
+	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 	_scsih_fw_event_del_from_list(ioc, fw_event);
 
 	/* the queue is being flushed so ignore this event */
-	if (ioc->remove_host || ioc->pci_error_recovery) {
-		fw_event_work_put(fw_event);
-		ioc->current_event = NULL;
-		return;
-	}
+	if (ioc->remove_host || ioc->pci_error_recovery)
+		goto out;
 
 	switch (fw_event->event) {
 	case MPT3SAS_PROCESS_TRIGGER_DIAG:
@@ -10794,8 +10814,10 @@ _mpt3sas_fw_work(struct MPT3SAS_ADAPTER *ioc, struct fw_event_work *fw_event)
 		return;
 	}
 out:
+	spin_lock_irqsave(&ioc->fw_event_lock, flags);
 	fw_event_work_put(fw_event);
 	ioc->current_event = NULL;
+	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 }
 
 /**
