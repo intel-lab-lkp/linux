@@ -1089,7 +1089,7 @@ struct execmem_info __init *execmem_arch_setup(void)
 		pgprot = PAGE_KERNEL_ROX;
 		flags = EXECMEM_KASAN_SHADOW | EXECMEM_ROX_CACHE;
 	} else {
-		pgprot = PAGE_KERNEL;
+		pgprot = PAGE_KERNEL_EXEC;
 		flags = EXECMEM_KASAN_SHADOW;
 	}
 
