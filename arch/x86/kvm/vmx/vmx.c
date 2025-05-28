@@ -4929,8 +4929,9 @@ void vmx_inject_irq(struct kvm_vcpu *vcpu, bool reinjected)
 		intr |= INTR_TYPE_SOFT_INTR;
 		vmcs_write32(VM_ENTRY_INSTRUCTION_LEN,
 			     vmx->vcpu.arch.event_exit_inst_len);
-	} else
+	} else {
 		intr |= INTR_TYPE_EXT_INTR;
+	}
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, intr);
 
 	vmx_clear_hlt(vcpu);
