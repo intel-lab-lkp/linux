@@ -804,7 +804,7 @@ static int ov2740_init_controls(struct ov2740 *ov2740)
 	int ret;
 
 	ctrl_hdlr = &ov2740->ctrl_handler;
-	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 12);
+	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 13);
 	if (ret)
 		return ret;
 
@@ -859,6 +859,9 @@ static int ov2740_init_controls(struct ov2740 *ov2740)
 			  V4L2_CID_CFA_PATTERN_FLIP,
 			  0, V4L2_CFA_PATTERN_FLIP_BOTH,
 			  0, V4L2_CFA_PATTERN_FLIP_BOTH);
+	v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_METADATA_LAYOUT,
+			  0, V4L2_METADATA_LAYOUT_OV2740,
+			  1, V4L2_METADATA_LAYOUT_OV2740);
 
 	ret = v4l2_fwnode_device_parse(ov2740->dev, &props);
 	if (ret) {
