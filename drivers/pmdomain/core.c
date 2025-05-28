@@ -2441,6 +2441,9 @@ static LIST_HEAD(of_genpd_providers);
 /* Mutex to protect the list above. */
 static DEFINE_MUTEX(of_genpd_mutex);
 
+static int of_genpd_parse_child_ids(struct device_node *np,
+				    struct genpd_onecell_data *data);
+
 /**
  * genpd_xlate_simple() - Xlate function for direct node-domain mapping
  * @genpdspec: OF phandle args to map into a PM domain
@@ -2635,6 +2638,14 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 	if (ret < 0)
 		goto error;
 
+	/* Parse power-domains-child-ids property to establish parent-child relationships */
+	ret = of_genpd_parse_child_ids(np, data);
+	if (ret < 0 && ret != -ENOENT) {
+		pr_err("Failed to parse power-domains-child-ids for %pOF: %d\n", np, ret);
+		of_genpd_del_provider(np);
+		goto error;
+	}
+
 	return 0;
 
 error:
@@ -2732,6 +2743,106 @@ static struct generic_pm_domain *genpd_get_from_provider(
 	mutex_unlock(&of_genpd_mutex);
 
 	return genpd;
+}
+
+/**
+ * of_genpd_parse_child_ids() - Parse power-domains-child-ids property
+ * @np: Device node pointer associated with the PM domain provider.
+ * @data: Pointer to the onecell data associated with the PM domain provider.
+ *
+ * Parse the power-domains and power-domains-child-ids properties to establish
+ * parent-child relationships for PM domains. The power-domains property lists
+ * parent domains, and power-domains-child-ids lists which child domain IDs
+ * should be associated with each parent.
+ *
+ * Returns 0 on success, -ENOENT if properties don't exist, or negative error code.
+ */
+static int of_genpd_parse_child_ids(struct device_node *np,
+				    struct genpd_onecell_data *data)
+{
+	struct of_phandle_args parent_args;
+	struct generic_pm_domain *parent_genpd, *child_genpd;
+	u32 *child_ids;
+	int num_parents, num_child_ids, i, ret;
+
+	/* Check if both properties exist */
+	num_parents = of_count_phandle_with_args(np, "power-domains", "#power-domain-cells");
+	if (num_parents <= 0)
+		return -ENOENT;
+
+	num_child_ids = of_property_count_u32_elems(np, "power-domains-child-ids");
+	if (num_child_ids <= 0)
+		return -ENOENT;
+
+	if (num_parents != num_child_ids) {
+		pr_err("power-domains (%d) and power-domains-child-ids (%d) count mismatch for %pOF\n",
+		       num_parents, num_child_ids, np);
+		return -EINVAL;
+	}
+
+	child_ids = kcalloc(num_child_ids, sizeof(*child_ids), GFP_KERNEL);
+	if (!child_ids)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(np, "power-domains-child-ids", child_ids, num_child_ids);
+	if (ret) {
+		pr_err("Failed to read power-domains-child-ids for %pOF: %d\n", np, ret);
+		goto out_free;
+	}
+
+	/* For each parent domain, establish parent-child relationship */
+	for (i = 0; i < num_parents; i++) {
+		ret = of_parse_phandle_with_args(np, "power-domains",
+						 "#power-domain-cells", i, &parent_args);
+		if (ret) {
+			pr_err("Failed to parse parent domain %d for %pOF: %d\n", i, np, ret);
+			goto out_free;
+		}
+
+		/* Get the parent domain */
+		parent_genpd = genpd_get_from_provider(&parent_args);
+		of_node_put(parent_args.np);
+		if (IS_ERR(parent_genpd)) {
+			pr_err("Failed to get parent domain %d for %pOF: %ld\n",
+			       i, np, PTR_ERR(parent_genpd));
+			ret = PTR_ERR(parent_genpd);
+			goto out_free;
+		}
+
+		/* Validate child ID is within bounds */
+		if (child_ids[i] >= data->num_domains) {
+			pr_err("Child ID %u out of bounds (max %u) for parent %d in %pOF\n",
+			       child_ids[i], data->num_domains - 1, i, np);
+			ret = -EINVAL;
+			goto out_free;
+		}
+
+		/* Get the child domain */
+		child_genpd = data->domains[child_ids[i]];
+		if (!child_genpd) {
+			pr_err("Child domain %u is NULL for parent %d in %pOF\n",
+			       child_ids[i], i, np);
+			ret = -EINVAL;
+			goto out_free;
+		}
+
+		/* Establish parent-child relationship */
+		ret = genpd_add_subdomain(parent_genpd, child_genpd);
+		if (ret) {
+			pr_err("Failed to add child domain %u to parent %d in %pOF: %d\n",
+			       child_ids[i], i, np, ret);
+			goto out_free;
+		}
+
+		pr_debug("Added child domain %u (%s) to parent %s for %pOF\n",
+			 child_ids[i], child_genpd->name, parent_genpd->name, np);
+	}
+
+	ret = 0;
+
+out_free:
+	kfree(child_ids);
+	return ret;
 }
 
 /**

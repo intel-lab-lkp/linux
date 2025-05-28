@@ -68,6 +68,21 @@ properties:
       by the given provider should be subdomains of the domain specified
       by this binding.
 
+  power-domains-child-ids:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description:
+      An array of child domain IDs that correspond to the power-domains
+      property. This property is only applicable to power domain providers
+      with #power-domain-cells > 0 (i.e., providers that supply multiple
+      power domains). It specifies which of the provider's child domains
+      should be associated with each parent domain listed in the power-domains
+      property. The number of elements in this array must match the number of
+      phandles in the power-domains property. Each element specifies the child
+      domain ID (index) that should be made a subdomain of the corresponding
+      parent domain. This enables hierarchical power domain structures where
+      different child domains from the same provider can have different
+      parent domains.
+
 required:
   - "#power-domain-cells"
 
@@ -133,3 +148,27 @@ examples:
             min-residency-us = <7000>;
         };
     };
+
+  - |
+    // Example of power-domains-child-ids usage
+    MAIN_PD: main-power-controller {
+        compatible = "foo,main-power-controller";
+        #power-domain-cells = <0>;
+    };
+
+    WKUP_PD: wkup-power-controller {
+        compatible = "foo,wkup-power-controller";
+        #power-domain-cells = <0>;
+    };
+
+    scmi_pds: protocol@11 {
+        reg = <0x11>;
+        #power-domain-cells = <1>;
+        power-domains = <&MAIN_PD>, <&WKUP_PD>;
+        power-domains-child-ids = <15>, <19>;
+    };
+
+    // In the above example:
+    // - Child domain 15 (scmi_pds 15) becomes a subdomain of MAIN_PD
+    // - Child domain 19 (scmi_pds 19) becomes a subdomain of WKUP_PD
+    // - Other child domains (0-14, 16-18, 20+) have no parent relationship
