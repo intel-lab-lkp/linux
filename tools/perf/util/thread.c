@@ -201,13 +201,21 @@ int thread__set_namespaces(struct thread *thread, u64 timestamp,
 	return ret;
 }
 
+static struct comm *__thread__comm(struct thread *thread)
+	SHARED_LOCKS_REQUIRED(thread__comm_lock(thread))
+{
+	if (list_empty(thread__comm_list(thread)))
+		return NULL;
+
+	return list_first_entry(thread__comm_list(thread), struct comm, list);
+}
+
 struct comm *thread__comm(struct thread *thread)
 {
 	struct comm *res = NULL;
 
 	down_read(thread__comm_lock(thread));
-	if (!list_empty(thread__comm_list(thread)))
-		res = list_first_entry(thread__comm_list(thread), struct comm, list);
+	res = __thread__comm(thread);
 	up_read(thread__comm_lock(thread));
 	return res;
 }
@@ -243,7 +251,7 @@ static int ____thread__set_comm(struct thread *thread, const char *str,
 				u64 timestamp, bool exec)
 	EXCLUSIVE_LOCKS_REQUIRED(thread__comm_lock(thread))
 {
-	struct comm *new, *curr = thread__comm(thread);
+	struct comm *new, *curr = __thread__comm(thread);
 
 	/* Override the default :tid entry */
 	if (!thread__comm_set(thread)) {
@@ -294,8 +302,9 @@ int thread__set_comm_from_proc(struct thread *thread)
 }
 
 static const char *__thread__comm_str(struct thread *thread)
+	SHARED_LOCKS_REQUIRED(thread__comm_lock(thread))
 {
-	const struct comm *comm = thread__comm(thread);
+	const struct comm *comm = __thread__comm(thread);
 
 	if (!comm)
 		return NULL;
