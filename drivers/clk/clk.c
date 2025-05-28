@@ -78,6 +78,10 @@ struct clk_parent_map {
  * @rate:              Current clock rate (Hz).
  * @req_rate:          Requested clock rate (Hz).
  * @new_rate:          New rate to be set during a rate change operation.
+ * @rate_directly_changed: Clocks have the ability to change the rate of it's
+ *                     parent in order to satisfy a rate change request. This
+ *                     flag indicates that the rate change request initiated
+ *                     with this particular node.
  * @new_parent:        Pointer to new parent during parent change.
  * @new_child:         Pointer to new child during reparenting.
  * @flags:             Clock property and capability flags.
@@ -114,6 +118,7 @@ struct clk_core {
 	unsigned long		rate;
 	unsigned long		req_rate;
 	unsigned long		new_rate;
+	bool			rate_directly_changed;
 	struct clk_core		*new_parent;
 	struct clk_core		*new_child;
 	unsigned long		flags;
@@ -2306,7 +2311,11 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
 		new_parent->new_child = core;
 
 	hlist_for_each_entry(child, &core->children, child_node) {
-		child->new_rate = clk_recalc(child, new_rate);
+		if (child->rate_directly_changed)
+			child->new_rate = clk_recalc(child, new_rate);
+		else
+			child->new_rate = child->rate;
+
 		clk_calc_subtree(child, child->new_rate, NULL, 0);
 	}
 }
@@ -2579,6 +2588,8 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	if (clk_core_rate_is_protected(core))
 		return -EBUSY;
 
+	core->rate_directly_changed = true;
+
 	/* calculate new rates and get the topmost changed clock */
 	top = clk_calc_new_rates(core, req_rate);
 	if (!top)
@@ -2600,6 +2611,8 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 
 	/* change the rates */
 	clk_change_rate(top);
+
+	core->rate_directly_changed = false;
 
 	core->req_rate = req_rate;
 err:
