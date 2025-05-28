@@ -205,6 +205,7 @@ static void show_meminfo(struct drm_printer *p, struct drm_file *file)
 
 	/* Public objects. */
 	spin_lock(&file->table_lock);
+	/* FIXME: Use idr_for_each to handle transient NULL pointers */
 	idr_for_each_entry(&file->object_idr, obj, id) {
 		struct xe_bo *bo = gem_to_xe_bo(obj);
 
@@ -213,6 +214,8 @@ static void show_meminfo(struct drm_printer *p, struct drm_file *file)
 			xe_bo_unlock(bo);
 		} else {
 			xe_bo_get(bo);
+			/* FIXME: dropping the lock can mess the idr iterator
+			 * state up */
 			spin_unlock(&file->table_lock);
 
 			xe_bo_lock(bo, false);
