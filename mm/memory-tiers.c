@@ -299,6 +299,19 @@ out:
 	return toptier;
 }
 
+nodemask_t get_tier_nodemask(int node)
+{
+	struct memory_tier *memtier;
+	nodemask_t tier_nodes = NODE_MASK_NONE;
+
+	memtier = __node_get_memory_tier(node);
+	if (!memtier)
+		return tier_nodes;
+
+	tier_nodes = get_memtier_nodemask(memtier);
+	return tier_nodes;
+}
+
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
 {
 	struct memory_tier *memtier;

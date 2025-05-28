@@ -378,7 +378,8 @@ struct damos *damon_new_scheme(struct damos_access_pattern *pattern,
 			unsigned long apply_interval_us,
 			struct damos_quota *quota,
 			struct damos_watermarks *wmarks,
-			int target_nid)
+			int target_nid,
+			bool use_nodes_of_tier)
 {
 	struct damos *scheme;
 
@@ -408,6 +409,7 @@ struct damos *damon_new_scheme(struct damos_access_pattern *pattern,
 	scheme->wmarks.activated = true;
 
 	scheme->target_nid = target_nid;
+	scheme->use_nodes_of_tier = use_nodes_of_tier;
 
 	return scheme;
 }
@@ -1006,7 +1008,7 @@ static int damon_commit_schemes(struct damon_ctx *dst, struct damon_ctx *src)
 				src_scheme->action,
 				src_scheme->apply_interval_us,
 				&src_scheme->quota, &src_scheme->wmarks,
-				NUMA_NO_NODE);
+				NUMA_NO_NODE, false);
 		if (!new_scheme)
 			return -ENOMEM;
 		err = damos_commit(new_scheme, src_scheme);

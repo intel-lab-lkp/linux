@@ -105,7 +105,8 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 				.weight_age = 100,
 			},
 			&(struct damos_watermarks){},
-			promote ? 0 : 1);	/* migrate target node id */
+			promote ? 0 : 1,	/* migrate target node id */
+			false);
 	if (!scheme)
 		goto free_out;
 	damon_set_schemes(ctx, &scheme, 1);

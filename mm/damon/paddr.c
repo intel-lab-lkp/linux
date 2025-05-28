@@ -383,7 +383,7 @@ static unsigned long damon_pa_deactivate_pages(struct damon_region *r,
 
 static unsigned int __damon_pa_migrate_folio_list(
 		struct list_head *migrate_folios, struct pglist_data *pgdat,
-		int target_nid)
+		int target_nid, bool use_nodes_of_tier)
 {
 	unsigned int nr_succeeded = 0;
 	nodemask_t allowed_mask = NODE_MASK_NONE;
@@ -405,6 +405,9 @@ static unsigned int __damon_pa_migrate_folio_list(
 	if (list_empty(migrate_folios))
 		return 0;
 
+	if (use_nodes_of_tier)
+		allowed_mask = get_tier_nodemask(target_nid);
+
 	/* Migration ignores all cpuset and mempolicy settings */
 	migrate_pages(migrate_folios, alloc_migrate_folio, NULL,
 		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DAMON,
@@ -415,7 +418,7 @@ static unsigned int __damon_pa_migrate_folio_list(
 
 static unsigned int damon_pa_migrate_folio_list(struct list_head *folio_list,
 						struct pglist_data *pgdat,
-						int target_nid)
+						int target_nid, bool use_nodes_of_tier)
 {
 	unsigned int nr_migrated = 0;
 	struct folio *folio;
@@ -444,7 +447,7 @@ keep:
 
 	/* Migrate folios selected for migration */
 	nr_migrated += __damon_pa_migrate_folio_list(
-			&migrate_folios, pgdat, target_nid);
+			&migrate_folios, pgdat, target_nid, use_nodes_of_tier);
 	/*
 	 * Folios that could not be migrated are still in @migrate_folios.  Add
 	 * those back on @folio_list
@@ -466,7 +469,7 @@ keep:
 }
 
 static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
-					    int target_nid)
+					    int target_nid, bool use_nodes_of_tier)
 {
 	int nid;
 	unsigned long nr_migrated = 0;
@@ -489,13 +492,15 @@ static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
 
 		nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
 							   NODE_DATA(nid),
-							   target_nid);
+							   target_nid,
+							   use_nodes_of_tier);
 		nid = folio_nid(lru_to_folio(folio_list));
 	} while (!list_empty(folio_list));
 
 	nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
 						   NODE_DATA(nid),
-						   target_nid);
+						   target_nid,
+						   use_nodes_of_tier);
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
@@ -529,7 +534,7 @@ put_folio:
 		addr += folio_size(folio);
 		folio_put(folio);
 	}
-	applied = damon_pa_migrate_pages(&folio_list, s->target_nid);
+	applied = damon_pa_migrate_pages(&folio_list, s->target_nid, s->use_nodes_of_tier);
 	cond_resched();
 	s->last_applied = folio;
 	return applied * PAGE_SIZE;

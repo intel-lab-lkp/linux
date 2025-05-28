@@ -455,6 +455,7 @@ struct damos_access_pattern {
  * @quota:		Control the aggressiveness of this scheme.
  * @wmarks:		Watermarks for automated (in)activation of this scheme.
  * @target_nid:		Destination node if @action is "migrate_{hot,cold}".
+ * @use_nodes_of_tier:	Whether to use nodes of the target tier.
  * @filters:		Additional set of &struct damos_filter for &action.
  * @ops_filters:	ops layer handling &struct damos_filter objects list.
  * @last_applied:	Last @action applied ops-managing entity.
@@ -475,6 +476,10 @@ struct damos_access_pattern {
  * @target_nid is used to set the migration target node for migrate_hot or
  * migrate_cold actions, which means it's only meaningful when @action is either
  * "migrate_hot" or "migrate_cold".
+ *
+ * @use_nodes_of_tier is used to select nodes of the target tier for migrating
+ * when target_nid is out of memory.Similar to @target_nid, this parameter is
+ * only meaningful when @action is either 'migrate_hot' or 'migrate_cold'.
  *
  * Before applying the &action to a memory region, &struct damon_operations
  * implementation could check pages of the region and skip &action to respect
@@ -519,6 +524,7 @@ struct damos {
 	union {
 		int target_nid;
 	};
+	bool use_nodes_of_tier;
 	struct list_head filters;
 	struct list_head ops_filters;
 	void *last_applied;
@@ -896,7 +902,8 @@ struct damos *damon_new_scheme(struct damos_access_pattern *pattern,
 			unsigned long apply_interval_us,
 			struct damos_quota *quota,
 			struct damos_watermarks *wmarks,
-			int target_nid);
+			int target_nid,
+			bool use_nodes_of_tier);
 void damon_add_scheme(struct damon_ctx *ctx, struct damos *s);
 void damon_destroy_scheme(struct damos *s);
 int damos_commit_quota_goals(struct damos_quota *dst, struct damos_quota *src);
