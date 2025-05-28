@@ -617,7 +617,8 @@ static int uvc_v4l2_release(struct file *file)
 
 	uvc_ctrl_cleanup_fh(handle);
 
-	if (handle->is_streaming)
+	if (stream->queue.queue.owner == file->private_data &&
+	    uvc_queue_streaming(&stream->queue))
 		uvc_pm_put(stream->dev);
 
 	/* Release the file handle. */
@@ -684,7 +685,7 @@ static int uvc_ioctl_streamon(struct file *file, void *fh,
 	struct uvc_streaming *stream = handle->stream;
 	int ret;
 
-	if (handle->is_streaming)
+	if (uvc_queue_streaming(&stream->queue))
 		return 0;
 
 	ret = uvc_pm_get(stream->dev);
@@ -697,8 +698,6 @@ static int uvc_ioctl_streamon(struct file *file, void *fh,
 		return ret;
 	}
 
-	handle->is_streaming = true;
-
 	return 0;
 }
 
@@ -707,16 +706,15 @@ static int uvc_ioctl_streamoff(struct file *file, void *fh,
 {
 	struct uvc_fh *handle = fh;
 	struct uvc_streaming *stream = handle->stream;
+	bool was_streaming = uvc_queue_streaming(&stream->queue);
 	int ret;
 
 	ret = vb2_ioctl_streamoff(file, fh, type);
 	if (ret)
 		return ret;
 
-	if (handle->is_streaming) {
-		handle->is_streaming = false;
+	if (was_streaming)
 		uvc_pm_put(stream->dev);
-	}
 
 	return 0;
 }
