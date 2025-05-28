@@ -1032,11 +1032,11 @@ struct folio *alloc_migrate_folio(struct folio *src, unsigned long private)
 	mtc->nmask = NULL;
 	mtc->gfp_mask |= __GFP_THISNODE;
 	dst = alloc_migration_target(src, (unsigned long)mtc);
+	mtc->nmask = allowed_mask;
 	if (dst)
 		return dst;
 
 	mtc->gfp_mask &= ~__GFP_THISNODE;
-	mtc->nmask = allowed_mask;
 
 	return alloc_migration_target(src, (unsigned long)mtc);
 }
