@@ -374,61 +374,51 @@ bool blk_mq_sched_try_insert_merge(struct request_queue *q, struct request *rq,
 }
 EXPORT_SYMBOL_GPL(blk_mq_sched_try_insert_merge);
 
-static int blk_mq_sched_alloc_map_and_rqs(struct request_queue *q,
-					  struct blk_mq_hw_ctx *hctx,
-					  unsigned int hctx_idx)
+static int blk_mq_init_sched_tags(struct request_queue *q,
+				  struct blk_mq_hw_ctx *hctx,
+				  unsigned int hctx_idx,
+				  struct elevator_queue *elevator)
 {
 	if (blk_mq_is_shared_tags(q->tag_set->flags)) {
 		hctx->sched_tags = q->sched_shared_tags;
 		return 0;
 	}
+	/*
+	 * We allocated the elevator queue and sched tags before initiating the
+	 * elevator switch, prior to acquiring ->elevator_lock. The sched tags
+	 * are stored under the elevator queue. So assign those pre-allocated
+	 * sched tags now.
+	 */
+	hctx->sched_tags = elevator->tags[hctx_idx];
 
-	hctx->sched_tags = blk_mq_alloc_map_and_rqs(q->tag_set, hctx_idx,
-						    q->nr_requests);
-
-	if (!hctx->sched_tags)
-		return -ENOMEM;
 	return 0;
 }
 
-static void blk_mq_exit_sched_shared_tags(struct request_queue *queue)
-{
-	blk_mq_free_rq_map(queue->sched_shared_tags);
-	queue->sched_shared_tags = NULL;
-}
-
-/* called in queue's release handler, tagset has gone away */
+/*
+ * Called while exiting elevator. Sched tags are freed later when we finish
+ * switching the elevator and releases the ->elevator_lock and ->frezze_lock.
+ */
 static void blk_mq_sched_tags_teardown(struct request_queue *q, unsigned int flags)
 {
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	queue_for_each_hw_ctx(q, hctx, i) {
-		if (hctx->sched_tags) {
-			if (!blk_mq_is_shared_tags(flags))
-				blk_mq_free_rq_map(hctx->sched_tags);
-			hctx->sched_tags = NULL;
-		}
-	}
+	queue_for_each_hw_ctx(q, hctx, i)
+		hctx->sched_tags = NULL;
 
 	if (blk_mq_is_shared_tags(flags))
-		blk_mq_exit_sched_shared_tags(q);
+		q->sched_shared_tags = NULL;
 }
-
-static int blk_mq_init_sched_shared_tags(struct request_queue *queue)
+static int blk_mq_init_sched_shared_tags(struct request_queue *queue,
+		struct elevator_queue *elevator)
 {
-	struct blk_mq_tag_set *set = queue->tag_set;
-
 	/*
-	 * Set initial depth at max so that we don't need to reallocate for
-	 * updating nr_requests.
+	 * We allocated the elevator queue and sched tags before initiating the
+	 * elevator switch, prior to acquiring ->elevator_lock. The sched tags
+	 * are stored under the elevator queue. So assign the pre-allocated
+	 * sched tags now.
 	 */
-	queue->sched_shared_tags = blk_mq_alloc_map_and_rqs(set,
-						BLK_MQ_NO_HCTX_IDX,
-						MAX_SCHED_RQ);
-	if (!queue->sched_shared_tags)
-		return -ENOMEM;
-
+	queue->sched_shared_tags = elevator->shared_tags;
 	blk_mq_tag_update_sched_shared_tags(queue);
 
 	return 0;
@@ -458,8 +448,97 @@ void blk_mq_sched_unreg_debugfs(struct request_queue *q)
 	mutex_unlock(&q->debugfs_mutex);
 }
 
+int blk_mq_alloc_elevator_and_sched_tags(struct request_queue *q,
+		struct elv_change_ctx *ctx)
+{
+	unsigned long i;
+	struct elevator_queue *elevator;
+	struct elevator_type *e;
+	struct blk_mq_tag_set *set = q->tag_set;
+	gfp_t gfp = GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY;
+
+	if (strncmp(ctx->new.name, "none", 4)) {
+
+		e = elevator_find_get(ctx->new.name);
+		if (!e)
+			return -EINVAL;
+
+		elevator = ctx->new.elevator = elevator_alloc(q, e);
+		if (!elevator) {
+			elevator_put(e);
+			return -ENOMEM;
+		}
+
+		/*
+		 * Default to double of smaller one between hw queue_depth and
+		 * 128, since we don't split into sync/async like the old code
+		 * did. Additionally, this is a per-hw queue depth.
+		 */
+		ctx->new.nr_requests = 2 * min_t(unsigned int,
+						set->queue_depth,
+						BLKDEV_DEFAULT_RQ);
+
+		if (blk_mq_is_shared_tags(set->flags)) {
+
+			elevator->shared_tags = blk_mq_alloc_map_and_rqs(set,
+							BLK_MQ_NO_HCTX_IDX,
+							MAX_SCHED_RQ);
+			if (!elevator->shared_tags)
+				goto out_elevator_release;
+
+			return 0;
+		}
+
+		elevator->tags = kcalloc(set->nr_hw_queues,
+					sizeof(struct blk_mq_tags *),
+					gfp);
+		if (!elevator->tags)
+			goto out_elevator_release;
+
+		for (i = 0; i < set->nr_hw_queues; i++) {
+			elevator->tags[i] = blk_mq_alloc_map_and_rqs(set, i,
+						ctx->new.nr_requests);
+			if (!elevator->tags[i])
+				goto out_free_tags;
+		}
+	}
+
+	return 0;
+
+out_free_tags:
+	blk_mq_free_sched_tags(q->tag_set, elevator);
+out_elevator_release:
+	kobject_put(&elevator->kobj);
+	return -ENOMEM;
+}
+
+void blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
+		struct elevator_queue *elevator)
+{
+	unsigned long i;
+
+	if (elevator->shared_tags) {
+		blk_mq_free_rqs(set, elevator->shared_tags, BLK_MQ_NO_HCTX_IDX);
+		blk_mq_free_rq_map(elevator->shared_tags);
+		return;
+	}
+
+	if (!elevator->tags)
+		return;
+
+	for (i = 0; i < set->nr_hw_queues; i++) {
+		if (elevator->tags[i]) {
+			blk_mq_free_rqs(set, elevator->tags[i], i);
+			blk_mq_free_rq_map(elevator->tags[i]);
+		}
+	}
+
+	kfree(elevator->tags);
+}
+
 /* caller must have a reference to @e, will grab another one if successful */
-int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
+int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
+		struct elv_change_ctx *ctx)
 {
 	unsigned int flags = q->tag_set->flags;
 	struct blk_mq_hw_ctx *hctx;
@@ -467,71 +546,42 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 	unsigned long i;
 	int ret;
 
-	/*
-	 * Default to double of smaller one between hw queue_depth and 128,
-	 * since we don't split into sync/async like the old code did.
-	 * Additionally, this is a per-hw queue depth.
-	 */
-	q->nr_requests = 2 * min_t(unsigned int, q->tag_set->queue_depth,
-				   BLKDEV_DEFAULT_RQ);
+	q->nr_requests = ctx->new.nr_requests;
 
-	if (blk_mq_is_shared_tags(flags)) {
-		ret = blk_mq_init_sched_shared_tags(q);
-		if (ret)
-			return ret;
-	}
+	if (blk_mq_is_shared_tags(flags))
+		blk_mq_init_sched_shared_tags(q, ctx->new.elevator);
 
-	queue_for_each_hw_ctx(q, hctx, i) {
-		ret = blk_mq_sched_alloc_map_and_rqs(q, hctx, i);
-		if (ret)
-			goto err_free_map_and_rqs;
-	}
+	queue_for_each_hw_ctx(q, hctx, i)
+		blk_mq_init_sched_tags(q, hctx, i, ctx->new.elevator);
 
-	ret = e->ops.init_sched(q, e);
+	ret = e->ops.init_sched(q, ctx->new.elevator);
 	if (ret)
-		goto err_free_map_and_rqs;
+		goto out;
 
 	queue_for_each_hw_ctx(q, hctx, i) {
 		if (e->ops.init_hctx) {
 			ret = e->ops.init_hctx(hctx, i);
 			if (ret) {
+				/*
+				 * For failed case, sched tags are released
+				 * later when we finish switching elevator and
+				 * release ->elevator_lock and ->freeze_lock.
+				 */
 				eq = q->elevator;
-				blk_mq_sched_free_rqs(q);
 				blk_mq_exit_sched(q, eq);
-				kobject_put(&eq->kobj);
 				return ret;
 			}
 		}
 	}
 	return 0;
 
-err_free_map_and_rqs:
-	blk_mq_sched_free_rqs(q);
-	blk_mq_sched_tags_teardown(q, flags);
-
+out:
+	/*
+	 * Sched tags are released later when we finish switching elevator
+	 * and release ->elevator_lock and ->freeze_lock.
+	 */
 	q->elevator = NULL;
 	return ret;
-}
-
-/*
- * called in either blk_queue_cleanup or elevator_switch, tagset
- * is required for freeing requests
- */
-void blk_mq_sched_free_rqs(struct request_queue *q)
-{
-	struct blk_mq_hw_ctx *hctx;
-	unsigned long i;
-
-	if (blk_mq_is_shared_tags(q->tag_set->flags)) {
-		blk_mq_free_rqs(q->tag_set, q->sched_shared_tags,
-				BLK_MQ_NO_HCTX_IDX);
-	} else {
-		queue_for_each_hw_ctx(q, hctx, i) {
-			if (hctx->sched_tags)
-				blk_mq_free_rqs(q->tag_set,
-						hctx->sched_tags, i);
-		}
-	}
 }
 
 void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e)

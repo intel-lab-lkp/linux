@@ -7,6 +7,26 @@
 
 #define MAX_SCHED_RQ (16 * BLKDEV_DEFAULT_RQ)
 
+/* Holding context data for changing elevator */
+struct elv_change_ctx {
+	/* for unregistering/freeing old elevator */
+	struct {
+		struct elevator_queue *elevator;
+	} old;
+
+	/* for registering/allocating new elevator */
+	struct {
+		const char *name;
+		bool no_uevent;
+		unsigned long nr_requests;
+		struct elevator_queue *elevator;
+		int inited;
+	} new;
+
+	/* elevator switch status */
+	int status;
+};
+
 bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 		unsigned int nr_segs, struct request **merged_request);
 bool blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio,
@@ -18,9 +38,13 @@ void __blk_mq_sched_restart(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx);
 
-int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e);
+int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
+		struct elv_change_ctx *ctx);
+int blk_mq_alloc_elevator_and_sched_tags(struct request_queue *q,
+		struct elv_change_ctx *ctx);
+void blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
+		struct elevator_queue *elevator);
 void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e);
-void blk_mq_sched_free_rqs(struct request_queue *q);
 
 static inline void blk_mq_sched_restart(struct blk_mq_hw_ctx *hctx)
 {
