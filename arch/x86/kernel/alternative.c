@@ -217,6 +217,15 @@ static void *its_alloc(void)
 	return no_free_ptr(page);
 }
 
+static void its_set_kernel_ro(void *addr)
+{
+#ifdef CONFIG_MODULES
+	if (its_mod)
+		return;
+#endif
+	execmem_restore_rox(addr, PAGE_SIZE);
+}
+
 static void *its_allocate_thunk(int reg)
 {
 	int size = 3 + (reg / 8);
@@ -234,6 +243,8 @@ static void *its_allocate_thunk(int reg)
 #endif
 
 	if (!its_page || (its_offset + size - 1) >= PAGE_SIZE) {
+		if (its_page)
+			its_set_kernel_ro(its_page);
 		its_page = its_alloc();
 		if (!its_page) {
 			pr_err("ITS page allocation failed\n");
@@ -2337,6 +2348,11 @@ void __init alternative_instructions(void)
 	 */
 	apply_retpolines(__retpoline_sites, __retpoline_sites_end);
 	apply_returns(__return_sites, __return_sites_end);
+
+	/* Make potential last thunk page read-only. */
+	if (its_page)
+		its_set_kernel_ro(its_page);
+	its_page = NULL;
 
 	/*
 	 * Adjust all CALL instructions to point to func()-10, including
