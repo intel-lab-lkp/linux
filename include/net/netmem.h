@@ -31,12 +31,34 @@ enum net_iov_type {
 };
 
 struct net_iov {
-	enum net_iov_type type;
-	unsigned long pp_magic;
-	struct page_pool *pp;
-	struct net_iov_area *owner;
-	unsigned long dma_addr;
-	atomic_long_t pp_ref_count;
+	/*
+	 * XXX: Now that struct netmem_desc overlays on struct page,
+	 * struct_group_tagged() should cover all of them.  However,
+	 * a separate struct netmem_desc should be declared and embedded,
+	 * once struct netmem_desc is no longer overlayed but it has its
+	 * own instance from slab.  The final form should be:
+	 *
+	 *    struct netmem_desc {
+	 *	   unsigned long pp_magic;
+	 *	   struct page_pool *pp;
+	 *	   unsigned long dma_addr;
+	 *	   atomic_long_t pp_ref_count;
+	 *    };
+	 *
+	 *    struct net_iov {
+	 *	   enum net_iov_type type;
+	 *	   struct net_iov_area *owner;
+	 *	   struct netmem_desc;
+	 *    };
+	 */
+	struct_group_tagged(netmem_desc, desc,
+		enum net_iov_type type;
+		unsigned long pp_magic;
+		struct page_pool *pp;
+		struct net_iov_area *owner;
+		unsigned long dma_addr;
+		atomic_long_t pp_ref_count;
+	);
 };
 
 struct net_iov_area {
@@ -72,6 +94,13 @@ NET_IOV_ASSERT_OFFSET(pp, pp);
 NET_IOV_ASSERT_OFFSET(dma_addr, dma_addr);
 NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
 #undef NET_IOV_ASSERT_OFFSET
+
+/*
+ * Since struct netmem_desc uses the space in struct page, the size
+ * should be checked, until struct netmem_desc has its own instance from
+ * slab, to avoid conflicting with other members within struct page.
+ */
+static_assert(sizeof(struct netmem_desc) <= offsetof(struct page, _refcount));
 
 static inline struct net_iov_area *net_iov_owner(const struct net_iov *niov)
 {
