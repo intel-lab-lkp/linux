@@ -11208,6 +11208,22 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		}
 #endif
 
+		/* Allow imbalance between LLCs within a single NUMA node */
+		if (env->sd->child && env->sd->child->flags & SD_SHARE_LLC && env->sd->parent
+				&& env->sd->parent->flags & SD_NUMA) {
+			int child_weight = env->sd->child->span_weight;
+			int llc_nr = env->sd->span_weight / child_weight;
+			int imb_nr, min;
+
+			if (llc_nr > 1) {
+				/* Let the imbalance not be greater than half of child_weight */
+				min = child_weight >= 4 ? 2 : 1;
+				imb_nr = max_t(int, min, child_weight >> 2);
+				if (imb_nr >= env->imbalance)
+					env->imbalance = 0;
+			}
+		}
+
 		/* Number of tasks to move to restore balance */
 		env->imbalance >>= 1;
 
