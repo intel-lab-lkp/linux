@@ -687,6 +687,7 @@ int v4l2_compat_get_array_args(struct file *file, void *mbuf,
 int v4l2_compat_put_array_args(struct file *file, void __user *user_ptr,
 			       void *mbuf, size_t array_size,
 			       unsigned int cmd, void *arg);
+unsigned int video_translate_cmd(unsigned int cmd);
 
 /**
  * typedef v4l2_kioctl - Typedef used to pass an ioctl handler.
