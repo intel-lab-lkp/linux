@@ -249,6 +249,7 @@ void amdgpu_gem_force_release(struct amdgpu_device *adev)
 
 		WARN_ONCE(1, "Still active user space clients!\n");
 		spin_lock(&file->table_lock);
+		/* FIXME: Use idr_for_each to handle transient NULL pointers */
 		idr_for_each_entry(&file->object_idr, gobj, handle) {
 			WARN_ONCE(1, "And also active allocations!\n");
 			drm_gem_object_put(gobj);
@@ -1167,6 +1168,7 @@ static int amdgpu_debugfs_gem_info_show(struct seq_file *m, void *unused)
 		rcu_read_unlock();
 
 		spin_lock(&file->table_lock);
+		/* FIXME: Use idr_for_each to handle transient NULL pointers */
 		idr_for_each_entry(&file->object_idr, gobj, id) {
 			struct amdgpu_bo *bo = gem_to_amdgpu_bo(gobj);
 
