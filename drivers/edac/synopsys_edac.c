@@ -755,7 +755,7 @@ static bool zynq_get_ecc_state(void __iomem *base)
 static bool zynqmp_get_ecc_state(void __iomem *base)
 {
 	enum dev_type dt;
-	u32 ecctype;
+	u32 ecctype, clearval;
 
 	dt = zynqmp_get_dtype(base);
 	if (dt == DEV_UNKNOWN)
@@ -763,8 +763,13 @@ static bool zynqmp_get_ecc_state(void __iomem *base)
 
 	ecctype = readl(base + ECC_CFG0_OFST) & SCRUB_MODE_MASK;
 	if ((ecctype == SCRUB_MODE_SECDED) &&
-	    ((dt == DEV_X2) || (dt == DEV_X4) || (dt == DEV_X8)))
+	    ((dt == DEV_X2) || (dt == DEV_X4) || (dt == DEV_X8))) {
+		clearval = readl(base + ECC_CLR_OFST) |
+				ECC_CTRL_CLR_CE_ERR | ECC_CTRL_CLR_CE_ERRCNT |
+				ECC_CTRL_CLR_UE_ERR | ECC_CTRL_CLR_UE_ERRCNT;
+		writel(clearval, base + ECC_CLR_OFST);
 		return true;
+	}
 
 	return false;
 }
