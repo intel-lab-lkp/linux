@@ -17,7 +17,7 @@ description: |
   and the properties used by the mxsmmc driver.
 
 allOf:
-  - $ref: mmc-controller.yaml
+  - $ref: mmc-controller-common.yaml#
 
 properties:
   compatible:
@@ -29,6 +29,9 @@ properties:
     maxItems: 1
 
   interrupts:
+    maxItems: 1
+
+  clocks:
     maxItems: 1
 
   dmas:
