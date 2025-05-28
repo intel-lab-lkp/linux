@@ -1525,6 +1525,22 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 		on_each_cpu(do_kernel_range_flush, info, 1);
 }
 
+static void kernel_tlb_flush_pgtable(struct flush_tlb_info *info)
+{
+	/*
+	 * The special thing about removing kernel page tables is that we can't
+	 * use a flush that just removes global TLB entries; we need one that
+	 * flushes paging structure caches across all PCIDs.
+	 * With INVLPGB, that's explicitly supported.
+	 * Otherwise, there's no good way (INVLPG and INVPCID can't specifically
+	 * target one address across all PCIDs), just throw everything away.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
+		invlpgb_kernel_range_flush(info);
+	else
+		flush_tlb_all();
+}
+
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
 	struct flush_tlb_info *info;
@@ -1539,6 +1555,27 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	else
 		kernel_tlb_flush_range(info);
 
+	put_flush_tlb_info();
+}
+
+/*
+ * Flush paging-structure cache entries for page tables covering the specified
+ * range and synchronize with concurrent hardware page table walks, in
+ * preparation for freeing page tables in the region.
+ * This must not be used for flushing translations to data pages.
+ */
+void flush_tlb_kernel_pgtable_range(unsigned long start, unsigned long end)
+{
+	struct flush_tlb_info *info;
+
+	/* We don't synchronize against GUP-fast. */
+	VM_WARN_ON(start < TASK_SIZE_MAX);
+
+	guard(preempt)();
+
+	info = get_flush_tlb_info(NULL, start, end, PMD_SHIFT, true,
+				  TLB_GENERATION_INVALID);
+	kernel_tlb_flush_pgtable(info);
 	put_flush_tlb_info();
 }
 

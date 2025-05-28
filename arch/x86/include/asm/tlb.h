@@ -153,6 +153,10 @@ static inline void invlpgb_flush_all(void)
 /* Flush addr, including globals, for all PCIDs. */
 static inline void invlpgb_flush_addr_nosync(unsigned long addr, u16 nr)
 {
+	/*
+	 * Don't set INVLPGB_FLAG_FINAL_ONLY here without adjusting
+	 * kernel_tlb_flush_pgtable().
+	 */
 	__invlpgb(0, 0, addr, nr, PTE_STRIDE, INVLPGB_FLAG_INCLUDE_GLOBAL);
 }
 

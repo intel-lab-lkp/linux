@@ -745,8 +745,13 @@ int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 
 	pud_clear(pud);
 
-	/* INVLPG to clear all paging-structure caches */
-	flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
+	/*
+	 * Clear paging-structure caches.
+	 * Note that since this function can remove a PMD table together with the
+	 * PTE tables it points to, we can't just flush the first PAGE_SIZE, we
+	 * must flush PUD_SIZE!
+	 */
+	flush_tlb_kernel_pgtable_range(addr, addr + PUD_SIZE);
 
 	for (i = 0; i < PTRS_PER_PMD; i++) {
 		if (!pmd_none(pmd_sv[i])) {
@@ -778,8 +783,8 @@ int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 	pte = (pte_t *)pmd_page_vaddr(*pmd);
 	pmd_clear(pmd);
 
-	/* INVLPG to clear all paging-structure caches */
-	flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
+	/* clear paging-structure caches */
+	flush_tlb_kernel_pgtable_range(addr, addr + PAGE_SIZE);
 
 	free_page((unsigned long)pte);
 
