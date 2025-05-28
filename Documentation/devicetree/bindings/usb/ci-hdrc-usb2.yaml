@@ -24,6 +24,8 @@ properties:
           - nvidia,tegra114-udc
           - nvidia,tegra124-udc
           - qcom,ci-hdrc
+          - nxp,s32g2-usb
+          - nxp,s32g3-usb
       - items:
           - enum:
               - nvidia,tegra114-ehci
