@@ -1774,6 +1774,8 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 	ret = drm_gem_handle_create(adev->kfd.client.file, gobj, &(*mem)->gem_handle);
 	if (ret)
 		goto err_gem_handle_create;
+	/* FIXME: Thou shall completely initialize the bo before calling
+	 * drm_gem_handle_create. Or explain why this is safe. */
 	bo = gem_to_amdgpu_bo(gobj);
 	if (bo_type == ttm_bo_type_sg) {
 		bo->tbo.sg = sg;
