@@ -243,6 +243,7 @@ extern const u8 atmel_tc_divisors[5];
 #define ATMEL_TC_RA	0x14		/* register A */
 #define ATMEL_TC_RB	0x18		/* register B */
 #define ATMEL_TC_RC	0x1c		/* register C */
+#define ATMEL_TC_RAB	0x0c		/* register AB */
 
 #define ATMEL_TC_SR	0x20		/* status (read-only) */
 /* Status-only flags */

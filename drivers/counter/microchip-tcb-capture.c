@@ -6,6 +6,9 @@
  */
 #include <linux/clk.h>
 #include <linux/counter.h>
+#include <linux/dmaengine.h>
+#include <linux/dma-direction.h>
+#include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
@@ -28,9 +31,19 @@
 #define ATMEL_TC_QDEN			BIT(8)
 #define ATMEL_TC_POSEN			BIT(9)
 
+struct mchp_tc_dma {
+	struct dma_chan *chan;
+	struct dma_slave_config slave_cfg;
+	u32 *buf;
+	dma_addr_t addr;
+	phys_addr_t phy_addr;
+	bool enabled;
+};
+
 struct mchp_tc_data {
 	const struct atmel_tcb_config *tc_cfg;
 	struct platform_device *pdev;
+	struct mchp_tc_dma dma;
 	struct regmap *regmap;
 	void __iomem *base;
 	int qdec_mode;
@@ -73,6 +86,61 @@ static struct counter_synapse mchp_tc_count_synapses[] = {
 		.signal = &mchp_tc_count_signals[1]
 	}
 };
+
+static void mchp_tc_dma_remove(void *data)
+{
+	struct mchp_tc_data *priv = data;
+
+	if (priv->dma.buf)
+		dma_free_coherent(&priv->pdev->dev, sizeof(u32),
+				  priv->dma.buf, priv->dma.addr);
+
+	if (priv->dma.chan)
+		dma_release_channel(priv->dma.chan);
+}
+
+static int mchp_tc_dma_transfer(struct mchp_tc_data *priv, u32 *val)
+{
+	struct dma_async_tx_descriptor *desc;
+	struct device *dev = &priv->pdev->dev;
+	dma_cookie_t cookie;
+	int ret;
+
+	ret = dmaengine_slave_config(priv->dma.chan, &priv->dma.slave_cfg);
+	if (ret) {
+		dev_err(dev, "DMA slave_config failed (%d)\n", ret);
+		return ret;
+	}
+
+	desc = dmaengine_prep_dma_memcpy(priv->dma.chan,
+					 priv->dma.addr,
+					 priv->dma.slave_cfg.src_addr,
+					 sizeof(u32),
+					 DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
+	if (!desc) {
+		dev_err(dev, "DMA prep descriptor failed\n");
+		return -ENOMEM;
+	}
+
+	cookie = dmaengine_submit(desc);
+	if (dma_submit_error(cookie)) {
+		dev_err(dev, "DMA submit error (%d)\n", cookie);
+		return cookie ?: -EIO;
+	}
+
+	dma_async_issue_pending(priv->dma.chan);
+
+	ret = dma_sync_wait(priv->dma.chan, cookie);
+	if (ret) {
+		dev_err(dev, "DMA transfer timed out (%d)\n", ret);
+		return ret;
+	}
+
+	/* Retrieve the 32-bit value the engine just copied */
+	*val = le32_to_cpu(*(u32 *)priv->dma.buf);
+
+	return 0;
+}
 
 static int mchp_tc_count_function_read(struct counter_device *counter,
 				       struct counter_count *count,
@@ -260,19 +328,24 @@ static int mchp_tc_count_cap_read(struct counter_device *counter,
 				  struct counter_count *count, size_t idx, u64 *val)
 {
 	struct mchp_tc_data *const priv = counter_priv(counter);
-	u32 cnt;
+	u32 cnt, reg_offset;
 	int ret;
 
 	switch (idx) {
 	case COUNTER_MCHP_EXCAP_RA:
-		ret = regmap_read(priv->regmap, ATMEL_TC_REG(priv->channel[0], RA), &cnt);
+		reg_offset = ATMEL_TC_REG((priv->channel[0]), RA);
 		break;
 	case COUNTER_MCHP_EXCAP_RB:
-		ret = regmap_read(priv->regmap, ATMEL_TC_REG(priv->channel[0], RB), &cnt);
+		reg_offset = ATMEL_TC_REG((priv->channel[0]), RB);
 		break;
 	default:
 		return -EINVAL;
 	}
+
+	if (!priv->dma.enabled)
+		ret = regmap_read(priv->regmap, reg_offset, &cnt);
+	else
+		ret = mchp_tc_dma_transfer(priv, &cnt);
 
 	if (ret < 0)
 		return ret;
@@ -578,6 +651,7 @@ static int mchp_tc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	priv->dma.phy_addr = parent_res->start;
 	priv->tc_cfg = tcb_config;
 	priv->regmap = regmap;
 	priv->pdev = pdev;
@@ -588,6 +662,36 @@ static int mchp_tc_probe(struct platform_device *pdev)
 	counter->counts = mchp_tc_counts;
 	counter->num_signals = ARRAY_SIZE(mchp_tc_count_signals);
 	counter->signals = mchp_tc_count_signals;
+
+	/* Check the dma flag */
+	priv->dma.enabled = of_property_read_bool(np, "mchp,use-dma-cap") ? true : false;
+
+	if (priv->dma.enabled) {
+		/* Initialise DMA */
+		priv->dma.buf = dma_alloc_coherent(&pdev->dev, sizeof(u32),
+						   &priv->dma.addr, GFP_KERNEL);
+		if (!priv->dma.buf)
+			return -ENOMEM;
+
+		priv->dma.chan = dma_request_chan(&parent_pdev->dev, "rx");
+		if (IS_ERR(priv->dma.chan))
+			return -EINVAL;
+
+		dev_info(&pdev->dev, "Using %s (rx) for DMA transfers\n",
+			 dma_chan_name(priv->dma.chan));
+
+		/* Configure DMA channel to read TC AB register */
+		priv->dma.slave_cfg.direction = DMA_DEV_TO_MEM;
+		priv->dma.slave_cfg.src_addr = priv->dma.phy_addr + ATMEL_TC_REG(priv->channel[0],
+										 RAB);
+		priv->dma.slave_cfg.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+		priv->dma.slave_cfg.src_maxburst = 1;
+		priv->dma.slave_cfg.dst_maxburst = 1;
+
+		ret = devm_add_action_or_reset(&pdev->dev, mchp_tc_dma_remove, priv);
+		if (ret)
+			return ret;
+	}
 
 	i = of_irq_get(np->parent, 0);
 	if (i == -EPROBE_DEFER)
