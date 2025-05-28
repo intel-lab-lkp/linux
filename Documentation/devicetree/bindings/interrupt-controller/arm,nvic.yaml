@@ -17,9 +17,7 @@ description:
 properties:
   compatible:
     enum:
-      - arm,v6m-nvic
-      - arm,v7m-nvic
-      - arm,v8m-nvic
+      - arm,armv7m-nvic
 
   reg:
     maxItems: 1
@@ -30,10 +28,10 @@ properties:
   interrupt-controller: true
 
   '#interrupt-cells':
-    const: 2
+    const: 1
     description: |
       Number of cells to encode an interrupt source:
-      first = interrupt number, second = priority.
+      first = interrupt number.
 
   arm,num-irq-priority-bits:
     description: Number of priority bits implemented by the SoC
@@ -45,15 +43,14 @@ required:
   - reg
   - interrupt-controller
   - '#interrupt-cells'
-  - arm,num-irq-priority-bits
 
 additionalProperties: false
 
 examples:
   - |
     interrupt-controller@e000e100 {
-        compatible = "arm,v7m-nvic";
-        #interrupt-cells = <2>;
+        compatible = "arm,armv7m-nvic";
+        #interrupt-cells = <1>;
         #address-cells = <0>;
         interrupt-controller;
         reg = <0xe000e100 0xc00>;
