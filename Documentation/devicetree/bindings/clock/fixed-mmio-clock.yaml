@@ -10,6 +10,11 @@ description:
   This binding describes a fixed-rate clock for which the frequency can
   be read from a single 32-bit memory mapped I/O register.
 
+  An optional ready register can be specified in a second reg entry.
+  The ready register will be polled until it signals ready prior to reading
+  the fixed rate. This is useful for example to optionally wait for a PLL
+  to lock.
+
   It was designed for test systems, like FPGA, not for complete,
   finished SoCs.
 
@@ -21,13 +26,34 @@ properties:
     const: fixed-mmio-clock
 
   reg:
-    maxItems: 1
+    minItems: 1
+    items:
+      - description: Fixed rate register
+      - description: Optional clock ready register
 
   "#clock-cells":
     const: 0
 
   clock-output-names:
     maxItems: 1
+
+  ready-timeout-us:
+    description:
+      Optional timeout in micro-seconds when polling for clock readiness.
+      0 means no timeout.
+    default: 0
+
+  ready-mask:
+    description:
+      Optional mask to apply when reading the ready register.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0xffffffff
+
+  ready-value:
+    description:
+      When a ready register is specified in reg, poll the ready reg until
+      ready-reg & ready-mask == ready-value.
+    $ref: /schemas/types.yaml#/definitions/uint32
 
 required:
   - compatible
@@ -43,5 +69,14 @@ examples:
       #clock-cells = <0>;
       reg = <0xfd020004 0x4>;
       clock-output-names = "sysclk";
+    };
+  - |
+    clock@fd040000 {
+      compatible = "fixed-mmio-clock";
+      #clock-cells = <0>;
+      reg = <0xfd040000 0x4 0xfd040004 0x4>;
+      ready-mask = <1>;
+      ready-value = <1>;
+      clock-output-names = "pclk";
     };
 ...
