@@ -411,7 +411,6 @@ struct kvaser_pciefd_can {
 	void __iomem *reg_base;
 	struct can_berr_counter bec;
 	u8 cmd_seq;
-	u8 tx_max_count;
 	u8 tx_idx;
 	u8 ack_idx;
 	int err_rep_cnt;
@@ -760,7 +759,7 @@ static int kvaser_pciefd_stop(struct net_device *netdev)
 
 static unsigned int kvaser_pciefd_tx_avail(const struct kvaser_pciefd_can *can)
 {
-	return can->tx_max_count - (READ_ONCE(can->tx_idx) - READ_ONCE(can->ack_idx));
+	return can->can.echo_skb_max - (READ_ONCE(can->tx_idx) - READ_ONCE(can->ack_idx));
 }
 
 static int kvaser_pciefd_prepare_tx_packet(struct kvaser_pciefd_tx_packet *p,
@@ -810,7 +809,7 @@ static netdev_tx_t kvaser_pciefd_start_xmit(struct sk_buff *skb,
 {
 	struct kvaser_pciefd_can *can = netdev_priv(netdev);
 	struct kvaser_pciefd_tx_packet packet;
-	unsigned int seq = can->tx_idx & (can->can.echo_skb_max - 1);
+	unsigned int seq = can->tx_idx % can->can.echo_skb_max;
 	unsigned int frame_len;
 	int nr_words;
 
@@ -992,10 +991,9 @@ static int kvaser_pciefd_setup_can_ctrls(struct kvaser_pciefd *pcie)
 		tx_nr_packets_max =
 			FIELD_GET(KVASER_PCIEFD_KCAN_TX_NR_PACKETS_MAX_MASK,
 				  ioread32(can->reg_base + KVASER_PCIEFD_KCAN_TX_NR_PACKETS_REG));
-		can->tx_max_count = min(KVASER_PCIEFD_CAN_TX_MAX_COUNT, tx_nr_packets_max - 1);
+		can->can.echo_skb_max = min(KVASER_PCIEFD_CAN_TX_MAX_COUNT, tx_nr_packets_max - 1);
 
 		can->can.clock.freq = pcie->freq;
-		can->can.echo_skb_max = roundup_pow_of_two(can->tx_max_count);
 		spin_lock_init(&can->lock);
 
 		can->can.bittiming_const = &kvaser_pciefd_bittiming_const;
@@ -1523,7 +1521,7 @@ static int kvaser_pciefd_handle_ack_packet(struct kvaser_pciefd *pcie,
 		unsigned int len, frame_len = 0;
 		struct sk_buff *skb;
 
-		if (echo_idx != (can->ack_idx & (can->can.echo_skb_max - 1)))
+		if (echo_idx != can->ack_idx % can->can.echo_skb_max)
 			return 0;
 		skb = can->can.echo_skb[echo_idx];
 		if (!skb)
