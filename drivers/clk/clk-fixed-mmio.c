@@ -11,9 +11,35 @@
 
 #include <linux/clk-provider.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
+
+static int fixed_mmio_clk_wait_ready(struct device_node *node,
+				     void __iomem *base)
+{
+	u32 ready_mask;
+	u32 ready_val;
+	u32 timeout;
+	u32 v;
+
+	if (of_property_read_u32(node, "ready-timeout-us", &timeout))
+		timeout = 0;
+
+	if (of_property_read_u32(node, "ready-mask", &ready_mask))
+		ready_mask = ~0;
+
+	if (of_property_read_u32(node, "ready-val", &ready_val)) {
+		pr_err("%pOFn: missing ready-val property\n", node);
+		return -EINVAL;
+	}
+
+	pr_info("%pOFn: wait for clock\n", node);
+	return readl_relaxed_poll_timeout_atomic(base, v,
+						 (v & ready_mask) == ready_val,
+						 1, timeout);
+}
 
 static struct clk_hw *fixed_mmio_clk_setup(struct device_node *node)
 {
@@ -22,6 +48,15 @@ static struct clk_hw *fixed_mmio_clk_setup(struct device_node *node)
 	void __iomem *base;
 	u32 freq;
 	int ret;
+
+	base = of_iomap(node, 1);
+	if (base) {
+		/* Wait for clk to get ready. */
+		ret = fixed_mmio_clk_wait_ready(node, base);
+		iounmap(base);
+		if (ret)
+			return ERR_PTR(ret);
+	}
 
 	base = of_iomap(node, 0);
 	if (!base) {
