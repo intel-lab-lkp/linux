@@ -7,7 +7,7 @@
 //! Reference: <https://docs.kernel.org/dev-tools/kunit/index.html>
 
 use crate::prelude::*;
-use core::{ffi::c_void, fmt};
+use core::fmt;
 
 /// Prints a KUnit error-level message.
 ///
