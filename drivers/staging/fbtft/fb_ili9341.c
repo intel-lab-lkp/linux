@@ -103,6 +103,9 @@ static int set_var(struct fbtft_par *par)
 		break;
 	}
 
+	if (par->invert)
+		write_reg(par, 0x21);
+
 	return 0;
 }
 

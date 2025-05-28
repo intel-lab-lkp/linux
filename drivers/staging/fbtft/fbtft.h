@@ -125,6 +125,7 @@ struct fbtft_display {
  * @display: Display properties
  * @gpios: Pointer to an array of pinname to gpio mappings
  * @rotate: Display rotation angle
+ * @invert: Invert display colors
  * @bgr: LCD Controller BGR bit
  * @fps: Frames per second (this will go away, use @fps in @fbtft_display)
  * @txbuflen: Size of transmit buffer
@@ -135,6 +136,7 @@ struct fbtft_display {
 struct fbtft_platform_data {
 	struct fbtft_display display;
 	unsigned int rotate;
+	bool invert;
 	bool bgr;
 	unsigned int fps;
 	int txbuflen;
@@ -229,6 +231,7 @@ struct fbtft_par {
 	bool first_update_done;
 	ktime_t update_time;
 	bool bgr;
+	bool invert;
 	void *extra;
 	bool polarity;
 };
