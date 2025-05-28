@@ -2039,6 +2039,12 @@ static int uvc_ctrl_add_event(struct v4l2_subscribed_event *sev, unsigned elems)
 		u32 changes = V4L2_EVENT_CTRL_CH_FLAGS;
 		s32 val = 0;
 
+		ret = uvc_pm_get(handle->chain->dev);
+		if (ret) {
+			list_del(&sev->node);
+			goto done;
+		}
+
 		if (uvc_ctrl_mapping_is_compound(mapping) ||
 		    __uvc_ctrl_get(handle->chain, ctrl, mapping, &val) == 0)
 			changes |= V4L2_EVENT_CTRL_CH_VALUE;
@@ -2051,6 +2057,8 @@ static int uvc_ctrl_add_event(struct v4l2_subscribed_event *sev, unsigned elems)
 		 */
 		sev->elems = elems;
 		v4l2_event_queue_fh(sev->fh, &ev);
+
+		uvc_pm_put(handle->chain->dev);
 	}
 
 done:
