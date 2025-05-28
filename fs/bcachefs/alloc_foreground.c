@@ -1277,6 +1277,11 @@ retry:
 
 	req->data_type		= req->wp->data_type;
 
+	/* If we're going to fall back to the whole fs, try nonblocking first */
+	struct closure *cl = req->target && !(flags & BCH_WRITE_only_specified_devs)
+		? _cl
+		: NULL;
+
 	ret = bch2_trans_relock(trans);
 	if (ret)
 		goto err;
@@ -1285,10 +1290,6 @@ retry:
 	if (req->data_type != BCH_DATA_user)
 		req->have_cache = true;
 
-	/* If we're going to fall back to the whole fs, try nonblocking first */
-	struct closure *cl = req->target && !(flags & BCH_WRITE_only_specified_devs)
-		? _cl
-		: NULL;
 	while (1) {
 		ret = open_bucket_add_buckets(trans, req, cl);
 		if (!ret ||
