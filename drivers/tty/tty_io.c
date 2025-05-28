@@ -3245,6 +3245,8 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	else
 		tty_line_name(driver, index, name);
 
+	mutex_lock(&tty_mutex);
+
 	if (!(driver->flags & TTY_DRIVER_DYNAMIC_ALLOC)) {
 		/*
 		 * Free any saved termios data so that the termios state is
@@ -3258,7 +3260,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 
 		retval = tty_cdev_add(driver, devt, index, 1);
 		if (retval)
-			return ERR_PTR(retval);
+			goto err_unlock;
 
 		cdev_added = true;
 	}
@@ -3281,6 +3283,8 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	if (retval)
 		goto err_put;
 
+	mutex_unlock(&tty_mutex);
+
 	return dev;
 
 err_put:
@@ -3295,6 +3299,9 @@ err_del_cdev:
 		cdev_del(driver->cdevs[index]);
 		driver->cdevs[index] = NULL;
 	}
+
+err_unlock:
+	mutex_unlock(&tty_mutex);
 
 	return ERR_PTR(retval);
 }
