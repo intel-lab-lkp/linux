@@ -25,6 +25,11 @@ properties:
     description:
       Phandle of the regulator supplying the output.
 
+  is_shared:
+    description:
+      Indicates that the regulator is shared and should not take exclusive control.
+    type: boolean
+
 required:
   - compatible
   - vout-supply
