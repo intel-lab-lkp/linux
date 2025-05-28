@@ -323,6 +323,7 @@ static int vmw_debugfs_gem_info_show(struct seq_file *m, void *unused)
 		rcu_read_unlock();
 
 		spin_lock(&file->table_lock);
+		/* FIXME: Use idr_for_each to handle transient NULL pointers */
 		idr_for_each_entry(&file->object_idr, gobj, id) {
 			struct vmw_bo *bo = to_vmw_bo(gobj);
 
