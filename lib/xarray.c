@@ -1917,6 +1917,8 @@ int xas_get_order(struct xa_state *xas)
 	if (!xas->xa_node)
 		return 0;
 
+	XA_NODE_BUG_ON(xas->xa_node, xa_is_sibling(xa_entry(xas->xa,
+		       xas->xa_node, xas->xa_offset)));
 	for (;;) {
 		unsigned int slot = xas->xa_offset + (1 << order);
 
