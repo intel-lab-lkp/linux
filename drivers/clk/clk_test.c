@@ -24,6 +24,10 @@ static const struct clk_ops empty_clk_ops = { };
 #define DUMMY_CLOCK_INIT_RATE	(42 * 1000 * 1000)
 #define DUMMY_CLOCK_RATE_1	(142 * 1000 * 1000)
 #define DUMMY_CLOCK_RATE_2	(242 * 1000 * 1000)
+#define DUMMY_CLOCK_RATE_6_MHZ	(6 * 1000 * 1000)
+#define DUMMY_CLOCK_RATE_16_MHZ	(16 * 1000 * 1000)
+#define DUMMY_CLOCK_RATE_24_MHZ	(24 * 1000 * 1000)
+#define DUMMY_CLOCK_RATE_48_MHZ	(48 * 1000 * 1000)
 
 struct clk_dummy_context {
 	struct clk_hw hw;
