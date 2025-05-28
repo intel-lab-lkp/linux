@@ -31,6 +31,7 @@ properties:
   compatible:
     enum:
       - samsung,exynos990-cmu-hsi0
+      - samsung,exynos990-cmu-hsi1
       - samsung,exynos990-cmu-peris
       - samsung,exynos990-cmu-top
 
@@ -79,6 +80,32 @@ allOf:
             - const: usb31drd
             - const: usbdp_debug
             - const: dpgtc
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: samsung,exynos990-cmu-hsi1
+
+    then:
+      properties:
+        clocks:
+          items:
+            - description: External reference clock (26 MHz)
+            - description: CMU_HSI1 BUS clock (from CMU_TOP)
+            - description: CMU_HSI1 MMC_CARD clock (from CMU_TOP)
+            - description: CMU_HSI1 PCIE clock (from CMU_TOP)
+            - description: CMU_HSI1 UFS_CARD clock (from CMU_TOP)
+            - description: CMU_HSI1 UFS_EMBD clock (from CMU_TOP)
+
+        clock-names:
+          items:
+            - const: oscclk
+            - const: bus
+            - const: mmc_card
+            - const: pcie
+            - const: ufs_card
+            - const: ufs_embd
 
   - if:
       properties:
