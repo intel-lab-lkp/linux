@@ -4,11 +4,15 @@
 //!
 //! To make this driver probe, QEMU must be run with `-device pci-testdev`.
 
-use kernel::{bindings, device::Core, dma::CoherentAllocation, pci, prelude::*, types::ARef};
+use kernel::{
+    bindings, device::Core, dma::CoherentAllocation, page::*, pci, prelude::*, scatterlist::*,
+    types::ARef,
+};
 
 struct DmaSampleDriver {
     pdev: ARef<pci::Device>,
     ca: CoherentAllocation<MyStruct>,
+    _sgt: DeviceSGTable,
 }
 
 const TEST_VALUES: [(u32, u32); 5] = [
@@ -62,10 +66,24 @@ impl pci::Driver for DmaSampleDriver {
             Ok(())
         }()?;
 
+        let mut len = 0;
+        let sgt = SGTable::alloc_table(TEST_VALUES.len(), GFP_KERNEL)?;
+        let sgt = sgt.init(|iter| {
+            for sg in iter {
+                sg.set_page(&Page::alloc_page(GFP_KERNEL)?, PAGE_SIZE as u32, 0);
+                len += 1;
+            }
+            Ok(())
+        })?;
+        assert_eq!(len, TEST_VALUES.len());
+        let sgt = sgt.dma_map(pdev.as_ref(), kernel::dma::DmaDataDirection::DmaToDevice)?;
+
         let drvdata = KBox::new(
             Self {
                 pdev: pdev.into(),
                 ca,
+                // Save object to excercise the destructor.
+                _sgt: sgt,
             },
             GFP_KERNEL,
         )?;
@@ -77,6 +95,7 @@ impl pci::Driver for DmaSampleDriver {
 impl Drop for DmaSampleDriver {
     fn drop(&mut self) {
         dev_info!(self.pdev.as_ref(), "Unload DMA test driver.\n");
+        assert_eq!(self._sgt.iter().count(), TEST_VALUES.len());
 
         let _ = || -> Result {
             for (i, value) in TEST_VALUES.into_iter().enumerate() {
