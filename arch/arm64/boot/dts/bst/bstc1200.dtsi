@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: GPL-2.0
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+/ {
+	compatible = "bst,c1200";
+	#address-cells = <0x2>;
+	#size-cells = <0x2>;
+
+	cpus {
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+
+		cpu@0 {
+			compatible = "arm,cortex-a78";
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&l2_cache>;
+			reg = <0x0>;
+			freq-domain = <0x3 0x1>;
+		};
+
+		cpu@1 {
+			compatible = "arm,cortex-a78";
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&l2_cache>;
+			reg = <0x100>;
+			freq-domain = <0x3 0x1>;
+		};
+
+		cpu@2 {
+			compatible = "arm,cortex-a78";
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&l2_cache>;
+			reg = <0x200>;
+			freq-domain = <0x3 0x1>;
+		};
+
+		cpu@3 {
+			compatible = "arm,cortex-a78";
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&l2_cache>;
+			reg = <0x300>;
+			freq-domain = <0x3 0x1>;
+		};
+
+		l2_cache: l2-cache-1 {
+			compatible = "cache";
+			cache-level = <2>;
+			cache-unified;
+		};
+	};
+
+	misc_clk: misc_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0x0>;
+		clock-frequency = <0x3d0900>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupt-parent = <&gic>;
+		always-on;
+		interrupts = <GIC_PPI 0xd (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)
+			      GIC_PPI 0xe (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)
+			      GIC_PPI 0xb (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)
+			      GIC_PPI 0xa (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	soc: soc@0 {
+		compatible = "simple-bus";
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges = <0x0 0x0 0x0 0x0 0xffffffff 0xffffffff>;
+
+		mmc0: dwmmc0@22200000 {
+			#address-cells = <0x2>;
+			#size-cells = <0x0>;
+			compatible = "bst,dwcmshc-sdhci";
+			reg = <0x0 0x22200000 0x0 0x1000>;
+			reg-names = "base";
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI 0x90 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "IRQDWMMC0";
+			clock-frequency = <0xbebc200>;
+			max-frequency = <0xbebc200>;
+			mmc_crm_base = <0x23006000>;
+			mmc_crm_size = <0x1000>;
+			fifo-depth = <0x400>;
+			bus-width = <0x8>;
+			non-removable;
+			sdhci,auto-cmd12;
+			dma-coherent;
+			status = "disabled";
+		};
+
+		uart0: serial@20008000 {
+			compatible = "snps,dw-apb-uart";
+			reg = <0x0 0x20008000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI 0xd3 IRQ_TYPE_LEVEL_HIGH>;
+			clock-frequency = <0x17d7840>;
+			reg-shift = <0x2>;
+			reg-io-width = <0x4>;
+			status = "disabled";
+		};
+
+		gic: interrupt-controller@32800000 {
+			compatible = "arm,gic-v3";
+			#interrupt-cells = <0x3>;
+			#address-cells = <0x2>;
+			#size-cells = <0x2>;
+			interrupt-controller;
+			interrupt-parent = <&gic>;
+			ranges;
+			reg = <0x0 0x32800000 0x0 0x10000 0x0 0x32880000 0x0 0x100000>;
+			interrupts = <GIC_PPI 0x9 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+			status = "okay";
+		};
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+		cpu_on = <0xc4000003>;
+		cpu_off = <0x84000002>;
+		cpu_suspend = <0xc4000001>;
+	};
+};
