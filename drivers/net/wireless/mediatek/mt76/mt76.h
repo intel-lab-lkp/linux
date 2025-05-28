@@ -1795,21 +1795,21 @@ int mt76_rx_token_consume(struct mt76_dev *dev, void *ptr,
 int mt76_create_page_pool(struct mt76_dev *dev, struct mt76_queue *q);
 static inline void mt76_put_page_pool_buf(void *buf, bool allow_direct)
 {
-	struct page *page = virt_to_head_page(buf);
+	netmem_ref netmem = netmem_compound_head(virt_to_netmem(buf));
 
-	page_pool_put_full_page(page->pp, page, allow_direct);
+	page_pool_put_full_netmem(netmem_get_pp(netmem), netmem, allow_direct);
 }
 
 static inline void *
 mt76_get_page_pool_buf(struct mt76_queue *q, u32 *offset, u32 size)
 {
-	struct page *page;
+	netmem_ref netmem;
 
-	page = page_pool_dev_alloc_frag(q->page_pool, offset, size);
-	if (!page)
+	netmem = page_pool_dev_alloc_netmem(q->page_pool, offset, &size);
+	if (!netmem)
 		return NULL;
 
-	return page_address(page) + *offset;
+	return netmem_address(netmem) + *offset;
 }
 
 static inline void mt76_set_tx_blocked(struct mt76_dev *dev, bool blocked)
