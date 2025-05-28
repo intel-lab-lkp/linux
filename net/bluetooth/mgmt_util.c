@@ -219,12 +219,19 @@ struct mgmt_pending_cmd *mgmt_pending_find(unsigned short channel, u16 opcode,
 {
 	struct mgmt_pending_cmd *cmd;
 
-	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(cmd, &hdev->mgmt_pending, list) {
 		if (hci_sock_get_channel(cmd->sk) != channel)
 			continue;
-		if (cmd->opcode == opcode)
+
+		if (cmd->opcode == opcode) {
+			rcu_read_unlock();
 			return cmd;
+		}
 	}
+
+	rcu_read_unlock();
 
 	return NULL;
 }
@@ -233,14 +240,11 @@ void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev,
 			  void (*cb)(struct mgmt_pending_cmd *cmd, void *data),
 			  void *data)
 {
-	struct mgmt_pending_cmd *cmd, *tmp;
+	struct mgmt_pending_cmd *cmd;
 
-	list_for_each_entry_safe(cmd, tmp, &hdev->mgmt_pending, list) {
-		if (opcode > 0 && cmd->opcode != opcode)
-			continue;
-
+	cmd = mgmt_pending_find(HCI_CHANNEL_CONTROL, opcode, hdev);
+	if (cmd)
 		cb(cmd, data);
-	}
 }
 
 struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
@@ -280,7 +284,7 @@ struct mgmt_pending_cmd *mgmt_pending_add(struct sock *sk, u16 opcode,
 	if (!cmd)
 		return NULL;
 
-	list_add_tail(&cmd->list, &hdev->mgmt_pending);
+	list_add_tail_rcu(&cmd->list, &hdev->mgmt_pending);
 
 	return cmd;
 }
@@ -294,7 +298,8 @@ void mgmt_pending_free(struct mgmt_pending_cmd *cmd)
 
 void mgmt_pending_remove(struct mgmt_pending_cmd *cmd)
 {
-	list_del(&cmd->list);
+	list_del_rcu(&cmd->list);
+	synchronize_rcu();
 	mgmt_pending_free(cmd);
 }
 
