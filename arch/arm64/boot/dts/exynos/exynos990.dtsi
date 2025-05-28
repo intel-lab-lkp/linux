@@ -254,6 +254,25 @@
 				      "dpgtc";
 		};
 
+		cmu_hsi1: clock-controller@13000000 {
+			compatible = "samsung,exynos990-cmu-hsi1";
+			reg = <0x13000000 0x8000>;
+			#clock-cells = <1>;
+
+			clocks = <&oscclk>,
+				 <&cmu_top CLK_DOUT_CMU_HSI1_BUS>,
+				 <&cmu_top CLK_DOUT_CMU_HSI1_MMC_CARD>,
+				 <&cmu_top CLK_DOUT_CMU_HSI1_PCIE>,
+				 <&cmu_top CLK_DOUT_CMU_HSI1_UFS_CARD>,
+				 <&cmu_top CLK_DOUT_CMU_HSI1_UFS_EMBD>;
+			clock-names = "oscclk",
+				      "bus",
+				      "mmc_card",
+				      "pcie",
+				      "ufs_card",
+				      "ufs_embd";
+		};
+
 		pinctrl_hsi1: pinctrl@13040000 {
 			compatible = "samsung,exynos990-pinctrl";
 			reg = <0x13040000 0x1000>;
