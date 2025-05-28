@@ -26,6 +26,7 @@ struct userspace_consumer_data {
 	struct mutex lock;
 	bool enabled;
 	bool no_autoswitch;
+	bool is_shared;
 
 	int num_supplies;
 	struct regulator_bulk_data *supplies;
@@ -156,8 +157,14 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 
 	mutex_init(&drvdata->lock);
 
-	ret = devm_regulator_bulk_get_exclusive(&pdev->dev, drvdata->num_supplies,
-						drvdata->supplies);
+	drvdata->is_shared = of_property_read_bool(pdev->dev.of_node, "is_shared");
+	if (drvdata->is_shared) {
+		ret = devm_regulator_bulk_get(&pdev->dev, drvdata->num_supplies,
+					      drvdata->supplies);
+	} else {
+		ret = devm_regulator_bulk_get_exclusive(&pdev->dev, drvdata->num_supplies,
+							drvdata->supplies);
+	}
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Failed to get supplies\n");
 
@@ -167,22 +174,24 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 	if (ret != 0)
 		return ret;
 
-	if (pdata->init_on && !pdata->no_autoswitch) {
-		ret = regulator_bulk_enable(drvdata->num_supplies,
-					    drvdata->supplies);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"Failed to set initial state: %d\n", ret);
+	if (!drvdata->is_shared) {
+		if (pdata->init_on && !pdata->no_autoswitch) {
+			ret = regulator_bulk_enable(drvdata->num_supplies,
+						    drvdata->supplies);
+			if (ret) {
+				dev_err(&pdev->dev,
+					"Failed to set initial state: %d\n", ret);
+				goto err_enable;
+			}
+		}
+
+		ret = regulator_is_enabled(pdata->supplies[0].consumer);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "Failed to get regulator status\n");
 			goto err_enable;
 		}
+		drvdata->enabled = !!ret;
 	}
-
-	ret = regulator_is_enabled(pdata->supplies[0].consumer);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to get regulator status\n");
-		goto err_enable;
-	}
-	drvdata->enabled = !!ret;
 
 	return 0;
 
