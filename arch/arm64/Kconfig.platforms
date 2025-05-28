@@ -402,4 +402,23 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config ARCH_BSTC1200
+	bool "BSTC1200 Platforms"
+	select SOC_NONCOHERENT
+	help
+	  This enables support for Black Sesame Technologies C1200 series SoCs.
+	  The BST C1200 is an automotive-grade SoC designed for ADAS and
+	  autonomous driving applications. It features ARM Cortex-A78 cores,
+	  dedicated AI accelerators, and various automotive interfaces.
+
+config ARCH_BST
+	bool "BST Platforms"
+	select SOC_NONCOHERENT
+	help
+	  This enables support for Black Sesame Technologies (BST) SoC family.
+	  BST is a leading provider of automotive-grade AI chips and solutions.
+	  Their SoC products integrate high-performance CPU cores, AI accelerators,
+	  and comprehensive automotive interfaces for ADAS and autonomous driving
+	  applications.
+
 endmenu # "Platform selection"
