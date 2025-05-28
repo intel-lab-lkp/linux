@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <uapi/linux/counter/microchip-tcb-capture.h>
@@ -29,7 +30,9 @@
 
 struct mchp_tc_data {
 	const struct atmel_tcb_config *tc_cfg;
+	struct platform_device *pdev;
 	struct regmap *regmap;
+	void __iomem *base;
 	int qdec_mode;
 	int num_channels;
 	int channel[2];
@@ -479,6 +482,8 @@ static int mchp_tc_probe(struct platform_device *pdev)
 	const struct atmel_tcb_config *tcb_config;
 	const struct of_device_id *match;
 	struct counter_device *counter;
+	struct platform_device *parent_pdev;
+	struct resource *parent_res;
 	struct mchp_tc_data *priv;
 	char clk_name[7];
 	struct regmap *regmap;
@@ -490,6 +495,18 @@ static int mchp_tc_probe(struct platform_device *pdev)
 	if (!counter)
 		return -ENOMEM;
 	priv = counter_priv(counter);
+
+	parent_pdev = of_find_device_by_node(np->parent);
+	if (!parent_pdev)
+		return -EPROBE_DEFER;
+
+	parent_res = platform_get_resource(parent_pdev, IORESOURCE_MEM, 0);
+	if (!parent_res)
+		return -EINVAL;
+
+	priv->base = devm_ioremap_resource(&parent_pdev->dev, parent_res);
+	if (IS_ERR(priv->base))
+		return PTR_ERR(priv->base);
 
 	match = of_match_node(atmel_tc_of_match, np->parent);
 	tcb_config = match->data;
@@ -563,6 +580,7 @@ static int mchp_tc_probe(struct platform_device *pdev)
 
 	priv->tc_cfg = tcb_config;
 	priv->regmap = regmap;
+	priv->pdev = pdev;
 	counter->name = dev_name(&pdev->dev);
 	counter->parent = &pdev->dev;
 	counter->ops = &mchp_tc_ops;
