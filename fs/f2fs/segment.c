@@ -5054,10 +5054,10 @@ init_discard_map_done:
 	if (__is_large_section(sbi)) {
 		unsigned int segno;
 
-		for (segno = 0; segno < MAIN_SEGS(sbi); segno += SEGS_PER_SEC(sbi))
+		for (segno = 0; segno < MAIN_SEGS(sbi); segno += SEGS_PER_SEC(sbi)) {
 			set_ckpt_valid_blocks(sbi, segno);
-
-		sanity_check_valid_blocks(sbi, segno);
+			sanity_check_valid_blocks(sbi, segno);
+		}
 	}
 
 	if (err)
