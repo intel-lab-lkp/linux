@@ -393,7 +393,7 @@ DEFINE_FIXED_SYMBOL(\name\()_common_real, text)
 	.endif
 
 	ld	r10,PACAKMSR(r13)	/* get MSR value for kernel */
-	/* MSR[RI] is clear iff using SRR regs */
+	/* MSR[RI] is clear if using SRR regs */
 	.if IHSRR_IF_HVMODE
 	BEGIN_FTR_SECTION
 	xori	r10,r10,MSR_RI
