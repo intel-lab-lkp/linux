@@ -4281,11 +4281,13 @@ static void *___kmalloc_large_node(size_t size, gfp_t flags, int node)
 	if (unlikely(flags & GFP_SLAB_BUG_MASK))
 		flags = kmalloc_fix_flags(flags);
 
-	if (node == NUMA_NO_NODE)
-		node = numa_mem_id();
-
 	flags |= __GFP_COMP;
-	folio = (struct folio *)__alloc_frozen_pages_noprof(flags, order, node, NULL);
+
+	if (node == NUMA_NO_NODE)
+		folio = (struct folio *)alloc_frozen_pages_noprof(flags, order);
+	else
+		folio = (struct folio *)__alloc_frozen_pages_noprof(flags, order, node, NULL);
+
 	if (folio) {
 		ptr = folio_address(folio);
 		lruvec_stat_mod_folio(folio, NR_SLAB_UNRECLAIMABLE_B,
