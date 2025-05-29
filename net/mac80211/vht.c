@@ -672,8 +672,8 @@ u32 __ieee80211_vht_handle_opmode(struct ieee80211_sub_if_data *sdata,
 				sta_opmode.changed |= STA_OPMODE_N_SS_CHANGED;
 			}
 		} else {
-			pr_warn_ratelimited("Ignoring NSS change in VHT Operating Mode Notification from %pM with invalid nss %d",
-					    link_sta->pub->addr, nss);
+			pr_warn_ratelimited("Ignoring NSS change in VHT Operating Mode Notification from %pM with invalid nss %d > %d",
+					    link_sta->pub->addr, nss, link_sta->op_mode_nss);
 		}
 	}
 
