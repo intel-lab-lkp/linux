@@ -23,12 +23,63 @@ static const struct genl_multicast_group em_genl_mcgrps[] = {
 static const struct nla_policy em_genl_policy[EM_GENL_ATTR_MAX + 1] = {
 };
 
+struct param {
+	struct nlattr **attrs;
+	struct sk_buff *msg;
+};
+
+typedef int (*cb_t)(struct param *);
+
 static struct genl_family em_genl_family;
 
+/*************************** Command encoding ********************************/
+
+static int em_genl_cmd_pd_get_id(struct param *p)
+{
+	return -ENOTSUPP;
+}
+
+static int em_genl_cmd_pd_get_tbl(struct param *p)
+{
+	return -ENOTSUPP;
+}
+
+static const cb_t cmd_cb[] = {
+	[EM_GENL_CMD_PD_GET_ID]			= em_genl_cmd_pd_get_id,
+	[EM_GENL_CMD_PD_GET_TBL]		= em_genl_cmd_pd_get_tbl,
+};
 
 static int em_genl_cmd_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	return -ENOTSUPP;
+	struct param p = { .attrs = info->attrs };
+	struct sk_buff *msg;
+	void *hdr;
+	int cmd = info->genlhdr->cmd;
+	int ret = -EMSGSIZE;
+
+	msg = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+	p.msg = msg;
+
+	hdr = genlmsg_put_reply(msg, info, &em_genl_family, 0, cmd);
+	if (!hdr)
+		goto out_free_msg;
+
+	ret = cmd_cb[cmd](&p);
+	if (ret)
+		goto out_cancel_msg;
+
+	genlmsg_end(msg, hdr);
+
+	return genlmsg_reply(msg, info);
+
+out_cancel_msg:
+	genlmsg_cancel(msg, hdr);
+out_free_msg:
+	nlmsg_free(msg);
+
+	return ret;
 }
 
 static const struct genl_small_ops em_genl_ops[] = {
