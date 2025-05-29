@@ -5689,6 +5689,10 @@ static int __init svm_init(void)
 	if (!kvm_is_svm_supported())
 		return -EOPNOTSUPP;
 
+	r = nested_svm_init_msrpm_merge_offsets();
+	if (r)
+		return r;
+
 	r = kvm_x86_vendor_init(&svm_init_ops);
 	if (r)
 		return r;
