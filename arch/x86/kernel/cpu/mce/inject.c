@@ -128,6 +128,13 @@ static void inject_mce(struct mce *m)
 {
 	struct mce *i = &per_cpu(injectm, m->extcpu);
 
+	/* do some sanity checks */
+	if (!(m->inject_flags & (MCJ_IRQ_BROADCAST | MCJ_NMI_BROADCAST))) {
+		if (m->cpuvendor == X86_VENDOR_INTEL ||
+		    m->cpuvendor == X86_VENDOR_ZHAOXIN)
+			m->mcgstatus |= MCG_STATUS_LMCES;
+	}
+
 	/* Make sure no one reads partially written injectm */
 	i->finished = 0;
 	mb();
