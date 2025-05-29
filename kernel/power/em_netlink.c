@@ -30,11 +30,100 @@ static const struct nla_policy em_genl_policy[EM_GENL_ATTR_MAX + 1] = {
 struct param {
 	struct nlattr **attrs;
 	struct sk_buff *msg;
+	int pd_id;
 };
 
 typedef int (*cb_t)(struct param *);
 
 static struct genl_family em_genl_family;
+
+/**************************** Event encoding *********************************/
+static int __em_genl_event_pd_id(struct param *p)
+{
+	if (nla_put_u32(p->msg, EM_PD_GENL_ATTR_ID, p->pd_id))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int em_genl_event_pd_create(struct param *p)
+{
+	return __em_genl_event_pd_id(p);
+}
+
+static int em_genl_event_pd_delete(struct param *p)
+{
+	return __em_genl_event_pd_id(p);
+}
+
+static int em_genl_event_pd_update(struct param *p)
+{
+	return __em_genl_event_pd_id(p);
+}
+
+static const cb_t event_cb[] = {
+	[EM_GENL_EVENT_PD_CREATE] = em_genl_event_pd_create,
+	[EM_GENL_EVENT_PD_DELETE] = em_genl_event_pd_delete,
+	[EM_GENL_EVENT_PD_UPDATE] = em_genl_event_pd_update,
+};
+
+static int em_genl_send_event(enum em_genl_event event, struct param *p)
+{
+	struct sk_buff *msg;
+	int ret = -EMSGSIZE;
+	void *hdr;
+
+	if (!genl_has_listeners(&em_genl_family, &init_net, EM_GENL_EVENT_GROUP))
+		return 0;
+
+	msg = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+	p->msg = msg;
+
+	hdr = genlmsg_put(msg, 0, 0, &em_genl_family, 0, event);
+	if (!hdr)
+		goto out_free_msg;
+
+	ret = event_cb[event](p);
+	if (ret)
+		goto out_cancel_msg;
+
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast(&em_genl_family, msg, 0, EM_GENL_EVENT_GROUP, GFP_KERNEL);
+
+	return 0;
+
+out_cancel_msg:
+	genlmsg_cancel(msg, hdr);
+out_free_msg:
+	nlmsg_free(msg);
+
+	return ret;
+}
+
+int em_notify_pd_create(const struct em_perf_domain *pd)
+{
+	struct param p = { .pd_id = pd->id };
+
+	return em_genl_send_event(EM_GENL_EVENT_PD_CREATE, &p);
+}
+
+
+int em_notify_pd_delete(const struct em_perf_domain *pd)
+{
+	struct param p = { .pd_id = pd->id };
+
+	return em_genl_send_event(EM_GENL_EVENT_PD_DELETE, &p);
+}
+
+int em_notify_pd_update(const struct em_perf_domain *pd)
+{
+	struct param p = { .pd_id = pd->id };
+
+	return em_genl_send_event(EM_GENL_EVENT_PD_UPDATE, &p);
+}
 
 /*************************** Command encoding ********************************/
 
