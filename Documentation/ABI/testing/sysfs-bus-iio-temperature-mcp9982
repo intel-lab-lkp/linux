@@ -1,0 +1,27 @@
+What:		/sys/bus/iio/devices/iio:deviceX/enable_extended_temp_range
+KernelVersion:	6.17
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute enables extended range of temperatures.
+		Value 1 uses the extended range, value 0 uses the default range.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_beta1
+KernelVersion:	6.17
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute controls the value of beta correction
+		for channel 1.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_beta2
+KernelVersion:	6.17
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute controls the value of beta correction
+		for channel 2.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_beta_available
+KernelVersion:	6.17
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute displays the values that can be
+		set for beta correction.
