@@ -99,6 +99,19 @@ static unsigned long cdx_mcdi_rpc_timeout(struct cdx_mcdi *cdx, unsigned int cmd
 		return cdx->mcdi_ops->mcdi_rpc_timeout(cdx, cmd);
 }
 
+/**
+ * cdx_mcdi_init - Initialize MCDI (Management Controller Driver Interface) state
+ * @cdx: NIC through which to issue the command
+ *
+ * This function allocates and initializes internal MCDI structures and resources
+ * for the CDX device, including the workqueue, locking primitives, and command
+ * tracking mechanisms. It sets the initial operating mode and prepares the device
+ * for MCDI operations.
+ *
+ * Return:
+ * * 0        - on success
+ * * -ENOMEM  - if memory allocation or workqueue creation fails
+ */
 int cdx_mcdi_init(struct cdx_mcdi *cdx)
 {
 	struct cdx_mcdi_iface *mcdi;
@@ -128,6 +141,7 @@ fail2:
 fail:
 	return rc;
 }
+EXPORT_SYMBOL_GPL(cdx_mcdi_init);
 
 void cdx_mcdi_finish(struct cdx_mcdi *cdx)
 {
@@ -553,6 +567,19 @@ static void cdx_mcdi_start_or_queue(struct cdx_mcdi_iface *mcdi,
 			cdx_mcdi_cmd_start_or_queue(mcdi, cmd);
 }
 
+/**
+ * cdx_mcdi_process_cmd - Process an incoming MCDI response
+ * @cdx: NIC through which to issue the command
+ * @outbuf:  Pointer to the response buffer received from the management controller
+ * @len:     Length of the response buffer in bytes
+ *
+ * This function handles a response from the management controller. It locates the
+ * corresponding command using the sequence number embedded in the header,
+ * completes the command if it is still pending, and initiates any necessary cleanup.
+ *
+ * The function assumes that the response buffer is well-formed and at least one
+ * dword in size.
+ */
 void cdx_mcdi_process_cmd(struct cdx_mcdi *cdx, struct cdx_dword *outbuf, int len)
 {
 	struct cdx_mcdi_iface *mcdi;
@@ -590,6 +617,7 @@ void cdx_mcdi_process_cmd(struct cdx_mcdi *cdx, struct cdx_dword *outbuf, int le
 
 	cdx_mcdi_process_cleanup_list(mcdi->cdx, &cleanup_list);
 }
+EXPORT_SYMBOL_GPL(cdx_mcdi_process_cmd);
 
 static void cdx_mcdi_cmd_work(struct work_struct *context)
 {
@@ -757,6 +785,7 @@ int cdx_mcdi_rpc(struct cdx_mcdi *cdx, unsigned int cmd,
 	return cdx_mcdi_rpc_sync(cdx, cmd, inbuf, inlen, outbuf, outlen,
 				 outlen_actual, false);
 }
+EXPORT_SYMBOL_GPL(cdx_mcdi_rpc);
 
 /**
  * cdx_mcdi_rpc_async - Schedule an MCDI command to run asynchronously
