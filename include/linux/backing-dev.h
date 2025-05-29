@@ -157,7 +157,7 @@ fetch_bdi_writeback_ctx(struct inode *inode)
 {
 	struct backing_dev_info *bdi = inode_to_bdi(inode);
 
-	return bdi->wb_ctx_arr[0];
+	return bdi->wb_ctx_arr[inode->i_ino % bdi->nr_wb_ctx];
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
