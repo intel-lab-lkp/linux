@@ -21,6 +21,8 @@ static const struct genl_multicast_group em_genl_mcgrps[] = {
 };
 
 static const struct nla_policy em_genl_policy[EM_GENL_ATTR_MAX + 1] = {
+	/* Performance domain */
+	[EM_GENL_ATTR_PD]			= { .type = NLA_NESTED },
 };
 
 struct param {
@@ -34,9 +36,60 @@ static struct genl_family em_genl_family;
 
 /*************************** Command encoding ********************************/
 
+static int __em_genl_cmd_pd_get_id(struct em_perf_domain *pd, void *data)
+{
+	char cpus_buf[EM_PD_CPUS_LENGTH];
+	struct sk_buff *msg = data;
+	struct nlattr *entry;
+
+	entry = nla_nest_start(msg, EM_PD_ENTRY_GENL_ATTR_PD);
+	if (!entry)
+		goto out_cancel_nest;
+
+	if (nla_put_u32(msg, EM_PD_GENL_ATTR_ID, pd->id))
+		goto out_cancel_nest;
+
+	if (nla_put_u64_64bit(msg, EM_PD_GENL_ATTR_FLAGS, pd->flags,
+			      EM_PD_GENL_ATTR_PAD))
+		goto out_cancel_nest;
+
+	snprintf(cpus_buf, sizeof(cpus_buf), "%*pb",
+		 cpumask_pr_args(to_cpumask(pd->cpus)));
+	if (nla_put_string(msg, EM_PD_GENL_ATTR_CPUS, cpus_buf))
+		goto out_cancel_nest;
+
+	nla_nest_end(msg, entry);
+
+	return 0;
+
+out_cancel_nest:
+	nla_nest_cancel(msg, entry);
+
+	return -EMSGSIZE;
+}
+
 static int em_genl_cmd_pd_get_id(struct param *p)
 {
-	return -ENOTSUPP;
+	struct sk_buff *msg = p->msg;
+	struct nlattr *start_pd;
+	int ret;
+
+	start_pd = nla_nest_start(msg, EM_GENL_ATTR_PD);
+	if (!start_pd)
+		return -EMSGSIZE;
+
+	ret = for_each_em_perf_domain(__em_genl_cmd_pd_get_id, msg);
+	if (ret)
+		goto out_cancel_nest;
+
+	nla_nest_end(msg, start_pd);
+
+	return 0;
+
+out_cancel_nest:
+	nla_nest_cancel(msg, start_pd);
+
+	return ret;
 }
 
 static int em_genl_cmd_pd_get_tbl(struct param *p)

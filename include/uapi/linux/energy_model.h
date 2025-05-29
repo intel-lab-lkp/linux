@@ -10,9 +10,34 @@
 /* Attributes of em_genl_family */
 enum em_genl_attr {
 	EM_GENL_ATTR_UNSPEC,
+	EM_GENL_ATTR_PAD = EM_GENL_ATTR_UNSPEC,
+	EM_GENL_ATTR_PD,	/* Performance domain */
 	__EM_GENL_ATTR_MAX,
 };
 #define EM_GENL_ATTR_MAX (__EM_GENL_ATTR_MAX - 1)
+
+enum em_pd_entry_genl_attr {
+	EM_PD_ENTRY_GENL_ATTR_UNSPEC,
+	EM_PD_ENTRY_GENL_ATTR_PAD = EM_PD_ENTRY_GENL_ATTR_UNSPEC,
+	EM_PD_ENTRY_GENL_ATTR_PD,
+	__EM_PD_ENTRY_GENL_ATTR_MAX,
+};
+#define EM_PD_ENTRY_GENL_ATTR_MAX (__EM_PD_ENTRY_GENL_ATTR_MAX - 1)
+
+enum em_pd_genl_attr {
+	EM_PD_GENL_ATTR_UNSPEC,
+	EM_PD_GENL_ATTR_PAD = EM_PD_GENL_ATTR_UNSPEC,
+
+	/* Performance domain */
+	EM_PD_GENL_ATTR_ID,
+	EM_PD_GENL_ATTR_FLAGS,
+	EM_PD_GENL_ATTR_CPUS,
+
+	__EM_PD_GENL_ATTR_MAX,
+};
+#define EM_PD_GENL_ATTR_MAX (__EM_PD_GENL_ATTR_MAX - 1)
+
+#define EM_PD_CPUS_LENGTH		256
 
 /* Events of em_genl_family */
 enum em_genl_event {
