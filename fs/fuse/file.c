@@ -1851,11 +1851,11 @@ static void fuse_writepage_free(struct fuse_writepage_args *wpa)
 
 static void fuse_writepage_finish_stat(struct inode *inode, struct folio *folio)
 {
-	struct backing_dev_info *bdi = inode_to_bdi(inode);
+	struct bdi_writeback_ctx *bdi_wb_ctx = fetch_bdi_writeback_ctx(inode);
 
-	dec_wb_stat(&bdi->wb_ctx_arr[0]->wb, WB_WRITEBACK);
+	dec_wb_stat(&bdi_wb_ctx->wb, WB_WRITEBACK);
 	node_stat_sub_folio(folio, NR_WRITEBACK_TEMP);
-	wb_writeout_inc(&bdi->wb_ctx_arr[0]->wb);
+	wb_writeout_inc(&bdi_wb_ctx->wb);
 }
 
 static void fuse_writepage_finish(struct fuse_writepage_args *wpa)
@@ -2134,6 +2134,7 @@ static void fuse_writepage_args_page_fill(struct fuse_writepage_args *wpa, struc
 					  struct folio *tmp_folio, uint32_t folio_index)
 {
 	struct inode *inode = folio->mapping->host;
+	struct bdi_writeback_ctx *bdi_wb_ctx = fetch_bdi_writeback_ctx(inode);
 	struct fuse_args_pages *ap = &wpa->ia.ap;
 
 	folio_copy(tmp_folio, folio);
@@ -2142,7 +2143,7 @@ static void fuse_writepage_args_page_fill(struct fuse_writepage_args *wpa, struc
 	ap->descs[folio_index].offset = 0;
 	ap->descs[folio_index].length = PAGE_SIZE;
 
-	inc_wb_stat(&inode_to_bdi(inode)->wb_ctx_arr[0]->wb, WB_WRITEBACK);
+	inc_wb_stat(&bdi_wb_ctx->wb, WB_WRITEBACK);
 	node_stat_add_folio(tmp_folio, NR_WRITEBACK_TEMP);
 }
 
