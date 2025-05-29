@@ -93,7 +93,7 @@ static const char *perf_pmu__mem_events_name(struct perf_pmu *pmu, int i,
 	if (i == PERF_MEM_EVENTS__LOAD || i == PERF_MEM_EVENTS__LOAD_STORE) {
 		if (e->ldlat) {
 			if (!e->aux_event) {
-				/* ARM and Most of Intel */
+				/* ARM, AMD and Most of Intel */
 				scnprintf(buf, buf_size,
 					  e->name, pmu->name,
 					  perf_mem_events__loads_ldlat);

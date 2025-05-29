@@ -32,3 +32,15 @@ struct perf_mem_event perf_mem_events_amd_ldlat[PERF_MEM_EVENTS__MAX] = {
 	E(NULL,		NULL,		NULL,	false,	0),
 	E("mem-ldst",	"%s/ldlat=%u/",	NULL,	true,	0),
 };
+
+struct perf_mem_event perf_mem_events_amd_swfilt[PERF_MEM_EVENTS__MAX] = {
+	E("mem-load",	"%s/swfilt=1,ldop=1/",		NULL,	false,	0),
+	E("mem-store",	"%s/swfilt=1,stop=1/",		NULL,	false,	0),
+	E("mem-ldst",	"%s/swfilt=1,ldop=1,stop=1/",	NULL,	false,	0),
+};
+
+struct perf_mem_event perf_mem_events_amd_ldlat_swfilt[PERF_MEM_EVENTS__MAX] = {
+	E("mem-load",	"%s/ldlat=%u,swfilt=1,ldop=1/",		NULL,	true,	0),
+	E("mem-store",	"%s/swfilt=1,stop=1/",			NULL,	false,	0),
+	E("mem-ldst",	"%s/ldlat=%u,swfilt=1,ldop=1,stop=1/",	NULL,	true,	0),
+};

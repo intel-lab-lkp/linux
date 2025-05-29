@@ -271,7 +271,7 @@ static void gnr_uncore_cha_imc_adjust_cpumask_for_snc(struct perf_pmu *pmu, bool
 
 void perf_pmu__arch_init(struct perf_pmu *pmu)
 {
-	struct perf_pmu_caps *ldlat_cap;
+	struct perf_pmu_caps *ldlat_cap, *swfilt_ldst_cap;
 
 #ifdef HAVE_AUXTRACE_SUPPORT
 	if (!strcmp(pmu->name, INTEL_PT_PMU_NAME)) {
@@ -295,11 +295,18 @@ void perf_pmu__arch_init(struct perf_pmu *pmu)
 			return;
 
 		ldlat_cap = perf_pmu__get_cap(pmu, "ldlat");
-		if (!ldlat_cap || strcmp(ldlat_cap->value, "1"))
-			return;
+		swfilt_ldst_cap = perf_pmu__get_cap(pmu, "swfilt_ldst");
 
-		perf_mem_events__loads_ldlat = 0;
-		pmu->mem_events = perf_mem_events_amd_ldlat;
+		if (ldlat_cap && !strcmp(ldlat_cap->value, "1")) {
+			perf_mem_events__loads_ldlat = 0;
+
+			if (swfilt_ldst_cap && !strcmp(swfilt_ldst_cap->value, "1"))
+				pmu->mem_events = perf_mem_events_amd_ldlat_swfilt;
+			else
+				pmu->mem_events = perf_mem_events_amd_ldlat;
+		} else if (swfilt_ldst_cap && !strcmp(swfilt_ldst_cap->value, "1")) {
+			pmu->mem_events = perf_mem_events_amd_swfilt;
+		}
 	} else {
 		if (pmu->is_core) {
 			if (perf_pmu__have_event(pmu, "mem-loads-aux"))

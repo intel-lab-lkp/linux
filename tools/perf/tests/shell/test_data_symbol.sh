@@ -57,7 +57,7 @@ echo "Recording workload..."
 is_amd=$(grep -E -c 'vendor_id.*AuthenticAMD' /proc/cpuinfo)
 if (($is_amd >= 1)); then
 	mem_events="$(perf mem record -v -e list 2>&1)"
-	if ! [[ "$mem_events" =~ ^mem\-ldst.*ibs_op/(.*)/.*available ]]; then
+	if ! [[ "$mem_events" =~ mem\-ldst.*ibs_op/(.*)/.*available ]]; then
 		echo "ERROR: mem-ldst event is not matching"
 		exit 1
 	fi
@@ -65,18 +65,22 @@ if (($is_amd >= 1)); then
 	# --ldlat on AMD:
 	# o Zen4 and earlier uarch does not support ldlat
 	# o Even on supported platforms, it's disabled (--ldlat=0) by default.
-	ldlat=${BASH_REMATCH[1]}
-	if [[ -n $ldlat ]]; then
-		if ! [[ "$ldlat" =~ ldlat=0 ]]; then
-			echo "ERROR: ldlat not initialized to 0?"
-			exit 1
+	format=${BASH_REMATCH[1]}
+	if [[ $format =~ ldlat=(\d*) ]]; then
+		ldlat=${BASH_REMATCH[1]}
+		if [[ -n $ldlat ]]; then
+			if ! [[ "$ldlat" =~ ldlat=0 ]]; then
+				echo "ERROR: ldlat not initialized to 0?"
+				exit 1
+			fi
+
+			mem_events="$(perf mem record -v --ldlat=150 -e list 2>&1)"
+			if ! [[ "$mem_events" =~ ^mem-ldst.*ibs_op/ldlat=150/.*available ]]; then
+				echo "ERROR: --ldlat not honored?"
+				exit 1
+			fi
 		fi
 
-		mem_events="$(perf mem record -v --ldlat=150 -e list 2>&1)"
-		if ! [[ "$mem_events" =~ ^mem-ldst.*ibs_op/ldlat=150/.*available ]]; then
-			echo "ERROR: --ldlat not honored?"
-			exit 1
-		fi
 	fi
 
 	# perf mem/c2c internally uses IBS PMU on AMD CPU which doesn't
