@@ -294,10 +294,11 @@ MODULE_ALIAS_CRYPTO("drbg_nopr_ctr_aes192");
 MODULE_ALIAS_CRYPTO("drbg_pr_ctr_aes128");
 MODULE_ALIAS_CRYPTO("drbg_nopr_ctr_aes128");
 
-static void drbg_kcapi_symsetkey(struct drbg_state *drbg,
-				 const unsigned char *key);
-static int drbg_kcapi_sym(struct drbg_state *drbg, unsigned char *outval,
-			  const struct drbg_string *in);
+static void drbg_kcapi_symsetkey(struct crypto_cipher *tfm,
+				 const unsigned char *key,
+				 u8 keylen);
+static int drbg_kcapi_sym(struct crypto_cipher *tfm, unsigned char *outval,
+			  const struct drbg_string *in, u8 blocklen_bytes);
 static int drbg_init_sym_kernel(struct drbg_state *drbg);
 static int drbg_fini_sym_kernel(struct drbg_state *drbg);
 static int drbg_kcapi_sym_ctr(struct drbg_state *drbg,
@@ -306,28 +307,31 @@ static int drbg_kcapi_sym_ctr(struct drbg_state *drbg,
 #define DRBG_OUTSCRATCHLEN 256
 
 /* BCC function for CTR DRBG as defined in 10.4.3 */
-static int drbg_ctr_bcc(struct drbg_state *drbg,
+
+static int drbg_ctr_bcc(struct crypto_cipher *tfm,
 			unsigned char *out, const unsigned char *key,
-			struct list_head *in)
+			struct list_head *in,
+			u8 blocklen_bytes,
+			u8 keylen)
 {
 	int ret = 0;
 	struct drbg_string *curr = NULL;
 	struct drbg_string data;
 	short cnt = 0;
 
-	drbg_string_fill(&data, out, drbg_blocklen(drbg));
+	drbg_string_fill(&data, out, blocklen_bytes);
 
 	/* 10.4.3 step 2 / 4 */
-	drbg_kcapi_symsetkey(drbg, key);
+	drbg_kcapi_symsetkey(tfm, key, keylen);
 	list_for_each_entry(curr, in, list) {
 		const unsigned char *pos = curr->buf;
 		size_t len = curr->len;
 		/* 10.4.3 step 4.1 */
 		while (len) {
 			/* 10.4.3 step 4.2 */
-			if (drbg_blocklen(drbg) == cnt) {
+			if (blocklen_bytes == cnt) {
 				cnt = 0;
-				ret = drbg_kcapi_sym(drbg, out, &data);
+				ret = drbg_kcapi_sym(tfm, out, &data, blocklen_bytes);
 				if (ret)
 					return ret;
 			}
@@ -339,13 +343,13 @@ static int drbg_ctr_bcc(struct drbg_state *drbg,
 	}
 	/* 10.4.3 step 4.2 for last block */
 	if (cnt)
-		ret = drbg_kcapi_sym(drbg, out, &data);
+		ret = drbg_kcapi_sym(tfm, out, &data, blocklen_bytes);
 
 	return ret;
 }
 
 /*
- * scratchpad usage: drbg_ctr_update is interlinked with drbg_ctr_df
+ * scratchpad usage: drbg_ctr_update is interlinked with crypto_drbg_ctr_df
  * (and drbg_ctr_bcc, but this function does not need any temporary buffers),
  * the scratchpad is used as follows:
  * drbg_ctr_update:
@@ -362,7 +366,7 @@ static int drbg_ctr_bcc(struct drbg_state *drbg,
  *				drbg_statelen(drbg) + drbg_blocklen(drbg)
  *		length: drbg_statelen(drbg)
  *
- * drbg_ctr_df:
+ * crypto_drbg_ctr_df:
  *	pad
  *		start: df_data + drbg_statelen(drbg)
  *		length: drbg_blocklen(drbg)
@@ -381,21 +385,24 @@ static int drbg_ctr_bcc(struct drbg_state *drbg,
  *			the final output of all BCC rounds are truncated).
  *			Therefore, add drbg_blocklen(drbg) to cover all
  *			possibilities.
+ * refer to crypto_drbg_ctr_df_datalen() to get required length
  */
 
 /* Derivation Function for CTR DRBG as defined in 10.4.2 */
-static int drbg_ctr_df(struct drbg_state *drbg,
+int crypto_drbg_ctr_df(struct crypto_cipher *tfm,
 		       unsigned char *df_data, size_t bytes_to_return,
-		       struct list_head *seedlist)
+		       struct list_head *seedlist,
+		       u8 blocklen_bytes,
+		       u8 statelen)
 {
 	int ret = -EFAULT;
 	unsigned char L_N[8];
 	/* S3 is input */
 	struct drbg_string S1, S2, S4, cipherin;
 	LIST_HEAD(bcc_list);
-	unsigned char *pad = df_data + drbg_statelen(drbg);
-	unsigned char *iv = pad + drbg_blocklen(drbg);
-	unsigned char *temp = iv + drbg_blocklen(drbg);
+	unsigned char *pad = df_data + statelen;
+	unsigned char *iv = pad + blocklen_bytes;
+	unsigned char *temp = iv + blocklen_bytes;
 	size_t padlen = 0;
 	unsigned int templen = 0;
 	/* 10.4.2 step 7 */
@@ -410,10 +417,11 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 	size_t generated_len = 0;
 	size_t inputlen = 0;
 	struct drbg_string *seed = NULL;
+	u8 keylen;
 
-	memset(pad, 0, drbg_blocklen(drbg));
-	memset(iv, 0, drbg_blocklen(drbg));
-
+	memset(pad, 0, blocklen_bytes);
+	memset(iv, 0, blocklen_bytes);
+	keylen = statelen - blocklen_bytes;
 	/* 10.4.2 step 1 is implicit as we work byte-wise */
 
 	/* 10.4.2 step 2 */
@@ -429,10 +437,10 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 	drbg_cpu_to_be32(bytes_to_return, &L_N[4]);
 
 	/* 10.4.2 step 5: length is L_N, input_string, one byte, padding */
-	padlen = (inputlen + sizeof(L_N) + 1) % (drbg_blocklen(drbg));
+	padlen = (inputlen + sizeof(L_N) + 1) % (blocklen_bytes);
 	/* wrap the padlen appropriately */
 	if (padlen)
-		padlen = drbg_blocklen(drbg) - padlen;
+		padlen = blocklen_bytes - padlen;
 	/*
 	 * pad / padlen contains the 0x80 byte and the following zero bytes.
 	 * As the calculated padlen value only covers the number of zero
@@ -442,7 +450,7 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 	pad[0] = 0x80;
 
 	/* 10.4.2 step 4 -- first fill the linked list and then order it */
-	drbg_string_fill(&S1, iv, drbg_blocklen(drbg));
+	drbg_string_fill(&S1, iv, blocklen_bytes);
 	list_add_tail(&S1.list, &bcc_list);
 	drbg_string_fill(&S2, L_N, sizeof(L_N));
 	list_add_tail(&S2.list, &bcc_list);
@@ -451,7 +459,7 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 	list_add_tail(&S4.list, &bcc_list);
 
 	/* 10.4.2 step 9 */
-	while (templen < (drbg_keylen(drbg) + (drbg_blocklen(drbg)))) {
+	while (templen < (keylen + (blocklen_bytes))) {
 		/*
 		 * 10.4.2 step 9.1 - the padding is implicit as the buffer
 		 * holds zeros after allocation -- even the increment of i
@@ -459,22 +467,23 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 		 */
 		drbg_cpu_to_be32(i, iv);
 		/* 10.4.2 step 9.2 -- BCC and concatenation with temp */
-		ret = drbg_ctr_bcc(drbg, temp + templen, K, &bcc_list);
+		ret = drbg_ctr_bcc(tfm, temp + templen, K, &bcc_list,
+				   blocklen_bytes, keylen);
 		if (ret)
 			goto out;
 		/* 10.4.2 step 9.3 */
 		i++;
-		templen += drbg_blocklen(drbg);
+		templen += blocklen_bytes;
 	}
 
 	/* 10.4.2 step 11 */
-	X = temp + (drbg_keylen(drbg));
-	drbg_string_fill(&cipherin, X, drbg_blocklen(drbg));
+	X = temp + (keylen);
+	drbg_string_fill(&cipherin, X, blocklen_bytes);
 
 	/* 10.4.2 step 12: overwriting of outval is implemented in next step */
 
 	/* 10.4.2 step 13 */
-	drbg_kcapi_symsetkey(drbg, temp);
+	drbg_kcapi_symsetkey(tfm, temp, keylen);
 	while (generated_len < bytes_to_return) {
 		short blocklen = 0;
 		/*
@@ -482,12 +491,12 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 		 * implicit as the key is only drbg_blocklen in size based on
 		 * the implementation of the cipher function callback
 		 */
-		ret = drbg_kcapi_sym(drbg, X, &cipherin);
+		ret = drbg_kcapi_sym(tfm, X, &cipherin, blocklen_bytes);
 		if (ret)
 			goto out;
-		blocklen = (drbg_blocklen(drbg) <
+		blocklen = (blocklen_bytes <
 				(bytes_to_return - generated_len)) ?
-			    drbg_blocklen(drbg) :
+			    blocklen_bytes :
 				(bytes_to_return - generated_len);
 		/* 10.4.2 step 13.2 and 14 */
 		memcpy(df_data + generated_len, X, blocklen);
@@ -497,11 +506,12 @@ static int drbg_ctr_df(struct drbg_state *drbg,
 	ret = 0;
 
 out:
-	memset(iv, 0, drbg_blocklen(drbg));
-	memset(temp, 0, drbg_statelen(drbg) + drbg_blocklen(drbg));
-	memset(pad, 0, drbg_blocklen(drbg));
+	memset(iv, 0, blocklen_bytes);
+	memset(temp, 0, statelen + blocklen_bytes);
+	memset(pad, 0, blocklen_bytes);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(crypto_drbg_ctr_df);
 
 /*
  * update function of CTR DRBG as defined in 10.2.1.2
@@ -548,7 +558,9 @@ static int drbg_ctr_update(struct drbg_state *drbg, struct list_head *seed,
 
 	/* 10.2.1.3.2 step 2 and 10.2.1.4.2 step 2 */
 	if (seed) {
-		ret = drbg_ctr_df(drbg, df_data, drbg_statelen(drbg), seed);
+		ret = crypto_drbg_ctr_df(drbg->priv_data, df_data, drbg_statelen(drbg), seed,
+					 drbg_blocklen(drbg),
+					 drbg_statelen(drbg));
 		if (ret)
 			goto out;
 	}
@@ -1310,10 +1322,8 @@ static inline int drbg_alloc_state(struct drbg_state *drbg)
 		sb_size = 0;
 	else if (drbg->core->flags & DRBG_CTR)
 		sb_size = drbg_statelen(drbg) + drbg_blocklen(drbg) + /* temp */
-			  drbg_statelen(drbg) +	/* df_data */
-			  drbg_blocklen(drbg) +	/* pad */
-			  drbg_blocklen(drbg) +	/* iv */
-			  drbg_statelen(drbg) + drbg_blocklen(drbg); /* temp */
+			  crypto_drbg_ctr_df_datalen(drbg_statelen(drbg),
+						     drbg_blocklen(drbg));
 	else
 		sb_size = drbg_statelen(drbg) + drbg_blocklen(drbg);
 
@@ -1800,21 +1810,17 @@ static int drbg_init_sym_kernel(struct drbg_state *drbg)
 	return alignmask;
 }
 
-static void drbg_kcapi_symsetkey(struct drbg_state *drbg,
-				 const unsigned char *key)
+static void drbg_kcapi_symsetkey(struct crypto_cipher *tfm,
+				 const unsigned char *key, u8 keylen)
 {
-	struct crypto_cipher *tfm = drbg->priv_data;
-
-	crypto_cipher_setkey(tfm, key, (drbg_keylen(drbg)));
+	crypto_cipher_setkey(tfm, key, keylen);
 }
 
-static int drbg_kcapi_sym(struct drbg_state *drbg, unsigned char *outval,
-			  const struct drbg_string *in)
+static int drbg_kcapi_sym(struct crypto_cipher *tfm, unsigned char *outval,
+			  const struct drbg_string *in, u8 blocklen_bytes)
 {
-	struct crypto_cipher *tfm = drbg->priv_data;
-
 	/* there is only component in *in */
-	BUG_ON(in->len < drbg_blocklen(drbg));
+	BUG_ON(in->len < blocklen_bytes);
 	crypto_cipher_encrypt_one(tfm, outval, in->buf);
 	return 0;
 }
