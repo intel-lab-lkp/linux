@@ -21,11 +21,18 @@ typedef int (*cpu_stop_fn_t)(void *arg);
 
 #ifdef CONFIG_SMP
 
+enum work_state {
+	WORK_INIT = 0,
+	WORK_QUEUE,
+	WORK_EXEC,
+};
+
 struct cpu_stop_work {
 	struct list_head	list;		/* cpu_stopper->works */
 	cpu_stop_fn_t		fn;
 	unsigned long		caller;
 	void			*arg;
+	enum work_state		state;
 	struct cpu_stop_done	*done;
 };
 

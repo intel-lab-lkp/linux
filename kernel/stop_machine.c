@@ -87,6 +87,7 @@ static void __cpu_stop_queue_work(struct cpu_stopper *stopper,
 {
 	list_add_tail(&work->list, &stopper->works);
 	wake_q_add(wakeq, stopper->thread);
+	work->state = WORK_QUEUE;
 }
 
 /* queue @work to @stopper.  if offline, @work is completed immediately */
@@ -385,7 +386,15 @@ int stop_two_cpus(unsigned int cpu1, unsigned int cpu2, cpu_stop_fn_t fn, void *
 bool stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
 			struct cpu_stop_work *work_buf)
 {
-	*work_buf = (struct cpu_stop_work){ .fn = fn, .arg = arg, .caller = _RET_IP_, };
+	if (unlikely(work_buf->state == WORK_QUEUE))
+		return true;
+
+	*work_buf = (struct cpu_stop_work){
+	    .fn = fn,
+	    .arg = arg,
+	    .caller = _RET_IP_,
+	    .state = WORK_INIT
+	};
 	return cpu_stop_queue_work(cpu, work_buf);
 }
 
@@ -496,6 +505,7 @@ repeat:
 		work = list_first_entry(&stopper->works,
 					struct cpu_stop_work, list);
 		list_del_init(&work->list);
+		work->state = WORK_EXEC;
 	}
 	raw_spin_unlock_irq(&stopper->lock);
 
