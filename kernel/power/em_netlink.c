@@ -23,6 +23,8 @@ static const struct genl_multicast_group em_genl_mcgrps[] = {
 static const struct nla_policy em_genl_policy[EM_GENL_ATTR_MAX + 1] = {
 	/* Performance domain */
 	[EM_GENL_ATTR_PD]			= { .type = NLA_NESTED },
+	/* Performance table of a performance domain */
+	[EM_GENL_ATTR_PD_TBL]			= { .type = NLA_NESTED },
 };
 
 struct param {
@@ -94,7 +96,67 @@ out_cancel_nest:
 
 static int em_genl_cmd_pd_get_tbl(struct param *p)
 {
-	return -ENOTSUPP;
+	struct sk_buff *msg = p->msg;
+	struct em_perf_domain *pd;
+	struct em_perf_state *table, *ps;
+	struct nlattr *start_tbl, *entry;
+	int id, i;
+
+	if (!p->attrs[EM_PD_GENL_ATTR_ID])
+		return -EINVAL;
+
+	id = nla_get_u32(p->attrs[EM_PD_GENL_ATTR_ID]);
+
+	pd = em_perf_domain_get_by_id(id);
+	if (!pd)
+		return -EINVAL;
+
+	start_tbl = nla_nest_start(msg, EM_GENL_ATTR_PD_TBL);
+	if (!start_tbl )
+		return -EMSGSIZE;
+
+	rcu_read_lock();
+	table = em_perf_state_from_pd(pd);
+
+	for (i = 0; i < pd->nr_perf_states; i++) {
+		ps = &table[i];
+
+		entry = nla_nest_start(msg, EM_TBL_ENTRY_GENL_ATTR_PD);
+		if (!entry)
+			goto out_cancel_nest;
+
+		if (nla_put_u64_64bit(msg, EM_TBL_GENL_ATTR_PS_PERFORMANCE,
+				      ps->performance, EM_TBL_GENL_ATTR_PAD))
+			goto out_cancel_nest2;
+		if (nla_put_u64_64bit(msg, EM_TBL_GENL_ATTR_PS_FREQUENCY,
+				      ps->frequency, EM_TBL_GENL_ATTR_PAD))
+			goto out_cancel_nest2;
+		if (nla_put_u64_64bit(msg, EM_TBL_GENL_ATTR_PS_POWER,
+				      ps->power, EM_TBL_GENL_ATTR_PAD))
+			goto out_cancel_nest2;
+		if (nla_put_u64_64bit(msg, EM_TBL_GENL_ATTR_PS_COST,
+				      ps->cost, EM_TBL_GENL_ATTR_PAD))
+			goto out_cancel_nest2;
+		if (nla_put_u64_64bit(msg, EM_TBL_GENL_ATTR_PS_FLAGS,
+				      ps->flags, EM_TBL_GENL_ATTR_PAD))
+			goto out_cancel_nest2;
+
+		nla_nest_end(msg, entry);
+	}
+	rcu_read_unlock();
+
+	nla_nest_end(msg, start_tbl);
+
+	return 0;
+
+out_cancel_nest2:
+	nla_nest_cancel(msg, entry);
+
+out_cancel_nest:
+	rcu_read_unlock();
+
+	nla_nest_cancel(msg, start_tbl);
+	return -EMSGSIZE;
 }
 
 static const cb_t cmd_cb[] = {

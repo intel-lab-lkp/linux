@@ -12,6 +12,7 @@ enum em_genl_attr {
 	EM_GENL_ATTR_UNSPEC,
 	EM_GENL_ATTR_PAD = EM_GENL_ATTR_UNSPEC,
 	EM_GENL_ATTR_PD,	/* Performance domain */
+	EM_GENL_ATTR_PD_TBL,	/* Performance table of a performance domain */
 	__EM_GENL_ATTR_MAX,
 };
 #define EM_GENL_ATTR_MAX (__EM_GENL_ATTR_MAX - 1)
@@ -38,6 +39,29 @@ enum em_pd_genl_attr {
 #define EM_PD_GENL_ATTR_MAX (__EM_PD_GENL_ATTR_MAX - 1)
 
 #define EM_PD_CPUS_LENGTH		256
+
+enum em_tbl_entry_genl_attr {
+	EM_TBL_ENTRY_GENL_ATTR_UNSPEC,
+	EM_TBL_ENTRY_GENL_ATTR_PAD = EM_TBL_ENTRY_GENL_ATTR_UNSPEC,
+	EM_TBL_ENTRY_GENL_ATTR_PD,
+	__EM_TBL_ENTRY_GENL_ATTR_MAX,
+};
+#define EM_TBL_ENTRY_GENL_ATTR_MAX (__EM_TBL_ENTRY_GENL_ATTR_MAX - 1)
+
+enum em_tbl_genl_attr {
+	EM_TBL_GENL_ATTR_UNSPEC,
+	EM_TBL_GENL_ATTR_PAD = EM_TBL_GENL_ATTR_UNSPEC,
+
+	/* Performance table of a performance domain */
+	EM_TBL_GENL_ATTR_PS_PERFORMANCE,
+	EM_TBL_GENL_ATTR_PS_FREQUENCY,
+	EM_TBL_GENL_ATTR_PS_POWER,
+	EM_TBL_GENL_ATTR_PS_COST,
+	EM_TBL_GENL_ATTR_PS_FLAGS,
+
+	__EM_TBL_GENL_ATTR_MAX,
+};
+#define EM_TBL_GENL_ATTR_MAX (__EM_TBL_GENL_ATTR_MAX - 1)
 
 /* Events of em_genl_family */
 enum em_genl_event {
