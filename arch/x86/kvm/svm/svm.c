@@ -827,7 +827,8 @@ static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)
 	bit_write = 2 * (msr & 0x0f) + 1;
 	tmp       = msrpm[offset];
 
-	BUG_ON(offset == MSR_INVALID);
+	if (KVM_BUG_ON(offset == MSR_INVALID, vcpu->kvm))
+		return false;
 
 	return test_bit(bit_write, &tmp);
 }
@@ -858,7 +859,8 @@ static void set_msr_interception_bitmap(struct kvm_vcpu *vcpu, u32 *msrpm,
 	bit_write = 2 * (msr & 0x0f) + 1;
 	tmp       = msrpm[offset];
 
-	BUG_ON(offset == MSR_INVALID);
+	if (KVM_BUG_ON(offset == MSR_INVALID, vcpu->kvm))
+		return;
 
 	read  ? clear_bit(bit_read,  &tmp) : set_bit(bit_read,  &tmp);
 	write ? clear_bit(bit_write, &tmp) : set_bit(bit_write, &tmp);
