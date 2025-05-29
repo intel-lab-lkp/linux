@@ -423,3 +423,51 @@ macro_rules! pr_cont (
         $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
     )
 );
+
+/// Returns just the base filename of the current file.
+/// file!() returns the full path of the current file, which is often too long.
+/// Use this macro to trace your code:
+/// pr_err!("{}:{}\n", sfile!(), line!());
+/// Note: Avoiding rfind() allows this macro to be evaluated at compile time
+/// in most situations, such as the above pr_err!() example.  However,
+/// because .. is apparently a non-const operator, the following will not work:
+///     const SFILE: &'static str = sfile!();
+#[macro_export]
+macro_rules! sfile {
+    () => {{
+        const FILE: &str = file!();
+
+        /// Return the index of the last occurrence of @needle in @haystack,
+        /// or zero if not found.  We can't use rfind() because it's not const (yet).
+        const fn find_last_or_zero(haystack: &str, needle: char) -> usize {
+            let bytes = haystack.as_bytes();
+            let mut i = haystack.len();
+            while i > 0 {
+                i -= 1;
+                if bytes[i] == needle as u8 {
+                    return i;
+                }
+            }
+            0
+        }
+
+        /// Return the index of the last occurrence of @needle in @haystack,
+        /// or the length of the string if not found.
+        const fn find_last_or_len(haystack: &str, needle: char) -> usize {
+            let len = haystack.len();
+            let bytes = haystack.as_bytes();
+            let mut i = len;
+            while i > 0 {
+                i -= 1;
+                if bytes[i] == needle as u8 {
+                    return i;
+                }
+            }
+            len
+        }
+
+        let start = find_last_or_zero(FILE, '/') + 1;
+        let len = find_last_or_len(&FILE[start..], '.');
+        &FILE[start..start+len]
+    }};
+}
