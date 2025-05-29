@@ -17,6 +17,8 @@
 #include <linux/sched/topology.h>
 #include <linux/slab.h>
 
+#include "em_netlink.h"
+
 /*
  * Mutex serializing the registrations of performance domains and letting
  * callbacks defined by drivers sleep.
@@ -936,3 +938,18 @@ void em_rebuild_sched_domains(void)
 	 */
 	schedule_work(&rebuild_sd_work);
 }
+
+static int __init em_init(void)
+{
+	int result;
+
+	result = em_netlink_init();
+	if (result)
+		goto error;
+
+	return 0;
+
+error:
+	return result;
+}
+postcore_initcall(em_init);
