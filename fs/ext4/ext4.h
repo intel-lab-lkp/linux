@@ -3844,6 +3844,10 @@ extern void ext4_orphan_file_block_trigger(
 				struct buffer_head *bh,
 				void *data, size_t size);
 
+/* dir.c */
+extern void __init ext4_init_dir(void);
+extern void ext4_exit_dir(void);
+
 /*
  * Add new method to test whether block and inode bitmaps are properly
  * initialized. With uninit_bg reading the block from disk is not enough

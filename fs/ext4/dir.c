@@ -424,6 +424,48 @@ struct fname {
 	char		name[] __counted_by(name_len);
 };
 
+#define EXT4_DIR_FNAME_SHORT_LENGTH 127
+static struct kmem_cache *ext4_dir_fname_cachep;
+
+void __init ext4_init_dir(void)
+{
+	ext4_dir_fname_cachep = kmem_cache_create_usercopy("ext4_dir_fname",
+			struct_size_t(struct fname, name,  EXT4_DIR_FNAME_SHORT_LENGTH + 1),
+			0, SLAB_RECLAIM_ACCOUNT,
+			offsetof(struct fname, name), EXT4_DIR_FNAME_SHORT_LENGTH + 1,
+			NULL);
+}
+
+void ext4_exit_dir(void)
+{
+	if (ext4_dir_fname_cachep)
+		kmem_cache_destroy(ext4_dir_fname_cachep);
+}
+
+static struct fname *rb_node_fname_zalloc(__u8 name_len)
+{
+	struct fname *p;
+	if (ext4_dir_fname_cachep && name_len <= EXT4_DIR_FNAME_SHORT_LENGTH)
+		p = kmem_cache_alloc(ext4_dir_fname_cachep, GFP_KERNEL);
+	else
+		p = kmalloc(struct_size(p, name, name_len + 1), GFP_KERNEL);
+	if (p) {
+		/* no need to fill name with zeroes*/
+		memset(p, 0, offsetof(struct fname, name));
+		p->name[name_len] = 0;
+	}
+	return p;
+}
+
+static void rb_node_fname_free(struct fname *p) {
+	if (!p)
+		return;
+	if (ext4_dir_fname_cachep && p->name_len <= EXT4_DIR_FNAME_SHORT_LENGTH)
+		kmem_cache_free(ext4_dir_fname_cachep, p);
+	else
+		kfree(p);
+}
+
 /*
  * This function implements a non-recursive way of freeing all of the
  * nodes in the red-black tree.
@@ -436,7 +478,7 @@ static void free_rb_tree_fname(struct rb_root *root)
 		while (fname) {
 			struct fname *old = fname;
 			fname = fname->next;
-			kfree(old);
+			rb_node_fname_free(old);
 		}
 
 	*root = RB_ROOT;
@@ -479,8 +521,7 @@ int ext4_htree_store_dirent(struct file *dir_file, __u32 hash,
 	p = &info->root.rb_node;
 
 	/* Create and allocate the fname structure */
-	new_fn = kzalloc(struct_size(new_fn, name, ent_name->len + 1),
-			 GFP_KERNEL);
+	new_fn = rb_node_fname_zalloc(ent_name->len);
 	if (!new_fn)
 		return -ENOMEM;
 	new_fn->hash = hash;

@@ -7455,6 +7455,8 @@ static int __init ext4_init_fs(void)
 	if (err)
 		goto out;
 
+	ext4_init_dir();
+
 	return 0;
 out:
 	unregister_as_ext2();
@@ -7495,6 +7497,7 @@ static void __exit ext4_exit_fs(void)
 	ext4_exit_post_read_processing();
 	ext4_exit_es();
 	ext4_exit_pending();
+	ext4_exit_dir();
 }
 
 MODULE_AUTHOR("Remy Card, Stephen Tweedie, Andrew Morton, Andreas Dilger, Theodore Ts'o and others");
