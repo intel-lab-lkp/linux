@@ -634,15 +634,23 @@ static_assert(SVM_MSRS_PER_RANGE == 8192);
 	(range_nr * SVM_MSRPM_BYTES_PER_RANGE * BITS_PER_BYTE +			\
 	 (msr - SVM_MSRPM_RANGE_## range_nr ##_BASE_MSR) * SVM_BITS_PER_MSR)
 
-#define SVM_MSRPM_SANITY_CHECK_BITS(range_nr)					\
+#define SVM_MSRPM_BYTE_NR(range_nr, msr)					\
+	(range_nr * SVM_MSRPM_BYTES_PER_RANGE +					\
+	 (msr - SVM_MSRPM_RANGE_## range_nr ##_BASE_MSR) / SVM_MSRS_PER_BYTE)
+
+#define SVM_MSRPM_SANITY_CHECK_BITS_AND_BYTES(range_nr)				\
 static_assert(SVM_MSRPM_BIT_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 1) ==	\
 	      range_nr * 2048 * 8 + 2);						\
 static_assert(SVM_MSRPM_BIT_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 7) ==	\
-	      range_nr * 2048 * 8 + 14);
+	      range_nr * 2048 * 8 + 14);					\
+static_assert(SVM_MSRPM_BYTE_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 1) ==	\
+	      range_nr * 2048);							\
+static_assert(SVM_MSRPM_BYTE_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 7) ==	\
+	      range_nr * 2048 + 1);
 
-SVM_MSRPM_SANITY_CHECK_BITS(0);
-SVM_MSRPM_SANITY_CHECK_BITS(1);
-SVM_MSRPM_SANITY_CHECK_BITS(2);
+SVM_MSRPM_SANITY_CHECK_BITS_AND_BYTES(0);
+SVM_MSRPM_SANITY_CHECK_BITS_AND_BYTES(1);
+SVM_MSRPM_SANITY_CHECK_BITS_AND_BYTES(2);
 
 #define SVM_BUILD_MSR_BITMAP_CASE(bitmap, range_nr, msr, bitop, bit_rw)		\
 	case SVM_MSRPM_FIRST_MSR(range_nr) ... SVM_MSRPM_LAST_MSR(range_nr):	\
