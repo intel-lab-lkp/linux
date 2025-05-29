@@ -2,7 +2,7 @@
 .. _atomic_writes:
 
 Atomic Block Writes
--------------------------
+-------------------
 
 Introduction
 ~~~~~~~~~~~~
@@ -133,7 +133,7 @@ atomic writes are typically constrained to small sizes
 
 
 Handling Journal transactions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To support multi-fsblock atomic writes, we ensure enough journal credits are
 reserved during:
