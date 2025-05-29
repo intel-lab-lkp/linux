@@ -184,6 +184,7 @@ void recalc_intercepts(struct vcpu_svm *svm)
 	}
 }
 
+typedef unsigned long nsvm_msrpm_merge_t;
 static int nested_svm_msrpm_merge_offsets[6] __ro_after_init;
 static int nested_svm_nr_msrpm_merge_offsets __ro_after_init;
 
@@ -234,10 +235,10 @@ int __init nested_svm_init_msrpm_merge_offsets(void)
 			return -EIO;
 
 		/*
-		 * Merging is done in 32-bit chunks to reduce the number of
-		 * accesses to L1's bitmap.
+		 * Merging is done in chunks to reduce the number of accesses
+		 * to L1's bitmap.
 		 */
-		offset /= sizeof(u32);
+		offset /= sizeof(nsvm_msrpm_merge_t);
 
 		for (j = 0; j < nested_svm_nr_msrpm_merge_offsets; j++) {
 			if (nested_svm_msrpm_merge_offsets[j] == offset)
@@ -265,8 +266,8 @@ int __init nested_svm_init_msrpm_merge_offsets(void)
 static bool nested_svm_merge_msrpm(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
-	u32 *msrpm02 = svm->nested.msrpm;
-	u32 *msrpm01 = svm->msrpm;
+	nsvm_msrpm_merge_t *msrpm02 = svm->nested.msrpm;
+	nsvm_msrpm_merge_t *msrpm01 = svm->msrpm;
 	int i;
 
 	/*
@@ -293,15 +294,15 @@ static bool nested_svm_merge_msrpm(struct kvm_vcpu *vcpu)
 
 	for (i = 0; i < nested_svm_nr_msrpm_merge_offsets; i++) {
 		const int p = nested_svm_msrpm_merge_offsets[i];
-		u32 value;
-		u64 offset;
+		nsvm_msrpm_merge_t l1_val;
+		gpa_t gpa;
 
-		offset = svm->nested.ctl.msrpm_base_pa + (p * 4);
+		gpa = svm->nested.ctl.msrpm_base_pa + (p * sizeof(l1_val));
 
-		if (kvm_vcpu_read_guest(vcpu, offset, &value, 4))
+		if (kvm_vcpu_read_guest(vcpu, gpa, &l1_val, sizeof(l1_val)))
 			return false;
 
-		msrpm02[p] = msrpm01[p] | value;
+		msrpm02[p] = msrpm01[p] | l1_val;
 	}
 
 	svm->nested.force_msr_bitmap_recalc = false;
