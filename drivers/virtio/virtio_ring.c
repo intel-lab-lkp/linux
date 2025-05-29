@@ -320,7 +320,7 @@ static void *vring_alloc_queue(struct virtio_device *vdev, size_t size,
 			*dma_handle = (dma_addr_t)phys_addr;
 
 			/*
-			 * Sanity check: make sure we dind't truncate
+			 * Sanity check: make sure we didn't truncate
 			 * the address.  The only arches I can find that
 			 * have 64-bit phys_addr_t but 32-bit dma_addr_t
 			 * are certain non-highmem MIPS and x86
@@ -606,7 +606,7 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 
 			prev = i;
 			/* Note that we trust indirect descriptor
-			 * table since it use stream DMA mapping.
+			 * table since it uses stream DMA mapping.
 			 */
 			i = virtqueue_add_desc_split(_vq, desc, extra, i, addr, len,
 						     VRING_DESC_F_NEXT,
@@ -623,7 +623,7 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 
 			prev = i;
 			/* Note that we trust indirect descriptor
-			 * table since it use stream DMA mapping.
+			 * table since it uses stream DMA mapping.
 			 */
 			i = virtqueue_add_desc_split(_vq, desc, extra, i, addr, len,
 						     VRING_DESC_F_NEXT |
@@ -2438,7 +2438,7 @@ EXPORT_SYMBOL_GPL(virtqueue_add_inbuf_premapped);
  * virtqueue_dma_dev - get the dma dev
  * @_vq: the struct virtqueue we're talking about.
  *
- * Returns the dma dev. That can been used for dma api.
+ * Returns the dma dev. That can be used for dma api.
  */
 struct device *virtqueue_dma_dev(struct virtqueue *_vq)
 {
@@ -3225,7 +3225,7 @@ EXPORT_SYMBOL_GPL(virtqueue_dma_need_sync);
  * @_vq: the struct virtqueue we're talking about.
  * @addr: DMA address
  * @offset: DMA address offset
- * @size: buf size for sync
+ * @size: buffer size to synchronize
  * @dir: DMA direction
  *
  * Before calling this function, use virtqueue_dma_need_sync() to confirm that
@@ -3252,7 +3252,7 @@ EXPORT_SYMBOL_GPL(virtqueue_dma_sync_single_range_for_cpu);
  * @_vq: the struct virtqueue we're talking about.
  * @addr: DMA address
  * @offset: DMA address offset
- * @size: buf size for sync
+ * @size: buffer size to synchronize
  * @dir: DMA direction
  *
  * Before calling this function, use virtqueue_dma_need_sync() to confirm that
