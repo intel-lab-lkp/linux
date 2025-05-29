@@ -1451,6 +1451,7 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power,
 	union acpi_object *out_obj;
 	acpi_handle handle;
 	int result, ret = -EINVAL;
+	struct acpi_device *adev;
 
 	if (!dev || !retry_interval)
 		return -EINVAL;
@@ -1464,11 +1465,27 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power,
 		return -ENODEV;
 	}
 
+	adev = ACPI_COMPANION(&dev->dev);
+	if (!adev)
+		return -EINVAL;
+
+	mutex_lock(&adev->power.aux_pwr_lock);
+
+	/* Check if aux power already granted */
+	if (adev->power.aux_power_limit) {
+		pci_info(dev, "D3cold Aux Power request already granted: %u mW\n",
+			 adev->power.aux_power_limit);
+		mutex_unlock(&adev->power.aux_pwr_lock);
+		return -EPERM;
+	}
+
 	out_obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, 4,
 					  DSM_PCI_D3COLD_AUX_POWER_LIMIT,
 					  &in_obj, ACPI_TYPE_INTEGER);
-	if (!out_obj)
+	if (!out_obj) {
+		mutex_unlock(&adev->power.aux_pwr_lock);
 		return -EINVAL;
+	}
 
 	result = out_obj->integer.value;
 	if (retry_interval)
@@ -1478,14 +1495,17 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power,
 	case 0x0:
 		pci_dbg(dev, "D3cold Aux Power %u mW request denied\n",
 			requested_power);
+		adev->power.aux_power_limit = 0;
 		break;
 	case 0x1:
 		pci_info(dev, "D3cold Aux Power request granted: %u mW\n",
 			 requested_power);
+		adev->power.aux_power_limit = requested_power;
 		ret = 0;
 		break;
 	case 0x2:
 		pci_info(dev, "D3cold Aux Power: Main power won't be removed\n");
+		adev->power.aux_power_limit = 0;
 		ret = -EBUSY;
 		break;
 	default:
@@ -1500,8 +1520,11 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power,
 			pci_err(dev, "D3cold Aux Power: Reserved or unsupported response: 0x%x\n",
 				result);
 		}
+		adev->power.aux_power_limit = 0;
 		break;
 	}
+
+	mutex_unlock(&adev->power.aux_pwr_lock);
 
 	ACPI_FREE(out_obj);
 	return ret;
