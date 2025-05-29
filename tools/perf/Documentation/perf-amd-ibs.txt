@@ -33,9 +33,6 @@ if IBS is supported by the hardware and kernel.
 IBS Op PMU supports two events: cycles and micro ops. IBS Fetch PMU supports
 one event: fetch ops.
 
-IBS PMUs do not have user/kernel filtering capability and thus it requires
-CAP_SYS_ADMIN or CAP_PERFMON privilege.
-
 IBS VS. REGULAR CORE PMU
 ------------------------
 
@@ -160,6 +157,38 @@ System-wide profile, fetch ops event, sampling period: 100000, Random enable
 
 etc.
 
+IBS SW FILTERING
+----------------
+
+IBS PMU driver provides few additional software filtering capabilities. When
+supported, kernel exposes config format through the following files:
+
+  /sys/bus/event_source/devices/ibs_fetch/format/swfilt
+  /sys/bus/event_source/devices/ibs_op/format/swfilt
+
+1. Privilege (user/kernel) filtering. IBS PMUs do not support privilege
+filtering in hardware so IBS driver supports it as a software filter.
+
+  ibs_op/swfilt=1/u               --> Only usermode samples
+  ibs_op/swfilt=1/k               --> Only kernelmode samples
+  ibs_fetch/swfilt=1/u            --> Only usermode samples
+  ibs_fetch/swfilt=1/k            --> Only kernelmode samples
+
+  Privilege filtering is always available when "swfilt" is supported.
+  So, kernel does not expose any separate PMU capability for this.
+
+2. Load/Store sampling. IBS OP PMU do not support load/store filtering in
+hardware, so IBS driver supports it as a software filter.
+
+  ibs_op/swfilt=1,ldop=1/         --> Only load samples
+  ibs_op/swfilt=1,stop=1/         --> Only store samples
+  ibs_op/swfilt=1,ldop=1,stop=1/  --> Load OR store samples
+
+  Kernel creates following PMU capability file when load/store software
+  filtering is supported:
+
+  /sys/bus/event_source/devices/ibs_op/caps/swfilt_ldst
+
 PERF MEM AND PERF C2C
 ---------------------
 
@@ -173,21 +202,28 @@ Below is a simple example of the perf mem tool.
 A normal perf mem report output will provide detailed memory access profile.
 However, it can also be aggregated based on output fields. For example:
 
-	# perf mem report -F mem,sample,snoop
-	Samples: 3M of event 'ibs_op//', Event count (approx.): 23524876
-	Memory access                                 Samples  Snoop
-	N/A                                           1903343  N/A
-	L1 hit                                        1056754  N/A
-	L2 hit                                          75231  N/A
-	L3 hit                                           9496  HitM
-	L3 hit                                           2270  N/A
-	RAM hit                                          8710  N/A
-	Remote node, same socket RAM hit                 3241  N/A
-	Remote core, same node Any cache hit             1572  HitM
-	Remote core, same node Any cache hit              514  N/A
-	Remote node, same socket Any cache hit           1216  HitM
-	Remote node, same socket Any cache hit            350  N/A
-	Uncached hit                                       18  N/A
+	# perf mem report -s comm,mem -H --stdio
+	     Overhead       Samples  Command / Memory access
+	  .........................  ..........................................
+	    66.46%        471728     cc1
+	       34.70%          1393     RAM hit
+	       10.42%           370     Remote node, same socket RAM hit
+		6.73%         10239     L2 hit
+		5.84%        293953     N/A
+		3.26%        163803     L1 hit
+		3.16%          1796     L3 hit
+		1.29%            95     Remote core, same node Any cache hit
+		1.06%            73     Remote node, same socket Any cache hit
+		0.00%             6     Uncached hit
+	     9.45%         44994     sh
+		2.60%           131     RAM hit
+		2.21%           219     Remote core, same node Any cache hit
+		1.89%           190     Remote node, same socket Any cache hit
+		1.02%            52     Remote node, same socket RAM hit
+		0.72%           785     L2 hit
+		0.60%         30149     N/A
+		0.27%         13340     L1 hit
+             ...
 
 Please refer to their man page for more detail.
 
