@@ -628,6 +628,50 @@ static_assert(SVM_MSRS_PER_RANGE == 8192);
 #define SVM_MSRPM_RANGE_1_BASE_MSR	0xc0000000
 #define SVM_MSRPM_RANGE_2_BASE_MSR	0xc0010000
 
+#define SVM_MSRPM_FIRST_MSR(range_nr)	\
+	(SVM_MSRPM_RANGE_## range_nr ##_BASE_MSR)
+#define SVM_MSRPM_LAST_MSR(range_nr)	\
+	(SVM_MSRPM_RANGE_## range_nr ##_BASE_MSR + SVM_MSRS_PER_RANGE - 1)
+
+#define SVM_MSRPM_BIT_NR(range_nr, msr)						\
+	(range_nr * SVM_MSRPM_BYTES_PER_RANGE * BITS_PER_BYTE +			\
+	 (msr - SVM_MSRPM_RANGE_## range_nr ##_BASE_MSR) * SVM_BITS_PER_MSR)
+
+#define SVM_MSRPM_SANITY_CHECK_BITS(range_nr)					\
+static_assert(SVM_MSRPM_BIT_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 1) ==	\
+	      range_nr * 2048 * 8 + 2);						\
+static_assert(SVM_MSRPM_BIT_NR(range_nr, SVM_MSRPM_FIRST_MSR(range_nr) + 7) ==	\
+	      range_nr * 2048 * 8 + 14);
+
+SVM_MSRPM_SANITY_CHECK_BITS(0);
+SVM_MSRPM_SANITY_CHECK_BITS(1);
+SVM_MSRPM_SANITY_CHECK_BITS(2);
+
+#define SVM_BUILD_MSR_BITMAP_CASE(bitmap, range_nr, msr, bitop, bit_rw)		\
+	case SVM_MSRPM_FIRST_MSR(range_nr) ... SVM_MSRPM_LAST_MSR(range_nr):	\
+		return bitop##_bit(SVM_MSRPM_BIT_NR(range_nr, msr) + bit_rw, bitmap);
+
+#define __BUILD_SVM_MSR_BITMAP_HELPER(rtype, action, bitop, access, bit_rw)	\
+static inline rtype svm_##action##_msr_bitmap_##access(unsigned long *bitmap,	\
+						       u32 msr)			\
+{										\
+	switch (msr) {								\
+	SVM_BUILD_MSR_BITMAP_CASE(bitmap, 0, msr, bitop, bit_rw)		\
+	SVM_BUILD_MSR_BITMAP_CASE(bitmap, 1, msr, bitop, bit_rw)		\
+	SVM_BUILD_MSR_BITMAP_CASE(bitmap, 2, msr, bitop, bit_rw)		\
+	default:								\
+		return (rtype)true;						\
+	}									\
+										\
+}
+#define BUILD_SVM_MSR_BITMAP_HELPERS(ret_type, action, bitop)			\
+	__BUILD_SVM_MSR_BITMAP_HELPER(ret_type, action, bitop, read,  0)	\
+	__BUILD_SVM_MSR_BITMAP_HELPER(ret_type, action, bitop, write, 1)
+
+BUILD_SVM_MSR_BITMAP_HELPERS(bool, test, test)
+BUILD_SVM_MSR_BITMAP_HELPERS(void, clear, __clear)
+BUILD_SVM_MSR_BITMAP_HELPERS(void, set, __set)
+
 #define MSR_INVALID				0xffffffffU
 
 #define DEBUGCTL_RESERVED_BITS (~DEBUGCTLMSR_LBR)
