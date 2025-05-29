@@ -20,7 +20,10 @@ const struct _kvm_stats_desc kvm_vcpu_stats_desc[] = {
 	STATS_DESC_COUNTER(VCPU, idle_exits),
 	STATS_DESC_COUNTER(VCPU, cpucfg_exits),
 	STATS_DESC_COUNTER(VCPU, signal_exits),
-	STATS_DESC_COUNTER(VCPU, hypercall_exits)
+	STATS_DESC_COUNTER(VCPU, hypercall_exits),
+	STATS_DESC_COUNTER(VCPU, ipi_emu_exits),
+	STATS_DESC_COUNTER(VCPU, eiointc_emu_exits),
+	STATS_DESC_COUNTER(VCPU, pch_pic_emu_exits)
 };
 
 const struct kvm_stats_header kvm_vcpu_stats_header = {
