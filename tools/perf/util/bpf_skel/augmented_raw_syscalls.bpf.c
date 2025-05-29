@@ -546,13 +546,14 @@ int sys_enter(struct syscall_enter_args *args)
 	/*
 	 * Jump to syscall specific augmenter, even if the default one,
 	 * "!raw_syscalls:unaugmented" that will just return 1 to return the
-	 * unaugmented tracepoint payload.
+	 * unaugmented tracepoint payload. If augmented, return 0 to reduce a
+	 * duplicated tracepoint sample.
 	 */
-	if (augment_sys_enter(args, &augmented_args->args))
-		bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+	if (!augment_sys_enter(args, &augmented_args->args))
+		return 0;
 
-	// If not found on the PROG_ARRAY syscalls map, then we're filtering it:
-	return 0;
+	bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+	return 1;
 }
 
 SEC("tp/raw_syscalls/sys_exit")
@@ -570,10 +571,7 @@ int sys_exit(struct syscall_exit_args *args)
 	 * unaugmented tracepoint payload.
 	 */
 	bpf_tail_call(args, &syscalls_sys_exit, exit_args.syscall_nr);
-	/*
-	 * If not found on the PROG_ARRAY syscalls map, then we're filtering it:
-	 */
-	return 0;
+	return 1;
 }
 
 char _license[] SEC("license") = "GPL";
