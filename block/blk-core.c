@@ -219,8 +219,11 @@ EXPORT_SYMBOL_GPL(blk_status_to_str);
  */
 void blk_sync_queue(struct request_queue *q)
 {
-	timer_delete_sync(&q->timeout);
+	blk_queue_flag_set(QUEUE_FLAG_NOTIMEOUT, q);
+	synchronize_rcu();
 	cancel_work_sync(&q->timeout_work);
+	timer_delete_sync(&q->timeout);
+	blk_queue_flag_clear(QUEUE_FLAG_NOTIMEOUT, q);
 }
 EXPORT_SYMBOL(blk_sync_queue);
 
@@ -383,7 +386,10 @@ static void blk_rq_timed_out_timer(struct timer_list *t)
 {
 	struct request_queue *q = from_timer(q, t, timeout);
 
-	kblockd_schedule_work(&q->timeout_work);
+	rcu_read_lock();
+	if (!blk_queue_notimeout(q))
+		kblockd_schedule_work(&q->timeout_work);
+	rcu_read_unlock();
 }
 
 static void blk_timeout_work(struct work_struct *work)
