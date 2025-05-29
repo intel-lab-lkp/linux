@@ -289,6 +289,12 @@ ifdef INSTALL_PATH
 		$(MAKE) -s --no-print-directory OUTPUT=$$BUILD_TARGET COLLECTION=$$TARGET \
 			-C $$TARGET emit_tests >> $(TEST_LIST); \
 	done;
+	@if git describe HEAD > /dev/null 2>&1; then \
+		git describe HEAD > $(INSTALL_PATH)/VERSION; \
+		printf "Version saved to $(INSTALL_PATH)/VERSION\n"; \
+	else \
+		printf "Unable to get version from git describe\n"; \
+	fi
 else
 	$(error Error: set INSTALL_PATH to use install)
 endif
