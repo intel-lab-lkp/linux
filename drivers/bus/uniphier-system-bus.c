@@ -10,6 +10,7 @@
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/string_choices.h>
 
 /* System Bus Controller registers */
 #define UNIPHIER_SBC_BASE	0x100	/* base address of bank0 space */
@@ -120,7 +121,7 @@ static void uniphier_system_bus_check_boot_swap(
 
 	is_swapped = !(readl(base_reg) & UNIPHIER_SBC_BASE_BE);
 
-	dev_dbg(priv->dev, "Boot Swap: %s\n", is_swapped ? "on" : "off");
+	dev_dbg(priv->dev, "Boot Swap: %s\n", str_on_off(is_swapped));
 
 	/*
 	 * If BOOT_SWAP was asserted on power-on-reset, the CS0 and CS1 are
