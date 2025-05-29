@@ -450,6 +450,7 @@ static int gfs2_write_inode(struct inode *inode, struct writeback_control *wbc)
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
 	struct address_space *metamapping = gfs2_glock2aspace(ip->i_gl);
 	struct backing_dev_info *bdi = inode_to_bdi(metamapping->host);
+	struct bdi_writeback_ctx *bdi_wb_ctx;
 	int ret = 0;
 	bool flush_all = (wbc->sync_mode == WB_SYNC_ALL || gfs2_is_jdata(ip));
 
@@ -457,10 +458,12 @@ static int gfs2_write_inode(struct inode *inode, struct writeback_control *wbc)
 		gfs2_log_flush(GFS2_SB(inode), ip->i_gl,
 			       GFS2_LOG_HEAD_FLUSH_NORMAL |
 			       GFS2_LFC_WRITE_INODE);
-	if (bdi->wb_ctx_arr[0]->wb.dirty_exceeded)
-		gfs2_ail1_flush(sdp, wbc);
-	else
-		filemap_fdatawrite(metamapping);
+
+	for_each_bdi_wb_ctx(bdi, bdi_wb_ctx)
+		if (bdi_wb_ctx->wb.dirty_exceeded)
+			gfs2_ail1_flush(sdp, wbc);
+		else
+			filemap_fdatawrite(metamapping);
 	if (flush_all)
 		ret = filemap_fdatawait(metamapping);
 	if (ret)
