@@ -1421,6 +1421,93 @@ static void pci_acpi_optimize_delay(struct pci_dev *pdev,
 	ACPI_FREE(obj);
 }
 
+/**
+ * pci_acpi_request_d3cold_aux_power - Request aux power while device is in D3Cold
+ * @dev: PCI device instance
+ * @requested_power: Requested auxiliary power in milliwatts
+ * @retry_interval: Retry interval returned by platform to retry auxiliary
+ *                  power request
+ *
+ * This function sends a request to the host BIOS via root port ACPI _DSM Function 0Ah
+ * for the auxiliary power needed by the PCI device when it is in D3Cold.
+ * It checks and evaluates the _DSM (Device Specific Method) to request the auxiliary
+ * power and handles the response accordingly.
+ *
+ * This function shall be only called by 1st non-bridge Endpoint driver
+ * on Function 0. For a Multi-Function Device, the driver for Function 0 is
+ * required to report an aggregate power requirement covering all
+ * functions contained within the device.
+ *
+ * Return: Returns 0 on success and errno on failure.
+ */
+int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power,
+				      u32 *retry_interval)
+{
+	union acpi_object in_obj = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = requested_power,
+	};
+
+	union acpi_object *out_obj;
+	acpi_handle handle;
+	int result, ret = -EINVAL;
+
+	if (!dev || !retry_interval)
+		return -EINVAL;
+
+	handle = ACPI_HANDLE(&dev->dev);
+	if (!handle)
+		return -EINVAL;
+
+	if (!acpi_check_dsm(handle, &pci_acpi_dsm_guid, 4, 1 << DSM_PCI_D3COLD_AUX_POWER_LIMIT)) {
+		pci_dbg(dev, "ACPI _DSM 0%Xh not supported\n", DSM_PCI_D3COLD_AUX_POWER_LIMIT);
+		return -ENODEV;
+	}
+
+	out_obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, 4,
+					  DSM_PCI_D3COLD_AUX_POWER_LIMIT,
+					  &in_obj, ACPI_TYPE_INTEGER);
+	if (!out_obj)
+		return -EINVAL;
+
+	result = out_obj->integer.value;
+	if (retry_interval)
+		*retry_interval = 0;
+
+	switch (result) {
+	case 0x0:
+		pci_dbg(dev, "D3cold Aux Power %u mW request denied\n",
+			requested_power);
+		break;
+	case 0x1:
+		pci_info(dev, "D3cold Aux Power request granted: %u mW\n",
+			 requested_power);
+		ret = 0;
+		break;
+	case 0x2:
+		pci_info(dev, "D3cold Aux Power: Main power won't be removed\n");
+		ret = -EBUSY;
+		break;
+	default:
+		if (result >= 0x11 && result <= 0x1F) {
+			if (retry_interval) {
+				*retry_interval = result & 0xF;
+				pci_warn(dev, "D3cold Aux Power request needs retry interval: %u seconds\n",
+					 *retry_interval);
+				ret = -EAGAIN;
+			}
+		} else {
+			pci_err(dev, "D3cold Aux Power: Reserved or unsupported response: 0x%x\n",
+				result);
+		}
+		break;
+	}
+
+	ACPI_FREE(out_obj);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pci_acpi_request_d3cold_aux_power);
+
 static void pci_acpi_set_external_facing(struct pci_dev *dev)
 {
 	u8 val;
