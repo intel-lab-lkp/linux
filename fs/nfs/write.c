@@ -932,11 +932,11 @@ static void nfs_folio_clear_commit(struct folio *folio)
 {
 	if (folio) {
 		long nr = folio_nr_pages(folio);
-		struct inode *inode = folio->mapping->host;
+		struct bdi_writeback_ctx *bdi_wb_ctx =
+				fetch_bdi_writeback_ctx(folio->mapping->host);
 
 		node_stat_mod_folio(folio, NR_WRITEBACK, -nr);
-		wb_stat_mod(&inode_to_bdi(inode)->wb_ctx_arr[0]->wb,
-			    WB_WRITEBACK, -nr);
+		wb_stat_mod(&bdi_wb_ctx->wb, WB_WRITEBACK, -nr);
 	}
 }
 

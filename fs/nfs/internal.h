@@ -838,14 +838,15 @@ static inline void nfs_folio_mark_unstable(struct folio *folio,
 {
 	if (folio && !cinfo->dreq) {
 		struct inode *inode = folio->mapping->host;
+		struct bdi_writeback_ctx *bdi_wb_ctx =
+						fetch_bdi_writeback_ctx(inode);
 		long nr = folio_nr_pages(folio);
 
 		/* This page is really still in write-back - just that the
 		 * writeback is happening on the server now.
 		 */
 		node_stat_mod_folio(folio, NR_WRITEBACK, nr);
-		wb_stat_mod(&inode_to_bdi(inode)->wb_ctx_arr[0]->wb,
-			    WB_WRITEBACK, nr);
+		wb_stat_mod(&bdi_wb_ctx->wb, WB_WRITEBACK, nr);
 		__mark_inode_dirty(inode, I_DIRTY_DATASYNC);
 	}
 }
