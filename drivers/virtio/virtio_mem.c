@@ -164,7 +164,7 @@ struct virtio_mem {
 			unsigned long first_mb_id;
 			/* Id of the last usable memory block of this device. */
 			unsigned long last_usable_mb_id;
-			/* Id of the next memory bock to prepare when needed. */
+			/* Id of the next memory block to prepare when needed. */
 			unsigned long next_mb_id;
 
 			/* The subblock size. */
@@ -209,7 +209,7 @@ struct virtio_mem {
 			unsigned long first_bb_id;
 			/* Id of the last usable big block of this device. */
 			unsigned long last_usable_bb_id;
-			/* Id of the next device bock to prepare when needed. */
+			/* Id of the next device block to prepare when needed. */
 			unsigned long next_bb_id;
 
 			/* Summary of all big block states. */
@@ -240,7 +240,7 @@ struct virtio_mem {
 	/* An error occurred we cannot handle - stop processing requests. */
 	bool broken;
 
-	/* Cached valued of is_kdump_kernel() when the device was probed. */
+	/* Cached value of is_kdump_kernel() when the device was probed. */
 	bool in_kdump;
 
 	/* The driver is being removed. */
@@ -808,7 +808,7 @@ static int virtio_mem_sbm_try_remove_unplugged_mb(struct virtio_mem *vm,
 }
 
 /*
- * See virtio_mem_offline_and_remove_memory(): Try to offline and remove a
+ * See virtio_mem_offline_and_remove_memory(): Try to offline and remove
  * all Linux memory blocks covered by the big block.
  */
 static int virtio_mem_bbm_offline_and_remove_bb(struct virtio_mem *vm,
@@ -1080,7 +1080,7 @@ static int virtio_mem_memory_notifier_cb(struct notifier_block *nb,
 		atomic64_sub(size, &vm->offline_size);
 		/*
 		 * Start adding more memory once we onlined half of our
-		 * threshold. Don't trigger if it's possibly due to our actipn
+		 * threshold. Don't trigger if it's possibly due to our action
 		 * (e.g., us adding memory which gets onlined immediately from
 		 * the core).
 		 */
@@ -2124,7 +2124,7 @@ static int virtio_mem_sbm_unplug_request(struct virtio_mem *vm, uint64_t diff)
 	 * whole memory blocks along with metadata. We prioritize ZONE_MOVABLE
 	 * as it's more reliable to unplug memory and remove whole memory
 	 * blocks, and we don't want to trigger a zone imbalances by
-	 * accidentially removing too much kernel memory.
+	 * accidentally removing too much kernel memory.
 	 */
 	for (i = 0; i < ARRAY_SIZE(mb_states); i++) {
 		virtio_mem_sbm_for_each_mb_rev(vm, mb_id, mb_states[i]) {
