@@ -5052,6 +5052,82 @@
 			};
 		};
 
+		ctcu@10001000 {
+			compatible = "qcom,sa8775p-ctcu";
+			reg = <0x0 0x10001000 0x0 0x1000>;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb";
+
+			in-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					ctcu_in0: endpoint {
+					remote-endpoint = <&etr0_out>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					ctcu_in1: endpoint {
+					remote-endpoint = <&etr1_out>;
+					};
+				};
+			};
+		};
+
+		stm@10002000 {
+			compatible = "arm,coresight-stm", "arm,primecell";
+			reg = <0x0 0x10002000 0x0 0x1000>,
+				<0x0 0x16280000 0x0 0x180000>;
+			reg-names = "stm-base", "stm-stimulus-base";
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			out-ports {
+				port {
+					stm_out_funnel_in0: endpoint {
+						remote-endpoint =
+						<&funnel_in0_in_stm>;
+					};
+				};
+			};
+		};
+
+		funnel@10041000 {
+			compatible = "arm,coresight-dynamic-funnel", "arm,primecell";
+			reg = <0x0 0x10041000 0x0 0x1000>;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@7 {
+					reg = <7>;
+					funnel_in0_in_stm: endpoint {
+						remote-endpoint =
+						<&stm_out_funnel_in0>;
+					};
+				};
+			};
+
+			out-ports {
+				port {
+					funnel_in0_out_funnel_qdss: endpoint {
+						remote-endpoint =
+						<&funnel_qdss_in_funnel_in0>;
+					};
+				};
+			};
+		};
+
 		funnel@10042000 {
 			compatible = "arm,coresight-dynamic-funnel", "arm,primecell";
 
@@ -5094,6 +5170,14 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 
+				port@0 {
+					reg = <0>;
+
+					funnel_qdss_in_funnel_in0: endpoint {
+						remote-endpoint = <&funnel_in0_out_funnel_qdss>;
+					};
+				};
+
 				port@1 {
 					reg = <1>;
 
@@ -5107,6 +5191,133 @@
 				port {
 					funnel_qdss_out_funnel_aoss: endpoint {
 						remote-endpoint = <&funnel_aoss_in_funnel_qdss>;
+					};
+				};
+			};
+		};
+
+		replicator@10046000 {
+			compatible = "arm,coresight-dynamic-replicator", "arm,primecell";
+			reg = <0x0 0x10046000 0x0 0x1000>;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				port {
+					replicator_qdss_in_replicator_swao: endpoint {
+						remote-endpoint =
+						<&replicator_swao_out_replicator_qdss>;
+					};
+				};
+			};
+
+			out-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					replicator_qdss_out_replicator_etr: endpoint {
+						remote-endpoint =
+						<&replicator_etr_in_replicator_qdss>;
+					};
+				};
+			};
+		};
+
+		tmc@10048000 {
+			compatible = "arm,coresight-tmc", "arm,primecell";
+			reg = <0x0 0x10048000 0x0 0x1000>;
+
+			iommus = <&apps_smmu 0x04e0 0>,
+				<&apps_smmu 0x04c0 0>;
+			dma-coherent;
+			arm,scatter-gather;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				port {
+					tmc_etr_in_replicator_etr: endpoint {
+						remote-endpoint =
+						<&replicator_etr_out_tmc_etr>;
+					};
+				};
+			};
+
+			out-ports {
+				port {
+					etr0_out: endpoint {
+						remote-endpoint =
+						<&ctcu_in0>;
+					};
+				};
+			};
+		};
+
+		replicator@1004e000 {
+			compatible = "arm,coresight-dynamic-replicator", "arm,primecell";
+			reg = <0x0 0x1004e000 0x0 0x1000>;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				port {
+					replicator_etr_in_replicator_qdss: endpoint {
+						remote-endpoint =
+						<&replicator_qdss_out_replicator_etr>;
+					};
+				};
+			};
+
+			out-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					replicator_etr_out_tmc_etr: endpoint {
+						remote-endpoint =
+						<&tmc_etr_in_replicator_etr>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					replicator_etr_out_tmc_etr1: endpoint {
+						remote-endpoint =
+						<&tmc_etr1_in_replicator_etr>;
+					};
+				};
+			};
+		};
+
+		tmc@1004f000 {
+			compatible = "arm,primecell";
+			reg = <0x0 0x1004f000 0x0 0x1000>;
+
+			iommus = <&apps_smmu 0x0500 0x0>;
+			dma-coherent;
+			arm,scatter-gather;
+
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				port {
+					tmc_etr1_in_replicator_etr: endpoint {
+						remote-endpoint =
+						<&replicator_etr_out_tmc_etr1>;
+					};
+				};
+			};
+
+			out-ports {
+				port {
+					etr1_out: endpoint {
+						remote-endpoint =
+						<&ctcu_in1>;
 					};
 				};
 			};
@@ -5154,6 +5365,45 @@
 				port {
 					tmc_etf_in_funnel_aoss: endpoint {
 						remote-endpoint = <&funnel_aoss_out_tmc_etf>;
+					};
+				};
+			};
+
+			out-ports {
+				port {
+					tmc_etf_out_replicator_swao: endpoint {
+						remote-endpoint =
+						<&replicator_swao_in_tmc_etf>;
+					};
+				};
+			};
+		};
+
+		replicator@10b06000 {
+			compatible = "arm,coresight-dynamic-replicator", "arm,primecell";
+			reg = <0x0 0x10b06000 0x0 0x1000>;
+
+			qcom,replicator-loses-context;
+			clocks = <&aoss_qmp>;
+			clock-names = "apb_pclk";
+
+			in-ports {
+				port {
+					replicator_swao_in_tmc_etf: endpoint {
+						remote-endpoint =
+						<&tmc_etf_out_replicator_swao>;
+					};
+				};
+			};
+
+			out-ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					replicator_swao_out_replicator_qdss: endpoint {
+						remote-endpoint =
+						<&replicator_qdss_in_replicator_swao>;
 					};
 				};
 			};
