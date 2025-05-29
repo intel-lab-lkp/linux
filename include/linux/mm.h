@@ -1549,6 +1549,8 @@ static inline void get_page(struct page *page)
 	struct folio *folio = page_folio(page);
 	if (WARN_ON_ONCE(folio_test_slab(folio)))
 		return;
+	if (WARN_ON_ONCE(folio_test_large_kmalloc(folio)))
+		return;
 	folio_get(folio);
 }
 
@@ -1643,7 +1645,7 @@ static inline void put_page(struct page *page)
 {
 	struct folio *folio = page_folio(page);
 
-	if (folio_test_slab(folio))
+	if (folio_test_slab(folio) || folio_test_large_kmalloc(folio))
 		return;
 
 	folio_put(folio);
