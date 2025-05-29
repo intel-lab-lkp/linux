@@ -65,3 +65,29 @@ if [ ${user_sample} -ne 0 ]; then
     echo "[FAIL] unexpected user samples: " ${user_sample}
     exit 1
 fi
+
+echo "test load/store swfilt"
+
+# load/store swfil
+if [ -f /sys/bus/event_source/devices/ibs_op/caps/swfilt_ldst ]; then
+	# test load only sampling
+	non_load_sample=$(perf record -e ibs_op/swfilt=1,ldop=1/ --raw-samples -o- perf test -w sqrtloop | perf script -D -i- | grep -c "LdOp 0")
+	if [ ${non_load_sample} -ne 0 ]; then
+		echo "[FAIL] unexpected non-load samples: " ${non_load_sample}
+		exit 1;
+	fi
+
+	# test store only sampling
+	non_store_sample=$(perf record -e ibs_op/swfilt=1,stop=1/ --raw-samples -o- perf test -w sqrtloop | perf script -D -i- | grep -c "StOp 0")
+	if [ ${non_store_sample} -ne 0 ]; then
+		echo "[FAIL] unexpected non-store samples: " ${non_store_sample}
+		exit 1;
+	fi
+
+	# test load/store only sampling
+	non_load_store_sample=$(perf record -e ibs_op/swfilt=1,ldop=1,stop=1/ --raw-samples -o- perf test -w sqrtloop | perf script -D -i- | grep -c "LdOp 0 StOp 0")
+	if [ ${non_load_store_sample} -ne 0 ]; then
+		echo "[FAIL] unexpected non-load/store samples: " ${non_load_store_sample}
+		exit 1;
+	fi
+fi
