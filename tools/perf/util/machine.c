@@ -128,7 +128,7 @@ out:
 	return 0;
 }
 
-struct machine *machine__new_host(void)
+struct machine *machine__new_host(struct perf_env *host_env)
 {
 	struct machine *machine = malloc(sizeof(*machine));
 
@@ -138,7 +138,7 @@ struct machine *machine__new_host(void)
 		if (machine__create_kernel_maps(machine) < 0)
 			goto out_delete;
 
-		machine->env = &perf_env;
+		machine->env = host_env;
 	}
 
 	return machine;
@@ -147,9 +147,9 @@ out_delete:
 	return NULL;
 }
 
-struct machine *machine__new_kallsyms(void)
+struct machine *machine__new_kallsyms(struct perf_env *host_env)
 {
-	struct machine *machine = machine__new_host();
+	struct machine *machine = machine__new_host(host_env);
 	/*
 	 * FIXME:
 	 * 1) We should switch to machine__load_kallsyms(), i.e. not explicitly
