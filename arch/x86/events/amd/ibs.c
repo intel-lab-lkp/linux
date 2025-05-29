@@ -31,6 +31,10 @@ static u32 ibs_caps;
 /* attr.config2 */
 #define IBS_SW_FILTER_MASK	1
 
+/* attr.config1 */
+#define IBS_LDOP_FILTER_MASK	(1UL << 12)
+#define IBS_STOP_FILTER_MASK	(1UL << 13)
+
 /*
  * IBS states:
  *
@@ -306,6 +310,11 @@ static int perf_ibs_init(struct perf_event *event)
 	if (!(event->attr.config2 & IBS_SW_FILTER_MASK) &&
 	    (event->attr.exclude_kernel || event->attr.exclude_user ||
 	     event->attr.exclude_hv))
+		return -EINVAL;
+
+	if (!(event->attr.config2 & IBS_SW_FILTER_MASK) &&
+	    (event->attr.config1 & (IBS_LDOP_FILTER_MASK |
+				    IBS_STOP_FILTER_MASK)))
 		return -EINVAL;
 
 	ret = validate_group(event);
@@ -624,6 +633,10 @@ static struct attribute_group empty_caps_group = {
 PMU_FORMAT_ATTR(rand_en,	"config:57");
 PMU_FORMAT_ATTR(cnt_ctl,	"config:19");
 PMU_FORMAT_ATTR(swfilt,		"config2:0");
+PMU_FORMAT_ATTR(ldop,		"config1:12"); /* IBS_LDOP_FILTER_MASK */
+PMU_FORMAT_ATTR(stop,		"config1:13"); /* IBS_STOP_FILTER_MASK */
+PMU_CAP_ATTR(swfilt_ldst,	"1");
+
 PMU_EVENT_ATTR_STRING(l3missonly, fetch_l3missonly, "config:59");
 PMU_EVENT_ATTR_STRING(l3missonly, op_l3missonly, "config:16");
 PMU_EVENT_ATTR_STRING(ldlat, ibs_op_ldlat_format, "config1:0-11");
@@ -724,6 +737,8 @@ cnt_ctl_is_visible(struct kobject *kobj, struct attribute *attr, int i)
 
 static struct attribute *op_attrs[] = {
 	&format_attr_swfilt.attr,
+	&format_attr_ldop.attr,
+	&format_attr_stop.attr,
 	NULL,
 };
 
@@ -737,9 +752,19 @@ static struct attribute *op_l3missonly_attrs[] = {
 	NULL,
 };
 
+static struct attribute *op_attrs_caps[] = {
+	&cap_attr_swfilt_ldst.attr,
+	NULL,
+};
+
 static struct attribute_group group_op_formats = {
 	.name = "format",
 	.attrs = op_attrs,
+};
+
+static struct attribute_group group_op_caps = {
+	.name = "caps",
+	.attrs = op_attrs_caps,
 };
 
 static struct attribute *ibs_op_ldlat_format_attrs[] = {
@@ -761,7 +786,7 @@ static struct attribute_group group_op_l3missonly = {
 
 static const struct attribute_group *op_attr_groups[] = {
 	&group_op_formats,
-	&empty_caps_group,
+	&group_op_caps,
 	NULL,
 };
 
@@ -1148,13 +1173,23 @@ static bool perf_ibs_is_mem_sample_type(struct perf_ibs *perf_ibs,
 			      PERF_SAMPLE_PHYS_ADDR);
 }
 
+static bool perf_ibs_ld_st_filter_event(struct perf_ibs *perf_ibs,
+					struct perf_event *event)
+{
+	return perf_ibs == &perf_ibs_op &&
+	       (event->attr.config2 & IBS_SW_FILTER_MASK) &&
+	       (event->attr.config1 & (IBS_LDOP_FILTER_MASK |
+				       IBS_STOP_FILTER_MASK));
+}
+
 static int perf_ibs_get_offset_max(struct perf_ibs *perf_ibs,
 				   struct perf_event *event,
 				   int check_rip)
 {
 	if (event->attr.sample_type & PERF_SAMPLE_RAW ||
 	    perf_ibs_is_mem_sample_type(perf_ibs, event) ||
-	    perf_ibs_ldlat_event(perf_ibs, event))
+	    perf_ibs_ldlat_event(perf_ibs, event) ||
+	    perf_ibs_ld_st_filter_event(perf_ibs, event))
 		return perf_ibs->offset_max;
 	else if (check_rip)
 		return 3;
@@ -1189,6 +1224,32 @@ static bool perf_ibs_is_kernel_br_target(struct perf_event *event,
 			op_data.op_brn_ret && kernel_ip(br_target));
 }
 
+/*
+ * ibs_op/swfilt=1,ldop=1/         --> Only load samples
+ * ibs_op/swfilt=1,stop=1/         --> Only store samples
+ * ibs_op/swfilt=1,ldop=1,stop=1/  --> Load OR store samples
+ */
+static bool perf_ibs_ld_st_filter(struct perf_event *event,
+				  struct perf_ibs_data *ibs_data)
+{
+	union ibs_op_data3 op_data3;
+
+	if (!(event->attr.config1 & (IBS_LDOP_FILTER_MASK |
+				     IBS_STOP_FILTER_MASK))) {
+		return false;
+	}
+
+	op_data3.val = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSOPDATA3)];
+
+	if ((event->attr.config1 & IBS_LDOP_FILTER_MASK) && op_data3.ld_op)
+		return false;
+
+	if ((event->attr.config1 & IBS_STOP_FILTER_MASK) && op_data3.st_op)
+		return false;
+
+	return true;
+}
+
 static bool perf_ibs_swfilt_discard(struct perf_ibs *perf_ibs, struct perf_event *event,
 				    struct pt_regs *regs, struct perf_ibs_data *ibs_data,
 				    int br_target_idx)
@@ -1196,8 +1257,11 @@ static bool perf_ibs_swfilt_discard(struct perf_ibs *perf_ibs, struct perf_event
 	if (perf_exclude_event(event, regs))
 		return true;
 
-	if (perf_ibs != &perf_ibs_op || !event->attr.exclude_kernel)
+	if (perf_ibs != &perf_ibs_op)
 		return false;
+
+	if (!event->attr.exclude_kernel)
+		goto ldst_filter;
 
 	if (perf_ibs_is_kernel_data_addr(event, ibs_data))
 		return true;
@@ -1206,7 +1270,8 @@ static bool perf_ibs_swfilt_discard(struct perf_ibs *perf_ibs, struct perf_event
 	    perf_ibs_is_kernel_br_target(event, ibs_data, br_target_idx))
 		return true;
 
-	return false;
+ldst_filter:
+	return perf_ibs_ld_st_filter(event, ibs_data);
 }
 
 static void perf_ibs_phyaddr_clear(struct perf_ibs *perf_ibs,

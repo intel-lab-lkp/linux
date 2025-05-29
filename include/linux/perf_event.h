@@ -1998,6 +1998,20 @@ _name##_show(struct device *dev,					\
 									\
 static struct device_attribute format_attr_##_name = __ATTR_RO(_name)
 
+#define PMU_CAP_ATTR_SHOW(_name, _cap)					\
+static ssize_t								\
+_name##_show(struct device *dev, struct device_attribute *attr,		\
+	     char *page)						\
+{									\
+	BUILD_BUG_ON(sizeof(_cap) >= PAGE_SIZE);			\
+	return sprintf(page, _cap "\n");				\
+}
+
+#define PMU_CAP_ATTR(_name, _cap)					\
+	PMU_CAP_ATTR_SHOW(_name, _cap)					\
+									\
+static struct device_attribute cap_attr_##_name = __ATTR_RO(_name)
+
 /* Performance counter hotplug functions */
 #ifdef CONFIG_PERF_EVENTS
 int perf_event_init_cpu(unsigned int cpu);
