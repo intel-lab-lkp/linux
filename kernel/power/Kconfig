@@ -390,3 +390,13 @@ config ENERGY_MODEL
 	  The exact usage of the energy model is subsystem-dependent.
 
 	  If in doubt, say N.
+
+if ENERGY_MODEL
+
+config ENERGY_MODEL_NETLINK
+	bool "Energy Model netlink management"
+	depends on NET
+	help
+	  The energy model framework has a netlink interface to notify the
+	  changes in the energy model. It is recommended to enable the feature.
+endif
