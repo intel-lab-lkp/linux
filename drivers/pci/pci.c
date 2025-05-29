@@ -5522,6 +5522,7 @@ static void pci_slot_lock(struct pci_slot *slot)
 {
 	struct pci_dev *dev;
 
+	pci_dev_lock(slot->bus->self);
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
@@ -5544,12 +5545,16 @@ static void pci_slot_unlock(struct pci_slot *slot)
 			pci_bus_unlock(dev->subordinate);
 		pci_dev_unlock(dev);
 	}
+	pci_dev_unlock(slot->bus->self);
 }
 
 /* Return 1 on successful lock, 0 on contention */
 static int pci_slot_trylock(struct pci_slot *slot)
 {
 	struct pci_dev *dev;
+
+	if (!pci_dev_trylock(slot->bus->self))
+		return 0;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
@@ -5574,6 +5579,7 @@ unlock:
 		else
 			pci_dev_unlock(dev);
 	}
+	pci_dev_unlock(slot->bus->self);
 	return 0;
 }
 
