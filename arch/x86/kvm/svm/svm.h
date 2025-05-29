@@ -677,8 +677,6 @@ BUILD_SVM_MSR_BITMAP_HELPERS(bool, test, test)
 BUILD_SVM_MSR_BITMAP_HELPERS(void, clear, __clear)
 BUILD_SVM_MSR_BITMAP_HELPERS(void, set, __set)
 
-#define MSR_INVALID				0xffffffffU
-
 #define DEBUGCTL_RESERVED_BITS (~DEBUGCTLMSR_LBR)
 
 /* svm.c */

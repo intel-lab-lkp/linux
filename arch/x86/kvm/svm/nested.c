@@ -191,14 +191,14 @@ static int nested_svm_nr_msrpm_merge_offsets __ro_after_init;
 	case SVM_MSRPM_FIRST_MSR(range_nr) ... SVM_MSRPM_LAST_MSR(range_nr):	\
 		return SVM_MSRPM_BYTE_NR(range_nr, msr);
 
-static u32 svm_msrpm_offset(u32 msr)
+static int svm_msrpm_offset(u32 msr)
 {
 	switch (msr) {
 	SVM_BUILD_MSR_BYTE_NR_CASE(0, msr)
 	SVM_BUILD_MSR_BYTE_NR_CASE(1, msr)
 	SVM_BUILD_MSR_BYTE_NR_CASE(2, msr)
 	default:
-		return MSR_INVALID;
+		return -EINVAL;
 	}
 }
 
@@ -228,9 +228,9 @@ int __init nested_svm_init_msrpm_merge_offsets(void)
 	int i, j;
 
 	for (i = 0; i < ARRAY_SIZE(merge_msrs); i++) {
-		u32 offset = svm_msrpm_offset(merge_msrs[i]);
+		int offset = svm_msrpm_offset(merge_msrs[i]);
 
-		if (WARN_ON(offset == MSR_INVALID))
+		if (WARN_ON(offset < 0))
 			return -EIO;
 
 		/*
@@ -1357,9 +1357,9 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 
 static int nested_svm_exit_handled_msr(struct vcpu_svm *svm)
 {
-	u32 offset, msr;
-	int write;
+	int offset, write;
 	u8 value;
+	u32 msr;
 
 	if (!(vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_MSR_PROT)))
 		return NESTED_EXIT_HOST;
@@ -1368,7 +1368,7 @@ static int nested_svm_exit_handled_msr(struct vcpu_svm *svm)
 	offset = svm_msrpm_offset(msr);
 	write  = svm->vmcb->control.exit_info_1 & 1;
 
-	if (offset == MSR_INVALID)
+	if (offset < 0)
 		return NESTED_EXIT_DONE;
 
 	if (kvm_vcpu_read_guest(&svm->vcpu, svm->nested.ctl.msrpm_base_pa + offset,
