@@ -1044,6 +1044,14 @@ config GCOV_PROFILE_FTRACE
 	  Note that on a kernel compiled with this config, ftrace will
 	  run significantly slower.
 
+config TRACEPOINT_VERIFY_USED
+	bool "Verify that all defined tracepoints are used"
+	depends on TRACEPOINTS
+	help
+	  This option checks if every builtin defined tracepoint is
+	  used in the code. If a tracepoint is defined but not used,
+	  it will waste memory as its meta data is still created.
+
 config FTRACE_SELFTEST
 	bool
 
