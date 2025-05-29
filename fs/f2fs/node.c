@@ -50,6 +50,7 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 	unsigned long avail_ram;
 	unsigned long mem_size = 0;
 	bool res = false;
+	struct bdi_writeback_ctx *bdi_wb_ctx;
 
 	if (!nm_i)
 		return true;
@@ -73,8 +74,9 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 		if (excess_cached_nats(sbi))
 			res = false;
 	} else if (type == DIRTY_DENTS) {
-		if (sbi->sb->s_bdi->wb_ctx_arr[0]->wb.dirty_exceeded)
-			return false;
+		for_each_bdi_wb_ctx(sbi->sb->s_bdi, bdi_wb_ctx)
+			if (bdi_wb_ctx->wb.dirty_exceeded)
+				return false;
 		mem_size = get_pages(sbi, F2FS_DIRTY_DENTS);
 		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 1);
 	} else if (type == INO_ENTRIES) {
@@ -114,8 +116,9 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 		res = false;
 #endif
 	} else {
-		if (!sbi->sb->s_bdi->wb_ctx_arr[0]->wb.dirty_exceeded)
-			return true;
+		for_each_bdi_wb_ctx(sbi->sb->s_bdi, bdi_wb_ctx)
+			if (bdi_wb_ctx->wb.dirty_exceeded)
+				return false;
 	}
 	return res;
 }

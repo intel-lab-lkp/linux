@@ -936,8 +936,11 @@ static inline bool sec_usage_check(struct f2fs_sb_info *sbi, unsigned int secno)
  */
 static inline int nr_pages_to_skip(struct f2fs_sb_info *sbi, int type)
 {
-	if (sbi->sb->s_bdi->wb_ctx_arr[0]->wb.dirty_exceeded)
-		return 0;
+	struct bdi_writeback_ctx *bdi_wb_ctx;
+
+	for_each_bdi_wb_ctx(sbi->sb->s_bdi, bdi_wb_ctx)
+		if (bdi_wb_ctx->wb.dirty_exceeded)
+			return 0;
 
 	if (type == DATA)
 		return BLKS_PER_SEG(sbi);
