@@ -292,6 +292,7 @@
 		vpll-supply = <&reg_main_1v8>;
 		vcca-supply = <&reg_main_1v2>;
 		vcc-supply = <&reg_main_1v2>;
+		no-hpd;
 
 		ports {
 			#address-cells = <1>;

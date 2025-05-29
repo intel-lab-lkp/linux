@@ -460,6 +460,7 @@
 		vpll-supply = <&reg_1p8v>;
 		vcca-supply = <&reg_1p2v>;
 		vcc-supply = <&reg_1p2v>;
+		no-hpd;
 
 		ports {
 			#address-cells = <1>;
