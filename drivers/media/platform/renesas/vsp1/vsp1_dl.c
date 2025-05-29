@@ -179,6 +179,7 @@ struct vsp1_dl_cmd_pool {
  * @has_chain: if true, indicates that there's a partition chain
  * @chain: entry in the display list partition chain
  * @flags: display list flags, a combination of VSP1_DL_FRAME_END_*
+ * @usage: usage counter to detect double list free
  */
 struct vsp1_dl_list {
 	struct list_head list;
@@ -198,6 +199,7 @@ struct vsp1_dl_list {
 	struct list_head chain;
 
 	unsigned int flags;
+	int usage;
 };
 
 /**
@@ -617,6 +619,7 @@ struct vsp1_dl_list *vsp1_dl_list_get(struct vsp1_dl_manager *dlm)
 		 * display list can assert list_empty() if it is not in a chain.
 		 */
 		INIT_LIST_HEAD(&dl->chain);
+		dl->usage++;
 	}
 
 	spin_unlock_irqrestore(&dlm->lock, flags);
@@ -656,6 +659,10 @@ static void __vsp1_dl_list_put(struct vsp1_dl_list *dl)
 	 * has at least one body, thus we reinitialise the entries list.
 	 */
 	dl->body0->num_entries = 0;
+
+	/* decrement usage count to detect invalid usage pattern. */
+	if (WARN_ON_ONCE(--dl->usage < 0))
+		dl->usage = 0;
 
 	list_add_tail(&dl->list, &dl->dlm->free);
 }
