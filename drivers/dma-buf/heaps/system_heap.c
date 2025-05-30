@@ -20,6 +20,9 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/bvec.h>
+#include <linux/bio.h>
+#include <linux/uio.h>
 
 static struct dma_heap *sys_heap;
 
@@ -281,6 +284,81 @@ static void system_heap_vunmap(struct dma_buf *dmabuf, struct iosys_map *map)
 	iosys_map_clear(map);
 }
 
+static ssize_t system_heap_buffer_rw_other(struct system_heap_buffer *buffer,
+			loff_t my_pos, struct file *other, loff_t pos,
+			size_t count, bool is_write)
+{
+	struct sg_table *sgt = &buffer->sg_table;
+	struct scatterlist *sg;
+	loff_t my_end = my_pos + count, bv_beg, bv_end = 0;
+	pgoff_t pg_idx = my_pos / PAGE_SIZE;
+	pgoff_t pg_end = DIV_ROUND_UP(my_end, PAGE_SIZE);
+	size_t i, bv_off, bv_len, bv_num, bv_idx = 0, bv_total = 0;
+	struct bio_vec *bvec;
+	struct kiocb kiocb;
+	struct iov_iter iter;
+	unsigned int direction = is_write ? ITER_SOURCE : ITER_DEST;
+	ssize_t ret = 0, rw_total = 0;
+
+	bv_num = min_t(size_t, pg_end - pg_idx + 1, 1024);
+	bvec = kvcalloc(bv_num, sizeof(*bvec), GFP_KERNEL);
+	if (!bvec)
+		return -ENOMEM;
+
+	init_sync_kiocb(&kiocb, other);
+	kiocb.ki_pos = pos;
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		if (my_pos >= my_end)
+			break;
+		bv_beg = bv_end;
+		bv_end += sg->length;
+		if (bv_end <= my_pos)
+			continue;
+
+		bv_len = min(bv_end, my_end) - my_pos;
+		bv_off = sg->offset + my_pos - bv_beg;
+		my_pos += bv_len;
+		bv_total += bv_len;
+		bvec_set_page(&bvec[bv_idx], sg_page(sg), bv_len, bv_off);
+		if (++bv_idx < bv_num && my_pos < my_end)
+			continue;
+
+		/* start R/W if bvec is full or count reaches zero. */
+		iov_iter_bvec(&iter, direction, bvec, bv_idx, bv_total);
+		if (is_write)
+			ret = other->f_op->write_iter(&kiocb, &iter);
+		else
+			ret = other->f_op->read_iter(&kiocb, &iter);
+		if (ret <= 0)
+			break;
+		rw_total += ret;
+		if (ret < bv_total || fatal_signal_pending(current))
+			break;
+
+		bv_idx = bv_total = 0;
+	}
+	kvfree(bvec);
+
+	return rw_total > 0 ? rw_total : ret;
+}
+
+static ssize_t system_heap_dma_buf_rw_file(struct dma_buf *dmabuf,
+			loff_t my_pos, struct file *file, loff_t pos,
+			size_t count, bool is_write)
+{
+	struct system_heap_buffer *buffer = dmabuf->priv;
+	ssize_t ret = -EBUSY;
+
+	mutex_lock(&buffer->lock);
+	if (list_empty(&buffer->attachments) && !buffer->vmap_cnt)
+		ret = system_heap_buffer_rw_other(buffer, my_pos,
+			file, pos, count, is_write);
+	mutex_unlock(&buffer->lock);
+
+	return ret;
+}
+
 static void system_heap_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct system_heap_buffer *buffer = dmabuf->priv;
@@ -308,6 +386,7 @@ static const struct dma_buf_ops system_heap_buf_ops = {
 	.mmap = system_heap_mmap,
 	.vmap = system_heap_vmap,
 	.vunmap = system_heap_vunmap,
+	.rw_file = system_heap_dma_buf_rw_file,
 	.release = system_heap_dma_buf_release,
 };
 
