@@ -807,7 +807,7 @@ int fat_reconfigure(struct fs_context *fc)
 	bool new_rdonly;
 	struct super_block *sb = fc->root->d_sb;
 	struct msdos_sb_info *sbi = MSDOS_SB(sb);
-	fc->sb_flags |= SB_NODIRATIME | (sbi->options.isvfat ? 0 : SB_NOATIME);
+	fc->sb_flags |= sbi->options.isvfat ? SB_NODIRATIME : SB_NOATIME;
 
 	sync_filesystem(sb);
 
