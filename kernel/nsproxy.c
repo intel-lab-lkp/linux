@@ -228,7 +228,7 @@ out:
 
 void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 {
-	struct nsproxy *ns;
+	struct nsproxy *ns __free(put_nsproxy) = NULL;
 
 	might_sleep();
 
@@ -236,9 +236,6 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 	ns = p->nsproxy;
 	p->nsproxy = new;
 	task_unlock(p);
-
-	if (ns)
-		put_nsproxy(ns);
 }
 
 void exit_task_namespaces(struct task_struct *p)
@@ -368,7 +365,7 @@ static int validate_nsset(struct nsset *nsset, struct pid *pid)
 	unsigned flags = nsset->flags;
 	struct user_namespace *user_ns = NULL;
 	struct pid_namespace *pid_ns = NULL;
-	struct nsproxy *nsp;
+	struct nsproxy *nsp __free(put_nsproxy) = NULL;
 	struct task_struct *tsk;
 
 	/* Take a "snapshot" of the target task's namespaces. */
@@ -483,8 +480,6 @@ static int validate_nsset(struct nsset *nsset, struct pid *pid)
 out:
 	put_user_ns(user_ns);
 	put_pid_ns(pid_ns);
-	if (nsp)
-		put_nsproxy(nsp);
 
 	return ret;
 }
