@@ -1911,7 +1911,7 @@ static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
  * Drains all per-CPU charge caches for given root_memcg resp. subtree
  * of the hierarchy under it.
  */
-void drain_all_stock(struct mem_cgroup *root_memcg)
+void drain_all_stock(struct mem_cgroup *root_memcg, bool sync)
 {
 	int cpu, curcpu;
 
@@ -1948,6 +1948,11 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 				schedule_work_on(cpu, &stock->work);
 		}
 	}
+	if (sync)
+		for_each_online_cpu(cpu) {
+			struct memcg_stock_pcp *stock = &per_cpu(memcg_stock, cpu);
+			flush_work(&stock->work);
+		}
 	migrate_enable();
 	mutex_unlock(&percpu_charge_mutex);
 }
@@ -2307,7 +2312,7 @@ retry:
 		goto retry;
 
 	if (!drained) {
-		drain_all_stock(mem_over_limit);
+		drain_all_stock(mem_over_limit, gfpflags_allow_blocking(gfp_mask));
 		drained = true;
 		goto retry;
 	}
@@ -3773,7 +3778,7 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	wb_memcg_offline(memcg);
 	lru_gen_offline_memcg(memcg);
 
-	drain_all_stock(memcg);
+	drain_all_stock(memcg, false);
 
 	mem_cgroup_id_put(memcg);
 }
@@ -4205,7 +4210,7 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 			break;
 
 		if (!drained) {
-			drain_all_stock(memcg);
+			drain_all_stock(memcg, false);
 			drained = true;
 			continue;
 		}
@@ -4253,7 +4258,7 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 			break;
 
 		if (!drained) {
-			drain_all_stock(memcg);
+			drain_all_stock(memcg, false);
 			drained = true;
 			continue;
 		}

@@ -24,7 +24,7 @@
 
 unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap);
 
-void drain_all_stock(struct mem_cgroup *root_memcg);
+void drain_all_stock(struct mem_cgroup *root_memcg, bool sync);
 
 unsigned long memcg_events(struct mem_cgroup *memcg, int event);
 unsigned long memcg_page_state_output(struct mem_cgroup *memcg, int item);
