@@ -188,6 +188,7 @@ void blk_mq_sched_unreg_debugfs(struct request_queue *q);
 
 #define elevator_lock(e)	spin_lock_irq(&(e)->lock)
 #define elevator_unlock(e)	spin_unlock_irq(&(e)->lock)
+#define elevator_assert_lock(e)	lockdep_assert_held(&(e)->lock)
 
 static inline struct request *elevator_dispatch_request(
 		struct blk_mq_hw_ctx *hctx)
