@@ -10,6 +10,8 @@
 #include <linux/module.h>
 #include <linux/pm_domain.h>
 #include <linux/scmi_protocol.h>
+#include <linux/of.h>
+
 
 static const struct scmi_power_proto_ops *power_ops;
 
@@ -47,14 +49,20 @@ static int scmi_pd_power_off(struct generic_pm_domain *domain)
 
 static int scmi_pm_domain_probe(struct scmi_device *sdev)
 {
-	int num_domains, i;
 	struct device *dev = &sdev->dev;
-	struct device_node *np = dev->of_node;
+	struct device_node *np;
 	struct scmi_pm_domain *scmi_pd;
-	struct genpd_onecell_data *scmi_pd_data;
-	struct generic_pm_domain **domains;
+	struct of_phandle_args args;
 	const struct scmi_handle *handle = sdev->handle;
 	struct scmi_protocol_handle *ph;
+	struct genpd_onecell_data *scmi_pd_data;
+	struct generic_pm_domain **domains;
+	int max_id = -1;
+	int index, num_domains;
+	ktime_t start_time = ktime_get();
+	unsigned long *domain_ids;
+
+	dev_err(dev, "Starting optimized SCMI power domain probe\n");
 
 	if (!handle)
 		return -ENODEV;
@@ -69,54 +77,90 @@ static int scmi_pm_domain_probe(struct scmi_device *sdev)
 		return num_domains;
 	}
 
-	scmi_pd = devm_kcalloc(dev, num_domains, sizeof(*scmi_pd), GFP_KERNEL);
-	if (!scmi_pd)
+	domain_ids = devm_bitmap_zalloc(dev, num_domains, GFP_KERNEL);
+	if (!domain_ids)
 		return -ENOMEM;
+
+	/* Find referenced domain IDs and mark them in bitmap */
+	for_each_node_with_property(np, "power-domains") {
+		index = 0;
+		while (!of_parse_phandle_with_args(np, "power-domains",
+					"#power-domain-cells",
+					index, &args)) {
+			if (args.args_count >= 1 && args.np == dev->of_node) {
+				int id = args.args[0];
+				if (id < num_domains) {
+					set_bit(id, domain_ids);
+					max_id = max(max_id, id);
+					dev_dbg(dev, "Found power domain reference %d from node %pOF\n",
+							id, np);
+				}
+			}
+			of_node_put(args.np);
+			index++;
+		}
+	}
+
+	if (max_id < 0) {
+		dev_warn(dev, "No power domains referenced in device tree\n");
+		/* Create provider anyway as domains might be referenced later */
+		max_id = 0;
+	}
+
+	dev_warn(dev, "Highest referenced domain ID: %d\n", max_id);
 
 	scmi_pd_data = devm_kzalloc(dev, sizeof(*scmi_pd_data), GFP_KERNEL);
 	if (!scmi_pd_data)
 		return -ENOMEM;
 
-	domains = devm_kcalloc(dev, num_domains, sizeof(*domains), GFP_KERNEL);
+	domains = devm_kcalloc(dev, max_id + 1, sizeof(*domains), GFP_KERNEL);
 	if (!domains)
 		return -ENOMEM;
 
-	for (i = 0; i < num_domains; i++, scmi_pd++) {
+	scmi_pd = devm_kcalloc(dev, max_id + 1, sizeof(*scmi_pd), GFP_KERNEL);
+	if (!scmi_pd)
+		return -ENOMEM;
+
+	/* Initialize only referenced domains */
+	for_each_set_bit(index, domain_ids, num_domains) {
 		u32 state;
 
-		if (power_ops->state_get(ph, i, &state)) {
-			dev_warn(dev, "failed to get state for domain %d\n", i);
+		if (power_ops->state_get(ph, index, &state)) {
+			dev_err(dev, "Domain %d not available\n", index);
 			continue;
 		}
 
-		/*
-		 * Register the explicit power on request to the firmware so
-		 * that it is tracked as used by OSPM agent and not
-		 * accidentally turned off with OSPM's knowledge
-		 */
-		if (state == SCMI_POWER_STATE_GENERIC_ON)
-			power_ops->state_set(ph, i, state);
+		dev_warn(dev, "Initializing referenced domain %d\n", index);
 
-		scmi_pd->domain = i;
+		scmi_pd->domain = index;
 		scmi_pd->ph = ph;
-		scmi_pd->name = power_ops->name_get(ph, i);
+		scmi_pd->name = power_ops->name_get(ph, index);
 		scmi_pd->genpd.name = scmi_pd->name;
 		scmi_pd->genpd.power_off = scmi_pd_power_off;
 		scmi_pd->genpd.power_on = scmi_pd_power_on;
 		scmi_pd->genpd.flags = GENPD_FLAG_ACTIVE_WAKEUP;
 
+		if (state == SCMI_POWER_STATE_GENERIC_ON) {
+			dev_warn(dev, "Domain %d is ON, registering state\n", index);
+			power_ops->state_set(ph, index, state);
+		}
+
 		pm_genpd_init(&scmi_pd->genpd, NULL,
 			      state == SCMI_POWER_STATE_GENERIC_OFF);
 
-		domains[i] = &scmi_pd->genpd;
+		domains[index] = &scmi_pd->genpd;
+		scmi_pd++;
 	}
 
 	scmi_pd_data->domains = domains;
-	scmi_pd_data->num_domains = num_domains;
+	scmi_pd_data->num_domains = max_id + 1;
 
 	dev_set_drvdata(dev, scmi_pd_data);
 
-	return of_genpd_add_provider_onecell(np, scmi_pd_data);
+	dev_err(dev, "SCMI power domains probe completed in %lld us\n",
+			ktime_us_delta(ktime_get(), start_time));
+
+	return of_genpd_add_provider_onecell(dev->of_node, scmi_pd_data);
 }
 
 static void scmi_pm_domain_remove(struct scmi_device *sdev)
