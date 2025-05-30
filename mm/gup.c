@@ -2300,6 +2300,25 @@ static void pofs_unpin(struct pages_or_folios *pofs)
 		unpin_user_pages(pofs->pages, pofs->nr_entries);
 }
 
+static struct folio *pofs_next_folio(struct folio *folio,
+				struct pages_or_folios *pofs, long *index_ptr)
+{
+	long i = *index_ptr + 1;
+	unsigned long nr_pages = folio_nr_pages(folio);
+
+	if (!pofs->has_folios)
+		while ((i < pofs->nr_entries) &&
+			/* Is this page part of this folio? */
+			(folio_page_idx(folio, pofs->pages[i]) < nr_pages))
+			i++;
+
+	if (unlikely(i == pofs->nr_entries))
+		return NULL;
+	*index_ptr = i;
+
+	return pofs_get_folio(pofs, i);
+}
+
 /*
  * Returns the number of collected folios. Return value is always >= 0.
  */
@@ -2307,16 +2326,12 @@ static void collect_longterm_unpinnable_folios(
 		struct list_head *movable_folio_list,
 		struct pages_or_folios *pofs)
 {
-	struct folio *prev_folio = NULL;
 	bool drain_allow = true;
-	unsigned long i;
+	long i = 0;
+	struct folio *folio;
 
-	for (i = 0; i < pofs->nr_entries; i++) {
-		struct folio *folio = pofs_get_folio(pofs, i);
-
-		if (folio == prev_folio)
-			continue;
-		prev_folio = folio;
+	for (folio = pofs_get_folio(pofs, 0); folio;
+			folio = pofs_next_folio(folio, pofs, &i)) {
 
 		if (folio_is_longterm_pinnable(folio))
 			continue;
