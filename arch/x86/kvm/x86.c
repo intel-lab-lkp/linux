@@ -6623,13 +6623,13 @@ split_irqchip_unlock:
 			pr_warn_once(SMT_RSB_MSG);
 
 		if (cap->args[0] & KVM_X86_DISABLE_EXITS_PAUSE)
-			kvm->arch.pause_in_guest = true;
+			kvm_disable_exits(kvm, KVM_X86_DISABLE_EXITS_PAUSE);
 		if (cap->args[0] & KVM_X86_DISABLE_EXITS_MWAIT)
-			kvm->arch.mwait_in_guest = true;
+			kvm_disable_exits(kvm, KVM_X86_DISABLE_EXITS_MWAIT);
 		if (cap->args[0] & KVM_X86_DISABLE_EXITS_HLT)
-			kvm->arch.hlt_in_guest = true;
+			kvm_disable_exits(kvm, KVM_X86_DISABLE_EXITS_HLT);
 		if (cap->args[0] & KVM_X86_DISABLE_EXITS_CSTATE)
-			kvm->arch.cstate_in_guest = true;
+			kvm_disable_exits(kvm, KVM_X86_DISABLE_EXITS_CSTATE);
 		r = 0;
 disable_exits_unlock:
 		mutex_unlock(&kvm->lock);
