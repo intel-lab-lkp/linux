@@ -3418,13 +3418,8 @@ intel_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 		spin_lock_init(&dmar_domain->s1_lock);
 	}
 
-	if (dirty_tracking) {
-		if (dmar_domain->use_first_level) {
-			iommu_domain_free(domain);
-			return ERR_PTR(-EOPNOTSUPP);
-		}
+	if (dirty_tracking)
 		domain->dirty_ops = &intel_dirty_ops;
-	}
 
 	return domain;
 }
