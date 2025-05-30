@@ -12,7 +12,7 @@ use crate::{
 use core::{fmt, ptr};
 
 #[cfg(CONFIG_PRINTK)]
-use crate::c_str;
+use crate::str::CStrExt as _;
 
 /// A reference-counted device.
 ///
@@ -176,7 +176,7 @@ impl Device {
             bindings::_dev_printk(
                 klevel as *const _ as *const crate::ffi::c_char,
                 self.as_raw(),
-                c_str!("%pA").as_char_ptr(),
+                c"%pA".as_char_ptr(),
                 &msg as *const _ as *const crate::ffi::c_void,
             )
         };
