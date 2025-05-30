@@ -462,7 +462,9 @@ EXPORT_PER_CPU_SYMBOL(softnet_data);
  * PP consumers must pay attention to run APIs in the appropriate context
  * (e.g. NAPI context).
  */
-DEFINE_PER_CPU(struct page_pool *, system_page_pool);
+DEFINE_PER_CPU(struct page_pool_bh, system_page_pool) = {
+	.bh_lock = INIT_LOCAL_LOCK(bh_lock),
+};
 
 #ifdef CONFIG_LOCKDEP
 /*
@@ -3594,9 +3596,10 @@ out:
 }
 EXPORT_SYMBOL(skb_checksum_help);
 
+#ifdef CONFIG_NET_CRC32C
 int skb_crc32c_csum_help(struct sk_buff *skb)
 {
-	__le32 crc32c_csum;
+	u32 crc;
 	int ret = 0, offset, start;
 
 	if (skb->ip_summed != CHECKSUM_PARTIAL)
@@ -3624,15 +3627,14 @@ int skb_crc32c_csum_help(struct sk_buff *skb)
 	if (ret)
 		goto out;
 
-	crc32c_csum = cpu_to_le32(~__skb_checksum(skb, start,
-						  skb->len - start, ~(__u32)0,
-						  crc32c_csum_stub));
-	*(__le32 *)(skb->data + offset) = crc32c_csum;
+	crc = ~skb_crc32c(skb, start, skb->len - start, ~0);
+	*(__le32 *)(skb->data + offset) = cpu_to_le32(crc);
 	skb_reset_csum_not_inet(skb);
 out:
 	return ret;
 }
 EXPORT_SYMBOL(skb_crc32c_csum_help);
+#endif /* CONFIG_NET_CRC32C */
 
 __be16 skb_network_protocol(struct sk_buff *skb, int *depth)
 {
@@ -3896,12 +3898,42 @@ sw_checksum:
 }
 EXPORT_SYMBOL(skb_csum_hwoffload_help);
 
+static struct sk_buff *validate_xmit_unreadable_skb(struct sk_buff *skb,
+						    struct net_device *dev)
+{
+	struct skb_shared_info *shinfo;
+	struct net_iov *niov;
+
+	if (likely(skb_frags_readable(skb)))
+		goto out;
+
+	if (!dev->netmem_tx)
+		goto out_free;
+
+	shinfo = skb_shinfo(skb);
+
+	if (shinfo->nr_frags > 0) {
+		niov = netmem_to_net_iov(skb_frag_netmem(&shinfo->frags[0]));
+		if (net_is_devmem_iov(niov) &&
+		    net_devmem_iov_binding(niov)->dev != dev)
+			goto out_free;
+	}
+
+out:
+	return skb;
+
+out_free:
+	kfree_skb(skb);
+	return NULL;
+}
+
 static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device *dev, bool *again)
 {
 	netdev_features_t features;
 
-	if (!skb_frags_readable(skb))
-		goto out_kfree_skb;
+	skb = validate_xmit_unreadable_skb(skb, dev);
+	if (unlikely(!skb))
+		goto out_null;
 
 	features = netif_skb_features(skb);
 	skb = validate_xmit_vlan(skb, features);
@@ -4783,6 +4815,7 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 	}
 
 use_local_napi:
+	DEBUG_NET_WARN_ON_ONCE(!list_empty(&napi->poll_list));
 	list_add_tail(&napi->poll_list, &sd->poll_list);
 	WRITE_ONCE(napi->list_owner, smp_processor_id());
 	/* If not called from net_rx_action()
@@ -5292,7 +5325,10 @@ netif_skb_check_for_xdp(struct sk_buff **pskb, const struct bpf_prog *prog)
 	struct sk_buff *skb = *pskb;
 	int err, hroom, troom;
 
-	if (!skb_cow_data_for_xdp(this_cpu_read(system_page_pool), pskb, prog))
+	local_lock_nested_bh(&system_page_pool.bh_lock);
+	err = skb_cow_data_for_xdp(this_cpu_read(system_page_pool.pool), pskb, prog);
+	local_unlock_nested_bh(&system_page_pool.bh_lock);
+	if (!err)
 		return 0;
 
 	/* In case we have to go down the path and also linearize,
@@ -7441,9 +7477,14 @@ static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 
 	work = __napi_poll(n, &do_repoll);
 
-	if (do_repoll)
+	if (do_repoll) {
+#if defined(CONFIG_DEBUG_NET)
+		if (unlikely(!napi_is_scheduled(n)))
+			pr_crit("repoll requested for device %s %ps but napi is not scheduled.\n",
+				n->dev->name, n->poll);
+#endif
 		list_add_tail(&n->poll_list, repoll);
-
+	}
 	netpoll_poll_unlock(have);
 
 	return work;
@@ -9243,8 +9284,16 @@ static int __dev_set_promiscuity(struct net_device *dev, int inc, bool notify)
 
 		dev_change_rx_flags(dev, IFF_PROMISC);
 	}
-	if (notify)
+	if (notify) {
+		/* The ops lock is only required to ensure consistent locking
+		 * for `NETDEV_CHANGE` notifiers. This function is sometimes
+		 * called without the lock, even for devices that are ops
+		 * locked, such as in `dev_uc_sync_multiple` when using
+		 * bonding or teaming.
+		 */
+		netdev_ops_assert_locked(dev);
 		__dev_notify_flags(dev, old_flags, IFF_PROMISC, 0, NULL);
+	}
 	return 0;
 }
 
@@ -12684,7 +12733,7 @@ static int net_page_pool_create(int cpuid)
 		return err;
 	}
 
-	per_cpu(system_page_pool, cpuid) = pp_ptr;
+	per_cpu(system_page_pool.pool, cpuid) = pp_ptr;
 #endif
 	return 0;
 }
@@ -12814,13 +12863,13 @@ out:
 		for_each_possible_cpu(i) {
 			struct page_pool *pp_ptr;
 
-			pp_ptr = per_cpu(system_page_pool, i);
+			pp_ptr = per_cpu(system_page_pool.pool, i);
 			if (!pp_ptr)
 				continue;
 
 			xdp_unreg_page_pool(pp_ptr);
 			page_pool_destroy(pp_ptr);
-			per_cpu(system_page_pool, i) = NULL;
+			per_cpu(system_page_pool.pool, i) = NULL;
 		}
 	}
 
