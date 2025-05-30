@@ -1277,12 +1277,12 @@ static bool tmigr_inactive_up(struct tmigr_group *group,
 			 * group is idle!
 			 */
 			if (!childstate.active) {
-				unsigned long new_migr_bit, active = newstate.active;
+				u8 active = newstate.active;
 
-				new_migr_bit = find_first_bit(&active, BIT_CNT);
+				if (active) {
+					u8 lsbit = active & -active;
 
-				if (new_migr_bit != BIT_CNT) {
-					newstate.migrator = BIT(new_migr_bit);
+					newstate.migrator = lsbit;
 				} else {
 					newstate.migrator = TMIGR_NONE;
 
