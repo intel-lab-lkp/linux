@@ -43,6 +43,9 @@
 
 #define ENETC_SIPMAR0	0x80
 #define ENETC_SIPMAR1	0x84
+#define ENETC_SICVLANR1	0x90
+#define ENETC_SICVLANR2	0x94
+#define  SICVLANR_ETYPE	GENMASK(15, 0)
 
 /* VF-PF Message passing */
 #define ENETC_DEFAULT_MSG_SIZE	1024	/* and max size */
@@ -178,8 +181,6 @@ enum enetc_bdr_type {TX, RX};
 #define ENETC_PSIPMAR0(n)	(0x0100 + (n) * 0x8) /* n = SI index */
 #define ENETC_PSIPMAR1(n)	(0x0104 + (n) * 0x8)
 #define ENETC_PVCLCTR		0x0208
-#define ENETC_PCVLANR1		0x0210
-#define ENETC_PCVLANR2		0x0214
 #define ENETC_VLAN_TYPE_C	BIT(0)
 #define ENETC_VLAN_TYPE_S	BIT(1)
 #define ENETC_PVCLCTR_OVTPIDL(bmp)	((bmp) & 0xff) /* VLAN_TYPE */
