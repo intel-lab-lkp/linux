@@ -227,8 +227,14 @@ void die(const char *str, struct pt_regs *regs, long err)
 
 	raw_spin_unlock_irqrestore(&die_lock, flags);
 
-	if (ret != NOTIFY_STOP)
+	if (ret != NOTIFY_STOP) {
+#ifdef CONFIG_CONTEXT_TRACKING_IDLE
+		long nmi_nesting = ct_nmi_nesting();
+		if (nmi_nesting && nmi_nesting != CT_NESTING_IRQ_NONIDLE)
+			ct_nmi_exit();
+#endif
 		make_task_dead(SIGSEGV);
+	}
 }
 
 static void arm64_show_signal(int signo, const char *str)
