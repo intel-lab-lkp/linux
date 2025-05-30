@@ -5164,6 +5164,8 @@ bool ext4_should_enable_large_folio(struct inode *inode)
 		return false;
 	if (ext4_has_feature_encrypt(sb))
 		return false;
+	if (!ext4_should_dioread_nolock(inode))
+		return false;
 
 	return true;
 }

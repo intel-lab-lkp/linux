@@ -422,6 +422,13 @@ static inline int ext4_free_data_revoke_credits(struct inode *inode, int blocks)
  */
 static inline int ext4_should_dioread_nolock(struct inode *inode)
 {
+	/*
+	 * Cannot disable dioread_nolock on an active inode that has
+	 * large folio enabled.
+	 */
+	if (mapping_large_folio_support(inode->i_mapping))
+		return 1;
+
 	if (!test_opt(inode->i_sb, DIOREAD_NOLOCK))
 		return 0;
 	if (!S_ISREG(inode->i_mode))
