@@ -469,6 +469,8 @@ tlb_update_vma_flags(struct mmu_gather *tlb, struct vm_area_struct *vma)
 
 static inline void tlb_flush_mmu_tlbonly(struct mmu_gather *tlb)
 {
+	VM_WARN_ON(arch_in_lazy_mmu_mode());
+
 	/*
 	 * Anything calling __tlb_adjust_range() also sets at least one of
 	 * these bits.

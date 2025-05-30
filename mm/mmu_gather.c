@@ -18,6 +18,7 @@
 static bool tlb_next_batch(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch;
+	bool lazy_mmu;
 
 	/* Limit batching if we have delayed rmaps pending */
 	if (tlb->delayed_rmap && tlb->active != &tlb->local)
@@ -32,7 +33,15 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 	if (tlb->batch_count == MAX_GATHER_BATCH_COUNT)
 		return false;
 
+	lazy_mmu = arch_in_lazy_mmu_mode();
+	if (lazy_mmu)
+		arch_leave_lazy_mmu_mode();
+
 	batch = (void *)__get_free_page(GFP_NOWAIT | __GFP_NOWARN);
+
+	if (lazy_mmu)
+		arch_enter_lazy_mmu_mode();
+
 	if (!batch)
 		return false;
 
@@ -145,6 +154,8 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch;
 
+	VM_WARN_ON(arch_in_lazy_mmu_mode());
+
 	for (batch = &tlb->local; batch && batch->nr; batch = batch->next)
 		__tlb_batch_free_encoded_pages(batch);
 	tlb->active = &tlb->local;
@@ -153,6 +164,8 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 static void tlb_batch_list_free(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch, *next;
+
+	VM_WARN_ON(arch_in_lazy_mmu_mode());
 
 	for (batch = tlb->local.next; batch; batch = next) {
 		next = batch->next;
@@ -362,6 +375,8 @@ static void tlb_table_flush(struct mmu_gather *tlb)
 void tlb_remove_table(struct mmu_gather *tlb, void *table)
 {
 	struct mmu_table_batch **batch = &tlb->batch;
+
+	VM_WARN_ON(arch_in_lazy_mmu_mode());
 
 	if (*batch == NULL) {
 		*batch = (struct mmu_table_batch *)__get_free_page(GFP_NOWAIT | __GFP_NOWARN);
