@@ -393,16 +393,19 @@ EXPORT_SYMBOL_GPL(vp_modern_remove);
  *
  * Returns the features read from the device
  */
-u64 vp_modern_get_features(struct virtio_pci_modern_device *mdev)
+virtio_features_t vp_modern_get_features(struct virtio_pci_modern_device *mdev)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
+	virtio_features_t features = 0;
+	int i;
 
-	u64 features;
+	for (i = 0; i < VIRTIO_FEATURES_WORDS; i++) {
+		virtio_features_t cur;
 
-	vp_iowrite32(0, &cfg->device_feature_select);
-	features = vp_ioread32(&cfg->device_feature);
-	vp_iowrite32(1, &cfg->device_feature_select);
-	features |= ((u64)vp_ioread32(&cfg->device_feature) << 32);
+		vp_iowrite32(i, &cfg->device_feature_select);
+		cur = vp_ioread32(&cfg->device_feature);
+		features |= cur << (32 * i);
+	}
 
 	return features;
 }
@@ -414,16 +417,20 @@ EXPORT_SYMBOL_GPL(vp_modern_get_features);
  *
  * Returns the driver features read from the device
  */
-u64 vp_modern_get_driver_features(struct virtio_pci_modern_device *mdev)
+virtio_features_t
+vp_modern_get_driver_features(struct virtio_pci_modern_device *mdev)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
+	virtio_features_t features = 0;
+	int i;
 
-	u64 features;
+	for (i = 0; i < VIRTIO_FEATURES_WORDS; i++) {
+		virtio_features_t cur;
 
-	vp_iowrite32(0, &cfg->guest_feature_select);
-	features = vp_ioread32(&cfg->guest_feature);
-	vp_iowrite32(1, &cfg->guest_feature_select);
-	features |= ((u64)vp_ioread32(&cfg->guest_feature) << 32);
+		vp_iowrite32(i, &cfg->guest_feature_select);
+		cur = vp_ioread32(&cfg->guest_feature);
+		features |= cur << (32 * i);
+	}
 
 	return features;
 }
@@ -435,14 +442,17 @@ EXPORT_SYMBOL_GPL(vp_modern_get_driver_features);
  * @features: the features set to device
  */
 void vp_modern_set_features(struct virtio_pci_modern_device *mdev,
-			    u64 features)
+			    virtio_features_t features)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
+	int i;
 
-	vp_iowrite32(0, &cfg->guest_feature_select);
-	vp_iowrite32((u32)features, &cfg->guest_feature);
-	vp_iowrite32(1, &cfg->guest_feature_select);
-	vp_iowrite32(features >> 32, &cfg->guest_feature);
+	for (i = 0; i < VIRTIO_FEATURES_WORDS; i++) {
+		u32 cur = features >> (32 * i);
+
+		vp_iowrite32(i, &cfg->guest_feature_select);
+		vp_iowrite32(cur, &cfg->guest_feature);
+	}
 }
 EXPORT_SYMBOL_GPL(vp_modern_set_features);
 
