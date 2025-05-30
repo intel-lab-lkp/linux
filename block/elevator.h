@@ -110,12 +110,12 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
 /*
  * each queue has an elevator_queue associated with it
  */
-struct elevator_queue
-{
+struct elevator_queue {
 	struct elevator_type *type;
 	void *elevator_data;
 	struct kobject kobj;
 	struct mutex sysfs_lock;
+	spinlock_t lock;
 	unsigned long flags;
 	DECLARE_HASHTABLE(hash, ELV_HASH_BITS);
 };
@@ -185,5 +185,62 @@ extern struct request *elv_rb_find(struct rb_root *, sector_t);
 
 void blk_mq_sched_reg_debugfs(struct request_queue *q);
 void blk_mq_sched_unreg_debugfs(struct request_queue *q);
+
+#define elevator_lock(e)	spin_lock_irq(&(e)->lock)
+#define elevator_unlock(e)	spin_unlock_irq(&(e)->lock)
+
+static inline struct request *elevator_dispatch_request(
+		struct blk_mq_hw_ctx *hctx)
+{
+	struct request_queue *q = hctx->queue;
+	struct elevator_queue *e = q->elevator;
+	bool sq_shared = blk_queue_sq_sched(q);
+	struct request *rq;
+
+	if (sq_shared)
+		elevator_lock(e);
+
+	rq = e->type->ops.dispatch_request(hctx);
+
+	if (sq_shared)
+		elevator_unlock(e);
+
+	return rq;
+}
+
+static inline void elevator_insert_requests(struct blk_mq_hw_ctx *hctx,
+					    struct list_head *list,
+					    blk_insert_t flags)
+{
+	struct request_queue *q = hctx->queue;
+	struct elevator_queue *e = q->elevator;
+	bool sq_shared = blk_queue_sq_sched(q);
+
+	if (sq_shared)
+		elevator_lock(e);
+
+	e->type->ops.insert_requests(hctx, list, flags);
+
+	if (sq_shared)
+		elevator_unlock(e);
+}
+
+static inline bool elevator_bio_merge(struct request_queue *q, struct bio *bio,
+				      unsigned int nr_segs)
+{
+	struct elevator_queue *e = q->elevator;
+	bool sq_shared = blk_queue_sq_sched(q);
+	bool ret;
+
+	if (sq_shared)
+		elevator_lock(e);
+
+	ret = e->type->ops.bio_merge(q, bio, nr_segs);
+
+	if (sq_shared)
+		elevator_unlock(e);
+
+	return ret;
+}
 
 #endif /* _ELEVATOR_H */
