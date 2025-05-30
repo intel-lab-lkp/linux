@@ -995,7 +995,7 @@ cifs_smb3_do_mount(struct file_system_type *fs_type,
 	mnt_data.flags = flags;
 
 	/* BB should we make this contingent on mount parm? */
-	flags |= SB_NODIRATIME | SB_NOATIME;
+	flags |= SB_NOATIME;
 
 	sb = sget(fs_type, cifs_match_super, cifs_set_super, flags, &mnt_data);
 	if (IS_ERR(sb)) {
