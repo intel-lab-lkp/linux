@@ -21,6 +21,7 @@
    :maxdepth: 1
 
    msg_zerocopy
+   vxlan.rst
 
 Todolist:
 
@@ -142,7 +143,6 @@ Todolist:
 *   tuntap
 *   udplite
 *   vrf
-*   vxlan
 *   x25
 *   x25-iface
 *   xfrm_device
