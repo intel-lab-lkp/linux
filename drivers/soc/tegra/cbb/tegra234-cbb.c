@@ -117,6 +117,15 @@ enum tegra264_cbb_fabric_ids {
 	T264_RSVD7_FABRIC_ID,
 };
 
+enum gb10_cbb_fabric_ids {
+	GB10_DCE_FABRIC_ID             = 19,
+	GB10_DISP_CLUSTER_FABRIC_ID    = 25,
+	GB10_C2C_FABRIC_ID             = 26,
+	GB10_GPU_FABRIC_ID             = 27,
+	GB10_DISP_CLUSTER_1_FABRIC_ID  = 28,
+	GB10_MAX_FABRIC_ID,
+};
+
 struct tegra234_target_lookup {
 	const char *name;
 	unsigned int offset;
@@ -1418,6 +1427,52 @@ static const struct tegra234_cbb_fabric tegra264_vision_cbb_fabric = {
 	.firewall_wr_ctl = 0x5c8,
 };
 
+static const struct tegra234_fabric_lookup gb10_cbb_fab_list[] = {
+	[GB10_C2C_FABRIC_ID] = { "c2c-fabric", true },
+	[GB10_DISP_CLUSTER_FABRIC_ID] = { "display-cluster-fabric", true },
+	[GB10_GPU_FABRIC_ID] = { "gpu-fabric", true },
+};
+
+static const struct tegra234_cbb_fabric gb10s_c2c_fabric = {
+	.fab_id = GB10_C2C_FABRIC_ID,
+	.fab_list = gb10_cbb_fab_list,
+	.errors = tegra241_cbb_errors,
+	.max_errors = ARRAY_SIZE(tegra241_cbb_errors),
+	.err_intr_enbl = 0xf,
+	.err_status_clr = 0x1ff007f,
+	.notifier_offset = 0x50000,
+	.off_mask_erd = 0x14004,
+	.firewall_base = 0x40000,
+	.firewall_ctl = 0x9b0,
+	.firewall_wr_ctl = 0x9a8,
+};
+
+static const struct tegra234_cbb_fabric gb10s_disp_fabric = {
+	.fab_id = GB10_DISP_CLUSTER_FABRIC_ID,
+	.fab_list = gb10_cbb_fab_list,
+	.errors = tegra241_cbb_errors,
+	.max_errors = ARRAY_SIZE(tegra241_cbb_errors),
+	.err_intr_enbl = 0x1,
+	.err_status_clr = 0x1ff007f,
+	.notifier_offset = 0x50000,
+	.firewall_base = 0x30000,
+	.firewall_ctl = 0x810,
+	.firewall_wr_ctl = 0x808,
+};
+
+static const struct tegra234_cbb_fabric gb10g_gpu_fabric = {
+	.fab_id = GB10_GPU_FABRIC_ID,
+	.fab_list = gb10_cbb_fab_list,
+	.errors = tegra241_cbb_errors,
+	.max_errors = ARRAY_SIZE(tegra241_cbb_errors),
+	.err_intr_enbl = 0x1f,
+	.err_status_clr = 0x1ff007f,
+	.notifier_offset = 0x50000,
+	.firewall_base = 0x30000,
+	.firewall_ctl = 0x930,
+	.firewall_wr_ctl = 0x928,
+};
+
 static const struct of_device_id tegra234_cbb_dt_ids[] = {
 	{ .compatible = "nvidia,tegra234-cbb-fabric", .data = &tegra234_cbb_fabric },
 	{ .compatible = "nvidia,tegra234-aon-fabric", .data = &tegra234_aon_fabric },
@@ -1442,6 +1497,9 @@ struct tegra234_cbb_acpi_uid {
 static const struct tegra234_cbb_acpi_uid tegra234_cbb_acpi_uids[] = {
 	{ "NVDA1070", "1", &tegra241_cbb_fabric },
 	{ "NVDA1070", "2", &tegra241_bpmp_fabric },
+	{ "NVDA1070", "3", &gb10s_c2c_fabric },
+	{ "NVDA1070", "4", &gb10s_disp_fabric },
+	{ "NVDA1070", "5", &gb10g_gpu_fabric },
 	{ },
 };
 
