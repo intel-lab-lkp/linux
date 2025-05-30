@@ -51,6 +51,7 @@ struct madvise_walk_private {
 struct madvise_behavior {
 	int behavior;
 	struct mmu_gather *tlb;
+	struct vm_area_struct *vma;
 };
 
 /*
@@ -1553,6 +1554,21 @@ int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 	return unmapped_error;
 }
 
+/*
+ * Call the visit function on the single vma with the per_vma lock
+ */
+static inline
+int madvise_single_locked_vma(struct vm_area_struct *vma,
+		unsigned long start, unsigned long end, void *arg,
+		int (*visit)(struct vm_area_struct *vma,
+				   struct vm_area_struct **prev, unsigned long start,
+				   unsigned long end, void *arg))
+{
+	struct vm_area_struct *prev;
+
+	return visit(vma, &prev, start, end, arg);
+}
+
 #ifdef CONFIG_ANON_VMA_NAME
 static int madvise_vma_anon_name(struct vm_area_struct *vma,
 				 struct vm_area_struct **prev,
@@ -1603,7 +1619,7 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
 }
 #endif /* CONFIG_ANON_VMA_NAME */
 
-static int madvise_lock(struct mm_struct *mm, int behavior)
+static int __madvise_lock(struct mm_struct *mm, int behavior)
 {
 	if (is_memory_failure(behavior))
 		return 0;
@@ -1617,7 +1633,7 @@ static int madvise_lock(struct mm_struct *mm, int behavior)
 	return 0;
 }
 
-static void madvise_unlock(struct mm_struct *mm, int behavior)
+static void __madvise_unlock(struct mm_struct *mm, int behavior)
 {
 	if (is_memory_failure(behavior))
 		return;
@@ -1626,6 +1642,46 @@ static void madvise_unlock(struct mm_struct *mm, int behavior)
 		mmap_write_unlock(mm);
 	else
 		mmap_read_unlock(mm);
+}
+
+static int madvise_lock(struct mm_struct *mm, unsigned long start,
+		unsigned long len, struct madvise_behavior *madv_behavior)
+{
+	int behavior = madv_behavior->behavior;
+
+	/*
+	 * MADV_DONTNEED is commonly used with userspace heaps and most often
+	 * affects a single VMA. In these cases, we can use per-VMA locks to
+	 * reduce contention on the mmap_lock.
+	 */
+	if (behavior == MADV_DONTNEED || behavior == MADV_DONTNEED_LOCKED) {
+		struct vm_area_struct *vma;
+		unsigned long end;
+
+		start = untagged_addr(start);
+		end = start + len;
+		vma = lock_vma_under_rcu(mm, start);
+		if (!vma)
+			goto out;
+		if (end > vma->vm_end || userfaultfd_armed(vma)) {
+			vma_end_read(vma);
+			goto out;
+		}
+		madv_behavior->vma = vma;
+		return 0;
+	}
+
+out:
+	return __madvise_lock(mm, behavior);
+}
+
+static void madvise_unlock(struct mm_struct *mm,
+		struct madvise_behavior *madv_behavior)
+{
+	if (madv_behavior->vma)
+		vma_end_read(madv_behavior->vma);
+	else
+		__madvise_unlock(mm, madv_behavior->behavior);
 }
 
 static bool madvise_batch_tlb_flush(int behavior)
@@ -1714,19 +1770,24 @@ static int madvise_do_behavior(struct mm_struct *mm,
 		unsigned long start, size_t len_in,
 		struct madvise_behavior *madv_behavior)
 {
+	struct vm_area_struct *vma = madv_behavior->vma;
 	int behavior = madv_behavior->behavior;
+
 	struct blk_plug plug;
 	unsigned long end;
 	int error;
 
 	if (is_memory_failure(behavior))
 		return madvise_inject_error(behavior, start, start + len_in);
-	start = untagged_addr_remote(mm, start);
+	start = untagged_addr(start);
 	end = start + PAGE_ALIGN(len_in);
 
 	blk_start_plug(&plug);
 	if (is_madvise_populate(behavior))
 		error = madvise_populate(mm, start, end, behavior);
+	else if (vma)
+		error = madvise_single_locked_vma(vma, start, end,
+				madv_behavior, madvise_vma_behavior);
 	else
 		error = madvise_walk_vmas(mm, start, end, madv_behavior,
 					  madvise_vma_behavior);
@@ -1817,13 +1878,13 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 
 	if (madvise_should_skip(start, len_in, behavior, &error))
 		return error;
-	error = madvise_lock(mm, behavior);
+	error = madvise_lock(mm, start, len_in, &madv_behavior);
 	if (error)
 		return error;
 	madvise_init_tlb(&madv_behavior, mm);
 	error = madvise_do_behavior(mm, start, len_in, &madv_behavior);
 	madvise_finish_tlb(&madv_behavior);
-	madvise_unlock(mm, behavior);
+	madvise_unlock(mm, &madv_behavior);
 
 	return error;
 }
@@ -1847,7 +1908,7 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 
 	total_len = iov_iter_count(iter);
 
-	ret = madvise_lock(mm, behavior);
+	ret = __madvise_lock(mm, behavior);
 	if (ret)
 		return ret;
 	madvise_init_tlb(&madv_behavior, mm);
@@ -1880,8 +1941,8 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 
 			/* Drop and reacquire lock to unwind race. */
 			madvise_finish_tlb(&madv_behavior);
-			madvise_unlock(mm, behavior);
-			madvise_lock(mm, behavior);
+			__madvise_unlock(mm, behavior);
+			__madvise_lock(mm, behavior);
 			madvise_init_tlb(&madv_behavior, mm);
 			continue;
 		}
@@ -1890,7 +1951,7 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 		iov_iter_advance(iter, iter_iov_len(iter));
 	}
 	madvise_finish_tlb(&madv_behavior);
-	madvise_unlock(mm, behavior);
+	__madvise_unlock(mm, behavior);
 
 	ret = (total_len - iov_iter_count(iter)) ? : ret;
 
