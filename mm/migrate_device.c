@@ -283,11 +283,12 @@ next:
 		migrate->src[migrate->npages++] = mpfn;
 	}
 
+	arch_leave_lazy_mmu_mode();
+
 	/* Only flush the TLB if we actually modified any entries */
 	if (unmapped)
 		flush_tlb_range(walk->vma, start, end);
 
-	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(ptep - 1, ptl);
 
 	return 0;
