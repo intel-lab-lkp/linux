@@ -481,10 +481,10 @@ static int validate_nsset(struct nsset *nsset, struct pid *pid)
 #endif
 
 out:
+	put_user_ns(user_ns);
 	put_pid_ns(pid_ns);
 	if (nsp)
 		put_nsproxy(nsp);
-	put_user_ns(user_ns);
 
 	return ret;
 }
