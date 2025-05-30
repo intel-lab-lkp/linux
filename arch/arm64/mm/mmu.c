@@ -1261,7 +1261,11 @@ int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
 	}
 
 	table = pte_offset_kernel(pmdp, addr);
+
+	/* Synchronize against ptdump_walk_pgd() */
+	mmap_read_lock(&init_mm);
 	pmd_clear(pmdp);
+	mmap_read_unlock(&init_mm);
 	__flush_tlb_kernel_pgtable(addr);
 	pte_free_kernel(NULL, table);
 	return 1;
@@ -1289,7 +1293,10 @@ int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
 		pmd_free_pte_page(pmdp, next);
 	} while (pmdp++, next += PMD_SIZE, next != end);
 
+	/* Synchronize against ptdump_walk_pgd() */
+	mmap_read_lock(&init_mm);
 	pud_clear(pudp);
+	mmap_read_unlock(&init_mm);
 	__flush_tlb_kernel_pgtable(addr);
 	pmd_free(NULL, table);
 	return 1;
