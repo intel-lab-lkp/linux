@@ -62,6 +62,62 @@
 #define TUNSETCARRIER _IOW('T', 226, int)
 #define TUNGETDEVNETNS _IO('T', 227)
 
+/**
+ * define TUNGETVNETHASHTYPES - ioctl to get supported virtio_net hashing types
+ *
+ * The argument is a pointer to __u32 which will store the supported virtio_net
+ * hashing types.
+ */
+#define TUNGETVNETHASHTYPES _IOR('T', 228, __u32)
+
+/**
+ * define TUNSETVNETREPORTINGAUTOMQ - ioctl to enable automq with hash reporting
+ *
+ * Disable RSS and enable automatic receive steering with hash reporting.
+ *
+ * The argument is a pointer to __u32 that contains a bitmask of hash types
+ * allowed to be reported.
+ *
+ * This ioctl results in %EBADFD if the underlying device is deleted. It affects
+ * all queues attached to the same device.
+ *
+ * This ioctl currently has no effect on XDP packets and packets with
+ * queue_mapping set by TC.
+ */
+#define TUNSETVNETREPORTINGAUTOMQ _IOR('T', 229, __u32)
+
+/**
+ * define TUNSETVNETREPORTINGRSS - ioctl to enable RSS with hash reporting
+ *
+ * Disable automatic receive steering and enable RSS with hash reporting.
+ *
+ * This ioctl results in %EBADFD if the underlying device is deleted. It affects
+ * all queues attached to the same device.
+ *
+ * This ioctl currently has no effect on XDP packets and packets with
+ * queue_mapping set by TC.
+ */
+#define TUNSETVNETREPORTINGRSS _IOR('T', 230, struct tun_vnet_rss)
+
+/**
+ * define TUNSETVNETRSS - ioctl to enable RSS without hash reporting
+ *
+ * Disable automatic receive steering and enable RSS without hash reporting.
+ *
+ * The argument is a pointer to the compound of the following in order:
+ *
+ * 1. &struct tun_vnet_rss
+ * 3. Indirection table
+ * 4. Key
+ *
+ * This ioctl results in %EBADFD if the underlying device is deleted. It affects
+ * all queues attached to the same device.
+ *
+ * This ioctl currently has no effect on XDP packets and packets with
+ * queue_mapping set by TC.
+ */
+#define TUNSETVNETRSS _IOR('T', 231, struct tun_vnet_rss)
+
 /* TUNSETIFF ifr flags */
 #define IFF_TUN		0x0001
 #define IFF_TAP		0x0002
@@ -123,5 +179,20 @@ struct tun_filter {
  * selectively overriding the steering decision.
  */
 #define TUN_STEERINGEBPF_FALLBACK -1
+
+/**
+ * struct tun_vnet_rss - virtio_net RSS configuration
+ * @hash_types:
+ *		Bitmask of allowed hash types
+ * @indirection_table_mask:
+ *		Bitmask to be applied to the indirection table index
+ * @unclassified_queue:
+ *		The index of the queue to place unclassified packets in
+ */
+struct tun_vnet_rss {
+	__u32 hash_types;
+	__u16 indirection_table_mask;
+	__u16 unclassified_queue;
+};
 
 #endif /* _UAPI__IF_TUN_H */
