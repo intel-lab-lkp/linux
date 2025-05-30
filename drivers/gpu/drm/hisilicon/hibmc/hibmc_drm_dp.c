@@ -11,6 +11,7 @@
 #include <drm/drm_edid.h>
 
 #include "hibmc_drm_drv.h"
+#include "hibmc_drm_regs.h"
 #include "dp/dp_hw.h"
 
 #define HIBMC_DP_MASKED_SINK_HPD_PLUG_INT	BIT(2)
@@ -169,9 +170,26 @@ static void hibmc_dp_encoder_disable(struct drm_encoder *drm_encoder,
 	hibmc_dp_display_en(dp, false);
 }
 
+static void hibmc_dp_encoder_mode_set(struct drm_encoder *encoder,
+				      struct drm_crtc_state *crtc_state,
+				      struct drm_connector_state *conn_state)
+{
+	struct drm_device *dev = encoder->dev;
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
+	u32 reg;
+
+	reg = readl(priv->mmio + HIBMC_DISPLAY_CONTROL_HISILE);
+	reg |= HIBMC_DISPLAY_CONTROL_FPVDDEN(1);
+	reg |= HIBMC_DISPLAY_CONTROL_PANELDATE(1);
+	reg |= HIBMC_DISPLAY_CONTROL_FPEN(1);
+	reg |= HIBMC_DISPLAY_CONTROL_VBIASEN(1);
+	writel(reg, priv->mmio + HIBMC_DISPLAY_CONTROL_HISILE);
+}
+
 static const struct drm_encoder_helper_funcs hibmc_dp_encoder_helper_funcs = {
 	.atomic_enable = hibmc_dp_encoder_enable,
 	.atomic_disable = hibmc_dp_encoder_disable,
+	.atomic_mode_set = hibmc_dp_encoder_mode_set,
 };
 
 irqreturn_t hibmc_dp_hpd_isr(int irq, void *arg)
