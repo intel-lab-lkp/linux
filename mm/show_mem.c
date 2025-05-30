@@ -5,6 +5,7 @@
  * Copyright (C) 2008 Johannes Weiner <hannes@saeurebad.de>
  */
 
+#include <linux/alloc_tag.h>
 #include <linux/blkdev.h>
 #include <linux/cma.h>
 #include <linux/cpuset.h>
@@ -433,18 +434,27 @@ void __show_mem(unsigned int filter, nodemask_t *nodemask, int max_zone_idx)
 				struct alloc_tag *tag = ct_to_alloc_tag(ct);
 				struct alloc_tag_counters counter = alloc_tag_read(tag);
 				char bytes[10];
+				int nid;
 
 				string_get_size(counter.bytes, 1, STRING_UNITS_2, bytes, sizeof(bytes));
+				pr_notice("percpu %c total %12s %8llu ",
+						ct->flags & CODETAG_PERCPU_ALLOC ? 'y' : 'n',
+						bytes, counter.calls);
+
+				for (nid = 0; nid < num_numa_nodes; nid++) {
+					counter = alloc_tag_read_nid(tag, nid);
+					string_get_size(counter.bytes, 1, STRING_UNITS_2,
+							bytes, sizeof(bytes));
+					pr_notice("numa%d %12s %8llu ", nid, bytes, counter.calls);
+				}
 
 				/* Same as alloc_tag_to_text() but w/o intermediate buffer */
 				if (ct->modname)
-					pr_notice("%12s %8llu %s:%u [%s] func:%s\n",
-						  bytes, counter.calls, ct->filename,
+					pr_notice("%s:%u [%s] func:%s\n", ct->filename,
 						  ct->lineno, ct->modname, ct->function);
 				else
-					pr_notice("%12s %8llu %s:%u func:%s\n",
-						  bytes, counter.calls, ct->filename,
-						  ct->lineno, ct->function);
+					pr_notice("%s:%u func:%s\n",
+						  ct->filename, ct->lineno, ct->function);
 			}
 		}
 	}
