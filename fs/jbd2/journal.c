@@ -84,6 +84,7 @@ EXPORT_SYMBOL(jbd2_journal_start_commit);
 EXPORT_SYMBOL(jbd2_journal_force_commit_nested);
 EXPORT_SYMBOL(jbd2_journal_wipe);
 EXPORT_SYMBOL(jbd2_journal_blocks_per_folio);
+EXPORT_SYMBOL(jbd2_journal_blocks_per_page);
 EXPORT_SYMBOL(jbd2_journal_invalidate_folio);
 EXPORT_SYMBOL(jbd2_journal_try_to_free_buffers);
 EXPORT_SYMBOL(jbd2_journal_force_commit);
@@ -2659,6 +2660,11 @@ int jbd2_journal_blocks_per_folio(struct inode *inode)
 {
 	return 1 << (PAGE_SHIFT + mapping_max_folio_order(inode->i_mapping) -
 		     inode->i_sb->s_blocksize_bits);
+}
+
+int jbd2_journal_blocks_per_page(struct inode *inode)
+{
+	return 1 << (PAGE_SHIFT - inode->i_sb->s_blocksize_bits);
 }
 
 /*
