@@ -16,6 +16,8 @@
 #define UID_GID_MAP_MAX_BASE_EXTENTS 5
 #define UID_GID_MAP_MAX_EXTENTS 340
 
+struct seq_file;
+
 struct uid_gid_extent {
 	u32 first;
 	u32 lower_first;
