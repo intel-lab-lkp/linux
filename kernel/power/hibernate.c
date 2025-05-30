@@ -1267,6 +1267,9 @@ static ssize_t resume_store(struct kobject *kobj, struct kobj_attribute *attr,
 	if (error)
 		return error;
 
+	if (dev == swsusp_resume_device)
+		return n;
+
 	sleep_flags = lock_system_sleep();
 	swsusp_resume_device = dev;
 	unlock_system_sleep(sleep_flags);
