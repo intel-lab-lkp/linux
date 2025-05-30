@@ -544,13 +544,6 @@ int __sched mutex_lock_interruptible_nested(struct mutex *lock,
 }
 EXPORT_SYMBOL_GPL(mutex_lock_interruptible_nested);
 
-int __sched mutex_lock_killable_nested(struct mutex *lock,
-					    unsigned int subclass)
-{
-	return __mutex_lock_common(lock, TASK_KILLABLE, subclass, NULL, _RET_IP_);
-}
-EXPORT_SYMBOL_GPL(mutex_lock_killable_nested);
-
 void __sched mutex_lock_io_nested(struct mutex *lock, unsigned int subclass)
 {
 	int token;
