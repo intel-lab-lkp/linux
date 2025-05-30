@@ -2149,6 +2149,11 @@ static void xen_flush_lazy_mmu(void)
 	preempt_enable();
 }
 
+static bool xen_in_lazy_mmu(void)
+{
+	return xen_get_lazy_mode() == XEN_LAZY_MMU;
+}
+
 static void __init xen_post_allocator_init(void)
 {
 	pv_ops.mmu.set_pte = xen_set_pte;
@@ -2234,6 +2239,7 @@ static const typeof(pv_ops) xen_mmu_ops __initconst = {
 			.enter = xen_enter_lazy_mmu,
 			.leave = xen_leave_lazy_mmu,
 			.flush = xen_flush_lazy_mmu,
+			.in = xen_in_lazy_mmu,
 		},
 
 		.set_fixmap = xen_set_fixmap,

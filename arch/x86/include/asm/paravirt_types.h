@@ -46,6 +46,7 @@ struct pv_lazy_ops {
 	void (*enter)(void);
 	void (*leave)(void);
 	void (*flush)(void);
+	bool (*in)(void);
 } __no_randomize_layout;
 #endif
 

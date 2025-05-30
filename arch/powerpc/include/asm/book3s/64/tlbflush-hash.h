@@ -57,6 +57,21 @@ static inline void arch_leave_lazy_mmu_mode(void)
 
 #define arch_flush_lazy_mmu_mode()      do {} while (0)
 
+static inline bool arch_in_lazy_mmu_mode(void)
+{
+	struct ppc64_tlb_batch *batch;
+	bool active;
+
+	if (radix_enabled())
+		return false;
+
+	batch = get_cpu_ptr(&ppc64_tlb_batch);
+	active = batch->active;
+	put_cpu_ptr(&ppc64_tlb_batch);
+
+	return active;
+}
+
 extern void hash__tlbiel_all(unsigned int action);
 
 extern void flush_hash_page(unsigned long vpn, real_pte_t pte, int psize,

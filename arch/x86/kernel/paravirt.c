@@ -105,6 +105,11 @@ static noinstr void pv_native_set_debugreg(int regno, unsigned long val)
 {
 	native_set_debugreg(regno, val);
 }
+
+static noinstr bool paravirt_retfalse(void)
+{
+	return false;
+}
 #endif
 
 struct pv_info pv_info = {
@@ -229,6 +234,7 @@ struct paravirt_patch_template pv_ops = {
 		.enter		= paravirt_nop,
 		.leave		= paravirt_nop,
 		.flush		= paravirt_nop,
+		.in		= paravirt_retfalse,
 	},
 
 	.mmu.set_fixmap		= native_set_fixmap,

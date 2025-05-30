@@ -69,6 +69,18 @@ void arch_leave_lazy_mmu_mode(void)
 	preempt_enable();
 }
 
+bool arch_in_lazy_mmu_mode(void)
+{
+	struct tlb_batch *tb;
+	bool active;
+
+	tb = get_cpu_ptr(&tlb_batch);
+	active = tb->active;
+	put_cpu_ptr(&tlb_batch);
+
+	return active;
+}
+
 static void tlb_batch_add_one(struct mm_struct *mm, unsigned long vaddr,
 			      bool exec, unsigned int hugepage_shift)
 {

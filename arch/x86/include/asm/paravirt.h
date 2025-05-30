@@ -557,6 +557,11 @@ static inline void arch_flush_lazy_mmu_mode(void)
 	PVOP_VCALL0(mmu.lazy_mode.flush);
 }
 
+static inline bool arch_in_lazy_mmu_mode(void)
+{
+	return PVOP_CALL0(bool, mmu.lazy_mode.in);
+}
+
 static inline void __set_fixmap(unsigned /* enum fixed_addresses */ idx,
 				phys_addr_t phys, pgprot_t flags)
 {
