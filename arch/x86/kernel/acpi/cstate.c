@@ -222,6 +222,9 @@ void __cpuidle acpi_processor_ffh_cstate_enter(struct acpi_processor_cx *cx)
 	struct cstate_entry *percpu_entry;
 
 	percpu_entry = per_cpu_ptr(cpu_cstate_entry, cpu);
+	/* flush and invalidate all modified cache line on C3 and C2 state entry*/
+	if (cx->type == ACPI_STATE_C3 || cx->type == ACPI_STATE_C2)
+		wbinvd();
 	mwait_idle_with_hints(percpu_entry->states[cx->index].eax,
 	                      percpu_entry->states[cx->index].ecx);
 }
