@@ -9,7 +9,7 @@ use core::ptr;
 use crate::{
     bindings,
     str::CStr,
-    types::{ARef, Opaque},
+    types::{ARef, Either, Opaque},
 };
 
 /// A reference-counted fwnode_handle.
@@ -55,6 +55,83 @@ impl FwNode {
     /// Obtain the raw `struct fwnode_handle *`.
     pub(crate) fn as_raw(&self) -> *mut bindings::fwnode_handle {
         self.0.get()
+    }
+
+    /// Returns an object that implements [`Display`](core::fmt::Display) for
+    /// printing the name of a node.
+    pub fn display_name(&self) -> impl core::fmt::Display + '_ {
+        struct FwNodeDisplayName<'a>(&'a FwNode);
+
+        impl core::fmt::Display for FwNodeDisplayName<'_> {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                // SAFETY: `self` is valid by its type invariant.
+                let name = unsafe { bindings::fwnode_get_name(self.0.as_raw()) };
+                if name.is_null() {
+                    return Ok(());
+                }
+                // SAFETY:
+                // - `fwnode_get_name` returns null or a valid C string.
+                // - `name` was checked to be non-null.
+                let name = unsafe { CStr::from_char_ptr(name) };
+                write!(f, "{name}")
+            }
+        }
+
+        FwNodeDisplayName(self)
+    }
+
+    /// Returns an object that implements [`Display`](core::fmt::Display) for
+    /// printing the full path of a node.
+    pub fn display_path(&self) -> impl core::fmt::Display + '_ {
+        struct FwNodeDisplayPath<'a>(&'a FwNode);
+
+        impl core::fmt::Display for FwNodeDisplayPath<'_> {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                // The logic here is the same as the one in lib/vsprintf.c
+                // (fwnode_full_name_string).
+
+                // SAFETY: `self.0.as_raw()` is valid by its type invariant.
+                let num_parents = unsafe { bindings::fwnode_count_parents(self.0.as_raw()) };
+
+                for depth in (0..=num_parents).rev() {
+                    let fwnode = if depth == 0 {
+                        Either::Left(self.0)
+                    } else {
+                        // SAFETY: `self.0.as_raw()` is valid.
+                        let ptr =
+                            unsafe { bindings::fwnode_get_nth_parent(self.0.as_raw(), depth) };
+                        // SAFETY:
+                        // - The depth passed to `fwnode_get_nth_parent` is
+                        //   within the valid range, so the returned pointer is
+                        //   not null.
+                        // - The reference count was incremented by
+                        //   `fwnode_get_nth_parent`.
+                        // - That increment is relinquished to
+                        //   `FwNode::from_raw`.
+                        Either::Right(unsafe { FwNode::from_raw(ptr) })
+                    };
+                    // Take a reference to the owned or borrowed `FwNode`.
+                    let fwnode: &FwNode = match &fwnode {
+                        Either::Left(f) => f,
+                        Either::Right(f) => f,
+                    };
+
+                    // SAFETY: `fwnode` is valid by its type invariant.
+                    let prefix = unsafe { bindings::fwnode_get_name_prefix(fwnode.as_raw()) };
+                    if !prefix.is_null() {
+                        // SAFETY: `fwnode_get_name_prefix` returns null or a
+                        // valid C string.
+                        let prefix = unsafe { CStr::from_char_ptr(prefix) };
+                        write!(f, "{prefix}")?;
+                    }
+                    write!(f, "{}", fwnode.display_name())?;
+                }
+
+                Ok(())
+            }
+        }
+
+        FwNodeDisplayPath(self)
     }
 
     /// Checks if property is present or not.
