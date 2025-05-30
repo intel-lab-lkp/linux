@@ -2557,10 +2557,9 @@ static int pagemap_scan_pmd_entry(pmd_t *pmd, unsigned long start,
 	}
 
 flush_and_return:
+	arch_leave_lazy_mmu_mode();
 	if (flush_end)
 		flush_tlb_range(vma, start, addr);
-
-	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(start_pte, ptl);
 
 	cond_resched();
