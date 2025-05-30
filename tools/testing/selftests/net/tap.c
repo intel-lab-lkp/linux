@@ -387,9 +387,6 @@ FIXTURE_TEARDOWN(tap)
 	if (self->fd != -1)
 		close(self->fd);
 
-	ret = dev_delete(param_dev_tap_name);
-	EXPECT_EQ(ret, 0);
-
 	ret = dev_delete(param_dev_dummy_name);
 	EXPECT_EQ(ret, 0);
 }
@@ -429,6 +426,134 @@ TEST_F(tap, test_packet_crash_tap_invalid_eth_proto)
 	ret = write(self->fd, pkt, off);
 	ASSERT_EQ(ret, -1);
 	ASSERT_EQ(errno, EINVAL);
+}
+
+TEST_F(tap, test_vnethdrsz)
+{
+	int sz = sizeof(struct virtio_net_hdr_v1_hash);
+
+	ASSERT_FALSE(dev_delete(param_dev_tap_name));
+
+	ASSERT_FALSE(ioctl(self->fd, TUNSETVNETHDRSZ, &sz));
+	sz = 0;
+	ASSERT_FALSE(ioctl(self->fd, TUNGETVNETHDRSZ, &sz));
+	EXPECT_EQ(sizeof(struct virtio_net_hdr_v1_hash), sz);
+}
+
+TEST_F(tap, test_vnetle)
+{
+	int le = 1;
+
+	ASSERT_FALSE(dev_delete(param_dev_tap_name));
+
+	ASSERT_FALSE(ioctl(self->fd, TUNSETVNETLE, &le));
+	le = 0;
+	ASSERT_FALSE(ioctl(self->fd, TUNGETVNETLE, &le));
+	EXPECT_EQ(1, le);
+}
+
+TEST_F(tap, test_vnetbe)
+{
+	int be = 1;
+	int ret;
+
+	ASSERT_FALSE(dev_delete(param_dev_tap_name));
+
+	ret = ioctl(self->fd, TUNSETVNETBE, &be);
+	if (ret == -1 && errno == EINVAL)
+		SKIP(return, "TUNSETVNETBE not supported");
+
+	ASSERT_FALSE(ret);
+	be = 0;
+	ASSERT_FALSE(ioctl(self->fd, TUNGETVNETBE, &be));
+	EXPECT_EQ(1, be);
+}
+
+TEST_F(tap, test_getvnethashtypes)
+{
+	uint32_t hash_types;
+	int ret;
+
+	ASSERT_FALSE(dev_delete(param_dev_tap_name));
+
+	ret = ioctl(self->fd, TUNGETVNETHASHTYPES, &hash_types);
+	if (ret == -1 && errno == EINVAL)
+		SKIP(return, "TUNGETVNETHASHTYPES not supported");
+
+	EXPECT_FALSE(ret);
+}
+
+FIXTURE(tap_setvnethash)
+{
+	int fd;
+};
+
+FIXTURE_VARIANT(tap_setvnethash)
+{
+	unsigned int cmd;
+};
+
+FIXTURE_VARIANT_ADD(tap_setvnethash, reportingautomq)
+{
+	.cmd = TUNSETVNETREPORTINGAUTOMQ
+};
+
+FIXTURE_VARIANT_ADD(tap_setvnethash, reportingrss)
+{
+	.cmd = TUNSETVNETREPORTINGRSS
+};
+
+FIXTURE_VARIANT_ADD(tap_setvnethash, rss)
+{
+	.cmd = TUNSETVNETRSS
+};
+
+FIXTURE_SETUP(tap_setvnethash)
+{
+	int ret;
+
+	ret = dev_create(param_dev_dummy_name, "dummy", NULL, NULL);
+	ASSERT_FALSE(ret);
+
+	ret = dev_create(param_dev_tap_name, "macvtap", macvtap_fill_rtattr,
+			 NULL);
+	ASSERT_FALSE(ret)
+		EXPECT_FALSE(dev_delete(param_dev_dummy_name));
+
+	self->fd = opentap(param_dev_tap_name);
+	ASSERT_LT(0, self->fd)
+		EXPECT_FALSE(dev_delete(param_dev_dummy_name));
+}
+
+FIXTURE_TEARDOWN(tap_setvnethash)
+{
+	EXPECT_FALSE(close(self->fd));
+	EXPECT_FALSE(dev_delete(param_dev_dummy_name));
+}
+
+TEST_F(tap_setvnethash, test_alive)
+{
+	struct tun_vnet_rss rss = { .hash_types = 0 };
+	int ret;
+
+	ret = ioctl(self->fd, variant->cmd, &rss);
+
+	if (ret == -1 && errno == EINVAL)
+		SKIP(return, "not supported");
+
+	EXPECT_FALSE(ret);
+}
+
+TEST_F(tap_setvnethash, test_deleted)
+{
+	ASSERT_FALSE(dev_delete(param_dev_tap_name));
+
+	ASSERT_EQ(-1, ioctl(self->fd, variant->cmd));
+
+	if (errno == EINVAL)
+		SKIP(return, "not supported");
+
+	EXPECT_EQ(EBADFD, errno);
 }
 
 TEST_HARNESS_MAIN
