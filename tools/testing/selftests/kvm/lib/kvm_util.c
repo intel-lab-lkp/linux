@@ -10,6 +10,7 @@
 #include "ucall_common.h"
 
 #include <assert.h>
+#include <pthread.h>
 #include <sched.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -2338,3 +2339,19 @@ bool vm_is_gpa_protected(struct kvm_vm *vm, vm_paddr_t paddr)
 	pg = paddr >> vm->page_shift;
 	return sparsebit_is_set(region->protected_phy_pages, pg);
 }
+
+int pin_task_to_one_cpu(void)
+{
+	int cpu = sched_getcpu();
+	cpu_set_t cpuset;
+	int rc;
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(cpu, &cpuset);
+
+	rc = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+	TEST_ASSERT(rc == 0, "%s: Can't set thread affinity", __func__);
+
+	return cpu;
+}
+

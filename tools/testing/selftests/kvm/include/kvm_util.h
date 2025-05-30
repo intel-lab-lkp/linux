@@ -1193,4 +1193,6 @@ bool vm_is_gpa_protected(struct kvm_vm *vm, vm_paddr_t paddr);
 
 uint32_t guest_get_vcpuid(void);
 
+int pin_task_to_one_cpu(void);
+
 #endif /* SELFTEST_KVM_UTIL_H */
