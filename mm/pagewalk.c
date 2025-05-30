@@ -440,6 +440,8 @@ static inline void process_vma_walk_lock(struct vm_area_struct *vma,
 	case PGWALK_RDLOCK:
 		/* PGWALK_RDLOCK is handled by process_mm_walk_lock */
 		break;
+	default:
+		break;
 	}
 #endif
 }
@@ -640,10 +642,12 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 	 * specified address range from being freed. The caller should take
 	 * other actions to prevent this race.
 	 */
-	if (mm == &init_mm)
-		mmap_assert_locked(walk.mm);
-	else
-		mmap_assert_write_locked(walk.mm);
+	if (ops->walk_lock != PGWALK_NOLOCK) {
+		if (mm == &init_mm)
+			mmap_assert_locked(walk.mm);
+		else
+			mmap_assert_write_locked(walk.mm);
+	}
 
 	return walk_pgd_range(start, end, &walk);
 }
