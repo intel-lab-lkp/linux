@@ -4377,6 +4377,7 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	unsigned long before;
 	const bool forks = argc > 0;
 	bool draining = false;
+	bool enable_evlist = false;
 
 	trace->live = true;
 
@@ -4447,6 +4448,9 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 		evlist__set_default_cgroup(trace->evlist, trace->cgroup);
 
 create_maps:
+	if (trace->syscalls.events.bpf_output)
+		trace->syscalls.events.bpf_output->core.system_wide = true;
+
 	err = evlist__create_maps(evlist, &trace->opts.target);
 	if (err < 0) {
 		fprintf(trace->output, "Problems parsing the target to trace, check your options!\n");
@@ -4481,20 +4485,54 @@ create_maps:
 		goto out_error_open;
 #ifdef HAVE_BPF_SKEL
 	if (trace->syscalls.events.bpf_output) {
+		struct perf_evsel *perf_evsel = &trace->syscalls.events.bpf_output->core;
 		struct perf_cpu cpu;
+		bool t = true;
+
+		enable_evlist = true;
+		if (trace->opts.target.system_wide)
+			trace->skel->bss->system_wide = true;
+		else
+			trace->skel->bss->system_wide = false;
 
 		/*
 		 * Set up the __augmented_syscalls__ BPF map to hold for each
 		 * CPU the bpf-output event's file descriptor.
 		 */
-		perf_cpu_map__for_each_cpu(cpu, i, trace->syscalls.events.bpf_output->core.cpus) {
+		perf_cpu_map__for_each_cpu(cpu, i, perf_evsel->cpus) {
 			int mycpu = cpu.cpu;
 
-			bpf_map__update_elem(trace->skel->maps.__augmented_syscalls__,
-					&mycpu, sizeof(mycpu),
-					xyarray__entry(trace->syscalls.events.bpf_output->core.fd,
-						       mycpu, 0),
-					sizeof(__u32), BPF_ANY);
+			err = bpf_map__update_elem(trace->skel->maps.__augmented_syscalls__,
+						   &mycpu, sizeof(mycpu),
+						   xyarray__entry(perf_evsel->fd, mycpu, 0),
+						   sizeof(__u32), BPF_ANY);
+			if (err) {
+				pr_err("Couldn't set system-wide bpf output perf event fd"
+				       ", err: %d\n", err);
+				goto out_disable;
+			}
+		}
+
+		if (target__has_task(&trace->opts.target)) {
+			struct perf_thread_map *threads = trace->evlist->core.threads;
+
+			for (int thread = 0; thread < perf_thread_map__nr(threads); thread++) {
+				pid_t pid = perf_thread_map__pid(threads, thread);
+
+				err = bpf_map__update_elem(trace->skel->maps.pids_targeted, &pid,
+							   sizeof(pid), &t, sizeof(t), BPF_ANY);
+				if (err) {
+					pr_err("Couldn't set pids_targeted map, err: %d\n", err);
+					goto out_disable;
+				}
+			}
+		} else if (workload_pid != -1) {
+			err = bpf_map__update_elem(trace->skel->maps.pids_targeted, &workload_pid,
+						   sizeof(workload_pid), &t, sizeof(t), BPF_ANY);
+			if (err) {
+				pr_err("Couldn't set pids_targeted map for workload, err: %d\n", err);
+				goto out_disable;
+			}
 		}
 	}
 
@@ -4553,7 +4591,7 @@ create_maps:
 			goto out_error_mmap;
 	}
 
-	if (!target__none(&trace->opts.target) && !trace->opts.target.initial_delay)
+	if (enable_evlist || (!target__none(&trace->opts.target) && !trace->opts.target.initial_delay))
 		evlist__enable(evlist);
 
 	if (forks)

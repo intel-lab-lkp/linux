@@ -26,6 +26,7 @@
 #define is_power_of_2(n) (n != 0 && ((n & (n - 1)) == 0))
 
 #define MAX_CPUS  4096
+#define MAX_PIDS  4096
 
 /* bpf-output associated map */
 struct __augmented_syscalls__ {
@@ -113,6 +114,15 @@ struct pids_filtered {
 	__uint(max_entries, 64);
 } pids_filtered SEC(".maps");
 
+volatile bool system_wide;
+
+struct pids_targeted {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, pid_t);
+	__type(value, bool);
+	__uint(max_entries, MAX_PIDS);
+} pids_targeted SEC(".maps");
+
 struct augmented_args_payload {
 	struct syscall_enter_args args;
 	struct augmented_arg arg, arg2; // We have to reserve space for two arguments (rename, etc)
@@ -144,6 +154,11 @@ struct beauty_payload_enter_map {
 	__type(value, struct beauty_payload_enter);
 	__uint(max_entries, 1);
 } beauty_payload_enter_map SEC(".maps");
+
+static pid_t getpid(void)
+{
+	return bpf_get_current_pid_tgid();
+}
 
 static inline struct augmented_args_payload *augmented_args_payload(void)
 {
@@ -418,14 +433,18 @@ failure:
 	return 1; /* Failure: don't filter */
 }
 
-static pid_t getpid(void)
+static bool filter_pid(void)
 {
-	return bpf_get_current_pid_tgid();
-}
+	if (system_wide)
+		return false;
 
-static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
-{
-	return bpf_map_lookup_elem(pids, &pid) != NULL;
+	pid_t pid = getpid();
+
+	if (bpf_map_lookup_elem(&pids_targeted, &pid) &&
+	    !bpf_map_lookup_elem(&pids_filtered, &pid))
+		return false;
+
+	return true;
 }
 
 static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
@@ -534,7 +553,7 @@ int sys_enter(struct syscall_enter_args *args)
 	 * initial, non-augmented raw_syscalls:sys_enter payload.
 	 */
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (filter_pid())
 		return 0;
 
 	augmented_args = augmented_args_payload();
@@ -560,7 +579,7 @@ int sys_exit(struct syscall_exit_args *args)
 {
 	struct syscall_exit_args exit_args;
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (filter_pid())
 		return 0;
 
 	bpf_probe_read_kernel(&exit_args, sizeof(exit_args), args);
