@@ -77,7 +77,10 @@ struct virtqueue_info {
  *      vdev: the virtio_device
  * @get_features: get the array of feature bits for this device.
  *	vdev: the virtio_device
- *	Returns the first 64 feature bits (all we currently need).
+ *	Returns the first 64 feature bits.
+ * @get_extended_features:
+ *      vdev: the virtio_device
+ *      Returns the first VIRTIO_FEATURES_MAX feature bits (all we currently need).
  * @finalize_features: confirm what device features we'll be using.
  *	vdev: the virtio_device
  *	This sends the driver feature bits to the device: it can change
@@ -121,6 +124,7 @@ struct virtio_config_ops {
 	void (*del_vqs)(struct virtio_device *);
 	void (*synchronize_cbs)(struct virtio_device *);
 	u64 (*get_features)(struct virtio_device *vdev);
+	virtio_features_t (*get_extended_features)(struct virtio_device *vdev);
 	int (*finalize_features)(struct virtio_device *vdev);
 	const char *(*bus_name)(struct virtio_device *vdev);
 	int (*set_vq_affinity)(struct virtqueue *vq,
@@ -149,11 +153,11 @@ static inline bool __virtio_test_bit(const struct virtio_device *vdev,
 {
 	/* Did you forget to fix assumptions on max features? */
 	if (__builtin_constant_p(fbit))
-		BUILD_BUG_ON(fbit >= 64);
+		BUILD_BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 	else
-		BUG_ON(fbit >= 64);
+		BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 
-	return vdev->features & BIT_ULL(fbit);
+	return vdev->features & VIRTIO_BIT(fbit);
 }
 
 /**
@@ -166,11 +170,11 @@ static inline void __virtio_set_bit(struct virtio_device *vdev,
 {
 	/* Did you forget to fix assumptions on max features? */
 	if (__builtin_constant_p(fbit))
-		BUILD_BUG_ON(fbit >= 64);
+		BUILD_BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 	else
-		BUG_ON(fbit >= 64);
+		BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 
-	vdev->features |= BIT_ULL(fbit);
+	vdev->features |= VIRTIO_BIT(fbit);
 }
 
 /**
@@ -183,11 +187,11 @@ static inline void __virtio_clear_bit(struct virtio_device *vdev,
 {
 	/* Did you forget to fix assumptions on max features? */
 	if (__builtin_constant_p(fbit))
-		BUILD_BUG_ON(fbit >= 64);
+		BUILD_BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 	else
-		BUG_ON(fbit >= 64);
+		BUG_ON(fbit >= VIRTIO_FEATURES_MAX);
 
-	vdev->features &= ~BIT_ULL(fbit);
+	vdev->features &= ~VIRTIO_BIT(fbit);
 }
 
 /**
@@ -202,6 +206,14 @@ static inline bool virtio_has_feature(const struct virtio_device *vdev,
 		virtio_check_driver_offered_feature(vdev, fbit);
 
 	return __virtio_test_bit(vdev, fbit);
+}
+
+static inline virtio_features_t virtio_get_features(struct virtio_device *vdev)
+{
+	if (vdev->config->get_extended_features)
+		return vdev->config->get_extended_features(vdev);
+
+	return vdev->config->get_features(vdev);
 }
 
 /**

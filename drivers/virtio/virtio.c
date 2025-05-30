@@ -272,22 +272,22 @@ static int virtio_dev_probe(struct device *_d)
 	int err, i;
 	struct virtio_device *dev = dev_to_virtio(_d);
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
-	u64 device_features;
-	u64 driver_features;
-	u64 driver_features_legacy;
+	virtio_features_t device_features;
+	virtio_features_t driver_features;
+	virtio_features_t driver_features_legacy;
 
 	/* We have a driver! */
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
-	device_features = dev->config->get_features(dev);
+	device_features = virtio_get_features(dev);
 
 	/* Figure out what features the driver supports. */
 	driver_features = 0;
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
-		BUG_ON(f >= 64);
-		driver_features |= (1ULL << f);
+		BUG_ON(f >= VIRTIO_FEATURES_MAX);
+		driver_features |= VIRTIO_BIT(f);
 	}
 
 	/* Some drivers have a separate feature table for virtio v1.0 */
@@ -320,7 +320,7 @@ static int virtio_dev_probe(struct device *_d)
 		goto err;
 
 	if (drv->validate) {
-		u64 features = dev->features;
+		virtio_features_t features = dev->features;
 
 		err = drv->validate(dev);
 		if (err)

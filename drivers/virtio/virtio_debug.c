@@ -12,7 +12,7 @@ static int virtio_debug_device_features_show(struct seq_file *s, void *data)
 	u64 device_features;
 	unsigned int i;
 
-	device_features = dev->config->get_features(dev);
+	device_features = virtio_get_features(dev);
 	for (i = 0; i < BITS_PER_LONG_LONG; i++) {
 		if (device_features & (1ULL << i))
 			seq_printf(s, "%u\n", i);
