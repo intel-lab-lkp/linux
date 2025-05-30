@@ -126,6 +126,7 @@ module_param(init, int, 0444);
 struct amc6821_data {
 	struct regmap *regmap;
 	struct mutex update_lock;
+	enum pwm_polarity of_pwm_polarity;
 };
 
 /*
@@ -848,12 +849,23 @@ static int amc6821_detect(struct i2c_client *client, struct i2c_board_info *info
 	return 0;
 }
 
-static enum pwm_polarity amc6821_pwm_polarity(struct i2c_client *client)
+static void amc6821_of_fan_read_data(struct amc6821_data *data,
+				     struct device_node *fan_np)
 {
-	enum pwm_polarity polarity = PWM_POLARITY_NORMAL;
 	struct of_phandle_args args;
-	struct device_node *fan_np;
 
+	data->of_pwm_polarity = PWM_POLARITY_NORMAL;
+
+	if (!of_parse_phandle_with_args(fan_np, "pwms", "#pwm-cells", 0, &args)) {
+		if (args.args_count == 2 && args.args[1] & PWM_POLARITY_INVERTED)
+			data->of_pwm_polarity = PWM_POLARITY_INVERSED;
+
+		of_node_put(args.np);
+	}
+}
+
+static enum pwm_polarity amc6821_pwm_polarity(struct amc6821_data *data)
+{
 	/*
 	 * For backward compatibility, the pwminv module parameter takes
 	 * always the precedence over any other device description
@@ -863,22 +875,7 @@ static enum pwm_polarity amc6821_pwm_polarity(struct i2c_client *client)
 	if (pwminv > 0)
 		return PWM_POLARITY_INVERSED;
 
-	fan_np = of_get_child_by_name(client->dev.of_node, "fan");
-	if (!fan_np)
-		return PWM_POLARITY_NORMAL;
-
-	if (of_parse_phandle_with_args(fan_np, "pwms", "#pwm-cells", 0, &args))
-		goto out;
-	of_node_put(args.np);
-
-	if (args.args_count != 2)
-		goto out;
-
-	if (args.args[1] & PWM_POLARITY_INVERTED)
-		polarity = PWM_POLARITY_INVERSED;
-out:
-	of_node_put(fan_np);
-	return polarity;
+	return data->of_pwm_polarity;
 }
 
 static int amc6821_init_client(struct i2c_client *client, struct amc6821_data *data)
@@ -902,7 +899,7 @@ static int amc6821_init_client(struct i2c_client *client, struct amc6821_data *d
 			return err;
 
 		regval = AMC6821_CONF1_START;
-		if (amc6821_pwm_polarity(client) == PWM_POLARITY_INVERSED)
+		if (amc6821_pwm_polarity(data) == PWM_POLARITY_INVERSED)
 			regval |= AMC6821_CONF1_PWMINV;
 
 		err = regmap_update_bits(regmap, AMC6821_REG_CONF1,
@@ -938,13 +935,21 @@ static const struct regmap_config amc6821_regmap_config = {
 	.cache_type = REGCACHE_MAPLE,
 };
 
+static void amc6821_of_fan_put(void *data)
+{
+	struct device_node *fan_np = data;
+
+	of_node_put(fan_np);
+}
+
 static int amc6821_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct amc6821_data *data;
 	struct device *hwmon_dev;
 	struct regmap *regmap;
-	int err;
+	struct device_node *fan_np;
+	int err = 0;
 
 	data = devm_kzalloc(dev, sizeof(struct amc6821_data), GFP_KERNEL);
 	if (!data)
@@ -955,6 +960,17 @@ static int amc6821_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(regmap),
 				     "Failed to initialize regmap\n");
 	data->regmap = regmap;
+
+	fan_np = of_get_child_by_name(dev->of_node, "fan");
+	if (fan_np)
+		err = devm_add_action_or_reset(dev, amc6821_of_fan_put, fan_np);
+
+	if (err)
+		return dev_err_probe(dev, err,
+				     "Failed to add fan node release action\n");
+
+	if (fan_np)
+		amc6821_of_fan_read_data(data, fan_np);
 
 	err = amc6821_init_client(client, data);
 	if (err)
