@@ -526,7 +526,7 @@ void kasan_release_vmalloc(unsigned long start, unsigned long end,
 
 
 		if (flags & KASAN_VMALLOC_PAGE_RANGE)
-			apply_to_existing_page_range(&init_mm,
+			apply_to_existing_page_range_nolazy(&init_mm,
 					     (unsigned long)shadow_start,
 					     size, kasan_depopulate_vmalloc_pte,
 					     NULL);

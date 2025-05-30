@@ -2913,7 +2913,7 @@ EXPORT_SYMBOL(vm_iomap_memory);
 static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 				     unsigned long addr, unsigned long end,
 				     pte_fn_t fn, void *data, bool create,
-				     pgtbl_mod_mask *mask)
+				     pgtbl_mod_mask *mask, bool lazy_mmu)
 {
 	pte_t *pte, *mapped_pte;
 	int err = 0;
@@ -2933,7 +2933,8 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			return -EINVAL;
 	}
 
-	arch_enter_lazy_mmu_mode();
+	if (lazy_mmu)
+		arch_enter_lazy_mmu_mode();
 
 	if (fn) {
 		do {
@@ -2946,7 +2947,8 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	}
 	*mask |= PGTBL_PTE_MODIFIED;
 
-	arch_leave_lazy_mmu_mode();
+	if (lazy_mmu)
+		arch_leave_lazy_mmu_mode();
 
 	if (mm != &init_mm)
 		pte_unmap_unlock(mapped_pte, ptl);
@@ -2956,7 +2958,7 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 				     unsigned long addr, unsigned long end,
 				     pte_fn_t fn, void *data, bool create,
-				     pgtbl_mod_mask *mask)
+				     pgtbl_mod_mask *mask, bool lazy_mmu)
 {
 	pmd_t *pmd;
 	unsigned long next;
@@ -2983,7 +2985,7 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 			pmd_clear_bad(pmd);
 		}
 		err = apply_to_pte_range(mm, pmd, addr, next,
-					 fn, data, create, mask);
+					 fn, data, create, mask, lazy_mmu);
 		if (err)
 			break;
 	} while (pmd++, addr = next, addr != end);
@@ -2994,7 +2996,7 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 				     unsigned long addr, unsigned long end,
 				     pte_fn_t fn, void *data, bool create,
-				     pgtbl_mod_mask *mask)
+				     pgtbl_mod_mask *mask, bool lazy_mmu)
 {
 	pud_t *pud;
 	unsigned long next;
@@ -3019,7 +3021,7 @@ static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 			pud_clear_bad(pud);
 		}
 		err = apply_to_pmd_range(mm, pud, addr, next,
-					 fn, data, create, mask);
+					 fn, data, create, mask, lazy_mmu);
 		if (err)
 			break;
 	} while (pud++, addr = next, addr != end);
@@ -3030,7 +3032,7 @@ static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 				     unsigned long addr, unsigned long end,
 				     pte_fn_t fn, void *data, bool create,
-				     pgtbl_mod_mask *mask)
+				     pgtbl_mod_mask *mask, bool lazy_mmu)
 {
 	p4d_t *p4d;
 	unsigned long next;
@@ -3055,7 +3057,7 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 			p4d_clear_bad(p4d);
 		}
 		err = apply_to_pud_range(mm, p4d, addr, next,
-					 fn, data, create, mask);
+					 fn, data, create, mask, lazy_mmu);
 		if (err)
 			break;
 	} while (p4d++, addr = next, addr != end);
@@ -3065,7 +3067,7 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 
 static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 				 unsigned long size, pte_fn_t fn,
-				 void *data, bool create)
+				 void *data, bool create, bool lazy_mmu)
 {
 	pgd_t *pgd;
 	unsigned long start = addr, next;
@@ -3091,7 +3093,7 @@ static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			pgd_clear_bad(pgd);
 		}
 		err = apply_to_p4d_range(mm, pgd, addr, next,
-					 fn, data, create, &mask);
+					 fn, data, create, &mask, lazy_mmu);
 		if (err)
 			break;
 	} while (pgd++, addr = next, addr != end);
@@ -3105,11 +3107,14 @@ static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 /*
  * Scan a region of virtual memory, filling in page tables as necessary
  * and calling a provided function on each leaf page table.
+ *
+ * fn() is called in lazy mmu mode. As a result, the callback must be careful
+ * not to perform memory allocation.
  */
 int apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			unsigned long size, pte_fn_t fn, void *data)
 {
-	return __apply_to_page_range(mm, addr, size, fn, data, true);
+	return __apply_to_page_range(mm, addr, size, fn, data, true, true);
 }
 EXPORT_SYMBOL_GPL(apply_to_page_range);
 
@@ -3117,13 +3122,36 @@ EXPORT_SYMBOL_GPL(apply_to_page_range);
  * Scan a region of virtual memory, calling a provided function on
  * each leaf page table where it exists.
  *
+ * fn() is called in lazy mmu mode. As a result, the callback must be careful
+ * not to perform memory allocation.
+ *
  * Unlike apply_to_page_range, this does _not_ fill in page tables
  * where they are absent.
  */
 int apply_to_existing_page_range(struct mm_struct *mm, unsigned long addr,
 				 unsigned long size, pte_fn_t fn, void *data)
 {
-	return __apply_to_page_range(mm, addr, size, fn, data, false);
+	return __apply_to_page_range(mm, addr, size, fn, data, false, true);
+}
+
+/*
+ * As per apply_to_page_range() but fn() is not called in lazy mmu mode.
+ */
+int apply_to_page_range_nolazy(struct mm_struct *mm, unsigned long addr,
+			       unsigned long size, pte_fn_t fn, void *data)
+{
+	return __apply_to_page_range(mm, addr, size, fn, data, true, false);
+}
+
+/*
+ * As per apply_to_existing_page_range() but fn() is not called in lazy mmu
+ * mode.
+ */
+int apply_to_existing_page_range_nolazy(struct mm_struct *mm,
+					unsigned long addr, unsigned long size,
+					pte_fn_t fn, void *data)
+{
+	return __apply_to_page_range(mm, addr, size, fn, data, false, false);
 }
 
 /*
