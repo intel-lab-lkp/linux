@@ -1680,6 +1680,7 @@ struct mpage_da_data {
 	unsigned int do_map:1;
 	unsigned int scanned_until_end:1;
 	unsigned int journalled_more_data:1;
+	unsigned int continue_map:1;
 };
 
 static void mpage_release_unused_pages(struct mpage_da_data *mpd,
@@ -2367,6 +2368,8 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
  *
  * @handle - handle for journal operations
  * @mpd - extent to map
+ * @needed_blocks - journal credits needed for one writepages iteration
+ * @check_blocks - journal credits needed for map one extent
  * @give_up_on_write - we set this to true iff there is a fatal error and there
  *                     is no hope of writing the data. The caller should discard
  *                     dirty pages to avoid infinite loops.
@@ -2383,6 +2386,7 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
  */
 static int mpage_map_and_submit_extent(handle_t *handle,
 				       struct mpage_da_data *mpd,
+				       int needed_blocks, int check_blocks,
 				       bool *give_up_on_write)
 {
 	struct inode *inode = mpd->inode;
@@ -2392,6 +2396,8 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 	int progress = 0;
 	ext4_io_end_t *io_end = mpd->io_submit.io_end;
 	struct ext4_io_end_vec *io_end_vec;
+
+	mpd->continue_map = 0;
 
 	io_end_vec = ext4_alloc_io_end_vec(io_end);
 	if (IS_ERR(io_end_vec))
@@ -2439,6 +2445,34 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 		err = mpage_map_and_submit_buffers(mpd);
 		if (err < 0)
 			goto update_disksize;
+		if (!map->m_len)
+			goto update_disksize;
+
+		/*
+		 * For mapping a folio that is sufficiently large and
+		 * discontinuous, the current handle credits may be
+		 * insufficient, try to extend the handle.
+		 */
+		err = __ext4_journal_ensure_credits(handle, check_blocks,
+				needed_blocks, 0);
+		if (err < 0)
+			goto update_disksize;
+		/*
+		 * The credits for the current handle and transaction have
+		 * reached their upper limit, stop the handle and initiate a
+		 * new transaction. Note that some blocks in this folio may
+		 * have been allocated, and these allocated extents are
+		 * submitted through the current transaction, but the folio
+		 * itself is not submitted. To prevent stale data and
+		 * potential deadlock in ordered mode, only the
+		 * dioread_nolock mode supports this.
+		 */
+		if (err > 0) {
+			WARN_ON_ONCE(!ext4_should_dioread_nolock(inode));
+			mpd->continue_map = 1;
+			err = 0;
+			goto update_disksize;
+		}
 	} while (map->m_len);
 
 update_disksize:
@@ -2467,6 +2501,9 @@ update_disksize:
 		if (!err)
 			err = err2;
 	}
+	if (!err && mpd->continue_map)
+		ext4_get_io_end(io_end);
+
 	return err;
 }
 
@@ -2703,7 +2740,7 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 	handle_t *handle = NULL;
 	struct inode *inode = mpd->inode;
 	struct address_space *mapping = inode->i_mapping;
-	int needed_blocks, rsv_blocks = 0, ret = 0;
+	int needed_blocks, check_blocks, rsv_blocks = 0, ret = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(mapping->host->i_sb);
 	struct blk_plug plug;
 	bool give_up_on_write = false;
@@ -2825,10 +2862,13 @@ retry:
 
 	while (!mpd->scanned_until_end && wbc->nr_to_write > 0) {
 		/* For each extent of pages we use new io_end */
-		mpd->io_submit.io_end = ext4_init_io_end(inode, GFP_KERNEL);
 		if (!mpd->io_submit.io_end) {
-			ret = -ENOMEM;
-			break;
+			mpd->io_submit.io_end =
+					ext4_init_io_end(inode, GFP_KERNEL);
+			if (!mpd->io_submit.io_end) {
+				ret = -ENOMEM;
+				break;
+			}
 		}
 
 		WARN_ON_ONCE(!mpd->can_map);
@@ -2841,10 +2881,13 @@ retry:
 		 */
 		BUG_ON(ext4_should_journal_data(inode));
 		needed_blocks = ext4_da_writepages_trans_blocks(inode);
+		check_blocks = ext4_chunk_trans_blocks(inode,
+				MAX_WRITEPAGES_EXTENT_LEN);
 
 		/* start a new transaction */
 		handle = ext4_journal_start_with_reserve(inode,
-				EXT4_HT_WRITE_PAGE, needed_blocks, rsv_blocks);
+				EXT4_HT_WRITE_PAGE, needed_blocks,
+				mpd->continue_map ? 0 : rsv_blocks);
 		if (IS_ERR(handle)) {
 			ret = PTR_ERR(handle);
 			ext4_msg(inode->i_sb, KERN_CRIT, "%s: jbd2_start: "
@@ -2861,6 +2904,7 @@ retry:
 		ret = mpage_prepare_extent_to_map(mpd);
 		if (!ret && mpd->map.m_len)
 			ret = mpage_map_and_submit_extent(handle, mpd,
+					needed_blocks, check_blocks,
 					&give_up_on_write);
 		/*
 		 * Caution: If the handle is synchronous,
@@ -2894,7 +2938,8 @@ retry:
 			ext4_journal_stop(handle);
 		} else
 			ext4_put_io_end(mpd->io_submit.io_end);
-		mpd->io_submit.io_end = NULL;
+		if (ret || !mpd->continue_map)
+			mpd->io_submit.io_end = NULL;
 
 		if (ret == -ENOSPC && sbi->s_journal) {
 			/*
