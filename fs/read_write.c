@@ -1471,6 +1471,20 @@ COMPAT_SYSCALL_DEFINE4(sendfile64, int, out_fd, int, in_fd,
 }
 #endif
 
+static inline bool is_copy_memory_file_to_file(struct file *file_in,
+				struct file *file_out)
+{
+	return (file_in->f_op->fop_flags & FOP_MEMORY_FILE) &&
+		file_in->f_op->copy_file_range && file_out->f_op->write_iter;
+}
+
+static inline bool is_copy_file_to_memory_file(struct file *file_in,
+				struct file *file_out)
+{
+	return (file_out->f_op->fop_flags & FOP_MEMORY_FILE) &&
+		file_in->f_op->read_iter && file_out->f_op->copy_file_range;
+}
+
 /*
  * Performs necessary checks before doing a file copy
  *
@@ -1486,11 +1500,23 @@ static int generic_copy_file_checks(struct file *file_in, loff_t pos_in,
 	struct inode *inode_out = file_inode(file_out);
 	uint64_t count = *req_count;
 	loff_t size_in;
+	bool splice = flags & COPY_FILE_SPLICE;
+	bool has_memory_file;
 	int ret;
 
-	ret = generic_file_rw_checks(file_in, file_out);
-	if (ret)
-		return ret;
+	/* Skip generic checks, allow cross-sb copies for dma-buf/tmpfs */
+	has_memory_file = is_copy_memory_file_to_file(file_in, file_out) ||
+			  is_copy_file_to_memory_file(file_in, file_out);
+	if (!splice && has_memory_file) {
+		if (!(file_in->f_mode & FMODE_READ) ||
+		    !(file_out->f_mode & FMODE_WRITE) ||
+		    (file_out->f_flags & O_APPEND))
+			return -EBADF;
+	} else {
+		ret = generic_file_rw_checks(file_in, file_out);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * We allow some filesystems to handle cross sb copy, but passing
@@ -1502,7 +1528,7 @@ static int generic_copy_file_checks(struct file *file_in, loff_t pos_in,
 	 * and several different sets of file_operations, but they all end up
 	 * using the same ->copy_file_range() function pointer.
 	 */
-	if (flags & COPY_FILE_SPLICE) {
+	if (splice || has_memory_file) {
 		/* cross sb splice is allowed */
 	} else if (file_out->f_op->copy_file_range) {
 		if (file_in->f_op->copy_file_range !=
@@ -1583,23 +1609,30 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	 * same sb using clone, but for filesystems where both clone and copy
 	 * are supported (e.g. nfs,cifs), we only call the copy method.
 	 */
-	if (!splice && file_out->f_op->copy_file_range) {
-		ret = file_out->f_op->copy_file_range(file_in, pos_in,
-						      file_out, pos_out,
-						      len, flags);
-	} else if (!splice && file_in->f_op->remap_file_range && samesb) {
-		ret = file_in->f_op->remap_file_range(file_in, pos_in,
-				file_out, pos_out,
-				min_t(loff_t, MAX_RW_COUNT, len),
-				REMAP_FILE_CAN_SHORTEN);
-		/* fallback to splice */
-		if (ret <= 0)
+	if (!splice) {
+		if (is_copy_memory_file_to_file(file_in, file_out)) {
+			ret = file_in->f_op->copy_file_range(file_in, pos_in,
+					file_out, pos_out, len, flags);
+		} else if (is_copy_file_to_memory_file(file_in, file_out)) {
+			ret = file_out->f_op->copy_file_range(file_in, pos_in,
+					file_out, pos_out, len, flags);
+		} else if (file_out->f_op->copy_file_range) {
+			ret = file_out->f_op->copy_file_range(file_in, pos_in,
+							file_out, pos_out,
+							len, flags);
+		} else if (file_in->f_op->remap_file_range && samesb) {
+			ret = file_in->f_op->remap_file_range(file_in, pos_in,
+					file_out, pos_out,
+					min_t(loff_t, MAX_RW_COUNT, len),
+					REMAP_FILE_CAN_SHORTEN);
+			/* fallback to splice */
+			if (ret <= 0)
+				splice = true;
+		} else if (samesb) {
+			/* Fallback to splice for same sb copy for backward compat */
 			splice = true;
-	} else if (samesb) {
-		/* Fallback to splice for same sb copy for backward compat */
-		splice = true;
+		}
 	}
-
 	file_end_write(file_out);
 
 	if (!splice)
