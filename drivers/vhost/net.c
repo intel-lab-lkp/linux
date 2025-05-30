@@ -77,6 +77,8 @@ enum {
 			 (1ULL << VIRTIO_F_RING_RESET)
 };
 
+#define VHOST_NET_ALL_FEATURES VHOST_NET_FEATURES
+
 enum {
 	VHOST_NET_BACKEND_FEATURES = (1ULL << VHOST_BACKEND_F_IOTLB_MSG_V2)
 };
@@ -1602,7 +1604,7 @@ done:
 	return err;
 }
 
-static int vhost_net_set_features(struct vhost_net *n, u64 features)
+static int vhost_net_set_features(struct vhost_net *n, virtio_features_t features)
 {
 	size_t vhost_hlen, sock_hlen, hdr_len;
 	int i;
@@ -1673,8 +1675,9 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	void __user *argp = (void __user *)arg;
 	u64 __user *featurep = argp;
 	struct vhost_vring_file backend;
-	u64 features;
-	int r;
+	virtio_features_t all_features;
+	u64 features, count;
+	int r, i;
 
 	switch (ioctl) {
 	case VHOST_NET_SET_BACKEND:
@@ -1692,6 +1695,58 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 		if (features & ~VHOST_NET_FEATURES)
 			return -EOPNOTSUPP;
 		return vhost_net_set_features(n, features);
+	case VHOST_GET_FEATURES_ARRAY:
+	{
+		if (copy_from_user(&count, argp, sizeof(u64)))
+			return -EFAULT;
+
+		/* Copy the net features, up to the user-provided buffer size */
+		all_features = VHOST_NET_ALL_FEATURES;
+		for (i = 0; i < min(VIRTIO_FEATURES_WORDS / 2, count); ++i) {
+			argp += sizeof(u64);
+			features = all_features >> (64 * i);
+			if (copy_to_user(argp, &features, sizeof(u64)))
+				return -EFAULT;
+		}
+
+		/* Zero the trailing space provided by user-space, if any */
+		features = 0;
+		for (; i < count; ++i) {
+			argp += sizeof(u64);
+			if (copy_to_user(argp, &features, sizeof(u64)))
+				return -EFAULT;
+		}
+		return 0;
+	}
+	case VHOST_SET_FEATURES_ARRAY:
+	{
+		if (copy_from_user(&count, argp, sizeof(u64)))
+			return -EFAULT;
+
+		all_features = 0;
+		for (i = 0; i < min(count, VIRTIO_FEATURES_WORDS / 2); ++i) {
+			argp += sizeof(u64);
+			if (copy_from_user(&features, argp, sizeof(u64)))
+				return -EFAULT;
+
+			all_features |= ((virtio_features_t)features) << (64 * i);
+		}
+
+		/* Any feature specified by user-space above VIRTIO_FEATURES_MAX is
+		 * not supported by definition.
+		 */
+		for (; i < count; ++i) {
+			if (copy_from_user(&features, argp, sizeof(u64)))
+				return -EFAULT;
+			if (features)
+				return -EOPNOTSUPP;
+		}
+
+		if (all_features & ~VHOST_NET_ALL_FEATURES)
+			return -EOPNOTSUPP;
+
+		return vhost_net_set_features(n, all_features);
+	}
 	case VHOST_GET_BACKEND_FEATURES:
 		features = VHOST_NET_BACKEND_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof(features)))
