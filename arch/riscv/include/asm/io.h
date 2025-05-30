@@ -68,7 +68,7 @@
 			ctype *buf = buffer;					\
 										\
 			do {							\
-				ctype x = __raw_read ## len(addr);		\
+				ctype x = *(const volatile ctype __force *)addr;\
 				*buf++ = x;					\
 			} while (--count);					\
 		}								\
@@ -85,7 +85,7 @@
 			const ctype *buf = buffer;				\
 										\
 			do {							\
-				__raw_write ## len(*buf++, addr);		\
+				*(volatile ctype __force *)addr = *buf++;	\
 			} while (--count);					\
 		}								\
 		afence;								\
