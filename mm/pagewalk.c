@@ -33,6 +33,9 @@ static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
 	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 
+	if (walk->ops->pre_pte_table)
+		walk->ops->pre_pte_table();
+
 	for (;;) {
 		if (ops->install_pte && pte_none(ptep_get(pte))) {
 			pte_t new_pte;
@@ -56,6 +59,9 @@ static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
 		addr += PAGE_SIZE;
 		pte++;
 	}
+
+	if (walk->ops->post_pte_table)
+		walk->ops->post_pte_table();
 	return err;
 }
 

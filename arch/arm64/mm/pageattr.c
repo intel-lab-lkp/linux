@@ -75,11 +75,23 @@ static int pageattr_pte_entry(pte_t *pte, unsigned long addr,
 	return 0;
 }
 
+static void pte_lazy_mmu_enter(void)
+{
+	arch_enter_lazy_mmu_mode();
+}
+
+static void pte_lazy_mmu_leave(void)
+{
+	arch_leave_lazy_mmu_mode();
+}
+
 static const struct mm_walk_ops pageattr_ops = {
 	.pud_entry	= pageattr_pud_entry,
 	.pmd_entry	= pageattr_pmd_entry,
 	.pte_entry	= pageattr_pte_entry,
 	.walk_lock	= PGWALK_NOLOCK,
+	.pre_pte_table	= pte_lazy_mmu_enter,
+	.post_pte_table	= pte_lazy_mmu_leave,
 };
 
 bool rodata_full __ro_after_init = IS_ENABLED(CONFIG_RODATA_FULL_DEFAULT_ENABLED);
