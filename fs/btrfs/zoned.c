@@ -17,6 +17,7 @@
 #include "fs.h"
 #include "accessors.h"
 #include "bio.h"
+#include "transaction.h"
 
 /* Maximum number of zones to report per blkdev_report_zones() call */
 #define BTRFS_REPORT_NR_ZONES   4096
@@ -2441,6 +2442,89 @@ void btrfs_clear_data_reloc_bg(struct btrfs_block_group *bg)
 	if (fs_info->data_reloc_bg == bg->start)
 		fs_info->data_reloc_bg = 0;
 	spin_unlock(&fs_info->relocation_bg_lock);
+}
+
+void btrfs_zoned_reserve_data_reloc_bg(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_space_info *data_sinfo = fs_info->data_sinfo;
+	struct btrfs_space_info *space_info;
+	struct btrfs_root *root;
+	struct btrfs_trans_handle *trans = NULL;
+	struct btrfs_block_group *bg;
+	u64 alloc_flags;
+	bool initial = false;
+	int index;
+	int ret;
+
+	if (!btrfs_is_zoned(fs_info))
+		return;
+
+	if (fs_info->data_reloc_bg)
+		return;
+
+	if (sb_rdonly(fs_info->sb))
+		return;
+
+	space_info = data_sinfo->sub_group[0];
+	ASSERT(space_info->subgroup_id == BTRFS_SUB_GROUP_DATA_RELOC);
+	alloc_flags = btrfs_get_alloc_profile(fs_info, space_info->flags);
+	index = btrfs_bg_flags_to_raid_index(alloc_flags);
+
+	list_for_each_entry(bg, &data_sinfo->block_groups[index], list) {
+		btrfs_get_block_group(bg);
+		if (!bg->used) {
+			if (!initial) {
+				initial = true;
+				btrfs_put_block_group(bg);
+				continue;
+			}
+
+			fs_info->data_reloc_bg = bg->start;
+			set_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC,
+				&bg->runtime_flags);
+			btrfs_zone_activate(bg);
+
+			btrfs_put_block_group(bg);
+			return;
+		}
+		btrfs_put_block_group(bg);
+	}
+
+	if (btrfs_fs_compat_ro(fs_info, BLOCK_GROUP_TREE))
+		root = fs_info->block_group_root;
+	else
+		root = btrfs_extent_root(fs_info, 0);
+
+	trans = btrfs_join_transaction(root);
+	if (IS_ERR(trans))
+		return;
+
+	mutex_lock(&fs_info->chunk_mutex);
+	bg = btrfs_create_chunk(trans, space_info, alloc_flags);
+	if (IS_ERR(bg)) {
+		mutex_unlock(&fs_info->chunk_mutex);
+		ret = PTR_ERR(bg);
+		btrfs_abort_transaction(trans, ret);
+		btrfs_end_transaction(trans);
+		return;
+	}
+
+	ret = btrfs_chunk_alloc_add_chunk_item(trans, bg);
+	if (ret) {
+		mutex_unlock(&fs_info->chunk_mutex);
+		btrfs_abort_transaction(trans, ret);
+		btrfs_end_transaction(trans);
+		return;
+	}
+	mutex_unlock(&fs_info->chunk_mutex);
+
+	btrfs_get_block_group(bg);
+	fs_info->data_reloc_bg = bg->start;
+	set_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &bg->runtime_flags);
+	btrfs_zone_activate(bg);
+	btrfs_put_block_group(bg);
+
+	btrfs_end_transaction(trans);
 }
 
 void btrfs_free_zone_cache(struct btrfs_fs_info *fs_info)
