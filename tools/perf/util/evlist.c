@@ -2618,18 +2618,6 @@ void evlist__uniquify_evsel_names(struct evlist *evlist, const struct perf_stat_
 	}
 }
 
-bool evlist__has_bpf_output(struct evlist *evlist)
-{
-	struct evsel *evsel;
-
-	evlist__for_each_entry(evlist, evsel) {
-		if (evsel__is_bpf_output(evsel))
-			return true;
-	}
-
-	return false;
-}
-
 bool evlist__needs_bpf_sb_event(struct evlist *evlist)
 {
 	struct evsel *evsel;

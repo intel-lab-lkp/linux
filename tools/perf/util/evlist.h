@@ -436,7 +436,6 @@ void evlist__format_evsels(struct evlist *evlist, struct strbuf *sb, size_t max_
 void evlist__check_mem_load_aux(struct evlist *evlist);
 void evlist__warn_user_requested_cpus(struct evlist *evlist, const char *cpu_list);
 void evlist__uniquify_evsel_names(struct evlist *evlist, const struct perf_stat_config *config);
-bool evlist__has_bpf_output(struct evlist *evlist);
 bool evlist__needs_bpf_sb_event(struct evlist *evlist);
 
 #endif /* __PERF_EVLIST_H */
