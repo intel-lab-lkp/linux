@@ -353,7 +353,7 @@ static int acp3x_dma_close(struct snd_soc_component *component,
 			adata->i2ssp_capture_stream = NULL;
 		}
 	}
-
+	kfree(ins);
 	return 0;
 }
 
