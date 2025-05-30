@@ -15,6 +15,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/hugetlb.h>
 #include <linux/shmem_fs.h>
+#include <linux/delay.h>
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include "internal.h"
@@ -1086,6 +1087,8 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 			 spinlock_t *dst_ptl, spinlock_t *src_ptl,
 			 struct folio *src_folio)
 {
+	swp_entry_t entry;
+
 	double_pt_lock(dst_ptl, src_ptl);
 
 	if (!is_pte_pages_stable(dst_pte, src_pte, orig_dst_pte, orig_src_pte,
@@ -1102,6 +1105,19 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 	if (src_folio) {
 		folio_move_anon_rmap(src_folio, dst_vma);
 		src_folio->index = linear_page_index(dst_vma, dst_addr);
+	} else {
+		/*
+		 * Check again after acquiring the src_pte lock. Or we might
+		 * miss a new loaded swap cache folio.
+		 */
+		entry = pte_to_swp_entry(orig_src_pte);
+		src_folio = filemap_get_folio(swap_address_space(entry),
+					      swap_cache_index(entry));
+		if (!IS_ERR_OR_NULL(src_folio)) {
+			double_pt_unlock(dst_ptl, src_ptl);
+			folio_put(src_folio);
+			return -EAGAIN;
+		}
 	}
 
 	orig_src_pte = ptep_get_and_clear(mm, src_addr, src_pte);
@@ -1408,6 +1424,16 @@ retry:
 				/* now we can block and wait */
 				folio_lock(src_folio);
 				goto retry;
+			}
+			/*
+			 * Check if the folio still belongs to the target swap entry after
+			 * acquiring the lock. Folio can be freed in the swap cache while
+			 * not locked.
+			 */
+			if (unlikely(!folio_test_swapcache(folio) ||
+				     entry.val != folio->swap.val)) {
+				err = -EAGAIN;
+				goto out;
 			}
 		}
 		err = move_swap_pte(mm, dst_vma, dst_addr, src_addr, dst_pte, src_pte,
