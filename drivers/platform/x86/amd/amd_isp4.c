@@ -151,7 +151,7 @@ MODULE_DEVICE_TABLE(acpi, amdisp_sensor_ids);
 
 static inline bool is_isp_i2c_adapter(struct i2c_adapter *adap)
 {
-	return !strcmp(adap->owner->name, "i2c_designware_amdisp");
+	return !strcmp(adap->name, "AMDISP DesignWare I2C adapter");
 }
 
 static void instantiate_isp_i2c_client(struct amdisp_platform *isp4_platform,
