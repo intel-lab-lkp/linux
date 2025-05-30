@@ -497,6 +497,9 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 
 	__tpdm_enable(drvdata);
 	drvdata->enable = true;
+
+	if (path)
+		drvdata->traceid = path->trace_id;
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDM tracing enabled\n");
@@ -554,6 +557,7 @@ static void tpdm_disable(struct coresight_device *csdev,
 	__tpdm_disable(drvdata);
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	drvdata->enable = false;
+	drvdata->traceid = 0;
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDM tracing disabled\n");
@@ -655,9 +659,21 @@ static ssize_t integration_test_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(integration_test);
 
+static ssize_t traceid_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	unsigned long val;
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	val = drvdata->traceid;
+	return sprintf(buf, "%#lx\n", val);
+}
+static DEVICE_ATTR_RO(traceid);
+
 static struct attribute *tpdm_attrs[] = {
 	&dev_attr_reset_dataset.attr,
 	&dev_attr_integration_test.attr,
+	&dev_attr_traceid.attr,
 	NULL,
 };
 
