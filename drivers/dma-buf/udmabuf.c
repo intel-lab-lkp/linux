@@ -284,6 +284,64 @@ static int end_cpu_udmabuf(struct dma_buf *buf,
 	return 0;
 }
 
+static ssize_t udmabuf_rw_file(struct dma_buf *dmabuf, loff_t my_pos,
+			struct file *other, loff_t pos,
+			size_t count, bool is_write)
+{
+	struct udmabuf *ubuf = dmabuf->priv;
+	loff_t my_end = my_pos + count, bv_beg, bv_end = 0;
+	pgoff_t pg_idx = my_pos / PAGE_SIZE;
+	pgoff_t pg_end = DIV_ROUND_UP(my_end, PAGE_SIZE);
+	size_t i, bv_off, bv_len, bv_num, bv_idx = 0, bv_total = 0;
+	struct bio_vec *bvec;
+	struct kiocb kiocb;
+	struct iov_iter iter;
+	unsigned int direction = is_write ? ITER_SOURCE : ITER_DEST;
+	ssize_t ret = 0, rw_total = 0;
+	struct folio *folio;
+
+	bv_num = min_t(size_t, pg_end - pg_idx + 1, 1024);
+	bvec = kvcalloc(bv_num, sizeof(*bvec), GFP_KERNEL);
+	if (!bvec)
+		return -ENOMEM;
+
+	init_sync_kiocb(&kiocb, other);
+	kiocb.ki_pos = pos;
+
+	for (i = 0; i < ubuf->nr_pinned && my_pos < my_end; i++) {
+		folio = ubuf->pinned_folios[i];
+		bv_beg = bv_end;
+		bv_end += folio_size(folio);
+		if (bv_end <= my_pos)
+			continue;
+
+		bv_len = min(bv_end, my_end) - my_pos;
+		bv_off = my_pos - bv_beg;
+		my_pos += bv_len;
+		bv_total += bv_len;
+		bvec_set_page(&bvec[bv_idx], &folio->page, bv_len, bv_off);
+		if (++bv_idx < bv_num && my_pos < my_end)
+			continue;
+
+		/* start R/W if bvec is full or count reaches zero. */
+		iov_iter_bvec(&iter, direction, bvec, bv_idx, bv_total);
+		if (is_write)
+			ret = other->f_op->write_iter(&kiocb, &iter);
+		else
+			ret = other->f_op->read_iter(&kiocb, &iter);
+		if (ret <= 0)
+			break;
+		rw_total += ret;
+		if (ret < bv_total || fatal_signal_pending(current))
+			break;
+
+		bv_idx = bv_total = 0;
+	}
+	kvfree(bvec);
+
+	return rw_total > 0 ? rw_total : ret;
+}
+
 static const struct dma_buf_ops udmabuf_ops = {
 	.cache_sgt_mapping = true,
 	.map_dma_buf	   = map_udmabuf,
@@ -294,6 +352,7 @@ static const struct dma_buf_ops udmabuf_ops = {
 	.vunmap		   = vunmap_udmabuf,
 	.begin_cpu_access  = begin_cpu_udmabuf,
 	.end_cpu_access    = end_cpu_udmabuf,
+	.rw_file = udmabuf_rw_file,
 };
 
 #define SEALS_WANTED (F_SEAL_SHRINK)
