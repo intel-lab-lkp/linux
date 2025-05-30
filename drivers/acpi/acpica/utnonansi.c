@@ -166,10 +166,7 @@ acpi_ut_safe_strncat(char *dest,
 
 void acpi_ut_safe_strncpy(char *dest, char *source, acpi_size dest_size)
 {
-	/* Always terminate destination string */
-
-	memcpy(dest, source, dest_size);
-	dest[dest_size - 1] = 0;
+	strscpy(dest, source, dest_size);
 }
 
 #endif
