@@ -2202,7 +2202,42 @@
 				 <&mmss_smmu 0x431>;
 			memory-region = <&venus_region>;
 			power-domains = <&mmcc VENUS_GDSC>;
+			operating-points-v2 = <&venus_opp_table>;
 			status = "disabled";
+
+			venus_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-133330000 {
+					opp-hz = /bits/ 64 <133330000>;
+					required-opps = <&rpmpd_opp_low_svs>;
+				};
+
+				opp-269330000 {
+					opp-hz = /bits/ 64 <269330000>;
+					required-opps = <&rpmpd_opp_svs>;
+				};
+
+				opp-320000000 {
+					opp-hz = /bits/ 64 <320000000>;
+					required-opps = <&rpmpd_opp_svs_plus>;
+				};
+
+				opp-404000000 {
+					opp-hz = /bits/ 64 <404000000>;
+					required-opps = <&rpmpd_opp_nom>;
+				};
+
+				opp-441600000 {
+					opp-hz = /bits/ 64 <441600000>;
+					required-opps = <&rpmpd_opp_nom_plus>;
+				};
+
+				opp-518400000 {
+					opp-hz = /bits/ 64 <518400000>;
+					required-opps = <&rpmpd_opp_turbo>;
+				};
+			};
 
 			video-decoder {
 				compatible = "venus-decoder";
