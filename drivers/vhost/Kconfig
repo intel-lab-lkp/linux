@@ -96,3 +96,16 @@ config VHOST_CROSS_ENDIAN_LEGACY
 	  If unsure, say "N".
 
 endif
+
+config VHOST_ENABLE_FORK_OWNER_IOCTL
+	bool "Enable IOCTL VHOST_FORK_FROM_OWNER"
+	default n
+	help
+	  This option enables the IOCTL VHOST_FORK_FROM_OWNER, allowing
+	  userspace applications to modify the thread mode for vhost devices.
+
+	  By default, `CONFIG_VHOST_ENABLE_FORK_OWNER_IOCTL` is set to `n`,
+	  which disables the IOCTL. When enabled (y), the IOCTL allows
+	  users to set the mode as needed.
+
+	  If unsure, say "N".
