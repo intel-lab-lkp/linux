@@ -22999,6 +22999,14 @@ W:	http://www.st.com/
 F:	Documentation/devicetree/bindings/iio/imu/st,lsm6dsx.yaml
 F:	drivers/iio/imu/st_lsm6dsx/
 
+ST M24LR CONTROL DRIVER
+M:	Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+L:	linux-kernel@vger.kernel.org
+L:	devicetree@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/misc/st,m24lr.yaml
+F:	drivers/misc/m24lr_ctl.c
+
 ST MIPID02 CSI-2 TO PARALLEL BRIDGE DRIVER
 M:	Benjamin Mugnier <benjamin.mugnier@foss.st.com>
 M:	Sylvain Petinot <sylvain.petinot@foss.st.com>
