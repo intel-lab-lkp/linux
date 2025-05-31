@@ -3160,6 +3160,7 @@
 			reg = <0x0cc00000 0xff000>;
 			interrupts = <GIC_SPI 287 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&mmcc VIDEO_TOP_GDSC>;
+			operating-points-v2 = <&venus_opp_table>;
 			clocks = <&mmcc VIDEO_CORE_CLK>,
 				 <&mmcc VIDEO_AHB_CLK>,
 				 <&mmcc VIDEO_AXI_CLK>,
@@ -3187,6 +3188,35 @@
 				 <&mmss_smmu 0x431>;
 			memory-region = <&venus_mem>;
 			status = "disabled";
+
+			venus_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-200000000 {
+					opp-hz = /bits/ 64 <200000000>;
+					required-opps = <&rpmpd_opp_low_svs>;
+				};
+
+				opp-269330000 {
+					opp-hz = /bits/ 64 <269330000>;
+					required-opps = <&rpmpd_opp_svs>;
+				};
+
+				opp-355200000 {
+					opp-hz = /bits/ 64 <355200000>;
+					required-opps = <&rpmpd_opp_svs_plus>;
+				};
+
+				opp-444000000 {
+					opp-hz = /bits/ 64 <444000000>;
+					required-opps = <&rpmpd_opp_nom>;
+				};
+
+				opp-533000000 {
+					opp-hz = /bits/ 64 <533000000>;
+					required-opps = <&rpmpd_opp_turbo>;
+				};
+			};
 
 			video-decoder {
 				compatible = "venus-decoder";
