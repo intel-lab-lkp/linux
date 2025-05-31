@@ -632,5 +632,7 @@ MODULE_SOFTDEP("pre: aead2");
 MODULE_SOFTDEP("pre: ccm");
 MODULE_SOFTDEP("pre: gcm");
 MODULE_SOFTDEP("pre: crc32");
+/* MODULE_VERSION() Makes /sys/module/ksmbd appear when compiled-in */
+MODULE_VERSION(KSMBD_GENL_VERSION_STRING);
 module_init(ksmbd_server_init)
 module_exit(ksmbd_server_exit)
