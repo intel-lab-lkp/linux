@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/st,m24lr.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics M24LR Series NFC/RFID EEPROM Control Interface
+
+maintainers:
+  - name: Abd-Alrhman Masalkhi
+    email: abd.masalkhi@gmail.com
+
+description: |
+  This binding describes the control interface for STMicroelectronics
+  M24LR series RFID/NFC EEPROM chips (e.g., M24LR04E-R, M24LR16E-R).
+  This driver provides sysfs access to device-specific control registers
+  (authentication, UID, etc.) over the I2C interface. It act as a
+  I2C gate for the EEPROM. Therefore, The EEPROM is represented as a
+  child node under a port and is accessed through a separate driver
+  (the standard 'at24' driver). This implementation is possible because
+  the M24LR chips uses two I2C addresses: one for accessing the
+  system parameter sector and another for the EEPROM.
+
+allOf:
+  - $ref: "i2c-mux.yaml#"
+
+properties:
+  compatible:
+    enum:
+    - st,m24lr04e-r
+    - st,m24lr16e-r
+    - st,m24lr64e-r
+
+  reg:
+    maxItems: 1
+    description: I2C address of the device.
+
+  pagesize:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: >
+      Maximum number of bytes that can be written in a single I2C
+      transaction. the default is 1.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      m24lr@57 {
+        compatible = "st,m24lr04e-r";
+        reg = <0x57>;
+
+        i2c-gate {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          m24lr_eeprom@53 {
+            compatible = "atmel,24c04";
+            reg = <0x53>;
+            address-width = <16>;
+            pagesize = <4>;
+          };
+        };
+      };
+    };
+...
