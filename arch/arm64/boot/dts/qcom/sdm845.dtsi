@@ -4254,14 +4254,6 @@
 
 			status = "disabled";
 
-			video-core0 {
-				compatible = "venus-decoder";
-			};
-
-			video-core1 {
-				compatible = "venus-encoder";
-			};
-
 			venus_opp_table: opp-table {
 				compatible = "operating-points-v2";
 
@@ -4275,13 +4267,13 @@
 					required-opps = <&rpmhpd_opp_low_svs>;
 				};
 
-				opp-320000000 {
-					opp-hz = /bits/ 64 <320000000>;
+				opp-330000000 {
+					opp-hz = /bits/ 64 <330000000>;
 					required-opps = <&rpmhpd_opp_svs>;
 				};
 
-				opp-380000000 {
-					opp-hz = /bits/ 64 <380000000>;
+				opp-404000000 {
+					opp-hz = /bits/ 64 <404000000>;
 					required-opps = <&rpmhpd_opp_svs_l1>;
 				};
 
@@ -4294,6 +4286,14 @@
 					opp-hz = /bits/ 64 <533000097>;
 					required-opps = <&rpmhpd_opp_turbo>;
 				};
+			};
+
+			video-core0 {
+				compatible = "venus-decoder";
+			};
+
+			video-core1 {
+				compatible = "venus-encoder";
 			};
 		};
 
