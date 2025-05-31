@@ -632,6 +632,21 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config M24LR_CTL
+	tristate "M24LR I2C RFID/NFC Control Interface driver"
+	depends on I2C_MUX && SYSFS
+	select REGMAP_I2C
+	help
+	  This driver provides support for the control interface of M24LR I2C
+	  RFID/NFC chips.
+
+	  Note This driver does not handle the EEPROM on the device. For EEPROM
+	  access, use the standard 'at24' driver (drivers/misc/eeprom/at24.c),
+	  which supports I2C-based EEPROMs.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called m24lr_ctl.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
