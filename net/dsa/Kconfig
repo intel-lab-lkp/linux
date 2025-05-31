@@ -49,6 +49,14 @@ config NET_DSA_TAG_BRCM_LEGACY
 	  Broadcom legacy switches which place the tag after the MAC source
 	  address.
 
+config NET_DSA_TAG_BRCM_LEGACY_FCS
+	tristate "Tag driver for Broadcom legacy switches using in-frame headers, FCS and length"
+	select NET_DSA_TAG_BRCM_COMMON
+	help
+	  Say Y if you want to enable support for tagging frames for the
+	  Broadcom legacy switches which place the tag after the MAC source
+	  address and require the original FCS and length.
+
 config NET_DSA_TAG_BRCM_PREPEND
 	tristate "Tag driver for Broadcom switches using prepended headers"
 	select NET_DSA_TAG_BRCM_COMMON
