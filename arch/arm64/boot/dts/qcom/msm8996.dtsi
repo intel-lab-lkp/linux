@@ -491,27 +491,25 @@
 					rpmpd_opp_table: opp-table {
 						compatible = "operating-points-v2";
 
-						rpmpd_opp1: opp1 {
+						rpmpd_opp_ret: opp1 {
 							opp-level = <1>;
 						};
 
-						rpmpd_opp2: opp2 {
-							opp-level = <2>;
-						};
+						/* No SVS_KRAIT/SVS_LOW */
 
-						rpmpd_opp3: opp3 {
+						rpmpd_opp_svs_soc: opp3 {
 							opp-level = <3>;
 						};
 
-						rpmpd_opp4: opp4 {
+						rpmpd_opp_nom: opp4 {
 							opp-level = <4>;
 						};
 
-						rpmpd_opp5: opp5 {
+						rpmpd_opp_turbo: opp5 {
 							opp-level = <5>;
 						};
 
-						rpmpd_opp6: opp6 {
+						rpmpd_opp_super_turbo: opp6 {
 							opp-level = <6>;
 						};
 					};
@@ -2333,6 +2331,7 @@
 			reg = <0x00c00000 0xff000>;
 			interrupts = <GIC_SPI 287 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&mmcc VENUS_GDSC>;
+			operating-points-v2 = <&venus_opp_table>;
 			clocks = <&mmcc VIDEO_CORE_CLK>,
 				 <&mmcc VIDEO_AHB_CLK>,
 				 <&mmcc VIDEO_AXI_CLK>,
@@ -2363,6 +2362,30 @@
 				 <&venus_smmu 0x31>;
 			memory-region = <&venus_mem>;
 			status = "disabled";
+
+			venus_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-75000000 {
+					opp-hz = /bits/ 64 <75000000>;
+					required-opps = <&rpmpd_opp_svs_soc>;
+				};
+
+				opp-150000000 {
+					opp-hz = /bits/ 64 <150000000>;
+					required-opps = <&rpmpd_opp_svs_soc>;
+				};
+
+				opp-346666667 {
+					opp-hz = /bits/ 64 <346666667>;
+					required-opps = <&rpmpd_opp_nom>;
+				};
+
+				opp-520000000 {
+					opp-hz = /bits/ 64 <520000000>;
+					required-opps = <&rpmpd_opp_turbo>;
+				};
+			};
 
 			video-decoder {
 				compatible = "venus-decoder";
