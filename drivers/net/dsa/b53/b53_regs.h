@@ -29,6 +29,7 @@
 #define B53_ARLIO_PAGE			0x05 /* ARL Access */
 #define B53_FRAMEBUF_PAGE		0x06 /* Management frame access */
 #define B53_MEM_ACCESS_PAGE		0x08 /* Memory access */
+#define B53_IEEE_PAGE			0x0a /* IEEE 802.1X */
 
 /* PHY Registers */
 #define B53_PORT_MII_PAGE(i)		(0x10 + (i)) /* Port i MII Registers */
@@ -46,6 +47,9 @@
 
 /* VLAN Registers */
 #define B53_VLAN_PAGE			0x34
+
+/* Rate Control Registers */
+#define B53_RATE_CTL_PAGE		0x35
 
 /* Jumbo Frame Registers */
 #define B53_JUMBO_PAGE			0x40
@@ -369,6 +373,18 @@
 #define B53_ARL_SRCH_RSTL(x)		(B53_ARL_SRCH_RSTL_0 + ((x) * 0x10))
 
 /*************************************************************************
+ * IEEE 802.1X Registers
+ *************************************************************************/
+
+/* Multicast DLF Drop Control register (16 bit) */
+#define B53_IEEE_MCAST_DLF		0x94
+#define B53_IEEE_MCAST_DROP_EN		BIT(11)
+
+/* Unicast DLF Drop Control register (16 bit) */
+#define B53_IEEE_UCAST_DLF		0x96
+#define B53_IEEE_UCAST_DROP_EN		BIT(11)
+
+/*************************************************************************
  * Port VLAN Registers
  *************************************************************************/
 
@@ -477,6 +493,28 @@
 
 /* VLAN Port Default Tag (16 bit) */
 #define B53_VLAN_PORT_DEF_TAG(i)	(0x10 + 2 * (i))
+
+/*************************************************************************
+ * Rate Control Page Registers
+ *************************************************************************/
+
+#define B53_RATE_CONTROL(i)		(0x00 + (i))
+#define   RC_PERCENT_S			0
+#define   RC_PERCENT_10			(0 << RC_PERCENT_S)
+#define   RC_PERCENT_20			(1 << RC_PERCENT_S)
+#define   RC_PERCENT_30			(2 << RC_PERCENT_S)
+#define   RC_PERCENT_40			(3 << RC_PERCENT_S)
+#define   RC_PERCENT_MASK		(3 << RC_PERCENT_S)
+#define   RC_BKT_SIZE_S			2
+#define   RC_BKT_SIZE_2K		(0 << RC_BKT_SIZE_S)
+#define   RC_BKT_SIZE_4K		(1 << RC_BKT_SIZE_S)
+#define   RC_BKT_SIZE_6K		(2 << RC_BKT_SIZE_S)
+#define   RC_BKT_SIZE_8K		(3 << RC_BKT_SIZE_S)
+#define   RC_BKT_SIZE_MASK		(3 << RC_BKT_SIZE_S)
+#define   RC_DLF_EN			BIT(4)
+#define   RC_BCAST_EN			BIT(5)
+#define   RC_MCAST_EN			BIT(6)
+#define   RC_DROP_FRAME			BIT(7)
 
 /*************************************************************************
  * Jumbo Frame Page Registers
