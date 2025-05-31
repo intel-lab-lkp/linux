@@ -1299,6 +1299,9 @@ static int b53_setup(struct dsa_switch *ds)
 
 	b53_reset_mib(dev);
 
+	if (is5325(dev))
+		b53_write8(dev, B53_CTRL_PAGE, B53_PD_MODE_CTRL_25, 0);
+
 	ret = b53_apply_config(dev);
 	if (ret) {
 		dev_err(ds->dev, "failed to apply configuration\n");
