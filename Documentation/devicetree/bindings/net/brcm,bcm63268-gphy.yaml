@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/brcm,bcm63268-gphy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM63268 GPHY
+
+description: Broadcom's internal gigabit ethernet PHY on BCM63268 SoC
+
+maintainers:
+  - TBD
+
+allOf:
+  - $ref: ethernet-phy.yaml#
+
+properties:
+  compatible:
+    const: ethernet-phy-id0362.5f50
+
+  reg:
+    maxItems: 1
+
+  brcm,gpio-ctrl:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the SoC GPIO controller
+      which contains PHY control registers
+
+required:
+  - reg
+  - brcm,gpio-ctrl
+  - resets
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/reset/bcm63268-reset.h>
+
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-phy@4 {
+            compatible = "ethernet-phy-id0362.5f50";
+            reg = <4>;
+
+            resets = <&periph_rst BCM63268_RST_GPHY>;
+
+            brcm,gpio-ctrl = <&gpio_cntl>;
+        };
+    };
