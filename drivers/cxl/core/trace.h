@@ -109,7 +109,7 @@ TRACE_EVENT(cxl_aer_uncorrectable_error,
 #define CXL_RAS_CE_CACHE_DATA_ECC	BIT(0)
 #define CXL_RAS_CE_MEM_DATA_ECC		BIT(1)
 #define CXL_RAS_CE_CRC_THRESH		BIT(2)
-#define CLX_RAS_CE_RETRY_THRESH		BIT(3)
+#define CXL_RAS_CE_RETRY_THRESH		BIT(3)
 #define CXL_RAS_CE_CACHE_POISON		BIT(4)
 #define CXL_RAS_CE_MEM_POISON		BIT(5)
 #define CXL_RAS_CE_PHYS_LAYER_ERR	BIT(6)
@@ -118,7 +118,7 @@ TRACE_EVENT(cxl_aer_uncorrectable_error,
 	{ CXL_RAS_CE_CACHE_DATA_ECC, "Cache Data ECC Error" },			\
 	{ CXL_RAS_CE_MEM_DATA_ECC, "Memory Data ECC Error" },			\
 	{ CXL_RAS_CE_CRC_THRESH, "CRC Threshold Hit" },				\
-	{ CLX_RAS_CE_RETRY_THRESH, "Retry Threshold" },				\
+	{ CXL_RAS_CE_RETRY_THRESH, "Retry Threshold" },				\
 	{ CXL_RAS_CE_CACHE_POISON, "Received Cache Poison From Peer" },		\
 	{ CXL_RAS_CE_MEM_POISON, "Received Memory Poison From Peer" },		\
 	{ CXL_RAS_CE_PHYS_LAYER_ERR, "Received Error From Physical Layer" }	\
@@ -684,7 +684,7 @@ TRACE_EVENT(cxl_dram,
 /*
  * Memory Module Event Record - MMER
  *
- * CXL res 3.1 section 8.2.9.2.1.3; Table 8-47
+ * CXL rev 3.1 section 8.2.9.2.1.3; Table 8-47
  */
 #define CXL_MMER_HEALTH_STATUS_CHANGE		0x00
 #define CXL_MMER_MEDIA_STATUS_CHANGE		0x01
