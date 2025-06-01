@@ -788,8 +788,10 @@ struct hidma_lldev *hidma_ll_init(struct device *dev, u32 nr_tres,
 		return NULL;
 
 	rc = hidma_ll_setup(lldev);
-	if (rc)
+	if (rc) {
+		kfifo_free(&lldev->handoff_fifo);
 		return NULL;
+	}
 
 	spin_lock_init(&lldev->lock);
 	tasklet_setup(&lldev->task, hidma_ll_tre_complete);
