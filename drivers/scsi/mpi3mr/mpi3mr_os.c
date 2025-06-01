@@ -4064,6 +4064,9 @@ static void mpi3mr_map_queues(struct Scsi_Host *shost)
 	int i, qoff, offset;
 	struct blk_mq_queue_map *map = NULL;
 
+	if (shost->nr_hw_queues == 1)
+		return;
+
 	offset = mrioc->op_reply_q_offset;
 
 	for (i = 0, qoff = 0; i < HCTX_MAX_TYPES; i++) {
@@ -5422,8 +5425,6 @@ mpi3mr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	shost->max_channel = 0;
 	shost->max_id = 0xFFFFFFFF;
 
-	shost->host_tagset = 1;
-
 	if (prot_mask >= 0)
 		scsi_host_set_prot(shost, prot_mask);
 	else {
@@ -5471,7 +5472,14 @@ mpi3mr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto init_ioc_failed;
 	}
 
-	shost->nr_hw_queues = mrioc->num_op_reply_q;
+	shost->host_tagset = 0;
+	shost->nr_hw_queues = 1;
+
+	if (mrioc->smp_affinity_enable) {
+		shost->nr_hw_queues = mrioc->num_op_reply_q;
+		shost->host_tagset = 1;
+	}
+
 	if (mrioc->active_poll_qcount)
 		shost->nr_maps = 3;
 

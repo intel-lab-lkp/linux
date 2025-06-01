@@ -1378,6 +1378,7 @@ struct mpi3mr_ioc {
 	u32 num_tb_segs;
 	struct dma_pool *trace_buf_pool;
 	struct segments *trace_buf;
+	bool smp_affinity_enable;
 
 };
 
