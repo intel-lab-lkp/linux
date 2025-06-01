@@ -1,0 +1,96 @@
+What:           /sys/bus/i2c/devices/<busnum>-<addr>/unlock
+Date:           2025-05-31
+KernelVersion:  6.16
+Contact:        Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+Description:
+                Write-only attribute used to present a password and unlock
+                access to protected areas of the M24LR chip, including
+                configuration registers such as the Sector Security Status
+                (SSS) bytes. A valid password must be written to enable write
+                access to these regions via the I2C interface.
+
+                Format:
+                  - Hexadecimal string representing a 32-bit (4-byte) password
+                  - Accepts 1 to 8 hex digits (e.g., "c", "1F", "a1b2c3d4")
+                  - No "0x" prefix, whitespace, or trailing newline
+                  - Case-insensitive
+
+                Behavior:
+                  - If the password matches the internal stored value,
+                    access to protected memory/configuration is granted
+                  - If the password does not match the internally stored value,
+                    it will fail silently
+
+What:           /sys/bus/i2c/devices/<busnum>-<addr>/new_pass
+Date:           2025-05-31
+KernelVersion:  6.16
+Contact:        Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+Description:
+                Write-only attribute used to update the password required to
+                unlock the M24LR chip.
+
+                Format:
+                  - Hexadecimal string representing a new 32-bit password
+                  - Accepts 1 to 8 hex digits (e.g., "1A", "ffff", "c0ffee00")
+                  - No "0x" prefix, whitespace, or trailing newline
+                  - Case-insensitive
+
+                Behavior:
+                  - Overwrites the current password stored in the I2C password
+                    register
+                  - Requires the device to be unlocked before changing the
+                    password
+                  - If the device is locked, the write silently fails
+
+What:           /sys/bus/i2c/devices/<busnum>-<addr>/uid
+Date:           2025-05-31
+KernelVersion:  6.16
+Contact:        Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+Description:
+                Read-only attribute that exposes the 8-byte unique identifier
+                programmed into the M24LR chip at the factory.
+
+                Format:
+                  - Lowercase hexadecimal string representing a 64-bit value
+                  - 1 to 16 hex digits (e.g., "e00204f12345678")
+                  - No "0x" prefix
+                  - Includes a trailing newline
+
+What:           /sys/bus/i2c/devices/<busnum>-<addr>/mem_size
+Date:           2025-05-31
+KernelVersion:  6.16
+Contact:        Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+Description:
+                Read-only attribute that exposes the internal memory size code
+                of the M24LR device, as stored in the system register area.
+
+                Format:
+                  - Unsigned 8-bit integer
+                  - Includes a trailing newline
+
+                Notes:
+                  - Value is encoded by the chip and corresponds to the EEPROM
+                    size (e.g., 3 = 4 kbit for M24LR04E-R)
+
+What:           /sys/bus/i2c/devices/<busnum>-<addr>/sss<N>
+Date:           2025-05-31
+KernelVersion:  6.16
+Contact:        Abd-Alrhman Masalkhi <abd.masalkhi@gmail.com>
+Description:
+                Read/write attribute representing the Sector Security Status
+                (SSS) byte for EEPROM sector <N> in the M24LR chips. Each sector
+                has one SSS byte, which defines I2c and RF access control via a
+                combination of protection and password settings.
+
+                Format:
+                  - Read: returns a 8-bit hexadecimal value followed by a
+                          newline
+                  - Write: requires exactly one or two hexadecimal digits
+                      - No "0x" prefix, whitespace, or trailing newline
+                      - Case-insensitive
+
+                Notes:
+                  - Refer to the M24LR chip datasheet for full bit definitions
+                    and usage
+                  - Write access requires prior password authentication in I2C
+                    mode
