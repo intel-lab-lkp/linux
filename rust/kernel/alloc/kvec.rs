@@ -8,6 +8,7 @@ use super::{
     AllocError, Allocator, Box, Flags,
 };
 use core::{
+    borrow::{Borrow, BorrowMut},
     fmt,
     marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
@@ -887,6 +888,24 @@ where
         // SAFETY: The memory behind `self.as_ptr()` is guaranteed to contain `self.len`
         // initialized elements of type `T`.
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
+    }
+}
+
+impl<T, A> Borrow<[T]> for Vec<T, A>
+where
+    A: Allocator,
+{
+    fn borrow(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<T, A> BorrowMut<[T]> for Vec<T, A>
+where
+    A: Allocator,
+{
+    fn borrow_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
     }
 }
 
