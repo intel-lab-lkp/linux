@@ -1084,8 +1084,11 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 			 pte_t orig_dst_pte, pte_t orig_src_pte,
 			 pmd_t *dst_pmd, pmd_t dst_pmdval,
 			 spinlock_t *dst_ptl, spinlock_t *src_ptl,
-			 struct folio *src_folio)
+			 struct folio *src_folio,
+			 struct swap_info_struct *si)
 {
+	swp_entry_t entry;
+
 	double_pt_lock(dst_ptl, src_ptl);
 
 	if (!is_pte_pages_stable(dst_pte, src_pte, orig_dst_pte, orig_src_pte,
@@ -1102,6 +1105,16 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 	if (src_folio) {
 		folio_move_anon_rmap(src_folio, dst_vma);
 		src_folio->index = linear_page_index(dst_vma, dst_addr);
+	} else {
+		/*
+		 * Check if the swap entry is cached after acquiring the src_pte
+		 * lock. Or we might miss a new loaded swap cache folio.
+		 */
+		entry = pte_to_swp_entry(orig_src_pte);
+		if (si->swap_map[swp_offset(entry)] & SWAP_HAS_CACHE) {
+			double_pt_unlock(dst_ptl, src_ptl);
+			return -EAGAIN;
+		}
 	}
 
 	orig_src_pte = ptep_get_and_clear(mm, src_addr, src_pte);
@@ -1409,10 +1422,20 @@ retry:
 				folio_lock(src_folio);
 				goto retry;
 			}
+			/*
+			 * Check if the folio still belongs to the target swap entry after
+			 * acquiring the lock. Folio can be freed in the swap cache while
+			 * not locked.
+			 */
+			if (unlikely(!folio_test_swapcache(folio) ||
+				     entry.val != folio->swap.val)) {
+				err = -EAGAIN;
+				goto out;
+			}
 		}
 		err = move_swap_pte(mm, dst_vma, dst_addr, src_addr, dst_pte, src_pte,
 				orig_dst_pte, orig_src_pte, dst_pmd, dst_pmdval,
-				dst_ptl, src_ptl, src_folio);
+				dst_ptl, src_ptl, src_folio, si);
 	}
 
 out:
