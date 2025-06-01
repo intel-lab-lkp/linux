@@ -31,6 +31,7 @@ unsigned char node_distances[MAX_NUMNODES][MAX_NUMNODES];
 EXPORT_SYMBOL(node_distances);
 
 static struct numa_meminfo numa_meminfo;
+static struct numa_meminfo numa_reserved_meminfo;
 cpumask_t cpus_on_node[MAX_NUMNODES];
 cpumask_t phys_cpus_on_node[MAX_NUMNODES];
 EXPORT_SYMBOL(cpus_on_node);
@@ -136,12 +137,14 @@ void __init early_numa_add_cpu(int cpuid, s16 node)
 void numa_add_cpu(unsigned int cpu)
 {
 	int nid = cpu_to_node(cpu);
+
 	cpumask_set_cpu(cpu, &cpus_on_node[nid]);
 }
 
 void numa_remove_cpu(unsigned int cpu)
 {
 	int nid = cpu_to_node(cpu);
+
 	cpumask_clear_cpu(cpu, &cpus_on_node[nid]);
 }
 
@@ -155,7 +158,7 @@ static int __init numa_add_memblk_to(int nid, u64 start, u64 end,
 	/* whine about and ignore invalid blks */
 	if (start > end || nid < 0 || nid >= MAX_NUMNODES) {
 		pr_warn("NUMA: Warning: invalid memblk node %d [mem %#010Lx-%#010Lx]\n",
-			   nid, start, end - 1);
+			nid, start, end - 1);
 		return 0;
 	}
 
@@ -187,6 +190,28 @@ int __init numa_add_memblk(int nid, u64 start, u64 end)
 	return numa_add_memblk_to(nid, start, end, &numa_meminfo);
 }
 
+/**
+ * numa_add_reserved_memblk - Add one numa_memblk to numa_reserved_meminfo
+ * @nid: NUMA node ID of the new memblk
+ * @start: Start address of the new memblk
+ * @end: End address of the new memblk
+ *
+ * Add a new memblk to the numa_reserved_meminfo.
+ *
+ * Usage Case: numa_cleanup_meminfo() reconciles all numa_memblk instances
+ * against memblock_type information and moves any that intersect reserved
+ * ranges to numa_reserved_meminfo. However, when that information is known
+ * ahead of time, we use numa_add_reserved_memblk() to add the numa_memblk
+ * to numa_reserved_meminfo directly.
+ *
+ * RETURNS:
+ * 0 on success, -errno on failure.
+ */
+int __init numa_add_reserved_memblk(int nid, u64 start, u64 end)
+{
+	return numa_add_memblk_to(nid, start, end, &numa_reserved_meminfo);
+}
+
 static void __init node_mem_init(unsigned int node)
 {
 	unsigned long start_pfn, end_pfn;
@@ -194,7 +219,7 @@ static void __init node_mem_init(unsigned int node)
 
 	node_addrspace_offset = nid_to_addrbase(node);
 	pr_info("Node%d's addrspace_offset is 0x%lx\n",
-			node, node_addrspace_offset);
+		node, node_addrspace_offset);
 
 	get_pfn_range_for_nid(node, &start_pfn, &end_pfn);
 	pr_info("Node%d: start_pfn=0x%lx, end_pfn=0x%lx\n",
@@ -285,7 +310,7 @@ static void __init init_node_memblock(void)
 		case EFI_MEMORY_MAPPED_IO:
 		case EFI_MEMORY_MAPPED_IO_PORT_SPACE:
 			pr_info("Resvd: mem_type:%d, mem_start:0x%llx, mem_size:0x%llx Bytes\n",
-					mem_type, mem_start, mem_size);
+				mem_type, mem_start, mem_size);
 			break;
 		}
 	}

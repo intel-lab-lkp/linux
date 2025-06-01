@@ -28,17 +28,18 @@ struct numa_memblk {
 	int			nid;
 };
 
-#define NR_NODE_MEMBLKS		(MAX_NUMNODES*2)
+#define NR_NODE_MEMBLKS		(MAX_NUMNODES * 2)
 struct numa_meminfo {
 	int			nr_blks;
 	struct numa_memblk	blk[NR_NODE_MEMBLKS];
 };
 
-extern int __init numa_add_memblk(int nodeid, u64 start, u64 end);
+int __init numa_add_memblk(int nodeid, u64 start, u64 end);
+int __init numa_add_reserved_memblk(int nid, u64 start, u64 end);
 
-extern void __init early_numa_add_cpu(int cpuid, s16 node);
-extern void numa_add_cpu(unsigned int cpu);
-extern void numa_remove_cpu(unsigned int cpu);
+void __init early_numa_add_cpu(int cpuid, s16 node);
+void numa_add_cpu(unsigned int cpu);
+void numa_remove_cpu(unsigned int cpu);
 
 static inline void numa_clear_node(int cpu)
 {
@@ -49,7 +50,7 @@ static inline void set_cpuid_to_node(int cpuid, s16 node)
 	__cpuid_to_node[cpuid] = node;
 }
 
-extern int early_cpu_to_node(int cpu);
+int early_cpu_to_node(int cpu);
 
 #else
 
