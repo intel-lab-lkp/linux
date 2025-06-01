@@ -816,6 +816,7 @@ int hidma_ll_uninit(struct hidma_lldev *lldev)
 
 	required_bytes = sizeof(struct hidma_tre) * lldev->nr_tres;
 	tasklet_kill(&lldev->task);
+	kfifo_free(&lldev->handoff_fifo);
 	memset(lldev->trepool, 0, required_bytes);
 	lldev->trepool = NULL;
 	atomic_set(&lldev->pending_tre_count, 0);
