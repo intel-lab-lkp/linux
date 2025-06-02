@@ -2081,7 +2081,11 @@ enum netdev_reg_state {
  *	moves out.
  */
 
+#ifdef CONFIG_RANDSTRUCT
+struct __randomize_layout net_device {
+#else
 struct net_device {
+#endif
 	/* Cacheline organization can be found documented in
 	 * Documentation/networking/net_cachelines/net_device.rst.
 	 * Please update the document when adding new fields.
