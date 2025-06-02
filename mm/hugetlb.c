@@ -6146,25 +6146,28 @@ static void unmap_ref_private(struct mm_struct *mm, struct vm_area_struct *vma,
 	i_mmap_unlock_write(mapping);
 }
 
+enum cow_context {
+	HUGETLB_FAULT_CONTEXT,
+	HUGETLB_NO_PAGE_CONTEXT,
+};
+
 /*
- * hugetlb_wp() should be called with page lock of the original hugepage held.
  * Called with hugetlb_fault_mutex_table held and pte_page locked so we
  * cannot race with other handlers or page migration.
  * Keep the pte_same checks anyway to make transition from the mutex easier.
  */
-static vm_fault_t hugetlb_wp(struct folio *pagecache_folio,
-		       struct vm_fault *vmf)
+static vm_fault_t hugetlb_wp(struct vm_fault *vmf, enum cow_context context)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
 	pte_t pte = huge_ptep_get(mm, vmf->address, vmf->pte);
 	struct hstate *h = hstate_vma(vma);
-	struct folio *old_folio;
-	struct folio *new_folio;
 	bool cow_from_owner = 0;
 	vm_fault_t ret = 0;
 	struct mmu_notifier_range range;
+	struct folio *old_folio, *new_folio, *pagecache_folio;
+	struct address_space *mapping = vma->vm_file->f_mapping;
 
 	/*
 	 * Never handle CoW for uffd-wp protected pages.  It should be only
@@ -6198,7 +6201,11 @@ retry_avoidcopy:
 	 * we run out of free hugetlb folios: we would have to kill processes
 	 * in scenarios that used to work. As a side effect, there can still
 	 * be leaks between processes, for example, with FOLL_GET users.
+	 *
+	 * We need to take the lock here because the folio might be undergoing a
+	 * migration. e.g: see folio_try_share_anon_rmap_pte.
 	 */
+	folio_lock(old_folio);
 	if (folio_mapcount(old_folio) == 1 && folio_test_anon(old_folio)) {
 		if (!PageAnonExclusive(&old_folio->page)) {
 			folio_move_anon_rmap(old_folio, vma);
@@ -6209,22 +6216,44 @@ retry_avoidcopy:
 						     vmf->pte);
 
 		delayacct_wpcopy_end();
+		folio_unlock(old_folio);
 		return 0;
 	}
 	VM_BUG_ON_PAGE(folio_test_anon(old_folio) &&
 		       PageAnonExclusive(&old_folio->page), &old_folio->page);
+	folio_unlock(old_folio);
 
+
+	/*
+	 * We can be called from two different contexts: hugetlb_no_page or
+	 * hugetlb_fault.
+	 * When called from the latter, we try to find the original folio in
+	 * the pagecache and compare it against the current folio we have mapped
+	 * in the pagetables. If it differs, it means that this process already
+	 * CoWed and mapped the folio privately, so we know that a reservation
+	 * was already consumed.
+	 * This will be latter used to determine whether we need to unmap the folio
+	 * from other processes in case we fail to allocate a new folio.
+	 */
+	if (context == HUGETLB_FAULT_CONTEXT) {
+		pagecache_folio = filemap_get_hugetlb_folio(h, mapping, vmf->pgoff);
+		if (IS_ERR(pagecache_folio))
+			pagecache_folio = NULL;
+		else
+			folio_put(pagecache_folio);
+	}
 	/*
 	 * If the process that created a MAP_PRIVATE mapping is about to
 	 * perform a COW due to a shared page count, attempt to satisfy
 	 * the allocation without using the existing reserves. The pagecache
-	 * page is used to determine if the reserve at this address was
+	 * folio is used to determine if the reserve at this address was already
 	 * consumed or not. If reserves were used, a partial faulted mapping
 	 * at the time of fork() could consume its reserves on COW instead
 	 * of the full address range.
 	 */
-	if (is_vma_resv_set(vma, HPAGE_RESV_OWNER) &&
-			old_folio != pagecache_folio)
+	if (context == HUGETLB_FAULT_CONTEXT &&
+	    is_vma_resv_set(vma, HPAGE_RESV_OWNER) &&
+	    old_folio != pagecache_folio)
 		cow_from_owner = true;
 
 	folio_get(old_folio);
@@ -6245,7 +6274,6 @@ retry_avoidcopy:
 		 * may get SIGKILLed if it later faults.
 		 */
 		if (cow_from_owner) {
-			struct address_space *mapping = vma->vm_file->f_mapping;
 			pgoff_t idx;
 			u32 hash;
 
@@ -6451,11 +6479,11 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	}
 
 	/*
-	 * Use page lock to guard against racing truncation
-	 * before we get page_table_lock.
+	 * hugetlb_fault_mutex_table guards us against truncation,
+	 * so we do not need to take locks on the folio.
 	 */
 	new_folio = false;
-	folio = filemap_lock_hugetlb_folio(h, mapping, vmf->pgoff);
+	folio = filemap_get_hugetlb_folio(h, mapping, vmf->pgoff);
 	if (IS_ERR(folio)) {
 		size = i_size_read(mapping->host) >> huge_page_shift(h);
 		if (vmf->pgoff >= size)
@@ -6521,6 +6549,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 		if (vma->vm_flags & VM_MAYSHARE) {
 			int err = hugetlb_add_to_page_cache(folio, mapping,
 							vmf->pgoff);
+			folio_unlock(folio);
 			if (err) {
 				/*
 				 * err can't be -EEXIST which implies someone
@@ -6537,7 +6566,6 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			}
 			new_pagecache_folio = true;
 		} else {
-			folio_lock(folio);
 			anon_rmap = 1;
 		}
 	} else {
@@ -6603,7 +6631,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	hugetlb_count_add(pages_per_huge_page(h), mm);
 	if ((vmf->flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED)) {
 		/* Optimization, do the COW without a second fault */
-		ret = hugetlb_wp(folio, vmf);
+		ret = hugetlb_wp(vmf, HUGETLB_NO_PAGE_CONTEXT);
 	}
 
 	spin_unlock(vmf->ptl);
@@ -6615,8 +6643,6 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	 */
 	if (new_folio)
 		folio_set_hugetlb_migratable(folio);
-
-	folio_unlock(folio);
 out:
 	hugetlb_vma_unlock_read(vma);
 
@@ -6636,7 +6662,6 @@ backout_unlocked:
 	if (new_folio && !new_pagecache_folio)
 		restore_reserve_on_error(h, vma, vmf->address, folio);
 
-	folio_unlock(folio);
 	folio_put(folio);
 	goto out;
 }
@@ -6671,7 +6696,6 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	vm_fault_t ret;
 	u32 hash;
 	struct folio *folio = NULL;
-	struct folio *pagecache_folio = NULL;
 	struct hstate *h = hstate_vma(vma);
 	struct address_space *mapping;
 	int need_wait_lock = 0;
@@ -6780,11 +6804,6 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		}
 		/* Just decrements count, does not deallocate */
 		vma_end_reservation(h, vma, vmf.address);
-
-		pagecache_folio = filemap_lock_hugetlb_folio(h, mapping,
-							     vmf.pgoff);
-		if (IS_ERR(pagecache_folio))
-			pagecache_folio = NULL;
 	}
 
 	vmf.ptl = huge_pte_lock(h, mm, vmf.pte);
@@ -6798,10 +6817,6 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	    (flags & FAULT_FLAG_WRITE) && !huge_pte_write(vmf.orig_pte)) {
 		if (!userfaultfd_wp_async(vma)) {
 			spin_unlock(vmf.ptl);
-			if (pagecache_folio) {
-				folio_unlock(pagecache_folio);
-				folio_put(pagecache_folio);
-			}
 			hugetlb_vma_unlock_read(vma);
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 			return handle_userfault(&vmf, VM_UFFD_WP);
@@ -6813,23 +6828,12 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		/* Fallthrough to CoW */
 	}
 
-	/*
-	 * hugetlb_wp() requires page locks of pte_page(vmf.orig_pte) and
-	 * pagecache_folio, so here we need take the former one
-	 * when folio != pagecache_folio or !pagecache_folio.
-	 */
 	folio = page_folio(pte_page(vmf.orig_pte));
-	if (folio != pagecache_folio)
-		if (!folio_trylock(folio)) {
-			need_wait_lock = 1;
-			goto out_ptl;
-		}
-
 	folio_get(folio);
 
 	if (flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) {
 		if (!huge_pte_write(vmf.orig_pte)) {
-			ret = hugetlb_wp(pagecache_folio, &vmf);
+			ret = hugetlb_wp(&vmf, HUGETLB_FAULT_CONTEXT);
 			goto out_put_page;
 		} else if (likely(flags & FAULT_FLAG_WRITE)) {
 			vmf.orig_pte = huge_pte_mkdirty(vmf.orig_pte);
@@ -6840,16 +6844,9 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 						flags & FAULT_FLAG_WRITE))
 		update_mmu_cache(vma, vmf.address, vmf.pte);
 out_put_page:
-	if (folio != pagecache_folio)
-		folio_unlock(folio);
 	folio_put(folio);
 out_ptl:
 	spin_unlock(vmf.ptl);
-
-	if (pagecache_folio) {
-		folio_unlock(pagecache_folio);
-		folio_put(pagecache_folio);
-	}
 out_mutex:
 	hugetlb_vma_unlock_read(vma);
 
@@ -6861,15 +6858,6 @@ out_mutex:
 		vma_end_read(vma);
 
 	mutex_unlock(&hugetlb_fault_mutex_table[hash]);
-	/*
-	 * Generally it's safe to hold refcount during waiting page lock. But
-	 * here we just wait to defer the next page fault to avoid busy loop and
-	 * the page is not used after unlocked before returning from the current
-	 * page fault. So we are safe from accessing freed page, even if we wait
-	 * here without taking refcount.
-	 */
-	if (need_wait_lock)
-		folio_wait_locked(folio);
 	return ret;
 }
 
