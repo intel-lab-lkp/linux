@@ -48,11 +48,6 @@ void fortify_add_kunit_error(int write);
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 
-/* Handle being built without CONFIG_FORTIFY_SOURCE */
-#ifndef __compiletime_strlen
-# define __compiletime_strlen __builtin_strlen
-#endif
-
 static struct kunit_resource read_resource;
 static struct kunit_resource write_resource;
 static int fortify_read_overflows;
@@ -1071,9 +1066,6 @@ static void fortify_test_kmemdup(struct kunit *test)
 
 static int fortify_test_init(struct kunit *test)
 {
-	if (!IS_ENABLED(CONFIG_FORTIFY_SOURCE))
-		kunit_skip(test, "Not built with CONFIG_FORTIFY_SOURCE=y");
-
 	fortify_read_overflows = 0;
 	kunit_add_named_resource(test, NULL, NULL, &read_resource,
 				 "fortify_read_overflows",
