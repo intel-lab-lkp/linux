@@ -2803,6 +2803,7 @@ static void __init l1tf_apply_mitigation(void)
 		return;
 	}
 
+	pr_info("Mitigation: PTE inversion\n");
 	setup_force_cpu_cap(X86_FEATURE_L1TF_PTEINV);
 }
 
