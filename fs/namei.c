@@ -3370,6 +3370,32 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
 	return mode;
 }
 
+static int __vfs_create(struct mnt_idmap *idmap, struct inode *dir,
+			struct dentry *dentry, umode_t mode, bool want_excl,
+			struct inode **delegated_inode)
+{
+	int error;
+
+	error = may_create(idmap, dir, dentry);
+	if (error)
+		return error;
+
+	if (!dir->i_op->create)
+		return -EACCES;	/* shouldn't it be ENOSYS? */
+
+	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG);
+	error = security_inode_create(dir, dentry, mode);
+	if (error)
+		return error;
+	error = try_break_deleg(dir, delegated_inode);
+	if (error)
+		return error;
+	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
+	if (!error)
+		fsnotify_create(dir, dentry);
+	return error;
+}
+
 /**
  * vfs_create - create new file
  * @idmap:	idmap of the mount the inode was found from
@@ -3389,23 +3415,7 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
 int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	       struct dentry *dentry, umode_t mode, bool want_excl)
 {
-	int error;
-
-	error = may_create(idmap, dir, dentry);
-	if (error)
-		return error;
-
-	if (!dir->i_op->create)
-		return -EACCES;	/* shouldn't it be ENOSYS? */
-
-	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG);
-	error = security_inode_create(dir, dentry, mode);
-	if (error)
-		return error;
-	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
-	if (!error)
-		fsnotify_create(dir, dentry);
-	return error;
+	return __vfs_create(idmap, dir, dentry, mode, want_excl, NULL);
 }
 EXPORT_SYMBOL(vfs_create);
 
@@ -4278,6 +4288,7 @@ static int do_mknodat(int dfd, struct filename *name, umode_t mode,
 	struct path path;
 	int error;
 	unsigned int lookup_flags = 0;
+	struct inode *delegated_inode = NULL;
 
 	error = may_mknod(mode);
 	if (error)
@@ -4296,8 +4307,9 @@ retry:
 	idmap = mnt_idmap(path.mnt);
 	switch (mode & S_IFMT) {
 		case 0: case S_IFREG:
-			error = vfs_create(idmap, path.dentry->d_inode,
-					   dentry, mode, true);
+			error = __vfs_create(idmap, path.dentry->d_inode,
+					     dentry, mode, true,
+					     &delegated_inode);
 			if (!error)
 				security_path_post_mknod(idmap, dentry);
 			break;
@@ -4312,6 +4324,11 @@ retry:
 	}
 out2:
 	done_path_create(&path, dentry);
+	if (delegated_inode) {
+		error = break_deleg_wait(&delegated_inode);
+		if (!error)
+			goto retry;
+	}
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;
 		goto retry;
