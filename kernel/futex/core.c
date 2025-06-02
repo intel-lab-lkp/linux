@@ -1754,7 +1754,12 @@ int futex_hash_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg4)
 			return -EINVAL;
 		if (arg4 & FH_FLAG_IMMUTABLE)
 			flags |= FH_IMMUTABLE;
+
+		static DEFINE_MUTEX(fha_syn);
+
+		mutex_lock(&fha_syn);
 		ret = futex_hash_allocate(arg3, flags);
+		mutex_unlock(&fha_syn);
 		break;
 
 	case PR_FUTEX_HASH_GET_SLOTS:
