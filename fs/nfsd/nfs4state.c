@@ -9640,8 +9640,11 @@ int
 nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
 		      int data_type, const struct qstr *name)
 {
+	struct inode *inode = fsnotify_data_inode(data, data_type);
 	struct file_lock_context *ctx;
 	struct file_lock_core *flc;
+
+	trace_nfsd_file_fsnotify_handle_dir_event(inode, dir, mask);
 
 	ctx = locks_inode_context(dir);
 	if (!ctx || list_empty(&ctx->flc_lease))

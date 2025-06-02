@@ -743,7 +743,7 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_mark *mark, u32 mask,
 	if (WARN_ON_ONCE(!inode))
 		return 0;
 
-	trace_nfsd_file_fsnotify_handle_event(inode, mask);
+	trace_nfsd_file_fsnotify_handle_event(inode, dir, mask);
 
 	/* Should be no marks on non-regular files */
 	if (!S_ISREG(inode->i_mode)) {

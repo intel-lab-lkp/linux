@@ -1293,24 +1293,35 @@ TRACE_EVENT(nfsd_file_is_cached,
 	)
 );
 
-TRACE_EVENT(nfsd_file_fsnotify_handle_event,
-	TP_PROTO(struct inode *inode, u32 mask),
-	TP_ARGS(inode, mask),
+DECLARE_EVENT_CLASS(nfsd_file_fsnotify_handle_event_class,
+	TP_PROTO(const struct inode *inode, const struct inode *dir, u32 mask),
+	TP_ARGS(inode, dir, mask),
 	TP_STRUCT__entry(
-		__field(struct inode *, inode)
+		__field(ino_t, ino)
+		__field(ino_t, dir)
 		__field(unsigned int, nlink)
 		__field(umode_t, mode)
 		__field(u32, mask)
 	),
 	TP_fast_assign(
-		__entry->inode = inode;
+		__entry->ino = inode->i_ino;
+		__entry->dir = dir ? dir->i_ino : 0;
 		__entry->nlink = inode->i_nlink;
 		__entry->mode = inode->i_mode;
 		__entry->mask = mask;
 	),
-	TP_printk("inode=%p nlink=%u mode=0%ho mask=0x%x", __entry->inode,
-			__entry->nlink, __entry->mode, __entry->mask)
+	TP_printk("dir=%lu inode=%lu nlink=%u mode=0%ho mask=0x%x",
+		  __entry->dir, __entry->ino, __entry->nlink,
+		  __entry->mode, __entry->mask)
 );
+
+#define DEFINE_NFSD_FSNOTIFY_HANDLE_EVENT(name)					\
+DEFINE_EVENT(nfsd_file_fsnotify_handle_event_class, name,			\
+	TP_PROTO(const struct inode *inode, const struct inode *dir, u32 mask),	\
+	TP_ARGS(inode, dir, mask))
+
+DEFINE_NFSD_FSNOTIFY_HANDLE_EVENT(nfsd_file_fsnotify_handle_event);
+DEFINE_NFSD_FSNOTIFY_HANDLE_EVENT(nfsd_file_fsnotify_handle_dir_event);
 
 DECLARE_EVENT_CLASS(nfsd_file_gc_class,
 	TP_PROTO(
