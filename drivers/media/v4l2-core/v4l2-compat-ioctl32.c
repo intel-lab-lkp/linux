@@ -929,6 +929,7 @@ unsigned int v4l2_compat_translate_cmd(unsigned int cmd)
 	}
 	return cmd;
 }
+EXPORT_SYMBOL_GPL(v4l2_compat_translate_cmd);
 
 int v4l2_compat_get_user(void __user *arg, void *parg, unsigned int cmd)
 {
