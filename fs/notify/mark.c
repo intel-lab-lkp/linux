@@ -308,6 +308,7 @@ void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 	if (update_children)
 		fsnotify_conn_set_children_dentry_flags(conn);
 }
+EXPORT_SYMBOL_GPL(fsnotify_recalc_mask);
 
 /* Free all connectors queued for freeing once SRCU period ends */
 static void fsnotify_connector_destroy_workfn(struct work_struct *work)
