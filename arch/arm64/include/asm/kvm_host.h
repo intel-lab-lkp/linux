@@ -1703,6 +1703,12 @@ int kvm_arm_pmu_v3_has_attr(struct kvm_vcpu *vcpu,
 			    struct kvm_device_attr *attr);
 int kvm_arm_pmu_v3_enable(struct kvm_vcpu *vcpu);
 
+bool kvm_vcpu_pmu_is_partitioned(struct kvm_vcpu *vcpu);
+
+#if defined(__KVM_NVHE_HYPERVISOR__)
+#define kvm_vcpu_pmu_is_partitioned(_) false
+#endif
+
 struct kvm_pmu_events *kvm_get_pmu_events(void);
 void kvm_vcpu_pmu_restore_guest(struct kvm_vcpu *vcpu);
 void kvm_vcpu_pmu_restore_host(struct kvm_vcpu *vcpu);
@@ -1818,6 +1824,11 @@ static inline bool kvm_pmu_counter_is_hyp(struct kvm_vcpu *vcpu, unsigned int id
 }
 
 static inline void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu) {}
+
+static inline bool kvm_vcpu_pmu_is_partitioned(struct kvm_vcpu *vcpu)
+{
+	return false;
+}
 
 #endif
 

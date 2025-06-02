@@ -42,12 +42,13 @@ static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 	 */
 	vcpu->arch.mdcr_el2 = FIELD_PREP(MDCR_EL2_HPMN, hpmn);
 	vcpu->arch.mdcr_el2 |= (MDCR_EL2_HPMD |
-				MDCR_EL2_TPM |
 				MDCR_EL2_TPMS |
 				MDCR_EL2_TTRF |
-				MDCR_EL2_TPMCR |
 				MDCR_EL2_TDRA |
 				MDCR_EL2_TDOSA);
+
+	if (!kvm_vcpu_pmu_is_partitioned(vcpu))
+		vcpu->arch.mdcr_el2 |= MDCR_EL2_TPM | MDCR_EL2_TPMCR;
 
 	/* Is the VM being debugged by userspace? */
 	if (vcpu->guest_debug)
