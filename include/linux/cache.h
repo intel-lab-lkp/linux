@@ -147,6 +147,34 @@
 	struct { } __cacheline_group_pad__##GROUP		\
 	__aligned((__VA_ARGS__ + 0) ? : SMP_CACHE_BYTES)
 
+/**
+ * __cacheline_group_begin_aligned_cond - conditionally align a cache group
+ * @GROUP: name of the group
+ * @COND: a size; if it equals SMP_CACHE_BYTES, the group will be aligned
+ * to SMP_CACHE_BYTES. Otherwise, no specific cacheline alignment
+ * is enforced.
+ *
+ */
+#define __cacheline_group_begin_aligned_cond(GROUP, COND)	\
+	__cacheline_group_begin(GROUP)				\
+	__aligned(((COND) == SMP_CACHE_BYTES) ? SMP_CACHE_BYTES : 1)
+
+/**
+ * __cacheline_group_end_aligned_cond - declare a conditionally aligned group end
+ * @GROUP: name of the group
+ * @COND: condition (size); if it equals SMP_CACHE_BYTES, padding will
+ * be aligned to SMP_CACHE_BYTES. Otherwise, no alignment.
+ *
+ * This complements __cacheline_group_begin_aligned_cond.
+ * The end marker itself is aligned to sizeof(long).
+ * The final padding to avoid the next field falling into this cacheline
+ * is applied conditionally based on COND.
+ */
+#define __cacheline_group_end_aligned_cond(GROUP, COND)                 \
+        __cacheline_group_end(GROUP) __aligned(sizeof(long));           \
+        struct { } __cacheline_group_pad__##GROUP                       \
+        __aligned(((COND) == SMP_CACHE_BYTES) ? SMP_CACHE_BYTES : 1)
+
 #ifndef CACHELINE_ASSERT_GROUP_MEMBER
 #define CACHELINE_ASSERT_GROUP_MEMBER(TYPE, GROUP, MEMBER) \
 	BUILD_BUG_ON(!(offsetof(TYPE, MEMBER) >= \
