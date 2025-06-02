@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/blkpg.h>
 #include <linux/magic.h>
+#include <linux/mtd/mtd.h>
 #include <linux/buffer_head.h>
 #include <linux/swap.h>
 #include <linux/writeback.h>
@@ -1075,9 +1076,23 @@ struct file *bdev_file_open_by_path(const char *path, blk_mode_t mode,
 	dev_t dev;
 	int error;
 
-	error = lookup_bdev(path, &dev);
-	if (error)
-		return ERR_PTR(error);
+#ifdef CONFIG_MTD_BLOCK
+	if (!strncmp(path, "mtd:", 4)) {
+		struct mtd_info *mtd;
+
+		/* mount by MTD device name */
+		pr_debug("path name \"%s\"\n", path);
+		mtd = get_mtd_device_nm(path + 4);
+		if (IS_ERR(mtd))
+			return ERR_PTR(-EINVAL);
+		dev = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
+	} else
+#endif
+	{
+		error = lookup_bdev(path, &dev);
+		if (error)
+			return ERR_PTR(error);
+	}
 
 	file = bdev_file_open_by_dev(dev, mode, holder, hops);
 	if (!IS_ERR(file) && (mode & BLK_OPEN_WRITE)) {
