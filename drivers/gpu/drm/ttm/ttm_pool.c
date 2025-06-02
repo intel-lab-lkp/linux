@@ -1132,17 +1132,24 @@ void ttm_pool_fini(struct ttm_pool *pool)
 }
 EXPORT_SYMBOL(ttm_pool_fini);
 
-/* As long as pages are available make sure to release at least one */
 static unsigned long ttm_pool_shrinker_scan(struct shrinker *shrink,
 					    struct shrink_control *sc)
 {
-	unsigned long num_freed = 0;
+	unsigned long to_scan, freed = 0;
 
-	do
-		num_freed += ttm_pool_shrink();
-	while (!num_freed && atomic_long_read(&allocated_pages));
+	to_scan = min_t(unsigned long,
+			sc->nr_to_scan,
+			atomic_long_read(&allocated_pages));
+	while (freed < to_scan) {
+		freed += ttm_pool_shrink();
+		to_scan = min_t(unsigned long,
+				to_scan,
+				atomic_long_read(&allocated_pages));
+	}
 
-	return num_freed;
+	sc->nr_scanned = freed;
+
+	return freed ?: SHRINK_STOP;
 }
 
 /* Return the number of pages available or SHRINK_EMPTY if we have none */
@@ -1266,8 +1273,10 @@ EXPORT_SYMBOL(ttm_pool_debugfs);
 /* Test the shrinker functions and dump the result */
 static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
 {
-	struct shrink_control sc = { .gfp_mask = GFP_NOFS };
-
+	struct shrink_control sc = {
+		.gfp_mask = GFP_NOFS,
+		.nr_to_scan = 1,
+	};
 	fs_reclaim_acquire(GFP_KERNEL);
 	seq_printf(m, "%lu/%lu\n", ttm_pool_shrinker_count(mm_shrinker, &sc),
 		   ttm_pool_shrinker_scan(mm_shrinker, &sc));
