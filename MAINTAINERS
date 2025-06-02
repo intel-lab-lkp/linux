@@ -15861,9 +15861,10 @@ S:	Maintained
 F:	drivers/mmc/host/atmel-mci.c
 
 MICROCHIP NAND DRIVER
+M:	Balamanikandan Gunasundar <balamanikandan.gunasundar@microchip.com>
 L:	linux-mtd@lists.infradead.org
-S:	Orphan
-F:	Documentation/devicetree/bindings/mtd/atmel-nand.txt
+S:	Maintained
+F:	Documentation/devicetree/bindings/mtd/microchip,*.yaml
 F:	drivers/mtd/nand/raw/atmel/*
 
 MICROCHIP OTPC DRIVER
