@@ -1179,10 +1179,6 @@ static long uvc_v4l2_compat_ioctl32(struct file *file,
 	void __user *up = compat_ptr(arg);
 	long ret;
 
-	ret = uvc_pm_get(handle->stream->dev);
-	if (ret)
-		return ret;
-
 	switch (cmd) {
 	case UVCIOC_CTRL_MAP32:
 		ret = uvc_v4l2_get_xu_mapping(&karg.xmap, up);
@@ -1200,7 +1196,13 @@ static long uvc_v4l2_compat_ioctl32(struct file *file,
 		ret = uvc_v4l2_get_xu_query(&karg.xqry, up);
 		if (ret)
 			break;
+
+		ret = uvc_pm_get(handle->stream->dev);
+		if (ret)
+			break;
 		ret = uvc_xu_ctrl_query(handle->chain, &karg.xqry);
+		uvc_pm_put(handle->stream->dev);
+
 		if (ret)
 			break;
 		ret = uvc_v4l2_put_xu_query(&karg.xqry, up);
@@ -1212,8 +1214,6 @@ static long uvc_v4l2_compat_ioctl32(struct file *file,
 		ret = -ENOIOCTLCMD;
 		break;
 	}
-
-	uvc_pm_put(handle->stream->dev);
 
 	return ret;
 }
@@ -1227,6 +1227,7 @@ static long uvc_v4l2_unlocked_ioctl(struct file *file,
 
 	/* The following IOCTLs do not need to turn on the camera. */
 	switch (cmd) {
+	case UVCIOC_CTRL_MAP:
 	case VIDIOC_CREATE_BUFS:
 	case VIDIOC_DQBUF:
 	case VIDIOC_ENUM_FMT:
