@@ -319,8 +319,8 @@ static int ad4851_set_oversampling_ratio(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 	}
-
-	ret = iio_backend_oversampling_ratio_set(st->back, osr);
+	/* Channel is ignored by the backend being used here */
+	ret = iio_backend_oversampling_ratio_set(st->back, 0, osr);
 	if (ret)
 		return ret;
 
