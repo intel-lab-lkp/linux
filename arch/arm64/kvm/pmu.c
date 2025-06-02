@@ -15,6 +15,12 @@ static LIST_HEAD(arm_pmus);
 static DEFINE_MUTEX(arm_pmus_lock);
 static DEFINE_PER_CPU(struct kvm_pmu_events, kvm_pmu_events);
 
+static u8 reserved_host_counters __read_mostly;
+
+module_param(reserved_host_counters, byte, 0);
+MODULE_PARM_DESC(reserved_host_counters,
+		 "Partition the PMU into host and guest counters");
+
 #define kvm_arm_pmu_irq_initialized(v)	((v)->arch.pmu.irq_num >= VGIC_NR_SGIS)
 
 bool kvm_supports_guest_pmuv3(void)
@@ -238,6 +244,13 @@ void kvm_host_pmu_init(struct arm_pmu *pmu)
 	 */
 	if (!pmuv3_implemented(kvm_arm_pmu_get_pmuver_limit()))
 		return;
+
+	if (reserved_host_counters) {
+		if (kvm_pmu_partition_supported())
+			WARN_ON(kvm_pmu_partition(pmu, reserved_host_counters));
+		else
+			kvm_err("PMU Partition is not supported");
+	}
 
 	guard(mutex)(&arm_pmus_lock);
 

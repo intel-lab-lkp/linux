@@ -22,6 +22,10 @@ bool kvm_set_pmuserenr(u64 val);
 void kvm_vcpu_pmu_resync_el0(void);
 void kvm_host_pmu_init(struct arm_pmu *pmu);
 
+bool kvm_pmu_partition_supported(void);
+u8 kvm_pmu_hpmn(u8 host_counters);
+int kvm_pmu_partition(struct arm_pmu *pmu, u8 host_counters);
+
 #else
 
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
@@ -32,6 +36,21 @@ static inline bool kvm_set_pmuserenr(u64 val)
 }
 static inline void kvm_vcpu_pmu_resync_el0(void) {}
 static inline void kvm_host_pmu_init(struct arm_pmu *pmu) {}
+
+static inline bool kvm_pmu_partiton_supported(void)
+{
+	return false;
+}
+
+static inline u8 kvm_pmu_hpmn(u8 nr_counters)
+{
+	return -1;
+}
+
+static inline int kvm_pmu_partition(struct arm_pmu *pmu)
+{
+	return -EPERM;
+}
 
 #endif
 
