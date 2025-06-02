@@ -186,7 +186,6 @@ function validate_result() {
 	# Delete the file once it is validated, otherwise keep it
 	# for debugging purposes
 	rm "${TMPFILENAME}"
-	exit "${ksft_pass}"
 }
 
 function check_for_dependencies() {
