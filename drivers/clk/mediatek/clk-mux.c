@@ -243,26 +243,12 @@ int mtk_clk_register_muxes(struct device *dev,
 		if (IS_ERR(hw)) {
 			pr_err("Failed to register clk %s: %pe\n", mux->name,
 			       hw);
-			goto err;
+			continue;
 		}
-
 		clk_data->hws[mux->id] = hw;
 	}
 
 	return 0;
-
-err:
-	while (--i >= 0) {
-		const struct mtk_mux *mux = &muxes[i];
-
-		if (IS_ERR_OR_NULL(clk_data->hws[mux->id]))
-			continue;
-
-		mtk_clk_unregister_mux(clk_data->hws[mux->id]);
-		clk_data->hws[mux->id] = ERR_PTR(-ENOENT);
-	}
-
-	return PTR_ERR(hw);
 }
 EXPORT_SYMBOL_GPL(mtk_clk_register_muxes);
 
