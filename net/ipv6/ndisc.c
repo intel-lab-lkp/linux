@@ -1237,6 +1237,10 @@ errout:
 
 static enum skb_drop_reason ndisc_router_discovery(struct sk_buff *skb)
 {
+	// Check if the buffer contains enough data for the struct ra_msg
+	if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct ra_msg)))
+		return SKB_DROP_REASON_PKT_TOO_SMALL;
+
 	struct ra_msg *ra_msg = (struct ra_msg *)skb_transport_header(skb);
 	bool send_ifinfo_notify = false;
 	struct neighbour *neigh = NULL;
