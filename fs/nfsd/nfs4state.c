@@ -9722,6 +9722,45 @@ nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
 			ent->notify_vals.data = p;
 			++nns->nns_idx;
 		}
+		if (mask & FS_RENAME) {
+			struct dentry *new_dentry = fsnotify_data_dentry(data, data_type);
+			static uint32_t notify_rename_bitmap = BIT(NOTIFY4_RENAME_ENTRY);
+			struct notify4 *ent = &nns->nns_ent[nns->nns_idx];
+			struct notify_rename4 nr = { };
+			u8 *p = (u8 *)(stream->p);
+			struct name_snapshot n;
+			bool ret;
+
+			if (!(flc->flc_flags & FL_IGN_DIR_RENAME))
+				continue;
+
+			/* FIXME: warn? */
+			if (!new_dentry)
+				continue;
+
+			nr.nrn_old_entry.nrm_old_entry.ne_file.len = name->len;
+			nr.nrn_old_entry.nrm_old_entry.ne_file.data = (char *)name->name;
+			nr.nrn_old_entry.nrm_old_entry.ne_attrs.attrmask.count = 1;
+			nr.nrn_old_entry.nrm_old_entry.ne_attrs.attrmask.element = &zerobm;
+			take_dentry_name_snapshot(&n, new_dentry);
+			nr.nrn_new_entry.nad_new_entry.ne_file.len = n.name.len;
+			nr.nrn_new_entry.nad_new_entry.ne_file.data = (char *)n.name.name;
+			nr.nrn_new_entry.nad_new_entry.ne_attrs.attrmask.count = 1;
+			nr.nrn_new_entry.nad_new_entry.ne_attrs.attrmask.element = &zerobm;
+			ret = xdrgen_encode_notify_rename4(stream, &nr);
+			release_dentry_name_snapshot(&n);
+			if (!ret) {
+				pr_warn("nfsd: unable to marshal notify_rename4 to xdr stream\n");
+				continue;
+			}
+
+			/* grab a notify4 in the buffer and set it up */
+			ent->notify_mask.count = 1;
+			ent->notify_mask.element = &notify_rename_bitmap;
+			ent->notify_vals.len = (u8 *)stream->p - p;
+			ent->notify_vals.data = p;
+			++nns->nns_idx;
+		}
 
 		if (nns->nns_idx)
 			nfsd4_run_cb_notify(ncn);
