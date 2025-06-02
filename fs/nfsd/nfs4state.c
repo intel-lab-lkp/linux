@@ -9697,6 +9697,31 @@ nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
 			ent->notify_vals.data = p;
 			++nns->nns_idx;
 		}
+		if (mask & FS_CREATE) {
+			static uint32_t notify_add_bitmap = BIT(NOTIFY4_ADD_ENTRY);
+			struct notify4 *ent = &nns->nns_ent[nns->nns_idx];
+			struct notify_add4 na = { };
+			u8 *p = (u8 *)(stream->p);
+
+			if (!(flc->flc_flags & FL_IGN_DIR_CREATE))
+				continue;
+
+			na.nad_new_entry.ne_file.len = name->len;
+			na.nad_new_entry.ne_file.data = (char *)name->name;
+			na.nad_new_entry.ne_attrs.attrmask.count = 1;
+			na.nad_new_entry.ne_attrs.attrmask.element = &zerobm;
+			if (!xdrgen_encode_notify_add4(stream, &na)) {
+				pr_warn("nfsd: unable to marshal notify_add4 to xdr stream\n");
+				continue;
+			}
+
+			/* grab a notify4 in the buffer and set it up */
+			ent->notify_mask.count = 1;
+			ent->notify_mask.element = &notify_add_bitmap;
+			ent->notify_vals.len = (u8 *)stream->p - p;
+			ent->notify_vals.data = p;
+			++nns->nns_idx;
+		}
 
 		if (nns->nns_idx)
 			nfsd4_run_cb_notify(ncn);

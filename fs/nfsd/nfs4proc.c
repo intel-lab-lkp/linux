@@ -2292,7 +2292,7 @@ nfsd4_verify(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	return status == nfserr_same ? nfs_ok : status;
 }
 
-#define SUPPORTED_NOTIFY_MASK BIT(NOTIFY4_REMOVE_ENTRY)
+#define SUPPORTED_NOTIFY_MASK BIT(NOTIFY4_REMOVE_ENTRY|NOTIFY4_ADD_ENTRY)
 
 static __be32
 nfsd4_get_dir_delegation(struct svc_rqst *rqstp,
