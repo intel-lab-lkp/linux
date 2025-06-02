@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mtd/microchip,pmecc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip pmecc controller
+
+maintainers:
+  - Balamanikandan Gunasundar <balamanikandan.gunasundar@microchip.com>
+
+description:
+  Bindings for microchip Programmable Multibit Error Correction Code
+  Controller (PMECC). pmecc is a programmable BCH encoder/decoder. This
+  block is passed as the value to the "ecc-engine" property of microchip
+  nand flash controller node.
+
+properties:
+  compatible:
+    oneOf:
+      - enum:
+          - atmel,at91sam9g45-pmecc
+          - atmel,sama5d2-pmecc
+          - atmel,sama5d4-pmecc
+      - items:
+          - enum:
+              - microchip,sam9x7-pmecc
+              - microchip,sam9x60-pmecc
+          - const: atmel,at91sam9g45-pmecc
+
+  reg:
+    items:
+      - description: PMECC controller registers
+      - description: PMECC_ERRLOC controller
+
+  clocks:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: microchip,sam9x7-pmecc
+    then:
+      required:
+        - clocks
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    ecc-engine@ffffc070 {
+        compatible = "microchip,sam9x7-pmecc", "atmel,at91sam9g45-pmecc";
+        reg = <0xffffe000 0x300>,
+              <0xffffe600 0x100>;
+        clocks = <&pmc 2 48>;
+    };
