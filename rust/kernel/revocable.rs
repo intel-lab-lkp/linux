@@ -105,13 +105,7 @@ impl<T> Revocable<T> {
     /// because another CPU may be waiting to complete the revocation of this object.
     pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
         let guard = rcu::read_lock();
-        if self.is_available.load(Ordering::Relaxed) {
-            // Since `self.is_available` is true, data is initialised and has to remain valid
-            // because the RCU read side lock prevents it from being dropped.
-            Some(RevocableGuard::new(self.data.get(), guard))
-        } else {
-            None
-        }
+        self.try_access_with_guard(&guard).map(|data| RevocableGuard::new(data, guard))
     }
 
     /// Tries to access the revocable wrapped object.
@@ -198,22 +192,16 @@ impl<T> PinnedDrop for Revocable<T> {
 ///
 /// CPUs may not sleep while holding on to [`RevocableGuard`] because it's in atomic context
 /// holding the RCU read-side lock.
-///
-/// # Invariants
-///
-/// The RCU read-side lock is held while the guard is alive.
 pub struct RevocableGuard<'a, T> {
-    data_ref: *const T,
+    data: &'a T,
     _rcu_guard: rcu::Guard,
-    _p: PhantomData<&'a ()>,
 }
 
-impl<T> RevocableGuard<'_, T> {
-    fn new(data_ref: *const T, rcu_guard: rcu::Guard) -> Self {
+impl<'a, T> RevocableGuard<'a, T> {
+    fn new(data: &'a T, rcu_guard: rcu::Guard) -> Self {
         Self {
-            data_ref,
+            data,
             _rcu_guard: rcu_guard,
-            _p: PhantomData,
         }
     }
 }
@@ -222,8 +210,6 @@ impl<T> Deref for RevocableGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: By the type invariants, we hold the rcu read-side lock, so the object is
-        // guaranteed to remain valid.
-        unsafe { &*self.data_ref }
+        self.data
     }
 }
