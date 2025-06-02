@@ -107,6 +107,11 @@ static inline void write_pmcntenset(u64 val)
 	write_sysreg(val, pmcntenset_el0);
 }
 
+static inline u64 read_pmcntenset(void)
+{
+	return read_sysreg(pmcntenset_el0);
+}
+
 static inline void write_pmcntenclr(u64 val)
 {
 	write_sysreg(val, pmcntenclr_el0);
@@ -115,6 +120,11 @@ static inline void write_pmcntenclr(u64 val)
 static inline void write_pmintenset(u64 val)
 {
 	write_sysreg(val, pmintenset_el1);
+}
+
+static inline u64 read_pmintenset(void)
+{
+	return read_sysreg(pmintenset_el1);
 }
 
 static inline void write_pmintenclr(u64 val)
@@ -162,9 +172,14 @@ static inline u64 read_pmovsclr(void)
 	return read_sysreg(pmovsclr_el0);
 }
 
-static inline void write_pmuserenr(u32 val)
+static inline void write_pmuserenr(u64 val)
 {
 	write_sysreg(val, pmuserenr_el0);
+}
+
+static inline u64 read_pmuserenr(void)
+{
+	return read_sysreg(pmuserenr_el0);
 }
 
 static inline void write_pmuacr(u64 val)
