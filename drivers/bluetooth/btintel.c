@@ -3582,15 +3582,12 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 		err = btintel_bootloader_setup(hdev, &ver);
 		btintel_register_devcoredump_support(hdev);
 		break;
-	case 0x18: /* GfP2 */
-	case 0x1c: /* GaP */
-		/* Re-classify packet type for controllers with LE audio */
-		hdev->classify_pkt_type = btintel_classify_pkt_type;
-		fallthrough;
 	case 0x17:
+	case 0x18:
 	case 0x19:
 	case 0x1b:
 	case 0x1d:
+	case 0x1c:
 	case 0x1e:
 	case 0x1f:
 		/* Display version information of TLV type */
