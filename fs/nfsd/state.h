@@ -188,6 +188,31 @@ struct nfs4_cb_fattr {
 	u64 ncf_cur_fsize;
 };
 
+#define NFSD4_NOTIFY_SPOOL_SZ	16
+
+/* A place to collect notifications */
+struct nfsd4_notify_spool {
+	struct xdr_stream	nns_stream;
+	struct xdr_buf		nns_xdr;
+	struct page		*nns_page;
+	struct notify4		nns_ent[NFSD4_NOTIFY_SPOOL_SZ];
+	u32			nns_idx;
+};
+
+/*
+ * Represents a directory delegation. The callback is for handling CB_NOTIFYs.
+ * As notifications from fsnotify come in, encode the relevant notify_*4 in the
+ * ncn_stream, and append a new ncn_notify_array value.
+ *
+ * Periodically, fire off a CB_NOTIFY request to the server. Replace the with
+ * new ones and send the request.
+ */
+struct nfsd4_cb_notify {
+	struct nfsd4_callback		ncn_cb;
+	struct nfsd4_notify_spool	*ncn_gather;
+	struct nfsd4_notify_spool	*ncn_send;
+};
+
 /*
  * Represents a delegation stateid. The nfs4_client holds references to these
  * and they are put when it is being destroyed or when the delegation is
@@ -222,8 +247,12 @@ struct nfs4_delegation {
 	struct nfsd4_callback	dl_recall;
 	bool			dl_recalled;
 
-	/* for CB_GETATTR */
-	struct nfs4_cb_fattr    dl_cb_fattr;
+	union {
+		/* for CB_GETATTR */
+		struct nfs4_cb_fattr    dl_cb_fattr;
+		/* for CB_NOTIFY */
+		struct nfsd4_cb_notify	dl_cb_notify;
+	};
 };
 
 static inline bool deleg_is_read(u32 dl_type)
