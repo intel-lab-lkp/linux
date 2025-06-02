@@ -305,14 +305,6 @@ static void randstruct_initializers(struct kunit *test)
 #undef init_members
 }
 
-static int randstruct_test_init(struct kunit *test)
-{
-	if (!IS_ENABLED(CONFIG_RANDSTRUCT))
-		kunit_skip(test, "Not built with CONFIG_RANDSTRUCT=y");
-
-	return 0;
-}
-
 static struct kunit_case randstruct_test_cases[] = {
 	KUNIT_CASE(randstruct_layout_same),
 	KUNIT_CASE(randstruct_layout_mixed),
@@ -324,7 +316,6 @@ static struct kunit_case randstruct_test_cases[] = {
 
 static struct kunit_suite randstruct_test_suite = {
 	.name = "randstruct",
-	.init = randstruct_test_init,
 	.test_cases = randstruct_test_cases,
 };
 

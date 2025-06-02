@@ -2866,10 +2866,10 @@ config OVERFLOW_KUNIT_TEST
 config RANDSTRUCT_KUNIT_TEST
 	tristate "Test randstruct structure layout randomization at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	depends on RANDSTRUCT
 	default KUNIT_ALL_TESTS
 	help
-	  Builds unit tests for the checking CONFIG_RANDSTRUCT=y, which
-	  randomizes structure layouts.
+	  Builds unit tests for checking structure layout randomization.
 
 config STACKINIT_KUNIT_TEST
 	tristate "Test level of stack variable initialization" if !KUNIT_ALL_TESTS
