@@ -4215,24 +4215,9 @@ inline struct dentry *user_path_create(int dfd, const char __user *pathname,
 }
 EXPORT_SYMBOL(user_path_create);
 
-/**
- * vfs_mknod - create device node or file
- * @idmap:	idmap of the mount the inode was found from
- * @dir:	inode of the parent directory
- * @dentry:	dentry of the child device node
- * @mode:	mode of the child device node
- * @dev:	device number of device to create
- *
- * Create a device node or file.
- *
- * If the inode has been found through an idmapped mount the idmap of
- * the vfsmount must be passed through @idmap. This function will then take
- * care to map the inode according to @idmap before checking permissions.
- * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply pass @nop_mnt_idmap.
- */
-int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
-	      struct dentry *dentry, umode_t mode, dev_t dev)
+static int __vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
+		       struct dentry *dentry, umode_t mode, dev_t dev,
+		       struct inode **delegated_inode)
 {
 	bool is_whiteout = S_ISCHR(mode) && dev == WHITEOUT_DEV;
 	int error = may_create(idmap, dir, dentry);
@@ -4256,10 +4241,36 @@ int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+	error = try_break_deleg(dir, delegated_inode);
+	if (error)
+		return error;
+
 	error = dir->i_op->mknod(idmap, dir, dentry, mode, dev);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
+}
+
+/**
+ * vfs_mknod - create device node or file
+ * @idmap:	idmap of the mount the inode was found from
+ * @dir:	inode of the parent directory
+ * @dentry:	dentry of the child device node
+ * @mode:	mode of the child device node
+ * @dev:	device number of device to create
+ *
+ * Create a device node or file.
+ *
+ * If the inode has been found through an idmapped mount the idmap of
+ * the vfsmount must be passed through @idmap. This function will then take
+ * care to map the inode according to @idmap before checking permissions.
+ * On non-idmapped mounts or if permission checking is to be performed on the
+ * raw inode simply pass @nop_mnt_idmap.
+ */
+int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
+	      struct dentry *dentry, umode_t mode, dev_t dev)
+{
+	return __vfs_mknod(idmap, dir, dentry, mode, dev, NULL);
 }
 EXPORT_SYMBOL(vfs_mknod);
 
@@ -4314,12 +4325,14 @@ retry:
 				security_path_post_mknod(idmap, dentry);
 			break;
 		case S_IFCHR: case S_IFBLK:
-			error = vfs_mknod(idmap, path.dentry->d_inode,
-					  dentry, mode, new_decode_dev(dev));
+			error = __vfs_mknod(idmap, path.dentry->d_inode,
+					    dentry, mode, new_decode_dev(dev),
+					    &delegated_inode);
 			break;
 		case S_IFIFO: case S_IFSOCK:
-			error = vfs_mknod(idmap, path.dentry->d_inode,
-					  dentry, mode, 0);
+			error = __vfs_mknod(idmap, path.dentry->d_inode,
+					    dentry, mode, 0,
+					    &delegated_inode);
 			break;
 	}
 out2:
