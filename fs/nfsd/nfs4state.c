@@ -1302,6 +1302,37 @@ static void put_deleg_file(struct nfs4_file *fp)
 		nfs4_file_put_access(fp, NFS4_SHARE_ACCESS_READ);
 }
 
+static void nfsd_fsnotify_recalc_mask(struct nfsd_file *nf)
+{
+	struct fsnotify_mark *fsn_mark = &nf->nf_mark->nfm_mark;
+	struct inode *inode = file_inode(nf->nf_file);
+	u32 lease_mask, mask = 0;
+	bool recalc = false;
+
+	/* This is only needed when adding or removing dir delegs */
+	if (!S_ISDIR(inode->i_mode))
+		return;
+
+	/* Set up notifications for any ignored delegation events */
+	lease_mask = inode_lease_ignore_mask(inode);
+	if (lease_mask & FL_IGN_DIR_CREATE)
+		mask |= FS_CREATE;
+	if (lease_mask & FL_IGN_DIR_DELETE)
+		mask |= FS_DELETE;
+	if (lease_mask & FL_IGN_DIR_RENAME)
+		mask |= FS_RENAME;
+
+	spin_lock(&fsn_mark->lock);
+	if (fsn_mark->mask != mask) {
+		fsn_mark->mask = mask;
+		recalc = true;
+	}
+	spin_unlock(&fsn_mark->lock);
+
+	if (recalc)
+		fsnotify_recalc_mask(fsn_mark->connector);
+}
+
 static void nfs4_unlock_deleg_lease(struct nfs4_delegation *dp)
 {
 	struct nfs4_file *fp = dp->dl_stid.sc_file;
@@ -1309,6 +1340,7 @@ static void nfs4_unlock_deleg_lease(struct nfs4_delegation *dp)
 
 	WARN_ON_ONCE(!fp->fi_delegees);
 
+	nfsd_fsnotify_recalc_mask(nf);
 	kernel_setlease(nf->nf_file, F_UNLCK, NULL, (void **)&dp);
 	put_deleg_file(fp);
 }
@@ -9487,8 +9519,10 @@ nfsd_get_dir_deleg(struct nfsd4_compound_state *cstate,
 	spin_unlock(&clp->cl_lock);
 	spin_unlock(&state_lock);
 
-	if (!status)
+	if (!status) {
+		nfsd_fsnotify_recalc_mask(nf);
 		return dp;
+	}
 
 	/* Something failed. Drop the lease and clean up the stid */
 	kernel_setlease(fp->fi_deleg_file->nf_file, F_UNLCK, NULL, (void **)&dp);
