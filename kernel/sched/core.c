@@ -3441,6 +3441,8 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p,
 		.dst_cpu = target_cpu,
 	};
 
+	/* Make sure no CPUs can come up or down */
+	cpus_read_lock();
 	if (arg.src_cpu == arg.dst_cpu)
 		goto out;
 
@@ -3461,6 +3463,7 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p,
 	ret = stop_two_cpus(arg.dst_cpu, arg.src_cpu, migrate_swap_stop, &arg);
 
 out:
+	cpus_read_unlock();
 	return ret;
 }
 #endif /* CONFIG_NUMA_BALANCING */
