@@ -2292,6 +2292,8 @@ nfsd4_verify(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	return status == nfserr_same ? nfs_ok : status;
 }
 
+#define SUPPORTED_NOTIFY_MASK BIT(NOTIFY4_REMOVE_ENTRY)
+
 static __be32
 nfsd4_get_dir_delegation(struct svc_rqst *rqstp,
 			 struct nfsd4_compound_state *cstate,
@@ -2330,6 +2332,7 @@ nfsd4_get_dir_delegation(struct svc_rqst *rqstp,
 
 	gdd->gddrnf_status = GDD4_OK;
 	memcpy(&gdd->gddr_stateid, &dd->dl_stid.sc_stateid, sizeof(gdd->gddr_stateid));
+	gdd->gddr_notification[0] = gdd->gdda_notification_types[0] & SUPPORTED_NOTIFY_MASK;
 	nfs4_put_stid(&dd->dl_stid);
 	return nfs_ok;
 }
