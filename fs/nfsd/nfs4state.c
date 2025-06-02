@@ -55,6 +55,7 @@
 #include "netns.h"
 #include "pnfs.h"
 #include "filecache.h"
+#include "nfs4xdr_gen.h"
 #include "trace.h"
 
 #define NFSDDBG_FACILITY                NFSDDBG_PROC
@@ -3309,15 +3310,83 @@ nfsd4_cb_getattr_release(struct nfsd4_callback *cb)
 	nfs4_put_stid(&dp->dl_stid);
 }
 
+static bool
+nfsd4_cb_notify_prepare(struct nfsd4_callback *cb)
+{
+	struct nfsd4_cb_notify *ncn =
+			container_of(cb, struct nfsd4_cb_notify, ncn_cb);
+	struct nfs4_delegation *dp =
+			container_of(ncn, struct nfs4_delegation, dl_cb_notify);
+	struct nfs4_file *fp = dp->dl_stid.sc_file;
+	struct nfsd_file *nf = fp->fi_deleg_file;
+	struct inode *inode = file_inode(nf->nf_file);
+	struct file_lock_context *flc = locks_inode_context(inode);
+	struct nfsd4_notify_spool *spool;
+
+	if (WARN_ON_ONCE(!flc))
+		return false;
+
+	if (WARN_ON_ONCE(ncn->ncn_send))
+		return false;
+
+	spool = alloc_notify_spool();
+	if (!spool) {
+		nfsd4_run_cb(&dp->dl_recall);
+		return false;
+	}
+
+	spin_lock(&flc->flc_lock);
+	ncn->ncn_send = ncn->ncn_gather;
+	ncn->ncn_gather = spool;
+	spin_unlock(&flc->flc_lock);
+	return true;
+}
+
+/* Returns true if more notifications are waiting to be sent */
+static bool
+nfsd4_cb_notify_release_send_spool(struct nfsd4_callback *cb)
+{
+	struct nfsd4_cb_notify *ncn = container_of(cb, struct nfsd4_cb_notify, ncn_cb);
+	struct nfs4_delegation *dp = container_of(ncn, struct nfs4_delegation, dl_cb_notify);
+	struct nfs4_file *fp = dp->dl_stid.sc_file;
+	struct nfsd_file *nf = fp->fi_deleg_file;
+	struct inode *inode = file_inode(nf->nf_file);
+	struct file_lock_context *flc = locks_inode_context(inode);
+	struct nfsd4_notify_spool *spool;
+	bool more;
+
+	spin_lock(&flc->flc_lock);
+	spool = ncn->ncn_send;
+	ncn->ncn_send = NULL;
+	more = ncn->ncn_gather && ncn->ncn_gather->nns_idx;
+	spin_unlock(&flc->flc_lock);
+
+	free_notify_spool(spool);
+	return more;
+}
+
 static int
 nfsd4_cb_notify_done(struct nfsd4_callback *cb,
 				struct rpc_task *task)
 {
+	struct nfsd4_cb_notify *ncn = container_of(cb, struct nfsd4_cb_notify, ncn_cb);
+	struct nfs4_delegation *dp = container_of(ncn, struct nfs4_delegation, dl_cb_notify);
+
 	switch (task->tk_status) {
 	case -NFS4ERR_DELAY:
 		rpc_delay(task, 2 * HZ);
 		return 0;
+	case 0:
+		/* If successful, release the send spool and maybe requeue the cb */
+		if (nfsd4_cb_notify_release_send_spool(cb)) {
+			refcount_inc(&dp->dl_stid.sc_count);
+			nfsd4_run_cb(cb);
+		}
+		return 1;
 	default:
+		/* For any other hard error, recall the deleg */
+		nfsd4_run_cb(&dp->dl_recall);
+		nfsd4_cb_notify_release_send_spool(cb);
 		return 1;
 	}
 }
@@ -3331,6 +3400,8 @@ nfsd4_cb_notify_release(struct nfsd4_callback *cb)
 			container_of(ncn, struct nfs4_delegation, dl_cb_notify);
 
 	nfs4_put_stid(&dp->dl_stid);
+	if (nfsd4_cb_notify_release_send_spool(cb))
+		nfsd4_run_cb(cb);
 }
 
 static const struct nfsd4_callback_ops nfsd4_cb_recall_any_ops = {
@@ -3346,6 +3417,7 @@ static const struct nfsd4_callback_ops nfsd4_cb_getattr_ops = {
 };
 
 static const struct nfsd4_callback_ops nfsd4_cb_notify_ops = {
+	.prepare	= nfsd4_cb_notify_prepare,
 	.done		= nfsd4_cb_notify_done,
 	.release	= nfsd4_cb_notify_release,
 	.opcode		= OP_CB_NOTIFY,
@@ -9533,4 +9605,84 @@ out_put_stid:
 out_delegees:
 	put_deleg_file(fp);
 	return ERR_PTR(status);
+}
+
+static void
+nfsd4_run_cb_notify(struct nfsd4_cb_notify *ncn)
+{
+	struct nfs4_delegation *dp = container_of(ncn, struct nfs4_delegation, dl_cb_notify);
+
+	if (test_and_set_bit(NFSD4_CALLBACK_RUNNING, &ncn->ncn_cb.cb_flags))
+		return;
+
+	if (!refcount_inc_not_zero(&dp->dl_stid.sc_count))
+		clear_bit(NFSD4_CALLBACK_RUNNING, &ncn->ncn_cb.cb_flags);
+	else
+		nfsd4_run_cb(&ncn->ncn_cb);
+}
+
+int
+nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
+		      int data_type, const struct qstr *name)
+{
+	struct file_lock_context *ctx;
+	struct file_lock_core *flc;
+
+	ctx = locks_inode_context(dir);
+	if (!ctx || list_empty(&ctx->flc_lease))
+		return 0;
+
+	/*
+	 * FIXME: Do getattr against @inode, and then generate an fattr4. Use that as the
+	 * ne_attrs in the notify_entry4's.
+	 */
+	spin_lock(&ctx->flc_lock);
+	list_for_each_entry(flc, &ctx->flc_lease, flc_list) {
+		struct file_lease *fl = container_of(flc, struct file_lease, c);
+		struct nfs4_delegation *dp = flc->flc_owner;
+		struct nfsd4_cb_notify *ncn = &dp->dl_cb_notify;
+		struct nfsd4_notify_spool *nns = ncn->ncn_gather;
+		struct xdr_stream *stream = &nns->nns_stream;
+		static uint32_t zerobm;
+
+		if (fl->fl_lmops != &nfsd_dir_lease_mng_ops)
+			continue;
+
+		/* If no buffer or slots are available, give up and break the deleg */
+		if (!nns || nns->nns_idx >= NFSD4_NOTIFY_SPOOL_SZ) {
+			nfsd_break_deleg_cb(fl);
+			continue;
+		}
+
+		if (mask & FS_DELETE) {
+			static uint32_t notify_remove_bitmap = BIT(NOTIFY4_REMOVE_ENTRY);
+			struct notify4 *ent = &nns->nns_ent[nns->nns_idx];
+			struct notify_remove4 nr = { };
+			u8 *p = (u8 *)(stream->p);
+
+			if (!(flc->flc_flags & FL_IGN_DIR_DELETE))
+				continue;
+
+			nr.nrm_old_entry.ne_file.len = name->len;
+			nr.nrm_old_entry.ne_file.data = (char *)name->name;
+			nr.nrm_old_entry.ne_attrs.attrmask.count = 1;
+			nr.nrm_old_entry.ne_attrs.attrmask.element = &zerobm;
+			if (!xdrgen_encode_notify_remove4(stream, &nr)) {
+				pr_warn("nfsd: unable to marshal notify_remove4 to xdr stream\n");
+				continue;
+			}
+
+			/* grab a notify4 in the buffer and set it up */
+			ent->notify_mask.count = 1;
+			ent->notify_mask.element = &notify_remove_bitmap;
+			ent->notify_vals.len = (u8 *)stream->p - p;
+			ent->notify_vals.data = p;
+			++nns->nns_idx;
+		}
+
+		if (nns->nns_idx)
+			nfsd4_run_cb_notify(ncn);
+	}
+	spin_unlock(&ctx->flc_lock);
+	return 0;
 }
