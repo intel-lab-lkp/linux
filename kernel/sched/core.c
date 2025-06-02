@@ -8524,6 +8524,8 @@ LIST_HEAD(task_groups);
 static struct kmem_cache *task_group_cache __ro_after_init;
 #endif
 
+static void __init cfs_rq_struct_check(void);
+
 void __init sched_init(void)
 {
 	unsigned long ptr = 0;
@@ -8540,7 +8542,7 @@ void __init sched_init(void)
 	BUG_ON(!sched_class_above(&fair_sched_class, &ext_sched_class));
 	BUG_ON(!sched_class_above(&ext_sched_class, &idle_sched_class));
 #endif
-
+	cfs_rq_struct_check();
 	wait_bit_init();
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -10746,3 +10748,60 @@ void sched_enq_and_set_task(struct sched_enq_and_set_ctx *ctx)
 		set_next_task(rq, ctx->p);
 }
 #endif	/* CONFIG_SCHED_CLASS_EXT */
+
+static void __init cfs_rq_struct_check(void)
+{
+	/*
+	 * The first two cache lines are hot and mostly read
+	 * except load.inv_weight
+	 */
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, load);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, nr_queued);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, h_nr_queued);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, h_nr_runnable);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, h_nr_idle);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, curr);
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, rq);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, tg);
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, throttle_count);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, runtime_enabled);
+#endif
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, idle);
+
+#ifdef CONFIG_SMP
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, propagate);
+#endif
+#endif
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, avg_vruntime);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, avg_load);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, min_vruntime);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, tasks_timeline);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, hot, next);
+
+	/*
+	 * This cache line groups hot fields of the throttling functions.
+	 * This group is enabled when CFS_BANDWIDTH is configured.
+	 */
+#ifdef CONFIG_CFS_BANDWIDTH
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle, throttled);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle, on_list);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
+				      leaf_cfs_rq_list);
+
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle, throttled_clock);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
+				      throttled_clock_pelt);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
+				      throttled_clock_pelt_time);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
+				      throttled_clock_self);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
+				      throttled_clock_self_time);
+#endif
+#endif
+}

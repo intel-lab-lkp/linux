@@ -641,31 +641,55 @@ struct balance_callback {
 	void (*func)(struct rq *rq);
 };
 
+/**
+ * The `throttle` cache group is designed to group 64 bytes into a cache
+ * line, which benefits architectures with a 64-byte cache line size. To
+ * prevent performance degradation on other architectures, let's
+ * conditionally align it when the target system utilizes a 64-byte
+ * cache line.
+ */
+#define THROTTLE_GROUP_ALIGN_COND 64
+
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
+	/* The first cache line group is hot and mostly read */
+	__cacheline_group_begin(hot);
 	struct load_weight	load;
 	unsigned int		nr_queued;
 	unsigned int		h_nr_queued;       /* SCHED_{NORMAL,BATCH,IDLE} */
 	unsigned int		h_nr_runnable;     /* SCHED_{NORMAL,BATCH,IDLE} */
 	unsigned int		h_nr_idle; /* SCHED_IDLE */
-
-	s64			avg_vruntime;
-	u64			avg_load;
-
-	u64			min_vruntime;
-#ifdef CONFIG_SCHED_CORE
-	unsigned int		forceidle_seq;
-	u64			min_vruntime_fi;
-#endif
-
-	struct rb_root_cached	tasks_timeline;
-
 	/*
 	 * 'curr' points to currently running entity on this cfs_rq.
 	 * It is set to NULL otherwise (i.e when none are currently running).
 	 */
 	struct sched_entity	*curr;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	struct rq		*rq;	/* CPU runqueue to which this cfs_rq is attached */
+	struct task_group	*tg;	/* group that "owns" this runqueue */
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	int			throttle_count;
+	int			runtime_enabled;
+#endif
+	/* Locally cached copy of our task_group's idle value */
+	int			idle;
+
+#ifdef CONFIG_SMP
+	long			propagate;
+#endif /* CONFIG_SMP */
+#endif /* CONFIG_FAIR_GROUP_SCHED */
+
+	s64			avg_vruntime;
+	u64			avg_load;
+
+	u64			min_vruntime;
+
+	struct rb_root_cached	tasks_timeline;
+
 	struct sched_entity	*next;
+	__cacheline_group_end(hot);
 
 #ifdef CONFIG_SMP
 	/*
@@ -686,7 +710,6 @@ struct cfs_rq {
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	u64			last_update_tg_load_avg;
 	unsigned long		tg_load_avg_contrib;
-	long			propagate;
 	long			prop_runnable_sum;
 
 	/*
@@ -702,8 +725,21 @@ struct cfs_rq {
 #endif /* CONFIG_SMP */
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	struct rq		*rq;	/* CPU runqueue to which this cfs_rq is attached */
-
+#ifdef CONFIG_CFS_BANDWIDTH
+	s64			runtime_remaining;
+	u64			throttled_pelt_idle;
+#ifndef CONFIG_64BIT
+	u64                     throttled_pelt_idle_copy;
+#endif
+	/*
+	 * This cache line groups hot fields of the throttling functions.
+	 * This group is enabled when CFS_BANDWIDTH is configured.
+	 * Alignment is enforced only when the target architecture
+	 * utilizes a 64-byte cache line size.
+	 */
+	__cacheline_group_begin_aligned_cond(throttle, THROTTLE_GROUP_ALIGN_COND);
+	int			throttled;
+#endif /* CONFIG_CFS_BANDWIDTH */
 	/*
 	 * leaf cfs_rqs are those that hold tasks (lowest schedulable entity in
 	 * a hierarchy). Non-leaf lrqs hold other higher schedulable entities
@@ -714,30 +750,23 @@ struct cfs_rq {
 	 */
 	int			on_list;
 	struct list_head	leaf_cfs_rq_list;
-	struct task_group	*tg;	/* group that "owns" this runqueue */
-
-	/* Locally cached copy of our task_group's idle value */
-	int			idle;
-
 #ifdef CONFIG_CFS_BANDWIDTH
-	int			runtime_enabled;
-	s64			runtime_remaining;
-
-	u64			throttled_pelt_idle;
-#ifndef CONFIG_64BIT
-	u64                     throttled_pelt_idle_copy;
-#endif
 	u64			throttled_clock;
 	u64			throttled_clock_pelt;
 	u64			throttled_clock_pelt_time;
 	u64			throttled_clock_self;
 	u64			throttled_clock_self_time;
-	int			throttled;
-	int			throttle_count;
+	__cacheline_group_end_aligned_cond(throttle, THROTTLE_GROUP_ALIGN_COND);
+
 	struct list_head	throttled_list;
 	struct list_head	throttled_csd_list;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
+
+#ifdef CONFIG_SCHED_CORE
+	unsigned int		forceidle_seq;
+	u64			min_vruntime_fi;
+#endif
 };
 
 #ifdef CONFIG_SCHED_CLASS_EXT
