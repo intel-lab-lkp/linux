@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mtd/atmel-nand.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Atmel NAND flash controller
+
+maintainers:
+  - Balamanikandan Gunasundar <balamanikandan.gunasundar@microchip.com>
+
+description:
+  Atmel nand flash controller. These are legacy bindings and
+  deprecated. Find the latest in microchip,nand-controller.yaml
+
+properties:
+  $nodename:
+    pattern: "^nand(@.*)?"
+
+  compatible:
+    enum:
+      - atmel,at91rm9200-nand
+      - atmel,sama5d2-nand
+      - atmel,sama5d4-nand
+
+  reg:
+    description:
+      The localbus address and size used for the chip, and hardware ECC
+      controller if available. If the hardware ECC is PMECC, it should
+      contain address and size for PMECC and PMECC Error Location
+      controller. The PMECC lookup table address and size in ROM is
+      optional. If not specified, driver will build it in runtime.
+
+  nand-on-flash-bbt:
+    description:
+      enable on flash bbt option if not present false
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  nand-ecc-mode:
+    description:
+      operation mode of the NAND ecc
+    enum:
+      [none, soft, hw, hw_syndrome, hw_oob_first, soft_bch]
+    default: soft
+    $ref: /schemas/types.yaml#/definitions/string
+
+  nand-bus-width:
+    description:
+      nand bus width
+    enum:
+      [8, 16]
+    default: 8
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  gpios:
+    minItems: 2
+    items:
+      - description: Ready/Busy
+      - description: Chip Enable
+      - description: Optional Card detect GPIO; can be 0 if unused
+
+  atmel,nand-addr-offset:
+    description:
+      offset for the address latch.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 31
+
+  atmel,nand-cmd-offset:
+    description:
+      offset for the command latch.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 31
+
+  atmel,nand-has-dma:
+    description:
+      support dma transfer for nand read/write.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  atmel,has-pmecc:
+    description:
+      enable Programmable Multibit ECC hardware, capable of BCH encoding
+      and decoding, on devices where it is present.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  atmel,pmecc-cap:
+    description:
+      error correct capability for Programmable Multibit ECC Controller.
+    enum:
+      [2, 4, 8, 12, 24, 32]
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  atmel,pmecc-sector-size:
+    description:
+      sector size for ECC computation.
+    enum:
+      [512, 1024]
+    default: 512
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+
+  atmel,pmecc-lookup-table-offset:
+    description:
+      Two offsets of lookup table in ROM for different sector size. First
+      one is for sector size 512, the next is for sector size 1024. If not
+      specified, driver will build the table in runtime.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    default: 512
+
+required:
+  - compatible
+  - reg
+  - atmel,nand-addr-offset
+  - atmel,nand-cmd-offset
+  - "#address-cells"
+  - "#size-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    nand@40000000 {
+        compatible = "atmel,at91rm9200-nand";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        reg = <0x40000000 0x10000000
+               0xffffe800 0x200>;
+        atmel,nand-addr-offset = <21>;	/* ale */
+        atmel,nand-cmd-offset = <22>;	/* cle */
+        nand-on-flash-bbt;
+        nand-ecc-mode = "soft";
+        gpios = <&pioC 13 0	/* rdy */
+                 &pioC 14 0     /* nce */
+                 0		/* cd */
+                >;
+    };
+  - |
+    /* for PMECC supported chips */
+    nand@40000000 {
+        compatible = "atmel,at91rm9200-nand";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        reg = <0x40000000 0x10000000	/* bus addr & size */
+               0xffffe000 0x00000600	/* PMECC addr & size */
+               0xffffe600 0x00000200	/* PMECC ERRLOC addr & size */
+               0x00100000 0x00100000>;	/* ROM addr & size */
+
+        atmel,nand-addr-offset = <21>;	/* ale */
+        atmel,nand-cmd-offset = <22>;	/* cle */
+        nand-on-flash-bbt;
+        nand-ecc-mode = "hw";
+        atmel,has-pmecc;	/* enable PMECC */
+        atmel,pmecc-cap = <2>;
+        atmel,pmecc-sector-size = <512>;
+        atmel,pmecc-lookup-table-offset = <0x8000 0x10000>;
+        gpios = <&pioD 5 0	/* rdy */
+                 &pioD 4 0	/* nce */
+                 0		/* cd */
+                >;
+    };
