@@ -1237,15 +1237,13 @@ static long uvc_v4l2_pm_ioctl(struct file *file,
 static long uvc_v4l2_unlocked_ioctl(struct file *file,
 				    unsigned int cmd, unsigned long arg)
 {
-	/*
-	 * For now, we do not support granular power saving for compat
-	 * syscalls.
-	 */
+	unsigned int converted_cmd = cmd;
+
 	if (in_compat_syscall())
-		return uvc_v4l2_pm_ioctl(file, cmd, arg);
+		converted_cmd = v4l2_compat_translate_cmd(cmd);
 
 	/* The following IOCTLs do need to turn on the camera. */
-	switch (cmd) {
+	switch (converted_cmd) {
 	case UVCIOC_CTRL_QUERY:
 	case VIDIOC_G_CTRL:
 	case VIDIOC_G_EXT_CTRLS:
