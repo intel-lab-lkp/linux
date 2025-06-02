@@ -118,6 +118,12 @@ This has a number of options available:
      additional certificates which will be included in the system keyring by
      default.
 
+ (5) :menuselection:`Use .platform keyring for verifying kernel modules signatures`
+     (``CONFIG_MODULE_SIG_PLATFORM``)
+
+     This option additionally allows modules to be signed with a key present
+     in ``.platform`` keyring, e.g. a SecureBoot 'db' key.
+
 Note that enabling module signing adds a dependency on the OpenSSL devel
 packages to the kernel build processes for the tool that does the signing.
 

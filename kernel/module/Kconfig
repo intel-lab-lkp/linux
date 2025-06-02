@@ -335,6 +335,17 @@ config MODULE_SIG_HASH
 	default "sha3-384" if MODULE_SIG_SHA3_384
 	default "sha3-512" if MODULE_SIG_SHA3_512
 
+config MODULE_SIG_PLATFORM
+	bool "Use .platform keyring for verifying kernel modules signatures"
+	depends on INTEGRITY_PLATFORM_KEYRING
+	depends on MODULE_SIG
+	help
+	  When selected, keys from .platform keyring can be used for verifying
+	  modules signatures. In particular, this allows to use UEFI SecureBoot
+	  'db' for verification.
+
+	  If unsure, say N.
+
 config MODULE_COMPRESS
 	bool "Module compression"
 	help

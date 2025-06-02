@@ -60,7 +60,7 @@ config INTEGRITY_PLATFORM_KEYRING
 	  Provide a separate, distinct keyring for platform trusted keys, which
 	  the kernel automatically populates during initialization from values
 	  provided by the platform for verifying the kexec'ed kerned image
-	  and, possibly, the initramfs signature.
+	  and, possibly, the initramfs signature and kernel modules signatures.
 
 config INTEGRITY_MACHINE_KEYRING
 	bool "Provide a keyring to which Machine Owner Keys may be added"
