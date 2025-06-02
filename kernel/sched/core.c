@@ -8525,6 +8525,7 @@ static struct kmem_cache *task_group_cache __ro_after_init;
 #endif
 
 static void __init cfs_rq_struct_check(void);
+static void __init sched_entity_struct_check(void);
 
 void __init sched_init(void)
 {
@@ -8543,6 +8544,7 @@ void __init sched_init(void)
 	BUG_ON(!sched_class_above(&ext_sched_class, &idle_sched_class));
 #endif
 	cfs_rq_struct_check();
+	sched_entity_struct_check();
 	wait_bit_init();
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -10803,5 +10805,23 @@ static void __init cfs_rq_struct_check(void)
 	CACHELINE_ASSERT_GROUP_MEMBER(struct cfs_rq, throttle,
 				      throttled_clock_self_time);
 #endif
+#endif
+}
+
+static void __init sched_entity_struct_check(void)
+{
+	/*
+	 * The compile time check is only enabled with CONFIG_FAIR_GROUP_SCHED.
+	 * We care about the placement of six hottest fields below.
+	 */
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, parent);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, cfs_rq);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, my_q);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot,
+				      runnable_weight);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, on_rq);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, load);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct sched_entity, hot, vruntime);
 #endif
 }
