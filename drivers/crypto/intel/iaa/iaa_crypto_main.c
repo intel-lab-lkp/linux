@@ -35,27 +35,38 @@ static unsigned int cpus_per_iaa;
 
 /* Per-cpu lookup table for balanced wqs */
 static struct wq_table_entry __percpu *wq_table;
+static DEFINE_SPINLOCK(wq_table_lock);
 
 static struct idxd_wq *wq_table_next_wq(int cpu)
 {
-	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
+	struct wq_table_entry *entry;
+	struct idxd_wq *wq;
+	int id;
+
+	guard(spinlock)(&wq_table_lock);
+
+	entry = per_cpu_ptr(wq_table, cpu);
 
 	if (++entry->cur_wq >= entry->n_wqs)
 		entry->cur_wq = 0;
 
-	if (!entry->wqs[entry->cur_wq])
+	id = entry->cur_wq;
+	wq = entry->wqs[id];
+
+	if (!wq)
 		return NULL;
 
 	pr_debug("%s: returning wq at idx %d (iaa wq %d.%d) from cpu %d\n", __func__,
-		 entry->cur_wq, entry->wqs[entry->cur_wq]->idxd->id,
-		 entry->wqs[entry->cur_wq]->id, cpu);
+		 id, wq->idxd->id, wq->id, cpu);
 
-	return entry->wqs[entry->cur_wq];
+	return wq;
 }
 
 static void wq_table_add(int cpu, struct idxd_wq *wq)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
+
+	lockdep_assert_held(&wq_table_lock);
 
 	if (WARN_ON(entry->n_wqs == entry->max_wqs))
 		return;
@@ -71,6 +82,8 @@ static void wq_table_free_entry(int cpu)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
 
+	lockdep_assert_held(&wq_table_lock);
+
 	kfree(entry->wqs);
 	memset(entry, 0, sizeof(*entry));
 }
@@ -78,6 +91,8 @@ static void wq_table_free_entry(int cpu)
 static void wq_table_clear_entry(int cpu)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
+
+	lockdep_assert_held(&wq_table_lock);
 
 	entry->n_wqs = 0;
 	entry->cur_wq = 0;
@@ -702,14 +717,23 @@ static int iaa_wq_put(struct idxd_wq *wq)
 	return ret;
 }
 
-static void free_wq_table(void)
+static void __free_wq_table(void)
 {
 	int cpu;
+
+	lockdep_assert_held(&wq_table_lock);
 
 	for (cpu = 0; cpu < nr_cpus; cpu++)
 		wq_table_free_entry(cpu);
 
 	free_percpu(wq_table);
+}
+
+static void free_wq_table(void)
+{
+	guard(spinlock)(&wq_table_lock);
+
+	__free_wq_table();
 
 	pr_debug("freed wq table\n");
 }
@@ -719,15 +743,17 @@ static int alloc_wq_table(int max_wqs)
 	struct wq_table_entry *entry;
 	int cpu;
 
-	wq_table = alloc_percpu(struct wq_table_entry);
+	guard(spinlock)(&wq_table_lock);
+
+	wq_table = alloc_percpu_gfp(struct wq_table_entry, GFP_ATOMIC);
 	if (!wq_table)
 		return -ENOMEM;
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
 		entry = per_cpu_ptr(wq_table, cpu);
-		entry->wqs = kcalloc(max_wqs, sizeof(*entry->wqs), GFP_KERNEL);
+		entry->wqs = kcalloc(max_wqs, sizeof(*entry->wqs), GFP_ATOMIC);
 		if (!entry->wqs) {
-			free_wq_table();
+			__free_wq_table();
 			return -ENOMEM;
 		}
 
@@ -836,6 +862,8 @@ static int wq_table_add_wqs(int iaa, int cpu)
 	struct pci_dev *pdev;
 	struct device *dev;
 
+	lockdep_assert_held(&wq_table_lock);
+
 	list_for_each_entry(iaa_device, &iaa_devices, list) {
 		idxd = iaa_device->idxd;
 		pdev = idxd->pdev;
@@ -901,6 +929,8 @@ static void rebalance_wq_table(void)
 
 	pr_debug("rebalance: nr_nodes=%d, nr_cpus %d, nr_iaa %d, cpus_per_iaa %d\n",
 		 nr_nodes, nr_cpus, nr_iaa, cpus_per_iaa);
+
+	guard(spinlock)(&wq_table_lock);
 
 	clear_wq_table();
 
