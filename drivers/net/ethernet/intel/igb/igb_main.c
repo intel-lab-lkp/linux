@@ -2175,10 +2175,14 @@ void igb_down(struct igb_adapter *adapter)
 	u32 tctl, rctl;
 	int i;
 
-	/* signal that we're down so the interrupt handler does not
-	 * reschedule our watchdog timer
+	/* The watchdog timer may be rescheduled, so explicitly
+	 * disable watchdog from being rescheduled.
 	 */
 	set_bit(__IGB_DOWN, &adapter->state);
+	timer_delete_sync(&adapter->watchdog_timer);
+	timer_delete_sync(&adapter->phy_info_timer);
+
+	cancel_work_sync(&adapter->watchdog_task);
 
 	/* disable receives in the hardware */
 	rctl = rd32(E1000_RCTL);
@@ -2209,9 +2213,6 @@ void igb_down(struct igb_adapter *adapter)
 			napi_disable(&adapter->q_vector[i]->napi);
 		}
 	}
-
-	timer_delete_sync(&adapter->watchdog_timer);
-	timer_delete_sync(&adapter->phy_info_timer);
 
 	/* record the stats before reset*/
 	spin_lock(&adapter->stats64_lock);
