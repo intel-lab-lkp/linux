@@ -2710,23 +2710,6 @@ void tpg_fill_plane_buffer(struct tpg_data *tpg, v4l2_std_id std,
 }
 EXPORT_SYMBOL_GPL(tpg_fill_plane_buffer);
 
-void tpg_fillbuffer(struct tpg_data *tpg, v4l2_std_id std, unsigned p, u8 *vbuf)
-{
-	unsigned offset = 0;
-	unsigned i;
-
-	if (tpg->buffers > 1) {
-		tpg_fill_plane_buffer(tpg, std, p, vbuf);
-		return;
-	}
-
-	for (i = 0; i < tpg_g_planes(tpg); i++) {
-		tpg_fill_plane_buffer(tpg, std, i, vbuf + offset);
-		offset += tpg_calc_plane_size(tpg, i);
-	}
-}
-EXPORT_SYMBOL_GPL(tpg_fillbuffer);
-
 MODULE_DESCRIPTION("V4L2 Test Pattern Generator");
 MODULE_AUTHOR("Hans Verkuil");
 MODULE_LICENSE("GPL");

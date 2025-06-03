@@ -248,8 +248,6 @@ void tpg_calc_text_basep(struct tpg_data *tpg,
 unsigned tpg_g_interleaved_plane(const struct tpg_data *tpg, unsigned buf_line);
 void tpg_fill_plane_buffer(struct tpg_data *tpg, v4l2_std_id std,
 			   unsigned p, u8 *vbuf);
-void tpg_fillbuffer(struct tpg_data *tpg, v4l2_std_id std,
-		    unsigned p, u8 *vbuf);
 bool tpg_s_fourcc(struct tpg_data *tpg, u32 fourcc);
 void tpg_s_crop_compose(struct tpg_data *tpg, const struct v4l2_rect *crop,
 		const struct v4l2_rect *compose);
