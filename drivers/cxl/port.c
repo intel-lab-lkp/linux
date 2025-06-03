@@ -111,6 +111,17 @@ static void cxl_disable_rch_root_ints(struct cxl_dport *dport)
 	writel(aer_cmd, aer_base + PCI_ERR_ROOT_COMMAND);
 }
 
+static void cxl_uport_init_ras_reporting(struct cxl_port *port,
+					 struct device *host)
+{
+	struct cxl_register_map *map = &port->reg_map;
+
+	map->host = host;
+	if (cxl_map_component_regs(map, &port->uport_regs,
+				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+		dev_dbg(&port->dev, "Failed to map RAS capability\n");
+}
+
 /**
  * cxl_dport_init_ras_reporting - Setup CXL RAS report on this dport
  * @dport: the cxl_dport that needs to be initialized
@@ -119,7 +130,6 @@ static void cxl_disable_rch_root_ints(struct cxl_dport *dport)
 void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 {
 	dport->reg_map.host = host;
-	cxl_dport_map_ras(dport);
 
 	if (dport->rch) {
 		struct pci_host_bridge *host_bridge = to_pci_host_bridge(dport->dport_dev);
@@ -127,12 +137,51 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 		if (!host_bridge->native_aer)
 			return;
 
+		cxl_dport_map_ras(dport);
 		cxl_dport_map_rch_aer(dport);
 		cxl_disable_rch_root_ints(dport);
+		return;
 	}
+
+	if (cxl_map_component_regs(&dport->reg_map, &dport->regs.component,
+				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+		dev_dbg(dport->dport_dev, "Failed to map RAS capability\n");
+
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, "CXL");
 
+static void cxl_switch_port_init_ras(struct cxl_port *port)
+{
+	struct device *dev __free(put_device) = get_device(&port->dev);
+
+	if (is_cxl_root(to_cxl_port(port->dev.parent)))
+		return;
+
+	/* Check for parent DSP */
+	if (port->parent_dport)
+		cxl_dport_init_ras_reporting(port->parent_dport, dev);
+
+	cxl_uport_init_ras_reporting(port, dev);
+}
+
+static void cxl_endpoint_port_init_ras(struct cxl_port *port)
+{
+	struct cxl_dport *dport;
+	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		cxl_mem_find_port(cxlmd, &dport);
+
+	if (!dport || !dev_is_pci(dport->dport_dev)) {
+		dev_err(&port->dev, "CXL port topology not found\n");
+		return;
+	}
+
+	cxl_dport_init_ras_reporting(dport, &cxlmd->dev);
+}
+
+#else
+static void cxl_endpoint_port_init_ras(struct cxl_port *port) { }
+static void cxl_switch_port_init_ras(struct cxl_port *port) { }
 #endif /* CONFIG_PCIEAER_CXL */
 
 static int cxl_switch_port_probe(struct cxl_port *port)
@@ -148,6 +197,8 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 		return rc;
 
 	cxl_switch_parse_cdat(port);
+
+	cxl_switch_port_init_ras(port);
 
 	cxlhdm = devm_cxl_setup_hdm(port, NULL);
 	if (!IS_ERR(cxlhdm))
@@ -202,6 +253,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	rc = devm_cxl_enumerate_decoders(cxlhdm, &info);
 	if (rc)
 		return rc;
+
+	cxl_endpoint_port_init_ras(port);
 
 	/*
 	 * Now that all endpoint decoders are successfully enumerated, try to
