@@ -841,23 +841,16 @@ void mddev_unlock(struct mddev *mddev)
 		mddev->sysfs_active = 1;
 		mutex_unlock(&mddev->reconfig_mutex);
 
-		if (mddev->kobj.sd) {
-			if (to_remove != &md_redundancy_group)
-				sysfs_remove_group(&mddev->kobj, to_remove);
-			if (mddev->pers == NULL ||
-			    mddev->pers->sync_request == NULL) {
-				sysfs_remove_group(&mddev->kobj, &md_redundancy_group);
-				if (mddev->sysfs_action)
-					sysfs_put(mddev->sysfs_action);
-				if (mddev->sysfs_completed)
-					sysfs_put(mddev->sysfs_completed);
-				if (mddev->sysfs_degraded)
-					sysfs_put(mddev->sysfs_degraded);
-				mddev->sysfs_action = NULL;
-				mddev->sysfs_completed = NULL;
-				mddev->sysfs_degraded = NULL;
-			}
-		}
+		sysfs_remove_group(&mddev->kobj, to_remove);
+		if (mddev->sysfs_action)
+			sysfs_put(mddev->sysfs_action);
+		if (mddev->sysfs_completed)
+			sysfs_put(mddev->sysfs_completed);
+		if (mddev->sysfs_degraded)
+			sysfs_put(mddev->sysfs_degraded);
+		mddev->sysfs_action = NULL;
+		mddev->sysfs_completed = NULL;
+		mddev->sysfs_degraded = NULL;
 		mddev->sysfs_active = 0;
 	} else
 		mutex_unlock(&mddev->reconfig_mutex);
@@ -6528,8 +6521,6 @@ static void __md_stop(struct mddev *mddev)
 	if (mddev->private)
 		pers->free(mddev, mddev->private);
 	mddev->private = NULL;
-	if (pers->sync_request && mddev->to_remove == NULL)
-		mddev->to_remove = &md_redundancy_group;
 	put_pers(pers);
 	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 
