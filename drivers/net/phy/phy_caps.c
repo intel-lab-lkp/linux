@@ -195,7 +195,7 @@ const struct link_capabilities *
 phy_caps_lookup(int speed, unsigned int duplex, const unsigned long *supported,
 		bool exact)
 {
-	const struct link_capabilities *lcap, *last = NULL;
+	const struct link_capabilities *lcap, *match = NULL, *last = NULL;
 
 	for_each_link_caps_desc_speed(lcap) {
 		if (linkmode_intersects(lcap->linkmodes, supported)) {
@@ -204,16 +204,19 @@ phy_caps_lookup(int speed, unsigned int duplex, const unsigned long *supported,
 			if (lcap->speed == speed && lcap->duplex == duplex) {
 				return lcap;
 			} else if (!exact) {
-				if (lcap->speed <= speed)
-					return lcap;
+				if (!match && lcap->speed <= speed)
+					match = lcap;
+
+				if (lcap->speed < speed)
+					break;
 			}
 		}
 	}
 
-	if (!exact)
-		return last;
+	if (!match && !exact)
+		match = last;
 
-	return NULL;
+	return match;
 }
 EXPORT_SYMBOL_GPL(phy_caps_lookup);
 
