@@ -29,6 +29,7 @@ struct pci_controller;
 #define DRM_WEDGE_RECOVERY_NONE		BIT(0)	/* optional telemetry collection */
 #define DRM_WEDGE_RECOVERY_REBIND	BIT(1)	/* unbind + bind driver */
 #define DRM_WEDGE_RECOVERY_BUS_RESET	BIT(2)	/* unbind + reset bus device + bind */
+#define DRM_WEDGE_RECOVERY_FW_FLASH	BIT(3)  /* unbind + firmware flash + bind */
 
 /**
  * enum switch_power_state - power state of drm device
