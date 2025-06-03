@@ -27,6 +27,10 @@
 MODULE_DESCRIPTION("Software simulator of IEEE 802.15.4 radio(s) for mac802154");
 MODULE_LICENSE("GPL");
 
+static int radios = 2;
+module_param(radios, int, 0444);
+MODULE_PARM_DESC(radios, "Number of simulated radios");
+
 static LIST_HEAD(hwsim_phys);
 static DEFINE_MUTEX(hwsim_phys_lock);
 
@@ -1018,13 +1022,13 @@ static int hwsim_probe(struct platform_device *pdev)
 	struct hwsim_phy *phy, *tmp;
 	int err, i;
 
-	for (i = 0; i < 2; i++) {
+	for (i = 0; i < radios; i++) {
 		err = hwsim_add_one(NULL, &pdev->dev, true);
 		if (err < 0)
 			goto err_slave;
 	}
 
-	dev_info(&pdev->dev, "Added 2 mac802154 hwsim hardware radios\n");
+	dev_info(&pdev->dev, "Added %d mac802154 hwsim hardware radios\n", radios);
 	return 0;
 
 err_slave:
@@ -1056,6 +1060,9 @@ static struct platform_driver mac802154hwsim_driver = {
 static __init int hwsim_init_module(void)
 {
 	int rc;
+
+	if (radios < 0)
+		return -EINVAL;
 
 	rc = genl_register_family(&hwsim_genl_family);
 	if (rc)
