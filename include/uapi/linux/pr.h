@@ -62,6 +62,12 @@ struct pr_keys {
 	__u64	keys[];
 };
 
+struct pr_held_reservation {
+	__u64		key;
+	__u32		generation;
+	__u32		type;
+};
+
 #define PR_FL_IGNORE_KEY	(1 << 0)	/* ignore existing key */
 
 #define IOC_PR_REGISTER		_IOW('p', 200, struct pr_registration)
@@ -71,5 +77,6 @@ struct pr_keys {
 #define IOC_PR_PREEMPT_ABORT	_IOW('p', 204, struct pr_preempt)
 #define IOC_PR_CLEAR		_IOW('p', 205, struct pr_clear)
 #define IOC_PR_READ_KEYS	_IOWR('p', 206, struct pr_keys)
+#define IOC_PR_READ_RESV	_IOWR('p', 207, struct pr_held_reservation)
 
 #endif /* _UAPI_PR_H */
