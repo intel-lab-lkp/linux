@@ -2333,7 +2333,7 @@ const struct device_type cxl_region_type = {
 
 bool is_cxl_region(struct device *dev)
 {
-	return dev->type == &cxl_region_type;
+	return dev && dev->type == &cxl_region_type;
 }
 EXPORT_SYMBOL_NS_GPL(is_cxl_region, "CXL");
 
