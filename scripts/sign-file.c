@@ -79,8 +79,13 @@ static char magic_number[] = "~Module signature appended~\n";
 static __attribute__((noreturn))
 void format(void)
 {
+#ifndef USE_PKCS7
+	fprintf(stderr,
+		"Usage: scripts/sign-file [-dpk] <hash algo> <key> <x509> <module> [<dest>]\n");
+#else
 	fprintf(stderr,
 		"Usage: scripts/sign-file [-dp] <hash algo> <key> <x509> <module> [<dest>]\n");
+#endif
 	fprintf(stderr,
 		"       scripts/sign-file -s <raw sig> <hash algo> <x509> <module> [<dest>]\n");
 	exit(2);
