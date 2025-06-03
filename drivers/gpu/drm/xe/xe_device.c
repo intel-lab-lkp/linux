@@ -1125,15 +1125,27 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
 }
 
 /**
+ * xe_device_set_wedged_method - Set wedged recovery method
+ * @xe: xe device instance
+ *
+ * Set wedged recovery method to be sent using drm wedged uevent.
+ */
+void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
+{
+	xe->wedged.method = method;
+}
+
+/**
  * xe_device_declare_wedged - Declare device wedged
  * @xe: xe device instance
  *
- * This is a final state that can only be cleared with a module
- * re-probe (unbind + bind).
- * In this state every IOCTL will be blocked so the GT cannot be used.
+ * This is a final state that can only be cleared with the method specified
+ * in the drm wedged uevent. The method needs to be set using xe_device_set_wedged_method
+ * before declaring the device as wedged or the default method of reprobe (unbind/re-bind)
+ * will be sent. In this state every IOCTL will be blocked so the GT cannot be used.
  * In general it will be called upon any critical error such as gt reset
- * failure or guc loading failure. Userspace will be notified of this state
- * through device wedged uevent.
+ * failure or guc loading failure or firmware failure.
+ * Userspace will be notified of this state through device wedged uevent.
  * If xe.wedged module parameter is set to 2, this function will be called
  * on every single execution timeout (a.k.a. GPU hang) right after devcoredump
  * snapshot capture. In this mode, GT reset won't be attempted so the state of
@@ -1156,6 +1168,11 @@ void xe_device_declare_wedged(struct xe_device *xe)
 		return;
 	}
 
+	/* If no wedge recovery method is set, use default */
+	if (!xe->wedged.method)
+		xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_REBIND
+					    | DRM_WEDGE_RECOVERY_BUS_RESET);
+
 	if (!atomic_xchg(&xe->wedged.flag, 1)) {
 		xe->needs_flr_on_fini = true;
 		drm_err(&xe->drm,
@@ -1165,8 +1182,7 @@ void xe_device_declare_wedged(struct xe_device *xe)
 			dev_name(xe->drm.dev));
 
 		/* Notify userspace of wedged device */
-		drm_dev_wedged_event(&xe->drm,
-				     DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+		drm_dev_wedged_event(&xe->drm, xe->wedged.method);
 	}
 
 	for_each_gt(gt, xe, id)
