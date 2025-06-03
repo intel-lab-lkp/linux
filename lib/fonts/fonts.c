@@ -54,11 +54,59 @@ static const struct font_desc *fonts[] = {
 #ifdef CONFIG_FONT_6x10
 	&font_6x10,
 #endif
-#ifdef CONFIG_FONT_TER16x32
-	&font_ter_16x32,
-#endif
 #ifdef CONFIG_FONT_6x8
 	&font_6x8,
+#endif
+#ifdef CONFIG_FONT_TER6x12N
+	&font_ter_6x12n,
+#endif
+#ifdef CONFIG_FONT_TER8x14B
+	&font_ter_8x14b,
+#endif
+#ifdef CONFIG_FONT_TER8x14N
+	&font_ter_8x14n,
+#endif
+#ifdef CONFIG_FONT_TER8x16B
+	&font_ter_8x16b,
+#endif
+#ifdef CONFIG_FONT_TER8x16N
+	&font_ter_8x16n,
+#endif
+#ifdef CONFIG_FONT_TER10x18B
+	&font_ter_10x18b,
+#endif
+#ifdef CONFIG_FONT_TER10x18N
+	&font_ter_10x18n,
+#endif
+#ifdef CONFIG_FONT_TER10x20B
+	&font_ter_10x20b,
+#endif
+#ifdef CONFIG_FONT_TER10x20N
+	&font_ter_10x20n,
+#endif
+#ifdef CONFIG_FONT_TER11x22B
+	&font_ter_11x22b,
+#endif
+#ifdef CONFIG_FONT_TER11x22N
+	&font_ter_11x22n,
+#endif
+#ifdef CONFIG_FONT_TER12x24B
+	&font_ter_12x24b,
+#endif
+#ifdef CONFIG_FONT_TER12x24N
+	&font_ter_12x24n,
+#endif
+#ifdef CONFIG_FONT_TER14x28B
+	&font_ter_14x28b,
+#endif
+#ifdef CONFIG_FONT_TER14x28N
+	&font_ter_14x28n,
+#endif
+#ifdef CONFIG_FONT_TER16x32B
+	&font_ter_16x32b,
+#endif
+#ifdef CONFIG_FONT_TER16x32N
+	&font_ter_16x32n,
 #endif
 };
 

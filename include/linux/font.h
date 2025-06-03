@@ -33,8 +33,24 @@ struct font_desc {
 #define ACORN8x8_IDX	8
 #define	MINI4x6_IDX	9
 #define FONT6x10_IDX	10
-#define TER16x32_IDX	11
-#define FONT6x8_IDX	12
+#define FONT6x8_IDX	11
+#define TER6x12N_IDX	12
+#define TER8x14B_IDX	13
+#define TER8x14N_IDX	14
+#define TER8x16B_IDX	15
+#define TER8x16N_IDX	16
+#define TER10x18B_IDX	17
+#define TER10x18N_IDX	18
+#define TER10x20B_IDX	19
+#define TER10x20N_IDX	20
+#define TER11x22B_IDX	21
+#define TER11x22N_IDX	22
+#define TER12x24B_IDX	23
+#define TER12x24N_IDX	24
+#define TER14x28B_IDX	25
+#define TER14x28N_IDX	26
+#define TER16x32B_IDX	27
+#define TER16x32N_IDX	28
 
 extern const struct font_desc	font_vga_8x8,
 			font_vga_8x16,
@@ -47,8 +63,24 @@ extern const struct font_desc	font_vga_8x8,
 			font_acorn_8x8,
 			font_mini_4x6,
 			font_6x10,
-			font_ter_16x32,
-			font_6x8;
+			font_6x8,
+			font_ter_6x12n,
+			font_ter_8x14b,
+			font_ter_8x14n,
+			font_ter_8x16b,
+			font_ter_8x16n,
+			font_ter_10x18b,
+			font_ter_10x18n,
+			font_ter_10x20b,
+			font_ter_10x20n,
+			font_ter_11x22b,
+			font_ter_11x22n,
+			font_ter_12x24b,
+			font_ter_12x24n,
+			font_ter_14x28b,
+			font_ter_14x28n,
+			font_ter_16x32b,
+			font_ter_16x32n;
 
 /* Find a font with a specific name */
 
