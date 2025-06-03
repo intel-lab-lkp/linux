@@ -3,6 +3,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/pci.h>
 
 #include "cxlmem.h"
 #include "cxlpci.h"
@@ -59,6 +60,21 @@ static int discover_region(struct device *dev, void *unused)
 }
 
 #ifdef CONFIG_PCIEAER_CXL
+
+static void cxl_unmask_prot_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev __free(pci_dev_put) =
+		pci_dev_get(to_pci_dev(dev));
+
+	if (!pdev->aer_cap) {
+		pdev->aer_cap = pci_find_ext_capability(pdev,
+							PCI_EXT_CAP_ID_ERR);
+		if (!pdev->aer_cap)
+			return;
+	}
+
+	pci_aer_unmask_internal_errors(pdev);
+}
 
 static void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
@@ -118,8 +134,12 @@ static void cxl_uport_init_ras_reporting(struct cxl_port *port,
 
 	map->host = host;
 	if (cxl_map_component_regs(map, &port->uport_regs,
-				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(&port->dev, "Failed to map RAS capability\n");
+		return;
+	}
+
+	cxl_unmask_prot_interrupts(port->uport_dev);
 }
 
 /**
@@ -144,9 +164,12 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 	}
 
 	if (cxl_map_component_regs(&dport->reg_map, &dport->regs.component,
-				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(dport->dport_dev, "Failed to map RAS capability\n");
+		return;
+	}
 
+	cxl_unmask_prot_interrupts(dport->dport_dev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, "CXL");
 
@@ -177,6 +200,8 @@ static void cxl_endpoint_port_init_ras(struct cxl_port *port)
 	}
 
 	cxl_dport_init_ras_reporting(dport, &cxlmd->dev);
+
+	cxl_unmask_prot_interrupts(cxlmd->cxlds->dev);
 }
 
 #else
