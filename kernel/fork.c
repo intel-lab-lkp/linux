@@ -604,6 +604,40 @@ static void dup_mm_exe_file(struct mm_struct *mm, struct mm_struct *oldmm)
 }
 
 #ifdef CONFIG_MMU
+/*
+ * Anonymous memory inherited by the child MM must, on success, contain a
+ * coherent snapshot of corresponding anonymous memory in the parent MM.
+ * (An exception are anonymous memory regions which are concurrently written
+ * by kernel code or hardware devices through page references obtained via GUP.)
+ * We effectively snapshot the parent's memory just before
+ * mmap_write_unlock(oldmm); any writes after that point are invisible to the
+ * child, while attempted writes before that point are either visible to the
+ * child or delayed until after mmap_write_unlock(oldmm).
+ *
+ * To make that work while only needing a single pass through the parent's VMA
+ * tree and page tables, we follow these rules:
+ *
+ *  - Before mmap_write_unlock(), a TLB flush ensures that parent threads can't
+ *    write to copy-on-write pages anymore.
+ *  - Before dup_mmap() copies page contents (which happens rarely), the
+ *    parent's PTE for the page is made read-only and a TLB flush is issued, so
+ *    subsequent writes are delayed until mmap_write_unlock().
+ *  - Before dup_mmap() starts walking the page tables of a VMA in the parent,
+ *    the VMA is write-locked to ensure that the parent can't perform writes
+ *    that won't be visible in the child before mmap_write_unlock():
+ *      a) through concurrent copy-on-write handling
+ *      b) by upgrading read-only PTEs to writable
+ *
+ * Not following these rules, and giving the child a torn copy of the parent's
+ * memory contents where different segments come from different points in time,
+ * would likely _mostly_ work:
+ * Any memory to which a concurrent parent thread could be writing under a lock
+ * can't be accessed from the child without risking deadlocks (since the child
+ * might inherit the lock in a locked state, in which case the lock will stay
+ * locked forever in the child).
+ * But if userspace is using trylock or lock-free algorithms, providing a torn
+ * view of memory could break the child.
+ */
 static __latent_entropy int dup_mmap(struct mm_struct *mm,
 					struct mm_struct *oldmm)
 {
