@@ -1186,7 +1186,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	cancel_mem_notifier_on_err = true;
 	mem_arg.start_pfn = pfn;
 	mem_arg.nr_pages = nr_pages;
-	mem_arg.status_change_nid = node_arg.status_change_nid;
+	mem_arg.nid = nid;
 	ret = memory_notify(MEM_GOING_ONLINE, &mem_arg);
 	ret = notifier_to_errno(ret);
 	if (ret)
@@ -1990,7 +1990,7 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	cancel_mem_notifier_on_err = true;
 	mem_arg.start_pfn = start_pfn;
 	mem_arg.nr_pages = nr_pages;
-	mem_arg.status_change_nid = node_arg.status_change_nid;
+	mem_arg.nid = node;
 	ret = memory_notify(MEM_GOING_OFFLINE, &mem_arg);
 	ret = notifier_to_errno(ret);
 	if (ret) {
