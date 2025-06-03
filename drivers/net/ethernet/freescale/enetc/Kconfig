@@ -17,6 +17,7 @@ config NXP_ENETC_PF_COMMON
 
 config NXP_NETC_LIB
 	tristate
+	default y if FSL_ENETC_CORE=y && NXP_ENETC4=m
 	help
 	  This module provides common functionalities for both ENETC and NETC
 	  Switch, such as NETC Table Management Protocol (NTMP) 2.0, common tc
