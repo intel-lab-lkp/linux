@@ -1713,44 +1713,6 @@ err:
 	return rc;
 }
 
-static int cxl_region_attach_auto(struct cxl_region *cxlr,
-				  struct cxl_endpoint_decoder *cxled, int pos)
-{
-	struct cxl_region_params *p = &cxlr->params;
-
-	if (cxled->state != CXL_DECODER_STATE_AUTO) {
-		dev_err(&cxlr->dev,
-			"%s: unable to add decoder to autodetected region\n",
-			dev_name(&cxled->cxld.dev));
-		return -EINVAL;
-	}
-
-	if (pos >= 0) {
-		dev_dbg(&cxlr->dev, "%s: expected auto position, not %d\n",
-			dev_name(&cxled->cxld.dev), pos);
-		return -EINVAL;
-	}
-
-	if (p->nr_targets >= p->interleave_ways) {
-		dev_err(&cxlr->dev, "%s: no more target slots available\n",
-			dev_name(&cxled->cxld.dev));
-		return -ENXIO;
-	}
-
-	/*
-	 * Temporarily record the endpoint decoder into the target array. Yes,
-	 * this means that userspace can view devices in the wrong position
-	 * before the region activates, and must be careful to understand when
-	 * it might be racing region autodiscovery.
-	 */
-	pos = p->nr_targets;
-	p->targets[pos] = cxled;
-	cxled->pos = pos;
-	p->nr_targets++;
-
-	return 0;
-}
-
 static int cmp_interleave_pos(const void *a, const void *b)
 {
 	struct cxl_endpoint_decoder *cxled_a = *(typeof(cxled_a) *)a;
@@ -1916,6 +1878,86 @@ static int cxl_region_sort_targets(struct cxl_region *cxlr)
 	return rc;
 }
 
+static int cxl_region_attach_auto(struct cxl_region *cxlr,
+				  struct cxl_endpoint_decoder *cxled, int pos)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	struct cxl_region_params *p = &cxlr->params;
+	struct cxl_port *root_port;
+	int i, rc;
+
+	if (cxled->state != CXL_DECODER_STATE_AUTO) {
+		dev_err(&cxlr->dev,
+			"%s: unable to add decoder to autodetected region\n",
+			dev_name(&cxled->cxld.dev));
+		return -EINVAL;
+	}
+
+	if (pos >= 0) {
+		dev_dbg(&cxlr->dev, "%s: expected auto position, not %d\n",
+			dev_name(&cxled->cxld.dev), pos);
+		return -EINVAL;
+	}
+
+	if (p->nr_targets >= p->interleave_ways) {
+		dev_err(&cxlr->dev, "%s: no more target slots available\n",
+			dev_name(&cxled->cxld.dev));
+		return -ENXIO;
+	}
+
+	/*
+	 * Temporarily record the endpoint decoder into the target array. Yes,
+	 * this means that userspace can view devices in the wrong position
+	 * before the region activates, and must be careful to understand when
+	 * it might be racing region autodiscovery.
+	 */
+	pos = p->nr_targets;
+	p->targets[pos] = cxled;
+	cxled->pos = pos;
+	p->nr_targets++;
+
+	/* await more targets to arrive... */
+	if (p->nr_targets < p->interleave_ways)
+		return 0;
+
+	/*
+	 * All targets are here, which implies all PCI enumeration that
+	 * affects this region has been completed. Walk the topology to
+	 * sort the devices into their relative region decode position.
+	 */
+	rc = cxl_region_sort_targets(cxlr);
+	if (rc)
+		return rc;
+
+	root_port = cxlrd_to_port(cxlrd);
+	for (i = 0; i < p->nr_targets; i++) {
+		struct cxl_port *ep_port;
+		struct cxl_dport *dport;
+
+		cxled = p->targets[i];
+		ep_port = cxled_to_port(cxled);
+		dport = cxl_find_dport_by_dev(root_port,
+					      ep_port->host_bridge);
+		rc = cxl_region_attach_position(cxlr, cxlrd, cxled,
+						dport, i);
+		if (rc)
+			return rc;
+	}
+
+	rc = cxl_region_setup_targets(cxlr);
+	if (rc)
+		return rc;
+
+	/*
+	 * If target setup succeeds in the autodiscovery case
+	 * then the region is already committed.
+	 */
+	p->state = CXL_CONFIG_COMMIT;
+	cxl_region_shared_upstream_bandwidth_update(cxlr);
+
+	return 0;
+}
+
 static int cxl_region_attach(struct cxl_region *cxlr,
 			     struct cxl_endpoint_decoder *cxled, int pos)
 {
@@ -1999,50 +2041,8 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 
 	cxl_region_perf_data_calculate(cxlr, cxled);
 
-	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
-		int i;
-
-		rc = cxl_region_attach_auto(cxlr, cxled, pos);
-		if (rc)
-			return rc;
-
-		/* await more targets to arrive... */
-		if (p->nr_targets < p->interleave_ways)
-			return 0;
-
-		/*
-		 * All targets are here, which implies all PCI enumeration that
-		 * affects this region has been completed. Walk the topology to
-		 * sort the devices into their relative region decode position.
-		 */
-		rc = cxl_region_sort_targets(cxlr);
-		if (rc)
-			return rc;
-
-		for (i = 0; i < p->nr_targets; i++) {
-			cxled = p->targets[i];
-			ep_port = cxled_to_port(cxled);
-			dport = cxl_find_dport_by_dev(root_port,
-						      ep_port->host_bridge);
-			rc = cxl_region_attach_position(cxlr, cxlrd, cxled,
-							dport, i);
-			if (rc)
-				return rc;
-		}
-
-		rc = cxl_region_setup_targets(cxlr);
-		if (rc)
-			return rc;
-
-		/*
-		 * If target setup succeeds in the autodiscovery case
-		 * then the region is already committed.
-		 */
-		p->state = CXL_CONFIG_COMMIT;
-		cxl_region_shared_upstream_bandwidth_update(cxlr);
-
-		return 0;
-	}
+	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags))
+		return cxl_region_attach_auto(cxlr, cxled, pos);
 
 	rc = cxl_region_validate_position(cxlr, cxled, pos);
 	if (rc)
