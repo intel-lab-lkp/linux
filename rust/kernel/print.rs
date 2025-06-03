@@ -423,3 +423,66 @@ macro_rules! pr_cont (
         $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
     )
 );
+
+/// Returns just the base filename of the current file.  This differs from the
+/// built-in file!() macro, which returns the full path of the current file.
+/// Using the base filename gives you more succinct logging prints.
+///
+/// # Examples
+///
+/// ```
+/// pr_err!("{}:{}\n", sfile!(), line!());
+/// ```
+#[macro_export]
+macro_rules! sfile {
+    () => {{
+        const FILE: &str = file!();
+        assert!(FILE.is_ascii()); // .as_bytes() does not support non-ascii filenames
+
+        // Return the index of the last occurrence of `needle` in `haystack`,
+        // or zero if not found.  We can't use rfind() because it's not const (yet).
+        // Avoiding rfind() allows this macro to be evaluated at compile time.
+        const fn find_last_or_zero(haystack: &str, needle: char) -> usize {
+            let bytes = haystack.as_bytes();
+            let mut i = haystack.len();
+            while i > 0 {
+                i -= 1;
+                if bytes[i] == needle as u8 {
+                    return i;
+                }
+            }
+            0
+        }
+
+        // Return the index of the last occurrence of `needle` in `haystack`,
+        // or the length of the string if not found.
+        const fn find_last_or_len(haystack: &str, needle: char) -> usize {
+            let len = haystack.len();
+            let bytes = haystack.as_bytes();
+            let mut i = len;
+            while i > 0 {
+                i -= 1;
+                if bytes[i] == needle as u8 {
+                    return i;
+                }
+            }
+            len
+        }
+        let start = find_last_or_zero(FILE, '/') + 1;
+        let end = find_last_or_len(FILE, '.');
+
+        // We use these unsafe functions because apparently indexing into
+        // a string using normal Rust methods is not completely const operation.
+
+        let base_ptr: *const u8 = FILE.as_ptr();
+        // SAFETY: We know that `start` is <= the length of FILE, because FILE
+        // never ends in a slash.
+        let ptr: *const u8 = unsafe { base_ptr.add(start) };
+        // SAFETY: We also know that `end` < the length of FILE.
+        // If `end` < `start`, this will generate a compiler error.
+        let slice = unsafe { core::slice::from_raw_parts(ptr, end - start) };
+        // SAFETY: We know that the slice is valid UTF-8, because we checked
+        // that FILE is ASCII (via is_ascii() above).
+        unsafe { core::str::from_utf8_unchecked(slice) }
+    }};
+}
