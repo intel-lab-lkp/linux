@@ -598,8 +598,14 @@ static bool blk_stack_atomic_writes_head(struct queue_limits *t,
 	    !blk_stack_atomic_writes_boundary_head(t, b))
 		return false;
 
-	if (t->io_min <= SECTOR_SIZE) {
-		/* No chunk sectors, so use bottom device values directly */
+	if (t->io_min <= SECTOR_SIZE ||
+	    (!(t->atomic_write_hw_unit_max % t->io_min) &&
+	     !(t->atomic_write_hw_unit_min % t->io_min))) {
+		/*
+		 * If there are no chunk sectors, or if b->atomic_write_hw_unit
+		 * _{min, max} are aligned to the chunk size (t->io_min), then
+		 * use the bottom device's values directly.
+		 */
 		t->atomic_write_hw_unit_max = b->atomic_write_hw_unit_max;
 		t->atomic_write_hw_unit_min = b->atomic_write_hw_unit_min;
 		t->atomic_write_hw_max = b->atomic_write_hw_max;
