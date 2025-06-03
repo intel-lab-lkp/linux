@@ -2751,6 +2751,20 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 	struct ieee80211_supported_band *sband;
 	u64 changed = 0;
 
+	/* Reject the operation if any of the AP BSS params that got changed are not
+	 * supported by the driver for explicit configuration.
+	 */
+	if (params->changed &
+	    ~(CFG80211_BSS_PARAM_CHANGED_CTS_PROT |
+	      CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE |
+	      CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME |
+	      CFG80211_BSS_PARAM_CHANGED_BASIC_RATES |
+	      CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE |
+	      CFG80211_BSS_PARAM_CHANGED_HT_OPMODE |
+	      CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW |
+	      CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS))
+		return -EOPNOTSUPP;
+
 	link = ieee80211_link_or_deflink(sdata, params->link_id, true);
 	if (IS_ERR(link))
 		return PTR_ERR(link);
