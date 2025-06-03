@@ -192,18 +192,18 @@ static int vfio_df_group_open(struct vfio_device_file *df)
 		 * implies they expected translation to exist
 		 */
 		if (!capable(CAP_SYS_RAWIO) ||
-		    vfio_iommufd_device_has_compat_ioas(device, df->iommufd))
+		    vfio_iommufd_device_has_compat_ioas(device, df->iommufd)) {
 			ret = -EPERM;
-		else
-			ret = 0;
-		goto out_put_kvm;
+			goto out_put_kvm;
+		}
 	}
 
 	ret = vfio_df_open(df);
 	if (ret)
 		goto out_put_kvm;
 
-	if (df->iommufd && device->open_count == 1) {
+	if (df->iommufd && device->open_count == 1 &&
+	    !vfio_device_is_noiommu(device)) {
 		ret = vfio_iommufd_compat_attach_ioas(device, df->iommufd);
 		if (ret)
 			goto out_close_device;
