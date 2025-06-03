@@ -29,9 +29,10 @@
 #include <signal.h>
 #include <errno.h>
 #include <mqueue.h>
-#include <include/vdso/time64.h>
 #include "../kselftest.h"
 
+/* define NSEC_PER_SEC as long long to avoid overflow on 32 bit architectures*/
+#define NSEC_PER_SEC   1000000000LL
 
 #define TARGET_TIMEOUT		100000000	/* 100ms in nanoseconds */
 #define UNRESONABLE_LATENCY	40000000	/* 40ms in nanosecs */

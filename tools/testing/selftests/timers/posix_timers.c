@@ -16,10 +16,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-#include <include/vdso/time64.h>
 #include <pthread.h>
 
 #include "../kselftest.h"
+
+/* define NSEC_PER_SEC as long long to avoid overflow on 32 bit architectures*/
+#define NSEC_PER_SEC   1000000000LL
+#define USEC_PER_SEC   1000000LL
 
 #define DELAY 2
 

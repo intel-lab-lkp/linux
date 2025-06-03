@@ -24,8 +24,10 @@
 #include <sys/timex.h>
 #include <string.h>
 #include <signal.h>
-#include <include/vdso/time64.h>
 #include "../kselftest.h"
+
+/* define NSEC_PER_SEC as long long to avoid overflow on 32 bit architectures*/
+#define NSEC_PER_SEC   1000000000LL
 
 #define UNRESONABLE_LATENCY 40000000 /* 40ms in nanosecs */
 
