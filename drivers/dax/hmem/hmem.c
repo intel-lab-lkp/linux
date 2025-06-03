@@ -9,6 +9,8 @@
 static bool region_idle;
 module_param_named(region_idle, region_idle, bool, 0644);
 
+static struct platform_device *dax_hmem_pdev;
+
 static int dax_hmem_probe(struct platform_device *pdev)
 {
 	unsigned long flags = IORESOURCE_DAX_KMEM;
@@ -59,9 +61,9 @@ static void release_hmem(void *pdev)
 	platform_device_unregister(pdev);
 }
 
-static int hmem_register_device(struct device *host, int target_nid,
-				const struct resource *res)
+static int hmem_register_device(int target_nid, const struct resource *res)
 {
+	struct device *host = &dax_hmem_pdev->dev;
 	struct platform_device *pdev;
 	struct memregion_info info;
 	long id;
@@ -125,7 +127,8 @@ out_put:
 
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {
-	return walk_hmem_resources(&pdev->dev, hmem_register_device);
+	dax_hmem_pdev = pdev;
+	return walk_hmem_resources(hmem_register_device);
 }
 
 static struct platform_driver dax_hmem_platform_driver = {
