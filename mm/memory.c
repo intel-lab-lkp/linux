@@ -917,7 +917,25 @@ copy_present_page(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 	/*
 	 * We have a prealloc page, all good!  Take it
 	 * over and copy the page & arm it.
+	 *
+	 * One nasty aspect is that we could be in a multithreaded process or
+	 * such, where another thread is in the middle of writing to memory
+	 * while this thread is forking. As long as we're just marking PTEs as
+	 * read-only to make copy-on-write happen *later*, that's easy; we just
+	 * need to do a single TLB flush before dropping the mmap/VMA locks, and
+	 * that's enough to guarantee that the child gets a coherent snapshot of
+	 * memory.
+	 * But here, where we're doing an immediate copy, we must ensure that
+	 * threads in the parent process can no longer write into the page being
+	 * copied until we're done forking.
+	 * This means that we still need to mark the source PTE as read-only,
+	 * with an immediate TLB flush.
+	 * (To make the source PTE writable again after fork() is done, we can
+	 * rely on the page fault handler to do that lazily, thanks to
+	 * PageAnonExclusive().)
 	 */
+	ptep_set_wrprotect(src_vma->vm_mm, addr, src_pte);
+	flush_tlb_page(src_vma, addr);
 
 	if (copy_mc_user_highpage(&new_folio->page, page, addr, src_vma))
 		return -EHWPOISON;
