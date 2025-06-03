@@ -825,7 +825,7 @@ static int madvise_free_single_vma(struct madvise_behavior *madv_behavior,
 
 	mmu_notifier_invalidate_range_start(&range);
 	tlb_start_vma(tlb, vma);
-	walk_page_range(vma->vm_mm, range.start, range.end,
+	walk_page_range_vma(vma, range.start, range.end,
 			&madvise_free_walk_ops, tlb);
 	tlb_end_vma(tlb, vma);
 	mmu_notifier_invalidate_range_end(&range);
