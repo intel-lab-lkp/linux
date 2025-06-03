@@ -2008,9 +2008,13 @@ static int sd_pr_read_reservation(struct block_device *bdev,
 	if (result)
 		return result;
 
+	rsv->generation = get_unaligned_be32(&data[0]);
+	rsv->type = 0;
 	len = get_unaligned_be32(&data[4]);
-	if (!len)
+	if (!len) {
+		rsv->key = 0;
 		return 0;
+	}
 
 	/* Make sure we have at least the key and type */
 	if (len < 14) {
@@ -2020,9 +2024,9 @@ static int sd_pr_read_reservation(struct block_device *bdev,
 		return -EINVAL;
 	}
 
-	rsv->generation = get_unaligned_be32(&data[0]);
 	rsv->key = get_unaligned_be64(&data[8]);
-	rsv->type = scsi_pr_type_to_block(data[21] & 0x0f);
+	if (len == 16)
+		rsv->type = scsi_pr_type_to_block(data[21] & 0x0f);
 	return 0;
 }
 
