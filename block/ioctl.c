@@ -422,6 +422,43 @@ static int blkdev_pr_clear(struct block_device *bdev, blk_mode_t mode,
 	return ops->pr_clear(bdev, c.key);
 }
 
+static int blkdev_pr_read_keys(struct block_device *bdev, blk_mode_t mode,
+		struct pr_keys __user *arg)
+{
+	const struct pr_ops *ops = bdev->bd_disk->fops->pr_ops;
+	struct pr_keys k_in, *k_out;
+	size_t k_len;
+	int ret, num_keys;
+
+	if (!blkdev_pr_allowed(bdev, mode))
+		return -EPERM;
+	if (!ops || !ops->pr_read_keys)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&k_in, arg, sizeof(k_in)))
+		return -EFAULT;
+
+	num_keys = k_in.num_keys;
+	k_out = kzalloc(sizeof(struct pr_keys) + num_keys * sizeof(u64),
+			GFP_KERNEL);
+	if (!k_out)
+		return -ENOMEM;
+
+	k_out->num_keys = num_keys;
+	ret = ops->pr_read_keys(bdev, k_out);
+	if (ret) {
+		kfree(k_out);
+		return ret;
+	}
+
+	k_len = sizeof(k_in) + num_keys * sizeof(u64);
+	if (copy_to_user(arg, k_out, k_len))
+		ret = -EFAULT;
+
+	kfree(k_out);
+	return ret;
+}
+
 static int blkdev_flushbuf(struct block_device *bdev, unsigned cmd,
 		unsigned long arg)
 {
@@ -643,6 +680,8 @@ static int blkdev_common_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return blkdev_pr_preempt(bdev, mode, argp, true);
 	case IOC_PR_CLEAR:
 		return blkdev_pr_clear(bdev, mode, argp);
+	case IOC_PR_READ_KEYS:
+		return blkdev_pr_read_keys(bdev, mode, argp);
 	default:
 		return -ENOIOCTLCMD;
 	}

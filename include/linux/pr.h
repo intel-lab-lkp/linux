@@ -4,12 +4,6 @@
 
 #include <uapi/linux/pr.h>
 
-struct pr_keys {
-	u32	generation;
-	u32	num_keys;
-	u64	keys[];
-};
-
 struct pr_held_reservation {
 	u64		key;
 	u32		generation;
