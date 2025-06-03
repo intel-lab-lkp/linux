@@ -8,7 +8,10 @@ static atomic_t mem_active;
 
 bool cxl_mem_active(void)
 {
-	return atomic_read(&mem_active) != 0;
+	if (IS_ENABLED(CONFIG_CXL_MEM))
+		return atomic_read(&mem_active) != 0;
+
+	return false;
 }
 
 void cxl_mem_active_inc(void)
