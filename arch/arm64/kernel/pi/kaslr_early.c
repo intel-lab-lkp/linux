@@ -35,9 +35,14 @@ static char *__strstr(const char *s1, const char *s2)
 static bool cmdline_contains_nokaslr(const u8 *cmdline)
 {
 	const u8 *str;
+	size_t len = strlen("nokaslr");
+	const char *after = cmdline + len;
 
 	str = __strstr(cmdline, "nokaslr");
-	return str == cmdline || (str > cmdline && *(str - 1) == ' ');
+	if ((str == cmdline || (str > cmdline && *(str - 1) == ' ')) &&
+	    (*after == ' ' || *after == '\0'))
+		return true;
+	return false;
 }
 
 static bool is_kaslr_disabled_cmdline(void *fdt)
