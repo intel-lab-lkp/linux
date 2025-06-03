@@ -837,6 +837,8 @@ void cgroup_update_frozen(struct cgroup *cgrp);
 void cgroup_freeze(struct cgroup *cgrp, bool freeze);
 void cgroup_freezer_migrate_task(struct task_struct *task, struct cgroup *src,
 				 struct cgroup *dst);
+int proc_cgroup_frztime_show(struct seq_file *m, struct pid_namespace *ns,
+			     struct pid *pid, struct task_struct *tsk);
 
 static inline bool cgroup_task_frozen(struct task_struct *task)
 {

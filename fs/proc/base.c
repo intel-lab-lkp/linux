@@ -3377,6 +3377,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 #ifdef CONFIG_CGROUPS
 	ONE("cgroup",  S_IRUGO, proc_cgroup_show),
+	ONE("cgroup_v2_freezer_time_frozen",  0444, proc_cgroup_frztime_show),
 #endif
 #ifdef CONFIG_PROC_CPU_RESCTRL
 	ONE("cpu_resctrl_groups", S_IRUGO, proc_resctrl_show),
@@ -3724,6 +3725,7 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 #ifdef CONFIG_CGROUPS
 	ONE("cgroup",  S_IRUGO, proc_cgroup_show),
+	ONE("cgroup_v2_freezer_time_frozen",  0444, proc_cgroup_frztime_show),
 #endif
 #ifdef CONFIG_PROC_CPU_RESCTRL
 	ONE("cpu_resctrl_groups", S_IRUGO, proc_resctrl_show),

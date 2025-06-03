@@ -1325,6 +1325,9 @@ struct task_struct {
 	struct css_set __rcu		*cgroups;
 	/* cg_list protected by css_set_lock and tsk->alloc_lock: */
 	struct list_head		cg_list;
+	/* freezer stats protected by the css_set_lock: */
+	u64				frozen_time_total;
+	u64				frozen_time_start;
 #endif
 #ifdef CONFIG_X86_CPU_RESCTRL
 	u32				closid;

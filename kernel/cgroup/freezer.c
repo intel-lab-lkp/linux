@@ -110,6 +110,7 @@ void cgroup_enter_frozen(void)
 
 	spin_lock_irq(&css_set_lock);
 	current->frozen = true;
+	current->frozen_time_start = ktime_get_ns();
 	cgrp = task_dfl_cgroup(current);
 	cgroup_inc_frozen_cnt(cgrp);
 	cgroup_update_frozen(cgrp);
@@ -132,10 +133,13 @@ void cgroup_leave_frozen(bool always_leave)
 	spin_lock_irq(&css_set_lock);
 	cgrp = task_dfl_cgroup(current);
 	if (always_leave || !test_bit(CGRP_FREEZE, &cgrp->flags)) {
+		u64 end_ns;
 		cgroup_dec_frozen_cnt(cgrp);
 		cgroup_update_frozen(cgrp);
 		WARN_ON_ONCE(!current->frozen);
 		current->frozen = false;
+		end_ns = ktime_get_ns();
+		current->frozen_time_total += (end_ns - current->frozen_time_start);
 	} else if (!(current->jobctl & JOBCTL_TRAP_FREEZE)) {
 		spin_lock(&current->sighand->siglock);
 		current->jobctl |= JOBCTL_TRAP_FREEZE;
@@ -252,6 +256,22 @@ void cgroup_freezer_migrate_task(struct task_struct *task,
 	 * Force the task to the desired state.
 	 */
 	cgroup_freeze_task(task, test_bit(CGRP_FREEZE, &dst->flags));
+}
+
+int proc_cgroup_frztime_show(struct seq_file *m, struct pid_namespace *ns,
+			     struct pid *pid, struct task_struct *tsk)
+{
+	u64 delta = 0;
+
+	spin_lock_irq(&css_set_lock);
+	if (tsk->frozen)
+		delta = ktime_get() - tsk->frozen_time_start;
+
+	seq_printf(m, "%llu\n",
+		   (unsigned long long)(tsk->frozen_time_total + delta));
+	spin_unlock_irq(&css_set_lock);
+
+	return 0;
 }
 
 void cgroup_freeze(struct cgroup *cgrp, bool freeze)
