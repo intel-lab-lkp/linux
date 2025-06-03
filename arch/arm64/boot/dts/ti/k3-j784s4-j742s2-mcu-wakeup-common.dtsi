@@ -310,6 +310,8 @@
 		interrupts = <GIC_SPI 897 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&k3_clks 397 0>;
 		clock-names = "fclk";
+		assigned-clocks = <&k3_clks 397 0>;
+		assigned-clock-parents = <&k3_clks 397 1>;
 		power-domains = <&k3_pds 397 TI_SCI_PD_EXCLUSIVE>;
 		status = "disabled";
 	};
