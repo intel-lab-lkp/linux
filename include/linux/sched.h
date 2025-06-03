@@ -406,6 +406,11 @@ static inline void sched_domains_mutex_lock(void) { }
 static inline void sched_domains_mutex_unlock(void) { }
 #endif
 
+#ifdef CONFIG_RSEQ
+/* Scheduler time slice extension */
+extern unsigned int sysctl_sched_preempt_delay_us;
+#endif
+
 struct sched_param {
 	int sched_priority;
 };
