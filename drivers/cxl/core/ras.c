@@ -110,8 +110,100 @@ static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
 #ifdef CONFIG_PCIEAER_CXL
 
+static void cxl_do_recovery(struct pci_dev *pdev)
+{
+}
+
+static int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
+{
+	struct cxl_prot_error_info *err_info = data;
+	struct pci_dev *pdev_ref __free(pci_dev_put) = pci_dev_get(pdev);
+	struct cxl_dev_state *cxlds;
+
+	/*
+	 * The capability, status, and control fields in Device 0,
+	 * Function 0 DVSEC control the CXL functionality of the
+	 * entire device (CXL 3.0, 8.1.3).
+	 */
+	if (pdev->devfn != PCI_DEVFN(0, 0))
+		return 0;
+
+	/*
+	 * CXL Memory Devices must have the 502h class code set (CXL
+	 * 3.0, 8.1.12.1).
+	 */
+	if ((pdev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+		return 0;
+
+	if (!is_cxl_memdev(&pdev->dev) || !pdev->dev.driver)
+		return 0;
+
+	cxlds = pci_get_drvdata(pdev);
+	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
+
+	if (err_info->severity == AER_CORRECTABLE)
+		cxl_cor_error_detected(pdev);
+	else
+		cxl_do_recovery(pdev);
+
+	return 1;
+}
+
+static struct pci_dev *sbdf_to_pci(struct cxl_prot_error_info *err_info)
+{
+	unsigned int devfn = PCI_DEVFN(err_info->device,
+				       err_info->function);
+	struct pci_dev *pdev __free(pci_dev_put) =
+		pci_get_domain_bus_and_slot(err_info->segment,
+					    err_info->bus,
+					    devfn);
+	return pdev;
+}
+
+static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
+{
+	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(sbdf_to_pci(err_info));
+
+	if (!pdev) {
+		pr_err("Failed to find the CXL device\n");
+		return;
+	}
+
+	/*
+	 * Internal errors of an RCEC indicate an AER error in an
+	 * RCH's downstream port. Check and handle them in the CXL.mem
+	 * device driver.
+	 */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_EC)
+		return pcie_walk_rcec(pdev, cxl_rch_handle_error_iter, err_info);
+
+	if (err_info->severity == AER_CORRECTABLE) {
+		int aer = pdev->aer_cap;
+		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+		struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
+
+		if (aer)
+			pci_clear_and_set_config_dword(pdev,
+						       aer + PCI_ERR_COR_STATUS,
+						       0, PCI_ERR_COR_INTERNAL);
+
+		cxl_cor_error_detected(pdev);
+
+		pcie_clear_device_status(pdev);
+	} else {
+		cxl_do_recovery(pdev);
+	}
+}
+
 static void cxl_prot_err_work_fn(struct work_struct *work)
 {
+	struct cxl_prot_err_work_data wd;
+
+	while (cxl_prot_err_kfifo_get(&wd)) {
+		struct cxl_prot_error_info *err_info = &wd.err_info;
+
+		cxl_handle_prot_error(err_info);
+	}
 }
 
 #else
