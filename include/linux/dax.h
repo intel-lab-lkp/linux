@@ -299,9 +299,15 @@ static inline int dax_mem2blk_err(int err)
 
 #ifdef CONFIG_DEV_DAX_HMEM_DEVICES
 void hmem_register_resource(int target_nid, struct resource *r);
+int hmem_register_device(int target_nid, const struct resource *res);
 #else
 static inline void hmem_register_resource(int target_nid, struct resource *r)
 {
+}
+
+static inline int hmem_register_device(int target_nid, const struct resource *res)
+{
+	return 0;
 }
 #endif
 

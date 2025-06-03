@@ -10,6 +10,7 @@
 #include <linux/sort.h>
 #include <linux/idr.h>
 #include <linux/memory-tiers.h>
+#include <linux/dax.h>
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
@@ -3553,6 +3554,11 @@ static struct resource *normalize_resource(struct resource *res)
 	return NULL;
 }
 
+static int cxl_softreserv_mem_register(struct resource *res, void *unused)
+{
+	return hmem_register_device(phys_to_target_node(res->start), res);
+}
+
 static int __cxl_region_softreserv_update(struct resource *soft,
 					  void *_cxlr)
 {
@@ -3589,6 +3595,10 @@ int cxl_region_softreserv_update(void)
 				    IORESOURCE_MEM, 0, -1, cxlr,
 				    __cxl_region_softreserv_update);
 	}
+
+	/* Now register any remaining SOFT RESERVES with DAX */
+	walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED, IORESOURCE_MEM,
+			    0, -1, NULL, cxl_softreserv_mem_register);
 
 	return 0;
 }
