@@ -1629,6 +1629,7 @@ vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 	pud_t *pud = vmf->pud;
 	struct mm_struct *mm = vma->vm_mm;
 	spinlock_t *ptl;
+	pud_t entry;
 
 	if (addr < vma->vm_start || addr >= vma->vm_end)
 		return VM_FAULT_SIGBUS;
@@ -1637,20 +1638,32 @@ vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 		return VM_FAULT_SIGBUS;
 
 	ptl = pud_lock(mm, pud);
-
-	/*
-	 * If there is already an entry present we assume the folio is
-	 * already mapped, hence no need to take another reference. We
-	 * still call insert_pfn_pud() though in case the mapping needs
-	 * upgrading to writeable.
-	 */
-	if (pud_none(*vmf->pud)) {
+	if (pud_none(*pud)) {
 		folio_get(folio);
 		folio_add_file_rmap_pud(folio, &folio->page, vma);
 		add_mm_counter(mm, mm_counter_file(folio), HPAGE_PUD_NR);
+
+		entry = folio_mk_pud(folio, vma->vm_page_prot);
+		if (write) {
+			entry = pud_mkyoung(pud_mkdirty(entry));
+			entry = maybe_pud_mkwrite(entry, vma);
+		}
+		set_pud_at(mm, addr, pud, entry);
+		update_mmu_cache_pud(vma, addr, pud);
+	} else if (pud_present(*pud) && write) {
+		/*
+		 * We only allow for upgrading write permissions if the
+		 * same folio is already mapped.
+		 */
+		if (pud_pfn(*pud) == folio_pfn(folio)) {
+			entry = pud_mkyoung(*pud);
+			entry = maybe_pud_mkwrite(pud_mkdirty(entry), vma);
+			if (pudp_set_access_flags(vma, addr, pud, entry, 1))
+				update_mmu_cache_pud(vma, addr, pud);
+		} else {
+			WARN_ON_ONCE(1);
+		}
 	}
-	insert_pfn_pud(vma, addr, vmf->pud, pfn_to_pfn_t(folio_pfn(folio)),
-		write);
 	spin_unlock(ptl);
 
 	return VM_FAULT_NOPAGE;
