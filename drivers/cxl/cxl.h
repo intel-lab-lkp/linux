@@ -801,6 +801,9 @@ int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint)
 void cxl_cor_error_detected(struct device *dev);
 pci_ers_result_t cxl_error_detected(struct device *dev);
 
+void cxl_port_cor_error_detected(struct device *dev);
+pci_ers_result_t cxl_port_error_detected(struct device *dev);
+
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info
  * @mem_enabled: cached value of mem_enabled in the DVSEC at init time
@@ -914,6 +917,8 @@ void cxl_coordinates_combine(struct access_coordinate *out,
 			     struct access_coordinate *c2);
 
 bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
+
+int match_uport(struct device *dev, const void *data);
 
 /*
  * Unit test builds overrides this to __weak, find the 'strong' version

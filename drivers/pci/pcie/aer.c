@@ -1018,11 +1018,6 @@ static bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 	if (!info || !info->is_cxl)
 		return false;
 
-	/* Only CXL Endpoints are currently supported */
-	if ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT) &&
-	    (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_EC))
-		return false;
-
 	return is_internal_error(info);
 }
 

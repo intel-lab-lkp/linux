@@ -753,6 +753,67 @@ static bool cxl_handle_endpoint_ras(struct cxl_dev_state *cxlds)
 
 #ifdef CONFIG_PCIEAER_CXL
 
+static void __iomem *cxl_get_ras_base(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	void __iomem *ras_base;
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+	{
+		struct cxl_dport *dport = NULL;
+		struct cxl_port *port __free(put_cxl_port) = find_cxl_port(&pdev->dev, &dport);
+
+		if (!dport || !dport->dport_dev) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+
+		ras_base = dport ? dport->regs.ras : NULL;
+		break;
+	}
+	case PCI_EXP_TYPE_UPSTREAM:
+	{
+		struct cxl_port *port;
+		struct device *dev __free(put_device) = bus_find_device(&cxl_bus_type, NULL,
+									&pdev->dev, match_uport);
+
+		if (!dev || !is_cxl_port(dev)) {
+			pci_err(pdev, "Failed to find the CXL device");
+			return NULL;
+		}
+
+		port = to_cxl_port(dev);
+		ras_base = port ? port->uport_regs.ras : NULL;
+		break;
+	}
+	default:
+	{
+		pci_warn_once(pdev, "Error: Unsupported device type (%X)", pci_pcie_type(pdev));
+		return NULL;
+	}
+	}
+
+	return ras_base;
+}
+
+void cxl_port_cor_error_detected(struct device *dev)
+{
+	void __iomem *ras_base = cxl_get_ras_base(dev);
+
+	__cxl_handle_cor_ras(dev, 0, ras_base);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_cor_error_detected, "CXL");
+
+pci_ers_result_t cxl_port_error_detected(struct device *dev)
+{
+	void __iomem *ras_base = cxl_get_ras_base(dev);
+
+	return  __cxl_handle_ras(dev, 0, ras_base);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_error_detected, "CXL");
+
 static void cxl_handle_rdport_cor_ras(struct cxl_dev_state *cxlds,
 					  struct cxl_dport *dport)
 {

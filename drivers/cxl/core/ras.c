@@ -140,20 +140,85 @@ static pci_ers_result_t cxl_merge_result(enum pci_ers_result orig,
 	return orig;
 }
 
-static int cxl_report_error_detected(struct pci_dev *pdev, void *data)
+int match_uport(struct device *dev, const void *data)
 {
-	pci_ers_result_t vote, *result = data;
-	struct cxl_dev_state *cxlds;
+	const struct device *uport_dev = data;
+	struct cxl_port *port;
 
-	if ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT) &&
-	    (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END))
+	if (!is_cxl_port(dev))
 		return 0;
 
-	cxlds = pci_get_drvdata(pdev);
-	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
+	port = to_cxl_port(dev);
+
+	return port->uport_dev == uport_dev;
+}
+EXPORT_SYMBOL_NS_GPL(match_uport, "CXL");
+
+/* Return 'struct device*' responsible for freeing pdev's CXL resources */
+static struct device *get_pci_cxl_host_dev(struct pci_dev *pdev)
+{
+	struct device *host_dev;
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+	{
+		struct cxl_dport *dport = NULL;
+		struct cxl_port *port = find_cxl_port(&pdev->dev, &dport);
+
+		if (!dport || !dport->dport_dev)
+			return NULL;
+
+		host_dev = &port->dev;
+		break;
+	}
+	case PCI_EXP_TYPE_UPSTREAM:
+	{
+		struct cxl_port *port;
+		struct device *cxl_dev = bus_find_device(&cxl_bus_type, NULL,
+							 &pdev->dev, match_uport);
+
+		if (!cxl_dev || !is_cxl_port(cxl_dev))
+			return NULL;
+
+		port = to_cxl_port(cxl_dev);
+		host_dev = &port->dev;
+		break;
+	}
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END:
+	{
+		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+
+		if (!cxlds)
+			return NULL;
+
+		host_dev = get_device(&cxlds->cxlmd->dev);
+		break;
+	}
+	default:
+	{
+		pci_warn_once(pdev, "Error: Unsupported device type (%X)", pci_pcie_type(pdev));
+		return NULL;
+	}
+	}
+
+	return host_dev;
+}
+
+static int cxl_report_error_detected(struct pci_dev *pdev, void *data)
+{
+	struct device *dev = &pdev->dev;
+	struct device *host_dev __free(put_device) = get_pci_cxl_host_dev(pdev);
+	pci_ers_result_t vote, *result = data;
 
 	device_lock(&pdev->dev);
-	vote = cxl_error_detected(&pdev->dev);
+	if ((pci_pcie_type(pdev) == PCI_EXP_TYPE_ENDPOINT) ||
+	    (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)) {
+		vote = cxl_error_detected(dev);
+	} else {
+		vote = cxl_port_error_detected(dev);
+	}
 	*result = cxl_merge_result(*result, vote);
 	device_unlock(&pdev->dev);
 
@@ -244,11 +309,15 @@ static struct pci_dev *sbdf_to_pci(struct cxl_prot_error_info *err_info)
 static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
 {
 	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(sbdf_to_pci(err_info));
-	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	struct device *cxlmd_dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
 
 	if (!pdev) {
 		pr_err("Failed to find the CXL device\n");
+		return;
+	}
+
+	struct device *host_dev __free(put_device) = get_pci_cxl_host_dev(pdev);
+	if (!host_dev) {
+		pr_err("Failed to find the CXL device's host\n");
 		return;
 	}
 
@@ -261,6 +330,7 @@ static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
 		return pcie_walk_rcec(pdev, cxl_rch_handle_error_iter, err_info);
 
 	if (err_info->severity == AER_CORRECTABLE) {
+		struct device *dev = &pdev->dev;
 		int aer = pdev->aer_cap;
 
 		if (aer)
@@ -268,7 +338,11 @@ static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
 						       aer + PCI_ERR_COR_STATUS,
 						       0, PCI_ERR_COR_INTERNAL);
 
-		cxl_cor_error_detected(&pdev->dev);
+		if ((pci_pcie_type(pdev) == PCI_EXP_TYPE_ENDPOINT) ||
+		    (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END))
+			cxl_cor_error_detected(dev);
+		else
+			cxl_port_cor_error_detected(dev);
 
 		pcie_clear_device_status(pdev);
 	} else {
