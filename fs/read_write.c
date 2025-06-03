@@ -1471,6 +1471,31 @@ COMPAT_SYSCALL_DEFINE4(sendfile64, int, out_fd, int, in_fd,
 }
 #endif
 
+static const struct file_operations *memory_copy_file_ops(
+			struct file *file_in, struct file *file_out)
+{
+	if ((file_in->f_op->fop_flags & FOP_MEMORY_FILE) &&
+	    (file_in->f_mode & FMODE_CAN_ODIRECT) &&
+	    file_in->f_op->copy_file_range && file_out->f_op->write_iter)
+		return file_in->f_op;
+	else if ((file_out->f_op->fop_flags & FOP_MEMORY_FILE) &&
+		 (file_out->f_mode & FMODE_CAN_ODIRECT) &&
+		 file_in->f_op->read_iter && file_out->f_op->copy_file_range)
+		return file_out->f_op;
+	else
+		return NULL;
+}
+
+static int essential_file_rw_checks(struct file *file_in, struct file *file_out)
+{
+	if (!(file_in->f_mode & FMODE_READ) ||
+	    !(file_out->f_mode & FMODE_WRITE) ||
+	    (file_out->f_flags & O_APPEND))
+		return -EBADF;
+
+	return 0;
+}
+
 /*
  * Performs necessary checks before doing a file copy
  *
@@ -1486,9 +1511,16 @@ static int generic_copy_file_checks(struct file *file_in, loff_t pos_in,
 	struct inode *inode_out = file_inode(file_out);
 	uint64_t count = *req_count;
 	loff_t size_in;
+	bool splice = flags & COPY_FILE_SPLICE;
+	const struct file_operations *mem_fops;
 	int ret;
 
-	ret = generic_file_rw_checks(file_in, file_out);
+	/* The dma-buf file is not a regular file. */
+	mem_fops = memory_copy_file_ops(file_in, file_out);
+	if (splice || mem_fops == NULL)
+		ret = generic_file_rw_checks(file_in, file_out);
+	else
+		ret = essential_file_rw_checks(file_in, file_out);
 	if (ret)
 		return ret;
 
@@ -1502,8 +1534,10 @@ static int generic_copy_file_checks(struct file *file_in, loff_t pos_in,
 	 * and several different sets of file_operations, but they all end up
 	 * using the same ->copy_file_range() function pointer.
 	 */
-	if (flags & COPY_FILE_SPLICE) {
+	if (splice) {
 		/* cross sb splice is allowed */
+	} else if (mem_fops != NULL) {
+		/* cross-fs copy is allowed for memory file. */
 	} else if (file_out->f_op->copy_file_range) {
 		if (file_in->f_op->copy_file_range !=
 		    file_out->f_op->copy_file_range)
@@ -1556,6 +1590,7 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	ssize_t ret;
 	bool splice = flags & COPY_FILE_SPLICE;
 	bool samesb = file_inode(file_in)->i_sb == file_inode(file_out)->i_sb;
+	const struct file_operations *mem_fops;
 
 	if (flags & ~COPY_FILE_SPLICE)
 		return -EINVAL;
@@ -1576,18 +1611,27 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	if (len == 0)
 		return 0;
 
+	if (splice)
+		goto do_splice;
+
 	file_start_write(file_out);
 
 	/*
 	 * Cloning is supported by more file systems, so we implement copy on
 	 * same sb using clone, but for filesystems where both clone and copy
 	 * are supported (e.g. nfs,cifs), we only call the copy method.
+	 * For copy to/from memory file, we alway call the copy method of the
+	 * memory file.
 	 */
-	if (!splice && file_out->f_op->copy_file_range) {
+	mem_fops = memory_copy_file_ops(file_in, file_out);
+	if (mem_fops) {
+		ret = mem_fops->copy_file_range(file_in, pos_in,
+					file_out, pos_out, len, flags);
+	} else if (file_out->f_op->copy_file_range) {
 		ret = file_out->f_op->copy_file_range(file_in, pos_in,
-						      file_out, pos_out,
-						      len, flags);
-	} else if (!splice && file_in->f_op->remap_file_range && samesb) {
+						file_out, pos_out,
+						len, flags);
+	} else if (file_in->f_op->remap_file_range && samesb) {
 		ret = file_in->f_op->remap_file_range(file_in, pos_in,
 				file_out, pos_out,
 				min_t(loff_t, MAX_RW_COUNT, len),
@@ -1605,6 +1649,7 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	if (!splice)
 		goto done;
 
+do_splice:
 	/*
 	 * We can get here for same sb copy of filesystems that do not implement
 	 * ->copy_file_range() in case filesystem does not support clone or in
@@ -1788,12 +1833,7 @@ int generic_file_rw_checks(struct file *file_in, struct file *file_out)
 	if (!S_ISREG(inode_in->i_mode) || !S_ISREG(inode_out->i_mode))
 		return -EINVAL;
 
-	if (!(file_in->f_mode & FMODE_READ) ||
-	    !(file_out->f_mode & FMODE_WRITE) ||
-	    (file_out->f_flags & O_APPEND))
-		return -EBADF;
-
-	return 0;
+	return essential_file_rw_checks(file_in, file_out);
 }
 
 int generic_atomic_write_valid(struct kiocb *iocb, struct iov_iter *iter)
