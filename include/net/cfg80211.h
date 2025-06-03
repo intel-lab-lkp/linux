@@ -2327,11 +2327,40 @@ struct mpath_info {
 };
 
 /**
+ * enum cfg80211_bss_params_changed - BSS parameters that are being changed
+ *
+ * This enum provides information of all BSS parameters that
+ * have to be updated as part of change_bss() call.
+ *
+ * @CFG80211_BSS_PARAM_CHANGED_CTS_PROT: Indicates that CTS Protection changed.
+ * @CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE: Indicates that preamble changed.
+ * @CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME: Indicates that slot timing changed.
+ * @CFG80211_BSS_PARAM_CHANGED_BASIC_RATES: Indicatesthat Basic Rateset changed.
+ * @CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE: Indicates that AP Isolation setting changed.
+ * @CFG80211_BSS_PARAM_CHANGED_HT_OPMODE: Indicates that HT mode to be changed.
+ * @CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW: Indicates that P2P CTWindow changed.
+ * @CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS: Indicates that P2P Opportunistic
+ *	Power Save Mode changed.
+ */
+enum cfg80211_bss_params_changed {
+	CFG80211_BSS_PARAM_CHANGED_CTS_PROT		= BIT(0),
+	CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE	= BIT(1),
+	CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME	= BIT(2),
+	CFG80211_BSS_PARAM_CHANGED_BASIC_RATES		= BIT(3),
+	CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE		= BIT(4),
+	CFG80211_BSS_PARAM_CHANGED_HT_OPMODE		= BIT(5),
+	CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW		= BIT(6),
+	CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS		= BIT(7),
+};
+
+/**
  * struct bss_parameters - BSS parameters
  *
  * Used to change BSS parameters (mainly for AP mode).
  *
  * @link_id: link_id or -1 for non-MLD
+ * @changed: bitmask of BSS parameters being changed by the user,
+ *	see &enum cfg80211_bss_params_changed.
  * @use_cts_prot: Whether to use CTS protection
  *	(0 = no, 1 = yes, -1 = do not change)
  * @use_short_preamble: Whether the use of short preambles is allowed
@@ -2350,6 +2379,7 @@ struct mpath_info {
  */
 struct bss_parameters {
 	int link_id;
+	u32 changed;
 	int use_cts_prot;
 	int use_short_preamble;
 	int use_short_slot_time;

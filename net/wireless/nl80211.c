@@ -8243,26 +8243,42 @@ static int nl80211_set_bss(struct sk_buff *skb, struct genl_info *info)
 	params.p2p_ctwindow = -1;
 	params.p2p_opp_ps = -1;
 
-	if (info->attrs[NL80211_ATTR_BSS_CTS_PROT])
+	if (info->attrs[NL80211_ATTR_BSS_CTS_PROT]) {
 		params.use_cts_prot =
 		    nla_get_u8(info->attrs[NL80211_ATTR_BSS_CTS_PROT]);
-	if (info->attrs[NL80211_ATTR_BSS_SHORT_PREAMBLE])
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_CTS_PROT;
+	}
+
+	if (info->attrs[NL80211_ATTR_BSS_SHORT_PREAMBLE]) {
 		params.use_short_preamble =
 		    nla_get_u8(info->attrs[NL80211_ATTR_BSS_SHORT_PREAMBLE]);
-	if (info->attrs[NL80211_ATTR_BSS_SHORT_SLOT_TIME])
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE;
+	}
+
+	if (info->attrs[NL80211_ATTR_BSS_SHORT_SLOT_TIME]) {
 		params.use_short_slot_time =
 		    nla_get_u8(info->attrs[NL80211_ATTR_BSS_SHORT_SLOT_TIME]);
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME;
+	}
+
 	if (info->attrs[NL80211_ATTR_BSS_BASIC_RATES]) {
 		params.basic_rates =
 			nla_data(info->attrs[NL80211_ATTR_BSS_BASIC_RATES]);
 		params.basic_rates_len =
 			nla_len(info->attrs[NL80211_ATTR_BSS_BASIC_RATES]);
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_BASIC_RATES;
 	}
-	if (info->attrs[NL80211_ATTR_AP_ISOLATE])
+
+	if (info->attrs[NL80211_ATTR_AP_ISOLATE]) {
 		params.ap_isolate = !!nla_get_u8(info->attrs[NL80211_ATTR_AP_ISOLATE]);
-	if (info->attrs[NL80211_ATTR_BSS_HT_OPMODE])
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE;
+	}
+
+	if (info->attrs[NL80211_ATTR_BSS_HT_OPMODE]) {
 		params.ht_opmode =
 			nla_get_u16(info->attrs[NL80211_ATTR_BSS_HT_OPMODE]);
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_HT_OPMODE;
+	}
 
 	if (info->attrs[NL80211_ATTR_P2P_CTWINDOW]) {
 		if (dev->ieee80211_ptr->iftype != NL80211_IFTYPE_P2P_GO)
@@ -8272,6 +8288,7 @@ static int nl80211_set_bss(struct sk_buff *skb, struct genl_info *info)
 		if (params.p2p_ctwindow != 0 &&
 		    !(rdev->wiphy.features & NL80211_FEATURE_P2P_GO_CTWIN))
 			return -EINVAL;
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW;
 	}
 
 	if (info->attrs[NL80211_ATTR_P2P_OPPPS]) {
@@ -8284,6 +8301,7 @@ static int nl80211_set_bss(struct sk_buff *skb, struct genl_info *info)
 		if (params.p2p_opp_ps &&
 		    !(rdev->wiphy.features & NL80211_FEATURE_P2P_GO_OPPPS))
 			return -EINVAL;
+		params.changed |= CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS;
 	}
 
 	if (!rdev->ops->change_bss)
