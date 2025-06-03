@@ -12,4 +12,6 @@ Compute Express Link
 
    maturity-map
 
+   conventions
+
 .. only::  subproject and html
