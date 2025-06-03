@@ -12,6 +12,7 @@
 #include <linux/node.h>
 #include <linux/io.h>
 #include <linux/pci.h>
+#include <linux/aer.h>
 
 extern const struct nvdimm_security_ops *cxl_security_ops;
 
@@ -771,9 +772,16 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 #ifdef CONFIG_PCIEAER_CXL
 void cxl_setup_parent_dport(struct device *host, struct cxl_dport *dport);
 void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host);
+static inline void cxl_mask_prot_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(to_pci_dev(dev));
+
+	pci_aer_mask_internal_errors(pdev);
+}
 #else
 static inline void cxl_dport_init_ras_reporting(struct cxl_dport *dport,
 						struct device *host) { }
+static inline void cxl_mask_prot_interrupts(struct device *dev) { }
 #endif
 
 struct cxl_decoder *to_cxl_decoder(struct device *dev);
