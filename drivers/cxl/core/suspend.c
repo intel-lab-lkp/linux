@@ -3,8 +3,10 @@
 #include <linux/atomic.h>
 #include <linux/export.h>
 #include "cxlmem.h"
+#include "cxlpci.h"
 
 static atomic_t mem_active;
+static atomic_t pci_loaded;
 
 bool cxl_mem_active(void)
 {
@@ -25,3 +27,9 @@ void cxl_mem_active_dec(void)
 	atomic_dec(&mem_active);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_active_dec, "CXL");
+
+void mark_cxl_pci_loaded(void)
+{
+	atomic_inc(&pci_loaded);
+}
+EXPORT_SYMBOL_NS_GPL(mark_cxl_pci_loaded, "CXL");

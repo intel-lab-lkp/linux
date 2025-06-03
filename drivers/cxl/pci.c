@@ -1189,6 +1189,8 @@ static int __init cxl_pci_driver_init(void)
 	if (rc)
 		pci_unregister_driver(&cxl_pci_driver);
 
+	mark_cxl_pci_loaded();
+
 	return rc;
 }
 
