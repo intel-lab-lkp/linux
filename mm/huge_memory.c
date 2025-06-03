@@ -1474,9 +1474,10 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 	struct vm_area_struct *vma = vmf->vma;
 	unsigned long addr = vmf->address & PMD_MASK;
 	struct mm_struct *mm = vma->vm_mm;
+	pmd_t *pmd = vmf->pmd;
 	spinlock_t *ptl;
 	pgtable_t pgtable = NULL;
-	int error;
+	pmd_t entry;
 
 	if (addr < vma->vm_start || addr >= vma->vm_end)
 		return VM_FAULT_SIGBUS;
@@ -1490,17 +1491,41 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 			return VM_FAULT_OOM;
 	}
 
-	ptl = pmd_lock(mm, vmf->pmd);
-	if (pmd_none(*vmf->pmd)) {
+	ptl = pmd_lock(mm, pmd);
+	if (pmd_none(*pmd)) {
 		folio_get(folio);
 		folio_add_file_rmap_pmd(folio, &folio->page, vma);
 		add_mm_counter(mm, mm_counter_file(folio), HPAGE_PMD_NR);
+
+		entry = folio_mk_pmd(folio, vma->vm_page_prot);
+		if (write) {
+			entry = pmd_mkyoung(pmd_mkdirty(entry));
+			entry = maybe_pmd_mkwrite(entry, vma);
+		}
+		set_pmd_at(mm, addr, pmd, entry);
+		update_mmu_cache_pmd(vma, addr, pmd);
+
+		if (pgtable) {
+			pgtable_trans_huge_deposit(mm, pmd, pgtable);
+			mm_inc_nr_ptes(mm);
+			pgtable = NULL;
+		}
+	} else if (pmd_present(*pmd) && write) {
+		/*
+		 * We only allow for upgrading write permissions if the
+		 * same folio is already mapped.
+		 */
+		if (pmd_pfn(*pmd) == folio_pfn(folio)) {
+			entry = pmd_mkyoung(*pmd);
+			entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
+			if (pmdp_set_access_flags(vma, addr, pmd, entry, 1))
+				update_mmu_cache_pmd(vma, addr, pmd);
+		} else {
+			WARN_ON_ONCE(!is_huge_zero_pmd(*pmd));
+		}
 	}
-	error = insert_pfn_pmd(vma, addr, vmf->pmd,
-			pfn_to_pfn_t(folio_pfn(folio)), vma->vm_page_prot,
-			write, pgtable);
 	spin_unlock(ptl);
-	if (error && pgtable)
+	if (pgtable)
 		pte_free(mm, pgtable);
 
 	return VM_FAULT_NOPAGE;
