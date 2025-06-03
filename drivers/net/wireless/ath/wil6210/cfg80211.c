@@ -2416,6 +2416,13 @@ static int wil_cfg80211_change_bss(struct wiphy *wiphy,
 	struct wil6210_priv *wil = wiphy_to_wil(wiphy);
 	struct wil6210_vif *vif = ndev_to_vif(dev);
 
+	/* Reject the operation if any of the AP BSS params that got changed are not
+	 * supported by the driver for explicit configuration.
+	 */
+	if (params->changed &
+	    ~(CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE))
+		return -EOPNOTSUPP;
+
 	if (params->ap_isolate >= 0) {
 		wil_dbg_misc(wil, "change_bss: ap_isolate MID %d, %d => %d\n",
 			     vif->mid, vif->ap_isolate, params->ap_isolate);
