@@ -588,6 +588,7 @@ static inline bool pci_dev_test_and_set_removed(struct pci_dev *dev)
 struct aer_err_info {
 	struct pci_dev *dev[AER_MAX_MULTI_ERR_DEVICES];
 	int error_dev_num;
+	bool is_cxl;
 
 	unsigned int id:16;
 
@@ -603,6 +604,11 @@ struct aer_err_info {
 	unsigned int mask;		/* COR/UNCOR Error Mask */
 	struct pcie_tlp_log tlp;	/* TLP Header */
 };
+
+static inline const char *aer_err_bus(struct aer_err_info *info)
+{
+	return info->is_cxl ? "CXL" : "PCIe";
+}
 
 int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info);
 void aer_print_error(struct pci_dev *dev, struct aer_err_info *info);
