@@ -310,7 +310,7 @@ sched_numa_hop_mask(unsigned int node, unsigned int hops)
 #define for_each_node_numadist(node, unvisited)					\
 	for (int __start = (node),						\
 	     (node) = nearest_node_nodemask((__start), &(unvisited));		\
-	     (node) < MAX_NUMNODES;						\
+	     (node) < MAX_NUMNODES && (node) != NUMA_NO_NODE;			\
 	     node_clear((node), (unvisited)),					\
 	     (node) = nearest_node_nodemask((__start), &(unvisited)))
 
