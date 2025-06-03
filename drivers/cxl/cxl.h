@@ -859,6 +859,7 @@ struct cxl_pmem_region *to_cxl_pmem_region(struct device *dev);
 int cxl_add_to_region(struct cxl_port *root,
 		      struct cxl_endpoint_decoder *cxled);
 struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
+int cxl_region_softreserv_update(void);
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
@@ -877,6 +878,10 @@ static inline int cxl_add_to_region(struct cxl_port *root,
 static inline struct cxl_dax_region *to_cxl_dax_region(struct device *dev)
 {
 	return NULL;
+}
+static inline int cxl_region_softreserv_update(void)
+{
+	return 0;
 }
 static inline u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint,
 					       u64 spa)

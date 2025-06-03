@@ -3443,6 +3443,157 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
 
+static int add_soft_reserved(resource_size_t start, resource_size_t len,
+			     unsigned long flags)
+{
+	struct resource *res = kmalloc(sizeof(*res), GFP_KERNEL);
+	int rc;
+
+	if (!res)
+		return -ENOMEM;
+
+	*res = DEFINE_RES_MEM_NAMED(start, len, "Soft Reserved");
+
+	res->desc = IORES_DESC_SOFT_RESERVED;
+	res->flags = flags;
+	rc = insert_resource(&iomem_resource, res);
+	if (rc) {
+		kfree(res);
+		return rc;
+	}
+
+	return 0;
+}
+
+static void remove_soft_reserved(struct cxl_region *cxlr, struct resource *soft,
+				 resource_size_t start, resource_size_t end)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	resource_size_t new_start, new_end;
+	int rc;
+
+	/* Prevent new usage while removing or adjusting the resource */
+	guard(mutex)(&cxlrd->range_lock);
+
+	/* Aligns at both resource start and end */
+	if (soft->start == start && soft->end == end)
+		goto remove;
+
+	/* Aligns at either resource start or end */
+	if (soft->start == start || soft->end == end) {
+		if (soft->start == start) {
+			new_start = end + 1;
+			new_end = soft->end;
+		} else {
+			new_start = soft->start;
+			new_end = start - 1;
+		}
+
+		rc = add_soft_reserved(new_start, new_end - new_start + 1,
+				       soft->flags);
+		if (rc)
+			dev_warn(&cxlr->dev, "cannot add new soft reserved resource at %pa\n",
+				 &new_start);
+
+		/* Remove the original Soft Reserved resource */
+		goto remove;
+	}
+
+	/*
+	 * No alignment. Attempt a 3-way split that removes the part of
+	 * the resource the region occupied, and then creates new soft
+	 * reserved resources for the leading and trailing addr space.
+	 */
+	new_start = soft->start;
+	new_end = soft->end;
+
+	rc = add_soft_reserved(new_start, start - new_start, soft->flags);
+	if (rc)
+		dev_warn(&cxlr->dev, "cannot add new soft reserved resource at %pa\n",
+			 &new_start);
+
+	rc = add_soft_reserved(end + 1, new_end - end, soft->flags);
+	if (rc)
+		dev_warn(&cxlr->dev, "cannot add new soft reserved resource at %pa + 1\n",
+			 &end);
+
+remove:
+	rc = remove_resource(soft);
+	if (rc)
+		dev_warn(&cxlr->dev, "cannot remove soft reserved resource %pr\n",
+			 soft);
+}
+
+/*
+ * normalize_resource
+ *
+ * The walk_iomem_res_desc() returns a copy of a resource, not a reference
+ * to the actual resource in the iomem_resource tree. As a result,
+ * __release_resource() which relies on pointer equality will fail.
+ *
+ * This helper walks the children of the resource's parent to find and
+ * return the original resource pointer that matches the given resource's
+ * start and end addresses.
+ *
+ * Return: Pointer to the matching original resource in iomem_resource, or
+ *         NULL if not found or invalid input.
+ */
+static struct resource *normalize_resource(struct resource *res)
+{
+	if (!res || !res->parent)
+		return NULL;
+
+	for (struct resource *res_iter = res->parent->child;
+	     res_iter != NULL; res_iter = res_iter->sibling) {
+		if ((res_iter->start == res->start) &&
+		    (res_iter->end == res->end))
+			return res_iter;
+	}
+
+	return NULL;
+}
+
+static int __cxl_region_softreserv_update(struct resource *soft,
+					  void *_cxlr)
+{
+	struct cxl_region *cxlr = _cxlr;
+	struct resource *res = cxlr->params.res;
+
+	/* Skip non-intersecting soft-reserved regions */
+	if (soft->end < res->start || soft->start > res->end)
+		return 0;
+
+	soft = normalize_resource(soft);
+	if (!soft)
+		return -EINVAL;
+
+	remove_soft_reserved(cxlr, soft, res->start, res->end);
+
+	return 0;
+}
+
+int cxl_region_softreserv_update(void)
+{
+	struct device *dev = NULL;
+
+	while ((dev = bus_find_next_device(&cxl_bus_type, dev))) {
+		struct device *put_dev __free(put_device) = dev;
+		struct cxl_region *cxlr;
+
+		if (!is_cxl_region(dev))
+			continue;
+
+		cxlr = to_cxl_region(dev);
+
+		walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED,
+				    IORESOURCE_MEM, 0, -1, cxlr,
+				    __cxl_region_softreserv_update);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_region_softreserv_update, "CXL");
+
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa)
 {
 	struct cxl_region_ref *iter;
