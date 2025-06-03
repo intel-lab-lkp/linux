@@ -114,6 +114,14 @@ struct aer_stats {
 static int pcie_aer_disable;
 static pci_ers_result_t aer_root_reset(struct pci_dev *dev);
 
+#if defined(CONFIG_PCIEAER_CXL)
+#define CXL_ERROR_SOURCES_MAX          128
+static DEFINE_KFIFO(cxl_prot_err_fifo, struct cxl_prot_err_work_data,
+		    CXL_ERROR_SOURCES_MAX);
+static DEFINE_SPINLOCK(cxl_prot_err_fifo_lock);
+struct work_struct *cxl_prot_err_work;
+#endif
+
 void pci_no_aer(void)
 {
 	pcie_aer_disable = 1;
@@ -1004,45 +1012,17 @@ static bool is_internal_error(struct aer_err_info *info)
 	return info->status & PCI_ERR_UNC_INTN;
 }
 
-static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
+static bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 {
-	struct aer_err_info *info = (struct aer_err_info *)data;
-	const struct pci_error_handlers *err_handler;
+	if (!info || !info->is_cxl)
+		return false;
 
-	if (!is_cxl_mem_dev(dev) || !cxl_error_is_native(dev))
-		return 0;
+	/* Only CXL Endpoints are currently supported */
+	if ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT) &&
+	    (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_EC))
+		return false;
 
-	/* Protect dev->driver */
-	device_lock(&dev->dev);
-
-	err_handler = dev->driver ? dev->driver->err_handler : NULL;
-	if (!err_handler)
-		goto out;
-
-	if (info->severity == AER_CORRECTABLE) {
-		if (err_handler->cor_error_detected)
-			err_handler->cor_error_detected(dev);
-	} else if (err_handler->error_detected) {
-		if (info->severity == AER_NONFATAL)
-			err_handler->error_detected(dev, pci_channel_io_normal);
-		else if (info->severity == AER_FATAL)
-			err_handler->error_detected(dev, pci_channel_io_frozen);
-	}
-out:
-	device_unlock(&dev->dev);
-	return 0;
-}
-
-static void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info)
-{
-	/*
-	 * Internal errors of an RCEC indicate an AER error in an
-	 * RCH's downstream port. Check and handle them in the CXL.mem
-	 * device driver.
-	 */
-	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC &&
-	    is_internal_error(info))
-		pcie_walk_rcec(dev, cxl_rch_handle_error_iter, info);
+	return is_internal_error(info);
 }
 
 static int handles_cxl_error_iter(struct pci_dev *dev, void *data)
@@ -1056,13 +1036,17 @@ static int handles_cxl_error_iter(struct pci_dev *dev, void *data)
 	return *handles_cxl;
 }
 
-static bool handles_cxl_errors(struct pci_dev *rcec)
+static bool handles_cxl_errors(struct pci_dev *dev)
 {
 	bool handles_cxl = false;
 
-	if (pci_pcie_type(rcec) == PCI_EXP_TYPE_RC_EC &&
-	    pcie_aer_is_native(rcec))
-		pcie_walk_rcec(rcec, handles_cxl_error_iter, &handles_cxl);
+	if (!pcie_aer_is_native(dev))
+		return false;
+
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC)
+		pcie_walk_rcec(dev, handles_cxl_error_iter, &handles_cxl);
+	else
+		handles_cxl = pcie_is_cxl(dev);
 
 	return handles_cxl;
 }
@@ -1076,10 +1060,46 @@ static void cxl_rch_enable_rcec(struct pci_dev *rcec)
 	pci_info(rcec, "CXL: Internal errors unmasked");
 }
 
+static int cxl_create_prot_error_info(struct pci_dev *pdev,
+				      struct aer_err_info *aer_err_info,
+				      struct cxl_prot_error_info *cxl_err_info)
+{
+	cxl_err_info->severity = aer_err_info->severity;
+
+	cxl_err_info->function = PCI_FUNC(pdev->devfn);
+	cxl_err_info->device = PCI_SLOT(pdev->devfn);
+	cxl_err_info->bus = pdev->bus->number;
+	cxl_err_info->segment = pci_domain_nr(pdev->bus);
+
+	return 0;
+}
+
+static void forward_cxl_error(struct pci_dev *pdev, struct aer_err_info *aer_err_info)
+{
+	struct cxl_prot_err_work_data wd;
+	struct cxl_prot_error_info *cxl_err_info = &wd.err_info;
+
+	cxl_create_prot_error_info(pdev, aer_err_info, cxl_err_info);
+
+	if (!kfifo_put(&cxl_prot_err_fifo, wd)) {
+		dev_err_ratelimited(&pdev->dev, "CXL kfifo overflow\n");
+		return;
+	}
+
+	schedule_work(cxl_prot_err_work);
+}
+
 #else
 static inline void cxl_rch_enable_rcec(struct pci_dev *dev) { }
 static inline void cxl_rch_handle_error(struct pci_dev *dev,
 					struct aer_err_info *info) { }
+static inline void forward_cxl_error(struct pci_dev *dev,
+				    struct aer_err_info *info) { }
+static inline bool handles_cxl_errors(struct pci_dev *dev)
+{
+	return false;
+}
+static bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info) { return 0; };
 #endif
 
 /**
@@ -1117,8 +1137,11 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
-	cxl_rch_handle_error(dev, info);
-	pci_aer_handle_error(dev, info);
+	if (is_cxl_error(dev, info))
+		forward_cxl_error(dev, info);
+	else
+		pci_aer_handle_error(dev, info);
+
 	pci_dev_put(dev);
 }
 
@@ -1581,6 +1604,31 @@ static pci_ers_result_t aer_root_reset(struct pci_dev *dev)
 
 	return rc ? PCI_ERS_RESULT_DISCONNECT : PCI_ERS_RESULT_RECOVERED;
 }
+
+#if defined(CONFIG_PCIEAER_CXL)
+
+int cxl_register_prot_err_work(struct work_struct *work)
+{
+	guard(spinlock)(&cxl_prot_err_fifo_lock);
+	cxl_prot_err_work = work;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_register_prot_err_work, "CXL");
+
+int cxl_unregister_prot_err_work(void)
+{
+	guard(spinlock)(&cxl_prot_err_fifo_lock);
+	cxl_prot_err_work = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_unregister_prot_err_work, "CXL");
+
+int cxl_prot_err_kfifo_get(struct cxl_prot_err_work_data *wd)
+{
+	return kfifo_get(&cxl_prot_err_fifo, wd);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_prot_err_kfifo_get, "CXL");
+#endif
 
 static struct pcie_port_service_driver aerdriver = {
 	.name		= "aer",

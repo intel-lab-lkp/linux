@@ -5,6 +5,7 @@
 #include <linux/aer.h>
 #include <cxl/event.h>
 #include <cxlmem.h>
+#include <cxlpci.h>
 #include "trace.h"
 
 static void cxl_cper_trace_corr_port_prot_err(struct pci_dev *pdev,
@@ -107,13 +108,41 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
+#ifdef CONFIG_PCIEAER_CXL
+
+static void cxl_prot_err_work_fn(struct work_struct *work)
+{
+}
+
+#else
+static void cxl_prot_err_work_fn(struct work_struct *work) { }
+#endif /* CONFIG_PCIEAER_CXL */
+
+static struct work_struct cxl_prot_err_work;
+static DECLARE_WORK(cxl_prot_err_work, cxl_prot_err_work_fn);
+
 int cxl_ras_init(void)
 {
-	return cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	int rc;
+
+	rc = cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	if (rc)
+		pr_err("Failed to register CPER AER kfifo (%x)", rc);
+
+	rc = cxl_register_prot_err_work(&cxl_prot_err_work);
+	if (rc) {
+		pr_err("Failed to register native AER kfifo (%x)", rc);
+		return rc;
+	}
+
+	return 0;
 }
 
 void cxl_ras_exit(void)
 {
 	cxl_cper_unregister_prot_err_work(&cxl_cper_prot_err_work);
 	cancel_work_sync(&cxl_cper_prot_err_work);
+
+	cxl_unregister_prot_err_work();
+	cancel_work_sync(&cxl_prot_err_work);
 }

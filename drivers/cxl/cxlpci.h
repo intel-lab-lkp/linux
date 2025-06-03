@@ -4,6 +4,7 @@
 #define __CXL_PCI_H__
 #include <linux/pci.h>
 #include "cxl.h"
+#include "linux/aer.h"
 
 #define CXL_MEMORY_PROGIF	0x10
 

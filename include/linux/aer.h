@@ -10,6 +10,7 @@
 
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/workqueue_types.h>
 
 #define AER_NONFATAL			0
 #define AER_FATAL			1
@@ -53,6 +54,27 @@ struct aer_capability_regs {
 	u16 uncor_err_source;
 };
 
+/**
+ * struct cxl_prot_err_info - Error information used in CXL error handling
+ * @severity: AER severity
+ * @function: Device's PCI function
+ * @device: Device's PCI device
+ * @bus: Device's PCI bus
+ * @segment: Device's PCI segment
+ */
+struct cxl_prot_error_info {
+	int severity;
+
+	u8 function;
+	u8 device;
+	u8 bus;
+	u16 segment;
+};
+
+struct cxl_prot_err_work_data {
+	struct cxl_prot_error_info err_info;
+};
+
 #if defined(CONFIG_PCIEAER)
 int pci_aer_clear_nonfatal_status(struct pci_dev *dev);
 int pcie_aer_is_native(struct pci_dev *dev);
@@ -62,6 +84,20 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 	return -EINVAL;
 }
 static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
+#endif
+
+#if defined(CONFIG_PCIEAER_CXL)
+int cxl_register_prot_err_work(struct work_struct *work);
+int cxl_unregister_prot_err_work(void);
+int cxl_prot_err_kfifo_get(struct cxl_prot_err_work_data *wd);
+#else
+static inline int
+cxl_register_prot_err_work(struct work_struct *work)
+{
+	return 0;
+}
+static inline int cxl_unregister_prot_err_work(void) { return 0; }
+static inline int cxl_prot_err_kfifo_get(struct cxl_prot_err_work_data *wd) { return 0; }
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
