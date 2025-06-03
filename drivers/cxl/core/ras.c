@@ -153,7 +153,7 @@ static int cxl_report_error_detected(struct pci_dev *pdev, void *data)
 	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
 
 	device_lock(&pdev->dev);
-	vote = cxl_error_detected(pdev, pci_channel_io_frozen);
+	vote = cxl_error_detected(&pdev->dev);
 	*result = cxl_merge_result(*result, vote);
 	device_unlock(&pdev->dev);
 
@@ -223,7 +223,7 @@ static int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
 	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
 
 	if (err_info->severity == AER_CORRECTABLE)
-		cxl_cor_error_detected(pdev);
+		cxl_cor_error_detected(dev);
 	else
 		cxl_do_recovery(pdev);
 
@@ -244,6 +244,8 @@ static struct pci_dev *sbdf_to_pci(struct cxl_prot_error_info *err_info)
 static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
 {
 	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(sbdf_to_pci(err_info));
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct device *cxlmd_dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
 
 	if (!pdev) {
 		pr_err("Failed to find the CXL device\n");
@@ -260,15 +262,13 @@ static void cxl_handle_prot_error(struct cxl_prot_error_info *err_info)
 
 	if (err_info->severity == AER_CORRECTABLE) {
 		int aer = pdev->aer_cap;
-		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-		struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
 
 		if (aer)
 			pci_clear_and_set_config_dword(pdev,
 						       aer + PCI_ERR_COR_STATUS,
 						       0, PCI_ERR_COR_INTERNAL);
 
-		cxl_cor_error_detected(pdev);
+		cxl_cor_error_detected(&pdev->dev);
 
 		pcie_clear_device_status(pdev);
 	} else {

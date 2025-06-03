@@ -11,6 +11,7 @@
 #include <linux/log2.h>
 #include <linux/node.h>
 #include <linux/io.h>
+#include <linux/pci.h>
 
 extern const struct nvdimm_security_ops *cxl_security_ops;
 
@@ -796,6 +797,9 @@ static inline int cxl_root_decoder_autoremove(struct device *host,
 	return cxl_decoder_autoremove(host, &cxlrd->cxlsd.cxld);
 }
 int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
+
+void cxl_cor_error_detected(struct device *dev);
+pci_ers_result_t cxl_error_detected(struct device *dev);
 
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info
