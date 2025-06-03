@@ -861,6 +861,9 @@ DECLARE_TRACE_CONDITION(sched_set_state_tp,
 	TP_ARGS(tsk, state),
 	TP_CONDITION(!!(tsk->__state) != !!state));
 
+DECLARE_TRACE(uclamp_update_task,
+	TP_PROTO(struct task_struct *p, int uclamp_id,  unsigned int value),
+	TP_ARGS(p, uclamp_id, value));
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */

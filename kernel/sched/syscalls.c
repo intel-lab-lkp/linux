@@ -430,12 +430,16 @@ static void __setscheduler_uclamp(struct task_struct *p,
 	    attr->sched_util_min != -1) {
 		uclamp_se_set(&p->uclamp_req[UCLAMP_MIN],
 			      attr->sched_util_min, true);
+		trace_uclamp_update_task_tp(p, UCLAMP_MIN,
+					    attr->sched_util_min);
 	}
 
 	if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP_MAX &&
 	    attr->sched_util_max != -1) {
 		uclamp_se_set(&p->uclamp_req[UCLAMP_MAX],
 			      attr->sched_util_max, true);
+		trace_uclamp_update_task_tp(p, UCLAMP_MAX,
+					    attr->sched_util_max);
 	}
 }
 
