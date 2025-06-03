@@ -100,6 +100,14 @@ MODULE_ALIAS_SCSI_DEVICE(TYPE_MOD);
 MODULE_ALIAS_SCSI_DEVICE(TYPE_RBC);
 MODULE_ALIAS_SCSI_DEVICE(TYPE_ZBC);
 
+/* timeout_sec defines the default value of the SCSI command timeout in second. */
+static int sd_timeout_sec = SD_TIMEOUT / HZ;
+module_param_named(timeout_sec, sd_timeout_sec, int, 0644);
+
+/* max_retries defines the default value of the max of SCSI command retries.*/
+static int sd_max_retries = SD_MAX_RETRIES;
+module_param_named(max_retries, sd_max_retries, int, 0644);
+
 #define SD_MINORS	16
 
 static void sd_config_discard(struct scsi_disk *sdkp, struct queue_limits *lim,
@@ -184,7 +192,7 @@ cache_type_store(struct device *dev, struct device_attribute *attr,
 		return count;
 	}
 
-	if (scsi_mode_sense(sdp, 0x08, 8, 0, buffer, sizeof(buffer), SD_TIMEOUT,
+	if (scsi_mode_sense(sdp, 0x08, 8, 0, buffer, sizeof(buffer), sd_timeout_sec * HZ,
 			    sdkp->max_retries, &data, NULL))
 		return -EINVAL;
 	len = min_t(size_t, sizeof(buffer), data.length - data.header_length -
@@ -202,7 +210,7 @@ cache_type_store(struct device *dev, struct device_attribute *attr,
 	 */
 	data.device_specific = 0;
 
-	ret = scsi_mode_select(sdp, 1, sp, buffer_data, len, SD_TIMEOUT,
+	ret = scsi_mode_select(sdp, 1, sp, buffer_data, len, sd_timeout_sec * HZ,
 			       sdkp->max_retries, &data, &sshdr);
 	if (ret) {
 		if (ret > 0 && scsi_sense_valid(&sshdr))
@@ -729,7 +737,7 @@ static int sd_sec_submit(void *data, u16 spsp, u8 secp, void *buffer,
 	put_unaligned_be32(len, &cdb[6]);
 
 	ret = scsi_execute_cmd(sdev, cdb, send ? REQ_OP_DRV_OUT : REQ_OP_DRV_IN,
-			       buffer, len, SD_TIMEOUT, sdkp->max_retries,
+			       buffer, len, sd_timeout_sec * HZ, sdkp->max_retries,
 			       &exec_args);
 	return ret <= 0 ? ret : -EIO;
 }
@@ -930,7 +938,7 @@ static blk_status_t sd_setup_unmap_cmnd(struct scsi_cmnd *cmd)
 
 	cmd->allowed = sdkp->max_retries;
 	cmd->transfersize = data_len;
-	rq->timeout = SD_TIMEOUT;
+	rq->timeout = sd_timeout_sec * HZ;
 
 	return scsi_alloc_sgtables(cmd);
 }
@@ -1016,7 +1024,7 @@ static blk_status_t sd_setup_write_same16_cmnd(struct scsi_cmnd *cmd,
 
 	cmd->allowed = sdkp->max_retries;
 	cmd->transfersize = data_len;
-	rq->timeout = unmap ? SD_TIMEOUT : SD_WRITE_SAME_TIMEOUT;
+	rq->timeout = unmap ? sd_timeout_sec * HZ : SD_WRITE_SAME_TIMEOUT;
 
 	return scsi_alloc_sgtables(cmd);
 }
@@ -1043,7 +1051,7 @@ static blk_status_t sd_setup_write_same10_cmnd(struct scsi_cmnd *cmd,
 
 	cmd->allowed = sdkp->max_retries;
 	cmd->transfersize = data_len;
-	rq->timeout = unmap ? SD_TIMEOUT : SD_WRITE_SAME_TIMEOUT;
+	rq->timeout = unmap ? sd_timeout_sec * HZ : SD_WRITE_SAME_TIMEOUT;
 
 	return scsi_alloc_sgtables(cmd);
 }
@@ -1739,7 +1747,7 @@ static unsigned int sd_check_events(struct gendisk *disk, unsigned int clearing)
 	if (scsi_block_when_processing_errors(sdp)) {
 		struct scsi_sense_hdr sshdr = { 0, };
 
-		retval = scsi_test_unit_ready(sdp, SD_TIMEOUT, sdkp->max_retries,
+		retval = scsi_test_unit_ready(sdp, sd_timeout_sec * HZ, sdkp->max_retries,
 					      &sshdr);
 
 		/* failed to execute TUR, assume media not present */
@@ -1952,7 +1960,7 @@ static int sd_pr_in_command(struct block_device *bdev, u8 sa,
 	put_unaligned_be16(data_len, &cmd[7]);
 
 	result = scsi_execute_cmd(sdev, cmd, REQ_OP_DRV_IN, data, data_len,
-				  SD_TIMEOUT, sdkp->max_retries, &exec_args);
+				  sd_timeout_sec * HZ, sdkp->max_retries, &exec_args);
 	if (scsi_status_is_check_condition(result) &&
 	    scsi_sense_valid(&sshdr)) {
 		sdev_printk(KERN_INFO, sdev, "PR command failed: %d\n", result);
@@ -2063,7 +2071,7 @@ static int sd_pr_out_command(struct block_device *bdev, u8 sa, u64 key,
 	data[20] = flags;
 
 	result = scsi_execute_cmd(sdev, cmd, REQ_OP_DRV_OUT, &data,
-				  sizeof(data), SD_TIMEOUT, sdkp->max_retries,
+				  sizeof(data), sd_timeout_sec * HZ, sdkp->max_retries,
 				  &exec_args);
 
 	if (scsi_status_is_check_condition(result) &&
@@ -2435,7 +2443,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 		scsi_failures_reset_retries(&failures);
 
 		the_result = scsi_execute_cmd(sdkp->device, cmd, REQ_OP_DRV_IN,
-					      NULL, 0, SD_TIMEOUT,
+					      NULL, 0, sd_timeout_sec * HZ,
 					      sdkp->max_retries, &exec_args);
 
 
@@ -2498,7 +2506,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 				sd_printk(KERN_NOTICE, sdkp, "Spinning up disk...");
 				scsi_execute_cmd(sdkp->device, start_cmd,
 						 REQ_OP_DRV_IN, NULL, 0,
-						 SD_TIMEOUT, sdkp->max_retries,
+						 sd_timeout_sec * HZ, sdkp->max_retries,
 						 &exec_args);
 				spintime_expire = jiffies + 100 * HZ;
 				spintime = 1;
@@ -2649,7 +2657,7 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 		memset(buffer, 0, RC16_LEN);
 
 		the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN,
-					      buffer, RC16_LEN, SD_TIMEOUT,
+					      buffer, RC16_LEN, sd_timeout_sec * HZ,
 					      sdkp->max_retries, &exec_args);
 		if (the_result > 0) {
 			if (media_not_present(sdkp, &sshdr))
@@ -2760,7 +2768,7 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	memset(buffer, 0, 8);
 
 	the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, buffer,
-				      8, SD_TIMEOUT, sdkp->max_retries,
+				      8, sd_timeout_sec * HZ, sdkp->max_retries,
 				      &exec_args);
 
 	if (the_result > 0) {
@@ -2948,7 +2956,7 @@ sd_do_mode_sense(struct scsi_disk *sdkp, int dbd, int modepage,
 		len = 8;
 
 	return scsi_mode_sense(sdkp->device, dbd, modepage, 0, buffer, len,
-			       SD_TIMEOUT, sdkp->max_retries, data, sshdr);
+			       sd_timeout_sec * HZ, sdkp->max_retries, data, sshdr);
 }
 
 /*
@@ -3206,7 +3214,7 @@ static bool sd_is_perm_stream(struct scsi_disk *sdkp, unsigned int stream_id)
 	put_unaligned_be32(sizeof(buf), &cdb[10]);
 
 	res = scsi_execute_cmd(sdev, cdb, REQ_OP_DRV_IN, &buf, sizeof(buf),
-			       SD_TIMEOUT, sdkp->max_retries, &exec_args);
+			       sd_timeout_sec * HZ, sdkp->max_retries, &exec_args);
 	if (res < 0)
 		return false;
 	if (scsi_status_is_check_condition(res) && scsi_sense_valid(&sshdr))
@@ -3231,7 +3239,7 @@ static void sd_read_io_hints(struct scsi_disk *sdkp, unsigned char *buffer)
 		return;
 
 	res = scsi_mode_sense(sdp, /*dbd=*/0x8, /*modepage=*/0x0a,
-			      /*subpage=*/0x05, buffer, SD_BUF_SIZE, SD_TIMEOUT,
+			      /*subpage=*/0x05, buffer, SD_BUF_SIZE, sd_timeout_sec * HZ,
 			      sdkp->max_retries, &data, &sshdr);
 	if (res < 0)
 		return;
@@ -3274,7 +3282,7 @@ static void sd_read_app_tag_own(struct scsi_disk *sdkp, unsigned char *buffer)
 	if (sdkp->protection_type == 0)
 		return;
 
-	res = scsi_mode_sense(sdp, 1, 0x0a, 0, buffer, 36, SD_TIMEOUT,
+	res = scsi_mode_sense(sdp, 1, 0x0a, 0, buffer, 36, sd_timeout_sec * HZ,
 			      sdkp->max_retries, &data, &sshdr);
 
 	if (res < 0 || !data.header_length ||
@@ -3682,7 +3690,7 @@ static void sd_read_block_zero(struct scsi_disk *sdkp)
 	}
 
 	scsi_execute_cmd(sdkp->device, cmd, REQ_OP_DRV_IN, buffer, buf_len,
-			 SD_TIMEOUT, sdkp->max_retries, NULL);
+			 sd_timeout_sec * HZ, sdkp->max_retries, NULL);
 	kfree(buffer);
 }
 
@@ -3957,13 +3965,13 @@ static int sd_probe(struct device *dev)
 	sdkp->device = sdp;
 	sdkp->disk = gd;
 	sdkp->index = index;
-	sdkp->max_retries = SD_MAX_RETRIES;
+	sdkp->max_retries = sd_max_retries;
 	atomic_set(&sdkp->openers, 0);
 	atomic_set(&sdkp->device->ioerr_cnt, 0);
 
 	if (!sdp->request_queue->rq_timeout) {
 		if (sdp->type != TYPE_MOD)
-			blk_queue_rq_timeout(sdp->request_queue, SD_TIMEOUT);
+			blk_queue_rq_timeout(sdp->request_queue, sd_timeout_sec * HZ);
 		else
 			blk_queue_rq_timeout(sdp->request_queue,
 					     SD_MOD_TIMEOUT);
@@ -4131,7 +4139,7 @@ static int sd_start_stop_device(struct scsi_disk *sdkp, int start)
 	if (!scsi_device_online(sdp))
 		return -ENODEV;
 
-	res = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, NULL, 0, SD_TIMEOUT,
+	res = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, NULL, 0, sd_timeout_sec * HZ,
 			       sdkp->max_retries, &exec_args);
 	if (res) {
 		sd_print_result(sdkp, "Start/Stop Unit failed", res);
