@@ -813,6 +813,24 @@ static int pair_cxl_resource(struct device *dev, void *data)
 	return 0;
 }
 
+static void cxl_softreserv_mem_work_fn(struct work_struct *work)
+{
+	/* Wait for cxl_pci and cxl_mem drivers to load */
+	cxl_wait_for_pci_mem();
+
+	/*
+	 * Wait for the driver probe routines to complete after cxl_pci
+	 * and cxl_mem drivers are loaded.
+	 */
+	wait_for_device_probe();
+}
+static DECLARE_WORK(cxl_sr_work, cxl_softreserv_mem_work_fn);
+
+static void cxl_softreserv_mem_update(void)
+{
+	schedule_work(&cxl_sr_work);
+}
+
 static int cxl_acpi_probe(struct platform_device *pdev)
 {
 	int rc;
@@ -887,6 +905,10 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 
 	/* In case PCI is scanned before ACPI re-trigger memdev attach */
 	cxl_bus_rescan();
+
+	/* Update SOFT RESERVE resources that intersect with CXL regions */
+	cxl_softreserv_mem_update();
+
 	return 0;
 }
 
@@ -918,6 +940,7 @@ static int __init cxl_acpi_init(void)
 
 static void __exit cxl_acpi_exit(void)
 {
+	cancel_work_sync(&cxl_sr_work);
 	platform_driver_unregister(&cxl_acpi_driver);
 	cxl_bus_drain();
 }
