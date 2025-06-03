@@ -523,7 +523,38 @@ static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
 	spin_unlock(&dmabuf->name_lock);
 }
 
+static ssize_t dma_buf_rw_file(struct dma_buf *dmabuf, loff_t my_pos,
+	struct file *file, loff_t pos, size_t count, bool is_write)
+{
+	if (!dmabuf->ops->rw_file)
+		return -EINVAL;
+
+	if (my_pos >= dmabuf->size)
+		count = 0;
+	else
+		count = min_t(size_t, count, dmabuf->size - my_pos);
+	if (!count)
+		return 0;
+
+	return dmabuf->ops->rw_file(dmabuf, my_pos, file, pos, count, is_write);
+}
+
+static ssize_t dma_buf_copy_file_range(struct file *file_in, loff_t pos_in,
+	struct file *file_out, loff_t pos_out,
+	size_t count, unsigned int flags)
+{
+	if (is_dma_buf_file(file_in) && file_out->f_op->write_iter)
+		return dma_buf_rw_file(file_in->private_data, pos_in,
+				file_out, pos_out, count, true);
+	else if (is_dma_buf_file(file_out) && file_in->f_op->read_iter)
+		return dma_buf_rw_file(file_out->private_data, pos_out,
+				file_in, pos_in, count, false);
+	else
+		return -EINVAL;
+}
+
 static const struct file_operations dma_buf_fops = {
+	.fop_flags = FOP_MEMORY_FILE,
 	.release	= dma_buf_file_release,
 	.mmap		= dma_buf_mmap_internal,
 	.llseek		= dma_buf_llseek,
@@ -531,6 +562,7 @@ static const struct file_operations dma_buf_fops = {
 	.unlocked_ioctl	= dma_buf_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.show_fdinfo	= dma_buf_show_fdinfo,
+	.copy_file_range = dma_buf_copy_file_range,
 };
 
 /*
