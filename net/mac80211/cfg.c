@@ -2751,6 +2751,20 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 	struct ieee80211_supported_band *sband;
 	u64 changed = 0;
 
+	/* Reject the operation if any of the AP BSS params that got changed are not
+	 * supported by the driver for explicit configuration.
+	 */
+	if (params->changed &
+	    ~(CFG80211_BSS_PARAM_CHANGED_CTS_PROT |
+	      CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE |
+	      CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME |
+	      CFG80211_BSS_PARAM_CHANGED_BASIC_RATES |
+	      CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE |
+	      CFG80211_BSS_PARAM_CHANGED_HT_OPMODE |
+	      CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW |
+	      CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS))
+		return -EOPNOTSUPP;
+
 	link = ieee80211_link_or_deflink(sdata, params->link_id, true);
 	if (IS_ERR(link))
 		return PTR_ERR(link);
@@ -2762,7 +2776,8 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 	if (!sband)
 		return -EINVAL;
 
-	if (params->basic_rates) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_BASIC_RATES) {
 		if (!ieee80211_parse_bitrates(link->conf->chanreq.oper.width,
 					      wiphy->bands[sband->band],
 					      params->basic_rates,
@@ -2773,11 +2788,13 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 		ieee80211_check_rate_mask(link);
 	}
 
-	if (params->use_cts_prot >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_CTS_PROT) {
 		link->conf->use_cts_prot = params->use_cts_prot;
 		changed |= BSS_CHANGED_ERP_CTS_PROT;
 	}
-	if (params->use_short_preamble >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_SHORT_PREAMBLE) {
 		link->conf->use_short_preamble = params->use_short_preamble;
 		changed |= BSS_CHANGED_ERP_PREAMBLE;
 	}
@@ -2789,12 +2806,14 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 		changed |= BSS_CHANGED_ERP_SLOT;
 	}
 
-	if (params->use_short_slot_time >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_SHORT_SLOT_TIME) {
 		link->conf->use_short_slot = params->use_short_slot_time;
 		changed |= BSS_CHANGED_ERP_SLOT;
 	}
 
-	if (params->ap_isolate >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_AP_ISOLATE) {
 		if (params->ap_isolate)
 			sdata->flags |= IEEE80211_SDATA_DONT_BRIDGE_PACKETS;
 		else
@@ -2802,12 +2821,14 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 		ieee80211_check_fast_rx_iface(sdata);
 	}
 
-	if (params->ht_opmode >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_HT_OPMODE) {
 		link->conf->ht_operation_mode = (u16)params->ht_opmode;
 		changed |= BSS_CHANGED_HT;
 	}
 
-	if (params->p2p_ctwindow >= 0) {
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_P2P_CTWINDOW) {
 		link->conf->p2p_noa_attr.oppps_ctwindow &=
 					~IEEE80211_P2P_OPPPS_CTWINDOW_MASK;
 		link->conf->p2p_noa_attr.oppps_ctwindow |=
@@ -2815,14 +2836,17 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 		changed |= BSS_CHANGED_P2P_PS;
 	}
 
-	if (params->p2p_opp_ps > 0) {
-		link->conf->p2p_noa_attr.oppps_ctwindow |=
-					IEEE80211_P2P_OPPPS_ENABLE_BIT;
-		changed |= BSS_CHANGED_P2P_PS;
-	} else if (params->p2p_opp_ps == 0) {
-		link->conf->p2p_noa_attr.oppps_ctwindow &=
-					~IEEE80211_P2P_OPPPS_ENABLE_BIT;
-		changed |= BSS_CHANGED_P2P_PS;
+	if (params->changed &
+	    CFG80211_BSS_PARAM_CHANGED_P2P_OPPPS) {
+		if (params->p2p_opp_ps > 0) {
+			link->conf->p2p_noa_attr.oppps_ctwindow |=
+						IEEE80211_P2P_OPPPS_ENABLE_BIT;
+			changed |= BSS_CHANGED_P2P_PS;
+		} else if (params->p2p_opp_ps == 0) {
+			link->conf->p2p_noa_attr.oppps_ctwindow &=
+						~IEEE80211_P2P_OPPPS_ENABLE_BIT;
+			changed |= BSS_CHANGED_P2P_PS;
+		}
 	}
 
 	ieee80211_link_info_change_notify(sdata, link, changed);
