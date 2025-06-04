@@ -429,6 +429,73 @@ static __always_inline bool kvm_vcpu_abt_issea(const struct kvm_vcpu *vcpu)
 	}
 }
 
+/*
+ * Return true if SEA is on an access made for stage-2 translation table walk.
+ */
+static inline bool kvm_vcpu_sea_iss2ttw(const struct kvm_vcpu *vcpu)
+{
+	u64 esr = kvm_vcpu_get_esr(vcpu);
+
+	if (!esr_fsc_is_sea_ttw(esr) && !esr_fsc_is_secc_ttw(esr))
+		return false;
+
+	return !(esr & ESR_ELx_S1PTW);
+}
+
+/*
+ * Sanitize ESR_EL2 before KVM_EXIT_ARM_SEA. The general rule is to keep
+ * only the SEA-relevant bits that are useful for userspace and relevant to
+ * guest memory.
+ */
+static inline u64 kvm_vcpu_sea_esr_sanitized(const struct kvm_vcpu *vcpu)
+{
+	u64 esr = kvm_vcpu_get_esr(vcpu);
+	/*
+	 * Starting with zero to hide the following bits:
+	 * - HDBSSF: hardware dirty state is not guest memory.
+	 * - TnD, TagAccess, AssuredOnly, Overlay, DirtyBit: they are
+	 *   for permission fault.
+	 * - GCS: not guest memory.
+	 * - Xs: it is for translation/access flag/permission fault.
+	 * - ISV: it is 1 mostly for Translation fault, Access flag fault,
+	 *        or Permission fault. Only when FEAT_RAS is not implemented,
+	 *        it may be set to 1 (implementation defined) for S2PTW,
+	 *        which not worthy to return to userspace anyway.
+	 * - ISS[23:14]: because ISV is already hidden.
+	 * - VNCR: VNCR_EL2 is not guest memory.
+	 */
+	u64 sanitized = 0ULL;
+
+	/*
+	 * Reasons to make these bits visible to userspace:
+	 * - EC: tell if abort on instruction or data.
+	 * - IL: useful if userspace decides to retire the instruction.
+	 * - FSC: tell if abort on translation table walk.
+	 * - SET: tell if abort is recoverable, uncontainable, or
+	 *        restartable.
+	 * - S1PTW: userspace can tell guest its stage-1 has problem.
+	 * - FnV: userspace should avoid writing FAR_EL1 if FnV=1.
+	 * - CM and WnR: make ESR "authentic" in general.
+	 */
+	sanitized |= esr & (ESR_ELx_EC_MASK | ESR_ELx_IL | ESR_ELx_FSC |
+			    ESR_ELx_SET_MASK | ESR_ELx_S1PTW | ESR_ELx_FnV |
+			    ESR_ELx_CM | ESR_ELx_WNR);
+
+	return sanitized;
+}
+
+/* Return true if faulting guest virtual address during SEA is valid. */
+static inline bool kvm_vcpu_sea_far_valid(const struct kvm_vcpu *vcpu)
+{
+	return !(kvm_vcpu_get_esr(vcpu) & ESR_ELx_FnV);
+}
+
+/* Return true if faulting guest physical address during SEA is valid. */
+static inline bool kvm_vcpu_sea_ipa_valid(const struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.fault.hpfar_el2 & HPFAR_EL2_NS;
+}
+
 static __always_inline int kvm_vcpu_sys_get_rt(struct kvm_vcpu *vcpu)
 {
 	u64 esr = kvm_vcpu_get_esr(vcpu);
