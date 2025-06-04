@@ -470,6 +470,7 @@
 		compatible = "rockchip,rk8602";
 		reg = <0x42>;
 		fcs,suspend-voltage-selector = <1>;
+		regulator-enable-ramp-delay = <500>;
 		regulator-max-microvolt = <1050000>;
 		regulator-min-microvolt = <550000>;
 		regulator-name = "vdd_cpu_big0_s0";
@@ -485,6 +486,7 @@
 		compatible = "rockchip,rk8603", "rockchip,rk8602";
 		reg = <0x43>;
 		fcs,suspend-voltage-selector = <1>;
+		regulator-enable-ramp-delay = <500>;
 		regulator-max-microvolt = <1050000>;
 		regulator-min-microvolt = <550000>;
 		regulator-name = "vdd_cpu_big1_s0";
@@ -504,6 +506,7 @@
 		compatible = "rockchip,rk8602";
 		reg = <0x42>;
 		fcs,suspend-voltage-selector = <1>;
+		regulator-enable-ramp-delay = <500>;
 		regulator-max-microvolt = <950000>;
 		regulator-min-microvolt = <550000>;
 		regulator-name = "vdd_npu_s0";
