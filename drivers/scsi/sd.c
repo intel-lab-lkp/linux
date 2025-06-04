@@ -1119,6 +1119,11 @@ static void sd_config_write_same(struct scsi_disk *sdkp,
 		sdkp->zeroing_mode = SD_ZERO_WRITE;
 
 	if (sdkp->max_ws_blocks &&
+	    (sdkp->zeroing_mode == SD_ZERO_WS16_UNMAP ||
+	     sdkp->zeroing_mode == SD_ZERO_WS10_UNMAP))
+		lim->features |= BLK_FEAT_WRITE_ZEROES_UNMAP;
+
+	if (sdkp->max_ws_blocks &&
 	    sdkp->physical_block_size > logical_block_size) {
 		/*
 		 * Reporting a maximum number of blocks that is not aligned
