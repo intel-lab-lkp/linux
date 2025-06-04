@@ -104,17 +104,11 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 
 static inline int wg_cpumask_choose_online(int *stored_cpu, unsigned int id)
 {
-	unsigned int cpu = *stored_cpu, cpu_index, i;
+	if (likely(*stored_cpu < nr_cpu_ids && cpu_online(*stored_cpu)))
+		return cpu;
 
-	if (unlikely(cpu >= nr_cpu_ids ||
-		     !cpumask_test_cpu(cpu, cpu_online_mask))) {
-		cpu_index = id % cpumask_weight(cpu_online_mask);
-		cpu = cpumask_first(cpu_online_mask);
-		for (i = 0; i < cpu_index; ++i)
-			cpu = cpumask_next(cpu, cpu_online_mask);
-		*stored_cpu = cpu;
-	}
-	return cpu;
+	*stored_cpu = cpumask_nth(id % num_online_cpus(), cpu_online_mask);
+	return *stored_cpu;
 }
 
 /* This function is racy, in the sense that it's called while last_cpu is
