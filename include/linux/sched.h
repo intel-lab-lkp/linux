@@ -46,6 +46,7 @@
 #include <linux/rv.h>
 #include <linux/uidgid_types.h>
 #include <linux/tracepoint-defs.h>
+#include <linux/mutex.h>
 #include <asm/kmap_size.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -395,14 +396,14 @@ enum uclamp_id {
 	UCLAMP_CNT
 };
 
+extern struct mutex sched_domains_mutex;
 #ifdef CONFIG_SMP
 extern struct root_domain def_root_domain;
-extern struct mutex sched_domains_mutex;
-extern void sched_domains_mutex_lock(void);
-extern void sched_domains_mutex_unlock(void);
+DEFINE_LOCK_GUARD_0(sched_domains_mutex,
+	mutex_lock(&sched_domains_mutex),
+	mutex_unlock(&sched_domains_mutex))
 #else
-static inline void sched_domains_mutex_lock(void) { }
-static inline void sched_domains_mutex_unlock(void) { }
+DEFINE_LOCK_GUARD_0(sched_domains_mutex, ,)
 #endif
 
 struct sched_param {
