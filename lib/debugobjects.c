@@ -125,6 +125,12 @@ static int __init disable_object_debug(char *str)
 }
 early_param("no_debug_objects", disable_object_debug);
 
+static void debug_objects_disable(const char *msg)
+{
+	debug_objects_enabled = false;
+	pr_warn("debug_objects disabled: %s\n", msg);
+}
+
 static const char *obj_states[ODEBUG_STATE_MAX] = {
 	[ODEBUG_STATE_NONE]		= "none",
 	[ODEBUG_STATE_INIT]		= "initialized",
@@ -690,7 +696,7 @@ static struct debug_obj *lookup_object_or_alloc(void *addr, struct debug_bucket 
 	}
 
 	/* Out of memory. Do the cleanup outside of the locked region */
-	debug_objects_enabled = false;
+	debug_objects_disable("out of memory");
 	return NULL;
 }
 
@@ -1161,6 +1167,8 @@ static int debug_stats_show(struct seq_file *m, void *v)
 	seq_printf(m, "on_free_list  : %u\n", pool_count(&pool_to_free));
 	seq_printf(m, "objs_allocated: %d\n", debug_objects_allocated);
 	seq_printf(m, "objs_freed    : %d\n", debug_objects_freed);
+	seq_printf(m, "debug_objects : %s\n", debug_objects_enabled ? "enabled"
+								    : "disabled");
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(debug_stats);
@@ -1314,7 +1322,7 @@ check_results(void *addr, enum debug_obj_state state, int fixups, int warnings)
 out:
 	raw_spin_unlock_irqrestore(&db->lock, flags);
 	if (res)
-		debug_objects_enabled = false;
+		debug_object_disable("selftest");
 	return res;
 }
 
@@ -1486,11 +1494,8 @@ void __init debug_objects_mem_init(void)
 	cache = kmem_cache_create("debug_objects_cache", sizeof (struct debug_obj), 0,
 				  SLAB_DEBUG_OBJECTS | SLAB_NOLEAKTRACE, NULL);
 
-	if (!cache || !debug_objects_replace_static_objects(cache)) {
-		debug_objects_enabled = false;
-		pr_warn("Out of memory.\n");
-		return;
-	}
+	if (!cache || !debug_objects_replace_static_objects(cache))
+		debug_objects_disable("out of memory");
 
 	/*
 	 * Adjust the thresholds for allocating and freeing objects
