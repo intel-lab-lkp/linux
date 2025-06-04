@@ -1301,7 +1301,7 @@ const char * const vmstat_text[] = {
 	[I(NR_MEMMAP_BOOT_PAGES)]		= "nr_memmap_boot_pages",
 #undef I
 
-#if defined(CONFIG_VM_EVENT_COUNTERS) || defined(CONFIG_MEMCG)
+#if defined(CONFIG_VM_EVENT_COUNTERS)
 	/* enum vm_event_item counters */
 #define I(x) (NR_VM_ZONE_STAT_ITEMS + NR_VM_NUMA_EVENT_ITEMS + \
 	     NR_VM_NODE_STAT_ITEMS + NR_VM_STAT_ITEMS + x)
@@ -1498,7 +1498,7 @@ const char * const vmstat_text[] = {
 #endif
 #endif
 #undef I
-#endif /* CONFIG_VM_EVENT_COUNTERS || CONFIG_MEMCG */
+#endif /* CONFIG_VM_EVENT_COUNTERS */
 };
 #endif /* CONFIG_PROC_FS || CONFIG_SYSFS || CONFIG_NUMA || CONFIG_MEMCG */
 
