@@ -172,7 +172,6 @@ dependencies:
 required:
   - compatible
   - reg
-  - interrupts
   - clocks
   - clock-names
 
