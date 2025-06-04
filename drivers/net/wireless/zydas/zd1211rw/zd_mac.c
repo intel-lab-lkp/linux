@@ -568,6 +568,7 @@ void zd_mac_tx_to_dev(struct sk_buff *skb, int error)
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hw *hw = info->rate_driver_data[0];
 	struct zd_mac *mac = zd_hw_mac(hw);
+	unsigned long flags;
 
 	ieee80211_tx_info_clear_status(info);
 
@@ -581,13 +582,17 @@ void zd_mac_tx_to_dev(struct sk_buff *skb, int error)
 	} else {
 		struct sk_buff_head *q = &mac->ack_wait_queue;
 
-		skb_queue_tail(q, skb);
+		spin_lock_irqsave(&q->lock, flags);
+
+		__skb_queue_tail(q, skb);
 		while (skb_queue_len(q) > ZD_MAC_MAX_ACK_WAITERS) {
-			zd_mac_tx_status(hw, skb_dequeue(q),
+			zd_mac_tx_status(hw, __skb_dequeue(q),
 					 mac->ack_pending ? mac->ack_signal : 0,
 					 NULL);
 			mac->ack_pending = 0;
 		}
+
+		spin_unlock_irqrestore(&q->lock, flags);
 	}
 }
 
