@@ -1265,7 +1265,7 @@ static inline void update_locked_rq(struct rq *rq)
  * Return the rq currently locked from an scx callback, or NULL if no rq is
  * locked.
  */
-static inline struct rq *scx_locked_rq(void)
+struct rq *scx_locked_rq(void)
 {
 	return __this_cpu_read(locked_rq);
 }
