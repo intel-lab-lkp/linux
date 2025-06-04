@@ -3249,14 +3249,14 @@ static int proc_pid_patch_state(struct seq_file *m, struct pid_namespace *ns,
 #endif /* CONFIG_LIVEPATCH */
 
 #ifdef CONFIG_KSM
-static int proc_pid_ksm_merging_pages(struct seq_file *m, struct pid_namespace *ns,
+static int proc_pid_ksm_process_sharing(struct seq_file *m, struct pid_namespace *ns,
 				struct pid *pid, struct task_struct *task)
 {
 	struct mm_struct *mm;
 
 	mm = get_task_mm(task);
 	if (mm) {
-		seq_printf(m, "%lu\n", mm->ksm_merging_pages);
+		seq_printf(m, "%lu\n", mm->ksm_process_sharing);
 		mmput(mm);
 	}
 
@@ -3272,7 +3272,7 @@ static int proc_pid_ksm_stat(struct seq_file *m, struct pid_namespace *ns,
 	if (mm) {
 		seq_printf(m, "ksm_rmap_items %lu\n", mm->ksm_rmap_items);
 		seq_printf(m, "ksm_zero_pages %ld\n", mm_ksm_zero_pages(mm));
-		seq_printf(m, "ksm_merging_pages %lu\n", mm->ksm_merging_pages);
+		seq_printf(m, "ksm_process_sharing %lu\n", mm->ksm_process_sharing);
 		seq_printf(m, "ksm_process_profit %ld\n", ksm_process_profit(mm));
 		seq_printf(m, "ksm_merge_any: %s\n",
 				test_bit(MMF_VM_MERGE_ANY, &mm->flags) ? "yes" : "no");
@@ -3421,7 +3421,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	ONE("seccomp_cache", S_IRUSR, proc_pid_seccomp_cache),
 #endif
 #ifdef CONFIG_KSM
-	ONE("ksm_merging_pages",  S_IRUSR, proc_pid_ksm_merging_pages),
+	ONE("ksm_process_sharing",  S_IRUSR, proc_pid_ksm_process_sharing),
 	ONE("ksm_stat",  S_IRUSR, proc_pid_ksm_stat),
 #endif
 };
@@ -3758,7 +3758,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	ONE("seccomp_cache", S_IRUSR, proc_pid_seccomp_cache),
 #endif
 #ifdef CONFIG_KSM
-	ONE("ksm_merging_pages",  S_IRUSR, proc_pid_ksm_merging_pages),
+	ONE("ksm_process_sharing",  S_IRUSR, proc_pid_ksm_process_sharing),
 	ONE("ksm_stat",  S_IRUSR, proc_pid_ksm_stat),
 #endif
 };

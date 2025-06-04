@@ -164,16 +164,16 @@ KSM可以通过合并相同的页面来节省内存，但也会消耗额外的�
 
 2) 单一进程中KSM的收益也可以通过以下近似的计算得到::
 
-       process_profit =~ ksm_merging_pages * sizeof(page) -
+       process_profit =~ ksm_process_sharing * sizeof(page) -
                          ksm_rmap_items * sizeof(rmap_item).
 
-   其中ksm_merging_pages显示在 ``/proc/<pid>/`` 目录下，而ksm_rmap_items
+   其中ksm_process_sharing显示在 ``/proc/<pid>/`` 目录下，而ksm_rmap_items
    显示在 ``/proc/<pid>/ksm_stat`` 。
 
-从应用的角度来看， ``ksm_rmap_items`` 和 ``ksm_merging_pages`` 的高比例意
+从应用的角度来看， ``ksm_rmap_items`` 和 ``ksm_process_sharing`` 的高比例意
 味着不好的madvise-applied策略，所以开发者或管理员必须重新考虑如何改变madvis策
 略。举个例子供参考，一个页面的大小通常是4K，而rmap_item的大小在32位CPU架构上分
-别是32B，在64位CPU架构上是64B。所以如果 ``ksm_rmap_items/ksm_merging_pages``
+别是32B，在64位CPU架构上是64B。所以如果 ``ksm_rmap_items/ksm_process_sharing``
 的比例在64位CPU上超过64，或者在32位CPU上超过128，那么应用程序的madvise策略应
 该被放弃，因为ksm收益大约为零或负值。
 

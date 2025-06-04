@@ -1175,7 +1175,7 @@ struct mm_struct {
 		 * Represent how many pages of this process are involved in KSM
 		 * merging (not including ksm_zero_pages).
 		 */
-		unsigned long ksm_merging_pages;
+		unsigned long ksm_process_sharing;
 		/*
 		 * Represent how many pages are checked for ksm merging
 		 * including merged and not merged.

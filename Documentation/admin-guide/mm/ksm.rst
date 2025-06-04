@@ -256,18 +256,18 @@ several times, which are unprofitable memory consumed.
 	process_profit =~ ksm_saved_pages * sizeof(page) -
 			  ksm_rmap_items * sizeof(rmap_item).
 
-   where ksm_saved_pages equals to the sum of ``ksm_merging_pages`` and
+   where ksm_saved_pages equals to the sum of ``ksm_process_sharing`` and
    ``ksm_zero_pages``, both of which are shown under the directory
    ``/proc/<pid>/ksm_stat``, and ksm_rmap_items is also shown in
    ``/proc/<pid>/ksm_stat``. The process profit is also shown in
    ``/proc/<pid>/ksm_stat`` as ksm_process_profit.
 
 From the perspective of application, a high ratio of ``ksm_rmap_items`` to
-``ksm_merging_pages`` means a bad madvise-applied policy, so developers or
+``ksm_process_sharing`` means a bad madvise-applied policy, so developers or
 administrators have to rethink how to change madvise policy. Giving an example
 for reference, a page's size is usually 4K, and the rmap_item's size is
 separately 32B on 32-bit CPU architecture and 64B on 64-bit CPU architecture.
-so if the ``ksm_rmap_items/ksm_merging_pages`` ratio exceeds 64 on 64-bit CPU
+so if the ``ksm_rmap_items/ksm_process_sharing`` ratio exceeds 64 on 64-bit CPU
 or exceeds 128 on 32-bit CPU, then the app's madvise policy should be dropped,
 because the ksm profit is approximately zero or negative.
 

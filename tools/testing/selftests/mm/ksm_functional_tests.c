@@ -41,7 +41,7 @@ static int mem_fd;
 static int ksm_fd;
 static int ksm_full_scans_fd;
 static int proc_self_ksm_stat_fd;
-static int proc_self_ksm_merging_pages_fd;
+static int proc_self_ksm_process_sharing_fd;
 static int ksm_use_zero_pages_fd;
 static int pagemap_fd;
 static size_t pagesize;
@@ -105,10 +105,10 @@ static long get_my_merging_pages(void)
 	char buf[10];
 	ssize_t ret;
 
-	if (proc_self_ksm_merging_pages_fd < 0)
-		return proc_self_ksm_merging_pages_fd;
+	if (proc_self_ksm_process_sharing_fd < 0)
+		return proc_self_ksm_process_sharing_fd;
 
-	ret = pread(proc_self_ksm_merging_pages_fd, buf, sizeof(buf) - 1, 0);
+	ret = pread(proc_self_ksm_process_sharing_fd, buf, sizeof(buf) - 1, 0);
 	if (ret <= 0)
 		return -errno;
 	buf[ret] = 0;
@@ -671,7 +671,7 @@ static void init_global_file_handles(void)
 	if (pagemap_fd < 0)
 		ksft_exit_skip("open(\"/proc/self/pagemap\") failed\n");
 	proc_self_ksm_stat_fd = open("/proc/self/ksm_stat", O_RDONLY);
-	proc_self_ksm_merging_pages_fd = open("/proc/self/ksm_merging_pages",
+	proc_self_ksm_process_sharing_fd = open("/proc/self/ksm_process_sharing",
 						O_RDONLY);
 	ksm_use_zero_pages_fd = open("/sys/kernel/mm/ksm/use_zero_pages", O_RDWR);
 }

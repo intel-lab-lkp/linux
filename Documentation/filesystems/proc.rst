@@ -2290,7 +2290,7 @@ Example
     / # cat /proc/self/ksm_stat
     ksm_rmap_items 0
     ksm_zero_pages 0
-    ksm_merging_pages 0
+    ksm_process_sharing 0
     ksm_process_profit 0
     ksm_merge_any: no
     ksm_mergeable: no
@@ -2312,12 +2312,12 @@ ksm_zero_pages
 When /sys/kernel/mm/ksm/use_zero_pages is enabled, it represent how many
 empty pages are merged with kernel zero pages by KSM.
 
-ksm_merging_pages
+ksm_process_sharing
 ^^^^^^^^^^^^^^^^^
 
 It represents how many pages of this process are involved in KSM merging
 (not including ksm_zero_pages). It is the same with what
-/proc/<pid>/ksm_merging_pages shows.
+/proc/<pid>/ksm_process_sharing shows.
 
 ksm_process_profit
 ^^^^^^^^^^^^^^^^^^
