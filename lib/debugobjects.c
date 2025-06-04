@@ -694,7 +694,7 @@ static struct debug_obj *lookup_object_or_alloc(void *addr, struct debug_bucket 
 	return NULL;
 }
 
-static void debug_objects_fill_pool(void)
+static void debug_objects_fill_pool(bool no_alloc)
 {
 	if (!static_branch_likely(&obj_cache_enabled))
 		return;
@@ -705,7 +705,7 @@ static void debug_objects_fill_pool(void)
 	/* Try reusing objects from obj_to_free_list */
 	fill_pool_from_freelist();
 
-	if (likely(!pool_should_refill(&pool_global)))
+	if (likely(!pool_should_refill(&pool_global) || no_alloc))
 		return;
 
 	/*
@@ -734,7 +734,7 @@ __debug_object_init(void *addr, const struct debug_obj_descr *descr, int onstack
 	struct debug_bucket *db;
 	unsigned long flags;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(descr->flags & ODEBUG_FLAG_NO_ALLOC);
 
 	db = get_bucket((unsigned long) addr);
 
@@ -811,7 +811,7 @@ int debug_object_activate(void *addr, const struct debug_obj_descr *descr)
 	if (!debug_objects_enabled)
 		return 0;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(descr->flags & ODEBUG_FLAG_NO_ALLOC);
 
 	db = get_bucket((unsigned long) addr);
 
@@ -1000,7 +1000,7 @@ void debug_object_assert_init(void *addr, const struct debug_obj_descr *descr)
 	if (!debug_objects_enabled)
 		return;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(descr->flags & ODEBUG_FLAG_NO_ALLOC);
 
 	db = get_bucket((unsigned long) addr);
 
