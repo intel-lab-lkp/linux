@@ -457,6 +457,29 @@ static int queue_wc_store(struct gendisk *disk, const char *page,
 	return 0;
 }
 
+static ssize_t queue_write_zeroes_unmap_show(struct gendisk *disk, char *page)
+{
+	return sysfs_emit(page, "%u\n",
+			  blk_queue_write_zeroes_unmap(disk->queue));
+}
+
+static int queue_write_zeroes_unmap_store(struct gendisk *disk,
+		const char *page, size_t count, struct queue_limits *lim)
+{
+	unsigned long val;
+	ssize_t ret;
+
+	ret = queue_var_store(&val, page, count);
+	if (ret < 0)
+		return ret;
+
+	if (val)
+		lim->flags &= ~BLK_FLAG_WRITE_ZEROES_UNMAP_DISABLED;
+	else
+		lim->flags |= BLK_FLAG_WRITE_ZEROES_UNMAP_DISABLED;
+	return 0;
+}
+
 #define QUEUE_RO_ENTRY(_prefix, _name)			\
 static struct queue_sysfs_entry _prefix##_entry = {	\
 	.attr	= { .name = _name, .mode = 0444 },	\
@@ -514,6 +537,7 @@ QUEUE_LIM_RO_ENTRY(queue_atomic_write_unit_min, "atomic_write_unit_min_bytes");
 
 QUEUE_RO_ENTRY(queue_write_same_max, "write_same_max_bytes");
 QUEUE_LIM_RO_ENTRY(queue_max_write_zeroes_sectors, "write_zeroes_max_bytes");
+QUEUE_LIM_RW_ENTRY(queue_write_zeroes_unmap, "write_zeroes_unmap");
 QUEUE_LIM_RO_ENTRY(queue_max_zone_append_sectors, "zone_append_max_bytes");
 QUEUE_LIM_RO_ENTRY(queue_zone_write_granularity, "zone_write_granularity");
 
@@ -662,6 +686,7 @@ static struct attribute *queue_attrs[] = {
 	&queue_atomic_write_unit_min_entry.attr,
 	&queue_atomic_write_unit_max_entry.attr,
 	&queue_max_write_zeroes_sectors_entry.attr,
+	&queue_write_zeroes_unmap_entry.attr,
 	&queue_max_zone_append_sectors_entry.attr,
 	&queue_zone_write_granularity_entry.attr,
 	&queue_rotational_entry.attr,

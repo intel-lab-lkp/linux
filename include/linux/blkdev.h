@@ -340,6 +340,9 @@ typedef unsigned int __bitwise blk_features_t;
 #define BLK_FEAT_ATOMIC_WRITES \
 	((__force blk_features_t)(1u << 16))
 
+/* supports unmap write zeroes command */
+#define BLK_FEAT_WRITE_ZEROES_UNMAP	((__force blk_features_t)(1u << 17))
+
 /*
  * Flags automatically inherited when stacking limits.
  */
@@ -359,6 +362,10 @@ typedef unsigned int __bitwise blk_flags_t;
 
 /* passthrough command IO accounting */
 #define BLK_FLAG_IOSTATS_PASSTHROUGH	((__force blk_flags_t)(1u << 2))
+
+/* disable the unmap write zeroes operation */
+#define BLK_FLAG_WRITE_ZEROES_UNMAP_DISABLED \
+					((__force blk_flags_t)(1u << 3))
 
 struct queue_limits {
 	blk_features_t		features;
@@ -1376,6 +1383,17 @@ bdev_max_secure_erase_sectors(struct block_device *bdev)
 static inline unsigned int bdev_write_zeroes_sectors(struct block_device *bdev)
 {
 	return bdev_limits(bdev)->max_write_zeroes_sectors;
+}
+
+static inline bool blk_queue_write_zeroes_unmap(struct request_queue *q)
+{
+	return (q->limits.features & BLK_FEAT_WRITE_ZEROES_UNMAP) &&
+		!(q->limits.flags & BLK_FLAG_WRITE_ZEROES_UNMAP_DISABLED);
+}
+
+static inline bool bdev_write_zeroes_unmap(struct block_device *bdev)
+{
+	return blk_queue_write_zeroes_unmap(bdev_get_queue(bdev));
 }
 
 static inline bool bdev_nonrot(struct block_device *bdev)
