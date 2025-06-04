@@ -42,22 +42,21 @@
 #include "nouveau_acpi.h"
 
 static struct ida bl_ida;
-#define BL_NAME_SIZE 15 // 12 for name + 2 for digits + 1 for '\0'
 
-static bool
-nouveau_get_backlight_name(char backlight_name[BL_NAME_SIZE],
-			   struct nouveau_backlight *bl)
+static char *
+nouveau_get_backlight_name(struct nouveau_backlight *bl)
 {
 	const int nb = ida_alloc_max(&bl_ida, 99, GFP_KERNEL);
 
 	if (nb < 0)
-		return false;
-	if (nb > 0)
-		snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight%d", nb);
-	else
-		snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight");
+		return NULL;
+
 	bl->id = nb;
-	return true;
+
+	if (nb > 0)
+		return kasprintf(GFP_KERNEL, "nv_backlight%d", nb);
+	else
+		return kasprintf(GFP_KERNEL, "nv_backlight");
 }
 
 static int
@@ -293,9 +292,9 @@ nouveau_backlight_init(struct drm_connector *connector)
 	struct nouveau_backlight *bl;
 	struct nouveau_encoder *nv_encoder = NULL;
 	struct nvif_device *device = &drm->client.device;
-	char backlight_name[BL_NAME_SIZE];
 	struct backlight_properties props = {0};
 	const struct backlight_ops *ops;
+	char *backlight_name;
 	int ret;
 
 	if (apple_gmux_present()) {
@@ -348,7 +347,8 @@ nouveau_backlight_init(struct drm_connector *connector)
 		goto fail_alloc;
 	}
 
-	if (!nouveau_get_backlight_name(backlight_name, bl)) {
+	backlight_name = nouveau_get_backlight_name(bl);
+	if (!backlight_name) {
 		NV_ERROR(drm, "Failed to retrieve a unique name for the backlight interface\n");
 		goto fail_alloc;
 	}
@@ -356,6 +356,7 @@ nouveau_backlight_init(struct drm_connector *connector)
 	props.type = BACKLIGHT_RAW;
 	bl->dev = backlight_device_register(backlight_name, connector->kdev,
 					    nv_encoder, ops, &props);
+	kfree(backlight_name);
 	if (IS_ERR(bl->dev)) {
 		if (bl->id >= 0)
 			ida_free(&bl_ida, bl->id);
