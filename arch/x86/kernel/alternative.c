@@ -199,6 +199,8 @@ static void *its_alloc(void)
 	if (!page)
 		return NULL;
 
+	execmem_make_temp_rw(page, PAGE_SIZE);
+
 #ifdef CONFIG_MODULES
 	if (its_mod) {
 		void *tmp = krealloc(its_mod->its_page_array,
@@ -210,7 +212,6 @@ static void *its_alloc(void)
 		its_mod->its_page_array = tmp;
 		its_mod->its_page_array[its_mod->its_num_pages++] = page;
 
-		execmem_make_temp_rw(page, PAGE_SIZE);
 	}
 #endif /* CONFIG_MODULES */
 
