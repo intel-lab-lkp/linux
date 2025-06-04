@@ -18,6 +18,8 @@ static inline bool scx_rq_bypassing(struct rq *rq)
 	return unlikely(rq->scx.flags & SCX_RQ_BYPASSING);
 }
 
+struct rq *scx_locked_rq(void);
+
 DECLARE_STATIC_KEY_FALSE(scx_ops_allow_queued_wakeup);
 
 void scx_tick(struct rq *rq);
