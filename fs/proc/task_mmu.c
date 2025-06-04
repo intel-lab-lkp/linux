@@ -127,13 +127,172 @@ static void release_task_mempolicy(struct proc_maps_private *priv)
 }
 #endif
 
-static struct vm_area_struct *proc_get_vma(struct proc_maps_private *priv,
-						loff_t *ppos)
-{
-	struct vm_area_struct *vma = vma_next(&priv->iter);
+#ifdef CONFIG_PER_VMA_LOCK
 
+static struct vm_area_struct *trylock_vma(struct proc_maps_private *priv,
+					  struct vm_area_struct *vma,
+					  unsigned long last_pos,
+					  bool mm_unstable)
+{
+	vma = vma_start_read(priv->mm, vma);
+	if (IS_ERR_OR_NULL(vma))
+		return NULL;
+
+	/* Check if the vma we locked is the right one. */
+	if (unlikely(vma->vm_mm != priv->mm))
+		goto err;
+
+	/* vma should not be ahead of the last search position. */
+	if (unlikely(last_pos >= vma->vm_end))
+		goto err;
+
+	/*
+	 * vma ahead of last search position is possible but we need to
+	 * verify that it was not shrunk after we found it, and another
+	 * vma has not been installed ahead of it. Otherwise we might
+	 * observe a gap that should not be there.
+	 */
+	if (mm_unstable && last_pos < vma->vm_start) {
+		/* Verify only if the address space changed since vma lookup. */
+		if ((priv->mm_wr_seq & 1) ||
+		    mmap_lock_speculate_retry(priv->mm, priv->mm_wr_seq)) {
+			vma_iter_init(&priv->iter, priv->mm, last_pos);
+			if (vma != vma_next(&priv->iter))
+				goto err;
+		}
+	}
+
+	priv->locked_vma = vma;
+
+	return vma;
+err:
+	vma_end_read(vma);
+	return NULL;
+}
+
+
+static void unlock_vma(struct proc_maps_private *priv)
+{
+	if (priv->locked_vma) {
+		vma_end_read(priv->locked_vma);
+		priv->locked_vma = NULL;
+	}
+}
+
+static const struct seq_operations proc_pid_maps_op;
+
+static inline bool lock_content(struct seq_file *m,
+				struct proc_maps_private *priv)
+{
+	/*
+	 * smaps and numa_maps perform page table walk, therefore require
+	 * mmap_lock but maps can be read with locked vma only.
+	 */
+	if (m->op != &proc_pid_maps_op) {
+		if (mmap_read_lock_killable(priv->mm))
+			return false;
+
+		priv->mmap_locked = true;
+	} else {
+		rcu_read_lock();
+		priv->locked_vma = NULL;
+		priv->mmap_locked = false;
+	}
+
+	return true;
+}
+
+static inline void unlock_content(struct proc_maps_private *priv)
+{
+	if (priv->mmap_locked) {
+		mmap_read_unlock(priv->mm);
+	} else {
+		unlock_vma(priv);
+		rcu_read_unlock();
+	}
+}
+
+static struct vm_area_struct *get_next_vma(struct proc_maps_private *priv,
+					   loff_t last_pos)
+{
+	struct vm_area_struct *vma;
+	int ret;
+
+	if (priv->mmap_locked)
+		return vma_next(&priv->iter);
+
+	unlock_vma(priv);
+	/*
+	 * Record sequence number ahead of vma lookup.
+	 * Odd seqcount means address space modification is in progress.
+	 */
+	mmap_lock_speculate_try_begin(priv->mm, &priv->mm_wr_seq);
+	vma = vma_next(&priv->iter);
+	if (!vma)
+		return NULL;
+
+	vma = trylock_vma(priv, vma, last_pos, true);
+	if (vma)
+		return vma;
+
+	/* Address space got modified, vma might be stale. Re-lock and retry */
+	rcu_read_unlock();
+	ret = mmap_read_lock_killable(priv->mm);
+	rcu_read_lock();
+	if (ret)
+		return ERR_PTR(ret);
+
+	/* Lookup the vma at the last position again under mmap_read_lock */
+	vma_iter_init(&priv->iter, priv->mm, last_pos);
+	vma = vma_next(&priv->iter);
 	if (vma) {
-		*ppos = vma->vm_start;
+		vma = trylock_vma(priv, vma, last_pos, false);
+		WARN_ON(!vma); /* mm is stable, has to succeed */
+	}
+	mmap_read_unlock(priv->mm);
+
+	return vma;
+}
+
+#else /* CONFIG_PER_VMA_LOCK */
+
+static inline bool lock_content(struct seq_file *m,
+				struct proc_maps_private *priv)
+{
+	return mmap_read_lock_killable(priv->mm) == 0;
+}
+
+static inline void unlock_content(struct proc_maps_private *priv)
+{
+	mmap_read_unlock(priv->mm);
+}
+
+static struct vm_area_struct *get_next_vma(struct proc_maps_private *priv,
+					   loff_t last_pos)
+{
+	return vma_next(&priv->iter);
+}
+
+#endif /* CONFIG_PER_VMA_LOCK */
+
+static struct vm_area_struct *proc_get_vma(struct seq_file *m, loff_t *ppos)
+{
+	struct proc_maps_private *priv = m->private;
+	struct vm_area_struct *vma;
+
+	vma = get_next_vma(priv, *ppos);
+	if (IS_ERR(vma))
+		return vma;
+
+	/* Store previous position to be able to restart if needed */
+	priv->last_pos = *ppos;
+	if (vma) {
+		/*
+		 * Track the end of the reported vma to ensure position changes
+		 * even if previous vma was merged with the next vma and we
+		 * found the extended vma with the same vm_start.
+		 */
+		*ppos = vma->vm_end;
 	} else {
 		*ppos = -2UL;
 		vma = get_gate_vma(priv->mm);
@@ -163,19 +322,21 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 		return NULL;
 	}
 
-	if (mmap_read_lock_killable(mm)) {
+	if (!lock_content(m, priv)) {
 		mmput(mm);
 		put_task_struct(priv->task);
 		priv->task = NULL;
 		return ERR_PTR(-EINTR);
 	}
 
+	if (last_addr > 0)
+		*ppos = last_addr = priv->last_pos;
 	vma_iter_init(&priv->iter, mm, last_addr);
 	hold_task_mempolicy(priv);
 	if (last_addr == -2UL)
 		return get_gate_vma(mm);
 
-	return proc_get_vma(priv, ppos);
+	return proc_get_vma(m, ppos);
 }
 
 static void *m_next(struct seq_file *m, void *v, loff_t *ppos)
@@ -184,7 +345,7 @@ static void *m_next(struct seq_file *m, void *v, loff_t *ppos)
 		*ppos = -1UL;
 		return NULL;
 	}
-	return proc_get_vma(m->private, ppos);
+	return proc_get_vma(m, ppos);
 }
 
 static void m_stop(struct seq_file *m, void *v)
@@ -196,7 +357,7 @@ static void m_stop(struct seq_file *m, void *v)
 		return;
 
 	release_task_mempolicy(priv);
-	mmap_read_unlock(mm);
+	unlock_content(priv);
 	mmput(mm);
 	put_task_struct(priv->task);
 	priv->task = NULL;
