@@ -502,7 +502,7 @@ phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
 /*
  * Create PMD level page table mapping for physical addresses. The virtual
  * and physical address have to be aligned at this level.
- * It returns the last physical address mapped.
+ * It returns the last physical address mapped, or zero if allocation failed.
  */
 static unsigned long __meminit
 phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
@@ -572,7 +572,14 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pte = alloc_low_page();
+		if (!pte)
+			return 0;
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot, init);
+		/*
+		 * phys_{ppmd,pud,p4d}_init return zero if allocation failed.
+		 * phys_pte_init makes no allocations, so should not return zero.
+		 */
+		BUG_ON(!paddr_last);
 
 		spin_lock(&init_mm.page_table_lock);
 		pmd_populate_kernel_init(&init_mm, pmd, pte, init);
@@ -586,7 +593,7 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
  * Create PUD level page table mapping for physical addresses. The virtual
  * and physical address do not have to be aligned at this level. KASLR can
  * randomize virtual addresses up to this level.
- * It returns the last physical address mapped.
+ * It returns the last physical address mapped, or zero if allocation failed.
  */
 static unsigned long __meminit
 phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
@@ -623,6 +630,8 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 							   paddr_end,
 							   page_size_mask,
 							   prot, init);
+				if (!paddr_last)
+					return 0;
 				continue;
 			}
 			/*
@@ -658,12 +667,22 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pmd = alloc_low_page();
+		if (!pmd)
+			return 0;
 		paddr_last = phys_pmd_init(pmd, paddr, paddr_end,
 					   page_size_mask, prot, init);
 
+		/*
+		 * We might have !paddr_last if allocation failed, but we should still
+		 * update pud before bailing, so that subsequent retries can pick up on
+		 * progress (here and in phys_pmd_init) without leaking pmd.
+		 */
 		spin_lock(&init_mm.page_table_lock);
 		pud_populate_init(&init_mm, pud, pmd, init);
 		spin_unlock(&init_mm.page_table_lock);
+
+		if (!paddr_last)
+			return 0;
 	}
 
 	update_page_count(PG_LEVEL_1G, pages);
@@ -707,16 +726,26 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 			pud = pud_offset(p4d, 0);
 			paddr_last = phys_pud_init(pud, paddr, __pa(vaddr_end),
 					page_size_mask, prot, init);
+			if (!paddr_last)
+				return 0;
 			continue;
 		}
 
 		pud = alloc_low_page();
+		if (!pud)
+			return 0;
 		paddr_last = phys_pud_init(pud, paddr, __pa(vaddr_end),
 					   page_size_mask, prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
 		p4d_populate_init(&init_mm, p4d, pud, init);
 		spin_unlock(&init_mm.page_table_lock);
+
+		/*
+		 * Bail only after updating p4d to keep progress from pud across retries.
+		 */
+		if (!paddr_last)
+			return 0;
 	}
 
 	return paddr_last;
@@ -748,10 +777,14 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 						   __pa(vaddr_end),
 						   page_size_mask,
 						   prot, init);
+			if (!paddr_last)
+				return 0;
 			continue;
 		}
 
 		p4d = alloc_low_page();
+		if (!p4d)
+			return 0;
 		paddr_last = phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask, prot, init);
 
@@ -763,6 +796,13 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 					  (pud_t *) p4d, init);
 
 		spin_unlock(&init_mm.page_table_lock);
+
+		/*
+		 * Bail only after updating pgd/p4d to keep progress from p4d across retries.
+		 */
+		if (!paddr_last)
+			return 0;
+
 		pgd_changed = true;
 	}
 
@@ -777,7 +817,8 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
  * Create page table mapping for the physical memory for specific physical
  * addresses. Note that it can only be used to populate non-present entries.
  * The virtual and physical addresses have to be aligned on PMD level
- * down. It returns the last physical address mapped.
+ * down. It returns the last physical address mapped, or zero if allocation
+ * failed at any point.
  */
 unsigned long __meminit
 kernel_physical_mapping_init(unsigned long paddr_start,
@@ -981,7 +1022,8 @@ int arch_add_memory(int nid, u64 start, u64 size,
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 
-	init_memory_mapping(start, start + size, params->pgprot);
+	if (!init_memory_mapping(start, start + size, params->pgprot))
+		return -ENOMEM;
 
 	return add_pages(nid, start_pfn, nr_pages, params);
 }
