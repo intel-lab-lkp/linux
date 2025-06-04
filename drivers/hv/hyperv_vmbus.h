@@ -120,8 +120,25 @@ enum {
  * Per cpu state for channel handling
  */
 struct hv_per_cpu_context {
+	/*
+	 * SynIC pages for communicating with the host.
+	 *
+	 * These pages are accessible to the host partition and the hypervisor,
+	 * so they can only be used for exchanging data when the host partition
+	 * and the hypervisor are trusted.
+	 */
 	void *hyp_synic_message_page;
 	void *hyp_synic_event_page;
+	/*
+	 * SynIC pages for communicating with the paravisor.
+	 *
+	 * These pages can be accessed only from within the guest partition.
+	 * Neither the host partition nor the hypervisor can access these pages,
+	 * so they can be used for exchanging data when the host partition and
+	 * the hypervisor are not trusted, such as in a confidential VM.
+	 */
+	void *para_synic_message_page;
+	void *para_synic_event_page;
 
 	/*
 	 * The page is only used in hv_post_message() for a TDX VM (with the
