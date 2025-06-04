@@ -111,7 +111,7 @@ EXPORT_SYMBOL_GPL(vhost_task_stop);
  * @arg: data to be passed to fn and handled_kill
  * @name: the thread's name
  *
- * This returns a specialized task for use by the vhost layer or ERR_PTR() on
+ * This returns a specialized task for use by the vhost layer or ERR_CAST() on
  * failure. The returned task is inactive, and the caller must fire it up
  * through vhost_task_start().
  */
@@ -145,7 +145,7 @@ struct vhost_task *vhost_task_create(bool (*fn)(void *),
 	tsk = copy_process(NULL, 0, NUMA_NO_NODE, &args);
 	if (IS_ERR(tsk)) {
 		kfree(vtsk);
-		return ERR_PTR(PTR_ERR(tsk));
+		return ERR_CAST(tsk);
 	}
 
 	vtsk->task = tsk;
