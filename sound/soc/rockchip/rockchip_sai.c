@@ -1448,15 +1448,11 @@ static int rockchip_sai_probe(struct platform_device *pdev)
 				     "Failed to get mclk\n");
 	}
 
-	sai->hclk = devm_clk_get(&pdev->dev, "hclk");
+	sai->hclk = devm_clk_get_enabled(&pdev->dev, "hclk");
 	if (IS_ERR(sai->hclk)) {
 		return dev_err_probe(&pdev->dev, PTR_ERR(sai->hclk),
 				     "Failed to get hclk\n");
 	}
-
-	ret = clk_prepare_enable(sai->hclk);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Failed to enable hclk\n");
 
 	regmap_read(sai->regmap, SAI_VERSION, &sai->version);
 
@@ -1512,8 +1508,6 @@ err_runtime_suspend:
 	if (pm_runtime_put(&pdev->dev))
 		rockchip_sai_runtime_suspend(&pdev->dev);
 err_disable_hclk:
-	clk_disable_unprepare(sai->hclk);
-
 	return ret;
 }
 
