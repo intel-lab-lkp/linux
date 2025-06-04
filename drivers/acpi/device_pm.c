@@ -851,7 +851,6 @@ static int __acpi_device_wakeup_enable(struct acpi_device *adev,
 {
 	struct acpi_device_wakeup *wakeup = &adev->wakeup;
 	acpi_status status;
-	int error = 0;
 
 	mutex_lock(&acpi_wakeup_lock);
 
@@ -864,7 +863,7 @@ static int __acpi_device_wakeup_enable(struct acpi_device *adev,
 	if (wakeup->enable_count > 0)
 		acpi_disable_wakeup_device_power(adev);
 
-	error = acpi_enable_wakeup_device_power(adev, target_state);
+	int error = acpi_enable_wakeup_device_power(adev, target_state);
 	if (error) {
 		if (wakeup->enable_count > 0) {
 			acpi_disable_gpe(wakeup->gpe_device, wakeup->gpe_number);
