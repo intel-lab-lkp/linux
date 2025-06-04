@@ -771,6 +771,9 @@ static bool is_access_to_paths_allowed(
 		_layer_masks_child2[LANDLOCK_NUM_ACCESS_FS];
 	layer_mask_t(*layer_masks_child1)[LANDLOCK_NUM_ACCESS_FS] = NULL,
 	(*layer_masks_child2)[LANDLOCK_NUM_ACCESS_FS] = NULL;
+	unsigned int rename_seqcount;
+	bool pathwalk_ref = false;
+	const struct landlock_rule *rule;
 
 	if (!access_request_parent1 && !access_request_parent2)
 		return true;
@@ -811,6 +814,7 @@ static bool is_access_to_paths_allowed(
 
 	rcu_read_lock();
 
+restart_pathwalk:
 	if (unlikely(dentry_child1)) {
 		landlock_unmask_layers(
 			find_rule_rcu(domain, dentry_child1),
@@ -833,13 +837,32 @@ static bool is_access_to_paths_allowed(
 	}
 
 	walker_path = *path;
+
+	/*
+	 * Attempt to do a pathwalk without taking dentry references first,
+	 * but if any rename happens while we are doing this, give up and do a
+	 * walk with dget_parent instead.  See comments in
+	 * collect_domain_accesses().
+	 */
+
+	if (!pathwalk_ref) {
+		rename_seqcount = read_seqbegin(&rename_lock);
+		if (rename_seqcount % 2 == 1) {
+			pathwalk_ref = true;
+			path_get(&walker_path);
+		}
+	} else {
+		path_get(&walker_path);
+	}
+
+	rule = find_rule_rcu(domain, walker_path.dentry);
+
 	/*
 	 * We need to walk through all the hierarchy to not miss any relevant
 	 * restriction.
 	 */
 	while (true) {
 		struct dentry *parent_dentry;
-		const struct landlock_rule *rule;
 
 		/*
 		 * If at least all accesses allowed on the destination are
@@ -881,7 +904,6 @@ static bool is_access_to_paths_allowed(
 				break;
 		}
 
-		rule = find_rule_rcu(domain, walker_path.dentry);
 		allowed_parent1 = allowed_parent1 ||
 				  landlock_unmask_layers(
 					  rule, access_masked_parent1,
@@ -899,13 +921,16 @@ static bool is_access_to_paths_allowed(
 jump_up:
 		if (walker_path.dentry == walker_path.mnt->mnt_root) {
 			/* follow_up gets the parent and puts the passed in path */
-			path_get(&walker_path);
+			if (!pathwalk_ref)
+				path_get(&walker_path);
 			if (follow_up(&walker_path)) {
-				path_put(&walker_path);
+				if (!pathwalk_ref)
+					path_put(&walker_path);
 				/* Ignores hidden mount points. */
 				goto jump_up;
 			} else {
-				path_put(&walker_path);
+				if (!pathwalk_ref)
+					path_put(&walker_path);
 				/*
 				 * Stops at the real root.  Denies access
 				 * because not all layers have granted access.
@@ -925,9 +950,26 @@ jump_up:
 			}
 			break;
 		}
-		parent_dentry = walker_path.dentry->d_parent;
-		walker_path.dentry = parent_dentry;
+		if (!pathwalk_ref) {
+			parent_dentry = walker_path.dentry->d_parent;
+
+			rule = find_rule_rcu(domain, parent_dentry);
+			if (read_seqretry(&rename_lock, rename_seqcount)) {
+				pathwalk_ref = true;
+				goto restart_pathwalk;
+			} else {
+				walker_path.dentry = parent_dentry;
+			}
+		} else {
+			parent_dentry = dget_parent(walker_path.dentry);
+			dput(walker_path.dentry);
+			walker_path.dentry = parent_dentry;
+			rule = find_rule_rcu(domain, walker_path.dentry);
+		}
 	}
+
+	if (pathwalk_ref)
+		path_put(&walker_path);
 
 	rcu_read_unlock();
 
@@ -1040,22 +1082,55 @@ static bool collect_domain_accesses(
 {
 	unsigned long access_dom;
 	bool ret = false;
+	bool pathwalk_ref = false;
+	unsigned int rename_seqcount;
+	const struct landlock_rule *rule;
+	struct dentry *parent_dentry;
 
 	if (WARN_ON_ONCE(!domain || !mnt_root || !dir || !layer_masks_dom))
 		return true;
 	if (is_nouser_or_private(dir))
 		return true;
 
+	rcu_read_lock();
+
+restart_pathwalk:
 	access_dom = landlock_init_layer_masks(domain, LANDLOCK_MASK_ACCESS_FS,
 					       layer_masks_dom,
 					       LANDLOCK_KEY_INODE);
 
-	rcu_read_lock();
+	/*
+	 * Attempt to do a pathwalk without taking dentry references first, but
+	 * if any rename happens while we are doing this, give up and do a walk
+	 * with dget_parent instead.  This prevents wrong denials in the
+	 * presence of a move followed by an immediate rmdir of the old parent,
+	 * where even when both the original and the new parent has allow
+	 * rules, we might still hit a negative dentry (the deleted old parent)
+	 * and being unable to find either rules.
+	 */
+
+	if (!pathwalk_ref) {
+		rename_seqcount = read_seqbegin(&rename_lock);
+		if (rename_seqcount % 2 == 1) {
+			pathwalk_ref = true;
+			dget(dir);
+		}
+	} else {
+		dget(dir);
+	}
+	rule = find_rule_rcu(domain, dir);
+	/*
+	 * We don't need to check rename_seqcount here because we haven't
+	 * followed any d_parent yet, and the d_inode of the path being
+	 * accessed can't change under us as we have ref on path.dentry.  But
+	 * once we start walking up the path, we need to check the seqcount to
+	 * make sure the rule we got isn't based on a wrong/changing/negative
+	 * dentry.
+	 */
 
 	while (true) {
 		/* Gets all layers allowing all domain accesses. */
-		if (landlock_unmask_layers(find_rule_rcu(domain, dir), access_dom,
-					   layer_masks_dom,
+		if (landlock_unmask_layers(rule, access_dom, layer_masks_dom,
 					   ARRAY_SIZE(*layer_masks_dom))) {
 			/*
 			 * Stops when all handled accesses are allowed by at
@@ -1069,8 +1144,20 @@ static bool collect_domain_accesses(
 		if (dir == mnt_root || WARN_ON_ONCE(IS_ROOT(dir)))
 			break;
 
-		dir = dir->d_parent;
+		if (!pathwalk_ref) {
+			parent_dentry = dir->d_parent;
+			rule = find_rule_rcu(domain, dir);
+			if (read_seqretry(&rename_lock, rename_seqcount)) {
+				pathwalk_ref = true;
+				goto restart_pathwalk;
+			} else {
+				dir = parent_dentry;
+			}
+		}
 	}
+
+	if (pathwalk_ref)
+		dput(dir);
 
 	rcu_read_unlock();
 
