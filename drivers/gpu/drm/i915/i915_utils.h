@@ -69,6 +69,19 @@ bool i915_error_injected(void);
 		drm_err(&(i915)->drm, fmt, ##__VA_ARGS__); \
 })
 
+
+/**
+ * range_overflows() - Check if @start + @size > @max
+ * @start: start offset
+ * @size: length of the range
+ * @max: valid upper limit
+ *
+ * Helper for the common @start + @size > @max range or buffer overflow
+ * check. Return true if the addition exceeds max or overflows. Also return true
+ * if @start == @max, even if @size == 0.
+ *
+ * Returns: %true if the range overflows.
+ */
 #define range_overflows(start, size, max) ({ \
 	typeof(start) start__ = (start); \
 	typeof(size) size__ = (size); \
@@ -78,9 +91,30 @@ bool i915_error_injected(void);
 	start__ >= max__ || size__ > max__ - start__; \
 })
 
+/**
+ * range_overflows_t() - Check if @start + @size > @max
+ * @type: data type to use
+ * @start: start offset
+ * @size: length of the range
+ * @max: valid upper limit
+ *
+ * Same as range_overflows(), but using the specified @type.
+ *
+ * Returns: %true if the range overflows.
+ */
 #define range_overflows_t(type, start, size, max) \
 	range_overflows((type)(start), (type)(size), (type)(max))
 
+/**
+ * range_overflows_end() - Check if @start + @size > @max
+ * @start: start offset
+ * @size: length of the range
+ * @max: valid upper limit
+ *
+ * Same as range_overflows(), but allow @start == @max when @size == 0.
+ *
+ * Returns: %true if the range overflows.
+ */
 #define range_overflows_end(start, size, max) ({ \
 	typeof(start) start__ = (start); \
 	typeof(size) size__ = (size); \
@@ -90,6 +124,17 @@ bool i915_error_injected(void);
 	start__ > max__ || size__ > max__ - start__; \
 })
 
+/**
+ * range_overflows_end_t() - Check if @start + @size > @max
+ * @type: data type to use
+ * @start: start offset
+ * @size: length of the range
+ * @max: valid upper limit
+ *
+ * Same as range_overflows_end(), but using the specified @type.
+ *
+ * Returns: %true if the range overflows.
+ */
 #define range_overflows_end_t(type, start, size, max) \
 	range_overflows_end((type)(start), (type)(size), (type)(max))
 
