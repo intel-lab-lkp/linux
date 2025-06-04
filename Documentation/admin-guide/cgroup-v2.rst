@@ -435,6 +435,15 @@ both cgroups.
 Controlling Controllers
 -----------------------
 
+Availablity
+~~~~~~~~~~~
+
+A controller is available in a cgroup when it is supported by the kernel and
+listed in the "cgroup.controllers" file. Availability means the controller's
+interface files are exposed in the cgroup’s directory, allowing the
+distribution of the target resource to be observed or controlled within
+that cgroup.
+
 Enabling and Disabling
 ~~~~~~~~~~~~~~~~~~~~~~
 
