@@ -187,7 +187,7 @@ char *spk_default_chars[256] = {
  * initialized to default_chartab and user selectable via
  * /sys/module/speakup/parameters/chartab
  */
-u_short spk_chartab[256];
+u16 spk_chartab[256];
 
 static u_short default_chartab[256] = {
 	B_CTL, B_CTL, B_CTL, B_CTL, B_CTL, B_CTL, B_CTL, B_CTL,	/* 0-7 */
