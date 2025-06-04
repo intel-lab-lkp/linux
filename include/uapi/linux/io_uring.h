@@ -960,6 +960,11 @@ struct io_uring_recvmsg_out {
 	__u32 flags;
 };
 
+struct io_timespec {
+	__u64		tv_sec;
+	__u64		tv_nsec;
+};
+
 /*
  * Argument for IORING_OP_URING_CMD when file is a socket
  */
@@ -968,6 +973,7 @@ enum io_uring_socket_op {
 	SOCKET_URING_OP_SIOCOUTQ,
 	SOCKET_URING_OP_GETSOCKOPT,
 	SOCKET_URING_OP_SETSOCKOPT,
+	SOCKET_URING_OP_TX_TIMESTAMP,
 };
 
 /* Zero copy receive refill queue entry */
