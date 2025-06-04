@@ -738,6 +738,10 @@ struct cfs_rq {
 	struct list_head	throttled_csd_list;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	/* sched_entity on parent runqueue */
+	struct sched_entity	se ____cacheline_aligned;
+#endif
 };
 
 #ifdef CONFIG_SCHED_CLASS_EXT
