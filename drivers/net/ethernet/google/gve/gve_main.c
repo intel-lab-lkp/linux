@@ -1921,7 +1921,6 @@ static void gve_tx_timeout(struct net_device *dev, unsigned int txqueue)
 	struct gve_notify_block *block;
 	struct gve_tx_ring *tx = NULL;
 	struct gve_priv *priv;
-	u32 last_nic_done;
 	u32 current_time;
 	u32 ntfy_idx;
 
@@ -1941,17 +1940,10 @@ static void gve_tx_timeout(struct net_device *dev, unsigned int txqueue)
 	if (tx->last_kick_msec + MIN_TX_TIMEOUT_GAP > current_time)
 		goto reset;
 
-	/* Check to see if there are missed completions, which will allow us to
-	 * kick the queue.
-	 */
-	last_nic_done = gve_tx_load_event_counter(priv, tx);
-	if (last_nic_done - tx->done) {
-		netdev_info(dev, "Kicking queue %d", txqueue);
-		iowrite32be(GVE_IRQ_MASK, gve_irq_doorbell(priv, block));
-		napi_schedule(&block->napi);
-		tx->last_kick_msec = current_time;
-		goto out;
-	} // Else reset.
+	netdev_info(dev, "Kicking queue %d", txqueue);
+	napi_schedule(&block->napi);
+	tx->last_kick_msec = current_time;
+	goto out;
 
 reset:
 	gve_schedule_reset(priv);
