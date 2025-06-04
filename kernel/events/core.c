@@ -931,20 +931,20 @@ static void perf_cgroup_switch(struct task_struct *task)
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
 	struct perf_cgroup *cgrp;
 
+	cgrp = perf_cgroup_from_task(task, NULL);
+	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
 	/*
 	 * cpuctx->cgrp is set when the first cgroup event enabled,
 	 * and is cleared when the last cgroup event disabled.
 	 */
 	if (READ_ONCE(cpuctx->cgrp) == NULL)
-		return;
+		goto unlock;
 
 	WARN_ON_ONCE(cpuctx->ctx.nr_cgroups == 0);
 
-	cgrp = perf_cgroup_from_task(task, NULL);
 	if (READ_ONCE(cpuctx->cgrp) == cgrp)
-		return;
+		goto unlock;
 
-	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
 	perf_ctx_disable(&cpuctx->ctx, true);
 
 	ctx_sched_out(&cpuctx->ctx, NULL, EVENT_ALL|EVENT_CGROUP);
@@ -962,6 +962,7 @@ static void perf_cgroup_switch(struct task_struct *task)
 	ctx_sched_in(&cpuctx->ctx, NULL, EVENT_ALL|EVENT_CGROUP);
 
 	perf_ctx_enable(&cpuctx->ctx, true);
+unlock:
 	perf_ctx_unlock(cpuctx, cpuctx->task_ctx);
 }
 
