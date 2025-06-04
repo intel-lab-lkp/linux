@@ -206,6 +206,16 @@ All these controls needs admin privilege to update.
 	Update a new temperature target in milli degree celsius for hardware to
 	use for the temperature control.
 
+``gain`` (RW)
+	A value in the range 0-7. Sets the aggressiveness of control loop.
+	7 – graceful, favors performance at the expense of temperature overshoots.
+	0 – aggressive, favors tight regulation over performance.
+
+``min_performance_level`` (RW)
+	Minimum Performance level below which the there will be no throttling.
+	0 - all levels of throttling allowed including survivability actions.
+	256 - no throttling allowed.
+
 Given that this is platform temperature control, it is expected that a
 single user-level manager owns and manages the controls. If multiple
 user-level software applications attempt to write different targets, it

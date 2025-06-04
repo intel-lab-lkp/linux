@@ -49,7 +49,7 @@ struct mmio_reg {
 };
 
 #define MAX_ATTR_GROUP_NAME_LEN	32
-#define PTC_MAX_ATTRS		3
+#define PTC_MAX_ATTRS		5
 
 struct ptc_data {
 	u32 offset;
@@ -57,6 +57,8 @@ struct ptc_data {
 	struct attribute *ptc_attrs[PTC_MAX_ATTRS];
 	struct device_attribute temperature_target_attr;
 	struct device_attribute enable_attr;
+	struct device_attribute gain_attr;
+	struct device_attribute min_performance_level_attr;
 	char group_name[MAX_ATTR_GROUP_NAME_LEN];
 };
 
@@ -78,6 +80,8 @@ static u32 ptc_offsets[PTC_MAX_INSTANCES] = {0x5B20, 0x5B28, 0x5B30};
 static const char * const ptc_strings[] = {
 	"temperature_target",
 	"enable",
+	"gain",
+	"min_performance_level",
 	NULL
 };
 
@@ -177,6 +181,11 @@ PTC_SHOW(temperature_target);
 PTC_STORE(temperature_target);
 PTC_SHOW(enable);
 PTC_STORE(enable);
+PTC_SHOW(gain);
+PTC_STORE(gain);
+PTC_SHOW(min_performance_level);
+PTC_STORE(min_performance_level);
+
 
 #define ptc_init_attribute(_name)\
 	do {\
@@ -193,9 +202,13 @@ static int ptc_create_groups(struct pci_dev *pdev, int instance, struct ptc_data
 
 	ptc_init_attribute(temperature_target);
 	ptc_init_attribute(enable);
+	ptc_init_attribute(gain);
+	ptc_init_attribute(min_performance_level);
 
 	data->ptc_attrs[index++] = &data->temperature_target_attr.attr;
 	data->ptc_attrs[index++] = &data->enable_attr.attr;
+	data->ptc_attrs[index++] = &data->gain_attr.attr;
+	data->ptc_attrs[index++] = &data->min_performance_level_attr.attr;
 	data->ptc_attrs[index] = NULL;
 
 	snprintf(data->group_name, MAX_ATTR_GROUP_NAME_LEN,
