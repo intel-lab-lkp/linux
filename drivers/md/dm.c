@@ -1096,6 +1096,7 @@ void disable_write_zeroes(struct mapped_device *md)
 
 	/* device doesn't really support WRITE ZEROES, disable it */
 	limits->max_write_zeroes_sectors = 0;
+	limits->features &= ~BLK_FEAT_WRITE_ZEROES_UNMAP;
 }
 
 static bool swap_bios_limit(struct dm_target *ti, struct bio *bio)
