@@ -242,10 +242,61 @@ static const struct v4l2_frmsize_stepwise stepwise_fhd = {
 	.step_height = 16
 };
 
+static const char *state_to_str(enum mtk_vdec_request_state state)
+{
+	switch (state) {
+	case MTK_VDEC_REQUEST_RECEIVED:
+		return "RECEIVED";
+	case MTK_VDEC_REQUEST_LAT_DONE:
+		return "LAT_DONE";
+	case MTK_VDEC_REQUEST_CORE_DONE:
+		return "CORE_DONE";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static void mtk_vcodec_dec_request_complete(struct mtk_vcodec_dec_ctx *ctx,
+					    enum mtk_vdec_request_state state,
+					    enum vb2_buffer_state buffer_state,
+					    struct media_request *src_buf_req)
+{
+	struct mtk_vcodec_dec_request *req = req_to_dec_req(src_buf_req);
+	struct vb2_v4l2_buffer *src_buf, *dst_buf;
+
+	mutex_lock(&ctx->lock);
+
+	if (req->req_state >= state) {
+		mutex_unlock(&ctx->lock);
+		return;
+	}
+
+	switch (req->req_state) {
+	case MTK_VDEC_REQUEST_RECEIVED:
+		v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+		src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		v4l2_m2m_buf_done(src_buf, buffer_state);
+		if (state == MTK_VDEC_REQUEST_LAT_DONE)
+			break;
+		fallthrough;
+	case MTK_VDEC_REQUEST_LAT_DONE:
+		dst_buf = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
+		v4l2_m2m_buf_done(dst_buf, buffer_state);
+		media_request_manual_complete(src_buf_req);
+		break;
+	default:
+		break;
+	}
+
+	mtk_v4l2_vdec_dbg(3, ctx, "Switch state from %s to %s.\n",
+			  state_to_str(req->req_state), state_to_str(state));
+	req->req_state = state;
+	mutex_unlock(&ctx->lock);
+}
+
 static void mtk_vdec_stateless_cap_to_disp(struct mtk_vcodec_dec_ctx *ctx, int error,
 					   struct media_request *src_buf_req)
 {
-	struct vb2_v4l2_buffer *vb2_dst;
 	enum vb2_buffer_state state;
 
 	if (error)
@@ -253,17 +304,7 @@ static void mtk_vdec_stateless_cap_to_disp(struct mtk_vcodec_dec_ctx *ctx, int e
 	else
 		state = VB2_BUF_STATE_DONE;
 
-	vb2_dst = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
-	if (vb2_dst) {
-		v4l2_m2m_buf_done(vb2_dst, state);
-		mtk_v4l2_vdec_dbg(2, ctx, "free frame buffer id:%d to done list",
-				  vb2_dst->vb2_buf.index);
-	} else {
-		mtk_v4l2_vdec_err(ctx, "dst buffer is NULL");
-	}
-
-	if (src_buf_req)
-		v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+	mtk_vcodec_dec_request_complete(ctx, MTK_VDEC_REQUEST_CORE_DONE, state, src_buf_req);
 }
 
 static struct vdec_fb *vdec_get_cap_buffer(struct mtk_vcodec_dec_ctx *ctx)
@@ -306,6 +347,7 @@ static void vb2ops_vdec_buf_request_complete(struct vb2_buffer *vb)
 	struct mtk_vcodec_dec_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	v4l2_ctrl_request_complete(vb->req_obj.req, &ctx->ctrl_hdl);
+	media_request_manual_complete(vb->req_obj.req);
 }
 
 static void mtk_vdec_worker(struct work_struct *work)
@@ -318,7 +360,8 @@ static void mtk_vdec_worker(struct work_struct *work)
 	struct mtk_vcodec_mem *bs_src;
 	struct mtk_video_dec_buf *dec_buf_src;
 	struct media_request *src_buf_req;
-	enum vb2_buffer_state state;
+	enum mtk_vdec_request_state req_state;
+	enum vb2_buffer_state buf_state;
 	bool res_chg = false;
 	int ret;
 
@@ -351,37 +394,43 @@ static void mtk_vdec_worker(struct work_struct *work)
 			  ctx->id, bs_src->va, &bs_src->dma_addr, bs_src->size, vb2_src);
 	/* Apply request controls. */
 	src_buf_req = vb2_src->req_obj.req;
-	if (src_buf_req)
-		v4l2_ctrl_request_setup(src_buf_req, &ctx->ctrl_hdl);
-	else
+	if (WARN_ON(!src_buf_req)) {
+		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		mtk_v4l2_vdec_err(ctx, "vb2 buffer media request is NULL");
+		return;
+	}
+	v4l2_ctrl_request_setup(src_buf_req, &ctx->ctrl_hdl);
 
 	ret = vdec_if_decode(ctx, bs_src, NULL, &res_chg);
-	if (ret && ret != -EAGAIN) {
+
+	if (ret == -EAGAIN) {
+		buf_state = VB2_BUF_STATE_DONE;
+		req_state = MTK_VDEC_REQUEST_RECEIVED;
+	} else if (ret) {
 		mtk_v4l2_vdec_err(ctx,
-				  "[%d] decode src_buf[%d] sz=0x%zx pts=%llu ret=%d res_chg=%d",
+				  "[%d] decode src_buf[%d] sz=0x%zx pts=%llu res_chg=%d ret=%d",
 				  ctx->id, vb2_src->index, bs_src->size,
-				  vb2_src->timestamp, ret, res_chg);
+				  vb2_src->timestamp, res_chg, ret);
 		if (ret == -EIO) {
 			mutex_lock(&ctx->lock);
 			dec_buf_src->error = true;
 			mutex_unlock(&ctx->lock);
 		}
+
+		buf_state = VB2_BUF_STATE_ERROR;
+		req_state = MTK_VDEC_REQUEST_CORE_DONE;
+	} else {
+		buf_state = VB2_BUF_STATE_DONE;
+
+		if (!IS_VDEC_LAT_ARCH(dev->vdec_pdata->hw_arch) ||
+		    ctx->current_codec == V4L2_PIX_FMT_VP8_FRAME)
+			req_state = MTK_VDEC_REQUEST_CORE_DONE;
+		else
+			req_state = MTK_VDEC_REQUEST_LAT_DONE;
 	}
 
-	state = ret ? VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE;
-	if (!IS_VDEC_LAT_ARCH(dev->vdec_pdata->hw_arch) ||
-	    ctx->current_codec == V4L2_PIX_FMT_VP8_FRAME) {
-		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx, state);
-		if (src_buf_req)
-			v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
-	} else {
-		if (ret != -EAGAIN) {
-			v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-			v4l2_m2m_buf_done(vb2_v4l2_src, state);
-		}
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
-	}
+	mtk_vcodec_dec_request_complete(ctx, req_state, buf_state, src_buf_req);
+	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 }
 
 static void vb2ops_vdec_stateless_buf_queue(struct vb2_buffer *vb)
@@ -709,6 +758,22 @@ static int mtk_vcodec_dec_ctrls_setup(struct mtk_vcodec_dec_ctx *ctx)
 	return 0;
 }
 
+static struct media_request *fops_media_request_alloc(struct media_device *mdev)
+{
+	struct mtk_vcodec_dec_request *req;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+
+	return &req->req;
+}
+
+static void fops_media_request_free(struct media_request *mreq)
+{
+	struct mtk_vcodec_dec_request *req = req_to_dec_req(mreq);
+
+	kfree(req);
+}
+
 static int fops_media_request_validate(struct media_request *mreq)
 {
 	const unsigned int buffer_cnt = vb2_request_buffer_cnt(mreq);
@@ -729,9 +794,20 @@ static int fops_media_request_validate(struct media_request *mreq)
 	return vb2_request_validate(mreq);
 }
 
+static void fops_media_request_queue(struct media_request *mreq)
+{
+	struct mtk_vcodec_dec_request *req = req_to_dec_req(mreq);
+
+	media_request_mark_manual_completion(mreq);
+	req->req_state = MTK_VDEC_REQUEST_RECEIVED;
+	v4l2_m2m_request_queue(mreq);
+}
+
 const struct media_device_ops mtk_vcodec_media_ops = {
+	.req_alloc      = fops_media_request_alloc,
+	.req_free      = fops_media_request_free,
 	.req_validate	= fops_media_request_validate,
-	.req_queue	= v4l2_m2m_request_queue,
+	.req_queue	= fops_media_request_queue,
 };
 
 static void mtk_vcodec_add_formats(unsigned int fourcc,

@@ -65,6 +65,19 @@ enum mtk_vdec_hw_arch {
 };
 
 /**
+ * enum mtk_vdec_request_state - Stages of processing a request
+ * @MTK_VDEC_REQUEST_RECEIVED: Hardware prepared for the LAT decode
+ * @MTK_VDEC_REQUEST_LAT_DONE: LAT decode finished, the bitstream is not
+ *		      needed anymore
+ * @MTK_VDEC_REQUEST_CORE_DONE: CORE decode finished
+ */
+enum mtk_vdec_request_state {
+	MTK_VDEC_REQUEST_RECEIVED = 0,
+	MTK_VDEC_REQUEST_LAT_DONE = 1,
+	MTK_VDEC_REQUEST_CORE_DONE = 2,
+};
+
+/**
  * struct vdec_pic_info  - picture size information
  * @pic_w: picture width
  * @pic_h: picture height
@@ -126,6 +139,17 @@ struct mtk_vcodec_dec_pdata {
 
 	bool is_subdev_supported;
 	bool uses_stateless_api;
+};
+
+/**
+ * struct mtk_vcodec_dec_request - Media request private data.
+ *
+ * @req_state: Request completion state
+ * @req: Media Request structure
+ */
+struct mtk_vcodec_dec_request {
+	enum mtk_vdec_request_state req_state;
+	struct media_request req;
 };
 
 /**
@@ -317,6 +341,11 @@ static inline struct mtk_vcodec_dec_ctx *fh_to_dec_ctx(struct v4l2_fh *fh)
 static inline struct mtk_vcodec_dec_ctx *ctrl_to_dec_ctx(struct v4l2_ctrl *ctrl)
 {
 	return container_of(ctrl->handler, struct mtk_vcodec_dec_ctx, ctrl_hdl);
+}
+
+static inline struct mtk_vcodec_dec_request *req_to_dec_req(struct media_request *req)
+{
+	return container_of(req, struct mtk_vcodec_dec_request, req);
 }
 
 /* Wake up context wait_queue */
