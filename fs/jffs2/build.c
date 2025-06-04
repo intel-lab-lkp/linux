@@ -185,8 +185,10 @@ static int jffs2_build_filesystem(struct jffs2_sb_info *c)
 			 * one. */
 			if (fd->type == DT_DIR) {
 				if (!fd->ic) {
-					/* We'll have complained about it and marked the coresponding
-					   raw node obsolete already. Just skip it. */
+					/* We'll have complained about it
+					 * and marked the corresponding raw node obsolete already.
+					 * Just skip it.
+					 */
 					continue;
 				}
 
