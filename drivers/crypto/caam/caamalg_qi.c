@@ -1435,7 +1435,7 @@ static inline int skcipher_crypt(struct skcipher_request *req, bool encrypt)
 
 	if (ctx->fallback && ((ctrlpriv->era <= 8 && xts_skcipher_ivsize(req)) ||
 			      ctx->xts_key_fallback)) {
-		struct caam_skcipher_req_ctx *rctx = skcipher_request_ctx(req);
+		struct caam_skcipher_req_ctx *rctx = skcipher_request_ctx_dma(req);
 
 		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
 		skcipher_request_set_callback(&rctx->fallback_req,
@@ -2524,7 +2524,7 @@ static int caam_cra_init(struct crypto_skcipher *tfm)
 		}
 
 		ctx->fallback = fallback;
-		crypto_skcipher_set_reqsize(tfm, sizeof(struct caam_skcipher_req_ctx) +
+		crypto_skcipher_set_reqsize_dma(tfm, sizeof(struct caam_skcipher_req_ctx) +
 					    crypto_skcipher_reqsize(fallback));
 	}
 
