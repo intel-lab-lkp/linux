@@ -1117,6 +1117,8 @@ void clear_local_APIC(void)
 	}
 #endif
 
+	// Mask IPI here
+
 	/*
 	 * Clean APIC state for other OSs:
 	 */
