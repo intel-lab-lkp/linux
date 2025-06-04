@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/linkage.h>
+#include <linux/cfi_types.h>
 #include <asm/frame.h>
 
 #include "tdxcall.S"
@@ -18,7 +19,7 @@
  * Return (via RAX) TDX_SEAMCALL_VMFAILINVALID if the SEAMCALL itself
  * fails, or the completion status of the SEAMCALL leaf function.
  */
-SYM_FUNC_START(__seamcall)
+SYM_TYPED_FUNC_START(__seamcall)
 	TDX_MODULE_CALL host=1
 SYM_FUNC_END(__seamcall)
 
@@ -37,7 +38,7 @@ SYM_FUNC_END(__seamcall)
  * Return (via RAX) TDX_SEAMCALL_VMFAILINVALID if the SEAMCALL itself
  * fails, or the completion status of the SEAMCALL leaf function.
  */
-SYM_FUNC_START(__seamcall_ret)
+SYM_TYPED_FUNC_START(__seamcall_ret)
 	TDX_MODULE_CALL host=1 ret=1
 SYM_FUNC_END(__seamcall_ret)
 
@@ -59,6 +60,6 @@ SYM_FUNC_END(__seamcall_ret)
  * Return (via RAX) TDX_SEAMCALL_VMFAILINVALID if the SEAMCALL itself
  * fails, or the completion status of the SEAMCALL leaf function.
  */
-SYM_FUNC_START(__seamcall_saved_ret)
+SYM_TYPED_FUNC_START(__seamcall_saved_ret)
 	TDX_MODULE_CALL host=1 ret=1 saved=1
 SYM_FUNC_END(__seamcall_saved_ret)
