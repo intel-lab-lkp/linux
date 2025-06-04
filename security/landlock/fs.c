@@ -361,7 +361,7 @@ int landlock_append_fs_rule(struct landlock_ruleset *const ruleset,
  * Returns NULL if no rule is found or if @dentry is negative.
  */
 static const struct landlock_rule *
-find_rule(const struct landlock_ruleset *const domain,
+find_rule_rcu(const struct landlock_ruleset *const domain,
 	  const struct dentry *const dentry)
 {
 	const struct landlock_rule *rule;
@@ -375,10 +375,10 @@ find_rule(const struct landlock_ruleset *const domain,
 		return NULL;
 
 	inode = d_backing_inode(dentry);
-	rcu_read_lock();
+	if (unlikely(!inode))
+		return NULL;
 	id.key.object = rcu_dereference(landlock_inode(inode)->object);
 	rule = landlock_find_rule(domain, id);
-	rcu_read_unlock();
 	return rule;
 }
 
@@ -809,9 +809,11 @@ static bool is_access_to_paths_allowed(
 		is_dom_check = false;
 	}
 
+	rcu_read_lock();
+
 	if (unlikely(dentry_child1)) {
 		landlock_unmask_layers(
-			find_rule(domain, dentry_child1),
+			find_rule_rcu(domain, dentry_child1),
 			landlock_init_layer_masks(
 				domain, LANDLOCK_MASK_ACCESS_FS,
 				&_layer_masks_child1, LANDLOCK_KEY_INODE),
@@ -821,7 +823,7 @@ static bool is_access_to_paths_allowed(
 	}
 	if (unlikely(dentry_child2)) {
 		landlock_unmask_layers(
-			find_rule(domain, dentry_child2),
+			find_rule_rcu(domain, dentry_child2),
 			landlock_init_layer_masks(
 				domain, LANDLOCK_MASK_ACCESS_FS,
 				&_layer_masks_child2, LANDLOCK_KEY_INODE),
@@ -831,7 +833,6 @@ static bool is_access_to_paths_allowed(
 	}
 
 	walker_path = *path;
-	path_get(&walker_path);
 	/*
 	 * We need to walk through all the hierarchy to not miss any relevant
 	 * restriction.
@@ -880,7 +881,7 @@ static bool is_access_to_paths_allowed(
 				break;
 		}
 
-		rule = find_rule(domain, walker_path.dentry);
+		rule = find_rule_rcu(domain, walker_path.dentry);
 		allowed_parent1 = allowed_parent1 ||
 				  landlock_unmask_layers(
 					  rule, access_masked_parent1,
@@ -897,10 +898,14 @@ static bool is_access_to_paths_allowed(
 			break;
 jump_up:
 		if (walker_path.dentry == walker_path.mnt->mnt_root) {
+			/* follow_up gets the parent and puts the passed in path */
+			path_get(&walker_path);
 			if (follow_up(&walker_path)) {
+				path_put(&walker_path);
 				/* Ignores hidden mount points. */
 				goto jump_up;
 			} else {
+				path_put(&walker_path);
 				/*
 				 * Stops at the real root.  Denies access
 				 * because not all layers have granted access.
@@ -920,11 +925,11 @@ jump_up:
 			}
 			break;
 		}
-		parent_dentry = dget_parent(walker_path.dentry);
-		dput(walker_path.dentry);
+		parent_dentry = walker_path.dentry->d_parent;
 		walker_path.dentry = parent_dentry;
 	}
-	path_put(&walker_path);
+
+	rcu_read_unlock();
 
 	if (!allowed_parent1) {
 		log_request_parent1->type = LANDLOCK_REQUEST_FS_ACCESS;
@@ -1045,12 +1050,11 @@ static bool collect_domain_accesses(
 					       layer_masks_dom,
 					       LANDLOCK_KEY_INODE);
 
-	dget(dir);
-	while (true) {
-		struct dentry *parent_dentry;
+	rcu_read_lock();
 
+	while (true) {
 		/* Gets all layers allowing all domain accesses. */
-		if (landlock_unmask_layers(find_rule(domain, dir), access_dom,
+		if (landlock_unmask_layers(find_rule_rcu(domain, dir), access_dom,
 					   layer_masks_dom,
 					   ARRAY_SIZE(*layer_masks_dom))) {
 			/*
@@ -1065,11 +1069,11 @@ static bool collect_domain_accesses(
 		if (dir == mnt_root || WARN_ON_ONCE(IS_ROOT(dir)))
 			break;
 
-		parent_dentry = dget_parent(dir);
-		dput(dir);
-		dir = parent_dentry;
+		dir = dir->d_parent;
 	}
-	dput(dir);
+
+	rcu_read_unlock();
+
 	return ret;
 }
 
