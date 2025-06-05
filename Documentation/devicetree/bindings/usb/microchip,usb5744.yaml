@@ -52,6 +52,16 @@ properties:
     description:
       phandle of an usb hub connected via i2c bus.
 
+  reset-delay-us:
+    description:
+      RESET pulse width in microseconds.
+
+  power-on-delay-us:
+    description:
+      Delay after power on in microseconds. USB5744 Hub requires some
+      delay after reset to get to state when SMBus configuration
+      data is going to be accepted.
+
 required:
   - compatible
   - reg
@@ -69,6 +79,8 @@ allOf:
         vdd2-supply: false
         peer-hub: false
         i2c-bus: false
+        reset-delay-us: false
+        power-on-delay-us: false
     else:
       $ref: /schemas/usb/usb-device.yaml
 
