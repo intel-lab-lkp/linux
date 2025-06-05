@@ -470,6 +470,24 @@ struct cxl_cedt_context {
 	struct device *dev;
 };
 
+static int mock_hmat_get_extended_linear_cache_size(struct device *dev,
+						    struct resource *backing_res,
+						    int nid, resource_size_t *size)
+{
+	struct cxl_decoder *cxld;
+	struct cxl_port *port;
+
+	if (!is_root_decoder(dev))
+		return -EINVAL;
+
+	cxld = to_cxl_decoder(dev);
+	port = to_cxl_port(cxld->dev.parent);
+	if (is_mock_port(&port->dev))
+		return -EOPNOTSUPP;
+
+	return hmat_get_extended_linear_cache_size(dev, backing_res, nid, size);
+}
+
 static int mock_acpi_table_parse_cedt(enum acpi_cedt_type id,
 				      acpi_tbl_entry_handler_arg handler_arg,
 				      void *arg)
@@ -1040,6 +1058,8 @@ static struct cxl_mock_ops cxl_mock_ops = {
 	.devm_cxl_enumerate_decoders = mock_cxl_enumerate_decoders,
 	.cxl_endpoint_parse_cdat = mock_cxl_endpoint_parse_cdat,
 	.list = LIST_HEAD_INIT(cxl_mock_ops.list),
+	.hmat_get_extended_linear_cache_size =
+		mock_hmat_get_extended_linear_cache_size,
 };
 
 static void mock_companion(struct acpi_device *adev, struct device *dev)

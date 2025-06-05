@@ -1095,10 +1095,12 @@ static inline acpi_handle acpi_get_processor_handle(int cpu)
 #endif	/* !CONFIG_ACPI */
 
 #ifdef CONFIG_ACPI_HMAT
-int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
+int hmat_get_extended_linear_cache_size(struct device *dev,
+					struct resource *backing_res, int nid,
 					resource_size_t *size);
 #else
-static inline int hmat_get_extended_linear_cache_size(struct resource *backing_res,
+static inline int hmat_get_extended_linear_cache_size(struct device *dev,
+						      struct resource *backing_res,
 						      int nid, resource_size_t *size)
 {
 	return -EOPNOTSUPP;

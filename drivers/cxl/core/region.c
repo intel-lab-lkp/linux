@@ -3239,7 +3239,11 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 	resource_size_t cache_size, start;
 	int rc;
 
-	rc = cxl_acpi_get_extended_linear_cache_size(res, nid, &cache_size);
+	if (!cxlrd->ops || !cxlrd->ops->get_extended_linear_cache_size)
+		return -EOPNOTSUPP;
+
+	rc = cxlrd->ops->get_extended_linear_cache_size(cxlrd, res, nid,
+							&cache_size);
 	if (rc)
 		return rc;
 
