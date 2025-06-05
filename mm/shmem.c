@@ -121,8 +121,10 @@ struct shmem_options {
 	int huge;
 	int seen;
 	bool noswap;
+#ifdef CONFIG_TMPFS_QUOTA
 	unsigned short quota_types;
 	struct shmem_quota_limits qlimits;
+#endif
 #if IS_ENABLED(CONFIG_UNICODE)
 	struct unicode_map *encoding;
 	bool strict_encoding;
@@ -132,7 +134,9 @@ struct shmem_options {
 #define SHMEM_SEEN_HUGE 4
 #define SHMEM_SEEN_INUMS 8
 #define SHMEM_SEEN_NOSWAP 16
+#ifdef CONFIG_TMPFS_QUOTA
 #define SHMEM_SEEN_QUOTA 32
+#endif
 };
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -4546,6 +4550,7 @@ enum shmem_param {
 	Opt_inode32,
 	Opt_inode64,
 	Opt_noswap,
+#ifdef CONFIG_TMPFS_QUOTA
 	Opt_quota,
 	Opt_usrquota,
 	Opt_grpquota,
@@ -4553,6 +4558,7 @@ enum shmem_param {
 	Opt_usrquota_inode_hardlimit,
 	Opt_grpquota_block_hardlimit,
 	Opt_grpquota_inode_hardlimit,
+#endif
 	Opt_casefold_version,
 	Opt_casefold,
 	Opt_strict_encoding,
@@ -4739,6 +4745,7 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 		ctx->noswap = true;
 		ctx->seen |= SHMEM_SEEN_NOSWAP;
 		break;
+#ifdef CONFIG_TMPFS_QUOTA
 	case Opt_quota:
 		if (fc->user_ns != &init_user_ns)
 			return invalfc(fc, "Quotas in unprivileged tmpfs mounts are unsupported");
@@ -4793,6 +4800,7 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 				       "Group quota inode hardlimit too large.");
 		ctx->qlimits.grpquota_ihardlimit = size;
 		break;
+#endif
 	case Opt_casefold_version:
 		return shmem_parse_opt_casefold(fc, param, false);
 	case Opt_casefold:
@@ -4896,13 +4904,13 @@ static int shmem_reconfigure(struct fs_context *fc)
 		goto out;
 	}
 
+#ifdef CONFIG_TMPFS_QUOTA
 	if (ctx->seen & SHMEM_SEEN_QUOTA &&
 	    !sb_any_quota_loaded(fc->root->d_sb)) {
 		err = "Cannot enable quota on remount";
 		goto out;
 	}
 
-#ifdef CONFIG_TMPFS_QUOTA
 #define CHANGED_LIMIT(name)						\
 	(ctx->qlimits.name## hardlimit &&				\
 	(ctx->qlimits.name## hardlimit != sbinfo->qlimits.name## hardlimit))
