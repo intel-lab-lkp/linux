@@ -9122,12 +9122,6 @@ cpu_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		return &root_task_group.css;
 	}
 
-	/* Do not allow cpu_cgroup hierachies with depth greater than 2. */
-#ifdef CONFIG_RT_GROUP_SCHED
-	if (parent != &root_task_group)
-		return ERR_PTR(-EINVAL);
-#endif
-
 	tg = sched_create_group(parent);
 	if (IS_ERR(tg))
 		return ERR_PTR(-ENOMEM);

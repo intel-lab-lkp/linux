@@ -630,6 +630,10 @@ change:
 
 	if (user) {
 #ifdef CONFIG_RT_GROUP_SCHED
+		if (dl_bandwidth_enabled() && rt_policy(policy) && !sched_rt_can_attach(task_group(p), p)) {
+			retval = -EPERM;
+			goto unlock;
+		}
 		/*
 		 * Do not allow real-time tasks into groups that have no runtime
 		 * assigned.

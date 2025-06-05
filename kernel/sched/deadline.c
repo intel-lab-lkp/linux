@@ -414,10 +414,39 @@ int dl_check_tg(unsigned long total)
 	return 1;
 }
 
-int dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
+static inline bool is_active_sched_group(struct task_group *tg)
 {
+	struct task_group *child;
+	bool is_active = 1;
+
+	// if there are no children, this is a leaf group, thus it is active
+	list_for_each_entry_rcu(child, &tg->children, siblings) {
+		if (child->dl_bandwidth.dl_runtime > 0) {
+			is_active = 0;
+		}
+	}
+	return is_active;
+}
+
+static inline bool sched_group_has_active_siblings(struct task_group *tg)
+{
+	struct task_group *child;
+	bool has_active_siblings = 0;
+
+	// if there are no children, this is a leaf group, thus it is active
+	list_for_each_entry_rcu(child, &tg->parent->children, siblings) {
+		if (child != tg && child->dl_bandwidth.dl_runtime > 0) {
+			has_active_siblings = 1;
+		}
+	}
+	return has_active_siblings;
+}
+
+int dl_init_tg(struct task_group *tg, int cpu, u64 rt_runtime, u64 rt_period)
+{
+	struct sched_dl_entity *dl_se = tg->dl_se[cpu];
 	struct rq *rq = container_of(dl_se->dl_rq, struct rq, dl);
-	int is_active;
+	int is_active, is_active_group;
 	u64 old_runtime;
 
 	/*
@@ -434,24 +463,40 @@ int dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
 	if (rt_period & (1ULL << 63))
 		return 0;
 
+	is_active_group = is_active_sched_group(tg);
+
 	raw_spin_rq_lock_irq(rq);
 	is_active = dl_se->my_q->rt.rt_nr_running > 0;
 	old_runtime = dl_se->dl_runtime;
 	dl_se->dl_runtime  = rt_runtime;
 	dl_se->dl_period   = rt_period;
 	dl_se->dl_deadline = dl_se->dl_period;
-	if (is_active) {
-		sub_running_bw(dl_se, dl_se->dl_rq);
-	} else if (dl_se->dl_non_contending) {
-		sub_running_bw(dl_se, dl_se->dl_rq);
-		dl_se->dl_non_contending = 0;
-		hrtimer_try_to_cancel(&dl_se->inactive_timer);
+	if (is_active_group) {
+		if (is_active) {
+			sub_running_bw(dl_se, dl_se->dl_rq);
+		} else if (dl_se->dl_non_contending) {
+			sub_running_bw(dl_se, dl_se->dl_rq);
+			dl_se->dl_non_contending = 0;
+			hrtimer_try_to_cancel(&dl_se->inactive_timer);
+		}
+		__sub_rq_bw(dl_se->dl_bw, dl_se->dl_rq);
+		dl_se->dl_bw = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
+		__add_rq_bw(dl_se->dl_bw, dl_se->dl_rq);
+	} else {
+		dl_se->dl_bw = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
 	}
-	__sub_rq_bw(dl_se->dl_bw, dl_se->dl_rq);
-	dl_se->dl_bw = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
-	__add_rq_bw(dl_se->dl_bw, dl_se->dl_rq);
 
-	if (is_active)
+	// add/remove the parent's bw
+	if (tg->parent && tg->parent != &root_task_group)
+	{
+		if (rt_runtime == 0 && old_runtime != 0 && !sched_group_has_active_siblings(tg)) {
+			__add_rq_bw(tg->parent->dl_se[cpu]->dl_bw, dl_se->dl_rq);
+		} else if (rt_runtime != 0 && old_runtime == 0 && !sched_group_has_active_siblings(tg)) {
+			__sub_rq_bw(tg->parent->dl_se[cpu]->dl_bw, dl_se->dl_rq);
+		}
+	}
+
+	if (is_active_group && is_active)
 		add_running_bw(dl_se, dl_se->dl_rq);
 
 	raw_spin_rq_unlock_irq(rq);
