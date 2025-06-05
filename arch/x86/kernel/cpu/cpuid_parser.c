@@ -22,10 +22,29 @@ static void cpuid_read_generic(const struct cpuid_parse_entry *e, struct cpuid_r
 		cpuid_read_subleaf(e->leaf, e->subleaf + i, output->regs);
 }
 
+static void cpuid_read_0x80000000(const struct cpuid_parse_entry *e, struct cpuid_read_output *output)
+{
+	struct leaf_0x80000000_0 *el0 = (struct leaf_0x80000000_0 *)output->regs;
+
+	cpuid_read_subleaf(e->leaf, e->subleaf, el0);
+
+	/*
+	 * Protect against 32-bit CPUs lacking extended CPUID support: Max
+	 * extended CPUID leaf must be in the 0x80000001-0x8000ffff range.
+	 */
+	if ((el0->max_ext_leaf & 0xffff0000) != 0x80000000) {
+		*el0 = (struct leaf_0x80000000_0){ };
+		return;
+	}
+
+	output->info->nr_entries = 1;
+}
+
 static unsigned int cpuid_range_max_leaf(const struct cpuid_leaves *l, unsigned int range)
 {
 	switch (range) {
 	case CPUID_BASE_START:	return __cpuid_leaves_subleaf_0(l, 0x0).max_std_leaf;
+	case CPUID_EXT_START:   return __cpuid_leaves_subleaf_0(l, 0x80000000).max_ext_leaf;
 	default:		return 0;
 	}
 }
@@ -41,7 +60,8 @@ cpuid_range_valid(const struct cpuid_leaves *l, unsigned int leaf, unsigned int 
 
 static bool cpuid_leaf_valid(const struct cpuid_leaves *l, unsigned int leaf)
 {
-	return cpuid_range_valid(l, leaf, CPUID_BASE_START, CPUID_BASE_END);
+	return	cpuid_range_valid(l, leaf, CPUID_BASE_START, CPUID_BASE_END) ||
+		cpuid_range_valid(l, leaf, CPUID_EXT_START, CPUID_EXT_END);
 }
 
 static const struct cpuid_parse_entry cpuid_common_parse_entries[] = {
