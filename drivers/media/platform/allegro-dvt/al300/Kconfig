@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config VIDEO_ALLEGRO_DVT_D300
+	tristate "Allegro DVT Video IP Decode Gen 3"
+	depends on V4L_MEM2MEM_DRIVERS
+	depends on VIDEO_DEV && OF && HAS_DMA
+	select V4L2_MEM2MEM_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  This is a video4linux2 driver for the Allegro DVT IP Decode Gen 3,
+	  that support codecs : AVC (H.264), HEVC (H.265), and JPEG.
+
+	  The driver provides hardware acceleration for video decoding operations,
+	  enabling efficient processing of compressed video streams on platforms
+	  featuring this IP block. It handles memory management, buffer allocation,
+	  and decoder command sequencing to deliver optimized performance.
+
+	  The driver integrates with the V4L2 framework and videobuf2 subsystem
+	  to provide a standard interface for applications requiring video
+	  decoding capabilities.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called al300-vdec.
