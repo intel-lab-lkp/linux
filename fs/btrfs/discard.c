@@ -698,6 +698,15 @@ void btrfs_discard_punt_unused_bgs_list(struct btrfs_fs_info *fs_info)
 	/* We enabled async discard, so punt all to the queue */
 	list_for_each_entry_safe(block_group, next, &fs_info->unused_bgs,
 				 bg_list) {
+		/* Fully remapped BGs have nothing to discard */
+		spin_lock(&block_group->lock);
+		if (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED &&
+		    !btrfs_is_block_group_used(block_group)) {
+			spin_unlock(&block_group->lock);
+			continue;
+		}
+		spin_unlock(&block_group->lock);
+
 		list_del_init(&block_group->bg_list);
 		btrfs_discard_queue_work(&fs_info->discard_ctl, block_group);
 		/*
