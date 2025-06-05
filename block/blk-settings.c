@@ -593,11 +593,13 @@ static bool blk_stack_atomic_writes_boundary_head(struct queue_limits *t,
 static bool blk_stack_atomic_writes_head(struct queue_limits *t,
 				struct queue_limits *b)
 {
+	unsigned int chunk_size = t->chunk_sectors << SECTOR_SHIFT;
+
 	if (b->atomic_write_hw_boundary &&
 	    !blk_stack_atomic_writes_boundary_head(t, b))
 		return false;
 
-	if (t->io_min <= SECTOR_SIZE) {
+	if (!t->chunk_sectors) {
 		/* No chunk sectors, so use bottom device values directly */
 		t->atomic_write_hw_unit_max = b->atomic_write_hw_unit_max;
 		t->atomic_write_hw_unit_min = b->atomic_write_hw_unit_min;
@@ -616,12 +618,12 @@ static bool blk_stack_atomic_writes_head(struct queue_limits *t,
 	 * aligned with both limits, i.e. 8K in this example.
 	 */
 	t->atomic_write_hw_unit_max = b->atomic_write_hw_unit_max;
-	while (t->io_min % t->atomic_write_hw_unit_max)
+	while (chunk_size % t->atomic_write_hw_unit_max)
 		t->atomic_write_hw_unit_max /= 2;
 
 	t->atomic_write_hw_unit_min = min(b->atomic_write_hw_unit_min,
 					  t->atomic_write_hw_unit_max);
-	t->atomic_write_hw_max = min(b->atomic_write_hw_max, t->io_min);
+	t->atomic_write_hw_max = min(b->atomic_write_hw_max, chunk_size);
 
 	return true;
 }
