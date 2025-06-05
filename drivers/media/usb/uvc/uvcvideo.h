@@ -45,6 +45,11 @@
 #define UVC_SWENTITY_UNIT		0x7ffd
 #define UVC_SWENTITY_UNIT_ID		0x101
 
+enum {
+	UVC_SWENTITY_ORIENTATION,
+	UVC_SWENTITY_ROTATION
+};
+
 /* ------------------------------------------------------------------------
  * Driver specific constants.
  */
