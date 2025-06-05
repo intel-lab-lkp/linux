@@ -2803,6 +2803,10 @@ static struct module *layout_and_allocate(struct load_info *info, int flags)
 	if (err)
 		return ERR_PTR(err);
 
+	/* Add SHF_ALLOC back so that relocations are applied. */
+	if (IS_ENABLED(CONFIG_SMP) && info->index.pcpu)
+		info->sechdrs[info->index.pcpu].sh_flags |= SHF_ALLOC;
+
 	/* Module has been copied to its final place now: return it. */
 	mod = (void *)info->sechdrs[info->index.mod].sh_addr;
 	kmemleak_load_module(mod, info);
