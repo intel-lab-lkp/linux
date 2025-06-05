@@ -1777,9 +1777,7 @@ static void arcmsr_shutdown(struct pci_dev *pdev)
 
 static int __init arcmsr_module_init(void)
 {
-	int error = 0;
-	error = pci_register_driver(&arcmsr_pci_driver);
-	return error;
+	return pci_register_driver(&arcmsr_pci_driver);
 }
 
 static void __exit arcmsr_module_exit(void)
