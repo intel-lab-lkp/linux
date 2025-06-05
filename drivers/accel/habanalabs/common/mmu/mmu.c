@@ -844,7 +844,7 @@ int hl_mmu_hr_init(struct hl_device *hdev, struct hl_mmu_hr_priv *hr_priv, u32 h
 	}
 
 	hr_priv->mmu_asid_hop0 = kvcalloc(prop->max_asid, sizeof(struct pgt_info), GFP_KERNEL);
-	if (ZERO_OR_NULL_PTR(hr_priv->mmu_asid_hop0)) {
+	if (!(hr_priv->mmu_asid_hop0)) {
 		dev_err(hdev->dev, "Failed to allocate hr-mmu hop0 table\n");
 		rc = -ENOMEM;
 		goto destroy_mmu_pgt_pool;
