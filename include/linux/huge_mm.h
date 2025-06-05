@@ -287,20 +287,35 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 				       unsigned long orders)
 {
 	/* Optimization to check if required orders are enabled early. */
-	if ((tva_flags & TVA_ENFORCE_SYSFS) && vma_is_anonymous(vma)) {
-		unsigned long mask = READ_ONCE(huge_anon_orders_always);
+	if (vma_is_anonymous(vma)) {
+		unsigned long always = READ_ONCE(huge_anon_orders_always);
+		unsigned long madvise = READ_ONCE(huge_anon_orders_madvise);
+		unsigned long inherit = READ_ONCE(huge_anon_orders_inherit);
+		unsigned long mask = always | madvise;
 
+		/*
+		 * If the system-wide THP/mTHP sysfs settings are disabled,
+		 * then we should never allow hugepages.
+		 */
+		if (!(mask & orders) && !(hugepage_global_enabled() && (inherit & orders)))
+			return 0;
+
+		if (!(tva_flags & TVA_ENFORCE_SYSFS))
+			goto skip;
+
+		mask = always;
 		if (vm_flags & VM_HUGEPAGE)
-			mask |= READ_ONCE(huge_anon_orders_madvise);
+			mask |= madvise;
 		if (hugepage_global_always() ||
 		    ((vm_flags & VM_HUGEPAGE) && hugepage_global_enabled()))
-			mask |= READ_ONCE(huge_anon_orders_inherit);
+			mask |= inherit;
 
 		orders &= mask;
 		if (!orders)
 			return 0;
 	}
 
+skip:
 	return __thp_vma_allowable_orders(vma, vm_flags, tva_flags, orders);
 }
 
