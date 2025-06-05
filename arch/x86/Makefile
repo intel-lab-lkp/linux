@@ -193,6 +193,31 @@ ifeq ($(CONFIG_STACKPROTECTOR),y)
     endif
 endif
 
+ifdef CONFIG_CC_IS_GCC
+ifndef CONFIG_X86_NATIVE_CPU
+#
+# Inline memcpy and memset handling policy for gcc.
+#
+# For ops of sizes known at compilation time it quickly resorts to issuing rep
+# movsq and stosq. On most uarchs rep-prefixed ops have a significant startup
+# latency and it is faster to issue regular stores (even if in loops) to handle
+# small buffers.
+#
+# This of course comes at an expense in terms of i-cache footprint. bloat-o-meter
+# reported 0.23% increase for enabling these.
+#
+# We inline up to 256 bytes, which in the best case issues few movs, in the
+# worst case creates a 4 * 8 store loop.
+#
+# The upper limit was chosen semi-arbitrarily as uarchs wildly differ between a
+# threshold past which rep-prefixed ops become faster. 256 being the lowest
+# common denominator. This should be fixed in the compiler.
+#
+KBUILD_CFLAGS += -mmemcpy-strategy=unrolled_loop:256:noalign,libcall:-1:noalign
+KBUILD_CFLAGS += -mmemset-strategy=unrolled_loop:256:noalign,libcall:-1:noalign
+endif
+endif
+
 #
 # If the function graph tracer is used with mcount instead of fentry,
 # '-maccumulate-outgoing-args' is needed to prevent a GCC bug
