@@ -2126,16 +2126,25 @@ static void shmem_set_folio_swapin_error(struct inode *inode, pgoff_t index,
 	struct address_space *mapping = inode->i_mapping;
 	swp_entry_t swapin_error;
 	void *old;
-	int nr_pages;
+	int nr_pages = folio_nr_pages(folio);
+	int order;
 
 	swapin_error = make_poisoned_swp_entry();
-	old = xa_cmpxchg_irq(&mapping->i_pages, index,
-			     swp_to_radix_entry(swap),
-			     swp_to_radix_entry(swapin_error), 0);
-	if (old != swp_to_radix_entry(swap))
+	xa_lock_irq(&mapping->i_pages);
+	order = xa_get_order(&mapping->i_pages, index);
+	if (nr_pages != (1 << order)) {
+		xa_unlock_irq(&mapping->i_pages);
 		return;
+	}
+	old = __xa_cmpxchg(&mapping->i_pages, index,
+			   swp_to_radix_entry(swap),
+			   swp_to_radix_entry(swapin_error), 0);
+	if (old != swp_to_radix_entry(swap)) {
+		xa_unlock_irq(&mapping->i_pages);
+		return;
+	}
+	xa_unlock_irq(&mapping->i_pages);
 
-	nr_pages = folio_nr_pages(folio);
 	folio_wait_writeback(folio);
 	if (!skip_swapcache)
 		delete_from_swap_cache(folio);
