@@ -122,22 +122,40 @@ phys_addr_t acpi_pci_root_get_mcfg_addr(acpi_handle handle)
 
 bool pci_acpi_preserve_config(struct pci_host_bridge *host_bridge)
 {
-	if (ACPI_HANDLE(&host_bridge->dev)) {
-		union acpi_object *obj;
+	bool rc = false;
+	u64 rev;
+	union acpi_object *obj;
 
-		/*
-		 * Evaluate the "PCI Boot Configuration" _DSM Function.  If it
-		 * exists and returns 0, we must preserve any PCI resource
-		 * assignments made by firmware for this host bridge.
-		 */
+	if (!ACPI_HANDLE(&host_bridge->dev))
+		return false;
+
+	/*
+	 * Evaluate the "PCI Boot Configuration" _DSM Function.  If it
+	 * exists and returns 0, we must preserve any PCI resource
+	 * assignments made by firmware for this host bridge.
+	 *
+	 * Per PCI Firmware r3.2, released Jan 26, 2015,
+	 * DSM_PCI_PRESERVE_BOOT_CONFIG Revision ID is 1. But PCI Firmware r3.3,
+	 * released Jan 20, 2021, changed sec 4.6.5 to say
+	 * "lowest valid Revision ID value: 2". So check rev 1 first, then rev 2.
+	 */
+	for (rev = 1; rev <= 2; rev++) {
+		if (!acpi_check_dsm(ACPI_HANDLE(&host_bridge->dev),
+					&pci_acpi_dsm_guid, rev, BIT(DSM_PCI_PRESERVE_BOOT_CONFIG)))
+			continue;
+
 		obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&host_bridge->dev),
-					      &pci_acpi_dsm_guid,
-					      1, DSM_PCI_PRESERVE_BOOT_CONFIG,
-					      NULL, ACPI_TYPE_INTEGER);
+						&pci_acpi_dsm_guid, rev,
+						DSM_PCI_PRESERVE_BOOT_CONFIG,
+						NULL, ACPI_TYPE_INTEGER);
 		if (obj && obj->integer.value == 0)
-			return true;
+			rc = true;
+
 		ACPI_FREE(obj);
-	}
+
+		if (rc)
+			return true;
+ 	}
 
 	return false;
 }
