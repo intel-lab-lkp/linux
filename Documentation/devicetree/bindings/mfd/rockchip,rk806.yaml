@@ -31,6 +31,29 @@ properties:
 
   system-power-controller: true
 
+  rockchip,reset-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    description:
+      Mode to use when a reset of the PMIC is triggered.
+
+      The reset can be triggered either programmatically, via one of
+      the PWRCTRL pins (provided additional configuration) or
+      asserting RESETB pin low.
+
+      The following modes are supported (see also
+      include/dt-bindings/mfd/rockchip,rk8xx.h)
+
+      - 0 (RK806_RESTART) restart PMU,
+      - 1 (RK806_RESET) reset all power off reset registers and force
+        state to switch to ACTIVE mode,
+      - 2 (RK806_RESET_NOTIFY) same as RK806_RESET and also pull
+        RESETB pin down for 5ms,
+
+      For example, some hardware may require a full restart
+      (RK806_RESTART mode) in order to function properly as regulators
+      are shortly interrupted in this mode.
+
   vcc1-supply:
     description:
       The input supply for dcdc-reg1.
