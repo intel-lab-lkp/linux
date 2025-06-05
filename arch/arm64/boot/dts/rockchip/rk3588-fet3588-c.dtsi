@@ -154,6 +154,7 @@
 		regulator-name = "vdd_cpu_big0_s0";
 		regulator-always-on;
 		regulator-boot-on;
+		regulator-enable-ramp-delay = <500>;
 		regulator-min-microvolt = <550000>;
 		regulator-max-microvolt = <1050000>;
 		regulator-ramp-delay = <2300>;
@@ -171,6 +172,7 @@
 		regulator-name = "vdd_cpu_big1_s0";
 		regulator-always-on;
 		regulator-boot-on;
+		regulator-enable-ramp-delay = <500>;
 		regulator-min-microvolt = <550000>;
 		regulator-max-microvolt = <1050000>;
 		regulator-ramp-delay = <2300>;
@@ -194,6 +196,7 @@
 		regulator-name = "vdd_npu_s0";
 		regulator-always-on;
 		regulator-boot-on;
+		regulator-enable-ramp-delay = <500>;
 		regulator-min-microvolt = <550000>;
 		regulator-max-microvolt = <950000>;
 		regulator-ramp-delay = <2300>;
