@@ -949,18 +949,29 @@ static void shmem_delete_from_page_cache(struct folio *folio, void *radswap)
  * the number of pages being freed. 0 means entry not found in XArray (0 pages
  * being freed).
  */
-static long shmem_free_swap(struct address_space *mapping,
-			    pgoff_t index, void *radswap)
+static long shmem_free_swap(struct address_space *mapping, pgoff_t index,
+			    int order, void *radswap)
 {
-	int order = xa_get_order(&mapping->i_pages, index);
+	int old_order;
 	void *old;
 
-	old = xa_cmpxchg_irq(&mapping->i_pages, index, radswap, NULL, 0);
-	if (old != radswap)
+	xa_lock_irq(&mapping->i_pages);
+	old_order = xa_get_order(&mapping->i_pages, index);
+	/* free swap anyway if input order is -1 */
+	if (order != -1 && old_order != order) {
+		xa_unlock_irq(&mapping->i_pages);
 		return 0;
-	free_swap_and_cache_nr(radix_to_swp_entry(radswap), 1 << order);
+	}
 
-	return 1 << order;
+	old = __xa_cmpxchg(&mapping->i_pages, index, radswap, NULL, 0);
+	if (old != radswap) {
+		xa_unlock_irq(&mapping->i_pages);
+		return 0;
+	}
+	xa_unlock_irq(&mapping->i_pages);
+
+	free_swap_and_cache_nr(radix_to_swp_entry(radswap), 1 << old_order);
+	return 1 << old_order;
 }
 
 /*
@@ -1078,6 +1089,39 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 }
 
 /*
+ * Similar to find_get_entries(), but will return order of found entries
+ */
+static unsigned shmem_find_get_entries(struct address_space *mapping,
+		pgoff_t *start, pgoff_t end, struct folio_batch *fbatch,
+		pgoff_t *indices, int *orders)
+{
+	XA_STATE(xas, &mapping->i_pages, *start);
+	struct folio *folio;
+
+	rcu_read_lock();
+	while ((folio = find_get_entry(&xas, end, XA_PRESENT)) != NULL) {
+		indices[fbatch->nr] = xas.xa_index;
+		if (!xa_is_value(folio))
+			orders[fbatch->nr] = folio_order(folio);
+		else
+			orders[fbatch->nr] = xas_get_order(&xas);
+		if (!folio_batch_add(fbatch, folio))
+			break;
+	}
+
+	if (folio_batch_count(fbatch)) {
+		unsigned long nr;
+		int idx = folio_batch_count(fbatch) - 1;
+
+		nr = 1 << orders[idx];
+		*start = round_down(indices[idx] + nr, nr);
+	}
+	rcu_read_unlock();
+
+	return folio_batch_count(fbatch);
+}
+
+/*
  * Remove range of pages and swap entries from page cache, and free them.
  * If !unfalloc, truncate or punch hole; if unfalloc, undo failed fallocate.
  */
@@ -1090,6 +1134,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 	pgoff_t end = (lend + 1) >> PAGE_SHIFT;
 	struct folio_batch fbatch;
 	pgoff_t indices[PAGEVEC_SIZE];
+	int orders[PAGEVEC_SIZE];
 	struct folio *folio;
 	bool same_folio;
 	long nr_swaps_freed = 0;
@@ -1113,7 +1158,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 				if (unfalloc)
 					continue;
 				nr_swaps_freed += shmem_free_swap(mapping,
-							indices[i], folio);
+						indices[i], -1, folio);
 				continue;
 			}
 
@@ -1166,8 +1211,8 @@ whole_folios:
 	while (index < end) {
 		cond_resched();
 
-		if (!find_get_entries(mapping, &index, end - 1, &fbatch,
-				indices)) {
+		if (!shmem_find_get_entries(mapping, &index, end - 1, &fbatch,
+				indices, orders)) {
 			/* If all gone or hole-punch or unfalloc, we're done */
 			if (index == start || end != -1)
 				break;
@@ -1183,9 +1228,13 @@ whole_folios:
 
 				if (unfalloc)
 					continue;
-				swaps_freed = shmem_free_swap(mapping, indices[i], folio);
+				swaps_freed = shmem_free_swap(mapping,
+					indices[i], orders[i], folio);
+				/*
+				 * Swap was replaced by page or was
+				 * splited: retry
+				 */
 				if (!swaps_freed) {
-					/* Swap was replaced by page: retry */
 					index = indices[i];
 					break;
 				}
@@ -1196,8 +1245,12 @@ whole_folios:
 			folio_lock(folio);
 
 			if (!unfalloc || !folio_test_uptodate(folio)) {
-				if (folio_mapping(folio) != mapping) {
-					/* Page was replaced by swap: retry */
+				/*
+				 * Page was replaced by swap or was
+				 * splited: retry
+				 */
+				if (folio_mapping(folio) != mapping ||
+				    folio_order(folio) != orders[i]) {
 					folio_unlock(folio);
 					index = indices[i];
 					break;

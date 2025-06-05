@@ -2015,7 +2015,7 @@ no_page:
 }
 EXPORT_SYMBOL(__filemap_get_folio);
 
-static inline struct folio *find_get_entry(struct xa_state *xas, pgoff_t max,
+struct folio *find_get_entry(struct xa_state *xas, pgoff_t max,
 		xa_mark_t mark)
 {
 	struct folio *folio;
