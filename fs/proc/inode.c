@@ -474,12 +474,11 @@ static int proc_reg_open(struct inode *inode, struct file *file)
 	struct pde_opener *pdeo;
 
 	if (pde_is_permanent(pde)) {
+		if (!pde->proc_ops->proc_lseek)
+			file->f_mode &= ~FMODE_LSEEK;
 		open = pde->proc_ops->proc_open;
-		if (open) {
-			if (!pde->proc_ops->proc_lseek)
-				file->f_mode &= ~FMODE_LSEEK;
+		if (open)
 			rv = open(inode, file);
-		}
 		return rv;
 	}
 
