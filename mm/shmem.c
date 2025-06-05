@@ -443,15 +443,6 @@ static void shmem_recalc_inode(struct inode *inode, long alloced, long swapped)
 	info->swapped += swapped;
 	freed = info->alloced - info->swapped -
 		READ_ONCE(inode->i_mapping->nrpages);
-	/*
-	 * Special case: whereas normally shmem_recalc_inode() is called
-	 * after i_mapping->nrpages has already been adjusted (up or down),
-	 * shmem_writepage() has to raise swapped before nrpages is lowered -
-	 * to stop a racing shmem_recalc_inode() from thinking that a page has
-	 * been freed.  Compensate here, to avoid the need for a followup call.
-	 */
-	if (swapped > 0)
-		freed += swapped;
 	if (freed > 0)
 		info->alloced -= freed;
 	spin_unlock(&info->lock);
@@ -1693,9 +1684,16 @@ try_split:
 		list_add(&info->swaplist, &shmem_swaplist);
 
 	if (!folio_alloc_swap(folio, __GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN)) {
-		shmem_recalc_inode(inode, 0, nr_pages);
+		/*
+		 * Raise swapped before nrpages is lowered to stop racing
+		 * shmem_recalc_inode() from thinking that a page has been freed.
+		 */
+		spin_lock(&info->lock);
+		info->swapped += nr_pages;
+		spin_unlock(&info->lock);
 		swap_shmem_alloc(folio->swap, nr_pages);
 		shmem_delete_from_page_cache(folio, swp_to_radix_entry(folio->swap));
+		shmem_recalc_inode(inode, 0, 0);
 
 		mutex_unlock(&shmem_swaplist_mutex);
 		BUG_ON(folio_mapped(folio));
