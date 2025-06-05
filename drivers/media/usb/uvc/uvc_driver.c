@@ -1869,11 +1869,15 @@ static int uvc_scan_device(struct uvc_device *dev)
 		return -1;
 	}
 
-	/* Add GPIO entity to the first chain. */
-	if (dev->gpio_unit) {
+	/* Add virtual entities to the first chain. */
+	if (dev->gpio_unit || dev->swentity_unit) {
 		chain = list_first_entry(&dev->chains,
 					 struct uvc_video_chain, list);
-		list_add_tail(&dev->gpio_unit->chain, &chain->entities);
+		if (dev->gpio_unit)
+			list_add_tail(&dev->gpio_unit->chain, &chain->entities);
+		if (dev->swentity_unit)
+			list_add_tail(&dev->swentity_unit->chain,
+				      &chain->entities);
 	}
 
 	return 0;
@@ -2246,6 +2250,10 @@ static int uvc_probe(struct usb_interface *intf,
 
 	/* Parse the associated GPIOs. */
 	ret = uvc_gpio_parse(dev);
+	if (ret < 0)
+		goto error;
+
+	ret = uvc_swentity_init(dev);
 	if (ret < 0)
 		goto error;
 
