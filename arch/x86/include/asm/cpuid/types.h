@@ -215,6 +215,7 @@ struct cpuid_leaves {
 	/*         leaf		subleaf		count */
 	CPUID_LEAF(0x0,		0,		1);
 	CPUID_LEAF(0x1,		0,		1);
+	CPUID_LEAF(0x2,		0,		1);
 	CPUID_LEAF(0x80000000,	0,		1);
 };
 
