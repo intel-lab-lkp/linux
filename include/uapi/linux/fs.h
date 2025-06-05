@@ -91,6 +91,42 @@ struct fs_sysfs_path {
 	__u8			name[128];
 };
 
+/* Protection info capability flags */
+#define	FILE_PI_CAP_INTEGRITY		(1 << 0)
+#define	FILE_PI_CAP_REFTAG		(1 << 1)
+
+/* Checksum types for Protection Information */
+#define FS_PI_CSUM_NONE			0
+#define FS_PI_CSUM_IP			1
+#define FS_PI_CSUM_CRC16_T10DIF		2
+#define FS_PI_CSUM_CRC64_NVME		3
+
+/*
+ * struct fs_pi_cap - protection information(PI) capability descriptor
+ * @fpc_flags:			Bitmask of capability flags
+ * @fpc_interval:		Number of bytes of data per PI tuple
+ * @fpc_csum_type:		Checksum type
+ * @fpc_metadata_size:		Size in bytes of the metadata associated with each interval
+ * @fpc_pi_size:		Size in bytes of the PI associated with each interval
+ * @fpc_tag_size:		Size of the tag area within the tuple
+ * @fpc_pi_offset:		Offset of protection information tuple within the metadata
+ * @fpc_ref_tag_size:		Size in bytes of the reference tag
+ * @fpc_storage_tag_size:	Size in bytes of the storage tag
+ * @fpc_rsvd:			Reserved for future use
+ */
+struct fs_pi_cap {
+	__u32	fpc_flags;
+	__u16	fpc_interval;
+	__u8	fpc_csum_type;
+	__u8	fpc_metadata_size;
+	__u8	fpc_pi_size;
+	__u8	fpc_tag_size;
+	__u8	fpc_pi_offset;
+	__u8	fpc_ref_tag_size;
+	__u8	fpc_storage_tag_size;
+	__u8	fpc_rsvd[19];
+};
+
 /* extent-same (dedupe) ioctls; these MUST match the btrfs ioctl definitions */
 #define FILE_DEDUPE_RANGE_SAME		0
 #define FILE_DEDUPE_RANGE_DIFFERS	1
@@ -247,6 +283,8 @@ struct fsxattr {
  * also /sys/kernel/debug/ for filesystems with debugfs exports
  */
 #define FS_IOC_GETFSSYSFSPATH		_IOR(0x15, 1, struct fs_sysfs_path)
+/* Get protection info capability details */
+#define FS_IOC_GETPICAP			_IOR(0x15, 2, struct fs_pi_cap)
 
 /*
  * Inode flags (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS)

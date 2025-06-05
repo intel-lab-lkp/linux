@@ -13,6 +13,7 @@
 #include <linux/scatterlist.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/t10-pi.h>
 
 #include "blk.h"
 
@@ -52,6 +53,46 @@ new_segment:
 	}
 
 	return segments;
+}
+
+int blk_get_pi_cap(struct block_device *bdev, struct fs_pi_cap __user *argp)
+{
+	struct blk_integrity *bi = blk_get_integrity(bdev->bd_disk);
+	struct fs_pi_cap pi_cap = {};
+
+	if (!bi)
+		goto out;
+
+	if (bi->flags & BLK_INTEGRITY_DEVICE_CAPABLE)
+		pi_cap.fpc_flags |= FILE_PI_CAP_INTEGRITY;
+	if (bi->flags & BLK_INTEGRITY_REF_TAG)
+		pi_cap.fpc_flags |= FILE_PI_CAP_REFTAG;
+	pi_cap.fpc_csum_type = bi->csum_type;
+	pi_cap.fpc_metadata_size = bi->tuple_size;
+	pi_cap.fpc_tag_size = bi->tag_size;
+	pi_cap.fpc_interval = 1 << bi->interval_exp;
+	pi_cap.fpc_pi_offset = bi->pi_offset;
+	pi_cap.fpc_pi_size = bi->pi_size;
+	if (bi->flags & BLK_INTEGRITY_REF_TAG) {
+		switch (bi->csum_type) {
+		case BLK_INTEGRITY_CSUM_CRC64:
+			pi_cap.fpc_ref_tag_size =
+				sizeof_field(struct crc64_pi_tuple, ref_tag);
+			break;
+		case BLK_INTEGRITY_CSUM_CRC:
+		case BLK_INTEGRITY_CSUM_IP:
+			pi_cap.fpc_ref_tag_size =
+				sizeof_field(struct t10_pi_tuple, ref_tag);
+			break;
+		default:
+			break;
+		}
+	}
+
+out:
+	if (copy_to_user(argp, &pi_cap, sizeof(struct fs_pi_cap)))
+		return -EFAULT;
+	return 0;
 }
 
 /**
