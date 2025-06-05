@@ -14,15 +14,43 @@
 
 #include "cpuid_parser.h"
 
+/**
+ * __define_cpuid_read_function() - Generate a CPUID parser read function
+ * @_suffix:	Suffix for the generated function name (full name: cpuid_read_@_suffix())
+ * @_leaf_t:	Type to cast the CPUID query output storage pointer
+ * @_leaf:	Name of the CPUID query storage pointer
+ * @_break_c:	Condition to break the CPUID parsing loop, which may reference @_leaf, and
+ *		where @_leaf stores each iteration's CPUID query output.
+ *
+ * Define a CPUID parser read function according to the requirements stated at
+ * &struct cpuid_parse_entry->read().
+ */
+#define __define_cpuid_read_function(_suffix, _leaf_t, _leaf, _break_c)				\
+static void											\
+cpuid_read_##_suffix(const struct cpuid_parse_entry *e, struct cpuid_read_output *output)	\
+{												\
+	struct _leaf_t *_leaf = (struct _leaf_t *)output->regs;					\
+												\
+	static_assert(sizeof(*_leaf) == 16);							\
+												\
+	output->info->nr_entries = 0;								\
+	for (int i = 0; i < e->maxcnt; i++, _leaf++, output->info->nr_entries++) {		\
+		cpuid_read_subleaf(e->leaf, e->subleaf + i, _leaf);				\
+		if (_break_c)									\
+			break;									\
+	}											\
+}
+
 /*
  * Default CPUID parser read function
  */
-static void cpuid_read_generic(const struct cpuid_parse_entry *e, struct cpuid_read_output *output)
-{
-	output->info->nr_entries = 0;
-	for (int i = 0; i < e->maxcnt; i++, output->regs++, output->info->nr_entries++)
-		cpuid_read_subleaf(e->leaf, e->subleaf + i, output->regs);
-}
+__define_cpuid_read_function(generic, cpuid_regs, ignored, false);
+
+/*
+ * Shared read function for Intel CPUID leaf 0x4 and AMD CPUID leaf 0x8000001d,
+ * as both have the same subleaf enumeration logic and registers output format.
+ */
+__define_cpuid_read_function(deterministic_cache, leaf_0x4_0, leaf, leaf->cache_type == 0);
 
 static void cpuid_read_0x2(const struct cpuid_parse_entry *e, struct cpuid_read_output *output)
 {
