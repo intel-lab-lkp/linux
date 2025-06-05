@@ -8615,7 +8615,6 @@ void __init sched_init(void)
 		 * starts working after scheduler_running, which is not the case
 		 * yet.
 		 */
-		rq->rt.rt_runtime = global_rt_runtime();
 		init_tg_rt_entry(&root_task_group, rq, NULL, i, NULL);
 #endif
 #ifdef CONFIG_SMP
