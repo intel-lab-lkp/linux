@@ -3104,14 +3104,30 @@ static int __btrfs_free_extent(struct btrfs_trans_handle *trans,
 	bool skinny_metadata = btrfs_fs_incompat(info, SKINNY_METADATA);
 	u64 delayed_ref_root = href->owning_root;
 
+	is_data = owner_objectid >= BTRFS_FIRST_FREE_OBJECTID;
+
+	if (!is_data && node->ref_root == BTRFS_REMAP_TREE_OBJECTID) {
+		ret = add_to_free_space_tree(trans, bytenr, num_bytes);
+		if (ret) {
+			btrfs_abort_transaction(trans, ret);
+			return ret;
+		}
+
+		ret = btrfs_update_block_group(trans, bytenr, num_bytes, false);
+		if (ret) {
+			btrfs_abort_transaction(trans, ret);
+			return ret;
+		}
+
+		return 0;
+	}
+
 	extent_root = btrfs_extent_root(info, bytenr);
 	ASSERT(extent_root);
 
 	path = btrfs_alloc_path();
 	if (!path)
 		return -ENOMEM;
-
-	is_data = owner_objectid >= BTRFS_FIRST_FREE_OBJECTID;
 
 	if (!is_data && refs_to_drop != 1) {
 		btrfs_crit(info,
@@ -4891,57 +4907,61 @@ static int alloc_reserved_tree_block(struct btrfs_trans_handle *trans,
 	int level = btrfs_delayed_ref_owner(node);
 	bool skinny_metadata = btrfs_fs_incompat(fs_info, SKINNY_METADATA);
 
-	extent_key.objectid = node->bytenr;
-	if (skinny_metadata) {
-		/* The owner of a tree block is the level. */
-		extent_key.offset = level;
-		extent_key.type = BTRFS_METADATA_ITEM_KEY;
-	} else {
-		extent_key.offset = node->num_bytes;
-		extent_key.type = BTRFS_EXTENT_ITEM_KEY;
-		size += sizeof(*block_info);
-	}
+	if (node->ref_root != BTRFS_REMAP_TREE_OBJECTID) {
+		extent_key.objectid = node->bytenr;
+		if (skinny_metadata) {
+			/* The owner of a tree block is the level. */
+			extent_key.offset = level;
+			extent_key.type = BTRFS_METADATA_ITEM_KEY;
+		} else {
+			extent_key.offset = node->num_bytes;
+			extent_key.type = BTRFS_EXTENT_ITEM_KEY;
+			size += sizeof(*block_info);
+		}
 
-	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
+		path = btrfs_alloc_path();
+		if (!path)
+			return -ENOMEM;
 
-	extent_root = btrfs_extent_root(fs_info, extent_key.objectid);
-	ret = btrfs_insert_empty_item(trans, extent_root, path, &extent_key,
-				      size);
-	if (ret) {
+		extent_root = btrfs_extent_root(fs_info, extent_key.objectid);
+		ret = btrfs_insert_empty_item(trans, extent_root, path,
+					      &extent_key, size);
+		if (ret) {
+			btrfs_free_path(path);
+			return ret;
+		}
+
+		leaf = path->nodes[0];
+		extent_item = btrfs_item_ptr(leaf, path->slots[0],
+					struct btrfs_extent_item);
+		btrfs_set_extent_refs(leaf, extent_item, 1);
+		btrfs_set_extent_generation(leaf, extent_item, trans->transid);
+		btrfs_set_extent_flags(leaf, extent_item,
+				flags | BTRFS_EXTENT_FLAG_TREE_BLOCK);
+
+		if (skinny_metadata) {
+			iref = (struct btrfs_extent_inline_ref *)(extent_item + 1);
+		} else {
+			block_info = (struct btrfs_tree_block_info *)(extent_item + 1);
+			btrfs_set_tree_block_key(leaf, block_info, &extent_op->key);
+			btrfs_set_tree_block_level(leaf, block_info, level);
+			iref = (struct btrfs_extent_inline_ref *)(block_info + 1);
+		}
+
+		if (node->type == BTRFS_SHARED_BLOCK_REF_KEY) {
+			btrfs_set_extent_inline_ref_type(leaf, iref,
+						BTRFS_SHARED_BLOCK_REF_KEY);
+			btrfs_set_extent_inline_ref_offset(leaf, iref,
+							   node->parent);
+		} else {
+			btrfs_set_extent_inline_ref_type(leaf, iref,
+						BTRFS_TREE_BLOCK_REF_KEY);
+			btrfs_set_extent_inline_ref_offset(leaf, iref,
+							   node->ref_root);
+		}
+
 		btrfs_free_path(path);
-		return ret;
 	}
-
-	leaf = path->nodes[0];
-	extent_item = btrfs_item_ptr(leaf, path->slots[0],
-				     struct btrfs_extent_item);
-	btrfs_set_extent_refs(leaf, extent_item, 1);
-	btrfs_set_extent_generation(leaf, extent_item, trans->transid);
-	btrfs_set_extent_flags(leaf, extent_item,
-			       flags | BTRFS_EXTENT_FLAG_TREE_BLOCK);
-
-	if (skinny_metadata) {
-		iref = (struct btrfs_extent_inline_ref *)(extent_item + 1);
-	} else {
-		block_info = (struct btrfs_tree_block_info *)(extent_item + 1);
-		btrfs_set_tree_block_key(leaf, block_info, &extent_op->key);
-		btrfs_set_tree_block_level(leaf, block_info, level);
-		iref = (struct btrfs_extent_inline_ref *)(block_info + 1);
-	}
-
-	if (node->type == BTRFS_SHARED_BLOCK_REF_KEY) {
-		btrfs_set_extent_inline_ref_type(leaf, iref,
-						 BTRFS_SHARED_BLOCK_REF_KEY);
-		btrfs_set_extent_inline_ref_offset(leaf, iref, node->parent);
-	} else {
-		btrfs_set_extent_inline_ref_type(leaf, iref,
-						 BTRFS_TREE_BLOCK_REF_KEY);
-		btrfs_set_extent_inline_ref_offset(leaf, iref, node->ref_root);
-	}
-
-	btrfs_free_path(path);
 
 	return alloc_reserved_extent(trans, node->bytenr, fs_info->nodesize);
 }
