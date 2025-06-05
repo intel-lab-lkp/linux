@@ -126,6 +126,7 @@ FEATURE_TESTS_EXTRA :=                  \
          llvm                           \
          clang                          \
          libbpf                         \
+         libbpf-strings                 \
          libbpf-btf__load_from_kernel_by_id \
          libbpf-bpf_prog_load           \
          libbpf-bpf_object__next_program \
