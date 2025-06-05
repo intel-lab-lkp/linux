@@ -2349,7 +2349,12 @@ static int
 migrate_longterm_unpinnable_folios(struct list_head *movable_folio_list,
 				   struct pages_or_folios *pofs)
 {
-	int ret;
+	struct migration_target_control mtc = {
+		.gfp_mask = GFP_USER | __GFP_NOWARN,
+		.reason = MR_LONGTERM_PIN,
+		.nid = NUMA_NO_NODE,
+	};
+	int ret = -EAGAIN;
 	unsigned long i;
 
 	for (i = 0; i < pofs->nr_entries; i++) {
@@ -2366,6 +2371,7 @@ migrate_longterm_unpinnable_folios(struct list_head *movable_folio_list,
 			gup_put_folio(folio, 1, FOLL_PIN);
 
 			if (migrate_device_coherent_folio(folio)) {
+				pofs_unpin(pofs);
 				ret = -EBUSY;
 				goto err;
 			}
@@ -2384,27 +2390,11 @@ migrate_longterm_unpinnable_folios(struct list_head *movable_folio_list,
 		pofs_clear_entry(pofs, i);
 	}
 
-	if (!list_empty(movable_folio_list)) {
-		struct migration_target_control mtc = {
-			.nid = NUMA_NO_NODE,
-			.gfp_mask = GFP_USER | __GFP_NOWARN,
-			.reason = MR_LONGTERM_PIN,
-		};
-
-		if (migrate_pages(movable_folio_list, alloc_migration_target,
-				  NULL, (unsigned long)&mtc, MIGRATE_SYNC,
-				  MR_LONGTERM_PIN, NULL)) {
-			ret = -ENOMEM;
-			goto err;
-		}
-	}
-
-	putback_movable_pages(movable_folio_list);
-
-	return -EAGAIN;
+	if (migrate_pages(movable_folio_list, alloc_migration_target, NULL,
+			  (unsigned long)&mtc, MIGRATE_SYNC, MR_LONGTERM_PIN, NULL))
+		ret = -ENOMEM;
 
 err:
-	pofs_unpin(pofs);
 	putback_movable_pages(movable_folio_list);
 
 	return ret;
