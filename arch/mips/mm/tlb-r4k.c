@@ -509,6 +509,82 @@ static int __init set_ntlb(char *str)
 __setup("ntlb=", set_ntlb);
 
 /*
+ * This is used to set an absolutely safe entryhi value that will not
+ * collide with any existing TLB entries as well as other UNIQUE_ENTRYHI
+ * values.
+ */
+static unsigned long r4k_safe_entryhi(void)
+{
+	int entry = current_cpu_data.tlbsize;
+	int old_index;
+
+	old_index = read_c0_index();
+	while (entry >= 0) {
+		int idx;
+		unsigned long entryhi = UNIQUE_ENTRYHI(entry);
+
+		write_c0_entryhi(entryhi);
+		mtc0_tlbw_hazard();
+		tlb_probe();
+		tlb_probe_hazard();
+		idx = read_c0_index();
+		if (idx < 0) {
+			/* Unused value found */
+			write_c0_index(old_index);
+			mtc0_tlbw_hazard();
+			return entryhi;
+		}
+		entry++;
+	}
+
+	panic("No safe TLB EntryHi value found");
+	return 0;
+}
+
+/*
+ * Initialize all TLB entries with unique values.
+ */
+static void r4k_tlb_uniquify(void)
+{
+	int entry;
+
+	entry = num_wired_entries();
+
+	htw_stop();
+	write_c0_entrylo0(0);
+	write_c0_entrylo1(0);
+	while (entry < current_cpu_data.tlbsize) {
+		unsigned long entryhi;
+		int collision_idx;
+
+		entryhi = UNIQUE_ENTRYHI(entry);
+		write_c0_entryhi(entryhi);
+		mtc0_tlbw_hazard();
+		tlb_probe();
+		tlb_probe_hazard();
+
+		/* Check for possible collision */
+		collision_idx = read_c0_index();
+		if (collision_idx >= 0 && collision_idx != entry) {
+			/* Override collision entry with a safe value */
+			r4k_safe_entryhi();
+			mtc0_tlbw_hazard();
+			tlb_write_indexed();
+			tlbw_use_hazard();
+			/* Recover correputed entryhi */
+			write_c0_entryhi(entryhi);
+		}
+
+		write_c0_index(entry);
+		mtc0_tlbw_hazard();
+		tlb_write_indexed();
+		entry++;
+	}
+	tlbw_use_hazard();
+	htw_start();
+}
+
+/*
  * Configure TLB (for init or after a CPU has been powered off).
  */
 static void r4k_tlb_configure(void)
@@ -547,7 +623,7 @@ static void r4k_tlb_configure(void)
 	temp_tlb_entry = current_cpu_data.tlbsize - 1;
 
 	/* From this point on the ARC firmware is dead.	 */
-	local_flush_tlb_all();
+	r4k_tlb_uniquify();
 
 	/* Did I tell you that ARC SUCKS?  */
 }
