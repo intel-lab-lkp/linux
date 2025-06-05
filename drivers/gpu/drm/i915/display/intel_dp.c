@@ -5747,6 +5747,11 @@ intel_dp_set_edid(struct intel_dp *intel_dp)
 	/* Below we depend on display info having been updated */
 	drm_edid_connector_update(&connector->base, drm_edid);
 
+	if (!intel_dp_is_edp(intel_dp))
+		drm_dp_dpcd_set_probe_quirk(&intel_dp->aux,
+					    drm_edid_has_quirk(&connector->base,
+							       DRM_EDID_QUIRK_DP_DPCD_PROBE));
+
 	vrr_capable = intel_vrr_is_capable(connector);
 	drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s] VRR capable: %s\n",
 		    connector->base.base.id, connector->base.name, str_yes_no(vrr_capable));
@@ -5881,6 +5886,7 @@ intel_dp_detect(struct drm_connector *_connector,
 	intel_dp_print_rates(intel_dp);
 
 	if (intel_dp->is_mst) {
+		drm_dp_dpcd_set_probe_quirk(&intel_dp->aux, false);
 		/*
 		 * If we are in MST mode then this connector
 		 * won't appear connected or have anything
@@ -6321,10 +6327,11 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 	 * complete the DP tunnel BW request for the latter connector/encoder
 	 * waiting for this encoder's DPRX read, perform a dummy read here.
 	 */
-	if (long_hpd)
+	if (long_hpd) {
+		drm_dp_dpcd_set_probe_quirk(&intel_dp->aux, true);
+
 		intel_dp_read_dprx_caps(intel_dp, dpcd);
 
-	if (long_hpd) {
 		intel_dp->reset_link_params = true;
 		intel_dp_invalidate_source_oui(intel_dp);
 
