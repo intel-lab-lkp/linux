@@ -1480,14 +1480,13 @@ static unsigned int shmem_find_swap_entries(struct address_space *mapping,
 }
 
 /*
- * Move the swapped pages for an inode to page cache. Returns the count
- * of pages swapped in, or the error in case of failure.
+ * Move the swapped pages for an inode to page cache. Returns 0 if success,
+ * or returns error in case of failure.
  */
 static int shmem_unuse_swap_entries(struct inode *inode,
 		struct folio_batch *fbatch, pgoff_t *indices)
 {
 	int i = 0;
-	int ret = 0;
 	int error = 0;
 	struct address_space *mapping = inode->i_mapping;
 
@@ -1501,13 +1500,11 @@ static int shmem_unuse_swap_entries(struct inode *inode,
 		if (error == 0) {
 			folio_unlock(folio);
 			folio_put(folio);
-			ret++;
 		}
 		if (error == -ENOMEM)
-			break;
-		error = 0;
+			return error;
 	}
-	return error ? error : ret;
+	return 0;
 }
 
 /*
@@ -1519,24 +1516,20 @@ static int shmem_unuse_inode(struct inode *inode, unsigned int type)
 	pgoff_t start = 0;
 	struct folio_batch fbatch;
 	pgoff_t indices[PAGEVEC_SIZE];
-	int ret = 0;
+	int ret;
 
 	do {
 		folio_batch_init(&fbatch);
 		if (!shmem_find_swap_entries(mapping, start, &fbatch,
-					     indices, type)) {
-			ret = 0;
-			break;
-		}
+					     indices, type))
+			return 0;
 
 		ret = shmem_unuse_swap_entries(inode, &fbatch, indices);
 		if (ret < 0)
-			break;
+			return ret;
 
 		start = indices[folio_batch_count(&fbatch) - 1];
 	} while (true);
-
-	return ret;
 }
 
 /*
