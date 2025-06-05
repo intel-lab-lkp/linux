@@ -2592,7 +2592,9 @@ out_unlock:
 static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 					   struct kvm_memory_attributes *attrs)
 {
-	gfn_t start, end;
+	gfn_t start, end, section_start, section_end;
+	u64 size, size_remaining;
+	int ret = 0;
 
 	/* flags is currently not used. */
 	if (attrs->flags)
@@ -2604,9 +2606,6 @@ static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 	if (!PAGE_ALIGNED(attrs->address) || !PAGE_ALIGNED(attrs->size))
 		return -EINVAL;
 
-	start = attrs->address >> PAGE_SHIFT;
-	end = (attrs->address + attrs->size) >> PAGE_SHIFT;
-
 	/*
 	 * xarray tracks data using "unsigned long", and as a result so does
 	 * KVM.  For simplicity, supports generic attributes only on 64-bit
@@ -2614,7 +2613,35 @@ static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 	 */
 	BUILD_BUG_ON(sizeof(attrs->attributes) != sizeof(unsigned long));
 
-	return kvm_vm_set_mem_attributes(kvm, start, end, attrs->attributes);
+	size_remaining = attrs->size;
+	section_start = start = attrs->address >> PAGE_SHIFT;
+	section_end = end = (attrs->address + attrs->size) >> PAGE_SHIFT;
+	while (size_remaining > 0) {
+		/*
+		 * If the range of memory is greater than 512GB, clamp it for
+		 * this iteration to 512GB. This avoids a potential CPU soft
+		 * lockup when run on a larger range for an SEV-SNP guest.
+		 * (measured at 940GB so there is some headroom, just in case).
+		 */
+		if (size_remaining > SZ_512G) {
+			size = SZ_512G;
+			size_remaining -= size;
+			section_end = section_start + (size >> PAGE_SHIFT);
+		} else {
+			size = size_remaining;
+			size_remaining = 0;
+			section_end = end;
+			WARN_ON_ONCE(section_end != (section_start + (size >> PAGE_SHIFT)));
+		}
+
+		ret = kvm_vm_set_mem_attributes(kvm, section_start, section_end, attrs->attributes);
+		if (ret != 0)
+			break;
+
+		section_start = section_end;
+	}
+
+	return ret;
 }
 #endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
 
