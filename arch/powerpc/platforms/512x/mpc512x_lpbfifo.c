@@ -241,8 +241,7 @@ static int mpc512x_lpbfifo_kick(void)
 
 	/* Make DMA channel work with LPB FIFO data register */
 	if (dma_dev->device_config(lpbfifo.chan, &dma_conf)) {
-		ret = -EINVAL;
-		goto err_dma_prep;
+		return -EINVAL;
 	}
 
 	sg_init_table(&sg, 1);
