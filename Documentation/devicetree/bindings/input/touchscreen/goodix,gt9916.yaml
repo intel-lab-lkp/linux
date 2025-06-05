@@ -44,6 +44,27 @@ properties:
   touchscreen-size-y: true
   touchscreen-swapped-x-y: true
 
+  goodix,stylus-enable:
+    type: boolean
+    description:
+      Indicates that stylus (pen) functionality is enabled. If present,
+      the driver will initialize stylus-specific input reporting.
+
+  goodix,physical-x:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Physical width of the touchscreen in millimeters.
+
+  goodix,physical-y:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Physical height of the touchscreen in millimeters.
+
+  goodix,stylus-pressure-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Number of discrete pressure levels supported by the stylus.
+      The reported ABS_PRESSURE range will be 0 to
+      (goodix,stylus-pressure-level - 1).
+
 additionalProperties: false
 
 required:
