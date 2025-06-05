@@ -12,13 +12,16 @@
 #include <linux/kvm_host.h>
 #include <linux/kernel.h>
 #include <linux/highmem.h>
+#include <linux/limits.h>
 #include <linux/psp.h>
 #include <linux/psp-sev.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
 #include <linux/misc_cgroup.h>
 #include <linux/processor.h>
+#include <linux/ratelimit.h>
 #include <linux/trace_events.h>
+#include <linux/units.h>
 #include <uapi/linux/sev-guest.h>
 
 #include <asm/pkru.h>
@@ -57,6 +60,10 @@ module_param_named(sev_snp, sev_snp_enabled, bool, 0444);
 static bool sev_es_debug_swap_enabled = true;
 module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
 static u64 sev_supported_vmsa_features;
+
+/* set a per-VM rate limit for SEV-SNP guest requests on VM creation. 0 is unlimited. */
+static int sev_snp_request_ratelimit_khz = 0;
+module_param(sev_snp_request_ratelimit_khz, int, 0444);
 
 #define AP_RESET_HOLD_NONE		0
 #define AP_RESET_HOLD_NAE_EVENT		1
@@ -366,6 +373,7 @@ static int snp_guest_req_init(struct kvm *kvm)
 {
 	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
 	struct page *req_page;
+	u64 throttle_interval;
 
 	req_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 	if (!req_page)
@@ -379,6 +387,9 @@ static int snp_guest_req_init(struct kvm *kvm)
 
 	sev->guest_req_buf = page_address(req_page);
 	mutex_init(&sev->guest_req_mutex);
+
+	throttle_interval = ((u64)sev_snp_request_ratelimit_khz * HZ) / HZ_PER_KHZ;
+	ratelimit_state_init(&sev->snp_guest_msg_rs, sev_snp_request_ratelimit_khz, 1);
 
 	return 0;
 }
@@ -4014,6 +4025,12 @@ static int snp_handle_guest_req(struct vcpu_svm *svm, gpa_t req_gpa, gpa_t resp_
 		return -EINVAL;
 
 	mutex_lock(&sev->guest_req_mutex);
+
+	if (!__ratelimit(&sev->snp_guest_msg_rs)) {
+		svm_vmgexit_no_action(svm, SNP_GUEST_ERR(SNP_GUEST_VMM_ERR_BUSY, 0));
+		ret = 1;
+		goto out_unlock;
+	}
 
 	if (kvm_read_guest(kvm, req_gpa, sev->guest_req_buf, PAGE_SIZE)) {
 		ret = -EIO;
