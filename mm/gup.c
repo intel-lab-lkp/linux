@@ -2296,15 +2296,13 @@ static void pofs_unpin(struct pages_or_folios *pofs)
 		unpin_user_pages(pofs->pages, pofs->nr_entries);
 }
 
-/*
- * Returns the number of collected folios. Return value is always >= 0.
- */
-static void collect_longterm_unpinnable_folios(
+static bool collect_longterm_unpinnable_folios(
 		struct list_head *movable_folio_list,
 		struct pages_or_folios *pofs)
 {
 	struct folio *prev_folio = NULL;
 	bool drain_allow = true;
+	bool any_unpinnable = false;
 	unsigned long i;
 
 	for (i = 0; i < pofs->nr_entries; i++) {
@@ -2316,6 +2314,8 @@ static void collect_longterm_unpinnable_folios(
 
 		if (folio_is_longterm_pinnable(folio))
 			continue;
+
+		any_unpinnable = true;
 
 		if (folio_is_device_coherent(folio))
 			continue;
@@ -2338,6 +2338,8 @@ static void collect_longterm_unpinnable_folios(
 				    NR_ISOLATED_ANON + folio_is_file_lru(folio),
 				    folio_nr_pages(folio));
 	}
+
+	return any_unpinnable;
 }
 
 /*
@@ -2403,11 +2405,25 @@ err:
 static long
 check_and_migrate_movable_pages_or_folios(struct pages_or_folios *pofs)
 {
+	bool any_unpinnable;
+
 	LIST_HEAD(movable_folio_list);
 
-	collect_longterm_unpinnable_folios(&movable_folio_list, pofs);
-	if (list_empty(&movable_folio_list))
+	any_unpinnable = collect_longterm_unpinnable_folios(&movable_folio_list, pofs);
+
+	if (list_empty(&movable_folio_list)) {
+		/*
+		 * If we find any longterm unpinnable page that we failed to
+		 * isolated for migration, it might be because someone else
+		 * concurrently isolated it. Make the caller retry until it
+		 * succeeds.
+		 */
+		if (any_unpinnable) {
+			pofs_unpin(pofs);
+			return -EAGAIN;
+		}
 		return 0;
+	}
 
 	return migrate_longterm_unpinnable_folios(&movable_folio_list, pofs);
 }
