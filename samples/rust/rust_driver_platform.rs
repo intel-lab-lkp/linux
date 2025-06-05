@@ -17,10 +17,48 @@ kernel::of_device_table!(
     [(of::DeviceId::new(c_str!("test,rust-device")), Info(42))]
 );
 
+kernel::acpi_device_table!(
+    ACPI_TABLE,
+    MODULE_ACPI_TABLE,
+    <SampleDriver as platform::Driver>::IdInfo,
+    [(acpi::DeviceId::new(c_str!("TEST4321")), Info(0))]
+);
+
+/// OF/ACPI match tables for Platform Driver implementation
+///
+/// The platform::Driver requires declaration of both OF_ID_TABLE and
+/// ACPI_ID_TABLE, but if driver is not going to use either of them
+/// it can implement one of them or both as None.
+///
+/// # Example:
+///
+///```
+/// impl platform::Driver for SampleDriver {
+///     type IdInfo = Info;
+///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
+///     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = None;
+///
+///     fn probe(
+///         pdev: &platform::Device<Core>,
+///         info: Option<&Self::IdInfo>,
+///     ) -> Result<Pin<KBox<Self>>> {
+///         dev_dbg!(pdev.as_ref(), "Probe Rust Platform driver sample.\n");
+///
+///         if let Some(info) = info {
+///             dev_info!(pdev.as_ref(), "Probed with info: '{}'.\n", info.0);
+///         }
+///
+///         let drvdata = KBox::new(Self { pdev: pdev.into() }, GFP_KERNEL)?;
+///
+///         Ok(drvdata.into())
+///     }
+/// }
+///```
+
 impl platform::Driver for SampleDriver {
     type IdInfo = Info;
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
-    const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = None;
+    const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 
     fn probe(
         pdev: &platform::Device<Core>,
