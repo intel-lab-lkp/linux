@@ -49,6 +49,12 @@ test_event_uniquifying() {
     uniquified_event_array+=("${uniquified_event}")
   done < <(${perf_tool} list -v ${event} | grep "\[Kernel PMU event\]")
 
+  if [ ${#uniquified_event_array[@]} -eq 0 ]; then
+    echo "'clocktick' event not available on this machine"
+    err=2
+    return
+  fi
+
   perf_command="${perf_tool} stat -e $event -A -o ${stat_output} -- true"
   $perf_command
 
