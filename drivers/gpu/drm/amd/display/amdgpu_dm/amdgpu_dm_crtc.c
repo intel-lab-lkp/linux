@@ -230,7 +230,7 @@ struct idle_workqueue *idle_create_workqueue(struct amdgpu_device *adev)
 	struct idle_workqueue *idle_work;
 
 	idle_work = kzalloc(sizeof(*idle_work), GFP_KERNEL);
-	if (ZERO_OR_NULL_PTR(idle_work))
+	if (!idle_work)
 		return NULL;
 
 	idle_work->dm = &adev->dm;
