@@ -77,7 +77,7 @@ struct adsp_pil_data {
 	const char *load_state;
 };
 
-struct qcom_adsp {
+struct qcom_pas {
 	struct device *dev;
 	struct rproc *rproc;
 
@@ -116,10 +116,10 @@ struct qcom_adsp {
 	struct qcom_rproc_ssr ssr_subdev;
 	struct qcom_sysmon *sysmon;
 
-	int (*shutdown)(struct qcom_adsp *adsp);
+	int (*shutdown)(struct qcom_pas *adsp);
 };
 
-static int qcom_rproc_pds_attach(struct qcom_adsp *adsp, const char **pd_names,
+static int qcom_rproc_pds_attach(struct qcom_pas *adsp, const char **pd_names,
 				 unsigned int num_pds)
 {
 	struct device *dev = adsp->dev;
@@ -145,7 +145,7 @@ out:
 	return 0;
 }
 
-static void qcom_rproc_pds_detach(struct qcom_adsp *adsp)
+static void qcom_rproc_pds_detach(struct qcom_pas *adsp)
 {
 	struct device *dev = adsp->dev;
 	struct dev_pm_domain_list *pds = adsp->pd_list;
@@ -156,7 +156,7 @@ static void qcom_rproc_pds_detach(struct qcom_adsp *adsp)
 		pm_runtime_disable(adsp->dev);
 }
 
-static int qcom_rproc_pds_enable(struct qcom_adsp *adsp)
+static int qcom_rproc_pds_enable(struct qcom_pas *adsp)
 {
 	struct device *dev = adsp->dev;
 	struct dev_pm_domain_list *pds = adsp->pd_list;
@@ -187,7 +187,7 @@ static int qcom_rproc_pds_enable(struct qcom_adsp *adsp)
 	return ret;
 }
 
-static void qcom_rproc_pds_disable(struct qcom_adsp *adsp)
+static void qcom_rproc_pds_disable(struct qcom_pas *adsp)
 {
 	struct device *dev = adsp->dev;
 	struct dev_pm_domain_list *pds = adsp->pd_list;
@@ -207,7 +207,7 @@ static void qcom_rproc_pds_disable(struct qcom_adsp *adsp)
 	pm_runtime_put(dev);
 }
 
-static int qcom_wpss_shutdown(struct qcom_adsp *adsp)
+static int qcom_wpss_shutdown(struct qcom_pas *adsp)
 {
 	unsigned int val;
 
@@ -247,7 +247,7 @@ static int qcom_wpss_shutdown(struct qcom_adsp *adsp)
 	return 0;
 }
 
-static int qcom_adsp_shutdown(struct qcom_adsp *adsp)
+static int qcom_adsp_shutdown(struct qcom_pas *adsp)
 {
 	unsigned long timeout;
 	unsigned int val;
@@ -314,7 +314,7 @@ reset:
 
 static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	int ret;
 
 	ret = qcom_mdt_load_no_init(adsp->dev, fw, rproc->firmware, 0,
@@ -330,7 +330,7 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 static void adsp_unmap_carveout(struct rproc *rproc)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 
 	if (adsp->has_iommu)
 		iommu_unmap(rproc->domain, adsp->mem_phys, adsp->mem_size);
@@ -338,7 +338,7 @@ static void adsp_unmap_carveout(struct rproc *rproc)
 
 static int adsp_map_carveout(struct rproc *rproc)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	struct of_phandle_args args;
 	long long sid;
 	unsigned long iova;
@@ -372,7 +372,7 @@ static int adsp_map_carveout(struct rproc *rproc)
 
 static int adsp_start(struct rproc *rproc)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	int ret;
 	unsigned int val;
 
@@ -453,7 +453,7 @@ disable_irqs:
 
 static void qcom_adsp_pil_handover(struct qcom_q6v5 *q6v5)
 {
-	struct qcom_adsp *adsp = container_of(q6v5, struct qcom_adsp, q6v5);
+	struct qcom_pas *adsp = container_of(q6v5, struct qcom_pas, q6v5);
 
 	clk_disable_unprepare(adsp->xo);
 	qcom_rproc_pds_disable(adsp);
@@ -461,7 +461,7 @@ static void qcom_adsp_pil_handover(struct qcom_q6v5 *q6v5)
 
 static int adsp_stop(struct rproc *rproc)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	int handover;
 	int ret;
 
@@ -484,7 +484,7 @@ static int adsp_stop(struct rproc *rproc)
 
 static void *adsp_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	int offset;
 
 	offset = da - adsp->mem_reloc;
@@ -496,7 +496,7 @@ static void *adsp_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iom
 
 static int adsp_parse_firmware(struct rproc *rproc, const struct firmware *fw)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 	int ret;
 
 	ret = qcom_register_dump_segments(rproc, fw);
@@ -517,7 +517,7 @@ static int adsp_parse_firmware(struct rproc *rproc, const struct firmware *fw)
 
 static unsigned long adsp_panic(struct rproc *rproc)
 {
-	struct qcom_adsp *adsp = rproc->priv;
+	struct qcom_pas *adsp = rproc->priv;
 
 	return qcom_q6v5_panic(&adsp->q6v5);
 }
@@ -531,7 +531,7 @@ static const struct rproc_ops adsp_ops = {
 	.panic = adsp_panic,
 };
 
-static int adsp_init_clock(struct qcom_adsp *adsp, const char **clk_ids)
+static int adsp_init_clock(struct qcom_pas *adsp, const char **clk_ids)
 {
 	int num_clks = 0;
 	int i;
@@ -555,7 +555,7 @@ static int adsp_init_clock(struct qcom_adsp *adsp, const char **clk_ids)
 	return devm_clk_bulk_get(adsp->dev, adsp->num_clks, adsp->clks);
 }
 
-static int adsp_init_reset(struct qcom_adsp *adsp)
+static int adsp_init_reset(struct qcom_pas *adsp)
 {
 	adsp->pdc_sync_reset = devm_reset_control_get_optional_exclusive(adsp->dev,
 			"pdc_sync");
@@ -578,7 +578,7 @@ static int adsp_init_reset(struct qcom_adsp *adsp)
 	return 0;
 }
 
-static int adsp_init_mmio(struct qcom_adsp *adsp,
+static int adsp_init_mmio(struct qcom_pas *adsp,
 				struct platform_device *pdev)
 {
 	struct resource *efuse_region;
@@ -623,7 +623,7 @@ static int adsp_init_mmio(struct qcom_adsp *adsp,
 	return 0;
 }
 
-static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
+static int adsp_alloc_memory_region(struct qcom_pas *adsp)
 {
 	struct reserved_mem *rmem = NULL;
 	struct device_node *node;
@@ -655,7 +655,7 @@ static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_pil_data *desc;
 	const char *firmware_name;
-	struct qcom_adsp *adsp;
+	struct qcom_pas *adsp;
 	struct rproc *rproc;
 	int ret;
 
@@ -753,7 +753,7 @@ disable_pm:
 
 static void adsp_remove(struct platform_device *pdev)
 {
-	struct qcom_adsp *adsp = platform_get_drvdata(pdev);
+	struct qcom_pas *adsp = platform_get_drvdata(pdev);
 
 	rproc_del(adsp->rproc);
 
