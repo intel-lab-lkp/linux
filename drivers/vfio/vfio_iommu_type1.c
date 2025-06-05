@@ -457,15 +457,22 @@ static bool is_invalid_reserved_pfn(unsigned long pfn)
 	return true;
 }
 
-static int put_pfn(unsigned long pfn, int prot)
+/*
+ * The caller must ensure that these npages PFNs belong to the same folio.
+ */
+static int put_pfns(unsigned long pfn, int prot, int npages)
 {
 	if (!is_invalid_reserved_pfn(pfn)) {
-		struct page *page = pfn_to_page(pfn);
-
-		unpin_user_pages_dirty_lock(&page, 1, prot & IOMMU_WRITE);
-		return 1;
+		unpin_user_page_range_dirty_lock(pfn_to_page(pfn),
+				npages, prot & IOMMU_WRITE);
+		return npages;
 	}
 	return 0;
+}
+
+static int put_pfn(unsigned long pfn, int prot)
+{
+	return put_pfns(pfn, prot, 1);
 }
 
 #define VFIO_BATCH_MAX_CAPACITY (PAGE_SIZE / sizeof(struct page *))
@@ -731,19 +738,48 @@ unpin_out:
 	return pinned;
 }
 
+static long get_step(unsigned long pfn, unsigned long npage)
+{
+	struct folio *folio;
+	struct page *page;
+
+	if (is_invalid_reserved_pfn(pfn))
+		return 1;
+
+	page = pfn_to_page(pfn);
+	folio = page_folio(page);
+
+	if (!folio_test_large(folio))
+		return 1;
+
+	/*
+	 * The precondition for doing this here is that pfn is contiguous
+	 */
+	return min_t(long, npage,
+			folio_nr_pages(folio) - folio_page_idx(folio, page));
+}
+
 static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 				    unsigned long pfn, unsigned long npage,
 				    bool do_accounting)
 {
 	long unlocked = 0, locked = 0;
-	long i;
 
-	for (i = 0; i < npage; i++, iova += PAGE_SIZE) {
-		if (put_pfn(pfn++, dma->prot)) {
-			unlocked++;
-			if (vfio_find_vpfn(dma, iova))
-				locked++;
+	while (npage) {
+		long step = get_step(pfn, npage);
+
+		/*
+		 * Although the third parameter of put_pfns() is of type int,
+		 * the value of step here will not exceed the range that int
+		 * can represent. Therefore, it is safe to pass step.
+		 */
+		if (put_pfns(pfn, dma->prot, step)) {
+			unlocked += step;
+			locked += vpfn_pages(dma, iova, step);
 		}
+		pfn += step;
+		iova += PAGE_SIZE * step;
+		npage -= step;
 	}
 
 	if (do_accounting)
