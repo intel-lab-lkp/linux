@@ -18,7 +18,6 @@
  * - ESD Management
  * - Firmware update/flashing
  * - "Config" update/flashing
- * - Stylus Events
  * - Gesture Events
  * - Support for revision B
  */
@@ -28,6 +27,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
+#include <linux/of.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -50,6 +50,8 @@
 #define GOODIX_BERLIN_POINT_TYPE_STYLUS_HOVER	1
 #define GOODIX_BERLIN_POINT_TYPE_STYLUS		3
 
+#define GOODIX_BERLIN_STYLUS_MAX_TILT		90
+
 #define GOODIX_BERLIN_TOUCH_ID_MASK		GENMASK(7, 4)
 
 #define GOODIX_BERLIN_DEV_CONFIRM_VAL		0xAA
@@ -58,6 +60,11 @@
 #define GOODIX_BERLIN_IC_INFO_MAX_LEN		SZ_1K
 
 #define GOODIX_BERLIN_CHECKSUM_SIZE		sizeof(u16)
+
+/* BIT(3) is unused */
+#define GOODIX_BERLIN_STYLUS_BTN_MASK		GENMASK(3, 1)
+static unsigned int stylus_btn[] = {BTN_STYLUS, BTN_STYLUS2};
+#define GOODIX_BERLIN_MAX_STYLUS_BTN		ARRAY_SIZE(stylus_btn)
 
 struct goodix_berlin_fw_version {
 	u8 rom_pid[6];
@@ -144,11 +151,24 @@ struct goodix_berlin_touch {
 };
 #define GOODIX_BERLIN_TOUCH_SIZE	sizeof(struct goodix_berlin_touch)
 
+struct goodix_berlin_stylus {
+	u8 status;
+	u8 reserved;
+	__le16 x;
+	__le16 y;
+	__le16 p;
+	__le16 x_angle;
+	__le16 y_angle;
+	u8 reserved2[4];
+};
+#define GOODIX_BERLIN_STYLUS_SIZE	sizeof(struct goodix_berlin_stylus)
+
 struct goodix_berlin_header {
 	u8 status;
 	u8 reserved1;
 	u8 request_type;
-	u8 reserved2[3];
+	u8 stylus_btn;
+	u8 reserved2[2];
 	__le16 checksum;
 };
 #define GOODIX_BERLIN_HEADER_SIZE	sizeof(struct goodix_berlin_header)
@@ -160,6 +180,12 @@ struct goodix_berlin_event {
 		GOODIX_BERLIN_CHECKSUM_SIZE];
 };
 
+enum goodix_berlin_event_type {
+	EVENT_NONE,
+	EVENT_STYLUS,
+	EVENT_TOUCH
+};
+
 struct goodix_berlin_core {
 	struct device *dev;
 	struct regmap *regmap;
@@ -169,6 +195,7 @@ struct goodix_berlin_core {
 	struct touchscreen_properties props;
 	struct goodix_berlin_fw_version fw_version;
 	struct input_dev *input_dev;
+	struct input_dev *stylus_dev;
 	int irq;
 
 	/* Runtime parameters extracted from IC_INFO buffer  */
@@ -177,6 +204,9 @@ struct goodix_berlin_core {
 	const struct goodix_berlin_ic_data *ic_data;
 
 	struct goodix_berlin_event event;
+
+	enum goodix_berlin_event_type last_event;
+	enum goodix_berlin_event_type cur_event;
 };
 
 static bool goodix_berlin_checksum_valid(const u8 *data, int size)
@@ -432,23 +462,52 @@ static int goodix_berlin_get_remaining_contacts(struct goodix_berlin_core *cd,
 	return 0;
 }
 
-static void goodix_berlin_report_state(struct goodix_berlin_core *cd, int n)
+static void goodix_berlin_stylus_report(struct goodix_berlin_core *cd,
+					u8 btn_pressed)
+{
+	struct goodix_berlin_stylus *s =
+			(struct goodix_berlin_stylus *)cd->event.data;
+
+	struct input_dev *dev = cd->stylus_dev;
+	s8 tilt_x, tilt_y;
+	int i;
+
+	if (!dev)
+		return;
+
+	tilt_x = (s8)(le16_to_cpu(s->x_angle) / 100);
+	tilt_y = (s8)(le16_to_cpu(s->y_angle) / 100);
+
+	input_report_key(dev, BTN_TOUCH, 1);
+	input_report_key(dev, BTN_TOOL_PEN, 1);
+	input_report_abs(dev, ABS_X, le16_to_cpu(s->x));
+	input_report_abs(dev, ABS_Y, le16_to_cpu(s->y));
+	input_report_abs(dev, ABS_PRESSURE, le16_to_cpu(s->p));
+	input_report_abs(dev, ABS_DISTANCE, !le16_to_cpu(s->p));
+	input_report_abs(dev, ABS_TILT_X, tilt_x);
+	input_report_abs(dev, ABS_TILT_Y, tilt_y);
+
+	dev_dbg(&dev->dev, "stylus: x: %d, y: %d, pressure: %d, tilt_x: %d tilt_y: %d, btn: %d",
+		le16_to_cpu(s->x), le16_to_cpu(s->y), le16_to_cpu(s->p), tilt_x,
+		tilt_y, btn_pressed);
+
+	for (i = 0; i < GOODIX_BERLIN_MAX_STYLUS_BTN; i++)
+		input_report_key(dev, stylus_btn[i],
+				 !!(btn_pressed & (1 << i)));
+
+	input_sync(dev);
+}
+
+static void goodix_berlin_mt_report(struct goodix_berlin_core *cd, int n)
 {
 	struct goodix_berlin_touch *touch_data =
 			(struct goodix_berlin_touch *)cd->event.data;
 	struct goodix_berlin_touch *t;
 	int i;
-	u8 type, id;
+	u8 id;
 
 	for (i = 0; i < n; i++) {
 		t = &touch_data[i];
-
-		type = FIELD_GET(GOODIX_BERLIN_POINT_TYPE_MASK, t->status);
-		if (type == GOODIX_BERLIN_POINT_TYPE_STYLUS ||
-		    type == GOODIX_BERLIN_POINT_TYPE_STYLUS_HOVER) {
-			dev_warn_once(cd->dev, "Stylus event type not handled\n");
-			continue;
-		}
 
 		id = FIELD_GET(GOODIX_BERLIN_TOUCH_ID_MASK, t->status);
 		if (id >= GOODIX_BERLIN_MAX_TOUCH) {
@@ -470,10 +529,95 @@ static void goodix_berlin_report_state(struct goodix_berlin_core *cd, int n)
 	input_sync(cd->input_dev);
 }
 
+static void goodix_berlin_device_switch(struct goodix_berlin_core *cd)
+{
+	int i;
+
+	switch (cd->last_event) {
+	case EVENT_STYLUS:
+		input_report_key(cd->stylus_dev, BTN_TOUCH, 0);
+		input_report_key(cd->stylus_dev, BTN_TOOL_PEN, 0);
+		input_sync(cd->stylus_dev);
+		break;
+	case EVENT_TOUCH:
+		for (i = 0; i < GOODIX_BERLIN_MAX_TOUCH; i++) {
+			input_mt_slot(cd->input_dev, i);
+			input_mt_report_slot_state(cd->input_dev,
+						   MT_TOOL_FINGER, false);
+		}
+		input_report_key(cd->input_dev, BTN_TOUCH, 0);
+		input_sync(cd->input_dev);
+		break;
+	default:
+		dev_warn(cd->dev, "%s: unsupported event code %d\n",
+			 __func__, cd->cur_event);
+	}
+}
+
+static void goodix_berlin_report_state(struct goodix_berlin_core *cd,
+				       u8 btn_pressed, int n)
+{
+	/*
+	 * When switching devices, the downstream code drops the first event
+	 * from the new device and instead reports a touch-up event. Retaining
+	 * and handling that initial event appears to be harmless.
+	 */
+	if (cd->last_event != EVENT_NONE && cd->last_event != cd->cur_event)
+		goodix_berlin_device_switch(cd);
+
+	switch (cd->cur_event) {
+	case EVENT_STYLUS:
+		goodix_berlin_stylus_report(cd, btn_pressed);
+		break;
+	case EVENT_TOUCH:
+		goodix_berlin_mt_report(cd, n);
+		break;
+	default:
+		dev_warn(cd->dev, "%s: unsupported event code %d\n",
+			 __func__, cd->cur_event);
+	}
+}
+
+static inline void goodix_berlin_event_update(struct goodix_berlin_core *cd)
+{
+	struct goodix_berlin_touch *touch_data =
+			(struct goodix_berlin_touch *)cd->event.data;
+
+	u8 type;
+
+	/*
+	 * According to the downstream code, the type of the first contact
+	 * point determines the type for the entire event sequence. In the
+	 * stylus case, there is typically only one contact point.
+	 */
+	cd->last_event = cd->cur_event;
+	type = FIELD_GET(GOODIX_BERLIN_POINT_TYPE_MASK, touch_data->status);
+	if (type == GOODIX_BERLIN_POINT_TYPE_STYLUS ||
+	    type == GOODIX_BERLIN_POINT_TYPE_STYLUS_HOVER)
+		cd->cur_event = EVENT_STYLUS;
+	else
+		cd->cur_event = EVENT_TOUCH;
+}
+
+static inline int goodix_berlin_event_len(struct goodix_berlin_core *cd, int n)
+{
+	switch (cd->cur_event) {
+	case EVENT_STYLUS:
+		return GOODIX_BERLIN_STYLUS_SIZE + GOODIX_BERLIN_CHECKSUM_SIZE;
+	case EVENT_TOUCH:
+		return n * GOODIX_BERLIN_TOUCH_SIZE +
+		       GOODIX_BERLIN_CHECKSUM_SIZE;
+	default:
+		dev_warn(cd->dev, "%s: unsupported event code %d\n",
+			 __func__, cd->cur_event);
+		return 0;
+	}
+}
+
 static void goodix_berlin_touch_handler(struct goodix_berlin_core *cd)
 {
-	u8 touch_num;
-	int error;
+	u8 touch_num, btn_pressed;
+	int error, len;
 
 	touch_num = FIELD_GET(GOODIX_BERLIN_TOUCH_COUNT_MASK,
 			      cd->event.hdr.request_type);
@@ -490,8 +634,9 @@ static void goodix_berlin_touch_handler(struct goodix_berlin_core *cd)
 	}
 
 	if (touch_num) {
-		int len = touch_num * GOODIX_BERLIN_TOUCH_SIZE +
-			  GOODIX_BERLIN_CHECKSUM_SIZE;
+		goodix_berlin_event_update(cd);
+		len = goodix_berlin_event_len(cd, touch_num);
+
 		if (!goodix_berlin_checksum_valid(cd->event.data, len)) {
 			dev_err(cd->dev, "touch data checksum error: %*ph\n",
 				len, cd->event.data);
@@ -499,7 +644,10 @@ static void goodix_berlin_touch_handler(struct goodix_berlin_core *cd)
 		}
 	}
 
-	goodix_berlin_report_state(cd, touch_num);
+	btn_pressed = FIELD_GET(GOODIX_BERLIN_STYLUS_BTN_MASK,
+				cd->event.hdr.stylus_btn);
+
+	goodix_berlin_report_state(cd, btn_pressed, touch_num);
 }
 
 static int goodix_berlin_request_handle_reset(struct goodix_berlin_core *cd)
@@ -519,9 +667,9 @@ static irqreturn_t goodix_berlin_irq(int irq, void *data)
 	int error;
 
 	/*
-	 * First, read buffer with space for 2 touch events:
+	 * First, read buffer with space for 2 touch events / 1 stylus event:
 	 * - GOODIX_BERLIN_HEADER_SIZE = 8 bytes
-	 * - GOODIX_BERLIN_TOUCH_SIZE * 2 = 16 bytes
+	 * - GOODIX_BERLIN_TOUCH_SIZE * 2 = GOODIX_BERLIN_STYLUS_SIZE = 16 bytes
 	 * - GOODIX_BERLIN_CHECKLSUM_SIZE = 2 bytes
 	 * For a total of 26 bytes.
 	 *
@@ -531,6 +679,12 @@ static irqreturn_t goodix_berlin_irq(int irq, void *data)
 	 * - bytes 8-15:  Finger 0 Data
 	 * - bytes 24-25: Checksum
 	 * - bytes 18-25: Unused 8 bytes
+	 *
+	 * If only a stylus is reported
+	 * - bytes 0-7:   Header (GOODIX_BERLIN_HEADER_SIZE)
+	 * - bytes 8-19:  Stylus Data
+	 * - bytes 20-23: Unused 4 bytes
+	 * - bytes 24-25: Checksum
 	 *
 	 * If 2 fingers are reported, we would have read the exact needed
 	 * amount of data and checksum would be at the end of the buffer:
@@ -599,6 +753,58 @@ out_clear:
 
 out:
 	return IRQ_HANDLED;
+}
+
+static int goodix_berlin_stylus_dev_config(struct goodix_berlin_core *cd,
+					   const struct input_id *id)
+{
+	struct device_node *np = cd->dev->of_node;
+	struct input_dev *stylus_dev;
+	int i, width, height, pressure;
+
+	if (!of_property_read_bool(np, "goodix,stylus-enable"))
+		return 0;
+
+	if (of_property_read_u32(np, "goodix,physical-x", &width))
+		width = cd->props.max_x / 10;
+
+	if (of_property_read_u32(np, "goodix,physical-y", &height))
+		height = cd->props.max_y / 10;
+
+	if (of_property_read_u32(np, "goodix,stylus-pressure-level", &pressure))
+		pressure = 4096;
+
+	stylus_dev = devm_input_allocate_device(cd->dev);
+	if (!stylus_dev)
+		return -ENOMEM;
+
+	cd->stylus_dev = stylus_dev;
+	input_set_drvdata(stylus_dev, cd);
+
+	stylus_dev->name = "Goodix Berlin Stylus";
+	stylus_dev->phys = "input/stylus";
+	stylus_dev->id = *id;
+
+	input_set_capability(stylus_dev, EV_KEY, BTN_TOUCH);
+	input_set_capability(stylus_dev, EV_KEY, BTN_TOOL_PEN);
+	for (i = 0; i < GOODIX_BERLIN_MAX_STYLUS_BTN; i++)
+		input_set_capability(stylus_dev, EV_KEY, stylus_btn[i]);
+	__set_bit(INPUT_PROP_DIRECT, stylus_dev->propbit);
+
+	input_set_abs_params(stylus_dev, ABS_X, 0, cd->props.max_x, 0, 0);
+	input_set_abs_params(stylus_dev, ABS_Y, 0, cd->props.max_y, 0, 0);
+	input_abs_set_res(stylus_dev, ABS_X, cd->props.max_x / width);
+	input_abs_set_res(stylus_dev, ABS_Y, cd->props.max_y / height);
+	input_set_abs_params(stylus_dev, ABS_PRESSURE, 0, pressure - 1, 0, 0);
+	input_set_abs_params(stylus_dev, ABS_DISTANCE, 0, 255, 0, 0);
+	input_set_abs_params(stylus_dev, ABS_TILT_X,
+			     -GOODIX_BERLIN_STYLUS_MAX_TILT,
+			     GOODIX_BERLIN_STYLUS_MAX_TILT, 0, 0);
+	input_set_abs_params(stylus_dev, ABS_TILT_Y,
+			     -GOODIX_BERLIN_STYLUS_MAX_TILT,
+			     GOODIX_BERLIN_STYLUS_MAX_TILT, 0, 0);
+
+	return input_register_device(stylus_dev);
 }
 
 static int goodix_berlin_input_dev_config(struct goodix_berlin_core *cd,
@@ -777,6 +983,12 @@ int goodix_berlin_probe(struct device *dev, int irq, const struct input_id *id,
 	error = goodix_berlin_input_dev_config(cd, id);
 	if (error) {
 		dev_err(dev, "failed set input device");
+		return error;
+	}
+
+	error = goodix_berlin_stylus_dev_config(cd, id);
+	if (error) {
+		dev_err(dev, "failed set stylus device");
 		return error;
 	}
 
