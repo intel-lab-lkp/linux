@@ -5598,7 +5598,7 @@ static ssize_t thpsize_shmem_enabled_store(struct kobject *kobj,
 					   const char *buf, size_t count)
 {
 	int order = to_thpsize(kobj)->order;
-	ssize_t ret = count;
+	int err;
 
 	if (sysfs_streq(buf, "always")) {
 		spin_lock(&huge_shmem_orders_lock);
@@ -5641,16 +5641,14 @@ static ssize_t thpsize_shmem_enabled_store(struct kobject *kobj,
 		clear_bit(order, &huge_shmem_orders_madvise);
 		spin_unlock(&huge_shmem_orders_lock);
 	} else {
-		ret = -EINVAL;
+		return -EINVAL;
 	}
 
-	if (ret > 0) {
-		int err = start_stop_khugepaged();
+	err = start_stop_khugepaged();
+	if (err)
+		return err;
 
-		if (err)
-			ret = err;
-	}
-	return ret;
+	return count;
 }
 
 struct kobj_attribute thpsize_shmem_enabled_attr =
