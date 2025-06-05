@@ -1240,6 +1240,7 @@ bool acpi_pci_need_resume(struct pci_dev *dev)
 
 void acpi_pci_add_bus(struct pci_bus *bus)
 {
+	u64 rev;
 	union acpi_object *obj;
 	struct pci_host_bridge *bridge;
 
@@ -1256,7 +1257,12 @@ void acpi_pci_add_bus(struct pci_bus *bus)
 	if (!pci_is_root_bus(bus))
 		return;
 
-	obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(bus->bridge), &pci_acpi_dsm_guid, 3,
+	rev = 3;
+	if (!acpi_check_dsm(ACPI_HANDLE(bus->bridge), &pci_acpi_dsm_guid, rev,
+			BIT(DSM_PCI_POWER_ON_RESET_DELAY)))
+		return;
+
+	obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(bus->bridge), &pci_acpi_dsm_guid, rev,
 				      DSM_PCI_POWER_ON_RESET_DELAY, NULL, ACPI_TYPE_INTEGER);
 	if (!obj)
 		return;
@@ -1412,12 +1418,18 @@ static void pci_acpi_optimize_delay(struct pci_dev *pdev,
 {
 	struct pci_host_bridge *bridge = pci_find_host_bridge(pdev->bus);
 	int value;
+	u64 rev;
 	union acpi_object *obj, *elements;
 
 	if (bridge->ignore_reset_delay)
 		pdev->d3cold_delay = 0;
 
-	obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, 3,
+	rev = 3;
+	if (!acpi_check_dsm(handle, &pci_acpi_dsm_guid, rev,
+				BIT(DSM_PCI_DEVICE_READINESS_DURATIONS)))
+		return;
+
+	obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, rev,
 				      DSM_PCI_DEVICE_READINESS_DURATIONS, NULL,
 				      ACPI_TYPE_PACKAGE);
 	if (!obj)
