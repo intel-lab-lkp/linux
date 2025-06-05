@@ -32,6 +32,9 @@ enum cpuid_regs_idx {
 #define CPUID_LEAF_FREQ		0x16
 #define CPUID_LEAF_TILE		0x1d
 
+#define CPUID_BASE_START	0x0
+#define CPUID_BASE_END		(CPUID_BASE_START + 0xffff)
+
 /*
  * Types for CPUID(0x2) parsing:
  */
