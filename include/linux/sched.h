@@ -721,12 +721,14 @@ struct sched_dl_entity {
 	 * Bits for DL-server functionality. Also see the comment near
 	 * dl_server_update().
 	 *
-	 * @rq the runqueue this server is for
+	 * @dl_rq the runqueue on which this entity is (to be) queued
+	 * @my_q  the runqueue "owned" by this entity
 	 *
 	 * @server_has_tasks() returns true if @server_pick return a
 	 * runnable task.
 	 */
-	struct rq			*rq;
+	struct dl_rq			*dl_rq;
+	struct rq			*my_q;
 	dl_server_has_tasks_f		server_has_tasks;
 	dl_server_pick_f		server_pick_task;
 
