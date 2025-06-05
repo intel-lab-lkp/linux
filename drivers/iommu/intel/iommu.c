@@ -3340,7 +3340,7 @@ intel_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	struct intel_iommu *iommu = info->iommu;
 	struct dmar_domain *dmar_domain;
 	struct iommu_domain *domain;
-	bool first_stage;
+	bool first_stage = false;
 
 	if (flags &
 	    (~(IOMMU_HWPT_ALLOC_NEST_PARENT | IOMMU_HWPT_ALLOC_DIRTY_TRACKING |
@@ -3356,13 +3356,8 @@ intel_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	 * IOMMU_HWPT_ALLOC_NEST_PARENT or IOMMU_HWPT_ALLOC_DIRTY_TRACKING
 	 * is specified.
 	 */
-	if (nested_parent || dirty_tracking) {
-		if (!sm_supported(iommu) || !ecap_slts(iommu->ecap))
-			return ERR_PTR(-EOPNOTSUPP);
-		first_stage = false;
-	} else {
+	if (!nested_parent && !dirty_tracking)
 		first_stage = first_level_by_default(iommu);
-	}
 
 	dmar_domain = paging_domain_alloc(dev, first_stage);
 	if (IS_ERR(dmar_domain))
