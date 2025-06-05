@@ -635,27 +635,6 @@ svc_destroy(struct svc_serv **servp)
 }
 EXPORT_SYMBOL_GPL(svc_destroy);
 
-static bool
-svc_init_buffer(struct svc_rqst *rqstp, unsigned int size, int node)
-{
-	unsigned long pages, ret;
-
-	/* bc_xprt uses fore channel allocated buffers */
-	if (svc_is_backchannel(rqstp))
-		return true;
-
-	pages = size / PAGE_SIZE + 1; /* extra page as we hold both request and reply.
-				       * We assume one is at most one page
-				       */
-	WARN_ON_ONCE(pages > RPCSVC_MAXPAGES);
-	if (pages > RPCSVC_MAXPAGES)
-		pages = RPCSVC_MAXPAGES;
-
-	ret = alloc_pages_bulk_node(GFP_KERNEL, node, pages,
-				    rqstp->rq_pages);
-	return ret == pages;
-}
-
 /*
  * Release an RPC server buffer
  */
@@ -706,9 +685,6 @@ svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 
 	rqstp->rq_resp = kmalloc_node(serv->sv_xdrsize, GFP_KERNEL, node);
 	if (!rqstp->rq_resp)
-		goto out_enomem;
-
-	if (!svc_init_buffer(rqstp, serv->sv_max_mesg, node))
 		goto out_enomem;
 
 	rqstp->rq_err = -EAGAIN; /* No error yet */
