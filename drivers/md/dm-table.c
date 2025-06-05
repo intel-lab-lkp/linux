@@ -430,6 +430,10 @@ static int dm_set_device_limits(struct dm_target *ti, struct dm_dev *dev,
 		return 0;
 	}
 
+	/* For striped types, limit the chunk_sectors to the chunk size */
+	if (dm_target_supports_striped(ti->type))
+		limits->chunk_sectors = len >> SECTOR_SHIFT;
+
 	mutex_lock(&q->limits_lock);
 	/*
 	 * BLK_FEAT_ATOMIC_WRITES is not inherited from the bottom device in

@@ -309,6 +309,9 @@ struct target_type {
 #define DM_TARGET_ATOMIC_WRITES		0x00000400
 #define dm_target_supports_atomic_writes(type) ((type)->features & DM_TARGET_ATOMIC_WRITES)
 
+#define DM_TARGET_STRIPED		0x00000800
+#define dm_target_supports_striped(type) ((type)->features & DM_TARGET_STRIPED)
+
 struct dm_target {
 	struct dm_table *table;
 	struct target_type *type;
