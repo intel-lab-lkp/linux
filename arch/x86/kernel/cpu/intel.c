@@ -335,6 +335,15 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 	 */
 	if (cpu_has(c, X86_FEATURE_TME))
 		detect_tme_early(c);
+
+	if (cpu_has(c, X86_FEATURE_CORE_CAPABILITIES)) {
+		u64 msr;
+
+		rdmsrl(MSR_IA32_CORE_CAPS, msr);
+
+		if (msr & MSR_IA32_CORE_CAPS_RAR)
+			setup_force_cpu_cap(X86_FEATURE_RAR);
+	}
 }
 
 static void bsp_init_intel(struct cpuinfo_x86 *c)
