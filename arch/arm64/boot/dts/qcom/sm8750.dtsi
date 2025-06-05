@@ -174,7 +174,6 @@
 				exit-latency-us = <130>;
 				min-residency-us = <686>;
 			};
-
 		};
 
 		domain-idle-states {
@@ -1875,7 +1874,6 @@
 				interconnect-names = "qup-core",
 						     "qup-config";
 
-
 				pinctrl-0 = <&qup_uart7_default>;
 				pinctrl-names = "default";
 
@@ -1911,7 +1909,6 @@
 			#interconnect-cells = <2>;
 			clocks = <&gcc GCC_AGGRE_UFS_PHY_AXI_CLK>,
 				 <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>;
-
 		};
 
 		aggre1_noc: interconnect@16e0000 {
@@ -1921,7 +1918,6 @@
 			#interconnect-cells = <2>;
 			clocks = <&gcc GCC_AGGRE_UFS_PHY_AXI_CLK>,
 				 <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>;
-
 		};
 
 		aggre2_noc: interconnect@1700000 {
