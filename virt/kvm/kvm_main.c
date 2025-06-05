@@ -2627,11 +2627,15 @@ static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 			size = SZ_512G;
 			size_remaining -= size;
 			section_end = section_start + (size >> PAGE_SHIFT);
+			trace_kvm_vm_set_mem_attributes(section_start, section_end,
+							attrs->attributes, true);
 		} else {
 			size = size_remaining;
 			size_remaining = 0;
 			section_end = end;
 			WARN_ON_ONCE(section_end != (section_start + (size >> PAGE_SHIFT)));
+			trace_kvm_vm_set_mem_attributes(section_start, section_end,
+							attrs->attributes, false);
 		}
 
 		ret = kvm_vm_set_mem_attributes(kvm, section_start, section_end, attrs->attributes);

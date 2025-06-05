@@ -473,6 +473,39 @@ TRACE_EVENT(kvm_dirty_ring_exit,
 	TP_printk("vcpu %d", __entry->vcpu_id)
 );
 
+#ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
+/*
+ * @start:	Starting address of guest memory range
+ * @end:	End address of guest memory range
+ * @attr:	The value of the attribute being set.
+ * @indent:	If true, indent output displayed (printing '.' is used to
+ *		indicate that the transaction was split into multiple
+ *		operations and more are to follow).
+ */
+TRACE_EVENT(kvm_vm_set_mem_attributes,
+	TP_PROTO(gfn_t start, gfn_t end, unsigned long attr, bool indent),
+	TP_ARGS(start, end, attr, indent),
+
+	TP_STRUCT__entry(
+		__field(gfn_t,		start)
+		__field(gfn_t,		end)
+		__field(unsigned long,	attr)
+		__field(bool,		indent)
+	),
+
+	TP_fast_assign(
+		__entry->start		= start;
+		__entry->end		= end;
+		__entry->attr		= attr;
+		__entry->indent		= indent;
+	),
+
+	TP_printk("%s %#016llx -- %#016llx [0x%lx]",
+		  __entry->indent ? " ." : "",
+		  __entry->start, __entry->end, __entry->attr)
+);
+#endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
+
 TRACE_EVENT(kvm_unmap_hva_range,
 	TP_PROTO(unsigned long start, unsigned long end),
 	TP_ARGS(start, end),
