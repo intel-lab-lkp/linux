@@ -7074,6 +7074,8 @@ static int igc_probe(struct pci_dev *pdev,
 	const struct igc_info *ei = igc_info_tbl[ent->driver_data];
 	int err;
 
+	pci_disable_link_state(pdev, PCIE_LINK_STATE_L1_2);
+
 	err = pci_enable_device_mem(pdev);
 	if (err)
 		return err;
@@ -7498,6 +7500,8 @@ static int __igc_resume(struct device *dev, bool rpm)
 	pci_enable_wake(pdev, PCI_D3hot, 0);
 	pci_enable_wake(pdev, PCI_D3cold, 0);
 
+	pci_disable_link_state(pdev, PCIE_LINK_STATE_L1_2);
+
 	if (igc_init_interrupt_scheme(adapter, true)) {
 		netdev_err(netdev, "Unable to allocate memory for queues\n");
 		return -ENOMEM;
@@ -7623,6 +7627,7 @@ static pci_ers_result_t igc_io_slot_reset(struct pci_dev *pdev)
 		pci_enable_wake(pdev, PCI_D3hot, 0);
 		pci_enable_wake(pdev, PCI_D3cold, 0);
 
+		pci_disable_link_state_locked(pdev, PCIE_LINK_STATE_L1_2);
 		/* In case of PCI error, adapter loses its HW address
 		 * so we should re-assign it here.
 		 */
