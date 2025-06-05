@@ -382,6 +382,10 @@ static inline void cgroup_put(struct cgroup *cgrp)
 
 extern struct mutex cgroup_mutex;
 
+DEFINE_LOCK_GUARD_0(cgroup_mutex,
+	mutex_lock(&cgroup_mutex),
+	mutex_unlock(&cgroup_mutex))
+
 static inline void cgroup_lock(void)
 {
 	mutex_lock(&cgroup_mutex);
@@ -655,6 +659,9 @@ struct cgroup *cgroup_get_from_id(u64 id);
 
 struct cgroup_subsys_state;
 struct cgroup;
+
+extern struct mutex cgroup_mutex;
+DEFINE_LOCK_GUARD_0(cgroup_mutex, , ,)
 
 static inline u64 cgroup_id(const struct cgroup *cgrp) { return 1; }
 static inline void css_get(struct cgroup_subsys_state *css) {}

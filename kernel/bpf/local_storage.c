@@ -333,14 +333,12 @@ static void cgroup_storage_map_free(struct bpf_map *_map)
 	struct list_head *storages = &map->list;
 	struct bpf_cgroup_storage *storage, *stmp;
 
-	cgroup_lock();
-
-	list_for_each_entry_safe(storage, stmp, storages, list_map) {
-		bpf_cgroup_storage_unlink(storage);
-		bpf_cgroup_storage_free(storage);
+	scoped_guard(cgroup_mutex) {
+		list_for_each_entry_safe(storage, stmp, storages, list_map) {
+			bpf_cgroup_storage_unlink(storage);
+			bpf_cgroup_storage_free(storage);
+		}
 	}
-
-	cgroup_unlock();
 
 	WARN_ON(!RB_EMPTY_ROOT(&map->root));
 	WARN_ON(!list_empty(&map->list));

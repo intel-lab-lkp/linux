@@ -64,21 +64,20 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 	struct cgroup_root *root;
 	int retval = 0;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 	cgroup_attach_lock(true);
 	for_each_root(root) {
 		struct cgroup *from_cgrp;
 
-		spin_lock_irq(&css_set_lock);
-		from_cgrp = task_cgroup_from_root(from, root);
-		spin_unlock_irq(&css_set_lock);
+		scoped_guard(spinlock_irq, &css_set_lock) {
+			from_cgrp = task_cgroup_from_root(from, root);
+		}
 
 		retval = cgroup_attach_task(from_cgrp, tsk, false);
 		if (retval)
 			break;
 	}
 	cgroup_attach_unlock(true);
-	cgroup_unlock();
 
 	return retval;
 }
@@ -117,10 +116,10 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 	cgroup_attach_lock(true);
 
 	/* all tasks in @from are being moved, all csets are source */
-	spin_lock_irq(&css_set_lock);
-	list_for_each_entry(link, &from->cset_links, cset_link)
-		cgroup_migrate_add_src(link->cset, to, &mgctx);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(link, &from->cset_links, cset_link)
+			cgroup_migrate_add_src(link->cset, to, &mgctx);
+	}
 
 	ret = cgroup_migrate_prepare_dst(&mgctx);
 	if (ret)
@@ -203,10 +202,10 @@ void cgroup1_pidlist_destroy_all(struct cgroup *cgrp)
 {
 	struct cgroup_pidlist *l, *tmp_l;
 
-	mutex_lock(&cgrp->pidlist_mutex);
-	list_for_each_entry_safe(l, tmp_l, &cgrp->pidlists, links)
-		mod_delayed_work(cgroup_pidlist_destroy_wq, &l->destroy_dwork, 0);
-	mutex_unlock(&cgrp->pidlist_mutex);
+	scoped_guard(mutex, &cgrp->pidlist_mutex) {
+		list_for_each_entry_safe(l, tmp_l, &cgrp->pidlists, links)
+			mod_delayed_work(cgroup_pidlist_destroy_wq, &l->destroy_dwork, 0);
+	}
 
 	flush_workqueue(cgroup_pidlist_destroy_wq);
 	BUG_ON(!list_empty(&cgrp->pidlists));
@@ -219,20 +218,19 @@ static void cgroup_pidlist_destroy_work_fn(struct work_struct *work)
 						destroy_dwork);
 	struct cgroup_pidlist *tofree = NULL;
 
-	mutex_lock(&l->owner->pidlist_mutex);
-
-	/*
-	 * Destroy iff we didn't get queued again.  The state won't change
-	 * as destroy_dwork can only be queued while locked.
-	 */
-	if (!delayed_work_pending(dwork)) {
-		list_del(&l->links);
-		kvfree(l->list);
-		put_pid_ns(l->key.ns);
-		tofree = l;
+	scoped_guard(mutex, &l->owner->pidlist_mutex) {
+		/*
+		 * Destroy iff we didn't get queued again.  The state won't change
+		 * as destroy_dwork can only be queued while locked.
+		 */
+		if (!delayed_work_pending(dwork)) {
+			list_del(&l->links);
+			kvfree(l->list);
+			put_pid_ns(l->key.ns);
+			tofree = l;
+		}
 	}
 
-	mutex_unlock(&l->owner->pidlist_mutex);
 	kfree(tofree);
 }
 
@@ -567,11 +565,12 @@ static ssize_t cgroup_release_agent_write(struct kernfs_open_file *of,
 	cgrp = cgroup_kn_lock_live(of->kn, false);
 	if (!cgrp)
 		return -ENODEV;
-	spin_lock(&release_agent_path_lock);
-	strscpy(cgrp->root->release_agent_path, strstrip(buf),
-		sizeof(cgrp->root->release_agent_path));
-	spin_unlock(&release_agent_path_lock);
+	scoped_guard(spinlock, &release_agent_path_lock) {
+		strscpy(cgrp->root->release_agent_path, strstrip(buf),
+			sizeof(cgrp->root->release_agent_path));
+	}
 	cgroup_kn_unlock(of->kn);
+
 	return nbytes;
 }
 
@@ -579,10 +578,11 @@ static int cgroup_release_agent_show(struct seq_file *seq, void *v)
 {
 	struct cgroup *cgrp = seq_css(seq)->cgroup;
 
-	spin_lock(&release_agent_path_lock);
-	seq_puts(seq, cgrp->root->release_agent_path);
-	spin_unlock(&release_agent_path_lock);
+	scoped_guard(spinlock, &release_agent_path_lock) {
+		seq_puts(seq, cgrp->root->release_agent_path);
+	}
 	seq_putc(seq, '\n');
+
 	return 0;
 }
 
@@ -728,13 +728,11 @@ int cgroupstats_build(struct cgroupstats *stats, struct dentry *dentry)
 	 * @kn->priv's validity.  For this and css_tryget_online_from_dir(),
 	 * @kn->priv is RCU safe.  Let's do the RCU dancing.
 	 */
-	rcu_read_lock();
-	cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
-	if (!cgrp || !cgroup_tryget(cgrp)) {
-		rcu_read_unlock();
-		return -ENOENT;
+	scoped_guard(rcu) {
+		cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
+		if (!cgrp || !cgroup_tryget(cgrp))
+			return -ENOENT;
 	}
-	rcu_read_unlock();
 
 	css_task_iter_start(&cgrp->self, 0, &it);
 	while ((tsk = css_task_iter_next(&it))) {
@@ -811,9 +809,9 @@ void cgroup1_release_agent(struct work_struct *work)
 	if (!pathbuf || !agentbuf)
 		goto out_free;
 
-	spin_lock(&release_agent_path_lock);
-	strscpy(agentbuf, cgrp->root->release_agent_path, PATH_MAX);
-	spin_unlock(&release_agent_path_lock);
+	scoped_guard(spinlock, &release_agent_path_lock) {
+		strscpy(agentbuf, cgrp->root->release_agent_path, PATH_MAX);
+	}
 	if (!agentbuf[0])
 		goto out_free;
 
@@ -862,13 +860,11 @@ static int cgroup1_rename(struct kernfs_node *kn, struct kernfs_node *new_parent
 	kernfs_break_active_protection(new_parent);
 	kernfs_break_active_protection(kn);
 
-	cgroup_lock();
-
-	ret = kernfs_rename(kn, new_parent, new_name_str);
-	if (!ret)
-		TRACE_CGROUP_PATH(rename, cgrp);
-
-	cgroup_unlock();
+	scoped_guard(cgroup_mutex) {
+		ret = kernfs_rename(kn, new_parent, new_name_str);
+		if (!ret)
+			TRACE_CGROUP_PATH(rename, cgrp);
+	}
 
 	kernfs_unbreak_active_protection(kn);
 	kernfs_unbreak_active_protection(new_parent);
@@ -893,11 +889,11 @@ static int cgroup1_show_options(struct seq_file *seq, struct kernfs_root *kf_roo
 	if (root->flags & CGRP_ROOT_FAVOR_DYNMODS)
 		seq_puts(seq, ",favordynmods");
 
-	spin_lock(&release_agent_path_lock);
-	if (strlen(root->release_agent_path))
-		seq_show_option(seq, "release_agent",
-				root->release_agent_path);
-	spin_unlock(&release_agent_path_lock);
+	scoped_guard(spinlock, &release_agent_path_lock) {
+		if (strlen(root->release_agent_path))
+			seq_show_option(seq, "release_agent",
+					root->release_agent_path);
+	}
 
 	if (test_bit(CGRP_CPUSET_CLONE_CHILDREN, &root->cgrp.flags))
 		seq_puts(seq, ",clone_children");
@@ -1128,9 +1124,8 @@ int cgroup1_reconfigure(struct fs_context *fc)
 	WARN_ON(rebind_subsystems(&cgrp_dfl_root, removed_mask));
 
 	if (ctx->release_agent) {
-		spin_lock(&release_agent_path_lock);
+		guard(spinlock)(&release_agent_path_lock);
 		strcpy(root->release_agent_path, ctx->release_agent);
-		spin_unlock(&release_agent_path_lock);
 	}
 
 	trace_cgroup_remount(root);
@@ -1294,23 +1289,23 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
 {
 	struct cgroup *cgrp = ERR_PTR(-ENOENT);
 	struct cgroup_root *root;
-	unsigned long flags;
 
-	rcu_read_lock();
+	guard(rcu)();
+
 	for_each_root(root) {
 		/* cgroup1 only*/
 		if (root == &cgrp_dfl_root)
 			continue;
 		if (root->hierarchy_id != hierarchy_id)
 			continue;
-		spin_lock_irqsave(&css_set_lock, flags);
-		cgrp = task_cgroup_from_root(tsk, root);
-		if (!cgrp || !cgroup_tryget(cgrp))
-			cgrp = ERR_PTR(-ENOENT);
-		spin_unlock_irqrestore(&css_set_lock, flags);
+		scoped_guard(spinlock_irqsave, &css_set_lock) {
+			cgrp = task_cgroup_from_root(tsk, root);
+			if (!cgrp || !cgroup_tryget(cgrp))
+				cgrp = ERR_PTR(-ENOENT);
+		}
 		break;
 	}
-	rcu_read_unlock();
+
 	return cgrp;
 }
 

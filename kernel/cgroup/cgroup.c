@@ -335,9 +335,9 @@ static int cgroup_idr_alloc(struct idr *idr, void *ptr, int start, int end,
 	int ret;
 
 	idr_preload(gfp_mask);
-	spin_lock_bh(&cgroup_idr_lock);
-	ret = idr_alloc(idr, ptr, start, end, gfp_mask & ~__GFP_DIRECT_RECLAIM);
-	spin_unlock_bh(&cgroup_idr_lock);
+	scoped_guard(spinlock_bh, &cgroup_idr_lock) {
+		ret = idr_alloc(idr, ptr, start, end, gfp_mask & ~__GFP_DIRECT_RECLAIM);
+	}
 	idr_preload_end();
 	return ret;
 }
@@ -346,17 +346,16 @@ static void *cgroup_idr_replace(struct idr *idr, void *ptr, int id)
 {
 	void *ret;
 
-	spin_lock_bh(&cgroup_idr_lock);
+	guard(spinlock_bh)(&cgroup_idr_lock);
 	ret = idr_replace(idr, ptr, id);
-	spin_unlock_bh(&cgroup_idr_lock);
+
 	return ret;
 }
 
 static void cgroup_idr_remove(struct idr *idr, int id)
 {
-	spin_lock_bh(&cgroup_idr_lock);
+	guard(spinlock_bh)(&cgroup_idr_lock);
 	idr_remove(idr, id);
-	spin_unlock_bh(&cgroup_idr_lock);
 }
 
 static bool cgroup_has_tasks(struct cgroup *cgrp)
@@ -583,20 +582,19 @@ struct cgroup_subsys_state *cgroup_get_e_css(struct cgroup *cgrp,
 	if (!CGROUP_HAS_SUBSYS_CONFIG)
 		return NULL;
 
-	rcu_read_lock();
+	guard(rcu)();
 
 	do {
 		css = cgroup_css(cgrp, ss);
 
 		if (css && css_tryget_online(css))
-			goto out_unlock;
+			return css;
 		cgrp = cgroup_parent(cgrp);
 	} while (cgrp);
 
 	css = init_css_set.subsys[ss->id];
 	css_get(css);
-out_unlock:
-	rcu_read_unlock();
+
 	return css;
 }
 EXPORT_SYMBOL_GPL(cgroup_get_e_css);
@@ -633,9 +631,8 @@ int cgroup_task_count(const struct cgroup *cgrp)
 {
 	int count;
 
-	spin_lock_irq(&css_set_lock);
+	guard(spinlock_irq)(&css_set_lock);
 	count = __cgroup_task_count(cgrp);
-	spin_unlock_irq(&css_set_lock);
 
 	return count;
 }
@@ -1202,11 +1199,11 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 
 	/* First see if we already have a cgroup group that matches
 	 * the desired set */
-	spin_lock_irq(&css_set_lock);
-	cset = find_existing_css_set(old_cset, cgrp, template);
-	if (cset)
-		get_css_set(cset);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		cset = find_existing_css_set(old_cset, cgrp, template);
+		if (cset)
+			get_css_set(cset);
+	}
 
 	if (cset)
 		return cset;
@@ -1238,33 +1235,32 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 	 * find_existing_css_set() */
 	memcpy(cset->subsys, template, sizeof(cset->subsys));
 
-	spin_lock_irq(&css_set_lock);
-	/* Add reference counts and links from the new css_set. */
-	list_for_each_entry(link, &old_cset->cgrp_links, cgrp_link) {
-		struct cgroup *c = link->cgrp;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		/* Add reference counts and links from the new css_set. */
+		list_for_each_entry(link, &old_cset->cgrp_links, cgrp_link) {
+			struct cgroup *c = link->cgrp;
 
-		if (c->root == cgrp->root)
-			c = cgrp;
-		link_css_set(&tmp_links, cset, c);
+			if (c->root == cgrp->root)
+				c = cgrp;
+			link_css_set(&tmp_links, cset, c);
+		}
+
+		BUG_ON(!list_empty(&tmp_links));
+
+		css_set_count++;
+
+		/* Add @cset to the hash table */
+		key = css_set_hash(cset->subsys);
+		hash_add(css_set_table, &cset->hlist, key);
+
+		for_each_subsys(ss, ssid) {
+			struct cgroup_subsys_state *css = cset->subsys[ssid];
+
+			list_add_tail(&cset->e_cset_node[ssid],
+				&css->cgroup->e_csets[ssid]);
+			css_get(css);
+		}
 	}
-
-	BUG_ON(!list_empty(&tmp_links));
-
-	css_set_count++;
-
-	/* Add @cset to the hash table */
-	key = css_set_hash(cset->subsys);
-	hash_add(css_set_table, &cset->hlist, key);
-
-	for_each_subsys(ss, ssid) {
-		struct cgroup_subsys_state *css = cset->subsys[ssid];
-
-		list_add_tail(&cset->e_cset_node[ssid],
-			      &css->cgroup->e_csets[ssid]);
-		css_get(css);
-	}
-
-	spin_unlock_irq(&css_set_lock);
 
 	/*
 	 * If @cset should be threaded, look up the matching dom_cset and
@@ -1281,11 +1277,10 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 			return NULL;
 		}
 
-		spin_lock_irq(&css_set_lock);
+		guard(spinlock_irq)(&css_set_lock);
 		cset->dom_cset = dcset;
 		list_add_tail(&cset->threaded_csets_node,
 			      &dcset->threaded_csets);
-		spin_unlock_irq(&css_set_lock);
 	}
 
 	return cset;
@@ -1362,15 +1357,13 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 	 * Release all the links from cset_links to this hierarchy's
 	 * root cgroup
 	 */
-	spin_lock_irq(&css_set_lock);
-
-	list_for_each_entry_safe(link, tmp_link, &cgrp->cset_links, cset_link) {
-		list_del(&link->cset_link);
-		list_del(&link->cgrp_link);
-		kfree(link);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry_safe(link, tmp_link, &cgrp->cset_links, cset_link) {
+			list_del(&link->cset_link);
+			list_del(&link->cgrp_link);
+			kfree(link);
+		}
 	}
-
-	spin_unlock_irq(&css_set_lock);
 
 	WARN_ON_ONCE(list_empty(&root->root_list));
 	list_del_rcu(&root->root_list);
@@ -1437,12 +1430,10 @@ current_cgns_cgroup_from_root(struct cgroup_root *root)
 
 	lockdep_assert_held(&css_set_lock);
 
-	rcu_read_lock();
-
-	cset = current->nsproxy->cgroup_ns->root_cset;
-	res = __cset_cgroup_from_root(cset, root);
-
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		cset = current->nsproxy->cgroup_ns->root_cset;
+		res = __cset_cgroup_from_root(cset, root);
+	}
 
 	/*
 	 * The namespace_sem is held by current, so the root cgroup can't
@@ -1702,9 +1693,9 @@ static void cgroup_rm_file(struct cgroup *cgrp, const struct cftype *cft)
 		struct cgroup_subsys_state *css = cgroup_css(cgrp, cft->ss);
 		struct cgroup_file *cfile = (void *)css + cft->file_offset;
 
-		spin_lock_irq(&cgroup_file_kn_lock);
-		cfile->kn = NULL;
-		spin_unlock_irq(&cgroup_file_kn_lock);
+		scoped_guard(spinlock_irq, &css_set_lock) {
+			cfile->kn = NULL;
+		}
 
 		timer_delete_sync(&cfile->notify_timer);
 	}
@@ -1867,25 +1858,25 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 		rcu_assign_pointer(dcgrp->subsys[ssid], css);
 		ss->root = dst_root;
 
-		spin_lock_irq(&css_set_lock);
-		css->cgroup = dcgrp;
-		WARN_ON(!list_empty(&dcgrp->e_csets[ss->id]));
-		list_for_each_entry_safe(cset, cset_pos, &scgrp->e_csets[ss->id],
-					 e_cset_node[ss->id]) {
-			list_move_tail(&cset->e_cset_node[ss->id],
-				       &dcgrp->e_csets[ss->id]);
-			/*
-			 * all css_sets of scgrp together in same order to dcgrp,
-			 * patch in-flight iterators to preserve correct iteration.
-			 * since the iterator is always advanced right away and
-			 * finished when it->cset_pos meets it->cset_head, so only
-			 * update it->cset_head is enough here.
-			 */
-			list_for_each_entry(it, &cset->task_iters, iters_node)
-				if (it->cset_head == &scgrp->e_csets[ss->id])
-					it->cset_head = &dcgrp->e_csets[ss->id];
+		scoped_guard(spinlock_irq, &css_set_lock) {
+			css->cgroup = dcgrp;
+			WARN_ON(!list_empty(&dcgrp->e_csets[ss->id]));
+			list_for_each_entry_safe(cset, cset_pos, &scgrp->e_csets[ss->id],
+						e_cset_node[ss->id]) {
+				list_move_tail(&cset->e_cset_node[ss->id],
+					&dcgrp->e_csets[ss->id]);
+				/*
+				 * all css_sets of scgrp together in same order to dcgrp,
+				 * patch in-flight iterators to preserve correct iteration.
+				 * since the iterator is always advanced right away and
+				 * finished when it->cset_pos meets it->cset_head, so only
+				 * update it->cset_head is enough here.
+				 */
+				list_for_each_entry(it, &cset->task_iters, iters_node)
+					if (it->cset_head == &scgrp->e_csets[ss->id])
+						it->cset_head = &dcgrp->e_csets[ss->id];
+			}
 		}
-		spin_unlock_irq(&css_set_lock);
 
 		/* default hierarchy doesn't enable controllers by default */
 		dst_root->subsys_mask |= 1 << ssid;
@@ -1921,10 +1912,10 @@ int cgroup_show_path(struct seq_file *sf, struct kernfs_node *kf_node,
 	if (!buf)
 		return -ENOMEM;
 
-	spin_lock_irq(&css_set_lock);
-	ns_cgroup = current_cgns_cgroup_from_root(kf_cgroot);
-	len = kernfs_path_from_node(kf_node, ns_cgroup->kn, buf, PATH_MAX);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		ns_cgroup = current_cgns_cgroup_from_root(kf_cgroot);
+		len = kernfs_path_from_node(kf_node, ns_cgroup->kn, buf, PATH_MAX);
+	}
 
 	if (len == -E2BIG)
 		len = -ERANGE;
@@ -2175,13 +2166,13 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	 * Link the root cgroup in this hierarchy into all the css_set
 	 * objects.
 	 */
-	spin_lock_irq(&css_set_lock);
-	hash_for_each(css_set_table, i, cset, hlist) {
-		link_css_set(&tmp_links, cset, root_cgrp);
-		if (css_set_populated(cset))
-			cgroup_update_populated(root_cgrp, true);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		hash_for_each(css_set_table, i, cset, hlist) {
+			link_css_set(&tmp_links, cset, root_cgrp);
+			if (css_set_populated(cset))
+				cgroup_update_populated(root_cgrp, true);
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	BUG_ON(!list_empty(&root_cgrp->self.children));
 	BUG_ON(atomic_read(&root->nr_cgrps) != 1);
@@ -2224,13 +2215,10 @@ int cgroup_do_get_tree(struct fs_context *fc)
 		struct super_block *sb = fc->root->d_sb;
 		struct cgroup *cgrp;
 
-		cgroup_lock();
-		spin_lock_irq(&css_set_lock);
-
-		cgrp = cset_cgroup_from_root(ctx->ns->root_cset, ctx->root);
-
-		spin_unlock_irq(&css_set_lock);
-		cgroup_unlock();
+		scoped_guard(cgroup_mutex) {
+			guard(spinlock_irq)(&css_set_lock);
+			cgrp = cset_cgroup_from_root(ctx->ns->root_cset, ctx->root);
+		}
 
 		nsdentry = kernfs_node_dentry(cgrp->kn, sb);
 		dput(fc->root);
@@ -2440,13 +2428,9 @@ int cgroup_path_ns(struct cgroup *cgrp, char *buf, size_t buflen,
 {
 	int ret;
 
-	cgroup_lock();
-	spin_lock_irq(&css_set_lock);
-
+	guard(cgroup_mutex)();
+	guard(spinlock_irq)(&css_set_lock);
 	ret = cgroup_path_ns_locked(cgrp, buf, buflen, ns);
-
-	spin_unlock_irq(&css_set_lock);
-	cgroup_unlock();
 
 	return ret;
 }
@@ -2630,27 +2614,26 @@ static int cgroup_migrate_execute(struct cgroup_mgctx *mgctx)
 	 * the new cgroup.  There are no failure cases after here, so this
 	 * is the commit point.
 	 */
-	spin_lock_irq(&css_set_lock);
-	list_for_each_entry(cset, &tset->src_csets, mg_node) {
-		list_for_each_entry_safe(task, tmp_task, &cset->mg_tasks, cg_list) {
-			struct css_set *from_cset = task_css_set(task);
-			struct css_set *to_cset = cset->mg_dst_cset;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(cset, &tset->src_csets, mg_node) {
+			list_for_each_entry_safe(task, tmp_task, &cset->mg_tasks, cg_list) {
+				struct css_set *from_cset = task_css_set(task);
+				struct css_set *to_cset = cset->mg_dst_cset;
 
-			get_css_set(to_cset);
-			to_cset->nr_tasks++;
-			css_set_move_task(task, from_cset, to_cset, true);
-			from_cset->nr_tasks--;
-			/*
-			 * If the source or destination cgroup is frozen,
-			 * the task might require to change its state.
-			 */
-			cgroup_freezer_migrate_task(task, from_cset->dfl_cgrp,
-						    to_cset->dfl_cgrp);
-			put_css_set_locked(from_cset);
-
+				get_css_set(to_cset);
+				to_cset->nr_tasks++;
+				css_set_move_task(task, from_cset, to_cset, true);
+				from_cset->nr_tasks--;
+				/*
+				 * If the source or destination cgroup is frozen,
+				 * the task might require to change its state.
+				 */
+				cgroup_freezer_migrate_task(task, from_cset->dfl_cgrp,
+							    to_cset->dfl_cgrp);
+				put_css_set_locked(from_cset);
+			}
 		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	/*
 	 * Migration is committed, all target tasks are now on dst_csets.
@@ -2683,13 +2666,13 @@ out_cancel_attach:
 		} while_each_subsys_mask();
 	}
 out_release_tset:
-	spin_lock_irq(&css_set_lock);
-	list_splice_init(&tset->dst_csets, &tset->src_csets);
-	list_for_each_entry_safe(cset, tmp_cset, &tset->src_csets, mg_node) {
-		list_splice_tail_init(&cset->mg_tasks, &cset->tasks);
-		list_del_init(&cset->mg_node);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_splice_init(&tset->dst_csets, &tset->src_csets);
+		list_for_each_entry_safe(cset, tmp_cset, &tset->src_csets, mg_node) {
+			list_splice_tail_init(&cset->mg_tasks, &cset->tasks);
+			list_del_init(&cset->mg_node);
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	/*
 	 * Re-initialize the cgroup_taskset structure in case it is reused
@@ -2747,7 +2730,7 @@ void cgroup_migrate_finish(struct cgroup_mgctx *mgctx)
 
 	lockdep_assert_held(&cgroup_mutex);
 
-	spin_lock_irq(&css_set_lock);
+	guard(spinlock_irq)(&css_set_lock);
 
 	list_for_each_entry_safe(cset, tmp_cset, &mgctx->preloaded_src_csets,
 				 mg_src_preload_node) {
@@ -2766,8 +2749,6 @@ void cgroup_migrate_finish(struct cgroup_mgctx *mgctx)
 		list_del_init(&cset->mg_dst_preload_node);
 		put_css_set_locked(cset);
 	}
-
-	spin_unlock_irq(&css_set_lock);
 }
 
 /**
@@ -2910,14 +2891,14 @@ int cgroup_migrate(struct task_struct *leader, bool threadgroup,
 	 * section to prevent tasks from being freed while taking the snapshot.
 	 * spin_lock_irq() implies RCU critical section here.
 	 */
-	spin_lock_irq(&css_set_lock);
-	task = leader;
-	do {
-		cgroup_migrate_add_task(task, mgctx);
-		if (!threadgroup)
-			break;
-	} while_each_thread(leader, task);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		task = leader;
+		do {
+			cgroup_migrate_add_task(task, mgctx);
+			if (!threadgroup)
+				break;
+		} while_each_thread(leader, task);
+	}
 
 	return cgroup_migrate_execute(mgctx);
 }
@@ -2938,16 +2919,15 @@ int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 	int ret = 0;
 
 	/* look up all src csets */
-	spin_lock_irq(&css_set_lock);
-	rcu_read_lock();
-	task = leader;
-	do {
-		cgroup_migrate_add_src(task_css_set(task), dst_cgrp, &mgctx);
-		if (!threadgroup)
-			break;
-	} while_each_thread(leader, task);
-	rcu_read_unlock();
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		guard(rcu)();
+		task = leader;
+		do {
+			cgroup_migrate_add_src(task_css_set(task), dst_cgrp, &mgctx);
+			if (!threadgroup)
+				break;
+		} while_each_thread(leader, task);
+	}
 
 	/* prepare dst csets and commit */
 	ret = cgroup_migrate_prepare_dst(&mgctx);
@@ -3089,23 +3069,23 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_mutex);
 
 	/* look up all csses currently attached to @cgrp's subtree */
-	spin_lock_irq(&css_set_lock);
-	cgroup_for_each_live_descendant_pre(dsct, d_css, cgrp) {
-		struct cgrp_cset_link *link;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		cgroup_for_each_live_descendant_pre(dsct, d_css, cgrp) {
+			struct cgrp_cset_link *link;
 
-		/*
-		 * As cgroup_update_dfl_csses() is only called by
-		 * cgroup_apply_control(). The csses associated with the
-		 * given cgrp will not be affected by changes made to
-		 * its subtree_control file. We can skip them.
-		 */
-		if (dsct == cgrp)
-			continue;
+			/*
+			 * As cgroup_update_dfl_csses() is only called by
+			 * cgroup_apply_control(). The csses associated with the
+			 * given cgrp will not be affected by changes made to
+			 * its subtree_control file. We can skip them.
+			 */
+			if (dsct == cgrp)
+				continue;
 
-		list_for_each_entry(link, &dsct->cset_links, cset_link)
-			cgroup_migrate_add_src(link->cset, dsct, &mgctx);
+			list_for_each_entry(link, &dsct->cset_links, cset_link)
+				cgroup_migrate_add_src(link->cset, dsct, &mgctx);
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	/*
 	 * We need to write-lock threadgroup_rwsem while migrating tasks.
@@ -3121,16 +3101,16 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	if (ret)
 		goto out_finish;
 
-	spin_lock_irq(&css_set_lock);
-	list_for_each_entry(src_cset, &mgctx.preloaded_src_csets,
-			    mg_src_preload_node) {
-		struct task_struct *task, *ntask;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(src_cset, &mgctx.preloaded_src_csets,
+				mg_src_preload_node) {
+			struct task_struct *task, *ntask;
 
-		/* all tasks in src_csets need to be migrated */
-		list_for_each_entry_safe(task, ntask, &src_cset->tasks, cg_list)
-			cgroup_migrate_add_task(task, &mgctx);
+			/* all tasks in src_csets need to be migrated */
+			list_for_each_entry_safe(task, ntask, &src_cset->tasks, cg_list)
+				cgroup_migrate_add_task(task, &mgctx);
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	ret = cgroup_migrate_execute(&mgctx);
 out_finish:
@@ -3735,7 +3715,8 @@ static int cgroup_stat_show(struct seq_file *seq, void *v)
 	 * Without proper lock protection, racing is possible. So the
 	 * numbers may not be consistent when that happens.
 	 */
-	rcu_read_lock();
+	guard(rcu)();
+
 	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT; ssid++) {
 		dying_cnt[ssid] = -1;
 		if ((BIT(ssid) & cgrp_dfl_inhibit_ss_mask) ||
@@ -3754,7 +3735,7 @@ static int cgroup_stat_show(struct seq_file *seq, void *v)
 			seq_printf(seq, "nr_dying_subsys_%s %d\n",
 				   cgroup_subsys[ssid]->name, dying_cnt[ssid]);
 	}
-	rcu_read_unlock();
+
 	return 0;
 }
 
@@ -3772,11 +3753,10 @@ static struct cgroup_subsys_state *cgroup_tryget_css(struct cgroup *cgrp,
 {
 	struct cgroup_subsys_state *css;
 
-	rcu_read_lock();
+	guard(rcu)();
 	css = cgroup_css(cgrp, ss);
 	if (css && !css_tryget_online(css))
 		css = NULL;
-	rcu_read_unlock();
 
 	return css;
 }
@@ -4057,9 +4037,9 @@ static void __cgroup_kill(struct cgroup *cgrp)
 
 	lockdep_assert_held(&cgroup_mutex);
 
-	spin_lock_irq(&css_set_lock);
-	cgrp->kill_seq++;
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		cgrp->kill_seq++;
+	}
 
 	css_task_iter_start(&cgrp->self, CSS_TASK_ITER_PROCS | CSS_TASK_ITER_THREADED, &it);
 	while ((task = css_task_iter_next(&it))) {
@@ -4188,9 +4168,9 @@ static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 	 * doesn't need to be pinned.  The RCU locking is not necessary
 	 * either.  It's just for the convenience of using cgroup_css().
 	 */
-	rcu_read_lock();
-	css = cgroup_css(cgrp, cft->ss);
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		css = cgroup_css(cgrp, cft->ss);
+	}
 
 	if (cft->write_u64) {
 		unsigned long long v;
@@ -4302,9 +4282,8 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 
 		timer_setup(&cfile->notify_timer, cgroup_file_notify_timer, 0);
 
-		spin_lock_irq(&cgroup_file_kn_lock);
+		guard(spinlock_irq)(&css_set_lock);
 		cfile->kn = kn;
-		spin_unlock_irq(&cgroup_file_kn_lock);
 	}
 
 	return 0;
@@ -4472,9 +4451,9 @@ int cgroup_rm_cftypes(struct cftype *cfts)
 	if (!(cfts[0].flags & __CFTYPE_ADDED))
 		return -ENOENT;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 	cgroup_rm_cftypes_locked(cfts);
-	cgroup_unlock();
+
 	return 0;
 }
 
@@ -4506,14 +4485,13 @@ int cgroup_add_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 	if (ret)
 		return ret;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	list_add_tail(&cfts->node, &ss->cfts);
 	ret = cgroup_apply_cftypes(cfts, true);
 	if (ret)
 		cgroup_rm_cftypes_locked(cfts);
 
-	cgroup_unlock();
 	return ret;
 }
 
@@ -4559,9 +4537,7 @@ int cgroup_add_legacy_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
  */
 void cgroup_file_notify(struct cgroup_file *cfile)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&cgroup_file_kn_lock, flags);
+	guard(spinlock_irqsave)(&cgroup_file_kn_lock);
 	if (cfile->kn) {
 		unsigned long last = cfile->notified_at;
 		unsigned long next = last + CGROUP_FILE_NOTIFY_MIN_INTV;
@@ -4573,7 +4549,6 @@ void cgroup_file_notify(struct cgroup_file *cfile)
 			cfile->notified_at = jiffies;
 		}
 	}
-	spin_unlock_irqrestore(&cgroup_file_kn_lock, flags);
 }
 
 /**
@@ -4585,10 +4560,10 @@ void cgroup_file_show(struct cgroup_file *cfile, bool show)
 {
 	struct kernfs_node *kn;
 
-	spin_lock_irq(&cgroup_file_kn_lock);
-	kn = cfile->kn;
-	kernfs_get(kn);
-	spin_unlock_irq(&cgroup_file_kn_lock);
+	scoped_guard(spinlock_irq, &cgroup_file_kn_lock) {
+		kn = cfile->kn;
+		kernfs_get(kn);
+	}
 
 	if (kn)
 		kernfs_show(kn, show);
@@ -4816,14 +4791,14 @@ bool css_has_online_children(struct cgroup_subsys_state *css)
 	struct cgroup_subsys_state *child;
 	bool ret = false;
 
-	rcu_read_lock();
+	guard(rcu)();
 	css_for_each_child(child, css) {
 		if (child->flags & CSS_ONLINE) {
 			ret = true;
 			break;
 		}
 	}
-	rcu_read_unlock();
+
 	return ret;
 }
 
@@ -5012,11 +4987,9 @@ repeat:
 void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 			 struct css_task_iter *it)
 {
-	unsigned long irqflags;
-
 	memset(it, 0, sizeof(*it));
 
-	spin_lock_irqsave(&css_set_lock, irqflags);
+	guard(spinlock_irqsave)(&css_set_lock);
 
 	it->ss = css->ss;
 	it->flags = flags;
@@ -5029,8 +5002,6 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 	it->cset_head = it->cset_pos;
 
 	css_task_iter_advance(it);
-
-	spin_unlock_irqrestore(&css_set_lock, irqflags);
 }
 
 /**
@@ -5043,14 +5014,12 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
-	unsigned long irqflags;
-
 	if (it->cur_task) {
 		put_task_struct(it->cur_task);
 		it->cur_task = NULL;
 	}
 
-	spin_lock_irqsave(&css_set_lock, irqflags);
+	guard(spinlock_irqsave)(&css_set_lock);
 
 	/* @it may be half-advanced by skips, finish advancing */
 	if (it->flags & CSS_TASK_ITER_SKIPPED)
@@ -5063,8 +5032,6 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
 		css_task_iter_advance(it);
 	}
 
-	spin_unlock_irqrestore(&css_set_lock, irqflags);
-
 	return it->cur_task;
 }
 
@@ -5076,13 +5043,10 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
  */
 void css_task_iter_end(struct css_task_iter *it)
 {
-	unsigned long irqflags;
-
 	if (it->cur_cset) {
-		spin_lock_irqsave(&css_set_lock, irqflags);
+		guard(spinlock_irqsave)(&css_set_lock);
 		list_del(&it->iters_node);
 		put_css_set_locked(it->cur_cset);
-		spin_unlock_irqrestore(&css_set_lock, irqflags);
 	}
 
 	if (it->cur_dcset)
@@ -5248,9 +5212,9 @@ static ssize_t __cgroup_procs_write(struct kernfs_open_file *of, char *buf,
 		goto out_unlock;
 
 	/* find the source cgroup */
-	spin_lock_irq(&css_set_lock);
-	src_cgrp = task_cgroup_from_root(task, &cgrp_dfl_root);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		src_cgrp = task_cgroup_from_root(task, &cgrp_dfl_root);
+	}
 
 	/*
 	 * Process and thread migrations follow same delegation rule. Check
@@ -5489,14 +5453,14 @@ static void css_free_rwork_fn(struct work_struct *work)
 	}
 }
 
-static void css_release_work_fn(struct work_struct *work)
+static inline void css_release_work_fn_locked(struct work_struct *work)
 {
 	struct cgroup_subsys_state *css =
 		container_of(work, struct cgroup_subsys_state, destroy_work);
 	struct cgroup_subsys *ss = css->ss;
 	struct cgroup *cgrp = css->cgroup;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	css->flags |= CSS_RELEASED;
 	list_del_rcu(&css->sibling);
@@ -5532,11 +5496,11 @@ static void css_release_work_fn(struct work_struct *work)
 
 		css_rstat_flush(&cgrp->self);
 
-		spin_lock_irq(&css_set_lock);
-		for (tcgrp = cgroup_parent(cgrp); tcgrp;
-		     tcgrp = cgroup_parent(tcgrp))
-			tcgrp->nr_dying_descendants--;
-		spin_unlock_irq(&css_set_lock);
+		scoped_guard(spinlock_irq, &css_set_lock) {
+			for (tcgrp = cgroup_parent(cgrp); tcgrp;
+			     tcgrp = cgroup_parent(tcgrp))
+				tcgrp->nr_dying_descendants--;
+		}
 
 		/*
 		 * There are two control paths which try to determine
@@ -5549,8 +5513,14 @@ static void css_release_work_fn(struct work_struct *work)
 			RCU_INIT_POINTER(*(void __rcu __force **)&cgrp->kn->priv,
 					 NULL);
 	}
+}
 
-	cgroup_unlock();
+static void css_release_work_fn(struct work_struct *work)
+{
+	struct cgroup_subsys_state *css =
+		container_of(work, struct cgroup_subsys_state, destroy_work);
+
+	css_release_work_fn_locked(work);
 
 	INIT_RCU_WORK(&css->destroy_rwork, css_free_rwork_fn);
 	queue_rcu_work(cgroup_destroy_wq, &css->destroy_rwork);
@@ -5785,20 +5755,20 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 		goto out_psi_free;
 
 	/* allocation complete, commit to creation */
-	spin_lock_irq(&css_set_lock);
-	for (i = 0; i < level; i++) {
-		tcgrp = cgrp->ancestors[i];
-		tcgrp->nr_descendants++;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		for (i = 0; i < level; i++) {
+			tcgrp = cgrp->ancestors[i];
+			tcgrp->nr_descendants++;
 
-		/*
-		 * If the new cgroup is frozen, all ancestor cgroups get a new
-		 * frozen descendant, but their state can't change because of
-		 * this.
-		 */
-		if (cgrp->freezer.e_freeze)
-			tcgrp->freezer.nr_frozen_descendants++;
+			/*
+			 * If the new cgroup is frozen, all ancestor cgroups get a new
+			 * frozen descendant, but their state can't change because of
+			 * this.
+			 */
+			if (cgrp->freezer.e_freeze)
+				tcgrp->freezer.nr_frozen_descendants++;
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	list_add_tail_rcu(&cgrp->self.sibling, &cgroup_parent(cgrp)->self.children);
 	atomic_inc(&root->nr_cgrps);
@@ -5914,7 +5884,7 @@ static void css_killed_work_fn(struct work_struct *work)
 	struct cgroup_subsys_state *css =
 		container_of(work, struct cgroup_subsys_state, destroy_work);
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	do {
 		offline_css(css);
@@ -5922,8 +5892,6 @@ static void css_killed_work_fn(struct work_struct *work)
 		/* @css can't go away while we're holding cgroup_mutex */
 		css = css->parent;
 	} while (css && atomic_dec_and_test(&css->online_cnt));
-
-	cgroup_unlock();
 }
 
 /* css kill confirmation processing requires process context, bounce */
@@ -6044,10 +6012,10 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	 */
 	cgrp->self.flags &= ~CSS_ONLINE;
 
-	spin_lock_irq(&css_set_lock);
-	list_for_each_entry(link, &cgrp->cset_links, cset_link)
-		link->cset->dead = true;
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(link, &cgrp->cset_links, cset_link)
+			link->cset->dead = true;
+	}
 
 	/* initiate massacre of all css's */
 	for_each_css(css, ssid, cgrp)
@@ -6060,18 +6028,18 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	if (cgroup_is_threaded(cgrp))
 		parent->nr_threaded_children--;
 
-	spin_lock_irq(&css_set_lock);
-	for (tcgrp = parent; tcgrp; tcgrp = cgroup_parent(tcgrp)) {
-		tcgrp->nr_descendants--;
-		tcgrp->nr_dying_descendants++;
-		/*
-		 * If the dying cgroup is frozen, decrease frozen descendants
-		 * counters of ancestor cgroups.
-		 */
-		if (test_bit(CGRP_FROZEN, &cgrp->flags))
-			tcgrp->freezer.nr_frozen_descendants--;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		for (tcgrp = parent; tcgrp; tcgrp = cgroup_parent(tcgrp)) {
+			tcgrp->nr_descendants--;
+			tcgrp->nr_dying_descendants++;
+			/*
+			 * If the dying cgroup is frozen, decrease frozen descendants
+			 * counters of ancestor cgroups.
+			 */
+			if (test_bit(CGRP_FROZEN, &cgrp->flags))
+				tcgrp->freezer.nr_frozen_descendants--;
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	cgroup1_check_for_release(parent);
 
@@ -6115,7 +6083,7 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 
 	pr_debug("Initializing cgroup subsys %s\n", ss->name);
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	idr_init(&ss->css_idr);
 	INIT_LIST_HEAD(&ss->cfts);
@@ -6161,8 +6129,6 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 	BUG_ON(!list_empty(&init_task.tasks));
 
 	BUG_ON(online_css(css));
-
-	cgroup_unlock();
 }
 
 /**
@@ -6224,20 +6190,18 @@ int __init cgroup_init(void)
 
 	get_user_ns(init_cgroup_ns.user_ns);
 
-	cgroup_lock();
+	scoped_guard(cgroup_mutex) {
+		/*
+		 * Add init_css_set to the hash table so that dfl_root can link to
+		 * it during init.
+		 */
+		hash_add(css_set_table, &init_css_set.hlist,
+				css_set_hash(init_css_set.subsys));
 
-	/*
-	 * Add init_css_set to the hash table so that dfl_root can link to
-	 * it during init.
-	 */
-	hash_add(css_set_table, &init_css_set.hlist,
-		 css_set_hash(init_css_set.subsys));
+		cgroup_bpf_lifetime_notifier_init();
 
-	cgroup_bpf_lifetime_notifier_init();
-
-	BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
-
-	cgroup_unlock();
+		BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
+	}
 
 	for_each_subsys(ss, ssid) {
 		if (ss->early_init) {
@@ -6289,9 +6253,9 @@ int __init cgroup_init(void)
 		if (ss->bind)
 			ss->bind(init_css_set.subsys[ssid]);
 
-		cgroup_lock();
-		css_populate_dir(init_css_set.subsys[ssid]);
-		cgroup_unlock();
+		scoped_guard(cgroup_mutex) {
+			css_populate_dir(init_css_set.subsys[ssid]);
+		}
 	}
 
 	/* init_css_set.subsys[] has been updated, re-hash */
@@ -6357,13 +6321,12 @@ struct cgroup *cgroup_get_from_id(u64 id)
 		return ERR_PTR(-ENOENT);
 	}
 
-	rcu_read_lock();
+	scoped_guard(rcu) {
+		cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
+		if (cgrp && !cgroup_tryget(cgrp))
+			cgrp = NULL;
+	}
 
-	cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
-	if (cgrp && !cgroup_tryget(cgrp))
-		cgrp = NULL;
-
-	rcu_read_unlock();
 	kernfs_put(kn);
 
 	if (!cgrp)
@@ -6540,15 +6503,14 @@ static int cgroup_css_set_fork(struct kernel_clone_args *kargs)
 
 	cgroup_threadgroup_change_begin(current);
 
-	spin_lock_irq(&css_set_lock);
-	cset = task_css_set(current);
-	get_css_set(cset);
-	if (kargs->cgrp)
-		kargs->kill_seq = kargs->cgrp->kill_seq;
-	else
-		kargs->kill_seq = cset->dfl_cgrp->kill_seq;
-	spin_unlock_irq(&css_set_lock);
-
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		cset = task_css_set(current);
+		get_css_set(cset);
+		if (kargs->cgrp)
+			kargs->kill_seq = kargs->cgrp->kill_seq;
+		else
+			kargs->kill_seq = cset->dfl_cgrp->kill_seq;
+	}
 	if (!(kargs->flags & CLONE_INTO_CGROUP)) {
 		kargs->cset = cset;
 		return 0;
@@ -6737,55 +6699,53 @@ void cgroup_post_fork(struct task_struct *child,
 	cset = kargs->cset;
 	kargs->cset = NULL;
 
-	spin_lock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		/* init tasks are special, only link regular threads */
+		if (likely(child->pid)) {
+			if (kargs->cgrp) {
+				cgrp_flags = kargs->cgrp->flags;
+				cgrp_kill_seq = kargs->cgrp->kill_seq;
+			} else {
+				cgrp_flags = cset->dfl_cgrp->flags;
+				cgrp_kill_seq = cset->dfl_cgrp->kill_seq;
+			}
 
-	/* init tasks are special, only link regular threads */
-	if (likely(child->pid)) {
-		if (kargs->cgrp) {
-			cgrp_flags = kargs->cgrp->flags;
-			cgrp_kill_seq = kargs->cgrp->kill_seq;
+			WARN_ON_ONCE(!list_empty(&child->cg_list));
+			cset->nr_tasks++;
+			css_set_move_task(child, NULL, cset, false);
 		} else {
-			cgrp_flags = cset->dfl_cgrp->flags;
-			cgrp_kill_seq = cset->dfl_cgrp->kill_seq;
+			put_css_set(cset);
+			cset = NULL;
 		}
 
-		WARN_ON_ONCE(!list_empty(&child->cg_list));
-		cset->nr_tasks++;
-		css_set_move_task(child, NULL, cset, false);
-	} else {
-		put_css_set(cset);
-		cset = NULL;
-	}
+		if (!(child->flags & PF_KTHREAD)) {
+			if (unlikely(test_bit(CGRP_FREEZE, &cgrp_flags))) {
+				/*
+				 * If the cgroup has to be frozen, the new task has
+				 * too. Let's set the JOBCTL_TRAP_FREEZE jobctl bit to
+				 * get the task into the frozen state.
+				 */
+				spin_lock(&child->sighand->siglock);
+				WARN_ON_ONCE(child->frozen);
+				child->jobctl |= JOBCTL_TRAP_FREEZE;
+				spin_unlock(&child->sighand->siglock);
 
-	if (!(child->flags & PF_KTHREAD)) {
-		if (unlikely(test_bit(CGRP_FREEZE, &cgrp_flags))) {
-			/*
-			 * If the cgroup has to be frozen, the new task has
-			 * too. Let's set the JOBCTL_TRAP_FREEZE jobctl bit to
-			 * get the task into the frozen state.
-			 */
-			spin_lock(&child->sighand->siglock);
-			WARN_ON_ONCE(child->frozen);
-			child->jobctl |= JOBCTL_TRAP_FREEZE;
-			spin_unlock(&child->sighand->siglock);
+				/*
+				 * Calling cgroup_update_frozen() isn't required here,
+				 * because it will be called anyway a bit later from
+				 * do_freezer_trap(). So we avoid cgroup's transient
+				 * switch from the frozen state and back.
+				 */
+			}
 
 			/*
-			 * Calling cgroup_update_frozen() isn't required here,
-			 * because it will be called anyway a bit later from
-			 * do_freezer_trap(). So we avoid cgroup's transient
-			 * switch from the frozen state and back.
+			 * If the cgroup is to be killed notice it now and take the
+			 * child down right after we finished preparing it for
+			 * userspace.
 			 */
+			kill = kargs->kill_seq != cgrp_kill_seq;
 		}
-
-		/*
-		 * If the cgroup is to be killed notice it now and take the
-		 * child down right after we finished preparing it for
-		 * userspace.
-		 */
-		kill = kargs->kill_seq != cgrp_kill_seq;
 	}
-
-	spin_unlock_irq(&css_set_lock);
 
 	/*
 	 * Call ss->fork().  This must happen after @child is linked on
@@ -6825,26 +6785,23 @@ void cgroup_exit(struct task_struct *tsk)
 	struct css_set *cset;
 	int i;
 
-	spin_lock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		WARN_ON_ONCE(list_empty(&tsk->cg_list));
+		cset = task_css_set(tsk);
+		css_set_move_task(tsk, cset, NULL, false);
+		cset->nr_tasks--;
+		/* matches the signal->live check in css_task_iter_advance() */
+		if (thread_group_leader(tsk) && atomic_read(&tsk->signal->live))
+			list_add_tail(&tsk->cg_list, &cset->dying_tasks);
 
-	WARN_ON_ONCE(list_empty(&tsk->cg_list));
-	cset = task_css_set(tsk);
-	css_set_move_task(tsk, cset, NULL, false);
-	cset->nr_tasks--;
-	/* matches the signal->live check in css_task_iter_advance() */
-	if (thread_group_leader(tsk) && atomic_read(&tsk->signal->live))
-		list_add_tail(&tsk->cg_list, &cset->dying_tasks);
+		if (dl_task(tsk))
+			dec_dl_tasks_cs(tsk);
 
-	if (dl_task(tsk))
-		dec_dl_tasks_cs(tsk);
-
-	WARN_ON_ONCE(cgroup_task_frozen(tsk));
-	if (unlikely(!(tsk->flags & PF_KTHREAD) &&
-		     test_bit(CGRP_FREEZE, &task_dfl_cgroup(tsk)->flags)))
-		cgroup_update_frozen(task_dfl_cgroup(tsk));
-
-	spin_unlock_irq(&css_set_lock);
-
+		WARN_ON_ONCE(cgroup_task_frozen(tsk));
+		if (unlikely(!(tsk->flags & PF_KTHREAD) &&
+			test_bit(CGRP_FREEZE, &task_dfl_cgroup(tsk)->flags)))
+			cgroup_update_frozen(task_dfl_cgroup(tsk));
+	}
 	/* see cgroup_post_fork() for details */
 	do_each_subsys_mask(ss, i, have_exit_callback) {
 		ss->exit(tsk);
@@ -6861,10 +6818,9 @@ void cgroup_release(struct task_struct *task)
 	} while_each_subsys_mask();
 
 	if (!list_empty(&task->cg_list)) {
-		spin_lock_irq(&css_set_lock);
+		guard(spinlock_irq)(&css_set_lock);
 		css_set_skip_task_iters(task_css_set(task), task);
 		list_del_init(&task->cg_list);
-		spin_unlock_irq(&css_set_lock);
 	}
 }
 
@@ -6945,7 +6901,7 @@ struct cgroup_subsys_state *css_tryget_online_from_dir(struct dentry *dentry,
 	    !kn || kernfs_type(kn) != KERNFS_DIR)
 		return ERR_PTR(-EBADF);
 
-	rcu_read_lock();
+	guard(rcu)();
 
 	/*
 	 * This path doesn't originate from kernfs and @kn could already
@@ -6959,7 +6915,6 @@ struct cgroup_subsys_state *css_tryget_online_from_dir(struct dentry *dentry,
 	if (!css || !css_tryget_online(css))
 		css = ERR_PTR(-ENOENT);
 
-	rcu_read_unlock();
 	return css;
 }
 
