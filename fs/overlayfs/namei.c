@@ -1371,7 +1371,7 @@ out:
 bool ovl_lower_positive(struct dentry *dentry)
 {
 	struct ovl_entry *poe = OVL_E(dentry->d_parent);
-	struct qstr *name = &dentry->d_name;
+	const struct qstr *name = &dentry->d_name;
 	const struct cred *old_cred;
 	unsigned int i;
 	bool positive = false;
@@ -1394,9 +1394,16 @@ bool ovl_lower_positive(struct dentry *dentry)
 		struct dentry *this;
 		struct ovl_path *parentpath = &ovl_lowerstack(poe)[i];
 
+		/*
+		 * We need to make a non-const copy of dentry->d_name,
+		 * becuase lookup_one_positive_unlocked() will hash name
+		 * with parentpath base, which is on another (lwoer fs).
+		 * TODO: the lookup_* API should be changed not to allow this.
+		 */
 		this = lookup_one_positive_unlocked(
 				mnt_idmap(parentpath->layer->mnt),
-				name, parentpath->dentry);
+				&QSTR_LEN(name->name, name->len),
+				parentpath->dentry);
 		if (IS_ERR(this)) {
 			switch (PTR_ERR(this)) {
 			case -ENOENT:
