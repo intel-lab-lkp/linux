@@ -3634,22 +3634,22 @@ static int do_move_mount(struct path *old_path,
 	if (!(attached ? check_mnt(old) : is_anon_ns(ns)))
 		goto out;
 
-	if (is_anon_ns(ns) && ns == p->mnt_ns) {
-		/*
-		 * Ending up with two files referring to the root of the
-		 * same anonymous mount namespace would cause an error
-		 * as this would mean trying to move the same mount
-		 * twice into the mount tree which would be rejected
-		 * later. But be explicit about it right here.
-		 */
+	/*
+	 * Ending up with two files referring to the root of the
+	 * same anonymous mount namespace would cause an error
+	 * as this would mean trying to move the same mount
+	 * twice into the mount tree which would be rejected
+	 * later. But be explicit about it right here.
+	 */
+	if (is_anon_ns(ns) && ns == p->mnt_ns)
 		goto out;
-	} else if (is_anon_ns(p->mnt_ns)) {
-		/*
-		 * Don't allow moving an attached mount tree to an
-		 * anonymous mount tree.
-		 */
+
+	/*
+	 * Don't allow moving an attached mount tree to an
+	 * anonymous mount tree.
+	 */
+	if (!is_anon_ns(ns) && is_anon_ns(p->mnt_ns))
 		goto out;
-	}
 
 	if (old->mnt.mnt_flags & MNT_LOCKED)
 		goto out;
