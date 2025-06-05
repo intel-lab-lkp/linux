@@ -519,5 +519,6 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
  */
 
 void cpuid_parser_scan_cpu(struct cpuinfo_x86 *c);
+void cpuid_parser_rescan_cpu(struct cpuinfo_x86 *c);
 
 #endif /* _ASM_X86_CPUID_API_H */

@@ -156,6 +156,30 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 	}
 }
 
+/*
+ * __cpuid_parser_scan_cpu() - Populate current CPU's CPUID table
+ * @c:			CPU capability structure associated with the current CPU
+ * @clear_cpuid_table:	Zero-out the CPUID table residing within @c before populating it
+ *
+ * The CPUID parser code expects a zeroed-out CPUID table since the accessor macros at
+ * <cpuid/api.h> use the leaf's "nr_entries" field as a validity marker; otherwise NULL is
+ * returned.
+ *
+ * At boot, all CPUID tables within the CPU capability structure(s) are zeroed.  For
+ * subsequent CPUID table scans, which are normally done after hardware state changes, the
+ * table might contain stale data that must be cleared beforehand; e.g., a CPUID leaf that
+ * is no longer available, but with a "nr_entries" value bigger than zero.
+ */
+static void __cpuid_parser_scan_cpu(struct cpuinfo_x86 *c, bool clear_cpuid_table)
+{
+	struct cpuid_table *table = &c->cpuid;
+
+	if (clear_cpuid_table)
+		memset(table, 0, sizeof(*table));
+
+	cpuid_fill_table(table, cpuid_common_parse_entries, cpuid_common_parse_entries_size);
+}
+
 /**
  * cpuid_parser_scan_cpu() - Populate current CPU's CPUID table
  * @c:		CPU capability structure associated with the current CPU
@@ -165,5 +189,21 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
  */
 void cpuid_parser_scan_cpu(struct cpuinfo_x86 *c)
 {
-	cpuid_fill_table(&c->cpuid, cpuid_common_parse_entries, cpuid_common_parse_entries_size);
+	__cpuid_parser_scan_cpu(c, false);
+}
+
+/**
+ * cpuid_parser_rescan_cpu() - Re-populate current CPU's CPUID table
+ * @c:		CPU capability structure associated with the current CPU
+ *
+ * Zero-out the CPUID table embedded within @c, then re-populate it using a fresh CPUID scan.
+ * Since all CPUID instructions are invoked locally, this function must be called on the CPU
+ * associated with @c.
+ *
+ * A CPUID table rescan is usually required after system changes that can affect CPUID state;
+ * e.g., disabing the Processor Serial Number (PSN) or performing a late microcode update.
+ */
+void cpuid_parser_rescan_cpu(struct cpuinfo_x86 *c)
+{
+	__cpuid_parser_scan_cpu(c, true);
 }
