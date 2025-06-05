@@ -1238,7 +1238,7 @@ void hid_quirks_exit(__u16 bus);
 #define hid_notice(hid, fmt, ...)			\
 	dev_notice(&(hid)->dev, fmt, ##__VA_ARGS__)
 #define hid_warn(hid, fmt, ...)				\
-	dev_warn(&(hid)->dev, fmt, ##__VA_ARGS__)
+	dev_warn_ratelimited(&(hid)->dev, fmt, ##__VA_ARGS__)
 #define hid_info(hid, fmt, ...)				\
 	dev_info(&(hid)->dev, fmt, ##__VA_ARGS__)
 #define hid_dbg(hid, fmt, ...)				\
