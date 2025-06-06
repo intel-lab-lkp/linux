@@ -13,9 +13,107 @@
 
 struct disas_context {
 	struct objtool_file *file;
+	struct instruction *insn;
 	disassembler_ftype disassembler;
 	struct disassemble_info info;
 };
+
+#define DINFO_FPRINTF(dinfo, ...)	\
+	((*(dinfo)->fprintf_func)((dinfo)->stream, __VA_ARGS__))
+
+static void disas_print_address(bfd_vma addr, struct disassemble_info *dinfo)
+{
+	struct disas_context *dctx = dinfo->application_data;
+	struct instruction *insn = dctx->insn;
+	struct objtool_file *file = dctx->file;
+	struct symbol *call_dest, *sym;
+	struct instruction *jump_dest;
+	struct section *sec;
+	struct reloc *reloc;
+	bool is_reloc;
+	s64 offset;
+
+	/*
+	 * If the instruction is a call/jump and it references a
+	 * destination then this is likely the address we are looking
+	 * up. So check it first.
+	 */
+	jump_dest = insn->jump_dest;
+	if (jump_dest && jump_dest->offset == addr) {
+		DINFO_FPRINTF(dinfo, "%lx <%s+0x%lx>", addr,
+			      jump_dest->sym->name,
+			      jump_dest->offset - jump_dest->sym->offset);
+		return;
+	}
+
+	/*
+	 * Assume the address is a relocation if it points to the next
+	 * instruction.
+	 */
+	is_reloc = (addr == insn->offset + insn->len);
+
+	/*
+	 * The call destination offset can be the address we are looking
+	 * up, or 0 if there is a relocation.
+	 */
+	call_dest = insn_call_dest(insn);
+	if (call_dest) {
+		if (call_dest->offset == addr) {
+			DINFO_FPRINTF(dinfo, "%lx <%s>", addr, call_dest->name);
+			return;
+		}
+		if (call_dest->offset == 0 && is_reloc) {
+			DINFO_FPRINTF(dinfo, "%s", call_dest->name);
+			return;
+		}
+	}
+
+	if (!is_reloc) {
+		DINFO_FPRINTF(dinfo, "0x%lx", addr);
+		return;
+	}
+
+	/*
+	 * If this is a relocation, check if we have relocation information
+	 * for this instruction.
+	 */
+	reloc = find_reloc_by_dest_range(file->elf, insn->sec,
+					 insn->offset, insn->len);
+	if (!reloc) {
+		DINFO_FPRINTF(dinfo, "0x%lx", addr);
+		return;
+	}
+
+	if (reloc_type(reloc) == R_X86_64_PC32 ||
+	    reloc_type(reloc) == R_X86_64_PLT32)
+		offset = arch_dest_reloc_offset(reloc_addend(reloc));
+	else
+		offset = reloc_addend(reloc);
+
+	/*
+	 * If the relocation symbol is a section name (for example ".bss")
+	 * then we try to further resolve the name.
+	 */
+	sec = find_section_by_name(file->elf, reloc->sym->name);
+	if (sec) {
+		sym = find_symbol_containing(sec, offset);
+		if (sym) {
+			if (sym->offset == offset)
+				DINFO_FPRINTF(dinfo, "%s+0x%lx = %s",
+					     reloc->sym->name, offset, sym->name);
+			else
+				DINFO_FPRINTF(dinfo, "%s+0x%lx = %s+0x%lx",
+					      reloc->sym->name, offset,
+					      sym->name, offset - sym->offset);
+			return;
+		}
+	}
+
+	if (offset)
+		DINFO_FPRINTF(dinfo, "%s+0x%lx", reloc->sym->name, offset);
+	else
+		DINFO_FPRINTF(dinfo, "%s", reloc->sym->name);
+}
 
 /*
  * Initialize disassemble info arch, mach (32 or 64-bit) and options.
@@ -65,6 +163,7 @@ struct disas_context *disas_context_create(struct objtool_file *file)
 				     fprintf_styled);
 
 	dinfo->read_memory_func = buffer_read_memory;
+	dinfo->print_address_func = disas_print_address;
 	dinfo->application_data = dctx;
 
 	/*
@@ -116,6 +215,8 @@ static size_t disas_insn(struct disas_context *dctx,
 {
 	disassembler_ftype disasm = dctx->disassembler;
 	struct disassemble_info *dinfo = &dctx->info;
+
+	dctx->insn = insn;
 
 	/*
 	 * Set the disassembler buffer to read data from the section
