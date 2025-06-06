@@ -81,6 +81,8 @@ struct instruction {
 	struct symbol *sym;
 	struct stack_op *stack_ops;
 	struct cfi_state *cfi;
+
+	u32 vtrace;
 };
 
 static inline struct symbol *insn_func(struct instruction *insn)

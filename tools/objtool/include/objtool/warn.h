@@ -96,7 +96,8 @@ static inline char *offstr(struct section *sec, unsigned long offset)
 		len = snprintf(NULL, 0, "  %s: " format,  _str, ##__VA_ARGS__);	\
 		len = (len < 50) ? 50 - len : 0;		\
 		WARN("  %s: " format "  %*s%s", _str, ##__VA_ARGS__, len, "", _istr); \
-		free(_str);					\
+		free(_str);						\
+		__insn->vtrace++;				\
 	}							\
 })
 

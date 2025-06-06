@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2017 Josh Poimboeuf <jpoimboe@redhat.com>
  */
 
+#include <fnmatch.h>
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -35,6 +36,80 @@ static struct cfi_state func_cfi;
 static struct cfi_state force_undefined_cfi;
 
 static size_t sym_name_max_len;
+
+static bool vtrace;
+static int vtrace_depth;
+
+/*
+ * Validation traces are sent to stderr so that they are output
+ * on the same flow as warnings.
+ */
+#define VTRACE_PRINTF(fmt, ...)		fprintf(stderr, fmt, ##__VA_ARGS__)
+
+#define VTRACE_INSN(insn, fmt, ...)				\
+	do {							\
+		if (vtrace) {					\
+			vtrace_insn(insn, fmt, ##__VA_ARGS__);	\
+			VTRACE_PRINTF("\n");			\
+		}						\
+	} while (0)
+
+#define VTRACE_INSN_OFFSET_SPACE	10
+#define VTRACE_INSN_SPACE		60
+
+/*
+ * Print an instruction address (offset and function), the instruction itself
+ * and an optional message.
+ */
+static void vtrace_insn(struct instruction *insn, const char *format, ...)
+{
+	char fake_nop_insn[32];
+	const char *addr_str, *insn_str;
+	bool fake_nop;
+	va_list args;
+	int i, len;
+
+	len = sym_name_max_len + VTRACE_INSN_OFFSET_SPACE;
+
+	/*
+	 * Alternative can insert a fake nop, sometimes with no
+	 * associated section so nothing to disassemble.
+	 */
+	fake_nop = (!insn->sec && insn->type == INSN_NOP);
+	if (fake_nop) {
+		addr_str = "";
+		snprintf(fake_nop_insn, 32, "<fake nop> (%d bytes)", insn->len);
+		insn_str = fake_nop_insn;
+	} else {
+		addr_str = offstr(insn->sec, insn->offset);
+		insn_str = objtool_disas_insn(insn);
+	}
+
+	/* print the instruction address */
+	VTRACE_PRINTF("%6lx:  %-*s  ", insn->offset, len, addr_str);
+
+	/* print vertical bars to show the validation flow */
+	for (i = 1; i < vtrace_depth; i++)
+		VTRACE_PRINTF("| ");
+
+	/* print the instruction */
+	len = vtrace_depth * 2 < VTRACE_INSN_SPACE ?
+		VTRACE_INSN_SPACE - vtrace_depth * 2 : 1;
+	VTRACE_PRINTF("%-*s", len, insn_str);
+
+	/* print message if any */
+	if (format) {
+		VTRACE_PRINTF(" - ");
+		va_start(args, format);
+		vfprintf(stderr, format, args);
+		va_end(args);
+	}
+
+	insn->vtrace++;
+
+	if (!fake_nop)
+		free((char *)addr_str);
+}
 
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset)
@@ -3511,8 +3586,10 @@ static bool skip_alt_group(struct instruction *insn)
 	struct instruction *alt_insn = insn->alts ? insn->alts->insn : NULL;
 
 	/* ANNOTATE_IGNORE_ALTERNATIVE */
-	if (insn->alt_group && insn->alt_group->ignore)
+	if (insn->alt_group && insn->alt_group->ignore) {
+		VTRACE_INSN(insn, "alt group ignored");
 		return true;
+	}
 
 	/*
 	 * For NOP patched with CLAC/STAC, only follow the latter to avoid
@@ -3539,14 +3616,17 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 			 struct instruction *prev_insn, struct instruction *next_insn,
 			 bool *validate_nextp);
 
+static int validate_branch(struct objtool_file *file, struct symbol *func,
+			   struct instruction *insn, struct insn_state state);
+
 /*
  * Follow the branch starting at the given instruction, and recursively follow
  * any other branches (jumps).  Meanwhile, track the frame pointer state at
  * each instruction and validate all the rules described in
  * tools/objtool/Documentation/objtool.txt.
  */
-static int validate_branch(struct objtool_file *file, struct symbol *func,
-			   struct instruction *insn, struct insn_state state)
+static int do_validate_branch(struct objtool_file *file, struct symbol *func,
+			      struct instruction *insn, struct insn_state state)
 {
 	struct instruction *next_insn, *prev_insn = NULL;
 	struct section *sec;
@@ -3558,7 +3638,10 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 
 	sec = insn->sec;
 
-	while (1) {
+	do {
+
+		insn->vtrace = 0;
+
 		next_insn = next_insn_to_validate(file, insn);
 
 		if (func && insn_func(insn) && func != insn_func(insn)->pfunc) {
@@ -3570,6 +3653,8 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 			if (file->ignore_unreachables)
 				return 0;
 
+			VTRACE_INSN(insn, "falls through to next function");
+
 			WARN("%s() falls through to next function %s()",
 			     func->name, insn_func(insn)->name);
 			func->warned = 1;
@@ -3580,10 +3665,8 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 		ret = validate_insn(file, func, insn, &state,
 				    prev_insn, next_insn,
 				    &validate_next);
-		if (!validate_next)
-			break;
 
-		if (!next_insn) {
+		if (validate_next && !next_insn) {
 			if (state.cfi.cfa.base == CFI_UNDEFINED)
 				return 0;
 			if (file->ignore_unreachables)
@@ -3595,9 +3678,17 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 			return 1;
 		}
 
+		if (!insn->vtrace) {
+			if (ret)
+				VTRACE_INSN(insn, "validated (%d)", ret);
+			else
+				VTRACE_INSN(insn, NULL);
+		}
+
 		prev_insn = insn;
 		insn = next_insn;
-	}
+
+	} while (validate_next);
 
 	return ret;
 }
@@ -3629,8 +3720,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		if (!insn->hint && !insn_cfi_match(insn, &statep->cfi))
 			return 1;
 
-		if (insn->visited & visited)
+		if (insn->visited & visited) {
+			VTRACE_INSN(insn, "already visited");
 			return 0;
+		}
 	} else {
 		nr_insns_visited++;
 	}
@@ -3667,8 +3760,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 				 * It will be seen later via the
 				 * straight-line path.
 				 */
-				if (!prev_insn)
+				if (!prev_insn) {
+					VTRACE_INSN(insn, "defer restore");
 					return 0;
+				}
 
 				WARN_INSN(insn, "objtool isn't smart enough to handle this CFI save/restore combo");
 				return 1;
@@ -3696,13 +3791,24 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 1;
 
 	if (insn->alts) {
+		int i, count;
+
+		count = 0;
+		for (alt = insn->alts; alt; alt = alt->next)
+			count++;
+
+		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
+			VTRACE_INSN(insn, "alternative %d/%d", i, count);
 			ret = validate_branch(file, func, alt->insn, *statep);
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
 			}
+			i++;
 		}
+
+		VTRACE_INSN(insn, "alternative orig");
 	}
 
 	if (skip_alt_group(insn))
@@ -3714,10 +3820,12 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	switch (insn->type) {
 
 	case INSN_RETURN:
+		VTRACE_INSN(insn, "return");
 		return validate_return(func, insn, statep);
 
 	case INSN_CALL:
 	case INSN_CALL_DYNAMIC:
+		VTRACE_INSN(insn, "call");
 		ret = validate_call(file, insn, statep);
 		if (ret)
 			return ret;
@@ -3733,13 +3841,21 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	case INSN_JUMP_CONDITIONAL:
 	case INSN_JUMP_UNCONDITIONAL:
 		if (is_sibling_call(insn)) {
+			VTRACE_INSN(insn, "sibling call");
 			ret = validate_sibling_call(file, insn, statep);
 			if (ret)
 				return ret;
 
 		} else if (insn->jump_dest) {
-			ret = validate_branch(file, func,
-					      insn->jump_dest, *statep);
+			if (insn->type == INSN_JUMP_UNCONDITIONAL) {
+				VTRACE_INSN(insn, "unconditional jump");
+				ret = do_validate_branch(file, func,
+							 insn->jump_dest, *statep);
+			} else {
+				VTRACE_INSN(insn, "jump taken");
+				ret = validate_branch(file, func,
+						      insn->jump_dest, *statep);
+			}
 			if (ret) {
 				BT_INSN(insn, "(branch)");
 				return ret;
@@ -3749,10 +3865,12 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		if (insn->type == INSN_JUMP_UNCONDITIONAL)
 			return 0;
 
+		VTRACE_INSN(insn, "jump not taken");
 		break;
 
 	case INSN_JUMP_DYNAMIC:
 	case INSN_JUMP_DYNAMIC_CONDITIONAL:
+		VTRACE_INSN(insn, "dynamic jump");
 		if (is_sibling_call(insn)) {
 			ret = validate_sibling_call(file, insn, statep);
 			if (ret)
@@ -3765,6 +3883,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_SYSCALL:
+		VTRACE_INSN(insn, "syscall");
 		if (func && (!next_insn || !next_insn->hint)) {
 			WARN_INSN(insn, "unsupported instruction in callable function");
 			return 1;
@@ -3773,6 +3892,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_SYSRET:
+		VTRACE_INSN(insn, "sysret");
 		if (func && (!next_insn || !next_insn->hint)) {
 			WARN_INSN(insn, "unsupported instruction in callable function");
 			return 1;
@@ -3781,6 +3901,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 0;
 
 	case INSN_STAC:
+		VTRACE_INSN(insn, "stac");
 		if (!opts.uaccess)
 			break;
 
@@ -3793,6 +3914,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_CLAC:
+		VTRACE_INSN(insn, "clac");
 		if (!opts.uaccess)
 			break;
 
@@ -3810,6 +3932,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_STD:
+		VTRACE_INSN(insn, "std");
 		if (statep->df) {
 			WARN_INSN(insn, "recursive STD");
 			return 1;
@@ -3819,6 +3942,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_CLD:
+		VTRACE_INSN(insn, "cld");
 		if (!statep->df && func) {
 			WARN_INSN(insn, "redundant CLD");
 			return 1;
@@ -3831,8 +3955,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 	}
 
-	if (insn->dead_end)
+	if (insn->dead_end) {
+		VTRACE_INSN(insn, "dead end");
 		return 0;
+	}
 
 	/*
 	 * Indicate that the caller should validate the next
@@ -3841,6 +3967,18 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	*validate_nextp = true;
 
 	return 0;
+}
+
+static int validate_branch(struct objtool_file *file, struct symbol *func,
+			   struct instruction *insn, struct insn_state state)
+{
+	int ret;
+
+	vtrace_depth++;
+	ret = do_validate_branch(file, func, insn, state);
+	vtrace_depth--;
+
+	return ret;
 }
 
 static int validate_unwind_hint(struct objtool_file *file,
@@ -4253,9 +4391,22 @@ static int validate_symbol(struct objtool_file *file, struct section *sec,
 	if (opts.uaccess)
 		state->uaccess = sym->uaccess_safe;
 
+	if (opts.trace && fnmatch(opts.trace, sym->name, 0) == 0) {
+		vtrace = true;
+		vtrace_depth = 0;
+		VTRACE_PRINTF("%s: validation begin\n", sym->name);
+	}
+
 	ret = validate_branch(file, insn_func(insn), insn, *state);
 	if (ret)
 		BT_INSN(insn, "<=== (sym)");
+
+	if (vtrace) {
+		VTRACE_PRINTF("%s: validation %s\n\n",
+			      sym->name, ret ? "failed" : "end");
+		vtrace = false;
+	}
+
 	return ret;
 }
 
@@ -4651,7 +4802,7 @@ int check(struct objtool_file *file)
 	 * disassembly context to disassemble instruction or function
 	 * on warning or backtrace.
 	 */
-	if (opts.verbose || opts.backtrace) {
+	if (opts.verbose || opts.backtrace || opts.trace) {
 		disas_ctx = disas_context_create(file);
 		objtool_disas_ctx = disas_ctx;
 	}
