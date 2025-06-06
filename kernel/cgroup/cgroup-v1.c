@@ -64,7 +64,8 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 	struct cgroup_root *root;
 	int retval = 0;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
+
 	cgroup_attach_lock(true);
 	for_each_root(root) {
 		struct cgroup *from_cgrp;
@@ -78,7 +79,6 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 			break;
 	}
 	cgroup_attach_unlock(true);
-	cgroup_unlock();
 
 	return retval;
 }
@@ -862,13 +862,11 @@ static int cgroup1_rename(struct kernfs_node *kn, struct kernfs_node *new_parent
 	kernfs_break_active_protection(new_parent);
 	kernfs_break_active_protection(kn);
 
-	cgroup_lock();
-
-	ret = kernfs_rename(kn, new_parent, new_name_str);
-	if (!ret)
-		TRACE_CGROUP_PATH(rename, cgrp);
-
-	cgroup_unlock();
+	scoped_guard(cgroup_mutex) {
+		ret = kernfs_rename(kn, new_parent, new_name_str);
+		if (!ret)
+			TRACE_CGROUP_PATH(rename, cgrp);
+	}
 
 	kernfs_unbreak_active_protection(kn);
 	kernfs_unbreak_active_protection(new_parent);

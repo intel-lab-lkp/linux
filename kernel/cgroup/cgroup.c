@@ -2224,13 +2224,13 @@ int cgroup_do_get_tree(struct fs_context *fc)
 		struct super_block *sb = fc->root->d_sb;
 		struct cgroup *cgrp;
 
-		cgroup_lock();
-		spin_lock_irq(&css_set_lock);
+		scoped_guard(cgroup_mutex) {
+			spin_lock_irq(&css_set_lock);
 
-		cgrp = cset_cgroup_from_root(ctx->ns->root_cset, ctx->root);
+			cgrp = cset_cgroup_from_root(ctx->ns->root_cset, ctx->root);
 
-		spin_unlock_irq(&css_set_lock);
-		cgroup_unlock();
+			spin_unlock_irq(&css_set_lock);
+		}
 
 		nsdentry = kernfs_node_dentry(cgrp->kn, sb);
 		dput(fc->root);
@@ -2440,13 +2440,12 @@ int cgroup_path_ns(struct cgroup *cgrp, char *buf, size_t buflen,
 {
 	int ret;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 	spin_lock_irq(&css_set_lock);
 
 	ret = cgroup_path_ns_locked(cgrp, buf, buflen, ns);
 
 	spin_unlock_irq(&css_set_lock);
-	cgroup_unlock();
 
 	return ret;
 }
@@ -4472,9 +4471,10 @@ int cgroup_rm_cftypes(struct cftype *cfts)
 	if (!(cfts[0].flags & __CFTYPE_ADDED))
 		return -ENOENT;
 
-	cgroup_lock();
-	cgroup_rm_cftypes_locked(cfts);
-	cgroup_unlock();
+	scoped_guard(cgroup_mutex) {
+		cgroup_rm_cftypes_locked(cfts);
+	}
+
 	return 0;
 }
 
@@ -4506,14 +4506,13 @@ int cgroup_add_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 	if (ret)
 		return ret;
 
-	cgroup_lock();
+	scoped_guard(cgroup_mutex) {
+		list_add_tail(&cfts->node, &ss->cfts);
+		ret = cgroup_apply_cftypes(cfts, true);
+		if (ret)
+			cgroup_rm_cftypes_locked(cfts);
+	}
 
-	list_add_tail(&cfts->node, &ss->cfts);
-	ret = cgroup_apply_cftypes(cfts, true);
-	if (ret)
-		cgroup_rm_cftypes_locked(cfts);
-
-	cgroup_unlock();
 	return ret;
 }
 
@@ -5489,14 +5488,14 @@ static void css_free_rwork_fn(struct work_struct *work)
 	}
 }
 
-static void css_release_work_fn(struct work_struct *work)
+static inline void css_release_work_fn_locked(struct work_struct *work)
 {
 	struct cgroup_subsys_state *css =
 		container_of(work, struct cgroup_subsys_state, destroy_work);
 	struct cgroup_subsys *ss = css->ss;
 	struct cgroup *cgrp = css->cgroup;
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	css->flags |= CSS_RELEASED;
 	list_del_rcu(&css->sibling);
@@ -5550,8 +5549,14 @@ static void css_release_work_fn(struct work_struct *work)
 					 NULL);
 	}
 
-	cgroup_unlock();
+}
 
+static void css_release_work_fn(struct work_struct *work)
+{
+	struct cgroup_subsys_state *css =
+		container_of(work, struct cgroup_subsys_state, destroy_work);
+
+	css_release_work_fn_locked(work);
 	INIT_RCU_WORK(&css->destroy_rwork, css_free_rwork_fn);
 	queue_rcu_work(cgroup_destroy_wq, &css->destroy_rwork);
 }
@@ -5914,7 +5919,7 @@ static void css_killed_work_fn(struct work_struct *work)
 	struct cgroup_subsys_state *css =
 		container_of(work, struct cgroup_subsys_state, destroy_work);
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	do {
 		offline_css(css);
@@ -5922,8 +5927,6 @@ static void css_killed_work_fn(struct work_struct *work)
 		/* @css can't go away while we're holding cgroup_mutex */
 		css = css->parent;
 	} while (css && atomic_dec_and_test(&css->online_cnt));
-
-	cgroup_unlock();
 }
 
 /* css kill confirmation processing requires process context, bounce */
@@ -6115,7 +6118,7 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 
 	pr_debug("Initializing cgroup subsys %s\n", ss->name);
 
-	cgroup_lock();
+	guard(cgroup_mutex)();
 
 	idr_init(&ss->css_idr);
 	INIT_LIST_HEAD(&ss->cfts);
@@ -6161,8 +6164,6 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 	BUG_ON(!list_empty(&init_task.tasks));
 
 	BUG_ON(online_css(css));
-
-	cgroup_unlock();
 }
 
 /**
@@ -6224,20 +6225,18 @@ int __init cgroup_init(void)
 
 	get_user_ns(init_cgroup_ns.user_ns);
 
-	cgroup_lock();
+	scoped_guard(cgroup_mutex) {
+		/*
+		 * Add init_css_set to the hash table so that dfl_root can link to
+		 * it during init.
+		 */
+		hash_add(css_set_table, &init_css_set.hlist,
+			css_set_hash(init_css_set.subsys));
 
-	/*
-	 * Add init_css_set to the hash table so that dfl_root can link to
-	 * it during init.
-	 */
-	hash_add(css_set_table, &init_css_set.hlist,
-		 css_set_hash(init_css_set.subsys));
+		cgroup_bpf_lifetime_notifier_init();
 
-	cgroup_bpf_lifetime_notifier_init();
-
-	BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
-
-	cgroup_unlock();
+		BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
+	}
 
 	for_each_subsys(ss, ssid) {
 		if (ss->early_init) {
@@ -6289,9 +6288,9 @@ int __init cgroup_init(void)
 		if (ss->bind)
 			ss->bind(init_css_set.subsys[ssid]);
 
-		cgroup_lock();
-		css_populate_dir(init_css_set.subsys[ssid]);
-		cgroup_unlock();
+		scoped_guard(cgroup_mutex) {
+			css_populate_dir(init_css_set.subsys[ssid]);
+		}
 	}
 
 	/* init_css_set.subsys[] has been updated, re-hash */
