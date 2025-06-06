@@ -116,6 +116,7 @@ static_assert(IS_ALIGNED(offsetof(struct slab, freelist), sizeof(freelist_aba_t)
 /**
  * enum slab_flags - How the slab flags bits are used.
  * @SL_locked: Is locked with slab_lock()
+ * @SL_partial: On the per-node partial list
  *
  * The slab flags share space with the page flags but some bits have
  * different interpretations.  The high bits are used for information
@@ -123,6 +124,7 @@ static_assert(IS_ALIGNED(offsetof(struct slab, freelist), sizeof(freelist_aba_t)
  */
 enum slab_flags {
 	SL_locked,
+	SL_partial = PG_workingset,	/* Historical reasons for this bit */
 };
 
 /**
