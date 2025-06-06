@@ -775,6 +775,7 @@ static bool timer_fixup_assert_init(void *addr, enum debug_obj_state state)
 
 static const struct debug_obj_descr timer_debug_descr = {
 	.name			= "timer_list",
+	.flags			= ODEBUG_FLAG_NO_ALLOC,
 	.debug_hint		= timer_debug_hint,
 	.is_static_object	= timer_is_static_object,
 	.fixup_init		= timer_fixup_init,
