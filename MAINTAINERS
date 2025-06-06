@@ -22725,16 +22725,18 @@ F:	Documentation/devicetree/bindings/nvmem/layouts/kontron,sl28-vpd.yaml
 F:	drivers/nvmem/layouts/sl28vpd.c
 
 SLAB ALLOCATOR
+M:	Vlastimil Babka <vbabka@suse.cz>
 M:	Christoph Lameter <cl@gentwo.org>
 M:	David Rientjes <rientjes@google.com>
 M:	Andrew Morton <akpm@linux-foundation.org>
-M:	Vlastimil Babka <vbabka@suse.cz>
 R:	Roman Gushchin <roman.gushchin@linux.dev>
 R:	Harry Yoo <harry.yoo@oracle.com>
 L:	linux-mm@kvack.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/vbabka/slab.git
-F:	include/linux/sl?b*.h
+F:	Documentation/admin-guide/mm/slab.rst
+F:	Documentation/mm/slab.rst
+F:	include/linux/slab.h
 F:	mm/sl?b*
 
 SLCAN CAN NETWORK DRIVER
