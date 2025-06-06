@@ -828,6 +828,7 @@ static void remove_node_from_stable_tree(struct ksm_stable_node *stable_node)
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
 		if (rmap_item->hlist.next) {
 			ksm_pages_sharing--;
+			rmap_item->mm->ksm_pages_sharing--;
 			trace_ksm_remove_rmap_item(stable_node->kpfn, rmap_item, rmap_item->mm);
 		} else {
 			ksm_pages_shared--;
@@ -980,8 +981,10 @@ static void remove_rmap_item_from_tree(struct ksm_rmap_item *rmap_item)
 		folio_unlock(folio);
 		folio_put(folio);
 
-		if (!hlist_empty(&stable_node->hlist))
+		if (!hlist_empty(&stable_node->hlist)) {
 			ksm_pages_sharing--;
+			rmap_item->mm->ksm_pages_sharing--;
+		}
 		else
 			ksm_pages_shared--;
 
@@ -2206,9 +2209,10 @@ static void stable_tree_append(struct ksm_rmap_item *rmap_item,
 	rmap_item->address |= STABLE_FLAG;
 	hlist_add_head(&rmap_item->hlist, &stable_node->hlist);
 
-	if (rmap_item->hlist.next)
+	if (rmap_item->hlist.next) {
 		ksm_pages_sharing++;
-	else
+		rmap_item->mm->ksm_pages_sharing++;
+	} else
 		ksm_pages_shared++;
 
 	rmap_item->mm->ksm_merging_pages++;
@@ -3303,7 +3307,7 @@ bool ksm_process_mergeable(struct mm_struct *mm)
 
 long ksm_process_profit(struct mm_struct *mm)
 {
-	return (long)(mm->ksm_merging_pages + mm_ksm_zero_pages(mm)) * PAGE_SIZE -
+	return (long)(mm->ksm_pages_sharing + mm_ksm_zero_pages(mm)) * PAGE_SIZE -
 		mm->ksm_rmap_items * sizeof(struct ksm_rmap_item);
 }
 #endif /* CONFIG_PROC_FS */

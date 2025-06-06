@@ -256,9 +256,10 @@ several times, which are unprofitable memory consumed.
 	process_profit =~ ksm_saved_pages * sizeof(page) -
 			  ksm_rmap_items * sizeof(rmap_item).
 
-   where ksm_saved_pages equals to the sum of ``ksm_merging_pages`` and
+   where ksm_saved_pages equals to the sum of ``ksm_pages_sharing`` and
    ``ksm_zero_pages``, both of which are shown under the directory
-   ``/proc/<pid>/ksm_stat``, and ksm_rmap_items is also shown in
+   ``/proc/<pid>/ksm_stat``, ksm_merging_pages and ksm_rmap_items are
+   also shown in
    ``/proc/<pid>/ksm_stat``. The process profit is also shown in
    ``/proc/<pid>/ksm_stat`` as ksm_process_profit.
 

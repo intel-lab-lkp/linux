@@ -1177,6 +1177,11 @@ struct mm_struct {
 		 */
 		unsigned long ksm_merging_pages;
 		/*
+		 * Represents how many pages saved of this process.
+		 * (not including ksm_zero_pages).
+		 */
+		unsigned long ksm_pages_sharing;
+		/*
 		 * Represent how many pages are checked for ksm merging
 		 * including merged and not merged.
 		 */
