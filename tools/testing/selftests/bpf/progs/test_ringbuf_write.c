@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#include <linux/bpf.h>
+#include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include "bpf_misc.h"
 
@@ -9,6 +9,8 @@ char _license[] SEC("license") = "GPL";
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 } ringbuf SEC(".maps");
+
+extern bool CONFIG_ARM64_64K_PAGES __kconfig __weak;
 
 /* inputs */
 int pid = 0;
@@ -26,11 +28,12 @@ int test_ringbuf_write(void *ctx)
 	if (cur_pid != pid)
 		return 0;
 
-	sample1 = bpf_ringbuf_reserve(&ringbuf, 0x3000, 0);
+	sample1 = bpf_ringbuf_reserve(&ringbuf, CONFIG_ARM64_64K_PAGES ? 0x30000 : 0x3000, 0);
+
 	if (!sample1)
 		return 0;
 	/* first one can pass */
-	sample2 = bpf_ringbuf_reserve(&ringbuf, 0x3000, 0);
+	sample2 = bpf_ringbuf_reserve(&ringbuf, CONFIG_ARM64_64K_PAGES ? 0x30000 : 0x3000, 0);
 	if (!sample2) {
 		bpf_ringbuf_discard(sample1, 0);
 		__sync_fetch_and_add(&discarded, 1);
