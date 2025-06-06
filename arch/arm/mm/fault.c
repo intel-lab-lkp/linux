@@ -275,8 +275,21 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 
 
 	/* Enable interrupts if they were enabled in the parent context. */
-	if (interrupts_enabled(regs))
-		local_irq_enable();
+	if (likely(user_mode(regs))) {
+		if (IS_ENABLED(CONFIG_PREEMPT) &&
+		    IS_ENABLED(CONFIG_HARDEN_BRANCH_PREDICTOR) &&
+		    unlikely(addr >= TASK_SIZE)) {
+
+			__do_user_fault(addr, fsr, SIGSEGV, SEGV_MAPERR, regs);
+			return 0;
+		}
+
+		flags |= FAULT_FLAG_USER;
+	} else if (!interrupts_enabled(regs))
+		goto irq_disabled;
+
+	local_irq_enable();
+irq_disabled:
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -284,9 +297,6 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	 */
 	if (faulthandler_disabled() || !mm)
 		goto no_context;
-
-	if (user_mode(regs))
-		flags |= FAULT_FLAG_USER;
 
 	if (is_write_fault(fsr)) {
 		flags |= FAULT_FLAG_WRITE;
