@@ -4137,28 +4137,22 @@ __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
 {
 	struct page *page = NULL;
 	unsigned long pflags;
-	bool drained = false;
 
 	psi_memstall_enter(&pflags);
 	*did_some_progress = __perform_reclaim(gfp_mask, order, ac);
-	if (unlikely(!(*did_some_progress)))
-		goto out;
-
-retry:
-	page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+	if (likely(*did_some_progress))
+		page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
 
 	/*
 	 * If an allocation failed after direct reclaim, it could be because
 	 * pages are pinned on the per-cpu lists or in high alloc reserves.
 	 * Shrink them and try again
 	 */
-	if (!page && !drained) {
+	if (!page) {
 		unreserve_highatomic_pageblock(ac, false);
 		drain_all_pages(NULL);
-		drained = true;
-		goto retry;
+		page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
 	}
-out:
 	psi_memstall_leave(&pflags);
 
 	return page;
