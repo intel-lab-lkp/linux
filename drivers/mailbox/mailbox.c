@@ -26,8 +26,6 @@ static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
 {
 	int idx;
 
-	guard(spinlock_irqsave)(&chan->lock);
-
 	/* See if there is any space left */
 	if (chan->msg_count == MBOX_TX_QUEUE_LEN)
 		return -ENOBUFS;
@@ -48,49 +46,49 @@ static void msg_submit(struct mbox_chan *chan)
 {
 	unsigned count, idx;
 	void *data;
-	int err = -EBUSY;
 
-	scoped_guard(spinlock_irqsave, &chan->lock) {
-		if (!chan->msg_count || chan->active_req)
-			break;
+	count = chan->msg_count;
+	idx = chan->msg_free;
+	if (idx >= count)
+		idx -= count;
+	else
+		idx += MBOX_TX_QUEUE_LEN - count;
 
-		count = chan->msg_count;
-		idx = chan->msg_free;
-		if (idx >= count)
-			idx -= count;
-		else
-			idx += MBOX_TX_QUEUE_LEN - count;
+	data = chan->msg_data[idx];
 
-		data = chan->msg_data[idx];
-
-		if (chan->cl->tx_prepare)
-			chan->cl->tx_prepare(chan->cl, data);
-		/* Try to submit a message to the MBOX controller */
-		err = chan->mbox->ops->send_data(chan, data);
-		if (!err) {
-			chan->active_req = data;
-			chan->msg_count--;
-		}
+	if (chan->cl->tx_prepare)
+		chan->cl->tx_prepare(chan->cl, data);
+	/* Try to submit a message to the MBOX controller */
+	if (!chan->mbox->ops->send_data(chan, data)) {
+		chan->active_req = data;
+		chan->msg_count--;
 	}
+}
 
-	if (!err && (chan->txdone_method & TXDONE_BY_POLL)) {
-		/* kick start the timer immediately to avoid delays */
-		scoped_guard(spinlock_irqsave, &chan->mbox->poll_hrt_lock)
-			hrtimer_start(&chan->mbox->poll_hrt, 0, HRTIMER_MODE_REL);
-	}
+static void mbox_kick_start_timer(struct mbox_chan *chan)
+{
+	/* kick start the timer immediately to avoid delays */
+	scoped_guard(spinlock_irqsave, &chan->mbox->poll_hrt_lock)
+		hrtimer_start(&chan->mbox->poll_hrt, 0, HRTIMER_MODE_REL);
 }
 
 static void tx_tick(struct mbox_chan *chan, int r)
 {
+	bool sent = false;
 	void *mssg;
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		mssg = chan->active_req;
 		chan->active_req = NULL;
+
+		if (chan->msg_count) {
+			msg_submit(chan);
+			sent = true;
+		}
 	}
 
-	/* Submit next message */
-	msg_submit(chan);
+	if (sent && (chan->txdone_method & TXDONE_BY_POLL))
+		mbox_kick_start_timer(chan);
 
 	if (!mssg)
 		return;
@@ -243,18 +241,27 @@ EXPORT_SYMBOL_GPL(mbox_client_peek_data);
  */
 int mbox_send_message(struct mbox_chan *chan, void *mssg)
 {
+	bool sent = false;
 	int t;
 
 	if (!chan || !chan->cl)
 		return -EINVAL;
 
-	t = add_to_rbuf(chan, mssg);
-	if (t < 0) {
-		dev_err(chan->mbox->dev, "Try increasing MBOX_TX_QUEUE_LEN\n");
-		return t;
+	scoped_guard(spinlock_irqsave, &chan->lock) {
+		t = add_to_rbuf(chan, mssg);
+		if (t < 0) {
+			dev_err(chan->mbox->dev, "Try increasing MBOX_TX_QUEUE_LEN\n");
+			return t;
+		}
+
+		if (!chan->active_req) {
+			msg_submit(chan);
+			sent = true;
+		}
 	}
 
-	msg_submit(chan);
+	if (sent && (chan->txdone_method & TXDONE_BY_POLL))
+		mbox_kick_start_timer(chan);
 
 	if (chan->cl->tx_block) {
 		unsigned long wait;
