@@ -41,6 +41,7 @@ struct debug_obj {
  * struct debug_obj_descr - object type specific debug description structure
  *
  * @name:		name of the object typee
+ * @flags:		debug object flags
  * @debug_hint:		function returning address, which have associated
  *			kernel symbol, to allow identify the object
  * @is_static_object:	return true if the obj is static, otherwise return false
@@ -58,6 +59,7 @@ struct debug_obj {
  */
 struct debug_obj_descr {
 	const char		*name;
+	unsigned long		 flags;
 	void *(*debug_hint)(void *addr);
 	bool (*is_static_object)(void *addr);
 	bool (*fixup_init)(void *addr, enum debug_obj_state state);
@@ -65,6 +67,10 @@ struct debug_obj_descr {
 	bool (*fixup_destroy)(void *addr, enum debug_obj_state state);
 	bool (*fixup_free)(void *addr, enum debug_obj_state state);
 	bool (*fixup_assert_init)(void *addr, enum debug_obj_state state);
+};
+
+enum debug_obj_flags {
+	ODEBUG_FLAG_NO_ALLOC = 0x1,	/* Disallow debug object pre-allocation */
 };
 
 #ifdef CONFIG_DEBUG_OBJECTS
