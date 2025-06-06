@@ -349,6 +349,12 @@ struct vduse_iova_range {
 	__u64 last;
 };
 
+struct vduse_iova_range_v2 {
+	__u64 start;
+	__u64 last;
+	__u32 asid;
+};
+
 /**
  * struct vduse_dev_request - control request
  * @type: request type
@@ -369,6 +375,7 @@ struct vduse_dev_request {
 		struct vduse_vq_state vq_state;
 		struct vduse_dev_status s;
 		struct vduse_iova_range iova;
+		struct vduse_iova_range_v2 iova_v2;
 		struct vduse_vq_group vq_group; /* Only if vduse api version >= 1 */
 		/* Only if vduse api version >= 1 */
 		struct vduse_vq_group_asid vq_group_asid;
