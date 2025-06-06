@@ -335,28 +335,23 @@ static int cgroup_idr_alloc(struct idr *idr, void *ptr, int start, int end,
 	int ret;
 
 	idr_preload(gfp_mask);
-	spin_lock_bh(&cgroup_idr_lock);
-	ret = idr_alloc(idr, ptr, start, end, gfp_mask & ~__GFP_DIRECT_RECLAIM);
-	spin_unlock_bh(&cgroup_idr_lock);
+	scoped_guard(spinlock_bh, &cgroup_idr_lock) {
+		ret = idr_alloc(idr, ptr, start, end, gfp_mask & ~__GFP_DIRECT_RECLAIM);
+	}
 	idr_preload_end();
 	return ret;
 }
 
 static void *cgroup_idr_replace(struct idr *idr, void *ptr, int id)
 {
-	void *ret;
-
-	spin_lock_bh(&cgroup_idr_lock);
-	ret = idr_replace(idr, ptr, id);
-	spin_unlock_bh(&cgroup_idr_lock);
-	return ret;
+	guard(spinlock_bh)(&cgroup_idr_lock);
+	return idr_replace(idr, ptr, id);
 }
 
 static void cgroup_idr_remove(struct idr *idr, int id)
 {
-	spin_lock_bh(&cgroup_idr_lock);
+	guard(spinlock_bh)(&cgroup_idr_lock);
 	idr_remove(idr, id);
-	spin_unlock_bh(&cgroup_idr_lock);
 }
 
 static bool cgroup_has_tasks(struct cgroup *cgrp)
@@ -583,20 +578,19 @@ struct cgroup_subsys_state *cgroup_get_e_css(struct cgroup *cgrp,
 	if (!CGROUP_HAS_SUBSYS_CONFIG)
 		return NULL;
 
-	rcu_read_lock();
+	guard(rcu)();
 
 	do {
 		css = cgroup_css(cgrp, ss);
 
 		if (css && css_tryget_online(css))
-			goto out_unlock;
+			return css;
 		cgrp = cgroup_parent(cgrp);
 	} while (cgrp);
 
 	css = init_css_set.subsys[ss->id];
 	css_get(css);
-out_unlock:
-	rcu_read_unlock();
+
 	return css;
 }
 EXPORT_SYMBOL_GPL(cgroup_get_e_css);
@@ -1691,9 +1685,9 @@ static void cgroup_rm_file(struct cgroup *cgrp, const struct cftype *cft)
 		struct cgroup_subsys_state *css = cgroup_css(cgrp, cft->ss);
 		struct cgroup_file *cfile = (void *)css + cft->file_offset;
 
-		spin_lock_irq(&cgroup_file_kn_lock);
-		cfile->kn = NULL;
-		spin_unlock_irq(&cgroup_file_kn_lock);
+		scoped_guard(spinlock_irq, &cgroup_file_kn_lock) {
+			cfile->kn = NULL;
+		}
 
 		timer_delete_sync(&cfile->notify_timer);
 	}
@@ -4277,9 +4271,9 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 
 		timer_setup(&cfile->notify_timer, cgroup_file_notify_timer, 0);
 
-		spin_lock_irq(&cgroup_file_kn_lock);
-		cfile->kn = kn;
-		spin_unlock_irq(&cgroup_file_kn_lock);
+		scoped_guard(spinlock_irq, &cgroup_file_kn_lock) {
+			cfile->kn = kn;
+		}
 	}
 
 	return 0;
@@ -4534,9 +4528,7 @@ int cgroup_add_legacy_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
  */
 void cgroup_file_notify(struct cgroup_file *cfile)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&cgroup_file_kn_lock, flags);
+	guard(spinlock_irqsave)(&cgroup_file_kn_lock);
 	if (cfile->kn) {
 		unsigned long last = cfile->notified_at;
 		unsigned long next = last + CGROUP_FILE_NOTIFY_MIN_INTV;
@@ -4548,7 +4540,6 @@ void cgroup_file_notify(struct cgroup_file *cfile)
 			cfile->notified_at = jiffies;
 		}
 	}
-	spin_unlock_irqrestore(&cgroup_file_kn_lock, flags);
 }
 
 /**
@@ -4560,10 +4551,10 @@ void cgroup_file_show(struct cgroup_file *cfile, bool show)
 {
 	struct kernfs_node *kn;
 
-	spin_lock_irq(&cgroup_file_kn_lock);
-	kn = cfile->kn;
-	kernfs_get(kn);
-	spin_unlock_irq(&cgroup_file_kn_lock);
+	scoped_guard(spinlock_irq, &cgroup_file_kn_lock) {
+		kn = cfile->kn;
+		kernfs_get(kn);
+	}
 
 	if (kn)
 		kernfs_show(kn, show);
@@ -4987,11 +4978,10 @@ repeat:
 void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 			 struct css_task_iter *it)
 {
-	unsigned long irqflags;
 
 	memset(it, 0, sizeof(*it));
 
-	spin_lock_irqsave(&css_set_lock, irqflags);
+	guard(spinlock_irqsave)(&css_set_lock);
 
 	it->ss = css->ss;
 	it->flags = flags;
@@ -5004,8 +4994,6 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 	it->cset_head = it->cset_pos;
 
 	css_task_iter_advance(it);
-
-	spin_unlock_irqrestore(&css_set_lock, irqflags);
 }
 
 /**
@@ -5018,14 +5006,12 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
-	unsigned long irqflags;
-
 	if (it->cur_task) {
 		put_task_struct(it->cur_task);
 		it->cur_task = NULL;
 	}
 
-	spin_lock_irqsave(&css_set_lock, irqflags);
+	guard(spinlock_irqsave)(&css_set_lock);
 
 	/* @it may be half-advanced by skips, finish advancing */
 	if (it->flags & CSS_TASK_ITER_SKIPPED)
@@ -5038,8 +5024,6 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
 		css_task_iter_advance(it);
 	}
 
-	spin_unlock_irqrestore(&css_set_lock, irqflags);
-
 	return it->cur_task;
 }
 
@@ -5051,13 +5035,10 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
  */
 void css_task_iter_end(struct css_task_iter *it)
 {
-	unsigned long irqflags;
-
 	if (it->cur_cset) {
-		spin_lock_irqsave(&css_set_lock, irqflags);
+		guard(spinlock_irqsave)(&css_set_lock);
 		list_del(&it->iters_node);
 		put_css_set_locked(it->cur_cset);
-		spin_unlock_irqrestore(&css_set_lock, irqflags);
 	}
 
 	if (it->cur_dcset)
@@ -6737,10 +6718,10 @@ void cgroup_post_fork(struct task_struct *child,
 				 * too. Let's set the JOBCTL_TRAP_FREEZE jobctl bit to
 				 * get the task into the frozen state.
 				 */
-				spin_lock(&child->sighand->siglock);
-				WARN_ON_ONCE(child->frozen);
-				child->jobctl |= JOBCTL_TRAP_FREEZE;
-				spin_unlock(&child->sighand->siglock);
+				scoped_guard(spinlock, &child->sighand->siglock) {
+					WARN_ON_ONCE(child->frozen);
+					child->jobctl |= JOBCTL_TRAP_FREEZE;
+				}
 
 				/*
 				 * Calling cgroup_update_frozen() isn't required here,

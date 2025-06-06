@@ -198,8 +198,6 @@ void put_css_set_locked(struct css_set *cset);
 
 static inline void put_css_set(struct css_set *cset)
 {
-	unsigned long flags;
-
 	/*
 	 * Ensure that the refcount doesn't hit zero while any readers
 	 * can see it. Similar to atomic_dec_and_lock(), but for an
@@ -208,9 +206,9 @@ static inline void put_css_set(struct css_set *cset)
 	if (refcount_dec_not_one(&cset->refcount))
 		return;
 
-	spin_lock_irqsave(&css_set_lock, flags);
-	put_css_set_locked(cset);
-	spin_unlock_irqrestore(&css_set_lock, flags);
+	scoped_guard(spinlock_irqsave, &css_set_lock) {
+		put_css_set_locked(cset);
+	}
 }
 
 /*

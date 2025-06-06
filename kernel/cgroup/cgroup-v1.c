@@ -1291,7 +1291,6 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
 {
 	struct cgroup *cgrp = ERR_PTR(-ENOENT);
 	struct cgroup_root *root;
-	unsigned long flags;
 
 	guard(rcu)();
 	for_each_root(root) {
@@ -1300,11 +1299,11 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
 			continue;
 		if (root->hierarchy_id != hierarchy_id)
 			continue;
-		spin_lock_irqsave(&css_set_lock, flags);
-		cgrp = task_cgroup_from_root(tsk, root);
-		if (!cgrp || !cgroup_tryget(cgrp))
-			cgrp = ERR_PTR(-ENOENT);
-		spin_unlock_irqrestore(&css_set_lock, flags);
+		scoped_guard(spinlock_irqsave, &css_set_lock) {
+			cgrp = task_cgroup_from_root(tsk, root);
+			if (!cgrp || !cgroup_tryget(cgrp))
+				cgrp = ERR_PTR(-ENOENT);
+		}
 		break;
 	}
 
