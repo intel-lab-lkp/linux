@@ -144,11 +144,11 @@ static int config_addend(void __iomem *ioaddr, u32 addend)
 	writel(value, ioaddr + PTP_TCR);
 
 	/* wait for present addend update to complete */
-	limit = 10;
+	limit = 10000;
 	while (limit--) {
 		if (!(readl(ioaddr + PTP_TCR) & PTP_TCR_TSADDREG))
 			break;
-		mdelay(10);
+		udelay(5);
 	}
 	if (limit < 0)
 		return -EBUSY;
@@ -187,11 +187,11 @@ static int adjust_systime(void __iomem *ioaddr, u32 sec, u32 nsec,
 	writel(value, ioaddr + PTP_TCR);
 
 	/* wait for present system time adjust/update to complete */
-	limit = 10;
+	limit = 10000;
 	while (limit--) {
 		if (!(readl(ioaddr + PTP_TCR) & PTP_TCR_TSUPDT))
 			break;
-		mdelay(10);
+		udelay(5);
 	}
 	if (limit < 0)
 		return -EBUSY;
