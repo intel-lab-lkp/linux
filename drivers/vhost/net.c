@@ -77,7 +77,9 @@ enum {
 			 (1ULL << VIRTIO_F_RING_RESET)
 };
 
-const u64 VHOST_NET_ALL_FEATURES[VIRTIO_FEATURES_DWORDS] = { VHOST_NET_FEATURES };
+const u64 VHOST_NET_ALL_FEATURES[VIRTIO_FEATURES_DWORDS] = { VHOST_NET_FEATURES,
+	VIRTIO_BIT(VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) |
+	VIRTIO_BIT(VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO) };
 
 enum {
 	VHOST_NET_BACKEND_FEATURES = (1ULL << VHOST_BACKEND_F_IOTLB_MSG_V2)
@@ -1613,6 +1615,12 @@ static int vhost_net_set_features(struct vhost_net *n, const u64 *features)
 		  virtio_features_test_bit(features, VIRTIO_F_VERSION_1) ?
 		  sizeof(struct virtio_net_hdr_mrg_rxbuf) :
 		  sizeof(struct virtio_net_hdr);
+
+	if (virtio_features_test_bit(features,
+				     VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO) ||
+	    virtio_features_test_bit(features,
+				     VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO))
+		hdr_len += sizeof(struct virtio_net_hdr_tunnel);
 
 	if (virtio_features_test_bit(features, VHOST_NET_F_VIRTIO_NET_HDR)) {
 		/* vhost provides vnet_hdr */
