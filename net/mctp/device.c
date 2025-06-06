@@ -140,9 +140,11 @@ static int mctp_dump_addrinfo(struct sk_buff *skb, struct netlink_callback *cb)
 		rc = mctp_dump_dev_addrinfo(mdev, skb, cb);
 		mctp_dev_put(mdev);
 		if (rc < 0)
-			break;
+			goto out;
 		mcb->a_idx = 0;
 	}
+	mcb->ifindex = ULONG_MAX;
+out:
 	rcu_read_unlock();
 
 	return skb->len;
