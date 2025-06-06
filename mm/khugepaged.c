@@ -2607,6 +2607,26 @@ static int khugepaged(void *none)
 	return 0;
 }
 
+static int thp_highest_allowable_order(void)
+{
+	unsigned long orders = READ_ONCE(huge_anon_orders_always)
+			       | READ_ONCE(huge_anon_orders_madvise)
+			       | READ_ONCE(huge_shmem_orders_always)
+			       | READ_ONCE(huge_shmem_orders_madvise)
+			       | READ_ONCE(huge_shmem_orders_within_size);
+	if (hugepage_global_enabled())
+		orders |= READ_ONCE(huge_anon_orders_inherit);
+	if (shmem_huge != SHMEM_HUGE_NEVER)
+		orders |= READ_ONCE(huge_shmem_orders_inherit);
+
+	return orders == 0 ? 0 : fls(orders) - 1;
+}
+
+static unsigned long min_thp_pageblock_nr_pages(void)
+{
+	return (1UL << min(thp_highest_allowable_order(), PAGE_BLOCK_ORDER));
+}
+
 static void set_recommended_min_free_kbytes(void)
 {
 	struct zone *zone;
@@ -2638,12 +2658,16 @@ static void set_recommended_min_free_kbytes(void)
 	 * second to avoid subsequent fallbacks of other types There are 3
 	 * MIGRATE_TYPES we care about.
 	 */
-	recommended_min += pageblock_nr_pages * nr_zones *
+	recommended_min += min_thp_pageblock_nr_pages() * nr_zones *
 			   MIGRATE_PCPTYPES * MIGRATE_PCPTYPES;
 
-	/* don't ever allow to reserve more than 5% of the lowmem */
-	recommended_min = min(recommended_min,
-			      (unsigned long) nr_free_buffer_pages() / 20);
+	/*
+	 * Don't ever allow to reserve more than 5% of the lowmem.
+	 * Use a min of 128 pages when all THP orders are set to never.
+	 */
+	recommended_min = clamp(recommended_min, 128,
+				(unsigned long) nr_free_buffer_pages() / 20);
+
 	recommended_min <<= (PAGE_SHIFT-10);
 
 	if (recommended_min > min_free_kbytes) {

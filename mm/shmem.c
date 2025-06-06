@@ -136,10 +136,10 @@ struct shmem_options {
 };
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-static unsigned long huge_shmem_orders_always __read_mostly;
-static unsigned long huge_shmem_orders_madvise __read_mostly;
-static unsigned long huge_shmem_orders_inherit __read_mostly;
-static unsigned long huge_shmem_orders_within_size __read_mostly;
+unsigned long huge_shmem_orders_always __read_mostly;
+unsigned long huge_shmem_orders_madvise __read_mostly;
+unsigned long huge_shmem_orders_inherit __read_mostly;
+unsigned long huge_shmem_orders_within_size __read_mostly;
 static bool shmem_orders_configured __initdata;
 #endif
 
@@ -517,25 +517,6 @@ static bool shmem_confirm_swap(struct address_space *mapping,
 }
 
 /*
- * Definitions for "huge tmpfs": tmpfs mounted with the huge= option
- *
- * SHMEM_HUGE_NEVER:
- *	disables huge pages for the mount;
- * SHMEM_HUGE_ALWAYS:
- *	enables huge pages for the mount;
- * SHMEM_HUGE_WITHIN_SIZE:
- *	only allocate huge pages if the page will be fully within i_size,
- *	also respect madvise() hints;
- * SHMEM_HUGE_ADVISE:
- *	only allocate huge pages if requested with madvise();
- */
-
-#define SHMEM_HUGE_NEVER	0
-#define SHMEM_HUGE_ALWAYS	1
-#define SHMEM_HUGE_WITHIN_SIZE	2
-#define SHMEM_HUGE_ADVISE	3
-
-/*
  * Special values.
  * Only can be set via /sys/kernel/mm/transparent_hugepage/shmem_enabled:
  *
@@ -551,7 +532,7 @@ static bool shmem_confirm_swap(struct address_space *mapping,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /* ifdef here to avoid bloating shmem.o when not necessary */
 
-static int shmem_huge __read_mostly = SHMEM_HUGE_NEVER;
+int shmem_huge __read_mostly = SHMEM_HUGE_NEVER;
 static int tmpfs_huge __read_mostly = SHMEM_HUGE_NEVER;
 
 /**

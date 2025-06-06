@@ -170,12 +170,37 @@ static inline void count_mthp_stat(int order, enum mthp_stat_item item)
 }
 #endif
 
+/*
+ * Definitions for "huge tmpfs": tmpfs mounted with the huge= option
+ *
+ * SHMEM_HUGE_NEVER:
+ *	disables huge pages for the mount;
+ * SHMEM_HUGE_ALWAYS:
+ *	enables huge pages for the mount;
+ * SHMEM_HUGE_WITHIN_SIZE:
+ *	only allocate huge pages if the page will be fully within i_size,
+ *	also respect madvise() hints;
+ * SHMEM_HUGE_ADVISE:
+ *	only allocate huge pages if requested with madvise();
+ */
+
+ #define SHMEM_HUGE_NEVER	0
+ #define SHMEM_HUGE_ALWAYS	1
+ #define SHMEM_HUGE_WITHIN_SIZE	2
+ #define SHMEM_HUGE_ADVISE	3
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 
 extern unsigned long transparent_hugepage_flags;
 extern unsigned long huge_anon_orders_always;
 extern unsigned long huge_anon_orders_madvise;
 extern unsigned long huge_anon_orders_inherit;
+
+extern int shmem_huge __read_mostly;
+extern unsigned long huge_shmem_orders_always;
+extern unsigned long huge_shmem_orders_madvise;
+extern unsigned long huge_shmem_orders_inherit;
+extern unsigned long huge_shmem_orders_within_size;
 
 static inline bool hugepage_global_enabled(void)
 {
