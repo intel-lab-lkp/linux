@@ -30,6 +30,7 @@ struct vm_fault;
 #define IOMAP_MAPPED	2	/* blocks allocated at @addr */
 #define IOMAP_UNWRITTEN	3	/* blocks allocated at @addr in unwritten state */
 #define IOMAP_INLINE	4	/* data inline in the inode */
+#define IOMAP_IN_MEM	5       /* data in memory, does not map to blocks */
 
 /*
  * Flags reported by the file system from iomap_begin:
