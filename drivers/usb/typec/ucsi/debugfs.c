@@ -36,6 +36,12 @@ static int ucsi_cmd(void *data, u64 val)
 	case UCSI_SET_NEW_CAM:
 		ret = ucsi_send_command(ucsi, val, NULL, 0);
 		break;
+	case UCSI_SET_PDOS:
+		ret = ucsi_send_message_out(ucsi, ucsi->debugfs->message_out,
+					    UCSI_COMMAND_DATA_LEN(val));
+		if (!ret)
+			ret = ucsi_send_command(ucsi, val, NULL, 0);
+		break;
 	case UCSI_GET_CAPABILITY:
 	case UCSI_GET_CONNECTOR_CAPABILITY:
 	case UCSI_GET_ALTERNATE_MODES:
