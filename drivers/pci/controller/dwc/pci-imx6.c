@@ -1441,6 +1441,10 @@ static int imx_add_pcie_ep(struct imx_pcie *imx_pcie,
 	struct device *dev = pci->dev;
 
 	imx_pcie_host_init(pp);
+
+	/* Make sure that PCIe LTSSM is cleared */
+	imx_pcie_ltssm_disable(dev);
+
 	ep = &pci->ep;
 	ep->ops = &pcie_ep_ops;
 
@@ -1464,9 +1468,6 @@ static int imx_add_pcie_ep(struct imx_pcie *imx_pcie,
 	}
 
 	pci_epc_init_notify(ep->epc);
-
-	/* Start LTSSM. */
-	imx_pcie_ltssm_enable(dev);
 
 	return 0;
 }
