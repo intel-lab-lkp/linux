@@ -1014,24 +1014,40 @@ static int sd_set_power_mode(struct rtsx_usb_sdmmc *host,
 		unsigned char power_mode)
 {
 	int err;
+	struct rtsx_ucr *ucr = host->ucr;
 
-	if (power_mode != MMC_POWER_OFF)
-		power_mode = MMC_POWER_ON;
-
-	if (power_mode == host->power_mode)
-		return 0;
-
-	if (power_mode == MMC_POWER_OFF) {
+	switch (power_mode) {
+	case MMC_POWER_OFF:
+		if (host->power_mode == MMC_POWER_OFF)
+			return 0;
 		err = sd_power_off(host);
 		pm_runtime_put_noidle(sdmmc_dev(host));
-	} else {
+		break;
+	case MMC_POWER_UP:
+	case MMC_POWER_ON:
+		if (host->power_mode == MMC_POWER_ON) {
+			return 0;
+		} else if (host->power_mode == MMC_POWER_UP) {
+			/* stop to send the clock signals */
+			rtsx_usb_write_register(ucr, SD_BUS_STAT, SD_CLK_TOGGLE_EN, 0x00);
+			host->power_mode = power_mode;
+			return 0;
+		}
 		pm_runtime_get_noresume(sdmmc_dev(host));
 		err = sd_power_on(host);
+		break;
+	default:
+		return 0;
 	}
+	if (!err) {
+		if (power_mode == MMC_POWER_UP) {
+			/* issue the clock signals to card */
+			rtsx_usb_write_register(ucr, SD_BUS_STAT, SD_CLK_TOGGLE_EN,
+				SD_CLK_TOGGLE_EN);
+		}
 
-	if (!err)
 		host->power_mode = power_mode;
-
+	}
 	return err;
 }
 
