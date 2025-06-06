@@ -54,8 +54,60 @@ static int vtrace_depth;
 		}						\
 	} while (0)
 
+#define VTRACE_INFO(insn, fmt, ...)				\
+	do {							\
+		if (vtrace)					\
+			vtrace_info(insn, fmt, ##__VA_ARGS__);	\
+	} while (0)
+
+#define VTRACE_ALT_FMT(fmt) "<alternative.%lx> alt " fmt
+
+#define VTRACE_ALT(insn, fmt, ...)				\
+	VTRACE_INSN(insn, VTRACE_ALT_FMT(fmt),			\
+		    (insn)->offset, ##__VA_ARGS__)
+
+#define VTRACE_ALT_INFO(insn, fmt, ...)				\
+	VTRACE_INFO(insn, VTRACE_ALT_FMT(fmt),			\
+		    (insn)->offset, ##__VA_ARGS__)
+
+#define VTRACE_ALT_INFO_NOADDR(insn, fmt, ...)			\
+	VTRACE_INFO(NULL, VTRACE_ALT_FMT(fmt),			\
+		    (insn)->offset, ##__VA_ARGS__)
+
 #define VTRACE_INSN_OFFSET_SPACE	10
 #define VTRACE_INSN_SPACE		60
+
+/*
+ * Print a message in the instruction flow. If insn is not NULL then
+ * the instruction address is printed in addition of the message,
+ * otherwise only the message is printed. In all cases, the instruction
+ * itself is not printed.
+ */
+static void vtrace_info(struct instruction *insn, const char *format, ...)
+{
+	const char *addr_str;
+	va_list args;
+	int len;
+	int i;
+
+	len = sym_name_max_len + VTRACE_INSN_OFFSET_SPACE;
+	if (insn) {
+		addr_str = offstr(insn->sec, insn->offset);
+		VTRACE_PRINTF("%6lx:  %-*s  ", insn->offset, len, addr_str);
+	} else {
+		len += 11;
+		VTRACE_PRINTF("%-*s", len, "");
+	}
+
+	/* print vertical bars to show the validation flow */
+	for (i = 1; i < vtrace_depth; i++)
+		VTRACE_PRINTF("| ");
+
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+	VTRACE_PRINTF("\n");
+}
 
 /*
  * Print an instruction address (offset and function), the instruction itself
@@ -3692,7 +3744,7 @@ static bool skip_alt_group(struct instruction *insn)
 
 	/* ANNOTATE_IGNORE_ALTERNATIVE */
 	if (insn->alt_group && insn->alt_group->ignore) {
-		VTRACE_INSN(insn, "alt group ignored");
+		VTRACE_ALT(insn, "alt group ignored");
 		return true;
 	}
 
@@ -3905,8 +3957,9 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 
 		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
-			VTRACE_INSN(insn, "alternative %d/%d", i, count);
+			VTRACE_ALT_INFO(insn, "%d/%d begin", i, count);
 			ret = validate_branch(file, func, alt->insn, *statep);
+			VTRACE_ALT_INFO_NOADDR(insn, "%d/%d end", i, count);
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
@@ -3914,7 +3967,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 			i++;
 		}
 
-		VTRACE_INSN(insn, "alternative orig");
+		VTRACE_ALT_INFO(insn, "default");
 	}
 
 	if (skip_alt_group(insn))
