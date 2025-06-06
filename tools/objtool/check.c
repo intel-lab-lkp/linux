@@ -4701,8 +4701,6 @@ int check(struct objtool_file *file)
 			goto out;
 	}
 
-	free_insns(file);
-
 	if (opts.stats) {
 		printf("nr_insns_visited: %ld\n", nr_insns_visited);
 		printf("nr_cfi: %ld\n", nr_cfi);
@@ -4725,6 +4723,8 @@ out:
 		disas_warned_funcs(disas_ctx);
 		disas_context_destroy(disas_ctx);
 	}
+
+	free_insns(file);
 
 	return ret;
 }

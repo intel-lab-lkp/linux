@@ -6,6 +6,8 @@
 #ifndef _ARCH_H
 #define _ARCH_H
 
+#include <bfd.h>
+#include <dis-asm.h>
 #include <stdbool.h>
 #include <linux/list.h>
 #include <objtool/objtool.h>
@@ -98,7 +100,10 @@ int arch_rewrite_retpolines(struct objtool_file *file);
 
 bool arch_pc_relative_reloc(struct reloc *reloc);
 
+
 unsigned int arch_reloc_size(struct reloc *reloc);
 unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *table);
+
+int arch_disas_info_init(struct disassemble_info *dinfo);
 
 #endif /* _ARCH_H */

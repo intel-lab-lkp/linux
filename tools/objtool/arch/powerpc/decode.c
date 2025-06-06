@@ -127,4 +127,10 @@ unsigned int arch_reloc_size(struct reloc *reloc)
 	default:
 		return 8;
 	}
+
+int arch_disas_info_init(struct disassemble_info *dinfo)
+{
+	return disas_info_init(dinfo, bfd_arch_powerpc,
+			       bfd_mach_ppc, bfd_mach_ppc64,
+			       NULL);
 }

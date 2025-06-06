@@ -48,8 +48,12 @@ int orc_dump(const char *objname);
 int orc_create(struct objtool_file *file);
 
 struct disas_context;
+struct disassemble_info;
 struct disas_context *disas_context_create(struct objtool_file *file);
 void disas_context_destroy(struct disas_context *dctx);
 void disas_warned_funcs(struct disas_context *dctx);
+int disas_info_init(struct disassemble_info *dinfo,
+		    int arch, int mach32, int mach64,
+		    const char *options);
 
 #endif /* _OBJTOOL_H */
