@@ -106,4 +106,6 @@ unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *tabl
 
 int arch_disas_info_init(struct disassemble_info *dinfo);
 
+extern const char *arch_reg_name[CFI_NUM_REGS];
+
 #endif /* _ARCH_H */
