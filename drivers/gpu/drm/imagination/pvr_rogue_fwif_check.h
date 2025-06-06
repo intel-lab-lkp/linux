@@ -157,6 +157,20 @@ OFFSET_CHECK(struct rogue_fwif_frag_ctx_state, frag_reg_pm_deallocated_mask_stat
 OFFSET_CHECK(struct rogue_fwif_frag_ctx_state, frag_reg_dm_pds_mtilefree_status, 4);
 OFFSET_CHECK(struct rogue_fwif_frag_ctx_state, ctx_state_flags, 8);
 OFFSET_CHECK(struct rogue_fwif_frag_ctx_state, frag_reg_isp_store, 12);
+
+/*
+ ******************************************************************************
+ * SPARSE warning reasoning: SIZE_CHECK(struct rogue_fwif_frag_ctx_state, 16)
+ ******************************************************************************
+ *
+ * The structure rogue_fwif_frag_ctx_state contains a flexible size field.
+ * The SIZE_CHECK will run a static_assert function over the structure and it
+ * will use 'sizeof' over a flexible structure.
+ * The implementation of the flexible size field is there by design and cannot
+ * be refactored in a way thet doesn't impact key features.
+ * To avoid having the sparse warning this argument can be used when triggering
+ * the sparse check from the build command "-Wno-sizeof-array-argument"
+ */
 SIZE_CHECK(struct rogue_fwif_frag_ctx_state, 16);
 
 OFFSET_CHECK(struct rogue_fwif_compute_ctx_state, ctx_state_flags, 0);
@@ -484,6 +498,20 @@ OFFSET_CHECK(struct rogue_fwif_hwrtdata, rtc_dev_addr, 264);
 OFFSET_CHECK(struct rogue_fwif_hwrtdata, owner_geom_not_used_by_host, 272);
 OFFSET_CHECK(struct rogue_fwif_hwrtdata, geom_caches_need_zeroing, 276);
 OFFSET_CHECK(struct rogue_fwif_hwrtdata, cleanup_state, 320);
+
+/*
+ ******************************************************************************
+ * SPARSE error reasoning: SIZE_CHECK(struct rogue_fwif_hwrtdata, 384)
+ ******************************************************************************
+ *
+ * The structure rogue_fwif_hwrtdata contains different memory alignment
+ * attributes for its fields.
+ * The SIZE_CHECK will run a static_assert function over the structure to check
+ * the size. The compilation will fail if the SIZE_CHECK fails.
+ * SPARSE seems to treat the alignment attributes in a different way than the
+ * compilation does since the compilation is not failing.
+ * This SPARSE error over this line should be ignored if it pops up.
+ */
 SIZE_CHECK(struct rogue_fwif_hwrtdata, 384);
 
 OFFSET_CHECK(struct rogue_fwif_sync_checkpoint, state, 0);
