@@ -412,9 +412,8 @@ static int unregister_vclock(struct device *dev, void *data)
 
 int ptp_clock_unregister(struct ptp_clock *ptp)
 {
-	if (ptp_vclock_in_use(ptp)) {
+	if (ptp_vclock_in_use(ptp))
 		device_for_each_child(&ptp->dev, NULL, unregister_vclock);
-	}
 
 	ptp->defunct = 1;
 	wake_up_interruptible(&ptp->tsev_wq);
