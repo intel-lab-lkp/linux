@@ -45,7 +45,8 @@ struct vduse_dev_config {
 	__u64 features;
 	__u32 vq_num;
 	__u32 vq_align;
-	__u32 reserved[13];
+	__u32 ngroups; /* if VDUSE_API_VERSION >= 1 */
+	__u32 reserved[12];
 	__u32 config_size;
 	__u8 config[];
 };
@@ -161,6 +162,16 @@ struct vduse_vq_state_packed {
 };
 
 /**
+ * struct vduse_vq_group - virtqueue group
+ * @num: Index of the virtqueue group
+ * @num: Group
+ */
+struct vduse_vq_group {
+	__u32 index;
+	__u32 num;
+};
+
+/**
  * struct vduse_vq_info - information of a virtqueue
  * @index: virtqueue index
  * @num: the size of virtqueue
@@ -182,6 +193,7 @@ struct vduse_vq_info {
 	union {
 		struct vduse_vq_state_split split;
 		struct vduse_vq_state_packed packed;
+		struct vduse_vq_group group;
 	};
 	__u8 ready;
 };
@@ -274,6 +286,7 @@ enum vduse_req_type {
 	VDUSE_GET_VQ_STATE,
 	VDUSE_SET_STATUS,
 	VDUSE_UPDATE_IOTLB,
+	VDUSE_GET_VQ_GROUP,
 };
 
 /**
@@ -328,6 +341,7 @@ struct vduse_dev_request {
 		struct vduse_vq_state vq_state;
 		struct vduse_dev_status s;
 		struct vduse_iova_range iova;
+		struct vduse_vq_group vq_group; /* Only if vduse api version >= 1 */
 		__u32 padding[32];
 	};
 };
@@ -350,6 +364,7 @@ struct vduse_dev_response {
 	__u32 reserved[4];
 	union {
 		struct vduse_vq_state vq_state;
+		struct vduse_vq_group vq_group; /* Only if vduse api version >= 1 */
 		__u32 padding[32];
 	};
 };

@@ -46,6 +46,11 @@
 #define VDUSE_IOVA_SIZE (VDUSE_MAX_BOUNCE_SIZE + 128 * 1024 * 1024)
 #define VDUSE_MSG_DEFAULT_TIMEOUT 30
 
+/*
+ * Let's make it 2 for simplicity.
+ */
+#define VDUSE_MAX_VQ_GROUPS 2
+
 #define IRQ_UNBOUND -1
 
 struct vduse_virtqueue {
@@ -114,6 +119,7 @@ struct vduse_dev {
 	u8 status;
 	u32 vq_num;
 	u32 vq_align;
+	u32 ngroups;
 	struct vduse_umem *umem;
 	struct mutex mem_lock;
 	unsigned int bounce_size;
@@ -592,6 +598,25 @@ static int vduse_vdpa_set_vq_state(struct vdpa_device *vdpa, u16 idx,
 	return 0;
 }
 
+static u32 vduse_get_vq_group(struct vdpa_device *vdpa, u16 idx)
+{
+	struct vduse_dev *dev = vdpa_to_vduse(vdpa);
+	struct vduse_dev_msg msg = { 0 };
+	int ret;
+
+	if (dev->api_version < VDUSE_API_VERSION_1)
+		return 0;
+
+	msg.req.type = VDUSE_GET_VQ_GROUP;
+	msg.req.vq_group.index = idx;
+
+	ret = vduse_dev_msg_sync(dev, &msg);
+	if (ret)
+		return ret;
+
+	return msg.resp.vq_group.num;
+}
+
 static int vduse_vdpa_get_vq_state(struct vdpa_device *vdpa, u16 idx,
 				struct vdpa_vq_state *state)
 {
@@ -789,6 +814,7 @@ static const struct vdpa_config_ops vduse_vdpa_config_ops = {
 	.set_vq_cb		= vduse_vdpa_set_vq_cb,
 	.set_vq_num             = vduse_vdpa_set_vq_num,
 	.get_vq_size		= vduse_vdpa_get_vq_size,
+	.get_vq_group		= vduse_get_vq_group,
 	.set_vq_ready		= vduse_vdpa_set_vq_ready,
 	.get_vq_ready		= vduse_vdpa_get_vq_ready,
 	.set_vq_state		= vduse_vdpa_set_vq_state,
@@ -1850,6 +1876,16 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 	dev->device_features = config->features;
 	dev->device_id = config->device_id;
 	dev->vendor_id = config->vendor_id;
+	if (dev->api_version >= 1) {
+		if (config->ngroups > VDUSE_MAX_VQ_GROUPS) {
+			pr_err("Not creating a VDUSE device with %u vq groups. Max: %u",
+				config->ngroups, VDUSE_MAX_VQ_GROUPS);
+			goto err_ngroups;
+		}
+		dev->ngroups = config->ngroups ?: 1;
+	} else {
+		dev->ngroups = 1;
+	}
 	dev->name = kstrdup(config->name, GFP_KERNEL);
 	if (!dev->name)
 		goto err_str;
@@ -1885,6 +1921,7 @@ err_dev:
 	idr_remove(&vduse_idr, dev->minor);
 err_idr:
 	kfree(dev->name);
+err_ngroups:
 err_str:
 	vduse_dev_destroy(dev);
 err:
@@ -2003,13 +2040,18 @@ static struct vduse_mgmt_dev *vduse_mgmt;
 static int vduse_dev_init_vdpa(struct vduse_dev *dev, const char *name)
 {
 	struct vduse_vdpa *vdev;
+	__u32 ngroups = 1;
 	int ret;
 
 	if (dev->vdev)
 		return -EEXIST;
 
+	if (vdev->dev->api_version >= VDUSE_API_VERSION_1)
+		ngroups = vdev->dev->ngroups;
+
 	vdev = vdpa_alloc_device(struct vduse_vdpa, vdpa, dev->dev,
-				 &vduse_vdpa_config_ops, 1, 1, name, true);
+				 &vduse_vdpa_config_ops, ngroups, 1, name,
+				 true);
 	if (IS_ERR(vdev))
 		return PTR_ERR(vdev);
 
