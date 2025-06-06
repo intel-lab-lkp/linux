@@ -59,42 +59,42 @@
  *
  * Note: bits 13 and 15 are reserved
  */
-#define LOOPBACK		(0x01 << 14)
-#define BASE100X		(0x01 << 12)
-#define MBPS_10			(0x01 << 11)
-#define DUPLEX_MODE		(0x01 << 10)
-#define PAUSE_FRAME		(0x01 << 9)
-#define PROMISCUOUS		(0x01 << 8)
-#define MULTICAST		(0x01 << 7)
-#define BROADCAST		(0x01 << 6)
-#define HASH			(0x01 << 5)
-#define APPEND_PAD		(0x01 << 4)
-#define APPEND_CRC		(0x01 << 3)
-#define TRANSMITTER_ACTION	(0x01 << 2)
-#define RECEIVER_ACTION		(0x01 << 1)
-#define DMA_ACTION		(0x01 << 0)
+#define LOOPBACK		BIT(14)
+#define BASE100X		BIT(12)
+#define MBPS_10			BIT(11)
+#define DUPLEX_MODE		BIT(10)
+#define PAUSE_FRAME		BIT(9)
+#define PROMISCUOUS		BIT(8)
+#define MULTICAST		BIT(7)
+#define BROADCAST		BIT(6)
+#define HASH			BIT(5)
+#define APPEND_PAD		BIT(4)
+#define APPEND_CRC		BIT(3)
+#define TRANSMITTER_ACTION	BIT(2)
+#define RECEIVER_ACTION		BIT(1)
+#define DMA_ACTION		BIT(0)
 
 /* Status register bits
  *
  * Note: bits 7-15 are reserved
  */
-#define ALIGNMENT		(0x01 << 6)
-#define FIFO_OVER_RUN		(0x01 << 5)
-#define FIFO_UNDER_RUN		(0x01 << 4)
-#define RX_ERROR		(0x01 << 3)
-#define RX_COMPLETE		(0x01 << 2)
-#define TX_ERROR		(0x01 << 1)
-#define TX_COMPLETE		(0x01 << 0)
+#define ALIGNMENT		BIT(6)
+#define FIFO_OVER_RUN		BIT(5)
+#define FIFO_UNDER_RUN		BIT(4)
+#define RX_ERROR		BIT(3)
+#define RX_COMPLETE		BIT(2)
+#define TX_ERROR		BIT(1)
+#define TX_COMPLETE		BIT(0)
 
 /* FIFO depth register bits
  *
  * Note: bits 6 and 14 are reserved
  */
 
-#define ETH_TXBD		(0x01 << 15)
-#define ETN_TX_FIFO_DEPTH	(0x01 << 8)
-#define ETH_RXBD		(0x01 << 7)
-#define ETH_RX_FIFO_DEPTH	(0x01 << 0)
+#define ETH_TXBD		BIT(15)
+#define ETN_TX_FIFO_DEPTH	BIT(8)
+#define ETH_RXBD		BIT(7)
+#define ETH_RX_FIFO_DEPTH	BIT(0)
 
 static int control_read(struct usbnet *dev,
 			unsigned char request, unsigned short value,
