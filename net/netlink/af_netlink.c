@@ -1285,11 +1285,15 @@ static struct sk_buff *netlink_trim(struct sk_buff *skb, gfp_t allocation)
 		return skb;
 
 	if (skb_shared(skb)) {
-		struct sk_buff *nskb = skb_clone(skb, allocation);
+		struct sk_buff *nskb;
+
+		nskb = skb_copy_expand(skb, skb_headroom(skb),
+				       skb_tailroom(skb) - delta,
+				       allocation);
 		if (!nskb)
 			return skb;
 		consume_skb(skb);
-		skb = nskb;
+		return nskb;
 	}
 
 	pskb_expand_head(skb, 0, -delta,
