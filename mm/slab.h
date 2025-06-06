@@ -50,7 +50,7 @@ typedef union {
 
 /* Reuses the bits in struct page */
 struct slab {
-	unsigned long __page_flags;
+	unsigned long flags;
 
 	struct kmem_cache *slab_cache;
 	union {
@@ -99,7 +99,7 @@ struct slab {
 
 #define SLAB_MATCH(pg, sl)						\
 	static_assert(offsetof(struct page, pg) == offsetof(struct slab, sl))
-SLAB_MATCH(flags, __page_flags);
+SLAB_MATCH(flags, flags);
 SLAB_MATCH(compound_head, slab_cache);	/* Ensure bit 0 is clear */
 SLAB_MATCH(_refcount, __page_refcount);
 #ifdef CONFIG_MEMCG
@@ -112,6 +112,18 @@ static_assert(sizeof(struct slab) <= sizeof(struct page));
 #if defined(system_has_freelist_aba)
 static_assert(IS_ALIGNED(offsetof(struct slab, freelist), sizeof(freelist_aba_t)));
 #endif
+
+/**
+ * enum slab_flags - How the slab flags bits are used.
+ * @SL_locked: Is locked with slab_lock()
+ *
+ * The slab flags share space with the page flags but some bits have
+ * different interpretations.  The high bits are used for information
+ * like zone/node/section.
+ */
+enum slab_flags {
+	SL_locked,
+};
 
 /**
  * folio_slab - Converts from folio to slab.
