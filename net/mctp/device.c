@@ -142,9 +142,9 @@ static int mctp_dump_addrinfo(struct sk_buff *skb, struct netlink_callback *cb)
 		if (rc < 0)
 			break;
 		mcb->a_idx = 0;
+		mcb->ifindex = dev->ifindex+1;
 	}
 	rcu_read_unlock();
-
 	return skb->len;
 }
 
