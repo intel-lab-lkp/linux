@@ -83,8 +83,16 @@
 	 UBLK_PARAM_TYPE_DEVT | UBLK_PARAM_TYPE_ZONED |    \
 	 UBLK_PARAM_TYPE_DMA_ALIGN | UBLK_PARAM_TYPE_SEGMENT)
 
+/*
+ * Initialize refcount to a large number to include any registered buffers.
+ * UBLK_IO_COMMIT_AND_FETCH_REQ will release these references minus those for
+ * any buffers registered on the io daemon task.
+ */
+#define UBLK_REFCOUNT_INIT (REFCOUNT_MAX / 2)
+
 struct ublk_rq_data {
 	refcount_t ref;
+	unsigned buffers_registered;
 
 	/* for auto-unregister buffer in case of UBLK_F_AUTO_BUF_REG */
 	u16 buf_index;
@@ -679,7 +687,8 @@ static inline void ublk_init_req_ref(const struct ublk_queue *ubq,
 	if (ublk_need_req_ref(ubq)) {
 		struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
 
-		refcount_set(&data->ref, 1);
+		refcount_set(&data->ref, UBLK_REFCOUNT_INIT);
+		data->buffers_registered = 0;
 	}
 }
 
@@ -706,6 +715,15 @@ static inline void ublk_put_req_ref(const struct ublk_queue *ubq,
 	} else {
 		__ublk_complete_rq(req);
 	}
+}
+
+static inline void ublk_sub_req_ref(struct request *req)
+{
+	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
+	unsigned sub_refs = UBLK_REFCOUNT_INIT - data->buffers_registered;
+
+	if (refcount_sub_and_test(sub_refs, &data->ref))
+		__ublk_complete_rq(req);
 }
 
 static inline bool ublk_need_get_data(const struct ublk_queue *ubq)
@@ -1186,10 +1204,8 @@ static void ublk_auto_buf_reg_fallback(struct request *req)
 {
 	const struct ublk_queue *ubq = req->mq_hctx->driver_data;
 	struct ublksrv_io_desc *iod = ublk_get_iod(ubq, req->tag);
-	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
 
 	iod->op_flags |= UBLK_IO_F_NEED_REG_BUF;
-	refcount_set(&data->ref, 1);
 }
 
 static bool ublk_auto_buf_reg(struct request *req, struct ublk_io *io,
@@ -1209,9 +1225,8 @@ static bool ublk_auto_buf_reg(struct request *req, struct ublk_io *io,
 		blk_mq_end_request(req, BLK_STS_IOERR);
 		return false;
 	}
-	/* one extra reference is dropped by ublk_io_release */
-	refcount_set(&data->ref, 2);
 
+	data->buffers_registered = 1;
 	data->buf_ctx_handle = io_uring_cmd_ctx_handle(io->cmd);
 	/* store buffer index in request payload */
 	data->buf_index = pdu->buf.index;
@@ -1223,10 +1238,10 @@ static bool ublk_prep_auto_buf_reg(struct ublk_queue *ubq,
 				   struct request *req, struct ublk_io *io,
 				   unsigned int issue_flags)
 {
+	ublk_init_req_ref(ubq, req);
 	if (ublk_support_auto_buf_reg(ubq) && ublk_rq_has_data(req))
 		return ublk_auto_buf_reg(req, io, issue_flags);
 
-	ublk_init_req_ref(ubq, req);
 	return true;
 }
 
@@ -2021,6 +2036,27 @@ static int ublk_register_io_buf(struct io_uring_cmd *cmd,
 	return 0;
 }
 
+static int ublk_daemon_register_io_buf(struct io_uring_cmd *cmd,
+				       const struct ublk_queue *ubq,
+				       const struct ublk_io *io,
+				       unsigned index, unsigned issue_flags)
+{
+	struct request *req = io->req;
+	struct ublk_rq_data *data = blk_mq_rq_to_pdu(req);
+	int ret;
+
+	if (!ublk_support_zero_copy(ubq) || !ublk_rq_has_data(req))
+		return -EINVAL;
+
+	ret = io_buffer_register_bvec(cmd, req, ublk_io_release, index,
+				      issue_flags);
+	if (ret)
+		return ret;
+
+	data->buffers_registered++;
+	return 0;
+}
+
 static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_queue *ubq,
 		      struct ublk_io *io, __u64 buf_addr)
 {
@@ -2133,9 +2169,13 @@ static int ublk_commit_and_fetch(const struct ublk_queue *ubq,
 	if (req_op(req) == REQ_OP_ZONE_APPEND)
 		req->__sector = ub_cmd->zone_append_lba;
 
-	if (likely(!blk_should_fake_timeout(req->q)))
-		ublk_put_req_ref(ubq, req);
+	if (unlikely(blk_should_fake_timeout(req->q)))
+		return 0;
 
+	if (ublk_need_req_ref(ubq))
+		ublk_sub_req_ref(req);
+	else
+		__ublk_complete_rq(req);
 	return 0;
 }
 
@@ -2233,7 +2273,8 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 
 	switch (_IOC_NR(cmd_op)) {
 	case UBLK_IO_REGISTER_IO_BUF:
-		return ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
+		return ublk_daemon_register_io_buf(cmd, ubq, io, ub_cmd->addr,
+						   issue_flags);
 	case UBLK_IO_COMMIT_AND_FETCH_REQ:
 		ret = ublk_commit_and_fetch(ubq, io, cmd, ub_cmd, issue_flags);
 		if (ret)
