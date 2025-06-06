@@ -424,8 +424,8 @@ static inline struct iomap_ioend *iomap_ioend_from_bio(struct bio *bio)
 
 struct iomap_writeback_ops {
 	/*
-	 * Required, maps the blocks so that writeback can be performed on
-	 * the range starting at offset.
+	 * Required if ->writeback_folio is not set. Maps the blocks so that
+	 * writeback can be performed on the range starting at offset.
 	 *
 	 * Can return arbitrarily large regions, but we need to call into it at
 	 * least once per folio to allow the file systems to synchronize with
@@ -436,6 +436,16 @@ struct iomap_writeback_ops {
 	 */
 	int (*map_blocks)(struct iomap_writepage_ctx *wpc, struct inode *inode,
 			  loff_t offset, unsigned len);
+	/*
+	 * Forwards the folio writeback logic to the caller.
+	 *
+	 * Required for IOMAP_IN_MEM iomaps or if ->map_blocks is not set.
+	 *
+	 * The caller is responsible for ending writeback on the folio after
+	 * it's fully done processing it.
+	 */
+	int (*writeback_folio)(struct iomap_writepage_ctx *wpc, struct folio *folio,
+			       struct inode *inode, loff_t offset, unsigned len);
 
 	/*
 	 * Optional, allows the file systems to hook into bio submission,
@@ -459,6 +469,7 @@ struct iomap_writepage_ctx {
 	struct iomap_ioend	*ioend;
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
+	void			*private;
 };
 
 struct iomap_ioend *iomap_init_ioend(struct inode *inode, struct bio *bio,
@@ -537,5 +548,8 @@ int iomap_swapfile_activate(struct swap_info_struct *sis,
 #endif /* CONFIG_SWAP */
 
 extern struct bio_set iomap_ioend_bioset;
+
+void iomap_start_folio_write(struct inode *inode, struct folio *folio, size_t len);
+void iomap_finish_folio_write(struct inode *inode, struct folio *folio, size_t len);
 
 #endif /* LINUX_IOMAP_H */

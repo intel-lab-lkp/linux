@@ -1441,15 +1441,15 @@ EXPORT_SYMBOL_GPL(iomap_page_mkwrite);
 
 /*
  * Submit an ioend.
- *
- * If @error is non-zero, it means that we have a situation where some part of
- * the submission process has failed after we've marked pages for writeback.
- * We cannot cancel ioend directly in that case, so call the bio end I/O handler
- * with the error status here to run the normal I/O completion handler to clear
- * the writeback bit and let the file system proess the errors.
  */
 int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 {
+	if (wpc->iomap.type == IOMAP_IN_MEM) {
+		if (wpc->ops->submit_ioend)
+			error = wpc->ops->submit_ioend(wpc, error);
+		return error;
+	}
+
 	if (!wpc->ioend)
 		return error;
 
@@ -1468,6 +1468,13 @@ int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 			iomap_submit_bio(&wpc->ioend->io_bio);
 	}
 
+	/*
+	 * If error is non-zero, it means that we have a situation where some part of
+	 * the submission process has failed after we've marked pages for writeback.
+	 * We cannot cancel ioend directly in that case, so call the bio end I/O handler
+	 * with the error status here to run the normal I/O completion handler to clear
+	 * the writeback bit and let the file system process the errors.
+	 */
 	if (error)
 		iomap_bio_ioend_error(wpc, error);
 
@@ -1635,8 +1642,17 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	 */
 	end_aligned = round_up(end_pos, i_blocksize(inode));
 	while ((rlen = iomap_find_dirty_range(folio, &pos, end_aligned))) {
-		error = iomap_writepage_map_blocks(wpc, wbc, folio, inode,
-				pos, end_pos, rlen, &count);
+		if (wpc->ops->writeback_folio) {
+			WARN_ON_ONCE(wpc->ops->map_blocks);
+			error = wpc->ops->writeback_folio(wpc, folio, inode,
+							  offset_in_folio(folio, pos),
+							  rlen);
+		} else {
+			WARN_ON_ONCE(wpc->iomap.type == IOMAP_IN_MEM);
+			error = iomap_writepage_map_blocks(wpc, wbc, folio,
+							   inode, pos, end_pos,
+							   rlen, &count);
+		}
 		if (error)
 			break;
 		pos += rlen;
@@ -1664,7 +1680,11 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 		if (atomic_dec_and_test(&ifs->write_bytes_pending))
 			folio_end_writeback(folio);
 	} else {
-		if (!count)
+		/*
+		 * If wpc->ops->writeback_folio is set, then it is responsible
+		 * for ending the writeback itself.
+		 */
+		if (!count && !wpc->ops->writeback_folio)
 			folio_end_writeback(folio);
 	}
 	mapping_set_error(inode->i_mapping, error);
@@ -1693,3 +1713,25 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 	return iomap_submit_ioend(wpc, error);
 }
 EXPORT_SYMBOL_GPL(iomap_writepages);
+
+void iomap_start_folio_write(struct inode *inode, struct folio *folio, size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+
+	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
+	if (ifs)
+		atomic_add(len, &ifs->write_bytes_pending);
+}
+EXPORT_SYMBOL_GPL(iomap_start_folio_write);
+
+void iomap_finish_folio_write(struct inode *inode, struct folio *folio, size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+
+	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
+	WARN_ON_ONCE(ifs && atomic_read(&ifs->write_bytes_pending) <= 0);
+
+	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending))
+		folio_end_writeback(folio);
+}
+EXPORT_SYMBOL_GPL(iomap_finish_folio_write);
