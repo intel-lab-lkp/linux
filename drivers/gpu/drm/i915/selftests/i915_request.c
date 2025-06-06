@@ -290,7 +290,12 @@ struct smoketest {
 static struct i915_request *
 __mock_request_alloc(struct intel_context *ce)
 {
-	return mock_request(ce, 0);
+	struct i915_request *rq;
+
+	rq = mock_request(ce, 0);
+	if (!rq)
+		return ERR_PTR(-ENOMEM);
+	return rq;
 }
 
 static struct i915_request *
