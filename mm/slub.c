@@ -635,6 +635,25 @@ static inline unsigned int slub_get_cpu_partial(struct kmem_cache *s)
 #endif /* CONFIG_SLUB_CPU_PARTIAL */
 
 /*
+ * If network-based swap is enabled, slub must keep track of whether memory
+ * were allocated from pfmemalloc reserves.
+ */
+static inline bool slab_test_pfmemalloc(const struct slab *slab)
+{
+	return test_bit(SL_pfmemalloc, &slab->flags);
+}
+
+static inline void slab_set_pfmemalloc(struct slab *slab)
+{
+	set_bit(SL_pfmemalloc, &slab->flags);
+}
+
+static inline void __slab_clear_pfmemalloc(struct slab *slab)
+{
+	__clear_bit(SL_pfmemalloc, &slab->flags);
+}
+
+/*
  * Per slab locking using the pagelock
  */
 static __always_inline void slab_lock(struct slab *slab)
