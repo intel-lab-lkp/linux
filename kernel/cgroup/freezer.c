@@ -108,12 +108,12 @@ void cgroup_enter_frozen(void)
 	if (current->frozen)
 		return;
 
-	spin_lock_irq(&css_set_lock);
+	guard(spinlock_irq)(&css_set_lock);
+
 	current->frozen = true;
 	cgrp = task_dfl_cgroup(current);
 	cgroup_inc_frozen_cnt(cgrp);
 	cgroup_update_frozen(cgrp);
-	spin_unlock_irq(&css_set_lock);
 }
 
 /*
@@ -129,7 +129,8 @@ void cgroup_leave_frozen(bool always_leave)
 {
 	struct cgroup *cgrp;
 
-	spin_lock_irq(&css_set_lock);
+	guard(spinlock_irq)(&css_set_lock);
+
 	cgrp = task_dfl_cgroup(current);
 	if (always_leave || !test_bit(CGRP_FREEZE, &cgrp->flags)) {
 		cgroup_dec_frozen_cnt(cgrp);
@@ -142,7 +143,6 @@ void cgroup_leave_frozen(bool always_leave)
 		set_thread_flag(TIF_SIGPENDING);
 		spin_unlock(&current->sighand->siglock);
 	}
-	spin_unlock_irq(&css_set_lock);
 }
 
 /*
@@ -178,12 +178,12 @@ static void cgroup_do_freeze(struct cgroup *cgrp, bool freeze)
 
 	lockdep_assert_held(&cgroup_mutex);
 
-	spin_lock_irq(&css_set_lock);
-	if (freeze)
-		set_bit(CGRP_FREEZE, &cgrp->flags);
-	else
-		clear_bit(CGRP_FREEZE, &cgrp->flags);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		if (freeze)
+			set_bit(CGRP_FREEZE, &cgrp->flags);
+		else
+			clear_bit(CGRP_FREEZE, &cgrp->flags);
+	}
 
 	if (freeze)
 		TRACE_CGROUP_PATH(freeze, cgrp);
@@ -206,10 +206,10 @@ static void cgroup_do_freeze(struct cgroup *cgrp, bool freeze)
 	 * Cgroup state should be revisited here to cover empty leaf cgroups
 	 * and cgroups which descendants are already in the desired state.
 	 */
-	spin_lock_irq(&css_set_lock);
-	if (cgrp->nr_descendants == cgrp->freezer.nr_frozen_descendants)
-		cgroup_update_frozen(cgrp);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		if (cgrp->nr_descendants == cgrp->freezer.nr_frozen_descendants)
+			cgroup_update_frozen(cgrp);
+	}
 }
 
 /*

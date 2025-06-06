@@ -48,27 +48,26 @@ static int current_css_set_read(struct seq_file *seq, void *v)
 	if (!cgroup_kn_lock_live(of->kn, false))
 		return -ENODEV;
 
-	spin_lock_irq(&css_set_lock);
-	rcu_read_lock();
-	cset = task_css_set(current);
-	refcnt = refcount_read(&cset->refcount);
-	seq_printf(seq, "css_set %pK %d", cset, refcnt);
-	if (refcnt > cset->nr_tasks)
-		seq_printf(seq, " +%d", refcnt - cset->nr_tasks);
-	seq_puts(seq, "\n");
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		guard(rcu)();
+		cset = task_css_set(current);
+		refcnt = refcount_read(&cset->refcount);
+		seq_printf(seq, "css_set %pK %d", cset, refcnt);
+		if (refcnt > cset->nr_tasks)
+			seq_printf(seq, " +%d", refcnt - cset->nr_tasks);
+		seq_puts(seq, "\n");
 
-	/*
-	 * Print the css'es stored in the current css_set.
-	 */
-	for_each_subsys(ss, i) {
-		css = cset->subsys[ss->id];
-		if (!css)
-			continue;
-		seq_printf(seq, "%2d: %-4s\t- %p[%d]\n", ss->id, ss->name,
-			  css, css->id);
+		/*
+		* Print the css'es stored in the current css_set.
+		*/
+		for_each_subsys(ss, i) {
+			css = cset->subsys[ss->id];
+			if (!css)
+				continue;
+			seq_printf(seq, "%2d: %-4s\t- %p[%d]\n", ss->id, ss->name,
+				css, css->id);
+		}
 	}
-	rcu_read_unlock();
-	spin_unlock_irq(&css_set_lock);
 	cgroup_kn_unlock(of->kn);
 	return 0;
 }
@@ -76,12 +75,8 @@ static int current_css_set_read(struct seq_file *seq, void *v)
 static u64 current_css_set_refcount_read(struct cgroup_subsys_state *css,
 					 struct cftype *cft)
 {
-	u64 count;
-
-	rcu_read_lock();
-	count = refcount_read(&task_css_set(current)->refcount);
-	rcu_read_unlock();
-	return count;
+	guard(rcu)();
+	return refcount_read(&task_css_set(current)->refcount);
 }
 
 static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
@@ -94,18 +89,17 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 	if (!name_buf)
 		return -ENOMEM;
 
-	spin_lock_irq(&css_set_lock);
-	rcu_read_lock();
-	cset = task_css_set(current);
-	list_for_each_entry(link, &cset->cgrp_links, cgrp_link) {
-		struct cgroup *c = link->cgrp;
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		guard(rcu)();
+		cset = task_css_set(current);
+		list_for_each_entry(link, &cset->cgrp_links, cgrp_link) {
+			struct cgroup *c = link->cgrp;
 
-		cgroup_name(c, name_buf, NAME_MAX + 1);
-		seq_printf(seq, "Root %d group %s\n",
-			   c->root->hierarchy_id, name_buf);
+			cgroup_name(c, name_buf, NAME_MAX + 1);
+			seq_printf(seq, "Root %d group %s\n",
+				c->root->hierarchy_id, name_buf);
+		}
 	}
-	rcu_read_unlock();
-	spin_unlock_irq(&css_set_lock);
 	kfree(name_buf);
 	return 0;
 }
@@ -117,74 +111,73 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 	struct cgrp_cset_link *link;
 	int dead_cnt = 0, extra_refs = 0, threaded_csets = 0;
 
-	spin_lock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(link, &css->cgroup->cset_links, cset_link) {
+			struct css_set *cset = link->cset;
+			struct task_struct *task;
+			int count = 0;
+			int refcnt = refcount_read(&cset->refcount);
 
-	list_for_each_entry(link, &css->cgroup->cset_links, cset_link) {
-		struct css_set *cset = link->cset;
-		struct task_struct *task;
-		int count = 0;
-		int refcnt = refcount_read(&cset->refcount);
-
-		/*
-		 * Print out the proc_cset and threaded_cset relationship
-		 * and highlight difference between refcount and task_count.
-		 */
-		seq_printf(seq, "css_set %pK", cset);
-		if (rcu_dereference_protected(cset->dom_cset, 1) != cset) {
-			threaded_csets++;
-			seq_printf(seq, "=>%pK", cset->dom_cset);
-		}
-		if (!list_empty(&cset->threaded_csets)) {
-			struct css_set *tcset;
-			int idx = 0;
-
-			list_for_each_entry(tcset, &cset->threaded_csets,
-					    threaded_csets_node) {
-				seq_puts(seq, idx ? "," : "<=");
-				seq_printf(seq, "%pK", tcset);
-				idx++;
+			/*
+			 * Print out the proc_cset and threaded_cset relationship
+			 * and highlight difference between refcount and task_count.
+			 */
+			seq_printf(seq, "css_set %pK", cset);
+			if (rcu_dereference_protected(cset->dom_cset, 1) != cset) {
+				threaded_csets++;
+				seq_printf(seq, "=>%pK", cset->dom_cset);
 			}
-		} else {
-			seq_printf(seq, " %d", refcnt);
-			if (refcnt - cset->nr_tasks > 0) {
-				int extra = refcnt - cset->nr_tasks;
+			if (!list_empty(&cset->threaded_csets)) {
+				struct css_set *tcset;
+				int idx = 0;
 
-				seq_printf(seq, " +%d", extra);
-				/*
-				 * Take out the one additional reference in
-				 * init_css_set.
-				 */
-				if (cset == &init_css_set)
-					extra--;
-				extra_refs += extra;
+				list_for_each_entry(tcset, &cset->threaded_csets,
+						threaded_csets_node) {
+					seq_puts(seq, idx ? "," : "<=");
+					seq_printf(seq, "%pK", tcset);
+					idx++;
+				}
+			} else {
+				seq_printf(seq, " %d", refcnt);
+				if (refcnt - cset->nr_tasks > 0) {
+					int extra = refcnt - cset->nr_tasks;
+
+					seq_printf(seq, " +%d", extra);
+					/*
+					 * Take out the one additional reference in
+					 * init_css_set.
+					 */
+					if (cset == &init_css_set)
+						extra--;
+					extra_refs += extra;
+				}
 			}
-		}
-		seq_puts(seq, "\n");
+			seq_puts(seq, "\n");
 
-		list_for_each_entry(task, &cset->tasks, cg_list) {
-			if (count++ <= MAX_TASKS_SHOWN_PER_CSS)
-				seq_printf(seq, "  task %d\n",
-					   task_pid_vnr(task));
-		}
+			list_for_each_entry(task, &cset->tasks, cg_list) {
+				if (count++ <= MAX_TASKS_SHOWN_PER_CSS)
+					seq_printf(seq, "  task %d\n",
+						task_pid_vnr(task));
+			}
 
-		list_for_each_entry(task, &cset->mg_tasks, cg_list) {
-			if (count++ <= MAX_TASKS_SHOWN_PER_CSS)
-				seq_printf(seq, "  task %d\n",
-					   task_pid_vnr(task));
-		}
-		/* show # of overflowed tasks */
-		if (count > MAX_TASKS_SHOWN_PER_CSS)
-			seq_printf(seq, "  ... (%d)\n",
-				   count - MAX_TASKS_SHOWN_PER_CSS);
+			list_for_each_entry(task, &cset->mg_tasks, cg_list) {
+				if (count++ <= MAX_TASKS_SHOWN_PER_CSS)
+					seq_printf(seq, "  task %d\n",
+						task_pid_vnr(task));
+			}
+			/* show # of overflowed tasks */
+			if (count > MAX_TASKS_SHOWN_PER_CSS)
+				seq_printf(seq, "  ... (%d)\n",
+					count - MAX_TASKS_SHOWN_PER_CSS);
 
-		if (cset->dead) {
-			seq_puts(seq, "    [dead]\n");
-			dead_cnt++;
-		}
+			if (cset->dead) {
+				seq_puts(seq, "    [dead]\n");
+				dead_cnt++;
+			}
 
-		WARN_ON(count != cset->nr_tasks);
+			WARN_ON(count != cset->nr_tasks);
+		}
 	}
-	spin_unlock_irq(&css_set_lock);
 
 	if (!dead_cnt && !extra_refs && !threaded_csets)
 		return 0;

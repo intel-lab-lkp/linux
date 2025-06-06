@@ -70,9 +70,9 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 	for_each_root(root) {
 		struct cgroup *from_cgrp;
 
-		spin_lock_irq(&css_set_lock);
-		from_cgrp = task_cgroup_from_root(from, root);
-		spin_unlock_irq(&css_set_lock);
+		scoped_guard(spinlock_irq, &css_set_lock) {
+			from_cgrp = task_cgroup_from_root(from, root);
+		}
 
 		retval = cgroup_attach_task(from_cgrp, tsk, false);
 		if (retval)
@@ -117,10 +117,10 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 	cgroup_attach_lock(true);
 
 	/* all tasks in @from are being moved, all csets are source */
-	spin_lock_irq(&css_set_lock);
-	list_for_each_entry(link, &from->cset_links, cset_link)
-		cgroup_migrate_add_src(link->cset, to, &mgctx);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		list_for_each_entry(link, &from->cset_links, cset_link)
+			cgroup_migrate_add_src(link->cset, to, &mgctx);
+	}
 
 	ret = cgroup_migrate_prepare_dst(&mgctx);
 	if (ret)
@@ -728,13 +728,12 @@ int cgroupstats_build(struct cgroupstats *stats, struct dentry *dentry)
 	 * @kn->priv's validity.  For this and css_tryget_online_from_dir(),
 	 * @kn->priv is RCU safe.  Let's do the RCU dancing.
 	 */
-	rcu_read_lock();
-	cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
-	if (!cgrp || !cgroup_tryget(cgrp)) {
-		rcu_read_unlock();
-		return -ENOENT;
+	scoped_guard(rcu) {
+		cgrp = rcu_dereference(*(void __rcu __force **)&kn->priv);
+		if (!cgrp || !cgroup_tryget(cgrp)) {
+			return -ENOENT;
+		}
 	}
-	rcu_read_unlock();
 
 	css_task_iter_start(&cgrp->self, 0, &it);
 	while ((tsk = css_task_iter_next(&it))) {
@@ -1294,7 +1293,7 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
 	struct cgroup_root *root;
 	unsigned long flags;
 
-	rcu_read_lock();
+	guard(rcu)();
 	for_each_root(root) {
 		/* cgroup1 only*/
 		if (root == &cgrp_dfl_root)
@@ -1308,7 +1307,7 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
 		spin_unlock_irqrestore(&css_set_lock, flags);
 		break;
 	}
-	rcu_read_unlock();
+
 	return cgrp;
 }
 

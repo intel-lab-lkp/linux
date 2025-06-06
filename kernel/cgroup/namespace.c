@@ -71,10 +71,10 @@ struct cgroup_namespace *copy_cgroup_ns(unsigned long flags,
 		return ERR_PTR(-ENOSPC);
 
 	/* It is not safe to take cgroup_mutex here */
-	spin_lock_irq(&css_set_lock);
-	cset = task_css_set(current);
-	get_css_set(cset);
-	spin_unlock_irq(&css_set_lock);
+	scoped_guard(spinlock_irq, &css_set_lock) {
+		cset = task_css_set(current);
+		get_css_set(cset);
+	}
 
 	new_ns = alloc_cgroup_ns();
 	if (IS_ERR(new_ns)) {

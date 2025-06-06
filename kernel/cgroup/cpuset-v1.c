@@ -140,9 +140,8 @@ int cpuset_memory_pressure_enabled __read_mostly;
 
 void __cpuset_memory_pressure_bump(void)
 {
-	rcu_read_lock();
+	guard(rcu)();
 	fmeter_markevent(&task_cs(current)->fmeter);
-	rcu_read_unlock();
 }
 
 static int update_relax_domain_level(struct cpuset *cs, s64 val)
@@ -393,13 +392,12 @@ int proc_cpuset_show(struct seq_file *m, struct pid_namespace *ns,
 	if (!buf)
 		goto out;
 
-	rcu_read_lock();
-	spin_lock_irq(&css_set_lock);
-	css = task_css(tsk, cpuset_cgrp_id);
-	retval = cgroup_path_ns_locked(css->cgroup, buf, PATH_MAX,
-				       current->nsproxy->cgroup_ns);
-	spin_unlock_irq(&css_set_lock);
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		guard(spinlock_irq)(&css_set_lock);
+		css = task_css(tsk, cpuset_cgrp_id);
+		retval = cgroup_path_ns_locked(css->cgroup, buf, PATH_MAX,
+					current->nsproxy->cgroup_ns);
+	}
 
 	if (retval == -E2BIG)
 		retval = -ENAMETOOLONG;
