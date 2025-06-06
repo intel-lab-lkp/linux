@@ -375,6 +375,16 @@ config PM_GENERIC_DOMAINS_OF
 	def_bool y
 	depends on PM_GENERIC_DOMAINS && OF
 
+config PM_DISABLE_USER_FORK_DURING_FREEZE
+	bool "Disable user fork during process freeze"
+	depends on PM
+	default n
+	help
+	If enabled, user space processes will be forbidden from creating
+	new tasks (via fork/clone) during the process freezing stage of
+	system suspend/hibernate.
+	This can avoid process list races and reduce retries during suspend.
+
 config CPU_PM
 	bool
 

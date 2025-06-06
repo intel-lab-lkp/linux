@@ -591,4 +591,12 @@ enum suspend_stat_step {
 void dpm_save_failed_dev(const char *name);
 void dpm_save_failed_step(enum suspend_stat_step step);
 
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+extern bool pm_block_user_fork;
+bool pm_should_block_fork(void);
+bool pm_freeze_process_in_progress(void);
+#else
+static inline bool pm_should_block_fork(void) { return false; };
+static inline bool pm_freeze_process_in_progress(void) { return false; };
+#endif /* CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE */
 #endif /* _LINUX_SUSPEND_H */

@@ -994,6 +994,47 @@ static ssize_t freeze_filesystems_store(struct kobject *kobj,
 power_attr(freeze_filesystems);
 #endif /* CONFIG_SUSPEND || CONFIG_HIBERNATION */
 
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+bool strict_fork_enabled;
+bool pm_block_user_fork;
+
+bool pm_freeze_process_in_progress(void)
+{
+	return pm_block_user_fork;
+}
+
+bool pm_should_block_fork(void)
+{
+	return strict_fork_enabled && pm_freeze_process_in_progress();
+}
+EXPORT_SYMBOL_GPL(pm_should_block_fork);
+
+static ssize_t strict_fork_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", strict_fork_enabled);
+}
+
+static ssize_t strict_fork_store(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 const char *buf, size_t n)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	if (val > 1)
+		return -EINVAL;
+
+	strict_fork_enabled = !!val;
+	return n;
+}
+
+power_attr(strict_fork);
+
+#endif /* CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE */
+
 static struct attribute * g[] = {
 	&state_attr.attr,
 #ifdef CONFIG_PM_TRACE
@@ -1026,6 +1067,9 @@ static struct attribute * g[] = {
 #endif
 #if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
 	&freeze_filesystems_attr.attr,
+#endif
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+	&strict_fork_attr.attr,
 #endif
 	NULL,
 };

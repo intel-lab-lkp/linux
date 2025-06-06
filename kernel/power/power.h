@@ -22,6 +22,10 @@ struct swsusp_info {
 extern bool filesystem_freeze_enabled;
 #endif
 
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+extern bool strict_fork_enabled;
+#endif
+
 #ifdef CONFIG_HIBERNATION
 /* kernel/power/snapshot.c */
 extern void __init hibernate_reserved_size_init(void);

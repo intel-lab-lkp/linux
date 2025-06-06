@@ -105,6 +105,7 @@
 #include <uapi/linux/pidfd.h>
 #include <linux/pidfs.h>
 #include <linux/tick.h>
+#include <linux/suspend.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -2595,6 +2596,11 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 		if (likely(!ptrace_event_enabled(current, trace)))
 			trace = 0;
 	}
+
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+	if (pm_should_block_fork() && !(current->flags & PF_KTHREAD))
+		return -EBUSY;
+#endif
 
 	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
 	add_latent_entropy();

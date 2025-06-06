@@ -134,7 +134,14 @@ int freeze_processes(void)
 
 	pm_wakeup_clear(0);
 	pm_freezing = true;
+
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+	pm_block_user_fork = true;
+#endif
 	error = try_to_freeze_tasks(true);
+#ifdef CONFIG_PM_DISABLE_USER_FORK_DURING_FREEZE
+	pm_block_user_fork = false;
+#endif
 	if (!error)
 		__usermodehelper_set_disable_depth(UMH_DISABLED);
 
