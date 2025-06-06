@@ -175,6 +175,16 @@ struct iomap_folio_ops {
 	 * locked by the iomap code.
 	 */
 	bool (*iomap_valid)(struct inode *inode, const struct iomap *iomap);
+
+	/*
+	 * Required for IOMAP_IN_MEM iomaps. Otherwise optional if the caller
+	 * wishes to handle reading in a folio.
+	 *
+	 * The read must be done synchronously.
+	 */
+	int (*read_folio_sync)(loff_t block_start, struct folio *folio,
+			       size_t off, size_t len, const struct iomap *iomap,
+			       void *private);
 };
 
 /*

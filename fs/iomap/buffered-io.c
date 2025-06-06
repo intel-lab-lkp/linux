@@ -300,7 +300,7 @@ static inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 {
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 
-	return srcmap->type != IOMAP_MAPPED ||
+	return (srcmap->type != IOMAP_MAPPED && srcmap->type != IOMAP_IN_MEM) ||
 		(srcmap->flags & IOMAP_F_NEW) ||
 		pos >= i_size_read(iter->inode);
 }
@@ -583,16 +583,26 @@ iomap_write_failed(struct inode *inode, loff_t pos, unsigned len)
 					 pos + len - 1);
 }
 
-static int iomap_read_folio_sync(loff_t block_start, struct folio *folio,
-		size_t poff, size_t plen, const struct iomap *iomap)
+static int iomap_read_folio_sync(const struct iomap_iter *iter, loff_t block_start,
+				 struct folio *folio, size_t poff, size_t plen)
 {
-	return iomap_bio_read_folio_sync(block_start, folio, poff, plen, iomap);
+	const struct iomap_folio_ops *folio_ops = iter->iomap.folio_ops;
+	const struct iomap *srcmap = iomap_iter_srcmap(iter);
+
+	if (folio_ops && folio_ops->read_folio_sync)
+		return folio_ops->read_folio_sync(block_start, folio,
+						  poff, plen, srcmap,
+						  iter->private);
+
+	/* IOMAP_IN_MEM iomaps must always handle ->read_folio_sync() */
+	WARN_ON_ONCE(iter->iomap.type == IOMAP_IN_MEM);
+
+	return iomap_bio_read_folio_sync(block_start, folio, poff, plen, srcmap);
 }
 
 static int __iomap_write_begin(const struct iomap_iter *iter, loff_t pos,
 		size_t len, struct folio *folio)
 {
-	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 	struct iomap_folio_state *ifs;
 	loff_t block_size = i_blocksize(iter->inode);
 	loff_t block_start = round_down(pos, block_size);
@@ -640,8 +650,8 @@ static int __iomap_write_begin(const struct iomap_iter *iter, loff_t pos,
 			if (iter->flags & IOMAP_NOWAIT)
 				return -EAGAIN;
 
-			status = iomap_read_folio_sync(block_start, folio,
-					poff, plen, srcmap);
+			status = iomap_read_folio_sync(iter, block_start, folio,
+						       poff, plen);
 			if (status)
 				return status;
 		}
