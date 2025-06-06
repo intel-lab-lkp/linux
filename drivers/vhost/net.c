@@ -77,6 +77,8 @@ enum {
 			 (1ULL << VIRTIO_F_RING_RESET)
 };
 
+const u64 VHOST_NET_ALL_FEATURES[VIRTIO_FEATURES_DWORDS] = { VHOST_NET_FEATURES };
+
 enum {
 	VHOST_NET_BACKEND_FEATURES = (1ULL << VHOST_BACKEND_F_IOTLB_MSG_V2)
 };
@@ -1602,16 +1604,17 @@ done:
 	return err;
 }
 
-static int vhost_net_set_features(struct vhost_net *n, u64 features)
+static int vhost_net_set_features(struct vhost_net *n, const u64 *features)
 {
 	size_t vhost_hlen, sock_hlen, hdr_len;
 	int i;
 
-	hdr_len = (features & ((1ULL << VIRTIO_NET_F_MRG_RXBUF) |
-			       (1ULL << VIRTIO_F_VERSION_1))) ?
-			sizeof(struct virtio_net_hdr_mrg_rxbuf) :
-			sizeof(struct virtio_net_hdr);
-	if (features & (1 << VHOST_NET_F_VIRTIO_NET_HDR)) {
+	hdr_len = virtio_features_test_bit(features, VIRTIO_NET_F_MRG_RXBUF) ||
+		  virtio_features_test_bit(features, VIRTIO_F_VERSION_1) ?
+		  sizeof(struct virtio_net_hdr_mrg_rxbuf) :
+		  sizeof(struct virtio_net_hdr);
+
+	if (virtio_features_test_bit(features, VHOST_NET_F_VIRTIO_NET_HDR)) {
 		/* vhost provides vnet_hdr */
 		vhost_hlen = hdr_len;
 		sock_hlen = 0;
@@ -1621,18 +1624,19 @@ static int vhost_net_set_features(struct vhost_net *n, u64 features)
 		sock_hlen = hdr_len;
 	}
 	mutex_lock(&n->dev.mutex);
-	if ((features & (1 << VHOST_F_LOG_ALL)) &&
+	if (virtio_features_test_bit(features, VHOST_F_LOG_ALL) &&
 	    !vhost_log_access_ok(&n->dev))
 		goto out_unlock;
 
-	if ((features & (1ULL << VIRTIO_F_ACCESS_PLATFORM))) {
+	if (virtio_features_test_bit(features, VIRTIO_F_ACCESS_PLATFORM)) {
 		if (vhost_init_device_iotlb(&n->dev))
 			goto out_unlock;
 	}
 
 	for (i = 0; i < VHOST_NET_VQ_MAX; ++i) {
 		mutex_lock(&n->vqs[i].vq.mutex);
-		n->vqs[i].vq.acked_features = features;
+		virtio_features_copy(n->vqs[i].vq.acked_features_array,
+				     features);
 		n->vqs[i].vhost_hlen = vhost_hlen;
 		n->vqs[i].sock_hlen = sock_hlen;
 		mutex_unlock(&n->vqs[i].vq.mutex);
@@ -1669,12 +1673,13 @@ out:
 static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			    unsigned long arg)
 {
+	u64 all_features[VIRTIO_FEATURES_DWORDS];
 	struct vhost_net *n = f->private_data;
 	void __user *argp = (void __user *)arg;
 	u64 __user *featurep = argp;
 	struct vhost_vring_file backend;
-	u64 features;
-	int r;
+	u64 features, count;
+	int r, i;
 
 	switch (ioctl) {
 	case VHOST_NET_SET_BACKEND:
@@ -1691,7 +1696,63 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			return -EFAULT;
 		if (features & ~VHOST_NET_FEATURES)
 			return -EOPNOTSUPP;
-		return vhost_net_set_features(n, features);
+
+		virtio_features_from_u64(all_features, features);
+		return vhost_net_set_features(n, all_features);
+	case VHOST_GET_FEATURES_ARRAY:
+	{
+		if (copy_from_user(&count, argp, sizeof(u64)))
+			return -EFAULT;
+
+		/* Copy the net features, up to the user-provided buffer size */
+		virtio_features_copy(all_features, VHOST_NET_ALL_FEATURES);
+		argp += sizeof(u64);
+		for (i = 0; i < min(count, VIRTIO_FEATURES_DWORDS); ++i) {
+			i = array_index_nospec(i, VIRTIO_FEATURES_DWORDS);
+			if (copy_to_user(argp, &all_features[i], sizeof(u64)))
+				return -EFAULT;
+
+			argp += sizeof(u64);
+		}
+
+		/* Zero the trailing space provided by user-space, if any */
+		if (i < count && clear_user(argp, (count - i) * sizeof(u64)))
+			return -EFAULT;
+		return 0;
+	}
+	case VHOST_SET_FEATURES_ARRAY:
+	{
+		u64 tmp[VIRTIO_FEATURES_DWORDS];
+
+		if (copy_from_user(&count, argp, sizeof(u64)))
+			return -EFAULT;
+
+		virtio_features_zero(all_features);
+		for (i = 0; i < min(count, VIRTIO_FEATURES_DWORDS); ++i) {
+			argp += sizeof(u64);
+			if (copy_from_user(&features, argp, sizeof(u64)))
+				return -EFAULT;
+
+			all_features[i] = features;
+		}
+
+		/* Any feature specified by user-space above VIRTIO_FEATURES_MAX is
+		 * not supported by definition.
+		 */
+		for (; i < count; ++i) {
+			if (copy_from_user(&features, argp, sizeof(u64)))
+				return -EFAULT;
+			if (features)
+				return -EOPNOTSUPP;
+		}
+
+		virtio_features_and_not(tmp, all_features, VHOST_NET_ALL_FEATURES);
+		for (i = 0; i < VIRTIO_FEATURES_DWORDS; i++)
+			if (tmp[i])
+				return -EOPNOTSUPP;
+
+		return vhost_net_set_features(n, all_features);
+	}
 	case VHOST_GET_BACKEND_FEATURES:
 		features = VHOST_NET_BACKEND_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof(features)))
