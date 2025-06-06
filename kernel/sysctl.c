@@ -53,6 +53,7 @@
 #include <linux/sched/sysctl.h>
 #include <linux/mount.h>
 #include <linux/pid.h>
+#include <linux/spinlock.h>
 
 #include "../lib/kstrtox.h"
 
@@ -1864,6 +1865,14 @@ static const struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 		.extra2		= SYSCTL_INT_MAX,
+	},
+#endif
+#ifdef CONFIG_DEBUG_SPINLOCK
+	{
+		.procname	= "debug_spin_lock_irq_with_disabled_interrupts",
+		.data		= &debug_spin_lock_irq_with_disabled_interrupts,
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
 	},
 #endif
 };

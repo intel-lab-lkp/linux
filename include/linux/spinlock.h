@@ -371,8 +371,21 @@ do {									\
 	raw_spin_lock_nest_lock(spinlock_check(lock), nest_lock);	\
 } while (0)
 
+#ifdef CONFIG_DEBUG_SPINLOCK
+DECLARE_STATIC_KEY_MAYBE(CONFIG_DEBUG_SPINLOCK_IRQ_WITH_DISABLED_INTERRUPTS_BY_DEFAULT,
+			 debug_spin_lock_irq_with_disabled_interrupts);
+#endif
+
 static __always_inline void spin_lock_irq(spinlock_t *lock)
 {
+#ifdef CONFIG_DEBUG_SPINLOCK
+	if (static_branch_unlikely(&debug_spin_lock_irq_with_disabled_interrupts)) {
+		if (raw_irqs_disabled()) {
+			static_branch_disable(&debug_spin_lock_irq_with_disabled_interrupts);
+			WARN(1, "spin_lock_irq() called with irqs disabled!\n");
+		}
+	}
+#endif
 	raw_spin_lock_irq(&lock->rlock);
 }
 
@@ -398,6 +411,14 @@ static __always_inline void spin_unlock_bh(spinlock_t *lock)
 
 static __always_inline void spin_unlock_irq(spinlock_t *lock)
 {
+#ifdef CONFIG_DEBUG_SPINLOCK
+	if (static_branch_unlikely(&debug_spin_lock_irq_with_disabled_interrupts)) {
+		if (!raw_irqs_disabled()) {
+			static_branch_disable(&debug_spin_lock_irq_with_disabled_interrupts);
+			WARN(1, "spin_unlock_irq() called with irqs enabled!\n");
+		}
+	}
+#endif
 	raw_spin_unlock_irq(&lock->rlock);
 }
 

@@ -22,6 +22,12 @@
 #include <linux/debug_locks.h>
 #include <linux/export.h>
 
+#ifdef CONFIG_DEBUG_SPINLOCK
+DEFINE_STATIC_KEY_MAYBE(CONFIG_DEBUG_SPINLOCK_IRQ_WITH_DISABLED_INTERRUPTS_BY_DEFAULT,
+			debug_spin_lock_irq_with_disabled_interrupts);
+EXPORT_SYMBOL(debug_spin_lock_irq_with_disabled_interrupts);
+#endif
+
 #ifdef CONFIG_MMIOWB
 #ifndef arch_mmiowb_state
 DEFINE_PER_CPU(struct mmiowb_state, __mmiowb_state);
