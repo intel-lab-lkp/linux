@@ -5,6 +5,7 @@
 
 #include <linux/component.h>
 #include <linux/delay.h>
+#include <linux/firmware.h>
 
 #include <drm/drm_managed.h>
 #include <drm/intel/i915_component.h>
@@ -13,11 +14,92 @@
 
 #include "xe_device.h"
 #include "xe_late_bind_fw.h"
+#include "xe_pcode.h"
+#include "xe_pcode_api.h"
 
-static struct xe_device *
-late_bind_to_xe(struct xe_late_bind *late_bind)
+static const char * const fw_type_to_name[] = {
+		[CSC_LATE_BINDING_TYPE_FAN_CONTROL] = "fan_control",
+	};
+
+static struct xe_device *late_bind_to_xe(struct xe_late_bind *late_bind)
 {
 	return container_of(late_bind, struct xe_device, late_bind);
+}
+
+static int late_bind_fw_num_fans(struct xe_late_bind *late_bind)
+{
+	struct xe_device *xe = late_bind_to_xe(late_bind);
+	struct xe_tile *root_tile = xe_device_get_root_tile(xe);
+	u32 uval;
+
+	if (!xe_pcode_read(root_tile,
+			   PCODE_MBOX(FAN_SPEED_CONTROL, FSC_READ_NUM_FANS, 0), &uval, NULL))
+		return uval;
+	else
+		return 0;
+}
+
+static int late_bind_fw_init(struct xe_late_bind *late_bind, u32 type)
+{
+	struct xe_device *xe = late_bind_to_xe(late_bind);
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	struct xe_late_bind_fw *lb_fw;
+	const struct firmware *fw;
+	u32 num_fans;
+	int ret;
+
+	if (!late_bind->component_added)
+		return 0;
+
+	lb_fw = &late_bind->late_bind_fw;
+
+	lb_fw->type = type;
+	lb_fw->valid = false;
+
+	if (lb_fw->type == CSC_LATE_BINDING_TYPE_FAN_CONTROL) {
+		num_fans = late_bind_fw_num_fans(late_bind);
+		drm_dbg(&xe->drm, "Number of Fans: %d\n", num_fans);
+		if (!num_fans)
+			return 0;
+	}
+
+	lb_fw->flags = CSC_LATE_BINDING_FLAGS_IS_PERSISTENT;
+
+	snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path), "xe/%s_8086_%04x_%04x_%04x.bin",
+		 fw_type_to_name[type], pdev->device,
+		 pdev->subsystem_vendor, pdev->subsystem_device);
+
+	drm_dbg(&xe->drm, "Request late binding firmware %s\n", lb_fw->blob_path);
+	ret = firmware_request_nowarn(&fw, lb_fw->blob_path, xe->drm.dev);
+	if (ret) {
+		drm_dbg(&xe->drm, "Failed to request %s\n", lb_fw->blob_path);
+		return 0;
+	}
+
+	if (fw->size > MAX_PAYLOAD_SIZE) {
+		lb_fw->payload_size = MAX_PAYLOAD_SIZE;
+		drm_err(&xe->drm, "Firmware %s size %zu is larger than max pay load size %u\n",
+			lb_fw->blob_path, fw->size, MAX_PAYLOAD_SIZE);
+		return 0;
+	}
+
+	lb_fw->payload_size = fw->size;
+
+	memcpy(lb_fw->payload, fw->data, lb_fw->payload_size);
+	release_firmware(fw);
+	lb_fw->valid = true;
+
+	return 0;
+}
+
+/**
+ * xe_mei_late_bind_fw_init() - Initialize late bind firmware
+ *
+ * Return: 0 if the initialization was successful, a negative errno otherwise.
+ */
+int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
+{
+	return late_bind_fw_init(late_bind, CSC_LATE_BINDING_TYPE_FAN_CONTROL);
 }
 
 static int xe_late_bind_component_bind(struct device *xe_kdev,
