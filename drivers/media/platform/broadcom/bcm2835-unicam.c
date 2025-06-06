@@ -341,11 +341,6 @@ static const struct unicam_format_info unicam_image_formats[] = {
 		.depth		= 16,
 		.csi_dt		= MIPI_CSI2_DT_RGB565,
 	}, {
-		.fourcc		= V4L2_PIX_FMT_RGB24, /* rgb */
-		.code		= MEDIA_BUS_FMT_RGB888_1X24,
-		.depth		= 24,
-		.csi_dt		= MIPI_CSI2_DT_RGB888,
-	}, {
 		.fourcc		= V4L2_PIX_FMT_BGR24, /* bgr */
 		.code		= MEDIA_BUS_FMT_BGR888_1X24,
 		.depth		= 24,
