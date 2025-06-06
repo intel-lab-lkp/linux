@@ -2257,7 +2257,7 @@ out:
 	return ret;
 }
 
-static int btrfs_freeze(struct super_block *sb)
+int btrfs_freeze(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 
@@ -2323,7 +2323,7 @@ out:
 	return ret;
 }
 
-static int btrfs_unfreeze(struct super_block *sb)
+int btrfs_unfreeze(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_device *device;

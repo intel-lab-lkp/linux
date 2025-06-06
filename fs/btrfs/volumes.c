@@ -256,6 +256,88 @@ void btrfs_describe_block_groups(u64 bg_flags, char *buf, u32 size_buf)
 out_overflow:;
 }
 
+static void btrfs_dev_mark_dead(struct block_device *bdev, bool surprise)
+	__releases(&bdev->bd_holder_lock)
+{
+	struct btrfs_fs_info *fs_info = bdev->bd_holder;
+	struct btrfs_dev_lookup_args args = { .devt = bdev->bd_dev, };
+	struct btrfs_device *device;
+
+	mutex_lock(&fs_info->fs_devices->device_list_mutex);
+	device = btrfs_find_device(fs_info->fs_devices, &args);
+	if (unlikely(!device)) {
+		btrfs_crit(fs_info, "can't find a btrfs_device for %pg", bdev);
+		mutex_unlock(&bdev->bd_holder_lock);
+		goto out;
+	}
+	if (surprise)
+		btrfs_warn_in_rcu(fs_info, "devid %llu device %pg path %s is dead",
+				  device->devid, device->bdev, btrfs_dev_name(device));
+	else
+		btrfs_info_in_rcu(fs_info, "devid %llu device %pg path %s is going to be removed",
+				  device->devid, device->bdev, btrfs_dev_name(device));
+	mutex_unlock(&bdev->bd_holder_lock);
+	set_bit(BTRFS_DEV_STATE_MISSING, &device->dev_state);
+	device->fs_devices->missing_devices++;
+	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
+		list_del_init(&device->dev_alloc_list);
+		clear_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state);
+		device->fs_devices->rw_devices--;
+	}
+	/*
+	 * If we can no longer maintain the RW opeartions for the fs, mark the
+	 * fs error.
+	 */
+	if (!btrfs_check_rw_degradable(fs_info, device)) {
+		btrfs_handle_fs_error(fs_info, -EIO,
+			"btrfs can no longer maintain read-write due to missing device(s)");
+	} else  {
+		btrfs_set_opt(fs_info->mount_opt, DEGRADED);
+		btrfs_warn(fs_info, "filesystem degraded due to missing device(s)");
+	}
+out:
+	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
+}
+
+static void btrfs_dev_sync(struct block_device *bdev)
+	__releases(&bdev->bd_holder_lock)
+{
+	struct btrfs_fs_info *fs_info = bdev->bd_holder;
+	int ret;
+
+	mutex_unlock(&bdev->bd_holder_lock);
+	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+	if (ret)
+		return;
+	ret = btrfs_sync_fs(fs_info->sb, 1);
+	wake_up_process(fs_info->cleaner_kthread);
+}
+
+static int btrfs_dev_freeze(struct block_device *bdev)
+	__releases(&bdev->bd_holder_lock)
+{
+	struct btrfs_fs_info *fs_info = bdev->bd_holder;
+
+	mutex_unlock(&bdev->bd_holder_lock);
+	return btrfs_freeze(fs_info->sb);
+}
+
+static int btrfs_dev_unfreeze(struct block_device *bdev)
+	__releases(&bdev->bd_holder_lock)
+{
+	struct btrfs_fs_info *fs_info = bdev->bd_holder;
+
+	mutex_unlock(&bdev->bd_holder_lock);
+	return btrfs_unfreeze(fs_info->sb);
+}
+
+const struct blk_holder_ops btrfs_bdev_ops = {
+	.mark_dead = btrfs_dev_mark_dead,
+	.sync = btrfs_dev_sync,
+	.freeze = btrfs_dev_freeze,
+	.thaw = btrfs_dev_unfreeze,
+};
+
 static int init_first_rw_device(struct btrfs_trans_handle *trans);
 static int btrfs_relocate_sys_chunks(struct btrfs_fs_info *fs_info);
 static void btrfs_dev_stat_print_on_load(struct btrfs_device *device);
@@ -473,7 +555,7 @@ btrfs_get_bdev_and_sb(const char *device_path, blk_mode_t flags, void *holder,
 	struct block_device *bdev;
 	int ret;
 
-	*bdev_file = bdev_file_open_by_path(device_path, flags, holder, NULL);
+	*bdev_file = bdev_file_open_by_path(device_path, flags, holder, &btrfs_bdev_ops);
 
 	if (IS_ERR(*bdev_file)) {
 		ret = PTR_ERR(*bdev_file);
@@ -2705,7 +2787,7 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 		return -EROFS;
 
 	bdev_file = bdev_file_open_by_path(device_path, BLK_OPEN_WRITE,
-					   fs_info, NULL);
+					   fs_info, &btrfs_bdev_ops);
 	if (IS_ERR(bdev_file))
 		return PTR_ERR(bdev_file);
 
@@ -6792,6 +6874,8 @@ static bool dev_args_match_device(const struct btrfs_dev_lookup_args *args,
 			return true;
 		return false;
 	}
+	if (args->devt)
+		return device->devt == args->devt;
 
 	if (device->devid != args->devid)
 		return false;

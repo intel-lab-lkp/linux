@@ -607,6 +607,7 @@ struct btrfs_raid_attr {
 };
 
 extern const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES];
+extern const struct blk_holder_ops btrfs_bdev_ops;
 
 struct btrfs_chunk_map {
 	struct rb_node rb_node;
@@ -652,6 +653,11 @@ struct btrfs_dev_lookup_args {
 	u64 devid;
 	u8 *uuid;
 	u8 *fsid;
+	/*
+	 * If @devt is set (non-zero), then args will be ignored since the
+	 * non-zero dev_t can locate the device.
+	 */
+	dev_t devt;
 	bool missing;
 };
 
