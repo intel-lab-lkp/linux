@@ -11,15 +11,145 @@
 #include <linux/string.h>
 #include <tools/dis-asm-compat.h>
 
+struct dbuffer {
+	char *addr;
+	size_t size;
+	size_t used;
+};
+
 struct disas_context {
 	struct objtool_file *file;
 	struct instruction *insn;
+	struct dbuffer result;
 	disassembler_ftype disassembler;
 	struct disassemble_info info;
 };
 
 #define DINFO_FPRINTF(dinfo, ...)	\
 	((*(dinfo)->fprintf_func)((dinfo)->stream, __VA_ARGS__))
+
+
+static int dbuffer_init(struct dbuffer *dbuf, size_t size)
+{
+	dbuf->used = 0;
+	dbuf->size = size;
+
+	if (!size) {
+		dbuf->addr = NULL;
+		return 0;
+	}
+
+	dbuf->addr = malloc(size);
+	if (!dbuf->addr)
+		return -1;
+
+	return 0;
+}
+
+static void dbuffer_fini(struct dbuffer *dbuf)
+{
+	free(dbuf->addr);
+	dbuf->size = 0;
+	dbuf->used = 0;
+}
+
+static void dbuffer_reset(struct dbuffer *dbuf)
+{
+	dbuf->used = 0;
+}
+
+static char *dbuffer_data(struct dbuffer *dbuf)
+{
+	return dbuf->addr;
+}
+
+static int dbuffer_expand(struct dbuffer *dbuf, size_t space)
+{
+	size_t size;
+	char *addr;
+
+	size = dbuf->size + space;
+	addr = realloc(dbuf->addr, size);
+	if (!addr)
+		return -1;
+
+	dbuf->addr = addr;
+	dbuf->size = size;
+
+	return 0;
+}
+
+static int dbuffer_vappendf_noexpand(struct dbuffer *dbuf, const char *fmt, va_list ap)
+{
+	int free, len;
+
+	free = dbuf->size - dbuf->used;
+
+	len = vsnprintf(dbuf->addr + dbuf->used, free, fmt, ap);
+
+	if (len < 0)
+		return -1;
+
+	if (len < free) {
+		dbuf->used += len;
+		return 0;
+	}
+
+	return (len - free) + 1;
+}
+
+static int dbuffer_vappendf(struct dbuffer *dbuf, const char *fmt, va_list ap)
+{
+	int space_needed, err;
+
+	space_needed = dbuffer_vappendf_noexpand(dbuf, fmt, ap);
+	if (space_needed <= 0)
+		return space_needed;
+
+	/*
+	 * The buffer is not large enough to store all data. Expand
+	 * the buffer and retry. The buffer is expanded with enough
+	 * space to store all data.
+	 */
+	err = dbuffer_expand(dbuf, space_needed * 2);
+	if (err) {
+		WARN("failed to expand buffer\n");
+		return -1;
+	}
+
+	return dbuffer_vappendf_noexpand(dbuf, fmt, ap);
+}
+
+static int disas_fprintf(void *stream, const char *fmt, ...)
+{
+	va_list arg;
+	int len;
+
+	va_start(arg, fmt);
+	len = dbuffer_vappendf(stream, fmt, arg);
+	va_end(arg);
+
+	return len == 0 ? 0 : -1;
+}
+
+/*
+ * For init_disassemble_info_compat().
+ */
+static int disas_fprintf_styled(void *stream,
+				enum disassembler_style style,
+				const char *fmt, ...)
+{
+	va_list arg;
+	int len;
+
+	(void)style;
+
+	va_start(arg, fmt);
+	len = dbuffer_vappendf(stream, fmt, arg);
+	va_end(arg);
+
+	return len == 0 ? 0 : -1;
+}
 
 static void disas_print_address(bfd_vma addr, struct disassemble_info *dinfo)
 {
@@ -147,6 +277,7 @@ struct disas_context *disas_context_create(struct objtool_file *file)
 {
 	struct disas_context *dctx;
 	struct disassemble_info *dinfo;
+	struct dbuffer *dbuf;
 	int err;
 
 	dctx = malloc(sizeof(*dctx));
@@ -157,10 +288,16 @@ struct disas_context *disas_context_create(struct objtool_file *file)
 
 	dctx->file = file;
 	dinfo = &dctx->info;
+	dbuf = &dctx->result;
 
-	init_disassemble_info_compat(dinfo, stdout,
-				     (fprintf_ftype)fprintf,
-				     fprintf_styled);
+	err = dbuffer_init(dbuf, 1024);
+	if (err) {
+		WARN("failed to initialize buffer\n");
+		return NULL;
+	}
+
+	init_disassemble_info_compat(dinfo, dbuf,
+				     disas_fprintf, disas_fprintf_styled);
 
 	dinfo->read_memory_func = buffer_read_memory;
 	dinfo->print_address_func = disas_print_address;
@@ -204,7 +341,16 @@ error:
 
 void disas_context_destroy(struct disas_context *dctx)
 {
+	if (!dctx)
+		return;
+
+	dbuffer_fini(&dctx->result);
 	free(dctx);
+}
+
+static char *disas_result(struct disas_context *dctx)
+{
+	return dbuffer_data(&dctx->result);
 }
 
 /*
@@ -216,6 +362,7 @@ static size_t disas_insn(struct disas_context *dctx,
 	disassembler_ftype disasm = dctx->disassembler;
 	struct disassemble_info *dinfo = &dctx->info;
 
+	dbuffer_reset(&dctx->result);
 	dctx->insn = insn;
 
 	/*
@@ -241,10 +388,12 @@ static void disas_func(struct disas_context *dctx, struct symbol *func)
 	sym_for_each_insn(dctx->file, func, insn) {
 
 		addr = insn->offset;
-		printf(" %6lx:  %s+0x%-6lx      ",
-		       addr, func->name, addr - func->offset);
 		size = disas_insn(dctx, insn);
-		printf("\n");
+
+		printf(" %6lx:  %s+0x%-6lx      %s\n",
+		       addr, func->name, addr - func->offset,
+		       disas_result(dctx));
+
 		if (size != insn->len)
 			WARN("inconsistent insn size (%ld and %d)\n", size, insn->len);
 	}
