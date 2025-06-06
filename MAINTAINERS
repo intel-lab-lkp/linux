@@ -737,6 +737,14 @@ F:	Documentation/devicetree/bindings/phy/airoha,en7581-pcie-phy.yaml
 F:	drivers/phy/airoha/phy-airoha-en7581-pcie-regs.h
 F:	drivers/phy/airoha/phy-airoha-en7581-pcie.c
 
+AIROHA AN7583 PCIE PHY DRIVER
+M:	Christian Marangi <ansuelsmth@gmail.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+S:	Maintained
+F:	Documentation/devicetree/bindings/phy/airoha,an7583-pcie-phy.yaml
+F:	drivers/phy/airoha/phy-airoha-an7583-pcie-regs.h
+F:	drivers/phy/airoha/phy-airoha-an7583-pcie.c
+
 AIROHA SPI SNFI DRIVER
 M:	Lorenzo Bianconi <lorenzo@kernel.org>
 M:	Ray Liu <ray.liu@airoha.com>
