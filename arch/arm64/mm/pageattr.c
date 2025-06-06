@@ -293,18 +293,29 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
-/*
- * This is - apart from the return value - doing the same
- * thing as the new set_direct_map_valid_noflush() function.
- *
- * Unify? Explain the conceptual differences?
- */
 void __kernel_map_pages(struct page *page, int numpages, int enable)
 {
+	bool lazy_mmu;
+
 	if (!can_set_direct_map())
 		return;
 
+	/*
+	 * This is called during page alloc or free, and maybe called while in
+	 * lazy mmu mode. Since set_memory_valid() may also enter lazy mmu mode,
+	 * this would cause nesting which is not supported; the inner call to
+	 * exit the mode would exit, meaning that the outer lazy mmu mode is no
+	 * longer benefiting from the optimization. So temporarily leave lazy
+	 * mmu mode for the duration of the call.
+	 */
+	lazy_mmu = arch_in_lazy_mmu_mode();
+	if (lazy_mmu)
+		arch_leave_lazy_mmu_mode();
+
 	set_memory_valid((unsigned long)page_address(page), numpages, enable);
+
+	if (lazy_mmu)
+		arch_enter_lazy_mmu_mode();
 }
 #endif /* CONFIG_DEBUG_PAGEALLOC */
 
