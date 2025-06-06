@@ -23,6 +23,40 @@ void __flush_tlb_all(void);
 #define TLB_FLUSH_ALL	-1UL
 #define TLB_GENERATION_INVALID	0
 
+/*
+ * When enabled, MITIGATION_PAGE_TABLE_ISOLATION consumes a single bit for
+ * user/kernel switches
+ */
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+# define PTI_CONSUMED_PCID_BITS	1
+#else
+# define PTI_CONSUMED_PCID_BITS	0
+#endif
+
+#define CR3_AVAIL_PCID_BITS (X86_CR3_PCID_BITS - PTI_CONSUMED_PCID_BITS)
+
+/*
+ * ASIDs are zero-based: 0->MAX_AVAIL_ASID are valid.  -1 below to account
+ * for them being zero-based.  Another -1 is because PCID 0 is reserved for
+ * use by non-PCID-aware users.
+ */
+#define MAX_ASID_AVAILABLE ((1 << CR3_AVAIL_PCID_BITS) - 2)
+
+/*
+ * With page table isolation, the user_pcid_flush_mask is used to indicate
+ * that the TLB for a process needs to be flushed when switching to user
+ * space. Broadcast TLB flushing uses more PCIDs, and a larger bitmap.
+ */
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+# ifdef CONFIG_BROADCAST_TLB_FLUSH
+#  define CR3_AVAIL_PCID_LONGS ((1 << CR3_AVAIL_PCID_BITS) / BITS_PER_LONG)
+# else
+#  define CR3_AVAIL_PCID_LONGS 1
+# endif
+#else
+# define CR3_AVAIL_PCID_LONGS 0
+#endif
+
 void cr4_update_irqsoff(unsigned long set, unsigned long clear);
 unsigned long cr4_read_shadow(void);
 
@@ -115,14 +149,6 @@ struct tlb_state {
 	 */
 	u8 lam;
 #endif
-
-	/*
-	 * Mask that contains TLB_NR_DYN_ASIDS+1 bits to indicate
-	 * the corresponding user PCID needs a flush next time we
-	 * switch to it; see SWITCH_TO_USER_CR3.
-	 */
-	unsigned short user_pcid_flush_mask;
-
 	/*
 	 * Access to this CR4 shadow and to H/W CR4 is protected by
 	 * disabling interrupts when modifying either one.
@@ -149,6 +175,13 @@ struct tlb_state {
 	 * context 0.
 	 */
 	struct tlb_context ctxs[TLB_NR_DYN_ASIDS];
+
+	/*
+	 * Mask that contains TLB_NR_DYN_ASIDS+1 bits to indicate
+	 * the corresponding user PCID needs a flush next time we
+	 * switch to it; see SWITCH_TO_USER_CR3.
+	 */
+	unsigned long user_pcid_flush_mask[CR3_AVAIL_PCID_LONGS];
 };
 DECLARE_PER_CPU_ALIGNED(struct tlb_state, cpu_tlbstate);
 
