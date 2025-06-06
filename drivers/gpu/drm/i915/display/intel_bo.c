@@ -59,9 +59,10 @@ void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj)
 	i915_debugfs_describe_obj(m, to_intel_bo(obj));
 }
 
-int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb)
+int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb,
+			 unsigned int (*tiling)(unsigned int, unsigned int, unsigned int))
 {
-	return i915_gem_object_panic_setup(to_intel_bo(obj), sb);
+	return i915_gem_object_panic_setup(to_intel_bo(obj), sb, tiling);
 }
 
 void intel_bo_panic_finish(struct drm_gem_object *obj)
