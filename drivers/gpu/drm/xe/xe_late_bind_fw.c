@@ -123,11 +123,14 @@ int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
 	if (!late_bind->component_added)
 		return -EINVAL;
 
+	if (late_bind->disable)
+		return 0;
+
 	lbfw = &late_bind->late_bind_fw;
 	if (lbfw->valid) {
 		drm_dbg(&xe->drm, "Queue work: to load %s firmware\n",
 			fw_type_to_name[lbfw->type]);
-			queue_work(late_bind->wq, &lbfw->work);
+		queue_work(late_bind->wq, &lbfw->work);
 	}
 
 	return 0;
