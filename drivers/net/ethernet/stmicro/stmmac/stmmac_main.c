@@ -4046,6 +4046,10 @@ static int __stmmac_open(struct net_device *dev,
 	if (ret < 0)
 		return ret;
 
+	/* Same mac config must before phy init and after stmmac_setup_dma_desc */
+	if (priv->plat->fix_mac_config)
+		priv->plat->fix_mac_config(dev, priv->plat->bsp_priv);
+
 	if ((!priv->hw->xpcs ||
 	     xpcs_get_an_mode(priv->hw->xpcs, mode) != DW_AN_C73)) {
 		ret = stmmac_init_phy(dev);
