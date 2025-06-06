@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/richtek,rtq9124.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Richtek RTQ9124 Automotive Audio Amplifier
+
+maintainers:
+  - ChiYuan Huang <cy_huang@richtek.com>
+
+description:
+  RTQ9124 is an ultra-low output noise, digital input, mono-channel Class-D
+  power amplifier that supports a 2.1MHz switching frequency. It integrates
+  both DC and AC load diagnostics, as well as real-time load monitoring to
+  assess speaker condition. The device operates from 4.5V to 18V and delivers
+  up to 30W output power.
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  compatible:
+    enum:
+      - richtek,rtq9124
+
+  reg:
+    maxItems: 1
+
+  '#sound-dai-cells':
+    const: 0
+
+  enable-gpios:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - '#sound-dai-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        amplifier@13 {
+            compatible = "richtek,rtq9124";
+            reg = <0x13>;
+            enable-gpios = <&gpio 26 GPIO_ACTIVE_HIGH>;
+            #sound-dai-cells = <0>;
+        };
+    };
