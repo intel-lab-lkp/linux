@@ -1592,7 +1592,8 @@ static bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
 }
 
 static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
-		struct writeback_control *wbc, struct folio *folio)
+		struct writeback_control *wbc, struct folio *folio,
+		bool unlock_folio)
 {
 	struct iomap_folio_state *ifs = folio->private;
 	struct inode *inode = folio->mapping->host;
@@ -1610,7 +1611,8 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	trace_iomap_writepage(inode, pos, folio_size(folio));
 
 	if (!iomap_writepage_handle_eof(folio, inode, &end_pos)) {
-		folio_unlock(folio);
+		if (unlock_folio)
+			folio_unlock(folio);
 		return 0;
 	}
 	WARN_ON_ONCE(end_pos <= pos);
@@ -1675,7 +1677,8 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	 * already at this point.  In that case we need to clear the writeback
 	 * bit ourselves right after unlocking the page.
 	 */
-	folio_unlock(folio);
+	if (unlock_folio)
+		folio_unlock(folio);
 	if (ifs) {
 		if (atomic_dec_and_test(&ifs->write_bytes_pending))
 			folio_end_writeback(folio);
@@ -1709,10 +1712,22 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 
 	wpc->ops = ops;
 	while ((folio = writeback_iter(mapping, wbc, folio, &error)))
-		error = iomap_writepage_map(wpc, wbc, folio);
+		error = iomap_writepage_map(wpc, wbc, folio, true);
 	return iomap_submit_ioend(wpc, error);
 }
 EXPORT_SYMBOL_GPL(iomap_writepages);
+
+int iomap_writeback_dirty_folio(struct folio *folio, struct writeback_control *wbc,
+				struct iomap_writepage_ctx *wpc,
+				const struct iomap_writeback_ops *ops)
+{
+	int error;
+
+	wpc->ops = ops;
+	error = iomap_writepage_map(wpc, wbc, folio, false);
+	return iomap_submit_ioend(wpc, error);
+}
+EXPORT_SYMBOL_GPL(iomap_writeback_dirty_folio);
 
 void iomap_start_folio_write(struct inode *inode, struct folio *folio, size_t len)
 {
