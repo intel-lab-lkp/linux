@@ -152,5 +152,6 @@ int disas_info_init(struct disassemble_info *dinfo,
 size_t disas_insn(struct disas_context *dctx, struct instruction *insn);
 char *disas_result(struct disas_context *dctx);
 const char *objtool_disas_insn(struct instruction *insn);
+const char *register_name(unsigned int reg);
 
 #endif /* _CHECK_H */

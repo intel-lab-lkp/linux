@@ -111,6 +111,111 @@ static void vtrace_insn(struct instruction *insn, const char *format, ...)
 		free((char *)addr_str);
 }
 
+/*
+ * Macros to trace CFI state attributes changes.
+ */
+
+#define VTRACE_CFI_ATTR(attr, prev, next, fmt, ...)			\
+	do {								\
+		if ((prev)->attr != (next)->attr)			\
+			VTRACE_PRINTF("%s=" fmt " ", #attr, __VA_ARGS__); \
+	} while (0)
+
+#define VTRACE_CFI_ATTR_BOOL(attr, prev, next)				\
+	VTRACE_CFI_ATTR(attr, prev, next,				\
+			"%s", (next)->attr ? "true" : "false")
+
+#define VTRACE_CFI_ATTR_NUM(attr, prev, next, fmt)			\
+	VTRACE_CFI_ATTR(attr, prev, next, fmt, (next)->attr)
+
+/*
+ * Functions and macros to trace CFI registers changes.
+ */
+
+static void vtrace_cfi_register(const char *prefix, int reg, const char *fmt,
+				int base_prev, int offset_prev,
+				int base_next, int offset_next)
+{
+	const char *rname;
+
+	if (base_prev == base_next && offset_prev == offset_next)
+		return;
+
+	if (prefix)
+		VTRACE_PRINTF("%s:", prefix);
+
+	rname = register_name(reg);
+
+	if (base_next == CFI_UNDEFINED) {
+		VTRACE_PRINTF("%1$s=<undef> ", rname);
+	} else {
+		VTRACE_PRINTF(fmt, rname,
+			      register_name(base_next), offset_next);
+	}
+}
+
+static void vtrace_cfi_reg_value(const char *prefix, int reg,
+				 int base_prev, int offset_prev,
+				 int base_next, int offset_next)
+{
+	vtrace_cfi_register(prefix, reg, "%1$s=%2$s%3$+d ",
+			    base_prev, offset_prev, base_next, offset_next);
+}
+
+static void vtrace_cfi_reg_reference(const char *prefix, int reg,
+				     int base_prev, int offset_prev,
+				     int base_next, int offset_next)
+{
+	vtrace_cfi_register(prefix, reg, "%1$s=(%2$s%3$+d) ",
+			    base_prev, offset_prev, base_next, offset_next);
+}
+
+#define VTRACE_CFI_REG_VAL(reg, prev, next)				\
+	vtrace_cfi_reg_value(NULL, reg, prev.base, prev.offset,		\
+			     next.base, next.offset)
+
+#define VTRACE_CFI_REG_REF(reg, prev, next)				\
+	vtrace_cfi_reg_reference(NULL, reg, prev.base, prev.offset,	\
+				 next.base, next.offset)
+
+static void vtrace_insn_state(struct instruction *insn,
+			      struct insn_state *sprev,
+			      struct insn_state *snext)
+{
+	struct cfi_state *cprev, *cnext;
+	int i;
+
+	if (memcmp(sprev, snext, sizeof(struct insn_state)) == 0)
+		return;
+
+	cprev = &sprev->cfi;
+	cnext = &snext->cfi;
+
+	vtrace_insn(insn, NULL);
+	VTRACE_PRINTF(" - state: ");
+
+	/* print registers changes */
+	VTRACE_CFI_REG_VAL(CFI_CFA, cprev->cfa, cnext->cfa);
+	for (i = 0; i < CFI_NUM_REGS; i++) {
+		VTRACE_CFI_REG_VAL(i, cprev->vals[i], cnext->vals[i]);
+		VTRACE_CFI_REG_REF(i, cprev->regs[i], cnext->regs[i]);
+	}
+
+	/* print attributes changes */
+	VTRACE_CFI_ATTR_NUM(stack_size, cprev, cnext, "%d");
+	VTRACE_CFI_ATTR_BOOL(drap, cprev, cnext);
+	if (cnext->drap) {
+		vtrace_cfi_reg_value("drap", cnext->drap_reg,
+				     cprev->drap_reg, cprev->drap_offset,
+				     cnext->drap_reg, cnext->drap_offset);
+	}
+	VTRACE_CFI_ATTR_BOOL(bp_scratch, cprev, cnext);
+	VTRACE_CFI_ATTR_NUM(instr, sprev, snext, "%d");
+	VTRACE_CFI_ATTR_NUM(uaccess_stack, sprev, snext, "%u");
+
+	VTRACE_PRINTF("\n");
+}
+
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset)
 {
@@ -3698,6 +3803,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 			 struct instruction *prev_insn, struct instruction *next_insn,
 			 bool *validate_nextp)
 {
+	struct insn_state state_prev;
 	struct alternative *alt;
 	u8 visited;
 	int ret;
@@ -3814,7 +3920,15 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	if (skip_alt_group(insn))
 		return 0;
 
-	if (handle_insn_ops(insn, next_insn, statep))
+	if (vtrace)
+		state_prev = *statep;
+
+	ret = handle_insn_ops(insn, next_insn, statep);
+
+	if (vtrace)
+		vtrace_insn_state(insn, &state_prev, statep);
+
+	if (ret)
 		return 1;
 
 	switch (insn->type) {

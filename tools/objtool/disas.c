@@ -29,6 +29,33 @@ struct disas_context {
 	((*(dinfo)->fprintf_func)((dinfo)->stream, __VA_ARGS__))
 
 
+#define REGISTER_NAME_MAXLEN   16
+
+/*
+ * Return the name of a register. Note that the same static buffer
+ * is returned if the name is dynamically generated.
+ */
+const char *register_name(unsigned int reg)
+{
+	static char rname_buffer[REGISTER_NAME_MAXLEN];
+
+	switch (reg) {
+	case CFI_UNDEFINED:
+		return "<undefined>";
+	case CFI_CFA:
+		return "cfa";
+	case CFI_SP_INDIRECT:
+		return "(sp)";
+	case CFI_BP_INDIRECT:
+		return "(bp)";
+	}
+
+	if (snprintf(rname_buffer, REGISTER_NAME_MAXLEN, "r%d", reg) == 1)
+		return NULL;
+
+	return (const char *)rname_buffer;
+}
+
 static int dbuffer_init(struct dbuffer *dbuf, size_t size)
 {
 	dbuf->used = 0;
