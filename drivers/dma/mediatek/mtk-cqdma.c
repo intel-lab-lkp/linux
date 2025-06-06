@@ -441,18 +441,19 @@ static enum dma_status mtk_cqdma_tx_status(struct dma_chan *c,
 	struct mtk_cqdma_vdesc *cvd;
 	struct virt_dma_desc *vd;
 	enum dma_status ret;
-	unsigned long flags;
+	unsigned long pc_flags;
+	unsigned long vc_flags;
 	size_t bytes = 0;
 
 	ret = dma_cookie_status(c, cookie, txstate);
 	if (ret == DMA_COMPLETE || !txstate)
 		return ret;
 
-	spin_lock_irqsave(&cvc->pc->lock, flags);
-	spin_lock_irqsave(&cvc->vc.lock, flags);
+	spin_lock_irqsave(&cvc->pc->lock, pc_flags);
+	spin_lock_irqsave(&cvc->vc.lock, vc_flags);
 	vd = mtk_cqdma_find_active_desc(c, cookie);
-	spin_unlock_irqrestore(&cvc->vc.lock, flags);
-	spin_unlock_irqrestore(&cvc->pc->lock, flags);
+	spin_unlock_irqrestore(&cvc->vc.lock, vc_flags);
+	spin_unlock_irqrestore(&cvc->pc->lock, pc_flags);
 
 	if (vd) {
 		cvd = to_cqdma_vdesc(vd);
