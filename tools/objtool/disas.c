@@ -8,6 +8,30 @@
 
 #include <linux/string.h>
 
+struct disas_context {
+	struct objtool_file *file;
+};
+
+struct disas_context *disas_context_create(struct objtool_file *file)
+{
+	struct disas_context *dctx;
+
+	dctx = malloc(sizeof(*dctx));
+	if (!dctx) {
+		WARN("failed too allocate disassembly context\n");
+		return NULL;
+	}
+
+	dctx->file = file;
+
+	return dctx;
+}
+
+void disas_context_destroy(struct disas_context *dctx)
+{
+	free(dctx);
+}
+
 /* 'funcs' is a space-separated list of function names */
 static void disas_funcs(const char *funcs)
 {
@@ -58,12 +82,17 @@ static void disas_funcs(const char *funcs)
 	}
 }
 
-void disas_warned_funcs(struct objtool_file *file)
+void disas_warned_funcs(struct disas_context *dctx)
 {
 	struct symbol *sym;
 	char *funcs = NULL, *tmp;
 
-	for_each_sym(file, sym) {
+	if (!dctx) {
+		ERROR("disassembly context is not defined");
+		return;
+	}
+
+	for_each_sym(dctx->file, sym) {
 		if (sym->warned) {
 			if (!funcs) {
 				funcs = malloc(strlen(sym->name) + 1);
