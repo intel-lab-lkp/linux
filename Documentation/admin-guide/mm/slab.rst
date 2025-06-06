@@ -1,10 +1,8 @@
 ==========================
-Short users guide for SLUB
+Short users guide for SLAB
 ==========================
 
-The basic philosophy of SLUB is very different from SLAB. SLAB
-requires rebuilding the kernel to activate debug options for all
-slab caches. SLUB always includes full debugging but it is off by default.
+SLUB always includes full debugging but it is off by default.
 SLUB can enable debugging only for selected slabs in order to avoid
 an impact on overall system performance which may make a bug more
 difficult to find.
