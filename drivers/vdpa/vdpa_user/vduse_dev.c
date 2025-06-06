@@ -445,6 +445,9 @@ static __poll_t vduse_dev_poll(struct file *file, poll_table *wait)
 	return mask;
 }
 
+static int vduse_set_group_asid(struct vdpa_device *vdpa, unsigned int group,
+				unsigned int asid);
+
 static void vduse_dev_reset(struct vduse_dev *dev)
 {
 	int i;
@@ -456,6 +459,9 @@ static void vduse_dev_reset(struct vduse_dev *dev)
 		if (domain && domain->bounce_map)
 			vduse_domain_reset_bounce_map(domain);
 	}
+
+	for (i = 0; i < dev->ngroups; i++)
+		vduse_set_group_asid(&dev->vdev->vdpa, i, 0);
 
 	down_write(&dev->rwsem);
 
