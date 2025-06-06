@@ -70,7 +70,7 @@ impl cpufreq::Driver for CPUFreqDTDriver {
         let dev = unsafe { cpu::from_cpu(cpu)? };
         let mut mask = CpumaskVar::new_zero(GFP_KERNEL)?;
 
-        mask.set(cpu);
+        mask.set(cpu)?;
 
         let token = find_supply_names(dev, cpu)
             .map(|names| {

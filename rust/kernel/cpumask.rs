@@ -37,13 +37,14 @@ use core::ops::{Deref, DerefMut};
 /// use kernel::bindings;
 /// use kernel::cpumask::Cpumask;
 ///
-/// fn set_clear_cpu(ptr: *mut bindings::cpumask, set_cpu: u32, clear_cpu: i32) {
+/// fn set_clear_cpu(ptr: *mut bindings::cpumask, set_cpu: u32, clear_cpu: i32) -> Result {
 ///     // SAFETY: The `ptr` is valid for writing and remains valid for the lifetime of the
 ///     // returned reference.
 ///     let mask = unsafe { Cpumask::as_mut_ref(ptr) };
 ///
-///     mask.set(set_cpu);
-///     mask.clear(clear_cpu);
+///     mask.set(set_cpu)?;
+///     mask.clear(clear_cpu)?;
+///     Ok(())
 /// }
 /// ```
 #[repr(transparent)]
@@ -90,9 +91,15 @@ impl Cpumask {
     /// This mismatches kernel naming convention and corresponds to the C
     /// function `__cpumask_set_cpu()`.
     #[inline]
-    pub fn set(&mut self, cpu: u32) {
+    pub fn set(&mut self, cpu: u32) -> Result {
+        // SAFETY: It is safe to read `nr_cpu_ids`.
+        if unsafe { cpu >= bindings::nr_cpu_ids } {
+            return Err(EINVAL);
+        }
+
         // SAFETY: By the type invariant, `self.as_raw` is a valid argument to `__cpumask_set_cpu`.
         unsafe { bindings::__cpumask_set_cpu(cpu, self.as_raw()) };
+        Ok(())
     }
 
     /// Clear `cpu` in the cpumask.
@@ -101,10 +108,16 @@ impl Cpumask {
     /// This mismatches kernel naming convention and corresponds to the C
     /// function `__cpumask_clear_cpu()`.
     #[inline]
-    pub fn clear(&mut self, cpu: i32) {
+    pub fn clear(&mut self, cpu: i32) -> Result {
+        // SAFETY: It is safe to read `nr_cpu_ids`.
+        if unsafe { cpu as u32 >= bindings::nr_cpu_ids } {
+            return Err(EINVAL);
+        }
+
         // SAFETY: By the type invariant, `self.as_raw` is a valid argument to
         // `__cpumask_clear_cpu`.
         unsafe { bindings::__cpumask_clear_cpu(cpu, self.as_raw()) };
+        Ok(())
     }
 
     /// Test `cpu` in the cpumask.
@@ -180,19 +193,23 @@ impl Cpumask {
 /// ```
 /// use kernel::cpumask::CpumaskVar;
 ///
-/// let mut mask = CpumaskVar::new_zero(GFP_KERNEL).unwrap();
+/// fn cpumask_test() -> Result {
+///     let mut mask = CpumaskVar::new_zero(GFP_KERNEL).unwrap();
 ///
-/// assert!(mask.empty());
-/// mask.set(2);
-/// assert!(mask.test(2));
-/// mask.set(3);
-/// assert!(mask.test(3));
-/// assert_eq!(mask.weight(), 2);
+///     assert!(mask.empty());
+///     mask.set(2)?;
+///     assert!(mask.test(2));
+///     mask.set(3)?;
+///     assert!(mask.test(3));
+///     assert_eq!(mask.weight(), 2);
 ///
-/// let mask2 = CpumaskVar::try_clone(&mask).unwrap();
-/// assert!(mask2.test(2));
-/// assert!(mask2.test(3));
-/// assert_eq!(mask2.weight(), 2);
+///     let mask2 = CpumaskVar::try_clone(&mask).unwrap();
+///     assert!(mask2.test(2));
+///     assert!(mask2.test(3));
+///     assert_eq!(mask2.weight(), 2);
+///
+///     Ok(())
+/// }
 /// ```
 pub struct CpumaskVar {
     #[cfg(CONFIG_CPUMASK_OFFSTACK)]
