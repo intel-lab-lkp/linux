@@ -249,6 +249,21 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	return devm_qce_register_algs(qce);
 }
 
+static int qce_crypto_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	struct qce_device *qce = platform_get_drvdata(pdev);
+
+	return icc_set_bw(qce->mem_path, 0, 0);
+}
+
+static int qce_crypto_resume(struct platform_device *pdev)
+{
+	struct qce_device *qce = platform_get_drvdata(pdev);
+
+	return icc_set_bw(qce->mem_path, QCE_DEFAULT_MEM_BANDWIDTH,
+		QCE_DEFAULT_MEM_BANDWIDTH);
+}
+
 static const struct of_device_id qce_crypto_of_match[] = {
 	{ .compatible = "qcom,crypto-v5.1", },
 	{ .compatible = "qcom,crypto-v5.4", },
@@ -259,6 +274,8 @@ MODULE_DEVICE_TABLE(of, qce_crypto_of_match);
 
 static struct platform_driver qce_crypto_driver = {
 	.probe = qce_crypto_probe,
+	.suspend = qce_crypto_suspend,
+	.resume = qce_crypto_resume,
 	.driver = {
 		.name = KBUILD_MODNAME,
 		.of_match_table = qce_crypto_of_match,
