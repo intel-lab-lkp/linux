@@ -281,6 +281,14 @@
  */
 #define UBLK_F_PER_IO_DAEMON (1ULL << 13)
 
+/*
+ * If this feature is set, UBLK_U_IO_REGISTER_IO_BUF/UBLK_U_IO_UNREGISTER_IO_BUF
+ * can be issued for an I/O on any task.
+ * If it is unset, zero-copy buffers can only be registered and unregistered by
+ * the I/O's daemon task.
+ */
+#define UBLK_F_BUF_REG_OFF_DAEMON (1ULL << 14)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1

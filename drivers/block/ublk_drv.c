@@ -70,7 +70,8 @@
 		| UBLK_F_UPDATE_SIZE \
 		| UBLK_F_AUTO_BUF_REG \
 		| UBLK_F_QUIESCE \
-		| UBLK_F_PER_IO_DAEMON)
+		| UBLK_F_PER_IO_DAEMON \
+		| UBLK_F_BUF_REG_OFF_DAEMON)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -2020,16 +2021,6 @@ static int ublk_register_io_buf(struct io_uring_cmd *cmd,
 	return 0;
 }
 
-static int ublk_unregister_io_buf(struct io_uring_cmd *cmd,
-				  const struct ublk_queue *ubq,
-				  unsigned int index, unsigned int issue_flags)
-{
-	if (!ublk_support_zero_copy(ubq))
-		return -EINVAL;
-
-	return io_buffer_unregister_bvec(cmd, index, issue_flags);
-}
-
 static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_queue *ubq,
 		      struct ublk_io *io, __u64 buf_addr)
 {
@@ -2186,6 +2177,14 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	if (ret)
 		goto out;
 
+	/*
+	 * io_buffer_unregister_bvec() doesn't access the ubq or io,
+	 * so no need to validate the q_id, tag, or task
+	 */
+	if (_IOC_NR(cmd_op) == UBLK_IO_UNREGISTER_IO_BUF)
+		return io_buffer_unregister_bvec(cmd, ub_cmd->addr,
+						 issue_flags);
+
 	ret = -EINVAL;
 	if (ub_cmd->q_id >= ub->dev_info.nr_hw_queues)
 		goto out;
@@ -2206,8 +2205,17 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		return -EIOCBQUEUED;
 	}
 
-	if (READ_ONCE(io->task) != current)
+	if (READ_ONCE(io->task) != current) {
+		/*
+		 * ublk_register_io_buf() accesses only the request, not io,
+		 * so can be handled on any task
+		 */
+		if (_IOC_NR(cmd_op) == UBLK_IO_REGISTER_IO_BUF)
+			return ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr,
+						    issue_flags);
+
 		goto out;
+	}
 
 	/* there is pending io cmd, something must be wrong */
 	if (!(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV)) {
@@ -2226,8 +2234,6 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	switch (_IOC_NR(cmd_op)) {
 	case UBLK_IO_REGISTER_IO_BUF:
 		return ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
-	case UBLK_IO_UNREGISTER_IO_BUF:
-		return ublk_unregister_io_buf(cmd, ubq, ub_cmd->addr, issue_flags);
 	case UBLK_IO_COMMIT_AND_FETCH_REQ:
 		ret = ublk_commit_and_fetch(ubq, io, cmd, ub_cmd, issue_flags);
 		if (ret)
@@ -2920,7 +2926,8 @@ static int ublk_ctrl_add_dev(const struct ublksrv_ctrl_cmd *header)
 
 	ub->dev_info.flags |= UBLK_F_CMD_IOCTL_ENCODE |
 		UBLK_F_URING_CMD_COMP_IN_TASK |
-		UBLK_F_PER_IO_DAEMON;
+		UBLK_F_PER_IO_DAEMON |
+		UBLK_F_BUF_REG_OFF_DAEMON;
 
 	/* GET_DATA isn't needed any more with USER_COPY or ZERO COPY */
 	if (ub->dev_info.flags & (UBLK_F_USER_COPY | UBLK_F_SUPPORT_ZERO_COPY |
