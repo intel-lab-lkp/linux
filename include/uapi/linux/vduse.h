@@ -46,7 +46,8 @@ struct vduse_dev_config {
 	__u32 vq_num;
 	__u32 vq_align;
 	__u32 ngroups; /* if VDUSE_API_VERSION >= 1 */
-	__u32 reserved[12];
+	__u32 nas; /* if VDUSE_API_VERSION >= 1 */
+	__u32 reserved[11];
 	__u32 config_size;
 	__u8 config[];
 };
@@ -75,6 +76,17 @@ struct vduse_iotlb_entry {
 	__u64 offset;
 	__u64 start;
 	__u64 last;
+#define VDUSE_ACCESS_RO 0x1
+#define VDUSE_ACCESS_WO 0x2
+#define VDUSE_ACCESS_RW 0x3
+	__u8 perm;
+};
+
+struct vduse_iotlb_entry_v2 {
+	__u64 offset;
+	__u64 start;
+	__u64 last;
+	__u32 asid;
 #define VDUSE_ACCESS_RO 0x1
 #define VDUSE_ACCESS_WO 0x2
 #define VDUSE_ACCESS_RW 0x3
@@ -172,6 +184,16 @@ struct vduse_vq_group {
 };
 
 /**
+ * struct vduse_vq_group - virtqueue group
+ @ @group: Index of the virtqueue group
+ * @asid: Address space ID of the group
+ */
+struct vduse_vq_group_asid {
+	__u32 group;
+	__u32 asid;
+};
+
+/**
  * struct vduse_vq_info - information of a virtqueue
  * @index: virtqueue index
  * @num: the size of virtqueue
@@ -231,7 +253,9 @@ struct vduse_vq_eventfd {
  * @uaddr: start address of userspace memory, it must be aligned to page size
  * @iova: start of the IOVA region
  * @size: size of the IOVA region
+ * @asid: Address space ID of the IOVA region
  * @reserved: for future use, needs to be initialized to zero
+ * @reserved2: for future use, needs to be initialized to zero
  *
  * Structure used by VDUSE_IOTLB_REG_UMEM and VDUSE_IOTLB_DEREG_UMEM
  * ioctls to register/de-register userspace memory for IOVA regions
@@ -240,7 +264,9 @@ struct vduse_iova_umem {
 	__u64 uaddr;
 	__u64 iova;
 	__u64 size;
-	__u64 reserved[3];
+	__u32 asid;
+	__u32 reserved[1];
+	__u64 reserved2[2];
 };
 
 /* Register userspace memory for IOVA regions */
@@ -264,7 +290,8 @@ struct vduse_iova_info {
 	__u64 last;
 #define VDUSE_IOVA_CAP_UMEM (1 << 0)
 	__u64 capability;
-	__u64 reserved[3];
+	__u64 asid; /* Only if device API version >= 1 */
+	__u64 reserved[2];
 };
 
 /*
@@ -287,6 +314,7 @@ enum vduse_req_type {
 	VDUSE_SET_STATUS,
 	VDUSE_UPDATE_IOTLB,
 	VDUSE_GET_VQ_GROUP,
+	VDUSE_SET_VQ_GROUP_ASID,
 };
 
 /**
@@ -342,6 +370,8 @@ struct vduse_dev_request {
 		struct vduse_dev_status s;
 		struct vduse_iova_range iova;
 		struct vduse_vq_group vq_group; /* Only if vduse api version >= 1 */
+		/* Only if vduse api version >= 1 */
+		struct vduse_vq_group_asid vq_group_asid;
 		__u32 padding[32];
 	};
 };
@@ -365,6 +395,8 @@ struct vduse_dev_response {
 	union {
 		struct vduse_vq_state vq_state;
 		struct vduse_vq_group vq_group; /* Only if vduse api version >= 1 */
+		/* Only if vduse api version >= 1 */
+		struct vduse_vq_group_asid vq_group_asid;
 		__u32 padding[32];
 	};
 };
