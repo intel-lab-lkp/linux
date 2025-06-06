@@ -43,6 +43,8 @@ struct conexant_spec {
 	unsigned int gpio_mute_led_mask;
 	unsigned int gpio_mic_led_mask;
 	bool is_cx8070_sn6140;
+
+	unsigned char init_imux_boost_val[HDA_MAX_NUM_INPUTS];
 };
 
 
@@ -1178,6 +1180,48 @@ static void add_cx5051_fake_mutes(struct hda_codec *codec)
 	spec->gen.dac_min_mute = true;
 }
 
+static void cxt_fixed_mic_boost(struct hda_codec *codec,
+	unsigned char node_id,
+	unsigned char mic_boost)
+{
+	unsigned char value = 0;
+
+	value = snd_hda_codec_read(codec, node_id, 0, AC_VERB_GET_AMP_GAIN_MUTE, 0);
+	if (value != mic_boost)
+		snd_hda_codec_amp_stereo(codec, node_id, HDA_INPUT, 0, HDA_AMP_VOLMASK, mic_boost);
+}
+
+static void cxt_cap_sync_hook(struct hda_codec *codec,
+					 struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct conexant_spec *spec = codec->spec;
+	hda_nid_t mux_pin = spec->gen.imux_pins[spec->gen.cur_mux[0]];
+
+	if (spec->init_imux_boost_val[mux_pin])
+		cxt_fixed_mic_boost(codec, mux_pin, spec->init_imux_boost_val[mux_pin]);
+}
+
+static int cxt_get_defaut_capture_gain_boost(struct hda_codec *codec)
+{
+	struct conexant_spec *spec = codec->spec;
+	int i;
+	unsigned int boost;
+
+	for (i = 0; i < HDA_MAX_NUM_INPUTS; i++) {
+		if (spec->gen.imux_pins[i] == 0)
+			continue;
+
+		boost = snd_hda_codec_read(codec, spec->gen.imux_pins[i],
+			0, AC_VERB_GET_AMP_GAIN_MUTE, 0);
+		spec->init_imux_boost_val[spec->gen.imux_pins[i]] = boost;
+		codec_info(codec, "%s, node_id = %x, mic_boost =%x", __func__,
+			spec->gen.imux_pins[i], boost);
+	}
+
+	spec->gen.cap_sync_hook = cxt_cap_sync_hook;
+}
+
 static int patch_conexant_auto(struct hda_codec *codec)
 {
 	struct conexant_spec *spec;
@@ -1244,6 +1288,8 @@ static int patch_conexant_auto(struct hda_codec *codec)
 
 	if (!spec->gen.vmaster_mute.hook && spec->dynamic_eapd)
 		spec->gen.vmaster_mute.hook = cx_auto_vmaster_hook;
+
+	cxt_get_defaut_capture_gain_boost(codec);
 
 	snd_hda_apply_fixup(codec, HDA_FIXUP_ACT_PRE_PROBE);
 
