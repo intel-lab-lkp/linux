@@ -2,12 +2,12 @@
 #
 # Phy drivers for Airoha platforms
 #
-config PHY_AIROHA_PCIE
-	tristate "Airoha PCIe-PHY Driver"
+config PHY_AIROHA_EN7581_PCIE
+	tristate "Airoha EN7581 PCIe-PHY Driver"
 	depends on ARCH_AIROHA || COMPILE_TEST
 	depends on OF
 	select GENERIC_PHY
 	help
-	  Say Y here to add support for Airoha PCIe PHY driver.
+	  Say Y here to add support for Airoha EN7581 PCIe PHY driver.
 	  This driver create the basic PHY instance and provides initialize
 	  callback for PCIe GEN3 port.

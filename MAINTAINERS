@@ -729,13 +729,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/net/airoha,en7581-eth.yaml
 F:	drivers/net/ethernet/airoha/
 
-AIROHA PCIE PHY DRIVER
+AIROHA EN7581 PCIE PHY DRIVER
 M:	Lorenzo Bianconi <lorenzo@kernel.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/phy/airoha,en7581-pcie-phy.yaml
-F:	drivers/phy/airoha/phy-airoha-pcie-regs.h
-F:	drivers/phy/airoha/phy-airoha-pcie.c
+F:	drivers/phy/airoha/phy-airoha-en7581-pcie-regs.h
+F:	drivers/phy/airoha/phy-airoha-en7581-pcie.c
 
 AIROHA SPI SNFI DRIVER
 M:	Lorenzo Bianconi <lorenzo@kernel.org>
