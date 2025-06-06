@@ -2316,14 +2316,10 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, unsigned int headroom)
 
 	if (delta <= 0)
 		skb2 = pskb_copy(skb, GFP_ATOMIC);
-	else {
-		skb2 = skb_clone(skb, GFP_ATOMIC);
-		if (skb2 && pskb_expand_head(skb2, SKB_DATA_ALIGN(delta), 0,
-					     GFP_ATOMIC)) {
-			kfree_skb(skb2);
-			skb2 = NULL;
-		}
-	}
+	else
+		skb2 = skb_copy_expand(skb, (skb_headroom(skb) +
+					     SKB_DATA_ALIGN(delta)),
+				       skb_tailroom(skb), GFP_ATOMIC);
 	return skb2;
 }
 EXPORT_SYMBOL(skb_realloc_headroom);
@@ -2400,8 +2396,10 @@ struct sk_buff *skb_expand_head(struct sk_buff *skb, unsigned int headroom)
 	delta = SKB_DATA_ALIGN(delta);
 	/* pskb_expand_head() might crash, if skb is shared. */
 	if (skb_shared(skb) || !is_skb_wmem(skb)) {
-		struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+		struct sk_buff *nskb;
 
+		nskb = skb_copy_expand(skb, skb_headroom(skb) + delta,
+				       skb_tailroom(skb), GFP_ATOMIC);
 		if (unlikely(!nskb))
 			goto fail;
 
@@ -2409,8 +2407,7 @@ struct sk_buff *skb_expand_head(struct sk_buff *skb, unsigned int headroom)
 			skb_set_owner_w(nskb, sk);
 		consume_skb(skb);
 		skb = nskb;
-	}
-	if (pskb_expand_head(skb, delta, 0, GFP_ATOMIC))
+	} else if (pskb_expand_head(skb, delta, 0, GFP_ATOMIC))
 		goto fail;
 
 	if (sk && is_skb_wmem(skb)) {
