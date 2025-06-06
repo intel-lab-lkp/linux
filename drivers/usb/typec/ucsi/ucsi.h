@@ -79,6 +79,7 @@ struct ucsi_operations {
 	int (*read_cci)(struct ucsi *ucsi, u32 *cci);
 	int (*poll_cci)(struct ucsi *ucsi, u32 *cci);
 	int (*read_message_in)(struct ucsi *ucsi, void *val, size_t val_len);
+	int (*write_message_out)(struct ucsi *ucsi, void *data, size_t data_len);
 	int (*sync_control)(struct ucsi *ucsi, u64 command, u32 *cci,
 			    void *data, size_t size);
 	int (*async_control)(struct ucsi *ucsi, u64 command);
@@ -531,6 +532,15 @@ struct ucsi_connector {
 
 int ucsi_send_command(struct ucsi *ucsi, u64 command,
 		      void *retval, size_t size);
+
+static inline int ucsi_send_message_out(struct ucsi *ucsi,
+					void *data, size_t size)
+{
+	if (!ucsi->ops->write_message_out)
+		return -EOPNOTSUPP;
+
+	return ucsi->ops->write_message_out(ucsi, data, size);
+}
 
 void ucsi_altmode_update_active(struct ucsi_connector *con);
 int ucsi_resume(struct ucsi *ucsi);
