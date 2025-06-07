@@ -1973,7 +1973,6 @@ disable_per_clk:
 free_sdhci:
 	if (imx_data->socdata->flags & ESDHC_FLAG_PMQOS)
 		cpu_latency_qos_remove_request(&imx_data->pm_qos_req);
-	sdhci_pltfm_free(pdev);
 	return err;
 }
 
@@ -1997,8 +1996,6 @@ static void sdhci_esdhc_imx_remove(struct platform_device *pdev)
 
 	if (imx_data->socdata->flags & ESDHC_FLAG_PMQOS)
 		cpu_latency_qos_remove_request(&imx_data->pm_qos_req);
-
-	sdhci_pltfm_free(pdev);
 }
 
 #ifdef CONFIG_PM_SLEEP
