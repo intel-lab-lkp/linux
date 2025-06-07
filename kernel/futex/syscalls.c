@@ -53,31 +53,43 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 	unsigned long ret;
 	struct task_struct *p;
 
-	rcu_read_lock();
-
-	ret = -ESRCH;
-	if (!pid)
+	if (!pid) {
 		p = current;
-	else {
+		get_task_struct(p);
+	} else {
+		rcu_read_lock();
 		p = find_task_by_vpid(pid);
+		/* pin the task to permit dropping the RCU read lock before
+		 * acquiring the semaphore
+		 */
+		if (p)
+			get_task_struct(p);
+		rcu_read_unlock();
 		if (!p)
-			goto err_unlock;
+			return -ESRCH;
 	}
+
+	ret = down_read_killable(&p->signal->exec_update_lock);
+	if (ret)
+		goto err_put;
 
 	ret = -EPERM;
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
 		goto err_unlock;
 
 	head = p->robust_list;
-	rcu_read_unlock();
+
+	up_read(&p->signal->exec_update_lock);
+	put_task_struct(p);
 
 	if (put_user(sizeof(*head), len_ptr))
 		return -EFAULT;
 	return put_user(head, head_ptr);
 
 err_unlock:
-	rcu_read_unlock();
-
+	up_read(&p->signal->exec_update_lock);
+err_put:
+	put_task_struct(p);
 	return ret;
 }
 
@@ -459,31 +471,42 @@ COMPAT_SYSCALL_DEFINE3(get_robust_list, int, pid,
 	unsigned long ret;
 	struct task_struct *p;
 
-	rcu_read_lock();
-
-	ret = -ESRCH;
-	if (!pid)
+	if (!pid) {
 		p = current;
-	else {
+		get_task_struct(p);
+	} else {
+		rcu_read_lock();
 		p = find_task_by_vpid(pid);
+		/* pin the task to permit dropping the RCU read lock before
+		 * acquiring the semaphore
+		 */
+		if (p)
+			get_task_struct(p);
+		rcu_read_unlock();
 		if (!p)
-			goto err_unlock;
+			return -ESRCH;
 	}
+
+	ret = down_read_killable(&p->signal->exec_update_lock);
+	if (ret)
+		goto err_put;
 
 	ret = -EPERM;
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
 		goto err_unlock;
 
 	head = p->compat_robust_list;
-	rcu_read_unlock();
+	up_read(&p->signal->exec_update_lock);
+	put_task_struct(p);
 
 	if (put_user(sizeof(*head), len_ptr))
 		return -EFAULT;
 	return put_user(ptr_to_compat(head), head_ptr);
 
 err_unlock:
-	rcu_read_unlock();
-
+	up_read(&p->signal->exec_update_lock);
+err_put:
+	put_task_struct(p);
 	return ret;
 }
 #endif /* CONFIG_COMPAT */
