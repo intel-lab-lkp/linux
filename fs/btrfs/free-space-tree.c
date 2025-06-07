@@ -1115,43 +1115,45 @@ static int populate_free_space_tree(struct btrfs_trans_handle *trans,
 	ret = btrfs_search_slot_for_read(extent_root, &key, path, 1, 0);
 	if (ret < 0)
 		goto out_locked;
-	ASSERT(ret == 0);
 
 	start = block_group->start;
 	end = block_group->start + block_group->length;
-	while (1) {
-		btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
 
-		if (key.type == BTRFS_EXTENT_ITEM_KEY ||
-		    key.type == BTRFS_METADATA_ITEM_KEY) {
-			if (key.objectid >= end)
-				break;
+	if (ret == 0) {
+		while (1) {
+			btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
 
-			if (start < key.objectid) {
-				ret = __add_to_free_space_tree(trans,
-							       block_group,
-							       path2, start,
-							       key.objectid -
-							       start);
-				if (ret)
-					goto out_locked;
+			if (key.type == BTRFS_EXTENT_ITEM_KEY ||
+			    key.type == BTRFS_METADATA_ITEM_KEY) {
+				if (key.objectid >= end)
+					break;
+
+				if (start < key.objectid) {
+					ret = __add_to_free_space_tree(trans,
+								       block_group,
+								       path2, start,
+								       key.objectid -
+								       start);
+					if (ret)
+						goto out_locked;
+				}
+				start = key.objectid;
+				if (key.type == BTRFS_METADATA_ITEM_KEY)
+					start += trans->fs_info->nodesize;
+				else
+					start += key.offset;
+			} else if (key.type == BTRFS_BLOCK_GROUP_ITEM_KEY) {
+				if (key.objectid != block_group->start)
+					break;
 			}
-			start = key.objectid;
-			if (key.type == BTRFS_METADATA_ITEM_KEY)
-				start += trans->fs_info->nodesize;
-			else
-				start += key.offset;
-		} else if (key.type == BTRFS_BLOCK_GROUP_ITEM_KEY) {
-			if (key.objectid != block_group->start)
+
+			ret = btrfs_next_item(extent_root, path);
+			if (ret < 0)
+				goto out_locked;
+			if (ret)
 				break;
 		}
-
-		ret = btrfs_next_item(extent_root, path);
-		if (ret < 0)
-			goto out_locked;
-		if (ret)
-			break;
-	}
+	}	
 	if (start < end) {
 		ret = __add_to_free_space_tree(trans, block_group, path2,
 					       start, end - start);
