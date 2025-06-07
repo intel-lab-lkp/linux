@@ -61,7 +61,18 @@ static bool __read_mostly sysrq_always_enabled;
 
 static bool sysrq_on(void)
 {
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	 * In CRASH_ONLY mode, sysrq is considered "on" only for the purpose
+	 * of allowing the crash command. The actual check for individual
+	 * commands happens in sysrq_on_mask().
+	 * For general "is sysrq on?" queries (like for input handler reg),
+	 * it should reflect that at least something (crash) is possible.
+	 */
+	return true;
+#else
 	return sysrq_enabled || sysrq_always_enabled;
+#endif
 }
 
 /**
@@ -82,9 +93,19 @@ EXPORT_SYMBOL_GPL(sysrq_mask);
  */
 static bool sysrq_on_mask(int mask)
 {
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	 * If CRASH_ONLY is set, only allow operations that have the
+	 * SYSRQ_ENABLE_DUMP mask (which sysrq_crash_op uses).
+	 * This makes sysrq_enabled and sysrq_always_enabled irrelevant
+	 * for other operations.
+	 */
+	return mask == SYSRQ_ENABLE_DUMP;
+#else
 	return sysrq_always_enabled ||
 	       sysrq_enabled == 1 ||
 	       (sysrq_enabled & mask);
+#endif
 }
 
 static int __init sysrq_always_enabled_setup(char *str)
@@ -558,6 +579,21 @@ static int sysrq_key_table_key2index(u8 key)
 }
 
 /*
+ * Initialize the sysrq_key_table at boot time if CRASH_ONLY is set.
+ * This ensures only the crash handler is active.
+ */
+static void __init sysrq_init_crash_only_table(void)
+{
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	int i;
+	const struct sysrq_key_op *crash_op = &sysrq_crash_op;
+	for (i = 0; i < ARRAY_SIZE(sysrq_key_table); i++)
+		sysrq_key_table[i] = NULL;
+	sysrq_key_table[sysrq_key_table_key2index('c')] = crash_op;
+#endif
+};
+
+/*
  * get and put functions for the table, exposed to modules.
  */
 static const struct sysrq_key_op *__sysrq_get_key_op(u8 key)
@@ -584,7 +620,6 @@ void __handle_sysrq(u8 key, bool check_mask)
 {
 	const struct sysrq_key_op *op_p;
 	int orig_suppress_printk;
-	int i;
 
 	orig_suppress_printk = suppress_printk;
 	suppress_printk = 0;
@@ -599,7 +634,15 @@ void __handle_sysrq(u8 key, bool check_mask)
 	 */
 	printk_force_console_enter();
 
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	if (key != 'c') { /* In CRASH_ONLY mode, only 'c' is considered */
+		op_p = NULL;
+	} else {
+		op_p = __sysrq_get_key_op(key);
+	}
+#else
 	op_p = __sysrq_get_key_op(key);
+#endif
 	if (op_p) {
 		/*
 		 * Should we check for enabled operations (/proc/sysrq-trigger
@@ -615,6 +658,15 @@ void __handle_sysrq(u8 key, bool check_mask)
 		}
 	} else {
 		pr_info("HELP : ");
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+		/* Check if the crash op is actually in the table and is the crash_op. */
+		if (sysrq_key_table_key2index('c') != -1 &&
+		    sysrq_key_table[sysrq_key_table_key2index('c')] == &sysrq_crash_op)
+			pr_cont("%s ", sysrq_crash_op.help_msg);
+		else /* Should not happen if table is defined correctly */
+			pr_cont("[Crash command not available] ");
+#else
+		int i;
 		/* Only print the help msg once per handler */
 		for (i = 0; i < ARRAY_SIZE(sysrq_key_table); i++) {
 			if (sysrq_key_table[i]) {
@@ -628,6 +680,7 @@ void __handle_sysrq(u8 key, bool check_mask)
 				pr_cont("%s ", sysrq_key_table[i]->help_msg);
 			}
 		}
+#endif
 		pr_cont("\n");
 		printk_force_console_exit();
 	}
@@ -1104,6 +1157,10 @@ static inline void sysrq_unregister_handler(void)
 
 int sysrq_toggle_support(int enable_mask)
 {
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	pr_warn("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Runtime toggle is not allowed.\n");
+	return -EPERM;
+#else
 	bool was_enabled = sysrq_on();
 
 	sysrq_enabled = enable_mask;
@@ -1116,6 +1173,7 @@ int sysrq_toggle_support(int enable_mask)
 	}
 
 	return 0;
+#endif
 }
 EXPORT_SYMBOL_GPL(sysrq_toggle_support);
 
@@ -1145,12 +1203,30 @@ static int __sysrq_swap_key_ops(u8 key, const struct sysrq_key_op *insert_op_p,
 
 int register_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
 {
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	 * In CRASH_ONLY mode, do not allow registering new SysRq ops.
+	 */
+	pr_warn("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Cannot register new SysRq key '%c'.\n", key);
+	return -EPERM;
+#endif
 	return __sysrq_swap_key_ops(key, op_p, NULL);
 }
 EXPORT_SYMBOL(register_sysrq_key);
 
 int unregister_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
 {
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	 * In CRASH_ONLY mode, do not allow unregistering the crash op.
+	 * Other ops should be NULL anyway due to sysrq_init_crash_only_table.
+	 */
+	if (op_p == &sysrq_crash_op) {
+		pr_warn("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Cannot unregister the crash SysRq key '%c'.\n", key);
+		return -EPERM;
+	}
+	return -EPERM; /* Attempt to unregister anything else is also an error */
+#endif
 	return __sysrq_swap_key_ops(key, NULL, op_p);
 }
 EXPORT_SYMBOL(unregister_sysrq_key);
@@ -1209,6 +1285,7 @@ static inline void sysrq_init_procfs(void)
 static int __init sysrq_init(void)
 {
 	sysrq_init_procfs();
+	sysrq_init_crash_only_table();
 
 	if (sysrq_on())
 		sysrq_register_handler();

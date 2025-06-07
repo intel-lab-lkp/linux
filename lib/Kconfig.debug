@@ -640,6 +640,19 @@ config MAGIC_SYSRQ_DEFAULT_ENABLE
 	  This may be set to 1 or 0 to enable or disable them all, or
 	  to a bitmask as described in Documentation/admin-guide/sysrq.rst.
 
+config MAGIC_SYSRQ_CRASH_ONLY
+	bool "Restrict Magic SysRq to crash command only"
+	depends on MAGIC_SYSRQ
+	default n
+	help
+	  If you say Y here, the Magic SysRq key functionality will be
+	  severely restricted at compile time. Only the 'c' command (trigger
+	  a system crash) will be available. All other SysRq commands will be
+	  disabled, and no new SysRq commands can be registered at runtime.
+	  The /proc/sys/kernel/sysrq setting will be ineffective for
+	  non-crash commands, and attempts to change it may be blocked.
+	  This is a security hardening option.
+
 config MAGIC_SYSRQ_SERIAL
 	bool "Enable magic SysRq key over serial"
 	depends on MAGIC_SYSRQ
