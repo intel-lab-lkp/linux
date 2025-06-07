@@ -129,7 +129,7 @@ void vma_iter_dump_tree(const struct vma_iterator *vmi);
 #ifdef CONFIG_DEBUG_VIRTUAL
 #define VIRTUAL_BUG_ON(cond) BUG_ON(cond)
 #else
-#define VIRTUAL_BUG_ON(cond) do { } while (0)
+#define VIRTUAL_BUG_ON(cond) BUILD_BUG_ON_INVALID(cond)
 #endif
 
 #ifdef CONFIG_DEBUG_VM_PGFLAGS
