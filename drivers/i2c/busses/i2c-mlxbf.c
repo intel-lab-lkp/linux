@@ -2071,6 +2071,8 @@ static s32 mlxbf_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 		break;
 
 	case I2C_SMBUS_I2C_BLOCK_DATA:
+		if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		byte_cnt = data->block[0];
 		mlxbf_i2c_smbus_i2c_block_func(&request, &command, data->block,
 					       &byte_cnt, read, pec);
@@ -2079,6 +2081,8 @@ static s32 mlxbf_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 		break;
 
 	case I2C_SMBUS_BLOCK_DATA:
+		if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		byte_cnt = read ? I2C_SMBUS_BLOCK_MAX : data->block[0];
 		mlxbf_i2c_smbus_block_func(&request, &command, data->block,
 					   &byte_cnt, read, pec);
@@ -2094,6 +2098,8 @@ static s32 mlxbf_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 		break;
 
 	case I2C_FUNC_SMBUS_BLOCK_PROC_CALL:
+		if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		byte_cnt = data->block[0];
 		mlxbf_i2c_smbus_blk_process_call_func(&request, &command,
 						      data->block, &byte_cnt,
