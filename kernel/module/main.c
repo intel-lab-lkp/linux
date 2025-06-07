@@ -2614,7 +2614,7 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 static int move_module(struct module *mod, struct load_info *info)
 {
 	int i;
-	enum mod_mem_type t = 0;
+	enum mod_mem_type t;
 	int ret = -ENOMEM;
 	bool codetag_section_found = false;
 
@@ -2630,6 +2630,7 @@ static int move_module(struct module *mod, struct load_info *info)
 			goto out_err;
 		}
 	}
+	t = MOD_MEM_NUM_TYPES;
 
 	/* Transfer each section which specifies SHF_ALLOC */
 	pr_debug("Final section addresses for %s:\n", mod->name);
@@ -2693,8 +2694,8 @@ static int move_module(struct module *mod, struct load_info *info)
 	return 0;
 out_err:
 	module_memory_restore_rox(mod);
-	for (t--; t >= 0; t--)
-		module_memory_free(mod, t);
+	for (; t > 0; t--)
+		module_memory_free(mod, t - 1);
 	if (codetag_section_found)
 		codetag_free_module_sections(mod);
 
