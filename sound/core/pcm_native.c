@@ -3061,10 +3061,14 @@ static int snd_pcm_sync_ptr(struct snd_pcm_substream *substream,
 	int err;
 
 	memset(&sync_ptr, 0, sizeof(sync_ptr));
-	if (get_user(sync_ptr.flags, (unsigned __user *)&(_sync_ptr->flags)))
+
+	if (!user_read_access_begin(_sync_ptr, sizeof(*_sync_ptr)))
 		return -EFAULT;
-	if (copy_from_user(&sync_ptr.c.control, &(_sync_ptr->c.control), sizeof(struct snd_pcm_mmap_control)))
-		return -EFAULT;	
+	unsafe_get_user(sync_ptr.flags, (unsigned __user *)&(_sync_ptr->flags), Efault);
+	unsafe_copy_from_user(&sync_ptr.c.control, &(_sync_ptr->c.control),
+			      sizeof(struct snd_pcm_mmap_control), Efault);
+	user_read_access_end();
+
 	status = runtime->status;
 	control = runtime->control;
 	if (sync_ptr.flags & SNDRV_PCM_SYNC_PTR_HWSYNC) {
@@ -3096,6 +3100,11 @@ static int snd_pcm_sync_ptr(struct snd_pcm_substream *substream,
 	if (copy_to_user(_sync_ptr, &sync_ptr, sizeof(sync_ptr)))
 		return -EFAULT;
 	return 0;
+
+Efault:
+	user_read_access_end();
+
+	return -EFAULT;
 }
 
 struct snd_pcm_mmap_status32 {
@@ -3154,10 +3163,13 @@ static int snd_pcm_ioctl_sync_ptr_compat(struct snd_pcm_substream *substream,
 	if (snd_BUG_ON(!runtime))
 		return -EINVAL;
 
-	if (get_user(sflags, &src->flags) ||
-	    get_user(scontrol.appl_ptr, &src->c.control.appl_ptr) ||
-	    get_user(scontrol.avail_min, &src->c.control.avail_min))
+	if (!user_read_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_get_user(sflags, &src->flags, Efault_rd);
+	unsafe_get_user(scontrol.appl_ptr, &src->c.control.appl_ptr, Efault_rd);
+	unsafe_get_user(scontrol.avail_min, &src->c.control.avail_min, Efault_rd);
+	user_read_access_end();
+
 	if (sflags & SNDRV_PCM_SYNC_PTR_HWSYNC) {
 		err = snd_pcm_hwsync(substream);
 		if (err < 0)
@@ -3189,18 +3201,31 @@ static int snd_pcm_ioctl_sync_ptr_compat(struct snd_pcm_substream *substream,
 	}
 	if (!(sflags & SNDRV_PCM_SYNC_PTR_APPL))
 		snd_pcm_dma_buffer_sync(substream, SNDRV_DMA_SYNC_DEVICE);
-	if (put_user(sstatus.state, &src->s.status.state) ||
-	    put_user(sstatus.hw_ptr, &src->s.status.hw_ptr) ||
-	    put_user(sstatus.tstamp.tv_sec, &src->s.status.tstamp_sec) ||
-	    put_user(sstatus.tstamp.tv_nsec, &src->s.status.tstamp_nsec) ||
-	    put_user(sstatus.suspended_state, &src->s.status.suspended_state) ||
-	    put_user(sstatus.audio_tstamp.tv_sec, &src->s.status.audio_tstamp_sec) ||
-	    put_user(sstatus.audio_tstamp.tv_nsec, &src->s.status.audio_tstamp_nsec) ||
-	    put_user(scontrol.appl_ptr, &src->c.control.appl_ptr) ||
-	    put_user(scontrol.avail_min, &src->c.control.avail_min))
+
+	if (!user_write_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_put_user(sstatus.state, &src->s.status.state, Efault_wr);
+	unsafe_put_user(sstatus.hw_ptr, &src->s.status.hw_ptr, Efault_wr);
+	unsafe_put_user(sstatus.tstamp.tv_sec, &src->s.status.tstamp_sec, Efault_wr);
+	unsafe_put_user(sstatus.tstamp.tv_nsec, &src->s.status.tstamp_nsec, Efault_wr);
+	unsafe_put_user(sstatus.suspended_state, &src->s.status.suspended_state, Efault_wr);
+	unsafe_put_user(sstatus.audio_tstamp.tv_sec, &src->s.status.audio_tstamp_sec, Efault_wr);
+	unsafe_put_user(sstatus.audio_tstamp.tv_nsec, &src->s.status.audio_tstamp_nsec, Efault_wr);
+	unsafe_put_user(scontrol.appl_ptr, &src->c.control.appl_ptr, Efault_wr);
+	unsafe_put_user(scontrol.avail_min, &src->c.control.avail_min, Efault_wr);
+	user_write_access_end();
 
 	return 0;
+
+Efault_rd:
+	user_read_access_end();
+
+	return -EFAULT;
+
+Efault_wr:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 #define __SNDRV_PCM_IOCTL_SYNC_PTR32 _IOWR('A', 0x23, struct snd_pcm_sync_ptr32)
 
@@ -3274,14 +3299,21 @@ static int snd_pcm_rewind_ioctl(struct snd_pcm_substream *substream,
 	snd_pcm_uframes_t frames;
 	snd_pcm_sframes_t result;
 
-	if (get_user(frames, _frames))
+	if (!user_access_begin(_frames, sizeof(*_frames)))
 		return -EFAULT;
-	if (put_user(0, _frames))
-		return -EFAULT;
+	unsafe_get_user(frames, _frames, Efault);
+	unsafe_put_user(0, _frames, Efault);
+	user_access_end();
+
 	result = snd_pcm_rewind(substream, frames);
 	if (put_user(result, _frames))
 		return -EFAULT;
 	return result < 0 ? result : 0;
+
+Efault:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 
 static int snd_pcm_forward_ioctl(struct snd_pcm_substream *substream,
@@ -3290,14 +3322,21 @@ static int snd_pcm_forward_ioctl(struct snd_pcm_substream *substream,
 	snd_pcm_uframes_t frames;
 	snd_pcm_sframes_t result;
 
-	if (get_user(frames, _frames))
+	if (!user_access_begin(_frames, sizeof(*_frames)))
 		return -EFAULT;
-	if (put_user(0, _frames))
-		return -EFAULT;
+	unsafe_get_user(frames, _frames, Efault);
+	unsafe_put_user(0, _frames, Efault);
+	user_access_end();
+
 	result = snd_pcm_forward(substream, frames);
 	if (put_user(result, _frames))
 		return -EFAULT;
 	return result < 0 ? result : 0;
+
+Efault:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 
 static int snd_pcm_common_ioctl(struct file *file,
