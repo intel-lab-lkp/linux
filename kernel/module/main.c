@@ -2615,7 +2615,7 @@ static int move_module(struct module *mod, struct load_info *info)
 {
 	int i;
 	enum mod_mem_type t;
-	int ret = -ENOMEM;
+	int ret;
 	bool codetag_section_found = false;
 
 	for_each_mod_mem_type(type) {
