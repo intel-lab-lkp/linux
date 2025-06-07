@@ -2270,6 +2270,8 @@ static int dib7090_tuner_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg msg[]
 {
 	struct dib7000p_state *state = i2c_get_adapdata(i2c_adap);
 
+	if (msg[0].len < 1)
+		return -EOPNOTSUPP;
 	u16 apb_address = 0, word;
 	int i = 0;
 	switch (msg[0].buf[0]) {
@@ -2360,11 +2362,15 @@ static int dib7090_tuner_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg msg[]
 	case 0x1d:
 		i = ((dib7000p_read_word(state, 72) >> 12) & 0x3);
 		word = dib7000p_read_word(state, 384 + i);
+		if (msg[1].len < 2)
+			return -EOPNOTSUPP;
 		msg[1].buf[0] = (word >> 8) & 0xff;
 		msg[1].buf[1] = (word) & 0xff;
 		return num;
 	case 0x1f:
 		if (num == 1) {	/* write */
+			if (msg[0].len < 3)
+				return -EOPNOTSUPP;
 			word = (u16) ((msg[0].buf[1] << 8) | msg[0].buf[2]);
 			word &= 0x3;
 			word = (dib7000p_read_word(state, 72) & ~(3 << 12)) | (word << 12);
