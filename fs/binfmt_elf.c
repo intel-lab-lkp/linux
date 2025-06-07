@@ -525,7 +525,10 @@ static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 
 	/* Sanity check the number of program headers... */
 	/* ...and their total size. */
-	size = sizeof(struct elf_phdr) * elf_ex->e_phnum;
+	
+	if (check_mul_overflow(sizeof(struct elf_phdr), elf_ex->e_phnum, &size))
+		goto out;
+
 	if (size == 0 || size > 65536 || size > ELF_MIN_ALIGN)
 		goto out;
 
