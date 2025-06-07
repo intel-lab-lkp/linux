@@ -196,7 +196,7 @@ static int idxd_setup_wqs(struct idxd_device *idxd)
 		wq = kzalloc_node(sizeof(*wq), GFP_KERNEL, dev_to_node(dev));
 		if (!wq) {
 			rc = -ENOMEM;
-			goto err;
+			goto err_wq;
 		}
 
 		idxd_dev_set_type(&wq->idxd_dev, IDXD_DEV_WQ);
@@ -246,6 +246,7 @@ err:
 	put_device(conf_dev);
 	kfree(wq);
 
+err_wq:
 	while (--i >= 0) {
 		wq = idxd->wqs[i];
 		if (idxd->hw.wq_cap.op_config)
