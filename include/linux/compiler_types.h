@@ -552,9 +552,6 @@ struct ftrace_likely_data {
 # define __compiletime_assert(condition, msg, prefix, suffix) ((void)(condition))
 #endif
 
-#define _compiletime_assert(condition, msg, prefix, suffix) \
-	__compiletime_assert(condition, msg, prefix, suffix)
-
 /**
  * compiletime_assert - break build and emit msg if condition is false
  * @condition: a compile-time constant condition to check
@@ -565,7 +562,7 @@ struct ftrace_likely_data {
  * compiler has support to do so.
  */
 #define compiletime_assert(condition, msg) \
-	_compiletime_assert(condition, msg, __compiletime_assert_, __COUNTER__)
+	__compiletime_assert(condition, msg, __compiletime_assert_, __COUNTER__)
 
 #define compiletime_assert_atomic_type(t)				\
 	compiletime_assert(__native_word(t),				\
