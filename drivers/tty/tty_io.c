@@ -102,6 +102,9 @@
 #include <linux/uaccess.h>
 #include <linux/termios_internal.h>
 #include <linux/fs.h>
+#include <linux/cred.h>
+#include <linux/user_namespace.h>
+#include <linux/capability.h>
 
 #include <linux/kbd_kern.h>
 #include <linux/vt_kern.h>
@@ -2379,7 +2382,7 @@ static int tiocswinsz(struct tty_struct *tty, struct winsize __user *arg)
  */
 static int tioccons(struct file *file)
 {
-	if (!capable(CAP_SYS_ADMIN))
+	if (!file_ns_capable(file, file->f_cred->user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
 	if (file->f_op->write_iter == redirected_tty_write) {
 		struct file *f;
