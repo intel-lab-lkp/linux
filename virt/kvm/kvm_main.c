@@ -209,7 +209,10 @@ static inline bool kvm_kick_many_cpus(struct cpumask *cpus, bool wait)
 	if (cpumask_empty(cpus))
 		return false;
 
+	preempt_disable();
 	smp_call_function_many(cpus, ack_kick, NULL, wait);
+	preempt_enable();
+
 	return true;
 }
 
