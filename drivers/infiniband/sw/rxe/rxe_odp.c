@@ -203,8 +203,6 @@ static int __rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
 
 		page = hmm_pfn_to_page(umem_odp->map.pfn_list[idx]);
 		user_va = kmap_local_page(page);
-		if (!user_va)
-			return -EFAULT;
 
 		src = (dir == RXE_TO_MR_OBJ) ? addr : user_va;
 		dest = (dir == RXE_TO_MR_OBJ) ? user_va : addr;
@@ -286,8 +284,6 @@ static enum resp_states rxe_odp_do_atomic_op(struct rxe_mr *mr, u64 iova,
 	idx = rxe_odp_iova_to_index(umem_odp, iova);
 	page_offset = rxe_odp_iova_to_page_offset(umem_odp, iova);
 	page = hmm_pfn_to_page(umem_odp->map.pfn_list[idx]);
-	if (!page)
-		return RESPST_ERR_RKEY_VIOLATION;
 
 	if (unlikely(page_offset & 0x7)) {
 		rxe_dbg_mr(mr, "iova not aligned\n");
