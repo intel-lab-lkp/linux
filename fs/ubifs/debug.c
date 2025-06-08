@@ -580,23 +580,6 @@ out_unlock:
 	spin_unlock(&dbg_lock);
 }
 
-void ubifs_dump_budget_req(const struct ubifs_budget_req *req)
-{
-	spin_lock(&dbg_lock);
-	pr_err("Budgeting request: new_ino %d, dirtied_ino %d\n",
-	       req->new_ino, req->dirtied_ino);
-	pr_err("\tnew_ino_d   %d, dirtied_ino_d %d\n",
-	       req->new_ino_d, req->dirtied_ino_d);
-	pr_err("\tnew_page    %d, dirtied_page %d\n",
-	       req->new_page, req->dirtied_page);
-	pr_err("\tnew_dent    %d, mod_dent     %d\n",
-	       req->new_dent, req->mod_dent);
-	pr_err("\tidx_growth  %d\n", req->idx_growth);
-	pr_err("\tdata_growth %d dd_growth     %d\n",
-	       req->data_growth, req->dd_growth);
-	spin_unlock(&dbg_lock);
-}
-
 void ubifs_dump_lstats(const struct ubifs_lp_stats *lst)
 {
 	spin_lock(&dbg_lock);
@@ -961,25 +944,6 @@ void ubifs_dump_tnc(struct ubifs_info *c)
 		pr_err("empty TNC tree in memory\n");
 	}
 	pr_err("(pid %d) finish dumping TNC tree\n", current->pid);
-}
-
-static int dump_znode(struct ubifs_info *c, struct ubifs_znode *znode,
-		      void *priv)
-{
-	ubifs_dump_znode(c, znode);
-	return 0;
-}
-
-/**
- * ubifs_dump_index - dump the on-flash index.
- * @c: UBIFS file-system description object
- *
- * This function dumps whole UBIFS indexing B-tree, unlike 'ubifs_dump_tnc()'
- * which dumps only in-memory znodes and does not read znodes which from flash.
- */
-void ubifs_dump_index(struct ubifs_info *c)
-{
-	dbg_walk_index(c, NULL, dump_znode, NULL);
 }
 
 /**

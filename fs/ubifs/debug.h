@@ -245,7 +245,6 @@ const char *dbg_snprintf_key(const struct ubifs_info *c,
 void ubifs_dump_inode(struct ubifs_info *c, const struct inode *inode);
 void ubifs_dump_node(const struct ubifs_info *c, const void *node,
 		     int node_len);
-void ubifs_dump_budget_req(const struct ubifs_budget_req *req);
 void ubifs_dump_lstats(const struct ubifs_lp_stats *lst);
 void ubifs_dump_budg(struct ubifs_info *c, const struct ubifs_budg_info *bi);
 void ubifs_dump_lprop(const struct ubifs_info *c,
@@ -260,7 +259,6 @@ void ubifs_dump_heap(struct ubifs_info *c, struct ubifs_lpt_heap *heap,
 void ubifs_dump_pnode(struct ubifs_info *c, struct ubifs_pnode *pnode,
 		      struct ubifs_nnode *parent, int iip);
 void ubifs_dump_tnc(struct ubifs_info *c);
-void ubifs_dump_index(struct ubifs_info *c);
 void ubifs_dump_lpt_lebs(const struct ubifs_info *c);
 
 int dbg_walk_index(struct ubifs_info *c, dbg_leaf_callback leaf_cb,
