@@ -395,6 +395,32 @@ impl Device {
     }
 }
 
+macro_rules! gen_irq_accessor {
+    ($(#[$meta:meta])* $fn_name:ident, $reg_type:ident, $handler_trait:ident) => {
+        $(#[$meta])*
+        pub fn $fn_name<T: crate::irq::$handler_trait + 'static>(
+            &self,
+            index: u32,
+            flags: crate::irq::flags::Flags,
+            name: &'static crate::str::CStr,
+            handler: T,
+        ) -> Result<impl PinInit<crate::irq::$reg_type<T>, crate::error::Error> + '_> {
+            // SAFETY: `self.as_raw` returns a valid pointer to a `struct pci_dev`.
+            let irq = unsafe { crate::bindings::pci_irq_vector(self.as_raw(), index) };
+            if irq < 0 {
+                return Err(crate::error::Error::from_errno(irq));
+            }
+            Ok(crate::irq::$reg_type::<T>::register(
+                self.as_ref(),
+                irq as u32,
+                flags,
+                name,
+                handler,
+            ))
+        }
+    };
+}
+
 impl Device<device::Bound> {
     /// Mapps an entire PCI-BAR after performing a region-request on it. I/O operation bound checks
     /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
@@ -413,6 +439,15 @@ impl Device<device::Bound> {
     pub fn iomap_region(&self, bar: u32, name: &CStr) -> Result<Devres<Bar>> {
         self.iomap_region_sized::<0>(bar, name)
     }
+
+    gen_irq_accessor!(
+        /// Returns a [`kernel::irq::Registration`] for the IRQ vector at the given index.
+        irq_by_index, Registration, Handler
+    );
+    gen_irq_accessor!(
+        /// Returns a [`kernel::irq::ThreadedRegistration`] for the IRQ vector at the given index.
+        threaded_irq_by_index, ThreadedRegistration, ThreadedHandler
+    );
 }
 
 impl Device<device::Core> {
