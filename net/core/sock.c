@@ -4284,7 +4284,7 @@ static const char *sock_prot_memory_pressure(struct proto *proto)
 static void proto_seq_printf(struct seq_file *seq, struct proto *proto)
 {
 
-	seq_printf(seq, "%-9s %4u %6d  %6ld   %-3s %6u   %-3s  %-10s "
+	seq_printf(seq, "%-11s %4u %6d  %6ld   %-3s %6u   %-3s  %-10s "
 			"%2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c\n",
 		   proto->name,
 		   proto->obj_size,
@@ -4317,7 +4317,7 @@ static void proto_seq_printf(struct seq_file *seq, struct proto *proto)
 static int proto_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == &proto_list)
-		seq_printf(seq, "%-9s %-4s %-8s %-6s %-5s %-7s %-4s %-10s %s",
+		seq_printf(seq, "%-11s %-4s %-8s %-6s %-5s %-7s %-4s %-10s %s",
 			   "protocol",
 			   "size",
 			   "sockets",
