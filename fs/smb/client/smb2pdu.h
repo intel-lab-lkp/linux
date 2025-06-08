@@ -425,24 +425,23 @@ struct smb2_create_ea_ctx {
 #define SMB2_WSL_XATTR_MODE		"$LXMOD"
 #define SMB2_WSL_XATTR_DEV		"$LXDEV"
 #define SMB2_WSL_XATTR_NAME_LEN	6
-#define SMB2_WSL_NUM_XATTRS		4
 
 #define SMB2_WSL_XATTR_UID_SIZE	4
 #define SMB2_WSL_XATTR_GID_SIZE	4
 #define SMB2_WSL_XATTR_MODE_SIZE	4
 #define SMB2_WSL_XATTR_DEV_SIZE	8
 
+/* minimal size: at least the smallest EA has to be present */
 #define SMB2_WSL_MIN_QUERY_EA_RESP_SIZE \
-	(ALIGN((SMB2_WSL_NUM_XATTRS - 1) * \
-	       (SMB2_WSL_XATTR_NAME_LEN + 1 + \
-		sizeof(struct smb2_file_full_ea_info)), 4) + \
-	 SMB2_WSL_XATTR_NAME_LEN + 1 + sizeof(struct smb2_file_full_ea_info))
+	(sizeof(struct smb2_file_full_ea_info) + SMB2_WSL_XATTR_NAME_LEN + 1 + 4)
 
+/*
+ * maximal size: all 4 EAs are present,
+ * beginning of each EA structure has to be aligned to 4 bytes,
+ * EAs have different size and can be returned in any other,
+ * use the largest EA size for aligning when calculating maximal size
+ */
 #define SMB2_WSL_MAX_QUERY_EA_RESP_SIZE \
-	(ALIGN(SMB2_WSL_MIN_QUERY_EA_RESP_SIZE + \
-	       SMB2_WSL_XATTR_UID_SIZE + \
-	       SMB2_WSL_XATTR_GID_SIZE + \
-	       SMB2_WSL_XATTR_MODE_SIZE + \
-	       SMB2_WSL_XATTR_DEV_SIZE, 4))
+	4 * ALIGN((sizeof(struct smb2_file_full_ea_info) + SMB2_WSL_XATTR_NAME_LEN + 1 + 8), 4)
 
 #endif				/* _SMB2PDU_H */
