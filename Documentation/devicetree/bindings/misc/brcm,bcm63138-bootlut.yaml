@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/brcm,bcm63138-bootlut.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM63138 Boot Lookup Table
+
+maintainers:
+  - William Zhang <william.zhang@broadcom.com>
+
+description: |
+  This describes the Boot Lookup Table (BootLUT) region for the BCM63138
+  SoC. It is used for secondary CPU initialization.
+
+properties:
+  compatible:
+    const: brcm,bcm63138-bootlut
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    bootlut: bootlut@8000 {
+      compatible = "brcm,bcm63138-bootlut";
+      reg = <0x8000 0x50>;
+    };
+...
