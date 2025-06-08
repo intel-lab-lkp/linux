@@ -17,6 +17,127 @@
 #define TXSETR_LANECNT_MASK		(0x3 << 0)
 
 /*
+ * DSI Command Transfer Registers
+ */
+#define TXCMSETR			0x110
+#define TXCMSETR_SPDTYP			BIT(8)	/* 0:HS 1:LP */
+#define TXCMSETR_LPPDACC		BIT(0)
+#define TXCMCR				0x120
+#define TXCMCR_BTATYP			BIT(2)
+#define TXCMCR_BTAREQ			BIT(1)
+#define TXCMCR_TXREQ			BIT(0)
+#define TXCMSR				0x130
+#define TXCMSR_CLSNERR			BIT(18)
+#define TXCMSR_AXIERR			BIT(16)
+#define TXCMSR_TXREQEND			BIT(0)
+#define TXCMSCR				0x134
+#define TXCMSCR_CLSNERR			BIT(18)
+#define TXCMSCR_AXIERR			BIT(16)
+#define TXCMSCR_TXREQEND		BIT(0)
+#define TXCMIER				0x138
+#define TXCMIER_CLSNERR			BIT(18)
+#define TXCMIER_AXIERR			BIT(16)
+#define TXCMIER_TXREQEND		BIT(0)
+#define TXCMADDRSET0R			0x140
+#define TXCMPHDR			0x150
+#define TXCMPHDR_FMT			BIT(24)	/* 0:SP 1:LP */
+#define TXCMPHDR_VC(n)			(((n) & 0x3) << 22)
+#define TXCMPHDR_DT(n)			(((n) & 0x3f) << 16)
+#define TXCMPHDR_DATA1(n)		(((n) & 0xff) << 8)
+#define TXCMPHDR_DATA0(n)		(((n) & 0xff) << 0)
+#define TXCMPPD0R			0x160
+#define TXCMPPD1R			0x164
+#define TXCMPPD2R			0x168
+#define TXCMPPD3R			0x16c
+
+#define RXSETR				0x200
+#define RXSETR_CRCEN			(((n) & 0xf) << 24)
+#define RXSETR_ECCEN			(((n) & 0xf) << 16)
+#define RXPSETR				0x210
+#define RXPSETR_LPPDACC			BIT(0)
+#define RXPSR				0x220
+#define RXPSR_ECCERR1B			BIT(28)
+#define RXPSR_UEXTRGERR			BIT(25)
+#define RXPSR_RESPTOERR			BIT(24)
+#define RXPSR_OVRERR			BIT(23)
+#define RXPSR_AXIERR			BIT(22)
+#define RXPSR_CRCERR			BIT(21)
+#define RXPSR_WCERR			BIT(20)
+#define RXPSR_UEXDTERR			BIT(19)
+#define RXPSR_UEXPKTERR			BIT(18)
+#define RXPSR_ECCERR			BIT(17)
+#define RXPSR_MLFERR			BIT(16)
+#define RXPSR_RCVACK			BIT(14)
+#define RXPSR_RCVEOT			BIT(10)
+#define RXPSR_RCVAKE			BIT(9)
+#define RXPSR_RCVRESP			BIT(8)
+#define RXPSR_BTAREQEND			BIT(0)
+#define RXPSCR				0x224
+#define RXPSCR_ECCERR1B			BIT(28)
+#define RXPSCR_UEXTRGERR		BIT(25)
+#define RXPSCR_RESPTOERR		BIT(24)
+#define RXPSCR_OVRERR			BIT(23)
+#define RXPSCR_AXIERR			BIT(22)
+#define RXPSCR_CRCERR			BIT(21)
+#define RXPSCR_WCERR			BIT(20)
+#define RXPSCR_UEXDTERR			BIT(19)
+#define RXPSCR_UEXPKTERR		BIT(18)
+#define RXPSCR_ECCERR			BIT(17)
+#define RXPSCR_MLFERR			BIT(16)
+#define RXPSCR_RCVACK			BIT(14)
+#define RXPSCR_RCVEOT			BIT(10)
+#define RXPSCR_RCVAKE			BIT(9)
+#define RXPSCR_RCVRESP			BIT(8)
+#define RXPSCR_BTAREQEND		BIT(0)
+#define RXPIER				0x228
+#define RXPIER_ECCERR1B			BIT(28)
+#define RXPIER_UEXTRGERR		BIT(25)
+#define RXPIER_RESPTOERR		BIT(24)
+#define RXPIER_OVRERR			BIT(23)
+#define RXPIER_AXIERR			BIT(22)
+#define RXPIER_CRCERR			BIT(21)
+#define RXPIER_WCERR			BIT(20)
+#define RXPIER_UEXDTERR			BIT(19)
+#define RXPIER_UEXPKTERR		BIT(18)
+#define RXPIER_ECCERR			BIT(17)
+#define RXPIER_MLFERR			BIT(16)
+#define RXPIER_RCVACK			BIT(14)
+#define RXPIER_RCVEOT			BIT(10)
+#define RXPIER_RCVAKE			BIT(9)
+#define RXPIER_RCVRESP			BIT(8)
+#define RXPIER_BTAREQEND		BIT(0)
+#define RXPADDRSET0R			0x230
+#define RXPSIZESETR			0x238
+#define RXPSIZESETR_SIZE(n)		(((n) & 0xf) << 3)
+#define RXPHDR				0x240
+#define RXPHDR_FMT			BIT(24)	/* 0:SP 1:LP */
+#define RXPHDR_VC(n)			(((n) & 0x3) << 22)
+#define RXPHDR_DT(n)			(((n) & 0x3f) << 16)
+#define RXPHDR_DATA1(n)			(((n) & 0xff) << 8)
+#define RXPHDR_DATA0(n)			(((n) & 0xff) << 0)
+#define RXPPD0R				0x250
+#define RXPPD1R				0x254
+#define RXPPD2R				0x258
+#define RXPPD3R				0x25c
+#define AKEPR				0x300
+#define AKEPR_VC(n)			(((n) & 0x3) << 22)
+#define AKEPR_DT(n)			(((n) & 0x3f) << 16)
+#define AKEPR_ERRRPT(n)			(((n) & 0xffff) << 0)
+#define RXRESPTOSETR			0x400
+#define TACR				0x500
+#define TASR				0x510
+#define TASCR				0x514
+#define TAIER				0x518
+#define TOSR				0x610
+#define TOSR_TATO			BIT(2)
+#define TOSR_LRXHTO			BIT(1)
+#define TOSR_HRXTO			BIT(0)
+#define TOSCR				0x614
+#define TOSCR_TATO			BIT(2)
+#define TOSCR_LRXHTO			BIT(1)
+#define TOSCR_HRXTO			BIT(0)
+
+/*
  * Video Mode Register
  */
 #define TXVMSETR			0x180
@@ -100,6 +221,10 @@
 #define PPICLSCR			0x724
 #define PPICLSCR_HSTOLP			BIT(27)
 #define PPICLSCR_TOHS			BIT(26)
+
+#define PPIDL0SR			0x740
+#define PPIDL0SR_DIR			BIT(10)
+#define PPIDL0SR_STPST			BIT(6)
 
 #define PPIDLSR				0x760
 #define PPIDLSR_STPST			(0xf << 0)
