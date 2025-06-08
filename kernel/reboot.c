@@ -626,22 +626,6 @@ int register_platform_power_off(void (*power_off)(void))
 }
 EXPORT_SYMBOL_GPL(register_platform_power_off);
 
-/**
- *	unregister_platform_power_off - Unregister platform-level power-off callback
- *	@power_off: Power-off callback
- *
- *	Unregisters previously registered platform power-off callback.
- */
-void unregister_platform_power_off(void (*power_off)(void))
-{
-	if (platform_power_off_handler &&
-	    platform_power_off_handler->cb_data == power_off) {
-		unregister_sys_off_handler(platform_power_off_handler);
-		platform_power_off_handler = NULL;
-	}
-}
-EXPORT_SYMBOL_GPL(unregister_platform_power_off);
-
 static int legacy_pm_power_off(struct sys_off_data *data)
 {
 	if (pm_power_off)

@@ -161,7 +161,6 @@ int devm_register_restart_handler(struct device *dev,
 				  void *cb_data);
 
 int register_platform_power_off(void (*power_off)(void));
-void unregister_platform_power_off(void (*power_off)(void));
 
 /*
  * Architecture independent implemenations of sys_reboot commands.
