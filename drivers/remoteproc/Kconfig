@@ -299,6 +299,15 @@ config RCAR_REMOTEPROC
 	  This can be either built-in or a loadable module.
 	  If compiled as module (M), the module name is rcar_rproc.
 
+config SOPHGO_CV1800B_C906L
+	tristate "Sophgo CV1800B C906L remoteproc support"
+	depends on ARCH_SOPHGO || COMPILE_TEST
+	help
+	  Say y here to support CV1800B C906L remote processor via the remote
+	  processor framework.
+
+	  It's safe to say N here.
+
 config ST_REMOTEPROC
 	tristate "ST remoteproc support"
 	depends on ARCH_STI
