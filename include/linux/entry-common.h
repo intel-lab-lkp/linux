@@ -146,8 +146,7 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
  * @syscall:	The syscall number
  *
  * Invoked from architecture specific syscall entry code with interrupts
- * enabled after invoking syscall_enter_from_user_mode_prepare() and extra
- * architecture specific work.
+ * enabled and extra architecture specific work.
  *
  * Returns: The original or a modified syscall number
  *
