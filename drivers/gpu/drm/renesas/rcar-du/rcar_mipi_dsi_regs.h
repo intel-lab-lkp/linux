@@ -12,6 +12,10 @@
 #define LINKSR_LPBUSY			BIT(1)
 #define LINKSR_HSBUSY			BIT(0)
 
+#define TXSETR				0x100
+#define TXSETR_EOTPEN			BIT(12)
+#define TXSETR_LANECNT_MASK		(0x3 << 0)
+
 /*
  * Video Mode Register
  */
