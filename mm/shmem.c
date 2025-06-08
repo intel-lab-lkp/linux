@@ -1995,6 +1995,14 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 	 */
 	if (swapcache_prepare(entry, nr_pages)) {
 		folio_put(new);
+
+		/*
+		 * A smaller folio is in the swap cache, mTHP swapin will always fail
+		 * until it's gone. Return -EINVAL to fallback to order 0.
+		 */
+		if (non_swapcache_batch(entry, nr_pages) != nr_pages)
+			return ERR_PTR(-EINVAL);
+
 		return ERR_PTR(-EEXIST);
 	}
 
@@ -2256,6 +2264,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	folio = swap_cache_get_folio(swap, NULL, 0);
 	order = xa_get_order(&mapping->i_pages, index);
 	if (!folio) {
+		int nr_pages = 1 << order;
 		bool fallback_order0 = false;
 
 		/* Or update major stats only when swapin succeeds?? */
@@ -2271,7 +2280,8 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 		 * to swapin order-0 folio, as well as for zswap case.
 		 */
 		if (order > 0 && ((vma && unlikely(userfaultfd_armed(vma))) ||
-				  !zswap_never_enabled()))
+				  !zswap_never_enabled() ||
+				  nr_pages != swap_zeromap_batch(swap, nr_pages, NULL)))
 			fallback_order0 = true;
 
 		/* Skip swapcache for synchronous device. */
