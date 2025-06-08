@@ -690,7 +690,8 @@ static void * __init efi_map_regions(int *count, int *pg_shift)
 		if (!should_map_region(md))
 			continue;
 
-		efi_map_region(md);
+		if (efi_map_region(md))
+			return NULL;
 
 		if (left < desc_size) {
 			new_memmap = realloc_pages(new_memmap, *pg_shift);
@@ -736,9 +737,10 @@ static void __init kexec_enter_virtual_mode(void)
 	* Map efi regions which were passed via setup_data. The virt_addr is a
 	* fixed addr which was used in first kernel of a kexec boot.
 	*/
-	for_each_efi_memory_desc(md)
-		efi_map_region_fixed(md); /* FIXME: add error handling */
-
+	for_each_efi_memory_desc(md) {
+		if (efi_map_region_fixed(md))
+			return;
+	}
 	/*
 	 * Unregister the early EFI memmap from efi_init() and install
 	 * the new EFI memory map.

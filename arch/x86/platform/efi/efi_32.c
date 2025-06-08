@@ -33,7 +33,7 @@
 #include <asm/tlbflush.h>
 #include <asm/efi.h>
 
-void __init efi_map_region(efi_memory_desc_t *md)
+int __init efi_map_region(efi_memory_desc_t *md)
 {
 	u64 start_pfn, end_pfn, end;
 	unsigned long size;
@@ -54,8 +54,11 @@ void __init efi_map_region(efi_memory_desc_t *md)
 	}
 
 	md->virt_addr = (unsigned long)va;
-	if (!va)
+	if (!va) {
 		pr_err("ioremap of 0x%llX failed!\n", md->phys_addr);
+		return -EINVAL;
+	}
+	return 0;
 }
 
 /*
