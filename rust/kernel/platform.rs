@@ -5,9 +5,11 @@
 //! C header: [`include/linux/platform_device.h`](srctree/include/linux/platform_device.h)
 
 use crate::{
-    bindings, container_of, device, driver,
+    bindings, container_of,
+    device::{self, Bound},
+    driver,
     error::{to_result, Result},
-    of,
+    irq, of,
     prelude::*,
     str::CStr,
     types::{ForeignOwnable, Opaque},
@@ -188,6 +190,127 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
     fn as_raw(&self) -> *mut bindings::platform_device {
         self.0.get()
     }
+}
+
+macro_rules! gen_irq_accessor {
+    ($(#[$meta:meta])* $fn_name:ident, $reg_type:ident, $handler_trait:ident, index, $irq_fn:ident) => {
+        $(#[$meta])*
+        pub fn $fn_name<T: irq::$handler_trait + 'static>(
+            &self,
+            index: u32,
+            flags: irq::flags::Flags,
+            name: &'static CStr,
+            handler: T,
+        ) -> Result<impl PinInit<irq::$reg_type<T>, Error> + '_> {
+            // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+            let irq = unsafe { bindings::$irq_fn(self.as_raw(), index) };
+
+            if irq < 0 {
+                return Err(Error::from_errno(irq));
+            }
+
+            Ok(irq::$reg_type::<T>::register(
+                self.as_ref(),
+                irq as u32,
+                flags,
+                name,
+                handler,
+            ))
+        }
+    };
+
+    ($(#[$meta:meta])* $fn_name:ident, $reg_type:ident, $handler_trait:ident, name, $irq_fn:ident) => {
+        $(#[$meta])*
+        pub fn $fn_name<T: irq::$handler_trait + 'static>(
+            &self,
+            name: &'static CStr,
+            flags: irq::flags::Flags,
+            handler: T,
+        ) -> Result<impl PinInit<irq::$reg_type<T>, Error> + '_> {
+            // SAFETY: `self.as_raw` returns a valid pointer to a `struct platform_device`.
+            let irq = unsafe { bindings::$irq_fn(self.as_raw(), name.as_char_ptr()) };
+
+            if irq < 0 {
+                return Err(Error::from_errno(irq));
+            }
+
+            Ok(irq::$reg_type::<T>::register(
+                self.as_ref(),
+                irq as u32,
+                flags,
+                name,
+                handler,
+            ))
+        }
+    };
+}
+
+impl Device<Bound> {
+    gen_irq_accessor!(
+        /// Returns a [`irq::Registration`] for the IRQ at the given index.
+        irq_by_index, Registration, Handler, index, platform_get_irq
+    );
+    gen_irq_accessor!(
+        /// Returns a [`irq::Registration`] for the IRQ with the given name.
+        irq_by_name,
+        Registration,
+        Handler,
+        name,
+        platform_get_irq_byname
+    );
+    gen_irq_accessor!(
+        /// Does the same as [`Self::irq_by_index`], except that it does not
+        /// print an error message if the IRQ cannot be obtained.
+        optional_irq_by_index,
+        Registration,
+        Handler,
+        index,
+        platform_get_irq_optional
+    );
+    gen_irq_accessor!(
+        /// Does the same as [`Self::irq_by_name`], except that it does not
+        /// print an error message if the IRQ cannot be obtained.
+        optional_irq_by_name,
+        Registration,
+        Handler,
+        name,
+        platform_get_irq_byname_optional
+    );
+
+    gen_irq_accessor!(
+        /// Returns a [`irq::ThreadedRegistration`] for the IRQ at the given index.
+        threaded_irq_by_index,
+        ThreadedRegistration,
+        ThreadedHandler,
+        index,
+        platform_get_irq
+    );
+    gen_irq_accessor!(
+        /// Returns a [`irq::ThreadedRegistration`] for the IRQ with the given name.
+        threaded_irq_by_name,
+        ThreadedRegistration,
+        ThreadedHandler,
+        name,
+        platform_get_irq_byname
+    );
+    gen_irq_accessor!(
+        /// Does the same as [`Self::threaded_irq_by_index`], except that it
+        /// does not print an error message if the IRQ cannot be obtained.
+        optional_threaded_irq_by_index,
+        ThreadedRegistration,
+        ThreadedHandler,
+        index,
+        platform_get_irq_optional
+    );
+    gen_irq_accessor!(
+        /// Does the same as [`Self::threaded_irq_by_name`], except that it
+        /// does not print an error message if the IRQ cannot be obtained.
+        optional_threaded_irq_by_name,
+        ThreadedRegistration,
+        ThreadedHandler,
+        name,
+        platform_get_irq_byname_optional
+    );
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
