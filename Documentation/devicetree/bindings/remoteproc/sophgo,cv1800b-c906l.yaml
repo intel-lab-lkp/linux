@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/sophgo,cv1800b-c906l.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sophgo C906L remote processor controller for CV1800B SoC
+
+maintainers:
+  - Junhui Liu <junhui.liu@pigmoral.tech>
+
+description:
+  Document the bindings for the C906L remoteproc component that loads and boots
+  firmwares on the CV1800B SoC.
+
+properties:
+  compatible:
+    const: sophgo,cv1800b-c906l
+
+  firmware-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      The name of the firmware file to load for this remote processor, relative
+      to the firmware search path (typically /lib/firmware/).
+
+  memory-region:
+    description:
+      Phandle to a reserved memory region that is used to load the firmware for
+      this remote processor. The remote processor will use this memory region
+      as its execution memory.
+
+  resets:
+    maxItems: 1
+
+  sophgo,syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      A phandle to the SEC_SYS region, used for configuration of the remote processor.
+
+required:
+  - compatible
+  - firmware-name
+  - memory-region
+  - resets
+  - sophgo,syscon
+
+additionalProperties: false
+
+examples:
+  - |
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        c906l_mem: region@83f40000 {
+            reg = <0x83f40000 0xc0000>;
+            no-map;
+        };
+    };
+
+    c906l-rproc {
+        compatible = "sophgo,cv1800b-c906l";
+        firmware-name = "c906l-firmware.elf";
+        memory-region = <&c906l_mem>;
+        resets = <&rst 294>;
+        sophgo,syscon = <&sec_sys>;
+    };
