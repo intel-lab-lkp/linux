@@ -1289,6 +1289,8 @@ int dfs_cache_remount_fs(struct cifs_sb_info *cifs_sb)
 	 * After reconnecting to a different server, unique ids won't match anymore, so we disable
 	 * serverino. This prevents dentry revalidation to think the dentry are stale (ESTALE).
 	 */
+	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)
+		cifs_dbg(VFS, "Reconnecting to different server, inode numbers won't match anymore\n");
 	cifs_autodisable_serverino(cifs_sb);
 	/*
 	 * Force the use of prefix path to support failover on DFS paths that resolve to targets

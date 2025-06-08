@@ -414,6 +414,7 @@ ffirst_retry:
 		cifsFile->invalidHandle = false;
 	} else if ((rc == -EOPNOTSUPP) &&
 		   (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)) {
+		cifs_dbg(VFS, "Cannot retrieve inode number for entries in dir %s: %d\n", full_path, rc);
 		cifs_autodisable_serverino(cifs_sb);
 		goto ffirst_retry;
 	}
@@ -1008,6 +1009,8 @@ static int cifs_filldir(char *find_entry, struct file *file,
 		fattr.cf_uniqueid = de.ino;
 	} else {
 		fattr.cf_uniqueid = iunique(sb, ROOT_I);
+		if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)
+			cifs_dbg(VFS, "Cannot retrieve inode number for dir entry %.*s\n", name.len, name.name);
 		cifs_autodisable_serverino(cifs_sb);
 	}
 

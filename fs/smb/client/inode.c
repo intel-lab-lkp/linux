@@ -1132,6 +1132,7 @@ static void cifs_set_fattr_ino(int xid, struct cifs_tcon *tcon, struct super_blo
 			fattr->cf_uniqueid = CIFS_I(*inode)->uniqueid;
 		else {
 			fattr->cf_uniqueid = iunique(sb, ROOT_I);
+			cifs_dbg(VFS, "Cannot retrieve inode number for %s: %d\n", full_path, rc);
 			cifs_autodisable_serverino(cifs_sb);
 		}
 		return;
@@ -1627,6 +1628,7 @@ retry_iget5_locked:
 			fattr->cf_flags &= ~CIFS_FATTR_INO_COLLISION;
 
 			if (inode_has_hashed_dentries(inode)) {
+				cifs_dbg(VFS, "Inode number collision detected\n");
 				cifs_autodisable_serverino(CIFS_SB(sb));
 				iput(inode);
 				fattr->cf_uniqueid = iunique(sb, ROOT_I);
@@ -1694,6 +1696,7 @@ iget_root:
 	if (!rc) {
 		if (fattr.cf_flags & CIFS_FATTR_JUNCTION) {
 			fattr.cf_flags &= ~CIFS_FATTR_JUNCTION;
+			cifs_dbg(VFS, "Cannot retrieve attributes for junction point %s: %d\n", path, rc);
 			cifs_autodisable_serverino(cifs_sb);
 		}
 		inode = cifs_iget(sb, &fattr);
