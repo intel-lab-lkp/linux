@@ -977,6 +977,11 @@ static int hdac_hdmi_create_pin_port_muxs(struct hdac_device *hdev,
 	int i = 0;
 	int num_items = hdmi->num_cvt + 1;
 
+	if (num_items >= HDA_MAX_CONNECTIONS) {
+		dev_warn(&hdev->dev, "HDMI: too many connections!\n");
+		return -EINVAL;
+	}
+
 	kc = devm_kzalloc(&hdev->dev, sizeof(*kc), GFP_KERNEL);
 	if (!kc)
 		return -ENOMEM;
