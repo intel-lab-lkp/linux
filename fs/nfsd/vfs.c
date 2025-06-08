@@ -1451,7 +1451,9 @@ nfsd_check_ignore_resizing(struct iattr *iap)
 		iap->ia_valid &= ~ATTR_SIZE;
 }
 
-/* The parent directory should already be locked: */
+/* The parent directory should already be locked.  The lock
+ * will be dropped on error.
+ */
 __be32
 nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		   struct nfsd_attrs *attrs,
@@ -1517,8 +1519,11 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfsd_create_setattr(rqstp, fhp, resfhp, attrs);
 
 out:
-	if (!IS_ERR(dchild))
+	if (!IS_ERR(dchild)) {
+		if (err)
+			inode_unlock(dirp);
 		dput(dchild);
+	}
 	return err;
 
 out_nfserr:
@@ -1573,6 +1578,9 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err != nfs_ok)
 		goto out_unlock;
 	err = nfsd_create_locked(rqstp, fhp, attrs, type, rdev, resfhp);
+	if (err)
+		/* lock will have been dropped */
+		return err;
 	fh_fill_post_attrs(fhp);
 out_unlock:
 	inode_unlock(dentry->d_inode);

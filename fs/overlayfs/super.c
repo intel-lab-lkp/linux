@@ -366,14 +366,17 @@ retry:
 			goto out_dput;
 	} else {
 		err = PTR_ERR(work);
+		inode_unlock(dir);
 		goto out_err;
 	}
 out_unlock:
-	inode_unlock(dir);
+	if (work && !IS_ERR(work))
+		inode_unlock(dir);
 	return work;
 
 out_dput:
 	dput(work);
+	inode_unlock(dir);
 out_err:
 	pr_warn("failed to create directory %s/%s (errno: %i); mounting read-only\n",
 		ofs->config.workdir, name, -err);
@@ -569,7 +572,7 @@ static int ovl_check_rename_whiteout(struct ovl_fs *ofs)
 	temp = ovl_create_temp(ofs, workdir, OVL_CATTR(S_IFREG | 0));
 	err = PTR_ERR(temp);
 	if (IS_ERR(temp))
-		goto out_unlock;
+		return err;
 
 	dest = ovl_lookup_temp(ofs, workdir);
 	err = PTR_ERR(dest);
@@ -620,10 +623,13 @@ static struct dentry *ovl_lookup_or_create(struct ovl_fs *ofs,
 
 	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
 	child = ovl_lookup_upper(ofs, name, parent, len);
-	if (!IS_ERR(child) && !child->d_inode)
+	if (!IS_ERR(child) && !child->d_inode) {
 		child = ovl_create_real(ofs, parent->d_inode, child,
 					OVL_CATTR(mode));
-	inode_unlock(parent->d_inode);
+		if (!IS_ERR(child))
+			inode_unlock(parent->d_inode);
+	} else
+		inode_unlock(parent->d_inode);
 	dput(parent);
 
 	return child;

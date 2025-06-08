@@ -131,8 +131,11 @@ retry:
 		ret = cachefiles_inject_write_error();
 		if (ret == 0)
 			subdir = vfs_mkdir(&nop_mnt_idmap, d_inode(dir), subdir, 0700);
-		else
+		else {
+			/* vfs_mkdir() unlocks on failure so we must too */
+			inode_unlock(d_inode(dir));
 			subdir = ERR_PTR(ret);
+		}
 		if (IS_ERR(subdir)) {
 			trace_cachefiles_vfs_error(NULL, d_inode(dir), ret,
 						   cachefiles_trace_mkdir_error);
@@ -196,9 +199,10 @@ mark_error:
 	return ERR_PTR(-EBUSY);
 
 mkdir_error:
-	inode_unlock(d_inode(dir));
-	if (!IS_ERR(subdir))
+	if (!IS_ERR(subdir)) {
+		inode_unlock(d_inode(dir));
 		dput(subdir);
+	}
 	pr_err("mkdir %s failed with error %d\n", dirname, ret);
 	return ERR_PTR(ret);
 

@@ -518,7 +518,7 @@ static int ovl_set_upper_fh(struct ovl_fs *ofs, struct dentry *upper,
 /*
  * Create and install index entry.
  *
- * Caller must hold i_mutex on indexdir.
+ * Caller must hold i_mutex on indexdir.  It will be unlocked on error.
  */
 static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 			    struct dentry *upper)
@@ -539,16 +539,22 @@ static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 	 * TODO: implement create index for non-dir, so we can call it when
 	 * encoding file handle for non-dir in case index does not exist.
 	 */
-	if (WARN_ON(!d_is_dir(dentry)))
+	if (WARN_ON(!d_is_dir(dentry))) {
+		inode_unlock(dir);
 		return -EIO;
+	}
 
 	/* Directory not expected to be indexed before copy up */
-	if (WARN_ON(ovl_test_flag(OVL_INDEX, d_inode(dentry))))
+	if (WARN_ON(ovl_test_flag(OVL_INDEX, d_inode(dentry)))) {
+		inode_unlock(dir);
 		return -EIO;
+	}
 
 	err = ovl_get_index_name_fh(fh, &name);
-	if (err)
+	if (err) {
+		inode_unlock(dir);
 		return err;
+	}
 
 	temp = ovl_create_temp(ofs, indexdir, OVL_CATTR(S_IFDIR | 0));
 	err = PTR_ERR(temp);
@@ -567,8 +573,10 @@ static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 		dput(index);
 	}
 out:
-	if (err)
+	if (err) {
 		ovl_cleanup(ofs, dir, temp);
+		inode_unlock(dir);
+	}
 	dput(temp);
 free_name:
 	kfree(name.name);
@@ -781,7 +789,8 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	ovl_start_write(c->dentry);
 	inode_lock(wdir);
 	temp = ovl_create_temp(ofs, c->workdir, &cattr);
-	inode_unlock(wdir);
+	if (!IS_ERR(wdir))
+		inode_unlock(wdir);
 	ovl_end_write(c->dentry);
 	ovl_revert_cu_creds(&cc);
 

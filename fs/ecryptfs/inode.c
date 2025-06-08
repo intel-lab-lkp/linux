@@ -520,7 +520,7 @@ static struct dentry *ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				 lower_dentry, mode);
 	rc = PTR_ERR(lower_dentry);
 	if (IS_ERR(lower_dentry))
-		goto out;
+		goto out_unlocked;
 	rc = 0;
 	if (d_unhashed(lower_dentry))
 		goto out;
@@ -532,6 +532,7 @@ static struct dentry *ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	set_nlink(dir, lower_dir->i_nlink);
 out:
 	inode_unlock(lower_dir);
+out_unlocked:
 	if (d_really_is_negative(dentry))
 		d_drop(dentry);
 	return ERR_PTR(rc);

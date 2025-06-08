@@ -138,13 +138,16 @@ kill_whiteout:
 	goto out;
 }
 
+/* dir will be unlocked on failure */
 struct dentry *ovl_create_real(struct ovl_fs *ofs, struct inode *dir,
 			       struct dentry *newdentry, struct ovl_cattr *attr)
 {
 	int err;
 
-	if (IS_ERR(newdentry))
+	if (IS_ERR(newdentry)) {
+		inode_unlock(dir);
 		return newdentry;
+	}
 
 	err = -ESTALE;
 	if (newdentry->d_inode)
@@ -189,13 +192,16 @@ struct dentry *ovl_create_real(struct ovl_fs *ofs, struct inode *dir,
 	}
 out:
 	if (err) {
-		if (!IS_ERR(newdentry))
+		if (!IS_ERR(newdentry)) {
+			inode_unlock(dir);
 			dput(newdentry);
+		}
 		return ERR_PTR(err);
 	}
 	return newdentry;
 }
 
+/* Note workdir will be unlocked on failure */
 struct dentry *ovl_create_temp(struct ovl_fs *ofs, struct dentry *workdir,
 			       struct ovl_cattr *attr)
 {
@@ -309,7 +315,7 @@ static int ovl_create_upper(struct dentry *dentry, struct inode *inode,
 				    attr);
 	err = PTR_ERR(newdentry);
 	if (IS_ERR(newdentry))
-		goto out_unlock;
+		goto out;
 
 	if (ovl_type_merge(dentry->d_parent) && d_is_dir(newdentry) &&
 	    !ovl_allow_offline_changes(ofs)) {
@@ -323,6 +329,7 @@ static int ovl_create_upper(struct dentry *dentry, struct inode *inode,
 		goto out_cleanup;
 out_unlock:
 	inode_unlock(udir);
+out:
 	return err;
 
 out_cleanup:
@@ -367,9 +374,12 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 
 	opaquedir = ovl_create_temp(ofs, workdir, OVL_CATTR(stat.mode));
 	err = PTR_ERR(opaquedir);
-	if (IS_ERR(opaquedir))
-		goto out_unlock;
-
+	if (IS_ERR(opaquedir)) {
+		/* workdir was unlocked, no upperdir */
+		inode_unlock(upperdir->d_inode);
+		mutex_unlock(&upperdir->d_sb->s_vfs_rename_mutex);
+		return ERR_PTR(err);
+	}
 	err = ovl_copy_xattr(dentry->d_sb, &upperpath, opaquedir);
 	if (err)
 		goto out_cleanup;
@@ -455,8 +465,13 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 
 	newdentry = ovl_create_temp(ofs, workdir, cattr);
 	err = PTR_ERR(newdentry);
-	if (IS_ERR(newdentry))
-		goto out_dput;
+	if (IS_ERR(newdentry)) {
+		/* workdir was unlocked, not upperdir */
+		inode_unlock(upperdir->d_inode);
+		mutex_unlock(&upperdir->d_sb->s_vfs_rename_mutex);
+		dput(upper);
+		goto out;
+	}
 
 	/*
 	 * mode could have been mutilated due to umask (e.g. sgid directory)

@@ -4163,9 +4163,10 @@ EXPORT_SYMBOL(kern_path_create);
 
 void done_path_create(struct path *path, struct dentry *dentry)
 {
-	if (!IS_ERR(dentry))
+	if (!IS_ERR(dentry)) {
 		dput(dentry);
-	inode_unlock(path->dentry->d_inode);
+		inode_unlock(path->dentry->d_inode);
+	}
 	mnt_drop_write(path->mnt);
 	path_put(path);
 }
@@ -4328,7 +4329,8 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
  * negative or unhashes it and possibly splices a different one returning it,
  * the original dentry is dput() and the alternate is returned.
  *
- * In case of an error the dentry is dput() and an ERR_PTR() is returned.
+ * In case of an error the dentry is dput(), the parent is unlocked, and
+ * an ERR_PTR() is returned.
  */
 struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 			 struct dentry *dentry, umode_t mode)
@@ -4366,6 +4368,8 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	return dentry;
 
 err:
+	/* Caller only needs to unlock if dentry is not an error */
+	inode_unlock(dir);
 	dput(dentry);
 	return ERR_PTR(error);
 }
