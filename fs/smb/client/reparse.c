@@ -1114,6 +1114,7 @@ static bool wsl_to_fattr(struct cifs_open_info_data *data,
 {
 	struct smb2_file_full_ea_info *ea;
 	bool ignore_missing_eas = false;
+	bool have_xattr_mode = false;
 	bool have_xattr_dev = false;
 	umode_t reparse_mode_type = 0;
 	u32 next = 0;
@@ -1173,6 +1174,7 @@ static bool wsl_to_fattr(struct cifs_open_info_data *data,
 			if (S_DT(reparse_mode_type) != S_DT(le32_to_cpu(*(__le32 *)v)))
 				return false;
 			fattr->cf_mode = (umode_t)le32_to_cpu(*(__le32 *)v);
+			have_xattr_mode = true;
 		} else if (!strncmp(name, SMB2_WSL_XATTR_DEV, nlen)) {
 			fattr->cf_rdev = reparse_mkdev(v);
 			have_xattr_dev = true;
@@ -1182,6 +1184,16 @@ out:
 
 	/* Major and minor numbers for char and block devices are mandatory. */
 	if (!have_xattr_dev && (tag == IO_REPARSE_TAG_LX_CHR || tag == IO_REPARSE_TAG_LX_BLK))
+		return ignore_missing_eas;
+
+	/*
+	 * S_DT part of xattr MODE is mandatory for all WSL reparse points except the WSL symlink.
+	 * Microsoft WSL does not recognize them without xattr MODE too (except the WSL symlink).
+	 * IO_REPARSE_TAG_AF_UNIX is here an exception because this reparse point is used by both
+	 * WSL subsystem and native NT/WinAPI subsystems. And NT/WinAPI creates AF UNIX socket
+	 * without the xattr MODE and recognize it also without the xattr MODE.
+	 */
+	if (!have_xattr_mode && (tag != IO_REPARSE_TAG_AF_UNIX && tag != IO_REPARSE_TAG_LX_SYMLINK))
 		return ignore_missing_eas;
 
 	fattr->cf_mode |= reparse_mode_type;
