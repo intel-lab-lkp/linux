@@ -795,27 +795,6 @@ static int mock_viommu_init(struct iommufd_viommu *viommu,
 	return 0;
 }
 
-static struct iommufd_viommu *mock_viommu_alloc(struct device *dev,
-						struct iommu_domain *domain,
-						struct iommufd_ctx *ictx,
-						unsigned int viommu_type)
-{
-	struct mock_iommu_device *mock_iommu =
-		iommu_get_iommu_dev(dev, struct mock_iommu_device, iommu_dev);
-	struct mock_viommu *mock_viommu;
-
-	if (viommu_type != IOMMU_VIOMMU_TYPE_SELFTEST)
-		return ERR_PTR(-EOPNOTSUPP);
-
-	mock_viommu = iommufd_viommu_alloc(ictx, struct mock_viommu, core,
-					   &mock_viommu_ops);
-	if (IS_ERR(mock_viommu))
-		return ERR_CAST(mock_viommu);
-
-	refcount_inc(&mock_iommu->users);
-	return &mock_viommu->core;
-}
-
 static const struct iommu_ops mock_ops = {
 	/*
 	 * IOMMU_DOMAIN_BLOCKED cannot be returned from def_domain_type()
@@ -835,7 +814,6 @@ static const struct iommu_ops mock_ops = {
 	.user_pasid_table = true,
 	.get_viommu_size = mock_get_viommu_size,
 	.viommu_init = mock_viommu_init,
-	.viommu_alloc = mock_viommu_alloc,
 	.default_domain_ops =
 		&(struct iommu_domain_ops){
 			.free = mock_domain_free,
