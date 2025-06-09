@@ -2464,7 +2464,7 @@ const struct snd_pcm_chmap_elem snd_pcm_alt_chmaps[] = {
 };
 EXPORT_SYMBOL_GPL(snd_pcm_alt_chmaps);
 
-static bool valid_chmap_channels(const struct snd_pcm_chmap *info, int ch)
+static __always_inline bool valid_chmap_channels(const struct snd_pcm_chmap *info, int ch)
 {
 	if (ch > info->max_channels)
 		return false;
@@ -2530,8 +2530,9 @@ static int pcm_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 		return -EINVAL;
 	if (size < 8)
 		return -ENOMEM;
-	if (put_user(SNDRV_CTL_TLVT_CONTAINER, tlv))
+	if (!user_write_access_begin(tlv, size))
 		return -EFAULT;
+	unsafe_put_user(SNDRV_CTL_TLVT_CONTAINER, tlv, Efault);
 	size -= 8;
 	dst = tlv + 2;
 	for (map = info->chmap; map->channels; map++) {
@@ -2539,26 +2540,32 @@ static int pcm_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 		if (!valid_chmap_channels(info, map->channels))
 			continue;
 		if (size < 8)
-			return -ENOMEM;
-		if (put_user(SNDRV_CTL_TLVT_CHMAP_FIXED, dst) ||
-		    put_user(chs_bytes, dst + 1))
-			return -EFAULT;
+			goto Enomem;
+		unsafe_put_user(SNDRV_CTL_TLVT_CHMAP_FIXED, dst, Efault);
+		unsafe_put_user(chs_bytes, dst + 1, Efault);
 		dst += 2;
 		size -= 8;
 		count += 8;
 		if (size < chs_bytes)
-			return -ENOMEM;
+			goto Enomem;
 		size -= chs_bytes;
 		count += chs_bytes;
-		for (c = 0; c < map->channels; c++) {
-			if (put_user(map->map[c], dst))
-				return -EFAULT;
-			dst++;
-		}
+		for (c = 0; c < map->channels; c++)
+			unsafe_put_user(map->map[c], dst++, Efault);
 	}
-	if (put_user(count, tlv + 1))
-		return -EFAULT;
+	unsafe_put_user(count, tlv + 1, Efault);
+	user_write_access_end();
 	return 0;
+
+Enomem:
+	user_write_access_end();
+
+	return -ENOMEM;
+
+Efault:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 
 static void pcm_chmap_ctl_private_free(struct snd_kcontrol *kcontrol)

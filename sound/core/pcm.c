@@ -107,15 +107,17 @@ static int snd_pcm_control_ioctl(struct snd_card *card,
 			struct snd_pcm_substream *substream;
 
 			info = (struct snd_pcm_info __user *)arg;
-			if (get_user(device, &info->device))
+
+			if (!user_read_access_begin(info, sizeof(*info)))
 				return -EFAULT;
-			if (get_user(stream, &info->stream))
-				return -EFAULT;
+			unsafe_get_user(device, &info->device, Efault);
+			unsafe_get_user(stream, &info->stream, Efault);
 			if (stream < 0 || stream > 1)
-				return -EINVAL;
+				goto Einval;
 			stream = array_index_nospec(stream, 2);
-			if (get_user(subdevice, &info->subdevice))
-				return -EFAULT;
+			unsafe_get_user(subdevice, &info->subdevice, Efault);
+			user_read_access_end();
+
 			guard(mutex)(&register_mutex);
 			pcm = snd_pcm_get(card, device);
 			if (pcm == NULL)
@@ -145,6 +147,16 @@ static int snd_pcm_control_ioctl(struct snd_card *card,
 		}
 	}
 	return -ENOIOCTLCMD;
+
+Einval:
+	user_read_access_end();
+
+	return -EINVAL;
+
+Efault:
+	user_read_access_end();
+
+	return -EFAULT;
 }
 
 #define FORMAT(v) [SNDRV_PCM_FORMAT_##v] = #v

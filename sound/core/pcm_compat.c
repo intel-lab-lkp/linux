@@ -91,18 +91,22 @@ static int snd_pcm_ioctl_sw_params_compat(struct snd_pcm_substream *substream,
 	int err;
 
 	memset(&params, 0, sizeof(params));
-	if (get_user(params.tstamp_mode, &src->tstamp_mode) ||
-	    get_user(params.period_step, &src->period_step) ||
-	    get_user(params.sleep_min, &src->sleep_min) ||
-	    get_user(params.avail_min, &src->avail_min) ||
-	    get_user(params.xfer_align, &src->xfer_align) ||
-	    get_user(params.start_threshold, &src->start_threshold) ||
-	    get_user(params.stop_threshold, &src->stop_threshold) ||
-	    get_user(params.silence_threshold, &src->silence_threshold) ||
-	    get_user(params.silence_size, &src->silence_size) ||
-	    get_user(params.tstamp_type, &src->tstamp_type) ||
-	    get_user(params.proto, &src->proto))
+
+	if (!user_read_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_get_user(params.tstamp_mode, &src->tstamp_mode, Efault);
+	unsafe_get_user(params.period_step, &src->period_step, Efault);
+	unsafe_get_user(params.sleep_min, &src->sleep_min, Efault);
+	unsafe_get_user(params.avail_min, &src->avail_min, Efault);
+	unsafe_get_user(params.xfer_align, &src->xfer_align, Efault);
+	unsafe_get_user(params.start_threshold, &src->start_threshold, Efault);
+	unsafe_get_user(params.stop_threshold, &src->stop_threshold, Efault);
+	unsafe_get_user(params.silence_threshold, &src->silence_threshold, Efault);
+	unsafe_get_user(params.silence_size, &src->silence_size, Efault);
+	unsafe_get_user(params.tstamp_type, &src->tstamp_type, Efault);
+	unsafe_get_user(params.proto, &src->proto, Efault);
+	user_read_access_end();
+
 	/*
 	 * Check silent_size parameter.  Since we have 64bit boundary,
 	 * silence_size must be compared with the 32bit boundary.
@@ -116,6 +120,11 @@ static int snd_pcm_ioctl_sw_params_compat(struct snd_pcm_substream *substream,
 	if (boundary && put_user(boundary, &src->boundary))
 		return -EFAULT;
 	return err;
+
+Efault:
+	user_read_access_end();
+
+	return -EFAULT;
 }
 
 struct snd_pcm_channel_info32 {
@@ -131,20 +140,37 @@ static int snd_pcm_ioctl_channel_info_compat(struct snd_pcm_substream *substream
 	struct snd_pcm_channel_info info;
 	int err;
 
-	if (get_user(info.channel, &src->channel) ||
-	    get_user(info.offset, &src->offset) ||
-	    get_user(info.first, &src->first) ||
-	    get_user(info.step, &src->step))
+	if (!user_read_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_get_user(info.channel, &src->channel, Efault_rd);
+	unsafe_get_user(info.offset, &src->offset, Efault_rd);
+	unsafe_get_user(info.first, &src->first, Efault_rd);
+	unsafe_get_user(info.step, &src->step, Efault_rd);
+	user_read_access_end();
+
 	err = snd_pcm_channel_info(substream, &info);
 	if (err < 0)
 		return err;
-	if (put_user(info.channel, &src->channel) ||
-	    put_user(info.offset, &src->offset) ||
-	    put_user(info.first, &src->first) ||
-	    put_user(info.step, &src->step))
+
+	if (!user_write_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_put_user(info.channel, &src->channel, Efault_wr);
+	unsafe_put_user(info.offset, &src->offset, Efault_wr);
+	unsafe_put_user(info.first, &src->first, Efault_wr);
+	unsafe_put_user(info.step, &src->step, Efault_wr);
+	user_write_access_end();
+
 	return err;
+
+Efault_rd:
+	user_read_access_end();
+
+	return -EFAULT;
+
+Efault_wr:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 
 #ifdef CONFIG_X86_X32_ABI
@@ -261,9 +287,12 @@ static int snd_pcm_ioctl_hw_params_compat(struct snd_pcm_substream *substream,
 	}
 	if (err < 0)
 		return err;
-	if (copy_to_user(data32, data, sizeof(*data32)) ||
-	    put_user(data->fifo_size, &data32->fifo_size))
+
+	if (!user_write_access_begin(data32, sizeof(*data32)))
 		return -EFAULT;
+	unsafe_copy_to_user(data32, data, sizeof(*data32), Efault);
+	unsafe_put_user(data->fifo_size, &data32->fifo_size, Efault);
+	user_write_access_end();
 
 	if (! refine) {
 		unsigned int new_boundary = recalculate_boundary(runtime);
@@ -271,6 +300,11 @@ static int snd_pcm_ioctl_hw_params_compat(struct snd_pcm_substream *substream,
 			runtime->boundary = new_boundary;
 	}
 	return err;
+
+Efault:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 
 
@@ -296,9 +330,11 @@ static int snd_pcm_ioctl_xferi_compat(struct snd_pcm_substream *substream,
 	if (substream->runtime->state == SNDRV_PCM_STATE_OPEN)
 		return -EBADFD;
 
-	if (get_user(buf, &data32->buf) ||
-	    get_user(frames, &data32->frames))
+	if (!user_read_access_begin(data32, sizeof(*data32)))
 		return -EFAULT;
+	unsafe_get_user(buf, &data32->buf, Efault);
+	unsafe_get_user(frames, &data32->frames, Efault);
+	user_read_access_end();
 
 	if (dir == SNDRV_PCM_STREAM_PLAYBACK)
 		err = snd_pcm_lib_write(substream, compat_ptr(buf), frames);
@@ -310,6 +346,11 @@ static int snd_pcm_ioctl_xferi_compat(struct snd_pcm_substream *substream,
 	if (put_user(err, &data32->result))
 		return -EFAULT;
 	return 0;
+
+Efault:
+	user_read_access_end();
+
+	return -EFAULT;
 }
 
 
@@ -345,20 +386,28 @@ static int snd_pcm_ioctl_xfern_compat(struct snd_pcm_substream *substream,
 	ch = substream->runtime->channels;
 	if (ch > 128)
 		return -EINVAL;
-	if (get_user(buf, &data32->bufs) ||
-	    get_user(frames, &data32->frames))
+
+	if (!user_read_access_begin(data32, sizeof(*data32)))
 		return -EFAULT;
+	unsafe_get_user(buf, &data32->bufs, Efault);
+	unsafe_get_user(frames, &data32->frames, Efault);
+	user_read_access_end();
+
 	bufptr = compat_ptr(buf);
 	bufs = kmalloc_array(ch, sizeof(void __user *), GFP_KERNEL);
 	if (bufs == NULL)
 		return -ENOMEM;
+
+	if (!user_read_access_begin(bufptr, sizeof(*bufptr) * ch))
+		return -EFAULT;
 	for (i = 0; i < ch; i++) {
 		u32 ptr;
-		if (get_user(ptr, bufptr))
-			return -EFAULT;
+		unsafe_get_user(ptr, bufptr, Efault);
 		bufs[i] = compat_ptr(ptr);
 		bufptr++;
 	}
+	user_read_access_end();
+
 	if (dir == SNDRV_PCM_STREAM_PLAYBACK)
 		err = snd_pcm_lib_writev(substream, bufs, frames);
 	else
@@ -368,6 +417,11 @@ static int snd_pcm_ioctl_xfern_compat(struct snd_pcm_substream *substream,
 			return -EFAULT;
 	}
 	return err;
+
+Efault:
+	user_read_access_end();
+
+	return -EFAULT;
 }
 
 #ifdef CONFIG_X86_X32_ABI
@@ -418,10 +472,13 @@ static int snd_pcm_ioctl_sync_ptr_x32(struct snd_pcm_substream *substream,
 	if (snd_BUG_ON(!runtime))
 		return -EINVAL;
 
-	if (get_user(sflags, &src->flags) ||
-	    get_user(scontrol.appl_ptr, &src->c.control.appl_ptr) ||
-	    get_user(scontrol.avail_min, &src->c.control.avail_min))
+	if (!user_read_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_get_user(sflags, &src->flags, Efault_rd);
+	unsafe_get_user(scontrol.appl_ptr, &src->c.control.appl_ptr, Efault_rd);
+	unsafe_get_user(scontrol.avail_min, &src->c.control.avail_min, Efault_rd);
+	user_read_access_end();
+
 	if (sflags & SNDRV_PCM_SYNC_PTR_HWSYNC) {
 		err = snd_pcm_hwsync(substream);
 		if (err < 0)
@@ -450,18 +507,31 @@ static int snd_pcm_ioctl_sync_ptr_x32(struct snd_pcm_substream *substream,
 	}
 	if (!(sflags & SNDRV_PCM_SYNC_PTR_APPL))
 		snd_pcm_dma_buffer_sync(substream, SNDRV_DMA_SYNC_DEVICE);
-	if (put_user(sstatus.state, &src->s.status.state) ||
-	    put_user(sstatus.hw_ptr, &src->s.status.hw_ptr) ||
-	    put_user(sstatus.tstamp.tv_sec, &src->s.status.tstamp_sec) ||
-	    put_user(sstatus.tstamp.tv_nsec, &src->s.status.tstamp_nsec) ||
-	    put_user(sstatus.suspended_state, &src->s.status.suspended_state) ||
-	    put_user(sstatus.audio_tstamp.tv_sec, &src->s.status.audio_tstamp_sec) ||
-	    put_user(sstatus.audio_tstamp.tv_nsec, &src->s.status.audio_tstamp_nsec) ||
-	    put_user(scontrol.appl_ptr, &src->c.control.appl_ptr) ||
-	    put_user(scontrol.avail_min, &src->c.control.avail_min))
+
+	if (!user_write_access_begin(src, sizeof(*src)))
 		return -EFAULT;
+	unsafe_put_user(sstatus.state, &src->s.status.state, Efault_wr);
+	unsafe_put_user(sstatus.hw_ptr, &src->s.status.hw_ptr, Efault_wr);
+	unsafe_put_user(sstatus.tstamp.tv_sec, &src->s.status.tstamp_sec, Efault_wr);
+	unsafe_put_user(sstatus.tstamp.tv_nsec, &src->s.status.tstamp_nsec, Efault_wr);
+	unsafe_put_user(sstatus.suspended_state, &src->s.status.suspended_state, Efault_wr);
+	unsafe_put_user(sstatus.audio_tstamp.tv_sec, &src->s.status.audio_tstamp_sec, Efault_wr);
+	unsafe_put_user(sstatus.audio_tstamp.tv_nsec, &src->s.status.audio_tstamp_nsec, Efault_wr);
+	unsafe_put_user(scontrol.appl_ptr, &src->c.control.appl_ptr, Efault_wr);
+	unsafe_put_user(scontrol.avail_min, &src->c.control.avail_min), Efault_wr);
+	user_write_access_end();
 
 	return 0;
+
+Efault_rd:
+	user_read_access_end();
+
+	return -EFAULT;
+
+Efault_wr:
+	user_write_access_end();
+
+	return -EFAULT;
 }
 #endif /* CONFIG_X86_X32_ABI */
 
