@@ -46,3 +46,13 @@ config B53_SERDES
 	default ARCH_BCM_NSP
 	help
 	  Select to enable support for SerDes on e.g: Northstar Plus SoCs.
+
+config B53_QUIRK_IMP_RGMII_IMPLIES_DELAYS
+	bool "Treat RGMII as RGMII-ID for CPU port"
+	depends on B53
+	default y
+	help
+	  Select to enable RGMII delays also in RGMII (no ID) mode for the CPU
+	  port to mirror old driver behavior.
+	  Enable this if your board wrongly uses RGMII instead of RGMII-ID as
+	  the phy interface, but actually requires internal delays enabled.
