@@ -1652,13 +1652,24 @@ static int bnxt_srxfh(struct bnxt *bp, struct ethtool_rxnfc *cmd)
 	u32 rss_hash_cfg = bp->rss_hash_cfg;
 	int tuple, rc = 0;
 
-	if (cmd->data == RXH_4TUPLE)
+	switch (cmd->data) {
+	case RXH_4TUPLE | RXH_IP6_FL:
+	case RXH_4TUPLE:
 		tuple = 4;
-	else if (cmd->data == RXH_2TUPLE)
+		break;
+	case RXH_2TUPLE | RXH_IP6_FL:
+	case RXH_2TUPLE:
 		tuple = 2;
-	else if (!cmd->data)
+		break;
+	case 0:
 		tuple = 0;
-	else
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (cmd->data & RXH_IP6_FL &&
+	    !(bp->rss_cap & BNXT_RSS_CAP_IPV6_FLOW_LABEL_RSS_CAP))
 		return -EINVAL;
 
 	if (cmd->flow_type == TCP_V4_FLOW) {
@@ -1728,6 +1739,13 @@ static int bnxt_srxfh(struct bnxt *bp, struct ethtool_rxnfc *cmd)
 			rss_hash_cfg |= VNIC_RSS_CFG_REQ_HASH_TYPE_IPV6;
 		else if (!tuple)
 			rss_hash_cfg &= ~VNIC_RSS_CFG_REQ_HASH_TYPE_IPV6;
+
+		if (cmd->data & RXH_IP6_FL)
+			rss_hash_cfg |=
+				VNIC_RSS_CFG_REQ_HASH_TYPE_IPV6_FLOW_LABEL;
+		else
+			rss_hash_cfg &=
+				~VNIC_RSS_CFG_REQ_HASH_TYPE_IPV6_FLOW_LABEL;
 		break;
 	}
 
