@@ -145,6 +145,7 @@ properties:
       - description: TI bone green variants based on TI AM335
         items:
           - enum:
+              - ti,am335x-bone-green-eco
               - ti,am335x-bone-green-wireless
           - const: ti,am335x-bone-green
           - const: ti,am335x-bone
