@@ -2483,6 +2483,15 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 		set_bit(HCI_QUIRK_NON_PERSISTENT_SETUP, &hdev->quirks);
 		hdev->shutdown = qca_power_off;
 	}
+	/* If the BT SoC BT_EN is controlled by hardware, disable the AUTO_OFF
+	 * feature. Otherwise, BT will close the HCI layer except for
+	 * the UART after firmware download. However, the SoC remains active.
+	 * If the SoC sends a packet to the Host after firmware download,
+	 * the Host cannot respond since the HCI layer is closed, which will
+	 * cause the firmware to enter an incorrect state.
+	 */
+	else
+		hci_dev_clear_flag(hdev, HCI_AUTO_OFF);
 
 	if (data) {
 		/* Wideband speech support must be set per driver since it can't
