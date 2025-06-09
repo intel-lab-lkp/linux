@@ -881,6 +881,7 @@ static int hfc_reset_param(struct rtw89_dev *rtwdev)
 
 	switch (rtwdev->hci.type) {
 	case RTW89_HCI_TYPE_PCIE:
+	case RTW89_HCI_TYPE_USB:
 		break;
 	default:
 		return -EINVAL;
