@@ -57,7 +57,8 @@ static void rtw89_ps_power_mode_change_with_hci(struct rtw89_dev *rtwdev,
 static void rtw89_ps_power_mode_change(struct rtw89_dev *rtwdev, bool enter)
 {
 	if (rtwdev->chip->low_power_hci_modes & BIT(rtwdev->ps_mode) &&
-	    !test_bit(RTW89_FLAG_WOWLAN, rtwdev->flags))
+	    !test_bit(RTW89_FLAG_WOWLAN, rtwdev->flags) &&
+	    rtwdev->hci.type == RTW89_HCI_TYPE_PCIE)
 		rtw89_ps_power_mode_change_with_hci(rtwdev, enter);
 	else
 		rtw89_mac_power_mode_change(rtwdev, enter);

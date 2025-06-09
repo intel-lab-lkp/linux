@@ -1336,6 +1336,9 @@ static void rtw89_mac_send_rpwm(struct rtw89_dev *rtwdev,
 {
 	u16 request;
 
+	if (rtwdev->hci.type != RTW89_HCI_TYPE_PCIE)
+		return;
+
 	spin_lock_bh(&rtwdev->rpwm_lock);
 
 	request = rtw89_read16(rtwdev, R_AX_RPWM);
@@ -1411,6 +1414,9 @@ void rtw89_mac_power_mode_change(struct rtw89_dev *rtwdev, bool enter)
 	unsigned long delay = enter ? 10 : 150;
 	int ret;
 	int i;
+
+	if (rtwdev->hci.type != RTW89_HCI_TYPE_PCIE)
+		return;
 
 	if (enter)
 		state = rtw89_mac_get_req_pwr_state(rtwdev);
