@@ -30,6 +30,7 @@
 	interrupt-parent = <&gic500>;
 
 	pcie0_ep: pcie-ep@f102000 {
+		bootph-all;
 		compatible = "ti,am64-pcie-ep", "ti,j721e-pcie-ep";
 		reg = <0x00 0x0f102000 0x00 0x1000>,
 		      <0x00 0x0f100000 0x00 0x400>,
