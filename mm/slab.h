@@ -59,8 +59,8 @@ struct slab {
 				struct list_head slab_list;
 #ifdef CONFIG_SLUB_CPU_PARTIAL
 				struct {
-					struct slab *next;
 					int slabs;	/* Nr of slabs left */
+					struct slab *next;
 				};
 #endif
 			};
