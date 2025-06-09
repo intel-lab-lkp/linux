@@ -181,7 +181,7 @@ unsafe impl Sync for Firmware {}
 /// module! {
 ///    type: MyModule,
 ///    name: "module_firmware_test",
-///    author: "Rust for Linux",
+///    authors: ["Rust for Linux"],
 ///    description: "module_firmware! test module",
 ///    license: "GPL",
 /// }
