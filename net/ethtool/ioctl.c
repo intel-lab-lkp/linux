@@ -1060,6 +1060,27 @@ static int ethtool_check_flow_types(struct net_device *dev, u32 input_xfrm)
 	return 0;
 }
 
+static int
+ethtool_srxfh_check(struct net_device *dev, const struct ethtool_rxnfc *info)
+{
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	int rc;
+
+	if (ops->get_rxfh) {
+		struct ethtool_rxfh_param rxfh = {};
+
+		rc = ops->get_rxfh(dev, &rxfh);
+		if (rc)
+			return rc;
+
+		rc = ethtool_check_xfrm_rxfh(rxfh.input_xfrm, info->data);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
 static noinline_for_stack int ethtool_set_rxnfc(struct net_device *dev,
 						u32 cmd, void __user *useraddr)
 {
@@ -1087,14 +1108,8 @@ static noinline_for_stack int ethtool_set_rxnfc(struct net_device *dev,
 			return -EINVAL;
 	}
 
-	if (cmd == ETHTOOL_SRXFH && ops->get_rxfh) {
-		struct ethtool_rxfh_param rxfh = {};
-
-		rc = ops->get_rxfh(dev, &rxfh);
-		if (rc)
-			return rc;
-
-		rc = ethtool_check_xfrm_rxfh(rxfh.input_xfrm, info.data);
+	if (cmd == ETHTOOL_SRXFH) {
+		rc = ethtool_srxfh_check(dev, &info);
 		if (rc)
 			return rc;
 	}
