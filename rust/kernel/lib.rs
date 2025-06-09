@@ -85,6 +85,7 @@ pub mod jump_label;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 pub mod list;
+pub mod math;
 pub mod miscdevice;
 pub mod mm;
 #[cfg(CONFIG_NET)]
