@@ -385,6 +385,9 @@ static inline bool homa_make_header_avl(struct sk_buff *skb)
 
 extern unsigned int homa_net_id;
 
+int      homa_xmit_control(enum homa_packet_type type, void *contents,
+			   size_t length, struct homa_rpc *rpc);
+
 /**
  * homa_net_from_net() - Return the struct homa_net associated with a particular
  * struct net.
