@@ -387,6 +387,7 @@ extern unsigned int homa_net_id;
 
 int      homa_xmit_control(enum homa_packet_type type, void *contents,
 			   size_t length, struct homa_rpc *rpc);
+void     homa_xmit_data(struct homa_rpc *rpc, bool force);
 
 /**
  * homa_net_from_net() - Return the struct homa_net associated with a particular
