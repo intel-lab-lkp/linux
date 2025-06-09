@@ -332,7 +332,52 @@ out:
 	return ret;
 }
 
+static void btrfs_bdev_mark_dead(struct block_device *bdev, bool surprise)
+{
+	struct btrfs_fs_info *fs_info = get_bdev_fs_info(bdev);
+	struct btrfs_dev_lookup_args args = { .devt = bdev->bd_dev, };
+	struct btrfs_device *device;
+
+	if (!fs_info)
+		return;
+
+	mutex_lock(&fs_info->fs_devices->device_list_mutex);
+	device = btrfs_find_device(fs_info->fs_devices, &args);
+	if (unlikely(!device)) {
+		btrfs_crit(fs_info, "can't find a btrfs_device for %pg", bdev);
+		goto out;
+	}
+	if (surprise)
+		btrfs_warn_in_rcu(fs_info, "devid %llu device %pg path %s is dead",
+				  device->devid, device->bdev, btrfs_dev_name(device));
+	else
+		btrfs_info_in_rcu(fs_info, "devid %llu device %pg path %s is going to be removed",
+				  device->devid, device->bdev, btrfs_dev_name(device));
+	set_bit(BTRFS_DEV_STATE_MISSING, &device->dev_state);
+	device->fs_devices->missing_devices++;
+	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
+		list_del_init(&device->dev_alloc_list);
+		clear_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state);
+		device->fs_devices->rw_devices--;
+	}
+	/*
+	 * If we can no longer maintain the RW opeartions for the fs, mark the
+	 * fs error.
+	 */
+	if (!btrfs_check_rw_degradable(fs_info, device)) {
+		btrfs_handle_fs_error(fs_info, -EIO,
+			"btrfs can no longer maintain read-write due to missing device(s)");
+	} else  {
+		btrfs_set_opt(fs_info->mount_opt, DEGRADED);
+		btrfs_warn(fs_info, "filesystem degraded due to missing device(s)");
+	}
+out:
+	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
+	put_bdev_fs_info(fs_info);
+}
+
 const struct blk_holder_ops btrfs_bdev_ops = {
+	.mark_dead = btrfs_bdev_mark_dead,
 	.sync = btrfs_bdev_sync,
 	.freeze = btrfs_bdev_freeze,
 	.thaw = btrfs_bdev_unfreeze,
@@ -6868,6 +6913,9 @@ static bool dev_args_match_fs_devices(const struct btrfs_dev_lookup_args *args,
 static bool dev_args_match_device(const struct btrfs_dev_lookup_args *args,
 				  const struct btrfs_device *device)
 {
+	if (args->devt)
+		return device->devt == args->devt;
+
 	if (args->missing) {
 		if (test_bit(BTRFS_DEV_STATE_IN_FS_METADATA, &device->dev_state) &&
 		    !device->bdev)

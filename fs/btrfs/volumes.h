@@ -651,6 +651,11 @@ struct btrfs_balance_control {
  */
 struct btrfs_dev_lookup_args {
 	u64 devid;
+	/*
+	 * If @devt is set (non-zero), then other args will be ignored since the
+	 * non-zero dev_t can locate the device uniquely.
+	 */
+	dev_t devt;
 	u8 *uuid;
 	u8 *fsid;
 	bool missing;
