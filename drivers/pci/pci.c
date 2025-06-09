@@ -1376,8 +1376,9 @@ int pci_power_up(struct pci_dev *dev)
 
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 	if (PCI_POSSIBLE_ERROR(pmcsr)) {
-		pci_err(dev, "Unable to change power state from %s to D0, device inaccessible\n",
-			pci_power_name(dev->current_state));
+		if (dev->error_state != pci_channel_io_perm_failure)
+			pci_err(dev, "Unable to change power state from %s to D0, device inaccessible\n",
+				pci_power_name(dev->current_state));
 		dev->current_state = PCI_D3cold;
 		return -EIO;
 	}
