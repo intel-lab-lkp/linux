@@ -304,8 +304,8 @@ static int xtrng_hwrng_trng_read(struct hwrng *hwrng, void *data, size_t max, bo
 		if (ret < 0)
 			break;
 
-		memcpy(data + i, buf, min(ret, (max - i)));
-		i += min(ret, (max - i));
+		memcpy(data + i, buf, min_t(int, ret, (max - i)));
+		i += min_t(int, ret, (max - i));
 	}
 	mutex_unlock(&rng->lock);
 
