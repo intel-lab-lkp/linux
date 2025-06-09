@@ -1600,7 +1600,7 @@ static int __init init_hugetlbfs_fs(void)
 {
 	struct vfsmount *mnt;
 	struct hstate *h;
-	int error;
+	int error = -ENOMEM;
 	int i;
 
 	if (!hugepages_supported()) {
@@ -1608,7 +1608,6 @@ static int __init init_hugetlbfs_fs(void)
 		return -ENOTSUPP;
 	}
 
-	error = -ENOMEM;
 	hugetlbfs_inode_cachep = kmem_cache_create("hugetlbfs_inode_cache",
 					sizeof(struct hugetlbfs_inode_info),
 					0, SLAB_ACCOUNT, init_once);
