@@ -15,6 +15,9 @@ properties:
       - enum:
           - brcm,bcm2711-pcie # The Raspberry Pi 4
           - brcm,bcm2712-pcie # Raspberry Pi 5
+          - brcm,bcm3162-pcie # Broadcom DOCSIS 4.0 CMTS w/ 64b ARM
+          - brcm,bcm3390-pcie # Broadcom DOCSIS 3.1 CM w/ 32b ARM
+          - brcm,bcm3392-pcie # Broadcom DOCSIS 3.1 CM w/ 64b ARM
           - brcm,bcm4908-pcie
           - brcm,bcm7211-pcie # Broadcom STB version of RPi4
           - brcm,bcm7216-pcie # Broadcom 7216 Arm
@@ -23,6 +26,7 @@ properties:
           - brcm,bcm7435-pcie # Broadcom 7435 MIPs
           - brcm,bcm7445-pcie # Broadcom 7445 Arm
           - brcm,bcm7712-pcie # Broadcom STB sibling of Rpi 5
+          - brcm,bcm33940-pcie # Broadcom DOCSIS 4.0 CM w/ 64b ARM
 
   reg:
     maxItems: 1
