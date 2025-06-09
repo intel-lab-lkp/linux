@@ -57,6 +57,8 @@ struct cpuidle_monitor {
 	cstate_t *hw_states;
 	int (*start) (void);
 	int (*stop) (void);
+	int (*cpu_start) (unsigned int cpu);
+	int (*cpu_stop) (unsigned int cpu);
 	struct cpuidle_monitor* (*do_register) (void);
 	void (*unregister)(void);
 	unsigned int overflow_s;

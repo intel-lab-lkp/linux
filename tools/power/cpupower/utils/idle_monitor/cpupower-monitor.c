@@ -304,12 +304,29 @@ int fork_it(char **argv)
 	unsigned long long timediff;
 	pid_t child_pid;
 	struct timespec start, end;
+	int cpu;
 
 	child_pid = fork();
 	clock_gettime(CLOCK_REALTIME, &start);
 
-	for (num = 0; num < avail_monitors; num++)
-		monitors[num]->start();
+	/* Call global start callbacks first */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->start)
+			monitors[num]->start();
+	}
+
+	/* Call per-CPU start callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->cpu_start) {
+			for (cpu = 0; cpu < cpu_count; cpu++) {
+				if (monitors[num]->flags.per_cpu_schedule) {
+					if (bind_cpu(cpu))
+						continue;
+				}
+				monitors[num]->cpu_start(cpu);
+			}
+		}
+	}
 
 	if (!child_pid) {
 		/* child */
@@ -332,8 +349,25 @@ int fork_it(char **argv)
 		}
 	}
 	clock_gettime(CLOCK_REALTIME, &end);
-	for (num = 0; num < avail_monitors; num++)
-		monitors[num]->stop();
+
+	/* Call per-CPU stop callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->cpu_stop) {
+			for (cpu = 0; cpu < cpu_count; cpu++) {
+				if (monitors[num]->flags.per_cpu_schedule) {
+					if (bind_cpu(cpu))
+						continue;
+				}
+				monitors[num]->cpu_stop(cpu);
+			}
+		}
+	}
+
+	/* Call global stop callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->stop)
+			monitors[num]->stop();
+	}
 
 	timediff = timespec_diff_us(start, end);
 	if (WIFEXITED(status))
@@ -352,10 +386,25 @@ int do_interval_measure(int i)
 		for (cpu = 0; cpu < cpu_count; cpu++)
 			bind_cpu(cpu);
 
+	/* Call global start callbacks first */
 	for (num = 0; num < avail_monitors; num++) {
 		dprint("HW C-state residency monitor: %s - States: %d\n",
 		       monitors[num]->name, monitors[num]->hw_states_num);
-		monitors[num]->start();
+		if (monitors[num]->start)
+			monitors[num]->start();
+	}
+
+	/* Call per-CPU start callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->cpu_start) {
+			for (cpu = 0; cpu < cpu_count; cpu++) {
+				if (monitors[num]->flags.per_cpu_schedule) {
+					if (bind_cpu(cpu))
+						continue;
+				}
+				monitors[num]->cpu_start(cpu);
+			}
+		}
 	}
 
 	sleep(i);
@@ -364,9 +413,24 @@ int do_interval_measure(int i)
 		for (cpu = 0; cpu < cpu_count; cpu++)
 			bind_cpu(cpu);
 
-	for (num = 0; num < avail_monitors; num++)
-		monitors[num]->stop();
+	/* Call per-CPU stop callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->cpu_stop) {
+			for (cpu = 0; cpu < cpu_count; cpu++) {
+				if (monitors[num]->flags.per_cpu_schedule) {
+					if (bind_cpu(cpu))
+						continue;
+				}
+				monitors[num]->cpu_stop(cpu);
+			}
+		}
+	}
 
+	/* Call global stop callbacks */
+	for (num = 0; num < avail_monitors; num++) {
+		if (monitors[num]->stop)
+			monitors[num]->stop();
+	}
 
 	return 0;
 }

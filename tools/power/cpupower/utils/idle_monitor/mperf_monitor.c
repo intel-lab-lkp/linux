@@ -224,27 +224,27 @@ static int mperf_get_count_freq(unsigned int id, unsigned long long *count,
 
 static int mperf_start(void)
 {
-	int cpu;
-
-	for (cpu = 0; cpu < cpu_count; cpu++) {
-		clock_gettime(CLOCK_REALTIME, &time_start[cpu]);
-		mperf_get_tsc(&tsc_at_measure_start[cpu]);
-		mperf_init_stats(cpu);
-	}
-
 	return 0;
 }
 
 static int mperf_stop(void)
 {
-	int cpu;
+	return 0;
+}
 
-	for (cpu = 0; cpu < cpu_count; cpu++) {
-		mperf_measure_stats(cpu);
-		mperf_get_tsc(&tsc_at_measure_end[cpu]);
-		clock_gettime(CLOCK_REALTIME, &time_end[cpu]);
-	}
+static int mperf_cpu_start(unsigned int cpu)
+{
+	clock_gettime(CLOCK_REALTIME, &time_start[cpu]);
+	mperf_get_tsc(&tsc_at_measure_start[cpu]);
+	mperf_init_stats(cpu);
+	return 0;
+}
 
+static int mperf_cpu_stop(unsigned int cpu)
+{
+	mperf_measure_stats(cpu);
+	mperf_get_tsc(&tsc_at_measure_end[cpu]);
+	clock_gettime(CLOCK_REALTIME, &time_end[cpu]);
 	return 0;
 }
 
@@ -373,6 +373,8 @@ struct cpuidle_monitor mperf_monitor = {
 	.hw_states		= mperf_cstates,
 	.start			= mperf_start,
 	.stop			= mperf_stop,
+	.cpu_start		= mperf_cpu_start,
+	.cpu_stop		= mperf_cpu_stop,
 	.do_register		= mperf_register,
 	.unregister		= mperf_unregister,
 	.flags.needs_root	= 1,
