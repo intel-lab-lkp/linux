@@ -183,6 +183,12 @@ resources, scheduled and executed.
   BH work items cannot sleep. All other features such as delayed queueing,
   flushing and canceling are supported.
 
+``WQ_PERCPU``
+  Work items queued to a per-cpu wq are bound to that specific CPU.
+  This flag it's the right choice when cpu locality is important.
+
+  This flag is the complement of ``WQ_UNBOUND``.
+
 ``WQ_UNBOUND``
   Work items queued to an unbound wq are served by the special
   worker-pools which host workers which are not bound to any
@@ -199,6 +205,10 @@ resources, scheduled and executed.
 
   * Long running CPU intensive workloads which can be better
     managed by the system scheduler.
+
+  **Note:** This flag will be removed in future and all the work
+  items that dosen't need to be bound to a specific CPU, should not
+  use this flags.
 
 ``WQ_FREEZABLE``
   A freezable wq participates in the freeze phase of the system
