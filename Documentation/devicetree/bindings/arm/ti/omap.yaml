@@ -104,12 +104,50 @@ properties:
       - description: TI AM33 based platform
         items:
           - enum:
+              - bosch,am335x-guardian
               - compulab,cm-t335
+              - grinn,am335x-chilisom
+              - gumstix,am335x-pepper
+              - moxa,uc-2101
               - moxa,uc-8100-me-t
+              - myir,myc-am335x
+              - myir,myd-am335x
               - novatech,am335x-lxm
+              - oct,osd3358-sm-refdesign
+              - tcl,am335x-sl50
               - ti,am335x-bone
               - ti,am335x-evm
+              - ti,am335x-evmsk
+              - ti,am335x-pocketbeagle
+              - ti,am335x-shc
               - ti,am3359-icev2
+              - vscom,onrisc
+          - const: ti,am33xx
+
+      - description: TI bone variants based on TI AM335
+        items:
+          - enum:
+              - ti,am335x-bone-black
+              - ti,am335x-bone-green
+              - ti,am335x-pocketbeagle
+          - const: ti,am335x-bone
+          - const: ti,am33xx
+
+      - description: TI bone black variants based on TI AM335
+        items:
+          - enum:
+              - sancloud,am335x-boneenhanced
+              - ti,am335x-bone-black-wireless
+          - const: ti,am335x-bone-black
+          - const: ti,am335x-bone
+          - const: ti,am33xx
+
+      - description: TI bone green variants based on TI AM335
+        items:
+          - enum:
+              - ti,am335x-bone-green-wireless
+          - const: ti,am335x-bone-green
+          - const: ti,am335x-bone
           - const: ti,am33xx
 
       - description: Compulab board variants based on TI AM33
