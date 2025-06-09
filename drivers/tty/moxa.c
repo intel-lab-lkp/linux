@@ -1627,10 +1627,11 @@ static void MoxaPortFlushData(struct moxa_port *port, int mode)
  *           long baud          : baud rate (50 - 115200)
  *
  *           return:    0       : this port is invalid or baud < 50
- *                      50 - 115200 : the real baud rate set to the port, if
- *                                    the argument baud is large than maximun
- *                                    available baud rate, the real setting
- *                                    baud rate will be the maximun baud rate.
+ *                      50 - 115200 : the real baud rate is set to the port, if
+ *                                    the argument baud rate is larger than 
+ *                                    the maximum available baud rate, the 
+ *                                    real setting baud rate will be the 
+ *                                    maximum baud rate.
  *
  *
  *      Function 12:    Configure the port.
