@@ -1320,8 +1320,8 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 {
 	struct device *dev = pcie->dev;
 	void __iomem *base = pcie->base;
+	const char *ssc_str = "(!SSC)";
 	u16 nlw, cls, lnksta;
-	bool ssc_good = false;
 	int ret, i;
 
 	/* Limit the generation if specified */
@@ -1357,7 +1357,7 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 	if (pcie->ssc) {
 		ret = brcm_pcie_set_ssc(pcie);
 		if (ret == 0)
-			ssc_good = true;
+			ssc_str = "(SSC)";
 		else
 			dev_err(dev, "failed attempt to enter ssc mode\n");
 	}
@@ -1366,8 +1366,7 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 	cls = FIELD_GET(PCI_EXP_LNKSTA_CLS, lnksta);
 	nlw = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
 	dev_info(dev, "link up, %s x%u %s\n",
-		 pci_speed_string(pcie_link_speed[cls]), nlw,
-		 ssc_good ? "(SSC)" : "(!SSC)");
+		 pci_speed_string(pcie_link_speed[cls]), nlw, ssc_str);
 
 	return 0;
 }
