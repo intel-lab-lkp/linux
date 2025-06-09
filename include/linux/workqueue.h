@@ -438,7 +438,7 @@ enum wq_consts {
  * system_long_wq is similar to system_percpu_wq but may host long running
  * works.  Queue flushing might take relatively long.
  *
- * system_unbound_wq is unbound workqueue.  Workers are not bound to
+ * system_dfl_wq is unbound workqueue.  Workers are not bound to
  * any specific CPU, not concurrency managed, and all queued works are
  * executed immediately as long as max_active limit is not reached and
  * resources are available.
@@ -460,6 +460,7 @@ extern struct workqueue_struct *system_percpu_wq;
 extern struct workqueue_struct *system_highpri_wq;
 extern struct workqueue_struct *system_long_wq;
 extern struct workqueue_struct *system_unbound_wq;
+extern struct workqueue_struct *system_dfl_wq;
 extern struct workqueue_struct *system_freezable_wq;
 extern struct workqueue_struct *system_power_efficient_wq;
 extern struct workqueue_struct *system_freezable_power_efficient_wq;
@@ -665,6 +666,11 @@ static inline bool queue_work(struct workqueue_struct *wq,
 		wq = system_percpu_wq;
 	}
 
+	if (wq == system_unbound_wq) {
+		pr_warn_once("system_unbound_wq will be removed in the near future. Please use the new system_dfl_wq. wq set to system_dfl_wq\n");
+		wq = system_dfl_wq;
+	}
+
 	return queue_work_on(WORK_CPU_UNBOUND, wq, work);
 }
 
@@ -685,6 +691,11 @@ static inline bool queue_delayed_work(struct workqueue_struct *wq,
 		wq = system_percpu_wq;
 	}
 
+	if (wq == system_unbound_wq) {
+		pr_warn_once("system_unbound_wq will be removed in the near future. Please use the new system_dfl_wq. wq set to system_dfl_wq\n");
+		wq = system_dfl_wq;
+	}
+
 	return queue_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
 }
 
@@ -703,6 +714,11 @@ static inline bool mod_delayed_work(struct workqueue_struct *wq,
 	if (wq == system_wq) {
 		pr_warn_once("system_wq will be removed in the near future. Please use the new system_percpu_wq. wq set to system_percpu_wq\n");
 		wq = system_percpu_wq;
+	}
+
+	if (wq == system_unbound_wq) {
+		pr_warn_once("system_unbound_wq will be removed in the near future. Please use the new system_dfl_wq. wq set to system_dfl_wq\n");
+		wq = system_dfl_wq;
 	}
 
 	return mod_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
@@ -792,8 +808,8 @@ extern void __warn_flushing_systemwide_wq(void)
 	     _wq == system_highpri_wq) ||				\
 	    (__builtin_constant_p(_wq == system_long_wq) &&		\
 	     _wq == system_long_wq) ||					\
-	    (__builtin_constant_p(_wq == system_unbound_wq) &&		\
-	     _wq == system_unbound_wq) ||				\
+	    (__builtin_constant_p(_wq == system_dfl_wq) &&		\
+	     _wq == system_dfl_wq) ||				\
 	    (__builtin_constant_p(_wq == system_freezable_wq) &&	\
 	     _wq == system_freezable_wq) ||				\
 	    (__builtin_constant_p(_wq == system_power_efficient_wq) &&	\

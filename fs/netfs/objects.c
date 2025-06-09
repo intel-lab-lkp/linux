@@ -159,7 +159,7 @@ void netfs_put_request(struct netfs_io_request *rreq, bool was_async,
 		if (dead) {
 			if (was_async) {
 				rreq->work.func = netfs_free_request;
-				if (!queue_work(system_unbound_wq, &rreq->work))
+				if (!queue_work(system_dfl_wq, &rreq->work))
 					WARN_ON(1);
 			} else {
 				netfs_free_request(&rreq->work);

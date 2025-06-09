@@ -1256,7 +1256,7 @@ int bch2_journal_read(struct bch_fs *c,
 		    percpu_ref_tryget(&ca->io_ref[READ]))
 			closure_call(&ca->journal.read,
 				     bch2_journal_read_device,
-				     system_unbound_wq,
+				     system_dfl_wq,
 				     &jlist.cl);
 		else
 			degraded = true;

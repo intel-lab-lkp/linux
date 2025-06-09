@@ -416,7 +416,7 @@ static void execlist_exec_queue_kill(struct xe_exec_queue *q)
 static void execlist_exec_queue_fini(struct xe_exec_queue *q)
 {
 	INIT_WORK(&q->execlist->fini_async, execlist_exec_queue_fini_async);
-	queue_work(system_unbound_wq, &q->execlist->fini_async);
+	queue_work(system_dfl_wq, &q->execlist->fini_async);
 }
 
 static int execlist_exec_queue_set_priority(struct xe_exec_queue *q,
