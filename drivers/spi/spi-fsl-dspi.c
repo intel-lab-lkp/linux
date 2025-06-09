@@ -228,6 +228,7 @@ struct fsl_dspi {
 	const struct fsl_dspi_devtype_data	*devtype_data;
 
 	struct completion			xfer_done;
+	int                                     xfer_status;
 
 	struct fsl_dspi_dma			*dma;
 
@@ -504,12 +505,22 @@ static int dspi_next_xfer_dma_submit(struct fsl_dspi *dspi)
 
 static void dspi_setup_accel(struct fsl_dspi *dspi);
 
+static bool dspi_is_fifo_overflow(struct fsl_dspi *dspi, u32 spi_sr)
+{
+	if (spi_sr & (SPI_SR_TFUF | SPI_SR_RFOF)) {
+		dev_err(&dspi->pdev->dev, "FIFO under/overflow");
+		return true;
+	}
+	return false;
+}
+
 static int dspi_dma_xfer(struct fsl_dspi *dspi)
 {
 	struct spi_message *message = dspi->cur_msg;
 	int max_words = dspi_dma_max_datawords(dspi);
 	struct device *dev = &dspi->pdev->dev;
 	int ret = 0;
+	u32 spi_sr;
 
 	/*
 	 * dspi->len gets decremented by dspi_pop_tx_pushr in
@@ -530,6 +541,12 @@ static int dspi_dma_xfer(struct fsl_dspi *dspi)
 		if (ret) {
 			dev_err(dev, "DMA transfer failed\n");
 			break;
+		}
+
+		if (spi_controller_is_target(dspi->ctlr)) {
+			regmap_read(dspi->regmap, SPI_SR, &spi_sr);
+			if (dspi_is_fifo_overflow(dspi, spi_sr))
+				return -EIO;
 		}
 	}
 
@@ -918,6 +935,8 @@ static int dspi_poll(struct fsl_dspi *dspi)
 		regmap_read(dspi->regmap, SPI_SR, &spi_sr);
 		regmap_write(dspi->regmap, SPI_SR, spi_sr);
 
+		if (dspi_is_fifo_overflow(dspi, spi_sr))
+			return -EIO;
 		if (spi_sr & SPI_SR_CMDTCF)
 			break;
 	} while (--tries);
@@ -939,8 +958,12 @@ static irqreturn_t dspi_interrupt(int irq, void *dev_id)
 	if (!(spi_sr & SPI_SR_CMDTCF))
 		return IRQ_NONE;
 
-	if (dspi_rxtx(dspi) == 0)
+	if (dspi_is_fifo_overflow(dspi, spi_sr)) {
+		WRITE_ONCE(dspi->xfer_status, -EIO);
 		complete(&dspi->xfer_done);
+	} else if (dspi_rxtx(dspi) == 0) {
+		complete(&dspi->xfer_done);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -1032,13 +1055,15 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 		if (dspi->devtype_data->trans_mode == DSPI_DMA_MODE) {
 			status = dspi_dma_xfer(dspi);
 		} else {
-			if (dspi->irq)
+			if (dspi->irq) {
+				WRITE_ONCE(dspi->xfer_status, 0);
 				reinit_completion(&dspi->xfer_done);
-
+			}
 			dspi_fifo_write(dspi);
 
 			if (dspi->irq) {
 				wait_for_completion(&dspi->xfer_done);
+				status = READ_ONCE(dspi->xfer_status);
 			} else {
 				do {
 					status = dspi_poll(dspi);
