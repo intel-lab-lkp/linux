@@ -2850,9 +2850,13 @@ u8 *ieee80211_ie_build_eht_oper(u8 *pos, const struct cfg80211_chan_def *chandef
 	u8 eht_oper_info_len =
 		offsetof(struct ieee80211_eht_operation_info, optional);
 	u8 chan_width = 0;
+	u8 ie_len = 0;
+
+	if (chandef->punctured)
+		ie_len += sizeof(chandef->punctured);
 
 	*pos++ = WLAN_EID_EXTENSION;
-	*pos++ = 1 + eht_oper_len + eht_oper_info_len;
+	*pos++ = 1 + eht_oper_len + eht_oper_info_len + ie_len;
 	*pos++ = WLAN_EID_EXT_EHT_OPERATION;
 
 	eht_oper = (struct ieee80211_eht_operation *)pos;
@@ -2904,7 +2908,14 @@ u8 *ieee80211_ie_build_eht_oper(u8 *pos, const struct cfg80211_chan_def *chandef
 	eht_oper_info->control = chan_width;
 	pos += eht_oper_info_len;
 
-	/* TODO: eht_oper_info->optional */
+	if (chandef->punctured) {
+		eht_oper->params |=
+			IEEE80211_EHT_OPER_DISABLED_SUBCHANNEL_BITMAP_PRESENT;
+
+		eht_oper_info->optional[0] = chandef->punctured & 0x00FF;
+		eht_oper_info->optional[1] = chandef->punctured >> 8;
+		pos += sizeof(chandef->punctured);
+	}
 
 	return pos;
 }

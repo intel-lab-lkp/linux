@@ -430,10 +430,48 @@ static void mesh_sta_info_init(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_supported_band *sband;
 	u32 rates, changed = 0;
 	enum ieee80211_sta_rx_bandwidth bw = sta->sta.deflink.bandwidth;
+	struct cfg80211_chan_def eht_chandef;
 
 	sband = ieee80211_get_sband(sdata);
 	if (!sband)
 		return;
+
+	/* 802.11s mesh peer may have different eht puncturing pattern,
+	 * update it here so that drivers can use if needed.
+	 */
+	if (elems->eht_operation &&
+	    (elems->eht_operation->params & IEEE80211_EHT_OPER_INFO_PRESENT) &&
+	    (u8_get_bits(elems->eht_operation->optional[0],
+			 IEEE80211_EHT_OPER_CHAN_WIDTH) >=
+	     IEEE80211_EHT_OPER_CHAN_WIDTH_80MHZ) &&
+	    (elems->eht_operation->params &
+	     IEEE80211_EHT_OPER_DISABLED_SUBCHANNEL_BITMAP_PRESENT)) {
+		struct ieee80211_channel *chan = sdata->vif.bss_conf.chanreq.oper.chan;
+
+		cfg80211_chandef_create(&eht_chandef, chan, NL80211_CHAN_NO_HT);
+		eht_chandef.punctured = (elems->eht_operation->optional[4] << 8) |
+					 elems->eht_operation->optional[3];
+		/* Validate Peer's Puncturing Bitmap and reset if invalid */
+		switch (u8_get_bits(elems->eht_operation->optional[0],
+				    IEEE80211_EHT_OPER_CHAN_WIDTH)) {
+		case IEEE80211_EHT_OPER_CHAN_WIDTH_80MHZ:
+			eht_chandef.width = NL80211_CHAN_WIDTH_80;
+			break;
+		case IEEE80211_EHT_OPER_CHAN_WIDTH_160MHZ:
+			eht_chandef.width = NL80211_CHAN_WIDTH_160;
+			break;
+		case IEEE80211_EHT_OPER_CHAN_WIDTH_320MHZ:
+			eht_chandef.width = NL80211_CHAN_WIDTH_320;
+			break;
+		default:
+			eht_chandef.width = NL80211_CHAN_WIDTH_20;
+		}
+		eht_chandef.center_freq1 =
+			ieee80211_channel_to_frequency(elems->eht_operation->optional[1],
+						       chan->band);
+		if (cfg80211_chandef_valid(&eht_chandef))
+			sta->sta.deflink.punctured = eht_chandef.punctured;
+	}
 
 	rates = ieee80211_sta_get_rates(sdata, elems, sband->band, NULL);
 

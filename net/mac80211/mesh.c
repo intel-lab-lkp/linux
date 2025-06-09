@@ -112,6 +112,12 @@ bool mesh_matches_local(struct ieee80211_sub_if_data *sdata,
 				       ie->eht_operation,
 				       &sta_chan_def);
 
+	/* In order to allow mesh peering when peer advertising different
+	 * puncturing bitmaps, update the local mesh punctured bitmap
+	 * with the new mesh peer punctured bitmap to ensure compatibility.
+	 */
+	sta_chan_def.punctured = sdata->vif.bss_conf.chanreq.oper.punctured;
+
 	if (!cfg80211_chandef_compatible(&sdata->vif.bss_conf.chanreq.oper,
 					 &sta_chan_def))
 		return false;
@@ -671,6 +677,9 @@ int mesh_add_eht_oper_ie(struct ieee80211_sub_if_data *sdata, struct sk_buff *sk
 
 	len = 2 + 1 + offsetof(struct ieee80211_eht_operation, optional) +
 		      offsetof(struct ieee80211_eht_operation_info, optional);
+
+	if (sdata->vif.bss_conf.chanreq.oper.punctured)
+		len += sizeof(sdata->vif.bss_conf.chanreq.oper.punctured);
 
 	if (skb_tailroom(skb) < len)
 		return -ENOMEM;
