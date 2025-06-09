@@ -1020,6 +1020,7 @@ int kgd2kfd_init_zone_device(struct amdgpu_device *adev)
 	struct amdgpu_kfd_dev *kfddev = &adev->kfd;
 	struct dev_pagemap *pgmap;
 	struct resource *res = NULL;
+	struct resource temp_res = iomem_resource;
 	unsigned long size;
 	void *r;
 
@@ -1042,7 +1043,10 @@ int kgd2kfd_init_zone_device(struct amdgpu_device *adev)
 		pgmap->range.end = adev->gmc.aper_base + adev->gmc.aper_size - 1;
 		pgmap->type = MEMORY_DEVICE_COHERENT;
 	} else {
-		res = devm_request_free_mem_region(adev->dev, &iomem_resource, size);
+		temp_res.end = dma_get_mask(adev->dev);
+		res = devm_request_free_mem_region(adev->dev, &temp_res, size);
+		if (IS_ERR(res))
+			res = devm_request_free_mem_region(adev->dev, &iomem_resource, size);
 		if (IS_ERR(res))
 			return PTR_ERR(res);
 		pgmap->range.start = res->start;
