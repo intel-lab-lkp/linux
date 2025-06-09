@@ -434,10 +434,11 @@ static int __uprobe_write_opcode(struct vm_area_struct *vma,
 	/*
 	 * When unregistering, we may only zap a PTE if uffd is disabled and
 	 * there are no unexpected folio references ...
+	 * Expected refs: mappings + swapcache.
+	 * We hold one additional reference (+1).
 	 */
 	if (is_register || userfaultfd_missing(vma) ||
-	    (folio_ref_count(folio) != folio_mapcount(folio) + 1 +
-	     folio_test_swapcache(folio) * folio_nr_pages(folio)))
+	    (folio_ref_count(folio) != folio_expected_ref_count(folio) + 1))
 		goto remap;
 
 	/*
