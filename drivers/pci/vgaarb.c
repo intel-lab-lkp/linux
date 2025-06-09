@@ -139,7 +139,7 @@ void vga_set_default_device(struct pci_dev *pdev)
 {
 	if (vga_default == pdev)
 		return;
-
+	vgaarb_info(&pdev->dev, "selecting as VGA boot device\n");
 	pci_dev_put(vga_default);
 	vga_default = pci_dev_get(pdev);
 }
@@ -676,9 +676,9 @@ static bool vga_is_boot_device(struct vga_device *vgadev)
 	}
 
 	/*
-	 * Vgadev has neither IO nor MEM enabled.  If we haven't found any
-	 * other VGA devices, it is the best candidate so far.
-	 */
+	* Vgadev has neither IO nor MEM enabled.  If we haven't found any
+	* other VGA devices, it is the best candidate so far.
+	*/
 	if (!boot_vga)
 		return true;
 
@@ -751,6 +751,31 @@ static void vga_arbiter_check_bridge_sharing(struct vga_device *vgadev)
 		vgaarb_info(&vgadev->pdev->dev, "no bridge control possible\n");
 }
 
+static
+void vga_arbiter_select_default_device(void)
+{
+	struct pci_dev *candidate = vga_default_device();
+	struct vga_device *vgadev;
+
+	list_for_each_entry(vgadev, &vga_list, list) {
+		if (vga_is_boot_device(vgadev)) {
+			/* check if one is an integrated GPU, use that if so */
+			if (candidate) {
+				if (vga_arb_integrated_gpu(&candidate->dev))
+					break;
+				if (vga_arb_integrated_gpu(&vgadev->pdev->dev)) {
+					candidate = vgadev->pdev;
+					break;
+				}
+			} else
+				candidate = vgadev->pdev;
+		}
+	}
+
+	if (candidate)
+		vga_set_default_device(candidate);
+}
+
 /*
  * Currently, we assume that the "initial" setup of the system is not sane,
  * that is, we come up with conflicting devices and let the arbiter's
@@ -816,13 +841,6 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 		bus = bus->parent;
 	}
 
-	if (vga_is_boot_device(vgadev)) {
-		vgaarb_info(&pdev->dev, "setting as boot VGA device%s\n",
-			    vga_default_device() ?
-			    " (overriding previous)" : "");
-		vga_set_default_device(pdev);
-	}
-
 	vga_arbiter_check_bridge_sharing(vgadev);
 
 	/* Add to the list */
@@ -833,6 +851,7 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 		vga_iostate_to_str(vgadev->owns),
 		vga_iostate_to_str(vgadev->locks));
 
+	vga_arbiter_select_default_device();
 	spin_unlock_irqrestore(&vga_lock, flags);
 	return true;
 fail:
@@ -1499,8 +1518,8 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 
 	vgaarb_dbg(dev, "%s\n", __func__);
 
-	/* Only deal with VGA class devices */
-	if (!pci_is_vga(pdev))
+	/* Only deal with display devices */
+	if (!pci_is_display(pdev))
 		return 0;
 
 	/*
@@ -1548,12 +1567,8 @@ static int __init vga_arb_device_init(void)
 
 	/* Add all VGA class PCI devices by default */
 	pdev = NULL;
-	while ((pdev =
-		pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
-			       PCI_ANY_ID, pdev)) != NULL) {
-		if (pci_is_vga(pdev))
-			vga_arbiter_add_pci_device(pdev);
-	}
+	while ((pdev = pci_get_base_class(PCI_BASE_CLASS_DISPLAY, pdev)))
+		vga_arbiter_add_pci_device(pdev);
 
 	pr_info("loaded\n");
 	return rc;
