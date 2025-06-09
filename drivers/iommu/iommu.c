@@ -3795,6 +3795,112 @@ err_unlock:
 }
 EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
 
+/*
+ * Deadlock Alert
+ *
+ * Caller must use iommu_dev_reset_prepare() and iommu_dev_reset_done() together
+ * before/after the core-level reset routine, as iommu_dev_reset_prepare() holds
+ * the group->mutex that will be only released in iommu_dev_reset_done().
+ */
+int iommu_dev_reset_prepare(struct device *dev)
+{
+	struct iommu_group *group = dev->iommu_group;
+	const struct iommu_ops *ops;
+	unsigned long pasid;
+	void *entry;
+	int ret;
+
+	/* Before locking */
+	if (!dev_has_iommu(dev))
+		return 0;
+
+	if (dev->iommu->require_direct) {
+		dev_warn(dev,
+			 "Firmware has requested this device have a 1:1 IOMMU mapping, rejecting configuring the device without a 1:1 mapping. Contact your platform vendor.\n");
+		return -EINVAL;
+	}
+
+	ops = dev_iommu_ops(dev);
+	if (!ops->blocked_domain) {
+		dev_warn(dev,
+			 "IOMMU driver doesn't support IOMMU_DOMAIN_BLOCKED\n");
+		return -EOPNOTSUPP;
+	}
+
+	/*
+	 * group->mutex starts
+	 *
+	 * This has to hold the group mutex until the reset is done, to prevent
+	 * any RID or PASID domain attachment/replacement, which otherwise might
+	 * re-enable the ATS during the reset cycle.
+	 */
+	mutex_lock(&group->mutex);
+
+	/* Device is already attached to the blocked_domain. Nothing to do */
+	if (group->domain->type == IOMMU_DOMAIN_BLOCKED)
+		return 0;
+
+	/* Dock RID domain to blocked_domain while retaining group->domain */
+	ret = __iommu_attach_device(ops->blocked_domain, dev);
+	if (ret)
+		return ret;
+
+	/* Dock PASID domains to blocked_domain while retaining pasid_array */
+	xa_lock(&group->pasid_array);
+	xa_for_each_start(&group->pasid_array, pasid, entry, 1)
+		iommu_remove_dev_pasid(dev, pasid,
+				       pasid_array_entry_to_domain(entry));
+	xa_unlock(&group->pasid_array);
+
+	/* group->mutex is held. Caller must invoke iommu_dev_reset_done() */
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_dev_reset_prepare);
+
+/*
+ * This is the resume routine of iommu_dev_reset_prepare(). It unlocks the group
+ * mutex at end, after all RID/PASID domains are re-attached.
+ *
+ * Note that, although unlikely, there is a risk that re-attaching domains might
+ * fail due to some unexpected happening like OOM.
+ */
+void iommu_dev_reset_done(struct device *dev)
+{
+	struct iommu_group *group = dev->iommu_group;
+	const struct iommu_ops *ops;
+	unsigned long pasid;
+	void *entry;
+
+	/* Previously unlocked */
+	if (!dev_has_iommu(dev))
+		return;
+	ops = dev_iommu_ops(dev);
+	if (!ops->blocked_domain)
+		return;
+
+	/* group->mutex held in iommu_dev_reset_prepare() continues from here */
+	WARN_ON(!lockdep_is_held(&group->mutex));
+
+	if (group->domain->type == IOMMU_DOMAIN_BLOCKED)
+		goto unlock;
+
+	/* Shift RID domain back to group->domain */
+	WARN_ON(__iommu_attach_device(group->domain, dev));
+
+	/* Shift PASID domains back to domains retained in pasid_array */
+	xa_lock(&group->pasid_array);
+	xa_for_each_start(&group->pasid_array, pasid, entry, 1)
+		WARN_ON(__iommu_set_group_pasid(
+			pasid_array_entry_to_domain(entry), group, pasid,
+			ops->blocked_domain));
+	xa_unlock(&group->pasid_array);
+
+unlock:
+	mutex_unlock(&group->mutex);
+}
+EXPORT_SYMBOL_GPL(iommu_dev_reset_done);
+
 #if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 /**
  * iommu_dma_prepare_msi() - Map the MSI page in the IOMMU domain
