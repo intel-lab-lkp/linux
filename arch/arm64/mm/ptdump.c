@@ -291,7 +291,7 @@ static struct ptdump_info kernel_ptdump_info __ro_after_init = {
 	.mm		= &init_mm,
 };
 
-bool ptdump_check_wx(void)
+static bool __ptdump_check_wx(void)
 {
 	struct ptdump_pg_state st = {
 		.seq = NULL,
@@ -323,6 +323,16 @@ bool ptdump_check_wx(void)
 
 		return true;
 	}
+}
+
+bool ptdump_check_wx(void)
+{
+	bool ret;
+
+	get_online_mems();
+	ret = __ptdump_check_wx();
+	put_online_mems();
+	return ret;
 }
 
 static int __init ptdump_init(void)
