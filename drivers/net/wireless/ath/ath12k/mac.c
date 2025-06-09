@@ -3028,6 +3028,9 @@ static void ath12k_peer_assoc_h_eht(struct ath12k *ar,
 	}
 
 	arg->punct_bitmap = ~arvif->punct_bitmap;
+	if (ieee80211_vif_is_mesh(arvif->ahvif->vif) && sta->deflink.punctured)
+		arg->punct_bitmap = ~sta->deflink.punctured;
+
 	arg->eht_disable_mcs15 = link_conf->eht_disable_mcs15;
 }
 
