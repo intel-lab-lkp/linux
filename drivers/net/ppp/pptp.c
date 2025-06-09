@@ -501,7 +501,6 @@ static int pptp_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 	struct pppox_sock *po;
-	int error = 0;
 
 	if (!sk)
 		return 0;
@@ -526,7 +525,7 @@ static int pptp_release(struct socket *sock)
 	release_sock(sk);
 	sock_put(sk);
 
-	return error;
+	return 0;
 }
 
 static void pptp_sock_destruct(struct sock *sk)
