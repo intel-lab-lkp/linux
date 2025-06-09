@@ -53,6 +53,7 @@
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/workqueue.h>
+#include <crypto/internal/cipher.h>
 
 /*
  * Concatenation Helper and string operation helper
@@ -264,6 +265,14 @@ static inline int crypto_drbg_reset_test(struct crypto_rng *drng,
 	return crypto_rng_reset(drng, pers->buf, pers->len);
 }
 
+static inline int crypto_drbg_ctr_df_datalen(u8 statelen, u8 blocklen)
+{
+	return statelen +	/* df_data */
+		blocklen +	/* pad */
+		blocklen +	/* iv */
+		statelen + blocklen;  /* temp */
+}
+
 /* DRBG type flags */
 #define DRBG_CTR	((drbg_flag_t)1<<0)
 #define DRBG_HMAC	((drbg_flag_t)1<<1)
@@ -282,5 +291,11 @@ enum drbg_prefixes {
 	DRBG_PREFIX2,
 	DRBG_PREFIX3
 };
+
+int crypto_drbg_ctr_df(struct crypto_cipher *tfm,
+		       unsigned char *df_data, size_t bytes_to_return,
+		       struct list_head *seedlist,
+		       u8 blocklen_bytes,
+		       u8 statelen);
 
 #endif /* _DRBG_H */
