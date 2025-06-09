@@ -410,6 +410,10 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 			mirror->mirror_ds->ds_versions[0].wsize = max_payload;
 		goto out;
 	}
+	/* There is a fatal error to connect to DS. Mark it unavailable to avoid infinite retry loop. */
+	if (nfs_error_is_fatal(status))
+		nfs4_mark_deviceid_unavailable(&mirror->mirror_ds->id_node);
+
 noconnect:
 	ff_layout_track_ds_error(FF_LAYOUT_FROM_HDR(lseg->pls_layout),
 				 mirror, lseg->pls_range.offset,
