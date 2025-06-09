@@ -304,12 +304,17 @@ sched_numa_hop_mask(unsigned int node, unsigned int hops)
  *
  * Requires rcu_lock to be held.
  */
+#if defined(CONFIG_NUMA) && (MAX_NUMNODES > 1)
 #define for_each_node_numadist(node, unvisited)					\
 	for (int __start = (node),						\
 	     (node) = nearest_node_nodemask((__start), &(unvisited));		\
 	     (node) < MAX_NUMNODES;						\
 	     node_clear((node), (unvisited)),					\
 	     (node) = nearest_node_nodemask((__start), &(unvisited)))
+#else
+#define for_each_node_numadist(node, unvisited)					\
+	for_each_node_mask((node), (unvisited))
+#endif
 
 /**
  * for_each_numa_hop_mask - iterate over cpumasks of increasing NUMA distance
