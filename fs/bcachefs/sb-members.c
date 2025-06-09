@@ -44,6 +44,12 @@ struct bch_member *bch2_members_v2_get_mut(struct bch_sb *sb, int i)
 static struct bch_member members_v2_get(struct bch_sb_field_members_v2 *mi, int i)
 {
 	struct bch_member ret, *p = __bch2_members_v2_get_mut(mi, i);
+	size_t array_size = le32_to_cpu(mi->field.u64s)*8-16;
+	size_t member_bytes = le16_to_cpu(mi->member_bytes);
+	if (i < 0 || (member_bytes && i >= array_size / member_bytes)) {
+		memset(&ret, 0, sizeof(ret));
+		return ret;
+	}
 	memset(&ret, 0, sizeof(ret));
 	memcpy(&ret, p, min_t(size_t, le16_to_cpu(mi->member_bytes), sizeof(ret)));
 	return ret;
