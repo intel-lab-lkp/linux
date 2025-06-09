@@ -26,6 +26,7 @@
 #include "intel_display_types.h"
 #include "intel_fb.h"
 #include "intel_fixed.h"
+#include "intel_flipq.h"
 #include "intel_pcode.h"
 #include "intel_wm.h"
 #include "skl_universal_plane_regs.h"
@@ -2938,7 +2939,7 @@ void
 intel_program_dpkgc_latency(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
-	int max_linetime, latency, added_wake_time = 0;
+	int max_linetime, latency, added_wake_time;
 
 	if (DISPLAY_VER(display) < 20)
 		return;
@@ -2946,6 +2947,7 @@ intel_program_dpkgc_latency(struct intel_atomic_state *state)
 	mutex_lock(&display->wm.wm_mutex);
 
 	latency = skl_watermark_max_latency(display, 1);
+	added_wake_time = intel_flipq_exec_time_us(display);
 
 	/*
 	 * Wa_22020432604

@@ -98,6 +98,9 @@ static void intel_flipq_crtc_init(struct intel_crtc *crtc)
 
 bool intel_flipq_supported(struct intel_display *display)
 {
+	if (!display->params.enable_flipq)
+		return false;
+
 	if (!display->dmc.dmc)
 		return false;
 
@@ -126,11 +129,19 @@ static int cdclk_factor(struct intel_display *display)
 		return 280;
 }
 
-static int intel_flipq_exec_time_us(struct intel_display *display)
+int intel_flipq_exec_time_us(struct intel_display *display)
 {
 	return intel_dsb_exec_time_us() +
 		DIV_ROUND_UP(display->cdclk.hw.cdclk * cdclk_factor(display), 540000) +
 		display->sagv.block_time_us;
+}
+
+static int intel_flipq_exec_time_lines(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+					intel_flipq_exec_time_us(display));
 }
 
 static int intel_flipq_preempt_timeout_ms(struct intel_display *display)
@@ -178,14 +189,6 @@ static void intel_flipq_sw_dmc_wake(struct intel_crtc *crtc)
 	struct intel_display *display = to_intel_display(crtc);
 
 	intel_de_write(display, PIPEDMC_FPQ_CTL1(crtc->pipe), PIPEDMC_SW_DMC_WAKE);
-}
-
-static int intel_flipq_exec_time_lines(const struct intel_crtc_state *crtc_state)
-{
-	struct intel_display *display = to_intel_display(crtc_state);
-
-	return intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
-					intel_flipq_exec_time_us(display));
 }
 
 void intel_flipq_reset(struct intel_display *display, enum pipe pipe)
