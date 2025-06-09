@@ -657,6 +657,20 @@ do {										\
 	__ret;									\
 })
 
+#define __wait_event_freezable_killable_exclusive(wq, condition)		\
+	___wait_event(wq, condition, (TASK_KILLABLE|TASK_FREEZABLE), 1, 0,	\
+		      schedule())
+
+#define wait_event_freezable_killable_exclusive(wq, condition)			\
+({										\
+	int __ret = 0;								\
+	might_sleep();								\
+	if (!(condition))							\
+		__ret = __wait_event_freezable_killable_exclusive(wq,		\
+								  condition);	\
+	__ret;									\
+})
+
 /**
  * wait_event_idle - wait for a condition without contributing to system load
  * @wq_head: the waitqueue to wait on
