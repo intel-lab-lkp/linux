@@ -7681,6 +7681,17 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 			nla_get_u8(info->attrs[NL80211_ATTR_OPMODE_NOTIF]);
 	}
 
+	if (info->attrs[NL80211_ATTR_PUNCT_BITMAP]) {
+		if (wdev->iftype != NL80211_IFTYPE_MESH_POINT)
+			return -EINVAL;
+		params.link_sta_params.punctured =
+			nla_get_u32(info->attrs[NL80211_ATTR_PUNCT_BITMAP]);
+		if (params.link_sta_params.punctured &&
+		    !wiphy_ext_feature_isset(&rdev->wiphy,
+					     NL80211_EXT_FEATURE_PUNCT))
+			return -EINVAL;
+	}
+
 	if (info->attrs[NL80211_ATTR_STA_PLINK_ACTION])
 		params.plink_action =
 			nla_get_u8(info->attrs[NL80211_ATTR_STA_PLINK_ACTION]);

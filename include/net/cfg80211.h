@@ -1653,6 +1653,9 @@ struct sta_txpwr {
  * @he_6ghz_capa: HE 6 GHz Band capabilities of station
  * @eht_capa: EHT capabilities of station
  * @eht_capa_len: the length of the EHT capabilities
+ * @punctured: Preamble puncturing bitmap. Each bit represents
+ *	a 20 MHz channel, lowest bit corresponding to the lowest channel.
+ *	Bit set to 1 indicates that the channel is punctured.
  */
 struct link_station_parameters {
 	const u8 *mld_mac;
@@ -1671,6 +1674,7 @@ struct link_station_parameters {
 	const struct ieee80211_he_6ghz_capa *he_6ghz_capa;
 	const struct ieee80211_eht_cap_elem *eht_capa;
 	u8 eht_capa_len;
+	u16 punctured;
 };
 
 /**
