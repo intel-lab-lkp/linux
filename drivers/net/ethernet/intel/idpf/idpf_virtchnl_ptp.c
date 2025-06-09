@@ -29,6 +29,7 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
 	struct libie_mmio_info	*mmio_info = &adapter->ctlq_ctx.mmio_info;
+	struct virtchnl2_ptp_cross_time_reg_offsets cross_tstamp_offsets;
 	struct virtchnl2_ptp_clk_adj_reg_offsets clk_adj_offsets;
 	struct virtchnl2_ptp_clk_reg_offsets clock_offsets;
 	struct idpf_ptp_secondary_mbx *scnd_mbx;
@@ -70,7 +71,7 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 
 	access_type = ptp->get_dev_clk_time_access;
 	if (access_type != IDPF_PTP_DIRECT)
-		goto discipline_clock;
+		goto cross_tstamp;
 
 	clock_offsets = recv_ptp_caps_msg->clk_offsets;
 
@@ -87,6 +88,23 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 	ptp->dev_clk_regs.phy_clk_ns_h =
 		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 	temp_offset = le32_to_cpu(clock_offsets.cmd_sync_trigger);
+	ptp->dev_clk_regs.cmd_sync =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
+
+cross_tstamp:
+	access_type = ptp->get_cross_tstamp_access;
+	if (access_type != IDPF_PTP_DIRECT)
+		goto discipline_clock;
+
+	cross_tstamp_offsets = recv_ptp_caps_msg->cross_time_offsets;
+
+	temp_offset = le32_to_cpu(cross_tstamp_offsets.sys_time_ns_l);
+	ptp->dev_clk_regs.sys_time_ns_l =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
+	temp_offset = le32_to_cpu(cross_tstamp_offsets.sys_time_ns_h);
+	ptp->dev_clk_regs.sys_time_ns_h =
+		libie_pci_get_mmio_addr(mmio_info, temp_offset);
+	temp_offset = le32_to_cpu(cross_tstamp_offsets.cmd_sync_trigger);
 	ptp->dev_clk_regs.cmd_sync =
 		libie_pci_get_mmio_addr(mmio_info, temp_offset);
 
@@ -172,6 +190,48 @@ int idpf_ptp_get_dev_clk_time(struct idpf_adapter *adapter,
 	get_dev_clk_time_resp = xn_params.recv_mem.iov_base;
 	dev_time = le64_to_cpu(get_dev_clk_time_resp->dev_time_ns);
 	dev_clk_time->dev_clk_time_ns = dev_time;
+
+free_resp:
+	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
+	return err;
+}
+
+/**
+ * idpf_ptp_get_cross_time - Send virtchnl get cross time message
+ * @adapter: Driver specific private structure
+ * @cross_time: Pointer to the device clock structure where the value is set
+ *
+ * Send virtchnl get cross time message to get the time of the clock and the
+ * system time.
+ *
+ * Return: 0 on success, -errno otherwise.
+ */
+int idpf_ptp_get_cross_time(struct idpf_adapter *adapter,
+			    struct idpf_ptp_dev_timers *cross_time)
+{
+	struct virtchnl2_ptp_get_cross_time *cross_time_resp;
+	struct virtchnl2_ptp_get_cross_time cross_time_msg;
+	struct libie_ctlq_xn_send_params xn_params = {
+		.chnl_opcode = VIRTCHNL2_OP_PTP_GET_CROSS_TIME,
+		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
+	};
+	int reply_sz;
+	int err;
+
+	err = idpf_send_mb_msg(adapter, &xn_params, &cross_time_msg,
+			       sizeof(cross_time_msg));
+	if (err)
+		return err;
+
+	reply_sz = xn_params.recv_mem.iov_len;
+	if (reply_sz != sizeof(*cross_time_resp)) {
+		err = -EIO;
+		goto free_resp;
+	}
+
+	cross_time_resp = xn_params.recv_mem.iov_base;
+	cross_time->dev_clk_time_ns = le64_to_cpu(cross_time_resp->dev_time_ns);
+	cross_time->sys_time_ns = le64_to_cpu(cross_time_resp->sys_time_ns);
 
 free_resp:
 	libie_ctlq_release_rx_buf(&xn_params.recv_mem);
