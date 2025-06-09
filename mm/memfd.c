@@ -475,22 +475,22 @@ SYSCALL_DEFINE2(memfd_create,
 	fd = get_unused_fd_flags((flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
 	if (fd < 0) {
 		error = fd;
-		goto err_name;
+		goto err_fd;
 	}
 
 	file = alloc_file(name, flags);
 	if (IS_ERR(file)) {
 		error = PTR_ERR(file);
-		goto err_fd;
+		goto err_file;
 	}
 
 	fd_install(fd, file);
 	kfree(name);
 	return fd;
 
-err_fd:
+err_file:
 	put_unused_fd(fd);
-err_name:
+err_fd:
 	kfree(name);
 	return error;
 }
