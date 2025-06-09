@@ -2035,11 +2035,10 @@ static inline int ip6mr_forward2_finish(struct net *net, struct sock *sk, struct
  *	Processing handlers for ip6mr_forward
  */
 
-static int ip6mr_forward2(struct net *net, struct mr_table *mrt,
-			  struct sk_buff *skb, int vifi)
+static int ip6mr_prepare_xmit(struct net *net, struct mr_table *mrt,
+			      struct sk_buff *skb, int vifi)
 {
 	struct vif_device *vif = &mrt->vif_table[vifi];
-	struct net_device *indev = skb->dev;
 	struct net_device *vif_dev;
 	struct ipv6hdr *ipv6h;
 	struct dst_entry *dst;
@@ -2098,6 +2097,20 @@ static int ip6mr_forward2(struct net *net, struct mr_table *mrt,
 
 	ipv6h = ipv6_hdr(skb);
 	ipv6h->hop_limit--;
+	return 0;
+
+out_free:
+	kfree_skb(skb);
+	return -1;
+}
+
+static int ip6mr_forward2(struct net *net, struct mr_table *mrt,
+			  struct sk_buff *skb, int vifi)
+{
+	struct net_device *indev = skb->dev;
+
+	if (ip6mr_prepare_xmit(net, mrt, skb, vifi))
+		return 0;
 
 	IP6CB(skb)->flags |= IP6SKB_FORWARDED;
 
@@ -2105,9 +2118,6 @@ static int ip6mr_forward2(struct net *net, struct mr_table *mrt,
 		       net, NULL, skb, indev, skb->dev,
 		       ip6mr_forward2_finish);
 
-out_free:
-	kfree_skb(skb);
-	return 0;
 }
 
 /* Called with rcu_read_lock() */
