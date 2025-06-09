@@ -2841,6 +2841,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	atomic_set(&fs_info->async_delalloc_pages, 0);
 	atomic_set(&fs_info->defrag_running, 0);
 	atomic_set(&fs_info->nr_delayed_iputs, 0);
+	atomic_set(&fs_info->bdev_ops_running, 0);
 	atomic64_set(&fs_info->tree_mod_seq, 0);
 	fs_info->global_root_tree = RB_ROOT;
 	fs_info->max_inline = BTRFS_DEFAULT_MAX_INLINE;
@@ -2874,6 +2875,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	mutex_init(&fs_info->transaction_kthread_mutex);
 	mutex_init(&fs_info->cleaner_mutex);
 	mutex_init(&fs_info->ro_block_group_mutex);
+	mutex_init(&fs_info->freeze_mutex);
 	init_rwsem(&fs_info->commit_root_sem);
 	init_rwsem(&fs_info->cleanup_work_sem);
 	init_rwsem(&fs_info->subvol_sem);
@@ -2891,6 +2893,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	init_waitqueue_head(&fs_info->transaction_blocked_wait);
 	init_waitqueue_head(&fs_info->async_submit_wait);
 	init_waitqueue_head(&fs_info->delayed_iputs_wait);
+	init_waitqueue_head(&fs_info->bdev_ops_wait);
 
 	/* Usable values until the real ones are cached from the superblock */
 	fs_info->nodesize = 4096;
@@ -4194,6 +4197,14 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	int ret;
 
 	set_bit(BTRFS_FS_CLOSING_START, &fs_info->flags);
+
+	/*
+	 * Wait for any bdev operations first.
+	 * After setting the above CLOSING_START bit, we will no longer
+	 * accept any new bdev operations.
+	 */
+	wait_event(fs_info->bdev_ops_wait,
+		   (atomic_read(&fs_info->bdev_ops_running) == 0));
 
 	/*
 	 * If we had UNFINISHED_DROPS we could still be processing them, so

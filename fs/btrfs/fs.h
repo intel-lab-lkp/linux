@@ -539,6 +539,14 @@ struct btrfs_fs_info {
 	struct mutex transaction_kthread_mutex;
 	struct mutex cleaner_mutex;
 	struct mutex chunk_mutex;
+	/*
+	 * Serialize freeze/unfreeze operations.
+	 *
+	 * Freeze/thaw is shared by not only the per-fs freeze/thaw but also
+	 * per-bdev callbacks, thus need a unified mutex inside btrfs to handle
+	 * per-fs and per-bdev races correctly.
+	 */
+	struct mutex freeze_mutex;
 
 	/*
 	 * This is taken to make sure we don't set block groups ro after the
@@ -687,6 +695,10 @@ struct btrfs_fs_info {
 	spinlock_t defrag_inodes_lock;
 	struct rb_root defrag_inodes;
 	atomic_t defrag_running;
+
+	/* For per-block-device callbacks.*/
+	atomic_t bdev_ops_running;
+	wait_queue_head_t bdev_ops_wait;
 
 	/* Used to protect avail_{data, metadata, system}_alloc_bits */
 	seqlock_t profiles_lock;

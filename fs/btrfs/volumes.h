@@ -607,6 +607,7 @@ struct btrfs_raid_attr {
 };
 
 extern const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES];
+extern const struct blk_holder_ops btrfs_bdev_ops;
 
 struct btrfs_chunk_map {
 	struct rb_node rb_node;

@@ -14,6 +14,8 @@ bool btrfs_check_options(const struct btrfs_fs_info *info,
 			 unsigned long long *mount_opt,
 			 unsigned long flags);
 int btrfs_sync_fs(struct super_block *sb, int wait);
+int btrfs_freeze(struct super_block *sb);
+int btrfs_unfreeze(struct super_block *sb);
 char *btrfs_get_subvol_name_from_objectid(struct btrfs_fs_info *fs_info,
 					  u64 subvol_objectid);
 void btrfs_set_free_space_cache_settings(struct btrfs_fs_info *fs_info);

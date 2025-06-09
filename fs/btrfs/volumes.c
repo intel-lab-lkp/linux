@@ -256,6 +256,88 @@ void btrfs_describe_block_groups(u64 bg_flags, char *buf, u32 size_buf)
 out_overflow:;
 }
 
+static struct btrfs_fs_info *get_bdev_fs_info(struct block_device *bdev)
+	__releases(&bdev->bd_holder_lock)
+{
+	struct btrfs_fs_info *fs_info = bdev->bd_holder;
+
+	if (!fs_info)
+		goto out;
+
+	/*
+	 * The fs_info's lifespan is ensured to cover the lifespan of an opened
+	 * bdev, so we are safe to access the fs_info.
+	 */
+	if (!test_bit(BTRFS_FS_OPEN, &fs_info->flags) ||
+	    btrfs_fs_closing(fs_info)) {
+		fs_info = NULL;
+		goto out;
+	}
+	atomic_inc(&fs_info->bdev_ops_running);
+
+out:
+	mutex_unlock(&bdev->bd_holder_lock);
+	return fs_info;
+}
+
+static void put_bdev_fs_info(struct btrfs_fs_info *fs_info)
+{
+	if (!fs_info)
+		return;
+	if (atomic_dec_and_test(&fs_info->bdev_ops_running))
+		wake_up(&fs_info->bdev_ops_wait);
+}
+
+static void btrfs_bdev_sync(struct block_device *bdev)
+{
+	struct btrfs_fs_info *fs_info = get_bdev_fs_info(bdev);
+	int ret;
+
+	if (!fs_info)
+		goto out;
+	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+	if (ret)
+		goto out;
+	btrfs_sync_fs(fs_info->sb, 1);
+	wake_up_process(fs_info->cleaner_kthread);
+out:
+	put_bdev_fs_info(fs_info);
+}
+
+static int btrfs_bdev_freeze(struct block_device *bdev)
+{
+	struct btrfs_fs_info *fs_info = get_bdev_fs_info(bdev);
+	int ret = 0;
+
+	lockdep_assert_held(&bdev->bd_fsfreeze_mutex);
+	if (!fs_info)
+		goto out;
+	ret = btrfs_freeze(fs_info->sb);
+out:
+	put_bdev_fs_info(fs_info);
+	return ret;
+}
+
+static int btrfs_bdev_unfreeze(struct block_device *bdev)
+{
+	struct btrfs_fs_info *fs_info = get_bdev_fs_info(bdev);
+	int ret = 0;
+
+	lockdep_assert_held(&bdev->bd_fsfreeze_mutex);
+	if (!fs_info)
+		goto out;
+	ret = btrfs_unfreeze(fs_info->sb);
+out:
+	put_bdev_fs_info(fs_info);
+	return ret;
+}
+
+const struct blk_holder_ops btrfs_bdev_ops = {
+	.sync = btrfs_bdev_sync,
+	.freeze = btrfs_bdev_freeze,
+	.thaw = btrfs_bdev_unfreeze,
+};
+
 static int init_first_rw_device(struct btrfs_trans_handle *trans);
 static int btrfs_relocate_sys_chunks(struct btrfs_fs_info *fs_info);
 static void btrfs_dev_stat_print_on_load(struct btrfs_device *device);
@@ -473,7 +555,7 @@ btrfs_get_bdev_and_sb(const char *device_path, blk_mode_t flags, void *holder,
 	struct block_device *bdev;
 	int ret;
 
-	*bdev_file = bdev_file_open_by_path(device_path, flags, holder, NULL);
+	*bdev_file = bdev_file_open_by_path(device_path, flags, holder, &btrfs_bdev_ops);
 
 	if (IS_ERR(*bdev_file)) {
 		ret = PTR_ERR(*bdev_file);
@@ -2705,7 +2787,7 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 		return -EROFS;
 
 	bdev_file = bdev_file_open_by_path(device_path, BLK_OPEN_WRITE,
-					   fs_info, NULL);
+					   fs_info, &btrfs_bdev_ops);
 	if (IS_ERR(bdev_file))
 		return PTR_ERR(bdev_file);
 

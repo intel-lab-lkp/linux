@@ -2257,11 +2257,19 @@ out:
 	return ret;
 }
 
-static int btrfs_freeze(struct super_block *sb)
+int btrfs_freeze(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 
+	mutex_lock(&fs_info->freeze_mutex);
+	if (test_bit(BTRFS_FS_FROZEN, &fs_info->flags)) {
+		mutex_unlock(&fs_info->freeze_mutex);
+		return -EBUSY;
+	}
+
+
 	set_bit(BTRFS_FS_FROZEN, &fs_info->flags);
+	mutex_unlock(&fs_info->freeze_mutex);
 	/*
 	 * We don't need a barrier here, we'll wait for any transaction that
 	 * could be in progress on other threads (and do delayed iputs that
@@ -2323,20 +2331,24 @@ out:
 	return ret;
 }
 
-static int btrfs_unfreeze(struct super_block *sb)
+int btrfs_unfreeze(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_device *device;
 	int ret = 0;
 
+	mutex_lock(&fs_info->freeze_mutex);
+	if (!test_bit(BTRFS_FS_FROZEN, &fs_info->flags)) {
+		mutex_unlock(&fs_info->freeze_mutex);
+		return -EINVAL;
+	}
+
 	/*
 	 * Make sure the fs is not changed by accident (like hibernation then
 	 * modified by other OS).
 	 * If we found anything wrong, we mark the fs error immediately.
-	 *
-	 * And since the fs is frozen, no one can modify the fs yet, thus
-	 * we don't need to hold device_list_mutex.
 	 */
+	mutex_lock(&fs_info->fs_devices->device_list_mutex);
 	list_for_each_entry(device, &fs_info->fs_devices->devices, dev_list) {
 		ret = check_dev_super(device);
 		if (ret < 0) {
@@ -2346,7 +2358,9 @@ static int btrfs_unfreeze(struct super_block *sb)
 			break;
 		}
 	}
+	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
 	clear_bit(BTRFS_FS_FROZEN, &fs_info->flags);
+	mutex_unlock(&fs_info->freeze_mutex);
 
 	/*
 	 * We still return 0, to allow VFS layer to unfreeze the fs even the
