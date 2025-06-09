@@ -245,6 +245,8 @@ static struct sock *tcp_fastopen_create_child(struct sock *sk,
 	struct sock *child;
 	bool own_req;
 
+	tcp_rsk(req)->tfo_listener = true;
+
 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL,
 							 NULL, &own_req);
 	if (!child)
@@ -261,7 +263,6 @@ static struct sock *tcp_fastopen_create_child(struct sock *sk,
 	tp = tcp_sk(child);
 
 	rcu_assign_pointer(tp->fastopen_rsk, req);
-	tcp_rsk(req)->tfo_listener = true;
 
 	/* RFC1323: The window in SYN & SYN/ACK segments is never
 	 * scaled. So correct it appropriately.
