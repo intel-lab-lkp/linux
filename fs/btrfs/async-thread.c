@@ -109,8 +109,7 @@ struct btrfs_workqueue *btrfs_alloc_workqueue(struct btrfs_fs_info *fs_info,
 		ret->thresh = thresh;
 	}
 
-	ret->normal_wq = alloc_workqueue("btrfs-%s", flags, ret->current_active,
-					 name);
+	ret->normal_wq = alloc_workqueue("btrfs-%s", flags, ret->current_active, name);
 	if (!ret->normal_wq) {
 		kfree(ret);
 		return NULL;

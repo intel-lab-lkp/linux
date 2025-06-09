@@ -909,15 +909,15 @@ static struct bch_fs *bch2_fs_alloc(struct bch_sb *sb, struct bch_opts opts)
 	if (!(c->btree_update_wq = alloc_workqueue("bcachefs",
 				WQ_HIGHPRI|WQ_FREEZABLE|WQ_MEM_RECLAIM|WQ_UNBOUND, 512)) ||
 	    !(c->btree_io_complete_wq = alloc_workqueue("bcachefs_btree_io",
-				WQ_HIGHPRI|WQ_FREEZABLE|WQ_MEM_RECLAIM, 1)) ||
+				WQ_HIGHPRI | WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 1)) ||
 	    !(c->copygc_wq = alloc_workqueue("bcachefs_copygc",
-				WQ_HIGHPRI|WQ_FREEZABLE|WQ_MEM_RECLAIM|WQ_CPU_INTENSIVE, 1)) ||
+				WQ_HIGHPRI | WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE | WQ_PERCPU, 1)) ||
 	    !(c->btree_read_complete_wq = alloc_workqueue("bcachefs_btree_read_complete",
-				WQ_HIGHPRI|WQ_FREEZABLE|WQ_MEM_RECLAIM, 512)) ||
+				WQ_HIGHPRI | WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 512)) ||
 	    !(c->btree_write_submit_wq = alloc_workqueue("bcachefs_btree_write_sumit",
-				WQ_HIGHPRI|WQ_FREEZABLE|WQ_MEM_RECLAIM, 1)) ||
+				WQ_HIGHPRI | WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 1)) ||
 	    !(c->write_ref_wq = alloc_workqueue("bcachefs_write_ref",
-				WQ_FREEZABLE, 0)) ||
+				WQ_FREEZABLE | WQ_PERCPU, 0)) ||
 #ifndef BCH_WRITE_REF_DEBUG
 	    percpu_ref_init(&c->writes, bch2_writes_disabled,
 			    PERCPU_REF_INIT_DEAD, GFP_KERNEL) ||

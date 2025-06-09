@@ -243,7 +243,8 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	display->wq.modeset = alloc_ordered_workqueue("i915_modeset", 0);
 	display->wq.flip = alloc_workqueue("i915_flip", WQ_HIGHPRI |
 						WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
-	display->wq.cleanup = alloc_workqueue("i915_cleanup", WQ_HIGHPRI, 0);
+	display->wq.cleanup = alloc_workqueue("i915_cleanup", WQ_HIGHPRI |
+						WQ_PERCPU, 0);
 
 	intel_mode_config_init(display);
 

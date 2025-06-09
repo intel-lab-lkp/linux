@@ -3941,7 +3941,8 @@ static struct pci_driver fw_ohci_pci_driver = {
 
 static int __init fw_ohci_init(void)
 {
-	selfid_workqueue = alloc_workqueue(KBUILD_MODNAME, WQ_MEM_RECLAIM, 0);
+	selfid_workqueue = alloc_workqueue(KBUILD_MODNAME,
+					   WQ_MEM_RECLAIM | WQ_PERCPU, 0);
 	if (!selfid_workqueue)
 		return -ENOMEM;
 

@@ -5675,8 +5675,26 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 	}
 
 	/* see the comment above the definition of WQ_POWER_EFFICIENT */
-	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)
-		flags |= WQ_UNBOUND;
+	if (flags & WQ_POWER_EFFICIENT) {
+		if (wq_power_efficient)
+			flags |= WQ_UNBOUND;
+		else
+			flags |= WQ_PERCPU;
+	}
+
+	/* one among WQ_UNBOUND and WQ_PERCPU should always be present */
+	if ((flags & WQ_UNBOUND) && (flags & WQ_PERCPU)) {
+		pr_warn_once("WQ_UNBOUND is the complement of the new WQ_PERCPU, "
+		"only one of them should be present. Fall back to the old behavior, removing WQ_UNBOUND.\n");
+
+		flags &= (~WQ_UNBOUND);
+	}
+
+	if (!(flags & WQ_PERCPU) && !(flags & WQ_UNBOUND)) {
+		pr_warn_once("One between WQ_PERCPU and WQ_UNBOUND should be present. WQ_PERCPU will be added to keep the old behavior.\n");
+
+		flags |= WQ_PERCPU;
+	}
 
 	/* allocate wq and format name */
 	if (flags & WQ_UNBOUND)
@@ -7819,23 +7837,25 @@ void __init workqueue_init_early(void)
 		ordered_wq_attrs[i] = attrs;
 	}
 
-	system_percpu_wq = alloc_workqueue("events", 0, 0);
-	system_highpri_wq = alloc_workqueue("events_highpri", WQ_HIGHPRI, 0);
-	system_long_wq = alloc_workqueue("events_long", 0, 0);
-	system_dfl_wq = alloc_workqueue("events_unbound", WQ_UNBOUND,
-					    WQ_MAX_ACTIVE);
+	system_wq = alloc_workqueue("events", WQ_PERCPU, 0);
+	system_percpu_wq = alloc_workqueue("events", WQ_PERCPU, 0);
+	system_highpri_wq = alloc_workqueue("events_highpri",
+					    WQ_HIGHPRI | WQ_PERCPU, 0);
+	system_long_wq = alloc_workqueue("events_long", WQ_PERCPU, 0);
+	system_dfl_wq = alloc_workqueue("events_unbound", WQ_UNBOUND, WQ_MAX_ACTIVE);
+	system_unbound_wq = alloc_workqueue("events_unbound", WQ_UNBOUND, WQ_MAX_ACTIVE);
 	system_freezable_wq = alloc_workqueue("events_freezable",
-					      WQ_FREEZABLE, 0);
+					      WQ_FREEZABLE | WQ_PERCPU, 0);
 	system_power_efficient_wq = alloc_workqueue("events_power_efficient",
 					      WQ_POWER_EFFICIENT, 0);
 	system_freezable_power_efficient_wq = alloc_workqueue("events_freezable_pwr_efficient",
-					      WQ_FREEZABLE | WQ_POWER_EFFICIENT,
-					      0);
-	system_bh_wq = alloc_workqueue("events_bh", WQ_BH, 0);
+					      WQ_FREEZABLE | WQ_POWER_EFFICIENT, 0);
+	system_bh_wq = alloc_workqueue("events_bh", WQ_BH | WQ_PERCPU, 0);
 	system_bh_highpri_wq = alloc_workqueue("events_bh_highpri",
-					       WQ_BH | WQ_HIGHPRI, 0);
-	BUG_ON(!system_percpu_wq || !system_highpri_wq || !system_long_wq ||
-	       !system_dfl_wq || !system_freezable_wq ||
+					WQ_BH | WQ_HIGHPRI | WQ_PERCPU, 0);
+
+	BUG_ON(!system_wq || !system_percpu_wq || !system_highpri_wq || !system_long_wq ||
+	       !system_dfl_wq || !system_freezable_wq || !system_unbound_wq ||
 	       !system_power_efficient_wq ||
 	       !system_freezable_power_efficient_wq ||
 	       !system_bh_wq || !system_bh_highpri_wq);
