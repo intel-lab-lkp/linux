@@ -17,6 +17,9 @@ kconfig options:
   adds warnings for allocations that weren't accounted because of a
   missing annotation
 
+- CONFIG_MEM_ALLOC_PROFILING_PER_NUMA_STATS
+  adds memory allocation profiling stats for each numa node, off by default.
+
 Boot parameter:
   sysctl.vm.mem_profiling={0|1|never}[,compressed]
 

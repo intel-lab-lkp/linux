@@ -2105,8 +2105,12 @@ __alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 	 * If other users appear then mem_alloc_profiling_enabled()
 	 * check should be added before alloc_tag_add().
 	 */
-	if (likely(obj_exts))
-		alloc_tag_add(&obj_exts->ref, current->alloc_tag, s->size);
+	if (likely(obj_exts)) {
+		struct page *page = virt_to_page(object);
+
+		alloc_tag_add(&obj_exts->ref, current->alloc_tag,
+				page_to_nid(page), s->size);
+	}
 }
 
 static inline void
@@ -2134,8 +2138,9 @@ __alloc_tagging_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p
 
 	for (i = 0; i < objects; i++) {
 		unsigned int off = obj_to_index(s, slab, p[i]);
+		struct page *page = virt_to_page(p[i]);
 
-		alloc_tag_sub(&obj_exts[off].ref, s->size);
+		alloc_tag_sub(&obj_exts[off].ref, page_to_nid(page), s->size);
 	}
 }
 

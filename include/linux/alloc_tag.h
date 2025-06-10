@@ -15,6 +15,8 @@
 #include <linux/static_key.h>
 #include <linux/irqflags.h>
 
+extern int pcpu_counters_num;
+
 struct alloc_tag_counters {
 	u64 bytes;
 	u64 calls;
@@ -134,16 +136,34 @@ static inline bool mem_alloc_profiling_enabled(void)
 				   &mem_alloc_profiling_key);
 }
 
-static inline struct alloc_tag_counters alloc_tag_read(struct alloc_tag *tag)
+static inline struct alloc_tag_counters alloc_tag_read_nid(struct alloc_tag *tag, int nid)
 {
 	struct alloc_tag_counters v = { 0, 0 };
-	struct alloc_tag_counters *counter;
+	struct alloc_tag_counters *counters;
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
-		counter = per_cpu_ptr(tag->counters, cpu);
-		v.bytes += counter->bytes;
-		v.calls += counter->calls;
+		counters = per_cpu_ptr(tag->counters, cpu);
+		v.bytes += counters[nid].bytes;
+		v.calls += counters[nid].calls;
+	}
+
+	return v;
+}
+
+static inline struct alloc_tag_counters alloc_tag_read(struct alloc_tag *tag)
+{
+	struct alloc_tag_counters v = { 0, 0 };
+	struct alloc_tag_counters *counters;
+	int cpu;
+	int nid;
+
+	for_each_possible_cpu(cpu) {
+		counters = per_cpu_ptr(tag->counters, cpu);
+		for (nid = 0; nid < pcpu_counters_num; nid++) {
+			v.bytes += counters[nid].bytes;
+			v.calls += counters[nid].calls;
+		}
 	}
 
 	return v;
@@ -179,7 +199,7 @@ static inline bool __alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag 
 	return true;
 }
 
-static inline bool alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag *tag)
+static inline bool alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag *tag, int nid)
 {
 	if (unlikely(!__alloc_tag_ref_set(ref, tag)))
 		return false;
@@ -190,17 +210,18 @@ static inline bool alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag *t
 	 * Each new reference for every sub-allocation needs to increment call
 	 * counter because when we free each part the counter will be decremented.
 	 */
-	this_cpu_inc(tag->counters->calls);
+	this_cpu_inc(tag->counters[nid].calls);
 	return true;
 }
 
-static inline void alloc_tag_add(union codetag_ref *ref, struct alloc_tag *tag, size_t bytes)
+static inline void alloc_tag_add(union codetag_ref *ref, struct alloc_tag *tag,
+				 int nid, size_t bytes)
 {
-	if (likely(alloc_tag_ref_set(ref, tag)))
-		this_cpu_add(tag->counters->bytes, bytes);
+	if (likely(alloc_tag_ref_set(ref, tag, nid)))
+		this_cpu_add(tag->counters[nid].bytes, bytes);
 }
 
-static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes)
+static inline void alloc_tag_sub(union codetag_ref *ref, int nid, size_t bytes)
 {
 	struct alloc_tag *tag;
 
@@ -215,8 +236,8 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes)
 
 	tag = ct_to_alloc_tag(ref->ct);
 
-	this_cpu_sub(tag->counters->bytes, bytes);
-	this_cpu_dec(tag->counters->calls);
+	this_cpu_sub(tag->counters[nid].bytes, bytes);
+	this_cpu_dec(tag->counters[nid].calls);
 
 	ref->ct = NULL;
 }
@@ -228,8 +249,8 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes)
 #define DEFINE_ALLOC_TAG(_alloc_tag)
 static inline bool mem_alloc_profiling_enabled(void) { return false; }
 static inline void alloc_tag_add(union codetag_ref *ref, struct alloc_tag *tag,
-				 size_t bytes) {}
-static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes) {}
+				 int nid, size_t bytes) {}
+static inline void alloc_tag_sub(union codetag_ref *ref, int nid, size_t bytes) {}
 #define alloc_tag_record(p)	do {} while (0)
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */

@@ -1103,58 +1103,59 @@ void __clear_page_tag_ref(struct page *page)
 /* Should be called only if mem_alloc_profiling_enabled() */
 static noinline
 void __pgalloc_tag_add(struct page *page, struct task_struct *task,
-		       unsigned int nr)
+		       int nid, unsigned int nr)
 {
 	union pgtag_ref_handle handle;
 	union codetag_ref ref;
 
 	if (get_page_tag_ref(page, &ref, &handle)) {
-		alloc_tag_add(&ref, task->alloc_tag, PAGE_SIZE * nr);
+		alloc_tag_add(&ref, task->alloc_tag, nid, PAGE_SIZE * nr);
 		update_page_tag_ref(handle, &ref);
 		put_page_tag_ref(handle);
 	}
 }
 
 static inline void pgalloc_tag_add(struct page *page, struct task_struct *task,
-				   unsigned int nr)
+				   int nid, unsigned int nr)
 {
 	if (mem_alloc_profiling_enabled())
-		__pgalloc_tag_add(page, task, nr);
+		__pgalloc_tag_add(page, task, nid, nr);
 }
 
 /* Should be called only if mem_alloc_profiling_enabled() */
 static noinline
-void __pgalloc_tag_sub(struct page *page, unsigned int nr)
+void __pgalloc_tag_sub(struct page *page, int nid, unsigned int nr)
 {
 	union pgtag_ref_handle handle;
 	union codetag_ref ref;
 
 	if (get_page_tag_ref(page, &ref, &handle)) {
-		alloc_tag_sub(&ref, PAGE_SIZE * nr);
+		alloc_tag_sub(&ref, nid, PAGE_SIZE * nr);
 		update_page_tag_ref(handle, &ref);
 		put_page_tag_ref(handle);
 	}
 }
 
-static inline void pgalloc_tag_sub(struct page *page, unsigned int nr)
+static inline void pgalloc_tag_sub(struct page *page, int nid, unsigned int nr)
 {
 	if (mem_alloc_profiling_enabled())
-		__pgalloc_tag_sub(page, nr);
+		__pgalloc_tag_sub(page, nid, nr);
 }
 
 /* When tag is not NULL, assuming mem_alloc_profiling_enabled */
-static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr)
+static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag,
+					 int nid, unsigned int nr)
 {
 	if (tag)
-		this_cpu_sub(tag->counters->bytes, PAGE_SIZE * nr);
+		this_cpu_sub(tag->counters[nid].bytes, PAGE_SIZE * nr);
 }
 
 #else /* CONFIG_MEM_ALLOC_PROFILING */
 
 static inline void pgalloc_tag_add(struct page *page, struct task_struct *task,
-				   unsigned int nr) {}
-static inline void pgalloc_tag_sub(struct page *page, unsigned int nr) {}
-static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr) {}
+				   int nid, unsigned int nr) {}
+static inline void pgalloc_tag_sub(struct page *page, int nid, unsigned int nr) {}
+static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, int nid, unsigned int nr) {}
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */
 
@@ -1193,7 +1194,7 @@ __always_inline bool free_pages_prepare(struct page *page,
 		/* Do not let hwpoison pages hit pcplists/buddy */
 		reset_page_owner(page, order);
 		page_table_check_free(page, order);
-		pgalloc_tag_sub(page, 1 << order);
+		pgalloc_tag_sub(page, page_to_nid(page), 1 << order);
 
 		/*
 		 * The page is isolated and accounted for.
@@ -1247,7 +1248,7 @@ __always_inline bool free_pages_prepare(struct page *page,
 	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 	reset_page_owner(page, order);
 	page_table_check_free(page, order);
-	pgalloc_tag_sub(page, 1 << order);
+	pgalloc_tag_sub(page, page_to_nid(page), 1 << order);
 
 	if (!PageHighMem(page)) {
 		debug_check_no_locks_freed(page_address(page),
@@ -1703,7 +1704,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 
 	set_page_owner(page, order, gfp_flags);
 	page_table_check_alloc(page, order);
-	pgalloc_tag_add(page, current, 1 << order);
+	pgalloc_tag_add(page, current, page_to_nid(page), 1 << order);
 }
 
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
@@ -5039,7 +5040,7 @@ static void ___free_pages(struct page *page, unsigned int order,
 	if (put_page_testzero(page))
 		__free_frozen_pages(page, order, fpi_flags);
 	else if (!head) {
-		pgalloc_tag_sub_pages(tag, (1 << order) - 1);
+		pgalloc_tag_sub_pages(tag, page_to_nid(page), (1 << order) - 1);
 		while (order-- > 0)
 			__free_frozen_pages(page + (1 << order), order,
 					    fpi_flags);
