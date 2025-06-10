@@ -11,6 +11,8 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/buffer-dmaengine.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/interrupt.h>
@@ -23,6 +25,8 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/spi/offload/consumer.h>
+#include <linux/spi/offload/provider.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/units.h>
@@ -111,6 +115,7 @@ enum ad4052_interrupt_en {
 
 struct ad4052_chip_info {
 	const struct iio_chan_spec channels[1];
+	const struct iio_chan_spec offload_channels[1];
 	const char *name;
 	u16 prod_id;
 	u8 max_avg;
@@ -156,7 +161,11 @@ struct ad4052_state {
 	const struct ad4052_bus_ops *ops;
 	const struct ad4052_chip_info *chip;
 	enum ad4052_operation_mode mode;
+	struct spi_offload *offload;
+	struct spi_offload_trigger *offload_trigger;
 	struct spi_device *spi;
+	struct spi_transfer offload_xfer;
+	struct spi_message offload_msg;
 	struct pwm_device *cnv_pwm;
 	struct pwm_state pwm_st;
 	struct spi_transfer xfer;
@@ -344,6 +353,7 @@ AD4052_EXT_INFO(AD4052_500KSPS);
 static const struct ad4052_chip_info ad4050_chip_info = {
 	.name = "ad4050",
 	.channels = { AD4052_CHAN(12, AD4052_2MSPS) },
+	.offload_channels = { AD4052_OFFLOAD_CHAN(12, AD4052_2MSPS) },
 	.prod_id = 0x70,
 	.max_avg = AD4050_MAX_AVG,
 	.grade = AD4052_2MSPS,
@@ -352,6 +362,7 @@ static const struct ad4052_chip_info ad4050_chip_info = {
 static const struct ad4052_chip_info ad4052_chip_info = {
 	.name = "ad4052",
 	.channels = { AD4052_CHAN(16, AD4052_2MSPS) },
+	.offload_channels = { AD4052_OFFLOAD_CHAN(16, AD4052_2MSPS) },
 	.prod_id = 0x72,
 	.max_avg = AD4052_MAX_AVG,
 	.grade = AD4052_2MSPS,
@@ -360,6 +371,7 @@ static const struct ad4052_chip_info ad4052_chip_info = {
 static const struct ad4052_chip_info ad4056_chip_info = {
 	.name = "ad4056",
 	.channels = { AD4052_CHAN(12, AD4052_500KSPS) },
+	.offload_channels = { AD4052_OFFLOAD_CHAN(12, AD4052_500KSPS) },
 	.prod_id = 0x76,
 	.max_avg = AD4050_MAX_AVG,
 	.grade = AD4052_500KSPS,
@@ -368,6 +380,7 @@ static const struct ad4052_chip_info ad4056_chip_info = {
 static const struct ad4052_chip_info ad4058_chip_info = {
 	.name = "ad4058",
 	.channels = { AD4052_CHAN(16, AD4052_500KSPS) },
+	.offload_channels = { AD4052_OFFLOAD_CHAN(16, AD4052_500KSPS) },
 	.prod_id = 0x78,
 	.max_avg = AD4052_MAX_AVG,
 	.grade = AD4052_500KSPS,
@@ -388,6 +401,28 @@ static int ad4052_update_xfer_raw(struct iio_dev *indio_dev,
 	xfer->bits_per_word = scan_type->realbits;
 	xfer->len = scan_type->realbits == 24 ? 4 : 2;
 	xfer->speed_hz = AD4052_SPI_MAX_ADC_XFER_SPEED(st->vio_uv);
+
+	return 0;
+}
+
+static int ad4052_update_xfer_offload(struct iio_dev *indio_dev,
+				      struct iio_chan_spec const *chan)
+{
+	struct ad4052_state *st = iio_priv(indio_dev);
+	const struct iio_scan_type *scan_type;
+	struct spi_transfer *xfer = &st->offload_xfer;
+
+	scan_type = iio_get_current_scan_type(indio_dev, chan);
+	if (IS_ERR(scan_type))
+		return PTR_ERR(scan_type);
+
+	xfer->bits_per_word = scan_type->realbits;
+	xfer->offload_flags = SPI_OFFLOAD_XFER_RX_STREAM;
+	xfer->len = scan_type->realbits == 24 ? 4 : 2;
+	xfer->speed_hz = AD4052_SPI_MAX_ADC_XFER_SPEED(st->vio_uv);
+
+	spi_message_init_with_transfers(&st->offload_msg, &st->offload_xfer, 1);
+	st->offload_msg.offload = st->offload;
 
 	return 0;
 }
@@ -838,6 +873,87 @@ static int ad4052_write_raw(struct iio_dev *indio_dev,
 	return ret;
 }
 
+static int ad4052_offload_buffer_postenable(struct iio_dev *indio_dev)
+{
+	struct ad4052_state *st = iio_priv(indio_dev);
+	struct spi_offload_trigger_config config = {
+		.type = SPI_OFFLOAD_TRIGGER_DATA_READY,
+	};
+	int ret;
+
+	ret = pm_runtime_resume_and_get(&st->spi->dev);
+	if (ret)
+		return ret;
+
+	ret = ad4052_set_operation_mode(st, st->mode);
+	if (ret)
+		goto out_mode_error;
+
+	ret = ad4052_update_xfer_offload(indio_dev, indio_dev->channels);
+	if (ret)
+		goto out_xfer_error;
+
+	ret = spi_optimize_message(st->spi, &st->offload_msg);
+	if (ret)
+		goto out_xfer_error;
+
+	/* SPI Offload handles the data ready irq */
+	if (st->gp1_irq)
+		disable_irq(st->gp1_irq);
+
+	ret = spi_offload_trigger_enable(st->offload, st->offload_trigger,
+					 &config);
+	if (ret)
+		goto out_offload_error;
+
+	st->pwm_st.enabled = true;
+	ret = pwm_apply_might_sleep(st->cnv_pwm, &st->pwm_st);
+	if (ret)
+		goto out_pwm_error;
+
+	return 0;
+
+out_pwm_error:
+	spi_offload_trigger_disable(st->offload, st->offload_trigger);
+out_offload_error:
+	if (st->gp1_irq)
+		enable_irq(st->gp1_irq);
+	spi_unoptimize_message(&st->offload_msg);
+out_xfer_error:
+	ad4052_exit_command(st);
+out_mode_error:
+	pm_runtime_mark_last_busy(&st->spi->dev);
+	pm_runtime_put_autosuspend(&st->spi->dev);
+
+	return ret;
+}
+
+static int ad4052_offload_buffer_predisable(struct iio_dev *indio_dev)
+{
+	struct ad4052_state *st = iio_priv(indio_dev);
+	int ret;
+
+	st->pwm_st.enabled = false;
+	pwm_apply_might_sleep(st->cnv_pwm, &st->pwm_st);
+
+	spi_offload_trigger_disable(st->offload, st->offload_trigger);
+	spi_unoptimize_message(&st->offload_msg);
+
+	ret = ad4052_exit_command(st);
+
+	if (st->gp1_irq)
+		enable_irq(st->gp1_irq);
+	pm_runtime_mark_last_busy(&st->spi->dev);
+	pm_runtime_put_autosuspend(&st->spi->dev);
+
+	return ret;
+}
+
+static const struct iio_buffer_setup_ops ad4052_buffer_offload_setup_ops = {
+	.postenable = &ad4052_offload_buffer_postenable,
+	.predisable = &ad4052_offload_buffer_predisable,
+};
+
 static int ad4052_debugfs_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 				     unsigned int writeval, unsigned int *readval)
 {
@@ -884,9 +1000,82 @@ static const struct regmap_config ad4052_regmap_config = {
 	.can_sleep = true,
 };
 
+static const struct spi_offload_config ad4052_offload_config = {
+	.capability_flags = SPI_OFFLOAD_CAP_TRIGGER |
+			    SPI_OFFLOAD_CAP_RX_STREAM_DMA,
+};
+
+static void ad4052_pwm_disable(void *pwm)
+{
+	pwm_disable(pwm);
+}
+
+static bool ad4052_offload_trigger_match(struct spi_offload_trigger *trigger,
+					 enum spi_offload_trigger_type type,
+					 u64 *args, u32 nargs)
+{
+	return type == SPI_OFFLOAD_TRIGGER_DATA_READY;
+}
+
+static const struct spi_offload_trigger_ops ad4052_offload_trigger_ops = {
+	.match = ad4052_offload_trigger_match,
+};
+
+static int ad4052_request_offload(struct iio_dev *indio_dev)
+{
+	struct ad4052_state *st = iio_priv(indio_dev);
+	struct device *dev = &st->spi->dev;
+	struct dma_chan *rx_dma;
+	struct spi_offload_trigger_info trigger_info = {
+		.fwnode = dev_fwnode(dev),
+		.ops = &ad4052_offload_trigger_ops,
+		.priv = st,
+	};
+	int ret;
+
+	indio_dev->setup_ops = &ad4052_buffer_offload_setup_ops;
+
+	ret = devm_spi_offload_trigger_register(dev, &trigger_info);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register offload trigger\n");
+
+	st->offload_trigger = devm_spi_offload_trigger_get(dev, st->offload,
+							   SPI_OFFLOAD_TRIGGER_DATA_READY);
+	if (IS_ERR(st->offload_trigger))
+		return PTR_ERR(st->offload_trigger);
+
+	st->cnv_pwm = devm_pwm_get(dev, NULL);
+	if (IS_ERR(st->cnv_pwm))
+		return dev_err_probe(dev, PTR_ERR(st->cnv_pwm), "failed to get CNV PWM\n");
+
+	pwm_init_state(st->cnv_pwm, &st->pwm_st);
+
+	st->pwm_st.enabled = false;
+	st->pwm_st.duty_cycle = AD4052_T_CNVH_NS * 2;
+	st->pwm_st.period = DIV_ROUND_UP_ULL(NSEC_PER_SEC, AD4052_MAX_RATE(st->chip->grade));
+
+	ret = pwm_apply_might_sleep(st->cnv_pwm, &st->pwm_st);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to apply CNV PWM\n");
+
+	ret = devm_add_action_or_reset(dev, ad4052_pwm_disable, st->cnv_pwm);
+	if (ret)
+		return ret;
+
+	rx_dma = devm_spi_offload_rx_stream_request_dma_chan(dev, st->offload);
+	if (IS_ERR(rx_dma))
+		return PTR_ERR(rx_dma);
+
+	return devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev, rx_dma,
+							   IIO_BUFFER_DIRECTION_IN);
+}
+
 static int __ad4052_validate_trigger_sources(struct of_phandle_args *trigger_sources)
 {
 	switch (trigger_sources->args[1]) {
+	case AD4052_TRIGGER_PIN_GP0:
+		return trigger_sources->args[0] == AD4052_TRIGGER_EVENT_EITHER_THRESH ?
+		       0 : -EINVAL;
 	case AD4052_TRIGGER_PIN_GP1:
 		return trigger_sources->args[0] == AD4052_TRIGGER_EVENT_DATA_READY ?
 		       0 : -EINVAL;
@@ -903,14 +1092,45 @@ static int ad4052_validate_trigger_sources(struct iio_dev *indio_dev)
 	int ret;
 
 	np = st->spi->dev.of_node;
+	for (u8 i = 0; i < 2; i++) {
+		ret = of_parse_phandle_with_args(np, "trigger-sources",
+						 "#trigger-source-cells", i,
+						 &trigger_sources);
+		if (ret)
+			return ret;
+
+		ret = __ad4052_validate_trigger_sources(&trigger_sources);
+		of_node_put(trigger_sources.np);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+static int ad4052_validate_parent_trigger_sources(struct iio_dev *indio_dev)
+{
+	struct ad4052_state *st = iio_priv(indio_dev);
+	struct of_phandle_args trigger_sources;
+	struct device_node *np;
+	int ret;
+
+	np = of_get_parent(st->spi->dev.of_node);
+	if (!np)
+		return -ENODEV;
+
 	ret = of_parse_phandle_with_args(np, "trigger-sources",
 					 "#trigger-source-cells", 0,
 					 &trigger_sources);
 	if (ret)
-		return ret;
+		goto out_error;
 
-	ret = __ad4052_validate_trigger_sources(&trigger_sources);
+	if (trigger_sources.args[0] != AD4052_TRIGGER_EVENT_DATA_READY ||
+	    trigger_sources.args[1] != AD4052_TRIGGER_PIN_GP1)
+		ret = -EINVAL;
 	of_node_put(trigger_sources.np);
+out_error:
+	of_node_put(np);
 	return ret;
 }
 
@@ -985,6 +1205,26 @@ static int ad4052_probe(struct spi_device *spi)
 	indio_dev->num_channels = 1;
 	indio_dev->info = &ad4052_info;
 	indio_dev->name = chip->name;
+
+	st->offload = devm_spi_offload_get(dev, spi, &ad4052_offload_config);
+	ret = PTR_ERR_OR_ZERO(st->offload);
+
+	if (ret == -ENODEV) {
+		st->offload_trigger = NULL;
+		indio_dev->channels = chip->channels;
+	} else if (!ret) {
+		indio_dev->channels = chip->offload_channels;
+		ret = ad4052_request_offload(indio_dev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to configure offload\n");
+		ret = ad4052_validate_parent_trigger_sources(indio_dev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to validate parent trigger sources\n");
+	} else {
+		return dev_err_probe(dev, ret, "Failed to get offload\n");
+	}
 
 	ret = ad4052_validate_trigger_sources(indio_dev);
 	if (ret)
