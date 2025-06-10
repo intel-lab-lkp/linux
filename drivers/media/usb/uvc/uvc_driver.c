@@ -729,7 +729,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	streaming->nformats = 0;
 
 	/* Parse the format descriptors. */
-	while (buflen > 2 && buffer[1] == USB_DT_CS_INTERFACE) {
+	while (buflen > 3 && buffer[1] == USB_DT_CS_INTERFACE) {
 		switch (buffer[2]) {
 		case UVC_VS_FORMAT_UNCOMPRESSED:
 		case UVC_VS_FORMAT_MJPEG:
