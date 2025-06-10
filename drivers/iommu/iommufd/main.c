@@ -172,6 +172,12 @@ int iommufd_object_remove(struct iommufd_ctx *ictx,
 		ictx->vfio_ioas = NULL;
 	xa_unlock(&ictx->objects);
 
+	if (obj->type == IOMMUFD_OBJ_DEVICE) {
+		/* idevice should be freed with lock held */
+		struct iommufd_device *idev = container_of(obj, struct iommufd_device, obj);
+
+		mutex_unlock(&idev->lock);
+	}
 	/*
 	 * Since users is zero any positive users_shortterm must be racing
 	 * iommufd_put_object(), or we have a bug.

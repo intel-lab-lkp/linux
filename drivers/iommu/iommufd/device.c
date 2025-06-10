@@ -221,6 +221,8 @@ struct iommufd_device *iommufd_device_bind(struct iommufd_ctx *ictx,
 	refcount_inc(&idev->obj.users);
 	/* igroup refcount moves into iommufd_device */
 	idev->igroup = igroup;
+	idev->vdev   = NULL;
+	mutex_init(&idev->lock);
 
 	/*
 	 * If the caller fails after this success it must call
@@ -282,6 +284,12 @@ EXPORT_SYMBOL_NS_GPL(iommufd_ctx_has_group, "IOMMUFD");
  */
 void iommufd_device_unbind(struct iommufd_device *idev)
 {
+	/* this will be unlocked while destroying the idev obj */
+	mutex_lock(&idev->lock);
+
+	if (idev->vdev)
+		/* extra refcount taken during vdevice alloc */
+		iommufd_object_destroy_user(idev->ictx, &idev->vdev->obj);
 	iommufd_object_destroy_user(idev->ictx, &idev->obj);
 }
 EXPORT_SYMBOL_NS_GPL(iommufd_device_unbind, "IOMMUFD");
