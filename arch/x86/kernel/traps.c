@@ -880,6 +880,29 @@ static void do_int3_user(struct pt_regs *regs)
 	cond_local_irq_disable(regs);
 }
 
+static int handle_disappeared_int3(struct pt_regs *regs)
+{
+	unsigned long addr = instruction_pointer(regs) - INT3_INSN_SIZE;
+	unsigned char opcode;
+	int ret;
+
+	/*
+	 * Evacuate the kernel from disappeared int3, which was there when
+	 * the exception happens, but it is removed now by another CPU.
+	 */
+	ret = copy_from_kernel_nofault(&opcode, (void *)addr, INT3_INSN_SIZE);
+	if (ret < 0)
+		return ret;
+	if (opcode == INT3_INSN_OPCODE)
+		return -EFAULT;
+
+	/* There is no INT3 here. Retry with the new instruction. */
+	WARN_ONCE(1, "A disappeared INT3 was handled at %pS.", (void *)addr);
+	instruction_pointer_set(regs, addr);
+
+	return 0;
+}
+
 DEFINE_IDTENTRY_RAW(exc_int3)
 {
 	/*
@@ -907,7 +930,7 @@ DEFINE_IDTENTRY_RAW(exc_int3)
 		irqentry_state_t irq_state = irqentry_nmi_enter(regs);
 
 		instrumentation_begin();
-		if (!do_int3(regs))
+		if (!do_int3(regs) && handle_disappeared_int3(regs) < 0)
 			die("int3", regs, 0);
 		instrumentation_end();
 		irqentry_nmi_exit(regs, irq_state);
