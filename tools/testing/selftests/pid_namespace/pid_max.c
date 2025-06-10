@@ -12,6 +12,7 @@
 #include <syscall.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 
 #include "../kselftest_harness.h"
 #include "../pidfd/pidfd.h"
