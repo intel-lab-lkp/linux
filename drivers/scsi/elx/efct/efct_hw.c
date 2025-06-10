@@ -1314,7 +1314,7 @@ efct_hw_rx_post(struct efct_hw *hw)
 			break;
 	}
 
-	if (rc && hw->seq_pool)
+	if (rc)
 		kfree(hw->seq_pool);
 
 	return rc;
