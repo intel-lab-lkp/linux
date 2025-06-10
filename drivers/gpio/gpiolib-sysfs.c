@@ -47,11 +47,13 @@ struct gpiod_data {
 
 	struct mutex mutex;
 	struct kernfs_node *value_class_node;
+	struct kernfs_node *value_chip_node;
 	int irq;
 	unsigned char irq_flags;
 
 	bool direction_can_change;
 
+	struct kobject *parent;
 	struct device_attribute dir_attr;
 	struct device_attribute val_attr;
 	struct device_attribute edge_attr;
@@ -180,6 +182,7 @@ static irqreturn_t gpio_sysfs_irq(int irq, void *priv)
 	struct gpiod_data *data = priv;
 
 	sysfs_notify_dirent(data->value_class_node);
+	kernfs_notify(data->value_chip_node);
 
 	return IRQ_HANDLED;
 }
@@ -780,13 +783,46 @@ int gpiod_export(struct gpio_desc *desc, bool direction_may_change)
 	gdev_data = gdev_get_data(gdev);
 	if (!gdev_data) {
 		status = -ENODEV;
-		goto err_unregister_device;
+		goto err_put_dirent;
 	}
 
 	list_add(&desc_data->list, &gdev_data->exported_lines);
 
+	desc_data->attr_group.name = kasprintf(GFP_KERNEL, "gpio%u",
+					       gpio_chip_hwgpio(desc));
+	if (!desc_data->attr_group.name) {
+		status = -ENOMEM;
+		goto err_put_dirent;
+	}
+
+	desc_data->parent = &gdev_data->cdev_id->kobj;
+	status = sysfs_create_groups(desc_data->parent,
+				     desc_data->attr_groups);
+	if (status)
+		goto err_free_name;
+
+	char *path __free(kfree) = kasprintf(GFP_KERNEL, "gpio%u/value",
+					     gpio_chip_hwgpio(desc));
+	if (!path) {
+		status = -ENOMEM;
+		goto err_remove_groups;
+	}
+
+	desc_data->value_chip_node = kernfs_walk_and_get(desc_data->parent->sd,
+							 path);
+	if (!desc_data->value_chip_node) {
+		status = -ENODEV;
+		goto err_remove_groups;
+	}
+
 	return 0;
 
+err_remove_groups:
+	sysfs_remove_groups(desc_data->parent, desc_data->attr_groups);
+err_free_name:
+	kfree(desc_data->attr_group.name);
+err_put_dirent:
+	sysfs_put(desc_data->value_class_node);
 err_unregister_device:
 	device_unregister(desc_data->dev);
 err_free_data:
@@ -876,6 +912,7 @@ void gpiod_unexport(struct gpio_desc *desc)
 		clear_bit(FLAG_EXPORT, &desc->flags);
 		sysfs_put(desc_data->value_class_node);
 		device_unregister(desc_data->dev);
+		kernfs_put(desc_data->value_chip_node);
 
 		/*
 		 * Release irq after deregistration to prevent race with
