@@ -17,6 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/tca6416_keypad.h>
+#include <linux/bitfield.h>
 
 #define TCA6416_INPUT          0
 #define TCA6416_OUTPUT         1
@@ -24,6 +25,7 @@
 #define TCA6416_DIRECTION      3
 
 #define TCA6416_POLL_INTERVAL	100 /* msec */
+#define TCA6416_MAX_IO_SIZE 16 /* maximum number of inputs */
 
 static const struct i2c_device_id tca6416_id[] = {
 	{ "tca6416-keys", 16, },
@@ -173,9 +175,67 @@ static int tca6416_setup_registers(struct tca6416_keypad_chip *chip)
 	return 0;
 }
 
+/* Configuration bitmap
+ * | 31:18    |         17 | 16:14 | 13:10    | 9:0  |
+ * | reserved | active_low | type  | reserved | code |
+ */
+#define CFG_CODE GENMASK(9, 0)
+#define CFG_TYPE GENMASK(16, 14)
+#define CFG_ACTIVE_LOW BIT(17)
+
+static struct tca6416_keys_platform_data *
+tca6416_parse_properties(struct device *dev, uint8_t io_size)
+{
+	static const char keymap_property[] = "linux,gpio-keymap";
+	struct tca6416_keys_platform_data *pdata;
+	u32 keymap[TCA6416_MAX_IO_SIZE];
+	struct tca6416_button *buttons;
+	int ret, i;
+	u8 pin;
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return NULL;
+
+	ret = device_property_count_u32(dev, keymap_property);
+	if (ret <= 0)
+		return NULL;
+
+	pdata->nbuttons = ret;
+	if (pdata->nbuttons > io_size)
+		pdata->nbuttons = io_size;
+
+	ret = device_property_read_u32_array(dev, keymap_property, keymap,
+					     pdata->nbuttons);
+	if (ret)
+		return NULL;
+
+	buttons = devm_kcalloc(dev, pdata->nbuttons, sizeof(*buttons),
+			       GFP_KERNEL);
+	if (!buttons)
+		return NULL;
+
+	for (i = 0; i < pdata->nbuttons; i++) {
+		buttons[i].code = FIELD_GET(CFG_CODE, keymap[i]);
+		buttons[i].type = FIELD_GET(CFG_TYPE, keymap[i]);
+		buttons[i].active_low = FIELD_GET(CFG_ACTIVE_LOW, keymap[i]);
+		/* enable all inputs by default */
+		pdata->pinmask |= BIT(i);
+	}
+
+	pdata->buttons = buttons;
+
+	pdata->rep = device_property_read_bool(dev, "autorepeat");
+	/* we can ignore the result as by default all inputs are enabled */
+	device_property_read_u16(dev, "pinmask", &pdata->pinmask);
+	pdata->use_polling = device_property_read_bool(dev, "polling");
+
+	return pdata;
+}
+
 static int tca6416_keypad_probe(struct i2c_client *client)
 {
-	const struct i2c_device_id *id = i2c_client_get_device_id(client);
+	uint8_t io_size = (uintptr_t)i2c_get_match_data(client);
 	struct tca6416_keys_platform_data *pdata;
 	struct tca6416_keypad_chip *chip;
 	struct input_dev *input;
@@ -190,9 +250,13 @@ static int tca6416_keypad_probe(struct i2c_client *client)
 	}
 
 	pdata = dev_get_platdata(&client->dev);
-	if (!pdata) {
-		dev_dbg(&client->dev, "no platform data\n");
-		return -EINVAL;
+	if (!pdata && dev_fwnode(&client->dev)) {
+		pdata = tca6416_parse_properties(&client->dev, io_size);
+		if (!pdata) {
+			dev_err(&client->dev,
+				"Failed to parse device configuration from properties\n");
+			return -EINVAL;
+		}
 	}
 
 	chip = devm_kzalloc(&client->dev,
@@ -207,7 +271,7 @@ static int tca6416_keypad_probe(struct i2c_client *client)
 
 	chip->client = client;
 	chip->input = input;
-	chip->io_size = id->driver_data;
+	chip->io_size = io_size;
 	chip->pinmask = pdata->pinmask;
 	chip->use_polling = pdata->use_polling;
 
@@ -279,9 +343,23 @@ static int tca6416_keypad_probe(struct i2c_client *client)
 	return 0;
 }
 
+static const struct of_device_id tca6416_of_match[] = {
+	{
+		.compatible = "ti,tca6416_keys",
+		.data = (void *)16,
+	},
+	{
+		.compatible = "ti,tca6408_keys",
+		.data = (void *)8,
+	},
+	{}
+};
+MODULE_DEVICE_TABLE(of, tca6416_of_match);
+
 static struct i2c_driver tca6416_keypad_driver = {
 	.driver = {
 		.name	= "tca6416-keypad",
+		.of_match_table = tca6416_of_match,
 	},
 	.probe		= tca6416_keypad_probe,
 	.id_table	= tca6416_id,
