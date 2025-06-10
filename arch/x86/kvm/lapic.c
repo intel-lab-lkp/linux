@@ -616,7 +616,7 @@ static const unsigned int apic_lvt_mask[KVM_APIC_MAX_NR_LVT_ENTRIES] = {
 	[LVT_CMCI] = LVT_MASK | APIC_MODE_MASK
 };
 
-static int apic_find_highest_vector(void *bitmap)
+static inline int apic_find_highest_vector(void *bitmap)
 {
 	int vec;
 	u32 *reg;
