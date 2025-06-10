@@ -525,6 +525,16 @@ static inline int apic_find_highest_vector(void *bitmap)
 	return -1;
 }
 
+static inline u32 apic_get_reg(void *regs, int reg_off)
+{
+	return *((u32 *) (regs + reg_off));
+}
+
+static inline void apic_set_reg(void *regs, int reg_off, u32 val)
+{
+	*((u32 *) (regs + reg_off)) = val;
+}
+
 /*
  * Warm reset vector position:
  */
