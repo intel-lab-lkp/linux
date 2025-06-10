@@ -39,6 +39,9 @@
 #define RTASE_FUNC_RXQ_NUM  1
 #define RTASE_INTERRUPT_NUM 1
 
+#define RTASE_TX_RING 0
+#define RTASE_RX_RING 1
+
 #define RTASE_MITI_TIME_COUNT_MASK    GENMASK(3, 0)
 #define RTASE_MITI_TIME_UNIT_MASK     GENMASK(7, 4)
 #define RTASE_MITI_DEFAULT_TIME       128
@@ -288,6 +291,7 @@ struct rtase_ring {
 	u32 cur_idx;
 	u32 dirty_idx;
 	u16 index;
+	u8 ring_type;
 
 	struct sk_buff *skbuff[RTASE_NUM_DESC];
 	void *data_buf[RTASE_NUM_DESC];

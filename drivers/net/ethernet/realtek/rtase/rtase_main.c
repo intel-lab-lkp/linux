@@ -326,6 +326,7 @@ static void rtase_tx_desc_init(struct rtase_private *tp, u16 idx)
 	ring->cur_idx = 0;
 	ring->dirty_idx = 0;
 	ring->index = idx;
+	ring->ring_type = RTASE_TX_RING;
 	ring->alloc_fail = 0;
 
 	for (i = 0; i < RTASE_NUM_DESC; i++) {
@@ -345,6 +346,10 @@ static void rtase_tx_desc_init(struct rtase_private *tp, u16 idx)
 		ring->ivec = &tp->int_vector[0];
 		list_add_tail(&ring->ring_entry, &tp->int_vector[0].ring_list);
 	}
+
+	netif_queue_set_napi(tp->dev, ring->index,
+			     NETDEV_QUEUE_TYPE_TX,
+			     &ring->ivec->napi);
 }
 
 static void rtase_map_to_asic(union rtase_rx_desc *desc, dma_addr_t mapping,
@@ -590,6 +595,7 @@ static void rtase_rx_desc_init(struct rtase_private *tp, u16 idx)
 	ring->cur_idx = 0;
 	ring->dirty_idx = 0;
 	ring->index = idx;
+	ring->ring_type = RTASE_RX_RING;
 	ring->alloc_fail = 0;
 
 	for (i = 0; i < RTASE_NUM_DESC; i++)
@@ -597,6 +603,9 @@ static void rtase_rx_desc_init(struct rtase_private *tp, u16 idx)
 
 	ring->ring_handler = rx_handler;
 	ring->ivec = &tp->int_vector[idx];
+	netif_queue_set_napi(tp->dev, ring->index,
+			     NETDEV_QUEUE_TYPE_RX,
+			     &ring->ivec->napi);
 	list_add_tail(&ring->ring_entry, &tp->int_vector[idx].ring_list);
 }
 
@@ -1161,8 +1170,18 @@ static void rtase_down(struct net_device *dev)
 		ivec = &tp->int_vector[i];
 		napi_disable(&ivec->napi);
 		list_for_each_entry_safe(ring, tmp, &ivec->ring_list,
-					 ring_entry)
+					 ring_entry) {
+			if (ring->ring_type == RTASE_TX_RING)
+				netif_queue_set_napi(tp->dev, ring->index,
+						     NETDEV_QUEUE_TYPE_TX,
+						     NULL);
+			else
+				netif_queue_set_napi(tp->dev, ring->index,
+						     NETDEV_QUEUE_TYPE_RX,
+						     NULL);
+
 			list_del(&ring->ring_entry);
+		}
 	}
 
 	netif_tx_disable(dev);
@@ -1518,8 +1537,18 @@ static void rtase_sw_reset(struct net_device *dev)
 	for (i = 0; i < tp->int_nums; i++) {
 		ivec = &tp->int_vector[i];
 		list_for_each_entry_safe(ring, tmp, &ivec->ring_list,
-					 ring_entry)
+					 ring_entry) {
+			if (ring->ring_type == RTASE_TX_RING)
+				netif_queue_set_napi(tp->dev, ring->index,
+						     NETDEV_QUEUE_TYPE_TX,
+						     NULL);
+			else
+				netif_queue_set_napi(tp->dev, ring->index,
+						     NETDEV_QUEUE_TYPE_RX,
+						     NULL);
+
 			list_del(&ring->ring_entry);
+		}
 	}
 
 	ret = rtase_init_ring(dev);
