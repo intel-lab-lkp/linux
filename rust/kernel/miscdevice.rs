@@ -9,7 +9,7 @@
 //! Reference: <https://www.kernel.org/doc/html/latest/driver-api/misc_devices.html>
 
 use crate::{
-    bindings,
+    bindings, container_of,
     device::Device,
     error::{to_result, Error, Result, VTABLE_DEFAULT_ERROR},
     ffi::{c_int, c_long, c_uint, c_ulong},
@@ -21,6 +21,7 @@ use crate::{
     types::{ForeignOwnable, Opaque},
 };
 use core::{marker::PhantomData, mem::MaybeUninit, pin::Pin};
+use pin_init::Wrapper;
 
 /// Options for creating a misc device.
 #[derive(Copy, Clone)]
@@ -31,7 +32,10 @@ pub struct MiscDeviceOptions {
 
 impl MiscDeviceOptions {
     /// Create a raw `struct miscdev` ready for registration.
-    pub const fn into_raw<T: MiscDevice>(self) -> bindings::miscdevice {
+    pub const fn into_raw<T: MiscDevice>(self) -> bindings::miscdevice
+    where
+        T::Data: Sync,
+    {
         // SAFETY: All zeros is valid for this C type.
         let mut result: bindings::miscdevice = unsafe { MaybeUninit::zeroed().assume_init() };
         result.minor = bindings::MISC_DYNAMIC_MINOR as _;
@@ -45,38 +49,55 @@ impl MiscDeviceOptions {
 ///
 /// # Invariants
 ///
-/// `inner` is a registered misc device.
-#[repr(transparent)]
+/// - `inner` is a registered misc device.
+/// - `data` contains a valid `T::Data` for the whole lifetime of [`MiscDeviceRegistration`]
+/// - `data` must be valid until `misc_deregister` (called when dropped) has returned.
+/// - no mutable references to `data` may be created.
 #[pin_data(PinnedDrop)]
-pub struct MiscDeviceRegistration<T> {
+pub struct MiscDeviceRegistration<T: MiscDevice> {
     #[pin]
     inner: Opaque<bindings::miscdevice>,
-    _t: PhantomData<T>,
+    #[pin]
+    data: Opaque<T::Data>,
 }
 
-// SAFETY: It is allowed to call `misc_deregister` on a different thread from where you called
-// `misc_register`.
-unsafe impl<T> Send for MiscDeviceRegistration<T> {}
-// SAFETY: All `&self` methods on this type are written to ensure that it is safe to call them in
-// parallel.
-unsafe impl<T> Sync for MiscDeviceRegistration<T> {}
+// SAFETY:
+// - It is allowed to call `misc_deregister` on a different thread from where you called
+//   `misc_register`.
+// - Only implements `Send` if `MiscDevice::Data` is also `Send`.
+unsafe impl<T: MiscDevice> Send for MiscDeviceRegistration<T> where T::Data: Send {}
+
+// SAFETY:
+// - All `&self` methods on this type are written to ensure that it is safe to call them in
+//   parallel.
+// - Only implements `Sync` if `MiscDevice::Data` is also `Sync`.
+unsafe impl<T: MiscDevice> Sync for MiscDeviceRegistration<T> where T::Data: Sync {}
 
 impl<T: MiscDevice> MiscDeviceRegistration<T> {
     /// Register a misc device.
-    pub fn register(opts: MiscDeviceOptions) -> impl PinInit<Self, Error> {
+    pub fn register(
+        opts: MiscDeviceOptions,
+        data: impl PinInit<T::Data, Error>,
+    ) -> impl PinInit<Self, Error>
+    where
+        T::Data: Sync,
+    {
         try_pin_init!(Self {
+            data <- Opaque::pin_init(data),
             inner <- Opaque::try_ffi_init(move |slot: *mut bindings::miscdevice| {
                 // SAFETY: The initializer can write to the provided `slot`.
                 unsafe { slot.write(opts.into_raw::<T>()) };
 
-                // SAFETY: We just wrote the misc device options to the slot. The miscdevice will
-                // get unregistered before `slot` is deallocated because the memory is pinned and
-                // the destructor of this type deallocates the memory.
+                // SAFETY:
+                // * We just wrote the misc device options to the slot. The miscdevice will
+                //   get unregistered before `slot` is deallocated because the memory is pinned and
+                //   the destructor of this type deallocates the memory.
+                // * `data` is Initialized before `misc_register` so no race with `fops->open()`
+                //   is possible.
                 // INVARIANT: If this returns `Ok(())`, then the `slot` will contain a registered
                 // misc device.
                 to_result(unsafe { bindings::misc_register(slot) })
             }),
-            _t: PhantomData,
         })
     }
 
@@ -94,13 +115,24 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
         // before the underlying `struct miscdevice` is destroyed.
         unsafe { Device::as_ref((*self.as_raw()).this_device) }
     }
+
+    /// Access the additional data stored in this registration.
+    pub fn data(&self) -> &T::Data {
+        // SAFETY:
+        // * No mutable reference to the value contained by `self.data` can ever be created.
+        // * The value contained by `self.data` is valid for the entire lifetime of `&self`.
+        unsafe { &*self.data.get() }
+    }
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for MiscDeviceRegistration<T> {
+impl<T: MiscDevice> PinnedDrop for MiscDeviceRegistration<T> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: We know that the device is registered by the type invariants.
         unsafe { bindings::misc_deregister(self.inner.get()) };
+
+        // SAFETY: `self.data` contains a valid `Data` and does not need to be valid anymore.
+        unsafe { core::ptr::drop_in_place(self.data.get()) };
     }
 }
 
@@ -109,6 +141,13 @@ impl<T> PinnedDrop for MiscDeviceRegistration<T> {
 pub trait MiscDevice: Sized {
     /// What kind of pointer should `Self` be wrapped in.
     type Ptr: ForeignOwnable + Send + Sync;
+
+    /// Additional data carried by the [`MiscDeviceRegistration`] for this [`MiscDevice`].
+    /// If no additional data is required than the unit type `()` should be used.
+    ///
+    /// This can be accessed in [`MiscDevice::open()`] using
+    /// [`MiscDeviceRegistration::data()`].
+    type Data;
 
     /// Called when the misc device is opened.
     ///
@@ -180,7 +219,10 @@ pub trait MiscDevice: Sized {
 /// A vtable for the file operations of a Rust miscdevice.
 struct MiscdeviceVTable<T: MiscDevice>(PhantomData<T>);
 
-impl<T: MiscDevice> MiscdeviceVTable<T> {
+impl<T: MiscDevice> MiscdeviceVTable<T>
+where
+    T::Data: Sync,
+{
     /// # Safety
     ///
     /// `file` and `inode` must be the file and inode for a file that is undergoing initialization.
@@ -195,18 +237,30 @@ impl<T: MiscDevice> MiscdeviceVTable<T> {
         // SAFETY: The open call of a file can access the private data.
         let misc_ptr = unsafe { (*raw_file).private_data };
 
-        // SAFETY: This is a miscdevice, so `misc_open()` set the private data to a pointer to the
-        // associated `struct miscdevice` before calling into this method. Furthermore,
-        // `misc_open()` ensures that the miscdevice can't be unregistered and freed during this
-        // call to `fops_open`.
-        let misc = unsafe { &*misc_ptr.cast::<MiscDeviceRegistration<T>>() };
+        // This is a miscdevice, so `misc_open()` sets the private data to a pointer to the
+        // associated `struct miscdevice` before calling into this method.
+        let misc_ptr = misc_ptr.cast::<Opaque<bindings::miscdevice>>();
+
+        // SAFETY:
+        // * `misc_open()` ensures that the `struct miscdevice` can't be unregistered and freed
+        //   during this call to `fops_open`.
+        // * The `misc_ptr` always points to the `inner` field of a `MiscDeviceRegistration<T>`.
+        // * The `MiscDeviceRegistration<T>` is valid until the `struct miscdevice` was
+        //   unregistered.
+        // * `MiscDeviceRegistration<T>` is `Send` since `MiscDeviceRegistration::register` has a
+        //   `T::Data: Sync` bound,  `MiscDeviceRegistration<T>` is Send if `T::Data: Sync` and is
+        //   the only way to create a `MiscDeviceRegistration`. This means that a reference to it
+        //   can be shared between contexts.
+        // TODO: add `assert_sync` for `MiscDeviceRegistration<T>` and
+        // `MiscDeviceRegistration<T>::Data`.
+        let registration = unsafe { &*container_of!(misc_ptr, MiscDeviceRegistration<T>, inner) };
 
         // SAFETY:
         // * This underlying file is valid for (much longer than) the duration of `T::open`.
         // * There is no active fdget_pos region on the file on this thread.
         let file = unsafe { File::from_raw_file(raw_file) };
 
-        let ptr = match T::open(file, misc) {
+        let ptr = match T::open(file, registration) {
             Ok(ptr) => ptr,
             Err(err) => return err.to_errno(),
         };
