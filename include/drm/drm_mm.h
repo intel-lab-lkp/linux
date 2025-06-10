@@ -465,6 +465,7 @@ static inline int drm_mm_insert_node(struct drm_mm *mm,
 void drm_mm_remove_node(struct drm_mm_node *node);
 void drm_mm_init(struct drm_mm *mm, u64 start, u64 size);
 void drm_mm_takedown(struct drm_mm *mm);
+void drm_mm_shift(struct drm_mm *mm, s64 shift);
 
 /**
  * drm_mm_clean - checks whether an allocator is clean

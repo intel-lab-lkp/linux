@@ -918,6 +918,30 @@ struct drm_mm_node *drm_mm_scan_color_evict(struct drm_mm_scan *scan)
 EXPORT_SYMBOL(drm_mm_scan_color_evict);
 
 /**
+ * drm_mm_shift - move the range of addresses managed by this @mm
+ * @mm: the drm_mm structure instance to shift
+ * @shift: the shift value to be added to addresses of all nodes
+ *
+ * The function shifts all nodes by given offset, moving the address space
+ * range managed by this @mm.
+ */
+void drm_mm_shift(struct drm_mm *mm, s64 shift)
+{
+	struct drm_mm_node *node;
+
+	/*
+	 * Head node represents a hole, with negative size and start at the end
+	 * of addressable area. This means it is never present within nodes
+	 * list - needs to be shifted separately.
+	 */
+	mm->head_node.start += shift;
+
+	drm_mm_for_each_node(node, mm)
+		node->start += shift;
+}
+EXPORT_SYMBOL(drm_mm_shift);
+
+/**
  * drm_mm_init - initialize a drm-mm allocator
  * @mm: the drm_mm structure to initialize
  * @start: start of the range managed by @mm
