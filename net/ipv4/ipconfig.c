@@ -146,7 +146,8 @@ u8 root_server_path[256] = { 0, };	/* Path to mount as root */
 static char vendor_class_identifier[253] __initdata;
 
 #if defined(CONFIG_IP_PNP_DHCP)
-static char dhcp_client_identifier[253] __initdata;
+static u8 dhcp_client_identifier[253] __initdata;
+static int dhcp_client_identifier_len __initdata;
 #endif
 
 /* Persistent data: */
@@ -740,15 +741,22 @@ ic_dhcp_init_options(u8 *options, struct ic_device *d)
 			memcpy(e, vendor_class_identifier, len);
 			e += len;
 		}
-		len = strlen(dhcp_client_identifier + 1);
 		/* the minimum length of identifier is 2, include 1 byte type,
 		 * and can not be larger than the length of options
 		 */
-		if (len >= 1 && len < 312 - (e - options) - 1) {
-			*e++ = 61;
-			*e++ = len + 1;
-			memcpy(e, dhcp_client_identifier, len + 1);
-			e += len + 1;
+		if (dhcp_client_identifier_len >= 2) {
+			if (dhcp_client_identifier_len <= 312 - (e - options) - 3) {
+				pr_debug("DHCP: sending client identifier %*phC\n",
+					 dhcp_client_identifier_len,
+					 dhcp_client_identifier);
+				*e++ = 61;
+				*e++ = dhcp_client_identifier_len;
+				memcpy(e, dhcp_client_identifier,
+				       dhcp_client_identifier_len);
+				e += dhcp_client_identifier_len;
+			} else {
+				pr_warn("DHCP: client identifier doesn't fit in the packet\n");
+			}
 		}
 	}
 
@@ -1661,6 +1669,33 @@ static int __init ip_auto_config(void)
 
 late_initcall(ip_auto_config);
 
+#ifdef CONFIG_IP_PNP_DHCP
+/*
+ *  Parses DHCP Client ID in the hex form "XX:XX ... :XX" (like MAC address).
+ *  Returns the length (min 2, max 253) or -EINVAL on parsing error.
+ */
+static int __init parse_client_id(const char *s, u8 *buf)
+{
+	int slen = strlen(s);
+	int len = (slen + 1) / 3;
+	int i;
+
+	/* Format: XX:XX ... :XX */
+	if (len * 3 - 1 != slen || len < 2 || len > 253)
+		return -EINVAL;
+
+	for (i = 0; i < len; i++) {
+		if (!isxdigit(s[i * 3]) || !isxdigit(s[i * 3 + 1]))
+			return -EINVAL;
+		if (i != len - 1 && s[i * 3 + 2] != ':')
+			return -EINVAL;
+
+		buf[i] = (hex_to_bin(s[i * 3]) << 4) | hex_to_bin(s[i * 3 + 1]);
+	}
+
+	return i;
+}
+#endif
 
 /*
  *  Decode any IP configuration options in the "ip=" or "nfsaddrs=" kernel
@@ -1685,12 +1720,22 @@ static int __init ic_proto_name(char *name)
 
 			client_id = client_id + 5;
 			v = strchr(client_id, ',');
-			if (!v)
+			if (!v) {
+				int len = parse_client_id(client_id,
+							  dhcp_client_identifier);
+				if (len < 0)
+					pr_warn("DHCP: Invalid client identifier \"%s\"\n",
+						client_id);
+				else
+					dhcp_client_identifier_len = len;
 				return 1;
+			}
+			/* Client ID in the text form */
 			*v = 0;
 			if (kstrtou8(client_id, 0, dhcp_client_identifier))
-				pr_debug("DHCP: Invalid client identifier type\n");
+				pr_warn("DHCP: Invalid client identifier type\n");
 			strncpy(dhcp_client_identifier + 1, v + 1, 251);
+			dhcp_client_identifier_len = strlen(dhcp_client_identifier + 1) + 1;
 			*v = ',';
 		}
 		return 1;
