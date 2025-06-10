@@ -673,9 +673,6 @@ static u32 dsb_error_int_en(struct intel_display *display)
 	if (DISPLAY_VER(display) >= 14)
 		errors |= DSB_ATS_FAULT_INT_EN;
 
-	if (DISPLAY_VER(display) >= 30)
-		errors |= DSB_GOSUB_INT_EN;
-
 	return errors;
 }
 
