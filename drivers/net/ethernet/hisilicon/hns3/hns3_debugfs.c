@@ -580,8 +580,9 @@ static const struct hns3_dbg_item tx_spare_info_items[] = {
 	{ "DMA", 17 },
 };
 
-static void hns3_dbg_tx_spare_info(struct hns3_enet_ring *ring, char *buf,
-				   int len, u32 ring_num, int *pos)
+static noinline_for_stack void
+hns3_dbg_tx_spare_info(struct hns3_enet_ring *ring, char *buf,
+			int len, u32 ring_num, int *pos)
 {
 	char data_str[ARRAY_SIZE(tx_spare_info_items)][HNS3_DBG_DATA_STR_LEN];
 	struct hns3_tx_spare *tx_spare = ring->tx_spare;
