@@ -578,15 +578,28 @@ static const struct attribute_group *netdev_trig_groups[] = {
 static bool netdev_event_requires_handling(unsigned long evt, struct net_device *dev,
 					   struct led_netdev_data *trigger_data)
 {
-	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
-	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
-	    && evt != NETDEV_CHANGENAME)
+	switch (evt) {
+	case NETDEV_REGISTER:
+		if (trigger_data->net_dev ||
+		    strcmp(dev->name, trigger_data->device_name))
+			return false;
+		break;
+	case NETDEV_CHANGENAME:
+		if (trigger_data->net_dev != dev &&
+		    (trigger_data->net_dev ||
+		     strcmp(dev->name, trigger_data->device_name)))
+			return false;
+		break;
+	case NETDEV_UNREGISTER:
+	case NETDEV_UP:
+	case NETDEV_DOWN:
+	case NETDEV_CHANGE:
+		if (trigger_data->net_dev != dev)
+			return false;
+		break;
+	default:
 		return false;
-
-	if (!(dev == trigger_data->net_dev ||
-	     (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
-	     (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
-		return false;
+	}
 
 	return true;
 }
