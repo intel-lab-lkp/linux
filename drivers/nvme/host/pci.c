@@ -578,11 +578,8 @@ static void nvme_commit_rqs(struct blk_mq_hw_ctx *hctx)
 	spin_unlock(&nvmeq->sq_lock);
 }
 
-static inline bool nvme_pci_metadata_use_sgls(struct nvme_dev *dev,
-					      struct request *req)
+static inline bool nvme_pci_metadata_use_sgls(struct request *req)
 {
-	if (!nvme_ctrl_meta_sgl_supported(&dev->ctrl))
-		return false;
 	return req->nr_integrity_segments > 1 ||
 		nvme_req(req)->flags & NVME_REQ_USERCMD;
 }
@@ -599,7 +596,7 @@ static inline bool nvme_pci_use_sgls(struct nvme_dev *dev, struct request *req,
 		return false;
 	if (!nvmeq->qid)
 		return false;
-	if (nvme_pci_metadata_use_sgls(dev, req))
+	if (nvme_pci_metadata_use_sgls(req))
 		return true;
 	if (!sgl_threshold || avg_seg_size < sgl_threshold)
 		return nvme_req(req)->flags & NVME_REQ_USERCMD;
@@ -858,7 +855,8 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 		struct bio_vec bv = req_bvec(req);
 
 		if (!is_pci_p2pdma_page(bv.bv_page)) {
-			if (!nvme_pci_metadata_use_sgls(dev, req) &&
+			if ((!nvme_ctrl_meta_sgl_supported(&dev->ctrl) ||
+			     !nvme_pci_metadata_use_sgls(req)) &&
 			    (bv.bv_offset & (NVME_CTRL_PAGE_SIZE - 1)) +
 			     bv.bv_len <= NVME_CTRL_PAGE_SIZE * 2)
 				return nvme_setup_prp_simple(dev, req,
@@ -981,7 +979,7 @@ static blk_status_t nvme_map_metadata(struct nvme_dev *dev, struct request *req)
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 
 	if ((iod->cmd.common.flags & NVME_CMD_SGL_METABUF) &&
-	    nvme_pci_metadata_use_sgls(dev, req))
+	    nvme_pci_metadata_use_sgls(req))
 		return nvme_pci_setup_meta_sgls(dev, req);
 	return nvme_pci_setup_meta_mptr(dev, req);
 }
