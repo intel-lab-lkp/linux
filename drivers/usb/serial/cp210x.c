@@ -1504,7 +1504,7 @@ static int cp210x_gpio_get(struct gpio_chip *gc, unsigned int gpio)
 	return !!(mask & BIT(gpio));
 }
 
-static void cp210x_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
+static int cp210x_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
 {
 	struct usb_serial *serial = gpiochip_get_data(gc);
 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
@@ -1522,8 +1522,8 @@ static void cp210x_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
 	mask = BIT(gpio);
 
 	result = usb_autopm_get_interface(serial->interface);
-	if (result)
-		goto out;
+	if (result < 0)
+		return result;
 
 	switch (priv->partnum) {
 	case CP210X_PARTNUM_CP2105:
@@ -1555,11 +1555,8 @@ static void cp210x_gpio_set(struct gpio_chip *gc, unsigned int gpio, int value)
 	}
 
 	usb_autopm_put_interface(serial->interface);
-out:
-	if (result < 0) {
-		dev_err(&serial->interface->dev, "failed to set GPIO value: %d\n",
-				result);
-	}
+
+	return result < 0 ? result : 0;
 }
 
 static int cp210x_gpio_direction_get(struct gpio_chip *gc, unsigned int gpio)
@@ -1599,9 +1596,8 @@ static int cp210x_gpio_direction_output(struct gpio_chip *gc, unsigned int gpio,
 	struct cp210x_serial_private *priv = usb_get_serial_data(serial);
 
 	priv->gpio_input &= ~BIT(gpio);
-	cp210x_gpio_set(gc, gpio, value);
 
-	return 0;
+	return cp210x_gpio_set(gc, gpio, value);
 }
 
 static int cp210x_gpio_set_config(struct gpio_chip *gc, unsigned int gpio,
@@ -1960,7 +1956,7 @@ static int cp210x_gpio_init(struct usb_serial *serial)
 	priv->gc.direction_input = cp210x_gpio_direction_input;
 	priv->gc.direction_output = cp210x_gpio_direction_output;
 	priv->gc.get = cp210x_gpio_get;
-	priv->gc.set = cp210x_gpio_set;
+	priv->gc.set_rv = cp210x_gpio_set;
 	priv->gc.set_config = cp210x_gpio_set_config;
 	priv->gc.init_valid_mask = cp210x_gpio_init_valid_mask;
 	priv->gc.owner = THIS_MODULE;
