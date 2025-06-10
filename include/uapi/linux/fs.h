@@ -91,6 +91,47 @@ struct fs_sysfs_path {
 	__u8			name[128];
 };
 
+/* Protection info capability flags */
+#define	LBMD_PI_CAP_INTEGRITY		(1 << 0)
+#define	LBMD_PI_CAP_REFTAG		(1 << 1)
+
+/* Checksum types for Protection Information */
+#define LBMD_PI_CSUM_NONE		0
+#define LBMD_PI_CSUM_IP			1
+#define LBMD_PI_CSUM_CRC16_T10DIF	2
+#define LBMD_PI_CSUM_CRC64_NVME		4
+
+/*
+ * struct logical_block_metadata_cap - Logical block metadata
+ * @lbmd_flags:			Bitmask of logical block metadata capability flags
+ * @lbmd_interval:		The amount of data described by each unit of logical block metadata
+ * @lbmd_size:			Size in bytes of the logical block metadata associated with each interval
+ * @lbmd_opaque_size:		Size in bytes of the opaque block tag associated with each interval
+ * @lbmd_opaque_offset:		Offset in bytes of the opaque block tag within the logical block metadata
+ * @lbmd_pi_size:		Size in bytes of the T10 PI tuple associated with each interval
+ * @lbmd_pi_offset:		Offset in bytes of T10 PI tuple within the logical block metadata
+ * @lbmd_pi_guard_tag_type:	T10 PI guard tag type
+ * @lbmd_pi_app_tag_size:	Size in bytes of the T10 PI application tag
+ * @lbmd_pi_ref_tag_size:	Size in bytes of the T10 PI reference tag
+ * @lbmd_pi_storage_tag_size:	Size in bytes of the T10 PI storage tag
+ * @lbmd_rsvd:			Reserved for future use
+ */
+
+struct logical_block_metadata_cap {
+	__u32	lbmd_flags;
+	__u16	lbmd_interval;
+	__u8	lbmd_size;
+	__u8	lbmd_opaque_size;
+	__u8	lbmd_opaque_offset;
+	__u8	lbmd_pi_size;
+	__u8	lbmd_pi_offset;
+	__u8	lbmd_guard_tag_type;
+	__u8	lbmd_app_tag_size;
+	__u8	lbmd_ref_tag_size;
+	__u8	lbmd_storage_tag_size;
+	__u8	lbmd_rsvd[17];
+};
+
 /* extent-same (dedupe) ioctls; these MUST match the btrfs ioctl definitions */
 #define FILE_DEDUPE_RANGE_SAME		0
 #define FILE_DEDUPE_RANGE_DIFFERS	1
@@ -247,6 +288,8 @@ struct fsxattr {
  * also /sys/kernel/debug/ for filesystems with debugfs exports
  */
 #define FS_IOC_GETFSSYSFSPATH		_IOR(0x15, 1, struct fs_sysfs_path)
+/* Get logical block metadata capability details */
+#define FS_IOC_GETLBMD_CAP		_IOR(0x15, 2, struct logical_block_metadata_cap)
 
 /*
  * Inode flags (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS)
