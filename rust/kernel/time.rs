@@ -261,31 +261,31 @@ impl Delta {
     /// Return `true` if the [`Delta`] spans no time.
     #[inline]
     pub fn is_zero(self) -> bool {
-        self.as_nanos() == 0
+        self.into_nanos() == 0
     }
 
     /// Return `true` if the [`Delta`] spans a negative amount of time.
     #[inline]
     pub fn is_negative(self) -> bool {
-        self.as_nanos() < 0
+        self.into_nanos() < 0
     }
 
     /// Return the number of nanoseconds in the [`Delta`].
     #[inline]
-    pub const fn as_nanos(self) -> i64 {
+    pub const fn into_nanos(self) -> i64 {
         self.nanos
     }
 
     /// Return the smallest number of microseconds greater than or equal
     /// to the value in the [`Delta`].
     #[inline]
-    pub const fn as_micros_ceil(self) -> i64 {
-        self.as_nanos().saturating_add(NSEC_PER_USEC - 1) / NSEC_PER_USEC
+    pub const fn into_micros_ceil(self) -> i64 {
+        self.into_nanos().saturating_add(NSEC_PER_USEC - 1) / NSEC_PER_USEC
     }
 
     /// Return the number of milliseconds in the [`Delta`].
     #[inline]
-    pub const fn as_millis(self) -> i64 {
-        self.as_nanos() / NSEC_PER_MSEC
+    pub const fn into_millis(self) -> i64 {
+        self.into_nanos() / NSEC_PER_MSEC
     }
 }
