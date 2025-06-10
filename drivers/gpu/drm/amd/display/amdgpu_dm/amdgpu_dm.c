@@ -7473,19 +7473,19 @@ static enum dc_status dm_validate_stream_and_context(struct dc *dc,
 						struct dc_stream_state *stream)
 {
 	enum dc_status dc_result = DC_ERROR_UNEXPECTED;
-	struct dc_plane_state *dc_plane_state = NULL;
-	struct dc_state *dc_state = NULL;
+	struct dc_plane_state *dc_plane_state;
+	struct dc_state *dc_state;
 
 	if (!stream)
-		goto cleanup;
+		return dc_result;
 
 	dc_plane_state = dc_create_plane_state(dc);
 	if (!dc_plane_state)
-		goto cleanup;
+		return dc_result;
 
 	dc_state = dc_state_create(dc, NULL);
 	if (!dc_state)
-		goto cleanup;
+		goto release_plane_state;
 
 	/* populate stream to plane */
 	dc_plane_state->src_rect.height  = stream->src.height;
@@ -7522,13 +7522,9 @@ static enum dc_status dm_validate_stream_and_context(struct dc *dc,
 	if (dc_result == DC_OK)
 		dc_result = dc_validate_global_state(dc, dc_state, DC_VALIDATE_MODE_ONLY);
 
-cleanup:
-	if (dc_state)
-		dc_state_release(dc_state);
-
-	if (dc_plane_state)
-		dc_plane_state_release(dc_plane_state);
-
+	dc_state_release(dc_state);
+release_plane_state:
+	dc_plane_state_release(dc_plane_state);
 	return dc_result;
 }
 
