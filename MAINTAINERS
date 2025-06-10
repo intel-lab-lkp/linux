@@ -12559,7 +12559,8 @@ F:	drivers/hwtracing/intel_th/
 F:	include/linux/intel_th.h
 
 INTEL(R) TRUSTED EXECUTION TECHNOLOGY (TXT)
-M:	Ning Sun <ning.sun@intel.com>
+M:	Michal Camacho Romero <michal.camacho.romero@linux.intel.com>
+M:	Mateusz Mowka <mateusz.mowka@linux.intel.com>
 L:	tboot-devel@lists.sourceforge.net
 S:	Supported
 W:	http://tboot.sourceforge.net
