@@ -1248,7 +1248,25 @@ int pmd_clear_huge(pmd_t *pmdp)
 	return 1;
 }
 
-int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
+#ifdef CONFIG_PTDUMP_DEBUGFS
+static inline void ptdump_synchronize_lock(void)
+{
+	/* Synchronize against ptdump_walk_pgd() */
+	mmap_read_lock(&init_mm);
+}
+
+static inline void ptdump_synchronize_unlock(void)
+{
+	mmap_read_unlock(&init_mm);
+}
+#else	/* CONFIG_PTDUMP_DEBUGFS */
+
+static inline void ptdump_synchronize_lock(void)	{}
+static inline void ptdump_synchronize_unlock(void)	{}
+
+#endif	/* CONFIG_PTDUMP_DEBUGFS */
+
+static int __pmd_free_pte_page(pmd_t *pmdp, unsigned long addr, bool lock)
 {
 	pte_t *table;
 	pmd_t pmd;
@@ -1261,10 +1279,21 @@ int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
 	}
 
 	table = pte_offset_kernel(pmdp, addr);
+
+	if (lock)
+		ptdump_synchronize_lock();
 	pmd_clear(pmdp);
+	if (lock)
+		ptdump_synchronize_unlock();
+
 	__flush_tlb_kernel_pgtable(addr);
 	pte_free_kernel(NULL, table);
 	return 1;
+}
+
+int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
+{
+	return __pmd_free_pte_page(pmdp, addr, true);
 }
 
 int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
@@ -1282,14 +1311,22 @@ int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
 	}
 
 	table = pmd_offset(pudp, addr);
+
+	/*
+	 * Isolate the PMD table; in case of race with ptdump, this helps
+	 * us to avoid taking the lock in __pmd_free_pte_page()
+	 */
+	ptdump_synchronize_lock();
+	pud_clear(pudp);
+	ptdump_synchronize_unlock();
+
 	pmdp = table;
 	next = addr;
 	end = addr + PUD_SIZE;
 	do {
-		pmd_free_pte_page(pmdp, next);
+		__pmd_free_pte_page(pmdp, next, false);
 	} while (pmdp++, next += PMD_SIZE, next != end);
 
-	pud_clear(pudp);
 	__flush_tlb_kernel_pgtable(addr);
 	pmd_free(NULL, table);
 	return 1;
