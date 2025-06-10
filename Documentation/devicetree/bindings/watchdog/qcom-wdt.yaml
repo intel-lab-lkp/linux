@@ -81,6 +81,16 @@ properties:
     minItems: 1
     maxItems: 5
 
+  sram:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      phandle to the IMEM syscon node that exposes the system restart reason
+    items:
+      - items:
+          - description: phandle of IMEM syscon
+          - description: offset of restart reason region
+          - description: value indicate that the watchdog timeout has occurred
+
 required:
   - compatible
   - reg
@@ -116,6 +126,16 @@ allOf:
             - description: Second watchdog
       required:
         - clock-frequency
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,apss-wdt-ipq5424
+    then:
+      required:
+        - sram
 
 unevaluatedProperties: false
 
