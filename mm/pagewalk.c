@@ -417,13 +417,17 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 	return err;
 }
 
-static inline void process_mm_walk_lock(struct mm_struct *mm,
+static inline bool process_mm_walk_lock(struct mm_struct *mm,
 					enum page_walk_lock walk_lock)
 {
+	if (walk_lock == PGWALK_NOLOCK)
+		return 1;
+
 	if (walk_lock == PGWALK_RDLOCK)
 		mmap_assert_locked(mm);
 	else
 		mmap_assert_write_locked(mm);
+	return 0;
 }
 
 static inline void process_vma_walk_lock(struct vm_area_struct *vma,
@@ -439,6 +443,8 @@ static inline void process_vma_walk_lock(struct vm_area_struct *vma,
 		break;
 	case PGWALK_RDLOCK:
 		/* PGWALK_RDLOCK is handled by process_mm_walk_lock */
+		break;
+	case PGWALK_NOLOCK:
 		break;
 	}
 #endif
@@ -470,7 +476,8 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 	if (!walk.mm)
 		return -EINVAL;
 
-	process_mm_walk_lock(walk.mm, ops->walk_lock);
+	if (process_mm_walk_lock(walk.mm, ops->walk_lock))
+		return -EINVAL;
 
 	vma = find_vma(walk.mm, start);
 	do {
@@ -626,8 +633,12 @@ int walk_kernel_page_table_range(unsigned long start, unsigned long end,
 	 * to prevent the intermediate kernel pages tables belonging to the
 	 * specified address range from being freed. The caller should take
 	 * other actions to prevent this race.
+	 *
+	 * If the caller can guarantee that it has exclusive access to the
+	 * specified address range, only then it can use PGWALK_NOLOCK.
 	 */
-	mmap_assert_locked(mm);
+	if (ops->walk_lock != PGWALK_NOLOCK)
+		mmap_assert_locked(mm);
 
 	return walk_pgd_range(start, end, &walk);
 }
@@ -699,7 +710,8 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 	if (!check_ops_valid(ops))
 		return -EINVAL;
 
-	process_mm_walk_lock(walk.mm, ops->walk_lock);
+	if (process_mm_walk_lock(walk.mm, ops->walk_lock))
+		return -EINVAL;
 	process_vma_walk_lock(vma, ops->walk_lock);
 	return __walk_page_range(start, end, &walk);
 }
@@ -719,7 +731,8 @@ int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
 	if (!check_ops_valid(ops))
 		return -EINVAL;
 
-	process_mm_walk_lock(walk.mm, ops->walk_lock);
+	if (process_mm_walk_lock(walk.mm, ops->walk_lock))
+		return -EINVAL;
 	process_vma_walk_lock(vma, ops->walk_lock);
 	return __walk_page_range(vma->vm_start, vma->vm_end, &walk);
 }

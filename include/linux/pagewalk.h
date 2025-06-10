@@ -14,6 +14,13 @@ enum page_walk_lock {
 	PGWALK_WRLOCK = 1,
 	/* vma is expected to be already write-locked during the walk */
 	PGWALK_WRLOCK_VERIFY = 2,
+	/*
+	 * Walk without any lock. Use of this is only meant for the
+	 * case where there is no underlying VMA, and the user has
+	 * exclusive control over the range, guaranteeing no concurrent
+	 * access. For example, changing permissions of vmalloc objects.
+	 */
+	PGWALK_NOLOCK = 3,
 };
 
 /**
