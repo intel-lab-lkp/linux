@@ -575,6 +575,22 @@ static const struct attribute_group *netdev_trig_groups[] = {
 	NULL,
 };
 
+static bool netdev_event_requires_handling(unsigned long evt, struct net_device *dev,
+					   struct led_netdev_data *trigger_data)
+{
+	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
+	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
+	    && evt != NETDEV_CHANGENAME)
+		return false;
+
+	if (!(dev == trigger_data->net_dev ||
+	     (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
+	     (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
+		return false;
+
+	return true;
+}
+
 static int netdev_trig_notify(struct notifier_block *nb,
 			      unsigned long evt, void *dv)
 {
@@ -584,14 +600,7 @@ static int netdev_trig_notify(struct notifier_block *nb,
 		container_of(nb, struct led_netdev_data, notifier);
 	struct led_classdev *led_cdev = trigger_data->led_cdev;
 
-	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
-	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
-	    && evt != NETDEV_CHANGENAME)
-		return NOTIFY_DONE;
-
-	if (!(dev == trigger_data->net_dev ||
-	      (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
-	      (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
+	if (!netdev_event_requires_handling(evt, dev, trigger_data))
 		return NOTIFY_DONE;
 
 	cancel_delayed_work_sync(&trigger_data->work);
