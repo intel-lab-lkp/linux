@@ -31,5 +31,6 @@ s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu, u64 wake_flags, u64 
 void scx_idle_enable(struct sched_ext_ops *ops);
 void scx_idle_disable(void);
 int scx_idle_init(void);
+void switch_class(struct rq *rq, struct task_struct *next);
 
 #endif /* _KERNEL_SCHED_EXT_IDLE_H */

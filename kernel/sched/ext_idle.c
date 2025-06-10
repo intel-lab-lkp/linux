@@ -660,11 +660,15 @@ static void update_builtin_idle(int cpu, bool idle)
  * while avoiding unnecessary updates and maintaining balanced state
  * transitions.
  */
-void __scx_update_idle(struct rq *rq, bool idle, bool do_notify)
+void __scx_update_idle(struct rq *rq, struct task_struct *next,
+		       bool idle, bool do_notify)
 {
 	int cpu = cpu_of(rq);
 
 	lockdep_assert_rq_held(rq);
+
+	if (!idle && !rq->scx.cpu_released && next)
+		switch_class(rq, next);
 
 	/*
 	 * Trigger ops.update_idle() only when transitioning from a task to
