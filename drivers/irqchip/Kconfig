@@ -634,12 +634,28 @@ config STARFIVE_JH8100_INTC
 
 	  If you don't know what to do here, say Y.
 
+config ACLINT_SSWI
+	bool
+
+config MIPS_P8700_ACLINT_SSWI
+	bool "MIPS P8700 ACLINT S-mode IPI Interrupt Controller"
+	depends on RISCV
+	depends on SMP
+	select IRQ_DOMAIN_HIERARCHY
+	select GENERIC_IRQ_IPI_MUX
+	select ACLINT_SSWI
+	help
+	  This enables support for MIPS P8700 specific ACLINT SSWI device
+
+	  If you don't know what to do here, say Y.
+
 config THEAD_C900_ACLINT_SSWI
 	bool "THEAD C9XX ACLINT S-mode IPI Interrupt Controller"
 	depends on RISCV
 	depends on SMP
 	select IRQ_DOMAIN_HIERARCHY
 	select GENERIC_IRQ_IPI_MUX
+	select ACLINT_SSWI
 	help
 	  This enables support for T-HEAD specific ACLINT SSWI device
 	  support.
