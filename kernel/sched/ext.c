@@ -338,6 +338,16 @@ struct sched_ext_ops {
 	void (*tick)(struct task_struct *p);
 
 	/**
+	 * @tick: Periodic tick
+	 * @rq: current CPU's rq
+	 *
+	 * This operation is called every 1/HZ seconds on each CPU which is
+	 * not idle. Notify BPF scheduler to take policy for runnable tasks
+	 * on local dsq.
+	 */
+	void (*cpu_tick)(struct rq *rq);
+
+	/**
 	 * @runnable: A task is becoming runnable on its associated CPU
 	 * @p: task becoming runnable
 	 * @enq_flags: %SCX_ENQ_*
@@ -3569,6 +3579,9 @@ void scx_tick(struct rq *rq)
 	}
 
 	update_other_load_avgs(rq);
+
+	if (SCX_HAS_OP(cpu_tick))
+		SCX_CALL_OP(SCX_KF_REST, cpu_tick, rq);
 }
 
 static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
@@ -5753,6 +5766,7 @@ static void sched_ext_ops__enqueue(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__dequeue(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__dispatch(s32 prev_cpu, struct task_struct *prev__nullable) {}
 static void sched_ext_ops__tick(struct task_struct *p) {}
+static void sched_ext_ops__cpu_tick(struct rq *rq) {}
 static void sched_ext_ops__runnable(struct task_struct *p, u64 enq_flags) {}
 static void sched_ext_ops__running(struct task_struct *p) {}
 static void sched_ext_ops__stopping(struct task_struct *p, bool runnable) {}
@@ -5790,6 +5804,7 @@ static struct sched_ext_ops __bpf_ops_sched_ext_ops = {
 	.dequeue		= sched_ext_ops__dequeue,
 	.dispatch		= sched_ext_ops__dispatch,
 	.tick			= sched_ext_ops__tick,
+	.cpu_tick		= sched_ext_ops__cpu_tick,
 	.runnable		= sched_ext_ops__runnable,
 	.running		= sched_ext_ops__running,
 	.stopping		= sched_ext_ops__stopping,
