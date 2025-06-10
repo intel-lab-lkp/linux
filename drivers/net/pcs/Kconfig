@@ -52,4 +52,26 @@ config PCS_RZN1_MIIC
 	  on RZ/N1 SoCs. This PCS converts MII to RMII/RGMII or can be set in
 	  pass-through mode for MII.
 
+config PCS_XILINX
+	tristate "Xilinx PCS driver"
+	default XILINX_AXI_EMAC
+	select COMMON_CLK
+	select GPIOLIB
+	select MDIO_BUS
+	select OF
+	select PCS
+	select PHYLINK
+	help
+	  PCS driver for the Xilinx 1G/2.5G Ethernet PCS/PMA or SGMII device.
+	  This device can either act as a PCS+PMA for 1000BASE-X or 2500BASE-X,
+	  or as a GMII-to-SGMII bridge. It can also switch between 1000BASE-X
+	  and SGMII dynamically if configured correctly when synthesized.
+	  Typical applications use this device on an FPGA connected to a GEM or
+	  TEMAC on the GMII side. The other side is typically connected to
+	  on-device gigabit transceivers, off-device SERDES devices using TBI,
+	  or LVDS IO resources directly.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pcs-xilinx.
+
 endmenu
