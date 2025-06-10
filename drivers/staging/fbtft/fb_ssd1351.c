@@ -96,6 +96,28 @@ static int set_var(struct fbtft_par *par)
 	return 0;
 }
 
+static noinline_for_stack void write_gamma_reg(struct fbtft_par *par,
+					       u32 gamma[63])
+{
+	write_reg(par, 0xB8,
+		  gamma[0],  gamma[1],  gamma[2],  gamma[3],
+		  gamma[4],  gamma[5],  gamma[6],  gamma[7],
+		  gamma[8],  gamma[9],  gamma[10], gamma[11],
+		  gamma[12], gamma[13], gamma[14], gamma[15],
+		  gamma[16], gamma[17], gamma[18], gamma[19],
+		  gamma[20], gamma[21], gamma[22], gamma[23],
+		  gamma[24], gamma[25], gamma[26], gamma[27],
+		  gamma[28], gamma[29], gamma[30], gamma[31],
+		  gamma[32], gamma[33], gamma[34], gamma[35],
+		  gamma[36], gamma[37], gamma[38], gamma[39],
+		  gamma[40], gamma[41], gamma[42], gamma[43],
+		  gamma[44], gamma[45], gamma[46], gamma[47],
+		  gamma[48], gamma[49], gamma[50], gamma[51],
+		  gamma[52], gamma[53], gamma[54], gamma[55],
+		  gamma[56], gamma[57], gamma[58], gamma[59],
+		  gamma[60], gamma[61], gamma[62]);
+}
+
 /*
  * Grayscale Lookup Table
  * GS1 - GS63
@@ -119,7 +141,7 @@ static int set_var(struct fbtft_par *par)
  */
 static int set_gamma(struct fbtft_par *par, u32 *curves)
 {
-	unsigned long tmp[GAMMA_NUM * GAMMA_LEN];
+	u32 tmp[GAMMA_NUM * GAMMA_LEN];
 	int i, acc = 0;
 
 	for (i = 0; i < 63; i++) {
@@ -139,23 +161,7 @@ static int set_gamma(struct fbtft_par *par, u32 *curves)
 		}
 	}
 
-	write_reg(par, 0xB8,
-		  tmp[0],  tmp[1],  tmp[2],  tmp[3],
-		  tmp[4],  tmp[5],  tmp[6],  tmp[7],
-		  tmp[8],  tmp[9],  tmp[10], tmp[11],
-		  tmp[12], tmp[13], tmp[14], tmp[15],
-		  tmp[16], tmp[17], tmp[18], tmp[19],
-		  tmp[20], tmp[21], tmp[22], tmp[23],
-		  tmp[24], tmp[25], tmp[26], tmp[27],
-		  tmp[28], tmp[29], tmp[30], tmp[31],
-		  tmp[32], tmp[33], tmp[34], tmp[35],
-		  tmp[36], tmp[37], tmp[38], tmp[39],
-		  tmp[40], tmp[41], tmp[42], tmp[43],
-		  tmp[44], tmp[45], tmp[46], tmp[47],
-		  tmp[48], tmp[49], tmp[50], tmp[51],
-		  tmp[52], tmp[53], tmp[54], tmp[55],
-		  tmp[56], tmp[57], tmp[58], tmp[59],
-		  tmp[60], tmp[61], tmp[62]);
+	write_gamma_reg(par, tmp);
 
 	return 0;
 }
