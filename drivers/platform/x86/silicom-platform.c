@@ -252,9 +252,6 @@ static int silicom_gpio_set(struct gpio_chip *gc, unsigned int offset,
 	u8 *channels = gpiochip_get_data(gc);
 	int channel = channels[offset];
 
-	if (direction == GPIO_LINE_DIRECTION_IN)
-		return -EPERM;
-
 	silicom_mec_port_set(channel, !value);
 
 	return 0;
