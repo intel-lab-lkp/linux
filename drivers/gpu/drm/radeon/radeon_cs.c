@@ -78,7 +78,7 @@ static void radeon_cs_buckets_get_list(struct radeon_cs_buckets *b,
 	}
 }
 
-static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
+static noinline_for_stack int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 {
 	struct radeon_cs_chunk *chunk;
 	struct radeon_cs_buckets buckets;
