@@ -34,12 +34,7 @@ static void enetc_pf_set_primary_mac_addr(struct enetc_hw *hw, int si,
 static struct phylink_pcs *enetc_pf_create_pcs(struct enetc_pf *pf,
 					       struct mii_bus *bus)
 {
-	return lynx_pcs_create_mdiodev(bus, 0);
-}
-
-static void enetc_pf_destroy_pcs(struct phylink_pcs *pcs)
-{
-	lynx_pcs_destroy(pcs);
+	return lynx_pcs_create_mdiodev(&pf->si->pdev->dev, bus, 0);
 }
 
 static void enetc_set_vlan_promisc(struct enetc_hw *hw, char si_map)
@@ -914,7 +909,6 @@ static const struct enetc_pf_ops enetc_pf_ops = {
 	.set_si_primary_mac = enetc_pf_set_primary_mac_addr,
 	.get_si_primary_mac = enetc_pf_get_primary_mac_addr,
 	.create_pcs = enetc_pf_create_pcs,
-	.destroy_pcs = enetc_pf_destroy_pcs,
 	.enable_psfp = enetc_psfp_enable,
 };
 
