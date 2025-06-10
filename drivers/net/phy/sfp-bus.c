@@ -275,6 +275,8 @@ void sfp_parse_support(struct sfp_bus *bus, const struct sfp_eeprom_id *id,
 		break;
 	case SFF8024_ECC_100GBASE_CR4:
 		phylink_set(modes, 100000baseCR4_Full);
+		phylink_set(modes, 50000baseCR2_Full);
+		__set_bit(PHY_INTERFACE_MODE_LAUI, interfaces);
 		fallthrough;
 	case SFF8024_ECC_25GBASE_CR_S:
 	case SFF8024_ECC_25GBASE_CR_N:
@@ -293,6 +295,12 @@ void sfp_parse_support(struct sfp_bus *bus, const struct sfp_eeprom_id *id,
 	case SFF8024_ECC_2_5GBASE_T:
 		phylink_set(modes, 2500baseT_Full);
 		__set_bit(PHY_INTERFACE_MODE_2500BASEX, interfaces);
+		break;
+	case SFF8024_ECC_200GBASE_CR4:
+		phylink_set(modes, 100000baseCR2_Full);
+		__set_bit(PHY_INTERFACE_MODE_100GBASEP, interfaces);
+		phylink_set(modes, 50000baseCR_Full);
+		__set_bit(PHY_INTERFACE_MODE_50GBASER, interfaces);
 		break;
 	default:
 		dev_warn(bus->sfp_dev,
@@ -357,6 +365,20 @@ EXPORT_SYMBOL_GPL(sfp_parse_support);
 phy_interface_t sfp_select_interface(struct sfp_bus *bus,
 				     const unsigned long *link_modes)
 {
+	if (phylink_test(link_modes, 100000baseCR2_Full) ||
+	    phylink_test(link_modes, 100000baseKR2_Full) ||
+	    phylink_test(link_modes, 100000baseSR2_Full))
+		return PHY_INTERFACE_MODE_100GBASEP;
+
+	if (phylink_test(link_modes, 50000baseCR_Full) ||
+	    phylink_test(link_modes, 50000baseKR_Full) ||
+	    phylink_test(link_modes, 50000baseSR_Full))
+		return PHY_INTERFACE_MODE_50GBASER;
+
+	if (phylink_test(link_modes, 50000baseCR2_Full) ||
+	    phylink_test(link_modes, 50000baseKR2_Full))
+		return PHY_INTERFACE_MODE_LAUI;
+
 	if (phylink_test(link_modes, 25000baseCR_Full) ||
 	    phylink_test(link_modes, 25000baseKR_Full) ||
 	    phylink_test(link_modes, 25000baseSR_Full))
