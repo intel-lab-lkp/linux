@@ -53,6 +53,16 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 	return hv_get_msr(reg);
 }
 
+static inline u64 hv_do_nested_hypercall(u64 control, void *input, void *output)
+{
+	return U64_MAX;
+}
+
+static inline u64 hv_do_fast_nested_hypercall8(u64 control, u64 input1)
+{
+	return U64_MAX;
+}
+
 /* SMCCC hypercall parameters */
 #define HV_SMCCC_FUNC_NUMBER	1
 #define HV_FUNC_ID	ARM_SMCCC_CALL_VAL(			\
