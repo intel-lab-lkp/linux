@@ -76,6 +76,10 @@ static ssize_t status_show_vhci(int pdev_nr, char *out)
 	}
 
 	hcd = platform_get_drvdata(pdev);
+	if (hcd == NULL) {
+		dev_warn(&pdev->dev, "port is not ready\n");
+		return 0;
+	}
 	vhci_hcd = hcd_to_vhci_hcd(hcd);
 	vhci = vhci_hcd->vhci;
 
