@@ -1058,7 +1058,6 @@ unsigned long pxafb_get_hsync_time(struct device *dev)
 
 	return fbi->hsync_time;
 }
-EXPORT_SYMBOL(pxafb_get_hsync_time);
 
 static int setup_frame_dma(struct pxafb_info *fbi, int dma, int pal,
 			   unsigned long start, size_t size)
