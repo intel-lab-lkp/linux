@@ -7,6 +7,21 @@
  * Definitions for RISC-V RAID-6 code
  */
 
+#ifdef __KERNEL__
+#include <asm/vector.h>
+#else
+#define kernel_vector_begin()
+#define kernel_vector_end()
+#define has_vector()		(1)
+#endif
+
+#include <linux/raid/pq.h>
+
+static int rvv_has_vector(void)
+{
+	return has_vector();
+}
+
 #define RAID6_RVV_WRAPPER(_n)						\
 	static void raid6_rvv ## _n ## _gen_syndrome(int disks,		\
 					size_t bytes, void **ptrs)	\

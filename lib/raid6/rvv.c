@@ -9,16 +9,13 @@
  *	Copyright 2002-2004 H. Peter Anvin
  */
 
-#include <asm/vector.h>
-#include <linux/raid/pq.h>
 #include "rvv.h"
 
+#ifdef __KERNEL__
 #define NSIZE	(riscv_v_vsize / 32) /* NSIZE = vlenb */
-
-static int rvv_has_vector(void)
-{
-	return has_vector();
-}
+#else
+#define NSIZE  16
+#endif
 
 static void raid6_rvv1_gen_syndrome_real(int disks, unsigned long bytes, void **ptrs)
 {
