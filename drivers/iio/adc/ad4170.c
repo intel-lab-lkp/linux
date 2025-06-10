@@ -185,6 +185,7 @@
 #define AD4170_NUM_ANALOG_PINS				9
 #define AD4170_NUM_GPIO_PINS				4
 #define AD4170_MAX_CHANNELS				16
+#define AD4170_MAX_IIO_CHANNELS				(AD4170_MAX_CHANNELS + 1)
 #define AD4170_MAX_ANALOG_PINS				8
 #define AD4170_MAX_SETUPS				8
 #define AD4170_INVALID_SETUP				9
@@ -429,7 +430,7 @@ struct ad4170_state {
 	int vrefs_uv[AD4170_MAX_SUP];
 	u32 mclk_hz;
 	struct ad4170_setup_info setup_infos[AD4170_MAX_SETUPS];
-	struct iio_chan_spec chans[AD4170_MAX_CHANNELS];
+	struct iio_chan_spec chans[AD4170_MAX_IIO_CHANNELS];
 	struct ad4170_chan_info chan_infos[AD4170_MAX_CHANNELS];
 	struct spi_device *spi;
 	struct regmap *regmap;
@@ -446,6 +447,7 @@ struct ad4170_state {
 	unsigned int clock_ctrl;
 	int gpio_fn[AD4170_NUM_GPIO_PINS];
 	unsigned int cur_src_pins[AD4170_NUM_CURRENT_SRC];
+	unsigned int num_adc_chans;
 	/*
 	 * DMA (thus cache coherency maintenance) requires the transfer buffers
 	 * to live in their own cache lines.
@@ -2387,7 +2389,16 @@ static int ad4170_parse_channels(struct iio_dev *indio_dev)
 			return dev_err_probe(dev, ret, "Invalid input config\n");
 
 		st->chan_infos[chan_num].input_range_uv = ret;
+		chan_num++;
 	}
+	st->num_adc_chans = chan_num;
+
+	/* Add timestamp channel */
+	struct iio_chan_spec ts_chan = IIO_CHAN_SOFT_TIMESTAMP(chan_num);
+
+	st->chans[chan_num] = ts_chan;
+	num_channels = num_channels + 1;
+
 	indio_dev->num_channels = num_channels;
 	indio_dev->channels = st->chans;
 
@@ -2579,7 +2590,7 @@ static int ad4170_initial_config(struct iio_dev *indio_dev)
 		return dev_err_probe(dev, ret,
 				     "Failed to set ADC mode to idle\n");
 
-	for (i = 0; i < indio_dev->num_channels; i++) {
+	for (i = 0; i < st->num_adc_chans; i++) {
 		struct ad4170_chan_info *chan_info;
 		struct iio_chan_spec const *chan;
 		struct ad4170_setup *setup;
@@ -2704,7 +2715,7 @@ static int ad4170_buffer_predisable(struct iio_dev *indio_dev)
 	 * is done after buffer disable. Disable all channels so only requested
 	 * channels will be read.
 	 */
-	for (i = 0; i < indio_dev->num_channels; i++) {
+	for (i = 0; i < st->num_adc_chans; i++) {
 		ret = ad4170_set_channel_enable(st, i, false);
 		if (ret)
 			return ret;
@@ -2754,7 +2765,9 @@ static irqreturn_t ad4170_trigger_handler(int irq, void *p)
 		memcpy(&st->bounce_buffer[i++], st->rx_buf, ARRAY_SIZE(st->rx_buf));
 	}
 
-	iio_push_to_buffers(indio_dev, st->bounce_buffer);
+	iio_push_to_buffers_with_ts(indio_dev, st->bounce_buffer,
+				    sizeof(st->bounce_buffer),
+				    iio_get_time_ns(indio_dev));
 err_out:
 	iio_trigger_notify_done(indio_dev->trig);
 	return IRQ_HANDLED;
