@@ -151,11 +151,12 @@ static int status_name_to_id(const char *name)
 static ssize_t status_show(struct device *dev,
 			   struct device_attribute *attr, char *out)
 {
-	char *s = out;
+	char *r, *s = out;
 	int pdev_nr;
 
 	out += sprintf(out,
 		       "hub port sta spd dev      sockfd local_busid\n");
+	r = out;
 
 	pdev_nr = status_name_to_id(attr->attr.name);
 	if (pdev_nr < 0)
@@ -163,7 +164,8 @@ static ssize_t status_show(struct device *dev,
 	else
 		out += status_show_vhci(pdev_nr, out);
 
-	return out - s;
+	/* Do not emit the header if no data was appended after. */
+	return r == out ? 0 : out - s;
 }
 
 static ssize_t nports_show(struct device *dev, struct device_attribute *attr,
