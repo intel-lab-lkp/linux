@@ -2949,8 +2949,16 @@ void smp_text_poke_batch_finish(void)
 		do_sync++;
 	}
 
-	if (do_sync)
+	if (do_sync) {
+		/*
+		 * Flush the instructions on the cache, then serialize the
+		 * pipeline of each CPU.
+		 */
+		flush_tlb_kernel_range((unsigned long)text_poke_addr(&text_poke_array.vec[0]),
+				       (unsigned long)text_poke_addr(text_poke_array.vec +
+								text_poke_array.nr_entries - 1));
 		smp_text_poke_sync_each_cpu();
+	}
 
 	/*
 	 * Remove and wait for refs to be zero.
