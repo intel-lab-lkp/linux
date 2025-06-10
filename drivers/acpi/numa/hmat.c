@@ -110,6 +110,7 @@ static struct memory_target *find_mem_target(unsigned int mem_pxm)
 
 /**
  * hmat_get_extended_linear_cache_size - Retrieve the extended linear cache size
+ * @dev: device for debug output
  * @backing_res: resource from the backing media
  * @nid: node id for the memory region
  * @cache_size: (Output) size of extended linear cache.
@@ -117,7 +118,8 @@ static struct memory_target *find_mem_target(unsigned int mem_pxm)
  * Return: 0 on success. Errno on failure.
  *
  */
-int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
+int hmat_get_extended_linear_cache_size(struct device *dev,
+					struct resource *backing_res, int nid,
 					resource_size_t *cache_size)
 {
 	unsigned int pxm = node_to_pxm(nid);
