@@ -2080,8 +2080,8 @@ static int rtase_init_board(struct pci_dev *pdev, struct net_device **dev_out,
 	int ret = -ENOMEM;
 
 	/* dev zeroed in alloc_etherdev */
-	dev = alloc_etherdev_mq(sizeof(struct rtase_private),
-				RTASE_FUNC_TXQ_NUM);
+	dev = alloc_etherdev_mqs(sizeof(struct rtase_private),
+				 RTASE_FUNC_TXQ_NUM, RTASE_FUNC_RXQ_NUM);
 	if (!dev)
 		goto err_out;
 
