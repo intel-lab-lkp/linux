@@ -18,6 +18,8 @@
 
 #include "../lib/drm_random.h"
 
+static struct drm_gem_object gobj, gobj2;
+
 struct drm_exec_priv {
 	struct device *dev;
 	struct drm_device *drm;
@@ -54,7 +56,6 @@ static void sanitycheck(struct kunit *test)
 static void test_lock(struct kunit *test)
 {
 	struct drm_exec_priv *priv = test->priv;
-	struct drm_gem_object gobj = { };
 	struct drm_exec exec;
 	int ret;
 
@@ -74,7 +75,6 @@ static void test_lock(struct kunit *test)
 static void test_lock_unlock(struct kunit *test)
 {
 	struct drm_exec_priv *priv = test->priv;
-	struct drm_gem_object gobj = { };
 	struct drm_exec exec;
 	int ret;
 
@@ -101,7 +101,6 @@ static void test_lock_unlock(struct kunit *test)
 static void test_duplicates(struct kunit *test)
 {
 	struct drm_exec_priv *priv = test->priv;
-	struct drm_gem_object gobj = { };
 	struct drm_exec exec;
 	int ret;
 
@@ -128,7 +127,6 @@ static void test_duplicates(struct kunit *test)
 static void test_prepare(struct kunit *test)
 {
 	struct drm_exec_priv *priv = test->priv;
-	struct drm_gem_object gobj = { };
 	struct drm_exec exec;
 	int ret;
 
@@ -150,13 +148,11 @@ static void test_prepare(struct kunit *test)
 static void test_prepare_array(struct kunit *test)
 {
 	struct drm_exec_priv *priv = test->priv;
-	struct drm_gem_object gobj1 = { };
-	struct drm_gem_object gobj2 = { };
-	struct drm_gem_object *array[] = { &gobj1, &gobj2 };
+	struct drm_gem_object *array[] = { &gobj, &gobj2 };
 	struct drm_exec exec;
 	int ret;
 
-	drm_gem_private_object_init(priv->drm, &gobj1, PAGE_SIZE);
+	drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
 	drm_gem_private_object_init(priv->drm, &gobj2, PAGE_SIZE);
 
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
@@ -166,7 +162,7 @@ static void test_prepare_array(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ret, 0);
 	drm_exec_fini(&exec);
 
-	drm_gem_private_object_fini(&gobj1);
+	drm_gem_private_object_fini(&gobj);
 	drm_gem_private_object_fini(&gobj2);
 }
 
