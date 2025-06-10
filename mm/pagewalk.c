@@ -420,6 +420,9 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 static inline void process_mm_walk_lock(struct mm_struct *mm,
 					enum page_walk_lock walk_lock)
 {
+	if (walk_lock == PGWALK_VMA_RDLOCK_VERIFY)
+		return;
+
 	if (walk_lock == PGWALK_RDLOCK)
 		mmap_assert_locked(mm);
 	else
@@ -436,6 +439,9 @@ static inline void process_vma_walk_lock(struct vm_area_struct *vma,
 		break;
 	case PGWALK_WRLOCK_VERIFY:
 		vma_assert_write_locked(vma);
+		break;
+	case PGWALK_VMA_RDLOCK_VERIFY:
+		vma_assert_locked(vma);
 		break;
 	case PGWALK_RDLOCK:
 		/* PGWALK_RDLOCK is handled by process_mm_walk_lock */
