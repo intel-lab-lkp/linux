@@ -82,21 +82,9 @@ static inline void kvm_lapic_set_reg(struct kvm_lapic *apic, int reg_off, u32 va
 	apic_set_reg(apic->regs, reg_off, val);
 }
 
-static __always_inline u64 apic_get_reg64(void *regs, int reg)
-{
-	BUILD_BUG_ON(reg != APIC_ICR);
-	return *((u64 *) (regs + reg));
-}
-
 static __always_inline u64 kvm_lapic_get_reg64(struct kvm_lapic *apic, int reg)
 {
 	return apic_get_reg64(apic->regs, reg);
-}
-
-static __always_inline void apic_set_reg64(void *regs, int reg, u64 val)
-{
-	BUILD_BUG_ON(reg != APIC_ICR);
-	*((u64 *) (regs + reg)) = val;
 }
 
 static __always_inline void kvm_lapic_set_reg64(struct kvm_lapic *apic,
