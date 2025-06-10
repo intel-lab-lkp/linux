@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/edac/altr,sdram-edac.yaml#"
+$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+
+title: Altera SoCFPGA SDRAM EDAC Controller
+
+maintainers:
+  - name: Dinh Nguyen
+    email: dinguyen@kernel.org
+
+description: |
+  EDAC-compatible controller for SDRAM error detection and correction on
+  Altera (Intel) SoCFPGA platforms.
+
+properties:
+  compatible:
+    oneOf:
+      - const: altr,sdram-edac
+      - const: altr,sdram-edac-a10
+      - const: altr,sdram-edac-s10
+
+  altr,sdr-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the SDRAM system controller (SDR) syscon node.
+
+  interrupts:
+    minItems: 1
+    maxItems: 2
+    description: |
+      One or two interrupt specifiers for ECC error interrupt(s).
+      Arria 10 SoCs use two interrupt lines.
+
+required:
+  - compatible
+  - altr,sdr-syscon
+  - interrupts
+
+$nodename:
+  pattern: "^edac@[0-9a-f]+$"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@0 {
+        compatible = "altr,sdram-edac-a10";
+        altr,sdr-syscon = <&sdr>;
+        interrupts = <GIC_SPI 45 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@0 {
+        compatible = "altr,sdram-edac-s10";
+        altr,sdr-syscon = <&sdr>;
+        interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@0 {
+        compatible = "altr,sdram-edac";
+        altr,sdr-syscon = <&sdr>;
+        interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+    };
