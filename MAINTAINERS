@@ -27060,6 +27060,12 @@ L:	netdev@vger.kernel.org
 S:	Orphan
 F:	drivers/net/ethernet/xilinx/ll_temac*
 
+XILINX PCS DRIVER
+M:	Sean Anderson <sean.anderson@linux.dev>
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/xilinx,pcs.yaml
+F:	drivers/net/pcs/pcs-xilinx.c
+
 XILINX PWM DRIVER
 M:	Sean Anderson <sean.anderson@seco.com>
 S:	Maintained
