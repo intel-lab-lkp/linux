@@ -113,26 +113,27 @@ nfsd4_block_encode_getdeviceinfo(struct xdr_stream *xdr,
 }
 
 int
-nfsd4_block_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
+nfsd4_block_decode_layoutupdate(struct xdr_buf *buf, struct iomap **iomapp,
 		u32 block_size)
 {
 	struct iomap *iomaps;
-	u32 nr_iomaps, i;
+	u32 nr_iomaps, expected, len, i;
+	struct xdr_stream xdr;
+	char scratch[sizeof(struct pnfs_block_extent)];
 
-	if (len < sizeof(u32)) {
-		dprintk("%s: extent array too small: %u\n", __func__, len);
+	xdr_init_decode(&xdr, buf, buf->head[0].iov_base, NULL);
+	xdr_set_scratch_buffer(&xdr, scratch, sizeof(scratch));
+
+	if (xdr_stream_decode_u32(&xdr, &nr_iomaps)) {
+		dprintk("%s: failed to decode extent array size\n", __func__);
 		return -EINVAL;
 	}
-	len -= sizeof(u32);
-	if (len % PNFS_BLOCK_EXTENT_SIZE) {
-		dprintk("%s: extent array invalid: %u\n", __func__, len);
-		return -EINVAL;
-	}
 
-	nr_iomaps = be32_to_cpup(p++);
-	if (nr_iomaps != len / PNFS_BLOCK_EXTENT_SIZE) {
+	len = sizeof(__be32) + xdr_stream_remaining(&xdr);
+	expected = sizeof(__be32) + nr_iomaps * PNFS_BLOCK_EXTENT_SIZE;
+	if (len != expected) {
 		dprintk("%s: extent array size mismatch: %u/%u\n",
-			__func__, len, nr_iomaps);
+			__func__, len, expected);
 		return -EINVAL;
 	}
 
@@ -144,29 +145,54 @@ nfsd4_block_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 
 	for (i = 0; i < nr_iomaps; i++) {
 		struct pnfs_block_extent bex;
+		ssize_t ret;
 
-		memcpy(&bex.vol_id, p, sizeof(struct nfsd4_deviceid));
-		p += XDR_QUADLEN(sizeof(struct nfsd4_deviceid));
+		ret = xdr_stream_decode_opaque_fixed(&xdr,
+				&bex.vol_id, sizeof(bex.vol_id));
+		if (ret < sizeof(bex.vol_id)) {
+			dprintk("%s: failed to decode device id for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 
-		p = xdr_decode_hyper(p, &bex.foff);
+		if (xdr_stream_decode_u64(&xdr, &bex.foff)) {
+			dprintk("%s: failed to decode offset for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (bex.foff & (block_size - 1)) {
 			dprintk("%s: unaligned offset 0x%llx\n",
 				__func__, bex.foff);
 			goto fail;
 		}
-		p = xdr_decode_hyper(p, &bex.len);
+
+		if (xdr_stream_decode_u64(&xdr, &bex.len)) {
+			dprintk("%s: failed to decode length for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (bex.len & (block_size - 1)) {
 			dprintk("%s: unaligned length 0x%llx\n",
 				__func__, bex.foff);
 			goto fail;
 		}
-		p = xdr_decode_hyper(p, &bex.soff);
+
+		if (xdr_stream_decode_u64(&xdr, &bex.soff)) {
+			dprintk("%s: failed to decode soffset for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (bex.soff & (block_size - 1)) {
 			dprintk("%s: unaligned disk offset 0x%llx\n",
 				__func__, bex.soff);
 			goto fail;
 		}
-		bex.es = be32_to_cpup(p++);
+
+		if (xdr_stream_decode_u32(&xdr, &bex.es)) {
+			dprintk("%s: failed to decode estate for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (bex.es != PNFS_BLOCK_READWRITE_DATA) {
 			dprintk("%s: incorrect extent state %d\n",
 				__func__, bex.es);
@@ -185,18 +211,23 @@ fail:
 }
 
 int
-nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
+nfsd4_scsi_decode_layoutupdate(struct xdr_buf *buf, struct iomap **iomapp,
 		u32 block_size)
 {
 	struct iomap *iomaps;
-	u32 nr_iomaps, expected, i;
+	u32 nr_iomaps, expected, len, i;
+	struct xdr_stream xdr;
+	char scratch[sizeof(struct pnfs_block_range)];
 
-	if (len < sizeof(u32)) {
-		dprintk("%s: extent array too small: %u\n", __func__, len);
+	xdr_init_decode(&xdr, buf, buf->head[0].iov_base, NULL);
+	xdr_set_scratch_buffer(&xdr, scratch, sizeof(scratch));
+
+	if (xdr_stream_decode_u32(&xdr, &nr_iomaps)) {
+		dprintk("%s: failed to decode extent array size\n", __func__);
 		return -EINVAL;
 	}
 
-	nr_iomaps = be32_to_cpup(p++);
+	len = sizeof(__be32) + xdr_stream_remaining(&xdr);
 	expected = sizeof(__be32) + nr_iomaps * PNFS_SCSI_RANGE_SIZE;
 	if (len != expected) {
 		dprintk("%s: extent array size mismatch: %u/%u\n",
@@ -213,14 +244,22 @@ nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 	for (i = 0; i < nr_iomaps; i++) {
 		u64 val;
 
-		p = xdr_decode_hyper(p, &val);
+		if (xdr_stream_decode_u64(&xdr, &val)) {
+			dprintk("%s: failed to decode offset for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (val & (block_size - 1)) {
 			dprintk("%s: unaligned offset 0x%llx\n", __func__, val);
 			goto fail;
 		}
 		iomaps[i].offset = val;
 
-		p = xdr_decode_hyper(p, &val);
+		if (xdr_stream_decode_u64(&xdr, &val)) {
+			dprintk("%s: failed to decode length for entry %u\n",
+				__func__, i);
+			goto fail;
+		}
 		if (val & (block_size - 1)) {
 			dprintk("%s: unaligned length 0x%llx\n", __func__, val);
 			goto fail;
