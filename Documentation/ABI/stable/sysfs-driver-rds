@@ -1,0 +1,92 @@
+What:		/sys/module/rds/parameters/rds_ioctl_set_tos
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to set on a socket
+		the Quality of Service.
+
+		The returned value is the socket ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_ioctl_get_tos
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to get on a socket
+		the Quality of Service.
+
+		The returned value is the socket ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_cancel_sent_to
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to cancel all pending
+		messages to a given destination.
+
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_get_mr
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to retrieve the memory
+		ranges for the RDMA calls to setsockopt.
+
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_free_mr
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to release the memory
+		ranges for the RDMA calls to setsockopt.
+
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_recverr
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports the mechanism to send RDMA notifications
+		for any RDMA operation that fails.
+
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_cong_monitor
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The RDS driver supports mechanism to provide Congestion updates via
+		RDS_CMSG_CONG_UPDATE control messages.
+
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_get_mr_for_dest
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_so_transport
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_socket_so_rxpath_latency
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The returned value is the ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_so_transport_ib
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The returned value for the IB transport ioctl number and this is read-only.
+
+What:		/sys/module/rds/parameters/rds_so_transport_tcp
+Date:		Jun 2025
+Contact:	rds-devel@oss.oracle.com
+Description:
+		The returned value is the TCP transport number and this is read-only.

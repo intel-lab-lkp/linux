@@ -31,6 +31,7 @@
  *
  */
 #include <linux/module.h>
+#include <linux/elfnote.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/gfp.h>
@@ -960,3 +961,35 @@ MODULE_DESCRIPTION("RDS: Reliable Datagram Sockets"
 MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_ALIAS_NETPROTO(PF_RDS);
+
+#define RDS_IOCTL(feature, val) ELFNOTE64("rds.ioctl_" #feature, 0, val); \
+				unsigned int rds_ioctl_##feature = val; \
+				module_param(rds_ioctl_##feature, int, 0444)
+
+#define RDS_SOCKET(feature, val) ELFNOTE64("rds.socket_" #feature, 0, val); \
+				unsigned int rds_socket_##feature = val; \
+				module_param(rds_socket_##feature, int, 0444)
+
+#define RDS_SO_TRANSPORT(feature, val) ELFNOTE64("rds.so_transport_" #feature, 0, val); \
+				unsigned int rds_so_transport_##feature = val; \
+				module_param(rds_so_transport_##feature, int, 0444)
+
+/* The values used here correspond to include/uapi/linux/rds.h values */
+
+RDS_IOCTL(set_tos, SIOCRDSSETTOS);
+RDS_IOCTL(get_tos, SIOCRDSGETTOS);
+
+/* Advertise setsocket/getsocket options. */
+
+RDS_SOCKET(cancel_sent_to, RDS_CANCEL_SENT_TO);
+RDS_SOCKET(get_mr, RDS_GET_MR);
+RDS_SOCKET(free_mr, RDS_FREE_MR);
+RDS_SOCKET(recverr, RDS_RECVERR);
+RDS_SOCKET(cong_monitor, RDS_CONG_MONITOR);
+RDS_SOCKET(get_mr_for_dest, RDS_GET_MR_FOR_DEST);
+RDS_SOCKET(so_transport, SO_RDS_TRANSPORT);
+RDS_SOCKET(so_rxpath_latency, SO_RDS_MSG_RXPATH_LATENCY);
+
+/* The transport mechanisms. */
+RDS_SO_TRANSPORT(ib, RDS_TRANS_IB);
+RDS_SO_TRANSPORT(tcp, RDS_TRANS_TCP);
