@@ -4185,54 +4185,30 @@ fill_transform_hdr(struct smb2_transform_hdr *tr_hdr, unsigned int orig_len,
 	memcpy(&tr_hdr->SessionId, &shdr->SessionId, 8);
 }
 
-static void *smb2_aead_req_alloc(struct crypto_aead *tfm, const struct smb_rqst *rqst,
-				 int num_rqst, const u8 *sig, u8 **iv,
-				 struct aead_request **req, struct sg_table *sgt,
-				 unsigned int *num_sgs, size_t *sensitive_size)
+/* Caller must free returned aead_request, @sig, @iv, and @sgl. */
+static struct aead_request *smb2_get_aead_req(struct crypto_aead *tfm, struct smb_rqst *rqst,
+					      int num_rqst, u8 **sig, struct scatterlist **sgl)
 {
-	unsigned int req_size = sizeof(**req) + crypto_aead_reqsize(tfm);
-	unsigned int iv_size = crypto_aead_ivsize(tfm);
-	unsigned int len;
-	u8 *p;
-
-	*num_sgs = cifs_get_num_sgs(rqst, num_rqst, sig);
-	if (IS_ERR_VALUE((long)(int)*num_sgs))
-		return ERR_PTR(*num_sgs);
-
-	len = iv_size;
-	len += crypto_aead_alignmask(tfm) & ~(crypto_tfm_ctx_alignment() - 1);
-	len = ALIGN(len, crypto_tfm_ctx_alignment());
-	len += req_size;
-	len = ALIGN(len, __alignof__(struct scatterlist));
-	len += array_size(*num_sgs, sizeof(struct scatterlist));
-	*sensitive_size = len;
-
-	p = kvzalloc(len, GFP_NOFS);
-	if (!p)
-		return ERR_PTR(-ENOMEM);
-
-	*iv = (u8 *)PTR_ALIGN(p, crypto_aead_alignmask(tfm) + 1);
-	*req = (struct aead_request *)PTR_ALIGN(*iv + iv_size,
-						crypto_tfm_ctx_alignment());
-	sgt->sgl = (struct scatterlist *)PTR_ALIGN((u8 *)*req + req_size,
-						   __alignof__(struct scatterlist));
-	return p;
-}
-
-static void *smb2_get_aead_req(struct crypto_aead *tfm, struct smb_rqst *rqst,
-			       int num_rqst, const u8 *sig, u8 **iv,
-			       struct aead_request **req, struct scatterlist **sgl,
-			       size_t *sensitive_size)
-{
+	struct aead_request *req;
 	struct sg_table sgtable = {};
 	unsigned int skip, num_sgs, i, j;
 	ssize_t rc;
-	void *p;
 
-	p = smb2_aead_req_alloc(tfm, rqst, num_rqst, sig, iv, req, &sgtable,
-				&num_sgs, sensitive_size);
-	if (IS_ERR(p))
-		return ERR_CAST(p);
+	*sig = kzalloc(SMB2_SIGNATURE_SIZE, GFP_NOFS);
+	if (!*sig)
+		return NULL;
+
+	num_sgs = cifs_get_num_sgs(rqst, num_rqst, *sig);
+	if (num_sgs <= 0)
+		return NULL;
+
+	req = aead_request_alloc(tfm, GFP_NOFS);
+	if (!req)
+		return NULL;
+
+	sgtable.sgl = kvcalloc(num_sgs, sizeof(struct scatterlist), GFP_NOFS);
+	if (!sgtable.sgl)
+		return NULL;
 
 	sg_init_marker(sgtable.sgl, num_sgs);
 
@@ -4262,10 +4238,11 @@ static void *smb2_get_aead_req(struct crypto_aead *tfm, struct smb_rqst *rqst,
 		sgtable.orig_nents = sgtable.nents;
 	}
 
-	cifs_sg_set_buf(&sgtable, sig, SMB2_SIGNATURE_SIZE);
+	cifs_sg_set_buf(&sgtable, *sig, SMB2_SIGNATURE_SIZE);
 	sg_mark_end(&sgtable.sgl[sgtable.nents - 1]);
 	*sgl = sgtable.sgl;
-	return p;
+
+	return req;
 }
 
 static int
@@ -4311,14 +4288,11 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 		(struct smb2_transform_hdr *)rqst[0].rq_iov[0].iov_base;
 	unsigned int assoc_data_len = sizeof(struct smb2_transform_hdr) - 20;
 	int rc = 0;
-	struct scatterlist *sg;
-	u8 sign[SMB2_SIGNATURE_SIZE] = {};
+	struct scatterlist *sg = NULL;
 	u8 key[SMB3_ENC_DEC_KEY_SIZE];
 	struct aead_request *req;
-	u8 *iv;
+	u8 *iv = NULL, *sign = NULL;
 	unsigned int crypt_len = le32_to_cpu(tr_hdr->OriginalMessageSize);
-	void *creq;
-	size_t sensitive_size;
 
 	rc = smb2_get_enc_key(server, le64_to_cpu(tr_hdr->SessionId), enc, key);
 	if (rc) {
@@ -4344,14 +4318,21 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 		return rc;
 	}
 
-	creq = smb2_get_aead_req(tfm, rqst, num_rqst, sign, &iv, &req, &sg,
-				 &sensitive_size);
-	if (IS_ERR(creq))
-		return PTR_ERR(creq);
+	req = smb2_get_aead_req(tfm, rqst, num_rqst, &sign, &sg);
+	if (!req) {
+		rc = -ENOMEM;
+		goto err_free;
+	}
 
 	if (!enc) {
 		memcpy(sign, &tr_hdr->Signature, SMB2_SIGNATURE_SIZE);
 		crypt_len += SMB2_SIGNATURE_SIZE;
+	}
+
+	iv = kzalloc(crypto_aead_ivsize(tfm), GFP_NOFS);
+	if (!iv) {
+		rc = -ENOMEM;
+		goto err_free;
 	}
 
 	if ((server->cipher_type == SMB2_ENCRYPTION_AES128_GCM) ||
@@ -4370,8 +4351,12 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 
 	if (!rc && enc)
 		memcpy(&tr_hdr->Signature, sign, SMB2_SIGNATURE_SIZE);
+err_free:
+	kfree(iv);
+	kfree(sign);
+	kvfree(sg);
+	aead_request_free(req);
 
-	kvfree_sensitive(creq, sensitive_size);
 	return rc;
 }
 
