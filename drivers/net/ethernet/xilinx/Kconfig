@@ -27,11 +27,24 @@ config XILINX_AXI_EMAC
 	tristate "Xilinx 10/100/1000 AXI Ethernet support"
 	depends on HAS_IOMEM
 	depends on XILINX_DMA
+	select MDIO_BUS
+	select OF_DYNAMIC
 	select PHYLINK
 	select DIMLIB
 	help
 	  This driver supports the 10/100/1000 Ethernet from Xilinx for the
 	  AXI bus interface used in Xilinx Virtex FPGAs and Soc's.
+
+config XILINX_AXI_EMAC_PCS_COMPAT
+	bool "Xilinx AXI Ethernet PCS compatibility shim"
+	default PCS_XILINX
+	depends on XILINX_AXI_EMAC
+	select OF_DYNAMIC
+	help
+	  Enable support for older devicetrees which do not have compatibles
+	  for the Xilinx PCS/PMA. If you enable this option, you should
+	  probably enable PCS_XILINX too. If you do not use 1G speeds, or you
+	  do not have a (Xilinx) PCS, say n. If unsure, say y.
 
 config XILINX_LL_TEMAC
 	tristate "Xilinx LL TEMAC (LocalLink Tri-mode Ethernet MAC) driver"
