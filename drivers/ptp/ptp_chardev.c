@@ -176,6 +176,7 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 	struct ptp_pin_desc pd;
 	struct timespec64 ts;
 	int enable, err = 0;
+	bool cycles;
 
 	if (in_compat_syscall() && cmd != PTP_ENABLE_PPS && cmd != PTP_ENABLE_PPS2)
 		arg = (unsigned long)compat_ptr(arg);
@@ -354,11 +355,30 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_SYS_OFFSET_PRECISE:
 	case PTP_SYS_OFFSET_PRECISE2:
-		if (!ptp->info->getcrosststamp) {
+		if (!ptp->info->getcrosststamp || !ptp->info->getcrosscycles) {
 			err = -EOPNOTSUPP;
 			break;
 		}
-		err = ptp->info->getcrosststamp(ptp->info, &xtstamp);
+		if (copy_from_user(&precise_offset, (void __user *)arg,
+				   sizeof(precise_offset))) {
+			err = -EFAULT;
+			break;
+		}
+
+		if ((cmd == PTP_SYS_OFFSET_PRECISE2 &&
+		    (precise_offset.rsv[0] & ~PTP_OFFSET_PRECISE_VALID_FLAGS)) ||
+		    (cmd == PTP_SYS_OFFSET_PRECISE &&
+		    (precise_offset.rsv[0] & ~PTP_OFFSET_PRECISE_V1_VALID_FLAGS)) ||
+		    precise_offset.rsv[1]) {
+			err = -EINVAL;
+			break;
+		}
+
+		cycles = !!(precise_offset.rsv[0] & PTP_OFFSET_CYCLES);
+		if (cycles)
+			err = ptp->info->getcrosscycles(ptp->info, &xtstamp);
+		else
+			err = ptp->info->getcrosststamp(ptp->info, &xtstamp);
 		if (err)
 			break;
 
@@ -379,7 +399,7 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_SYS_OFFSET_EXTENDED:
 	case PTP_SYS_OFFSET_EXTENDED2:
-		if (!ptp->info->gettimex64) {
+		if (!ptp->info->gettimex64 || !ptp->info->getcyclesx64) {
 			err = -EOPNOTSUPP;
 			break;
 		}
@@ -389,8 +409,13 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 			extoff = NULL;
 			break;
 		}
+
 		if (extoff->n_samples > PTP_MAX_SAMPLES ||
-		    extoff->rsv[0] || extoff->rsv[1] ||
+		    (cmd == PTP_SYS_OFFSET_EXTENDED2 &&
+		     (extoff->rsv[0] & ~PTP_OFFSET_EXTENDED_VALID_FLAGS)) ||
+		    (cmd == PTP_SYS_OFFSET_EXTENDED &&
+		     (extoff->rsv[0] & ~PTP_OFFSET_EXTENDED_V1_VALID_FLAGS)) ||
+		    extoff->rsv[1] ||
 		    (extoff->clockid != CLOCK_REALTIME &&
 		     extoff->clockid != CLOCK_MONOTONIC &&
 		     extoff->clockid != CLOCK_MONOTONIC_RAW)) {
@@ -398,8 +423,14 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 			break;
 		}
 		sts.clockid = extoff->clockid;
+		cycles = !!(extoff->rsv[0] & PTP_OFFSET_CYCLES);
 		for (i = 0; i < extoff->n_samples; i++) {
-			err = ptp->info->gettimex64(ptp->info, &ts, &sts);
+			if (cycles)
+				err = ptp->info->getcyclesx64(ptp->info, &ts,
+							      &sts);
+			else
+				err = ptp->info->gettimex64(ptp->info, &ts,
+							    &sts);
 			if (err)
 				goto out;
 			extoff->ts[i][0].sec = sts.pre_ts.tv_sec;

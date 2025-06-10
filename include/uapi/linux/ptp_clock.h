@@ -26,6 +26,31 @@
 #include <linux/types.h>
 
 /*
+ * Bits of the ptp_sys_offset.flags field:
+ */
+#define PTP_OFFSET_CYCLES  (1<<0)  /* Use cycles instead of timestamps */
+
+/*
+ * flag fields valid for the PTP_SYS_OFFSET_EXTENDED2 ioctl.
+ */
+#define PTP_OFFSET_EXTENDED_VALID_FLAGS	(PTP_OFFSET_CYCLES)
+
+/*
+ * No flags are valid for the original PTP_SYS_OFFSET_EXTENDED ioctl
+ */
+#define PTP_OFFSET_EXTENDED_V1_VALID_FLAGS	(0)
+
+/*
+ * flag fields valid for the PTP_SYS_OFFSET_PRECISE2 ioctl.
+ */
+#define PTP_OFFSET_PRECISE_VALID_FLAGS	(PTP_OFFSET_CYCLES)
+
+/*
+ * No flags are valid for the original PTP_SYS_OFFSET_PRECISE ioctl
+ */
+#define PTP_OFFSET_PRECISE_V1_VALID_FLAGS	(0)
+
+/*
  * Bits of the ptp_extts_request.flags field:
  */
 #define PTP_ENABLE_FEATURE (1<<0)
@@ -86,9 +111,15 @@
  *
  */
 struct ptp_clock_time {
-	__s64 sec;  /* seconds */
-	__u32 nsec; /* nanoseconds */
-	__u32 reserved;
+	union {
+		struct {
+			__s64 sec;  /* seconds */
+			__u32 nsec; /* nanoseconds */
+			__u32 reserved;
+		};
+		__u64 cycles;
+	};
+
 };
 
 struct ptp_clock_caps {
@@ -173,7 +204,7 @@ struct ptp_sys_offset {
 struct ptp_sys_offset_extended {
 	unsigned int n_samples;
 	__kernel_clockid_t clockid;
-	unsigned int rsv[2];
+	unsigned int rsv[2];    /* rsv[0] is used for PTP_OFFSET_FLAG_CYCLES */
 	struct ptp_clock_time ts[PTP_MAX_SAMPLES][3];
 };
 
@@ -181,7 +212,7 @@ struct ptp_sys_offset_precise {
 	struct ptp_clock_time device;
 	struct ptp_clock_time sys_realtime;
 	struct ptp_clock_time sys_monoraw;
-	unsigned int rsv[4];    /* Reserved for future use. */
+	unsigned int rsv[4];    /* rsv[0] is used for PTP_OFFSET_FLAG_CYCLES */
 };
 
 enum ptp_pin_function {
