@@ -138,6 +138,19 @@ static struct icssg_firmwares icssg_hsr_firmwares[] = {
 	}
 };
 
+static struct icssg_firmwares icssg_prp_firmwares[] = {
+	{
+		.pru = "ti-pruss/am65x-sr2-pru0-pruprp-fw.elf",
+		.rtu = "ti-pruss/am65x-sr2-rtu0-pruprp-fw.elf",
+		.txpru = "ti-pruss/am65x-sr2-txpru0-pruprp-fw.elf",
+	},
+	{
+		.pru = "ti-pruss/am65x-sr2-pru1-pruprp-fw.elf",
+		.rtu = "ti-pruss/am65x-sr2-rtu1-pruprp-fw.elf",
+		.txpru = "ti-pruss/am65x-sr2-txpru1-pruprp-fw.elf",
+	}
+};
+
 static struct icssg_firmwares icssg_switch_firmwares[] = {
 	{
 		.pru = "ti-pruss/am65x-sr2-pru0-prusw-fw.elf",
@@ -187,8 +200,10 @@ static int prueth_emac_start(struct prueth *prueth)
 
 	if (prueth->is_switch_mode)
 		firmwares = icssg_switch_firmwares;
-	else if (prueth->is_hsr_offload_mode)
+	else if (prueth->is_hsr_offload_mode && HSR_V1 == prueth->hsr_prp_version)
 		firmwares = icssg_hsr_firmwares;
+	else if (prueth->is_hsr_offload_mode && PRP_V1 == prueth->hsr_prp_version)
+		firmwares = icssg_prp_firmwares;
 	else
 		firmwares = icssg_emac_firmwares;
 
@@ -1566,6 +1581,7 @@ static int prueth_netdevice_event(struct notifier_block *unused,
 	struct netdev_notifier_changeupper_info *info;
 	struct prueth_emac *emac = netdev_priv(ndev);
 	struct prueth *prueth = emac->prueth;
+	enum hsr_version hsr_ndev_version;
 	int ret = NOTIFY_DONE;
 
 	if (ndev->netdev_ops != &emac_netdev_ops)
@@ -1577,6 +1593,11 @@ static int prueth_netdevice_event(struct notifier_block *unused,
 
 		if ((ndev->features & NETIF_PRUETH_HSR_OFFLOAD_FEATURES) &&
 		    is_hsr_master(info->upper_dev)) {
+			hsr_get_version(info->upper_dev, &hsr_ndev_version);
+			if (hsr_ndev_version != HSR_V1 && hsr_ndev_version != PRP_V1)
+				return -EOPNOTSUPP;
+			prueth->hsr_prp_version = hsr_ndev_version;
+
 			if (info->linking) {
 				if (!prueth->hsr_dev) {
 					prueth->hsr_dev = info->upper_dev;
