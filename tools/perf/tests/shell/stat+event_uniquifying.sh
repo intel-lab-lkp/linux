@@ -49,6 +49,11 @@ test_event_uniquifying() {
     uniquified_event_array+=("${uniquified_event}")
   done < <(${perf_tool} list -v ${event} | grep "\[Kernel PMU event\]")
 
+  if [ -z "$uniquified_event" ]
+  then
+    err=2
+    return
+  fi
   perf_command="${perf_tool} stat -e $event -A -o ${stat_output} -- true"
   $perf_command
 
