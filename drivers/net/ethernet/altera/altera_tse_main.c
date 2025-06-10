@@ -32,6 +32,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/pcs.h>
 #include <linux/pcs-lynx.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
@@ -1412,7 +1413,7 @@ static int altera_tse_probe(struct platform_device *pdev)
 		goto err_init_pcs;
 	}
 
-	priv->pcs = lynx_pcs_create_mdiodev(pcs_bus, 0);
+	priv->pcs = lynx_pcs_create_mdiodev(&pdev->dev, pcs_bus, 0);
 	if (IS_ERR(priv->pcs)) {
 		ret = PTR_ERR(priv->pcs);
 		goto err_init_pcs;
@@ -1444,7 +1445,7 @@ static int altera_tse_probe(struct platform_device *pdev)
 
 	return 0;
 err_init_phylink:
-	lynx_pcs_destroy(priv->pcs);
+	pcs_put(priv->pcs);
 err_init_pcs:
 	unregister_netdev(ndev);
 err_register_netdev:
@@ -1466,7 +1467,7 @@ static void altera_tse_remove(struct platform_device *pdev)
 	altera_tse_mdio_destroy(ndev);
 	unregister_netdev(ndev);
 	phylink_destroy(priv->phylink);
-	lynx_pcs_destroy(priv->pcs);
+	pcs_put(priv->pcs);
 
 	free_netdev(ndev);
 }

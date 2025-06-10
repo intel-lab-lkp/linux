@@ -32,7 +32,6 @@ struct enetc_pf_ops {
 	void (*set_si_primary_mac)(struct enetc_hw *hw, int si, const u8 *addr);
 	void (*get_si_primary_mac)(struct enetc_hw *hw, int si, u8 *addr);
 	struct phylink_pcs *(*create_pcs)(struct enetc_pf *pf, struct mii_bus *bus);
-	void (*destroy_pcs)(struct phylink_pcs *pcs);
 	int (*enable_psfp)(struct enetc_ndev_priv *priv);
 };
 

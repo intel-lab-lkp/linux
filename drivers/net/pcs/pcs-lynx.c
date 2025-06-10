@@ -1,11 +1,14 @@
-// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
-/* Copyright 2020 NXP
+// SPDX-License-Identifier: GPL-2.0+
+/* Copyright (C) 2022 Sean Anderson <seanga2@gmail.com>
+ * Copyright 2020 NXP
  * Lynx PCS MDIO helpers
  */
 
 #include <linux/mdio.h>
-#include <linux/phylink.h>
+#include <linux/of.h>
+#include <linux/pcs.h>
 #include <linux/pcs-lynx.h>
+#include <linux/phylink.h>
 #include <linux/property.h>
 
 #define SGMII_CLOCK_PERIOD_NS		8 /* PCS is clocked at 125 MHz */
@@ -343,16 +346,16 @@ static const phy_interface_t lynx_interfaces[] = {
 	PHY_INTERFACE_MODE_USXGMII,
 };
 
-static struct phylink_pcs *lynx_pcs_create(struct mdio_device *mdio)
+static int lynx_pcs_probe(struct mdio_device *mdio)
 {
+	struct device *dev = &mdio->dev;
 	struct lynx_pcs *lynx;
-	int i;
+	int i, ret;
 
-	lynx = kzalloc(sizeof(*lynx), GFP_KERNEL);
+	lynx = devm_kzalloc(dev, sizeof(*lynx), GFP_KERNEL);
 	if (!lynx)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
-	mdio_device_get(mdio);
 	lynx->mdio = mdio;
 	lynx->pcs.ops = &lynx_pcs_phylink_ops;
 	lynx->pcs.poll = true;
@@ -360,31 +363,65 @@ static struct phylink_pcs *lynx_pcs_create(struct mdio_device *mdio)
 	for (i = 0; i < ARRAY_SIZE(lynx_interfaces); i++)
 		__set_bit(lynx_interfaces[i], lynx->pcs.supported_interfaces);
 
-	return lynx_to_phylink_pcs(lynx);
+	ret = devm_pcs_register(dev, &lynx->pcs);
+	if (ret)
+		return dev_err_probe(dev, ret, "could not register PCS\n");
+	dev_info(dev, "probed\n");
+	return 0;
 }
 
-struct phylink_pcs *lynx_pcs_create_mdiodev(struct mii_bus *bus, int addr)
+#ifdef CONFIG_OF
+static const struct of_device_id lynx_pcs_of_match[] = {
+	{ .compatible = "fsl,lynx-pcs" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, lynx_pcs_of_match);
+#endif
+
+static struct mdio_driver lynx_pcs_driver = {
+	.probe = lynx_pcs_probe,
+	.mdiodrv.driver = {
+		.name = "lynx-pcs",
+		.of_match_table = of_match_ptr(lynx_pcs_of_match),
+	},
+};
+mdio_module_driver(lynx_pcs_driver);
+
+struct phylink_pcs *lynx_pcs_create_mdiodev(struct device *dev,
+					    struct mii_bus *bus, int addr)
 {
 	struct mdio_device *mdio;
 	struct phylink_pcs *pcs;
+	int err;
 
 	mdio = mdio_device_create(bus, addr);
 	if (IS_ERR(mdio))
 		return ERR_CAST(mdio);
 
-	pcs = lynx_pcs_create(mdio);
+	mdio->bus_match = mdio_device_bus_match;
+	strscpy(mdio->modalias, "lynx-pcs");
+	err = mdio_device_register(mdio);
+	if (err) {
+		mdio_device_free(mdio);
+		return ERR_PTR(err);
+	}
 
-	/* lynx_create() has taken a refcount on the mdiodev if it was
-	 * successful. If lynx_create() fails, this will free the mdio
-	 * device here. In any case, we don't need to hold our reference
-	 * anymore, and putting it here will allow mdio_device_put() in
-	 * lynx_destroy() to automatically free the mdio device.
-	 */
-	mdio_device_put(mdio);
-
+	pcs = pcs_get_by_dev(dev, &mdio->dev);
+	mdio_device_free(mdio);
 	return pcs;
 }
 EXPORT_SYMBOL(lynx_pcs_create_mdiodev);
+
+static int lynx_pcs_fixup(struct of_changeset *ocs,
+			  struct device_node *np, void *data)
+{
+#ifdef CONFIG_OF_DYNAMIC
+	return of_changeset_add_prop_string(ocs, np, "compatible",
+					    "fsl,lynx-pcs");
+#else
+	return -ENODEV;
+#endif
+}
 
 /*
  * lynx_pcs_create_fwnode() creates a lynx PCS instance from the fwnode
@@ -396,40 +433,12 @@ EXPORT_SYMBOL(lynx_pcs_create_mdiodev);
  *  -ENOMEM if we fail to allocate memory
  *  pointer to a phylink_pcs on success
  */
-struct phylink_pcs *lynx_pcs_create_fwnode(struct fwnode_handle *node)
+struct phylink_pcs *lynx_pcs_create_fwnode(struct device *dev,
+					   struct fwnode_handle *node)
 {
-	struct mdio_device *mdio;
-	struct phylink_pcs *pcs;
-
-	if (!fwnode_device_is_available(node))
-		return ERR_PTR(-ENODEV);
-
-	mdio = fwnode_mdio_find_device(node);
-	if (!mdio)
-		return ERR_PTR(-EPROBE_DEFER);
-
-	pcs = lynx_pcs_create(mdio);
-
-	/* lynx_create() has taken a refcount on the mdiodev if it was
-	 * successful. If lynx_create() fails, this will free the mdio
-	 * device here. In any case, we don't need to hold our reference
-	 * anymore, and putting it here will allow mdio_device_put() in
-	 * lynx_destroy() to automatically free the mdio device.
-	 */
-	mdio_device_put(mdio);
-
-	return pcs;
+	return pcs_get_by_fwnode_compat(dev, node, lynx_pcs_fixup, NULL);
 }
 EXPORT_SYMBOL_GPL(lynx_pcs_create_fwnode);
 
-void lynx_pcs_destroy(struct phylink_pcs *pcs)
-{
-	struct lynx_pcs *lynx = phylink_pcs_to_lynx(pcs);
-
-	mdio_device_put(lynx->mdio);
-	kfree(lynx);
-}
-EXPORT_SYMBOL(lynx_pcs_destroy);
-
-MODULE_DESCRIPTION("NXP Lynx PCS phylink library");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_DESCRIPTION("NXP Lynx PCS phylink driver");
+MODULE_LICENSE("GPL");

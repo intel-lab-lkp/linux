@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_net.h>
+#include <linux/pcs.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <linux/mdio/mdio-regmap.h>
@@ -414,7 +415,7 @@ static int socfpga_dwmac_pcs_init(struct stmmac_priv *priv)
 	if (IS_ERR(pcs_bus))
 		return PTR_ERR(pcs_bus);
 
-	pcs = lynx_pcs_create_mdiodev(pcs_bus, 0);
+	pcs = lynx_pcs_create_mdiodev(priv->device, pcs_bus, 0);
 	if (IS_ERR(pcs))
 		return PTR_ERR(pcs);
 
@@ -424,8 +425,7 @@ static int socfpga_dwmac_pcs_init(struct stmmac_priv *priv)
 
 static void socfpga_dwmac_pcs_exit(struct stmmac_priv *priv)
 {
-	if (priv->hw->phylink_pcs)
-		lynx_pcs_destroy(priv->hw->phylink_pcs);
+	pcs_put(priv->hw->phylink_pcs);
 }
 
 static struct phylink_pcs *socfpga_dwmac_select_pcs(struct stmmac_priv *priv,

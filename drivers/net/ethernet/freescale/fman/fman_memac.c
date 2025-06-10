@@ -11,6 +11,7 @@
 
 #include <linux/slab.h>
 #include <linux/io.h>
+#include <linux/pcs.h>
 #include <linux/pcs-lynx.h>
 #include <linux/phy.h>
 #include <linux/phy_fixed.h>
@@ -972,21 +973,21 @@ static int memac_init(struct fman_mac *memac)
 	return 0;
 }
 
-static void pcs_put(struct phylink_pcs *pcs)
+static void memac_pcs_put(struct phylink_pcs *pcs)
 {
 	if (IS_ERR_OR_NULL(pcs))
 		return;
 
-	lynx_pcs_destroy(pcs);
+	pcs_put(pcs);
 }
 
 static int memac_free(struct fman_mac *memac)
 {
 	free_init_resources(memac);
 
-	pcs_put(memac->sgmii_pcs);
-	pcs_put(memac->qsgmii_pcs);
-	pcs_put(memac->xfi_pcs);
+	memac_pcs_put(memac->sgmii_pcs);
+	memac_pcs_put(memac->qsgmii_pcs);
+	memac_pcs_put(memac->xfi_pcs);
 	kfree(memac->memac_drv_param);
 	kfree(memac);
 
@@ -1033,7 +1034,8 @@ static struct fman_mac *memac_config(struct mac_device *mac_dev,
 	return memac;
 }
 
-static struct phylink_pcs *memac_pcs_create(struct device_node *mac_node,
+static struct phylink_pcs *memac_pcs_create(struct device *dev,
+					    struct device_node *mac_node,
 					    int index)
 {
 	struct device_node *node;
@@ -1043,7 +1045,7 @@ static struct phylink_pcs *memac_pcs_create(struct device_node *mac_node,
 	if (!node)
 		return ERR_PTR(-ENODEV);
 
-	pcs = lynx_pcs_create_fwnode(of_fwnode_handle(node));
+	pcs = lynx_pcs_create_fwnode(dev, of_fwnode_handle(node));
 	of_node_put(node);
 
 	return pcs;
@@ -1100,7 +1102,7 @@ int memac_initialization(struct mac_device *mac_dev,
 
 	err = of_property_match_string(mac_node, "pcs-handle-names", "xfi");
 	if (err >= 0) {
-		memac->xfi_pcs = memac_pcs_create(mac_node, err);
+		memac->xfi_pcs = memac_pcs_create(mac_dev->dev, mac_node, err);
 		if (IS_ERR(memac->xfi_pcs)) {
 			err = PTR_ERR(memac->xfi_pcs);
 			dev_err_probe(mac_dev->dev, err, "missing xfi pcs\n");
@@ -1112,7 +1114,8 @@ int memac_initialization(struct mac_device *mac_dev,
 
 	err = of_property_match_string(mac_node, "pcs-handle-names", "qsgmii");
 	if (err >= 0) {
-		memac->qsgmii_pcs = memac_pcs_create(mac_node, err);
+		memac->qsgmii_pcs = memac_pcs_create(mac_dev->dev, mac_node,
+						     err);
 		if (IS_ERR(memac->qsgmii_pcs)) {
 			err = PTR_ERR(memac->qsgmii_pcs);
 			dev_err_probe(mac_dev->dev, err,
@@ -1128,11 +1131,11 @@ int memac_initialization(struct mac_device *mac_dev,
 	 */
 	err = of_property_match_string(mac_node, "pcs-handle-names", "sgmii");
 	if (err == -EINVAL || err == -ENODATA)
-		pcs = memac_pcs_create(mac_node, 0);
+		pcs = memac_pcs_create(mac_dev->dev, mac_node, 0);
 	else if (err < 0)
 		goto _return_fm_mac_free;
 	else
-		pcs = memac_pcs_create(mac_node, err);
+		pcs = memac_pcs_create(mac_dev->dev, mac_node, err);
 
 	if (IS_ERR(pcs)) {
 		err = PTR_ERR(pcs);
