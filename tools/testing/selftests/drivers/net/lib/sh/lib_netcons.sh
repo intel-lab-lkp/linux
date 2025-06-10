@@ -109,6 +109,17 @@ function create_dynamic_target() {
 	echo 1 > "${NETCONS_PATH}"/enabled
 }
 
+# Generate the command line argument for netconsole following:
+#  netconsole=[+][src-port]@[src-ip]/[<dev>],[tgt-port]@<tgt-ip>/[tgt-macaddr]
+function create_cmdline_str() {
+	DSTMAC=$(ip netns exec "${NAMESPACE}" \
+		 ip link show "${DSTIF}" | awk '/ether/ {print $2}')
+	SRCPORT="1514"
+	TGTPORT="6666"
+
+	echo "netconsole=\"+${SRCPORT}@${SRCIP}/${SRCIF},${TGTPORT}@${DSTIP}/${DSTMAC}\""
+}
+
 # Do not append the release to the header of the message
 function disable_release_append() {
 	echo 0 > "${NETCONS_PATH}"/enabled
@@ -157,13 +168,9 @@ function listen_port_and_save_to() {
 		socat UDP-LISTEN:"${PORT}",fork "${OUTPUT}"
 }
 
-function validate_result() {
+# Only validate that the message arrived properly
+function validate_msg() {
 	local TMPFILENAME="$1"
-
-	# TMPFILENAME will contain something like:
-	# 6.11.1-0_fbk0_rc13_509_g30d75cea12f7,13,1822,115075213798,-;netconsole selftest: netcons_gtJHM
-	#  key=value
-
 	# Check if the file exists
 	if [ ! -f "$TMPFILENAME" ]; then
 		echo "FAIL: File was not generated." >&2
@@ -175,6 +182,17 @@ function validate_result() {
 		cat "${TMPFILENAME}" >&2
 		exit "${ksft_fail}"
 	fi
+}
+
+# Validate the message and userdata
+function validate_result() {
+	local TMPFILENAME="$1"
+
+	# TMPFILENAME will contain something like:
+	# 6.11.1-0_fbk0_rc13_509_g30d75cea12f7,13,1822,115075213798,-;netconsole selftest: netcons_gtJHM
+	#  key=value
+
+	validate_msg "${TMPFILENAME}"
 
 	if ! grep -q "${USERDATA_KEY}=${USERDATA_VALUE}" "${TMPFILENAME}"; then
 		echo "FAIL: ${USERDATA_KEY}=${USERDATA_VALUE} not found in ${TMPFILENAME}" >&2
@@ -245,4 +263,13 @@ function pkill_socat() {
 	set +e
 	pkill -f "${PROCESS_NAME}"
 	set -e
+}
+
+# Check if netconsole was compiled as a module, otherwise exit
+function check_netconsole_module() {
+	if modinfo netconsole | grep filename: | grep -q builtin
+	then
+		echo "SKIP: netconsole should be compiled as a module" >&2
+		exit "${ksft_skip}"
+	fi
 }
