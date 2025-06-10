@@ -21,6 +21,7 @@ ALL_TESTS="
 	kci_test_vrf
 	kci_test_encap
 	kci_test_macsec
+	kci_test_mcast_addr_notification
 	kci_test_ipsec
 	kci_test_ipsec_offload
 	kci_test_fdb_get
@@ -1332,6 +1333,44 @@ kci_test_mngtmpaddr()
 
 	ip netns del "$testns"
 	return $ret
+}
+
+kci_test_mcast_addr_notification()
+{
+	local tmpfile
+	local monitor_pid
+	local match_result
+
+	tmpfile=$(mktemp)
+
+	ip monitor maddr > $tmpfile &
+	monitor_pid=$!
+	sleep 1
+	if [ ! -e "/proc/$monitor_pid" ]; then
+		end_test "SKIP: mcast addr notification: iproute2 too old"
+		rm $tmpfile
+		return $ksft_skip
+	fi
+
+	run_cmd ip link add name test-dummy1 type dummy
+	run_cmd ip link set test-dummy1 up
+	run_cmd ip link del dev test-dummy1
+	sleep 1
+
+	match_result=$(grep -cE "test-dummy1.*(224.0.0.1|ff02::1)" $tmpfile)
+
+	kill $monitor_pid
+	rm $tmpfile
+	# There should be 4 line matches as follows.
+	# 13: test-dummy1    inet6 mcast ff02::1 scope global 
+	# 13: test-dummy1    inet mcast 224.0.0.1 scope global 
+	# Deleted 13: test-dummy1    inet mcast 224.0.0.1 scope global 
+	# Deleted 13: test-dummy1    inet6 mcast ff02::1 scope global 
+	if [ $match_result -ne 4 ];then
+		end_test "FAIL: mcast addr notification"
+		return 1
+	fi
+	end_test "PASS: mcast addr notification"
 }
 
 kci_test_rtnl()
