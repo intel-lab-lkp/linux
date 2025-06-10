@@ -156,6 +156,7 @@ void driver_deferred_probe_del(struct device *dev)
 static bool driver_deferred_probe_enable;
 /**
  * driver_deferred_probe_trigger() - Kick off re-probing deferred devices
+ * @dev: the successfully-bound device, or %NULL if not applicable
  *
  * This functions moves all devices from the pending list to the active
  * list and schedules the deferred probe workqueue to process them.  It
@@ -172,7 +173,7 @@ static bool driver_deferred_probe_enable;
  * changes in the midst of a probe, then deferred processing should be triggered
  * again.
  */
-void driver_deferred_probe_trigger(void)
+void driver_deferred_probe_trigger(struct device *dev)
 {
 	if (!driver_deferred_probe_enable)
 		return;
@@ -184,6 +185,10 @@ void driver_deferred_probe_trigger(void)
 	 */
 	mutex_lock(&deferred_probe_mutex);
 	atomic_inc(&deferred_trigger_count);
+	if (dev) {
+		smp_wmb(); /* paired with device_needs_retrigger */
+		atomic_inc(&dev->trigger_count);
+	}
 	list_splice_tail_init(&deferred_probe_pending_list,
 			      &deferred_probe_active_list);
 	mutex_unlock(&deferred_probe_mutex);
@@ -216,7 +221,7 @@ void device_block_probing(void)
 void device_unblock_probing(void)
 {
 	defer_all_probes = false;
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(NULL);
 }
 
 /**
@@ -308,7 +313,7 @@ static void deferred_probe_timeout_work_func(struct work_struct *work)
 	fw_devlink_drivers_done();
 
 	driver_deferred_probe_timeout = 0;
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(NULL);
 	flush_work(&deferred_probe_work);
 
 	mutex_lock(&deferred_probe_mutex);
@@ -347,7 +352,7 @@ static int deferred_probe_initcall(void)
 			    &deferred_devs_fops);
 
 	driver_deferred_probe_enable = true;
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(NULL);
 	/* Sort as many dependencies as possible before exiting initcalls */
 	flush_work(&deferred_probe_work);
 	initcalls_done = true;
@@ -359,7 +364,7 @@ static int deferred_probe_initcall(void)
 	 * Trigger deferred probe again, this time we won't defer anything
 	 * that is optional
 	 */
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(NULL);
 	flush_work(&deferred_probe_work);
 
 	if (driver_deferred_probe_timeout > 0) {
@@ -415,7 +420,7 @@ static void driver_bound(struct device *dev)
 	 * kick off retrying all pending devices
 	 */
 	driver_deferred_probe_del(dev);
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(dev);
 
 	bus_notify(dev, BUS_NOTIFY_BOUND_DRIVER);
 	kobject_uevent(&dev->kobj, KOBJ_BIND);
@@ -807,6 +812,47 @@ static int __driver_probe_device(const struct device_driver *drv, struct device 
 }
 
 /**
+ * dev_get_trigger_count() - Recursively read trigger_count
+ * @dev: device to read from
+ * @data: pointer to the int result; should be initialized to 0
+ *
+ * Read @dev's trigger_count, as well as all its children's trigger counts,
+ * recursively. The result is the number of times @dev or any of its
+ * (possibly-removed) children have been successfully probed.
+ *
+ * Return: 0
+ */
+static int dev_get_trigger_count(struct device *dev, void *data)
+{
+	*(int *)data += atomic_read(&dev->trigger_count);
+	return device_for_each_child(dev, dev_get_trigger_count, data);
+}
+
+/*
+ * device_needs_retrigger() - Determine if we need to re-trigger a deferred probe
+ * @dev: Device that failed to probe with %EPROBE_DEFER
+ * @old_trigger_count: Value of deferred_trigger_count before probing the device
+ *
+ * The resource @dev was looking for could have been probed between when @dev
+ * looked up the resource and when the probe process finished. If this occurred
+ * we need to retrigger deferred probing so that @dev gets another shot at
+ * probing. However, we need to ignore deferred probe triggers from @dev's own
+ * children, since that could result in an infinite probe loop.
+ *
+ * Return: %true if we should retrigger probing of deferred devices
+ */
+static bool device_needs_retrigger(struct device *dev, int old_trigger_count)
+{
+	int dev_trigger_count = 0;
+	int new_trigger_count;
+
+	dev_get_trigger_count(dev, &dev_trigger_count);
+	smp_rmb(); /* paired with driver_deferred_probe_trigger */
+	new_trigger_count = atomic_read(&deferred_trigger_count);
+	return new_trigger_count > old_trigger_count + dev_trigger_count;
+}
+
+/**
  * driver_probe_device - attempt to bind device & driver together
  * @drv: driver to bind a device to
  * @dev: device to try to bind to the driver
@@ -830,12 +876,9 @@ static int driver_probe_device(const struct device_driver *drv, struct device *d
 	if (ret == -EPROBE_DEFER || ret == EPROBE_DEFER) {
 		driver_deferred_probe_add(dev);
 
-		/*
-		 * Did a trigger occur while probing? Need to re-trigger if yes
-		 */
-		if (trigger_count != atomic_read(&deferred_trigger_count) &&
-		    !defer_all_probes)
-			driver_deferred_probe_trigger();
+		if (!defer_all_probes &&
+		    device_needs_retrigger(dev, trigger_count))
+			driver_deferred_probe_trigger(NULL);
 	}
 	atomic_dec(&probe_count);
 	wake_up_all(&probe_waitqueue);

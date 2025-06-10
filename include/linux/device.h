@@ -486,6 +486,8 @@ struct device_physical_location {
  * @p:		Holds the private data of the driver core portions of the device.
  * 		See the comment of the struct device_private for detail.
  * @kobj:	A top-level, abstract class from which other classes are derived.
+ * @trigger_count: Number of times this device (or any of its removed children)
+ *              has been successfully bound to a driver.
  * @init_name:	Initial name of the device.
  * @type:	The type of device.
  * 		This identifies the device type and carries type-specific
@@ -581,6 +583,7 @@ struct device_physical_location {
  */
 struct device {
 	struct kobject kobj;
+	atomic_t		trigger_count;
 	struct device		*parent;
 
 	struct device_private	*p;

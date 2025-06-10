@@ -1858,7 +1858,7 @@ void __init wait_for_init_devices_probe(void)
 
 	pr_info("Trying to probe devices needed for running init ...\n");
 	fw_devlink_best_effort = true;
-	driver_deferred_probe_trigger();
+	driver_deferred_probe_trigger(NULL);
 
 	/*
 	 * Wait for all "best effort" probes to finish before going back to
@@ -3739,6 +3739,9 @@ done:
 	kobject_uevent(&dev->kobj, KOBJ_REMOVE);
 	glue_dir = get_glue_dir(dev);
 	kobject_del(&dev->kobj);
+	if (parent)
+		atomic_add(atomic_read(&dev->trigger_count),
+			   &dev->parent->trigger_count);
  Error:
 	cleanup_glue_dir(dev, glue_dir);
 parent_error:
@@ -3899,6 +3902,9 @@ void device_del(struct device *dev)
 	kobject_uevent(&dev->kobj, KOBJ_REMOVE);
 	glue_dir = get_glue_dir(dev);
 	kobject_del(&dev->kobj);
+	if (parent)
+		atomic_add(atomic_read(&dev->trigger_count),
+			   &parent->trigger_count);
 	cleanup_glue_dir(dev, glue_dir);
 	memalloc_noio_restore(noio_flag);
 	put_device(parent);
