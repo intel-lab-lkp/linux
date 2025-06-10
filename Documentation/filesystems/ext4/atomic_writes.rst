@@ -1,5 +1,4 @@
 .. SPDX-License-Identifier: GPL-2.0
-.. _atomic_writes:
 
 Atomic Block Writes
 -------------------------
@@ -154,7 +153,7 @@ Creating Filesystems with Atomic Write Support
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First check the atomic write units supported by block device.
-See :ref:`atomic_write_bdev_support` for more details.
+See "Hardware Support" section below for more details.
 
 For single-fsblock atomic writes with a larger block size
 (on systems with block size < page size):
@@ -201,7 +200,6 @@ details:
 The STATX_ATTR_WRITE_ATOMIC flag in ``statx->attributes`` is set if atomic
 writes are supported.
 
-.. _atomic_write_bdev_support:
 
 Hardware Support
 ----------------
