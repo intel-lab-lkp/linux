@@ -1199,6 +1199,8 @@ static void phylink_pcs_neg_mode(struct phylink *pl, struct phylink_pcs *pcs,
 	pl->act_link_an_mode = mode;
 }
 
+static void pcs_change_callback(void *priv, bool up);
+
 static void phylink_major_config(struct phylink *pl, bool restart,
 				  const struct phylink_link_state *state)
 {
@@ -1254,10 +1256,10 @@ static void phylink_major_config(struct phylink *pl, bool restart,
 		phylink_pcs_disable(pl->pcs);
 
 		if (pl->pcs)
-			pl->pcs->phylink = NULL;
+			pl->pcs->link_change_priv = NULL;
 
-		pcs->phylink = pl;
-
+		pcs->link_change = pcs_change_callback;
+		pcs->link_change_priv = pl;
 		pl->pcs = pcs;
 	}
 
@@ -2327,25 +2329,13 @@ void phylink_mac_change(struct phylink *pl, bool up)
 }
 EXPORT_SYMBOL_GPL(phylink_mac_change);
 
-/**
- * phylink_pcs_change() - notify phylink of a change to PCS link state
- * @pcs: pointer to &struct phylink_pcs
- * @up: indicates whether the link is currently up.
- *
- * The PCS driver should call this when the state of its link changes
- * (e.g. link failure, new negotiation results, etc.) Note: it should
- * not determine "up" by reading the BMSR. If in doubt about the link
- * state at interrupt time, then pass true if pcs_get_state() returns
- * the latched link-down state, otherwise pass false.
- */
-void phylink_pcs_change(struct phylink_pcs *pcs, bool up)
+static void pcs_change_callback(void *priv, bool up)
 {
-	struct phylink *pl = pcs->phylink;
+	struct phylink *pl = priv;
 
 	if (pl)
 		phylink_link_changed(pl, up, "pcs");
 }
-EXPORT_SYMBOL_GPL(phylink_pcs_change);
 
 static irqreturn_t phylink_link_handler(int irq, void *data)
 {
