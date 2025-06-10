@@ -36,11 +36,7 @@
 #include <linux/memblock.h>
 #include <linux/kasan-enabled.h>
 
-#define DEPOT_POOLS_CAP 8192
-/* The pool_index is offset by 1 so the first record does not have a 0 handle. */
-#define DEPOT_MAX_POOLS \
-	(((1LL << (DEPOT_POOL_INDEX_BITS)) - 1 < DEPOT_POOLS_CAP) ? \
-	 (1LL << (DEPOT_POOL_INDEX_BITS)) - 1 : DEPOT_POOLS_CAP)
+#define DEPOT_MAX_POOLS CONFIG_STACKDEPOT_MAX_POOLS
 
 static bool stack_depot_disabled;
 static bool __stack_depot_early_init_requested __initdata = IS_ENABLED(CONFIG_STACKDEPOT_ALWAYS_INIT);
@@ -244,6 +240,9 @@ EXPORT_SYMBOL_GPL(stack_depot_init);
 static bool depot_init_pool(void **prealloc)
 {
 	lockdep_assert_held(&pool_lock);
+
+	/* The pool_index is offset by 1 so the first record does not have a 0 handle. */
+	BUILD_BUG_ON((1LL << (DEPOT_POOL_INDEX_BITS)) - 1 < DEPOT_MAX_POOLS);
 
 	if (unlikely(pools_num >= DEPOT_MAX_POOLS)) {
 		/* Bail out if we reached the pool limit. */
