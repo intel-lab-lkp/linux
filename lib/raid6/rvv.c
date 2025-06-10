@@ -23,9 +23,9 @@ static int rvv_has_vector(void)
 static void raid6_rvv1_gen_syndrome_real(int disks, unsigned long bytes, void **ptrs)
 {
 	u8 **dptr = (u8 **)ptrs;
-	unsigned long d;
-	int z, z0;
 	u8 *p, *q;
+	unsigned long vl, d;
+	int z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
 	p = dptr[z0 + 1];		/* XOR parity */
@@ -33,8 +33,9 @@ static void raid6_rvv1_gen_syndrome_real(int disks, unsigned long bytes, void **
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	 /* v0:wp0, v1:wq0, v2:wd0/w20, v3:w10 */
@@ -96,7 +97,7 @@ static void raid6_rvv1_xor_syndrome_real(int disks, int start, int stop,
 {
 	u8 **dptr = (u8 **)ptrs;
 	u8 *p, *q;
-	unsigned long d;
+	unsigned long vl, d;
 	int z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
@@ -105,8 +106,9 @@ static void raid6_rvv1_xor_syndrome_real(int disks, int start, int stop,
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/* v0:wp0, v1:wq0, v2:wd0/w20, v3:w10 */
@@ -192,9 +194,9 @@ static void raid6_rvv1_xor_syndrome_real(int disks, int start, int stop,
 static void raid6_rvv2_gen_syndrome_real(int disks, unsigned long bytes, void **ptrs)
 {
 	u8 **dptr = (u8 **)ptrs;
-	unsigned long d;
-	int z, z0;
 	u8 *p, *q;
+	unsigned long vl, d;
+	int z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
 	p = dptr[z0 + 1];		/* XOR parity */
@@ -202,8 +204,9 @@ static void raid6_rvv2_gen_syndrome_real(int disks, unsigned long bytes, void **
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
@@ -284,7 +287,7 @@ static void raid6_rvv2_xor_syndrome_real(int disks, int start, int stop,
 {
 	u8 **dptr = (u8 **)ptrs;
 	u8 *p, *q;
-	unsigned long d;
+	unsigned long vl, d;
 	int z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
@@ -293,8 +296,9 @@ static void raid6_rvv2_xor_syndrome_real(int disks, int start, int stop,
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
@@ -410,9 +414,9 @@ static void raid6_rvv2_xor_syndrome_real(int disks, int start, int stop,
 static void raid6_rvv4_gen_syndrome_real(int disks, unsigned long bytes, void **ptrs)
 {
 	u8 **dptr = (u8 **)ptrs;
-	unsigned long d;
-	int z, z0;
 	u8 *p, *q;
+	unsigned long vl, d;
+	int z, z0;
 
 	z0 = disks - 3;	/* Highest data disk */
 	p = dptr[z0 + 1];	/* XOR parity */
@@ -420,8 +424,9 @@ static void raid6_rvv4_gen_syndrome_real(int disks, unsigned long bytes, void **
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
@@ -536,7 +541,7 @@ static void raid6_rvv4_xor_syndrome_real(int disks, int start, int stop,
 {
 	u8 **dptr = (u8 **)ptrs;
 	u8 *p, *q;
-	unsigned long d;
+	unsigned long vl, d;
 	int z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
@@ -545,8 +550,9 @@ static void raid6_rvv4_xor_syndrome_real(int disks, int start, int stop,
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
@@ -718,9 +724,9 @@ static void raid6_rvv4_xor_syndrome_real(int disks, int start, int stop,
 static void raid6_rvv8_gen_syndrome_real(int disks, unsigned long bytes, void **ptrs)
 {
 	u8 **dptr = (u8 **)ptrs;
-	unsigned long d;
-	int z, z0;
 	u8 *p, *q;
+	unsigned long vl, d;
+	int z, z0;
 
 	z0 = disks - 3;	/* Highest data disk */
 	p = dptr[z0 + 1];	/* XOR parity */
@@ -728,8 +734,9 @@ static void raid6_rvv8_gen_syndrome_real(int disks, unsigned long bytes, void **
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
@@ -912,7 +919,7 @@ static void raid6_rvv8_xor_syndrome_real(int disks, int start, int stop,
 {
 	u8 **dptr = (u8 **)ptrs;
 	u8 *p, *q;
-	unsigned long d;
+	unsigned long vl, d;
 	int z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
@@ -921,8 +928,9 @@ static void raid6_rvv8_xor_syndrome_real(int disks, int start, int stop,
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
-		      "vsetvli	t0, x0, e8, m1, ta, ma\n"
+		      "vsetvli	%0, x0, e8, m1, ta, ma\n"
 		      ".option	pop\n"
+		      : "=&r" (vl)
 	);
 
 	/*
