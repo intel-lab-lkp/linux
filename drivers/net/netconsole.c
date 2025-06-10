@@ -1659,7 +1659,8 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 	int ipv6;
 
 	if (*cur != '@') {
-		if ((delim = strchr(cur, '@')) == NULL)
+		delim = strchr(cur, '@');
+		if (!delim)
 			goto parse_failed;
 		*delim = 0;
 		if (kstrtou16(cur, 10, &np->local_port))
@@ -1670,7 +1671,8 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 
 	if (*cur != '/') {
 		ipversion_set = true;
-		if ((delim = strchr(cur, '/')) == NULL)
+		delim = strchr(cur, '/');
+		if (!delim)
 			goto parse_failed;
 		*delim = 0;
 		ipv6 = netpoll_parse_ip_addr(cur, &np->local_ip);
@@ -1684,7 +1686,8 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 
 	if (*cur != ',') {
 		/* parse out dev_name or dev_mac */
-		if ((delim = strchr(cur, ',')) == NULL)
+		delim = strchr(cur, ',');
+		if (!delim)
 			goto parse_failed;
 		*delim = 0;
 
@@ -1701,7 +1704,8 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 
 	if (*cur != '@') {
 		/* dst port */
-		if ((delim = strchr(cur, '@')) == NULL)
+		delim = strchr(cur, '@');
+		if (!delim)
 			goto parse_failed;
 		*delim = 0;
 		if (*cur == ' ' || *cur == '\t')
@@ -1713,7 +1717,8 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 	cur++;
 
 	/* dst ip */
-	if ((delim = strchr(cur, '/')) == NULL)
+	delim = strchr(cur, '/');
+	if (!delim)
 		goto parse_failed;
 	*delim = 0;
 	ipv6 = netpoll_parse_ip_addr(cur, &np->remote_ip);
