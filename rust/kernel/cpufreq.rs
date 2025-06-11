@@ -842,7 +842,7 @@ pub trait Driver {
 ///     c_str,
 ///     device::{Core, Device},
 ///     macros::vtable,
-///     of, platform,
+///     platform,
 ///     sync::Arc,
 /// };
 /// struct SampleDevice;
@@ -887,7 +887,6 @@ pub trait Driver {
 ///
 /// impl platform::Driver for SampleDriver {
 ///     type IdInfo = ();
-///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
 ///
 ///     fn probe(
 ///         pdev: &platform::Device<Core>,
