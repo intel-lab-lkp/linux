@@ -691,6 +691,7 @@ struct ixgbe_aci_cmd_nvm {
 #define IXGBE_ACI_NVM_LAST_CMD		BIT(0)
 #define IXGBE_ACI_NVM_PCIR_REQ		BIT(0) /* Used by NVM Write reply */
 #define IXGBE_ACI_NVM_PRESERVE_ALL	BIT(1)
+#define IXGBE_ACI_NVM_FACTORY_DEFAULT	BIT(2)
 #define IXGBE_ACI_NVM_ACTIV_SEL_NVM	BIT(3) /* Write Activate/SR Dump only */
 #define IXGBE_ACI_NVM_ACTIV_SEL_OROM	BIT(4)
 #define IXGBE_ACI_NVM_ACTIV_SEL_NETLIST	BIT(5)
