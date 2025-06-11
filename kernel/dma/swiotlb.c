@@ -1379,6 +1379,8 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	phys_addr_t tlb_addr;
 	unsigned short pad_slots;
 
+	trace_swiotlb_bounced(dev, orig_addr, mapping_size);
+
 	if (!mem || !mem->nslabs) {
 		dev_warn_ratelimited(dev,
 			"Can not allocate SWIOTLB buffer earlier and can't now provide you with the DMA bounce buffer");

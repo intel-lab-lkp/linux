@@ -1153,8 +1153,6 @@ static phys_addr_t iommu_dma_map_swiotlb(struct device *dev, phys_addr_t phys,
 		return (phys_addr_t)DMA_MAPPING_ERROR;
 	}
 
-	trace_swiotlb_bounced(dev, phys, size);
-
 	phys = swiotlb_tbl_map_single(dev, phys, size, iova_mask(iovad), dir,
 			attrs);
 
