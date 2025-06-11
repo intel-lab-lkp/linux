@@ -36,6 +36,109 @@
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
+#define SPAN_NR_ENTRIES(vstart, vend, shift) \
+	((((vend) - 1) >> (shift)) - ((vstart) >> (shift)) + 1)
+
+#define NR_BM_PTE_TABLES \
+	SPAN_NR_ENTRIES(FIXADDR_START, FIXADDR_TOP, PMD_SHIFT)
+#define NR_BM_PMD_TABLES \
+	SPAN_NR_ENTRIES(FIXADDR_START, FIXADDR_TOP, PUD_SHIFT)
+
+static_assert(NR_BM_PMD_TABLES == 1);
+
+#define __BM_TABLE_IDX(addr, shift) \
+	(((addr) >> (shift)) - (FIXADDR_START >> (shift)))
+
+#define BM_PTE_TABLE_IDX(addr)	__BM_TABLE_IDX(addr, PMD_SHIFT)
+
+static pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __page_aligned_bss;
+static pmd_t bm_pmd[PTRS_PER_PMD] __page_aligned_bss __maybe_unused;
+static pud_t bm_pud[PTRS_PER_PUD] __page_aligned_bss __maybe_unused;
+
+static inline pte_t *fixmap_pte(unsigned long addr)
+{
+	return &bm_pte[BM_PTE_TABLE_IDX(addr)][pte_index(addr)];
+}
+
+static void __init early_fixmap_init_pte(pmd_t *pmdp, unsigned long addr)
+{
+	pmd_t pmd = READ_ONCE(*pmdp);
+	pte_t *ptep;
+
+	if (!pmd_present(pmd)) {
+		ptep = bm_pte[BM_PTE_TABLE_IDX(addr)];
+		pmd_populate_kernel(&init_mm, pmdp, ptep);
+		kernel_pte_init(ptep);
+	}
+}
+
+static void __init early_fixmap_init_pmd(pud_t *pudp, unsigned long addr,
+					 unsigned long end)
+{
+	unsigned long next;
+	pud_t pud = READ_ONCE(*pudp);
+	pmd_t *pmdp;
+
+	if (pud_none(pud))
+		pud_populate(&init_mm, pudp, bm_pmd);
+
+	pmdp = pmd_offset(pudp, addr);
+
+#ifndef __PAGETABLE_PMD_FOLDED
+	pmd_init(pmdp);
+#endif
+	do {
+		next = pmd_addr_end(addr, end);
+		early_fixmap_init_pte(pmdp, addr);
+	} while (pmdp++, addr = next, addr != end);
+}
+
+static void __init early_fixmap_init_pud(p4d_t *p4dp, unsigned long addr,
+					 unsigned long end)
+{
+	p4d_t p4d = READ_ONCE(*p4dp);
+	pud_t *pudp;
+
+#ifndef __PAGETABLE_PUD_FOLDED
+	if (CONFIG_PGTABLE_LEVELS > 3 && !p4d_none(p4d) &&
+	    p4d_phys(p4d) != __pa_symbol(bm_pud)) {
+		/*
+		 * We only end up here if the kernel mapping and the fixmap
+		 * share the top level pgd entry, which should only happen on
+		 * 16k/4 levels configurations.
+		 */
+		BUG_ON(!IS_ENABLED(CONFIG_PAGE_SIZE_16KB));
+	}
+#endif
+
+	if (p4d_none(p4d))
+		p4d_populate(&init_mm, p4dp, bm_pud);
+
+	pudp = pud_offset(p4dp, addr);
+
+#ifndef __PAGETABLE_PUD_FOLDED
+	pud_init(pudp);
+#endif
+	early_fixmap_init_pmd(pudp, addr, end);
+}
+
+/*
+ * The p*d_populate functions call virt_to_phys implicitly so they can't be used
+ * directly on kernel symbols (bm_p*d). This function is called too early to use
+ * lm_alias so __p*d_populate functions must be used to populate with the
+ * physical address from __pa_symbol.
+ */
+void __init early_fixmap_init(void)
+{
+	unsigned long addr = FIXADDR_START;
+	unsigned long end = FIXADDR_TOP;
+
+	pgd_t *pgdp = pgd_offset_k(addr);
+	p4d_t *p4dp = p4d_offset(pgdp, addr);
+
+	early_fixmap_init_pud(p4dp, addr, end);
+}
+
 unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_bss;
 EXPORT_SYMBOL(empty_zero_page);
 
@@ -191,7 +294,7 @@ pte_t * __init populate_kernel_pte(unsigned long addr)
 	return pte_offset_kernel(pmd, addr);
 }
 
-void __init __set_fixmap(enum fixed_addresses idx,
+void __set_fixmap(enum fixed_addresses idx,
 			       phys_addr_t phys, pgprot_t flags)
 {
 	unsigned long addr = __fix_to_virt(idx);
@@ -199,11 +302,7 @@ void __init __set_fixmap(enum fixed_addresses idx,
 
 	BUG_ON(idx <= FIX_HOLE || idx >= __end_of_fixed_addresses);
 
-	ptep = populate_kernel_pte(addr);
-	if (!pte_none(ptep_get(ptep))) {
-		pte_ERROR(*ptep);
-		return;
-	}
+	ptep = fixmap_pte(addr);
 
 	if (pgprot_val(flags))
 		set_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
