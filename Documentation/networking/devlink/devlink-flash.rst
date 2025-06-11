@@ -36,6 +36,9 @@ This mask indicates the set of sections which are allowed to be overwritten.
        components being updated with the identifiers found in the provided
        image. This includes MAC addresses, serial IDs, and similar device
        identifiers.
+   * - ``DEVLINK_FLASH_OVERWRITE_FROM_FACTORY_SETTINGS``
+     - Indicates that device shall overwrite settings and identifiers from
+       factory settings section instead of provided image.
 
 Multiple overwrite bits may be combined and requested together. If no bits
 are provided, it is expected that the device only update firmware binaries
