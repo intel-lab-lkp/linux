@@ -53,6 +53,7 @@ void wxvf_remove(struct pci_dev *pdev)
 	kfree(wx->vfinfo);
 	kfree(wx->rss_key);
 	kfree(wx->mac_table);
+	phylink_destroy(wx->phylink);
 	wx_clear_interrupt_scheme(wx);
 	pci_release_selected_regions(pdev,
 				     pci_select_bars(pdev, IORESOURCE_MEM));
@@ -64,6 +65,7 @@ static irqreturn_t wx_msix_misc_vf(int __always_unused irq, void *data)
 {
 	struct wx *wx = data;
 
+	phylink_mac_change(wx->phylink, wx->link);
 	/* Clear the interrupt */
 	if (netif_running(wx->netdev))
 		wr32(wx, WX_VXIMC, wx->eims_other);
@@ -242,6 +244,23 @@ int wx_set_mac_vf(struct net_device *netdev, void *p)
 }
 EXPORT_SYMBOL(wx_set_mac_vf);
 
+void wx_get_mac_link_vf(struct phylink_config *config,
+			struct phylink_link_state *state)
+{
+	struct wx *wx = phylink_to_wx(config);
+	int err;
+
+	spin_lock_bh(&wx->mbx.mbx_lock);
+	err = wx_check_mac_link_vf(wx);
+	spin_unlock_bh(&wx->mbx.mbx_lock);
+	if (err)
+		return;
+
+	state->link = wx->link;
+	state->speed = wx->speed;
+}
+EXPORT_SYMBOL(wx_get_mac_link_vf);
+
 static void wxvf_irq_enable(struct wx *wx)
 {
 	wr32(wx, WX_VXIMC, wx->eims_enable_mask);
@@ -258,6 +277,7 @@ static void wxvf_up_complete(struct wx *wx)
 	wxvf_irq_enable(wx);
 	/* enable transmits */
 	netif_tx_start_all_queues(wx->netdev);
+	phylink_start(wx->phylink);
 }
 
 int wxvf_open(struct net_device *netdev)
@@ -300,6 +320,7 @@ static void wxvf_down(struct wx *wx)
 {
 	struct net_device *netdev = wx->netdev;
 
+	phylink_stop(wx->phylink);
 	netif_tx_stop_all_queues(netdev);
 	netif_tx_disable(netdev);
 	wx_napi_disable_all(wx);
@@ -320,3 +341,25 @@ int wxvf_close(struct net_device *netdev)
 	return 0;
 }
 EXPORT_SYMBOL(wxvf_close);
+
+void wxvf_mac_config(struct phylink_config *config, unsigned int mode,
+		     const struct phylink_link_state *state)
+{
+}
+EXPORT_SYMBOL(wxvf_mac_config);
+
+void wxvf_mac_link_down(struct phylink_config *config,
+			unsigned int mode, phy_interface_t interface)
+{
+	struct wx *wx = phylink_to_wx(config);
+
+	wx->speed = SPEED_UNKNOWN;
+}
+EXPORT_SYMBOL(wxvf_mac_link_down);
+
+void wxvf_mac_link_up(struct phylink_config *config, struct phy_device *phy,
+		      unsigned int mode, phy_interface_t interface,
+		      int speed, int duplex, bool tx_pause, bool rx_pause)
+{
+}
+EXPORT_SYMBOL(wxvf_mac_link_up);

@@ -37,6 +37,88 @@ static const struct pci_device_id txgbevf_pci_tbl[] = {
 	{ .device = 0 }
 };
 
+static const struct phylink_mac_ops txgbevf_mac_ops = {
+	.mac_config = wxvf_mac_config,
+	.mac_link_down = wxvf_mac_link_down,
+	.mac_link_up = wxvf_mac_link_up,
+};
+
+static int txgbevf_interface_max_speed(phy_interface_t interface)
+{
+	switch (interface) {
+	case PHY_INTERFACE_MODE_10GBASER:
+		return SPEED_10000;
+	case PHY_INTERFACE_MODE_25GBASER:
+		return SPEED_25000;
+	case PHY_INTERFACE_MODE_XLGMII:
+		return SPEED_40000;
+	default:
+		/* No idea! Garbage in, unknown out */
+		return SPEED_UNKNOWN;
+	}
+
+	return SPEED_UNKNOWN;
+}
+
+static int txgbevf_phylink_init(struct wx *wx)
+{
+	struct phylink_link_state link_state;
+	struct phylink_config *phy_config;
+	phy_interface_t phy_mode;
+	struct phylink *phylink;
+	int err;
+
+	phy_config = &wx->phylink_config;
+	phy_config->dev = &wx->netdev->dev;
+	phy_config->type = PHYLINK_NETDEV;
+	phy_config->mac_capabilities = MAC_40000FD | MAC_25000FD | MAC_10000FD |
+				       MAC_1000FD | MAC_100FD | MAC_10FD;
+	phy_config->get_fixed_state = wx_get_mac_link_vf;
+
+	if (wx->mac.type == wx_mac_aml40) {
+		phy_mode = PHY_INTERFACE_MODE_XLGMII;
+		__set_bit(PHY_INTERFACE_MODE_XLGMII,
+			  phy_config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_10GBASER,
+			  phy_config->supported_interfaces);
+	} else if (wx->mac.type == wx_mac_aml) {
+		phy_mode = PHY_INTERFACE_MODE_25GBASER;
+		__set_bit(PHY_INTERFACE_MODE_25GBASER,
+			  phy_config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_10GBASER,
+			  phy_config->supported_interfaces);
+	} else if (wx->mac.type == wx_mac_sp) {
+		phy_mode = PHY_INTERFACE_MODE_10GBASER;
+		__set_bit(PHY_INTERFACE_MODE_10GBASER,
+			  phy_config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+			  phy_config->supported_interfaces);
+	} else {
+		wx_err(wx, "Unsupported MAC type for VF\n");
+		return -EINVAL;
+	}
+
+	/* Initialize the phylink */
+	phylink = phylink_create(phy_config, NULL,
+				 phy_mode, &txgbevf_mac_ops);
+	if (IS_ERR(phylink)) {
+		wx_err(wx, "Failed to create phylink\n");
+		return PTR_ERR(phylink);
+	}
+
+	link_state.speed = txgbevf_interface_max_speed(phy_mode);
+	link_state.duplex = DUPLEX_FULL;
+	err = phylink_set_fixed_link(phylink, &link_state);
+	if (err) {
+		wx_err(wx, "Failed to set fixed link\n");
+		return err;
+	}
+
+	wx->phylink = phylink;
+
+	return 0;
+}
+
 static const struct net_device_ops txgbevf_netdev_ops = {
 	.ndo_open               = wxvf_open,
 	.ndo_stop               = wxvf_close,
@@ -257,6 +339,10 @@ static int txgbevf_probe(struct pci_dev *pdev,
 	if (err)
 		goto err_free_sw_init;
 
+	err = txgbevf_phylink_init(wx);
+	if (err)
+		goto err_clear_interrupt_scheme;
+
 	err = register_netdev(netdev);
 	if (err)
 		goto err_register;
@@ -267,6 +353,8 @@ static int txgbevf_probe(struct pci_dev *pdev,
 	return 0;
 
 err_register:
+	phylink_destroy(wx->phylink);
+err_clear_interrupt_scheme:
 	wx_clear_interrupt_scheme(wx);
 err_free_sw_init:
 	kfree(wx->vfinfo);

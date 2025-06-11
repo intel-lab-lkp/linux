@@ -519,3 +519,124 @@ int wx_get_queues_vf(struct wx *wx, u32 *num_tcs, u32 *default_tc)
 	return ret;
 }
 EXPORT_SYMBOL(wx_get_queues_vf);
+
+static int wx_get_link_status_from_pf(struct wx *wx, u32 *msgbuf)
+{
+	u32 links_reg = msgbuf[1];
+
+	if (msgbuf[1] & WX_PF_NOFITY_VF_NET_NOT_RUNNING)
+		wx->notify_down = true;
+	else
+		wx->notify_down = false;
+
+	if (wx->notify_down) {
+		wx->link = false;
+		wx->speed = SPEED_UNKNOWN;
+		return 0;
+	}
+
+	wx->link = WX_PFLINK_STATUS(links_reg);
+	wx->speed = WX_PFLINK_SPEED(links_reg);
+
+	return 0;
+}
+
+static int wx_pf_ping_vf(struct wx *wx, u32 *msgbuf)
+{
+	if (!(msgbuf[0] & WX_VT_MSGTYPE_CTS))
+		/* msg is not CTS, we need to do reset */
+		return -EINVAL;
+
+	return 0;
+}
+
+static struct wx_link_reg_fields wx_speed_lookup_vf[] = {
+	{wx_mac_unknown},
+	{wx_mac_sp, SPEED_10000, SPEED_1000, SPEED_100, SPEED_UNKNOWN, SPEED_UNKNOWN},
+	{wx_mac_em, SPEED_1000,  SPEED_100, SPEED_10, SPEED_UNKNOWN, SPEED_UNKNOWN},
+	{wx_mac_aml, SPEED_40000, SPEED_25000, SPEED_10000, SPEED_1000, SPEED_UNKNOWN},
+	{wx_mac_aml40, SPEED_40000, SPEED_25000, SPEED_10000, SPEED_1000, SPEED_UNKNOWN},
+};
+
+static void wx_check_physical_link(struct wx *wx, u32 link_val)
+{
+	wx->link = true;
+
+	switch (WX_VXSTATUS_SPEED(link_val)) {
+	case BIT(0):
+		wx->speed = wx_speed_lookup_vf[wx->mac.type].bit0_f;
+		break;
+	case BIT(1):
+		wx->speed = wx_speed_lookup_vf[wx->mac.type].bit1_f;
+		break;
+	case BIT(2):
+		wx->speed = wx_speed_lookup_vf[wx->mac.type].bit2_f;
+		break;
+	case BIT(3):
+		wx->speed = wx_speed_lookup_vf[wx->mac.type].bit3_f;
+		break;
+	case BIT(4):
+	default:
+		wx->speed = SPEED_UNKNOWN;
+		break;
+	}
+
+	if (wx->speed == SPEED_UNKNOWN)
+		wx->link = false;
+}
+
+int wx_check_mac_link_vf(struct wx *wx)
+{
+	struct wx_mbx_info *mbx = &wx->mbx;
+	u32 val, msgbuf[2] = {0};
+	int ret = 0;
+
+	/* If we were hit with a reset drop the link */
+	if (!wx_check_for_rst_vf(wx) || !mbx->timeout)
+		goto out;
+
+	if (!wx_check_for_msg_vf(wx))
+		ret = wx_read_mbx_vf(wx, msgbuf, 2);
+	if (ret)
+		goto out;
+
+	switch (msgbuf[0] & GENMASK(8, 0)) {
+	case WX_PF_NOFITY_VF_LINK_STATUS | WX_PF_CONTROL_MSG:
+		ret = wx_get_link_status_from_pf(wx, msgbuf);
+		goto out;
+	case WX_PF_CONTROL_MSG:
+		ret = wx_pf_ping_vf(wx, msgbuf);
+		goto out;
+	default:
+		break;
+	}
+
+	/* get link status from hw status reg */
+	/* for SFP+ modules and DA cables, it can take up to 500usecs
+	 * before the link status is correct
+	 */
+	ret = read_poll_timeout_atomic(rd32, val, val & BIT(0), 100,
+				       500, false, wx, WX_VXSTATUS);
+	if (ret)
+		goto out;
+
+	/* check link status */
+	wx_check_physical_link(wx, val);
+
+	if (!(msgbuf[0] & WX_VT_MSGTYPE_CTS)) {
+		/* msg is not CTS and is NACK we must have lost CTS status */
+		if (msgbuf[0] & WX_VT_MSGTYPE_NACK)
+			ret = -EBUSY;
+		goto out;
+	}
+
+	/* the pf is talking, if we timed out in the past we reinit */
+	if (!mbx->timeout) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL(wx_check_mac_link_vf);
