@@ -69,6 +69,7 @@ static unsigned int xfs_errortag_random_default[] = {
 struct xfs_errortag_attr {
 	struct attribute	attr;
 	unsigned int		tag;
+	bool			enable_default;
 };
 
 static inline struct xfs_errortag_attr *
@@ -129,12 +130,15 @@ static const struct sysfs_ops xfs_errortag_sysfs_ops = {
 	.store = xfs_errortag_attr_store,
 };
 
-#define XFS_ERRORTAG_ATTR_RW(_name, _tag) \
+#define __XFS_ERRORTAG_ATTR_RW(_name, _tag, enable) \
 static struct xfs_errortag_attr xfs_errortag_attr_##_name = {		\
 	.attr = {.name = __stringify(_name),				\
 		 .mode = VERIFY_OCTAL_PERMISSIONS(S_IWUSR | S_IRUGO) },	\
 	.tag	= (_tag),						\
+	.enable_default = enable,					\
 }
+#define XFS_ERRORTAG_ATTR_RW(_name, _tag) \
+	__XFS_ERRORTAG_ATTR_RW(_name, _tag, false)
 
 #define XFS_ERRORTAG_ATTR_LIST(_name) &xfs_errortag_attr_##_name.attr
 
@@ -240,6 +244,35 @@ static const struct kobj_type xfs_errortag_ktype = {
 	.default_groups = xfs_errortag_groups,
 };
 
+/*
+ * Enable tags that are defined to be on by default. This is typically limited
+ * to tags that don't necessarily inject errors, but rather modify control paths
+ * for improved code coverage testing on DEBUG kernels.
+ */
+static void
+xfs_errortag_enable_defaults(
+	struct xfs_mount	*mp)
+{
+	int i;
+
+	for (i = 0; xfs_errortag_attrs[i]; i++) {
+		struct xfs_errortag_attr *xfs_attr =
+				to_attr(xfs_errortag_attrs[i]);
+
+		if (!xfs_attr->enable_default)
+			continue;
+
+		/*
+		 * Suppress log noise unless userspace makes configuration
+		 * changes. Open code the assignment to avoid clearing the quiet
+		 * flag.
+		 */
+		xfs_set_quiet_errtag(mp);
+		mp->m_errortag[xfs_attr->tag] =
+			xfs_errortag_random_default[xfs_attr->tag];
+	}
+}
+
 int
 xfs_errortag_init(
 	struct xfs_mount	*mp)
@@ -250,6 +283,8 @@ xfs_errortag_init(
 				GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!mp->m_errortag)
 		return -ENOMEM;
+
+	xfs_errortag_enable_defaults(mp);
 
 	ret = xfs_sysfs_init(&mp->m_errortag_kobj, &xfs_errortag_ktype,
 				&mp->m_kobj, "errortag");
@@ -320,9 +355,11 @@ xfs_errortag_test(
 	if (!randfactor || get_random_u32_below(randfactor))
 		return false;
 
-	xfs_warn_ratelimited(mp,
+	if (!xfs_is_quiet_errtag(mp)) {
+		xfs_warn_ratelimited(mp,
 "Injecting error (%s) at file %s, line %d, on filesystem \"%s\"",
 			expression, file, line, mp->m_super->s_id);
+	}
 	return true;
 }
 
@@ -346,6 +383,7 @@ xfs_errortag_set(
 	if (!xfs_errortag_valid(error_tag))
 		return -EINVAL;
 
+	xfs_clear_quiet_errtag(mp);
 	mp->m_errortag[error_tag] = tag_value;
 	return 0;
 }
