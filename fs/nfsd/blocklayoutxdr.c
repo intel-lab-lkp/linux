@@ -112,6 +112,25 @@ nfsd4_block_encode_getdeviceinfo(struct xdr_stream *xdr,
 	return 0;
 }
 
+/**
+ * nfsd4_block_decode_layoutupdate - decode the block layout extent array
+ * @p: pointer to the xdr data
+ * @len: number of bytes to decode
+ * @iomapp: pointer to store the decoded array
+ * @block_size: alignment of extent offset and length
+ *
+ * This function decodes the opaque field of the layoutupdate4 structure
+ * in a layoutcommit request for the block layout driver. The field is
+ * actually an array of extents sent by the client. It also checks that
+ * the file offset, storage offset and length of each extent are aligned
+ * by @block_size.
+ *
+ * Return: The number of extents contained in @iomapp on success,
+ * otherwise one of the following negative NFS error codes:
+ *   %-NFS4ERR_BADXDR: The encoded array in @p was invalid.
+ *   %-NFS4ERR_INVAL: An unaligned extent found.
+ *   %-NFS4ERR_DELAY: Failed to allocate memory for @iomapp.
+ */
 int
 nfsd4_block_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 		u32 block_size)
@@ -121,25 +140,25 @@ nfsd4_block_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 
 	if (len < sizeof(u32)) {
 		dprintk("%s: extent array too small: %u\n", __func__, len);
-		return -EINVAL;
+		return -NFS4ERR_BADXDR;
 	}
 	len -= sizeof(u32);
 	if (len % PNFS_BLOCK_EXTENT_SIZE) {
 		dprintk("%s: extent array invalid: %u\n", __func__, len);
-		return -EINVAL;
+		return -NFS4ERR_BADXDR;
 	}
 
 	nr_iomaps = be32_to_cpup(p++);
 	if (nr_iomaps != len / PNFS_BLOCK_EXTENT_SIZE) {
 		dprintk("%s: extent array size mismatch: %u/%u\n",
 			__func__, len, nr_iomaps);
-		return -EINVAL;
+		return -NFS4ERR_BADXDR;
 	}
 
 	iomaps = kcalloc(nr_iomaps, sizeof(*iomaps), GFP_KERNEL);
 	if (!iomaps) {
 		dprintk("%s: failed to allocate extent array\n", __func__);
-		return -ENOMEM;
+		return -NFS4ERR_DELAY;
 	}
 
 	for (i = 0; i < nr_iomaps; i++) {
@@ -181,9 +200,27 @@ nfsd4_block_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 	return nr_iomaps;
 fail:
 	kfree(iomaps);
-	return -EINVAL;
+	return -NFS4ERR_INVAL;
 }
 
+/**
+ * nfsd4_scsi_decode_layoutupdate - decode the scsi layout extent array
+ * @p: pointer to the xdr data
+ * @len: number of bytes to decode
+ * @iomapp: pointer to store the decoded array
+ * @block_size: alignment of extent offset and length
+ *
+ * This function decodes the opaque field of the layoutupdate4 structure
+ * in a layoutcommit request for the scsi layout driver. The field is
+ * actually an array of extents sent by the client. It also checks that
+ * the offset and length of each extent are aligned by @block_size.
+ *
+ * Return: The number of extents contained in @iomapp on success,
+ * otherwise one of the following negative NFS error codes:
+ *   %-NFS4ERR_BADXDR: The encoded array in @p was invalid.
+ *   %-NFS4ERR_INVAL: An unaligned extent found.
+ *   %-NFS4ERR_DELAY: Failed to allocate memory for @iomapp.
+ */
 int
 nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 		u32 block_size)
@@ -193,7 +230,7 @@ nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 
 	if (len < sizeof(u32)) {
 		dprintk("%s: extent array too small: %u\n", __func__, len);
-		return -EINVAL;
+		return -NFS4ERR_BADXDR;
 	}
 
 	nr_iomaps = be32_to_cpup(p++);
@@ -201,13 +238,13 @@ nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 	if (len != expected) {
 		dprintk("%s: extent array size mismatch: %u/%u\n",
 			__func__, len, expected);
-		return -EINVAL;
+		return -NFS4ERR_BADXDR;
 	}
 
 	iomaps = kcalloc(nr_iomaps, sizeof(*iomaps), GFP_KERNEL);
 	if (!iomaps) {
 		dprintk("%s: failed to allocate extent array\n", __func__);
-		return -ENOMEM;
+		return -NFS4ERR_DELAY;
 	}
 
 	for (i = 0; i < nr_iomaps; i++) {
@@ -232,5 +269,5 @@ nfsd4_scsi_decode_layoutupdate(__be32 *p, u32 len, struct iomap **iomapp,
 	return nr_iomaps;
 fail:
 	kfree(iomaps);
-	return -EINVAL;
+	return -NFS4ERR_INVAL;
 }

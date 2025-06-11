@@ -182,7 +182,7 @@ nfsd4_block_proc_layoutcommit(struct inode *inode,
 	nr_iomaps = nfsd4_block_decode_layoutupdate(lcp->lc_up_layout,
 			lcp->lc_up_len, &iomaps, i_blocksize(inode));
 	if (nr_iomaps < 0)
-		return nfserrno(nr_iomaps);
+		return cpu_to_be32(-nr_iomaps);
 
 	return nfsd4_block_commit_blocks(inode, lcp, iomaps, nr_iomaps);
 }
@@ -320,7 +320,7 @@ nfsd4_scsi_proc_layoutcommit(struct inode *inode,
 	nr_iomaps = nfsd4_scsi_decode_layoutupdate(lcp->lc_up_layout,
 			lcp->lc_up_len, &iomaps, i_blocksize(inode));
 	if (nr_iomaps < 0)
-		return nfserrno(nr_iomaps);
+		return cpu_to_be32(-nr_iomaps);
 
 	return nfsd4_block_commit_blocks(inode, lcp, iomaps, nr_iomaps);
 }
