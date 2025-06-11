@@ -1724,6 +1724,7 @@ static inline int tid_geq(tid_t x, tid_t y)
 }
 
 extern int jbd2_journal_blocks_per_folio(struct inode *inode);
+extern int jbd2_journal_blocks_per_page(struct inode *inode);
 extern size_t journal_tag_bytes(journal_t *journal);
 
 static inline int jbd2_journal_has_csum_v2or3(journal_t *journal)

@@ -326,6 +326,13 @@ static inline int ext4_journal_blocks_per_folio(struct inode *inode)
 	return 0;
 }
 
+static inline int ext4_journal_blocks_per_page(struct inode *inode)
+{
+	if (EXT4_JOURNAL(inode) != NULL)
+		return jbd2_journal_blocks_per_page(inode);
+	return 0;
+}
+
 static inline int ext4_journal_force_commit(journal_t *journal)
 {
 	if (journal)
