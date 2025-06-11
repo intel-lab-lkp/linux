@@ -3686,6 +3686,32 @@ static void sd_read_block_zero(struct scsi_disk *sdkp)
 	kfree(buffer);
 }
 
+/*
+ * Set the optimal I/O size: limit the default to the SCSI host optimal sector
+ * limit if it is set. There may be an impact on performance when the size of
+ * a request exceeds this host limit. If the host did not set any optimal
+ * sector limit and the device did not indicate an optimal transfer size
+ * (e.g. ATA devices), default to using the device max_sectors limit.
+ */
+static void sd_set_io_opt(struct scsi_disk *sdkp, unsigned int dev_max,
+			  struct queue_limits *lim)
+{
+	struct scsi_device *sdp = sdkp->device;
+	struct Scsi_Host *shost = sdp->host;
+
+	lim->io_opt = shost->opt_sectors << SECTOR_SHIFT;
+	if (sd_validate_opt_xfer_size(sdkp, dev_max))
+		lim->io_opt = min_not_zero(lim->io_opt,
+				logical_to_bytes(sdp, sdkp->opt_xfer_blocks));
+	if (!lim->io_opt) {
+		lim->io_opt = ALIGN_DOWN(lim->max_sectors << SECTOR_SHIFT,
+					 sdkp->physical_block_size - 1);
+		sd_first_printk(KERN_WARNING, sdkp,
+			"Using default optimal transfer size of %u bytes\n",
+			lim->io_opt);
+	}
+}
+
 /**
  *	sd_revalidate_disk - called the first time a new disk is seen,
  *	performs disk spin up, read_capacity, etc.
@@ -3782,16 +3808,7 @@ static int sd_revalidate_disk(struct gendisk *disk)
 	else
 		lim.io_min = 0;
 
-	/*
-	 * Limit default to SCSI host optimal sector limit if set. There may be
-	 * an impact on performance for when the size of a request exceeds this
-	 * host limit.
-	 */
-	lim.io_opt = sdp->host->opt_sectors << SECTOR_SHIFT;
-	if (sd_validate_opt_xfer_size(sdkp, dev_max)) {
-		lim.io_opt = min_not_zero(lim.io_opt,
-				logical_to_bytes(sdp, sdkp->opt_xfer_blocks));
-	}
+	sd_set_io_opt(sdkp, dev_max, &lim);
 
 	sdkp->first_scan = 0;
 
