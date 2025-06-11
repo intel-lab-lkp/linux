@@ -328,6 +328,9 @@ class JsonEvent:
     self.compat = jd.get('Compat')
     self.desc = fixdesc(jd.get('BriefDescription'))
     self.long_desc = fixdesc(jd.get('PublicDescription'))
+    if self.desc == self.long_desc:
+        # Avoid duplicated descriptions.
+        self.long_desc = None
     precise = jd.get('PEBS')
     msr = lookup_msr(jd.get('MSRIndex'))
     msrval = jd.get('MSRValue')
