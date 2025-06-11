@@ -120,6 +120,50 @@ err_wx_sw_init:
 	return err;
 }
 
+static const struct phylink_mac_ops ngbevf_mac_ops = {
+	.mac_config = wxvf_mac_config,
+	.mac_link_down = wxvf_mac_link_down,
+	.mac_link_up = wxvf_mac_link_up,
+};
+
+static int ngbevf_phylink_init(struct wx *wx)
+{
+	struct phylink_link_state link_state;
+	struct phylink_config *phy_config;
+	phy_interface_t phy_mode;
+	struct phylink *phylink;
+	int err;
+
+	phy_config = &wx->phylink_config;
+	phy_config->dev = &wx->netdev->dev;
+	phy_config->type = PHYLINK_NETDEV;
+	phy_config->mac_capabilities = MAC_1000FD | MAC_100FD | MAC_10FD;
+	phy_config->get_fixed_state = wx_get_mac_link_vf;
+
+	phy_mode = PHY_INTERFACE_MODE_RGMII;
+	__set_bit(PHY_INTERFACE_MODE_RGMII, phy_config->supported_interfaces);
+
+	/* Initialize the phylink */
+	phylink = phylink_create(phy_config, NULL,
+				 phy_mode, &ngbevf_mac_ops);
+	if (IS_ERR(phylink)) {
+		wx_err(wx, "Failed to create phylink\n");
+		return PTR_ERR(phylink);
+	}
+
+	link_state.speed = SPEED_1000;
+	link_state.duplex = DUPLEX_FULL;
+	err = phylink_set_fixed_link(phylink, &link_state);
+	if (err) {
+		wx_err(wx, "Failed to set fixed link\n");
+		return err;
+	}
+
+	wx->phylink = phylink;
+
+	return 0;
+}
+
 /**
  * ngbevf_probe - Device Initialization Routine
  * @pdev: PCI device information struct
@@ -201,6 +245,10 @@ static int ngbevf_probe(struct pci_dev *pdev,
 	if (err)
 		goto err_free_sw_init;
 
+	err = ngbevf_phylink_init(wx);
+	if (err)
+		goto err_clear_interrupt_scheme;
+
 	err = register_netdev(netdev);
 	if (err)
 		goto err_register;
@@ -211,6 +259,8 @@ static int ngbevf_probe(struct pci_dev *pdev,
 	return 0;
 
 err_register:
+	phylink_destroy(wx->phylink);
+err_clear_interrupt_scheme:
 	wx_clear_interrupt_scheme(wx);
 err_free_sw_init:
 	kfree(wx->vfinfo);
