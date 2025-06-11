@@ -479,6 +479,7 @@ struct hv_connection_info {
 #define HV_EVENT_FLAGS_COUNT		(256 * 8)
 #define HV_EVENT_FLAGS_BYTE_COUNT	(256)
 #define HV_EVENT_FLAGS32_COUNT		(256 / sizeof(u32))
+#define HV_EVENT_FLAGS_LONG_COUNT	(HV_EVENT_FLAGS_BYTE_COUNT / sizeof(u64))
 
 /* linux side we create long version of flags to use long bit ops on flags */
 #define HV_EVENT_FLAGS_UL_COUNT		(256 / sizeof(ulong))
