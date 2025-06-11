@@ -654,6 +654,12 @@ int ixgbe_flash_pldm_image(struct devlink *devlink,
 		/* overwrite both settings and identifiers, preserve nothing */
 		preservation = IXGBE_ACI_NVM_NO_PRESERVATION;
 		break;
+	case (DEVLINK_FLASH_OVERWRITE_SETTINGS |
+	     DEVLINK_FLASH_OVERWRITE_IDENTIFIERS |
+	     DEVLINK_FLASH_OVERWRITE_FROM_FACTORY_SETTINGS):
+		/* overwrite both settings and identifiers, from factory settings */
+		preservation = IXGBE_ACI_NVM_FACTORY_DEFAULT;
+		break;
 	default:
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Requested overwrite mask is not supported");
