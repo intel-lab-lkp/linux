@@ -1086,13 +1086,13 @@ static void cxl_del_overflow_old_recs(struct xarray *rec_xarray)
 int cxl_store_rec_gen_media(struct cxl_memdev *cxlmd, union cxl_event *evt)
 {
 	struct cxl_mem_err_rec *array_rec = cxlmd->err_rec_array;
-	struct cxl_event_gen_media *rec;
 	void *old_rec;
 
 	if (!IS_ENABLED(CONFIG_CXL_EDAC_MEM_REPAIR) || !array_rec)
 		return 0;
 
-	rec = kmemdup(&evt->gen_media, sizeof(*rec), GFP_KERNEL);
+	struct cxl_event_gen_media *rec __free(kfree) =
+		kmemdup(&evt->gen_media, sizeof(*rec), GFP_KERNEL);
 	if (!rec)
 		return -ENOMEM;
 
@@ -1106,6 +1106,7 @@ int cxl_store_rec_gen_media(struct cxl_memdev *cxlmd, union cxl_event *evt)
 
 	cxl_del_expired_gmedia_recs(&array_rec->rec_gen_media, rec);
 	cxl_del_overflow_old_recs(&array_rec->rec_gen_media);
+	retain_and_null_ptr(rec);
 
 	return 0;
 }
@@ -1114,13 +1115,13 @@ EXPORT_SYMBOL_NS_GPL(cxl_store_rec_gen_media, "CXL");
 int cxl_store_rec_dram(struct cxl_memdev *cxlmd, union cxl_event *evt)
 {
 	struct cxl_mem_err_rec *array_rec = cxlmd->err_rec_array;
-	struct cxl_event_dram *rec;
 	void *old_rec;
 
 	if (!IS_ENABLED(CONFIG_CXL_EDAC_MEM_REPAIR) || !array_rec)
 		return 0;
 
-	rec = kmemdup(&evt->dram, sizeof(*rec), GFP_KERNEL);
+	struct cxl_event_dram *rec __free(kfree) =
+		kmemdup(&evt->dram, sizeof(*rec), GFP_KERNEL);
 	if (!rec)
 		return -ENOMEM;
 
@@ -1134,6 +1135,7 @@ int cxl_store_rec_dram(struct cxl_memdev *cxlmd, union cxl_event *evt)
 
 	cxl_del_expired_dram_recs(&array_rec->rec_dram, rec);
 	cxl_del_overflow_old_recs(&array_rec->rec_dram);
+	retain_and_null_ptr(rec);
 
 	return 0;
 }
