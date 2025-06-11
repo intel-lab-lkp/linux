@@ -378,9 +378,8 @@ static irqreturn_t tegra_pcie_rp_irq_handler(int irq, void *arg)
 			val |= APPL_CAR_RESET_OVRD_CYA_OVERRIDE_CORE_RST_N;
 			appl_writel(pcie, val, APPL_CAR_RESET_OVRD);
 
-			val = dw_pcie_readl_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL);
-			val |= PORT_LOGIC_SPEED_CHANGE;
-			dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, val);
+			dw_pcie_clear_and_set_dword(pci, PCIE_LINK_WIDTH_SPEED_CONTROL,
+						    0, PORT_LOGIC_SPEED_CHANGE);
 		}
 	}
 
@@ -412,7 +411,7 @@ static irqreturn_t tegra_pcie_rp_irq_handler(int irq, void *arg)
 
 	if (status_l0 & APPL_INTR_STATUS_L0_CDM_REG_CHK_INT) {
 		status_l1 = appl_readl(pcie, APPL_INTR_STATUS_L1_18);
-		val = dw_pcie_readl_dbi(pci, PCIE_PL_CHK_REG_CONTROL_STATUS);
+		val = 0;
 		if (status_l1 & APPL_INTR_STATUS_L1_18_CDM_REG_CHK_CMPLT) {
 			dev_info(pci->dev, "CDM check complete\n");
 			val |= PCIE_PL_CHK_REG_CHK_REG_COMPLETE;
@@ -425,7 +424,8 @@ static irqreturn_t tegra_pcie_rp_irq_handler(int irq, void *arg)
 			dev_err(pci->dev, "CDM Logic error\n");
 			val |= PCIE_PL_CHK_REG_CHK_REG_LOGIC_ERROR;
 		}
-		dw_pcie_writel_dbi(pci, PCIE_PL_CHK_REG_CONTROL_STATUS, val);
+		dw_pcie_clear_and_set_dword(pci, PCIE_PL_CHK_REG_CONTROL_STATUS,
+					    PORT_LOGIC_SPEED_CHANGE, val);
 		val = dw_pcie_readl_dbi(pci, PCIE_PL_CHK_REG_ERR_ADDR);
 		dev_err(pci->dev, "CDM Error Address Offset = 0x%08X\n", val);
 	}
@@ -610,34 +610,27 @@ static struct pci_ops tegra_pci_ops = {
 #if defined(CONFIG_PCIEASPM)
 static void disable_aspm_l11(struct tegra_pcie_dw *pcie)
 {
-	u32 val;
-
-	val = dw_pcie_readl_dbi(&pcie->pci, pcie->cfg_link_cap_l1sub);
-	val &= ~PCI_L1SS_CAP_ASPM_L1_1;
-	dw_pcie_writel_dbi(&pcie->pci, pcie->cfg_link_cap_l1sub, val);
+	dw_pcie_clear_and_set_dword(&pcie->pci, pcie->cfg_link_cap_l1sub,
+				    PCI_L1SS_CAP_ASPM_L1_1, 0);
 }
 
 static void disable_aspm_l12(struct tegra_pcie_dw *pcie)
 {
-	u32 val;
-
-	val = dw_pcie_readl_dbi(&pcie->pci, pcie->cfg_link_cap_l1sub);
-	val &= ~PCI_L1SS_CAP_ASPM_L1_2;
-	dw_pcie_writel_dbi(&pcie->pci, pcie->cfg_link_cap_l1sub, val);
+	dw_pcie_clear_and_set_dword(&pcie->pci, pcie->cfg_link_cap_l1sub,
+				    PCI_L1SS_CAP_ASPM_L1_2, 0);
 }
 
 static inline u32 event_counter_prog(struct tegra_pcie_dw *pcie, u32 event)
 {
-	u32 val;
+	u32 val = 0;
 
-	val = dw_pcie_readl_dbi(&pcie->pci, pcie->ras_des_cap +
-				PCIE_RAS_DES_EVENT_COUNTER_CONTROL);
-	val &= ~(EVENT_COUNTER_EVENT_SEL_MASK << EVENT_COUNTER_EVENT_SEL_SHIFT);
 	val |= EVENT_COUNTER_GROUP_5 << EVENT_COUNTER_GROUP_SEL_SHIFT;
 	val |= event << EVENT_COUNTER_EVENT_SEL_SHIFT;
 	val |= EVENT_COUNTER_ENABLE_ALL << EVENT_COUNTER_ENABLE_SHIFT;
-	dw_pcie_writel_dbi(&pcie->pci, pcie->ras_des_cap +
-			   PCIE_RAS_DES_EVENT_COUNTER_CONTROL, val);
+	dw_pcie_clear_and_set_dword(&pcie->pci, pcie->ras_des_cap +
+				    PCIE_RAS_DES_EVENT_COUNTER_CONTROL,
+				    EVENT_COUNTER_EVENT_SEL_MASK << EVENT_COUNTER_EVENT_SEL_SHIFT,
+				    val);
 	val = dw_pcie_readl_dbi(&pcie->pci, pcie->ras_des_cap +
 				PCIE_RAS_DES_EVENT_COUNTER_DATA);
 
@@ -697,18 +690,20 @@ static void init_host_aspm(struct tegra_pcie_dw *pcie)
 			   PCIE_RAS_DES_EVENT_COUNTER_CONTROL, val);
 
 	/* Program T_cmrt and T_pwr_on values */
-	val = dw_pcie_readl_dbi(pci, pcie->cfg_link_cap_l1sub);
-	val &= ~(PCI_L1SS_CAP_CM_RESTORE_TIME | PCI_L1SS_CAP_P_PWR_ON_VALUE);
+	val = 0;
 	val |= (pcie->aspm_cmrt << 8);
 	val |= (pcie->aspm_pwr_on_t << 19);
-	dw_pcie_writel_dbi(pci, pcie->cfg_link_cap_l1sub, val);
+	dw_pcie_clear_and_set_dword(pci, pcie->cfg_link_cap_l1sub,
+				    PCI_L1SS_CAP_CM_RESTORE_TIME |
+				    PCI_L1SS_CAP_P_PWR_ON_VALUE,
+				    val);
 
 	/* Program L0s and L1 entrance latencies */
-	val = dw_pcie_readl_dbi(pci, PCIE_PORT_AFR);
-	val &= ~PORT_AFR_L0S_ENTRANCE_LAT_MASK;
+	val = 0;
 	val |= (pcie->aspm_l0s_enter_lat << PORT_AFR_L0S_ENTRANCE_LAT_SHIFT);
 	val |= PORT_AFR_ENTER_ASPM;
-	dw_pcie_writel_dbi(pci, PCIE_PORT_AFR, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_PORT_AFR,
+				    PORT_AFR_L0S_ENTRANCE_LAT_MASK, val);
 }
 
 static void init_debugfs(struct tegra_pcie_dw *pcie)
@@ -860,31 +855,26 @@ static void config_gen3_gen4_eq_presets(struct tegra_pcie_dw *pcie)
 		dw_pcie_writeb_dbi(pci, offset + i, val);
 	}
 
-	val = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
-	val &= ~GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK;
-	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
+	dw_pcie_clear_and_set_dword(pci, GEN3_RELATED_OFF,
+				    GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK, 0);
 
-	val = dw_pcie_readl_dbi(pci, GEN3_EQ_CONTROL_OFF);
-	val &= ~GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC;
-	val |= FIELD_PREP(GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC, 0x3ff);
-	val &= ~GEN3_EQ_CONTROL_OFF_FB_MODE;
-	dw_pcie_writel_dbi(pci, GEN3_EQ_CONTROL_OFF, val);
+	dw_pcie_clear_and_set_dword(pci, GEN3_EQ_CONTROL_OFF,
+				    GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC |
+				    GEN3_EQ_CONTROL_OFF_FB_MODE,
+				    FIELD_PREP(GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC, 0x3ff));
 
-	val = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
-	val &= ~GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK;
-	val |= (0x1 << GEN3_RELATED_OFF_RATE_SHADOW_SEL_SHIFT);
-	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
+	dw_pcie_clear_and_set_dword(pci, GEN3_RELATED_OFF,
+				    GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK,
+				    0x1 << GEN3_RELATED_OFF_RATE_SHADOW_SEL_SHIFT);
 
-	val = dw_pcie_readl_dbi(pci, GEN3_EQ_CONTROL_OFF);
-	val &= ~GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC;
-	val |= FIELD_PREP(GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC,
-			  pcie->of_data->gen4_preset_vec);
-	val &= ~GEN3_EQ_CONTROL_OFF_FB_MODE;
-	dw_pcie_writel_dbi(pci, GEN3_EQ_CONTROL_OFF, val);
+	dw_pcie_clear_and_set_dword(pci, GEN3_EQ_CONTROL_OFF,
+				    GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC |
+				    GEN3_EQ_CONTROL_OFF_FB_MODE,
+				    FIELD_PREP(GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC,
+					       pcie->of_data->gen4_preset_vec));
 
-	val = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
-	val &= ~GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK;
-	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
+	dw_pcie_clear_and_set_dword(pci, GEN3_RELATED_OFF,
+				    GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK, 0);
 }
 
 static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
@@ -892,7 +882,6 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct tegra_pcie_dw *pcie = to_tegra_pcie(pci);
 	u32 val;
-	u16 val_16;
 
 	pp->bridge->ops = &tegra_pci_ops;
 
@@ -900,32 +889,25 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 		pcie->pcie_cap_base = dw_pcie_find_capability(&pcie->pci,
 							      PCI_CAP_ID_EXP);
 
-	val = dw_pcie_readl_dbi(pci, PCI_IO_BASE);
-	val &= ~(IO_BASE_IO_DECODE | IO_BASE_IO_DECODE_BIT8);
-	dw_pcie_writel_dbi(pci, PCI_IO_BASE, val);
+	dw_pcie_clear_and_set_dword(pci, PCI_IO_BASE,
+				    IO_BASE_IO_DECODE | IO_BASE_IO_DECODE_BIT8, 0);
 
-	val = dw_pcie_readl_dbi(pci, PCI_PREF_MEMORY_BASE);
-	val |= CFG_PREF_MEM_LIMIT_BASE_MEM_DECODE;
-	val |= CFG_PREF_MEM_LIMIT_BASE_MEM_LIMIT_DECODE;
-	dw_pcie_writel_dbi(pci, PCI_PREF_MEMORY_BASE, val);
+	dw_pcie_clear_and_set_dword(pci, PCI_PREF_MEMORY_BASE, 0,
+				    CFG_PREF_MEM_LIMIT_BASE_MEM_DECODE |
+				    CFG_PREF_MEM_LIMIT_BASE_MEM_LIMIT_DECODE);
 
 	dw_pcie_writel_dbi(pci, PCI_BASE_ADDRESS_0, 0);
 
 	/* Enable as 0xFFFF0001 response for RRS */
-	val = dw_pcie_readl_dbi(pci, PORT_LOGIC_AMBA_ERROR_RESPONSE_DEFAULT);
-	val &= ~(AMBA_ERROR_RESPONSE_RRS_MASK << AMBA_ERROR_RESPONSE_RRS_SHIFT);
-	val |= (AMBA_ERROR_RESPONSE_RRS_OKAY_FFFF0001 <<
-		AMBA_ERROR_RESPONSE_RRS_SHIFT);
-	dw_pcie_writel_dbi(pci, PORT_LOGIC_AMBA_ERROR_RESPONSE_DEFAULT, val);
+	dw_pcie_clear_and_set_dword(pci, PORT_LOGIC_AMBA_ERROR_RESPONSE_DEFAULT,
+				    AMBA_ERROR_RESPONSE_RRS_MASK << AMBA_ERROR_RESPONSE_RRS_SHIFT,
+				    AMBA_ERROR_RESPONSE_RRS_OKAY_FFFF0001 <<
+				    AMBA_ERROR_RESPONSE_RRS_SHIFT);
 
 	/* Clear Slot Clock Configuration bit if SRNS configuration */
-	if (pcie->enable_srns) {
-		val_16 = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
-					   PCI_EXP_LNKSTA);
-		val_16 &= ~PCI_EXP_LNKSTA_SLC;
-		dw_pcie_writew_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA,
-				   val_16);
-	}
+	if (pcie->enable_srns)
+		dw_pcie_clear_and_set_dword(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA,
+					    PCI_EXP_LNKSTA_SLC, 0);
 
 	config_gen3_gen4_eq_presets(pcie);
 
@@ -937,17 +919,13 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 		disable_aspm_l12(pcie);
 	}
 
-	if (!pcie->of_data->has_l1ss_exit_fix) {
-		val = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
-		val &= ~GEN3_RELATED_OFF_GEN3_ZRXDC_NONCOMPL;
-		dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
-	}
+	if (!pcie->of_data->has_l1ss_exit_fix)
+		dw_pcie_clear_and_set_dword(pci, GEN3_RELATED_OFF,
+					    GEN3_RELATED_OFF_GEN3_ZRXDC_NONCOMPL, 0);
 
-	if (pcie->update_fc_fixup) {
-		val = dw_pcie_readl_dbi(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF);
-		val |= 0x1 << CFG_TIMER_CTRL_ACK_NAK_SHIFT;
-		dw_pcie_writel_dbi(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF, val);
-	}
+	if (pcie->update_fc_fixup)
+		dw_pcie_clear_and_set_dword(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF,
+					    0, 0x1 << CFG_TIMER_CTRL_ACK_NAK_SHIFT);
 
 	clk_set_rate(pcie->core_clk, GEN4_CORE_CLK_FREQ);
 
@@ -1018,9 +996,8 @@ retry_link:
 		reset_control_deassert(pcie->core_rst);
 
 		offset = dw_pcie_find_ext_capability(pci, PCI_EXT_CAP_ID_DLF);
-		val = dw_pcie_readl_dbi(pci, offset + PCI_DLF_CAP);
-		val &= ~PCI_DLF_EXCHANGE_ENABLE;
-		dw_pcie_writel_dbi(pci, offset + PCI_DLF_CAP, val);
+		dw_pcie_clear_and_set_dword(pci, offset + PCI_DLF_CAP,
+					    PCI_DLF_EXCHANGE_ENABLE, 0);
 
 		tegra_pcie_dw_host_init(pp);
 		dw_pcie_setup_rc(pp);
@@ -1847,11 +1824,9 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 
 	reset_control_deassert(pcie->core_rst);
 
-	if (pcie->update_fc_fixup) {
-		val = dw_pcie_readl_dbi(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF);
-		val |= 0x1 << CFG_TIMER_CTRL_ACK_NAK_SHIFT;
-		dw_pcie_writel_dbi(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF, val);
-	}
+	if (pcie->update_fc_fixup)
+		dw_pcie_clear_and_set_dword(pci, CFG_TIMER_CTRL_MAX_FUNC_NUM_OFF,
+					    0, 0x1 << CFG_TIMER_CTRL_ACK_NAK_SHIFT);
 
 	config_gen3_gen4_eq_presets(pcie);
 
@@ -1863,11 +1838,9 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 		disable_aspm_l12(pcie);
 	}
 
-	if (!pcie->of_data->has_l1ss_exit_fix) {
-		val = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
-		val &= ~GEN3_RELATED_OFF_GEN3_ZRXDC_NONCOMPL;
-		dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
-	}
+	if (!pcie->of_data->has_l1ss_exit_fix)
+		dw_pcie_clear_and_set_dword(pci, GEN3_RELATED_OFF,
+					    GEN3_RELATED_OFF_GEN3_ZRXDC_NONCOMPL, 0);
 
 	pcie->pcie_cap_base = dw_pcie_find_capability(&pcie->pci,
 						      PCI_CAP_ID_EXP);
