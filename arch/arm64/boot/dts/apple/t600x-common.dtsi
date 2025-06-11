@@ -11,6 +11,10 @@
 	#address-cells = <2>;
 	#size-cells = <2>;
 
+	aliases {
+		gpu = &gpu;
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
@@ -377,5 +381,35 @@
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-output-names = "nco_ref";
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		gpu_globals: globals {
+			reg = <0x0 0 0 0>;
+		};
+
+		gpu_hw_cal_a: hw-cal-a {
+			reg = <0x0 0 0 0>;
+		};
+
+		gpu_hw_cal_b: hw-cal-b {
+			reg = <0x0 0 0 0>;
+		};
+
+		uat_handoff: uat-handoff {
+			reg = <0x0 0 0 0>;
+		};
+
+		uat_pagetables: uat-pagetables {
+			reg = <0x0 0 0 0>;
+		};
+
+		uat_ttbs: uat-ttbs {
+			reg = <0x0 0 0 0>;
+		};
 	};
 };
