@@ -2594,6 +2594,7 @@ static int vhost_scsi_make_nexus(struct vhost_scsi_tpg *tpg,
 				const char *name)
 {
 	struct vhost_scsi_nexus *tv_nexus;
+	int ret;
 
 	mutex_lock(&tpg->tv_tpg_mutex);
 	if (tpg->tpg_nexus) {
@@ -2617,9 +2618,10 @@ static int vhost_scsi_make_nexus(struct vhost_scsi_tpg *tpg,
 					TARGET_PROT_DIN_PASS | TARGET_PROT_DOUT_PASS,
 					(unsigned char *)name, tv_nexus, NULL);
 	if (IS_ERR(tv_nexus->tvn_se_sess)) {
+		ret = PTR_ERR(tv_nexus->tvn_se_sess);
 		mutex_unlock(&tpg->tv_tpg_mutex);
 		kfree(tv_nexus);
-		return -ENOMEM;
+		return ret;
 	}
 	tpg->tpg_nexus = tv_nexus;
 
@@ -2810,7 +2812,7 @@ vhost_scsi_make_tpg(struct se_wwn *wwn, const char *name)
 	ret = core_tpg_register(wwn, &tpg->se_tpg, tport->tport_proto_id);
 	if (ret < 0) {
 		kfree(tpg);
-		return NULL;
+		return ERR_PTR(ret);
 	}
 	mutex_lock(&vhost_scsi_mutex);
 	list_add_tail(&tpg->tv_tpg_list, &vhost_scsi_list);
