@@ -6335,3 +6335,23 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+#define MICROSOFT_2051_SVC 0xb210
+#define MICROSOFT_2051_MANA_MGMT 0x00b8
+#define MICROSOFT_2051_MANA_MGMT_GFT 0xb290
+
+/*
+ * For devices that don't require the full 100ms sleep
+ * after FLR and do not support immediate readiness or readiness
+ * time reporting
+ */
+static void pci_fixup_pci_flr_10msec(struct pci_dev *pdev)
+{
+	pdev->flr_delay = 10000;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_SVC,
+	pci_fixup_pci_flr_10msec);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_MANA_MGMT,
+	pci_fixup_pci_flr_10msec);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_MICROSOFT, MICROSOFT_2051_MANA_MGMT_GFT,
+	pci_fixup_pci_flr_10msec);
