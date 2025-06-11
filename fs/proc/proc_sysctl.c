@@ -917,19 +917,23 @@ static int proc_sys_compare(const struct dentry *dentry,
 {
 	struct ctl_table_header *head;
 	struct inode *inode;
+	int ret;
 
 	/* Although proc doesn't have negative dentries, rcu-walk means
 	 * that inode here can be NULL */
 	/* AV: can it, indeed? */
+	rcu_read_lock();
 	inode = d_inode_rcu(dentry);
-	if (!inode)
-		return 1;
-	if (name->len != len)
-		return 1;
-	if (memcmp(name->name, str, len))
-		return 1;
-	head = rcu_dereference(PROC_I(inode)->sysctl);
-	return !head || !sysctl_is_seen(head);
+	if (!inode ||
+	    name->len != len ||
+	    memcmp(name->name, str, len)) {
+		ret = 1;
+	} else {
+		head = rcu_dereference(PROC_I(inode)->sysctl);
+		ret = !head || !sysctl_is_seen(head);
+	}
+	rcu_read_unlock();
+	return ret;
 }
 
 static const struct dentry_operations proc_sys_dentry_operations = {
