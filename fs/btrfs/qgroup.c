@@ -349,13 +349,27 @@ int btrfs_verify_qgroup_counts(const struct btrfs_fs_info *fs_info, u64 qgroupid
 }
 #endif
 
-static void qgroup_mark_inconsistent(struct btrfs_fs_info *fs_info)
+__printf(2, 3)
+static void qgroup_mark_inconsistent(struct btrfs_fs_info *fs_info, const char *fmt, ...)
 {
+	bool old_inconsistent = fs_info->qgroup_flags & BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT;
+
 	if (btrfs_qgroup_mode(fs_info) == BTRFS_QGROUP_MODE_SIMPLE)
 		return;
 	fs_info->qgroup_flags |= (BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT |
 				  BTRFS_QGROUP_RUNTIME_FLAG_CANCEL_RESCAN |
 				  BTRFS_QGROUP_RUNTIME_FLAG_NO_ACCOUNTING);
+	if (!old_inconsistent) {
+		struct va_format vaf;
+		va_list args;
+
+		va_start(args, fmt);
+		vaf.fmt = fmt;
+		vaf.va = &args;
+
+		btrfs_warn_rl(fs_info, "qgroup marked inconsistent, %pV", &vaf);
+		va_end(args);
+	}
 }
 
 static void qgroup_read_enable_gen(struct btrfs_fs_info *fs_info,
@@ -434,13 +448,10 @@ int btrfs_read_qgroup_config(struct btrfs_fs_info *fs_info)
 				goto out;
 			}
 			fs_info->qgroup_flags = btrfs_qgroup_status_flags(l, ptr);
-			if (fs_info->qgroup_flags & BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE) {
+			if (fs_info->qgroup_flags & BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE)
 				qgroup_read_enable_gen(fs_info, l, slot, ptr);
-			} else if (btrfs_qgroup_status_generation(l, ptr) != fs_info->generation) {
-				qgroup_mark_inconsistent(fs_info);
-				btrfs_err(fs_info,
-					"qgroup generation mismatch, marked as inconsistent");
-			}
+			else if (btrfs_qgroup_status_generation(l, ptr) != fs_info->generation)
+				qgroup_mark_inconsistent(fs_info, "qgroup generation mismatch");
 			rescan_progress = btrfs_qgroup_status_rescan(l, ptr);
 			goto next1;
 		}
@@ -451,10 +462,9 @@ int btrfs_read_qgroup_config(struct btrfs_fs_info *fs_info)
 
 		qgroup = find_qgroup_rb(fs_info, found_key.offset);
 		if ((qgroup && found_key.type == BTRFS_QGROUP_INFO_KEY) ||
-		    (!qgroup && found_key.type == BTRFS_QGROUP_LIMIT_KEY)) {
-			btrfs_err(fs_info, "inconsistent qgroup config");
-			qgroup_mark_inconsistent(fs_info);
-		}
+		    (!qgroup && found_key.type == BTRFS_QGROUP_LIMIT_KEY))
+			qgroup_mark_inconsistent(fs_info,
+						 "inconsistent qgroup config");
 		if (!qgroup) {
 			struct btrfs_qgroup *prealloc;
 			struct btrfs_root *tree_root = fs_info->tree_root;
@@ -1844,13 +1854,12 @@ int btrfs_remove_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 		if (qgroup->rfer || qgroup->excl ||
 		    qgroup->rfer_cmpr || qgroup->excl_cmpr) {
 			DEBUG_WARN();
-			btrfs_warn_rl(fs_info,
-"to be deleted qgroup %u/%llu has non-zero numbers, rfer %llu rfer_cmpr %llu excl %llu excl_cmpr %llu",
-				      btrfs_qgroup_level(qgroup->qgroupid),
-				      btrfs_qgroup_subvolid(qgroup->qgroupid),
-				      qgroup->rfer, qgroup->rfer_cmpr,
-				      qgroup->excl, qgroup->excl_cmpr);
-			qgroup_mark_inconsistent(fs_info);
+			qgroup_mark_inconsistent(fs_info,
+				"to be deleted qgroup %u/%llu has non-zero numbers, rfer %llu rfer_cmpr %llu excl %llu excl_cmpr %llu",
+				btrfs_qgroup_level(qgroup->qgroupid),
+				btrfs_qgroup_subvolid(qgroup->qgroupid),
+				qgroup->rfer, qgroup->rfer_cmpr,
+				qgroup->excl, qgroup->excl_cmpr);
 		}
 	}
 	del_qgroup_rb(fs_info, qgroupid);
@@ -1968,11 +1977,9 @@ int btrfs_limit_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid,
 	spin_unlock(&fs_info->qgroup_lock);
 
 	ret = update_qgroup_limit_item(trans, qgroup);
-	if (ret) {
-		qgroup_mark_inconsistent(fs_info);
-		btrfs_info(fs_info, "unable to update quota limit for %llu",
-		       qgroupid);
-	}
+	if (ret)
+		qgroup_mark_inconsistent(fs_info, "qgroup item update error %d",
+					 ret);
 
 out:
 	mutex_unlock(&fs_info->qgroup_ioctl_lock);
@@ -2027,7 +2034,8 @@ int btrfs_qgroup_trace_extent_nolock(struct btrfs_fs_info *fs_info,
 	ret = __xa_store(&delayed_refs->dirty_extents, index, record, GFP_ATOMIC);
 	xa_unlock(&delayed_refs->dirty_extents);
 	if (xa_is_err(ret)) {
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info,
+					 "xarray insert error: %d", xa_err(ret));
 		return xa_err(ret);
 	}
 
@@ -2094,10 +2102,8 @@ int btrfs_qgroup_trace_extent_post(struct btrfs_trans_handle *trans,
 
 	ret = btrfs_find_all_roots(&ctx, true);
 	if (ret < 0) {
-		qgroup_mark_inconsistent(fs_info);
-		btrfs_warn(fs_info,
-"error accounting new delayed refs extent (err code: %d), quota inconsistent",
-			ret);
+		qgroup_mark_inconsistent(fs_info,
+				"error accounting new delayed refs extent: %d", ret);
 		return 0;
 	}
 
@@ -2589,7 +2595,7 @@ static int qgroup_trace_subtree_swap(struct btrfs_trans_handle *trans,
 out:
 	btrfs_free_path(dst_path);
 	if (ret < 0)
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info, "%s error: %d", __func__, ret);
 	return ret;
 }
 
@@ -2633,7 +2639,8 @@ int btrfs_qgroup_trace_subtree(struct btrfs_trans_handle *trans,
 	 * mark qgroup inconsistent.
 	 */
 	if (root_level >= drop_subptree_thres) {
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info,
+					 "subtree level reached threshold");
 		return 0;
 	}
 
@@ -3133,10 +3140,12 @@ int btrfs_run_qgroups(struct btrfs_trans_handle *trans)
 		spin_unlock(&fs_info->qgroup_lock);
 		ret = update_qgroup_info_item(trans, qgroup);
 		if (ret)
-			qgroup_mark_inconsistent(fs_info);
+			qgroup_mark_inconsistent(fs_info,
+						 "qgroup item update error %d", ret);
 		ret = update_qgroup_limit_item(trans, qgroup);
 		if (ret)
-			qgroup_mark_inconsistent(fs_info);
+			qgroup_mark_inconsistent(fs_info,
+						 "qgroup item update error %d", ret);
 		spin_lock(&fs_info->qgroup_lock);
 	}
 	if (btrfs_qgroup_enabled(fs_info))
@@ -3147,7 +3156,8 @@ int btrfs_run_qgroups(struct btrfs_trans_handle *trans)
 
 	ret = update_qgroup_status_item(trans);
 	if (ret)
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info,
+					 "qgroup item update error %d", ret);
 
 	return ret;
 }
@@ -3554,7 +3564,7 @@ out:
 	if (!committing)
 		mutex_unlock(&fs_info->qgroup_ioctl_lock);
 	if (need_rescan)
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info, "qgroup inherit needs a rescan");
 	if (qlist_prealloc) {
 		for (int i = 0; i < inherit->num_qgroups; i++)
 			kfree(qlist_prealloc[i]);
@@ -4781,7 +4791,7 @@ out_unlock:
 	spin_unlock(&blocks->lock);
 out:
 	if (ret < 0)
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info, "%s error: %d", __func__, ret);
 	return ret;
 }
 
@@ -4869,10 +4879,9 @@ free_out:
 	free_extent_buffer(reloc_eb);
 out:
 	if (ret < 0) {
-		btrfs_err_rl(fs_info,
-			     "failed to account subtree at bytenr %llu: %d",
-			     subvol_eb->start, ret);
-		qgroup_mark_inconsistent(fs_info);
+		qgroup_mark_inconsistent(fs_info,
+				"failed to account subtree at bytenr %llu: %d",
+				subvol_eb->start, ret);
 	}
 	return ret;
 }
