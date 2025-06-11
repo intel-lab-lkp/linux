@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/cpumask.h>
 #include <linux/efi.h>
+#include <linux/export.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/psp-sev.h>
