@@ -7,6 +7,9 @@
 #include <linux/udp.h>
 #include <linux/pkt_cls.h>
 
+#define PAGE_SIZE 65536 /* make it work on 64K page arches */
+#define BPF_SKB_MAX_LEN (PAGE_SIZE << 2)
+
 long change_tail_ret = 1;
 
 static __always_inline struct iphdr *parse_ip_header(struct __sk_buff *skb, int *ip_proto)
@@ -94,7 +97,7 @@ int change_tail(struct __sk_buff *skb)
 			bpf_skb_change_tail(skb, len, 0);
 		return TCX_PASS;
 	} else if (payload[0] == 'E') { /* Error */
-		change_tail_ret = bpf_skb_change_tail(skb, 65535, 0);
+		change_tail_ret = bpf_skb_change_tail(skb, BPF_SKB_MAX_LEN, 0);
 		return TCX_PASS;
 	} else if (payload[0] == 'Z') { /* Zero */
 		change_tail_ret = bpf_skb_change_tail(skb, 0, 0);

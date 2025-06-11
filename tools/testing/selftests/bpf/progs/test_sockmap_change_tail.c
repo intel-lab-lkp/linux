@@ -3,6 +3,9 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 
+#define PAGE_SIZE 65536 /* make it work on 64K page arches */
+#define BPF_SKB_MAX_LEN (PAGE_SIZE << 2)
+
 struct {
 	__uint(type, BPF_MAP_TYPE_SOCKMAP);
 	__uint(max_entries, 1);
@@ -31,7 +34,7 @@ int prog_skb_verdict(struct __sk_buff *skb)
 		change_tail_ret = bpf_skb_change_tail(skb, skb->len + 1, 0);
 		return SK_PASS;
 	} else if (data[0] == 'E') { /* Error */
-		change_tail_ret = bpf_skb_change_tail(skb, 65535, 0);
+		change_tail_ret = bpf_skb_change_tail(skb, BPF_SKB_MAX_LEN, 0);
 		return SK_PASS;
 	}
 	return SK_PASS;
