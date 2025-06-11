@@ -33,6 +33,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/gfp.h>
 #include <linux/in.h>
 #include <linux/ipv6.h>
@@ -871,6 +872,33 @@ static void rds6_sock_info(struct socket *sock, unsigned int len,
 }
 #endif
 
+#ifdef CONFIG_SYSFS
+static ssize_t features_show(struct kobject *kobj, struct kobj_attribute *attr,
+			     char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "get_tos\n"
+			"set_tos\n"
+			"socket_cancel_sent_to\n"
+			"socket_get_mr\n"
+			"socket_free_mr\n"
+			"socket_recverr\n"
+			"socket_cong_monitor\n"
+			"socket_get_mr_for_dest\n"
+			"socket_so_transport\n"
+			"socket_so_rxpath_latency\n");
+}
+static struct kobj_attribute rds_features_attr = __ATTR_RO(features);
+
+static struct attribute *rds_sysfs_attrs[] = {
+	&rds_features_attr.attr,
+	NULL,
+};
+static const struct attribute_group rds_sysfs_attr_group = {
+	.attrs = rds_sysfs_attrs,
+	.name = "rds",
+};
+#endif
+
 static void rds_exit(void)
 {
 	sock_unregister(rds_family_ops.family);
@@ -882,6 +910,9 @@ static void rds_exit(void)
 	rds_stats_exit();
 	rds_page_exit();
 	rds_bind_lock_destroy();
+#ifdef CONFIG_SYSFS
+	sysfs_remove_group(kernel_kobj, &rds_sysfs_attr_group);
+#endif
 	rds_info_deregister_func(RDS_INFO_SOCKETS, rds_sock_info);
 	rds_info_deregister_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -922,6 +953,12 @@ static int __init rds_init(void)
 	ret = sock_register(&rds_family_ops);
 	if (ret)
 		goto out_proto;
+
+#ifdef CONFIG_SYSFS
+	ret = sysfs_create_group(kernel_kobj, &rds_sysfs_attr_group);
+	if (ret)
+		goto out_proto;
+#endif
 
 	rds_info_register_func(RDS_INFO_SOCKETS, rds_sock_info);
 	rds_info_register_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
