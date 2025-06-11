@@ -66,10 +66,20 @@ clocks_calc_mult_shift(u32 *mult, u32 *shift, u32 from, u32 to, u32 maxsec)
 	 * range:
 	 */
 	tmp = ((u64)maxsec * from) >> 32;
-	while (tmp) {
-		tmp >>=1;
-		sftacc--;
-	}
+
+	/*
+	 * Decrement "sftacc" by the number of bits needed to represent "tmp".
+	 * Using (32 - __builtin_clz(tmp)) to ge the bit width:
+	 * - __builtin_clz(tmp) returns the count of leading zero bits
+	 * - (32 - __builtin_clz(tmp)) gives us the number of significant bits
+	 *
+	 * Note: It use 32 instead of 31 because we want bit width (0-index MSB
+	 * position + 1), not just the MSB position itself.
+	 *
+	 * Handle tmp == 0 separately since __builtin_clz(0) has undefined behavior.
+	 */
+	if (tmp)
+		sftacc -= (32 - __builtin_clz(tmp));
 
 	/*
 	 * Find the conversion shift/mult pair which has the best
