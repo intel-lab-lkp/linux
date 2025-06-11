@@ -1615,11 +1615,8 @@ xfs_alloc_ag_vextent_lastblock(
 	int			error;
 	int			i;
 
-#ifdef DEBUG
-	/* Randomly don't execute the first algorithm. */
-	if (get_random_u32_below(2))
+	if (XFS_TEST_ERROR(false, args->mp, XFS_ERRTAG_AG_ALLOC_SKIP))
 		return 0;
-#endif
 
 	/*
 	 * Start from the entry that lookup found, sequence through all larger
