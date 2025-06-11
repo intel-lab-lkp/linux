@@ -1565,6 +1565,13 @@ static irqreturn_t qcom_pcie_global_irq_thread(int irq, void *data)
 
 	if (FIELD_GET(PARF_INT_ALL_LINK_UP, status)) {
 		dev_dbg(dev, "Received Link up event. Starting enumeration!\n");
+		/*
+		 * As per PCIe r6.0, sec 6.6.1, a Downstream Port that supports
+		 * Link speeds greater than 5.0 GT/s, software must wait a
+		 * minimum of 100 ms after Link training completes before
+		 * sending a Configuration Request.
+		 */
+		msleep(PCIE_T_RRS_READY_MS);
 		/* Rescan the bus to enumerate endpoint devices */
 		pci_lock_rescan_remove();
 		pci_rescan_bus(pp->bridge->bus);
