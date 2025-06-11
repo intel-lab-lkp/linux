@@ -51,7 +51,7 @@ static int try_to_freeze_tasks(bool user_only)
 		todo = 0;
 		read_lock(&tasklist_lock);
 		for_each_process_thread(g, p) {
-			if (p == current || !freeze_task(p))
+			if (p == current || p->exit_state || !freeze_task(p))
 				continue;
 
 			todo++;
