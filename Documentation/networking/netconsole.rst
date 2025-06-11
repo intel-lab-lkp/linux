@@ -340,6 +340,28 @@ In this example, the message was sent by CPU 42.
       cpu=42    # kernel-populated value
 
 
+Message ID auto population in userdata
+--------------------------------------
+
+Within the netconsole configfs hierarchy, there is a file named `msgid_enabled`
+located in the `userdata` directory. This file controls the message ID
+auto-population feature, which assigns a unique id to each message sent to a
+given target and appends the ID to userdata dictionary in every message sent.
+
+The message ID is built from a per-target 32 bit counter that is incremented
+for every message sent to the target. This ID can be used by the target to
+detect if messages were dropped before reaching the target.
+
+Example::
+
+  echo "This is message #1" > /dev/kmsg
+  echo "This is message #2" > /dev/kmsg
+  13,434,54928466,-;This is message #1
+   msgid=1
+  13,435,54934019,-;This is message #2
+   msgid=2
+
+
 Extended console:
 =================
 
