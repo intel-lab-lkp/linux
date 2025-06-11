@@ -165,11 +165,7 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
 static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, long syscall)
 {
 	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
-
-	if (work & SYSCALL_WORK_ENTER)
-		syscall = syscall_trace_enter(regs, syscall, work);
-
-	return syscall;
+	return  syscall_trace_enter(regs, syscall, work);
 }
 
 /**
@@ -408,8 +404,7 @@ static __always_inline void syscall_exit_to_user_mode_work(struct pt_regs *regs)
 	 * enabled, we want to run them exactly once per syscall exit with
 	 * interrupts enabled.
 	 */
-	if (unlikely(work & SYSCALL_WORK_EXIT))
-		syscall_exit_work(regs, work);
+	syscall_exit_work(regs, work);
 	local_irq_disable_exit_to_user();
 	exit_to_user_mode_prepare(regs);
 }
