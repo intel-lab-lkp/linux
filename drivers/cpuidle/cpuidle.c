@@ -103,6 +103,8 @@ static int find_deepest_state(struct cpuidle_driver *drv,
 		latency_req = s->exit_latency_ns;
 		ret = i;
 	}
+	trace_cpuidle_find_deepest_state(dev->cpu, s2idle, ret);
+
 	return ret;
 }
 
