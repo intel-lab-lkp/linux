@@ -2752,6 +2752,8 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 	int result;
 	bool is_cwnd_limited = false, is_rwnd_limited = false;
 
+	WRITE_ONCE(inet_csk(sk)->icsk_accept_queue.rskq_defer_accept, 0);
+
 	sent_pkts = 0;
 
 	tcp_mstamp_refresh(tp);

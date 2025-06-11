@@ -5776,6 +5776,10 @@ static void __tcp_ack_snd_check(struct sock *sk, int ofo_possible)
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned long rtt, delay;
 
+	/* Avoid sending ACK if waiting for user data */
+	if (READ_ONCE(inet_csk(sk)->icsk_accept_queue.rskq_defer_accept))
+		return;
+
 	    /* More than one full frame received... */
 	if (((tp->rcv_nxt - tp->rcv_wup) > inet_csk(sk)->icsk_ack.rcv_mss &&
 	     /* ... and right edge of window advances far enough.

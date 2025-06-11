@@ -1499,6 +1499,10 @@ void __tcp_cleanup_rbuf(struct sock *sk, int copied)
 	struct tcp_sock *tp = tcp_sk(sk);
 	bool time_to_ack = false;
 
+	/* Avoid sending ACK if waiting for user data. */
+	if (READ_ONCE(inet_csk(sk)->icsk_accept_queue.rskq_defer_accept))
+		return;
+
 	if (inet_csk_ack_scheduled(sk)) {
 		const struct inet_connection_sock *icsk = inet_csk(sk);
 
