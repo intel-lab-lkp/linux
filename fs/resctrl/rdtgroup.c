@@ -70,6 +70,7 @@ static struct seq_buf last_cmd_status;
 static char last_cmd_status_buf[512];
 
 static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
+static int rdtgroup_init_cat(struct resctrl_schema *s, u32 closid);
 
 static void rdtgroup_destroy_root(void);
 
@@ -230,6 +231,19 @@ bool closid_allocated(unsigned int closid)
 	lockdep_assert_held(&rdtgroup_mutex);
 
 	return !test_bit(closid, closid_free_map);
+}
+
+static int resctrl_io_alloc_closid_alloc(u32 io_alloc_closid)
+{
+	if (__test_and_clear_bit(io_alloc_closid, closid_free_map))
+		return io_alloc_closid;
+	else
+		return -ENOSPC;
+}
+
+static void resctrl_io_alloc_closid_free(u32 io_alloc_closid)
+{
+	closid_free(io_alloc_closid);
 }
 
 /**
@@ -1031,6 +1045,29 @@ static int rdt_shareable_bits_show(struct kernfs_open_file *of,
 }
 
 /*
+ * resctrl_io_alloc_closid_get - io_alloc feature uses max CLOSID to route
+ * the IO traffic. Get the max CLOSID and verify if the CLOSID is available.
+ *
+ * The total number of CLOSIDs is determined in closid_init(),  based on the
+ * minimum supported across all resources. If CDP (Code Data Prioritization)
+ * is enabled, the number of CLOSIDs is halved. The final value is returned
+ * by closids_supported(). Make sure this value aligns with the maximum
+ * CLOSID supported by the respective resource.
+ */
+static int resctrl_io_alloc_closid_get(struct rdt_resource *r)
+{
+	int num_closids = closids_supported();
+
+	if (resctrl_arch_get_cdp_enabled(r->rid))
+		num_closids *= 2;
+
+	if (num_closids != resctrl_arch_get_num_closid(r))
+		return -ENOSPC;
+
+	return closids_supported() - 1;
+}
+
+/*
  * rdt_bit_usage_show - Display current usage of resources
  *
  * A domain is a shared resource that can now be allocated differently. Here
@@ -1058,20 +1095,23 @@ static int rdt_bit_usage_show(struct kernfs_open_file *of,
 	struct rdt_ctrl_domain *dom;
 	int i, hwb, swb, excl, psl;
 	enum rdtgrp_mode mode;
+	int io_alloc_closid;
 	bool sep = false;
 	u32 ctrl_val;
 
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
-	hw_shareable = r->cache.shareable_bits;
 	list_for_each_entry(dom, &r->ctrl_domains, hdr.list) {
 		if (sep)
 			seq_putc(seq, ';');
+		hw_shareable = r->cache.shareable_bits;
 		sw_shareable = 0;
 		exclusive = 0;
 		seq_printf(seq, "%d=", dom->hdr.id);
 		for (i = 0; i < closids_supported(); i++) {
-			if (!closid_allocated(i))
+			if (!closid_allocated(i) ||
+			    (resctrl_arch_get_io_alloc_enabled(r) &&
+			     i == resctrl_io_alloc_closid_get(r)))
 				continue;
 			ctrl_val = resctrl_arch_get_config(r, dom, i,
 							   s->conf_type);
@@ -1099,6 +1139,24 @@ static int rdt_bit_usage_show(struct kernfs_open_file *of,
 				break;
 			}
 		}
+
+		/*
+		 * When the "io_alloc" feature is enabled, a portion of the
+		 * cache is reserved for shared use between hardware and software.
+		 */
+		if (resctrl_arch_get_io_alloc_enabled(r)) {
+			io_alloc_closid = resctrl_io_alloc_closid_get(r);
+			if (resctrl_arch_get_cdp_enabled(r->rid))
+				ctrl_val = resctrl_arch_get_config(r, dom,
+								   io_alloc_closid,
+								   CDP_CODE);
+			else
+				ctrl_val = resctrl_arch_get_config(r, dom,
+								   io_alloc_closid,
+								   CDP_NONE);
+			hw_shareable |= ctrl_val;
+		}
+
 		for (i = r->cache.cbm_len - 1; i >= 0; i--) {
 			pseudo_locked = dom->plr ? dom->plr->cbm : 0;
 			hwb = test_bit(i, &hw_shareable);
@@ -1803,6 +1861,142 @@ static ssize_t mbm_local_bytes_config_write(struct kernfs_open_file *of,
 	return ret ?: nbytes;
 }
 
+static int resctrl_io_alloc_show(struct kernfs_open_file *of,
+				 struct seq_file *seq, void *v)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	struct rdt_resource *r = s->res;
+
+	if (r->cache.io_alloc_capable) {
+		if (resctrl_arch_get_io_alloc_enabled(r))
+			seq_puts(seq, "enabled\n");
+		else
+			seq_puts(seq, "disabled\n");
+	} else {
+		seq_puts(seq, "not supported\n");
+	}
+
+	return 0;
+}
+
+/*
+ * Initialize io_alloc CLOSID cache resource with default CBM values.
+ */
+static int resctrl_io_alloc_init_cat(struct rdt_resource *r,
+				     struct resctrl_schema *s, u32 closid)
+{
+	int ret;
+
+	rdt_staged_configs_clear();
+
+	ret = rdtgroup_init_cat(s, closid);
+	if (ret < 0)
+		goto out_init_cat;
+
+	ret = resctrl_arch_update_domains(r, closid);
+
+out_init_cat:
+	rdt_staged_configs_clear();
+	return ret;
+}
+
+static const char *rdtgroup_name_by_closid(int closid)
+{
+	struct rdtgroup *rdtgrp;
+
+	list_for_each_entry(rdtgrp, &rdt_all_groups, rdtgroup_list) {
+		if (rdtgrp->closid == closid)
+			return rdt_kn_name(rdtgrp->kn);
+	}
+
+	return NULL;
+}
+
+/*
+ * When CDP is enabled, io_alloc directs traffic using the highest CLOSID
+ * linked to an L3CODE resource. Although CBMs can be accessed through
+ * either L3CODE or L3DATA resources, any updates to the schemata must
+ * always be performed on L3CODE.
+ */
+static struct resctrl_schema *resctrl_schema_io_alloc(struct resctrl_schema *s)
+{
+	struct resctrl_schema *schema;
+
+	if (s->conf_type == CDP_DATA) {
+		list_for_each_entry(schema, &resctrl_schema_all, list) {
+			if (schema->conf_type == CDP_CODE)
+				return schema;
+		}
+	}
+
+	return s;
+}
+
+static ssize_t resctrl_io_alloc_write(struct kernfs_open_file *of, char *buf,
+				      size_t nbytes, loff_t off)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	struct rdt_resource *r = s->res;
+	char const *grp_name;
+	u32 io_alloc_closid;
+	bool enable;
+	int ret;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	if (!r->cache.io_alloc_capable) {
+		rdt_last_cmd_puts("io_alloc feature is not supported on the resource\n");
+		ret = -ENODEV;
+		goto out_io_alloc;
+	}
+
+	io_alloc_closid = resctrl_io_alloc_closid_get(r);
+	if (io_alloc_closid < 0) {
+		rdt_last_cmd_puts("Max CLOSID to support io_alloc is not available\n");
+		ret = -EINVAL;
+		goto out_io_alloc;
+	}
+
+	if (resctrl_arch_get_io_alloc_enabled(r) != enable) {
+		if (enable) {
+			ret = resctrl_io_alloc_closid_alloc(io_alloc_closid);
+			if (ret < 0) {
+				grp_name = rdtgroup_name_by_closid(io_alloc_closid);
+				rdt_last_cmd_printf("CLOSID for io_alloc is used by %s group\n",
+						    grp_name ? grp_name : "another");
+				ret = -EINVAL;
+				goto out_io_alloc;
+			}
+
+			ret = resctrl_io_alloc_init_cat(r, resctrl_schema_io_alloc(s),
+							io_alloc_closid);
+			if (ret) {
+				rdt_last_cmd_puts("Failed to initialize io_alloc allocations\n");
+				resctrl_io_alloc_closid_free(io_alloc_closid);
+				goto out_io_alloc;
+			}
+
+		} else {
+			resctrl_io_alloc_closid_free(io_alloc_closid);
+		}
+
+		ret = resctrl_arch_io_alloc_enable(r, enable);
+	}
+
+out_io_alloc:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -1956,6 +2150,13 @@ static struct rftype res_common_files[] = {
 		.fflags		= RFTYPE_CTRL_BASE,
 	},
 	{
+		.name           = "io_alloc",
+		.mode           = 0644,
+		.kf_ops         = &rdtgroup_kf_single_ops,
+		.seq_show       = resctrl_io_alloc_show,
+		.write          = resctrl_io_alloc_write,
+	},
+	{
 		.name		= "mba_MBps_event",
 		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2060,6 +2261,15 @@ static void thread_throttle_mode_init(void)
 
 	resctrl_file_fflags_init("thread_throttle_mode",
 				 RFTYPE_CTRL_INFO | RFTYPE_RES_MB);
+}
+
+static void io_alloc_init(void)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+
+	if (r->cache.io_alloc_capable)
+		resctrl_file_fflags_init("io_alloc",
+					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
@@ -4248,6 +4458,8 @@ int resctrl_init(void)
 	rdtgroup_setup_default();
 
 	thread_throttle_mode_init();
+
+	io_alloc_init();
 
 	ret = resctrl_mon_resource_init();
 	if (ret)
