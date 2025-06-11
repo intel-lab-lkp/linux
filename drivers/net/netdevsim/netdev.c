@@ -39,12 +39,16 @@ MODULE_IMPORT_NS("NETDEV_INTERNAL");
 
 static int nsim_napi_rx(struct nsim_rq *rq, struct sk_buff *skb)
 {
+	struct net_device *dev = rq->napi.dev;
+
 	if (skb_queue_len(&rq->skb_queue) > NSIM_RING_SIZE) {
 		dev_kfree_skb_any(skb);
+		dev_dstats_rx_dropped(dev);
 		return NET_RX_DROP;
 	}
 
 	skb_queue_tail(&rq->skb_queue, skb);
+	dev_dstats_rx_add(dev, skb->len);
 	return NET_RX_SUCCESS;
 }
 
