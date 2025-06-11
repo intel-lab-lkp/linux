@@ -55,9 +55,16 @@ static unsigned long intel_security_flags(struct nvdimm *nvdimm,
 {
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
 	unsigned long security_flags = 0;
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_get_security_state cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_get_security_state cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_GET_SECURITY_STATE,
@@ -120,9 +127,16 @@ static unsigned long intel_security_flags(struct nvdimm *nvdimm,
 static int intel_security_freeze(struct nvdimm *nvdimm)
 {
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_freeze_lock cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_freeze_lock cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_FREEZE_LOCK,
@@ -153,9 +167,16 @@ static int intel_security_change_key(struct nvdimm *nvdimm,
 	unsigned int cmd = ptype == NVDIMM_MASTER ?
 		NVDIMM_INTEL_SET_MASTER_PASSPHRASE :
 		NVDIMM_INTEL_SET_PASSPHRASE;
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_set_passphrase cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_set_passphrase cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_family = NVDIMM_FAMILY_INTEL,
@@ -195,9 +216,16 @@ static int __maybe_unused intel_security_unlock(struct nvdimm *nvdimm,
 		const struct nvdimm_key_data *key_data)
 {
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_unlock_unit cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_unlock_unit cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_UNLOCK_UNIT,
@@ -234,9 +262,16 @@ static int intel_security_disable(struct nvdimm *nvdimm,
 {
 	int rc;
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_disable_passphrase cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_disable_passphrase cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_DISABLE_PASSPHRASE,
@@ -277,9 +312,16 @@ static int __maybe_unused intel_security_erase(struct nvdimm *nvdimm,
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
 	unsigned int cmd = ptype == NVDIMM_MASTER ?
 		NVDIMM_INTEL_MASTER_SECURE_ERASE : NVDIMM_INTEL_SECURE_ERASE;
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_secure_erase cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_secure_erase cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_family = NVDIMM_FAMILY_INTEL,
@@ -318,9 +360,16 @@ static int __maybe_unused intel_security_query_overwrite(struct nvdimm *nvdimm)
 {
 	int rc;
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_query_overwrite cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_query_overwrite cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_QUERY_OVERWRITE,
@@ -354,9 +403,16 @@ static int __maybe_unused intel_security_overwrite(struct nvdimm *nvdimm,
 {
 	int rc;
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_overwrite cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_overwrite cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_OVERWRITE,
@@ -407,9 +463,16 @@ const struct nvdimm_security_ops *intel_security_ops = &__intel_security_ops;
 static int intel_bus_fwa_businfo(struct nvdimm_bus_descriptor *nd_desc,
 		struct nd_intel_bus_fw_activate_businfo *info)
 {
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_bus_fw_activate_businfo cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_bus_fw_activate_businfo cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_BUS_INTEL_FW_ACTIVATE_BUSINFO,
@@ -518,9 +581,16 @@ static enum nvdimm_fwa_capability intel_bus_fwa_capability(
 static int intel_bus_fwa_activate(struct nvdimm_bus_descriptor *nd_desc)
 {
 	struct acpi_nfit_desc *acpi_desc = to_acpi_desc(nd_desc);
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_bus_fw_activate cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_bus_fw_activate cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_BUS_INTEL_FW_ACTIVATE,
@@ -582,9 +652,16 @@ const struct nvdimm_bus_fw_ops *intel_bus_fw_ops = &__intel_bus_fw_ops;
 static int intel_fwa_dimminfo(struct nvdimm *nvdimm,
 		struct nd_intel_fw_activate_dimminfo *info)
 {
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_fw_activate_dimminfo cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_fw_activate_dimminfo cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_FW_ACTIVATE_DIMMINFO,
@@ -688,9 +765,16 @@ static int intel_fwa_arm(struct nvdimm *nvdimm, enum nvdimm_fwa_trigger arm)
 {
 	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
 	struct acpi_nfit_desc *acpi_desc = nfit_mem->acpi_desc;
-	struct {
+	/*
+	 * This effectively creates a union between the flexible-array member
+	 * and any members after _offset_to_fam.
+	 */
+	union {
 		struct nd_cmd_pkg pkg;
-		struct nd_intel_fw_activate_arm cmd;
+		struct {
+			u8 _offset_to_fam[offsetof(struct nd_cmd_pkg, nd_payload)];
+			struct nd_intel_fw_activate_arm cmd;
+		};
 	} nd_cmd = {
 		.pkg = {
 			.nd_command = NVDIMM_INTEL_FW_ACTIVATE_ARM,
