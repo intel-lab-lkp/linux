@@ -29,6 +29,7 @@ struct scmi_data {
 	cpumask_var_t opp_shared_cpus;
 	struct notifier_block limit_notify_nb;
 	struct freq_qos_request	limits_freq_req;
+	bool perf_limit_notify;
 };
 
 static struct scmi_protocol_handle *ph;
@@ -310,15 +311,22 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 		goto out_free_table;
 	}
 
-	priv->limit_notify_nb.notifier_call = scmi_limit_notify_cb;
-	ret = sdev->handle->notify_ops->event_notifier_register(sdev->handle, SCMI_PROTOCOL_PERF,
+	priv->perf_limit_notify =
+		perf_ops->notify_supported(ph, SCMI_EVENT_PERFORMANCE_LIMITS_CHANGED,
+					   priv->domain_id);
+
+	if (priv->perf_limit_notify) {
+		priv->limit_notify_nb.notifier_call = scmi_limit_notify_cb;
+		ret = sdev->handle->notify_ops->event_notifier_register(sdev->handle,
+							SCMI_PROTOCOL_PERF,
 							SCMI_EVENT_PERFORMANCE_LIMITS_CHANGED,
 							&priv->domain_id,
 							&priv->limit_notify_nb);
-	if (ret)
-		dev_warn(&sdev->dev,
-			 "failed to register for limits change notifier for domain %d\n",
-			 priv->domain_id);
+		if (ret)
+			dev_warn(&sdev->dev,
+				"failed to register for limits change notifier for domain %d\n",
+				priv->domain_id);
+	}
 
 	return 0;
 
@@ -341,10 +349,13 @@ static void scmi_cpufreq_exit(struct cpufreq_policy *policy)
 	struct scmi_data *priv = policy->driver_data;
 	struct scmi_device *sdev = cpufreq_get_driver_data();
 
-	sdev->handle->notify_ops->event_notifier_unregister(sdev->handle, SCMI_PROTOCOL_PERF,
+	if (priv->perf_limit_notify) {
+		sdev->handle->notify_ops->event_notifier_unregister(sdev->handle,
+							    SCMI_PROTOCOL_PERF,
 							    SCMI_EVENT_PERFORMANCE_LIMITS_CHANGED,
 							    &priv->domain_id,
 							    &priv->limit_notify_nb);
+	}
 	freq_qos_remove_request(&priv->limits_freq_req);
 	dev_pm_opp_free_cpufreq_table(priv->cpu_dev, &policy->freq_table);
 	dev_pm_opp_remove_all_dynamic(priv->cpu_dev);
