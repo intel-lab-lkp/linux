@@ -514,6 +514,7 @@ static void timerlat_top_usage(char *usage)
 		"	  -k/--kernel-threads: use timerlat kernel-space threads instead of rtla user-space threads",
 		"	  -U/--user-load: enable timerlat for user-defined user-space workload",
 		"	  -A/--on-threshold <action>: define action to be executed at latency threshold, multiple -A are allowed",
+		"	  -N/--on-end: define action to be executed at measurement end, multiple -N are allowed"
 		"	     --warm-up s: let the workload run for s seconds before collecting data",
 		"	     --trace-buffer-size kB: set the per-cpu trace buffer size in kB",
 		"	     --deepest-idle-state n: only go down to idle state n on cpus used by timerlat to reduce exit from idle latency",
@@ -552,7 +553,8 @@ static struct timerlat_params
 	if (!params)
 		exit(1);
 
-	actions_init(&params->actions);
+	actions_init(&params->threshold_actions);
+	actions_init(&params->end_actions);
 
 	/* disabled by default */
 	params->dma_latency = -1;
@@ -578,6 +580,7 @@ static struct timerlat_params
 			{"help",		no_argument,		0, 'h'},
 			{"house-keeping",	required_argument,	0, 'H'},
 			{"irq",			required_argument,	0, 'i'},
+			{"on-end",		required_argument,	0, 'N'},
 			{"nano",		no_argument,		0, 'n'},
 			{"period",		required_argument,	0, 'p'},
 			{"priority",		required_argument,	0, 'P'},
@@ -603,7 +606,7 @@ static struct timerlat_params
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "A:a:c:C::d:De:hH:i:knp:P:qs:t::T:uU0:1:2:345:6:7:",
+		c = getopt_long(argc, argv, "A:a:c:C::d:De:hH:i:kN:np:P:qs:t::T:uU0:1:2:345:6:7:",
 				 long_options, &option_index);
 
 		/* detect the end of the options. */
@@ -623,9 +626,10 @@ static struct timerlat_params
 
 			/* set trace */
 			trace_output = "timerlat_trace.txt";
+
 			break;
 		case 'A':
-			retval = actions_parse(&params->actions, optarg);
+			retval = actions_parse(&params->threshold_actions, optarg);
 			if (retval) {
 				err_msg("Invalid action %s\n", optarg);
 				exit(EXIT_FAILURE);
@@ -697,6 +701,13 @@ static struct timerlat_params
 			break;
 		case 'k':
 			params->kernel_workload = true;
+			break;
+		case 'N':
+			retval = actions_parse(&params->end_actions, optarg);
+			if (retval) {
+				err_msg("Invalid action %s\n", optarg);
+				exit(EXIT_FAILURE);
+			}
 			break;
 		case 'n':
 			params->output_divisor = 1;
@@ -788,7 +799,7 @@ static struct timerlat_params
 	}
 
 	if (trace_output)
-		actions_add_trace_output(&params->actions, trace_output);
+		actions_add_trace_output(&params->threshold_actions, trace_output);
 
 	if (geteuid()) {
 		err_msg("rtla needs root permission\n");
@@ -812,7 +823,8 @@ static struct timerlat_params
 	 * mixed mode
 	 */
 	if (params->mode == TRACING_MODE_BPF &&
-	    (params->actions.present[ACTION_TRACE_OUTPUT] || !params->no_aa))
+	    (params->threshold_actions.present[ACTION_TRACE_OUTPUT] ||
+	     params->end_actions.present[ACTION_TRACE_OUTPUT] || !params->no_aa))
 		params->mode = TRACING_MODE_MIXED;
 
 	return params;
@@ -934,14 +946,14 @@ timerlat_top_main_loop(struct osnoise_tool *top,
 			timerlat_print_stats(params, top);
 
 		if (osnoise_trace_is_off(top, record)) {
-			actions_perform(&params->actions);
+			actions_perform(&params->threshold_actions);
 
-			if (!params->actions.continue_flag)
+			if (!params->threshold_actions.continue_flag)
 				/* continue flag not set, break */
 				break;
 
 			/* continue action reached, re-enable tracing */
-			if (params->actions.present[ACTION_TRACE_OUTPUT])
+			if (record)
 				trace_instance_start(&record->trace);
 			if (!params->no_aa)
 				trace_instance_start(&aa->trace);
@@ -993,14 +1005,14 @@ timerlat_top_bpf_main_loop(struct osnoise_tool *top,
 
 		if (wait_retval == 1) {
 			/* Stopping requested by tracer */
-			actions_perform(&params->actions);
+			actions_perform(&params->threshold_actions);
 
-			if (!params->actions.continue_flag)
+			if (!params->threshold_actions.continue_flag)
 				/* continue flag not set, break */
 				break;
 
 			/* continue action reached, re-enable tracing */
-			if (params->actions.present[ACTION_TRACE_OUTPUT])
+			if (record)
 				trace_instance_start(&record->trace);
 			if (!params->no_aa)
 				trace_instance_start(&aa->trace);
@@ -1128,13 +1140,15 @@ int timerlat_top_main(int argc, char *argv[])
 		}
 	}
 
-	if (params->actions.present[ACTION_TRACE_OUTPUT]) {
+	if (params->threshold_actions.present[ACTION_TRACE_OUTPUT] ||
+	    params->end_actions.present[ACTION_TRACE_OUTPUT]) {
 		record = osnoise_init_trace_tool("timerlat");
 		if (!record) {
 			err_msg("Failed to enable the trace instance\n");
 			goto out_free;
 		}
-		params->actions.trace_output_inst = record->trace.inst;
+		params->threshold_actions.trace_output_inst = record->trace.inst;
+		params->end_actions.trace_output_inst = record->trace.inst;
 
 		if (params->events) {
 			retval = trace_events_enable(&record->trace, params->events);
@@ -1201,7 +1215,7 @@ int timerlat_top_main(int argc, char *argv[])
 	 * tracing while enabling other instances. The trace instance is the
 	 * one with most valuable information.
 	 */
-	if (params->actions.present[ACTION_TRACE_OUTPUT])
+	if (record)
 		trace_instance_start(&record->trace);
 	if (!params->no_aa)
 		trace_instance_start(&aa->trace);
@@ -1235,6 +1249,8 @@ int timerlat_top_main(int argc, char *argv[])
 	}
 
 	timerlat_print_stats(params, top);
+
+	actions_perform(&params->end_actions);
 
 	return_value = PASSED;
 
@@ -1276,7 +1292,8 @@ out_free:
 		osnoise_destroy_tool(aa);
 	osnoise_destroy_tool(record);
 	osnoise_destroy_tool(top);
-	actions_destroy(&params->actions);
+	actions_destroy(&params->threshold_actions);
+	actions_destroy(&params->end_actions);
 	if (params->mode != TRACING_MODE_TRACEFS)
 		timerlat_bpf_destroy();
 	free(params);
