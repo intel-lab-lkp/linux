@@ -155,6 +155,8 @@ struct netconsole_target {
 	size_t			userdata_length;
 	/* bit-wise with sysdata_feature bits */
 	u32			sysdata_fields;
+	/* protected by target_list_lock */
+	u32			msgcounter;
 #endif
 	struct netconsole_target_stats stats;
 	bool			enabled;
@@ -1345,13 +1347,21 @@ static int sysdata_append_release(struct netconsole_target *nt, int offset)
 			 init_utsname()->release);
 }
 
+static int sysdata_append_msgid(struct netconsole_target *nt, int offset)
+{
+	nt->msgcounter++;
+	return scnprintf(&nt->extradata_complete[offset],
+			 MAX_EXTRADATA_ENTRY_LEN, " msgid=%u\n",
+			 nt->msgcounter);
+}
+
 /*
  * prepare_extradata - append sysdata at extradata_complete in runtime
  * @nt: target to send message to
  */
 static int prepare_extradata(struct netconsole_target *nt)
 {
-	u32 fields = SYSDATA_CPU_NR | SYSDATA_TASKNAME;
+	u32 fields = SYSDATA_CPU_NR | SYSDATA_TASKNAME | SYSDATA_MSGID;
 	int extradata_len;
 
 	/* userdata was appended when configfs write helper was called
@@ -1368,6 +1378,8 @@ static int prepare_extradata(struct netconsole_target *nt)
 		extradata_len += sysdata_append_taskname(nt, extradata_len);
 	if (nt->sysdata_fields & SYSDATA_RELEASE)
 		extradata_len += sysdata_append_release(nt, extradata_len);
+	if (nt->sysdata_fields & SYSDATA_MSGID)
+		extradata_len += sysdata_append_msgid(nt, extradata_len);
 
 	WARN_ON_ONCE(extradata_len >
 		     MAX_EXTRADATA_ENTRY_LEN * MAX_EXTRADATA_ITEMS);
