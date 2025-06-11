@@ -43,7 +43,7 @@ struct ili9881c_desc {
 	const struct drm_display_mode *mode;
 	const unsigned long mode_flags;
 	u8 default_address_mode;
-	unsigned int lanes;
+	u8 lanes;
 };
 
 struct ili9881c {
