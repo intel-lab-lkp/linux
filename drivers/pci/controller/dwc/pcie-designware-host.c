@@ -909,7 +909,7 @@ static void dw_pcie_config_presets(struct dw_pcie_rp *pp)
 int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
-	u32 val, ctrl, num_ctrls;
+	u32 ctrl, num_ctrls;
 	int ret;
 
 	/*
@@ -941,23 +941,17 @@ int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
 	dw_pcie_writel_dbi(pci, PCI_BASE_ADDRESS_1, 0x00000000);
 
 	/* Setup interrupt pins */
-	val = dw_pcie_readl_dbi(pci, PCI_INTERRUPT_LINE);
-	val &= 0xffff00ff;
-	val |= 0x00000100;
-	dw_pcie_writel_dbi(pci, PCI_INTERRUPT_LINE, val);
+	dw_pcie_clear_and_set_dword(pci, PCI_INTERRUPT_LINE,
+				    0xffff00ff, 0x00000100);
 
 	/* Setup bus numbers */
-	val = dw_pcie_readl_dbi(pci, PCI_PRIMARY_BUS);
-	val &= 0xff000000;
-	val |= 0x00ff0100;
-	dw_pcie_writel_dbi(pci, PCI_PRIMARY_BUS, val);
+	dw_pcie_clear_and_set_dword(pci, PCI_PRIMARY_BUS,
+				    0xff000000, 0x00ff0100);
 
 	/* Setup command register */
-	val = dw_pcie_readl_dbi(pci, PCI_COMMAND);
-	val &= 0xffff0000;
-	val |= PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
-		PCI_COMMAND_MASTER | PCI_COMMAND_SERR;
-	dw_pcie_writel_dbi(pci, PCI_COMMAND, val);
+	dw_pcie_clear_and_set_dword(pci, PCI_COMMAND, 0xffff0000,
+				    PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
+				    PCI_COMMAND_MASTER | PCI_COMMAND_SERR);
 
 	dw_pcie_config_presets(pp);
 	/*
@@ -976,9 +970,8 @@ int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
 	/* Program correct class for RC */
 	dw_pcie_writew_dbi(pci, PCI_CLASS_DEVICE, PCI_CLASS_BRIDGE_PCI);
 
-	val = dw_pcie_readl_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL);
-	val |= PORT_LOGIC_SPEED_CHANGE;
-	dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_LINK_WIDTH_SPEED_CONTROL,
+				    0, PORT_LOGIC_SPEED_CHANGE);
 
 	dw_pcie_dbi_ro_wr_dis(pci);
 

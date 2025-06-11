@@ -720,24 +720,14 @@ static inline void dw_pcie_clear_and_set_dword(struct dw_pcie *pci, int pos,
 
 static inline void dw_pcie_dbi_ro_wr_en(struct dw_pcie *pci)
 {
-	u32 reg;
-	u32 val;
-
-	reg = PCIE_MISC_CONTROL_1_OFF;
-	val = dw_pcie_readl_dbi(pci, reg);
-	val |= PCIE_DBI_RO_WR_EN;
-	dw_pcie_writel_dbi(pci, reg, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_MISC_CONTROL_1_OFF,
+				    0, PCIE_DBI_RO_WR_EN);
 }
 
 static inline void dw_pcie_dbi_ro_wr_dis(struct dw_pcie *pci)
 {
-	u32 reg;
-	u32 val;
-
-	reg = PCIE_MISC_CONTROL_1_OFF;
-	val = dw_pcie_readl_dbi(pci, reg);
-	val &= ~PCIE_DBI_RO_WR_EN;
-	dw_pcie_writel_dbi(pci, reg, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_MISC_CONTROL_1_OFF,
+				    PCIE_DBI_RO_WR_EN, 0);
 }
 
 static inline int dw_pcie_start_link(struct dw_pcie *pci)
