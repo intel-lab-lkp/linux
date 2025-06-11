@@ -42,6 +42,7 @@
 #include <crypto/twofish.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/export.h>
 #include <linux/types.h>
 
 asmlinkage void twofish_enc_blk(struct twofish_ctx *ctx, u8 *dst,
