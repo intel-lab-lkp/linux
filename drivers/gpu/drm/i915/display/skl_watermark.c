@@ -4045,14 +4045,14 @@ DEFINE_SHOW_ATTRIBUTE(intel_sagv_status);
 
 void skl_watermark_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
+	struct dentry *debugfs_root = display->drm->debugfs_root;
 
 	if (HAS_IPC(display))
-		debugfs_create_file("i915_ipc_status", 0644, minor->debugfs_root,
+		debugfs_create_file("i915_ipc_status", 0644, debugfs_root,
 				    display, &skl_watermark_ipc_status_fops);
 
 	if (HAS_SAGV(display))
-		debugfs_create_file("i915_sagv_status", 0444, minor->debugfs_root,
+		debugfs_create_file("i915_sagv_status", 0444, debugfs_root,
 				    display, &intel_sagv_status_fops);
 }
 

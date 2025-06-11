@@ -390,15 +390,15 @@ static const struct file_operations i915_cur_wm_latency_fops = {
 
 void intel_wm_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
+	struct dentry *debugfs_root = display->drm->debugfs_root;
 
-	debugfs_create_file("i915_pri_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_pri_wm_latency", 0644, debugfs_root,
 			    display, &i915_pri_wm_latency_fops);
 
-	debugfs_create_file("i915_spr_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_spr_wm_latency", 0644, debugfs_root,
 			    display, &i915_spr_wm_latency_fops);
 
-	debugfs_create_file("i915_cur_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_cur_wm_latency", 0644, debugfs_root,
 			    display, &i915_cur_wm_latency_fops);
 
 	skl_watermark_debugfs_register(display);
