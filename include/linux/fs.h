@@ -2016,10 +2016,10 @@ int vfs_unlink(struct mnt_idmap *, struct inode *, struct dentry *,
  */
 struct renamedata {
 	struct mnt_idmap *old_mnt_idmap;
-	struct inode *old_dir;
+	struct dentry *old_dir;
 	struct dentry *old_dentry;
 	struct mnt_idmap *new_mnt_idmap;
-	struct inode *new_dir;
+	struct dentry *new_dir;
 	struct dentry *new_dentry;
 	struct inode **delegated_inode;
 	unsigned int flags;
