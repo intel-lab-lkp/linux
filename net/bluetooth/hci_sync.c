@@ -3167,7 +3167,15 @@ int hci_update_scan(struct hci_dev *hdev)
 
 static int update_passive_scan_sync(struct hci_dev *hdev, void *data)
 {
-	return hci_update_passive_scan_sync(hdev);
+	int ret;
+
+	hci_dev_lock(hdev);
+
+	ret = hci_update_passive_scan_sync(hdev);
+
+	hci_dev_unlock(hdev);
+
+	return ret;
 }
 
 int hci_update_passive_scan(struct hci_dev *hdev)
