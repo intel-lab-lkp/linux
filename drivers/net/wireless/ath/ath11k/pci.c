@@ -203,16 +203,18 @@ static void ath11k_pci_soc_global_reset(struct ath11k_base *ab)
 		ath11k_warn(ab, "link down error during global reset\n");
 }
 
-static void ath11k_pci_clear_dbg_registers(struct ath11k_base *ab)
+static void ath11k_pci_clear_dbg_registers(struct ath11k_base *ab, bool power_on)
 {
-	u32 val;
+	if (power_on) {
+		u32 val;
 
-	/* read cookie */
-	val = ath11k_pcic_read32(ab, PCIE_Q6_COOKIE_ADDR);
-	ath11k_dbg(ab, ATH11K_DBG_PCI, "pcie_q6_cookie_addr 0x%x\n", val);
+		/* read cookie */
+		val = ath11k_pcic_read32(ab, PCIE_Q6_COOKIE_ADDR);
+		ath11k_dbg(ab, ATH11K_DBG_PCI, "pcie_q6_cookie_addr 0x%x\n", val);
 
-	val = ath11k_pcic_read32(ab, WLAON_WARM_SW_ENTRY);
-	ath11k_dbg(ab, ATH11K_DBG_PCI, "wlaon_warm_sw_entry 0x%x\n", val);
+		val = ath11k_pcic_read32(ab, WLAON_WARM_SW_ENTRY);
+		ath11k_dbg(ab, ATH11K_DBG_PCI, "wlaon_warm_sw_entry 0x%x\n", val);
+	}
 
 	/* TODO: exact time to sleep is uncertain */
 	mdelay(10);
@@ -223,14 +225,18 @@ static void ath11k_pci_clear_dbg_registers(struct ath11k_base *ab)
 	ath11k_pcic_write32(ab, WLAON_WARM_SW_ENTRY, 0);
 	mdelay(10);
 
-	val = ath11k_pcic_read32(ab, WLAON_WARM_SW_ENTRY);
-	ath11k_dbg(ab, ATH11K_DBG_PCI, "wlaon_warm_sw_entry 0x%x\n", val);
+	if (power_on) {
+		u32 val;
 
-	/* A read clear register. clear the register to prevent
-	 * Q6 from entering wrong code path.
-	 */
-	val = ath11k_pcic_read32(ab, WLAON_SOC_RESET_CAUSE_REG);
-	ath11k_dbg(ab, ATH11K_DBG_PCI, "soc reset cause %d\n", val);
+		val = ath11k_pcic_read32(ab, WLAON_WARM_SW_ENTRY);
+		ath11k_dbg(ab, ATH11K_DBG_PCI, "wlaon_warm_sw_entry 0x%x\n", val);
+
+		/* A read clear register. clear the register to prevent
+		* Q6 from entering wrong code path.
+		*/
+		val = ath11k_pcic_read32(ab, WLAON_SOC_RESET_CAUSE_REG);
+		ath11k_dbg(ab, ATH11K_DBG_PCI, "soc reset cause %d\n", val);
+	}
 }
 
 static int ath11k_pci_set_link_reg(struct ath11k_base *ab,
@@ -368,7 +374,7 @@ static void ath11k_pci_sw_reset(struct ath11k_base *ab, bool power_on)
 	}
 
 	ath11k_mhi_clear_vector(ab);
-	ath11k_pci_clear_dbg_registers(ab);
+	ath11k_pci_clear_dbg_registers(ab, power_on);
 	ath11k_pci_soc_global_reset(ab);
 	ath11k_mhi_set_mhictrl_reset(ab);
 }
