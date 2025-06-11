@@ -13,6 +13,7 @@
 enum fixed_addresses {
 	FIX_HOLE,
 	FIX_EARLYCON_MEM_BASE,
+	FIX_TEXT_POKE0,
 	__end_of_fixed_addresses
 };
 
@@ -20,6 +21,7 @@ enum fixed_addresses {
 #define FIXADDR_START	(FIXADDR_TOP - FIXADDR_SIZE)
 #define FIXMAP_PAGE_IO	PAGE_KERNEL_SUC
 
+void __init early_fixmap_init(void);
 extern void __set_fixmap(enum fixed_addresses idx,
 			 phys_addr_t phys, pgprot_t flags);
 
