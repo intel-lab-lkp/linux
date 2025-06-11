@@ -110,9 +110,9 @@
 
 #define INTEL_ICELAKE_X			IFM(6, 0x6A) /* Sunny Cove */
 #define INTEL_ICELAKE_D			IFM(6, 0x6C) /* Sunny Cove */
-#define INTEL_ICELAKE			IFM(6, 0x7D) /* Sunny Cove */
+#define INTEL_ICELAKE			IFM(6, 0x7D) /* Sunny Cove, never released */
 #define INTEL_ICELAKE_L			IFM(6, 0x7E) /* Sunny Cove */
-#define INTEL_ICELAKE_NNPI		IFM(6, 0x9D) /* Sunny Cove */
+#define INTEL_ICELAKE_NNPI		IFM(6, 0x9D) /* Sunny Cove, never released */
 
 #define INTEL_ROCKETLAKE		IFM(6, 0xA7) /* Cypress Cove */
 

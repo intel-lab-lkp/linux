@@ -337,9 +337,21 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 		detect_tme_early(c);
 }
 
+static const struct x86_cpu_id unreleased_cpus[] = {
+	X86_MATCH_VFM(INTEL_ICELAKE,		0),
+	X86_MATCH_VFM(INTEL_ICELAKE_NNPI,	0),
+	{},
+};
+
 static void bsp_init_intel(struct cpuinfo_x86 *c)
 {
 	resctrl_cpu_detect(c);
+
+	if (x86_match_cpu(unreleased_cpus) && !cpu_has(c, X86_FEATURE_HYPERVISOR)) {
+		add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+		WARN_ONCE(1, "WARNING: CPU family=0x%x, model=0x%x is unreleased, tainting\n",
+			  c->x86, c->x86_model);
+	}
 }
 
 #ifdef CONFIG_X86_32
