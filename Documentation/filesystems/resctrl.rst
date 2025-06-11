@@ -181,6 +181,19 @@ related to allocation:
 			# cat /sys/fs/resctrl/info/L3/io_alloc_cbm
 			0=ffff;1=ffff
 
+		CBM can be configured by writing to the interface.
+
+		Example::
+
+			# echo 1=FF > /sys/fs/resctrl/info/L3/io_alloc_cbm
+			# cat /sys/fs/resctrl/info/L3/io_alloc_cbm
+			0=ffff;1=00ff
+
+		When CDP is enabled, io_alloc directs traffic using the highest CLOSID
+		linked to an L3CODE resource. Although CBMs can be accessed through
+		either L3CODE or L3DATA resources, any updates to the schemata are
+		always routed through L3CODE.
+
 
 Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
