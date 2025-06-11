@@ -578,6 +578,7 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 	const struct tps6594_regulator_irq_type **ldos_irq_types;
 	const struct regulator_desc *ldo_regs;
 	size_t interrupt_count;
+	const struct regulator_desc *buck_cfg;
 
 	if (tps->chip_id == TPS65224) {
 		bucks_irq_types = tps65224_bucks_irq_types;
@@ -586,6 +587,12 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 		ldos_irq_types = tps65224_ldos_irq_types;
 		ldo_regs = tps65224_ldo_regs;
 		multi_phase_cnt = ARRAY_SIZE(tps65224_multi_regs);
+		buck_cfg = tps65224_buck_regs;
+	} else if (tps->chip_id == TPS652G1) {
+		ldo_regs = tps65224_ldo_regs;
+		/* TPS652G1 doesn't have multi phase buck converters */
+		multi_phase_cnt = 0;
+		buck_cfg = tps65224_buck_regs;
 	} else {
 		bucks_irq_types = tps6594_bucks_irq_types;
 		interrupt_count = ARRAY_SIZE(tps6594_buck1_irq_types);
@@ -593,6 +600,7 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 		ldos_irq_types = tps6594_ldos_irq_types;
 		ldo_regs = tps6594_ldo_regs;
 		multi_phase_cnt = ARRAY_SIZE(tps6594_multi_regs);
+		buck_cfg = buck_regs;
 	}
 
 	enum {
@@ -657,18 +665,24 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 		nr_buck = ARRAY_SIZE(tps65224_buck_regs);
 		nr_ldo = ARRAY_SIZE(tps65224_ldo_regs);
 		nr_types = TPS65224_REGS_INT_NB;
+	} else if (tps->chip_id == TPS652G1) {
+		nr_buck = ARRAY_SIZE(tps65224_buck_regs);
+		nr_ldo = ARRAY_SIZE(tps65224_ldo_regs);
 	} else {
 		nr_buck = ARRAY_SIZE(buck_regs);
 		nr_ldo = (tps->chip_id == LP8764) ? 0 : ARRAY_SIZE(tps6594_ldo_regs);
 		nr_types = REGS_INT_NB;
 	}
 
-	reg_irq_nb = nr_types * (nr_buck + nr_ldo);
+	if (tps->chip_id != TPS652G1) {
+		reg_irq_nb = nr_types * (nr_buck + nr_ldo);
 
-	irq_data = devm_kmalloc_array(tps->dev, reg_irq_nb,
-				      sizeof(struct tps6594_regulator_irq_data), GFP_KERNEL);
-	if (!irq_data)
-		return -ENOMEM;
+		irq_data = devm_kmalloc_array(tps->dev, reg_irq_nb,
+					      sizeof(struct tps6594_regulator_irq_data),
+					      GFP_KERNEL);
+		if (!irq_data)
+			return -ENOMEM;
+	}
 
 	for (i = 0; i < multi_phase_cnt; i++) {
 		if (!buck_multi[i])
@@ -679,6 +693,10 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 			return dev_err_probe(tps->dev, PTR_ERR(rdev),
 					     "failed to register %s regulator\n",
 					     pdev->name);
+
+		/* skip interrupts */
+		if (tps->chip_id == TPS652G1)
+			continue;
 
 		/* config multiphase buck12+buck34 */
 		if (i == MULTI_BUCK12_34)
@@ -718,13 +736,14 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 		if (buck_configured[i])
 			continue;
 
-		const struct regulator_desc *buck_cfg = (tps->chip_id == TPS65224) ?
-							 tps65224_buck_regs : buck_regs;
-
 		rdev = devm_regulator_register(&pdev->dev, &buck_cfg[i], &config);
 		if (IS_ERR(rdev))
 			return dev_err_probe(tps->dev, PTR_ERR(rdev),
 					     "failed to register %s regulator\n", pdev->name);
+
+		/* skip interrupts */
+		if (tps->chip_id == TPS652G1)
+			continue;
 
 		error = tps6594_request_reg_irqs(pdev, rdev, irq_data,
 						 bucks_irq_types[i], interrupt_count, &irq_idx);
@@ -741,6 +760,10 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 						     "failed to register %s regulator\n",
 						     pdev->name);
 
+			/* skip interrupts */
+			if (tps->chip_id == TPS652G1)
+				continue;
+
 			error = tps6594_request_reg_irqs(pdev, rdev, irq_data,
 							 ldos_irq_types[i], interrupt_count,
 							 &irq_idx);
@@ -752,6 +775,8 @@ static int tps6594_regulator_probe(struct platform_device *pdev)
 	if (tps->chip_id == TPS65224) {
 		irq_types = tps65224_ext_regulator_irq_types;
 		irq_count = ARRAY_SIZE(tps65224_ext_regulator_irq_types);
+	} else if (tps->chip_id == TPS652G1) {
+		irq_count = 0;
 	} else {
 		irq_types = tps6594_ext_regulator_irq_types;
 		if (tps->chip_id == LP8764)
