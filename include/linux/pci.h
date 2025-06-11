@@ -402,6 +402,7 @@ struct pci_dev {
 						   bit manually */
 	unsigned int	d3hot_delay;	/* D3hot->D0 transition time in ms */
 	unsigned int	d3cold_delay;	/* D3cold->D0 transition time in ms */
+	unsigned int    flr_delay;      /* pci post flr sleep time in us */
 
 	u16		l1ss;		/* L1SS Capability pointer */
 #ifdef CONFIG_PCIEASPM

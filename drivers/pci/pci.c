@@ -3233,6 +3233,8 @@ void pci_pm_init(struct pci_dev *dev)
 	dev->bridge_d3 = pci_bridge_d3_possible(dev);
 	dev->d3cold_allowed = true;
 
+	dev->flr_delay = PCI_FLR_DELAY;
+
 	dev->d1_support = false;
 	dev->d2_support = false;
 	if (!pci_no_d1d2(dev)) {
@@ -4529,9 +4531,11 @@ int pcie_flr(struct pci_dev *dev)
 	/*
 	 * Per PCIe r4.0, sec 6.6.2, a device must complete an FLR within
 	 * 100ms, but may silently discard requests while the FLR is in
-	 * progress.  Wait 100ms before trying to access the device.
+	 * progress.  Wait 100ms before trying to access the device, unless
+	 * otherwise modified if the device supports a faster reset.
+	 * Use usleep_range to support delays under 20ms.
 	 */
-	msleep(100);
+	usleep_range(dev->flr_delay, dev->flr_delay+1);
 
 	return pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
 }
