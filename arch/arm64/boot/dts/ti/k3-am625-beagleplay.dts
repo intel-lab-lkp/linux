@@ -585,6 +585,7 @@
 };
 
 &cpsw3g {
+	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii1_pins_default>, <&spe_pins_default>,
 		    <&gbe_pmx_obsclk>;
