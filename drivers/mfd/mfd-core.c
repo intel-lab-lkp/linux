@@ -212,17 +212,17 @@ match:
 				cell->name, platform_id);
 	}
 
-	mfd_acpi_add_device(cell, pdev);
-
-	if (cell->pdata_size) {
-		ret = platform_device_add_data(pdev,
-					cell->platform_data, cell->pdata_size);
-		if (ret)
-			goto fail_of_entry;
-	}
-
 	if (cell->swnode) {
 		ret = device_add_software_node(&pdev->dev, cell->swnode);
+		if (ret)
+			goto fail_of_entry;
+	} else {
+		/* add parent dev fwnode only when swnode is not present */
+		mfd_acpi_add_device(cell, pdev);
+	}
+
+	if (cell->pdata_size) {
+		ret = platform_device_add_data(pdev, cell->platform_data, cell->pdata_size);
 		if (ret)
 			goto fail_of_entry;
 	}
