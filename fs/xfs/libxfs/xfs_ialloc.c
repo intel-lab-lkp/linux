@@ -707,7 +707,6 @@ xfs_ialloc_ag_alloc(
 	struct xfs_inobt_rec_incore rec;
 	struct xfs_ino_geometry	*igeo = M_IGEO(tp->t_mountp);
 	uint16_t		allocmask = (uint16_t) -1;
-	int			do_sparse = 0;
 
 	memset(&args, 0, sizeof(args));
 	args.tp = tp;
@@ -715,13 +714,6 @@ xfs_ialloc_ag_alloc(
 	args.fsbno = NULLFSBLOCK;
 	args.oinfo = XFS_RMAP_OINFO_INODES;
 	args.pag = pag;
-
-#ifdef DEBUG
-	/* randomly do sparse inode allocations */
-	if (xfs_has_sparseinodes(tp->t_mountp) &&
-	    igeo->ialloc_min_blks < igeo->ialloc_blks)
-		do_sparse = get_random_u32_below(2);
-#endif
 
 	/*
 	 * Locking will ensure that we don't have two callers in here
@@ -742,8 +734,12 @@ xfs_ialloc_ag_alloc(
 	newino = be32_to_cpu(agi->agi_newino);
 	args.agbno = XFS_AGINO_TO_AGBNO(args.mp, newino) +
 		     igeo->ialloc_blks;
-	if (do_sparse)
+
+	if (xfs_has_sparseinodes(args.mp) &&
+	    igeo->ialloc_min_blks < igeo->ialloc_blks &&
+	    XFS_TEST_ERROR(false, args.mp, XFS_ERRTAG_SPARSE_IALLOC))
 		goto sparse_alloc;
+
 	if (likely(newino != NULLAGINO &&
 		  (args.agbno < be32_to_cpu(agi->agi_length)))) {
 		args.prod = 1;
