@@ -10,6 +10,33 @@
 
 static DEFINE_RAW_SPINLOCK(patch_lock);
 
+static bool is_image_text(unsigned long addr)
+{
+	return core_kernel_text(addr);
+}
+
+static void  *patch_map(void *addr, int fixmap)
+{
+	unsigned long uintaddr = (uintptr_t)addr;
+	bool image = is_image_text(uintaddr);
+	struct page *page;
+	phys_addr_t phys;
+
+	if (image)
+		phys = __pa_symbol(addr);
+	else {
+		page = vmalloc_to_page(addr);
+	phys = page_to_phys(page) + offset_in_page(addr);
+	}
+
+	return (void *)set_fixmap_offset(fixmap, phys);
+}
+
+static void patch_unmap(int fixmap)
+{
+	clear_fixmap(fixmap);
+}
+
 void simu_pc(struct pt_regs *regs, union loongarch_instruction insn)
 {
 	unsigned long pc = regs->csr_era;
@@ -218,6 +245,36 @@ int larch_insn_patch_text(void *addr, u32 insn)
 	return ret;
 }
 
+int larch_insn_text_copy(void *dst, void *src, size_t len)
+{
+	unsigned long flags;
+	size_t wlen = 0;
+	size_t size;
+	void *waddr;
+	void *ptr;
+	int ret = 0;
+
+	raw_spin_lock_irqsave(&patch_lock, flags);
+	while (wlen < len) {
+		ptr = dst + wlen;
+		size = min_t(size_t, PAGE_SIZE - offset_in_page(ptr),
+			     len - wlen);
+
+		waddr = patch_map(ptr, FIX_TEXT_POKE0);
+		ret = copy_to_kernel_nofault(waddr, src + wlen, size);
+		patch_unmap(FIX_TEXT_POKE0);
+
+		if (ret) {
+			pr_err("%s: operation failed\n", __func__);
+			break;
+		}
+		wlen += size;
+	}
+	raw_spin_unlock_irqrestore(&patch_lock, flags);
+
+	return ret;
+}
+
 u32 larch_insn_gen_nop(void)
 {
 	return INSN_NOP;
@@ -333,6 +390,34 @@ u32 larch_insn_gen_jirl(enum loongarch_gpr rd, enum loongarch_gpr rj, int imm)
 	}
 
 	emit_jirl(&insn, rd, rj, imm >> 2);
+
+	return insn.word;
+}
+
+u32 larch_insn_gen_beq(enum loongarch_gpr rd, enum loongarch_gpr rj, int imm)
+{
+	union loongarch_instruction insn;
+
+	if ((imm & 3) || imm < -SZ_128K || imm >= SZ_128K) {
+		pr_warn("The generated beq instruction is out of range.\n");
+		return INSN_BREAK;
+	}
+
+	emit_beq(&insn, rd, rj, imm >> 2);
+
+	return insn.word;
+}
+
+u32 larch_insn_gen_bne(enum loongarch_gpr rd, enum loongarch_gpr rj, int imm)
+{
+	union loongarch_instruction insn;
+
+	if ((imm & 3) || imm < -SZ_128K || imm >= SZ_128K) {
+		pr_warn("The generated bne instruction is out of range.\n");
+		return INSN_BREAK;
+	}
+
+	emit_bne(&insn, rj, rd, imm >> 2);
 
 	return insn.word;
 }
