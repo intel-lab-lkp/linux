@@ -158,6 +158,14 @@
 #define DATA_BUFFER_STATUS_LEVEL_TX(x)	((x) & GENMASK(7, 0))
 
 #define PRESENT_STATE			0x54
+#define   CM_TFR_ST_STS			GENMASK(21, 16)
+#define     CM_TFR_ST_STS_HALT		0x13
+#define   CM_TFR_STS			GENMASK(13, 8)
+#define     CM_TFR_STS_MASTER_SERV_IBI	0xe
+#define     CM_TFR_STS_MASTER_HALT	0xf
+#define     CM_TFR_STS_SLAVE_HALT	0x6
+#define   SDA_LINE_SIGNAL_LEVEL		BIT(1)
+#define   SCL_LINE_SIGNAL_LEVEL		BIT(0)
 #define CCC_DEVICE_STATUS		0x58
 #define DEVICE_ADDR_TABLE_POINTER	0x5c
 #define DEVICE_ADDR_TABLE_DEPTH(x)	(((x) & GENMASK(31, 16)) >> 16)
@@ -1393,6 +1401,8 @@ static void dw_i3c_master_handle_ibi_sir(struct dw_i3c_master *master,
 	unsigned long flags;
 	u8 addr, len;
 	int idx;
+	bool terminate_ibi = false;
+	u32 state;
 
 	addr = IBI_QUEUE_IBI_ADDR(status);
 	len = IBI_QUEUE_STATUS_DATA_LEN(status);
@@ -1435,6 +1445,7 @@ static void dw_i3c_master_handle_ibi_sir(struct dw_i3c_master *master,
 		dev_dbg_ratelimited(&master->base.dev,
 				    "IBI payload len %d greater than max %d\n",
 				    len, dev->ibi->max_payload_len);
+		terminate_ibi = true;
 		goto err_drain;
 	}
 
@@ -1450,6 +1461,9 @@ static void dw_i3c_master_handle_ibi_sir(struct dw_i3c_master *master,
 
 err_drain:
 	dw_i3c_master_drain_ibi_queue(master, len);
+	state = FIELD_GET(CM_TFR_STS, readl(master->regs + PRESENT_STATE));
+	if (terminate_ibi && state == CM_TFR_STS_MASTER_SERV_IBI)
+		master->platform_ops->gen_tbits_in(master);
 
 	spin_unlock_irqrestore(&master->devs_lock, flags);
 }

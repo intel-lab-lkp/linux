@@ -33,10 +33,27 @@
 #define AST2600_I3CG_REG1_SA_EN			BIT(15)
 #define AST2600_I3CG_REG1_INST_ID_MASK		GENMASK(19, 16)
 #define AST2600_I3CG_REG1_INST_ID(x)		(((x) << 16) & AST2600_I3CG_REG1_INST_ID_MASK)
+#define AST2600_I3CG_REG1_SCL_SW_MODE_OE	BIT(20)
+#define AST2600_I3CG_REG1_SCL_OUT_SW_MODE_VAL	BIT(21)
+#define AST2600_I3CG_REG1_SCL_IN_SW_MODE_VAL	BIT(23)
+#define AST2600_I3CG_REG1_SDA_SW_MODE_OE	BIT(24)
+#define AST2600_I3CG_REG1_SDA_OUT_SW_MODE_VAL	BIT(25)
+#define AST2600_I3CG_REG1_SDA_IN_SW_MODE_VAL	BIT(27)
+#define AST2600_I3CG_REG1_SCL_IN_SW_MODE_EN	BIT(28)
+#define AST2600_I3CG_REG1_SDA_IN_SW_MODE_EN	BIT(29)
+#define AST2600_I3CG_REG1_SCL_OUT_SW_MODE_EN	BIT(30)
+#define AST2600_I3CG_REG1_SDA_OUT_SW_MODE_EN	BIT(31)
 
 #define AST2600_DEFAULT_SDA_PULLUP_OHMS		2000
 
 #define DEV_ADDR_TABLE_IBI_PEC			BIT(11)
+
+#define IBI_QUEUE_STATUS		0x18
+#define PRESENT_STATE			0x54
+#define   CM_TFR_STS			GENMASK(13, 8)
+#define     CM_TFR_STS_MASTER_SERV_IBI	0xe
+#define   SDA_LINE_SIGNAL_LEVEL		BIT(1)
+#define   SCL_LINE_SIGNAL_LEVEL		BIT(0)
 
 struct ast2600_i3c {
 	struct dw_i3c_master dw;
@@ -117,9 +134,52 @@ static void ast2600_i3c_set_dat_ibi(struct dw_i3c_master *i3c,
 	}
 }
 
+static bool ast2600_i3c_fsm_exit_serv_ibi(struct dw_i3c_master *dw)
+{
+	u32 state;
+
+	/*
+	 * Clear the IBI queue to enable the hardware to generate SCL and
+	 * begin detecting the T-bit low to stop reading IBI data.
+	 */
+	readl(dw->regs + IBI_QUEUE_STATUS);
+	state = FIELD_GET(CM_TFR_STS, readl(dw->regs + PRESENT_STATE));
+	if (state == CM_TFR_STS_MASTER_SERV_IBI)
+		return false;
+
+	return true;
+}
+
+static void ast2600_i3c_gen_tbits_in(struct dw_i3c_master *dw)
+{
+	struct ast2600_i3c *i3c = to_ast2600_i3c(dw);
+	bool is_idle;
+	int ret;
+
+	regmap_write_bits(i3c->global_regs, AST2600_I3CG_REG1(i3c->global_idx),
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_VAL,
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_VAL);
+	regmap_write_bits(i3c->global_regs, AST2600_I3CG_REG1(i3c->global_idx),
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_EN,
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_EN);
+
+	regmap_write_bits(i3c->global_regs, AST2600_I3CG_REG1(i3c->global_idx),
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_VAL, 0);
+	ret = readx_poll_timeout_atomic(ast2600_i3c_fsm_exit_serv_ibi, dw,
+					is_idle, is_idle, 0, 2000000);
+	regmap_write_bits(i3c->global_regs, AST2600_I3CG_REG1(i3c->global_idx),
+			  AST2600_I3CG_REG1_SDA_IN_SW_MODE_EN, 0);
+	if (ret)
+		dev_err(&dw->base.dev,
+			"Failed to exit the I3C fsm from %lx(MASTER_SERV_IBI): %d",
+			FIELD_GET(CM_TFR_STS, readl(dw->regs + PRESENT_STATE)),
+			ret);
+}
+
 static const struct dw_i3c_platform_ops ast2600_i3c_ops = {
 	.init = ast2600_i3c_init,
 	.set_dat_ibi = ast2600_i3c_set_dat_ibi,
+	.gen_tbits_in = ast2600_i3c_gen_tbits_in,
 };
 
 static int ast2600_i3c_probe(struct platform_device *pdev)

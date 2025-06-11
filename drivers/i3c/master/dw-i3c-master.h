@@ -89,6 +89,15 @@ struct dw_i3c_platform_ops {
 	 */
 	void (*set_dat_ibi)(struct dw_i3c_master *i3c,
 			    struct i3c_dev_desc *dev, bool enable, u32 *reg);
+	/*
+	 * Gerenating the fake t-bit (SDA low) to stop the IBI storm when the received
+	 * data length of IBI is larger than the maximum IBI payload.
+	 *
+	 * When an IBI is received and SDA remains high after the address phase, the i3c
+	 * controller may enter an infinite loop while trying to read data until the t-bit
+	 * appears
+	 */
+	void (*gen_tbits_in)(struct dw_i3c_master *i3c);
 };
 
 extern int dw_i3c_common_probe(struct dw_i3c_master *master,
