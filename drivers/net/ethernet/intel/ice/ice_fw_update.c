@@ -1008,6 +1008,10 @@ int ice_devlink_flash_update(struct devlink *devlink,
 					      DEVLINK_FLASH_OVERWRITE_IDENTIFIERS)) {
 		/* overwrite both settings and identifiers, preserve nothing */
 		preservation = ICE_AQC_NVM_NO_PRESERVATION;
+	} else if (params->overwrite_mask == (DEVLINK_FLASH_OVERWRITE_SETTINGS |
+					      DEVLINK_FLASH_OVERWRITE_IDENTIFIERS |
+					      DEVLINK_FLASH_OVERWRITE_FROM_FACTORY_SETTINGS)) {
+		preservation = ICE_AQC_NVM_FACTORY_DEFAULT;
 	} else {
 		NL_SET_ERR_MSG_MOD(extack, "Requested overwrite mask is not supported");
 		return -EOPNOTSUPP;
