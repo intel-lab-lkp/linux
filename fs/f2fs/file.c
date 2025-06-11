@@ -5015,6 +5015,18 @@ static void f2fs_dio_write_submit_io(const struct iomap_iter *iter,
 	enum log_type type = f2fs_rw_hint_to_seg_type(sbi, inode->i_write_hint);
 	enum temp_type temp = f2fs_get_segment_temp(sbi, type);
 
+	/* if fadvise set to hot, override the temperature */
+	struct f2fs_io_info fio = {
+		.sbi = sbi,
+		.inode = inode,
+		.type = DATA,
+		.op = REQ_OP_WRITE,
+		.temp = file_is_hot(inode) ? HOT : temp,
+		.op_flags = bio->bi_opf,
+		.page = NULL,
+	};
+	bio->bi_opf |= f2fs_io_flags(&fio);
+
 	bio->bi_write_hint = f2fs_io_type_to_rw_hint(sbi, DATA, temp);
 	submit_bio(bio);
 }
