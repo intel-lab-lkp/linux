@@ -222,6 +222,12 @@ combined flash image that contains the ``fw.mgmt``, ``fw.undi``, and
        identifying fields such as the MAC address, VPD area, and device
        serial number. It is expected that this combination be used with an
        image customized for the specific device.
+   * - ``DEVLINK_FLASH_OVERWRITE_SETTINGS``, ``DEVLINK_FLASH_OVERWRITE_IDENTIFIERS``
+       and ``DEVLINK_FLASH_OVERWRITE_FROM_FACTORY_SETTINGS``
+     - Do not preserve either settings or identifiers. Overwrite everything
+       in the flash with contents of the factory settings section instead of
+       provided image.
+
 
 The ice hardware does not support overwriting only identifiers while
 preserving settings, and thus ``DEVLINK_FLASH_OVERWRITE_IDENTIFIERS`` on its
