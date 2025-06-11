@@ -45,6 +45,20 @@
  */
 #undef FSCRYPT_MAX_KEY_SIZE
 
+/*
+ * This mask is passed as the third argument to crypto_alloc_*() functions to
+ * disallow CryptoAPI algorithm implementations that have any of these flags
+ * set.  This ensures that fscrypt uses only either well-tested "software"
+ * crypto (which these days is usually hardware-accelerated by specialized CPU
+ * instructions) or an inline encryption engine, not obsolete dedicated crypto
+ * accelerators.  Dedicated crypto accelerators often have buggy drivers and/or
+ * are slower than the "software" crypto, and fscrypt has never really been able
+ * to properly take advantage of them, as it en/decrypts data synchronously.
+ */
+#define FSCRYPT_CRYPTOAPI_MASK                            \
+	(CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY | \
+	 CRYPTO_ALG_KERN_DRIVER_ONLY)
+
 #define FSCRYPT_CONTEXT_V1	1
 #define FSCRYPT_CONTEXT_V2	2
 
