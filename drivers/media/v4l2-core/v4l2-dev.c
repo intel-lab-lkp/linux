@@ -907,6 +907,7 @@ int __video_register_device(struct video_device *vdev,
 	int ret;
 	int minor_offset = 0;
 	int minor_cnt = VIDEO_NUM_DEVICES;
+	int start;
 	const char *name_base;
 
 	/* A minor value of -1 marks this video device as never
@@ -994,10 +995,11 @@ int __video_register_device(struct video_device *vdev,
 
 	/* Pick a device node number */
 	mutex_lock(&videodev_lock);
-	nr = devnode_find(vdev, nr == -1 ? 0 : nr, minor_cnt);
-	if (nr == minor_cnt)
-		nr = devnode_find(vdev, 0, minor_cnt);
-	if (nr == minor_cnt) {
+	start = (nr < 0) ? 0 : nr;
+	nr = devnode_find(vdev, start, minor_cnt);
+	if (nr == minor_cnt && start != 0)
+		nr = devnode_find(vdev, 0, start);
+	if (nr == (start != 0 ? start : minor_cnt)) {
 		pr_err("could not get a free device node number\n");
 		mutex_unlock(&videodev_lock);
 		return -ENFILE;
