@@ -1232,6 +1232,12 @@ properties:
           - const: tq,imx8mp-tqma8mpql            # TQ-Systems GmbH i.MX8MP TQMa8MPQL SOM
           - const: fsl,imx8mp
 
+      - description: Ultratronik SBC i.MX8MP based boards
+        items:
+          - enum:
+              - const: ultratronik,imx8mp-ultra-mach-sbc
+              - const: fsl,imx8mp
+
       - description: Variscite VAR-SOM-MX8M Plus based boards
         items:
           - const: variscite,var-som-mx8mp-symphony
