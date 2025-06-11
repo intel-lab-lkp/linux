@@ -660,4 +660,14 @@ config NETDEV_LEGACY_INIT
 	  Drivers that call netdev_boot_setup_check() should select this
 	  symbol, everything else no longer needs it.
 
+config ICCNET
+	tristate "Intel IPU ICCNET interface"
+	depends on ACPI || OF
+	help
+
+	  Enables support for the Intel ICCNET (Inter-Complex
+	  Communication Network) interface used in Intel IPU
+	  (Infrastructure Processing Unit). It provides a point-to-point
+	  communication link between 2 CPU complexes over a shared memory
+	  transport.
 endif # NETDEVICES
