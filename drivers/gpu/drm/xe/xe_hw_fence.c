@@ -20,9 +20,8 @@ static struct kmem_cache *xe_hw_fence_slab;
 
 int __init xe_hw_fence_module_init(void)
 {
-	xe_hw_fence_slab = kmem_cache_create("xe_hw_fence",
-					     sizeof(struct xe_hw_fence), 0,
-					     SLAB_HWCACHE_ALIGN, NULL);
+	xe_hw_fence_slab = KMEM_CACHE(xe_hw_fence, SLAB_HWCACHE_ALIGN);
+
 	if (!xe_hw_fence_slab)
 		return -ENOMEM;
 
