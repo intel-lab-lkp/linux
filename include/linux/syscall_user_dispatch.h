@@ -48,4 +48,6 @@ static inline int syscall_user_dispatch_set_config(struct task_struct *task,
 
 #endif /* CONFIG_GENERIC_ENTRY */
 
+bool syscall_user_dispatch(struct pt_regs *regs);
+
 #endif /* _SYSCALL_USER_DISPATCH_H */
