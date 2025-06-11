@@ -33,6 +33,7 @@
 #include <linux/sched/cputime.h>
 #include <linux/spinlock.h>
 #include <linux/eventfd.h>
+#include <linux/export.h>
 
 #include <asm/apicdef.h>
 #include <asm/mshyperv.h>

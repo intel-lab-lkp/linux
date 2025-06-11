@@ -5,6 +5,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kvm_host.h>
+#include <linux/export.h>
 #include <asm/mshyperv.h>
 
 #include "hyperv.h"
