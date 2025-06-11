@@ -2683,21 +2683,6 @@ struct scsi_event *sdev_evt_alloc(enum scsi_device_event evt_type,
 	evt->evt_type = evt_type;
 	INIT_LIST_HEAD(&evt->node);
 
-	/* evt_type-specific initialization, if any */
-	switch (evt_type) {
-	case SDEV_EVT_MEDIA_CHANGE:
-	case SDEV_EVT_INQUIRY_CHANGE_REPORTED:
-	case SDEV_EVT_CAPACITY_CHANGE_REPORTED:
-	case SDEV_EVT_SOFT_THRESHOLD_REACHED_REPORTED:
-	case SDEV_EVT_MODE_PARAMETER_CHANGE_REPORTED:
-	case SDEV_EVT_LUN_CHANGE_REPORTED:
-	case SDEV_EVT_ALUA_STATE_CHANGE_REPORTED:
-	case SDEV_EVT_POWER_ON_RESET_OCCURRED:
-	default:
-		/* do nothing */
-		break;
-	}
-
 	return evt;
 }
 EXPORT_SYMBOL_GPL(sdev_evt_alloc);
