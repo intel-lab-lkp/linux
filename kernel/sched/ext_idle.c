@@ -17,7 +17,6 @@ static DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_enabled);
 /* Enable/disable per-node idle cpumasks */
 static DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_per_node);
 
-#ifdef CONFIG_SMP
 /* Enable/disable LLC aware optimizations */
 static DEFINE_STATIC_KEY_FALSE(scx_selcpu_topo_llc);
 
@@ -794,7 +793,6 @@ static void reset_idle_masks(struct sched_ext_ops *ops)
 		cpumask_and(idle_cpumask(node)->smt, cpu_online_mask, node_mask);
 	}
 }
-#endif	/* CONFIG_SMP */
 
 void scx_idle_enable(struct sched_ext_ops *ops)
 {
@@ -808,9 +806,7 @@ void scx_idle_enable(struct sched_ext_ops *ops)
 	else
 		static_branch_disable_cpuslocked(&scx_builtin_idle_per_node);
 
-#ifdef CONFIG_SMP
 	reset_idle_masks(ops);
-#endif
 }
 
 void scx_idle_disable(void)
@@ -896,7 +892,6 @@ s32 select_cpu_from_kfunc(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 	if (!rq)
 		lockdep_assert_held(&p->pi_lock);
 
-#ifdef CONFIG_SMP
 	/*
 	 * This may also be called from ops.enqueue(), so we need to handle
 	 * per-CPU tasks as well. For these tasks, we can skip all idle CPU
@@ -913,9 +908,7 @@ s32 select_cpu_from_kfunc(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 		cpu = scx_select_cpu_dfl(p, prev_cpu, wake_flags,
 					 allowed ?: p->cpus_ptr, flags);
 	}
-#else
-	cpu = -EBUSY;
-#endif
+
 	if (scx_kf_allowed_if_unlocked())
 		task_rq_unlock(rq, p, &rf);
 
@@ -1010,11 +1003,7 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_cpumask_node(int node)
 	if (node < 0)
 		return cpu_none_mask;
 
-#ifdef CONFIG_SMP
 	return idle_cpumask(node)->cpu;
-#else
-	return cpu_none_mask;
-#endif
 }
 
 /**
@@ -1034,11 +1023,7 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_cpumask(void)
 	if (!check_builtin_idle_enabled())
 		return cpu_none_mask;
 
-#ifdef CONFIG_SMP
 	return idle_cpumask(NUMA_NO_NODE)->cpu;
-#else
-	return cpu_none_mask;
-#endif
 }
 
 /**
@@ -1057,14 +1042,10 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_smtmask_node(int node)
 	if (node < 0)
 		return cpu_none_mask;
 
-#ifdef CONFIG_SMP
 	if (sched_smt_active())
 		return idle_cpumask(node)->smt;
 	else
 		return idle_cpumask(node)->cpu;
-#else
-	return cpu_none_mask;
-#endif
 }
 
 /**
@@ -1085,14 +1066,10 @@ __bpf_kfunc const struct cpumask *scx_bpf_get_idle_smtmask(void)
 	if (!check_builtin_idle_enabled())
 		return cpu_none_mask;
 
-#ifdef CONFIG_SMP
 	if (sched_smt_active())
 		return idle_cpumask(NUMA_NO_NODE)->smt;
 	else
 		return idle_cpumask(NUMA_NO_NODE)->cpu;
-#else
-	return cpu_none_mask;
-#endif
 }
 
 /**
