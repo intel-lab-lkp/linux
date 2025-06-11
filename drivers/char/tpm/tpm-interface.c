@@ -88,7 +88,8 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 	int rc;
 	ssize_t len = 0;
 	u32 count, ordinal;
-	unsigned long stop;
+	ktime_t timeout, curr_time;
+	unsigned int ord_dur_us;
 
 	if (bufsiz < TPM_HEADER_SIZE)
 		return -EINVAL;
@@ -126,8 +127,16 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 	if (chip->flags & TPM_CHIP_FLAG_IRQ)
 		goto out_recv;
 
-	stop = jiffies + tpm_calc_ordinal_duration(chip, ordinal);
+	ord_dur_us = jiffies_to_usecs(tpm_calc_ordinal_duration(chip, ordinal));
+	timeout = ktime_add_us(ktime_get(), ord_dur_us);
 	do {
+		/*
+		 * Save the time of the completion check. This way even if CPU
+		 * goes to sleep indefinitely on tpm_sleep, the driver will
+		 * check for completion one more time instead of timing out
+		 * instantly after waking up.
+		 */
+		curr_time = ktime_get();
 		u8 status = tpm_chip_status(chip);
 		if ((status & chip->ops->req_complete_mask) ==
 		    chip->ops->req_complete_val)
@@ -140,7 +149,7 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 
 		tpm_msleep(TPM_TIMEOUT_POLL);
 		rmb();
-	} while (time_before(jiffies, stop));
+	} while (ktime_before(curr_time, timeout));
 
 	tpm_chip_cancel(chip);
 	dev_err(&chip->dev, "Operation Timed out\n");
