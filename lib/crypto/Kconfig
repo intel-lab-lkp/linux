@@ -179,6 +179,7 @@ config CRYPTO_LIB_SHA512
 config CRYPTO_LIB_SHA512_ARCH
 	bool
 	depends on CRYPTO_LIB_SHA512
+	default y if ARM && !CPU_V7M
 
 config CRYPTO_LIB_SM3
 	tristate
