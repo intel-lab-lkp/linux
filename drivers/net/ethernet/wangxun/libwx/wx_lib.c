@@ -1783,12 +1783,22 @@ static int wx_acquire_msix_vectors(struct wx *wx)
 		return nvecs;
 	}
 
-	wx->msix_entry->entry = 0;
-	wx->msix_entry->vector = pci_irq_vector(wx->pdev, 0);
 	nvecs -= 1;
-	for (i = 0; i < nvecs; i++) {
-		wx->msix_q_entries[i].entry = i;
-		wx->msix_q_entries[i].vector = pci_irq_vector(wx->pdev, i + 1);
+	/* VF has a fixed interrupt mapping. */
+	if (wx->pdev->is_virtfn) {
+		for (i = 0; i < nvecs; i++) {
+			wx->msix_q_entries[i].entry = i;
+			wx->msix_q_entries[i].vector = pci_irq_vector(wx->pdev, i);
+		}
+		wx->msix_entry->entry = i;
+		wx->msix_entry->vector = pci_irq_vector(wx->pdev, i);
+	} else {
+		wx->msix_entry->entry = 0;
+		wx->msix_entry->vector = pci_irq_vector(wx->pdev, 0);
+		for (i = 0; i < nvecs; i++) {
+			wx->msix_q_entries[i].entry = i;
+			wx->msix_q_entries[i].vector = pci_irq_vector(wx->pdev, i + 1);
+		}
 	}
 
 	wx->num_q_vectors = nvecs;
@@ -1810,7 +1820,7 @@ static int wx_set_interrupt_capability(struct wx *wx)
 
 	/* We will try to get MSI-X interrupts first */
 	ret = wx_acquire_msix_vectors(wx);
-	if (ret == 0 || (ret == -ENOMEM))
+	if (ret == 0 || (ret == -ENOMEM) || pdev->is_virtfn)
 		return ret;
 
 	/* Disable VMDq support */
@@ -2161,7 +2171,12 @@ int wx_init_interrupt_scheme(struct wx *wx)
 	int ret;
 
 	/* Number of supported queues */
-	wx_set_num_queues(wx);
+	if (wx->pdev->is_virtfn) {
+		if (wx->set_num_queues)
+			wx->set_num_queues(wx);
+	} else {
+		wx_set_num_queues(wx);
+	}
 
 	/* Set interrupt mode */
 	ret = wx_set_interrupt_capability(wx);

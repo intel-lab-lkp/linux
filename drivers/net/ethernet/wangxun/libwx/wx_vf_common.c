@@ -17,6 +17,7 @@ int wxvf_suspend(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	netif_device_detach(wx->netdev);
+	wx_clear_interrupt_scheme(wx);
 	pci_disable_device(pdev);
 
 	return 0;
@@ -35,6 +36,7 @@ int wxvf_resume(struct device *dev_d)
 	struct wx *wx = pci_get_drvdata(pdev);
 
 	pci_set_master(pdev);
+	wx_init_interrupt_scheme(wx);
 	netif_device_attach(wx->netdev);
 
 	return 0;
@@ -51,6 +53,7 @@ void wxvf_remove(struct pci_dev *pdev)
 	kfree(wx->vfinfo);
 	kfree(wx->rss_key);
 	kfree(wx->mac_table);
+	wx_clear_interrupt_scheme(wx);
 	pci_release_selected_regions(pdev,
 				     pci_select_bars(pdev, IORESOURCE_MEM));
 	pci_disable_device(pdev);
@@ -239,9 +242,35 @@ int wx_set_mac_vf(struct net_device *netdev, void *p)
 }
 EXPORT_SYMBOL(wx_set_mac_vf);
 
+static void wxvf_irq_enable(struct wx *wx)
+{
+	wr32(wx, WX_VXIMC, wx->eims_enable_mask);
+}
+
+static void wxvf_up_complete(struct wx *wx)
+{
+	wx_configure_msix_vf(wx);
+
+	/* clear any pending interrupts, may auto mask */
+	wr32(wx, WX_VXICR, U32_MAX);
+	wxvf_irq_enable(wx);
+}
+
 int wxvf_open(struct net_device *netdev)
 {
+	struct wx *wx = netdev_priv(netdev);
+	int err;
+
+	err = wx_request_msix_irqs_vf(wx);
+	if (err)
+		goto err_reset;
+
+	wxvf_up_complete(wx);
+
 	return 0;
+err_reset:
+	wx_reset_vf(wx);
+	return err;
 }
 EXPORT_SYMBOL(wxvf_open);
 
@@ -249,8 +278,13 @@ static void wxvf_down(struct wx *wx)
 {
 	struct net_device *netdev = wx->netdev;
 
+	netif_tx_stop_all_queues(netdev);
 	netif_tx_disable(netdev);
+	wx_napi_disable_all(wx);
 	wx_reset_vf(wx);
+
+	wx_clean_all_tx_rings(wx);
+	wx_clean_all_rx_rings(wx);
 }
 
 int wxvf_close(struct net_device *netdev)
@@ -258,6 +292,7 @@ int wxvf_close(struct net_device *netdev)
 	struct wx *wx = netdev_priv(netdev);
 
 	wxvf_down(wx);
+	wx_free_irq(wx);
 
 	return 0;
 }
