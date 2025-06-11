@@ -2363,6 +2363,42 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
 }
 
 /*
+ * This is used to submit mapped buffers in a single folio that is not fully
+ * mapped for various reasons, such as insufficient space or journal credits.
+ */
+static int mpage_submit_buffers(struct mpage_da_data *mpd, loff_t pos)
+{
+	struct inode *inode = mpd->inode;
+	struct folio *folio;
+	int ret;
+
+	folio = filemap_get_folio(inode->i_mapping, mpd->first_page);
+	if (IS_ERR(folio))
+		return PTR_ERR(folio);
+
+	ret = mpage_submit_folio(mpd, folio);
+	if (ret)
+		goto out;
+	/*
+	 * Update first_page to prevent this folio from being released in
+	 * mpage_release_unused_pages(), it should not equal to the folio
+	 * index.
+	 *
+	 * The first_page will be reset to the aligned folio index when this
+	 * folio is written again in the next round. Additionally, do not
+	 * update wbc->nr_to_write here, as it will be updated once the
+	 * entire folio has finished processing.
+	 */
+	mpd->first_page = round_up(pos, PAGE_SIZE) >> PAGE_SHIFT;
+	WARN_ON_ONCE((folio->index == mpd->first_page) ||
+		     !folio_contains(folio, pos >> PAGE_SHIFT));
+out:
+	folio_unlock(folio);
+	folio_put(folio);
+	return ret;
+}
+
+/*
  * mpage_map_and_submit_extent - map extent starting at mpd->lblk of length
  *				 mpd->len and submit pages underlying it for IO
  *
@@ -2412,8 +2448,16 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 			 */
 			if ((err == -ENOMEM) ||
 			    (err == -ENOSPC && ext4_count_free_clusters(sb))) {
-				if (progress)
+				/*
+				 * We may have already allocated extents for
+				 * some bhs inside the folio, issue the
+				 * corresponding data to prevent stale data.
+				 */
+				if (progress) {
+					if (mpage_submit_buffers(mpd, disksize))
+						goto invalidate_dirty_pages;
 					goto update_disksize;
+				}
 				return err;
 			}
 			ext4_msg(sb, KERN_CRIT,
@@ -2432,6 +2476,8 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 			*give_up_on_write = true;
 			return err;
 		}
+		disksize = ((loff_t)(map->m_lblk + map->m_len)) <<
+				inode->i_blkbits;
 		progress = 1;
 		/*
 		 * Update buffer state, submit mapped pages, and get us new
@@ -2442,12 +2488,12 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 			goto update_disksize;
 	} while (map->m_len);
 
+	disksize = ((loff_t)mpd->first_page) << PAGE_SHIFT;
 update_disksize:
 	/*
 	 * Update on-disk size after IO is submitted.  Races with
 	 * truncate are avoided by checking i_size under i_data_sem.
 	 */
-	disksize = ((loff_t)mpd->first_page) << PAGE_SHIFT;
 	if (disksize > READ_ONCE(EXT4_I(inode)->i_disksize)) {
 		int err2;
 		loff_t i_size;
