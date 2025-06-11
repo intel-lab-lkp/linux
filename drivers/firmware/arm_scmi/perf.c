@@ -1068,24 +1068,6 @@ scmi_power_scale_get(const struct scmi_protocol_handle *ph)
 	return pi->power_scale;
 }
 
-static const struct scmi_perf_proto_ops perf_proto_ops = {
-	.num_domains_get = scmi_perf_num_domains_get,
-	.info_get = scmi_perf_info_get,
-	.limits_set = scmi_perf_limits_set,
-	.limits_get = scmi_perf_limits_get,
-	.level_set = scmi_perf_level_set,
-	.level_get = scmi_perf_level_get,
-	.transition_latency_get = scmi_dvfs_transition_latency_get,
-	.rate_limit_get = scmi_dvfs_rate_limit_get,
-	.device_opps_add = scmi_dvfs_device_opps_add,
-	.freq_set = scmi_dvfs_freq_set,
-	.freq_get = scmi_dvfs_freq_get,
-	.est_power_get = scmi_dvfs_est_power_get,
-	.fast_switch_possible = scmi_fast_switch_possible,
-	.fast_switch_rate_limit = scmi_fast_switch_rate_limit,
-	.power_scale_get = scmi_power_scale_get,
-};
-
 static bool scmi_perf_notify_supported(const struct scmi_protocol_handle *ph,
 				       u8 evt_id, u32 src_id)
 {
@@ -1106,6 +1088,25 @@ static bool scmi_perf_notify_supported(const struct scmi_protocol_handle *ph,
 
 	return supported;
 }
+
+static const struct scmi_perf_proto_ops perf_proto_ops = {
+	.num_domains_get = scmi_perf_num_domains_get,
+	.info_get = scmi_perf_info_get,
+	.limits_set = scmi_perf_limits_set,
+	.limits_get = scmi_perf_limits_get,
+	.level_set = scmi_perf_level_set,
+	.level_get = scmi_perf_level_get,
+	.transition_latency_get = scmi_dvfs_transition_latency_get,
+	.rate_limit_get = scmi_dvfs_rate_limit_get,
+	.device_opps_add = scmi_dvfs_device_opps_add,
+	.freq_set = scmi_dvfs_freq_set,
+	.freq_get = scmi_dvfs_freq_get,
+	.est_power_get = scmi_dvfs_est_power_get,
+	.fast_switch_possible = scmi_fast_switch_possible,
+	.fast_switch_rate_limit = scmi_fast_switch_rate_limit,
+	.power_scale_get = scmi_power_scale_get,
+	.notify_supported = scmi_perf_notify_supported,
+};
 
 static int scmi_perf_set_notify_enabled(const struct scmi_protocol_handle *ph,
 					u8 evt_id, u32 src_id, bool enable)

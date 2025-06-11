@@ -155,6 +155,7 @@ struct scmi_perf_domain_info {
  *	successive fast_switching requests
  * @power_scale_get: indicates if the power values provided are in milliWatts
  *	or in some other (abstract) scale
+ * @notify_supported: indicates if the event is supported
  */
 struct scmi_perf_proto_ops {
 	int (*num_domains_get)(const struct scmi_protocol_handle *ph);
@@ -185,6 +186,8 @@ struct scmi_perf_proto_ops {
 	int (*fast_switch_rate_limit)(const struct scmi_protocol_handle *ph,
 				      u32 domain, u32 *rate_limit);
 	enum scmi_power_scale (*power_scale_get)(const struct scmi_protocol_handle *ph);
+	bool (*notify_supported)(const struct scmi_protocol_handle *ph, u8 evt_id,
+				 u32 src_id);
 };
 
 /**
