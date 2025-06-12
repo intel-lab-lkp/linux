@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/memory-controllers/socfpga-sdram-edac.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Altera SoCFPGA SDRAM EDAC Controller
+
+maintainers:
+  - Matthew Gerlach <matthew.gerlach@altera.com>
+
+description: |
+  EDAC-compatible controller for SDRAM error detection and correction on
+  Altera (Intel) SoCFPGA platforms.
+
+properties:
+  compatible:
+    enum:
+      - altr,sdram-edac
+      - altr,sdram-edac-a10
+      - altr,sdram-edac-s10
+
+  altr,sdr-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the SDRAM system controller (SDR) syscon node.
+
+  interrupts:
+    minItems: 1
+    maxItems: 2
+    description: |
+      One or two interrupt specifiers for ECC error interrupt(s).
+      Arria 10 SoCs use two interrupt lines.
+
+  reg:
+    maxItems: 1
+    description: Memory-mapped base address and size of the SDRAM EDAC controller.
+
+required:
+  - compatible
+  - altr,sdr-syscon
+  - interrupts
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@ffb90000 {
+    compatible = "altr,sdram-edac-a10";
+    reg = <0xffb90000 0x1000>;
+    altr,sdr-syscon = <&sdr>;
+    interrupts = <GIC_SPI 45 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@f8004000 {
+    compatible = "altr,sdram-edac-s10";
+    reg = <0xf8004000 0x1000>;
+    altr,sdr-syscon = <&sdr>;
+    interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    edac@ffc25000 {
+    compatible = "altr,sdram-edac";
+    reg = <0xffc25000 0x1000>;
+    altr,sdr-syscon = <&sdr>;
+    interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+    };
