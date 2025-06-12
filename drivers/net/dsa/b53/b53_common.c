@@ -2490,8 +2490,18 @@ struct b53_chip_data {
 
 static const struct b53_chip_data b53_switch_chips[] = {
 	{
-		.chip_id = BCM5325_DEVICE_ID,
-		.dev_name = "BCM5325",
+		.chip_id = BCM5325M_DEVICE_ID,
+		.dev_name = "BCM5325M",
+		.vlans = 16,
+		.enabled_ports = 0x3f,
+		.arl_bins = 2,
+		.arl_buckets = 1024,
+		.imp_port = 5,
+		.duplex_reg = B53_DUPLEX_STAT_FE,
+	},
+	{
+		.chip_id = BCM5325E_DEVICE_ID,
+		.dev_name = "BCM5325E",
 		.vlans = 16,
 		.enabled_ports = 0x3f,
 		.arl_bins = 2,
@@ -2938,10 +2948,22 @@ int b53_switch_detect(struct b53_device *dev)
 		b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_TABLE_ACCESS_25, 0xf);
 		b53_read16(dev, B53_VLAN_PAGE, B53_VLAN_TABLE_ACCESS_25, &tmp);
 
-		if (tmp == 0xf)
-			dev->chip_id = BCM5325_DEVICE_ID;
-		else
+		if (tmp == 0xf) {
+			u32 phy_id;
+			int val;
+
+			val = b53_phy_read16(dev->ds, 0, MII_PHYSID1);
+			phy_id = (val & 0xffff) << 16;
+			val = b53_phy_read16(dev->ds, 0, MII_PHYSID2);
+			phy_id |= (val & 0xffff);
+
+			if (phy_id == 0x0143bc30)
+				dev->chip_id = BCM5325E_DEVICE_ID;
+			else
+				dev->chip_id = BCM5325M_DEVICE_ID;
+		} else {
 			dev->chip_id = BCM5365_DEVICE_ID;
+		}
 		break;
 	case BCM5389_DEVICE_ID:
 	case BCM5395_DEVICE_ID:
@@ -2975,7 +2997,7 @@ int b53_switch_detect(struct b53_device *dev)
 		}
 	}
 
-	if (dev->chip_id == BCM5325_DEVICE_ID)
+	if (is5325(dev))
 		return b53_read8(dev, B53_STAT_PAGE, B53_REV_ID_25,
 				 &dev->core_rev);
 	else

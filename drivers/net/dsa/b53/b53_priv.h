@@ -60,7 +60,8 @@ struct b53_io_ops {
 
 enum {
 	BCM4908_DEVICE_ID = 0x4908,
-	BCM5325_DEVICE_ID = 0x25,
+	BCM5325M_DEVICE_ID = 0x25,
+	BCM5325E_DEVICE_ID = 0x25e,
 	BCM5365_DEVICE_ID = 0x65,
 	BCM5389_DEVICE_ID = 0x89,
 	BCM5395_DEVICE_ID = 0x95,
@@ -162,7 +163,18 @@ struct b53_device {
 
 static inline int is5325(struct b53_device *dev)
 {
-	return dev->chip_id == BCM5325_DEVICE_ID;
+	return dev->chip_id == BCM5325E_DEVICE_ID ||
+		dev->chip_id == BCM5325M_DEVICE_ID;
+}
+
+static inline int is5325e(struct b53_device *dev)
+{
+	return dev->chip_id == BCM5325E_DEVICE_ID;
+}
+
+static inline int is5325m(struct b53_device *dev)
+{
+	return dev->chip_id == BCM5325M_DEVICE_ID;
 }
 
 static inline int is5365(struct b53_device *dev)
