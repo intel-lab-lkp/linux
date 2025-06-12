@@ -895,10 +895,30 @@ int ext2_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		u64 start, u64 len)
 {
 	int ret;
+	u64 maxbytes;
 
 	inode_lock(inode);
-	len = min_t(u64, len, i_size_read(inode));
+	maxbytes = inode->i_sb->s_maxbytes;
+
+	if (len == 0) {
+		ret = -EINVAL;
+		goto unlock_inode;
+	}
+
+	if (start > maxbytes) {
+		ret = -EFBIG;
+		goto unlock_inode;
+	}
+
+	/*
+	 * Shrink request scope to what the fs can actually handle.
+	 */
+	if (len > maxbytes || (maxbytes - len) < start)
+		len = maxbytes - start;
+
 	ret = iomap_fiemap(inode, fieinfo, start, len, &ext2_iomap_ops);
+
+unlock_inode:
 	inode_unlock(inode);
 
 	return ret;
