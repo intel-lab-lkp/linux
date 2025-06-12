@@ -23,6 +23,8 @@ properties:
           - nvidia,tegra30-udc
           - nvidia,tegra114-udc
           - nvidia,tegra124-udc
+          - nxp,s32g2-usb
+          - nxp,s32g3-usb
           - qcom,ci-hdrc
       - items:
           - enum:
