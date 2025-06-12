@@ -4605,10 +4605,12 @@ static void disas_funcs(const char *funcs)
 	/* real snprintf() */
 	snprintf(cmd, size, objdump_str, cross_compile, objname, funcs);
 	ret = system(cmd);
+	free(cmd);
 	if (ret) {
 		WARN("disassembly failed: %d", ret);
 		return;
 	}
+
 }
 
 static void disas_warned_funcs(struct objtool_file *file)
@@ -4629,6 +4631,7 @@ static void disas_warned_funcs(struct objtool_file *file)
 				tmp = malloc(strlen(funcs) + strlen(sym->name) + 2);
 				if (!tmp) {
 					ERROR_GLIBC("malloc");
+					free(funcs);
 					return;
 				}
 				sprintf(tmp, "%s %s", funcs, sym->name);
@@ -4638,8 +4641,10 @@ static void disas_warned_funcs(struct objtool_file *file)
 		}
 	}
 
-	if (funcs)
+	if (funcs) {
 		disas_funcs(funcs);
+		free(funcs);
+	}
 }
 
 struct insn_chunk {
