@@ -242,10 +242,17 @@ static u32 get_reserved(struct intel_gmbus *bus)
 	struct intel_display *display = bus->display;
 	u32 reserved = 0;
 
-	/* On most chips, these bits must be preserved in software. */
-	if (!display->platform.i830 && !display->platform.i845g)
-		reserved = intel_de_read_notrace(display, bus->gpio_reg) &
-			(GPIO_DATA_PULLUP_DISABLE | GPIO_CLOCK_PULLUP_DISABLE);
+	if (!display->platform.i830 && !display->platform.i845g) {
+		/* On most chips, these bits must be preserved in software. */
+		u32 preserve_bits = GPIO_DATA_PULLUP_DISABLE | GPIO_CLOCK_PULLUP_DISABLE;
+
+		/* PTL: Wa_16025573575: the masks bits need to be preserved through out */
+		if (DISPLAY_VER(display) == 30)
+			preserve_bits |= GPIO_CLOCK_DIR_MASK | GPIO_CLOCK_VAL_MASK |
+					 GPIO_DATA_DIR_MASK | GPIO_DATA_VAL_MASK;
+
+		reserved = intel_de_read_notrace(display, bus->gpio_reg) & preserve_bits;
+	}
 
 	return reserved;
 }
@@ -308,6 +315,23 @@ static void set_data(void *data, int state_high)
 	intel_de_posting_read(display, bus->gpio_reg);
 }
 
+/* PTL: Wa_16025573575 */
+static void
+ptl_handle_mask_bits(struct intel_gmbus *bus, bool set)
+{
+	struct intel_display *display = bus->display;
+	u32 reg_val = intel_de_read_notrace(display, bus->gpio_reg);
+	u32 mask_bits = GPIO_CLOCK_DIR_MASK | GPIO_CLOCK_VAL_MASK |
+			GPIO_DATA_DIR_MASK | GPIO_DATA_VAL_MASK;
+	if (set)
+		reg_val |= mask_bits;
+	else
+		reg_val &= ~mask_bits;
+
+	intel_de_write_notrace(display, bus->gpio_reg, reg_val);
+	intel_de_posting_read(display, bus->gpio_reg);
+}
+
 static int
 intel_gpio_pre_xfer(struct i2c_adapter *adapter)
 {
@@ -318,6 +342,9 @@ intel_gpio_pre_xfer(struct i2c_adapter *adapter)
 
 	if (display->platform.pineview)
 		pnv_gmbus_clock_gating(display, false);
+
+	if (DISPLAY_VER(display) == 30)
+		ptl_handle_mask_bits(bus, true);
 
 	set_data(bus, 1);
 	set_clock(bus, 1);
@@ -336,6 +363,9 @@ intel_gpio_post_xfer(struct i2c_adapter *adapter)
 
 	if (display->platform.pineview)
 		pnv_gmbus_clock_gating(display, true);
+
+	if (DISPLAY_VER(display) == 30)
+		ptl_handle_mask_bits(bus, false);
 }
 
 static void
