@@ -1178,6 +1178,18 @@ static void zynqmp_dma_remove(struct platform_device *pdev)
 		zynqmp_dma_runtime_suspend(zdev->dev);
 }
 
+/**
+ * zynqmp_dma_shutdown - Driver shutdown function
+ * @pdev: Pointer to the platform_device structure
+ */
+static void zynqmp_dma_shutdown(struct platform_device *pdev)
+{
+	struct zynqmp_dma_device *zdev = platform_get_drvdata(pdev);
+
+	zynqmp_dma_chan_remove(zdev->chan);
+	pm_runtime_disable(zdev->dev);
+}
+
 static const struct of_device_id zynqmp_dma_of_match[] = {
 	{ .compatible = "amd,versal2-dma-1.0", .data = &versal2_dma_config },
 	{ .compatible = "xlnx,zynqmp-dma-1.0", },
@@ -1193,6 +1205,7 @@ static struct platform_driver zynqmp_dma_driver = {
 	},
 	.probe = zynqmp_dma_probe,
 	.remove = zynqmp_dma_remove,
+	.shutdown = zynqmp_dma_shutdown,
 };
 
 module_platform_driver(zynqmp_dma_driver);
