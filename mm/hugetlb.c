@@ -6411,7 +6411,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	struct mm_struct *mm = vma->vm_mm;
 	struct hstate *h = hstate_vma(vma);
 	vm_fault_t ret = VM_FAULT_SIGBUS;
-	int anon_rmap = 0;
+	bool anon_rmap = false;
 	unsigned long size;
 	struct folio *folio;
 	pte_t new_pte;
@@ -6522,7 +6522,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			 * check whether we can re-use this page exclusively for us.
 			 */
 			folio_lock(folio);
-			anon_rmap = 1;
+			anon_rmap = true;
 		}
 	} else {
 		/*
