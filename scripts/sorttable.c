@@ -334,6 +334,7 @@ static void *mmap_file(char const *fname, size_t *size)
 	addr = mmap(0, sb.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 	if (addr == MAP_FAILED) {
 		fprintf(stderr, "Could not mmap file: %s\n", fname);
+		addr = NULL;
 		goto out;
 	}
 
