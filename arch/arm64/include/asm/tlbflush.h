@@ -112,8 +112,7 @@ static inline unsigned long get_trans_granule(void)
 	    level >= 0 && level <= 3) {					\
 		u64 ttl = level & 3;					\
 		ttl |= get_trans_granule() << 2;			\
-		arg &= ~TLBI_TTL_MASK;					\
-		arg |= FIELD_PREP(TLBI_TTL_MASK, ttl);			\
+		FIELD_MODIFY(TLBI_TTL_MASK, &arg, ttl);			\
 	}								\
 									\
 	__tlbi(op, arg);						\
