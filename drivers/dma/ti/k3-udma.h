@@ -348,6 +348,8 @@ struct udma_dev {
 	int (*stop)(struct udma_chan *uc);
 	int (*reset_chan)(struct udma_chan *uc, bool hard);
 	void (*decrement_byte_counters)(struct udma_chan *uc, u32 val);
+	int (*bcdma_setup_sci_resources)(struct udma_dev *ud);
+	int (*pktdma_setup_sci_resources)(struct udma_dev *ud);
 };
 
 struct udma_desc {
@@ -672,6 +674,11 @@ struct udma_##res *__udma_reserve_##res(struct udma_dev *ud,	\
 _UDMA_RESERVE_RESOURCE(bchan);
 _UDMA_RESERVE_RESOURCE(tchan);
 _UDMA_RESERVE_RESOURCE(rchan);
+
+int udma_setup_resources(struct udma_dev *ud);
+int bcdma_setup_resources(struct udma_dev *ud);
+int pktdma_setup_resources(struct udma_dev *ud);
+int setup_resources(struct udma_dev *ud);
 
 /* Direct access to UDMA low lever resources for the glue layer */
 int xudma_navss_psil_pair(struct udma_dev *ud, u32 src_thread, u32 dst_thread);
