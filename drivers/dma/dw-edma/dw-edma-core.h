@@ -86,6 +86,8 @@ struct dw_edma_chan {
 	u8				configured;
 
 	struct dma_slave_config		config;
+
+	bool				non_ll_en;
 };
 
 struct dw_edma_irq {
