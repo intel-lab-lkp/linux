@@ -995,10 +995,10 @@ bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 	struct blk_plug *plug = current->plug;
 	struct request *rq;
 
-	if (!plug || rq_list_empty(&plug->mq_list))
+	if (!plug)
 		return false;
 
-	rq_list_for_each(&plug->mq_list, rq) {
+	list_for_each_entry(rq, &plug->mq_list, queuelist) {
 		if (rq->q == q) {
 			if (blk_attempt_bio_merge(q, rq, bio, nr_segs, false) ==
 			    BIO_MERGE_OK)

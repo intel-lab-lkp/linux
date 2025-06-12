@@ -470,7 +470,7 @@ __blk_mq_alloc_requests_batch(struct blk_mq_alloc_data *data)
 		prefetch(tags->static_rqs[tag]);
 		tag_mask &= ~(1UL << i);
 		rq = blk_mq_rq_ctx_init(data, tags, tag);
-		rq_list_add_head(data->cached_rqs, rq);
+		list_add(&rq->queuelist, data->cached_rqs);
 		nr++;
 	}
 	if (!(data->rq_flags & RQF_SCHED_TAGS))
@@ -605,7 +605,7 @@ static struct request *blk_mq_alloc_cached_request(struct request_queue *q,
 	if (!plug)
 		return NULL;
 
-	if (rq_list_empty(&plug->cached_rqs)) {
+	if (list_empty(&plug->cached_rqs)) {
 		if (plug->nr_ios == 1)
 			return NULL;
 		rq = blk_mq_rq_cache_fill(q, plug, opf, flags);
@@ -1177,7 +1177,6 @@ void blk_mq_end_request_batch(struct io_comp_batch *iob)
 
 	while ((rq = rq_list_pop(&iob->req_list)) != NULL) {
 		prefetch(rq->bio);
-		prefetch(rq->rq_next);
 
 		blk_complete_request(rq);
 		if (iob->need_ts)
@@ -1398,7 +1397,7 @@ static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 	 */
 	if (!plug->has_elevator && (rq->rq_flags & RQF_SCHED_TAGS))
 		plug->has_elevator = true;
-	rq_list_add_tail(&plug->mq_list, rq);
+	list_add_tail(&rq->queuelist, &plug->mq_list);
 	plug->rq_count++;
 }
 
@@ -2780,7 +2779,7 @@ static blk_status_t blk_mq_request_issue_directly(struct request *rq, bool last)
 	return __blk_mq_issue_directly(hctx, rq, last);
 }
 
-static void blk_mq_issue_direct(struct rq_list *rqs)
+static void blk_mq_issue_direct(struct list_head *rqs)
 {
 	struct blk_mq_hw_ctx *hctx = NULL;
 	struct request *rq;
@@ -2788,7 +2787,7 @@ static void blk_mq_issue_direct(struct rq_list *rqs)
 	blk_status_t ret = BLK_STS_OK;
 
 	while ((rq = rq_list_pop(rqs))) {
-		bool last = rq_list_empty(rqs);
+		bool last = list_empty(rqs);
 
 		if (hctx != rq->mq_hctx) {
 			if (hctx) {
@@ -2819,43 +2818,15 @@ out:
 		blk_mq_commit_rqs(hctx, queued, false);
 }
 
-static void __blk_mq_flush_list(struct request_queue *q, struct rq_list *rqs)
+static void __blk_mq_flush_list(struct request_queue *q, struct list_head *rqs)
 {
 	if (blk_queue_quiesced(q))
 		return;
 	q->mq_ops->queue_rqs(rqs);
 }
 
-static unsigned blk_mq_extract_queue_requests(struct rq_list *rqs,
-					      struct rq_list *queue_rqs)
-{
-	struct request *rq = rq_list_pop(rqs);
-	struct request_queue *this_q = rq->q;
-	struct request **prev = &rqs->head;
-	struct rq_list matched_rqs = {};
-	struct request *last = NULL;
-	unsigned depth = 1;
-
-	rq_list_add_tail(&matched_rqs, rq);
-	while ((rq = *prev)) {
-		if (rq->q == this_q) {
-			/* move rq from rqs to matched_rqs */
-			*prev = rq->rq_next;
-			rq_list_add_tail(&matched_rqs, rq);
-			depth++;
-		} else {
-			/* leave rq in rqs */
-			prev = &rq->rq_next;
-			last = rq;
-		}
-	}
-
-	rqs->tail = last;
-	*queue_rqs = matched_rqs;
-	return depth;
-}
-
-static void blk_mq_dispatch_queue_requests(struct rq_list *rqs, unsigned depth)
+static void blk_mq_dispatch_queue_requests(struct list_head *rqs,
+					   unsigned depth)
 {
 	struct request_queue *q = rq_list_peek(rqs)->q;
 
@@ -2869,39 +2840,36 @@ static void blk_mq_dispatch_queue_requests(struct rq_list *rqs, unsigned depth)
 	 */
 	if (q->mq_ops->queue_rqs) {
 		blk_mq_run_dispatch_ops(q, __blk_mq_flush_list(q, rqs));
-		if (rq_list_empty(rqs))
+		if (list_empty(rqs))
 			return;
 	}
 
 	blk_mq_run_dispatch_ops(q, blk_mq_issue_direct(rqs));
 }
 
-static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
+static void blk_mq_dispatch_list(struct list_head *rqs, bool from_sched)
 {
 	struct blk_mq_hw_ctx *this_hctx = NULL;
 	struct blk_mq_ctx *this_ctx = NULL;
-	struct rq_list requeue_list = {};
+	LIST_HEAD(requeue_list);
+	LIST_HEAD(list);
+	struct request *rq, *n;
 	unsigned int depth = 0;
 	bool is_passthrough = false;
-	LIST_HEAD(list);
 
-	do {
-		struct request *rq = rq_list_pop(rqs);
-
+	list_for_each_entry_safe(rq, n, rqs, queuelist) {
 		if (!this_hctx) {
 			this_hctx = rq->mq_hctx;
 			this_ctx = rq->mq_ctx;
 			is_passthrough = blk_rq_is_passthrough(rq);
 		} else if (this_hctx != rq->mq_hctx || this_ctx != rq->mq_ctx ||
 			   is_passthrough != blk_rq_is_passthrough(rq)) {
-			rq_list_add_tail(&requeue_list, rq);
 			continue;
 		}
-		list_add_tail(&rq->queuelist, &list);
+		list_move_tail(&rq->queuelist, &list);
 		depth++;
-	} while (!rq_list_empty(rqs));
+	}
 
-	*rqs = requeue_list;
 	trace_block_unplug(this_hctx->queue, depth, !from_sched);
 
 	percpu_ref_get(&this_hctx->queue->q_usage_counter);
@@ -2921,17 +2889,27 @@ static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 	percpu_ref_put(&this_hctx->queue->q_usage_counter);
 }
 
-static void blk_mq_dispatch_multiple_queue_requests(struct rq_list *rqs)
+static void blk_mq_dispatch_multiple_queue_requests(struct list_head *rqs)
 {
 	do {
-		struct rq_list queue_rqs;
-		unsigned depth;
+		struct request_queue *this_q = NULL;
+		struct request *rq, *n;
+		LIST_HEAD(queue_rqs);
+		unsigned depth = 0;
 
-		depth = blk_mq_extract_queue_requests(rqs, &queue_rqs);
+		list_for_each_entry_safe(rq, n, rqs, queuelist) {
+			if (!this_q)
+				this_q = rq->q;
+			if (this_q == rq->q) {
+				list_move_tail(&rq->queuelist, &queue_rqs);
+				depth++;
+			}
+		}
+
 		blk_mq_dispatch_queue_requests(&queue_rqs, depth);
-		while (!rq_list_empty(&queue_rqs))
+		while (!list_empty(&queue_rqs))
 			blk_mq_dispatch_list(&queue_rqs, false);
-	} while (!rq_list_empty(rqs));
+	} while (!list_empty(rqs));
 }
 
 void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
@@ -2955,15 +2933,14 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 			blk_mq_dispatch_multiple_queue_requests(&plug->mq_list);
 			return;
 		}
-
 		blk_mq_dispatch_queue_requests(&plug->mq_list, depth);
-		if (rq_list_empty(&plug->mq_list))
+		if (list_empty(&plug->mq_list))
 			return;
 	}
 
 	do {
 		blk_mq_dispatch_list(&plug->mq_list, from_schedule);
-	} while (!rq_list_empty(&plug->mq_list));
+	} while (!list_empty(&plug->mq_list));
 }
 
 static void blk_mq_try_issue_list_directly(struct blk_mq_hw_ctx *hctx,

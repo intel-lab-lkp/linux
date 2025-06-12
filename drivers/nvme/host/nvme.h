@@ -789,7 +789,7 @@ static __always_inline void nvme_complete_batch(struct io_comp_batch *iob,
 {
 	struct request *req;
 
-	rq_list_for_each(&iob->req_list, req) {
+	list_for_each_entry(req, &iob->req_list, queuelist) {
 		fn(req);
 		nvme_complete_batch_req(req);
 	}

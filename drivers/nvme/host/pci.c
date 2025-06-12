@@ -1051,11 +1051,11 @@ static blk_status_t nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 	return BLK_STS_OK;
 }
 
-static void nvme_submit_cmds(struct nvme_queue *nvmeq, struct rq_list *rqlist)
+static void nvme_submit_cmds(struct nvme_queue *nvmeq, struct list_head *rqlist)
 {
 	struct request *req;
 
-	if (rq_list_empty(rqlist))
+	if (list_empty(rqlist))
 		return;
 
 	spin_lock(&nvmeq->sq_lock);
@@ -1082,27 +1082,28 @@ static bool nvme_prep_rq_batch(struct nvme_queue *nvmeq, struct request *req)
 	return nvme_prep_rq(nvmeq->dev, req) == BLK_STS_OK;
 }
 
-static void nvme_queue_rqs(struct rq_list *rqlist)
+static void nvme_queue_rqs(struct list_head *rqlist)
 {
-	struct rq_list submit_list = { };
-	struct rq_list requeue_list = { };
 	struct nvme_queue *nvmeq = NULL;
-	struct request *req;
+	LIST_HEAD(requeue_list);
+	struct request *req, *n;
 
-	while ((req = rq_list_pop(rqlist))) {
-		if (nvmeq && nvmeq != req->mq_hctx->driver_data)
+	list_for_each_entry_safe(req, n, rqlist, queuelist) {
+		if (nvmeq && nvmeq != req->mq_hctx->driver_data) {
+			LIST_HEAD(submit_list);
+
+			list_cut_before(&submit_list, rqlist, &req->queuelist);
 			nvme_submit_cmds(nvmeq, &submit_list);
+		}
 		nvmeq = req->mq_hctx->driver_data;
 
-		if (nvme_prep_rq_batch(nvmeq, req))
-			rq_list_add_tail(&submit_list, req);
-		else
-			rq_list_add_tail(&requeue_list, req);
+		if (!nvme_prep_rq_batch(nvmeq, req))
+			list_move_tail(&req->queuelist, &requeue_list);
 	}
 
 	if (nvmeq)
-		nvme_submit_cmds(nvmeq, &submit_list);
-	*rqlist = requeue_list;
+		nvme_submit_cmds(nvmeq, rqlist);
+	list_splice(&requeue_list, rqlist);
 }
 
 static __always_inline void nvme_unmap_metadata(struct nvme_dev *dev,
@@ -1245,7 +1246,7 @@ static irqreturn_t nvme_irq(int irq, void *data)
 	DEFINE_IO_COMP_BATCH(iob);
 
 	if (nvme_poll_cq(nvmeq, &iob)) {
-		if (!rq_list_empty(&iob.req_list))
+		if (!list_empty(&iob.req_list))
 			nvme_pci_complete_batch(&iob);
 		return IRQ_HANDLED;
 	}

@@ -101,7 +101,7 @@ struct ublk_uring_cmd_pdu {
 	 */
 	union {
 		struct request *req;
-		struct request *req_list;
+		struct list_head req_list;
 	};
 
 	/*
@@ -1325,24 +1325,19 @@ static void ublk_cmd_list_tw_cb(struct io_uring_cmd *cmd,
 		unsigned int issue_flags)
 {
 	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
-	struct request *rq = pdu->req_list;
-	struct request *next;
+	struct request *rq;
 
-	do {
-		next = rq->rq_next;
-		rq->rq_next = NULL;
+	while ((rq = rq_list_pop(&pdu->req_list)))
 		ublk_dispatch_req(rq->mq_hctx->driver_data, rq, issue_flags);
-		rq = next;
-	} while (rq);
 }
 
-static void ublk_queue_cmd_list(struct ublk_io *io, struct rq_list *l)
+static void ublk_queue_cmd_list(struct request *req, struct ublk_io *io,
+		struct list_head *head)
 {
 	struct io_uring_cmd *cmd = io->cmd;
 	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
 
-	pdu->req_list = rq_list_peek(l);
-	rq_list_init(l);
+	list_cut_before(&pdu->req_list, head, &req->queuelist);
 	io_uring_cmd_complete_in_task(cmd, ublk_cmd_list_tw_cb);
 }
 
@@ -1416,30 +1411,27 @@ static blk_status_t ublk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	return BLK_STS_OK;
 }
 
-static void ublk_queue_rqs(struct rq_list *rqlist)
+static void ublk_queue_rqs(struct list_head *rqlist)
 {
-	struct rq_list requeue_list = { };
-	struct rq_list submit_list = { };
 	struct ublk_io *io = NULL;
-	struct request *req;
+	struct request *req, *n;
+	LIST_HEAD(requeue_list);
 
-	while ((req = rq_list_pop(rqlist))) {
+	list_for_each_entry_safe(req, n, rqlist, queuelist) {
 		struct ublk_queue *this_q = req->mq_hctx->driver_data;
 		struct ublk_io *this_io = &this_q->ios[req->tag];
 
-		if (io && io->task != this_io->task && !rq_list_empty(&submit_list))
-			ublk_queue_cmd_list(io, &submit_list);
+		if (io && io->task != this_io->task)
+			ublk_queue_cmd_list(req, io, rqlist);
 		io = this_io;
 
-		if (ublk_prep_req(this_q, req, true) == BLK_STS_OK)
-			rq_list_add_tail(&submit_list, req);
-		else
-			rq_list_add_tail(&requeue_list, req);
+		if (ublk_prep_req(this_q, req, true) != BLK_STS_OK)
+			list_move_tail(&req->queuelist, &requeue_list);
 	}
 
-	if (!rq_list_empty(&submit_list))
-		ublk_queue_cmd_list(io, &submit_list);
-	*rqlist = requeue_list;
+	if (!list_empty(rqlist))
+		ublk_queue_cmd_list(io, rqlist);
+	list_splice(&requeue_list, rqlist);
 }
 
 static int ublk_init_hctx(struct blk_mq_hw_ctx *hctx, void *driver_data,

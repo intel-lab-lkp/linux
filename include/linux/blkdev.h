@@ -1065,11 +1065,6 @@ extern void blk_put_queue(struct request_queue *);
 
 void blk_mark_disk_dead(struct gendisk *disk);
 
-struct rq_list {
-	struct request *head;
-	struct request *tail;
-};
-
 #ifdef CONFIG_BLOCK
 /*
  * blk_plug permits building a queue of related requests by holding the I/O
@@ -1083,10 +1078,10 @@ struct rq_list {
  * blk_flush_plug() is called.
  */
 struct blk_plug {
-	struct rq_list mq_list; /* blk-mq requests */
+	struct list_head mq_list; /* blk-mq requests */
 
 	/* if ios_left is > 1, we can batch tag/rq allocations */
-	struct rq_list cached_rqs;
+	struct list_head cached_rqs;
 	u64 cur_ktime;
 	unsigned short nr_ios;
 
@@ -1762,7 +1757,7 @@ int bdev_thaw(struct block_device *bdev);
 void bdev_fput(struct file *bdev_file);
 
 struct io_comp_batch {
-	struct rq_list req_list;
+	struct list_head req_list;
 	bool need_ts;
 	void (*complete)(struct io_comp_batch *);
 };
@@ -1807,6 +1802,9 @@ bdev_atomic_write_unit_max_bytes(struct block_device *bdev)
 	return queue_atomic_write_unit_max_bytes(bdev_get_queue(bdev));
 }
 
-#define DEFINE_IO_COMP_BATCH(name)	struct io_comp_batch name = { }
+#define DEFINE_IO_COMP_BATCH(name)				\
+struct io_comp_batch name = {					\
+	.req_list	= LIST_HEAD_INIT((name).req_list),	\
+}
 
 #endif /* _LINUX_BLKDEV_H */

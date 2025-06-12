@@ -471,7 +471,7 @@ static bool virtblk_prep_rq_batch(struct request *req)
 }
 
 static void virtblk_add_req_batch(struct virtio_blk_vq *vq,
-		struct rq_list *rqlist)
+		struct list_head *rqlist)
 {
 	struct request *req;
 	unsigned long flags;
@@ -498,29 +498,30 @@ static void virtblk_add_req_batch(struct virtio_blk_vq *vq,
 		virtqueue_notify(vq->vq);
 }
 
-static void virtio_queue_rqs(struct rq_list *rqlist)
+static void virtio_queue_rqs(struct list_head *rqlist)
 {
-	struct rq_list submit_list = { };
-	struct rq_list requeue_list = { };
 	struct virtio_blk_vq *vq = NULL;
-	struct request *req;
+	LIST_HEAD(requeue_list);
+	struct request *req, *n;
 
-	while ((req = rq_list_pop(rqlist))) {
+	list_for_each_entry_safe(req, n, rqlist, queuelist) {
 		struct virtio_blk_vq *this_vq = get_virtio_blk_vq(req->mq_hctx);
 
-		if (vq && vq != this_vq)
+		if (vq && vq != this_vq) {
+			LIST_HEAD(submit_list);
+
+			list_cut_before(&submit_list, rqlist, &req->queuelist);
 			virtblk_add_req_batch(vq, &submit_list);
+		}
 		vq = this_vq;
 
-		if (virtblk_prep_rq_batch(req))
-			rq_list_add_tail(&submit_list, req);
-		else
-			rq_list_add_tail(&requeue_list, req);
+		if (!virtblk_prep_rq_batch(req))
+			list_move_tail(&req->queuelist, &requeue_list);
 	}
 
 	if (vq)
-		virtblk_add_req_batch(vq, &submit_list);
-	*rqlist = requeue_list;
+		virtblk_add_req_batch(vq, rqlist);
+	list_splice(&requeue_list, rqlist);
 }
 
 #ifdef CONFIG_BLK_DEV_ZONED
@@ -1187,7 +1188,7 @@ static void virtblk_complete_batch(struct io_comp_batch *iob)
 {
 	struct request *req;
 
-	rq_list_for_each(&iob->req_list, req) {
+	list_for_each_entry(req, &iob->req_list, queuelist) {
 		virtblk_unmap_data(req, blk_mq_rq_to_pdu(req));
 		virtblk_cleanup_cmd(req);
 	}
