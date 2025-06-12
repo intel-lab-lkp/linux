@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/bluetooth/mediatek,mt7925-bluetooth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT7925 Bluetooth
+
+maintainers:
+  - Zhangchao Zhang <zhangchao.zhang@mediatek.com>
+
+description:
+  7925 uses the USB bus to communicate with the host.
+  Two methods are used to reset Bluetooth.
+  When Bluetooth crashes or core dumps,
+  the pin will be pulled low, then held for 200ms,
+  and then pulled high again before next probe.
+
+allOf:
+  - $ref: bluetooth-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt7925-bluetooth
+
+  reg:
+    const: 2
+
+  reset-gpios:
+    maxItems: 1
+    description:
+      An active-high reset pin for the Bluetooth core;
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    &xhci0 {
+      vbus-supply = <&pp5000_usb>;
+      usb2-lpm-disable;
+
+      status = "okay";
+
+      bt_reset: bt-reset{
+        compatible = "mediatek,usb-bluetooth";
+        reset-gpios = <&pio 248 GPIO_ACTIVE_HIGH>;
+      };
+    };
