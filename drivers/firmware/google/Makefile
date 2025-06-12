@@ -12,3 +12,6 @@ obj-$(CONFIG_GOOGLE_CBMEM)		+= cbmem.o
 
 vpd-sysfs-y := vpd.o vpd_decode.o
 obj-$(CONFIG_GOOGLE_VPD)		+= vpd-sysfs.o
+
+# LinuxBootSMM related.
+obj-$(CONFIG_COREBOOT_PAYLOAD_MM)		+= mm_info.o

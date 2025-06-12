@@ -41,7 +41,6 @@ struct lb_cbmem_ref {
 };
 
 #define LB_TAG_CBMEM_ENTRY 0x31
-
 /* Corresponds to LB_TAG_CBMEM_ENTRY */
 struct lb_cbmem_entry {
 	u32 tag;
@@ -50,6 +49,16 @@ struct lb_cbmem_entry {
 	u64 address;
 	u32 entry_size;
 	u32 id;
+};
+
+/* Corresponds to LB_TAG_PLD_MM_INTERFACE_INFO */
+#define LB_TAG_PLD_MM_INTERFACE_INFO 0x3b
+struct lb_pld_mm_interface_info {
+	u32 tag;
+	u32 size;
+	u8 revision;
+	u8 requires_long_mode_call;
+	u8 register_mm_entry_command;
 };
 
 /* Describes framebuffer setup by coreboot */
@@ -61,15 +70,15 @@ struct lb_framebuffer {
 	u32 x_resolution;
 	u32 y_resolution;
 	u32 bytes_per_line;
-	u8  bits_per_pixel;
-	u8  red_mask_pos;
-	u8  red_mask_size;
-	u8  green_mask_pos;
-	u8  green_mask_size;
-	u8  blue_mask_pos;
-	u8  blue_mask_size;
-	u8  reserved_mask_pos;
-	u8  reserved_mask_size;
+	u8 bits_per_pixel;
+	u8 red_mask_pos;
+	u8 red_mask_size;
+	u8 green_mask_pos;
+	u8 green_mask_size;
+	u8 blue_mask_pos;
+	u8 blue_mask_size;
+	u8 reserved_mask_pos;
+	u8 reserved_mask_size;
 };
 
 /* A device, additionally with information from coreboot. */
@@ -80,6 +89,7 @@ struct coreboot_device {
 		struct lb_cbmem_ref cbmem_ref;
 		struct lb_cbmem_entry cbmem_entry;
 		struct lb_framebuffer framebuffer;
+		struct lb_pld_mm_interface_info mm_info;
 		DECLARE_FLEX_ARRAY(u8, raw);
 	};
 };
@@ -112,8 +122,8 @@ void coreboot_driver_unregister(struct coreboot_driver *driver);
  * boilerplate.  Each module may only use this macro once, and
  * calling it replaces module_init() and module_exit()
  */
-#define module_coreboot_driver(__coreboot_driver) \
+#define module_coreboot_driver(__coreboot_driver)                  \
 	module_driver(__coreboot_driver, coreboot_driver_register, \
-			coreboot_driver_unregister)
+		      coreboot_driver_unregister)
 
 #endif /* __COREBOOT_TABLE_H */
