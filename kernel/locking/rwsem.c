@@ -205,14 +205,12 @@ bool is_rwsem_reader_owned(struct rw_semaphore *sem)
 		return false;
 	return rwsem_test_oflags(sem, RWSEM_READER_OWNED);
 }
-#endif
 
-#ifdef CONFIG_DEBUG_RWSEMS
 /*
- * With CONFIG_DEBUG_RWSEMS configured, it will make sure that if there
- * is a task pointer in owner of a reader-owned rwsem, it will be the
- * real owner or one of the real owners. The only exception is when the
- * unlock is done by up_read_non_owner().
+ * With CONFIG_DEBUG_RWSEMS or CONFIG_DETECT_HUNG_TASK_BLOCKER configured,
+ * it will make sure that the owner field of a reader-owned rwsem either
+ * points to a real reader-owner(s) or gets cleared. The only exception is
+ * when the unlock is done by up_read_non_owner().
  */
 static inline void rwsem_clear_reader_owned(struct rw_semaphore *sem)
 {
