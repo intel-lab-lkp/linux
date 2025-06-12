@@ -1612,8 +1612,10 @@ enum mac80211_rx_encoding {
  *	it but can store it and pass it back to the driver for synchronisation
  * @band: the active band when this frame was received
  * @freq: frequency the radio was tuned to when receiving this frame, in MHz
- *	This field must be set for management frames, but isn't strictly needed
- *	for data (other) frames - for those it only affects radiotap reporting.
+ *	This field must be set for management frames, also for group
+ *	addressed data frames in case of multi-radio device, but otherwise
+ *	this isn't strictly needed for data (other) frames - for those it
+ *	only affects radiotap reporting.
  * @freq_offset: @freq has a positive offset of 500Khz.
  * @signal: signal strength when receiving this frame, either in dBm, in dB or
  *	unspecified depending on the hardware capabilities flags
