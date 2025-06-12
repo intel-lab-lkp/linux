@@ -123,10 +123,8 @@ static void vgic_mmio_write_v3_misc(struct kvm_vcpu *vcpu,
 			val &= ~GICD_CTLR_nASSGIreq;
 
 		/* Dist stays enabled? nASSGIreq is RO */
-		if (was_enabled && dist->enabled) {
-			val &= ~GICD_CTLR_nASSGIreq;
-			val |= FIELD_PREP(GICD_CTLR_nASSGIreq, is_hwsgi);
-		}
+		if (was_enabled && dist->enabled)
+			FIELD_MODIFY(GICD_CTLR_nASSGIreq, &val, is_hwsgi);
 
 		/* Switching HW SGIs? */
 		dist->nassgireq = val & GICD_CTLR_nASSGIreq;
