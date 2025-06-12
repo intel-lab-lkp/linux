@@ -283,6 +283,13 @@ enum swap_cluster_flags {
 #define SWAP_NR_ORDERS		1
 #endif
 
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+struct percpu_cluster {
+	local_lock_t lock; /* Protect the percpu_cluster above */
+	unsigned int next[SWAP_NR_ORDERS]; /* Likely next allocation offset */
+};
+#endif
+
 /*
  * We keep using same cluster for rotational device so IO will be sequential.
  * The purpose is to optimize SWAP throughput on these device.
@@ -341,6 +348,7 @@ struct swap_info_struct {
 	struct list_head discard_clusters; /* discard clusters list */
 #ifdef CONFIG_SWAP_CGROUP_PRIORITY
 	int unique_id;
+	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
 #endif
 	struct plist_node avail_lists[]; /*
 					   * entries in swap_avail_heads, one

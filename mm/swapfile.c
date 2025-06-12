@@ -126,8 +126,12 @@ static DEFINE_PER_CPU(struct percpu_swap_cluster, percpu_swap_cluster) = {
 	.offset = { SWAP_ENTRY_INVALID },
 	.lock = INIT_LOCAL_LOCK(),
 };
-/* TODO: better choice? */
+/* TODO: better arrangement */
 #ifdef CONFIG_SWAP_CGROUP_PRIORITY
+static bool get_swap_device_info(struct swap_info_struct *si);
+static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
+					      unsigned char usage, bool is_cgroup_priority);
+static int swap_node(struct swap_info_struct *si);
 #include "swap_cgroup_priority.c"
 #endif
 
@@ -776,7 +780,8 @@ static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 					    struct swap_cluster_info *ci,
 					    unsigned long offset,
 					    unsigned int order,
-					    unsigned char usage)
+					    unsigned char usage,
+					    bool is_cgroup_priority)
 {
 	unsigned int next = SWAP_ENTRY_INVALID, found = SWAP_ENTRY_INVALID;
 	unsigned long start = ALIGN_DOWN(offset, SWAPFILE_CLUSTER);
@@ -820,12 +825,19 @@ static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 out:
 	relocate_cluster(si, ci);
 	unlock_cluster(ci);
+
 	if (si->flags & SWP_SOLIDSTATE) {
-		this_cpu_write(percpu_swap_cluster.offset[order], next);
-		this_cpu_write(percpu_swap_cluster.si[order], si);
-	} else {
+		if (!is_cgroup_priority) {
+			this_cpu_write(percpu_swap_cluster.offset[order], next);
+			this_cpu_write(percpu_swap_cluster.si[order], si);
+		} else {
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+			__this_cpu_write(si->percpu_cluster->next[order], next);
+#endif
+		}
+	} else
 		si->global_cluster->next[order] = next;
-	}
+
 	return found;
 }
 
@@ -883,7 +895,7 @@ static void swap_reclaim_work(struct work_struct *work)
  * cluster for current CPU too.
  */
 static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
-					      unsigned char usage)
+					      unsigned char usage, bool is_cgroup_priority)
 {
 	struct swap_cluster_info *ci;
 	unsigned int offset = SWAP_ENTRY_INVALID, found = SWAP_ENTRY_INVALID;
@@ -895,32 +907,38 @@ static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int o
 	if (order && !(si->flags & SWP_BLKDEV))
 		return 0;
 
-	if (!(si->flags & SWP_SOLIDSTATE)) {
+	if (si->flags & SWP_SOLIDSTATE) {
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+                local_lock(&si->percpu_cluster->lock);
+                offset = __this_cpu_read(si->percpu_cluster->next[order]);
+#endif
+	} else {
 		/* Serialize HDD SWAP allocation for each device. */
 		spin_lock(&si->global_cluster_lock);
 		offset = si->global_cluster->next[order];
-		if (offset == SWAP_ENTRY_INVALID)
-			goto new_cluster;
-
-		ci = lock_cluster(si, offset);
-		/* Cluster could have been used by another order */
-		if (cluster_is_usable(ci, order)) {
-			if (cluster_is_empty(ci))
-				offset = cluster_offset(si, ci);
-			found = alloc_swap_scan_cluster(si, ci, offset,
-							order, usage);
-		} else {
-			unlock_cluster(ci);
-		}
-		if (found)
-			goto done;
 	}
+
+	if (offset == SWAP_ENTRY_INVALID)
+		goto new_cluster;
+
+	ci = lock_cluster(si, offset);
+	/* Cluster could have been used by another order */
+	if (cluster_is_usable(ci, order)) {
+		if (cluster_is_empty(ci))
+			offset = cluster_offset(si, ci);
+		found = alloc_swap_scan_cluster(si, ci, offset,
+						order, usage, is_cgroup_priority);
+	} else {
+		unlock_cluster(ci);
+	}
+	if (found)
+		goto done;
 
 new_cluster:
 	ci = isolate_lock_cluster(si, &si->free_clusters);
 	if (ci) {
 		found = alloc_swap_scan_cluster(si, ci, cluster_offset(si, ci),
-						order, usage);
+						order, usage, is_cgroup_priority);
 		if (found)
 			goto done;
 	}
@@ -934,7 +952,7 @@ new_cluster:
 
 		while ((ci = isolate_lock_cluster(si, &si->nonfull_clusters[order]))) {
 			found = alloc_swap_scan_cluster(si, ci, cluster_offset(si, ci),
-							order, usage);
+							order, usage, is_cgroup_priority);
 			if (found)
 				goto done;
 			/* Clusters failed to allocate are moved to frag_clusters */
@@ -952,7 +970,7 @@ new_cluster:
 			 * reclaimable (eg. lazy-freed swap cache) slots.
 			 */
 			found = alloc_swap_scan_cluster(si, ci, cluster_offset(si, ci),
-							order, usage);
+							order, usage, is_cgroup_priority);
 			if (found)
 				goto done;
 			frags++;
@@ -979,21 +997,27 @@ new_cluster:
 		while ((ci = isolate_lock_cluster(si, &si->frag_clusters[o]))) {
 			atomic_long_dec(&si->frag_cluster_nr[o]);
 			found = alloc_swap_scan_cluster(si, ci, cluster_offset(si, ci),
-							0, usage);
+							0, usage, is_cgroup_priority);
 			if (found)
 				goto done;
 		}
 
 		while ((ci = isolate_lock_cluster(si, &si->nonfull_clusters[o]))) {
 			found = alloc_swap_scan_cluster(si, ci, cluster_offset(si, ci),
-							0, usage);
+							0, usage, is_cgroup_priority);
 			if (found)
 				goto done;
 		}
 	}
 done:
-	if (!(si->flags & SWP_SOLIDSTATE))
+	if (si->flags & SWP_SOLIDSTATE) {
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+		local_unlock(&si->percpu_cluster->lock);
+#endif
+	} else {
 		spin_unlock(&si->global_cluster_lock);
+	}
+
 	return found;
 }
 
@@ -1032,6 +1056,7 @@ static void del_from_avail_list(struct swap_info_struct *si, bool swapoff)
 	for_each_node(nid)
 		plist_del(&si->avail_lists[nid], &swap_avail_heads[nid]);
 
+	deactivate_swap_cgroup_priority_pnode(si, swapoff);
 skip:
 	spin_unlock(&swap_avail_lock);
 }
@@ -1075,6 +1100,7 @@ static void add_to_avail_list(struct swap_info_struct *si, bool swapon)
 	for_each_node(nid)
 		plist_add(&si->avail_lists[nid], &swap_avail_heads[nid]);
 
+	activate_swap_cgroup_priority_pnode(si, swapon);
 skip:
 	spin_unlock(&swap_avail_lock);
 }
@@ -1200,7 +1226,8 @@ static bool swap_alloc_fast(swp_entry_t *entry,
 	if (cluster_is_usable(ci, order)) {
 		if (cluster_is_empty(ci))
 			offset = cluster_offset(si, ci);
-		found = alloc_swap_scan_cluster(si, ci, offset, order, SWAP_HAS_CACHE);
+		found = alloc_swap_scan_cluster(si, ci, offset, order,
+				SWAP_HAS_CACHE, false);
 		if (found)
 			*entry = swp_entry(si->type, found);
 	} else {
@@ -1227,7 +1254,7 @@ start_over:
 		plist_requeue(&si->avail_lists[node], &swap_avail_heads[node]);
 		spin_unlock(&swap_avail_lock);
 		if (get_swap_device_info(si)) {
-			offset = cluster_alloc_swap_entry(si, order, SWAP_HAS_CACHE);
+			offset = cluster_alloc_swap_entry(si, order, SWAP_HAS_CACHE, false);
 			put_swap_device(si);
 			if (offset) {
 				*entry = swp_entry(si->type, offset);
@@ -1294,10 +1321,12 @@ int folio_alloc_swap(struct folio *folio, gfp_t gfp)
 		}
 	}
 
-	local_lock(&percpu_swap_cluster.lock);
-	if (!swap_alloc_fast(&entry, order))
-		swap_alloc_slow(&entry, order);
-	local_unlock(&percpu_swap_cluster.lock);
+	if (!swap_alloc_cgroup_priority(folio_memcg(folio), &entry, order)) {
+		local_lock(&percpu_swap_cluster.lock);
+		if (!swap_alloc_fast(&entry, order))
+			swap_alloc_slow(&entry, order);
+		local_unlock(&percpu_swap_cluster.lock);
+	}
 
 	/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
 	if (mem_cgroup_try_charge_swap(folio, entry))
@@ -1870,7 +1899,7 @@ swp_entry_t get_swap_page_of_type(int type)
 	/* This is called for allocating swap entry, not cache */
 	if (get_swap_device_info(si)) {
 		if (si->flags & SWP_WRITEOK) {
-			offset = cluster_alloc_swap_entry(si, 0, 1);
+			offset = cluster_alloc_swap_entry(si, 0, 1, false);
 			if (offset) {
 				entry = swp_entry(si->type, offset);
 				atomic_long_dec(&nr_swap_pages);
@@ -2800,6 +2829,10 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	arch_swap_invalidate_area(p->type);
 	zswap_swapoff(p->type);
 	mutex_unlock(&swapon_mutex);
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	free_percpu(p->percpu_cluster);
+	p->percpu_cluster = NULL;
+#endif
 	kfree(p->global_cluster);
 	p->global_cluster = NULL;
 	vfree(swap_map);
@@ -3207,7 +3240,23 @@ static struct swap_cluster_info *setup_clusters(struct swap_info_struct *si,
 	for (i = 0; i < nr_clusters; i++)
 		spin_lock_init(&cluster_info[i].lock);
 
-	if (!(si->flags & SWP_SOLIDSTATE)) {
+	if (si->flags & SWP_SOLIDSTATE) {
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+		si->percpu_cluster = alloc_percpu(struct percpu_cluster);
+		if (!si->percpu_cluster)
+			goto err_free;
+
+		int cpu;
+		for_each_possible_cpu(cpu) {
+			struct percpu_cluster *cluster;
+
+			cluster = per_cpu_ptr(si->percpu_cluster, cpu);
+			for (i = 0; i < SWAP_NR_ORDERS; i++)
+				cluster->next[i] = SWAP_ENTRY_INVALID;
+			local_lock_init(&cluster->lock);
+		}
+#endif
+	} else {
 		si->global_cluster = kmalloc(sizeof(*si->global_cluster),
 				     GFP_KERNEL);
 		if (!si->global_cluster)
@@ -3495,6 +3544,10 @@ free_swap_address_space:
 bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	free_percpu(si->percpu_cluster);
+	si->percpu_cluster = NULL;
+#endif
 	kfree(si->global_cluster);
 	si->global_cluster = NULL;
 	inode = NULL;

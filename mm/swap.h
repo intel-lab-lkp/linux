@@ -113,7 +113,15 @@ void delete_swap_cgroup_priority(struct mem_cgroup *memcg);
 void show_swap_device_unique_id(struct seq_file *m);
 #else
 static inline void delete_swap_cgroup_priority(struct mem_cgroup *memcg) {}
+static inline void activate_swap_cgroup_priority_pnode(struct swap_info_struct *swp, bool swapon) {}
+static inline void deactivate_swap_cgroup_priority_pnode(struct swap_info_struct *swp, bool swapoff){}
 static inline void get_swap_unique_id(struct swap_info_struct *si) {}
+static inline bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
+				swp_entry_t *entry, int order)
+{
+	return false;
+}
+
 #endif
 
 #else /* CONFIG_SWAP */
