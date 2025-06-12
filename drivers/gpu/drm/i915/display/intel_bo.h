@@ -24,7 +24,8 @@ struct intel_frontbuffer *intel_bo_set_frontbuffer(struct drm_gem_object *obj,
 						   struct intel_frontbuffer *front);
 
 void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj);
-int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb);
+int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb,
+			 unsigned int (*tiling)(unsigned int, unsigned int, unsigned int));
 void intel_bo_panic_finish(struct drm_gem_object *obj);
 
 #endif /* __INTEL_BO__ */

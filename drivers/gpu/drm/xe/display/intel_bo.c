@@ -64,6 +64,7 @@ void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj)
 static int xe_panic_page = -1;
 static void *xe_panic_vaddr;
 static struct xe_bo *xe_panic_bo;
+static unsigned int (*xe_panic_tiling)(unsigned int, unsigned int, unsigned int);
 
 static void xe_panic_kunmap(void)
 {
@@ -85,7 +86,10 @@ static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int 
 	unsigned int new_page;
 	unsigned int offset;
 
-	offset = y * sb->pitch[0] + x * sb->format->cpp[0];
+	if (xe_panic_tiling)
+		offset = xe_panic_tiling(sb->width, x, y);
+	else
+		offset = y * sb->pitch[0] + x * sb->format->cpp[0];
 
 	new_page = offset >> PAGE_SHIFT;
 	offset = offset % PAGE_SIZE;
@@ -101,11 +105,13 @@ static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int 
 	}
 }
 
-int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb)
+int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb,
+			 unsigned int (*tiling)(unsigned int, unsigned int, unsigned int))
 {
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 
 	xe_panic_bo = bo;
+	xe_panic_tiling = tiling;
 	sb->set_pixel = xe_panic_page_set_pixel;
 	return 0;
 }

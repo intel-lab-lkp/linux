@@ -358,6 +358,7 @@ static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 static struct page **i915_panic_pages;
 static int i915_panic_page = -1;
 static void *i915_panic_vaddr;
+static unsigned int (*i915_panic_tiling)(unsigned int, unsigned int, unsigned int);
 
 static void i915_panic_kunmap(void)
 {
@@ -386,6 +387,14 @@ static struct page **i915_gem_object_panic_pages(struct drm_i915_gem_object *obj
 	return pages;
 }
 
+static void i915_gem_object_panic_map_set_pixel(struct drm_scanout_buffer *sb, unsigned int x,
+						unsigned int y, u32 color)
+{
+	unsigned int offset = i915_panic_tiling(sb->width, x, y);
+
+	iosys_map_wr(&sb->map[0], offset, u32, color);
+}
+
 /*
  * The scanout buffer pages are not mapped, so for each pixel,
  * use kmap_local_page_try_from_panic() to map the page, and write the pixel.
@@ -397,7 +406,10 @@ static void i915_gem_object_panic_page_set_pixel(struct drm_scanout_buffer *sb, 
 	unsigned int new_page;
 	unsigned int offset;
 
-	offset = y * sb->pitch[0] + x * sb->format->cpp[0];
+	if (i915_panic_tiling)
+		offset = i915_panic_tiling(sb->width, x, y);
+	else
+		offset = y * sb->pitch[0] + x * sb->format->cpp[0];
 
 	new_page = offset >> PAGE_SHIFT;
 	offset = offset % PAGE_SIZE;
@@ -418,10 +430,13 @@ static void i915_gem_object_panic_page_set_pixel(struct drm_scanout_buffer *sb, 
  * Use current vaddr if it exists, or setup a list of pages.
  * pfn is not supported yet.
  */
-int i915_gem_object_panic_setup(struct drm_i915_gem_object *obj, struct drm_scanout_buffer *sb)
+int i915_gem_object_panic_setup(struct drm_i915_gem_object *obj, struct drm_scanout_buffer *sb,
+				unsigned int (*tiling)(unsigned int, unsigned int, unsigned int))
 {
 	enum i915_map_type has_type;
 	void *ptr;
+
+	i915_panic_tiling = tiling;
 
 	ptr = page_unpack_bits(obj->mm.mapping, &has_type);
 	if (ptr) {
@@ -430,6 +445,8 @@ int i915_gem_object_panic_setup(struct drm_i915_gem_object *obj, struct drm_scan
 		else
 			iosys_map_set_vaddr(&sb->map[0], ptr);
 
+		if (tiling)
+			sb->set_pixel = i915_gem_object_panic_map_set_pixel;
 		return 0;
 	}
 	if (i915_gem_object_has_struct_page(obj)) {
