@@ -97,7 +97,9 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY(0x0,		0,		generic),			\
 	CPUID_PARSE_ENTRY(0x1,		0,		generic),			\
 	CPUID_PARSE_ENTRY(0x2,		0,		0x2),				\
-	CPUID_PARSE_ENTRY(0x80000000,	0,		0x80000000),
+	CPUID_PARSE_ENTRY(0x4,		0,		deterministic_cache),		\
+	CPUID_PARSE_ENTRY(0x80000000,	0,		0x80000000),			\
+	CPUID_PARSE_ENTRY(0x8000001d,	0,		deterministic_cache),
 
 extern const struct cpuid_parse_entry cpuid_common_parse_entries[];
 extern const int cpuid_common_parse_entries_size;
