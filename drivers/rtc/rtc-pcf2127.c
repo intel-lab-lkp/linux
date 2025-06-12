@@ -182,6 +182,12 @@ struct pcf21xx_ts_config {
 	u8 ie_bit; /* Interrupt enable bit. */
 };
 
+struct pcf21xx_pwrmng_config {
+	int bsm;
+	bool bld;
+	bool pfd;
+};
+
 struct pcf21xx_config {
 	int type; /* IC variant */
 	int max_register;
@@ -209,6 +215,7 @@ struct pcf2127 {
 	bool irq_enabled;
 	time64_t ts[PCF2127_MAX_TS_SUPPORTED]; /* Timestamp values. */
 	bool ts_valid[PCF2127_MAX_TS_SUPPORTED];  /* Timestamp valid indication. */
+	bool bld_set;
 };
 
 /*
@@ -333,26 +340,130 @@ static int pcf2127_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	return 0;
 }
 
-static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
+static int pcf2127_rtc_get_pwrmng(struct device *dev,
+				  struct pcf21xx_pwrmng_config *cfg)
 {
 	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
-	u32 value;
+	unsigned int value;
+	int ret;
+
+	ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+	if (ret < 0)
+		return ret;
+
+	value = FIELD_GET(PCF2127_CTRL3_PM, value);
+
+	switch (value) {
+	case 0:
+		cfg->bsm = RTC_BSM_LEVEL;
+		cfg->bld = true;
+		cfg->pfd = true;
+		break;
+
+	case 1:
+		cfg->bsm = RTC_BSM_LEVEL;
+		cfg->bld = false;
+		cfg->pfd = true;
+		break;
+
+	case 2:
+		cfg->bsm = RTC_BSM_LEVEL;
+		cfg->bld = false;
+		cfg->pfd = false;
+		break;
+
+	case 3:
+		cfg->bsm = RTC_BSM_DIRECT;
+		cfg->bld = true;
+		cfg->pfd = true;
+		break;
+
+	case 4:
+		cfg->bsm = RTC_BSM_DIRECT;
+		cfg->bld = false;
+		cfg->pfd = true;
+		break;
+
+	case 5:
+		cfg->bsm = RTC_BSM_DIRECT;
+		cfg->bld = false;
+		cfg->pfd = false;
+		break;
+
+	case 6:
+		cfg->bsm = RTC_BSM_DISABLED;
+		cfg->bld = false;
+		cfg->pfd = true;
+		break;
+
+	default:
+		cfg->bsm = RTC_BSM_DISABLED;
+		cfg->bld = false;
+		cfg->pfd = false;
+		break;
+	}
+
+	return 0;
+}
+
+static int pcf2127_rtc_set_pwrmng(struct device *dev,
+				  struct pcf21xx_pwrmng_config *cfg)
+{
+	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
+	unsigned int value;
+
+	if (cfg->bld)
+		cfg->pfd = true;
+
+	switch (cfg->bsm) {
+	case RTC_BSM_LEVEL:
+		if (cfg->bld)
+			value = 0;
+		else if (cfg->pfd)
+			value = 1;
+		else
+			value = 2;
+		break;
+
+	case RTC_BSM_DIRECT:
+		if (cfg->bld)
+			value = 3;
+		else if (cfg->pfd)
+			value = 4;
+		else
+			value = 5;
+		break;
+
+	case RTC_BSM_DISABLED:
+		if (cfg->bld)
+			return -EINVAL;
+		else if (cfg->pfd)
+			value = 6;
+		else
+			value = 7;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				  PCF2127_CTRL3_PM,
+				  FIELD_PREP(PCF2127_CTRL3_PM, value));
+}
+
+static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
+{
+	struct pcf21xx_pwrmng_config cfg;
 	int ret;
 
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+		ret = pcf2127_rtc_get_pwrmng(dev, &cfg);
 		if (ret < 0)
 			return ret;
 
-		value = FIELD_GET(PCF2127_CTRL3_PM, value);
-
-		if (value < 0x3)
-			param->uvalue = RTC_BSM_LEVEL;
-		else if (value < 0x6)
-			param->uvalue = RTC_BSM_DIRECT;
-		else
-			param->uvalue = RTC_BSM_DISABLED;
+		param->uvalue = cfg.bsm;
 
 		break;
 
@@ -366,49 +477,23 @@ static int pcf2127_param_get(struct device *dev, struct rtc_param *param)
 static int pcf2127_param_set(struct device *dev, struct rtc_param *param)
 {
 	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
-	u8 mode = 0;
-	u32 value;
+	struct pcf21xx_pwrmng_config cfg;
 	int ret;
 
 	switch (param->param) {
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &value);
+		ret = pcf2127_rtc_get_pwrmng(dev, &cfg);
 		if (ret < 0)
 			return ret;
 
-		value = FIELD_GET(PCF2127_CTRL3_PM, value);
-
-		if (value > 5)
-			value -= 5;
-		else if (value > 2)
-			value -= 3;
-
-		switch (param->uvalue) {
-		case RTC_BSM_LEVEL:
-			break;
-		case RTC_BSM_DIRECT:
-			mode = 3;
-			break;
-		case RTC_BSM_DISABLED:
-			if (value == 0)
-				value = 1;
-			mode = 5;
-			break;
-		default:
-			return -EINVAL;
-		}
-
-		return regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
-					  PCF2127_CTRL3_PM,
-					  FIELD_PREP(PCF2127_CTRL3_PM, mode + value));
-
-		break;
+		cfg.bsm = param->uvalue;
+		if (pcf2127->bld_set && cfg.bsm != RTC_BSM_DISABLED)
+			cfg.bld = true;
+		return pcf2127_rtc_set_pwrmng(dev, &cfg);
 
 	default:
 		return -EINVAL;
 	}
-
-	return 0;
 }
 
 static int pcf2127_rtc_ioctl(struct device *dev,
@@ -1181,6 +1266,8 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	struct pcf2127 *pcf2127;
 	int ret = 0;
 	unsigned int val;
+	struct pcf21xx_pwrmng_config pm_cfg;
+	bool pm_cfg_write = false;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -1322,6 +1409,39 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 			__func__);
 		return ret;
 	}
+
+	ret = pcf2127_rtc_get_pwrmng(dev, &pm_cfg);
+	if (ret) {
+		dev_err(dev,
+			"%s: power management config (ctrl3) read failed\n",
+			__func__);
+		return ret;
+	}
+
+	if (!device_property_read_u32(dev, "backup-switchover-mode",
+				      &pm_cfg.bsm)) {
+		pm_cfg_write = true;
+	}
+
+	pcf2127->bld_set = device_property_read_bool(dev,
+					"battery-low-detection-set");
+	if (pcf2127->bld_set) {
+		if (pm_cfg.bsm != RTC_BSM_DISABLED)
+			pm_cfg.bld = true;
+		pm_cfg_write = true;
+	}
+
+	if (pm_cfg_write) {
+		ret = pcf2127_rtc_set_pwrmng(dev, &pm_cfg);
+		if (ret) {
+			dev_err(dev,
+				"%s: power management config (ctrl3) failed\n",
+				__func__);
+			return ret;
+		}
+	}
+
+	set_bit(RTC_FEATURE_BACKUP_SWITCH_MODE, pcf2127->rtc->features);
 
 	/*
 	 * Enable timestamp functions 1 to 4.
