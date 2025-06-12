@@ -2252,8 +2252,8 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 			sig = 0;
 	}
 	/*
-	 * Send with __send_signal as si_pid and si_uid are in the
-	 * parent's namespaces.
+	 * Use __send_signal_locked() instead of send_signal_locked()
+	 * because the latter can wrongly change si_pid/si_uid
 	 */
 	if (valid_signal(sig) && sig)
 		__send_signal_locked(sig, &info, tsk->parent, PIDTYPE_TGID, false);
