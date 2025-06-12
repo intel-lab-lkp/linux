@@ -171,3 +171,34 @@ impl<T> Borrow<T> for PowerOfTwo<T> {
         &self.0
     }
 }
+
+macro_rules! impl_fls {
+    ($($t:ty),+) => {
+        $(
+            ::kernel::macros::paste! {
+            /// Find Last Set Bit: return the 1-based index of the last (i.e. most significant) set
+            /// bit in `v`.
+            ///
+            /// Equivalent to the C `fls` function.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use kernel::num::fls_u32;
+            ///
+            /// assert_eq!(fls_u32(0x0), 0);
+            /// assert_eq!(fls_u32(0x1), 1);
+            /// assert_eq!(fls_u32(0x10), 5);
+            /// assert_eq!(fls_u32(0xffff), 16);
+            /// assert_eq!(fls_u32(0x8000_0000), 32);
+            /// ```
+            #[inline(always)]
+            pub const fn [<fls_ $t>](v: $t) -> u32 {
+                $t::BITS - v.leading_zeros()
+            }
+            }
+        )+
+    };
+}
+
+impl_fls!(usize, u8, u16, u32, u64, u128);
