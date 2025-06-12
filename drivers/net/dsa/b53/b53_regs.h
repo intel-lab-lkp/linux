@@ -105,6 +105,8 @@
 
 /* Power-down mode control */
 #define B53_PD_MODE_CTRL_25		0x0f
+#define  B53_PD_MODE_PORT_MIN		1
+#define  B53_PD_MODE_PORT_MAX		4
 
 /* IP Multicast control (8 bit) */
 #define B53_IP_MULTICAST_CTRL		0x21
