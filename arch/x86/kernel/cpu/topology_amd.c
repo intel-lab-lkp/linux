@@ -80,7 +80,13 @@ static bool parse_8000_001e(struct topo_scan *tscan, bool has_topoext)
 
 	cpuid_leaf(0x8000001e, &leaf);
 
-	tscan->c->topo.initial_apicid = leaf.ext_apic_id;
+	/*
+	 * Prefer initial_apicid parsed from CPUID leaf 0x8000026 or 0xb
+	 * if available. Otherwise prefer the one from leaf 0x8000001e
+	 * over 0x1.
+	 */
+	if (!has_topoext)
+		tscan->c->topo.initial_apicid = leaf.ext_apic_id;
 
 	/*
 	 * If leaf 0xb is available, then the domain shifts are set
