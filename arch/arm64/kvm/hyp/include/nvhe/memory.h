@@ -37,8 +37,7 @@ enum pkvm_page_state {
 static inline enum kvm_pgtable_prot pkvm_mkstate(enum kvm_pgtable_prot prot,
 						 enum pkvm_page_state state)
 {
-	prot &= ~PKVM_PAGE_STATE_PROT_MASK;
-	prot |= FIELD_PREP(PKVM_PAGE_STATE_PROT_MASK, state);
+	FIELD_MODIFY(PKVM_PAGE_STATE_PROT_MASK, &prot, state);
 	return prot;
 }
 
