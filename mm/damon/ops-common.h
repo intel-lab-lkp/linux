@@ -18,3 +18,5 @@ int damon_hot_score(struct damon_ctx *c, struct damon_region *r,
 			struct damos *s);
 
 unsigned long damon_migrate_pages(struct list_head *folio_list, int target_nid);
+int damon_interleave_target_nid(unsigned long addr, struct vm_area_struct *vma,
+			struct mempolicy *pol, struct folio *folio);

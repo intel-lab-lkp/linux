@@ -9,12 +9,14 @@
 
 #include <linux/highmem.h>
 #include <linux/hugetlb.h>
+#include <linux/mempolicy.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
 #include <linux/pagewalk.h>
 #include <linux/sched/mm.h>
 
+#include "../internal.h"
 #include "ops-common.h"
 
 #ifdef CONFIG_DAMON_VADDR_KUNIT_TEST
@@ -653,6 +655,137 @@ static unsigned long damos_madvise(struct damon_target *target,
 }
 #endif	/* CONFIG_ADVISE_SYSCALLS */
 
+#ifdef CONFIG_NUMA
+struct damos_va_interleave_private {
+	struct list_head *folio_migration_list;
+	struct mempolicy *pol;
+};
+
+static void damos_va_interleave_folio(unsigned long addr, struct folio *folio,
+	struct vm_area_struct *vma, struct damos_va_interleave_private *priv)
+{
+	int target_nid;
+
+	if (!folio_isolate_lru(folio))
+		return;
+
+	target_nid = damon_interleave_target_nid(addr, vma, priv->pol, folio);
+
+	if (target_nid != NUMA_NO_NODE && folio_nid(folio) != target_nid)
+		list_add(&folio->lru, &priv->folio_migration_list[target_nid]);
+	else
+		folio_putback_lru(folio);
+
+}
+
+static int damos_va_interleave_pmd(pmd_t *pmd, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	struct damos_va_interleave_private *priv = walk->private;
+	struct folio *folio;
+	spinlock_t *ptl;
+	pmd_t pmde;
+
+	ptl = pmd_lock(walk->mm, pmd);
+	pmde = pmdp_get(pmd);
+
+	if (!pmd_present(pmde) || !pmd_trans_huge(pmde))
+		goto unlock;
+
+	folio = damon_get_folio(pmd_pfn(pmde));
+	if (!folio)
+		goto unlock;
+
+	damos_va_interleave_folio(addr, folio, walk->vma, priv);
+
+	folio_put(folio);
+unlock:
+	spin_unlock(ptl);
+	return 0;
+}
+
+static int damos_va_interleave_pte(pte_t *pte, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	struct damos_va_interleave_private *priv = walk->private;
+	struct folio *folio;
+
+	if (pte_none(*pte) || !pte_present(*pte))
+		return 0;
+
+	folio = vm_normal_folio(walk->vma, addr, *pte);
+	if (!folio)
+		return 0;
+	folio_get(folio);
+
+	damos_va_interleave_folio(addr, folio, walk->vma, priv);
+
+	folio_put(folio);
+	return 0;
+}
+
+static unsigned long damos_va_interleave(struct damon_target *target,
+		struct damon_region *r, struct damos *s)
+{
+	struct damos_va_interleave_private priv;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	int ret;
+	unsigned long applied = 0;
+	struct mm_walk_ops walk_ops = {
+		.pmd_entry = damos_va_interleave_pmd,
+		.pte_entry = damos_va_interleave_pte,
+	};
+
+	task = damon_get_task_struct(target);
+	if (!task)
+		return 0;
+
+	priv.pol = get_task_policy(task);
+	if (!priv.pol)
+		goto put_task;
+
+	if (priv.pol->mode != MPOL_WEIGHTED_INTERLEAVE)
+		goto put_pol;
+
+	priv.folio_migration_list = kmalloc_array(nr_node_ids, sizeof(struct list_head),
+		GFP_KERNEL);
+	if (!priv.folio_migration_list)
+		goto put_pol;
+
+	for (int i = 0; i < nr_node_ids; i++)
+		INIT_LIST_HEAD(&priv.folio_migration_list[i]);
+
+	mm = damon_get_mm(target);
+	if (!mm)
+		goto free_folio_list;
+
+	mmap_read_lock(mm);
+	ret = walk_page_range(mm, r->ar.start, r->ar.end, &walk_ops, &priv);
+	mmap_read_unlock(mm);
+	mmput(mm);
+
+	for (int i = 0; i < nr_node_ids; i++) {
+		applied += damon_migrate_pages(&priv.folio_migration_list[i], i);
+		cond_resched();
+	}
+
+free_folio_list:
+	kfree(priv.folio_migration_list);
+put_pol:
+	mpol_cond_put(priv.pol);
+put_task:
+	put_task_struct(task);
+	return applied * PAGE_SIZE;
+}
+#else
+static unsigned long damos_va_interleave(struct damon_target *target,
+		struct damon_region *r, struct damos *s)
+{
+	return 0;
+}
+#endif /* CONFIG_NUMA */
+
 static unsigned long damon_va_apply_scheme(struct damon_ctx *ctx,
 		struct damon_target *t, struct damon_region *r,
 		struct damos *scheme, unsigned long *sz_filter_passed)
@@ -675,6 +808,8 @@ static unsigned long damon_va_apply_scheme(struct damon_ctx *ctx,
 	case DAMOS_NOHUGEPAGE:
 		madv_action = MADV_NOHUGEPAGE;
 		break;
+	case DAMOS_INTERLEAVE:
+		return damos_va_interleave(t, r, scheme);
 	case DAMOS_STAT:
 		return 0;
 	default:

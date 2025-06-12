@@ -415,7 +415,7 @@ put_folio:
 }
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_NUMA)
-struct damos_interleave_private {
+struct damos_pa_interleave_private {
 	struct list_head *folio_migration_list;
 	bool putback_lru;
 };
@@ -425,9 +425,8 @@ static bool damon_pa_interleave_rmap(struct folio *folio, struct vm_area_struct 
 {
 	struct mempolicy *pol;
 	struct task_struct *task;
-	pgoff_t ilx;
 	int target_nid;
-	struct damos_interleave_private *priv = arg;
+	struct damos_pa_interleave_private *priv = arg;
 
 	task = rcu_dereference(vma->vm_mm->owner);
 	if (!task)
@@ -443,9 +442,7 @@ static bool damon_pa_interleave_rmap(struct folio *folio, struct vm_area_struct 
 		return true;
 	}
 
-	ilx = vma->vm_pgoff >> folio_order(folio);
-	ilx += (addr - vma->vm_start) >> (PAGE_SHIFT + folio_order(folio));
-	policy_nodemask(0, pol, ilx, &target_nid);
+	target_nid = damon_interleave_target_nid(addr, vma, pol, folio);
 
 	if (target_nid != NUMA_NO_NODE && folio_nid(folio) != target_nid) {
 		list_add(&folio->lru, &priv->folio_migration_list[target_nid]);
@@ -459,7 +456,7 @@ static bool damon_pa_interleave_rmap(struct folio *folio, struct vm_area_struct 
 static unsigned long damon_pa_interleave(struct damon_region *r, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
-	struct damos_interleave_private priv;
+	struct damos_pa_interleave_private priv;
 	struct rmap_walk_control rwc;
 	unsigned long addr, applied;
 	struct folio *folio;

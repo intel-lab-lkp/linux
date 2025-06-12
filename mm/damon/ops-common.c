@@ -261,3 +261,16 @@ unsigned long damon_migrate_pages(struct list_head *folio_list,
 
 	return nr_migrated;
 }
+
+int damon_interleave_target_nid(unsigned long addr, struct vm_area_struct *vma,
+		struct mempolicy *pol, struct folio *folio)
+{
+	pgoff_t ilx;
+	int target_nid;
+
+	ilx = vma->vm_pgoff >> folio_order(folio);
+	ilx += (addr - vma->vm_start) >> (PAGE_SHIFT + folio_order(folio));
+	policy_nodemask(0, pol, ilx, &target_nid);
+
+	return target_nid;
+}
