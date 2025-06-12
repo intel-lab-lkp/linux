@@ -106,6 +106,16 @@ static inline int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 		return find_next_bit(sis->zeromap, end, start) - start;
 }
 
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+int create_swap_cgroup_priority(struct mem_cgroup *memcg,
+				int unique[], int prio[], int nr);
+void delete_swap_cgroup_priority(struct mem_cgroup *memcg);
+void show_swap_device_unique_id(struct seq_file *m);
+#else
+static inline void delete_swap_cgroup_priority(struct mem_cgroup *memcg) {}
+static inline void get_swap_unique_id(struct swap_info_struct *si) {}
+#endif
+
 #else /* CONFIG_SWAP */
 struct swap_iocb;
 static inline void swap_read_folio(struct folio *folio, struct swap_iocb **plug)

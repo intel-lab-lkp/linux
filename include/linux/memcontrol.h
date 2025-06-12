@@ -218,6 +218,9 @@ struct mem_cgroup {
 	bool zswap_writeback;
 #endif
 
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	struct swap_cgroup_priority *swap_priority;
+#endif
 	/* vmpressure notifications */
 	struct vmpressure vmpressure;
 

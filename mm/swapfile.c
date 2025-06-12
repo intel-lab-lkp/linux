@@ -126,6 +126,10 @@ static DEFINE_PER_CPU(struct percpu_swap_cluster, percpu_swap_cluster) = {
 	.offset = { SWAP_ENTRY_INVALID },
 	.lock = INIT_LOCAL_LOCK(),
 };
+/* TODO: better choice? */
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+#include "swap_cgroup_priority.c"
+#endif
 
 static struct swap_info_struct *swap_type_to_swap_info(int type)
 {
@@ -3461,6 +3465,8 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		inode->i_flags &= ~S_SWAPFILE;
 		goto free_swap_zswap;
 	}
+
+	get_swap_unique_id(si);
 
 	mutex_lock(&swapon_mutex);
 	prio = -1;

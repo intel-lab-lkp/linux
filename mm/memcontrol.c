@@ -69,6 +69,7 @@
 #include <net/ip.h>
 #include "slab.h"
 #include "memcontrol-v1.h"
+#include "swap.h"
 
 #include <linux/uaccess.h>
 
@@ -3702,6 +3703,7 @@ static void mem_cgroup_free(struct mem_cgroup *memcg)
 {
 	lru_gen_exit_memcg(memcg);
 	memcg_wb_domain_exit(memcg);
+	delete_swap_cgroup_priority(memcg);
 	__mem_cgroup_free(memcg);
 }
 
@@ -5403,6 +5405,51 @@ static int swap_events_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+static ssize_t swap_cgroup_priority_write(struct kernfs_open_file *of,
+			      char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret;
+	int unique[MAX_SWAPFILES] = {0, };
+	int prios[MAX_SWAPFILES] = {0,};
+	int idx = 0;
+	char *token;
+
+	buf = strstrip(buf);
+	if (strlen(buf) == 0) {
+		delete_swap_cgroup_priority(memcg);
+		return nbytes;
+	}
+
+	while ((token = strsep(&buf, ",")) != NULL) {
+		char *token2 = token;
+		char *token3;
+
+		token3 = strsep(&token2, ":");
+		if (!token2 || !token3)
+			return -EINVAL;
+
+		if (kstrtoint(token3, 10, &unique[idx]) ||
+			kstrtoint(token2, 10, &prios[idx]))
+			return -EINVAL;
+
+		idx++;
+	}
+
+	if ((ret = create_swap_cgroup_priority(memcg, unique, prios, idx)))
+		return ret;
+
+	return nbytes;
+}
+
+static int swap_cgroup_priority_show(struct seq_file *m, void *v)
+{
+	show_swap_device_unique_id(m);
+	return 0;
+}
+#endif
+
 static struct cftype swap_files[] = {
 	{
 		.name = "swap.current",
@@ -5435,6 +5482,14 @@ static struct cftype swap_files[] = {
 		.file_offset = offsetof(struct mem_cgroup, swap_events_file),
 		.seq_show = swap_events_show,
 	},
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	{
+		.name = "swap.priority",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = swap_cgroup_priority_show,
+		.write = swap_cgroup_priority_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 
