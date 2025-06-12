@@ -92,6 +92,12 @@ static void (*w)(uint32_t, uint32_t *);
 static void (*w8)(uint64_t, uint64_t *);
 typedef void (*table_sort_t)(char *, int);
 
+static Elf_Shdr *init_data_sec;
+static Elf_Shdr *ro_data_sec;
+static Elf_Shdr *data_data_sec;
+
+static void *file_map_end;
+
 static struct elf_funcs {
 	int (*compare_extable)(const void *a, const void *b);
 	uint64_t (*ehdr_shoff)(Elf_Ehdr *ehdr);
@@ -550,8 +556,6 @@ static void *sort_orctable(void *arg)
 }
 #endif
 
-#ifdef MCOUNT_SORT_ENABLED
-
 static int compare_values_64(const void *a, const void *b)
 {
 	uint64_t av = *(uint64_t *)a;
@@ -573,6 +577,22 @@ static int compare_values_32(const void *a, const void *b)
 }
 
 static int (*compare_values)(const void *a, const void *b);
+
+static int fill_addrs(void *ptr, uint64_t size, void *addrs)
+{
+	void *end = ptr + size;
+	int count = 0;
+
+	for (; ptr < end; ptr += long_size, addrs += long_size, count++) {
+		if (long_size == 4)
+			*(uint32_t *)ptr = r(addrs);
+		else
+			*(uint64_t *)ptr = r8(addrs);
+	}
+	return count;
+}
+
+#ifdef MCOUNT_SORT_ENABLED
 
 /* Only used for sorting mcount table */
 static void rela_write_addend(Elf_Rela *rela, uint64_t val)
@@ -684,7 +704,6 @@ static char m_err[ERRSTR_MAXSZ];
 
 struct elf_mcount_loc {
 	Elf_Ehdr *ehdr;
-	Elf_Shdr *init_data_sec;
 	uint64_t start_mcount_loc;
 	uint64_t stop_mcount_loc;
 };
@@ -785,20 +804,6 @@ static void replace_relocs(void *ptr, uint64_t size, Elf_Ehdr *ehdr, uint64_t st
 	}
 }
 
-static int fill_addrs(void *ptr, uint64_t size, void *addrs)
-{
-	void *end = ptr + size;
-	int count = 0;
-
-	for (; ptr < end; ptr += long_size, addrs += long_size, count++) {
-		if (long_size == 4)
-			*(uint32_t *)ptr = r(addrs);
-		else
-			*(uint64_t *)ptr = r8(addrs);
-	}
-	return count;
-}
-
 static void replace_addrs(void *ptr, uint64_t size, void *addrs)
 {
 	void *end = ptr + size;
@@ -815,8 +820,8 @@ static void replace_addrs(void *ptr, uint64_t size, void *addrs)
 static void *sort_mcount_loc(void *arg)
 {
 	struct elf_mcount_loc *emloc = (struct elf_mcount_loc *)arg;
-	uint64_t offset = emloc->start_mcount_loc - shdr_addr(emloc->init_data_sec)
-					+ shdr_offset(emloc->init_data_sec);
+	uint64_t offset = emloc->start_mcount_loc - shdr_addr(init_data_sec)
+					+ shdr_offset(init_data_sec);
 	uint64_t size = emloc->stop_mcount_loc - emloc->start_mcount_loc;
 	unsigned char *start_loc = (void *)emloc->ehdr + offset;
 	Elf_Ehdr *ehdr = emloc->ehdr;
@@ -920,6 +925,211 @@ static void get_mcount_loc(struct elf_mcount_loc *emloc, Elf_Shdr *symtab_sec,
 static inline int parse_symbols(const char *fname) { return 0; }
 #endif
 
+struct elf_tracepoint {
+	Elf_Ehdr *ehdr;
+	uint64_t start_tracepoint_check;
+	uint64_t stop_tracepoint_check;
+	uint64_t start_tracepoint;
+	uint64_t stop_tracepoint;
+	uint64_t *array;
+	int count;
+};
+
+static void make_trace_array(struct elf_tracepoint *etrace)
+{
+	uint64_t offset = etrace->start_tracepoint_check - shdr_addr(init_data_sec)
+					+ shdr_offset(init_data_sec);
+	uint64_t size = etrace->stop_tracepoint_check - etrace->start_tracepoint_check;
+	Elf_Ehdr *ehdr = etrace->ehdr;
+	void *start = (void *)ehdr + offset;
+	int count = 0;
+	void *vals;
+
+	etrace->array = NULL;
+
+	/* If CONFIG_TRACEPOINT_VERIFY_USED is not set, there's nothing to do */
+	if (!size)
+		return;
+
+	vals = malloc(long_size * size);
+	if (!vals) {
+		fprintf(stderr, "Failed to allocate tracepoint check array");
+		return;
+	}
+
+	count = fill_addrs(vals, size, start);
+
+	compare_values = long_size == 4 ? compare_values_32 : compare_values_64;
+	qsort(vals, count, long_size, compare_values);
+
+	etrace->array = vals;
+	etrace->count = count;
+}
+
+static int cmp_addr_64(const void *K, const void *A)
+{
+	uint64_t key = *(const uint64_t *)K;
+	const uint64_t *a = A;
+
+	if (key < *a)
+		return -1;
+	return key > *a;
+}
+
+static int cmp_addr_32(const void *K, const void *A)
+{
+	uint32_t key = *(const uint32_t *)K;
+	const uint32_t *a = A;
+
+	if (key < *a)
+		return -1;
+	return key > *a;
+}
+
+static int find_event(void *array, size_t size, uint64_t key)
+{
+	uint32_t val_32;
+	uint64_t val_64;
+	void *val;
+	int (*cmp_func)(const void *A, const void *B);
+
+	if (long_size == 4) {
+		val_32 = key;
+		val = &val_32;
+		cmp_func = cmp_addr_32;
+	} else {
+		val_64 = key;
+		val = &val_64;
+		cmp_func = cmp_addr_64;
+	}
+	return bsearch(val, array, size, long_size, cmp_func) != NULL;
+}
+
+static int failed_event(struct elf_tracepoint *etrace, uint64_t addr)
+{
+	uint64_t sec_addr = shdr_addr(data_data_sec);
+	uint64_t sec_offset = shdr_offset(data_data_sec);
+	uint64_t offset = addr - sec_addr + sec_offset;
+	Elf_Ehdr *ehdr = etrace->ehdr;
+	void *name_ptr = (void *)ehdr + offset;
+	char *name;
+
+	if (name_ptr > file_map_end)
+		goto bad_addr;
+
+	if (long_size == 4)
+		addr = r(name_ptr);
+	else
+		addr = r8(name_ptr);
+
+	sec_addr = shdr_addr(ro_data_sec);
+	sec_offset = shdr_offset(ro_data_sec);
+	offset = addr - sec_addr + sec_offset;
+	name = (char *)ehdr + offset;
+	if ((void *)name > file_map_end)
+		goto bad_addr;
+
+	fprintf(stderr, "warning: tracepoint '%s' is unused.\n", name);
+	return 0;
+bad_addr:
+	fprintf(stderr, "warning: Failed to verify unused trace events.\n");
+	return -1;
+}
+
+static void check_tracepoints(struct elf_tracepoint *etrace)
+{
+	uint64_t sec_addr = shdr_addr(ro_data_sec);
+	uint64_t sec_offset = shdr_offset(ro_data_sec);
+	uint64_t offset = etrace->start_tracepoint - sec_addr + sec_offset;
+	uint64_t size = etrace->stop_tracepoint - etrace->start_tracepoint;
+	Elf_Ehdr *ehdr = etrace->ehdr;
+	void *start = (void *)ehdr + offset;
+	void *end = start + size;
+	void *addrs;
+	int inc = long_size;
+
+	if (!etrace->array)
+		return;
+
+	if (!size)
+		return;
+
+#ifdef PREL32_RELOCATIONS
+	inc = 4;
+#endif
+
+	sec_offset = sec_offset + (uint64_t)ehdr;
+	for (addrs = start; addrs < end; addrs += inc) {
+		uint64_t val;
+
+#ifdef PREL32_RELOCATIONS
+		val = r(addrs);
+		val += sec_addr + ((uint64_t)addrs - sec_offset);
+#else
+		val = long_size == 4 ? r(addrs) : r8(addrs);
+#endif
+		if (!find_event(etrace->array, etrace->count, val)) {
+			if (failed_event(etrace, val))
+				return;
+		}
+	}
+	free(etrace->array);
+}
+
+static void *tracepoint_check(struct elf_tracepoint *etrace, Elf_Shdr *symtab_sec,
+			      const char *strtab)
+{
+	Elf_Sym *sym, *end_sym;
+	int symentsize = shdr_entsize(symtab_sec);
+	int found = 0;
+
+	sym = (void *)etrace->ehdr + shdr_offset(symtab_sec);
+	end_sym = (void *)sym + shdr_size(symtab_sec);
+
+	while (sym < end_sym) {
+		if (!strcmp(strtab + sym_name(sym), "__start___tracepoint_check")) {
+			etrace->start_tracepoint_check = sym_value(sym);
+			if (++found == 4)
+				break;
+		} else if (!strcmp(strtab + sym_name(sym), "__stop___tracepoint_check")) {
+			etrace->stop_tracepoint_check = sym_value(sym);
+			if (++found == 4)
+				break;
+		} else if (!strcmp(strtab + sym_name(sym), "__start___tracepoints_ptrs")) {
+			etrace->start_tracepoint = sym_value(sym);
+			if (++found == 4)
+				break;
+		} else if (!strcmp(strtab + sym_name(sym), "__stop___tracepoints_ptrs")) {
+			etrace->stop_tracepoint = sym_value(sym);
+			if (++found == 4)
+				break;
+		}
+		sym = (void *)sym + symentsize;
+	}
+
+	if (!etrace->start_tracepoint_check) {
+		fprintf(stderr, "warning: get start_tracepoint_check error!\n");
+		return NULL;
+	}
+	if (!etrace->stop_tracepoint_check) {
+		fprintf(stderr, "warning: get stop_tracepoint_check error!\n");
+		return NULL;
+	}
+	if (!etrace->start_tracepoint) {
+		fprintf(stderr, "warning: get start_tracepoint error!\n");
+		return NULL;
+	}
+	if (!etrace->stop_tracepoint) {
+		fprintf(stderr, "warning: get start_tracepoint error!\n");
+		return NULL;
+	}
+
+	make_trace_array(etrace);
+	check_tracepoints(etrace);
+
+	return NULL;
+}
+
 static int do_sort(Elf_Ehdr *ehdr,
 		   char const *const fname,
 		   table_sort_t custom_sort)
@@ -948,6 +1158,7 @@ static int do_sort(Elf_Ehdr *ehdr,
 	int i;
 	unsigned int shnum;
 	unsigned int shstrndx;
+	struct elf_tracepoint tstruct = {0};
 #ifdef MCOUNT_SORT_ENABLED
 	struct elf_mcount_loc mstruct = {0};
 #endif
@@ -985,11 +1196,17 @@ static int do_sort(Elf_Ehdr *ehdr,
 			symtab_shndx = (Elf32_Word *)((const char *)ehdr +
 						      shdr_offset(shdr));
 
-#ifdef MCOUNT_SORT_ENABLED
 		/* locate the .init.data section in vmlinux */
 		if (!strcmp(secstrings + idx, ".init.data"))
-			mstruct.init_data_sec = shdr;
-#endif
+			init_data_sec = shdr;
+
+		/* locate the .ro.data section in vmlinux */
+		if (!strcmp(secstrings + idx, ".rodata"))
+			ro_data_sec = shdr;
+
+		/* locate the .data section in vmlinux */
+		if (!strcmp(secstrings + idx, ".data"))
+			data_data_sec = shdr;
 
 #ifdef UNWINDER_ORC_ENABLED
 		/* locate the ORC unwind tables */
@@ -1055,7 +1272,7 @@ static int do_sort(Elf_Ehdr *ehdr,
 	mstruct.ehdr = ehdr;
 	get_mcount_loc(&mstruct, symtab_sec, strtab);
 
-	if (!mstruct.init_data_sec || !mstruct.start_mcount_loc || !mstruct.stop_mcount_loc) {
+	if (!init_data_sec || !mstruct.start_mcount_loc || !mstruct.stop_mcount_loc) {
 		fprintf(stderr,
 			"incomplete mcount's sort in file: %s\n",
 			fname);
@@ -1070,6 +1287,9 @@ static int do_sort(Elf_Ehdr *ehdr,
 		goto out;
 	}
 #endif
+
+	tstruct.ehdr = ehdr;
+	tracepoint_check(&tstruct, symtab_sec, strtab);
 
 	if (custom_sort) {
 		custom_sort(extab_image, shdr_size(extab_sec));
@@ -1403,6 +1623,8 @@ int main(int argc, char *argv[])
 			++n_error;
 			continue;
 		}
+
+		file_map_end = addr + size;
 
 		if (do_file(argv[i], addr))
 			++n_error;
