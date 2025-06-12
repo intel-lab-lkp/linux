@@ -1427,6 +1427,10 @@ static void __init its_select_mitigation(void)
 		return;
 	}
 
+	/* For IBPB to be effective against ITS */
+	if (boot_cpu_has_bug(X86_BUG_OLD_MICROCODE))
+		pr_warn("Old microcode, userspace may be vulnerable to ITS\n");
+
 	if (its_mitigation == ITS_MITIGATION_RETPOLINE_STUFF &&
 	    !IS_ENABLED(CONFIG_MITIGATION_CALL_DEPTH_TRACKING)) {
 		pr_err("RSB stuff mitigation not supported, using default\n");
