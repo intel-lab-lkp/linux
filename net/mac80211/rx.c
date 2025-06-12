@@ -5125,6 +5125,32 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 	return ieee80211_prepare_and_rx_handle(rx, skb, consume);
 }
 
+static bool
+ieee80211_rx_is_sdata_match(struct ieee80211_sub_if_data *sdata,
+			    int freq)
+{
+	struct ieee80211_link_data *link;
+	struct ieee80211_bss_conf *bss_conf;
+	struct ieee80211_chanctx_conf *conf;
+
+	if (!freq)
+		return true;
+
+	for_each_link_data(sdata, link) {
+		bss_conf = link->conf;
+		if (!bss_conf)
+			continue;
+		conf = rcu_dereference(bss_conf->chanctx_conf);
+		if (!conf || !conf->def.chan)
+			return true;
+
+		if (conf->def.chan->center_freq == freq)
+			return true;
+	}
+
+	return false;
+}
+
 /*
  * This is the actual Rx frames handler. as it belongs to Rx path it must
  * be called with rcu_read_lock protection.
@@ -5264,18 +5290,26 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		 * the loop to avoid copying the SKB once too much
 		 */
 
-		if (!prev) {
+		/* Process the group addressed management and data packets
+		 * in the intended interface when the operating frequency
+		 * matches with rx_status->freq in multi-radio devices.
+		 * If rx_status->freq is not set by the driver, then
+		 * follow the existing code flow.
+		 */
+
+		if (ieee80211_rx_is_sdata_match(sdata, status->freq)) {
+			if (!prev) {
+				prev = sdata;
+				continue;
+			}
+
+			rx.sdata = prev;
+			ieee80211_rx_for_interface(&rx, skb, false);
 			prev = sdata;
-			continue;
 		}
-
-		rx.sdata = prev;
-		ieee80211_rx_for_interface(&rx, skb, false);
-
-		prev = sdata;
 	}
 
-	if (prev) {
+	if (prev && ieee80211_rx_is_sdata_match(prev, status->freq)) {
 		rx.sdata = prev;
 
 		if (ieee80211_rx_for_interface(&rx, skb, true))
