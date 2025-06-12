@@ -578,6 +578,106 @@ static int compare_values_32(const void *a, const void *b)
 
 static int (*compare_values)(const void *a, const void *b);
 
+static char m_err[ERRSTR_MAXSZ];
+static long rela_type;
+static bool sort_reloc;
+static int reloc_shnum;
+
+/* Fill the array with the content of the relocs */
+static int fill_relocs(void *ptr, uint64_t size, Elf_Ehdr *ehdr, uint64_t start_loc)
+{
+	Elf_Shdr *shdr_start;
+	Elf_Rela *rel;
+	unsigned int shnum;
+	unsigned int count = 0;
+	int shentsize;
+	void *array_end = ptr + size;
+
+	shdr_start = (Elf_Shdr *)((char *)ehdr + ehdr_shoff(ehdr));
+	shentsize = ehdr_shentsize(ehdr);
+
+	shnum = ehdr_shnum(ehdr);
+	if (shnum == SHN_UNDEF)
+		shnum = shdr_size(shdr_start);
+
+	for (int i = 0; i < shnum; i++) {
+		Elf_Shdr *shdr = get_index(shdr_start, shentsize, i);
+		void *end;
+
+		if (shdr_type(shdr) != SHT_RELA)
+			continue;
+
+		reloc_shnum = i;
+
+		rel = (void *)ehdr + shdr_offset(shdr);
+		end = (void *)rel + shdr_size(shdr);
+
+		for (; (void *)rel < end; rel = (void *)rel + shdr_entsize(shdr)) {
+			uint64_t offset = rela_offset(rel);
+
+			if (offset >= start_loc && offset < start_loc + size) {
+				if (ptr + long_size > array_end) {
+					snprintf(m_err, ERRSTR_MAXSZ,
+						 "Too many relocations");
+					return -1;
+				}
+
+				/* Make sure this has the correct type */
+				if (rela_info(rel) != rela_type) {
+					snprintf(m_err, ERRSTR_MAXSZ,
+						"rela has type %lx but expected %lx\n",
+						(long)rela_info(rel), rela_type);
+					return -1;
+				}
+
+				if (long_size == 4)
+					*(uint32_t *)ptr = rela_addend(rel);
+				else
+					*(uint64_t *)ptr = rela_addend(rel);
+				ptr += long_size;
+				count++;
+			}
+		}
+	}
+	return count;
+}
+
+static uint64_t get_addr_reloc(Elf_Ehdr *ehdr, uint64_t addr)
+{
+	Elf_Shdr *shdr_start;
+	Elf_Shdr *shdr;
+	Elf_Rela *rel;
+	unsigned int shnum;
+	int shentsize;
+	void *end;
+
+	shdr_start = (Elf_Shdr *)((char *)ehdr + ehdr_shoff(ehdr));
+	shentsize = ehdr_shentsize(ehdr);
+
+	shnum = ehdr_shnum(ehdr);
+	if (shnum == SHN_UNDEF)
+		shnum = shdr_size(shdr_start);
+
+	shdr = get_index(shdr_start, shentsize, reloc_shnum);
+	if (shdr_type(shdr) != SHT_RELA)
+		return 0;
+
+	rel = (void *)ehdr + shdr_offset(shdr);
+	end = (void *)rel + shdr_size(shdr);
+
+	for (; (void *)rel < end; rel = (void *)rel + shdr_entsize(shdr)) {
+		uint64_t offset = rela_offset(rel);
+
+		if (offset == addr) {
+			if (long_size == 4)
+				return rela_addend(rel);
+			else
+				return rela_addend(rel);
+		}
+	}
+	return 0;
+}
+
 static int fill_addrs(void *ptr, uint64_t size, void *addrs)
 {
 	void *end = ptr + size;
@@ -696,74 +796,12 @@ static int parse_symbols(const char *fname)
 }
 
 static pthread_t mcount_sort_thread;
-static bool sort_reloc;
-
-static long rela_type;
-
-static char m_err[ERRSTR_MAXSZ];
 
 struct elf_mcount_loc {
 	Elf_Ehdr *ehdr;
 	uint64_t start_mcount_loc;
 	uint64_t stop_mcount_loc;
 };
-
-/* Fill the array with the content of the relocs */
-static int fill_relocs(void *ptr, uint64_t size, Elf_Ehdr *ehdr, uint64_t start_loc)
-{
-	Elf_Shdr *shdr_start;
-	Elf_Rela *rel;
-	unsigned int shnum;
-	unsigned int count = 0;
-	int shentsize;
-	void *array_end = ptr + size;
-
-	shdr_start = (Elf_Shdr *)((char *)ehdr + ehdr_shoff(ehdr));
-	shentsize = ehdr_shentsize(ehdr);
-
-	shnum = ehdr_shnum(ehdr);
-	if (shnum == SHN_UNDEF)
-		shnum = shdr_size(shdr_start);
-
-	for (int i = 0; i < shnum; i++) {
-		Elf_Shdr *shdr = get_index(shdr_start, shentsize, i);
-		void *end;
-
-		if (shdr_type(shdr) != SHT_RELA)
-			continue;
-
-		rel = (void *)ehdr + shdr_offset(shdr);
-		end = (void *)rel + shdr_size(shdr);
-
-		for (; (void *)rel < end; rel = (void *)rel + shdr_entsize(shdr)) {
-			uint64_t offset = rela_offset(rel);
-
-			if (offset >= start_loc && offset < start_loc + size) {
-				if (ptr + long_size > array_end) {
-					snprintf(m_err, ERRSTR_MAXSZ,
-						 "Too many relocations");
-					return -1;
-				}
-
-				/* Make sure this has the correct type */
-				if (rela_info(rel) != rela_type) {
-					snprintf(m_err, ERRSTR_MAXSZ,
-						"rela has type %lx but expected %lx\n",
-						(long)rela_info(rel), rela_type);
-					return -1;
-				}
-
-				if (long_size == 4)
-					*(uint32_t *)ptr = rela_addend(rel);
-				else
-					*(uint64_t *)ptr = rela_addend(rel);
-				ptr += long_size;
-				count++;
-			}
-		}
-	}
-	return count;
-}
 
 /* Put the sorted vals back into the relocation elements */
 static void replace_relocs(void *ptr, uint64_t size, Elf_Ehdr *ehdr, uint64_t start_loc)
@@ -957,7 +995,15 @@ static void make_trace_array(struct elf_tracepoint *etrace)
 		return;
 	}
 
-	count = fill_addrs(vals, size, start);
+	if (sort_reloc) {
+		count = fill_relocs(vals, size, ehdr, etrace->start_tracepoint_check);
+		/* gcc may use relocs to save the addresses, but clang does not. */
+		if (!count) {
+			count = fill_addrs(vals, size, start);
+			sort_reloc = 0;
+		}
+	} else
+		count = fill_addrs(vals, size, start);
 
 	compare_values = long_size == 4 ? compare_values_32 : compare_values_64;
 	qsort(vals, count, long_size, compare_values);
@@ -1017,10 +1063,14 @@ static int failed_event(struct elf_tracepoint *etrace, uint64_t addr)
 	if (name_ptr > file_map_end)
 		goto bad_addr;
 
-	if (long_size == 4)
-		addr = r(name_ptr);
-	else
-		addr = r8(name_ptr);
+	if (sort_reloc) {
+		addr = get_addr_reloc(ehdr, addr);
+	} else {
+		if (long_size == 4)
+			addr = r(name_ptr);
+		else
+			addr = r8(name_ptr);
+	}
 
 	sec_addr = shdr_addr(ro_data_sec);
 	sec_offset = shdr_offset(ro_data_sec);
@@ -1473,9 +1523,9 @@ static int do_file(char const *const fname, void *addr)
 
 	switch (r2(&ehdr->e32.e_machine)) {
 	case EM_AARCH64:
-#ifdef MCOUNT_SORT_ENABLED
 		sort_reloc = true;
 		rela_type = 0x403;
+#ifdef MCOUNT_SORT_ENABLED
 		/* arm64 uses patchable function entry placing before function */
 		before_func = 8;
 #endif
