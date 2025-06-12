@@ -365,6 +365,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-o", "--output", help="Output file name")
+    parser.add_argument("-d", "--input_dir", help="YAML input directory")
 
     # Index and input are mutually exclusive
     group = parser.add_mutually_exclusive_group()
@@ -405,11 +406,14 @@ def write_to_rstfile(content: str, filename: str) -> None:
     """Write the generated content into an RST file"""
     logging.debug("Saving RST file to %s", filename)
 
+    dir = os.path.dirname(filename)
+    os.makedirs(dir, exist_ok=True)
+
     with open(filename, "w", encoding="utf-8") as rst_file:
         rst_file.write(content)
 
 
-def generate_main_index_rst(output: str) -> None:
+def generate_main_index_rst(output: str, index_dir: str) -> None:
     """Generate the `networking_spec/index` content and write to the file"""
     lines = []
 
@@ -418,12 +422,18 @@ def generate_main_index_rst(output: str) -> None:
     lines.append(rst_title("Netlink Family Specifications"))
     lines.append(rst_toctree(1))
 
-    index_dir = os.path.dirname(output)
-    logging.debug("Looking for .rst files in %s", index_dir)
+    index_fname = os.path.basename(output)
+    base, ext = os.path.splitext(index_fname)
+
+    if not index_dir:
+        index_dir = os.path.dirname(output)
+
+    logging.debug(f"Looking for {ext} files in %s", index_dir)
     for filename in sorted(os.listdir(index_dir)):
-        if not filename.endswith(".rst") or filename == "index.rst":
+        if not filename.endswith(ext) or filename == index_fname:
             continue
-        lines.append(f"   {filename.replace('.rst', '')}\n")
+        base, ext = os.path.splitext(filename)
+        lines.append(f"   {base}\n")
 
     logging.debug("Writing an index file at %s", output)
     write_to_rstfile("".join(lines), output)
@@ -447,7 +457,7 @@ def main() -> None:
 
     if args.index:
         # Generate the index RST file
-        generate_main_index_rst(args.output)
+        generate_main_index_rst(args.output, args.input_dir)
 
 
 if __name__ == "__main__":
