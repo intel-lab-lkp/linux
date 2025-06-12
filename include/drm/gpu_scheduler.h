@@ -21,6 +21,49 @@
  *
  */
 
+/**
+ * DOC: Concurrency in drm/sched
+ *
+ * The DRM GPU Scheduler interacts with drivers through the callbacks defined in
+ * &struct drm_sched_backend_ops. These callbacks can be invoked by the scheduler
+ * at any point in time if not stated otherwise explicitly in the callback
+ * documentation.
+ *
+ * For most use cases, passing the recommended default parameters in &struct
+ * drm_sched_init_args is sufficient. There are some special circumstances,
+ * though:
+ *
+ * For timeout handling, it makes a lot of sense for drivers with HARDWARE
+ * scheduling to have the timeouts (e.g., for different hardware rings) occur
+ * sequentially, for example to allow for detecting which job timedout first
+ * and, therefore, caused the hang. Thereby, it is determined which &struct
+ * drm_sched_entity has to be killed and which entities' jobs must be
+ * resubmitted after a GPU reset.
+ *
+ * This can be achieved by passing an ordered workqueue in &struct
+ * drm_sched_init_args.timeout_wq. Also take a look at the documentation of
+ * &struct drm_sched_backend_ops.timedout_job.
+ *
+ * Furthermore, for drivers with hardware that supports FIRMWARE scheduling,
+ * the driver design can be simplified a bit by providing one ordered workqueue
+ * for both &struct drm_sched_init_args.timeout_wq and
+ * &struct drm_sched_init_args.submit_wq. Reason being that firmware schedulers
+ * should always have one scheduler instance per firmware runqueue and one
+ * entity per scheduler instance. If that scheduler instance then shares one
+ * ordered workqueue with the driver, locking can be very lightweight or
+ * dropped alltogether.
+ *
+ * NOTE that sharing &struct drm_sched_init_args.submit_wq with the driver
+ * theoretically can deadlock. It must be guaranteed that submit_wq never has
+ * more than max_active - 1 active tasks, or if max_active tasks are reached at
+ * least one of them does not execute operations that may block on dma_fences
+ * that potentially make progress through this scheduler instance. Otherwise,
+ * it is possible that all max_active tasks end up waiting on a dma_fence (that
+ * can only make progress through this schduler instance), while the
+ * scheduler's queued work waits for at least one of the max_active tasks to
+ * finish. Thus, this can result in a deadlock.
+ */
+
 #ifndef _DRM_GPU_SCHEDULER_H_
 #define _DRM_GPU_SCHEDULER_H_
 
@@ -495,7 +538,7 @@ struct drm_sched_backend_ops {
 	 * timeout handlers of different schedulers. One way to achieve this
 	 * synchronization is to create an ordered workqueue (using
 	 * alloc_ordered_workqueue()) at the driver level, and pass this queue
-	 * as drm_sched_init()'s @timeout_wq parameter. This will guarantee
+	 * in &struct drm_sched_init_args.timeout_wq. This will guarantee
 	 * that timeout handlers are executed sequentially.
 	 *
 	 * Return: The scheduler's status, defined by &enum drm_gpu_sched_stat
@@ -577,14 +620,19 @@ struct drm_gpu_scheduler {
  *
  * @ops: backend operations provided by the driver
  * @submit_wq: workqueue to use for submission. If NULL, an ordered wq is
- *	       allocated and used.
+ *	       allocated and used. It is recommended to pass NULL unless there
+ *	       is a good reason not to. For details, see &DOC: Concurrency in
+ *	       drm/sched.
  * @num_rqs: Number of run-queues. This may be at most DRM_SCHED_PRIORITY_COUNT,
  *	     as there's usually one run-queue per priority, but may be less.
  * @credit_limit: the number of credits this scheduler can hold from all jobs
  * @hang_limit: number of times to allow a job to hang before dropping it.
  *		This mechanism is DEPRECATED. Set it to 0.
  * @timeout: timeout value in jiffies for submitted jobs.
- * @timeout_wq: workqueue to use for timeout work. If NULL, the system_wq is used.
+ * @timeout_wq: workqueue to use for timeout work. If NULL, the system_wq is
+ *		used. An ordered workqueue could be passed to achieve timeout
+ *		synchronization. See &DOC: Concurreny in drm/sched and &struct
+ *		drm_sched_backend_ops.timedout_job.
  * @score: score atomic shared with other schedulers. May be NULL.
  * @name: name (typically the driver's name). Used for debugging
  * @dev: associated device. Used for debugging
