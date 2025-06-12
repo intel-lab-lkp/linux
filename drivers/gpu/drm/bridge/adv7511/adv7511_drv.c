@@ -1278,7 +1278,7 @@ static int adv7511_probe(struct i2c_client *i2c)
 						  SNDRV_PCM_FMTBIT_S20_3LE |
 						  SNDRV_PCM_FMTBIT_S24_3LE |
 						  SNDRV_PCM_FMTBIT_S24_LE |
-						  SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE),
+						  SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE);
 	adv7511->bridge.hdmi_audio_spdif_playback = 1;
 	adv7511->bridge.hdmi_audio_dai_port = 2;
 #endif
