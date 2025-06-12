@@ -455,13 +455,13 @@ static void raid1_end_write_request(struct bio *bio)
 	struct md_rdev *rdev = conf->mirrors[mirror].rdev;
 	sector_t lo = r1_bio->sector;
 	sector_t hi = r1_bio->sector + r1_bio->sectors;
-	bool ignore_error = !raid1_should_handle_error(bio) ||
-		(bio->bi_status && bio_op(bio) == REQ_OP_DISCARD);
+	bool discard_error = bio->bi_status && bio_op(bio) == REQ_OP_DISCARD;
 
 	/*
 	 * 'one mirror IO has finished' event handler:
 	 */
-	if (bio->bi_status && !ignore_error) {
+	if (bio->bi_status && !discard_error &&
+	    raid1_should_handle_error(bio)) {
 		set_bit(WriteErrorSeen,	&rdev->flags);
 		if (!test_and_set_bit(WantReplacement, &rdev->flags))
 			set_bit(MD_RECOVERY_NEEDED, &
@@ -507,12 +507,13 @@ static void raid1_end_write_request(struct bio *bio)
 		 * check this here.
 		 */
 		if (test_bit(In_sync, &rdev->flags) &&
-		    !test_bit(Faulty, &rdev->flags))
+		    !test_bit(Faulty, &rdev->flags) &&
+		    (!bio->bi_status || discard_error))
 			set_bit(R1BIO_Uptodate, &r1_bio->state);
 
 		/* Maybe we can clear some bad blocks. */
 		if (rdev_has_badblock(rdev, r1_bio->sector, r1_bio->sectors) &&
-		    !ignore_error) {
+		    !bio->bi_status) {
 			r1_bio->bios[mirror] = IO_MADE_GOOD;
 			set_bit(R1BIO_MadeGood, &r1_bio->state);
 		}

@@ -458,8 +458,8 @@ static void raid10_end_write_request(struct bio *bio)
 	int slot, repl;
 	struct md_rdev *rdev = NULL;
 	struct bio *to_put = NULL;
-	bool ignore_error = !raid1_should_handle_error(bio) ||
-		(bio->bi_status && bio_op(bio) == REQ_OP_DISCARD);
+	bool discard_error = bio->bi_status && bio_op(bio) == REQ_OP_DISCARD;
+	bool ignore_error = !raid1_should_handle_error(bio) || discard_error;
 
 	dev = find_bio_disk(conf, r10_bio, bio, &slot, &repl);
 
@@ -522,13 +522,14 @@ static void raid10_end_write_request(struct bio *bio)
 		 * check this here.
 		 */
 		if (test_bit(In_sync, &rdev->flags) &&
-		    !test_bit(Faulty, &rdev->flags))
+		    !test_bit(Faulty, &rdev->flags) &&
+		    (!bio->bi_status || discard_error))
 			set_bit(R10BIO_Uptodate, &r10_bio->state);
 
 		/* Maybe we can clear some bad blocks. */
 		if (rdev_has_badblock(rdev, r10_bio->devs[slot].addr,
 				      r10_bio->sectors) &&
-		    !ignore_error) {
+		    !bio->bi_status) {
 			bio_put(bio);
 			if (repl)
 				r10_bio->devs[slot].repl_bio = IO_MADE_GOOD;
