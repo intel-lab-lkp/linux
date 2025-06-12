@@ -99,6 +99,14 @@ static inline void padlock_output_block(uint32_t *src,
 		*dst++ = swab32(*src++);
 }
 
+static inline void padlock_pad_block_zhaoxin(u8 *padded_data, size_t block_size, u64 bit_len)
+{
+	memset(padded_data, 0, block_size);
+	padded_data[0] = 0x80;
+	for (int i = 0; i < 8 && bit_len; i++)
+		padded_data[block_size - 1 - i] = (bit_len >> (i * 8)) & 0xFF;
+}
+
 static int padlock_sha_finup(struct shash_desc *desc, const u8 *in,
 			     unsigned int count, u8 *out)
 {
@@ -133,6 +141,37 @@ static int padlock_sha1_finup(struct shash_desc *desc, const u8 *in,
 	return 0;
 }
 
+static int padlock_sha1_finup_zhaoxin(struct shash_desc *desc, const u8 *in,
+			      unsigned int count, u8 *out)
+{
+	struct sha1_state *state = padlock_shash_desc_ctx(desc);
+	u64 start = state->count;
+
+	if (start + count > ULONG_MAX)
+		return padlock_sha_finup(desc, in, count, out);
+
+	if (count == 0) {
+		u8 buf[SHA1_BLOCK_SIZE + PADLOCK_ALIGNMENT - 1];
+		u8 *padded_data = PTR_ALIGN(&buf[0], PADLOCK_ALIGNMENT);
+		u64 bit_len = (start + count) * 8;
+
+		padlock_pad_block_zhaoxin(padded_data, SHA1_BLOCK_SIZE, bit_len);
+
+		asm volatile(".byte 0xf3,0x0f,0xa6,0xc8"
+			: "+S"(padded_data), "+D"(state)
+			: "a"((long)-1), "c"(1UL));
+	} else {
+		/* Process the input data in bytes, applying necessary padding */
+		asm volatile(".byte 0xf3,0x0f,0xa6,0xc8"
+			     :
+			     : "c"((unsigned long)start + count), "a"((unsigned long)start),
+			       "S"(in), "D"(state));
+	}
+
+	padlock_output_block(state->state, (uint32_t *)out, 5);
+	return 0;
+}
+
 static int padlock_sha256_finup(struct shash_desc *desc, const u8 *in,
 				unsigned int count, u8 *out)
 {
@@ -150,6 +189,37 @@ static int padlock_sha256_finup(struct shash_desc *desc, const u8 *in,
 		      : "c"((unsigned long)start + count), \
 			"a"((unsigned long)start), \
 			"S"(in), "D"(state));
+
+	padlock_output_block(state->state, (uint32_t *)out, 8);
+	return 0;
+}
+
+static int padlock_sha256_finup_zhaoxin(struct shash_desc *desc, const u8 *in,
+				unsigned int count, u8 *out)
+{
+	struct sha256_state *state = padlock_shash_desc_ctx(desc);
+	u64 start = state->count;
+
+	if (start + count > ULONG_MAX)
+		return padlock_sha_finup(desc, in, count, out);
+
+	if (count == 0) {
+		u8 buf[SHA256_BLOCK_SIZE + PADLOCK_ALIGNMENT - 1];
+		u8 *padded_data = PTR_ALIGN(&buf[0], PADLOCK_ALIGNMENT);
+		u64 bit_len = (start + count) * 8;
+
+		padlock_pad_block_zhaoxin(padded_data, SHA256_BLOCK_SIZE, bit_len);
+
+		asm volatile(".byte 0xf3,0x0f,0xa6,0xd0"
+			: "+S"(padded_data), "+D"(state)
+			: "a"((long)-1), "c"(1UL));
+	} else {
+		/* Process the input data in bytes, applying necessary padding */
+		asm volatile(".byte 0xf3,0x0f,0xa6,0xd0"
+			:
+			: "c"((unsigned long)start + count), "a"((unsigned long)start),
+			"S"(in), "D"(state));
+	}
 
 	padlock_output_block(state->state, (uint32_t *)out, 8);
 	return 0;
@@ -258,6 +328,31 @@ static int padlock_sha1_update_nano(struct shash_desc *desc,
 	return len;
 }
 
+static int padlock_sha1_update_zhaoxin(struct shash_desc *desc,
+				    const u8 *src, unsigned int len)
+{
+	struct sha1_state *state = padlock_shash_desc_ctx(desc);
+	int blocks = len / SHA1_BLOCK_SIZE;
+
+	/* The xsha1 instruction requires a 32-byte buffer for execution for Zhaoxin processors */
+	u8 buf[32 + PADLOCK_ALIGNMENT - 1];
+	u8 *dst = PTR_ALIGN(&buf[0], PADLOCK_ALIGNMENT);
+
+	memcpy(dst, (u8 *)(state->state), SHA1_DIGEST_SIZE);
+
+	len -= blocks * SHA1_BLOCK_SIZE;
+	state->count += blocks * SHA1_BLOCK_SIZE;
+
+	/* Process the input data in blocks, without applying padding */
+	asm volatile(".byte 0xf3,0x0f,0xa6,0xc8"
+			: "+S"(src), "+D"(dst)
+			: "a"((long)-1), "c"((unsigned long)blocks));
+
+	memcpy((u8 *)(state->state), dst, SHA1_DIGEST_SIZE);
+
+	return len;
+}
+
 static int padlock_sha256_update_nano(struct shash_desc *desc, const u8 *src,
 			  unsigned int len)
 {
@@ -316,6 +411,44 @@ static struct shash_alg sha256_alg_nano = {
 	}
 };
 
+static struct shash_alg sha1_alg_zhaoxin = {
+	.digestsize = SHA1_DIGEST_SIZE,
+	.init       = padlock_sha1_init,
+	.update     = padlock_sha1_update_zhaoxin,
+	.finup      = padlock_sha1_finup_zhaoxin,
+	.export     = padlock_sha_export,
+	.import     = padlock_sha_import,
+	.descsize   = PADLOCK_SHA_DESCSIZE,
+	.statesize  = SHA1_STATE_SIZE,
+	.base       = {
+		.cra_name        = "sha1",
+		.cra_driver_name = "sha1-padlock-zhaoxin",
+		.cra_priority    = PADLOCK_CRA_PRIORITY,
+		.cra_flags       = CRYPTO_AHASH_ALG_BLOCK_ONLY | CRYPTO_AHASH_ALG_FINUP_MAX,
+		.cra_blocksize   = SHA1_BLOCK_SIZE,
+		.cra_module      = THIS_MODULE,
+	}
+};
+
+static struct shash_alg sha256_alg_zhaoxin = {
+	.digestsize = SHA256_DIGEST_SIZE,
+	.init       = padlock_sha256_init,
+	.update     = padlock_sha256_update_nano,
+	.finup      = padlock_sha256_finup_zhaoxin,
+	.export     = padlock_sha_export,
+	.import     = padlock_sha_import,
+	.descsize   = PADLOCK_SHA_DESCSIZE,
+	.statesize  = sizeof(struct crypto_sha256_state),
+	.base       = {
+		.cra_name        = "sha256",
+		.cra_driver_name = "sha256-padlock-zhaoxin",
+		.cra_priority    = PADLOCK_CRA_PRIORITY,
+		.cra_flags       = CRYPTO_AHASH_ALG_BLOCK_ONLY | CRYPTO_AHASH_ALG_FINUP_MAX,
+		.cra_blocksize   = SHA256_BLOCK_SIZE,
+		.cra_module      = THIS_MODULE,
+	}
+};
+
 static const struct x86_cpu_id padlock_sha_ids[] = {
 	X86_MATCH_FEATURE(X86_FEATURE_PHE, NULL),
 	{}
@@ -332,14 +465,21 @@ static int __init padlock_init(void)
 	if (!x86_match_cpu(padlock_sha_ids) || !boot_cpu_has(X86_FEATURE_PHE_EN))
 		return -ENODEV;
 
-	/* Register the newly added algorithm module if on *
-	* VIA Nano processor, or else just do as before */
-	if (c->x86_model < 0x0f) {
-		sha1 = &sha1_alg;
-		sha256 = &sha256_alg;
+	if (c->x86 >= 0x07) {
+		/* Register the newly added algorithm module for Zhaoxin processors */
+		sha1 = &sha1_alg_zhaoxin;
+		sha256 = &sha256_alg_zhaoxin;
 	} else {
-		sha1 = &sha1_alg_nano;
-		sha256 = &sha256_alg_nano;
+		/* Register the newly added algorithm module if on
+		 * VIA Nano processor, or else just do as before
+		 */
+		if (c->x86_model < 0x0f) {
+			sha1 = &sha1_alg;
+			sha256 = &sha256_alg;
+		} else {
+			sha1 = &sha1_alg_nano;
+			sha256 = &sha256_alg_nano;
+		}
 	}
 
 	rc = crypto_register_shash(sha1);
@@ -366,12 +506,17 @@ static void __exit padlock_fini(void)
 {
 	struct cpuinfo_x86 *c = &cpu_data(0);
 
-	if (c->x86_model >= 0x0f) {
-		crypto_unregister_shash(&sha1_alg_nano);
-		crypto_unregister_shash(&sha256_alg_nano);
+	if (c->x86 >= 0x07) {
+		crypto_unregister_shash(&sha1_alg_zhaoxin);
+		crypto_unregister_shash(&sha256_alg_zhaoxin);
 	} else {
-		crypto_unregister_shash(&sha1_alg);
-		crypto_unregister_shash(&sha256_alg);
+		if (c->x86_model >= 0x0f) {
+			crypto_unregister_shash(&sha1_alg_nano);
+			crypto_unregister_shash(&sha256_alg_nano);
+		} else {
+			crypto_unregister_shash(&sha1_alg);
+			crypto_unregister_shash(&sha256_alg);
+		}
 	}
 }
 
