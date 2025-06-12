@@ -2467,8 +2467,14 @@ DEFINE_ATTR_EVENT(xfs_attr_node_get);
 DEFINE_ATTR_EVENT(xfs_attr_node_replace);
 DEFINE_ATTR_EVENT(xfs_attr_node_removename);
 
+/*
+ * When the corresponding code in xfs_attr.c is re-enabled
+ * then so can these trace events.
+ */
+#if 0
 DEFINE_ATTR_EVENT(xfs_attr_fillstate);
 DEFINE_ATTR_EVENT(xfs_attr_refillstate);
+#endif
 
 DEFINE_ATTR_EVENT(xfs_attr_rmtval_get);
 
