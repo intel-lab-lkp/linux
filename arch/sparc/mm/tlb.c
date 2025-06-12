@@ -52,10 +52,9 @@ out:
 
 void arch_enter_lazy_mmu_mode(void)
 {
-	struct tlb_batch *tb;
+	struct tlb_batch *tb = this_cpu_ptr(&tlb_batch);
 
-	preempt_disable();
-	tb = this_cpu_ptr(&tlb_batch);
+	VM_WARN_ON_ONCE(preemptible());
 	tb->active = 1;
 }
 
@@ -63,10 +62,15 @@ void arch_leave_lazy_mmu_mode(void)
 {
 	struct tlb_batch *tb = this_cpu_ptr(&tlb_batch);
 
+	VM_WARN_ON_ONCE(preemptible());
 	if (tb->tlb_nr)
 		flush_tlb_pending();
 	tb->active = 0;
-	preempt_enable();
+}
+
+void arch_flush_lazy_mmu_mode(void)
+{
+	VM_WARN_ON_ONCE(preemptible());
 }
 
 static void tlb_batch_add_one(struct mm_struct *mm, unsigned long vaddr,
