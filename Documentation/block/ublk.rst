@@ -411,8 +411,8 @@ If auto buffer registration fails:
    - The uring_cmd is completed
    - ``UBLK_IO_F_NEED_REG_BUF`` is set in ``ublksrv_io_desc.op_flags``
    - The ublk server must manually deal with the failure, such as, register
-     the buffer manually, or using user copy feature for retrieving the data
-     for handling ublk IO
+   the buffer manually, or using user copy feature for retrieving the data
+   for handling ublk IO
 
 2. If fallback is not enabled:
    - The ublk I/O request fails silently
