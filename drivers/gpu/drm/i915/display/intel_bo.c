@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 /* Copyright © 2024 Intel Corporation */
 
+#include <drm/drm_panic.h>
 #include "gem/i915_gem_mman.h"
 #include "gem/i915_gem_object.h"
 #include "gem/i915_gem_object_frontbuffer.h"
@@ -56,4 +57,14 @@ struct intel_frontbuffer *intel_bo_set_frontbuffer(struct drm_gem_object *obj,
 void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj)
 {
 	i915_debugfs_describe_obj(m, to_intel_bo(obj));
+}
+
+int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb)
+{
+	return i915_gem_object_panic_setup(to_intel_bo(obj), sb);
+}
+
+void intel_bo_panic_finish(struct drm_gem_object *obj)
+{
+	return i915_gem_object_panic_finish(to_intel_bo(obj));
 }

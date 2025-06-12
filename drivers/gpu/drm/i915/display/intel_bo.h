@@ -4,6 +4,7 @@
 #ifndef __INTEL_BO__
 #define __INTEL_BO__
 
+#include <drm/drm_panic.h>
 #include <linux/types.h>
 
 struct drm_gem_object;
@@ -23,5 +24,7 @@ struct intel_frontbuffer *intel_bo_set_frontbuffer(struct drm_gem_object *obj,
 						   struct intel_frontbuffer *front);
 
 void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj);
+int intel_bo_panic_setup(struct drm_gem_object *obj, struct drm_scanout_buffer *sb);
+void intel_bo_panic_finish(struct drm_gem_object *obj);
 
 #endif /* __INTEL_BO__ */
