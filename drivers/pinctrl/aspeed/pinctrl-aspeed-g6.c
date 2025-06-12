@@ -17,6 +17,10 @@
 #include "../pinctrl-utils.h"
 #include "pinctrl-aspeed.h"
 
+#define SCU_UNLOCKED_VALUE 0x00000001
+
+#define SCU000		0x000 /* Protection Key Register */
+#define SCU010		0x010 /* Protection Key Register 2 */
 #define SCU400		0x400 /* Multi-function Pin Control #1  */
 #define SCU404		0x404 /* Multi-function Pin Control #2  */
 #define SCU40C		0x40C /* Multi-function Pin Control #3  */
@@ -2667,6 +2671,28 @@ static int aspeed_g6_sig_expr_set(struct aspeed_pinmux_data *ctx,
 
 		WARN_ON(desc->ip != ASPEED_IP_SCU);
 		is_strap = desc->reg == SCU500 || desc->reg == SCU510;
+
+		/*
+		 * The SCU should be unlocked, with SCU000 and SCU010
+		 * both returning 0x01. However, it may have been locked,
+		 * e.g. by a userspace script using /dev/mem.
+		 */
+		u32 scuprt_val, scuprt2_val;
+
+		ret = regmap_read(ctx->maps[desc->ip], SCU000, &scuprt_val);
+		if (ret < 0)
+			return ret;
+
+		ret = regmap_read(ctx->maps[desc->ip], SCU010, &scuprt2_val);
+		if (ret < 0)
+			return ret;
+
+		if (scuprt_val != SCU_UNLOCKED_VALUE ||
+		    scuprt2_val != SCU_UNLOCKED_VALUE) {
+			dev_err(ctx->dev,
+				"SCU protection is active, cannot continue\n");
+			return -EPERM;
+		}
 
 		if (is_strap) {
 			/*

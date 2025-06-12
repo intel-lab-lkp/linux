@@ -28,6 +28,8 @@
 #define SIG_EXPR_LIST_DECL_SINGLE SIG_EXPR_LIST_DECL_SESG
 #define SIG_EXPR_LIST_DECL_DUAL SIG_EXPR_LIST_DECL_DESG
 
+#define SCU_UNLOCKED_VALUE 0x00000001
+
 /*
  * The "Multi-function Pins Mapping and Control" table in the SoC datasheet
  * references registers by the device/offset mnemonic. The register macros
@@ -37,6 +39,7 @@
  * reset control and MAC clock configuration registers. The AST2500 goes a step
  * further and references registers in the graphics IP block.
  */
+#define SCU00           0x00 /* Protection Key Register */
 #define SCU2C           0x2C /* Misc. Control Register */
 #define SCU3C           0x3C /* System Reset Control/Status Register */
 #define SCU48           0x48 /* MAC Interface Clock Delay Setting */
@@ -2763,7 +2766,26 @@ static int aspeed_g5_sig_expr_set(struct aspeed_pinmux_data *ctx,
 
 		/* On AST2500, Set bits in SCU70 are cleared from SCU7C */
 		if (desc->ip == ASPEED_IP_SCU && desc->reg == HW_STRAP1) {
-			u32 value = ~val & desc->mask;
+			/*
+			 * The SCU should be unlocked, with SCU00
+			 * returning 0x01.
+			 * However, it may have been locked, e.g. by a
+			 * userspace script using /dev/mem.
+			 */
+			u32 value;
+
+			ret = regmap_read(ctx->maps[desc->ip], SCU00, &value);
+
+			if (ret < 0)
+				return ret;
+
+			if (value != SCU_UNLOCKED_VALUE) {
+				dev_err(ctx->dev,
+					"SCU protection is active, cannot continue\n");
+				return -EPERM;
+			}
+
+			value = ~val & desc->mask;
 
 			if (value) {
 				ret = regmap_write(ctx->maps[desc->ip],
