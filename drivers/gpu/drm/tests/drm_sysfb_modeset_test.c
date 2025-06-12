@@ -2,9 +2,10 @@
 
 #include <kunit/test.h>
 
-#include <drm/drm_format_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_kunit_helpers.h>
+
+#include "../sysfb/drm_sysfb_helper.h"
 
 #define TEST_BUF_SIZE 50
 
@@ -141,9 +142,9 @@ static void drm_test_fb_build_fourcc_list(struct kunit *test)
 	drm = __drm_kunit_helper_alloc_drm_device(test, dev, sizeof(*drm), 0, DRIVER_MODESET);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, drm);
 
-	nfourccs_out = drm_fb_build_fourcc_list(drm, params->native_fourccs,
-						params->native_fourccs_size,
-						fourccs_out, TEST_BUF_SIZE);
+	nfourccs_out = drm_sysfb_build_fourcc_list(drm, params->native_fourccs,
+						   params->native_fourccs_size,
+						   fourccs_out, TEST_BUF_SIZE);
 
 	KUNIT_EXPECT_EQ(test, nfourccs_out, params->expected_fourccs_size);
 	KUNIT_EXPECT_MEMEQ(test, fourccs_out, params->expected, TEST_BUF_SIZE);
