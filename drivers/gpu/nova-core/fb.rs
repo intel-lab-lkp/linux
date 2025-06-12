@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 
+use core::ops::Range;
+
+use kernel::num::PowerOfTwo;
 use kernel::prelude::*;
+use kernel::sizes::*;
 use kernel::types::ARef;
 use kernel::{dev_warn, device};
 
 use crate::dma::DmaObject;
 use crate::driver::Bar0;
 use crate::gpu::Chipset;
+use crate::regs;
 
 mod hal;
 
@@ -62,5 +67,70 @@ impl SysmemFlush {
                 "attempt to unregister a sysmem flush page that is not active\n"
             );
         }
+    }
+}
+
+/// Layout of the GPU framebuffer memory.
+///
+/// Contains ranges of GPU memory reserved for a given purpose during the GSP bootup process.
+#[derive(Debug)]
+#[expect(dead_code)]
+pub(crate) struct FbLayout {
+    pub fb: Range<u64>,
+    pub vga_workspace: Range<u64>,
+    pub frts: Range<u64>,
+}
+
+impl FbLayout {
+    /// Computes the FB layout.
+    pub(crate) fn new(chipset: Chipset, bar: &Bar0) -> Result<Self> {
+        let hal = hal::fb_hal(chipset);
+
+        let fb = {
+            let fb_size = hal.vidmem_size(bar);
+
+            0..fb_size
+        };
+
+        let vga_workspace = {
+            let vga_base = {
+                const NV_PRAMIN_SIZE: u64 = SZ_1M as u64;
+                let base = fb.end - NV_PRAMIN_SIZE;
+
+                if hal.supports_display(bar) {
+                    match regs::NV_PDISP_VGA_WORKSPACE_BASE::read(bar).vga_workspace_addr() {
+                        Some(addr) => {
+                            if addr < base {
+                                const VBIOS_WORKSPACE_SIZE: u64 = SZ_128K as u64;
+
+                                // Point workspace address to end of framebuffer.
+                                fb.end - VBIOS_WORKSPACE_SIZE
+                            } else {
+                                addr
+                            }
+                        }
+                        None => base,
+                    }
+                } else {
+                    base
+                }
+            };
+
+            vga_base..fb.end
+        };
+
+        let frts = {
+            const FRTS_DOWN_ALIGN: PowerOfTwo<u64> = PowerOfTwo::<u64>::new(SZ_128K as u64);
+            const FRTS_SIZE: u64 = SZ_1M as u64;
+            let frts_base = FRTS_DOWN_ALIGN.align_down(vga_workspace.start) - FRTS_SIZE;
+
+            frts_base..frts_base + FRTS_SIZE
+        };
+
+        Ok(Self {
+            fb,
+            vga_workspace,
+            frts,
+        })
     }
 }
