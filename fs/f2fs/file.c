@@ -1893,7 +1893,7 @@ next_alloc:
 			f2fs_down_write(&sbi->gc_lock);
 			stat_inc_gc_call_count(sbi, FOREGROUND);
 			err = f2fs_gc(sbi, &gc_control);
-			if (err && err != -ENODATA) {
+			if (err && err != -ENODATA && err != -EAGAIN) {
 				f2fs_up_write(&sbi->pin_sem);
 				goto out_err;
 			}
