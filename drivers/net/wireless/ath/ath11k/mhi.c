@@ -286,8 +286,11 @@ static void ath11k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
 			break;
 		}
 
-		if (!(test_bit(ATH11K_FLAG_UNREGISTERING, &ab->dev_flags)))
+		if (!(test_bit(ATH11K_FLAG_UNREGISTERING, &ab->dev_flags))) {
+			set_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+			set_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
 			queue_work(ab->workqueue_aux, &ab->reset_work);
+		}
 
 		break;
 	default:
