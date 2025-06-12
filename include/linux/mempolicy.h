@@ -133,6 +133,8 @@ struct mempolicy *__get_vma_policy(struct vm_area_struct *vma,
 struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
 		unsigned long addr, int order, pgoff_t *ilx);
 bool vma_policy_mof(struct vm_area_struct *vma);
+nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
+		pgoff_t ilx, int *nid);
 
 extern void numa_default_policy(void);
 extern void numa_policy_init(void);
@@ -229,6 +231,13 @@ static inline struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
 				unsigned long addr, int order, pgoff_t *ilx)
 {
 	*ilx = 0;
+	return NULL;
+}
+
+static inline nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
+				pgoff_t ilx, int *nid)
+{
+	*nid = NUMA_NO_NODE;
 	return NULL;
 }
 
