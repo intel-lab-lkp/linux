@@ -95,7 +95,7 @@ bool drm_dev_needs_global_mutex(struct drm_device *dev)
  * No other file operations are supported by the DRM userspace API. Overall the
  * following is an example &file_operations structure::
  *
- *     static const example_drm_fops = {
+ *     static const struct file_operations example_drm_fops = {
  *             .owner = THIS_MODULE,
  *             .open = drm_open,
  *             .release = drm_release,
