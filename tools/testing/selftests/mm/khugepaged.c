@@ -561,8 +561,6 @@ static bool wait_for_scan(const char *msg, char *p, int nr_hpages,
 		usleep(TICK);
 	}
 
-	madvise(p, nr_hpages * hpage_pmd_size, MADV_NOHUGEPAGE);
-
 	return timeout == -1;
 }
 
@@ -585,6 +583,7 @@ static void khugepaged_collapse(const char *msg, char *p, int nr_hpages,
 	if (ops != &__anon_ops)
 		ops->fault(p, 0, nr_hpages * hpage_pmd_size);
 
+	madvise(p, nr_hpages * hpage_pmd_size, MADV_NOHUGEPAGE);
 	if (ops->check_huge(p, expect ? nr_hpages : 0))
 		success("OK");
 	else
