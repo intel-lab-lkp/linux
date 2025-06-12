@@ -1085,7 +1085,9 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 			if (!nn->nfsd_serv)
 				return -EBUSY;
 			trace_nfsd_end_grace(netns(file));
+			mutex_lock(&nfsd_mutex);
 			nfsd4_end_grace(nn);
+			mutex_lock(&nfsd_mutex);
 			break;
 		default:
 			return -EINVAL;

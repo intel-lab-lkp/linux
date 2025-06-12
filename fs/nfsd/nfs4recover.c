@@ -162,7 +162,9 @@ legacy_recdir_name_error(struct nfs4_client *clp, int error)
 	if (error == -ENOENT) {
 		printk(KERN_ERR "NFSD: disabling legacy clientid tracking. "
 			"Reboot recovery will not function correctly!\n");
+		mutex_lock(&nfsd_mutex);
 		nfsd4_client_tracking_exit(clp->net);
+		mutex_unlock(&nfsd_mutex);
 	}
 }
 
@@ -2083,8 +2085,10 @@ nfsd4_client_record_create(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
+	mutex_lock(&nfsd_mutex);
 	if (nn->client_tracking_ops)
 		nn->client_tracking_ops->create(clp);
+	mutex_unlock(&nfsd_mutex);
 }
 
 void
@@ -2092,8 +2096,10 @@ nfsd4_client_record_remove(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
+	mutex_lock(&nfsd_mutex);
 	if (nn->client_tracking_ops)
 		nn->client_tracking_ops->remove(clp);
+	mutex_unlock(&nfsd_mutex);
 }
 
 int
@@ -2101,8 +2107,10 @@ nfsd4_client_record_check(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 
+	mutex_lock(&nfsd_mutex);
 	if (nn->client_tracking_ops)
 		return nn->client_tracking_ops->check(clp);
+	mutex_unlock(&nfsd_mutex);
 
 	return -EOPNOTSUPP;
 }

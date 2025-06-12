@@ -2529,7 +2529,9 @@ static void inc_reclaim_complete(struct nfs4_client *clp)
 			nn->reclaim_str_hashtbl_size) {
 		printk(KERN_INFO "NFSD: all clients done reclaiming, ending NFSv4 grace period (net %x)\n",
 				clp->net->ns.inum);
+		mutex_lock(&nfsd_mutex);
 		nfsd4_end_grace(nn);
+		mutex_unlock(&nfsd_mutex);
 	}
 }
 
@@ -6773,7 +6775,9 @@ nfs4_laundromat(struct nfsd_net *nn)
 		lt.new_timeo = 0;
 		goto out;
 	}
+	mutex_lock(&nfsd_mutex);
 	nfsd4_end_grace(nn);
+	mutex_unlock(&nfsd_mutex);
 
 	spin_lock(&nn->s2s_cp_lock);
 	idr_for_each_entry(&nn->s2s_cp_stateids, cps_t, i) {
