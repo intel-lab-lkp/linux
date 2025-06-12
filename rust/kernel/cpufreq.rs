@@ -1277,7 +1277,7 @@ impl<T: Driver> Registration<T> {
     /// Driver's `bios_limit` callback.
     ///
     /// SAFETY: Called from C. Inputs must be valid pointers.
-    extern "C" fn bios_limit_callback(cpu: i32, limit: *mut u32) -> kernel::ffi::c_int {
+    extern "C" fn bios_limit_callback(cpu: kernel::ffi::c_int, limit: *mut kernel::ffi::c_uint) -> kernel::ffi::c_int {
         from_result(|| {
             let mut policy = PolicyCpu::from_cpu(cpu as u32)?;
 
