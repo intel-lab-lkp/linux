@@ -1798,6 +1798,13 @@ event_enable_read(struct file *filp, char __user *ubuf, size_t cnt,
 
 	strcat(buf, "\n");
 
+	/*
+	 * A requested cnt less than strlen(buf) could lead to a wrong
+	 * event status being reported.
+	 */
+	if (cnt < strlen(buf))
+		return -EINVAL;
+
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, strlen(buf));
 }
 
@@ -1832,8 +1839,6 @@ event_enable_write(struct file *filp, const char __user *ubuf, size_t cnt,
 	default:
 		return -EINVAL;
 	}
-
-	*ppos += cnt;
 
 	return cnt;
 }
@@ -2557,7 +2562,7 @@ static const struct file_operations ftrace_enable_fops = {
 	.read = event_enable_read,
 	.write = event_enable_write,
 	.release = tracing_release_file_tr,
-	.llseek = default_llseek,
+	.llseek = noop_llseek,
 };
 
 static const struct file_operations ftrace_event_format_fops = {
