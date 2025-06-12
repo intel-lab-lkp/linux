@@ -535,6 +535,114 @@ put_folio:
 	return applied * PAGE_SIZE;
 }
 
+#if defined(CONFIG_MEMCG) && defined(CONFIG_NUMA)
+struct damos_interleave_private {
+	struct list_head *folio_migration_list;
+	bool putback_lru;
+};
+
+static bool damon_pa_interleave_rmap(struct folio *folio, struct vm_area_struct *vma,
+		unsigned long addr, void *arg)
+{
+	struct mempolicy *pol;
+	struct task_struct *task;
+	pgoff_t ilx;
+	int target_nid;
+	struct damos_interleave_private *priv = arg;
+
+	task = rcu_dereference(vma->vm_mm->owner);
+	if (!task)
+		return true;
+
+	pol = get_task_policy(task);
+	if (!pol)
+		return true;
+
+	/* Getting the interleave weights only makes sense with MPOL_WEIGHTED_INTERLEAVE */
+	if (pol->mode != MPOL_WEIGHTED_INTERLEAVE) {
+		mpol_cond_put(pol);
+		return true;
+	}
+
+	ilx = vma->vm_pgoff >> folio_order(folio);
+	ilx += (addr - vma->vm_start) >> (PAGE_SHIFT + folio_order(folio));
+	policy_nodemask(0, pol, ilx, &target_nid);
+
+	if (target_nid != NUMA_NO_NODE && folio_nid(folio) != target_nid) {
+		list_add(&folio->lru, &priv->folio_migration_list[target_nid]);
+		priv->putback_lru = false;
+	}
+
+	mpol_cond_put(pol);
+	return false;
+}
+
+static unsigned long damon_pa_interleave(struct damon_region *r, struct damos *s,
+		unsigned long *sz_filter_passed)
+{
+	struct damos_interleave_private priv;
+	struct rmap_walk_control rwc;
+	unsigned long addr, applied;
+	struct folio *folio;
+
+	priv.folio_migration_list = kmalloc_array(nr_node_ids, sizeof(struct list_head),
+		GFP_KERNEL);
+	if (!priv.folio_migration_list)
+		return 0;
+
+	for (int i = 0; i < nr_node_ids; i++)
+		INIT_LIST_HEAD(&priv.folio_migration_list[i]);
+
+	memset(&rwc, 0, sizeof(struct rmap_walk_control));
+	rwc.rmap_one = damon_pa_interleave_rmap;
+	rwc.arg = &priv;
+
+	addr = r->ar.start;
+	while (addr < r->ar.end) {
+		folio = damon_get_folio(PHYS_PFN(addr));
+
+		if (damon_pa_invalid_damos_folio(folio, s)) {
+			addr += PAGE_SIZE;
+			continue;
+		}
+
+		if (damos_pa_filter_out(s, folio))
+			goto put_folio;
+		else
+			*sz_filter_passed += folio_size(folio);
+
+		if (!folio_isolate_lru(folio))
+			goto put_folio;
+
+		priv.putback_lru = true;
+		rmap_walk(folio, &rwc);
+
+		if (priv.putback_lru)
+			folio_putback_lru(folio);
+
+put_folio:
+		addr += folio_size(folio);
+		folio_put(folio);
+	}
+
+	applied = 0;
+	for (int i = 0; i < nr_node_ids; i++) {
+		applied += damon_pa_migrate_pages(&priv.folio_migration_list[i], i);
+		cond_resched();
+	}
+
+	kfree(priv.folio_migration_list);
+	s->last_applied = folio;
+	return applied * PAGE_SIZE;
+}
+#else
+static unsigned long damon_pa_interleave(struct damon_region *r, struct damos *s,
+		unsigned long *sz_filter_passed)
+{
+	return 0;
+}
+#endif /* defined(CONFIG_MEMCG) && defined(CONFIG_NUMA) */
+
 static bool damon_pa_scheme_has_filter(struct damos *s)
 {
 	struct damos_filter *f;
@@ -584,6 +692,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 	case DAMOS_MIGRATE_HOT:
 	case DAMOS_MIGRATE_COLD:
 		return damon_pa_migrate(r, scheme, sz_filter_passed);
+	case DAMOS_INTERLEAVE:
+		return damon_pa_interleave(r, scheme, sz_filter_passed);
 	case DAMOS_STAT:
 		return damon_pa_stat(r, scheme, sz_filter_passed);
 	default:
@@ -608,6 +718,8 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 		return damon_hot_score(context, r, scheme);
 	case DAMOS_MIGRATE_COLD:
 		return damon_cold_score(context, r, scheme);
+	case DAMOS_INTERLEAVE:
+		return damon_hot_score(context, r, scheme);
 	default:
 		break;
 	}

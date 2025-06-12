@@ -455,6 +455,8 @@ that supports each action are as below.
    Supported by ``paddr`` operations set.
  - ``migrate_cold``: Migrate the regions prioritizing colder regions.
    Supported by ``paddr`` operations set.
+ - ``interleave``: Interleave the regions according to the weighted interleave weights.
+   Supported by ``paddr`` operations set.
  - ``stat``: Do nothing but count the statistics.
    Supported by all operations sets.
 

@@ -1597,6 +1597,7 @@ static const char * const damon_sysfs_damos_action_strs[] = {
 	"lru_deprio",
 	"migrate_hot",
 	"migrate_cold",
+	"interleave",
 	"stat",
 };
 
