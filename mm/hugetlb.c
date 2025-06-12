@@ -6517,6 +6517,10 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			}
 			new_pagecache_folio = true;
 		} else {
+			/*
+			 * hugetlb_wp() expects the folio to be locked in order to
+			 * check whether we can re-use this page exclusively for us.
+			 */
 			folio_lock(folio);
 			anon_rmap = 1;
 		}
@@ -6781,7 +6785,19 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		/* Fallthrough to CoW */
 	}
 
-	/* hugetlb_wp() requires page locks of pte_page(vmf.orig_pte) */
+	/*
+	 * We need to lock the folio before calling hugetlb_wp().
+	 * Either the folio is in the pagecache and we need to copy it over
+	 * to another file, so it must remain stable throughout the operation,
+	 * or the folio is anonymous and we need to lock it in order to check
+	 * whether we can re-use it and mark it exclusive for this process.
+	 * The timespan for the lock differs depending on the type, since
+	 * anonymous folios only need to hold the lock while checking whether we
+	 * can re-use it, while we need to hold it throughout the copy in case
+	 * we are dealing with a folio from a pagecache.
+	 * Representing this difference would be tricky with the current code,
+	 * so just hold the lock for the duration of hugetlb_wp().
+	 */
 	folio = page_folio(pte_page(vmf.orig_pte));
 	folio_lock(folio);
 	folio_get(folio);
