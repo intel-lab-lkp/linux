@@ -831,7 +831,6 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 		folio_walk_flags_t flags)
 {
 	unsigned long entry_size;
-	bool expose_page = true;
 	struct page *page;
 	pud_t *pudp, pud;
 	pmd_t *pmdp, pmd;
@@ -884,6 +883,9 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 		 * support PUD mappings in VM_PFNMAP|VM_MIXEDMAP VMAs.
 		 */
 		page = pud_page(pud);
+
+		/* Note: Offset from the mapped page, not the folio start. */
+		fw->page = nth_page(page, (addr & (entry_size - 1)) >> PAGE_SHIFT);
 		goto found;
 	}
 
@@ -902,6 +904,7 @@ pmd_table:
 		fw->level = FW_LEVEL_PMD;
 		fw->pmdp = pmdp;
 		fw->pmd = pmd;
+		fw->page = NULL;
 
 		if (pmd_none(pmd)) {
 			spin_unlock(ptl);
@@ -912,11 +915,12 @@ pmd_table:
 		} else if (pmd_present(pmd)) {
 			page = vm_normal_page_pmd(vma, addr, pmd);
 			if (page) {
+				/* Note: Offset from the mapped page, not the folio start. */
+				fw->page = nth_page(page, (addr & (entry_size - 1)) >> PAGE_SHIFT);
 				goto found;
 			} else if ((flags & FW_ZEROPAGE) &&
 				    is_huge_zero_pmd(pmd)) {
 				page = pfn_to_page(pmd_pfn(pmd));
-				expose_page = false;
 				goto found;
 			}
 		} else if ((flags & FW_MIGRATION) &&
@@ -924,7 +928,6 @@ pmd_table:
 			swp_entry_t entry = pmd_to_swp_entry(pmd);
 
 			page = pfn_swap_entry_to_page(entry);
-			expose_page = false;
 			goto found;
 		}
 		spin_unlock(ptl);
@@ -942,15 +945,18 @@ pte_table:
 	fw->level = FW_LEVEL_PTE;
 	fw->ptep = ptep;
 	fw->pte = pte;
+	fw->page = NULL;
 
 	if (pte_present(pte)) {
 		page = vm_normal_page(vma, addr, pte);
-		if (page)
+		if (page) {
+			/* Note: Offset from the mapped page, not the folio start. */
+			fw->page = nth_page(page, (addr & (entry_size - 1)) >> PAGE_SHIFT);
 			goto found;
+		}
 		if ((flags & FW_ZEROPAGE) &&
 		    is_zero_pfn(pte_pfn(pte))) {
 			page = pfn_to_page(pte_pfn(pte));
-			expose_page = false;
 			goto found;
 		}
 	} else if (!pte_none(pte)) {
@@ -959,7 +965,6 @@ pte_table:
 		if ((flags & FW_MIGRATION) &&
 		    is_migration_entry(entry)) {
 			page = pfn_swap_entry_to_page(entry);
-			expose_page = false;
 			goto found;
 		}
 	}
@@ -968,11 +973,6 @@ not_found:
 	vma_pgtable_walk_end(vma);
 	return NULL;
 found:
-	if (expose_page)
-		/* Note: Offset from the mapped page, not the folio start. */
-		fw->page = nth_page(page, (addr & (entry_size - 1)) >> PAGE_SHIFT);
-	else
-		fw->page = NULL;
 	fw->ptl = ptl;
 	return page_folio(page);
 }
