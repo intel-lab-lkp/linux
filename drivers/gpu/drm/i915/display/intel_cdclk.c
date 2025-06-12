@@ -3884,3 +3884,13 @@ void intel_cdclk_read_hw(struct intel_display *display)
 	cdclk_state->actual = display->cdclk.hw;
 	cdclk_state->logical = display->cdclk.hw;
 }
+
+int intel_cdclk_actual(const struct intel_cdclk_state *cdclk_state)
+{
+	return cdclk_state->actual.cdclk;
+}
+
+int intel_cdclk_actual_voltage_level(const struct intel_cdclk_state *cdclk_state)
+{
+	return cdclk_state->actual.voltage_level;
+}
