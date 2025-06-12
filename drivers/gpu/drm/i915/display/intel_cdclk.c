@@ -3867,3 +3867,8 @@ bool intel_cdclk_pmdemand_needs_update(struct intel_atomic_state *state)
 
 	return false;
 }
+
+void intel_cdclk_force_min_cdclk(struct intel_cdclk_state *cdclk_state, int force_min_cdclk)
+{
+	cdclk_state->force_min_cdclk = force_min_cdclk;
+}
