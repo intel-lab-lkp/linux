@@ -224,12 +224,12 @@ static inline int pmd_dirty(pmd_t pmd)
  * a raw PTE pointer after it has been modified are not guaranteed to be
  * up to date.
  *
- * In the general case, no lock is guaranteed to be held between entry and exit
- * of the lazy mode. So the implementation must assume preemption may be enabled
- * and cpu migration is possible; it must take steps to be robust against this.
- * (In practice, for user PTE updates, the appropriate page table lock(s) are
- * held, but for kernel PTE updates, no lock is held). Nesting is not permitted
- * and the mode cannot be used in interrupt context.
+ * For PREEMPT_RT kernels implementation must assume that preemption may
+ * be enabled and cpu migration is possible between entry and exit of the
+ * lazy MMU mode; it must take steps to be robust against this. There is
+ * no such assumption for non-PREEMPT_RT kernels, since both kernel and
+ * user page tables are protected with a spinlock while in lazy MMU mode.
+ * Nesting is not permitted and the mode cannot be used in interrupt context.
  */
 #ifndef __HAVE_ARCH_ENTER_LAZY_MMU_MODE
 #define arch_enter_lazy_mmu_mode()	do {} while (0)

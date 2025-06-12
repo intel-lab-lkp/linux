@@ -105,6 +105,7 @@ static int vmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	if (!pte)
 		return -ENOMEM;
 
+	spin_lock(&init_mm.page_table_lock);
 	arch_enter_lazy_mmu_mode();
 
 	do {
@@ -132,6 +133,7 @@ static int vmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	} while (pte += PFN_DOWN(size), addr += size, addr != end);
 
 	arch_leave_lazy_mmu_mode();
+	spin_unlock(&init_mm.page_table_lock);
 	*mask |= PGTBL_PTE_MODIFIED;
 	return 0;
 }
@@ -359,6 +361,7 @@ static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	unsigned long size = PAGE_SIZE;
 
 	pte = pte_offset_kernel(pmd, addr);
+	spin_lock(&init_mm.page_table_lock);
 	arch_enter_lazy_mmu_mode();
 
 	do {
@@ -379,6 +382,7 @@ static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	} while (pte += (size >> PAGE_SHIFT), addr += size, addr != end);
 
 	arch_leave_lazy_mmu_mode();
+	spin_unlock(&init_mm.page_table_lock);
 	*mask |= PGTBL_PTE_MODIFIED;
 }
 
@@ -525,6 +529,7 @@ static int vmap_pages_pte_range(pmd_t *pmd, unsigned long addr,
 	if (!pte)
 		return -ENOMEM;
 
+	spin_lock(&init_mm.page_table_lock);
 	arch_enter_lazy_mmu_mode();
 
 	do {
@@ -542,6 +547,7 @@ static int vmap_pages_pte_range(pmd_t *pmd, unsigned long addr,
 	} while (pte++, addr += PAGE_SIZE, addr != end);
 
 	arch_leave_lazy_mmu_mode();
+	spin_unlock(&init_mm.page_table_lock);
 	*mask |= PGTBL_PTE_MODIFIED;
 	return 0;
 }
