@@ -13,3 +13,8 @@
 		     "google,elm-rev5", "google,elm-rev4", "google,elm-rev3",
 		     "google,elm", "mediatek,mt8173";
 };
+
+&mmc1 {
+	max-frequency = <100000000>;
+	disable-wp;
+};
