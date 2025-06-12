@@ -130,6 +130,16 @@ config PMS7003
 	  To compile this driver as a module, choose M here: the module will
 	  be called pms7003.
 
+config GP2Y1010AU0F
+	tristate "Sharp GP2Y1010AU0F optical dust sensor"
+	depends on IIO
+	help
+	  Say Y here to build support for Sharp GP2Y1010AU0F optical dust sensor
+	  that measures particulate matter concentration in air.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called gp2y1010au0f.
+
 config SCD30_CORE
 	tristate "SCD30 carbon dioxide sensor driver"
 	select IIO_BUFFER

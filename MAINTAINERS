@@ -22034,6 +22034,13 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jic23/iio.git
 F:	Documentation/devicetree/bindings/iio/light/sharp,gp2ap002.yaml
 F:	drivers/iio/light/gp2ap002.c
 
+SHARP GP2Y1010AU0F DUST SENSOR DRIVER
+M:	Suraj Sonawane <surajsonawane0215@gmail.com>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/chemical/sharp,gp2y1010au0f.yaml
+F:	drivers/iio/chemical/gp2y1010.c
+
 SHARP RJ54N1CB0C SENSOR DRIVER
 M:	Jacopo Mondi <jacopo@jmondi.org>
 L:	linux-media@vger.kernel.org
