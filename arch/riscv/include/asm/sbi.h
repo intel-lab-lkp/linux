@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/cpumask.h>
 #include <linux/jump_label.h>
+#include <linux/build_bug.h>
 
 #ifdef CONFIG_RISCV_SBI
 enum sbi_ext_id {
@@ -465,8 +466,39 @@ struct sbiret __sbi_ecall(unsigned long arg0, unsigned long arg1,
 			  unsigned long arg2, unsigned long arg3,
 			  unsigned long arg4, unsigned long arg5,
 			  int fid, int ext);
-#define sbi_ecall(e, f, a0, a1, a2, a3, a4, a5)	\
+
+#define sbi_ecall1(e) \
+		__sbi_ecall(0, 0, 0, 0, 0, 0, 0, e)
+#define sbi_ecall2(e, f) \
+		__sbi_ecall(0, 0, 0, 0, 0, 0, f, e)
+#define sbi_ecall3(e, f, a0) \
+		__sbi_ecall(a0, 0, 0, 0, 0, 0, f, e)
+#define sbi_ecall4(e, f, a0, a1) \
+		__sbi_ecall(a0, a1, 0, 0, 0, 0, f, e)
+#define sbi_ecall5(e, f, a0, a1, a2) \
+		__sbi_ecall(a0, a1, a2, 0, 0, 0, f, e)
+#define sbi_ecall6(e, f, a0, a1, a2, a3) \
+		__sbi_ecall(a0, a1, a2, a3, 0, 0, f, e)
+#define sbi_ecall7(e, f, a0, a1, a2, a3, a4) \
+		__sbi_ecall(a0, a1, a2, a3, a4, 0, f, e)
+#define sbi_ecall8(e, f, a0, a1, a2, a3, a4, a5) \
 		__sbi_ecall(a0, a1, a2, a3, a4, a5, f, e)
+
+#define __sbi_count_args_magic(_, a, b, c, d, e, f, g, h, N, ...) N
+#define __sbi_count_args(...) \
+	__sbi_count_args_magic(_, ## __VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define __sbi_count_args2(...) \
+	(sizeof((unsigned long[]){0, ## __VA_ARGS__}) / sizeof(unsigned long) - 1)
+#define __sbi_concat_expanded(a, b) a ## b
+#define __sbi_concat(n) __sbi_concat_expanded(sbi_ecall, n)
+
+/* sbi_ecall selects the appropriate sbi_ecall1 to sbi_ecall8 */
+#define sbi_ecall(...)  \
+	({ \
+		static_assert(__sbi_count_args2(__VA_ARGS__) <= 8); \
+		__sbi_concat(__sbi_count_args(__VA_ARGS__)) \
+				(__VA_ARGS__); \
+	})
 
 #ifdef CONFIG_RISCV_SBI_V01
 void sbi_console_putchar(int ch);
