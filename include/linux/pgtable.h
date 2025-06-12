@@ -232,9 +232,23 @@ static inline int pmd_dirty(pmd_t pmd)
  * Nesting is not permitted and the mode cannot be used in interrupt context.
  */
 #ifndef __HAVE_ARCH_ENTER_LAZY_MMU_MODE
-#define arch_enter_lazy_mmu_mode()	do {} while (0)
-#define arch_leave_lazy_mmu_mode()	do {} while (0)
-#define arch_flush_lazy_mmu_mode()	do {} while (0)
+static inline void arch_enter_lazy_mmu_mode(void)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		VM_WARN_ON_ONCE(preemptible());
+}
+
+static inline void arch_leave_lazy_mmu_mode(void)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		VM_WARN_ON_ONCE(preemptible());
+}
+
+static inline void arch_flush_lazy_mmu_mode(void)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		VM_WARN_ON_ONCE(preemptible());
+}
 #endif
 
 #ifndef pte_batch_hint
