@@ -4373,7 +4373,7 @@ int ath12k_mac_get_fw_stats(struct ath12k *ar,
 	 * received 'update stats' event, we keep a 3 seconds timeout in case,
 	 * fw_stats_done is not marked yet
 	 */
-	timeout = jiffies + msecs_to_jiffies(3 * 1000);
+	timeout = jiffies + secs_to_jiffies(3);
 	ath12k_fw_stats_reset(ar);
 
 	reinit_completion(&ar->fw_stats_complete);
