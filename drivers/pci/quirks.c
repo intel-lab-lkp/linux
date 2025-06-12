@@ -6335,3 +6335,11 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+static void pci_ivshmem_writeback(struct pci_dev *dev)
+{
+	struct resource *r = &dev->resource[2];
+
+	r->flags |= IORESOURCE_CACHEABLE;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REDHAT_QUMRANET, 0x1110, pci_ivshmem_writeback);

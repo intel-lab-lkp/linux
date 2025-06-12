@@ -35,6 +35,7 @@ int pci_mmap_resource_range(struct pci_dev *pdev, int bar,
 	if (write_combine)
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	else
+	else if (!(pci_resource_flags(pdev, bar) & IORESOURCE_CACHEABLE))
 		vma->vm_page_prot = pgprot_device(vma->vm_page_prot);
 
 	if (mmap_state == pci_mmap_io) {
@@ -45,6 +46,11 @@ int pci_mmap_resource_range(struct pci_dev *pdev, int bar,
 		vma->vm_pgoff += (pci_resource_start(pdev, bar) >> PAGE_SHIFT);
 
 	vma->vm_ops = &pci_phys_vm_ops;
+
+	if (pci_resource_flags(pdev, bar) & IORESOURCE_CACHEABLE)
+		return remap_pfn_range_notrack(vma, vma->vm_start, vma->vm_pgoff,
+					       vma->vm_end - vma->vm_start,
+					       vma->vm_page_prot);
 
 	return io_remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff,
 				  vma->vm_end - vma->vm_start,
