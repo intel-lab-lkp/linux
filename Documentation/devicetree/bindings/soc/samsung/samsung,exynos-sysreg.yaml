@@ -54,6 +54,12 @@ properties:
         deprecated: true
       - items:
           - enum:
+              - samsung,exynos7870-cam-sysreg
+              - samsung,exynos7870-disp-sysreg
+          - const: samsung,exynos7870-sysreg
+          - const: syscon
+      - items:
+          - enum:
               - samsung,exynos850-cmgp-sysreg
               - samsung,exynos850-peri-sysreg
           - const: samsung,exynos850-sysreg
