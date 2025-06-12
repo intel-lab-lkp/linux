@@ -9699,7 +9699,8 @@ EXPORT_SYMBOL_GPL(nft_hook_find_ops_rcu);
 static void
 nf_tables_device_notify(const struct nft_table *table, int attr,
 			const char *name, const struct nft_hook *hook,
-			const struct net_device *dev, int event)
+			const struct net_device *dev, int event,
+			bool report, struct list_head *notify_list)
 {
 	struct net *net = dev_net(dev);
 	struct nlmsghdr *nlh;
@@ -9727,8 +9728,12 @@ nf_tables_device_notify(const struct nft_table *table, int attr,
 		goto err;
 
 	nlmsg_end(skb, nlh);
-	nfnetlink_send(skb, net, 0, NFNLGRP_NFT_DEV,
-		       nlmsg_report(nlh), GFP_KERNEL);
+
+	if (notify_list)
+		nft_notify_enqueue(skb, report, NFNLGRP_NFT_DEV, notify_list);
+	else
+		nfnetlink_send(skb, net, 0, NFNLGRP_NFT_DEV,
+			       report, GFP_KERNEL);
 	return;
 err:
 	if (skb)
@@ -9739,19 +9744,23 @@ err:
 void
 nf_tables_chain_device_notify(const struct nft_chain *chain,
 			      const struct nft_hook *hook,
-			      const struct net_device *dev, int event)
+			      const struct net_device *dev, int event,
+			      bool report, struct list_head *notify_list)
 {
 	nf_tables_device_notify(chain->table, NFTA_DEVICE_CHAIN,
-				chain->name, hook, dev, event);
+				chain->name, hook, dev, event,
+				report, notify_list);
 }
 
 static void
 nf_tables_flowtable_device_notify(const struct nft_flowtable *ft,
 				  const struct nft_hook *hook,
-				  const struct net_device *dev, int event)
+				  const struct net_device *dev, int event,
+				  bool report, struct list_head *notify_list)
 {
 	nf_tables_device_notify(ft->table, NFTA_DEVICE_FLOWTABLE,
-				ft->name, hook, dev, event);
+				ft->name, hook, dev, event,
+				report, notify_list);
 }
 
 static int nft_flowtable_event(unsigned long event, struct net_device *dev,
@@ -9801,7 +9810,8 @@ static int nft_flowtable_event(unsigned long event, struct net_device *dev,
 			list_add_tail_rcu(&ops->list, &hook->ops_list);
 			break;
 		}
-		nf_tables_flowtable_device_notify(flowtable, hook, dev, event);
+		nf_tables_flowtable_device_notify(flowtable, hook, dev, event,
+						  false, NULL);
 		break;
 	}
 	return 0;

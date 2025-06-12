@@ -364,7 +364,7 @@ static int nft_netdev_event(unsigned long event, struct net_device *dev,
 			break;
 		}
 		nf_tables_chain_device_notify(&basechain->chain,
-					      hook, dev, event);
+					      hook, dev, event, false, NULL);
 		break;
 	}
 	return 0;

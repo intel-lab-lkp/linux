@@ -1145,7 +1145,8 @@ void nf_tables_unbind_chain(const struct nft_ctx *ctx, struct nft_chain *chain);
 struct nft_hook;
 void nf_tables_chain_device_notify(const struct nft_chain *chain,
 				   const struct nft_hook *hook,
-				   const struct net_device *dev, int event);
+				   const struct net_device *dev, int event,
+				   bool report, struct list_head *notify_list);
 
 enum nft_chain_types {
 	NFT_CHAIN_T_DEFAULT = 0,
