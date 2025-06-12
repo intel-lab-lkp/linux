@@ -826,6 +826,19 @@ config ARCH_WANTS_THP_SWAP
 config MM_ID
 	def_bool n
 
+config ARCH_HAS_STATIC_PMD_ZERO_PAGE
+	def_bool n
+
+config STATIC_PMD_ZERO_PAGE
+	bool "Allocate a PMD page for zeroing"
+	depends on ARCH_HAS_STATIC_PMD_ZERO_PAGE
+	help
+	  Typically huge_zero_folio, which is a PMD page of zeroes, is allocated
+	  on demand and deallocated when not in use. This option will
+	  allocate a PMD sized zero page in .bss and huge_zero_folio will
+	  use it instead allocating dynamically.
+	  Not suitable for memory constrained systems.
+
 menuconfig TRANSPARENT_HUGEPAGE
 	bool "Transparent Hugepage Support"
 	depends on HAVE_ARCH_TRANSPARENT_HUGEPAGE && !PREEMPT_RT

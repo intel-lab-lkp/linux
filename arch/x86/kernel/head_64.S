@@ -714,6 +714,14 @@ EXPORT_SYMBOL(phys_base)
 #include "../xen/xen-head.S"
 
 	__PAGE_ALIGNED_BSS
+
+#ifdef CONFIG_STATIC_PMD_ZERO_PAGE
+SYM_DATA_START_PAGE_ALIGNED(empty_pmd_zero_page)
+	.skip PMD_SIZE
+SYM_DATA_END(empty_pmd_zero_page)
+EXPORT_SYMBOL(empty_pmd_zero_page)
+#endif
+
 SYM_DATA_START_PAGE_ALIGNED(empty_zero_page)
 	.skip PAGE_SIZE
 SYM_DATA_END(empty_zero_page)

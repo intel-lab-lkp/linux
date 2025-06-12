@@ -47,6 +47,14 @@ void ptdump_walk_user_pgd_level_checkwx(void);
 #define debug_checkwx_user()	do { } while (0)
 #endif
 
+#ifdef CONFIG_STATIC_PMD_ZERO_PAGE
+/*
+ * PMD_ZERO_PAGE is a global shared PMD page that is always zero.
+ */
+extern unsigned long empty_pmd_zero_page[(PMD_SIZE) / sizeof(unsigned long)]
+	__visible;
+#endif
+
 /*
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
