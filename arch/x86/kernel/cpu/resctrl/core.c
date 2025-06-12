@@ -17,13 +17,14 @@
 #define pr_fmt(fmt)	"resctrl: " fmt
 
 #include <linux/cpu.h>
-#include <linux/slab.h>
-#include <linux/err.h>
 #include <linux/cpuhotplug.h>
+#include <linux/err.h>
+#include <linux/slab.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/msr.h>
 #include <asm/resctrl.h>
+
 #include "internal.h"
 
 /*
