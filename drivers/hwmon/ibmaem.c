@@ -383,8 +383,7 @@ static int aem_read_sensor(struct aem_data *data, u8 elt, u8 reg,
 
 	aem_send_message(ipmi);
 
-	res = wait_for_completion_timeout(&ipmi->read_complete, IPMI_TIMEOUT);
-	if (!res) {
+	if (!wait_for_completion_timeout(&ipmi->read_complete, IPMI_TIMEOUT)) {
 		res = -ETIMEDOUT;
 		goto out;
 	}
@@ -491,7 +490,6 @@ static void aem_delete(struct aem_data *data)
 /* Retrieve version and module handle for an AEM1 instance */
 static int aem_find_aem1_count(struct aem_ipmi_data *data)
 {
-	int res;
 	struct aem_find_firmware_req	ff_req;
 	struct aem_find_firmware_resp	ff_resp;
 
@@ -508,8 +506,7 @@ static int aem_find_aem1_count(struct aem_ipmi_data *data)
 
 	aem_send_message(data);
 
-	res = wait_for_completion_timeout(&data->read_complete, IPMI_TIMEOUT);
-	if (!res)
+	if (!wait_for_completion_timeout(&data->read_complete, IPMI_TIMEOUT))
 		return -ETIMEDOUT;
 
 	if (data->rx_result || data->rx_msg_len != sizeof(ff_resp) ||
@@ -632,7 +629,6 @@ static int aem_find_aem2(struct aem_ipmi_data *data,
 			    struct aem_find_instance_resp *fi_resp,
 			    int instance_num)
 {
-	int res;
 	struct aem_find_instance_req fi_req;
 
 	fi_req.id = system_x_id;
@@ -648,8 +644,7 @@ static int aem_find_aem2(struct aem_ipmi_data *data,
 
 	aem_send_message(data);
 
-	res = wait_for_completion_timeout(&data->read_complete, IPMI_TIMEOUT);
-	if (!res)
+	if (!wait_for_completion_timeout(&data->read_complete, IPMI_TIMEOUT))
 		return -ETIMEDOUT;
 
 	if (data->rx_result || data->rx_msg_len != sizeof(*fi_resp) ||
