@@ -2489,3 +2489,5 @@ int setup_resources(struct udma_dev *ud)
 	return ch_count;
 }
 
+/* Private interfaces to UDMA */
+#include "k3-udma-private.c"
