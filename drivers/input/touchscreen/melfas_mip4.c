@@ -1146,14 +1146,16 @@ exit_bl:
 	mip4_query_device(ts);
 
 	/* Refresh device parameters */
-	input_set_abs_params(ts->input, ABS_MT_POSITION_X, 0, ts->max_x, 0, 0);
-	input_set_abs_params(ts->input, ABS_MT_POSITION_Y, 0, ts->max_y, 0, 0);
-	input_set_abs_params(ts->input, ABS_X, 0, ts->max_x, 0, 0);
-	input_set_abs_params(ts->input, ABS_Y, 0, ts->max_y, 0, 0);
-	input_abs_set_res(ts->input, ABS_MT_POSITION_X, ts->ppm_x);
-	input_abs_set_res(ts->input, ABS_MT_POSITION_Y, ts->ppm_y);
-	input_abs_set_res(ts->input, ABS_X, ts->ppm_x);
-	input_abs_set_res(ts->input, ABS_Y, ts->ppm_y);
+	if (ts->max_x && ts->max_y) {
+		input_set_abs_params(ts->input, ABS_MT_POSITION_X, 0, ts->max_x, 0, 0);
+		input_set_abs_params(ts->input, ABS_MT_POSITION_Y, 0, ts->max_y, 0, 0);
+		input_set_abs_params(ts->input, ABS_X, 0, ts->max_x, 0, 0);
+		input_set_abs_params(ts->input, ABS_Y, 0, ts->max_y, 0, 0);
+		input_abs_set_res(ts->input, ABS_MT_POSITION_X, ts->ppm_x);
+		input_abs_set_res(ts->input, ABS_MT_POSITION_Y, ts->ppm_y);
+		input_abs_set_res(ts->input, ABS_X, ts->ppm_x);
+		input_abs_set_res(ts->input, ABS_Y, ts->ppm_y);
+	}
 
 	for (i = 0; i < ts->key_num; i++) {
 		if (ts->key_code[i])
@@ -1498,21 +1500,23 @@ static int mip4_probe(struct i2c_client *client)
 	input->keycodesize = sizeof(*ts->key_code);
 	input->keycodemax = ts->key_num;
 
-	input_set_abs_params(input, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_X, 0, ts->max_x, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, ts->max_y, 0, 0);
-	input_set_abs_params(input, ABS_MT_PRESSURE,
-			     MIP4_PRESSURE_MIN, MIP4_PRESSURE_MAX, 0, 0);
-	input_set_abs_params(input, ABS_MT_TOUCH_MAJOR,
-			     MIP4_TOUCH_MAJOR_MIN, MIP4_TOUCH_MAJOR_MAX, 0, 0);
-	input_set_abs_params(input, ABS_MT_TOUCH_MINOR,
-			     MIP4_TOUCH_MINOR_MIN, MIP4_TOUCH_MINOR_MAX, 0, 0);
-	input_abs_set_res(ts->input, ABS_MT_POSITION_X, ts->ppm_x);
-	input_abs_set_res(ts->input, ABS_MT_POSITION_Y, ts->ppm_y);
+	if (ts->max_x && ts->max_y) {
+		input_set_abs_params(input, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0);
+		input_set_abs_params(input, ABS_MT_POSITION_X, 0, ts->max_x, 0, 0);
+		input_set_abs_params(input, ABS_MT_POSITION_Y, 0, ts->max_y, 0, 0);
+		input_set_abs_params(input, ABS_MT_PRESSURE,
+				     MIP4_PRESSURE_MIN, MIP4_PRESSURE_MAX, 0, 0);
+		input_set_abs_params(input, ABS_MT_TOUCH_MAJOR,
+				     MIP4_TOUCH_MAJOR_MIN, MIP4_TOUCH_MAJOR_MAX, 0, 0);
+		input_set_abs_params(input, ABS_MT_TOUCH_MINOR,
+				     MIP4_TOUCH_MINOR_MIN, MIP4_TOUCH_MINOR_MAX, 0, 0);
+		input_abs_set_res(ts->input, ABS_MT_POSITION_X, ts->ppm_x);
+		input_abs_set_res(ts->input, ABS_MT_POSITION_Y, ts->ppm_y);
 
-	error = input_mt_init_slots(input, MIP4_MAX_FINGERS, INPUT_MT_DIRECT);
-	if (error)
-		return error;
+		error = input_mt_init_slots(input, MIP4_MAX_FINGERS, INPUT_MT_DIRECT);
+		if (error)
+			return error;
+	}
 
 	for (i = 0; i < ts->key_num; i++) {
 		if (ts->key_code[i])
