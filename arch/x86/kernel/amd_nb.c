@@ -94,7 +94,7 @@ static int amd_cache_northbridges(struct cpuinfo_x86 *c)
 	if (amd_gart_present())
 		amd_northbridges.flags |= AMD_NB_GART;
 
-	if (!cpuid_amd_hygon_has_l3_cache())
+	if (!cpuid_amd_hygon_has_l3_cache(c))
 		return 0;
 
 	/*
