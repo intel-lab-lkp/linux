@@ -169,7 +169,7 @@ struct mip4_ts {
 	unsigned int event_format;
 
 	unsigned int key_num;
-	unsigned short key_code[MIP4_MAX_KEYS];
+	unsigned int key_code[MIP4_MAX_KEYS];
 
 	bool wake_irq_enabled;
 
@@ -337,8 +337,13 @@ static int mip4_query_device(struct mip4_ts *ts)
 			ts->ppm_x, ts->ppm_y);
 
 		/* Key ts */
-		if (ts->node_key > 0)
+		if (ts->node_key > MIP4_MAX_KEYS) {
+			dev_warn(&ts->client->dev,
+				"Too many keys (%u) found\n", ts->node_key);
+			ts->key_num = MIP4_MAX_KEYS;
+		} else {
 			ts->key_num = ts->node_key;
+		}
 	}
 
 	/* Protocol */
@@ -1080,6 +1085,7 @@ static int mip4_flash_fw(struct mip4_ts *ts,
 			 const u8 *fw_data, u32 fw_size, u32 fw_offset)
 {
 	struct i2c_client *client = ts->client;
+	unsigned int i;
 	int offset;
 	u16 buf_addr;
 	int error, error2;
@@ -1148,6 +1154,11 @@ exit_bl:
 	input_abs_set_res(ts->input, ABS_MT_POSITION_Y, ts->ppm_y);
 	input_abs_set_res(ts->input, ABS_X, ts->ppm_x);
 	input_abs_set_res(ts->input, ABS_Y, ts->ppm_y);
+
+	for (i = 0; i < ts->key_num; i++) {
+		if (ts->key_code[i])
+			input_set_capability(ts->input, EV_KEY, ts->key_code[i]);
+	}
 
 	return error ? error : 0;
 }
@@ -1425,6 +1436,7 @@ static int mip4_probe(struct i2c_client *client)
 {
 	struct mip4_ts *ts;
 	struct input_dev *input;
+	unsigned int i;
 	int error;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -1471,6 +1483,17 @@ static int mip4_probe(struct i2c_client *client)
 
 	input_set_drvdata(input, ts);
 
+#ifdef CONFIG_OF
+	error = of_property_read_u32_array(client->dev.of_node, "linux,keycodes",
+					   ts->key_code, ts->key_num);
+	if (error && ts->key_num) {
+		dev_warn(&client->dev,
+			 "Failed to get codes for %u supported keys", ts->key_num);
+		/* Disable touchkey support */
+		ts->key_num = 0;
+	}
+#endif
+
 	input->keycode = ts->key_code;
 	input->keycodesize = sizeof(*ts->key_code);
 	input->keycodemax = ts->key_num;
@@ -1490,6 +1513,11 @@ static int mip4_probe(struct i2c_client *client)
 	error = input_mt_init_slots(input, MIP4_MAX_FINGERS, INPUT_MT_DIRECT);
 	if (error)
 		return error;
+
+	for (i = 0; i < ts->key_num; i++) {
+		if (ts->key_code[i])
+			input_set_capability(input, EV_KEY, ts->key_code[i]);
+	}
 
 	i2c_set_clientdata(client, ts);
 
