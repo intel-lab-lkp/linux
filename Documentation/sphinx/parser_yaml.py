@@ -55,7 +55,7 @@ class YamlParser(Parser):
         fname = document.current_source
 
         # Handle netlink yaml specs
-        if re.search("/netlink/specs/", fname):
+        if re.search("netlink/specs/", fname):
             if fname.endswith("index.yaml"):
                 msg = self.netlink_parser.generate_main_index_rst(fname, None)
             else:
