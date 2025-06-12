@@ -571,6 +571,7 @@ struct device *nd_pfn_create(struct nd_region *nd_region);
 struct device *nd_pfn_devinit(struct nd_pfn *nd_pfn,
 		struct nd_namespace_common *ndns);
 int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig);
+int nd_pfn_set_dax_defaults(struct nd_pfn *nd_pfn);
 extern const struct attribute_group *nd_pfn_attribute_groups[];
 #else
 static inline int nd_pfn_probe(struct device *dev,
@@ -590,6 +591,11 @@ static inline struct device *nd_pfn_create(struct nd_region *nd_region)
 }
 
 static inline int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
+{
+	return -ENODEV;
+}
+
+static inline int nd_pfn_set_dax_defaults(struct nd_pfn *nd_pfn)
 {
 	return -ENODEV;
 }

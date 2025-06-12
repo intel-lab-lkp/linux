@@ -439,6 +439,76 @@ static bool nd_supported_alignment(unsigned long align)
 	return false;
 }
 
+static unsigned long nd_best_supported_alignment(unsigned long start,
+						 unsigned long end)
+{
+	int i;
+	unsigned long ret = 0, supported[MAX_NVDIMM_ALIGN] = { [0] = 0, };
+
+	nd_pfn_supported_alignments(supported);
+	for (i = 0; supported[i]; i++)
+		if (IS_ALIGNED(start, supported[i]) &&
+		    IS_ALIGNED(end + 1, supported[i]))
+			ret = supported[i];
+		else
+			break;
+
+	return ret;
+}
+
+static int nd_pfn_checks(struct nd_pfn *nd_pfn, u64 offset,
+			 unsigned long start_pad, unsigned long end_trunc)
+{
+	/*
+	 * These warnings are verbose because they can only trigger in
+	 * the case where the physical address alignment of the
+	 * namespace has changed since the pfn superblock was
+	 * established.
+	 */
+	struct nd_namespace_common *ndns = nd_pfn->ndns;
+	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
+	struct resource *res = &nsio->res;
+	resource_size_t res_size = resource_size(res);
+	unsigned long align = nd_pfn->align;
+
+	if (align > nvdimm_namespace_capacity(ndns)) {
+		dev_err(&nd_pfn->dev, "alignment: %lx exceeds capacity %llx\n",
+			align, nvdimm_namespace_capacity(ndns));
+		return -EOPNOTSUPP;
+	}
+
+	if (offset >= res_size) {
+		dev_err(&nd_pfn->dev, "pfn array size exceeds capacity of %s\n",
+			dev_name(&ndns->dev));
+		return -EOPNOTSUPP;
+	}
+
+	if ((align && !IS_ALIGNED(res->start + offset + start_pad, align)) ||
+	    !IS_ALIGNED(offset, PAGE_SIZE)) {
+		dev_err(&nd_pfn->dev,
+			"bad offset: %#llx dax disabled align: %#lx\n",
+			offset, align);
+		return -EOPNOTSUPP;
+	}
+
+	if (!IS_ALIGNED(res->start + start_pad, memremap_compat_align())) {
+		dev_err(&nd_pfn->dev, "resource start misaligned\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (!IS_ALIGNED(res->end + 1 - end_trunc, memremap_compat_align())) {
+		dev_err(&nd_pfn->dev, "resource end misaligned\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (offset >= (res_size - start_pad - end_trunc)) {
+		dev_err(&nd_pfn->dev, "bad offset with small namespace\n");
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 /**
  * nd_pfn_validate - read and validate info-block
  * @nd_pfn: fsdax namespace runtime state / properties
@@ -451,10 +521,7 @@ static bool nd_supported_alignment(unsigned long align)
 int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 {
 	u64 checksum, offset;
-	struct resource *res;
 	enum nd_pfn_mode mode;
-	resource_size_t res_size;
-	struct nd_namespace_io *nsio;
 	unsigned long align, start_pad, end_trunc;
 	struct nd_pfn_sb *pfn_sb = nd_pfn->pfn_sb;
 	struct nd_namespace_common *ndns = nd_pfn->ndns;
@@ -573,52 +640,53 @@ int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 		}
 	}
 
-	if (align > nvdimm_namespace_capacity(ndns)) {
-		dev_err(&nd_pfn->dev, "alignment: %lx exceeds capacity %llx\n",
-				align, nvdimm_namespace_capacity(ndns));
-		return -EOPNOTSUPP;
-	}
-
-	/*
-	 * These warnings are verbose because they can only trigger in
-	 * the case where the physical address alignment of the
-	 * namespace has changed since the pfn superblock was
-	 * established.
-	 */
-	nsio = to_nd_namespace_io(&ndns->dev);
-	res = &nsio->res;
-	res_size = resource_size(res);
-	if (offset >= res_size) {
-		dev_err(&nd_pfn->dev, "pfn array size exceeds capacity of %s\n",
-				dev_name(&ndns->dev));
-		return -EOPNOTSUPP;
-	}
-
-	if ((align && !IS_ALIGNED(res->start + offset + start_pad, align))
-			|| !IS_ALIGNED(offset, PAGE_SIZE)) {
-		dev_err(&nd_pfn->dev,
-				"bad offset: %#llx dax disabled align: %#lx\n",
-				offset, align);
-		return -EOPNOTSUPP;
-	}
-
-	if (!IS_ALIGNED(res->start + start_pad, memremap_compat_align())) {
-		dev_err(&nd_pfn->dev, "resource start misaligned\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (!IS_ALIGNED(res->end + 1 - end_trunc, memremap_compat_align())) {
-		dev_err(&nd_pfn->dev, "resource end misaligned\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (offset >= (res_size - start_pad - end_trunc)) {
-		dev_err(&nd_pfn->dev, "bad offset with small namespace\n");
-		return -EOPNOTSUPP;
-	}
-	return 0;
+	return nd_pfn_checks(nd_pfn, offset, start_pad, end_trunc);
 }
 EXPORT_SYMBOL(nd_pfn_validate);
+
+int nd_pfn_set_dax_defaults(struct nd_pfn *nd_pfn)
+{
+	struct nd_pfn_sb *pfn_sb = nd_pfn->pfn_sb;
+	struct nd_namespace_common *ndns = nd_pfn->ndns;
+	struct nd_region *nd_region = to_nd_region(nd_pfn->dev.parent);
+	struct nd_namespace_io *nsio;
+	struct resource *res;
+	unsigned long align;
+
+	if (!pfn_sb || !ndns)
+		return -ENODEV;
+
+	if (!is_memory(nd_pfn->dev.parent))
+		return -ENODEV;
+
+	if (nd_region->provider_data) {
+		align = (unsigned long)nd_region->provider_data;
+	} else {
+		nsio = to_nd_namespace_io(&ndns->dev);
+		res = &nsio->res;
+		align = nd_best_supported_alignment(res->start, res->end);
+		if (!align) {
+			dev_err(&nd_pfn->dev, "init failed, resource misaligned\n");
+			return -EOPNOTSUPP;
+		}
+	}
+
+	memset(pfn_sb, 0, sizeof(*pfn_sb));
+
+	if (!nd_pfn->uuid) {
+		nd_pfn->uuid = kmemdup(pfn_sb->uuid, 16, GFP_KERNEL);
+		if (!nd_pfn->uuid)
+			return -ENOMEM;
+		nd_pfn->align = align;
+		nd_pfn->mode = PFN_MODE_RAM;
+	}
+
+	pfn_sb->align = cpu_to_le64(nd_pfn->align);
+	pfn_sb->mode = cpu_to_le32(nd_pfn->mode);
+
+	return nd_pfn_checks(nd_pfn, 0, 0, 0);
+}
+EXPORT_SYMBOL(nd_pfn_set_dax_defaults);
 
 int nd_pfn_probe(struct device *dev, struct nd_namespace_common *ndns)
 {
@@ -705,7 +773,7 @@ static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 	};
 	pgmap->nr_range = 1;
 	if (nd_pfn->mode == PFN_MODE_RAM) {
-		if (offset < reserve)
+		if (offset && offset < reserve)
 			return -EINVAL;
 		nd_pfn->npfns = le64_to_cpu(pfn_sb->npfns);
 	} else if (nd_pfn->mode == PFN_MODE_PMEM) {
@@ -730,7 +798,7 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	struct nd_namespace_common *ndns = nd_pfn->ndns;
 	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
 	resource_size_t start, size;
-	struct nd_region *nd_region;
+	struct nd_region *nd_region = to_nd_region(nd_pfn->dev.parent);
 	unsigned long npfns, align;
 	u32 end_trunc;
 	struct nd_pfn_sb *pfn_sb;
@@ -749,6 +817,9 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	else
 		sig = PFN_SIG;
 
+	if (test_bit(ND_REGION_DEVDAX, &nd_region->flags))
+		return nd_pfn_set_dax_defaults(nd_pfn);
+
 	rc = nd_pfn_validate(nd_pfn, sig);
 	if (rc == 0)
 		return nd_pfn_clear_memmap_errors(nd_pfn);
@@ -758,7 +829,6 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	/* no info block, do init */;
 	memset(pfn_sb, 0, sizeof(*pfn_sb));
 
-	nd_region = to_nd_region(nd_pfn->dev.parent);
 	if (nd_region->ro) {
 		dev_info(&nd_pfn->dev,
 				"%s is read-only, unable to init metadata\n",

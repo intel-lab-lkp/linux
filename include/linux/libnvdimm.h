@@ -70,6 +70,9 @@ enum {
 	/* Region was created by CXL subsystem */
 	ND_REGION_CXL = 4,
 
+	/* Region is supposed to be treated as devdax */
+	ND_REGION_DEVDAX = 5,
+
 	/* mark newly adjusted resources as requiring a label update */
 	DPA_RESOURCE_ADJUSTED = 1 << 0,
 };

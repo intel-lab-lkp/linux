@@ -113,7 +113,10 @@ int nd_dax_probe(struct device *dev, struct nd_namespace_common *ndns)
 	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);
 	nd_pfn = &nd_dax->nd_pfn;
 	nd_pfn->pfn_sb = pfn_sb;
-	rc = nd_pfn_validate(nd_pfn, DAX_SIG);
+	if (test_bit(ND_REGION_DEVDAX, &nd_region->flags))
+		rc = nd_pfn_set_dax_defaults(nd_pfn);
+	else
+		rc = nd_pfn_validate(nd_pfn, DAX_SIG);
 	dev_dbg(dev, "dax: %s\n", rc == 0 ? dev_name(dax_dev) : "<none>");
 	if (rc < 0) {
 		nd_detach_ndns(dax_dev, &nd_pfn->ndns);
