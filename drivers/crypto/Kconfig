@@ -715,6 +715,8 @@ config CRYPTO_DEV_TEGRA
 config CRYPTO_DEV_XILINX_TRNG
 	tristate "Support for Xilinx True Random Generator"
 	depends on ZYNQMP_FIRMWARE || COMPILE_TEST
+	select CRYPTO_DRBG_MENU
+	select CRYPTO_DRBG_CTR
 	select CRYPTO_RNG
 	select HW_RANDOM
 	help
