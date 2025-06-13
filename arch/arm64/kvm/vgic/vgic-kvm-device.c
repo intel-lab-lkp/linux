@@ -626,6 +626,26 @@ static int vgic_v3_set_attr(struct kvm_device *dev,
 		dev->kvm->arch.vgic.mi_intid = val;
 		return 0;
 	}
+	case KVM_DEV_ARM_VGIC_GRP_FEATURES: {
+		u8 __user *uaddr = (u8 __user *)attr->addr;
+		u8 val;
+
+		if (attr->attr != KVM_DEV_ARM_VGIC_FEATURE_nASSGIcap)
+			return -ENXIO;
+
+		if (get_user(val, uaddr))
+			return -EFAULT;
+
+		guard(mutex)(&dev->kvm->arch.config_lock);
+		if (vgic_initialized(dev->kvm))
+			return -EBUSY;
+
+		if (!(kvm_vgic_global_state.has_gicv4_1 && gic_cpuif_has_vsgi()) && val)
+			return -EINVAL;
+
+		dev->kvm->arch.vgic.nassgicap = val;
+		return 0;
+	}
 	default:
 		return vgic_set_common_attr(dev, attr);
 	}
@@ -645,6 +665,17 @@ static int vgic_v3_get_attr(struct kvm_device *dev,
 
 		guard(mutex)(&dev->kvm->arch.config_lock);
 		return put_user(dev->kvm->arch.vgic.mi_intid, uaddr);
+	}
+	case KVM_DEV_ARM_VGIC_GRP_FEATURES: {
+		u8 __user *uaddr = (u8 __user *)attr->addr;
+		u8 val;
+
+		if (attr->attr != KVM_DEV_ARM_VGIC_FEATURE_nASSGIcap)
+			return -ENXIO;
+
+		guard(mutex)(&dev->kvm->arch.config_lock);
+		val = dev->kvm->arch.vgic.nassgicap;
+		return put_user(val, uaddr);
 	}
 	default:
 		return vgic_get_common_attr(dev, attr);
@@ -683,8 +714,14 @@ static int vgic_v3_has_attr(struct kvm_device *dev,
 			return 0;
 		case KVM_DEV_ARM_VGIC_SAVE_PENDING_TABLES:
 			return 0;
+		default:
+			return -ENXIO;
 		}
+	case KVM_DEV_ARM_VGIC_GRP_FEATURES:
+		return attr->attr != KVM_DEV_ARM_VGIC_FEATURE_nASSGIcap ?
+		       -ENXIO : 0;
 	}
+
 	return -ENXIO;
 }
 

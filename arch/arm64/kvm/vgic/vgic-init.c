@@ -157,6 +157,9 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 
 	kvm->arch.vgic.in_kernel = true;
 	kvm->arch.vgic.vgic_model = type;
+	if (type == KVM_DEV_TYPE_ARM_VGIC_V3)
+		kvm->arch.vgic.nassgicap = kvm_vgic_global_state.has_gicv4_1 &&
+					   gic_cpuif_has_vsgi();
 
 	kvm->arch.vgic.vgic_dist_base = VGIC_ADDR_UNDEF;
 

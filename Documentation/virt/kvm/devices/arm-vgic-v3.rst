@@ -306,3 +306,32 @@ Groups:
 
     The vINTID specifies which interrupt is generated when the vGIC
     must generate a maintenance interrupt. This must be a PPI.
+
+  KVM_DEV_ARM_VGIC_GRP_FEATURES
+   Attributes:
+
+    KVM_DEV_ARM_VGIC_FEATURE_nASSGIcap
+      Control whether support for SGIs without an active state is exposed
+      to the VM. attr->addr points to a __u8 value which indicates whether
+      he feature is enabled / disabled.
+
+      A value of 0 indicates that the feature is disabled. A nonzero value
+      indicates that the feature is enabled.
+
+      This attribute can only be set prior to initializing the VGIC (i.e.
+      KVM_DEV_ARM_VGIC_CTRL_INIT).
+
+      Support for SGIs without an active state depends on hardware support.
+      Userspace can discover support for the feature by reading the
+      attribute after creating a VGICv3. It is possible that
+      KVM_DEV_ARM_VGIC_CTRL_INIT can later fail if this feature is enabled
+      and KVM is unable to allocate GIC vPEs for the VM.
+
+  Errors:
+
+    =======  ========================================================
+    -ENXIO   Invalid attribute in attr->attr
+    -EFAULT  Invalid user address in attr->addr
+    -EBUSY   The VGIC has already been initialized
+    -EINVAL  KVM doesn't support the requested feature setting
+    =======  ========================================================
