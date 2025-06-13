@@ -388,7 +388,7 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 		iter.status = iomap_read_folio_iter(&iter, &ctx);
 
 	if (ctx.bio) {
-		submit_bio(ctx.bio);
+		iomap_submit_bio(ctx.bio);
 		WARN_ON_ONCE(!ctx.cur_folio_in_bio);
 	} else {
 		WARN_ON_ONCE(ctx.cur_folio_in_bio);
@@ -460,7 +460,7 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 		iter.status = iomap_readahead_iter(&iter, &ctx);
 
 	if (ctx.bio)
-		submit_bio(ctx.bio);
+		iomap_submit_bio(ctx.bio);
 	if (ctx.cur_folio) {
 		if (!ctx.cur_folio_in_bio)
 			folio_unlock(ctx.cur_folio);
@@ -1463,7 +1463,7 @@ int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 		if (WARN_ON_ONCE(wpc->iomap.flags & IOMAP_F_ANON_WRITE))
 			error = -EIO;
 		if (!error)
-			submit_bio(&wpc->ioend->io_bio);
+			iomap_submit_bio(&wpc->ioend->io_bio);
 	}
 
 	if (error)

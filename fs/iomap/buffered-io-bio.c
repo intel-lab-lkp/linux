@@ -81,6 +81,11 @@ void iomap_bio_readpage(const struct iomap *iomap, loff_t pos,
 	}
 }
 
+void iomap_submit_bio(struct bio *bio)
+{
+	submit_bio(bio);
+}
+
 int iomap_bio_read_folio_sync(loff_t block_start, struct folio *folio,
 		size_t poff, size_t plen, const struct iomap *iomap)
 {
