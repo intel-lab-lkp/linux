@@ -950,3 +950,137 @@ void resctrl_mon_resource_exit(void)
 
 	dom_data_exit(r);
 }
+
+/**
+ * resctrl_config_cntr() - Configure the counter ID for the event, RMID pair in
+ * the domain.
+ *
+ * Assign the counter if @assign is true else unassign the counter. Reset the
+ * associated non-architectural state.
+ */
+static void resctrl_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+				enum resctrl_event_id evtid, u32 rmid, u32 closid,
+				u32 cntr_id, bool assign)
+{
+	struct mbm_state *m;
+
+	resctrl_arch_config_cntr(r, d, evtid, rmid, closid, cntr_id, assign);
+
+	m = get_mbm_state(d, closid, rmid, evtid);
+	if (m)
+		memset(m, 0, sizeof(struct mbm_state));
+}
+
+/**
+ * mbm_cntr_get() - Return the counter ID for the matching @evtid and @rdtgrp.
+ *
+ * Return:
+ * Valid counter ID on success, or -ENOENT on failure.
+ */
+static int mbm_cntr_get(struct rdt_resource *r, struct rdt_mon_domain *d,
+			struct rdtgroup *rdtgrp, enum resctrl_event_id evtid)
+{
+	int cntr_id;
+
+	if (!resctrl_is_mbm_event(evtid))
+		return -ENOENT;
+
+	for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+		if (d->cntr_cfg[cntr_id].rdtgrp == rdtgrp &&
+		    d->cntr_cfg[cntr_id].evtid == evtid)
+			return cntr_id;
+	}
+
+	return -ENOENT;
+}
+
+/**
+ * mbm_cntr_alloc() - Initilialize and return a new counter ID in the domain @d.
+ *
+ * Return:
+ * Valid counter ID on success, or -ENOSPC on failure.
+ */
+static int mbm_cntr_alloc(struct rdt_resource *r, struct rdt_mon_domain *d,
+			  struct rdtgroup *rdtgrp, enum resctrl_event_id evtid)
+{
+	int cntr_id;
+
+	for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+		if (!d->cntr_cfg[cntr_id].rdtgrp) {
+			d->cntr_cfg[cntr_id].rdtgrp = rdtgrp;
+			d->cntr_cfg[cntr_id].evtid = evtid;
+			return cntr_id;
+		}
+	}
+
+	return -ENOSPC;
+}
+
+/**
+ * resctrl_alloc_config_cntr() - Allocate a counter ID and configure it for the
+ * event pointed to by @mevt and the resctrl group @rdtgrp within the domain @d.
+ *
+ * Return:
+ * 0 on success, or a non-zero value on failure.
+ */
+static int resctrl_alloc_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+				     struct rdtgroup *rdtgrp, struct mon_evt *mevt)
+{
+	int cntr_id;
+
+	/* No need to allocate a new counter if it is already assigned */
+	cntr_id = mbm_cntr_get(r, d, rdtgrp, mevt->evtid);
+	if (cntr_id >= 0)
+		goto cntr_configure;
+
+	cntr_id = mbm_cntr_alloc(r, d, rdtgrp, mevt->evtid);
+	if (cntr_id <  0) {
+		rdt_last_cmd_printf("Unable to allocate counter in domain %d\n",
+				    d->hdr.id);
+		return cntr_id;
+	}
+
+cntr_configure:
+	/*
+	 * Skip reconfiguration if the event setup is current; otherwise,
+	 * update and apply the new configuration to the domain.
+	 */
+	if (mevt->evt_cfg != d->cntr_cfg[cntr_id].evt_cfg) {
+		d->cntr_cfg[cntr_id].evt_cfg = mevt->evt_cfg;
+		resctrl_config_cntr(r, d, mevt->evtid, rdtgrp->mon.rmid,
+				    rdtgrp->closid, cntr_id, true);
+	}
+
+	return 0;
+}
+
+/**
+ * resctrl_assign_cntr_event() - Assign a hardware counter for the event in
+ * @mevt to the resctrl group @rdtgrp. Assign counters to all domains if @d is
+ * NULL; otherwise, assign the counter to the specified domain @d.
+ *
+ * If all counters in a domain are already in use, resctrl_alloc_config_cntr()
+ * will fail. The assignment process will abort at the first failure encountered
+ * during domain traversal, which may result in the event being only partially
+ * assigned.
+ *
+ * Return:
+ * 0 on success, or a non-zero value on failure.
+ */
+int resctrl_assign_cntr_event(struct rdt_resource *r, struct rdt_mon_domain *d,
+			      struct rdtgroup *rdtgrp, struct mon_evt *mevt)
+{
+	int ret = 0;
+
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			ret = resctrl_alloc_config_cntr(r, d, rdtgrp, mevt);
+			if (ret)
+				return ret;
+		}
+	} else {
+		ret = resctrl_alloc_config_cntr(r, d, rdtgrp, mevt);
+	}
+
+	return ret;
+}
