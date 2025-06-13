@@ -634,7 +634,10 @@ static struct nsim_rq *nsim_queue_alloc(void)
 
 static void nsim_queue_free(struct nsim_rq *rq)
 {
+	struct net_device *dev = rq->napi.dev;
+
 	hrtimer_cancel(&rq->napi_timer);
+	dev_dstats_rx_dropped_add(dev, rq->skb_queue.qlen);
 	skb_queue_purge_reason(&rq->skb_queue, SKB_DROP_REASON_QUEUE_PURGE);
 	kfree(rq);
 }
