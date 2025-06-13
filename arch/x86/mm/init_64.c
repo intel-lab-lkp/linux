@@ -572,6 +572,8 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pte = alloc_low_page();
+		if (!pte)
+			return -ENOMEM;
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
@@ -664,6 +666,8 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pmd = alloc_low_page();
+		if (!pmd)
+			return -ENOMEM;
 		ret = phys_pmd_init(pmd, paddr, paddr_end,
 				    page_size_mask, prot, init);
 
@@ -726,6 +730,8 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pud = alloc_low_page();
+		if (!pud)
+			return -ENOMEM;
 		ret = phys_pud_init(pud, paddr, __pa(vaddr_end),
 				    page_size_mask, prot, init);
 
@@ -774,6 +780,8 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 		}
 
 		p4d = alloc_low_page();
+		if (!p4d)
+			return -ENOMEM;
 		ret = phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
 				    page_size_mask, prot, init);
 
