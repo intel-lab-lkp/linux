@@ -10,12 +10,7 @@
 
     This script performs extensive parsing to the Linux kernel's netlink YAML
     spec files, in an effort to avoid needing to heavily mark up the original
-    YAML file.
-
-    This code is split in three big parts:
-        1) RST formatters: Use to convert a string to a RST output
-        2) Parser helpers: Functions to parse the YAML data structure
-        3) Main function and small helpers
+    YAML file. It uses the library code from scripts/lib.
 """
 
 import os.path
@@ -28,7 +23,7 @@ SRC_DIR = os.path.dirname(os.path.realpath(__file__))
 
 sys.path.insert(0, os.path.join(SRC_DIR, LIB_DIR))
 
-from netlink_yml_parser import parse_yaml_file, generate_main_index_rst
+from netlink_yml_parser import NetlinkYamlParser
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -76,10 +71,10 @@ def write_to_rstfile(content: str, filename: str) -> None:
         rst_file.write(content)
 
 
-def write_index_rst(output: str, index_dir: str) -> None:
+def write_index_rst(parser: NetlinkYamlParser, output: str, index_dir: str) -> None:
     """Generate the `networking_spec/index` content and write to the file"""
 
-    msg = generate_main_index_rst(output, index_dir)
+    msg = parser.generate_main_index_rst(output, index_dir)
 
     logging.debug("Writing an index file at %s", output)
     write_to_rstfile(msg, output)
@@ -90,10 +85,12 @@ def main() -> None:
 
     args = parse_arguments()
 
+    parser = NetlinkYamlParser()
+
     if args.input:
         logging.debug("Parsing %s", args.input)
         try:
-            content = parse_yaml_file(os.path.join(args.input))
+            content = parser.parse_yaml_file(os.path.join(args.input))
         except Exception as exception:
             logging.warning("Failed to parse %s.", args.input)
             logging.warning(exception)
@@ -103,7 +100,7 @@ def main() -> None:
 
     if args.index:
         # Generate the index RST file
-        write_index_rst(args.output, args.input_dir)
+        write_index_rst(parser, args.output, args.input_dir)
 
 
 if __name__ == "__main__":
