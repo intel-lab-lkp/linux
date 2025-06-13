@@ -26,15 +26,16 @@ u32 iomap_finish_ioend_direct(struct iomap_ioend *ioend);
 bool ifs_set_range_uptodate(struct folio *folio, struct iomap_folio_state *ifs,
 		size_t off, size_t len);
 int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error);
-int iomap_add_to_ioend(struct iomap_writepage_ctx *wpc,
-		struct writeback_control *wbc, struct folio *folio,
-		struct inode *inode, loff_t pos, loff_t end_pos, unsigned len);
 
 #ifdef CONFIG_BLOCK
 int iomap_bio_read_folio_sync(loff_t block_start, struct folio *folio,
 		size_t poff, size_t plen, const struct iomap *iomap);
+int iomap_bio_add_to_ioend(struct iomap_writepage_ctx *wpc,
+		struct writeback_control *wbc, struct folio *folio,
+		struct inode *inode, loff_t pos, loff_t end_pos, unsigned len);
 #else
 #define iomap_bio_read_folio_sync(...)		(-ENOSYS)
+#define iomap_bio_add_to_ioend(...)		(-ENOSYS)
 #endif /* CONFIG_BLOCK */
 
 #endif /* _IOMAP_INTERNAL_H */

@@ -1571,8 +1571,8 @@ static int iomap_writepage_map_blocks(struct iomap_writepage_ctx *wpc,
 		case IOMAP_HOLE:
 			break;
 		default:
-			error = iomap_add_to_ioend(wpc, wbc, folio, inode, pos,
-					end_pos, map_len);
+			error = iomap_bio_add_to_ioend(wpc, wbc, folio, inode,
+					pos, end_pos, map_len);
 			if (!error)
 				(*count)++;
 			break;
