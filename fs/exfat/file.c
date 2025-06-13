@@ -625,7 +625,7 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 
 	if (iocb_is_dsync(iocb) && iocb->ki_pos > pos) {
 		ssize_t err = vfs_fsync_range(file, pos, iocb->ki_pos - 1,
-				iocb->ki_flags & IOCB_SYNC);
+				(iocb->ki_flags & IOCB_SYNC) ? 0 : 1);
 		if (err < 0)
 			return err;
 	}
