@@ -35,7 +35,7 @@ static void fuse_add_dirent_to_cache(struct file *file,
 	struct fuse_inode *fi = get_fuse_inode(file_inode(file));
 	size_t reclen = FUSE_DIRENT_SIZE(dirent);
 	pgoff_t index;
-	struct page *page;
+	struct folio *folio;
 	loff_t size;
 	u64 version;
 	unsigned int offset;
@@ -62,12 +62,13 @@ static void fuse_add_dirent_to_cache(struct file *file,
 	spin_unlock(&fi->rdc.lock);
 
 	if (offset) {
-		page = find_lock_page(file->f_mapping, index);
+		folio = filemap_lock_folio(file->f_mapping, index);
 	} else {
-		page = find_or_create_page(file->f_mapping, index,
-					   mapping_gfp_mask(file->f_mapping));
+		folio = __filemap_get_folio(file->f_mapping, index,
+				FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
+				mapping_gfp_mask(file->f_mapping));
 	}
-	if (!page)
+	if (!folio)
 		return;
 
 	spin_lock(&fi->rdc.lock);
@@ -76,19 +77,19 @@ static void fuse_add_dirent_to_cache(struct file *file,
 	    WARN_ON(fi->rdc.pos != pos))
 		goto unlock;
 
-	addr = kmap_local_page(page);
+	addr = kmap_local_folio(folio, offset);
+	memcpy(addr, dirent, reclen);
 	if (!offset) {
-		clear_page(addr);
-		SetPageUptodate(page);
+		memset(addr + reclen, 0, PAGE_SIZE - reclen);
+		folio_mark_uptodate(folio);
 	}
-	memcpy(addr + offset, dirent, reclen);
 	kunmap_local(addr);
 	fi->rdc.size = (index << PAGE_SHIFT) + offset + reclen;
 	fi->rdc.pos = dirent->off;
 unlock:
 	spin_unlock(&fi->rdc.lock);
-	unlock_page(page);
-	put_page(page);
+	folio_unlock(folio);
+	folio_put(folio);
 }
 
 static void fuse_readdir_cache_end(struct file *file, loff_t pos)
