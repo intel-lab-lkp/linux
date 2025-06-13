@@ -1226,6 +1226,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
 		vma->gpuva.flags |= XE_VMA_ATOMIC_PTE_BIT;
 
 	vma->attr = *attr;
+	vma->skip_invalidation = 0;
 
 	if (bo) {
 		struct drm_gpuvm_bo *vm_bo;

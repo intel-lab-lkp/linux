@@ -88,13 +88,18 @@ static void madvise_preferred_mem_loc(struct xe_device *xe, struct xe_vm *vm,
 	xe_assert(vm->xe, op->type == DRM_XE_VMA_ATTR_PREFERRED_LOC);
 
 	for (i = 0; i < num_vmas; i++) {
-		vmas[i]->attr.preferred_loc.devmem_fd = op->preferred_mem_loc.devmem_fd;
-
-		/* Till multi-device support is not added migration_policy
-		 * is of no use and can be ignored.
-		 */
-		vmas[i]->attr.preferred_loc.migration_policy =
+		if (vmas[i]->attr.preferred_loc.devmem_fd == op->preferred_mem_loc.devmem_fd &&
+		    vmas[i]->attr.preferred_loc.migration_policy ==
+		    op->preferred_mem_loc.migration_policy) {
+			vmas[i]->skip_invalidation = 1;
+		} else {
+			vmas[i]->attr.preferred_loc.devmem_fd = op->preferred_mem_loc.devmem_fd;
+			/* Till multi-device support is not added migration_policy
+			 * is of no use and can be ignored.
+			 */
+			vmas[i]->attr.preferred_loc.migration_policy =
 						op->preferred_mem_loc.migration_policy;
+		}
 	}
 }
 
@@ -109,7 +114,10 @@ static void madvise_atomic(struct xe_device *xe, struct xe_vm *vm,
 	xe_assert(vm->xe, op->atomic.val <= DRM_XE_VMA_ATOMIC_CPU);
 
 	for (i = 0; i < num_vmas; i++) {
-		vmas[i]->attr.atomic_access = op->atomic.val;
+		if (vmas[i]->attr.atomic_access == op->atomic.val)
+			vmas[i]->skip_invalidation = 1;
+		else
+			vmas[i]->attr.atomic_access = op->atomic.val;
 
 		bo = xe_vma_bo(vmas[i]);
 		if (!bo)
@@ -134,9 +142,12 @@ static void madvise_pat_index(struct xe_device *xe, struct xe_vm *vm,
 
 	xe_assert(vm->xe, op->type == DRM_XE_VMA_ATTR_PAT);
 
-	for (i = 0; i < num_vmas; i++)
-		vmas[i]->attr.pat_index = op->pat_index.val;
-
+	for (i = 0; i < num_vmas; i++) {
+		if (vmas[i]->attr.pat_index == op->pat_index.val)
+			vmas[i]->skip_invalidation = 1;
+		else
+			vmas[i]->attr.pat_index = op->pat_index.val;
+	}
 }
 
 typedef void (*madvise_func)(struct xe_device *xe, struct xe_vm *vm,
@@ -161,23 +172,25 @@ static void xe_zap_ptes_in_madvise_range(struct xe_vm *vm, u64 start, u64 end, u
 				  false, MAX_SCHEDULE_TIMEOUT) <= 0)
 		XE_WARN_ON(1);
 
-	*tile_mask = xe_svm_ranges_zap_ptes_in_range(vm, start, end);
-
 	drm_gpuvm_for_each_va_range(gpuva, &vm->gpuvm, start, end) {
 		struct xe_vma *vma = gpuva_to_vma(gpuva);
 
-		if (xe_vma_is_cpu_addr_mirror(vma))
+		if (vma->skip_invalidation)
 			continue;
 
-		if (xe_vma_is_userptr(vma)) {
-			WARN_ON_ONCE(!dma_resv_test_signaled(xe_vm_resv(xe_vma_vm(vma)),
-							     DMA_RESV_USAGE_BOOKKEEP));
-		}
-
-		for_each_tile(tile, vm->xe, id) {
-			if (xe_pt_zap_ptes(tile, vma)) {
-				*tile_mask |= BIT(id);
-				vma->tile_invalidated |= BIT(id);
+		if (xe_vma_is_cpu_addr_mirror(vma)) {
+			*tile_mask |= xe_svm_ranges_zap_ptes_in_range(vm,
+								      xe_vma_start(vma),
+								      xe_vma_end(vma));
+		} else {
+			if (xe_vma_is_userptr(vma))
+				WARN_ON_ONCE(!dma_resv_test_signaled(xe_vm_resv(xe_vma_vm(vma)),
+								     DMA_RESV_USAGE_BOOKKEEP));
+			for_each_tile(tile, vm->xe, id) {
+				if (xe_pt_zap_ptes(tile, vma)) {
+					*tile_mask |= BIT(id);
+					vma->tile_invalidated |= BIT(id);
+				}
 			}
 		}
 	}
