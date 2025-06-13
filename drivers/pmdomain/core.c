@@ -2998,8 +2998,8 @@ static int __genpd_dev_pm_attach(struct device *dev, struct device *base_dev,
 				 unsigned int index, unsigned int num_domains,
 				 bool power_on)
 {
-	struct of_phandle_args pd_args;
-	struct generic_pm_domain *pd;
+	struct of_phandle_args pd_args, parent_args;
+	struct generic_pm_domain *pd, *parent_pd = NULL;
 	int ret;
 
 	ret = of_parse_phandle_with_args(dev->of_node, "power-domains",
@@ -3039,6 +3039,22 @@ static int __genpd_dev_pm_attach(struct device *dev, struct device *base_dev,
 			goto err;
 	}
 
+	/*
+	 * Check for power-domain-map, which implies the primary
+	 * power-doamin is a subdomain of the parent found in the map.
+	 */
+	ret = of_parse_phandle_with_args_map(dev->of_node, "power-domains",
+					     "power-domain", index, &parent_args);
+	if (!ret && (pd_args.np != parent_args.np)) {
+		parent_pd = genpd_get_from_provider(&parent_args);
+		of_node_put(parent_args.np);
+
+		ret = pm_genpd_add_subdomain(parent_pd, pd);
+		if (!ret)
+			dev_dbg(dev, "adding PM domain %s as subdomain of %s\n",
+				pd->name, parent_pd->name);
+	}
+
 	ret = genpd_set_required_opp(dev, index);
 	if (ret)
 		goto err;
@@ -3056,6 +3072,8 @@ static int __genpd_dev_pm_attach(struct device *dev, struct device *base_dev,
 			dev_gpd_data(dev)->default_pstate = 0;
 		}
 
+		if (parent_pd)
+			pm_genpd_remove_subdomain(parent_pd, pd);
 		genpd_remove_device(pd, dev);
 		return -EPROBE_DEFER;
 	}
@@ -3063,6 +3081,8 @@ static int __genpd_dev_pm_attach(struct device *dev, struct device *base_dev,
 	return 1;
 
 err:
+	if (parent_pd)
+		pm_genpd_remove_subdomain(parent_pd, pd);
 	genpd_remove_device(pd, dev);
 	return ret;
 }
