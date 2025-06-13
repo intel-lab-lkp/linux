@@ -1909,6 +1909,25 @@ unlock_cntrs_show:
 	return ret;
 }
 
+static int event_filter_show(struct kernfs_open_file *of, struct seq_file *seq, void *v)
+{
+	struct mon_evt *mevt = rdt_kn_parent_priv(of->kn);
+	bool sep = false;
+	int i;
+
+	for (i = 0; i < NUM_MBM_EVT_VALUES; i++) {
+		if (mevt->evt_cfg & mbm_config_values[i].val) {
+			if (sep)
+				seq_putc(seq, ',');
+			seq_printf(seq, "%s", mbm_config_values[i].name);
+			sep = true;
+		}
+	}
+	seq_putc(seq, '\n');
+
+	return 0;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2032,6 +2051,12 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= mbm_local_bytes_config_show,
 		.write		= mbm_local_bytes_config_write,
+	},
+	{
+		.name		= "event_filter",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= event_filter_show,
 	},
 	{
 		.name		= "mbm_assign_mode",
@@ -2315,6 +2340,53 @@ static int rdtgroup_mkdir_info_resdir(void *priv, char *name,
 	return ret;
 }
 
+static int resctrl_mkdir_counter_configs(struct rdt_resource *r, char *name)
+{
+	struct kernfs_node *l3_mon_kn, *kn_subdir, *kn_subdir2;
+	struct mon_evt *mevt;
+	int ret;
+
+	l3_mon_kn = kernfs_find_and_get(kn_info, name);
+	if (!l3_mon_kn)
+		return -ENOENT;
+
+	kn_subdir = kernfs_create_dir(l3_mon_kn, "event_configs", l3_mon_kn->mode, NULL);
+	if (IS_ERR(kn_subdir)) {
+		kernfs_put(l3_mon_kn);
+		return PTR_ERR(kn_subdir);
+	}
+
+	ret = rdtgroup_kn_set_ugid(kn_subdir);
+	if (ret) {
+		kernfs_put(l3_mon_kn);
+		return ret;
+	}
+
+	for (mevt = &mon_event_all[0]; mevt < &mon_event_all[QOS_NUM_EVENTS]; mevt++) {
+		if (!mevt->enabled || !resctrl_is_mbm_event(mevt->evtid))
+			continue;
+
+		kn_subdir2 = kernfs_create_dir(kn_subdir, mevt->name, kn_subdir->mode, mevt);
+		if (IS_ERR(kn_subdir2)) {
+			ret = PTR_ERR(kn_subdir2);
+			goto out_config;
+		}
+
+		ret = rdtgroup_kn_set_ugid(kn_subdir2);
+		if (ret)
+			goto out_config;
+
+		ret = rdtgroup_add_files(kn_subdir2, RFTYPE_ASSIGN_CONFIG);
+		if (!ret)
+			kernfs_activate(kn_subdir);
+	}
+
+out_config:
+	kernfs_put(l3_mon_kn);
+
+	return ret;
+}
+
 static unsigned long fflags_from_resource(struct rdt_resource *r)
 {
 	switch (r->rid) {
@@ -2361,6 +2433,12 @@ static int rdtgroup_create_info_dir(struct kernfs_node *parent_kn)
 		ret = rdtgroup_mkdir_info_resdir(r, name, fflags);
 		if (ret)
 			goto out_destroy;
+
+		if (r->mon.mbm_cntr_assignable) {
+			ret = resctrl_mkdir_counter_configs(r, name);
+			if (ret)
+				goto out_destroy;
+		}
 	}
 
 	ret = rdtgroup_kn_set_ugid(kn_info);
