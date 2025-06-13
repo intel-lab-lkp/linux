@@ -114,6 +114,17 @@ static int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv,
 
 		rb = *p;
 		pos = rb_entry(rb, struct drm_prime_member, dmabuf_rb);
+
+		/*
+		 * Just ignore the new handle if we already have an handle for
+		 * this DMA-buf.
+		 */
+		if (dma_buf == pos->dma_buf) {
+			dma_buf_put(dma_buf);
+			kfree(member);
+			return 0;
+
+		}
 		if (dma_buf > pos->dma_buf)
 			p = &rb->rb_right;
 		else
