@@ -550,6 +550,9 @@ static int bmc150_accel_set_interrupt(struct bmc150_accel_data *data, int i,
 	if (ret < 0)
 		return ret;
 
+	if (!info)
+		return 0;
+
 	/* map the interrupt to the appropriate pins */
 	ret = regmap_update_bits(data->regmap, info->map_reg, info->map_bitmask,
 				 (state ? info->map_bitmask : 0));
