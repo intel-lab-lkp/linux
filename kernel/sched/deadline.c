@@ -1752,6 +1752,61 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	return retval;
 }
 
+/**
+ * dl_server_remove_params - Remove bandwidth reservation for a DL server
+ * @dl_se: The DL server entity to remove bandwidth for
+ *
+ * This function removes the bandwidth reservation for a DL server entity,
+ * cleaning up all bandwidth accounting and server state.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int dl_server_remove_params(struct sched_dl_entity *dl_se)
+{
+	struct rq *rq = dl_se->rq;
+	int cpu = cpu_of(rq);
+	struct dl_bw *dl_b;
+	int cpus;
+
+	if (!dl_se->dl_runtime)
+		return 0;  /* Already disabled */
+
+	/*
+	 * First dequeue if still queued. It should not be queued since
+	 * we call this only after the last dl_server_stop().
+	 */
+	if (WARN_ON_ONCE(on_dl_rq(dl_se)))
+		dequeue_dl_entity(dl_se, DEQUEUE_SLEEP);
+
+	/* Cancel any pending timers */
+	hrtimer_try_to_cancel(&dl_se->dl_timer);
+	hrtimer_try_to_cancel(&dl_se->inactive_timer);
+
+	/* Remove bandwidth from both runqueue and root domain accounting */
+	dl_b = dl_bw_of(cpu);
+	guard(raw_spinlock)(&dl_b->lock);
+	cpus = dl_bw_cpus(cpu);
+
+	sub_rq_bw(dl_se, &rq->dl);
+	__dl_sub(dl_b, dl_se->dl_bw, cpus);
+
+	/*
+	 * If server was active and consuming bandwidth, remove it from
+	 * running bandwidth accounting. This should not happen because
+	 * we call this only after the last dl_server_stop().
+	 */
+	if (WARN_ON_ONCE(!dl_se->dl_non_contending))
+		sub_running_bw(dl_se, &rq->dl);
+
+	/*
+	 * Clear all server parameters. This will also clear ->dl_server so
+	 * the next dl_server_apply_params() will reconfigure the server.
+	 */
+	__dl_clear_params(dl_se);
+
+	return 0;
+}
+
 /*
  * Update the current task's runtime statistics (provided it is still
  * a -deadline task and has not been removed from the dl_rq).
