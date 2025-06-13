@@ -884,21 +884,15 @@ static const struct inode_operations proc_sys_dir_operations = {
 	.getattr	= proc_sys_getattr,
 };
 
-static int proc_sys_revalidate(struct inode *dir, const struct qstr *name,
-			       struct dentry *dentry, unsigned int flags)
-{
-	if (flags & LOOKUP_RCU)
-		return -ECHILD;
-	return !PROC_I(d_inode(dentry))->sysctl->unregistering;
-}
-
 static int proc_sys_delete(const struct dentry *dentry)
 {
 	return !!PROC_I(d_inode(dentry))->sysctl->unregistering;
 }
 
-static int sysctl_is_seen(struct ctl_table_header *p)
+static int proc_sys_revalidate(struct inode *dir, const struct qstr *name,
+			       struct dentry *dentry, unsigned int flags)
 {
+	struct ctl_table_header *p = PROC_I(d_inode(dentry))->sysctl;
 	struct ctl_table_set *set = p->set;
 	int res;
 	spin_lock(&sysctl_lock);
@@ -907,35 +901,14 @@ static int sysctl_is_seen(struct ctl_table_header *p)
 	else if (!set->is_seen)
 		res = 1;
 	else
-		res = set->is_seen(set);
+		res = set->is_seen(set) ? 1 : -ENOENT;
 	spin_unlock(&sysctl_lock);
 	return res;
-}
-
-static int proc_sys_compare(const struct dentry *dentry,
-		unsigned int len, const char *str, const struct qstr *name)
-{
-	struct ctl_table_header *head;
-	struct inode *inode;
-
-	/* Although proc doesn't have negative dentries, rcu-walk means
-	 * that inode here can be NULL */
-	/* AV: can it, indeed? */
-	inode = d_inode_rcu(dentry);
-	if (!inode)
-		return 1;
-	if (name->len != len)
-		return 1;
-	if (memcmp(name->name, str, len))
-		return 1;
-	head = rcu_dereference(PROC_I(inode)->sysctl);
-	return !head || !sysctl_is_seen(head);
 }
 
 static const struct dentry_operations proc_sys_dentry_operations = {
 	.d_revalidate	= proc_sys_revalidate,
 	.d_delete	= proc_sys_delete,
-	.d_compare	= proc_sys_compare,
 };
 
 static struct ctl_dir *find_subdir(struct ctl_dir *dir,
