@@ -1486,57 +1486,6 @@ int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 	return error;
 }
 
-static int iomap_writepage_map_blocks(struct iomap_writepage_ctx *wpc,
-		struct writeback_control *wbc, struct folio *folio,
-		struct inode *inode, u64 pos, u64 end_pos,
-		unsigned dirty_len, bool *async_writeback)
-{
-	int error;
-
-	do {
-		unsigned map_len;
-
-		error = wpc->ops->map_blocks(wpc, inode, pos, dirty_len);
-		if (error)
-			break;
-		trace_iomap_writepage_map(inode, pos, dirty_len, &wpc->iomap);
-
-		map_len = min_t(u64, dirty_len,
-			wpc->iomap.offset + wpc->iomap.length - pos);
-		WARN_ON_ONCE(!folio->private && map_len < dirty_len);
-
-		switch (wpc->iomap.type) {
-		case IOMAP_INLINE:
-			WARN_ON_ONCE(1);
-			error = -EIO;
-			break;
-		case IOMAP_HOLE:
-			break;
-		default:
-			error = iomap_bio_add_to_ioend(wpc, wbc, folio, inode,
-					pos, end_pos, map_len);
-			if (!error)
-				*async_writeback = true;
-			break;
-		}
-		dirty_len -= map_len;
-		pos += map_len;
-	} while (dirty_len && !error);
-
-	/*
-	 * We cannot cancel the ioend directly here on error.  We may have
-	 * already set other pages under writeback and hence we have to run I/O
-	 * completion to mark the error state of the pages under writeback
-	 * appropriately.
-	 *
-	 * Just let the file system know what portion of the folio failed to
-	 * map.
-	 */
-	if (error && wpc->ops->discard_folio)
-		wpc->ops->discard_folio(folio, pos);
-	return error;
-}
-
 /*
  * Check interaction of the folio with the file end.
  *
@@ -1603,9 +1552,14 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	u64 pos = folio_pos(folio);
 	u64 end_pos = pos + folio_size(folio);
 	u64 end_aligned = 0;
-	bool async_writeback = false;
 	int error = 0;
 	u32 rlen;
+	struct iomap_writeback_folio_range ctx = {
+		.wpc = wpc,
+		.wbc = wbc,
+		.folio = folio,
+		.end_pos = end_pos,
+	};
 
 	WARN_ON_ONCE(!folio_test_locked(folio));
 	WARN_ON_ONCE(folio_test_dirty(folio));
@@ -1646,14 +1600,20 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	 */
 	end_aligned = round_up(end_pos, i_blocksize(inode));
 	while ((rlen = iomap_find_dirty_range(folio, &pos, end_aligned))) {
-		error = iomap_writepage_map_blocks(wpc, wbc, folio, inode,
-				pos, end_pos, rlen, &async_writeback);
-		if (error)
+		ctx.pos = pos;
+		ctx.dirty_len = rlen;
+		WARN_ON(!wpc->ops->writeback_folio);
+		error = wpc->ops->writeback_folio(&ctx);
+
+		if (error) {
+			if (wpc->ops->discard_folio)
+				wpc->ops->discard_folio(folio, pos);
 			break;
+		}
 		pos += rlen;
 	}
 
-	if (async_writeback)
+	if (ctx.async_writeback)
 		wpc->nr_folios++;
 
 	/*
@@ -1675,7 +1635,7 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 		if (atomic_dec_and_test(&ifs->write_bytes_pending))
 			folio_end_writeback(folio);
 	} else {
-		if (!async_writeback)
+		if (!ctx.async_writeback)
 			folio_end_writeback(folio);
 	}
 	mapping_set_error(inode->i_mapping, error);

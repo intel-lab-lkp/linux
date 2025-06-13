@@ -2486,6 +2486,11 @@ static int gfs2_map_blocks(struct iomap_writepage_ctx *wpc, struct inode *inode,
 	return ret;
 }
 
+static int gfs2_writeback_folio(struct iomap_writeback_folio_range *ctx)
+{
+	return iomap_bio_writeback_folio(ctx, gfs2_map_blocks);
+}
+
 const struct iomap_writeback_ops gfs2_writeback_ops = {
-	.map_blocks		= gfs2_map_blocks,
+	.writeback_folio	= gfs2_writeback_folio,
 };

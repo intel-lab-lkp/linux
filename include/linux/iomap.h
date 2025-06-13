@@ -16,6 +16,7 @@ struct inode;
 struct iomap_iter;
 struct iomap_dio;
 struct iomap_writepage_ctx;
+struct iomap_writeback_folio_range;
 struct iov_iter;
 struct kiocb;
 struct page;
@@ -427,18 +428,13 @@ static inline struct iomap_ioend *iomap_ioend_from_bio(struct bio *bio)
 
 struct iomap_writeback_ops {
 	/*
-	 * Required, maps the blocks so that writeback can be performed on
-	 * the range starting at offset.
+	 * Required.
 	 *
-	 * Can return arbitrarily large regions, but we need to call into it at
-	 * least once per folio to allow the file systems to synchronize with
-	 * the write path that could be invalidating mappings.
-	 *
-	 * An existing mapping from a previous call to this method can be reused
-	 * by the file system if it is still valid.
+	 * If the writeback is done asynchronously, the caller is responsible
+	 * for ending writeback on the folio once all the dirty ranges have been
+	 * written out and the caller should set ctx->async_writeback to true.
 	 */
-	int (*map_blocks)(struct iomap_writepage_ctx *wpc, struct inode *inode,
-			  loff_t offset, unsigned len);
+	int (*writeback_folio)(struct iomap_writeback_folio_range *ctx);
 
 	/*
 	 * Optional, allows the file systems to hook into bio submission,
@@ -462,6 +458,16 @@ struct iomap_writepage_ctx {
 	struct iomap_ioend	*ioend;
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
+};
+
+struct iomap_writeback_folio_range {
+	struct iomap_writepage_ctx *wpc;
+	struct writeback_control *wbc;
+	struct folio *folio;
+	u64 pos;
+	u64 end_pos;
+	u32 dirty_len;
+	bool async_writeback; /* should get set to true if writeback is async */
 };
 
 struct iomap_ioend *iomap_init_ioend(struct inode *inode, struct bio *bio,
@@ -540,5 +546,21 @@ int iomap_swapfile_activate(struct swap_info_struct *sis,
 #endif /* CONFIG_SWAP */
 
 extern struct bio_set iomap_ioend_bioset;
+
+/*
+ * Maps the blocks so that writeback can be performed on the range
+ * starting at offset.
+ *
+ * Can return arbitrarily large regions, but we need to call into it at
+ * least once per folio to allow the file systems to synchronize with
+ * the write path that could be invalidating mappings.
+ *
+ * An existing mapping from a previous call to this method can be reused
+ * by the file system if it is still valid.
+ */
+typedef int iomap_map_blocks_t(struct iomap_writepage_ctx *wpc,
+		struct inode *inode, loff_t offset, unsigned int len);
+int iomap_bio_writeback_folio(struct iomap_writeback_folio_range *ctx,
+		iomap_map_blocks_t map_blocks);
 
 #endif /* LINUX_IOMAP_H */

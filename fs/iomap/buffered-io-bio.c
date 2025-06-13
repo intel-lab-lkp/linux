@@ -9,6 +9,7 @@
 #include <linux/writeback.h>
 
 #include "internal.h"
+#include "trace.h"
 
 static void iomap_finish_folio_read(struct folio *folio, size_t off,
 		size_t len, int error)
@@ -208,7 +209,7 @@ static bool iomap_can_add_to_ioend(struct iomap_writepage_ctx *wpc, loff_t pos,
  * At the end of a writeback pass, there will be a cached ioend remaining on the
  * writepage context that the caller will need to submit.
  */
-int iomap_bio_add_to_ioend(struct iomap_writepage_ctx *wpc,
+static int iomap_add_to_ioend(struct iomap_writepage_ctx *wpc,
 		struct writeback_control *wbc, struct folio *folio,
 		struct inode *inode, loff_t pos, loff_t end_pos,
 		unsigned len)
@@ -290,3 +291,49 @@ new_ioend:
 	wbc_account_cgroup_owner(wbc, folio, len);
 	return 0;
 }
+
+int iomap_bio_writeback_folio(struct iomap_writeback_folio_range *ctx,
+		iomap_map_blocks_t map_blocks)
+{
+	struct iomap_writepage_ctx *wpc = ctx->wpc;
+	struct folio *folio = ctx->folio;
+	u64 pos = ctx->pos;
+	u64 end_pos = ctx->end_pos;
+	u32 dirty_len = ctx->dirty_len;
+	struct writeback_control *wbc = ctx->wbc;
+	struct inode *inode = folio->mapping->host;
+	int error;
+
+	do {
+		unsigned map_len;
+
+		error = map_blocks(wpc, inode, pos, dirty_len);
+		if (error)
+			break;
+		trace_iomap_writepage_map(inode, pos, dirty_len, &wpc->iomap);
+
+		map_len = min_t(u64, dirty_len,
+			wpc->iomap.offset + wpc->iomap.length - pos);
+		WARN_ON_ONCE(!folio->private && map_len < dirty_len);
+
+		switch (wpc->iomap.type) {
+		case IOMAP_INLINE:
+			WARN_ON_ONCE(1);
+			error = -EIO;
+			break;
+		case IOMAP_HOLE:
+			break;
+		default:
+			error = iomap_add_to_ioend(wpc, wbc, folio, inode, pos,
+					end_pos, map_len);
+			if (!error)
+				ctx->async_writeback = true;
+			break;
+		}
+		dirty_len -= map_len;
+		pos += map_len;
+	} while (dirty_len && !error);
+
+	return error;
+}
+EXPORT_SYMBOL_GPL(iomap_bio_writeback_folio);

@@ -551,8 +551,13 @@ static int blkdev_map_blocks(struct iomap_writepage_ctx *wpc,
 				  IOMAP_WRITE, &wpc->iomap, NULL);
 }
 
+static int blkdev_writeback_folio(struct iomap_writeback_folio_range *ctx)
+{
+	return iomap_bio_writeback_folio(ctx, blkdev_map_blocks);
+}
+
 static const struct iomap_writeback_ops blkdev_writeback_ops = {
-	.map_blocks		= blkdev_map_blocks,
+	.writeback_folio	= blkdev_writeback_folio,
 };
 
 static int blkdev_writepages(struct address_space *mapping,

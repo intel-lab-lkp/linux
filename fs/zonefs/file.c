@@ -145,8 +145,13 @@ static int zonefs_write_map_blocks(struct iomap_writepage_ctx *wpc,
 					IOMAP_WRITE, &wpc->iomap, NULL);
 }
 
+static int zonefs_writeback_folio(struct iomap_writeback_folio_range *ctx)
+{
+	return iomap_bio_writeback_folio(ctx, zonefs_write_map_blocks);
+}
+
 static const struct iomap_writeback_ops zonefs_writeback_ops = {
-	.map_blocks		= zonefs_write_map_blocks,
+	.writeback_folio	= zonefs_writeback_folio,
 };
 
 static int zonefs_writepages(struct address_space *mapping,

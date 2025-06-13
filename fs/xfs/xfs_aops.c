@@ -455,6 +455,11 @@ xfs_ioend_needs_wq_completion(
 	return false;
 }
 
+static int xfs_writeback_folio(struct iomap_writeback_folio_range *ctx)
+{
+	return iomap_bio_writeback_folio(ctx, xfs_map_blocks);
+}
+
 static int
 xfs_submit_ioend(
 	struct iomap_writepage_ctx *wpc,
@@ -526,7 +531,7 @@ xfs_discard_folio(
 }
 
 static const struct iomap_writeback_ops xfs_writeback_ops = {
-	.map_blocks		= xfs_map_blocks,
+	.writeback_folio	= xfs_writeback_folio,
 	.submit_ioend		= xfs_submit_ioend,
 	.discard_folio		= xfs_discard_folio,
 };
@@ -608,6 +613,11 @@ xfs_zoned_map_blocks(
 	return 0;
 }
 
+static int xfs_zoned_writeback_folio(struct iomap_writeback_folio_range *ctx)
+{
+	return iomap_bio_writeback_folio(ctx, xfs_zoned_map_blocks);
+}
+
 static int
 xfs_zoned_submit_ioend(
 	struct iomap_writepage_ctx *wpc,
@@ -621,7 +631,7 @@ xfs_zoned_submit_ioend(
 }
 
 static const struct iomap_writeback_ops xfs_zoned_writeback_ops = {
-	.map_blocks		= xfs_zoned_map_blocks,
+	.writeback_folio	= xfs_zoned_writeback_folio,
 	.submit_ioend		= xfs_zoned_submit_ioend,
 	.discard_folio		= xfs_discard_folio,
 };

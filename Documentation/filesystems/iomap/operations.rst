@@ -278,7 +278,7 @@ writeback.
 It does not lock ``i_rwsem`` or ``invalidate_lock``.
 
 The dirty bit will be cleared for all folios run through the
-``->map_blocks`` machinery described below even if the writeback fails.
+``->writeback_folio`` machinery described below even if the writeback fails.
 This is to prevent dirty folio clots when storage devices fail; an
 ``-EIO`` is recorded for userspace to collect via ``fsync``.
 
@@ -290,29 +290,33 @@ The ``ops`` structure must be specified and is as follows:
 .. code-block:: c
 
  struct iomap_writeback_ops {
-     int (*map_blocks)(struct iomap_writepage_ctx *wpc, struct inode *inode,
-                       loff_t offset, unsigned len);
+     int (*writeback_folio)(struct iomap_writeback_folio_range *ctx);
      int (*submit_ioend)(struct iomap_writepage_ctx *wpc, int status);
      void (*discard_folio)(struct folio *folio, loff_t pos);
  };
 
 The fields are as follows:
 
-  - ``map_blocks``: Sets ``wpc->iomap`` to the space mapping of the file
-    range (in bytes) given by ``offset`` and ``len``.
-    iomap calls this function for each dirty fs block in each dirty folio,
-    though it will `reuse mappings
+  - ``writeback_folio``: iomap calls this function for each dirty fs block
+    in each dirty folio, though it will `reuse mappings
     <https://lore.kernel.org/all/20231207072710.176093-15-hch@lst.de/>`_
     for runs of contiguous dirty fsblocks within a folio.
-    Do not return ``IOMAP_INLINE`` mappings here; the ``->iomap_end``
-    function must deal with persisting written data.
-    Do not return ``IOMAP_DELALLOC`` mappings here; iomap currently
-    requires mapping to allocated space.
-    Filesystems can skip a potentially expensive mapping lookup if the
-    mappings have not changed.
-    This revalidation must be open-coded by the filesystem; it is
-    unclear if ``iomap::validity_cookie`` can be reused for this
-    purpose.
+    For blocks that need to be mapped first, please take a look at
+    ``iomap_bio_writeback_folio`` which takes in a ``iomap_map_blocks_t``
+    mapping function. For that mapping function,
+
+      * Set ``wpc->iomap`` to the space mapping of the file range (in bytes)
+        given by ``offset`` and ``len``.
+      * Do not return ``IOMAP_INLINE`` mappings here; the ``->iomap_end``
+        function must deal with persisting written data.
+      * Do not return ``IOMAP_DELALLOC`` mappings here; iomap currently
+        requires mapping to allocated space.
+      * Filesystems can skip a potentially expensive mapping lookup if the
+        mappings have not changed.
+      * This revalidation must be open-coded by the filesystem; it is
+        unclear if ``iomap::validity_cookie`` can be reused for this
+        purpose.
+
     This function must be supplied by the filesystem.
 
   - ``submit_ioend``: Allows the file systems to hook into writeback bio
@@ -323,7 +327,7 @@ The fields are as follows:
     transactions from process context before submitting the bio.
     This function is optional.
 
-  - ``discard_folio``: iomap calls this function after ``->map_blocks``
+  - ``discard_folio``: iomap calls this function after ``->writeback_folio``
     fails to schedule I/O for any part of a dirty folio.
     The function should throw away any reservations that may have been
     made for the write.
