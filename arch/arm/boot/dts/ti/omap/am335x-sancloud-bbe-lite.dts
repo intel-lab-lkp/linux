@@ -12,10 +12,7 @@
 
 / {
 	model = "SanCloud BeagleBone Enhanced Lite";
-	compatible = "sancloud,am335x-boneenhanced",
-		     "ti,am335x-bone-black",
-		     "ti,am335x-bone",
-		     "ti,am33xx";
+	compatible = "sancloud,am335x-boneenhanced", "ti,am33xx";
 };
 
 &am33xx_pinmux {

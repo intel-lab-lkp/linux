@@ -11,8 +11,8 @@
 #include <dt-bindings/leds/common.h>
 
 / {
-	model = "TI AM335x PocketBeagle";
-	compatible = "ti,am335x-pocketbeagle", "ti,am335x-bone", "ti,am33xx";
+	model = "AM335x PocketBeagle";
+	compatible = "beagle,am335x-pocketbeagle", "ti,am33xx";
 
 	chosen {
 		stdout-path = &uart0;

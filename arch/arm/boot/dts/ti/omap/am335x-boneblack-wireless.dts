@@ -11,8 +11,8 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 / {
-	model = "TI AM335x BeagleBone Black Wireless";
-	compatible = "ti,am335x-bone-black-wireless", "ti,am335x-bone-black", "ti,am335x-bone", "ti,am33xx";
+	model = "AM335x BeagleBone Black Wireless";
+	compatible = "beagle,am335x-bone-black-wireless", "ti,am33xx";
 
 	wlan_en_reg: fixedregulator@2 {
 		compatible = "regulator-fixed";

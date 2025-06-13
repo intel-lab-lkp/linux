@@ -10,8 +10,8 @@
 #include "am335x-boneblack-hdmi.dtsi"
 
 / {
-	model = "TI AM335x BeagleBone Black";
-	compatible = "ti,am335x-bone-black", "ti,am335x-bone", "ti,am33xx";
+	model = "AM335x BeagleBone Black";
+	compatible = "beagle,am335x-bone-black", "ti,am33xx";
 };
 
 &cpu0_opp_table {

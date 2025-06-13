@@ -9,8 +9,8 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 / {
-	model = "TI AM335x BeagleBone Blue";
-	compatible = "ti,am335x-bone-blue", "ti,am33xx";
+	model = "AM335x BeagleBone Blue";
+	compatible = "beagle,am335x-bone-blue", "ti,am33xx";
 
 	chosen {
 		stdout-path = &uart0;
