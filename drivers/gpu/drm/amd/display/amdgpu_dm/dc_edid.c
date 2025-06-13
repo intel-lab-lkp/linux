@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "amdgpu_dm/dc_edid.h"
 #include "dc.h"
+#include <drm/drm_edid.h>
 
 bool dc_edid_is_same_edid(struct dc_sink *prev_sink,
 			  struct dc_sink *current_sink)
@@ -24,4 +25,9 @@ void dc_edid_copy_edid_to_dc(struct dc_sink *dc_sink,
 {
 	memmove(dc_sink->dc_edid.raw_edid, edid, len);
 	dc_sink->dc_edid.length = len;
+}
+
+void dc_edid_sink_edid_free(struct dc_sink *sink)
+{
+	drm_edid_free(sink->drm_edid);
 }
