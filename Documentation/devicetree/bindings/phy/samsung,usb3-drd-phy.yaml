@@ -35,6 +35,7 @@ properties:
       - samsung,exynos850-usbdrd-phy
       - samsung,exynosautov920-usbdrd-hsphy
       - samsung,exynosautov920-usbdrd-phy
+      - samsung,exynosautov920-usb31drd-ssphy
 
   clocks:
     minItems: 1
@@ -221,6 +222,7 @@ allOf:
               - samsung,exynos850-usbdrd-phy
               - samsung,exynosautov920-usbdrd-hsphy
               - samsung,exynosautov920-usbdrd-phy
+              - samsung,exynosautov920-usb31drd-ssphy
     then:
       properties:
         clocks:
