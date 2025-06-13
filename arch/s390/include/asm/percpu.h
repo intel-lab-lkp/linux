@@ -18,7 +18,7 @@
  * generate external references.
  */
 #if defined(MODULE)
-#define ARCH_NEEDS_WEAK_PER_CPU
+#define MODULE_NEEDS_WEAK_PER_CPU
 #endif
 
 /*
