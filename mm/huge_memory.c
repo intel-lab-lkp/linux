@@ -1088,7 +1088,7 @@ static inline bool is_transparent_hugepage(const struct folio *folio)
 		folio_test_large_rmappable(folio);
 }
 
-static unsigned long __thp_get_unmapped_area(struct file *filp,
+unsigned long mm_get_unmapped_area_aligned(struct file *filp,
 		unsigned long addr, unsigned long len,
 		loff_t off, unsigned long flags, unsigned long size,
 		vm_flags_t vm_flags)
@@ -1132,6 +1132,7 @@ static unsigned long __thp_get_unmapped_area(struct file *filp,
 	ret += off_sub;
 	return ret;
 }
+EXPORT_SYMBOL_GPL(mm_get_unmapped_area_aligned);
 
 unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags,
@@ -1140,7 +1141,8 @@ unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long add
 	unsigned long ret;
 	loff_t off = (loff_t)pgoff << PAGE_SHIFT;
 
-	ret = __thp_get_unmapped_area(filp, addr, len, off, flags, PMD_SIZE, vm_flags);
+	ret = mm_get_unmapped_area_aligned(filp, addr, len, off, flags,
+					   PMD_SIZE, vm_flags);
 	if (ret)
 		return ret;
 

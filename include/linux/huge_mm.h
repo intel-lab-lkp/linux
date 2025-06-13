@@ -339,7 +339,10 @@ unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags,
 		vm_flags_t vm_flags);
-
+unsigned long mm_get_unmapped_area_aligned(struct file *filp,
+		unsigned long addr, unsigned long len,
+		loff_t off, unsigned long flags, unsigned long size,
+		vm_flags_t vm_flags);
 bool can_split_folio(struct folio *folio, int caller_pins, int *pextra_pins);
 int split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
 		unsigned int new_order);
@@ -539,6 +542,15 @@ static inline unsigned long
 thp_get_unmapped_area_vmflags(struct file *filp, unsigned long addr,
 			      unsigned long len, unsigned long pgoff,
 			      unsigned long flags, vm_flags_t vm_flags)
+{
+	return 0;
+}
+
+static inline unsigned long
+mm_get_unmapped_area_aligned(struct file *filp,
+			     unsigned long addr, unsigned long len,
+			     loff_t off, unsigned long flags, unsigned long size,
+			     vm_flags_t vm_flags)
 {
 	return 0;
 }
