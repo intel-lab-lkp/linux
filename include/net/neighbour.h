@@ -182,6 +182,7 @@ struct pneigh_entry {
 	netdevice_tracker	dev_tracker;
 	u32			flags;
 	u8			protocol;
+	u8			state;
 	u32			key[];
 };
 
