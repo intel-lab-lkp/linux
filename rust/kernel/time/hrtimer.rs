@@ -201,7 +201,6 @@ impl<T> HrTimer<T> {
     /// - The caller must ensure that the `hrtimer_clock_base` cannot possibly change in the context
     ///   this function is being called in. This means either exclusive access to `self_ptr` is
     ///   required, or we must be from within the timer callback context of `self_ptr`.
-    #[expect(unused)]
     unsafe fn raw_cb_time(self_ptr: *const Self) -> HrTimerInstant<T>
     where
         T: HasHrTimer<T>,
@@ -242,6 +241,44 @@ impl<T> HrTimer<T> {
         // - The only way that we could hold a mutable reference to `HrTimer<T>` is if we have
         //   exclusive access to it - fulfilling the requirements of the C API.
         unsafe { Self::raw_forward(self.get_unchecked_mut(), now, interval) }
+    }
+
+    /// Conditionally forward the timer.
+    ///
+    /// This is a variant of [`forward()`](Self::forward) that uses an interval after the current
+    /// time of the base clock for the [`HrTimer`].
+    pub fn forward_now(self: Pin<&mut Self>, interval: Delta) -> u64
+    where
+        T: HasHrTimer<T>,
+    {
+        // SAFETY: `self` is a mutable reference, guaranteeing it is both a valid pointer to Self
+        // and that we also have exclusive access to `self`.
+        let now = unsafe { Self::raw_cb_time(&*self.as_ref()) };
+
+        self.forward(now, interval)
+    }
+
+    /// Return the time expiry for this [`HrTimer`].
+    ///
+    /// This value should only be used as a snapshot, as the actual expiry time could change after
+    /// this function is called.
+    pub fn expires(&self) -> HrTimerInstant<T>
+    where
+        T: HasHrTimer<T>,
+    {
+        // SAFETY: `self` is an immutable reference and thus always points to a valid `HrTimer`.
+        let c_timer_ptr = unsafe { HrTimer::raw_get(self) };
+
+        // SAFETY:
+        // - `node.expires` is a ktime_t, so it must be within the range of `0` to `KTIME_MAX`.
+        // - There's no actual locking here, a racy read is fine and expected
+        unsafe {
+            Instant::from_nanos(
+                // This `read_volatile` is intended to correspond to a READ_ONCE call.
+                // FIXME(read_once): Replace with `read_once` when available on the Rust side.
+                core::ptr::read_volatile(&raw const ((*c_timer_ptr).node.expires)),
+            )
+        }
     }
 }
 
@@ -701,6 +738,25 @@ impl<'a, T> HrTimerCallbackContext<'a, T> {
         // - We are guaranteed to be within the context of a timer callback by our type invariants
         // - By our type invariants, `self.0` always points to a valid `HrTimer<T>`
         unsafe { HrTimer::<T>::raw_forward(self.0.as_ptr(), now, interval) }
+    }
+
+    /// Conditionally forward the timer.
+    ///
+    /// This is a variant of [`HrTimerCallbackContext::forward()`] that uses an interval after the
+    /// current time of the base clock for the [`HrTimer`].
+    pub fn forward_now(&mut self, duration: Delta) -> u64
+    where
+        T: HasHrTimer<T>,
+    {
+        self.forward(
+            // SAFETY:
+            // - We're guaranteed `self.0` points to a valid `HrTimer<T>` instance by type
+            //   invariants.
+            // - We're guaranteed to be within the context of the timer callback by our type
+            //   invariants.
+            unsafe { HrTimer::<T>::raw_cb_time(self.0.as_ptr()) },
+            duration,
+        )
     }
 }
 
