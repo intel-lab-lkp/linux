@@ -86,3 +86,40 @@
 &xtcxo {
 	clock-frequency = <38400000>;
 };
+
+/* usb */
+&usbdrd20_phy0 {
+	status = "okay";
+};
+
+&usbdrd20_dwc3_0 {
+	dr_mode = "peripheral";
+};
+
+&usbdrd20_0 {
+	status = "okay";
+};
+
+&usbdrd20_phy1 {
+	status = "okay";
+};
+
+&usbdrd20_dwc3_1 {
+	dr_mode = "peripheral";
+};
+
+&usbdrd20_1 {
+	status = "okay";
+};
+
+&usbdrd20_phy2 {
+	status = "okay";
+};
+
+&usbdrd20_dwc3_2 {
+	dr_mode = "peripheral";
+};
+
+&usbdrd20_2 {
+	status = "okay";
+};
