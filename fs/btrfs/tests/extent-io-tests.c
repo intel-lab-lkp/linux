@@ -111,7 +111,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	struct btrfs_root *root = NULL;
 	struct inode *inode = NULL;
 	struct extent_io_tree *tmp;
-	struct page *page;
+	struct folio *folio;
 	struct folio *locked_folio = NULL;
 	unsigned long index = 0;
 	/* In this test we need at least 2 file extents at its maximum size */
@@ -152,23 +152,25 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	btrfs_extent_io_tree_init(NULL, tmp, IO_TREE_SELFTEST);
 
 	/*
-	 * First go through and create and mark all of our pages dirty, we pin
-	 * everything to make sure our pages don't get evicted and screw up our
+	 * First go through and create and mark all of our folios dirty, we pin
+	 * everything to make sure our folios don't get evicted and screw up our
 	 * test.
 	 */
 	for (index = 0; index < (total_dirty >> PAGE_SHIFT); index++) {
-		page = find_or_create_page(inode->i_mapping, index, GFP_KERNEL);
-		if (!page) {
-			test_err("failed to allocate test page");
+		folio = __filemap_get_folio(inode->i_mapping, index,
+				FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
+				GFP_KERNEL);
+		if (!folio) {
+			test_err("failed to allocate test folio");
 			ret = -ENOMEM;
 			goto out;
 		}
-		SetPageDirty(page);
+		folio_mark_dirty(folio);
 		if (index) {
-			unlock_page(page);
+			folio_unlock(folio);
 		} else {
-			get_page(page);
-			locked_folio = page_folio(page);
+			folio_get(folio);
+			locked_folio = folio;
 		}
 	}
 
@@ -283,14 +285,14 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 * Now to test where we run into a page that is no longer dirty in the
 	 * range we want to find.
 	 */
-	page = find_get_page(inode->i_mapping,
+	folio = filemap_get_folio(inode->i_mapping,
 			     (max_bytes + SZ_1M) >> PAGE_SHIFT);
-	if (!page) {
-		test_err("couldn't find our page");
+	if (!folio) {
+		test_err("couldn't find our folio");
 		goto out_bits;
 	}
-	ClearPageDirty(page);
-	put_page(page);
+	folio_clear_dirty(folio);
+	folio_put(folio);
 
 	/* We unlocked it in the previous test */
 	folio_lock(locked_folio);
