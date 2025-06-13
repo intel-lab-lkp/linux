@@ -21,14 +21,10 @@
 #include <sound/soc.h>
 #include <sound/initval.h>
 
-#define WM8524_NUM_RATES 7
-
 /* codec private data */
 struct wm8524_priv {
 	struct gpio_desc *mute;
 	unsigned int sysclk;
-	unsigned int rate_constraint_list[WM8524_NUM_RATES];
-	struct snd_pcm_hw_constraint_list rate_constraint;
 };
 
 
@@ -43,37 +39,11 @@ static const struct snd_soc_dapm_route wm8524_dapm_routes[] = {
 	{ "LINEVOUTR", NULL, "DAC" },
 };
 
-static const struct {
-	int value;
-	int ratio;
-} lrclk_ratios[WM8524_NUM_RATES] = {
-	{ 1, 128 },
-	{ 2, 192 },
-	{ 3, 256 },
-	{ 4, 384 },
-	{ 5, 512 },
-	{ 6, 768 },
-	{ 7, 1152 },
-};
-
 static int wm8524_startup(struct snd_pcm_substream *substream,
 			  struct snd_soc_dai *dai)
 {
 	struct snd_soc_component *component = dai->component;
 	struct wm8524_priv *wm8524 = snd_soc_component_get_drvdata(component);
-
-	/* The set of sample rates that can be supported depends on the
-	 * MCLK supplied to the CODEC - enforce this.
-	 */
-	if (!wm8524->sysclk) {
-		dev_err(component->dev,
-			"No MCLK configured, call set_sysclk() on init\n");
-		return -EINVAL;
-	}
-
-	snd_pcm_hw_constraint_list(substream->runtime, 0,
-				   SNDRV_PCM_HW_PARAM_RATE,
-				   &wm8524->rate_constraint);
 
 	gpiod_set_value_cansleep(wm8524->mute, 1);
 
@@ -94,41 +64,8 @@ static int wm8524_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 {
 	struct snd_soc_component *component = codec_dai->component;
 	struct wm8524_priv *wm8524 = snd_soc_component_get_drvdata(component);
-	unsigned int val;
-	int i, j = 0;
 
 	wm8524->sysclk = freq;
-
-	wm8524->rate_constraint.count = 0;
-	for (i = 0; i < ARRAY_SIZE(lrclk_ratios); i++) {
-		val = freq / lrclk_ratios[i].ratio;
-		/* Check that it's a standard rate since core can't
-		 * cope with others and having the odd rates confuses
-		 * constraint matching.
-		 */
-		switch (val) {
-		case 8000:
-		case 32000:
-		case 44100:
-		case 48000:
-		case 88200:
-		case 96000:
-		case 176400:
-		case 192000:
-			dev_dbg(component->dev, "Supported sample rate: %dHz\n",
-				val);
-			wm8524->rate_constraint_list[j++] = val;
-			wm8524->rate_constraint.count++;
-			break;
-		default:
-			dev_dbg(component->dev, "Skipping sample rate: %dHz\n",
-				val);
-		}
-	}
-
-	/* Need at least one supported rate... */
-	if (wm8524->rate_constraint.count == 0)
-		return -EINVAL;
 
 	return 0;
 }
@@ -183,19 +120,7 @@ static struct snd_soc_dai_driver wm8524_dai = {
 	.ops = &wm8524_dai_ops,
 };
 
-static int wm8524_probe(struct snd_soc_component *component)
-{
-	struct wm8524_priv *wm8524 = snd_soc_component_get_drvdata(component);
-
-	wm8524->rate_constraint.list = &wm8524->rate_constraint_list[0];
-	wm8524->rate_constraint.count =
-		ARRAY_SIZE(wm8524->rate_constraint_list);
-
-	return 0;
-}
-
 static const struct snd_soc_component_driver soc_component_dev_wm8524 = {
-	.probe			= wm8524_probe,
 	.dapm_widgets		= wm8524_dapm_widgets,
 	.num_dapm_widgets	= ARRAY_SIZE(wm8524_dapm_widgets),
 	.dapm_routes		= wm8524_dapm_routes,
