@@ -41,6 +41,16 @@ static bool all_vcpu_threads_running;
 static struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
 
 /*
+ * When writing to guest memory, write the opcode for the `ret` instruction so
+ * that subsequent iteractions can exercise instruction fetch by calling the
+ * memory.
+ *
+ * NOTE: Non-x86 architectures would to use different values here to support
+ * execute.
+ */
+#define RETURN_OPCODE 0xC3
+
+/*
  * Continuously write to the first 8 bytes of each page in the
  * specified region.
  */
@@ -75,8 +85,10 @@ void memstress_guest_code(uint32_t vcpu_idx)
 
 			addr = gva + (page * args->guest_page_size);
 
-			if (__guest_random_bool(&rand_state, args->write_percent))
-				*(uint64_t *)addr = 0x0123456789ABCDEF;
+			if (args->execute)
+				((void (*)(void)) addr)();
+			else if (__guest_random_bool(&rand_state, args->write_percent))
+				*(uint64_t *)addr = RETURN_OPCODE;
 			else
 				READ_ONCE(*(uint64_t *)addr);
 		}
@@ -257,6 +269,15 @@ void __weak memstress_setup_nested(struct kvm_vm *vm, int nr_vcpus, struct kvm_v
 {
 	pr_info("%s() not support on this architecture, skipping.\n", __func__);
 	exit(KSFT_SKIP);
+}
+
+void memstress_set_execute(struct kvm_vm *vm, bool execute)
+{
+#ifndef __x86_64__
+	TEST_FAIL("Execute not supported on thhis architecture; see RETURN_OPCODE.");
+#endif
+	memstress_args.execute = execute;
+	sync_global_to_guest(vm, memstress_args);
 }
 
 static void *vcpu_thread_main(void *data)

@@ -50,6 +50,9 @@ struct memstress_args {
  	/* Test is done, stop running vCPUs. */
  	bool stop_vcpus;
 
+	/* If vCPUs should execute from memory. */
+	bool execute;
+
 	struct memstress_vcpu_args vcpu_args[KVM_MAX_VCPUS];
 };
 
@@ -63,6 +66,7 @@ void memstress_destroy_vm(struct kvm_vm *vm);
 
 void memstress_set_write_percent(struct kvm_vm *vm, uint32_t write_percent);
 void memstress_set_random_access(struct kvm_vm *vm, bool random_access);
+void memstress_set_execute(struct kvm_vm *vm, bool execute);
 
 void memstress_start_vcpu_threads(int vcpus, void (*vcpu_fn)(struct memstress_vcpu_args *));
 void memstress_join_vcpu_threads(int vcpus);
