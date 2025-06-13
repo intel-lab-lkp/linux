@@ -193,6 +193,33 @@ impl<T> HrTimer<T> {
         }
     }
 
+    /// Retrieve the current time according to the `struct hrtimer_clock_base` for `self_ptr`.
+    ///
+    /// # Safety
+    ///
+    /// - `self_ptr` must point to a valid `Self`.
+    /// - The caller must ensure that the `hrtimer_clock_base` cannot possibly change in the context
+    ///   this function is being called in. This means either exclusive access to `self_ptr` is
+    ///   required, or we must be from within the timer callback context of `self_ptr`.
+    #[expect(unused)]
+    unsafe fn raw_cb_time(self_ptr: *const Self) -> HrTimerInstant<T>
+    where
+        T: HasHrTimer<T>,
+    {
+        // SAFETY: We're guaranteed `self_ptr` points to a valid `Self` by our safety contract.
+        let clock_base = unsafe { (*Self::raw_get(self_ptr)).base };
+
+        // SAFETY: The C API guarantees that `get_time` is initialized to a valid function pointer
+        // for as long as we expose hrtimers to users.
+        let get_time_fn = unsafe { (*clock_base).get_time.unwrap_unchecked() };
+
+        // SAFETY:
+        // - get_time_fn() returns a ktime_t, so we're guaranteed its return value is between `0`
+        //   and `KTIME_MAX`.
+        // - get_time_fn() itself has no special requirements.
+        unsafe { Instant::from_nanos(get_time_fn()) }
+    }
+
     /// Conditionally forward the timer.
     ///
     /// If the timer expires after `now`, this function does nothing and returns 0. If the timer
