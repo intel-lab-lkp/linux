@@ -2519,6 +2519,17 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 	get_task_comm(vm->task_info->process_name, current->group_leader);
 }
 
+#if defined(CONFIG_DEBUG_FS)
+static int amdgpu_pt_base_show(void *data, u64 *val)
+{
+	struct amdgpu_vm *vm = (struct amdgpu_vm *)data;
+	*val = amdgpu_bo_gpu_offset(vm->root.bo);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(amdgpu_pt_base_fops, amdgpu_pt_base_show, NULL, "%llx\n");
+#endif
+
 /**
  * amdgpu_vm_init - initialize a vm instance
  *
@@ -2532,7 +2543,7 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
  * 0 for success, error for failure.
  */
 int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
-		   int32_t xcp_id)
+		   int32_t xcp_id, struct drm_file *file)
 {
 	struct amdgpu_bo *root_bo;
 	struct amdgpu_bo_vm *root;
@@ -2608,6 +2619,7 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	if (r)
 		DRM_DEBUG("Failed to create task info for VM\n");
 
+	debugfs_create_file("pt_base", 0444, file->debugfs_client, vm, &amdgpu_pt_base_fops);
 	amdgpu_bo_unreserve(vm->root.bo);
 	amdgpu_bo_unref(&root_bo);
 
