@@ -873,11 +873,11 @@ static __init bool get_rdt_mon_resources(void)
 		resctrl_enable_mon_event(QOS_L3_OCCUP_EVENT_ID);
 		ret = true;
 	}
-	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL)) {
+	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL) || rdt_cpu_has(X86_FEATURE_ABMC)) {
 		resctrl_enable_mon_event(QOS_L3_MBM_TOTAL_EVENT_ID);
 		ret = true;
 	}
-	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_LOCAL)) {
+	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_LOCAL) || rdt_cpu_has(X86_FEATURE_ABMC)) {
 		resctrl_enable_mon_event(QOS_L3_MBM_LOCAL_EVENT_ID);
 		ret = true;
 	}
