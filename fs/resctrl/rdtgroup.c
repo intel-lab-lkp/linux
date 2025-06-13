@@ -1928,6 +1928,123 @@ static int event_filter_show(struct kernfs_open_file *of, struct seq_file *seq, 
 	return 0;
 }
 
+/**
+ * rdtgroup_assign_cntr - Update the counter assignments for the event in
+ *			  a group.
+ * @r:		Resource to which update needs to be done.
+ * @rdtgrp:	Resctrl group.
+ * @mevt:	MBM monitor event.
+ */
+static int rdtgroup_assign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+				struct mon_evt *mevt)
+{
+	struct rdt_mon_domain *d;
+	int cntr_id;
+
+	list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		cntr_id = mbm_cntr_get(r, d, rdtgrp, mevt->evtid);
+		if (cntr_id >= 0 && d->cntr_cfg[cntr_id].evt_cfg != mevt->evt_cfg) {
+			d->cntr_cfg[cntr_id].evt_cfg = mevt->evt_cfg;
+			resctrl_arch_config_cntr(r, d, mevt->evtid, rdtgrp->mon.rmid,
+						 rdtgrp->closid, cntr_id, true);
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * resctrl_assign_cntr_allrdtgrp - Update the counter assignments for the event
+ *				   for all the groups.
+ * @r:		Resource to which update needs to be done.
+ * @mevt	MBM Monitor event.
+ */
+static void resctrl_assign_cntr_allrdtgrp(struct rdt_resource *r, struct mon_evt *mevt)
+{
+	struct rdtgroup *prgrp, *crgrp;
+
+	/*
+	 * Check all the groups where the event tyoe is assigned and update
+	 * the assignment
+	 */
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		rdtgroup_assign_cntr(r, prgrp, mevt);
+
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list)
+			rdtgroup_assign_cntr(r, crgrp, mevt);
+	}
+}
+
+static int resctrl_process_configs(char *tok, u32 *val)
+{
+	char *evt_str;
+	u32 temp_val;
+	bool found;
+	int i;
+
+next_config:
+	if (!tok || tok[0] == '\0')
+		return 0;
+
+	/* Start processing the strings for each memory transaction type */
+	evt_str = strim(strsep(&tok, ","));
+	found = false;
+	for (i = 0; i < NUM_MBM_EVT_VALUES; i++) {
+		if (!strcmp(mbm_config_values[i].name, evt_str)) {
+			temp_val = mbm_config_values[i].val;
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		rdt_last_cmd_printf("Invalid memory transaction type %s\n", evt_str);
+		return -EINVAL;
+	}
+
+	*val |= temp_val;
+
+	goto next_config;
+}
+
+static ssize_t event_filter_write(struct kernfs_open_file *of, char *buf,
+				  size_t nbytes, loff_t off)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+	struct mon_evt *mevt = rdt_kn_parent_priv(of->kn);
+	u32 evt_cfg = 0;
+	int ret = 0;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+
+	buf[nbytes - 1] = '\0';
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	if (!resctrl_arch_mbm_cntr_assign_enabled(r)) {
+		rdt_last_cmd_puts("mbm_cntr_assign mode is not enabled\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	ret = resctrl_process_configs(buf, &evt_cfg);
+	if (!ret && mevt->evt_cfg != evt_cfg) {
+		mevt->evt_cfg = evt_cfg;
+		resctrl_assign_cntr_allrdtgrp(r, mevt);
+	}
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2054,9 +2171,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "event_filter",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= event_filter_show,
+		.write		= event_filter_write,
 	},
 	{
 		.name		= "mbm_assign_mode",
