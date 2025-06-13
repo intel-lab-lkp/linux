@@ -648,15 +648,32 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 			goto out;
 		}
 		d = container_of(hdr, struct rdt_mon_domain, hdr);
+
+		/*
+		 * Report 'Unassigned' if "mbm_event" mode is enabled and counter
+		 * is unassigned.
+		 */
+		if (resctrl_arch_mbm_cntr_assign_enabled(r) &&
+		    resctrl_is_mbm_event(evtid) &&
+		    (mbm_cntr_get(r, d, rdtgrp, evtid) < 0)) {
+			rr.err = -ENOENT;
+			goto checkresult;
+		}
+
 		mon_event_read(&rr, r, d, rdtgrp, &d->hdr.cpu_mask, evtid, false);
 	}
 
 checkresult:
-
+	/*
+	 * -ENOENT is a special case, set only when "mbm_event" mode is enabled
+	 * and no counter has been assigned.
+	 */
 	if (rr.err == -EIO)
 		seq_puts(m, "Error\n");
 	else if (rr.err == -EINVAL)
 		seq_puts(m, "Unavailable\n");
+	else if (rr.err == -ENOENT)
+		seq_puts(m, "Unassigned\n");
 	else
 		seq_printf(m, "%llu\n", rr.val);
 
