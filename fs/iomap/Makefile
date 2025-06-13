@@ -11,6 +11,7 @@ obj-$(CONFIG_FS_IOMAP)		+= iomap.o
 iomap-y				+= trace.o \
 				   iter.o
 iomap-$(CONFIG_BLOCK)		+= buffered-io.o \
+				   buffered-io-bio.o \
 				   direct-io.o \
 				   ioend.o \
 				   fiemap.o \
