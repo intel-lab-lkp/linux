@@ -2677,6 +2677,15 @@ void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
 void __sock_recv_wifi_status(struct msghdr *msg, struct sock *sk,
 			     struct sk_buff *skb);
 
+enum {
+	NET_TIMESTAMP_ORIGIN_SW		= 0,
+	NET_TIMESTAMP_ORIGIN_HW		= 1,
+};
+
+bool skb_has_tx_timestamp(struct sk_buff *skb, const struct sock *sk);
+int skb_get_tx_timestamp(struct sk_buff *skb, struct sock *sk,
+			 struct timespec64 *ts);
+
 static inline void
 sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb)
 {
