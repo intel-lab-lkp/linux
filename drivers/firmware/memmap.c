@@ -369,19 +369,19 @@ int __meminit firmware_map_remove(u64 start, u64 end, const char *type)
 
 static ssize_t start_show(struct firmware_map_entry *entry, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%llx\n",
 		(unsigned long long)entry->start);
 }
 
 static ssize_t end_show(struct firmware_map_entry *entry, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%llx\n",
 		(unsigned long long)entry->end);
 }
 
 static ssize_t type_show(struct firmware_map_entry *entry, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n", entry->type);
+	return scnprintf(buf, PAGE_SIZE, "%s\n", entry->type);
 }
 
 static inline struct memmap_attribute *to_memmap_attr(struct attribute *attr)
