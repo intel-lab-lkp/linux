@@ -819,12 +819,6 @@ static int ttm_lru_walk_ticketlock(struct ttm_lru_walk_arg *arg,
 	return ret;
 }
 
-static void ttm_lru_walk_unlock(struct ttm_buffer_object *bo, bool locked)
-{
-	if (locked)
-		dma_resv_unlock(bo->base.resv);
-}
-
 /**
  * ttm_lru_walk_for_evict() - Perform a LRU list walk, with actions taken on
  * valid items.
@@ -859,64 +853,21 @@ static void ttm_lru_walk_unlock(struct ttm_buffer_object *bo, bool locked)
 s64 ttm_lru_walk_for_evict(struct ttm_lru_walk *walk, struct ttm_device *bdev,
 			   struct ttm_resource_manager *man, s64 target)
 {
-	struct ttm_resource_cursor cursor;
-	struct ttm_resource *res;
+	struct ttm_bo_lru_cursor cursor;
+	struct ttm_buffer_object *bo;
 	s64 progress = 0;
 	s64 lret;
 
-	spin_lock(&bdev->lru_lock);
-	ttm_resource_cursor_init(&cursor, man);
-	ttm_resource_manager_for_each_res(&cursor, res) {
-		struct ttm_buffer_object *bo = res->bo;
-		bool bo_needs_unlock = false;
-		bool bo_locked = false;
-		int mem_type;
-
-		/*
-		 * Attempt a trylock before taking a reference on the bo,
-		 * since if we do it the other way around, and the trylock fails,
-		 * we need to drop the lru lock to put the bo.
-		 */
-		if (ttm_lru_walk_trylock(&walk->arg, bo, &bo_needs_unlock))
-			bo_locked = true;
-		else if (!walk->arg.ticket || walk->arg.ctx->no_wait_gpu ||
-			 walk->arg.trylock_only)
-			continue;
-
-		if (!ttm_bo_get_unless_zero(bo)) {
-			ttm_lru_walk_unlock(bo, bo_needs_unlock);
-			continue;
-		}
-
-		mem_type = res->mem_type;
-		spin_unlock(&bdev->lru_lock);
-
-		lret = 0;
-		if (!bo_locked)
-			lret = ttm_lru_walk_ticketlock(&walk->arg, bo, &bo_needs_unlock);
-
-		/*
-		 * Note that in between the release of the lru lock and the
-		 * ticketlock, the bo may have switched resource,
-		 * and also memory type, since the resource may have been
-		 * freed and allocated again with a different memory type.
-		 * In that case, just skip it.
-		 */
-		if (!lret && bo->resource && bo->resource->mem_type == mem_type)
-			lret = walk->ops->process_bo(walk, bo);
-
-		ttm_lru_walk_unlock(bo, bo_needs_unlock);
-		ttm_bo_put(bo);
+	ttm_bo_lru_for_each_reserved_guarded(&cursor, man, &walk->arg, bo) {
+		lret = walk->ops->process_bo(walk, bo);
 		if (lret == -EBUSY || lret == -EALREADY)
 			lret = 0;
 		progress = (lret < 0) ? lret : progress + lret;
-
-		spin_lock(&bdev->lru_lock);
 		if (progress < 0 || progress >= target)
 			break;
 	}
-	ttm_resource_cursor_fini(&cursor);
-	spin_unlock(&bdev->lru_lock);
+	if (IS_ERR(bo))
+		return PTR_ERR(bo);
 
 	return progress;
 }
@@ -956,10 +907,7 @@ EXPORT_SYMBOL(ttm_bo_lru_cursor_fini);
  * @man: The ttm resource_manager whose LRU lists to iterate over.
  * @arg: The ttm_lru_walk_arg to govern the walk.
  *
- * Initialize a struct ttm_bo_lru_cursor. Currently only trylocking
- * or prelocked buffer objects are available as detailed by
- * @arg->ctx.resv and @arg->ctx.allow_res_evict. Ticketlocking is not
- * supported.
+ * Initialize a struct ttm_bo_lru_cursor.
  *
  * Return: Pointer to @curs. The function does not fail.
  */
@@ -977,21 +925,65 @@ ttm_bo_lru_cursor_init(struct ttm_bo_lru_cursor *curs,
 EXPORT_SYMBOL(ttm_bo_lru_cursor_init);
 
 static struct ttm_buffer_object *
-ttm_bo_from_res_reserved(struct ttm_resource *res, struct ttm_bo_lru_cursor *curs)
+__ttm_bo_lru_cursor_next(struct ttm_bo_lru_cursor *curs, bool first)
 {
-	struct ttm_buffer_object *bo = res->bo;
+	spinlock_t *lru_lock = &curs->res_curs.man->bdev->lru_lock;
+	struct ttm_resource *res = NULL;
+	struct ttm_buffer_object *bo;
+	struct ttm_lru_walk_arg *arg = curs->arg;
 
-	if (!ttm_lru_walk_trylock(curs->arg, bo, &curs->needs_unlock))
-		return NULL;
+	ttm_bo_lru_cursor_cleanup_bo(curs);
 
-	if (!ttm_bo_get_unless_zero(bo)) {
-		if (curs->needs_unlock)
-			dma_resv_unlock(bo->base.resv);
-		return NULL;
+	spin_lock(lru_lock);
+	for (;;) {
+		int mem_type, ret;
+		bool bo_locked = false;
+
+		if (first) {
+			res = ttm_resource_manager_first(&curs->res_curs);
+			first = false;
+		} else {
+			res = ttm_resource_manager_next(&curs->res_curs);
+		}
+		if (!res)
+			break;
+
+		bo = res->bo;
+		if (ttm_lru_walk_trylock(arg, bo, &curs->needs_unlock))
+			bo_locked = true;
+		else if (!arg->ticket || arg->ctx->no_wait_gpu || arg->trylock_only)
+			continue;
+
+		if (!ttm_bo_get_unless_zero(bo)) {
+			if (curs->needs_unlock)
+				dma_resv_unlock(bo->base.resv);
+			continue;
+		}
+
+		mem_type = res->mem_type;
+		spin_unlock(lru_lock);
+		if (!bo_locked)
+			ret = ttm_lru_walk_ticketlock(arg, bo, &curs->needs_unlock);
+		/*
+		 * Note that in between the release of the lru lock and the
+		 * ticketlock, the bo may have switched resource,
+		 * and also memory type, since the resource may have been
+		 * freed and allocated again with a different memory type.
+		 * In that case, just skip it.
+		 */
+		curs->bo = bo;
+		if (!ret && bo->resource && bo->resource->mem_type == mem_type)
+			return bo;
+
+		ttm_bo_lru_cursor_cleanup_bo(curs);
+		if (ret)
+			return ERR_PTR(ret);
+
+		spin_lock(lru_lock);
 	}
 
-	curs->bo = bo;
-	return bo;
+	spin_unlock(lru_lock);
+	return res ? bo : NULL;
 }
 
 /**
@@ -1005,25 +997,7 @@ ttm_bo_from_res_reserved(struct ttm_resource *res, struct ttm_bo_lru_cursor *cur
  */
 struct ttm_buffer_object *ttm_bo_lru_cursor_next(struct ttm_bo_lru_cursor *curs)
 {
-	spinlock_t *lru_lock = &curs->res_curs.man->bdev->lru_lock;
-	struct ttm_resource *res = NULL;
-	struct ttm_buffer_object *bo;
-
-	ttm_bo_lru_cursor_cleanup_bo(curs);
-
-	spin_lock(lru_lock);
-	for (;;) {
-		res = ttm_resource_manager_next(&curs->res_curs);
-		if (!res)
-			break;
-
-		bo = ttm_bo_from_res_reserved(res, curs);
-		if (bo)
-			break;
-	}
-
-	spin_unlock(lru_lock);
-	return res ? bo : NULL;
+	return __ttm_bo_lru_cursor_next(curs, false);
 }
 EXPORT_SYMBOL(ttm_bo_lru_cursor_next);
 
@@ -1037,21 +1011,7 @@ EXPORT_SYMBOL(ttm_bo_lru_cursor_next);
  */
 struct ttm_buffer_object *ttm_bo_lru_cursor_first(struct ttm_bo_lru_cursor *curs)
 {
-	spinlock_t *lru_lock = &curs->res_curs.man->bdev->lru_lock;
-	struct ttm_buffer_object *bo;
-	struct ttm_resource *res;
-
-	spin_lock(lru_lock);
-	res = ttm_resource_manager_first(&curs->res_curs);
-	if (!res) {
-		spin_unlock(lru_lock);
-		return NULL;
-	}
-
-	bo = ttm_bo_from_res_reserved(res, curs);
-	spin_unlock(lru_lock);
-
-	return bo ? bo : ttm_bo_lru_cursor_next(curs);
+	return __ttm_bo_lru_cursor_next(curs, true);
 }
 EXPORT_SYMBOL(ttm_bo_lru_cursor_first);
 
