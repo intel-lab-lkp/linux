@@ -218,10 +218,10 @@ EXPORT_SYMBOL_GPL(faux_device_create);
  */
 void faux_device_destroy(struct faux_device *faux_dev)
 {
-	struct device *dev = &faux_dev->dev;
-
 	if (!faux_dev)
 		return;
+
+	struct device *dev = &faux_dev->dev;
 
 	device_del(dev);
 
