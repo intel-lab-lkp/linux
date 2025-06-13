@@ -2913,6 +2913,25 @@ static void sched_rt_do_global(void)
 {
 }
 
+static inline int sched_global_validate(void)
+{
+	int ret;
+
+	ret = sched_rt_global_validate();
+	if (ret)
+		return ret;
+
+	ret = sched_dl_global_validate();
+	if (ret)
+		return ret;
+
+	ret = sched_rt_global_constraints();
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
 static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
@@ -2920,36 +2939,24 @@ static int sched_rt_handler(const struct ctl_table *table, int write, void *buff
 	static DEFINE_MUTEX(mutex);
 	int ret;
 
-	mutex_lock(&mutex);
-	sched_domains_mutex_lock();
+	guard(mutex)(&mutex);
+	guard(sched_domains_mutex)();
+
 	old_period = sysctl_sched_rt_period;
 	old_runtime = sysctl_sched_rt_runtime;
 
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		return ret;
 
-	if (!ret && write) {
-		ret = sched_rt_global_validate();
-		if (ret)
-			goto undo;
-
-		ret = sched_dl_global_validate();
-		if (ret)
-			goto undo;
-
-		ret = sched_rt_global_constraints();
-		if (ret)
-			goto undo;
-
+	ret = sched_global_validate();
+	if (!ret) {
 		sched_rt_do_global();
 		sched_dl_do_global();
-	}
-	if (0) {
-undo:
+	} else {
 		sysctl_sched_rt_period = old_period;
 		sysctl_sched_rt_runtime = old_runtime;
 	}
-	sched_domains_mutex_unlock();
-	mutex_unlock(&mutex);
 
 	return ret;
 }

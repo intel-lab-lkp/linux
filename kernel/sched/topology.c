@@ -6,14 +6,6 @@
 #include <linux/bsearch.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
-void sched_domains_mutex_lock(void)
-{
-	mutex_lock(&sched_domains_mutex);
-}
-void sched_domains_mutex_unlock(void)
-{
-	mutex_unlock(&sched_domains_mutex);
-}
 
 /* Protected by sched_domains_mutex: */
 static cpumask_var_t sched_domains_tmpmask;
@@ -470,43 +462,40 @@ static void free_rootdomain(struct rcu_head *rcu)
 void rq_attach_root(struct rq *rq, struct root_domain *rd)
 {
 	struct root_domain *old_rd = NULL;
-	struct rq_flags rf;
 
-	rq_lock_irqsave(rq, &rf);
+	scoped_guard(rq_lock_irqsave, rq) {
+		if (rq->rd) {
+			old_rd = rq->rd;
 
-	if (rq->rd) {
-		old_rd = rq->rd;
+			if (cpumask_test_cpu(rq->cpu, old_rd->online))
+				set_rq_offline(rq);
 
-		if (cpumask_test_cpu(rq->cpu, old_rd->online))
-			set_rq_offline(rq);
+			cpumask_clear_cpu(rq->cpu, old_rd->span);
 
-		cpumask_clear_cpu(rq->cpu, old_rd->span);
+			/*
+			 * If we don't want to free the old_rd yet then
+			 * set old_rd to NULL to skip the freeing later
+			 * in this function:
+			 */
+			if (!atomic_dec_and_test(&old_rd->refcount))
+				old_rd = NULL;
+		}
 
+		atomic_inc(&rd->refcount);
+		rq->rd = rd;
+
+		cpumask_set_cpu(rq->cpu, rd->span);
+		if (cpumask_test_cpu(rq->cpu, cpu_active_mask))
+			set_rq_online(rq);
 		/*
-		 * If we don't want to free the old_rd yet then
-		 * set old_rd to NULL to skip the freeing later
-		 * in this function:
+		 * Because the rq is not a task,
+		 * dl_add_task_root_domain() did not move
+		 * the fair server bw to the rd if it already started.
+		 * Add it now.
 		 */
-		if (!atomic_dec_and_test(&old_rd->refcount))
-			old_rd = NULL;
+		if (rq->fair_server.dl_server)
+			__dl_server_attach_root(&rq->fair_server, rq);
 	}
-
-	atomic_inc(&rd->refcount);
-	rq->rd = rd;
-
-	cpumask_set_cpu(rq->cpu, rd->span);
-	if (cpumask_test_cpu(rq->cpu, cpu_active_mask))
-		set_rq_online(rq);
-
-	/*
-	 * Because the rq is not a task, dl_add_task_root_domain() did not
-	 * move the fair server bw to the rd if it already started.
-	 * Add it now.
-	 */
-	if (rq->fair_server.dl_server)
-		__dl_server_attach_root(&rq->fair_server, rq);
-
-	rq_unlock_irqrestore(rq, &rf);
 
 	if (old_rd)
 		call_rcu(&old_rd->rcu, free_rootdomain);
@@ -1809,18 +1798,17 @@ bool find_numa_distance(int distance)
 	if (distance == node_distance(0, 0))
 		return true;
 
-	rcu_read_lock();
+	guard(rcu)();
+
 	distances = rcu_dereference(sched_domains_numa_distance);
 	if (!distances)
-		goto unlock;
+		return found;
 	for (i = 0; i < sched_domains_numa_levels; i++) {
 		if (distances[i] == distance) {
 			found = true;
 			break;
 		}
 	}
-unlock:
-	rcu_read_unlock();
 
 	return found;
 }
@@ -2131,26 +2119,24 @@ void sched_domains_numa_masks_clear(unsigned int cpu)
  */
 int sched_numa_find_closest(const struct cpumask *cpus, int cpu)
 {
-	int i, j = cpu_to_node(cpu), found = nr_cpu_ids;
+	int i, j = cpu_to_node(cpu);
 	struct cpumask ***masks;
 
-	rcu_read_lock();
+	guard(rcu)();
+
 	masks = rcu_dereference(sched_domains_numa_masks);
 	if (!masks)
-		goto unlock;
+		return nr_cpu_ids;
 	for (i = 0; i < sched_domains_numa_levels; i++) {
 		if (!masks[i][j])
-			break;
+			return nr_cpu_ids;
 		cpu = cpumask_any_and_distribute(cpus, masks[i][j]);
 		if (cpu < nr_cpu_ids) {
-			found = cpu;
-			break;
+			return cpu;
 		}
 	}
-unlock:
-	rcu_read_unlock();
 
-	return found;
+	return nr_cpu_ids;
 }
 
 struct __cmp_key {
@@ -2201,7 +2187,7 @@ int sched_numa_find_nth_cpu(const struct cpumask *cpus, int cpu, int node)
 	if (node == NUMA_NO_NODE)
 		return cpumask_nth_and(cpu, cpus, cpu_online_mask);
 
-	rcu_read_lock();
+	guard(rcu)();
 
 	/* CPU-less node entries are uninitialized in sched_domains_numa_masks */
 	node = numa_nearest_node(node, N_CPU);
@@ -2209,7 +2195,7 @@ int sched_numa_find_nth_cpu(const struct cpumask *cpus, int cpu, int node)
 
 	k.masks = rcu_dereference(sched_domains_numa_masks);
 	if (!k.masks)
-		goto unlock;
+		return ret;
 
 	hop_masks = bsearch(&k, k.masks, sched_domains_numa_levels, sizeof(k.masks[0]), hop_cmp);
 	hop = hop_masks	- k.masks;
@@ -2217,8 +2203,7 @@ int sched_numa_find_nth_cpu(const struct cpumask *cpus, int cpu, int node)
 	ret = hop ?
 		cpumask_nth_and_andnot(cpu - k.w, cpus, k.masks[hop][node], k.masks[hop-1][node]) :
 		cpumask_nth_and(cpu, cpus, k.masks[0][node]);
-unlock:
-	rcu_read_unlock();
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(sched_numa_find_nth_cpu);
@@ -2570,17 +2555,17 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	}
 
 	/* Attach the domains */
-	rcu_read_lock();
-	for_each_cpu(i, cpu_map) {
-		rq = cpu_rq(i);
-		sd = *per_cpu_ptr(d.sd, i);
+	scoped_guard(rcu) {
+		for_each_cpu(i, cpu_map) {
+			rq = cpu_rq(i);
+			sd = *per_cpu_ptr(d.sd, i);
 
-		cpu_attach_domain(sd, d.rd, i);
+			cpu_attach_domain(sd, d.rd, i);
 
-		if (lowest_flag_domain(i, SD_CLUSTER))
-			has_cluster = true;
+			if (lowest_flag_domain(i, SD_CLUSTER))
+				has_cluster = true;
+		}
 	}
-	rcu_read_unlock();
 
 	if (has_asym)
 		static_branch_inc_cpuslocked(&sched_asym_cpucapacity);
@@ -2657,6 +2642,8 @@ int __init sched_init_domains(const struct cpumask *cpu_map)
 {
 	int err;
 
+	guard(sched_domains_mutex)();
+
 	zalloc_cpumask_var(&sched_domains_tmpmask, GFP_KERNEL);
 	zalloc_cpumask_var(&sched_domains_tmpmask2, GFP_KERNEL);
 	zalloc_cpumask_var(&fallback_doms, GFP_KERNEL);
@@ -2688,10 +2675,9 @@ static void detach_destroy_domains(const struct cpumask *cpu_map)
 	if (static_branch_unlikely(&sched_cluster_active))
 		static_branch_dec_cpuslocked(&sched_cluster_active);
 
-	rcu_read_lock();
+	guard(rcu)();
 	for_each_cpu(i, cpu_map)
 		cpu_attach_domain(NULL, &def_root_domain, i);
-	rcu_read_unlock();
 }
 
 /* handle null as "default" */
@@ -2836,7 +2822,6 @@ match3:
 void partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
 			     struct sched_domain_attr *dattr_new)
 {
-	sched_domains_mutex_lock();
+	guard(sched_domains_mutex)();
 	partition_sched_domains_locked(ndoms_new, doms_new, dattr_new);
-	sched_domains_mutex_unlock();
 }
