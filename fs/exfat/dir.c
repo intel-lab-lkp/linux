@@ -1194,7 +1194,8 @@ int exfat_count_dir_entries(struct super_block *sb, struct exfat_chain *p_dir)
 {
 	int i, count = 0;
 	int dentries_per_clu;
-	unsigned int entry_type;
+	unsigned int entry_type = TYPE_FILE;
+	unsigned int clu_count = 0;
 	struct exfat_chain clu;
 	struct exfat_dentry *ep;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
@@ -1205,18 +1206,26 @@ int exfat_count_dir_entries(struct super_block *sb, struct exfat_chain *p_dir)
 	exfat_chain_dup(&clu, p_dir);
 
 	while (clu.dir != EXFAT_EOF_CLUSTER) {
-		for (i = 0; i < dentries_per_clu; i++) {
-			ep = exfat_get_dentry(sb, &clu, i, &bh);
-			if (!ep)
-				return -EIO;
-			entry_type = exfat_get_entry_type(ep);
-			brelse(bh);
+		clu_count++;
+		if (clu_count > sbi->used_clusters) {
+			exfat_fs_error(sb, "dir size or FAT or bitmap is corrupted");
+			return -EIO;
+		}
 
-			if (entry_type == TYPE_UNUSED)
-				return count;
-			if (entry_type != TYPE_DIR)
-				continue;
-			count++;
+		if (entry_type != TYPE_UNUSED) {
+			for (i = 0; i < dentries_per_clu; i++) {
+				ep = exfat_get_dentry(sb, &clu, i, &bh);
+				if (!ep)
+					return -EIO;
+				entry_type = exfat_get_entry_type(ep);
+				brelse(bh);
+
+				if (entry_type == TYPE_UNUSED)
+					break;
+				if (entry_type != TYPE_DIR)
+					continue;
+				count++;
+			}
 		}
 
 		if (clu.flags == ALLOC_NO_FAT_CHAIN) {
