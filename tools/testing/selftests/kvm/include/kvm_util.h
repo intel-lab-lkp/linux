@@ -629,7 +629,8 @@ void vm_userspace_mem_region_add(struct kvm_vm *vm,
 	uint32_t flags);
 void vm_mem_add(struct kvm_vm *vm, enum vm_mem_backing_src_type src_type,
 		uint64_t guest_paddr, uint32_t slot, uint64_t npages,
-		uint32_t flags, int guest_memfd_fd, uint64_t guest_memfd_offset);
+		uint32_t flags, int guest_memfd_fd, uint64_t guest_memfd_offset,
+		int extra_mmap_flags);
 
 #ifndef vm_arch_has_protected_memory
 static inline bool vm_arch_has_protected_memory(struct kvm_vm *vm)
