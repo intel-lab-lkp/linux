@@ -1,0 +1,211 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/temperature/microchip,mcp9982.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip MCP998X/33 and MCP998XD/33D Multichannel Automotive
+       Temperature Monitor Family
+
+maintainers:
+  - Victor Duicu <victor.duicu@microchip.com>
+
+description: |
+  The MCP998X/33 and MCP998XD/33D family is a high-accuracy 2-wire multichannel
+  automotive temperature monitor.
+  The datasheet can be found here:
+    https://ww1.microchip.com/downloads/aemDocuments/documents/MSLD/ProductDocuments/DataSheets/MCP998X-Family-Data-Sheet-DS20006827.pdf
+
+properties:
+  compatible:
+    enum:
+      - microchip,mcp9933
+      - microchip,mcp9933d
+      - microchip,mcp9982
+      - microchip,mcp9982d
+      - microchip,mcp9983
+      - microchip,mcp9983d
+      - microchip,mcp9984
+      - microchip,mcp9984d
+      - microchip,mcp9985
+      - microchip,mcp9985d
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 2
+    maxItems: 2
+
+  interrupt-names:
+    description:
+      -alert-therm is used to handle a HIGH or LOW limit.
+      -therm-addr is used to handle a THERM limit on chips
+      without "D" in the name.
+      -sys-shutdown is used to handle a THERM limit on chips
+      with "D" in the name.
+    items:
+      - const: alert-therm
+      - const: therm-addr
+      - const: sys-shutdown
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  microchip,enable-anti-parallel:
+    description:
+      Enable anti-parallel diode mode operation.
+      MCP9984/84D/85/85D and MCP9933/33D support reading two external diodes
+      in anti-parallel connection on the same set of pins.
+    type: boolean
+
+  microchip,beta1:
+    description:
+      Set beta compensation value for external channel 1.
+      <0> 0.050
+      <1> 0.066
+      <2> 0.087
+      <3> 0.114
+      <4> 0.150
+      <5> 0.197
+      <6> 0.260
+      <7> 0.342
+      <8> 0.449
+      <9> 0.591
+      <10> 0.778
+      <11> 1.024
+      <12> 1.348
+      <13> 1.773
+      <14> 2.333
+      <15> Diode_Mode
+      <16> Auto
+      - Diode_Mode is used when measuring a discrete thermal diode
+      or a CPU diode that functions like a discrete thermal diode.
+      - Auto enables beta auto-detection. The chip monitors
+      external diode/transistor and determines the optimum
+      setting.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 16
+
+  microchip,beta2:
+    description:
+      Set beta compensation value for external channel 2.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 16
+
+  microchip,resistance-comp-ch1-2-enable:
+    description:
+      Enable resistance error correction(REC) for external channels 1 and 2.
+      The chip internal hardware counterbalances the parasitic resistance in
+      series with the external diodes. The compensation can be activated or
+      disabled in hardware for both channels 1 and 2 at the same time.
+    type: boolean
+
+  microchip,resistance-comp-ch3-4-enable:
+    description:
+      Enable resistance error correction(REC) for external channels 3 and 4.
+      The chip internal hardware counterbalances the parasitic resistance in
+      series with the external diodes. The compensation can be activated or
+      disabled in hardware for both channels 3 and 4 at the same time.
+    type: boolean
+
+
+  vdd-supply: true
+
+patternProperties:
+  "^channel@[1-4]$":
+    description:
+      Represents the external temperature channels to which
+      a remote diode is connected.
+    type: object
+
+    properties:
+      reg:
+        items:
+          minimum: 1
+          maximum: 4
+
+      microchip,ideality-factor:
+        description:
+          Each channel has an ideality factor.
+          Beta compensation and resistance error correction automatically
+          correct for most ideality errors. So ideality factor does not need
+          to be adjusted in general.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        default: 18
+
+      label:
+        description: Unique name to identify which channel this is.
+
+    required:
+      - reg
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - microchip,mcp9982d
+              - microchip,mcp9983d
+              - microchip,mcp9984d
+              - microchip,mcp9985d
+              - microchip,mcp9933d
+    then:
+      properties:
+        interrupts-names:
+          items:
+            - const: alert-therm
+            - const: sys-shutdown
+    else:
+      properties:
+        interrupts-names:
+          items:
+            - const: alert-therm
+            - const: therm-addr
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        temperature-sensor@4c {
+            compatible = "microchip,mcp9985";
+            reg = <0x4c>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            microchip,enable-anti-parallel;
+            microchip,resistance-comp-ch1-2-enable;
+            microchip,resistance-comp-ch3-4-enable;
+            microchip,beta1 = <16>;
+            microchip,beta2 = <16>;
+            vdd-supply = <&vdd>;
+
+            channel@1 {
+                reg = <1>;
+                label = "CPU Temperature";
+            };
+
+            channel@2 {
+                reg = <2>;
+                label = "GPU Temperature";
+            };
+        };
+    };
+
+...
