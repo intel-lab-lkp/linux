@@ -291,7 +291,7 @@ The ``ops`` structure must be specified and is as follows:
 
  struct iomap_writeback_ops {
      int (*writeback_folio)(struct iomap_writeback_folio_range *ctx);
-     int (*submit_ioend)(struct iomap_writepage_ctx *wpc, int status);
+     int (*writeback_complete)(struct iomap_writepage_ctx *wpc, int status);
      void (*discard_folio)(struct folio *folio, loff_t pos);
  };
 
@@ -319,13 +319,15 @@ The fields are as follows:
 
     This function must be supplied by the filesystem.
 
-  - ``submit_ioend``: Allows the file systems to hook into writeback bio
-    submission.
-    This might include pre-write space accounting updates, or installing
-    a custom ``->bi_end_io`` function for internal purposes, such as
-    deferring the ioend completion to a workqueue to run metadata update
-    transactions from process context before submitting the bio.
-    This function is optional.
+  - ``writeback_complete``: Allows the file systems to execute any logic that
+    needs to happen after ``->writeback_folio`` has been called for all dirty
+    folios. This might include hooking into writeback bio submission for
+    pre-write space accounting updates, or installing a custom ``->bi_end_io``
+    function for internal purposes, such as deferring the ioend completion to
+    a workqueue to run metadata update transactions from process context
+    before submitting the bio.
+    This function is optional. If this function is not provided, iomap will
+    default to ``iomap_bio_writeback_complete``.
 
   - ``discard_folio``: iomap calls this function after ``->writeback_folio``
     fails to schedule I/O for any part of a dirty folio.

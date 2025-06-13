@@ -1450,39 +1450,13 @@ out_unlock:
 }
 EXPORT_SYMBOL_GPL(iomap_page_mkwrite);
 
-/*
- * Submit an ioend.
- *
- * If @error is non-zero, it means that we have a situation where some part of
- * the submission process has failed after we've marked pages for writeback.
- * We cannot cancel ioend directly in that case, so call the bio end I/O handler
- * with the error status here to run the normal I/O completion handler to clear
- * the writeback bit and let the file system proess the errors.
- */
-int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
+int iomap_writeback_complete(struct iomap_writepage_ctx *wpc, int error)
 {
-	if (!wpc->ioend)
-		return error;
+	if (wpc->ops->writeback_complete)
+		error = wpc->ops->writeback_complete(wpc, error);
+	else
+		error = iomap_bio_writeback_complete(wpc, error, NULL);
 
-	/*
-	 * Let the file systems prepare the I/O submission and hook in an I/O
-	 * comletion handler.  This also needs to happen in case after a
-	 * failure happened so that the file system end I/O handler gets called
-	 * to clean up.
-	 */
-	if (wpc->ops->submit_ioend) {
-		error = wpc->ops->submit_ioend(wpc, error);
-	} else {
-		if (WARN_ON_ONCE(wpc->iomap.flags & IOMAP_F_ANON_WRITE))
-			error = -EIO;
-		if (!error)
-			iomap_submit_bio(&wpc->ioend->io_bio);
-	}
-
-	if (error)
-		iomap_bio_ioend_error(wpc, error);
-
-	wpc->ioend = NULL;
 	return error;
 }
 
@@ -1661,6 +1635,6 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 	wpc->ops = ops;
 	while ((folio = writeback_iter(mapping, wbc, folio, &error)))
 		error = iomap_writepage_map(wpc, wbc, folio);
-	return iomap_submit_ioend(wpc, error);
+	return iomap_writeback_complete(wpc, error);
 }
 EXPORT_SYMBOL_GPL(iomap_writepages);

@@ -437,14 +437,10 @@ struct iomap_writeback_ops {
 	int (*writeback_folio)(struct iomap_writeback_folio_range *ctx);
 
 	/*
-	 * Optional, allows the file systems to hook into bio submission,
-	 * including overriding the bi_end_io handler.
-	 *
-	 * Returns 0 if the bio was successfully submitted, or a negative
-	 * error code if status was non-zero or another error happened and
-	 * the bio could not be submitted.
+	 * Optional, allows the file system to call into this once
+	 * ->writeback_folio() on all dirty ranges have been issued.
 	 */
-	int (*submit_ioend)(struct iomap_writepage_ctx *wpc, int status);
+	int (*writeback_complete)(struct iomap_writepage_ctx *wpc, int status);
 
 	/*
 	 * Optional, allows the file system to discard state on a page where
@@ -562,5 +558,21 @@ typedef int iomap_map_blocks_t(struct iomap_writepage_ctx *wpc,
 		struct inode *inode, loff_t offset, unsigned int len);
 int iomap_bio_writeback_folio(struct iomap_writeback_folio_range *ctx,
 		iomap_map_blocks_t map_blocks);
+
+#ifdef CONFIG_BLOCK
+/*
+ * Allows the file systems to hook into bio submission, including overriding
+ * the bi_end_io handler.
+ *
+ * Returns 0 if the bio was successfully submitted, or a negative
+ * error code if status was non-zero or another error happened and
+ * the bio could not be submitted.
+ */
+typedef int iomap_submit_ioend_t(struct iomap_writepage_ctx *wpc, int error);
+int iomap_bio_writeback_complete(struct iomap_writepage_ctx *wpc, int error,
+		iomap_submit_ioend_t submit_ioend);
+#else
+#define iomap_bio_writeback_complete(...)	(-ENOSYS)
+#endif /* CONFIG_BLOCK */
 
 #endif /* LINUX_IOMAP_H */

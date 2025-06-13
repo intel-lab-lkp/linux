@@ -493,6 +493,11 @@ xfs_submit_ioend(
 	return 0;
 }
 
+static int xfs_writeback_complete(struct iomap_writepage_ctx *wpc, int error)
+{
+	return iomap_bio_writeback_complete(wpc, error, xfs_submit_ioend);
+}
+
 /*
  * If the folio has delalloc blocks on it, the caller is asking us to punch them
  * out. If we don't, we can leave a stale delalloc mapping covered by a clean
@@ -532,7 +537,7 @@ xfs_discard_folio(
 
 static const struct iomap_writeback_ops xfs_writeback_ops = {
 	.writeback_folio	= xfs_writeback_folio,
-	.submit_ioend		= xfs_submit_ioend,
+	.writeback_complete	= xfs_writeback_complete,
 	.discard_folio		= xfs_discard_folio,
 };
 
@@ -630,9 +635,14 @@ xfs_zoned_submit_ioend(
 	return 0;
 }
 
+static int xfs_zoned_writeback_complete(struct iomap_writepage_ctx *wpc, int error)
+{
+	return iomap_bio_writeback_complete(wpc, error, xfs_zoned_submit_ioend);
+}
+
 static const struct iomap_writeback_ops xfs_zoned_writeback_ops = {
 	.writeback_folio	= xfs_zoned_writeback_folio,
-	.submit_ioend		= xfs_zoned_submit_ioend,
+	.writeback_complete	= xfs_zoned_writeback_complete,
 	.discard_folio		= xfs_discard_folio,
 };
 
