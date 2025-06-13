@@ -21,6 +21,7 @@
 #include "intel_display_types.h"
 #include "intel_fbc.h"
 #include "intel_step.h"
+#include "intel_writeback_reg.h"
 
 __diag_push();
 __diag_ignore_all("-Woverride-init", "Allow field initialization overrides for display info");
@@ -144,12 +145,16 @@ static const struct intel_display_device_info no_display = {};
 		[TRANSCODER_B] = PIPE_B_OFFSET, \
 		[TRANSCODER_C] = PIPE_C_OFFSET, \
 		[TRANSCODER_EDP] = PIPE_EDP_OFFSET, \
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, \
 	}, \
 	.trans_offsets = { \
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET, \
 		[TRANSCODER_B] = TRANSCODER_B_OFFSET, \
 		[TRANSCODER_C] = TRANSCODER_C_OFFSET, \
 		[TRANSCODER_EDP] = TRANSCODER_EDP_OFFSET, \
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, \
 	}
 
 #define CHV_PIPE_OFFSETS \
@@ -677,7 +682,8 @@ static const struct intel_display_device_info skl_display = {
 	.__runtime_defaults.pipe_mask = BIT(PIPE_A) | BIT(PIPE_B) | BIT(PIPE_C),
 	.__runtime_defaults.cpu_transcoder_mask =
 	BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
-	BIT(TRANSCODER_C) | BIT(TRANSCODER_EDP),
+	BIT(TRANSCODER_C) | BIT(TRANSCODER_EDP) |
+	BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_1),
 	.__runtime_defaults.port_mask = BIT(PORT_A) | BIT(PORT_B) | BIT(PORT_C) | BIT(PORT_D) | BIT(PORT_E),
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A),
 };
@@ -829,6 +835,7 @@ static const struct platform_desc cml_desc = {
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) | \
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_EDP) | \
 		BIT(TRANSCODER_DSI_A) | BIT(TRANSCODER_DSI_C), \
+		BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_0), \
 	.__runtime_defaults.port_mask = BIT(PORT_A) | BIT(PORT_B) | BIT(PORT_C)
 
 static const enum intel_step bxt_steppings[] = {
@@ -883,6 +890,8 @@ static const struct platform_desc glk_desc = {
 		[TRANSCODER_EDP] = PIPE_EDP_OFFSET, \
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, \
 	}, \
 	.trans_offsets = { \
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET, \
@@ -891,6 +900,8 @@ static const struct platform_desc glk_desc = {
 		[TRANSCODER_EDP] = TRANSCODER_EDP_OFFSET, \
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, \
 	}, \
 	IVB_CURSOR_OFFSETS, \
 	ICL_COLORS, \
@@ -904,6 +915,7 @@ static const struct platform_desc glk_desc = {
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) | \
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_EDP) | \
 		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1), \
+		BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_1), \
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A)
 
 static const u16 icl_port_f_ids[] = {
@@ -974,6 +986,8 @@ static const struct platform_desc ehl_desc = {
 		[TRANSCODER_D] = PIPE_D_OFFSET, \
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, \
 	}, \
 	.trans_offsets = { \
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET, \
@@ -982,6 +996,8 @@ static const struct platform_desc ehl_desc = {
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET, \
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET, \
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, \
 	}, \
 	TGL_CURSOR_OFFSETS, \
 	ICL_COLORS, \
@@ -996,6 +1012,7 @@ static const struct platform_desc ehl_desc = {
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) | \
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D) | \
 		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1), \
+		BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_1), \
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A)
 
 static const u16 tgl_uy_ids[] = {
@@ -1141,6 +1158,8 @@ static const struct platform_desc adl_s_desc = {
 		[TRANSCODER_D] = PIPE_D_OFFSET,					\
 		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET,				\
 		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET,				\
+		[TRANSCODER_WD_0] = PIPE_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = PIPE_WD1_OFFSET, \
 	},									\
 	.trans_offsets = {							\
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET,				\
@@ -1149,6 +1168,8 @@ static const struct platform_desc adl_s_desc = {
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET,				\
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET,			\
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET,			\
+		[TRANSCODER_WD_0] = TRANSCODER_WD0_OFFSET, \
+		[TRANSCODER_WD_1] = TRANSCODER_WD1_OFFSET, \
 	},									\
 	TGL_CURSOR_OFFSETS,							\
 										\
@@ -1168,7 +1189,8 @@ static const struct intel_display_device_info xe_lpd_display = {
 	.__runtime_defaults.cpu_transcoder_mask =
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D) |
-		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1),
+		BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1) |
+		BIT(TRANSCODER_WD_0) | BIT(TRANSCODER_WD_1),
 	.__runtime_defaults.port_mask = BIT(PORT_A) | BIT(PORT_B) |
 		BIT(PORT_TC1) | BIT(PORT_TC2) | BIT(PORT_TC3) | BIT(PORT_TC4),
 };
