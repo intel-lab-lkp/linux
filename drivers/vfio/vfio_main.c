@@ -1354,6 +1354,23 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	return device->ops->mmap(device, vma);
 }
 
+static unsigned long vfio_device_get_unmapped_area(struct file *file,
+						   unsigned long addr,
+						   unsigned long len,
+						   unsigned long pgoff,
+						   unsigned long flags)
+{
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	if (!device->ops->get_unmapped_area)
+		return mm_get_unmapped_area(current->mm, file, addr,
+					    len, pgoff, flags);
+
+	return device->ops->get_unmapped_area(device, file, addr, len,
+					      pgoff, flags);
+}
+
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,
@@ -1363,6 +1380,7 @@ const struct file_operations vfio_device_fops = {
 	.unlocked_ioctl	= vfio_device_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.mmap		= vfio_device_fops_mmap,
+	.get_unmapped_area = vfio_device_get_unmapped_area,
 };
 
 static struct vfio_device *vfio_device_from_file(struct file *file)
