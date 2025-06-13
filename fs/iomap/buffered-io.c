@@ -1489,7 +1489,7 @@ int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 static int iomap_writepage_map_blocks(struct iomap_writepage_ctx *wpc,
 		struct writeback_control *wbc, struct folio *folio,
 		struct inode *inode, u64 pos, u64 end_pos,
-		unsigned dirty_len, unsigned *count)
+		unsigned dirty_len, bool *async_writeback)
 {
 	int error;
 
@@ -1516,7 +1516,7 @@ static int iomap_writepage_map_blocks(struct iomap_writepage_ctx *wpc,
 			error = iomap_bio_add_to_ioend(wpc, wbc, folio, inode,
 					pos, end_pos, map_len);
 			if (!error)
-				(*count)++;
+				*async_writeback = true;
 			break;
 		}
 		dirty_len -= map_len;
@@ -1603,7 +1603,7 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	u64 pos = folio_pos(folio);
 	u64 end_pos = pos + folio_size(folio);
 	u64 end_aligned = 0;
-	unsigned count = 0;
+	bool async_writeback = false;
 	int error = 0;
 	u32 rlen;
 
@@ -1647,13 +1647,13 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	end_aligned = round_up(end_pos, i_blocksize(inode));
 	while ((rlen = iomap_find_dirty_range(folio, &pos, end_aligned))) {
 		error = iomap_writepage_map_blocks(wpc, wbc, folio, inode,
-				pos, end_pos, rlen, &count);
+				pos, end_pos, rlen, &async_writeback);
 		if (error)
 			break;
 		pos += rlen;
 	}
 
-	if (count)
+	if (async_writeback)
 		wpc->nr_folios++;
 
 	/*
@@ -1675,7 +1675,7 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 		if (atomic_dec_and_test(&ifs->write_bytes_pending))
 			folio_end_writeback(folio);
 	} else {
-		if (!count)
+		if (!async_writeback)
 			folio_end_writeback(folio);
 	}
 	mapping_set_error(inode->i_mapping, error);
