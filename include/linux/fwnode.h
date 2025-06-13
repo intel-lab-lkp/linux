@@ -54,7 +54,7 @@ struct fwnode_handle {
 	const struct fwnode_operations *ops;
 
 	/* The below is used solely by device links, don't use otherwise */
-	struct device *dev;
+	struct device *__private dev;
 	struct list_head suppliers;
 	struct list_head consumers;
 	u8 flags;
@@ -234,7 +234,7 @@ bool fw_devlink_is_strict(void);
 static inline void fw_devlink_set_device(struct fwnode_handle *fwnode,
 					 struct device *dev)
 {
-	fwnode->dev = dev;
+	ACCESS_PRIVATE(fwnode, dev) = dev;
 }
 
 #endif
