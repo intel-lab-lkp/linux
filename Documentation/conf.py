@@ -222,7 +222,11 @@ language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['output']
+exclude_patterns = [
+	'output',
+	'devicetree/bindings/**.yaml',
+	'netlink/*.yaml',
+]
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
