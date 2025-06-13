@@ -142,8 +142,10 @@ static int mlxbf_gige_open(struct net_device *netdev)
 
 	mlxbf_gige_cache_stats(priv);
 	err = mlxbf_gige_clean_port(priv);
-	if (err)
+	if (err) {
+		dev_err(priv->dev, "open: clean_port failed, err=0x%x\n", err);
 		return err;
+	}
 
 	/* Clear driver's valid_polarity to match hardware,
 	 * since the above call to clean_port() resets the
@@ -154,19 +156,25 @@ static int mlxbf_gige_open(struct net_device *netdev)
 	phy_start(phydev);
 
 	err = mlxbf_gige_tx_init(priv);
-	if (err)
+	if (err) {
+		dev_err(priv->dev, "open: tx_init failed, err=0x%x\n", err);
 		goto phy_deinit;
+	}
 	err = mlxbf_gige_rx_init(priv);
-	if (err)
+	if (err) {
+		dev_err(priv->dev, "open: rx_init failed, err=0x%x\n", err);
 		goto tx_deinit;
+	}
 
 	netif_napi_add(netdev, &priv->napi, mlxbf_gige_poll);
 	napi_enable(&priv->napi);
 	netif_start_queue(netdev);
 
 	err = mlxbf_gige_request_irqs(priv);
-	if (err)
+	if (err) {
+		dev_err(priv->dev, "open: request_irqs failed, err=0x%x\n", err);
 		goto napi_deinit;
+	}
 
 	mlxbf_gige_enable_mac_rx_filter(priv, MLXBF_GIGE_BCAST_MAC_FILTER_IDX);
 	mlxbf_gige_enable_mac_rx_filter(priv, MLXBF_GIGE_LOCAL_MAC_FILTER_IDX);
@@ -418,8 +426,10 @@ static int mlxbf_gige_probe(struct platform_device *pdev)
 
 	/* Attach MDIO device */
 	err = mlxbf_gige_mdio_probe(pdev, priv);
-	if (err)
+	if (err) {
+		dev_err(priv->dev, "probe: mdio_probe failed, err=0x%x\n", err);
 		return err;
+	}
 
 	priv->base = base;
 	priv->llu_base = llu_base;
