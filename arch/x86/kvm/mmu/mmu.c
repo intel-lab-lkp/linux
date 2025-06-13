@@ -7577,17 +7577,18 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm,
 	nx_huge_pages = &kvm->arch.possible_nx_huge_pages[mmu_type].pages;
 
 	rcu_idx = srcu_read_lock(&kvm->srcu);
-	if (is_tdp)
+	if (is_tdp) {
 		read_lock(&kvm->mmu_lock);
-	else
+		/*
+		 * Zapping TDP MMU shadow pages, including the remote TLB flush,
+		 * must be done under RCU protection, because the pages are
+		 * freed via RCU callback.
+		 */
+		rcu_read_lock();
+	} else {
 		write_lock(&kvm->mmu_lock);
+	}
 
-	/*
-	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
-	 * be done under RCU protection, because the pages are freed via RCU
-	 * callback.
-	 */
-	rcu_read_lock();
 
 	for ( ; to_zap; --to_zap) {
 		if (is_tdp)
@@ -7635,25 +7636,26 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm,
 
 		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
 			kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
-			rcu_read_unlock();
 
-			if (is_tdp)
+			if (is_tdp) {
+				rcu_read_unlock();
 				cond_resched_rwlock_read(&kvm->mmu_lock);
-			else
+				rcu_read_lock();
+			} else {
 				cond_resched_rwlock_write(&kvm->mmu_lock);
+			}
 
 			flush = false;
-			rcu_read_lock();
 		}
 	}
 	kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
 
-	rcu_read_unlock();
-
-	if (is_tdp)
+	if (is_tdp) {
+		rcu_read_unlock();
 		read_unlock(&kvm->mmu_lock);
-	else
+	} else {
 		write_unlock(&kvm->mmu_lock);
+	}
 	srcu_read_unlock(&kvm->srcu, rcu_idx);
 }
 
