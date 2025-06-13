@@ -82,6 +82,7 @@ extern "C" {
  *  - &DRM_IOCTL_XE_WAIT_USER_FENCE
  *  - &DRM_IOCTL_XE_OBSERVATION
  *  - &DRM_IOCTL_XE_MADVISE
+ *  - &DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS
  */
 
 /*
@@ -104,6 +105,7 @@ extern "C" {
 #define DRM_XE_WAIT_USER_FENCE		0x0a
 #define DRM_XE_OBSERVATION		0x0b
 #define DRM_XE_MADVISE			0x0c
+#define DRM_XE_VM_QUERY_VMAS_ATTRS	0x0d
 
 /* Must be kept compact -- no holes */
 
@@ -120,6 +122,7 @@ extern "C" {
 #define DRM_IOCTL_XE_WAIT_USER_FENCE		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_WAIT_USER_FENCE, struct drm_xe_wait_user_fence)
 #define DRM_IOCTL_XE_OBSERVATION		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_OBSERVATION, struct drm_xe_observation_param)
 #define DRM_IOCTL_XE_MADVISE			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_MADVISE, struct drm_xe_madvise)
+#define DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_QUERY_VMAS_ATTRS, struct drm_xe_vm_query_vmas_attr)
 
 /**
  * DOC: Xe IOCTL Extensions
@@ -2091,6 +2094,133 @@ struct drm_xe_madvise {
 
 	/** @reserved: Reserved */
 	__u64 reserved[2];
+};
+
+/**
+ * struct drm_xe_vma_mem_attr - Output of &DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS
+ *
+ * This structure is provided by userspace and filled by KMD in response to the
+ * DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS ioctl. It describes memory attributes of
+ * a VMA within a specified address range in a VM.
+ *
+ * The structure includes information such as atomic access policy, purgeable
+ * state, page attribute table (PAT) index, and preferred memory location.
+ * Userspace allocates an array of these structures and passes a pointer to the
+ * ioctl to retrieve attributes for each VMA
+ *
+ * @extensions: Pointer to the first extension struct, if any
+ * @start: Start address of the virtual memory area
+ * @end: End address of the virtual memory area
+ *
+ * @atomic.val: Value of atomic operation policy
+ * @atomic.reserved: Reserved, must be zero
+ *
+ * @purge_state_val.val: Value for DRM_XE_VMA_ATTR_PURGEABLE_STATE
+ * @purge_state_val.reserved: Reserved, must be zero
+ *
+ * @pat_index.val: Page Attribute Table (PAT) index
+ * @pat_index.reserved: Reserved, must be zero
+ *
+ * @preferred_mem_loc.devmem_fd: File descriptor for preferred device memory
+ * @preferred_mem_loc.migration_policy: Migration policy for memory placement
+ *
+ */
+struct drm_xe_vma_mem_attr {
+	 /** @extensions: Pointer to the first extension struct, if any */
+	__u64 extensions;
+
+	/** @start: start of the vma */
+	__u64 start;
+
+	/** @end: end of the vma */
+	__u64 end;
+
+	struct {
+		struct {
+		/** @atomic.val: atomic attribute for vma*/
+			__u32 val;
+
+		/** @atomic.reserved: Reserved */
+			__u32 reserved;
+		} atomic;
+
+		struct {
+			/** @pat_index.val: PAT index of vma */
+			__u32 val;
+
+			/** @pat_index.reserved: Reserved */
+			__u32 reserved;
+		} pat_index;
+
+		/** @preferred_mem_loc: preferred memory location */
+		struct {
+			/** @preferred_mem_loc.devmem_fd: fd for preferred loc */
+			__u32 devmem_fd;
+
+			/** @preferred_mem_loc.migration_policy: Page migration policy */
+			__u32 migration_policy;
+		} preferred_mem_loc;
+	};
+
+	 /** @reserved: Reserved */
+	__u64 reserved[2];
+};
+
+/**
+ * struct drm_xe_vm_query_vmas_attr - Input of &DRM_IOCTL_XE_VM_QUERY_MEM_ATTRIBUTES
+ *
+ * This structure is used to query memory attributes of virtual memory areas
+ * (VMAs) within a specified address range in a VM. It provides detailed
+ * information about each VMA, including atomic access policy, purgeable state,
+ * page attribute table (PAT) index, and preferred memory location.
+ *
+ * Userspace first calls the ioctl with @num_vmas = 0 and
+ * @vector_of_vma_mem_attr = NULL to retrieve the number of VMAs in the range.
+ * Then, it allocates a buffer of that size and calls the ioctl again to fill
+ * the buffer with VMA attributes.
+ *
+ * Example:
+ *
+ * .. code-block:: C
+ *
+ *     struct drm_xe_vma_mem_attr *attrs;
+ *     __u32 num_vmas;
+ *
+ *     // First call to get number of VMAs
+ *     ioctl(fd, DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS, &query);
+ *     num_vmas = query.num_vmas;
+ *
+ *     // Allocate and query attributes
+ *     attrs = malloc(num_vmas, sizeof(*attrs));
+ *     query.vector_of_vma_mem_attr = (__u64)(uintptr_t)attrs;
+ *     query.num_vmas = num_vmas;
+ *     ioctl(fd, DRM_IOCTL_XE_VM_QUERY_VMAS_ATTRS, &query);
+ */
+struct drm_xe_vm_query_vmas_attr {
+	/** @extensions: Pointer to the first extension struct, if any */
+	__u64 extensions;
+
+	/** @vm_id: vm_id of the virtual range */
+	__u32 vm_id;
+
+	/** @num_vmas: number of vmas in range */
+	__u32 num_vmas;
+
+	/** @start: start of the virtual address range */
+	__u64 start;
+
+	/** @size: size of the virtual address range */
+	__u64 range;
+
+	/**
+	 * @vector_of_ops: userptr to array of struct
+	 * drm_xe_vma_mem_attr
+	 */
+	__u64 vector_of_vma_mem_attr;
+
+	/** @reserved: Reserved */
+	__u64 reserved[2];
+
 };
 
 #if defined(__cplusplus)
