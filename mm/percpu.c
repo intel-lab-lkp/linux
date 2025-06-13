@@ -2927,6 +2927,13 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 	ai->atom_size = atom_size;
 	ai->alloc_size = alloc_size;
 
+	for_each_possible_cpu(cpu) {
+		group = group_map[cpu];
+		struct pcpu_group_info *gi = &ai->groups[group];
+
+		gi->cpu_map[gi->nr_units++] = cpu;
+	}
+
 	for (group = 0, unit = 0; group < nr_groups; group++) {
 		struct pcpu_group_info *gi = &ai->groups[group];
 
@@ -2937,9 +2944,6 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 		 */
 		gi->base_offset = unit * ai->unit_size;
 
-		for_each_possible_cpu(cpu)
-			if (group_map[cpu] == group)
-				gi->cpu_map[gi->nr_units++] = cpu;
 		gi->nr_units = roundup(gi->nr_units, upa);
 		unit += gi->nr_units;
 	}
