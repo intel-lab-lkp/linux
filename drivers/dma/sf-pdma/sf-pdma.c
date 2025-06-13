@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/of_dma.h>
 #include <linux/slab.h>
+#include <linux/interrupt.h>
 
 #include "sf-pdma.h"
 
@@ -603,7 +604,7 @@ static void sf_pdma_remove(struct platform_device *pdev)
 		devm_free_irq(&pdev->dev, ch->txirq, ch);
 		devm_free_irq(&pdev->dev, ch->errirq, ch);
 		list_del(&ch->vchan.chan.device_node);
-		tasklet_kill(&ch->vchan.task);
+		cancel_work_sync(&ch->vchan.work);
 		tasklet_kill(&ch->done_tasklet);
 		tasklet_kill(&ch->err_tasklet);
 	}

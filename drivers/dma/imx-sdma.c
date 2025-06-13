@@ -2427,7 +2427,7 @@ static void sdma_remove(struct platform_device *pdev)
 	for (i = 0; i < MAX_DMA_CHANNELS; i++) {
 		struct sdma_channel *sdmac = &sdma->channel[i];
 
-		tasklet_kill(&sdmac->vc.task);
+		cancel_work_sync(&sdmac->vc.work);
 		sdma_free_chan_resources(&sdmac->vc.chan);
 	}
 

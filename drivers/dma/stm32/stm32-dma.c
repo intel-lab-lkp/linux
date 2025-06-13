@@ -27,6 +27,7 @@
 #include <linux/reset.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/interrupt.h>
 
 #include "../virt-dma.h"
 

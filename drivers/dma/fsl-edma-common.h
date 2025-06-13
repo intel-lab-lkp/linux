@@ -8,6 +8,7 @@
 
 #include <linux/dma-direction.h>
 #include <linux/platform_device.h>
+#include <linux/interrupt.h>
 #include "virt-dma.h"
 
 #define EDMA_CR_EDBG		BIT(1)

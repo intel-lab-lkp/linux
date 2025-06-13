@@ -14,6 +14,7 @@
 #include <linux/dma/qcom-gpi-dma.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/interrupt.h>
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 

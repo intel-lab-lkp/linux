@@ -1019,7 +1019,7 @@ static void jz4780_dma_remove(struct platform_device *pdev)
 	free_irq(jzdma->irq, jzdma);
 
 	for (i = 0; i < jzdma->soc_data->nb_channels; i++)
-		tasklet_kill(&jzdma->chan[i].vchan.task);
+		cancel_work_sync(&jzdma->chan[i].vchan.work);
 }
 
 static const struct jz4780_dma_soc_data jz4740_dma_soc_data = {
