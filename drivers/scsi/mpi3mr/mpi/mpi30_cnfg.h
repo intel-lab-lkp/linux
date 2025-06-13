@@ -206,6 +206,7 @@ struct mpi3_config_page_header {
 #define MPI3_TEMP_SENSOR_LOCATION_OUTLET                (0x2)
 #define MPI3_TEMP_SENSOR_LOCATION_DRAM                  (0x3)
 #define MPI3_MFGPAGE_VENDORID_BROADCOM                  (0x1000)
+#define MPI3_MFGPAGE_VENDORID_ATTO                      (0x117C)
 #define MPI3_MFGPAGE_DEVID_SAS4116                      (0x00a5)
 #define MPI3_MFGPAGE_DEVID_SAS5116_MPI			(0x00b3)
 #define MPI3_MFGPAGE_DEVID_SAS5116_NVME			(0x00b4)
