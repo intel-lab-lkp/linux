@@ -11,6 +11,7 @@
 
 #include "xe_bo.h"
 #include "xe_gt_tlb_invalidation.h"
+#include "xe_pat.h"
 #include "xe_pt.h"
 #include "xe_svm.h"
 
@@ -115,7 +116,13 @@ static void madvise_pat_index(struct xe_device *xe, struct xe_vm *vm,
 			      struct xe_vma **vmas, int num_vmas,
 			      struct drm_xe_madvise *op)
 {
-	/* Implementation pending */
+	int i;
+
+	xe_assert(vm->xe, op->type == DRM_XE_VMA_ATTR_PAT);
+
+	for (i = 0; i < num_vmas; i++)
+		vmas[i]->attr.pat_index = op->pat_index.val;
+
 }
 
 typedef void (*madvise_func)(struct xe_device *xe, struct xe_vm *vm,
@@ -195,7 +202,13 @@ static int drm_xe_madvise_args_are_sane(struct xe_device *xe, const struct drm_x
 			return -EINVAL;
 		break;
 	case DRM_XE_VMA_ATTR_PAT:
-		/*TODO: Add valid pat check */
+		u16 coh_mode = xe_pat_index_get_coh_mode(xe, args->pat_index.val);
+
+		if (XE_IOCTL_DBG(xe, !coh_mode))
+			return -EINVAL;
+
+		if (XE_WARN_ON(coh_mode > XE_COH_AT_LEAST_1WAY))
+			return -EINVAL;
 		break;
 	case DRM_XE_VMA_ATTR_PREFERRED_LOC:
 		s32 fd = (s32)args->preferred_mem_loc.devmem_fd;
