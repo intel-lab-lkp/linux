@@ -21,6 +21,13 @@ struct iomap_folio_state {
 	unsigned long		state[];
 };
 
+struct iomap_readpage_ctx {
+	struct folio		*cur_folio;
+	bool			cur_folio_in_bio;
+	struct bio		*bio;
+	struct readahead_control *rac;
+};
+
 u32 iomap_finish_ioend_buffered(struct iomap_ioend *ioend);
 u32 iomap_finish_ioend_direct(struct iomap_ioend *ioend);
 bool ifs_set_range_uptodate(struct folio *folio, struct iomap_folio_state *ifs,
@@ -33,9 +40,13 @@ int iomap_bio_read_folio_sync(loff_t block_start, struct folio *folio,
 int iomap_bio_add_to_ioend(struct iomap_writepage_ctx *wpc,
 		struct writeback_control *wbc, struct folio *folio,
 		struct inode *inode, loff_t pos, loff_t end_pos, unsigned len);
+void iomap_bio_readpage(const struct iomap *iomap, loff_t pos,
+		struct iomap_readpage_ctx *ctx, size_t poff, size_t plen,
+		loff_t length);
 #else
 #define iomap_bio_read_folio_sync(...)		(-ENOSYS)
 #define iomap_bio_add_to_ioend(...)		(-ENOSYS)
+#define iomap_bio_readpage(...)		((void)0)
 #endif /* CONFIG_BLOCK */
 
 #endif /* _IOMAP_INTERNAL_H */

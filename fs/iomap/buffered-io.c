@@ -267,45 +267,6 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 	*lenp = plen;
 }
 
-static void iomap_finish_folio_read(struct folio *folio, size_t off,
-		size_t len, int error)
-{
-	struct iomap_folio_state *ifs = folio->private;
-	bool uptodate = !error;
-	bool finished = true;
-
-	if (ifs) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&ifs->state_lock, flags);
-		if (!error)
-			uptodate = ifs_set_range_uptodate(folio, ifs, off, len);
-		ifs->read_bytes_pending -= len;
-		finished = !ifs->read_bytes_pending;
-		spin_unlock_irqrestore(&ifs->state_lock, flags);
-	}
-
-	if (finished)
-		folio_end_read(folio, uptodate);
-}
-
-static void iomap_read_end_io(struct bio *bio)
-{
-	int error = blk_status_to_errno(bio->bi_status);
-	struct folio_iter fi;
-
-	bio_for_each_folio_all(fi, bio)
-		iomap_finish_folio_read(fi.folio, fi.offset, fi.length, error);
-	bio_put(bio);
-}
-
-struct iomap_readpage_ctx {
-	struct folio		*cur_folio;
-	bool			cur_folio_in_bio;
-	struct bio		*bio;
-	struct readahead_control *rac;
-};
-
 /**
  * iomap_read_inline_data - copy inline data into the page cache
  * @iter: iteration structure
@@ -354,7 +315,6 @@ static int iomap_readpage_iter(struct iomap_iter *iter,
 	struct folio *folio = ctx->cur_folio;
 	struct iomap_folio_state *ifs;
 	size_t poff, plen;
-	sector_t sector;
 	int ret;
 
 	if (iomap->type == IOMAP_INLINE) {
@@ -383,36 +343,7 @@ static int iomap_readpage_iter(struct iomap_iter *iter,
 		spin_unlock_irq(&ifs->state_lock);
 	}
 
-	sector = iomap_sector(iomap, pos);
-	if (!ctx->bio ||
-	    bio_end_sector(ctx->bio) != sector ||
-	    !bio_add_folio(ctx->bio, folio, plen, poff)) {
-		gfp_t gfp = mapping_gfp_constraint(folio->mapping, GFP_KERNEL);
-		gfp_t orig_gfp = gfp;
-		unsigned int nr_vecs = DIV_ROUND_UP(length, PAGE_SIZE);
-
-		if (ctx->bio)
-			submit_bio(ctx->bio);
-
-		if (ctx->rac) /* same as readahead_gfp_mask */
-			gfp |= __GFP_NORETRY | __GFP_NOWARN;
-		ctx->bio = bio_alloc(iomap->bdev, bio_max_segs(nr_vecs),
-				     REQ_OP_READ, gfp);
-		/*
-		 * If the bio_alloc fails, try it again for a single page to
-		 * avoid having to deal with partial page reads.  This emulates
-		 * what do_mpage_read_folio does.
-		 */
-		if (!ctx->bio) {
-			ctx->bio = bio_alloc(iomap->bdev, 1, REQ_OP_READ,
-					     orig_gfp);
-		}
-		if (ctx->rac)
-			ctx->bio->bi_opf |= REQ_RAHEAD;
-		ctx->bio->bi_iter.bi_sector = sector;
-		ctx->bio->bi_end_io = iomap_read_end_io;
-		bio_add_folio_nofail(ctx->bio, folio, plen, poff);
-	}
+	iomap_bio_readpage(iomap, pos, ctx, poff, plen, length);
 
 done:
 	/*
