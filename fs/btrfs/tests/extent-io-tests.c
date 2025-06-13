@@ -664,17 +664,17 @@ out:
 	return ret;
 }
 
-static void dump_eb_and_memory_contents(struct extent_buffer *eb, void *memory,
-					const char *test_name)
+static void dump_eb_and_memory_contents(const struct extent_buffer *eb,
+		const u8 *memory, const char *test_name)
 {
 	for (int i = 0; i < eb->len; i++) {
-		struct page *page = folio_page(eb->folios[i >> PAGE_SHIFT], 0);
-		void *addr = page_address(page) + offset_in_page(i);
+		struct folio *folio = eb->folios[i / PAGE_SIZE];
+		u8 *addr = folio_address(folio) + i % PAGE_SIZE;
 
-		if (memcmp(addr, memory + i, 1) != 0) {
+		if (*addr != memory[i]) {
 			test_err("%s failed", test_name);
 			test_err("eb and memory diffs at byte %u, eb has 0x%02x memory has 0x%02x",
-				 i, *(u8 *)addr, *(u8 *)(memory + i));
+				 i, *addr, memory[i]);
 			return;
 		}
 	}
