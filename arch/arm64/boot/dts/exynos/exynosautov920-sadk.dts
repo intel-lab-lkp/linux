@@ -88,6 +88,18 @@
 };
 
 /* usb */
+&usbdrd31_hsphy {
+	status = "okay";
+};
+
+&usbdrd31_dwc3 {
+	dr_mode = "peripheral";
+};
+
+&usbdrd31 {
+	status = "okay";
+};
+
 &usbdrd20_phy0 {
 	status = "okay";
 };
