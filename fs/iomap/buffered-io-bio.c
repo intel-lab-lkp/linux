@@ -99,18 +99,6 @@ int iomap_bio_read_folio_sync(loff_t block_start, struct folio *folio,
 	return submit_bio_wait(&bio);
 }
 
-static void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
-		size_t len)
-{
-	struct iomap_folio_state *ifs = folio->private;
-
-	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
-	WARN_ON_ONCE(ifs && atomic_read(&ifs->write_bytes_pending) <= 0);
-
-	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending))
-		folio_end_writeback(folio);
-}
-
 /*
  * We're now finished for good with this ioend structure.  Update the page
  * state, release holds on bios, and finally free up memory.  Do not use the

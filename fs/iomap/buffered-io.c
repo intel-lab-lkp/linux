@@ -1638,3 +1638,27 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 	return iomap_writeback_complete(wpc, error);
 }
 EXPORT_SYMBOL_GPL(iomap_writepages);
+
+void iomap_start_folio_write(struct inode *inode, struct folio *folio,
+		size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+
+	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
+	if (ifs)
+		atomic_add(len, &ifs->write_bytes_pending);
+}
+EXPORT_SYMBOL_GPL(iomap_start_folio_write);
+
+void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
+		size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+
+	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
+	WARN_ON_ONCE(ifs && atomic_read(&ifs->write_bytes_pending) <= 0);
+
+	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending))
+		folio_end_writeback(folio);
+}
+EXPORT_SYMBOL_GPL(iomap_finish_folio_write);

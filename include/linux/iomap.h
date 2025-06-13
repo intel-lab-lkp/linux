@@ -454,6 +454,7 @@ struct iomap_writepage_ctx {
 	struct iomap_ioend	*ioend;
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
+	void			*private;
 };
 
 struct iomap_writeback_folio_range {
@@ -574,5 +575,10 @@ int iomap_bio_writeback_complete(struct iomap_writepage_ctx *wpc, int error,
 #else
 #define iomap_bio_writeback_complete(...)	(-ENOSYS)
 #endif /* CONFIG_BLOCK */
+
+void iomap_start_folio_write(struct inode *inode, struct folio *folio,
+		size_t len);
+void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
+		size_t len);
 
 #endif /* LINUX_IOMAP_H */
