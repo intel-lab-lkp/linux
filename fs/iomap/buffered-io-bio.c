@@ -145,6 +145,12 @@ static void iomap_writepage_end_bio(struct bio *bio)
 	iomap_finish_ioend_buffered(ioend);
 }
 
+void iomap_bio_ioend_error(struct iomap_writepage_ctx *wpc, int error)
+{
+	wpc->ioend->io_bio.bi_status = errno_to_blk_status(error);
+	bio_endio(&wpc->ioend->io_bio);
+}
+
 static struct iomap_ioend *iomap_alloc_ioend(struct iomap_writepage_ctx *wpc,
 		struct writeback_control *wbc, struct inode *inode, loff_t pos,
 		u16 ioend_flags)

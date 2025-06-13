@@ -43,10 +43,12 @@ int iomap_bio_add_to_ioend(struct iomap_writepage_ctx *wpc,
 void iomap_bio_readpage(const struct iomap *iomap, loff_t pos,
 		struct iomap_readpage_ctx *ctx, size_t poff, size_t plen,
 		loff_t length);
+void iomap_bio_ioend_error(struct iomap_writepage_ctx *wpc, int error);
 #else
 #define iomap_bio_read_folio_sync(...)		(-ENOSYS)
 #define iomap_bio_add_to_ioend(...)		(-ENOSYS)
 #define iomap_bio_readpage(...)		((void)0)
+#define iomap_bio_ioend_error(...)		((void)0)
 #endif /* CONFIG_BLOCK */
 
 #endif /* _IOMAP_INTERNAL_H */
