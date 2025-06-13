@@ -452,7 +452,7 @@ static int fuse_readdir_cached(struct file *file, struct dir_context *ctx)
 	enum fuse_parse_result res;
 	pgoff_t index;
 	unsigned int size;
-	struct page *page;
+	struct folio *folio;
 	void *addr;
 
 	/* Seeked?  If so, reset the cache stream */
@@ -528,42 +528,42 @@ retry_locked:
 	if ((ff->readdir.cache_off & ~PAGE_MASK) == size)
 		return 0;
 
-	page = find_get_page_flags(file->f_mapping, index,
-				   FGP_ACCESSED | FGP_LOCK);
+	folio = __filemap_get_folio(file->f_mapping, index,
+			FGP_ACCESSED | FGP_LOCK, 0);
 	/* Page gone missing, then re-added to cache, but not initialized? */
-	if (page && !PageUptodate(page)) {
-		unlock_page(page);
-		put_page(page);
-		page = NULL;
+	if (folio && !folio_test_uptodate(folio)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		folio = NULL;
 	}
 	spin_lock(&fi->rdc.lock);
-	if (!page) {
+	if (!folio) {
 		/*
-		 * Uh-oh: page gone missing, cache is useless
+		 * Uh-oh: folio gone missing, cache is useless
 		 */
 		if (fi->rdc.version == ff->readdir.version)
 			fuse_rdc_reset(inode);
 		goto retry_locked;
 	}
 
-	/* Make sure it's still the same version after getting the page. */
+	/* Make sure it's still the same version after getting the folio. */
 	if (ff->readdir.version != fi->rdc.version) {
 		spin_unlock(&fi->rdc.lock);
-		unlock_page(page);
-		put_page(page);
+		folio_unlock(folio);
+		folio_put(folio);
 		goto retry;
 	}
 	spin_unlock(&fi->rdc.lock);
 
 	/*
-	 * Contents of the page are now protected against changing by holding
-	 * the page lock.
+	 * Contents of the folio are now protected against changing by holding
+	 * the folio lock.
 	 */
-	addr = kmap_local_page(page);
+	addr = kmap_local_folio(folio, 0);
 	res = fuse_parse_cache(ff, addr, size, ctx);
 	kunmap_local(addr);
-	unlock_page(page);
-	put_page(page);
+	folio_unlock(folio);
+	folio_put(folio);
 
 	if (res == FOUND_ERR)
 		return -EIO;
