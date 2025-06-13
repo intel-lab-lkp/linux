@@ -413,6 +413,9 @@ static inline bool resctrl_is_mbm_event(enum resctrl_event_id eventid)
 		eventid <= QOS_L3_MBM_LOCAL_EVENT_ID);
 }
 
+u32 resctrl_get_mon_evt_cfg(enum resctrl_event_id eventid);
+void resctrl_set_mon_evt_cfg(enum resctrl_event_id eventid, u32 evt_cfg);
+
 #define for_each_mbm_event_id(eventid)				\
 	for (eventid = QOS_L3_MBM_TOTAL_EVENT_ID;		\
 	     eventid <= QOS_L3_MBM_LOCAL_EVENT_ID; eventid++)

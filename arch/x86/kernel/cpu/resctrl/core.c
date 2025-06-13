@@ -875,10 +875,14 @@ static __init bool get_rdt_mon_resources(void)
 	}
 	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL) || rdt_cpu_has(X86_FEATURE_ABMC)) {
 		resctrl_enable_mon_event(QOS_L3_MBM_TOTAL_EVENT_ID);
+		resctrl_set_mon_evt_cfg(QOS_L3_MBM_TOTAL_EVENT_ID, MAX_EVT_CONFIG_BITS);
 		ret = true;
 	}
 	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_LOCAL) || rdt_cpu_has(X86_FEATURE_ABMC)) {
 		resctrl_enable_mon_event(QOS_L3_MBM_LOCAL_EVENT_ID);
+		resctrl_set_mon_evt_cfg(QOS_L3_MBM_LOCAL_EVENT_ID,
+					READS_TO_LOCAL_MEM | READS_TO_LOCAL_S_MEM |
+					NON_TEMP_WRITE_TO_LOCAL_MEM);
 		ret = true;
 	}
 

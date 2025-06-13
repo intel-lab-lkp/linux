@@ -884,6 +884,16 @@ bool resctrl_is_mon_event_enabled(enum resctrl_event_id eventid)
 	       mon_event_all[eventid].enabled;
 }
 
+u32 resctrl_get_mon_evt_cfg(enum resctrl_event_id evtid)
+{
+	return mon_event_all[evtid].evt_cfg;
+}
+
+void resctrl_set_mon_evt_cfg(enum resctrl_event_id evtid, u32 evt_cfg)
+{
+	mon_event_all[evtid].evt_cfg = evt_cfg;
+}
+
 /**
  * resctrl_mon_resource_init() - Initialise global monitoring structures.
  *
