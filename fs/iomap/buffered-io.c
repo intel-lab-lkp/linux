@@ -702,7 +702,7 @@ static int __iomap_write_begin(const struct iomap_iter *iter, size_t len,
 			if (iter->flags & IOMAP_NOWAIT)
 				return -EAGAIN;
 
-			status = iomap_read_folio_sync(block_start, folio,
+			status = iomap_bio_read_folio_sync(block_start, folio,
 					poff, plen, srcmap);
 			if (status)
 				return status;

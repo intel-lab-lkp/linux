@@ -10,7 +10,7 @@
 
 #include "internal.h"
 
-int iomap_read_folio_sync(loff_t block_start, struct folio *folio,
+int iomap_bio_read_folio_sync(loff_t block_start, struct folio *folio,
 		size_t poff, size_t plen, const struct iomap *iomap)
 {
 	struct bio_vec bvec;
