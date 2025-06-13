@@ -5575,33 +5575,45 @@ static int get_monitor_name(const struct drm_edid *drm_edid, char name[13])
 }
 
 /**
- * drm_edid_get_monitor_name - fetch the monitor name from the edid
- * @edid: monitor EDID information
+ * drm_edid_get_monitor_name - fetch the monitor name from the drm_edid
+ * @drm_edid: EDID
  * @name: pointer to a character array to hold the name of the monitor
  * @bufsize: The size of the name buffer (should be at least 14 chars.)
  *
  */
-void drm_edid_get_monitor_name(const struct edid *edid, char *name, int bufsize)
+void drm_edid_get_monitor_name(const struct drm_edid *drm_edid, char *name, int bufsize)
 {
 	int name_length = 0;
 
 	if (bufsize <= 0)
 		return;
 
-	if (edid) {
+	if (drm_edid->edid) {
 		char buf[13];
-		struct drm_edid drm_edid = {
-			.edid = edid,
-			.size = edid_size(edid),
-		};
 
-		name_length = min(get_monitor_name(&drm_edid, buf), bufsize - 1);
+		name_length = min(get_monitor_name(drm_edid, buf), bufsize - 1);
 		memcpy(name, buf, name_length);
 	}
 
 	name[name_length] = '\0';
 }
 EXPORT_SYMBOL(drm_edid_get_monitor_name);
+
+/**
+ * drm_edid_raw_get_monitor_name - fetch the monitor name from raw edid
+ * @edid: monitor EDID information
+ * @name: pointer to a character array to hold the name of the monitor
+ * @bufsize: The size of the name buffer (should be at least 14 chars.)
+ *
+ * This function is deprecated. Use drm_edid_get_monitor_name() instead.
+ */
+void drm_edid_raw_get_monitor_name(const struct edid *edid, char *name, int bufsize)
+{
+	struct drm_edid drm_edid;
+
+	drm_edid_get_monitor_name(drm_edid_legacy_init(&drm_edid, edid), name, bufsize);
+}
+EXPORT_SYMBOL(drm_edid_raw_get_monitor_name);
 
 static void clear_eld(struct drm_connector *connector)
 {
