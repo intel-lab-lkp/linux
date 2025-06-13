@@ -1876,6 +1876,77 @@ static int resctrl_mbm_assign_mode_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of,
+					     char *buf, size_t nbytes, loff_t off)
+{
+	struct rdt_resource *r = rdt_kn_parent_priv(of->kn);
+	struct rdt_mon_domain *d;
+	int ret = 0;
+	bool enable;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+
+	buf[nbytes - 1] = '\0';
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	if (!strcmp(buf, "default")) {
+		enable = 0;
+	} else if (!strcmp(buf, "mbm_event")) {
+		if (r->mon.mbm_cntr_assignable) {
+			enable = 1;
+		} else {
+			ret = -EINVAL;
+			rdt_last_cmd_puts("mbm_event mode is not supported\n");
+			goto write_exit;
+		}
+	} else {
+		ret = -EINVAL;
+		rdt_last_cmd_puts("Unsupported assign mode\n");
+		goto write_exit;
+	}
+
+	if (enable != resctrl_arch_mbm_cntr_assign_enabled(r)) {
+		ret = resctrl_arch_mbm_cntr_assign_set(r, enable);
+		if (ret)
+			goto write_exit;
+
+		/* Update the visibility of BMEC related files */
+		resctrl_bmec_files_show(r, !enable);
+
+		/*
+		 * Initialize the default memory transaction values for
+		 * total and local events.
+		 */
+		if (resctrl_is_mon_event_enabled(QOS_L3_MBM_TOTAL_EVENT_ID))
+			resctrl_set_mon_evt_cfg(QOS_L3_MBM_TOTAL_EVENT_ID,
+						MAX_EVT_CONFIG_BITS);
+		if (resctrl_is_mon_event_enabled(QOS_L3_MBM_LOCAL_EVENT_ID))
+			resctrl_set_mon_evt_cfg(QOS_L3_MBM_LOCAL_EVENT_ID,
+						READS_TO_LOCAL_MEM |
+						READS_TO_LOCAL_S_MEM |
+						NON_TEMP_WRITE_TO_LOCAL_MEM);
+		/*
+		 * Reset all the non-achitectural RMID state and assignable counters.
+		 */
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			mbm_cntr_free_all(r, d);
+			resctrl_reset_rmid_all(r, d);
+		}
+	}
+
+write_exit:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 static int resctrl_num_mbm_cntrs_show(struct kernfs_open_file *of,
 				      struct seq_file *s, void *v)
 {
@@ -2203,8 +2274,8 @@ static int resctrl_process_assign(struct rdt_resource *r, struct rdtgroup *rdtgr
 	struct mon_evt *mevt;
 	int assign_state;
 	char domain[10];
+	int ret = 0;
 	bool found;
-	int ret;
 
 	mevt = mbm_get_mon_event_by_name(r, event);
 	if (!mevt) {
@@ -2249,7 +2320,7 @@ check_state:
 
 	switch (assign_state) {
 	case ASSIGN_NONE:
-		ret = resctrl_unassign_cntr_event(r, d, rdtgrp, mevt);
+		resctrl_unassign_cntr_event(r, d, rdtgrp, mevt);
 		break;
 	case ASSIGN_EXCLUSIVE:
 		ret = resctrl_assign_cntr_event(r, d, rdtgrp, mevt);
@@ -2463,9 +2534,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "mbm_assign_mode",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_mbm_assign_mode_show,
+		.write		= resctrl_mbm_assign_mode_write,
 		.fflags		= RFTYPE_MON_INFO | RFTYPE_RES_CACHE,
 	},
 	{
