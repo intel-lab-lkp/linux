@@ -1786,17 +1786,10 @@ int dl_server_remove_params(struct sched_dl_entity *dl_se)
 	dl_b = dl_bw_of(cpu);
 	guard(raw_spinlock)(&dl_b->lock);
 	cpus = dl_bw_cpus(cpu);
-
+	if (dl_se->dl_non_contending)
+		sub_running_bw(dl_se, &rq->dl);
 	sub_rq_bw(dl_se, &rq->dl);
 	__dl_sub(dl_b, dl_se->dl_bw, cpus);
-
-	/*
-	 * If server was active and consuming bandwidth, remove it from
-	 * running bandwidth accounting. This should not happen because
-	 * we call this only after the last dl_server_stop().
-	 */
-	if (WARN_ON_ONCE(!dl_se->dl_non_contending))
-		sub_running_bw(dl_se, &rq->dl);
 
 	/*
 	 * Clear all server parameters. This will also clear ->dl_server so
