@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/debugfs.h>
+#include <linux/string_choices.h>
 #include <scsi/sg.h>
 #include "aoe.h"
 
@@ -37,7 +38,7 @@ static ssize_t aoedisk_show_state(struct device *dev,
 	struct aoedev *d = disk->private_data;
 
 	return sysfs_emit(page, "%s%s\n",
-			(d->flags & DEVFL_UP) ? "up" : "down",
+			str_up_down(d->flags & DEVFL_UP),
 			(d->flags & DEVFL_KICKME) ? ",kickme" :
 			(d->nopen && !(d->flags & DEVFL_UP)) ? ",closewait" : "");
 	/* I'd rather see nopen exported so we can ditch closewait */
