@@ -97,28 +97,46 @@ void vsock_wait_remote_close(int fd)
 	close(epollfd);
 }
 
+/* Wait until ioctl gives an expected int value.
+ * Return a negative value if the op is not supported.
+ */
+int ioctl_int(int fd, unsigned long op, int *actual, int expected)
+{
+	int ret;
+	char name[32];
+
+	if (!actual) {
+		fprintf(stderr, "%s requires a non-null pointer\n", __func__);
+		exit(EXIT_FAILURE);
+	}
+
+	snprintf(name, sizeof(name), "ioctl(%lu)", op);
+
+	timeout_begin(TIMEOUT);
+	do {
+		ret = ioctl(fd, op, actual);
+		if (ret < 0) {
+			if (errno == EOPNOTSUPP)
+				break;
+
+			perror(name);
+			exit(EXIT_FAILURE);
+		}
+		timeout_check(name);
+	} while (*actual != expected);
+	timeout_end();
+
+	return ret;
+}
+
 /* Wait until transport reports no data left to be sent.
  * Return false if transport does not implement the unsent_bytes() callback.
  */
 bool vsock_wait_sent(int fd)
 {
-	int ret, sock_bytes_unsent;
+	int sock_bytes_unsent;
 
-	timeout_begin(TIMEOUT);
-	do {
-		ret = ioctl(fd, SIOCOUTQ, &sock_bytes_unsent);
-		if (ret < 0) {
-			if (errno == EOPNOTSUPP)
-				break;
-
-			perror("ioctl(SIOCOUTQ)");
-			exit(EXIT_FAILURE);
-		}
-		timeout_check("SIOCOUTQ");
-	} while (sock_bytes_unsent != 0);
-	timeout_end();
-
-	return !ret;
+	return !(ioctl_int(fd, SIOCOUTQ, &sock_bytes_unsent, 0));
 }
 
 /* Create socket <type>, bind to <cid, port> and return the file descriptor. */
