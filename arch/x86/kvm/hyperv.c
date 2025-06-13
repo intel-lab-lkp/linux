@@ -2005,7 +2005,7 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	struct kvm *kvm = vcpu->kvm;
 	struct hv_tlb_flush_ex flush_ex;
 	struct hv_tlb_flush flush;
-	DECLARE_BITMAP(vcpu_mask, KVM_MAX_VCPUS);
+	unsigned long *vcpu_mask;
 	struct kvm_vcpu_hv_tlb_flush_fifo *tlb_flush_fifo;
 	/*
 	 * Normally, there can be no more than 'KVM_HV_TLB_FLUSH_FIFO_SIZE'
@@ -2019,6 +2019,11 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	struct kvm_vcpu *v;
 	unsigned long i;
 	bool all_cpus;
+	u64 ret;
+
+	vcpu_mask = bitmap_zalloc(KVM_MAX_VCPUS, GFP_KERNEL);
+	if (!vcpu_mask)
+		return HV_STATUS_INSUFFICIENT_MEMORY;
 
 	/*
 	 * The Hyper-V TLFS doesn't allow more than HV_MAX_SPARSE_VCPU_BANKS
@@ -2036,8 +2041,10 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	 */
 	if (!hc->fast && is_guest_mode(vcpu)) {
 		hc->ingpa = translate_nested_gpa(vcpu, hc->ingpa, 0, NULL);
-		if (unlikely(hc->ingpa == INVALID_GPA))
-			return HV_STATUS_INVALID_HYPERCALL_INPUT;
+		if (unlikely(hc->ingpa == INVALID_GPA)){
+			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+			goto out_free;
+		}
 	}
 
 	if (hc->code == HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST ||
@@ -2049,8 +2056,10 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 			hc->consumed_xmm_halves = 1;
 		} else {
 			if (unlikely(kvm_read_guest(kvm, hc->ingpa,
-						    &flush, sizeof(flush))))
-				return HV_STATUS_INVALID_HYPERCALL_INPUT;
+						    &flush, sizeof(flush)))) {
+				ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+				goto out_free;
+							}
 			hc->data_offset = sizeof(flush);
 		}
 
@@ -2079,8 +2088,10 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 			hc->consumed_xmm_halves = 2;
 		} else {
 			if (unlikely(kvm_read_guest(kvm, hc->ingpa, &flush_ex,
-						    sizeof(flush_ex))))
-				return HV_STATUS_INVALID_HYPERCALL_INPUT;
+						    sizeof(flush_ex)))){
+				ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+				goto out_free;
+							}
 			hc->data_offset = sizeof(flush_ex);
 		}
 
@@ -2093,15 +2104,19 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 		all_cpus = flush_ex.hv_vp_set.format !=
 			HV_GENERIC_SET_SPARSE_4K;
 
-		if (hc->var_cnt != hweight64(valid_bank_mask))
-			return HV_STATUS_INVALID_HYPERCALL_INPUT;
+		if (hc->var_cnt != hweight64(valid_bank_mask)){
+			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+			goto out_free;
+		}
 
 		if (!all_cpus) {
 			if (!hc->var_cnt)
 				goto ret_success;
 
-			if (kvm_get_sparse_vp_set(kvm, hc, sparse_banks))
-				return HV_STATUS_INVALID_HYPERCALL_INPUT;
+			if (kvm_get_sparse_vp_set(kvm, hc, sparse_banks)){
+				ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+				goto out_free;
+			}
 		}
 
 		/*
@@ -2122,8 +2137,10 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 	    hc->rep_cnt > ARRAY_SIZE(__tlb_flush_entries)) {
 		tlb_flush_entries = NULL;
 	} else {
-		if (kvm_hv_get_tlb_flush_entries(kvm, hc, __tlb_flush_entries))
-			return HV_STATUS_INVALID_HYPERCALL_INPUT;
+		if (kvm_hv_get_tlb_flush_entries(kvm, hc, __tlb_flush_entries)){
+				ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+				goto out_free;
+		}
 		tlb_flush_entries = __tlb_flush_entries;
 	}
 
@@ -2189,8 +2206,11 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 
 ret_success:
 	/* We always do full TLB flush, set 'Reps completed' = 'Rep Count' */
-	return (u64)HV_STATUS_SUCCESS |
+	ret = (u64)HV_STATUS_SUCCESS |
 		((u64)hc->rep_cnt << HV_HYPERCALL_REP_COMP_OFFSET);
+out_free:
+	bitmap_free(vcpu_mask);
+	return ret;
 }
 
 static void kvm_hv_send_ipi_to_many(struct kvm *kvm, u32 vector,
