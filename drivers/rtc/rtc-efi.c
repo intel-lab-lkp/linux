@@ -254,7 +254,7 @@ static const struct rtc_class_ops efi_rtc_ops = {
 	.proc		= efi_procfs,
 };
 
-static int __init efi_rtc_probe(struct platform_device *dev)
+static int efi_rtc_probe(struct platform_device *dev)
 {
 	struct rtc_device *rtc;
 	efi_time_t eft;
@@ -286,9 +286,20 @@ static struct platform_driver efi_rtc_driver = {
 	.driver = {
 		.name = "rtc-efi",
 	},
+	.probe = efi_rtc_probe,
 };
 
-module_platform_driver_probe(efi_rtc_driver, efi_rtc_probe);
+static int __init efi_rtc_driver_init(void)
+{
+	return platform_driver_register(&efi_rtc_driver);
+}
+late_initcall(efi_rtc_driver_init);
+
+static void __exit efi_rtc_driver_exit(void)
+{
+	platform_driver_unregister(&efi_rtc_driver);
+}
+module_exit(efi_rtc_driver_exit);
 
 MODULE_AUTHOR("dann frazier <dannf@dannf.org>");
 MODULE_LICENSE("GPL");
