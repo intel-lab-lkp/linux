@@ -216,6 +216,19 @@ config PCIE_MT7621
 	help
 	  This selects a driver for the MediaTek MT7621 PCIe Controller.
 
+config PCIE_ASPEED
+	bool "ASPEED PCIe controller"
+	depends on PCI
+	depends on OF || COMPILE_TEST
+	select PCI_MSI_ARCH_FALLBACKS
+	help
+	  Enable this option to add support for the PCIe controller
+	  found on ASPEED SoCs.
+	  This driver provides initialization and management for PCIe
+	  Root Complex functionality, including interrupt and MSI support.
+	  Select Y if your platform uses an ASPEED SoC and requires PCIe
+	  connectivity.
+
 config PCI_HYPERV_INTERFACE
 	tristate "Microsoft Hyper-V PCI Interface"
 	depends on ((X86 && X86_64) || ARM64) && HYPERV && PCI_MSI
