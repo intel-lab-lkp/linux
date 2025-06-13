@@ -354,6 +354,22 @@ with the following files:
 	  # cat /sys/fs/resctrl/info/L3_MON/counter_configs/mbm_total_bytes/event_filter
 	   local_reads, local_non_temporal_writes
 
+"mbm_assign_on_mkdir":
+	Determines if a counter will automatically be assigned to an RMID, event pair
+	when its associated monitor group is created via mkdir. It is enabled by default
+	on boot and users can disable by writing to the interface.
+
+	"0":
+		Auto assignment is disabled.
+	"1":
+		Auto assignment is enabled.
+
+	Example::
+
+	  # echo 0 > /sys/fs/resctrl/info/L3_MON/mbm_assign_on_mkdir
+	  # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_on_mkdir
+	  0
+
 "max_threshold_occupancy":
 		Read/write file provides the largest value (in
 		bytes) at which a previously used LLC_occupancy
