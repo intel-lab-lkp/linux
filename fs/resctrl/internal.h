@@ -212,6 +212,17 @@ struct rdtgroup {
 	struct pseudo_lock_region	*plr;
 };
 
+/**
+ * struct mbm_config_value - Memory transaction an MBM event can be configured with.
+ * @name:	Name of memory transaction (read, write ...).
+ * @val:	The bit used to represent the memory transaction within an
+ *		event's configuration.
+ */
+struct mbm_config_value {
+	char	name[32];
+	u32	val;
+};
+
 /* rdtgroup.flags */
 #define	RDT_DELETED		1
 
