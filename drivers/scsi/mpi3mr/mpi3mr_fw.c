@@ -4204,6 +4204,163 @@ static int mpi3mr_enable_events(struct mpi3mr_ioc *mrioc)
 }
 
 /**
+ * mpi3mr_atto_validate_nvram - validate the ATTO nvram
+ *
+ * @mrioc:  Adapter instance reference
+ * @nvram: ptr to the ATTO nvram structure
+ * Return: 0 for success, non-zero for failure.
+ */
+static int mpi3mr_atto_validate_nvram(struct mpi3mr_ioc *mrioc, struct ATTO_SAS_NVRAM *nvram)
+{
+	int r = -EINVAL;
+	union ATTO_SAS_ADDRESS *sasaddr;
+	u32 len;
+	u8 *pb;
+	u8 cksum;
+
+	/* validate nvram checksum */
+	pb = (u8 *) nvram;
+	cksum = ATTO_SASNVR_CKSUM_SEED;
+	len = sizeof(struct ATTO_SAS_NVRAM);
+
+	while (len--)
+		cksum = cksum + pb[len];
+
+	if (cksum) {
+		ioc_err(mrioc, "Invalid ATTO NVRAM checksum\n");
+		return r;
+	}
+
+	sasaddr = (union ATTO_SAS_ADDRESS *) nvram->sasaddr;
+
+	if (nvram->signature[0] != 'E'
+	|| nvram->signature[1] != 'S'
+	|| nvram->signature[2] != 'A'
+	|| nvram->signature[3] != 'S')
+		ioc_err(mrioc, "Invalid ATTO NVRAM signature\n");
+	else if (nvram->version > ATTO_SASNVR_VERSION)
+		ioc_info(mrioc, "Invalid ATTO NVRAM version");
+	else if ((nvram->sasaddr[7] & (ATTO_SAS_ADDR_ALIGN - 1))
+			|| sasaddr->b[0] != 0x50
+			|| sasaddr->b[1] != 0x01
+			|| sasaddr->b[2] != 0x08
+			|| (sasaddr->b[3] & 0xF0) != 0x60
+			|| ((sasaddr->b[3] & 0x0F) | le32_to_cpu(sasaddr->d[1])) == 0) {
+		ioc_err(mrioc, "Invalid ATTO SAS address\n");
+	} else
+		r = 0;
+	return r;
+}
+
+/**
+ * mpi3mr_atto_get_sas_addr - get the ATTO SAS address from driver page 2
+ *
+ * @mrioc: Adapter instance reference
+ * @*sas_address: return sas address
+ * Return: 0 for success, non-zero for failure.
+ */
+static int mpi3mr_atto_get_sas_addr(struct mpi3mr_ioc *mrioc, union ATTO_SAS_ADDRESS *sas_address)
+{
+	struct mpi3_driver_page2 *driver_pg2 = NULL;
+	struct ATTO_SAS_NVRAM *nvram;
+	u16 sz;
+	int r;
+	__be64 addr;
+
+	sz = mpi3mr_cfg_get_page_size(mrioc, MPI3_CONFIG_PAGETYPE_DRIVER, 2);
+	driver_pg2 = kzalloc(sz, GFP_KERNEL);
+	if (!driver_pg2)
+		goto out;
+
+	r = mpi3mr_cfg_get_driver_pg2(mrioc, driver_pg2, sz, MPI3_CONFIG_ACTION_READ_PERSISTENT);
+	if (r)
+		goto out;
+
+	nvram = (struct ATTO_SAS_NVRAM *) &driver_pg2->trigger;
+
+	r = mpi3mr_atto_validate_nvram(mrioc, nvram);
+	if (r)
+		goto out;
+
+	addr = *((__be64 *) nvram->sasaddr);
+	sas_address->q = cpu_to_le64(be64_to_cpu(addr));
+
+out:
+	kfree(driver_pg2);
+	return r;
+}
+
+/**
+ * mpi3mr_atto_init - Initialize the controller
+ * @mrioc: Adapter instance reference
+ *
+ * This the ATTO controller initialization routine
+ *
+ * Return: 0 on success and non-zero on failure.
+ */
+static int mpi3mr_atto_init(struct mpi3mr_ioc *mrioc)
+{
+	int i, bias = 0;
+	u16 sz;
+	struct mpi3_sas_io_unit_page0 *sas_io_unit_pg0 = NULL;
+	struct mpi3_man_page5 *man_pg5 = NULL;
+	union ATTO_SAS_ADDRESS base_address;
+	union ATTO_SAS_ADDRESS dev_address;
+	union ATTO_SAS_ADDRESS sas_address;
+
+	sz = mpi3mr_cfg_get_page_size(mrioc, MPI3_CONFIG_PAGETYPE_SAS_IO_UNIT, 0);
+	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
+	if (!sas_io_unit_pg0)
+		goto out;
+
+	if (mpi3mr_cfg_get_sas_io_unit_pg0(mrioc, sas_io_unit_pg0, sz)) {
+		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
+		    __FILE__, __LINE__, __func__);
+		goto out;
+	}
+
+	sz = mpi3mr_cfg_get_page_size(mrioc, MPI3_CONFIG_PAGETYPE_MANUFACTURING, 5);
+	man_pg5 = kzalloc(sz, GFP_KERNEL);
+	if (!man_pg5)
+		goto out;
+
+	if (mpi3mr_cfg_get_man_pg5(mrioc, man_pg5, sz)) {
+		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
+		    __FILE__, __LINE__, __func__);
+		goto out;
+	}
+
+	mpi3mr_atto_get_sas_addr(mrioc, &base_address);
+
+	dev_address.q = base_address.q;
+	dev_address.b[0] += ATTO_SAS_ADDR_DEVNAME_BIAS;
+
+	for (i = 0; i < man_pg5->num_phys; i++) {
+		if (sas_io_unit_pg0->phy_data[i].phy_flags &
+			(MPI3_SASIOUNIT0_PHYFLAGS_HOST_PHY |
+			MPI3_SASIOUNIT0_PHYFLAGS_VIRTUAL_PHY))
+			continue;
+
+		sas_address.q = base_address.q;
+		sas_address.b[0] += bias++;
+
+		man_pg5->phy[i].device_name = dev_address.q;
+		man_pg5->phy[i].ioc_wwid = sas_address.q;
+		man_pg5->phy[i].sata_wwid = sas_address.q;
+	}
+
+	if (mpi3mr_cfg_set_man_pg5(mrioc, man_pg5, sz))
+		ioc_info(mrioc, "ATTO set manufacuring page 5 failed\n");
+
+out:
+	kfree(sas_io_unit_pg0);
+	kfree(man_pg5);
+
+	return 0;
+}
+
+
+/**
  * mpi3mr_init_ioc - Initialize the controller
  * @mrioc: Adapter instance reference
  *
@@ -4375,6 +4532,9 @@ retry_init:
 		ioc_err(mrioc, "failed to refresh triggers\n");
 		goto out_failed;
 	}
+
+	if (mrioc->pdev->subsystem_vendor == MPI3_MFGPAGE_VENDORID_ATTO)
+		mpi3mr_atto_init(mrioc);
 
 	ioc_info(mrioc, "controller initialization completed successfully\n");
 	return retval;
@@ -6294,6 +6454,118 @@ out_failed:
 }
 
 /**
+ * mpi3mr_cfg_get_man_pg5 - Read manufacturing page 5
+ * @mrioc: Adapter instance reference
+ * @io_unit_pg5: Pointer to the manufacturing page 5 to read
+ * @pg_sz: Size of the memory allocated to the page pointer
+ *
+ * This is handler for config page read of manufacturing
+ * page 5.
+ *
+ * Return: 0 on success, non-zero on failure.
+ */
+int mpi3mr_cfg_get_man_pg5(struct mpi3mr_ioc *mrioc,
+	struct mpi3_man_page5 *man_pg5, u16 pg_sz)
+{
+	struct mpi3_config_page_header cfg_hdr;
+	struct mpi3_config_request cfg_req;
+	u16 ioc_status = 0;
+
+	memset(man_pg5, 0, pg_sz);
+	memset(&cfg_hdr, 0, sizeof(cfg_hdr));
+	memset(&cfg_req, 0, sizeof(cfg_req));
+
+	cfg_req.function = MPI3_FUNCTION_CONFIG;
+	cfg_req.action = MPI3_CONFIG_ACTION_PAGE_HEADER;
+	cfg_req.page_type = MPI3_CONFIG_PAGETYPE_MANUFACTURING;
+	cfg_req.page_number = 5;
+	cfg_req.page_address = 0;
+
+	if (mpi3mr_process_cfg_req(mrioc, &cfg_req, NULL,
+	    MPI3MR_INTADMCMD_TIMEOUT, &ioc_status, &cfg_hdr, sizeof(cfg_hdr))) {
+		ioc_err(mrioc, "manufacturing page5 header read failed\n");
+		goto out_failed;
+	}
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		ioc_err(mrioc, "manufacturing page5 header read failed with ioc_status(0x%04x)\n",
+		    ioc_status);
+		goto out_failed;
+	}
+
+	cfg_req.action = MPI3_CONFIG_ACTION_READ_CURRENT;
+
+	if (mpi3mr_process_cfg_req(mrioc, &cfg_req, &cfg_hdr,
+	    MPI3MR_INTADMCMD_TIMEOUT, &ioc_status, man_pg5, pg_sz)) {
+		ioc_err(mrioc, "manufacturing page5 read failed\n");
+		goto out_failed;
+	}
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		ioc_err(mrioc, "manufacturing page5 read failed with ioc_status(0x%04x)\n",
+		    ioc_status);
+		goto out_failed;
+	}
+	return 0;
+out_failed:
+	return -1;
+}
+
+/**
+ * mpi3mr_cfg_set_man_pg5 - Write manufacturing page 5
+ * @mrioc: Adapter instance reference
+ * @io_unit_pg5: Pointer to the manufacturing page 5 to write
+ * @pg_sz: Size of the memory allocated to the page pointer
+ *
+ * This is handler for config page write for manufacturing
+ * page 5. This will modify only the current page.
+ *
+ * Return: 0 on success, non-zero on failure.
+ */
+int mpi3mr_cfg_set_man_pg5(struct mpi3mr_ioc *mrioc,
+	struct mpi3_man_page5 *man_pg5, u16 pg_sz)
+{
+	struct mpi3_config_page_header cfg_hdr;
+	struct mpi3_config_request cfg_req;
+	u16 ioc_status = 0;
+
+	memset(&cfg_hdr, 0, sizeof(cfg_hdr));
+	memset(&cfg_req, 0, sizeof(cfg_req));
+
+	cfg_req.function = MPI3_FUNCTION_CONFIG;
+	cfg_req.action = MPI3_CONFIG_ACTION_PAGE_HEADER;
+	cfg_req.page_type = MPI3_CONFIG_PAGETYPE_MANUFACTURING;
+	cfg_req.page_number = 5;
+	cfg_req.page_address = 0;
+
+	if (mpi3mr_process_cfg_req(mrioc, &cfg_req, NULL,
+	    MPI3MR_INTADMCMD_TIMEOUT, &ioc_status, &cfg_hdr, sizeof(cfg_hdr))) {
+		ioc_err(mrioc, "manufacturing page5 header read failed\n");
+		goto out_failed;
+	}
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		ioc_err(mrioc, "manufacturing page5 header read failed with ioc_status(0x%04x)\n",
+		    ioc_status);
+		goto out_failed;
+	}
+
+	cfg_req.action = MPI3_CONFIG_ACTION_WRITE_CURRENT;
+
+	if (mpi3mr_process_cfg_req(mrioc, &cfg_req, &cfg_hdr,
+	    MPI3MR_INTADMCMD_TIMEOUT, &ioc_status, man_pg5, pg_sz)) {
+		ioc_err(mrioc, "manufacturing page5 write failed\n");
+		goto out_failed;
+	}
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		ioc_err(mrioc, "manufacturing page5 write failed with ioc_status(0x%04x)\n",
+		    ioc_status);
+		goto out_failed;
+	}
+
+	return 0;
+out_failed:
+	return -1;
+}
+
+/**
  * mpi3mr_cfg_get_driver_pg1 - Read current Driver page1
  * @mrioc: Adapter instance reference
  * @driver_pg1: Pointer to return Driver page 1
@@ -6409,3 +6681,41 @@ out_failed:
 	return -1;
 }
 
+/**
+ * mpi3mr_cfg_get_page_size - Get the size of requested page
+ * @mrioc: Adapter instance reference
+ * @page_type: Page type (MPI3_CONFIG_PAGETYPE_XXX)
+ * @page_num: Page number
+ *
+ * Return the specified config page size in bytes.
+ *
+ * Return: Page size in bytes, -1 on failure.
+ */
+int mpi3mr_cfg_get_page_size(struct mpi3mr_ioc *mrioc, int page_type, int page_num)
+{
+	struct mpi3_config_page_header cfg_hdr;
+	struct mpi3_config_request cfg_req;
+	u16 ioc_status = 0;
+
+	memset(&cfg_hdr, 0, sizeof(cfg_hdr));
+	memset(&cfg_req, 0, sizeof(cfg_req));
+
+	cfg_req.function = MPI3_FUNCTION_CONFIG;
+	cfg_req.action = MPI3_CONFIG_ACTION_PAGE_HEADER;
+	cfg_req.page_type = page_type;
+	cfg_req.page_number = page_num;
+	cfg_req.page_address = 0;
+
+	if (mpi3mr_process_cfg_req(mrioc, &cfg_req, NULL,
+	    MPI3MR_INTADMCMD_TIMEOUT, &ioc_status, &cfg_hdr, sizeof(cfg_hdr))) {
+		ioc_err(mrioc, "header read failed\n");
+		return -1;
+	}
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		ioc_err(mrioc, "header read failed with ioc_status(0x%04x)\n",
+		    ioc_status);
+		return -1;
+	}
+
+	return cfg_hdr.page_length * 4;
+}
