@@ -1017,6 +1017,14 @@ static int mbm_cntr_alloc(struct rdt_resource *r, struct rdt_mon_domain *d,
 }
 
 /**
+ * mbm_cntr_free() - Clear the counter ID configuration details in the domain @d.
+ */
+static void mbm_cntr_free(struct rdt_mon_domain *d, int cntr_id)
+{
+	memset(&d->cntr_cfg[cntr_id], 0, sizeof(struct mbm_cntr_cfg));
+}
+
+/**
  * resctrl_alloc_config_cntr() - Allocate a counter ID and configure it for the
  * event pointed to by @mevt and the resctrl group @rdtgrp within the domain @d.
  *
@@ -1083,4 +1091,43 @@ int resctrl_assign_cntr_event(struct rdt_resource *r, struct rdt_mon_domain *d,
 	}
 
 	return ret;
+}
+
+/**
+ * resctrl_free_config_cntr() - Unassign and reset the counter ID configuration
+ * for the event pointed to by @mevt within the domain @d and resctrl group @rdtgrp.
+ */
+static void resctrl_free_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+				     struct rdtgroup *rdtgrp, struct mon_evt *mevt)
+{
+	int cntr_id;
+
+	cntr_id = mbm_cntr_get(r, d, rdtgrp, mevt->evtid);
+
+	/* If there is no cntr_id assigned, nothing to do */
+	if (cntr_id < 0)
+		return;
+
+	resctrl_config_cntr(r, d, mevt->evtid, rdtgrp->mon.rmid, rdtgrp->closid,
+			    cntr_id, false);
+
+	mbm_cntr_free(d, cntr_id);
+
+	return;
+}
+
+/**
+ * resctrl_unassign_cntr_event() - Unassign a hardware counter associated with
+ * the event structure @mevt from the domain @d and the group @rdtgrp. Unassign
+ * the counters from all the domains if @d is NULL else unassign from @d.
+ */
+void resctrl_unassign_cntr_event(struct rdt_resource *r, struct rdt_mon_domain *d,
+				 struct rdtgroup *rdtgrp, struct mon_evt *mevt)
+{
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list)
+			resctrl_free_config_cntr(r, d, rdtgrp, mevt);
+	} else {
+		resctrl_free_config_cntr(r, d, rdtgrp, mevt);
+	}
 }
