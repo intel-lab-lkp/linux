@@ -119,6 +119,12 @@ ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
 		size_t count, loff_t *ppos);
 ssize_t vfio_pci_core_write(struct vfio_device *core_vdev, const char __user *buf,
 		size_t count, loff_t *ppos);
+unsigned long vfio_pci_core_get_unmapped_area(struct vfio_device *device,
+					      struct file *file,
+					      unsigned long addr,
+					      unsigned long len,
+					      unsigned long pgoff,
+					      unsigned long flags);
 int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma);
 void vfio_pci_core_request(struct vfio_device *core_vdev, unsigned int count);
 int vfio_pci_core_match(struct vfio_device *core_vdev, char *buf);

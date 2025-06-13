@@ -1641,6 +1641,71 @@ static unsigned long vma_to_pfn(struct vm_area_struct *vma)
 	return (pci_resource_start(vdev->pdev, index) >> PAGE_SHIFT) + pgoff;
 }
 
+#ifdef CONFIG_ARCH_SUPPORTS_HUGE_PFNMAP
+/*
+ * Hint function to provide mmap() virtual address candidate so as to be
+ * able to map huge pfnmaps as much as possible.  It is done by aligning
+ * the VA to the PFN to be mapped in the specific bar.
+ *
+ * Note that this function does the minimum check on mmap() parameters to
+ * make the PFN calculation valid only. The majority of mmap() sanity check
+ * will be done later in mmap().
+ */
+unsigned long vfio_pci_core_get_unmapped_area(struct vfio_device *device,
+					      struct file *file,
+					      unsigned long addr,
+					      unsigned long len,
+					      unsigned long pgoff,
+					      unsigned long flags)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
+	struct pci_dev *pdev = vdev->pdev;
+	unsigned long ret, phys_len, req_start, phys_addr;
+	unsigned int index;
+
+	index = pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+
+	/* Currently, only bars 0-5 supports huge pfnmap */
+	if (index >= VFIO_PCI_ROM_REGION_INDEX)
+		goto fallback;
+
+	/* Bar offset */
+	req_start = (pgoff << PAGE_SHIFT) & ((1UL << VFIO_PCI_OFFSET_SHIFT) - 1);
+	phys_len = PAGE_ALIGN(pci_resource_len(pdev, index));
+
+	/*
+	 * Make sure we at least can get a valid physical address to do the
+	 * math.  If this happens, it will probably fail mmap() later..
+	 */
+	if (req_start >= phys_len)
+		goto fallback;
+
+	phys_len = MIN(phys_len, len);
+	/* Calculate the start of physical address to be mapped */
+	phys_addr = pci_resource_start(pdev, index) + req_start;
+
+	/* Choose the alignment */
+	if (IS_ENABLED(CONFIG_ARCH_SUPPORTS_PUD_PFNMAP) && phys_len >= PUD_SIZE) {
+		ret = mm_get_unmapped_area_aligned(file, addr, len, phys_addr,
+						   flags, PUD_SIZE, 0);
+		if (ret)
+			return ret;
+	}
+
+	if (phys_len >= PMD_SIZE) {
+		ret = mm_get_unmapped_area_aligned(file, addr, len, phys_addr,
+						   flags, PMD_SIZE, 0);
+		if (ret)
+			return ret;
+	}
+
+fallback:
+	return mm_get_unmapped_area(current->mm, file, addr, len, pgoff, flags);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_get_unmapped_area);
+#endif
+
 static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
 					   unsigned int order)
 {
