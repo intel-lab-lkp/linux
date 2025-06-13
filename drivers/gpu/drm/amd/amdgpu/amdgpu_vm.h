@@ -668,4 +668,14 @@ void amdgpu_vm_tlb_fence_create(struct amdgpu_device *adev,
 				 struct amdgpu_vm *vm,
 				 struct dma_fence **fence);
 
+struct amdgpu_bo_va_mapping *amdgpu_vm_it_first_mapping_in_range(
+	struct amdgpu_vm *avm, uint64_t start, uint64_t end);
+struct amdgpu_bo_va_mapping *amdgpu_vm_it_next_mapping_in_range(
+	struct amdgpu_bo_va_mapping *mapping, uint64_t start, uint64_t end);
+
+#define amdgpu_vm_it_for_each_entry(avm, mapping, start, end) \
+	for (mapping = amdgpu_vm_it_first_mapping_in_range(avm, start, end); \
+		mapping; \
+		mapping = amdgpu_vm_it_next_mapping_in_range(mapping, start, end))
+
 #endif

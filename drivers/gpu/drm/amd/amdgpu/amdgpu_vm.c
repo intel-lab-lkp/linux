@@ -3156,3 +3156,14 @@ bool amdgpu_vm_is_bo_always_valid(struct amdgpu_vm *vm, struct amdgpu_bo *bo)
 {
 	return bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv;
 }
+
+
+struct amdgpu_bo_va_mapping *amdgpu_vm_it_first_mapping_in_range(struct amdgpu_vm *avm, uint64_t start, uint64_t end)
+{
+	return amdgpu_vm_it_iter_first(&avm->va, start, end);
+}
+
+struct amdgpu_bo_va_mapping *amdgpu_vm_it_next_mapping_in_range(struct amdgpu_bo_va_mapping *mapping, uint64_t start, uint64_t end)
+{
+	return amdgpu_vm_it_iter_next(mapping, start, end);
+}

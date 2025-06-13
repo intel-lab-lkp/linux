@@ -57,6 +57,10 @@ extern "C" {
 #define DRM_AMDGPU_USERQ		0x16
 #define DRM_AMDGPU_USERQ_SIGNAL		0x17
 #define DRM_AMDGPU_USERQ_WAIT		0x18
+#define DRM_AMDGPU_CRIU_OP		0x19
+
+#define DRM_AMDGPU_CRIU_BO_INFO	0x20
+#define DRM_AMDGPU_CRIU_MAPPING_INFO	0x21
 
 #define DRM_IOCTL_AMDGPU_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_GEM_CREATE, union drm_amdgpu_gem_create)
 #define DRM_IOCTL_AMDGPU_GEM_MMAP	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_GEM_MMAP, union drm_amdgpu_gem_mmap)
@@ -77,6 +81,10 @@ extern "C" {
 #define DRM_IOCTL_AMDGPU_USERQ		DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ, union drm_amdgpu_userq)
 #define DRM_IOCTL_AMDGPU_USERQ_SIGNAL	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ_SIGNAL, struct drm_amdgpu_userq_signal)
 #define DRM_IOCTL_AMDGPU_USERQ_WAIT	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_USERQ_WAIT, struct drm_amdgpu_userq_wait)
+#define DRM_IOCTL_AMDGPU_CRIU_OP	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_CRIU_OP, struct drm_amdgpu_criu_args)
+
+#define DRM_IOCTL_AMDGPU_CRIU_BO_INFO	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_CRIU_BO_INFO, struct drm_amdgpu_criu_bo_info_args)
+#define DRM_IOCTL_AMDGPU_CRIU_MAPPING_INFO	DRM_IOWR(DRM_COMMAND_BASE + DRM_AMDGPU_CRIU_MAPPING_INFO, struct drm_amdgpu_criu_mapping_info_args)
 
 /**
  * DOC: memory domains
@@ -1624,6 +1632,60 @@ struct drm_color_ctm_3x4 {
 	 * (not two's complement!) format.
 	 */
 	__u64 matrix[12];
+};
+
+#define AMDGPU_CRIU_BO_FLAG_IS_IMPORT	(1 << 0)
+
+struct drm_amdgpu_criu_bo_info_args {
+    /* IN: Size of bo_buckets buffer. OUT: Number of bos in process (if larger than size of buffer, must retry) */
+    __u32   num_bos;
+
+    /* User pointer to array of drm_amdgpu_criu_bo_bucket */
+    __u64   bo_buckets;
+};
+
+struct drm_amdgpu_criu_bo_bucket {
+    /* Size of bo */
+    __u64 size;
+
+    /* Offset of bo in device file */
+    __u64 offset;
+
+    /* GEM_CREATE flags for re-creation of buffer */
+    __u64 alloc_flags;
+
+    /* Pending how to handle this; provides information needed to remake the buffer on restore */
+    __u32 preferred_domains;
+
+    /* Currently just one flag: IS_IMPORT */
+    __u32 flags;
+
+    __u32 gem_handle;
+};
+
+struct drm_amdgpu_criu_mapping_info_args {
+    /* Handle of bo to get mappings of */
+    __u32   gem_handle;
+
+    /* IN: Size of vm_buckets buffer. OUT: Number of bos in process (if larger than size of buffer, must retry) */
+    __u32   num_mappings;
+
+    /* User pointer to array of drm_amdgpu_criu_vm_bucket */
+    __u64   vm_buckets;
+};
+
+struct drm_amdgpu_criu_vm_bucket {
+    /* Start of mapping (in number of pages) */
+    __u64 start;
+
+    /* End of mapping (in number of pages) */
+    __u64 last;
+
+    /* Mapping offset */
+    __u64 offset;
+
+    /* flags needed to recreate mapping; still pending how to get these */
+    __u64 flags;
 };
 
 #if defined(__cplusplus)
