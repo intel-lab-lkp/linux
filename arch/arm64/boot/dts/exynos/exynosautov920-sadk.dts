@@ -88,6 +88,10 @@
 };
 
 /* usb */
+&usbdrd31_ssphy {
+	status = "okay";
+};
+
 &usbdrd31_hsphy {
 	status = "okay";
 };

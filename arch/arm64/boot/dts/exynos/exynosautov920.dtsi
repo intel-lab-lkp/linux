@@ -1048,6 +1048,17 @@
 			interrupts = <GIC_SPI 456 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
+		usbdrd31_ssphy: phy@16480000 {
+			compatible = "samsung,exynosautov920-usb31drd-ssphy";
+			reg = <0x16480000 0x0200>;
+			clocks = <&cmu_hsi1 CLK_MOUT_HSI1_NOC_USER>,
+				 <&cmu_hsi1 CLK_MOUT_HSI1_USBDRD>;
+			clock-names = "phy", "ref";
+			#phy-cells = <1>;
+			samsung,pmu-syscon = <&pmu_system_controller>;
+			status = "disabled";
+		};
+
 		usbdrd31_hsphy: phy@16490000 {
 			compatible = "samsung,exynosautov920-usbdrd-hsphy";
 			reg = <0x16490000 0x0200>;
@@ -1109,8 +1120,8 @@
 					 <&cmu_hsi1 CLK_MOUT_HSI1_USBDRD>;
 				clock-names = "ref", "susp_clk";
 				interrupts = <GIC_SPI 491 IRQ_TYPE_LEVEL_HIGH>;
-				phys = <&usbdrd31_hsphy 0>;
-				phy-names = "usb2-phy";
+				phys = <&usbdrd31_hsphy 0>, <&usbdrd31_ssphy 0>;
+				phy-names = "usb2-phy", "usb3-phy";
 				snps,has-lpm-erratum;
 				snps,dis_u2_susphy_quirk;
 				snps,dis_u3_susphy_quirk;
