@@ -51,6 +51,15 @@ static inline struct rdt_fs_context *rdt_fc2context(struct fs_context *fc)
 	return container_of(kfc, struct rdt_fs_context, kfc);
 }
 
+/*
+ * Assignment types for the monitor modes
+ */
+enum {
+	ASSIGN_NONE		= 0,
+	ASSIGN_EXCLUSIVE,
+	ASSIGN_INVALID,
+};
+
 /**
  * struct mon_evt - Description of a monitor event
  * @evtid:		event id
