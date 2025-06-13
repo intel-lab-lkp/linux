@@ -1164,7 +1164,8 @@ static int rdt_mon_features_show(struct kernfs_open_file *of,
 		if (mevt->rid != r->rid || !mevt->enabled)
 			continue;
 		seq_printf(seq, "%s\n", mevt->name);
-		if (mevt->configurable)
+		if (mevt->configurable &&
+		    !resctrl_arch_mbm_cntr_assign_enabled(r))
 			seq_printf(seq, "%s_config\n", mevt->name);
 	}
 
@@ -1811,6 +1812,38 @@ static ssize_t mbm_local_bytes_config_write(struct kernfs_open_file *of,
 	cpus_read_unlock();
 
 	return ret ?: nbytes;
+}
+
+/**
+ * resctrl_bmec_files_show() — Controls the visibility of BMEC-related resctrl
+ * files. When @show is true, the files are displayed; when false, the files
+ * are hidden.
+ */
+static void resctrl_bmec_files_show(struct rdt_resource *r, bool show)
+{
+	struct kernfs_node *kn_config, *l3_mon_kn;
+	char name[32];
+
+	sprintf(name, "%s_MON", r->name);
+	l3_mon_kn = kernfs_find_and_get(kn_info, name);
+	if (!l3_mon_kn)
+		return;
+
+	kn_config = kernfs_find_and_get(l3_mon_kn, "mbm_total_bytes_config");
+	if (kn_config) {
+		kernfs_get(kn_config);
+		kernfs_show(kn_config, show);
+		kernfs_put(kn_config);
+	}
+
+	kn_config = kernfs_find_and_get(l3_mon_kn, "mbm_local_bytes_config");
+	if (kn_config) {
+		kernfs_get(kn_config);
+		kernfs_show(kn_config, show);
+		kernfs_put(kn_config);
+	}
+
+	kernfs_put(l3_mon_kn);
 }
 
 static int resctrl_mbm_assign_mode_show(struct kernfs_open_file *of,
@@ -2808,6 +2841,13 @@ static int rdtgroup_create_info_dir(struct kernfs_node *parent_kn)
 			ret = resctrl_mkdir_counter_configs(r, name);
 			if (ret)
 				goto out_destroy;
+
+			/*
+			 * Hide BMEC related files if mbm_event mode
+			 * is enabled.
+			 */
+			if (resctrl_arch_mbm_cntr_assign_enabled(r))
+				resctrl_bmec_files_show(r, false);
 		}
 	}
 
