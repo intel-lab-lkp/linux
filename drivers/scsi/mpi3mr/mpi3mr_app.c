@@ -2691,6 +2691,15 @@ static long mpi3mr_bsg_process_mpt_cmds(struct bsg_job *job)
 		goto out;
 	}
 
+	if (mrioc->pdev->subsystem_vendor == MPI3_MFGPAGE_VENDORID_ATTO &&
+		mpi_header->function == MPI3_FUNCTION_CI_DOWNLOAD) {
+		dprint_bsg_err(mrioc, "%s: Firmware download not supported for ATTO HBA.\n",
+				__func__);
+		rval = -EPERM;
+		mutex_unlock(&mrioc->bsg_cmds.mutex);
+		goto out;
+	}
+
 	if (mpi_header->function == MPI3_BSG_FUNCTION_NVME_ENCAPSULATED) {
 		nvme_fmt = mpi3mr_get_nvme_data_fmt(
 			(struct mpi3_nvme_encapsulated_request *)mpi_req);
