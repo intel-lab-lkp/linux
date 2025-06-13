@@ -1438,6 +1438,35 @@ struct delayed_evt_ack_node {
 	u32 event_ctx;
 };
 
+/*
+ * struct ATTO_SAS_NVRAM - ATTO NVRAM settings
+ * @signature: ATTO NVRAM signature
+ * @version: ATTO NVRAM version
+ * @checksum: NVRAM checksum
+ * @sasaddr: ATTO SAS address
+ */
+struct ATTO_SAS_NVRAM {
+	u8		signature[4];
+	u8		version;
+#define ATTO_SASNVR_VERSION		0
+
+	u8		checksum;
+#define ATTO_SASNVR_CKSUM_SEED	0x5A
+	u8		pad[10];
+	u8		sasaddr[8];
+#define ATTO_SAS_ADDR_ALIGN		64
+	u8		reserved[232];
+};
+
+#define ATTO_SAS_ADDR_DEVNAME_BIAS		63
+
+union ATTO_SAS_ADDRESS {
+	u8		b[8];
+	u16		w[4];
+	u32		d[2];
+	u64		q;
+};
+
 int mpi3mr_setup_resources(struct mpi3mr_ioc *mrioc);
 void mpi3mr_cleanup_resources(struct mpi3mr_ioc *mrioc);
 int mpi3mr_init_ioc(struct mpi3mr_ioc *mrioc);
@@ -1533,10 +1562,16 @@ int mpi3mr_cfg_get_sas_io_unit_pg1(struct mpi3mr_ioc *mrioc,
 	struct mpi3_sas_io_unit_page1 *sas_io_unit_pg1, u16 pg_sz);
 int mpi3mr_cfg_set_sas_io_unit_pg1(struct mpi3mr_ioc *mrioc,
 	struct mpi3_sas_io_unit_page1 *sas_io_unit_pg1, u16 pg_sz);
+int mpi3mr_cfg_get_man_pg5(struct mpi3mr_ioc *mrioc,
+	struct mpi3_man_page5 *man_pg5, u16 pg_sz);
+int mpi3mr_cfg_set_man_pg5(struct mpi3mr_ioc *mrioc,
+	struct mpi3_man_page5 *man_pg5, u16 pg_sz);
 int mpi3mr_cfg_get_driver_pg1(struct mpi3mr_ioc *mrioc,
 	struct mpi3_driver_page1 *driver_pg1, u16 pg_sz);
 int mpi3mr_cfg_get_driver_pg2(struct mpi3mr_ioc *mrioc,
 	struct mpi3_driver_page2 *driver_pg2, u16 pg_sz, u8 page_type);
+int mpi3mr_cfg_get_page_size(struct mpi3mr_ioc *mrioc,
+	int page_type, int page_num);
 
 u8 mpi3mr_is_expander_device(u16 device_info);
 int mpi3mr_expander_add(struct mpi3mr_ioc *mrioc, u16 handle);
