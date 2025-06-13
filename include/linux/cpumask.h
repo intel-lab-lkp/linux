@@ -408,22 +408,22 @@ unsigned int cpumask_next_wrap(int n, const struct cpumask *src)
 	for_each_set_bit_from(cpu, cpumask_bits(mask), small_cpumask_bits)
 
 /**
- * cpumask_any_but - return an arbitrary cpu in a cpumask, but not this one.
+ * cpumask_first_but - return the first cpu in a cpumask, but not this one.
  * @mask: the cpumask to search
  * @cpu: the cpu to ignore.
  *
- * Often used to find any cpu but smp_processor_id() in a mask.
+ * Often used to find the first cpu but smp_processor_id() in a mask.
  * Return: >= nr_cpu_ids if no cpus set.
  */
 static __always_inline
-unsigned int cpumask_any_but(const struct cpumask *mask, unsigned int cpu)
+unsigned int cpumask_first_but(const struct cpumask *mask, unsigned int cpu)
 {
 	unsigned int i;
 
 	cpumask_check(cpu);
-	for_each_cpu(i, mask)
-		if (i != cpu)
-			break;
+	i = cpumask_first(mask);
+	if (i == cpu)
+		i = cpumask_next(i, mask);
 	return i;
 }
 
@@ -863,6 +863,16 @@ void cpumask_copy(struct cpumask *dstp, const struct cpumask *srcp)
  * Return: >= nr_cpu_ids if no cpus set.
  */
 #define cpumask_any(srcp) cpumask_first(srcp)
+
+/**
+ * cpumask_any_but - pick an arbitrary cpu from *srcp but not the given cpu
+ * @srcp: the input cpumask
+ * @cpu: the cpu to ignore
+ *
+ * Often used to find any cpu but smp_processor_id() in a mask.
+ * Return: >= nr_cpu_ids if no cpus set.
+ */
+#define cpumask_any_but(srcp, cpu) cpumask_first_but(srcp, cpu)
 
 /**
  * cpumask_any_and - pick an arbitrary cpu from *mask1 & *mask2
