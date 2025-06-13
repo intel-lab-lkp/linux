@@ -72,6 +72,9 @@ default behaviors of iomap:
      void (*put_folio)(struct inode *inode, loff_t pos, unsigned copied,
                        struct folio *folio);
      bool (*iomap_valid)(struct inode *inode, const struct iomap *iomap);
+     int (*read_folio_sync)(loff_t block_start, struct folio *folio,
+                            size_t off, size_t len,
+                            const struct iomap *iomap, void *private);
  };
 
 iomap calls these functions:
@@ -101,6 +104,10 @@ iomap calls these functions:
     takes
     <https://lore.kernel.org/all/20221123055812.747923-8-david@fromorbit.com/>`_
     to allocate, install, and lock that folio.
+
+  - ``read_folio_sync``: Called to synchronously read in the range that will
+    be written to. If this function is not provided, iomap will default to
+    submitting a bio read request.
 
     For the pagecache, races can happen if writeback doesn't take
     ``i_rwsem`` or ``invalidate_lock`` and updates mapping information.
