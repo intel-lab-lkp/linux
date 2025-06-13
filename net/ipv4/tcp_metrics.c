@@ -479,6 +479,9 @@ void tcp_init_metrics(struct sock *sk)
 
 	if (dst_metric_locked(dst, RTAX_CWND))
 		tp->snd_cwnd_clamp = dst_metric(dst, RTAX_CWND);
+	val = dst_metric(dst, RTAX_SSTHRESH);
+	if (val)
+		tp->snd_ssthresh = val;
 
 	rcu_read_lock();
 	tm = tcp_get_metrics(sk, dst, false);
@@ -489,11 +492,8 @@ void tcp_init_metrics(struct sock *sk)
 
 	val = READ_ONCE(net->ipv4.sysctl_tcp_no_ssthresh_metrics_save) ?
 	      0 : tcp_metric_get(tm, TCP_METRIC_SSTHRESH);
-	if (val) {
+	if (val)
 		tp->snd_ssthresh = val;
-		if (tp->snd_ssthresh > tp->snd_cwnd_clamp)
-			tp->snd_ssthresh = tp->snd_cwnd_clamp;
-	}
 	val = tcp_metric_get(tm, TCP_METRIC_REORDERING);
 	if (val && tp->reordering != val)
 		tp->reordering = val;
@@ -537,6 +537,9 @@ reset:
 
 		inet_csk(sk)->icsk_rto = TCP_TIMEOUT_FALLBACK;
 	}
+
+	if (tp->snd_ssthresh > tp->snd_cwnd_clamp)
+		tp->snd_ssthresh = tp->snd_cwnd_clamp;
 }
 
 bool tcp_peer_is_proven(struct request_sock *req, struct dst_entry *dst)
