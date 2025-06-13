@@ -1432,7 +1432,7 @@ struct task_struct {
 	int				last_mm_cid;	/* Most recent cid in mm */
 	int				migrate_from_cpu;
 	int				mm_cid_active;	/* Whether cid bitmap is active */
-	struct callback_head		cid_work;
+	unsigned long			last_cid_reset;	/* Time of last reset in jiffies */
 #endif
 
 	struct tlbflush_unmap_batch	tlb_ubc;
@@ -2275,6 +2275,12 @@ static __always_inline void alloc_tag_restore(struct alloc_tag *tag, struct allo
 #else
 #define alloc_tag_save(_tag)			NULL
 #define alloc_tag_restore(_tag, _old)		do {} while (0)
+#endif
+
+#ifdef CONFIG_SCHED_MM_CID
+extern void task_queue_mm_cid(struct task_struct *curr);
+#else
+static inline void task_queue_mm_cid(struct task_struct *curr) { }
 #endif
 
 #endif
