@@ -507,6 +507,9 @@ void resctrl_offline_cpu(unsigned int cpu);
  *			counter may match traffic of both @closid and @rmid, or @rmid
  *			only.
  * @rmid:		rmid of the counter to read.
+ * @cntr_id:		Counter ID used to read MBM events in mbm_event mode. Only valid
+ *			when mbm_event mode is enabled and @eventid is an MBM event.
+ *			Can be negative when invalid.
  * @eventid:		eventid to read, e.g. L3 occupancy.
  * @val:		result of the counter read in bytes.
  * @arch_mon_ctx:	An architecture specific value from
@@ -524,8 +527,9 @@ void resctrl_offline_cpu(unsigned int cpu);
  * 0 on success, or -EIO, -EINVAL etc on error.
  */
 int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_mon_domain *d,
-			   u32 closid, u32 rmid, enum resctrl_event_id eventid,
-			   u64 *val, void *arch_mon_ctx);
+			   u32 closid, u32 rmid, int cntr_id,
+			   enum resctrl_event_id eventid, u64 *val,
+			   void *arch_mon_ctx);
 
 /**
  * resctrl_arch_rmid_read_context_check()  - warn about invalid contexts
@@ -566,12 +570,15 @@ struct rdt_domain_hdr *resctrl_find_domain(struct list_head *h, int id,
  * @closid:	closid that matches the rmid. Depending on the architecture, the
  *		counter may match traffic of both @closid and @rmid, or @rmid only.
  * @rmid:	The rmid whose counter values should be reset.
+ * @cntr_id:	Counter ID used to read MBM events in mbm_event mode. Only valid
+ *		when mbm_event mode is enabled and @eventid is an MBM event. Can
+ *		be negative when invalid.
  * @eventid:	The eventid whose counter values should be reset.
  *
  * This can be called from any CPU.
  */
 void resctrl_arch_reset_rmid(struct rdt_resource *r, struct rdt_mon_domain *d,
-			     u32 closid, u32 rmid,
+			     u32 closid, u32 rmid, int cntr_id,
 			     enum resctrl_event_id eventid);
 
 /**
