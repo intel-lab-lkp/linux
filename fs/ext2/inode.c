@@ -895,9 +895,15 @@ int ext2_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		u64 start, u64 len)
 {
 	int ret;
+	u64 i_size;
 
 	inode_lock(inode);
-	len = min_t(u64, len, i_size_read(inode));
+
+	i_size = i_size_read(inode);
+
+	if (i_size > 0)
+		len = min_t(u64, len, i_size_read(inode));
+
 	ret = iomap_fiemap(inode, fieinfo, start, len, &ext2_iomap_ops);
 	inode_unlock(inode);
 
