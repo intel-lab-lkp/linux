@@ -495,6 +495,9 @@ static int tdfxfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 			return -EINVAL;
 		}
 	}
+	
+	if (var->pixclock <= KHZ2PICOS(par->max_pixclock))
+		var->pixclock = KHZ2PICOS(par->max_pixclock) + 1;
 
 	if (PICOS2KHZ(var->pixclock) > par->max_pixclock) {
 		DPRINTK("pixclock too high (%ldKHz)\n",
