@@ -41,13 +41,14 @@ struct adc128 {
 	} __aligned(IIO_DMA_MINALIGN);
 };
 
-static int adc128_adc_conversion(struct adc128 *adc, u8 channel)
+static int adc128_adc_conversion(struct adc128 *adc,
+				 struct iio_chan_spec const *channel)
 {
 	int ret;
 
 	guard(mutex)(&adc->lock);
 
-	adc->buffer[0] = channel << 3;
+	adc->buffer[0] = channel->channel << 3;
 	adc->buffer[1] = 0;
 
 	ret = spi_write(adc->spi, &adc->buffer, sizeof(adc->buffer));
@@ -58,7 +59,10 @@ static int adc128_adc_conversion(struct adc128 *adc, u8 channel)
 	if (ret < 0)
 		return ret;
 
-	return be16_to_cpu(adc->buffer16) & 0xFFF;
+	ret = (be16_to_cpu(adc->buffer16) >> channel->scan_type.shift) &
+	       GENMASK(channel->scan_type.realbits - 1, 0);
+
+	return ret;
 }
 
 static int adc128_read_raw(struct iio_dev *indio_dev,
@@ -71,7 +75,7 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 
-		ret = adc128_adc_conversion(adc, channel->channel);
+		ret = adc128_adc_conversion(adc, channel);
 		if (ret < 0)
 			return ret;
 
@@ -81,7 +85,7 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 
 		*val = adc->vref_mv;
-		*val2 = 12;
+		*val2 = channel->scan_type.realbits;
 		return IIO_VAL_FRACTIONAL_LOG2;
 
 	default:
@@ -90,14 +94,23 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 
 }
 
-#define ADC128_VOLTAGE_CHANNEL(num)	\
-	{ \
-		.type = IIO_VOLTAGE, \
-		.indexed = 1, \
-		.channel = (num), \
-		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW), \
-		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) \
+#define _ADC128_VOLTAGE_CHANNEL(num, real_bits)				\
+	{								\
+		.type = IIO_VOLTAGE,					\
+		.indexed = 1,						\
+		.channel = (num),					\
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
+		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
+		.scan_index = (num),					\
+		.scan_type = {						\
+			.sign = 'u',					\
+			.realbits = (real_bits),			\
+			.storagebits = 16,				\
+			.shift = (12 - real_bits),			\
+		},							\
 	}
+
+#define ADC128_VOLTAGE_CHANNEL(num) _ADC128_VOLTAGE_CHANNEL(num, 12)
 
 static const struct iio_chan_spec adc128s052_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(0),
@@ -124,26 +137,30 @@ static const struct iio_chan_spec adc124s021_channels[] = {
 
 static const char * const bd79104_regulators[] = { "iovdd" };
 
-static const struct adc128_configuration adc128_config[] = {
-	{
-		.channels = adc128s052_channels,
-		.num_channels = ARRAY_SIZE(adc128s052_channels),
-		.refname = "vref",
-	}, {
-		.channels = adc122s021_channels,
-		.num_channels = ARRAY_SIZE(adc122s021_channels),
-		.refname = "vref",
-	}, {
-		.channels = adc124s021_channels,
-		.num_channels = ARRAY_SIZE(adc124s021_channels),
-		.refname = "vref",
-	}, {
-		.channels = adc128s052_channels,
-		.num_channels = ARRAY_SIZE(adc128s052_channels),
-		.refname = "vdd",
-		.other_regulators = &bd79104_regulators,
-		.num_other_regulators = 1,
-	},
+static const struct adc128_configuration adc122s021_config = {
+	.channels = adc122s021_channels,
+	.num_channels = ARRAY_SIZE(adc122s021_channels),
+	.refname = "vref",
+};
+
+static const struct adc128_configuration adc124s021_config = {
+	.channels = adc124s021_channels,
+	.num_channels = ARRAY_SIZE(adc124s021_channels),
+	.refname = "vref",
+};
+
+static const struct adc128_configuration adc128s052_config = {
+	.channels = adc128s052_channels,
+	.num_channels = ARRAY_SIZE(adc128s052_channels),
+	.refname = "vref",
+};
+
+static const struct adc128_configuration bd79104_config = {
+	.channels = adc128s052_channels,
+	.num_channels = ARRAY_SIZE(adc128s052_channels),
+	.refname = "vdd",
+	.other_regulators = &bd79104_regulators,
+	.num_other_regulators = 1,
 };
 
 static const struct iio_info adc128_info = {
@@ -199,33 +216,33 @@ static int adc128_probe(struct spi_device *spi)
 }
 
 static const struct of_device_id adc128_of_match[] = {
-	{ .compatible = "ti,adc128s052", .data = &adc128_config[0] },
-	{ .compatible = "ti,adc122s021", .data = &adc128_config[1] },
-	{ .compatible = "ti,adc122s051", .data = &adc128_config[1] },
-	{ .compatible = "ti,adc122s101", .data = &adc128_config[1] },
-	{ .compatible = "ti,adc124s021", .data = &adc128_config[2] },
-	{ .compatible = "ti,adc124s051", .data = &adc128_config[2] },
-	{ .compatible = "ti,adc124s101", .data = &adc128_config[2] },
-	{ .compatible = "rohm,bd79104", .data = &adc128_config[3] },
+	{ .compatible = "ti,adc128s052", .data = &adc128s052_config },
+	{ .compatible = "ti,adc122s021", .data = &adc122s021_config },
+	{ .compatible = "ti,adc122s051", .data = &adc122s021_config },
+	{ .compatible = "ti,adc122s101", .data = &adc122s021_config },
+	{ .compatible = "ti,adc124s021", .data = &adc124s021_config },
+	{ .compatible = "ti,adc124s051", .data = &adc124s021_config },
+	{ .compatible = "ti,adc124s101", .data = &adc124s021_config },
+	{ .compatible = "rohm,bd79104",  .data = &bd79104_config },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, adc128_of_match);
 
 static const struct spi_device_id adc128_id[] = {
-	{ "adc128s052", (kernel_ulong_t)&adc128_config[0] },
-	{ "adc122s021",	(kernel_ulong_t)&adc128_config[1] },
-	{ "adc122s051",	(kernel_ulong_t)&adc128_config[1] },
-	{ "adc122s101",	(kernel_ulong_t)&adc128_config[1] },
-	{ "adc124s021", (kernel_ulong_t)&adc128_config[2] },
-	{ "adc124s051", (kernel_ulong_t)&adc128_config[2] },
-	{ "adc124s101", (kernel_ulong_t)&adc128_config[2] },
-	{ "bd79104", (kernel_ulong_t)&adc128_config[3] },
+	{ "adc128s052", (kernel_ulong_t)&adc128s052_config },
+	{ "adc122s021",	(kernel_ulong_t)&adc122s021_config },
+	{ "adc122s051",	(kernel_ulong_t)&adc122s021_config },
+	{ "adc122s101",	(kernel_ulong_t)&adc122s021_config },
+	{ "adc124s021", (kernel_ulong_t)&adc124s021_config },
+	{ "adc124s051", (kernel_ulong_t)&adc124s021_config },
+	{ "adc124s101", (kernel_ulong_t)&adc124s021_config },
+	{ "bd79104",	(kernel_ulong_t)&bd79104_config },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adc128_id);
 
 static const struct acpi_device_id adc128_acpi_match[] = {
-	{ "AANT1280", (kernel_ulong_t)&adc128_config[2] },
+	{ "AANT1280", (kernel_ulong_t)&adc124s021_config },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, adc128_acpi_match);
