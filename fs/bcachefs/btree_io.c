@@ -556,7 +556,10 @@ static int __btree_err(int ret,
 		       struct printbuf *err_msg,
 		       const char *fmt, ...)
 {
-	if (c->recovery.curr_pass == BCH_RECOVERY_PASS_scan_for_btree_nodes)
+	if (c->recovery.curr_pass == BCH_RECOVERY_PASS_scan_for_btree_nodes &&
+	    !(ret == -BCH_ERR_btree_node_read_err_bad_node &&
+	      __bch2_topology_error(c, err_msg)) &&
+	    ret != -BCH_ERR_btree_node_read_err_incompatible)
 		return bch_err_throw(c, fsck_fix);
 
 	bool have_retry = false;
