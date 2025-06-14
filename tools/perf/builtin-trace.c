@@ -5359,6 +5359,7 @@ out:
 
 static void trace__exit(struct trace *trace)
 {
+	thread__zput(trace->current);
 	strlist__delete(trace->ev_qualifier);
 	zfree(&trace->ev_qualifier_ids.entries);
 	if (trace->syscalls.table) {
@@ -5369,6 +5370,7 @@ static void trace__exit(struct trace *trace)
 	zfree(&trace->perfconfig_events);
 	evlist__delete(trace->evlist);
 	trace->evlist = NULL;
+	ordered_events__free(&trace->oe.data);
 #ifdef HAVE_LIBBPF_SUPPORT
 	btf__free(trace->btf);
 	trace->btf = NULL;
