@@ -1434,7 +1434,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				else
 					ok = false;
 			}
-			if (flags & FUSE_OVER_IO_URING && fuse_uring_enabled())
+			if ((flags & FUSE_OVER_IO_URING) && fuse_uring_enabled())
 				fc->io_uring = 1;
 
 			if (flags & FUSE_REQUEST_TIMEOUT)
