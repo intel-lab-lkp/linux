@@ -224,7 +224,7 @@ noinstr irqentry_state_t irqentry_enter(struct pt_regs *regs)
 		/*
 		 * If RCU is not watching then the same careful
 		 * sequence vs. lockdep and tracing is required
-		 * as in irqentry_enter_from_user_mode().
+		 * as in enter_from_user_mode().
 		 */
 		lockdep_hardirqs_off(CALLER_ADDR0);
 		ct_irq_enter();
