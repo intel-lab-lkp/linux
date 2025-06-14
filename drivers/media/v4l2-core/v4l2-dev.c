@@ -138,10 +138,22 @@ static inline void devnode_clear(struct video_device *vdev)
 	clear_bit(vdev->num, devnode_bits(vdev->vfl_type));
 }
 
-/* Try to find a free device node number in the range [from, to> */
+/* Try to find a free device node number in the range [from, to>, wrapping */
 static inline int devnode_find(struct video_device *vdev, int from, int to)
 {
-	return find_next_zero_bit(devnode_bits(vdev->vfl_type), to, from);
+	int ret;
+
+	ret = find_next_zero_bit(devnode_bits(vdev->vfl_type), to, from);
+
+	if (ret == to) {
+		if (from == 0)
+			return -ENOSPC;
+		ret = find_next_zero_bit(devnode_bits(vdev->vfl_type), from, 0);
+		if (ret == from)
+			return -ENOSPC;
+	}
+
+	return ret;
 }
 
 struct video_device *video_device_alloc(void)
@@ -995,9 +1007,7 @@ int __video_register_device(struct video_device *vdev,
 	/* Pick a device node number */
 	mutex_lock(&videodev_lock);
 	nr = devnode_find(vdev, nr == -1 ? 0 : nr, minor_cnt);
-	if (nr == minor_cnt)
-		nr = devnode_find(vdev, 0, minor_cnt);
-	if (nr == minor_cnt) {
+	if (nr == -ENOSPC) {
 		pr_err("could not get a free device node number\n");
 		mutex_unlock(&videodev_lock);
 		return -ENFILE;
