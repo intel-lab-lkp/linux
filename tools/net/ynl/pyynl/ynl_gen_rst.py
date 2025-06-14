@@ -23,7 +23,7 @@ SRC_DIR = os.path.dirname(os.path.realpath(__file__))
 
 sys.path.insert(0, os.path.join(SRC_DIR, LIB_DIR))
 
-from netlink_yml_parser import YnlDocGenerator
+from netlink_yml_parser import YnlDocGenerator        # pylint: disable=C0413
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -74,7 +74,31 @@ def write_to_rstfile(content: str, filename: str) -> None:
 def write_index_rst(parser: YnlDocGenerator, output: str, index_dir: str) -> None:
     """Generate the `networking_spec/index` content and write to the file"""
 
-    msg = parser.generate_main_index_rst(output, index_dir)
+    lines = []
+
+    lines.append(parser.fmt.rst_header())
+    lines.append(parser.fmt.rst_label("specs"))
+    lines.append(parser.fmt.rst_title("Netlink Family Specifications"))
+    lines.append(parser.fmt.rst_toctree(1))
+
+    index_fname = os.path.basename(output)
+    if not index_dir:
+        index_dir = os.path.dirname(output)
+
+    exts = [ ".yaml", ".rst" ]
+
+    logging.debug(f"Looking for files in %s", index_dir)
+    for filename in sorted(os.listdir(index_dir)):
+        if filename == index_fname:
+            continue
+
+        for ext in exts:
+            if not filename.endswith(ext):
+                continue
+        base, ext = os.path.splitext(filename)
+        lines.append(f"   {base}\n")
+
+    msg = "".join(lines)
 
     logging.debug("Writing an index file at %s", output)
     write_to_rstfile(msg, output)
