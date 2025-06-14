@@ -259,6 +259,8 @@ u32 i810_get_watermark(const struct fb_var_screeninfo *var,
 		}
 	}
 
+	if (!var->pixclock)
+		return -EINVAL;
 	pixclock = 1000000/var->pixclock;
 	min = ~0;
 	for (i = 0; i < size; i++) {

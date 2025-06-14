@@ -251,6 +251,8 @@ void i810fb_fill_var_timings(struct fb_var_screeninfo *var)
 	xres = var->xres;
 	yres = var->yres;
 	
+	if (!var->pixclock)
+		return;
 	pixclock = 1000000000 / var->pixclock;
 	mode = i810fb_find_best_mode(xres, yres, pixclock);
 	
