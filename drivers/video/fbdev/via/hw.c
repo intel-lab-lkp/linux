@@ -1488,8 +1488,9 @@ void viafb_fill_crtc_timing(const struct fb_var_screeninfo *var,
 	if (viaparinfo->chip_info->gfx_chip_name != UNICHROME_CLE266
 		&& viaparinfo->chip_info->gfx_chip_name != UNICHROME_K400)
 		viafb_load_FIFO_reg(iga, var->xres, var->yres);
-
-	viafb_set_vclock(PICOS2KHZ(var->pixclock) * 1000, iga);
+	
+	if (var->pixclock)
+		viafb_set_vclock(PICOS2KHZ(var->pixclock) * 1000, iga);
 }
 
 void viafb_init_chip_info(int chip_type)
