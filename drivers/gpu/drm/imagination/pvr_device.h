@@ -37,6 +37,9 @@ struct clk;
 /* Forward declaration from <linux/firmware.h>. */
 struct firmware;
 
+/* Forward declaration from <linux/pwrseq/consumer.h */
+struct pwrseq_desc;
+
 /**
  * struct pvr_gpu_id - Hardware GPU ID information for a PowerVR device
  * @b: Branch ID.
@@ -55,6 +58,14 @@ struct pvr_gpu_id {
  */
 struct pvr_fw_version {
 	u16 major, minor;
+};
+
+/*
+ * struct pvr_soc_data - Platform specific data associated with a compatible string.
+ * @has_pwrseq: True if the platform requires power management via the pwrseq framework.
+ */
+struct pvr_soc_data {
+	bool has_pwrseq;
 };
 
 /**
@@ -97,6 +108,9 @@ struct pvr_device {
 
 	/** @fw_version: Firmware version detected at runtime. */
 	struct pvr_fw_version fw_version;
+
+	/** @soc_data: Pointer to platform-specific quirk data. */
+	const struct pvr_soc_data *soc_data;
 
 	/** @regs_resource: Resource representing device control registers. */
 	struct resource *regs_resource;
@@ -147,6 +161,9 @@ struct pvr_device {
 	 * procedure.
 	 */
 	struct reset_control *reset;
+
+	/** @pwrseq: Pointer to a power sequencer, if one is used. */
+	struct pwrseq_desc *pwrseq;
 
 	/** @irq: IRQ number. */
 	int irq;

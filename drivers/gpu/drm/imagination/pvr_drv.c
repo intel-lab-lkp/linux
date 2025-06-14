@@ -1481,6 +1481,11 @@ static void pvr_remove(struct platform_device *plat_dev)
 }
 
 static const struct of_device_id dt_match[] = {
+	{
+		.compatible = "thead,th1520-gpu",
+		.data = &(struct pvr_soc_data){ .has_pwrseq = true },
+	},
+
 	{ .compatible = "img,img-rogue", .data = NULL },
 
 	/*
@@ -1513,4 +1518,5 @@ MODULE_DESCRIPTION(PVR_DRIVER_DESC);
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_IMPORT_NS("DMA_BUF");
 MODULE_FIRMWARE("powervr/rogue_33.15.11.3_v1.fw");
+MODULE_FIRMWARE("powervr/rogue_36.52.104.182_v1.fw");
 MODULE_FIRMWARE("powervr/rogue_36.53.104.796_v1.fw");
