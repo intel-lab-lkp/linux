@@ -506,7 +506,9 @@ static int sm501fb_set_par_common(struct fb_info *info,
 			fbi->regs + head_addr);
 
 	/* program CRT clock  */
-
+	
+	if (!var->pixclock)
+		return -EINVAL;
 	pixclock = sm501fb_ps_to_hz(var->pixclock);
 
 	sm501pixclock = sm501_set_clock(fbi->dev->parent, clock_type,
