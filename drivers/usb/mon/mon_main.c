@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/notifier.h>
 #include <linux/mutex.h>
+#include <linux/dma-mapping.h>
 
 #include "usb_mon.h"
 
@@ -141,6 +142,12 @@ static void mon_bus_complete(struct mon_bus *mbus, struct urb *urb, int status)
 static void mon_complete(struct usb_bus *ubus, struct urb *urb, int status)
 {
 	struct mon_bus *mbus;
+
+	if (urb->transfer_flags & URB_USBMON_NEED_SYNC)
+		dma_sync_single_for_cpu(ubus->sysdev,
+					urb->transfer_dma,
+					urb->transfer_buffer_length,
+					DMA_FROM_DEVICE);
 
 	mbus = ubus->mon_bus;
 	if (mbus != NULL)
