@@ -17,22 +17,41 @@
 
 enum {
 	DMA_MAP_BENCH_SINGLE_MODE,
+	DMA_MAP_BENCH_SG_MODE,
 	DMA_MAP_BENCH_MODE_MAX
 };
 
+/**
+ * struct map_benchmark - Benchmarking data for DMA mapping operations.
+ * @avg_map_100ns: Average map latency in 100ns.
+ * @map_stddev: Standard deviation of map latency.
+ * @avg_unmap_100ns: Average unmap latency in 100ns.
+ * @unmap_stddev: Standard deviation of unmap latency.
+ * @threads: Number of threads performing map/unmap operations in parallel.
+ * @seconds: Duration of the test in seconds.
+ * @node: NUMA node on which this benchmark will run.
+ * @dma_bits: DMA addressing capability.
+ * @dma_dir: DMA data direction.
+ * @dma_trans_ns: Time for DMA transmission in ns.
+ * @granule: Number of PAGE_SIZE units to map/unmap at once.
+	     In SG mode, this represents the number of scatterlist entries.
+	     In single mode, this represents the total size of the mapping.
+ * @map_mode: Mode of DMA mapping.
+ * @expansion: Reserved for future use.
+ */
 struct map_benchmark {
-	__u64 avg_map_100ns; /* average map latency in 100ns */
-	__u64 map_stddev; /* standard deviation of map latency */
-	__u64 avg_unmap_100ns; /* as above */
+	__u64 avg_map_100ns;
+	__u64 map_stddev;
+	__u64 avg_unmap_100ns;
 	__u64 unmap_stddev;
-	__u32 threads; /* how many threads will do map/unmap in parallel */
-	__u32 seconds; /* how long the test will last */
-	__s32 node; /* which numa node this benchmark will run on */
-	__u32 dma_bits; /* DMA addressing capability */
-	__u32 dma_dir; /* DMA data direction */
-	__u32 dma_trans_ns; /* time for DMA transmission in ns */
-	__u32 granule;  /* how many PAGE_SIZE will do map/unmap once a time */
-	__u8  map_mode; /* the mode of dma map */
-	__u8 expansion[75];     /* For future use */
+	__u32 threads;
+	__u32 seconds;
+	__s32 node;
+	__u32 dma_bits;
+	__u32 dma_dir;
+	__u32 dma_trans_ns;
+	__u32 granule;
+	__u8  map_mode;
+	__u8 expansion[75];
 };
 #endif /* _KERNEL_DMA_BENCHMARK_H */
