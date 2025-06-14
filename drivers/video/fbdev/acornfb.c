@@ -421,6 +421,8 @@ acornfb_validate_timing(struct fb_var_screeninfo *var,
 	 * No need to do long long divisions or anything
 	 * like that if you factor it correctly
 	 */
+	if (!var->pixclock)
+		return -EINVAL;
 	hs = 1953125000 / var->pixclock;
 	hs = hs * 512 /
 	     (var->xres + var->left_margin + var->right_margin + var->hsync_len);
