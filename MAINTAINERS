@@ -7202,6 +7202,7 @@ F:	scripts/get_abi.py
 F:	scripts/kernel-doc*
 F:	scripts/lib/abi/*
 F:	scripts/lib/kdoc/*
+F:	scripts/lib/netlink_yml_parser.py
 F:	scripts/sphinx-pre-install
 X:	Documentation/ABI/
 X:	Documentation/admin-guide/media/
@@ -27314,6 +27315,7 @@ M:	Jakub Kicinski <kuba@kernel.org>
 F:	Documentation/netlink/
 F:	Documentation/userspace-api/netlink/intro-specs.rst
 F:	Documentation/userspace-api/netlink/specs.rst
+F:	scripts/lib/netlink_yml_parser.py
 F:	tools/net/ynl/
 
 YEALINK PHONE DRIVER
