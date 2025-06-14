@@ -7,6 +7,21 @@
  * https://www.ti.com/lit/ds/symlink/adc128s052.pdf
  * https://www.ti.com/lit/ds/symlink/adc122s021.pdf
  * https://www.ti.com/lit/ds/symlink/adc124s021.pdf
+ *
+ * The adcxx4s communicates with a host processor via an SPI/Microwire Bus
+ * interface. This driver supports the whole family of devices with a name
+ * ADC<bb><c>S<sss>, where
+ * bb is the resolution in number of bits (8, 10, 12)
+ * c is the number of channels (1, 2, 4, 8)
+ * sss is the maximum conversion speed (021 for 200 kSPS, 051 for 500 kSPS and
+ * 101 for 1 MSPS)
+ *
+ * Complete datasheets are available at TI's website here:
+ * https://www.ti.com/lit/ds/symlink/adc<bb><c>s<sss>.pdf
+ *
+ * 8, 10, and 12 bits converters send 12-bit data with unavailable bits set to
+ * 0 in LSB.
+ * Shift is calculated per resolution and used in scaling and raw data read.
  */
 
 #include <linux/cleanup.h>
@@ -110,7 +125,19 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 		},							\
 	}
 
+#define ADC082_VOLTAGE_CHANNEL(num) _ADC128_VOLTAGE_CHANNEL(num, 8)
+#define ADC102_VOLTAGE_CHANNEL(num) _ADC128_VOLTAGE_CHANNEL(num, 10)
 #define ADC128_VOLTAGE_CHANNEL(num) _ADC128_VOLTAGE_CHANNEL(num, 12)
+
+static const struct iio_chan_spec adc082s021_channels[] = {
+	ADC082_VOLTAGE_CHANNEL(0),
+	ADC082_VOLTAGE_CHANNEL(1),
+};
+
+static const struct iio_chan_spec adc102s021_channels[] = {
+	ADC102_VOLTAGE_CHANNEL(0),
+	ADC102_VOLTAGE_CHANNEL(1),
+};
 
 static const struct iio_chan_spec adc122s021_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(0),
@@ -136,6 +163,18 @@ static const struct iio_chan_spec adc128s052_channels[] = {
 };
 
 static const char * const bd79104_regulators[] = { "iovdd" };
+
+static const struct adc128_configuration adc082s021_config = {
+	.channels = adc082s021_channels,
+	.num_channels = ARRAY_SIZE(adc082s021_channels),
+	.refname = "vref",
+};
+
+static const struct adc128_configuration adc102s021_config = {
+	.channels = adc102s021_channels,
+	.num_channels = ARRAY_SIZE(adc102s021_channels),
+	.refname = "vref",
+};
 
 static const struct adc128_configuration adc122s021_config = {
 	.channels = adc122s021_channels,
@@ -217,6 +256,12 @@ static int adc128_probe(struct spi_device *spi)
 
 static const struct of_device_id adc128_of_match[] = {
 	{ .compatible = "rohm,bd79104",  .data = &bd79104_config    },
+	{ .compatible = "ti,adc082s021", .data = &adc082s021_config },
+	{ .compatible = "ti,adc082s051", .data = &adc082s021_config },
+	{ .compatible = "ti,adc082s101", .data = &adc082s021_config },
+	{ .compatible = "ti,adc102s021", .data = &adc102s021_config },
+	{ .compatible = "ti,adc102s051", .data = &adc102s021_config },
+	{ .compatible = "ti,adc102s101", .data = &adc102s021_config },
 	{ .compatible = "ti,adc122s021", .data = &adc122s021_config },
 	{ .compatible = "ti,adc122s051", .data = &adc122s021_config },
 	{ .compatible = "ti,adc122s101", .data = &adc122s021_config },
@@ -229,6 +274,12 @@ static const struct of_device_id adc128_of_match[] = {
 MODULE_DEVICE_TABLE(of, adc128_of_match);
 
 static const struct spi_device_id adc128_id[] = {
+	{ "adc082s021", (kernel_ulong_t)&adc082s021_config },
+	{ "adc082s051", (kernel_ulong_t)&adc082s021_config },
+	{ "adc082s101", (kernel_ulong_t)&adc082s021_config },
+	{ "adc102s021", (kernel_ulong_t)&adc102s021_config },
+	{ "adc102s051", (kernel_ulong_t)&adc102s021_config },
+	{ "adc102s101", (kernel_ulong_t)&adc102s021_config },
 	{ "adc122s021",	(kernel_ulong_t)&adc122s021_config },
 	{ "adc122s051",	(kernel_ulong_t)&adc122s021_config },
 	{ "adc122s101",	(kernel_ulong_t)&adc122s021_config },
