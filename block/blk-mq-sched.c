@@ -113,7 +113,7 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 		if (budget_token < 0)
 			break;
 
-		rq = e->type->ops.dispatch_request(hctx);
+		rq = elevator_dispatch_request(hctx);
 		if (!rq) {
 			blk_mq_put_dispatch_budget(q, budget_token);
 			/*
@@ -342,7 +342,7 @@ bool blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio,
 	enum hctx_type type;
 
 	if (e && e->type->ops.bio_merge) {
-		ret = e->type->ops.bio_merge(q, bio, nr_segs);
+		ret = elevator_bio_merge(q, bio, nr_segs);
 		goto out_put;
 	}
 

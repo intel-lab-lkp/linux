@@ -2637,7 +2637,7 @@ static void blk_mq_insert_request(struct request *rq, blk_insert_t flags)
 		WARN_ON_ONCE(rq->tag != BLK_MQ_NO_TAG);
 
 		list_add(&rq->queuelist, &list);
-		q->elevator->type->ops.insert_requests(hctx, &list, flags);
+		elevator_insert_requests(hctx, &list, flags);
 	} else {
 		trace_block_rq_insert(rq);
 
@@ -2912,8 +2912,7 @@ static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 		spin_unlock(&this_hctx->lock);
 		blk_mq_run_hw_queue(this_hctx, from_sched);
 	} else if (this_hctx->queue->elevator) {
-		this_hctx->queue->elevator->type->ops.insert_requests(this_hctx,
-				&list, 0);
+		elevator_insert_requests(this_hctx, &list, 0);
 		blk_mq_run_hw_queue(this_hctx, from_sched);
 	} else {
 		blk_mq_insert_requests(this_hctx, this_ctx, &list, from_sched);
