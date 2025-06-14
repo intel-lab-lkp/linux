@@ -101,6 +101,49 @@ static bool elevator_can_dispatch(struct sched_dispatch_ctx *ctx)
 	return true;
 }
 
+static void elevator_dispatch_requests(struct sched_dispatch_ctx *ctx)
+{
+	struct request *rq;
+	int budget_token[BUDGET_TOKEN_BATCH];
+	int count;
+	int i;
+
+	while (true) {
+		if (!elevator_can_dispatch(ctx))
+			return;
+
+		count = blk_mq_get_dispatch_budgets(ctx->q, budget_token);
+		if (count <= 0)
+			return;
+
+		elevator_lock(ctx->e);
+		for (i = 0; i < count; ++i) {
+			rq = ctx->e->type->ops.dispatch_request(ctx->hctx);
+			if (!rq) {
+				ctx->run_queue = true;
+				goto err_free_budgets;
+			}
+
+			blk_mq_set_rq_budget_token(rq, budget_token[i]);
+			list_add_tail(&rq->queuelist, &ctx->rq_list);
+			ctx->count++;
+			if (rq->mq_hctx != ctx->hctx)
+				ctx->multi_hctxs = true;
+
+			if (!blk_mq_get_driver_tag(rq)) {
+				i++;
+				goto err_free_budgets;
+			}
+		}
+		elevator_unlock(ctx->e);
+	}
+
+err_free_budgets:
+	elevator_unlock(ctx->e);
+	for (; i < count; ++i)
+		blk_mq_put_dispatch_budget(ctx->q, budget_token[i]);
+}
+
 static bool elevator_dispatch_one_request(struct sched_dispatch_ctx *ctx)
 {
 	struct request *rq;
@@ -202,10 +245,14 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 	else
 		max_dispatch = hctx->queue->nr_requests;
 
-	do {
-		if (!elevator_dispatch_one_request(&ctx))
-			break;
-	} while (ctx.count < max_dispatch);
+	if (!hctx->dispatch_busy && blk_queue_sq_sched(ctx.q))
+		elevator_dispatch_requests(&ctx);
+	else {
+		do {
+			if (!elevator_dispatch_one_request(&ctx))
+				break;
+		} while (ctx.count < max_dispatch);
+	}
 
 	return elevator_finish_dispatch(&ctx);
 }
