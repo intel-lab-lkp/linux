@@ -4521,6 +4521,17 @@ TEST_F_FORK(ioctl, handle_file_access_file)
 FIXTURE(layout1_bind) {};
 /* clang-format on */
 
+static const char bind_dir_s1d3[] = TMP_DIR "/s2d1/s2d2/s1d3";
+static const char bind_file1_s1d3[] = TMP_DIR "/s2d1/s2d2/s1d3/f1";
+/* Move targets for disconnected path tests */
+static const char dir_s4d1[] = TMP_DIR "/s4d1";
+static const char file1_s4d1[] = TMP_DIR "/s4d1/f1";
+static const char file2_s4d1[] = TMP_DIR "/s4d1/f2";
+static const char dir_s4d2[] = TMP_DIR "/s4d1/s4d2";
+static const char file1_s4d2[] = TMP_DIR "/s4d1/s4d2/f1";
+static const char file1_name[] = "f1";
+static const char file2_name[] = "f2";
+
 FIXTURE_SETUP(layout1_bind)
 {
 	prepare_layout(_metadata);
@@ -4536,13 +4547,13 @@ FIXTURE_TEARDOWN_PARENT(layout1_bind)
 {
 	/* umount(dir_s2d2)) is handled by namespace lifetime. */
 
+	remove_path(file1_s4d1);
+	remove_path(file2_s4d1);
+
 	remove_layout1(_metadata);
 
 	cleanup_layout(_metadata);
 }
-
-static const char bind_dir_s1d3[] = TMP_DIR "/s2d1/s2d2/s1d3";
-static const char bind_file1_s1d3[] = TMP_DIR "/s2d1/s2d2/s1d3/f1";
 
 /*
  * layout1_bind hierarchy:
@@ -4764,6 +4775,260 @@ TEST_F_FORK(layout1_bind, reparent_cross_mount)
 
 	/* Checks legitimate downgrade move. */
 	ASSERT_EQ(0, rename(bind_file1_s1d3, file1_s2d2));
+}
+
+/*
+ * Make sure access to file through a disconnected path works as expected.
+ * This test uses s4d1 as the move target.
+ */
+TEST_F_FORK(layout1_bind, path_disconnected)
+{
+	const struct rule layer1_allow_all[] = {
+		{
+			.path = TMP_DIR,
+			.access = ACCESS_ALL,
+		},
+		{},
+	};
+
+	const struct rule layer2_allow_just_f1[] = {
+		{
+			.path = file1_s1d3,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE,
+		},
+		{},
+	};
+
+	const struct rule layer3_only_s1d2[] = {
+		{
+			.path = dir_s1d2,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE,
+		},
+		{},
+	};
+
+	/* Landlock should not deny access just because it is disconnected */
+	int ruleset_fd =
+		create_ruleset(_metadata, ACCESS_ALL, layer1_allow_all);
+	/*
+	 * Create the new ruleset now before we move the dir containing the
+	 * file
+	 */
+	int ruleset_fd_l2 =
+		create_ruleset(_metadata, ACCESS_RW, layer2_allow_just_f1);
+	int ruleset_fd_l3 =
+		create_ruleset(_metadata, ACCESS_RW, layer3_only_s1d2);
+	int bind_s1d3_fd;
+
+	ASSERT_LE(0, ruleset_fd);
+	ASSERT_LE(0, ruleset_fd_l2);
+	ASSERT_LE(0, ruleset_fd_l3);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	bind_s1d3_fd = open(bind_dir_s1d3, O_PATH | O_CLOEXEC);
+
+	ASSERT_LE(0, bind_s1d3_fd);
+	/* Test access is possible before we move */
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+	/* Make it disconnected */
+	ASSERT_EQ(0, rename(dir_s1d3, dir_s4d1))
+	{
+		TH_LOG("Failed to rename %s to %s: %s", dir_s1d3, dir_s4d1,
+		       strerror(errno));
+	}
+	/* Test access still possible */
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+	/*
+	 * Test ".." not possibe (not because of landlock, but just because
+	 * it's disconnected)
+	 */
+	ASSERT_EQ(ENOENT,
+		  test_open_rel(bind_s1d3_fd, "..", O_RDONLY | O_DIRECTORY));
+
+	/* Should still work with a narrower rule */
+	enforce_ruleset(_metadata, ruleset_fd_l2);
+	ASSERT_EQ(0, close(ruleset_fd_l2));
+
+	ASSERT_EQ(0, test_open(file1_s4d1, O_RDONLY));
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+	ASSERT_EQ(EACCES, test_open_rel(bind_s1d3_fd, file2_name, O_RDONLY));
+
+	/*
+	 * But if we only allow access to under the original dir, then it
+	 * should be denied.
+	 */
+	enforce_ruleset(_metadata, ruleset_fd_l3);
+	ASSERT_EQ(0, close(ruleset_fd_l3));
+	ASSERT_EQ(EACCES, test_open(file1_s4d1, O_RDONLY));
+	ASSERT_EQ(EACCES, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+}
+
+/*
+ * Test that we can rename to make files disconnected, and rename it back,
+ * under landlock.  This test uses s4d2 as the move target, so that we can
+ * have a rule allowing refers on the move target's immediate parent.
+ */
+TEST_F_FORK(layout1_bind, path_disconnected_rename)
+{
+	const struct rule layer1[] = {
+		{
+			.path = dir_s1d2,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MAKE_DIR |
+				  LANDLOCK_ACCESS_FS_REMOVE_DIR |
+				  LANDLOCK_ACCESS_FS_MAKE_REG |
+				  LANDLOCK_ACCESS_FS_REMOVE_FILE |
+				  LANDLOCK_ACCESS_FS_READ_FILE,
+		},
+		{
+			.path = dir_s4d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MAKE_DIR |
+				  LANDLOCK_ACCESS_FS_REMOVE_DIR |
+				  LANDLOCK_ACCESS_FS_MAKE_REG |
+				  LANDLOCK_ACCESS_FS_REMOVE_FILE |
+				  LANDLOCK_ACCESS_FS_READ_FILE,
+		},
+		{}
+	};
+
+	const struct rule layer2_only_s1d2[] = {
+		{
+			.path = dir_s1d2,
+			.access = LANDLOCK_ACCESS_FS_READ_FILE,
+		},
+		{},
+	};
+
+	ASSERT_EQ(0, mkdir(dir_s4d1, 0755))
+	{
+		TH_LOG("Failed to create %s: %s", dir_s4d1, strerror(errno));
+	}
+
+	int ruleset_fd = create_ruleset(_metadata, ACCESS_ALL, layer1);
+	int ruleset_fd_l2 = create_ruleset(
+		_metadata, LANDLOCK_ACCESS_FS_READ_FILE, layer2_only_s1d2);
+	pid_t child_pid;
+	int bind_s1d3_fd, status;
+
+	ASSERT_LE(0, ruleset_fd);
+	ASSERT_LE(0, ruleset_fd_l2);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	bind_s1d3_fd = open(bind_dir_s1d3, O_PATH | O_CLOEXEC);
+	ASSERT_LE(0, bind_s1d3_fd);
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+
+	ASSERT_EQ(0, rename(dir_s1d3, dir_s4d2))
+	{
+		TH_LOG("Failed to rename %s to %s: %s", dir_s1d3, dir_s4d2,
+		       strerror(errno));
+	}
+
+	/*
+	 * Since file is no longer under s1d2, we should not be able to access
+	 * it if we enforced layer 2.  Do a fork to test this so we don't
+	 * prevent ourselves from renaming it back later.
+	 */
+	child_pid = fork();
+	if (child_pid == 0) {
+		enforce_ruleset(_metadata, ruleset_fd_l2);
+		ASSERT_EQ(0, close(ruleset_fd_l2));
+		ASSERT_EQ(EACCES,
+			  test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+		ASSERT_EQ(EACCES, test_open(file1_s4d2, O_RDONLY));
+
+		/*
+		 * Test that access widening checks indeed prevents us from
+		 * renaming it back
+		 */
+		ASSERT_EQ(-1, rename(dir_s4d2, dir_s1d3));
+		ASSERT_EQ(EXDEV, errno);
+		/*
+		 * Including through the now disconnected fd (but it should return
+		 * EXDEV)
+		 */
+		ASSERT_EQ(-1, renameat(bind_s1d3_fd, file1_name, AT_FDCWD,
+				       file1_s2d2));
+		ASSERT_EQ(EXDEV, errno);
+		_exit(!__test_passed(_metadata));
+		return;
+	}
+
+	ASSERT_NE(-1, child_pid);
+	ASSERT_EQ(child_pid, waitpid(child_pid, &status, 0));
+	ASSERT_EQ(1, WIFEXITED(status));
+	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+
+	ASSERT_EQ(0, rename(dir_s4d2, dir_s1d3))
+	{
+		TH_LOG("Failed to rename %s back to %s: %s", dir_s4d1, dir_s1d3,
+		       strerror(errno));
+	}
+
+	/* Now check that we can access it under l2 */
+	child_pid = fork();
+	if (child_pid == 0) {
+		enforce_ruleset(_metadata, ruleset_fd_l2);
+		ASSERT_EQ(0, close(ruleset_fd_l2));
+		ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+		ASSERT_EQ(0, test_open(file1_s1d3, O_RDONLY));
+		_exit(!__test_passed(_metadata));
+		return;
+	}
+	ASSERT_NE(-1, child_pid);
+	ASSERT_EQ(child_pid, waitpid(child_pid, &status, 0));
+	ASSERT_EQ(1, WIFEXITED(status));
+	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+
+	/*
+	 * Also test that we can rename via a disconnected path.  We move the
+	 * dir back to the disconnected place first, then we rename file1 to
+	 * file2 through our dir fd.
+	 */
+	ASSERT_EQ(0, rename(dir_s1d3, dir_s4d2))
+	{
+		TH_LOG("Failed to rename %s to %s: %s", dir_s1d3, dir_s4d2,
+		       strerror(errno));
+	}
+	ASSERT_EQ(0,
+		  renameat(bind_s1d3_fd, file1_name, bind_s1d3_fd, file2_name))
+	{
+		TH_LOG("Failed to rename %s to %s through disconnected %s: %s",
+		       file1_name, file2_name, bind_dir_s1d3, strerror(errno));
+	}
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file2_name, O_RDONLY));
+	ASSERT_EQ(0, renameat(bind_s1d3_fd, file2_name, AT_FDCWD, file1_s2d2))
+	{
+		TH_LOG("Failed to rename %s to %s through disconnected %s: %s",
+		       file2_name, file1_s2d2, bind_dir_s1d3, strerror(errno));
+	}
+	ASSERT_EQ(0, test_open(file1_s2d2, O_RDONLY));
+	ASSERT_EQ(0, test_open(file1_s1d2, O_RDONLY));
+
+	/* Move it back using the disconnected path as the target */
+	ASSERT_EQ(0, renameat(AT_FDCWD, file1_s2d2, bind_s1d3_fd, file1_name))
+	{
+		TH_LOG("Failed to rename %s to %s through disconnected %s: %s",
+		       file1_s1d2, file1_name, bind_dir_s1d3, strerror(errno));
+	}
+
+	/* Now make it connected again */
+	ASSERT_EQ(0, rename(dir_s4d2, dir_s1d3))
+	{
+		TH_LOG("Failed to rename %s back to %s: %s", dir_s4d2, dir_s1d3,
+		       strerror(errno));
+	}
+
+	/* Check again that we can access it under l2 */
+	enforce_ruleset(_metadata, ruleset_fd_l2);
+	ASSERT_EQ(0, close(ruleset_fd_l2));
+	ASSERT_EQ(0, test_open_rel(bind_s1d3_fd, file1_name, O_RDONLY));
+	ASSERT_EQ(0, test_open(file1_s1d3, O_RDONLY));
 }
 
 #define LOWER_BASE TMP_DIR "/lower"
