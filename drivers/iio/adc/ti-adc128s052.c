@@ -112,17 +112,6 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 
 #define ADC128_VOLTAGE_CHANNEL(num) _ADC128_VOLTAGE_CHANNEL(num, 12)
 
-static const struct iio_chan_spec adc128s052_channels[] = {
-	ADC128_VOLTAGE_CHANNEL(0),
-	ADC128_VOLTAGE_CHANNEL(1),
-	ADC128_VOLTAGE_CHANNEL(2),
-	ADC128_VOLTAGE_CHANNEL(3),
-	ADC128_VOLTAGE_CHANNEL(4),
-	ADC128_VOLTAGE_CHANNEL(5),
-	ADC128_VOLTAGE_CHANNEL(6),
-	ADC128_VOLTAGE_CHANNEL(7),
-};
-
 static const struct iio_chan_spec adc122s021_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(0),
 	ADC128_VOLTAGE_CHANNEL(1),
@@ -133,6 +122,17 @@ static const struct iio_chan_spec adc124s021_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(1),
 	ADC128_VOLTAGE_CHANNEL(2),
 	ADC128_VOLTAGE_CHANNEL(3),
+};
+
+static const struct iio_chan_spec adc128s052_channels[] = {
+	ADC128_VOLTAGE_CHANNEL(0),
+	ADC128_VOLTAGE_CHANNEL(1),
+	ADC128_VOLTAGE_CHANNEL(2),
+	ADC128_VOLTAGE_CHANNEL(3),
+	ADC128_VOLTAGE_CHANNEL(4),
+	ADC128_VOLTAGE_CHANNEL(5),
+	ADC128_VOLTAGE_CHANNEL(6),
+	ADC128_VOLTAGE_CHANNEL(7),
 };
 
 static const char * const bd79104_regulators[] = { "iovdd" };
@@ -216,27 +216,27 @@ static int adc128_probe(struct spi_device *spi)
 }
 
 static const struct of_device_id adc128_of_match[] = {
-	{ .compatible = "ti,adc128s052", .data = &adc128s052_config },
+	{ .compatible = "rohm,bd79104",  .data = &bd79104_config    },
 	{ .compatible = "ti,adc122s021", .data = &adc122s021_config },
 	{ .compatible = "ti,adc122s051", .data = &adc122s021_config },
 	{ .compatible = "ti,adc122s101", .data = &adc122s021_config },
 	{ .compatible = "ti,adc124s021", .data = &adc124s021_config },
 	{ .compatible = "ti,adc124s051", .data = &adc124s021_config },
 	{ .compatible = "ti,adc124s101", .data = &adc124s021_config },
-	{ .compatible = "rohm,bd79104",  .data = &bd79104_config },
+	{ .compatible = "ti,adc128s052", .data = &adc128s052_config },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, adc128_of_match);
 
 static const struct spi_device_id adc128_id[] = {
-	{ "adc128s052", (kernel_ulong_t)&adc128s052_config },
 	{ "adc122s021",	(kernel_ulong_t)&adc122s021_config },
 	{ "adc122s051",	(kernel_ulong_t)&adc122s021_config },
 	{ "adc122s101",	(kernel_ulong_t)&adc122s021_config },
 	{ "adc124s021", (kernel_ulong_t)&adc124s021_config },
 	{ "adc124s051", (kernel_ulong_t)&adc124s021_config },
 	{ "adc124s101", (kernel_ulong_t)&adc124s021_config },
-	{ "bd79104",	(kernel_ulong_t)&bd79104_config },
+	{ "adc128s052", (kernel_ulong_t)&adc128s052_config },
+	{ "bd79104",	(kernel_ulong_t)&bd79104_config	   },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adc128_id);
