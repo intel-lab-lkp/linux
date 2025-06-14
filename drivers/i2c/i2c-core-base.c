@@ -929,6 +929,9 @@ int i2c_dev_irq_from_resources(const struct resource *resources,
 static int i2c_lock_addr(struct i2c_adapter *adap, unsigned short addr,
 			 unsigned short flags)
 {
+	if (flags & I2C_CLIENT_TEN)
+		mutex_lock(&adap->addrs_10bit_lock);
+
 	if (!(flags & I2C_CLIENT_TEN) &&
 	    test_and_set_bit(addr, adap->addrs_in_instantiation))
 		return -EBUSY;
@@ -939,7 +942,9 @@ static int i2c_lock_addr(struct i2c_adapter *adap, unsigned short addr,
 static void i2c_unlock_addr(struct i2c_adapter *adap, unsigned short addr,
 			    unsigned short flags)
 {
-	if (!(flags & I2C_CLIENT_TEN))
+	if (flags & I2C_CLIENT_TEN)
+		mutex_unlock(&adap->addrs_10bit_lock);
+	else
 		clear_bit(addr, adap->addrs_in_instantiation);
 }
 
@@ -1538,6 +1543,7 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 	adap->locked_flags = 0;
 	rt_mutex_init(&adap->bus_lock);
 	rt_mutex_init(&adap->mux_lock);
+	mutex_init(&adap->addrs_10bit_lock);
 	mutex_init(&adap->userspace_clients_lock);
 	INIT_LIST_HEAD(&adap->userspace_clients);
 

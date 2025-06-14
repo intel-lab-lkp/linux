@@ -765,6 +765,9 @@ struct i2c_adapter {
 
 	/* 7bit address space */
 	DECLARE_BITMAP(addrs_in_instantiation, 1 << 7);
+
+	/* Lock for 10bit address instantiation */
+	struct mutex addrs_10bit_lock;
 };
 #define to_i2c_adapter(d) container_of(d, struct i2c_adapter, dev)
 
