@@ -179,6 +179,8 @@ static inline int get_var_refresh(struct fb_var_screeninfo *var)
 		+ var->hsync_len;
 	vtotal = var->upper_margin + var->yres + var->lower_margin
 		+ var->vsync_len;
+	if (!var->pixclock)
+		return -EINVAL;
 	return PICOS2KHZ(var->pixclock) * 1000 / (htotal * vtotal);
 }
 
