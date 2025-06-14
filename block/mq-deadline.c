@@ -101,7 +101,7 @@ struct deadline_data {
 	u32 async_depth;
 	int prio_aging_expire;
 
-	spinlock_t lock;
+	spinlock_t *lock;
 };
 
 /* Maps an I/O priority class to a deadline scheduler priority. */
@@ -213,7 +213,7 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 	const u8 ioprio_class = dd_rq_ioclass(next);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	dd->per_prio[prio].stats.merged++;
 
@@ -253,7 +253,7 @@ static u32 dd_queued(struct deadline_data *dd, enum dd_prio prio)
 {
 	const struct io_stats_per_prio *stats = &dd->per_prio[prio].stats;
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	return stats->inserted - atomic_read(&stats->completed);
 }
@@ -323,7 +323,7 @@ static struct request *__dd_dispatch_request(struct deadline_data *dd,
 	enum dd_prio prio;
 	u8 ioprio_class;
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	if (!list_empty(&per_prio->dispatch)) {
 		rq = list_first_entry(&per_prio->dispatch, struct request,
@@ -434,7 +434,7 @@ static struct request *dd_dispatch_prio_aged_requests(struct deadline_data *dd,
 	enum dd_prio prio;
 	int prio_cnt;
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	prio_cnt = !!dd_queued(dd, DD_RT_PRIO) + !!dd_queued(dd, DD_BE_PRIO) +
 		   !!dd_queued(dd, DD_IDLE_PRIO);
@@ -466,10 +466,9 @@ static struct request *dd_dispatch_request(struct blk_mq_hw_ctx *hctx)
 	struct request *rq;
 	enum dd_prio prio;
 
-	spin_lock(&dd->lock);
 	rq = dd_dispatch_prio_aged_requests(dd, now);
 	if (rq)
-		goto unlock;
+		return rq;
 
 	/*
 	 * Next, dispatch requests in priority order. Ignore lower priority
@@ -480,9 +479,6 @@ static struct request *dd_dispatch_request(struct blk_mq_hw_ctx *hctx)
 		if (rq || dd_queued(dd, prio))
 			break;
 	}
-
-unlock:
-	spin_unlock(&dd->lock);
 
 	return rq;
 }
@@ -552,9 +548,9 @@ static void dd_exit_sched(struct elevator_queue *e)
 		WARN_ON_ONCE(!list_empty(&per_prio->fifo_list[DD_READ]));
 		WARN_ON_ONCE(!list_empty(&per_prio->fifo_list[DD_WRITE]));
 
-		spin_lock(&dd->lock);
+		spin_lock(dd->lock);
 		queued = dd_queued(dd, prio);
-		spin_unlock(&dd->lock);
+		spin_unlock(dd->lock);
 
 		WARN_ONCE(queued != 0,
 			  "statistics for priority %d: i %u m %u d %u c %u\n",
@@ -601,7 +597,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 	dd->last_dir = DD_WRITE;
 	dd->fifo_batch = fifo_batch;
 	dd->prio_aging_expire = prio_aging_expire;
-	spin_lock_init(&dd->lock);
+	dd->lock = &eq->lock;
 
 	/* We dispatch from request queue wide instead of hw queue */
 	blk_queue_flag_set(QUEUE_FLAG_SQ_SCHED, q);
@@ -653,14 +649,10 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 static bool dd_bio_merge(struct request_queue *q, struct bio *bio,
 		unsigned int nr_segs)
 {
-	struct deadline_data *dd = q->elevator->elevator_data;
 	struct request *free = NULL;
 	bool ret;
 
-	spin_lock(&dd->lock);
 	ret = blk_mq_sched_try_merge(q, bio, nr_segs, &free);
-	spin_unlock(&dd->lock);
-
 	if (free)
 		blk_mq_free_request(free);
 
@@ -681,7 +673,7 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	struct dd_per_prio *per_prio;
 	enum dd_prio prio;
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	prio = ioprio_class_to_prio[ioprio_class];
 	per_prio = &dd->per_prio[prio];
@@ -721,11 +713,8 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 			       struct list_head *list,
 			       blk_insert_t flags)
 {
-	struct request_queue *q = hctx->queue;
-	struct deadline_data *dd = q->elevator->elevator_data;
 	LIST_HEAD(free);
 
-	spin_lock(&dd->lock);
 	while (!list_empty(list)) {
 		struct request *rq;
 
@@ -733,7 +722,6 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 		list_del_init(&rq->queuelist);
 		dd_insert_request(hctx, rq, flags, &free);
 	}
-	spin_unlock(&dd->lock);
 
 	blk_mq_free_requests(&free);
 }
@@ -849,13 +837,13 @@ static const struct elv_fs_entry deadline_attrs[] = {
 #define DEADLINE_DEBUGFS_DDIR_ATTRS(prio, data_dir, name)		\
 static void *deadline_##name##_fifo_start(struct seq_file *m,		\
 					  loff_t *pos)			\
-	__acquires(&dd->lock)						\
+	__acquires(dd->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];		\
 									\
-	spin_lock(&dd->lock);						\
+	spin_lock(dd->lock);						\
 	return seq_list_start(&per_prio->fifo_list[data_dir], *pos);	\
 }									\
 									\
@@ -870,12 +858,12 @@ static void *deadline_##name##_fifo_next(struct seq_file *m, void *v,	\
 }									\
 									\
 static void deadline_##name##_fifo_stop(struct seq_file *m, void *v)	\
-	__releases(&dd->lock)						\
+	__releases(dd->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
 									\
-	spin_unlock(&dd->lock);						\
+	spin_unlock(dd->lock);						\
 }									\
 									\
 static const struct seq_operations deadline_##name##_fifo_seq_ops = {	\
@@ -941,11 +929,11 @@ static int dd_queued_show(void *data, struct seq_file *m)
 	struct deadline_data *dd = q->elevator->elevator_data;
 	u32 rt, be, idle;
 
-	spin_lock(&dd->lock);
+	spin_lock(dd->lock);
 	rt = dd_queued(dd, DD_RT_PRIO);
 	be = dd_queued(dd, DD_BE_PRIO);
 	idle = dd_queued(dd, DD_IDLE_PRIO);
-	spin_unlock(&dd->lock);
+	spin_unlock(dd->lock);
 
 	seq_printf(m, "%u %u %u\n", rt, be, idle);
 
@@ -957,7 +945,7 @@ static u32 dd_owned_by_driver(struct deadline_data *dd, enum dd_prio prio)
 {
 	const struct io_stats_per_prio *stats = &dd->per_prio[prio].stats;
 
-	lockdep_assert_held(&dd->lock);
+	lockdep_assert_held(dd->lock);
 
 	return stats->dispatched + stats->merged -
 		atomic_read(&stats->completed);
@@ -969,11 +957,11 @@ static int dd_owned_by_driver_show(void *data, struct seq_file *m)
 	struct deadline_data *dd = q->elevator->elevator_data;
 	u32 rt, be, idle;
 
-	spin_lock(&dd->lock);
+	spin_lock(dd->lock);
 	rt = dd_owned_by_driver(dd, DD_RT_PRIO);
 	be = dd_owned_by_driver(dd, DD_BE_PRIO);
 	idle = dd_owned_by_driver(dd, DD_IDLE_PRIO);
-	spin_unlock(&dd->lock);
+	spin_unlock(dd->lock);
 
 	seq_printf(m, "%u %u %u\n", rt, be, idle);
 
@@ -983,13 +971,13 @@ static int dd_owned_by_driver_show(void *data, struct seq_file *m)
 #define DEADLINE_DISPATCH_ATTR(prio)					\
 static void *deadline_dispatch##prio##_start(struct seq_file *m,	\
 					     loff_t *pos)		\
-	__acquires(&dd->lock)						\
+	__acquires(dd->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];		\
 									\
-	spin_lock(&dd->lock);						\
+	spin_lock(dd->lock);						\
 	return seq_list_start(&per_prio->dispatch, *pos);		\
 }									\
 									\
@@ -1004,12 +992,12 @@ static void *deadline_dispatch##prio##_next(struct seq_file *m,		\
 }									\
 									\
 static void deadline_dispatch##prio##_stop(struct seq_file *m, void *v)	\
-	__releases(&dd->lock)						\
+	__releases(dd->lock)						\
 {									\
 	struct request_queue *q = m->private;				\
 	struct deadline_data *dd = q->elevator->elevator_data;		\
 									\
-	spin_unlock(&dd->lock);						\
+	spin_unlock(dd->lock);						\
 }									\
 									\
 static const struct seq_operations deadline_dispatch##prio##_seq_ops = { \
