@@ -419,6 +419,10 @@ static int i740fb_decode_var(const struct fb_var_screeninfo *var,
 
 
 	bpp = var->bits_per_pixel;
+	if (!var->pixclock){
+		dev_err(info->device, "pixclock must not be zero\n");
+		return -EINVAL;
+	}
 	switch (bpp) {
 	case 1 ... 8:
 		bpp = 8;
