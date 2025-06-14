@@ -73,7 +73,7 @@ static inline int sha1_base_do_update(struct shash_desc *desc,
 static inline int sha1_base_do_finalize(struct shash_desc *desc,
 					sha1_block_fn *block_fn)
 {
-	const int bit_offset = SHA1_BLOCK_SIZE - sizeof(__be64);
+	const unsigned int bit_offset = SHA1_BLOCK_SIZE - sizeof(__be64);
 	struct sha1_state *sctx = shash_desc_ctx(desc);
 	__be64 *bits = (__be64 *)(sctx->buffer + bit_offset);
 	unsigned int partial = sctx->count % SHA1_BLOCK_SIZE;
@@ -99,7 +99,7 @@ static inline int sha1_base_finish(struct shash_desc *desc, u8 *out)
 	__be32 *digest = (__be32 *)out;
 	int i;
 
-	for (i = 0; i < SHA1_DIGEST_SIZE / sizeof(__be32); i++)
+	for (i = 0; i < SHA1_DIGEST_SIZE / (int)sizeof(__be32); i++)
 		put_unaligned_be32(sctx->state[i], digest++);
 
 	memzero_explicit(sctx, sizeof(*sctx));
