@@ -3029,8 +3029,6 @@ static bool bond_has_this_ip(struct bonding *bond, __be32 ip)
 	return ret;
 }
 
-#define BOND_VLAN_PROTO_NONE cpu_to_be16(0xffff)
-
 static bool bond_handle_vlan(struct slave *slave, struct bond_vlan_tag *tags,
 			     struct sk_buff *skb)
 {
@@ -3144,22 +3142,24 @@ struct bond_vlan_tag *bond_verify_device_path(struct net_device *start_dev,
 
 static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 {
-	struct rtable *rt;
-	struct bond_vlan_tag *tags;
 	struct bond_arp_target *targets = bond->params.arp_targets;
+	struct bond_vlan_tag *tags;
 	__be32 target_ip, addr;
+	struct rtable *rt;
 	int i;
 
 	for (i = 0; i < BOND_MAX_ARP_TARGETS && targets[i].target_ip; i++) {
 		target_ip = targets[i].target_ip;
 		tags = targets[i].tags;
+		char pbuf[BOND_OPTION_STRING_MAX_SIZE];
 
-		slave_dbg(bond->dev, slave->dev, "%s: target %pI4\n",
-			  __func__, &target_ip);
+		bond_arp_target_to_string(&targets[i], pbuf, sizeof(pbuf));
+		slave_dbg(bond->dev, slave->dev, "%s: target %s\n", __func__, pbuf);
 
 		/* Find out through which dev should the packet go */
 		rt = ip_route_output(dev_net(bond->dev), target_ip, 0, 0, 0,
 				     RT_SCOPE_LINK);
+
 		if (IS_ERR(rt)) {
 			/* there's no route to target_ip - try to send arp
 			 * probe to generate any traffic (arp_validate=0)
@@ -3177,9 +3177,13 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 		if (rt->dst.dev == bond->dev)
 			goto found;
 
-		rcu_read_lock();
-		tags = bond_verify_device_path(bond->dev, rt->dst.dev, 0);
-		rcu_read_unlock();
+		if (!tags) {
+			rcu_read_lock();
+			tags = bond_verify_device_path(bond->dev, rt->dst.dev, 0);
+			/* cache the tags */
+			targets[i].tags = tags;
+			rcu_read_unlock();
+		}
 
 		if (!IS_ERR_OR_NULL(tags))
 			goto found;
@@ -3195,7 +3199,6 @@ found:
 		addr = bond_confirm_addr(rt->dst.dev, target_ip, 0);
 		ip_rt_put(rt);
 		bond_arp_send(slave, ARPOP_REQUEST, target_ip, addr, tags);
-		kfree(tags);
 	}
 }
 
@@ -6077,6 +6080,7 @@ static void bond_uninit(struct net_device *bond_dev)
 	bond_for_each_slave(bond, slave, iter)
 		__bond_release_one(bond_dev, slave->dev, true, true);
 	netdev_info(bond_dev, "Released all slaves\n");
+	bond_free_vlan_tags(bond->params.arp_targets);
 
 #ifdef CONFIG_XFRM_OFFLOAD
 	mutex_destroy(&bond->ipsec_lock);
@@ -6283,21 +6287,26 @@ static int __init bond_check_params(struct bond_params *params)
 
 	for (arp_ip_count = 0, i = 0;
 	     (arp_ip_count < BOND_MAX_ARP_TARGETS) && arp_ip_target[i]; i++) {
-		__be32 ip;
+		struct bond_arp_target tmp_arp_target;
 
-		/* not a complete check, but good enough to catch mistakes */
-		if (!in4_pton(arp_ip_target[i], -1, (u8 *)&ip, -1, NULL) ||
-		    !bond_is_ip_target_ok(ip)) {
+		if (bond_arp_ip_target_opt_parse(arp_ip_target[i], &tmp_arp_target)) {
 			pr_warn("Warning: bad arp_ip_target module parameter (%s), ARP monitoring will not be performed\n",
 				arp_ip_target[i]);
 			arp_interval = 0;
-		} else {
-			if (bond_get_targets_ip(arp_target, ip) == -1)
-				arp_target[arp_ip_count++].target_ip = ip;
-			else
-				pr_warn("Warning: duplicate address %pI4 in arp_ip_target, skipping\n",
-					&ip);
+			break;
 		}
+
+		if (bond_get_targets_ip(arp_target, tmp_arp_target.target_ip) != -1) {
+			pr_warn("Warning: duplicate address %pI4 in arp_ip_target, skipping\n",
+				&tmp_arp_target.target_ip);
+			kfree(tmp_arp_target.tags);
+			continue;
+		}
+
+		arp_target[i].target_ip = tmp_arp_target.target_ip;
+		arp_target[i].tags = tmp_arp_target.tags;
+		arp_target[i].flags |= BOND_TARGET_DONTFREE;
+		++arp_ip_count;
 	}
 
 	if (arp_interval && !arp_ip_count) {
@@ -6663,7 +6672,7 @@ static void __exit bonding_exit(void)
 
 	bond_netlink_fini();
 	unregister_pernet_subsys(&bond_net_ops);
-
+	bond_free_vlan_tags_all(bonding_defaults.arp_targets);
 	bond_destroy_debugfs();
 
 #ifdef CONFIG_NET_POLL_CONTROLLER

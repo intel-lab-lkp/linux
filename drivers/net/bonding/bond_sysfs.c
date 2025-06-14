@@ -288,11 +288,14 @@ static ssize_t bonding_show_arp_targets(struct device *d,
 {
 	struct bonding *bond = to_bond(d);
 	int i, res = 0;
+	char pbuf[BOND_OPTION_STRING_MAX_SIZE];
 
 	for (i = 0; i < BOND_MAX_ARP_TARGETS; i++) {
-		if (bond->params.arp_targets[i].target_ip)
-			res += sysfs_emit_at(buf, res, "%pI4 ",
-					     &bond->params.arp_targets[i].target_ip);
+		if (bond->params.arp_targets[i].target_ip) {
+			bond_arp_target_to_string(&bond->params.arp_targets[i],
+						  pbuf, sizeof(pbuf));
+			res += sysfs_emit_at(buf, res, "%s ", pbuf);
+		}
 	}
 	if (res)
 		buf[res-1] = '\n'; /* eat the leftover space */

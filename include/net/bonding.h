@@ -23,6 +23,7 @@
 #include <linux/etherdevice.h>
 #include <linux/reciprocal_div.h>
 #include <linux/if_link.h>
+#include <linux/inet.h>
 
 #include <net/bond_3ad.h>
 #include <net/bond_alb.h>
@@ -786,6 +787,151 @@ static inline int bond_get_targets_ip6(struct in6_addr *targets, struct in6_addr
 	return -1;
 }
 #endif
+
+#define BOND_VLAN_PROTO_NONE cpu_to_be16(0xffff)
+#define BOND_OPTION_STRING_MAX_SIZE 256
+
+/* Convert vlan_list into struct bond_vlan_tag.
+ * Inspired by bond_verify_device_path();
+ */
+static inline struct bond_vlan_tag *bond_vlan_tags_parse(char *vlan_list, int level)
+{
+	struct bond_vlan_tag *tags;
+	char *vlan;
+
+	if (!vlan_list || strlen(vlan_list) == 0) {
+		tags = kcalloc(level + 1, sizeof(*tags), GFP_ATOMIC);
+		if (!tags)
+			return ERR_PTR(-ENOMEM);
+		tags[level].vlan_proto = BOND_VLAN_PROTO_NONE;
+		return tags;
+	}
+
+	for (vlan = strsep(&vlan_list, "/"); (vlan != 0); level++) {
+		tags = bond_vlan_tags_parse(vlan_list, level + 1);
+		if (IS_ERR_OR_NULL(tags)) {
+			if (IS_ERR(tags))
+				return tags;
+			continue;
+		}
+
+		tags[level].vlan_proto = __cpu_to_be16(ETH_P_8021Q);
+		if (kstrtou16(vlan, 0, &tags[level].vlan_id)) {
+			kfree(tags);
+			return ERR_PTR(-EINVAL);
+		}
+
+		if (tags[level].vlan_id < 1 || tags[level].vlan_id > 4094) {
+			kfree(tags);
+			return ERR_PTR(-EINVAL);
+		}
+
+		return tags;
+	}
+
+	return NULL;
+}
+
+/**
+ * bond_arp_ip_target_opt_parse - parse a single arp_ip_target option value string
+ * @src: the option value to be parsed
+ * @dest: struct bond_arp_target to place the results.
+ *
+ * This function parses a single arp_ip_target string in the form:
+ * x.x.x.x[tag/....] into a struct bond_arp_target.
+ * Returns 0 on success.
+ */
+static inline int bond_arp_ip_target_opt_parse(char *src, struct bond_arp_target *dest)
+{
+	char *ipv4, *vlan_list;
+	char target[BOND_OPTION_STRING_MAX_SIZE], *args;
+	struct bond_vlan_tag *tags = NULL;
+	__be32 ip;
+
+	if (strlen(src) > BOND_OPTION_STRING_MAX_SIZE)
+		return -E2BIG;
+
+	pr_debug("Parsing arp_ip_target (%s)\n", src);
+
+	/* copy arp_ip_target[i] to local array, strsep works
+	 * destructively...
+	 */
+	args = target;
+	strscpy(target, src);
+	ipv4 = strsep(&args, "[");
+
+	/* not a complete check, but good enough to catch mistakes */
+	if (!in4_pton(ipv4, -1, (u8 *)&ip, -1, NULL) ||
+	    !bond_is_ip_target_ok(ip)) {
+		return -EINVAL;
+	}
+
+	/* extract vlan tags */
+	vlan_list = strsep(&args, "]");
+
+	/* If a vlan list was not supplied skip the processing of the list.
+	 * A value of "[]" is a valid list and should be handled a such.
+	 */
+	if (vlan_list) {
+		tags = bond_vlan_tags_parse(vlan_list, 0);
+		dest->flags |= BOND_TARGET_USERTAGS;
+		if (IS_ERR(tags))
+			return PTR_ERR(tags);
+	}
+
+	dest->target_ip = ip;
+	dest->tags = tags;
+
+	return 0;
+}
+
+static inline int bond_arp_target_to_string(struct bond_arp_target *target,
+					    char *buf, int size)
+{
+	struct bond_vlan_tag *tags = target->tags;
+	int i, num = 0;
+
+	if (!(target->flags & BOND_TARGET_USERTAGS)) {
+		num = snprintf(&buf[0], size, "%pI4", &target->target_ip);
+		return num;
+	}
+
+	num = snprintf(&buf[0], size, "%pI4[", &target->target_ip);
+	if (tags) {
+		for (i = 0; (tags[i].vlan_proto != BOND_VLAN_PROTO_NONE); i++) {
+			if (!tags[i].vlan_id)
+				continue;
+			if (i != 0)
+				num = num + snprintf(&buf[num], size-num, "/");
+			num = num + snprintf(&buf[num], size-num, "%u",
+					     tags[i].vlan_id);
+		}
+	}
+	snprintf(&buf[num], size-num, "]");
+	return num;
+}
+
+static inline void bond_free_vlan_tag(struct bond_arp_target *target)
+{
+	if (!(target->flags & BOND_TARGET_DONTFREE))
+		kfree(target->tags);
+}
+
+static inline void __bond_free_vlan_tags(struct bond_arp_target *targets, int all)
+{
+	int i;
+
+	for (i = 0; i < BOND_MAX_ARP_TARGETS && targets[i].tags; i++) {
+		if (!all)
+			bond_free_vlan_tag(&targets[i]);
+		else
+			kfree(targets[i].tags);
+	}
+}
+
+#define bond_free_vlan_tags(targets)  __bond_free_vlan_tags(targets, 0)
+#define bond_free_vlan_tags_all(targets) __bond_free_vlan_tags(targets, 1)
+
 
 /* exported from bond_main.c */
 extern unsigned int bond_net_id;

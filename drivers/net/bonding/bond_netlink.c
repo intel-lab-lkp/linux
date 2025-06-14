@@ -287,14 +287,21 @@ static int bond_changelink(struct net_device *bond_dev, struct nlattr *tb[],
 
 		bond_option_arp_ip_targets_clear(bond);
 		nla_for_each_nested(attr, data[IFLA_BOND_ARP_IP_TARGET], rem) {
+			char target_str[BOND_OPTION_STRING_MAX_SIZE];
 			__be32 target;
 
 			if (nla_len(attr) < sizeof(target))
 				return -EINVAL;
 
-			target = nla_get_be32(attr);
+			if (nla_len(attr) > sizeof(target)) {
+				snprintf(target_str, sizeof(target_str),
+					 "%s%s", "+", (__force char *)nla_data(attr));
+				bond_opt_initstr(&newval, target_str);
+			} else {
+				target = nla_get_be32(attr);
+				bond_opt_initval(&newval, (__force u64)target);
+			}
 
-			bond_opt_initval(&newval, (__force u64)target);
 			err = __bond_opt_set(bond, BOND_OPT_ARP_TARGETS,
 					     &newval,
 					     data[IFLA_BOND_ARP_IP_TARGET],
