@@ -243,6 +243,7 @@ static void hci_devcd_handle_pkt_pattern(struct hci_dev *hdev,
 static void hci_devcd_dump(struct hci_dev *hdev)
 {
 	struct sk_buff *skb;
+	char *coredump;
 	u32 size;
 
 	bt_dev_dbg(hdev, "state %d", hdev->dump.state);
@@ -250,7 +251,11 @@ static void hci_devcd_dump(struct hci_dev *hdev)
 	size = hdev->dump.tail - hdev->dump.head;
 
 	/* Emit a devcoredump with the available data */
-	dev_coredumpv(&hdev->dev, hdev->dump.head, size, GFP_KERNEL);
+	coredump = vmalloc(size);
+	if (coredump) {
+		memcpy(coredump, hdev->dump.head, size);
+		dev_coredumpv(&hdev->dev, coredump, size, GFP_KERNEL);
+	}
 
 	/* Send a copy to monitor as a diagnostic packet */
 	skb = bt_skb_alloc(size, GFP_ATOMIC);
