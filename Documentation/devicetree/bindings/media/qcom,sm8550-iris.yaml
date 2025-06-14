@@ -69,11 +69,6 @@ properties:
 
   dma-coherent: true
 
-  operating-points-v2: true
-
-  opp-table:
-    type: object
-
 required:
   - compatible
   - power-domain-names

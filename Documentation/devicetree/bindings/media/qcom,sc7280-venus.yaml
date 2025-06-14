@@ -54,10 +54,6 @@ properties:
       - const: cpu-cfg
       - const: video-mem
 
-  operating-points-v2: true
-  opp-table:
-    type: object
-
   video-decoder:
     type: object
 

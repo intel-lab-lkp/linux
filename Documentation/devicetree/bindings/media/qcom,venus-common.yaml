@@ -47,6 +47,10 @@ properties:
     minItems: 1
     maxItems: 4
 
+  operating-points-v2: true
+  opp-table:
+    type: object
+
   video-firmware:
     type: object
     additionalProperties: false
