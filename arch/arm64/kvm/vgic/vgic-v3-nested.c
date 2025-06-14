@@ -343,7 +343,7 @@ void vgic_v3_put_nested(struct kvm_vcpu *vcpu)
 	struct shadow_if *shadow_if = get_shadow_if();
 	struct vgic_v3_cpu_if *s_cpu_if = &shadow_if->cpuif;
 	u64 val;
-	int i;
+	int i, index = 0;
 
 	__vgic_v3_save_vmcr_aprs(s_cpu_if);
 	__vgic_v3_deactivate_traps(s_cpu_if);
@@ -368,10 +368,11 @@ void vgic_v3_put_nested(struct kvm_vcpu *vcpu)
 		val = __vcpu_sys_reg(vcpu, ICH_LRN(i));
 
 		val &= ~ICH_LR_STATE;
-		val |= s_cpu_if->vgic_lr[i] & ICH_LR_STATE;
+		val |= s_cpu_if->vgic_lr[index] & ICH_LR_STATE;
 
 		__vcpu_sys_reg(vcpu, ICH_LRN(i)) = val;
-		s_cpu_if->vgic_lr[i] = 0;
+		s_cpu_if->vgic_lr[index] = 0;
+		index++;
 	}
 
 	shadow_if->lr_map = 0;
