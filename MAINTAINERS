@@ -24136,6 +24136,7 @@ F:	drivers/gpio/gpio-thunderx.c
 
 TI ADC12xs and ROHM BD79104 ADC driver
 M:	Matti Vaittinen <mazziesaccount@gmail.com>
+M:	Sukrut Bellary <sbellary@baylibre.com>
 S:	Maintained
 F:	drivers/iio/adc/ti-adc128s052.c
 L:	linux-iio@vger.kernel.org
