@@ -41,10 +41,8 @@ static void proc_evict_inode(struct inode *inode)
 		proc_pid_evict_inode(ei);
 
 	head = ei->sysctl;
-	if (head) {
-		RCU_INIT_POINTER(ei->sysctl, NULL);
+	if (head)
 		proc_sys_evict_inode(inode, head);
-	}
 }
 
 static struct kmem_cache *proc_inode_cachep __ro_after_init;

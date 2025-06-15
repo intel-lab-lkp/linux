@@ -915,7 +915,6 @@ static int sysctl_is_seen(struct ctl_table_header *p)
 static int proc_sys_compare(const struct dentry *dentry,
 		unsigned int len, const char *str, const struct qstr *name)
 {
-	struct ctl_table_header *head;
 	struct inode *inode;
 
 	/* Although proc doesn't have negative dentries, rcu-walk means
@@ -928,8 +927,7 @@ static int proc_sys_compare(const struct dentry *dentry,
 		return 1;
 	if (memcmp(name->name, str, len))
 		return 1;
-	head = rcu_dereference(PROC_I(inode)->sysctl);
-	return !head || !sysctl_is_seen(head);
+	return !sysctl_is_seen(PROC_I(inode)->sysctl);
 }
 
 static const struct dentry_operations proc_sys_dentry_operations = {
