@@ -241,7 +241,7 @@ static void aspeed_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 	struct sdhci_pltfm_host *pltfm_host;
 	unsigned long parent, bus;
 	struct aspeed_sdhci *sdhci;
-	int div;
+	int div = 1;
 	u16 clk;
 
 	pltfm_host = sdhci_priv(host);
@@ -256,6 +256,9 @@ static void aspeed_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 
 	if (WARN_ON(clock > host->max_clk))
 		clock = host->max_clk;
+
+	if (sdhci->pdata)
+		div = sdhci->pdata->clk_div_start;
 
 	/*
 	 * Regarding the AST2600:
@@ -273,7 +276,7 @@ static void aspeed_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 	 * supporting the value 0 in (EMMC12C[7:6], EMMC12C[15:8]), and capture
 	 * the 0-value capability in clk_div_start.
 	 */
-	for (div = sdhci->pdata->clk_div_start; div < 256; div *= 2) {
+	for (; div < 256; div *= 2) {
 		bus = parent / div;
 		if (bus <= clock)
 			break;
