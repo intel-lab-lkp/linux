@@ -9,27 +9,110 @@
 ///
 /// It's okay for the type to have padding, as initializing those bytes has no effect.
 ///
+/// # Example
+/// ```
+/// let arr = [1, 2, 3, 4];
+///
+/// let result = u32::from_bytes(&arr);
+///
+/// #[cfg(target_endian = "little")]
+/// match result {
+///     Some(x) => assert_eq!(*x, 0x4030201),
+///     None => unreachable!()
+/// }
+///
+/// #[cfg(target_endian = "big")]
+/// match result {
+///     Some(x) => assert_eq!(*x, 0x1020304),
+///     None => unreachable!()
+/// }
+/// ```
+///
 /// # Safety
 ///
 /// All bit-patterns must be valid for this type. This type must not have interior mutability.
-pub unsafe trait FromBytes {}
+pub unsafe trait FromBytes {
+    /// Converts a slice of bytes to a reference to `Self` when possible.
+    fn from_bytes(bytes: &[u8]) -> Option<&Self>;
+
+    /// Converts a mutable slice of bytes to a reference to `Self` when possible.
+    fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut Self>
+    where
+        Self: AsBytes;
+}
 
 macro_rules! impl_frombytes {
     ($($({$($generics:tt)*})? $t:ty, )*) => {
         // SAFETY: Safety comments written in the macro invocation.
-        $(unsafe impl$($($generics)*)? FromBytes for $t {})*
+        $(unsafe impl$($($generics)*)? FromBytes for $t {
+            fn from_bytes(bytes: &[u8]) -> Option<&$t> {
+                if bytes.len() == core::mem::size_of::<$t>()
+                    && (bytes.as_ptr() as usize) % core::mem::align_of::<$t>() == 0
+                {
+                    let slice_ptr = bytes.as_ptr().cast::<$t>();
+                    unsafe { Some(&*slice_ptr) }
+                } else {
+                    None
+                }
+            }
+
+            fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut $t>
+            where
+            Self: AsBytes,
+            {
+                if bytes.len() == core::mem::size_of::<$t>()
+                    && (bytes.as_mut_ptr() as usize) % core::mem::align_of::<$t>() == 0
+                {
+                    let slice_ptr = bytes.as_mut_ptr().cast::<$t>();
+                    unsafe { Some(&mut *slice_ptr) }
+                } else {
+                    None
+                }
+            }
+        })*
     };
 }
 
 impl_frombytes! {
     // SAFETY: All bit patterns are acceptable values of the types below.
+    // Checking the pointer size and alignment makes this operation safe and it's necessary
+    // to dereference to get the value and return it as a reference to `Self`.
     u8, u16, u32, u64, usize,
     i8, i16, i32, i64, isize,
-
-    // SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
-    // patterns are also acceptable for arrays of that type.
-    {<T: FromBytes>} [T],
     {<T: FromBytes, const N: usize>} [T; N],
+}
+
+// SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
+// patterns are also acceptable for arrays of that type.
+unsafe impl<T: FromBytes> FromBytes for [T] {
+    fn from_bytes(bytes: &[u8]) -> Option<&Self> {
+        if bytes.len() % core::mem::size_of::<T>() == 0
+            && (bytes.as_ptr() as usize) % core::mem::align_of::<T>() == 0
+        {
+            let slice_ptr = bytes.as_ptr().cast::<T>();
+            let slice_len = bytes.len() / core::mem::size_of::<T>();
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(core::slice::from_raw_parts(slice_ptr, slice_len)) }
+        } else {
+            None
+        }
+    }
+
+    fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut Self>
+    where
+        Self: AsBytes,
+    {
+        if bytes.len() % core::mem::size_of::<T>() == 0
+            && (bytes.as_mut_ptr() as usize) % core::mem::align_of::<T>() == 0
+        {
+            let slice_ptr = bytes.as_mut_ptr().cast::<T>();
+            let slice_len = bytes.len() / core::mem::size_of::<T>();
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(core::slice::from_raw_parts_mut(slice_ptr, slice_len)) }
+        } else {
+            None
+        }
+    }
 }
 
 /// Types that can be viewed as an immutable slice of initialized bytes.
