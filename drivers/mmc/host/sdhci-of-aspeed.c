@@ -25,6 +25,7 @@
 #define   ASPEED_SDC_S1_PHASE_IN	GENMASK(25, 21)
 #define   ASPEED_SDC_S0_PHASE_IN	GENMASK(20, 16)
 #define   ASPEED_SDC_S0_PHASE_IN_SHIFT  16
+#define   ASPEED_SDC_S0_PHASE_OUT_SHIFT 3
 #define   ASPEED_SDC_S1_PHASE_OUT	GENMASK(15, 11)
 #define   ASPEED_SDC_S1_PHASE_IN_EN	BIT(10)
 #define   ASPEED_SDC_S1_PHASE_OUT_EN	GENMASK(9, 8)
@@ -422,7 +423,7 @@ static int aspeed_sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 		}
 
 		window = right - left;
-		dev_info(dev, "tuning window = %d\n", window);
+		dev_dbg(dev, "tuning window[%d][%d~%d] = %d\n", edge, left, right, window);
 
 		if (window > oldwindow) {
 			oldwindow = window;
@@ -433,7 +434,50 @@ static int aspeed_sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 	val = (out_phase | enable_mask | (center << ASPEED_SDC_S0_PHASE_IN_SHIFT));
 	writel(val, sdc->regs + ASPEED_SDC_PHASE);
 
-	dev_info(dev, "tuning result=%x\n", val);
+	dev_dbg(dev, "input tuning result=%x\n", val);
+
+	inverted = 0;
+	out_phase = val & ~ASPEED_SDC_S0_PHASE_OUT;
+	in_phase = out_phase;
+	oldwindow = 0;
+
+	for (edge = 0; edge < 2; edge++) {
+		if (edge == 1)
+			inverted = ASPEED_SDHCI_TAP_PARAM_INVERT_CLK;
+
+		val = (in_phase | enable_mask | (inverted << ASPEED_SDC_S0_PHASE_OUT_SHIFT));
+
+		/* find the left boundary */
+		for (left = 0; left < ASPEED_SDHCI_NR_TAPS + 1; left++) {
+			out_phase = val | (left << ASPEED_SDC_S0_PHASE_OUT_SHIFT);
+			writel(out_phase, sdc->regs + ASPEED_SDC_PHASE);
+
+			if (!mmc_send_tuning(host->mmc, opcode, NULL))
+				break;
+		}
+
+		/* find the right boundary */
+		for (right = left + 1; right < ASPEED_SDHCI_NR_TAPS + 1; right++) {
+			out_phase = val | (right << ASPEED_SDC_S0_PHASE_OUT_SHIFT);
+			writel(out_phase, sdc->regs + ASPEED_SDC_PHASE);
+
+			if (mmc_send_tuning(host->mmc, opcode, NULL))
+				break;
+		}
+
+		window = right - left;
+		dev_info(dev, "tuning window[%d][%d~%d] = %d\n", edge, left, right, window);
+
+		if (window > oldwindow) {
+			oldwindow = window;
+			center = (((right - 1) + left) / 2) | inverted;
+		}
+	}
+
+	val = (in_phase | enable_mask | (center << ASPEED_SDC_S0_PHASE_OUT_SHIFT));
+	writel(val, sdc->regs + ASPEED_SDC_PHASE);
+
+	dev_dbg(dev, "output tuning result=%x\n", val);
 
 	return mmc_send_tuning(host->mmc, opcode, NULL);
 }
