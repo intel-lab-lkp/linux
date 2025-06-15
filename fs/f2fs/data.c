@@ -416,10 +416,9 @@ int f2fs_target_device_index(struct f2fs_sb_info *sbi, block_t blkaddr)
 	return 0;
 }
 
-static blk_opf_t f2fs_io_flags(struct f2fs_io_info *fio)
+blk_opf_t f2fs_io_flags(struct f2fs_io_info *fio, struct inode *inode)
 {
 	unsigned int temp_mask = GENMASK(NR_TEMP_TYPE - 1, 0);
-	struct folio *fio_folio = page_folio(fio->page);
 	unsigned int fua_flag, meta_flag, io_flag;
 	blk_opf_t op_flags = 0;
 
@@ -446,8 +445,8 @@ static blk_opf_t f2fs_io_flags(struct f2fs_io_info *fio)
 	if (BIT(fio->temp) & fua_flag)
 		op_flags |= REQ_FUA;
 
-	if (fio->type == DATA &&
-	    F2FS_I(fio_folio->mapping->host)->ioprio_hint == F2FS_IOPRIO_WRITE)
+	if (inode && fio->type == DATA &&
+	    F2FS_I(inode)->ioprio_hint == F2FS_IOPRIO_WRITE)
 		op_flags |= REQ_PRIO;
 
 	return op_flags;
@@ -459,10 +458,11 @@ static struct bio *__bio_alloc(struct f2fs_io_info *fio, int npages)
 	struct block_device *bdev;
 	sector_t sector;
 	struct bio *bio;
+	struct inode *inode = fio->page ? fio->page->mapping->host : NULL;
 
 	bdev = f2fs_target_device(sbi, fio->new_blkaddr, &sector);
 	bio = bio_alloc_bioset(bdev, npages,
-				fio->op | fio->op_flags | f2fs_io_flags(fio),
+				fio->op | fio->op_flags | f2fs_io_flags(fio, inode),
 				GFP_NOIO, &f2fs_bioset);
 	bio->bi_iter.bi_sector = sector;
 	if (is_read_io(fio->op)) {
