@@ -527,6 +527,8 @@ static int i801_block_transaction_by_block(struct i801_priv *priv,
 
 	if (read_write == I2C_SMBUS_WRITE) {
 		len = data->block[0];
+		if (len < 1 || len > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		iowrite8(len, SMBHSTDAT0(priv));
 		ioread8(SMBHSTCNT(priv));	/* reset the data buffer index */
 		iowrite8_rep(SMBBLKDAT(priv), data->block + 1, len);
