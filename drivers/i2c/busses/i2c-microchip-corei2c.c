@@ -492,6 +492,8 @@ static int mchp_corei2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned 
 		if (read_write == I2C_SMBUS_WRITE) {
 			int data_len;
 
+			if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+				return -EINVAL;
 			data_len = data->block[0];
 			msgs[CORE_I2C_SMBUS_MSG_WR].len = data_len + 2;
 			for (int i = 0; i <= data_len; i++)
