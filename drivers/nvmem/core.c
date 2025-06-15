@@ -1044,6 +1044,7 @@ err_remove_cells:
 		nvmem_sysfs_remove_compat(nvmem, config);
 err_put_device:
 	put_device(&nvmem->dev);
+	kfree(nvmem);
 
 	return ERR_PTR(rval);
 }
