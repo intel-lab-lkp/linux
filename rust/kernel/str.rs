@@ -3,6 +3,7 @@
 //! String representations.
 
 use crate::alloc::{flags::*, AllocError, KVec};
+use core::borrow::{Borrow, BorrowMut};
 use core::fmt::{self, Write};
 use core::ops::{self, Deref, DerefMut, Index};
 
@@ -908,6 +909,50 @@ impl DerefMut for CString {
         // SAFETY: A `CString` is always NUL-terminated and contains no other
         // NUL bytes.
         unsafe { CStr::from_bytes_with_nul_unchecked_mut(self.buf.as_mut_slice()) }
+    }
+}
+
+/// # Examples
+///
+/// ```
+/// # use core::borrow::Borrow;
+/// # use kernel::str::{CStr, CString};
+/// # use kernel::fmt;
+/// struct Foo<B: Borrow<CStr>>(B);
+///
+/// // Owned instance using `CString`.
+/// let foo_owned = Foo(CString::try_from_fmt(fmt!("{}", "abc"))?);
+///
+/// let str_data = b"abc\0";
+/// // Borrowed from `str_data`.
+/// let foo_borrowed = Foo(CStr::from_bytes_with_nul(str_data)?);
+/// # Ok::<(), Error>(())
+/// ```
+impl Borrow<CStr> for CString {
+    fn borrow(&self) -> &CStr {
+        self.deref()
+    }
+}
+
+/// # Examples
+///
+/// ```
+/// # use core::borrow::BorrowMut;
+/// # use kernel::str::{CStr, CString};
+/// # use kernel::fmt;
+/// struct Foo<B: BorrowMut<CStr>>(B);
+///
+/// // Owned instance using `CString`.
+/// let foo_owned = Foo(CString::try_from_fmt(fmt!("{}", "abc"))?);
+///
+/// let mut str_data = [b'a', b'b', b'c', 0];
+/// // Borrowed from `str_data`.
+/// let foo_borrowed = Foo(unsafe { CStr::from_bytes_with_nul_unchecked_mut(&mut str_data) });
+/// # Ok::<(), Error>(())
+/// ```
+impl BorrowMut<CStr> for CString {
+    fn borrow_mut(&mut self) -> &mut CStr {
+        self.deref_mut()
     }
 }
 
