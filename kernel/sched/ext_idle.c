@@ -250,7 +250,7 @@ static struct cpumask *llc_span(s32 cpu)
 
 	sd = rcu_dereference(per_cpu(sd_llc, cpu));
 	if (!sd)
-		return 0;
+		return NULL;
 
 	return sched_domain_span(sd);
 }
