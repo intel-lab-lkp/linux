@@ -973,8 +973,13 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	mdev->usb_device = usb_dev;
 	mdev->link_stat_timer.expires = jiffies + (2 * HZ);
 
+	device_initialize(&mdev->dev);
+	mdev->dev.init_name = mdev->description;
+	mdev->dev.parent = &interface->dev;
+	mdev->dev.release = release_mdev;
+
 	mdev->iface.mod = hdm_usb_fops.owner;
-	mdev->iface.dev = &mdev->dev;
+	mdev->iface.dev = get_device(&mdev->dev);
 	mdev->iface.driver_dev = &interface->dev;
 	mdev->iface.interface = ITYPE_USB;
 	mdev->iface.configure = hdm_configure_channel;
@@ -993,9 +998,6 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		 usb_dev->config->desc.bConfigurationValue,
 		 usb_iface_desc->desc.bInterfaceNumber);
 
-	mdev->dev.init_name = mdev->description;
-	mdev->dev.parent = &interface->dev;
-	mdev->dev.release = release_mdev;
 	mdev->conf = kcalloc(num_endpoints, sizeof(*mdev->conf), GFP_KERNEL);
 	if (!mdev->conf)
 		goto err_free_mdev;
@@ -1126,7 +1128,6 @@ static void hdm_disconnect(struct usb_interface *interface)
 	kfree(mdev->cap);
 	kfree(mdev->conf);
 	kfree(mdev->ep_address);
-	put_device(&mdev->dci->dev);
 	put_device(&mdev->dev);
 }
 
