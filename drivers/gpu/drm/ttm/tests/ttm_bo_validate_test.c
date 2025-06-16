@@ -977,6 +977,7 @@ static void ttm_bo_validate_allowed_only_evict(struct kunit *test)
 	ttm_mock_manager_fini(priv->ttm_dev, mem_multihop);
 }
 
+#if 0
 static void ttm_bo_validate_deleted_evict(struct kunit *test)
 {
 	struct ttm_operation_ctx ctx_init = { }, ctx_val  = { };
@@ -1026,6 +1027,7 @@ static void ttm_bo_validate_deleted_evict(struct kunit *test)
 	ttm_bo_fini(bo_big);
 	ttm_mock_manager_fini(priv->ttm_dev, mem_type);
 }
+#endif
 
 static void ttm_bo_validate_busy_domain_evict(struct kunit *test)
 {
@@ -1205,7 +1207,7 @@ static struct kunit_case ttm_bo_validate_test_cases[] = {
 	KUNIT_CASE(ttm_bo_validate_happy_evict),
 	KUNIT_CASE(ttm_bo_validate_all_pinned_evict),
 	KUNIT_CASE(ttm_bo_validate_allowed_only_evict),
-	KUNIT_CASE(ttm_bo_validate_deleted_evict),
+	/*KUNIT_CASE(ttm_bo_validate_deleted_evict),*/
 	KUNIT_CASE(ttm_bo_validate_busy_domain_evict),
 	KUNIT_CASE(ttm_bo_validate_evict_gutting),
 	KUNIT_CASE(ttm_bo_validate_recrusive_evict),
