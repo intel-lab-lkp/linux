@@ -133,6 +133,7 @@ struct ice_aqc_list_caps_elem {
 #define ICE_AQC_CAPS_FW_LAG_SUPPORT			0x0092
 #define ICE_AQC_BIT_ROCEV2_LAG				BIT(0)
 #define ICE_AQC_BIT_SRIOV_LAG				BIT(1)
+#define ICE_AQC_BIT_SRIOV_AA_LAG			BIT(2)
 
 	u8 major_ver;
 	u8 minor_ver;
@@ -2165,6 +2166,10 @@ struct ice_aqc_cfg_txqs {
 #define ICE_AQC_Q_CFG_SRC_PRT_M		0x7
 #define ICE_AQC_Q_CFG_DST_PRT_S		3
 #define ICE_AQC_Q_CFG_DST_PRT_M		(0x7 << ICE_AQC_Q_CFG_DST_PRT_S)
+#define ICE_AQC_Q_CFG_MODE_M		GENMASK(7, 6)
+#define ICE_AQC_Q_CFG_MODE_SAME_PF	0x0
+#define ICE_AQC_Q_CFG_MODE_GIVE_OWN	0x1
+#define ICE_AQC_Q_CFG_MODE_KEEP_OWN	0x2
 	u8 time_out;
 #define ICE_AQC_Q_CFG_TIMEOUT_S		2
 #define ICE_AQC_Q_CFG_TIMEOUT_M		(0x1F << ICE_AQC_Q_CFG_TIMEOUT_S)
