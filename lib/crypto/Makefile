@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
+obj-y += tests/
+
 obj-$(CONFIG_CRYPTO_LIB_UTILS)			+= libcryptoutils.o
 libcryptoutils-y				:= memneq.o utils.o
 
