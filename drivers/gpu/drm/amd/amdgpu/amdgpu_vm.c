@@ -2447,6 +2447,9 @@ amdgpu_vm_get_vm_from_pasid(struct amdgpu_device *adev, u32 pasid)
  */
 void amdgpu_vm_put_task_info(struct amdgpu_task_info *task_info)
 {
+	if (unlikely(ZERO_OR_NULL_PTR(task_info)))
+		return;
+
 	kref_put(&task_info->refcount, amdgpu_vm_destroy_task_info);
 }
 
