@@ -10,6 +10,11 @@ ksft_skip=4
 #
 hpages_test=8
 
+if ! grep -q hugetlbfs /proc/filesystems; then
+	echo "hugetlbfs not supported, test skipped."
+	exit $ksft_skip
+fi
+
 #
 # Get count of free huge pages from /proc/meminfo
 #
