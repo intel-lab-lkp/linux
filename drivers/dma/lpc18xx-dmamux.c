@@ -53,10 +53,16 @@ static void lpc18xx_dmamux_free(struct device *dev, void *route_data)
 static void *lpc18xx_dmamux_reserve(struct of_phandle_args *dma_spec,
 				    struct of_dma *ofdma)
 {
-	struct platform_device *pdev = of_find_device_by_node(ofdma->of_node);
-	struct lpc18xx_dmamux_data *dmamux = platform_get_drvdata(pdev);
+	struct platform_device *pdev;
+	struct lpc18xx_dmamux_data *dmamux;
 	unsigned long flags;
 	unsigned mux;
+
+	pdev = of_find_device_by_node(ofdma->of_node);
+	if (!pdev)
+		return ERR_PTR(-ENODEV);
+
+	dmamux = platform_get_drvdata(pdev);
 
 	if (dma_spec->args_count != 3) {
 		dev_err(&pdev->dev, "invalid number of dma mux args\n");
