@@ -233,7 +233,6 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 	loff_t orig_pos = *pos;
 	loff_t isize = i_size_read(inode);
 	unsigned block_bits = inode->i_blkbits;
-	unsigned block_size = (1 << block_bits);
 	size_t poff = offset_in_folio(folio, *pos);
 	size_t plen = min_t(loff_t, folio_size(folio) - poff, length);
 	size_t orig_plen = plen;
@@ -252,16 +251,12 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 		for (i = first; i <= last; i++) {
 			if (!ifs_block_is_uptodate(ifs, i))
 				break;
-			*pos += block_size;
-			poff += block_size;
-			plen -= block_size;
 			first++;
 		}
 
 		/* truncate len if we find any trailing uptodate block(s) */
 		while (++i <= last) {
 			if (ifs_block_is_uptodate(ifs, i)) {
-				plen -= (last - i + 1) * block_size;
 				last = i - 1;
 				break;
 			}
@@ -277,8 +272,12 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 		unsigned end = offset_in_folio(folio, isize - 1) >> block_bits;
 
 		if (first <= end && last > end)
-			plen -= (last - end) * block_size;
+			last = end;
 	}
+
+	poff = first << block_bits;
+	plen = (last - first + 1) << block_bits;
+	*pos = folio_pos(folio) + poff;
 
 	*offp = poff;
 	*lenp = plen;
