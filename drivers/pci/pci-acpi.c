@@ -1653,15 +1653,7 @@ pci_acpi_setup_ecam_mapping(struct acpi_pci_root *root)
 }
 
 /* release_info: free resources allocated by init_info */
-static void pci_acpi_generic_release_info(struct acpi_pci_root_info *ci)
-{
-	struct acpi_pci_generic_root_info *ri;
-
-	ri = container_of(ci, struct acpi_pci_generic_root_info, common);
-	pci_ecam_free(ri->cfg);
-	kfree(ci->ops);
-	kfree(ri);
-}
+static void pci_acpi_generic_release_info(struct acpi_pci_root_info *ci) {}
 
 /* Interface called from ACPI code to setup PCI host controller */
 struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
