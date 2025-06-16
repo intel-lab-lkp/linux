@@ -2120,15 +2120,13 @@ static int _mmc_flush_cache(struct mmc_host *host)
 	return err;
 }
 
-static int _mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
+static int __mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
 {
 	unsigned int notify_type = EXT_CSD_POWER_OFF_SHORT;
 	int err = 0;
 
 	if (pm_type == MMC_POWEROFF_SHUTDOWN)
 		notify_type = EXT_CSD_POWER_OFF_LONG;
-
-	mmc_claim_host(host);
 
 	if (mmc_card_suspended(host->card))
 		goto out;
@@ -2156,7 +2154,17 @@ static int _mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
 		mmc_card_set_suspended(host->card);
 	}
 out:
+	return err;
+}
+
+static int _mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
+{
+	int err;
+
+	mmc_claim_host(host);
+	err = __mmc_suspend(host, pm_type);
 	mmc_release_host(host);
+
 	return err;
 }
 
@@ -2218,6 +2226,13 @@ out:
 static int mmc_shutdown(struct mmc_host *host)
 {
 	int err = 0;
+
+	/*
+	 * In case of undervoltage, the card will be powered off by
+	 * _mmc_handle_undervoltage()
+	 */
+	if (host->undervoltage)
+		return 0;
 
 	/*
 	 * If the card remains suspended at this point and it was done by using
@@ -2309,6 +2324,60 @@ static int _mmc_hw_reset(struct mmc_host *host)
 	return mmc_init_card(host, card->ocr, card);
 }
 
+/**
+ * _mmc_handle_undervoltage - Handle an undervoltage event for MMC/eMMC devices
+ * @host: MMC host structure
+ *
+ * This function is triggered when an undervoltage condition is detected.
+ * It attempts to transition the device into a low-power or safe state to
+ * prevent data corruption.
+ *
+ * Steps performed:
+ * 1. If no card is present, return immediately.
+ * 2. Perform an emergency suspend using EXT_CSD_POWER_OFF_SHORT if possible.
+ *    - If power-off notify is not supported, fallback mechanisms like sleep or
+ *      deselecting the card are attempted.
+ *    - Cache flushing is skipped to reduce execution time.
+ * 3. Mark the card as removed to prevent further interactions after
+ *    undervoltage.
+ *
+ * Note: This function does not handle host claiming or releasing. The caller
+ *	 must ensure that the host is properly claimed before calling this
+ *	 function and released afterward.
+ *
+ * Returns: 0 on success, or a negative error code if any step fails.
+ */
+static int _mmc_handle_undervoltage(struct mmc_host *host)
+{
+	struct mmc_card *card = host->card;
+	int err;
+
+	/* If there is no card attached, nothing to do */
+	if (!card)
+		return 0;
+
+	/*
+	 * Perform an emergency suspend to power off the eMMC quickly.
+	 * This ensures the device enters a safe state before power is lost.
+	 * We first attempt EXT_CSD_POWER_OFF_SHORT, but if power-off notify
+	 * is not supported, we fall back to sleep mode or deselecting the card.
+	 * Cache flushing is skipped to minimize delay.
+	 */
+	err = __mmc_suspend(host, MMC_POWEROFF_UNDERVOLTAGE);
+	if (err)
+		pr_err("%s: undervoltage suspend failed: %pe\n",
+		       mmc_hostname(host), ERR_PTR(err));
+
+	/*
+	 * Mark the card as removed to prevent further operations.
+	 * This ensures the system does not attempt to access the device
+	 * after an undervoltage event, avoiding potential corruption.
+	 */
+	mmc_card_set_removed(card);
+
+	return err;
+}
+
 static const struct mmc_bus_ops mmc_ops = {
 	.remove = mmc_remove,
 	.detect = mmc_detect,
@@ -2321,6 +2390,7 @@ static const struct mmc_bus_ops mmc_ops = {
 	.hw_reset = _mmc_hw_reset,
 	.cache_enabled = _mmc_cache_enabled,
 	.flush_cache = _mmc_flush_cache,
+	.handle_undervoltage = _mmc_handle_undervoltage,
 };
 
 /*
