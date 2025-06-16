@@ -26,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/cpumask.h>
 
+DECLARE_STATIC_KEY_FALSE(ptdump_lock_key);
 /*
  * CPU feature register tracking
  *
