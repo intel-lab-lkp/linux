@@ -290,7 +290,7 @@ impl CStr {
     #[inline]
     pub const unsafe fn from_bytes_with_nul_unchecked_mut(bytes: &mut [u8]) -> &mut CStr {
         // SAFETY: Properties of `bytes` guaranteed by the safety precondition.
-        unsafe { &mut *(bytes as *mut [u8] as *mut CStr) }
+        unsafe { core::mem::transmute(bytes) }
     }
 
     /// Returns a C pointer to the string.
