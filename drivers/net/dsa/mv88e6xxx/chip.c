@@ -6013,6 +6013,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ops = &mv88e6176_ops,
+		.p0_mode_mask_override = 0x7,
 	},
 
 	[MV88E6185] = {

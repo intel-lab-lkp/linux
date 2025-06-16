@@ -178,6 +178,13 @@ struct mv88e6xxx_info {
 	 * port 0, 1 means internal PHYs range starts at port 1, etc
 	 */
 	unsigned int internal_phys_offset;
+
+	/* Some chips use 3 bits for the port mode in scratch
+         * register CONFIG Data2.
+         * If this is set to 0x0, it will use the default mask of
+         * MV88E6352_G2_SCRATCH_CONFIG_DATA2_P0_MODE_MASK
+         */
+	u8 p0_mode_mask_override;
 };
 
 struct mv88e6xxx_atu_entry {
