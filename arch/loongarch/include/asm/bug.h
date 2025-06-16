@@ -11,7 +11,7 @@
 #else
 #define __BUGVERBOSE_LOCATION(file, line)			\
 		.pushsection .rodata.str, "aMS", @progbits, 1;	\
-	10002:	.string file;					\
+	10002:	.ascii file "\0";				\
 		.popsection;					\
 								\
 		.long 10002b - .;				\
