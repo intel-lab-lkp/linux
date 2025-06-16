@@ -7,6 +7,7 @@
 #include <sys/eventfd.h>
 
 #define __EXPORTED_HEADERS__
+#include <linux/const.h>
 #include <linux/vfio.h>
 
 #include "iommufd_utils.h"
@@ -2022,7 +2023,19 @@ FIXTURE_SETUP(iommufd_dirty_tracking)
 	self->fd = open("/dev/iommu", O_RDWR);
 	ASSERT_NE(-1, self->fd);
 
-	rc = posix_memalign(&self->buffer, HUGEPAGE_SIZE, variant->buffer_size);
+	if (variant->hugepages) {
+		/*
+		 * Allocation must be aligned to the HUGEPAGE_SIZE, because the
+		 * following mmap() will automatically align the length to be a
+		 * multiple of the underlying huge page size. Failing to do the
+		 * same at this allocation will result in a memory overwrite by
+		 * the mmap().
+		 */
+		size = __ALIGN_KERNEL(variant->buffer_size, HUGEPAGE_SIZE);
+	} else {
+		size = variant->buffer_size;
+	}
+	rc = posix_memalign(&self->buffer, HUGEPAGE_SIZE, size);
 	if (rc || !self->buffer) {
 		SKIP(return, "Skipping buffer_size=%lu due to errno=%d",
 			   variant->buffer_size, rc);
@@ -2037,8 +2050,8 @@ FIXTURE_SETUP(iommufd_dirty_tracking)
 		mmap_flags |= MAP_HUGETLB | MAP_POPULATE;
 	}
 	assert((uintptr_t)self->buffer % HUGEPAGE_SIZE == 0);
-	vrc = mmap(self->buffer, variant->buffer_size, PROT_READ | PROT_WRITE,
-		   mmap_flags, -1, 0);
+	vrc = mmap(self->buffer, size, PROT_READ | PROT_WRITE, mmap_flags, -1,
+		   0);
 	assert(vrc == self->buffer);
 
 	self->page_size = MOCK_PAGE_SIZE;
@@ -2066,8 +2079,13 @@ FIXTURE_SETUP(iommufd_dirty_tracking)
 
 FIXTURE_TEARDOWN(iommufd_dirty_tracking)
 {
-	munmap(self->buffer, variant->buffer_size);
-	munmap(self->bitmap, DIV_ROUND_UP(self->bitmap_size, BITS_PER_BYTE));
+	unsigned long size = variant->buffer_size;
+
+	if (variant->hugepages)
+		size = __ALIGN_KERNEL(variant->buffer_size, HUGEPAGE_SIZE);
+	munmap(self->buffer, size);
+	free(self->buffer);
+	free(self->bitmap);
 	teardown_iommufd(self->fd, _metadata);
 }
 
