@@ -15740,10 +15740,6 @@ F:	include/linux/memory_hotplug.h
 F:	include/linux/memory-tiers.h
 F:	include/linux/mempolicy.h
 F:	include/linux/mempool.h
-F:	include/linux/memremap.h
-F:	include/linux/mmzone.h
-F:	include/linux/mmu_notifier.h
-F:	include/linux/pagewalk.h
 F:	include/trace/events/ksm.h
 F:	mm/
 F:	tools/mm/
@@ -15764,16 +15760,40 @@ S:	Maintained
 W:	http://www.linux-mm.org
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/akpm/mm
 F:	include/linux/memory.h
+F:	include/linux/memremap.h
 F:	include/linux/mm.h
 F:	include/linux/mm_*.h
 F:	include/linux/mmdebug.h
+F:	include/linux/mmu_notifier.h
+F:	include/linux/mmzone.h
 F:	include/linux/pagewalk.h
 F:	kernel/fork.c
 F:	mm/Kconfig
 F:	mm/debug.c
+F:	mm/debug_page_ref.c
+F:	mm/debug_vm_pgtable.c
+F:	mm/folio-compat.c
+F:	mm/highmem.c
 F:	mm/init-mm.c
+F:	mm/internal.h
+F:	mm/interval_tree.c
+F:	mm/io-mapping.c
+F:	mm/ioremap.c
+F:	mm/list_lru.c
+F:	mm/maccess.c
+F:	mm/mapping_dirty_helpers.c
 F:	mm/memory.c
+F:	mm/memremap.c
+F:	mm/mmu_notifier.c
+F:	mm/mmzone.c
+F:	mm/oom_kill.c
+F:	mm/page_idle.c
 F:	mm/pagewalk.c
+F:	mm/pgtable-generic.c
+F:	mm/process_vm_access.c
+F:	mm/ptdump.c
+F:	mm/sparse-vmemmap.c
+F:	mm/sparse.c
 F:	mm/util.c
 
 MEMORY MANAGEMENT - EXECMEM
