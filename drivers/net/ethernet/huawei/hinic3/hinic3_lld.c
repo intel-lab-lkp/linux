@@ -121,6 +121,7 @@ static int hinic3_attach_aux_devices(struct hinic3_hwdev *hwdev)
 			goto err_del_adevs;
 	}
 	mutex_unlock(&pci_adapter->pdev_mutex);
+
 	return 0;
 
 err_del_adevs:
@@ -132,6 +133,7 @@ err_del_adevs:
 		}
 	}
 	mutex_unlock(&pci_adapter->pdev_mutex);
+
 	return -ENOMEM;
 }
 
@@ -153,6 +155,7 @@ struct hinic3_hwdev *hinic3_adev_get_hwdev(struct auxiliary_device *adev)
 	struct hinic3_adev *hadev;
 
 	hadev = container_of(adev, struct hinic3_adev, adev);
+
 	return hadev->hwdev;
 }
 
@@ -333,6 +336,7 @@ err_unmap_bar:
 
 err_out:
 	dev_err(&pdev->dev, "PCIe device probe function failed\n");
+
 	return err;
 }
 
@@ -365,6 +369,7 @@ err_uninit_pci:
 
 err_out:
 	dev_err(&pdev->dev, "PCIe device probe failed\n");
+
 	return err;
 }
 
