@@ -20,6 +20,9 @@
 
 #include "bpmp-private.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/tegra_bpmp.h>
+
 #define MSG_ACK		BIT(0)
 #define MSG_RING	BIT(1)
 #define TAG_SZ		32
@@ -227,6 +230,7 @@ static ssize_t tegra_bpmp_channel_read(struct tegra_bpmp_channel *channel,
 unlock:
 	up(&bpmp->threaded.lock);
 
+	trace_tegra_bpmp_channel_read(channel, data, size, ret, err);
 	return err;
 }
 
@@ -239,6 +243,8 @@ static ssize_t __tegra_bpmp_channel_write(struct tegra_bpmp_channel *channel,
 
 	if (data && size > 0)
 		tegra_bpmp_mb_write(&channel->ob, data, size);
+
+	trace_tegra_bpmp_channel_write(channel, mrq, flags, data, size);
 
 	return tegra_bpmp_post_request(channel);
 }
@@ -350,8 +356,12 @@ int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
 	if (err < 0)
 		return err;
 
-	return __tegra_bpmp_channel_read(channel, msg->rx.data, msg->rx.size,
+	err =  __tegra_bpmp_channel_read(channel, msg->rx.data, msg->rx.size,
 					 &msg->rx.ret);
+
+	trace_tegra_bpmp_channel_read(channel, msg->rx.data, msg->rx.size,
+				      &msg->rx.ret, err);
+	return err;
 }
 EXPORT_SYMBOL_GPL(tegra_bpmp_transfer_atomic);
 
@@ -367,6 +377,8 @@ int tegra_bpmp_transfer(struct tegra_bpmp *bpmp,
 
 	if (!tegra_bpmp_message_valid(msg))
 		return -EINVAL;
+
+	trace_tegra_bpmp_transfer(bpmp, msg);
 
 	if (bpmp->suspended) {
 		/* Reset BPMP IPC channels during resume based on flags passed */
@@ -812,6 +824,7 @@ static int __maybe_unused tegra_bpmp_suspend(struct device *dev)
 {
 	struct tegra_bpmp *bpmp = dev_get_drvdata(dev);
 
+	trace_tegra_bpmp_pm(bpmp, true);
 	bpmp->suspended = true;
 
 	return 0;
@@ -821,6 +834,7 @@ static int __maybe_unused tegra_bpmp_resume(struct device *dev)
 {
 	struct tegra_bpmp *bpmp = dev_get_drvdata(dev);
 
+	trace_tegra_bpmp_pm(bpmp, false);
 	bpmp->suspended = false;
 
 	if (bpmp->soc->ops->resume)
