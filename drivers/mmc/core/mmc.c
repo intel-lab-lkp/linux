@@ -2370,6 +2370,12 @@ int mmc_attach_mmc(struct mmc_host *host)
 		goto remove_card;
 
 	mmc_claim_host(host);
+
+	if (host->card->ext_csd.power_off_notification == EXT_CSD_POWER_ON) {
+		mmc_regulator_register_undervoltage_notifier(host);
+		host->undervoltage_notify_registered = true;
+	}
+
 	return 0;
 
 remove_card:

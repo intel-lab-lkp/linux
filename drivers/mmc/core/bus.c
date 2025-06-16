@@ -394,6 +394,11 @@ void mmc_remove_card(struct mmc_card *card)
 {
 	struct mmc_host *host = card->host;
 
+	if (host->undervoltage_notify_registered) {
+		mmc_regulator_unregister_undervoltage_notifier(host);
+		host->undervoltage_notify_registered = false;
+	}
+
 	mmc_remove_card_debugfs(card);
 
 	if (mmc_card_present(card)) {
