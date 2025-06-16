@@ -5,6 +5,7 @@
 #include <linux/bitfield.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/module.h>

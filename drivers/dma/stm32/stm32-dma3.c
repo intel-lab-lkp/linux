@@ -12,6 +12,7 @@
 #include <linux/dmaengine.h>
 #include <linux/dmapool.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/list.h>
 #include <linux/module.h>

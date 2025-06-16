@@ -7,6 +7,7 @@
 #define _FSL_EDMA_COMMON_H_
 
 #include <linux/dma-direction.h>
+#include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include "virt-dma.h"
 

@@ -1031,7 +1031,7 @@ static void mdc_dma_remove(struct platform_device *pdev)
 
 		devm_free_irq(&pdev->dev, mchan->irq, mchan);
 
-		tasklet_kill(&mchan->vc.task);
+		cancel_work_sync(&mchan->vc.work);
 	}
 
 	pm_runtime_disable(&pdev->dev);

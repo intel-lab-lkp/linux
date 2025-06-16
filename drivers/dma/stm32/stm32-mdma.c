@@ -18,6 +18,7 @@
 #include <linux/dmapool.h>
 #include <linux/err.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/jiffies.h>
 #include <linux/list.h>
