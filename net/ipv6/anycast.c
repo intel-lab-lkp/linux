@@ -73,15 +73,13 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 	struct inet6_dev *idev;
 	int err = 0, ishost;
 
-	ASSERT_RTNL();
-
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 	if (ipv6_addr_is_multicast(addr))
 		return -EINVAL;
 
 	if (ifindex)
-		dev = __dev_get_by_index(net, ifindex);
+		dev = dev_get_by_index(net, ifindex);
 
 	if (ipv6_chk_addr_and_flags(net, addr, dev, true, 0, IFA_F_TENTATIVE)) {
 		err = -EINVAL;
@@ -105,14 +103,15 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 		rt = rt6_lookup(net, addr, NULL, 0, NULL, 0);
 		if (rt) {
 			dev = rt->dst.dev;
+			dev_hold(dev);
 			ip6_rt_put(rt);
 		} else if (ishost) {
 			err = -EADDRNOTAVAIL;
 			goto error;
 		} else {
 			/* router, no matching interface: just pick one */
-			dev = __dev_get_by_flags(net, IFF_UP,
-						 IFF_UP | IFF_LOOPBACK);
+			dev = dev_get_by_flags(net, IFF_UP,
+					       IFF_UP | IFF_LOOPBACK);
 		}
 	}
 
@@ -121,7 +120,7 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 		goto error;
 	}
 
-	idev = __in6_dev_get(dev);
+	idev = in6_dev_get(dev);
 	if (!idev) {
 		if (ifindex)
 			err = -ENODEV;
@@ -143,7 +142,7 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 		if (ishost)
 			err = -EADDRNOTAVAIL;
 		if (err)
-			goto error;
+			goto error_idev;
 	}
 
 	err = __ipv6_dev_ac_inc(idev, addr);
@@ -153,7 +152,11 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 		pac = NULL;
 	}
 
+error_idev:
+	in6_dev_put(idev);
 error:
+	dev_put(dev);
+
 	if (pac)
 		sock_kfree_s(sk, pac, sizeof(*pac));
 	return err;
