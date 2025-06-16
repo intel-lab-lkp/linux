@@ -49,6 +49,14 @@
 #include "ttm_module.h"
 #include "ttm_bo_internal.h"
 
+static void ttm_bo_release(struct kref *kref);
+
+/* TODO: remove! */
+void ttm_bo_put(struct ttm_buffer_object *bo)
+{
+	kref_put(&bo->kref, ttm_bo_release);
+}
+
 static void ttm_bo_mem_space_debug(struct ttm_buffer_object *bo,
 					struct ttm_placement *placement)
 {
@@ -318,18 +326,11 @@ static void ttm_bo_release(struct kref *kref)
 	bo->destroy(bo);
 }
 
-/**
- * ttm_bo_put
- *
- * @bo: The buffer object.
- *
- * Unreference a buffer object.
- */
-void ttm_bo_put(struct ttm_buffer_object *bo)
+void ttm_bo_fini(struct ttm_buffer_object *bo)
 {
-	kref_put(&bo->kref, ttm_bo_release);
+	ttm_bo_put(bo);
 }
-EXPORT_SYMBOL(ttm_bo_put);
+EXPORT_SYMBOL(ttm_bo_fini);
 
 static int ttm_bo_bounce_temp_buffer(struct ttm_buffer_object *bo,
 				     struct ttm_operation_ctx *ctx,
