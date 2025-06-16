@@ -1427,6 +1427,12 @@ eb_relocate_entry(struct i915_execbuffer *eb,
 	struct eb_vma *target;
 	int err;
 
+	/* Sanity check for non-canonical or NULL pointer */
+	if (!reloc || !access_ok(reloc, sizeof(*reloc))) {
+		DRM_ERROR("Invalid relocation entry pointer: %p\n", reloc);
+		return -EFAULT;
+	}
+
 	/* we've already hold a reference to all valid objects */
 	target = eb_get_vma(eb, reloc->target_handle);
 	if (unlikely(!target))
