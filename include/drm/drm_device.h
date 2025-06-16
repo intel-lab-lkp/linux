@@ -325,6 +325,10 @@ struct drm_device {
 	 * Root directory for debugfs files.
 	 */
 	struct dentry *debugfs_root;
+	/**
+	 * @drm_debugfs_root;
+	 */
+	struct dentry *drm_debugfs_root;
 };
 
 #endif

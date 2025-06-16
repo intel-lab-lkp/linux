@@ -296,6 +296,7 @@ EXPORT_SYMBOL(drm_debugfs_remove_files);
 void drm_debugfs_dev_init(struct drm_device *dev, struct dentry *root)
 {
 	dev->debugfs_root = debugfs_create_dir(dev->unique, root);
+	dev->drm_debugfs_root = root;
 }
 
 /**

@@ -39,6 +39,7 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/vga_switcheroo.h>
+#include <linux/debugfs.h>
 
 #include <drm/drm_client_event.h>
 #include <drm/drm_drv.h>
@@ -133,6 +134,7 @@ struct drm_file *drm_file_alloc(struct drm_minor *minor)
 	struct drm_device *dev = minor->dev;
 	struct drm_file *file;
 	int ret;
+	char *dir_name, *drm_name, *symlink;
 
 	file = kzalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)
@@ -142,6 +144,27 @@ struct drm_file *drm_file_alloc(struct drm_minor *minor)
 	file->client_id = atomic64_inc_return(&ident);
 	rcu_assign_pointer(file->pid, get_pid(task_tgid(current)));
 	file->minor = minor;
+
+	dir_name = kasprintf(GFP_KERNEL, "client-%llu", file->client_id);
+	if (!dir_name)
+		return ERR_PTR(-ENOMEM);
+
+	/* Create a debugfs directory for the client in root on drm debugfs */
+	file->debugfs_client = debugfs_create_dir(dir_name, dev->drm_debugfs_root);
+	kfree(dir_name);
+
+	drm_name = kasprintf(GFP_KERNEL, "%d", minor->index);
+	if (!drm_name)
+		return ERR_PTR(-ENOMEM);
+
+	symlink = kasprintf(GFP_KERNEL, "../%d", minor->index);
+	if (!symlink)
+		return ERR_PTR(-ENOMEM);
+
+	/* Create a link from client_id to the drm device this client id belongs to */
+	debugfs_create_symlink(drm_name, file->debugfs_client, symlink);
+	kfree(drm_name);
+	kfree(symlink);
 
 	/* for compatibility root is always authenticated */
 	file->authenticated = capable(CAP_SYS_ADMIN);
@@ -236,6 +259,9 @@ void drm_file_free(struct drm_file *file)
 		     atomic_read(&dev->open_count));
 
 	drm_events_release(file);
+
+	debugfs_remove_recursive(file->debugfs_client);
+	file->debugfs_client = NULL;
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		drm_fb_release(file);
