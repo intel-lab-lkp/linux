@@ -814,6 +814,8 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 	}
 	t->max_secure_erase_sectors = min_not_zero(t->max_secure_erase_sectors,
 						   b->max_secure_erase_sectors);
+	t->driver_preserves_write_order = t->driver_preserves_write_order &&
+		b->driver_preserves_write_order;
 	t->zone_write_granularity = max(t->zone_write_granularity,
 					b->zone_write_granularity);
 	if (!(t->features & BLK_FEAT_ZONED)) {
