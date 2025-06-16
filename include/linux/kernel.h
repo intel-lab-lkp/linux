@@ -27,6 +27,7 @@
 #include <linux/math.h>
 #include <linux/minmax.h>
 #include <linux/typecheck.h>
+#include <linux/sys_info.h>
 #include <linux/panic.h>
 #include <linux/printk.h>
 #include <linux/build_bug.h>
