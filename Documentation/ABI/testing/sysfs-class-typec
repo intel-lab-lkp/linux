@@ -264,6 +264,23 @@ Description:	The USB Modes that the partner device supports. The active mode
 		- usb3 (USB 3.2)
 		- usb4 (USB4)
 
+What:		/sys/class/typec/<port>-partner/mode_selection
+Date:		June 2025
+Contact:	Andrei Kuchynski <akuchynski@chromium.org>
+Description:	Lists the partner-supported alternate modes and mode entry
+		results with the currently entered mode bracketed. If a cable doesn't
+		support a mode, it's marked as 'nc'. An ellipsis indicates a mode
+		currently in progress. Automated mode selection is activated by writing
+		"yes" to the file. Conversely, writing "no" will cancel any ongoing
+		selection process and exit the currently active mode, if any.
+
+		Example values:
+		- "DP TBT=... USB4=nc": The cable does not support USB4 mode,
+			The driver is currently attempting to enter Thunderbolt alt-mode.
+		- "[DP] TBT=-EOPNOTSUPP USB4=-ETIME": USB4 mode entry failed due to
+			a timeout, Thunderbolt failed with the result -EOPNOTSUPP,
+			and DisplayPort is the active alt-mode.
+
 USB Type-C cable devices (eg. /sys/class/typec/port0-cable/)
 
 Note: Electronically Marked Cables will have a device also for one cable plug
