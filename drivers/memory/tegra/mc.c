@@ -21,6 +21,9 @@
 
 #include "mc.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/tegra_mc.h>
+
 static const struct of_device_id tegra_mc_of_match[] = {
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	{ .compatible = "nvidia,tegra20-mc-gart", .data = &tegra20_mc_soc },
@@ -210,6 +213,8 @@ static int tegra_mc_hotreset_assert(struct reset_controller_dev *rcdev,
 	int retries = 500;
 	int err;
 
+	trace_tegra_mc_hotreset(mc->dev, id, true);
+
 	rst = tegra_mc_reset_find(mc, id);
 	if (!rst)
 		return -ENODEV;
@@ -268,6 +273,8 @@ static int tegra_mc_hotreset_deassert(struct reset_controller_dev *rcdev,
 	const struct tegra_mc_reset_ops *rst_ops;
 	const struct tegra_mc_reset *rst;
 	int err;
+
+	trace_tegra_mc_hotreset(mc->dev, id, false);
 
 	rst = tegra_mc_reset_find(mc, id);
 	if (!rst)
@@ -583,7 +590,7 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 	for_each_set_bit(bit, &status, 32) {
 		const char *error = tegra_mc_status_names[bit] ?: "unknown";
 		const char *client = "unknown", *desc;
-		const char *direction, *secure;
+		bool secure, write;
 		u32 status_reg, addr_reg;
 		u32 intmask = BIT(bit);
 		phys_addr_t addr = 0;
@@ -652,15 +659,8 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 		}
 #endif
 
-		if (value & MC_ERR_STATUS_RW)
-			direction = "write";
-		else
-			direction = "read";
-
-		if (value & MC_ERR_STATUS_SECURITY)
-			secure = "secure ";
-		else
-			secure = "";
+		write = value & MC_ERR_STATUS_RW;
+		secure = value & MC_ERR_STATUS_SECURITY;
 
 		id = value & mc->soc->client_id_mask;
 
@@ -710,8 +710,12 @@ irqreturn_t tegra30_mc_handle_irq(int irq, void *data)
 			value = mc_readl(mc, addr_reg);
 		addr |= value;
 
+		trace_tegra_mc_err(mc->dev, client, secure, write, addr,
+				   error, desc, perm);
+
 		dev_err_ratelimited(mc->dev, "%s: %s%s @%pa: %s (%s%s)\n",
-				    client, secure, direction, &addr, error,
+				    client, secure ? "secure" : "",
+				    write ? "write" : "read", &addr, error,
 				    desc, perm);
 	}
 
