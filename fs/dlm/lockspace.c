@@ -69,7 +69,7 @@ static ssize_t dlm_event_store(struct dlm_ls *ls, const char *buf, size_t len)
 
 static ssize_t dlm_id_show(struct dlm_ls *ls, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n", ls->ls_global_id);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", ls->ls_global_id);
 }
 
 static ssize_t dlm_id_store(struct dlm_ls *ls, const char *buf, size_t len)
@@ -83,7 +83,7 @@ static ssize_t dlm_id_store(struct dlm_ls *ls, const char *buf, size_t len)
 
 static ssize_t dlm_nodir_show(struct dlm_ls *ls, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n", dlm_no_directory(ls));
+	return scnprintf(buf, PAGE_SIZE, "%u\n", dlm_no_directory(ls));
 }
 
 static ssize_t dlm_nodir_store(struct dlm_ls *ls, const char *buf, size_t len)
@@ -101,12 +101,12 @@ static ssize_t dlm_nodir_store(struct dlm_ls *ls, const char *buf, size_t len)
 static ssize_t dlm_recover_status_show(struct dlm_ls *ls, char *buf)
 {
 	uint32_t status = dlm_recover_status(ls);
-	return snprintf(buf, PAGE_SIZE, "%x\n", status);
+	return scnprintf(buf, PAGE_SIZE, "%x\n", status);
 }
 
 static ssize_t dlm_recover_nodeid_show(struct dlm_ls *ls, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n", ls->ls_recover_nodeid);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ls->ls_recover_nodeid);
 }
 
 struct dlm_attr {

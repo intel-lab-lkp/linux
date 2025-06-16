@@ -185,7 +185,7 @@ static ssize_t cluster_##name##_store(struct config_item *item, \
 }                                                                             \
 static ssize_t cluster_##name##_show(struct config_item *item, char *buf)     \
 {                                                                             \
-	return snprintf(buf, PAGE_SIZE, "%u\n", dlm_config.ci_##name);        \
+	return scnprintf(buf, PAGE_SIZE, "%u\n", dlm_config.ci_##name);       \
 }                                                                             \
 CONFIGFS_ATTR(cluster_, name);
 
