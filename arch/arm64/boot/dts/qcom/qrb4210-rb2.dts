@@ -606,9 +606,8 @@
 };
 
 &tlmm {
-	gpio-reserved-ranges = <43 2>, <49 1>, <54 1>,
-			       <56 3>, <61 2>, <64 1>,
-			       <68 1>, <72 8>, <96 1>;
+	gpio-reserved-ranges = <12 2>, <43 2>, <49 1>, <54 1>, <56 3>,
+			       <61 2>, <64 1>, <68 1>, <72 8>, <96 1>;
 
 	uart3_default: uart3-default-state {
 		cts-pins {
