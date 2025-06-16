@@ -479,7 +479,8 @@ static void pci_device_remove(struct device *dev)
 	pci_iov_remove(pci_dev);
 
 	/* Undo the runtime PM settings in local_pci_probe() */
-	pm_runtime_put_sync(dev);
+	if (!pci_dev_is_disconnected(pci_dev))
+		pm_runtime_put_sync(dev);
 
 	/*
 	 * If the device is still on, set the power state as "unknown",
