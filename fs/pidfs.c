@@ -25,6 +25,16 @@
 #include "internal.h"
 #include "mount.h"
 
+/*
+ * Usage:
+ * pid->wait_pidfd.lock protects:
+ *   - insertion of dentry into pid->stashed
+ *   - deletion of dentry into pid->stashed
+ *   - deletion of pid[PIDTYPE_TGID] task linkage
+ */
+
+#define PIDFS_PID_DEAD ERR_PTR(-ESRCH)
+
 static struct kmem_cache *pidfs_cachep __ro_after_init;
 
 /*
@@ -552,30 +562,47 @@ struct pid *pidfd_pid(const struct file *file)
  * task has been reaped which cannot happen until we're out of
  * release_task().
  *
- * If this struct pid is referred to by a pidfd then
- * stashed_dentry_get() will return the dentry and inode for that struct
- * pid. Since we've taken a reference on it there's now an additional
- * reference from the exit path on it. Which is fine. We're going to put
- * it again in a second and we know that the pid is kept alive anyway.
+ * If this struct pid has at least once been referred to by a pidfd then
+ * pid->stashed will contain a dentry. One reference exclusively belongs
+ * to pidfs_exit(). There might of course be other references.
  *
  * Worst case is that we've filled in the info and immediately free the
- * dentry and inode afterwards since the pidfd has been closed. Since
- * pidfs_exit() currently is placed after exit_task_work() we know that
- * it cannot be us aka the exiting task holding a pidfd to ourselves.
+ * dentry and inode afterwards when no one holds an open pidfd anymore.
+ * Since pidfs_exit() currently is placed after exit_task_work() we know
+ * that it cannot be us aka the exiting task holding a pidfd to itself.
  */
 void pidfs_exit(struct task_struct *tsk)
 {
 	struct dentry *dentry;
+	struct pid *pid = task_pid(tsk);
 
 	might_sleep();
 
-	dentry = stashed_dentry_get(&task_pid(tsk)->stashed);
-	if (dentry) {
-		struct inode *inode = d_inode(dentry);
-		struct pidfs_exit_info *exit_info = &pidfs_i(inode)->__pei;
+	scoped_guard(spinlock_irq, &pid->wait_pidfd.lock) {
+		struct inode *inode;
+		struct pidfs_exit_info *exit_info;
 #ifdef CONFIG_CGROUPS
 		struct cgroup *cgrp;
+#endif
 
+		dentry = pid->stashed;
+		if (!dentry) {
+			/*
+			 * No one held a pidfd for this struct pid.
+			 * Mark it as dead so no one can add a pidfs
+			 * entry anymore. We're about to be reaped and
+			 * so no exit information would be available.
+			 */
+			rcu_assign_pointer(pid->stashed, PIDFS_PID_DEAD);
+			return;
+		}
+
+		/* We own a reference assert that clearly. */
+		VFS_WARN_ON_ONCE(__lockref_is_dead(&dentry->d_lockref));
+		inode = d_inode(dentry);
+		exit_info = &pidfs_i(inode)->__pei;
+
+#ifdef CONFIG_CGROUPS
 		rcu_read_lock();
 		cgrp = task_dfl_cgroup(tsk);
 		exit_info->cgroupid = cgroup_id(cgrp);
@@ -585,8 +612,15 @@ void pidfs_exit(struct task_struct *tsk)
 
 		/* Ensure that PIDFD_GET_INFO sees either all or nothing. */
 		smp_store_release(&pidfs_i(inode)->exit_info, &pidfs_i(inode)->__pei);
-		dput(dentry);
 	}
+
+	/*
+	 * If there was a dentry in there we own a reference to it. So
+	 * accessing pid->stashed is safe. Note, pid->stashed will be
+	 * cleared by pidfs. Leave it alone as we could end up in a
+	 * legitimate race with path_from_stashed()'s fast path.
+	 */
+	dput(dentry);
 }
 
 #ifdef CONFIG_COREDUMP
@@ -683,9 +717,30 @@ static char *pidfs_dname(struct dentry *dentry, char *buffer, int buflen)
 	return dynamic_dname(buffer, buflen, "anon_inode:[pidfd]");
 }
 
+static void pidfs_dentry_prune(struct dentry *dentry)
+{
+	struct dentry **stashed = dentry->d_fsdata;
+	struct inode *inode = d_inode(dentry);
+	struct pid *pid;
+
+	if (WARN_ON_ONCE(!stashed))
+		return;
+
+	if (!inode)
+		return;
+
+	pid = inode->i_private;
+	VFS_WARN_ON_ONCE(!pid);
+	scoped_guard(spinlock_irq, &pid->wait_pidfd.lock) {
+		VFS_WARN_ON_ONCE(!__lockref_is_dead(&dentry->d_lockref));
+		VFS_WARN_ON_ONCE(*stashed != dentry);
+		rcu_assign_pointer(*stashed, PIDFS_PID_DEAD);
+	}
+}
+
 const struct dentry_operations pidfs_dentry_operations = {
 	.d_dname	= pidfs_dname,
-	.d_prune	= stashed_dentry_prune,
+	.d_prune	= pidfs_dentry_prune,
 };
 
 static int pidfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
@@ -878,9 +933,43 @@ static void pidfs_put_data(void *data)
 	put_pid(pid);
 }
 
+static struct dentry *pidfs_stash_dentry(struct dentry **stashed,
+					 struct dentry *dentry)
+{
+	struct pid *pid = d_inode(dentry)->i_private;
+
+	VFS_WARN_ON_ONCE(stashed != &pid->stashed);
+
+	/* We need to synchronize with pidfs_exit(). */
+	guard(spinlock_irq)(&pid->wait_pidfd.lock);
+
+	/*
+	 * There's nothing stashed in here so no pidfs dentry exists for
+	 * this task yet and we're definitely not past pidfs_exit().
+	 */
+	if (likely(!pid->stashed)) {
+		rcu_assign_pointer(pid->stashed, dget(dentry));
+		return dentry;
+	}
+
+	/*
+	 * We're past pidfs_exit() so we can't return a pidfd for this
+	 * reaped struct pid as no exit information would be available.
+	 */
+	if (pid->stashed == PIDFS_PID_DEAD)
+		return ERR_PTR(-ESRCH);
+
+	/* Another task might've raced us and added a pidfs dentry. */
+	dentry = stashed_dentry_get(&pid->stashed);
+	VFS_WARN_ON_ONCE(!dentry);
+	VFS_WARN_ON_ONCE(IS_ERR(dentry));
+	return dentry;
+}
+
 static const struct stashed_operations pidfs_stashed_ops = {
-	.init_inode = pidfs_init_inode,
-	.put_data = pidfs_put_data,
+	.stash_dentry	= pidfs_stash_dentry,
+	.init_inode	= pidfs_init_inode,
+	.put_data	= pidfs_put_data,
 };
 
 static int pidfs_init_fs_context(struct fs_context *fc)
