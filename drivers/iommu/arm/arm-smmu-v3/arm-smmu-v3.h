@@ -792,6 +792,7 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
 	const struct arm_smmu_v3_impl	*impl;
 };
 
@@ -1004,6 +1005,8 @@ struct arm_smmu_v3_impl {
 	int (*combined_irq_handle)(int irq, struct arm_smmu_device *smmu_dev);
 	int (*smmu_evt_handler)(int irq, struct arm_smmu_device *smmu_dev,
 				u64 *evt, struct ratelimit_state *rs);
+	int (*smmu_power_get)(struct arm_smmu_device *smmu);
+	int (*smmu_power_put)(struct arm_smmu_device *smmu);
 };
 
 struct arm_smmu_device *arm_smmu_v3_impl_init(struct arm_smmu_device *smmu);
