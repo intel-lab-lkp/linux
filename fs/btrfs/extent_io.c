@@ -110,6 +110,7 @@ struct btrfs_bio_ctrl {
 	 * This is to avoid touching ranges covered by compression/inline.
 	 */
 	unsigned long submit_bitmap;
+	struct readahead_control *ractl;
 };
 
 static void submit_one_bio(struct btrfs_bio_ctrl *bio_ctrl)
@@ -882,6 +883,20 @@ static struct extent_map *get_extent_map(struct btrfs_inode *inode,
 
 	return em;
 }
+
+static void btrfs_readahead_expand(struct readahead_control *ractl, struct extent_map *em)
+{
+	ASSERT(ractl);
+	u64 ra_pos = readahead_pos(ractl);
+	u64 ra_len = readahead_length(ractl);
+	u64 ra_end = ra_pos + ra_len;
+	u64 em_end = em->start + em->ram_bytes;
+
+	ASSERT(em_end >= ra_pos);
+	if (em_end > ra_end)
+		readahead_expand(ractl, ra_pos, em_end - ra_pos);
+}
+
 /*
  * basic readpage implementation.  Locked extent state structs are inserted
  * into the tree that are removed when the IO is done (by the end_io
@@ -939,11 +954,20 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 			end_folio_read(folio, false, cur, end + 1 - cur);
 			return PTR_ERR(em);
 		}
+
 		extent_offset = cur - em->start;
 		BUG_ON(btrfs_extent_map_end(em) <= cur);
 		BUG_ON(end < cur);
 
 		compress_type = btrfs_extent_map_compression(em);
+
+		if (bio_ctrl->ractl) {
+			bool subpage = fs_info->sectorsize < PAGE_SIZE;
+			bool compressed = compress_type != BTRFS_COMPRESS_NONE;
+
+			if (!subpage && compressed)
+				btrfs_readahead_expand(bio_ctrl->ractl, em);
+		}
 
 		if (compress_type != BTRFS_COMPRESS_NONE)
 			disk_bytenr = em->disk_bytenr;
@@ -2541,7 +2565,10 @@ int btrfs_writepages(struct address_space *mapping, struct writeback_control *wb
 
 void btrfs_readahead(struct readahead_control *rac)
 {
-	struct btrfs_bio_ctrl bio_ctrl = { .opf = REQ_OP_READ | REQ_RAHEAD };
+	struct btrfs_bio_ctrl bio_ctrl = {
+		.opf = REQ_OP_READ | REQ_RAHEAD,
+		.ractl = rac
+	};
 	struct folio *folio;
 	struct btrfs_inode *inode = BTRFS_I(rac->mapping->host);
 	const u64 start = readahead_pos(rac);
