@@ -12,3 +12,14 @@ obj-$(CONFIG_GOOGLE_CBMEM)		+= cbmem.o
 
 vpd-sysfs-y := vpd.o vpd_decode.o
 obj-$(CONFIG_GOOGLE_VPD)		+= vpd-sysfs.o
+
+# LinuxBootSMM related.
+payload-mm-$(CONFIG_COREBOOT_PAYLOAD_MM)	:= mm_loader.o mm_blob.o
+
+subdir-						:= mm_handler
+obj-$(CONFIG_COREBOOT_PAYLOAD_MM)		+= payload-mm.o
+
+$(obj)/mm_blob.o: $(obj)/mm_handler/handler.bin
+
+$(obj)/mm_handler/handler.bin: FORCE
+	$(Q)$(MAKE) $(build)=$(obj)/mm_handler $@
