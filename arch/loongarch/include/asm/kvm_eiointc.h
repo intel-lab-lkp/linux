@@ -17,6 +17,9 @@
 /* map to ipnum per 32 irqs */
 #define EIOINTC_IRQS_NODETYPE_COUNT	16
 
+#define MISC_BASE			0x420
+#define MISC_SIZE			0x8
+
 #define EIOINTC_BASE			0x1400
 #define EIOINTC_SIZE			0x900
 
@@ -59,6 +62,7 @@ struct loongarch_eiointc {
 	struct kvm *kvm;
 	struct kvm_io_device device;
 	struct kvm_io_device device_vext;
+	struct kvm_io_device misc;
 	uint32_t num_cpu;
 	uint32_t features;
 	uint32_t status;

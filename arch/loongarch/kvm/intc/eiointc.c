@@ -781,6 +781,129 @@ static const struct kvm_io_device_ops kvm_eiointc_virt_ops = {
 	.write	= kvm_eiointc_virt_write,
 };
 
+
+static int kvm_misc_read(struct kvm_vcpu *vcpu, struct kvm_io_device *dev,
+			gpa_t addr, int len, void *val)
+{
+	unsigned long flags, data, status;
+	unsigned int shift;
+	struct loongarch_eiointc *eiointc = vcpu->kvm->arch.eiointc;
+
+	if (!eiointc) {
+		kvm_err("%s: eiointc irqchip not valid!\n", __func__);
+		return -EINVAL;
+	}
+
+	addr -= MISC_BASE;
+	if (addr & (len - 1)) {
+		kvm_err("%s: eiointc not aligned addr %llx len %d\n", __func__, addr, len);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&eiointc->lock, flags);
+	status = eiointc->status;
+	spin_unlock_irqrestore(&eiointc->lock, flags);
+
+	data = 0;
+	if (status & BIT(EIOINTC_ENABLE))
+		data |= IOCSR_MISC_FUNC_EXT_IOI_EN;
+	if (status & BIT(EIOINTC_ENABLE_INT_ENCODE))
+		data |= IOCSR_MISC_FUNC_INT_ENCODE;
+
+	shift = (addr & 7) * 8;
+	data = data >> shift;
+	switch (len) {
+	case 1:
+		*(unsigned char *)val = (unsigned char)data;
+		break;
+
+	case 2:
+		*(unsigned short *)val = (unsigned short)data;
+		break;
+
+	case 4:
+		*(unsigned int *)val = (unsigned int)data;
+		break;
+
+	default:
+		*(unsigned long *)val = data;
+		break;
+	}
+
+	return 0;
+}
+
+static int kvm_misc_write(struct kvm_vcpu *vcpu, struct kvm_io_device *dev,
+			gpa_t addr, int len, const void *val)
+{
+	unsigned long flags, data, mask, old;
+	unsigned int shift;
+	struct loongarch_eiointc *eiointc = vcpu->kvm->arch.eiointc;
+
+	if (!eiointc) {
+		kvm_err("%s: eiointc irqchip not valid!\n", __func__);
+		return -EINVAL;
+	}
+
+	addr -= MISC_BASE;
+	if (addr & (len - 1)) {
+		kvm_err("%s: eiointc not aligned addr %llx len %d\n", __func__, addr, len);
+		return -EINVAL;
+	}
+
+	shift = (addr & 7) * 8;
+	switch (len) {
+	case 1:
+		data = *(unsigned char *)val;
+		mask = 0xFF;
+		mask = mask << shift;
+		data = data << shift;
+		break;
+
+	case 2:
+		data = *(unsigned short *)val;
+		mask = 0xFFFF;
+		mask = mask << shift;
+		data = data << shift;
+		break;
+
+	case 4:
+		data = *(unsigned int *)val;
+		mask = UINT_MAX;
+		mask = mask << shift;
+		data = data << shift;
+		break;
+
+	default:
+		data = *(unsigned long *)val;
+		mask = ULONG_MAX;
+		mask = mask << shift;
+		data = data << shift;
+		break;
+	}
+
+	spin_lock_irqsave(&eiointc->lock, flags);
+	old = 0;
+	if (eiointc->status & BIT(EIOINTC_ENABLE))
+		old |= IOCSR_MISC_FUNC_EXT_IOI_EN;
+	if (eiointc->status & BIT(EIOINTC_ENABLE_INT_ENCODE))
+		old |= IOCSR_MISC_FUNC_INT_ENCODE;
+
+	data = (old & ~mask) | data;
+	eiointc->status &= ~(BIT(EIOINTC_ENABLE_INT_ENCODE) | BIT(EIOINTC_ENABLE));
+	if (data & IOCSR_MISC_FUNC_INT_ENCODE)
+		eiointc->status |= BIT(EIOINTC_ENABLE_INT_ENCODE);
+	if (data & IOCSR_MISC_FUNC_EXT_IOI_EN)
+		eiointc->status |= BIT(EIOINTC_ENABLE);
+	spin_unlock_irqrestore(&eiointc->lock, flags);
+	return 0;
+}
+
+static const struct kvm_io_device_ops kvm_misc_ops = {
+	.read   = kvm_misc_read,
+	.write  = kvm_misc_write,
+};
+
 static int kvm_eiointc_ctrl_access(struct kvm_device *dev,
 					struct kvm_device_attr *attr)
 {
@@ -993,8 +1116,18 @@ static int kvm_eiointc_create(struct kvm_device *dev, u32 type)
 		kfree(s);
 		return ret;
 	}
-	kvm->arch.eiointc = s;
 
+	device = &s->misc;
+	kvm_iodevice_init(device, &kvm_misc_ops);
+	ret = kvm_io_bus_register_dev(kvm, KVM_IOCSR_BUS, MISC_BASE, MISC_SIZE, device);
+	if (ret < 0) {
+		kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &s->device);
+		kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &s->device_vext);
+		kfree(s);
+		return ret;
+	}
+
+	kvm->arch.eiointc = s;
 	return 0;
 }
 
@@ -1010,6 +1143,7 @@ static void kvm_eiointc_destroy(struct kvm_device *dev)
 	eiointc = kvm->arch.eiointc;
 	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &eiointc->device);
 	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &eiointc->device_vext);
+	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &eiointc->misc);
 	kfree(eiointc);
 }
 
