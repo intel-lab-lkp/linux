@@ -144,7 +144,7 @@ static inline void ksft_print_header(void)
 static inline void ksft_set_plan(unsigned int plan)
 {
 	ksft_plan = plan;
-	printf("1..%u\n", ksft_plan);
+	printf("%u..%u\n", !plan ? 0 : 1, ksft_plan);
 }
 
 static inline void ksft_print_cnts(void)
