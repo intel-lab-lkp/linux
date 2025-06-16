@@ -1630,7 +1630,7 @@ static int cpufreq_online(unsigned int cpu)
 	 */
 	if (cpufreq_driver->set_boost && policy->boost_supported &&
 	    (new_policy || !cpufreq_boost_enabled())) {
-		ret = policy_set_boost(policy, cpufreq_boost_enabled());
+		ret = cpufreq_driver->set_boost(policy, cpufreq_boost_enabled());
 		if (ret) {
 			/* If the set_boost fails, the online operation is not affected */
 			pr_info("%s: CPU%d: Cannot %s BOOST\n", __func__, policy->cpu,
