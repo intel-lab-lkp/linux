@@ -17,9 +17,23 @@ extern unsigned long __phys_addr(unsigned long);
 
 #include <linux/string.h>
 
-static inline void clear_page(void *page)
+/*
+ * clear_pages() - clear kernel page range.
+ * @addr: page aligned pointer
+ * @npages: number of pages
+ *
+ * Assumes that (@addr, +@npage) references a kernel region.
+ * Does absolutely no exception handling.
+ */
+static inline void clear_pages(void *addr, u64 npages)
 {
-	memset(page, 0, PAGE_SIZE);
+	for (u64 i = 0; i < npages; i++)
+		memset(addr + i * PAGE_SIZE, 0, PAGE_SIZE);
+}
+
+static inline void clear_page(void *addr)
+{
+	clear_pages(addr, 1);
 }
 
 static inline void copy_page(void *to, void *from)
