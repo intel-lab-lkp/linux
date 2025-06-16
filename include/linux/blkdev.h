@@ -842,7 +842,7 @@ static inline unsigned int disk_nr_zones(struct gendisk *disk)
 {
 	return disk->nr_zones;
 }
-bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs);
+bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs, int *from_cpu);
 
 /**
  * disk_zone_capacity - returns the zone capacity of zone containing @sector
