@@ -76,6 +76,16 @@ static struct page_ext_operations page_idle_ops __initdata = {
 };
 #endif
 
+static bool need_page_mig(void)
+{
+	return true;
+}
+
+static struct page_ext_operations page_mig_ops __initdata = {
+	.need = need_page_mig,
+	.need_shared_flags = true,
+};
+
 static struct page_ext_operations *page_ext_ops[] __initdata = {
 #ifdef CONFIG_PAGE_OWNER
 	&page_owner_ops,
@@ -89,6 +99,7 @@ static struct page_ext_operations *page_ext_ops[] __initdata = {
 #ifdef CONFIG_PAGE_TABLE_CHECK
 	&page_table_check_ops,
 #endif
+	&page_mig_ops,
 };
 
 unsigned long page_ext_size;

@@ -40,7 +40,24 @@ enum page_ext_flags {
 	PAGE_EXT_YOUNG,
 	PAGE_EXT_IDLE,
 #endif
+	/*
+	 * 32 bits following this are used by the migrator.
+	 * The next available bit position is 33.
+	 */
+	PAGE_EXT_MIGRATE_READY,
 };
+
+#define PAGE_EXT_MIG_NID_WIDTH	10
+#define PAGE_EXT_MIG_FREQ_WIDTH	3
+#define PAGE_EXT_MIG_TIME_WIDTH	18
+
+#define PAGE_EXT_MIG_NID_SHIFT	(PAGE_EXT_MIGRATE_READY + 1)
+#define PAGE_EXT_MIG_FREQ_SHIFT	(PAGE_EXT_MIG_NID_SHIFT + PAGE_EXT_MIG_NID_WIDTH)
+#define PAGE_EXT_MIG_TIME_SHIFT	(PAGE_EXT_MIG_FREQ_SHIFT + PAGE_EXT_MIG_FREQ_WIDTH)
+
+#define PAGE_EXT_MIG_NID_MASK	((1UL << PAGE_EXT_MIG_NID_SHIFT) - 1)
+#define PAGE_EXT_MIG_FREQ_MASK	((1UL << PAGE_EXT_MIG_FREQ_SHIFT) - 1)
+#define PAGE_EXT_MIG_TIME_MASK	((1UL << PAGE_EXT_MIG_TIME_SHIFT) - 1)
 
 /*
  * Page Extension can be considered as an extended mem_map.

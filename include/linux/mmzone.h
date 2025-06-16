@@ -853,6 +853,8 @@ enum zone_type {
 
 };
 
+int kmigrated_add_pfn(unsigned long pfn, int nid);
+
 #ifndef __GENERATING_BOUNDS_H
 
 #define ASYNC_AND_SYNC 2
@@ -1049,6 +1051,7 @@ enum pgdat_flags {
 					 * many pages under writeback
 					 */
 	PGDAT_RECLAIM_LOCKED,		/* prevents concurrent reclaim */
+	PGDAT_KMIGRATED_ACTIVATE,	/* activates kmigrated */
 };
 
 enum zone_flags {
@@ -1493,6 +1496,8 @@ typedef struct pglist_data {
 #ifdef CONFIG_MEMORY_FAILURE
 	struct memory_failure_stats mf_stats;
 #endif
+	struct task_struct *kmigrated;
+	wait_queue_head_t kmigrated_wait;
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)

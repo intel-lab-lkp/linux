@@ -37,7 +37,8 @@ mmu-y			:= nommu.o
 mmu-$(CONFIG_MMU)	:= highmem.o memory.o mincore.o \
 			   mlock.o mmap.o mmu_gather.o mprotect.o mremap.o \
 			   msync.o page_vma_mapped.o pagewalk.o \
-			   pgtable-generic.o rmap.o vmalloc.o vma.o vma_exec.o
+			   pgtable-generic.o rmap.o vmalloc.o vma.o vma_exec.o \
+			   kmigrated.o
 
 
 ifdef CONFIG_CROSS_MEMORY_ATTACH
