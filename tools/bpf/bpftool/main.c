@@ -164,6 +164,7 @@ static int do_version(int argc, char **argv)
 		jsonw_end_object(json_wtr);	/* features */
 
 		jsonw_end_object(json_wtr);	/* root object */
+		jsonw_destroy(&json_wtr);
 	} else {
 		unsigned int nb_features = 0;
 
