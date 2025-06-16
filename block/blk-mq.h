@@ -156,6 +156,7 @@ struct blk_mq_alloc_data {
 	struct rq_list *cached_rqs;
 
 	/* input & output parameter */
+	int from_cpu;
 	struct blk_mq_ctx *ctx;
 	struct blk_mq_hw_ctx *hctx;
 };

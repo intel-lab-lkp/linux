@@ -485,6 +485,7 @@ __blk_mq_alloc_requests_batch(struct blk_mq_alloc_data *data)
 static struct request *__blk_mq_alloc_requests(struct blk_mq_alloc_data *data)
 {
 	struct request_queue *q = data->q;
+	int from_cpu = data->from_cpu;
 	u64 alloc_time_ns = 0;
 	struct request *rq;
 	unsigned int tag;
@@ -497,7 +498,8 @@ static struct request *__blk_mq_alloc_requests(struct blk_mq_alloc_data *data)
 		data->flags |= BLK_MQ_REQ_NOWAIT;
 
 retry:
-	data->ctx = blk_mq_get_ctx(q);
+	data->from_cpu = from_cpu >= 0 ? from_cpu : raw_smp_processor_id();
+	data->ctx = __blk_mq_get_ctx(q, data->from_cpu);
 	data->hctx = blk_mq_map_queue(data->cmd_flags, data->ctx);
 
 	if (q->elevator) {
@@ -579,6 +581,7 @@ static struct request *blk_mq_rq_cache_fill(struct request_queue *q,
 		.rq_flags	= 0,
 		.nr_tags	= plug->nr_ios,
 		.cached_rqs	= &plug->cached_rqs,
+		.from_cpu	= -1,
 		.ctx		= NULL,
 		.hctx		= NULL
 	};
@@ -644,6 +647,7 @@ struct request *blk_mq_alloc_request(struct request_queue *q, blk_opf_t opf,
 			.cmd_flags	= opf,
 			.rq_flags	= 0,
 			.nr_tags	= 1,
+			.from_cpu	= -1,
 			.cached_rqs	= NULL,
 			.ctx		= NULL,
 			.hctx		= NULL
@@ -678,6 +682,7 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 		.cmd_flags	= opf,
 		.rq_flags	= 0,
 		.nr_tags	= 1,
+		.from_cpu	= -1,
 		.cached_rqs	= NULL,
 		.ctx		= NULL,
 		.hctx		= NULL
@@ -3012,6 +3017,7 @@ static bool blk_mq_attempt_bio_merge(struct request_queue *q,
 }
 
 static struct request *blk_mq_get_new_requests(struct request_queue *q,
+					       int from_cpu,
 					       struct blk_plug *plug,
 					       struct bio *bio)
 {
@@ -3021,6 +3027,7 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 		.shallow_depth	= 0,
 		.cmd_flags	= bio->bi_opf,
 		.rq_flags	= 0,
+		.from_cpu	= from_cpu,
 		.nr_tags	= 1,
 		.cached_rqs	= NULL,
 		.ctx		= NULL,
@@ -3046,7 +3053,7 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
  * Check if there is a suitable cached request and return it.
  */
 static struct request *blk_mq_peek_cached_request(struct blk_plug *plug,
-		struct request_queue *q, blk_opf_t opf)
+		struct request_queue *q, int from_cpu, blk_opf_t opf)
 {
 	enum hctx_type type = blk_mq_get_hctx_type(opf);
 	struct request *rq;
@@ -3055,6 +3062,8 @@ static struct request *blk_mq_peek_cached_request(struct blk_plug *plug,
 		return NULL;
 	rq = rq_list_peek(&plug->cached_rqs);
 	if (!rq || rq->q != q)
+		return NULL;
+	if (from_cpu >= 0 && rq->mq_ctx->cpu != from_cpu)
 		return NULL;
 	if (type != rq->mq_hctx->type &&
 	    (type != HCTX_TYPE_READ || rq->mq_hctx->type != HCTX_TYPE_DEFAULT))
@@ -3114,6 +3123,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	struct blk_mq_hw_ctx *hctx;
 	unsigned int nr_segs;
 	struct request *rq;
+	int from_cpu = -1;
 	blk_status_t ret;
 
 	/*
@@ -3160,7 +3170,7 @@ void blk_mq_submit_bio(struct bio *bio)
 		goto queue_exit;
 
 new_request:
-	rq = blk_mq_peek_cached_request(plug, q, bio->bi_opf);
+	rq = blk_mq_peek_cached_request(plug, q, from_cpu, bio->bi_opf);
 	if (rq) {
 		blk_mq_use_cached_rq(rq, plug, bio);
 		/*
@@ -3170,7 +3180,7 @@ new_request:
 		 */
 		blk_queue_exit(q);
 	} else {
-		rq = blk_mq_get_new_requests(q, plug, bio);
+		rq = blk_mq_get_new_requests(q, from_cpu, plug, bio);
 		if (unlikely(!rq)) {
 			if (bio->bi_opf & REQ_NOWAIT)
 				bio_wouldblock_error(bio);
