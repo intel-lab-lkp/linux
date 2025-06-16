@@ -1677,6 +1677,8 @@ static int dib8096p_tuner_write_serpar(struct i2c_adapter *i2c_adap,
 	struct dib8000_state *state = i2c_get_adapdata(i2c_adap);
 	u8 n_overflow = 1;
 	u16 i = 1000;
+	if (msg[0].len < 3)
+		return -EINVAL;
 	u16 serpar_num = msg[0].buf[0];
 
 	while (n_overflow == 1 && i) {
@@ -1697,6 +1699,8 @@ static int dib8096p_tuner_read_serpar(struct i2c_adapter *i2c_adap,
 	struct dib8000_state *state = i2c_get_adapdata(i2c_adap);
 	u8 n_overflow = 1, n_empty = 1;
 	u16 i = 1000;
+	if (msg[0].len < 1 || msg[1].len < 2)
+		return -EINVAL;
 	u16 serpar_num = msg[0].buf[0];
 	u16 read_word;
 
@@ -1740,7 +1744,8 @@ static int dib8096p_rw_on_apb(struct i2c_adapter *i2c_adap,
 {
 	struct dib8000_state *state = i2c_get_adapdata(i2c_adap);
 	u16 word;
-
+	if (msg[0].len < 3 || msg[1].len < 2)
+		return -EINVAL;
 	if (num == 1) {		/* write */
 		dib8000_write_word(state, apb_address,
 				((msg[0].buf[1] << 8) | (msg[0].buf[2])));
@@ -1758,7 +1763,8 @@ static int dib8096p_tuner_xfer(struct i2c_adapter *i2c_adap,
 	struct dib8000_state *state = i2c_get_adapdata(i2c_adap);
 	u16 apb_address = 0, word;
 	int i = 0;
-
+	if (msg[0].len < 1)
+		return -EINVAL;
 	switch (msg[0].buf[0]) {
 	case 0x12:
 			apb_address = 1920;
@@ -1848,11 +1854,15 @@ static int dib8096p_tuner_xfer(struct i2c_adapter *i2c_adap,
 			/* get sad sel request */
 			i = ((dib8000_read_word(state, 921) >> 12)&0x3);
 			word = dib8000_read_word(state, 924+i);
+			if (msg[1].len < 2)
+				return -EINVAL;
 			msg[1].buf[0] = (word >> 8) & 0xff;
 			msg[1].buf[1] = (word) & 0xff;
 			return num;
 	case 0x1f:
 			if (num == 1) {	/* write */
+				if (msg[0].len < 3)
+					return -EINVAL;
 				word = (u16) ((msg[0].buf[1] << 8) |
 						msg[0].buf[2]);
 				/* in the VGAMODE Sel are located on bit 0/1 */
