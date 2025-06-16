@@ -16,5 +16,12 @@
 #define SYS_SHOW_BLOCKED_TASKS		0x00000080
 
 extern void sys_show_info(unsigned long info_mask);
+extern unsigned long sys_info_parse_param(char *str);
 
+#ifdef CONFIG_SYSCTL
+struct ctl_table;
+extern int sysctl_sys_info_handler(const struct ctl_table *ro_table, int write,
+					  void *buffer, size_t *lenp,
+					  loff_t *ppos);
+#endif
 #endif	/* _LINUX_SYS_INFO_H */
