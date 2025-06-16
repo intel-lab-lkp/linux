@@ -257,7 +257,7 @@ larp_show(
 	struct kobject	*kobject,
 	char		*buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.larp);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.larp);
 }
 XFS_SYSFS_ATTR_RW(larp);
 
@@ -283,7 +283,7 @@ bload_leaf_slack_show(
 	struct kobject	*kobject,
 	char		*buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.bload_leaf_slack);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.bload_leaf_slack);
 }
 XFS_SYSFS_ATTR_RW(bload_leaf_slack);
 
@@ -309,7 +309,7 @@ bload_node_slack_show(
 	struct kobject	*kobject,
 	char		*buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.bload_node_slack);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.bload_node_slack);
 }
 XFS_SYSFS_ATTR_RW(bload_node_slack);
 
