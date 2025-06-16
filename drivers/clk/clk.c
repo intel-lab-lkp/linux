@@ -2567,6 +2567,28 @@ err:
 }
 
 /**
+ * clk_determine_rate - determine if the rate for clk can be set or not
+ * @clk: the clk whose rate is being changed
+ * @rate: the new rate for clk
+ *
+ * Check if there is a best match frequency for the desired rate that
+ * can be set for clk.
+ * Returns 0 on success, -EERROR otherwise.
+ */
+int clk_determine_rate(struct clk *clk, unsigned long rate)
+{
+	struct clk_rate_request req;
+
+	if (!clk)
+		return 0;
+
+	clk_hw_init_rate_request(clk->core->hw, &req, rate);
+
+	return __clk_determine_rate(clk->core->hw, &req);
+}
+EXPORT_SYMBOL_GPL(clk_determine_rate);
+
+/**
  * clk_set_rate - specify a new rate for clk
  * @clk: the clk whose rate is being changed
  * @rate: the new rate for clk

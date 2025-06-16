@@ -830,6 +830,16 @@ void devm_clk_put(struct device *dev, struct clk *clk);
 long clk_round_rate(struct clk *clk, unsigned long rate);
 
 /**
+ * clk_determine_rate - determine if the clock rate for a clock source
+ * can be set or not
+ * @clk: clock source
+ * @rate: desired clock rate in Hz
+ *
+ * Returns success (0) or negative errno.
+ */
+int clk_determine_rate(struct clk *clk, unsigned long rate);
+
+/**
  * clk_set_rate - set the clock rate for a clock source
  * @clk: clock source
  * @rate: desired clock rate in Hz
@@ -1074,6 +1084,11 @@ static inline void clk_bulk_disable(int num_clks,
 				    const struct clk_bulk_data *clks) {}
 
 static inline unsigned long clk_get_rate(struct clk *clk)
+{
+	return 0;
+}
+
+static inline int clk_determine_rate(struct clk *clk, unsigned long rate)
 {
 	return 0;
 }
