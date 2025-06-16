@@ -41,12 +41,18 @@ static void rzn1_dmamux_free(struct device *dev, void *route_data)
 static void *rzn1_dmamux_route_allocate(struct of_phandle_args *dma_spec,
 					struct of_dma *ofdma)
 {
-	struct platform_device *pdev = of_find_device_by_node(ofdma->of_node);
-	struct rzn1_dmamux_data *dmamux = platform_get_drvdata(pdev);
+	struct platform_device *pdev;
+	struct rzn1_dmamux_data *dmamux;
 	struct rzn1_dmamux_map *map;
 	unsigned int dmac_idx, chan, val;
 	u32 mask;
 	int ret;
+
+	pdev = of_find_device_by_node(ofdma->of_node);
+	if (!pdev)
+		return ERR_PTR(-ENODEV);
+
+	dmamux = platform_get_drvdata(pdev);
 
 	if (dma_spec->args_count != RNZ1_DMAMUX_NCELLS)
 		return ERR_PTR(-EINVAL);
