@@ -457,15 +457,26 @@ static bool is_invalid_reserved_pfn(unsigned long pfn)
 	return true;
 }
 
-static int put_pfn(unsigned long pfn, int prot)
+static inline void _put_pfns(struct page *page, int npages, int prot)
+{
+	unpin_user_page_range_dirty_lock(page, npages, prot & IOMMU_WRITE);
+}
+
+/*
+ * The caller must ensure that these npages PFNs belong to the same folio.
+ */
+static inline int put_pfns(unsigned long pfn, int npages, int prot)
 {
 	if (!is_invalid_reserved_pfn(pfn)) {
-		struct page *page = pfn_to_page(pfn);
-
-		unpin_user_pages_dirty_lock(&page, 1, prot & IOMMU_WRITE);
-		return 1;
+		_put_pfns(pfn_to_page(pfn), npages, prot);
+		return npages;
 	}
 	return 0;
+}
+
+static inline int put_pfn(unsigned long pfn, int prot)
+{
+	return put_pfns(pfn, 1, prot);
 }
 
 #define VFIO_BATCH_MAX_CAPACITY (PAGE_SIZE / sizeof(struct page *))
@@ -736,11 +747,37 @@ static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 				    bool do_accounting)
 {
 	long unlocked = 0, locked = vpfn_pages(dma, iova, npage);
-	long i;
 
-	for (i = 0; i < npage; i++)
-		if (put_pfn(pfn++, dma->prot))
-			unlocked++;
+	while (npage) {
+		long nr_pages = 1;
+
+		if (!is_invalid_reserved_pfn(pfn)) {
+			struct page *page = pfn_to_page(pfn);
+			struct folio *folio = page_folio(page);
+			long folio_pages_num = folio_nr_pages(folio);
+
+			/*
+			 * For a folio, it represents a physically
+			 * contiguous set of bytes, and all of its pages
+			 * share the same invalid/reserved state.
+			 *
+			 * Here, our PFNs are contiguous. Therefore, if we
+			 * detect that the current PFN belongs to a large
+			 * folio, we can batch the operations for the next
+			 * nr_pages PFNs.
+			 */
+			if (folio_pages_num > 1)
+				nr_pages = min_t(long, npage,
+					folio_pages_num -
+					folio_page_idx(folio, page));
+
+			_put_pfns(page, nr_pages, dma->prot);
+			unlocked += nr_pages;
+		}
+
+		pfn += nr_pages;
+		npage -= nr_pages;
+	}
 
 	if (do_accounting)
 		vfio_lock_acct(dma, locked - unlocked, true);
