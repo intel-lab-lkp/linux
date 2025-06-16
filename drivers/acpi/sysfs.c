@@ -181,10 +181,9 @@ static int param_set_trace_method_name(const char *val,
 
 	/* This is a hack.  We can't kmalloc in early boot. */
 	if (is_abs_path)
-		strcpy(trace_method_name, val);
+		strscpy(trace_method_name, val);
 	else {
-		trace_method_name[0] = '\\';
-		strcpy(trace_method_name+1, val);
+		scnprintf(trace_method_name, sizeof(trace_method_name), "%c%s", '\\', val);
 	}
 
 	/* Restore the original tracer state */
