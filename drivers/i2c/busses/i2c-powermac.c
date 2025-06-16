@@ -78,10 +78,14 @@ static s32 i2c_powermac_smbus_xfer(	struct i2c_adapter*	adap,
 	 * anywhere near a pmac i2c bus anyway ...
 	 */
         case I2C_SMBUS_BLOCK_DATA:
+		if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		buf = data->block;
 		len = data->block[0] + 1;
 		break;
 	case I2C_SMBUS_I2C_BLOCK_DATA:
+		if (data->block[0] < 1 || data->block[0] > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
 		buf = &data->block[1];
 		len = data->block[0];
 		break;
