@@ -1417,8 +1417,6 @@ static bool xe_ttm_bo_lock_in_destructor(struct ttm_buffer_object *ttm_bo)
 	struct xe_device *xe = ttm_to_xe_device(ttm_bo->bdev);
 	bool locked;
 
-	xe_assert(xe, !kref_read(&ttm_bo->kref));
-
 	/*
 	 * We can typically only race with TTM trylocking under the
 	 * lru_lock, which will immediately be unlocked again since
