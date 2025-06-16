@@ -880,7 +880,7 @@ static void sci_transmit_chars(struct uart_port *port)
 			sci_serial_out(port, SCSCR, ctrl);
 		}
 
-		sci_stop_tx(port);
+		s->port.ops->stop_tx(port);
 	}
 }
 
@@ -1497,7 +1497,7 @@ static void sci_dma_tx_work_fn(struct work_struct *work)
 switch_to_pio:
 	uart_port_lock_irqsave(port, &flags);
 	s->chan_tx = NULL;
-	sci_start_tx(port);
+	s->port.ops->start_tx(port);
 	uart_port_unlock_irqrestore(port, flags);
 	return;
 }
@@ -2289,8 +2289,8 @@ void sci_shutdown(struct uart_port *port)
 	mctrl_gpio_disable_ms_sync(to_sci_port(port)->gpios);
 
 	uart_port_lock_irqsave(port, &flags);
-	sci_stop_rx(port);
-	sci_stop_tx(port);
+	s->port.ops->stop_rx(port);
+	s->port.ops->stop_tx(port);
 	s->ops->shutdown_complete(port);
 	uart_port_unlock_irqrestore(port, flags);
 
@@ -2684,7 +2684,7 @@ done:
 	}
 	if (port->flags & UPF_HARD_FLOW) {
 		/* Refresh (Auto) RTS */
-		sci_set_mctrl(port, port->mctrl);
+		s->port.ops->set_mctrl(port, port->mctrl);
 	}
 
 	/*
@@ -2721,7 +2721,7 @@ done:
 	sci_port_disable(s);
 
 	if (UART_ENABLE_MS(port, termios->c_cflag))
-		sci_enable_ms(port);
+		s->port.ops->enable_ms(port);
 }
 
 void sci_pm(struct uart_port *port, unsigned int state,
@@ -2827,7 +2827,7 @@ void sci_config_port(struct uart_port *port, int flags)
 		struct sci_port *sport = to_sci_port(port);
 
 		port->type = sport->cfg->type;
-		sci_request_port(port);
+		sport->port.ops->request_port(port);
 	}
 }
 
