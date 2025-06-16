@@ -11,7 +11,7 @@
  * Always use weak definitions for percpu variables in modules.
  */
 #if defined(MODULE) && defined(CONFIG_SMP)
-#define ARCH_NEEDS_WEAK_PER_CPU
+#define MODULE_NEEDS_WEAK_PER_CPU
 #endif
 
 #include <asm-generic/percpu.h>
