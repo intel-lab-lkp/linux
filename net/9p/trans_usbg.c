@@ -242,6 +242,15 @@ static void usb9pfs_rx_complete(struct usb_ep *ep, struct usb_request *req)
 	if (!p9_rx_req)
 		return;
 
+	/* Validate actual received size against buffer capacity */
+	if (req->actual > p9_rx_req->rc.capacity) {
+		dev_err(&cdev->gadget->dev,
+			"received data size %u exceeds buffer capacity %zu\n",
+			req->actual, p9_rx_req->rc.capacity);
+		p9_req_put(usb9pfs->client, p9_rx_req);
+		return;
+	}
+
 	memcpy(p9_rx_req->rc.sdata, req->buf, req->actual);
 
 	p9_rx_req->rc.size = req->actual;
