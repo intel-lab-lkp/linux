@@ -34,6 +34,16 @@ properties:
       This property depends on the module vendor's
       configuration.
 
+  secondary-baudrate:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 3000000
+      - 4000000
+    default: 3000000
+    description:
+      Operational baudrate after HCI initialization is done.
+      Also used by FW download mechanism while downloading FW chunks.
+
   firmware-name:
     maxItems: 1
 
