@@ -118,6 +118,40 @@ TEST_F(fixture_setup_failure, pass) {
 	TH_LOG("after");
 }
 
+FIXTURE(fixture_variant) {
+	pid_t testpid;
+};
+
+FIXTURE_VARIANT(fixture_variant)
+{
+	int value;
+};
+
+FIXTURE_VARIANT_ADD(fixture_variant, v32)
+{
+	.value = 32,
+};
+
+FIXTURE_VARIANT_ADD(fixture_variant, v64)
+{
+	.value = 64,
+};
+
+FIXTURE_SETUP(fixture_variant) {
+	TH_LOG("setup %d", variant->value);
+	self->testpid = getpid();
+}
+
+FIXTURE_TEARDOWN(fixture_variant) {
+	TH_LOG("teardown same-process=%d", self->testpid == getpid());
+}
+
+TEST_F(fixture_variant, pass) {
+	TH_LOG("before");
+	ASSERT_EQ(0, 0);
+	TH_LOG("after");
+}
+
 int main(int argc, char **argv)
 {
 	/*
