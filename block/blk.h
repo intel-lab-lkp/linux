@@ -10,6 +10,7 @@
 #include <linux/timekeeping.h>
 #include <xen/xen.h>
 #include "blk-crypto-internal.h"
+#include "elevator.h"
 
 struct elevator_type;
 
@@ -321,7 +322,8 @@ bool blk_bio_list_merge(struct request_queue *q, struct list_head *list,
 
 bool blk_insert_flush(struct request *rq);
 
-void elv_update_nr_hw_queues(struct request_queue *q);
+void elv_update_nr_hw_queues(struct request_queue *q,
+		struct elevator_tags **elv_tags, int count);
 void elevator_set_default(struct request_queue *q);
 void elevator_set_none(struct request_queue *q);
 

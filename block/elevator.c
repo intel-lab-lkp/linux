@@ -45,17 +45,6 @@
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
 
-/* Holding context data for changing elevator */
-struct elv_change_ctx {
-	const char *name;
-	bool no_uevent;
-
-	/* for unregistering old elevator */
-	struct elevator_queue *old;
-	/* for registering new elevator */
-	struct elevator_queue *new;
-};
-
 static DEFINE_SPINLOCK(elv_list_lock);
 static LIST_HEAD(elv_list);
 
@@ -132,7 +121,7 @@ static struct elevator_type *elevator_find_get(const char *name)
 static const struct kobj_type elv_ktype;
 
 struct elevator_queue *elevator_alloc(struct request_queue *q,
-				  struct elevator_type *e)
+		struct elevator_type *e, struct elevator_tags *tags)
 {
 	struct elevator_queue *eq;
 
@@ -142,6 +131,7 @@ struct elevator_queue *elevator_alloc(struct request_queue *q,
 
 	__elevator_get(e);
 	eq->type = e;
+	eq->tags = tags;
 	kobject_init(&eq->kobj, &elv_ktype);
 	mutex_init(&eq->sysfs_lock);
 	hash_init(eq->hash);
@@ -166,11 +156,23 @@ static void elevator_exit(struct request_queue *q)
 	lockdep_assert_held(&q->elevator_lock);
 
 	ioc_clear_queue(q);
-	blk_mq_sched_free_rqs(q);
 
 	mutex_lock(&e->sysfs_lock);
 	blk_mq_exit_sched(q, e);
 	mutex_unlock(&e->sysfs_lock);
+}
+
+static struct elevator_tags *elevator_tags_lookup(struct elevator_tags **tags,
+		struct request_queue *q, int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (tags[i]->id == q->id)
+			return tags[i];
+	}
+
+	return NULL;
 }
 
 static inline void __elv_rqhash_del(struct request *rq)
@@ -570,7 +572,8 @@ EXPORT_SYMBOL_GPL(elv_unregister);
  * If switching fails, we are most likely running out of memory and not able
  * to restore the old io scheduler, so leaving the io scheduler being none.
  */
-static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
+static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx,
+		struct elevator_tags *tags)
 {
 	struct elevator_type *new_e = NULL;
 	int ret = 0;
@@ -592,7 +595,7 @@ static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
 	}
 
 	if (new_e) {
-		ret = blk_mq_init_sched(q, new_e);
+		ret = blk_mq_init_sched(q, new_e, tags);
 		if (ret)
 			goto out_unfreeze;
 		ctx->new = q->elevator;
@@ -627,8 +630,10 @@ static void elv_exit_and_release(struct request_queue *q)
 	elevator_exit(q);
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
-	if (e)
+	if (e) {
+		__blk_mq_free_sched_tags(q->tag_set, e->tags);
 		kobject_put(&e->kobj);
+	}
 }
 
 static int elevator_change_done(struct request_queue *q,
@@ -641,6 +646,7 @@ static int elevator_change_done(struct request_queue *q,
 				&ctx->old->flags);
 
 		elv_unregister_queue(q, ctx->old);
+		__blk_mq_free_sched_tags(q->tag_set, ctx->old->tags);
 		kobject_put(&ctx->old->kobj);
 		if (enable_wbt)
 			wbt_enable_default(q->disk);
@@ -659,9 +665,17 @@ static int elevator_change_done(struct request_queue *q,
 static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 {
 	unsigned int memflags;
+	struct elevator_tags *tags = NULL;
+	struct blk_mq_tag_set *set = q->tag_set;
 	int ret = 0;
 
-	lockdep_assert_held(&q->tag_set->update_nr_hwq_lock);
+	lockdep_assert_held(&set->update_nr_hwq_lock);
+
+	if (strncmp(ctx->name, "none", 4)) {
+		tags = __blk_mq_alloc_sched_tags(set, set->nr_hw_queues, q->id);
+		if (!tags)
+			return -ENOMEM;
+	}
 
 	memflags = blk_mq_freeze_queue(q);
 	/*
@@ -676,11 +690,16 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	blk_mq_cancel_work_sync(q);
 	mutex_lock(&q->elevator_lock);
 	if (!(q->elevator && elevator_match(q->elevator->type, ctx->name)))
-		ret = elevator_switch(q, ctx);
+		ret = elevator_switch(q, ctx, tags);
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
 	if (!ret)
 		ret = elevator_change_done(q, ctx);
+	/*
+	 * Free sched tags if it's allocated but we couldn't switch elevator.
+	 */
+	if (tags && !ctx->new)
+		__blk_mq_free_sched_tags(set, tags);
 
 	return ret;
 }
@@ -689,24 +708,47 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
  * The I/O scheduler depends on the number of hardware queues, this forces a
  * reattachment when nr_hw_queues changes.
  */
-void elv_update_nr_hw_queues(struct request_queue *q)
+void elv_update_nr_hw_queues(struct request_queue *q,
+		struct elevator_tags **elv_tags, int count)
 {
+	struct elevator_tags *tags = NULL;
+	struct blk_mq_tag_set *set = q->tag_set;
 	struct elv_change_ctx ctx = {};
 	int ret = -ENODEV;
 
 	WARN_ON_ONCE(q->mq_freeze_depth == 0);
+
+	/*
+	 * Accessing q->elevator without holding q->elevator_lock is safe here
+	 * because nr_hw_queue update is protected by set->update_nr_hwq_lock
+	 * in the writer context. So, scheduler update/switch code (which
+	 * acquires same lock in the reader context) can't run concurrently.
+	 */
+	if (q->elevator) {
+		tags = elevator_tags_lookup(elv_tags, q, count);
+		if (!tags) {
+			WARN_ON(1);
+			goto out_unfreeze;
+		}
+	}
 
 	mutex_lock(&q->elevator_lock);
 	if (q->elevator && !blk_queue_dying(q) && blk_queue_registered(q)) {
 		ctx.name = q->elevator->type->elevator_name;
 
 		/* force to reattach elevator after nr_hw_queue is updated */
-		ret = elevator_switch(q, &ctx);
+		ret = elevator_switch(q, &ctx, tags);
 	}
 	mutex_unlock(&q->elevator_lock);
+out_unfreeze:
 	blk_mq_unfreeze_queue_nomemrestore(q);
 	if (!ret)
 		WARN_ON_ONCE(elevator_change_done(q, &ctx));
+	/*
+	 * Free sched tags if it's allocated but we couldn't switch elevator.
+	 */
+	if (tags && !ctx.new)
+		__blk_mq_free_sched_tags(set, tags);
 }
 
 /*

@@ -374,27 +374,17 @@ bool blk_mq_sched_try_insert_merge(struct request_queue *q, struct request *rq,
 }
 EXPORT_SYMBOL_GPL(blk_mq_sched_try_insert_merge);
 
-static int blk_mq_sched_alloc_map_and_rqs(struct request_queue *q,
-					  struct blk_mq_hw_ctx *hctx,
-					  unsigned int hctx_idx)
+static void blk_mq_init_sched_tags(struct request_queue *q,
+				   struct blk_mq_hw_ctx *hctx,
+				   unsigned int hctx_idx,
+				   struct elevator_queue *eq)
 {
 	if (blk_mq_is_shared_tags(q->tag_set->flags)) {
 		hctx->sched_tags = q->sched_shared_tags;
-		return 0;
+		return;
 	}
 
-	hctx->sched_tags = blk_mq_alloc_map_and_rqs(q->tag_set, hctx_idx,
-						    q->nr_requests);
-
-	if (!hctx->sched_tags)
-		return -ENOMEM;
-	return 0;
-}
-
-static void blk_mq_exit_sched_shared_tags(struct request_queue *queue)
-{
-	blk_mq_free_rq_map(queue->sched_shared_tags);
-	queue->sched_shared_tags = NULL;
+	hctx->sched_tags = eq->tags->u.tags[hctx_idx];
 }
 
 /* called in queue's release handler, tagset has gone away */
@@ -403,35 +393,18 @@ static void blk_mq_sched_tags_teardown(struct request_queue *q, unsigned int fla
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	queue_for_each_hw_ctx(q, hctx, i) {
-		if (hctx->sched_tags) {
-			if (!blk_mq_is_shared_tags(flags))
-				blk_mq_free_rq_map(hctx->sched_tags);
-			hctx->sched_tags = NULL;
-		}
-	}
+	queue_for_each_hw_ctx(q, hctx, i)
+		hctx->sched_tags = NULL;
 
 	if (blk_mq_is_shared_tags(flags))
-		blk_mq_exit_sched_shared_tags(q);
+		q->sched_shared_tags = NULL;
 }
 
-static int blk_mq_init_sched_shared_tags(struct request_queue *queue)
+static void blk_mq_init_sched_shared_tags(struct request_queue *queue,
+		struct elevator_queue *eq)
 {
-	struct blk_mq_tag_set *set = queue->tag_set;
-
-	/*
-	 * Set initial depth at max so that we don't need to reallocate for
-	 * updating nr_requests.
-	 */
-	queue->sched_shared_tags = blk_mq_alloc_map_and_rqs(set,
-						BLK_MQ_NO_HCTX_IDX,
-						MAX_SCHED_RQ);
-	if (!queue->sched_shared_tags)
-		return -ENOMEM;
-
+	queue->sched_shared_tags = eq->tags->u.shared_tags;
 	blk_mq_tag_update_sched_shared_tags(queue);
-
-	return 0;
 }
 
 void blk_mq_sched_reg_debugfs(struct request_queue *q)
@@ -458,8 +431,165 @@ void blk_mq_sched_unreg_debugfs(struct request_queue *q)
 	mutex_unlock(&q->debugfs_mutex);
 }
 
+void __blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
+		struct elevator_tags *tags)
+{
+	unsigned long i;
+
+	if (!tags)
+		return;
+
+	if (blk_mq_is_shared_tags(set->flags)) {
+		if (tags->u.shared_tags) {
+			blk_mq_free_rqs(set, tags->u.shared_tags,
+					BLK_MQ_NO_HCTX_IDX);
+			blk_mq_free_rq_map(tags->u.shared_tags);
+		}
+		goto out;
+	}
+
+	if (!tags->u.tags)
+		goto out;
+
+	for (i = 0; i < tags->nr_hw_queues; i++) {
+		if (tags->u.tags[i]) {
+			blk_mq_free_rqs(set, tags->u.tags[i], i);
+			blk_mq_free_rq_map(tags->u.tags[i]);
+		}
+	}
+
+	kfree(tags->u.tags);
+out:
+	kfree(tags);
+}
+
+void blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
+		struct elevator_tags **tags)
+{
+	unsigned long i, count = 0;
+	struct request_queue *q;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+
+	if (!tags)
+		return;
+
+	/*
+	 * Accessing q->elevator without holding q->elevator_lock is safe
+	 * because we're holding here set->update_nr_hwq_lock in the writer
+	 * context. So, scheduler update/switch code (which acquires the same
+	 * lock but in the reader context) can't run concurrently.
+	 */
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		if (q->elevator)
+			count++;
+	}
+
+	for (i = 0; i < count; i++)
+		__blk_mq_free_sched_tags(set, tags[i]);
+
+	kfree(tags);
+}
+
+struct elevator_tags *__blk_mq_alloc_sched_tags(struct blk_mq_tag_set *set,
+				unsigned int nr_hw_queues, int id)
+{
+	unsigned int i;
+	struct elevator_tags *tags;
+	gfp_t gfp = GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY;
+
+	tags = kcalloc(1, sizeof(struct elevator_tags), gfp);
+	if (!tags)
+		return NULL;
+
+	tags->id = id;
+	/*
+	 * Default to double of smaller one between hw queue_depth and
+	 * 128, since we don't split into sync/async like the old code
+	 * did. Additionally, this is a per-hw queue depth.
+	 */
+	tags->nr_requests = 2 * min_t(unsigned int, set->queue_depth,
+			BLKDEV_DEFAULT_RQ);
+
+	if (blk_mq_is_shared_tags(set->flags)) {
+
+		tags->u.shared_tags = blk_mq_alloc_map_and_rqs(set,
+					BLK_MQ_NO_HCTX_IDX,
+					MAX_SCHED_RQ);
+		if (!tags->u.shared_tags)
+			goto out;
+
+		return tags;
+	}
+
+	tags->u.tags = kcalloc(nr_hw_queues, sizeof(struct blk_mq_tags *), gfp);
+	if (!tags->u.tags)
+		goto out;
+
+	tags->nr_hw_queues = nr_hw_queues;
+	for (i = 0; i < nr_hw_queues; i++) {
+		tags->u.tags[i] = blk_mq_alloc_map_and_rqs(set, i,
+				tags->nr_requests);
+		if (!tags->u.tags[i])
+			goto out;
+	}
+
+	return tags;
+
+out:
+	__blk_mq_free_sched_tags(set, tags);
+	return NULL;
+}
+
+int blk_mq_alloc_sched_tags(struct blk_mq_tag_set *set,
+			    unsigned int nr_hw_queues,
+			    struct elevator_tags ***elv_tags)
+{
+	unsigned long idx = 0, count = 0;
+	struct request_queue *q;
+	struct elevator_tags **tags;
+	gfp_t gfp = GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+	/*
+	 * Accessing q->elevator without holding q->elevator_lock is safe
+	 * because we're holding here set->update_nr_hwq_lock in the writer
+	 * context. So, scheduler update/switch code (which acquires the same
+	 * lock but in the reader context) can't run concurrently.
+	 */
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		if (q->elevator)
+			count++;
+	}
+
+	if (!count)
+		return 0;
+
+	tags = kcalloc(count, sizeof(struct elevator_tags *), gfp);
+	if (!tags)
+		return -ENOMEM;
+
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		if (q->elevator) {
+			tags[idx] = __blk_mq_alloc_sched_tags(set, nr_hw_queues,
+					q->id);
+			if (!tags[idx])
+				goto out;
+
+			idx++;
+		}
+	}
+
+	*elv_tags = tags;
+	return count;
+out:
+	blk_mq_free_sched_tags(set, tags);
+	return -ENOMEM;
+}
+
 /* caller must have a reference to @e, will grab another one if successful */
-int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
+int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
+		struct elevator_tags *tags)
 {
 	unsigned int flags = q->tag_set->flags;
 	struct blk_mq_hw_ctx *hctx;
@@ -467,40 +597,26 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 	unsigned long i;
 	int ret;
 
-	/*
-	 * Default to double of smaller one between hw queue_depth and 128,
-	 * since we don't split into sync/async like the old code did.
-	 * Additionally, this is a per-hw queue depth.
-	 */
-	q->nr_requests = 2 * min_t(unsigned int, q->tag_set->queue_depth,
-				   BLKDEV_DEFAULT_RQ);
-
-	eq = elevator_alloc(q, e);
+	eq = elevator_alloc(q, e, tags);
 	if (!eq)
 		return -ENOMEM;
 
-	if (blk_mq_is_shared_tags(flags)) {
-		ret = blk_mq_init_sched_shared_tags(q);
-		if (ret)
-			return ret;
-	}
+	q->nr_requests = tags->nr_requests;
 
-	queue_for_each_hw_ctx(q, hctx, i) {
-		ret = blk_mq_sched_alloc_map_and_rqs(q, hctx, i);
-		if (ret)
-			goto err_free_map_and_rqs;
-	}
+	if (blk_mq_is_shared_tags(flags))
+		blk_mq_init_sched_shared_tags(q, eq);
+
+	queue_for_each_hw_ctx(q, hctx, i)
+		blk_mq_init_sched_tags(q, hctx, i, eq);
 
 	ret = e->ops.init_sched(q, eq);
 	if (ret)
-		goto err_free_map_and_rqs;
+		goto out;
 
 	queue_for_each_hw_ctx(q, hctx, i) {
 		if (e->ops.init_hctx) {
 			ret = e->ops.init_hctx(hctx, i);
 			if (ret) {
-				eq = q->elevator;
-				blk_mq_sched_free_rqs(q);
 				blk_mq_exit_sched(q, eq);
 				kobject_put(&eq->kobj);
 				return ret;
@@ -509,10 +625,8 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 	}
 	return 0;
 
-err_free_map_and_rqs:
-	blk_mq_sched_free_rqs(q);
+out:
 	blk_mq_sched_tags_teardown(q, flags);
-
 	kobject_put(&eq->kobj);
 	q->elevator = NULL;
 	return ret;

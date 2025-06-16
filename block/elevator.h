@@ -23,6 +23,17 @@ enum elv_merge {
 struct blk_mq_alloc_data;
 struct blk_mq_hw_ctx;
 
+/* Holding context data for changing elevator */
+struct elv_change_ctx {
+	const char *name;
+	bool no_uevent;
+
+	/* for unregistering old elevator */
+	struct elevator_queue *old;
+	/* for registering new elevator */
+	struct elevator_queue *new;
+};
+
 struct elevator_mq_ops {
 	int (*init_sched)(struct request_queue *, struct elevator_queue *);
 	void (*exit_sched)(struct elevator_queue *);
@@ -107,12 +118,27 @@ void elv_rqhash_add(struct request_queue *q, struct request *rq);
 void elv_rqhash_reposition(struct request_queue *q, struct request *rq);
 struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
 
+struct elevator_tags {
+	/* num. of hardware queues for which tags are allocated */
+	unsigned int nr_hw_queues;
+	/* depth used while allocating tags */
+	unsigned int nr_requests;
+	/* request queue id (q->id) used during elevator_tags_lookup() */
+	int id;
+	union {
+		/* tags shared across all queues */
+		struct blk_mq_tags *shared_tags;
+		/* array of blk_mq_tags pointers, one per hardware queue. */
+		struct blk_mq_tags **tags;
+	} u;
+};
 /*
  * each queue has an elevator_queue associated with it
  */
 struct elevator_queue
 {
 	struct elevator_type *type;
+	struct elevator_tags *tags;
 	void *elevator_data;
 	struct kobject kobj;
 	struct mutex sysfs_lock;
@@ -153,7 +179,7 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *page, size_t count);
 
 extern bool elv_bio_merge_ok(struct request *, struct bio *);
 extern struct elevator_queue *elevator_alloc(struct request_queue *,
-					struct elevator_type *);
+		struct elevator_type *, struct elevator_tags *);
 
 /*
  * Helper functions.
