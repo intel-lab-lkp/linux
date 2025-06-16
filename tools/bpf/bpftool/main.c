@@ -533,8 +533,12 @@ int main(int argc, char **argv)
 	if (argc < 0)
 		usage();
 
-	if (version_requested)
-		return do_version(argc, argv);
+	if (version_requested) {
+		ret = do_version(argc, argv);
+		if (json_output)
+			jsonw_destroy(&json_wtr);
+		return ret;
+	}
 
 	ret = cmd_select(commands, argc, argv, do_help);
 
