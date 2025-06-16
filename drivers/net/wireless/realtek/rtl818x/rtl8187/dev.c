@@ -189,6 +189,7 @@ static void rtl8187_tx_cb(struct urb *urb)
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hw *hw = info->rate_driver_data[0];
 	struct rtl8187_priv *priv = hw->priv;
+	unsigned long flags;
 
 	skb_pull(skb, priv->is_rtl8187b ? sizeof(struct rtl8187b_tx_hdr) :
 					  sizeof(struct rtl8187_tx_hdr));
@@ -196,7 +197,8 @@ static void rtl8187_tx_cb(struct urb *urb)
 
 	if (!(urb->status) && !(info->flags & IEEE80211_TX_CTL_NO_ACK)) {
 		if (priv->is_rtl8187b) {
-			skb_queue_tail(&priv->b_tx_status.queue, skb);
+			spin_lock_irqsave(&priv->b_tx_status.queue.lock, flags);
+			__skb_queue_tail(&priv->b_tx_status.queue, skb);
 
 			/* queue is "full", discard last items */
 			while (skb_queue_len(&priv->b_tx_status.queue) > 5) {
@@ -205,9 +207,11 @@ static void rtl8187_tx_cb(struct urb *urb)
 				dev_dbg(&priv->udev->dev,
 					"transmit status queue full\n");
 
-				old_skb = skb_dequeue(&priv->b_tx_status.queue);
+				old_skb = __skb_dequeue(&priv->b_tx_status.queue);
 				ieee80211_tx_status_irqsafe(hw, old_skb);
 			}
+
+			spin_unlock_irqrestore(&priv->b_tx_status.queue.lock, flags);
 			return;
 		} else {
 			info->flags |= IEEE80211_TX_STAT_ACK;
@@ -893,6 +897,7 @@ static void rtl8187_work(struct work_struct *work)
 				    work.work);
 	struct ieee80211_tx_info *info;
 	struct ieee80211_hw *dev = priv->dev;
+	unsigned long flags;
 	static u16 retry;
 	u16 tmp;
 	u16 avg_retry;
@@ -900,6 +905,8 @@ static void rtl8187_work(struct work_struct *work)
 
 	mutex_lock(&priv->conf_mutex);
 	tmp = rtl818x_ioread16(priv, (__le16 *)0xFFFA);
+
+	spin_lock_irqsave(&priv->b_tx_status.queue.lock, flags);
 	length = skb_queue_len(&priv->b_tx_status.queue);
 	if (unlikely(!length))
 		length = 1;
@@ -909,13 +916,15 @@ static void rtl8187_work(struct work_struct *work)
 	while (skb_queue_len(&priv->b_tx_status.queue) > 0) {
 		struct sk_buff *old_skb;
 
-		old_skb = skb_dequeue(&priv->b_tx_status.queue);
+		old_skb = __skb_dequeue(&priv->b_tx_status.queue);
 		info = IEEE80211_SKB_CB(old_skb);
 		info->status.rates[0].count = avg_retry + 1;
 		if (info->status.rates[0].count > RETRY_COUNT)
 			info->flags &= ~IEEE80211_TX_STAT_ACK;
 		ieee80211_tx_status_irqsafe(dev, old_skb);
 	}
+	spin_unlock_irqrestore(&priv->b_tx_status.queue.lock, flags);
+
 	retry = tmp;
 	mutex_unlock(&priv->conf_mutex);
 }
