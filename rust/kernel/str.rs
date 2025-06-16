@@ -243,11 +243,13 @@ impl CStr {
         unsafe { Self::from_bytes_with_nul_unchecked(bytes) }
     }
 
-    /// Creates a [`CStr`] from a `[u8]`.
+    /// Returns `Ok` if `bytes` can safely be interpreted as a [`CStr`].
     ///
-    /// The provided slice must be `NUL`-terminated, does not contain any
-    /// interior `NUL` bytes.
-    pub const fn from_bytes_with_nul(bytes: &[u8]) -> Result<&Self, CStrConvertError> {
+    /// `bytes` is a valid [`CStr`] if:
+    /// * It is not empty,
+    /// * It is zero-terminated,
+    /// * It does not contain any other zero byte.
+    const fn is_valid_cstr(bytes: &[u8]) -> Result<(), CStrConvertError> {
         if bytes.is_empty() {
             return Err(CStrConvertError::NotNulTerminated);
         }
@@ -263,8 +265,31 @@ impl CStr {
             }
             i += 1;
         }
-        // SAFETY: We just checked that all properties hold.
-        Ok(unsafe { Self::from_bytes_with_nul_unchecked(bytes) })
+
+        Ok(())
+    }
+
+    /// Creates a [`CStr`] from a `[u8]`.
+    ///
+    /// The provided slice must be `NUL`-terminated, does not contain any
+    /// interior `NUL` bytes.
+    pub const fn from_bytes_with_nul(bytes: &[u8]) -> Result<&Self, CStrConvertError> {
+        match Self::is_valid_cstr(bytes) {
+            // SAFETY: We just checked that all properties hold.
+            Ok(()) => Ok(unsafe { Self::from_bytes_with_nul_unchecked(bytes) }),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Creates a mutable [`CStr`] from a mutable `[u8]`.
+    ///
+    /// The provided slice must be `NUL`-terminated and not contain any interior `NUL` bytes.
+    pub const fn from_bytes_with_nul_mut(bytes: &mut [u8]) -> Result<&mut Self, CStrConvertError> {
+        match Self::is_valid_cstr(bytes) {
+            // SAFETY: We just checked that all properties hold.
+            Ok(()) => Ok(unsafe { Self::from_bytes_with_nul_unchecked_mut(bytes) }),
+            Err(e) => Err(e),
+        }
     }
 
     /// Creates a [`CStr`] from a `[u8]` without performing any additional
