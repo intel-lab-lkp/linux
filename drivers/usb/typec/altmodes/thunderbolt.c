@@ -242,12 +242,18 @@ static int tbt_altmode_vdm(struct typec_altmode *alt,
 			else if (tbt->plug[TYPEC_PLUG_SOP_P])
 				tbt->state = TBT_STATE_SOP_P_EXIT;
 			break;
+		case TBT_CMD_STATUS_UPDATE:
+			typec_mode_selection_altmode_complete(alt, 0);
+			break;
 		}
 		break;
 	case CMDT_RSP_NAK:
 		switch (cmd) {
 		case CMD_ENTER_MODE:
 			dev_warn(&alt->dev, "Enter Mode refused\n");
+			break;
+		case TBT_CMD_STATUS_UPDATE:
+			typec_mode_selection_altmode_complete(alt, *(int *)vdo);
 			break;
 		default:
 			break;
