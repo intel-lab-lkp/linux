@@ -477,9 +477,9 @@ static ssize_t ocfs2_max_locking_protocol_show(struct kobject *kobj,
 
 	spin_lock(&ocfs2_stack_lock);
 	if (locking_max_version.pv_major)
-		ret = snprintf(buf, PAGE_SIZE, "%u.%u\n",
-			       locking_max_version.pv_major,
-			       locking_max_version.pv_minor);
+		ret = scnprintf(buf, PAGE_SIZE, "%u.%u\n",
+				locking_max_version.pv_major,
+				locking_max_version.pv_minor);
 	spin_unlock(&ocfs2_stack_lock);
 
 	return ret;
@@ -525,8 +525,8 @@ static ssize_t ocfs2_active_cluster_plugin_show(struct kobject *kobj,
 
 	spin_lock(&ocfs2_stack_lock);
 	if (active_stack) {
-		ret = snprintf(buf, PAGE_SIZE, "%s\n",
-			       active_stack->sp_name);
+		ret = scnprintf(buf, PAGE_SIZE, "%s\n",
+				active_stack->sp_name);
 		if (ret >= PAGE_SIZE)
 			ret = -E2BIG;
 	}
@@ -545,7 +545,7 @@ static ssize_t ocfs2_cluster_stack_show(struct kobject *kobj,
 {
 	ssize_t ret;
 	spin_lock(&ocfs2_stack_lock);
-	ret = snprintf(buf, PAGE_SIZE, "%s\n", cluster_stack_name);
+	ret = scnprintf(buf, PAGE_SIZE, "%s\n", cluster_stack_name);
 	spin_unlock(&ocfs2_stack_lock);
 
 	return ret;
@@ -595,7 +595,7 @@ static ssize_t ocfs2_dlm_recover_show(struct kobject *kobj,
 					struct kobj_attribute *attr,
 					char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "1\n");
+	return scnprintf(buf, PAGE_SIZE, "1\n");
 }
 
 static struct kobj_attribute ocfs2_attr_dlm_recover_support =

@@ -28,7 +28,7 @@ static ssize_t mlog_mask_show(u64 mask, char *buf)
 	else
 		state = "off";
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", state);
+	return scnprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
 static ssize_t mlog_mask_store(u64 mask, const char *buf, size_t count)

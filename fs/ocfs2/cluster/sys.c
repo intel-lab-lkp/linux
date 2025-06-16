@@ -21,7 +21,7 @@
 static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
 			    char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n", O2NM_API_VERSION);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", O2NM_API_VERSION);
 }
 static struct kobj_attribute attr_version =
 	__ATTR(interface_revision, S_IRUGO, version_show, NULL);
