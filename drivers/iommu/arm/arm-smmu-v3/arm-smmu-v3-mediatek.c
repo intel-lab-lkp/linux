@@ -15,10 +15,12 @@
 #include "arm-smmu-v3.h"
 
 #define MTK_SMMU_COMP_STR_LEN		64
+#define SMMU_REQUIRE_PARENT		BIT(5)
 #define MTK_SMMU_HAS_FLAG(pdata, _x)    (!!(((pdata)->flags) & (_x)))
 
 enum mtk_smmu_type {
 	MTK_SMMU_MM,
+	MTK_SMMU_APU,
 	MTK_SMMU_TYPE_NUM,
 };
 
@@ -36,12 +38,18 @@ static const struct mtk_smmu_v3_plat mt8196_data_mm = {
 	.smmu_type		= MTK_SMMU_MM,
 };
 
+static const struct mtk_smmu_v3_plat mt8196_data_apu = {
+	.smmu_type		= MTK_SMMU_APU,
+	.flags			= SMMU_REQUIRE_PARENT,
+};
+
 struct mtk_smmu_v3_of_device_data {
 	char			compatible[MTK_SMMU_COMP_STR_LEN];
 	const void		*data;
 };
 
 static const struct mtk_smmu_v3_of_device_data mtk_smmu_v3_of_ids[] = {
+	{ .compatible = "mediatek,mt8196-apu-smmu", .data = &mt8196_data_apu},
 	{ .compatible = "mediatek,mt8196-mm-smmu", .data = &mt8196_data_mm},
 };
 
@@ -77,6 +85,30 @@ struct arm_smmu_device *arm_smmu_v3_impl_mtk_init(struct arm_smmu_device *smmu)
 	if (!mtk_smmu_v3->plat_data) {
 		dev_err(dev, "Get platform data fail\n");
 		return ERR_PTR(-EINVAL);
+	}
+
+	if (MTK_SMMU_HAS_FLAG(mtk_smmu_v3->plat_data, SMMU_REQUIRE_PARENT)) {
+		parent_node = of_parse_phandle(dev->of_node, "mediatek,smmu-parent", 0);
+		if (!parent_node) {
+			dev_err(dev, "Lack its parent node.\n");
+			return ERR_PTR(-EINVAL);
+		}
+		if (!of_device_is_available(parent_node)) {
+			of_node_put(parent_node);
+			return ERR_PTR(-EINVAL);
+		}
+
+		parent_pdev = of_find_device_by_node(parent_node);
+		of_node_put(parent_node);
+		if (!parent_pdev) {
+			dev_err(dev, "Lack its parent devices.\n");
+			return ERR_PTR(-ENODEV);
+		}
+
+		if (!platform_get_drvdata(parent_pdev)) {
+			dev_err(dev, "Delay since its parent driver is not ready.\n");
+			return ERR_PTR(-EPROBE_DEFER);
+		}
 	}
 
 	return &mtk_smmu_v3->smmu;
