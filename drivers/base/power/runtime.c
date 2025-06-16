@@ -1261,6 +1261,47 @@ int pm_runtime_get_if_in_use(struct device *dev)
 EXPORT_SYMBOL_GPL(pm_runtime_get_if_in_use);
 
 /**
+ * pm_runtime_get_if_not_suspended - Conditionally bump up runtime PM usage count.
+ * @dev: Target device.
+ *
+ * Increment the runtime PM usage counter of @dev if its runtime PM status is NOT
+ * %RPM_SUSPENDED, in which case it returns 1. If the device state is %RPM_SUSPENDED
+ * 0 is returned. -EINVAL is returned if runtime PM is disabled for the device, in
+ * which case also the usage_count will remain unmodified.
+ *
+ * NOTE: This also cancels any pending autosuspend request.
+ */
+int pm_runtime_get_if_not_suspended(struct device *dev)
+{
+	unsigned long flags;
+	int retval;
+
+	spin_lock_irqsave(&dev->power.lock, flags);
+	if (dev->power.disable_depth > 0) {
+		retval = -EINVAL;
+		goto out;
+	}
+
+	if (dev->power.runtime_status == RPM_SUSPENDED) {
+		retval = 0;
+		goto out;
+	}
+
+	/* Cancel the auto-suspend timer */
+	pm_runtime_cancel_pending(dev);
+	atomic_inc(&dev->power.usage_count);
+	__update_runtime_status(dev, RPM_ACTIVE);
+	retval = 1;
+	spin_unlock_irqrestore(&dev->power.lock, flags);
+
+	return retval;
+out:
+	spin_unlock_irqrestore(&dev->power.lock, flags);
+	return retval;
+}
+EXPORT_SYMBOL_GPL(pm_runtime_get_if_not_suspended);
+
+/**
  * __pm_runtime_set_status - Set runtime PM status of a device.
  * @dev: Device to handle.
  * @status: New runtime PM status of the device.
