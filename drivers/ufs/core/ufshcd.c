@@ -5281,6 +5281,12 @@ static int ufshcd_sdev_configure(struct scsi_device *sdev,
 	struct ufs_hba *hba = shost_priv(sdev->host);
 	struct request_queue *q = sdev->request_queue;
 
+	/*
+	 * The write order is preserved per MCQ. Without MCQ, auto-hibernation
+	 * may cause write reordering that results in unaligned write errors.
+	 */
+	lim->driver_preserves_write_order = hba->mcq_enabled;
+
 	lim->dma_pad_mask = PRDT_DATA_BYTE_COUNT_PAD - 1;
 
 	/*
