@@ -2,7 +2,7 @@
 #
 
 config AMD_AE4DMA
-	tristate  "AMD AE4DMA Engine"
+	bool  "AMD AE4DMA Engine"
 	depends on (X86_64 || COMPILE_TEST) && PCI
 	depends on AMD_PTDMA
 	select DMA_ENGINE
@@ -17,7 +17,7 @@ config AMD_AE4DMA
 
 config AMD_PTDMA
 	tristate  "AMD PassThru DMA Engine"
-	depends on X86_64 && PCI
+	depends on (X86_64 || COMPILE_TEST) && PCI
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 	help

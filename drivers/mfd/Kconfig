@@ -702,7 +702,7 @@ config INTEL_SOC_PMIC_MRFLD
 	  that is found on Intel Merrifield systems.
 
 config MFD_INTEL_LPSS
-	tristate
+	bool "MFD_INTEL_LPSS"
 	select COMMON_CLK
 	select MFD_CORE
 
