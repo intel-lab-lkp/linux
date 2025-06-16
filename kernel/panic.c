@@ -125,6 +125,13 @@ static const struct ctl_table kern_panic_table[] = {
 		.mode           = 0644,
 		.proc_handler   = proc_douintvec,
 	},
+	{
+		.procname	= "panic_sys_info",
+		.data		= &panic_print,
+		.maxlen         = sizeof(panic_print),
+		.mode		= 0644,
+		.proc_handler	= sysctl_sys_info_handler,
+	},
 };
 
 static __init int kernel_panic_sysctls_init(void)
@@ -134,6 +141,15 @@ static __init int kernel_panic_sysctls_init(void)
 }
 late_initcall(kernel_panic_sysctls_init);
 #endif
+
+/* The format is "panic_sys_info=task,mem,ftrace,..." */
+static int __init setup_panic_sys_info(char *buf)
+{
+	/* There is no risk of race in kernel boot phase */
+	panic_print = sys_info_parse_param(buf);
+	return 1;
+}
+__setup("panic_sys_info=", setup_panic_sys_info);
 
 static atomic_t warn_count = ATOMIC_INIT(0);
 

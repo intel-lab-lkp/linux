@@ -899,6 +899,24 @@ So for example to print tasks and memory info on panic, user can::
   echo 3 > /proc/sys/kernel/panic_print
 
 
+panic_sys_info
+==============
+
+String of subsystem info to be dumped on panic. It expects string of
+comma-separated words like "tasks,mem,timer,...", which is a human
+readable string version of 'panic_print':
+
+=============   ===================================================
+tasks           print all tasks info
+mem             print system memory info
+timer           print timer info
+lock            print locks info if CONFIG_LOCKDEP is on
+ftrace          print ftrace buffer
+all_bt          print all CPUs backtrace (if available in the arch)
+blocked_tasks   print only tasks in uninterruptible (blocked) state
+=============   ===================================================
+
+
 panic_on_rcu_stall
 ==================
 
