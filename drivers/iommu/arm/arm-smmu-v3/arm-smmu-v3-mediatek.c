@@ -397,9 +397,87 @@ static int mtk_smmu_v3_smmuwp_irq_handler(int irq, struct arm_smmu_device *smmu)
 	return 0;
 }
 
+/*
+ * SMMU TF-A SMC cmd format:
+ * sec[11:11] + smmu_type[10:8] + cmd_id[7:0]
+ */
+#define SMMU_ATF_SET_CMD(smmu_type, sec, cmd_id) \
+	((cmd_id) | ((smmu_type) << 8) | ((sec) << 11))
+
+enum smmu_atf_cmd {
+	SMMU_SECURE_PM_GET,
+	SMMU_SECURE_PM_PUT,
+	SMMU_CMD_NUM
+};
+
+/*
+ * a0/in0 = MTK_IOMMU_SECURE_CONTROL(IOMMU SMC ID)
+ * a1/in1 = SMMU TF-A SMC cmd (sec + smmu_type + cmd_id)
+ * a2/in2 ~ a7/in7: user defined
+ */
+static int mtk_smmu_atf_call(u32 smmu_type, unsigned long cmd,
+			     unsigned long in2, unsigned long in3, unsigned long in4,
+			     unsigned long in5, unsigned long in6, unsigned long in7)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(MTK_SIP_KERNEL_IOMMU_CONTROL, cmd, in2, in3, in4, in5, in6, in7, &res);
+
+	return res.a0;
+}
+
+static int mtk_smmu_atf_call_common(u32 smmu_type, unsigned long cmd_id)
+{
+	unsigned long cmd = SMMU_ATF_SET_CMD(smmu_type, 1, cmd_id);
+
+	return mtk_smmu_atf_call(smmu_type, cmd, 0, 0, 0, 0, 0, 0);
+}
+
+static int mtk_smmu_pm_get(struct device *dev, uint32_t smmu_type)
+{
+	int ret;
+
+	ret = mtk_smmu_atf_call_common(smmu_type, SMMU_SECURE_PM_GET);
+	if (ret) {
+		dev_dbg(dev, "%s, smc call fail. ret:%d, type:%u\n", __func__, ret, smmu_type);
+		return -ENODEV;
+	}
+	return 0;
+}
+
+static int mtk_smmu_pm_put(struct device *dev, uint32_t smmu_type)
+{
+	int ret;
+
+	ret = mtk_smmu_atf_call_common(smmu_type, SMMU_SECURE_PM_PUT);
+	if (ret) {
+		dev_dbg(dev, "%s, smc call fail:%d, type:%u\n", __func__, ret, smmu_type);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int mtk_smmu_power_get(struct arm_smmu_device *smmu)
+{
+	struct mtk_smmu_v3 *mtk_smmuv3 = to_mtk_smmu_v3(smmu);
+	const struct mtk_smmu_v3_plat *plat_data = mtk_smmuv3->plat_data;
+
+	return mtk_smmu_pm_get(smmu->dev, plat_data->smmu_type);
+}
+
+static int mtk_smmu_power_put(struct arm_smmu_device *smmu)
+{
+	struct mtk_smmu_v3 *mtk_smmuv3 = to_mtk_smmu_v3(smmu);
+	const struct mtk_smmu_v3_plat *plat_data = mtk_smmuv3->plat_data;
+
+	return mtk_smmu_pm_put(smmu->dev, plat_data->smmu_type);
+}
+
 static const struct arm_smmu_v3_impl mtk_smmu_v3_impl = {
 	.combined_irq_handle = mtk_smmu_v3_smmuwp_irq_handler,
 	.smmu_evt_handler = mtk_smmu_evt_handler,
+	.smmu_power_get = mtk_smmu_power_get,
+	.smmu_power_put = mtk_smmu_power_put,
 };
 
 struct arm_smmu_device *arm_smmu_v3_impl_mtk_init(struct arm_smmu_device *smmu)
