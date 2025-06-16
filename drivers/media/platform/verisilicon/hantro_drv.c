@@ -11,6 +11,9 @@
  */
 
 #include <linux/clk.h>
+#include <linux/dma-map-ops.h>
+#include <linux/iommu.h>
+#include <linux/iommu-dma.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -185,6 +188,14 @@ static void device_run(void *priv)
 		goto err_cancel_job;
 
 	v4l2_m2m_buf_copy_metadata(src, dst, true);
+
+	if (use_dma_iommu(ctx->dev->v4l2_dev.dev)) {
+		struct iommu_domain *mmu_dom;
+
+		mmu_dom = iommu_get_domain_for_dev(ctx->dev->v4l2_dev.dev);
+		if (mmu_dom)
+			iommu_flush_iotlb_all(mmu_dom);
+	}
 
 	if (ctx->codec_ops->run(ctx))
 		goto err_cancel_job;
