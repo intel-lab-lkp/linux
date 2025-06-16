@@ -7079,8 +7079,11 @@ static int clear_subpage(unsigned long addr, int idx, void *arg)
  * folio_zero_user - Zero a folio which will be mapped to userspace.
  * @folio: The folio to zero.
  * @addr_hint: The address will be accessed or the base address if uncelar.
+ *
+ * folio_zero_user() does page-at-a-time zeroing because it needs to handle
+ * CONFIG_HIGHMEM. Allow architecture override.
  */
-void folio_zero_user(struct folio *folio, unsigned long addr_hint)
+void __weak folio_zero_user(struct folio *folio, unsigned long addr_hint)
 {
 	unsigned int nr_pages = folio_nr_pages(folio);
 
