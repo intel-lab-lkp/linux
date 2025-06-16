@@ -88,6 +88,13 @@ config ARM_SMMU_V3
 	  the ARM SMMUv3 architecture.
 
 if ARM_SMMU_V3
+config ARM_SMMU_V3_MEDIATEK
+	bool "ARM Ltd. System MMU Version 3 (SMMUv3) MediaTek Support"
+	depends on ARM_SMMU_V3 && ARCH_MEDIATEK
+	help
+	  When running on a MediaTek platform that has the custom variant
+	  of the ARM SMMUv3, this needs to be built into the SMMU driver.
+
 config ARM_SMMU_V3_SVA
 	bool "Shared Virtual Addressing support for the ARM SMMUv3"
 	select IOMMU_SVA
