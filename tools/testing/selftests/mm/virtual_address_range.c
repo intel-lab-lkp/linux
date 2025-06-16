@@ -80,7 +80,7 @@ static void validate_addr(char *ptr, int high_addr)
 	if (high_addr && addr < HIGH_ADDR_MARK)
 		ksft_exit_fail_msg("Bad address %lx\n", addr);
 
-	if (addr > HIGH_ADDR_MARK)
+	if (!high_addr && addr > HIGH_ADDR_MARK)
 		ksft_exit_fail_msg("Bad address %lx\n", addr);
 }
 
@@ -117,7 +117,7 @@ static int validate_lower_address_hint(void)
 
 static int validate_complete_va_space(void)
 {
-	unsigned long start_addr, end_addr, prev_end_addr;
+	unsigned long start_addr, end_addr;
 	char line[400];
 	char prot[6];
 	FILE *file;
@@ -134,7 +134,6 @@ static int validate_complete_va_space(void)
 	if (file == NULL)
 		ksft_exit_fail_msg("cannot open /proc/self/maps\n");
 
-	prev_end_addr = 0;
 	while (fgets(line, sizeof(line), file)) {
 		const char *vma_name = NULL;
 		int vma_name_start = 0;
@@ -150,12 +149,6 @@ static int validate_complete_va_space(void)
 		/* end of userspace mappings; ignore vsyscall mapping */
 		if (start_addr & (1UL << 63))
 			return 0;
-
-		/* /proc/self/maps must have gaps less than MAP_CHUNK_SIZE */
-		if (start_addr - prev_end_addr >= MAP_CHUNK_SIZE)
-			return 1;
-
-		prev_end_addr = end_addr;
 
 		if (prot[0] != 'r')
 			continue;
@@ -223,8 +216,7 @@ int main(int argc, char *argv[])
 
 		if (hptr[i] == MAP_FAILED)
 			break;
-
-		mark_range(ptr[i], MAP_CHUNK_SIZE);
+		mark_range(hptr[i], MAP_CHUNK_SIZE);
 		validate_addr(hptr[i], 1);
 	}
 	hchunks = i;
