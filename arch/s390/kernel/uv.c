@@ -424,7 +424,7 @@ int make_hva_secure(struct mm_struct *mm, unsigned long hva, struct uv_cb_header
 		return -EFAULT;
 	}
 	folio = folio_walk_start(&fw, vma, hva, 0);
-	if (!folio) {
+	if (!folio || folio_is_zone_device(folio)) {
 		mmap_read_unlock(mm);
 		return -ENXIO;
 	}

@@ -449,7 +449,7 @@ void do_secure_storage_access(struct pt_regs *regs)
 		if (!vma)
 			return handle_fault_error(regs, SEGV_MAPERR);
 		folio = folio_walk_start(&fw, vma, addr, 0);
-		if (!folio) {
+		if (!folio || folio_is_zone_device(folio)) {
 			mmap_read_unlock(mm);
 			return;
 		}
