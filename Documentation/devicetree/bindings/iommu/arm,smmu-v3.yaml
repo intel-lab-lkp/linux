@@ -20,7 +20,12 @@ properties:
   $nodename:
     pattern: "^iommu@[0-9a-f]*"
   compatible:
-    const: arm,smmu-v3
+    - description: MediaTek SoCs implementing "arm,smmu-v3"
+      items:
+        - enum:
+            - mediatek,mt8196-apu-smmu
+            - mediatek,mt8196-mm-smmu
+        - const: arm,smmu-v3
 
   reg:
     maxItems: 1
@@ -69,10 +74,27 @@ properties:
       register access with page 0 offsets. Set for Cavium ThunderX2 silicon that
       doesn't support SMMU page1 register space.
 
+  mediatek,smmu-parents:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      A phandle to the SMMU's power node. The SMMU should wait until its power
+      is ready
+
 required:
   - compatible
   - reg
   - '#iommu-cells'
+
+allOf:
+  - if:  # for SMMU need to wait its power node
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8196-apu-smmu
+    then:
+      required:
+        - mediatek,smmu-parents
 
 additionalProperties: false
 
