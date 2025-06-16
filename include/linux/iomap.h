@@ -460,6 +460,11 @@ void iomap_sort_ioends(struct list_head *ioend_list);
 ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 		loff_t pos, loff_t end_pos, unsigned int dirty_len);
 int ioend_writeback_submit(struct iomap_writepage_ctx *wpc, int error);
+
+void iomap_start_folio_write(struct inode *inode, struct folio *folio,
+		size_t len);
+void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
+		size_t len);
 int iomap_writepages(struct iomap_writepage_ctx *wpc);
 
 /*
