@@ -325,7 +325,7 @@ static int zd1301_demod_i2c_master_xfer(struct i2c_adapter *adapter,
 	if (ZD1301_IS_I2C_XFER_WRITE_READ(msg, num)) {
 		dev_dbg(&pdev->dev, "write&read msg[0].len=%u msg[1].len=%u\n",
 			msg[0].len, msg[1].len);
-		if (msg[0].len > 1 || msg[1].len > 8) {
+		if (msg[0].len != 1 || msg[1].len > 8) {
 			ret = -EOPNOTSUPP;
 			goto err;
 		}
@@ -372,7 +372,7 @@ static int zd1301_demod_i2c_master_xfer(struct i2c_adapter *adapter,
 		}
 	} else if (ZD1301_IS_I2C_XFER_WRITE(msg, num)) {
 		dev_dbg(&pdev->dev, "write msg[0].len=%u\n", msg[0].len);
-		if (msg[0].len > 1 + 8) {
+		if (msg[0].len > 1 + 8 || msg[0].len < 1) {
 			ret = -EOPNOTSUPP;
 			goto err;
 		}
