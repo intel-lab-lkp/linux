@@ -162,6 +162,23 @@ Description:	Lists the supported USB Modes. The default USB mode that is used
 		- usb3 (USB 3.2)
 		- usb4 (USB4)
 
+What:		/sys/class/typec/<port>/altmode_priorities
+Date:		June 2025
+Contact:	Andrei Kuchynski <akuchynski@chromium.org>
+Description:	Lists the alternate modes supported by the port and their
+		priorities. The priority setting determines the order in which
+		Displayport alt-mode, Thunderbolt alt-mode and USB4 mode will be
+		activated, indicating the preferred selection sequence. A value of -1
+		disables automatic entry into a specific mode, while lower numbers
+		indicate higher priority. The default priorities can be modified by
+		assigning new values. Modes without explicitly set values default to -1,
+		effectively disabling them.
+
+		Example values:
+		- "USB4=0 TBT=1 DP=2"
+		- "USB4=-1 TBT=0"
+		- "DP=-1 USB4=-1 TBT=-1"
+
 USB Type-C partner devices (eg. /sys/class/typec/port0-partner/)
 
 What:		/sys/class/typec/<port>-partner/accessory_mode
