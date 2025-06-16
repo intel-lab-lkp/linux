@@ -70,6 +70,20 @@
 #define EXYNOS_EMUL_DATA_MASK	0xFF
 #define EXYNOS_EMUL_ENABLE	0x1
 
+#define INTSTAT_FALL2	BIT(24)
+#define INTSTAT_FALL1	BIT(20)
+#define INTSTAT_FALL0	BIT(16)
+#define INTSTAT_RISE2	BIT(8)
+#define INTSTAT_RISE1	BIT(4)
+#define INTSTAT_RISE0	BIT(0)
+
+#define INTCLEAR_FALL2	BIT(24)
+#define INTCLEAR_FALL1	BIT(20)
+#define INTCLEAR_FALL0	BIT(16)
+#define INTCLEAR_RISE2	BIT(8)
+#define INTCLEAR_RISE1	BIT(4)
+#define INTCLEAR_RISE0	BIT(0)
+
 /* Exynos5260 specific */
 #define EXYNOS5260_TMU_REG_INTEN		0xC0
 #define EXYNOS5260_TMU_REG_INTSTAT		0xC4
@@ -773,7 +787,7 @@ static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 
 static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 {
-	unsigned int val_irq;
+	unsigned int val_irq, clearirq = 0;
 	u32 tmu_intstat, tmu_intclear;
 
 	if (data->soc == SOC_ARCH_EXYNOS5260) {
@@ -791,15 +805,29 @@ static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 	}
 
 	val_irq = readl(data->base + tmu_intstat);
-	/*
-	 * Clear the interrupts.  Please note that the documentation for
-	 * Exynos3250, Exynos4412, Exynos5250 and Exynos5260 incorrectly
-	 * states that INTCLEAR register has a different placing of bits
-	 * responsible for FALL IRQs than INTSTAT register.  Exynos5420
-	 * and Exynos5440 documentation is correct (Exynos4210 doesn't
-	 * support FALL IRQs at all).
-	 */
-	writel(val_irq, data->base + tmu_intclear);
+
+	if (data->soc == SOC_ARCH_EXYNOS4210) {
+		writel(val_irq, data->base + tmu_intclear);
+		return;
+	}
+
+	/* Map INTSTAT bits to INTCLEAR bits */
+	if (val_irq & INTSTAT_FALL2)
+		clearirq |= INTCLEAR_FALL2;
+	else if (val_irq & INTSTAT_FALL1)
+		clearirq |= INTCLEAR_FALL1;
+	else if (val_irq & INTSTAT_FALL0)
+		clearirq |= INTCLEAR_FALL0;
+	else if (val_irq & INTSTAT_RISE2)
+		clearirq |= INTCLEAR_RISE2;
+	else if (val_irq & INTSTAT_RISE1)
+		clearirq |= INTCLEAR_RISE1;
+	else if (val_irq & INTSTAT_RISE0)
+		clearirq |= INTCLEAR_RISE0;
+
+	/* Perform proper task for decrease temperature */
+	if (clearirq)
+		writel(clearirq, data->base + tmu_intclear);
 }
 
 static const struct of_device_id exynos_tmu_match[] = {
