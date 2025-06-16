@@ -172,6 +172,9 @@ enum soc_type {
  *	0 < reference_voltage <= 31
  * @tzd: pointer to thermal_zone_device structure
  * @enabled: current status of TMU device
+ * @tmu_intstat: interrupt status register
+ * @tmu_intclear: interrupt clear register
+ * @irq_clear_support: SoC supports clear IRQ
  * @tmu_set_low_temp: SoC specific method to set trip (falling threshold)
  * @tmu_set_high_temp: SoC specific method to set trip (rising threshold)
  * @tmu_set_crit_temp: SoC specific method to set critical temperature
@@ -198,6 +201,9 @@ struct exynos_tmu_data {
 	u8 reference_voltage;
 	struct thermal_zone_device *tzd;
 	bool enabled;
+	u32 tmu_intstat;
+	u32 tmu_intclear;
+	bool irq_clear_support;
 
 	void (*tmu_set_low_temp)(struct exynos_tmu_data *data, u8 temp);
 	void (*tmu_set_high_temp)(struct exynos_tmu_data *data, u8 temp);
@@ -785,28 +791,15 @@ static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 	return IRQ_HANDLED;
 }
 
-static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
+static void exynos_tmu_clear_irqs(struct exynos_tmu_data *data)
 {
 	unsigned int val_irq, clearirq = 0;
-	u32 tmu_intstat, tmu_intclear;
-
-	if (data->soc == SOC_ARCH_EXYNOS5260) {
-		tmu_intstat = EXYNOS5260_TMU_REG_INTSTAT;
-		tmu_intclear = EXYNOS5260_TMU_REG_INTCLEAR;
-	} else if (data->soc == SOC_ARCH_EXYNOS7) {
-		tmu_intstat = EXYNOS7_TMU_REG_INTPEND;
-		tmu_intclear = EXYNOS7_TMU_REG_INTPEND;
-	} else if (data->soc == SOC_ARCH_EXYNOS5433) {
-		tmu_intstat = EXYNOS5433_TMU_REG_INTPEND;
-		tmu_intclear = EXYNOS5433_TMU_REG_INTPEND;
-	} else {
-		tmu_intstat = EXYNOS_TMU_REG_INTSTAT;
-		tmu_intclear = EXYNOS_TMU_REG_INTCLEAR;
-	}
+	u32 tmu_intstat = data->tmu_intstat;
+	u32 tmu_intclear = data->tmu_intclear;
 
 	val_irq = readl(data->base + tmu_intstat);
 
-	if (data->soc == SOC_ARCH_EXYNOS4210) {
+	if (!data->irq_clear_support) {
 		writel(val_irq, data->base + tmu_intclear);
 		return;
 	}
@@ -900,12 +893,15 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_initialize = exynos4210_tmu_initialize;
 		data->tmu_control = exynos4210_tmu_control;
 		data->tmu_read = exynos4210_tmu_read;
-		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->tmu_clear_irqs = exynos_tmu_clear_irqs;
 		data->gain = 15;
 		data->reference_voltage = 7;
 		data->efuse_value = 55;
 		data->min_efuse_value = 40;
 		data->max_efuse_value = 100;
+		data->tmu_intstat = EXYNOS_TMU_REG_INTSTAT;
+		data->tmu_intclear = EXYNOS_TMU_REG_INTCLEAR;
+		data->irq_clear_support = false;
 		break;
 	case SOC_ARCH_EXYNOS3250:
 	case SOC_ARCH_EXYNOS4412:
@@ -922,7 +918,7 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_control = exynos4210_tmu_control;
 		data->tmu_read = exynos4412_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
-		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->tmu_clear_irqs = exynos_tmu_clear_irqs;
 		data->gain = 8;
 		data->reference_voltage = 16;
 		data->efuse_value = 55;
@@ -932,6 +928,14 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		else
 			data->min_efuse_value = 0;
 		data->max_efuse_value = 100;
+		data->irq_clear_support = true;
+		if (data->soc == SOC_ARCH_EXYNOS5260) {
+			data->tmu_intstat = EXYNOS5260_TMU_REG_INTSTAT;
+			data->tmu_intclear = EXYNOS5260_TMU_REG_INTCLEAR;
+		} else {
+			data->tmu_intstat = EXYNOS_TMU_REG_INTSTAT;
+			data->tmu_intclear = EXYNOS_TMU_REG_INTCLEAR;
+		}
 		break;
 	case SOC_ARCH_EXYNOS5433:
 		data->tmu_set_low_temp = exynos5433_tmu_set_low_temp;
@@ -943,7 +947,7 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_control = exynos5433_tmu_control;
 		data->tmu_read = exynos4412_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
-		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->tmu_clear_irqs = exynos_tmu_clear_irqs;
 		data->gain = 8;
 		if (res.start == EXYNOS5433_G3D_BASE)
 			data->reference_voltage = 23;
@@ -952,6 +956,9 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->efuse_value = 75;
 		data->min_efuse_value = 40;
 		data->max_efuse_value = 150;
+		data->tmu_intstat = EXYNOS5433_TMU_REG_INTPEND;
+		data->tmu_intclear = EXYNOS5433_TMU_REG_INTPEND;
+		data->irq_clear_support = true;
 		break;
 	case SOC_ARCH_EXYNOS7:
 		data->tmu_set_low_temp = exynos7_tmu_set_low_temp;
@@ -963,12 +970,15 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_control = exynos7_tmu_control;
 		data->tmu_read = exynos7_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
-		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->tmu_clear_irqs = exynos_tmu_clear_irqs;
 		data->gain = 9;
 		data->reference_voltage = 17;
 		data->efuse_value = 75;
 		data->min_efuse_value = 15;
 		data->max_efuse_value = 100;
+		data->tmu_intstat = EXYNOS7_TMU_REG_INTPEND;
+		data->tmu_intclear = EXYNOS7_TMU_REG_INTPEND;
+		data->irq_clear_support = true;
 		break;
 	default:
 		dev_err(&pdev->dev, "Platform not supported\n");
