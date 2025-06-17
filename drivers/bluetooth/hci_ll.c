@@ -34,7 +34,6 @@
 #include <linux/of.h>
 #include <linux/serdev.h>
 #include <linux/skbuff.h>
-#include <linux/ti_wilink_st.h>
 #include <linux/clk.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -42,6 +41,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/nvmem-consumer.h>
 
+#include "hci_ll.h"
 #include "hci_uart.h"
 
 /* Vendor-specific HCI commands */
