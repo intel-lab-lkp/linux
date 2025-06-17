@@ -49,6 +49,11 @@ properties:
     description: ID of the controller reset line
     const: 1
 
+  airoha,chip-scu:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the Chip SCU syscon node for PCIe
+      configuration
+
 required:
   - compatible
   - reg
@@ -65,6 +70,8 @@ allOf:
           minItems: 2
 
         '#reset-cells': false
+
+        airoha,chip-scu: false
 
   - if:
       properties:
@@ -97,5 +104,6 @@ examples:
         reg = <0x0 0x1fb00000 0x0 0x970>;
               #clock-cells = <1>;
               #reset-cells = <1>;
+        airoha,chip-scu = <&chip_scu>;
       };
     };
