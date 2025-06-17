@@ -817,6 +817,38 @@ void drm_crtc_load_palette_8(struct drm_crtc *crtc, const struct drm_color_lut *
 }
 EXPORT_SYMBOL(drm_crtc_load_palette_8);
 
+static void fill_palette_332(struct drm_crtc *crtc, u16 r, u16 g, u16 b,
+			     drm_crtc_set_lut_func set_palette)
+{
+	unsigned int i = (r << 5) | (g << 2) | b;
+
+	r = (r << 13) | (r << 10) | (r << 7) | (r << 4) | (r << 1) | (r >> 2);
+	g = (g << 13) | (g << 10) | (g << 7) | (g << 4) | (g << 1) | (g >> 2);
+	b = (b << 14) | (b << 12) | (b << 10) | (b << 8) | (b << 6) | (b << 4) | (b << 2) | b;
+
+	set_palette(crtc, i, r, g, b);
+}
+
+/**
+ * drm_crtc_fill_palette_332 - Programs a default palette for R332-like formats
+ * @crtc: The displaying CRTC
+ * @set_palette: Callback for programming the hardware gamma LUT
+ *
+ * Programs an RGB332 palette to hardware.
+ */
+void drm_crtc_fill_palette_332(struct drm_crtc *crtc, drm_crtc_set_lut_func set_palette)
+{
+	unsigned int r, g, b;
+
+	for (r = 0; r < 8; ++r) {
+		for (g = 0; g < 8; ++g) {
+			for (b = 0; b < 4; ++b)
+				fill_palette_332(crtc, r, g, b, set_palette);
+		}
+	}
+}
+EXPORT_SYMBOL(drm_crtc_fill_palette_332);
+
 static void fill_palette_8(struct drm_crtc *crtc, unsigned int i,
 			   drm_crtc_set_lut_func set_palette)
 {
