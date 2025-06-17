@@ -751,13 +751,15 @@ static void dd_finish_request(struct request *rq)
 {
 	struct dd_per_prio *per_prio = rq->elv.priv[0];
 
-	/*
-	 * The block layer core may call dd_finish_request() without having
-	 * called dd_insert_requests(). Skip requests that bypassed I/O
-	 * scheduling. See also blk_mq_request_bypass_insert().
-	 */
-	if (per_prio)
-		atomic_inc(&per_prio->stats.completed);
+	if (rq->q->elevator) {
+		/*
+		* The block layer core may call dd_finish_request() without having
+		* called dd_insert_requests(). Skip requests that bypassed I/O
+		* scheduling. See also blk_mq_request_bypass_insert().
+		*/
+		if (per_prio)
+			atomic_inc(&per_prio->stats.completed);
+	}
 }
 
 static bool dd_has_work_for_prio(struct dd_per_prio *per_prio)
