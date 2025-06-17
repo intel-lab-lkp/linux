@@ -360,12 +360,7 @@ void unpin_user_page_range_dirty_lock(struct page *page, unsigned long npages,
 
 	for (i = 0; i < npages; i += nr) {
 		folio = gup_folio_range_next(page, npages, i, &nr);
-		if (make_dirty && !folio_test_dirty(folio)) {
-			folio_lock(folio);
-			folio_mark_dirty(folio);
-			folio_unlock(folio);
-		}
-		gup_put_folio(folio, nr, FOLL_PIN);
+		unpin_user_folio_dirty_locked(folio, nr, make_dirty);
 	}
 }
 EXPORT_SYMBOL(unpin_user_page_range_dirty_lock);
@@ -434,6 +429,26 @@ void unpin_user_folio(struct folio *folio, unsigned long npages)
 	gup_put_folio(folio, npages, FOLL_PIN);
 }
 EXPORT_SYMBOL(unpin_user_folio);
+
+/**
+ * unpin_user_folio_dirty_locked() - conditionally mark a folio
+ * dirty and unpin it
+ *
+ * @folio:  pointer to folio to be released
+ * @npins:  number of pins
+ * @make_dirty: whether to mark the folio dirty
+ *
+ * Mark the folio as being modified if @make_dirty is true. Then
+ * release npins of the folio.
+ */
+void unpin_user_folio_dirty_locked(struct folio *folio,
+		unsigned long npins, bool make_dirty)
+{
+	if (make_dirty && !folio_test_dirty(folio))
+		folio_mark_dirty_lock(folio);
+	gup_put_folio(folio, npins, FOLL_PIN);
+}
+EXPORT_SYMBOL_GPL(unpin_user_folio_dirty_locked);
 
 /**
  * unpin_folios() - release an array of gup-pinned folios.
