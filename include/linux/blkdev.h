@@ -1227,7 +1227,7 @@ enum blk_default_limits {
  * Not to be confused with the max_hw_sector limit that is entirely
  * controlled by the driver, usually based on hardware limits.
  */
-#define BLK_DEF_MAX_SECTORS_CAP	2560u
+#define BLK_DEF_MAX_SECTORS_CAP	8192u
 
 static inline struct queue_limits *bdev_limits(struct block_device *bdev)
 {
