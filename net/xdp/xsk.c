@@ -34,8 +34,6 @@
 #include "xdp_umem.h"
 #include "xsk.h"
 
-#define TX_BATCH_SIZE 32
-
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
 	if (pool->cached_need_wakeup & XDP_WAKEUP_RX)
@@ -780,8 +778,8 @@ free_err:
 
 static int __xsk_generic_xmit(struct sock *sk)
 {
+	u32 max_batch = READ_ONCE(net_hotdata.sysctl_xsk_tx_batch_size);
 	struct xdp_sock *xs = xdp_sk(sk);
-	u32 max_batch = TX_BATCH_SIZE;
 	bool sent_frame = false;
 	struct xdp_desc desc;
 	struct sk_buff *skb;

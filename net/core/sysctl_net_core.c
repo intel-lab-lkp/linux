@@ -647,6 +647,14 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
+	{
+		.procname	= "xsk_tx_batch_size",
+		.data		= &net_hotdata.sysctl_xsk_tx_batch_size,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+
 };
 
 static struct ctl_table netns_core_table[] = {
