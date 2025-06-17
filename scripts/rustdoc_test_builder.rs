@@ -15,60 +15,100 @@
 //! from that. For the moment, we generate ourselves a new name, `{file}_{number}` instead, in
 //! the `gen` script (done there since we need to be aware of all the tests in a given file).
 
+use std::collections::HashMap;
 use std::io::Read;
+use std::fs::create_dir_all;
+
+use json::JsonValue;
+
+mod json;
+
+fn generate_doctest(file: &str, line: i32, doctest_code: &HashMap<String, JsonValue>) -> bool {
+    // FIXME: Once let chain feature is stable, please use it instead.
+    let Some(JsonValue::Object(wrapper)) = doctest_code.get("wrapper") else { return false };
+    let Some(JsonValue::String(before)) = wrapper.get("before") else { return false };
+    let Some(JsonValue::String(after)) = wrapper.get("after") else { return false };
+    let Some(JsonValue::String(code)) = doctest_code.get("code") else { return false };
+    let Some(JsonValue::String(crate_level_code)) = doctest_code.get("crate_level") else { return false };
+
+    // For tests that get generated with `Result`, `rustdoc` generates an `unwrap()` on
+    // the return value to check there were no returned errors. Instead, we use our assert macro
+    // since we want to just fail the test, not panic the kernel.
+    //
+    // We save the result in a variable so that the failed assertion message looks nicer.
+    let after = if let Some(JsonValue::Bool(true)) = wrapper.get("returns_result") {
+        "\n} let test_return_value = _inner(); assert!(test_return_value.is_ok()); }"
+    } else {
+        after.as_str()
+    };
+    let code = format!("{crate_level_code}\n{before}\n{code}{after}\n");
+
+    let file = file
+        .strip_suffix(".rs")
+        .unwrap_or(file)
+        .strip_prefix("../rust/kernel/")
+        .unwrap_or(file)
+        .replace('/', "_");
+    let path = format!("rust/test/doctests/kernel/{file}-{line}.rs");
+
+    std::fs::write(path, code.as_bytes()).unwrap();
+    true
+}
 
 fn main() {
     let mut stdin = std::io::stdin().lock();
     let mut body = String::new();
     stdin.read_to_string(&mut body).unwrap();
 
-    // Find the generated function name looking for the inner function inside `main()`.
-    //
-    // The line we are looking for looks like one of the following:
-    //
-    // ```
-    // fn main() { #[allow(non_snake_case)] fn _doctest_main_rust_kernel_file_rs_28_0() {
-    // fn main() { #[allow(non_snake_case)] fn _doctest_main_rust_kernel_file_rs_37_0() -> Result<(), impl ::core::fmt::Debug> {
-    // ```
-    //
-    // It should be unlikely that doctest code matches such lines (when code is formatted properly).
-    let rustdoc_function_name = body
-        .lines()
-        .find_map(|line| {
-            Some(
-                line.split_once("fn main() {")?
-                    .1
-                    .split_once("fn ")?
-                    .1
-                    .split_once("()")?
-                    .0,
-            )
-            .filter(|x| x.chars().all(|c| c.is_alphanumeric() || c == '_'))
-        })
-        .expect("No test function found in `rustdoc`'s output.");
+    let JsonValue::Object(rustdoc) = JsonValue::parse(&body).unwrap() else {
+        panic!("Expected an object")
+    };
+    if let Some(JsonValue::Number(format_version)) = rustdoc.get("format_version") {
+        if *format_version != 2 {
+            panic!("unsupported rustdoc format version: {format_version}");
+        }
+    } else {
+        panic!("missing `format_version` field");
+    }
+    let Some(JsonValue::Array(doctests)) = rustdoc.get("doctests") else {
+        panic!("`doctests` field is missing or has the wrong type");
+    };
 
-    // Qualify `Result` to avoid the collision with our own `Result` coming from the prelude.
-    let body = body.replace(
-        &format!("{rustdoc_function_name}() -> Result<(), impl ::core::fmt::Debug> {{"),
-        &format!(
-            "{rustdoc_function_name}() -> ::core::result::Result<(), impl ::core::fmt::Debug> {{"
-        ),
-    );
+    // We ignore the error since it will fail when generating doctests below if the folder doesn't
+    // exist.
+    let _ = create_dir_all("rust/test/doctests/kernel");
 
-    // For tests that get generated with `Result`, like above, `rustdoc` generates an `unwrap()` on
-    // the return value to check there were no returned errors. Instead, we use our assert macro
-    // since we want to just fail the test, not panic the kernel.
-    //
-    // We save the result in a variable so that the failed assertion message looks nicer.
-    let body = body.replace(
-        &format!("}} {rustdoc_function_name}().unwrap() }}"),
-        &format!("}} let test_return_value = {rustdoc_function_name}(); assert!(test_return_value.is_ok()); }}"),
-    );
+    let mut nb_generated = 0;
+    for doctest in doctests {
+        let JsonValue::Object(doctest) = doctest else {
+            unreachable!()
+        };
+        // We check if we need to skip this test by checking it's a rust code and it's not ignored.
+        if let Some(JsonValue::Object(attributes)) = doctest.get("doctest_attributes") {
+            if attributes.get("rust") != Some(&JsonValue::Bool(true)) {
+                continue;
+            } else if let Some(JsonValue::String(ignore)) = attributes.get("ignore") {
+                if ignore != "None" {
+                    continue;
+                }
+            }
+        }
+        if let (
+            Some(JsonValue::String(file)),
+            Some(JsonValue::Number(line)),
+            Some(JsonValue::Object(doctest_code)),
+        ) = (
+            doctest.get("file"),
+            doctest.get("line"),
+            doctest.get("doctest_code"),
+        ) {
+            if generate_doctest(file, *line, doctest_code) {
+                nb_generated += 1;
+            }
+        }
+    }
 
-    // Figure out a smaller test name based on the generated function name.
-    let name = rustdoc_function_name.split_once("_rust_kernel_").unwrap().1;
-
-    let path = format!("rust/test/doctests/kernel/{name}");
-
-    std::fs::write(path, body.as_bytes()).unwrap();
+    if nb_generated == 0 {
+        panic!("No test function found in `rustdoc`'s output.");
+    }
 }
