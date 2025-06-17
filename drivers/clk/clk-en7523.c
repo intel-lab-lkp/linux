@@ -5,6 +5,7 @@
 #include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/mfd/syscon.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
@@ -83,6 +84,7 @@ struct en_rst_data {
 };
 
 struct en_clk_soc_data {
+	bool probe_child;
 	u32 num_clocks;
 	const struct en_clk_desc *base_clks;
 	const struct clk_ops pcie_ops;
@@ -900,8 +902,19 @@ static int en7523_clk_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	return of_clk_add_hw_provider(dev->of_node, of_clk_hw_onecell_get,
-				      clk_data);
+	err = of_clk_add_hw_provider(dev->of_node, of_clk_hw_onecell_get,
+				     clk_data);
+	if (err)
+		return err;
+
+	if (soc_data->probe_child) {
+		err = of_platform_populate(dev->of_node, NULL, NULL,
+					   dev);
+		if (err)
+			return err;
+	}
+
+	return 0;
 }
 
 static const struct en_clk_soc_data en7523_data = {
