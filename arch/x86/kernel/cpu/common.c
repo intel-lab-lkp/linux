@@ -2248,7 +2248,7 @@ static void initialize_debug_regs(void)
 	int i;
 
 	/* Control register first */
-	set_debugreg(0, 7);
+	set_debugreg(DR7_FIXED_1, 7);
 	set_debugreg(DR6_RESERVED, 6);
 
 	/* Ignore db4, db5 */
