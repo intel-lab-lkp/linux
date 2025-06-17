@@ -32,6 +32,7 @@ properties:
       - enum:
           - airoha,en7523-scu
           - airoha,en7581-scu
+          - airoha,an7583-scu
 
   reg:
     items:
@@ -81,6 +82,14 @@ allOf:
       properties:
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          const: airoha,an7583-scu
+    then:
+      required:
+        - airoha,chip-scu
 
 additionalProperties: false
 
