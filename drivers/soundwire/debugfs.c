@@ -237,8 +237,8 @@ static int cmd_go(void *data, u64 value)
 {
 	const struct firmware *fw = NULL;
 	struct sdw_slave *slave = data;
-	ktime_t start_t;
-	ktime_t finish_t;
+	ktime_t start_t = 0;
+	ktime_t finish_t = 0;
 	int ret;
 
 	if (value != 1)
