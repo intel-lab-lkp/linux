@@ -5000,9 +5000,9 @@ static void scx_disable_workfn(struct kthread_work *work)
 		 * server bandwidth will be re-initialized.
 		 */
 		rq_lock_irqsave(rq, &rf);
-		if (dl_server_active(&rq->ext_server)) {
+		update_rq_clock(rq);
+		if (dl_server_active(&rq->ext_server))
 			dl_server_stop(&rq->ext_server);
-		}
 		dl_server_remove_params(&rq->ext_server);
 		rq_unlock_irqrestore(rq, &rf);
 	}
@@ -5754,6 +5754,7 @@ static int scx_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 			 * re-initialized.
 			 */
 			rq_lock_irqsave(rq, &rf);
+			update_rq_clock(rq);
 			if (dl_server_active(&rq->fair_server))
 				dl_server_stop(&rq->fair_server);
 			dl_server_remove_params(&rq->fair_server);
