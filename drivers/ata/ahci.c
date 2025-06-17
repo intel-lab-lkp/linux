@@ -1454,6 +1454,22 @@ static bool ahci_broken_lpm(struct pci_dev *pdev)
 			},
 			/* 320 is broken, there is no known good version yet. */
 		},
+		{
+			/*
+			 * AMD 500 Series Chipset SATA Controller [1022:43eb]
+			 * on this motherboard timouts on ports 5 and 6
+			 * when LPM enabled at least with WDC WD20EFAX-68FB5N0
+			 * hard drives.
+			 */
+			.matches = {
+				DMI_MATCH(DMI_BOARD_VENDOR,
+					"ASUSTeK COMPUTER INC."),
+				DMI_MATCH(DMI_BOARD_NAME,
+					"ROG STRIX B550-F GAMING (WI-FI)"),
+			},
+			/* 3621 is broken, there is no known good version yet.
+			 */
+		},
 		{ }	/* terminate list */
 	};
 	const struct dmi_system_id *dmi = dmi_first_match(sysids);
