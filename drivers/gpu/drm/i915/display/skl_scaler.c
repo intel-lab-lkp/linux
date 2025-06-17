@@ -134,6 +134,24 @@ static void skl_scaler_max_dst_size(struct intel_crtc *crtc,
 	}
 }
 
+bool
+skl_scaler_mode_valid(struct intel_display *display,
+		      const struct drm_display_mode *mode,
+		      enum intel_output_format output_format,
+		      int num_joined_pipes,
+		      enum drm_mode_status *status)
+{
+	if (num_joined_pipes < 2 && output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+		if (DISPLAY_VER(display) >= 14 &&
+		    mode->hdisplay > 4096) {
+			*status = MODE_NO_420;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static int
 skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 		  unsigned int scaler_user, int *scaler_id,

@@ -14,6 +14,7 @@
 #include "intel_lvds_regs.h"
 #include "intel_pfit.h"
 #include "intel_pfit_regs.h"
+#include "skl_scaler.h"
 
 static int intel_pch_pfit_check_dst_window(const struct intel_crtc_state *crtc_state)
 {
@@ -544,6 +545,17 @@ out:
 		return 0;
 
 	return intel_gmch_pfit_check_timings(crtc_state);
+}
+
+bool
+intel_pfit_mode_valid(struct intel_display *display,
+		      const struct drm_display_mode *mode,
+		      enum intel_output_format output_format,
+		      int num_joined_pipes,
+		      enum drm_mode_status *status)
+{
+	return skl_scaler_mode_valid(display, mode, output_format,
+				     num_joined_pipes, status);
 }
 
 int intel_pfit_compute_config(struct intel_crtc_state *crtc_state,
