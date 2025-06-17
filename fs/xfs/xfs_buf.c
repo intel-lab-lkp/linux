@@ -1722,21 +1722,11 @@ xfs_configure_buftarg(
 	struct xfs_buftarg	*btp,
 	unsigned int		sectorsize)
 {
-	int			error;
-
 	ASSERT(btp->bt_bdev != NULL);
 
 	/* Set up metadata sector size info */
 	btp->bt_meta_sectorsize = sectorsize;
 	btp->bt_meta_sectormask = sectorsize - 1;
-
-	error = bdev_validate_blocksize(btp->bt_bdev, sectorsize);
-	if (error) {
-		xfs_warn(btp->bt_mount,
-			"Cannot use blocksize %u on device %pg, err %d",
-			sectorsize, btp->bt_bdev, error);
-		return -EINVAL;
-	}
 
 	/*
 	 * Flush the block device pagecache so our bios see anything dirtied
