@@ -284,7 +284,7 @@ impl Delta {
     /// Return the smallest number of microseconds greater than or equal
     /// to the value in the [`Delta`].
     #[inline]
-    pub fn as_micros_ceil(self) -> i64 {
+    pub fn into_micros_ceil(self) -> i64 {
         #[cfg(CONFIG_64BIT)]
         {
             self.into_nanos().saturating_add(NSEC_PER_USEC - 1) / NSEC_PER_USEC
@@ -299,7 +299,7 @@ impl Delta {
 
     /// Return the number of milliseconds in the [`Delta`].
     #[inline]
-    pub fn as_millis(self) -> i64 {
+    pub fn into_millis(self) -> i64 {
         #[cfg(CONFIG_64BIT)]
         {
             self.into_nanos() / NSEC_PER_MSEC
