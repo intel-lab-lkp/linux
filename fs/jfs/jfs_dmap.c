@@ -2856,9 +2856,13 @@ static int dbJoin(dmtree_t *tp, int leafno, int newval, bool is_ctl)
 static void dbAdjTree(dmtree_t *tp, int leafno, int newval, bool is_ctl)
 {
 	int lp, pp, k;
-	int max, size;
+	int max, size, max_idx;
 
 	size = is_ctl ? CTLTREESIZE : TREESIZE;
+	max_idx = is_ctl ? LPERCTL : LPERDMAP;
+
+	if (WARN_ON_ONCE(le32_to_cpu(tp->dmt_leafidx) >= max_idx))
+		return;
 
 	/* pick up the index of the leaf for this leafno.
 	 */
