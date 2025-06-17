@@ -1081,6 +1081,8 @@ patternProperties:
     description: Novatek
   "^novtech,.*":
     description: NovTech, Inc.
+  "^ntmer,.*":
+    description: Shenzhen Ntmer Technology Co., Ltd.
   "^numonyx,.*":
     description: Numonyx (deprecated, use micron)
     deprecated: true
