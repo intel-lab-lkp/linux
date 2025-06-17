@@ -2809,7 +2809,17 @@ static int qedf_prepare_sb(struct qedf_ctx *qedf)
 		    sizeof(struct fcoe_cqe);
 	}
 err:
-	return 0;
+for (int i = 0; i < id; i++) {
+	fp = &qedf->fp_array[i];
+if (fp->sb_info) {
+	qedf_free_sb(qedf, fp->sb_info);
+kfree(fp->sb_info);
+fp->sb_info = NULL;
+}
+}
+kfree(qedf->fp_array);
+qedf->fp_array = NULL;
+return -ENOMEM;
 }
 
 void qedf_process_cqe(struct qedf_ctx *qedf, struct fcoe_cqe *cqe)
