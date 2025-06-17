@@ -48,20 +48,7 @@
 	__EMIT_BUG(cond_str, BUGFLAG_WARNING|(flags));	\
 } while (0)
 
-#define WARN_ON(x) ({					\
-	int __ret_warn_on = !!(x);			\
-	if (__builtin_constant_p(__ret_warn_on)) {	\
-		if (__ret_warn_on)			\
-			__WARN();			\
-	} else {					\
-		if (unlikely(__ret_warn_on))		\
-			__WARN();			\
-	}						\
-	unlikely(__ret_warn_on);			\
-})
-
 #define HAVE_ARCH_BUG
-#define HAVE_ARCH_WARN_ON
 #endif /* CONFIG_BUG */
 
 #include <asm-generic/bug.h>
