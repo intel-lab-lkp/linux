@@ -8,8 +8,7 @@
 
 / {
 	model = "AM335x Chiliboard";
-	compatible = "grinn,am335x-chiliboard", "grinn,am335x-chilisom",
-		     "ti,am33xx";
+	compatible = "grinn,am335x-chiliboard", "ti,am33xx";
 
 	chosen {
 		stdout-path = &uart0;

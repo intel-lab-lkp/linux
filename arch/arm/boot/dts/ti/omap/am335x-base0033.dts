@@ -9,7 +9,7 @@
 
 / {
 	model = "IGEP COM AM335x on AQUILA Expansion";
-	compatible = "isee,am335x-base0033", "isee,am335x-igep0033", "ti,am33xx";
+	compatible = "isee,am335x-base0033", "ti,am33xx";
 
 	hdmi {
 		compatible = "ti,tilcdc,slave";
