@@ -2141,6 +2141,7 @@ pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
 {
 	return -ENOSPC;
 }
+
 #endif /* CONFIG_PCI */
 
 /* Include architecture-dependent settings and functions */
