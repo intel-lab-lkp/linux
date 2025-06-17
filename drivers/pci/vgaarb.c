@@ -1499,8 +1499,8 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 
 	vgaarb_dbg(dev, "%s\n", __func__);
 
-	/* Only deal with VGA class devices */
-	if (!pci_is_vga(pdev))
+	/* Only deal with PCI display class devices */
+	if (!pci_is_display(pdev))
 		return 0;
 
 	/*
@@ -1546,12 +1546,12 @@ static int __init vga_arb_device_init(void)
 
 	bus_register_notifier(&pci_bus_type, &pci_notifier);
 
-	/* Add all VGA class PCI devices by default */
+	/* Add all PCI display class devices by default */
 	pdev = NULL;
 	while ((pdev =
 		pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
 			       PCI_ANY_ID, pdev)) != NULL) {
-		if (pci_is_vga(pdev))
+		if (pci_is_display(pdev))
 			vga_arbiter_add_pci_device(pdev);
 	}
 
