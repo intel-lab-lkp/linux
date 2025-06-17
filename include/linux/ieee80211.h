@@ -3160,6 +3160,10 @@ ieee80211_he_spr_size(const u8 *he_spr_ie)
 #define S1G_OPER_CH_WIDTH_PRIMARY_1MHZ	BIT(0)
 #define S1G_OPER_CH_WIDTH_OPER		GENMASK(4, 1)
 
+/* IEEE80211 2024 Table 9-351 */
+#define S1G_CAP3_MAX_MPDU_LEN_3895 0
+#define S1G_CAP3_MAX_MPDU_LEN_7991 1
+
 /* EHT MAC capabilities as defined in P802.11be_D2.0 section 9.4.2.313.2 */
 #define IEEE80211_EHT_MAC_CAP0_EPCS_PRIO_ACCESS			0x01
 #define IEEE80211_EHT_MAC_CAP0_OM_CONTROL			0x02
