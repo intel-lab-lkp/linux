@@ -106,6 +106,11 @@ struct fuse_backing {
 	struct rcu_head rcu;
 };
 
+struct fuse_entry_backing {
+	struct fuse_entry_backing_out out;
+	struct file *backing_file;
+};
+
 /** FUSE inode */
 struct fuse_inode {
 	/** Inode data */
@@ -209,6 +214,14 @@ struct fuse_inode {
 #ifdef CONFIG_FUSE_PASSTHROUGH
 	/** Reference to backing file in passthrough mode */
 	struct fuse_backing *fb;
+#endif
+
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+	/**
+	 * Backing inode, if this inode is from a backing file system.
+	 * If this is set, nodeid is 0.
+	 */
+	struct inode *backing_inode;
 #endif
 };
 
@@ -1114,13 +1127,17 @@ extern const struct dentry_operations fuse_root_dentry_operations;
 /**
  * Get a filled in inode
  */
+struct inode *fuse_iget_backing(struct super_block *sb,
+			struct inode *backing_inode);
+
 struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version,
 			u64 evict_ctr);
 
 int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name,
-		     struct fuse_entry_out *outarg, struct inode **inode);
+		     struct fuse_entry_out *outarg, struct dentry *entry,
+		     struct inode **inode);
 
 /**
  * Send FORGET command
@@ -1577,4 +1594,7 @@ extern void fuse_sysctl_unregister(void);
 #define fuse_sysctl_unregister()	do { } while (0)
 #endif /* CONFIG_SYSCTL */
 
+/* backing.c */
+int fuse_handle_backing(struct fuse_entry_backing *feb,
+	struct inode **backing_inode, struct path *backing_path);
 #endif /* _FS_FUSE_I_H */

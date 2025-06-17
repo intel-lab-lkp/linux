@@ -75,3 +75,16 @@ config FUSE_IO_URING
 
 	  If you want to allow fuse server/client communication through io-uring,
 	  answer Y
+
+config FUSE_PASSTHROUGH_DIR
+	bool "FUSE directory passthrough operations support"
+	depends on FUSE_FS
+	select FS_STACK
+	help
+	  This allows bypassing FUSE server on a specified directory by mapping
+	  all FUSE operations to be performed directly on a backing directory.
+
+	  The bypass will automatically extend to all sub directories and files
+	  in that directory.
+
+	  If you want to allow directory passthrough operations, answer Y.

@@ -694,6 +694,10 @@ struct fuse_entry_out {
 	struct fuse_attr attr;
 };
 
+struct fuse_entry_backing_out {
+	uint64_t	backing_fd;
+};
+
 struct fuse_forget_in {
 	uint64_t	nlookup;
 };

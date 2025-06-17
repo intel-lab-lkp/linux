@@ -2207,6 +2207,20 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		err = fuse_copy_out_args(cs, req->args, nbytes);
 	fuse_copy_finish(cs);
 
+	if (!err && req->in.h.opcode == FUSE_LOOKUP &&
+			req->args->out_args[1].size ==
+			sizeof(struct fuse_entry_backing_out)) {
+		struct fuse_entry_backing_out *febo =
+			(struct fuse_entry_backing_out *)
+				req->args->out_args[1].value;
+		struct fuse_entry_backing *feb =
+			container_of(febo, struct fuse_entry_backing, out);
+
+		feb->backing_file = fget(febo->backing_fd);
+		if (!feb->backing_file)
+			err = -EBADFD;
+	}
+
 	spin_lock(&fpq->lock);
 	clear_bit(FR_LOCKED, &req->flags);
 	if (!fpq->connected)

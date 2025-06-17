@@ -34,7 +34,7 @@ static void fuse_advise_use_readdirplus(struct inode *dir)
 	set_bit(FUSE_I_ADVISE_RDPLUS, &fi->state);
 }
 
-#if BITS_PER_LONG >= 64
+#if BITS_PER_LONG >= 64 && !defined(CONFIG_FUSE_PASSTHROUGH_DIR)
 static inline void __fuse_dentry_settime(struct dentry *entry, u64 time)
 {
 	entry->d_fsdata = (void *) time;
@@ -47,7 +47,12 @@ static inline u64 fuse_dentry_time(const struct dentry *entry)
 
 #else
 union fuse_dentry {
-	u64 time;
+	struct {
+		u64 time;
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+		struct path backing_path;
+#endif
+	};
 	struct rcu_head rcu;
 };
 
@@ -59,6 +64,11 @@ static inline void __fuse_dentry_settime(struct dentry *dentry, u64 time)
 static inline u64 fuse_dentry_time(const struct dentry *entry)
 {
 	return ((union fuse_dentry *) entry->d_fsdata)->time;
+}
+
+static inline union fuse_dentry *get_fuse_dentry(const struct dentry *entry)
+{
+	return entry->d_fsdata;
 }
 #endif
 
@@ -170,7 +180,8 @@ static void fuse_invalidate_entry(struct dentry *entry)
 
 static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 			     u64 nodeid, const struct qstr *name,
-			     struct fuse_entry_out *outarg)
+			     struct fuse_entry_out *outarg,
+			     struct fuse_entry_backing_out *febo)
 {
 	memset(outarg, 0, sizeof(struct fuse_entry_out));
 	args->opcode = FUSE_LOOKUP;
@@ -181,9 +192,12 @@ static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 	args->in_args[1].value = name->name;
 	args->in_args[2].size = 1;
 	args->in_args[2].value = "";
-	args->out_numargs = 1;
+	args->out_argvar = true;
+	args->out_numargs = 2;
 	args->out_args[0].size = sizeof(struct fuse_entry_out);
 	args->out_args[0].value = outarg;
+	args->out_args[1].size = sizeof(struct fuse_entry_backing_out);
+	args->out_args[1].value = febo;
 }
 
 /*
@@ -214,6 +228,7 @@ static int fuse_dentry_revalidate(struct inode *dir, const struct qstr *name,
 	else if (time_before64(fuse_dentry_time(entry), get_jiffies_64()) ||
 		 (flags & (LOOKUP_EXCL | LOOKUP_REVAL | LOOKUP_RENAME_TARGET))) {
 		struct fuse_entry_out outarg;
+		struct fuse_entry_backing feb;
 		FUSE_ARGS(args);
 		struct fuse_forget_link *forget;
 		u64 attr_version;
@@ -236,7 +251,7 @@ static int fuse_dentry_revalidate(struct inode *dir, const struct qstr *name,
 		attr_version = fuse_get_attr_version(fm->fc);
 
 		fuse_lookup_init(fm->fc, &args, get_node_id(dir),
-				 name, &outarg);
+				 name, &outarg, &feb.out);
 		ret = fuse_simple_request(fm, &args);
 		/* Zero nodeid is same as -ENOENT */
 		if (!ret && !outarg.nodeid)
@@ -283,7 +298,7 @@ invalid:
 	goto out;
 }
 
-#if BITS_PER_LONG < 64
+#if BITS_PER_LONG < 64 || defined(CONFIG_FUSE_PASSTHROUGH_DIR)
 static int fuse_dentry_init(struct dentry *dentry)
 {
 	dentry->d_fsdata = kzalloc(sizeof(union fuse_dentry),
@@ -294,6 +309,11 @@ static int fuse_dentry_init(struct dentry *dentry)
 static void fuse_dentry_release(struct dentry *dentry)
 {
 	union fuse_dentry *fd = dentry->d_fsdata;
+
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+	if (fd && fd->backing_path.dentry)
+		path_put(&fd->backing_path);
+#endif
 
 	kfree_rcu(fd, rcu);
 }
@@ -334,7 +354,7 @@ static struct vfsmount *fuse_dentry_automount(struct path *path)
 const struct dentry_operations fuse_dentry_operations = {
 	.d_revalidate	= fuse_dentry_revalidate,
 	.d_delete	= fuse_dentry_delete,
-#if BITS_PER_LONG < 64
+#if BITS_PER_LONG < 64 || defined(CONFIG_FUSE_PASSTHROUGH_DIR)
 	.d_init		= fuse_dentry_init,
 	.d_release	= fuse_dentry_release,
 #endif
@@ -365,10 +385,12 @@ bool fuse_invalid_attr(struct fuse_attr *attr)
 }
 
 int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name,
-		     struct fuse_entry_out *outarg, struct inode **inode)
+		     struct fuse_entry_out *outarg, struct dentry *entry,
+		     struct inode **inode)
 {
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	FUSE_ARGS(args);
+	struct fuse_entry_backing backing_arg = {0};
 	struct fuse_forget_link *forget;
 	u64 attr_version, evict_ctr;
 	int err;
@@ -387,23 +409,61 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	attr_version = fuse_get_attr_version(fm->fc);
 	evict_ctr = fuse_get_evict_ctr(fm->fc);
 
-	fuse_lookup_init(fm->fc, &args, nodeid, name, outarg);
+	fuse_lookup_init(fm->fc, &args, nodeid, name, outarg, &backing_arg.out);
 	err = fuse_simple_request(fm, &args);
-	/* Zero nodeid is same as -ENOENT, but with valid timeout */
-	if (err || !outarg->nodeid)
-		goto out_put_forget;
 
-	err = -EIO;
-	if (fuse_invalid_attr(&outarg->attr))
-		goto out_put_forget;
-	if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
-		pr_warn_once("root generation should be zero\n");
-		outarg->generation = 0;
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+	if (err == sizeof(backing_arg.out)) {
+		struct file *backing_file;
+		struct inode *backing_inode;
+
+		err = -ENOENT;
+		if (!entry)
+			goto out_put_forget;
+
+		err = -EINVAL;
+		backing_file = backing_arg.backing_file;
+		if (!backing_file)
+			goto out_put_forget;
+
+		if (IS_ERR(backing_file)) {
+			err = PTR_ERR(backing_file);
+			goto out_put_forget;
+		}
+
+		backing_inode = backing_file->f_inode;
+		*inode = fuse_iget_backing(sb, backing_inode);
+		if (!*inode)
+			goto out_put_forget;
+
+		err = fuse_handle_backing(&backing_arg,
+				&get_fuse_inode(*inode)->backing_inode,
+				&get_fuse_dentry(entry)->backing_path);
+		if (err) {
+			iput(*inode);
+			*inode = NULL;
+			goto out_put_forget;
+		}
+	} else
+#endif
+	{
+		/* Zero nodeid is same as -ENOENT, but with valid timeout */
+		if (err || !outarg->nodeid)
+			goto out_put_forget;
+
+		err = -EIO;
+		if (fuse_invalid_attr(&outarg->attr))
+			goto out_put_forget;
+		if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
+			pr_warn_once("root generation should be zero\n");
+			outarg->generation = 0;
+		}
+
+		*inode = fuse_iget(sb, outarg->nodeid, outarg->generation,
+				&outarg->attr, ATTR_TIMEOUT(outarg),
+				attr_version, evict_ctr);
 	}
 
-	*inode = fuse_iget(sb, outarg->nodeid, outarg->generation,
-			   &outarg->attr, ATTR_TIMEOUT(outarg),
-			   attr_version, evict_ctr);
 	err = -ENOMEM;
 	if (!*inode) {
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
@@ -411,9 +471,11 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	}
 	err = 0;
 
- out_put_forget:
+out_put_forget:
 	kfree(forget);
- out:
+out:
+	if (backing_arg.backing_file)
+		fput(backing_arg.backing_file);
 	return err;
 }
 
@@ -436,7 +498,7 @@ static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
 
 	locked = fuse_lock_inode(dir);
 	err = fuse_lookup_name(dir->i_sb, get_node_id(dir), &entry->d_name,
-			       &outarg, &inode);
+			       &outarg, entry, &inode);
 	fuse_unlock_inode(dir, locked);
 	if (err == -ENOENT) {
 		outarg_valid = false;
@@ -465,9 +527,9 @@ static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
 		fuse_advise_use_readdirplus(dir);
 	return newent;
 
- out_iput:
+out_iput:
 	iput(inode);
- out_err:
+out_err:
 	return ERR_PTR(err);
 }
 
