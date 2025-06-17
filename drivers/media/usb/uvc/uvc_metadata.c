@@ -190,13 +190,29 @@ int uvc_meta_init(struct uvc_device *dev)
 	static const u32 uvch_only[] = {V4L2_META_FMT_UVC, 0};
 	static const u32 d4xx_format[] = {V4L2_META_FMT_UVC, V4L2_META_FMT_D4XX,
 					  0};
+	static const u32 all_formats[] = {V4L2_META_FMT_UVC, V4L2_META_FMT_D4XX,
+					  V4L2_META_FMT_UVC_MSXU_1_5, 0};
+	static const u32 ms_format[] = {V4L2_META_FMT_UVC,
+					V4L2_META_FMT_UVC_MSXU_1_5, 0};
+	bool support_msxu;
+
+	support_msxu = dev->quirks & UVC_QUIRK_MSXU_META;
 
 	switch (dev->info->meta_format) {
+	case V4L2_META_FMT_UVC_MSXU_1_5:
+		dev->meta_formats = ms_format;
+		break;
 	case V4L2_META_FMT_D4XX:
-		dev->meta_formats = d4xx_format;
+		if (support_msxu)
+			dev->meta_formats = all_formats;
+		else
+			dev->meta_formats = d4xx_format;
 		break;
 	case 0:
-		dev->meta_formats = uvch_only;
+		if (support_msxu)
+			dev->meta_formats = ms_format;
+		else
+			dev->meta_formats = uvch_only;
 		break;
 	default:
 		dev_err(&dev->udev->dev, "Unknown metadata format 0x%x\n",
