@@ -4507,8 +4507,18 @@ EXPORT_SYMBOL_GPL(ufshcd_uic_hibern8_exit);
 
 static void ufshcd_configure_auto_hibern8(struct ufs_hba *hba)
 {
+	u32 reg_ahit;
+
 	if (!ufshcd_is_auto_hibern8_supported(hba))
 		return;
+
+	if (hba->quirks & UFSHCD_QUIRK_SEND_NOP_BEFORE_AHIT_DISABLE) {
+		reg_ahit = ufshcd_readl(hba, REG_AUTO_HIBERNATE_IDLE_TIMER);
+		if (hba->ahit == 0 &&
+		    FIELD_GET(UFSHCI_AHIBERN8_TIMER_MASK, reg_ahit) != 0)
+			ufshcd_exec_dev_cmd(hba, DEV_CMD_TYPE_NOP,
+					    hba->nop_out_timeout);
+	}
 
 	ufshcd_writel(hba, hba->ahit, REG_AUTO_HIBERNATE_IDLE_TIMER);
 }

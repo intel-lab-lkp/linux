@@ -689,6 +689,13 @@ enum ufshcd_quirks {
 	 * single doorbell mode.
 	 */
 	UFSHCD_QUIRK_BROKEN_LSDBS_CAP			= 1 << 25,
+
+	/*
+	 * This quirk indicates that host must send a NOP OUT to device before
+	 * disabling AHIT(setting AHIT.AH8ITV to 0), if already programmed to a
+	 * non-zero value.
+	 */
+	UFSHCD_QUIRK_SEND_NOP_BEFORE_AHIT_DISABLE	= 1 << 31,
 };
 
 enum ufshcd_caps {
