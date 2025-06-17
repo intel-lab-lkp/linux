@@ -358,29 +358,3 @@ class YnlDocGenerator:
             content = self.parse_yaml(yaml_data)
 
         return content
-
-    def generate_main_index_rst(self, output: str, index_dir: str) -> None:
-        """Generate the `networking_spec/index` content and write to the file"""
-        lines = []
-
-        lines.append(self.fmt.rst_header())
-        lines.append(self.fmt.rst_label("specs"))
-        lines.append(self.fmt.rst_title("Netlink Family Specifications"))
-        lines.append(self.fmt.rst_toctree(1))
-
-        index_fname = os.path.basename(output)
-        base, ext = os.path.splitext(index_fname)
-
-        if not index_dir:
-            index_dir = os.path.dirname(output)
-
-        logging.debug(f"Looking for {ext} files in %s", index_dir)
-        for filename in sorted(os.listdir(index_dir)):
-            if not filename.endswith(ext) or filename == index_fname:
-                continue
-            base, ext = os.path.splitext(filename)
-            lines.append(f"   {base}\n")
-
-        logging.debug("Writing an index file at %s", output)
-
-        return "".join(lines)
