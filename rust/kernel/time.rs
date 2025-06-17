@@ -51,6 +51,15 @@ pub fn msecs_to_jiffies(msecs: Msecs) -> Jiffies {
     unsafe { bindings::__msecs_to_jiffies(msecs) }
 }
 
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::Monotonic {}
+    impl Sealed for super::RealTime {}
+    impl Sealed for super::BootTime {}
+    impl Sealed for super::Tai {}
+}
+
 /// Trait for clock sources.
 ///
 /// Selection of the clock source depends on the use case. In some cases the usage of a
@@ -58,7 +67,7 @@ pub fn msecs_to_jiffies(msecs: Msecs) -> Jiffies {
 /// cases the user of the clock has to decide which clock is best suited for the
 /// purpose. In most scenarios clock [`Monotonic`] is the best choice as it
 /// provides a accurate monotonic notion of time (leap second smearing ignored).
-pub trait ClockSource {
+pub trait ClockSource: private::Sealed {
     /// The kernel clock ID associated with this clock source.
     ///
     /// This constant corresponds to the C side `clockid_t` value.
