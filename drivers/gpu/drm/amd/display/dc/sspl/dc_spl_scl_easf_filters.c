@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Copyright 2024 Advanced Micro Devices, Inc.
-
+#include <linux/array_size.h>
 #include "spl_debug.h"
 #include "dc_spl_filters.h"
 #include "dc_spl_scl_filters.h"
@@ -2409,8 +2409,7 @@ static uint32_t spl_easf_get_scale_ratio_to_reg_value(struct spl_fixed31_32 rati
 uint32_t spl_get_v_bf3_mode(struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
-	unsigned int num_entries = sizeof(easf_v_bf3_mode_lookup) /
-		sizeof(struct scale_ratio_to_reg_value_lookup);
+	unsigned int num_entries = ARRAY_SIZE(easf_v_bf3_mode_lookup);
 	value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 		easf_v_bf3_mode_lookup, num_entries);
 	return value;
@@ -2418,8 +2417,7 @@ uint32_t spl_get_v_bf3_mode(struct spl_fixed31_32 ratio)
 uint32_t spl_get_h_bf3_mode(struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
-	unsigned int num_entries = sizeof(easf_h_bf3_mode_lookup) /
-		sizeof(struct scale_ratio_to_reg_value_lookup);
+	unsigned int num_entries = ARRAY_SIZE(easf_h_bf3_mode_lookup);
 	value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 		easf_h_bf3_mode_lookup, num_entries);
 	return value;
@@ -2430,13 +2428,11 @@ uint32_t spl_get_reducer_gain6(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 4) {
-		num_entries = sizeof(easf_reducer_gain6_4tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_reducer_gain6_4tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_reducer_gain6_4tap_lookup, num_entries);
 	} else if (taps == 6) {
-		num_entries = sizeof(easf_reducer_gain6_6tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_reducer_gain6_6tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_reducer_gain6_6tap_lookup, num_entries);
 	} else
@@ -2449,13 +2445,11 @@ uint32_t spl_get_reducer_gain4(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 4) {
-		num_entries = sizeof(easf_reducer_gain4_4tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_reducer_gain4_4tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_reducer_gain4_4tap_lookup, num_entries);
 	} else if (taps == 6) {
-		num_entries = sizeof(easf_reducer_gain4_6tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_reducer_gain4_6tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_reducer_gain4_6tap_lookup, num_entries);
 	} else
@@ -2468,13 +2462,11 @@ uint32_t spl_get_gainRing6(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 4) {
-		num_entries = sizeof(easf_gain_ring6_4tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_gain_ring6_4tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_gain_ring6_4tap_lookup, num_entries);
 	} else if (taps == 6) {
-		num_entries = sizeof(easf_gain_ring6_6tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_gain_ring6_6tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_gain_ring6_6tap_lookup, num_entries);
 	} else
@@ -2487,13 +2479,11 @@ uint32_t spl_get_gainRing4(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 4) {
-		num_entries = sizeof(easf_gain_ring4_4tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_gain_ring4_4tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_gain_ring4_4tap_lookup, num_entries);
 	} else if (taps == 6) {
-		num_entries = sizeof(easf_gain_ring4_6tap_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_gain_ring4_6tap_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_gain_ring4_6tap_lookup, num_entries);
 	} else
@@ -2506,8 +2496,7 @@ uint32_t spl_get_3tap_dntilt_uptilt_offset(int taps, struct spl_fixed31_32 ratio
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_dntilt_uptilt_offset_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_dntilt_uptilt_offset_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_dntilt_uptilt_offset_lookup, num_entries);
 	} else
@@ -2520,8 +2509,7 @@ uint32_t spl_get_3tap_uptilt_maxval(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_uptilt_maxval_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_uptilt_maxval_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_uptilt_maxval_lookup, num_entries);
 	} else
@@ -2534,8 +2522,7 @@ uint32_t spl_get_3tap_dntilt_slope(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_dntilt_slope_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_dntilt_slope_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_dntilt_slope_lookup, num_entries);
 	} else
@@ -2548,8 +2535,7 @@ uint32_t spl_get_3tap_uptilt1_slope(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_uptilt1_slope_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_uptilt1_slope_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_uptilt1_slope_lookup, num_entries);
 	} else
@@ -2562,8 +2548,7 @@ uint32_t spl_get_3tap_uptilt2_slope(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_uptilt2_slope_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_uptilt2_slope_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_uptilt2_slope_lookup, num_entries);
 	} else
@@ -2576,8 +2561,7 @@ uint32_t spl_get_3tap_uptilt2_offset(int taps, struct spl_fixed31_32 ratio)
 	unsigned int num_entries;
 
 	if (taps == 3) {
-		num_entries = sizeof(easf_3tap_uptilt2_offset_lookup) /
-			sizeof(struct scale_ratio_to_reg_value_lookup);
+		num_entries = ARRAY_SIZE(easf_3tap_uptilt2_offset_lookup);
 		value = spl_easf_get_scale_ratio_to_reg_value(ratio,
 			easf_3tap_uptilt2_offset_lookup, num_entries);
 	} else
