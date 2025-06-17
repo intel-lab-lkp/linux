@@ -18,6 +18,7 @@
 #include <linux/export.h>
 #include <linux/mempool.h>
 #include <linux/writeback.h>
+#include <linux/sched/prio.h>
 #include "slab.h"
 
 #ifdef CONFIG_SLUB_DEBUG_ON
@@ -386,7 +387,7 @@ void *mempool_alloc_noprof(mempool_t *pool, gfp_t gfp_mask)
 	void *element;
 	unsigned long flags;
 	wait_queue_entry_t wait;
-	gfp_t gfp_temp;
+	gfp_t gfp_temp, gfp_src = gfp_mask;
 
 	VM_WARN_ON_ONCE(gfp_mask & __GFP_ZERO);
 	might_alloc(gfp_mask);
@@ -431,6 +432,16 @@ repeat_alloc:
 	if (!(gfp_mask & __GFP_DIRECT_RECLAIM)) {
 		spin_unlock_irqrestore(&pool->lock, flags);
 		return NULL;
+	}
+
+	/*
+	 * We will try to direct reclaim cyclically, if the rt-thread
+	 * is without __GFP_NORETRY.
+	 */
+	if (!(gfp_src & __GFP_NORETRY) && current->prio < MAX_RT_PRIO) {
+		spin_unlock_irqrestore(&pool->lock, flags);
+		gfp_temp = gfp_src;
+		goto repeat_alloc;
 	}
 
 	/* Let's wait for someone else to return an element to @pool */
