@@ -2243,20 +2243,17 @@ EXPORT_PER_CPU_SYMBOL(__stack_chk_guard);
 #endif
 #endif
 
-/*
- * Clear all 6 debug registers:
- */
-static void clear_all_debug_regs(void)
+static void initialize_debug_regs(void)
 {
 	int i;
 
-	for (i = 0; i < 8; i++) {
-		/* Ignore db4, db5 */
-		if ((i == 4) || (i == 5))
-			continue;
+	/* Control register first */
+	set_debugreg(0, 7);
+	set_debugreg(DR6_RESERVED, 6);
 
+	/* Ignore db4, db5 */
+	for (i = 0; i < 4; i++)
 		set_debugreg(0, i);
-	}
 }
 
 #ifdef CONFIG_KGDB
@@ -2417,7 +2414,7 @@ void cpu_init(void)
 
 	load_mm_ldt(&init_mm);
 
-	clear_all_debug_regs();
+	initialize_debug_regs();
 	dbg_restore_debug_regs();
 
 	doublefault_init_cpu_tss();
