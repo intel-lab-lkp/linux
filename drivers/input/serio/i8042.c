@@ -49,6 +49,10 @@ static bool i8042_probe_defer;
 module_param_named(probe_defer, i8042_probe_defer, bool, 0);
 MODULE_PARM_DESC(probe_defer, "Allow deferred probing.");
 
+static bool i8042_nokbdwakeup;
+module_param_named(nokbdwakeup, i8042_nokbdwakeup, bool, 0);
+MODULE_PARM_DESC(nokbdwakeup, "Disable keyboard port from waking up the system.");
+
 enum i8042_controller_reset_mode {
 	I8042_RESET_NEVER,
 	I8042_RESET_ALWAYS,
@@ -423,13 +427,13 @@ static int i8042_start(struct serio *serio)
 	/*
 	 * On platforms using suspend-to-idle, allow the keyboard to
 	 * wake up the system from sleep by enabling keyboard wakeups
-	 * by default.  This is consistent with keyboard wakeup
+	 * by default unless quirked. This is consistent with keyboard wakeup
 	 * behavior on many platforms using suspend-to-RAM (ACPI S3)
 	 * by default.
 	 */
 	if (pm_suspend_default_s2idle() &&
 	    serio == i8042_ports[I8042_KBD_PORT_NO].serio) {
-		device_set_wakeup_enable(&serio->dev, true);
+		device_set_wakeup_enable(&serio->dev, !i8042_nokbdwakeup);
 	}
 
 	guard(spinlock_irq)(&i8042_lock);

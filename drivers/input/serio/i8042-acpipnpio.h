@@ -84,6 +84,7 @@ static inline void i8042_write_command(int val)
 #define SERIO_QUIRK_DRITEK		BIT(13)
 #define SERIO_QUIRK_NOPNP		BIT(14)
 #define SERIO_QUIRK_FORCENORESTORE	BIT(15)
+#define SERIO_QUIRK_NOKBDWAKEUP		BIT(16)
 
 /* Quirk table for different mainboards. Options similar or identical to i8042
  * module parameters.
@@ -1725,6 +1726,8 @@ static void __init i8042_check_quirks(void)
 #endif
 	if (quirks & SERIO_QUIRK_FORCENORESTORE)
 		i8042_forcenorestore = true;
+	if (quirks & SERIO_QUIRK_NOKBDWAKEUP)
+		i8042_nokbdwakeup = true;
 }
 #else
 static inline void i8042_check_quirks(void) {}
@@ -1758,7 +1761,7 @@ static int __init i8042_platform_init(void)
 
 	i8042_check_quirks();
 
-	pr_debug("Active quirks (empty means none):%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+	pr_debug("Active quirks (empty means none):%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 		i8042_nokbd ? " nokbd" : "",
 		i8042_noaux ? " noaux" : "",
 		i8042_nomux ? " nomux" : "",
@@ -1782,7 +1785,8 @@ static int __init i8042_platform_init(void)
 #else
 		"",
 #endif
-		i8042_forcenorestore ? " forcenorestore" : "");
+		i8042_forcenorestore ? " forcenorestore" : "",
+		i8042_nokbdwakeup ? " nokbdwakeup" : "");
 
 	retval = i8042_pnp_init();
 	if (retval)
