@@ -640,6 +640,13 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 	},
+	{
+		.procname	= "xsk_max_per_socket_budget",
+		.data		= &net_hotdata.sysctl_xsk_max_per_socket_budget,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
 };
 
 static struct ctl_table netns_core_table[] = {

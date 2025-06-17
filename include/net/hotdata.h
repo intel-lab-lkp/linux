@@ -40,6 +40,7 @@ struct net_hotdata {
 	int			sysctl_max_skb_frags;
 	int			sysctl_skb_defer_max;
 	int			sysctl_mem_pcpu_rsv;
+	int			sysctl_xsk_max_per_socket_budget;
 };
 
 #define inet_ehash_secret	net_hotdata.tcp_protocol.secret

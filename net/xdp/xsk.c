@@ -28,13 +28,13 @@
 #include <net/netdev_lock.h>
 #include <net/netdev_rx_queue.h>
 #include <net/xdp.h>
+#include <net/hotdata.h>
 
 #include "xsk_queue.h"
 #include "xdp_umem.h"
 #include "xsk.h"
 
 #define TX_BATCH_SIZE 32
-#define MAX_PER_SOCKET_BUDGET (TX_BATCH_SIZE)
 
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
@@ -424,7 +424,9 @@ bool xsk_tx_peek_desc(struct xsk_buff_pool *pool, struct xdp_desc *desc)
 	rcu_read_lock();
 again:
 	list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list) {
-		if (xs->tx_budget_spent >= MAX_PER_SOCKET_BUDGET) {
+		int max_budget = READ_ONCE(net_hotdata.sysctl_xsk_max_per_socket_budget);
+
+		if (xs->tx_budget_spent >= max_budget) {
 			budget_exhausted = true;
 			continue;
 		}
