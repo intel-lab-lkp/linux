@@ -6737,7 +6737,7 @@ static void probe_intel_uncore_frequency_legacy(void)
 			int k, l;
 			char path_base[128];
 
-			sprintf(path_base, "/sys/devices/system/cpu/intel_uncore_frequency/package_%02d_die_%02d", i,
+			sprintf(path_base, "/sys/devices/system/cpu/intel_uncore_frequency/package_%02d_die_%02d/current_freq_khz", i,
 				j);
 
 			if (access(path_base, R_OK))
