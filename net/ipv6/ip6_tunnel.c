@@ -2053,8 +2053,17 @@ static int ip6_tnl_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip6_tnl_net *ip6n = net_generic(net, ip6_tnl_net_id);
 	struct ip_tunnel_encap ipencap;
 
-	if (dev == ip6n->fb_tnl_dev)
-		return -EINVAL;
+	if (dev == ip6n->fb_tnl_dev) {
+		if (!data[IFLA_IPTUN_PROTO]) {
+			NL_SET_ERR_MSG(extack,
+				       "Only protocol can be changed for fallback tunnel");
+			return -EINVAL;
+		}
+
+		ip6_tnl_netlink_parms(data, &p);
+		ip6_tnl0_update(netdev_priv(ip6n->fb_tnl_dev), &p);
+		return 0;
+	}
 
 	if (ip_tunnel_netlink_encap_parms(data, &ipencap)) {
 		int err = ip6_tnl_encap_setup(t, &ipencap);
