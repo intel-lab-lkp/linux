@@ -700,9 +700,16 @@ static struct debug_obj *lookup_object_or_alloc(void *addr, struct debug_bucket 
 	return NULL;
 }
 
-static void debug_objects_fill_pool(void)
+static void debug_objects_fill_pool(bool init)
 {
 	if (!static_branch_likely(&obj_cache_enabled))
+		return;
+
+	/*
+	 * Attempt to fill the pool only if called from debug_objects_init()
+	 * or not in atomic context.
+	 */
+	if (!init && in_atomic())
 		return;
 
 	if (likely(!pool_should_refill(&pool_global)))
@@ -740,7 +747,7 @@ __debug_object_init(void *addr, const struct debug_obj_descr *descr, int onstack
 	struct debug_bucket *db;
 	unsigned long flags;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(true);
 
 	db = get_bucket((unsigned long) addr);
 
@@ -817,7 +824,7 @@ int debug_object_activate(void *addr, const struct debug_obj_descr *descr)
 	if (!debug_objects_enabled)
 		return 0;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(false);
 
 	db = get_bucket((unsigned long) addr);
 
@@ -1006,7 +1013,7 @@ void debug_object_assert_init(void *addr, const struct debug_obj_descr *descr)
 	if (!debug_objects_enabled)
 		return;
 
-	debug_objects_fill_pool();
+	debug_objects_fill_pool(false);
 
 	db = get_bucket((unsigned long) addr);
 
