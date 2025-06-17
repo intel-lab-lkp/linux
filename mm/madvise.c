@@ -1536,10 +1536,10 @@ int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 				   struct vm_area_struct **prev, unsigned long start,
 				   unsigned long end, void *arg))
 {
+	struct vm_area_struct *prev = NULL;
 	struct vm_area_struct *vma;
-	struct vm_area_struct *prev;
-	unsigned long tmp;
 	int unmapped_error = 0;
+	unsigned long tmp;
 	int error;
 
 	/*
