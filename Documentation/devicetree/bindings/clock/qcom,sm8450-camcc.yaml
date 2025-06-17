@@ -35,6 +35,7 @@ properties:
       - description: Sleep clock source
 
   power-domains:
+    minItems: 1
     description:
       Power domains required for the clock controller to operate
     items:
@@ -42,6 +43,7 @@ properties:
       - description: MXC power domain
 
   required-opps:
+    minItems: 1
     description:
       OPP nodes that describe required performance points on power domains
     items:
