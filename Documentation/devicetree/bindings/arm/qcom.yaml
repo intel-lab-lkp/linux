@@ -860,6 +860,7 @@ properties:
               - lenovo,thinkpad-x13s
               - microsoft,arcata
               - microsoft,blackrock
+              - ntmer,tw220
               - qcom,sc8280xp-crd
               - qcom,sc8280xp-qrd
           - const: qcom,sc8280xp
