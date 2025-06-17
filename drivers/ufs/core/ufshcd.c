@@ -2835,7 +2835,7 @@ static inline void ufshcd_prepare_utp_nop_upiu(struct ufshcd_lrb *lrbp)
 	memset(ucd_req_ptr, 0, sizeof(struct utp_upiu_req));
 
 	ucd_req_ptr->header = (struct utp_upiu_header){
-		.transaction_code = UPIU_TRANSACTION_NOP_OUT,
+		/* .transaction_code = UPIU_TRANSACTION_NOP_OUT = 0x0, */
 		.task_tag = lrbp->task_tag,
 	};
 }
