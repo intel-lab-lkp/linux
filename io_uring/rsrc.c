@@ -804,8 +804,10 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 	}
 
 	imu = io_alloc_imu(ctx, nr_pages);
-	if (!imu)
+	if (!imu) {
+		unpin_user_pages(pages, nr_pages);
 		goto done;
+	}
 
 	imu->nr_bvecs = nr_pages;
 	ret = io_buffer_account_pin(ctx, pages, nr_pages, imu, last_hpage);
