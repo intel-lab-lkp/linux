@@ -846,11 +846,16 @@ static int en7581_clk_hw_init(struct platform_device *pdev,
 			      const struct en_clk_soc_data *soc_data,
 			      struct clk_hw_onecell_data *clk_data)
 {
+	struct device *dev = &pdev->dev;
 	struct regmap *map, *clk_map;
 	void __iomem *base;
 	int err;
 
-	map = syscon_regmap_lookup_by_compatible("airoha,en7581-chip-scu");
+	if (of_property_present(dev->of_node, "airoha,chip-scu"))
+		map = syscon_regmap_lookup_by_phandle(dev->of_node,
+						      "airoha,chip-scu");
+	else
+		map = syscon_regmap_lookup_by_compatible("airoha,en7581-chip-scu");
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
