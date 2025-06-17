@@ -12,12 +12,7 @@
 #include "ionic_lif.h"
 #include "ionic_txrx.h"
 
-static dma_addr_t ionic_tx_map_single(struct ionic_queue *q,
-				      void *data, size_t len);
 
-static dma_addr_t ionic_tx_map_frag(struct ionic_queue *q,
-				    const skb_frag_t *frag,
-				    size_t offset, size_t len);
 
 static void ionic_tx_desc_unmap_bufs(struct ionic_queue *q,
 				     struct ionic_tx_desc_info *desc_info);
@@ -320,9 +315,9 @@ static int ionic_xdp_post_frame(struct ionic_queue *q, struct xdp_frame *frame,
 		dma_sync_single_for_device(q->dev, dma_addr,
 					   len, DMA_TO_DEVICE);
 	} else /* XDP_REDIRECT */ {
-		dma_addr = ionic_tx_map_single(q, frame->data, len);
-		if (!dma_addr)
-			return -EIO;
+		dma_addr = dma_map_single(q->dev, frame->data, len, DMA_TO_DEVICE);
+		if (dma_mapping_error(q->dev, dma_addr))
+			goto dma_err;
 	}
 
 	buf_info->dma_addr = dma_addr;
@@ -355,11 +350,12 @@ static int ionic_xdp_post_frame(struct ionic_queue *q, struct xdp_frame *frame,
 							   skb_frag_size(frag),
 							   DMA_TO_DEVICE);
 			} else {
-				dma_addr = ionic_tx_map_frag(q, frag, 0,
-							     skb_frag_size(frag));
+				dma_addr = skb_frag_dma_map(q->dev, frag, 0,
+							    skb_frag_size(frag),
+							    DMA_TO_DEVICE);
 				if (dma_mapping_error(q->dev, dma_addr)) {
 					ionic_tx_desc_unmap_bufs(q, desc_info);
-					return -EIO;
+					goto dma_err;
 				}
 			}
 			bi->dma_addr = dma_addr;
@@ -388,6 +384,12 @@ static int ionic_xdp_post_frame(struct ionic_queue *q, struct xdp_frame *frame,
 	ionic_txq_post(q, ring_doorbell);
 
 	return 0;
+
+dma_err:
+	net_warn_ratelimited("%s: DMA map failed on %s!\n",
+			     dev_name(q->dev), q->name);
+	q_to_tx_stats(q)->dma_map_err++;
+	return -EIO;
 }
 
 int ionic_xdp_xmit(struct net_device *netdev, int n,
@@ -1072,38 +1074,6 @@ int ionic_txrx_napi(struct napi_struct *napi, int budget)
 	return rx_work_done;
 }
 
-static dma_addr_t ionic_tx_map_single(struct ionic_queue *q,
-				      void *data, size_t len)
-{
-	struct device *dev = q->dev;
-	dma_addr_t dma_addr;
-
-	dma_addr = dma_map_single(dev, data, len, DMA_TO_DEVICE);
-	if (unlikely(dma_mapping_error(dev, dma_addr))) {
-		net_warn_ratelimited("%s: DMA single map failed on %s!\n",
-				     dev_name(dev), q->name);
-		q_to_tx_stats(q)->dma_map_err++;
-		return 0;
-	}
-	return dma_addr;
-}
-
-static dma_addr_t ionic_tx_map_frag(struct ionic_queue *q,
-				    const skb_frag_t *frag,
-				    size_t offset, size_t len)
-{
-	struct device *dev = q->dev;
-	dma_addr_t dma_addr;
-
-	dma_addr = skb_frag_dma_map(dev, frag, offset, len, DMA_TO_DEVICE);
-	if (unlikely(dma_mapping_error(dev, dma_addr))) {
-		net_warn_ratelimited("%s: DMA frag map failed on %s!\n",
-				     dev_name(dev), q->name);
-		q_to_tx_stats(q)->dma_map_err++;
-		return 0;
-	}
-	return dma_addr;
-}
 
 static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 			    struct ionic_tx_desc_info *desc_info)
@@ -1115,9 +1085,9 @@ static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 	skb_frag_t *frag;
 	int frag_idx;
 
-	dma_addr = ionic_tx_map_single(q, skb->data, skb_headlen(skb));
-	if (!dma_addr)
-		return -EIO;
+	dma_addr = dma_map_single(q->dev, skb->data, skb_headlen(skb), DMA_TO_DEVICE);
+	if (dma_mapping_error(q->dev, dma_addr))
+		goto dma_early_fail;
 	buf_info->dma_addr = dma_addr;
 	buf_info->len = skb_headlen(skb);
 	buf_info++;
@@ -1125,8 +1095,8 @@ static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 	frag = skb_shinfo(skb)->frags;
 	nfrags = skb_shinfo(skb)->nr_frags;
 	for (frag_idx = 0; frag_idx < nfrags; frag_idx++, frag++) {
-		dma_addr = ionic_tx_map_frag(q, frag, 0, skb_frag_size(frag));
-		if (!dma_addr)
+		dma_addr = skb_frag_dma_map(q->dev, frag, 0, skb_frag_size(frag), DMA_TO_DEVICE);
+		if (dma_mapping_error(q->dev, dma_addr))
 			goto dma_fail;
 		buf_info->dma_addr = dma_addr;
 		buf_info->len = skb_frag_size(frag);
@@ -1147,6 +1117,10 @@ dma_fail:
 	}
 	dma_unmap_single(dev, desc_info->bufs[0].dma_addr,
 			 desc_info->bufs[0].len, DMA_TO_DEVICE);
+dma_early_fail:
+	net_warn_ratelimited("%s: DMA map failed on %s!\n",
+			     dev_name(dev), q->name);
+	q_to_tx_stats(q)->dma_map_err++;
 	return -EIO;
 }
 
