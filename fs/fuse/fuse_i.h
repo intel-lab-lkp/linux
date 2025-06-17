@@ -96,6 +96,25 @@ struct fuse_submount_lookup {
 	struct fuse_forget_link *forget;
 };
 
+
+/** FUSE specific dentry data */
+#if BITS_PER_LONG < 64 || defined(CONFIG_FUSE_PASSTHROUGH_DIR)
+union fuse_dentry {
+	struct {
+		u64 time;
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+		struct path backing_path;
+#endif
+	};
+	struct rcu_head rcu;
+};
+
+static inline union fuse_dentry *get_fuse_dentry(const struct dentry *entry)
+{
+	return entry->d_fsdata;
+}
+#endif
+
 /** Container for data related to mapping to backing file */
 struct fuse_backing {
 	struct file *file;
@@ -283,6 +302,14 @@ struct fuse_file {
 		u64 version;
 
 	} readdir;
+
+#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
+	/**
+	 * TODO: Reconcile with passthrough file
+	 * backing file when in bpf mode
+	 */
+	struct file *backing_file;
+#endif
 
 	/** RB node to be linked on fuse_conn->polled_files */
 	struct rb_node polled_node;
@@ -1597,4 +1624,16 @@ extern void fuse_sysctl_unregister(void);
 /* backing.c */
 int fuse_handle_backing(struct fuse_entry_backing *feb,
 	struct inode **backing_inode, struct path *backing_path);
+
+
+static inline bool fuse_inode_has_backing(struct inode *inode)
+{
+	struct fuse_inode *fuse_inode = get_fuse_inode(inode);
+
+	return fuse_inode && fuse_inode->backing_inode;
+}
+
+int fuse_open_backing(struct inode *inode, struct file *file, bool isdir);
+int fuse_flush_backing(struct file *file, fl_owner_t id);
+
 #endif /* _FS_FUSE_I_H */

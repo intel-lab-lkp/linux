@@ -44,18 +44,7 @@ static inline u64 fuse_dentry_time(const struct dentry *entry)
 {
 	return (u64)entry->d_fsdata;
 }
-
 #else
-union fuse_dentry {
-	struct {
-		u64 time;
-#ifdef CONFIG_FUSE_PASSTHROUGH_DIR
-		struct path backing_path;
-#endif
-	};
-	struct rcu_head rcu;
-};
-
 static inline void __fuse_dentry_settime(struct dentry *dentry, u64 time)
 {
 	((union fuse_dentry *) dentry->d_fsdata)->time = time;
@@ -64,11 +53,6 @@ static inline void __fuse_dentry_settime(struct dentry *dentry, u64 time)
 static inline u64 fuse_dentry_time(const struct dentry *entry)
 {
 	return ((union fuse_dentry *) entry->d_fsdata)->time;
-}
-
-static inline union fuse_dentry *get_fuse_dentry(const struct dentry *entry)
-{
-	return entry->d_fsdata;
 }
 #endif
 

@@ -21,6 +21,7 @@
 #include <linux/filelock.h>
 #include <linux/splice.h>
 #include <linux/task_io_accounting_ops.h>
+#include <linux/file.h>
 
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 			  unsigned int open_flags, int opcode,
@@ -105,19 +106,24 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 		struct fuse_release_args *ra = &ff->args->release_args;
 		struct fuse_args *args = (ra ? &ra->args : NULL);
 
-		if (ra && ra->inode)
-			fuse_file_io_release(ff, ra->inode);
-
-		if (!args) {
-			/* Do nothing when server does not implement 'open' */
-		} else if (sync) {
-			fuse_simple_request(ff->fm, args);
+		if (ff->backing_file) {
 			fuse_release_end(ff->fm, args, 0);
+			fput(ff->backing_file);
 		} else {
-			args->end = fuse_release_end;
-			if (fuse_simple_background(ff->fm, args,
-						   GFP_KERNEL | __GFP_NOFAIL))
-				fuse_release_end(ff->fm, args, -ENOTCONN);
+			if (ra && ra->inode)
+				fuse_file_io_release(ff, ra->inode);
+
+			if (!args) {
+				/* Do nothing when server does not implement 'open' */
+			} else if (sync) {
+				fuse_simple_request(ff->fm, args);
+				fuse_release_end(ff->fm, args, 0);
+			} else {
+				args->end = fuse_release_end;
+				if (fuse_simple_background(ff->fm, args,
+							GFP_KERNEL | __GFP_NOFAIL))
+					fuse_release_end(ff->fm, args, -ENOTCONN);
+			}
 		}
 		kfree(ff);
 	}
@@ -247,6 +253,9 @@ static int fuse_open(struct inode *inode, struct file *file)
 	err = generic_file_open(inode, file);
 	if (err)
 		return err;
+
+	if (fuse_inode_has_backing(inode))
+		return fuse_open_backing(inode, file, false);
 
 	if (is_wb_truncate || dax_truncate)
 		inode_lock(inode);
@@ -443,6 +452,9 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	struct fuse_flush_in inarg;
 	FUSE_ARGS(args);
 	int err;
+
+	if (fuse_inode_has_backing(file->f_inode))
+		return fuse_flush_backing(file, id);
 
 	if (fuse_is_bad(inode))
 		return -EIO;
