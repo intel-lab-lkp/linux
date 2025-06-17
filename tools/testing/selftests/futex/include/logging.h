@@ -23,6 +23,44 @@
 #include <linux/futex.h>
 #include "kselftest.h"
 
+#define ASSERT_EQ(var, value)	\
+do {				\
+	if (var != value) {	\
+		ksft_test_result_fail("%s: expected %ld, but %s has %ld\n", \
+				      __func__, (long) value, #var, \
+				      (long) var); \
+		return;		\
+	}			\
+} while (0)
+
+#define ASSERT_NE(var, value)	\
+do {				\
+	if (var == value) {	\
+		ksft_test_result_fail("%s: expected not %ld, but %s has %ld\n", \
+				      __func__, (long) value, #var, \
+				      (long) var); \
+		return; \
+	}		\
+} while (0)
+
+#define ASSERT_TRUE(var)	\
+do {				\
+	if ((var) == 0) {	\
+		ksft_test_result_fail("%s: expected %s to be true\n", \
+				      __func__, #var); \
+		return;		\
+	}			\
+} while (0)
+
+#define ASSERT_FALSE(var)	\
+do {				\
+	if (var) {		\
+		ksft_test_result_fail("%s: expected %s to be false\n", \
+				      __func__, #var); \
+		return;		\
+	}			\
+} while (0)
+
 /*
  * Define PASS, ERROR, and FAIL strings with and without color escape
  * sequences, default to no color.
