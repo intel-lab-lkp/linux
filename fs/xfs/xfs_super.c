@@ -541,17 +541,12 @@ xfs_setup_devices(
 {
 	int			error;
 
-	error = xfs_configure_buftarg(mp->m_ddev_targp, mp->m_sb.sb_sectsize);
+	error = xfs_configure_buftarg(mp->m_ddev_targp);
 	if (error)
 		return error;
 
 	if (mp->m_logdev_targp && mp->m_logdev_targp != mp->m_ddev_targp) {
-		unsigned int	log_sector_size = BBSIZE;
-
-		if (xfs_has_sector(mp))
-			log_sector_size = mp->m_sb.sb_logsectsize;
-		error = xfs_configure_buftarg(mp->m_logdev_targp,
-					    log_sector_size);
+		error = xfs_configure_buftarg(mp->m_logdev_targp);
 		if (error)
 			return error;
 	}
@@ -564,8 +559,7 @@ xfs_setup_devices(
 		}
 		mp->m_rtdev_targp = mp->m_ddev_targp;
 	} else if (mp->m_rtname) {
-		error = xfs_configure_buftarg(mp->m_rtdev_targp,
-					    mp->m_sb.sb_sectsize);
+		error = xfs_configure_buftarg(mp->m_rtdev_targp);
 		if (error)
 			return error;
 	}

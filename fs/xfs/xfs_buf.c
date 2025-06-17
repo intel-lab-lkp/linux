@@ -387,11 +387,12 @@ xfs_buf_map_verify(
 	struct xfs_buftarg	*btp,
 	struct xfs_buf_map	*map)
 {
+	unsigned int		sectsize = btp->bt_mount->m_sb.sb_sectsize;
 	xfs_daddr_t		eofs;
 
 	/* Check for IOs smaller than the sector size / not sector aligned */
-	ASSERT(!(BBTOB(map->bm_len) < btp->bt_meta_sectorsize));
-	ASSERT(!(BBTOB(map->bm_bn) & (xfs_off_t)btp->bt_meta_sectormask));
+	ASSERT(!(BBTOB(map->bm_len) < sectsize));
+	ASSERT(!(BBTOB(map->bm_bn) & (xfs_off_t)(sectsize - 1)));
 
 	/*
 	 * Corrupted block numbers can get through to here, unfortunately, so we
@@ -1719,14 +1720,9 @@ xfs_configure_buftarg_atomic_writes(
 /* Configure a buffer target that abstracts a block device. */
 int
 xfs_configure_buftarg(
-	struct xfs_buftarg	*btp,
-	unsigned int		sectorsize)
+	struct xfs_buftarg	*btp)
 {
 	ASSERT(btp->bt_bdev != NULL);
-
-	/* Set up metadata sector size info */
-	btp->bt_meta_sectorsize = sectorsize;
-	btp->bt_meta_sectormask = sectorsize - 1;
 
 	/*
 	 * Flush the block device pagecache so our bios see anything dirtied
@@ -1806,14 +1802,7 @@ xfs_alloc_buftarg(
 	if (error)
 		goto error_free;
 
-	/*
-	 * When allocating the buftargs we have not yet read the super block and
-	 * thus don't know the file system sector size yet.
-	 */
-	btp->bt_meta_sectorsize = bdev_logical_block_size(btp->bt_bdev);
-	btp->bt_meta_sectormask = btp->bt_meta_sectorsize - 1;
-
-	error = xfs_init_buftarg(btp, btp->bt_meta_sectorsize,
+	error = xfs_init_buftarg(btp, bdev_logical_block_size(btp->bt_bdev),
 				mp->m_super->s_id);
 	if (error)
 		goto error_free;

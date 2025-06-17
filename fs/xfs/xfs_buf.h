@@ -79,19 +79,6 @@ struct xfs_buf_cache {
 int xfs_buf_cache_init(struct xfs_buf_cache *bch);
 void xfs_buf_cache_destroy(struct xfs_buf_cache *bch);
 
-/*
- * The xfs_buftarg contains 2 notions of "sector size" -
- *
- * 1) The metadata sector size, which is the minimum unit and
- *    alignment of IO which will be performed by metadata operations.
- * 2) The device logical sector size
- *
- * The first is specified at mkfs time, and is stored on-disk in the
- * superblock's sb_sectsize.
- *
- * The latter is derived from the underlying device, and controls direct IO
- * alignment constraints.
- */
 struct xfs_buftarg {
 	dev_t			bt_dev;
 	struct block_device	*bt_bdev;
@@ -99,8 +86,6 @@ struct xfs_buftarg {
 	struct file		*bt_file;
 	u64			bt_dax_part_off;
 	struct xfs_mount	*bt_mount;
-	unsigned int		bt_meta_sectorsize;
-	size_t			bt_meta_sectormask;
 	size_t			bt_logical_sectorsize;
 	size_t			bt_logical_sectormask;
 
@@ -373,7 +358,7 @@ struct xfs_buftarg *xfs_alloc_buftarg(struct xfs_mount *mp,
 extern void xfs_free_buftarg(struct xfs_buftarg *);
 extern void xfs_buftarg_wait(struct xfs_buftarg *);
 extern void xfs_buftarg_drain(struct xfs_buftarg *);
-int xfs_configure_buftarg(struct xfs_buftarg *btp, unsigned int sectorsize);
+int xfs_configure_buftarg(struct xfs_buftarg *btp);
 
 #define xfs_readonly_buftarg(buftarg)	bdev_read_only((buftarg)->bt_bdev)
 
