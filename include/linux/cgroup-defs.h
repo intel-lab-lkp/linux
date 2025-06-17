@@ -233,16 +233,6 @@ struct cgroup_subsys_state {
 	 * Protected by cgroup_mutex.
 	 */
 	int nr_descendants;
-
-	/*
-	 * A singly-linked list of css structures to be rstat flushed.
-	 * This is a scratch field to be used exclusively by
-	 * css_rstat_flush().
-	 *
-	 * Protected by rstat_base_lock when css is cgroup::self.
-	 * Protected by css->ss->rstat_ss_lock otherwise.
-	 */
-	struct cgroup_subsys_state *rstat_flush_next;
 };
 
 /*
@@ -343,12 +333,12 @@ struct css_set {
 };
 
 struct cgroup_base_stat {
-	struct task_cputime cputime;
+	struct atomic_task_cputime cputime;
 
 #ifdef CONFIG_SCHED_CORE
-	u64 forceidle_sum;
+	atomic64_t forceidle_sum;
 #endif
-	u64 ntime;
+	atomic64_t ntime;
 };
 
 /*
@@ -384,6 +374,14 @@ struct css_rstat_cpu {
 	 */
 	struct cgroup_subsys_state *updated_children;
 	struct cgroup_subsys_state *updated_next;	/* NULL if not on the list */
+	/*
+	 * A singly-linked list of css structures to be rstat flushed.
+	 * This is a scratch field to be used exclusively by
+	 * css_rstat_flush().
+	 *
+	 * Protected by per-cpu css->ss->rstat_ss_cpu_lock.
+	 */
+	struct cgroup_subsys_state *rstat_flush_next;
 };
 
 /*
@@ -391,11 +389,6 @@ struct css_rstat_cpu {
  * top of it - bsync, bstat and last_bstat.
  */
 struct cgroup_rstat_base_cpu {
-	/*
-	 * ->bsync protects ->bstat.  These are the only fields which get
-	 * updated in the hot path.
-	 */
-	struct u64_stats_sync bsync;
 	struct cgroup_base_stat bstat;
 
 	/*
@@ -820,7 +813,6 @@ struct cgroup_subsys {
 	 */
 	unsigned int depends_on;
 
-	spinlock_t rstat_ss_lock;
 	raw_spinlock_t __percpu *rstat_ss_cpu_lock;
 };
 

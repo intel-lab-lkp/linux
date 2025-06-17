@@ -232,32 +232,6 @@ DECLARE_EVENT_CLASS(cgroup_rstat,
 );
 
 /*
- * Related to locks:
- * global rstat_base_lock for base stats
- * cgroup_subsys::rstat_ss_lock for subsystem stats
- */
-DEFINE_EVENT(cgroup_rstat, cgroup_rstat_lock_contended,
-
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
-
-	TP_ARGS(cgrp, cpu, contended)
-);
-
-DEFINE_EVENT(cgroup_rstat, cgroup_rstat_locked,
-
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
-
-	TP_ARGS(cgrp, cpu, contended)
-);
-
-DEFINE_EVENT(cgroup_rstat, cgroup_rstat_unlock,
-
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
-
-	TP_ARGS(cgrp, cpu, contended)
-);
-
-/*
  * Related to per CPU locks:
  * global rstat_base_cpu_lock for base stats
  * cgroup_subsys::rstat_ss_cpu_lock for subsystem stats

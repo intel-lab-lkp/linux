@@ -20,4 +20,10 @@ struct task_cputime {
 	unsigned long long		sum_exec_runtime;
 };
 
+struct atomic_task_cputime {
+	atomic64_t stime;
+	atomic64_t utime;
+	atomic_long_t sum_exec_runtime;
+};
+
 #endif /* _LINUX_SCHED_TYPES_H */
