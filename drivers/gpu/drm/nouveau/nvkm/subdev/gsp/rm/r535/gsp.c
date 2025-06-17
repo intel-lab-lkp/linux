@@ -1583,7 +1583,7 @@ nvkm_gsp_sg(struct nvkm_device *device, u64 size, struct sg_table *sgt)
 		return ret;
 
 	for_each_sgtable_sg(sgt, sgl, i) {
-		struct page *page = alloc_page(GFP_KERNEL);
+		struct page *page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 
 		if (!page) {
 			nvkm_gsp_sg_free(device, sgt);
