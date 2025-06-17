@@ -819,13 +819,14 @@ static bool iov_iter_aligned_bvec(const struct iov_iter *i, unsigned addr_mask,
 	unsigned skip = i->iov_offset;
 	size_t size = i->count;
 
+	if (size & len_mask)
+		return false;
+
 	do {
 		size_t len = bvec->bv_len;
 
 		if (len > size)
 			len = size;
-		if (len & len_mask)
-			return false;
 		if ((unsigned long)(bvec->bv_offset + skip) & addr_mask)
 			return false;
 
