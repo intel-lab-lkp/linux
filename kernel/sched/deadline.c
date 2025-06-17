@@ -1589,8 +1589,8 @@ void dl_server_start(struct sched_dl_entity *dl_se)
 		u64 runtime =  50 * NSEC_PER_MSEC;
 		u64 period = 1000 * NSEC_PER_MSEC;
 
-		dl_server_apply_params(dl_se, runtime, period, 1);
-
+		if (dl_server_apply_params(dl_se, runtime, period, 1))
+			return;
 		dl_se->dl_server = 1;
 		dl_se->dl_defer = 1;
 		setup_new_dl_entity(dl_se);
@@ -1607,7 +1607,7 @@ void dl_server_start(struct sched_dl_entity *dl_se)
 
 void dl_server_stop(struct sched_dl_entity *dl_se)
 {
-	if (!dl_se->dl_runtime)
+	if (!dl_se->dl_runtime || !dl_se->dl_server_active)
 		return;
 
 	dequeue_dl_entity(dl_se, DEQUEUE_SLEEP);
