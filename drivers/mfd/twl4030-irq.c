@@ -676,7 +676,7 @@ int twl4030_init_irq(struct device *dev, int irq_num)
 	static struct irq_chip	twl4030_irq_chip;
 	int			status, i;
 	int			irq_base, irq_end, nr_irqs;
-	struct			device_node *node = dev->of_node;
+	struct fwnode_handle    *fwnode = NULL;
 
 	/*
 	 * TWL core and pwr interrupts must be contiguous because
@@ -690,8 +690,10 @@ int twl4030_init_irq(struct device *dev, int irq_num)
 		dev_err(dev, "Fail to allocate IRQ descs\n");
 		return irq_base;
 	}
-
-	irq_domain_create_legacy(of_fwnode_handle(node), nr_irqs, irq_base, 0,
+#ifdef CONFIG_OF
+	fwnode = of_fwnode_handle(dev->of_node);
+#endif
+	irq_domain_create_legacy(fwnode, nr_irqs, irq_base, 0,
 				 &irq_domain_simple_ops, NULL);
 
 	irq_end = irq_base + TWL4030_CORE_NR_IRQS;
