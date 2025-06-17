@@ -1176,6 +1176,7 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 	struct drm_i915_private *i915 = placements[0]->i915;
 	struct drm_i915_gem_object *obj;
 	struct i915_request *rq = NULL;
+	struct file *mock_file;
 	unsigned long addr;
 	LIST_HEAD(objects);
 	u64 offset;
@@ -1194,14 +1195,19 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 	if (err)
 		goto out_put;
 
+	/* Pretend to open("/dev/dri/card0") */
+	mock_file = mock_drm_getfile(i915->drm.primary, O_RDWR);
+	if (IS_ERR(mock_file))
+		return PTR_ERR(mock_file);
+
 	/*
 	 * This will eventually create a GEM context, due to opening dummy drm
 	 * file, which needs a tiny amount of mappable device memory for the top
 	 * level paging structures(and perhaps scratch), so make sure we
 	 * allocate early, to avoid tears.
 	 */
-	addr = igt_mmap_offset(i915, offset, obj->base.size,
-			       PROT_WRITE, MAP_SHARED);
+	addr = igt_mmap_offset_with_file(i915, offset, obj->base.size,
+					 PROT_WRITE, MAP_SHARED, mock_file);
 	if (IS_ERR_VALUE(addr)) {
 		err = addr;
 		goto out_put;
@@ -1299,6 +1305,7 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 	}
 
 out_put:
+	fput(mock_file);
 	i915_gem_object_put(obj);
 	igt_close_objects(i915, &objects);
 	return err;
