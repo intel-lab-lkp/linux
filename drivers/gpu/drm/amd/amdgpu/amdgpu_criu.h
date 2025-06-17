@@ -28,5 +28,7 @@
 
 int amdgpu_criu_bo_info_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *filp);
+int amdgpu_criu_mapping_info_ioctl(struct drm_device *dev, void *data,
+                struct drm_file *filp);
 
 #endif

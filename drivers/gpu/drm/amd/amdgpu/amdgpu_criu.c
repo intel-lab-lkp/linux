@@ -142,3 +142,99 @@ exit:
 
 	return ret;
 }
+
+/**
+ * amdgpu_criu_mapping_info_ioctl - get information about a buffer's mappings
+ *
+ * @dev: drm device pointer
+ * @data: drm_amdgpu_criu_mapping_info_args
+ * @filp: drm file pointer
+ *
+ * num_mappings is set as an input to the size of the vm_buckets array.
+ * num_mappings is sent back as output as the number of mappings the bo has.
+ * If that number is larger than the size of the array, the ioctl must
+ * be retried.
+ *
+ * Returns:
+ * 0 for success, -errno for errors.
+ */
+int amdgpu_criu_mapping_info_ioctl(struct drm_device *dev, void *data,
+                struct drm_file *filp)
+{
+    struct drm_amdgpu_criu_mapping_info_args *args = data;
+    struct drm_gem_object *gobj = idr_find(&filp->object_idr, args->gem_handle);
+    struct amdgpu_vm *avm = &((struct amdgpu_fpriv *)filp->driver_priv)->vm;
+    struct amdgpu_bo *bo = gem_to_amdgpu_bo(gobj);
+    struct amdgpu_bo_va *bo_va = amdgpu_vm_bo_find(avm, bo);
+    struct amdgpu_fpriv *fpriv = filp->driver_priv;
+    struct drm_amdgpu_criu_vm_bucket *vm_buckets;
+    struct amdgpu_bo_va_mapping *mapping;
+    struct drm_exec exec;
+    int num_mappings = 0;
+    int ret;
+
+    vm_buckets = kvzalloc(args->num_mappings * sizeof(*vm_buckets), GFP_KERNEL);
+    if (!vm_buckets) {
+        ret = -ENOMEM;
+        goto free_vms;
+    }
+
+    drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT |
+              DRM_EXEC_IGNORE_DUPLICATES, 0);
+    drm_exec_until_all_locked(&exec) {
+        if (gobj) {
+            ret = drm_exec_lock_obj(&exec, gobj);
+            drm_exec_retry_on_contention(&exec);
+            if (ret)
+                goto unlock_exec;
+        }
+
+        ret = amdgpu_vm_lock_pd(&fpriv->vm, &exec, 2);
+        drm_exec_retry_on_contention(&exec);
+        if (ret)
+            goto unlock_exec;
+    }
+
+	amdgpu_vm_bo_va_for_each_valid_mapping(bo_va, mapping) {
+        if (num_mappings < args->num_mappings) {
+            vm_buckets[num_mappings].start = mapping->start;
+            vm_buckets[num_mappings].last = mapping->last;
+            vm_buckets[num_mappings].offset = mapping->offset;
+            vm_buckets[num_mappings].flags = hardware_flags_to_uapi_flags(drm_to_adev(dev), mapping->flags);
+        }
+        num_mappings += 1;
+	}
+
+	amdgpu_vm_bo_va_for_each_invalid_mapping(mapping, bo_va) {
+        if (num_mappings < args->num_mappings) {
+            vm_buckets[num_mappings].start = mapping->start;
+            vm_buckets[num_mappings].last = mapping->last;
+            vm_buckets[num_mappings].offset = mapping->offset;
+            vm_buckets[num_mappings].flags = hardware_flags_to_uapi_flags(drm_to_adev(dev), mapping->flags);
+        }
+        num_mappings += 1;
+	}
+
+    drm_exec_fini(&exec);
+
+    if (num_mappings > 0) {
+        if (num_mappings <= args->num_mappings) {
+            ret = copy_to_user((void __user *)args->vm_buckets, vm_buckets, num_mappings * sizeof(*vm_buckets));
+            if (ret) {
+                pr_debug("Failed to copy BO information to user\n");
+                ret = -EFAULT;
+            }
+        }
+    }
+    args->num_mappings = num_mappings;
+
+    kvfree(vm_buckets);
+
+    return ret;
+unlock_exec:
+    drm_exec_fini(&exec);
+free_vms:
+    kvfree(vm_buckets);
+
+    return ret;
+}
