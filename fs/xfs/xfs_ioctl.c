@@ -992,7 +992,7 @@ xfs_ioc_getlabel(
 	/* 1 larger than sb_fname, so this ensures a trailing NUL char */
 	memset(label, 0, sizeof(label));
 	spin_lock(&mp->m_sb_lock);
-	strncpy(label, sbp->sb_fname, XFSLABEL_MAX);
+	strscpy(label, sbp->sb_fname, sizeof(label));
 	spin_unlock(&mp->m_sb_lock);
 
 	if (copy_to_user(user_label, label, sizeof(label)))
