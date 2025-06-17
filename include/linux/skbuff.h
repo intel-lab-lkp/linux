@@ -3665,7 +3665,12 @@ static inline void *skb_frag_address(const skb_frag_t *frag)
  */
 static inline void *skb_frag_address_safe(const skb_frag_t *frag)
 {
-	void *ptr = page_address(skb_frag_page(frag));
+	void *ptr;
+
+	if (!skb_frag_page(frag))
+		return NULL;
+
+	ptr = page_address(skb_frag_page(frag));
 	if (unlikely(!ptr))
 		return NULL;
 
