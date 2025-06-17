@@ -5359,6 +5359,7 @@ out:
 
 static void trace__exit(struct trace *trace)
 {
+	thread__zput(trace->current);
 	strlist__delete(trace->ev_qualifier);
 	zfree(&trace->ev_qualifier_ids.entries);
 	if (trace->syscalls.table) {
@@ -5369,6 +5370,7 @@ static void trace__exit(struct trace *trace)
 	zfree(&trace->perfconfig_events);
 	evlist__delete(trace->evlist);
 	trace->evlist = NULL;
+	ordered_events__free(&trace->oe.data);
 #ifdef HAVE_LIBBPF_SUPPORT
 	btf__free(trace->btf);
 	trace->btf = NULL;
@@ -5517,6 +5519,9 @@ int cmd_trace(int argc, const char **argv)
 	sigchld_act.sa_flags = SA_SIGINFO;
 	sigchld_act.sa_sigaction = sighandler_chld;
 	sigaction(SIGCHLD, &sigchld_act, NULL);
+
+	ordered_events__init(&trace.oe.data, ordered_events__deliver_event, &trace);
+	ordered_events__set_copy_on_queue(&trace.oe.data, true);
 
 	trace.evlist = evlist__new();
 
@@ -5674,11 +5679,6 @@ skip_augmentation:
 
 		if (use_btf)
 			trace__load_vmlinux_btf(&trace);
-	}
-
-	if (trace.sort_events) {
-		ordered_events__init(&trace.oe.data, ordered_events__deliver_event, &trace);
-		ordered_events__set_copy_on_queue(&trace.oe.data, true);
 	}
 
 	/*
