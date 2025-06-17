@@ -974,7 +974,8 @@ static void __acpi_pci_root_release_info(struct acpi_pci_root_info *info)
 		resource_list_destroy_entry(entry);
 	}
 
-	info->ops->release_info(info);
+	if (info->ops && info->ops->release_info)
+		info->ops->release_info(info);
 }
 
 static void acpi_pci_root_release_info(struct pci_host_bridge *bridge)
