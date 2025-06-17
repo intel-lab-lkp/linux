@@ -898,6 +898,30 @@ static const struct dmi_system_id i8042_dmi_quirk_table[] __initconst = {
 		.driver_data = (void *)(SERIO_QUIRK_RESET_ALWAYS)
 	},
 	{
+		/* MSI Claw A1M */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "Micro-Star International Co., Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Claw A1M"),
+		},
+		.driver_data = (void *)(SERIO_QUIRK_NOKBDWAKEUP)
+	},
+	{
+		/* MSI Claw 7 AI+ A2VM */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "Micro-Star International Co., Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Claw 7 AI+ A2VM"),
+		},
+		.driver_data = (void *)(SERIO_QUIRK_NOKBDWAKEUP)
+	},
+	{
+		/* MSI Claw 8 AI+ A2VM */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "Micro-Star International Co., Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Claw 8 AI+ A2VM"),
+		},
+		.driver_data = (void *)(SERIO_QUIRK_NOKBDWAKEUP)
+	},
+	{
 		/* MSI Wind U-100 */
 		.matches = {
 			DMI_MATCH(DMI_BOARD_VENDOR, "MICRO-STAR INTERNATIONAL CO., LTD"),
