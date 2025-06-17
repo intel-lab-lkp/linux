@@ -485,7 +485,6 @@
 		reset-gpios = <&gpio4 RK_PD1 GPIO_ACTIVE_LOW>;
 		vcc-supply = <&vcc2v8_lcd>;
 		iovcc-supply = <&vcc1v8_lcd>;
-		pinctrl-names = "default";
 
 		port {
 			mipi_in_panel: endpoint {
