@@ -1744,8 +1744,7 @@ xfs_configure_buftarg(
 	 */
 	if (bdev_can_atomic_write(btp->bt_bdev))
 		xfs_configure_buftarg_atomic_writes(btp);
-
-	return sync_blockdev(btp->bt_bdev);
+	return 0;
 }
 
 int
