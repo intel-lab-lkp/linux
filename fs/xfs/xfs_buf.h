@@ -113,8 +113,8 @@ struct xfs_buftarg {
 	struct ratelimit_state	bt_ioerror_rl;
 
 	/* Atomic write unit values, bytes */
-	unsigned int		bt_bdev_awu_min;
-	unsigned int		bt_bdev_awu_max;
+	unsigned int		bt_awu_min;
+	unsigned int		bt_awu_max_hw;
 
 	/* built-in cache, if we're not using the perag one */
 	struct xfs_buf_cache	bt_cache[];
