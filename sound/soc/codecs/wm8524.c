@@ -63,17 +63,12 @@ static int wm8524_startup(struct snd_pcm_substream *substream,
 	struct wm8524_priv *wm8524 = snd_soc_component_get_drvdata(component);
 
 	/* The set of sample rates that can be supported depends on the
-	 * MCLK supplied to the CODEC - enforce this.
+	 * MCLK supplied to the CODEC.
 	 */
-	if (!wm8524->sysclk) {
-		dev_err(component->dev,
-			"No MCLK configured, call set_sysclk() on init\n");
-		return -EINVAL;
-	}
-
-	snd_pcm_hw_constraint_list(substream->runtime, 0,
-				   SNDRV_PCM_HW_PARAM_RATE,
-				   &wm8524->rate_constraint);
+	if (wm8524->sysclk)
+		snd_pcm_hw_constraint_list(substream->runtime, 0,
+					   SNDRV_PCM_HW_PARAM_RATE,
+					   &wm8524->rate_constraint);
 
 	gpiod_set_value_cansleep(wm8524->mute, 1);
 
@@ -98,6 +93,8 @@ static int wm8524_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 	int i, j = 0;
 
 	wm8524->sysclk = freq;
+	if (!wm8524->sysclk)
+		return 0;
 
 	wm8524->rate_constraint.count = 0;
 	for (i = 0; i < ARRAY_SIZE(lrclk_ratios); i++) {
