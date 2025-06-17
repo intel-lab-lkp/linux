@@ -856,6 +856,7 @@ static struct clock_event_device timer_clockevent = {
 
 static irqreturn_t um_timer(int irq, void *dev)
 {
+	struct pt_regs *regs;
 	/*
 	 * Interrupt the (possibly) running userspace process, technically this
 	 * should only happen if userspace is currently executing.
@@ -864,8 +865,12 @@ static irqreturn_t um_timer(int irq, void *dev)
 	 */
 	if (time_travel_mode != TT_MODE_INFCPU &&
 	    time_travel_mode != TT_MODE_EXTERNAL &&
-	    get_current()->mm)
+	    get_current()->mm) {
 		os_alarm_process(get_current()->mm->context.id.pid);
+
+		regs = get_irq_regs();
+		regs->regs.is_user = true;
+	}
 
 	(*timer_clockevent.event_handler)(&timer_clockevent);
 
