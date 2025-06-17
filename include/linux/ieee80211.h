@@ -1278,7 +1278,7 @@ struct ieee80211_ext {
 			u8 sa[ETH_ALEN];
 			__le32 timestamp;
 			u8 change_seq;
-			u8 variable[0];
+			u8 variable[4];
 		} __packed s1g_beacon;
 	} u;
 } __packed __aligned(2);

@@ -7222,7 +7222,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	if (ieee80211_is_s1g_beacon(mgmt->frame_control)) {
 		struct ieee80211_ext *ext = (void *) mgmt;
 		variable = ext->u.s1g_beacon.variable +
-			   ieee80211_s1g_optional_len(ext->frame_control);
+			   (ieee80211_s1g_optional_len(ext->frame_control) - 1);
 	}
 
 	baselen = (u8 *) variable - (u8 *) mgmt;
