@@ -124,6 +124,7 @@ properties:
               - oct,osd3358-sm-refdesign
               - sancloud,am335x-boneenhanced
               - seeed,am335x-bone-green
+              - seeed,am335x-bone-green-eco
               - seeed,am335x-bone-green-wireless
               - tcl,am335x-sl50
               - ti,am335x-evm
