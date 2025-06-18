@@ -1216,8 +1216,8 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 
 	nlk = nlk_sk(sk);
 
-	if ((atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
-	     test_bit(NETLINK_S_CONGESTED, &nlk->state))) {
+	if (!sock_rcvbuf_has_space(sk, skb) ||
+	    test_bit(NETLINK_S_CONGESTED, &nlk->state)) {
 		DECLARE_WAITQUEUE(wait, current);
 		if (!*timeo) {
 			if (!ssk || netlink_is_kernel(ssk))
@@ -1230,7 +1230,7 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&nlk->wait, &wait);
 
-		if ((atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
+		if ((!sock_rcvbuf_has_space(sk, skb) ||
 		     test_bit(NETLINK_S_CONGESTED, &nlk->state)) &&
 		    !sock_flag(sk, SOCK_DEAD))
 			*timeo = schedule_timeout(*timeo);
@@ -1383,12 +1383,15 @@ EXPORT_SYMBOL_GPL(netlink_strict_get_check);
 static int netlink_broadcast_deliver(struct sock *sk, struct sk_buff *skb)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
+	unsigned int rmem, rcvbuf;
 
-	if (atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf &&
+	if (sock_rcvbuf_has_space(sk, skb) &&
 	    !test_bit(NETLINK_S_CONGESTED, &nlk->state)) {
 		netlink_skb_set_owner_r(skb, sk);
 		__netlink_sendskb(sk, skb);
-		return atomic_read(&sk->sk_rmem_alloc) > (sk->sk_rcvbuf >> 1);
+		rmem = atomic_read(&sk->sk_rmem_alloc);
+		rcvbuf = READ_ONCE(sk->sk_rcvbuf);
+		return rmem > (rcvbuf >> 1);
 	}
 	return -1;
 }
@@ -1895,6 +1898,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	struct netlink_sock *nlk = nlk_sk(sk);
 	size_t copied, max_recvmsg_len;
 	struct sk_buff *skb, *data_skb;
+	unsigned int rmem, rcvbuf;
 	int err, ret;
 
 	if (flags & MSG_OOB)
@@ -1960,12 +1964,15 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	skb_free_datagram(sk, skb);
 
-	if (READ_ONCE(nlk->cb_running) &&
-	    atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf / 2) {
-		ret = netlink_dump(sk, false);
-		if (ret) {
-			WRITE_ONCE(sk->sk_err, -ret);
-			sk_error_report(sk);
+	if (READ_ONCE(nlk->cb_running)) {
+		rmem = atomic_read(&sk->sk_rmem_alloc);
+		rcvbuf = READ_ONCE(sk->sk_rcvbuf);
+		if (rmem <= (rcvbuf >> 1)) {
+			ret = netlink_dump(sk, false);
+			if (ret) {
+				WRITE_ONCE(sk->sk_err, -ret);
+				sk_error_report(sk);
+			}
 		}
 	}
 
@@ -2258,9 +2265,6 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 		goto errout_skb;
 	}
 
-	if (atomic_read(&sk->sk_rmem_alloc) >= sk->sk_rcvbuf)
-		goto errout_skb;
-
 	/* NLMSG_GOODSIZE is small to avoid high order allocations being
 	 * required, but it makes sense to _attempt_ a 32KiB allocation
 	 * to reduce number of system calls on dump operations, if user
@@ -2281,6 +2285,9 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 		skb = alloc_skb(alloc_size, GFP_KERNEL);
 	}
 	if (!skb)
+		goto errout_skb;
+
+	if (!sock_rcvbuf_has_space(sk, skb))
 		goto errout_skb;
 
 	/* Trim skb to allocated size. User is expected to provide buffer as
