@@ -660,6 +660,11 @@ static void unix_sock_destructor(struct sock *sk)
 #endif
 }
 
+static unsigned int unix_skb_len(const struct sk_buff *skb)
+{
+	return skb->len - UNIXCB(skb).consumed;
+}
+
 static void unix_release_sock(struct sock *sk, int embrion)
 {
 	struct unix_sock *u = unix_sk(sk);
@@ -687,6 +692,12 @@ static void unix_release_sock(struct sock *sk, int embrion)
 	unix_state_unlock(sk);
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
+	skb = skb_peek(&sk->sk_receive_queue);
+	if (skb && !unix_skb_len(skb)) {
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		consume_skb(skb);
+	}
+
 	u->oob_skb = NULL;
 #endif
 
@@ -2659,11 +2670,6 @@ static long unix_stream_data_wait(struct sock *sk, long timeo,
 	finish_wait(sk_sleep(sk), &wait);
 	unix_state_unlock(sk);
 	return timeo;
-}
-
-static unsigned int unix_skb_len(const struct sk_buff *skb)
-{
-	return skb->len - UNIXCB(skb).consumed;
 }
 
 struct unix_stream_read_state {
