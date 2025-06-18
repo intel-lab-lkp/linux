@@ -188,8 +188,10 @@ static int rkcif_interface_enable_streams(struct v4l2_subdev *sd,
 		stream = &interface->streams[RKCIF_ID0];
 		rkcif_interface_apply_crop(stream, state);
 	} else {
-		/* TODO implement for MIPI */
-		return -EOPNOTSUPP;
+		for_each_active_route(&state->routing, route) {
+			stream = &interface->streams[route->sink_stream];
+			rkcif_interface_apply_crop(stream, state);
+		}
 	}
 
 	mask = v4l2_subdev_state_xlate_streams(state, RKCIF_IF_PAD_SINK,
