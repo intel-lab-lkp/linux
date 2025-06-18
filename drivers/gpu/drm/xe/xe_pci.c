@@ -65,6 +65,7 @@ struct xe_device_desc {
 	u8 has_fan_control:1;
 	u8 has_heci_gscfi:1;
 	u8 has_heci_cscfi:1;
+	u8 has_late_bind:1;
 	u8 has_llc:1;
 	u8 has_mbx_power_limits:1;
 	u8 has_pxp:1;
@@ -348,6 +349,7 @@ static const struct xe_device_desc bmg_desc = {
 	.has_fan_control = true,
 	.has_mbx_power_limits = true,
 	.has_heci_cscfi = 1,
+	.has_late_bind = true,
 	.needs_scratch = true,
 };
 
@@ -592,6 +594,7 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
 	xe->info.has_heci_cscfi = desc->has_heci_cscfi;
+	xe->info.has_late_bind = desc->has_late_bind;
 	xe->info.has_llc = desc->has_llc;
 	xe->info.has_pxp = desc->has_pxp;
 	xe->info.has_sriov = desc->has_sriov;
