@@ -224,12 +224,9 @@ SYM_INNER_LABEL(common_startup_64, SYM_L_LOCAL)
 
 	/* Even if ignored in long mode, set PSE uniformly on all logical CPUs. */
 	btsl	$X86_CR4_PSE_BIT, %ecx
-	movq	%rcx, %cr4
-
-	/*
-	 * Set CR4.PGE to re-enable global translations.
-	 */
+	/* Set CR4.PGE to re-enable global translations. */
 	btsl	$X86_CR4_PGE_BIT, %ecx
+	
 	movq	%rcx, %cr4
 
 #ifdef CONFIG_SMP
