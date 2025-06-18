@@ -172,35 +172,6 @@ void cleanup_tc(struct tc *tc)
 	local_irq_restore(flags);
 }
 
-/* module wrapper entry points */
-/* give me a vpe */
-void *vpe_alloc(void)
-{
-	int i;
-	struct vpe *v;
-
-	/* find a vpe */
-	for (i = 1; i < MAX_VPES; i++) {
-		v = get_vpe(i);
-		if (v != NULL) {
-			v->state = VPE_STATE_INUSE;
-			return v;
-		}
-	}
-	return NULL;
-}
-EXPORT_SYMBOL(vpe_alloc);
-
-/* start running from here */
-int vpe_start(void *vpe, unsigned long start)
-{
-	struct vpe *v = vpe;
-
-	v->__start = start;
-	return vpe_run(v);
-}
-EXPORT_SYMBOL(vpe_start);
-
 /* halt it for now */
 static int vpe_stop(void *vpe)
 {
