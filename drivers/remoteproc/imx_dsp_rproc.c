@@ -122,6 +122,7 @@ enum imx_dsp_rp_mbox_messages {
  * @ipc_handle: System Control Unit ipc handle
  * @rproc_work: work for processing virtio interrupts
  * @pm_comp: completion primitive to sync for suspend response
+ * @firmware: firmware handler
  * @flags: control flags
  */
 struct imx_dsp_rproc {
@@ -139,6 +140,7 @@ struct imx_dsp_rproc {
 	struct imx_sc_ipc			*ipc_handle;
 	struct work_struct			rproc_work;
 	struct completion			pm_comp;
+	const struct firmware			*firmware;
 	u32					flags;
 };
 
@@ -211,6 +213,7 @@ static const struct imx_rproc_att imx_dsp_rproc_att_imx8ulp[] = {
 
 /* Initialize the mailboxes between cores, if exists */
 static int (*imx_dsp_rproc_mbox_init)(struct imx_dsp_rproc *priv);
+static int imx_dsp_rproc_elf_load_segments(struct rproc *rproc, const struct firmware *fw);
 
 /* Reset function for DSP on i.MX8MP */
 static int imx8mp_dsp_reset(struct imx_dsp_rproc *priv)
@@ -402,7 +405,23 @@ static int imx_dsp_rproc_start(struct rproc *rproc)
 	const struct imx_dsp_rproc_dcfg *dsp_dcfg = priv->dsp_dcfg;
 	const struct imx_rproc_dcfg *dcfg = dsp_dcfg->dcfg;
 	struct device *dev = rproc->dev.parent;
+	struct rproc_mem_entry *carveout;
 	int ret;
+
+	pm_runtime_get_sync(dev);
+
+	/*
+	 * Clear buffers after pm rumtime for internal ocram is not
+	 * accessible if power and clock are not enabled.
+	 */
+	list_for_each_entry(carveout, &rproc->carveouts, node) {
+		if (carveout->va)
+			memset(carveout->va, 0, carveout->len);
+	}
+
+	ret = imx_dsp_rproc_elf_load_segments(rproc, priv->firmware);
+	if (ret)
+		return ret;
 
 	switch (dcfg->method) {
 	case IMX_RPROC_MMIO:
@@ -446,6 +465,7 @@ static int imx_dsp_rproc_stop(struct rproc *rproc)
 
 	if (rproc->state == RPROC_CRASHED) {
 		priv->flags &= ~REMOTE_IS_READY;
+		pm_runtime_put_sync(dev);
 		return 0;
 	}
 
@@ -471,6 +491,8 @@ static int imx_dsp_rproc_stop(struct rproc *rproc)
 		dev_err(dev, "Failed to stop remote core\n");
 	else
 		priv->flags &= ~REMOTE_IS_READY;
+
+	pm_runtime_put_sync(dev);
 
 	return ret;
 }
@@ -774,7 +796,6 @@ static int imx_dsp_rproc_prepare(struct rproc *rproc)
 {
 	struct imx_dsp_rproc *priv = rproc->priv;
 	struct device *dev = rproc->dev.parent;
-	struct rproc_mem_entry *carveout;
 	int ret;
 
 	ret = imx_dsp_rproc_add_carveout(priv);
@@ -782,25 +803,6 @@ static int imx_dsp_rproc_prepare(struct rproc *rproc)
 		dev_err(dev, "failed on imx_dsp_rproc_add_carveout\n");
 		return ret;
 	}
-
-	pm_runtime_get_sync(dev);
-
-	/*
-	 * Clear buffers after pm rumtime for internal ocram is not
-	 * accessible if power and clock are not enabled.
-	 */
-	list_for_each_entry(carveout, &rproc->carveouts, node) {
-		if (carveout->va)
-			memset(carveout->va, 0, carveout->len);
-	}
-
-	return  0;
-}
-
-/* Unprepare function for rproc_ops */
-static int imx_dsp_rproc_unprepare(struct rproc *rproc)
-{
-	pm_runtime_put_sync(rproc->dev.parent);
 
 	return  0;
 }
@@ -1022,13 +1024,25 @@ static int imx_dsp_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw
 	return 0;
 }
 
+static int imx_dsp_rproc_load(struct rproc *rproc, const struct firmware *fw)
+{
+	struct imx_dsp_rproc *priv = rproc->priv;
+
+	/*
+	 * Just save the fw handler, the firmware loading will be after
+	 * power enabled
+	 */
+	priv->firmware = fw;
+
+	return 0;
+}
+
 static const struct rproc_ops imx_dsp_rproc_ops = {
 	.prepare	= imx_dsp_rproc_prepare,
-	.unprepare	= imx_dsp_rproc_unprepare,
 	.start		= imx_dsp_rproc_start,
 	.stop		= imx_dsp_rproc_stop,
 	.kick		= imx_dsp_rproc_kick,
-	.load		= imx_dsp_rproc_elf_load_segments,
+	.load		= imx_dsp_rproc_load,
 	.parse_fw	= imx_dsp_rproc_parse_fw,
 	.handle_rsc	= imx_dsp_rproc_handle_rsc,
 	.find_loaded_rsc_table = rproc_elf_find_loaded_rsc_table,
