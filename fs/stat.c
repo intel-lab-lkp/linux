@@ -338,7 +338,7 @@ static int vfs_statx_fd(int fd, int flags, struct kstat *stat,
  *
  * 0 will be returned on success, and a -ve error code if unsuccessful.
  */
-static int vfs_statx(int dfd, struct filename *filename, int flags,
+int vfs_statx(int dfd, struct filename *filename, int flags,
 	      struct kstat *stat, u32 request_mask)
 {
 	struct path path;
@@ -361,6 +361,7 @@ retry:
 	}
 	return error;
 }
+EXPORT_SYMBOL(vfs_statx);
 
 int vfs_fstatat(int dfd, const char __user *filename,
 			      struct kstat *stat, int flags)
@@ -377,6 +378,7 @@ int vfs_fstatat(int dfd, const char __user *filename,
 
 	return ret;
 }
+EXPORT_SYMBOL(vfs_fstatat);
 
 #ifdef __ARCH_WANT_OLD_STAT
 

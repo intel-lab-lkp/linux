@@ -3567,6 +3567,8 @@ extern const struct inode_operations simple_symlink_inode_operations;
 
 extern int iterate_dir(struct file *, struct dir_context *);
 
+int vfs_statx(int dfd, struct filename *filename, int flags,
+		struct kstat *stat, u32 request_mask);
 int vfs_fstatat(int dfd, const char __user *filename, struct kstat *stat,
 		int flags);
 int vfs_fstat(int fd, struct kstat *stat);
