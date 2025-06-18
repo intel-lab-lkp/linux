@@ -16,6 +16,9 @@ enum etnaviv_flop_reset_type {
 	flop_reset_tp = 1 << 2
 };
 
+static int etnaviv_force_flop_reset = 0;
+module_param_named(force_flop_reset, etnaviv_force_flop_reset, int , 0);
+
 #define PPU_IMAGE_STRIDE 64
 #define PPU_IMAGE_XSIZE 64
 #define PPU_IMAGE_YSIZE 6
@@ -149,6 +152,12 @@ etnaviv_flop_reset_ppu_require(const struct etnaviv_chip_identity *chip_id)
 		if (chip_id->model == e->chip_model &&
 		    chip_id->revision == e->revision)
 			return (e->flags & flop_reset_ppu) != 0;
+	}
+
+	if (etnaviv_force_flop_reset & flop_reset_ppu) {
+		pr_warn("Forcing flop reset for model: 0x%04x, revision: 0x%04x\n",
+			chip_id->model, chip_id->revision);
+		return true;
 	}
 
 	return false;
