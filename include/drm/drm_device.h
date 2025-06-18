@@ -33,6 +33,8 @@ struct pci_controller;
 
 /**
  * struct drm_wedge_task_info - information about the guilty task of a wedge dev
+ * @pid:	the pid of the task
+ * @comm:	the command name of the task
  */
 struct drm_wedge_task_info {
 	pid_t pid;
