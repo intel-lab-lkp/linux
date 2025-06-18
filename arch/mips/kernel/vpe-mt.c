@@ -202,7 +202,7 @@ int vpe_start(void *vpe, unsigned long start)
 EXPORT_SYMBOL(vpe_start);
 
 /* halt it for now */
-int vpe_stop(void *vpe)
+static int vpe_stop(void *vpe)
 {
 	struct vpe *v = vpe;
 	struct tc *t;
@@ -220,10 +220,9 @@ int vpe_stop(void *vpe)
 
 	return 0;
 }
-EXPORT_SYMBOL(vpe_stop);
 
 /* I've done with it thank you */
-int vpe_free(void *vpe)
+static int vpe_free(void *vpe)
 {
 	struct vpe *v = vpe;
 	struct tc *t;
@@ -255,7 +254,6 @@ int vpe_free(void *vpe)
 
 	return 0;
 }
-EXPORT_SYMBOL(vpe_free);
 
 static ssize_t store_kill(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t len)
