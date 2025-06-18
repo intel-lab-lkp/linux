@@ -255,7 +255,9 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 			" sec_pagetables:%lukB"
 			" all_unreclaimable? %s"
 			" Balloon:%lukB"
-			"\n",
+		        " gpu_active:%lukB"
+		        " gpu_reclaim:%lukB"
+		        "\n",
 			pgdat->node_id,
 			K(node_page_state(pgdat, NR_ACTIVE_ANON)),
 			K(node_page_state(pgdat, NR_INACTIVE_ANON)),
@@ -281,7 +283,10 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 			K(node_page_state(pgdat, NR_PAGETABLE)),
 			K(node_page_state(pgdat, NR_SECONDARY_PAGETABLE)),
 			str_yes_no(pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES),
-			K(node_page_state(pgdat, NR_BALLOON_PAGES)));
+		        K(node_page_state(pgdat, NR_BALLOON_PAGES)),
+		        K(node_page_state(pgdat, NR_GPU_ACTIVE)),
+			K(node_page_state(pgdat, NR_GPU_RECLAIM)));
+
 	}
 
 	for_each_populated_zone(zone) {
