@@ -782,6 +782,15 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 	delta_ns = div_s64(1000000LL * (vpos * mode->crtc_htotal + hpos),
 			   mode->crtc_clock);
 
+	/*
+	 * For vblank interrupt fired off at the end of display active region,
+	 * subtract time duration of an entire frame if vpos happens to be the
+	 * display active lines(hpos is in the horizontal blank region).
+	 */
+	if (in_vblank_irq && vpos == mode->crtc_vdisplay)
+		delta_ns -= div_u64(1000000LL * mode->crtc_htotal * mode->crtc_vtotal,
+				    mode->crtc_clock);
+
 	/* Subtract time delta from raw timestamp to get final
 	 * vblank_time timestamp for end of vblank.
 	 */
