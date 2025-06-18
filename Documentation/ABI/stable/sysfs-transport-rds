@@ -1,0 +1,55 @@
+What:          /sys/kernel/rds/features/*
+Date:          June 2025
+KernelVersion: 6.17
+Contact:       rds-devel@oss.oracle.com
+Description:   This directory contains the features that this kernel
+               has been built with and supports. They correspond
+               to the include/uapi/linux/rds.h features.
+
+	       The intent is for applications compiled against rds.h
+	       to be able to query and find out what features the
+	       driver supports. The current expected value is 'supported'.
+
+	       The features so far are:
+
+	       ioctl_get_tos
+	       ioctl_set_tos
+
+		Allows the user to set on the socket a type of
+		service(tos) value associated forever.
+
+	       socket_cancel_sent_to
+
+		Allows to cancel all pending messages to a given destination.
+
+	       socket_cong_monitor
+
+		RDS provides an explicit monitoring wherein a 64-bit mask value
+		on the socket and each bit corresponds to a group of ports.
+
+		When a congestion update arrives, RDS checks the set of ports
+		that became uncongested against the bit mask.
+
+		If they overlap, a control messages is enqueued on the socket,
+		and the application is woken up.
+
+	       socket_get_mr
+	       socket_get_mr_for_dest
+	       socket_free_mr
+
+		RDS allows a process to register or release memory ranges for
+		RDMA.
+
+	       socket_recverr
+
+		RDS will send RDMA notification messages to the application for
+		any RDMA operation that fails. By default this is off.
+
+	       socket_so_rxpath_latency
+
+		Receive path latency in various stages of receive path.
+
+	       socket_so_transport
+
+		Attach the socket to the underlaying transport (TCP or RDMA)
+		before invoking bind on the socket.
