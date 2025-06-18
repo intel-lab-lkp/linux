@@ -2541,6 +2541,8 @@ static long vsock_dev_do_ioctl(struct file *filp,
 
 	switch (cmd) {
 	case IOCTL_VM_SOCKETS_GET_LOCAL_CID:
+		mutex_lock(&vsock_register_mutex);
+
 		/* To be compatible with the VMCI behavior, we prioritize the
 		 * guest CID instead of well-know host CID (VMADDR_CID_HOST).
 		 */
@@ -2548,6 +2550,8 @@ static long vsock_dev_do_ioctl(struct file *filp,
 			cid = transport_g2h->get_local_cid();
 		else if (transport_h2g)
 			cid = transport_h2g->get_local_cid();
+
+		mutex_unlock(&vsock_register_mutex);
 
 		if (put_user(cid, p) != 0)
 			retval = -EFAULT;
