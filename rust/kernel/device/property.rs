@@ -93,6 +93,15 @@ impl FwNode {
         unsafe { bindings::fwnode_property_present(self.as_raw().cast_const(), name.as_char_ptr()) }
     }
 
+    /// Return `true` if this [`FwNode`] is compatible with `match_str`, `false` otherwise.
+    pub fn is_compatible(&self, match_str: &CStr) -> bool {
+        // SAFETY:
+        // - By the invariant of `CStr`, `name.as_char_ptr()` is valid and null-terminated.
+        // - The type invariant of `Self` guarantees that `self.as_raw() is a pointer to a valid
+        //   `struct fwnode_handle`.
+        unsafe { bindings::fwnode_device_is_compatible(self.as_raw(), match_str.as_char_ptr()) }
+    }
+
     /// Returns firmware property `name` boolean value.
     pub fn property_read_bool(&self, name: &CStr) -> bool {
         // SAFETY:
