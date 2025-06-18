@@ -200,27 +200,18 @@ static inline struct net *netns(struct file *file)
 	return file_inode(file)->i_sb->s_fs_info;
 }
 
-/*
- * write_unlock_ip - Release all locks used by a client
- *
- * Experimental.
- *
- * Input:
- *			buf:	'\n'-terminated C string containing a
- *				presentation format IP address
- *			size:	length of C string in @buf
- * Output:
- *	On success:	returns zero if all specified locks were released;
- *			returns one if one or more locks were not released
- *	On error:	return code is negative errno value
- */
-static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
+static ssize_t __write_unlock_ip(struct file *file, char *buf, size_t size)
 {
 	struct sockaddr_storage address;
 	struct sockaddr *sap = (struct sockaddr *)&address;
 	size_t salen = sizeof(address);
 	char *fo_path;
 	struct net *net = netns(file);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -241,24 +232,39 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
 }
 
 /*
- * write_unlock_fs - Release all locks on a local file system
+ * write_unlock_ip - Release all locks used by a client
  *
  * Experimental.
  *
  * Input:
- *			buf:	'\n'-terminated C string containing the
- *				absolute pathname of a local file system
+ *			buf:	'\n'-terminated C string containing a
+ *				presentation format IP address
  *			size:	length of C string in @buf
  * Output:
  *	On success:	returns zero if all specified locks were released;
  *			returns one if one or more locks were not released
  *	On error:	return code is negative errno value
  */
-static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
+static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
+{
+	ssize_t rv;
+
+	mutex_lock(&nfsd_mutex);
+	rv = __write_unlock_ip(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return rv;
+}
+
+static ssize_t __write_unlock_fs(struct file *file, char *buf, size_t size)
 {
 	struct path path;
 	char *fo_path;
 	int error;
+	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
+
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -289,6 +295,30 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 
 	path_put(&path);
 	return error;
+}
+
+/*
+ * write_unlock_fs - Release all locks on a local file system
+ *
+ * Experimental.
+ *
+ * Input:
+ *			buf:	'\n'-terminated C string containing the
+ *				absolute pathname of a local file system
+ *			size:	length of C string in @buf
+ * Output:
+ *	On success:	returns zero if all specified locks were released;
+ *			returns one if one or more locks were not released
+ *	On error:	return code is negative errno value
+ */
+static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
+{
+	ssize_t rv;
+
+	mutex_lock(&nfsd_mutex);
+	rv = __write_unlock_fs(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return rv;
 }
 
 /*
@@ -1053,27 +1083,7 @@ static ssize_t write_recoverydir(struct file *file, char *buf, size_t size)
 }
 #endif
 
-/*
- * write_v4_end_grace - release grace period for nfsd's v4.x lock manager
- *
- * Input:
- *			buf:		ignored
- *			size:		zero
- * OR
- *
- * Input:
- *			buf:		any value
- *			size:		non-zero length of C string in @buf
- * Output:
- *			passed-in buffer filled with "Y" or "N" with a newline
- *			and NULL-terminated C string. This indicates whether
- *			the grace period has ended in the current net
- *			namespace. Return code is the size in bytes of the
- *			string. Writing a string that starts with 'Y', 'y', or
- *			'1' to the file will end the grace period for nfsd's v4
- *			lock manager.
- */
-static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
+static ssize_t __write_v4_end_grace(struct file *file, char *buf, size_t size)
 {
 	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
 
@@ -1096,6 +1106,35 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 			 nn->grace_ended ? 'Y' : 'N');
 }
 
+/*
+ * write_v4_end_grace - release grace period for nfsd's v4.x lock manager
+ *
+ * Input:
+ *			buf:		ignored
+ *			size:		zero
+ * OR
+ *
+ * Input:
+ *			buf:		any value
+ *			size:		non-zero length of C string in @buf
+ * Output:
+ *			passed-in buffer filled with "Y" or "N" with a newline
+ *			and NULL-terminated C string. This indicates whether
+ *			the grace period has ended in the current net
+ *			namespace. Return code is the size in bytes of the
+ *			string. Writing a string that starts with 'Y', 'y', or
+ *			'1' to the file will end the grace period for nfsd's v4
+ *			lock manager.
+ */
+static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
+{
+	ssize_t rv;
+
+	mutex_lock(&nfsd_mutex);
+	rv = __write_v4_end_grace(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return rv;
+}
 #endif
 
 /*----------------------------------------------------------------------------*/
