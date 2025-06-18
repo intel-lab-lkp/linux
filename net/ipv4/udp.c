@@ -1733,17 +1733,8 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	rcvbuf = READ_ONCE(sk->sk_rcvbuf);
 	size = skb->truesize;
 
-	/* Immediately drop when the receive queue is full.
-	 * Cast to unsigned int performs the boundary check for INT_MAX.
-	 */
-	if (rmem + size > rcvbuf) {
-		if (rcvbuf > INT_MAX >> 1)
-			goto drop;
-
-		/* Always allow at least one packet for small buffer. */
-		if (rmem > rcvbuf)
-			goto drop;
-	}
+	if (!__sock_rcvbuf_has_space(rmem, rcvbuf, size))
+		goto drop;
 
 	/* Under mem pressure, it might be helpful to help udp_recvmsg()
 	 * having linear skbs :
