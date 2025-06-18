@@ -2041,7 +2041,8 @@ static bool dest_is_valid(struct mlx5_flow_destination *dest,
 		    ft->type != FS_FT_NIC_TX)
 			return false;
 
-		if (dest->type == MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE &&
+		if (dest &&
+		    dest->type == MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE &&
 		    ft->type != dest->ft->type)
 			return false;
 	}
