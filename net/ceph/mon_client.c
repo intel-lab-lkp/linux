@@ -1232,6 +1232,7 @@ out_auth:
 	ceph_auth_destroy(monc->auth);
 out_monmap:
 	kfree(monc->monmap);
+	monc->monmap = NULL;
 out:
 	return err;
 }
@@ -1239,6 +1240,8 @@ EXPORT_SYMBOL(ceph_monc_init);
 
 void ceph_monc_stop(struct ceph_mon_client *monc)
 {
+	struct ceph_monmap *old_monmap;
+
 	dout("stop\n");
 
 	mutex_lock(&monc->mutex);
@@ -1266,7 +1269,11 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	ceph_msg_put(monc->m_subscribe);
 	ceph_msg_put(monc->m_subscribe_ack);
 
-	kfree(monc->monmap);
+	mutex_lock(&monc->mutex);
+	old_monmap = monc->monmap;
+	monc->monmap = NULL;
+	mutex_unlock(&monc->mutex);
+	kfree(old_monmap);
 }
 EXPORT_SYMBOL(ceph_monc_stop);
 
