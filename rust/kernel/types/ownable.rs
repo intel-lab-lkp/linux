@@ -18,8 +18,8 @@ use core::{
 ///
 /// Note: Implementing this trait allows types to be wrapped in an [`Owned<Self>`]. This does not
 /// provide reference counting but represents a unique, owned reference. If reference counting is
-/// required [`AlwaysRefCounted`](crate::types::AlwaysRefCounted) should be implemented which allows
-/// types to be wrapped in an [`ARef<Self>`](crate::types::ARef).
+/// required [`RefCounted`](crate::types::RefCounted) should be implemented which allows types to be
+/// wrapped in an [`ARef<Self>`](crate::types::ARef).
 ///
 /// # Safety
 ///
