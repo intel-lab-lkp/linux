@@ -134,6 +134,7 @@ struct intel_panic_data {
 	struct page **pages;
 	int page;
 	void *vaddr;
+	unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width);
 };
 
 struct intel_framebuffer {
