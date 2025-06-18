@@ -37,4 +37,4 @@ Implementation notes
 
 Note that the rpc server requires the caller to serialize addition and
 removal of listening sockets, and startup and shutdown of the server.
-For nfsd this is done using nfsd_mutex.
+For nfsd this is done using nfsd_info.mutex in struct nfsd_net.

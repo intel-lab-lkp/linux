@@ -95,6 +95,13 @@ static ssize_t (*const write_op[])(struct file *, char *, size_t) = {
 #endif
 };
 
+#define	with_nfsd_net_locked(__net)					\
+	for (struct nfsd_net *__nn = net_generic(__net, nfsd_net_id);	\
+	     __nn ? ({mutex_lock(&__nn->nfsd_info.mutex); 1; }) : 0;	\
+	     ({mutex_unlock(&__nn->nfsd_info.mutex); __nn = NULL;}))
+#define with_nfsd_file_locked(__file)					\
+	with_nfsd_net_locked(netns(__file))
+
 static ssize_t nfsctl_transaction_write(struct file *file, const char __user *buf, size_t size, loff_t *pos)
 {
 	ino_t ino =  file_inode(file)->i_ino;
@@ -249,9 +256,8 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_unlock_ip(file, buf, size);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_unlock_ip(file, buf, size);
 	return rv;
 }
 
@@ -315,9 +321,8 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_unlock_fs(file, buf, size);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_unlock_fs(file, buf, size);
 	return rv;
 }
 
@@ -440,9 +445,8 @@ static ssize_t write_threads(struct file *file, char *buf, size_t size)
 		if (newthreads < 0)
 			return -EINVAL;
 		trace_nfsd_ctl_threads(net, newthreads);
-		mutex_lock(&nfsd_mutex);
-		rv = nfsd_svc(1, &newthreads, net, file->f_cred, NULL);
-		mutex_unlock(&nfsd_mutex);
+		with_nfsd_net_locked(net)
+			rv = nfsd_svc(1, &newthreads, net, file->f_cred, NULL);
 		if (rv < 0)
 			return rv;
 	} else
@@ -473,7 +477,7 @@ static ssize_t write_threads(struct file *file, char *buf, size_t size)
  *			return code is the size in bytes of the string
  *	On error:	return code is zero or a negative errno value
  */
-static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
+static ssize_t __write_pool_threads(struct file *file, char *buf, size_t size)
 {
 	/* if size > 0, look for an array of number of threads per node
 	 * and apply them  then write out number of threads per node as reply
@@ -486,7 +490,6 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
 	int *nthreads;
 	struct net *net = netns(file);
 
-	mutex_lock(&nfsd_mutex);
 	npools = nfsd_nrpools(net);
 	if (npools == 0) {
 		/*
@@ -494,7 +497,6 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
 		 * writing to the threads file but NOT the pool_threads
 		 * file, sorry.  Report zero threads.
 		 */
-		mutex_unlock(&nfsd_mutex);
 		strcpy(buf, "0\n");
 		return strlen(buf);
 	}
@@ -544,8 +546,16 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
 	rv = mesg - buf;
 out_free:
 	kfree(nthreads);
-	mutex_unlock(&nfsd_mutex);
 	return rv;
+}
+
+static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+
+	with_nfsd_file_locked(file)
+		ret = __write_pool_threads(file, buf, size);
+	return ret;
 }
 
 static ssize_t
@@ -709,9 +719,9 @@ static ssize_t write_versions(struct file *file, char *buf, size_t size)
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_versions(file, buf, size);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_versions(file, buf, size);
+
 	return rv;
 }
 
@@ -868,9 +878,8 @@ static ssize_t write_ports(struct file *file, char *buf, size_t size)
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_ports(file, buf, size, netns(file));
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_ports(file, buf, size, netns(file));
 	return rv;
 }
 
@@ -916,13 +925,13 @@ static ssize_t write_maxblksize(struct file *file, char *buf, size_t size)
 		bsize = max_t(int, bsize, 1024);
 		bsize = min_t(int, bsize, NFSSVC_MAXBLKSIZE);
 		bsize &= ~(1024-1);
-		mutex_lock(&nfsd_mutex);
+		mutex_lock(&nn->nfsd_info.mutex);
 		if (nn->nfsd_serv) {
-			mutex_unlock(&nfsd_mutex);
+			mutex_unlock(&nn->nfsd_info.mutex);
 			return -EBUSY;
 		}
 		nfsd_max_blksize = bsize;
-		mutex_unlock(&nfsd_mutex);
+		mutex_unlock(&nn->nfsd_info.mutex);
 	}
 
 	return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%d\n",
@@ -971,9 +980,8 @@ static ssize_t nfsd4_write_time(struct file *file, char *buf, size_t size,
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __nfsd4_write_time(file, buf, size, time, nn);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __nfsd4_write_time(file, buf, size, time, nn);
 	return rv;
 }
 
@@ -1076,9 +1084,8 @@ static ssize_t write_recoverydir(struct file *file, char *buf, size_t size)
 	ssize_t rv;
 	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_recoverydir(file, buf, size, nn);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_recoverydir(file, buf, size, nn);
 	return rv;
 }
 #endif
@@ -1130,9 +1137,8 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 {
 	ssize_t rv;
 
-	mutex_lock(&nfsd_mutex);
-	rv = __write_v4_end_grace(file, buf, size);
-	mutex_unlock(&nfsd_mutex);
+	with_nfsd_file_locked(file)
+		rv = __write_v4_end_grace(file, buf, size);
 	return rv;
 }
 #endif
@@ -1552,9 +1558,8 @@ int nfsd_nl_rpc_status_get_dumpit(struct sk_buff *skb,
 	int i, ret, rqstp_index = 0;
 	struct nfsd_net *nn;
 
-	mutex_lock(&nfsd_mutex);
-
 	nn = net_generic(sock_net(skb->sk), nfsd_net_id);
+	mutex_lock(&nn->nfsd_info.mutex);
 	if (!nn->nfsd_serv) {
 		ret = -ENODEV;
 		goto out_unlock;
@@ -1636,7 +1641,7 @@ int nfsd_nl_rpc_status_get_dumpit(struct sk_buff *skb,
 out:
 	rcu_read_unlock();
 out_unlock:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 
 	return ret;
 }
@@ -1665,7 +1670,7 @@ int nfsd_nl_threads_set_doit(struct sk_buff *skb, struct genl_info *info)
 			count++;
 	}
 
-	mutex_lock(&nfsd_mutex);
+	mutex_lock(&nn->nfsd_info.mutex);
 
 	nrpools = max(count, nfsd_nrpools(net));
 	nthreads = kcalloc(nrpools, sizeof(int), GFP_KERNEL);
@@ -1720,7 +1725,7 @@ int nfsd_nl_threads_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (ret > 0)
 		ret = 0;
 out_unlock:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 	kfree(nthreads);
 	return ret;
 }
@@ -1749,7 +1754,7 @@ int nfsd_nl_threads_get_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_free_msg;
 	}
 
-	mutex_lock(&nfsd_mutex);
+	mutex_lock(&nn->nfsd_info.mutex);
 
 	err = nla_put_u32(skb, NFSD_A_SERVER_GRACETIME,
 			  nn->nfsd4_grace) ||
@@ -1777,14 +1782,14 @@ int nfsd_nl_threads_get_doit(struct sk_buff *skb, struct genl_info *info)
 			goto err_unlock;
 	}
 
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 
 	genlmsg_end(skb, hdr);
 
 	return genlmsg_reply(skb, info);
 
 err_unlock:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 err_free_msg:
 	nlmsg_free(skb);
 
@@ -1807,11 +1812,10 @@ int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_PROTO_VERSION))
 		return -EINVAL;
 
-	mutex_lock(&nfsd_mutex);
-
 	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	mutex_lock(&nn->nfsd_info.mutex);
 	if (nn->nfsd_serv) {
-		mutex_unlock(&nfsd_mutex);
+		mutex_unlock(&nn->nfsd_info.mutex);
 		return -EBUSY;
 	}
 
@@ -1856,7 +1860,7 @@ int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 
 	return 0;
 }
@@ -1884,7 +1888,7 @@ int nfsd_nl_version_get_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_free_msg;
 	}
 
-	mutex_lock(&nfsd_mutex);
+	mutex_lock(&nn->nfsd_info.mutex);
 	nn = net_generic(genl_info_net(info), nfsd_net_id);
 
 	for (i = 2; i <= 4; i++) {
@@ -1928,13 +1932,13 @@ int nfsd_nl_version_get_doit(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 	genlmsg_end(skb, hdr);
 
 	return genlmsg_reply(skb, info);
 
 err_nfsd_unlock:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 err_free_msg:
 	nlmsg_free(skb);
 
@@ -1959,15 +1963,16 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 	bool delete = false;
 	int err, rem;
 
-	mutex_lock(&nfsd_mutex);
+	nn = net_generic(net, nfsd_net_id);
+
+	mutex_lock(&nn->nfsd_info.mutex);
 
 	err = nfsd_create_serv(net);
 	if (err) {
-		mutex_unlock(&nfsd_mutex);
+		mutex_unlock(&nn->nfsd_info.mutex);
 		return err;
 	}
 
-	nn = net_generic(net, nfsd_net_id);
 	serv = nn->nfsd_serv;
 
 	spin_lock_bh(&serv->sv_lock);
@@ -2083,7 +2088,7 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 		nfsd_destroy_serv(net);
 
 out_unlock_mtx:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 
 	return err;
 }
@@ -2113,8 +2118,8 @@ int nfsd_nl_listener_get_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_free_msg;
 	}
 
-	mutex_lock(&nfsd_mutex);
 	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	mutex_lock(&nn->nfsd_info.mutex);
 
 	/* no nfs server? Just send empty socket list */
 	if (!nn->nfsd_serv)
@@ -2144,14 +2149,14 @@ int nfsd_nl_listener_get_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 	spin_unlock_bh(&serv->sv_lock);
 out_unlock_mtx:
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 	genlmsg_end(skb, hdr);
 
 	return genlmsg_reply(skb, info);
 
 err_serv_unlock:
 	spin_unlock_bh(&serv->sv_lock);
-	mutex_unlock(&nfsd_mutex);
+	mutex_unlock(&nn->nfsd_info.mutex);
 err_free_msg:
 	nlmsg_free(skb);
 
@@ -2253,7 +2258,7 @@ static __net_init int nfsd_net_init(struct net *net)
 		nn->nfsd_versions[i] = nfsd_support_version(i);
 	for (i = 0; i < sizeof(nn->nfsd4_minorversions); i++)
 		nn->nfsd4_minorversions[i] = nfsd_support_version(4);
-	nn->nfsd_info.mutex = &nfsd_mutex;
+	mutex_init(&nn->nfsd_info.mutex);
 	nn->nfsd_serv = NULL;
 	nfsd4_init_leases_net(nn);
 	get_random_bytes(&nn->siphash_key, sizeof(nn->siphash_key));
