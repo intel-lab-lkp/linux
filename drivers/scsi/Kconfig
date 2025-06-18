@@ -456,7 +456,7 @@ config SCSI_AACRAID
 	  To compile this driver as a module, choose M here: the module
 	  will be called aacraid.
 
-
+source "drivers/scsi/aacraid/Kconfig"
 source "drivers/scsi/aic7xxx/Kconfig.aic7xxx"
 source "drivers/scsi/aic7xxx/Kconfig.aic79xx"
 source "drivers/scsi/aic94xx/Kconfig"

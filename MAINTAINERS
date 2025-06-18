@@ -184,6 +184,7 @@ L:	linux-scsi@vger.kernel.org
 S:	Supported
 W:	http://www.adaptec.com/
 F:	Documentation/scsi/aacraid.rst
+F:	drivers/scsi/aacraid/Kconfig
 F:	drivers/scsi/aacraid/
 
 AAEON UPBOARD FPGA MFD DRIVER

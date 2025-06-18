@@ -129,6 +129,17 @@ Supported Cards/Chipsets
 People
 ======
 
+Sagar Biradar <Sagar.Biradar@microchip.com>
+
+ - Added support for CPU offlining and updated the driver to support MultiQ.
+ - Introduced the option CONFIG_SCSI_AACRAID_MULTIQ to control this feature.
+
+By default, MultiQ support is disabled to provide optimal I/O performance.
+
+Enable CONFIG_SCSI_AACRAID_MULTIQ only if CPU offlining support is required,
+as enabling it may result in reduced performance in some configurations.
+Note : Disabling MultiQ while still offlining CPUs may lead to I/O hangs.
+
 Alan Cox <alan@lxorguk.ukuu.org.uk>
 
 Christoph Hellwig <hch@infradead.org>

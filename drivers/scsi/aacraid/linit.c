@@ -506,6 +506,17 @@ common_config:
 	return 0;
 }
 
+#ifdef CONFIG_SCSI_AACRAID_MULTIQ
+static void aac_map_queues(struct Scsi_Host *shost)
+{
+	struct aac_dev *aac = (struct aac_dev *)shost->hostdata;
+	struct blk_mq_queue_map *qmap = &shost->tag_set.map[HCTX_TYPE_DEFAULT];
+
+	blk_mq_map_hw_queues(qmap, &aac->pdev->dev, 0);
+	aac->use_map_queue = true;
+}
+#endif
+
 /**
  *	aac_change_queue_depth		-	alter queue depths
  *	@sdev:	SCSI device we are considering
@@ -1490,6 +1501,9 @@ static const struct scsi_host_template aac_driver_template = {
 	.bios_param			= aac_biosparm,
 	.shost_groups			= aac_host_groups,
 	.sdev_configure			= aac_sdev_configure,
+#ifdef CONFIG_SCSI_AACRAID_MULTIQ
+	.map_queues			= aac_map_queues,
+#endif
 	.change_queue_depth		= aac_change_queue_depth,
 	.sdev_groups			= aac_dev_groups,
 	.eh_abort_handler		= aac_eh_abort,
@@ -1777,7 +1791,11 @@ static int aac_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	shost->max_lun = AAC_MAX_LUN;
 
 	pci_set_drvdata(pdev, shost);
-
+#ifdef CONFIG_SCSI_AACRAID_MULTIQ
+	shost->nr_hw_queues = aac->max_msix;
+	shost->can_queue = min_t(int, aac->vector_cap, shost->can_queue);
+	shost->host_tagset = 1;
+#endif
 	error = scsi_add_host(shost, &pdev->dev);
 	if (error)
 		goto out_deinit;
@@ -1908,6 +1926,9 @@ static void aac_remove_one(struct pci_dev *pdev)
 	struct aac_dev *aac = (struct aac_dev *)shost->hostdata;
 
 	aac_cancel_rescan_worker(aac);
+#ifdef CONFIG_SCSI_AACRAID_MULTIQ
+	aac->use_map_queue = false;
+#endif
 	scsi_remove_host(shost);
 
 	__aac_shutdown(aac);

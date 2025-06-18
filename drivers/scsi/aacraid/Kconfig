@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Kernel configuration file for the aacraid driver.
+#
+# Copyright (c) 2025 Microchip Technology Inc. and its subsidiaries
+#  (mailto:storagedev@microchip.com)
+#
+config SCSI_AACRAID_MULTIQ
+	bool "AACRAID Multiq support"
+	depends on SCSI_AACRAID
+	default n
+	help
+	  This option enables MultiQ support in the aacraid driver.
+
+	  Enabling MultiQ allows the driver to safely handle CPU offlining.
+	  However, it may cause a performance drop in certain configurations.
+
+	  Enable this option only if your system requires CPU offlining support.
+
+	  If unsure, say N.
