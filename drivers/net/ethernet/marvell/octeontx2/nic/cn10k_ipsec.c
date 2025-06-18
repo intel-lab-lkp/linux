@@ -346,6 +346,58 @@ detach:
 	return ret;
 }
 
+struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
+						     struct nix_cqe_rx_s *cqe,
+						     struct sk_buff *skb,
+						     int qidx)
+{
+	struct nix_rx_sg_s *sg = &cqe->sg;
+	struct nix_wqe_rx_s *wqe = NULL;
+	u64 *seg_addr = &sg->seg_addr;
+	struct cpt_parse_hdr_s *cptp;
+	struct xfrm_offload *xo;
+	struct xfrm_state *xs;
+	struct sec_path *sp;
+	void *va;
+
+	/* CPT_PARSE_HDR_S is present in the beginning of the buffer */
+	va = phys_to_virt(otx2_iova_to_phys(pfvf->iommu_domain, *seg_addr));
+
+	cptp = (struct cpt_parse_hdr_s *)va;
+
+	/* Convert the wqe_ptr from CPT_PARSE_HDR_S to a CPU usable pointer */
+	wqe = phys_to_virt(otx2_iova_to_phys(pfvf->iommu_domain,
+					     be64_to_cpu(cptp->wqe_ptr)));
+
+	/* Get the XFRM state pointer stored in SA context */
+	xs = pfvf->ipsec.inb_sa->base +
+	     (be32_to_cpu(cptp->cookie) * pfvf->ipsec.sa_tbl_entry_sz) + 1024;
+
+	/* Set XFRM offload status and flags for successful decryption */
+	sp = secpath_set(skb);
+	if (!sp) {
+		netdev_err(pfvf->netdev, "Failed to secpath_set\n");
+		wqe = NULL;
+		goto err_out;
+	}
+
+	rcu_read_lock();
+	xfrm_state_hold(xs);
+	rcu_read_unlock();
+
+	sp->xvec[sp->len++] = xs;
+	sp->olen++;
+
+	xo = xfrm_offload(skb);
+	xo->flags = CRYPTO_DONE;
+	xo->status = CRYPTO_SUCCESS;
+
+err_out:
+	/* Return metapacket buffer back to pool since it's no longer needed */
+	otx2_free_rcv_seg(pfvf, cqe, qidx);
+	return wqe;
+}
+
 static int cn10k_inb_nix_inline_lf_cfg(struct otx2_nic *pfvf)
 {
 	struct nix_inline_ipsec_lf_cfg *req;
