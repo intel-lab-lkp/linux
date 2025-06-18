@@ -104,4 +104,14 @@ void hwrm_req_alloc_flags(struct bnge_dev *bd, void *req, gfp_t flags);
 void *hwrm_req_dma_slice(struct bnge_dev *bd, void *req, u32 size,
 			 dma_addr_t *dma);
 
+static inline int
+bnge_hwrm_func_cfg_short_req_init(struct bnge_dev *bdev,
+				  struct hwrm_func_cfg_input **req)
+{
+	u32 req_len;
+
+	req_len = min_t(u32, sizeof(**req), bdev->hwrm_max_ext_req_len);
+	return __hwrm_req_init(bdev, (void **)req, HWRM_FUNC_CFG, req_len);
+}
+
 #endif /* _BNGE_HWRM_H_ */
