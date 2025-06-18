@@ -3235,82 +3235,75 @@ typedef int (*sendmsg_func)(struct sock *sk, struct msghdr *msg);
 static int __skb_send_sock(struct sock *sk, struct sk_buff *skb, int offset,
 			   int len, sendmsg_func sendmsg, int flags)
 {
-	unsigned int orig_len = len;
 	struct sk_buff *head = skb;
 	unsigned short fragidx;
-	int slen, ret;
+	struct msghdr msg;
+	struct bio_vec *bvec;
+	int max_vecs, ret;
+	int bvec_count = 0;
+	unsigned int copied = 0;
+
+	max_vecs = skb_shinfo(skb)->nr_frags + 1; // +1 for linear data
+	if (skb_has_frag_list(skb)) {
+		struct sk_buff *frag_skb = skb_shinfo(skb)->frag_list;
+
+		while (frag_skb) {
+			max_vecs += skb_shinfo(frag_skb)->nr_frags + 1; // +1 for linear data
+			frag_skb = frag_skb->next;
+		}
+	}
+
+	bvec = kcalloc(max_vecs, sizeof(struct bio_vec), GFP_KERNEL);
+	if (!bvec)
+		return -ENOMEM;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_flags = MSG_SPLICE_PAGES | MSG_DONTWAIT | flags;
 
 do_frag_list:
 
 	/* Deal with head data */
-	while (offset < skb_headlen(skb) && len) {
-		struct kvec kv;
-		struct msghdr msg;
+	if (offset < skb_headlen(skb)) {
+		unsigned int copy_len = min(skb_headlen(skb) - offset, len - copied);
+		struct page *page = virt_to_page(skb->data + offset);
+		unsigned int page_offset = offset_in_page(skb->data + offset);
 
-		slen = min_t(int, len, skb_headlen(skb) - offset);
-		kv.iov_base = skb->data + offset;
-		kv.iov_len = slen;
-		memset(&msg, 0, sizeof(msg));
-		msg.msg_flags = MSG_DONTWAIT | flags;
+		if (!sendpage_ok(page))
+			msg.msg_flags &= ~MSG_SPLICE_PAGES;
 
-		iov_iter_kvec(&msg.msg_iter, ITER_SOURCE, &kv, 1, slen);
-		ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked,
-				      sendmsg_unlocked, sk, &msg);
-		if (ret <= 0)
-			goto error;
-
-		offset += ret;
-		len -= ret;
+		bvec_set_page(&bvec[bvec_count++], page, copy_len, page_offset);
+		copied += copy_len;
+		offset += copy_len;
 	}
-
-	/* All the data was skb head? */
-	if (!len)
-		goto out;
 
 	/* Make offset relative to start of frags */
 	offset -= skb_headlen(skb);
 
-	/* Find where we are in frag list */
-	for (fragidx = 0; fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
-		skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
+	if (copied < len) {
+		for (fragidx = 0; fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
+			skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
+			unsigned int frag_size = skb_frag_size(frag);
 
-		if (offset < skb_frag_size(frag))
-			break;
+			/* Find where we are in frag list */
+			if (offset >= frag_size) {
+				offset -= frag_size;
+				continue;
+			}
 
-		offset -= skb_frag_size(frag);
-	}
+			unsigned int copy_len = min(frag_size - offset, len - copied);
 
-	for (; len && fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
-		skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
-
-		slen = min_t(size_t, len, skb_frag_size(frag) - offset);
-
-		while (slen) {
-			struct bio_vec bvec;
-			struct msghdr msg = {
-				.msg_flags = MSG_SPLICE_PAGES | MSG_DONTWAIT |
-					     flags,
-			};
-
-			bvec_set_page(&bvec, skb_frag_page(frag), slen,
+			bvec_set_page(&bvec[bvec_count++], skb_frag_page(frag), copy_len,
 				      skb_frag_off(frag) + offset);
-			iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, &bvec, 1,
-				      slen);
 
-			ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked,
-					      sendmsg_unlocked, sk, &msg);
-			if (ret <= 0)
-				goto error;
+			copied += copy_len;
+			offset = 0;
 
-			len -= ret;
-			offset += ret;
-			slen -= ret;
+			if (copied >= len)
+				break;
 		}
-
-		offset = 0;
 	}
 
-	if (len) {
+	if (copied < len) {
 		/* Process any frag lists */
 
 		if (skb == head) {
@@ -3324,11 +3317,12 @@ do_frag_list:
 		}
 	}
 
-out:
-	return orig_len - len;
+	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, bvec, bvec_count, len);
+	ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked, sendmsg_unlocked, sk, &msg);
 
-error:
-	return orig_len == len ? ret : orig_len - len;
+	kfree(bvec);
+
+	return ret;
 }
 
 /* Send skb data on a socket. Socket must be locked. */
