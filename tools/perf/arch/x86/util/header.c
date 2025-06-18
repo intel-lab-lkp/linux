@@ -16,9 +16,9 @@ void get_cpuid_0(char *vendor, unsigned int *lvl)
 	unsigned int b, c, d;
 
 	cpuid(0, 0, lvl, &b, &c, &d);
-	strncpy(&vendor[0], (char *)(&b), 4);
-	strncpy(&vendor[4], (char *)(&d), 4);
-	strncpy(&vendor[8], (char *)(&c), 4);
+	memcpy(&vendor[0], (char *)(&b), 4);
+	memcpy(&vendor[4], (char *)(&d), 4);
+	memcpy(&vendor[8], (char *)(&c), 4);
 	vendor[12] = '\0';
 }
 
