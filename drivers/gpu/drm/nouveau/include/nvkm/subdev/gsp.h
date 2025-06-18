@@ -146,6 +146,7 @@ struct nvkm_gsp {
 		struct nvkm_gsp_radix3 radix3;
 		struct nvkm_gsp_mem meta;
 		struct sg_table fbsr;
+		u64 fbsr_size;
 	} sr;
 
 	struct {

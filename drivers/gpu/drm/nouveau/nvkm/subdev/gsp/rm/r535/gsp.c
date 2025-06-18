@@ -1719,6 +1719,9 @@ r535_gsp_fini(struct nvkm_gsp *gsp, bool suspend)
 		u32 len = rm->api->gsp->sr_data_size(gsp);
 		GspFwSRMeta *sr;
 
+		ret = rm->api->fbsr->suspend(gsp);
+		if (ret)
+			return ret;
 		ret = nvkm_gsp_sg(gsp->subdev.device, len, &gsp->sr.sgt);
 		if (ret)
 			return ret;
@@ -1737,12 +1740,15 @@ r535_gsp_fini(struct nvkm_gsp *gsp, bool suspend)
 		sr->sysmemAddrOfSuspendResumeData = gsp->sr.radix3.lvl0.addr;
 		sr->sizeOfSuspendResumeData = len;
 
-		ret = rm->api->fbsr->suspend(gsp);
-		if (ret) {
-			nvkm_gsp_mem_dtor(&gsp->sr.meta);
-			nvkm_gsp_radix3_dtor(gsp, &gsp->sr.radix3);
-			nvkm_gsp_sg_free(gsp->subdev.device, &gsp->sr.sgt);
-			return ret;
+		if (rm->api->fbsr->suspend2) {
+			ret = rm->api->fbsr->suspend2(gsp);
+			if (ret) {
+				nvkm_gsp_mem_dtor(&gsp->sr.meta);
+				nvkm_gsp_radix3_dtor(gsp, &gsp->sr.radix3);
+				nvkm_gsp_sg_free(gsp->subdev.device, &gsp->sr.sgt);
+				gsp->rm->api->fbsr->resume(gsp);
+				return ret;
+			}
 		}
 	}
 

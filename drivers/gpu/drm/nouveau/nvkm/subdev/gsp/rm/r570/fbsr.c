@@ -132,8 +132,18 @@ r570_fbsr_suspend(struct nvkm_gsp *gsp)
 	if (ret)
 		return ret;
 
+	gsp->sr.fbsr_size = size;
+	return 0;
+}
+
+static int
+r570_fbsr_suspend2(struct nvkm_gsp *gsp)
+{
+	struct nvkm_subdev *subdev = &gsp->subdev;
+	struct nvkm_device *device = subdev->device;
+	int ret;
 	/* Initialise FBSR on RM. */
-	ret = r570_fbsr_init(gsp, &gsp->sr.fbsr, size);
+	ret = r570_fbsr_init(gsp, &gsp->sr.fbsr, gsp->sr.fbsr_size);
 	if (ret) {
 		nvkm_gsp_sg_free(device, &gsp->sr.fbsr);
 		return ret;
@@ -145,5 +155,6 @@ r570_fbsr_suspend(struct nvkm_gsp *gsp)
 const struct nvkm_rm_api_fbsr
 r570_fbsr = {
 	.suspend = r570_fbsr_suspend,
+	.suspend2 = r570_fbsr_suspend2,
 	.resume = r570_fbsr_resume,
 };
