@@ -36,6 +36,7 @@
 #include <linux/kernel_read_file.h>
 
 #include "zram_drv.h"
+#include "zram_wb.h"
 
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
@@ -56,7 +57,6 @@ static size_t huge_class_size;
 
 static const struct block_device_operations zram_devops;
 
-static void zram_free_page(struct zram *zram, size_t index);
 static int zram_read_from_zspool(struct zram *zram, struct page *page,
 				 u32 index);
 
@@ -95,7 +95,7 @@ static __must_check bool zram_slot_trylock(struct zram *zram, u32 index)
 	return false;
 }
 
-static void zram_slot_lock(struct zram *zram, u32 index)
+void zram_slot_lock(struct zram *zram, u32 index)
 {
 	unsigned long *lock = &zram->table[index].flags;
 
@@ -104,7 +104,7 @@ static void zram_slot_lock(struct zram *zram, u32 index)
 	lock_acquired(slot_dep_map(zram, index), _RET_IP_);
 }
 
-static void zram_slot_unlock(struct zram *zram, u32 index)
+void zram_slot_unlock(struct zram *zram, u32 index)
 {
 	unsigned long *lock = &zram->table[index].flags;
 
@@ -127,19 +127,17 @@ static unsigned long zram_get_handle(struct zram *zram, u32 index)
 	return zram->table[index].handle;
 }
 
-static void zram_set_handle(struct zram *zram, u32 index, unsigned long handle)
+void zram_set_handle(struct zram *zram, u32 index, unsigned long handle)
 {
 	zram->table[index].handle = handle;
 }
 
-static bool zram_test_flag(struct zram *zram, u32 index,
-			enum zram_pageflags flag)
+bool zram_test_flag(struct zram *zram, u32 index, enum zram_pageflags flag)
 {
 	return zram->table[index].flags & BIT(flag);
 }
 
-static void zram_set_flag(struct zram *zram, u32 index,
-			enum zram_pageflags flag)
+void zram_set_flag(struct zram *zram, u32 index, enum zram_pageflags flag)
 {
 	zram->table[index].flags |= BIT(flag);
 }
@@ -233,22 +231,6 @@ static void zram_accessed(struct zram *zram, u32 index)
 }
 
 #if defined CONFIG_ZRAM_WRITEBACK || defined CONFIG_ZRAM_MULTI_COMP
-struct zram_pp_slot {
-	unsigned long		index;
-	struct list_head	entry;
-};
-
-/*
- * A post-processing bucket is, essentially, a size class, this defines
- * the range (in bytes) of pp-slots sizes in particular bucket.
- */
-#define PP_BUCKET_SIZE_RANGE	64
-#define NUM_PP_BUCKETS		((PAGE_SIZE / PP_BUCKET_SIZE_RANGE) + 1)
-
-struct zram_pp_ctl {
-	struct list_head	pp_buckets[NUM_PP_BUCKETS];
-};
-
 static struct zram_pp_ctl *init_pp_ctl(void)
 {
 	struct zram_pp_ctl *ctl;
@@ -258,15 +240,20 @@ static struct zram_pp_ctl *init_pp_ctl(void)
 	if (!ctl)
 		return NULL;
 
+	init_completion(&ctl->all_done);
+	atomic_set(&ctl->num_pp_slots, 0);
 	for (idx = 0; idx < NUM_PP_BUCKETS; idx++)
 		INIT_LIST_HEAD(&ctl->pp_buckets[idx]);
 	return ctl;
 }
 
-static void release_pp_slot(struct zram *zram, struct zram_pp_slot *pps)
+static void remove_pp_slot_from_ctl(struct zram_pp_slot *pps)
 {
 	list_del_init(&pps->entry);
+}
 
+void free_pp_slot(struct zram *zram, struct zram_pp_slot *pps)
+{
 	zram_slot_lock(zram, pps->index);
 	zram_clear_flag(zram, pps->index, ZRAM_PP_SLOT);
 	zram_slot_unlock(zram, pps->index);
@@ -274,7 +261,13 @@ static void release_pp_slot(struct zram *zram, struct zram_pp_slot *pps)
 	kfree(pps);
 }
 
-static void release_pp_ctl(struct zram *zram, struct zram_pp_ctl *ctl)
+static void release_pp_slot(struct zram *zram, struct zram_pp_slot *pps)
+{
+	remove_pp_slot_from_ctl(pps);
+	free_pp_slot(zram, pps);
+}
+
+void release_pp_ctl(struct zram *zram, struct zram_pp_ctl *ctl)
 {
 	u32 idx;
 
@@ -312,6 +305,7 @@ static bool place_pp_slot(struct zram *zram, struct zram_pp_ctl *ctl,
 	list_add(&pps->entry, &ctl->pp_buckets[bid]);
 
 	zram_set_flag(zram, pps->index, ZRAM_PP_SLOT);
+	atomic_inc(&ctl->num_pp_slots);
 	return true;
 }
 
@@ -713,7 +707,7 @@ retry:
 	return blk_idx;
 }
 
-static void free_block_bdev(struct zram *zram, unsigned long blk_idx)
+void free_block_bdev(struct zram *zram, unsigned long blk_idx)
 {
 	int was_set;
 
@@ -737,18 +731,18 @@ static void read_from_bdev_async(struct zram *zram, struct page *page,
 static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 {
 	unsigned long blk_idx = 0;
-	struct page *page = NULL;
 	struct zram_pp_slot *pps;
-	struct bio_vec bio_vec;
-	struct bio bio;
-	int ret = 0, err;
+	int ret = 0;
 	u32 index;
+	int nr_pps = atomic_read(&ctl->num_pp_slots);
 
-	page = alloc_page(GFP_KERNEL);
-	if (!page)
-		return -ENOMEM;
+	if (!nr_pps)
+		return 0;
 
 	while ((pps = select_pp_slot(ctl))) {
+		struct zram_wb_request *req;
+		struct page *page;
+
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
@@ -765,6 +759,13 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 			}
 		}
 
+		req = alloc_wb_request(zram, pps, ctl, blk_idx);
+		if (IS_ERR(req)) {
+			ret = PTR_ERR(req);
+			break;
+		}
+		page = bio_first_page_all(req->bio);
+
 		index = pps->index;
 		zram_slot_lock(zram, index);
 		/*
@@ -779,63 +780,28 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 			goto next;
 		zram_slot_unlock(zram, index);
 
-		bio_init(&bio, zram->bdev, &bio_vec, 1,
-			 REQ_OP_WRITE | REQ_SYNC);
-		bio.bi_iter.bi_sector = blk_idx * (PAGE_SIZE >> 9);
-		__bio_add_page(&bio, page, PAGE_SIZE, 0);
-
-		/*
-		 * XXX: A single page IO would be inefficient for write
-		 * but it would be not bad as starter.
-		 */
-		err = submit_bio_wait(&bio);
-		if (err) {
-			release_pp_slot(zram, pps);
-			/*
-			 * BIO errors are not fatal, we continue and simply
-			 * attempt to writeback the remaining objects (pages).
-			 * At the same time we need to signal user-space that
-			 * some writes (at least one, but also could be all of
-			 * them) were not successful and we do so by returning
-			 * the most recent BIO error.
-			 */
-			ret = err;
-			continue;
-		}
-
-		atomic64_inc(&zram->stats.bd_writes);
-		zram_slot_lock(zram, index);
-		/*
-		 * Same as above, we release slot lock during writeback so
-		 * slot can change under us: slot_free() or slot_free() and
-		 * reallocation (zram_write_page()). In both cases slot loses
-		 * ZRAM_PP_SLOT flag. No concurrent post-processing can set
-		 * ZRAM_PP_SLOT on such slots until current post-processing
-		 * finishes.
-		 */
-		if (!zram_test_flag(zram, index, ZRAM_PP_SLOT))
-			goto next;
-
-		zram_free_page(zram, index);
-		zram_set_flag(zram, index, ZRAM_WB);
-		zram_set_handle(zram, index, blk_idx);
+		nr_pps--;
+		remove_pp_slot_from_ctl(pps);
 		blk_idx = 0;
-		atomic64_inc(&zram->stats.pages_stored);
-		spin_lock(&zram->wb_limit_lock);
-		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
-		spin_unlock(&zram->wb_limit_lock);
+		submit_bio(req->bio);
+		continue;
+
 next:
 		zram_slot_unlock(zram, index);
 		release_pp_slot(zram, pps);
+		free_wb_request(req);
 
 		cond_resched();
 	}
 
 	if (blk_idx)
 		free_block_bdev(zram, blk_idx);
-	if (page)
-		__free_page(page);
+
+	if (nr_pps && atomic_sub_and_test(nr_pps, &ctl->num_pp_slots))
+		complete(&ctl->all_done);
+
+	/* wait until all async bios completed */
+	wait_for_completion(&ctl->all_done);
 
 	return ret;
 }
@@ -1111,8 +1077,6 @@ static int read_from_bdev(struct zram *zram, struct page *page,
 {
 	return -EIO;
 }
-
-static void free_block_bdev(struct zram *zram, unsigned long blk_idx) {};
 #endif
 
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
@@ -1620,7 +1584,7 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	return true;
 }
 
-static void zram_free_page(struct zram *zram, size_t index)
+void zram_free_page(struct zram *zram, size_t index)
 {
 	unsigned long handle;
 
@@ -2244,12 +2208,6 @@ static ssize_t recompress_store(struct device *dev,
 	prio_max = min(prio_max, (u32)zram->num_active_comps);
 	if (prio >= prio_max) {
 		ret = -EINVAL;
-		goto release_init_lock;
-	}
-
-	page = alloc_page(GFP_KERNEL);
-	if (!page) {
-		ret = -ENOMEM;
 		goto release_init_lock;
 	}
 
@@ -2912,6 +2870,9 @@ static int __init zram_init(void)
 		num_devices--;
 	}
 
+	if (setup_zram_writeback())
+		goto out_error;
+
 	return 0;
 
 out_error:
@@ -2921,6 +2882,7 @@ out_error:
 
 static void __exit zram_exit(void)
 {
+	destroy_zram_writeback();
 	destroy_devices();
 }
 
