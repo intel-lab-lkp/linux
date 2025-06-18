@@ -1996,6 +1996,10 @@ static const char *step_into(struct nameidata *nd, int flags,
 		if (path.mnt == nd->path.mnt)
 			mntget(path.mnt);
 	}
+
+	if (inode && !S_ISLNK(inode->i_mode))
+		return NULL;
+
 	return pick_link(nd, &path, inode, flags);
 }
 
