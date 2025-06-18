@@ -175,6 +175,37 @@ MODULE_DEVICE_TABLE(usb, id_table);
 #define PL2303_HXN_FLOWCTRL_RTS_CTS	0x18
 #define PL2303_HXN_FLOWCTRL_XON_XOFF	0x0c
 
+
+struct PL2303G_GPIO {
+	u8 GP_Branch;
+	u8 Number;
+	u8 Value;
+};
+
+
+#define GPIO_AB_CONTROL_MODE		_IOW(0x81, 10, struct PL2303G_GPIO)
+#define GPIO_AB_OUTPUT_MODE		_IOW(0x81, 11, struct PL2303G_GPIO)
+#define GPIO_AB_SET_VALUE		_IOW(0x81, 12, struct PL2303G_GPIO)
+#define GPIO_AB_GET_VALUE		_IOR(0x81, 13, struct PL2303G_GPIO)
+
+#define GPIO_A_DATA_REG		0x00
+#define GPIO_A_OE_REG		0x02
+#define GPIO_A_CE_REG		0x04
+
+#define GPIO_B_DATA_REG		0x01
+#define GPIO_B_OE_REG		0x03
+#define GPIO_B_CE_REG		0x05
+
+#define PL2303N_CE_MODE		0
+#define PL2303N_OE_MODE		1
+#define PL2303N_SET_MODE	2
+#define PL2303N_GET_MODE	2
+
+#define GET_GPIO_REG(mode, branch) \
+		((mode) == 0 ? ((branch) == 0 ? GPIO_A_CE_REG : GPIO_B_CE_REG) : \
+		(mode) == 1 ? ((branch) == 0 ? GPIO_A_OE_REG : GPIO_B_OE_REG) : \
+					((branch) == 0 ? GPIO_A_DATA_REG : GPIO_B_DATA_REG))
+
 static int pl2303_set_break(struct usb_serial_port *port, bool enable);
 
 enum pl2303_type {
@@ -1095,6 +1126,156 @@ static int pl2303_carrier_raised(struct usb_serial_port *port)
 	return 0;
 }
 
+static int pl2303N_gpio_get(struct usb_serial *serial, void __user *data, u8 u8Mode)
+{
+	struct pl2303_serial_private *spriv = usb_get_serial_data(serial);
+	struct PL2303G_GPIO gpio;
+	unsigned char *buf;
+	u8 channel;
+	u8 kdatPar;
+	int retval = 0;
+
+	/* only support TYPE_HXN */
+	if (spriv->type != &pl2303_type_data[TYPE_HXN])
+		return -ENOIOCTLCMD;
+
+	buf = kmalloc(1, GFP_KERNEL);
+	if (!buf)
+		return -ENOIOCTLCMD;
+
+	if (copy_from_user(&gpio, data, sizeof(gpio))) {
+		retval = -EFAULT;
+		goto err_out;
+	}
+
+	channel = GET_GPIO_REG(u8Mode, gpio.GP_Branch);
+
+	retval = pl2303_vendor_read(serial, channel, buf);
+
+	if (retval < 0)
+		goto err_out;
+
+	if (gpio.Number <= 7)
+		kdatPar = 1 << gpio.Number;
+	else
+		kdatPar = 0x01;
+
+	if (*buf & kdatPar)
+		gpio.Value = 1;
+	else
+		gpio.Value = 0;
+
+	if (copy_to_user(data, &gpio, sizeof(gpio))) {
+		retval = -EFAULT;
+		goto err_out;
+	}
+
+err_out:
+
+	kfree(buf);
+
+	return retval;
+
+}
+
+static int pl2303N_gpio_set(struct usb_serial *serial, void __user *data, u8 u8Mode)
+{
+	struct pl2303_serial_private *spriv = usb_get_serial_data(serial);
+	struct PL2303G_GPIO gpio;
+	unsigned char *buf;
+	u8 kdatPar;
+	u8 channel;
+	int retval = 0;
+
+	/* only support TYPE_HXN */
+	if (spriv->type != &pl2303_type_data[TYPE_HXN])
+		return -ENOIOCTLCMD;
+
+	buf = kmalloc(1, GFP_KERNEL);
+	if (!buf)
+		return -ENOIOCTLCMD;
+
+	if (copy_from_user(&gpio, data, sizeof(gpio))) {
+		retval = -EFAULT;
+		goto err_out;
+	}
+
+	channel = GET_GPIO_REG(u8Mode, gpio.GP_Branch);
+
+	retval = pl2303_vendor_read(serial, channel, buf);
+
+	if (retval < 0)
+		goto err_out;
+
+	if (gpio.Number <= 7)
+		kdatPar = 1 << gpio.Number;
+	else
+		kdatPar = 0x01;
+
+	if (gpio.Value)
+		*buf |= kdatPar;
+	else
+		*buf &= ~kdatPar;
+
+	retval = pl2303_vendor_write(serial, channel, *buf);
+
+	if (retval < 0)
+		goto err_out;
+
+err_out:
+
+	kfree(buf);
+
+	return retval;
+
+}
+
+
+static int pl2303_ioctl(struct tty_struct *tty,
+			unsigned int cmd, unsigned long arg)
+{
+	int retval = 0;
+	struct serial_struct ser;
+	struct usb_serial_port *port = tty->driver_data;
+	struct usb_serial *serial = port->serial;
+
+	switch (cmd) {
+	case TIOCGSERIAL:
+		memset(&ser, 0, sizeof(ser));
+		ser.type = PORT_16654;
+		ser.line = port->minor;
+		ser.port = port->port_number;
+		ser.baud_base = 460800;
+
+		if (copy_to_user((void __user *)arg, &ser, sizeof(ser)))
+			return -EFAULT;
+
+		return 0;
+	case GPIO_AB_CONTROL_MODE:
+		retval = pl2303N_gpio_set(serial, (void __user *) arg,
+								PL2303N_CE_MODE);
+		break;
+	case GPIO_AB_OUTPUT_MODE:
+		retval = pl2303N_gpio_set(serial, (void __user *) arg,
+								PL2303N_OE_MODE);
+		break;
+	case GPIO_AB_SET_VALUE:
+		retval = pl2303N_gpio_set(serial, (void __user *) arg,
+								PL2303N_SET_MODE);
+		break;
+	case GPIO_AB_GET_VALUE:
+		retval = pl2303N_gpio_get(serial, (void __user *) arg,
+								PL2303N_GET_MODE);
+		break;
+	default:
+		retval = -ENOIOCTLCMD;
+		break;
+	}
+
+	return retval;
+
+}
+
 static int pl2303_set_break(struct usb_serial_port *port, bool enable)
 {
 	struct usb_serial *serial = port->serial;
@@ -1285,6 +1466,7 @@ static struct usb_serial_driver pl2303_device = {
 	.close =		pl2303_close,
 	.dtr_rts =		pl2303_dtr_rts,
 	.carrier_raised =	pl2303_carrier_raised,
+	.ioctl =		pl2303_ioctl,
 	.break_ctl =		pl2303_break_ctl,
 	.set_termios =		pl2303_set_termios,
 	.tiocmget =		pl2303_tiocmget,
