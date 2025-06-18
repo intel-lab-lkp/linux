@@ -130,6 +130,12 @@ struct intel_fb_view {
 	} color_plane[4];
 };
 
+struct intel_panic_data {
+	struct page **pages;
+	int page;
+	void *vaddr;
+};
+
 struct intel_framebuffer {
 	struct drm_framebuffer base;
 	struct intel_frontbuffer *frontbuffer;
@@ -145,6 +151,8 @@ struct intel_framebuffer {
 
 	unsigned int min_alignment;
 	unsigned int vtd_guard;
+
+	struct intel_panic_data panic;
 };
 
 enum intel_hotplug_state {
