@@ -207,7 +207,7 @@ mock_sched_timedout_job(struct drm_sched_job *sched_job)
 
 	job->flags |= DRM_MOCK_SCHED_JOB_TIMEDOUT;
 
-	return DRM_GPU_SCHED_STAT_NOMINAL;
+	return DRM_GPU_SCHED_STAT_RESET;
 }
 
 static void mock_sched_free_job(struct drm_sched_job *sched_job)
