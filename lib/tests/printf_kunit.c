@@ -763,6 +763,31 @@ errptr(struct kunit *kunittest)
 #endif
 }
 
+struct pte_test {
+	u64 val;
+	const char *name;
+};
+
+static struct pte_test pte_test_cases[] = {
+	{ .val = 0xc0ffee,      .name = "0x00c0ffee"},
+	{ .val = 0xdeadbeef,    .name = "0xdeadbeef"},
+	{ .val = 0xaabbcc,      .name = "0x00aabbcc"},
+};
+
+static void
+pte(struct kunit *kunittest)
+{
+	char buf[64];
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(pte_test_cases); i++) {
+		pte_t pte = __pte(pte_test_cases[i].val);
+
+		snprintf(buf, sizeof(buf), "%ppte", &pte);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pte_test_cases[i].name);
+	}
+}
+
 static int printf_suite_init(struct kunit_suite *suite)
 {
 	total_tests = 0;
@@ -811,6 +836,7 @@ static struct kunit_case printf_test_cases[] = {
 	KUNIT_CASE(errptr),
 	KUNIT_CASE(fwnode_pointer),
 	KUNIT_CASE(fourcc_pointer),
+	KUNIT_CASE(pte),
 	{}
 };
 
