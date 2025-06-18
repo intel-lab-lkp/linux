@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2025 Intel Corporation
  */
-#include <drm/drm_connector.h>
 #include <drm/intel/i915_component.h>
 #include <drm/intel/late_bind_mei_interface.h>
 #include <linux/component.h>

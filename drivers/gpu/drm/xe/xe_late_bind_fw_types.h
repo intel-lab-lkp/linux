@@ -10,6 +10,36 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 
+#define MAX_PAYLOAD_SIZE (1024 * 4)
+
+/**
+ * xe_late_bind_fw_id - enum to determine late binding fw index
+ */
+enum xe_late_bind_fw_id {
+	FAN_CONTROL_FW_ID = 0,
+	MAX_FW_ID
+};
+
+/**
+ * struct xe_late_bind_fw
+ */
+struct xe_late_bind_fw {
+	/** @late_bind_fw.valid: to check if fw is valid */
+	bool valid;
+	/** @late_bind_fw.id: firmware index */
+	u32 id;
+	/** @late_bind_fw.blob_path: firmware binary path */
+	char blob_path[PATH_MAX];
+	/** @late_bind_fw.type: firmware type */
+	u32  type;
+	/** @late_bind_fw.flags: firmware flags */
+	u32  flags;
+	/** @late_bind_fw.payload: to store the late binding blob */
+	u8  payload[MAX_PAYLOAD_SIZE];
+	/** @late_bind_fw.payload_size: late binding blob payload_size */
+	size_t payload_size;
+};
+
 /**
  * struct xe_late_bind_component - Late Binding services component
  * @mei_dev: device that provide Late Binding service.
@@ -34,6 +64,8 @@ struct xe_late_bind {
 	bool component_added;
 	/** @late_bind.mutex: protects the component binding and usage */
 	struct mutex mutex;
+	/** @late_bind.late_bind_fw: late binding firmware array */
+	struct xe_late_bind_fw late_bind_fw[MAX_FW_ID];
 };
 
 #endif
