@@ -165,7 +165,11 @@ struct rvalue {
 };
 
 struct field_access {
-	char *name;
+	enum { FIELD_NAME, ARRAY_INDEX } type;
+	union {
+		char *name;
+		struct rvalue index;
+	};
 };
 
 struct var_preset {
@@ -1630,28 +1634,60 @@ static int process_prog(const char *filename, struct bpf_object *obj, struct bpf
 		free(buf);
 
 	return 0;
-};
+}
+
+static int append_preset_atom(struct var_preset *preset, char *value, bool is_index)
+{
+	struct field_access *tmp;
+	int i = preset->atom_count;
+	int err;
+
+	tmp = reallocarray(preset->atoms, i + 1, sizeof(*preset->atoms));
+	if (!tmp)
+		return -ENOMEM;
+
+	preset->atoms = tmp;
+	preset->atom_count++;
+
+	if (is_index) {
+		preset->atoms[i].type = ARRAY_INDEX;
+		err = parse_rvalue(value, &preset->atoms[i].index);
+		if (err)
+			return err;
+	} else {
+		preset->atoms[i].type = FIELD_NAME;
+		preset->atoms[i].name = strdup(value);
+		if (!preset->atoms[i].name)
+			return -ENOMEM;
+	}
+	return 0;
+}
 
 static int parse_var_atoms(const char *full_var, struct var_preset *preset)
 {
-	char expr[256], *name, *saveptr;
+	char expr[256], var[256], *name, *saveptr;
+	int n, len, off;
 
 	snprintf(expr, sizeof(expr), "%s", full_var);
 	preset->atom_count = 0;
 	while ((name = strtok_r(preset->atom_count ? NULL : expr, ".", &saveptr))) {
-		struct field_access *tmp;
-		int i = preset->atom_count;
+		len = strlen(name);
+		/* parse variable name */
+		if (sscanf(name, "%[a-zA-Z0-9_] %n", var, &off) != 1) {
+			fprintf(stderr, "Can't parse %s\n", name);
+			return -EINVAL;
+		}
+		append_preset_atom(preset, var, false);
 
-		tmp = reallocarray(preset->atoms, i + 1, sizeof(*preset->atoms));
-		if (!tmp)
-			return -ENOMEM;
-
-		preset->atoms = tmp;
-		preset->atom_count++;
-
-		preset->atoms[i].name = strdup(name);
-		if (!preset->atoms[i].name)
-			return -ENOMEM;
+		/* parse optional array indexes */
+		while (off < len) {
+			if (sscanf(name + off, "[%[a-zA-Z0-9_]] %n", var, &n) != 1) {
+				fprintf(stderr, "Can't parse %s as index\n", name + off);
+				return -EINVAL;
+			}
+			append_preset_atom(preset, var, true);
+			off += n;
+		}
 	}
 	return 0;
 }
@@ -1671,7 +1707,7 @@ static int append_var_preset(struct var_preset **presets, int *cnt, const char *
 	memset(cur, 0, sizeof(*cur));
 	(*cnt)++;
 
-	if (sscanf(expr, "%s = %s %n", var, val, &n) != 2 || n != strlen(expr)) {
+	if (sscanf(expr, "%[][a-zA-Z0-9_.] = %s %n", var, val, &n) != 2 || n != strlen(expr)) {
 		fprintf(stderr, "Failed to parse expression '%s'\n", expr);
 		return -EINVAL;
 	}
@@ -1764,17 +1800,103 @@ static bool is_preset_supported(const struct btf_type *t)
 	return btf_is_int(t) || btf_is_enum(t) || btf_is_enum64(t);
 }
 
+static int find_enum_value(const struct btf *btf, const char *name, long long *value)
+{
+	const struct btf_type *t;
+	int cnt, i;
+	long long lvalue;
+
+	cnt = btf__type_cnt(btf);
+	for (i = 1; i != cnt; ++i) {
+		t = btf__type_by_id(btf, i);
+
+		if (!btf_is_any_enum(t))
+			continue;
+
+		if (enum_value_from_name(btf, t, name, &lvalue) == 0) {
+			*value = lvalue;
+			return 0;
+		}
+	}
+	return -ESRCH;
+}
+
+static int resolve_rvalue(struct btf *btf, const struct rvalue *rvalue, long long *result)
+{
+	int err = 0;
+
+	switch (rvalue->type) {
+	case INTEGRAL:
+		*result = rvalue->ivalue;
+		break;
+	case ENUMERATOR:
+		err = find_enum_value(btf, rvalue->svalue, result);
+		if (err)
+			fprintf(stderr, "Can't resolve enum value %s\n", rvalue->svalue);
+		break;
+	}
+	return err;
+}
+
+/* Returns number of consumed atoms from preset, negative error if failed */
+static int adjust_var_secinfo_array(struct btf *btf, int tid, struct var_preset *preset,
+				    int atom_idx, struct btf_var_secinfo *sinfo)
+{
+	struct btf_array *barr;
+	int i = atom_idx, err;
+	const struct btf_type *t;
+	long long off = 0, idx;
+
+	if (atom_idx < 1) /* Array index can't be the first atom */
+		return -EINVAL;
+
+	tid = btf__resolve_type(btf, tid);
+	t = btf__type_by_id(btf, tid);
+	if (!btf_is_array(t)) {
+		fprintf(stderr, "Array index is not expected for %s\n",
+			preset->atoms[atom_idx - 1].name);
+		return -EINVAL;
+	}
+	do {
+		if (preset->atoms[i].type != ARRAY_INDEX) {
+			fprintf(stderr, "Array index is missing for %s\n",
+				preset->atoms[atom_idx - 1].name);
+			return -EINVAL;
+		}
+		err = resolve_rvalue(btf, &preset->atoms[i].index, &idx);
+		if (err)
+			return err;
+		barr = btf_array(t);
+		if (idx < 0 || idx >= barr->nelems) {
+			fprintf(stderr, "Array index %lld is out of bounds [0, %u]: %s\n",
+				idx, barr->nelems, preset->full_name);
+			return -EINVAL;
+		}
+		off *= barr->nelems;
+		off += idx;
+		tid = btf__resolve_type(btf, barr->type);
+		t = btf__type_by_id(btf, tid);
+		i++;
+	} while (btf_is_array(t));
+
+	sinfo->size = t->size;
+	sinfo->type = tid;
+	sinfo->offset += off * t->size;
+	return i - atom_idx;
+}
+
 const int btf_find_member(const struct btf *btf,
 			  const struct btf_type *parent_type,
 			  __u32 parent_offset,
 			  const char *member_name,
-			  int *member_tid,
-			  __u32 *member_offset)
+			  struct btf_var_secinfo *sinfo)
 {
 	int i;
 
-	if (!btf_is_composite(parent_type))
+	if (!btf_is_composite(parent_type)) {
+		fprintf(stderr, "Can't resolve field %s for non-composite type\n", member_name);
 		return -EINVAL;
+	}
 
 	for (i = 0; i < btf_vlen(parent_type); ++i) {
 		const struct btf_member *member;
@@ -1796,15 +1918,16 @@ const int btf_find_member(const struct btf *btf,
 						name);
 					return -EINVAL;
 				}
-				*member_offset = parent_offset + member->offset;
-				*member_tid = tid;
+				sinfo->offset += (parent_offset + member->offset) / 8;
+				sinfo->type = tid;
+				sinfo->size = member_type->size;
 				return 0;
 			}
 		} else if (btf_is_composite(member_type)) {
 			int err;
 
 			err = btf_find_member(btf, member_type, parent_offset + member->offset,
-					      member_name, member_tid, member_offset);
+					      member_name, sinfo);
 			if (!err)
 				return 0;
 		}
@@ -1816,26 +1939,29 @@ const int btf_find_member(const struct btf *btf,
 static int adjust_var_secinfo(struct btf *btf, const struct btf_type *t,
 			      struct btf_var_secinfo *sinfo, struct var_preset *preset)
 {
-	const struct btf_type *base_type, *member_type;
-	int err, member_tid, i;
-	__u32 member_offset = 0;
+	const struct btf_type *base_type;
+	int err, i = 1, n;
+	int tid;
 
-	base_type = btf__type_by_id(btf, btf__resolve_type(btf, t->type));
+	tid = btf__resolve_type(btf, t->type);
+	base_type = btf__type_by_id(btf, tid);
 
-	for (i = 1; i < preset->atom_count; ++i) {
-		err = btf_find_member(btf, base_type, 0, preset->atoms[i].name,
-				      &member_tid, &member_offset);
-		if (err) {
-			fprintf(stderr, "Could not find member %s for variable %s\n",
-				preset->atoms[i].name, preset->atoms[i - 1].name);
-			return err;
+	while (i < preset->atom_count) {
+		if (preset->atoms[i].type == ARRAY_INDEX) {
+			n = adjust_var_secinfo_array(btf, tid, preset, i, sinfo);
+			if (n < 0)
+				return n;
+			i += n;
+		} else {
+			err = btf_find_member(btf, base_type, 0, preset->atoms[i].name, sinfo);
+			if (err)
+				return err;
+			i++;
 		}
-		member_type = btf__type_by_id(btf, member_tid);
-		sinfo->offset += member_offset / 8;
-		sinfo->size = member_type->size;
-		sinfo->type = member_tid;
-		base_type = member_type;
+		base_type = btf__type_by_id(btf, sinfo->type);
+		tid = sinfo->type;
 	}
+
 	return 0;
 }
 
@@ -1854,8 +1980,8 @@ static int set_global_var(struct bpf_object *obj, struct btf *btf,
 		return -EINVAL;
 	}
 	if (!is_preset_supported(base_type)) {
-		fprintf(stderr, "Setting value for type %s is not supported\n",
-			btf__name_by_offset(btf, base_type->name_off));
+		fprintf(stderr, "Can't set %s. Only ints and enums are supported\n",
+			preset->full_name);
 		return -EINVAL;
 	}
 
@@ -1972,6 +2098,7 @@ static int set_global_vars(struct bpf_object *obj, struct var_preset *presets, i
 		if (!presets[i].applied) {
 			fprintf(stderr, "Global variable preset %s has not been applied\n",
 				presets[i].full_name);
+			err = -EINVAL;
 		}
 		presets[i].applied = false;
 	}
@@ -3165,11 +3292,18 @@ int main(int argc, char **argv)
 	free(env.deny_filters);
 	for (i = 0; i < env.npresets; ++i) {
 		free(env.presets[i].full_name);
-		for (j = 0; j < env.presets[i].atom_count; ++j)
-			free(env.presets[i].atoms[j].name);
+		for (j = 0; j < env.presets[i].atom_count; ++j) {
+			switch (env.presets[i].atoms[j].type) {
+			case FIELD_NAME:
+				free(env.presets[i].atoms[j].name);
+				break;
+			case ARRAY_INDEX:
+				if (env.presets[i].atoms[j].index.type == ENUMERATOR)
+					free(env.presets[i].atoms[j].index.svalue);
+				break;
+			}
+		}
 		free(env.presets[i].atoms);
-		if (env.presets[i].value.type == ENUMERATOR)
-			free(env.presets[i].value.svalue);
 	}
 	free(env.presets);
 	return -err;
