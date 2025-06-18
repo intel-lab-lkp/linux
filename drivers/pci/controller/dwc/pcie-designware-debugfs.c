@@ -213,10 +213,8 @@ static ssize_t lane_detect_write(struct file *file, const char __user *buf,
 	if (val)
 		return val;
 
-	val = dw_pcie_readl_dbi(pci, rinfo->ras_cap_offset + SD_STATUS_L1LANE_REG);
-	val &= ~(LANE_SELECT);
-	val |= FIELD_PREP(LANE_SELECT, lane);
-	dw_pcie_writel_dbi(pci, rinfo->ras_cap_offset + SD_STATUS_L1LANE_REG, val);
+	dw_pcie_clear_and_set_dword(pci, rinfo->ras_cap_offset + SD_STATUS_L1LANE_REG,
+				    LANE_SELECT, FIELD_PREP(LANE_SELECT, lane));
 
 	return count;
 }
@@ -307,14 +305,13 @@ static ssize_t err_inj_write(struct file *file, const char __user *buf,
 static void set_event_number(struct dwc_pcie_rasdes_priv *pdata,
 			     struct dw_pcie *pci, struct dwc_pcie_rasdes_info *rinfo)
 {
-	u32 val;
+	u32 val = 0;
 
-	val = dw_pcie_readl_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG);
-	val &= ~EVENT_COUNTER_ENABLE;
-	val &= ~(EVENT_COUNTER_GROUP_SELECT | EVENT_COUNTER_EVENT_SELECT);
 	val |= FIELD_PREP(EVENT_COUNTER_GROUP_SELECT, event_list[pdata->idx].group_no);
 	val |= FIELD_PREP(EVENT_COUNTER_EVENT_SELECT, event_list[pdata->idx].event_no);
-	dw_pcie_writel_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG, val);
+	dw_pcie_clear_and_set_dword(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG,
+				    EVENT_COUNTER_ENABLE | EVENT_COUNTER_GROUP_SELECT |
+				    EVENT_COUNTER_EVENT_SELECT, val);
 }
 
 static ssize_t counter_enable_read(struct file *file, char __user *buf,
@@ -354,13 +351,9 @@ static ssize_t counter_enable_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&rinfo->reg_event_lock);
 	set_event_number(pdata, pci, rinfo);
-	val = dw_pcie_readl_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG);
-	if (enable)
-		val |= FIELD_PREP(EVENT_COUNTER_ENABLE, PER_EVENT_ON);
-	else
-		val |= FIELD_PREP(EVENT_COUNTER_ENABLE, PER_EVENT_OFF);
-
-	dw_pcie_writel_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG, val);
+	val |= FIELD_PREP(EVENT_COUNTER_ENABLE, enable ? PER_EVENT_ON : PER_EVENT_OFF);
+	dw_pcie_clear_and_set_dword(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG,
+				    0, val);
 
 	/*
 	 * While enabling the counter, always read the status back to check if
@@ -415,10 +408,9 @@ static ssize_t counter_lane_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&rinfo->reg_event_lock);
 	set_event_number(pdata, pci, rinfo);
-	val = dw_pcie_readl_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG);
-	val &= ~(EVENT_COUNTER_LANE_SELECT);
-	val |= FIELD_PREP(EVENT_COUNTER_LANE_SELECT, lane);
-	dw_pcie_writel_dbi(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG, val);
+	dw_pcie_clear_and_set_dword(pci, rinfo->ras_cap_offset + RAS_DES_EVENT_COUNTER_CTRL_REG,
+				    EVENT_COUNTER_LANE_SELECT,
+				    FIELD_PREP(EVENT_COUNTER_LANE_SELECT, lane));
 	mutex_unlock(&rinfo->reg_event_lock);
 
 	return count;
@@ -654,20 +646,15 @@ static int dw_pcie_ptm_check_capability(void *drvdata)
 static int dw_pcie_ptm_context_update_write(void *drvdata, u8 mode)
 {
 	struct dw_pcie *pci = drvdata;
-	u32 val;
 
-	if (mode == PCIE_PTM_CONTEXT_UPDATE_AUTO) {
-		val = dw_pcie_readl_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL);
-		val |= PTM_REQ_AUTO_UPDATE_ENABLED;
-		dw_pcie_writel_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL, val);
-	} else if (mode == PCIE_PTM_CONTEXT_UPDATE_MANUAL) {
-		val = dw_pcie_readl_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL);
-		val &= ~PTM_REQ_AUTO_UPDATE_ENABLED;
-		val |= PTM_REQ_START_UPDATE;
-		dw_pcie_writel_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL, val);
-	} else {
+	if (mode == PCIE_PTM_CONTEXT_UPDATE_AUTO)
+		dw_pcie_clear_and_set_dword(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL,
+					    0, PTM_REQ_AUTO_UPDATE_ENABLED);
+	else if (mode == PCIE_PTM_CONTEXT_UPDATE_MANUAL)
+		dw_pcie_clear_and_set_dword(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL,
+					    PTM_REQ_AUTO_UPDATE_ENABLED, PTM_REQ_START_UPDATE);
+	else
 		return -EINVAL;
-	}
 
 	return 0;
 }
@@ -694,17 +681,13 @@ static int dw_pcie_ptm_context_update_read(void *drvdata, u8 *mode)
 static int dw_pcie_ptm_context_valid_write(void *drvdata, bool valid)
 {
 	struct dw_pcie *pci = drvdata;
-	u32 val;
 
-	if (valid) {
-		val = dw_pcie_readl_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL);
-		val |= PTM_RES_CCONTEXT_VALID;
-		dw_pcie_writel_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL, val);
-	} else {
-		val = dw_pcie_readl_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL);
-		val &= ~PTM_RES_CCONTEXT_VALID;
-		dw_pcie_writel_dbi(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL, val);
-	}
+	if (valid)
+		dw_pcie_clear_and_set_dword(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL,
+					    0, PTM_RES_CCONTEXT_VALID);
+	else
+		dw_pcie_clear_and_set_dword(pci, pci->ptm_vsec_offset + PTM_RES_REQ_CTRL,
+					    PTM_RES_CCONTEXT_VALID, 0);
 
 	return 0;
 }

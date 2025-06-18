@@ -740,11 +740,8 @@ EXPORT_SYMBOL_GPL(dw_pcie_link_up);
 
 void dw_pcie_upconfig_setup(struct dw_pcie *pci)
 {
-	u32 val;
-
-	val = dw_pcie_readl_dbi(pci, PCIE_PORT_MULTI_LANE_CTRL);
-	val |= PORT_MLTI_UPCFG_SUPPORT;
-	dw_pcie_writel_dbi(pci, PCIE_PORT_MULTI_LANE_CTRL, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_PORT_MULTI_LANE_CTRL,
+				    0, PORT_MLTI_UPCFG_SUPPORT);
 }
 EXPORT_SYMBOL_GPL(dw_pcie_upconfig_setup);
 
@@ -805,21 +802,12 @@ int dw_pcie_link_get_max_link_width(struct dw_pcie *pci)
 
 static void dw_pcie_link_set_max_link_width(struct dw_pcie *pci, u32 num_lanes)
 {
-	u32 lnkcap, lwsc, plc;
+	u32 plc = 0;
 	u8 cap;
 
 	if (!num_lanes)
 		return;
 
-	/* Set the number of lanes */
-	plc = dw_pcie_readl_dbi(pci, PCIE_PORT_LINK_CONTROL);
-	plc &= ~PORT_LINK_FAST_LINK_MODE;
-	plc &= ~PORT_LINK_MODE_MASK;
-
-	/* Set link width speed control register */
-	lwsc = dw_pcie_readl_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL);
-	lwsc &= ~PORT_LOGIC_LINK_WIDTH_MASK;
-	lwsc |= PORT_LOGIC_LINK_WIDTH_1_LANES;
 	switch (num_lanes) {
 	case 1:
 		plc |= PORT_LINK_MODE_1_LANES;
@@ -837,14 +825,19 @@ static void dw_pcie_link_set_max_link_width(struct dw_pcie *pci, u32 num_lanes)
 		dev_err(pci->dev, "num-lanes %u: invalid value\n", num_lanes);
 		return;
 	}
-	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, plc);
-	dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, lwsc);
+	/* Set the number of lanes */
+	dw_pcie_clear_and_set_dword(pci, PCIE_PORT_LINK_CONTROL,
+				    PORT_LINK_FAST_LINK_MODE | PORT_LINK_MODE_MASK,
+				    plc);
+	/* Set link width speed control register */
+	dw_pcie_clear_and_set_dword(pci, PCIE_LINK_WIDTH_SPEED_CONTROL,
+				    PORT_LOGIC_LINK_WIDTH_MASK,
+				    PORT_LOGIC_LINK_WIDTH_1_LANES);
 
 	cap = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
-	lnkcap = dw_pcie_readl_dbi(pci, cap + PCI_EXP_LNKCAP);
-	lnkcap &= ~PCI_EXP_LNKCAP_MLW;
-	lnkcap |= FIELD_PREP(PCI_EXP_LNKCAP_MLW, num_lanes);
-	dw_pcie_writel_dbi(pci, cap + PCI_EXP_LNKCAP, lnkcap);
+	dw_pcie_clear_and_set_dword(pci, cap + PCI_EXP_LNKCAP,
+				    PCI_EXP_LNKCAP_MLW,
+				    FIELD_PREP(PCI_EXP_LNKCAP_MLW, num_lanes));
 }
 
 void dw_pcie_iatu_detect(struct dw_pcie *pci)
@@ -1133,38 +1126,27 @@ void dw_pcie_edma_remove(struct dw_pcie *pci)
 
 void dw_pcie_setup(struct dw_pcie *pci)
 {
-	u32 val;
-
 	dw_pcie_link_set_max_speed(pci);
 
 	/* Configure Gen1 N_FTS */
-	if (pci->n_fts[0]) {
-		val = dw_pcie_readl_dbi(pci, PCIE_PORT_AFR);
-		val &= ~(PORT_AFR_N_FTS_MASK | PORT_AFR_CC_N_FTS_MASK);
-		val |= PORT_AFR_N_FTS(pci->n_fts[0]);
-		val |= PORT_AFR_CC_N_FTS(pci->n_fts[0]);
-		dw_pcie_writel_dbi(pci, PCIE_PORT_AFR, val);
-	}
+	if (pci->n_fts[0])
+		dw_pcie_clear_and_set_dword(pci, PCIE_PORT_AFR,
+					    PORT_AFR_N_FTS_MASK | PORT_AFR_CC_N_FTS_MASK,
+					    PORT_AFR_N_FTS(pci->n_fts[0]) |
+					    PORT_AFR_CC_N_FTS(pci->n_fts[0]));
 
 	/* Configure Gen2+ N_FTS */
-	if (pci->n_fts[1]) {
-		val = dw_pcie_readl_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL);
-		val &= ~PORT_LOGIC_N_FTS_MASK;
-		val |= pci->n_fts[1];
-		dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, val);
-	}
+	if (pci->n_fts[1])
+		dw_pcie_clear_and_set_dword(pci, PCIE_LINK_WIDTH_SPEED_CONTROL,
+					    PORT_LOGIC_N_FTS_MASK, pci->n_fts[1]);
 
-	if (dw_pcie_cap_is(pci, CDM_CHECK)) {
-		val = dw_pcie_readl_dbi(pci, PCIE_PL_CHK_REG_CONTROL_STATUS);
-		val |= PCIE_PL_CHK_REG_CHK_REG_CONTINUOUS |
-		       PCIE_PL_CHK_REG_CHK_REG_START;
-		dw_pcie_writel_dbi(pci, PCIE_PL_CHK_REG_CONTROL_STATUS, val);
-	}
+	if (dw_pcie_cap_is(pci, CDM_CHECK))
+		dw_pcie_clear_and_set_dword(pci, PCIE_PL_CHK_REG_CONTROL_STATUS, 0,
+					    PCIE_PL_CHK_REG_CHK_REG_CONTINUOUS |
+					    PCIE_PL_CHK_REG_CHK_REG_START);
 
-	val = dw_pcie_readl_dbi(pci, PCIE_PORT_LINK_CONTROL);
-	val &= ~PORT_LINK_FAST_LINK_MODE;
-	val |= PORT_LINK_DLL_LINK_EN;
-	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, val);
+	dw_pcie_clear_and_set_dword(pci, PCIE_PORT_LINK_CONTROL,
+				    PORT_LINK_FAST_LINK_MODE, PORT_LINK_DLL_LINK_EN);
 
 	dw_pcie_link_set_max_link_width(pci, pci->num_lanes);
 }
