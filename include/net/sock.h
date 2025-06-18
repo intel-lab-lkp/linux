@@ -2484,6 +2484,44 @@ static inline unsigned long sock_wspace(struct sock *sk)
 	return amt;
 }
 
+static inline bool __sock_rcvbuf_has_space(unsigned int rmem,
+					   unsigned int rcvbuf,
+					   unsigned int size)
+{
+	/* Immediately drop when the receive queue is full. */
+	if (rmem + size > rcvbuf) {
+		if (rcvbuf > INT_MAX >> 1)
+			return false;
+
+		/* Always allow at least one packet for small buffer. */
+		if (rmem > rcvbuf)
+			return false;
+	}
+	return true;
+}
+
+/**
+ * sock_rcvbuf_has_space - check if sk->sk_rcvbuf has space
+ * @sk: socket
+ * @skb: socket buffer
+ *
+ * Can skb->truesize bytes be added to the socket receive buffer
+ * while respecting the sk->sk_rcvbuf limit. Note that rcvbuf and
+ * rmem are assigned to unsigned int to avoid wraparound.
+ *
+ * Return: true if there is space, false otherwise
+ */
+static inline bool sock_rcvbuf_has_space(struct sock *sk, struct sk_buff *skb)
+{
+	unsigned int rmem, rcvbuf;
+
+	/* Cast to unsigned int performs the boundary check for INT_MAX. */
+	rmem = atomic_read(&sk->sk_rmem_alloc);
+	rcvbuf = READ_ONCE(sk->sk_rcvbuf);
+
+	return __sock_rcvbuf_has_space(rmem, rcvbuf, skb->truesize);
+}
+
 /* Note:
  *  We use sk->sk_wq_raw, from contexts knowing this
  *  pointer is not NULL and cannot disappear/change.
