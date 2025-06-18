@@ -604,6 +604,8 @@ static void etnaviv_unbind(struct device *dev)
 
 	xa_destroy(&priv->active_contexts);
 
+	kfree(priv->flop_reset_data_ppu);
+
 	drm->dev_private = NULL;
 	kfree(priv);
 

@@ -18,6 +18,7 @@
 
 #include "etnaviv_cmdbuf.h"
 #include "etnaviv_dump.h"
+#include "etnaviv_flop_reset.h"
 #include "etnaviv_gpu.h"
 #include "etnaviv_gem.h"
 #include "etnaviv_mmu.h"
@@ -1807,6 +1808,11 @@ static int etnaviv_gpu_bind(struct device *dev, struct device *master,
 		ret = -ENXIO;
 		goto out_sched;
 	}
+
+	if (etnaviv_flop_reset_ppu_require(&gpu->identity) &&
+	    !priv->flop_reset_data_ppu)
+		etnaviv_flop_reset_ppu_init(priv);
+
 	priv->gpu[priv->num_gpus++] = gpu;
 
 	return 0;
