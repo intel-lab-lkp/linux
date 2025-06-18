@@ -900,6 +900,8 @@ unsigned long mem_cgroup_get_zone_lru_size(struct lruvec *lruvec,
 
 void mem_cgroup_handle_over_high(gfp_t gfp_mask);
 
+void mem_cgroup_handle_over_max(gfp_t gfp_mask);
+
 unsigned long mem_cgroup_get_max(struct mem_cgroup *memcg);
 
 unsigned long mem_cgroup_size(struct mem_cgroup *memcg);
@@ -1351,6 +1353,10 @@ mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 }
 
 static inline void mem_cgroup_handle_over_high(gfp_t gfp_mask)
+{
+}
+
+static inline void mem_cgroup_handle_over_max(gfp_t gfp_mask)
 {
 }
 

@@ -1549,8 +1549,11 @@ struct task_struct {
 #endif
 
 #ifdef CONFIG_MEMCG
-	/* Number of pages to reclaim on returning to userland: */
+	/* Number of pages over high to reclaim on returning to userland: */
 	unsigned int			memcg_nr_pages_over_high;
+
+	/* Number of pages over max to reclaim on returning to userland: */
+	unsigned int			memcg_nr_pages_over_max;
 
 	/* Used by memcontrol for targeted memcg charge: */
 	struct mem_cgroup		*active_memcg;
@@ -1745,7 +1748,11 @@ extern struct pid *cad_pid;
 #define PF_MEMALLOC_PIN		0x10000000	/* Allocations constrained to zones which allow long term pinning.
 						 * See memalloc_pin_save() */
 #define PF_BLOCK_TS		0x20000000	/* plug has ts that needs updating */
-#define PF__HOLE__40000000	0x40000000
+#ifdef CONFIG_MEMCG
+#define PF_MEMALLOC_ACCOUNTFORCE 0x40000000 /* See memalloc_account_force_save() */
+#else
+#define PF_MEMALLOC_ACCOUNTFORCE 0
+#endif
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
 
 /*
