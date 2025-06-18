@@ -282,10 +282,10 @@ static void tdx_clear_page(struct page *page)
 	void *dest = page_to_virt(page);
 	unsigned long i;
 
-	/*
-	 * The page could have been poisoned.  MOVDIR64B also clears
-	 * the poison bit so the kernel can safely use the page again.
-	 */
+	/* Machine check handler may have poisoned the page */
+	if (PageHWPoison(page))
+		return;
+
 	for (i = 0; i < PAGE_SIZE; i += 64)
 		movdir64b(dest + i, zero_page);
 	/*
