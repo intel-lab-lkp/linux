@@ -2433,6 +2433,9 @@ early_param("no_hash_pointers", no_hash_pointers_enable);
  *		Without an option prints the full name of the node
  *		f full name
  *		P node name, including a possible unit address
+ * - 'pte'	For a 64 bit page table entry, this prints its contents in
+ *              a hexa decimal format
+ *
  * - 'x' For printing the address unmodified. Equivalent to "%lx".
  *       Please read the documentation (path below) before using!
  * - '[ku]s' For a BPF/tracing related format specifier, e.g. used out of
@@ -2542,6 +2545,23 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 		default:
 			return error_string(buf, end, "(einval)", spec);
 		}
+	case 'p':
+		if (fmt[1] == 't' && fmt[2] == 'e') {
+			pte_t *pte = (pte_t *)ptr;
+
+			spec.field_width = 10;
+			spec.precision = 8;
+			spec.base = 16;
+			spec.flags = SPECIAL | SMALL | ZEROPAD;
+			if (sizeof(pte_t) == sizeof(u64)) {
+				u64 val = pte_val(*pte);
+
+				return number(buf, end, val, spec);
+			}
+			WARN_ONCE(1, "Non standard pte_t\n");
+			return error_string(buf, end, "(einval)", spec);
+		}
+		fallthrough;
 	default:
 		return default_pointer(buf, end, ptr, spec);
 	}
