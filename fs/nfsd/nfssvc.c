@@ -270,13 +270,13 @@ static int nfsd_init_socks(struct net *net, const struct cred *cred)
 	return 0;
 }
 
-static int nfsd_users = 0;
+static atomic_t nfsd_users = ATOMIC_INIT(0);
 
 static int nfsd_startup_generic(void)
 {
 	int ret;
 
-	if (nfsd_users++)
+	if (atomic_fetch_inc(&nfsd_users))
 		return 0;
 
 	ret = nfsd_file_cache_init();
@@ -291,13 +291,13 @@ static int nfsd_startup_generic(void)
 out_file_cache:
 	nfsd_file_cache_shutdown();
 dec_users:
-	nfsd_users--;
+	atomic_dec(&nfsd_users);
 	return ret;
 }
 
 static void nfsd_shutdown_generic(void)
 {
-	if (--nfsd_users)
+	if (atomic_dec_return(&nfsd_users))
 		return;
 
 	nfs4_state_shutdown();
