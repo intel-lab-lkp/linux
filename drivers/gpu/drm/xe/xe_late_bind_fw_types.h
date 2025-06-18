@@ -71,6 +71,9 @@ struct xe_late_bind {
 	struct xe_late_bind_fw late_bind_fw[MAX_FW_ID];
 	/** @late_bind.wq: workqueue to submit request to download late bind blob */
 	struct workqueue_struct *wq;
+
+	/** @late_bind.disable to block late binding reload during pm resume flow*/
+	bool disable;
 };
 
 #endif
