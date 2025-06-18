@@ -11,6 +11,9 @@ use core::{
 };
 use pin_init::{PinInit, Zeroable};
 
+pub mod ownable;
+pub use ownable::{Ownable, OwnableMut, Owned};
+
 /// Used to transfer ownership to and from foreign (non-Rust) languages.
 ///
 /// Ownership is transferred from Rust to a foreign language by calling [`Self::into_foreign`] and
@@ -424,6 +427,10 @@ impl<T> Opaque<T> {
 /// This is usually implemented by wrappers to existing structures on the C side of the code. For
 /// Rust code, the recommendation is to use [`Arc`](crate::sync::Arc) to create reference-counted
 /// instances of a type.
+///
+/// Note: Implementing this trait allows types to be wrapped in an [`ARef<Self>`]. It requires an
+/// internal reference count and provides only shared references. If unique references are required
+/// [`Ownable`] should be implemented which allows types to be wrapped in an [`Owned<Self>`].
 ///
 /// # Safety
 ///
