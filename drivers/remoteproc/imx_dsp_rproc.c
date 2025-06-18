@@ -738,9 +738,7 @@ static int imx_dsp_rproc_add_carveout(struct imx_dsp_rproc *priv)
 		mem = rproc_mem_entry_init(dev, (void __force *)cpu_addr, (dma_addr_t)att->sa,
 					   att->size, da, NULL, NULL, "dsp_mem");
 
-		if (mem)
-			rproc_coredump_add_segment(rproc, da, att->size);
-		else
+		if (!mem)
 			return -ENOMEM;
 
 		rproc_add_carveout(rproc, mem);
@@ -1202,6 +1200,8 @@ static int imx_dsp_rproc_probe(struct platform_device *pdev)
 		dev_err(dev, "rproc_add failed\n");
 		goto err_detach_domains;
 	}
+
+	rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_XTENSA);
 
 	pm_runtime_enable(dev);
 
