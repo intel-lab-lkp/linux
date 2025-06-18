@@ -83,9 +83,10 @@
  *                   expect return value to match passed parameter:
  *                   - a decimal number
  *                   - a hexadecimal number, when starts from 0x
- *                   - literal INT_MIN
- *                   - literal POINTER_VALUE (see definition below)
- *                   - literal TEST_DATA_LEN (see definition below)
+ *                   - a macro which expands to one of the above
+ *                   In addition, two special macros are defined:
+ *                   - POINTER_VALUE (see definition below)
+ *                   - TEST_DATA_LEN (see definition below)
  * __retval_unpriv   Same, but load program in unprivileged mode.
  *
  * __description     Text to be used instead of a program name for display
@@ -125,8 +126,8 @@
 #define __success_unpriv	__attribute__((btf_decl_tag("comment:test_expect_success_unpriv")))
 #define __log_level(lvl)	__attribute__((btf_decl_tag("comment:test_log_level="#lvl)))
 #define __flag(flag)		__attribute__((btf_decl_tag("comment:test_prog_flags="#flag)))
-#define __retval(val)		__attribute__((btf_decl_tag("comment:test_retval="#val)))
-#define __retval_unpriv(val)	__attribute__((btf_decl_tag("comment:test_retval_unpriv="#val)))
+#define __retval(val)		__attribute__((btf_decl_tag("comment:test_retval="XSTR(val))))
+#define __retval_unpriv(val)	__attribute__((btf_decl_tag("comment:test_retval_unpriv="XSTR(val))))
 #define __auxiliary		__attribute__((btf_decl_tag("comment:test_auxiliary")))
 #define __auxiliary_unpriv	__attribute__((btf_decl_tag("comment:test_auxiliary_unpriv")))
 #define __btf_path(path)	__attribute__((btf_decl_tag("comment:test_btf_path=" path)))

@@ -318,23 +318,6 @@ static int parse_caps(const char *str, __u64 *val, const char *name)
 
 static int parse_retval(const char *str, int *val, const char *name)
 {
-	struct {
-		char *name;
-		int val;
-	} named_values[] = {
-		{ "INT_MIN"      , INT_MIN },
-		{ "POINTER_VALUE", POINTER_VALUE },
-		{ "TEST_DATA_LEN", TEST_DATA_LEN },
-	};
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(named_values); ++i) {
-		if (strcmp(str, named_values[i].name) != 0)
-			continue;
-		*val = named_values[i].val;
-		return 0;
-	}
-
 	return parse_int(str, val, name);
 }
 
