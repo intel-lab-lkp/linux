@@ -48,6 +48,7 @@ config KVM_X86
 	select KVM_GENERIC_PRE_FAULT_MEMORY
 	select KVM_GENERIC_PRIVATE_MEM if KVM_SW_PROTECTED_VM
 	select KVM_WERROR if WERROR
+	select KVM_GENERIC_PAGE_FAULT
 
 config KVM
 	tristate "Kernel-based Virtual Machine (KVM) support"

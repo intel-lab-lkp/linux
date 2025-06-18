@@ -269,14 +269,6 @@ enum {
  */
 static_assert(RET_PF_CONTINUE == 0);
 
-static inline void kvm_mmu_prepare_memory_fault_exit(struct kvm_vcpu *vcpu,
-						     struct kvm_page_fault *fault)
-{
-	kvm_prepare_memory_fault_exit(vcpu, fault->gfn << PAGE_SHIFT,
-				      PAGE_SIZE, fault->write, fault->exec,
-				      fault->is_private);
-}
-
 static inline int kvm_mmu_do_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 					u64 err, bool prefetch,
 					int *emulation_type, u8 *level)
@@ -329,7 +321,7 @@ static inline int kvm_mmu_do_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 	 */
 	if (r == RET_PF_EMULATE && fault.is_private) {
 		pr_warn_ratelimited("kvm: unexpected emulation request on private memory\n");
-		kvm_mmu_prepare_memory_fault_exit(vcpu, &fault);
+		kvm_prepare_memory_fault_exit(vcpu, &fault);
 		return -EFAULT;
 	}
 

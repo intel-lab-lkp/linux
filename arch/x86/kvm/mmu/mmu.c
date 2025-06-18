@@ -3429,7 +3429,7 @@ static int kvm_handle_noslot_fault(struct kvm_vcpu *vcpu,
 	gva_t gva = fault->is_tdp ? 0 : fault->addr;
 
 	if (fault->is_private) {
-		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		kvm_prepare_memory_fault_exit(vcpu, fault);
 		return -EFAULT;
 	}
 
@@ -4499,14 +4499,14 @@ static int kvm_mmu_faultin_pfn_private(struct kvm_vcpu *vcpu,
 	int max_order, r;
 
 	if (!kvm_slot_can_be_private(fault->slot)) {
-		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		kvm_prepare_memory_fault_exit(vcpu, fault);
 		return -EFAULT;
 	}
 
 	r = kvm_gmem_get_pfn(vcpu->kvm, fault->slot, fault->gfn, &fault->pfn,
 			     &fault->refcounted_page, &max_order);
 	if (r) {
-		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		kvm_prepare_memory_fault_exit(vcpu, fault);
 		return r;
 	}
 
@@ -4586,7 +4586,7 @@ static int kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	 * private vs. shared mismatch.
 	 */
 	if (fault->is_private != kvm_mem_is_private(kvm, fault->gfn)) {
-		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		kvm_prepare_memory_fault_exit(vcpu, fault);
 		return -EFAULT;
 	}
 

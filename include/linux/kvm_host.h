@@ -2497,20 +2497,34 @@ static inline void kvm_account_pgtable_pages(void *virt, int nr)
 /* Max number of entries allowed for each kvm dirty ring */
 #define  KVM_DIRTY_RING_MAX_ENTRIES  65536
 
+#ifdef CONFIG_KVM_GENERIC_PAGE_FAULT
+
+#define KVM_ASSERT_TYPE_IS(type_t, x)					\
+do {									\
+	type_t __maybe_unused tmp;					\
+									\
+	BUILD_BUG_ON(!__types_ok(tmp, x) || !__typecheck(tmp, x));	\
+} while (0)
+
 static inline void kvm_prepare_memory_fault_exit(struct kvm_vcpu *vcpu,
-						 gpa_t gpa, gpa_t size,
-						 bool is_write, bool is_exec,
-						 bool is_private)
+						 struct kvm_page_fault *fault)
 {
+	KVM_ASSERT_TYPE_IS(gfn_t, fault->gfn);
+	KVM_ASSERT_TYPE_IS(bool, fault->exec);
+	KVM_ASSERT_TYPE_IS(bool, fault->write);
+	KVM_ASSERT_TYPE_IS(bool, fault->is_private);
+	KVM_ASSERT_TYPE_IS(struct kvm_memory_slot *, fault->slot);
+
 	vcpu->run->exit_reason = KVM_EXIT_MEMORY_FAULT;
-	vcpu->run->memory_fault.gpa = gpa;
-	vcpu->run->memory_fault.size = size;
+	vcpu->run->memory_fault.gpa = fault->gfn << PAGE_SHIFT;
+	vcpu->run->memory_fault.size = PAGE_SIZE;
 
 	/* RWX flags are not (yet) defined or communicated to userspace. */
 	vcpu->run->memory_fault.flags = 0;
-	if (is_private)
+	if (fault->is_private)
 		vcpu->run->memory_fault.flags |= KVM_MEMORY_EXIT_FLAG_PRIVATE;
 }
+#endif
 
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 static inline unsigned long kvm_get_memory_attributes(struct kvm *kvm, gfn_t gfn)
