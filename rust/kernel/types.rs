@@ -12,7 +12,7 @@ use core::{
 use pin_init::{PinInit, Zeroable};
 
 pub mod ownable;
-pub use ownable::{Ownable, OwnableMut, Owned};
+pub use ownable::{Ownable, OwnableMut, OwnableRefCounted, Owned};
 
 /// Used to transfer ownership to and from foreign (non-Rust) languages.
 ///
@@ -429,6 +429,8 @@ impl<T> Opaque<T> {
 /// Note: Implementing this trait allows types to be wrapped in an [`ARef<Self>`]. It requires an
 /// internal reference count and provides only shared references. If unique references are required
 /// [`Ownable`] should be implemented which allows types to be wrapped in an [`Owned<Self>`].
+/// Implementing the trait [`OwnableRefCounted`] allows to convert between unique and shared
+/// references (i.e. [`Owned<Self>`] and [`ARef<Self>`]).
 ///
 /// # Safety
 ///
@@ -569,6 +571,12 @@ impl<T: AlwaysRefCounted> From<&T> for ARef<T> {
         b.inc_ref();
         // SAFETY: We just incremented the refcount above.
         unsafe { Self::from_raw(NonNull::from(b)) }
+    }
+}
+
+impl<T: OwnableRefCounted> From<Owned<T>> for ARef<T> {
+    fn from(b: Owned<T>) -> Self {
+        T::into_shared(b)
     }
 }
 
