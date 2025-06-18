@@ -22,7 +22,8 @@
 static LIST_HEAD(mbox_cons);
 static DEFINE_MUTEX(con_mutex);
 
-static int add_to_rbuf(struct mbox_chan *chan, void *mssg, struct completion *tx_complete)
+static int add_to_rbuf(struct mbox_chan *chan, void *mssg, struct completion *tx_complete,
+		       int *tx_status)
 {
 	int idx;
 
@@ -35,6 +36,7 @@ static int add_to_rbuf(struct mbox_chan *chan, void *mssg, struct completion *tx
 	idx = chan->msg_free;
 	chan->msg_data[idx].data = mssg;
 	chan->msg_data[idx].tx_complete = tx_complete;
+	chan->msg_data[idx].tx_status = tx_status;
 	chan->msg_count++;
 
 	if (idx == MBOX_TX_QUEUE_LEN - 1)
@@ -86,12 +88,14 @@ static void tx_tick(struct mbox_chan *chan, int r)
 	int idx;
 	void *mssg = NULL;
 	struct completion *tx_complete = NULL;
+	int *tx_status = NULL;
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		idx = chan->active_req;
 		if (idx >= 0) {
 			mssg = chan->msg_data[idx].data;
 			tx_complete = chan->msg_data[idx].tx_complete;
+			tx_status = chan->msg_data[idx].tx_status;
 			chan->active_req = -1;
 		}
 	}
@@ -106,8 +110,10 @@ static void tx_tick(struct mbox_chan *chan, int r)
 	if (chan->cl->tx_done)
 		chan->cl->tx_done(chan->cl, mssg, r);
 
-	if (r != -ETIME && chan->cl->tx_block)
+	if (r != -ETIME && chan->cl->tx_block) {
+		*tx_status = r;
 		complete(tx_complete);
+	}
 }
 
 static enum hrtimer_restart txdone_hrtimer(struct hrtimer *hrtimer)
@@ -252,15 +258,16 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 {
 	int t;
 	struct completion tx_complete;
+	int tx_status = 0;
 
 	if (!chan || !chan->cl)
 		return -EINVAL;
 
 	if (chan->cl->tx_block) {
 		init_completion(&tx_complete);
-		t = add_to_rbuf(chan, mssg, &tx_complete);
+		t = add_to_rbuf(chan, mssg, &tx_complete, &tx_status);
 	} else {
-		t = add_to_rbuf(chan, mssg, NULL);
+		t = add_to_rbuf(chan, mssg, NULL, NULL);
 	}
 
 	if (t < 0) {
@@ -283,6 +290,8 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 		if (ret == 0) {
 			t = -ETIME;
 			tx_tick(chan, t);
+		} else if (tx_status < 0) {
+			t = tx_status;
 		}
 	}
 
