@@ -829,14 +829,6 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 		goto fail;
 	}
 
-	etnaviv_hw_identify(gpu);
-
-	if (gpu->identity.model == 0) {
-		dev_err(gpu->dev, "Unknown GPU model\n");
-		ret = -ENXIO;
-		goto fail;
-	}
-
 	if (gpu->identity.nn_core_count > 0)
 		dev_warn(gpu->dev, "etnaviv has been instantiated on a NPU, "
                                    "for which the UAPI is still experimental\n");
@@ -1808,6 +1800,13 @@ static int etnaviv_gpu_bind(struct device *dev, struct device *master,
 	INIT_WORK(&gpu->sync_point_work, sync_point_worker);
 	init_waitqueue_head(&gpu->fence_event);
 
+	etnaviv_hw_identify(gpu);
+
+	if (gpu->identity.model == 0) {
+		dev_err(gpu->dev, "Unknown GPU model\n");
+		ret = -ENXIO;
+		goto out_sched;
+	}
 	priv->gpu[priv->num_gpus++] = gpu;
 
 	return 0;
