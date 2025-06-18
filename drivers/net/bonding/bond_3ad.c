@@ -1375,10 +1375,12 @@ static void ad_churn_machine(struct port *port)
  */
 static void ad_tx_machine(struct port *port)
 {
-	/* check if tx timer expired, to verify that we do not send more than
-	 * 3 packets per second
-	 */
-	if (port->sm_tx_timer_counter && !(--port->sm_tx_timer_counter)) {
+	unsigned long now = jiffies;
+
+	/* Check if enough time has passed since the last LACPDU sent */
+	if (time_after_eq(now, port->sm_tx_next_jiffies)) {
+		port->sm_tx_next_jiffies += ad_ticks_per_sec / AD_MAX_TX_IN_SECOND;
+
 		/* check if there is something to send */
 		if (port->ntt && (port->sm_vars & AD_PORT_LACP_ENABLED)) {
 			__update_lacpdu_from_port(port);
@@ -1395,10 +1397,6 @@ static void ad_tx_machine(struct port *port)
 				port->ntt = false;
 			}
 		}
-		/* restart tx timer(to verify that we will not exceed
-		 * AD_MAX_TX_IN_SECOND
-		 */
-		port->sm_tx_timer_counter = ad_ticks_per_sec/AD_MAX_TX_IN_SECOND;
 	}
 }
 
@@ -2199,9 +2197,9 @@ void bond_3ad_bind_slave(struct slave *slave)
 		/* actor system is the bond's system */
 		__ad_actor_update_port(port);
 		/* tx timer(to verify that no more than MAX_TX_IN_SECOND
-		 * lacpdu's are sent in one second)
+		 * lacpdu's are sent in the configured interval (1 or 30 secs))
 		 */
-		port->sm_tx_timer_counter = ad_ticks_per_sec/AD_MAX_TX_IN_SECOND;
+		port->sm_tx_next_jiffies = jiffies + ad_ticks_per_sec / AD_MAX_TX_IN_SECOND;
 
 		__disable_port(port);
 

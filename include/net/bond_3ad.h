@@ -231,10 +231,7 @@ typedef struct port {
 	mux_states_t sm_mux_state;	/* state machine mux state */
 	u16 sm_mux_timer_counter;	/* state machine mux timer counter */
 	tx_states_t sm_tx_state;	/* state machine tx state */
-	u16 sm_tx_timer_counter;	/* state machine tx timer counter
-					 * (always on - enter to transmit
-					 *  state 3 time per second)
-					 */
+	unsigned long sm_tx_next_jiffies;/* expected jiffies for next LACPDU sent */
 	u16 sm_churn_actor_timer_counter;
 	u16 sm_churn_partner_timer_counter;
 	u32 churn_actor_count;
