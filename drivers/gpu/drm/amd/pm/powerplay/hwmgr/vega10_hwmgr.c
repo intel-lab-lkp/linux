@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
-
+#include <linux/string_choices.h>
 #include "hwmgr.h"
 #include "amd_powerplay.h"
 #include "hardwaremanager.h"
@@ -3012,7 +3012,7 @@ static int vega10_enable_disable_PCC_limit_feature(struct pp_hwmgr *hwmgr, bool 
 
 	if (data->smu_features[GNLD_PCC_LIMIT].supported) {
 		if (enable == data->smu_features[GNLD_PCC_LIMIT].enabled)
-			pr_info("GNLD_PCC_LIMIT has been %s \n", enable ? "enabled" : "disabled");
+			pr_info("GNLD_PCC_LIMIT has been %s\n", str_enabled_disabled(enable));
 		PP_ASSERT_WITH_CODE(!vega10_enable_smc_features(hwmgr,
 				enable, data->smu_features[GNLD_PCC_LIMIT].smu_feature_bitmap),
 				"Attempt to Enable PCC Limit feature Failed!",
