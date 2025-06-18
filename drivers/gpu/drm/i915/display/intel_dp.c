@@ -5681,7 +5681,8 @@ intel_dp_update_dfp(struct intel_dp *intel_dp,
 		    intel_dp->dfp.max_tmds_clock,
 		    intel_dp->dfp.pcon_max_frl_bw);
 
-	intel_dp_get_pcon_dsc_cap(intel_dp);
+	if (drm_dp_is_branch(intel_dp->dpcd))
+		intel_dp_get_pcon_dsc_cap(intel_dp);
 }
 
 static bool
