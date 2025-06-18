@@ -1215,7 +1215,7 @@ static int mlxbf_pmc_get_event_num(const char *blk, const char *evt)
 		return -EINVAL;
 
 	for (i = 0; i < size; ++i) {
-		if (!strcmp(evt, events[i].evt_name))
+		if (!strncmp(evt, events[i].evt_name, strlen(events[i].evt_name)))
 			return events[i].evt_num;
 	}
 
