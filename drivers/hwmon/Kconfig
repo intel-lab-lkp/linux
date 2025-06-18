@@ -505,7 +505,7 @@ config SENSORS_CHIPCAP2
 
 config SENSORS_CORSAIR_CPRO
 	tristate "Corsair Commander Pro controller"
-	depends on HID
+	depends on HIDRAW
 	help
 	  If you say yes here you get support for the Corsair Commander Pro
 	  controller.
