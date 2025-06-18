@@ -1665,7 +1665,8 @@ noinstr void do_machine_check(struct pt_regs *regs)
 		 * be added to free list when the guest is terminated.
 		 */
 		if (mce_usable_address(m)) {
-			struct page *p = pfn_to_online_page(m->addr >> PAGE_SHIFT);
+			unsigned long pfn = (m->addr & MCI_ADDR_PHYSADDR) >> PAGE_SHIFT;
+			struct page *p = pfn_to_online_page(pfn);
 
 			if (p)
 				SetPageHWPoison(p);
