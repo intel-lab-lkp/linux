@@ -787,6 +787,7 @@ int cn10k_ipsec_init(struct net_device *netdev)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
 	u32 sa_size;
+	int err;
 
 	if (!is_dev_support_ipsec_offload(pf->pdev))
 		return 0;
@@ -796,6 +797,22 @@ int cn10k_ipsec_init(struct net_device *netdev)
 			 (sizeof(struct cn10k_tx_sa_s) / OTX2_ALIGN + 1) *
 			 OTX2_ALIGN : sizeof(struct cn10k_tx_sa_s);
 	pf->ipsec.sa_size = sa_size;
+
+	/* Set sa_tbl_entry_sz to 2048 since we are programming NIX RX
+	 * to calculate SA index as SPI * 2048. The first 1024 bytes
+	 * are used for SA context and  the next half for bookkeeping data.
+	 */
+	pf->ipsec.sa_tbl_entry_sz = 2048;
+	err = qmem_alloc(pf->dev, &pf->ipsec.inb_sa, CN10K_IPSEC_INB_MAX_SA,
+			 pf->ipsec.sa_tbl_entry_sz);
+	if (err)
+		return err;
+
+	memset(pf->ipsec.inb_sa->base, 0,
+	       pf->ipsec.sa_tbl_entry_sz * CN10K_IPSEC_INB_MAX_SA);
+
+	/* List to track all ingress SAs */
+	INIT_LIST_HEAD(&pf->ipsec.inb_sw_ctx_list);
 
 	INIT_WORK(&pf->ipsec.sa_work, cn10k_ipsec_sa_wq_handler);
 	pf->ipsec.sa_workq = alloc_workqueue("cn10k_ipsec_sa_workq", 0, 0);
@@ -828,6 +845,9 @@ void cn10k_ipsec_clean(struct otx2_nic *pf)
 	}
 
 	cn10k_outb_cpt_clean(pf);
+
+	/* Free Ingress SA table */
+	qmem_free(pf->dev, pf->ipsec.inb_sa);
 }
 EXPORT_SYMBOL(cn10k_ipsec_clean);
 
