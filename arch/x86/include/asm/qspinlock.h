@@ -87,7 +87,7 @@ DECLARE_STATIC_KEY_FALSE(virt_spin_lock_key);
 #define virt_spin_lock virt_spin_lock
 static inline bool virt_spin_lock(struct qspinlock *lock)
 {
-	int val;
+	int val, locked;
 
 	if (!static_branch_likely(&virt_spin_lock_key))
 		return false;
@@ -98,11 +98,33 @@ static inline bool virt_spin_lock(struct qspinlock *lock)
 	 * horrible lock 'holder' preemption issues.
 	 */
 
+#define MAX_BACKOFF 64
+	int backoff = 1;
+
  __retry:
 	val = atomic_read(&lock->val);
+	locked = val;
 
-	if (val || !atomic_try_cmpxchg(&lock->val, &val, _Q_LOCKED_VAL)) {
-		cpu_relax();
+	if (locked || !atomic_try_cmpxchg(&lock->val, &val, _Q_LOCKED_VAL)) {
+		int spin_count = backoff;
+
+		while (spin_count--)
+			cpu_relax();
+
+		/*
+		 * Here not locked means lock tried, but fails.
+		 *
+		 * When multiple threads waiting for lock at the same time,
+		 * once lock owner releases the lock, waiters will see lock available
+		 * and all try to lock, which may cause an expensive CAS storm.
+		 *
+		 * Binary exponential backoff is introduced. As try-lock attempt
+		 * increases, there is more likely that a larger number threads
+		 * compete for the same lock, so increase wait time in exponential.
+		 */
+		if (!locked)
+			backoff = (backoff < MAX_BACKOFF) ? backoff << 1 : backoff;
+
 		goto __retry;
 	}
 
