@@ -706,8 +706,13 @@ struct irq_domain *pci_msi_create_irq_domain(struct fwnode_handle *fwnode,
 					     struct irq_domain *parent);
 u32 pci_msi_domain_get_msi_rid(struct irq_domain *domain, struct pci_dev *pdev);
 struct irq_domain *pci_msi_get_device_domain(struct pci_dev *pdev);
+struct device_node *pci_msi_get_device_msi_ctlr_node(struct pci_dev *pdev);
 #else /* CONFIG_PCI_MSI */
 static inline struct irq_domain *pci_msi_get_device_domain(struct pci_dev *pdev)
+{
+	return NULL;
+}
+static inline struct device_node *pci_msi_get_device_msi_ctlr_node(struct pci_dev *pdev)
 {
 	return NULL;
 }

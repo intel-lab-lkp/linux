@@ -53,6 +53,8 @@ extern struct irq_domain *of_msi_get_domain(struct device *dev,
 extern struct irq_domain *of_msi_map_get_device_domain(struct device *dev,
 							u32 id,
 							u32 bus_token);
+extern struct device_node *of_msi_map_get_ctlr_node(struct device *dev,
+						    u32 id, u32 bus_token);
 extern void of_msi_configure(struct device *dev, const struct device_node *np);
 u32 of_msi_map_id(struct device *dev, struct device_node *msi_np, u32 id_in);
 #else
@@ -93,6 +95,11 @@ static inline struct irq_domain *of_msi_get_domain(struct device *dev,
 	return NULL;
 }
 static inline struct irq_domain *of_msi_map_get_device_domain(struct device *dev,
+						u32 id, u32 bus_token)
+{
+	return NULL;
+}
+static inline struct device_node *of_msi_map_get_ctlr_node(struct device *dev,
 						u32 id, u32 bus_token)
 {
 	return NULL;

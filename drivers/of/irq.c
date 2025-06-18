@@ -724,6 +724,27 @@ struct irq_domain *of_msi_map_get_device_domain(struct device *dev, u32 id,
 }
 
 /**
+ * of_msi_map_get_ctlr_node - Use msi-map to find the relevant MSI controller node
+ * @dev: device for which the mapping is to be done.
+ * @id: Device ID.
+ * @bus_token: Bus token
+ *
+ * Walk up the device hierarchy looking for devices with a "msi-map"
+ * property.
+ *
+ * Returns: the MSI controller node with a reference held (or NULL on failure)
+ */
+struct device_node *of_msi_map_get_ctlr_node(struct device *dev, u32 id,
+					     u32 bus_token)
+{
+	struct device_node *np = NULL;
+
+	__of_msi_map_id(dev, &np, id);
+
+	return np;
+}
+
+/**
  * of_msi_get_domain - Use msi-parent to find the relevant MSI domain
  * @dev: device for which the domain is requested
  * @np: device node for @dev

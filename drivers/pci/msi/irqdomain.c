@@ -448,3 +448,22 @@ struct irq_domain *pci_msi_get_device_domain(struct pci_dev *pdev)
 					     DOMAIN_BUS_PCI_MSI);
 	return dom;
 }
+
+/**
+ * pci_msi_get_device_msi_ctlr_node - Get the MSI controller node for a given PCI device
+ * @pdev:	The PCI device
+ *
+ * Use the firmware data to find the MSI controller node for pci dev
+ *
+ * Returns: The corresponding MSI controller device node with a reference held or
+ *	    NULL if none has been found.
+ */
+struct device_node *pci_msi_get_device_msi_ctlr_node(struct pci_dev *pdev)
+{
+	u32 rid = pci_dev_id(pdev);
+
+	pci_for_each_dma_alias(pdev, get_msi_id_cb, &rid);
+
+	return of_msi_map_get_ctlr_node(&pdev->dev, rid, DOMAIN_BUS_PCI_MSI);
+}
+

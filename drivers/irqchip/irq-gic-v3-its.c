@@ -41,6 +41,7 @@
 #include <asm/exception.h>
 
 #include "irq-gic-common.h"
+#include "irq-gic-its-msi-parent.h"
 #include <linux/irqchip/irq-msi-lib.h>
 
 #define ITS_FLAGS_CMDQ_NEEDS_FLUSHING		(1ULL << 0)
@@ -5142,7 +5143,7 @@ static int its_init_domain(struct its_node *its)
 	info->data = its;
 	dom_info.host_data = info;
 
-	if (!msi_create_parent_irq_domain(&dom_info, &gic_v3_its_msi_parent_ops)) {
+	if (!msi_create_parent_irq_domain(&dom_info, &gic_its_msi_parent_ops)) {
 		kfree(info);
 		return -ENOMEM;
 	}
