@@ -270,38 +270,51 @@ static int nfsd_init_socks(struct net *net, const struct cred *cred)
 	return 0;
 }
 
-static int nfsd_users = 0;
+static struct kref nfsd_users = KREF_INIT(0);
+static DEFINE_MUTEX(nfsd_startup_mutex);
 
 static int nfsd_startup_generic(void)
 {
-	int ret;
+	int ret = 0;
 
-	if (nfsd_users++)
+	if (kref_get_unless_zero(&nfsd_users))
 		return 0;
+	mutex_lock(&nfsd_startup_mutex);
+	if (kref_get_unless_zero(&nfsd_users))
+		goto out_unlock;
 
 	ret = nfsd_file_cache_init();
 	if (ret)
-		goto dec_users;
+		goto out_unlock;
 
 	ret = nfs4_state_start();
 	if (ret)
 		goto out_file_cache;
-	return 0;
+	kref_init(&nfsd_users);
+out_unlock:
+	mutex_unlock(&nfsd_startup_mutex);
+	return ret;
 
 out_file_cache:
 	nfsd_file_cache_shutdown();
-dec_users:
-	nfsd_users--;
-	return ret;
+	goto out_unlock;
 }
 
-static void nfsd_shutdown_generic(void)
+static void nfsd_shutdown_cb(struct kref *kref)
 {
-	if (--nfsd_users)
-		return;
-
 	nfs4_state_shutdown();
 	nfsd_file_cache_shutdown();
+	mutex_unlock(&nfsd_startup_mutex);
+}
+
+bool nfsd_startup_get(void)
+{
+	return kref_get_unless_zero(&nfsd_users);
+}
+
+void nfsd_startup_put(void)
+{
+	kref_put_mutex(&nfsd_users, nfsd_shutdown_cb, &nfsd_startup_mutex);
 }
 
 static bool nfsd_needs_lockd(struct nfsd_net *nn)
@@ -416,7 +429,7 @@ out_lockd:
 		nn->lockd_up = false;
 	}
 out_socks:
-	nfsd_shutdown_generic();
+	nfsd_startup_put();
 	return ret;
 }
 
@@ -443,7 +456,7 @@ static void nfsd_shutdown_net(struct net *net)
 	percpu_ref_exit(&nn->nfsd_net_ref);
 
 	nn->nfsd_net_up = false;
-	nfsd_shutdown_generic();
+	nfsd_startup_put();
 }
 
 static DEFINE_SPINLOCK(nfsd_notifier_lock);
