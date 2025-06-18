@@ -10,6 +10,7 @@
 #include <linux/libfdt.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 #include <linux/pci_hotplug.h>
 #include <linux/of_fdt.h>
 
@@ -474,7 +475,7 @@ static int pnv_php_enable(struct pnv_php_slot *php_slot, bool rescan)
 	struct hotplug_slot *slot = &php_slot->slot;
 	uint8_t presence = OPAL_PCI_SLOT_EMPTY;
 	uint8_t power_status = OPAL_PCI_SLOT_POWER_ON;
-	int ret;
+	int ret, i;
 
 	/* Check if the slot has been configured */
 	if (php_slot->state != PNV_PHP_STATE_REGISTERED)
@@ -532,6 +533,27 @@ static int pnv_php_enable(struct pnv_php_slot *php_slot, bool rescan)
 
 	/* Power is off, turn it on and then scan the slot */
 	ret = pnv_php_set_slot_power_state(slot, OPAL_PCI_SLOT_POWER_ON);
+	if (ret) {
+		SLOT_WARN(php_slot, "PCI slot activation failed with error code %d, possible frozen PHB", ret);
+		SLOT_WARN(php_slot, "Attempting complete PHB reset before retrying slot activation\n");
+		for (i = 0; i < 3; i++) {
+			/* Slot activation failed, PHB may be fenced from a prior device failure
+			 * Use the OPAL fundamental reset call to both try a device reset and clear
+			 * any potentially active PHB fence / freeze
+			 */
+			SLOT_WARN(php_slot, "Try %d...\n", i + 1);
+			pci_set_pcie_reset_state(php_slot->pdev, pcie_warm_reset);
+			msleep(250);
+			pci_set_pcie_reset_state(php_slot->pdev, pcie_deassert_reset);
+
+			ret = pnv_php_set_slot_power_state(slot, OPAL_PCI_SLOT_POWER_ON);
+			if (!ret)
+				break;
+		}
+
+		if (i >= 3)
+			SLOT_WARN(php_slot, "Failed to bring slot online, aborting!\n");
+	}
 	if (ret)
 		return ret;
 
@@ -841,11 +863,40 @@ static void pnv_php_event_handler(struct work_struct *work)
 	struct pnv_php_event *event =
 		container_of(work, struct pnv_php_event, work);
 	struct pnv_php_slot *php_slot = event->php_slot;
+	struct pci_dev *pdev = php_slot->pdev;
+	struct eeh_dev *edev;
+	struct eeh_pe *pe;
+	int i, rc;
 
 	if (event->added)
 		pnv_php_enable_slot(&php_slot->slot);
 	else
 		pnv_php_disable_slot(&php_slot->slot);
+
+	if (!event->added) {
+		/* When a device is surprise removed from a downstream bridge slot, the upstream bridge port
+		 * can still end up frozen due to related EEH events, which will in turn block the MSI interrupts
+		 * for slot hotplug detection.  Detect and thaw any frozen upstream PE after slot deactivation...
+		 */
+		edev = pci_dev_to_eeh_dev(pdev);
+		pe = edev ? edev->pe : NULL;
+		rc = eeh_pe_get_state(pe);
+		if ((rc == -ENODEV) || (rc == -ENOENT)) {
+			SLOT_WARN(php_slot, "Upstream bridge PE state unknown, hotplug detect may fail\n");
+		}
+		else {
+			if (pe->state & EEH_PE_ISOLATED) {
+				SLOT_WARN(php_slot, "Upstream bridge PE %02x frozen, thawing...\n", pe->addr);
+				for (i = 0; i < 3; i++)
+					if (!eeh_unfreeze_pe(pe))
+						break;
+				if (i >= 3)
+					SLOT_WARN(php_slot, "Unable to thaw PE %02x, hotplug detect will fail!\n", pe->addr);
+				else
+					SLOT_WARN(php_slot, "PE %02x thawed successfully\n", pe->addr);
+			}
+		}
+	}
 
 	kfree(event);
 }
