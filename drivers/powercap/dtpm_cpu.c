@@ -97,6 +97,11 @@ static u64 get_pd_power_uw(struct dtpm *dtpm)
 
 	pd = em_cpu_get(dtpm_cpu->cpu);
 
+	if (!pd) {
+		pr_warn("DTPM: No energy model available for CPU%d\n", dtpm_cpu->cpu);
+		return 0;
+	}
+
 	pd_mask = em_span_cpus(pd);
 
 	freq = cpufreq_quick_get(dtpm_cpu->cpu);
@@ -207,6 +212,7 @@ static int __dtpm_cpu_setup(int cpu, struct dtpm *parent)
 	pd = em_cpu_get(cpu);
 	if (!pd || em_is_artificial(pd)) {
 		ret = -EINVAL;
+
 		goto release_policy;
 	}
 
