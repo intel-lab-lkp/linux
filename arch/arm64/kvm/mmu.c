@@ -1660,6 +1660,10 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	is_vma_cacheable = kvm_vma_is_cacheable(vma);
 
+	/* Reject COW VM_PFNMAP */
+	if ((vma->vm_flags & VM_PFNMAP) && is_cow_mapping(vma->vm_flags))
+		return -EINVAL;
+
 	/* Don't use the VMA after the unlock -- it may have vanished */
 	vma = NULL;
 
@@ -1684,9 +1688,6 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		return -EFAULT;
 
 	if (!kvm_can_use_cmo_pfn(pfn)) {
-		if (is_vma_cacheable)
-			return -EINVAL;
-
 		/*
 		 * If the page was identified as device early by looking at
 		 * the VMA flags, vma_pagesize is already representing the
@@ -1696,8 +1697,13 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		 *
 		 * In both cases, we don't let transparent_hugepage_adjust()
 		 * change things at the last minute.
+		 *
+		 * Do not set device as the device memory is cacheable. Note
+		 * that such mapping is safe as the KVM S2 will have the same
+		 * Normal memory type as the VMA has in the S1.
 		 */
-		disable_cmo = true;
+		if (!is_vma_cacheable)
+			disable_cmo = true;
 	} else if (logging_active && !write_fault) {
 		/*
 		 * Only actually map the page as writable if this was a write
@@ -1782,6 +1788,19 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	} else if (cpus_have_final_cap(ARM64_HAS_CACHE_DIC) &&
 		   (!nested || kvm_s2_trans_executable(nested))) {
 		prot |= KVM_PGTABLE_PROT_X;
+	}
+
+	/*
+	 *  When FWB is unsupported KVM needs to do cache flushes
+	 *  (via dcache_clean_inval_poc()) of the underlying memory. This is
+	 *  only possible if the memory is already mapped into the kernel map.
+	 *
+	 *  Outright reject as the cacheable device memory is not present in
+	 *  the kernel map and not suitable for cache management.
+	 */
+	if (is_vma_cacheable && !kvm_arch_supports_cacheable_pfnmap()) {
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	/*
@@ -2271,8 +2290,12 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 				break;
 			}
 
-			/* Cacheable PFNMAP is not allowed */
-			if (kvm_vma_is_cacheable(vma)) {
+			/*
+			 * Cacheable PFNMAP is allowed only if the hardware
+			 * supports it.
+			 */
+			if (kvm_vma_is_cacheable(vma) &&
+			    !kvm_arch_supports_cacheable_pfnmap()) {
 				ret = -EINVAL;
 				break;
 			}
