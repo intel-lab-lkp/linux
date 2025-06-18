@@ -967,25 +967,8 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 		err = dup_anon_vma(next, middle, &anon_dup);
 	}
 
-	if (err)
+	if (err || commit_merge(vmg))
 		goto abort;
-
-	err = commit_merge(vmg);
-	if (err) {
-		VM_WARN_ON(err != -ENOMEM);
-
-		if (anon_dup)
-			unlink_anon_vmas(anon_dup);
-
-		/*
-		 * We've cleaned up any cloned anon_vma's, no VMAs have been
-		 * modified, no harm no foul if the user requests that we not
-		 * report this and just give up, leaving the VMAs unmerged.
-		 */
-		if (!vmg->give_up_on_oom)
-			vmg->state = VMA_MERGE_ERROR_NOMEM;
-		return NULL;
-	}
 
 	khugepaged_enter_vma(vmg->target, vmg->flags);
 	vmg->state = VMA_MERGE_SUCCESS;
@@ -994,6 +977,9 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 abort:
 	vma_iter_set(vmg->vmi, start);
 	vma_iter_load(vmg->vmi);
+
+	if (anon_dup)
+		unlink_anon_vmas(anon_dup);
 
 	/*
 	 * This means we have failed to clone anon_vma's correctly, but no
@@ -2583,7 +2569,7 @@ static int call_mmap_prepare(struct mmap_state *map)
 	};
 
 	/* Invoke the hook. */
-	err = __call_mmap_prepare(map->file, &desc);
+	err = vfs_mmap_prepare(map->file, &desc);
 	if (err)
 		return err;
 
@@ -3126,7 +3112,6 @@ int __vm_munmap(unsigned long start, size_t len, bool unlock)
 	userfaultfd_unmap_complete(mm, &uf);
 	return ret;
 }
-
 
 /* Insert vm structure into process list sorted by address
  * and into the inode's i_mmap tree.  If vm_file is non-NULL
