@@ -33,8 +33,77 @@ properties:
       - enum: [ priref, secref ]
       - const: secref
 
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
   '#clock-cells':
     const: 1
+
+patternProperties:
+  '^clk@[0-1]$':
+    type: object
+    description:
+      optional child node that can be used to specify input pin parameters. The reg
+      properties match the CDCE6214_CLK_* defines.
+
+    additionalProperties: false
+
+    properties:
+      reg:
+        description:
+          clock input identifier.
+        minimum: 0
+        maximum: 1
+
+      ti,clkin-fmt:
+        enum: [ lvcmos, xtal, differential ]
+        description:
+          Clock input format.
+
+      ti,xo-cload-femtofarads:
+        description:
+          Selects load cap for XO in femto Farad (fF). Up to 9000fF
+        minimum: 3000
+        maximum: 9000
+
+      ti,xo-bias-current-microamp:
+        description:
+          Bias current setting of the XO.
+        minimum: 0
+        maximum: 1758
+
+  '^clk@[2-9]$':
+    type: object
+    description:
+      optional child node that can be used to specify output pin parameters.  The reg
+      properties match the CDCE6214_CLK_* defines.
+
+    additionalProperties: false
+
+    properties:
+      reg:
+        description:
+          clock output identifier.
+        minimum: 2
+        maximum: 9
+
+      ti,clkout-fmt:
+        enum: [ cmos, lvds, lp-hcsl ]
+        description:
+          Clock output format.
+
+      ti,cmosn-mode:
+        enum: [ disabled, high, low ]
+        description:
+          CMOSN output mode.
+
+      ti,cmosp-mode:
+        enum: [ disabled, high, low ]
+        description:
+          CMOSP output mode.
 
 required:
   - compatible
@@ -53,8 +122,34 @@ examples:
         clock-generator@67 {
             compatible = "ti,cdce6214";
             reg = <0x67>;
+            #address-cells = <1>;
+            #size-cells = <0>;
             #clock-cells = <1>;
             clocks = <&clock_ref25m>;
             clock-names = "secref";
+
+            clk@1 {
+                reg = <1>; // CDCE6214_CLK_SECREF
+                ti,clkin-fmt = "xtal";
+                ti,xo-cload-femtofarads = <4400>;
+                ti,xo-bias-current-microamp = <295>;
+            };
+
+            clk@3 {
+                reg = <3>; // CDCE6214_CLK_OUT1
+                ti,clkout-fmt = "cmos";
+                ti,cmosp-mode = "high";
+                ti,cmosn-mode = "low";
+            };
+
+            clk@4 {
+                reg = <4>; // CDCE6214_CLK_OUT2
+                ti,clkout-fmt = "lvds";
+            };
+
+            clk@6 {
+                reg = <6>; // CDCE6214_CLK_OUT4
+                ti,clkout-fmt = "lp-hcsl";
+            };
         };
     };
