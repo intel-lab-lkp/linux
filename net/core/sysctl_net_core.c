@@ -668,6 +668,14 @@ static struct ctl_table netns_core_table[] = {
 		.proc_handler	= proc_dointvec_minmax
 	},
 	{
+		.procname	= "xsk_max_tx_budget",
+		.data		= &init_net.core.sysctl_xsk_max_tx_budget,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.extra1		= SYSCTL_ONE,
+		.proc_handler	= proc_dointvec_minmax
+	},
+	{
 		.procname	= "txrehash",
 		.data		= &init_net.core.sysctl_txrehash,
 		.maxlen		= sizeof(u8),

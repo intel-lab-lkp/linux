@@ -14,6 +14,7 @@ struct netns_core {
 
 	int	sysctl_somaxconn;
 	int	sysctl_optmem_max;
+	int	sysctl_xsk_max_tx_budget;
 	u8	sysctl_txrehash;
 	u8	sysctl_tstamp_allow_data;
 
