@@ -533,8 +533,10 @@ EXPORT_SYMBOL_GPL(vsock_assign_transport);
 
 bool vsock_find_cid(unsigned int cid)
 {
-	if (transport_g2h && cid == transport_g2h->get_local_cid())
-		return true;
+	scoped_guard(mutex, &vsock_register_mutex) {
+		if (transport_g2h && cid == transport_g2h->get_local_cid())
+			return true;
+	}
 
 	if (transport_h2g && cid == VMADDR_CID_HOST)
 		return true;
