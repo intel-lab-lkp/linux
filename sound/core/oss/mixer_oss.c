@@ -1014,11 +1014,11 @@ static int snd_mixer_oss_build_input(struct snd_mixer_oss *mixer,
 			
 		if (kctl->info(kctl, uinfo))
 			return 0;
-		strcpy(str, ptr->name);
+		strscpy(str, ptr->name);
 		if (!strcmp(str, "Master"))
-			strcpy(str, "Mix");
+			strscpy(str, "Mix");
 		if (!strcmp(str, "Master Mono"))
-			strcpy(str, "Mix Mono");
+			strscpy(str, "Mix Mono");
 		slot.capture_item = 0;
 		if (!strcmp(uinfo->value.enumerated.name, str)) {
 			slot.present |= SNDRV_MIXER_OSS_PRESENT_CAPTURE;
