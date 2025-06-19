@@ -220,6 +220,28 @@ config STATIC_USERMODEHELPER_PATH
 	  If you wish for all usermode helper programs to be disabled,
 	  specify an empty string here (i.e. "").
 
+config LSM_CONFIG_SELF_POLICY_MAX_BUFFER_SIZE
+	int "Maximum buffer size for lsm_manage_policy"
+	range 16384 1073741824
+	depends on SECURITY
+	default 4194304
+	help
+	  The maximum size of the buffer argument of lsm_config_self_policy.
+
+	  The default value of 4194304 (4MiB) is reasonable and should be large
+	  enough to fit policies in for most cases.
+
+config LSM_CONFIG_SYSTEM_POLICY_MAX_BUFFER_SIZE
+	int "Maximum buffer size for lsm_manage_policy"
+	range 16384 1073741824
+	depends on SECURITY
+	default 4194304
+	help
+	  The maximum size of the buffer argument of lsm_config_system_policy.
+
+	  The default value of 4194304 (4MiB) is reasonable and should be large
+	  enough to fit policies in for most cases
+
 source "security/selinux/Kconfig"
 source "security/smack/Kconfig"
 source "security/tomoyo/Kconfig"
