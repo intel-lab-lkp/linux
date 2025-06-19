@@ -104,6 +104,11 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	if (!presence)
 		pci_walk_bus(parent, pci_dev_set_disconnected, NULL);
 
+	/*
+	 * Release reset_lock before driver unbinding
+	 * to avoid AB-BA deadlock with device_lock.
+	 */
+	up_read(&ctrl->reset_lock);
 	pci_lock_rescan_remove();
 
 	/*
@@ -116,11 +121,6 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 					 bus_list) {
 		pci_dev_get(dev);
 
-		/*
-		 * Release reset_lock during driver unbinding
-		 * to avoid AB-BA deadlock with device_lock.
-		 */
-		up_read(&ctrl->reset_lock);
 		pci_stop_and_remove_bus_device(dev);
 		down_read_nested(&ctrl->reset_lock, ctrl->depth);
 
@@ -134,8 +134,14 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 			command |= PCI_COMMAND_INTX_DISABLE;
 			pci_write_config_word(dev, PCI_COMMAND, command);
 		}
+		/*
+		 * Release reset_lock before driver unbinding
+		 * to avoid AB-BA deadlock with device_lock.
+		 */
+		up_read(&ctrl->reset_lock);
 		pci_dev_put(dev);
 	}
 
+	down_read_nested(&ctrl->reset_lock, ctrl->depth);
 	pci_unlock_rescan_remove();
 }
