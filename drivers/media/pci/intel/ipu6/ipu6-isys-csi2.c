@@ -348,7 +348,7 @@ static int ipu6_isys_csi2_enable_streams(struct v4l2_subdev *sd,
 	struct ipu6_isys_csi2_timing timing = { };
 	struct v4l2_subdev *remote_sd;
 	struct media_pad *remote_pad;
-	u64 sink_streams;
+	u64 sink_streams, already_enabled;
 	int ret;
 
 	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
@@ -358,13 +358,17 @@ static int ipu6_isys_csi2_enable_streams(struct v4l2_subdev *sd,
 		v4l2_subdev_state_xlate_streams(state, pad, CSI2_PAD_SINK,
 						&streams_mask);
 
-	ret = ipu6_isys_csi2_calc_timing(csi2, &timing, CSI2_ACCINV);
-	if (ret)
-		return ret;
+	already_enabled = v4l2_subdev_state_streams_enabled(sd, state,
+							    CSI2_PAD_SINK);
+	if (!already_enabled) {
+		ret = ipu6_isys_csi2_calc_timing(csi2, &timing, CSI2_ACCINV);
+		if (ret)
+			return ret;
 
-	ret = ipu6_isys_csi2_set_stream(sd, &timing, csi2->nlanes, true);
-	if (ret)
-		return ret;
+		ret = ipu6_isys_csi2_set_stream(sd, &timing, csi2->nlanes, true);
+		if (ret)
+			return ret;
+	}
 
 	ret = v4l2_subdev_enable_streams(remote_sd, remote_pad->index,
 					 sink_streams);
@@ -382,7 +386,7 @@ static int ipu6_isys_csi2_disable_streams(struct v4l2_subdev *sd,
 {
 	struct v4l2_subdev *remote_sd;
 	struct media_pad *remote_pad;
-	u64 sink_streams;
+	u64 sink_streams, still_enabled;
 
 	sink_streams =
 		v4l2_subdev_state_xlate_streams(state, pad, CSI2_PAD_SINK,
@@ -391,7 +395,10 @@ static int ipu6_isys_csi2_disable_streams(struct v4l2_subdev *sd,
 	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
 	remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
 
-	ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
+	still_enabled = v4l2_subdev_state_streams_enabled(sd, state,
+							  CSI2_PAD_SINK);
+	if (still_enabled == sink_streams)
+		ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
 
 	v4l2_subdev_disable_streams(remote_sd, remote_pad->index, sink_streams);
 
