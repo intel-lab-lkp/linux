@@ -139,7 +139,7 @@ macro_rules! declare_drm_ioctls {
                             // asserted above matches the size of this type, and all bit patterns of
                             // UAPI structs must be valid.
                             let data = unsafe {
-                                &*(raw_data as *const $crate::types::Opaque<$crate::uapi::$struct>)
+                                &mut *(raw_data as *mut $crate::uapi::$struct)
                             };
                             // SAFETY: This is just the DRM file structure
                             let file = unsafe { $crate::drm::File::as_ref(raw_file) };
