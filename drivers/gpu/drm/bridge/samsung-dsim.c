@@ -1473,22 +1473,31 @@ static void samsung_dsim_atomic_pre_enable(struct drm_bridge *bridge,
 	}
 
 	dsi->state |= DSIM_STATE_ENABLED;
-
-	/*
-	 * For Exynos-DSIM the downstream bridge, or panel are expecting
-	 * the host initialization during DSI transfer.
-	 */
-	if (!samsung_dsim_hw_is_exynos(dsi->plat_data->hw_type)) {
-		ret = samsung_dsim_init(dsi);
-		if (ret)
-			return;
-	}
 }
 
 static void samsung_dsim_atomic_enable(struct drm_bridge *bridge,
 				       struct drm_atomic_state *state)
 {
 	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
+	int ret;
+
+	/*
+	 * The DSI bridge may have already been initialized in
+	 * samsung_dsim_host_transfer(). It is possible that the refclk rate has
+	 * changed after that due to the display controller configuration, and
+	 * thus we need to reinitialize the DSI bridge to ensure the correct
+	 * clock settings.
+	 */
+
+	if (dsi->state & DSIM_STATE_INITIALIZED) {
+		dsi->state &= ~DSIM_STATE_INITIALIZED;
+		samsung_dsim_disable_clock(dsi);
+		samsung_dsim_disable_irq(dsi);
+	}
+
+	ret = samsung_dsim_init(dsi);
+	if (ret)
+		return;
 
 	samsung_dsim_set_display_mode(dsi);
 	samsung_dsim_set_display_enable(dsi, true);
