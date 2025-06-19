@@ -692,14 +692,17 @@ u64 avg_vruntime(struct cfs_rq *cfs_rq)
  */
 static void update_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	s64 vlag, limit;
+	s64 vlag, limit_hi, limit_lo, r_max;
 
 	WARN_ON_ONCE(!se->on_rq);
 
 	vlag = avg_vruntime(cfs_rq) - se->vruntime;
-	limit = calc_delta_fair(max_t(u64, 2*se->slice, TICK_NSEC), se);
+	r_max = 2 * se->slice;
 
-	se->vlag = clamp(vlag, -limit, limit);
+	limit_hi = calc_delta_fair(max_t(u64, r_max, TICK_NSEC), se);
+	limit_lo = calc_delta_fair(r_max, se);
+
+	se->vlag = clamp(vlag, -limit_lo, limit_hi);
 }
 
 /*
