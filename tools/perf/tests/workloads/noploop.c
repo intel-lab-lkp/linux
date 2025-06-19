@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
+#include <linux/prctl.h>
+#include <sys/prctl.h>
 #include <linux/compiler.h>
 #include "../tests.h"
 
@@ -16,6 +18,7 @@ static int noploop(int argc, const char **argv)
 {
 	int sec = 1;
 
+	prctl(PR_SET_NAME, "perf-noploop");
 	if (argc > 0)
 		sec = atoi(argv[0]);
 
