@@ -16,7 +16,7 @@
 #include <linux/nfc.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
-
+#include <linux/string_choices.h>
 #include <linux/unaligned.h>
 
 #include <net/nfc/hci.h>
@@ -212,7 +212,7 @@ static void pn544_hci_i2c_platform_init(struct pn544_i2c_phy *phy)
 			if (ret == count) {
 				nfc_info(&phy->i2c_dev->dev,
 					 "nfc_en polarity : active %s\n",
-					 (polarity == 0 ? "low" : "high"));
+					 str_low_high(polarity == 0));
 				goto out;
 			}
 		}
