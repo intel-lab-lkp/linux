@@ -18,6 +18,7 @@
 #include <linux/cpufreq.h>
 #include <linux/irq_work.h>
 #include <linux/kthread.h>
+#include <linux/sched.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
 #include <uapi/linux/sched/types.h>
@@ -752,6 +753,10 @@ static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
 	cpu_data = policy->driver_data;
 
 	cpufreq_cpu_put(policy);
+
+	/* Idle CPUs have unreliable counters, so skip to the end. */
+	if (idle_cpu(cpu))
+		goto out_invalid_counters;
 
 	ret = cppc_get_perf_ctrs_sample(cpu, &fb_ctrs_t0, &fb_ctrs_t1);
 	if (ret) {
