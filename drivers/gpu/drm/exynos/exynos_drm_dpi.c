@@ -137,6 +137,7 @@ static void exynos_dpi_disable(struct drm_encoder *encoder)
 	if (ctx->panel) {
 		drm_panel_disable(ctx->panel);
 		drm_panel_unprepare(ctx->panel);
+		drm_panel_put(ctx->panel);
 	}
 }
 
