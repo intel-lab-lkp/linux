@@ -1121,9 +1121,10 @@ __getblk_slow(struct block_device *bdev, sector_t block,
 	     unsigned size, gfp_t gfp)
 {
 	bool blocking = gfpflags_allow_blocking(gfp);
+	int blocklog = PAGE_SHIFT + mapping_min_folio_order(bdev->bd_mapping);
 
 	if (unlikely(size & (bdev_logical_block_size(bdev) - 1) ||
-		     (size < 512 || size > PAGE_SIZE))) {
+		     (size < 512 || size > (1U << blocklog)))) {
 		printk(KERN_ERR "getblk(): invalid block size %d requested\n",
 					size);
 		printk(KERN_ERR "logical block size: %d\n",
