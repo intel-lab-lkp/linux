@@ -330,7 +330,6 @@
 	usb20_pins: usb20 {
 		ovc {
 			pinmux =  <RZV2H_PORT_PINMUX(9, 6, 14)>; /* OVC */
-			bias-pull-up;
 		};
 
 		vbus {
@@ -341,7 +340,6 @@
 	usb21_pins: usb21 {
 		ovc {
 			pinmux = <RZV2H_PORT_PINMUX(6, 7, 14)>; /* OVC */
-			bias-pull-up;
 		};
 
 		vbus {
