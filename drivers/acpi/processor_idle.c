@@ -1392,8 +1392,10 @@ int acpi_processor_power_init(struct acpi_processor *pr)
 		}
 
 		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-		if (!dev)
-			return -ENOMEM;
+		if (!dev) {
+			retval = -ENOMEM;
+			goto unregister_driver;
+		}
 		per_cpu(acpi_cpuidle_device, pr->id) = dev;
 
 		acpi_processor_setup_cpuidle_dev(pr, dev);
@@ -1402,14 +1404,22 @@ int acpi_processor_power_init(struct acpi_processor *pr)
 		 * must already be registered before registering device
 		 */
 		retval = cpuidle_register_device(dev);
-		if (retval) {
-			if (acpi_processor_registered == 0)
-				cpuidle_unregister_driver(&acpi_idle_driver);
-			return retval;
-		}
+		if (retval)
+			goto free_cpuidle_device;
+
 		acpi_processor_registered++;
 	}
 	return 0;
+
+free_cpuidle_device:
+	per_cpu(acpi_cpuidle_device, pr->id) = NULL;
+	kfree(dev);
+
+unregister_driver:
+	if (acpi_processor_registered == 0)
+		cpuidle_unregister_driver(&acpi_idle_driver);
+
+	return retval;
 }
 
 int acpi_processor_power_exit(struct acpi_processor *pr)
