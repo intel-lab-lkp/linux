@@ -1634,7 +1634,7 @@ power_off:
 
 static int venus_suspend(struct venus_core *core)
 {
-	if (IS_V3(core) || IS_V4(core) || IS_V6(core))
+	if (IS_HFI(core, V3, V4, V6))
 		return venus_suspend_3xx(core);
 
 	return venus_suspend_1xx(core);
