@@ -363,7 +363,7 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 		goto fail_npresmsk;
 
 	masks = kcalloc(numgrps, sizeof(*masks), GFP_KERNEL);
-	if (!masks)
+	if (ZERO_OR_NULL_PTR(masks))
 		goto fail_node_to_cpumask;
 
 	build_node_to_cpumask(node_to_cpumask);
