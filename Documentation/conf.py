@@ -310,8 +310,11 @@ if  html_theme == 'alabaster':
         'sidebar_width': '15em',
         'fixed_sidebar': 'true',
         'font_size': 'inherit',
-        'font_family': 'serif',
     }
+
+    html_css_files  = [
+        'typography.css',
+    ]
 
 sys.stderr.write("Using %s theme\n" % html_theme)
 

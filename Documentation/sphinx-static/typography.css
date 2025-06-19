@@ -1,0 +1,62 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+
+:root {
+	/* Font stack inspired by https://www.mediawiki.org/wiki/Typography_refresh */
+	--font-family-sans: sans-serif;
+	--font-family-serif: "Linux Libertine", Georgia, Times, "Source Serif Pro", serif;
+	--font-family-monospace: monospace;
+}
+
+body {
+	font-family: var(--font-family-sans);
+}
+
+div.body {
+	color: #252525;
+}
+
+div.sphinxsidebar h3,
+div.sphinxsidebar h4,
+div.sphinxsidebar input {
+	font-family: var(--font-family-sans);
+}
+
+div.admonition p.admonition-title {
+	font-family: var(--font-family-sans);
+}
+
+span.menuselection {
+	font-family: var(--font-family-sans);
+	/*
+	 * Distinguish menu text from regular prose by giving it
+	 * the same background color as inline pre-formatted text.
+	 */
+	background-color: #ecf0f3;
+}
+
+div.body h1,
+div.body h2 {
+	font-family: var(--font-family-serif);
+}
+
+div.body h3,
+div.body h4,
+div.body h5,
+div.body h6 {
+	font-family: var(--font-family-sans);
+}
+
+code,
+kbd,
+pre,
+samp,
+tt,
+span.pre {
+	font-family: var(--font-family-monospace);
+	/*
+	 * Bump monospace font-size as default (100%) is constrastingly
+	 * too small (10.8px compared to 16px) in certain fonts
+	 * (e.g. DejaVu Sans Mono).
+	 */
+	font-size: 110%;
+}
