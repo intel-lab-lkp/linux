@@ -1202,8 +1202,7 @@ int mapping_wrprotect_range(struct address_space *mapping, pgoff_t pgoff,
 	if (!mapping)
 		return 0;
 
-	__rmap_walk_file(/* folio = */NULL, mapping, pgoff, nr_pages, &rwc,
-			 /* locked = */false);
+	__rmap_walk_file(NULL, mapping, pgoff, nr_pages, &rwc, false);
 
 	return state.cleaned;
 }
@@ -2806,6 +2805,7 @@ static void rmap_walk_anon(struct folio *folio,
 	struct anon_vma *anon_vma;
 	pgoff_t pgoff_start, pgoff_end;
 	struct anon_vma_chain *avc;
+	unsigned long nr_pages;
 
 	if (locked) {
 		anon_vma = folio_anon_vma(folio);
@@ -2817,13 +2817,13 @@ static void rmap_walk_anon(struct folio *folio,
 	if (!anon_vma)
 		return;
 
+	nr_pages = folio_nr_pages(folio);
 	pgoff_start = folio_pgoff(folio);
-	pgoff_end = pgoff_start + folio_nr_pages(folio) - 1;
+	pgoff_end = pgoff_start + nr_pages - 1;
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) {
 		struct vm_area_struct *vma = avc->vma;
-		unsigned long address = vma_address(vma, pgoff_start,
-				folio_nr_pages(folio));
+		unsigned long address = vma_address(vma, pgoff_start, nr_pages);
 
 		VM_BUG_ON_VMA(address == -EFAULT, vma);
 		cond_resched();
@@ -2831,7 +2831,7 @@ static void rmap_walk_anon(struct folio *folio,
 		if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
 			continue;
 
-		if (!rwc->rmap_one(folio, vma, address, rwc->arg))
+		if (rwc->rmap_one && !rwc->rmap_one(folio, vma, address, rwc->arg))
 			break;
 		if (rwc->done && rwc->done(folio))
 			break;
@@ -2894,7 +2894,7 @@ lookup:
 		if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
 			continue;
 
-		if (!rwc->rmap_one(folio, vma, address, rwc->arg))
+		if (rwc->rmap_one && !rwc->rmap_one(folio, vma, address, rwc->arg))
 			goto done;
 		if (rwc->done && rwc->done(folio))
 			goto done;

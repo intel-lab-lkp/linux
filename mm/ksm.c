@@ -3068,7 +3068,7 @@ again:
 			if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
 				continue;
 
-			if (!rwc->rmap_one(folio, vma, addr, rwc->arg)) {
+			if (rwc->rmap_one && !rwc->rmap_one(folio, vma, addr, rwc->arg)) {
 				anon_vma_unlock_read(anon_vma);
 				return;
 			}
