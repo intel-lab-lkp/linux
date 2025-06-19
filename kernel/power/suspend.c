@@ -584,6 +584,8 @@ static int enter_state(suspend_state_t state)
 	if (!mutex_trylock(&system_transition_mutex))
 		return -EBUSY;
 
+	pm_suspend_target_state = state;
+
 	if (state == PM_SUSPEND_TO_IDLE)
 		s2idle_begin();
 
@@ -616,6 +618,7 @@ static int enter_state(suspend_state_t state)
 	suspend_finish();
  Unlock:
 	filesystems_thaw();
+	pm_suspend_target_state = PM_SUSPEND_ON;
 	mutex_unlock(&system_transition_mutex);
 	return error;
 }
