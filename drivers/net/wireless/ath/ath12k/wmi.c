@@ -7524,7 +7524,9 @@ static int ath12k_wmi_tlv_fw_stats_data_parse(struct ath12k_base *ab,
 			if (sta) {
 				ahsta = ath12k_sta_to_ahsta(sta);
 				arsta = &ahsta->deflink;
+				spin_lock_bh(&ab->base_lock);
 				arsta->rssi_beacon = le32_to_cpu(src->beacon_snr);
+				spin_unlock_bh(&ab->base_lock);
 				ath12k_dbg(ab, ATH12K_DBG_WMI,
 					   "wmi stats vdev id %d snr %d\n",
 					   src->vdev_id, src->beacon_snr);

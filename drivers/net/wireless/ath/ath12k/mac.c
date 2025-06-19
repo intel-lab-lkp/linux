@@ -11056,6 +11056,7 @@ static void ath12k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 	db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
 			  ar->ab->wmi_ab.svc_map);
 
+	spin_lock_bh(&ar->ab->base_lock);
 	sinfo->rx_duration = arsta->rx_duration;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_DURATION);
 
@@ -11097,6 +11098,7 @@ static void ath12k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 	}
 
 	sinfo->signal_avg = ewma_avg_rssi_read(&arsta->avg_rssi);
+	spin_unlock_bh(&ar->ab->base_lock);
 
 	if (!db2dbm)
 		sinfo->signal_avg += ATH12K_DEFAULT_NOISE_FLOOR;
