@@ -1731,6 +1731,9 @@ int v4l2_subdev_enable_streams(struct v4l2_subdev *sd, u32 pad,
 int v4l2_subdev_disable_streams(struct v4l2_subdev *sd, u32 pad,
 				u64 streams_mask);
 
+u64 v4l2_subdev_state_streams_enabled(struct v4l2_subdev *sd,
+				      struct v4l2_subdev_state *state, u32 pad);
+
 /**
  * v4l2_subdev_s_stream_helper() - Helper to implement the subdev s_stream
  *	operation using enable_streams and disable_streams

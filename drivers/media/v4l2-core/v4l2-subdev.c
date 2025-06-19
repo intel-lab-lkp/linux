@@ -2453,6 +2453,23 @@ done:
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_disable_streams);
 
+u64 v4l2_subdev_state_streams_enabled(struct v4l2_subdev *sd,
+				      struct v4l2_subdev_state *state, u32 pad)
+{
+	u64 streams_mask = 0;
+
+	for (unsigned int i = 0; i < state->stream_configs.num_configs; i++) {
+		struct v4l2_subdev_stream_config *cfg =
+			&state->stream_configs.configs[i];
+
+		if (cfg->pad == pad && cfg->enabled)
+			streams_mask |= BIT_ULL(cfg->stream);
+	}
+
+	return streams_mask;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_state_streams_enabled);
+
 int v4l2_subdev_s_stream_helper(struct v4l2_subdev *sd, int enable)
 {
 	struct v4l2_subdev_state *state;
