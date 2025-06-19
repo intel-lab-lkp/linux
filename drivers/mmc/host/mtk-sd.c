@@ -77,6 +77,9 @@
 #define MSDC_PATCH_BIT   0xb0
 #define MSDC_PATCH_BIT1  0xb4
 #define MSDC_PATCH_BIT2  0xb8
+#define MSDC_PAD_CTRL0   0xe0
+#define MSDC_PAD_CTRL1   0xe4
+#define MSDC_PAD_CTRL2   0xe8
 #define MSDC_PAD_TUNE    0xec
 #define MSDC_PAD_TUNE0   0xf0
 #define MSDC_DAT_RDDLY0  0xf0
@@ -2038,6 +2041,11 @@ static void msdc_init_hw(struct msdc_host *host)
 	}
 
 	if (host->dev_comp->mips_mt762x) {
+		/* Set default pins drive strength */
+		writel(0x000d0044, host->base + MSDC_PAD_CTRL0);
+		writel(0x000e0044, host->base + MSDC_PAD_CTRL1);
+		writel(0x000e0044, host->base + MSDC_PAD_CTRL2);
+
 		/* Set default tuning parameters */
 		writel(0x84101010, host->base + tune_reg);
 		writel(0x10101010, host->base + MSDC_DAT_RDDLY0);
