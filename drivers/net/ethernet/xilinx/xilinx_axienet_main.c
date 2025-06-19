@@ -22,6 +22,7 @@
  *  - Add support for extended VLAN support.
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
@@ -2749,13 +2750,16 @@ static void axienet_disable_misc(void *clocks)
 	clk_bulk_disable_unprepare(XAE_NUM_MISC_CLOCKS, clocks);
 }
 
-static int axienet_mac_probe(struct axienet_local *lp)
+static int axienet_mac_probe(struct auxiliary_device *auxdev,
+			     const struct auxiliary_device_id *id)
 {
+	struct axienet_local *lp = auxdev->dev.platform_data;
 	struct net_device *ndev = lp->ndev;
 	struct device_node *np;
 	int ret;
 
-	SET_NETDEV_DEV(ndev, lp->dev);
+	auxiliary_set_drvdata(auxdev, ndev);
+	SET_NETDEV_DEV(ndev, &auxdev->dev);
 	if (lp->phy_mode == PHY_INTERFACE_MODE_SGMII ||
 	    lp->phy_mode == PHY_INTERFACE_MODE_1000BASEX) {
 		np = of_parse_phandle(lp->dev->of_node, "pcs-handle", 0);
@@ -2818,9 +2822,9 @@ cleanup_pcs:
 	return ret;
 }
 
-static void axienet_mac_remove(struct platform_device *pdev)
+static void axienet_mac_remove(struct auxiliary_device *auxdev)
 {
-	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct net_device *ndev = auxiliary_get_drvdata(auxdev);
 	struct axienet_local *lp = netdev_priv(ndev);
 
 	unregister_netdev(ndev);
@@ -2829,9 +2833,9 @@ static void axienet_mac_remove(struct platform_device *pdev)
 		put_device(&lp->pcs_phy->dev);
 }
 
-static void axienet_mac_shutdown(struct platform_device *pdev)
+static void axienet_mac_shutdown(struct auxiliary_device *auxdev)
 {
-	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct net_device *ndev = auxiliary_get_drvdata(auxdev);
 
 	rtnl_lock();
 	netif_device_detach(ndev);
@@ -2877,6 +2881,24 @@ static int axienet_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(axienet_pm_ops,
 				axienet_suspend, axienet_resume);
 
+static const struct auxiliary_device_id xilinx_axienet_mac_id_table[] = {
+	{ .name = KBUILD_MODNAME ".mac", },
+	{ },
+};
+MODULE_DEVICE_TABLE(auxiliary, xilinx_axienet_mac_id_table);
+
+static struct auxiliary_driver xilinx_axienet_mac = {
+	.name = "mac",
+	.id_table = xilinx_axienet_mac_id_table,
+	.probe = axienet_mac_probe,
+	.remove = axienet_mac_remove,
+	.shutdown = axienet_mac_shutdown,
+	.driver = {
+		 .pm = &axienet_pm_ops,
+	},
+};
+module_auxiliary_driver(xilinx_axienet_mac)
+
 /**
  * axienet_probe - Axi Ethernet probe function.
  * @pdev:	Pointer to platform device structure.
@@ -2892,12 +2914,14 @@ static DEFINE_SIMPLE_DEV_PM_OPS(axienet_pm_ops,
 static int axienet_probe(struct platform_device *pdev)
 {
 	int ret;
+	struct auxiliary_device *auxdev;
 	struct device_node *np;
 	struct axienet_local *lp;
 	struct net_device *ndev;
 	struct resource *ethres;
 	u8 mac_addr[ETH_ALEN];
 	int addr_width = 32;
+	char name[20];
 	u32 value;
 
 	ndev = devm_alloc_etherdev(&pdev->dev, sizeof(*lp));
@@ -2906,7 +2930,6 @@ static int axienet_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ndev);
 
-	SET_NETDEV_DEV(ndev, &pdev->dev);
 	ndev->features = NETIF_F_SG;
 	ndev->ethtool_ops = &axienet_ethtool_ops;
 
@@ -3174,36 +3197,27 @@ static int axienet_probe(struct platform_device *pdev)
 	lp->tx_dma_cr = axienet_calc_cr(lp, XAXIDMA_DFT_TX_THRESHOLD,
 					XAXIDMA_DFT_TX_USEC);
 
-	ret = axienet_mdio_setup(lp);
-	if (ret)
-		dev_warn(&pdev->dev,
-			 "error registering MDIO bus: %d\n", ret);
+	snprintf(name, sizeof(name), "mdio.%llx",
+		 (unsigned long long)lp->regs_start);
+	auxdev = devm_auxiliary_device_create(&pdev->dev, name, lp);
+	if (IS_ERR(auxdev))
+		return dev_err_probe(&pdev->dev, PTR_ERR(auxdev),
+				     "could not create MDIO bus\n");
 
-	ret = axienet_mac_probe(lp);
-	if (!ret)
-		return 0;
+	snprintf(name, sizeof(name), "mac.%llx",
+		 (unsigned long long)lp->regs_start);
+	auxdev = devm_auxiliary_device_create(&pdev->dev, name, lp);
+	if (IS_ERR(auxdev))
+		return dev_err_probe(&pdev->dev, PTR_ERR(auxdev),
+				     "could not create MAC\n");
 
-	if (lp->mii_bus)
-		axienet_mdio_teardown(lp);
-	return ret;
-}
-
-static void axienet_remove(struct platform_device *pdev)
-{
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct axienet_local *lp = netdev_priv(ndev);
-
-	axienet_mac_remove(pdev);
-	axienet_mdio_teardown(lp);
+	return 0;
 }
 
 static struct platform_driver axienet_driver = {
 	.probe = axienet_probe,
-	.remove = axienet_remove,
-	.shutdown = axienet_mac_shutdown,
 	.driver = {
 		 .name = "xilinx_axienet",
-		 .pm = &axienet_pm_ops,
 		 .of_match_table = axienet_of_match,
 	},
 };
