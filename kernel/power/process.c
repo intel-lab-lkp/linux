@@ -32,6 +32,7 @@ static int try_to_freeze_tasks(bool user_only)
 	struct task_struct *g, *p;
 	unsigned long end_time;
 	unsigned int todo;
+	unsigned int retry = 0;
 	bool wq_busy = false;
 	ktime_t start, end, elapsed;
 	unsigned int elapsed_msecs;
@@ -63,6 +64,8 @@ static int try_to_freeze_tasks(bool user_only)
 			todo += wq_busy;
 		}
 
+		pm_pr_dbg("freeze round: %d, task to freeze: %d\n", retry, todo);
+
 		if (!todo || time_after(jiffies, end_time))
 			break;
 
@@ -79,6 +82,7 @@ static int try_to_freeze_tasks(bool user_only)
 		usleep_range(sleep_usecs / 2, sleep_usecs);
 		if (sleep_usecs < 8 * USEC_PER_MSEC)
 			sleep_usecs *= 2;
+		retry++;
 	}
 
 	end = ktime_get_boottime();
