@@ -119,5 +119,7 @@ struct loongarch_eiointc {
 
 int kvm_loongarch_register_eiointc_device(void);
 void eiointc_set_irq(struct loongarch_eiointc *s, int irq, int level);
+int kvm_eiointc_get_status(struct kvm_vcpu *vcpu, unsigned long *value);
+int kvm_eiointc_update_status(struct kvm_vcpu *vcpu, unsigned long value, unsigned long mask);
 
 #endif /* __ASM_KVM_EIOINTC_H */

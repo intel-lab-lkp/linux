@@ -18,6 +18,7 @@ kvm-y += vcpu.o
 kvm-y += vm.o
 kvm-y += intc/ipi.o
 kvm-y += intc/eiointc.o
+kvm-y += intc/misc.o
 kvm-y += intc/pch_pic.o
 kvm-y += irqfd.o
 

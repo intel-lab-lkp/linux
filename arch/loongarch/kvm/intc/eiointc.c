@@ -4,6 +4,7 @@
  */
 
 #include <asm/kvm_eiointc.h>
+#include <asm/kvm_misc.h>
 #include <asm/kvm_vcpu.h>
 #include <linux/count_zeros.h>
 
@@ -708,6 +709,56 @@ static const struct kvm_io_device_ops kvm_eiointc_ops = {
 	.write	= kvm_eiointc_write,
 };
 
+int kvm_eiointc_get_status(struct kvm_vcpu *vcpu, unsigned long *value)
+{
+	unsigned long data, flags;
+	struct loongarch_eiointc *eiointc = vcpu->kvm->arch.eiointc;
+
+	if (!eiointc) {
+		kvm_err("%s: eiointc irqchip not valid!\n", __func__);
+		return -EINVAL;
+	}
+
+	data = 0;
+	spin_lock_irqsave(&eiointc->lock, flags);
+	if (eiointc->status & BIT(EIOINTC_ENABLE))
+		data |= IOCSR_MISC_FUNC_EXT_IOI_EN;
+
+	if (eiointc->status & BIT(EIOINTC_ENABLE_INT_ENCODE))
+		data |= IOCSR_MISC_FUNC_INT_ENCODE;
+	spin_unlock_irqrestore(&eiointc->lock, flags);
+
+	*value = data;
+	return 0;
+}
+
+int kvm_eiointc_update_status(struct kvm_vcpu *vcpu, unsigned long value, unsigned long mask)
+{
+	struct loongarch_eiointc *eiointc = vcpu->kvm->arch.eiointc;
+	unsigned long old, flags;
+
+	if (!eiointc) {
+		kvm_err("%s: eiointc irqchip not valid!\n", __func__);
+		return -EINVAL;
+	}
+
+	old = 0;
+	spin_lock_irqsave(&eiointc->lock, flags);
+	if (eiointc->status & BIT(EIOINTC_ENABLE))
+		old |= IOCSR_MISC_FUNC_EXT_IOI_EN;
+	if (eiointc->status & BIT(EIOINTC_ENABLE_INT_ENCODE))
+		old |= IOCSR_MISC_FUNC_INT_ENCODE;
+
+	value |= (old & ~mask);
+	eiointc->status &= ~(BIT(EIOINTC_ENABLE_INT_ENCODE) | BIT(EIOINTC_ENABLE));
+	if (value & IOCSR_MISC_FUNC_INT_ENCODE)
+		eiointc->status |= BIT(EIOINTC_ENABLE_INT_ENCODE);
+	if (value & IOCSR_MISC_FUNC_EXT_IOI_EN)
+		eiointc->status |= BIT(EIOINTC_ENABLE);
+	spin_unlock_irqrestore(&eiointc->lock, flags);
+	return 0;
+}
+
 static int kvm_eiointc_virt_read(struct kvm_vcpu *vcpu,
 				struct kvm_io_device *dev,
 				gpa_t addr, int len, void *val)
@@ -993,6 +1044,15 @@ static int kvm_eiointc_create(struct kvm_device *dev, u32 type)
 		kfree(s);
 		return ret;
 	}
+
+	ret = kvm_loongarch_create_misc(kvm);
+	if (ret < 0) {
+		kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &s->device);
+		kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &s->device_vext);
+		kfree(s);
+		return ret;
+	}
+
 	kvm->arch.eiointc = s;
 
 	return 0;
@@ -1010,6 +1070,7 @@ static void kvm_eiointc_destroy(struct kvm_device *dev)
 	eiointc = kvm->arch.eiointc;
 	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &eiointc->device);
 	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &eiointc->device_vext);
+	kvm_loongarch_destroy_misc(kvm);
 	kfree(eiointc);
 }
 

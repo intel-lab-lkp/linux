@@ -132,6 +132,8 @@ struct kvm_arch {
 	struct loongarch_ipi *ipi;
 	struct loongarch_eiointc *eiointc;
 	struct loongarch_pch_pic *pch_pic;
+	struct kvm_io_device misc;
+	bool   misc_created;
 };
 
 #define CSR_MAX_NUMS		0x800
