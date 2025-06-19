@@ -274,7 +274,11 @@ static int hbg_push_link_status(struct hbg_priv *priv)
 	u32 link_status[2];
 
 	/* phy link status */
-	link_status[0] = priv->mac.phydev->link;
+	if (priv->mac.phydev)
+		link_status[0] = priv->mac.phydev->link;
+	else
+		link_status[0] = 0;
+
 	/* mac link status */
 	link_status[1] = hbg_reg_read_field(priv, HBG_REG_AN_NEG_STATE_ADDR,
 					    HBG_REG_AN_NEG_STATE_NP_LINK_OK_B);

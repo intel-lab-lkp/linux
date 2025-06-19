@@ -8,6 +8,7 @@
 #include "hbg_err.h"
 #include "hbg_ethtool.h"
 #include "hbg_hw.h"
+#include "hbg_mdio.h"
 
 struct hbg_ethtool_stats {
 	char name[ETH_GSTRING_LEN];
@@ -290,7 +291,10 @@ static int hbg_ethtool_set_pauseparam(struct net_device *net_dev,
 	struct hbg_priv *priv = netdev_priv(net_dev);
 
 	priv->mac.pause_autoneg = param->autoneg;
-	phy_set_asym_pause(priv->mac.phydev, param->rx_pause, param->tx_pause);
+
+	if (priv->mac.phydev)
+		phy_set_asym_pause(priv->mac.phydev,
+				   param->rx_pause, param->tx_pause);
 
 	if (!param->autoneg)
 		hbg_hw_set_pause_enable(priv, param->tx_pause, param->rx_pause);
@@ -474,16 +478,102 @@ hbg_ethtool_get_rmon_stats(struct net_device *netdev,
 	*ranges = hbg_rmon_ranges;
 }
 
+static int
+hbg_ethtool_get_link_ksettings_no_phy(struct hbg_priv *priv,
+				      struct ethtool_link_ksettings *cmd)
+{
+	u32 supported;
+
+	supported = (SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full |
+		     SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full |
+		     SUPPORTED_1000baseT_Full | SUPPORTED_TP);
+
+	cmd->base.speed = hbg_convert_mac_speed_to_phy(priv->mac.speed);
+	cmd->base.duplex = priv->mac.duplex;
+	cmd->base.autoneg = priv->mac.autoneg;
+	cmd->base.phy_address = priv->mac.phy_addr;
+	cmd->base.port = PORT_TP;
+	ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.supported,
+						supported);
+	return 0;
+}
+
+static int hbg_ethtool_get_link_ksettings(struct net_device *netdev,
+					  struct ethtool_link_ksettings *cmd)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	if (priv->mac.phydev)
+		return phy_ethtool_get_link_ksettings(netdev, cmd);
+	else
+		return hbg_ethtool_get_link_ksettings_no_phy(priv, cmd);
+}
+
+static int
+hbg_ethtool_set_link_ksettings_no_phy(struct hbg_priv *priv,
+				      const struct ethtool_link_ksettings *cmd)
+{
+	u32 speed;
+
+	if (cmd->base.autoneg) {
+		netdev_err(priv->netdev, "cannot set autoneg without phy\n");
+		return -EINVAL;
+	}
+
+	speed = hbg_convert_phy_speed_to_mac(cmd->base.speed);
+	if (speed == HBG_PORT_MODE_SGMII_UNKNOWN ||
+	    (speed == HBG_PORT_MODE_SGMII_1000M &&
+	     cmd->base.duplex != DUPLEX_FULL))
+		return -EINVAL;
+
+	priv->mac.speed = speed;
+	priv->mac.duplex = cmd->base.duplex;
+	hbg_hw_adjust_link(priv, priv->mac.speed, priv->mac.duplex);
+	return 0;
+}
+
+static int
+hbg_ethtool_set_link_ksettings(struct net_device *netdev,
+			       const struct ethtool_link_ksettings *cmd)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	if (priv->mac.phydev)
+		return phy_ethtool_set_link_ksettings(netdev, cmd);
+	else
+		return hbg_ethtool_set_link_ksettings_no_phy(priv, cmd);
+}
+
+static u32 hbg_ethtool_get_link(struct net_device *netdev)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	if (priv->mac.phydev)
+		return ethtool_op_get_link(netdev);
+
+	return priv->mac.link_status;
+}
+
+static int hbg_ethtool_nway_reset(struct net_device *netdev)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	if (!priv->mac.phydev)
+		return -EOPNOTSUPP;
+
+	return phy_ethtool_nway_reset(netdev);
+}
+
 static const struct ethtool_ops hbg_ethtool_ops = {
-	.get_link		= ethtool_op_get_link,
-	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
-	.set_link_ksettings	= phy_ethtool_set_link_ksettings,
+	.get_link		= hbg_ethtool_get_link,
+	.get_link_ksettings	= hbg_ethtool_get_link_ksettings,
+	.set_link_ksettings	= hbg_ethtool_set_link_ksettings,
 	.get_regs_len		= hbg_ethtool_get_regs_len,
 	.get_regs		= hbg_ethtool_get_regs,
 	.get_pauseparam         = hbg_ethtool_get_pauseparam,
 	.set_pauseparam         = hbg_ethtool_set_pauseparam,
 	.reset			= hbg_ethtool_reset,
-	.nway_reset		= phy_ethtool_nway_reset,
+	.nway_reset		= hbg_ethtool_nway_reset,
 	.get_sset_count		= hbg_ethtool_get_sset_count,
 	.get_strings		= hbg_ethtool_get_strings,
 	.get_ethtool_stats	= hbg_ethtool_get_stats,

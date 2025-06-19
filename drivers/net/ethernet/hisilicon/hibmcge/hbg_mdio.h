@@ -10,5 +10,8 @@ int hbg_mdio_init(struct hbg_priv *priv);
 void hbg_phy_start(struct hbg_priv *priv);
 void hbg_phy_stop(struct hbg_priv *priv);
 void hbg_fix_np_link_fail(struct hbg_priv *priv);
+int hbg_convert_mac_speed_to_phy(u32 mac_speed);
+u32 hbg_convert_phy_speed_to_mac(int phy_speed);
+void hbg_print_link_status(struct hbg_priv *priv);
 
 #endif

@@ -19,6 +19,8 @@
 #define HBG_SUPPORT_FEATURES (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | \
 			     NETIF_F_RXCSUM)
 
+static void hbg_update_link_status(struct hbg_priv *priv);
+
 static void hbg_all_irq_enable(struct hbg_priv *priv, bool enabled)
 {
 	const struct hbg_irq_info *info;
@@ -42,7 +44,11 @@ static int hbg_net_open(struct net_device *netdev)
 	hbg_all_irq_enable(priv, true);
 	hbg_hw_mac_enable(priv, HBG_STATUS_ENABLE);
 	netif_start_queue(netdev);
-	hbg_phy_start(priv);
+
+	if (priv->mac.phydev)
+		hbg_phy_start(priv);
+	else
+		hbg_hw_adjust_link(priv, priv->mac.speed, priv->mac.duplex);
 
 	return 0;
 }
@@ -67,11 +73,15 @@ static int hbg_net_stop(struct net_device *netdev)
 {
 	struct hbg_priv *priv = netdev_priv(netdev);
 
-	hbg_phy_stop(priv);
+	if (priv->mac.phydev)
+		hbg_phy_stop(priv);
+
 	netif_stop_queue(netdev);
 	hbg_hw_mac_enable(priv, HBG_STATUS_DISABLE);
 	hbg_all_irq_enable(priv, false);
 	hbg_txrx_uninit(priv);
+
+	hbg_update_link_status(priv);
 	return hbg_hw_txrx_clear(priv);
 }
 
@@ -281,6 +291,32 @@ static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_eth_ioctl		= phy_do_ioctl_running,
 };
 
+static void hbg_update_link_status(struct hbg_priv *priv)
+{
+	u8 link = 0;
+
+	/* if have phy, use phylib to update link status */
+	if (priv->mac.phydev)
+		return;
+
+	if (netif_running(priv->netdev))
+		link = hbg_reg_read_field(priv, HBG_REG_AN_NEG_STATE_ADDR,
+					  HBG_REG_AN_NEG_STATE_NP_LINK_OK_B);
+	if (link == priv->mac.link_status)
+		return;
+
+	if (link) {
+		netif_tx_wake_all_queues(priv->netdev);
+		netif_carrier_on(priv->netdev);
+	} else {
+		netif_carrier_off(priv->netdev);
+		netif_tx_stop_all_queues(priv->netdev);
+	}
+
+	priv->mac.link_status = link;
+	hbg_print_link_status(priv);
+}
+
 static void hbg_service_task(struct work_struct *work)
 {
 	struct hbg_priv *priv = container_of(work, struct hbg_priv,
@@ -292,6 +328,7 @@ static void hbg_service_task(struct work_struct *work)
 	if (test_and_clear_bit(HBG_NIC_STATE_NP_LINK_FAIL, &priv->state))
 		hbg_fix_np_link_fail(priv);
 
+	hbg_update_link_status(priv);
 	hbg_diagnose_message_push(priv);
 
 	/* The type of statistics register is u32,

@@ -218,6 +218,7 @@ enum hbg_port_mode {
 	HBG_PORT_MODE_SGMII_10M = 0x6,
 	HBG_PORT_MODE_SGMII_100M = 0x7,
 	HBG_PORT_MODE_SGMII_1000M = 0x8,
+	HBG_PORT_MODE_SGMII_UNKNOWN = 0x9,
 };
 
 struct hbg_tx_desc {
