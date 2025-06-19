@@ -2113,19 +2113,6 @@ static inline bool ieee80211_vif_is_mesh(struct ieee80211_vif *vif)
 }
 
 /**
- * wdev_to_ieee80211_vif - return a vif struct from a wdev
- * @wdev: the wdev to get the vif for
- *
- * This can be used by mac80211 drivers with direct cfg80211 APIs
- * (like the vendor commands) that get a wdev.
- *
- * Return: pointer to the wdev, or %NULL if the given wdev isn't
- * associated with a vif that the driver knows about (e.g. monitor
- * or AP_VLAN interfaces.)
- */
-struct ieee80211_vif *wdev_to_ieee80211_vif(struct wireless_dev *wdev);
-
-/**
  * ieee80211_vif_to_wdev - return a wdev struct from a vif
  * @vif: the vif to get the wdev for
  *
