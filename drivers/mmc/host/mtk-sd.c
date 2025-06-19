@@ -445,6 +445,7 @@ struct mtk_mmc_compatible {
 	u8 pop_en_cnt;
 	bool enhance_rx;
 	bool support_64g;
+	bool support_cmd23;
 	bool use_internal_cd;
 	bool support_new_tx;
 	bool support_new_rx;
@@ -535,6 +536,7 @@ static const struct mtk_mmc_compatible mt2701_compat = {
 	.stop_clk_fix = false,
 	.enhance_rx = false,
 	.support_64g = false,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt2712_compat = {
@@ -549,6 +551,7 @@ static const struct mtk_mmc_compatible mt2712_compat = {
 	.stop_dly_sel = 3,
 	.enhance_rx = true,
 	.support_64g = true,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt6779_compat = {
@@ -563,6 +566,7 @@ static const struct mtk_mmc_compatible mt6779_compat = {
 	.stop_dly_sel = 3,
 	.enhance_rx = true,
 	.support_64g = true,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt6795_compat = {
@@ -576,6 +580,7 @@ static const struct mtk_mmc_compatible mt6795_compat = {
 	.stop_clk_fix = false,
 	.enhance_rx = false,
 	.support_64g = false,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt7620_compat = {
@@ -588,6 +593,7 @@ static const struct mtk_mmc_compatible mt7620_compat = {
 	.busy_check = false,
 	.stop_clk_fix = false,
 	.enhance_rx = false,
+	.support_cmd23 = false,
 	.use_internal_cd = true,
 };
 
@@ -603,6 +609,7 @@ static const struct mtk_mmc_compatible mt7622_compat = {
 	.stop_dly_sel = 3,
 	.enhance_rx = true,
 	.support_64g = false,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt7986_compat = {
@@ -618,6 +625,7 @@ static const struct mtk_mmc_compatible mt7986_compat = {
 	.stop_dly_sel = 3,
 	.enhance_rx = true,
 	.support_64g = true,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt8135_compat = {
@@ -631,6 +639,7 @@ static const struct mtk_mmc_compatible mt8135_compat = {
 	.stop_clk_fix = false,
 	.enhance_rx = false,
 	.support_64g = false,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt8173_compat = {
@@ -644,6 +653,7 @@ static const struct mtk_mmc_compatible mt8173_compat = {
 	.stop_clk_fix = false,
 	.enhance_rx = false,
 	.support_64g = false,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt8183_compat = {
@@ -659,6 +669,7 @@ static const struct mtk_mmc_compatible mt8183_compat = {
 	.stop_dly_sel = 3,
 	.enhance_rx = true,
 	.support_64g = true,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt8516_compat = {
@@ -671,6 +682,7 @@ static const struct mtk_mmc_compatible mt8516_compat = {
 	.busy_check = true,
 	.stop_clk_fix = true,
 	.stop_dly_sel = 3,
+	.support_cmd23 = true,
 };
 
 static const struct mtk_mmc_compatible mt8196_compat = {
@@ -687,6 +699,7 @@ static const struct mtk_mmc_compatible mt8196_compat = {
 	.pop_en_cnt = 2,
 	.enhance_rx = true,
 	.support_64g = true,
+	.support_cmd23 = true,
 	.support_new_tx = true,
 	.support_new_rx = true,
 };
@@ -3054,7 +3067,9 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	if (mmc->caps & MMC_CAP_SDIO_IRQ)
 		mmc->caps2 |= MMC_CAP2_SDIO_IRQ_NOTHREAD;
 
-	mmc->caps |= MMC_CAP_CMD23;
+	if (host->dev_comp->support_cmd23)
+		mmc->caps |= MMC_CAP_CMD23;
+
 	if (host->cqhci)
 		mmc->caps2 |= MMC_CAP2_CQE | MMC_CAP2_CQE_DCMD;
 	/* MMC core transfer sizes tunable parameters */
