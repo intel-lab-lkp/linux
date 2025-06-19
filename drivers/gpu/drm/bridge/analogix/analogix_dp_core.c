@@ -1230,6 +1230,7 @@ static void analogix_dp_bridge_disable(struct drm_bridge *bridge)
 	pm_runtime_put_sync(dp->dev);
 
 	drm_panel_unprepare(dp->plat_data->panel);
+	drm_panel_put(dp->plat_data->panel);
 
 	dp->fast_train_enable = false;
 	dp->psr_supported = false;
