@@ -157,6 +157,8 @@ static int ccp_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	spin_lock(&ccp->wait_input_report_lock);
 	if (!completion_done(&ccp->wait_input_report)) {
 		memcpy(ccp->buffer, data, min(IN_BUFFER_SIZE, size));
+		if (size < IN_BUFFER_SIZE)
+			memset(ccp->buffer + size, 0, IN_BUFFER_SIZE - size);
 		complete_all(&ccp->wait_input_report);
 	}
 	spin_unlock(&ccp->wait_input_report_lock);
