@@ -153,7 +153,7 @@ macro_rules! declare_drm_ioctls {
                         Some($cmd)
                     },
                     flags: $flags,
-                    name: $crate::c_str!(::core::stringify!($cmd)).as_char_ptr(),
+                    name: $crate::str_to_cstr!(::core::stringify!($cmd)).as_char_ptr(),
                 }
             ),*];
             ioctls
