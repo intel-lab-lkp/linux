@@ -990,6 +990,7 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 	struct device *dev = &av->isys->adev->auxdev.dev;
 	struct v4l2_subdev *sd;
 	struct media_pad *r_pad;
+	unsigned int i;
 	u32 sink_pad, sink_stream;
 	u64 r_stream;
 	u64 stream_mask = 0;
@@ -1018,14 +1019,15 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 		stop_streaming_firmware(av);
 
 		/* stop sub-device which connects with video */
-		dev_dbg(dev, "stream off entity %s pad:%d mask:0x%llx\n",
-			sd->name, r_pad->index, stream_mask);
-		ret = v4l2_subdev_disable_streams(sd, r_pad->index,
-						  stream_mask);
-		if (ret) {
-			dev_err(dev, "stream off %s failed with %d\n", sd->name,
-				ret);
-			return ret;
+		for (i = CSI2_PAD_SRC; i < NR_OF_CSI2_SRC_PADS; i++) {
+			if (!media_pad_pipeline(&sd->entity.pads[i]))
+				continue;
+			ret = v4l2_subdev_disable_streams(sd, i, 1U);
+			if (ret) {
+				dev_err(dev, "stream off %s failed with %d\n",
+					sd->name, ret);
+				return ret;
+			}
 		}
 		close_streaming_firmware(av);
 	} else {
@@ -1036,13 +1038,15 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 		}
 
 		/* start sub-device which connects with video */
-		dev_dbg(dev, "stream on %s pad %d mask 0x%llx\n", sd->name,
-			r_pad->index, stream_mask);
-		ret = v4l2_subdev_enable_streams(sd, r_pad->index, stream_mask);
-		if (ret) {
-			dev_err(dev, "stream on %s failed with %d\n", sd->name,
-				ret);
-			goto out_media_entity_stop_streaming_firmware;
+		for (i = CSI2_PAD_SRC; i < NR_OF_CSI2_SRC_PADS; i++) {
+			if (!media_pad_pipeline(&sd->entity.pads[i]))
+				continue;
+			ret = v4l2_subdev_enable_streams(sd, i, 1U);
+			if (ret) {
+				dev_err(dev, "stream on %s failed with %d\n",
+					sd->name, ret);
+				goto out_media_entity_stop_streaming_firmware;
+			}
 		}
 	}
 
@@ -1051,6 +1055,15 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 	return 0;
 
 out_media_entity_stop_streaming_firmware:
+	while (i-- > CSI2_PAD_SRC) {
+		int ret2;
+
+		if (!media_pad_pipeline(&sd->entity.pads[i]))
+			continue;
+		ret2 = v4l2_subdev_disable_streams(sd, i, 1U);
+		dev_err(dev, "stream off %s failed with %d\n", sd->name, ret2);
+	}
+
 	stop_streaming_firmware(av);
 
 	return ret;
