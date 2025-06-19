@@ -76,6 +76,7 @@ struct madvise_behavior {
 	struct madvise_behavior_range range;
 	/* The VMA and VMA preceding it (if applicable) currently targeted. */
 	struct vm_area_struct *prev, *vma;
+	bool lock_dropped;
 };
 
 #ifdef CONFIG_ANON_VMA_NAME
@@ -205,10 +206,8 @@ static int madvise_update_vma(vm_flags_t new_flags,
 	struct anon_vma_name *anon_name = madv_behavior->anon_name;
 	VMA_ITERATOR(vmi, madv_behavior->mm, range->start);
 
-	if (new_flags == vma->vm_flags && anon_vma_name_eq(anon_vma_name(vma), anon_name)) {
-		madv_behavior->prev = vma;
+	if (new_flags == vma->vm_flags && anon_vma_name_eq(anon_vma_name(vma), anon_name))
 		return 0;
-	}
 
 	vma = vma_modify_flags_name(&vmi, madv_behavior->prev, vma,
 			range->start, range->end, new_flags, anon_name);
@@ -216,7 +215,6 @@ static int madvise_update_vma(vm_flags_t new_flags,
 		return PTR_ERR(vma);
 
 	madv_behavior->vma = vma;
-	madv_behavior->prev = vma;
 
 	/* vm_flags is protected by the mmap_lock held in write mode. */
 	vma_start_write(vma);
@@ -330,7 +328,6 @@ static long madvise_willneed(struct madvise_behavior *madv_behavior)
 	unsigned long end = madv_behavior->range.end;
 	loff_t offset;
 
-	madv_behavior->prev = vma;
 #ifdef CONFIG_SWAP
 	if (!file) {
 		walk_page_range_vma(vma, start, end, &swapin_walk_ops, vma);
@@ -359,7 +356,7 @@ static long madvise_willneed(struct madvise_behavior *madv_behavior)
 	 * vma's reference to the file) can go away as soon as we drop
 	 * mmap_lock.
 	 */
-	madv_behavior->prev = NULL;	/* tell sys_madvise we drop mmap_lock */
+	madv_behavior->lock_dropped = true;
 	get_file(file);
 	offset = (loff_t)(start - vma->vm_start)
 			+ ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
@@ -650,7 +647,6 @@ static long madvise_cold(struct madvise_behavior *madv_behavior)
 	struct vm_area_struct *vma = madv_behavior->vma;
 	struct mmu_gather tlb;
 
-	madv_behavior->prev = vma;
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
 
@@ -682,7 +678,6 @@ static long madvise_pageout(struct madvise_behavior *madv_behavior)
 	struct mmu_gather tlb;
 	struct vm_area_struct *vma = madv_behavior->vma;
 
-	madv_behavior->prev = vma;
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
 
@@ -971,7 +966,6 @@ static long madvise_dontneed_free(struct madvise_behavior *madv_behavior)
 	struct madvise_behavior_range *range = &madv_behavior->range;
 	int behavior = madv_behavior->behavior;
 
-	madv_behavior->prev = madv_behavior->vma;
 	if (!madvise_dontneed_free_valid_vma(madv_behavior))
 		return -EINVAL;
 
@@ -981,8 +975,7 @@ static long madvise_dontneed_free(struct madvise_behavior *madv_behavior)
 	if (!userfaultfd_remove(madv_behavior->vma, range->start, range->end)) {
 		struct vm_area_struct *vma;
 
-		madv_behavior->prev = NULL; /* mmap_lock has been dropped, prev is stale */
-
+		madv_behavior->lock_dropped = true;
 		mmap_read_lock(mm);
 		madv_behavior->vma = vma = vma_lookup(mm, range->start);
 		if (!vma)
@@ -1081,7 +1074,7 @@ static long madvise_remove(struct madvise_behavior *madv_behavior)
 	unsigned long start = madv_behavior->range.start;
 	unsigned long end = madv_behavior->range.end;
 
-	madv_behavior->prev = NULL; /* tell sys_madvise we drop mmap_lock */
+	madv_behavior->lock_dropped = true;
 
 	if (vma->vm_flags & VM_LOCKED)
 		return -EINVAL;
@@ -1200,7 +1193,6 @@ static long madvise_guard_install(struct madvise_behavior *madv_behavior)
 	long err;
 	int i;
 
-	madv_behavior->prev = vma;
 	if (!is_valid_guard_vma(vma, /* allow_locked = */false))
 		return -EINVAL;
 
@@ -1310,7 +1302,6 @@ static long madvise_guard_remove(struct madvise_behavior *madv_behavior)
 	struct vm_area_struct *vma = madv_behavior->vma;
 	struct madvise_behavior_range *range = &madv_behavior->range;
 
-	madv_behavior->prev = vma;
 	/*
 	 * We're ok with removing guards in mlock()'d ranges, as this is a
 	 * non-destructive action.
@@ -1352,8 +1343,8 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 	case MADV_DONTNEED_LOCKED:
 		return madvise_dontneed_free(madv_behavior);
 	case MADV_COLLAPSE:
-		return madvise_collapse(vma, &madv_behavior->prev,
-					range->start, range->end);
+		return madvise_collapse(vma, range->start, range->end,
+			&madv_behavior->lock_dropped);
 	case MADV_GUARD_INSTALL:
 		return madvise_guard_install(madv_behavior);
 	case MADV_GUARD_REMOVE:
@@ -1601,7 +1592,6 @@ static bool try_vma_read_lock(struct madvise_behavior *madv_behavior)
 		vma_end_read(vma);
 		goto take_mmap_read_lock;
 	}
-	madv_behavior->prev = vma; /* Not currently required. */
 	madv_behavior->vma = vma;
 	return true;
 
@@ -1627,7 +1617,7 @@ int madvise_walk_vmas(struct madvise_behavior *madv_behavior)
 	unsigned long end = range->end;
 	int unmapped_error = 0;
 	int error;
-	struct vm_area_struct *vma;
+	struct vm_area_struct *prev, *vma;
 
 	/*
 	 * If VMA read lock is supported, apply madvise to a single VMA
@@ -1645,19 +1635,23 @@ int madvise_walk_vmas(struct madvise_behavior *madv_behavior)
 	 * ranges, just ignore them, but return -ENOMEM at the end.
 	 * - different from the way of handling in mlock etc.
 	 */
-	vma = find_vma_prev(mm, range->start, &madv_behavior->prev);
+	vma = find_vma_prev(mm, range->start, &prev);
 	if (vma && range->start > vma->vm_start)
-		madv_behavior->prev = vma;
+		prev = vma;
 
 	for (;;) {
-		struct vm_area_struct *prev;
-
 		/* Still start < end. */
 		if (!vma)
 			return -ENOMEM;
 
 		/* Here start < (end|vma->vm_end). */
 		if (range->start < vma->vm_start) {
+			/*
+			 * This indicates a gap between VMAs in the input
+			 * range. This does not cause the operation to abort,
+			 * rather we simply return -ENOMEM to indicate that this
+			 * has happened, but carry on.
+			 */
 			unmapped_error = -ENOMEM;
 			range->start = vma->vm_start;
 			if (range->start >= end)
@@ -1668,21 +1662,28 @@ int madvise_walk_vmas(struct madvise_behavior *madv_behavior)
 		range->end = min(vma->vm_end, end);
 
 		/* Here vma->vm_start <= range->start < range->end <= (end|vma->vm_end). */
+		madv_behavior->prev = prev;
 		madv_behavior->vma = vma;
 		error = madvise_vma_behavior(madv_behavior);
 		if (error)
 			return error;
-		prev = madv_behavior->prev;
+		if (madv_behavior->lock_dropped) {
+			/* We dropped the mmap lock, we can't ref the VMA. */
+			prev = NULL;
+			vma = NULL;
+			madv_behavior->lock_dropped = false;
+		} else {
+			prev = vma;
+			vma = madv_behavior->vma;
+		}
 
-		range->start = range->end;
-		if (prev && range->start < prev->vm_end)
-			range->start = prev->vm_end;
-		if (range->start >= end)
+		if (vma && range->end < vma->vm_end)
+			range->end = vma->vm_end;
+		if (range->end >= end)
 			break;
-		if (prev)
-			vma = find_vma(mm, prev->vm_end);
-		else	/* madvise_remove dropped mmap_lock */
-			vma = find_vma(mm, range->start);
+
+		vma = find_vma(mm, vma ? vma->vm_end : range->end);
+		range->start = range->end;
 	}
 
 	return unmapped_error;
