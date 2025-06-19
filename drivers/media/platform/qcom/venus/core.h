@@ -528,6 +528,29 @@ struct venus_inst {
 #define IS_IRIS2(core)		((core)->res->vpu_version == VPU_VERSION_IRIS2)
 #define IS_IRIS2_1(core)	((core)->res->vpu_version == VPU_VERSION_IRIS2_1)
 
+#define IS_VPU_MATCH(core, type)	IS_##type(core)
+#define IS_VERSION_MATCH(core, type)	IS_##type(core)
+
+/* Limit this to 4 versions. Use a helper if >4 versions share logic. */
+#define MATCH_1(CMD, core, a) \
+	IS_##CMD##_MATCH(core, a)
+#define MATCH_2(CMD, core, a, b) \
+	(IS_##CMD##_MATCH(core, a) || IS_##CMD##_MATCH(core, b))
+#define MATCH_3(CMD, core, a, b, c) \
+	(IS_##CMD##_MATCH(core, a) || IS_##CMD##_MATCH(core, b) || \
+	IS_##CMD##_MATCH(core, c))
+#define MATCH_4(CMD, core, a, b, c, d) \
+	(IS_##CMD##_MATCH(core, a) || IS_##CMD##_MATCH(core, b) || \
+	IS_##CMD##_MATCH(core, c) || IS_##CMD##_MATCH(core, d))
+
+#define GET_MACRO(_1, _2, _3, _4, NAME, ...) NAME /* _1-_4 are ignored */
+#define IS_DISPATCH(CMD, core, ...) \
+	(GET_MACRO(__VA_ARGS__, MATCH_4, MATCH_3, MATCH_2, MATCH_1)( \
+		CMD, core, __VA_ARGS__))
+
+#define IS_VPU(core, ...)	IS_DISPATCH(VPU, core, __VA_ARGS__)
+#define IS_HFI(core, ...)	IS_DISPATCH(VERSION, core, __VA_ARGS__)
+
 #define ctrl_to_inst(ctrl)	\
 	container_of((ctrl)->handler, struct venus_inst, ctrl_handler)
 
