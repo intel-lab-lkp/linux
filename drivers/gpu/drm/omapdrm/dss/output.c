@@ -48,7 +48,6 @@ int omapdss_device_init_output(struct omap_dss_device *out,
 			ret = PTR_ERR(bridge);
 			goto error;
 		}
-
 		out->bridge = bridge;
 	}
 
@@ -76,9 +75,12 @@ error:
 
 void omapdss_device_cleanup_output(struct omap_dss_device *out)
 {
-	if (out->bridge && out->panel)
+	if (out->bridge && out->panel) {
 		drm_panel_bridge_remove(out->next_bridge ?
 					out->next_bridge : out->bridge);
+		drm_panel_put(out->panel);
+
+	}
 }
 
 void dss_mgr_set_timings(struct omap_dss_device *dssdev,
