@@ -225,6 +225,8 @@ static void sti_dvo_disable(struct drm_bridge *bridge)
 
 	drm_panel_disable(dvo->panel);
 
+	drm_panel_put(dvo->panel);
+
 	/* Disable/unprepare dvo clock */
 	clk_disable_unprepare(dvo->clk_pix);
 	clk_disable_unprepare(dvo->clk);
