@@ -29,7 +29,6 @@ struct disas_context {
 #define DINFO_FPRINTF(dinfo, ...)	\
 	((*(dinfo)->fprintf_func)((dinfo)->stream, __VA_ARGS__))
 
-
 static int disas_result_fprintf(struct disas_context *dctx,
 				const char *fmt, va_list ap)
 {
