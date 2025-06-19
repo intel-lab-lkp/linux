@@ -28,6 +28,13 @@ bool arch_pc_relative_reloc(struct reloc *reloc)
 	return false;
 }
 
+unsigned long arch_pc_relative_offset(struct instruction *insn,
+				      struct reloc *reloc)
+{
+	/* no PC relative relocation */
+	return 0;
+}
+
 bool arch_callee_saved_reg(unsigned char reg)
 {
 	switch (reg) {

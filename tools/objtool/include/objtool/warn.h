@@ -17,6 +17,18 @@
 
 extern const char *objname;
 
+static inline int sprint_name(char *str, const char *name, unsigned long offset)
+{
+	int len;
+
+	if (offset)
+		len = sprintf(str, "%s+0x%lx", name, offset);
+	else
+		len = sprintf(str, "%s", name);
+
+	return len;
+}
+
 static inline char *offstr(struct section *sec, unsigned long offset)
 {
 	bool is_text = (sec->sh.sh_flags & SHF_EXECINSTR);
