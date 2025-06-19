@@ -4109,6 +4109,8 @@ static const struct net_device_ops macb_netdev_ops = {
 static void macb_configure_caps(struct macb *bp,
 				const struct macb_config *dt_conf)
 {
+	struct device_node *np = bp->pdev->dev.of_node;
+	bool refclk_ext = of_property_present(np, "cdns,refclk-ext");
 	u32 dcfg;
 
 	if (dt_conf)
@@ -4140,6 +4142,9 @@ static void macb_configure_caps(struct macb *bp,
 			}
 		}
 	}
+
+	if (refclk_ext)
+		bp->caps |= MACB_CAPS_USRIO_HAS_CLKEN;
 
 	dev_dbg(&bp->pdev->dev, "Cadence caps 0x%08x\n", bp->caps);
 }
