@@ -571,16 +571,10 @@ static int enter_state(suspend_state_t state)
 	int error;
 
 	trace_suspend_resume(TPS("suspend_enter"), state, true);
-	if (state == PM_SUSPEND_TO_IDLE) {
-#ifdef CONFIG_PM_DEBUG
-		if (pm_test_level != TEST_NONE && pm_test_level <= TEST_CPUS) {
-			pr_warn("Unsupported test mode for suspend to idle, please choose none/freezer/devices/platform.\n");
-			return -EAGAIN;
-		}
-#endif
-	} else if (!valid_state(state)) {
-		return -EINVAL;
-	}
+
+	if (!sleep_state_supported(state))
+		return -ENOSYS;
+
 	if (!mutex_trylock(&system_transition_mutex))
 		return -EBUSY;
 
