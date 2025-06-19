@@ -11,16 +11,9 @@
 
 #include "../common/smbacl.h"
 
-#define READ_BIT        0x4
-#define WRITE_BIT       0x2
-#define EXEC_BIT        0x1
-
 #define ACL_OWNER_MASK 0700
 #define ACL_GROUP_MASK 0070
 #define ACL_EVERYONE_MASK 0007
-
-#define UBITSHIFT	6
-#define GBITSHIFT	3
 
 /*
  * Security Descriptor length containing DACL with 3 ACEs (one each for
