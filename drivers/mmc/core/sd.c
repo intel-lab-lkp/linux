@@ -365,7 +365,6 @@ static int mmc_read_switch(struct mmc_card *card)
 		card->sw_caps.sd3_bus_mode = status[13];
 		/* Driver Strengths supported by the card */
 		card->sw_caps.sd3_drv_type = status[9];
-		card->sw_caps.sd3_curr_limit = status[7] | status[6] << 8;
 	}
 
 out:
@@ -556,7 +555,7 @@ static int sd_set_current_limit(struct mmc_card *card, u8 *status)
 {
 	int current_limit = SD_SET_CURRENT_LIMIT_200;
 	int err;
-	u32 max_current;
+	u32 max_current, card_needs;
 
 	/*
 	 * Current limit switch is only defined for SDR50, SDR104, and DDR50
@@ -575,33 +574,24 @@ static int sd_set_current_limit(struct mmc_card *card, u8 *status)
 	max_current = sd_get_host_max_current(card->host);
 
 	/*
-	 * We only check host's capability here, if we set a limit that is
-	 * higher than the card's maximum current, the card will be using its
-	 * maximum current, e.g. if the card's maximum current is 300ma, and
-	 * when we set current limit to 200ma, the card will draw 200ma, and
-	 * when we set current limit to 400/600/800ma, the card will draw its
-	 * maximum 300ma from the host.
-	 *
-	 * The above is incorrect: if we try to set a current limit that is
-	 * not supported by the card, the card can rightfully error out the
-	 * attempt, and remain at the default current limit.  This results
-	 * in a 300mA card being limited to 200mA even though the host
-	 * supports 800mA. Failures seen with SanDisk 8GB UHS cards with
-	 * an iMX6 host. --rmk
+	 * query the card of its maximun current/power consumption given the
+	 * bus speed mode
 	 */
-	if (max_current >= 800 &&
-	    card->sw_caps.sd3_curr_limit & SD_MAX_CURRENT_800)
+	err = mmc_sd_switch(card, 0, 0, card->sd_bus_speed, status);
+	if (err)
+		return err;
+
+	card_needs = status[1] | status[0] << 8;
+
+	if (max_current >= 800 && card_needs > 600)
 		current_limit = SD_SET_CURRENT_LIMIT_800;
-	else if (max_current >= 600 &&
-		 card->sw_caps.sd3_curr_limit & SD_MAX_CURRENT_600)
+	else if (max_current >= 600 && card_needs > 400)
 		current_limit = SD_SET_CURRENT_LIMIT_600;
-	else if (max_current >= 400 &&
-		 card->sw_caps.sd3_curr_limit & SD_MAX_CURRENT_400)
+	else if (max_current >= 400 && card_needs > 200)
 		current_limit = SD_SET_CURRENT_LIMIT_400;
 
 	if (current_limit != SD_SET_CURRENT_LIMIT_200) {
-		err = mmc_sd_switch(card, SD_SWITCH_SET, 3,
-				current_limit, status);
+		err = mmc_sd_switch(card, SD_SWITCH_SET, 3, current_limit, status);
 		if (err)
 			return err;
 
