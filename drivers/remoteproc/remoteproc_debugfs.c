@@ -46,8 +46,9 @@ static ssize_t rproc_coredump_read(struct file *filp, char __user *userbuf,
 	char buf[20];
 	int len;
 
-	len = scnprintf(buf, sizeof(buf), "%s\n",
-			rproc_coredump_str[rproc->dump_conf]);
+	len = sysfs_emit(buf, "%s\n",
+		rproc_coredump_str[rproc->dump_conf]);
+
 
 	return simple_read_from_buffer(userbuf, count, ppos, buf, len);
 }
@@ -135,7 +136,7 @@ static ssize_t rproc_trace_read(struct file *filp, char __user *userbuf,
 	va = rproc_da_to_va(data->rproc, trace->da, trace->len, NULL);
 
 	if (!va) {
-		len = scnprintf(buf, sizeof(buf), "Trace %s not available\n",
+		len = sysfs_emit(buf, "Trace %s not available\n",
 				trace->name);
 		va = buf;
 	} else {
@@ -160,7 +161,7 @@ static ssize_t rproc_name_read(struct file *filp, char __user *userbuf,
 	char buf[100];
 	int i;
 
-	i = scnprintf(buf, sizeof(buf), "%.98s\n", rproc->name);
+	i = sysfs_emit(buf, "%.98s\n", rproc->name);
 
 	return simple_read_from_buffer(userbuf, count, ppos, buf, i);
 }
