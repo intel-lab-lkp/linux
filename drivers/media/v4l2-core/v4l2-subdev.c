@@ -2254,9 +2254,11 @@ static void v4l2_subdev_set_streams_enabled(struct v4l2_subdev *sd,
 	for (unsigned int i = 0; i < state->stream_configs.num_configs; ++i) {
 		struct v4l2_subdev_stream_config *cfg =
 			&state->stream_configs.configs[i];
+		struct v4l2_subdev_stream_config *cfg2 =
+			&state->stream_configs.configs[i ^ 1U];
 
 		if (cfg->pad == pad && (streams_mask & BIT_ULL(cfg->stream)))
-			cfg->enabled = enabled;
+			cfg->enabled = cfg2->enabled = enabled;
 	}
 }
 
