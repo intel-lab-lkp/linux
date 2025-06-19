@@ -101,4 +101,13 @@ bool arch_pc_relative_reloc(struct reloc *reloc);
 unsigned int arch_reloc_size(struct reloc *reloc);
 unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *table);
 
+#ifdef DISAS
+
+#include <bfd.h>
+#include <dis-asm.h>
+
+int arch_disas_info_init(struct disassemble_info *dinfo);
+
+#endif /* DISAS */
+
 #endif /* _ARCH_H */

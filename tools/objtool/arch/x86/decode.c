@@ -16,6 +16,7 @@
 
 #include <asm/orc_types.h>
 #include <objtool/check.h>
+#include <objtool/disas.h>
 #include <objtool/elf.h>
 #include <objtool/arch.h>
 #include <objtool/warn.h>
@@ -880,3 +881,14 @@ unsigned int arch_reloc_size(struct reloc *reloc)
 		return 8;
 	}
 }
+
+#ifdef DISAS
+
+int arch_disas_info_init(struct disassemble_info *dinfo)
+{
+	return disas_info_init(dinfo, bfd_arch_i386,
+			       bfd_mach_i386_i386, bfd_mach_x86_64,
+			       "att");
+}
+
+#endif /* DISAS */
