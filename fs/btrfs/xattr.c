@@ -12,6 +12,7 @@
 #include <linux/posix_acl_xattr.h>
 #include <linux/iversion.h>
 #include <linux/sched/mm.h>
+#include <linux/string.h>
 #include "ctree.h"
 #include "fs.h"
 #include "messages.h"
@@ -516,8 +517,7 @@ static int btrfs_initxattrs(struct inode *inode,
 			ret = -ENOMEM;
 			break;
 		}
-		strcpy(name, XATTR_SECURITY_PREFIX);
-		strcpy(name + XATTR_SECURITY_PREFIX_LEN, xattr->name);
+		sysfs_emit(name, "%s%s", XATTR_SECURITY_PREFIX, xattr->name);
 
 		if (strcmp(name, XATTR_NAME_CAPS) == 0)
 			clear_bit(BTRFS_INODE_NO_CAP_XATTR, &BTRFS_I(inode)->runtime_flags);
