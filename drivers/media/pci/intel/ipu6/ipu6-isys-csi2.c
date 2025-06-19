@@ -346,21 +346,31 @@ static int ipu6_isys_csi2_enable_streams(struct v4l2_subdev *sd,
 	struct ipu6_isys_subdev *asd = to_ipu6_isys_subdev(sd);
 	struct ipu6_isys_csi2 *csi2 = to_ipu6_isys_csi2(asd);
 	struct ipu6_isys_csi2_timing timing = { };
+	struct ipu6_isys_video *iv;
+	struct ipu6_isys_stream *stream;
 	struct v4l2_subdev *remote_sd;
-	struct media_pad *remote_pad;
-	u64 sink_streams, already_enabled;
+	struct media_pad *remote_pad, *vdev_pad;
+	u64 sink_streams;
 	int ret;
 
-	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
-	remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
+	vdev_pad = media_pad_remote_pad_first(&sd->entity.pads[pad]);
+	iv = container_of_const(media_entity_to_video_device(vdev_pad->entity),
+				struct ipu6_isys_video, vdev);
+	stream = iv->stream;
 
 	sink_streams =
 		v4l2_subdev_state_xlate_streams(state, pad, CSI2_PAD_SINK,
 						&streams_mask);
 
-	already_enabled = v4l2_subdev_state_streams_enabled(sd, state,
-							    CSI2_PAD_SINK);
-	if (!already_enabled) {
+	if ((sink_streams | stream->streams_enabled) != stream->streams) {
+		stream->streams_enabled |= sink_streams;
+		return 0;
+	}
+
+	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
+	remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
+
+	if (!stream->streaming) {
 		ret = ipu6_isys_csi2_calc_timing(csi2, &timing, CSI2_ACCINV);
 		if (ret)
 			return ret;
@@ -371,11 +381,14 @@ static int ipu6_isys_csi2_enable_streams(struct v4l2_subdev *sd,
 	}
 
 	ret = v4l2_subdev_enable_streams(remote_sd, remote_pad->index,
+					 stream->streams_enabled |
 					 sink_streams);
 	if (ret) {
 		ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
 		return ret;
 	}
+
+	stream->streams_enabled |= sink_streams;
 
 	return 0;
 }
@@ -401,6 +414,17 @@ static int ipu6_isys_csi2_disable_streams(struct v4l2_subdev *sd,
 		ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
 
 	v4l2_subdev_disable_streams(remote_sd, remote_pad->index, sink_streams);
+
+	struct media_pad *vdev_pad;
+	struct ipu6_isys_video *iv;
+	struct ipu6_isys_stream *stream;
+
+	vdev_pad = media_pad_remote_pad_first(&sd->entity.pads[pad]);
+	iv = container_of_const(media_entity_to_video_device(vdev_pad->entity),
+				struct ipu6_isys_video, vdev);
+	stream = iv->stream;
+
+	stream->streams_enabled &= ~sink_streams;
 
 	return 0;
 }

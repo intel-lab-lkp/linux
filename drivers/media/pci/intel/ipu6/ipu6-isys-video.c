@@ -710,23 +710,15 @@ static void close_streaming_firmware(struct ipu6_isys_video *av)
 }
 
 int ipu6_isys_video_prepare_stream(struct ipu6_isys_video *av,
-				   struct media_entity *source_entity,
-				   int nr_queues)
+				   struct media_entity *source_entity)
 {
 	struct ipu6_isys_stream *stream = av->stream;
 	struct ipu6_isys_csi2 *csi2;
 
-	if (WARN_ON(stream->nr_streaming))
-		return -EINVAL;
-
-	stream->nr_queues = nr_queues;
 	atomic_set(&stream->sequence, 0);
 
 	stream->seq_index = 0;
 	memset(stream->seq, 0, sizeof(stream->seq));
-
-	if (WARN_ON(!list_empty(&stream->queues)))
-		return -EINVAL;
 
 	stream->stream_source = stream->asd->source;
 	csi2 = ipu6_isys_subdev_to_csi2(stream->asd);
@@ -1020,8 +1012,24 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 
 		/* stop sub-device which connects with video */
 		for (i = CSI2_PAD_SRC; i < NR_OF_CSI2_SRC_PADS; i++) {
+			u64 sink_stream = 1U, src_stream;
+
 			if (!media_pad_pipeline(&sd->entity.pads[i]))
 				continue;
+
+			struct v4l2_subdev_state *state =
+				v4l2_subdev_get_unlocked_active_state(sd);
+
+			src_stream =
+				v4l2_subdev_state_xlate_streams(state, i,
+								CSI2_PAD_SINK,
+								&sink_stream);
+
+			v4l2_subdev_unlock_state(state);
+
+			if (!(src_stream & stream->streams))
+				continue;
+
 			ret = v4l2_subdev_disable_streams(sd, i, 1U);
 			if (ret) {
 				dev_err(dev, "stream off %s failed with %d\n",
@@ -1039,8 +1047,24 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 
 		/* start sub-device which connects with video */
 		for (i = CSI2_PAD_SRC; i < NR_OF_CSI2_SRC_PADS; i++) {
+			u64 sink_stream = 1U, src_stream;
+
 			if (!media_pad_pipeline(&sd->entity.pads[i]))
 				continue;
+
+			struct v4l2_subdev_state *state =
+				v4l2_subdev_get_unlocked_active_state(sd);
+
+			src_stream =
+				v4l2_subdev_state_xlate_streams(state, i,
+								CSI2_PAD_SINK,
+								&sink_stream);
+
+			v4l2_subdev_unlock_state(state);
+
+			if (!(src_stream & stream->streams))
+				continue;
+
 			ret = v4l2_subdev_enable_streams(sd, i, 1U);
 			if (ret) {
 				dev_err(dev, "stream on %s failed with %d\n",
@@ -1049,8 +1073,6 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 			}
 		}
 	}
-
-	av->streaming = state;
 
 	return 0;
 
@@ -1178,7 +1200,7 @@ void ipu6_isys_fw_close(struct ipu6_isys *isys)
 }
 
 int ipu6_isys_setup_video(struct ipu6_isys_video *av,
-			  struct media_entity **source_entity, int *nr_queues)
+			  struct media_entity **source_entity)
 {
 	const struct ipu6_isys_pixelformat *pfmt =
 		ipu6_isys_get_isys_format(ipu6_isys_get_format(av), 0);
@@ -1192,8 +1214,6 @@ int ipu6_isys_setup_video(struct ipu6_isys_video *av,
 	struct media_pipeline *pipeline;
 	struct media_pad *source_pad, *remote_pad;
 	int ret = -EINVAL;
-
-	*nr_queues = 0;
 
 	remote_pad = media_pad_remote_pad_unique(&av->pad);
 	if (IS_ERR(remote_pad)) {
@@ -1213,12 +1233,9 @@ int ipu6_isys_setup_video(struct ipu6_isys_video *av,
 
 	/* Find the root */
 	state = v4l2_subdev_lock_and_get_active_state(remote_sd);
-	for_each_active_route(&state->routing, r) {
-		(*nr_queues)++;
-
+	for_each_active_route(&state->routing, r)
 		if (r->source_pad == remote_pad->index)
 			route = r;
-	}
 
 	if (!route) {
 		v4l2_subdev_unlock_state(state);
