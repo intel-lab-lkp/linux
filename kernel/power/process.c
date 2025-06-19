@@ -55,6 +55,9 @@ static int try_to_freeze_tasks(bool user_only)
 			if (p == current || !freeze_task(p))
 				continue;
 
+			if (retry > 1 && READ_ONCE(p->__state) == TASK_UNINTERRUPTIBLE)
+				sched_show_task(p);
+
 			todo++;
 		}
 		read_unlock(&tasklist_lock);
