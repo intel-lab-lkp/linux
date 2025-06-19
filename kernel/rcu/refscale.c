@@ -71,7 +71,7 @@ MODULE_AUTHOR("Joel Fernandes (Google) <joel@joelfernandes.org>");
 
 static char *scale_type = "rcu";
 module_param(scale_type, charp, 0444);
-MODULE_PARM_DESC(scale_type, "Type of test (rcu, srcu, refcnt, rwsem, rwlock.");
+MODULE_PARM_DESC(scale_type, "Type of test (rcu, srcu, refcnt, rwsem, rwlock, local_interrupt, local_irq.");
 
 torture_param(int, verbose, 0, "Enable verbose debugging printk()s");
 torture_param(int, verbose_batched, 0, "Batch verbose debugging printk()s");
@@ -524,6 +524,62 @@ static const struct ref_scale_ops lock_irq_ops = {
 	.name		= "lock-irq"
 };
 
+// IRQ disable/enable tests using interrupt_disable/enable.
+static void ref_local_interrupt_section(const int nloops)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		local_interrupt_disable();
+		local_interrupt_enable();
+	}
+}
+
+static void ref_local_interrupt_delay_section(const int nloops, const int udl, const int ndl)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		local_interrupt_disable();
+		un_delay(udl, ndl);
+		local_interrupt_enable();
+	}
+}
+
+static const struct ref_scale_ops local_interrupt_ops = {
+	.readsection	= ref_local_interrupt_section,
+	.delaysection	= ref_local_interrupt_delay_section,
+	.name		= "local_interrupt"
+};
+
+// IRQ disable/enable tests using local_irq_disable/enable.
+static void ref_local_irq_section(const int nloops)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		local_irq_disable();
+		local_irq_enable();
+	}
+}
+
+static void ref_local_irq_delay_section(const int nloops, const int udl, const int ndl)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		local_irq_disable();
+		un_delay(udl, ndl);
+		local_irq_enable();
+	}
+}
+
+static const struct ref_scale_ops local_irq_ops = {
+	.readsection	= ref_local_irq_section,
+	.delaysection	= ref_local_irq_delay_section,
+	.name		= "local_irq"
+};
+
 // Definitions acquire-release.
 static DEFINE_PER_CPU(unsigned long, test_acqrel);
 
@@ -956,13 +1012,22 @@ repeat:
 			rcu_scale_one_reader();
 	// Also keep interrupts disabled.  This also has the effect
 	// of preventing entries into slow path for rcu_read_unlock().
-	local_irq_save(flags);
+	// Exception: for IRQ ops, use preempt_disable instead since we need
+	// to test actual IRQ disable/enable performance.
+	if (cur_ops == &local_interrupt_ops || cur_ops == &local_irq_ops)
+		preempt_disable();
+	else
+		local_irq_save(flags);
 	start = ktime_get_mono_fast_ns();
 
 	rcu_scale_one_reader();
 
 	duration = ktime_get_mono_fast_ns() - start;
-	local_irq_restore(flags);
+
+	if (cur_ops == &local_interrupt_ops || cur_ops == &local_irq_ops)
+		preempt_enable();
+	else
+		local_irq_restore(flags);
 
 	rt->last_duration_ns = WARN_ON_ONCE(duration < 0) ? 0 : duration;
 	// To reduce runtime-skew noise, do maintain-load invocations until
@@ -1194,7 +1259,7 @@ ref_scale_init(void)
 	int firsterr = 0;
 	static const struct ref_scale_ops *scale_ops[] = {
 		&rcu_ops, &srcu_ops, &srcu_fast_ops, &srcu_lite_ops, RCU_TRACE_OPS RCU_TASKS_OPS
-		&refcnt_ops, &rwlock_ops, &rwsem_ops, &lock_ops, &lock_irq_ops,
+		&refcnt_ops, &rwlock_ops, &rwsem_ops, &lock_ops, &lock_irq_ops, &local_interrupt_ops, &local_irq_ops,
 		&acqrel_ops, &sched_clock_ops, &clock_ops, &jiffies_ops,
 		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops,
 	};
