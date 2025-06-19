@@ -578,7 +578,8 @@ int v4l2_ctrl_handler_init_class(struct v4l2_ctrl_handler *hdl,
  * the control list.
  * @hdl:	The control handler.
  *
- * Does nothing if @hdl == NULL.
+ * Does nothing if @hdl == NULL. Does not reset the handler's error code in any
+ * case.
  *
  * Returns the handler's error field.
  */
