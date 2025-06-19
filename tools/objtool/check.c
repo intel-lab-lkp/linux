@@ -3517,7 +3517,7 @@ static bool skip_alt_group(struct instruction *insn)
 
 	/* ANNOTATE_IGNORE_ALTERNATIVE */
 	if (insn->alt_group && insn->alt_group->ignore) {
-		TRACE_INSN(insn, "alt group ignored");
+		TRACE_ALT(insn, "alt group ignored");
 		return true;
 	}
 
@@ -3641,22 +3641,74 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	if (insn->alts) {
 		int i, num_alts;
 
+		/*
+		 * Count the number of alternatives with an alt group.
+		 *
+		 * For a jump alternative, count is 0 and there is a single
+		 * alternative (with no alt group).
+		 *
+		 * For a group alternative, count is at least 1. In addition
+		 * there is an alternative that points to the code following
+		 * the alternative.
+		 */
 		num_alts = 0;
-		for (alt = insn->alts; alt; alt = alt->next)
-			num_alts++;
+		for (alt = insn->alts; alt; alt = alt->next) {
+			if (alt->insn->alt_group)
+				num_alts++;
+		}
 
 		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
-			TRACE_INSN(insn, "alternative %d/%d", i, num_alts);
+			if (!num_alts) {
+				/*
+				 * For a jump alternative, the non-default
+				 * branch is validated first. So if the
+				 * default instruction is a NOP then the
+				 * branch is validated first (jump taken),
+				 * otherwise the branch is not taken. Then
+				 * the default alternative is validated.
+				 */
+				if (insn->type == INSN_NOP)
+					TRACE_ALT_INFO(insn, "jump taken - begin");
+				else
+					TRACE_ALT_INFO(insn, "jump not taken - begin");
+			} else {
+				/*
+				 * For a group alternative, the code after the
+				 * alternative (alternative with no alt group)
+				 * is validated first. Then each alternative
+				 * is validated. Finally the default alternative
+				 * is validated.
+				 */
+				if (alt->insn->alt_group)
+					TRACE_ALT_INFO(insn, "alt %d/%d - begin", i, num_alts);
+				else
+					TRACE_ALT_INFO(insn, "after alternative - begin");
+			}
+
 			ret = validate_branch(file, func, alt->insn, *statep);
+
+			if (!num_alts) {
+				if (insn->type == INSN_NOP)
+					TRACE_ALT_INFO(insn, "jump taken - end");
+				else
+					TRACE_ALT_INFO(insn, "jump not taken - end");
+			} else {
+				if (alt->insn->alt_group)
+					TRACE_ALT_INFO_NOADDR(insn, "alt %d/%d - end", i, num_alts);
+				else
+					TRACE_ALT_INFO_NOADDR(insn, "after alternative - end");
+			}
+
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
 			}
-			i++;
+			if (alt->insn->alt_group)
+				i++;
 		}
 
-		TRACE_INSN(insn, "alternative orig");
+		TRACE_ALT_INFO(insn, "default");
 	}
 
 	if (skip_alt_group(insn))
