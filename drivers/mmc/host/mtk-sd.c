@@ -1939,7 +1939,8 @@ static void msdc_init_hw(struct msdc_host *host)
 	val |= FIELD_PREP(MSDC_CKGEN_MSDC_DLY_SEL, 1);
 
 	/* First MSDC_PATCH_BIT setup is done: pull the trigger! */
-	writel(val, host->base + MSDC_PATCH_BIT);
+	if (!host->dev_comp->mips_mt762x)
+		writel(val, host->base + MSDC_PATCH_BIT);
 
 	/* Set wr data, crc status, cmd response turnaround period for UHS104 */
 	pb1_val = FIELD_PREP(MSDC_PB1_WRDAT_CRC_TACNTR, 1);
@@ -2002,8 +2003,10 @@ static void msdc_init_hw(struct msdc_host *host)
 		pb2_val |= MSDC_PB2_SUPPORT_64G;
 
 	/* Patch Bit 1/2 setup is done: pull the trigger! */
-	writel(pb1_val, host->base + MSDC_PATCH_BIT1);
-	writel(pb2_val, host->base + MSDC_PATCH_BIT2);
+	if (!host->dev_comp->mips_mt762x) {
+		writel(pb1_val, host->base + MSDC_PATCH_BIT1);
+		writel(pb2_val, host->base + MSDC_PATCH_BIT2);
+	}
 	sdr_set_bits(host->base + EMMC50_CFG0, EMMC50_CFG_CFCSTS_SEL);
 
 	if (host->dev_comp->data_tune) {
