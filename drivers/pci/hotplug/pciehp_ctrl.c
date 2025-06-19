@@ -30,6 +30,25 @@
 #define SAFE_REMOVAL	 true
 #define SURPRISE_REMOVAL false
 
+static void pciehp_wait_for_link_inactive(struct controller *ctrl)
+{
+	u16 lnk_status;
+	int timeout = 10000, step = 20;
+
+	do {
+		pcie_capability_read_word(ctrl->pcie->port, PCI_EXP_LNKSTA,
+					  &lnk_status);
+
+		if (!(lnk_status & PCI_EXP_LNKSTA_DLLLA))
+			return;
+
+		msleep(step);
+		timeout -= step;
+	} while (timeout >= 0);
+
+	ctrl_dbg(ctrl, "Timeout waiting for link inactive state\n");
+}
+
 static void set_slot_off(struct controller *ctrl)
 {
 	/*
@@ -119,8 +138,11 @@ static void remove_board(struct controller *ctrl, bool safe_removal)
 		 * After turning power off, we must wait for at least 1 second
 		 * before taking any action that relies on power having been
 		 * removed from the slot/adapter.
+		 *
+		 * Extended wait with polling to ensure hardware has completed
+		 * power-off sequence.
 		 */
-		msleep(1000);
+		pciehp_wait_for_link_inactive(ctrl);
 
 		/* Ignore link or presence changes caused by power off */
 		atomic_and(~(PCI_EXP_SLTSTA_DLLSC | PCI_EXP_SLTSTA_PDC),
