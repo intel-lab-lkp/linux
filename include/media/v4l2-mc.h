@@ -193,6 +193,50 @@ void v4l2_pipeline_pm_put(struct media_entity *entity);
 int v4l2_pipeline_link_notify(struct media_link *link, u32 flags,
 			      unsigned int notification);
 
+/**
+ * v4l2_mc_pipeline_enabled - Tell when to start streaming
+ * @vdev: The video device
+ * @func: Caller-provided function to tell a video device's streaming state
+ * @__sink_pad: sink pad at the root of the local pipeline
+ * @__sink_streams: streams to start
+ *
+ * Use to tell whether streaming should start on a video node. @func returns
+ * true if streaming has been started on a given video node. @__sink_pad and
+ * @__sink_streams are filled with pad and streams on the sub-device closest to
+ * the video nodes, to be used for calling v4l2_subdev_enable_streams() and
+ * v4l2_subdev_disable_streams().
+ *
+ * Using v4l2_mc_pipeline_enabled() has a few limitations currently (consider it
+ * a to-do list):
+ * * only unbranched streams can be supported albeit adding support for
+ *   downstream branches would be fairly trivial,
+ * * streams within a single source sub-device are considered to start at the
+ *   same time, more control could be added in two ways: 1) for sources to
+ *   determine stream starting, a control could be added to UAPI and 2) sources
+ *   could tell which streams start at the same time using a sub-device
+ *   operation,
+ * * CSI-2 VC framing is ignored currently, but VC-based stream starting could
+ *   be implemented by letting the caller to provide a function to determine
+ *   which streams are of interest and
+ * * routes leading to nowhere are ignored, on some hardware this is a problem,
+ *   but this can also be rather trivially addressed.
+ *
+ * Return:
+ * * 0: Success, but don't start streaming yet
+ * * 1: Success, now it's time to start streaming
+ * * -ENXIO: Route traversal encountered a non-video device/sub-device entity
+ * * -ENOTUNIQ: No unique remote pad
+ * * -ENOLINK: No remote pad found
+ * * -ENOENT: Enabled upstream route not found
+ * * -EMLINK: No unique downstream route found
+ * * -EINVAL: Stream could not be followed to source or was not produced by
+ *            the source
+ */
+int v4l2_mc_pipeline_enabled(struct video_device *vdev,
+			     bool (*func)(struct video_device *vdev),
+			     struct media_pad **__sink_pad,
+			     u64 *__sink_streams);
+
 #else /* CONFIG_MEDIA_CONTROLLER */
 
 static inline int v4l2_mc_create_media_graph(struct media_device *mdev)
