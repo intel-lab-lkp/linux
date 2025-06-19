@@ -608,7 +608,7 @@ static inline void check_conflict(int warnlvl, pgprot_t prot, pgprotval_t val,
 	if (warnlvl > cpa_warn_level || !conflicts(prot, val))
 		return;
 
-	pr_warn("CPA %8s %10s: 0x%016lx - 0x%016lx PFN %lx req %016llx prevent %016llx\n",
+	pr_warn_ratelimited("CPA %8s %10s: 0x%016lx - 0x%016lx PFN %lx req %016llx prevent %016llx\n",
 		lvltxt[warnlvl], txt, start, end, pfn, (unsigned long long)pgprot_val(prot),
 		(unsigned long long)val);
 }
