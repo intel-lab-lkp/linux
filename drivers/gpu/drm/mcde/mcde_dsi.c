@@ -1154,8 +1154,11 @@ static void mcde_dsi_unbind(struct device *dev, struct device *master,
 {
 	struct mcde_dsi *d = dev_get_drvdata(dev);
 
-	if (d->panel)
+	if (d->panel) {
 		drm_panel_bridge_remove(d->bridge_out);
+		drm_panel_put(d->panel);
+	}
+
 	regmap_update_bits(d->prcmu, PRCM_DSI_SW_RESET,
 			   PRCM_DSI_SW_RESET_DSI0_SW_RESETN, 0);
 }
