@@ -806,9 +806,11 @@ intel_dp_mst_hdcp2_stream_encryption(struct intel_connector *connector,
 	enum port port = dig_port->base.port;
 	int ret;
 
-	drm_WARN_ON(display->drm, enable &&
-		    !!(intel_de_read(display, HDCP2_AUTH_STREAM(display, cpu_transcoder, port))
-		    & AUTH_STREAM_TYPE) != data->streams[0].stream_type);
+	if (DISPLAY_VER(display) < 30)
+		drm_WARN_ON(display->drm, enable &&
+			    !!(intel_de_read(display,
+			    HDCP2_AUTH_STREAM(display, cpu_transcoder, port))
+			    & AUTH_STREAM_TYPE) != data->streams[0].stream_type);
 
 	ret = intel_dp_mst_toggle_hdcp_stream_select(connector, enable);
 	if (ret)
@@ -824,6 +826,11 @@ intel_dp_mst_hdcp2_stream_encryption(struct intel_connector *connector,
 		return -ETIMEDOUT;
 	}
 
+	if (DISPLAY_VER(display) >= 30)
+		drm_WARN_ON(display->drm, enable &&
+			    !!(intel_de_read(display,
+			    HDCP2_STREAM_STATUS(display, cpu_transcoder, port))
+			    & STREAM_TYPE_STATUS) != data->streams[0].stream_type);
 	return 0;
 }
 
