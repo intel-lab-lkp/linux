@@ -11617,11 +11617,11 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	hw->hw_addr = ioremap(pci_resource_start(pdev, 0),
 			      pci_resource_len(pdev, 0));
-	adapter->io_addr = hw->hw_addr;
 	if (!hw->hw_addr) {
 		err = -EIO;
 		goto err_ioremap;
 	}
+	adapter->io_addr = hw->hw_addr;
 
 	/* Setup hw api */
 	hw->mac.ops   = *ii->mac_ops;
