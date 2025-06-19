@@ -1469,22 +1469,22 @@ static void rar_tlb_flush(struct flush_tlb_info *info)
 {
 	unsigned long asid = mm_global_asid(info->mm);
 	cpumask_t *cpumask = mm_cpumask(info->mm);
+	int cpu = raw_smp_processor_id();
 	u16 pcid = kern_pcid(asid);
 
 	if (info->trim_cpumask)
 		trim_cpumask(info);
 
 	/* Only the local CPU needs to be flushed? */
-	if (cpumask_equal(cpumask, cpumask_of(raw_smp_processor_id()))) {
+	if (cpumask_test_cpu(cpu, cpumask)) {
 		lockdep_assert_irqs_enabled();
 		local_irq_disable();
 		flush_tlb_func(info);
 		local_irq_enable();
-		return;
 	}
 
 	/* Flush all the CPUs at once with RAR. */
-	if (cpumask_weight(cpumask)) {
+	if (cpumask_any_but(cpumask, cpu)) {
 		smp_call_rar_many(mm_cpumask(info->mm), pcid, info->start, info->end);
 		if (cpu_feature_enabled(X86_FEATURE_PTI))
 			smp_call_rar_many(mm_cpumask(info->mm), user_pcid(asid), info->start, info->end);
