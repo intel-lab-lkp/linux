@@ -79,6 +79,8 @@
 #define MSDC_PATCH_BIT2  0xb8
 #define MSDC_PAD_TUNE    0xec
 #define MSDC_PAD_TUNE0   0xf0
+#define MSDC_DAT_RDDLY0  0xf0
+#define MSDC_DAT_RDDLY1  0xf4
 #define PAD_DS_TUNE      0x188
 #define PAD_CMD_TUNE     0x18c
 #define EMMC51_CFG0	 0x204
@@ -449,6 +451,7 @@ struct mtk_mmc_compatible {
 	bool use_internal_cd;
 	bool support_new_tx;
 	bool support_new_rx;
+	bool mips_mt762x;
 };
 
 struct msdc_tune_para {
@@ -595,6 +598,7 @@ static const struct mtk_mmc_compatible mt7620_compat = {
 	.enhance_rx = false,
 	.support_cmd23 = false,
 	.use_internal_cd = true,
+	.mips_mt762x = true,
 };
 
 static const struct mtk_mmc_compatible mt7622_compat = {
@@ -1090,7 +1094,12 @@ static void msdc_set_mclk(struct msdc_host *host, unsigned char timing, u32 hz)
 	 * mmc_select_hs400() will drop to 50Mhz and High speed mode,
 	 * tune result of hs200/200Mhz is not suitable for 50Mhz
 	 */
-	if (mmc->actual_clock <= 52000000) {
+	if (host->dev_comp->mips_mt762x &&
+	    mmc->actual_clock > 25000000) {
+		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_RSPL);
+		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_DSPL);
+		sdr_set_bits(host->base + MSDC_IOCON, MSDC_IOCON_W_DSPL);
+	} else if (mmc->actual_clock <= 52000000) {
 		writel(host->def_tune_para.iocon, host->base + MSDC_IOCON);
 		if (host->top_base) {
 			writel(host->def_tune_para.emmc_top_control,
@@ -2026,6 +2035,13 @@ static void msdc_init_hw(struct msdc_host *host)
 		else
 			sdr_set_bits(host->base + tune_reg,
 				     MSDC_PAD_TUNE_RXDLYSEL);
+	}
+
+	if (host->dev_comp->mips_mt762x) {
+		/* Set default tuning parameters */
+		writel(0x84101010, host->base + tune_reg);
+		writel(0x10101010, host->base + MSDC_DAT_RDDLY0);
+		writel(0x10101010, host->base + MSDC_DAT_RDDLY1);
 	}
 
 	if (mmc->caps2 & MMC_CAP2_NO_SDIO) {
