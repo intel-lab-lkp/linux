@@ -25,11 +25,6 @@
 #include <linux/static_call_types.h>
 #include <linux/string.h>
 
-struct alternative {
-	struct alternative *next;
-	struct instruction *insn;
-};
-
 static unsigned long nr_cfi, nr_cfi_reused, nr_cfi_cache;
 
 static struct cfi_init_state initial_func_cfi;
@@ -130,9 +125,6 @@ static struct instruction *prev_insn_same_sym(struct objtool_file *file,
 	for (insn = prev_insn_same_sec(file, insn);			\
 	     insn && insn->offset >= sym->offset;			\
 	     insn = prev_insn_same_sec(file, insn))
-
-#define sec_for_each_insn_from(file, insn)				\
-	for (; insn; insn = next_insn_same_sec(file, insn))
 
 #define sec_for_each_insn_continue(file, insn)				\
 	for (insn = next_insn_same_sec(file, insn); insn;		\

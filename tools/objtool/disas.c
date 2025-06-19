@@ -266,6 +266,12 @@ char *disas_result(struct disas_context *dctx)
 #define DISAS_INSN_OFFSET_SPACE		10
 #define DISAS_INSN_SPACE		60
 
+#define DISAS_PRINFO(insn, depth, format, ...)				\
+	disas_print_info(stdout, insn, depth, format "\n", ##__VA_ARGS__)
+
+#define DISAS_PRINSN(dctx, insn, depth)			\
+	disas_print_insn(stdout, dctx, insn, depth, "\n")
+
 /*
  * Print a message in the instruction flow. If insn is not NULL then
  * the instruction address is printed in addition of the message,
@@ -345,6 +351,82 @@ void disas_print_insn(FILE *stream, struct disas_context *dctx,
 	va_end(args);
 }
 
+static void disas_group_alt(struct disas_context *dctx,
+			    struct instruction *orig_insn)
+{
+	struct instruction *insn;
+	struct alternative *alt;
+	struct symbol *func;
+	int i, count;
+	int alt_id;
+
+	func = orig_insn->sym;
+	alt_id = orig_insn->offset;
+
+	count = 0;
+	for (alt = orig_insn->alts; alt; alt = alt->next) {
+		if (!alt->insn->alt_group)
+			/* jump alternative */
+			continue;
+
+		if (func && alt->insn->sec == func->sec)
+			/* exception handler */
+			continue;
+
+		/* count group alternatives, including fake nop */
+		count++;
+	}
+
+	i = 1;
+	for (alt = orig_insn->alts; alt; alt = alt->next) {
+
+		if (!alt->insn->alt_group)
+			continue;
+
+		/*
+		 * If the alternative instruction is in the same section
+		 * as the original instruction then that's an exception
+		 * handling i.e. branch to the alternative instruction if
+		 * there is an exception.
+		 */
+		if (func && alt->insn->sec == func->sec) {
+			DISAS_PRINFO(NULL, 0,
+				    "<alternative.%x> exception handler - begin", alt_id);
+			DISAS_PRINFO(orig_insn, 1, "jmp    %lx <%s+0x%lx>",
+				    alt->insn->offset, func->name,
+				    alt->insn->offset - func->offset);
+			DISAS_PRINFO(NULL, 0,
+				    "<alternative.%x> exception handler - end", alt_id);
+			continue;
+		}
+
+		DISAS_PRINFO(NULL, 0,
+			    "<alternative.%x> %d/%d - begin", alt_id, i, count);
+
+		insn = alt->insn->alt_group->first_insn;
+
+		sec_for_each_insn_from(dctx->file, insn) {
+
+			if (insn->alts) {
+				DISAS_PRINFO(insn, 0,
+					     "alt group: ignore nested alternative (not supported)");
+			}
+
+			DISAS_PRINSN(dctx, insn, 1);
+
+			if (insn == insn->alt_group->last_insn ||
+			    insn == insn->alt_group->nop)
+				break;
+
+			insn = next_insn_same_sec(dctx->file, insn);
+		}
+
+		DISAS_PRINFO(NULL, 0,
+			    "<alternative.%x> %d/%d end", alt_id, i, count);
+		i++;
+	}
+}
+
 /*
  * Disassemble a single instruction. Return the size of the instruction.
  */
@@ -367,21 +449,79 @@ size_t disas_insn(struct disas_context *dctx, struct instruction *insn)
 	return disasm(insn->offset, &dctx->info);
 }
 
+static void disas_jump_alt(struct disas_context *dctx, struct instruction *insn)
+{
+	struct instruction *alt_insn;
+	struct symbol *func;
+	int alt_id;
+
+	func = insn->sym;
+	alt_id = insn->offset;
+
+	DISAS_PRINFO(NULL, 0, "<jump alternative.%x> default", alt_id);
+	DISAS_PRINSN(dctx, insn, 1);
+
+	alt_insn = insn->alts->insn;
+	if (!alt_insn) {
+		WARN_INSN(insn, "no jump alternative");
+		return;
+	}
+
+	DISAS_PRINFO(NULL, 0, "<jump alternative.%x> else", alt_id);
+
+	if (insn->type == INSN_NOP) {
+		DISAS_PRINFO(insn, 1, "jmp    %lx <%s+0x%lx>",
+			    alt_insn->offset, func->name,
+			    alt_insn->offset - func->offset);
+	} else {
+		DISAS_PRINFO(insn, 1, "nop%d", insn->len);
+	}
+
+	DISAS_PRINFO(NULL, 0, "<jump alternative.%x> end", alt_id);
+
+	if (insn->alts->next)
+		WARN_INSN(insn, "more than one jump alternatives\n");
+}
+
 /*
  * Disassemble a function.
  */
 static void disas_func(struct disas_context *dctx, struct symbol *func)
 {
+	struct instruction *alt = NULL;
 	struct instruction *insn;
-	size_t addr;
+	int alt_id = 0;
+	int depth = 0;
 
 	printf("%s:\n", func->name);
 	sym_for_each_insn(dctx->file, func, insn) {
-		addr = insn->offset;
-		disas_insn(dctx, insn);
-		printf(" %6lx:  %s+0x%-6lx      %s\n",
-		       addr, func->name, addr - func->offset,
-		       disas_result(dctx));
+
+		if (insn->alts) {
+			if (alt) {
+				DISAS_PRINFO(insn, 0,
+					     "alt default: ignore nested alternative (not supported)");
+			} else if (insn->alt_group) {
+				alt = insn;
+				alt_id = alt->offset;
+				DISAS_PRINFO(NULL, 0,
+					    "<alternative.%x> default - begin", alt_id);
+				depth = 1;
+			} else {
+				disas_jump_alt(dctx, insn);
+				continue;
+			}
+		}
+
+		DISAS_PRINSN(dctx, insn, depth);
+
+		if (alt && (alt->alt_group->last_insn == insn ||
+			    alt->alt_group->nop == insn)) {
+			DISAS_PRINFO(NULL, 0,
+				    "<alternative.%x> default - end", alt_id);
+			disas_group_alt(dctx, alt);
+			alt = NULL;
+			depth = 0;
+		}
 	}
 	printf("\n");
 }
