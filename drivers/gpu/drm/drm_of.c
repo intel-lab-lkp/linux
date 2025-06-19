@@ -280,6 +280,8 @@ int drm_of_find_panel_or_bridge(const struct device_node *np,
 
 	}
 
+	drm_panel_put(*panel);
+
 	of_node_put(remote);
 	return ret;
 }
