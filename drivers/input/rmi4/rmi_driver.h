@@ -115,6 +115,10 @@ static inline int rmi_f03_overwrite_button(struct rmi_function *fn,
 static inline void rmi_f03_commit_buttons(struct rmi_function *fn) {}
 #endif
 
+#ifdef CONFIG_RMI4_F21
+int rmi_f21_report_pressure(struct rmi_function *fn, int i);
+#endif
+
 #ifdef CONFIG_RMI4_F34
 int rmi_f34_create_sysfs(struct rmi_device *rmi_dev);
 void rmi_f34_remove_sysfs(struct rmi_device *rmi_dev);
@@ -133,6 +137,7 @@ extern struct rmi_function_handler rmi_f01_handler;
 extern struct rmi_function_handler rmi_f03_handler;
 extern struct rmi_function_handler rmi_f11_handler;
 extern struct rmi_function_handler rmi_f12_handler;
+extern struct rmi_function_handler rmi_f21_handler;
 extern struct rmi_function_handler rmi_f30_handler;
 extern struct rmi_function_handler rmi_f34_handler;
 extern struct rmi_function_handler rmi_f3a_handler;
