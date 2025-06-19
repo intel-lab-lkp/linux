@@ -100,6 +100,7 @@ static int fsl_dcu_attach_panel(struct fsl_dcu_drm_device *fsl_dev,
 	if (ret < 0)
 		goto err_sysfs;
 
+	drm_panel_put(panel);
 	return 0;
 
 err_sysfs:
