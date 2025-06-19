@@ -23,8 +23,10 @@ void __fat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 	struct fat_mount_options *opts = &MSDOS_SB(sb)->options;
 	va_list args;
 	struct va_format vaf;
+	static DEFINE_RATELIMIT_STATE(fat_err_rs, DEFAULT_RATELIMIT_INTERVAL,
+								  DEFAULT_RATELIMIT_BURST);
 
-	if (report) {
+	if (report && __ratelimit(&fat_err_rs)) {
 		va_start(args, fmt);
 		vaf.fmt = fmt;
 		vaf.va = &args;
