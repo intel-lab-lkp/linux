@@ -1176,10 +1176,14 @@ void cfg80211_scan_done(struct cfg80211_scan_request *request,
 			struct cfg80211_scan_info *info)
 {
 	struct cfg80211_scan_info old_info = request->info;
+	struct cfg80211_scan_request *rdev_req, *rdev_int_req;
+
+	rdev_req = wiphy_to_rdev(request->wiphy)->scan_req;
+	rdev_int_req = wiphy_to_rdev(request->wiphy)->int_scan_req;
 
 	trace_cfg80211_scan_done(request, info);
-	WARN_ON(request != wiphy_to_rdev(request->wiphy)->scan_req &&
-		request != wiphy_to_rdev(request->wiphy)->int_scan_req);
+	WARN_ON((rdev_req && request != rdev_req) &&
+		(rdev_int_req && request != rdev_int_req));
 
 	request->info = *info;
 
