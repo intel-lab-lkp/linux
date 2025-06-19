@@ -1548,12 +1548,31 @@ int v4l2_subdev_set_routing_with_fmt(struct v4l2_subdev *sd,
 				     const struct v4l2_mbus_framefmt *fmt);
 
 /**
+ * v4l2_subdev_find_route() - Find routes from a (pad, stream) pair
+ * @routing: routing used to find the opposite side
+ * @pad: pad id
+ * @stream: stream id
+ * @active: set to true for looking up only active routes
+ * @index: for accessing more than one route from the pad
+ *
+ * Find a route from the routing table where one end has (pad, stream) pair
+ * matching @pad and @stream.
+ *
+ * Returns the route on success or -ENOENT if no matching route is found.
+ */
+struct v4l2_subdev_route *
+v4l2_subdev_find_route(const struct v4l2_subdev_krouting *routing,
+		       u32 pad, u32 stream, bool active, unsigned int index);
+
+/**
  * v4l2_subdev_routing_find_opposite_end() - Find the opposite stream
  * @routing: routing used to find the opposite side
  * @pad: pad id
  * @stream: stream id
  * @other_pad: pointer used to return the opposite pad
  * @other_stream: pointer used to return the opposite stream
+ *
+ * Prefer v4l2_subdev_find_route() over v4l2_subdev_routing_find_opposite_end().
  *
  * This function uses the routing table to find the pad + stream which is
  * opposite the given pad + stream.

@@ -1996,34 +1996,52 @@ int v4l2_subdev_set_routing_with_fmt(struct v4l2_subdev *sd,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_set_routing_with_fmt);
 
-int v4l2_subdev_routing_find_opposite_end(const struct v4l2_subdev_krouting *routing,
-					  u32 pad, u32 stream, u32 *other_pad,
-					  u32 *other_stream)
+struct v4l2_subdev_route *
+v4l2_subdev_find_route(const struct v4l2_subdev_krouting *routing,
+		       u32 pad, u32 stream, bool active, unsigned int index)
 {
 	unsigned int i;
 
 	for (i = 0; i < routing->num_routes; ++i) {
 		struct v4l2_subdev_route *route = &routing->routes[i];
 
-		if (route->source_pad == pad &&
-		    route->source_stream == stream) {
-			if (other_pad)
-				*other_pad = route->sink_pad;
-			if (other_stream)
-				*other_stream = route->sink_stream;
-			return 0;
-		}
+		if (active && !(route->flags & V4L2_SUBDEV_ROUTE_FL_ACTIVE))
+			continue;
 
-		if (route->sink_pad == pad && route->sink_stream == stream) {
-			if (other_pad)
-				*other_pad = route->source_pad;
-			if (other_stream)
-				*other_stream = route->source_stream;
-			return 0;
-		}
+		if ((route->source_pad != pad ||
+		     route->source_stream != stream) &&
+		    (route->sink_pad != pad || route->sink_stream != stream))
+			continue;
+
+		if (index--)
+			continue;
+
+		return route;
 	}
 
-	return -EINVAL;
+	return ERR_PTR(-ENOENT);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_find_route);
+
+int v4l2_subdev_routing_find_opposite_end(const struct v4l2_subdev_krouting *routing,
+					  u32 pad, u32 stream, u32 *other_pad,
+					  u32 *other_stream)
+{
+	struct v4l2_subdev_route *route;
+
+	route = v4l2_subdev_find_route(routing, pad, stream, false, 0);
+	if (IS_ERR(route))
+		return PTR_ERR(route);
+
+	bool is_source = route->source_pad == pad;
+
+	if (other_pad)
+		*other_pad = is_source ? route->sink_pad : route->source_pad;
+	if (other_stream)
+		*other_stream = is_source ?
+			route->sink_stream : route->source_stream;
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_routing_find_opposite_end);
 
