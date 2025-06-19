@@ -99,11 +99,13 @@ int vmbus_negotiate_version(struct vmbus_channel_msginfo *msginfo, u32 version)
 	if (version >= VERSION_WIN10_V5) {
 		msg->msg_sint = VMBUS_MESSAGE_SINT;
 		msg->msg_vtl = ms_hyperv.vtl;
-		vmbus_connection.msg_conn_id = VMBUS_MESSAGE_CONNECTION_ID_4;
 	} else {
 		msg->interrupt_page = virt_to_phys(vmbus_connection.int_page);
-		vmbus_connection.msg_conn_id = VMBUS_MESSAGE_CONNECTION_ID;
 	}
+	/* Set default connection ID if not provided via DeviceTree */
+	if (!vmbus_connection.msg_conn_id)
+		vmbus_connection.msg_conn_id = (version >= VERSION_WIN10_V5) ?
+			VMBUS_MESSAGE_CONNECTION_ID_4 : VMBUS_MESSAGE_CONNECTION_ID;
 
 	/*
 	 * shared_gpa_boundary is zero in non-SNP VMs, so it's safe to always
