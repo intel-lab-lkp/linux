@@ -617,7 +617,7 @@ static int mlx4_create_zones(struct mlx4_dev *dev,
 	 *  and A0 steering area size) are such that there are only two subareas -- one
 	 *  for RSS and one for RAW_ETH.
 	 */
-	for (k = MLX4_QP_TABLE_ZONE_RSS + 1; k < sizeof(*bitmap)/sizeof((*bitmap)[0]);
+	for (k = MLX4_QP_TABLE_ZONE_RSS + 1; k < ARRAY_SIZE((*bitmap));
 	     k++) {
 		int size;
 		u32 offset = start_offset_rss;
