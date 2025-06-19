@@ -2225,16 +2225,17 @@ static void v4l2_subdev_collect_streams(struct v4l2_subdev *sd,
 	*found_streams = 0;
 	*enabled_streams = 0;
 
-	for (unsigned int i = 0; i < state->stream_configs.num_configs; ++i) {
-		const struct v4l2_subdev_stream_config *cfg =
-			&state->stream_configs.configs[i];
+	for (unsigned int i = 0; i < state->stream_configs.num_configs; i += 2) {
+		const struct v4l2_subdev_stream_config *src_cfg =
+			&state->stream_configs.configs[i + 1];
 
-		if (cfg->pad != pad || !(streams_mask & BIT_ULL(cfg->stream)))
+		if (src_cfg->pad != pad ||
+		    !(streams_mask & BIT_ULL(src_cfg->stream)))
 			continue;
 
-		*found_streams |= BIT_ULL(cfg->stream);
-		if (cfg->enabled)
-			*enabled_streams |= BIT_ULL(cfg->stream);
+		*found_streams |= BIT_ULL(src_cfg->stream);
+		if (src_cfg->enabled)
+			*enabled_streams |= BIT_ULL(src_cfg->stream);
 	}
 }
 
