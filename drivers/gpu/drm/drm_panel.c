@@ -401,6 +401,9 @@ EXPORT_SYMBOL(__devm_drm_panel_alloc);
  * Searches the set of registered panels for one that matches the given device
  * tree node. If a matching panel is found, return a pointer to it.
  *
+ * The refcount of the returned panel is incremented. Use drm_panel_put()
+ * at the caller side to maintain the count.
+ *
  * Return: A pointer to the panel registered for the specified device tree
  * node or an ERR_PTR() if no panel matching the device tree node can be found.
  *
@@ -422,6 +425,7 @@ struct drm_panel *of_drm_find_panel(const struct device_node *np)
 	list_for_each_entry(panel, &panel_list, list) {
 		if (panel->dev->of_node == np) {
 			mutex_unlock(&panel_lock);
+			drm_panel_get(panel);
 			return panel;
 		}
 	}
