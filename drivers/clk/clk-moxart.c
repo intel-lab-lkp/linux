@@ -58,7 +58,7 @@ static void __init moxart_of_apb_clk_init(struct device_node *node)
 	struct clk_hw *hw;
 	struct clk *pll_clk;
 	unsigned int div, val;
-	unsigned int div_idx[] = { 2, 3, 4, 6, 8};
+	static const unsigned int div_idx[] = { 2, 3, 4, 6, 8};
 	const char *name = node->name;
 	const char *parent_name;
 
