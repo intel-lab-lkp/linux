@@ -1523,6 +1523,7 @@ static int tegra_dsi_host_detach(struct mipi_dsi_host *host,
 
 	if (output->panel && &device->dev == output->panel->dev) {
 		output->panel = NULL;
+		drm_panel_put(output->panel);
 
 		if (output->connector.dev)
 			drm_helper_hpd_irq_event(output->connector.dev);
