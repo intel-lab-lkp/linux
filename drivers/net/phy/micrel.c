@@ -2173,6 +2173,116 @@ static void kszphy_get_phy_stats(struct phy_device *phydev,
 	stats->rx_errors = priv->phy_stats.rx_err_pkt_cnt;
 }
 
+/* Base register for Signal Quality Indicator (SQI) - Channel A
+ *
+ * MMD Address: MDIO_MMD_PMAPMD (0x01)
+ * Register:    0xAC (Channel A)
+ * Each channel has its own register:
+ *   Channel A: 0xAC
+ *   Channel B: 0xAD
+ *   Channel C: 0xAE
+ *   Channel D: 0xAF
+ */
+#define KSZ9477_MMD_SIGNAL_QUALITY_CHAN_A	0xAC
+
+/* SQI field mask for bits [14:8]
+ *
+ * SQI indicates relative quality of the signal.
+ * A lower value indicates better signal quality.
+ * Use FIELD_GET() to extract the field.
+ */
+#define KSZ9477_MMD_SQI_MASK			GENMASK(14, 8)
+
+/* Maximum raw value of the SQI field (7 bits: bits [14:8]) */
+#define KSZ9477_MMD_SQI_MAX_VALUE		0x7F
+
+/* Delay between consecutive SQI register reads in microseconds.
+ *
+ * Reference: KSZ9477S Datasheet DS00002392C, Section 4.1.11 (page 26)
+ * The register is updated every 2 µs. Use 3 µs to avoid redundant reads.
+ */
+#define KSZ9477_MMD_SQI_READ_DELAY_US		3
+
+/* Number of SQI samples to average for a stable result.
+ *
+ * Reference: KSZ9477S Datasheet DS00002392C, Section 4.1.11 (page 26)
+ * For noisy environments, a minimum of 30–50 readings is recommended.
+ */
+#define KSZ9477_SQI_SAMPLE_COUNT		40
+
+/* Currently only Channel A is supported by the SQI API */
+#define KSZ9477_SQI_MAX_CHANNELS		1
+
+/**
+ * kszphy_get_sqi - Read and average Signal Quality Indicator (SQI)
+ * @phydev: the PHY device
+ *
+ * For 1000BASE-T, all four differential pairs (channels A–D) are polled.
+ * For 100BASE-TX, only channel A is used.
+ *
+ * SQI approximates SNR and varies with cable length, noise, etc.
+ * Lower raw values from hardware = better signal.
+ * This function inverts the value to match Linux convention:
+ * higher SQI = better signal quality.
+ *
+ * Return: SQI value (0–127), or negative errno on failure.
+ */
+static int kszphy_get_sqi(struct phy_device *phydev)
+{
+	int sum[KSZ9477_SQI_MAX_CHANNELS] = {};
+	int avg[KSZ9477_SQI_MAX_CHANNELS] = {};
+	int ch, i, val, sqi;
+	u8 channels;
+
+	/* Determine applicable channels based on link speed */
+	if (phydev->speed == SPEED_1000)
+		/* TODO: current SQI API only supports 1 channel.
+		 * In the future, we can extend it to support all 4 channels.
+		 */
+		channels = 1;
+	else if (phydev->speed == SPEED_100)
+		channels = 1;
+	else
+		return -EOPNOTSUPP;
+
+	/*
+	 * Sample and accumulate SQI readings for each channel.
+	 *
+	 * Reference: KSZ9477S Datasheet DS00002392C, Section 4.1.11 (page 26)
+	 * - The SQI register is updated every 2 µs.
+	 * - Values may fluctuate significantly, even in low-noise environments.
+	 * - For reliable estimation, average a minimum of 30–50 samples
+	 *   (recommended for noisy environments)
+	 * - In noisy environments, individual readings are highly unreliable.
+	 *
+	 * We use 40 samples per channel with a delay of 3 µs between each
+	 * read to ensure new values are captured (2 µs update interval).
+	 */
+	for (i = 0; i < KSZ9477_SQI_SAMPLE_COUNT; i++) {
+		for (ch = 0; ch < channels; ch++) {
+			val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+					   KSZ9477_MMD_SIGNAL_QUALITY_CHAN_A + ch);
+			if (val < 0)
+				return val;
+
+			sqi = FIELD_GET(KSZ9477_MMD_SQI_MASK, val);
+			sum[ch] += sqi;
+		}
+		udelay(KSZ9477_MMD_SQI_READ_DELAY_US);
+	}
+
+	/* Average readings per channel */
+	for (ch = 0; ch < channels; ch++)
+		avg[ch] = sum[ch] / KSZ9477_SQI_SAMPLE_COUNT;
+
+	return avg[0]; /* Return the average for channel A */
+}
+
+static int kszphy_get_sqi_max(struct phy_device *phydev)
+{
+	return KSZ9477_MMD_SQI_MAX_VALUE;
+}
+
 static void kszphy_enable_clk(struct phy_device *phydev)
 {
 	struct kszphy_priv *priv = phydev->priv;
@@ -5801,6 +5911,8 @@ static struct phy_driver ksphy_driver[] = {
 	.update_stats	= kszphy_update_stats,
 	.cable_test_start	= ksz9x31_cable_test_start,
 	.cable_test_get_status	= ksz9x31_cable_test_get_status,
+	.get_sqi	= kszphy_get_sqi,
+	.get_sqi_max	= kszphy_get_sqi_max,
 } };
 
 module_phy_driver(ksphy_driver);
