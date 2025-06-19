@@ -17,6 +17,14 @@ properties:
   compatible:
     const: microsoft,vmbus
 
+  microsoft,message-connection-id:
+    description: |
+      VMBus message connection ID to be used for communication between host and
+      guest. If not specified, defaults to VMBUS_MESSAGE_CONNECTION_ID_4 (4) for
+      protocol version VERSION_WIN10_V5 and above, or VMBUS_MESSAGE_CONNECTION_ID
+      (1) for older versions.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   ranges: true
 
   '#address-cells':
@@ -55,6 +63,7 @@ examples:
 
             vmbus@ff0000000 {
                 compatible = "microsoft,vmbus";
+                microsoft,message-connection-id = <4>;
                 #address-cells = <2>;
                 #size-cells = <1>;
                 ranges = <0x0f 0xf0000000 0x0f 0xf0000000 0x10000000>;
