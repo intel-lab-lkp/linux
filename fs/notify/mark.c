@@ -665,6 +665,7 @@ static int fsnotify_attach_connector_to_object(fsnotify_connp_t *connp,
 		return -ENOMEM;
 	spin_lock_init(&conn->lock);
 	INIT_HLIST_HEAD(&conn->list);
+	conn->destroy_next = NULL;
 	conn->flags = 0;
 	conn->prio = 0;
 	conn->type = obj_type;
