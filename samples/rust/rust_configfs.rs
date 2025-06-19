@@ -10,6 +10,8 @@ use kernel::page::PAGE_SIZE;
 use kernel::prelude::*;
 use kernel::sync::Mutex;
 
+use core::ffi::CStr;
+
 module! {
     type: RustConfigfs,
     name: "rust_configfs",

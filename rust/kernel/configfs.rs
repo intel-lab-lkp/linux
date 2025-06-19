@@ -118,6 +118,7 @@ use crate::sync::Arc;
 use crate::sync::ArcBorrow;
 use crate::types::Opaque;
 use core::cell::UnsafeCell;
+use core::ffi::CStr;
 use core::marker::PhantomData;
 
 /// A configfs subsystem.
