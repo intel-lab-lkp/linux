@@ -88,13 +88,9 @@ static inline struct kthread *to_kthread(struct task_struct *k)
 /*
  * Variant of to_kthread() that doesn't assume @p is a kthread.
  *
- * Per construction; when:
- *
- *   (p->flags & PF_KTHREAD) && p->worker_private
- *
- * the task is both a kthread and struct kthread is persistent. However
- * PF_KTHREAD on it's own is not, kernel_thread() can exec() (See umh.c and
- * begin_new_exec()).
+ * For io_uring worker thread, p->worker_private point to io_worker
+ * struct, but they do not have PF_KTHREAD flag.
+ * Return NULL for such tasks.
  */
 static inline struct kthread *__to_kthread(struct task_struct *p)
 {
