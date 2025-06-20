@@ -161,8 +161,13 @@ struct scmi_proto_helpers_ops;
  * @dev: A reference to the associated SCMI instance device (handle->dev).
  * @xops: A reference to a struct holding refs to the core xfer operations that
  *	  can be used by the protocol implementation to generate SCMI messages.
+ * @hops: A reference to a struct holding refs to the common helper operations
+ *	  that can be used by the protocol implementation.
  * @set_priv: A method to set protocol private data for this instance.
  * @get_priv: A method to get protocol private data previously set.
+ * @notifier_register: A method to register interest for notifications from
+ *		       within a protocol implementation unit: notifiers can
+ *		       be registered only for the same protocol.
  *
  * This structure represents a protocol initialized against specific SCMI
  * instance and it will be used as follows:
@@ -182,6 +187,9 @@ struct scmi_protocol_handle {
 	int (*set_priv)(const struct scmi_protocol_handle *ph, void *priv,
 			u32 version);
 	void *(*get_priv)(const struct scmi_protocol_handle *ph);
+	int (*notifier_register)(const struct scmi_protocol_handle *ph,
+				 u8 evt_id, const u32 *src_id,
+				 struct notifier_block *nb);
 };
 
 /**
