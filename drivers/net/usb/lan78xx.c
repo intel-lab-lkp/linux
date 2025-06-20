@@ -3819,7 +3819,10 @@ static void lan78xx_rx_csum_offload(struct lan78xx_net *dev,
 	     !(dev->net->features & NETIF_F_HW_VLAN_CTAG_RX))) {
 		skb->ip_summed = CHECKSUM_NONE;
 	} else {
-		skb->csum = ntohs((u16)(rx_cmd_b >> RX_CMD_B_CSUM_SHIFT_));
+		__be16 csum_raw;
+
+		csum_raw = (__force __be16)(rx_cmd_b >> RX_CMD_B_CSUM_SHIFT_);
+		skb->csum = (__force __wsum)ntohs(csum_raw);
 		skb->ip_summed = CHECKSUM_COMPLETE;
 	}
 }
