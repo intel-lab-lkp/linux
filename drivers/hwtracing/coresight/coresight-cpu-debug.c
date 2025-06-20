@@ -416,13 +416,16 @@ static int debug_enable_func(void)
 {
 	struct debug_drvdata *drvdata;
 	int cpu, ret = 0;
-	cpumask_t mask;
+	cpumask_var_t mask;
+
+	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
+		return -ENOMEM;
 
 	/*
 	 * Use cpumask to track which debug power domains have
 	 * been powered on and use it to handle failure case.
 	 */
-	cpumask_clear(&mask);
+	cpumask_clear(mask);
 
 	for_each_possible_cpu(cpu) {
 		drvdata = per_cpu(debug_drvdata, cpu);
@@ -433,9 +436,10 @@ static int debug_enable_func(void)
 		if (ret < 0)
 			goto err;
 		else
-			cpumask_set_cpu(cpu, &mask);
+			cpumask_set_cpu(cpu, mask);
 	}
 
+	free_cpumask_var(mask);
 	return 0;
 
 err:
@@ -443,11 +447,12 @@ err:
 	 * If pm_runtime_get_sync() has failed, need rollback on
 	 * all the other CPUs that have been enabled before that.
 	 */
-	for_each_cpu(cpu, &mask) {
+	for_each_cpu(cpu, mask) {
 		drvdata = per_cpu(debug_drvdata, cpu);
 		pm_runtime_put_noidle(drvdata->dev);
 	}
 
+	free_cpumask_var(mask);
 	return ret;
 }
 
