@@ -2934,7 +2934,7 @@ static void fbcon_select_primary(struct fb_info *info)
 {
 	if (!map_override && primary_device == -1 &&
 	    video_is_primary_device(info->device)) {
-		int i;
+		int i, r;
 
 		printk(KERN_INFO "fbcon: %s (fb%i) is primary device\n",
 		       info->fix.id, info->node);
@@ -2949,6 +2949,10 @@ static void fbcon_select_primary(struct fb_info *info)
 			       first_fb_vc + 1, last_fb_vc + 1);
 			info_idx = primary_device;
 		}
+		r = sysfs_create_link(&fbcon_device->kobj, &info->device->kobj,
+				      "primary_device");
+		if (r)
+			pr_err("fbcon: Failed to link to primary device: %d\n", r);
 	}
 
 }
@@ -3376,6 +3380,10 @@ void __init fb_console_init(void)
 
 void __exit fb_console_exit(void)
 {
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+	if (primary_device != -1)
+		sysfs_remove_link(&fbcon_device->kobj, "primary_device");
+#endif
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
 	console_lock();
 	if (deferred_takeover)
