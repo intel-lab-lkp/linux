@@ -814,7 +814,6 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 {
 	struct virtio_fs_vq *fsvq = container_of(work, struct virtio_fs_vq,
 						 done_work);
-	struct fuse_pqueue *fpq = &fsvq->fud->pq;
 	struct virtqueue *vq = fsvq->vq;
 	struct fuse_req *req;
 	struct fuse_req *next;
@@ -827,9 +826,7 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		virtqueue_disable_cb(vq);
 
 		while ((req = virtqueue_get_buf(vq, &len)) != NULL) {
-			spin_lock(&fpq->lock);
-			list_move_tail(&req->list, &reqs);
-			spin_unlock(&fpq->lock);
+			list_add_tail(&req->list, &reqs);
 		}
 	} while (!virtqueue_enable_cb(vq));
 	spin_unlock(&fsvq->lock);
@@ -1388,7 +1385,6 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 	unsigned int i;
 	int ret;
 	bool notify;
-	struct fuse_pqueue *fpq;
 
 	/* Does the sglist fit on the stack? */
 	total_sgs = sg_count_fuse_req(req);
@@ -1444,10 +1440,6 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 	}
 
 	/* Request successfully sent. */
-	fpq = &fsvq->fud->pq;
-	spin_lock(&fpq->lock);
-	list_add_tail(&req->list, fpq->processing);
-	spin_unlock(&fpq->lock);
 	set_bit(FR_SENT, &req->flags);
 	/* matches barrier in request_wait_answer() */
 	smp_mb__after_atomic();
