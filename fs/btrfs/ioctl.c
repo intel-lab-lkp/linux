@@ -5213,6 +5213,16 @@ static int btrfs_ioctl_subvol_sync(struct btrfs_fs_info *fs_info, void __user *a
 	return 0;
 }
 
+static int btrfs_emergency_shutdown(struct btrfs_fs_info *fs_info, u32 flags)
+{
+	if (flags >= BTRFS_SHUTDOWN_FLAGS_LAST)
+		return -EINVAL;
+
+	/* For now, btrfs do not distinguish the different flags. */
+	btrfs_shutdown(fs_info);
+	return 0;
+}
+
 long btrfs_ioctl(struct file *file, unsigned int
 		cmd, unsigned long arg)
 {
@@ -5368,6 +5378,14 @@ long btrfs_ioctl(struct file *file, unsigned int
 #endif
 	case BTRFS_IOC_SUBVOL_SYNC_WAIT:
 		return btrfs_ioctl_subvol_sync(fs_info, argp);
+	case BTRFS_IOC_SHUTDOWN:
+		u32 flags;
+
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		if (get_user(flags, (__u32 __user *)arg))
+			return -EFAULT;
+		return btrfs_emergency_shutdown(fs_info, flags);
 	}
 
 	return -ENOTTY;
