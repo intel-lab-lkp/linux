@@ -476,8 +476,7 @@ xlog_state_shutdown_callbacks(
 	struct xlog_in_core	*iclog;
 	LIST_HEAD(cb_list);
 
-	iclog = log->l_iclog;
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		if (atomic_read(&iclog->ic_refcnt)) {
 			/* Reference holder will re-run iclog callbacks. */
 			continue;
@@ -490,7 +489,7 @@ xlog_state_shutdown_callbacks(
 		spin_lock(&log->l_icloglock);
 		wake_up_all(&iclog->ic_write_wait);
 		wake_up_all(&iclog->ic_force_wait);
-	} while ((iclog = iclog->ic_next) != log->l_iclog);
+	}
 
 	wake_up_all(&log->l_flush_wait);
 }
@@ -810,13 +809,11 @@ xlog_force_iclog(
 static void
 xlog_wait_iclog_completion(struct xlog *log)
 {
-	int		i;
-	struct xlog_in_core	*iclog = log->l_iclog;
+	struct xlog_in_core	*iclog;
 
-	for (i = 0; i < log->l_iclog_bufs; i++) {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		down(&iclog->ic_sema);
 		up(&iclog->ic_sema);
-		iclog = iclog->ic_next;
 	}
 }
 
@@ -920,7 +917,7 @@ out_err:
 		xfs_alert(mp, "%s: unmount record failed", __func__);
 
 	spin_lock(&log->l_icloglock);
-	iclog = log->l_iclog;
+	iclog = list_first_entry(&log->l_iclogs, struct xlog_in_core, ic_list);
 	error = xlog_force_iclog(iclog);
 	xlog_wait_on_iclog(iclog);
 
@@ -934,12 +931,12 @@ static void
 xfs_log_unmount_verify_iclog(
 	struct xlog		*log)
 {
-	struct xlog_in_core	*iclog = log->l_iclog;
+	struct xlog_in_core	*iclog;
 
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		ASSERT(iclog->ic_state == XLOG_STATE_ACTIVE);
 		ASSERT(iclog->ic_offset == 0);
-	} while ((iclog = iclog->ic_next) != log->l_iclog);
+	}
 }
 
 /*
@@ -1368,8 +1365,7 @@ xlog_alloc_log(
 {
 	struct xlog		*log;
 	xlog_rec_header_t	*head;
-	xlog_in_core_t		**iclogp;
-	xlog_in_core_t		*iclog, *prev_iclog=NULL;
+	struct xlog_in_core	*iclog, *tmp;
 	int			i;
 	int			error = -ENOMEM;
 	uint			log2_size = 0;
@@ -1435,13 +1431,13 @@ xlog_alloc_log(
 	spin_lock_init(&log->l_icloglock);
 	init_waitqueue_head(&log->l_flush_wait);
 
-	iclogp = &log->l_iclog;
+	INIT_LIST_HEAD(&log->l_iclogs);
 	/*
 	 * The amount of memory to allocate for the iclog structure is
 	 * rather funky due to the way the structure is defined.  It is
 	 * done this way so that we can use different sizes for machines
 	 * with different amounts of memory.  See the definition of
-	 * xlog_in_core_t in xfs_log_priv.h for details.
+	 * xlog_in_core in xfs_log_priv.h for details.
 	 */
 	ASSERT(log->l_iclog_size >= 4096);
 	for (i = 0; i < log->l_iclog_bufs; i++) {
@@ -1452,10 +1448,6 @@ xlog_alloc_log(
 				GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 		if (!iclog)
 			goto out_free_iclog;
-
-		*iclogp = iclog;
-		iclog->ic_prev = prev_iclog;
-		prev_iclog = iclog;
 
 		iclog->ic_data = kvzalloc(log->l_iclog_size,
 				GFP_KERNEL | __GFP_RETRY_MAYFAIL);
@@ -1483,10 +1475,8 @@ xlog_alloc_log(
 		INIT_WORK(&iclog->ic_end_io_work, xlog_ioend_work);
 		sema_init(&iclog->ic_sema, 1);
 
-		iclogp = &iclog->ic_next;
+		list_add(&iclog->ic_list, &log->l_iclogs);
 	}
-	*iclogp = log->l_iclog;			/* complete ring */
-	log->l_iclog->ic_prev = prev_iclog;	/* re-write 1st prev ptr */
 
 	log->l_ioend_workqueue = alloc_workqueue("xfs-log/%s",
 			XFS_WQFLAGS(WQ_FREEZABLE | WQ_MEM_RECLAIM |
@@ -1503,12 +1493,10 @@ xlog_alloc_log(
 out_destroy_workqueue:
 	destroy_workqueue(log->l_ioend_workqueue);
 out_free_iclog:
-	for (iclog = log->l_iclog; iclog; iclog = prev_iclog) {
-		prev_iclog = iclog->ic_next;
+	list_for_each_entry_safe(iclog, tmp, &log->l_iclogs, ic_list) {
+		list_del(&iclog->ic_list);
 		kvfree(iclog->ic_data);
 		kfree(iclog);
-		if (prev_iclog == log->l_iclog)
-			break;
 	}
 out_free_log:
 	kfree(log);
@@ -1844,10 +1832,9 @@ xlog_sync(
  */
 STATIC void
 xlog_dealloc_log(
-	struct xlog	*log)
+	struct xlog		*log)
 {
-	xlog_in_core_t	*iclog, *next_iclog;
-	int		i;
+	struct xlog_in_core	*iclog, *tmp;
 
 	/*
 	 * Destroy the CIL after waiting for iclog IO completion because an
@@ -1856,12 +1843,10 @@ xlog_dealloc_log(
 	 */
 	xlog_cil_destroy(log);
 
-	iclog = log->l_iclog;
-	for (i = 0; i < log->l_iclog_bufs; i++) {
-		next_iclog = iclog->ic_next;
+	list_for_each_entry_safe(iclog, tmp, &log->l_iclogs, ic_list) {
+		list_del(&iclog->ic_list);
 		kvfree(iclog->ic_data);
 		kfree(iclog);
-		iclog = next_iclog;
 	}
 
 	log->l_mp->m_log = NULL;
@@ -2332,9 +2317,9 @@ xlog_state_activate_iclogs(
 	struct xlog		*log,
 	int			*iclogs_changed)
 {
-	struct xlog_in_core	*iclog = log->l_iclog;
+	struct xlog_in_core	*iclog;
 
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		if (iclog->ic_state == XLOG_STATE_DIRTY)
 			xlog_state_activate_iclog(iclog, iclogs_changed);
 		/*
@@ -2343,7 +2328,7 @@ xlog_state_activate_iclogs(
 		 */
 		else if (iclog->ic_state != XLOG_STATE_ACTIVE)
 			break;
-	} while ((iclog = iclog->ic_next) != log->l_iclog);
+	}
 }
 
 static int
@@ -2404,10 +2389,10 @@ STATIC xfs_lsn_t
 xlog_get_lowest_lsn(
 	struct xlog		*log)
 {
-	struct xlog_in_core	*iclog = log->l_iclog;
+	struct xlog_in_core	*iclog;
 	xfs_lsn_t		lowest_lsn = 0, lsn;
 
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		if (iclog->ic_state == XLOG_STATE_ACTIVE ||
 		    iclog->ic_state == XLOG_STATE_DIRTY)
 			continue;
@@ -2415,7 +2400,7 @@ xlog_get_lowest_lsn(
 		lsn = be64_to_cpu(iclog->ic_header.h_lsn);
 		if ((lsn && !lowest_lsn) || XFS_LSN_CMP(lsn, lowest_lsn) < 0)
 			lowest_lsn = lsn;
-	} while ((iclog = iclog->ic_next) != log->l_iclog);
+	}
 
 	return lowest_lsn;
 }
@@ -2486,19 +2471,17 @@ xlog_state_do_iclog_callbacks(
 		__releases(&log->l_icloglock)
 		__acquires(&log->l_icloglock)
 {
-	struct xlog_in_core	*first_iclog = log->l_iclog;
-	struct xlog_in_core	*iclog = first_iclog;
+	struct xlog_in_core	*iclog;
 	bool			ran_callback = false;
 
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		LIST_HEAD(cb_list);
 
 		if (xlog_state_iodone_process_iclog(log, iclog))
 			break;
-		if (iclog->ic_state != XLOG_STATE_CALLBACK) {
-			iclog = iclog->ic_next;
+		if (iclog->ic_state != XLOG_STATE_CALLBACK)
 			continue;
-		}
+
 		list_splice_init(&iclog->ic_callbacks, &cb_list);
 		spin_unlock(&log->l_icloglock);
 
@@ -2509,8 +2492,7 @@ xlog_state_do_iclog_callbacks(
 
 		spin_lock(&log->l_icloglock);
 		xlog_state_clean_iclog(log, iclog);
-		iclog = iclog->ic_next;
-	} while (iclog != first_iclog);
+	}
 
 	return ran_callback;
 }
@@ -2526,6 +2508,7 @@ xlog_state_do_callback(
 {
 	int			flushcnt = 0;
 	int			repeats = 0;
+	struct xlog_in_core	*iclog;
 
 	spin_lock(&log->l_icloglock);
 	while (xlog_state_do_iclog_callbacks(log)) {
@@ -2541,7 +2524,8 @@ xlog_state_do_callback(
 		}
 	}
 
-	if (log->l_iclog->ic_state == XLOG_STATE_ACTIVE)
+	iclog = list_first_entry(&log->l_iclogs, struct xlog_in_core, ic_list);
+	if (iclog->ic_state == XLOG_STATE_ACTIVE)
 		wake_up_all(&log->l_flush_wait);
 
 	spin_unlock(&log->l_icloglock);
@@ -2610,9 +2594,9 @@ xlog_state_get_iclog_space(
 	struct xlog_ticket	*ticket,
 	int			*logoffsetp)
 {
-	int		  log_offset;
-	xlog_rec_header_t *head;
-	xlog_in_core_t	  *iclog;
+	int			log_offset;
+	xlog_rec_header_t	*head;
+	struct xlog_in_core	*iclog;
 
 restart:
 	spin_lock(&log->l_icloglock);
@@ -2621,7 +2605,7 @@ restart:
 		return -EIO;
 	}
 
-	iclog = log->l_iclog;
+	iclog = list_first_entry(&log->l_iclogs, struct xlog_in_core, ic_list);
 	if (iclog->ic_state != XLOG_STATE_ACTIVE) {
 		XFS_STATS_INC(log->l_mp, xs_log_noiclogs);
 
@@ -2778,8 +2762,9 @@ xfs_log_ticket_ungrant(
 }
 
 /*
- * This routine will mark the current iclog in the ring as WANT_SYNC and move
- * the current iclog pointer to the next iclog in the ring.
+ * The current iclog is always the first one in the ring.
+ * This routine will mark the current iclog as WANT_SYNC and move it to
+ * the tail of the ring, making the next iclog the current active.
  */
 void
 xlog_state_switch_iclogs(
@@ -2822,8 +2807,8 @@ xlog_state_switch_iclogs(
 		if (log->l_curr_cycle == XLOG_HEADER_MAGIC_NUM)
 			log->l_curr_cycle++;
 	}
-	ASSERT(iclog == log->l_iclog);
-	log->l_iclog = iclog->ic_next;
+	ASSERT(list_is_first(&iclog->ic_list, &log->l_iclogs));
+	list_move_tail(&iclog->ic_list, &log->l_iclogs);
 }
 
 /*
@@ -2899,7 +2884,7 @@ xfs_log_force(
 	if (xlog_is_shutdown(log))
 		goto out_error;
 
-	iclog = log->l_iclog;
+	iclog = list_first_entry(&log->l_iclogs, struct xlog_in_core, ic_list);
 	trace_xlog_iclog_force(iclog, _RET_IP_);
 
 	if (iclog->ic_state == XLOG_STATE_DIRTY ||
@@ -2913,7 +2898,7 @@ xfs_log_force(
 		 * is nothing to sync out. Otherwise, we attach ourselves to the
 		 * previous iclog and go to sleep.
 		 */
-		iclog = iclog->ic_prev;
+		iclog = list_prev_entry_circular(iclog, &log->l_iclogs, ic_list);
 	} else if (iclog->ic_state == XLOG_STATE_ACTIVE) {
 		if (atomic_read(&iclog->ic_refcnt) == 0) {
 			/* We have exclusive access to this iclog. */
@@ -2975,21 +2960,22 @@ xlog_force_lsn(
 	int			*log_flushed,
 	bool			already_slept)
 {
-	struct xlog_in_core	*iclog;
+	struct xlog_in_core	*iclog, *icprev;
 	bool			completed;
 
 	spin_lock(&log->l_icloglock);
 	if (xlog_is_shutdown(log))
 		goto out_error;
 
-	iclog = log->l_iclog;
+	iclog = list_first_entry(&log->l_iclogs, struct xlog_in_core, ic_list);
 	while (be64_to_cpu(iclog->ic_header.h_lsn) != lsn) {
 		trace_xlog_iclog_force_lsn(iclog, _RET_IP_);
-		iclog = iclog->ic_next;
-		if (iclog == log->l_iclog)
+		iclog = list_next_entry(iclog, ic_list);
+		if (list_entry_is_head(iclog, &log->l_iclogs, ic_list))
 			goto out_unlock;
 	}
 
+	icprev = list_prev_entry_circular(iclog, &log->l_iclogs, ic_list);
 	switch (iclog->ic_state) {
 	case XLOG_STATE_ACTIVE:
 		/*
@@ -3008,9 +2994,9 @@ xlog_force_lsn(
 		 * will go out then.
 		 */
 		if (!already_slept &&
-		    (iclog->ic_prev->ic_state == XLOG_STATE_WANT_SYNC ||
-		     iclog->ic_prev->ic_state == XLOG_STATE_SYNCING)) {
-			xlog_wait(&iclog->ic_prev->ic_write_wait,
+		    (icprev->ic_state == XLOG_STATE_WANT_SYNC ||
+		     icprev->ic_state == XLOG_STATE_SYNCING)) {
+			xlog_wait(&icprev->ic_write_wait,
 					&log->l_icloglock);
 			return -EAGAIN;
 		}
@@ -3323,7 +3309,7 @@ xlog_verify_iclog(
 	int			count)
 {
 	xlog_op_header_t	*ophead;
-	xlog_in_core_t		*icptr;
+	struct xlog_in_core	*icptr;
 	xlog_in_core_2_t	*xhdr;
 	void			*base_ptr, *ptr, *p;
 	ptrdiff_t		field_offset;
@@ -3333,12 +3319,8 @@ xlog_verify_iclog(
 
 	/* check validity of iclog pointers */
 	spin_lock(&log->l_icloglock);
-	icptr = log->l_iclog;
-	for (i = 0; i < log->l_iclog_bufs; i++, icptr = icptr->ic_next)
+	list_for_each_entry(icptr, &log->l_iclogs, ic_list)
 		ASSERT(icptr);
-
-	if (icptr != log->l_iclog)
-		xfs_emerg(log->l_mp, "%s: corrupt iclog ring", __func__);
 	spin_unlock(&log->l_icloglock);
 
 	/* check log magic numbers */
@@ -3531,17 +3513,15 @@ STATIC int
 xlog_iclogs_empty(
 	struct xlog	*log)
 {
-	xlog_in_core_t	*iclog;
+	struct xlog_in_core	*iclog;
 
-	iclog = log->l_iclog;
-	do {
+	list_for_each_entry(iclog, &log->l_iclogs, ic_list) {
 		/* endianness does not matter here, zero is zero in
 		 * any language.
 		 */
 		if (iclog->ic_header.h_num_logops)
 			return 0;
-		iclog = iclog->ic_next;
-	} while (iclog != log->l_iclog);
+	}
 	return 1;
 }
 

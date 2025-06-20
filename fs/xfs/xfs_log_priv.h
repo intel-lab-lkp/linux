@@ -163,7 +163,7 @@ typedef struct xlog_ticket {
  * - ic_data follows, so a write to disk can start at the beginning of
  *	the iclog.
  * - ic_forcewait is used to implement synchronous forcing of the iclog to disk.
- * - ic_next is the pointer to the next iclog in the ring.
+ * - ic_list is the list member of iclog ring, headed by log->l_iclogs.
  * - ic_log is a pointer back to the global log structure.
  * - ic_size is the full size of the log buffer, minus the cycle headers.
  * - ic_offset is the current number of bytes written to in this iclog.
@@ -183,11 +183,10 @@ typedef struct xlog_ticket {
  * We'll put all the read-only and l_icloglock fields in the first cacheline,
  * and move everything else out to subsequent cachelines.
  */
-typedef struct xlog_in_core {
+struct xlog_in_core {
 	wait_queue_head_t	ic_force_wait;
 	wait_queue_head_t	ic_write_wait;
-	struct xlog_in_core	*ic_next;
-	struct xlog_in_core	*ic_prev;
+	struct list_head	ic_list;
 	struct xlog		*ic_log;
 	u32			ic_size;
 	u32			ic_offset;
@@ -207,7 +206,7 @@ typedef struct xlog_in_core {
 	struct work_struct	ic_end_io_work;
 	struct bio		ic_bio;
 	struct bio_vec		ic_bvec[];
-} xlog_in_core_t;
+};
 
 /*
  * The CIL context is used to aggregate per-transaction details as well be
@@ -422,7 +421,7 @@ struct xlog {
 						/* waiting for iclog flush */
 	int			l_covered_state;/* state of "covering disk
 						 * log entries" */
-	xlog_in_core_t		*l_iclog;       /* head log queue	*/
+	struct list_head	l_iclogs;       /* head log queue */
 	spinlock_t		l_icloglock;    /* grab to change iclog state */
 	int			l_curr_cycle;   /* Cycle number of log writes */
 	int			l_prev_cycle;   /* Cycle number before last

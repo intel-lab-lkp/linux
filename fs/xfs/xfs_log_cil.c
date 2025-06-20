@@ -1463,16 +1463,21 @@ xlog_cil_push_work(
 	 */
 	spin_lock(&log->l_icloglock);
 	if (ctx->start_lsn != ctx->commit_lsn) {
-		xfs_lsn_t	plsn;
+		xfs_lsn_t		plsn;
+		struct xlog_in_core	*icprev;
 
-		plsn = be64_to_cpu(ctx->commit_iclog->ic_prev->ic_header.h_lsn);
+		icprev = list_prev_entry_circular(ctx->commit_iclog,
+						  &log->l_iclogs,
+						  ic_list);
+
+		plsn = be64_to_cpu(icprev->ic_header.h_lsn);
 		if (plsn && XFS_LSN_CMP(plsn, ctx->commit_lsn) < 0) {
 			/*
 			 * Waiting on ic_force_wait orders the completion of
-			 * iclogs older than ic_prev. Hence we only need to wait
+			 * iclogs older than icprev. Hence we only need to wait
 			 * on the most recent older iclog here.
 			 */
-			xlog_wait_on_iclog(ctx->commit_iclog->ic_prev);
+			xlog_wait_on_iclog(icprev);
 			spin_lock(&log->l_icloglock);
 		}
 
