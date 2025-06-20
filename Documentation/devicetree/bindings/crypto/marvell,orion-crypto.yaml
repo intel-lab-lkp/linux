@@ -32,11 +32,12 @@ properties:
         deprecated: true
 
   reg-names:
+    description: |
+      Names for register regions. "sram" is deprecated.
     minItems: 1
     items:
       - const: regs
       - const: sram
-        deprecated: true
 
   interrupts:
     description: One interrupt for each CESA engine
