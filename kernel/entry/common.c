@@ -326,13 +326,15 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs)
 	irq_state.lockdep = lockdep_hardirqs_enabled();
 
 	__nmi_enter();
-	lockdep_hardirqs_off(CALLER_ADDR0);
+	if (irq_state.lockdep)
+		lockdep_hardirqs_off(CALLER_ADDR0);
 	lockdep_hardirq_enter();
 	ct_nmi_enter();
 
 	instrumentation_begin();
 	kmsan_unpoison_entry_regs(regs);
-	trace_hardirqs_off_finish();
+	if (irq_state.lockdep)
+		trace_hardirqs_off_finish();
 	ftrace_nmi_enter();
 	instrumentation_end();
 
