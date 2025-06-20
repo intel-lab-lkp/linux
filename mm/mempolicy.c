@@ -165,7 +165,7 @@ static unsigned int *node_bw_table;
  */
 static DEFINE_MUTEX(wi_state_lock);
 
-static u8 get_il_weight(int node)
+u8 get_il_weight(int node)
 {
 	struct weighted_interleave_state *state;
 	u8 weight = 1;

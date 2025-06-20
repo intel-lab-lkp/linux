@@ -1170,6 +1170,7 @@ extern int node_reclaim_mode;
 
 extern int node_reclaim(struct pglist_data *, gfp_t, unsigned int);
 extern int find_next_best_node(int node, nodemask_t *used_node_mask);
+extern u8 get_il_weight(int node);
 #else
 #define node_reclaim_mode 0
 
@@ -1181,6 +1182,11 @@ static inline int node_reclaim(struct pglist_data *pgdat, gfp_t mask,
 static inline int find_next_best_node(int node, nodemask_t *used_node_mask)
 {
 	return NUMA_NO_NODE;
+}
+
+static inline u8 get_il_weight(int node)
+{
+	return 1;
 }
 #endif
 
