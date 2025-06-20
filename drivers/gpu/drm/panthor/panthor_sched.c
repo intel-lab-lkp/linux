@@ -535,6 +535,9 @@ struct panthor_group {
 	/** @ptdev: Device. */
 	struct panthor_device *ptdev;
 
+	/** @pfile: File this group is created from. */
+	struct panthor_file *pfile;
+
 	/** @vm: VM bound to the group. */
 	struct panthor_vm *vm;
 
@@ -919,6 +922,7 @@ static void group_release_work(struct work_struct *work)
 	panthor_kernel_bo_destroy(group->syncobjs);
 
 	panthor_vm_put(group->vm);
+	panthor_file_put(group->pfile);
 	kfree(group);
 }
 
@@ -3466,6 +3470,8 @@ int panthor_group_create(struct panthor_file *pfile,
 	INIT_WORK(&group->sync_upd_work, group_sync_upd_work);
 	INIT_WORK(&group->tiler_oom_work, group_tiler_oom_work);
 	INIT_WORK(&group->release_work, group_release_work);
+
+	group->pfile = panthor_file_get(pfile);
 
 	group->vm = panthor_vm_pool_get_vm(pfile->vms, group_args->vm_id);
 	if (!group->vm) {

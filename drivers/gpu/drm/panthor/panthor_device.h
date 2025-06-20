@@ -256,7 +256,23 @@ struct panthor_file {
 
 	/** @stats: cycle and timestamp measures for job execution. */
 	struct panthor_gpu_usage stats;
+
+	/** @refcount: ref count of this file */
+	struct kref refcount;
 };
+
+static inline struct panthor_file *panthor_file_get(struct panthor_file *pfile)
+{
+	kref_get(&pfile->refcount);
+	return pfile;
+}
+
+void panthor_file_release(struct kref *kref);
+
+static inline void panthor_file_put(struct panthor_file *pfile)
+{
+	kref_put(&pfile->refcount, panthor_file_release);
+}
 
 int panthor_device_init(struct panthor_device *ptdev);
 void panthor_device_unplug(struct panthor_device *ptdev);

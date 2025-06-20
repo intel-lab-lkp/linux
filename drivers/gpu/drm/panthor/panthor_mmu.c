@@ -1604,6 +1604,7 @@ void panthor_vm_pool_destroy(struct panthor_file *pfile)
 
 	xa_destroy(&pfile->vms->xa);
 	kfree(pfile->vms);
+	pfile->vms = NULL;
 }
 
 /**

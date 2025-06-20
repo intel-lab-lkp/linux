@@ -1393,6 +1393,16 @@ static int panthor_ioctl_set_user_mmio_offset(struct drm_device *ddev,
 	return 0;
 }
 
+void panthor_file_release(struct kref *kref)
+{
+	struct panthor_file *pfile =
+		container_of(kref, struct panthor_file, refcount);
+
+	WARN_ON(pfile->vms || pfile->groups);
+
+	kfree(pfile);
+}
+
 static int
 panthor_open(struct drm_device *ddev, struct drm_file *file)
 {
@@ -1426,6 +1436,8 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 	if (ret)
 		goto err_destroy_vm_pool;
 
+	kref_init(&pfile->refcount);
+
 	file->driver_priv = pfile;
 	return 0;
 
@@ -1442,10 +1454,11 @@ panthor_postclose(struct drm_device *ddev, struct drm_file *file)
 {
 	struct panthor_file *pfile = file->driver_priv;
 
+	/* destroy vm and group handles now to avoid circular references */
 	panthor_group_pool_destroy(pfile);
 	panthor_vm_pool_destroy(pfile);
 
-	kfree(pfile);
+	panthor_file_put(pfile);
 }
 
 static const struct drm_ioctl_desc panthor_drm_driver_ioctls[] = {
