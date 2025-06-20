@@ -238,18 +238,32 @@ void hibmc_dp_display_en(struct hibmc_dp *dp, bool enable)
 	msleep(50);
 }
 
+int hibmc_dp_detect_link(struct hibmc_dp *dp)
+{
+	struct hibmc_dp_dev *dp_dev = dp->dp_dev;
+	int ret = 0;
+
+	mutex_lock(&dp->link_train_mutex);
+
+	if (!dp_dev->link.status.channel_equalized) {
+		ret = hibmc_dp_link_training(dp_dev);
+		if (ret)
+			drm_err(dp->drm_dev, "dp link training failed, ret: %d\n", ret);
+	}
+
+	mutex_unlock(&dp->link_train_mutex);
+
+	return ret;
+}
+
 int hibmc_dp_mode_set(struct hibmc_dp *dp, struct drm_display_mode *mode)
 {
 	struct hibmc_dp_dev *dp_dev = dp->dp_dev;
 	int ret;
 
-	if (!dp_dev->link.status.channel_equalized) {
-		ret = hibmc_dp_link_training(dp_dev);
-		if (ret) {
-			drm_err(dp->drm_dev, "dp link training failed, ret: %d\n", ret);
-			return ret;
-		}
-	}
+	ret = hibmc_dp_detect_link(dp);
+	if (ret)
+		return ret;
 
 	hibmc_dp_display_en(dp, false);
 	hibmc_dp_link_cfg(dp_dev, mode);
