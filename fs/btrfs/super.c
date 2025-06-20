@@ -2398,6 +2398,39 @@ static long btrfs_free_cached_objects(struct super_block *sb, struct shrink_cont
 	return 0;
 }
 
+static void btrfs_shutdown_bdev(struct super_block *sb, struct block_device *bdev)
+{
+	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
+	struct btrfs_device *device;
+	struct btrfs_dev_lookup_args lookup_args = { .devt = bdev->bd_dev };
+
+	mutex_lock(&fs_info->fs_devices->device_list_mutex);
+	device = btrfs_find_device(fs_info->fs_devices, &lookup_args);
+	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
+	if (!device) {
+		btrfs_warn(fs_info, "unable to find btrfs device for block device '%pg'",
+			   bdev);
+		return;
+	}
+	set_bit(BTRFS_DEV_STATE_MISSING, &device->dev_state);
+	device->fs_devices->missing_devices++;
+	if (test_and_clear_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
+		list_del_init(&device->dev_alloc_list);
+		device->fs_devices->rw_devices--;
+	}
+	if (!btrfs_check_rw_degradable(fs_info, device)) {
+		btrfs_warn_in_rcu(fs_info,
+	"btrfs device id %llu path %s has gone missing, can not maintain read-write",
+				  device->devid, btrfs_dev_name(device));
+		btrfs_shutdown(fs_info);
+		return;
+	}
+	btrfs_warn_in_rcu(fs_info,
+	"btrfs device id %llu path %s has gone missing, continue degraded",
+			  device->devid, btrfs_dev_name(device));
+	btrfs_set_opt(fs_info->mount_opt, DEGRADED);
+}
+
 static const struct super_operations btrfs_super_ops = {
 	.drop_inode	= btrfs_drop_inode,
 	.evict_inode	= btrfs_evict_inode,
@@ -2413,6 +2446,7 @@ static const struct super_operations btrfs_super_ops = {
 	.unfreeze_fs	= btrfs_unfreeze,
 	.nr_cached_objects = btrfs_nr_cached_objects,
 	.free_cached_objects = btrfs_free_cached_objects,
+	.shutdown_bdev	= btrfs_shutdown_bdev,
 };
 
 static const struct file_operations btrfs_ctl_fops = {
