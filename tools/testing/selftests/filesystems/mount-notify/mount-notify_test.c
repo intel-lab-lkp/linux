@@ -465,12 +465,17 @@ TEST_F(fanotify, rmdir)
 	ASSERT_GE(ret, 0);
 
 	if (ret == 0) {
-		chdir("/");
-		unshare(CLONE_NEWNS);
-		mount("", "/", NULL, MS_REC|MS_PRIVATE, NULL);
-		umount2("/a", MNT_DETACH);
+		if (chdir("/"))
+			exit(-1);
+		if (unshare(CLONE_NEWNS))
+			exit(-1);
+		if (mount("", "/", NULL, MS_REC|MS_PRIVATE, NULL))
+			exit(-1);
+		if (umount2("/a", MNT_DETACH))
+			exit(-1);
 		// This triggers a detach in the other namespace
-		rmdir("/a");
+		if (rmdir("/a"))
+			exit(-1);
 		exit(0);
 	}
 	wait(NULL);
