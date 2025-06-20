@@ -6415,6 +6415,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	pte_t new_pte;
 	bool new_folio, new_pagecache_folio = false;
 	u32 hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
+	bool folio_locked = true;
 
 	/*
 	 * Currently, we are forced to kill the process in the event the
@@ -6580,6 +6581,11 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 
 	hugetlb_count_add(pages_per_huge_page(h), mm);
 	if ((vmf->flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED)) {
+		/* No need to lock file folios. See comment in hugetlb_fault() */
+		if (!anon_rmap) {
+			folio_locked = false;
+			folio_unlock(folio);
+		}
 		/* Optimization, do the COW without a second fault */
 		ret = hugetlb_wp(vmf);
 	}
@@ -6594,7 +6600,8 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	if (new_folio)
 		folio_set_hugetlb_migratable(folio);
 
-	folio_unlock(folio);
+	if (folio_locked)
+		folio_unlock(folio);
 out:
 	hugetlb_vma_unlock_read(vma);
 
@@ -6614,7 +6621,8 @@ backout_unlocked:
 	if (new_folio && !new_pagecache_folio)
 		restore_reserve_on_error(h, vma, vmf->address, folio);
 
-	folio_unlock(folio);
+	if (folio_locked)
+		folio_unlock(folio);
 	folio_put(folio);
 	goto out;
 }
@@ -6648,7 +6656,7 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	vm_fault_t ret;
 	u32 hash;
-	struct folio *folio;
+	struct folio *folio = NULL;
 	struct hstate *h = hstate_vma(vma);
 	struct address_space *mapping;
 	struct vm_fault vmf = {
@@ -6665,6 +6673,7 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		 * be hard to debug if called functions make assumptions
 		 */
 	};
+	bool folio_locked = false;
 
 	/*
 	 * Serialize hugepage allocation and instantiation, so that we don't
@@ -6779,13 +6788,24 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		/* Fallthrough to CoW */
 	}
 
-	/* hugetlb_wp() requires page locks of pte_page(vmf.orig_pte) */
-	folio = page_folio(pte_page(vmf.orig_pte));
-	folio_lock(folio);
-	folio_get(folio);
-
 	if (flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) {
 		if (!huge_pte_write(vmf.orig_pte)) {
+			/*
+			 * Anonymous folios need to be lock since hugetlb_wp()
+			 * checks whether we can re-use the folio exclusively
+			 * for us in case we are the only user of it.
+			 */
+			folio = page_folio(pte_page(vmf.orig_pte));
+			folio_get(folio);
+			if (folio_test_anon(folio)) {
+				spin_unlock(vmf.ptl);
+				folio_lock(folio);
+				folio_locked = true;
+				spin_lock(vmf.ptl);
+				if (unlikely(!pte_same(vmf.orig_pte, huge_ptep_get(mm,
+						   vmf.address, vmf.pte))))
+					goto out_put_page;
+			}
 			ret = hugetlb_wp(&vmf);
 			goto out_put_page;
 		} else if (likely(flags & FAULT_FLAG_WRITE)) {
@@ -6797,8 +6817,11 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 						flags & FAULT_FLAG_WRITE))
 		update_mmu_cache(vma, vmf.address, vmf.pte);
 out_put_page:
-	folio_unlock(folio);
-	folio_put(folio);
+	if (folio) {
+		if (folio_locked)
+			folio_unlock(folio);
+		folio_put(folio);
+	}
 out_ptl:
 	spin_unlock(vmf.ptl);
 out_mutex:
