@@ -4079,7 +4079,7 @@ static int core_pmu_hw_config(struct perf_event *event)
 static bool is_available_metric_event(struct perf_event *event)
 {
 	return is_metric_event(event) &&
-		event->attr.config <= INTEL_TD_METRIC_AVAILABLE_MAX;
+	       (event->attr.config & INTEL_ARCH_EVENT_MASK) <= INTEL_TD_METRIC_AVAILABLE_MAX;
 }
 
 static inline bool is_mem_loads_event(struct perf_event *event)
