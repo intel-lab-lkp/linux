@@ -502,6 +502,7 @@ unsigned long zswap_total_pages(void)
 
 	return total;
 }
+EXPORT_SYMBOL(zswap_total_pages);
 
 static bool zswap_check_limits(void)
 {
@@ -756,6 +757,7 @@ void zswap_folio_swapin(struct folio *folio)
 		atomic_long_inc(&lruvec->zswap_lruvec_state.nr_disk_swapins);
 	}
 }
+EXPORT_SYMBOL(zswap_folio_swapin);
 
 /*
  * This function should be called when a memcg is being offlined.
@@ -1638,6 +1640,7 @@ check_old:
 
 	return ret;
 }
+EXPORT_SYMBOL(zswap_store);
 
 /**
  * zswap_load() - load a folio from zswap
@@ -1718,6 +1721,7 @@ int zswap_load(struct folio *folio)
 	folio_unlock(folio);
 	return 0;
 }
+EXPORT_SYMBOL(zswap_load);
 
 void zswap_invalidate(swp_entry_t swp)
 {
@@ -1752,6 +1756,7 @@ int zswap_swapon(int type, unsigned long nr_pages)
 	zswap_trees[type] = trees;
 	return 0;
 }
+EXPORT_SYMBOL(zswap_swapon);
 
 void zswap_swapoff(int type)
 {
@@ -1769,6 +1774,7 @@ void zswap_swapoff(int type)
 	nr_zswap_trees[type] = 0;
 	zswap_trees[type] = NULL;
 }
+EXPORT_SYMBOL(zswap_swapoff);
 
 /*********************************
 * debugfs functions
