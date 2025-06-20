@@ -467,6 +467,7 @@ static const struct x86_pmu zhaoxin_pmu __initconst = {
 	.schedule_events	= x86_schedule_events,
 	.eventsel		= MSR_ARCH_PERFMON_EVENTSEL0,
 	.perfctr		= MSR_ARCH_PERFMON_PERFCTR0,
+	.fixedctr		= MSR_ARCH_PERFMON_FIXED_CTR0,
 	.event_map		= zhaoxin_pmu_event_map,
 	.max_events		= ARRAY_SIZE(zx_pmon_event_map),
 	.apic			= 1,
