@@ -936,7 +936,7 @@ static inline bool __test_passed(struct __test_metadata *metadata)
  * list so tests are run in source declaration order.
  * https://gcc.gnu.org/onlinedocs/gccint/Initialization.html
  * However, it seems not all toolchains do this correctly, so use
- * __constructor_order_foward to detect which direction is called first
+ * __constructor_order_forward to detect which direction is called first
  * and adjust list building logic to get things running in the right
  * direction.
  */
