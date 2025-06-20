@@ -16,6 +16,7 @@
 #include <net/net_namespace.h>
 #include <linux/unaligned.h>
 #include <linux/uio.h>
+#include <linux/minmax.h>
 #include "aoe.h"
 
 #define MAXIOC (8192)	/* default meant to avoid most soft lockups */
@@ -607,10 +608,7 @@ probe(struct aoetgt *t)
 	ata_rw_frameinit(f);
 	skb = f->skb;
 	for (frag = 0, n = f->iter.bi_size; n > 0; ++frag, n -= m) {
-		if (n < PAGE_SIZE)
-			m = n;
-		else
-			m = PAGE_SIZE;
+		m = min(n, PAGE_SIZE);
 		skb_fill_page_desc(skb, frag, empty_page, 0, m);
 	}
 	skb->len += f->iter.bi_size;
