@@ -853,7 +853,7 @@ static bool check_pmu_access_disabled(struct kvm_vcpu *vcpu, u64 flags)
 	return !enabled;
 }
 
-static bool pmu_access_el0_disabled(struct kvm_vcpu *vcpu)
+bool pmu_access_el0_disabled(struct kvm_vcpu *vcpu)
 {
 	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_EN);
 }
@@ -1053,7 +1053,7 @@ static bool writethrough_pmevtyper(struct kvm_vcpu *vcpu, struct sys_reg_params 
 	    !test_bit(eventsel, vcpu->kvm->arch.pmu_filter))
 		return false;
 
-	__vcpu_sys_reg(vcpu, reg) = eventsel;
+	__vcpu_assign_sys_reg(vcpu, reg, eventsel);
 
 	if (idx == ARMV8_PMU_CYCLE_IDX)
 		write_pmccfiltr(eventsel);
