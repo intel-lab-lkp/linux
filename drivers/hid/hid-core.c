@@ -661,7 +661,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 			item->tag <= HID_MAIN_ITEM_TAG_RESERVED_MAX)
 			hid_warn(parser->device, "reserved main item tag 0x%x\n", item->tag);
 		else
-			hid_warn(parser->device, "unknown main item tag 0x%x\n", item->tag);
+			hid_warn_ratelimited(parser->device, "unknown main item tag 0x%x\n", item->tag);
 		ret = 0;
 	}
 
