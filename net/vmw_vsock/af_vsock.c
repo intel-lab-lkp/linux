@@ -2577,6 +2577,8 @@ static long vsock_dev_do_ioctl(struct file *filp,
 		cid = vsock_transport_local_cid(&transport_g2h);
 		if (cid == VMADDR_CID_ANY)
 			cid = vsock_transport_local_cid(&transport_h2g);
+		if (cid == VMADDR_CID_ANY && transport_local)
+			cid = VMADDR_CID_LOCAL;
 
 		if (put_user(cid, p) != 0)
 			retval = -EFAULT;
