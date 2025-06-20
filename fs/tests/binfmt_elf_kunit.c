@@ -3,7 +3,7 @@
 
 static void total_mapping_size_test(struct kunit *test)
 {
-	struct elf_phdr empty[] = {
+	static const struct elf_phdr empty[] = {
 		{ .p_type = PT_LOAD, .p_vaddr = 0, .p_memsz = 0, },
 		{ .p_type = PT_INTERP, .p_vaddr = 10, .p_memsz = 999999, },
 	};
@@ -11,7 +11,7 @@ static void total_mapping_size_test(struct kunit *test)
 	 * readelf -lW /bin/mount | grep '^  .*0x0' | awk '{print "\t\t{ .p_type = PT_" \
 	 *				$1 ", .p_vaddr = " $3 ", .p_memsz = " $6 ", },"}'
 	 */
-	struct elf_phdr mount[] = {
+	static const struct elf_phdr mount[] = {
 		{ .p_type = PT_PHDR, .p_vaddr = 0x00000040, .p_memsz = 0x0002d8, },
 		{ .p_type = PT_INTERP, .p_vaddr = 0x00000318, .p_memsz = 0x00001c, },
 		{ .p_type = PT_LOAD, .p_vaddr = 0x00000000, .p_memsz = 0x0033a8, },
@@ -28,7 +28,7 @@ static void total_mapping_size_test(struct kunit *test)
 	};
 	size_t mount_size = 0xE070;
 	/* https://lore.kernel.org/linux-fsdevel/YfF18Dy85mCntXrx@fractal.localdomain */
-	struct elf_phdr unordered[] = {
+	static const struct elf_phdr unordered[] = {
 		{ .p_type = PT_LOAD, .p_vaddr = 0x00000000, .p_memsz = 0x0033a8, },
 		{ .p_type = PT_LOAD, .p_vaddr = 0x0000d330, .p_memsz = 0x000d40, },
 		{ .p_type = PT_LOAD, .p_vaddr = 0x00004000, .p_memsz = 0x005c91, },
