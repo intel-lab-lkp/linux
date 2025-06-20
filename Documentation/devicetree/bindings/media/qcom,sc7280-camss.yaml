@@ -131,6 +131,12 @@ properties:
     description:
       Phandle to 1.8V regulator supply to PHY refclk pll block.
 
+  regulator-load-current:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      Specifies the load current (in microamperes) for the regulators used by the device.
+      The first value corresponds to vdda-phy, and the second to vdda-pll.
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
