@@ -848,20 +848,20 @@ static bool dl_entity_overflow(struct sched_dl_entity *dl_se, u64 t);
 
 /*
  * Pure Earliest Deadline First (EDF) scheduling does not deal with the
- * possibility of a entity lasting more than what it declared, and thus
+ * possibility of an entity lasting more than what it declared, and thus
  * exhausting its runtime.
  *
  * Here we are interested in making runtime overrun possible, but we do
- * not want a entity which is misbehaving to affect the scheduling of all
+ * not want an entity which is misbehaving to affect the scheduling of all
  * other entities.
  * Therefore, a budgeting strategy called Constant Bandwidth Server (CBS)
  * is used, in order to confine each entity within its own bandwidth.
  *
  * This function deals exactly with that, and ensures that when the runtime
- * of a entity is replenished, its deadline is also postponed. That ensures
+ * of an entity is replenished, its deadline is also postponed. That ensures
  * the overrunning entity can't interfere with other entity in the system and
  * can't make them miss their deadlines. Reasons why this kind of overruns
- * could happen are, typically, a entity voluntarily trying to overcome its
+ * could happen are, typically, an entity voluntarily trying to overcome its
  * runtime, or it just underestimated it during sched_setattr().
  */
 static void replenish_dl_entity(struct sched_dl_entity *dl_se)
@@ -3104,7 +3104,7 @@ static void prio_changed_dl(struct rq *rq, struct task_struct *p,
 
 	if (task_current_donor(rq, p)) {
 		/*
-		 * If we now have a earlier deadline task than p,
+		 * If we now have an earlier deadline task than p,
 		 * then reschedule, provided p is still on this
 		 * runqueue.
 		 */
@@ -3123,7 +3123,7 @@ static void prio_changed_dl(struct rq *rq, struct task_struct *p,
 	}
 #else
 	/*
-	 * We don't know if p has a earlier or later deadline, so let's blindly
+	 * We don't know if p has an earlier or later deadline, so let's blindly
 	 * set a (maybe not needed) rescheduling point.
 	 */
 	resched_curr(rq);
