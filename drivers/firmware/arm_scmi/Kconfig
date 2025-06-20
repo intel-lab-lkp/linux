@@ -99,4 +99,14 @@ config ARM_SCMI_POWER_CONTROL
 	  called scmi_power_control. Note this may needed early in boot to catch
 	  early shutdown/reboot SCMI requests.
 
+config ARM_SCMI_SYSTEM_TELEMETRY
+	tristate "SCMI System Telemetry driver"
+	depends on ARM_SCMI_PROTOCOL || (COMPILE_TEST && OF)
+	help
+	  This enables SCMI Systemn Telemetry support that allows userspace to
+	  retrieve ARM Telemetry data made available via SCMI.
+
+	  This driver can also be built as a module.  If so, the module will be
+	  called scmi_system_telemetry.
+
 endmenu
