@@ -748,9 +748,10 @@ static void etnaviv_gpu_setup_pulse_eater(struct etnaviv_gpu *gpu)
 	if ((gpu->identity.revision > 0x5420) &&
 	    (gpu->identity.features & chipFeatures_PIPE_3D))
 	{
-		/* Performance fix: disable internal DFS */
+		/* Performance fix: disable internal DFS and pulse-eater */
 		pulse_eater = gpu_read_power(gpu, VIVS_PM_PULSE_EATER);
-		pulse_eater |= BIT(18);
+		pulse_eater &= ~BIT(16);
+		pulse_eater |= BIT(18) | BIT(17);
 	}
 
 	gpu_write_power(gpu, VIVS_PM_PULSE_EATER, pulse_eater);
