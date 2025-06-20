@@ -294,16 +294,101 @@ struct perf_event_pmu_context;
 /**
  * pmu::capabilities flags
  */
+
+/**
+ * define PERF_PMU_CAP_NO_INTERRUPT - \
+ *    PMU is incapable of generating samples
+ *
+ * On CPU PMU hardware, a PMU driver is only capable of generating sample data
+ * in the form of &struct perf_sample_data if the hardware is capable of
+ * generating hardware interrupts. If such interrupt capability is missing,
+ * this flag should be set.
+ *
+ * Uncore drivers, i.e. drivers for hardware performance counters that are not
+ * closely entwined with CPUs and their model of execution, should also set
+ * this flag, as they are not able to generate meaningful sample data, even if
+ * they do use an interrupt for some purpose.
+ */
 #define PERF_PMU_CAP_NO_INTERRUPT	0x0001
+/**
+ * define PERF_PMU_CAP_NO_NMI - \
+ *    PMU is guaranteed to not generate non-maskable interrupts
+ */
 #define PERF_PMU_CAP_NO_NMI		0x0002
+/**
+ * define PERF_PMU_CAP_AUX_NO_SG - \
+ *    PMU does not support using scatter-gather as the output
+ *
+ * The PERF_PMU_CAP_AUX_NO_SG flag indicates that the PMU does not support
+ * scatter-gather for its output buffer, and needs a larger contiguous buffer
+ * to output to.
+ */
 #define PERF_PMU_CAP_AUX_NO_SG		0x0004
+/**
+ * define PERF_PMU_CAP_EXTENDED_REGS - \
+ *    PMU is capable of sampling extended registers
+ *
+ * Some architectures have a concept of extended registers, e.g. XMM0 on x86
+ * or VG on arm64. If the PMU is capable of sampling these registers, then the
+ * flag PERF_PMU_CAP_EXTENDED_REGS should be set.
+ */
 #define PERF_PMU_CAP_EXTENDED_REGS	0x0008
+/**
+ * define PERF_PMU_CAP_EXCLUSIVE - \
+ *    PMU can only have one scheduled event at a time
+ *
+ * Certain PMU hardware cannot track several events at the same time. Such
+ * hardware must set PERF_PMU_CAP_EXCLUSIVE in order to avoid conflicts.
+ */
 #define PERF_PMU_CAP_EXCLUSIVE		0x0010
+/**
+ * define PERF_PMU_CAP_ITRACE - PMU traces instructions
+ *
+ * Some PMU hardware does instruction tracing, in that it traces execution of
+ * each instruction. Setting this capability flag makes the perf core generate
+ * a %PERF_RECORD_ITRACE_START event, recording the profiled task's PID and TID,
+ * to allow tools to properly decode such traces.
+ */
 #define PERF_PMU_CAP_ITRACE		0x0020
+/**
+ * define PERF_PMU_CAP_NO_EXCLUDE - \
+ *    PMU is incapable of excluding events based on context
+ *
+ * The PERF_PMU_CAP_NO_EXCLUDE flag, when set, makes the perf core reject any
+ * request for an event that has one of the attributes
+ * perf_event_attr::exclude_{user,kernel,hv,idle,host,guest} set.
+ *
+ * Drivers for PMU hardware that cannot distinguish between these different
+ * execution contexts should set this flag.
+ */
 #define PERF_PMU_CAP_NO_EXCLUDE		0x0040
+/**
+ * define PERF_PMU_CAP_AUX_OUTPUT - PMU non-AUX events generate AUX data
+ *
+ * Drivers for PMU hardware that supports non-AUX events which generate data for
+ * AUX events should set PERF_PMU_CAP_AUX_OUTPUT. This flag tells the perf core
+ * to schedule non-AUX events together with AUX events, so that this data isn't
+ * lost.
+ */
 #define PERF_PMU_CAP_AUX_OUTPUT		0x0080
+/**
+ * define PERF_PMU_CAP_EXTENDED_HW_TYPE - \
+ *    PMU supports PERF_TYPE_HARDWARE and PERF_TYPE_HW_CACHE
+ */
 #define PERF_PMU_CAP_EXTENDED_HW_TYPE	0x0100
+/**
+ * define PERF_PMU_CAP_AUX_PAUSE - \
+ *    PMU can pause and resume AUX area traces based on events
+ */
 #define PERF_PMU_CAP_AUX_PAUSE		0x0200
+/**
+ * define PERF_PMU_CAP_AUX_PREFER_LARGE - PMU prefers contiguous output buffers
+ *
+ * The PERF_PMU_CAP_AUX_PREFER_LARGE capability flag is a less strict variant of
+ * %PERF_PMU_CAP_AUX_NO_SG. PMU drivers for hardware that doesn't strictly
+ * require contiguous output buffers, but find the benefits outweigh the
+ * downside of increased memory fragmentation, may set this capability flag.
+ */
 #define PERF_PMU_CAP_AUX_PREFER_LARGE	0x0400
 
 /**
