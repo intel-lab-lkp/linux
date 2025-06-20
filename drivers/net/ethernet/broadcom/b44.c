@@ -2314,7 +2314,7 @@ static void b44_unregister_phy_one(struct b44 *bp)
 	struct net_device *dev = bp->dev;
 	struct mii_bus *mii_bus = bp->mii_bus;
 
-	phy_disconnect(dev->phydev);
+	phy_disconnect_rtnl(dev->phydev);
 	mdiobus_unregister(mii_bus);
 	mdiobus_free(mii_bus);
 }

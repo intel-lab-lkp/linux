@@ -805,7 +805,7 @@ static void xgbe_phy_free_phy_device(struct xgbe_prv_data *pdata)
 	struct xgbe_phy_data *phy_data = pdata->phy_data;
 
 	if (phy_data->phydev) {
-		phy_detach(phy_data->phydev);
+		phy_detach_rtnl(phy_data->phydev);
 		phy_device_remove(phy_data->phydev);
 		phy_device_free(phy_data->phydev);
 		phy_data->phydev = NULL;

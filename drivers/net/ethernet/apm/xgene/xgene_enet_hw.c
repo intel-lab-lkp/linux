@@ -973,7 +973,7 @@ void xgene_enet_phy_disconnect(struct xgene_enet_pdata *pdata)
 	struct net_device *ndev = pdata->ndev;
 
 	if (ndev->phydev)
-		phy_disconnect(ndev->phydev);
+		phy_disconnect_rtnl(ndev->phydev);
 }
 
 void xgene_enet_mdio_remove(struct xgene_enet_pdata *pdata)
@@ -981,7 +981,7 @@ void xgene_enet_mdio_remove(struct xgene_enet_pdata *pdata)
 	struct net_device *ndev = pdata->ndev;
 
 	if (ndev->phydev)
-		phy_disconnect(ndev->phydev);
+		phy_disconnect_rtnl(ndev->phydev);
 
 	mdiobus_unregister(pdata->mdio_bus);
 	mdiobus_free(pdata->mdio_bus);

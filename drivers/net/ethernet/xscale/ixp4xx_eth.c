@@ -1583,7 +1583,7 @@ static int ixp4xx_eth_probe(struct platform_device *pdev)
 	return 0;
 
 err_phy_dis:
-	phy_disconnect(phydev);
+	phy_disconnect_rtnl(phydev);
 err_free_mem:
 	npe_port_tab[NPE_ID(port->id)] = NULL;
 	npe_release(port->npe);
@@ -1597,7 +1597,7 @@ static void ixp4xx_eth_remove(struct platform_device *pdev)
 	struct port *port = netdev_priv(ndev);
 
 	unregister_netdev(ndev);
-	phy_disconnect(phydev);
+	phy_disconnect_rtnl(phydev);
 	ixp4xx_mdio_remove();
 	npe_port_tab[NPE_ID(port->id)] = NULL;
 	npe_release(port->npe);

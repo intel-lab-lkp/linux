@@ -248,7 +248,7 @@ void hclge_mac_disconnect_phy(struct hnae3_handle *handle)
 	if (!phydev)
 		return;
 
-	phy_disconnect(phydev);
+	phy_disconnect_rtnl(phydev);
 }
 
 void hclge_mac_start_phy(struct hclge_dev *hdev)

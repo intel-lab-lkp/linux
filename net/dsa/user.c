@@ -2650,7 +2650,7 @@ static int dsa_user_phy_connect(struct net_device *user_dev, int addr,
 
 	user_dev->phydev->dev_flags |= flags;
 
-	return phylink_connect_phy(dp->pl, user_dev->phydev);
+	return phylink_connect_phy_rtnl(dp->pl, user_dev->phydev);
 }
 
 static int dsa_user_phy_setup(struct net_device *user_dev)

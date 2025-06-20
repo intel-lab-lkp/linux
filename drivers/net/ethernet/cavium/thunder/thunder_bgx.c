@@ -1183,7 +1183,7 @@ static void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 	    (lmac->lmac_type != BGX_MODE_XLAUI) &&
 	    (lmac->lmac_type != BGX_MODE_40G_KR) &&
 	    (lmac->lmac_type != BGX_MODE_10G_KR) && lmac->phydev)
-		phy_disconnect(lmac->phydev);
+		phy_disconnect_rtnl(lmac->phydev);
 
 	lmac->phydev = NULL;
 }

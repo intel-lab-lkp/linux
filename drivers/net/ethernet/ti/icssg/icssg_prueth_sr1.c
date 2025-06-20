@@ -1125,7 +1125,7 @@ netdev_unregister:
 			continue;
 
 		if (prueth->emac[i]->ndev->phydev) {
-			phy_disconnect(prueth->emac[i]->ndev->phydev);
+			phy_disconnect_rtnl(prueth->emac[i]->ndev->phydev);
 			prueth->emac[i]->ndev->phydev = NULL;
 		}
 		unregister_netdev(prueth->registered_netdevs[i]);
@@ -1187,7 +1187,7 @@ static void prueth_remove(struct platform_device *pdev)
 		if (!prueth->registered_netdevs[i])
 			continue;
 		phy_stop(prueth->emac[i]->ndev->phydev);
-		phy_disconnect(prueth->emac[i]->ndev->phydev);
+		phy_disconnect_rtnl(prueth->emac[i]->ndev->phydev);
 		prueth->emac[i]->ndev->phydev = NULL;
 		unregister_netdev(prueth->registered_netdevs[i]);
 	}

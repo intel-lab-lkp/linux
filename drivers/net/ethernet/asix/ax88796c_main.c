@@ -1097,7 +1097,7 @@ static int ax88796c_probe(struct spi_device *spi)
 	return 0;
 
 err_phy_dis:
-	phy_disconnect(ax_local->phydev);
+	phy_disconnect_rtnl(ax_local->phydev);
 err:
 	return ret;
 }
@@ -1107,7 +1107,7 @@ static void ax88796c_remove(struct spi_device *spi)
 	struct ax88796c_device *ax_local = dev_get_drvdata(&spi->dev);
 	struct net_device *ndev = ax_local->ndev;
 
-	phy_disconnect(ndev->phydev);
+	phy_disconnect_rtnl(ndev->phydev);
 
 	netif_info(ax_local, probe, ndev, "removing network device %s %s\n",
 		   dev_driver_string(&spi->dev),

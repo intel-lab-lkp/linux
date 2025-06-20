@@ -480,7 +480,7 @@ static int mlxbf_gige_probe(struct platform_device *pdev)
 	err = register_netdev(netdev);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to register netdev\n");
-		phy_disconnect(phydev);
+		phy_disconnect_rtnl(phydev);
 		goto out;
 	}
 
@@ -496,7 +496,7 @@ static void mlxbf_gige_remove(struct platform_device *pdev)
 	struct mlxbf_gige *priv = platform_get_drvdata(pdev);
 
 	unregister_netdev(priv->netdev);
-	phy_disconnect(priv->netdev->phydev);
+	phy_disconnect_rtnl(priv->netdev->phydev);
 	mlxbf_gige_mdio_remove(priv);
 	platform_set_drvdata(pdev, NULL);
 }

@@ -87,7 +87,7 @@ void xge_mdio_remove(struct net_device *ndev)
 	struct mii_bus *mdio_bus = pdata->mdio_bus;
 
 	if (ndev->phydev)
-		phy_disconnect(ndev->phydev);
+		phy_disconnect_rtnl(ndev->phydev);
 
 	if (mdio_bus->state == MDIOBUS_REGISTERED)
 		mdiobus_unregister(mdio_bus);

@@ -2116,7 +2116,7 @@ static int tg3_phy_init(struct tg3 *tp)
 		phy_support_asym_pause(phydev);
 		break;
 	default:
-		phy_disconnect(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+		phy_disconnect_rtnl(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
 		return -EINVAL;
 	}
 
@@ -2161,7 +2161,7 @@ static void tg3_phy_stop(struct tg3 *tp)
 static void tg3_phy_fini(struct tg3 *tp)
 {
 	if (tp->phy_flags & TG3_PHYFLG_IS_CONNECTED) {
-		phy_disconnect(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+		phy_disconnect_rtnl(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
 		tp->phy_flags &= ~TG3_PHYFLG_IS_CONNECTED;
 	}
 }

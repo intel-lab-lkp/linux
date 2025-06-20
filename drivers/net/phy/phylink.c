@@ -2159,6 +2159,17 @@ static int phylink_attach_phy(struct phylink *pl, struct phy_device *phy,
 	return phy_attach_direct(pl->netdev, phy, flags, interface);
 }
 
+static int phylink_preconnect_phy(struct phylink *pl, struct phy_device *phy)
+{
+	/* Use PHY device/driver interface */
+	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
+		pl->link_interface = phy->interface;
+		pl->link_config.interface = pl->link_interface;
+	}
+
+	return phylink_attach_phy(pl, phy, pl->link_interface);
+}
+
 /**
  * phylink_connect_phy() - connect a PHY to the phylink instance
  * @pl: a pointer to a &struct phylink returned from phylink_create()
@@ -2178,14 +2189,8 @@ int phylink_connect_phy(struct phylink *pl, struct phy_device *phy)
 {
 	int ret;
 
-	/* Use PHY device/driver interface */
-	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
-		pl->link_interface = phy->interface;
-		pl->link_config.interface = pl->link_interface;
-	}
-
-	ret = phylink_attach_phy(pl, phy, pl->link_interface);
-	if (ret < 0)
+	ret = phylink_preconnect_phy(pl, phy);
+	if (ret)
 		return ret;
 
 	ret = phylink_bringup_phy(pl, phy, pl->link_config.interface);
@@ -2195,6 +2200,40 @@ int phylink_connect_phy(struct phylink *pl, struct phy_device *phy)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(phylink_connect_phy);
+
+/**
+ * phylink_connect_phy_rtnl() - connect a PHY to the phylink instance
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ * @phy: a pointer to a &struct phy_device.
+ *
+ * Connect @phy to the phylink instance specified by @pl by calling
+ * phy_attach_direct(). Configure the @phy according to the MAC driver's
+ * capabilities, start the PHYLIB state machine and enable any interrupts
+ * that the PHY supports.
+ *
+ * This updates the phylink's ethtool supported and advertising link mode
+ * masks.
+ *
+ * This is a similar to phylink_connect_phy but is called without the hold
+ * of rtnlock. It then use phy_detach_rtnl that takes the rtnl semaphore.
+ *
+ * Returns 0 on success or a negative errno.
+ */
+int phylink_connect_phy_rtnl(struct phylink *pl, struct phy_device *phy)
+{
+	int ret;
+
+	ret = phylink_preconnect_phy(pl, phy);
+	if (ret)
+		return ret;
+
+	ret = phylink_bringup_phy(pl, phy, pl->link_config.interface);
+	if (ret)
+		phy_detach_rtnl(phy);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phylink_connect_phy_rtnl);
 
 /**
  * phylink_of_phy_connect() - connect the PHY specified in the DT mode.
@@ -2215,6 +2254,58 @@ int phylink_of_phy_connect(struct phylink *pl, struct device_node *dn,
 }
 EXPORT_SYMBOL_GPL(phylink_of_phy_connect);
 
+static struct phy_device *
+phylink_fwnode_phy_preconnect(struct phylink *pl,
+			      const struct fwnode_handle *fwnode,
+			      u32 flags)
+{
+	struct fwnode_handle *phy_fwnode;
+	struct phy_device *phy_dev;
+	int ret;
+
+	/* Fixed links and 802.3z are handled without needing a PHY */
+	if (pl->cfg_link_an_mode == MLO_AN_FIXED ||
+	    (pl->cfg_link_an_mode == MLO_AN_INBAND &&
+	     phy_interface_mode_is_8023z(pl->link_interface)))
+		return NULL;
+
+	phy_fwnode = fwnode_get_phy_node(fwnode);
+	if (IS_ERR(phy_fwnode)) {
+		if (pl->cfg_link_an_mode == MLO_AN_PHY)
+			return ERR_PTR(-ENODEV);
+		return NULL;
+	}
+
+	phy_dev = fwnode_phy_find_device(phy_fwnode);
+	/* We're done with the phy_node handle */
+	fwnode_handle_put(phy_fwnode);
+	if (!phy_dev)
+		return ERR_PTR(-ENODEV);
+
+	/* Use PHY device/driver interface */
+	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
+		pl->link_interface = phy_dev->interface;
+		pl->link_config.interface = pl->link_interface;
+	}
+
+	if (pl->config->mac_requires_rxc)
+		flags |= PHY_F_RXC_ALWAYS_ON;
+
+	ret = phy_attach_direct(pl->netdev, phy_dev, flags,
+				pl->link_interface);
+	phy_device_free(phy_dev);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = phylink_bringup_phy(pl, phy_dev, pl->link_config.interface);
+	if (ret) {
+		phy_detach(phy_dev);
+		return ERR_PTR(ret);
+	}
+
+	return phy_dev;
+}
+
 /**
  * phylink_fwnode_phy_connect() - connect the PHY specified in the fwnode.
  * @pl: a pointer to a &struct phylink returned from phylink_create()
@@ -2230,43 +2321,12 @@ int phylink_fwnode_phy_connect(struct phylink *pl,
 			       const struct fwnode_handle *fwnode,
 			       u32 flags)
 {
-	struct fwnode_handle *phy_fwnode;
 	struct phy_device *phy_dev;
 	int ret;
 
-	/* Fixed links and 802.3z are handled without needing a PHY */
-	if (pl->cfg_link_an_mode == MLO_AN_FIXED ||
-	    (pl->cfg_link_an_mode == MLO_AN_INBAND &&
-	     phy_interface_mode_is_8023z(pl->link_interface)))
-		return 0;
-
-	phy_fwnode = fwnode_get_phy_node(fwnode);
-	if (IS_ERR(phy_fwnode)) {
-		if (pl->cfg_link_an_mode == MLO_AN_PHY)
-			return -ENODEV;
-		return 0;
-	}
-
-	phy_dev = fwnode_phy_find_device(phy_fwnode);
-	/* We're done with the phy_node handle */
-	fwnode_handle_put(phy_fwnode);
-	if (!phy_dev)
-		return -ENODEV;
-
-	/* Use PHY device/driver interface */
-	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
-		pl->link_interface = phy_dev->interface;
-		pl->link_config.interface = pl->link_interface;
-	}
-
-	if (pl->config->mac_requires_rxc)
-		flags |= PHY_F_RXC_ALWAYS_ON;
-
-	ret = phy_attach_direct(pl->netdev, phy_dev, flags,
-				pl->link_interface);
-	phy_device_free(phy_dev);
-	if (ret)
-		return ret;
+	phy_dev = phylink_fwnode_phy_preconnect(pl, fwnode, flags);
+	if (IS_ERR_OR_NULL(phy_dev))
+		return PTR_ERR(phy_dev);
 
 	ret = phylink_bringup_phy(pl, phy_dev, pl->link_config.interface);
 	if (ret)
@@ -2275,6 +2335,40 @@ int phylink_fwnode_phy_connect(struct phylink *pl,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(phylink_fwnode_phy_connect);
+
+/**
+ * phylink_fwnode_phy_connect() - connect the PHY specified in the fwnode.
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ * @fwnode: a pointer to a &struct fwnode_handle.
+ * @flags: PHY-specific flags to communicate to the PHY device driver
+ *
+ * Connect the phy specified @fwnode to the phylink instance specified
+ * by @pl.
+ *
+ * This is a similar to phylink_fwnode_phy_connect but is called without
+ * the hold of rtnlock. It then use phy_detach_rtnl that takes the rtnl
+ * semaphore.
+ *
+ * Returns 0 on success or a negative errno.
+ */
+int phylink_fwnode_phy_connect_rtnl(struct phylink *pl,
+				    const struct fwnode_handle *fwnode,
+				    u32 flags)
+{
+	struct phy_device *phy_dev;
+	int ret;
+
+	phy_dev = phylink_fwnode_phy_preconnect(pl, fwnode, flags);
+	if (IS_ERR_OR_NULL(phy_dev))
+		return PTR_ERR(phy_dev);
+
+	ret = phylink_bringup_phy(pl, phy_dev, pl->link_config.interface);
+	if (ret)
+		phy_detach_rtnl(phy_dev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phylink_fwnode_phy_connect_rtnl);
 
 /**
  * phylink_disconnect_phy() - disconnect any PHY attached to the phylink

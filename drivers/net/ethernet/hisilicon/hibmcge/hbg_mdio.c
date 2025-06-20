@@ -194,7 +194,7 @@ static void hbg_phy_adjust_link(struct net_device *netdev)
 
 static void hbg_phy_disconnect(void *data)
 {
-	phy_disconnect((struct phy_device *)data);
+	phy_disconnect_rtnl((struct phy_device *)data);
 }
 
 static int hbg_phy_connect(struct hbg_priv *priv)

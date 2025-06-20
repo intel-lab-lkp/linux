@@ -1570,7 +1570,7 @@ static int owl_emac_probe(struct platform_device *pdev)
 	ret = devm_register_netdev(dev, netdev);
 	if (ret) {
 		netif_napi_del(&priv->napi);
-		phy_disconnect(netdev->phydev);
+		phy_disconnect_rtnl(netdev->phydev);
 		return ret;
 	}
 
@@ -1582,7 +1582,7 @@ static void owl_emac_remove(struct platform_device *pdev)
 	struct owl_emac_priv *priv = platform_get_drvdata(pdev);
 
 	netif_napi_del(&priv->napi);
-	phy_disconnect(priv->netdev->phydev);
+	phy_disconnect_rtnl(priv->netdev->phydev);
 	cancel_work_sync(&priv->mac_reset_task);
 }
 

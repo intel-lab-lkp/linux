@@ -1215,7 +1215,7 @@ static int dm9051_probe(struct spi_device *spi)
 
 	ret = devm_register_netdev(dev, ndev);
 	if (ret) {
-		phy_disconnect(db->phydev);
+		phy_disconnect_rtnl(db->phydev);
 		return dev_err_probe(dev, ret, "device register failed");
 	}
 
@@ -1228,7 +1228,7 @@ static void dm9051_drv_remove(struct spi_device *spi)
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct board_info *db = to_dm9051_board(ndev);
 
-	phy_disconnect(db->phydev);
+	phy_disconnect_rtnl(db->phydev);
 }
 
 static const struct of_device_id dm9051_match_table[] = {

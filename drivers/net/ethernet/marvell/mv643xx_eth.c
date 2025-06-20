@@ -3277,7 +3277,7 @@ static void mv643xx_eth_remove(struct platform_device *pdev)
 
 	unregister_netdev(mp->dev);
 	if (dev->phydev)
-		phy_disconnect(dev->phydev);
+		phy_disconnect_rtnl(dev->phydev);
 	cancel_work_sync(&mp->tx_timeout_task);
 
 	if (!IS_ERR(mp->clk))

@@ -1263,7 +1263,7 @@ static void smsc95xx_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
 	struct smsc95xx_priv *pdata = dev->driver_priv;
 
-	phy_disconnect(dev->net->phydev);
+	phy_disconnect_rtnl(dev->net->phydev);
 	mdiobus_unregister(pdata->mdiobus);
 	mdiobus_free(pdata->mdiobus);
 	irq_dispose_mapping(irq_find_mapping(pdata->irqdomain, PHY_HWIRQ));

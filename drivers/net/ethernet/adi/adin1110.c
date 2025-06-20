@@ -1224,7 +1224,7 @@ static struct notifier_block adin1110_netdevice_nb = {
 
 static void adin1110_disconnect_phy(void *data)
 {
-	phy_disconnect(data);
+	phy_disconnect_rtnl(data);
 }
 
 static int adin1110_port_set_forwarding_state(struct adin1110_port_priv *port_priv)

@@ -1798,7 +1798,9 @@ struct phy_device *phy_connect(struct net_device *dev, const char *bus_id,
 			       void (*handler)(struct net_device *),
 			       phy_interface_t interface);
 void phy_disconnect(struct phy_device *phydev);
+void phy_disconnect_rtnl(struct phy_device *phydev);
 void phy_detach(struct phy_device *phydev);
+void phy_detach_rtnl(struct phy_device *phydev);
 void phy_start(struct phy_device *phydev);
 void phy_stop(struct phy_device *phydev);
 int phy_config_aneg(struct phy_device *phydev);

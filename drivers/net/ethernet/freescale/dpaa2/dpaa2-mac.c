@@ -434,10 +434,10 @@ int dpaa2_mac_connect(struct dpaa2_mac *mac)
 	mac->phylink = phylink;
 
 	rtnl_lock();
-	err = phylink_fwnode_phy_connect(mac->phylink, dpmac_node, 0);
+	err = phylink_fwnode_phy_connect_rtnl(mac->phylink, dpmac_node, 0);
 	rtnl_unlock();
 	if (err) {
-		netdev_err(net_dev, "phylink_fwnode_phy_connect() = %d\n", err);
+		netdev_err(net_dev, "phylink_fwnode_phy_connect_rtnl() = %d\n", err);
 		goto err_phylink_destroy;
 	}
 

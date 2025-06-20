@@ -884,7 +884,7 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 
 out_disconnect_phy:
 	netif_napi_del(&priv->napi);
-	phy_disconnect(phy);
+	phy_disconnect_rtnl(phy);
 out_disable_clk:
 	clk_disable_unprepare(priv->clk);
 out_free_netdev:
@@ -901,7 +901,7 @@ static void hisi_femac_drv_remove(struct platform_device *pdev)
 	netif_napi_del(&priv->napi);
 	unregister_netdev(ndev);
 
-	phy_disconnect(ndev->phydev);
+	phy_disconnect_rtnl(ndev->phydev);
 	clk_disable_unprepare(priv->clk);
 	free_netdev(ndev);
 }

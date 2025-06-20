@@ -2406,7 +2406,7 @@ static void hns_nic_dev_remove(struct platform_device *pdev)
 	priv->ring_data = NULL;
 
 	if (ndev->phydev)
-		phy_disconnect(ndev->phydev);
+		phy_disconnect_rtnl(ndev->phydev);
 
 	if (!IS_ERR_OR_NULL(priv->ae_handle))
 		hnae_put_handle(priv->ae_handle);

@@ -248,7 +248,7 @@ static int ax88172a_stop(struct usbnet *dev)
 		netdev_info(dev->net, "Disconnecting from phy %s\n",
 			    priv->phy_name);
 		phy_stop(priv->phydev);
-		phy_disconnect(priv->phydev);
+		phy_disconnect_rtnl(priv->phydev);
 	}
 
 	return 0;

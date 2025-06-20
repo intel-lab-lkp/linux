@@ -699,10 +699,14 @@ void phylink_destroy(struct phylink *);
 bool phylink_expects_phy(struct phylink *pl);
 
 int phylink_connect_phy(struct phylink *, struct phy_device *);
+int phylink_connect_phy_rtnl(struct phylink *pl, struct phy_device *phy);
 int phylink_of_phy_connect(struct phylink *, struct device_node *, u32 flags);
 int phylink_fwnode_phy_connect(struct phylink *pl,
 			       const struct fwnode_handle *fwnode,
 			       u32 flags);
+int phylink_fwnode_phy_connect_rtnl(struct phylink *pl,
+				    const struct fwnode_handle *fwnode,
+				    u32 flags);
 void phylink_disconnect_phy(struct phylink *);
 int phylink_set_fixed_link(struct phylink *,
 			   const struct phylink_link_state *);

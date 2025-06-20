@@ -856,7 +856,7 @@ static void tc35815_remove_one(struct pci_dev *pdev)
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct tc35815_local *lp = netdev_priv(dev);
 
-	phy_disconnect(dev->phydev);
+	phy_disconnect_rtnl(dev->phydev);
 	mdiobus_unregister(lp->mii_bus);
 	mdiobus_free(lp->mii_bus);
 	unregister_netdev(dev);

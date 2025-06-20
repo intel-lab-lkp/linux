@@ -4256,8 +4256,11 @@ static int bcmgenet_resume(struct device *d)
 	return 0;
 
 out_clk_disable:
-	if (priv->internal_phy)
+	if (priv->internal_phy) {
+		rtnl_lock();
 		bcmgenet_power_down(priv, GENET_POWER_PASSIVE);
+		rtnl_unlock();
+	}
 	clk_disable_unprepare(priv->clk);
 	return ret;
 }
@@ -4325,11 +4328,13 @@ static int bcmgenet_suspend_noirq(struct device *d)
 	if (!netif_running(dev))
 		return 0;
 
+	rtnl_lock();
 	/* Prepare the device for Wake-on-LAN and switch to the slow clock */
 	if (device_may_wakeup(d) && priv->wolopts)
 		ret = bcmgenet_power_down(priv, GENET_POWER_WOL_MAGIC);
 	else if (priv->internal_phy)
 		ret = bcmgenet_power_down(priv, GENET_POWER_PASSIVE);
+	rtnl_unlock();
 
 	/* Let the framework handle resumption and leave the clocks on */
 	if (ret)

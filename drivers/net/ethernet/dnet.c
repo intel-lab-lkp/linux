@@ -852,7 +852,7 @@ static void dnet_remove(struct platform_device *pdev)
 	if (dev) {
 		bp = netdev_priv(dev);
 		if (dev->phydev)
-			phy_disconnect(dev->phydev);
+			phy_disconnect_rtnl(dev->phydev);
 		mdiobus_unregister(bp->mii_bus);
 		mdiobus_free(bp->mii_bus);
 		unregister_netdev(dev);

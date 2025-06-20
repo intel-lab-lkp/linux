@@ -579,7 +579,7 @@ static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 
 static void oa_tc6_phy_exit(struct oa_tc6 *tc6)
 {
-	phy_disconnect(tc6->phydev);
+	phy_disconnect_rtnl(tc6->phydev);
 	oa_tc6_mdiobus_unregister(tc6);
 }
 

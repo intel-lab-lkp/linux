@@ -3294,7 +3294,7 @@ static void et131x_pci_remove(struct pci_dev *pdev)
 
 	unregister_netdev(netdev);
 	netif_napi_del(&adapter->napi);
-	phy_disconnect(netdev->phydev);
+	phy_disconnect_rtnl(netdev->phydev);
 	mdiobus_unregister(adapter->mii_bus);
 	mdiobus_free(adapter->mii_bus);
 
@@ -4028,7 +4028,7 @@ out:
 	return rc;
 
 err_phy_disconnect:
-	phy_disconnect(netdev->phydev);
+	phy_disconnect_rtnl(netdev->phydev);
 err_mdio_unregister:
 	mdiobus_unregister(adapter->mii_bus);
 err_mdio_free:

@@ -1261,7 +1261,7 @@ static void ethoc_remove(struct platform_device *pdev)
 
 	if (netdev) {
 		netif_napi_del(&priv->napi);
-		phy_disconnect(netdev->phydev);
+		phy_disconnect_rtnl(netdev->phydev);
 
 		if (priv->mdio) {
 			mdiobus_unregister(priv->mdio);

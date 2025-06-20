@@ -1340,6 +1340,22 @@ void phy_disconnect(struct phy_device *phydev)
 EXPORT_SYMBOL(phy_disconnect);
 
 /**
+ * phy_disconnect_rtnl - disable interrupts, stop state machine, and detach a PHY
+ *		    device
+ * @phydev: target phy_device struct
+ *
+ * This is a wrapper around phy_disconnect that takes the rtnl semaphore.
+ */
+void phy_disconnect_rtnl(struct phy_device *phydev)
+{
+	if (rtnl_lock_killable())
+		return;
+	phy_disconnect(phydev);
+	rtnl_unlock();
+}
+EXPORT_SYMBOL(phy_disconnect_rtnl);
+
+/**
  * phy_poll_reset - Safely wait until a PHY reset has properly completed
  * @phydev: The PHY device to poll
  *
@@ -1767,8 +1783,8 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	return err;
 
 error:
-	/* phy_detach() does all of the cleanup below */
-	phy_detach(phydev);
+	/* phy_detach_rtnl() does all of the cleanup below */
+	phy_detach_rtnl(phydev);
 	return err;
 
 error_module_put:
@@ -1898,6 +1914,24 @@ void phy_detach(struct phy_device *phydev)
 		module_put(bus->owner);
 }
 EXPORT_SYMBOL(phy_detach);
+
+/**
+ * phy_detach_rtnl - detach a PHY device from its network device
+ * @phydev: target phy_device struct
+ *
+ * This detaches the phy device from its network device and the phy
+ * driver, and drops the reference count taken in phy_attach_direct().
+ *
+ * This is a wrapper around phy_detach that takes the rtnl semaphore.
+ */
+void phy_detach_rtnl(struct phy_device *phydev)
+{
+	if (rtnl_lock_killable())
+		return;
+	phy_detach(phydev);
+	rtnl_unlock();
+}
+EXPORT_SYMBOL(phy_detach_rtnl);
 
 int phy_suspend(struct phy_device *phydev)
 {

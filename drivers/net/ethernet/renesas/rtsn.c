@@ -930,7 +930,7 @@ static int rtsn_phy_init(struct rtsn_private *priv)
 
 static void rtsn_phy_deinit(struct rtsn_private *priv)
 {
-	phy_disconnect(priv->ndev->phydev);
+	phy_disconnect_rtnl(priv->ndev->phydev);
 	priv->ndev->phydev = NULL;
 }
 

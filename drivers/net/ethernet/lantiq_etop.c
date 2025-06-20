@@ -424,7 +424,7 @@ ltq_etop_mdio_cleanup(struct net_device *dev)
 {
 	struct ltq_etop_priv *priv = netdev_priv(dev);
 
-	phy_disconnect(dev->phydev);
+	phy_disconnect_rtnl(dev->phydev);
 	mdiobus_unregister(priv->mii_bus);
 	mdiobus_free(priv->mii_bus);
 }

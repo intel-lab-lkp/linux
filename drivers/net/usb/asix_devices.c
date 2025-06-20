@@ -707,7 +707,7 @@ static int ax88772_init_phy(struct usbnet *dev)
 		return -ENODEV;
 	}
 
-	ret = phylink_connect_phy(priv->phylink, priv->phydev);
+	ret = phylink_connect_phy_rtnl(priv->phylink, priv->phydev);
 	if (ret) {
 		netdev_err(dev->net, "Could not connect PHY\n");
 		return ret;

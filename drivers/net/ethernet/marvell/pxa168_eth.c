@@ -1535,7 +1535,7 @@ static void pxa168_eth_remove(struct platform_device *pdev)
 		pep->htpr = NULL;
 	}
 	if (dev->phydev)
-		phy_disconnect(dev->phydev);
+		phy_disconnect_rtnl(dev->phydev);
 
 	mdiobus_unregister(pep->smi_bus);
 	mdiobus_free(pep->smi_bus);

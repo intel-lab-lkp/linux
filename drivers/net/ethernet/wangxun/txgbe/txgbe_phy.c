@@ -297,7 +297,7 @@ static int txgbe_phylink_init(struct txgbe *txgbe)
 	if (wx->phydev) {
 		int ret;
 
-		ret = phylink_connect_phy(phylink, wx->phydev);
+		ret = phylink_connect_phy_rtnl(phylink, wx->phydev);
 		if (ret) {
 			phylink_destroy(phylink);
 			return ret;

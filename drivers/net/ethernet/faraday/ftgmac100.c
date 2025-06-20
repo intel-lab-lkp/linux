@@ -1734,7 +1734,7 @@ static void ftgmac100_phy_disconnect(struct net_device *netdev)
 	if (!netdev->phydev)
 		return;
 
-	phy_disconnect(netdev->phydev);
+	phy_disconnect_rtnl(netdev->phydev);
 	if (of_phy_is_fixed_link(priv->dev->of_node))
 		of_phy_deregister_fixed_link(priv->dev->of_node);
 

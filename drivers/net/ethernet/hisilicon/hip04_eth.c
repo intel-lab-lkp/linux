@@ -1027,7 +1027,7 @@ static void hip04_remove(struct platform_device *pdev)
 	struct device *d = &pdev->dev;
 
 	if (priv->phy)
-		phy_disconnect(priv->phy);
+		phy_disconnect_rtnl(priv->phy);
 
 	hip04_free_ring(ndev, d);
 	unregister_netdev(ndev);

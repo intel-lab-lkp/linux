@@ -393,7 +393,7 @@ static int gmac_setup_phy(struct net_device *netdev)
 		break;
 	default:
 		netdev_err(netdev, "Unsupported MII interface\n");
-		phy_disconnect(phy);
+		phy_disconnect_rtnl(phy);
 		netdev->phydev = NULL;
 		return -EINVAL;
 	}
@@ -2344,7 +2344,7 @@ static irqreturn_t gemini_port_irq(int irq, void *data)
 static void gemini_port_remove(struct gemini_ethernet_port *port)
 {
 	if (port->netdev) {
-		phy_disconnect(port->netdev->phydev);
+		phy_disconnect_rtnl(port->netdev->phydev);
 		unregister_netdev(port->netdev);
 	}
 	clk_disable_unprepare(port->pclk);

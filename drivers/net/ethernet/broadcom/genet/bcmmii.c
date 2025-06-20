@@ -397,7 +397,7 @@ int bcmgenet_mii_probe(struct net_device *dev)
 	 */
 	ret = bcmgenet_mii_config(dev, true);
 	if (ret) {
-		phy_disconnect(dev->phydev);
+		phy_disconnect_rtnl(dev->phydev);
 		return ret;
 	}
 
