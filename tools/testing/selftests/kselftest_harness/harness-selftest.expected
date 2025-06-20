@@ -1,6 +1,6 @@
 TAP version 13
-1..9
-# Starting 9 tests from 4 test cases.
+1..11
+# Starting 11 tests from 6 test cases.
 #  RUN           global.standalone_pass ...
 # harness-selftest.c:19:standalone_pass:before
 # harness-selftest.c:23:standalone_pass:after
@@ -60,5 +60,17 @@ ok 8 fixture_parent.pass
 # pass: Test terminated by assertion
 #          FAIL  fixture_setup_failure.pass
 not ok 9 fixture_setup_failure.pass
-# FAILED: 4 / 9 tests passed.
-# Totals: pass:4 fail:5 xfail:0 xpass:0 skip:0 error:0
+#  RUN           fixture_variant.v32.pass ...
+# harness-selftest.c:140:pass:setup 32
+# harness-selftest.c:148:pass:test function 32
+# harness-selftest.c:144:pass:teardown 32
+#            OK  fixture_variant.v32.pass
+ok 10 fixture_variant.v32.pass
+#  RUN           fixture_variant.v64.pass ...
+# harness-selftest.c:140:pass:setup 64
+# harness-selftest.c:148:pass:test function 64
+# harness-selftest.c:144:pass:teardown 64
+#            OK  fixture_variant.v64.pass
+ok 11 fixture_variant.v64.pass
+# FAILED: 6 / 11 tests passed.
+# Totals: pass:6 fail:5 xfail:0 xpass:0 skip:0 error:0

@@ -118,6 +118,36 @@ TEST_F(fixture_setup_failure, pass) {
 	TH_LOG("after");
 }
 
+FIXTURE(fixture_variant) {
+};
+
+FIXTURE_VARIANT(fixture_variant)
+{
+	int value;
+};
+
+FIXTURE_VARIANT_ADD(fixture_variant, v32)
+{
+	.value = 32,
+};
+
+FIXTURE_VARIANT_ADD(fixture_variant, v64)
+{
+	.value = 64,
+};
+
+FIXTURE_SETUP(fixture_variant) {
+	TH_LOG("setup %d", variant->value);
+}
+
+FIXTURE_TEARDOWN(fixture_variant) {
+	TH_LOG("teardown %d", variant->value);
+}
+
+TEST_F(fixture_variant, pass) {
+	TH_LOG("test function %d", variant->value);
+}
+
 int main(int argc, char **argv)
 {
 	/*
