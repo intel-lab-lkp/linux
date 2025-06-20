@@ -27,9 +27,31 @@
 
 #include "b53_priv.h"
 
+struct b53_phy_info {
+	u32 chip_id;
+	u32 mask;
+	u32 num_ephy;
+	const u32 *ephy_offset;
+};
+
 struct b53_mmap_priv {
 	void __iomem *regs;
 	struct regmap *gpio_ctrl;
+	const struct b53_phy_info *phy_info;
+};
+
+static const u32 bcm63268_ephy_offsets[] = {4, 9, 14};
+
+static const struct b53_phy_info bcm63xx_ephy_info[] = {
+	{
+		/* 6318 has different reg layout,
+		 * need to distinguish it somehow
+		 */
+		.chip_id = BCM63268_DEVICE_ID,
+		.mask = GENMASK(4, 0),
+		.num_ephy = ARRAY_SIZE(bcm63268_ephy_offsets),
+		.ephy_offset = bcm63268_ephy_offsets,
+	}
 };
 
 static int b53_mmap_read8(struct b53_device *dev, u8 page, u8 reg, u8 *val)
@@ -296,7 +318,7 @@ static int b53_mmap_probe(struct platform_device *pdev)
 	struct b53_platform_data *pdata = pdev->dev.platform_data;
 	struct b53_mmap_priv *priv;
 	struct b53_device *dev;
-	int ret;
+	int i, ret;
 
 	if (!pdata && np) {
 		ret = b53_mmap_probe_of(pdev, &pdata);
@@ -316,6 +338,14 @@ static int b53_mmap_probe(struct platform_device *pdev)
 	priv->regs = pdata->regs;
 
 	priv->gpio_ctrl = syscon_regmap_lookup_by_phandle(np, "brcm,gpio-ctrl");
+	if (!IS_ERR(priv->gpio_ctrl)) {
+		for (i = 0; i < ARRAY_SIZE(bcm63xx_ephy_info); i++) {
+			if (bcm63xx_ephy_info[i].chip_id == pdata->chip_id) {
+				priv->phy_info = &bcm63xx_ephy_info[i];
+				break;
+			}
+		}
+	}
 
 	dev = b53_switch_alloc(&pdev->dev, &b53_mmap_ops, priv);
 	if (!dev)
