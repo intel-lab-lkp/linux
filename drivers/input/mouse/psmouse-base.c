@@ -21,6 +21,7 @@
 #include <linux/libps2.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
+#include <linux/input/trackpoint.h>
 
 #include "psmouse.h"
 #include "synaptics.h"
@@ -28,7 +29,6 @@
 #include "alps.h"
 #include "hgpk.h"
 #include "lifebook.h"
-#include "trackpoint.h"
 #include "touchkit_ps2.h"
 #include "elantech.h"
 #include "sentelic.h"

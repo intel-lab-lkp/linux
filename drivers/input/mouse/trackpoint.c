@@ -13,8 +13,10 @@
 #include <linux/libps2.h>
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
+#include <linux/input/trackpoint.h>
 #include "psmouse.h"
-#include "trackpoint.h"
+
+static struct trackpoint_data *trackpoint_dev;
 
 static const char * const trackpoint_variants[] = {
 	[TP_VARIANT_IBM]		= "IBM",
@@ -61,6 +63,21 @@ static int trackpoint_write(struct ps2dev *ps2dev, u8 loc, u8 val)
 	u8 param[3] = { TP_WRITE_MEM, loc, val };
 
 	return ps2_command(ps2dev, param, MAKE_PS2_CMD(3, 0, TP_COMMAND));
+}
+
+/* Read function for TrackPoint extended registers */
+static int trackpoint_extended_read(struct ps2dev *ps2dev, u8 loc, u8 *val)
+{
+	u8 ext_param[2] = {TP_READ_MEM, loc};
+	int error;
+
+	error = ps2_command(ps2dev,
+			    ext_param, MAKE_PS2_CMD(2, 1, TP_COMMAND));
+
+	if (!error)
+		*val = ext_param[0];
+
+	return error;
 }
 
 static int trackpoint_toggle_bit(struct ps2dev *ps2dev, u8 loc, u8 mask)
@@ -393,6 +410,96 @@ static int trackpoint_reconnect(struct psmouse *psmouse)
 	return 0;
 }
 
+/* List of known incapable device PNP IDs */
+static const char * const dt_incompatible_devices[] = {
+	"LEN0304",
+	"LEN0306",
+	"LEN0317",
+	"LEN031A",
+	"LEN031B",
+	"LEN031C",
+	"LEN031D",
+};
+
+/*
+ * checks if it’s a doubletap capable device
+ * The PNP ID format eg: is "PNP: LEN030d PNP0f13".
+ */
+bool is_trackpoint_dt_capable(const char *pnp_id)
+{
+	char id[16];
+
+	/* Make sure string starts with "PNP: " */
+	if (strncmp(pnp_id, "PNP: LEN03", 10) != 0)
+		return false;
+
+	/* Extract the first word after "PNP: " */
+	if (sscanf(pnp_id + 5, "%15s", id) != 1)
+		return false;
+
+	/* Check if it's blacklisted */
+	for (size_t i = 0; i < ARRAY_SIZE(dt_incompatible_devices); ++i) {
+		if (strcmp(pnp_id, dt_incompatible_devices[i]) == 0)
+			return false;
+	}
+
+	return true;
+}
+
+/* Trackpoint doubletap status function */
+int trackpoint_doubletap_status(bool *status)
+{
+	struct trackpoint_data *tp = trackpoint_dev;
+	struct ps2dev *ps2dev = &tp->psmouse->ps2dev;
+	u8 reg_val;
+	int rc;
+
+	/* Reading the Doubletap register using extended read */
+	rc = trackpoint_extended_read(ps2dev, TP_DOUBLETAP, &reg_val);
+	if (!rc)
+		*status = reg_val & BIT(TP_DOUBLETAP_STATUS_BIT) ?
+				true : false;
+
+	return rc;
+}
+EXPORT_SYMBOL(trackpoint_doubletap_status);
+
+/* Trackpoint doubletap enable/disable function */
+int trackpoint_set_doubletap(bool enable)
+{
+	struct trackpoint_data *tp = trackpoint_dev;
+	struct ps2dev *ps2dev = &tp->psmouse->ps2dev;
+	static u8 doubletap_status;
+	u8 new_val;
+
+	if (!tp)
+		return -ENODEV;
+
+	new_val = enable ? TP_DOUBLETAP_ENABLE : TP_DOUBLETAP_DISABLE;
+
+	/* Comparing the new value paased with the existing value */
+	if (doubletap_status == new_val) {
+		pr_info("TrackPoint: Doubletap is already %s\n",
+			enable ? "enabled" : "disabled");
+		return 0;
+	}
+
+	doubletap_status = new_val;
+
+	return trackpoint_write(ps2dev, TP_DOUBLETAP, new_val);
+}
+EXPORT_SYMBOL(trackpoint_set_doubletap);
+
+/*
+ * Doubletap capability check
+ * We use PNP ID to check the capability of the device.
+ */
+bool trackpoint_doubletap_support(void)
+{
+	return trackpoint_dev->doubletap_capable;
+}
+EXPORT_SYMBOL(trackpoint_doubletap_support);
+
 int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 {
 	struct ps2dev *ps2dev = &psmouse->ps2dev;
@@ -424,6 +531,9 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 
 	psmouse->reconnect = trackpoint_reconnect;
 	psmouse->disconnect = trackpoint_disconnect;
+
+	trackpoint_dev = psmouse->private;
+	trackpoint_dev->psmouse = psmouse;  /* Set parent reference */
 
 	if (variant_id != TP_VARIANT_IBM) {
 		/* Newer variants do not support extended button query. */
@@ -469,6 +579,9 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 		     "%s TrackPoint firmware: 0x%02x, buttons: %d/%d\n",
 		     psmouse->vendor, firmware_id,
 		     (button_info & 0xf0) >> 4, button_info & 0x0f);
+
+	/* Checking the doubletap Capability */
+	tp->doubletap_capable = is_trackpoint_dt_capable(ps2dev->serio->firmware_id);
 
 	return 0;
 }

@@ -69,6 +69,8 @@
 					/* (how hard it is to drag */
 					/* with Z-axis pressed) */
 
+#define TP_DOUBLETAP		0x58	/* TrackPoint doubletap register */
+
 #define TP_MINDRAG		0x59	/* Minimum amount of force needed */
 					/* to trigger dragging */
 
@@ -139,6 +141,12 @@
 #define TP_DEF_TWOHAND		0x00
 #define TP_DEF_SOURCE_TAG	0x00
 
+/* Doubletap register values */
+#define TP_DOUBLETAP_ENABLE	0xFF	/* Enable value */
+#define TP_DOUBLETAP_DISABLE	0xFE	/* Disable value */
+
+#define TP_DOUBLETAP_STATUS_BIT 0	/* 0th bit defines enable/disable */
+
 #define MAKE_PS2_CMD(params, results, cmd) ((params<<12) | (results<<8) | (cmd))
 
 struct trackpoint_data {
@@ -150,13 +158,21 @@ struct trackpoint_data {
 	u8 thresh, upthresh;
 	u8 ztime, jenks;
 	u8 drift_time;
+	bool doubletap_capable;
 
 	/* toggles */
 	bool press_to_select;
 	bool skipback;
 	bool ext_dev;
+
+	struct psmouse *psmouse;  /* Parent device */
 };
 
 int trackpoint_detect(struct psmouse *psmouse, bool set_properties);
+
+int trackpoint_doubletap_status(bool *status);
+int trackpoint_set_doubletap(bool enable);
+bool trackpoint_doubletap_support(void);
+bool is_trackpoint_dt_capable(const char *device_id);
 
 #endif /* _TRACKPOINT_H */

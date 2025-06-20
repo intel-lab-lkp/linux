@@ -71,6 +71,7 @@
 #include <linux/uaccess.h>
 #include <linux/units.h>
 #include <linux/workqueue.h>
+#include <linux/input/trackpoint.h>
 
 #include <acpi/battery.h>
 #include <acpi/video.h>
@@ -373,7 +374,8 @@ static struct {
 	u32 hotkey_poll_active:1;
 	u32 has_adaptive_kbd:1;
 	u32 kbd_lang:1;
-	u32 trackpoint_doubletap:1;
+	u32 trackpoint_doubletap_state:1;
+	u32 trackpoint_doubletap_capable:1;
 	struct quirk_entry *quirks;
 } tp_features;
 
@@ -3325,6 +3327,8 @@ static int __init hotkey_init(struct ibm_init_struct *iibm)
 	bool radiosw_state  = false;
 	bool tabletsw_state = false;
 	int hkeyv, res, status, camera_shutter_state;
+	bool dt_state;
+	int rc;
 
 	vdbg_printk(TPACPI_DBG_INIT | TPACPI_DBG_HKEY,
 			"initializing hotkey subdriver\n");
@@ -3556,8 +3560,19 @@ static int __init hotkey_init(struct ibm_init_struct *iibm)
 
 	hotkey_poll_setup_safe(true);
 
-	/* Enable doubletap by default */
-	tp_features.trackpoint_doubletap = 1;
+	/* Checking doubletap status by default */
+	tp_features.trackpoint_doubletap_capable = trackpoint_doubletap_support();
+
+	if (tp_features.trackpoint_doubletap_capable) {
+		rc = trackpoint_doubletap_status(&dt_state);
+		if (rc) {
+			/* Disable if access to register fails */
+			tp_features.trackpoint_doubletap_state = false;
+			pr_info("ThinkPad ACPI: Doubletap failed to check status\n");
+		} else {
+			tp_features.trackpoint_doubletap_state = dt_state;
+		}
+	}
 
 	return 0;
 }
@@ -3862,9 +3877,7 @@ static bool hotkey_notify_8xxx(const u32 hkey, bool *send_acpi_ev)
 {
 	switch (hkey) {
 	case TP_HKEY_EV_TRACK_DOUBLETAP:
-		if (tp_features.trackpoint_doubletap)
-			tpacpi_input_send_key(hkey, send_acpi_ev);
-
+		*send_acpi_ev = true;
 		return true;
 	default:
 		return false;
@@ -10738,6 +10751,101 @@ static struct ibm_struct  dytc_profile_driver_data = {
 	.exit = dytc_profile_exit,
 };
 
+/************************************************************************
+ * Trackpoint Doubletap Interface
+ *
+ * Control/Monitoring of Trackpoint Doubletap from
+ * /sys/devices/platform/thinkpad_acpi/tp_doubletap
+ */
+
+static ssize_t tp_doubletap_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	bool status;
+
+	if (!trackpoint_doubletap_status(&status))
+		return sysfs_emit(buf, "access error\n");
+
+	return sysfs_emit(buf, "%s\n", status ? "enabled" : "disabled");
+}
+
+static ssize_t tp_doubletap_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	if (sysfs_streq(buf, "enable")) {
+		/* enabling the doubletap here */
+		if (!trackpoint_set_doubletap(true))
+			tp_features.trackpoint_doubletap_state = true;
+	} else if (sysfs_streq(buf, "disable")) {
+		/* disabling the doubletap here */
+		if (!trackpoint_set_doubletap(false))
+			tp_features.trackpoint_doubletap_state = false;
+	} else {
+		pr_err("ThinkPad ACPI: thinkpad_acpi: Invalid value '%s' for tp_doubletap\n", buf);
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static umode_t tp_doubletap_is_visible(struct kobject *kobj, struct attribute *attr, int index);
+
+static DEVICE_ATTR_RW(tp_doubletap);
+
+static struct attribute *tp_doubletap_attrs[] = {
+	&dev_attr_tp_doubletap.attr,
+	NULL
+};
+
+static const struct attribute_group tp_doubletap_attr_group = {
+	.attrs = tp_doubletap_attrs,
+	.is_visible = tp_doubletap_is_visible,
+};
+
+static umode_t tp_doubletap_is_visible(struct kobject *kobj, struct attribute *attr, int index)
+{
+	/* Only show the attribute if the TrackPoint doubletap is supported */
+	tp_features.trackpoint_doubletap_capable = trackpoint_doubletap_support();
+	if (!tp_features.trackpoint_doubletap_capable)
+		return 0;
+
+	pr_info("ThinkPad ACPI: TrackPoint doubletap sysfs is visible\n");
+
+	return attr->mode;
+}
+
+static struct delayed_work tp_doubletap_work;
+
+static void tp_doubletap_work_func(struct work_struct *work)
+{
+	if (!trackpoint_doubletap_support()) {
+		pr_info("TrackPoint doubletap not supported yet, rechecking later\n");
+		schedule_delayed_work(&tp_doubletap_work, msecs_to_jiffies(2000));
+		return;
+	}
+
+	if (sysfs_create_group(&tpacpi_pdev->dev.kobj, &tp_doubletap_attr_group) == 0)
+		pr_info("TrackPoint doubletap sysfs group created\n");
+	else
+		pr_err("Failed to create TrackPoint doubletap sysfs group\n");
+}
+
+static int __init tp_doubletap_init(struct ibm_init_struct *iibm)
+{
+	INIT_DELAYED_WORK(&tp_doubletap_work, tp_doubletap_work_func);
+	schedule_delayed_work(&tp_doubletap_work, msecs_to_jiffies(1000));
+
+	return 0;
+}
+
+static void tp_doubletap_exit(void)
+{
+	device_remove_file(&tpacpi_pdev->dev, &dev_attr_tp_doubletap);
+}
+
+static struct ibm_struct tp_doubletap_driver_data = {
+	.name = "tp_doubletap",
+	.exit =  tp_doubletap_exit,
+};
+
 /*************************************************************************
  * Keyboard language interface
  */
@@ -11192,7 +11300,7 @@ static struct platform_driver tpacpi_hwmon_pdriver = {
  */
 static bool tpacpi_driver_event(const unsigned int hkey_event)
 {
-	int camera_shutter_state;
+	int camera_shutter_state, rc;
 
 	switch (hkey_event) {
 	case TP_HKEY_EV_BRGHT_UP:
@@ -11284,8 +11392,30 @@ static bool tpacpi_driver_event(const unsigned int hkey_event)
 		mutex_unlock(&tpacpi_inputdev_send_mutex);
 		return true;
 	case TP_HKEY_EV_DOUBLETAP_TOGGLE:
-		tp_features.trackpoint_doubletap = !tp_features.trackpoint_doubletap;
-		return true;
+		if (tp_features.trackpoint_doubletap_capable) {
+			/* Togging the register value */
+			rc = trackpoint_set_doubletap(!tp_features.trackpoint_doubletap_state);
+
+			if (rc) {
+				pr_err("ThinkPad ACPI: Trackpoint doubletap toggle failed\n");
+			} else {
+				/* Toggling the Doubletap Enable/Disable */
+				tp_features.trackpoint_doubletap_state =
+					!tp_features.trackpoint_doubletap_state;
+				pr_info("ThinkPad ACPI: Trackpoint doubletap is %s\n",
+					tp_features.trackpoint_doubletap_state ?
+					"enabled" : "disabled");
+
+				return true;
+			}
+		}
+
+		/*
+		 * Suppress the event if Doubletap is not supported
+		 * or if the trackpoint_set_doubletap() is failing
+		 */
+		return false;
+
 	case TP_HKEY_EV_PROFILE_TOGGLE:
 	case TP_HKEY_EV_PROFILE_TOGGLE2:
 		platform_profile_cycle();
@@ -11751,6 +11881,11 @@ static struct ibm_init_struct ibms_init[] __initdata = {
 		.init = auxmac_init,
 		.data = &auxmac_data,
 	},
+	{
+		.init = tp_doubletap_init,
+		.data = &tp_doubletap_driver_data
+	},
+
 };
 
 static int __init set_ibm_param(const char *val, const struct kernel_param *kp)

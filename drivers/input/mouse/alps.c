@@ -18,10 +18,10 @@
 #include <linux/serio.h>
 #include <linux/libps2.h>
 #include <linux/dmi.h>
+#include <linux/input/trackpoint.h>
 
 #include "psmouse.h"
 #include "alps.h"
-#include "trackpoint.h"
 
 /*
  * Definitions for ALPS version 3 and 4 command mode protocol
