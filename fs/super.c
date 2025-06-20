@@ -1461,7 +1461,9 @@ static void fs_bdev_mark_dead(struct block_device *bdev, bool surprise)
 		sync_filesystem(sb);
 	shrink_dcache_sb(sb);
 	evict_inodes(sb);
-	if (sb->s_op->shutdown)
+	if (sb->s_op->shutdown_bdev)
+		sb->s_op->shutdown_bdev(sb, bdev);
+	else if (sb->s_op->shutdown)
 		sb->s_op->shutdown(sb);
 
 	super_unlock_shared(sb);

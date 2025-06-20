@@ -2365,7 +2365,17 @@ struct super_operations {
 				  struct shrink_control *);
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
+	/*
+	 * For single-device filesystems. Called when the only block device is
+	 * marked dead.
+	 */
 	void (*shutdown)(struct super_block *sb);
+
+	/*
+	 * For multi-device filesystems. Called when any of its block device is
+	 * marked dead.
+	 */
+	void (*shutdown_bdev)(struct super_block *sb, struct block_device *bdev);
 };
 
 /*
