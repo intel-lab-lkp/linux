@@ -27,6 +27,7 @@
 #include <linux/spi/mmc_spi.h>
 
 #include <linux/unaligned.h>
+#include <linux/string_choices.h>
 
 
 /* NOTES:
@@ -774,7 +775,7 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 	unsigned		n_sg;
 	bool			multiple = (data->blocks > 1);
 	bool			write = (data->flags & MMC_DATA_WRITE);
-	const char		*write_or_read = write ? "write" : "read";
+	const char		*write_or_read = str_write_read(write);
 	u32			clock_rate;
 	unsigned long		timeout;
 
