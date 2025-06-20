@@ -597,6 +597,10 @@ static int s6x0_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		case (DW2102_RC_QUERY): {
 			u8 ibuf[5];
 
+			if (msg[j].len < 2) {
+				ret = -EOPNOTSUPP;
+				goto unlock;
+			}
 			dw210x_op_rw(d->udev, 0xb8, 0, 0,
 				     ibuf, 5, DW210X_READ_MSG);
 			memcpy(msg[j].buf, ibuf + 3, 2);
@@ -604,7 +608,11 @@ static int s6x0_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		}
 		case (DW2102_VOLTAGE_CTRL): {
 			u8 obuf[2];
-
+			
+			if (msg[j].len < 2) {
+				ret = -EOPNOTSUPP;
+				goto unlock;
+			}
 			obuf[0] = 1;
 			obuf[1] = msg[j].buf[1];/* off-on */
 			dw210x_op_rw(d->udev, 0x8a, 0, 0,
@@ -618,6 +626,10 @@ static int s6x0_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		case (DW2102_LED_CTRL): {
 			u8 obuf[2];
 
+			if (msg[j].len < 1) {
+				ret = -EOPNOTSUPP;
+				goto unlock;
+			}
 			obuf[0] = 5;
 			obuf[1] = msg[j].buf[0];
 			dw210x_op_rw(d->udev, 0x8a, 0, 0,
@@ -631,6 +643,10 @@ static int s6x0_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		 * case 0xa0: eeprom
 		 */
 		default: {
+			if (msg[j].len < 1) {
+				ret = -EOPNOTSUPP;
+				goto unlock;
+			}
 			if (msg[j].flags == I2C_M_RD) {
 				/* read registers */
 				u8 ibuf[MAX_XFER_SIZE];
