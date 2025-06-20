@@ -16,6 +16,8 @@
 #include "protocols.h"
 #include "notify.h"
 
+#include <trace/events/scmi.h>
+
 /* Updated only after ALL the mandatory features for that version are merged */
 #define SCMI_PROTOCOL_SUPPORTED_VERSION		0x10000
 
@@ -813,8 +815,10 @@ static int scmi_telemetry_tdcf_parse_one(struct telemetry_info *ti,
 	int used_qwords;
 
 	de = xa_load(&ti->xa_des, le32_to_cpu(payld->id));
-	if (!de || DATA_INVALID(payld))
+	if (!de || DATA_INVALID(payld)) {
+		trace_scmi_tlm_access(de->id, "DE_INVALID", 0, 0);
 		return -EINVAL;
+	}
 
 	used_qwords = 4;
 
@@ -840,6 +844,8 @@ static int scmi_telemetry_tdcf_parse_one(struct telemetry_info *ti,
 	else
 		tde->last_ts = 0;
 
+	trace_scmi_tlm_collect(0, de->id, tde->last_val, "SHMTI_UPDATE");
+
 	return used_qwords;
 }
 
@@ -864,8 +870,10 @@ static int scmi_telemetry_shmti_scan(struct telemetry_info *ti,
 		fsleep((SCMI_TLM_TDCF_MAX_RETRIES - retries) * 1000);
 
 		startm = TDCF_START_SEQ_GET(tdcf);
-		if (IS_BAD_START_SEQ(startm))
+		if (IS_BAD_START_SEQ(startm)) {
+			trace_scmi_tlm_access(0, "MSEQ_BADSTART", startm, 0);
 			continue;
+		}
 
 		qwords = tdcf->prlg.num_qwords;
 		next = tdcf->payld;
@@ -874,14 +882,18 @@ static int scmi_telemetry_shmti_scan(struct telemetry_info *ti,
 
 			used_qwords = scmi_telemetry_tdcf_parse_one(ti, next,
 								    update ? shmti : NULL);
-			if (qwords < used_qwords)
+			if (qwords < used_qwords) {
+				trace_scmi_tlm_access(0, "BAD_QWORDS", 0, 0);
 				return -EINVAL;
+			}
 
 			next += used_qwords * 4;
 			qwords -= used_qwords;
 		}
 
 		endm = TDCF_END_SEQ_GET(eplg);
+		if (startm != endm)
+			trace_scmi_tlm_access(0, "MSEQ_MISMATCH", startm, endm);
 	} while (startm != endm && --retries);
 
 	if (startm != endm)
@@ -1252,12 +1264,17 @@ static int scmi_telemetry_de_tdcf_parse(struct telemetry_de *tde,
 		fsleep((SCMI_TLM_TDCF_MAX_RETRIES - retries) * 1000);
 
 		startm = TDCF_START_SEQ_GET(tdcf);
-		if (IS_BAD_START_SEQ(startm))
+		if (IS_BAD_START_SEQ(startm)) {
+			trace_scmi_tlm_access(tde->de.id, "MSEQ_BADSTART",
+					      startm, 0);
 			continue;
+		}
 
 		payld = tde->base + tde->offset;
-		if (le32_to_cpu(payld->id) != tde->de.id || DATA_INVALID(payld))
+		if (le32_to_cpu(payld->id) != tde->de.id || DATA_INVALID(payld)) {
+			trace_scmi_tlm_access(tde->de.id, "DE_INVALID", 0, 0);
 			return -EINVAL;
+		}
 
 		//TODO BLK_TS
 		if (tstamp && USE_LINE_TS(payld) && TS_VALID(payld))
@@ -1266,6 +1283,9 @@ static int scmi_telemetry_de_tdcf_parse(struct telemetry_de *tde,
 		*val = LINE_DATA_GET(&payld->tsl);
 
 		endm = TDCF_END_SEQ_GET(tde->eplg);
+		if (startm != endm)
+			trace_scmi_tlm_access(tde->de.id, "MSEQ_MISMATCH",
+					      startm, endm);
 	} while (startm != endm && --retries);
 
 	if (startm != endm)
@@ -1412,6 +1432,9 @@ scmi_telemetry_msg_payld_process(struct telemetry_info *ti,
 			tde->last_ts = LINE_TSTAMP_GET(&payld->tsl);
 		else
 			tde->last_ts = 0;
+
+		trace_scmi_tlm_collect(timestamp, tde->de.id, tde->last_val,
+				       "MESSAGE");
 	}
 }
 
@@ -1622,6 +1645,8 @@ static void scmi_telemetry_scan_update(struct telemetry_info *ti, u64 ts)
 			tde->last_ts = tstamp;
 		else
 			tde->last_ts = 0;
+
+		trace_scmi_tlm_collect(ts, de->id, tde->last_val, "FC_UPDATE");
 	}
 }
 
