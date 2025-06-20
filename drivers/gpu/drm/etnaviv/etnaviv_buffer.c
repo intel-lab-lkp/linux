@@ -90,25 +90,6 @@ static inline void CMD_SEM(struct etnaviv_cmdbuf *buffer, u32 from, u32 to)
 static void etnaviv_cmd_select_pipe(struct etnaviv_gpu *gpu,
 	struct etnaviv_cmdbuf *buffer, u8 pipe)
 {
-	u32 flush = 0;
-
-	lockdep_assert_held(&gpu->lock);
-
-	/*
-	 * This assumes that if we're switching to 2D, we're switching
-	 * away from 3D, and vice versa.  Hence, if we're switching to
-	 * the 2D core, we need to flush the 3D depth and color caches,
-	 * otherwise we need to flush the 2D pixel engine cache.
-	 */
-	if (gpu->exec_state == ETNA_PIPE_2D)
-		flush = VIVS_GL_FLUSH_CACHE_PE2D;
-	else if (gpu->exec_state == ETNA_PIPE_3D)
-		flush = VIVS_GL_FLUSH_CACHE_DEPTH | VIVS_GL_FLUSH_CACHE_COLOR;
-
-	CMD_LOAD_STATE(buffer, VIVS_GL_FLUSH_CACHE, flush);
-	CMD_SEM(buffer, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
-	CMD_STALL(buffer, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
-
 	CMD_LOAD_STATE(buffer, VIVS_GL_PIPE_SELECT,
 		       VIVS_GL_PIPE_SELECT_PIPE(pipe));
 }
@@ -382,7 +363,7 @@ void etnaviv_buffer_queue(struct etnaviv_gpu *gpu, u32 exec_state,
 
 		/* pipe switch commands */
 		if (switch_context)
-			extra_dwords += 4;
+			extra_dwords += 1;
 
 		/* PTA load command */
 		if (switch_mmu_context && gpu->sec_mode == ETNA_SEC_KERNEL)
