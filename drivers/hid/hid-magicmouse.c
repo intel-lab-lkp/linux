@@ -81,32 +81,32 @@ MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state fie
 
 /* Touch surface information. Dimension is in hundredths of a mm, min and max
  * are in units. */
-#define MOUSE_DIMENSION_X (float)9056
+#define MOUSE_DIMENSION_X ((float)9056)
 #define MOUSE_MIN_X -1100
 #define MOUSE_MAX_X 1258
 #define MOUSE_RES_X ((MOUSE_MAX_X - MOUSE_MIN_X) / (MOUSE_DIMENSION_X / 100))
-#define MOUSE_DIMENSION_Y (float)5152
+#define MOUSE_DIMENSION_Y ((float)5152)
 #define MOUSE_MIN_Y -1589
 #define MOUSE_MAX_Y 2047
 #define MOUSE_RES_Y ((MOUSE_MAX_Y - MOUSE_MIN_Y) / (MOUSE_DIMENSION_Y / 100))
 
-#define TRACKPAD_DIMENSION_X (float)13000
+#define TRACKPAD_DIMENSION_X ((float)13000)
 #define TRACKPAD_MIN_X -2909
 #define TRACKPAD_MAX_X 3167
 #define TRACKPAD_RES_X \
 	((TRACKPAD_MAX_X - TRACKPAD_MIN_X) / (TRACKPAD_DIMENSION_X / 100))
-#define TRACKPAD_DIMENSION_Y (float)11000
+#define TRACKPAD_DIMENSION_Y ((float)11000)
 #define TRACKPAD_MIN_Y -2456
 #define TRACKPAD_MAX_Y 2565
 #define TRACKPAD_RES_Y \
 	((TRACKPAD_MAX_Y - TRACKPAD_MIN_Y) / (TRACKPAD_DIMENSION_Y / 100))
 
-#define TRACKPAD2_DIMENSION_X (float)16000
+#define TRACKPAD2_DIMENSION_X ((float)16000)
 #define TRACKPAD2_MIN_X -3678
 #define TRACKPAD2_MAX_X 3934
 #define TRACKPAD2_RES_X \
 	((TRACKPAD2_MAX_X - TRACKPAD2_MIN_X) / (TRACKPAD2_DIMENSION_X / 100))
-#define TRACKPAD2_DIMENSION_Y (float)11490
+#define TRACKPAD2_DIMENSION_Y ((float)11490)
 #define TRACKPAD2_MIN_Y -2478
 #define TRACKPAD2_MAX_Y 2587
 #define TRACKPAD2_RES_Y \
