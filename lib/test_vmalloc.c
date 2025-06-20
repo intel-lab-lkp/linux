@@ -598,7 +598,7 @@ static int __init vmalloc_test_init(void)
 	return IS_BUILTIN(CONFIG_TEST_VMALLOC) ? 0:-EAGAIN;
 }
 
-module_init(vmalloc_test_init)
+late_initcall(vmalloc_test_init)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Uladzislau Rezki");
