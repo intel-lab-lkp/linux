@@ -1683,16 +1683,62 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	if (vm_flags & (VM_PFNMAP | VM_MIXEDMAP) && !pfn_is_map_memory(pfn)) {
 		/*
-		 * If the page was identified as device early by looking at
-		 * the VMA flags, vma_pagesize is already representing the
-		 * largest quantity we can map.  If instead it was mapped
-		 * via __kvm_faultin_pfn(), vma_pagesize is set to PAGE_SIZE
-		 * and must not be upgraded.
-		 *
-		 * In both cases, we don't let transparent_hugepage_adjust()
-		 * change things at the last minute.
+		 * This is non-struct page memory PFN, and cannot support
+		 * CMOs. It could potentially be unsafe to access as cachable.
 		 */
-		s2_force_noncacheable = true;
+		bool cacheable_pfnmap = false;
+
+		if (vm_flags & VM_PFNMAP) {
+			/*
+			 * COW VM_PFNMAP is possible when doing a MAP_PRIVATE
+			 * /dev/mem mapping on systems that allow such mapping.
+			 * Reject such case.
+			 */
+			if (is_cow_mapping(vm_flags))
+				return -EINVAL;
+
+			/*
+			 * Check if the VMA owner considers the physical address
+			 * safe to be mapped cacheable.
+			 */
+			if (is_vma_cacheable)
+				cacheable_pfnmap = true;
+		}
+
+		if (cacheable_pfnmap) {
+			/*
+			 * Whilst the VMA owner expects cacheable mapping to this
+			 * PFN, hardware also has to support the FWB and CACHE DIC
+			 * features.
+			 *
+			 * ARM64 KVM relies on kernel VA mapping to the PFN to
+			 * perform cache maintenance as the CMO instructions work on
+			 * virtual addresses. VM_PFNMAP region are not necessarily
+			 * mapped to a KVA and hence the presence of hardware features
+			 * S2FWB and CACHE DIC is mandatory for cache maintenance.
+			 *
+			 * Check if the hardware supports it before allowing the VMA
+			 * owner request for cacheable mapping.
+			 */
+			if (!kvm_arch_supports_cacheable_pfnmap())
+				return -EFAULT;
+
+			/* Cannot degrade cachable to non cachable */
+			if (s2_force_noncacheable)
+				return -EINVAL;
+		} else {
+			/*
+			 * If the page was identified as device early by looking at
+			 * the VMA flags, vma_pagesize is already representing the
+			 * largest quantity we can map.  If instead it was mapped
+			 * via __kvm_faultin_pfn(), vma_pagesize is set to PAGE_SIZE
+			 * and must not be upgraded.
+			 *
+			 * In both cases, we don't let transparent_hugepage_adjust()
+			 * change things at the last minute.
+			 */
+			s2_force_noncacheable = true;
+		}
 	} else if (logging_active && !write_fault) {
 		/*
 		 * Only actually map the page as writable if this was a write
@@ -2269,8 +2315,12 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 				break;
 			}
 
-			/* Cacheable PFNMAP is not allowed */
-			if (kvm_vma_is_cacheable(vma)) {
+			/*
+			 * Cacheable PFNMAP is allowed only if the hardware
+			 * supports it.
+			 */
+			if (kvm_vma_is_cacheable(vma) &&
+			    !kvm_arch_supports_cacheable_pfnmap()) {
 				ret = -EINVAL;
 				break;
 			}
