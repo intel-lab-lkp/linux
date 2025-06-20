@@ -187,6 +187,7 @@ struct fm10k_q_vector {
 	u32 __iomem *itr;	/* pointer to ITR register for this vector */
 	u16 v_idx;		/* index of q_vector within interface array */
 	struct fm10k_ring_container rx, tx;
+	struct rcu_head rcu;	/* to avoid race with update stats on free */
 
 	struct napi_struct napi;
 	cpumask_t affinity_mask;
@@ -195,7 +196,6 @@ struct fm10k_q_vector {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dbg_q_vector;
 #endif /* CONFIG_DEBUG_FS */
-	struct rcu_head rcu;	/* to avoid race with update stats on free */
 
 	/* for dynamic allocation of rings associated with this q_vector */
 	struct fm10k_ring ring[] ____cacheline_internodealigned_in_smp;

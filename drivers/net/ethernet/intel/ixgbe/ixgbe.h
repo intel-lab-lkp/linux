@@ -509,11 +509,11 @@ struct ixgbe_q_vector {
 				 * represents the vector for this ring */
 	u16 itr;		/* Interrupt throttle rate written to EITR */
 	struct ixgbe_ring_container rx, tx;
+	struct rcu_head rcu;	/* to avoid race with update stats on free */
 
 	struct napi_struct napi;
 	cpumask_t affinity_mask;
 	int numa_node;
-	struct rcu_head rcu;	/* to avoid race with update stats on free */
 	char name[IFNAMSIZ + 9];
 
 	/* for dynamic allocation of rings associated with this q_vector */
