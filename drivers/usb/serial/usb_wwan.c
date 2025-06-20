@@ -80,10 +80,10 @@ void usb_wwan_dtr_rts(struct usb_serial_port *port, int on)
 		return;
 
 	portdata = usb_get_serial_port_data(port);
-	/* FIXME: locking */
+	mutex_lock(&portdata->lock);
 	portdata->rts_state = on;
 	portdata->dtr_state = on;
-
+	mutex_unlock(&portdata->lock);
 	usb_wwan_send_setup(port);
 }
 EXPORT_SYMBOL(usb_wwan_dtr_rts);
@@ -120,7 +120,7 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 	if (!intfdata->use_send_setup)
 		return -EINVAL;
 
-	/* FIXME: what locks portdata fields ? */
+	mutex_lock(&portdata->lock);
 	if (set & TIOCM_RTS)
 		portdata->rts_state = 1;
 	if (set & TIOCM_DTR)
@@ -130,6 +130,7 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 		portdata->rts_state = 0;
 	if (clear & TIOCM_DTR)
 		portdata->dtr_state = 0;
+	mutex_unlock(&portdata->lock);
 	return usb_wwan_send_setup(port);
 }
 EXPORT_SYMBOL(usb_wwan_tiocmset);
