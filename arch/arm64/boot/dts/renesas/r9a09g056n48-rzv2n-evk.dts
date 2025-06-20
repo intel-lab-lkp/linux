@@ -24,6 +24,7 @@
 		i2c6 = &i2c6;
 		i2c7 = &i2c7;
 		i2c8 = &i2c8;
+		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		serial0 = &scif;
 	};
@@ -44,6 +45,15 @@
 		regulator-name = "fixed-0.8V";
 		regulator-min-microvolt = <800000>;
 		regulator-max-microvolt = <800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	reg_1p8v: regulator-1p8v {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-1.8V";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
 		regulator-boot-on;
 		regulator-always-on;
 	};
