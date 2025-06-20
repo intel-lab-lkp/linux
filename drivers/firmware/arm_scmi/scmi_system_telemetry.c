@@ -6,6 +6,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -14,6 +15,8 @@
 #include <linux/scmi_protocol.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
+
+#include <uapi/linux/scmi.h>
 
 #define MAX_BULK_LINE_CHAR_LENGTH	64
 
@@ -39,13 +42,22 @@ struct scmi_tlm_de_dev {
 #define to_tlm_de_dev(d)					\
 	(container_of((d), struct scmi_tlm_de_dev, dev))
 
+struct scmi_tlm_ioctls_db {
+	struct scmi_tlm_info tlm_info;
+	struct scmi_tlm_intervals *tlm_intervals;
+	struct scmi_tlm_intervals **tlm_grp_intervals;
+	struct scmi_tlm_des_list *tlm_des_list;
+};
+
 struct scmi_tlm_instance {
 	struct device dev;
+	struct cdev cdev;
 	struct device des_dev;
 	struct device groups_dev;
 	struct scmi_tlm_de_dev **des;
 	struct scmi_tlm_setup *tsp;
 	const struct scmi_telemetry_info *info;
+	struct scmi_tlm_ioctls_db io_db;
 };
 
 #define dev_to_tlm_instance(d)	\
@@ -70,6 +82,8 @@ struct scmi_tlm_setup {
 	struct scmi_protocol_handle *ph;
 	const void *priv;
 };
+
+static int scmi_tlm_major;
 
 static void scmi_telemetry_release(struct device *dev)
 {
@@ -326,7 +340,6 @@ static ssize_t intervals_discrete_show(struct device *dev,
 	return __intervals_discrete_show(buf, ti->info->intervals.discrete);
 }
 
-//TODO Review available interval show
 #define BUF_SZ	1024
 static inline ssize_t
 __available_update_show(char *buf,
@@ -526,6 +539,31 @@ scmi_telemetry_dev_register(struct device *dev, struct device *parent,
 	device_set_pm_not_required(dev);
 	dev_set_uevent_suppress(dev, true);
 	ret = device_register(dev);
+	if (ret)
+		put_device(dev);
+
+	return ret;
+}
+
+static int
+scmi_telemetry_cdev_register(struct device *dev, struct device *parent,
+			     struct cdev *cdev, const struct file_operations *fops,
+			     const char *name, unsigned int minor)
+{
+	int ret;
+
+	dev->parent = parent;
+	dev->release = scmi_tlm_dev_release;
+	dev_set_name(dev, "%s", name);
+	device_set_pm_not_required(dev);
+	dev_set_uevent_suppress(dev, true);
+
+	device_initialize(dev);
+
+	dev->devt = MKDEV(scmi_tlm_major, minor);
+	cdev_init(cdev, fops);
+
+	ret = cdev_device_add(cdev, dev);
 	if (ret)
 		put_device(dev);
 
@@ -807,6 +845,448 @@ err:
 	return ret;
 }
 
+struct scmi_tlm_priv {
+	char *buf;
+	size_t buf_sz;
+	int buf_len;
+	struct scmi_tlm_instance *ti;
+};
+
+static int scmi_tlm_open(struct inode *ino, struct file *filp)
+{
+	struct scmi_tlm_instance *ti;
+	struct scmi_tlm_priv *tp;
+
+	tp = kzalloc(sizeof(*tp), GFP_KERNEL);
+	if (!tp)
+		return -ENOMEM;
+
+	ti = container_of(ino->i_cdev, struct scmi_tlm_instance, cdev);
+	tp->ti = ti;
+
+	filp->private_data = tp;
+
+	return 0;
+}
+
+static int scmi_tlm_bulk_buffer_allocate_and_fill(struct scmi_tlm_priv *tp)
+{
+	struct scmi_tlm_instance *ti = tp->ti;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	struct scmi_telemetry_de_sample *samples;
+	int ret, num_samples;
+
+	tp->buf_sz = ti->info->num_de * MAX_BULK_LINE_CHAR_LENGTH;
+	tp->buf = kzalloc(tp->buf_sz, GFP_KERNEL);
+	if (!tp->buf)
+		return -ENOMEM;
+
+	num_samples = ti->info->num_de;
+	samples = kcalloc(num_samples, sizeof(*samples), GFP_KERNEL);
+	if (!samples) {
+		kfree(tp->buf);
+		return -ENOMEM;
+	}
+
+	ret = tsp->ops->des_bulk_read(tsp->ph, SCMI_TLM_GRP_INVALID,
+				      &num_samples, samples);
+	if (ret) {
+		kfree(samples);
+		kfree(tp->buf);
+		return ret;
+	}
+
+	ret = scmi_tlm_buffer_fill(&ti->dev, tp->buf, tp->buf_sz, &tp->buf_len,
+				   num_samples, samples);
+	kfree(samples);
+
+	return ret;
+}
+
+static ssize_t scmi_tlm_read(struct file *filp, char __user *buf, size_t count,
+			     loff_t *ppos)
+{
+	struct scmi_tlm_priv *tp = filp->private_data;
+	int ret;
+
+	if (!tp->buf) {
+		ret = scmi_tlm_bulk_buffer_allocate_and_fill(tp);
+		if (ret)
+			return ret;
+	}
+
+	return simple_read_from_buffer(buf, count, ppos, tp->buf, tp->buf_len);
+}
+
+static __poll_t scmi_tlm_poll(struct file *, struct poll_table_struct *)
+{
+	return 0;
+}
+
+static long
+scmi_tlm_info_get_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+
+	if (copy_to_user(uptr, &ti->io_db.tlm_info,
+			 sizeof(ti->io_db.tlm_info)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long
+scmi_tlm_intervals_ioctl(struct scmi_tlm_instance *ti, unsigned long arg,
+			 bool group)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_intervals ivs, *tlm_ivs;
+
+	if (copy_from_user(&ivs, uptr, sizeof(ivs)))
+		return -EFAULT;
+
+	if (!group) {
+		tlm_ivs = ti->io_db.tlm_intervals;
+	} else {
+		if (ivs.grp_id >= ti->info->num_groups)
+			return -EINVAL;
+
+		tlm_ivs = ti->io_db.tlm_grp_intervals[ivs.grp_id];
+	}
+
+	if (ivs.num != tlm_ivs->num)
+		return -EINVAL;
+
+	if (copy_to_user(uptr, tlm_ivs,
+			 sizeof(*tlm_ivs) + sizeof(u32) * ivs.num))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long
+scmi_tlm_de_config_set_ioctl(struct scmi_tlm_instance *ti, unsigned long arg,
+			     bool all)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	const struct scmi_telemetry_de *de;
+	struct scmi_tlm_de_config tcfg = {};
+	int ret;
+
+	if (copy_from_user(&tcfg, uptr, sizeof(tcfg)))
+		return -EFAULT;
+
+	if (!all)
+		return tsp->ops->state_set(tsp->ph, false, tcfg.id,
+					   (bool *)&tcfg.enable,
+					   (bool *)&tcfg.t_enable);
+
+	for (int i = 0; i < ti->info->num_de; i++) {
+		de = ti->info->des[i];
+
+		ret = tsp->ops->state_set(tsp->ph, false, de->id,
+					  (bool *)&tcfg.enable,
+					  (bool *)&tcfg.t_enable);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static long
+scmi_tlm_de_config_get_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	struct scmi_tlm_de_config tcfg = {};
+	int ret;
+
+	if (copy_from_user(&tcfg, uptr, sizeof(tcfg)))
+		return -EFAULT;
+
+	ret = tsp->ops->state_get(tsp->ph, tcfg.id,
+				  (bool *)&tcfg.enable, (bool *)&tcfg.t_enable);
+	if (ret)
+		return ret;
+
+	if (copy_to_user(uptr, &tcfg, sizeof(tcfg)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long
+scmi_tlm_config_get_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_config cfg;
+
+	cfg.enable = !!ti->info->enabled;
+	cfg.current_update_interval =
+		ti->info->intervals.active_update_interval;
+
+	if (copy_to_user(uptr, &cfg, sizeof(cfg)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long
+scmi_tlm_config_set_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	struct scmi_tlm_config cfg = {};
+
+	if (copy_from_user(&cfg, uptr, sizeof(cfg)))
+		return -EFAULT;
+
+	return tsp->ops->collection_configure(tsp->ph, SCMI_TLM_GRP_INVALID,
+					      true, (bool *)&cfg.enable,
+					      &cfg.current_update_interval,
+					      NULL);
+}
+
+static long
+scmi_tlm_des_list_get_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_des_list dsl;
+
+	if (copy_from_user(&dsl, uptr, sizeof(dsl)))
+		return -EFAULT;
+
+	if (dsl.num_des < ti->io_db.tlm_des_list->num_des)
+		return -EFAULT;
+
+	if (copy_to_user(uptr, ti->io_db.tlm_des_list,
+			 sizeof(*ti->io_db.tlm_des_list) +
+			 ti->io_db.tlm_des_list->num_des * sizeof(ti->io_db.tlm_des_list->des[0])))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long
+scmi_tlm_de_value_get_ioctl(struct scmi_tlm_instance *ti, unsigned long arg)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	struct scmi_tlm_de_sample sample;
+	int ret;
+
+	if (copy_from_user(&sample, uptr, sizeof(sample)))
+		return -EFAULT;
+
+	ret = tsp->ops->de_data_read(tsp->ph,
+				     (struct scmi_telemetry_de_sample *)&sample);
+	if (ret)
+		return ret;
+
+	if (copy_to_user(uptr, &sample, sizeof(sample)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long scmi_tlm_des_read_ioctl(struct scmi_tlm_instance *ti,
+				    unsigned long arg, bool single)
+{
+	void * __user uptr = (void * __user)arg;
+	struct scmi_tlm_setup *tsp = ti->tsp;
+	struct scmi_tlm_bulk_read bulk, *bulk_ptr;
+	int ret;
+
+	if (copy_from_user(&bulk, uptr, sizeof(bulk)))
+		return -EFAULT;
+
+	bulk_ptr = kzalloc(sizeof(*bulk_ptr) +
+			     bulk.num_samples * sizeof(bulk_ptr->samples[0]),
+			     GFP_KERNEL);
+	if (!bulk_ptr)
+		return -ENOMEM;
+
+	bulk_ptr->grp_id = bulk.grp_id;
+	bulk_ptr->num_samples = bulk.num_samples;
+	if (!single)
+		ret = tsp->ops->des_bulk_read(tsp->ph, bulk_ptr->grp_id,
+					      &bulk_ptr->num_samples,
+			  (struct scmi_telemetry_de_sample *)bulk_ptr->samples);
+	else
+		ret = tsp->ops->des_sample_get(tsp->ph, bulk_ptr->grp_id,
+					       &bulk_ptr->num_samples,
+			  (struct scmi_telemetry_de_sample *)bulk_ptr->samples);
+	if (ret)
+		goto out;
+
+	if (copy_to_user(uptr, bulk_ptr, sizeof(*bulk_ptr) +
+			 bulk_ptr->num_samples * sizeof(bulk_ptr->samples[0])))
+		ret = -EFAULT;
+
+out:
+	kfree(bulk_ptr);
+
+	return ret;
+}
+
+static long scmi_tlm_unlocked_ioctl(struct file *filp, unsigned int cmd,
+				    unsigned long arg)
+{
+	struct scmi_tlm_priv *tp = filp->private_data;
+	struct scmi_tlm_instance *ti = tp->ti;
+
+	switch (cmd) {
+	case SCMI_TLM_GET_INFO:
+		return scmi_tlm_info_get_ioctl(ti, arg);
+	case SCMI_TLM_GET_CFG:
+		return scmi_tlm_config_get_ioctl(ti, arg);
+	case SCMI_TLM_SET_CFG:
+		return scmi_tlm_config_set_ioctl(ti, arg);
+	case SCMI_TLM_GET_INTRVS:
+		return scmi_tlm_intervals_ioctl(ti, arg, false);
+	case SCMI_TLM_GET_DE_CFG:
+		return scmi_tlm_de_config_get_ioctl(ti, arg);
+	case SCMI_TLM_SET_DE_CFG:
+		return scmi_tlm_de_config_set_ioctl(ti, arg, false);
+	case SCMI_TLM_GET_DE_INFO:
+		return -EOPNOTSUPP;
+	case SCMI_TLM_GET_DE_LIST:
+		return scmi_tlm_des_list_get_ioctl(ti, arg);
+	case SCMI_TLM_GET_DE_VALUE:
+		return scmi_tlm_de_value_get_ioctl(ti, arg);
+	case SCMI_TLM_GET_GRP_CFG:
+		return -EOPNOTSUPP;
+	case SCMI_TLM_SET_GRP_CFG:
+		return -EOPNOTSUPP;
+	case SCMI_TLM_GET_GRP_INTRVS:
+		return scmi_tlm_intervals_ioctl(ti, arg, true);
+	case SCMI_TLM_GET_GRP_INFO:
+		return -EOPNOTSUPP;
+	case SCMI_TLM_GET_GRP_LIST:
+		return -EOPNOTSUPP;
+	case SCMI_TLM_SINGLE_SAMPLE:
+		return scmi_tlm_des_read_ioctl(ti, arg, true);
+	case SCMI_TLM_BULK_READ:
+		return scmi_tlm_des_read_ioctl(ti, arg, false);
+	case SCMI_TLM_SET_ALL_CFG:
+		return scmi_tlm_de_config_set_ioctl(ti, arg, true);
+	default:
+		return -ENOTTY;
+	}
+}
+
+static long scmi_tlm_compat_ioctl(struct file *, unsigned int, unsigned long)
+{
+	return 0;
+}
+
+static int scmi_tlm_mmap(struct file *, struct vm_area_struct *)
+{
+	return 0;
+}
+
+static int scmi_tlm_release(struct inode *ino, struct file *filp)
+{
+	struct scmi_tlm_priv *tp = filp->private_data;
+
+	kfree(tp->buf);
+	kfree(tp);
+
+	return 0;
+}
+
+static const struct file_operations scmi_tlm_fops = {
+	.owner = THIS_MODULE,
+	.open = scmi_tlm_open,
+	.read = scmi_tlm_read,
+	.poll = scmi_tlm_poll,
+	.unlocked_ioctl = scmi_tlm_unlocked_ioctl,
+	.compat_ioctl = scmi_tlm_compat_ioctl,
+	.mmap = scmi_tlm_mmap,
+	.release = scmi_tlm_release,
+};
+
+static int scmi_tlm_setup_ioctl_data(struct device *dev,
+				     struct scmi_tlm_instance *ti)
+{
+	ti->io_db.tlm_info.version = ti->info->version;
+	for (int i = 0; i < SCMI_TLM_DE_IMPL_VERS; i++)
+		ti->io_db.tlm_info.de_impl_version[i] = ti->info->de_impl_version[i];
+	ti->io_db.tlm_info.num_des = ti->info->num_de;
+	ti->io_db.tlm_info.num_groups = ti->info->num_groups;
+	ti->io_db.tlm_info.num_intervals = ti->info->intervals.num;
+	if (ti->info->reset_support)
+		ti->io_db.tlm_info.flags = SCMI_TLM_CAN_RESET;
+
+	ti->io_db.tlm_intervals = devm_kzalloc(dev, sizeof(*ti->io_db.tlm_intervals) +
+					       ti->info->intervals.num * sizeof(__u32),
+					       GFP_KERNEL);
+	if (!ti->io_db.tlm_intervals)
+		return -ENOMEM;
+
+	ti->io_db.tlm_intervals->grp_id = 0;
+	ti->io_db.tlm_intervals->discrete = ti->info->intervals.discrete;
+	ti->io_db.tlm_intervals->num = ti->info->intervals.num;
+	for (int i = 0; i < ti->info->intervals.num; i++)
+		ti->io_db.tlm_intervals->available[i] =
+			ti->info->intervals.update_intervals[i];
+
+	ti->io_db.tlm_grp_intervals = devm_kcalloc(dev, ti->info->num_groups,
+						   sizeof(ti->io_db.tlm_grp_intervals),
+						   GFP_KERNEL);
+	if (!ti->io_db.tlm_grp_intervals)
+		return -ENOMEM;
+
+	for (int i = 0; i < ti->info->num_groups; i++) {
+		struct scmi_tlm_intervals *ivs;
+		struct scmi_telemetry_group *grp = &ti->info->des_groups[i];
+
+		ivs = devm_kzalloc(dev, sizeof(*ivs) +
+				   grp->intervals.num * sizeof(__u32),
+				   GFP_KERNEL);
+		if (!ivs)
+			return -ENOMEM;
+
+		ivs->grp_id = i;
+		ivs->discrete = grp->intervals.discrete;
+		ivs->num = grp->intervals.num;
+		for (int j = 0; j < ivs->num; j++)
+			ivs->available[i] = grp->intervals.update_intervals[i];
+
+		ti->io_db.tlm_grp_intervals[i] = ivs;
+	}
+
+	ti->io_db.tlm_des_list = devm_kzalloc(dev, sizeof(*ti->io_db.tlm_des_list) +
+					ti->info->num_de * sizeof(ti->io_db.tlm_des_list->des[0]),
+					GFP_KERNEL);
+	if (!ti->io_db.tlm_des_list)
+		return -ENOMEM;
+
+	ti->io_db.tlm_des_list->num_des = ti->info->num_de;
+	for (int i = 0; i < ti->info->num_de; i++) {
+		ti->io_db.tlm_des_list->des[i].id = ti->info->des[i]->id;
+		ti->io_db.tlm_des_list->des[i].grp_id =
+			ti->info->des[i]->grp ? ti->info->des[i]->grp->id : SCMI_TLM_GRP_INVALID;
+		ti->io_db.tlm_des_list->des[i].data_sz = ti->info->des[i]->data_sz;
+		ti->io_db.tlm_des_list->des[i].type = ti->info->des[i]->type;
+		ti->io_db.tlm_des_list->des[i].unit = ti->info->des[i]->unit;
+		ti->io_db.tlm_des_list->des[i].unit_exp = ti->info->des[i]->unit_exp;
+		ti->io_db.tlm_des_list->des[i].tstamp_exp = ti->info->des[i]->tstamp_exp;
+		ti->io_db.tlm_des_list->des[i].instance_id = ti->info->des[i]->instance_id;
+		ti->io_db.tlm_des_list->des[i].compo_instance_id =
+			ti->info->des[i]->compo_instance_id;
+		ti->io_db.tlm_des_list->des[i].compo_type = ti->info->des[i]->compo_type;
+		ti->io_db.tlm_des_list->des[i].persistent = ti->info->des[i]->persistent;
+		if (ti->info->des[i]->name)
+			strscpy(ti->io_db.tlm_des_list->des[i].name, ti->info->des[i]->name,
+				SCMI_SHORT_NAME_MAX_SIZE);
+	}
+
+	return 0;
+}
+
 static int
 scmi_tlm_root_instance_initialize(struct device *dev,
 				  struct scmi_tlm_instance *ti, int instance_id)
@@ -814,11 +1294,16 @@ scmi_tlm_root_instance_initialize(struct device *dev,
 	char name[16];
 	int ret;
 
+	ret = scmi_tlm_setup_ioctl_data(dev, ti);
+	if (ret)
+		return ret;
+
 	ti->dev.class = &scmi_telemetry_class;
 	ti->dev.groups = scmi_telemetry_groups;
 
 	snprintf(name, 16, "scmi_tlm_%d", instance_id);
-	ret = scmi_telemetry_dev_register(&ti->dev, NULL, name);
+	ret = scmi_telemetry_cdev_register(&ti->dev, NULL, &ti->cdev,
+					   &scmi_tlm_fops, name, instance_id);
 	if (ret)
 		return ret;
 
@@ -940,7 +1425,14 @@ static struct scmi_driver scmi_telemetry_driver = {
 
 static int __init scmi_telemetry_init(void)
 {
+	dev_t devt;
 	int ret;
+
+	ret = alloc_chrdev_region(&devt, 0, 1024, "scmi-tlm");
+	if (ret)
+		return ret;
+
+	scmi_tlm_major = MAJOR(devt);
 
 	ret = class_register(&scmi_telemetry_class);
 	if (ret)
