@@ -405,6 +405,8 @@ static int dw2104_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[], i
 	for (j = 0; j < num; j++) {
 		switch (msg[j].addr) {
 		case(DW2102_RC_QUERY): {
+			if (msg[j].len < 2)
+				return -EOPNOTSUPP;
 			u8 ibuf[2];
 
 			dw210x_op_rw(d->udev, 0xb8, 0, 0,
@@ -413,6 +415,8 @@ static int dw2104_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[], i
 			break;
 		}
 		case(DW2102_VOLTAGE_CTRL): {
+			if (msg[j].len < 1)
+				return -EOPNOTSUPP;
 			u8 obuf[2];
 
 			obuf[0] = 0x30;
@@ -427,6 +431,8 @@ static int dw2104_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[], i
 		 * case 0x60: ts2020, stv6110, stb6100
 		 */
 		default: {
+			if (msg[j].len < 1)
+				return -EOPNOTSUPP;
 			if (msg[j].flags == I2C_M_RD) {
 				/* read registers */
 				u8  ibuf[MAX_XFER_SIZE];
