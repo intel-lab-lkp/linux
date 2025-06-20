@@ -188,11 +188,11 @@ typedef struct xlog_rec_ext_header {
 /*
  * Quite misnamed, because this union lays out the actual on-disk log buffer.
  */
-typedef union xlog_in_core2 {
+union xlog_in_core2 {
 	xlog_rec_header_t	hic_header;
 	xlog_rec_ext_header_t	hic_xheader;
 	char			hic_sector[XLOG_HEADER_SIZE];
-} xlog_in_core_2_t;
+};
 
 /* not an on-disk structure, but needed by log recovery in userspace */
 typedef struct xfs_log_iovec {

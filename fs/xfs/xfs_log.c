@@ -1530,7 +1530,7 @@ xlog_pack_data(
 	}
 
 	if (xfs_has_logv2(log->l_mp)) {
-		xlog_in_core_2_t *xhdr = iclog->ic_data;
+		union xlog_in_core2	*xhdr = iclog->ic_data;
 
 		for ( ; i < BTOBB(size); i++) {
 			j = i / (XLOG_HEADER_CYCLE_SIZE / BBSIZE);
@@ -3310,7 +3310,7 @@ xlog_verify_iclog(
 {
 	xlog_op_header_t	*ophead;
 	struct xlog_in_core	*icptr;
-	xlog_in_core_2_t	*xhdr;
+	union xlog_in_core2	*xhdr;
 	void			*base_ptr, *ptr, *p;
 	ptrdiff_t		field_offset;
 	uint8_t			clientid;

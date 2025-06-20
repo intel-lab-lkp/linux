@@ -197,7 +197,7 @@ struct xlog_in_core {
 
 	/* reference counts need their own cacheline */
 	atomic_t		ic_refcnt ____cacheline_aligned_in_smp;
-	xlog_in_core_2_t	*ic_data;
+	union xlog_in_core2	*ic_data;
 #define ic_header	ic_data->hic_header
 #ifdef DEBUG
 	bool			ic_fail_crc : 1;
