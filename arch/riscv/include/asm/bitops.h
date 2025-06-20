@@ -20,17 +20,20 @@
 #include <asm-generic/bitops/__fls.h>
 #include <asm-generic/bitops/ffs.h>
 #include <asm-generic/bitops/fls.h>
+#include <asm-generic/bitops/rotate.h>
 
 #else
 #define __HAVE_ARCH___FFS
 #define __HAVE_ARCH___FLS
 #define __HAVE_ARCH_FFS
 #define __HAVE_ARCH_FLS
+#define __HAVE_ARCH_ROTATE
 
 #include <asm-generic/bitops/__ffs.h>
 #include <asm-generic/bitops/__fls.h>
 #include <asm-generic/bitops/ffs.h>
 #include <asm-generic/bitops/fls.h>
+#include <asm-generic/bitops/rotate.h>
 
 #include <asm/alternative-macros.h>
 #include <asm/hwcap.h>
@@ -174,6 +177,175 @@ legacy:
 	 :							\
 	 variable_fls(x_);					\
 })
+
+static __always_inline u64 variable_rol64(u64 word, unsigned int shift)
+{
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rol %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word) : "r" (word), "r" (shift) :);
+
+	return word;
+
+legacy:
+	return generic_rol64(word, shift);
+}
+
+static inline u64 variable_ror64(u64 word, unsigned int shift)
+{
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"ror %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word) : "r" (word), "r" (shift) :);
+
+	return word;
+
+legacy:
+	return generic_ror64(word, shift);
+}
+
+static inline u32 variable_rol32(u32 word, unsigned int shift)
+{
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rolw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word) : "r" (word), "r" (shift) :);
+
+	return word;
+
+legacy:
+	return generic_rol32(word, shift);
+}
+
+static inline u32 variable_ror32(u32 word, unsigned int shift)
+{
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rorw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word) : "r" (word), "r" (shift) :);
+
+	return word;
+
+legacy:
+	return generic_ror32(word, shift);
+}
+
+static inline u16 variable_rol16(u16 word, unsigned int shift)
+{
+	u32 word32 = ((u32)word << 16) | word;
+
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rolw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word32) : "r" (word32), "r" (shift) :);
+
+	return (u16)word32;
+
+legacy:
+	return generic_rol16(word, shift);
+}
+
+static inline u16 variable_ror16(u16 word, unsigned int shift)
+{
+	u32 word32 = ((u32)word << 16) | word;
+
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rorw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word32) : "r" (word32), "r" (shift) :);
+
+	return (u16)word32;
+
+legacy:
+	return generic_ror16(word, shift);
+}
+
+static inline u8 variable_rol8(u8 word, unsigned int shift)
+{
+	u32 word32 = ((u32)word << 24) | ((u32)word << 16) | ((u32)word << 8) | word;
+
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rolw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word32) : "r" (word32), "r" (shift) :);
+
+	return (u8)word32;
+
+legacy:
+	return generic_rol8(word, shift);
+}
+
+static inline u8 variable_ror8(u8 word, unsigned int shift)
+{
+	u32 word32 = ((u32)word << 24) | ((u32)word << 16) | ((u32)word << 8) | word;
+
+	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
+				      RISCV_ISA_EXT_ZBB, 1)
+			  : : : : legacy);
+
+	asm volatile(
+		".option push\n"
+		".option arch,+zbb\n"
+		"rorw %0, %1, %2\n"
+		".option pop\n"
+		: "=r" (word32) : "r" (word32), "r" (shift) :);
+
+	return (u8)word32;
+
+legacy:
+	return generic_ror8(word, shift);
+}
+
+#define rol64(word, shift) variable_rol64(word, shift)
+#define ror64(word, shift) variable_ror64(word, shift)
+#define rol32(word, shift) variable_rol32(word, shift)
+#define ror32(word, shift) variable_ror32(word, shift)
+#define rol16(word, shift) variable_rol16(word, shift)
+#define ror16(word, shift) variable_ror16(word, shift)
+#define rol8(word, shift)  variable_rol8(word, shift)
+#define ror8(word, shift)  variable_ror8(word, shift)
 
 #endif /* !(defined(CONFIG_RISCV_ISA_ZBB) && defined(CONFIG_TOOLCHAIN_HAS_ZBB)) || defined(NO_ALTERNATIVE) */
 
