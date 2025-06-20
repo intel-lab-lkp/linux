@@ -134,6 +134,7 @@ struct nfsd_net {
 
 	struct svc_info nfsd_info;
 #define nfsd_serv nfsd_info.serv
+#define config_mutex nfsd_info.mutex
 
 	struct percpu_ref nfsd_net_ref;
 	struct completion nfsd_net_confirm_done;

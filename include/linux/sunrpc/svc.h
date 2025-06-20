@@ -98,7 +98,7 @@ struct svc_serv {
 /* This is used by pool_stats to find and lock an svc */
 struct svc_info {
 	struct svc_serv		*serv;
-	struct mutex		*mutex;
+	struct mutex		mutex;
 };
 
 void svc_destroy(struct svc_serv **svcp);
