@@ -2244,6 +2244,7 @@ static void setup_pebs_adaptive_sample_data(struct perf_event *event,
 		return;
 
 	perf_regs = container_of(regs, struct x86_perf_regs, regs);
+	perf_regs->ssp = 0;
 	perf_regs->xmm_regs = NULL;
 
 	format_group = basic->format_group;
@@ -2360,6 +2361,7 @@ static void setup_arch_pebs_sample_data(struct perf_event *event,
 		return;
 
 	perf_regs = container_of(regs, struct x86_perf_regs, regs);
+	perf_regs->ssp = 0;
 	perf_regs->xmm_regs = NULL;
 
 	__setup_perf_sample_data(event, iregs, data);
