@@ -542,9 +542,6 @@ static int etnaviv_hw_reset(struct etnaviv_gpu *gpu)
 		unsigned int fscale = 1 << (6 - gpu->freq_scale);
 		u32 pulse_eater = 0x01590880;
 
-		/* disable clock gating */
-		gpu_write_power(gpu, VIVS_PM_POWER_CONTROLS, 0x0);
-
 		/* disable pulse eater */
 		pulse_eater |= BIT(17);
 		gpu_write_power(gpu, VIVS_PM_PULSE_EATER, pulse_eater);
