@@ -433,7 +433,6 @@ static int lcdif_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
 	struct drm_bridge_state *bridge_state;
-	struct drm_bridge *bridge;
 	u32 bus_format, bus_flags;
 	bool format_set = false, flags_set = false;
 	int ret, i;
@@ -448,6 +447,8 @@ static int lcdif_crtc_atomic_check(struct drm_crtc *crtc,
 
 	/* Try to find consistent bus format and flags across first bridges. */
 	for_each_new_connector_in_state(state, connector, connector_state, i) {
+		struct drm_bridge *bridge __free(drm_bridge_put) = NULL;
+
 		if (!connector_state->crtc)
 			continue;
 
