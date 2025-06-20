@@ -29,6 +29,7 @@
 #include "b53_priv.h"
 
 #define BCM63XX_EPHY_REG 0x3C
+#define BCM63XX_EPHY_POWER_DOWN_BIAS BIT(24)
 
 struct b53_phy_info {
 	u32 chip_id;
@@ -264,6 +265,53 @@ static void bcm63xx_ephy_reset(struct regmap *regmap, int num_ephy)
 	regmap_update_bits(regmap, BCM63XX_EPHY_REG, mask, mask);
 }
 
+static void bcm63xx_ephy_set(struct b53_device *dev, int port, bool enable)
+{
+	struct b53_mmap_priv *priv = dev->priv;
+	const struct b53_phy_info *info = priv->phy_info;
+	u32 val, mask;
+	int i;
+
+	if (enable) {
+		val = 0;
+		mask = (info->mask << info->ephy_offset[port])
+				| BCM63XX_EPHY_POWER_DOWN_BIAS;
+		regmap_update_bits(priv->gpio_ctrl, BCM63XX_EPHY_REG, mask, val);
+	} else {
+		if (!regmap_read(priv->gpio_ctrl, BCM63XX_EPHY_REG, &val)) {
+			val |= info->mask << info->ephy_offset[port];
+			/*Check if all phys are full off and set bias bit*/
+			for (i = 0; i < info->num_ephy; i++) {
+				mask = info->mask << info->ephy_offset[i];
+				if ((val & mask) != mask)
+					break;
+			}
+
+			if (i == info->num_ephy)
+				val |= BCM63XX_EPHY_POWER_DOWN_BIAS;
+
+			/*Might need a lock around the read/write*/
+			regmap_write(priv->gpio_ctrl, BCM63XX_EPHY_REG, val);
+		}
+	}
+}
+
+static void b53_mmap_phy_enable(struct b53_device *dev, int port)
+{
+	struct b53_mmap_priv *priv = dev->priv;
+
+	if (priv->phy_info && port < priv->phy_info->num_ephy)
+		bcm63xx_ephy_set(dev, port, true);
+}
+
+static void b53_mmap_phy_disable(struct b53_device *dev, int port)
+{
+	struct b53_mmap_priv *priv = dev->priv;
+
+	if (priv->phy_info && port < priv->phy_info->num_ephy)
+		bcm63xx_ephy_set(dev, port, false);
+}
+
 static const struct b53_io_ops b53_mmap_ops = {
 	.read8 = b53_mmap_read8,
 	.read16 = b53_mmap_read16,
@@ -277,6 +325,8 @@ static const struct b53_io_ops b53_mmap_ops = {
 	.write64 = b53_mmap_write64,
 	.phy_read16 = b53_mmap_phy_read16,
 	.phy_write16 = b53_mmap_phy_write16,
+	.phy_enable = b53_mmap_phy_enable,
+	.phy_disable = b53_mmap_phy_disable,
 };
 
 static int b53_mmap_probe_of(struct platform_device *pdev,
