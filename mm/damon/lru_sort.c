@@ -164,7 +164,7 @@ static struct damos *damon_lru_sort_new_scheme(
 			&quota,
 			/* (De)activate this according to the watermarks. */
 			&damon_lru_sort_wmarks,
-			NUMA_NO_NODE);
+			NULL);
 }
 
 /* Create a DAMON-based operation scheme for hot memory regions */

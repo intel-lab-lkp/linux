@@ -47,6 +47,10 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	struct damos *scheme;
 	struct damos_quota_goal *quota_goal;
 	struct damos_filter *filter;
+	nodemask_t target_node;
+
+	nodes_clear(target_node);
+	node_set(promote ? 0 : 1, target_node);
 
 	ctx = damon_new_ctx();
 	if (!ctx)
@@ -105,7 +109,7 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 				.weight_age = 100,
 			},
 			&(struct damos_watermarks){},
-			promote ? 0 : 1);	/* migrate target node id */
+			&target_node);
 	if (!scheme)
 		goto free_out;
 	damon_set_schemes(ctx, &scheme, 1);

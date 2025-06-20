@@ -88,7 +88,7 @@ static int damon_sample_prcl_start(void)
 			0,
 			&(struct damos_quota){},
 			&(struct damos_watermarks){},
-			NUMA_NO_NODE);
+			NULL);
 	if (!scheme) {
 		damon_destroy_ctx(ctx);
 		return -ENOMEM;

@@ -1584,7 +1584,7 @@ struct damon_sysfs_scheme {
 	struct damon_sysfs_scheme_filters *filters;
 	struct damon_sysfs_stats *stats;
 	struct damon_sysfs_scheme_regions *tried_regions;
-	int target_nid;
+	nodemask_t target_nids;
 };
 
 /* This should match with enum damos_action */
@@ -1612,7 +1612,7 @@ static struct damon_sysfs_scheme *damon_sysfs_scheme_alloc(
 	scheme->kobj = (struct kobject){};
 	scheme->action = action;
 	scheme->apply_interval_us = apply_interval_us;
-	scheme->target_nid = NUMA_NO_NODE;
+	nodes_clear(scheme->target_nids);
 	return scheme;
 }
 
@@ -1881,18 +1881,22 @@ static ssize_t target_nid_show(struct kobject *kobj,
 	struct damon_sysfs_scheme *scheme = container_of(kobj,
 			struct damon_sysfs_scheme, kobj);
 
-	return sysfs_emit(buf, "%d\n", scheme->target_nid);
+	return bitmap_print_to_pagebuf(true, buf, scheme->target_nids.bits, MAX_NUMNODES);
 }
 
 static ssize_t target_nid_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
+	nodemask_t new;
 	struct damon_sysfs_scheme *scheme = container_of(kobj,
 			struct damon_sysfs_scheme, kobj);
 	int err = 0;
 
 	/* TODO: error handling for target_nid range. */
-	err = kstrtoint(buf, 0, &scheme->target_nid);
+	err = nodelist_parse(buf, new);
+
+	if (!err)
+		nodes_copy(scheme->target_nids, new);
 
 	return err ? err : count;
 }
@@ -2259,7 +2263,7 @@ static struct damos *damon_sysfs_mk_scheme(
 
 	scheme = damon_new_scheme(&pattern, sysfs_scheme->action,
 			sysfs_scheme->apply_interval_us, &quota, &wmarks,
-			sysfs_scheme->target_nid);
+			&sysfs_scheme->target_nids);
 	if (!scheme)
 		return NULL;
 

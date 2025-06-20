@@ -178,7 +178,7 @@ static struct damos *damon_reclaim_new_scheme(void)
 			&damon_reclaim_quota,
 			/* (De)activate this according to the watermarks. */
 			&damon_reclaim_wmarks,
-			NUMA_NO_NODE);
+			NULL);
 }
 
 static int damon_reclaim_apply_parameters(void)

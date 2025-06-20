@@ -454,7 +454,7 @@ struct damos_access_pattern {
  * @apply_interval_us:	The time between applying the @action.
  * @quota:		Control the aggressiveness of this scheme.
  * @wmarks:		Watermarks for automated (in)activation of this scheme.
- * @target_nid:		Destination node if @action is "migrate_{hot,cold}".
+ * @target_nids:	Destination nodes if @action is "migrate_{hot,cold}".
  * @filters:		Additional set of &struct damos_filter for &action.
  * @ops_filters:	ops layer handling &struct damos_filter objects list.
  * @last_applied:	Last @action applied ops-managing entity.
@@ -472,7 +472,7 @@ struct damos_access_pattern {
  * monitoring context are inactive, DAMON stops monitoring either, and just
  * repeatedly checks the watermarks.
  *
- * @target_nid is used to set the migration target node for migrate_hot or
+ * @target_nids is used to set the migration targets node for migrate_hot or
  * migrate_cold actions, which means it's only meaningful when @action is either
  * "migrate_hot" or "migrate_cold".
  *
@@ -517,7 +517,7 @@ struct damos {
 	struct damos_quota quota;
 	struct damos_watermarks wmarks;
 	union {
-		int target_nid;
+		nodemask_t target_nids;
 	};
 	struct list_head filters;
 	struct list_head ops_filters;
@@ -896,7 +896,7 @@ struct damos *damon_new_scheme(struct damos_access_pattern *pattern,
 			unsigned long apply_interval_us,
 			struct damos_quota *quota,
 			struct damos_watermarks *wmarks,
-			int target_nid);
+			nodemask_t *target_nids);
 void damon_add_scheme(struct damon_ctx *ctx, struct damos *s);
 void damon_destroy_scheme(struct damos *s);
 int damos_commit_quota_goals(struct damos_quota *dst, struct damos_quota *src);

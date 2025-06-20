@@ -19,6 +19,12 @@
 #include "../internal.h"
 #include "ops-common.h"
 
+struct damon_pa_migrate_rmap_arg {
+	nodemask_t *nids;
+	u8 *weights;
+	int *target_nid;
+};
+
 static bool damon_folio_mkold_one(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
@@ -500,12 +506,83 @@ static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
 	return nr_migrated;
 }
 
+static bool damon_pa_migrate_rmap(struct folio *folio,
+				  struct vm_area_struct *vma,
+				  unsigned long addr,
+				  void *arg)
+{
+	struct damon_pa_migrate_rmap_arg *rmap_arg;
+	pgoff_t ilx;
+	int order;
+	unsigned int target;
+	unsigned int weight_total = 0;
+	int nid;
+
+	rmap_arg = (struct damon_pa_migrate_rmap_arg *)arg;
+
+	order = folio_order(folio);
+	ilx = vma->vm_pgoff >> order;
+	ilx += (addr - vma->vm_start) >> (PAGE_SHIFT + order);
+
+	/* Same logic as weighted_interleave_nid() */
+	for_each_node_mask(nid, *rmap_arg->nids) {
+		weight_total += rmap_arg->weights[nid];
+	}
+
+	target = ilx % weight_total;
+	nid = first_node(*rmap_arg->nids);
+	while (target) {
+		if (target < rmap_arg->weights[nid])
+			break;
+		target -= rmap_arg->weights[nid];
+		nid = next_node_in(nid, *rmap_arg->nids);
+	}
+
+	if (nid == folio_nid(folio))
+		*rmap_arg->target_nid = NUMA_NO_NODE;
+	else
+		*rmap_arg->target_nid = nid;
+	return false;
+}
+
 static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
 	unsigned long addr, applied;
-	LIST_HEAD(folio_list);
+	struct rmap_walk_control rwc;
+	struct damon_pa_migrate_rmap_arg rmap_arg;
+	struct list_head *folio_lists;
 	struct folio *folio;
+	u8 *weights;
+	int target_nid;
+	int nr_nodes;
+
+	nr_nodes = nodes_weight(s->target_nids);
+	if (!nr_nodes)
+		return 0;
+
+	folio_lists = kmalloc_array(nr_node_ids, sizeof(struct list_head),
+		GFP_KERNEL);
+	if (!folio_lists)
+		return 0;
+
+	weights = kmalloc_array(nr_node_ids, sizeof(u8), GFP_KERNEL);
+	if (!weights) {
+		kfree(folio_lists);
+		return 0;
+	}
+
+	for (int i = 0; i < nr_node_ids; i++) {
+		INIT_LIST_HEAD(&folio_lists[i]);
+		weights[i] = get_il_weight(i);
+	}
+
+	memset(&rwc, 0, sizeof(struct rmap_walk_control));
+	rwc.rmap_one = damon_pa_migrate_rmap;
+	rwc.arg = &rmap_arg;
+	rmap_arg.nids = &s->target_nids;
+	rmap_arg.weights = weights;
+	rmap_arg.target_nid = &target_nid;
 
 	addr = r->ar.start;
 	while (addr < r->ar.end) {
@@ -520,15 +597,38 @@ static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 		else
 			*sz_filter_passed += folio_size(folio);
 
+		/*
+		 * If there is only one target node, migrate there. Otherwise,
+		 * interleave across the nodes according to the global
+		 * interleave weights
+		 */
+		if (nr_nodes == 1) {
+			target_nid = first_node(s->target_nids);
+		} else {
+			target_nid = NUMA_NO_NODE;
+			/* Updates target_nid */
+			rmap_walk(folio, &rwc);
+		}
+
+		if (target_nid == NUMA_NO_NODE)
+			goto put_folio;
+
 		if (!folio_isolate_lru(folio))
 			goto put_folio;
-		list_add(&folio->lru, &folio_list);
+		list_add(&folio->lru, &folio_lists[target_nid]);
 put_folio:
 		addr += folio_size(folio);
 		folio_put(folio);
 	}
-	applied = damon_pa_migrate_pages(&folio_list, s->target_nid);
-	cond_resched();
+
+	applied = 0;
+	for (int i = 0; i < nr_node_ids; i++) {
+		applied += damon_pa_migrate_pages(&folio_lists[i], i);
+		cond_resched();
+	}
+
+	kfree(weights);
+	kfree(folio_lists);
 	s->last_applied = folio;
 	return applied * PAGE_SIZE;
 }
