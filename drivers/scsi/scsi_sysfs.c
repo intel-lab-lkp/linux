@@ -1095,14 +1095,14 @@ sdev_show_blacklist(struct device *dev, struct device_attribute *attr,
 			name = sdev_bflags_name[i];
 
 		if (name)
-			len += scnprintf(buf + len, PAGE_SIZE - len,
+			len += sysfs_emit(buf + len,
 					 "%s%s", len ? " " : "", name);
 		else
-			len += scnprintf(buf + len, PAGE_SIZE - len,
+			len += sysfs_emit(buf + len,
 					 "%sINVALID_BIT(%d)", len ? " " : "", i);
 	}
 	if (len)
-		len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+		len += sysfs_emit(buf + len, "\n");
 	return len;
 }
 static DEVICE_ATTR(blacklist, S_IRUGO, sdev_show_blacklist, NULL);
