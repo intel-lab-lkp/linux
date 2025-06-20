@@ -1543,8 +1543,8 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 
 	if (tb[IPSET_ATTR_HASHSIZE]) {
 		hashsize = ip_set_get_h32(tb[IPSET_ATTR_HASHSIZE]);
-		if (hashsize < IPSET_MIMINAL_HASHSIZE)
-			hashsize = IPSET_MIMINAL_HASHSIZE;
+		if (hashsize < IPSET_MINIMAL_HASHSIZE)
+			hashsize = IPSET_MINIMAL_HASHSIZE;
 	}
 
 	if (tb[IPSET_ATTR_MAXELEM])
