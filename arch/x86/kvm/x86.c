@@ -25,6 +25,7 @@
 #include "tss.h"
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
+#include "kvm_onhyperv.h"
 #include "mmu/page_track.h"
 #include "x86.h"
 #include "cpuid.h"
@@ -12390,6 +12391,8 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 
 #if IS_ENABLED(CONFIG_HYPERV)
 	vcpu->arch.hv_root_tdp = INVALID_PAGE;
+	vcpu->arch.hv_vmx_use_flush_guest_mapping =
+		(kvm_x86_ops.flush_remote_tlbs == hv_flush_remote_tlbs);
 #endif
 
 	r = kvm_x86_call(vcpu_create)(vcpu);

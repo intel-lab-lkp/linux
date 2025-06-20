@@ -1485,8 +1485,12 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu)
 		/*
 		 * Flush all EPTP/VPID contexts, the new pCPU may have stale
 		 * TLB entries from its previous association with the vCPU.
+		 * Unless we are running on Hyper-V where we promotes local TLB
+		 * flushes to be visible across all CPUs so no need to do again
+		 * on migration.
 		 */
-		kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
+		if (!vmx_hv_use_flush_guest_mapping(vcpu))
+			kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
 
 		/*
 		 * Linux uses per-cpu TSS and GDT, so set these when switching
@@ -3243,11 +3247,21 @@ void vmx_flush_tlb_current(struct kvm_vcpu *vcpu)
 	if (!VALID_PAGE(root_hpa))
 		return;
 
-	if (enable_ept)
+	if (enable_ept) {
+		/*
+		 * hyperv_flush_guest_mapping() has the semantics of
+		 * invept-single across all pCPUs. This makes root
+		 * modifications consistent across pCPUs, so an invept-global
+		 * on migration is no longer required.
+		 */
+		if (vmx_hv_use_flush_guest_mapping(vcpu))
+			return (void)WARN_ON_ONCE(hyperv_flush_guest_mapping(root_hpa));
+
 		ept_sync_context(construct_eptp(vcpu, root_hpa,
 						mmu->root_role.level));
-	else
+	} else {
 		vpid_sync_context(vmx_get_current_vpid(vcpu));
+	}
 }
 
 void vmx_flush_tlb_gva(struct kvm_vcpu *vcpu, gva_t addr)

@@ -1077,6 +1077,7 @@ struct kvm_vcpu_arch {
 
 #if IS_ENABLED(CONFIG_HYPERV)
 	hpa_t hv_root_tdp;
+	bool hv_vmx_use_flush_guest_mapping;
 #endif
 };
 

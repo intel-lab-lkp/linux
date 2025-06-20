@@ -119,6 +119,11 @@ static inline void evmcs_load(u64 phys_addr)
 }
 
 void evmcs_sanitize_exec_ctrls(struct vmcs_config *vmcs_conf);
+
+static inline bool vmx_hv_use_flush_guest_mapping(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.hv_vmx_use_flush_guest_mapping;
+}
 #else /* !IS_ENABLED(CONFIG_HYPERV) */
 static __always_inline bool kvm_is_using_evmcs(void) { return false; }
 static __always_inline void evmcs_write64(unsigned long field, u64 value) {}
@@ -128,6 +133,7 @@ static __always_inline u64 evmcs_read64(unsigned long field) { return 0; }
 static __always_inline u32 evmcs_read32(unsigned long field) { return 0; }
 static __always_inline u16 evmcs_read16(unsigned long field) { return 0; }
 static inline void evmcs_load(u64 phys_addr) {}
+static inline bool vmx_hv_use_flush_guest_mapping(struct kvm_vcpu *vcpu) { return false; }
 #endif /* IS_ENABLED(CONFIG_HYPERV) */
 
 #endif /* __ARCH_X86_KVM_VMX_ONHYPERV_H__ */
