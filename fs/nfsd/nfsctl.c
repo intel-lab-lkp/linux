@@ -221,6 +221,12 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
 	size_t salen = sizeof(address);
 	char *fo_path;
 	struct net *net = netns(file);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
+	guard(mutex)(&nfsd_mutex);
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -259,6 +265,12 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 	struct path path;
 	char *fo_path;
 	int error;
+	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
+
+	guard(mutex)(&nfsd_mutex);
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -1053,6 +1065,7 @@ static ssize_t write_recoverydir(struct file *file, char *buf, size_t size)
 }
 #endif
 
+
 /*
  * write_v4_end_grace - release grace period for nfsd's v4.x lock manager
  *
@@ -1077,6 +1090,7 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 {
 	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
 
+	guard(mutex)(&nfsd_mutex);
 	if (size > 0) {
 		switch(buf[0]) {
 		case 'Y':
