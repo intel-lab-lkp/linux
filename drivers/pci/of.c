@@ -400,6 +400,13 @@ static int devm_of_pci_get_host_bridge_resources(struct device *dev,
 			*io_base = range.cpu_addr;
 		} else if (resource_type(res) == IORESOURCE_MEM) {
 			res->flags &= ~IORESOURCE_MEM_64;
+
+			if (!(res->flags & IORESOURCE_PREFETCH))
+				if (upper_32_bits(range.pci_addr + range.size - 1))
+					dev_warn(dev,
+						"host bridge non-prefetchable window: pci range end address exceeds 32 bit boundary %pR"
+						" (pci address range [%#012llx-%#012llx])\n",
+						res, range.pci_addr, range.pci_addr + range.size - 1);
 		}
 
 		pci_add_resource_offset(resources, res,	res->start - range.pci_addr);
@@ -621,10 +628,6 @@ static int pci_parse_request_of_pci_ranges(struct device *dev,
 			break;
 		case IORESOURCE_MEM:
 			res_valid |= !(res->flags & IORESOURCE_PREFETCH);
-
-			if (!(res->flags & IORESOURCE_PREFETCH))
-				if (upper_32_bits(resource_size(res)))
-					dev_warn(dev, "Memory resource size exceeds max for 32 bits\n");
 
 			break;
 		}
