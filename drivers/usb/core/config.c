@@ -14,6 +14,7 @@
 #include <asm/byteorder.h>
 #include "usb.h"
 
+#include "authent.h"
 
 #define USB_MAXALTSETTING		128	/* Hard limit */
 
@@ -824,7 +825,50 @@ static int usb_parse_configuration(struct usb_device *dev, int cfgidx,
 		kref_init(&intfc->ref);
 	}
 
-	/* FIXME: parse the BOS descriptor */
+	/* If device USB version is above 2.0, get BOS descriptor */
+	/*
+	 * Requirement for bcdUSB >= 2.10 is defined in USB 3.2 §9.2.6.6
+	 * "Devices with a value of at least 0210H in the bcdUSB field of their
+	 * device descriptor shall support GetDescriptor (BOS Descriptor) requests."
+	 *
+	 * To discuss, BOS request could be also sent for bcdUSB >= 0x0201
+	 */
+	// Set a default value for authenticated at true in order not to block devices
+	// that do not support the authentication
+	dev->authenticated = 1;
+
+	if (le16_to_cpu(dev->descriptor.bcdUSB) >= 0x0201) {
+		pr_notice("bcdUSB >= 0x0201\n");
+		retval = usb_get_bos_descriptor(dev);
+		if (!retval) {
+			pr_notice("found BOS\n");
+#ifdef CONFIG_USB_AUTHENTICATION
+			if (dev->bos->authent_cap) {
+				/* If authentication cap is present, start device authent */
+				pr_notice("found Authent BOS\n");
+				retval = usb_authenticate_device(dev);
+				if (retval != 0) {
+					pr_err("failed to authenticate the device: %d\n",
+					       retval);
+				} else if (!dev->authenticated) {
+					pr_notice("device has been rejected\n");
+					// return early from the configuration process
+					return 0;
+				} else {
+					pr_notice("device has been authorized\n");
+				}
+			} else {
+				// USB authentication unsupported
+				// Apply security policy on failed devices
+				pr_notice("no authentication capability\n");
+			}
+#endif
+		} else {
+			// Older USB version, authentication not supported
+			// Apply security policy on failed devices
+			pr_notice("device does not have a BOS descriptor\n");
+		}
+	}
 
 	/* Skip over any Class Specific or Vendor Specific descriptors;
 	 * find the first interface descriptor */
@@ -1051,6 +1095,7 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 	length = bos->bLength;
 	total_len = le16_to_cpu(bos->wTotalLength);
 	num = bos->bNumDeviceCaps;
+
 	kfree(bos);
 	if (total_len < length)
 		return -EINVAL;
@@ -1121,6 +1166,10 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 		case USB_PTM_CAP_TYPE:
 			dev->bos->ptm_cap =
 				(struct usb_ptm_cap_descriptor *)buffer;
+			break;
+		case USB_AUTHENT_CAP_TYPE:
+			dev->bos->authent_cap =
+				(struct usb_authent_cap_descriptor *)buffer;
 			break;
 		default:
 			break;

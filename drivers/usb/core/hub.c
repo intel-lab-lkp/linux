@@ -2640,6 +2640,12 @@ int usb_new_device(struct usb_device *udev)
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
 
+	// TODO: Check the device state, we want to avoid semi-initialized device to userspace.
+	if (!udev->authenticated) {
+		// If the device is not authenticated, abort the procedure
+		goto fail;
+	}
+
 	/* Tell the world! */
 	announce_device(udev);
 

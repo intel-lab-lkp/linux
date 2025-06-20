@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 
 #include "hub.h"
+#include "authent_netlink.h"
 
 const char *usbcore_name = "usbcore";
 
@@ -1080,6 +1081,10 @@ static int __init usb_init(void)
 	usb_debugfs_init();
 
 	usb_acpi_register();
+
+	// TODO : check error case
+	usb_auth_init_netlink();
+
 	retval = bus_register(&usb_bus_type);
 	if (retval)
 		goto bus_register_failed;
