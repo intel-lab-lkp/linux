@@ -143,3 +143,11 @@ config USB_DEFAULT_AUTHORIZATION_MODE
 	  ACPI selecting value 2 is analogous to selecting value 0.
 
 	  If unsure, keep the default value.
+
+config USB_AUTHENTICATION
+	bool "Enable USB authentication function"
+	default n
+	depends on USB
+	help
+		Enables the USB Authentication function. This activates the
+		hook points in the USB stack.
