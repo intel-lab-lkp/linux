@@ -16,7 +16,6 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/phy.h>
-#include <linux/device.h>
 #include <linux/brcmphy.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
@@ -39,6 +38,7 @@ struct bcm54xx_phy_priv {
 	int	wake_irq;
 	bool	wake_irq_enabled;
 	bool	brr_mode;
+	bool	mii_lite_mode;
 };
 
 /* Link modes for BCM58411 PHY */
@@ -680,6 +680,12 @@ static int bcm5481x_read_abilities(struct phy_device *phydev)
 
 	priv->brr_mode = of_property_read_bool(np, "brr-mode");
 
+	/* Enable MII Lite (No TXER, RXER, CRS, COL) if configured */
+	err = bcm_phy_modify_exp(phydev, BCM_EXP_SYNC_ETHERNET,
+				 BCM_EXP_SYNC_ETHERNET_MII_LITE,
+				 priv->mii_lite_mode ?
+				 BCM_EXP_SYNC_ETHERNET_MII_LITE : 0);
+
 	/* Set BroadR-Reach mode as configured in the DT. */
 	err = bcm5481x_set_brrmode(phydev, priv->brr_mode);
 	if (err)
@@ -1140,6 +1146,7 @@ static int bcm54xx_phy_probe(struct phy_device *phydev)
 	struct bcm54xx_phy_priv *priv;
 	struct gpio_desc *wakeup_gpio;
 	int ret = 0;
+	struct device_node *np = phydev->mdio.dev.of_node;
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1158,6 +1165,29 @@ static int bcm54xx_phy_probe(struct phy_device *phydev)
 	priv->ptp = bcm_ptp_probe(phydev);
 	if (IS_ERR(priv->ptp))
 		return PTR_ERR(priv->ptp);
+
+	priv->mii_lite_mode = of_property_read_bool(np, "mii-lite-mode");
+	if (!phy_interface_is_rgmii(phydev) ||
+	    phydev->interface == PHY_INTERFACE_MODE_MII) {
+		/* Enable MII Lite (No TXER, RXER, CRS, COL) if configured */
+		ret = bcm_phy_modify_exp(phydev, BCM_EXP_SYNC_ETHERNET,
+					 BCM_EXP_SYNC_ETHERNET_MII_LITE,
+					 priv->mii_lite_mode ?
+					 BCM_EXP_SYNC_ETHERNET_MII_LITE : 0);
+		if (ret < 0)
+			return ret;
+		/* Misc Control: GMII/MII Mode (not RGMII) */
+		ret = phy_write(phydev, MII_BCM54XX_AUX_CTL,
+				MII_BCM54XX_AUXCTL_MISC_WREN |
+				MII_BCM54XX_AUXCTL_SHDWSEL_MASK |
+				MII_BCM54XX_AUXCTL_SHDWSEL_MISC |
+				(MII_BCM54XX_AUXCTL_SHDWSEL_MISC
+				  << MII_BCM54XX_AUXCTL_SHDWSEL_READ_SHIFT) |
+				MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RGMII_SKEW_EN |
+				MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RSVD);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* We cannot utilize the _optional variant here since we want to know
 	 * whether the GPIO descriptor exists or not to advertise Wake-on-LAN
