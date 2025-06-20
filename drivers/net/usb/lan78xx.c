@@ -2281,6 +2281,7 @@ static void lan78xx_mac_link_down(struct phylink_config *config,
 	int ret;
 
 	netif_stop_queue(net);
+	napi_disable(&dev->napi);
 
 	/* MAC reset will not de-assert TXEN/RXEN, we need to stop them
 	 * manually before reset. TX and RX should be disabled before running
@@ -2505,6 +2506,7 @@ static void lan78xx_mac_link_up(struct phylink_config *config,
 	if (ret < 0)
 		goto link_up_fail;
 
+	napi_enable(&dev->napi);
 	netif_start_queue(net);
 
 	return;
@@ -3421,7 +3423,6 @@ static int lan78xx_open(struct net_device *net)
 
 	lan78xx_init_stats(dev);
 
-	napi_enable(&dev->napi);
 
 	set_bit(EVENT_DEV_OPEN, &dev->flags);
 
@@ -3494,7 +3495,6 @@ static int lan78xx_stop(struct net_device *net)
 		timer_delete_sync(&dev->stat_monitor);
 
 	clear_bit(EVENT_DEV_OPEN, &dev->flags);
-	napi_disable(&dev->napi);
 
 	lan78xx_terminate_urbs(dev);
 
