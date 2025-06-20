@@ -550,6 +550,8 @@ static int etnaviv_hw_reset(struct etnaviv_gpu *gpu)
 		gpu_write_power(gpu, VIVS_PM_PULSE_EATER, pulse_eater);
 		pulse_eater |= BIT(0);
 		gpu_write_power(gpu, VIVS_PM_PULSE_EATER, pulse_eater);
+		pulse_eater &= ~BIT(0);
+		gpu_write_power(gpu, VIVS_PM_PULSE_EATER, pulse_eater);
 
 		/* enable clock */
 		control = VIVS_HI_CLOCK_CONTROL_FSCALE_VAL(fscale);
