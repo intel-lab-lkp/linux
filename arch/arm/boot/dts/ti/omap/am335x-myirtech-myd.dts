@@ -12,7 +12,7 @@
 
 / {
 	model = "MYIR MYD-AM335X";
-	compatible = "myir,myd-am335x", "myir,myc-am335x", "ti,am33xx";
+	compatible = "myir,myd-am335x", "ti,am33xx";
 
 	chosen {
 		stdout-path = &uart0;

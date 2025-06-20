@@ -10,7 +10,7 @@
 
 / {
 	model = "TI AM335x BeagleBone Blue";
-	compatible = "ti,am335x-bone-blue", "ti,am33xx";
+	compatible = "beagle,am335x-bone-blue", "ti,am33xx";
 
 	chosen {
 		stdout-path = &uart0;

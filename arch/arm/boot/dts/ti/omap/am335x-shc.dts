@@ -12,7 +12,7 @@
 
 / {
 	model = "Bosch SHC";
-	compatible = "ti,am335x-shc", "ti,am335x-bone", "ti,am33xx";
+	compatible = "bosch,am335x-shc", "ti,am33xx";
 
 	aliases {
 		mmcblk0 = &mmc1;
