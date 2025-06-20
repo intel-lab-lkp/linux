@@ -106,6 +106,7 @@ struct csiphy_device {
 	int nclocks;
 	u32 timer_clk_rate;
 	struct regulator_bulk_data *supplies;
+	u32 *load_currents;
 	int num_supplies;
 	struct csiphy_config cfg;
 	struct v4l2_mbus_framefmt fmt[MSM_CSIPHY_PADS_NUM];

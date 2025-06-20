@@ -209,6 +209,7 @@ static int csiphy_set_power(struct v4l2_subdev *sd, int on)
 {
 	struct csiphy_device *csiphy = v4l2_get_subdevdata(sd);
 	struct device *dev = csiphy->camss->dev;
+	int i;
 
 	if (on) {
 		int ret;
@@ -216,6 +217,15 @@ static int csiphy_set_power(struct v4l2_subdev *sd, int on)
 		ret = pm_runtime_resume_and_get(dev);
 		if (ret < 0)
 			return ret;
+
+		if (csiphy->load_currents) {
+			for (i = 0; i < csiphy->num_supplies; i++) {
+				ret = regulator_set_load(csiphy->supplies[i].consumer,
+							 csiphy->load_currents[i]);
+			if (ret)
+				return ret;
+			}
+		}
 
 		ret = regulator_bulk_enable(csiphy->num_supplies,
 					    csiphy->supplies);
@@ -249,6 +259,11 @@ static int csiphy_set_power(struct v4l2_subdev *sd, int on)
 		disable_irq(csiphy->irq);
 
 		camss_disable_clocks(csiphy->nclocks, csiphy->clock);
+
+		if (csiphy->load_currents) {
+			for (i = 0; i < csiphy->num_supplies; i++)
+				regulator_set_load(csiphy->supplies[i].consumer, 0);
+		}
 
 		regulator_bulk_disable(csiphy->num_supplies, csiphy->supplies);
 
@@ -717,6 +732,20 @@ int msm_csiphy_subdev_init(struct camss *camss,
 
 	ret = devm_regulator_bulk_get(camss->dev, csiphy->num_supplies,
 				      csiphy->supplies);
+
+	if (device_property_present(camss->dev, "regulator-load-current")) {
+		csiphy->load_currents = kcalloc(csiphy->num_supplies, sizeof(u32), GFP_KERNEL);
+		if (!csiphy->load_currents)
+			return -ENOMEM;
+
+		ret = device_property_read_u32_array(camss->dev,
+						     "regulator-load-current",
+						     csiphy->load_currents,
+						     csiphy->num_supplies);
+		for (i = 0; i < csiphy->num_supplies; i++)
+			regulator_set_load(csiphy->supplies[i].consumer, 0);
+	}
+
 	return ret;
 }
 
