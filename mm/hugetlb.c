@@ -6405,17 +6405,16 @@ static bool hugetlb_pte_stable(struct hstate *h, struct mm_struct *mm, unsigned 
 static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			struct vm_fault *vmf)
 {
+	u32 hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
+	bool new_folio, new_anon_folio = false;
 	struct vm_area_struct *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	struct hstate *h = hstate_vma(vma);
 	vm_fault_t ret = VM_FAULT_SIGBUS;
-	int anon_rmap = 0;
-	unsigned long size;
-	struct folio *folio;
-	pte_t new_pte;
-	bool new_folio, new_pagecache_folio = false;
-	u32 hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
 	bool folio_locked = true;
+	struct folio *folio;
+	unsigned long size;
+	pte_t new_pte;
 
 	/*
 	 * Currently, we are forced to kill the process in the event the
@@ -6496,6 +6495,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 		folio_zero_user(folio, vmf->real_address);
 		__folio_mark_uptodate(folio);
 		new_folio = true;
+		new_anon_folio = !(vma->vm_flags & VM_MAYSHARE);
 
 		if (vma->vm_flags & VM_MAYSHARE) {
 			int err = hugetlb_add_to_page_cache(folio, mapping,
@@ -6514,10 +6514,8 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 				ret = VM_FAULT_SIGBUS;
 				goto out;
 			}
-			new_pagecache_folio = true;
 		} else {
 			folio_lock(folio);
-			anon_rmap = 1;
 		}
 	} else {
 		/*
@@ -6566,7 +6564,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	if (!pte_same(huge_ptep_get(mm, vmf->address, vmf->pte), vmf->orig_pte))
 		goto backout;
 
-	if (anon_rmap)
+	if (new_anon_folio)
 		hugetlb_add_new_anon_rmap(folio, vma, vmf->address);
 	else
 		hugetlb_add_file_rmap(folio);
@@ -6582,7 +6580,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	hugetlb_count_add(pages_per_huge_page(h), mm);
 	if ((vmf->flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED)) {
 		/* No need to lock file folios. See comment in hugetlb_fault() */
-		if (!anon_rmap) {
+		if (!new_anon_folio) {
 			folio_locked = false;
 			folio_unlock(folio);
 		}
@@ -6618,7 +6616,8 @@ out:
 backout:
 	spin_unlock(vmf->ptl);
 backout_unlocked:
-	if (new_folio && !new_pagecache_folio)
+	/* We only need to restore reservations for private mappings */
+	if (new_folio && new_anon_folio)
 		restore_reserve_on_error(h, vma, vmf->address, folio);
 
 	if (folio_locked)
