@@ -1703,6 +1703,9 @@ struct xfrm_state *xfrm_stateonly_find(struct net *net, u32 mark, u32 if_id,
 				       u8 mode, u8 proto, u32 reqid);
 struct xfrm_state *xfrm_state_lookup_byspi(struct net *net, __be32 spi,
 					      unsigned short family);
+struct xfrm_state *xfrm_state_lookup_spi_proto(struct net *net, __be32 spi,
+						u8 proto);
+
 int xfrm_state_check_expire(struct xfrm_state *x);
 void xfrm_state_update_stats(struct net *net);
 #ifdef CONFIG_XFRM_OFFLOAD
