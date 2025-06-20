@@ -257,6 +257,12 @@ struct panthor_file {
 	/** @stats: cycle and timestamp measures for job execution. */
 	struct panthor_gpu_usage stats;
 
+	/** @pid: pid of the task created this file */
+	pid_t pid;
+
+	/** @comm: comm of the task created this file */
+	char *comm;
+
 	/** @refcount: ref count of this file */
 	struct kref refcount;
 };

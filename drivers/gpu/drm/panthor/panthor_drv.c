@@ -1400,6 +1400,7 @@ void panthor_file_release(struct kref *kref)
 
 	WARN_ON(pfile->vms || pfile->groups);
 
+	kfree(pfile->comm);
 	kfree(pfile);
 }
 
@@ -1408,6 +1409,7 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 {
 	struct panthor_device *ptdev = container_of(ddev, struct panthor_device, base);
 	struct panthor_file *pfile;
+	struct task_struct *task;
 	int ret;
 
 	pfile = kzalloc(sizeof(*pfile), GFP_KERNEL);
@@ -1435,6 +1437,13 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 	ret = panthor_group_pool_create(pfile);
 	if (ret)
 		goto err_destroy_vm_pool;
+
+	task = get_pid_task(rcu_access_pointer(file->pid), PIDTYPE_PID);
+	if (task) {
+		pfile->pid = task->pid;
+		pfile->comm = kstrdup(task->comm, GFP_KERNEL);
+		put_task_struct(task);
+	}
 
 	kref_init(&pfile->refcount);
 
