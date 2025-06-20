@@ -3917,7 +3917,12 @@ static void ieee80211_ml_reconf_reset(struct ieee80211_sub_if_data *sdata)
 	}
 }
 
-static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
+/*
+ * Note that if ieee80211_report_disconnect() relies on the *frame_buf
+ * initialized by this function, then it must only be called if this function
+ * returns true; otherwise, it may use an uninitialized buffer.
+ */
+static bool ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 				   u16 stype, u16 reason, bool tx,
 				   u8 *frame_buf)
 {
@@ -3935,13 +3940,13 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (WARN_ON(!ap_sta))
-		return;
+		return false;
 
 	if (WARN_ON_ONCE(tx && !frame_buf))
-		return;
+		return false;
 
 	if (WARN_ON(!ifmgd->associated))
-		return;
+		return false;
 
 	ieee80211_stop_poll(sdata);
 
@@ -4168,6 +4173,8 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 
 	memset(ifmgd->userspace_selectors, 0,
 	       sizeof(ifmgd->userspace_selectors));
+
+	return true;
 }
 
 static void ieee80211_reset_ap_probe(struct ieee80211_sub_if_data *sdata)
@@ -4448,6 +4455,7 @@ static void __ieee80211_disconnect(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	bool report_disconnect;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -4477,20 +4485,22 @@ static void __ieee80211_disconnect(struct ieee80211_sub_if_data *sdata)
 		}
 	}
 
-	ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
-			       ifmgd->driver_disconnect ?
-					WLAN_REASON_DEAUTH_LEAVING :
-					WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY,
-			       true, frame_buf);
+	report_disconnect = ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
+						   ifmgd->driver_disconnect ?
+						   WLAN_REASON_DEAUTH_LEAVING :
+						   WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY,
+						   true, frame_buf);
 	/* the other links will be destroyed */
 	sdata->vif.bss_conf.csa_active = false;
 	sdata->deflink.u.mgd.csa.waiting_bcn = false;
 	sdata->deflink.u.mgd.csa.blocked_tx = false;
 	ieee80211_vif_unblock_queues_csa(sdata);
 
-	ieee80211_report_disconnect(sdata, frame_buf, sizeof(frame_buf), true,
-				    WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY,
-				    ifmgd->reconnect);
+	if (report_disconnect)
+		ieee80211_report_disconnect(sdata, frame_buf, sizeof(frame_buf),
+					    true, WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY,
+					    ifmgd->reconnect);
+
 	ifmgd->reconnect = false;
 }
 
@@ -7477,9 +7487,12 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	changed |= ieee80211_recalc_twt_req(sdata, sband, link, link_sta, elems);
 
 	if (ieee80211_config_bw(link, elems, true, &changed, "beacon")) {
-		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
-				       WLAN_REASON_DEAUTH_LEAVING,
-				       true, deauth_buf);
+		if (!ieee80211_set_disassoc(sdata,
+					    IEEE80211_STYPE_DEAUTH,
+					    WLAN_REASON_DEAUTH_LEAVING,
+					    true, deauth_buf))
+			goto free;
+
 		ieee80211_report_disconnect(sdata, deauth_buf,
 					    sizeof(deauth_buf), true,
 					    WLAN_REASON_DEAUTH_LEAVING,
@@ -8090,8 +8103,9 @@ void ieee80211_sta_connection_lost(struct ieee80211_sub_if_data *sdata,
 {
 	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
 
-	ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH, reason,
-			       tx, frame_buf);
+	if (!ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH, reason,
+				    tx, frame_buf))
+		return;
 
 	ieee80211_report_disconnect(sdata, frame_buf, sizeof(frame_buf), true,
 				    reason, false);
@@ -8967,7 +8981,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_bss *bss;
 	u16 auth_alg;
 	int err;
-	bool cont_auth, wmm_used;
+	bool cont_auth, wmm_used, report_disconnect;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
@@ -9089,14 +9103,16 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new auth to %pM\n",
 			   sdata->vif.cfg.ap_addr, auth_data->ap_addr);
-		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
-				       WLAN_REASON_UNSPECIFIED,
-				       false, frame_buf);
+		report_disconnect = ieee80211_set_disassoc(sdata,
+							   IEEE80211_STYPE_DEAUTH,
+							   WLAN_REASON_UNSPECIFIED,
+							   false, frame_buf);
 
-		ieee80211_report_disconnect(sdata, frame_buf,
-					    sizeof(frame_buf), true,
-					    WLAN_REASON_UNSPECIFIED,
-					    false);
+		if (report_disconnect)
+			ieee80211_report_disconnect(sdata, frame_buf,
+						    sizeof(frame_buf), true,
+						    WLAN_REASON_UNSPECIFIED,
+						    false);
 	}
 
 	/* needed for transmitting the auth frame(s) properly */
@@ -9345,6 +9361,7 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	struct cfg80211_bss *cbss;
 	bool override, uapsd_supported;
 	bool match_auth;
+	bool report_disconnect;
 	int i, err;
 	size_t size = sizeof(*assoc_data) + req->ie_len;
 
@@ -9392,14 +9409,16 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new assoc to %pM\n",
 			   sdata->vif.cfg.ap_addr, assoc_data->ap_addr);
-		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
-				       WLAN_REASON_UNSPECIFIED,
-				       false, frame_buf);
+		report_disconnect = ieee80211_set_disassoc(sdata,
+							   IEEE80211_STYPE_DEAUTH,
+							   WLAN_REASON_UNSPECIFIED,
+							   false, frame_buf);
 
-		ieee80211_report_disconnect(sdata, frame_buf,
-					    sizeof(frame_buf), true,
-					    WLAN_REASON_UNSPECIFIED,
-					    false);
+		if (report_disconnect)
+			ieee80211_report_disconnect(sdata, frame_buf,
+						    sizeof(frame_buf), true,
+						    WLAN_REASON_UNSPECIFIED,
+						    false);
 	}
 
 	memset(sdata->u.mgd.userspace_selectors, 0,
@@ -9720,6 +9739,7 @@ int ieee80211_mgd_deauth(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
 	bool tx = !req->local_state_change;
+	bool report_disconnect;
 	struct ieee80211_prep_tx_info info = {
 		.subtype = IEEE80211_STYPE_DEAUTH,
 	};
@@ -9773,11 +9793,14 @@ int ieee80211_mgd_deauth(struct ieee80211_sub_if_data *sdata,
 			   req->bssid, req->reason_code,
 			   ieee80211_get_reason_code_string(req->reason_code));
 
-		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
-				       req->reason_code, tx, frame_buf);
-		ieee80211_report_disconnect(sdata, frame_buf,
-					    sizeof(frame_buf), true,
-					    req->reason_code, false);
+		report_disconnect = ieee80211_set_disassoc(sdata,
+							   IEEE80211_STYPE_DEAUTH,
+							   req->reason_code, tx, frame_buf);
+
+		if (report_disconnect)
+			ieee80211_report_disconnect(sdata, frame_buf,
+						    sizeof(frame_buf), true,
+						    req->reason_code, false);
 		return 0;
 	}
 
@@ -9788,6 +9811,7 @@ int ieee80211_mgd_disassoc(struct ieee80211_sub_if_data *sdata,
 			   struct cfg80211_disassoc_request *req)
 {
 	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	bool report_disconnect;
 
 	if (!sdata->u.mgd.associated ||
 	    memcmp(sdata->vif.cfg.ap_addr, req->ap_addr, ETH_ALEN))
@@ -9798,12 +9822,13 @@ int ieee80211_mgd_disassoc(struct ieee80211_sub_if_data *sdata,
 		   req->ap_addr, req->reason_code,
 		   ieee80211_get_reason_code_string(req->reason_code));
 
-	ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DISASSOC,
-			       req->reason_code, !req->local_state_change,
-			       frame_buf);
+	report_disconnect = ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DISASSOC,
+						   req->reason_code, !req->local_state_change,
+						   frame_buf);
 
-	ieee80211_report_disconnect(sdata, frame_buf, sizeof(frame_buf), true,
-				    req->reason_code, false);
+	if (report_disconnect)
+		ieee80211_report_disconnect(sdata, frame_buf, sizeof(frame_buf), true,
+					    req->reason_code, false);
 
 	return 0;
 }
