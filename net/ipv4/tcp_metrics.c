@@ -473,12 +473,13 @@ void tcp_init_metrics(struct sock *sk)
 	/* ssthresh may have been reduced unnecessarily during.
 	 * 3WHS. Restore it back to its initial default.
 	 */
-	tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
+	tp->snd_ssthresh = 0;
 	if (!dst)
 		goto reset;
 
 	if (dst_metric_locked(dst, RTAX_CWND))
 		tp->snd_cwnd_clamp = dst_metric(dst, RTAX_CWND);
+	tp->snd_ssthresh = dst_metric(dst, RTAX_SSTHRESH);
 
 	rcu_read_lock();
 	tm = tcp_get_metrics(sk, dst, false);
@@ -487,13 +488,8 @@ void tcp_init_metrics(struct sock *sk)
 		goto reset;
 	}
 
-	val = READ_ONCE(net->ipv4.sysctl_tcp_no_ssthresh_metrics_save) ?
-	      0 : tcp_metric_get(tm, TCP_METRIC_SSTHRESH);
-	if (val) {
-		tp->snd_ssthresh = val;
-		if (tp->snd_ssthresh > tp->snd_cwnd_clamp)
-			tp->snd_ssthresh = tp->snd_cwnd_clamp;
-	}
+	if (!READ_ONCE(net->ipv4.sysctl_tcp_no_ssthresh_metrics_save))
+		tp->snd_ssthresh = tcp_metric_get(tm, TCP_METRIC_SSTHRESH);
 	val = tcp_metric_get(tm, TCP_METRIC_REORDERING);
 	if (val && tp->reordering != val)
 		tp->reordering = val;
@@ -537,6 +533,11 @@ reset:
 
 		inet_csk(sk)->icsk_rto = TCP_TIMEOUT_FALLBACK;
 	}
+
+	if (!tp->snd_ssthresh)
+		tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
+	else if (tp->snd_ssthresh > tp->snd_cwnd_clamp)
+		tp->snd_ssthresh = tp->snd_cwnd_clamp;
 }
 
 bool tcp_peer_is_proven(struct request_sock *req, struct dst_entry *dst)
