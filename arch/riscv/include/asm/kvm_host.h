@@ -48,6 +48,7 @@
 					 BIT(EXC_SYSCALL)         | \
 					 BIT(EXC_INST_PAGE_FAULT) | \
 					 BIT(EXC_LOAD_PAGE_FAULT) | \
+					 BIT(EXC_INST_ILLEGAL)    | \
 					 BIT(EXC_STORE_PAGE_FAULT))
 
 #define KVM_HIDELEG_DEFAULT		(BIT(IRQ_VS_SOFT)  | \
