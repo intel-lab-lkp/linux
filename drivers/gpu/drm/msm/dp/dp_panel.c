@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
+#include <linux/io.h>
 
 #include "dp_panel.h"
 #include "dp_reg.h"
