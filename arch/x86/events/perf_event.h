@@ -183,6 +183,8 @@ struct amd_nb {
 	 (1ULL << PERF_REG_X86_R14)   | \
 	 (1ULL << PERF_REG_X86_R15))
 
+#define PEBS_GP_EXT_REGS	(PEBS_GP_REGS | BIT_ULL(PERF_REG_X86_SSP))
+
 /*
  * Per register state.
  */

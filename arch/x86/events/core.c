@@ -666,6 +666,22 @@ int x86_pmu_hw_config(struct perf_event *event)
 			return -EINVAL;
 	}
 
+	/*
+	 * sample_regs_user doesn't support SSP register now, it would be
+	 * supported later.
+	 */
+	if (event->attr.sample_regs_user & BIT_ULL(PERF_REG_X86_SSP))
+		return -EINVAL;
+
+	if (event->attr.sample_regs_intr & BIT_ULL(PERF_REG_X86_SSP)) {
+		/*
+		 * sample_regs_intr doesn't support SSP register for
+		 * non-PEBS events now. it would be supported later.
+		 */
+		if (!event->attr.precise_ip || !x86_pmu.arch_pebs)
+			return -EINVAL;
+	}
+
 	return x86_setup_perfctr(event);
 }
 
