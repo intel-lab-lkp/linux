@@ -576,6 +576,70 @@ struct vm_fault {
 					 */
 };
 
+#ifdef CONFIG_USERFAULTFD
+/* A combined operation mode + behavior flags. */
+typedef unsigned int __bitwise uffd_flags_t;
+
+enum mfill_atomic_mode {
+	MFILL_ATOMIC_COPY,
+	MFILL_ATOMIC_ZEROPAGE,
+	MFILL_ATOMIC_CONTINUE,
+	MFILL_ATOMIC_POISON,
+	NR_MFILL_ATOMIC_MODES,
+};
+
+/* VMA userfaultfd operations */
+typedef struct {
+	/**
+	 * @uffd_features: features supported in bitmask.
+	 *
+	 * When the ops is defined, the driver must set non-zero features
+	 * to be a subset (or all) of: VM_UFFD_MISSING|WP|MINOR.
+	 */
+	unsigned long uffd_features;
+	/**
+	 * @uffd_ioctls: ioctls supported in bitmask.
+	 *
+	 * Userfaultfd ioctls supported by the module.  Below will always
+	 * be supported by default whenever a module provides vm_uffd_ops:
+	 *
+	 *   _UFFDIO_API, _UFFDIO_REGISTER, _UFFDIO_UNREGISTER, _UFFDIO_WAKE
+	 *
+	 * The module needs to provide all the rest optionally supported
+	 * ioctls.  For example, when VM_UFFD_MISSING was supported,
+	 * _UFFDIO_COPY must be supported as ioctl, while _UFFDIO_ZEROPAGE
+	 * is optional.
+	 */
+	unsigned long uffd_ioctls;
+	/**
+	 * uffd_get_folio: Handler to resolve UFFDIO_CONTINUE request.
+	 *
+	 * @inode: the inode for folio lookup
+	 * @pgoff: the pgoff of the folio
+	 * @folio: returned folio pointer
+	 *
+	 * Return: zero if succeeded, negative for errors.
+	 */
+	int (*uffd_get_folio)(struct inode *inode, pgoff_t pgoff,
+			      struct folio **folio);
+	/**
+	 * uffd_copy: Handler to resolve UFFDIO_COPY|ZEROPAGE request.
+	 *
+	 * @dst_pmd: target pmd to resolve page fault
+	 * @dst_vma: target vma
+	 * @dst_addr: target virtual address
+	 * @src_addr: source address to copy from
+	 * @flags: userfaultfd request flags
+	 * @foliop: previously allocated folio
+	 *
+	 * Return: zero if succeeded, negative for errors.
+	 */
+	int (*uffd_copy)(pmd_t *dst_pmd, struct vm_area_struct *dst_vma,
+			 unsigned long dst_addr, unsigned long src_addr,
+			 uffd_flags_t flags, struct folio **foliop);
+} vm_uffd_ops;
+#endif
+
 /*
  * These are the virtual MM functions - opening of an area, closing and
  * unmapping it (needed to keep files on disk up-to-date etc), pointer
@@ -653,6 +717,13 @@ struct vm_operations_struct {
 	 */
 	struct page *(*find_special_page)(struct vm_area_struct *vma,
 					  unsigned long addr);
+#ifdef CONFIG_USERFAULTFD
+	/*
+	 * Userfaultfd related ops.  Modules need to define this to support
+	 * userfaultfd.
+	 */
+	const vm_uffd_ops *userfaultfd_ops;
+#endif
 };
 
 #ifdef CONFIG_NUMA_BALANCING

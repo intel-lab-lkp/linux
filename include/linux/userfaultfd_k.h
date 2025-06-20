@@ -80,18 +80,6 @@ struct userfaultfd_ctx {
 
 extern vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason);
 
-/* A combined operation mode + behavior flags. */
-typedef unsigned int __bitwise uffd_flags_t;
-
-/* Mutually exclusive modes of operation. */
-enum mfill_atomic_mode {
-	MFILL_ATOMIC_COPY,
-	MFILL_ATOMIC_ZEROPAGE,
-	MFILL_ATOMIC_CONTINUE,
-	MFILL_ATOMIC_POISON,
-	NR_MFILL_ATOMIC_MODES,
-};
-
 #define MFILL_ATOMIC_MODE_BITS (const_ilog2(NR_MFILL_ATOMIC_MODES - 1) + 1)
 #define MFILL_ATOMIC_BIT(nr) BIT(MFILL_ATOMIC_MODE_BITS + (nr))
 #define MFILL_ATOMIC_FLAG(nr) ((__force uffd_flags_t) MFILL_ATOMIC_BIT(nr))
