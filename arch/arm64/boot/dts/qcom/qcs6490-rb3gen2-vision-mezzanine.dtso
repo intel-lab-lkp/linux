@@ -16,6 +16,7 @@
 &camss {
 	vdda-phy-supply = <&vreg_l10c_0p88>;
 	vdda-pll-supply = <&vreg_l6b_1p2>;
+	regulator-load-current = <54000 96400>;
 
 	status = "okay";
 
