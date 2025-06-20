@@ -50,8 +50,6 @@
 
 #define NFSD_LAUNDRETTE_DELAY		     (2 * HZ)
 
-#define NFSD_FILE_CACHE_UP		     (0)
-
 /* We only care about NFSD_MAY_READ/WRITE for this cache */
 #define NFSD_FILE_MAY_MASK	(NFSD_MAY_READ|NFSD_MAY_WRITE|NFSD_MAY_LOCALIO)
 
@@ -70,7 +68,6 @@ struct nfsd_fcache_disposal {
 static struct kmem_cache		*nfsd_file_slab;
 static struct kmem_cache		*nfsd_file_mark_slab;
 static struct list_lru			nfsd_file_lru;
-static unsigned long			nfsd_file_flags;
 static struct fsnotify_group		*nfsd_file_fsnotify_group;
 static struct delayed_work		nfsd_filecache_laundrette;
 static struct rhltable			nfsd_file_rhltable
@@ -112,9 +109,12 @@ static const struct rhashtable_params nfsd_file_rhash_params = {
 static void
 nfsd_file_schedule_laundrette(void)
 {
-	if (test_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags))
-		queue_delayed_work(system_unbound_wq, &nfsd_filecache_laundrette,
+	if (nfsd_startup_get()) {
+		queue_delayed_work(system_unbound_wq,
+				   &nfsd_filecache_laundrette,
 				   NFSD_LAUNDRETTE_DELAY);
+		nfsd_startup_put();
+	}
 }
 
 static void
@@ -795,10 +795,6 @@ nfsd_file_cache_init(void)
 {
 	int ret;
 
-	lockdep_assert_held(&nfsd_mutex);
-	if (test_and_set_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags) == 1)
-		return 0;
-
 	ret = rhltable_init(&nfsd_file_rhltable, &nfsd_file_rhash_params);
 	if (ret)
 		goto out;
@@ -853,8 +849,6 @@ nfsd_file_cache_init(void)
 
 	INIT_DELAYED_WORK(&nfsd_filecache_laundrette, nfsd_file_gc_worker);
 out:
-	if (ret)
-		clear_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags);
 	return ret;
 out_notifier:
 	lease_unregister_notifier(&nfsd_file_lease_notifier);
@@ -958,9 +952,10 @@ nfsd_file_cache_start_net(struct net *net)
 void
 nfsd_file_cache_purge(struct net *net)
 {
-	lockdep_assert_held(&nfsd_mutex);
-	if (test_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags) == 1)
+	if (nfsd_startup_get()) {
 		__nfsd_file_cache_purge(net);
+		nfsd_startup_put();
+	}
 }
 
 void
@@ -974,10 +969,6 @@ void
 nfsd_file_cache_shutdown(void)
 {
 	int i;
-
-	lockdep_assert_held(&nfsd_mutex);
-	if (test_and_clear_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags) == 0)
-		return;
 
 	lease_unregister_notifier(&nfsd_file_lease_notifier);
 	shrinker_free(nfsd_file_shrinker);
@@ -1347,8 +1338,7 @@ int nfsd_file_cache_stats_show(struct seq_file *m, void *v)
 	unsigned long lru = 0, total_age = 0;
 
 	/* Serialize with server shutdown */
-	mutex_lock(&nfsd_mutex);
-	if (test_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags) == 1) {
+	if (nfsd_startup_get()) {
 		struct bucket_table *tbl;
 		struct rhashtable *ht;
 
@@ -1360,8 +1350,9 @@ int nfsd_file_cache_stats_show(struct seq_file *m, void *v)
 		tbl = rht_dereference_rcu(ht->tbl, ht);
 		buckets = tbl->size;
 		rcu_read_unlock();
+
+		nfsd_startup_put();
 	}
-	mutex_unlock(&nfsd_mutex);
 
 	for_each_possible_cpu(i) {
 		hits += per_cpu(nfsd_file_cache_hits, i);

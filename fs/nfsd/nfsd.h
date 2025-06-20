@@ -80,6 +80,9 @@ extern const struct svc_version	nfsd_version2, nfsd_version3, nfsd_version4;
 extern struct mutex		nfsd_mutex;
 extern atomic_t			nfsd_th_cnt;		/* number of available threads */
 
+bool nfsd_startup_get(void);
+void nfsd_startup_put(void);
+
 extern const struct seq_operations nfs_exports_op;
 
 /*
