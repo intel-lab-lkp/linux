@@ -1,0 +1,67 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * SPDX-FileCopyrightText: (C) 2025 ANSSI
+ *
+ * USB Authentication netlink interface definitions shared with userspace
+ *
+ * Author: Luc Bonnafoux <luc.bonnafoux@ssi.gouv.fr>
+ * Author: Nicolas Bouchinet <nicolas.bouchinet@ssi.gouv.fr>
+ *
+ */
+
+#ifndef __USB_AUTHENT_NETLINK_H_
+#define __USB_AUTHENT_NETLINK_H_
+
+#define USBAUTH_GENL_NAME "usb_auth_genl"
+#define USBAUTH_GENL_VERSION 1
+
+/* Attributes */
+enum usbauth_genl_attrs {
+	USBAUTH_A_REQ_ID = 1,
+	USBAUTH_A_DEV_ID,
+	USBAUTH_A_DIGEST,
+	USBAUTH_A_DIGESTS,
+	USBAUTH_A_SLOT_MASK,
+	USBAUTH_A_KNOWN,
+	USBAUTH_A_BLOCKED,
+	USBAUTH_A_VALID,
+	USBAUTH_A_CERTIFICATE,
+	USBAUTH_A_CERT_LEN,
+	USBAUTH_A_ROUTE,
+	USBAUTH_A_NONCE,
+	USBAUTH_A_CHALL,
+	USBAUTH_A_DESCRIPTOR,
+	USBAUTH_A_BOS,
+	USBAUTH_A_ERROR_CODE,
+	__USBAUTH_A_MAX,
+};
+
+#define USBAUTH_MAX_DESC_SIZE 1024
+#define USBAUTH_MAX_BOS_SIZE  1024
+
+#define USBAUTH_A_MAX (__USBAUTH_A_MAX - 1)
+
+/* Commands */
+enum usbauth_genl_cmds {
+	USBAUTH_CMD_REGISTER,
+	USBAUTH_CMD_CHECK_DIGEST,
+	USBAUTH_CMD_CHECK_CERTIFICATE,
+	USBAUTH_CMD_REMOVE_DEV,
+	USBAUTH_CMD_GEN_NONCE,
+	USBAUTH_CMD_CHECK_CHALL,
+	USBAUTH_CMD_RESP_DIGEST,
+	USBAUTH_CMD_RESP_CERTIFICATE,
+	USBAUTH_CMD_RESP_CREATE_DEV,
+	USBAUTH_CMD_RESP_REMOVE_DEV,
+	USBAUTH_CMD_RESP_GEN_NONCE,
+	USBAUTH_CMD_RESP_CHECK_CHALL,
+	__USBAUTH_CMD_MAX,
+};
+
+#define USBAUTH_CMD_MAX (__USBAUTH_CMD_MAX - 1)
+
+/* Error codes */
+#define USBAUTH_OK 0
+#define USBAUTH_INVRESP 1
+
+#endif /* __USB_AUTHENT_NETLINK_H_ */
