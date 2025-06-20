@@ -6,6 +6,32 @@
 
 menu "Pressure sensors"
 
+menu "Bosch BMP390 pressure sensor driver"
+config BMP390_IIO
+    tristate "Bosch BMP390 pressure sensor driver"
+    depends on IIO
+    help
+      Say yes here to build support for the Bosch BMP390 pressure sensor.
+
+
+      The Bosch BMP390 is a high-precision, low-power digital pressure sensor
+      designed for a wide range of applications, including weather monitoring,
+      altitude tracking, and indoor navigation. This driver provides support
+      for interfacing with the BMP390 sensor through the Industrial I/O (IIO)
+      subsystem.
+
+      If you choose to compile this driver as a module, it will be named
+      'bmp390'. This allows the driver to be dynamically loaded and unloaded
+      as needed, providing flexibility in managing the sensor.
+
+      To compile this driver as a module, choose M here: the module will be
+      called bmp390. If you are unsure, it is safe to say 'N' here.
+
+if BMP390_IIO
+    source "drivers/iio/pressure/bmp390/Kconfig"
+endif # BMP390_IIO
+endmenu
+
 config ABP060MG
 	tristate "Honeywell ABP pressure sensor driver"
 	depends on I2C

@@ -27447,6 +27447,13 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 F:	sound/pci/hda/patch_senarytech.c
 
+BOSCH SENSORTEC BMP390 PRESSURE IIO DRIVER
+M:	Liquancin Mereena Mathai <liquancin.mereenamathai@in.bosch.com>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/pressure/bosch,bmp390.yaml
+F:	drivers/iio/pressure/bmp390/*
+
 THE REST
 M:	Linus Torvalds <torvalds@linux-foundation.org>
 L:	linux-kernel@vger.kernel.org

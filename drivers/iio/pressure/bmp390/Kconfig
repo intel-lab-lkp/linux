@@ -1,0 +1,29 @@
+#
+# Kconfig for Bosch BMP390 sensors driver.
+#
+config BMP3_SUPPORT_DYNAMIC_KO_MODULE
+    bool "BMP390 driver build dynamic .ko module"
+    depends on I2C && SYSFS
+    help
+      Enable this option to build the Bosch Sensortec BMP390 sensor driver as a dynamic kernel module (.ko).
+      This allows the driver to be loaded and unloaded dynamically at runtime, providing flexibility in managing
+      the driver without requiring a reboot. This is particularly useful for development, testing, and systems
+      that need to manage kernel modules dynamically.
+
+      This option depends on I2C and SYSFS support being enabled in the kernel configuration. If you are unsure,
+      it is safe to say 'N' here.
+
+      Say 'Y' here if you want to support dynamic loading and unloading of the BMP390 sensor driver.
+
+config BMP3_SUPPORT_SPI_BUS
+    bool "BMP390 driver build for SPI interface"
+    depends on SPI_MASTER && SYSFS
+    help
+      Enable this option to build the Bosch Sensortec BMP390 sensor driver with support for the SPI interface.
+      This allows the BMP390 sensor to communicate with the host system using the SPI bus, which can provide
+      faster data transfer rates compared to I2C.
+
+      This option depends on SPI_MASTER and SYSFS support being enabled in the kernel configuration. If you are unsure,
+      it is safe to say 'N' here.
+
+      Say 'Y' here if you want to enable SPI interface support for the BMP390 sensor driver.
