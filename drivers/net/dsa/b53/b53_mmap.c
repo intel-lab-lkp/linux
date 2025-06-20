@@ -24,8 +24,11 @@
 #include <linux/mfd/syscon.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/b53.h>
+#include <linux/regmap.h>
 
 #include "b53_priv.h"
+
+#define BCM63XX_EPHY_REG 0x3C
 
 struct b53_phy_info {
 	u32 chip_id;
@@ -253,6 +256,14 @@ static int b53_mmap_phy_write16(struct b53_device *dev, int addr, int reg,
 	return -EIO;
 }
 
+static void bcm63xx_ephy_reset(struct regmap *regmap, int num_ephy)
+{
+	u32 mask = GENMASK((num_ephy - 1), 0);
+
+	/* Set lowest bits to deassert resets */
+	regmap_update_bits(regmap, BCM63XX_EPHY_REG, mask, mask);
+}
+
 static const struct b53_io_ops b53_mmap_ops = {
 	.read8 = b53_mmap_read8,
 	.read16 = b53_mmap_read16,
@@ -345,6 +356,8 @@ static int b53_mmap_probe(struct platform_device *pdev)
 				break;
 			}
 		}
+		if (priv->phy_info)
+			bcm63xx_ephy_reset(priv->gpio_ctrl, priv->phy_info->num_ephy);
 	}
 
 	dev = b53_switch_alloc(&pdev->dev, &b53_mmap_ops, priv);
