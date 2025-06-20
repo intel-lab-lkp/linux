@@ -475,7 +475,8 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 		}
 
 		folio = filemap_alloc_folio(mapping_gfp_constraint(mapping,
-								   ~__GFP_FS), 0);
+								   ~__GFP_FS),
+				0, NULL);
 		if (!folio)
 			break;
 
