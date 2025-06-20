@@ -249,16 +249,6 @@ static void randstruct_initializers(struct kunit *test)
 	struct randstruct_mixed_shuffled mixed_shuffled = {
 		init_members
 	};
-	struct contains_randstruct_untouched contains_untouched = {
-		.untouched = {
-			init_members
-		},
-	};
-	struct contains_randstruct_shuffled contains_shuffled = {
-		.shuffled = {
-			init_members
-		},
-	};
 #define func_member(x, ignored)	\
 		.x = func_##x,
 	struct randstruct_funcs_untouched funcs_untouched = {
@@ -272,21 +262,6 @@ static void randstruct_initializers(struct kunit *test)
 	test_check_init(test, "unnamed", &untouched,
 		&(struct randstruct_shuffled){
 			init_members
-		});
-
-	test_check_contained_init(test, "named", &contains_untouched, &contains_shuffled);
-	test_check_contained_init(test, "unnamed", &contains_untouched,
-		&(struct contains_randstruct_shuffled){
-			.shuffled = (struct randstruct_shuffled){
-				init_members
-			},
-		});
-
-	test_check_contained_init(test, "named", &contains_untouched, &contains_shuffled);
-	test_check_contained_init(test, "unnamed copy", &contains_untouched,
-		&(struct contains_randstruct_shuffled){
-			/* full struct copy initializer */
-			.shuffled = shuffled,
 		});
 
 	test_check_mixed_init(test, "named", &mixed_untouched, &mixed_shuffled);
@@ -305,6 +280,49 @@ static void randstruct_initializers(struct kunit *test)
 #undef init_members
 }
 
+static void randstruct_contains_initializers(struct kunit *test)
+{
+#define init_members		\
+		.a = 1,		\
+		.b = 3,		\
+		.c = 5,		\
+		.d = 7,		\
+		.e = 11,	\
+		.f = 13,	\
+		.g = 17,	\
+		.h = 19,
+	struct contains_randstruct_untouched contains_untouched = {
+		.untouched = {
+			init_members
+		},
+	};
+	struct contains_randstruct_shuffled contains_shuffled = {
+		.shuffled = {
+			init_members
+		},
+	};
+	struct randstruct_shuffled shuffled = {
+		init_members
+	};
+
+	test_check_contained_init(test, "named", &contains_untouched, &contains_shuffled);
+	test_check_contained_init(test, "unnamed", &contains_untouched,
+		&(struct contains_randstruct_shuffled){
+			.shuffled = (struct randstruct_shuffled){
+				init_members
+			},
+		});
+
+	test_check_contained_init(test, "named", &contains_untouched, &contains_shuffled);
+	test_check_contained_init(test, "unnamed copy", &contains_untouched,
+		&(struct contains_randstruct_shuffled){
+			/* full struct copy initializer */
+			.shuffled = shuffled,
+		});
+
+#undef init_members
+}
+
 static int randstruct_test_init(struct kunit *test)
 {
 	if (!IS_ENABLED(CONFIG_RANDSTRUCT))
@@ -319,6 +337,7 @@ static struct kunit_case randstruct_test_cases[] = {
 	KUNIT_CASE(randstruct_layout_fptr),
 	KUNIT_CASE(randstruct_layout_fptr_deep),
 	KUNIT_CASE(randstruct_initializers),
+	KUNIT_CASE(randstruct_contains_initializers),
 	{}
 };
 
