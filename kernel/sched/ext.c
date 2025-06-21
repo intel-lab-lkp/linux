@@ -3187,7 +3187,7 @@ preempt_reason_from_class(const struct sched_class *class)
 	return SCX_CPU_PREEMPT_UNKNOWN;
 }
 
-static void switch_class(struct rq *rq, struct task_struct *next)
+void switch_class(struct rq *rq, struct task_struct *next)
 {
 	const struct sched_class *next_class = next->sched_class;
 

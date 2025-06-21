@@ -1738,6 +1738,7 @@ static inline void scx_rq_clock_invalidate(struct rq *rq)
 	WRITE_ONCE(rq->scx.flags, rq->scx.flags & ~SCX_RQ_CLK_VALID);
 }
 
+void switch_class(struct rq *rq, struct task_struct *next);
 #else /* !CONFIG_SCHED_CLASS_EXT */
 #define scx_enabled()		false
 #define scx_switched_all()	false
@@ -2470,6 +2471,11 @@ static inline void put_prev_set_next_task(struct rq *rq,
 
 	prev->sched_class->put_prev_task(rq, prev, next);
 	next->sched_class->set_next_task(rq, next, true);
+
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (scx_enabled())
+		switch_class(rq, next);
+#endif
 }
 
 /*
