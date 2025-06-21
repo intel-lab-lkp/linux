@@ -1420,12 +1420,13 @@ static bool dwc3_needs_extra_trb(struct dwc3_ep *dep, struct dwc3_request *req)
 	unsigned int maxp = usb_endpoint_maxp(dep->endpoint.desc);
 	unsigned int rem = req->request.length % maxp;
 
-	if ((req->request.length && req->request.zero && !rem &&
-			!usb_endpoint_xfer_isoc(dep->endpoint.desc)) ||
-			(!req->direction && rem))
-		return true;
+	if (usb_endpoint_xfer_isoc(dep->endpoint.desc))
+		return false;
 
-	return false;
+	if (!req->direction) /* OUT transfers */
+		return rem != 0;
+
+	return rem == 0;
 }
 
 /**
