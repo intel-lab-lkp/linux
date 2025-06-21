@@ -419,3 +419,123 @@ impl<T: ?Sized> Drop for WwMutexGuard<'_, T> {
         unsafe { bindings::ww_mutex_unlock(self.mutex.as_ptr()) };
     }
 }
+
+#[kunit_tests(rust_kernel_ww_mutex)]
+mod tests {
+    use crate::c_str;
+    use crate::prelude::*;
+    use pin_init::stack_pin_init;
+
+    use super::*;
+
+    // A simple coverage on `define_ww_class` macro.
+    define_ww_class!(TEST_WOUND_WAIT_CLASS, wound_wait, c_str!("test_wound_wait"));
+    define_ww_class!(TEST_WAIT_DIE_CLASS, wait_die, c_str!("test_wait_die"));
+
+    #[test]
+    fn test_ww_mutex_basic_lock_unlock() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("test_mutex_class")));
+
+        stack_pin_init!(let mutex = WwMutex::new(42, &class));
+
+        // Lock without context
+        let guard = mutex.lock(None)?;
+        assert_eq!(*guard, 42);
+
+        // Drop the lock
+        drop(guard);
+
+        // Lock it again
+        let mut guard = mutex.lock(None)?;
+        *guard = 100;
+        assert_eq!(*guard, 100);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_mutex_trylock() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("trylock_class")));
+
+        stack_pin_init!(let mutex = WwMutex::new(123, &class));
+
+        // trylock on unlocked mutex should succeed
+        let guard = mutex.try_lock(None)?;
+        assert_eq!(*guard, 123);
+        drop(guard);
+
+        // lock it first
+        let _guard1 = mutex.lock(None)?;
+
+        // trylock should fail when already locked
+        assert!(mutex.try_lock(None).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_mutex_is_locked() -> Result {
+        stack_pin_init!(let class = WwClass::new_wait_die(c_str!("locked_check_class")));
+
+        stack_pin_init!(let mutex = WwMutex::new("hello", &class));
+
+        // should not be locked initially
+        assert!(!mutex.is_locked());
+
+        let guard = mutex.lock(None)?;
+        assert!(mutex.is_locked());
+
+        drop(guard);
+        assert!(!mutex.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_acquire_context() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("ctx_class")));
+
+        stack_pin_init!(let mutex1 = WwMutex::new(1, &class));
+        stack_pin_init!(let mutex2 = WwMutex::new(2, &class));
+
+        let mut ctx = KBox::pin_init(WwAcquireCtx::new(&class), GFP_KERNEL)?;
+
+        // acquire multiple mutexes with same context
+        let guard1 = mutex1.lock(Some(&ctx))?;
+        let guard2 = mutex2.lock(Some(&ctx))?;
+
+        assert_eq!(*guard1, 1);
+        assert_eq!(*guard2, 2);
+
+        ctx.as_mut().done();
+
+        // we shouldn't be able to lock once it's `done`.
+        assert!(mutex1.lock(Some(&ctx)).is_err());
+        assert!(mutex2.lock(Some(&ctx)).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_global_classes() -> Result {
+        stack_pin_init!(let wound_wait_mutex = WwMutex::new(100, &TEST_WOUND_WAIT_CLASS));
+        stack_pin_init!(let wait_die_mutex = WwMutex::new(200, &TEST_WAIT_DIE_CLASS));
+
+        let ww_guard = wound_wait_mutex.lock(None)?;
+        let wd_guard = wait_die_mutex.lock(None)?;
+
+        assert_eq!(*ww_guard, 100);
+        assert_eq!(*wd_guard, 200);
+
+        assert!(wound_wait_mutex.is_locked());
+        assert!(wait_die_mutex.is_locked());
+
+        drop(ww_guard);
+        drop(wd_guard);
+
+        assert!(!wound_wait_mutex.is_locked());
+        assert!(!wait_die_mutex.is_locked());
+
+        Ok(())
+    }
+}
