@@ -37,51 +37,41 @@ static const char hmm_bo_type_string[] = "pv";
 static ssize_t bo_show(struct device *dev, struct device_attribute *attr,
 		       char *buf, struct list_head *bo_list, bool active)
 {
-	ssize_t ret = 0;
+	ssize_t offset = 0;
 	struct hmm_buffer_object *bo;
 	unsigned long flags;
 	int i;
 	long total[HMM_BO_LAST] = { 0 };
 	long count[HMM_BO_LAST] = { 0 };
-	int index1 = 0;
-	int index2 = 0;
 
-	ret = scnprintf(buf, PAGE_SIZE, "type pgnr\n");
-	if (ret <= 0)
-		return 0;
-
-	index1 += ret;
+	offset += sysfs_emit(buf, "type pgnr\n");
 
 	spin_lock_irqsave(&bo_device.list_lock, flags);
 	list_for_each_entry(bo, bo_list, list) {
 		if ((active && (bo->status & HMM_BO_ALLOCED)) ||
 		    (!active && !(bo->status & HMM_BO_ALLOCED))) {
-			ret = scnprintf(buf + index1, PAGE_SIZE - index1,
+			offset += sysfs_emit_at(buf, offset,
 					"%c %d\n",
 					hmm_bo_type_string[bo->type], bo->pgnr);
 
 			total[bo->type] += bo->pgnr;
 			count[bo->type]++;
-			if (ret > 0)
-				index1 += ret;
 		}
 	}
 	spin_unlock_irqrestore(&bo_device.list_lock, flags);
 
 	for (i = 0; i < HMM_BO_LAST; i++) {
 		if (count[i]) {
-			ret = scnprintf(buf + index1 + index2,
-					PAGE_SIZE - index1 - index2,
+			offset += sysfs_emit_at(buf,
+					offset,
 					"%ld %c buffer objects: %ld KB\n",
 					count[i], hmm_bo_type_string[i],
 					total[i] * 4);
-			if (ret > 0)
-				index2 += ret;
 		}
 	}
 
-	/* Add trailing zero, not included by scnprintf */
-	return index1 + index2 + 1;
+	/* Direct return of accumlated length */
+	return offset;
 }
 
 static ssize_t active_bo_show(struct device *dev, struct device_attribute *attr,
