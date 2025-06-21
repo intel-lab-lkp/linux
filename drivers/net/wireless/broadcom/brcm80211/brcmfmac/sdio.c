@@ -474,7 +474,6 @@ struct brcmf_sdio {
 
 	u8 sdpcm_ver;	/* Bus protocol reported by dongle */
 
-	bool intr;		/* Use interrupts */
 	atomic_t ipend;		/* Device interrupt is pending */
 	uint spurious;		/* Count of spurious interrupts */
 
@@ -2327,8 +2326,6 @@ static uint brcmf_sdio_sendfromq(struct brcmf_sdio *bus, uint maxframes)
 {
 	struct sk_buff *pkt;
 	struct sk_buff_head pktq;
-	u32 intstat_addr = bus->sdio_core->base + SD_REG(intstatus);
-	u32 intstatus = 0;
 	int ret = 0, prec_out, i;
 	uint cnt = 0;
 	u8 tx_prec_map, pkt_num;
@@ -2361,21 +2358,6 @@ static uint brcmf_sdio_sendfromq(struct brcmf_sdio *bus, uint maxframes)
 		ret = brcmf_sdio_txpkt(bus, &pktq, SDPCM_DATA_CHANNEL);
 
 		cnt += i;
-
-		/* In poll mode, need to check for other events */
-		if (!bus->intr) {
-			/* Check device status, signal pending interrupt */
-			sdio_claim_host(bus->sdiodev->func1);
-			intstatus = brcmf_sdiod_readl(bus->sdiodev,
-						      intstat_addr, &ret);
-			sdio_release_host(bus->sdiodev->func1);
-
-			bus->sdcnt.f2txdata++;
-			if (ret != 0)
-				break;
-			if (intstatus & bus->hostintmask)
-				atomic_set(&bus->ipend, 1);
-		}
 	}
 
 	/* Deflow-control stack if needed */
@@ -3653,10 +3635,6 @@ void brcmf_sdio_isr(struct brcmf_sdio *bus, bool in_isr)
 			brcmf_err("failed backplane access\n");
 		}
 
-	/* Disable additional interrupts (is this needed now)? */
-	if (!bus->intr)
-		brcmf_err("isr w/o interrupt configured!\n");
-
 	bus->dpc_triggered = true;
 	queue_work(bus->brcmf_wq, &bus->datawork);
 }
@@ -4036,9 +4014,6 @@ brcmf_sdio_probe_attach(struct brcmf_sdio *bus)
 	/* Locate an appropriately-aligned portion of hdrbuf */
 	bus->rxhdr = (u8 *) roundup((unsigned long)&bus->hdrbuf[0],
 				    bus->head_align);
-
-	/* Set the poll and/or interrupt flags */
-	bus->intr = true;
 
 	return 0;
 
