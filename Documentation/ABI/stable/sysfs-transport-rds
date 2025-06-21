@@ -1,0 +1,43 @@
+What:		/sys/kernel/rds/features/*
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	rds-devel@oss.oracle.com
+Description:	This directory contains the features that this kernel
+		has been built with and supports. They correspond
+		to the include/uapi/linux/rds.h features.
+
+		The intent is for applications compiled against rds.h
+		to be able to query and find out what features the
+		driver supports. The current expected value is 'supported'.
+
+What:		/sys/kernel/rds/features/ioctl_[get,set]_tos
+Description:	Allows the user to set on the socket a type of
+		service(tos) value associated forever.
+
+What:		/sys/kernel/rds/features/socket_cancel_sent_to
+Description:	Allows to cancel all pending messages to a given destination.
+
+What:		/sys/kernel/rds/features/socket_cong_monitor
+Description:	RDS provides explicit congestion monitoring for a socket using
+		a 64-bit mask. Each bit in the mask corresponds to a group of ports.
+
+		When a congestion update arrives, RDS checks the set of ports
+		that became uncongested against the bit mask.
+
+		If they overlap, a control messages is enqueued on the socket,
+		and the application is woken up.
+
+What:		/sys/kernel/rds/features/socket_[get_mr.get_mr_for_dest,free_mr]
+Description:	RDS allows a process to register or release memory ranges for
+		RDMA.
+
+What:		/sys/kernel/rds/features/socket_recverr
+Description:	RDS will send RDMA notification messages to the application for
+		any RDMA operation that fails. By default this is off.
+
+What:		/sys/kernel/rds/features/socket_so_rxpath_latency
+Description:	Receive path latency in various stages of receive path.
+
+What:		/sys/kernel/rds/features/socket_so_transport
+Description:	Attach the socket to the underlaying transport (TCP, RDMA
+		or loop) before invoking bind on the socket.

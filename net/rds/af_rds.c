@@ -32,7 +32,9 @@
  */
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/elfnote.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/gfp.h>
 #include <linux/in.h>
 #include <linux/ipv6.h>
@@ -871,6 +873,53 @@ static void rds6_sock_info(struct socket *sock, unsigned int len,
 }
 #endif
 
+static ssize_t supported_show(struct kobject *kobj, struct kobj_attribute *attr,
+			     char *buf)
+{
+	return sysfs_emit(buf, "supported\n");
+}
+
+#define SYSFS_ATTR(_name)					\
+ELFNOTE64("rds." #_name, 0, 1);				\
+static struct kobj_attribute rds_attr_##_name = {		\
+	.attr = {.name = __stringify(_name), .mode = 0444 },	\
+	.show = supported_show,					\
+}
+
+SYSFS_ATTR(ioctl_set_tos);
+SYSFS_ATTR(ioctl_get_tos);
+SYSFS_ATTR(socket_cancel_sent_to);
+SYSFS_ATTR(socket_cong_monitor);
+SYSFS_ATTR(socket_get_mr);
+SYSFS_ATTR(socket_get_mr_for_dest);
+SYSFS_ATTR(socket_free_mr);
+SYSFS_ATTR(socket_recverr);
+SYSFS_ATTR(socket_so_rxpath_latency);
+SYSFS_ATTR(socket_so_transport);
+
+#define ATTR_LIST(_name) &rds_attr_##_name.attr
+
+static struct attribute *rds_feat_attrs[] = {
+	ATTR_LIST(ioctl_set_tos),
+	ATTR_LIST(ioctl_get_tos),
+	ATTR_LIST(socket_cancel_sent_to),
+	ATTR_LIST(socket_cong_monitor),
+	ATTR_LIST(socket_get_mr),
+	ATTR_LIST(socket_get_mr_for_dest),
+	ATTR_LIST(socket_free_mr),
+	ATTR_LIST(socket_recverr),
+	ATTR_LIST(socket_so_rxpath_latency),
+	ATTR_LIST(socket_so_transport),
+	NULL,
+};
+
+static const struct attribute_group rds_feat_group = {
+	.attrs = rds_feat_attrs,
+	.name = "features",
+};
+
+static struct kobject *rds_sysfs_kobj;
+
 static void rds_exit(void)
 {
 	sock_unregister(rds_family_ops.family);
@@ -882,6 +931,8 @@ static void rds_exit(void)
 	rds_stats_exit();
 	rds_page_exit();
 	rds_bind_lock_destroy();
+	sysfs_remove_group(rds_sysfs_kobj, &rds_feat_group);
+	kobject_put(rds_sysfs_kobj);
 	rds_info_deregister_func(RDS_INFO_SOCKETS, rds_sock_info);
 	rds_info_deregister_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -923,6 +974,15 @@ static int __init rds_init(void)
 	if (ret)
 		goto out_proto;
 
+	rds_sysfs_kobj = kobject_create_and_add("rds", kernel_kobj);
+	if (!rds_sysfs_kobj) {
+		ret = -ENOMEM;
+		goto out_proto;
+	}
+	ret = sysfs_create_group(rds_sysfs_kobj, &rds_feat_group);
+	if (ret)
+		goto out_kobject;
+
 	rds_info_register_func(RDS_INFO_SOCKETS, rds_sock_info);
 	rds_info_register_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -931,7 +991,8 @@ static int __init rds_init(void)
 #endif
 
 	goto out;
-
+out_kobject:
+	kobject_put(rds_sysfs_kobj);
 out_proto:
 	proto_unregister(&rds_proto);
 out_stats:
