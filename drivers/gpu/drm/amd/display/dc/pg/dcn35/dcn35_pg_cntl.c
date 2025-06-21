@@ -24,6 +24,7 @@
  *
  */
 
+#include <linux/string_choices.h>
 #include "reg_helper.h"
 #include "core_types.h"
 #include "dcn35_pg_cntl.h"
@@ -236,7 +237,7 @@ void pg_cntl35_hubp_dpp_pg_control(struct pg_cntl *pg_cntl, unsigned int hubp_dp
 	}
 
 	DC_LOG_DEBUG("HUBP DPP instance %d, power %s", hubp_dpp_inst,
-		power_on ? "ON" : "OFF");
+		str_on_off(power_on));
 
 	if (hubp_dpp_inst < MAX_PIPES) {
 		pg_cntl->pg_pipe_res_enable[PG_HUBP][hubp_dpp_inst] = power_on;
