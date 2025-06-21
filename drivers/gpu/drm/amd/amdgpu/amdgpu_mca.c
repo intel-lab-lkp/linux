@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#include <linux/string_choices.h>
 #include "amdgpu_ras.h"
 #include "amdgpu.h"
 #include "amdgpu_mca.h"
@@ -519,7 +520,7 @@ static int amdgpu_mca_smu_debug_mode_set(void *data, u64 val)
 	if (ret)
 		return ret;
 
-	dev_info(adev->dev, "amdgpu set smu mca debug mode %s success\n", val ? "on" : "off");
+	dev_info(adev->dev, "amdgpu set smu mca debug mode %s success\n", str_on_off(val));
 
 	return 0;
 }
