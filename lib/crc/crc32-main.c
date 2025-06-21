@@ -31,7 +31,7 @@
 
 #include "crc32table.h"
 
-static inline __maybe_unused u32
+static inline u32 __maybe_unused
 crc32_le_base(u32 crc, const u8 *p, size_t len)
 {
 	while (len--)
@@ -39,7 +39,7 @@ crc32_le_base(u32 crc, const u8 *p, size_t len)
 	return crc;
 }
 
-static inline __maybe_unused u32
+static inline u32 __maybe_unused
 crc32_be_base(u32 crc, const u8 *p, size_t len)
 {
 	while (len--)
@@ -47,7 +47,7 @@ crc32_be_base(u32 crc, const u8 *p, size_t len)
 	return crc;
 }
 
-static inline __maybe_unused u32
+static inline u32 __maybe_unused
 crc32c_base(u32 crc, const u8 *p, size_t len)
 {
 	while (len--)

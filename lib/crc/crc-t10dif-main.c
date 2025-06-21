@@ -51,7 +51,7 @@ static const u16 t10_dif_crc_table[256] = {
 	0xF0D8, 0x7B6F, 0x6C01, 0xE7B6, 0x42DD, 0xC96A, 0xDE04, 0x55B3
 };
 
-static inline __maybe_unused u16
+static inline u16 __maybe_unused
 crc_t10dif_generic(u16 crc, const u8 *p, size_t len)
 {
 	while (len--)

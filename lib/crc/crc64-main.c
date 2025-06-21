@@ -40,7 +40,7 @@
 
 #include "crc64table.h"
 
-static inline __maybe_unused u64
+static inline u64 __maybe_unused
 crc64_be_generic(u64 crc, const u8 *p, size_t len)
 {
 	while (len--)
@@ -48,7 +48,7 @@ crc64_be_generic(u64 crc, const u8 *p, size_t len)
 	return crc;
 }
 
-static inline __maybe_unused u64
+static inline u64 __maybe_unused
 crc64_nvme_generic(u64 crc, const u8 *p, size_t len)
 {
 	while (len--)
