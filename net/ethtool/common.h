@@ -74,4 +74,6 @@ int ethtool_get_module_eeprom_call(struct net_device *dev,
 
 bool __ethtool_dev_mm_supported(struct net_device *dev);
 
+void ethtool_rss_notify(struct net_device *dev, u32 rss_context);
+
 #endif /* _ETHTOOL_COMMON_H */
