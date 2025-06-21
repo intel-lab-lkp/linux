@@ -37,6 +37,8 @@
 #define SPEAR_ADC_DATA_MASK		0x03ff
 #define SPEAR_ADC_DATA_BITS		10
 
+#define SPEAR_ADC_AVG_SAMPLE_MASK 0x01E0
+
 #define SPEAR_ADC_MOD_NAME "spear-adc"
 
 #define SPEAR_ADC_CHANNEL_NUM		8
@@ -158,7 +160,7 @@ static int spear_adc_read_raw(struct iio_dev *indio_dev,
 		mutex_lock(&st->lock);
 
 		status = SPEAR_ADC_STATUS_CHANNEL_NUM(chan->channel) |
-			SPEAR_ADC_STATUS_AVG_SAMPLE(st->avg_samples) |
+			(SPEAR_ADC_STATUS_AVG_SAMPLE(st->avg_samples) & SPEAR_ADC_AVG_SAMPLE_MASK) |
 			SPEAR_ADC_STATUS_START_CONVERSION |
 			SPEAR_ADC_STATUS_ADC_ENABLE;
 		if (st->vref_external == 0)
