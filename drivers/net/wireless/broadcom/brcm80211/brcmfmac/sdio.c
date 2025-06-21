@@ -404,7 +404,6 @@ struct brcmf_sdio_hdrinfo {
 struct brcmf_sdio_count {
 	uint intrcount;		/* Count of device interrupt callbacks */
 	uint lastintrs;		/* Count as of last watchdog timer */
-	uint pollcnt;		/* Count of active polls */
 	uint regfails;		/* Count of R_REG failures */
 	uint tx_sderrs;		/* Count of tx attempts with sd errors */
 	uint fcqueued;		/* Tx packets that got queued */
@@ -476,11 +475,8 @@ struct brcmf_sdio {
 	u8 sdpcm_ver;	/* Bus protocol reported by dongle */
 
 	bool intr;		/* Use interrupts */
-	bool poll;		/* Use polling */
 	atomic_t ipend;		/* Device interrupt is pending */
 	uint spurious;		/* Count of spurious interrupts */
-	uint pollrate;		/* Ticks between device polls */
-	uint polltick;		/* Tick counter */
 
 #ifdef DEBUG
 	uint console_interval;
@@ -3178,7 +3174,7 @@ static int brcmf_debugfs_sdio_count_read(struct seq_file *seq, void *data)
 
 	seq_printf(seq,
 		   "intrcount:    %u\nlastintrs:    %u\n"
-		   "pollcnt:      %u\nregfails:     %u\n"
+		   "pollcnt:       0\nregfails:     %u\n"
 		   "tx_sderrs:    %u\nfcqueued:     %u\n"
 		   "rxrtx:        %u\nrx_toolong:   %u\n"
 		   "rxc_errors:   %u\nrx_hdrfail:   %u\n"
@@ -3192,7 +3188,7 @@ static int brcmf_debugfs_sdio_count_read(struct seq_file *seq, void *data)
 		   "tx_ctlpkts:   %lu\nrx_ctlerrs:   %lu\n"
 		   "rx_ctlpkts:   %lu\nrx_readahead: %lu\n",
 		   sdcnt->intrcount, sdcnt->lastintrs,
-		   sdcnt->pollcnt, sdcnt->regfails,
+		   sdcnt->regfails,
 		   sdcnt->tx_sderrs, sdcnt->fcqueued,
 		   sdcnt->rxrtx, sdcnt->rx_toolong,
 		   sdcnt->rxc_errors, sdcnt->rx_hdrfail,
@@ -3669,43 +3665,6 @@ static void brcmf_sdio_bus_watchdog(struct brcmf_sdio *bus)
 {
 	brcmf_dbg(TIMER, "Enter\n");
 
-	/* Poll period: check device if appropriate. */
-	if (!bus->sr_enabled &&
-	    bus->poll && (++bus->polltick >= bus->pollrate)) {
-		u32 intstatus = 0;
-
-		/* Reset poll tick */
-		bus->polltick = 0;
-
-		/* Check device if no interrupts */
-		if (!bus->intr ||
-		    (bus->sdcnt.intrcount == bus->sdcnt.lastintrs)) {
-
-			if (!bus->dpc_triggered) {
-				u8 devpend;
-
-				sdio_claim_host(bus->sdiodev->func1);
-				devpend = brcmf_sdiod_func0_rb(bus->sdiodev,
-						  SDIO_CCCR_INTx, NULL);
-				sdio_release_host(bus->sdiodev->func1);
-				intstatus = devpend & (INTR_STATUS_FUNC1 |
-						       INTR_STATUS_FUNC2);
-			}
-
-			/* If there is something, make like the ISR and
-				 schedule the DPC */
-			if (intstatus) {
-				bus->sdcnt.pollcnt++;
-				atomic_set(&bus->ipend, 1);
-
-				bus->dpc_triggered = true;
-				queue_work(bus->brcmf_wq, &bus->datawork);
-			}
-		}
-
-		/* Update interrupt tracking */
-		bus->sdcnt.lastintrs = bus->sdcnt.intrcount;
-	}
 #ifdef DEBUG
 	/* Poll for console output periodically */
 	if (bus->sdiodev->state == BRCMF_SDIOD_DATA && BRCMF_FWCON_ON() &&
@@ -4080,9 +4039,6 @@ brcmf_sdio_probe_attach(struct brcmf_sdio *bus)
 
 	/* Set the poll and/or interrupt flags */
 	bus->intr = true;
-	bus->poll = false;
-	if (bus->poll)
-		bus->pollrate = 1;
 
 	return 0;
 
