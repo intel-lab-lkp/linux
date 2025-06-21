@@ -4320,7 +4320,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 		}
 	}, {
 		.alg = "authenc(hmac(sha384),ctr(aes))",
-		.generic_driver = "authenc(hmac-sha384-lib,ctr(aes-generic))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
@@ -4332,7 +4331,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 		}
 	}, {
 		.alg = "authenc(hmac(sha384),rfc3686(ctr(aes)))",
-		.generic_driver = "authenc(hmac-sha384-lib,rfc3686(ctr(aes-generic)))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
@@ -4359,12 +4357,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 		}
 	}, {
 		.alg = "authenc(hmac(sha512),ctr(aes))",
-		.generic_driver = "authenc(hmac-sha512-lib,ctr(aes-generic))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
 		.alg = "authenc(hmac(sha512),rfc3686(ctr(aes)))",
-		.generic_driver = "authenc(hmac-sha512-lib,rfc3686(ctr(aes-generic)))",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
@@ -5352,12 +5348,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 		.fips_allowed = 1,
 	}, {
 		.alg = "pkcs1(rsa,sha384)",
-		.generic_driver = "pkcs1(rsa,sha384-lib)",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
 		.alg = "pkcs1(rsa,sha512)",
-		.generic_driver = "pkcs1(rsa,sha512-lib)",
 		.test = alg_test_null,
 		.fips_allowed = 1,
 	}, {
