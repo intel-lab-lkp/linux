@@ -768,10 +768,15 @@ int __init agp_amd64_init(void)
 
 		/* Look for any AGP bridge */
 		agp_amd64_pci_driver.id_table = agp_amd64_pci_promisc_table;
-		err = driver_attach(&agp_amd64_pci_driver.driver);
-		if (err == 0 && agp_bridges_found == 0) {
+		if ((int *)agp_amd64_pci_driver.probe != 0) {
 			pci_unregister_driver(&agp_amd64_pci_driver);
 			err = -ENODEV;
+		} else {
+			err = driver_attach(&agp_amd64_pci_driver.driver);
+			if (err == 0 && agp_bridges_found == 0) {
+				pci_unregister_driver(&agp_amd64_pci_driver);
+				err = -ENODEV;
+			}
 		}
 	}
 	return err;
