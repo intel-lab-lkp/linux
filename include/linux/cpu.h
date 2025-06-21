@@ -167,6 +167,7 @@ static inline void suspend_enable_secondary_cpus(void) { }
 void __noreturn cpu_startup_entry(enum cpuhp_state state);
 
 void cpu_idle_poll_ctrl(bool enable);
+void cpu_idle_poll_update(const struct cpumask *mask);
 
 bool cpu_in_idle(unsigned long pc);
 

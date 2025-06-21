@@ -979,15 +979,34 @@ void __init arch_post_acpi_subsys_init(void)
 	pr_info("System has AMD C1E erratum E400. Workaround enabled.\n");
 }
 
+cpumask_var_t idle_poll_mask;
+EXPORT_SYMBOL_GPL(idle_poll_mask);
+
+static int __init idle_poll_setup(char *str)
+{
+	int err = 0;
+
+	if (cpulist_parse(str, idle_poll_mask) < 0) {
+		pr_warn("idle poll: incorrect CPU range\n");
+		err = 1;
+	} else {
+		boot_option_idle_override = IDLE_POLL;
+		cpu_idle_poll_update(idle_poll_mask);
+	}
+
+	return err;
+}
+
 static int __init idle_setup(char *str)
 {
 	if (!str)
 		return -EINVAL;
 
-	if (!strcmp(str, "poll")) {
-		pr_info("using polling idle threads\n");
-		boot_option_idle_override = IDLE_POLL;
-		cpu_idle_poll_ctrl(true);
+	if (!strncmp(str, "poll,", 5)) {
+		str += 5;
+		idle_poll_setup(str);
+	} else if (!strcmp(str, "poll")) {
+		cpu_idle_poll_update(cpu_present_mask);
 	} else if (!strcmp(str, "halt")) {
 		/* 'idle=halt' HALT for idle. C-states are disabled. */
 		boot_option_idle_override = IDLE_HALT;

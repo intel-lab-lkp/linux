@@ -24,22 +24,29 @@ void sched_idle_set_state(struct cpuidle_state *idle_state)
 	idle_set_state(this_rq(), idle_state);
 }
 
-static int __read_mostly cpu_idle_force_poll;
+static DEFINE_PER_CPU(int, idle_force_poll);
 
 void cpu_idle_poll_ctrl(bool enable)
 {
 	if (enable) {
-		cpu_idle_force_poll++;
-	} else {
-		cpu_idle_force_poll--;
-		WARN_ON_ONCE(cpu_idle_force_poll < 0);
-	}
+		this_cpu_inc(idle_force_poll);
+	} else
+		WARN_ON_ONCE(this_cpu_dec_return(idle_force_poll) < 0);
+}
+
+void cpu_idle_poll_update(const struct cpumask *mask)
+{
+	int cpu;
+
+	pr_info_once("using polling idle threads\n");
+	for_each_cpu(cpu, mask)
+		per_cpu(idle_force_poll, cpu) = 1;
 }
 
 #ifdef CONFIG_GENERIC_IDLE_POLL_SETUP
 static int __init cpu_idle_poll_setup(char *__unused)
 {
-	cpu_idle_force_poll = 1;
+	cpu_idle_poll_update(cpu_present_mask);
 
 	return 1;
 }
@@ -47,8 +54,6 @@ __setup("nohlt", cpu_idle_poll_setup);
 
 static int __init cpu_idle_nopoll_setup(char *__unused)
 {
-	cpu_idle_force_poll = 0;
-
 	return 1;
 }
 __setup("hlt", cpu_idle_nopoll_setup);
@@ -56,14 +61,16 @@ __setup("hlt", cpu_idle_nopoll_setup);
 
 static noinline int __cpuidle cpu_idle_poll(void)
 {
+	int cpu = smp_processor_id();
+
 	instrumentation_begin();
-	trace_cpu_idle(0, smp_processor_id());
+	trace_cpu_idle(0, cpu);
 	stop_critical_timings();
 	ct_cpuidle_enter();
 
 	raw_local_irq_enable();
 	while (!tif_need_resched() &&
-	       (cpu_idle_force_poll || tick_check_broadcast_expired()))
+	       (per_cpu(idle_force_poll, cpu) || tick_check_broadcast_expired()))
 		cpu_relax();
 	raw_local_irq_disable();
 
@@ -83,7 +90,7 @@ void __weak arch_cpu_idle_exit(void) { }
 void __weak __noreturn arch_cpu_idle_dead(void) { while (1); }
 void __weak arch_cpu_idle(void)
 {
-	cpu_idle_force_poll = 1;
+	this_cpu_inc(idle_force_poll);
 }
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST_IDLE
@@ -323,7 +330,7 @@ static void do_idle(void)
 		 * broadcast device expired for us, we don't want to go deep
 		 * idle as we know that the IPI is going to arrive right away.
 		 */
-		if (cpu_idle_force_poll || tick_check_broadcast_expired()) {
+		if (__this_cpu_read(idle_force_poll) || tick_check_broadcast_expired()) {
 			tick_nohz_idle_restart_tick();
 			cpu_idle_poll();
 		} else {
