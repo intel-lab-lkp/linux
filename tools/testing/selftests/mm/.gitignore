@@ -25,6 +25,7 @@ pfnmap
 protection_keys
 protection_keys_32
 protection_keys_64
+madv_dontneed
 madv_populate
 uffd-stress
 uffd-unit-tests

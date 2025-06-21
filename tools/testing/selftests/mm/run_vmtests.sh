@@ -47,6 +47,8 @@ separated by spaces:
 	hmm smoke tests
 - madv_guard
 	test madvise(2) MADV_GUARD_INSTALL and MADV_GUARD_REMOVE options
+- madv_dontneed
+	test memadvise(2) MADV_DONTNEED and PROCESS_MADV_DONTNEED options
 - madv_populate
 	test memadvise(2) MADV_POPULATE_{READ,WRITE} options
 - memfd_secret
@@ -421,6 +423,9 @@ CATEGORY="hmm" run_test bash ./test_hmm.sh smoke
 
 # MADV_GUARD_INSTALL and MADV_GUARD_REMOVE tests
 CATEGORY="madv_guard" run_test ./guard-regions
+
+# MADV_DONTNEED and PROCESS_DONTNEED tests
+CATEGORY="madv_dontneed" run_test ./madv_dontneed
 
 # MADV_POPULATE_READ and MADV_POPULATE_WRITE tests
 CATEGORY="madv_populate" run_test ./madv_populate
