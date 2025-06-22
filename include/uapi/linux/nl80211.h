@@ -2915,6 +2915,10 @@ enum nl80211_commands {
  *	%NL80211_CMD_START_NAN and %NL80211_CMD_CHANGE_NAN_CONFIG.
  *	See &enum nl80211_nan_conf_attributes for details.
  *	This attribute is optional.
+ * @NL80211_ATTR_NAN_CAPABILITIES: Nested attribute for NAN capabilities.
+ *	This is used with %NL80211_CMD_GET_WIPHY to indicate the NAN
+ *	capabilities supported by the driver. See &enum nl80211_nan_capabilities
+ *	for details.
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3474,6 +3478,7 @@ enum nl80211_attrs {
 	NL80211_ATTR_ASSOC_MLD_EXT_CAPA_OPS,
 
 	NL80211_ATTR_NAN_CONFIG,
+	NL80211_ATTR_NAN_CAPABILITIES,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -8224,6 +8229,37 @@ enum nl80211_wiphy_radio_freq_range {
 
 	__NL80211_WIPHY_RADIO_FREQ_ATTR_LAST,
 	NL80211_WIPHY_RADIO_FREQ_ATTR_MAX = __NL80211_WIPHY_RADIO_FREQ_ATTR_LAST - 1,
+};
+
+/**
+ * enum nl80211_nan_capabilities - NAN (Neighbor Aware Networking)
+ *	capabilities.
+ *
+ * @__NL80211_NAN_CAPABILITIES_INVALID: Invalid.
+ * @NL80211_NAN_CAPA_SYNC_OFFLOAD: Flag attribute indicating that
+ *	NAN synchronization offload is supported. If this capability is set,
+ *	the driver must be able to handle %NL80211_ATTR_NAN_CONFIG
+ *	attribute in the %NL80211_CMD_START_NAN (and change) command.
+ * @NL80211_NAN_CAPA_DE_OFFLOAD: Flag attribute indicating that
+ *	NAN Discovery Engine (DE) offload is supported. Drivers/devices that set
+ *	this capability must be able to handle %NL80211_CMD_ADD_NAN_FUNCTION,
+ *	%NL80211_CMD_DEL_NAN_FUNCTION and %NL80211_CMD_NAN_MATCH commands.
+ * @NL80211_NAN_CAPA_DW_NOTIF_SUPPORT: Flag attribute indicating that
+ *	the device supports notifying user space about the upcoming
+ *	discovery window (DW) using %NL80211_CMD_NAN_NEXT_DW_NOTIFICATION.
+ *
+ * @__NL80211_NAN_CAPABILITIES_LAST: Internal
+ * @NL80211_NAN_CAPABILITES_MAX: Highest NAN capability attribute.
+ */
+enum nl80211_nan_capabilities {
+	__NL80211_NAN_CAPABILITIES_INVALID,
+
+	NL80211_NAN_CAPA_SYNC_OFFLOAD,
+	NL80211_NAN_CAPA_DE_OFFLOAD,
+	NL80211_NAN_CAPA_DW_NOTIF_SUPPORT,
+	/* keep last */
+	__NL80211_NAN_CAPABILITIES_LAST,
+	NL80211_NAN_CAPABILITES_MAX = __NL80211_NAN_CAPABILITIES_LAST - 1,
 };
 
 #endif /* __LINUX_NL80211_H */
