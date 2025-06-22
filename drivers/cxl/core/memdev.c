@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/pci.h>
+#include <linux/cleanup.h>
 #include <cxlmem.h>
 #include "trace.h"
 #include "core.h"
@@ -802,11 +803,11 @@ static int cxl_mem_activate_fw(struct cxl_memdev_state *mds, int slot)
 static int cxl_mem_abort_fw_xfer(struct cxl_memdev_state *mds)
 {
 	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
-	struct cxl_mbox_transfer_fw *transfer;
 	struct cxl_mbox_cmd mbox_cmd;
 	int rc;
 
-	transfer = kzalloc(struct_size(transfer, data, 0), GFP_KERNEL);
+	struct cxl_mbox_transfer_fw *transfer __free(kfree) =
+		kzalloc(struct_size(transfer, data, 0), GFP_KERNEL);
 	if (!transfer)
 		return -ENOMEM;
 
@@ -822,7 +823,6 @@ static int cxl_mem_abort_fw_xfer(struct cxl_memdev_state *mds)
 	transfer->action = CXL_FW_TRANSFER_ACTION_ABORT;
 
 	rc = cxl_internal_send_cmd(cxl_mbox, &mbox_cmd);
-	kfree(transfer);
 	return rc;
 }
 
@@ -880,7 +880,7 @@ static enum fw_upload_err cxl_fw_write(struct fw_upload *fwl, const u8 *data,
 	struct cxl_dev_state *cxlds = &mds->cxlds;
 	struct cxl_mailbox *cxl_mbox = &cxlds->cxl_mbox;
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct cxl_mbox_transfer_fw *transfer;
+	struct cxl_mbox_transfer_fw *transfer __free(kfree);
 	struct cxl_mbox_cmd mbox_cmd;
 	u32 cur_size, remaining;
 	size_t size_in;
@@ -970,7 +970,6 @@ static enum fw_upload_err cxl_fw_write(struct fw_upload *fwl, const u8 *data,
 	rc = FW_UPLOAD_ERR_NONE;
 
 out_free:
-	kfree(transfer);
 	return rc;
 }
 
