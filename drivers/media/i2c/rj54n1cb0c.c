@@ -1331,6 +1331,7 @@ static int rj54n1_probe(struct i2c_client *client)
 			V4L2_CID_AUTO_WHITE_BALANCE, 0, 1, 1, 1);
 	rj54n1->subdev.ctrl_handler = &rj54n1->hdl;
 	if (rj54n1->hdl.error)
+		v4l2_ctrl_handler_free(&rj54n1->hdl);
 		return rj54n1->hdl.error;
 
 	rj54n1->clk_div		= clk_div;
