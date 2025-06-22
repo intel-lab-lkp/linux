@@ -3865,6 +3865,7 @@ static int btusb_probe(struct usb_interface *intf,
 	unsigned ifnum_base;
 	int i, err, priv_size;
 
+    pr_info("SWJ changed the btusb driver in the Linux Kernel\n");
 	BT_DBG("intf %p id %p", intf, id);
 
 	if ((id->driver_info & BTUSB_IFNUM_2) &&
