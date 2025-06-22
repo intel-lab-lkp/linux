@@ -1351,6 +1351,9 @@
  *	userspace about the next Discovery Window (DW). Userspace may use it
  *	to prepare frames to be sent in the next DW. %NL80211_ATTR_WIPHY_FREQ
  *	is used to indicate the frequency of the next DW.
+ * @NL80211_CMD_NAN_CLUSTER_JOINED: This command is used to notify
+ * 	userspace that the NAN new cluster has been joined. The cluster ID is
+ *	indicated by %NL80211_ATTR_MAC.
  *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
@@ -1613,7 +1616,7 @@ enum nl80211_commands {
 	NL80211_CMD_EPCS_CFG,
 
 	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
-
+	NL80211_CMD_NAN_CLUSTER_JOINED,
 	/* add new commands above here */
 
 	/* used to define NL80211_CMD_MAX below */
@@ -2926,6 +2929,9 @@ enum nl80211_commands {
  *	This is used with %NL80211_CMD_GET_WIPHY to indicate the NAN
  *	capabilities supported by the driver. See &enum nl80211_nan_capabilities
  *	for details.
+ * @NL80211_ATTR_NAN_NEW_CLUSTER: Flag attribute indicating that a new
+ *	NAN cluster has been created. This is used with
+ *	%NL80211_CMD_NAN_CLUSTER_JOINED
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3486,6 +3492,7 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_NAN_CONFIG,
 	NL80211_ATTR_NAN_CAPABILITIES,
+	NL80211_ATTR_NAN_NEW_CLUSTER,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
