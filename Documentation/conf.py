@@ -9,7 +9,11 @@ import os
 import shutil
 import sys
 
+import docutils
 import sphinx
+from sphinx.util import logging
+
+logger = logging.getLogger(__name__)
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -21,11 +25,71 @@ from load_config import loadConfig               # pylint: disable=C0413,E0401
 # Minimal supported version
 needs_sphinx = "3.4.3"
 
-# Get Sphinx version
-major, minor, patch = sphinx.version_info[:3]          # pylint: disable=I1101
+# Get Sphinx and docutils versions
+sphinx_ver = sphinx.version_info[:3]          # pylint: disable=I1101
+docutils_ver = docutils.__version_info__[:3]
+
+sphinx_ver_str = ".".join([str(x) for x in sphinx_ver])
+docutils_ver_str = ".".join([str(x) for x in docutils_ver])
+
+# Docutils min/max versions.
+# The dockutils version check logic is done with:
+#     ver >= min and ver < max
+SPHINX_DOCUTILS_VERS = {
+    (3, 4, 3): {
+        "min": (0, 12, 0),
+        "max": (0, 18, 0)
+    },
+    (4, 0, 0): {
+        "min": (0, 12, 0),
+        "max": (0, 19, 0)
+    },
+    (6, 0, 0): {
+        "min": (0, 18, 0),
+        "max": (0, 20, 0)
+    },
+    (7, 0, 0): {
+        "min": (0, 18, 1),
+        "max": (0, 21, 0)
+    },
+    (7, 2, 0): {
+        "min": (0, 18, 1),
+        "max": (0, 20, 0)
+    },
+    (7, 4, 0): {
+        "min": (0, 18, 1),
+        "max": (0, 21, 0)
+    },
+    (8, 0, 0): {
+        "min": (0, 20, 0),
+        "max": (0, 22, 0)
+    },
+    (8, 2, 3): {
+        "min": (0, 20, 0),
+        "max": (0, 22, 0)
+    },
+}
+
+du_min = None
+du_max = None
+for sp_ver, doc_vers in SPHINX_DOCUTILS_VERS.items():
+    if sp_ver > sphinx_ver:
+        break
+
+    du_min = doc_vers.get("min")
+    du_max = doc_vers.get("max")
+
+if sphinx_ver > sorted(SPHINX_DOCUTILS_VERS.keys())[-1]:
+    logger.warning(f"Sphinx version {sphinx_ver_str} is too new and not tested. Doc generation may fail")
+elif not du_min or not du_max:
+    logger.warning(f"Sphinx version {sphinx_ver_str} is not tested. Doc generation may fail")
+elif docutils_ver < du_min:
+    logger.warning(f"Docutils {docutils_ver_str} is too old for Sphinx {sphinx_ver_str}. Doc generation may fail")
+elif docutils_ver >= du_max:
+    logger.warning(f"Docutils {docutils_ver_str} could be too new for Sphinx {sphinx_ver_str}. Doc generation may fail")
 
 # Include_patterns were added on Sphinx 5.1
-if (major < 5) or (major == 5 and minor < 1):
+if sphinx_ver < (5, 1, 0):
     has_include_patterns = False
 else:
     has_include_patterns = True
