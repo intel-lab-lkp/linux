@@ -134,7 +134,6 @@ static __always_inline void kuap_assert_locked(void)
 
 static __always_inline void allow_read_from_user(const void __user *from)
 {
-	barrier_nospec();
 	allow_user_access(NULL, from, KUAP_READ);
 }
 
@@ -145,7 +144,6 @@ static __always_inline void allow_write_to_user(void __user *to)
 
 static __always_inline void allow_read_write_user(void __user *to, const void __user *from)
 {
-	barrier_nospec();
 	allow_user_access(to, from, KUAP_READ_WRITE);
 }
 
