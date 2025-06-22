@@ -50,6 +50,13 @@ size_t copy_from_user_iter(void __user *iter_from, size_t progress,
 	if (should_fail_usercopy())
 		return len;
 	if (access_ok(iter_from, len)) {
+		/*
+		 * Ensure that bad access_ok() speculation will not
+		 * lead to nasty side effects *after* the copy is
+		 * finished:
+		 */
+		barrier_nospec();
+
 		to += progress;
 		instrument_copy_from_user_before(to, iter_from, len);
 		res = raw_copy_from_user(to, iter_from, len);
