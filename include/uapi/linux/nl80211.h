@@ -1347,6 +1347,11 @@
  *	control EPCS configuration. Used to notify userland on the current state
  *	of EPCS.
  *
+ * @NL80211_CMD_NAN_NEXT_DW_NOTIFICATION: This command is used to notify
+ *	userspace about the next Discovery Window (DW). Userspace may use it
+ *	to prepare frames to be sent in the next DW. %NL80211_ATTR_WIPHY_FREQ
+ *	is used to indicate the frequency of the next DW.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1606,6 +1611,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_ASSOC_MLO_RECONF,
 	NL80211_CMD_EPCS_CFG,
+
+	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 
 	/* add new commands above here */
 
