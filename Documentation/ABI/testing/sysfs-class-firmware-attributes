@@ -18,6 +18,7 @@ Description:
 
 		The following are known types:
 
+			- boolean
 			- enumeration: a set of pre-defined valid values
 			- integer: a range of numerical values
 			- string
