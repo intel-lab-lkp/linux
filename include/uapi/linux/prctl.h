@@ -371,4 +371,12 @@ struct prctl_mm_map {
 # define PR_FUTEX_HASH_GET_SLOTS	2
 # define PR_FUTEX_HASH_GET_IMMUTABLE	3
 
+/*
+ * Set or get a task's numa_preferred_nid
+ */
+#define PR_PREFERRED_NID		79
+# define PR_PREFERRED_NID_GET		0
+# define PR_PREFERRED_NID_SET		1
+# define PR_PREFERRED_NID_CMD_MAX	2
+
 #endif /* _LINUX_PRCTL_H */
