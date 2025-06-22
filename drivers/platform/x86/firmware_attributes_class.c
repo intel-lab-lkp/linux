@@ -10,7 +10,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/string_choices.h>
-#include "firmware_attributes_class.h"
+#include <linux/firmware_attributes_class.h>
 
 #define to_fwat_bool_data(_c) \
 	container_of_const(_c, struct fwat_bool_data, group)
