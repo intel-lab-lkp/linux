@@ -3759,6 +3759,30 @@ struct cfg80211_qos_map {
 };
 
 /**
+ * struct cfg80211_nan_band_config - NAN band specific configuration
+ *
+ * @chan: Pointer to the IEEE 802.11 channel structure. The channel to be used
+ *	for NAN operations on this band. For 2.4 GHz band, this is always
+ *	channel 6. For 5 GHz band, the channel is either 44 or 149, according
+ *	to the regulatory constraints.
+ * @rssi_close: RSSI close threshold used for NAN master selection. If not
+ *	specified (set to 0), default device value is used. The value should
+ *	be greater than -60 dBm (unsigned).
+ * @rssi_middle: RSSI middle threshold used for NAN master selection. If not
+ *	specified (set to 0), default device value is used. The value should be
+ *	greater than -75 dBm and less than rssi_close.
+ * @awake_dw_interval: Committed DW interval. Valid values range: 0-5. 0
+ *	indicates no wakeup for DW and can't be used on 2.4GHz band, otherwise
+ *	2^(n-1).
+ */
+struct cfg80211_nan_band_config {
+	struct ieee80211_channel *chan;
+	u8 rssi_close;
+	u8 rssi_middle;
+	u8 awake_dw_interval;
+};
+
+/**
  * struct cfg80211_nan_conf - NAN configuration
  *
  * This struct defines NAN configuration parameters
@@ -3767,10 +3791,35 @@ struct cfg80211_qos_map {
  * @bands: operating bands, a bitmap of &enum nl80211_band values.
  *	For instance, for NL80211_BAND_2GHZ, bit 0 would be set
  *	(i.e. BIT(NL80211_BAND_2GHZ)).
+ * @cluster_id: cluster ID used for NAN synchronization
+ * @scan_period: period (in seconds) between NAN scans.
+ * @scan_dwell_time: dwell time (in milliseconds) for NAN scans.
+ * @discovery_beacon_interval: interval (in TUs) for discovery beacons.
+ * @enable_dw_notification: flag to enable/disable discovery window
+ *	notifications.
+ * @low_band_cfg: configuration for the low band.
+ * @high_band_cfg: configuration for the high band.
+ * @enable_scan: Flag to enable or disable scanning on 5 GHz band.
+ * @extra_nan_attrs: pointer to additional NAN attributes.
+ * @extra_nan_attrs_len: length of the additional NAN attributes.
+ * @vendor_elems: pointer to vendor-specific elements.
+ * @vendor_elems_len: length of the vendor-specific elements.
  */
 struct cfg80211_nan_conf {
 	u8 master_pref;
 	u8 bands;
+	u16 cluster_id;
+	u16 scan_period;
+	u16 scan_dwell_time;
+	u16 discovery_beacon_interval;
+	bool enable_dw_notification;
+	struct cfg80211_nan_band_config low_band_cfg;
+	struct cfg80211_nan_band_config high_band_cfg;
+	bool enable_hb_scan;
+	u8 *extra_nan_attrs;
+	size_t extra_nan_attrs_len;
+	u8 *vendor_elems;
+	size_t vendor_elems_len;
 };
 
 /**
@@ -3779,10 +3828,32 @@ struct cfg80211_nan_conf {
  *
  * @CFG80211_NAN_CONF_CHANGED_PREF: master preference
  * @CFG80211_NAN_CONF_CHANGED_BANDS: operating bands
+ * @CFG80211_NAN_CONF_CHANGED_CLUSTER_ID: cluster ID
+ * @CFG80211_NAN_CONF_CHANGED_SCAN_PERIOD: scan period
+ * @CFG80211_NAN_CONF_CHANGED_SCAN_DWELL_TIME: scan dwell time
+ * @CFG80211_NAN_CONF_CHANGED_DISCOVERY_BEACON_INTERVAL: discovery beacon
+ *	interval
+ * @CFG80211_NAN_CONF_CHANGED_ENABLE_DW_NOTIFICATION: enable DW notification
+ * @CFG80211_NAN_CONF_CHANGED_AWAKE_DW_INTERVALs: awake DW intervals (both
+ *	bands)
+ * @CFG80211_NAN_CONF_CHANGED_RSSI_THOLDS: RSSI thresholds (both bands)
+ * @CFG80211_NAN_CONF_CHANGED_ENABLE_HB_SCAN: enable high band scan
+ * @CFG80211_NAN_CONF_CHANGED_EXTRA_ATTRS: extra attributes
+ * @CFG80211_NAN_CONF_CHANGED_VENDOR_ELEMS: vendor elements
  */
 enum cfg80211_nan_conf_changes {
 	CFG80211_NAN_CONF_CHANGED_PREF = BIT(0),
 	CFG80211_NAN_CONF_CHANGED_BANDS = BIT(1),
+	CFG80211_NAN_CONF_CHANGED_CLUSTER_ID = BIT(2),
+	CFG80211_NAN_CONF_CHANGED_SCAN_PERIOD = BIT(3),
+	CFG80211_NAN_CONF_CHANGED_SCAN_DWELL_TIME = BIT(4),
+	CFG80211_NAN_CONF_CHANGED_DISCOVERY_BEACON_INTERVAL = BIT(5),
+	CFG80211_NAN_CONF_CHANGED_ENABLE_DW_NOTIFICATION = BIT(6),
+	CFG80211_NAN_CONF_CHANGED_AWAKE_DW_INTERVALS = BIT(7),
+	CFG80211_NAN_CONF_CHANGED_RSSI_THOLDS = BIT(8),
+	CFG80211_NAN_CONF_CHANGED_ENABLE_HB_SCAN = BIT(9),
+	CFG80211_NAN_CONF_CHANGED_EXTRA_ATTRS = BIT(10),
+	CFG80211_NAN_CONF_CHANGED_VENDOR_ELEMS = BIT(11),
 };
 
 /**
