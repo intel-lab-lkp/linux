@@ -18,6 +18,14 @@
 #define FASTRPC_IOCTL_MEM_UNMAP		_IOWR('R', 11, struct fastrpc_mem_unmap)
 #define FASTRPC_IOCTL_GET_DSP_INFO	_IOWR('R', 13, struct fastrpc_ioctl_capability)
 
+#define ADSP_DOMAIN_ID (0)
+#define MDSP_DOMAIN_ID (1)
+#define SDSP_DOMAIN_ID (2)
+#define CDSP_DOMAIN_ID (3)
+#define GDSP_DOMAIN_ID (4)
+
+#define FASTRPC_DOMAIN_MAX    4
+
 /**
  * enum fastrpc_map_flags - control flags for mapping memory on DSP user process
  * @FASTRPC_MAP_STATIC: Map memory pages with RW- permission and CACHE WRITEBACK.
@@ -134,10 +142,9 @@ struct fastrpc_mem_unmap {
 };
 
 struct fastrpc_ioctl_capability {
-	__u32 domain;
 	__u32 attribute_id;
 	__u32 capability;   /* dsp capability */
-	__u32 reserved[4];
+	__u32 reserved[5];
 };
 
 #endif /* __QCOM_FASTRPC_H__ */
