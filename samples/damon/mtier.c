@@ -164,8 +164,12 @@ static int damon_sample_mtier_enable_store(
 	if (enabled == enable)
 		return 0;
 
-	if (enabled)
-		return damon_sample_mtier_start();
+	if (enabled) {
+		err = damon_sample_mtier_start();
+		if (err)
+			enabled = false;
+		return err;
+	}
 	damon_sample_mtier_stop();
 	return 0;
 }
