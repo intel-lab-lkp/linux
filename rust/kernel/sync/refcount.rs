@@ -71,6 +71,14 @@ impl Refcount {
     /// must come after.
     ///
     /// Returns true if the resulting refcount is 0, false otherwise.
+    ///
+    /// # Notes
+    ///
+    /// A common pattern of using `Refcount` is to free memory when the reference count reaches
+    /// zero. This means that the reference to `Refcount` could become invalid after calling this
+    /// function. This is fine as long as the reference to `Refcount` is no longer used when this
+    /// function returns `false`. It is not necessary to use raw pointers in this scenario, see
+    /// https://github.com/rust-lang/rust/issues/55005.
     #[inline]
     #[must_use = "use `dec` instead if you do not need to test if it is 0"]
     pub fn dec_and_test(&self) -> bool {
