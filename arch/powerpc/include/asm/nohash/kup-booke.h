@@ -74,7 +74,7 @@ static __always_inline void uaccess_end_booke(void)
 }
 
 static __always_inline void allow_user_access(void __user *to, const void __user *from,
-					      unsigned long size, unsigned long dir)
+					      unsigned long dir)
 {
 	uaccess_begin_booke(current->thread.pid);
 }

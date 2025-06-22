@@ -50,7 +50,7 @@ static __always_inline void uaccess_end_8xx(void)
 }
 
 static __always_inline void allow_user_access(void __user *to, const void __user *from,
-					      unsigned long size, unsigned long dir)
+					      unsigned long dir)
 {
 	uaccess_begin_8xx(MD_APG_INIT);
 }
