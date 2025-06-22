@@ -45,7 +45,15 @@ impl MiscDeviceOptions {
 ///
 /// # Invariants
 ///
-/// `inner` is a registered misc device.
+/// The `inner` field contains a `struct miscdevice` that has been registered with
+/// the kernel using `misc_register()`.
+/// This registration remains valid for the entire lifetime of the `MiscDeviceRegistration`
+/// instance.
+/// Deregistration is guaranteed to occur exactly once, during the [`Drop`] implementation, via
+/// a call to `misc_deregister()`.
+/// The `inner` pointer is never null and always points to a valid, pinned `miscdevice` instance
+/// initialized via `MiscDeviceOptions::into_raw`.
+
 #[repr(transparent)]
 #[pin_data(PinnedDrop)]
 pub struct MiscDeviceRegistration<T> {
