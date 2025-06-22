@@ -2,6 +2,8 @@
 #ifndef _ARCH_POWERPC_UACCESS_H
 #define _ARCH_POWERPC_UACCESS_H
 
+#include <linux/sizes.h>
+
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/extable.h>
@@ -454,6 +456,104 @@ user_write_access_begin(const void __user *ptr, size_t len)
 }
 #define user_write_access_begin	user_write_access_begin
 #define user_write_access_end		prevent_current_write_to_user
+
+/*
+ * Masking the user address is an alternative to a conditional
+ * user_access_begin that can avoid the fencing. This only works
+ * for dense accesses starting at the address.
+ */
+static inline void __user *mask_user_address_simple(const void __user *ptr)
+{
+	unsigned long addr = (unsigned long)ptr;
+	unsigned long mask = (unsigned long)((long)addr >> (BITS_PER_LONG - 1));
+
+	addr = ((addr & ~mask) & (~0UL >> 1)) | (mask & (1UL << (BITS_PER_LONG - 1)));
+
+	return (void __user *)addr;
+}
+
+static inline void __user *mask_user_address_e500(const void __user *ptr)
+{
+	unsigned long addr;
+
+	asm("cmplw %1, %2; iselgt %0, %2, %1" : "=r"(addr) : "r"(ptr), "r"(TASK_SIZE): "cr0");
+
+	return (void __user *)addr;
+}
+
+/* Make sure TASK_SIZE is a multiple of 128K for shifting by 17 to the right */
+static inline void __user *mask_user_address_32(const void __user *ptr)
+{
+	unsigned long addr = (unsigned long)ptr;
+	unsigned long mask = (unsigned long)((long)((TASK_SIZE >> 17) - 1 - (addr >> 17)) >> 31);
+
+	addr = (addr & ~mask) | (TASK_SIZE & mask);
+
+	return (void __user *)addr;
+}
+
+static inline void __user *mask_user_address_fallback(const void __user *ptr)
+{
+	unsigned long addr = (unsigned long)ptr;
+
+	return (void __user *)(addr < TASK_SIZE ? addr : TASK_SIZE);
+}
+
+static inline void __user *mask_user_address(const void __user *ptr)
+{
+#ifdef MODULES_VADDR
+	const unsigned long border = MODULES_VADDR;
+#else
+	const unsigned long border = PAGE_OFFSET;
+#endif
+	BUILD_BUG_ON(TASK_SIZE_MAX & (SZ_128K - 1));
+	BUILD_BUG_ON(TASK_SIZE_MAX + SZ_128K > border);
+	BUILD_BUG_ON(TASK_SIZE_MAX & 0x8000000000000000ULL);
+	BUILD_BUG_ON(IS_ENABLED(CONFIG_PPC64) && !(PAGE_OFFSET & 0x8000000000000000ULL));
+
+	if (IS_ENABLED(CONFIG_PPC64))
+		return mask_user_address_simple(ptr);
+	if (IS_ENABLED(CONFIG_E500))
+		return mask_user_address_e500(ptr);
+	if (TASK_SIZE <= SZ_2G && border >= SZ_2G)
+		return mask_user_address_simple(ptr);
+	if (IS_ENABLED(CONFIG_PPC_BARRIER_NOSPEC))
+		return mask_user_address_32(ptr);
+	return mask_user_address_fallback(ptr);
+}
+
+static inline void __user *masked_user_access_begin(const void __user *p)
+{
+	void __user *ptr = mask_user_address(p);
+
+	might_fault();
+	allow_read_write_user(ptr, ptr);
+
+	return ptr;
+}
+#define masked_user_access_begin masked_user_access_begin
+
+static inline void __user *masked_user_read_access_begin(const void __user *p)
+{
+	void __user *ptr = mask_user_address(p);
+
+	might_fault();
+	allow_read_from_user(ptr);
+
+	return ptr;
+}
+#define masked_user_read_access_begin masked_user_read_access_begin
+
+static inline void __user *masked_user_write_access_begin(const void __user *p)
+{
+	void __user *ptr = mask_user_address(p);
+
+	might_fault();
+	allow_write_to_user(ptr);
+
+	return ptr;
+}
+#define masked_user_write_access_begin masked_user_write_access_begin
 
 #define unsafe_get_user(x, p, e) do {					\
 	__long_type(*(p)) __gu_val;				\
