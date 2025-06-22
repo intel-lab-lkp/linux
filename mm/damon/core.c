@@ -126,8 +126,11 @@ struct damon_region *damon_new_region(unsigned long start, unsigned long end)
 	if (!region)
 		return NULL;
 
+	if (start == end)
+		return NULL;
 	region->ar.start = start;
 	region->ar.end = end;
+
 	region->nr_accesses = 0;
 	region->nr_accesses_bp = 0;
 	INIT_LIST_HEAD(&region->list);
