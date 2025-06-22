@@ -160,7 +160,7 @@ static int mpfs_clk_register_mssplls(struct device *dev, struct mpfs_msspll_hw_c
 		ret = devm_clk_hw_register(dev, &msspll_hw->hw);
 		if (ret)
 			return dev_err_probe(dev, ret, "failed to register msspll id: %d\n",
-					     CLK_MSSPLL_INTERNAL);
+					     msspll_hw->id);
 
 		data->hw_data.hws[msspll_hw->id] = &msspll_hw->hw;
 	}
