@@ -100,6 +100,11 @@ enum fid_type {
 	FILEID_FAT_WITH_PARENT = 0x72,
 
 	/*
+	 * 64 bit inode number.
+	 */
+	FILEID_INO64 = 0x80,
+
+	/*
 	 * 64 bit inode number, 32 bit generation number.
 	 */
 	FILEID_INO64_GEN = 0x81,
@@ -131,6 +136,12 @@ enum fid_type {
 	 * Filesystems must not use 0xff file ID.
 	 */
 	FILEID_INVALID = 0xff,
+
+	/* Internal kernel fid types */
+
+	/* pidfs fid types */
+	FILEID_PIDFS_FSTYPE = 0x100,
+	FILEID_PIDFS = FILEID_PIDFS_FSTYPE | FILEID_INO64,
 };
 
 struct fid {
