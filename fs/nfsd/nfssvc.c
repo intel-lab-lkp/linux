@@ -225,14 +225,12 @@ static void nfsd_net_free(struct percpu_ref *ref)
 
 int nfsd_nrthreads(struct net *net)
 {
-	int rv = 0;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
-	mutex_lock(&nn->config_mutex);
-	if (nn->nfsd_serv)
-		rv = nn->nfsd_serv->sv_nrthreads;
-	mutex_unlock(&nn->config_mutex);
-	return rv;
+	guard(mutex)(&nn->config_mutex);
+	if (!nn->nfsd_serv)
+		return 0;
+	return nn->nfsd_serv->sv_nrthreads;
 }
 
 static int nfsd_init_socks(struct net *net, const struct cred *cred)
@@ -578,17 +576,14 @@ void nfsd_shutdown_threads(struct net *net)
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	struct svc_serv *serv;
 
-	mutex_lock(&nn->config_mutex);
+	guard(mutex)(&nn->config_mutex);
 	serv = nn->nfsd_serv;
-	if (serv == NULL) {
-		mutex_unlock(&nn->config_mutex);
+	if (serv == NULL)
 		return;
-	}
 
 	/* Kill outstanding nfsd threads */
 	svc_set_num_threads(serv, NULL, 0);
 	nfsd_destroy_serv(net);
-	mutex_unlock(&nn->config_mutex);
 }
 
 struct svc_rqst *nfsd_current_rqst(void)
