@@ -489,6 +489,7 @@ nfp_alloc_bar(struct nfp6000_pcie *nfp,
 		if (retval)
 			return retval;
 		__acquire(&nfp->bar_lock);
+		spin_lock_irqsave(&nfp->bar_lock, irqflags);
 	}
 
 	nfp_bar_get(nfp, &nfp->bar[barnum]);
