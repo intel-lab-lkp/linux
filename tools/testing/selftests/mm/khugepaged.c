@@ -502,7 +502,7 @@ static void __madvise_collapse(const char *msg, char *p, int nr_hpages,
 	printf("%s...", msg);
 
 	settings.thp_enabled = THP_ALWAYS;
-	settings.shmem_enabled = SHMEM_NEVER;
+	settings.shmem_enabled = SHMEM_ALWAYS;
 	thp_push_settings(&settings);
 
 	/* Clear VM_NOHUGEPAGE */
