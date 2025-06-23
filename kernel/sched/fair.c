@@ -13252,12 +13252,12 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	struct cfs_rq *cfs_rq;
 	int i;
 
-	tg->cfs_rq = kcalloc(nr_cpu_ids, sizeof(cfs_rq), GFP_KERNEL);
+	tg->cfs_rq = kcalloc(nr_cpu_ids, sizeof(*tg->cfs_rq), GFP_KERNEL);
 	if (!tg->cfs_rq)
 		goto err;
-	tg->se = kcalloc(nr_cpu_ids, sizeof(se), GFP_KERNEL);
+	tg->se = kcalloc(nr_cpu_ids, sizeof(*tg->se), GFP_KERNEL);
 	if (!tg->se)
-		goto err;
+		goto err_free_rq;
 
 	tg->shares = NICE_0_LOAD;
 
@@ -13267,7 +13267,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 		cfs_rq = kzalloc_node(sizeof(struct cfs_rq),
 				      GFP_KERNEL, cpu_to_node(i));
 		if (!cfs_rq)
-			goto err;
+			goto err_free_rq;
 
 		se = kzalloc_node(sizeof(struct sched_entity_stats),
 				  GFP_KERNEL, cpu_to_node(i));
@@ -13282,7 +13282,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	return 1;
 
 err_free_rq:
-	kfree(cfs_rq);
+	free_fair_sched_group(tg);
 err:
 	return 0;
 }
