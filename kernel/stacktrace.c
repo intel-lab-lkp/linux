@@ -228,8 +228,8 @@ unsigned int stack_trace_save_user(unsigned long *store, unsigned int size)
 		.size	= size,
 	};
 
-	/* Trace user stack if not a kernel thread */
-	if (current->flags & PF_KTHREAD)
+	/* Skip tasks that do not return to userspace */
+	if (current->flags & (PF_KTHREAD | PF_USER_WORKER))
 		return 0;
 
 	arch_stack_walk_user(consume_entry, &c, task_pt_regs(current));
