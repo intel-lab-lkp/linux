@@ -97,14 +97,12 @@ static int st_mmap_register_enable_irq(struct st_thermal_sensor *sensor)
 	if (sensor->irq < 0)
 		return sensor->irq;
 
-	ret = devm_request_threaded_irq(dev, sensor->irq,
-					NULL, st_mmap_thermal_trip_handler,
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					dev->driver->name, sensor);
-	if (ret) {
-		dev_err(dev, "failed to register IRQ %d\n", sensor->irq);
+	ret = devm_request_threaded_irq_probe(dev, sensor->irq,
+					      NULL, st_mmap_thermal_trip_handler,
+					      IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					      dev->driver->name, sensor, NULL);
+	if (ret)
 		return ret;
-	}
 
 	return st_mmap_enable_irq(sensor);
 }
