@@ -41,4 +41,10 @@ pvr_power_put(struct pvr_device *pvr_dev)
 int pvr_power_domains_init(struct pvr_device *pvr_dev);
 void pvr_power_domains_fini(struct pvr_device *pvr_dev);
 
+/* Power sequence functions */
+int pvr_power_on_sequence_manual(struct pvr_device *pvr_dev);
+int pvr_power_off_sequence_manual(struct pvr_device *pvr_dev);
+int pvr_power_on_sequence_pwrseq(struct pvr_device *pvr_dev);
+int pvr_power_off_sequence_pwrseq(struct pvr_device *pvr_dev);
+
 #endif /* PVR_POWER_H */

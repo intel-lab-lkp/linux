@@ -1481,14 +1481,39 @@ static void pvr_remove(struct platform_device *plat_dev)
 }
 
 static const struct of_device_id dt_match[] = {
-	{ .compatible = "img,img-rogue", .data = NULL },
+	{
+		.compatible = "thead,th1520-gpu",
+		.data =
+			&(struct pvr_soc_data)
+			{
+				.power_on = pvr_power_on_sequence_pwrseq,
+				.power_off = pvr_power_off_sequence_pwrseq,
+			},
+	},
+	{
+		.compatible = "img,img-rogue",
+		.data =
+			&(struct pvr_soc_data)
+			{
+				.power_on = pvr_power_on_sequence_manual,
+				.power_off = pvr_power_off_sequence_manual,
+			},
+	},
 
 	/*
 	 * This legacy compatible string was introduced early on before the more generic
 	 * "img,img-rogue" was added. Keep it around here for compatibility, but never use
 	 * "img,img-axe" in new devicetrees.
 	 */
-	{ .compatible = "img,img-axe", .data = NULL },
+	{
+		.compatible = "img,img-axe",
+		.data =
+			&(struct pvr_soc_data)
+			{
+				.power_on = pvr_power_on_sequence_manual,
+				.power_off = pvr_power_off_sequence_manual,
+			},
+	},
 	{}
 };
 MODULE_DEVICE_TABLE(of, dt_match);
@@ -1513,4 +1538,5 @@ MODULE_DESCRIPTION(PVR_DRIVER_DESC);
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_IMPORT_NS("DMA_BUF");
 MODULE_FIRMWARE("powervr/rogue_33.15.11.3_v1.fw");
+MODULE_FIRMWARE("powervr/rogue_36.52.104.182_v1.fw");
 MODULE_FIRMWARE("powervr/rogue_36.53.104.796_v1.fw");
