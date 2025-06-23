@@ -489,7 +489,7 @@ int nfsd_cache_lookup(struct svc_rqst *rqstp, unsigned int start,
 
 	if (type == RC_NOCACHE) {
 		nfsd_stats_rc_nocache_inc(nn);
-		goto out;
+		return rtn;
 	}
 
 	csum = nfsd_cache_csum(&rqstp->rq_arg, start, len);
@@ -500,64 +500,61 @@ int nfsd_cache_lookup(struct svc_rqst *rqstp, unsigned int start,
 	 */
 	rp = nfsd_cacherep_alloc(rqstp, csum, nn);
 	if (!rp)
-		goto out;
+		return rtn;
 
 	b = nfsd_cache_bucket_find(rqstp->rq_xid, nn);
-	spin_lock(&b->cache_lock);
-	found = nfsd_cache_insert(b, rp, nn);
-	if (found != rp)
-		goto found_entry;
-	*cacherep = rp;
-	rp->c_state = RC_INPROG;
-	nfsd_prune_bucket_locked(nn, b, 3, &dispose);
-	spin_unlock(&b->cache_lock);
+	scoped_guard(spinlock, &b->cache_lock) {
+		found = nfsd_cache_insert(b, rp, nn);
+		if (found == rp) {
+			*cacherep = rp;
+			rp->c_state = RC_INPROG;
+			nfsd_prune_bucket_locked(nn, b, 3, &dispose);
+			goto out;
+		}
+		/* We found a matching entry which is either in progress or done. */
+		nfsd_reply_cache_free_locked(NULL, rp, nn);
+		nfsd_stats_rc_hits_inc(nn);
+		rtn = RC_DROPIT;
+		rp = found;
 
+		/* Request being processed */
+		if (rp->c_state == RC_INPROG)
+			goto out_trace;
+
+		/* From the hall of fame of impractical attacks:
+		 * Is this a user who tries to snoop on the cache?
+		 */
+		rtn = RC_DOIT;
+		if (!test_bit(RQ_SECURE, &rqstp->rq_flags) && rp->c_secure)
+			goto out_trace;
+
+		/* Compose RPC reply header */
+		switch (rp->c_type) {
+		case RC_NOCACHE:
+			break;
+		case RC_REPLSTAT:
+			xdr_stream_encode_be32(&rqstp->rq_res_stream, rp->c_replstat);
+			rtn = RC_REPLY;
+			break;
+		case RC_REPLBUFF:
+			if (!nfsd_cache_append(rqstp, &rp->c_replvec))
+				return rtn; /* should not happen */
+			rtn = RC_REPLY;
+			break;
+		default:
+			WARN_ONCE(1, "nfsd: bad repcache type %d\n", rp->c_type);
+		}
+
+out_trace:
+		trace_nfsd_drc_found(nn, rqstp, rtn);
+		return rtn;
+	}
+out:
 	nfsd_cacherep_dispose(&dispose);
 
 	nfsd_stats_rc_misses_inc(nn);
 	atomic_inc(&nn->num_drc_entries);
 	nfsd_stats_drc_mem_usage_add(nn, sizeof(*rp));
-	goto out;
-
-found_entry:
-	/* We found a matching entry which is either in progress or done. */
-	nfsd_reply_cache_free_locked(NULL, rp, nn);
-	nfsd_stats_rc_hits_inc(nn);
-	rtn = RC_DROPIT;
-	rp = found;
-
-	/* Request being processed */
-	if (rp->c_state == RC_INPROG)
-		goto out_trace;
-
-	/* From the hall of fame of impractical attacks:
-	 * Is this a user who tries to snoop on the cache? */
-	rtn = RC_DOIT;
-	if (!test_bit(RQ_SECURE, &rqstp->rq_flags) && rp->c_secure)
-		goto out_trace;
-
-	/* Compose RPC reply header */
-	switch (rp->c_type) {
-	case RC_NOCACHE:
-		break;
-	case RC_REPLSTAT:
-		xdr_stream_encode_be32(&rqstp->rq_res_stream, rp->c_replstat);
-		rtn = RC_REPLY;
-		break;
-	case RC_REPLBUFF:
-		if (!nfsd_cache_append(rqstp, &rp->c_replvec))
-			goto out_unlock; /* should not happen */
-		rtn = RC_REPLY;
-		break;
-	default:
-		WARN_ONCE(1, "nfsd: bad repcache type %d\n", rp->c_type);
-	}
-
-out_trace:
-	trace_nfsd_drc_found(nn, rqstp, rtn);
-out_unlock:
-	spin_unlock(&b->cache_lock);
-out:
 	return rtn;
 }
 
