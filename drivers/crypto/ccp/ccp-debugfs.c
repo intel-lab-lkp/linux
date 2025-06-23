@@ -320,4 +320,5 @@ void ccp5_debugfs_setup(struct ccp_device *ccp)
 void ccp5_debugfs_destroy(void)
 {
 	debugfs_remove_recursive(ccp_debugfs_dir);
+	ccp_debugfs_dir = NULL;
 }
