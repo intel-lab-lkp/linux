@@ -1037,8 +1037,9 @@ static int adc_tm5_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	return devm_request_threaded_irq(dev, irq, NULL, adc_tm->data->isr,
-			IRQF_ONESHOT, adc_tm->data->irq_name, adc_tm);
+	return devm_request_threaded_irq_probe(dev, irq, NULL, adc_tm->data->isr,
+					       IRQF_ONESHOT, adc_tm->data->irq_name,
+					       adc_tm, NULL);
 }
 
 static const struct of_device_id adc_tm5_match_table[] = {
