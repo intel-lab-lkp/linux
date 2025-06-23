@@ -185,7 +185,7 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 			break;
 
 		bt_prev = bt;
-		io_schedule();
+		blk_io_schedule_timeout();
 
 		sbitmap_finish_wait(bt, ws, &wait);
 

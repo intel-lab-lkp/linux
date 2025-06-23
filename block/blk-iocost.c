@@ -2732,7 +2732,7 @@ retry_lock:
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		if (wait.committed)
 			break;
-		io_schedule();
+		blk_io_schedule_timeout();
 	}
 
 	/* waker already committed us, proceed */

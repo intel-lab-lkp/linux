@@ -62,6 +62,8 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_insert);
 
 static DEFINE_IDA(blk_queue_ida);
 
+static unsigned long __read_mostly sysctl_io_schedule_timeout_msecs;
+
 /*
  * For queue allocation
  */
@@ -71,6 +73,18 @@ static struct kmem_cache *blk_requestq_cachep;
  * Controlling structure to kblockd
  */
 static struct workqueue_struct *kblockd_workqueue;
+
+#ifdef CONFIG_SYSCTL
+static const struct ctl_table kernel_io_schedule_timeout_table[] = {
+	{
+		.procname	= "io_schedule_timeout_msecs",
+		.data		= &sysctl_io_schedule_timeout_msecs,
+		.maxlen		= sizeof(sysctl_io_schedule_timeout_msecs),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+	},
+};
+#endif
 
 /**
  * blk_queue_flag_set - atomically set a queue flag
@@ -1250,6 +1264,21 @@ void blk_finish_plug(struct blk_plug *plug)
 }
 EXPORT_SYMBOL(blk_finish_plug);
 
+/**
+ * Maybe it can be integrated into blk_io_schedule?
+ */
+void blk_io_schedule_timeout(void)
+{
+	/* Prevent hang_check timer from firing at us during very long I/O */
+	unsigned long timeout = msecs_to_jiffies(sysctl_io_schedule_timeout_msecs);
+
+	if (timeout)
+		io_schedule_timeout(timeout);
+	else
+		io_schedule();
+}
+EXPORT_SYMBOL_GPL(blk_io_schedule_timeout);
+
 void blk_io_schedule(void)
 {
 	/* Prevent hang_check timer from firing at us during very long I/O */
@@ -1279,6 +1308,10 @@ int __init blk_dev_init(void)
 	blk_requestq_cachep = KMEM_CACHE(request_queue, SLAB_PANIC);
 
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
+
+#ifdef CONFIG_SYSCTL
+	register_sysctl_init("kernel", kernel_io_schedule_timeout_table);
+#endif
 
 	return 0;
 }

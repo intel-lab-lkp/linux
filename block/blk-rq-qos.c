@@ -306,7 +306,7 @@ void rq_qos_wait(struct rq_wait *rqw, void *private_data,
 	do {
 		if (data.got_token)
 			break;
-		io_schedule();
+		blk_io_schedule_timeout();
 		set_current_state(TASK_UNINTERRUPTIBLE);
 	} while (1);
 	finish_wait(&rqw->wait, &data.wq);
