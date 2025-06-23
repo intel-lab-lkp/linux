@@ -20,6 +20,8 @@
 
 #define HBG_NP_LINK_FAIL_RETRY_TIMES	5
 
+#define HBG_UNUSE_PHY	0xFF
+
 static void hbg_mdio_set_command(struct hbg_mac *mac, u32 cmd)
 {
 	hbg_reg_write(HBG_MAC_GET_PRIV(mac), HBG_REG_MDIO_COMMAND_ADDR, cmd);
@@ -134,6 +136,11 @@ void hbg_fix_np_link_fail(struct hbg_priv *priv)
 {
 	struct device *dev = &priv->pdev->dev;
 
+	if (!priv->mac.phydev) {
+		dev_err(dev, "failed to link between MAC and PHY\n");
+		return;
+	}
+
 	rtnl_lock();
 
 	if (priv->stats.np_link_fail_cnt >= HBG_NP_LINK_FAIL_RETRY_TIMES) {
@@ -158,6 +165,53 @@ unlock:
 	rtnl_unlock();
 }
 
+int hbg_convert_mac_speed_to_phy(u32 mac_speed)
+{
+	switch (mac_speed) {
+	case HBG_PORT_MODE_SGMII_10M:
+		return SPEED_10;
+	case HBG_PORT_MODE_SGMII_100M:
+		return SPEED_100;
+	case HBG_PORT_MODE_SGMII_1000M:
+		return SPEED_1000;
+	default:
+		return SPEED_UNKNOWN;
+	}
+}
+
+u32 hbg_convert_phy_speed_to_mac(int phy_speed)
+{
+	switch (phy_speed) {
+	case SPEED_10:
+		return HBG_PORT_MODE_SGMII_10M;
+	case SPEED_100:
+		return HBG_PORT_MODE_SGMII_100M;
+	case SPEED_1000:
+		return HBG_PORT_MODE_SGMII_1000M;
+	default:
+		return HBG_PORT_MODE_SGMII_UNKNOWN;
+	}
+}
+
+void hbg_print_link_status(struct hbg_priv *priv)
+{
+	u32 speed;
+
+	if (priv->mac.phydev) {
+		phy_print_status(priv->mac.phydev);
+		return;
+	}
+
+	if (priv->mac.link_status) {
+		speed = hbg_convert_mac_speed_to_phy(priv->mac.speed);
+		netdev_info(priv->netdev, "Link is Up - %s/%s\n",
+			    phy_speed_to_str(speed),
+			    phy_duplex_to_str(priv->mac.duplex));
+	} else {
+		netdev_info(priv->netdev, "Link is Down\n");
+	}
+}
+
 static void hbg_phy_adjust_link(struct net_device *netdev)
 {
 	struct hbg_priv *priv = netdev_priv(netdev);
@@ -166,19 +220,9 @@ static void hbg_phy_adjust_link(struct net_device *netdev)
 
 	if (phydev->link != priv->mac.link_status) {
 		if (phydev->link) {
-			switch (phydev->speed) {
-			case SPEED_10:
-				speed = HBG_PORT_MODE_SGMII_10M;
-				break;
-			case SPEED_100:
-				speed = HBG_PORT_MODE_SGMII_100M;
-				break;
-			case SPEED_1000:
-				speed = HBG_PORT_MODE_SGMII_1000M;
-				break;
-			default:
+			speed = hbg_convert_phy_speed_to_mac(phydev->speed);
+			if (speed == HBG_PORT_MODE_SGMII_UNKNOWN)
 				return;
-			}
 
 			priv->mac.speed = speed;
 			priv->mac.duplex = phydev->duplex;
@@ -188,7 +232,7 @@ static void hbg_phy_adjust_link(struct net_device *netdev)
 		}
 
 		priv->mac.link_status = phydev->link;
-		phy_print_status(phydev);
+		hbg_print_link_status(priv);
 	}
 }
 
@@ -238,6 +282,12 @@ int hbg_mdio_init(struct hbg_priv *priv)
 	int ret;
 
 	mac->phy_addr = priv->dev_specs.phy_addr;
+	if (mac->phy_addr == HBG_UNUSE_PHY) {
+		mac->duplex = 1;
+		mac->speed = HBG_PORT_MODE_SGMII_1000M;
+		return 0;
+	}
+
 	mdio_bus = devm_mdiobus_alloc(dev);
 	if (!mdio_bus)
 		return dev_err_probe(dev, -ENOMEM,

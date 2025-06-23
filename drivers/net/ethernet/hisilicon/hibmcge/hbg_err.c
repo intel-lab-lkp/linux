@@ -35,6 +35,9 @@ static void hbg_restore_user_def_settings(struct hbg_priv *priv)
 	hbg_hw_set_pause_enable(priv, pause_param->tx_pause,
 				pause_param->rx_pause);
 	hbg_hw_set_rx_pause_mac_addr(priv, rx_pause_addr);
+
+	if (!priv->mac.phydev)
+		hbg_hw_adjust_link(priv, priv->mac.speed, priv->mac.duplex);
 }
 
 int hbg_rebuild(struct hbg_priv *priv)
