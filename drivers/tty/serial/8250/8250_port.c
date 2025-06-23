@@ -2216,6 +2216,23 @@ static void serial8250_THRE_test(struct uart_port *port)
 		up->bugs |= UART_BUG_THRE;
 }
 
+static void serial8250_init_mctrl(struct uart_port *port)
+{
+	struct uart_8250_port *up = up_to_u8250p(port);
+
+	if (up->port.flags & UPF_FOURPORT) {
+		if (!up->port.irq)
+			up->port.mctrl |= TIOCM_OUT1;
+	} else
+		/*
+		 * Most PC uarts need OUT2 raised to enable interrupts.
+		 */
+		if (port->irq)
+			up->port.mctrl |= TIOCM_OUT2;
+
+	serial8250_set_mctrl(port, port->mctrl);
+}
+
 static void serial8250_initialize(struct uart_port *port)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
@@ -2225,16 +2242,7 @@ static void serial8250_initialize(struct uart_port *port)
 	serial_port_out(port, UART_LCR, UART_LCR_WLEN8);
 
 	uart_port_lock_irqsave(port, &flags);
-	if (port->flags & UPF_FOURPORT) {
-		if (!port->irq)
-			port->mctrl |= TIOCM_OUT1;
-	} else {
-		/* Most PC uarts need OUT2 raised to enable interrupts. */
-		if (port->irq)
-			port->mctrl |= TIOCM_OUT2;
-	}
-
-	serial8250_set_mctrl(port, port->mctrl);
+	serial8250_init_mctrl(port);
 
 	/*
 	 * Serial over Lan (SoL) hack:
