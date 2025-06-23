@@ -270,38 +270,40 @@ static int nfsd_init_socks(struct net *net, const struct cred *cred)
 	return 0;
 }
 
-static int nfsd_users = 0;
+static bool nfsd_started;
+static DEFINE_MUTEX(nfsd_startup_mutex);
+
+bool nfsd_is_started(void)
+{
+	return smp_load_acquire(&nfsd_started);
+}
 
 static int nfsd_startup_generic(void)
 {
-	int ret;
+	int ret = 0;
 
-	if (nfsd_users++)
+	if (nfsd_is_started())
 		return 0;
+	mutex_lock(&nfsd_startup_mutex);
+	if (nfsd_is_started())
+		goto out_unlock;
 
 	ret = nfsd_file_cache_init();
 	if (ret)
-		goto dec_users;
+		goto out_unlock;
 
 	ret = nfs4_state_start();
 	if (ret)
 		goto out_file_cache;
+	smp_store_release(&nfsd_started, true);
+	mutex_unlock(&nfsd_startup_mutex);
 	return 0;
 
 out_file_cache:
 	nfsd_file_cache_shutdown();
-dec_users:
-	nfsd_users--;
+out_unlock:
+	mutex_unlock(&nfsd_startup_mutex);
 	return ret;
-}
-
-static void nfsd_shutdown_generic(void)
-{
-	if (--nfsd_users)
-		return;
-
-	nfs4_state_shutdown();
-	nfsd_file_cache_shutdown();
 }
 
 static bool nfsd_needs_lockd(struct nfsd_net *nn)
@@ -416,7 +418,6 @@ out_lockd:
 		nn->lockd_up = false;
 	}
 out_socks:
-	nfsd_shutdown_generic();
 	return ret;
 }
 
@@ -443,7 +444,6 @@ static void nfsd_shutdown_net(struct net *net)
 	percpu_ref_exit(&nn->nfsd_net_ref);
 
 	nn->nfsd_net_up = false;
-	nfsd_shutdown_generic();
 }
 
 static DEFINE_SPINLOCK(nfsd_notifier_lock);

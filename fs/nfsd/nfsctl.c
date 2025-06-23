@@ -2371,6 +2371,11 @@ out_free_slabs:
 
 static void __exit exit_nfsd(void)
 {
+	if (nfsd_is_started()) {
+		nfs4_state_shutdown();
+		nfsd_file_cache_shutdown();
+	}
+
 	remove_proc_entry("fs/nfs/exports", NULL);
 	remove_proc_entry("fs/nfs", NULL);
 	genl_unregister_family(&nfsd_nl_family);
