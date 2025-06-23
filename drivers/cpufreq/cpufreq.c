@@ -2698,15 +2698,19 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	/* start new governor */
 	policy->governor = new_gov;
 	ret = cpufreq_init_governor(policy);
-	if (!ret) {
-		ret = cpufreq_start_governor(policy);
-		if (!ret) {
-			pr_debug("governor change\n");
-			return 0;
-		}
+	if (ret)
+		goto start_old_gov;
+
+	ret = cpufreq_start_governor(policy);
+	if (ret) {
 		cpufreq_exit_governor(policy);
+		goto start_old_gov;
 	}
 
+	pr_debug("governor change\n");
+	return 0;
+
+start_old_gov:
 	/* new governor failed, so re-start old one */
 	pr_debug("starting governor %s failed\n", policy->governor->name);
 	if (old_gov) {
