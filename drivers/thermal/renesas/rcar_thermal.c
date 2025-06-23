@@ -444,12 +444,11 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 			idle = 0; /* polling delay is not needed */
 		}
 
-		ret = devm_request_irq(dev, irq, rcar_thermal_irq,
-				       IRQF_SHARED, dev_name(dev), common);
-		if (ret) {
-			dev_err(dev, "irq request failed\n");
+		ret = devm_request_irq_probe(dev, irq, rcar_thermal_irq,
+					     IRQF_SHARED, dev_name(dev),
+					     common, NULL);
+		if (ret)
 			goto error_unregister;
-		}
 
 		/* update ENR bits */
 		if (chip->irq_per_ch)
