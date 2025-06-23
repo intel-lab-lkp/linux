@@ -441,13 +441,11 @@ static int airoha_thermal_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
-					airoha_thermal_irq, IRQF_ONESHOT,
-					pdev->name, priv);
-	if (ret) {
-		dev_err(dev, "Can't get interrupt working.\n");
+	ret = devm_request_threaded_irq_probe(&pdev->dev, irq, NULL,
+					      airoha_thermal_irq, IRQF_ONESHOT,
+					      pdev->name, priv, NULL);
+	if (ret)
 		return ret;
-	}
 
 	airoha_thermal_setup_monitor(priv);
 	airoha_thermal_setup_adc_val(dev, priv);
