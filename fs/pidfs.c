@@ -747,7 +747,7 @@ static int pidfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
 
 	*max_len = 2;
 	*(u64 *)fh = pid->ino;
-	return FILEID_KERNFS;
+	return FILEID_PIDFS;
 }
 
 static int pidfs_ino_find(const void *key, const struct rb_node *node)
@@ -802,6 +802,8 @@ static struct dentry *pidfs_fh_to_dentry(struct super_block *sb,
 		return NULL;
 
 	switch (fh_type) {
+	case FILEID_PIDFS:
+		fallthrough;
 	case FILEID_KERNFS:
 		pid_ino = *(u64 *)fid;
 		break;
@@ -860,6 +862,7 @@ static const struct export_operations pidfs_export_operations = {
 	.fh_to_dentry	= pidfs_fh_to_dentry,
 	.open		= pidfs_export_open,
 	.permission	= pidfs_export_permission,
+	.flags		= EXPORT_OP_AUTONOMOUS_HANDLES,
 };
 
 static int pidfs_init_inode(struct inode *inode, void *data)
