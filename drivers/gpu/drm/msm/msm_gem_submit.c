@@ -904,8 +904,6 @@ out_unlock:
 out_post_unlock:
 	if (ret && (out_fence_fd >= 0)) {
 		put_unused_fd(out_fence_fd);
-		if (sync_file)
-			fput(sync_file->file);
 	}
 
 	if (!IS_ERR_OR_NULL(submit)) {
