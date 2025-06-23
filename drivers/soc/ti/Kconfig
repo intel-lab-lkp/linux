@@ -53,7 +53,6 @@ config WKUP_M3_IPC
 config TI_K3_RINGACC
 	tristate "K3 Ring accelerator Sub System"
 	depends on ARCH_K3 || COMPILE_TEST
-	depends on TI_SCI_INTA_IRQCHIP
 	help
 	  Say y here to support the K3 Ring accelerator module.
 	  The Ring Accelerator (RINGACC or RA)  provides hardware acceleration
