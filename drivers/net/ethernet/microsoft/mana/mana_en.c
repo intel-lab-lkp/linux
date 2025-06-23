@@ -723,6 +723,7 @@ out:
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_NET_SHAPER)
 static int mana_shaper_set(struct net_shaper_binding *binding,
 			   const struct net_shaper *shaper,
 			   struct netlink_ext_ack *extack)
@@ -794,6 +795,7 @@ static const struct net_shaper_ops mana_shaper_ops = {
 	.delete = mana_shaper_del,
 	.capabilities = mana_shaper_cap,
 };
+#endif
 
 static const struct net_device_ops mana_devops = {
 	.ndo_open		= mana_open,
@@ -805,7 +807,9 @@ static const struct net_device_ops mana_devops = {
 	.ndo_bpf		= mana_bpf,
 	.ndo_xdp_xmit		= mana_xdp_xmit,
 	.ndo_change_mtu		= mana_change_mtu,
+#if IS_ENABLED(CONFIG_NET_SHAPER)
 	.net_shaper_ops         = &mana_shaper_ops,
+#endif
 };
 
 static void mana_cleanup_port_context(struct mana_port_context *apc)
