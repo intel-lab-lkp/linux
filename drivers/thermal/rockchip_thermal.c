@@ -1578,13 +1578,13 @@ static int rockchip_thermal_probe(struct platform_device *pdev)
 				"failed to register sensor[%d].\n", i);
 	}
 
-	error = devm_request_threaded_irq(&pdev->dev, irq, NULL,
-					  &rockchip_thermal_alarm_irq_thread,
-					  IRQF_ONESHOT,
-					  "rockchip_thermal", thermal);
+	error = devm_request_threaded_irq_probe(&pdev->dev, irq, NULL,
+						&rockchip_thermal_alarm_irq_thread,
+						IRQF_ONESHOT,
+						"rockchip_thermal", thermal, "tsadc");
+
 	if (error)
-		return dev_err_probe(&pdev->dev, error,
-				     "failed to request tsadc irq.\n");
+		return error;
 
 	thermal->chip->control(thermal->regs, true);
 
