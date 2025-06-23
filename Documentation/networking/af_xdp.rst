@@ -442,6 +442,15 @@ is created by a privileged process and passed to a non-privileged one.
 Once the option is set, kernel will refuse attempts to bind that socket
 to a different interface.  Updating the value requires CAP_NET_RAW.
 
+XDP_MAX_TX_BUDGET setsockopt
+----------------------------
+
+This setsockopt sets the maximum number of descriptors that can be handled
+and passed to the driver at one send syscall. It is applied in two cases:
+non-zero copy mode and non-batched version of zero copy mode, to break
+the maximum iteration limitation for better throughput and less frequency
+of send syscall.
+
 XDP_STATISTICS getsockopt
 -------------------------
 
