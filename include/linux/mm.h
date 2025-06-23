@@ -4059,14 +4059,13 @@ unsigned long wp_shared_mapping_range(struct address_space *mapping,
 #endif
 
 #ifdef CONFIG_ANON_VMA_NAME
-int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
-			  unsigned long len_in,
-			  struct anon_vma_name *anon_name);
+int prctl_set_vma(unsigned long opt, unsigned long start,
+		  unsigned long size, unsigned long arg);
 #else
-static inline int
-madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
-		      unsigned long len_in, struct anon_vma_name *anon_name) {
-	return 0;
+static inline int prctl_set_vma(unsigned long opt, unsigned long start,
+				unsigned long size, unsigned long arg)
+{
+	return -EINVAL;
 }
 #endif
 
