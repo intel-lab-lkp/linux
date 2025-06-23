@@ -353,13 +353,12 @@ static int brcmstb_thermal_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq >= 0) {
-		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
-						brcmstb_tmon_irq_thread,
-						IRQF_ONESHOT,
-						DRV_NAME, priv);
+		ret = devm_request_threaded_irq_probe(&pdev->dev, irq, NULL,
+						      brcmstb_tmon_irq_thread,
+						      IRQF_ONESHOT,
+						      DRV_NAME, priv, NULL);
 		if (ret < 0)
-			return dev_err_probe(&pdev->dev, ret,
-						"could not request IRQ\n");
+			return ret;
 	}
 
 	dev_info(&pdev->dev, "registered AVS TMON of-sensor driver\n");
