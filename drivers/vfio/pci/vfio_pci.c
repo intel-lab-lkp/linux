@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/notifier.h>
 #include <linux/pm_runtime.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -125,6 +126,16 @@ static int vfio_pci_open_device(struct vfio_device *core_vdev)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
+static void vfio_pci_core_show_fdinfo(struct vfio_device *core_vdev, struct seq_file *m)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+
+	seq_printf(m, "vfio-device-name: %s\n", pci_name(vdev->pdev));
+}
+#endif
+
 static const struct vfio_device_ops vfio_pci_ops = {
 	.name		= "vfio-pci",
 	.init		= vfio_pci_core_init_dev,
@@ -138,6 +149,9 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.mmap		= vfio_pci_core_mmap,
 	.request	= vfio_pci_core_request,
 	.match		= vfio_pci_core_match,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo	= vfio_pci_core_show_fdinfo,
+#endif
 	.bind_iommufd	= vfio_iommufd_physical_bind,
 	.unbind_iommufd	= vfio_iommufd_physical_unbind,
 	.attach_ioas	= vfio_iommufd_physical_attach_ioas,
