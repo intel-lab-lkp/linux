@@ -43,7 +43,7 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 * for us.  These identity mapped page tables map all of the
 	 * kernel pages and possibly all of memory.
 	 *
-	 * %RSI holds the physical address of the boot_params structure
+	 * %RDI holds the physical address of the boot_params structure
 	 * provided by the bootloader. Preserve it in %R15 so C function calls
 	 * will not clobber it.
 	 *
@@ -56,7 +56,7 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 * compiled to run at we first fixup the physical addresses in our page
 	 * tables and then reload them.
 	 */
-	mov	%rsi, %r15
+	mov	%rdi, %r15
 
 	/* Set up the stack for verify_cpu() */
 	leaq	__top_init_kernel_stack(%rip), %rsp
