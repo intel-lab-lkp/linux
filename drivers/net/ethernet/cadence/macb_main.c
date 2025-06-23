@@ -934,12 +934,11 @@ static int macb_mii_init(struct macb *bp)
 	struct device_node *mdio_np, *np = bp->pdev->dev.of_node;
 	int err = -ENXIO;
 
-	/* With fixed-link, we don't need to register the MDIO bus,
-	 * except if we have a child named "mdio" in the device tree.
-	 * In that case, some devices may be attached to the MACB's MDIO bus.
+	/* Only register MDIO bus if there is a child named "mdio" in
+	 * the device tree
 	 */
 	mdio_np = of_get_child_by_name(np, "mdio");
-	if (!mdio_np && of_phy_is_fixed_link(np))
+	if (!mdio_np)
 		return macb_mii_probe(bp->dev);
 
 	/* Enable management port */
