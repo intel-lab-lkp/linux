@@ -405,6 +405,30 @@ drm_get_buddy(struct drm_buddy_block *block)
 EXPORT_SYMBOL(drm_get_buddy);
 
 /**
+ * drm_buddy_clear_reset_blocks - reset cleared blocks
+ *
+ * @mm: DRM buddy manager
+ *
+ * Reset all the cleared blocks in the freelist.
+ */
+void drm_buddy_clear_reset_blocks(struct drm_buddy *mm)
+{
+	unsigned int i;
+
+	for (i = 0; i <= mm->max_order; ++i) {
+		struct drm_buddy_block *block;
+
+		list_for_each_entry_reverse(block, &mm->free_list[i], link) {
+			if (drm_buddy_block_is_clear(block)) {
+				clear_reset(block);
+				mm->clear_avail -= drm_buddy_block_size(mm, block);
+			}
+		}
+	}
+}
+EXPORT_SYMBOL(drm_buddy_clear_reset_blocks);
+
+/**
  * drm_buddy_free_block - free a block
  *
  * @mm: DRM buddy manager

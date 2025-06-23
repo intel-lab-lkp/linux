@@ -58,6 +58,11 @@ static inline bool amdgpu_vram_mgr_is_cleared(struct drm_buddy_block *block)
 	return drm_buddy_block_is_clear(block);
 }
 
+static inline void amdgpu_vram_mgr_clear_reset_blocks(struct drm_buddy *mm)
+{
+	drm_buddy_clear_reset_blocks(mm);
+}
+
 static inline struct amdgpu_vram_mgr_resource *
 to_amdgpu_vram_mgr_resource(struct ttm_resource *res)
 {
