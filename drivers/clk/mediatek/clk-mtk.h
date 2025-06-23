@@ -20,6 +20,7 @@
 
 #define MHZ (1000 * 1000)
 
+#define MTK_WAIT_HWV_DONE_US	30
 #define MTK_WAIT_FENC_DONE_US	30
 
 struct platform_device;
