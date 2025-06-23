@@ -113,7 +113,7 @@ struct cxl_pmu_info {
 
 /*
  * All CPMU counters are discoverable via the Event Capabilities Registers.
- * Each Event Capability register contains a a VID / GroupID.
+ * Each Event Capability register contains a VID / GroupID.
  * A counter may then count any combination (by summing) of events in
  * that group which are in the Supported Events Bitmask.
  * However, there are some complexities to the scheme.
@@ -834,8 +834,8 @@ static int cxl_pmu_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	info->hw_events = devm_kcalloc(dev, sizeof(*info->hw_events),
-				       info->num_counters, GFP_KERNEL);
+	info->hw_events = devm_kcalloc(dev, info->num_counters,
+				       sizeof(*info->hw_events), GFP_KERNEL);
 	if (!info->hw_events)
 		return -ENOMEM;
 
@@ -873,7 +873,7 @@ static int cxl_pmu_probe(struct device *dev)
 		return rc;
 	irq = rc;
 
-	irq_name = devm_kasprintf(dev, GFP_KERNEL, "%s_overflow\n", dev_name);
+	irq_name = devm_kasprintf(dev, GFP_KERNEL, "%s_overflow", dev_name);
 	if (!irq_name)
 		return -ENOMEM;
 
