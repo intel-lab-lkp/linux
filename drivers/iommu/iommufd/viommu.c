@@ -130,6 +130,7 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 		goto out_put_idev;
 	}
 
+	vdev->ictx = ucmd->ictx;
 	vdev->id = virt_id;
 	vdev->dev = idev->dev;
 	get_device(idev->dev);
