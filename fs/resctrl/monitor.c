@@ -767,10 +767,10 @@ static int dom_data_init(struct rdt_resource *r)
 	u32 idx_limit = resctrl_arch_system_num_rmid_idx();
 	u32 num_closid = resctrl_arch_get_num_closid(r);
 	struct rmid_entry *entry = NULL;
-	int err = 0, i;
+	int i;
 	u32 idx;
 
-	mutex_lock(&rdtgroup_mutex);
+	guard(mutex)(&rdtgroup_mutex);
 	if (IS_ENABLED(CONFIG_RESCTRL_RMID_DEPENDS_ON_CLOSID)) {
 		u32 *tmp;
 
@@ -781,10 +781,8 @@ static int dom_data_init(struct rdt_resource *r)
 		 * use.
 		 */
 		tmp = kcalloc(num_closid, sizeof(*tmp), GFP_KERNEL);
-		if (!tmp) {
-			err = -ENOMEM;
-			goto out_unlock;
-		}
+		if (!tmp)
+			return -ENOMEM;
 
 		closid_num_dirty_rmid = tmp;
 	}
@@ -795,8 +793,7 @@ static int dom_data_init(struct rdt_resource *r)
 			kfree(closid_num_dirty_rmid);
 			closid_num_dirty_rmid = NULL;
 		}
-		err = -ENOMEM;
-		goto out_unlock;
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < idx_limit; i++) {
@@ -817,18 +814,15 @@ static int dom_data_init(struct rdt_resource *r)
 	entry = __rmid_entry(idx);
 	list_del(&entry->list);
 
-out_unlock:
-	mutex_unlock(&rdtgroup_mutex);
-
-	return err;
+	return 0;
 }
 
 static void dom_data_exit(struct rdt_resource *r)
 {
-	mutex_lock(&rdtgroup_mutex);
+	guard(mutex)(&rdtgroup_mutex);
 
 	if (!r->mon_capable)
-		goto out_unlock;
+		return;
 
 	if (IS_ENABLED(CONFIG_RESCTRL_RMID_DEPENDS_ON_CLOSID)) {
 		kfree(closid_num_dirty_rmid);
@@ -837,9 +831,6 @@ static void dom_data_exit(struct rdt_resource *r)
 
 	kfree(rmid_ptrs);
 	rmid_ptrs = NULL;
-
-out_unlock:
-	mutex_unlock(&rdtgroup_mutex);
 }
 
 static struct mon_evt llc_occupancy_event = {

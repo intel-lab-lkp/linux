@@ -916,14 +916,13 @@ int proc_resctrl_show(struct seq_file *s, struct pid_namespace *ns,
 		      struct pid *pid, struct task_struct *tsk)
 {
 	struct rdtgroup *rdtg;
-	int ret = 0;
 
-	mutex_lock(&rdtgroup_mutex);
+	guard(mutex)(&rdtgroup_mutex);
 
 	/* Return empty if resctrl has not been mounted. */
 	if (!resctrl_mounted) {
 		seq_puts(s, "res:\nmon:\n");
-		goto unlock;
+		return 0;
 	}
 
 	list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list) {
@@ -952,17 +951,13 @@ int proc_resctrl_show(struct seq_file *s, struct pid_namespace *ns,
 			break;
 		}
 		seq_putc(s, '\n');
-		goto unlock;
+		return 0;
 	}
 	/*
 	 * The above search should succeed. Otherwise return
 	 * with an error.
 	 */
-	ret = -ENOENT;
-unlock:
-	mutex_unlock(&rdtgroup_mutex);
-
-	return ret;
+	return -ENOENT;
 }
 #endif
 
@@ -4132,11 +4127,11 @@ int resctrl_online_mon_domain(struct rdt_resource *r, struct rdt_mon_domain *d)
 {
 	int err;
 
-	mutex_lock(&rdtgroup_mutex);
+	guard(mutex)(&rdtgroup_mutex);
 
 	err = domain_setup_mon_state(r, d);
 	if (err)
-		goto out_unlock;
+		return err;
 
 	if (resctrl_is_mbm_enabled()) {
 		INIT_DELAYED_WORK(&d->mbm_over, mbm_handle_overflow);
@@ -4156,10 +4151,7 @@ int resctrl_online_mon_domain(struct rdt_resource *r, struct rdt_mon_domain *d)
 	if (resctrl_mounted && resctrl_arch_mon_capable())
 		mkdir_mondata_subdir_allrdtgrp(r, d);
 
-out_unlock:
-	mutex_unlock(&rdtgroup_mutex);
-
-	return err;
+	return 0;
 }
 
 void resctrl_online_cpu(unsigned int cpu)
@@ -4202,7 +4194,7 @@ void resctrl_offline_cpu(unsigned int cpu)
 	struct rdt_mon_domain *d;
 	struct rdtgroup *rdtgrp;
 
-	mutex_lock(&rdtgroup_mutex);
+	guard(mutex)(&rdtgroup_mutex);
 	list_for_each_entry(rdtgrp, &rdt_all_groups, rdtgroup_list) {
 		if (cpumask_test_and_clear_cpu(cpu, &rdtgrp->cpu_mask)) {
 			clear_childcpus(rdtgrp, cpu);
@@ -4211,7 +4203,7 @@ void resctrl_offline_cpu(unsigned int cpu)
 	}
 
 	if (!l3->mon_capable)
-		goto out_unlock;
+		return;
 
 	d = get_mon_domain_from_cpu(cpu, l3);
 	if (d) {
@@ -4225,9 +4217,6 @@ void resctrl_offline_cpu(unsigned int cpu)
 			cqm_setup_limbo_handler(d, 0, cpu);
 		}
 	}
-
-out_unlock:
-	mutex_unlock(&rdtgroup_mutex);
 }
 
 /*
