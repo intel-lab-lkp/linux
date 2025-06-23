@@ -123,6 +123,11 @@
 	};
 };
 
+&ddrperfm {
+	st,dram-type = <2>;
+	status = "disabled";
+};
+
 &dcmipp {
 	status = "okay";
 	port {
