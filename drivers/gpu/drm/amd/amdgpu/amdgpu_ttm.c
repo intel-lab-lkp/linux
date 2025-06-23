@@ -407,9 +407,10 @@ static int amdgpu_move_blit(struct ttm_buffer_object *bo,
 		r = amdgpu_fill_buffer(abo, 0, NULL, &wipe_fence,
 				       false);
 		if (r) {
+			amdgpu_vram_mgr_set_clear_state(bo->resource, false);
 			goto error;
 		} else if (wipe_fence) {
-			amdgpu_vram_mgr_set_cleared(bo->resource);
+			amdgpu_vram_mgr_set_clear_state(bo->resource, true);
 			dma_fence_put(fence);
 			fence = wipe_fence;
 		}

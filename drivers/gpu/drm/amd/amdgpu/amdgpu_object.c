@@ -1302,28 +1302,40 @@ void amdgpu_bo_release_notify(struct ttm_buffer_object *bo)
 	 * So when this locking here fails something is wrong with the reference
 	 * counting.
 	 */
-	if (WARN_ON_ONCE(!dma_resv_trylock(&bo->base._resv)))
+	if (WARN_ON_ONCE(!dma_resv_trylock(&bo->base._resv))) {
+		if (bo->resource && bo->resource->mem_type == TTM_PL_VRAM)
+			amdgpu_vram_mgr_set_clear_state(bo->resource, false);
+
 		return;
+	}
 
 	amdgpu_amdkfd_remove_all_eviction_fences(abo);
 
-	if (!bo->resource || bo->resource->mem_type != TTM_PL_VRAM ||
-	    !(abo->flags & AMDGPU_GEM_CREATE_VRAM_WIPE_ON_RELEASE) ||
-	    adev->in_suspend || drm_dev_is_unplugged(adev_to_drm(adev)))
+	if (!bo->resource || bo->resource->mem_type != TTM_PL_VRAM)
 		goto out;
+
+	if (!(abo->flags & AMDGPU_GEM_CREATE_VRAM_WIPE_ON_RELEASE) ||
+	    adev->in_suspend || drm_dev_is_unplugged(adev_to_drm(adev)))
+		goto out_clear_err;
 
 	r = dma_resv_reserve_fences(&bo->base._resv, 1);
 	if (r)
-		goto out;
+		goto out_clear_err;
 
 	r = amdgpu_fill_buffer(abo, 0, &bo->base._resv, &fence, true);
 	if (WARN_ON(r))
-		goto out;
+		goto out_clear_err;
 
-	amdgpu_vram_mgr_set_cleared(bo->resource);
+	amdgpu_vram_mgr_set_clear_state(bo->resource, true);
 	dma_resv_add_fence(&bo->base._resv, fence, DMA_RESV_USAGE_KERNEL);
 	dma_fence_put(fence);
 
+	dma_resv_unlock(&bo->base._resv);
+
+	return;
+
+out_clear_err:
+	amdgpu_vram_mgr_set_clear_state(bo->resource, false);
 out:
 	dma_resv_unlock(&bo->base._resv);
 }

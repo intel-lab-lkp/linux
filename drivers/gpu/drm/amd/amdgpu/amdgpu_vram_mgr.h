@@ -64,9 +64,12 @@ to_amdgpu_vram_mgr_resource(struct ttm_resource *res)
 	return container_of(res, struct amdgpu_vram_mgr_resource, base);
 }
 
-static inline void amdgpu_vram_mgr_set_cleared(struct ttm_resource *res)
+static inline void amdgpu_vram_mgr_set_clear_state(struct ttm_resource *res, bool is_clear)
 {
-	to_amdgpu_vram_mgr_resource(res)->flags |= DRM_BUDDY_CLEARED;
+	if (is_clear)
+		to_amdgpu_vram_mgr_resource(res)->flags |= DRM_BUDDY_CLEARED;
+	else
+		to_amdgpu_vram_mgr_resource(res)->flags &= ~DRM_BUDDY_CLEARED;
 }
 
 #endif
