@@ -14,6 +14,7 @@
 #[macro_use]
 mod quote;
 mod concat_idents;
+mod convert;
 mod export;
 mod helpers;
 mod kunit;
@@ -424,4 +425,74 @@ pub fn paste(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
     kunit::kunit_tests(attr, ts)
+}
+
+/// A derive macro for generating an impl of the trait [`FromPrimitive`].
+///
+/// This macro automatically derives [`FromPrimitive`] trait for a given enum. Currently,
+/// it only supports [unit-only enum]s without generic parameters.
+///
+/// [unit-only enum]: https://doc.rust-lang.org/reference/items/enumerations.html#r-items.enum.unit-only
+///
+/// # Notes
+///
+/// When you manually implement [`FromPrimitive`], only `from_i64` and `from_u64` are
+/// required since the other `from_*` methods delegate to those two defaults. However,
+/// an enum may be marked with `#[repr(i128)]` or `#[repr(u128)]`, which means discriminants
+/// outside the 64-bit range would never be matched by the defaults. To avoid this silent
+/// failure, this macro also generates explicit `from_i128` and `from_u128` implementations.
+/// As a side note, `from_isize` and `from_usize` are also explicitly implemented, since
+/// converting from 64-bit integers to pointer-sized integers involves `Result`.
+///
+/// [`FromPrimitive`]: ../kernel/convert/trait.FromPrimitive.html
+///
+/// # Examples
+///
+/// You may give each variant an explicit discriminant; the macro uses those values during
+/// expansion.
+///
+/// ```rust
+/// use kernel::convert::FromPrimitive;
+/// use kernel::macros::FromPrimitive;
+///
+/// #[derive(Default, FromPrimitive)]
+/// #[repr(u8)]
+/// enum Foo {
+///     #[default]
+///     A,
+///     B = 0x17,
+/// }
+///
+/// assert_eq!(Foo::from_u8(0), Some(Foo::A));
+/// assert_eq!(Foo::from_u8(0x17), Some(Foo::B));
+/// assert_eq!(Foo::from_u8(0x19), None);
+/// ```
+///
+/// The following examples do not compile.
+///
+/// ```compile_fail
+/// # use kernel::convert::FromPrimitive;
+/// # use kernel::macros::FromPrimitive;
+/// // Generic parameters are not allowed.
+/// #[derive(FromPrimitive)]
+/// enum Foo<T> {
+///     A,
+/// }
+///
+/// // Tuple-like enums or struct-like enums are not allowed.
+/// #[derive(FromPrimitive)]
+/// enum Bar {
+///     A(u8),
+///     B {
+///         inner: u8,
+///     },
+/// }
+///
+/// // Structs are not allowed.
+/// #[derive(FromPrimitive)]
+/// struct Baz(u8);
+/// ```
+#[proc_macro_derive(FromPrimitive)]
+pub fn derive_from_primitive(input: TokenStream) -> TokenStream {
+    convert::derive(input)
 }
