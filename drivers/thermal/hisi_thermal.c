@@ -574,14 +574,12 @@ static int hisi_thermal_probe(struct platform_device *pdev)
 		if (ret < 0)
 			return ret;
 
-		ret = devm_request_threaded_irq(dev, ret, NULL,
-						hisi_thermal_alarm_irq_thread,
-						IRQF_ONESHOT, sensor->irq_name,
-						sensor);
-		if (ret < 0) {
-			dev_err(dev, "Failed to request alarm irq: %d\n", ret);
+		ret = devm_request_threaded_irq_probe(dev, ret, NULL,
+						      hisi_thermal_alarm_irq_thread,
+						      IRQF_ONESHOT, sensor->irq_name,
+						      sensor, "alarm");
+		if (ret < 0)
 			return ret;
-		}
 
 		ret = data->ops->enable_sensor(sensor);
 		if (ret) {
