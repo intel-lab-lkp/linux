@@ -213,9 +213,11 @@ static void n_tty_kick_worker(const struct tty_struct *tty)
 static ssize_t chars_in_buffer(const struct tty_struct *tty)
 {
 	const struct n_tty_data *ldata = tty->disc_data;
-	size_t head = ldata->icanon ? ldata->canon_head : ldata->commit_head;
+	size_t head = ldata->icanon ?
+		      smp_load_acquire(&ldata->canon_head) :
+		      smp_load_acquire(&ldata->commit_head);
 
-	return head - ldata->read_tail;
+	return head - smp_load_acquire(&ldata->read_tail);
 }
 
 /**
@@ -1919,11 +1921,12 @@ static inline int input_available_p(const struct tty_struct *tty, int poll)
 {
 	const struct n_tty_data *ldata = tty->disc_data;
 	int amt = poll && !TIME_CHAR(tty) && MIN_CHAR(tty) ? MIN_CHAR(tty) : 1;
+	size_t tail = smp_load_acquire(&ldata->read_tail);
 
 	if (ldata->icanon && !L_EXTPROC(tty))
-		return ldata->canon_head != ldata->read_tail;
+		return smp_load_acquire(&ldata->canon_head) != tail;
 	else
-		return ldata->commit_head - ldata->read_tail >= amt;
+		return smp_load_acquire(&ldata->commit_head) - tail >= amt;
 }
 
 /**
