@@ -587,9 +587,9 @@ static int sun8i_ths_probe(struct platform_device *pdev)
 	 * registered yet, we deffer the registration of the interrupt to
 	 * the end.
 	 */
-	ret = devm_request_threaded_irq(dev, irq, NULL,
-					sun8i_irq_thread,
-					IRQF_ONESHOT, "ths", tmdev);
+	ret = devm_request_threaded_irq_probe(dev, irq, NULL,
+					      sun8i_irq_thread,
+					      IRQF_ONESHOT, "ths", tmdev, NULL);
 	if (ret)
 		return ret;
 
