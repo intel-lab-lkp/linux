@@ -17,12 +17,10 @@
 
 static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 {
-	if (unlikely(audit_context())) {
-		unsigned long args[6];
+	unsigned long args[6];
 
-		syscall_get_arguments(current, regs, args);
-		audit_syscall_entry(syscall, args[0], args[1], args[2], args[3]);
-	}
+	syscall_get_arguments(current, regs, args);
+	audit_syscall_entry(syscall, args[0], args[1], args[2], args[3]);
 }
 
 long syscall_trace_enter(struct pt_regs *regs, long syscall,
@@ -65,8 +63,9 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
 		 */
 		syscall = syscall_get_nr(current, regs);
 	}
-
-	syscall_enter_audit(regs, syscall);
+	
+	if (unlikely(work & SYSCALL_WORK_SYSCALL_AUDIT))
+		syscall_enter_audit(regs, syscall);
 
 	return ret ? : syscall;
 }
