@@ -236,13 +236,13 @@ SWAP Page Table Helpers
 ========================
 
 +---------------------------+--------------------------------------------------+
-| __pte_to_swp_entry        | Creates a swapped entry (arch) from a mapped PTE |
+| __pte_to_swp_entry        | Creates a swap entry (arch) from a swapped PTE   |
 +---------------------------+--------------------------------------------------+
-| __swp_to_pte_entry        | Creates a mapped PTE from a swapped entry (arch) |
+| __swp_entry_to_pte        | Creates a swapped PTE from a swap entry (arch)   |
 +---------------------------+--------------------------------------------------+
-| __pmd_to_swp_entry        | Creates a swapped entry (arch) from a mapped PMD |
+| __pmd_to_swp_entry        | Creates a swap entry (arch) from a swapped PMD   |
 +---------------------------+--------------------------------------------------+
-| __swp_to_pmd_entry        | Creates a mapped PMD from a swapped entry (arch) |
+| __swp_entry_to_pmd        | Creates a swapped PMD from a swap entry (arch)   |
 +---------------------------+--------------------------------------------------+
 | is_migration_entry        | Tests a migration (read or write) swapped entry  |
 +-------------------------------+----------------------------------------------+
