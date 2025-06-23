@@ -258,12 +258,16 @@ static int of_pci_prop_intr_map(struct pci_dev *pdev, struct of_changeset *ocs,
 	 * Parsing interrupt failed for all pins. In this case, it does not
 	 * need to generate interrupt-map property.
 	 */
-	if (!map_sz)
-		return 0;
+	if (!map_sz) {
+		ret = 0;
+		goto out_put_nodes;
+	}
 
 	int_map = kcalloc(map_sz, sizeof(u32), GFP_KERNEL);
-	if (!int_map)
-		return -ENOMEM;
+	if (!int_map) {
+		ret = -ENOMEM;
+		goto out_put_nodes;
+	}
 	mapp = int_map;
 
 	list_for_each_entry(child, &pdev->subordinate->devices, bus_list) {
@@ -305,14 +309,12 @@ static int of_pci_prop_intr_map(struct pci_dev *pdev, struct of_changeset *ocs,
 	ret = of_changeset_add_prop_u32_array(ocs, np, "interrupt-map-mask",
 					      int_map_mask,
 					      ARRAY_SIZE(int_map_mask));
-	if (ret)
-		goto failed;
-
-	kfree(int_map);
-	return 0;
 
 failed:
 	kfree(int_map);
+out_put_nodes:
+	for (i = 0; i < OF_PCI_MAX_INT_PIN; i++)
+		of_node_put(out_irq[i].np);
 	return ret;
 }
 
