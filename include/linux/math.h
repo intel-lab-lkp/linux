@@ -88,6 +88,17 @@
 	__x - (__x % (y));				\
 }							\
 )
+/*
+ * Same as above but for u64 dividends. divisor must be a 32-bit
+ * number.
+ */
+#define rounddown_ull(x, y) (				\
+{							\
+	unsigned long long __x = (x);			\
+	unsigned long long _tmp = __x;			\
+	__x - do_div(_tmp, (y));			\
+}							\
+)
 
 /*
  * Divide positive or negative dividend by positive or negative divisor
