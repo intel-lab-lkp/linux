@@ -420,11 +420,29 @@ static int bcm54811_config_init(struct phy_device *phydev)
 			return err;
 	}
 
-	/* With BCM54811, BroadR-Reach implies no autoneg */
-	if (priv->brr_mode)
-		phydev->autoneg = 0;
+	err = bcm5481x_set_brrmode(phydev, priv->brr_mode);
+	if (err < 0)
+		return err;
 
-	return bcm5481x_set_brrmode(phydev, priv->brr_mode);
+	/* With BCM54811, BroadR-Reach implies no autoneg */
+	if (priv->brr_mode) {
+		phydev->autoneg = 0;
+		/* Disable Long Distance Signaling, the BRR mode autoneg */
+		err = phy_modify(phydev, MII_BCM54XX_LRECR, LRECR_LDSEN, 0);
+		if (err < 0)
+			return err;
+	}
+
+	if (!phy_interface_is_rgmii(phydev) ||
+	    phydev->interface == PHY_INTERFACE_MODE_MII) {
+		/* Misc Control: GMII/MII Mode (not RGMII) */
+		err = bcm54xx_auxctl_write(phydev,
+					   MII_BCM54XX_AUXCTL_SHDWSEL_MISC,
+					   MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RGMII_SKEW_EN |
+					   MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RSVD
+		);
+	}
+	return err;
 }
 
 static int bcm54xx_config_init(struct phy_device *phydev)
