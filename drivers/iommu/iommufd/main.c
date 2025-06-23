@@ -167,7 +167,7 @@ int iommufd_object_remove(struct iommufd_ctx *ictx,
 		goto err_xa;
 	}
 
-	xas_store(&xas, NULL);
+	xas_store(&xas, (flags & REMOVE_OBJ_TOMBSTONE) ? XA_ZERO_ENTRY : NULL);
 	if (ictx->vfio_ioas == container_of(obj, struct iommufd_ioas, obj))
 		ictx->vfio_ioas = NULL;
 	xa_unlock(&ictx->objects);
@@ -238,6 +238,7 @@ static int iommufd_fops_release(struct inode *inode, struct file *filp)
 	struct iommufd_ctx *ictx = filp->private_data;
 	struct iommufd_sw_msi_map *next;
 	struct iommufd_sw_msi_map *cur;
+	XA_STATE(xas, &ictx->objects, 0);
 	struct iommufd_object *obj;
 
 	/*
@@ -251,16 +252,30 @@ static int iommufd_fops_release(struct inode *inode, struct file *filp)
 	 */
 	while (!xa_empty(&ictx->objects)) {
 		unsigned int destroyed = 0;
-		unsigned long index;
 
-		xa_for_each(&ictx->objects, index, obj) {
-			if (!refcount_dec_if_one(&obj->users))
-				continue;
+		xas_set(&xas, 0);
+		for (;;) {
+			rcu_read_lock();
+			obj = xas_find(&xas, ULONG_MAX);
+			rcu_read_unlock();
+
+			if (!obj)
+				break;
+
+			if (!xa_is_zero(obj)) {
+				if (!refcount_dec_if_one(&obj->users))
+					continue;
+
+				iommufd_object_ops[obj->type].destroy(obj);
+				kfree(obj);
+			}
+
 			destroyed++;
-			xa_erase(&ictx->objects, index);
-			iommufd_object_ops[obj->type].destroy(obj);
-			kfree(obj);
+			xas_lock(&xas);
+			xas_store(&xas, NULL);
+			xas_unlock(&xas);
 		}
+
 		/* Bug related to users refcount */
 		if (WARN_ON(!destroyed))
 			break;
