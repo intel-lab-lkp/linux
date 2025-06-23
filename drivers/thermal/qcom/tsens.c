@@ -1190,21 +1190,18 @@ static int tsens_register_irq(struct tsens_priv *priv, char *irqname,
 	} else {
 		/* VER_0 interrupt is TRIGGER_RISING, VER_0_1 and up is ONESHOT */
 		if (tsens_version(priv) == VER_0)
-			ret = devm_request_threaded_irq(&pdev->dev, irq,
-							thread_fn, NULL,
-							IRQF_TRIGGER_RISING,
-							dev_name(&pdev->dev),
-							priv);
+			ret = devm_request_threaded_irq_probe(&pdev->dev, irq,
+							      thread_fn, NULL,
+							      IRQF_TRIGGER_RISING,
+							      dev_name(&pdev->dev),
+							      priv, NULL);
 		else
-			ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
-							thread_fn, IRQF_ONESHOT,
-							dev_name(&pdev->dev),
-							priv);
+			ret = devm_request_threaded_irq_probe(&pdev->dev, irq, NULL,
+							      thread_fn, IRQF_ONESHOT,
+							      dev_name(&pdev->dev),
+							      priv, NULL);
 
-		if (ret)
-			dev_err(&pdev->dev, "%s: failed to get irq\n",
-				__func__);
-		else
+		if (!ret)
 			enable_irq_wake(irq);
 	}
 
