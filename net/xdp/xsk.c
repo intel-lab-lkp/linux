@@ -857,6 +857,9 @@ static int __xsk_generic_xmit(struct sock *sk)
 	}
 
 out:
+	if (xs->tx->cached_prod != xs->tx->cached_cons)
+		__xskq_cons_release(xs->tx);
+
 	if (sent_frame)
 		if (xsk_tx_writeable(xs))
 			sk->sk_write_space(sk);
