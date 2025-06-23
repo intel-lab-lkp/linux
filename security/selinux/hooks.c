@@ -3847,6 +3847,12 @@ static int selinux_file_ioctl(struct file *file, unsigned int cmd,
 					    CAP_OPT_NONE, true);
 		break;
 
+	case TIOCSTI:
+		if (!file_ns_capable(file, &init_user_ns, CAP_SYS_ADMIN) ||
+		    !capable(CAP_SYS_ADMIN))
+			error = -EPERM;
+		break;
+
 	case FIOCLEX:
 	case FIONCLEX:
 		if (!selinux_policycap_ioctl_skip_cloexec())
