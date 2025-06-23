@@ -8,6 +8,7 @@
 
 #include <linux/of.h>
 #include <linux/of_clk.h>
+#include <linux/regmap.h>
 
 /*
  * flags used across common struct clk.  these flags should only affect the
@@ -526,6 +527,7 @@ void of_fixed_clk_setup(struct device_node *np);
 struct clk_gate {
 	struct clk_hw hw;
 	void __iomem	*reg;
+	u8		map_offset;
 	u8		bit_idx;
 	u8		flags;
 	spinlock_t	*lock;
@@ -538,6 +540,37 @@ struct clk_gate {
 #define CLK_GATE_BIG_ENDIAN		BIT(2)
 
 extern const struct clk_ops clk_gate_ops;
+
+#ifdef CONFIG_COMMON_CLK_GATE_REGMAP
+/**
+ * struct clk_gate_regmap - gating clock via regmap
+ *
+ * @hw:		handle between common and hardware-specific interfaces
+ * @map:	regmap controlling gate
+ * @map_offset:	register offset within the regmap controlling gate
+ * @bit_idx:	single bit controlling gate
+ * @flags:	hardware-specific flags
+ * @lock:	register lock
+ *
+ * Clock which can gate its output.  Implements .enable & .disable
+ *
+ * Flags:
+ * See clk_gate
+ */
+struct clk_gate_regmap {
+	struct clk_hw hw;
+	struct regmap	*map;
+	u8		map_offset;
+	u8		bit_idx;
+	u8		flags;
+	spinlock_t	*lock;
+};
+
+#define to_clk_gate_regmap(_hw) container_of(_hw, struct clk_gate_regmap, hw)
+
+extern const struct clk_ops clk_gate_regmap_ops;
+#endif
+
 struct clk_hw *__clk_hw_register_gate(struct device *dev,
 		struct device_node *np, const char *name,
 		const char *parent_name, const struct clk_hw *parent_hw,
@@ -663,6 +696,31 @@ void clk_unregister_gate(struct clk *clk);
 void clk_hw_unregister_gate(struct clk_hw *hw);
 int clk_gate_is_enabled(struct clk_hw *hw);
 
+#ifdef CONFIG_COMMON_CLK_GATE_REGMAP
+struct clk_hw *__clk_hw_register_gate_regmap(struct device *dev,
+		struct device_node *np, const char *name,
+		const char *parent_name, const struct clk_hw *parent_hw,
+		const struct clk_parent_data *parent_data,
+		unsigned long flags,
+		struct regmap *map, u8 map_offset, u8 bit_idx,
+		u8 clk_gate_flags, spinlock_t *lock);
+struct clk_hw *__devm_clk_hw_register_gate_regmap(struct device *dev,
+		struct device_node *np, const char *name,
+		const char *parent_name, const struct clk_hw *parent_hw,
+		const struct clk_parent_data *parent_data,
+		unsigned long flags,
+		struct regmap *map, u8 map_offset, u8 bit_idx,
+		u8 clk_gate_flags, spinlock_t *lock);
+struct clk *clk_register_gate_regmap(struct device *dev, const char *name,
+		const char *parent_name, unsigned long flags,
+		struct regmap *map, u8 map_offset, u8 bit_idx,
+		u8 clk_gate_flags, spinlock_t *lock);
+
+void clk_unregister_gate_regmap(struct clk *clk);
+void clk_hw_unregister_gate_regmap(struct clk_hw *hw);
+int clk_gate_regmap_is_enabled(struct clk_hw *hw);
+#endif
+
 struct clk_div_table {
 	unsigned int	val;
 	unsigned int	div;
@@ -735,6 +793,41 @@ struct clk_divider {
 
 extern const struct clk_ops clk_divider_ops;
 extern const struct clk_ops clk_divider_ro_ops;
+
+#ifdef CONFIG_COMMON_CLK_DIVIDER_REGMAP
+/**
+ * struct clk_divider_regmap - adjustable divider clock via regmap
+ *
+ * @hw:		handle between common and hardware-specific interfaces
+ * @map:	regmap containing the divider
+ * @map_offset:	register offset within the regmap containing the divider
+ * @shift:	shift to the divider bit field
+ * @width:	width of the divider bit field
+ * @table:	array of value/divider pairs, last entry should have div = 0
+ * @lock:	register lock
+ *
+ * Clock with an adjustable divider affecting its output frequency.  Implements
+ * .recalc_rate, .set_rate and .round_rate
+ *
+ * @flags:
+ * See clk_divider
+ */
+struct clk_divider_regmap {
+	struct clk_hw	hw;
+	struct regmap	*regmap;
+	u8		map_offset;
+	u8		shift;
+	u8		width;
+	u8		flags;
+	const struct clk_div_table	*table;
+	spinlock_t	*lock;
+};
+
+#define to_clk_divider_regmap(_hw) container_of(_hw, struct clk_divider_regmap, hw)
+
+extern const struct clk_ops clk_divider_regmap_ops;
+extern const struct clk_ops clk_divider_regmap_ro_ops;
+#endif
 
 unsigned long divider_recalc_rate(struct clk_hw *hw, unsigned long parent_rate,
 		unsigned int val, const struct clk_div_table *table,
@@ -971,6 +1064,33 @@ struct clk *clk_register_divider_table(struct device *dev, const char *name,
 
 void clk_unregister_divider(struct clk *clk);
 void clk_hw_unregister_divider(struct clk_hw *hw);
+
+#ifdef CONFIG_COMMON_CLK_DIVIDER_REGMAP
+struct clk_hw *__clk_hw_register_divider_regmap(struct device *dev,
+		struct device_node *np, const char *name,
+		const char *parent_name, const struct clk_hw *parent_hw,
+		const struct clk_parent_data *parent_data, unsigned long flags,
+		struct regmap *regmap, u8 map_offset, u8 shift, u8 width,
+		u8 clk_divider_flags, const struct clk_div_table *table,
+		spinlock_t *lock);
+
+struct clk_hw *__devm_clk_hw_register_divider_regmap(struct device *dev,
+		struct device_node *np, const char *name,
+		const char *parent_name, const struct clk_hw *parent_hw,
+		const struct clk_parent_data *parent_data, unsigned long flags,
+		struct regmap *regmap, u8 map_offset, u8 shift, u8 width,
+		u8 clk_divider_flags, const struct clk_div_table *table,
+		spinlock_t *lock);
+
+struct clk *clk_register_divider_regmap_table(struct device *dev,
+		const char *name, const char *parent_name, unsigned long flags,
+		struct regmap *regmap, u8 map_offset, u8 shift, u8 width,
+		u8 clk_divider_flags, const struct clk_div_table *table,
+		spinlock_t *lock);
+
+void clk_unregister_divider_regmap(struct clk *clk);
+void clk_hw_unregister_divider_regmap(struct clk_hw *hw);
+#endif
 
 /**
  * struct clk_mux - multiplexer clock
