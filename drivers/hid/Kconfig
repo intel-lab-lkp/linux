@@ -536,6 +536,18 @@ config HID_XIAOMI
 	  Adds support for side buttons of Xiaomi Mi Dual Mode Wireless
 	  Mouse Silent Edition.
 
+config HID_XINMENG
+	tristate "Xinmeng Keyboards"
+	depends on USB_HID
+	help
+		Support for Xinmeng Keyboard.
+
+		Say Y here if you have a Xinmeng M71 Keyboard
+		and want to be able to read its battery capacity.
+
+		To compile this driver as a module, choose M here: the
+		module will be called hid-xinmeng.
+
 config HID_GYRATION
 	tristate "Gyration remote control"
 	help
