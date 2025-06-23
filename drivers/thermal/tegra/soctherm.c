@@ -1989,29 +1989,27 @@ static int soctherm_interrupts_init(struct platform_device *pdev,
 		return 0;
 	}
 
-	ret = devm_request_threaded_irq(&pdev->dev,
-					tegra->thermal_irq,
-					soctherm_thermal_isr,
-					soctherm_thermal_isr_thread,
-					IRQF_ONESHOT,
-					dev_name(&pdev->dev),
-					tegra);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "request_irq 'thermal_irq' failed.\n");
+	ret = devm_request_threaded_irq_probe(&pdev->dev,
+					      tegra->thermal_irq,
+					      soctherm_thermal_isr,
+					      soctherm_thermal_isr_thread,
+					      IRQF_ONESHOT,
+					      dev_name(&pdev->dev),
+					      tegra,
+					      "thermal_irq");
+	if (ret < 0)
 		return ret;
-	}
 
-	ret = devm_request_threaded_irq(&pdev->dev,
-					tegra->edp_irq,
-					soctherm_edp_isr,
-					soctherm_edp_isr_thread,
-					IRQF_ONESHOT,
-					"soctherm_edp",
-					tegra);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "request_irq 'edp_irq' failed.\n");
+	ret = devm_request_threaded_irq_probe(&pdev->dev,
+					      tegra->edp_irq,
+					      soctherm_edp_isr,
+					      soctherm_edp_isr_thread,
+					      IRQF_ONESHOT,
+					      "soctherm_edp",
+					      tegra,
+					      "edp_irq");
+	if (ret < 0)
 		return ret;
-	}
 
 	return 0;
 }
