@@ -235,9 +235,19 @@ static int dw_edma_device_config(struct dma_chan *dchan,
 				 struct dma_slave_config *config)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	struct dw_edma_peripheral_config *pconfig = config->peripheral_config;
+	unsigned long flags;
 
+	if (WARN_ON(config->peripheral_config &&
+		    config->peripheral_size != sizeof(*pconfig)))
+		return -EINVAL;
+
+	spin_lock_irqsave(&chan->vc.lock, flags);
 	memcpy(&chan->config, config, sizeof(*config));
+
+	chan->non_ll_en = pconfig ? pconfig->non_ll_en : false;
 	chan->configured = true;
+	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
 	return 0;
 }

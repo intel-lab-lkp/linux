@@ -101,6 +101,14 @@ struct dw_edma_chip {
 	struct dw_edma		*dw;
 };
 
+/**
+ * struct dw_edma_peripheral_config - peripheral spicific configurations
+ * @non_ll_en:		 enable non-linked list mode of operations
+ */
+struct dw_edma_peripheral_config {
+	bool			non_ll_en;
+};
+
 /* Export to the platform drivers */
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
