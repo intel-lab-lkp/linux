@@ -137,11 +137,54 @@ static struct iommufd_group *iommufd_get_group(struct iommufd_ctx *ictx,
 	}
 }
 
+static void iommufd_device_remove_vdev(struct iommufd_device *idev)
+{
+	bool vdev_removing = false;
+
+	mutex_lock(&idev->igroup->lock);
+	if (idev->vdev) {
+		struct iommufd_vdevice *vdev;
+
+		vdev = iommufd_get_vdevice(idev->ictx, idev->vdev->obj.id);
+		if (IS_ERR(vdev)) {
+			/* vdev is removed from xarray, but is not destroyed/freed */
+			vdev_removing = true;
+			goto unlock;
+		}
+
+		/* Should never happen */
+		if (WARN_ON(vdev != idev->vdev)) {
+			idev->vdev = NULL;
+			iommufd_put_object(idev->ictx, &vdev->obj);
+			goto unlock;
+		}
+
+		/*
+		 * vdev cannot be destroyed after refcount_inc, safe to release
+		 * idev->igroup->lock and use idev->vdev afterward.
+		 */
+		refcount_inc(&idev->vdev->obj.users);
+		iommufd_put_object(idev->ictx, &idev->vdev->obj);
+	}
+unlock:
+	mutex_unlock(&idev->igroup->lock);
+
+	if (vdev_removing) {
+		if (!wait_event_timeout(idev->ictx->destroy_wait,
+					!idev->vdev,
+					msecs_to_jiffies(60000)))
+			pr_crit("Time out waiting for iommufd vdevice removed\n");
+	} else if (idev->vdev) {
+		iommufd_object_tombstone_user(idev->ictx, &idev->vdev->obj);
+	}
+}
+
 void iommufd_device_destroy(struct iommufd_object *obj)
 {
 	struct iommufd_device *idev =
 		container_of(obj, struct iommufd_device, obj);
 
+	iommufd_device_remove_vdev(idev);
 	iommu_device_release_dma_owner(idev->dev);
 	iommufd_put_group(idev->igroup);
 	if (!iommufd_selftest_is_mock_dev(idev->dev))
