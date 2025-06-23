@@ -228,6 +228,8 @@ static int imx_ocotp_cell_pp(void *context, const char *id, int index,
 
 	/* Deal with some post processing of nvmem cell data */
 	if (id && !strcmp(id, "mac-address"))
+		if (bytes > 6)
+			bytes = 6;
 		for (i = 0; i < bytes / 2; i++)
 			swap(buf[i], buf[bytes - i - 1]);
 
