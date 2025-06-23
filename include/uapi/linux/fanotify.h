@@ -254,6 +254,7 @@ struct fanotify_response_info_audit_rule {
 
 #define FAN_AUDIT	0x10	/* Bitmask to create audit record for result */
 #define FAN_INFO	0x20	/* Bitmask to indicate additional information */
+#define FAN_DEFAULT	0x30	/* Bitmask to set default response on close */
 
 /* No fd set in event */
 #define FAN_NOFD	-1

@@ -378,6 +378,13 @@ static int process_access_response(struct fsnotify_group *group,
 		return -EINVAL;
 	}
 
+	if (response & FAN_DEFAULT) {
+		if (fd != FAN_NOFD)
+			return -EINVAL;
+		group->default_response = response & FANOTIFY_RESPONSE_ACCESS;
+		return 0;
+	}
+
 	if ((response & FAN_AUDIT) && !FAN_GROUP_FLAG(group, FAN_ENABLE_AUDIT))
 		return -EINVAL;
 
@@ -1023,7 +1030,8 @@ static int fanotify_release(struct inode *ignored, struct file *file)
 		event = list_first_entry(&group->fanotify_data.access_list,
 				struct fanotify_perm_event, fae.fse.list);
 		list_del_init(&event->fae.fse.list);
-		finish_permission_event(group, event, FAN_ALLOW, NULL);
+		finish_permission_event(group, event,
+				group->default_response, NULL);
 		spin_lock(&group->notification_lock);
 	}
 
@@ -1040,7 +1048,7 @@ static int fanotify_release(struct inode *ignored, struct file *file)
 			fsnotify_destroy_event(group, fsn_event);
 		} else {
 			finish_permission_event(group, FANOTIFY_PERM(event),
-						FAN_ALLOW, NULL);
+						group->default_response, NULL);
 		}
 		spin_lock(&group->notification_lock);
 	}
@@ -1639,6 +1647,8 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 		fd = -EINVAL;
 		goto out_destroy_group;
 	}
+
+	group->default_response = FAN_ALLOW;
 
 	BUILD_BUG_ON(!(FANOTIFY_ADMIN_INIT_FLAGS & FAN_UNLIMITED_QUEUE));
 	if (flags & FAN_UNLIMITED_QUEUE) {
