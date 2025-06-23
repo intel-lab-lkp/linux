@@ -285,6 +285,15 @@ config MTK_CMDQ_MBOX
 	  critical time limitation, such as updating display configuration
 	  during the vblank.
 
+config MTK_TINYSYS_MBOX
+	tristate "MediaTek TINYSYS Mailbox Support"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	help
+	  The MediaTek TinySYS mailbox is used to communicate with remote
+	  processors based on the MediaTek IPIC framework.
+	  Say yes here to add support for the MediaTek TinySYS mailbox
+	  driver.
+
 config ZYNQMP_IPI_MBOX
 	tristate "Xilinx ZynqMP IPI Mailbox"
 	depends on ARCH_ZYNQMP && OF
