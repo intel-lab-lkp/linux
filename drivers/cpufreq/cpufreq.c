@@ -2991,6 +2991,7 @@ err_if_unreg:
 err_boost_unreg:
 	remove_boost_sysfs_file();
 err_null_driver:
+	static_branch_disable_cpuslocked(&cpufreq_freq_invariance);
 	write_lock_irqsave(&cpufreq_driver_lock, flags);
 	cpufreq_driver = NULL;
 	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
