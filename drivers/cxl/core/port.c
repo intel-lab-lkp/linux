@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/node.h>
+#include <linux/cleanup.h>
 #include <cxl/einj.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
@@ -1888,14 +1889,14 @@ EXPORT_SYMBOL_NS_GPL(cxl_switch_decoder_alloc, "CXL");
  */
 struct cxl_endpoint_decoder *cxl_endpoint_decoder_alloc(struct cxl_port *port)
 {
-	struct cxl_endpoint_decoder *cxled;
 	struct cxl_decoder *cxld;
 	int rc;
 
 	if (!is_cxl_endpoint(port))
 		return ERR_PTR(-EINVAL);
 
-	cxled = kzalloc(sizeof(*cxled), GFP_KERNEL);
+	struct cxl_endpoint_decoder *cxled __free(kfree) =
+		kzalloc(sizeof(*cxled), GFP_KERNEL);
 	if (!cxled)
 		return ERR_PTR(-ENOMEM);
 
@@ -1904,7 +1905,6 @@ struct cxl_endpoint_decoder *cxl_endpoint_decoder_alloc(struct cxl_port *port)
 	cxld = &cxled->cxld;
 	rc = cxl_decoder_init(port, cxld);
 	if (rc)	 {
-		kfree(cxled);
 		return ERR_PTR(rc);
 	}
 
