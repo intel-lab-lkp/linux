@@ -241,14 +241,11 @@ static int pmic_thermal_probe(struct platform_device *pdev)
 			return virq;
 		}
 
-		ret = devm_request_threaded_irq(&pdev->dev, virq,
-				NULL, pmic_thermal_irq_handler,
-				IRQF_ONESHOT, "pmic_thermal", pdev);
-
-		if (ret) {
-			dev_err(dev, "request irq(%d) failed: %d\n", virq, ret);
+		ret = devm_request_threaded_irq_probe(&pdev->dev, virq, NULL,
+						      pmic_thermal_irq_handler, IRQF_ONESHOT,
+						      "pmic_thermal", pdev, NULL);
+		if (ret)
 			return ret;
-		}
 		pmic_irq_count++;
 	}
 
