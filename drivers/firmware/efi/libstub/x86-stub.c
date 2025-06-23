@@ -794,8 +794,8 @@ static efi_status_t efi_decompress_kernel(unsigned long *kernel_entry,
 static void __noreturn enter_kernel(unsigned long kernel_addr,
 				    struct boot_params *boot_params)
 {
-	/* enter decompressed kernel with boot_params pointer in RSI/ESI */
-	asm("jmp *%0"::"r"(kernel_addr), "S"(boot_params));
+	/* enter decompressed kernel with boot_params pointer in RDI/EDI */
+	asm("jmp *%0"::"r"(kernel_addr), "D"(boot_params));
 
 	unreachable();
 }
