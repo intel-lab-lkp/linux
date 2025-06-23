@@ -468,9 +468,10 @@ static int rcar_gen3_thermal_request_irqs(struct rcar_gen3_thermal_priv *priv,
 		if (!irqname)
 			return -ENOMEM;
 
-		ret = devm_request_threaded_irq(dev, irq, NULL,
-						rcar_gen3_thermal_irq,
-						IRQF_ONESHOT, irqname, priv);
+		ret = devm_request_threaded_irq_probe(dev, irq, NULL,
+						      rcar_gen3_thermal_irq,
+						      IRQF_ONESHOT, irqname,
+						      priv, NULL);
 		if (ret)
 			return ret;
 	}
