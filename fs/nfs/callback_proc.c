@@ -264,47 +264,43 @@ static u32 initiate_file_draining(struct nfs_client *clp,
 
 	pnfs_layoutcommit_inode(ino, false);
 
+	scoped_guard(spinlock, &ino->i_lock) {
+		lo = NFS_I(ino)->layout;
+		if (!lo)
+			goto out;
+		pnfs_get_layout_hdr(lo);
+		rv = pnfs_check_callback_stateid(lo, &args->cbl_stateid, cps);
+		if (rv != NFS_OK)
+			break;
 
-	spin_lock(&ino->i_lock);
-	lo = NFS_I(ino)->layout;
-	if (!lo) {
-		spin_unlock(&ino->i_lock);
-		goto out;
-	}
-	pnfs_get_layout_hdr(lo);
-	rv = pnfs_check_callback_stateid(lo, &args->cbl_stateid, cps);
-	if (rv != NFS_OK)
-		goto unlock;
+		/*
+		 * Enforce RFC5661 Section 12.5.5.2.1.5 (Bulk Recall and Return)
+		 */
+		if (test_bit(NFS_LAYOUT_BULK_RECALL, &lo->plh_flags)) {
+			rv = NFS4ERR_DELAY;
+			break;
+		}
 
-	/*
-	 * Enforce RFC5661 Section 12.5.5.2.1.5 (Bulk Recall and Return)
-	 */
-	if (test_bit(NFS_LAYOUT_BULK_RECALL, &lo->plh_flags)) {
-		rv = NFS4ERR_DELAY;
-		goto unlock;
-	}
+		pnfs_set_layout_stateid(lo, &args->cbl_stateid, NULL, true);
+		switch (pnfs_mark_matching_lsegs_return(lo, &free_me_list,
+					&args->cbl_range,
+					be32_to_cpu(args->cbl_stateid.seqid))) {
+		case 0:
+		case -EBUSY:
+			/* There are layout segments that need to be returned */
+			rv = NFS4_OK;
+			break;
+		case -ENOENT:
+			set_bit(NFS_LAYOUT_DRAIN, &lo->plh_flags);
+			/* Embrace your forgetfulness! */
+			rv = NFS4ERR_NOMATCHING_LAYOUT;
 
-	pnfs_set_layout_stateid(lo, &args->cbl_stateid, NULL, true);
-	switch (pnfs_mark_matching_lsegs_return(lo, &free_me_list,
-				&args->cbl_range,
-				be32_to_cpu(args->cbl_stateid.seqid))) {
-	case 0:
-	case -EBUSY:
-		/* There are layout segments that need to be returned */
-		rv = NFS4_OK;
-		break;
-	case -ENOENT:
-		set_bit(NFS_LAYOUT_DRAIN, &lo->plh_flags);
-		/* Embrace your forgetfulness! */
-		rv = NFS4ERR_NOMATCHING_LAYOUT;
-
-		if (NFS_SERVER(ino)->pnfs_curr_ld->return_range) {
-			NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo,
-				&args->cbl_range);
+			if (NFS_SERVER(ino)->pnfs_curr_ld->return_range) {
+				NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo,
+					&args->cbl_range);
+			}
 		}
 	}
-unlock:
-	spin_unlock(&ino->i_lock);
 	pnfs_free_lseg_list(&free_me_list);
 	/* Free all lsegs that are attached to commit buckets */
 	nfs_commit_inode(ino, 0);
@@ -524,62 +520,61 @@ __be32 nfs4_callback_sequence(void *argp, void *resp,
 	res->csr_sequenceid = args->csa_sequenceid;
 	res->csr_slotid = args->csa_slotid;
 
-	spin_lock(&tbl->slot_tbl_lock);
-	/* state manager is resetting the session */
-	if (test_bit(NFS4_SLOT_TBL_DRAINING, &tbl->slot_tbl_state)) {
-		status = htonl(NFS4ERR_DELAY);
-		/* Return NFS4ERR_BADSESSION if we're draining the session
-		 * in order to reset it.
+	scoped_guard(spinlock, &tbl->slot_tbl_lock) {
+		/* state manager is resetting the session */
+		if (test_bit(NFS4_SLOT_TBL_DRAINING, &tbl->slot_tbl_state)) {
+			status = htonl(NFS4ERR_DELAY);
+			/* Return NFS4ERR_BADSESSION if we're draining the session
+			 * in order to reset it.
+			 */
+			if (test_bit(NFS4CLNT_SESSION_RESET, &clp->cl_state))
+				status = htonl(NFS4ERR_BADSESSION);
+			break;
+		}
+
+		status = htonl(NFS4ERR_BADSLOT);
+		slot = nfs4_lookup_slot(tbl, args->csa_slotid);
+		if (IS_ERR(slot))
+			break;
+
+		res->csr_highestslotid = tbl->server_highest_slotid;
+		res->csr_target_highestslotid = tbl->target_highest_slotid;
+
+		status = validate_seqid(tbl, slot, args);
+		if (status)
+			break;
+		if (!nfs4_try_to_lock_slot(tbl, slot)) {
+			status = htonl(NFS4ERR_DELAY);
+			break;
+		}
+		cps->slot = slot;
+
+		/* The ca_maxresponsesize_cached is 0 with no DRC */
+		if (args->csa_cachethis != 0) {
+			status = htonl(NFS4ERR_REP_TOO_BIG_TO_CACHE);
+			break;
+		}
+
+		/*
+		 * Check for pending referring calls.  If a match is found, a
+		 * related callback was received before the response to the original
+		 * call.
 		 */
-		if (test_bit(NFS4CLNT_SESSION_RESET, &clp->cl_state))
-			status = htonl(NFS4ERR_BADSESSION);
-		goto out_unlock;
+		ret = referring_call_exists(clp, args->csa_nrclists, args->csa_rclists,
+					    &tbl->slot_tbl_lock);
+		if (ret < 0) {
+			status = htonl(NFS4ERR_DELAY);
+			break;
+		}
+		cps->referring_calls = ret;
+
+		/*
+		 * RFC5661 20.9.3
+		 * If CB_SEQUENCE returns an error, then the state of the slot
+		 * (sequence ID, cached reply) MUST NOT change.
+		 */
+		slot->seq_nr = args->csa_sequenceid;
 	}
-
-	status = htonl(NFS4ERR_BADSLOT);
-	slot = nfs4_lookup_slot(tbl, args->csa_slotid);
-	if (IS_ERR(slot))
-		goto out_unlock;
-
-	res->csr_highestslotid = tbl->server_highest_slotid;
-	res->csr_target_highestslotid = tbl->target_highest_slotid;
-
-	status = validate_seqid(tbl, slot, args);
-	if (status)
-		goto out_unlock;
-	if (!nfs4_try_to_lock_slot(tbl, slot)) {
-		status = htonl(NFS4ERR_DELAY);
-		goto out_unlock;
-	}
-	cps->slot = slot;
-
-	/* The ca_maxresponsesize_cached is 0 with no DRC */
-	if (args->csa_cachethis != 0) {
-		status = htonl(NFS4ERR_REP_TOO_BIG_TO_CACHE);
-		goto out_unlock;
-	}
-
-	/*
-	 * Check for pending referring calls.  If a match is found, a
-	 * related callback was received before the response to the original
-	 * call.
-	 */
-	ret = referring_call_exists(clp, args->csa_nrclists, args->csa_rclists,
-				    &tbl->slot_tbl_lock);
-	if (ret < 0) {
-		status = htonl(NFS4ERR_DELAY);
-		goto out_unlock;
-	}
-	cps->referring_calls = ret;
-
-	/*
-	 * RFC5661 20.9.3
-	 * If CB_SEQUENCE returns an error, then the state of the slot
-	 * (sequence ID, cached reply) MUST NOT change.
-	 */
-	slot->seq_nr = args->csa_sequenceid;
-out_unlock:
-	spin_unlock(&tbl->slot_tbl_lock);
 
 out:
 	cps->clp = clp; /* put in nfs4_callback_compound */
