@@ -81,6 +81,49 @@ int devm_request_threaded_irq(struct device *dev, unsigned int irq,
 EXPORT_SYMBOL(devm_request_threaded_irq);
 
 /**
+ * devm_request_threaded_irq_probe - request irq for a managed device with error msg (recommended in probe)
+ * @dev:	Device to request interrupt for
+ * @irq:	Interrupt line to allocate
+ * @handler:	Function to be called when the IRQ occurs
+ * @thread_fn:	Function to be called in a threaded interrupt context. NULL
+ *		for devices which handle everything in @handler
+ * @irqflags:	Interrupt type flags
+ * @devname:	An ascii name for the claiming device, dev_name(dev) if NULL
+ * @dev_id:	A cookie passed back to the handler function
+ * @info:	Optional additional error log
+ *
+ * This is a variant of the devm_request_threaded_irq function.
+ * It will print an error message by default when the request fails,
+ * and the consumer can add a special error msg.
+ *
+ * Except for the extra @info argument, this function takes the
+ * same arguments and performs the same function as
+ * devm_request_threaded_irq(). IRQs requested with this function will be
+ * automatically freed on driver detach.
+ *
+ * If an IRQ allocated with this function needs to be freed
+ * separately, devm_free_irq() must be used.
+ *
+ * Return: 0 on success or a negative error number.
+ */
+int devm_request_threaded_irq_probe(struct device *dev, unsigned int irq,
+				    irq_handler_t handler, irq_handler_t thread_fn,
+				    unsigned long irqflags, const char *devname,
+				    void *dev_id, const char *info)
+{
+	int rc;
+
+	rc = devm_request_threaded_irq(dev, irq, handler, NULL, irqflags, devname, dev_id);
+	if (rc) {
+		return dev_err_probe(dev, rc, "Failed to request %sinterrupt %u %s %s\n",
+				     thread_fn ? "threaded " : "", irq, devname ? : dev_name(dev),
+				     info ? : "");
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_request_threaded_irq_probe);
+
+/**
  *	devm_request_any_context_irq - allocate an interrupt line for a managed device
  *	@dev: device to request interrupt for
  *	@irq: Interrupt line to allocate

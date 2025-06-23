@@ -206,6 +206,21 @@ extern void free_percpu_nmi(unsigned int irq, void __percpu *percpu_dev_id);
 struct device;
 
 extern int __must_check
+devm_request_threaded_irq_probe(struct device *dev, unsigned int irq,
+			      irq_handler_t handler, irq_handler_t thread_fn,
+			      unsigned long irqflags, const char *devname,
+			      void *dev_id, const char *info);
+
+static inline int __must_check
+devm_request_irq_probe(struct device *dev, unsigned int irq,
+		       irq_handler_t handler, unsigned long irqflags,
+		       const char *devname, void *dev_id, const char *info)
+{
+	return devm_request_threaded_irq_probe(dev, irq, handler, NULL, irqflags,
+					       devname, dev_id, info);
+}
+
+extern int __must_check
 devm_request_threaded_irq(struct device *dev, unsigned int irq,
 			  irq_handler_t handler, irq_handler_t thread_fn,
 			  unsigned long irqflags, const char *devname,
