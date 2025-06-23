@@ -909,15 +909,12 @@ static int armada_thermal_probe(struct platform_device *pdev)
 
 	/* The overheat interrupt feature is not mandatory */
 	if (irq > 0) {
-		ret = devm_request_threaded_irq(&pdev->dev, irq,
-						armada_overheat_isr,
-						armada_overheat_isr_thread,
-						0, NULL, priv);
-		if (ret) {
-			dev_err(&pdev->dev, "Cannot request threaded IRQ %d\n",
-				irq);
+		ret = devm_request_threaded_irq_probe(&pdev->dev, irq,
+						      armada_overheat_isr,
+						      armada_overheat_isr_thread,
+						      0, NULL, priv, NULL);
+		if (ret)
 			return ret;
-		}
 	}
 
 	/*
