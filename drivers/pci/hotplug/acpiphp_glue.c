@@ -50,6 +50,21 @@ static void acpiphp_sanitize_bus(struct pci_bus *bus);
 static void hotplug_event(u32 type, struct acpiphp_context *context);
 static void free_bridge(struct kref *kref);
 
+static bool hotplug_is_native(struct pci_dev *bridge)
+{
+	u32 slot_cap;
+
+	pcie_capability_read_dword(bridge, PCI_EXP_SLTCAP, &slot_cap);
+
+	if (slot_cap & PCI_EXP_SLTCAP_HPC && pciehp_is_native(bridge))
+		return true;
+
+	if (shpchp_is_native(bridge))
+		return true;
+
+	return false;
+}
+
 /**
  * acpiphp_init_context - Create hotplug context and grab a reference to it.
  * @adev: ACPI device object to create the context for.
