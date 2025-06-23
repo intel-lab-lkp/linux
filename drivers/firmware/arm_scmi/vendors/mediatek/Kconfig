@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "ARM SCMI MediaTek Vendor Protocols"
+
+config MTK_SCMI_TINYSYS
+	tristate "MediaTek SCMI TinySYS Extension"
+	depends on ARM_SCMI_PROTOCOL || (COMPILE_TEST && OF)
+	default y if ARCH_MEDIATEK
+	help
+	  This enables communication with the MediaTek TinySYS MCU
+	  to control the power status of various SoC sub-devices
+	  other than passing other messages for initialization.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called mtk-tinysys.
+
+endmenu
