@@ -504,12 +504,21 @@ static int vlan_device_event(struct notifier_block *unused, unsigned long event,
 		break;
 
 	case NETDEV_CVLAN_FILTER_PUSH_INFO:
+		flgs = dev_get_flags(dev);
+		if (flgs & IFF_UP) {
+			pr_info("adding VLAN 0 to HW filter on device %s\n",
+				dev->name);
+			vlan_vid_add(dev, htons(ETH_P_8021Q), 0);
+		}
 		err = vlan_filter_push_vids(vlan_info, htons(ETH_P_8021Q));
 		if (err)
 			return notifier_from_errno(err);
 		break;
 
 	case NETDEV_CVLAN_FILTER_DROP_INFO:
+		flgs = dev_get_flags(dev);
+		if (flgs & IFF_UP)
+			vlan_vid_del(dev, htons(ETH_P_8021Q), 0);
 		vlan_filter_drop_vids(vlan_info, htons(ETH_P_8021Q));
 		break;
 
