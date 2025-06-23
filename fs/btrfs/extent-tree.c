@@ -3865,14 +3865,10 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	 * Do not allow non-relocation blocks in the dedicated relocation block
 	 * group, and vice versa.
 	 */
-	spin_lock(&fs_info->relocation_bg_lock);
-	data_reloc_bytenr = fs_info->data_reloc_bg;
+	data_reloc_bytenr = READ_ONCE(fs_info->data_reloc_bg);
 	if (data_reloc_bytenr &&
 	    ((ffe_ctl->for_data_reloc && bytenr != data_reloc_bytenr) ||
 	     (!ffe_ctl->for_data_reloc && bytenr == data_reloc_bytenr)))
-		skip = true;
-	spin_unlock(&fs_info->relocation_bg_lock);
-	if (skip)
 		return 1;
 
 	/* Check RO and no space case before trying to activate it */
@@ -3899,7 +3895,6 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	spin_lock(&space_info->lock);
 	spin_lock(&block_group->lock);
 	spin_lock(&fs_info->treelog_bg_lock);
-	spin_lock(&fs_info->relocation_bg_lock);
 
 	if (ret)
 		goto out;
@@ -3908,8 +3903,8 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	       block_group->start == fs_info->treelog_bg ||
 	       fs_info->treelog_bg == 0);
 	ASSERT(!ffe_ctl->for_data_reloc ||
-	       block_group->start == fs_info->data_reloc_bg ||
-	       fs_info->data_reloc_bg == 0);
+	       block_group->start == data_reloc_bytenr ||
+	       data_reloc_bytenr == 0);
 
 	if (block_group->ro ||
 	    (!ffe_ctl->for_data_reloc &&
@@ -3932,7 +3927,7 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	 * Do not allow currently used block group to be the data relocation
 	 * dedicated block group.
 	 */
-	if (ffe_ctl->for_data_reloc && !fs_info->data_reloc_bg &&
+	if (ffe_ctl->for_data_reloc && data_reloc_bytenr == 0 &&
 	    (block_group->used || block_group->reserved)) {
 		ret = 1;
 		goto out;
@@ -3957,8 +3952,8 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 		fs_info->treelog_bg = block_group->start;
 
 	if (ffe_ctl->for_data_reloc) {
-		if (!fs_info->data_reloc_bg)
-			fs_info->data_reloc_bg = block_group->start;
+		if (READ_ONCE(fs_info->data_reloc_bg) == 0)
+			WRITE_ONCE(fs_info->data_reloc_bg, block_group->start);
 		/*
 		 * Do not allow allocations from this block group, unless it is
 		 * for data relocation. Compared to increasing the ->ro, setting
@@ -3994,8 +3989,7 @@ out:
 	if (ret && ffe_ctl->for_treelog)
 		fs_info->treelog_bg = 0;
 	if (ret && ffe_ctl->for_data_reloc)
-		fs_info->data_reloc_bg = 0;
-	spin_unlock(&fs_info->relocation_bg_lock);
+		WRITE_ONCE(fs_info->data_reloc_bg, 0);
 	spin_unlock(&fs_info->treelog_bg_lock);
 	spin_unlock(&block_group->lock);
 	spin_unlock(&space_info->lock);
@@ -4304,10 +4298,10 @@ static int prepare_allocation_zoned(struct btrfs_fs_info *fs_info,
 			ffe_ctl->hint_byte = fs_info->treelog_bg;
 		spin_unlock(&fs_info->treelog_bg_lock);
 	} else if (ffe_ctl->for_data_reloc) {
-		spin_lock(&fs_info->relocation_bg_lock);
-		if (fs_info->data_reloc_bg)
-			ffe_ctl->hint_byte = fs_info->data_reloc_bg;
-		spin_unlock(&fs_info->relocation_bg_lock);
+		u64 data_reloc_bg = READ_ONCE(fs_info->data_reloc_bg);
+
+		if (data_reloc_bg)
+			ffe_ctl->hint_byte = data_reloc_bg;
 	} else if (ffe_ctl->flags & BTRFS_BLOCK_GROUP_DATA) {
 		struct btrfs_block_group *block_group;
 
