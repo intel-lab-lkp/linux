@@ -624,7 +624,7 @@ static void l1d_flush_force_sigbus(struct callback_head *ch)
 	force_sig(SIGBUS);
 }
 
-static void l1d_flush_evaluate(unsigned long prev_mm, unsigned long next_mm,
+static __always_inline void l1d_flush_evaluate(unsigned long prev_mm, unsigned long next_mm,
 				struct task_struct *next)
 {
 	/* Flush L1D if the outgoing task requests it */
@@ -648,7 +648,7 @@ static void l1d_flush_evaluate(unsigned long prev_mm, unsigned long next_mm,
 	}
 }
 
-static unsigned long mm_mangle_tif_spec_bits(struct task_struct *next)
+static __always_inline unsigned long mm_mangle_tif_spec_bits(struct task_struct *next)
 {
 	unsigned long next_tif = read_task_thread_flags(next);
 	unsigned long spec_bits = (next_tif >> TIF_SPEC_IB) & LAST_USER_MM_SPEC_MASK;
