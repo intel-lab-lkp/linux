@@ -101,6 +101,14 @@ properties:
       1BR-10 names. The PHY must be configured to operate in BroadR-Reach mode
       by software.
 
+  mii-lite-mode:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If set, indicates the use of MII-Lite variant of MII, without the
+      functions of TXER, RXER, CRS and COL signals for Broadcom PHYs. These
+      PHYs can be strapped to use MII mode but the MII or MII-Lite selection
+      must be done by software.
+
   clocks:
     maxItems: 1
     description:
