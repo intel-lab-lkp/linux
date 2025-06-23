@@ -471,7 +471,7 @@ SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 /*
  * Jump to the decompressed kernel.
  */
-	movq	%r15, %rsi
+	movq	%r15, %rdi
 	jmp	*%rax
 SYM_FUNC_END(.Lrelocated)
 
