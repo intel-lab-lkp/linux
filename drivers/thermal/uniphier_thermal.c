@@ -298,9 +298,9 @@ static int uniphier_tm_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = devm_request_threaded_irq(dev, irq, uniphier_tm_alarm_irq,
-					uniphier_tm_alarm_irq_thread,
-					0, "thermal", tdev);
+	ret = devm_request_threaded_irq_probe(dev, irq, uniphier_tm_alarm_irq,
+					      uniphier_tm_alarm_irq_thread,
+					      0, "thermal", tdev, NULL);
 	if (ret)
 		return ret;
 
