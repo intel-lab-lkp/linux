@@ -23,12 +23,13 @@ static long do_sys_name_to_handle(const struct path *path,
 	struct file_handle f_handle;
 	int handle_dwords, handle_bytes;
 	struct file_handle *handle = NULL;
+	const struct export_operations *eops = path->dentry->d_sb->s_export_op;
 
 	/*
 	 * We need to make sure whether the file system support decoding of
 	 * the file handle if decodeable file handle was requested.
 	 */
-	if (!exportfs_can_encode_fh(path->dentry->d_sb->s_export_op, fh_flags))
+	if (!exportfs_can_encode_fh(eops, fh_flags))
 		return -EOPNOTSUPP;
 
 	/*
@@ -90,6 +91,10 @@ static long do_sys_name_to_handle(const struct path *path,
 			if (d_is_dir(path->dentry))
 				handle->handle_type |= FILEID_IS_DIR;
 		}
+
+		/* Filesystems supports autonomous file handles. */
+		if (eops->flags & EXPORT_OP_AUTONOMOUS_HANDLES)
+			handle->handle_type |= FILEID_IS_AUTONOMOUS;
 		retval = 0;
 	}
 	/* copy the mount id */
