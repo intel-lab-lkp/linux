@@ -25,8 +25,9 @@ use core::mem::MaybeUninit;
 ///     transmute; however, const trait functions relies on `const_trait_impl` unstable feature,
 ///     which is broken/gone in Rust 1.73.
 ///
-///   - `DRIVER_DATA_OFFSET` is the offset of context/data field of the device ID (usually named
-///     `driver_data`) of the device ID, the field is suitable sized to write a `usize` value.
+///   - If [`RawDeviceId::DRIVER_DATA_OFFSET`] is `Some(offset)`, it's the offset of
+///     context/data field of the device ID (usually named `driver_data`) of the device ID,
+///     the field is suitable sized to write a `usize` value.
 ///
 ///     Similar to the previous requirement, the data should ideally be added during `Self` to
 ///     `RawType` conversion, but there's currently no way to do it when using traits in const.
@@ -37,7 +38,7 @@ pub unsafe trait RawDeviceId {
     type RawType: Copy;
 
     /// The offset to the context/data field.
-    const DRIVER_DATA_OFFSET: usize;
+    const DRIVER_DATA_OFFSET: Option<usize> = None;
 
     /// The index stored at `DRIVER_DATA_OFFSET` of the implementor of the [`RawDeviceId`] trait.
     fn index(&self) -> usize;
@@ -77,14 +78,17 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
             // SAFETY: by the safety requirement of `RawDeviceId`, we're guaranteed that `T` is
             // layout-wise compatible with `RawType`.
             raw_ids[i] = unsafe { core::mem::transmute_copy(&ids[i].0) };
-            // SAFETY: by the safety requirement of `RawDeviceId`, this would be effectively
-            // `raw_ids[i].driver_data = i;`.
-            unsafe {
-                raw_ids[i]
-                    .as_mut_ptr()
-                    .byte_add(T::DRIVER_DATA_OFFSET)
-                    .cast::<usize>()
-                    .write(i);
+
+            if let Some(data_offset) = T::DRIVER_DATA_OFFSET {
+                // SAFETY: by the safety requirement of `RawDeviceId`, this would be effectively
+                // `raw_ids[i].driver_data = i;`.
+                unsafe {
+                    raw_ids[i]
+                        .as_mut_ptr()
+                        .byte_add(data_offset)
+                        .cast::<usize>()
+                        .write(i);
+                }
             }
 
             // SAFETY: this is effectively a move: `infos[i] = ids[i].1`. We make a copy here but

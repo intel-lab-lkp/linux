@@ -19,7 +19,8 @@ pub struct DeviceId(bindings::of_device_id);
 unsafe impl RawDeviceId for DeviceId {
     type RawType = bindings::of_device_id;
 
-    const DRIVER_DATA_OFFSET: usize = core::mem::offset_of!(bindings::of_device_id, data);
+    const DRIVER_DATA_OFFSET: Option<usize> =
+        Some(core::mem::offset_of!(bindings::of_device_id, data));
 
     fn index(&self) -> usize {
         self.0.data as usize

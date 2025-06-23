@@ -147,8 +147,10 @@ impl DeviceId {
 unsafe impl RawDeviceId for DeviceId {
     type RawType = bindings::auxiliary_device_id;
 
-    const DRIVER_DATA_OFFSET: usize =
-        core::mem::offset_of!(bindings::auxiliary_device_id, driver_data);
+    const DRIVER_DATA_OFFSET: Option<usize> = Some(core::mem::offset_of!(
+        bindings::auxiliary_device_id,
+        driver_data
+    ));
 
     fn index(&self) -> usize {
         self.0.driver_data
