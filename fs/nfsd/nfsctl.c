@@ -214,13 +214,18 @@ static inline struct net *netns(struct file *file)
  *			returns one if one or more locks were not released
  *	On error:	return code is negative errno value
  */
-static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
+static ssize_t __write_unlock_ip(struct file *file, char *buf, size_t size)
 {
 	struct sockaddr_storage address;
 	struct sockaddr *sap = (struct sockaddr *)&address;
 	size_t salen = sizeof(address);
 	char *fo_path;
 	struct net *net = netns(file);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -240,6 +245,16 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
 	return nlmsvc_unlock_all_by_ip(sap);
 }
 
+static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+
+	mutex_lock(&nfsd_mutex);
+	ret = __write_unlock_ip(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+
 /*
  * write_unlock_fs - Release all locks on a local file system
  *
@@ -254,11 +269,16 @@ static ssize_t write_unlock_ip(struct file *file, char *buf, size_t size)
  *			returns one if one or more locks were not released
  *	On error:	return code is negative errno value
  */
-static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
+static ssize_t __write_unlock_fs(struct file *file, char *buf, size_t size)
 {
 	struct path path;
 	char *fo_path;
 	int error;
+	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
+
+	if (!nn->nfsd_serv)
+		/* There cannot be any files to unlock */
+		return -EINVAL;
 
 	/* sanity check */
 	if (size == 0)
@@ -289,6 +309,16 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 
 	path_put(&path);
 	return error;
+}
+
+static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+
+	mutex_lock(&nfsd_mutex);
+	ret = __write_unlock_fs(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return ret;
 }
 
 /*
@@ -1082,10 +1112,14 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 		case 'Y':
 		case 'y':
 		case '1':
-			if (!nn->nfsd_serv)
+			mutex_lock(&nfsd_mutex);
+			if (!nn->nfsd_serv) {
+				mutex_unlock(&nfsd_mutex);
 				return -EBUSY;
+			}
 			trace_nfsd_end_grace(netns(file));
 			nfsd4_end_grace(nn);
+			mutex_unlock(&nfsd_mutex);
 			break;
 		default:
 			return -EINVAL;
