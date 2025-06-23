@@ -438,8 +438,10 @@ static int appletb_kbd_probe(struct hid_device *hdev, const struct hid_device_id
 	return 0;
 
 close_hw:
-	if (kbd->backlight_dev)
+	if (kbd->backlight_dev) {
 		put_device(&kbd->backlight_dev->dev);
+		timer_delete_sync(&kbd->inactivity_timer);
+	}
 	hid_hw_close(hdev);
 stop_hw:
 	hid_hw_stop(hdev);
