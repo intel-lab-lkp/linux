@@ -432,8 +432,8 @@ static int qpnp_tm_probe(struct platform_device *pdev)
 
 	devm_thermal_add_hwmon_sysfs(&pdev->dev, chip->tz_dev);
 
-	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, qpnp_tm_isr,
-					IRQF_ONESHOT, node->name, chip);
+	ret = devm_request_threaded_irq_probe(&pdev->dev, irq, NULL, qpnp_tm_isr,
+					      IRQF_ONESHOT, node->name, chip, NULL);
 	if (ret < 0)
 		return ret;
 
