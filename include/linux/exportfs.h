@@ -131,6 +131,11 @@ enum fid_type {
 	 * Filesystems must not use 0xff file ID.
 	 */
 	FILEID_INVALID = 0xff,
+
+	/* Internal kernel fid types */
+
+	/* pidfs fid type */
+	FILEID_PIDFS = 0x100,
 };
 
 struct fid {
