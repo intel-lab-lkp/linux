@@ -763,7 +763,6 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 {
 	struct ovl_fs *ofs = OVL_FS(c->dentry->d_sb);
 	struct inode *inode;
-	struct inode *wdir = d_inode(c->workdir);
 	struct path path = { .mnt = ovl_upper_mnt(ofs) };
 	struct dentry *temp, *upper, *trap;
 	struct ovl_cu_creds cc;
@@ -793,8 +792,10 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	 */
 	path.dentry = temp;
 	err = ovl_copy_up_data(c, &path);
-	if (err)
-		goto cleanup_write_unlocked;
+	if (err) {
+		ovl_start_write(c->dentry);
+		goto cleanup_unlocked;
+	}
 	/*
 	 * We cannot hold lock_rename() throughout this helper, because of
 	 * lock ordering with sb_writers, which shouldn't be held when calling
@@ -814,9 +815,9 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 		/* temp or workdir moved underneath us? abort without cleanup */
 		dput(temp);
 		err = -EIO;
-		if (IS_ERR(trap))
-			goto out;
-		goto unlock;
+		if (!IS_ERR(trap))
+			unlock_rename(c->workdir, c->destdir);
+		goto out;
 	}
 
 	err = ovl_copy_up_metadata(c, temp);
@@ -830,9 +831,10 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 		goto cleanup;
 
 	err = ovl_do_rename(ofs, c->workdir, temp, c->destdir, upper, 0);
+	unlock_rename(c->workdir, c->destdir);
 	dput(upper);
 	if (err)
-		goto cleanup;
+		goto cleanup_unlocked;
 
 	inode = d_inode(c->dentry);
 	if (c->metacopy_digest)
@@ -846,20 +848,13 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	ovl_inode_update(inode, temp);
 	if (S_ISDIR(inode->i_mode))
 		ovl_set_flag(OVL_WHITEOUTS, inode);
-unlock:
-	unlock_rename(c->workdir, c->destdir);
 out:
 	ovl_end_write(c->dentry);
 
 	return err;
 
 cleanup:
-	ovl_cleanup(ofs, wdir, temp);
-	dput(temp);
-	goto unlock;
-
-cleanup_write_unlocked:
-	ovl_start_write(c->dentry);
+	unlock_rename(c->workdir, c->destdir);
 cleanup_unlocked:
 	ovl_cleanup_unlocked(ofs, c->workdir, temp);
 	dput(temp);
