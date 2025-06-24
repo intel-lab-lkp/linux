@@ -717,30 +717,13 @@ out:
  * The I/O scheduler depends on the number of hardware queues, this forces a
  * reattachment when nr_hw_queues changes.
  */
-void elv_update_nr_hw_queues(struct request_queue *q)
+void elv_update_nr_hw_queues(struct request_queue *q, struct elevator_tags *et)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
-	struct elevator_tags et;
-	struct elv_change_ctx ctx = {};
+	struct elv_change_ctx ctx = {.et = et};
 	int ret = -ENODEV;
 
 	WARN_ON_ONCE(q->mq_freeze_depth == 0);
-
-	et.nr_hw_queues = set->nr_hw_queues;
-	xa_init(&et.tags_table);
-	ctx.et = &et;
-	/*
-	 * Accessing q->elevator without holding q->elevator_lock is safe here
-	 * because nr_hw_queue update is protected by set->update_nr_hwq_lock
-	 * in the writer context. So, scheduler update/switch code (which
-	 * acquires same lock in the reader context) can't run concurrently.
-	 */
-	if (q->elevator) {
-		if (blk_mq_alloc_sched_tags(ctx.et, set, q->id)) {
-			WARN_ON_ONCE(1);
-			goto out;
-		}
-	}
 
 	mutex_lock(&q->elevator_lock);
 	if (q->elevator && !blk_queue_dying(q) && blk_queue_registered(q)) {
@@ -758,8 +741,6 @@ void elv_update_nr_hw_queues(struct request_queue *q)
 	 */
 	if (!xa_empty(&ctx.et->tags_table) && !ctx.new)
 		blk_mq_free_sched_tags(ctx.et, set, q->id);
-out:
-	xa_destroy(&ctx.et->tags_table);
 }
 
 /*

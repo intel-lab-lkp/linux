@@ -508,6 +508,57 @@ out_free_tags:
 	return -ENOMEM;
 }
 
+int blk_mq_alloc_sched_tags_batch(struct elevator_tags *et,
+		struct blk_mq_tag_set *set)
+{
+	struct request_queue *q;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		/*
+		 * Accessing q->elevator without holding q->elevator_lock is
+		 * safe because we're holding here set->update_nr_hwq_lock in
+		 * the writer context. So, scheduler update/switch code (which
+		 * acquires the same lock but in the reader context) can't run
+		 * concurrently.
+		 */
+		if (q->elevator) {
+			if (blk_mq_alloc_sched_tags(et, set, q->id))
+				goto out_unwind;
+		}
+	}
+	return 0;
+
+out_unwind:
+	list_for_each_entry_continue_reverse(q, &set->tag_list, tag_set_list) {
+		if (q->elevator)
+			blk_mq_free_sched_tags(et, set, q->id);
+	}
+
+	return -ENOMEM;
+}
+
+void blk_mq_free_sched_tags_batch(struct elevator_tags *et,
+		struct blk_mq_tag_set *set)
+{
+	struct request_queue *q;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		/*
+		 * Accessing q->elevator without holding q->elevator_lock is
+		 * safe because we're holding here set->update_nr_hwq_lock in
+		 * the writer context. So, scheduler update/switch code (which
+		 * acquires the same lock but in the reader context) can't run
+		 * concurrently.
+		 */
+		if (q->elevator)
+			blk_mq_free_sched_tags(et, set, q->id);
+	}
+}
+
 /* caller must have a reference to @e, will grab another one if successful */
 int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
 		struct elevator_tags *et)

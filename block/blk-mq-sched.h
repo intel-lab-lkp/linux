@@ -29,6 +29,11 @@ struct blk_mq_tags **__blk_mq_alloc_sched_tags(struct blk_mq_tag_set *set,
 void __blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
 		struct blk_mq_tags **tags, unsigned int nr_hw_queues);
 
+int blk_mq_alloc_sched_tags_batch(struct elevator_tags *et,
+		struct blk_mq_tag_set *set);
+void blk_mq_free_sched_tags_batch(struct elevator_tags *et,
+		struct blk_mq_tag_set *set);
+
 int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
 		struct elevator_tags *et);
 void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e);
