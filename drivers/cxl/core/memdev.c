@@ -280,7 +280,7 @@ static int cxl_validate_poison_dpa(struct cxl_memdev *cxlmd, u64 dpa)
 	return 0;
 }
 
-int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
+int __inject_poison_locked(struct cxl_memdev *cxlmd, u64 dpa)
 {
 	struct cxl_mailbox *cxl_mbox = &cxlmd->cxlds->cxl_mbox;
 	struct cxl_mbox_inject_poison inject;
@@ -292,19 +292,12 @@ int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return 0;
 
-	rc = down_read_interruptible(&cxl_region_rwsem);
-	if (rc)
-		return rc;
-
-	rc = down_read_interruptible(&cxl_dpa_rwsem);
-	if (rc) {
-		up_read(&cxl_region_rwsem);
-		return rc;
-	}
+	lockdep_assert_held(&cxl_dpa_rwsem);
+	lockdep_assert_held(&cxl_region_rwsem);
 
 	rc = cxl_validate_poison_dpa(cxlmd, dpa);
 	if (rc)
-		goto out;
+		return rc;
 
 	inject.address = cpu_to_le64(dpa);
 	mbox_cmd = (struct cxl_mbox_cmd) {
@@ -314,7 +307,7 @@ int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 	};
 	rc = cxl_internal_send_cmd(cxl_mbox, &mbox_cmd);
 	if (rc)
-		goto out;
+		return rc;
 
 	cxlr = cxl_dpa_to_region(cxlmd, dpa);
 	if (cxlr)
@@ -327,25 +320,13 @@ int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 		.length = cpu_to_le32(1),
 	};
 	trace_cxl_poison(cxlmd, cxlr, &record, 0, 0, CXL_POISON_TRACE_INJECT);
-out:
-	up_read(&cxl_dpa_rwsem);
-	up_read(&cxl_region_rwsem);
 
 	return rc;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_inject_poison, "CXL");
 
-int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
+int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 {
-	struct cxl_mailbox *cxl_mbox = &cxlmd->cxlds->cxl_mbox;
-	struct cxl_mbox_clear_poison clear;
-	struct cxl_poison_record record;
-	struct cxl_mbox_cmd mbox_cmd;
-	struct cxl_region *cxlr;
 	int rc;
-
-	if (!IS_ENABLED(CONFIG_DEBUG_FS))
-		return 0;
 
 	rc = down_read_interruptible(&cxl_region_rwsem);
 	if (rc)
@@ -357,10 +338,33 @@ int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
 		return rc;
 	}
 
+	rc = __inject_poison_locked(cxlmd, dpa);
+
+	up_read(&cxl_dpa_rwsem);
+	up_read(&cxl_region_rwsem);
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_inject_poison, "CXL");
+
+int __clear_poison_locked(struct cxl_memdev *cxlmd, u64 dpa)
+{
+	struct cxl_mailbox *cxl_mbox = &cxlmd->cxlds->cxl_mbox;
+	struct cxl_mbox_clear_poison clear;
+	struct cxl_poison_record record;
+	struct cxl_mbox_cmd mbox_cmd;
+	struct cxl_region *cxlr;
+	int rc;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_FS))
+		return 0;
+
+	lockdep_assert_held(&cxl_dpa_rwsem);
+	lockdep_assert_held(&cxl_region_rwsem);
+
 	rc = cxl_validate_poison_dpa(cxlmd, dpa);
 	if (rc)
-		goto out;
-
+		return rc;
 	/*
 	 * In CXL 3.0 Spec 8.2.9.8.4.3, the Clear Poison mailbox command
 	 * is defined to accept 64 bytes of write-data, along with the
@@ -378,7 +382,7 @@ int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
 
 	rc = cxl_internal_send_cmd(cxl_mbox, &mbox_cmd);
 	if (rc)
-		goto out;
+		return rc;
 
 	cxlr = cxl_dpa_to_region(cxlmd, dpa);
 	if (cxlr)
@@ -391,7 +395,26 @@ int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
 		.length = cpu_to_le32(1),
 	};
 	trace_cxl_poison(cxlmd, cxlr, &record, 0, 0, CXL_POISON_TRACE_CLEAR);
-out:
+
+	return rc;
+}
+
+int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
+{
+	int rc;
+
+	rc = down_read_interruptible(&cxl_region_rwsem);
+	if (rc)
+		return rc;
+
+	rc = down_read_interruptible(&cxl_dpa_rwsem);
+	if (rc) {
+		up_read(&cxl_region_rwsem);
+		return rc;
+	}
+
+	rc = __clear_poison_locked(cxlmd, dpa);
+
 	up_read(&cxl_dpa_rwsem);
 	up_read(&cxl_region_rwsem);
 
