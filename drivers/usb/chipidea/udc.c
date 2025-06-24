@@ -1992,7 +1992,7 @@ static struct usb_ep *ci_udc_match_ep(struct usb_gadget *gadget,
 	struct ci_hdrc *ci = container_of(gadget, struct ci_hdrc, gadget);
 	struct usb_ep *ep;
 
-	if (usb_endpoint_xfer_isoc(desc) && usb_endpoint_dir_in(desc)) {
+	if (usb_endpoint_is_isoc_in(desc)) {
 		list_for_each_entry_reverse(ep, &ci->gadget.ep_list, ep_list) {
 			if (ep->caps.dir_in && !ep->claimed)
 				return ep;
