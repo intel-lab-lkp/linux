@@ -1,0 +1,86 @@
+.. SPDX-License-Identifier: GPL-2.0
+
+Kernel driver mp2896a
+=====================
+
+Supported chips:
+
+  * MPS MP2896A
+
+    Prefix: 'mp2896a'
+
+  * MPS MP29612A
+
+    Prefix: 'mp29612a'
+
+Author:
+
+    Henry Wu <Henry_WU@quantatw.com>
+
+Description
+-----------
+
+This driver implements support for Monolithic Power Systems, Inc. (MPS)
+MP2896A, a digital, multi-phase voltage regulator controller with PMBus interface.
+
+This device:
+
+- Supports up to two power rails.
+- Supports multiple PMBus pages for telemetry and configuration.
+- Supports VOUT readout in **VID format only** (no support for direct format).
+- Supports AMD SVI3 VID protocol with 5-mV/LSB resolution (if applicable).
+- Uses vendor-specific registers for VOUT scaling and phase configuration.
+
+Device supports:
+
+- SVID interface.
+- AVSBus interface.
+
+Device compliant with:
+
+- PMBus rev 1.3 interface.
+
+Sysfs Interface
+---------------
+
+The driver provides the following sysfs attributes:
+
+**Current measurements:**
+
+- Index 1: "iin"
+- Indexes 2, 3: "iout"
+
+**curr[1-3]_alarm**
+**curr[1-3]_input**
+**curr[1-3]_label**
+
+**Voltage measurements:**
+
+- Index 1: "vin"
+- Indexes 2, 3: "vout"
+
+**in[1-3]_crit**
+**in[1-3]_crit_alarm**
+**in[1-3]_input**
+**in[1-3]_label**
+**in[1-3]_lcrit**
+**in[1-3]_lcrit_alarm**
+
+**Power measurements:**
+
+- Index 1: "pin"
+- Indexes 2, 3: "pout"
+
+**power[1-3]_alarm**
+**power[1-3]_input**
+**power[1-3]_label**
+
+**Temperature measurements:**
+
+**temp[1-2]_crit**
+**temp[1-2]_crit_alarm**
+**temp[1-2]_input**
+**temp[1-2]_max**
+**temp[1-2]_max_alarm**
+
+
