@@ -18,7 +18,19 @@ void __blk_mq_sched_restart(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx);
 
-int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e);
+int blk_mq_alloc_sched_tags(struct elevator_tags *et,
+		struct blk_mq_tag_set *set, int id);
+void blk_mq_free_sched_tags(struct elevator_tags *et,
+		struct blk_mq_tag_set *set, int id);
+struct blk_mq_tags **__blk_mq_alloc_sched_tags(struct blk_mq_tag_set *set,
+					unsigned int nr_hw_queues,
+					unsigned int nr_requests,
+					gfp_t gfp);
+void __blk_mq_free_sched_tags(struct blk_mq_tag_set *set,
+		struct blk_mq_tags **tags, unsigned int nr_hw_queues);
+
+int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
+		struct elevator_tags *et);
 void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e);
 void blk_mq_sched_free_rqs(struct request_queue *q);
 
