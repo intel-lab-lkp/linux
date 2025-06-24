@@ -2972,6 +2972,91 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 	return hpa;
 }
 
+struct hpa_decode_result {
+	u64 dpa_offset;
+	int pos;
+};
+
+struct cxl_dpa_result {
+	u64 dpa;
+	struct cxl_memdev *cxlmd;
+};
+
+static struct hpa_decode_result decode_hpa_to_dpa(u64 hpa_offset, u8 eiw,
+						  u16 eig)
+{
+	struct hpa_decode_result result;
+	u64 bits_upper;
+
+	if (eiw < 8) {
+		result.pos = (hpa_offset >> (eig + 8)) & GENMASK(eiw - 1, 0);
+		hpa_offset &= ~((u64)GENMASK(eiw - 1, 0) << (eig + 8));
+		result.dpa_offset = hpa_offset >> eiw;
+	} else {
+		bits_upper = hpa_offset >> (eig + 8);
+		result.pos = bits_upper % 3;
+		bits_upper /= 3;
+		result.dpa_offset = bits_upper << (eig + 8);
+	}
+
+	result.dpa_offset |= hpa_offset & GENMASK_ULL(eig + 7, 0);
+
+	return result;
+}
+
+static struct cxl_dpa_result __maybe_unused
+cxl_hpa_to_dpa(struct cxl_region *cxlr, u64 hpa)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	struct cxl_dpa_result result = { .dpa = ULLONG_MAX, .cxlmd = NULL };
+	struct cxl_region_params *p = &cxlr->params;
+	struct hpa_decode_result decode;
+	u64 hpa_offset;
+	u16 eig = 0;
+	u8 eiw = 0;
+
+	lockdep_assert_held(&cxl_region_rwsem);
+	lockdep_assert_held(&cxl_dpa_rwsem);
+
+	if (hpa < p->res->start || hpa > p->res->end) {
+		dev_err_once(&cxlr->dev,
+			     "HPA 0x%llx not in region [0x%llx-0x%llx]\n", hpa,
+			     p->res->start, p->res->end);
+
+		return result;
+	}
+
+	/* Apply root decoder translation */
+	if (cxlrd->hpa_to_spa)
+		hpa = cxlrd->hpa_to_spa(cxlrd, hpa);
+
+	ways_to_eiw(p->interleave_ways, &eiw);
+	granularity_to_eig(p->interleave_granularity, &eig);
+	hpa_offset = hpa - p->res->start;
+
+	decode = decode_hpa_to_dpa(hpa_offset, eiw, eig);
+	if (decode.pos >= p->nr_targets) {
+		dev_err(&cxlr->dev, "Invalid position %d for %d targets\n",
+			decode.pos, p->nr_targets);
+
+		return result;
+	}
+
+	for (int i = 0; i < p->nr_targets; i++) {
+		struct cxl_endpoint_decoder *cxled = p->targets[i];
+
+		if (cxled->pos == decode.pos) {
+			result.cxlmd = cxled_to_memdev(cxled);
+			result.dpa = decode.dpa_offset + cxl_dpa_resource_start(cxled);
+
+			return result;
+		}
+	}
+	dev_err(&cxlr->dev, "No device found for position %d\n", decode.pos);
+
+	return result;
+}
+
 static struct lock_class_key cxl_pmem_region_key;
 
 static int cxl_pmem_region_alloc(struct cxl_region *cxlr)
