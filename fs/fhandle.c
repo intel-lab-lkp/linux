@@ -173,7 +173,7 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 	return err;
 }
 
-static int get_path_anchor(int fd, struct path *root)
+static int get_path_anchor(int fd, struct path *root, int handle_type)
 {
 	if (fd >= 0) {
 		CLASS(fd, f)(fd);
@@ -191,6 +191,24 @@ static int get_path_anchor(int fd, struct path *root)
 		path_get(root);
 		spin_unlock(&fs->lock);
 		return 0;
+	}
+
+	/*
+	 * Only autonomous handles can be decoded without a file
+	 * descriptor.
+	 */
+	if (!(handle_type & FILEID_IS_AUTONOMOUS))
+		return -EOPNOTSUPP;
+
+	if (fd != FD_INVALID)
+		return -EINVAL;
+
+	switch (handle_type & ~FILEID_USER_FLAGS_MASK) {
+	case FILEID_PIDFS:
+		pidfs_get_root(root);
+		break;
+	default:
+		return -EINVAL;
 	}
 
 	return 0;
@@ -347,7 +365,7 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	    FILEID_USER_FLAGS(f_handle.handle_type) & ~FILEID_VALID_USER_FLAGS)
 		return -EINVAL;
 
-	retval = get_path_anchor(mountdirfd, &ctx.root);
+	retval = get_path_anchor(mountdirfd, &ctx.root, f_handle.handle_type);
 	if (retval)
 		return retval;
 
