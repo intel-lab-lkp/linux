@@ -590,6 +590,7 @@ static gboolean on_treeview2_button_press_event(GtkWidget *widget,
 						gpointer user_data)
 {
 	GtkTreeView *view = GTK_TREE_VIEW(widget);
+	GtkTreeModel *model = gtk_tree_view_get_model(view);
 	GtkTreePath *path;
 	GtkTreeViewColumn *column;
 	GtkTreeIter iter;
@@ -602,9 +603,9 @@ static gboolean on_treeview2_button_press_event(GtkWidget *widget,
 	if (path == NULL)
 		return FALSE;
 
-	if (!gtk_tree_model_get_iter(model2, &iter, path))
+	if (!gtk_tree_model_get_iter(model, &iter, path))
 		return FALSE;
-	gtk_tree_model_get(model2, &iter, COL_MENU, &menu, -1);
+	gtk_tree_model_get(model, &iter, COL_MENU, &menu, -1);
 
 	col = column2index(column);
 	if (event->type == GDK_2BUTTON_PRESS) {
@@ -698,6 +699,7 @@ static gboolean on_treeview1_button_press_event(GtkWidget *widget,
 						gpointer user_data)
 {
 	GtkTreeView *view = GTK_TREE_VIEW(widget);
+	GtkTreeModel *model = gtk_tree_view_get_model(view);
 	GtkTreePath *path;
 	GtkTreeIter iter;
 	struct menu *menu;
@@ -708,8 +710,8 @@ static gboolean on_treeview1_button_press_event(GtkWidget *widget,
 	if (path == NULL)
 		return FALSE;
 
-	gtk_tree_model_get_iter(model1, &iter, path);
-	gtk_tree_model_get(model1, &iter, COL_MENU, &menu, -1);
+	gtk_tree_model_get_iter(model, &iter, path);
+	gtk_tree_model_get(model, &iter, COL_MENU, &menu, -1);
 
 	if (event->type == GDK_2BUTTON_PRESS) {
 		toggle_sym_value(menu);
