@@ -24,36 +24,29 @@ MODULE_PARM_DESC(redirect_max,
 
 static int ovl_set_redirect(struct dentry *dentry, bool samedir);
 
-int ovl_cleanup(struct ovl_fs *ofs, struct inode *wdir, struct dentry *wdentry)
-{
-	int err;
-
-	dget(wdentry);
-	if (d_is_dir(wdentry))
-		err = ovl_do_rmdir(ofs, wdir, wdentry);
-	else
-		err = ovl_do_unlink(ofs, wdir, wdentry);
-	dput(wdentry);
-
-	if (err) {
-		pr_err("cleanup of '%pd2' failed (%i)\n",
-		       wdentry, err);
-	}
-
-	return err;
-}
-
-int ovl_cleanup_unlocked(struct ovl_fs *ofs, struct dentry *workdir,
+int ovl_cleanup(struct ovl_fs *ofs, struct dentry *workdir,
 			 struct dentry *wdentry)
 {
 	int err;
 
 	inode_lock_nested(workdir->d_inode, I_MUTEX_PARENT);
-	if (wdentry->d_parent == workdir)
-		ovl_cleanup(ofs, workdir->d_inode, wdentry);
-	else
+	if (wdentry->d_parent == workdir) {
+		struct inode *wdir = workdir->d_inode;
+
+		dget(wdentry);
+		if (d_is_dir(wdentry))
+			err = ovl_do_rmdir(ofs, wdir, wdentry);
+		else
+			err = ovl_do_unlink(ofs, wdir, wdentry);
+		dput(wdentry);
+	} else
 		err = -EINVAL;
 	inode_unlock(workdir->d_inode);
+
+	if (err) {
+		pr_err("cleanup of '%pd2' failed (%i)\n",
+		       wdentry, err);
+	}
 
 	return err;
 }
@@ -153,14 +146,14 @@ int ovl_cleanup_and_whiteout(struct ovl_fs *ofs, struct dentry *dir,
 	if (err)
 		goto kill_whiteout;
 	if (flags)
-		ovl_cleanup_unlocked(ofs, ofs->workdir, dentry);
+		ovl_cleanup(ofs, ofs->workdir, dentry);
 
 out:
 	dput(whiteout);
 	return err;
 
 kill_whiteout:
-	ovl_cleanup_unlocked(ofs, ofs->workdir, whiteout);
+	ovl_cleanup(ofs, ofs->workdir, whiteout);
 	goto out;
 }
 
@@ -357,7 +350,7 @@ out:
 	return err;
 
 out_cleanup:
-	ovl_cleanup_unlocked(ofs, upperdir, newdentry);
+	ovl_cleanup(ofs, upperdir, newdentry);
 	dput(newdentry);
 	goto out;
 }
@@ -422,7 +415,7 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 	unlock_rename(workdir, upperdir);
 
 	ovl_cleanup_whiteouts(ofs, upper, list);
-	ovl_cleanup_unlocked(ofs, workdir, upper);
+	ovl_cleanup(ofs, workdir, upper);
 
 	/* dentry's upper doesn't match now, get rid of it */
 	d_drop(dentry);
@@ -432,7 +425,7 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 out_cleanup:
 	unlock_rename(workdir, upperdir);
 out_cleanup_unlocked:
-	ovl_cleanup_unlocked(ofs, workdir, opaquedir);
+	ovl_cleanup(ofs, workdir, opaquedir);
 	dput(opaquedir);
 out:
 	return ERR_PTR(err);
@@ -527,7 +520,7 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 		if (err)
 			goto out_cleanup;
 
-		ovl_cleanup_unlocked(ofs, workdir, upper);
+		ovl_cleanup(ofs, workdir, upper);
 	} else {
 		err = ovl_do_rename(ofs, workdir, newdentry, upperdir, upper, 0);
 		unlock_rename(workdir, upperdir);
@@ -537,7 +530,7 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 	ovl_dir_modified(dentry->d_parent, false);
 	err = ovl_instantiate(dentry, inode, newdentry, hardlink, NULL);
 	if (err) {
-		ovl_cleanup_unlocked(ofs, upperdir, newdentry);
+		ovl_cleanup(ofs, upperdir, newdentry);
 		dput(newdentry);
 	}
 out_dput:
@@ -552,7 +545,7 @@ out:
 out_cleanup_locked:
 	unlock_rename(workdir, upperdir);
 out_cleanup:
-	ovl_cleanup_unlocked(ofs, workdir, newdentry);
+	ovl_cleanup(ofs, workdir, newdentry);
 	dput(newdentry);
 	goto out_dput;
 }
@@ -1279,7 +1272,7 @@ static int ovl_rename(struct mnt_idmap *idmap, struct inode *olddir,
 	unlock_rename(new_upperdir, old_upperdir);
 
 	if (cleanup_whiteout)
-		ovl_cleanup_unlocked(ofs, old_upperdir, newdentry);
+		ovl_cleanup(ofs, old_upperdir, newdentry);
 
 	if (overwrite && d_inode(new)) {
 		if (new_is_dir)

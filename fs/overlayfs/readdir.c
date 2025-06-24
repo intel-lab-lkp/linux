@@ -1048,7 +1048,7 @@ void ovl_cleanup_whiteouts(struct ovl_fs *ofs, struct dentry *upper,
 			continue;
 		}
 		if (dentry->d_inode)
-			ovl_cleanup_unlocked(ofs, upper, dentry);
+			ovl_cleanup(ofs, upper, dentry);
 		dput(dentry);
 	}
 }
@@ -1159,7 +1159,7 @@ int ovl_workdir_cleanup(struct ovl_fs *ofs, struct dentry *parent,
 	int err;
 
 	if (!d_is_dir(dentry) || level > 1) {
-		return ovl_cleanup_unlocked(ofs, parent, dentry);
+		return ovl_cleanup(ofs, parent, dentry);
 	}
 
 	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
@@ -1173,7 +1173,7 @@ int ovl_workdir_cleanup(struct ovl_fs *ofs, struct dentry *parent,
 
 		err = ovl_workdir_cleanup_recurse(ofs, &path, level + 1);
 		if (!err)
-			err = ovl_cleanup_unlocked(ofs, parent, dentry);
+			err = ovl_cleanup(ofs, parent, dentry);
 	}
 
 	return err;
@@ -1224,7 +1224,7 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 			goto next;
 		} else if (err == -ESTALE) {
 			/* Cleanup stale index entries */
-			err = ovl_cleanup_unlocked(ofs, indexdir, index);
+			err = ovl_cleanup(ofs, indexdir, index);
 		} else if (err != -ENOENT) {
 			/*
 			 * Abort mount to avoid corrupting the index if
@@ -1240,7 +1240,7 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 			err = ovl_cleanup_and_whiteout(ofs, indexdir, index);
 		} else {
 			/* Cleanup orphan index entries */
-			err = ovl_cleanup_unlocked(ofs, indexdir, index);
+			err = ovl_cleanup(ofs, indexdir, index);
 		}
 
 		if (err)
