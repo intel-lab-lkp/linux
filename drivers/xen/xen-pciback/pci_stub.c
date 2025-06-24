@@ -18,6 +18,7 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/atomic.h>
+#include <linux/sysfs.h>
 #include <xen/events.h>
 #include <xen/pci.h>
 #include <xen/xen.h>
@@ -29,6 +30,7 @@
 #include "pciback.h"
 #include "conf_space.h"
 #include "conf_space_quirks.h"
+
 
 #define PCISTUB_DRIVER_NAME "pciback"
 
@@ -720,7 +722,7 @@ again:
 		return;
 	}
 	/*PV AER handlers will set this flag*/
-	xenbus_printf(xbt, nodename, "aerState" , "aerfail");
+	xenbus_printf(xbt, nodename, "aerState", "aerfail");
 	err = xenbus_transaction_end(xbt, 0);
 	if (err) {
 		if (err == -EAGAIN)
@@ -1261,7 +1263,7 @@ static ssize_t slots_show(struct device_driver *drv, char *buf)
 		if (count >= PAGE_SIZE)
 			break;
 
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+			count += sysfs_emit_at(buf, count,
 				   "%04x:%02x:%02x.%d\n",
 				   pci_dev_id->domain, pci_dev_id->bus,
 				   PCI_SLOT(pci_dev_id->devfn),
@@ -1290,7 +1292,7 @@ static ssize_t irq_handlers_show(struct device_driver *drv, char *buf)
 		if (!dev_data)
 			continue;
 		count +=
-		    scnprintf(buf + count, PAGE_SIZE - count,
+		    sysfs_emit_at(buf, count,
 			      "%s:%s:%sing:%ld\n",
 			      pci_name(psdev->dev),
 			      dev_data->isr_on ? "on" : "off",
