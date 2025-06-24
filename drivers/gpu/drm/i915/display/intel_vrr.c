@@ -9,6 +9,7 @@
 #include "intel_de.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_dmc.h"
 #include "intel_dp.h"
 #include "intel_dmc_regs.h"
 #include "intel_vrr.h"
@@ -668,6 +669,9 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 	if (crtc_state->cmrr.enable)
 		ctl |= VRR_CTL_CMRR_ENABLE;
 
+	if (crtc_state->vrr.dc_balance.enable)
+		intel_pipedmc_dcb_enable(NULL, crtc);
+
 	intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder), ctl);
 }
 
@@ -681,6 +685,9 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 
 	if (!old_crtc_state->vrr.enable)
 		return;
+
+	if (old_crtc_state->vrr.dc_balance.enable)
+		intel_pipedmc_dcb_disable(NULL, crtc);
 
 	ctl = trans_vrr_ctl(old_crtc_state);
 	if (intel_vrr_always_use_vrr_tg(display))
