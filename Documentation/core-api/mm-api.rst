@@ -91,6 +91,8 @@ Memory pools
 .. kernel-doc:: mm/mempool.c
    :export:
 
+.. _dma_pools:
+
 DMA pools
 =========
 
