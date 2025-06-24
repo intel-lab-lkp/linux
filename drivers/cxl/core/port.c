@@ -1614,7 +1614,7 @@ static int cxl_port_setup_with_dport(struct cxl_port *port,
 {
 	device_lock_assert(&port->dev);
 
-	cxl_switch_parse_cdat(port);
+	cxl_switch_parse_cdat(dport);
 
 	return update_decoders_with_dport(port, dport);
 }
