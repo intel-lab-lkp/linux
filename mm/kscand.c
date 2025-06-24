@@ -104,6 +104,7 @@ struct kscand_mm_slot {
 	unsigned long scan_size;
 	long address;
 	bool is_scanned;
+	int target_node;
 };
 
 /* Data structure to keep track of current mm under scan */
@@ -116,13 +117,23 @@ struct kscand_scan kscand_scan = {
 	.mm_head = LIST_HEAD_INIT(kscand_scan.mm_head),
 };
 
+/* Per memory node information used to caclulate target_node for migration */
+struct kscand_nodeinfo {
+	unsigned long nr_scanned;
+	unsigned long nr_accessed;
+	int node;
+	bool is_toptier;
+};
+
 /*
  * Data structure passed to control scanning and also collect
  * per memory node information
  */
 struct kscand_scanctrl {
 	struct list_head scan_list;
+	struct kscand_nodeinfo *nodeinfo[MAX_NUMNODES];
 	unsigned long address;
+	unsigned long nr_to_scan;
 };
 
 struct kscand_scanctrl kscand_scanctrl;
@@ -218,13 +229,119 @@ static void kmigrated_wait_work(void)
 			migrate_sleep_jiffies);
 }
 
-/*
- * Do not know what info to pass in the future to make
- * decision on taget node. Keep it void * now.
- */
+static unsigned long get_slowtier_accesed(struct kscand_scanctrl *scanctrl)
+{
+	int node;
+	unsigned long accessed = 0;
+
+	for_each_node_state(node, N_MEMORY) {
+		if (!node_is_toptier(node) && scanctrl->nodeinfo[node])
+			accessed += scanctrl->nodeinfo[node]->nr_accessed;
+	}
+	return accessed;
+}
+
+static inline void set_nodeinfo_nr_accessed(struct kscand_nodeinfo *ni, unsigned long val)
+{
+	ni->nr_accessed = val;
+}
+static inline unsigned long get_nodeinfo_nr_scanned(struct kscand_nodeinfo *ni)
+{
+	return ni->nr_scanned;
+}
+
+static inline void set_nodeinfo_nr_scanned(struct kscand_nodeinfo *ni, unsigned long val)
+{
+	ni->nr_scanned = val;
+}
+
+static inline void reset_nodeinfo_nr_scanned(struct kscand_nodeinfo *ni)
+{
+	set_nodeinfo_nr_scanned(ni, 0);
+}
+
+static inline void reset_nodeinfo(struct kscand_nodeinfo *ni)
+{
+	set_nodeinfo_nr_scanned(ni, 0);
+	set_nodeinfo_nr_accessed(ni, 0);
+}
+
+static void init_one_nodeinfo(struct kscand_nodeinfo *ni, int node)
+{
+	ni->nr_scanned = 0;
+	ni->nr_accessed = 0;
+	ni->node = node;
+	ni->is_toptier = node_is_toptier(node) ? true : false;
+}
+
+static struct kscand_nodeinfo *alloc_one_nodeinfo(int node)
+{
+	struct kscand_nodeinfo *ni;
+
+	ni = kzalloc(sizeof(*ni), GFP_KERNEL);
+
+	if (!ni)
+		return NULL;
+
+	init_one_nodeinfo(ni, node);
+
+	return ni;
+}
+
+/* TBD: Handle errors */
+static void init_scanctrl(struct kscand_scanctrl *scanctrl)
+{
+	struct kscand_nodeinfo *ni;
+	int node;
+
+	for_each_node(node) {
+		ni = alloc_one_nodeinfo(node);
+		if (!ni)
+			WARN_ON_ONCE(ni);
+		scanctrl->nodeinfo[node] = ni;
+	}
+}
+
+static void reset_scanctrl(struct kscand_scanctrl *scanctrl)
+{
+	int node;
+
+	for_each_node_state(node, N_MEMORY)
+		reset_nodeinfo(scanctrl->nodeinfo[node]);
+
+	/* XXX: Not rellay required? */
+	scanctrl->nr_to_scan = kscand_scan_size;
+}
+
+static void free_scanctrl(struct kscand_scanctrl *scanctrl)
+{
+	int node;
+
+	for_each_node(node)
+		kfree(scanctrl->nodeinfo[node]);
+}
+
 static int kscand_get_target_node(void *data)
 {
 	return kscand_target_node;
+}
+
+static int get_target_node(struct kscand_scanctrl *scanctrl)
+{
+	int node, target_node = NUMA_NO_NODE;
+	unsigned long prev = 0;
+
+	for_each_node(node) {
+		if (node_is_toptier(node) && scanctrl->nodeinfo[node] &&
+				get_nodeinfo_nr_scanned(scanctrl->nodeinfo[node]) > prev) {
+			prev = get_nodeinfo_nr_scanned(scanctrl->nodeinfo[node]);
+			target_node = node;
+		}
+	}
+	if (target_node == NUMA_NO_NODE)
+		target_node = kscand_get_target_node(NULL);
+
+	return target_node;
 }
 
 extern bool migrate_balanced_pgdat(struct pglist_data *pgdat,
@@ -492,6 +609,14 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 	}
 	srcnid = folio_nid(folio);
 
+	scanctrl->nodeinfo[srcnid]->nr_scanned++;
+	if (scanctrl->nr_to_scan)
+		scanctrl->nr_to_scan--;
+
+	if (!scanctrl->nr_to_scan) {
+		folio_put(folio);
+		return 1;
+	}
 
 	if (!folio_test_lru(folio)) {
 		folio_put(folio);
@@ -501,6 +626,8 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 	if (!folio_test_idle(folio) || folio_test_young(folio) ||
 			mmu_notifier_test_young(mm, addr) ||
 			folio_test_referenced(folio) || pte_young(pteval)) {
+
+		scanctrl->nodeinfo[srcnid]->nr_accessed++;
 
 		if (!kscand_eligible_srcnid(srcnid)) {
 			folio_put(folio);
@@ -695,7 +822,13 @@ static void kmigrated_migrate_mm(struct kmigrated_mm_slot *mm_slot)
 
 			spin_unlock(&mm_slot->migrate_lock);
 
-			dest = kscand_get_target_node(NULL);
+			if (!mmap_read_trylock(mm)) {
+				dest = kscand_get_target_node(NULL);
+			} else {
+				dest = READ_ONCE(mm->target_node);
+				mmap_read_unlock(mm);
+			}
+
 			ret = kmigrated_promote_folio(info, mm, dest);
 
 			kfree(info);
@@ -781,7 +914,7 @@ static void kmigrated_migrate_folio(void)
  *		Increase scan_size by (1 << SCAN_SIZE_CHANGE_SHIFT).
  */
 static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
-				unsigned long total)
+				unsigned long total, int target_node)
 {
 	unsigned int scan_period;
 	unsigned long now;
@@ -829,6 +962,7 @@ static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
 	mm_slot->scan_period = scan_period;
 	mm_slot->scan_size = scan_size;
 	mm_slot->scan_delta = total;
+	mm_slot->target_node = target_node;
 }
 
 static unsigned long kscand_scan_mm_slot(void)
@@ -837,6 +971,7 @@ static unsigned long kscand_scan_mm_slot(void)
 	bool update_mmslot_info = false;
 
 	unsigned int mm_slot_scan_period;
+	int target_node, mm_slot_target_node, mm_target_node;
 	unsigned long now;
 	unsigned long mm_slot_next_scan;
 	unsigned long mm_slot_scan_size;
@@ -870,6 +1005,7 @@ static unsigned long kscand_scan_mm_slot(void)
 	mm_slot_next_scan = mm_slot->next_scan;
 	mm_slot_scan_period = mm_slot->scan_period;
 	mm_slot_scan_size = mm_slot->scan_size;
+	mm_slot_target_node = mm_slot->target_node;
 	spin_unlock(&kscand_mm_lock);
 
 	if (unlikely(!mmap_read_trylock(mm)))
@@ -880,6 +1016,9 @@ static unsigned long kscand_scan_mm_slot(void)
 		goto outerloop;
 	}
 
+	mm_target_node = READ_ONCE(mm->target_node);
+	if (mm_target_node != mm_slot_target_node)
+		WRITE_ONCE(mm->target_node, mm_slot_target_node);
 	now = jiffies;
 
 	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
@@ -887,24 +1026,41 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	VMA_ITERATOR(vmi, mm, address);
 
+	/* Either Scan 25% of scan_size or cover vma size of scan_size */
+	kscand_scanctrl.nr_to_scan =	mm_slot_scan_size >> PAGE_SHIFT;
+	/* Reduce actual amount of pages scanned */
+	kscand_scanctrl.nr_to_scan =	mm_slot_scan_size >> 1;
+
+	/* XXX: skip scanning to avoid duplicates until all migrations done? */
 	kmigrated_mm_slot = kmigrated_get_mm_slot(mm, false);
 
 	for_each_vma(vmi, vma) {
 		kscand_walk_page_vma(vma, &kscand_scanctrl);
 		vma_scanned_size += vma->vm_end - vma->vm_start;
 
-		if (vma_scanned_size >= kscand_scan_size) {
+		if (vma_scanned_size >= mm_slot_scan_size ||
+					!kscand_scanctrl.nr_to_scan) {
 			next_mm = true;
 
 			if (!list_empty(&kscand_scanctrl.scan_list)) {
 				if (!kmigrated_mm_slot)
 					kmigrated_mm_slot = kmigrated_get_mm_slot(mm, true);
+				/* Add scanned folios to migration list */
 				spin_lock(&kmigrated_mm_slot->migrate_lock);
+
 				list_splice_tail_init(&kscand_scanctrl.scan_list,
 						&kmigrated_mm_slot->migrate_head);
 				spin_unlock(&kmigrated_mm_slot->migrate_lock);
+				break;
 			}
-			break;
+		}
+		if (!list_empty(&kscand_scanctrl.scan_list)) {
+			if (!kmigrated_mm_slot)
+				kmigrated_mm_slot = kmigrated_get_mm_slot(mm, true);
+			spin_lock(&kmigrated_mm_slot->migrate_lock);
+			list_splice_tail_init(&kscand_scanctrl.scan_list,
+					&kmigrated_mm_slot->migrate_head);
+			spin_unlock(&kmigrated_mm_slot->migrate_lock);
 		}
 	}
 
@@ -915,9 +1071,19 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	update_mmslot_info = true;
 
+	total = get_slowtier_accesed(&kscand_scanctrl);
+	target_node = get_target_node(&kscand_scanctrl);
+
+	mm_target_node = READ_ONCE(mm->target_node);
+
+	/* XXX: Do we need write lock? */
+	if (mm_target_node != target_node)
+		WRITE_ONCE(mm->target_node, target_node);
+	reset_scanctrl(&kscand_scanctrl);
+
 	if (update_mmslot_info) {
 		mm_slot->address = address;
-		kscand_update_mmslot_info(mm_slot, total);
+		kscand_update_mmslot_info(mm_slot, total, target_node);
 	}
 
 outerloop:
@@ -1111,6 +1277,7 @@ static int stop_kscand(void)
 		kthread_stop(kscand_thread);
 		kscand_thread = NULL;
 	}
+	free_scanctrl(&kscand_scanctrl);
 
 	return 0;
 }
@@ -1166,6 +1333,7 @@ static inline void init_list(void)
 	spin_lock_init(&kscand_migrate_lock);
 	init_waitqueue_head(&kscand_wait);
 	init_waitqueue_head(&kmigrated_wait);
+	init_scanctrl(&kscand_scanctrl);
 }
 
 static int __init kscand_init(void)
