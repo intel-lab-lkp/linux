@@ -210,18 +210,12 @@ DMA_BIDIRECTIONAL	direction isn't known
 	this API should be obtained from sources which guarantee it to be
 	physically contiguous (like kmalloc).
 
-	Further, the DMA address of the memory must be within the dma_mask of
-	the device.  To ensure that the memory allocated by kmalloc is within
-	the dma_mask, the driver may specify various platform-dependent flags
-	to restrict the DMA address range of the allocation (e.g., on x86,
-	GFP_DMA guarantees to be within the first 16MB of available DMA
-	addresses, as required by ISA devices).
-
-	Note also that the above constraints on physical contiguity and
-	dma_mask may not apply if the platform has an IOMMU (a device which
-	maps an I/O DMA address to a physical memory address).  However, to be
-	portable, device driver writers may *not* assume that such an IOMMU
-	exists.
+	Mapping may also fail if the memory is not within the DMA mask of the
+	device.  However, this constraint does not apply if the platform has
+	an IOMMU (a device which maps an I/O DMA address to a physical memory
+	address), or the kernel is configured with SWIOTLB (bounce buffers).
+	It is reasonable to assume that at least one of these mechanisms
+	allows streaming DMA to any physical address.
 
 .. warning::
 
