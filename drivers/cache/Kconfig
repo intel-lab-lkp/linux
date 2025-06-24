@@ -1,6 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0
 menu "Cache Drivers"
 
+config CACHE_COHERENCY_SUBSYSTEM
+	bool "Cache coherency control subsystem"
+	depends on ARCH_HAS_CPU_CACHE_INVALIDATE_MEMREGION
+	depends on GENERIC_CPU_CACHE_INVALIDATE_MEMREGION
+	help
+	  Framework to which coherency control drivers register allowing core
+	  kernel subsystems to issue invalidations and similar coherency
+	  operations.
+
 config AX45MP_L2_CACHE
 	bool "Andes Technology AX45MP L2 Cache controller"
 	depends on RISCV
