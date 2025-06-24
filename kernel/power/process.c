@@ -51,6 +51,8 @@ static int try_to_freeze_tasks(bool user_only)
 		todo = 0;
 		read_lock(&tasklist_lock);
 		for_each_process_thread(g, p) {
+			if ((p->flags & PF_KTHREAD) && !(p->flags & PF_NOFREEZE))
+				continue;
 			if (p == current || !freeze_task(p))
 				continue;
 
