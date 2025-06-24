@@ -492,8 +492,24 @@ static struct sched_domain_topology_level x86_topology[] = {
 	{ NULL },
 };
 
+static void __init maybe_remove_smt_level(void)
+{
+	if (cpu_smt_num_threads <= 1) {
+		/*
+		 * SMT level is x86_topology[0].  Shift the array left by one,
+		 * keep the sentinel { NULL } at the end.
+		 */
+		memmove(&x86_topology[0], &x86_topology[1],
+			sizeof(x86_topology) - sizeof(x86_topology[0]));
+		memset(&x86_topology[ARRAY_SIZE(x86_topology) - 1], 0,
+		       sizeof(x86_topology[0]));
+	}
+}
+
 static void __init build_sched_topology(void)
 {
+	maybe_remove_smt_level();
+
 	/*
 	 * When there is NUMA topology inside the package invalidate the
 	 * PKG domain since the NUMA domains will auto-magically create the
