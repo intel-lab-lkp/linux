@@ -30,6 +30,7 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/aperture.h>
+#include <asm/video.h>
 #include "pci.h"
 
 #ifndef ARCH_PCI_DEV_GROUPS
@@ -678,6 +679,13 @@ const struct attribute_group *pcibus_groups[] = {
 	&pcibus_group,
 	NULL,
 };
+
+static ssize_t boot_display_show(struct device *dev, struct device_attribute *attr,
+				 char *buf)
+{
+	return sysfs_emit(buf, "%u\n", video_is_primary_device(dev));
+}
+static DEVICE_ATTR_RO(boot_display);
 
 static ssize_t boot_vga_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
@@ -1698,6 +1706,7 @@ late_initcall(pci_sysfs_init);
 
 static struct attribute *pci_dev_dev_attrs[] = {
 	&dev_attr_boot_vga.attr,
+	&dev_attr_boot_display.attr,
 	NULL,
 };
 
@@ -1709,6 +1718,11 @@ static umode_t pci_dev_attrs_are_visible(struct kobject *kobj,
 
 	if (a == &dev_attr_boot_vga.attr && pci_is_vga(pdev))
 		return a->mode;
+
+#ifdef CONFIG_VIDEO
+	if (a == &dev_attr_boot_display.attr && pci_is_display(pdev))
+		return a->mode;
+#endif
 
 	return 0;
 }
