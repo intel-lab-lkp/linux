@@ -237,7 +237,11 @@ static int cxl_region_invalidate_memregion(struct cxl_region *cxlr)
 		return -ENXIO;
 	}
 
-	cpu_cache_invalidate_memregion(IORES_DESC_CXL);
+	if (!cxlr->params.res)
+		return -ENXIO;
+	cpu_cache_invalidate_memregion(IORES_DESC_CXL,
+				       cxlr->params.res->start,
+				       resource_size(cxlr->params.res));
 	return 0;
 }
 
