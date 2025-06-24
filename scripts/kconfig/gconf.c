@@ -56,7 +56,6 @@ enum {
 	COL_NUMBER
 };
 
-static void display_list(void);
 static void display_tree(GtkTreeStore *store, struct menu *menu);
 static void display_tree_part(void);
 
@@ -292,8 +291,10 @@ static void set_view_mode(enum view_mode mode)
 			else
 				browsed = menu_get_parent_menu(selected);
 		}
+		gtk_tree_store_clear(tree1);
+		display_tree(tree1, &rootmenu);
+		gtk_tree_view_expand_all(GTK_TREE_VIEW(tree1_w));
 		gtk_tree_store_clear(tree2);
-		display_list();
 		if (browsed)
 			display_tree(tree2, browsed);
 		select_menu(GTK_TREE_VIEW(tree1_w), browsed);
@@ -978,15 +979,6 @@ static void display_tree_part(void)
 	else if (view_mode == FULL_VIEW)
 		display_tree(tree2, &rootmenu);
 	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree2_w));
-}
-
-/* Display the list in the left frame (split view) */
-static void display_list(void)
-{
-	gtk_tree_store_clear(tree1);
-
-	display_tree(tree1, &rootmenu);
-	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree1_w));
 }
 
 static void fixup_rootmenu(struct menu *menu)
