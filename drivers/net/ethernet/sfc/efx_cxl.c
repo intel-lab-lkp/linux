@@ -15,14 +15,17 @@
 
 #include "net_driver.h"
 #include "efx_cxl.h"
+#include "efx.h"
 
 #define EFX_CTPIO_BUFFER_SIZE	SZ_256M
 
 static void efx_release_cxl_region(void *priv_cxl)
 {
 	struct efx_probe_data *probe_data = priv_cxl;
+	struct efx_nic *efx = &probe_data->efx;
 	struct efx_cxl *cxl = probe_data->cxl;
 
+	efx_ef10_disable_piobufs(efx);
 	iounmap(cxl->ctpio_cxl);
 	cxl_put_root_decoder(cxl->cxlrd);
 	probe_data->cxl_pio_initialised = false;
@@ -34,6 +37,7 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	struct pci_dev *pci_dev = efx->pci_dev;
 	resource_size_t max_size;
 	struct efx_cxl *cxl;
+	struct range range;
 	u16 dvsec;
 	int rc;
 
@@ -135,10 +139,26 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 		goto err_region;
 	}
 
+	rc = cxl_get_region_range(cxl->efx_region, &range);
+	if (rc) {
+		pci_err(pci_dev, "CXL getting regions params failed");
+		goto err_region_params;
+	}
+
+	cxl->ctpio_cxl = ioremap(range.start, range.end - range.start + 1);
+	if (!cxl->ctpio_cxl) {
+		pci_err(pci_dev, "CXL ioremap region (%pra) pfailed", &range);
+		rc = -ENOMEM;
+		goto err_region_params;
+	}
+
 	probe_data->cxl = cxl;
+	probe_data->cxl_pio_initialised = true;
 
 	goto endpoint_release;
 
+err_region_params:
+	cxl_decoder_kill_region(cxl->cxled);
 err_region:
 	cxl_dpa_free(cxl->cxled);
 put_root_decoder:
@@ -151,6 +171,7 @@ endpoint_release:
 void efx_cxl_exit(struct efx_probe_data *probe_data)
 {
 	if (probe_data->cxl_pio_initialised) {
+		iounmap(probe_data->cxl->ctpio_cxl);
 		cxl_decoder_kill_region(probe_data->cxl->cxled);
 		cxl_dpa_free(probe_data->cxl->cxled);
 		cxl_put_root_decoder(probe_data->cxl->cxlrd);
