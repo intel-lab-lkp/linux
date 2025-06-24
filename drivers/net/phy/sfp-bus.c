@@ -120,6 +120,9 @@ bool sfp_may_have_phy(struct sfp_bus *bus, const struct sfp_eeprom_id *id)
 	if (id->base.e1000_base_t)
 		return true;
 
+	if (id->base.e100_base_fx)
+		return true;
+
 	if (id->base.phys_id != SFF8024_ID_DWDM_SFP) {
 		switch (id->base.extended_cc) {
 		case SFF8024_ECC_10GBASE_T_SFI:
@@ -213,6 +216,7 @@ void sfp_parse_support(struct sfp_bus *bus, const struct sfp_eeprom_id *id,
 	if (id->base.e100_base_fx || id->base.e100_base_lx) {
 		phylink_set(modes, 100baseFX_Full);
 		__set_bit(PHY_INTERFACE_MODE_100BASEX, interfaces);
+		__set_bit(PHY_INTERFACE_MODE_SGMII, interfaces);
 	}
 	if ((id->base.e_base_px || id->base.e_base_bx10) && br_nom == 100) {
 		phylink_set(modes, 100baseFX_Full);
@@ -378,7 +382,8 @@ phy_interface_t sfp_select_interface(struct sfp_bus *bus,
 		return PHY_INTERFACE_MODE_2500BASEX;
 
 	if (phylink_test(link_modes, 1000baseT_Half) ||
-	    phylink_test(link_modes, 1000baseT_Full))
+	    phylink_test(link_modes, 1000baseT_Full) ||
+	    phylink_test(link_modes, 100baseFX_Full))
 		return PHY_INTERFACE_MODE_SGMII;
 
 	if (phylink_test(link_modes, 1000baseX_Full))

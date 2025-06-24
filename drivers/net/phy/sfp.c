@@ -459,6 +459,19 @@ static void sfp_quirk_ubnt_uf_instant(const struct sfp_eeprom_id *id,
 	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT, modes);
 }
 
+static void sfp_fixup_sgmii_to_100base(struct sfp *sfp)
+{
+	sfp->mdio_protocol = MDIO_I2C_MARVELL_C22;
+}
+
+static void sfp_quirk_sgmii_to_100base(const struct sfp_eeprom_id *id,
+				       unsigned long *modes,
+				       unsigned long *interfaces)
+{
+	linkmode_set_bit(ETHTOOL_LINK_MODE_100baseFX_Full_BIT, modes);
+	__set_bit(PHY_INTERFACE_MODE_SGMII, interfaces);
+}
+
 #define SFP_QUIRK(_v, _p, _m, _f) \
 	{ .vendor = _v, .part = _p, .modes = _m, .fixup = _f, }
 #define SFP_QUIRK_M(_v, _p, _m) SFP_QUIRK(_v, _p, _m, NULL)
@@ -524,6 +537,15 @@ static const struct sfp_quirk sfp_quirks[] = {
 	SFP_QUIRK_F("Turris", "RTSFP-2.5G", sfp_fixup_rollball),
 	SFP_QUIRK_F("Turris", "RTSFP-10", sfp_fixup_rollball),
 	SFP_QUIRK_F("Turris", "RTSFP-10G", sfp_fixup_rollball),
+
+	SFP_QUIRK("CISCO-PROLABS", "GLC-GE-100FX-C", sfp_quirk_sgmii_to_100base,
+						     sfp_fixup_sgmii_to_100base),
+	SFP_QUIRK("PROLABS", "SFP-GE-100FX-C", sfp_quirk_sgmii_to_100base,
+					       sfp_fixup_sgmii_to_100base),
+	SFP_QUIRK("FS", "SFP-GE-100FX", sfp_quirk_sgmii_to_100base,
+					sfp_fixup_sgmii_to_100base),
+	SFP_QUIRK("PHOENIX CONTACT", "2891081", sfp_quirk_sgmii_to_100base,
+						sfp_fixup_sgmii_to_100base),
 };
 
 static size_t sfp_strlen(const char *str, size_t maxlen)
