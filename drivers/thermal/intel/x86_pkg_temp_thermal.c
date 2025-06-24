@@ -309,6 +309,7 @@ static int pkg_temp_thermal_trips_init(int cpu, int tj_max,
 
 static int pkg_temp_thermal_device_add(unsigned int cpu)
 {
+	static struct lock_class_key x86_pkg_temp_class;
 	struct thermal_trip trips[MAX_NUMBER_OF_TRIPS] = { 0 };
 	int id = topology_logical_die_id(cpu);
 	u32 eax, ebx, ecx, edx;
@@ -347,6 +348,7 @@ static int pkg_temp_thermal_device_add(unsigned int cpu)
 		err = PTR_ERR(zonedev->tzone);
 		goto out_kfree_zonedev;
 	}
+	thermal_zone_device_set_lock_class(zonedev->tzone, &x86_pkg_temp_class);
 	err = thermal_zone_device_enable(zonedev->tzone);
 	if (err)
 		goto out_unregister_tz;

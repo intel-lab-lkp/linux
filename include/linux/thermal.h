@@ -240,6 +240,9 @@ struct thermal_zone_device *thermal_tripless_zone_device_register(
 					const struct thermal_zone_device_ops *ops,
 					const struct thermal_zone_params *tzp);
 
+void thermal_zone_device_set_lock_class(struct thermal_zone_device *tz,
+					struct lock_class_key *lock_class);
+
 void thermal_zone_device_unregister(struct thermal_zone_device *tz);
 
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd);
@@ -289,6 +292,11 @@ static inline struct thermal_zone_device *thermal_tripless_zone_device_register(
 					struct thermal_zone_device_ops *ops,
 					const struct thermal_zone_params *tzp)
 { return ERR_PTR(-ENODEV); }
+
+static inline void
+thermal_zone_device_set_lock_class(struct thermal_zone_device *tz,
+				   struct lock_class_key *lock_class)
+{ }
 
 static inline void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 { }

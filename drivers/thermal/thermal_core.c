@@ -1657,6 +1657,13 @@ struct thermal_zone_device *thermal_tripless_zone_device_register(
 }
 EXPORT_SYMBOL_GPL(thermal_tripless_zone_device_register);
 
+void thermal_zone_device_set_lock_class(struct thermal_zone_device *tz,
+					struct lock_class_key *lock_class)
+{
+	lockdep_set_class_and_name(&tz->lock, lock_class, tz->type);
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_set_lock_class);
+
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
 {
 	return tzd->devdata;
