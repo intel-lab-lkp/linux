@@ -45,6 +45,14 @@
 #define DOMAIN_NUMBER_MASK		GENMASK(7, 4)
 #define BUS_NUMBER_MASK			GENMASK(3, 0)
 
+int ath12k_msi_mode;
+module_param(ath12k_msi_mode, int, 0644);
+MODULE_PARM_DESC(ath12k_msi_mode, "MSI mode: 0 = multi-vector (default), 1 = single-vector");
+
+bool ath12k_32bit_msi;
+module_param(ath12k_32bit_msi, bool, 0644);
+MODULE_PARM_DESC(ath12k_32bit_msi, "Force 32-bit MSI addressing");
+
 static const struct pci_device_id ath12k_pci_id_table[] = {
 	{ PCI_VDEVICE(QCOM, QCN9274_DEVICE_ID) },
 	{ PCI_VDEVICE(QCOM, WCN7850_DEVICE_ID) },
@@ -773,10 +781,19 @@ static int ath12k_pci_msi_alloc(struct ath12k_pci *ab_pci)
 	int num_vectors;
 	int ret;
 
-	num_vectors = pci_alloc_irq_vectors(ab_pci->pdev,
-					    msi_config->total_vectors,
-					    msi_config->total_vectors,
-					    PCI_IRQ_MSI);
+	/* Set 32-bit MSI flag early if requested */
+	if (ath12k_32bit_msi)
+		ab_pci->pdev->no_64bit_msi = 1;
+
+	/* Force single MSI mode if requested */
+	if (ath12k_msi_mode == ATH12K_MSI_VEC_SINGLE) {
+		num_vectors = -EINVAL; /* Force fallback path */
+	} else {
+		num_vectors = pci_alloc_irq_vectors(ab_pci->pdev,
+						    msi_config->total_vectors,
+						    msi_config->total_vectors,
+						    PCI_IRQ_MSI);
+	}
 
 	if (num_vectors == msi_config->total_vectors) {
 		set_bit(ATH12K_PCI_FLAG_MULTI_MSI_VECTORS, &ab_pci->flags);

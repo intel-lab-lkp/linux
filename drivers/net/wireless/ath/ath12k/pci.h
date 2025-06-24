@@ -92,6 +92,11 @@ enum ath12k_pci_flags {
 	ATH12K_PCI_FLAG_MULTI_MSI_VECTORS,
 };
 
+enum ath12k_msi_mode {
+	ATH12K_MSI_VEC_AUTO = 0,
+	ATH12K_MSI_VEC_SINGLE = 1,
+};
+
 struct ath12k_pci_ops {
 	int (*wakeup)(struct ath12k_base *ab);
 	void (*release)(struct ath12k_base *ab);
