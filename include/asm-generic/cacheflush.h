@@ -124,4 +124,16 @@ static inline void flush_cache_vunmap(unsigned long start, unsigned long end)
 	} while (0)
 #endif
 
+#ifdef CONFIG_GENERIC_CPU_CACHE_INVALIDATE_MEMREGION
+
+struct system_cache_flush_method {
+	int (*invalidate_memregion)(int res_desc,
+				    phys_addr_t start, size_t len);
+};
+
+void generic_set_sys_cache_flush_method(const struct system_cache_flush_method *method);
+void generic_clr_sys_cache_flush_method(const struct system_cache_flush_method *method);
+
+#endif /* CONFIG_GENERIC_CPU_CACHE_INVALIDATE_MEMREGION */
+
 #endif /* _ASM_GENERIC_CACHEFLUSH_H */

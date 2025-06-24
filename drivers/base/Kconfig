@@ -181,6 +181,9 @@ config SYS_HYPERVISOR
 	bool
 	default n
 
+config GENERIC_CPU_CACHE_INVALIDATE_MEMREGION
+	bool
+
 config GENERIC_CPU_DEVICES
 	bool
 	default n
