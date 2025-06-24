@@ -20,6 +20,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/cleanup.h>
+#include <linux/minmax.h>
 
 #include <asm/pgalloc.h>
 #include "internal.h"
@@ -32,6 +33,16 @@ static DEFINE_MUTEX(kscand_mutex);
  */
 #define KSCAND_SCAN_SIZE	(1 * 1024 * 1024 * 1024UL)
 static unsigned long kscand_scan_size __read_mostly = KSCAND_SCAN_SIZE;
+
+/*
+ * Scan period for each mm.
+ * Min: 600ms default: 2sec Max: 5sec
+ */
+#define KSCAND_SCAN_PERIOD_MAX	5000U
+#define KSCAND_SCAN_PERIOD_MIN	600U
+#define KSCAND_SCAN_PERIOD		2000U
+
+static unsigned int kscand_mm_scan_period_ms __read_mostly = KSCAND_SCAN_PERIOD;
 
 /* How long to pause between two scan cycles */
 static unsigned int kscand_scan_sleep_ms __read_mostly = 20;
@@ -78,6 +89,11 @@ static struct kmem_cache *kmigrated_slot_cache __read_mostly;
 /* Per mm information collected to control VMA scanning */
 struct kscand_mm_slot {
 	struct mm_slot slot;
+	/* Unit: ms. Determines how aften mm scan should happen. */
+	unsigned int scan_period;
+	unsigned long next_scan;
+	/* Tracks how many useful pages obtained for migration in the last scan */
+	unsigned long scan_delta;
 	long address;
 	bool is_scanned;
 };
@@ -713,13 +729,92 @@ static void kmigrated_migrate_folio(void)
 	}
 }
 
+/*
+ * This is the normal change percentage when old and new delta remain same.
+ * i.e., either both positive or both zero.
+ */
+#define SCAN_PERIOD_TUNE_PERCENT	15
+
+/* This is to change the scan_period aggressively when deltas are different */
+#define SCAN_PERIOD_CHANGE_SCALE	3
+/*
+ * XXX: Hack to prevent unmigrated pages coming again and again while scanning.
+ * Actual fix needs to identify the type of unmigrated pages OR consider migration
+ * failures in next scan.
+ */
+#define KSCAND_IGNORE_SCAN_THR	256
+
+/* Maintains stability of scan_period by decaying last time accessed pages */
+#define SCAN_DECAY_SHIFT	4
+/*
+ * X : Number of useful pages in the last scan.
+ * Y : Number of useful pages found in current scan.
+ * Tuning scan_period:
+ *	Initial scan_period is 2s.
+ *	case 1: (X = 0, Y = 0)
+ *		Increase scan_period by SCAN_PERIOD_TUNE_PERCENT.
+ *	case 2: (X = 0, Y > 0)
+ *		Decrease scan_period by (2 << SCAN_PERIOD_CHANGE_SCALE).
+ *	case 3: (X > 0, Y = 0 )
+ *		Increase scan_period by (2 << SCAN_PERIOD_CHANGE_SCALE).
+ *	case 4: (X > 0, Y > 0)
+ *		Decrease scan_period by SCAN_PERIOD_TUNE_PERCENT.
+ */
+static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
+				unsigned long total)
+{
+	unsigned int scan_period;
+	unsigned long now;
+	unsigned long old_scan_delta;
+
+	scan_period = mm_slot->scan_period;
+	old_scan_delta = mm_slot->scan_delta;
+
+	/* decay old value */
+	total = (old_scan_delta >> SCAN_DECAY_SHIFT) + total;
+
+	/* XXX: Hack to get rid of continuously failing/unmigrateable pages */
+	if (total < KSCAND_IGNORE_SCAN_THR)
+		total = 0;
+
+	/*
+	 * case 1: old_scan_delta and new delta are similar, (slow) TUNE_PERCENT used.
+	 * case 2: old_scan_delta and new delta are different. (fast) CHANGE_SCALE used.
+	 * TBD:
+	 * 1. Further tune scan_period based on delta between last and current scan delta.
+	 * 2. Optimize calculation
+	 */
+	if (!old_scan_delta && !total) {
+		scan_period = (100 + SCAN_PERIOD_TUNE_PERCENT) * scan_period;
+		scan_period /= 100;
+	} else if (old_scan_delta && total) {
+		scan_period = (100 - SCAN_PERIOD_TUNE_PERCENT) * scan_period;
+		scan_period /= 100;
+	} else if (old_scan_delta && !total) {
+		scan_period = scan_period << SCAN_PERIOD_CHANGE_SCALE;
+	} else {
+		scan_period = scan_period >> SCAN_PERIOD_CHANGE_SCALE;
+	}
+
+	scan_period = clamp(scan_period, KSCAND_SCAN_PERIOD_MIN, KSCAND_SCAN_PERIOD_MAX);
+
+	now = jiffies;
+	mm_slot->next_scan = now + msecs_to_jiffies(scan_period);
+	mm_slot->scan_period = scan_period;
+	mm_slot->scan_delta = total;
+}
+
 static unsigned long kscand_scan_mm_slot(void)
 {
 	bool next_mm = false;
 	bool update_mmslot_info = false;
 
+	unsigned int mm_slot_scan_period;
+	unsigned long now;
+	unsigned long mm_slot_next_scan;
 	unsigned long vma_scanned_size = 0;
 	unsigned long address;
+	unsigned long total = 0;
 
 	struct mm_slot *slot;
 	struct mm_struct *mm;
@@ -744,6 +839,8 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	mm = slot->mm;
 	mm_slot->is_scanned = true;
+	mm_slot_next_scan = mm_slot->next_scan;
+	mm_slot_scan_period = mm_slot->scan_period;
 	spin_unlock(&kscand_mm_lock);
 
 	if (unlikely(!mmap_read_trylock(mm)))
@@ -753,6 +850,11 @@ static unsigned long kscand_scan_mm_slot(void)
 		next_mm = true;
 		goto outerloop;
 	}
+
+	now = jiffies;
+
+	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
+		goto outerloop;
 
 	VMA_ITERATOR(vmi, mm, address);
 
@@ -784,8 +886,10 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	update_mmslot_info = true;
 
-	if (update_mmslot_info)
+	if (update_mmslot_info) {
 		mm_slot->address = address;
+		kscand_update_mmslot_info(mm_slot, total);
+	}
 
 outerloop:
 	/* exit_mmap will destroy ptes after this */
@@ -887,6 +991,10 @@ void __kscand_enter(struct mm_struct *mm)
 		return;
 
 	kscand_slot->address = 0;
+	kscand_slot->scan_period = kscand_mm_scan_period_ms;
+	kscand_slot->next_scan = 0;
+	kscand_slot->scan_delta = 0;
+
 	slot = &kscand_slot->slot;
 
 	spin_lock(&kscand_mm_lock);
