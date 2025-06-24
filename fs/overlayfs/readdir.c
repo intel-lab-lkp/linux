@@ -1141,7 +1141,8 @@ static int ovl_workdir_cleanup_recurse(struct ovl_fs *ofs, const struct path *pa
 		if (IS_ERR(dentry))
 			continue;
 		if (dentry->d_inode)
-			err = ovl_workdir_cleanup(ofs, dir, path->mnt, dentry, level);
+			err = ovl_workdir_cleanup(ofs, path->dentry, path->mnt,
+						  dentry, level);
 		dput(dentry);
 		if (err)
 			break;
@@ -1152,24 +1153,27 @@ out:
 	return err;
 }
 
-int ovl_workdir_cleanup(struct ovl_fs *ofs, struct inode *dir,
+int ovl_workdir_cleanup(struct ovl_fs *ofs, struct dentry *parent,
 			struct vfsmount *mnt, struct dentry *dentry, int level)
 {
 	int err;
 
 	if (!d_is_dir(dentry) || level > 1) {
-		return ovl_cleanup(ofs, dir, dentry);
+		return ovl_cleanup_unlocked(ofs, parent, dentry);
 	}
 
-	err = ovl_do_rmdir(ofs, dir, dentry);
+	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
+	if (dentry->d_parent == parent)
+		err = ovl_do_rmdir(ofs, parent->d_inode, dentry);
+	else
+		err = -EINVAL;
+	inode_unlock(parent->d_inode);
 	if (err) {
 		struct path path = { .mnt = mnt, .dentry = dentry };
 
-		inode_unlock(dir);
 		err = ovl_workdir_cleanup_recurse(ofs, &path, level + 1);
-		inode_lock_nested(dir, I_MUTEX_PARENT);
 		if (!err)
-			err = ovl_cleanup(ofs, dir, dentry);
+			err = ovl_cleanup_unlocked(ofs, parent, dentry);
 	}
 
 	return err;
@@ -1180,7 +1184,6 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 	int err;
 	struct dentry *indexdir = ofs->workdir;
 	struct dentry *index = NULL;
-	struct inode *dir = indexdir->d_inode;
 	struct path path = { .mnt = ovl_upper_mnt(ofs), .dentry = indexdir };
 	LIST_HEAD(list);
 	struct ovl_cache_entry *p;
@@ -1194,7 +1197,6 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 	if (err)
 		goto out;
 
-	inode_lock_nested(dir, I_MUTEX_PARENT);
 	list_for_each_entry(p, &list, l_node) {
 		if (p->name[0] == '.') {
 			if (p->len == 1)
@@ -1202,7 +1204,8 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 			if (p->len == 2 && p->name[1] == '.')
 				continue;
 		}
-		index = ovl_lookup_upper(ofs, p->name, indexdir, p->len);
+		index = ovl_lookup_upper_unlocked(ofs, p->name, indexdir,
+						  p->len);
 		if (IS_ERR(index)) {
 			err = PTR_ERR(index);
 			index = NULL;
@@ -1210,7 +1213,8 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 		}
 		/* Cleanup leftover from index create/cleanup attempt */
 		if (index->d_name.name[0] == '#') {
-			err = ovl_workdir_cleanup(ofs, dir, path.mnt, index, 1);
+			err = ovl_workdir_cleanup(ofs, indexdir, path.mnt,
+						  index, 1);
 			if (err)
 				break;
 			goto next;
@@ -1220,7 +1224,7 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 			goto next;
 		} else if (err == -ESTALE) {
 			/* Cleanup stale index entries */
-			err = ovl_cleanup(ofs, dir, index);
+			err = ovl_cleanup_unlocked(ofs, indexdir, index);
 		} else if (err != -ENOENT) {
 			/*
 			 * Abort mount to avoid corrupting the index if
@@ -1236,7 +1240,7 @@ int ovl_indexdir_cleanup(struct ovl_fs *ofs)
 			err = ovl_cleanup_and_whiteout(ofs, indexdir, index);
 		} else {
 			/* Cleanup orphan index entries */
-			err = ovl_cleanup(ofs, dir, index);
+			err = ovl_cleanup_unlocked(ofs, indexdir, index);
 		}
 
 		if (err)
@@ -1247,7 +1251,6 @@ next:
 		index = NULL;
 	}
 	dput(index);
-	inode_unlock(dir);
 out:
 	ovl_cache_free(&list);
 	if (err)
