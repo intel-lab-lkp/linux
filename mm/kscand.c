@@ -28,6 +28,7 @@
 
 static struct task_struct *kscand_thread __read_mostly;
 static DEFINE_MUTEX(kscand_mutex);
+extern unsigned int sysctl_numa_balancing_scan_delay;
 
 /*
  * Total VMA size to cover during scan.
@@ -1008,6 +1009,7 @@ void __kscand_enter(struct mm_struct *mm)
 {
 	struct kscand_mm_slot *kscand_slot;
 	struct mm_slot *slot;
+	unsigned long now;
 	int wakeup;
 
 	/* __kscand_exit() must not run from under us */
@@ -1018,10 +1020,12 @@ void __kscand_enter(struct mm_struct *mm)
 	if (!kscand_slot)
 		return;
 
+	now = jiffies;
 	kscand_slot->address = 0;
 	kscand_slot->scan_period = kscand_mm_scan_period_ms;
 	kscand_slot->scan_size = kscand_scan_size;
-	kscand_slot->next_scan = 0;
+	kscand_slot->next_scan = now +
+			msecs_to_jiffies(sysctl_numa_balancing_scan_delay);
 	kscand_slot->scan_delta = 0;
 
 	slot = &kscand_slot->slot;
