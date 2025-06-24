@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/mmu_notifier.h>
+#include <linux/migrate.h>
 #include <linux/rmap.h>
 #include <linux/pagewalk.h>
 #include <linux/page_ext.h>
@@ -41,6 +42,15 @@ static unsigned long kscand_mms_to_scan __read_mostly = KSCAND_MMS_TO_SCAN;
 
 bool kscand_scan_enabled = true;
 static bool need_wakeup;
+static bool migrated_need_wakeup;
+
+/* How long to pause between two migration cycles */
+static unsigned int kmigrate_sleep_ms __read_mostly = 20;
+
+static struct task_struct *kmigrated_thread __read_mostly;
+static DEFINE_MUTEX(kmigrated_mutex);
+static DECLARE_WAIT_QUEUE_HEAD(kmigrated_wait);
+static unsigned long kmigrated_sleep_expire;
 
 static unsigned long kscand_sleep_expire;
 
@@ -79,6 +89,7 @@ struct kscand_scanctrl {
 };
 
 struct kscand_scanctrl kscand_scanctrl;
+
 /* Per folio information used for migration */
 struct kscand_migrate_info {
 	struct list_head migrate_node;
@@ -131,6 +142,19 @@ static inline bool is_valid_folio(struct folio *folio)
 	return true;
 }
 
+static inline void kmigrated_wait_work(void)
+{
+	const unsigned long migrate_sleep_jiffies =
+		msecs_to_jiffies(kmigrate_sleep_ms);
+
+	if (!migrate_sleep_jiffies)
+		return;
+
+	kmigrated_sleep_expire = jiffies + migrate_sleep_jiffies;
+	wait_event_timeout(kmigrated_wait,
+			true,
+			migrate_sleep_jiffies);
+}
 
 static bool folio_idle_clear_pte_refs_one(struct folio *folio,
 					 struct vm_area_struct *vma,
@@ -533,6 +557,49 @@ static int stop_kscand(void)
 	return 0;
 }
 
+static int kmigrated(void *arg)
+{
+	while (true) {
+		WRITE_ONCE(migrated_need_wakeup, false);
+		if (unlikely(kthread_should_stop()))
+			break;
+		msleep(20);
+		kmigrated_wait_work();
+	}
+	return 0;
+}
+
+static int start_kmigrated(void)
+{
+	struct task_struct *kthread;
+
+	guard(mutex)(&kmigrated_mutex);
+
+	/* Someone already succeeded in starting daemon */
+	if (kmigrated_thread)
+		return 0;
+
+	kthread = kthread_run(kmigrated, NULL, "kmigrated");
+	if (IS_ERR(kmigrated_thread)) {
+		pr_err("kmigrated: kthread_run(kmigrated)  failed\n");
+		return PTR_ERR(kthread);
+	}
+
+	kmigrated_thread = kthread;
+	pr_info("kmigrated: Successfully started kmigrated");
+
+	wake_up_interruptible(&kmigrated_wait);
+
+	return 0;
+}
+
+static int stop_kmigrated(void)
+{
+	guard(mutex)(&kmigrated_mutex);
+	kthread_stop(kmigrated_thread);
+	return 0;
+}
+
 static inline void init_list(void)
 {
 	INIT_LIST_HEAD(&kscand_scanctrl.scan_list);
@@ -555,7 +622,14 @@ static int __init kscand_init(void)
 	if (err)
 		goto err_kscand;
 
+	err = start_kmigrated();
+	if (err)
+		goto err_kmigrated;
+
 	return 0;
+
+err_kmigrated:
+	stop_kmigrated();
 
 err_kscand:
 	stop_kscand();
