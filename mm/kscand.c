@@ -7,12 +7,14 @@
 #include <linux/swap.h>
 #include <linux/mm_inline.h>
 #include <linux/kthread.h>
+#include <linux/kscand.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/cleanup.h>
 
 #include <asm/pgalloc.h>
 #include "internal.h"
+#include "mm_slot.h"
 
 static struct task_struct *kscand_thread __read_mostly;
 static DEFINE_MUTEX(kscand_mutex);
@@ -29,11 +31,23 @@ static bool need_wakeup;
 
 static unsigned long kscand_sleep_expire;
 
+static DEFINE_SPINLOCK(kscand_mm_lock);
 static DECLARE_WAIT_QUEUE_HEAD(kscand_wait);
+
+#define KSCAND_SLOT_HASH_BITS 10
+static DEFINE_READ_MOSTLY_HASHTABLE(kscand_slots_hash, KSCAND_SLOT_HASH_BITS);
+
+static struct kmem_cache *kscand_slot_cache __read_mostly;
+
+/* Per mm information collected to control VMA scanning */
+struct kscand_mm_slot {
+	struct mm_slot slot;
+};
 
 /* Data structure to keep track of current mm under scan */
 struct kscand_scan {
 	struct list_head mm_head;
+	struct kscand_mm_slot *mm_slot;
 };
 
 struct kscand_scan kscand_scan = {
@@ -69,6 +83,12 @@ static void kscand_wait_work(void)
 	wait_event_timeout(kscand_wait, kscand_should_wakeup(),
 			scan_sleep_jiffies);
 }
+
+static inline int kscand_test_exit(struct mm_struct *mm)
+{
+	return atomic_read(&mm->mm_users) == 0;
+}
+
 static void kscand_do_scan(void)
 {
 	unsigned long iter = 0, mms_to_scan;
@@ -107,6 +127,65 @@ static int kscand(void *none)
 		kscand_wait_work();
 	}
 	return 0;
+}
+
+static inline void kscand_destroy(void)
+{
+	kmem_cache_destroy(kscand_slot_cache);
+}
+
+void __kscand_enter(struct mm_struct *mm)
+{
+	struct kscand_mm_slot *kscand_slot;
+	struct mm_slot *slot;
+	int wakeup;
+
+	/* __kscand_exit() must not run from under us */
+	VM_BUG_ON_MM(kscand_test_exit(mm), mm);
+
+	kscand_slot = mm_slot_alloc(kscand_slot_cache);
+
+	if (!kscand_slot)
+		return;
+
+	slot = &kscand_slot->slot;
+
+	spin_lock(&kscand_mm_lock);
+	mm_slot_insert(kscand_slots_hash, mm, slot);
+
+	wakeup = list_empty(&kscand_scan.mm_head);
+	list_add_tail(&slot->mm_node, &kscand_scan.mm_head);
+	spin_unlock(&kscand_mm_lock);
+
+	mmgrab(mm);
+	if (wakeup)
+		wake_up_interruptible(&kscand_wait);
+}
+
+void __kscand_exit(struct mm_struct *mm)
+{
+	struct kscand_mm_slot *mm_slot;
+	struct mm_slot *slot;
+	int free = 0;
+
+	spin_lock(&kscand_mm_lock);
+	slot = mm_slot_lookup(kscand_slots_hash, mm);
+	mm_slot = mm_slot_entry(slot, struct kscand_mm_slot, slot);
+	if (mm_slot && kscand_scan.mm_slot != mm_slot) {
+		hash_del(&slot->hash);
+		list_del(&slot->mm_node);
+		free = 1;
+	}
+
+	spin_unlock(&kscand_mm_lock);
+
+	if (free) {
+		mm_slot_free(kscand_slot_cache, mm_slot);
+		mmdrop(mm);
+	} else if (mm_slot) {
+		mmap_write_lock(mm);
+		mmap_write_unlock(mm);
+	}
 }
 
 static int start_kscand(void)
@@ -149,6 +228,12 @@ static int __init kscand_init(void)
 {
 	int err;
 
+	kscand_slot_cache = KMEM_CACHE(kscand_mm_slot, 0);
+
+	if (!kscand_slot_cache) {
+		pr_err("kscand: kmem_cache error");
+		return -ENOMEM;
+	}
 	err = start_kscand();
 	if (err)
 		goto err_kscand;
@@ -157,6 +242,7 @@ static int __init kscand_init(void)
 
 err_kscand:
 	stop_kscand();
+	kscand_destroy();
 
 	return err;
 }
