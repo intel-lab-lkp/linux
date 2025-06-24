@@ -1108,6 +1108,8 @@ static void idpf_vport_queue_grp_rel_all(struct idpf_vport *vport)
  */
 void idpf_vport_queues_rel(struct idpf_vport *vport)
 {
+	idpf_xdp_copy_prog_to_rqs(vport, NULL);
+
 	idpf_tx_desc_rel_all(vport);
 	idpf_rx_desc_rel_all(vport);
 
@@ -1677,6 +1679,8 @@ int idpf_vport_queues_alloc(struct idpf_vport *vport)
 	err = idpf_rx_desc_alloc_all(vport);
 	if (err)
 		goto err_out;
+
+	idpf_xdp_copy_prog_to_rqs(vport, vport->xdp_prog);
 
 	return 0;
 
