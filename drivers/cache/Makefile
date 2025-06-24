@@ -5,3 +5,4 @@ obj-$(CONFIG_SIFIVE_CCACHE)		+= sifive_ccache.o
 obj-$(CONFIG_STARFIVE_STARLINK_CACHE)	+= starfive_starlink_cache.o
 
 obj-$(CONFIG_CACHE_COHERENCY_SUBSYSTEM)	+= coherency_core.o
+obj-$(CONFIG_HISI_SOC_HHA)		+= hisi_soc_hha.o

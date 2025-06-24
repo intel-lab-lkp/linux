@@ -10,6 +10,20 @@ config CACHE_COHERENCY_SUBSYSTEM
 	  kernel subsystems to issue invalidations and similar coherency
 	  operations.
 
+if CACHE_COHERENCY_SUBSYSTEM
+
+config HISI_SOC_HHA
+	tristate "HiSilicon Hydra Home Agent (HHA) device driver"
+	depends on (ARM64 && ACPI) || COMPILE_TEST
+	help
+	  The Hydra Home Agent (HHA) is responsible of cache coherency
+	  on SoC. This drivers provides cache maintenance functions of HHA.
+
+	  This driver can be built as a module. If so, the module will be
+	  called hisi_soc_hha.
+
+endif
+
 config AX45MP_L2_CACHE
 	bool "Andes Technology AX45MP L2 Cache controller"
 	depends on RISCV
