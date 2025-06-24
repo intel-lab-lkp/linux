@@ -322,16 +322,12 @@ int ice_plug_aux_dev(struct ice_pf *pf)
 		"roce" : "iwarp";
 
 	ret = auxiliary_device_init(adev);
-	if (ret) {
-		kfree(iadev);
-		return ret;
-	}
+	if (ret)
+		goto free_iadev;
 
 	ret = auxiliary_device_add(adev);
-	if (ret) {
-		auxiliary_device_uninit(adev);
-		return ret;
-	}
+	if (ret)
+		goto aux_dev_uninit;
 
 	mutex_lock(&pf->adev_mutex);
 	cdev->adev = adev;
@@ -339,6 +335,13 @@ int ice_plug_aux_dev(struct ice_pf *pf)
 	set_bit(ICE_FLAG_AUX_DEV_CREATED, pf->flags);
 
 	return 0;
+
+aux_dev_uninit:
+	auxiliary_device_uninit(adev);
+free_iadev:
+	kfree(iadev);
+
+	return ret;
 }
 
 /* ice_unplug_aux_dev - unregister and free AUX device
