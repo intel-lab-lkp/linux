@@ -972,8 +972,10 @@ static void idpf_vport_dealloc(struct idpf_vport *vport)
 	struct idpf_adapter *adapter = vport->adapter;
 	unsigned int i = vport->idx;
 
+	rtnl_lock();
 	idpf_deinit_mac_addr(vport);
 	idpf_vport_stop(vport);
+	rtnl_unlock();
 
 	if (!test_bit(IDPF_HR_RESET_IN_PROG, adapter->flags))
 		idpf_decfg_netdev(vport);
