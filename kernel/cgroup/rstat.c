@@ -175,14 +175,7 @@ static struct cgroup_subsys_state *css_rstat_push_children(
 	struct cgroup_subsys_state *parent, *grandchild;
 	struct css_rstat_cpu *crstatc;
 
-	child->rstat_flush_next = NULL;
-
-	/*
-	 * The subsystem rstat lock must be held for the whole duration from
-	 * here as the rstat_flush_next list is being constructed to when
-	 * it is consumed later in css_rstat_flush().
-	 */
-	lockdep_assert_held(ss_rstat_lock(head->ss));
+	css_rstat_cpu(child, cpu)->rstat_flush_next = NULL;
 
 	/*
 	 * Notation: -> updated_next pointer
@@ -203,19 +196,19 @@ static struct cgroup_subsys_state *css_rstat_push_children(
 next_level:
 	while (cnext) {
 		child = cnext;
-		cnext = child->rstat_flush_next;
+		cnext = css_rstat_cpu(child, cpu)->rstat_flush_next;
 		parent = child->parent;
 
 		/* updated_next is parent cgroup terminated if !NULL */
 		while (child != parent) {
-			child->rstat_flush_next = head;
+			css_rstat_cpu(child, cpu)->rstat_flush_next = head;
 			head = child;
 			crstatc = css_rstat_cpu(child, cpu);
 			grandchild = crstatc->updated_children;
 			if (grandchild != child) {
 				/* Push the grand child to the next level */
 				crstatc->updated_children = child;
-				grandchild->rstat_flush_next = ghead;
+				css_rstat_cpu(grandchild, cpu)->rstat_flush_next = ghead;
 				ghead = grandchild;
 			}
 			child = crstatc->updated_next;
@@ -286,7 +279,7 @@ static struct cgroup_subsys_state *css_rstat_updated_list(
 
 	/* Push @root to the list first before pushing the children */
 	head = root;
-	root->rstat_flush_next = NULL;
+	css_rstat_cpu(root, cpu)->rstat_flush_next = NULL;
 	child = rstatc->updated_children;
 	rstatc->updated_children = root;
 	if (child != root)
@@ -383,19 +376,18 @@ __bpf_kfunc void css_rstat_flush(struct cgroup_subsys_state *css)
 	might_sleep();
 	for_each_possible_cpu(cpu) {
 		struct cgroup_subsys_state *pos;
-
-		/* Reacquire for each CPU to avoid disabling IRQs too long */
-		__css_rstat_lock(css, cpu);
 		pos = css_rstat_updated_list(css, cpu);
-		for (; pos; pos = pos->rstat_flush_next) {
+		for (; pos; pos = css_rstat_cpu(pos, cpu)->rstat_flush_next) {
 			if (is_self) {
 				cgroup_base_stat_flush(pos->cgroup, cpu);
 				bpf_rstat_flush(pos->cgroup,
 						cgroup_parent(pos->cgroup), cpu);
-			} else
+			} else {
+				__css_rstat_lock(css, cpu);
 				pos->ss->css_rstat_flush(pos, cpu);
+				__css_rstat_unlock(css, cpu);
+			}
 		}
-		__css_rstat_unlock(css, cpu);
 		if (!cond_resched())
 			cpu_relax();
 	}
@@ -434,13 +426,6 @@ int css_rstat_init(struct cgroup_subsys_state *css)
 
 		rstatc->owner = rstatc->updated_children = css;
 		init_llist_node(&rstatc->lnode);
-
-		if (is_self) {
-			struct cgroup_rstat_base_cpu *rstatbc;
-
-			rstatbc = cgroup_rstat_base_cpu(cgrp, cpu);
-			u64_stats_init(&rstatbc->bsync);
-		}
 	}
 
 	return 0;
@@ -507,25 +492,48 @@ int __init ss_rstat_init(struct cgroup_subsys *ss)
 static void cgroup_base_stat_add(struct cgroup_base_stat *dst_bstat,
 				 struct cgroup_base_stat *src_bstat)
 {
-	dst_bstat->cputime.utime += src_bstat->cputime.utime;
-	dst_bstat->cputime.stime += src_bstat->cputime.stime;
-	dst_bstat->cputime.sum_exec_runtime += src_bstat->cputime.sum_exec_runtime;
+	atomic64_add(atomic64_read(&src_bstat->cputime.utime),
+		     &dst_bstat->cputime.utime);
+	atomic64_add(atomic64_read(&src_bstat->cputime.stime),
+		     &dst_bstat->cputime.stime);
+	atomic_long_add(atomic_long_read(&src_bstat->cputime.sum_exec_runtime),
+			&dst_bstat->cputime.sum_exec_runtime);
 #ifdef CONFIG_SCHED_CORE
-	dst_bstat->forceidle_sum += src_bstat->forceidle_sum;
+	atomic64_add(atomic64_read(&src_bstat->forceidle_sum),
+		     &dst_bstat->forceidle_sum);
 #endif
-	dst_bstat->ntime += src_bstat->ntime;
 }
 
 static void cgroup_base_stat_sub(struct cgroup_base_stat *dst_bstat,
 				 struct cgroup_base_stat *src_bstat)
 {
-	dst_bstat->cputime.utime -= src_bstat->cputime.utime;
-	dst_bstat->cputime.stime -= src_bstat->cputime.stime;
-	dst_bstat->cputime.sum_exec_runtime -= src_bstat->cputime.sum_exec_runtime;
+	atomic64_sub(atomic64_read(&src_bstat->cputime.utime),
+		     &dst_bstat->cputime.utime);
+	atomic64_sub(atomic64_read(&src_bstat->cputime.stime),
+		     &dst_bstat->cputime.stime);
+	atomic_long_sub(atomic_long_read(&src_bstat->cputime.sum_exec_runtime),
+			&dst_bstat->cputime.sum_exec_runtime);
 #ifdef CONFIG_SCHED_CORE
-	dst_bstat->forceidle_sum -= src_bstat->forceidle_sum;
+	atomic64_sub(atomic64_read(&src_bstat->forceidle_sum),
+		     &dst_bstat->forceidle_sum);
 #endif
-	dst_bstat->ntime -= src_bstat->ntime;
+	atomic64_sub(atomic64_read(&src_bstat->ntime), &dst_bstat->ntime);
+}
+
+static void cgroup_base_stat_copy(struct cgroup_base_stat *dst_bstat,
+				  struct cgroup_base_stat *src_bstat)
+{
+	atomic64_set(&dst_bstat->cputime.stime,
+		     atomic64_read(&src_bstat->cputime.stime));
+	atomic64_set(&dst_bstat->cputime.utime,
+		     atomic64_read(&src_bstat->cputime.utime));
+	atomic_long_set(&dst_bstat->cputime.sum_exec_runtime,
+			atomic_long_read(&src_bstat->cputime.sum_exec_runtime));
+#ifdef CONFIG_SCHED_CORE
+	atomic64_set(&dst_bstat->forceidle_sum,
+		     atomic64_read(&src_bstat->forceidle_sum));
+#endif
+	atomic64_set(&dst_bstat->ntime, atomic64_read(&src_bstat->ntime));
 }
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
@@ -534,17 +542,12 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 	struct cgroup *parent = cgroup_parent(cgrp);
 	struct cgroup_rstat_base_cpu *prstatbc;
 	struct cgroup_base_stat delta;
-	unsigned seq;
 
 	/* Root-level stats are sourced from system-wide CPU stats */
 	if (!parent)
 		return;
 
-	/* fetch the current per-cpu values */
-	do {
-		seq = __u64_stats_fetch_begin(&rstatbc->bsync);
-		delta = rstatbc->bstat;
-	} while (__u64_stats_fetch_retry(&rstatbc->bsync, seq));
+	cgroup_base_stat_copy(&delta, &rstatbc->bstat);
 
 	/* propagate per-cpu delta to cgroup and per-cpu global statistics */
 	cgroup_base_stat_sub(&delta, &rstatbc->last_bstat);
@@ -554,12 +557,12 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 
 	/* propagate cgroup and per-cpu global delta to parent (unless that's root) */
 	if (cgroup_parent(parent)) {
-		delta = cgrp->bstat;
+		cgroup_base_stat_copy(&delta, &cgrp->bstat);
 		cgroup_base_stat_sub(&delta, &cgrp->last_bstat);
 		cgroup_base_stat_add(&parent->bstat, &delta);
 		cgroup_base_stat_add(&cgrp->last_bstat, &delta);
 
-		delta = rstatbc->subtree_bstat;
+		cgroup_base_stat_copy(&delta, &rstatbc->subtree_bstat);
 		prstatbc = cgroup_rstat_base_cpu(parent, cpu);
 		cgroup_base_stat_sub(&delta, &rstatbc->last_subtree_bstat);
 		cgroup_base_stat_add(&prstatbc->subtree_bstat, &delta);
@@ -567,65 +570,43 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 	}
 }
 
-static struct cgroup_rstat_base_cpu *
-cgroup_base_stat_cputime_account_begin(struct cgroup *cgrp, unsigned long *flags)
-{
-	struct cgroup_rstat_base_cpu *rstatbc;
-
-	rstatbc = get_cpu_ptr(cgrp->rstat_base_cpu);
-	*flags = u64_stats_update_begin_irqsave(&rstatbc->bsync);
-	return rstatbc;
-}
-
-static void cgroup_base_stat_cputime_account_end(struct cgroup *cgrp,
-						 struct cgroup_rstat_base_cpu *rstatbc,
-						 unsigned long flags)
-{
-	u64_stats_update_end_irqrestore(&rstatbc->bsync, flags);
-	css_rstat_updated(&cgrp->self, smp_processor_id());
-	put_cpu_ptr(rstatbc);
-}
-
 void __cgroup_account_cputime(struct cgroup *cgrp, u64 delta_exec)
 {
-	struct cgroup_rstat_base_cpu *rstatbc;
-	unsigned long flags;
-
-	rstatbc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
-	rstatbc->bstat.cputime.sum_exec_runtime += delta_exec;
-	cgroup_base_stat_cputime_account_end(cgrp, rstatbc, flags);
+	struct cgroup_rstat_base_cpu *rstatbc =
+		get_cpu_ptr(cgrp->rstat_base_cpu);
+	atomic_long_add(delta_exec, &rstatbc->bstat.cputime.sum_exec_runtime);
+	put_cpu_ptr(rstatbc);
 }
 
 void __cgroup_account_cputime_field(struct cgroup *cgrp,
 				    enum cpu_usage_stat index, u64 delta_exec)
 {
 	struct cgroup_rstat_base_cpu *rstatbc;
-	unsigned long flags;
 
-	rstatbc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
+	rstatbc = get_cpu_ptr(cgrp->rstat_base_cpu);
 
 	switch (index) {
 	case CPUTIME_NICE:
-		rstatbc->bstat.ntime += delta_exec;
+		atomic64_add(delta_exec, &rstatbc->bstat.ntime);
 		fallthrough;
 	case CPUTIME_USER:
-		rstatbc->bstat.cputime.utime += delta_exec;
+		atomic64_add(delta_exec, &rstatbc->bstat.cputime.utime);
 		break;
 	case CPUTIME_SYSTEM:
 	case CPUTIME_IRQ:
 	case CPUTIME_SOFTIRQ:
-		rstatbc->bstat.cputime.stime += delta_exec;
+		atomic64_add(delta_exec, &rstatbc->bstat.cputime.stime);
 		break;
 #ifdef CONFIG_SCHED_CORE
 	case CPUTIME_FORCEIDLE:
-		rstatbc->bstat.forceidle_sum += delta_exec;
+		atomic64_add(delta_exec, &rstatbc->bstat.forceidle_sum);
 		break;
 #endif
 	default:
 		break;
 	}
 
-	cgroup_base_stat_cputime_account_end(cgrp, rstatbc, flags);
+	put_cpu_ptr(rstatbc);
 }
 
 /*
@@ -636,7 +617,7 @@ void __cgroup_account_cputime_field(struct cgroup *cgrp,
  */
 static void root_cgroup_cputime(struct cgroup_base_stat *bstat)
 {
-	struct task_cputime *cputime = &bstat->cputime;
+	struct atomic_task_cputime *cputime = &bstat->cputime;
 	int i;
 
 	memset(bstat, 0, sizeof(*bstat));
@@ -650,20 +631,19 @@ static void root_cgroup_cputime(struct cgroup_base_stat *bstat)
 
 		user += cpustat[CPUTIME_USER];
 		user += cpustat[CPUTIME_NICE];
-		cputime->utime += user;
+		atomic64_add(user, &cputime->utime);
 
 		sys += cpustat[CPUTIME_SYSTEM];
 		sys += cpustat[CPUTIME_IRQ];
 		sys += cpustat[CPUTIME_SOFTIRQ];
-		cputime->stime += sys;
+		atomic64_add(sys, &cputime->stime);
 
-		cputime->sum_exec_runtime += user;
-		cputime->sum_exec_runtime += sys;
+		atomic_long_add(sys + user, &cputime->sum_exec_runtime);
 
 #ifdef CONFIG_SCHED_CORE
-		bstat->forceidle_sum += cpustat[CPUTIME_FORCEIDLE];
+		atomic64_add(cpustat[CPUTIME_FORCEIDLE], &bstat->forceidle_sum);
 #endif
-		bstat->ntime += cpustat[CPUTIME_NICE];
+		atomic64_add(cpustat[CPUTIME_NICE], &bstat->ntime);
 	}
 }
 
@@ -671,7 +651,7 @@ static void root_cgroup_cputime(struct cgroup_base_stat *bstat)
 static void cgroup_force_idle_show(struct seq_file *seq, struct cgroup_base_stat *bstat)
 {
 #ifdef CONFIG_SCHED_CORE
-	u64 forceidle_time = bstat->forceidle_sum;
+	u64 forceidle_time = atomic64_read(&bstat->forceidle_sum);
 
 	do_div(forceidle_time, NSEC_PER_USEC);
 	seq_printf(seq, "core_sched.force_idle_usec %llu\n", forceidle_time);
@@ -682,31 +662,50 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq)
 {
 	struct cgroup *cgrp = seq_css(seq)->cgroup;
 	struct cgroup_base_stat bstat;
+	unsigned long long sum_exec_runtime;
+	u64 utime, stime, ntime;
 
 	if (cgroup_parent(cgrp)) {
 		css_rstat_flush(&cgrp->self);
-		__css_rstat_lock(&cgrp->self, -1);
-		bstat = cgrp->bstat;
-		cputime_adjust(&cgrp->bstat.cputime, &cgrp->prev_cputime,
-			       &bstat.cputime.utime, &bstat.cputime.stime);
-		__css_rstat_unlock(&cgrp->self, -1);
-	} else {
+		cgroup_base_stat_copy(&bstat, &cgrp->bstat);
+		struct task_cputime cputime = {
+			.stime = atomic64_read(&bstat.cputime.stime),
+			.utime = atomic64_read(&bstat.cputime.utime),
+			.sum_exec_runtime = atomic_long_read(
+				&bstat.cputime.sum_exec_runtime)
+		};
+		cputime_adjust(&cputime, &cgrp->prev_cputime, &cputime.utime,
+			       &cputime.stime);
+		atomic64_set(&bstat.cputime.utime, cputime.utime);
+		atomic64_set(&bstat.cputime.stime, cputime.stime);
+	} else
 		root_cgroup_cputime(&bstat);
-	}
 
-	do_div(bstat.cputime.sum_exec_runtime, NSEC_PER_USEC);
-	do_div(bstat.cputime.utime, NSEC_PER_USEC);
-	do_div(bstat.cputime.stime, NSEC_PER_USEC);
-	do_div(bstat.ntime, NSEC_PER_USEC);
+	sum_exec_runtime = atomic_long_read(&bstat.cputime.sum_exec_runtime);
 
-	seq_printf(seq, "usage_usec %llu\n"
-			"user_usec %llu\n"
-			"system_usec %llu\n"
-			"nice_usec %llu\n",
-			bstat.cputime.sum_exec_runtime,
-			bstat.cputime.utime,
-			bstat.cputime.stime,
-			bstat.ntime);
+	do_div(sum_exec_runtime, NSEC_PER_USEC);
+
+	utime = atomic64_read(&bstat.cputime.utime);
+
+	do_div(utime, NSEC_PER_USEC);
+
+	stime = atomic64_read(&bstat.cputime.stime);
+
+	do_div(stime, NSEC_PER_USEC);
+
+	ntime = atomic64_read(&bstat.ntime);
+
+	do_div(ntime, NSEC_PER_USEC);
+
+	seq_printf(seq,
+		   "usage_usec %llu\n"
+		   "user_usec %llu\n"
+		   "system_usec %llu\n"
+		   "nice_usec %llu\n",
+		   sum_exec_runtime,
+		   utime,
+		   stime,
+		   ntime);
 
 	cgroup_force_idle_show(seq, &bstat);
 }
