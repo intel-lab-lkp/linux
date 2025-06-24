@@ -941,16 +941,11 @@ int owl_pinctrl_probe(struct platform_device *pdev,
 		return PTR_ERR(pctrl->base);
 
 	/* enable GPIO/MFP clock */
-	pctrl->clk = devm_clk_get(&pdev->dev, NULL);
+	pctrl->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+
 	if (IS_ERR(pctrl->clk)) {
 		dev_err(&pdev->dev, "no clock defined\n");
 		return PTR_ERR(pctrl->clk);
-	}
-
-	ret = clk_prepare_enable(pctrl->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "clk enable failed\n");
-		return ret;
 	}
 
 	raw_spin_lock_init(&pctrl->lock);
@@ -1006,7 +1001,5 @@ int owl_pinctrl_probe(struct platform_device *pdev,
 	return 0;
 
 err_exit:
-	clk_disable_unprepare(pctrl->clk);
-
 	return ret;
 }
