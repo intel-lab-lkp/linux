@@ -599,16 +599,14 @@ static int fsl_ep_enable(struct usb_ep *_ep,
 	struct_ep_qh_setup(udc, (unsigned char) ep_index(ep),
 			(unsigned char) ((desc->bEndpointAddress & USB_DIR_IN)
 					?  USB_SEND : USB_RECV),
-			(unsigned char) (desc->bmAttributes
-					& USB_ENDPOINT_XFERTYPE_MASK),
+			(unsigned char) usb_endpoint_type(desc),
 			max, zlt, mult);
 
 	/* Init endpoint ctrl register */
 	dr_ep_setup((unsigned char) ep_index(ep),
 			(unsigned char) ((desc->bEndpointAddress & USB_DIR_IN)
 					? USB_SEND : USB_RECV),
-			(unsigned char) (desc->bmAttributes
-					& USB_ENDPOINT_XFERTYPE_MASK));
+			(unsigned char) usb_endpoint_type(desc));
 
 	spin_unlock_irqrestore(&udc->lock, flags);
 	retval = 0;

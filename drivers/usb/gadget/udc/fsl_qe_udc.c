@@ -533,7 +533,7 @@ static int qe_ep_init(struct qe_udc *udc,
 	/* Refer to USB2.0 spec table 9-13,
 	*/
 	if (pipe_num != 0) {
-		switch (desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) {
+		switch (usb_endpoint_type(desc)) {
 		case USB_ENDPOINT_XFER_BULK:
 			if (strstr(ep->ep.name, "-iso")
 					|| strstr(ep->ep.name, "-int"))
@@ -636,7 +636,7 @@ static int qe_ep_init(struct qe_udc *udc,
 
 	/* initialize ep structure */
 	ep->ep.maxpacket = max;
-	ep->tm = (u8)(desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK);
+	ep->tm = (u8) usb_endpoint_type(desc);
 	ep->ep.desc = desc;
 	ep->stopped = 0;
 	ep->init = 1;
