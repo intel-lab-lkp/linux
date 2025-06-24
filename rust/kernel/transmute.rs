@@ -9,27 +9,115 @@
 ///
 /// It's okay for the type to have padding, as initializing those bytes has no effect.
 ///
+/// # Examples
+///
+/// ```
+/// use kernel::transmute::FromBytes;
+///
+/// let foo = [1, 2, 3, 4];
+///
+/// let result = u32::from_bytes(&foo)?;
+///
+/// #[cfg(target_endian = "little")]
+/// assert_eq!(*result, 0x4030201);
+///
+/// #[cfg(target_endian = "big")]
+/// assert_eq!(*result, 0x1020304);
+/// ```
+///
 /// # Safety
 ///
 /// All bit-patterns must be valid for this type. This type must not have interior mutability.
-pub unsafe trait FromBytes {}
+pub unsafe trait FromBytes {
+    /// Converts a slice of bytes to a reference to `Self` when possible.
+    fn from_bytes(bytes: &[u8]) -> Option<&Self>;
 
-macro_rules! impl_frombytes {
+    /// Converts a mutable slice of bytes to a reference to `Self` when possible.
+    fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut Self>
+    where
+        Self: AsBytes;
+}
+
+/// Just a proxy trait for FromBytes, if you need an implementation for your type use this instead.
+///
+/// # Safety
+///
+/// All bit-patterns must be valid for this type. This type must not have interior mutability.
+pub unsafe trait FromBytesSized: Sized {}
+
+macro_rules! impl_frombytessized {
     ($($({$($generics:tt)*})? $t:ty, )*) => {
         // SAFETY: Safety comments written in the macro invocation.
-        $(unsafe impl$($($generics)*)? FromBytes for $t {})*
+        $(unsafe impl$($($generics)*)? FromBytesSized for $t {})*
     };
 }
 
-impl_frombytes! {
+impl_frombytessized! {
     // SAFETY: All bit patterns are acceptable values of the types below.
     u8, u16, u32, u64, usize,
     i8, i16, i32, i64, isize,
 
     // SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
     // patterns are also acceptable for arrays of that type.
-    {<T: FromBytes>} [T],
-    {<T: FromBytes, const N: usize>} [T; N],
+    {<T: FromBytesSized, const N: usize>} [T; N],
+}
+
+// SAFETY: All bit patterns are acceptable values of the types and in array case if all bit patterns
+// are acceptable for individual values in an array, then all bit patterns are also acceptable
+// for arrays of that type.
+unsafe impl<T> FromBytes for T
+where
+    T: FromBytesSized,
+{
+    fn from_bytes(bytes: &[u8]) -> Option<&Self> {
+        let slice_ptr = bytes.as_ptr().cast::<T>();
+        if bytes.len() == ::core::mem::size_of::<T>() && slice_ptr.is_aligned() {
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(&*slice_ptr) }
+        } else {
+            None
+        }
+    }
+
+    fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut Self>
+    where
+        Self: AsBytes,
+    {
+        let slice_ptr = bytes.as_mut_ptr().cast::<T>();
+        if bytes.len() == ::core::mem::size_of::<T>() && slice_ptr.is_aligned() {
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(&mut *slice_ptr) }
+        } else {
+            None
+        }
+    }
+}
+
+// SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
+// patterns are also acceptable for arrays of that type.
+unsafe impl<T: FromBytes> FromBytes for [T] {
+    fn from_bytes(bytes: &[u8]) -> Option<&Self> {
+        let slice_ptr = bytes.as_ptr().cast::<T>();
+        if bytes.len() % ::core::mem::size_of::<T>() == 0 && slice_ptr.is_aligned() {
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(::core::slice::from_raw_parts(slice_ptr, bytes.len())) }
+        } else {
+            None
+        }
+    }
+
+    fn from_mut_bytes(bytes: &mut [u8]) -> Option<&mut Self>
+    where
+        Self: AsBytes,
+    {
+        let slice_ptr = bytes.as_mut_ptr().cast::<T>();
+        if bytes.len() % ::core::mem::size_of::<T>() == 0 && slice_ptr.is_aligned() {
+            // SAFETY: Since the code checks the size and alignment, the slice is valid.
+            unsafe { Some(::core::slice::from_raw_parts_mut(slice_ptr, bytes.len())) }
+        } else {
+            None
+        }
+    }
 }
 
 /// Types that can be viewed as an immutable slice of initialized bytes.
