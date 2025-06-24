@@ -831,6 +831,9 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 			mce_log(&err);
 
 clear_it:
+		if (mce_flags.amd_threshold)
+			amd_reset_thr_limit(i);
+
 		/*
 		 * Clear state for this bank.
 		 */
