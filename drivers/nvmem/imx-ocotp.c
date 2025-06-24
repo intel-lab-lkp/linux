@@ -605,7 +605,7 @@ static int imx_ocotp_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
-	priv->clk = devm_clk_get(dev, NULL);
+	priv->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(priv->clk))
 		return PTR_ERR(priv->clk);
 
@@ -618,7 +618,6 @@ static int imx_ocotp_probe(struct platform_device *pdev)
 
 	priv->config = &imx_ocotp_nvmem_config;
 
-	clk_prepare_enable(priv->clk);
 	imx_ocotp_clr_err_if_set(priv);
 	clk_disable_unprepare(priv->clk);
 
