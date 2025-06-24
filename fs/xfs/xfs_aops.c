@@ -234,6 +234,47 @@ xfs_end_bio(
 }
 
 /*
+ * We cannot cancel the ioend directly on error.  We may have already set other
+ * pages under writeback and hence we have to run I/O completion to mark the
+ * error state of the pages under writeback appropriately.
+ *
+ * If the folio has delalloc blocks on it, the caller is asking us to punch them
+ * out. If we don't, we can leave a stale delalloc mapping covered by a clean
+ * page that needs to be dirtied again before the delalloc mapping can be
+ * converted. This stale delalloc mapping can trip up a later direct I/O read
+ * operation on the same region.
+ *
+ * We prevent this by truncating away the delalloc regions on the folio. Because
+ * they are delalloc, we can do this without needing a transaction. Indeed - if
+ * we get ENOSPC errors, we have to be able to do this truncation without a
+ * transaction as there is no space left for block reservation (typically why
+ * we see a ENOSPC in writeback).
+ */
+static void
+xfs_discard_folio(
+	struct folio		*folio,
+	loff_t			pos)
+{
+	struct xfs_inode	*ip = XFS_I(folio->mapping->host);
+	struct xfs_mount	*mp = ip->i_mount;
+
+	if (xfs_is_shutdown(mp))
+		return;
+
+	xfs_alert_ratelimited(mp,
+		"page discard on page "PTR_FMT", inode 0x%llx, pos %llu.",
+			folio, ip->i_ino, pos);
+
+	/*
+	 * The end of the punch range is always the offset of the first
+	 * byte of the next folio. Hence the end offset is only dependent on the
+	 * folio itself and not the start offset that is passed in.
+	 */
+	xfs_bmap_punch_delalloc_range(ip, XFS_DATA_FORK, pos,
+				folio_pos(folio) + folio_size(folio), NULL);
+}
+
+/*
  * Fast revalidation of the cached writeback mapping. Return true if the current
  * mapping is valid, false otherwise.
  */
@@ -275,16 +316,17 @@ xfs_imap_valid(
 	return true;
 }
 
-static int
-xfs_map_blocks(
+static ssize_t
+xfs_writeback_range(
 	struct iomap_writepage_ctx *wpc,
-	struct inode		*inode,
-	loff_t			offset,
-	unsigned int		len)
+	struct folio		*folio,
+	u64			offset,
+	unsigned int		len,
+	u64			end_pos)
 {
-	struct xfs_inode	*ip = XFS_I(inode);
+	struct xfs_inode	*ip = XFS_I(wpc->inode);
 	struct xfs_mount	*mp = ip->i_mount;
-	ssize_t			count = i_blocksize(inode);
+	ssize_t			count = i_blocksize(wpc->inode);
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = XFS_B_TO_FSB(mp, offset + count);
 	xfs_fileoff_t		cow_fsb;
@@ -292,7 +334,7 @@ xfs_map_blocks(
 	struct xfs_bmbt_irec	imap;
 	struct xfs_iext_cursor	icur;
 	int			retries = 0;
-	int			error = 0;
+	ssize_t			ret = 0;
 	unsigned int		*seq;
 
 	if (xfs_is_shutdown(mp))
@@ -316,7 +358,7 @@ xfs_map_blocks(
 	 * out that ensures that we always see the current value.
 	 */
 	if (xfs_imap_valid(wpc, ip, offset))
-		return 0;
+		goto map_blocks;
 
 	/*
 	 * If we don't have a valid map, now it's time to get a new one for this
@@ -351,7 +393,7 @@ retry:
 	 */
 	if (xfs_imap_valid(wpc, ip, offset)) {
 		xfs_iunlock(ip, XFS_ILOCK_SHARED);
-		return 0;
+		goto map_blocks;
 	}
 
 	/*
@@ -389,7 +431,12 @@ retry:
 
 	xfs_bmbt_to_iomap(ip, &wpc->iomap, &imap, 0, 0, XFS_WPC(wpc)->data_seq);
 	trace_xfs_map_blocks_found(ip, offset, count, whichfork, &imap);
-	return 0;
+map_blocks:
+	ret = iomap_add_to_ioend(wpc, folio, offset, end_pos, len);
+	if (ret < 0)
+		goto out_error;
+	return ret;
+
 allocate_blocks:
 	/*
 	 * Convert a dellalloc extent to a real one. The current page is held
@@ -402,9 +449,9 @@ allocate_blocks:
 	else
 		seq = &XFS_WPC(wpc)->data_seq;
 
-	error = xfs_bmapi_convert_delalloc(ip, whichfork, offset,
-				&wpc->iomap, seq);
-	if (error) {
+	ret = xfs_bmapi_convert_delalloc(ip, whichfork, offset, &wpc->iomap,
+			seq);
+	if (ret) {
 		/*
 		 * If we failed to find the extent in the COW fork we might have
 		 * raced with a COW to data fork conversion or truncate.
@@ -412,10 +459,10 @@ allocate_blocks:
 		 * the former case, but prevent additional retries to avoid
 		 * looping forever for the latter case.
 		 */
-		if (error == -EAGAIN && whichfork == XFS_COW_FORK && !retries++)
+		if (ret == -EAGAIN && whichfork == XFS_COW_FORK && !retries++)
 			goto retry;
-		ASSERT(error != -EAGAIN);
-		return error;
+		ASSERT(ret != -EAGAIN);
+		goto out_error;
 	}
 
 	/*
@@ -433,7 +480,11 @@ allocate_blocks:
 	ASSERT(wpc->iomap.offset <= offset);
 	ASSERT(wpc->iomap.offset + wpc->iomap.length > offset);
 	trace_xfs_map_blocks_alloc(ip, offset, count, whichfork, &imap);
-	return 0;
+	goto map_blocks;
+
+out_error:
+	xfs_discard_folio(folio, offset);
+	return ret;
 }
 
 static bool
@@ -488,47 +539,9 @@ xfs_submit_ioend(
 	return 0;
 }
 
-/*
- * If the folio has delalloc blocks on it, the caller is asking us to punch them
- * out. If we don't, we can leave a stale delalloc mapping covered by a clean
- * page that needs to be dirtied again before the delalloc mapping can be
- * converted. This stale delalloc mapping can trip up a later direct I/O read
- * operation on the same region.
- *
- * We prevent this by truncating away the delalloc regions on the folio. Because
- * they are delalloc, we can do this without needing a transaction. Indeed - if
- * we get ENOSPC errors, we have to be able to do this truncation without a
- * transaction as there is no space left for block reservation (typically why
- * we see a ENOSPC in writeback).
- */
-static void
-xfs_discard_folio(
-	struct folio		*folio,
-	loff_t			pos)
-{
-	struct xfs_inode	*ip = XFS_I(folio->mapping->host);
-	struct xfs_mount	*mp = ip->i_mount;
-
-	if (xfs_is_shutdown(mp))
-		return;
-
-	xfs_alert_ratelimited(mp,
-		"page discard on page "PTR_FMT", inode 0x%llx, pos %llu.",
-			folio, ip->i_ino, pos);
-
-	/*
-	 * The end of the punch range is always the offset of the first
-	 * byte of the next folio. Hence the end offset is only dependent on the
-	 * folio itself and not the start offset that is passed in.
-	 */
-	xfs_bmap_punch_delalloc_range(ip, XFS_DATA_FORK, pos,
-				folio_pos(folio) + folio_size(folio), NULL);
-}
-
 static const struct iomap_writeback_ops xfs_writeback_ops = {
-	.map_blocks		= xfs_map_blocks,
+	.writeback_range	= xfs_writeback_range,
 	.submit_ioend		= xfs_submit_ioend,
-	.discard_folio		= xfs_discard_folio,
 };
 
 struct xfs_zoned_writepage_ctx {
@@ -542,20 +555,22 @@ XFS_ZWPC(struct iomap_writepage_ctx *ctx)
 	return container_of(ctx, struct xfs_zoned_writepage_ctx, ctx);
 }
 
-static int
-xfs_zoned_map_blocks(
+static ssize_t
+xfs_zoned_writeback_range(
 	struct iomap_writepage_ctx *wpc,
-	struct inode		*inode,
-	loff_t			offset,
-	unsigned int		len)
+	struct folio		*folio,
+	u64			offset,
+	unsigned int		len,
+	u64			end_pos)
 {
-	struct xfs_inode	*ip = XFS_I(inode);
+	struct xfs_inode	*ip = XFS_I(wpc->inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = XFS_B_TO_FSB(mp, offset + len);
 	xfs_filblks_t		count_fsb;
 	struct xfs_bmbt_irec	imap, del;
 	struct xfs_iext_cursor	icur;
+	ssize_t			ret;
 
 	if (xfs_is_shutdown(mp))
 		return -EIO;
@@ -586,7 +601,7 @@ xfs_zoned_map_blocks(
 		imap.br_state = XFS_EXT_NORM;
 		xfs_iunlock(ip, XFS_ILOCK_EXCL);
 		xfs_bmbt_to_iomap(ip, &wpc->iomap, &imap, 0, 0, 0);
-		return 0;
+		goto map_blocks;
 	}
 	end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
 	count_fsb = end_fsb - offset_fsb;
@@ -603,9 +618,13 @@ xfs_zoned_map_blocks(
 	wpc->iomap.offset = offset;
 	wpc->iomap.length = XFS_FSB_TO_B(mp, count_fsb);
 	wpc->iomap.flags = IOMAP_F_ANON_WRITE;
-
 	trace_xfs_zoned_map_blocks(ip, offset, wpc->iomap.length);
-	return 0;
+
+map_blocks:
+	ret = iomap_add_to_ioend(wpc, folio, offset, end_pos, len);
+	if (ret < 0)
+		xfs_discard_folio(folio, offset);
+	return ret;
 }
 
 static int
@@ -621,9 +640,8 @@ xfs_zoned_submit_ioend(
 }
 
 static const struct iomap_writeback_ops xfs_zoned_writeback_ops = {
-	.map_blocks		= xfs_zoned_map_blocks,
+	.writeback_range	= xfs_zoned_writeback_range,
 	.submit_ioend		= xfs_zoned_submit_ioend,
-	.discard_folio		= xfs_discard_folio,
 };
 
 STATIC int
