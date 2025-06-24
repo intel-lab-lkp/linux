@@ -580,7 +580,7 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 
 	maxpacket = usb_endpoint_maxp(desc);
 
-	if (((desc->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK) != ep->index)
+	if (usb_endpoint_num(desc) != ep->index
 			|| ep->index == 0
 			|| desc->bDescriptorType != USB_DT_ENDPOINT
 			|| maxpacket == 0
