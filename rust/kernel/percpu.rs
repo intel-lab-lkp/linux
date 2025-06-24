@@ -23,7 +23,10 @@ pub struct PerCpuAllocation<T>(PerCpuPtr<T>);
 
 /// Holds a dynamically-allocated per-CPU variable.
 pub struct DynamicPerCpu<T> {
+    // INVARIANT: `ptr` is managed by `alloc` and the value of `ptr` does not change for the
+    // lifetime of `self`.
     alloc: Arc<PerCpuAllocation<T>>,
+    ptr: PerCpuPtr<T>,
 }
 
 /// Holds a statically-allocated per-CPU variable.
@@ -199,9 +202,10 @@ impl<T> DynamicPerCpu<T> {
     pub fn new(flags: Flags) -> Option<Self> {
         let alloc: PerCpuAllocation<T> = PerCpuAllocation::new()?;
 
+        let ptr = alloc.0;
         let arc = Arc::new(alloc, flags).ok()?;
 
-        Some(Self { alloc: arc })
+        Some(Self { alloc: arc, ptr })
     }
 
     /// Wraps a `PerCpuAllocation<T>` in a `PerCpu<T>`
@@ -210,8 +214,9 @@ impl<T> DynamicPerCpu<T> {
     /// * `alloc` - The allocation to use
     /// * `flags` - The flags used to allocate an `Arc` that keeps track of the `PerCpuAllocation`.
     pub fn new_from_allocation(alloc: PerCpuAllocation<T>, flags: Flags) -> Option<Self> {
+        let ptr = alloc.0;
         let arc = Arc::new(alloc, flags).ok()?;
-        Some(Self { alloc: arc })
+        Some(Self { alloc: arc, ptr })
     }
 }
 
@@ -219,7 +224,7 @@ impl<T> DynamicPerCpu<T> {
 // don't deallocate the underlying `PerCpuAllocation` until `self` is dropped.
 unsafe impl<T> PerCpu<T> for DynamicPerCpu<T> {
     unsafe fn ptr(&mut self) -> &PerCpuPtr<T> {
-        &self.alloc.0
+        &self.ptr
     }
 }
 
@@ -227,6 +232,7 @@ impl<T> Clone for DynamicPerCpu<T> {
     fn clone(&self) -> Self {
         Self {
             alloc: self.alloc.clone(),
+            ptr: self.ptr,
         }
     }
 }

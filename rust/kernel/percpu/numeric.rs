@@ -62,7 +62,7 @@ macro_rules! impl_ops_byte {
             /// Returns a `PerCpuNumeric` that can be used to manipulate the underlying per-CPU
             /// variable.
             pub fn num(&self) -> PerCpuNumeric<'_, $ty> {
-                PerCpuNumeric { ptr: &self.alloc.0 }
+                PerCpuNumeric { ptr: &self.ptr }
             }
         }
         impl StaticPerCpu<$ty> {
