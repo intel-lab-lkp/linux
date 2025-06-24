@@ -43,6 +43,21 @@ int ovl_cleanup(struct ovl_fs *ofs, struct inode *wdir, struct dentry *wdentry)
 	return err;
 }
 
+int ovl_cleanup_unlocked(struct ovl_fs *ofs, struct dentry *workdir,
+			 struct dentry *wdentry)
+{
+	int err;
+
+	inode_lock_nested(workdir->d_inode, I_MUTEX_PARENT);
+	if (wdentry->d_parent == workdir)
+		ovl_cleanup(ofs, workdir->d_inode, wdentry);
+	else
+		err = -EINVAL;
+	inode_unlock(workdir->d_inode);
+
+	return err;
+}
+
 struct dentry *ovl_lookup_temp(struct ovl_fs *ofs, struct dentry *workdir)
 {
 	struct dentry *temp;
@@ -199,8 +214,12 @@ out:
 struct dentry *ovl_create_temp(struct ovl_fs *ofs, struct dentry *workdir,
 			       struct ovl_cattr *attr)
 {
-	return ovl_create_real(ofs, d_inode(workdir),
-			       ovl_lookup_temp(ofs, workdir), attr);
+	struct dentry *ret;
+	inode_lock(workdir->d_inode);
+	ret = ovl_create_real(ofs, d_inode(workdir),
+			      ovl_lookup_temp(ofs, workdir), attr);
+	inode_unlock(workdir->d_inode);
+	return ret;
 }
 
 static int ovl_set_opaque_xerr(struct dentry *dentry, struct dentry *upper,
@@ -348,28 +367,30 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 	if (WARN_ON(!workdir))
 		return ERR_PTR(-EROFS);
 
-	err = ovl_lock_rename_workdir(workdir, upperdir);
-	if (err)
-		goto out;
-
 	ovl_path_upper(dentry, &upperpath);
 	err = vfs_getattr(&upperpath, &stat,
 			  STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 	if (err)
-		goto out_unlock;
+		goto out;
 
 	err = -ESTALE;
 	if (!S_ISDIR(stat.mode))
-		goto out_unlock;
+		goto out;
 	upper = upperpath.dentry;
-	if (upper->d_parent->d_inode != udir)
-		goto out_unlock;
+	/* This test is racey but we re-test under the lock */
+	if (upper->d_parent != upperdir)
+		goto out;
 
 	opaquedir = ovl_create_temp(ofs, workdir, OVL_CATTR(stat.mode));
 	err = PTR_ERR(opaquedir);
 	if (IS_ERR(opaquedir))
-		goto out_unlock;
-
+		/* workdir was unlocked, no upperdir */
+		goto out;
+	err = ovl_lock_rename_workdir(workdir, upperdir);
+	if (err)
+		goto out_cleanup_unlocked;
+	if (upper->d_parent->d_inode != udir)
+		goto out_cleanup;
 	err = ovl_copy_xattr(dentry->d_sb, &upperpath, opaquedir);
 	if (err)
 		goto out_cleanup;
@@ -398,10 +419,10 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 	return opaquedir;
 
 out_cleanup:
-	ovl_cleanup(ofs, wdir, opaquedir);
-	dput(opaquedir);
-out_unlock:
 	unlock_rename(workdir, upperdir);
+out_cleanup_unlocked:
+	ovl_cleanup_unlocked(ofs, workdir, opaquedir);
+	dput(opaquedir);
 out:
 	return ERR_PTR(err);
 }
@@ -439,15 +460,11 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 			return err;
 	}
 
-	err = ovl_lock_rename_workdir(workdir, upperdir);
-	if (err)
-		goto out;
-
-	upper = ovl_lookup_upper(ofs, dentry->d_name.name, upperdir,
-				 dentry->d_name.len);
+	upper = ovl_lookup_upper_unlocked(ofs, dentry->d_name.name, upperdir,
+					  dentry->d_name.len);
 	err = PTR_ERR(upper);
 	if (IS_ERR(upper))
-		goto out_unlock;
+		goto out;
 
 	err = -ESTALE;
 	if (d_is_negative(upper) || !ovl_upper_is_whiteout(ofs, upper))
@@ -457,6 +474,10 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 	err = PTR_ERR(newdentry);
 	if (IS_ERR(newdentry))
 		goto out_dput;
+
+	err = ovl_lock_rename_workdir(workdir, upperdir);
+	if (err)
+		goto out_cleanup;
 
 	/*
 	 * mode could have been mutilated due to umask (e.g. sgid directory)
@@ -472,35 +493,35 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 		err = ovl_do_notify_change(ofs, newdentry, &attr);
 		inode_unlock(newdentry->d_inode);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 	}
 	if (!hardlink) {
 		err = ovl_set_upper_acl(ofs, newdentry,
 					XATTR_NAME_POSIX_ACL_ACCESS, acl);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 
 		err = ovl_set_upper_acl(ofs, newdentry,
 					XATTR_NAME_POSIX_ACL_DEFAULT, default_acl);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 	}
 
 	if (!hardlink && S_ISDIR(cattr->mode)) {
 		err = ovl_set_opaque(dentry, newdentry);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 
 		err = ovl_do_rename(ofs, workdir, newdentry, upperdir, upper,
 				    RENAME_EXCHANGE);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 
 		ovl_cleanup(ofs, wdir, upper);
 	} else {
 		err = ovl_do_rename(ofs, workdir, newdentry, upperdir, upper, 0);
 		if (err)
-			goto out_cleanup;
+			goto out_cleanup_locked;
 	}
 	ovl_dir_modified(dentry->d_parent, false);
 	err = ovl_instantiate(dentry, inode, newdentry, hardlink, NULL);
@@ -508,10 +529,9 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 		ovl_cleanup(ofs, udir, newdentry);
 		dput(newdentry);
 	}
+	unlock_rename(workdir, upperdir);
 out_dput:
 	dput(upper);
-out_unlock:
-	unlock_rename(workdir, upperdir);
 out:
 	if (!hardlink) {
 		posix_acl_release(acl);
@@ -519,8 +539,10 @@ out:
 	}
 	return err;
 
+out_cleanup_locked:
+	unlock_rename(workdir, upperdir);
 out_cleanup:
-	ovl_cleanup(ofs, wdir, newdentry);
+	ovl_cleanup_unlocked(ofs, workdir, newdentry);
 	dput(newdentry);
 	goto out_dput;
 }

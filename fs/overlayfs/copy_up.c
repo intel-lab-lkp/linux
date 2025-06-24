@@ -517,15 +517,12 @@ static int ovl_set_upper_fh(struct ovl_fs *ofs, struct dentry *upper,
 
 /*
  * Create and install index entry.
- *
- * Caller must hold i_mutex on indexdir.
  */
 static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 			    struct dentry *upper)
 {
 	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct dentry *indexdir = ovl_indexdir(dentry->d_sb);
-	struct inode *dir = d_inode(indexdir);
 	struct dentry *index = NULL;
 	struct dentry *temp = NULL;
 	struct qstr name = { };
@@ -558,17 +555,21 @@ static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 	err = ovl_set_upper_fh(ofs, upper, temp);
 	if (err)
 		goto out;
-
+	lock_rename(indexdir, indexdir);
 	index = ovl_lookup_upper(ofs, name.name, indexdir, name.len);
 	if (IS_ERR(index)) {
 		err = PTR_ERR(index);
+	} else if (temp->d_parent != indexdir) {
+		err = -EINVAL;
+		dput(index);
 	} else {
 		err = ovl_do_rename(ofs, indexdir, temp, indexdir, index, 0);
 		dput(index);
 	}
+	unlock_rename(indexdir, indexdir);
 out:
 	if (err)
-		ovl_cleanup(ofs, dir, temp);
+		ovl_cleanup_unlocked(ofs, indexdir, temp);
 	dput(temp);
 free_name:
 	kfree(name.name);
@@ -779,9 +780,7 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 		return err;
 
 	ovl_start_write(c->dentry);
-	inode_lock(wdir);
 	temp = ovl_create_temp(ofs, c->workdir, &cattr);
-	inode_unlock(wdir);
 	ovl_end_write(c->dentry);
 	ovl_revert_cu_creds(&cc);
 
@@ -794,6 +793,8 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	 */
 	path.dentry = temp;
 	err = ovl_copy_up_data(c, &path);
+	if (err)
+		goto cleanup_write_unlocked;
 	/*
 	 * We cannot hold lock_rename() throughout this helper, because of
 	 * lock ordering with sb_writers, which shouldn't be held when calling
@@ -801,6 +802,13 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	 * temp wasn't moved before copy up completion or cleanup.
 	 */
 	ovl_start_write(c->dentry);
+
+	if (S_ISDIR(c->stat.mode) && c->indexed) {
+		err = ovl_create_index(c->dentry, c->origin_fh, temp);
+		if (err)
+			goto cleanup_unlocked;
+	}
+
 	trap = lock_rename(c->workdir, c->destdir);
 	if (trap || temp->d_parent != c->workdir) {
 		/* temp or workdir moved underneath us? abort without cleanup */
@@ -809,19 +817,11 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 		if (IS_ERR(trap))
 			goto out;
 		goto unlock;
-	} else if (err) {
-		goto cleanup;
 	}
 
 	err = ovl_copy_up_metadata(c, temp);
 	if (err)
 		goto cleanup;
-
-	if (S_ISDIR(c->stat.mode) && c->indexed) {
-		err = ovl_create_index(c->dentry, c->origin_fh, temp);
-		if (err)
-			goto cleanup;
-	}
 
 	upper = ovl_lookup_upper(ofs, c->destname.name, c->destdir,
 				 c->destname.len);
@@ -857,6 +857,13 @@ cleanup:
 	ovl_cleanup(ofs, wdir, temp);
 	dput(temp);
 	goto unlock;
+
+cleanup_write_unlocked:
+	ovl_start_write(c->dentry);
+cleanup_unlocked:
+	ovl_cleanup_unlocked(ofs, c->workdir, temp);
+	dput(temp);
+	goto out;
 }
 
 /* Copyup using O_TMPFILE which does not require cross dir locking */
