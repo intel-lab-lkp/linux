@@ -1864,11 +1864,10 @@ static int btrfs_get_tree_super(struct fs_context *fc)
 	fs_devices = device->fs_devices;
 	fs_info->fs_devices = fs_devices;
 
+	mutex_unlock(&uuid_mutex);
 	sb = sget_fc(fc, btrfs_fc_test_super, set_anon_super_fc);
-	if (IS_ERR(sb)) {
-		mutex_unlock(&uuid_mutex);
+	if (IS_ERR(sb))
 		return PTR_ERR(sb);
-	}
 
 	set_device_specific_options(fs_info);
 
@@ -1887,6 +1886,7 @@ static int btrfs_get_tree_super(struct fs_context *fc)
 		 * But the fs_info->fs_devices is not opened, we should not let
 		 * btrfs_free_fs_context() to close them.
 		 */
+		mutex_lock(&uuid_mutex);
 		fs_info->fs_devices = NULL;
 		mutex_unlock(&uuid_mutex);
 
@@ -1906,6 +1906,7 @@ static int btrfs_get_tree_super(struct fs_context *fc)
 		 */
 		ASSERT(fc->s_fs_info == NULL);
 
+		mutex_lock(&uuid_mutex);
 		ret = btrfs_open_devices(fs_devices, mode, sb);
 		mutex_unlock(&uuid_mutex);
 		if (ret < 0) {
