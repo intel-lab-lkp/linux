@@ -12,6 +12,13 @@ config CACHE_COHERENCY_SUBSYSTEM
 
 if CACHE_COHERENCY_SUBSYSTEM
 
+config ACPI_CACHE_CONTROL
+       tristate "ACPI cache maintenance"
+       depends on ARM64 && ACPI
+       help
+         ACPI0019 device ID in DSDT identifies an interface that may be used
+	 to carry out certain forms of cache flush operation.
+
 config HISI_SOC_HHA
 	tristate "HiSilicon Hydra Home Agent (HHA) device driver"
 	depends on (ARM64 && ACPI) || COMPILE_TEST
