@@ -56,9 +56,6 @@ enum {
 	COL_NUMBER
 };
 
-static void display_tree(GtkTreeStore *store, struct menu *menu);
-static void recreate_menu_content_tree(void);
-
 static void conf_changed(bool dirty)
 {
 	gtk_widget_set_sensitive(save_btn, dirty);
@@ -254,6 +251,74 @@ static void update_trees(void)
 	update_tree(tree2);
 }
 
+static void _recreate_menu_tree(GtkTreeStore *store, struct menu *menu,
+				GtkTreeIter *parent, gboolean menu_only)
+{
+	GtkTreeIter iter;
+
+	/* REVISIT: menu_finalize() creates empty "if" entries. */
+	if (menu->type == M_IF)
+		return;
+
+	if (!menu_only || menu->type == M_MENU) {
+		gtk_tree_store_append(store, &iter, parent);
+		set_node(store, &iter, menu);
+	}
+
+	for (struct menu *child = menu->list; child; child = child->next)
+		_recreate_menu_tree(store, child, &iter, menu_only);
+}
+
+static void recreate_menu_tree(void)
+{
+	GtkTreeStore *store;
+	GtkTreeView *view;
+
+	if (view_mode == SPLIT_VIEW) {
+		store = tree1;
+		view = GTK_TREE_VIEW(tree1_w);
+	} else {
+		store = tree2;
+		view = GTK_TREE_VIEW(tree2_w);
+	}
+
+	gtk_tree_store_clear(store);
+	_recreate_menu_tree(store, &rootmenu, NULL, view_mode == SPLIT_VIEW);
+	select_menu(view, browsed);
+	gtk_tree_view_expand_all(view);
+}
+
+static void _recreate_menu_content_tree(GtkTreeStore *store, struct menu *menu,
+					GtkTreeIter *parent, gboolean no_menu)
+{
+	for (struct menu *child = menu->list; child; child = child->next) {
+		GtkTreeIter iter;
+
+		/* REVISIT: menu_finalize() creates empty "if" entries. */
+		if (child->type == M_IF)
+			continue;
+
+		if (!no_menu || child->type != M_MENU) {
+			gtk_tree_store_append(store, &iter, parent);
+			set_node(store, &iter, child);
+		}
+
+		if (child->type != M_MENU)
+			_recreate_menu_content_tree(store, child, &iter,
+						    no_menu);
+	}
+}
+
+static void recreate_menu_content_tree(void)
+{
+	gtk_tree_store_clear(tree2);
+	if (browsed)
+		_recreate_menu_content_tree(tree2, browsed, NULL,
+					    view_mode == SPLIT_VIEW);
+	select_menu(GTK_TREE_VIEW(tree2_w), selected);
+	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree2_w));
+}
+
 static void set_view_mode(enum view_mode mode)
 {
 	view_mode = mode;
@@ -280,7 +345,6 @@ static void set_view_mode(enum view_mode mode)
 		else
 			browsed = &rootmenu;
 		recreate_menu_content_tree();
-		select_menu(GTK_TREE_VIEW(tree2_w), selected);
 		gtk_widget_set_sensitive(single_btn, FALSE);
 		break;
 	case SPLIT_VIEW:
@@ -291,20 +355,12 @@ static void set_view_mode(enum view_mode mode)
 			else
 				browsed = menu_get_parent_menu(selected);
 		}
-		gtk_tree_store_clear(tree1);
-		display_tree(tree1, &rootmenu);
-		gtk_tree_view_expand_all(GTK_TREE_VIEW(tree1_w));
-		gtk_tree_store_clear(tree2);
-		if (browsed)
-			display_tree(tree2, browsed);
-		select_menu(GTK_TREE_VIEW(tree1_w), browsed);
-		select_menu(GTK_TREE_VIEW(tree2_w), selected);
+		recreate_menu_tree();
+		recreate_menu_content_tree();
 		gtk_widget_set_sensitive(split_btn, FALSE);
 		break;
 	case FULL_VIEW:
-		gtk_tree_store_clear(tree2);
-		display_tree(tree2, &rootmenu);
-		select_menu(GTK_TREE_VIEW(tree2_w), selected);
+		recreate_menu_tree();
 		gtk_widget_set_sensitive(full_btn, FALSE);
 		break;
 	}
@@ -917,83 +973,6 @@ static gboolean on_treeview1_button_press_event(GtkWidget *widget,
 	return FALSE;
 }
 
-/* Display the whole tree (single/split/full view) */
-static void _display_tree(GtkTreeStore *tree, struct menu *menu,
-			  GtkTreeIter *parent)
-{
-	struct property *prop;
-	struct menu *child;
-	enum prop_type ptype;
-	GtkTreeIter iter;
-
-	for (child = menu->list; child; child = child->next) {
-		/*
-		 * REVISIT:
-		 * menu_finalize() creates empty "if" entries.
-		 * Do not confuse gtk_tree_model_get(), which would otherwise
-		 * return "if" menu entry.
-		 */
-		if (child->type == M_IF)
-			continue;
-
-		prop = child->prompt;
-		ptype = prop ? prop->type : P_UNKNOWN;
-
-		if ((view_mode == SPLIT_VIEW)
-		    && !(child->flags & MENU_ROOT) && (tree == tree1))
-			continue;
-
-		if ((view_mode == SPLIT_VIEW) && (child->flags & MENU_ROOT)
-		    && (tree == tree2))
-			continue;
-
-		gtk_tree_store_append(tree, &iter, parent);
-		set_node(tree, &iter, child);
-
-		if ((view_mode != FULL_VIEW) && (ptype == P_MENU)
-		    && (tree == tree2))
-			continue;
-/*
-		if (((menu != &rootmenu) && !(menu->flags & MENU_ROOT))
-		    || (view_mode == FULL_VIEW)
-		    || (view_mode == SPLIT_VIEW))*/
-
-		if (((view_mode == SINGLE_VIEW) && (menu->flags & MENU_ROOT))
-		    || (view_mode == FULL_VIEW)
-		    || (view_mode == SPLIT_VIEW))
-			_display_tree(tree, child, &iter);
-	}
-}
-
-static void display_tree(GtkTreeStore *store, struct menu *menu)
-{
-	_display_tree(store, menu, NULL);
-}
-
-/* Display a part of the tree starting at current node (single/split view) */
-static void recreate_menu_content_tree(void)
-{
-	gtk_tree_store_clear(tree2);
-	display_tree(tree2, browsed);
-	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree2_w));
-}
-
-static void fixup_rootmenu(struct menu *menu)
-{
-	struct menu *child;
-	static int menu_cnt = 0;
-
-	menu->flags |= MENU_ROOT;
-	for (child = menu->list; child; child = child->next) {
-		if (child->prompt && child->prompt->type == P_MENU) {
-			menu_cnt++;
-			fixup_rootmenu(child);
-			menu_cnt--;
-		} else if (!menu_cnt)
-			fixup_rootmenu(child);
-	}
-}
-
 /* Main Window Initialization */
 static void replace_button_icon(GtkWidget *widget, const char * const xpm[])
 {
@@ -1354,7 +1333,6 @@ int main(int ac, char *av[])
 		name = av[1];
 
 	conf_parse(name);
-	fixup_rootmenu(&rootmenu);
 
 	/* Load the interface and connect signals */
 	init_main_window(glade_file);
