@@ -11634,6 +11634,32 @@ static void update_lb_imbalance_stat(struct lb_env *env, struct sched_domain *sd
 	}
 }
 
+static inline bool update_newidle_cost(struct sched_domain *sd, u64 cost)
+{
+	if (cost > sd->max_newidle_lb_cost) {
+		/*
+		 * Track max cost of a domain to make sure to not delay the
+		 * next wakeup on the CPU.   Add a bit to the min so we don't
+		 * have to worry about <= vs <, and to handle the sysctl set at
+		 * zero.
+		 */
+		sd->max_newidle_lb_cost = min(cost, sysctl_sched_migration_cost + 200);
+		sd->last_decay_max_lb_cost = jiffies;
+	} else if (time_after(jiffies, sd->last_decay_max_lb_cost + HZ)) {
+		/*
+		 * Decay the newidle max times by ~1% per second to ensure that
+		 * it is not outdated and the current max cost is actually
+		 * shorter.
+		 */
+		sd->max_newidle_lb_cost = (sd->max_newidle_lb_cost * 253) / 256;
+		sd->last_decay_max_lb_cost = jiffies;
+
+		return true;
+	}
+
+	return false;
+}
+
 /*
  * Check this_cpu to ensure it is balanced within domain. Attempt to move
  * tasks if there is an imbalance.
@@ -11672,12 +11698,14 @@ redo:
 
 	group = sched_balance_find_src_group(&env);
 	if (!group) {
+		update_newidle_cost(sd, sd->max_newidle_lb_cost + sd->max_newidle_lb_cost / 2);
 		schedstat_inc(sd->lb_nobusyg[idle]);
 		goto out_balanced;
 	}
 
 	busiest = sched_balance_find_src_rq(&env, group);
 	if (!busiest) {
+		update_newidle_cost(sd, sd->max_newidle_lb_cost + sd->max_newidle_lb_cost / 2);
 		schedstat_inc(sd->lb_nobusyq[idle]);
 		goto out_balanced;
 	}
@@ -12056,30 +12084,6 @@ static atomic_t sched_balance_running = ATOMIC_INIT(0);
 void update_max_interval(void)
 {
 	max_load_balance_interval = HZ*num_online_cpus()/10;
-}
-
-static inline bool update_newidle_cost(struct sched_domain *sd, u64 cost)
-{
-	if (cost > sd->max_newidle_lb_cost) {
-		/*
-		 * Track max cost of a domain to make sure to not delay the
-		 * next wakeup on the CPU.
-		 */
-		sd->max_newidle_lb_cost = cost;
-		sd->last_decay_max_lb_cost = jiffies;
-	} else if (time_after(jiffies, sd->last_decay_max_lb_cost + HZ)) {
-		/*
-		 * Decay the newidle max times by ~1% per second to ensure that
-		 * it is not outdated and the current max cost is actually
-		 * shorter.
-		 */
-		sd->max_newidle_lb_cost = (sd->max_newidle_lb_cost * 253) / 256;
-		sd->last_decay_max_lb_cost = jiffies;
-
-		return true;
-	}
-
-	return false;
 }
 
 /*
