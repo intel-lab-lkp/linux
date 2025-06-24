@@ -833,6 +833,9 @@ static int sun50i_iommu_of_xlate(struct device *dev,
 				 const struct of_phandle_args *args)
 {
 	struct platform_device *iommu_pdev = of_find_device_by_node(args->np);
+	if (WARN_ON(!iommu_pdev))
+		return -ENODEV;
+
 	unsigned id = args->args[0];
 
 	dev_iommu_priv_set(dev, platform_get_drvdata(iommu_pdev));
