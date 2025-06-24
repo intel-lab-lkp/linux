@@ -326,9 +326,10 @@ static int ovl_create_upper(struct dentry *dentry, struct inode *inode,
 				    ovl_lookup_upper(ofs, dentry->d_name.name,
 						     upperdir, dentry->d_name.len),
 				    attr);
+	inode_unlock(udir);
 	err = PTR_ERR(newdentry);
 	if (IS_ERR(newdentry))
-		goto out_unlock;
+		goto out;
 
 	if (ovl_type_merge(dentry->d_parent) && d_is_dir(newdentry) &&
 	    !ovl_allow_offline_changes(ofs)) {
@@ -340,14 +341,13 @@ static int ovl_create_upper(struct dentry *dentry, struct inode *inode,
 	err = ovl_instantiate(dentry, inode, newdentry, !!attr->hardlink, NULL);
 	if (err)
 		goto out_cleanup;
-out_unlock:
-	inode_unlock(udir);
+out:
 	return err;
 
 out_cleanup:
-	ovl_cleanup(ofs, udir, newdentry);
+	ovl_cleanup_unlocked(ofs, upperdir, newdentry);
 	dput(newdentry);
-	goto out_unlock;
+	goto out;
 }
 
 static struct dentry *ovl_clear_empty(struct dentry *dentry,
