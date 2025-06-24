@@ -18,6 +18,16 @@
 
 #define EFX_CTPIO_BUFFER_SIZE	SZ_256M
 
+static void efx_release_cxl_region(void *priv_cxl)
+{
+	struct efx_probe_data *probe_data = priv_cxl;
+	struct efx_cxl *cxl = probe_data->cxl;
+
+	iounmap(cxl->ctpio_cxl);
+	cxl_put_root_decoder(cxl->cxlrd);
+	probe_data->cxl_pio_initialised = false;
+}
+
 int efx_cxl_init(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
@@ -116,10 +126,21 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 		goto put_root_decoder;
 	}
 
+	cxl->efx_region = cxl_create_region(cxl->cxlrd, &cxl->cxled, 1,
+					    efx_release_cxl_region,
+					    &probe_data);
+	if (IS_ERR(cxl->efx_region)) {
+		pci_err(pci_dev, "CXL accel create region failed");
+		rc = PTR_ERR(cxl->efx_region);
+		goto err_region;
+	}
+
 	probe_data->cxl = cxl;
 
 	goto endpoint_release;
 
+err_region:
+	cxl_dpa_free(cxl->cxled);
 put_root_decoder:
 	cxl_put_root_decoder(cxl->cxlrd);
 endpoint_release:
@@ -129,7 +150,8 @@ endpoint_release:
 
 void efx_cxl_exit(struct efx_probe_data *probe_data)
 {
-	if (probe_data->cxl) {
+	if (probe_data->cxl_pio_initialised) {
+		cxl_decoder_kill_region(probe_data->cxl->cxled);
 		cxl_dpa_free(probe_data->cxl->cxled);
 		cxl_put_root_decoder(probe_data->cxl->cxlrd);
 	}
