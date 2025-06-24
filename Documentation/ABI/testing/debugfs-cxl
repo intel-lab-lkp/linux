@@ -35,6 +35,39 @@ Description:
 		The clear_poison attribute is only visible for devices
 		supporting the capability.
 
+
+What:		/sys/kernel/debug/regionX/inject_poison
+Date:		August, 2025
+KernelVersion:	v6.17
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) When a Host Physical Address (HPA) is written to this
+		attribute, the region driver translates it to a Device
+		Physical Address (DPA) and identifies the corresponding
+		memdev. It then sends an inject poison command to that memdev
+		at the translated DPA. Refer to the memdev ABI entry at:
+		/sys/kernel/debug/cxl/memX/inject_poison for the detailed
+		behavior. This attribute is only visible if all memdevs
+		participating in the region support both inject and clear
+		poison commands.
+
+
+What:		/sys/kernel/debug/regionX/clear_poison
+Date:		August, 2025
+KernelVersion:	v6.17
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) When a Host Physical Address (HPA) is written to this
+		attribute, the region driver translates it to a Device
+		Physical Address (DPA) and identifies the corresponding
+		memdev. It then sends a clear poison command to that memdev
+		at the translated DPA. Refer to the memdev ABI entry at:
+		/sys/kernel/debug/cxl/memX/clear_poison for the detailed
+		behavior. This attribute is only visible if all memdevs
+		participating in the region support both inject and clear
+		poison commands.
+
+
 What:		/sys/kernel/debug/cxl/einj_types
 Date:		January, 2024
 KernelVersion:	v6.9

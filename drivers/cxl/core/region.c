@@ -2,6 +2,7 @@
 /* Copyright(c) 2022 Intel Corporation. All rights reserved. */
 #include <linux/memregion.h>
 #include <linux/genalloc.h>
+#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/memory.h>
@@ -3004,8 +3005,7 @@ static struct hpa_decode_result decode_hpa_to_dpa(u64 hpa_offset, u8 eiw,
 	return result;
 }
 
-static struct cxl_dpa_result __maybe_unused
-cxl_hpa_to_dpa(struct cxl_region *cxlr, u64 hpa)
+static struct cxl_dpa_result cxl_hpa_to_dpa(struct cxl_region *cxlr, u64 hpa)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
 	struct cxl_dpa_result result = { .dpa = ULLONG_MAX, .cxlmd = NULL };
@@ -3616,10 +3616,101 @@ static void shutdown_notifiers(void *_cxlr)
 	unregister_mt_adistance_algorithm(&cxlr->adist_notifier);
 }
 
+static void remove_debugfs(void *dentry)
+{
+	debugfs_remove_recursive(dentry);
+}
+
+static int cxl_region_debugfs_poison_inject(void *data, u64 hpa)
+{
+	struct cxl_region *cxlr = data;
+	struct cxl_region_params *p = &cxlr->params;
+	struct cxl_dpa_result result;
+	int rc;
+
+	rc = down_read_interruptible(&cxl_region_rwsem);
+	if (rc)
+		return rc;
+
+	rc = down_read_interruptible(&cxl_dpa_rwsem);
+	if (rc) {
+		up_read(&cxl_region_rwsem);
+		return rc;
+	}
+
+	if (hpa < p->res->start || hpa > p->res->end) {
+		dev_err_once(&cxlr->dev, "HPA 0x%llx not in region %pr\n", hpa,
+			     p->res);
+		rc = -EINVAL;
+		goto out;
+	}
+	result = cxl_hpa_to_dpa(cxlr, hpa);
+	if (!result.cxlmd || result.dpa == ULLONG_MAX) {
+		dev_err(&cxlr->dev, "Failed to resolve DPA from HPA 0x%llx\n",
+			hpa);
+
+		rc = -EINVAL;
+		goto out;
+	}
+	rc = __inject_poison_locked(result.cxlmd, result.dpa);
+
+out:
+	up_read(&cxl_dpa_rwsem);
+	up_read(&cxl_region_rwsem);
+
+	return rc;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_inject_fops, NULL,
+			 cxl_region_debugfs_poison_inject, "%llx\n");
+
+static int cxl_region_debugfs_poison_clear(void *data, u64 hpa)
+{
+	struct cxl_region *cxlr = data;
+	struct cxl_region_params *p = &cxlr->params;
+	struct cxl_dpa_result result;
+	int rc;
+
+	rc = down_read_interruptible(&cxl_region_rwsem);
+	if (rc)
+		return rc;
+
+	rc = down_read_interruptible(&cxl_dpa_rwsem);
+	if (rc) {
+		up_read(&cxl_region_rwsem);
+		return rc;
+	}
+
+	if (hpa < p->res->start || hpa > p->res->end) {
+		dev_err_once(&cxlr->dev, "HPA 0x%llx not in region %pr\n", hpa,
+			     p->res);
+		rc = -EINVAL;
+		goto out;
+	}
+	result = cxl_hpa_to_dpa(cxlr, hpa);
+	if (!result.cxlmd || result.dpa == ULLONG_MAX) {
+		dev_err(&cxlr->dev, "Failed to resolve DPA from HPA 0x%llx\n",
+			hpa);
+
+		rc = -EINVAL;
+		goto out;
+	}
+	rc = __clear_poison_locked(result.cxlmd, result.dpa);
+out:
+	up_read(&cxl_dpa_rwsem);
+	up_read(&cxl_region_rwsem);
+
+	return rc;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
+			 cxl_region_debugfs_poison_clear, "%llx\n");
+
 static int cxl_region_probe(struct device *dev)
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
 	struct cxl_region_params *p = &cxlr->params;
+	bool poison_supported = true;
 	int rc;
 
 	rc = down_read_interruptible(&cxl_region_rwsem);
@@ -3662,6 +3753,31 @@ out:
 	rc = devm_add_action_or_reset(&cxlr->dev, shutdown_notifiers, cxlr);
 	if (rc)
 		return rc;
+
+	/* Create poison attributes if all memdevs support the capabilities */
+	for (int i = 0; i < p->nr_targets; i++) {
+		struct cxl_endpoint_decoder *cxled = p->targets[i];
+		struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+
+		if (!cxl_memdev_has_poison_cmd(cxlmd, CXL_POISON_ENABLED_INJECT) ||
+		    !cxl_memdev_has_poison_cmd(cxlmd, CXL_POISON_ENABLED_CLEAR)) {
+			poison_supported = false;
+			break;
+		}
+	}
+
+	if (poison_supported) {
+		struct dentry *dentry;
+
+		dentry = cxl_debugfs_create_dir(dev_name(dev));
+		debugfs_create_file("inject_poison", 0200, dentry, cxlr,
+				    &cxl_poison_inject_fops);
+		debugfs_create_file("clear_poison", 0200, dentry, cxlr,
+				    &cxl_poison_clear_fops);
+		rc = devm_add_action_or_reset(dev, remove_debugfs, dentry);
+		if (rc)
+			return rc;
+	}
 
 	switch (cxlr->mode) {
 	case CXL_PARTMODE_PMEM:
