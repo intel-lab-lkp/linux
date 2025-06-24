@@ -154,10 +154,10 @@ struct scsi_cmnd {
  * Return the driver private allocation behind the command.
  * Only works if cmd_size is set in the host template.
  */
-static inline void *scsi_cmd_priv(struct scsi_cmnd *cmd)
-{
-	return cmd + 1;
-}
+#define scsi_cmd_priv(cmd)                                         \
+	_Generic(cmd,                                              \
+		const struct scsi_cmnd *: (const void *)(cmd + 1), \
+		struct scsi_cmnd *: (void *)(cmd + 1))
 
 void scsi_done(struct scsi_cmnd *cmd);
 void scsi_done_direct(struct scsi_cmnd *cmd);
