@@ -125,7 +125,7 @@ static void set_node(GtkTreeStore *tree, GtkTreeIter *node, struct menu *menu)
 	const gchar *_mod = "";
 	const gchar *_yes = "";
 	const gchar *value = "";
-	GdkColor color;
+	GdkRGBA color;
 	gboolean editable = FALSE;
 	gboolean btnvis = FALSE;
 
@@ -135,7 +135,7 @@ static void set_node(GtkTreeStore *tree, GtkTreeIter *node, struct menu *menu)
 				 menu->type == M_COMMENT ? "***" : "",
 				 sym && !sym_has_value(sym) ? "(NEW)" : "");
 
-	gdk_color_parse(menu_is_visible(menu) ? "Black" : "DarkGray", &color);
+	gdk_rgba_parse(&color, menu_is_visible(menu) ? "Black" : "DarkGray");
 
 	if (!sym)
 		goto set;
@@ -1148,7 +1148,7 @@ static void init_left_tree(void)
 				   G_TYPE_STRING, G_TYPE_STRING,
 				   G_TYPE_STRING, G_TYPE_STRING,
 				   G_TYPE_STRING, G_TYPE_STRING,
-				   G_TYPE_POINTER, GDK_TYPE_COLOR,
+				   G_TYPE_POINTER, GDK_TYPE_RGBA,
 				   G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF,
 				   G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
 				   G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
@@ -1179,7 +1179,7 @@ static void init_left_tree(void)
 	gtk_tree_view_column_set_attributes(GTK_TREE_VIEW_COLUMN(column),
 					    renderer,
 					    "text", COL_OPTION,
-					    "foreground-gdk",
+					    "foreground-rgba",
 					    COL_COLOR, NULL);
 
 	sel = gtk_tree_view_get_selection(view);
@@ -1199,7 +1199,7 @@ static void init_right_tree(void)
 				   G_TYPE_STRING, G_TYPE_STRING,
 				   G_TYPE_STRING, G_TYPE_STRING,
 				   G_TYPE_STRING, G_TYPE_STRING,
-				   G_TYPE_POINTER, GDK_TYPE_COLOR,
+				   G_TYPE_POINTER, GDK_TYPE_RGBA,
 				   G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF,
 				   G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
 				   G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
@@ -1237,32 +1237,32 @@ static void init_right_tree(void)
 	gtk_tree_view_column_set_attributes(GTK_TREE_VIEW_COLUMN(column),
 					    renderer,
 					    "text", COL_OPTION,
-					    "foreground-gdk",
+					    "foreground-rgba",
 					    COL_COLOR, NULL);
 
 	renderer = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(view, -1,
 						    "Name", renderer,
 						    "text", COL_NAME,
-						    "foreground-gdk",
+						    "foreground-rgba",
 						    COL_COLOR, NULL);
 	renderer = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(view, -1,
 						    "N", renderer,
 						    "text", COL_NO,
-						    "foreground-gdk",
+						    "foreground-rgba",
 						    COL_COLOR, NULL);
 	renderer = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(view, -1,
 						    "M", renderer,
 						    "text", COL_MOD,
-						    "foreground-gdk",
+						    "foreground-rgba",
 						    COL_COLOR, NULL);
 	renderer = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(view, -1,
 						    "Y", renderer,
 						    "text", COL_YES,
-						    "foreground-gdk",
+						    "foreground-rgba",
 						    COL_COLOR, NULL);
 	renderer = gtk_cell_renderer_text_new();
 	gtk_tree_view_insert_column_with_attributes(view, -1,
@@ -1270,7 +1270,7 @@ static void init_right_tree(void)
 						    "text", COL_VALUE,
 						    "editable",
 						    COL_EDIT,
-						    "foreground-gdk",
+						    "foreground-rgba",
 						    COL_COLOR, NULL);
 	g_signal_connect(G_OBJECT(renderer), "edited",
 			 G_CALLBACK(renderer_edited), tree2_w);
