@@ -252,7 +252,7 @@ endif
 ifeq ($(NO_SHELLCHECK),1)
   SHELLCHECK :=
 else
-  SHELLCHECK := $(shell which shellcheck 2> /dev/null)
+  SHELLCHECK := $(shell which shellcheck 2> /dev/null) -s bash
 endif
 
 # shellcheck is using in tools/perf/tests/Build with option -a/--check-sourced (
