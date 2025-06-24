@@ -26,6 +26,7 @@
 #include <linux/i2c.h>
 #include <linux/media-bus-format.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -432,8 +433,7 @@ static const struct drm_panel_funcs panel_simple_funcs = {
 
 static struct panel_desc panel_dpi;
 
-static int panel_dpi_probe(struct device *dev,
-			   struct panel_simple *panel)
+static struct panel_desc *panel_dpi_get_desc(struct device *dev)
 {
 	struct display_timing *timing;
 	const struct device_node *np;
@@ -445,17 +445,17 @@ static int panel_dpi_probe(struct device *dev,
 	np = dev->of_node;
 	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)
-		return -ENOMEM;
+		return NULL;
 
 	timing = devm_kzalloc(dev, sizeof(*timing), GFP_KERNEL);
 	if (!timing)
-		return -ENOMEM;
+		return NULL;
 
 	ret = of_get_display_timing(np, "panel-timing", timing);
 	if (ret < 0) {
 		dev_err(dev, "%pOF: no panel-timing node found for \"panel-dpi\" binding\n",
 			np);
-		return ret;
+		return NULL;
 	}
 
 	desc->timings = timing;
@@ -473,9 +473,7 @@ static int panel_dpi_probe(struct device *dev,
 	/* We do not know the connector for the DT node, so guess it */
 	desc->connector_type = DRM_MODE_CONNECTOR_DPI;
 
-	panel->desc = desc;
-
-	return 0;
+	return desc;
 }
 
 #define PANEL_SIMPLE_BOUNDS_CHECK(to_check, bounds, field) \
@@ -570,6 +568,15 @@ static int panel_simple_override_nondefault_lvds_datamapping(struct device *dev,
 	return 0;
 }
 
+static bool is_panel_dpi(struct device *dev)
+{
+	const struct of_device_id *match;
+
+	match = of_match_device(dev->driver->of_match_table, dev);
+
+	return strcmp(match->compatible, "panel_dpi");
+}
+
 static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 {
 	struct panel_simple *panel;
@@ -578,6 +585,10 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 	int connector_type;
 	u32 bus_flags;
 	int err;
+
+	/* Is this simple panel a DPI panel */
+	if (is_panel_dpi(dev))
+		desc = panel_dpi_get_desc(dev);
 
 	panel = devm_drm_panel_alloc(dev, struct panel_simple, base,
 				     &panel_simple_funcs, desc->connector_type);
@@ -611,16 +622,11 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 			return -EPROBE_DEFER;
 	}
 
-	if (desc == &panel_dpi) {
-		/* Handle the generic panel-dpi binding */
-		err = panel_dpi_probe(dev, panel);
-		if (err)
-			goto free_ddc;
-		desc = panel->desc;
-	} else {
+	if (is_panel_dpi(dev))
+		goto free_ddc;
+	else
 		if (!of_get_display_timing(dev->of_node, "panel-timing", &dt))
 			panel_simple_parse_panel_timing_node(dev, panel, &dt);
-	}
 
 	if (desc->connector_type == DRM_MODE_CONNECTOR_LVDS) {
 		/* Optional data-mapping property for overriding bus format */
