@@ -247,6 +247,13 @@ static struct ctl_table ipv6_rotable[] = {
 		.proc_handler	= proc_dointvec,
 	},
 #endif /* CONFIG_NETLABEL */
+	{
+		.procname	= "ndisc_debug",
+		.data		= &ndisc_debug,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax
+	},
 };
 
 static int __net_init ipv6_sysctl_net_init(struct net *net)

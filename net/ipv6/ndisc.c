@@ -83,6 +83,9 @@ static void pndisc_destructor(struct pneigh_entry *n);
 static void pndisc_redo(struct sk_buff *skb);
 static int ndisc_is_multicast(const void *pkey);
 
+u8 ndisc_debug = 1;
+EXPORT_SYMBOL_GPL(ndisc_debug);
+
 static const struct neigh_ops ndisc_generic_ops = {
 	.family =		AF_INET6,
 	.solicit =		ndisc_solicit,
