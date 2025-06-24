@@ -638,6 +638,7 @@ static gboolean on_treeview2_key_press_event(GtkWidget *widget,
 					     gpointer user_data)
 {
 	GtkTreeView *view = GTK_TREE_VIEW(widget);
+	GtkTreeModel *model = gtk_tree_view_get_model(view);
 	GtkTreePath *path;
 	GtkTreeIter iter;
 	struct menu *menu;
@@ -654,11 +655,9 @@ static gboolean on_treeview2_key_press_event(GtkWidget *widget,
 			gtk_tree_view_expand_row(view, path, FALSE);
 		return TRUE;
 	}
-	if (widget == tree1_w)
-		return FALSE;
 
-	gtk_tree_model_get_iter(model2, &iter, path);
-	gtk_tree_model_get(model2, &iter, COL_MENU, &menu, -1);
+	gtk_tree_model_get_iter(model, &iter, path);
+	gtk_tree_model_get(model, &iter, COL_MENU, &menu, -1);
 
 	if (!strcasecmp(event->string, "n"))
 		col = COL_NO;
