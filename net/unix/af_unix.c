@@ -2674,7 +2674,6 @@ struct unix_stream_read_state {
 	struct pipe_inode_info *pipe;
 	size_t size;
 	int flags;
-	unsigned int splice_flags;
 };
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
@@ -3082,7 +3081,6 @@ static ssize_t unix_stream_splice_read(struct socket *sock,  loff_t *ppos,
 		.socket = sock,
 		.pipe = pipe,
 		.size = size,
-		.splice_flags = flags,
 	};
 
 	if (unlikely(*ppos))
