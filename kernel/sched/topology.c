@@ -2426,6 +2426,15 @@ static bool topology_span_sane(const struct cpumask *cpu_map)
 		cpumask_clear(covered);
 		cpumask_clear(id_seen);
 
+#ifdef CONFIG_NUMA
+		/*
+		 * Reuse the sched_domains_curr_level hack since
+		 * tl->mask() below can resolve to sd_numa_mask()
+		 * for the NODE domain.
+		 */
+		sched_domains_curr_level = tl->numa_level;
+#endif
+
 		/*
 		 * Non-NUMA levels cannot partially overlap - they must be either
 		 * completely equal or completely disjoint. Otherwise we can end up
