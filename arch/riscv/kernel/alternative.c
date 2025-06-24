@@ -205,6 +205,7 @@ void __init apply_boot_alternatives(void)
 	apply_vdso_alternatives();
 }
 
+#ifdef CONFIG_RISCV_ALTERNATIVE_EARLY
 /*
  * apply_early_boot_alternatives() is called from setup_vm() with MMU-off.
  *
@@ -219,12 +220,11 @@ void __init apply_boot_alternatives(void)
  */
 void __init apply_early_boot_alternatives(void)
 {
-#ifdef CONFIG_RISCV_ALTERNATIVE_EARLY
 	_apply_alternatives((struct alt_entry *)__alt_start,
 			    (struct alt_entry *)__alt_end,
 			    RISCV_ALTERNATIVES_EARLY_BOOT);
-#endif
 }
+#endif
 
 #ifdef CONFIG_MODULES
 void apply_module_alternatives(void *start, size_t length)

@@ -31,7 +31,13 @@
 #define ALT_ALT_PTR(a)			__ALT_PTR(a, alt_offset)
 
 void __init apply_boot_alternatives(void);
+
+# ifdef CONFIG_RISCV_ALTERNATIVE_EARLY
 void __init apply_early_boot_alternatives(void);
+# else
+static inline void apply_early_boot_alternatives(void) { }
+# endif
+
 void apply_module_alternatives(void *start, size_t length);
 
 void riscv_alternative_fix_offsets(void *alt_ptr, unsigned int len,
