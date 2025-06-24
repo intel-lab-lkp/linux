@@ -375,6 +375,11 @@ static void on_load_clicked(GtkButton *button, gpointer user_data)
 	on_load1_activate(NULL, user_data);
 }
 
+static void on_save_clicked(GtkButton *button, gpointer user_data)
+{
+	on_save_activate(NULL, user_data);
+}
+
 static void on_single_clicked(GtkButton *button, gpointer user_data)
 {
 	set_view_mode(SINGLE_VIEW);
@@ -1217,7 +1222,7 @@ static void init_main_window(const gchar *glade_file)
 
 	save_btn = glade_xml_get_widget(xml, "button3");
 	g_signal_connect(save_btn, "clicked",
-			 G_CALLBACK(on_save_activate), NULL);
+			 G_CALLBACK(on_save_clicked), NULL);
 	save_menu_item = glade_xml_get_widget(xml, "save1");
 	conf_set_changed_callback(conf_changed);
 
