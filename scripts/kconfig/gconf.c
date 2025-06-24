@@ -43,7 +43,7 @@ static GtkWidget *save_menu_item;
 
 static GtkTextTag *tag1, *tag2;
 
-static GtkTreeStore *tree1, *tree2, *tree;
+static GtkTreeStore *tree1, *tree2;
 static GtkTreeModel *model1, *model2;
 
 static struct menu *current; // current node for SINGLE view
@@ -57,7 +57,7 @@ enum {
 };
 
 static void display_list(void);
-static void display_tree(struct menu *menu);
+static void display_tree(GtkTreeStore *store, struct menu *menu);
 static void display_tree_part(void);
 static void update_tree(struct menu *src, GtkTreeIter * dst);
 
@@ -101,7 +101,7 @@ static void set_view_mode(enum view_mode mode)
 		break;
 	case FULL_VIEW:
 		gtk_tree_store_clear(tree2);
-		display_tree(&rootmenu);
+		display_tree(tree2, &rootmenu);
 		gtk_widget_set_sensitive(full_btn, FALSE);
 		break;
 	}
@@ -272,7 +272,7 @@ static void on_set_option_mode1_activate(GtkMenuItem *menuitem,
 {
 	opt_mode = OPT_NORMAL;
 	gtk_tree_store_clear(tree2);
-	display_tree(&rootmenu);	/* instead of update_tree to speed-up */
+	display_tree(tree2, &rootmenu);	/* instead of update_tree to speed-up */
 }
 
 static void on_set_option_mode2_activate(GtkMenuItem *menuitem,
@@ -280,7 +280,7 @@ static void on_set_option_mode2_activate(GtkMenuItem *menuitem,
 {
 	opt_mode = OPT_ALL;
 	gtk_tree_store_clear(tree2);
-	display_tree(&rootmenu);	/* instead of update_tree to speed-up */
+	display_tree(tree2, &rootmenu);	/* instead of update_tree to speed-up */
 }
 
 static void on_set_option_mode3_activate(GtkMenuItem *menuitem,
@@ -288,7 +288,7 @@ static void on_set_option_mode3_activate(GtkMenuItem *menuitem,
 {
 	opt_mode = OPT_PROMPT;
 	gtk_tree_store_clear(tree2);
-	display_tree(&rootmenu);	/* instead of update_tree to speed-up */
+	display_tree(tree2, &rootmenu);	/* instead of update_tree to speed-up */
 }
 
 static void on_introduction1_activate(GtkMenuItem *menuitem, gpointer user_data)
@@ -852,7 +852,8 @@ static gchar **fill_row(struct menu *menu)
 
 
 /* Set the node content with a row of strings */
-static void set_node(GtkTreeIter * node, struct menu *menu, gchar ** row)
+static void set_node(GtkTreeStore *tree, GtkTreeIter *node,
+		     struct menu *menu, gchar **row)
 {
 	GdkColor color;
 	gboolean success;
@@ -976,7 +977,7 @@ static void update_tree(struct menu *src, GtkTreeIter * dst)
 				gtk_tree_store_insert_before(tree2,
 							     child2,
 							     dst, sibling);
-				set_node(child2, menu1, fill_row(menu1));
+				set_node(tree2, child2, menu1, fill_row(menu1));
 				if (menu2 == NULL)
 					valid = TRUE;
 			} else {	// remove node
@@ -990,7 +991,7 @@ static void update_tree(struct menu *src, GtkTreeIter * dst)
 					goto reparse;	// next child
 			}
 		} else if (sym && (child1->flags & MENU_CHANGED)) {
-			set_node(child2, menu1, fill_row(menu1));
+			set_node(tree2, child2, menu1, fill_row(menu1));
 		}
 
 		update_tree(child1, child2);
@@ -1001,7 +1002,8 @@ static void update_tree(struct menu *src, GtkTreeIter * dst)
 
 
 /* Display the whole tree (single/split/full view) */
-static void _display_tree(struct menu *menu, GtkTreeIter *parent)
+static void _display_tree(GtkTreeStore *tree, struct menu *menu,
+			  GtkTreeIter *parent)
 {
 	struct property *prop;
 	struct menu *child;
@@ -1029,7 +1031,7 @@ static void _display_tree(struct menu *menu, GtkTreeIter *parent)
 		    (opt_mode == OPT_PROMPT && menu_has_prompt(child)) ||
 		    (opt_mode == OPT_ALL    && menu_get_prompt(child))) {
 			gtk_tree_store_append(tree, &iter, parent);
-			set_node(&iter, child, fill_row(child));
+			set_node(tree, &iter, child, fill_row(child));
 		}
 
 		if ((view_mode != FULL_VIEW) && (ptype == P_MENU)
@@ -1043,13 +1045,13 @@ static void _display_tree(struct menu *menu, GtkTreeIter *parent)
 		if (((view_mode == SINGLE_VIEW) && (menu->flags & MENU_ROOT))
 		    || (view_mode == FULL_VIEW)
 		    || (view_mode == SPLIT_VIEW))
-			_display_tree(child, &iter);
+			_display_tree(tree, child, &iter);
 	}
 }
 
-static void display_tree(struct menu *menu)
+static void display_tree(GtkTreeStore *store, struct menu *menu)
 {
-	_display_tree(menu, NULL);
+	_display_tree(store, menu, NULL);
 }
 
 /* Display a part of the tree starting at current node (single/split view) */
@@ -1057,11 +1059,11 @@ static void display_tree_part(void)
 {
 	gtk_tree_store_clear(tree2);
 	if (view_mode == SINGLE_VIEW)
-		display_tree(current);
+		display_tree(tree2, current);
 	else if (view_mode == SPLIT_VIEW)
-		display_tree(browsed);
+		display_tree(tree2, browsed);
 	else if (view_mode == FULL_VIEW)
-		display_tree(&rootmenu);
+		display_tree(tree2, &rootmenu);
 	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree2_w));
 }
 
@@ -1070,10 +1072,8 @@ static void display_list(void)
 {
 	gtk_tree_store_clear(tree1);
 
-	tree = tree1;
-	display_tree(&rootmenu);
+	display_tree(tree1, &rootmenu);
 	gtk_tree_view_expand_all(GTK_TREE_VIEW(tree1_w));
-	tree = tree2;
 }
 
 static void fixup_rootmenu(struct menu *menu)
@@ -1258,7 +1258,7 @@ static void init_main_window(const gchar *glade_file)
 
 static void init_tree_model(void)
 {
-	tree = tree2 = gtk_tree_store_new(COL_NUMBER,
+	tree2 = gtk_tree_store_new(COL_NUMBER,
 					  G_TYPE_STRING, G_TYPE_STRING,
 					  G_TYPE_STRING, G_TYPE_STRING,
 					  G_TYPE_STRING, G_TYPE_STRING,
