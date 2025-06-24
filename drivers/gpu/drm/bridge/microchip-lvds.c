@@ -23,7 +23,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_of.h>
-#include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
@@ -56,7 +55,6 @@ struct mchp_lvds {
 	struct device *dev;
 	void __iomem *regs;
 	struct clk *pclk;
-	struct drm_panel *panel;
 	struct drm_bridge bridge;
 	struct drm_bridge *panel_bridge;
 };
@@ -179,12 +177,7 @@ static int mchp_lvds_probe(struct platform_device *pdev)
 			"can't find port point, please init lvds panel port!\n");
 		return -ENODEV;
 	}
-
-	lvds->panel = of_drm_find_panel(port);
 	of_node_put(port);
-
-	if (IS_ERR(lvds->panel))
-		return -EPROBE_DEFER;
 
 	lvds->panel_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 1, 0);
 
