@@ -3070,7 +3070,7 @@ static int unix_stream_splice_actor(struct sk_buff *skb,
 {
 	return skb_splice_bits(skb, state->socket->sk,
 			       UNIXCB(skb).consumed + skip,
-			       state->pipe, chunk, state->splice_flags);
+			       state->pipe, chunk);
 }
 
 static ssize_t unix_stream_splice_read(struct socket *sock,  loff_t *ppos,
