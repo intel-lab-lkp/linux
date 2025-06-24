@@ -28,7 +28,7 @@ static void scsi_log_release_buffer(char *bufptr)
 
 static inline const char *scmd_name(const struct scsi_cmnd *scmd)
 {
-	struct request *rq = scsi_cmd_to_rq((struct scsi_cmnd *)scmd);
+	const struct request *rq = scsi_cmd_to_rq(scmd);
 
 	if (!rq->q || !rq->q->disk)
 		return NULL;
@@ -94,7 +94,7 @@ void scmd_printk(const char *level, const struct scsi_cmnd *scmd,
 	if (!logbuf)
 		return;
 	off = sdev_format_header(logbuf, logbuf_len, scmd_name(scmd),
-				 scsi_cmd_to_rq((struct scsi_cmnd *)scmd)->tag);
+				 scsi_cmd_to_rq(scmd)->tag);
 	if (off < logbuf_len) {
 		va_start(args, fmt);
 		off += vscnprintf(logbuf + off, logbuf_len - off, fmt, args);
@@ -374,8 +374,8 @@ EXPORT_SYMBOL(__scsi_print_sense);
 void scsi_print_sense(const struct scsi_cmnd *cmd)
 {
 	scsi_log_print_sense(cmd->device, scmd_name(cmd),
-			     scsi_cmd_to_rq((struct scsi_cmnd *)cmd)->tag,
-			     cmd->sense_buffer, SCSI_SENSE_BUFFERSIZE);
+			     scsi_cmd_to_rq(cmd)->tag, cmd->sense_buffer,
+			     SCSI_SENSE_BUFFERSIZE);
 }
 EXPORT_SYMBOL(scsi_print_sense);
 
@@ -393,7 +393,7 @@ void scsi_print_result(const struct scsi_cmnd *cmd, const char *msg,
 		return;
 
 	off = sdev_format_header(logbuf, logbuf_len, scmd_name(cmd),
-				 scsi_cmd_to_rq((struct scsi_cmnd *)cmd)->tag);
+				 scsi_cmd_to_rq(cmd)->tag);
 
 	if (off >= logbuf_len)
 		goto out_printk;

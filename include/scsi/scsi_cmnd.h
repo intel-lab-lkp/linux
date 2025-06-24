@@ -144,10 +144,11 @@ struct scsi_cmnd {
 };
 
 /* Variant of blk_mq_rq_from_pdu() that verifies the type of its argument. */
-static inline struct request *scsi_cmd_to_rq(struct scsi_cmnd *scmd)
-{
-	return blk_mq_rq_from_pdu(scmd);
-}
+#define scsi_cmd_to_rq(scmd)                                       \
+	_Generic(scmd,                                             \
+		const struct scsi_cmnd *: (const struct request *) \
+			blk_mq_rq_from_pdu((void *)scmd),          \
+		struct scsi_cmnd *: blk_mq_rq_from_pdu((void *)scmd))
 
 /*
  * Return the driver private allocation behind the command.
