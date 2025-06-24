@@ -257,4 +257,6 @@ struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
 				     int ways, void (*action)(void *),
 				     void *data);
 void cxl_decoder_kill_region(struct cxl_endpoint_decoder *cxled);
+struct range;
+int cxl_get_region_range(struct cxl_region *region, struct range *range);
 #endif /* __CXL_CXL_H__ */
