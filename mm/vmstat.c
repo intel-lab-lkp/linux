@@ -1348,6 +1348,16 @@ const char * const vmstat_text[] = {
 	"numa_hint_faults_local",
 	"numa_pages_migrated",
 #endif
+#ifdef CONFIG_KSCAND
+	"nr_kscand_mm_scans",
+	"nr_kscand_vma_scans",
+	"nr_kscand_migadded",
+	"nr_kscand_migrated",
+	"nr_kscand_migrate_failed",
+	"nr_kscand_slowtier",
+	"nr_kscand_toptier",
+	"nr_kscand_idlepage",
+#endif
 #ifdef CONFIG_MIGRATION
 	"pgmigrate_success",
 	"pgmigrate_fail",
