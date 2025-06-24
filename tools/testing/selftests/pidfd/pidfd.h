@@ -19,6 +19,10 @@
 #include "../kselftest.h"
 #include "../clone3/clone3_selftests.h"
 
+#ifndef FD_INVALID
+#define FD_INVALID -10009 /* Invalid file descriptor. */
+#endif
+
 #ifndef P_PIDFD
 #define P_PIDFD 3
 #endif
