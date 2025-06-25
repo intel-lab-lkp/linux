@@ -370,4 +370,20 @@ static inline u64 roundup_u64(u64 x, u32 y)
 {
 	return DIV_U64_ROUND_UP(x, y) * y;
 }
+
+/**
+ * rounddown_u64 - Round down a 64bit value to the next specified 32bit multiple
+ * @x: the value to round
+ * @y: 32bit multiple to round down to
+ *
+ * Rounds @x down to the next multiple of @y. For 32bit @x values, see rounddown
+ * and the faster round_down() for powers of 2.
+ *
+ * Return: rounded up value.
+ */
+static inline u64 rounddown_u64(u64 x, u32 y)
+{
+	u64 tmp = x;
+	return x - do_div(tmp, y);
+}
 #endif /* _LINUX_MATH64_H */
