@@ -197,7 +197,7 @@ static ssize_t kmb_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static int kmb_dsi_host_attach(struct mipi_dsi_host *host,
-			       struct mipi_dsi_device *dev)
+			       const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	return 0;
 }
@@ -209,7 +209,7 @@ static int kmb_dsi_host_detach(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops kmb_dsi_host_ops = {
-	.attach = kmb_dsi_host_attach,
+	.attach_new = kmb_dsi_host_attach,
 	.detach = kmb_dsi_host_detach,
 	.transfer = kmb_dsi_host_transfer,
 };
