@@ -5,11 +5,6 @@
 #include <linux/blk-mq-dma.h>
 #include "blk.h"
 
-struct phys_vec {
-	phys_addr_t	paddr;
-	u32		len;
-};
-
 static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
 			      struct phys_vec *vec)
 {
@@ -77,14 +72,14 @@ static inline bool blk_can_dma_map_iova(struct request *req,
 		dma_get_merge_boundary(dma_dev));
 }
 
-static bool blk_dma_map_bus(struct blk_dma_iter *iter, struct phys_vec *vec)
+bool blk_dma_map_bus(struct blk_dma_iter *iter, struct phys_vec *vec)
 {
 	iter->addr = pci_p2pdma_bus_addr_map(&iter->p2pdma, vec->paddr);
 	iter->len = vec->len;
 	return true;
 }
 
-static bool blk_dma_map_direct(struct request *req, struct device *dma_dev,
+bool blk_dma_map_direct(struct request *req, struct device *dma_dev,
 		struct blk_dma_iter *iter, struct phys_vec *vec)
 {
 	iter->addr = dma_map_page(dma_dev, phys_to_page(vec->paddr),

@@ -112,6 +112,100 @@ new_segment:
 }
 EXPORT_SYMBOL(blk_rq_map_integrity_sg);
 
+static void bio_integrity_advance_iter_single(struct bio *bio,
+						struct bvec_iter *iter,
+						struct bio_vec *bvec,
+						unsigned int bytes)
+{
+	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
+
+	iter->bi_sector += bytes / bi->tuple_size;
+	bvec_iter_advance(bvec, iter, bytes);
+}
+
+static bool blk_rq_integrity_map_iter_next(struct request *req,
+		struct req_iterator *iter, struct phys_vec *vec)
+{
+	struct bio_integrity_payload *bip = bio_integrity(iter->bio);
+	unsigned int max_size;
+	struct bio_vec bv;
+
+	if (!iter->iter.bi_size)
+		return false;
+
+	bv = mp_bvec_iter_bvec(bip->bip_vec, iter->iter);
+	vec->paddr = bvec_phys(&bv);
+	max_size = get_max_segment_size(&req->q->limits, vec->paddr, UINT_MAX);
+	bv.bv_len = min(bv.bv_len, max_size);
+
+	bio_integrity_advance_iter_single(iter->bio, &iter->iter, &bv, bv.bv_len);
+	while (!iter->iter.bi_size || !iter->iter.bi_bvec_done) {
+		struct bio_vec next;
+
+		if (!iter->iter.bi_size) {
+			if (!iter->bio->bi_next)
+				break;
+			iter->bio = iter->bio->bi_next;
+			iter->iter = iter->bio->bi_iter;
+		}
+
+		next = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
+		if (bv.bv_len + next.bv_len > max_size ||
+		    !biovec_phys_mergeable(req->q, &bv, &next))
+			break;
+
+		bv.bv_len += next.bv_len;
+		bio_integrity_advance_iter_single(iter->bio, &iter->iter, &bv,
+							next.bv_len);
+	}
+
+	vec->len = bv.bv_len;
+	return true;
+}
+
+bool blk_rq_integrity_dma_map_iter_start(struct request *req,
+		struct device *dma_dev, struct blk_dma_iter *iter)
+{
+	struct bio_integrity_payload *bip = bio_integrity(req->bio);
+	struct phys_vec vec;
+
+	iter->iter.bio = req->bio;
+	iter->iter.iter = bip->bip_iter;
+	memset(&iter->p2pdma, 0, sizeof(iter->p2pdma));
+	iter->status = BLK_STS_OK;
+
+	if (!blk_rq_integrity_map_iter_next(req, &iter->iter, &vec))
+		return false;
+
+	switch (pci_p2pdma_state(&iter->p2pdma, dma_dev,
+				phys_to_page(vec.paddr))) {
+	case PCI_P2PDMA_MAP_BUS_ADDR:
+		return blk_dma_map_bus(iter, &vec);
+	case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
+	case PCI_P2PDMA_MAP_NONE:
+		break;
+	default:
+		iter->status = BLK_STS_INVAL;
+		return false;
+	}
+
+	return blk_dma_map_direct(req, dma_dev, iter, &vec);
+}
+EXPORT_SYMBOL_GPL(blk_rq_integrity_map_iter_start);
+
+bool blk_rq_integrity_dma_map_iter_next(struct request *req,
+		struct device *dma_dev, struct blk_dma_iter *iter)
+{
+	struct phys_vec vec;
+
+	if (!blk_rq_integrity_map_iter_next(req, &iter->iter, &vec))
+		return false;
+	if (iter->p2pdma.map == PCI_P2PDMA_MAP_BUS_ADDR)
+		return blk_dma_map_bus(iter, &vec);
+	return blk_dma_map_direct(req, dma_dev, iter, &vec);
+}
+EXPORT_SYMBOL_GPL(blk_rq_integrity_dma_map_iter_next);
+
 int blk_rq_integrity_map_user(struct request *rq, void __user *ubuf,
 			      ssize_t bytes)
 {

@@ -4,6 +4,7 @@
 
 #include <linux/blk-mq.h>
 #include <linux/bio-integrity.h>
+#include <linux/blk-mq-dma.h>
 
 struct request;
 
@@ -29,6 +30,11 @@ int blk_rq_map_integrity_sg(struct request *, struct scatterlist *);
 int blk_rq_count_integrity_sg(struct request_queue *, struct bio *);
 int blk_rq_integrity_map_user(struct request *rq, void __user *ubuf,
 			      ssize_t bytes);
+
+bool blk_rq_integrity_dma_map_iter_start(struct request *req,
+		struct device *dma_dev, struct blk_dma_iter *iter);
+bool blk_rq_integrity_dma_map_iter_next(struct request *req,
+		struct device *dma_dev, struct blk_dma_iter *iter);
 
 static inline bool
 blk_integrity_queue_supports_integrity(struct request_queue *q)

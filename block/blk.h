@@ -4,6 +4,7 @@
 
 #include <linux/bio-integrity.h>
 #include <linux/blk-crypto.h>
+#include <linux/blk-mq-dma.h>
 #include <linux/lockdep.h>
 #include <linux/memblock.h>	/* for max_pfn/max_low_pfn */
 #include <linux/sched/sysctl.h>
@@ -726,6 +727,15 @@ void bdev_release(struct file *bdev_file);
 int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	      const struct blk_holder_ops *hops, struct file *bdev_file);
 int bdev_permission(dev_t dev, blk_mode_t mode, void *holder);
+
+struct phys_vec {
+	phys_addr_t	paddr;
+	u32		len;
+};
+
+bool blk_dma_map_bus(struct blk_dma_iter *iter, struct phys_vec *vec);
+bool blk_dma_map_direct(struct request *req, struct device *dma_dev,
+		struct blk_dma_iter *iter, struct phys_vec *vec);
 
 void blk_integrity_generate(struct bio *bio);
 void blk_integrity_verify_iter(struct bio *bio, struct bvec_iter *saved_iter);
