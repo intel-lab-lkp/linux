@@ -379,6 +379,9 @@ int mipi_dsi_attach(struct mipi_dsi_device *dsi)
 	if (!ops || !ops->attach)
 		return -ENOSYS;
 
+	if (dsi->lanes < 1)
+		return dev_err_probe(&dsi->dev, -EINVAL, "Incorrect lanes number\n");
+
 	ret = ops->attach(dsi->host, dsi);
 	if (ret)
 		return ret;
