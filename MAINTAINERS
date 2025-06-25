@@ -9248,6 +9248,7 @@ F:	include/uapi/linux/openat2.h
 F:	Documentation/driver-api/early-userspace/buffer-format.rst
 F:	init/do_mounts*
 F:	init/*initramfs*
+F:	scripts/gdb/linux/vfs.py
 
 FILESYSTEMS [EXPORTFS]
 M:	Chuck Lever <chuck.lever@oracle.com>
