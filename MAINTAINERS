@@ -15755,6 +15755,10 @@ F:	include/linux/mmu_notifier.h
 F:	include/linux/pagewalk.h
 F:	include/trace/events/ksm.h
 F:	mm/
+F:	scripts/gdb/linux/mm.py
+F:	scripts/gdb/linux/page_owner.py
+F:	scripts/gdb/linux/pgtable.py
+F:	scripts/gdb/linux/slab.py
 F:	tools/mm/
 F:	tools/testing/selftests/mm/
 N:	include/linux/page[-_]*
