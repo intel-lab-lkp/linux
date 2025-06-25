@@ -111,7 +111,7 @@ int dphy_pll_config(struct dsi_context *ctx)
 	struct dphy_pll *pll = &ctx->pll;
 	int ret;
 
-	pll->freq = dsi->slave->hs_rate;
+	pll->freq = dsi->bus_fmt.hs_rate;
 
 	/* FREQ = 26M * (NINT + KINT / 2^20) / out_sel */
 	ret = dphy_calc_pll_param(pll);

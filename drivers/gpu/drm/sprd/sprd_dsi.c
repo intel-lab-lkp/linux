@@ -389,7 +389,7 @@ static u32 fmt_to_coding(u32 fmt)
 static void sprd_dsi_init(struct dsi_context *ctx)
 {
 	struct sprd_dsi *dsi = container_of(ctx, struct sprd_dsi, ctx);
-	u32 byte_clk = dsi->slave->hs_rate / 8;
+	u32 byte_clk = dsi->bus_fmt.hs_rate / 8;
 	u16 data_hs2lp, data_lp2hs, clk_hs2lp, clk_lp2hs;
 	u16 max_rd_time;
 	int div;
@@ -406,7 +406,7 @@ static void sprd_dsi_init(struct dsi_context *ctx)
 	dsi_reg_up(ctx, VIRTUAL_CHANNEL_ID, VIDEO_PKT_VCID, 0);
 	dsi_reg_up(ctx, VIRTUAL_CHANNEL_ID, GEN_RX_VCID, 0);
 
-	div = DIV_ROUND_UP(byte_clk, dsi->slave->lp_rate);
+	div = DIV_ROUND_UP(byte_clk, dsi->bus_fmt.lp_rate);
 	writel(div, ctx->base + TX_ESC_CLK_CONFIG);
 
 	max_rd_time = ns_to_cycle(ctx->max_rd_time, byte_clk);
@@ -448,7 +448,7 @@ static int sprd_dsi_dpi_video(struct dsi_context *ctx)
 {
 	struct sprd_dsi *dsi = container_of(ctx, struct sprd_dsi, ctx);
 	struct videomode *vm = &ctx->vm;
-	u32 byte_clk = dsi->slave->hs_rate / 8;
+	u32 byte_clk = dsi->bus_fmt.hs_rate / 8;
 	u16 bpp_x100;
 	u16 video_size;
 	u32 ratio_x1000;
@@ -466,7 +466,7 @@ static int sprd_dsi_dpi_video(struct dsi_context *ctx)
 	u16 hline;
 	u16 byte_cycle;
 
-	coding = fmt_to_coding(dsi->slave->format);
+	coding = fmt_to_coding(dsi->bus_fmt.format);
 	video_size = round_video_size(coding, vm->hactive);
 	bpp_x100 = calc_bytes_per_pixel_x100(coding);
 	video_size_step = calc_video_size_step(coding);
@@ -517,7 +517,7 @@ static int sprd_dsi_dpi_video(struct dsi_context *ctx)
 
 		/* hline total bytes from the DPI interface */
 		total_bytes = (vm->hactive + vm->hfront_porch) *
-				ratio_x1000 / dsi->slave->lanes / 1000;
+				ratio_x1000 / dsi->bus_fmt.lanes / 1000;
 
 		/* check if the pixels actually fit on the DSI link */
 		if (total_bytes < bytes_per_chunk) {
@@ -588,7 +588,7 @@ static void sprd_dsi_edpi_video(struct dsi_context *ctx)
 	u32 max_fifo_len;
 	u8 coding;
 
-	coding = fmt_to_coding(dsi->slave->format);
+	coding = fmt_to_coding(dsi->bus_fmt.format);
 	bpp_x100 = calc_bytes_per_pixel_x100(coding);
 	max_fifo_len = word_length * fifo_depth * 100 / bpp_x100;
 
@@ -760,7 +760,7 @@ static int sprd_dphy_init(struct dsi_context *ctx)
 	dsi_reg_up(ctx, PHY_INTERFACE_CTRL, RF_PHY_RESET_N, RF_PHY_RESET_N);
 	writel(0x1C, ctx->base + PHY_MIN_STOP_TIME);
 	dsi_reg_up(ctx, PHY_INTERFACE_CTRL, RF_PHY_CLK_EN, RF_PHY_CLK_EN);
-	writel(dsi->slave->lanes - 1, ctx->base + PHY_LANE_NUM_CONFIG);
+	writel(dsi->bus_fmt.lanes - 1, ctx->base + PHY_LANE_NUM_CONFIG);
 
 	ret = dphy_wait_pll_locked(ctx);
 	if (ret) {
@@ -809,7 +809,7 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	sprd_dsi_set_work_mode(ctx, ctx->work_mode);
 	sprd_dsi_state_reset(ctx);
 
-	if (dsi->slave->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS) {
+	if (dsi->bus_fmt.mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS) {
 		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, AUTO_CLKLANE_CTRL_EN,
 			   AUTO_CLKLANE_CTRL_EN);
 	} else {
@@ -965,21 +965,21 @@ static const struct component_ops dsi_component_ops = {
 };
 
 static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
-				struct mipi_dsi_device *slave)
+				const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct dsi_context *ctx = &dsi->ctx;
 
-	dsi->slave = slave;
+	dsi->bus_fmt = *bus_fmt;
 
-	if (slave->mode_flags & MIPI_DSI_MODE_VIDEO)
+	if (bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO)
 		ctx->work_mode = DSI_MODE_VIDEO;
 	else
 		ctx->work_mode = DSI_MODE_CMD;
 
-	if (slave->mode_flags & MIPI_DSI_MODE_VIDEO_BURST)
+	if (bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO_BURST)
 		ctx->burst_mode = VIDEO_BURST_WITH_SYNC_PULSES;
-	else if (slave->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE)
+	else if (bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE)
 		ctx->burst_mode = VIDEO_NON_BURST_WITH_SYNC_PULSES;
 	else
 		ctx->burst_mode = VIDEO_NON_BURST_WITH_SYNC_EVENTS;
@@ -1017,7 +1017,7 @@ static ssize_t sprd_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops sprd_dsi_host_ops = {
-	.attach = sprd_dsi_host_attach,
+	.attach_new = sprd_dsi_host_attach,
 	.detach = sprd_dsi_host_detach,
 	.transfer = sprd_dsi_host_transfer,
 };

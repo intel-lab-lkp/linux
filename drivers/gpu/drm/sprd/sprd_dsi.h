@@ -114,7 +114,7 @@ struct dsi_context {
 struct sprd_dsi {
 	struct drm_device *drm;
 	struct mipi_dsi_host host;
-	struct mipi_dsi_device *slave;
+	struct mipi_dsi_bus_fmt bus_fmt;
 	struct drm_encoder encoder;
 	struct drm_bridge *panel_bridge;
 	struct dsi_context ctx;

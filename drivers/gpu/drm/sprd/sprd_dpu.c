@@ -626,7 +626,7 @@ static void sprd_crtc_mode_set_nofb(struct drm_crtc *crtc)
 				  crtc->state->encoder_mask) {
 		dsi = encoder_to_dsi(encoder);
 
-		if (dsi->slave->mode_flags & MIPI_DSI_MODE_VIDEO)
+		if (dsi->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO)
 			dpu->ctx.if_type = SPRD_DPU_IF_DPI;
 		else
 			dpu->ctx.if_type = SPRD_DPU_IF_EDPI;
