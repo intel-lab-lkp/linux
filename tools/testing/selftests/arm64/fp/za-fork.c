@@ -24,7 +24,7 @@ int verify_fork(void);
 int fork_test_c(void)
 {
 	pid_t newpid, waiting;
-	int child_status, parent_result;
+	int child_status = 0, parent_result;
 
 	newpid = fork();
 	if (newpid == 0) {

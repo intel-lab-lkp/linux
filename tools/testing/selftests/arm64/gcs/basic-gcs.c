@@ -240,7 +240,7 @@ static bool map_guarded_stack(void)
 static bool test_fork(void)
 {
 	unsigned long child_mode;
-	int ret, status;
+	int ret, status = 0;
 	pid_t pid;
 	bool pass = true;
 

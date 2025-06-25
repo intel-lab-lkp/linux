@@ -96,7 +96,7 @@ static int write_sleep_read(void)
 static int write_fork_read(void)
 {
 	pid_t newpid, waiting, oldpid;
-	int status;
+	int status = 0;
 
 	set_tpidr2(getpid());
 
