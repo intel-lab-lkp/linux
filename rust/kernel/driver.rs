@@ -178,11 +178,6 @@ pub trait Adapter {
     /// If this returns `None`, it means that there is no match in any of the ID tables directly
     /// associated with a [`device::Device`].
     fn id_info(dev: &device::Device) -> Option<&'static Self::IdInfo> {
-        let id = Self::of_id_info(dev);
-        if id.is_some() {
-            return id;
-        }
-
-        None
+        Self::of_id_info(dev)
     }
 }
