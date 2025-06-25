@@ -16,6 +16,20 @@
 #include <linux/overflow.h>
 #include <linux/wordpart.h>
 
+static const struct sha512_block_state sha384_iv = {
+	.h = {
+		SHA384_H0, SHA384_H1, SHA384_H2, SHA384_H3,
+		SHA384_H4, SHA384_H5, SHA384_H6, SHA384_H7,
+	},
+};
+
+static const struct sha512_block_state sha512_iv = {
+	.h = {
+		SHA512_H0, SHA512_H1, SHA512_H2, SHA512_H3,
+		SHA512_H4, SHA512_H5, SHA512_H6, SHA512_H7,
+	},
+};
+
 static const u64 sha512_K[80] = {
 	0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL,
 	0xe9b5dba58189dbbcULL, 0x3956c25bf348b538ULL, 0x59f111f1b605d019ULL,
@@ -44,20 +58,6 @@ static const u64 sha512_K[80] = {
 	0x28db77f523047d84ULL, 0x32caab7b40c72493ULL, 0x3c9ebe0a15c9bebcULL,
 	0x431d67c49c100d4cULL, 0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL,
 	0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL,
-};
-
-static const struct sha512_block_state sha384_iv = {
-	.h = {
-		SHA384_H0, SHA384_H1, SHA384_H2, SHA384_H3,
-		SHA384_H4, SHA384_H5, SHA384_H6, SHA384_H7,
-	},
-};
-
-static const struct sha512_block_state sha512_iv = {
-	.h = {
-		SHA512_H0, SHA512_H1, SHA512_H2, SHA512_H3,
-		SHA512_H4, SHA512_H5, SHA512_H6, SHA512_H7,
-	},
 };
 
 #define Ch(x, y, z) ((z) ^ ((x) & ((y) ^ (z))))
@@ -136,28 +136,6 @@ sha512_blocks_generic(struct sha512_block_state *state,
 #define sha512_blocks sha512_blocks_generic
 #endif
 
-static void __sha512_final(struct __sha512_ctx *ctx,
-			   u8 *out, size_t digest_size)
-{
-	u64 bitcount_hi = (ctx->bytecount_hi << 3) | (ctx->bytecount_lo >> 61);
-	u64 bitcount_lo = ctx->bytecount_lo << 3;
-	size_t partial = ctx->bytecount_lo % SHA512_BLOCK_SIZE;
-
-	ctx->buf[partial++] = 0x80;
-	if (partial > SHA512_BLOCK_SIZE - 16) {
-		memset(&ctx->buf[partial], 0, SHA512_BLOCK_SIZE - partial);
-		sha512_blocks(&ctx->state, ctx->buf, 1);
-		partial = 0;
-	}
-	memset(&ctx->buf[partial], 0, SHA512_BLOCK_SIZE - 16 - partial);
-	*(__be64 *)&ctx->buf[SHA512_BLOCK_SIZE - 16] = cpu_to_be64(bitcount_hi);
-	*(__be64 *)&ctx->buf[SHA512_BLOCK_SIZE - 8] = cpu_to_be64(bitcount_lo);
-	sha512_blocks(&ctx->state, ctx->buf, 1);
-
-	for (size_t i = 0; i < digest_size; i += 8)
-		put_unaligned_be64(ctx->state.h[i / 8], out + i);
-}
-
 static void __sha512_init(struct __sha512_ctx *ctx,
 			  const struct sha512_block_state *iv,
 			  u64 initial_bytecount)
@@ -212,6 +190,28 @@ void __sha512_update(struct __sha512_ctx *ctx, const u8 *data, size_t len)
 		memcpy(&ctx->buf[partial], data, len);
 }
 EXPORT_SYMBOL_GPL(__sha512_update);
+
+static void __sha512_final(struct __sha512_ctx *ctx,
+			   u8 *out, size_t digest_size)
+{
+	u64 bitcount_hi = (ctx->bytecount_hi << 3) | (ctx->bytecount_lo >> 61);
+	u64 bitcount_lo = ctx->bytecount_lo << 3;
+	size_t partial = ctx->bytecount_lo % SHA512_BLOCK_SIZE;
+
+	ctx->buf[partial++] = 0x80;
+	if (partial > SHA512_BLOCK_SIZE - 16) {
+		memset(&ctx->buf[partial], 0, SHA512_BLOCK_SIZE - partial);
+		sha512_blocks(&ctx->state, ctx->buf, 1);
+		partial = 0;
+	}
+	memset(&ctx->buf[partial], 0, SHA512_BLOCK_SIZE - 16 - partial);
+	*(__be64 *)&ctx->buf[SHA512_BLOCK_SIZE - 16] = cpu_to_be64(bitcount_hi);
+	*(__be64 *)&ctx->buf[SHA512_BLOCK_SIZE - 8] = cpu_to_be64(bitcount_lo);
+	sha512_blocks(&ctx->state, ctx->buf, 1);
+
+	for (size_t i = 0; i < digest_size; i += 8)
+		put_unaligned_be64(ctx->state.h[i / 8], out + i);
+}
 
 void sha384_final(struct sha384_ctx *ctx, u8 out[SHA384_DIGEST_SIZE])
 {
