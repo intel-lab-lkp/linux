@@ -79,10 +79,18 @@ EXPORT_SYMBOL_GPL(lwtunnel_state_alloc);
 static const struct lwtunnel_encap_ops __rcu *
 		lwtun_encaps[LWTUNNEL_ENCAP_MAX + 1] __read_mostly;
 
+static inline int lwtunnel_encap_type_check(unsigned int encap_type)
+{
+	if (encap_type == LWTUNNEL_ENCAP_NONE ||
+	    encap_type > LWTUNNEL_ENCAP_MAX)
+		return -EINVAL;
+	return 0;
+}
+
 int lwtunnel_encap_add_ops(const struct lwtunnel_encap_ops *ops,
 			   unsigned int num)
 {
-	if (num > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(num) < 0)
 		return -ERANGE;
 
 	return !cmpxchg((const struct lwtunnel_encap_ops **)
@@ -96,8 +104,7 @@ int lwtunnel_encap_del_ops(const struct lwtunnel_encap_ops *ops,
 {
 	int ret;
 
-	if (encap_type == LWTUNNEL_ENCAP_NONE ||
-	    encap_type > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(encap_type) < 0)
 		return -ERANGE;
 
 	ret = (cmpxchg((const struct lwtunnel_encap_ops **)
@@ -117,10 +124,10 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 {
 	const struct lwtunnel_encap_ops *ops;
 	bool found = false;
-	int ret = -EINVAL;
+	int ret;
 
-	if (encap_type == LWTUNNEL_ENCAP_NONE ||
-	    encap_type > LWTUNNEL_ENCAP_MAX) {
+	ret = lwtunnel_encap_type_check(encap_type);
+	if (ret < 0) {
 		NL_SET_ERR_MSG_ATTR(extack, encap,
 				    "Unknown LWT encapsulation type");
 		return ret;
@@ -152,10 +159,10 @@ EXPORT_SYMBOL_GPL(lwtunnel_build_state);
 int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 {
 	const struct lwtunnel_encap_ops *ops;
-	int ret = -EINVAL;
+	int ret;
 
-	if (encap_type == LWTUNNEL_ENCAP_NONE ||
-	    encap_type > LWTUNNEL_ENCAP_MAX) {
+	ret = lwtunnel_encap_type_check(encap_type);
+	if (ret < 0) {
 		NL_SET_ERR_MSG(extack, "Unknown lwt encapsulation type");
 		return ret;
 	}
@@ -236,8 +243,7 @@ int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 	if (!lwtstate)
 		return 0;
 
-	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
-	    lwtstate->type > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(lwtstate->type) < 0)
 		return 0;
 
 	nest = nla_nest_start_noflag(skb, encap_attr);
@@ -275,8 +281,7 @@ int lwtunnel_get_encap_size(struct lwtunnel_state *lwtstate)
 	if (!lwtstate)
 		return 0;
 
-	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
-	    lwtstate->type > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(lwtstate->type) < 0)
 		return 0;
 
 	rcu_read_lock();
@@ -303,8 +308,7 @@ int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 	if (a->type != b->type)
 		return 1;
 
-	if (a->type == LWTUNNEL_ENCAP_NONE ||
-	    a->type > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(a->type) < 0)
 		return 0;
 
 	rcu_read_lock();
@@ -339,9 +343,7 @@ int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 		goto drop;
 	}
 	lwtstate = dst->lwtstate;
-
-	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
-	    lwtstate->type > LWTUNNEL_ENCAP_MAX) {
+	if (lwtunnel_encap_type_check(lwtstate->type) < 0) {
 		ret = 0;
 		goto out;
 	}
@@ -393,9 +395,7 @@ int lwtunnel_xmit(struct sk_buff *skb)
 	}
 
 	lwtstate = dst->lwtstate;
-
-	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
-	    lwtstate->type > LWTUNNEL_ENCAP_MAX) {
+	if (lwtunnel_encap_type_check(lwtstate->type) < 0) {
 		ret = 0;
 		goto out;
 	}
@@ -446,9 +446,7 @@ int lwtunnel_input(struct sk_buff *skb)
 		goto drop;
 	}
 	lwtstate = dst->lwtstate;
-
-	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
-	    lwtstate->type > LWTUNNEL_ENCAP_MAX)
+	if (lwtunnel_encap_type_check(lwtstate->type) < 0)
 		return 0;
 
 	ret = -EOPNOTSUPP;
