@@ -34,6 +34,7 @@ int main(int argc, char *argv[])
 
 	if (setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
 		perror("setsockopt");
+		close(server);
 		return 1;
 	}
 
@@ -43,11 +44,13 @@ int main(int argc, char *argv[])
 
 	if (bind(server, (struct sockaddr *)&address, sizeof(address)) < 0) {
 		perror("bind failed");
+		close(server);
 		return 1;
 	}
 
 	if (listen(server, 1) < 0) {
 		perror("listen");
+		close(server);
 		return 1;
 	}
 
@@ -56,6 +59,7 @@ int main(int argc, char *argv[])
 	client = accept(server, NULL, 0);
 	if (client < 0) {
 		perror("accept");
+		close(server);
 		return 1;
 	}
 
@@ -64,6 +68,7 @@ int main(int argc, char *argv[])
 			 &optlen);
 	if (ret != 0) {
 		perror("getsockopt");
+		close(server);
 		return 1;
 	}
 
@@ -73,6 +78,7 @@ int main(int argc, char *argv[])
 
 	if (napi_id == 0) {
 		fprintf(stderr, "napi ID is 0\n");
+		close(server);
 		return 1;
 	}
 
