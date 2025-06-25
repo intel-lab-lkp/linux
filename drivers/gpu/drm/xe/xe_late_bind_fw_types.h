@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include "xe_uc_fw_abi.h"
 
 #define MAX_PAYLOAD_SIZE SZ_4K
 
@@ -41,6 +42,8 @@ struct xe_late_bind_fw {
 	size_t payload_size;
 	/** @late_bind_fw.work: worker to upload latebind blob */
 	struct work_struct work;
+	/** @late_bind_fw.version: late binding blob manifest version */
+	struct gsc_version version;
 };
 
 /**
