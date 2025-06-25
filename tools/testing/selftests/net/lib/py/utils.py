@@ -203,6 +203,9 @@ def bpftrace(expr, json=None, ns=None, host=None, timeout=None):
         expr += ' interval:s:' + str(timeout) + ' { exit(); }'
     cmd_arr += ['-e', expr]
     cmd_obj = cmd(cmd_arr, ns=ns, host=host, shell=False)
+    if cmd_obj.ret != 0:
+        raise Exception("Warning: bpftrace command returned a non-zero exit code.")
+
     if json:
         # bpftrace prints objects as lines
         ret = {}
