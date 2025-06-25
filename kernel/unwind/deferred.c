@@ -48,6 +48,7 @@ static inline u64 assign_timestamp(struct unwind_task_info *info,
 /* Guards adding to and reading the list of callbacks */
 static DEFINE_MUTEX(callback_mutex);
 static LIST_HEAD(callbacks);
+static unsigned long unwind_mask;
 
 /*
  * Read the task context timestamp, if this is the first caller then
@@ -153,7 +154,10 @@ static void unwind_deferred_task_work(struct callback_head *head)
 
 	guard(mutex)(&callback_mutex);
 	list_for_each_entry(work, &callbacks, list) {
-		work->func(work, &trace, timestamp);
+		if (test_bit(work->bit, &info->unwind_mask)) {
+			work->func(work, &trace, timestamp);
+			clear_bit(work->bit, &info->unwind_mask);
+		}
 	}
 }
 
@@ -205,15 +209,19 @@ int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 
 	*timestamp = get_timestamp(info);
 
+	/* This is already queued */
+	if (test_bit(work->bit, &info->unwind_mask))
+		return 1;
+
 	/* callback already pending? */
 	pending = local_read(&info->pending);
 	if (pending)
-		return 1;
+		goto out;
 
 	if (CAN_USE_IN_NMI) {
 		/* Claim the work unless an NMI just now swooped in to do so. */
 		if (!local_try_cmpxchg(&info->pending, &pending, 1))
-			return 1;
+			goto out;
 	} else {
 		local_set(&info->pending, 1);
 	}
@@ -225,16 +233,27 @@ int unwind_deferred_request(struct unwind_work *work, u64 *timestamp)
 		return ret;
 	}
 
-	return 0;
+ out:
+	return test_and_set_bit(work->bit, &info->unwind_mask);
 }
 
 void unwind_deferred_cancel(struct unwind_work *work)
 {
+	struct task_struct *g, *t;
+
 	if (!work)
 		return;
 
 	guard(mutex)(&callback_mutex);
 	list_del(&work->list);
+
+	__clear_bit(work->bit, &unwind_mask);
+
+	guard(rcu)();
+	/* Clear this bit from all threads */
+	for_each_process_thread(g, t) {
+		clear_bit(work->bit, &t->unwind_info.unwind_mask);
+	}
 }
 
 int unwind_deferred_init(struct unwind_work *work, unwind_callback_t func)
@@ -242,6 +261,14 @@ int unwind_deferred_init(struct unwind_work *work, unwind_callback_t func)
 	memset(work, 0, sizeof(*work));
 
 	guard(mutex)(&callback_mutex);
+
+	/* See if there's a bit in the mask available */
+	if (unwind_mask == ~0UL)
+		return -EBUSY;
+
+	work->bit = ffz(unwind_mask);
+	__set_bit(work->bit, &unwind_mask);
+
 	list_add(&work->list, &callbacks);
 	work->func = func;
 	return 0;
@@ -253,6 +280,7 @@ void unwind_task_init(struct task_struct *task)
 
 	memset(info, 0, sizeof(*info));
 	init_task_work(&info->work, unwind_deferred_task_work);
+	info->unwind_mask = 0;
 }
 
 void unwind_task_free(struct task_struct *task)

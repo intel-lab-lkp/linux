@@ -13,6 +13,7 @@ struct unwind_cache {
 struct unwind_task_info {
 	struct unwind_cache	*cache;
 	struct callback_head	work;
+	unsigned long		unwind_mask;
 	local64_t		timestamp;
 	local_t			pending;
 };
