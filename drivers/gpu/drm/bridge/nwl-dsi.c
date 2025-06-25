@@ -344,16 +344,16 @@ static int nwl_dsi_init_interrupts(struct nwl_dsi *dsi)
 }
 
 static int nwl_dsi_host_attach(struct mipi_dsi_host *dsi_host,
-			       struct mipi_dsi_device *device)
+			       const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct nwl_dsi *dsi = container_of(dsi_host, struct nwl_dsi, dsi_host);
 
-	if (device->lanes > 4)
+	if (bus_fmt->lanes > 4)
 		return -EINVAL;
 
-	dsi->lanes = device->lanes;
-	dsi->format = device->format;
-	dsi->dsi_mode_flags = device->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->format = bus_fmt->format;
+	dsi->dsi_mode_flags = bus_fmt->mode_flags;
 
 	return 0;
 }
@@ -620,7 +620,7 @@ static ssize_t nwl_dsi_host_transfer(struct mipi_dsi_host *dsi_host,
 }
 
 static const struct mipi_dsi_host_ops nwl_dsi_host_ops = {
-	.attach = nwl_dsi_host_attach,
+	.attach_new = nwl_dsi_host_attach,
 	.transfer = nwl_dsi_host_transfer,
 };
 
