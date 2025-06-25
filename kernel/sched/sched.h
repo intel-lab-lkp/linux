@@ -1709,6 +1709,7 @@ struct rq_flags {
 };
 
 extern struct balance_callback balance_push_callback;
+void push_current_task(struct rq *rq);
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 extern const struct sched_class ext_sched_class;

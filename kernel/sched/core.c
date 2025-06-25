@@ -5577,6 +5577,10 @@ void sched_tick(void)
 
 	sched_clock_tick();
 
+	/* push the current task out if cpu is marked as avoid */
+	if (cpu_avoid(cpu))
+		push_current_task(rq);
+
 	rq_lock(rq, &rf);
 	donor = rq->donor;
 
@@ -8028,6 +8032,43 @@ static void balance_hotplug_wait(void)
 			   TASK_UNINTERRUPTIBLE);
 }
 
+static DEFINE_PER_CPU(struct cpu_stop_work, push_task_work);
+
+/* A CPU is marked as Avoid when there is contention for underlying
+ * physical CPU and using this CPU will lead to hypervisor preemptions.
+ * It is better not to use this CPU.
+ *
+ * In case any task is scheduled on such CPU, move it out. In
+ * select_fallback_rq a non_avoid CPU will be chosen and henceforth
+ * task shouldn't come back to this CPU
+ */
+void push_current_task(struct rq *rq)
+{
+	struct task_struct *push_task = rq->curr;
+	unsigned long flags;
+
+	/* idle task can't be pused out */
+	if (rq->curr == rq->idle || !cpu_avoid(rq->cpu))
+		return;
+
+	/* Do for only SCHED_NORMAL AND RT for now */
+	if (push_task->sched_class != &fair_sched_class &&
+	    push_task->sched_class != &rt_sched_class)
+		return;
+
+	if (kthread_is_per_cpu(push_task) ||
+	    is_migration_disabled(push_task))
+		return;
+
+	local_irq_save(flags);
+	get_task_struct(push_task);
+	preempt_disable();
+
+	stop_one_cpu_nowait(rq->cpu, __balance_push_cpu_stop, push_task,
+			    this_cpu_ptr(&push_task_work));
+	preempt_enable();
+	local_irq_restore(flags);
+}
 #else /* !CONFIG_HOTPLUG_CPU: */
 
 static inline void balance_push(struct rq *rq)
@@ -8042,6 +8083,9 @@ static inline void balance_hotplug_wait(void)
 {
 }
 
+void push_current_task(struct rq *rq)
+{
+}
 #endif /* !CONFIG_HOTPLUG_CPU */
 
 void set_rq_online(struct rq *rq)
