@@ -1600,9 +1600,11 @@ static void rtl8xxxu_set_linktype(struct rtl8xxxu_priv *priv,
 	case NL80211_IFTYPE_ADHOC:
 		type = MSR_LINKTYPE_ADHOC;
 		break;
+	case NL80211_IFTYPE_P2P_CLIENT:
 	case NL80211_IFTYPE_STATION:
 		type = MSR_LINKTYPE_STATION;
 		break;
+	case NL80211_IFTYPE_P2P_GO:
 	case NL80211_IFTYPE_AP:
 		type = MSR_LINKTYPE_AP;
 		break;
@@ -6780,6 +6782,7 @@ static int rtl8xxxu_add_interface(struct ieee80211_hw *hw,
 		return -EOPNOTSUPP;
 
 	switch (vif->type) {
+	case NL80211_IFTYPE_P2P_CLIENT:
 	case NL80211_IFTYPE_STATION:
 		if (port_num == 0) {
 			rtl8xxxu_stop_tx_beacon(priv);
@@ -6790,6 +6793,7 @@ static int rtl8xxxu_add_interface(struct ieee80211_hw *hw,
 			rtl8xxxu_write8(priv, REG_BEACON_CTRL, val8);
 		}
 		break;
+	case NL80211_IFTYPE_P2P_GO:
 	case NL80211_IFTYPE_AP:
 		if (port_num == 1) {
 			rtl8xxxu_switch_ports(priv);
@@ -6837,6 +6841,23 @@ static void rtl8xxxu_remove_interface(struct ieee80211_hw *hw,
 	dev_dbg(&priv->udev->dev, "%s\n", __func__);
 
 	priv->vifs[rtlvif->port_num] = NULL;
+}
+
+static int rtl8xxxu_change_interface(struct ieee80211_hw *hw,
+				     struct ieee80211_vif *vif,
+				     enum nl80211_iftype new_type, bool p2p)
+{
+	struct rtl8xxxu_priv *priv = hw->priv;
+	int ret;
+
+	dev_dbg(&priv->udev->dev, "%s: p2p %x\n", __func__, p2p);
+
+	rtl8xxxu_remove_interface(hw, vif);
+	vif->type = new_type;
+	vif->p2p = p2p;
+	ret = rtl8xxxu_add_interface(hw, vif);
+
+	return ret;
 }
 
 static int rtl8xxxu_config(struct ieee80211_hw *hw, u32 changed)
@@ -7623,6 +7644,7 @@ static const struct ieee80211_ops rtl8xxxu_ops = {
 	.tx = rtl8xxxu_tx,
 	.wake_tx_queue = ieee80211_handle_wake_tx_queue,
 	.add_interface = rtl8xxxu_add_interface,
+	.change_interface = rtl8xxxu_change_interface,
 	.remove_interface = rtl8xxxu_remove_interface,
 	.config = rtl8xxxu_config,
 	.conf_tx = rtl8xxxu_conf_tx,
@@ -7755,7 +7777,9 @@ static void rtl8xxxu_deinit_led(struct rtl8xxxu_priv *priv)
 
 static const struct ieee80211_iface_limit rtl8xxxu_limits[] = {
 	{ .max = 2, .types = BIT(NL80211_IFTYPE_STATION), },
-	{ .max = 1, .types = BIT(NL80211_IFTYPE_AP), },
+	{ .max = 1, .types = BIT(NL80211_IFTYPE_AP) |
+			     BIT(NL80211_IFTYPE_P2P_CLIENT) |
+			     BIT(NL80211_IFTYPE_P2P_GO), },
 };
 
 static const struct ieee80211_iface_combination rtl8xxxu_combinations[] = {
@@ -7912,6 +7936,9 @@ static int rtl8xxxu_probe(struct usb_interface *interface,
 	hw->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION);
 	if (priv->fops->supports_ap)
 		hw->wiphy->interface_modes |= BIT(NL80211_IFTYPE_AP);
+	if (priv->fops->supports_p2p)
+		hw->wiphy->interface_modes |= BIT(NL80211_IFTYPE_P2P_CLIENT) |
+					      BIT(NL80211_IFTYPE_P2P_GO);
 	hw->queues = 4;
 
 	hw->wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;

@@ -1752,6 +1752,7 @@ struct rtl8xxxu_fileops rtl8192eu_fops = {
 	.gen2_thermal_meter = 1,
 	.needs_full_init = 1,
 	.supports_ap = 1,
+	.supports_p2p = 1,
 	.max_macid_num = 128,
 	.max_sec_cam_num = 64,
 	.adda_1t_init = 0x0fc01616,

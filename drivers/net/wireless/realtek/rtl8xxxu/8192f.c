@@ -2078,6 +2078,7 @@ struct rtl8xxxu_fileops rtl8192fu_fops = {
 	.ustime_tsf_edca = 0x50,
 	.max_aggr_num = 0x1f1f,
 	.supports_ap = 1,
+	.supports_p2p = 1,
 	.max_macid_num = 128,
 	.max_sec_cam_num = 64,
 	.trxff_boundary = 0x3f3f,

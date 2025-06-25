@@ -2013,6 +2013,7 @@ struct rtl8xxxu_fileops {
 	u8 ustime_tsf_edca;
 	u16 max_aggr_num;
 	u8 supports_ap:1;
+	u8 supports_p2p:1;
 	u16 max_macid_num;
 	u16 max_sec_cam_num;
 	u32 adda_1t_init;

@@ -1750,6 +1750,7 @@ struct rtl8xxxu_fileops rtl8723bu_fops = {
 	.ustime_tsf_edca = 0x50,
 	.max_aggr_num = 0x0c14,
 	.supports_ap = 1,
+	.supports_p2p = 1,
 	.max_macid_num = 128,
 	.max_sec_cam_num = 64,
 	.adda_1t_init = 0x01c00014,
