@@ -510,23 +510,23 @@ dw_mipi_dsi2_work_mode(struct dw_mipi_dsi2 *dsi2, u32 mode)
 }
 
 static int dw_mipi_dsi2_host_attach(struct mipi_dsi_host *host,
-				    struct mipi_dsi_device *device)
+				    const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct dw_mipi_dsi2 *dsi2 = host_to_dsi2(host);
 	const struct dw_mipi_dsi2_plat_data *pdata = dsi2->plat_data;
 	struct drm_bridge *bridge;
 	int ret;
 
-	if (device->lanes > dsi2->plat_data->max_data_lanes) {
+	if (bus_fmt->lanes > dsi2->plat_data->max_data_lanes) {
 		dev_err(dsi2->dev, "the number of data lanes(%u) is too many\n",
-			device->lanes);
+			bus_fmt->lanes);
 		return -EINVAL;
 	}
 
-	dsi2->lanes = device->lanes;
-	dsi2->channel = device->channel;
-	dsi2->format = device->format;
-	dsi2->mode_flags = device->mode_flags;
+	dsi2->lanes = bus_fmt->lanes;
+	dsi2->channel = bus_fmt->channel;
+	dsi2->format = bus_fmt->format;
+	dsi2->mode_flags = bus_fmt->mode_flags;
 
 	bridge = devm_drm_of_get_bridge(dsi2->dev, dsi2->dev->of_node, 1, 0);
 	if (IS_ERR(bridge))
@@ -687,7 +687,7 @@ static ssize_t dw_mipi_dsi2_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops dw_mipi_dsi2_host_ops = {
-	.attach = dw_mipi_dsi2_host_attach,
+	.attach_new = dw_mipi_dsi2_host_attach,
 	.detach = dw_mipi_dsi2_host_detach,
 	.transfer = dw_mipi_dsi2_host_transfer,
 };
