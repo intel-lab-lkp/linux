@@ -1453,12 +1453,17 @@ static int allocate_caches_and_workqueue(struct smbd_connection *info)
 	int rc;
 
 	scnprintf(name, MAX_NAME_LEN, "smbd_request_%p", info);
+	struct kmem_cache_args request_args = {
+		.align		= __alignof__(struct smbd_request),
+		.useroffset	= offsetof(struct smbd_request, packet),
+		.usersize	= sizeof(struct smbdirect_data_transfer),
+	};
 	info->request_cache =
 		kmem_cache_create(
 			name,
 			sizeof(struct smbd_request) +
 				sizeof(struct smbdirect_data_transfer),
-			0, SLAB_HWCACHE_ALIGN, NULL);
+			&request_args, SLAB_HWCACHE_ALIGN);
 	if (!info->request_cache)
 		return -ENOMEM;
 
@@ -1469,12 +1474,16 @@ static int allocate_caches_and_workqueue(struct smbd_connection *info)
 		goto out1;
 
 	scnprintf(name, MAX_NAME_LEN, "smbd_response_%p", info);
+
+	struct kmem_cache_args response_args = {
+		.align		= __alignof__(struct smbd_response),
+		.useroffset	= offsetof(struct smbd_response, packet),
+		.usersize	= sp->max_recv_size,
+	};
 	info->response_cache =
-		kmem_cache_create(
-			name,
-			sizeof(struct smbd_response) +
-				sp->max_recv_size,
-			0, SLAB_HWCACHE_ALIGN, NULL);
+		kmem_cache_create(name,
+				  sizeof(struct smbd_response) + sp->max_recv_size,
+				  &response_args, SLAB_HWCACHE_ALIGN);
 	if (!info->response_cache)
 		goto out2;
 
