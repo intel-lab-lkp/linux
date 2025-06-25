@@ -199,7 +199,7 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static int intel_dsi_host_attach(struct mipi_dsi_host *host,
-				 struct mipi_dsi_device *dsi)
+				 const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	return 0;
 }
@@ -211,7 +211,7 @@ static int intel_dsi_host_detach(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops intel_dsi_host_ops = {
-	.attach = intel_dsi_host_attach,
+	.attach_new = intel_dsi_host_attach,
 	.detach = intel_dsi_host_detach,
 	.transfer = intel_dsi_host_transfer,
 };

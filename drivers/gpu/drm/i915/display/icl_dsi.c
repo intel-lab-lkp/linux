@@ -1780,7 +1780,7 @@ static const struct drm_connector_helper_funcs gen11_dsi_connector_helper_funcs 
 };
 
 static int gen11_dsi_host_attach(struct mipi_dsi_host *host,
-				 struct mipi_dsi_device *dsi)
+				 const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	return 0;
 }
@@ -1826,7 +1826,7 @@ static ssize_t gen11_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops gen11_dsi_host_ops = {
-	.attach = gen11_dsi_host_attach,
+	.attach_new = gen11_dsi_host_attach,
 	.detach = gen11_dsi_host_detach,
 	.transfer = gen11_dsi_host_transfer,
 };
