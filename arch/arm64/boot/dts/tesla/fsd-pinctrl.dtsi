@@ -120,6 +120,27 @@
 		samsung,pin-pud = <FSD_PIN_PULL_NONE>;
 		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
 	};
+
+	pcie1_clkreq: pcie1-clkreq-pins {
+		samsung,pins = "gpf6-0";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie1_wake: pcie1-wake-pins {
+		samsung,pins = "gpf6-1";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie1_preset: pcie1-preset-pins {
+		samsung,pins = "gpf6-2";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
 };
 
 &pinctrl_peric {
@@ -492,6 +513,50 @@
 		samsung,pin-function = <FSD_PIN_FUNC_2>;
 		samsung,pin-pud = <FSD_PIN_PULL_UP>;
 		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie0_clkreq: pcie0-clkreq-pins {
+		samsung,pins = "gpc8-0";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie0_wake0: pcie0-wake0-pins {
+		samsung,pins = "gpc8-1";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie0_preset0: pcie0-preset0-pins {
+		samsung,pins = "gpc8-2";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie0_wake1: pcie0-wake1-pins {
+		samsung,pins = "gpc8-3";
+		samsung,pin-function = <FSD_PIN_FUNC_2>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+	};
+
+	pcie0_slot0: pcie0-gpio22-pins {
+		samsung,pins = "gpg2-6";
+		samsung,pin-function = <FSD_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+		samsung,pin-val = <1>;
+	};
+
+	pcie0_slot1: pcie0-gpio23-pins {
+		samsung,pins = "gpg2-7";
+		samsung,pin-function = <FSD_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <FSD_PIN_PULL_UP>;
+		samsung,pin-drv = <FSD_PIN_DRV_LV4>;
+		samsung,pin-val = <1>;
 	};
 };
 

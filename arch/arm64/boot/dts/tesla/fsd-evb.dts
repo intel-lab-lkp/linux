@@ -19,6 +19,8 @@
 	aliases {
 		serial0 = &serial_0;
 		serial1 = &serial_1;
+		pciephy0 = &pciephy0;
+		pciephy1 = &pciephy1;
 	};
 
 	chosen {
@@ -129,4 +131,38 @@
 
 &ufs {
 	status = "okay";
+};
+
+&pcierc2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie1_clkreq>, <&pcie1_wake>, <&pcie1_preset>,
+			<&pcie0_slot1>;
+};
+
+&pcieep2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie1_clkreq>, <&pcie1_wake>, <&pcie1_preset>,
+			<&pcie0_slot1>;
+};
+
+&pcierc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_clkreq>, <&pcie0_wake0>, <&pcie0_preset0>,
+			 <&pcie0_slot0>;
+};
+
+&pcieep0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_clkreq>, <&pcie0_wake0>, <&pcie0_preset0>,
+			 <&pcie0_slot0>;
+};
+
+&pcierc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_clkreq>, <&pcie0_wake1>, <&pcie0_preset0>;
+};
+
+&pcieep1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_clkreq>, <&pcie0_wake1>, <&pcie0_preset0>;
 };

@@ -1009,6 +1009,16 @@
 			status = "disabled";
 		};
 
+		pciephy0: pcie-phy@15080000 {
+			compatible = "tesla,fsd-pcie-phy";
+			#phy-cells = <0>;
+			reg = <0x0 0x15080000 0x0 0x2000>,
+			      <0x0 0x150a0000 0x0 0x1000>;
+			samsung,pmu-syscon = <&pmu_system_controller>;
+			samsung,fsys-sysreg = <&sysreg_fsys0>;
+			status = "disabled";
+		};
+
 		ufs: ufs@15120000 {
 			compatible = "tesla,fsd-ufs";
 			reg = <0x0 0x15120000 0x0 0x200>,  /* 0: HCI standard */
@@ -1055,6 +1065,143 @@
 				    <&eth0_rx_ctrl>, <&eth0_mdio>;
 			local-mac-address = [00 00 00 00 00 00];
 			iommus = <&smmu_fsys0 0x0 0x1>;
+			status = "disabled";
+		};
+
+		pcierc2: pcie@15400000 {
+			compatible = "tesla,fsd-pcie";
+			reg = <0x0 0x15400000 0x0 0x2000>,
+			      <0x0 0x15090000 0x0 0x1000>,
+			      <0x0 0x15800000 0x0 0x1000>;
+			reg-names = "dbi", "elbi", "config";
+			ranges =  <0x82000000 0 0x15801000 0 0x15801000 0 0xffefff>;
+			clocks = <&clock_fsys0 PCIE_SUBCTRL_INST0_AUX_CLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_DBI_ACLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_MSTR_ACLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_SLV_ACLK_SOC>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			dma-coherent;
+			device_type = "pci";
+			interrupts = <GIC_SPI 93 IRQ_TYPE_EDGE_RISING>;
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys0 0x434>;
+			phys = <&pciephy0>;
+			iommu-map = <0x0 &smmu_fsys0 0x4 0x10000>;
+			iommu-map-mask = <0x0>;
+			status = "disabled";
+		};
+
+		pcieep2: pcie-ep@15400000 {
+			compatible = "tesla,fsd-pcie-ep";
+			reg = <0x0 0x15090000 0x0 0x1000>,
+			      <0x0 0x15400000 0x0 0x2000>,
+			      <0x0 0x15402000 0x0 0x80>,
+			      <0x0 0x15800000 0x0 0xff0000>;
+			reg-names = "elbi", "dbi", "dbi2", "addr_space";
+			clocks = <&clock_fsys0 PCIE_SUBCTRL_INST0_AUX_CLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_DBI_ACLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_MSTR_ACLK_SOC>,
+				 <&clock_fsys0 PCIE_SUBCTRL_INST0_SLV_ACLK_SOC>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys0 0x434>;
+			phys = <&pciephy0>;
+			status = "disabled";
+		};
+
+		pciephy1: pcie-phy@16880000 {
+			compatible = "tesla,fsd-pcie-phy";
+			#phy-cells = <0>;
+			reg = <0x0 0x16880000 0x0 0x2000>,
+			      <0x0 0x16860000 0x0 0x1000>;
+			samsung,pmu-syscon = <&pmu_system_controller>;
+			samsung,fsys-sysreg = <&sysreg_fsys1>;
+			status = "disabled";
+		};
+
+		pcierc0: pcie@16a00000 {
+			compatible = "tesla,fsd-pcie";
+			reg = <0x0 0x16a00000 0x0 0x2000>,
+			      <0x0 0x168b0000 0x0 0x1000>,
+			      <0x0 0x17000000 0x0 0x1000>;
+			reg-names = "dbi", "elbi", "config";
+			ranges =  <0x82000000 0 0x17001000 0 0x17001000 0 0xffefff>;
+			clocks = <&clock_fsys1 PCIE_LINK0_IPCLKPORT_AUX_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_DBI_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_MSTR_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_SLV_ACLK>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			dma-coherent;
+			device_type = "pci";
+			interrupts = <GIC_SPI 115 IRQ_TYPE_EDGE_RISING>;
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys1 0x50c>;
+			phys = <&pciephy1>;
+			iommu-map = <0x0 &smmu_imem 0x0 0x10000>;
+			iommu-map-mask = <0x0>;
+			status = "disabled";
+		};
+
+		pcieep0: pcie-ep@16a00000 {
+			compatible = "tesla,fsd-pcie-ep";
+			reg = <0x0 0x168b0000 0x0 0x1000>,
+			      <0x0 0x16a00000 0x0 0x2000>,
+			      <0x0 0x16a02000 0x0 0x80>,
+			      <0x0 0x17000000 0x0 0xff0000>;
+			reg-names = "elbi", "dbi", "dbi2", "addr_space";
+			clocks = <&clock_fsys1 PCIE_LINK0_IPCLKPORT_AUX_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_DBI_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_MSTR_ACLK>,
+				 <&clock_fsys1 PCIE_LINK0_IPCLKPORT_SLV_ACLK>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys1 0x50c>;
+			phys = <&pciephy1>;
+			status = "disabled";
+		};
+
+		pcierc1: pcie@16b00000 {
+			compatible = "tesla,fsd-pcie";
+			reg = <0x0 0x16b00000 0x0 0x2000>,
+			      <0x0 0x168c0000 0x0 0x1000>,
+			      <0x0 0x18000000 0x0 0x1000>;
+			reg-names = "dbi", "elbi", "config";
+			ranges =  <0x82000000 0 0x18001000 0 0x18001000 0 0xffefff>;
+			clocks = <&clock_fsys1 PCIE_LINK1_IPCLKPORT_AUX_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_DBI_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_MSTR_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_SLV_ACLK>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			dma-coherent;
+			device_type = "pci";
+			interrupts = <GIC_SPI 117 IRQ_TYPE_EDGE_RISING>;
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys1 0x510>;
+			phys = <&pciephy1>;
+			status = "disabled";
+		};
+
+		pcieep1: pcie-ep@16b00000 {
+			compatible = "tesla,fsd-pcie-ep";
+			reg = <0x0 0x168c0000 0x0 0x1000>,
+			      <0x0 0x16b00000 0x0 0x2000>,
+			      <0x0 0x16b02000 0x0 0x80>,
+			      <0x0 0x18000000 0x0 0xff0000>;
+			reg-names = "elbi", "dbi", "dbi2", "addr_space";
+			clocks = <&clock_fsys1 PCIE_LINK1_IPCLKPORT_AUX_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_DBI_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_MSTR_ACLK>,
+				 <&clock_fsys1 PCIE_LINK1_IPCLKPORT_SLV_ACLK>;
+			clock-names = "aux", "dbi", "mstr", "slv";
+			num-lanes = <4>;
+			samsung,syscon-pcie = <&sysreg_fsys1 0x510>;
+			phys = <&pciephy1>;
 			status = "disabled";
 		};
 	};
