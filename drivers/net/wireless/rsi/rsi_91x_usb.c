@@ -122,8 +122,7 @@ static int rsi_find_bulk_in_and_out_endpoints(struct usb_interface *interface,
 
 		if (!dev->bulkin_endpoint_addr[bin_found] &&
 		    (endpoint->bEndpointAddress & USB_DIR_IN) &&
-		    ((endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
-		    USB_ENDPOINT_XFER_BULK)) {
+		    usb_endpoint_xfer_bulk(endpoint)) {
 			buffer_size = endpoint->wMaxPacketSize;
 			dev->bulkin_size[bin_found] = buffer_size;
 			dev->bulkin_endpoint_addr[bin_found] =
@@ -133,8 +132,7 @@ static int rsi_find_bulk_in_and_out_endpoints(struct usb_interface *interface,
 
 		if (!dev->bulkout_endpoint_addr[bout_found] &&
 		    !(endpoint->bEndpointAddress & USB_DIR_IN) &&
-		    ((endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
-		    USB_ENDPOINT_XFER_BULK)) {
+		    usb_endpoint_xfer_bulk(endpoint)) {
 			buffer_size = endpoint->wMaxPacketSize;
 			dev->bulkout_endpoint_addr[bout_found] =
 				endpoint->bEndpointAddress;
