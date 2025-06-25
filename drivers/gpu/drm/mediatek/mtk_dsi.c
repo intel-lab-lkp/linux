@@ -981,15 +981,15 @@ static const struct component_ops mtk_dsi_component_ops = {
 };
 
 static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
-			       struct mipi_dsi_device *device)
+			       const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct mtk_dsi *dsi = host_to_dsi(host);
 	struct device *dev = host->dev;
 	int ret;
 
-	dsi->lanes = device->lanes;
-	dsi->format = device->format;
-	dsi->mode_flags = device->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->format = bus_fmt->format;
+	dsi->mode_flags = bus_fmt->mode_flags;
 	dsi->next_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 1, 0);
 	if (IS_ERR(dsi->next_bridge)) {
 		ret = PTR_ERR(dsi->next_bridge);
@@ -1184,7 +1184,7 @@ restore_dsi_mode:
 }
 
 static const struct mipi_dsi_host_ops mtk_dsi_ops = {
-	.attach = mtk_dsi_host_attach,
+	.attach_new = mtk_dsi_host_attach,
 	.detach = mtk_dsi_host_detach,
 	.transfer = mtk_dsi_host_transfer,
 };
