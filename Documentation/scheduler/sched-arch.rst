@@ -62,6 +62,31 @@ Your cpu_idle routines need to obey the following rules:
 arch/x86/kernel/process.c has examples of both polling and
 sleeping idle functions.
 
+CPU Avoid
+=========
+
+Under paravirt conditions it is possible to overcommit CPU resources.
+i.e sum of virtual CPU(vCPU) of all VM is greater than number of physical
+CPUs(pCPU). Under such conditions when all or many VM have high utilization,
+hypervisor won't be able to satisfy the requirement and has to context switch
+within or across VM. VM level context switch is more expensive compared to
+task context switch within the VM.
+
+In such cases it is better that VM's co-ordinate among themselves and ask for
+less CPU request by not using some of the vCPUs. Such vCPUs where workload
+can be avoided at the moment are called as "Avoid CPUs". Note that when the
+pCPU contention goes away, these vCPUs can be used again by the workload.
+
+Arch need to set/unset the vCPU as avoid in cpu_avoid_mask. When set, avoid
+the CPU and when unset, use it as usual.
+
+Scheduler will try to avoid those CPUs as much as it can.
+This is achived by
+1. Not selecting those CPU at wakeup.
+2. Push the task away from avoid CPU at tick.
+3. Not selecting avoid CPU at load balance.
+
+This works only for SCHED_RT and SCHED_NORMAL.
 
 Possible arch/ problems
 =======================
