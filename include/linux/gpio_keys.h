@@ -48,6 +48,7 @@ struct gpio_keys_button {
  * @enable:		platform hook for enabling the device
  * @disable:		platform hook for disabling the device
  * @name:		input device name
+ * @no_hw_debounce:	avoid programming hardware debounce
  */
 struct gpio_keys_platform_data {
 	const struct gpio_keys_button *buttons;
@@ -57,6 +58,7 @@ struct gpio_keys_platform_data {
 	int (*enable)(struct device *dev);
 	void (*disable)(struct device *dev);
 	const char *name;
+	bool no_hw_debounce;
 };
 
 #endif

@@ -232,6 +232,7 @@ soc_button_device_create(struct platform_device *pdev,
 	gpio_keys_pdata->buttons = gpio_keys;
 	gpio_keys_pdata->nbuttons = n_buttons;
 	gpio_keys_pdata->rep = autorepeat;
+	gpio_keys_pdata->no_hw_debounce = TRUE;
 
 	pd = platform_device_register_resndata(&pdev->dev, "gpio-keys",
 					       PLATFORM_DEVID_AUTO, NULL, 0,
