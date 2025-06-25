@@ -420,12 +420,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 		pm_stay_awake(bdata->input->dev.parent);
 		if (bdata->suspended  &&
 		    (button->type == 0 || button->type == EV_KEY)) {
-			/*
-			 * Simulate wakeup key press in case the key has
-			 * already released by the time we got interrupt
-			 * handler to run.
-			 */
-			input_report_key(bdata->input, button->code, 1);
+			pm_wakeup_event(bdata->input->dev.parent, 0);
 		}
 	}
 
