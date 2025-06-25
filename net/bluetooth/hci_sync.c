@@ -1262,6 +1262,7 @@ int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance)
 		hci_cpu_to_le24(adv->max_interval, cp.max_interval);
 		cp.tx_power = adv->tx_power;
 		cp.sid = adv->sid;
+		adv->enable_after_set_ext_data = true;
 	} else {
 		hci_cpu_to_le24(hdev->le_adv_min_interval, cp.min_interval);
 		hci_cpu_to_le24(hdev->le_adv_max_interval, cp.max_interval);
@@ -1456,6 +1457,23 @@ int hci_enable_ext_advertising_sync(struct hci_dev *hdev, u8 instance)
 				     data, HCI_CMD_TIMEOUT);
 }
 
+static int enable_ext_advertising_sync(struct hci_dev *hdev, void *data)
+{
+	u8 instance = PTR_UINT(data);
+
+	return hci_enable_ext_advertising_sync(hdev, instance);
+}
+
+int hci_enable_ext_advertising(struct hci_dev *hdev, u8 instance)
+{
+	if (!hci_dev_test_flag(hdev, HCI_ADVERTISING) &&
+	    list_empty(&hdev->adv_instances))
+		return 0;
+
+	return hci_cmd_sync_queue(hdev, enable_ext_advertising_sync,
+				  UINT_PTR(instance), NULL);
+}
+
 int hci_start_ext_adv_sync(struct hci_dev *hdev, u8 instance)
 {
 	int err;
@@ -1464,11 +1482,11 @@ int hci_start_ext_adv_sync(struct hci_dev *hdev, u8 instance)
 	if (err)
 		return err;
 
-	err = hci_set_ext_scan_rsp_data_sync(hdev, instance);
-	if (err)
-		return err;
-
-	return hci_enable_ext_advertising_sync(hdev, instance);
+	/* SET_EXT_ADV_DATA and SET_EXT_ADV_ENABLE are called in the
+	 * asynchronous response chain of set_ext_adv_params in order to
+	 * set the advertising data first prior enabling it.
+	 */
+	return hci_set_ext_scan_rsp_data_sync(hdev, instance);
 }
 
 int hci_disable_per_advertising_sync(struct hci_dev *hdev, u8 instance)
@@ -1832,8 +1850,14 @@ static int hci_set_ext_adv_data_sync(struct hci_dev *hdev, u8 instance)
 
 	if (instance) {
 		adv = hci_find_adv_instance(hdev, instance);
-		if (!adv || !adv->adv_data_changed)
+		if (!adv)
 			return 0;
+		if (!adv->adv_data_changed) {
+			if (adv->enable_after_set_ext_data)
+				hci_enable_ext_advertising_sync(hdev,
+								adv->handle);
+			return 0;
+		}
 	}
 
 	len = eir_create_adv_data(hdev, instance, pdu->data,

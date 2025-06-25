@@ -2184,6 +2184,37 @@ static u8 hci_cc_set_ext_adv_param(struct hci_dev *hdev, void *data,
 	return rp->status;
 }
 
+static u8 hci_cc_le_set_ext_adv_data(struct hci_dev *hdev, void *data,
+				     struct sk_buff *skb)
+{
+	struct hci_cp_le_set_ext_adv_data *cp;
+	struct hci_ev_status *rp = data;
+	struct adv_info *adv_instance;
+
+	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
+
+	if (rp->status)
+		return rp->status;
+
+	cp = hci_sent_cmd_data(hdev, HCI_OP_LE_SET_EXT_ADV_DATA);
+	if (!cp)
+		return rp->status;
+
+	hci_dev_lock(hdev);
+
+	if (cp->handle) {
+		adv_instance = hci_find_adv_instance(hdev, cp->handle);
+		if (adv_instance) {
+			if (adv_instance->enable_after_set_ext_data)
+				hci_enable_ext_advertising(hdev, cp->handle);
+		}
+	}
+
+	hci_dev_unlock(hdev);
+
+	return rp->status;
+}
+
 static u8 hci_cc_read_rssi(struct hci_dev *hdev, void *data,
 			   struct sk_buff *skb)
 {
@@ -4166,6 +4197,8 @@ static const struct hci_cc {
 	       sizeof(struct hci_rp_le_read_num_supported_adv_sets)),
 	HCI_CC(HCI_OP_LE_SET_EXT_ADV_PARAMS, hci_cc_set_ext_adv_param,
 	       sizeof(struct hci_rp_le_set_ext_adv_params)),
+	HCI_CC_STATUS(HCI_OP_LE_SET_EXT_ADV_DATA,
+		      hci_cc_le_set_ext_adv_data),
 	HCI_CC_STATUS(HCI_OP_LE_SET_EXT_ADV_ENABLE,
 		      hci_cc_le_set_ext_adv_enable),
 	HCI_CC_STATUS(HCI_OP_LE_SET_ADV_SET_RAND_ADDR,

@@ -237,6 +237,7 @@ struct oob_data {
 
 struct adv_info {
 	struct list_head list;
+	bool	enable_after_set_ext_data;
 	bool	enabled;
 	bool	pending;
 	bool	periodic;

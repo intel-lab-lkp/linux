@@ -112,6 +112,7 @@ int hci_schedule_adv_instance_sync(struct hci_dev *hdev, u8 instance,
 int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance);
 int hci_start_ext_adv_sync(struct hci_dev *hdev, u8 instance);
 int hci_enable_ext_advertising_sync(struct hci_dev *hdev, u8 instance);
+int hci_enable_ext_advertising(struct hci_dev *hdev, u8 instance);
 int hci_enable_advertising_sync(struct hci_dev *hdev);
 int hci_enable_advertising(struct hci_dev *hdev);
 
