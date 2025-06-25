@@ -619,26 +619,30 @@ mlx5e_tc_sample_init(struct mlx5_eswitch *esw, struct mlx5e_post_act *post_act)
 	struct mlx5e_tc_psample *tc_psample;
 	int err;
 
-	tc_psample = kzalloc(sizeof(*tc_psample), GFP_KERNEL);
-	if (!tc_psample)
-		return ERR_PTR(-ENOMEM);
-	if (IS_ERR_OR_NULL(post_act)) {
+	if (IS_ERR(post_act)) {
 		err = PTR_ERR(post_act);
+		goto err_post_act;
+	}
+
+	tc_psample = kzalloc(sizeof(*tc_psample), GFP_KERNEL);
+	if (!tc_psample) {
+		err = -ENOMEM;
 		goto err_post_act;
 	}
 	tc_psample->post_act = post_act;
 	tc_psample->esw = esw;
 	err = sampler_termtbl_create(tc_psample);
 	if (err)
-		goto err_post_act;
+		goto err_create;
 
 	mutex_init(&tc_psample->ht_lock);
 	mutex_init(&tc_psample->restore_lock);
 
 	return tc_psample;
 
-err_post_act:
+err_create:
 	kfree(tc_psample);
+err_post_act:
 	return ERR_PTR(err);
 }
 
