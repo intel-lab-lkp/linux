@@ -44,6 +44,7 @@
 #include "xe_hw_engine_group.h"
 #include "xe_hwmon.h"
 #include "xe_irq.h"
+#include "xe_late_bind_fw.h"
 #include "xe_memirq.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
@@ -887,6 +888,10 @@ int xe_device_probe(struct xe_device *xe)
 
 	err = xe_heci_gsc_init(xe);
 	if (err)
+		return err;
+
+	err = xe_late_bind_init(&xe->late_bind);
+	if (err && err != -ENODEV)
 		return err;
 
 	err = xe_oa_init(xe);
