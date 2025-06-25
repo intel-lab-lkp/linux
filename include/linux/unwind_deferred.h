@@ -29,12 +29,12 @@ void unwind_deferred_cancel(struct unwind_work *work);
 static __always_inline void unwind_reset_info(void)
 {
 	/* Exit out early if this was never used */
-	if (likely(!current->unwind_info.timestamp))
+	if (likely(!local64_read(&current->unwind_info.timestamp)))
 		return;
 
 	if (current->unwind_info.cache)
 		current->unwind_info.cache->nr_entries = 0;
-	current->unwind_info.timestamp = 0;
+	local64_set(&current->unwind_info.timestamp, 0);
 }
 
 #else /* !CONFIG_UNWIND_USER */
