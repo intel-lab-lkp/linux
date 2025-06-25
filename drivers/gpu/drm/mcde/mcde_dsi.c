@@ -64,13 +64,13 @@ static inline struct mcde_dsi *host_to_mcde_dsi(struct mipi_dsi_host *h)
 	return container_of(h, struct mcde_dsi, dsi_host);
 }
 
-bool mcde_dsi_irq(struct mipi_dsi_device *mdsi)
+bool mcde_dsi_irq(struct mipi_dsi_host *host)
 {
 	struct mcde_dsi *d;
 	u32 val;
 	bool te_received = false;
 
-	d = host_to_mcde_dsi(mdsi->host);
+	d = host_to_mcde_dsi(host);
 
 	dev_dbg(d->dev, "%s called\n", __func__);
 

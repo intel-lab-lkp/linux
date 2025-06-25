@@ -104,7 +104,7 @@ static inline bool mcde_flow_is_video(struct mcde *mcde)
 		mcde->flow_mode == MCDE_VIDEO_FORMATTER_FLOW);
 }
 
-bool mcde_dsi_irq(struct mipi_dsi_device *mdsi);
+bool mcde_dsi_irq(struct mipi_dsi_host *host);
 void mcde_dsi_te_request(struct mcde *mcde);
 void mcde_dsi_enable(struct drm_bridge *bridge);
 void mcde_dsi_disable(struct drm_bridge *bridge);

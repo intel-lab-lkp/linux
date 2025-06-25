@@ -89,7 +89,7 @@ void mcde_display_irq(struct mcde *mcde)
 	 *
 	 * TODO: Currently only one DSI link is supported.
 	 */
-	if (!mcde->dpi_output && mcde_dsi_irq(mcde->mdsi)) {
+	if (!mcde->dpi_output && mcde_dsi_irq(mcde->dsi_host)) {
 		u32 val;
 
 		/*
