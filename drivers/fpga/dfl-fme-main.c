@@ -36,7 +36,7 @@ static ssize_t ports_num_show(struct device *dev,
 
 	v = readq(base + FME_HDR_CAP);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
+	return sysfs_emit(buf, "%u\n",
 			 (unsigned int)FIELD_GET(FME_CAP_NUM_PORTS, v));
 }
 static DEVICE_ATTR_RO(ports_num);
@@ -56,7 +56,7 @@ static ssize_t bitstream_id_show(struct device *dev,
 
 	v = readq(base + FME_HDR_BITSTREAM_ID);
 
-	return scnprintf(buf, PAGE_SIZE, "0x%llx\n", (unsigned long long)v);
+	return sysfs_emit(buf, "0x%llx\n", (unsigned long long)v);
 }
 static DEVICE_ATTR_RO(bitstream_id);
 
@@ -75,7 +75,7 @@ static ssize_t bitstream_metadata_show(struct device *dev,
 
 	v = readq(base + FME_HDR_BITSTREAM_MD);
 
-	return scnprintf(buf, PAGE_SIZE, "0x%llx\n", (unsigned long long)v);
+	return sysfs_emit(buf, "0x%llx\n", (unsigned long long)v);
 }
 static DEVICE_ATTR_RO(bitstream_metadata);
 
