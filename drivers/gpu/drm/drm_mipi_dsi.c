@@ -367,6 +367,18 @@ void mipi_dsi_host_unregister(struct mipi_dsi_host *host)
 }
 EXPORT_SYMBOL(mipi_dsi_host_unregister);
 
+static void mipi_dsi_dev_copy_bus_fmt(struct mipi_dsi_bus_fmt *fmt,
+				      const struct mipi_dsi_device *dsi_dev)
+{
+	fmt->channel	= dsi_dev->channel;
+	fmt->lanes	= dsi_dev->lanes;
+	fmt->format	= dsi_dev->format;
+	fmt->mode_flags	= dsi_dev->mode_flags;
+	fmt->hs_rate	= dsi_dev->hs_rate;
+	fmt->lp_rate	= dsi_dev->lp_rate;
+	fmt->dsc	= dsi_dev->dsc;
+}
+
 /**
  * mipi_dsi_attach - attach a DSI device to its DSI host
  * @dsi: DSI peripheral
@@ -374,15 +386,20 @@ EXPORT_SYMBOL(mipi_dsi_host_unregister);
 int mipi_dsi_attach(struct mipi_dsi_device *dsi)
 {
 	const struct mipi_dsi_host_ops *ops = dsi->host->ops;
+	struct mipi_dsi_bus_fmt bus_fmt;
 	int ret;
 
-	if (!ops || !ops->attach)
+	if (!ops || !(ops->attach_new || ops->attach))
 		return -ENOSYS;
 
 	if (dsi->lanes < 1)
 		return dev_err_probe(&dsi->dev, -EINVAL, "Incorrect lanes number\n");
 
-	ret = ops->attach(dsi->host, dsi);
+	mipi_dsi_dev_copy_bus_fmt(&bus_fmt, dsi);
+
+	ret = ops->attach_new ?
+		ops->attach_new(dsi->host, &bus_fmt) :
+		ops->attach(dsi->host, dsi);
 	if (ret) {
 		dev_err(dsi->host->dev,
 			"Failed to attach %s device (lanes:%d bpp:%d mode-flags:0x%lx) (%d)\n",

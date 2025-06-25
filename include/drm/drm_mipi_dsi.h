@@ -103,8 +103,33 @@ enum mipi_dsi_pixel_format {
 #define DSI_DEV_NAME_SIZE		20
 
 /**
+ * struct mipi_dsi_bus_fmt - format required by a DSI peripheral device
+ * @channel: virtual channel assigned to the peripheral
+ * @format: pixel format for video mode
+ * @lanes: number of active data lanes
+ * @mode_flags: DSI operation mode related flags
+ * @hs_rate: maximum lane frequency for high speed mode in hertz, this should
+ * be set to the real limits of the hardware, zero is only accepted for
+ * legacy drivers
+ * @lp_rate: maximum lane frequency for low power mode in hertz, this should
+ * be set to the real limits of the hardware, zero is only accepted for
+ * legacy drivers
+ * @dsc: panel/bridge DSC pps payload to be sent
+ */
+struct mipi_dsi_bus_fmt {
+	unsigned int channel;
+	unsigned int lanes;
+	enum mipi_dsi_pixel_format format;
+	unsigned long mode_flags;
+	unsigned long hs_rate;
+	unsigned long lp_rate;
+	struct drm_dsc_config *dsc;
+};
+
+/**
  * struct mipi_dsi_host_ops - DSI bus operations
- * @attach: attach DSI device to DSI host
+ * @attach_new: attach DSI device to DSI host; either @attach_new or @attach is mandatory
+ * @attach: deprecated version of @attach_new
  * @detach: detach DSI device from DSI host
  * @transfer: transmit a DSI packet
  *
@@ -126,6 +151,8 @@ enum mipi_dsi_pixel_format {
  * properly enabled.
  */
 struct mipi_dsi_host_ops {
+	int (*attach_new)(struct mipi_dsi_host *host,
+			  const struct mipi_dsi_bus_fmt *bus_fmt);
 	int (*attach)(struct mipi_dsi_host *host,
 		      struct mipi_dsi_device *dsi);
 	int (*detach)(struct mipi_dsi_host *host,
