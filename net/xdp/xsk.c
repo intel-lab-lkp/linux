@@ -857,6 +857,9 @@ static int __xsk_generic_xmit(struct sock *sk)
 	}
 
 out:
+	if (xskq_has_descs(xs->tx))
+		__xskq_cons_release(xs->tx);
+
 	if (sent_frame)
 		if (xsk_tx_writeable(xs))
 			sk->sk_write_space(sk);
