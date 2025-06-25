@@ -15,6 +15,8 @@
 #include <asm/thread_info.h>
 #include <asm/asm-offsets.h>
 #include <asm/errata_list.h>
+#include <asm/alternative.h>
+
 #include <linux/sizes.h>
 
 	.section .irqentry.text, "ax"

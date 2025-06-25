@@ -33,6 +33,7 @@
 #include <asm/soc.h>
 #include <asm/sparsemem.h>
 #include <asm/tlbflush.h>
+#include <asm/alternative.h>
 
 #include "../kernel/head.h"
 

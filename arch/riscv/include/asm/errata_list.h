@@ -5,7 +5,6 @@
 #ifndef ASM_ERRATA_LIST_H
 #define ASM_ERRATA_LIST_H
 
-#include <asm/alternative.h>
 #include <asm/csr.h>
 #include <asm/insn-def.h>
 #include <asm/hwcap.h>
@@ -27,6 +26,11 @@
 #define	ERRATA_THEAD_PMU 1
 #define	ERRATA_THEAD_GHOSTWRITE 2
 #define	ERRATA_THEAD_NUMBER 3
+#endif
+
+#ifdef CONFIG_ERRATA_MIPS
+#define ERRATA_MIPS_P8700_PAUSE_OPCODE 0
+#define ERRATA_MIPS_NUMBER 1
 #endif
 
 #ifdef __ASSEMBLY__
@@ -58,6 +62,17 @@ asm(ALTERNATIVE("sfence.vma %0", "sfence.vma", SIFIVE_VENDOR_ID,	\
 asm(ALTERNATIVE("sfence.vma %0, %1", "sfence.vma", SIFIVE_VENDOR_ID,	\
 		ERRATA_SIFIVE_CIP_1200, CONFIG_ERRATA_SIFIVE_CIP_1200)	\
 		: : "r" (addr), "r" (asid) : "memory")
+
+#define ALT_RISCV_PAUSE()					\
+asm(ALTERNATIVE(	\
+		RISCV_PAUSE, /* Original RISC‑V pause insn */	\
+		".4byte 0x00501013", /* Replacement for MIPS P8700 */	\
+		MIPS_VENDOR_ID, /* Vendor ID to match */	\
+		ERRATA_MIPS_P8700_PAUSE_OPCODE, /* patch_id */	\
+		CONFIG_ERRATA_MIPS_P8700_PAUSE_OPCODE)	\
+	: /* no outputs */	\
+	: /* no inputs */	\
+	: "memory")
 
 /*
  * _val is marked as "will be overwritten", so need to set it to 0
