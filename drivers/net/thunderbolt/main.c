@@ -269,7 +269,7 @@ static int tbnet_login_request(struct tbnet *net, u8 sequence)
 	request.transmit_path = net->local_transmit_path;
 
 	return tb_xdomain_request(xd, &request, sizeof(request),
-				  TB_CFG_PKG_XDOMAIN_RESP, &reply,
+				  TB_CFG_PKG_XDOMAIN_REQ, &reply,
 				  sizeof(reply), TB_CFG_PKG_XDOMAIN_RESP,
 				  TBNET_LOGIN_TIMEOUT);
 }
@@ -300,7 +300,7 @@ static int tbnet_logout_request(struct tbnet *net)
 			  atomic_inc_return(&net->command_id));
 
 	return tb_xdomain_request(xd, &request, sizeof(request),
-				  TB_CFG_PKG_XDOMAIN_RESP, &reply,
+				  TB_CFG_PKG_XDOMAIN_REQ, &reply,
 				  sizeof(reply), TB_CFG_PKG_XDOMAIN_RESP,
 				  TBNET_LOGOUT_TIMEOUT);
 }
