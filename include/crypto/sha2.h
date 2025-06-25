@@ -249,7 +249,7 @@ void hmac_sha384_preparekey(struct hmac_sha384_key *key,
 			    const u8 *raw_key, size_t raw_key_len);
 
 /**
- * hmac_sha384_init() - Initialize a HMAC-SHA384 context for a new message
+ * hmac_sha384_init() - Initialize an HMAC-SHA384 context for a new message
  * @ctx: (output) the HMAC context to initialize
  * @key: the prepared HMAC key
  *
@@ -264,7 +264,7 @@ static inline void hmac_sha384_init(struct hmac_sha384_ctx *ctx,
 }
 
 /**
- * hmac_sha384_update() - Update a HMAC-SHA384 context with message data
+ * hmac_sha384_update() - Update an HMAC-SHA384 context with message data
  * @ctx: the HMAC context to update; must have been initialized
  * @data: the message data
  * @data_len: the data length in bytes
@@ -280,7 +280,7 @@ static inline void hmac_sha384_update(struct hmac_sha384_ctx *ctx,
 }
 
 /**
- * hmac_sha384_final() - Finish computing a HMAC-SHA384 value
+ * hmac_sha384_final() - Finish computing an HMAC-SHA384 value
  * @ctx: the HMAC context to finalize; must have been initialized
  * @out: (output) the resulting HMAC-SHA384 value
  *
@@ -407,7 +407,7 @@ void hmac_sha512_preparekey(struct hmac_sha512_key *key,
 			    const u8 *raw_key, size_t raw_key_len);
 
 /**
- * hmac_sha512_init() - Initialize a HMAC-SHA512 context for a new message
+ * hmac_sha512_init() - Initialize an HMAC-SHA512 context for a new message
  * @ctx: (output) the HMAC context to initialize
  * @key: the prepared HMAC key
  *
@@ -422,7 +422,7 @@ static inline void hmac_sha512_init(struct hmac_sha512_ctx *ctx,
 }
 
 /**
- * hmac_sha512_update() - Update a HMAC-SHA512 context with message data
+ * hmac_sha512_update() - Update an HMAC-SHA512 context with message data
  * @ctx: the HMAC context to update; must have been initialized
  * @data: the message data
  * @data_len: the data length in bytes
@@ -438,7 +438,7 @@ static inline void hmac_sha512_update(struct hmac_sha512_ctx *ctx,
 }
 
 /**
- * hmac_sha512_final() - Finish computing a HMAC-SHA512 value
+ * hmac_sha512_final() - Finish computing an HMAC-SHA512 value
  * @ctx: the HMAC context to finalize; must have been initialized
  * @out: (output) the resulting HMAC-SHA512 value
  *
