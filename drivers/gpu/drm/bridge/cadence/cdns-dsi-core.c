@@ -1072,7 +1072,6 @@ static int cdns_dsi_attach(struct mipi_dsi_host *host,
 	struct cdns_dsi_output *output = &dsi->output;
 	struct cdns_dsi_input *input = &dsi->input;
 	struct drm_bridge *bridge;
-	int ret;
 
 	/*
 	 * We currently do not support connecting several DSI devices to the
@@ -1093,12 +1092,8 @@ static int cdns_dsi_attach(struct mipi_dsi_host *host,
 	 */
 	bridge = devm_drm_of_get_bridge(dsi->base.dev, dsi->base.dev->of_node,
 					DSI_OUTPUT_PORT, dev->channel);
-	if (IS_ERR(bridge)) {
-		ret = PTR_ERR(bridge);
-		dev_err(host->dev, "failed to add DSI device %s (err = %d)",
-			dev->name, ret);
-		return ret;
-	}
+	if (IS_ERR(bridge))
+		return PTR_ERR(bridge);
 
 	output->dev = dev;
 	output->bridge = bridge;
