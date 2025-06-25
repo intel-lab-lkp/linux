@@ -469,6 +469,7 @@ static void tb_ctl_rx_callback(struct tb_ring *ring, struct ring_frame *frame,
 	case TB_CFG_PKG_ERROR:
 	case TB_CFG_PKG_OVERRIDE:
 	case TB_CFG_PKG_RESET:
+	case TB_CFG_PKG_XDOMAIN_RESP:
 		if (*(__be32 *)(pkg->buffer + frame->size) != crc32) {
 			tb_ctl_err(pkg->ctl,
 				   "RX: checksum mismatch, dropping packet\n");
@@ -482,7 +483,6 @@ static void tb_ctl_rx_callback(struct tb_ring *ring, struct ring_frame *frame,
 		break;
 
 	case TB_CFG_PKG_EVENT:
-	case TB_CFG_PKG_XDOMAIN_RESP:
 	case TB_CFG_PKG_XDOMAIN_REQ:
 		if (*(__be32 *)(pkg->buffer + frame->size) != crc32) {
 			tb_ctl_err(pkg->ctl,
