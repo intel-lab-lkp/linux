@@ -1603,7 +1603,7 @@ bool qcom_scm_lmh_dcvsh_available(void)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_lmh_dcvsh_available);
 
-int qcom_scm_shm_bridge_enable(void)
+int qcom_scm_shm_bridge_enable(struct device *scm_dev)
 {
 	int ret;
 
@@ -1615,11 +1615,11 @@ int qcom_scm_shm_bridge_enable(void)
 
 	struct qcom_scm_res res;
 
-	if (!__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_MP,
+	if (!__qcom_scm_is_call_available(scm_dev, QCOM_SCM_SVC_MP,
 					  QCOM_SCM_MP_SHM_BRIDGE_ENABLE))
 		return -EOPNOTSUPP;
 
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	ret = qcom_scm_call(scm_dev, &desc, &res);
 
 	if (ret)
 		return ret;
