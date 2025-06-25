@@ -494,13 +494,29 @@ static struct sched_domain_topology_level x86_topology[] = {
 
 static void __init build_sched_topology(void)
 {
+	bool smt_dropped = false;
+
+	if (cpu_smt_num_threads <= 1) {
+		/*
+		 * SMT level is x86_topology[0].  Shift the array left by one,
+		 */
+		memmove(&x86_topology[0], &x86_topology[1],
+			sizeof(x86_topology) - sizeof(x86_topology[0]));
+		smt_dropped = true;
+	}
+
 	/*
 	 * When there is NUMA topology inside the package invalidate the
 	 * PKG domain since the NUMA domains will auto-magically create the
 	 * right spanning domains based on the SLIT.
 	 */
 	if (x86_has_numa_in_package) {
-		unsigned int pkgdom = ARRAY_SIZE(x86_topology) - 2;
+		unsigned int pkgdom;
+
+		if (smt_dropped)
+			pkgdom = ARRAY_SIZE(x86_topology) - 3;
+		else
+			pkgdom = ARRAY_SIZE(x86_topology) - 2;
 
 		memset(&x86_topology[pkgdom], 0, sizeof(x86_topology[pkgdom]));
 	}
