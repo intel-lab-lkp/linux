@@ -3162,6 +3162,29 @@ void task_numa_free(struct task_struct *p, bool final)
 }
 
 /*
+ * Return true if the NUMA balance is allowed for
+ * the task in a task group.
+ */
+static bool tg_numa_balance_enabled(struct task_struct *p)
+{
+	/*
+	 * The min/max of sysctl_numa_balancing_mode ranges
+	 * from SYSCTL_ONE to SYSCTL_FOUR, so it is safe to
+	 * only check NUMA_BALANCING_CGROUP because it is
+	 * impossible to have both NUMA_BALANCING_CGROUP and
+	 * NUMA_BALANCING_NORMAL/NUMA_BALANCING_MEMORY_TIERING
+	 * set.
+	 */
+	struct task_group *tg = task_group(p);
+
+	if (tg && (sysctl_numa_balancing_mode & NUMA_BALANCING_CGROUP) &&
+	    !READ_ONCE(tg->nlb_enabled))
+		return false;
+
+	return true;
+}
+
+/*
  * Got a PROT_NONE fault for a page on @node.
  */
 void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
@@ -3187,6 +3210,9 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 	if (!node_is_toptier(mem_node) &&
 	    (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING ||
 	     !cpupid_valid(last_cpupid)))
+		return;
+
+	if (!tg_numa_balance_enabled(p))
 		return;
 
 	/* Allocate buffer to track faults on a per-node basis */
@@ -3330,6 +3356,8 @@ static void task_numa_work(struct callback_head *work)
 	if (p->flags & PF_EXITING)
 		return;
 
+	if (!tg_numa_balance_enabled(p))
+		return;
 	/*
 	 * Memory is pinned to only one NUMA node via cpuset.mems, naturally
 	 * no page can be migrated.

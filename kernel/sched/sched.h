@@ -485,6 +485,9 @@ struct task_group {
 	/* Effective clamp values used for a task group */
 	struct uclamp_se	uclamp[UCLAMP_CNT];
 #endif
+#ifdef CONFIG_NUMA_BALANCING
+	u64			nlb_enabled;
+#endif
 
 };
 

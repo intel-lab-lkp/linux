@@ -10078,6 +10078,30 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 }
 #endif
 
+#ifdef CONFIG_NUMA_BALANCING
+static int numa_balance_write_u64(struct cgroup_subsys_state *css,
+				  struct cftype *cftype, u64 enable)
+{
+	struct task_group *tg;
+	bool was_enabled;
+
+	tg = css_tg(css);
+	was_enabled = READ_ONCE(tg->nlb_enabled);
+	if (was_enabled == enable)
+		return 0;
+
+	WRITE_ONCE(tg->nlb_enabled, enable);
+
+	return 0;
+}
+
+static u64 numa_balance_read_u64(struct cgroup_subsys_state *css,
+				 struct cftype *cft)
+{
+	return READ_ONCE(css_tg(css)->nlb_enabled);
+}
+#endif /* CONFIG_NUMA_BALANCING */
+
 static struct cftype cpu_files[] = {
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
 	{
@@ -10125,6 +10149,13 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
+	},
+#endif
+#ifdef CONFIG_NUMA_BALANCING
+	{
+		.name = "numa_load_balance",
+		.read_u64 = numa_balance_read_u64,
+		.write_u64 = numa_balance_write_u64,
 	},
 #endif
 	{ }	/* terminate */
