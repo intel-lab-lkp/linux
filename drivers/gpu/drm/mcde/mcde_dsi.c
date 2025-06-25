@@ -172,7 +172,7 @@ static int mcde_dsi_host_attach(struct mipi_dsi_host *host,
 {
 	struct mcde_dsi *d = host_to_mcde_dsi(host);
 
-	if (mdsi->lanes < 1 || mdsi->lanes > 2) {
+	if (mdsi->lanes > 2) {
 		DRM_ERROR("dsi device params invalid, 1 or 2 lanes supported\n");
 		return -EINVAL;
 	}
