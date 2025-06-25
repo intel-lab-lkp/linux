@@ -317,13 +317,17 @@ static int mid8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!uart.port.membase)
 		return -ENOMEM;
 
-	ret = mid->board->setup(mid, &uart.port);
-	if (ret)
-		return ret;
+	if (id->device != PCI_DEVICE_ID_INTEL_DNV_UART) {
+		ret = mid->board->setup(mid, &uart.port);
+		if (ret)
+			return ret;
 
-	ret = mid8250_dma_setup(mid, &uart);
-	if (ret)
-		goto err;
+		ret = mid8250_dma_setup(mid, &uart);
+		if (ret)
+			goto err;
+	} else {
+		uart.port.handle_irq = dnv_handle_irq;
+	}
 
 	ret = serial8250_register_8250_port(&uart);
 	if (ret < 0)
