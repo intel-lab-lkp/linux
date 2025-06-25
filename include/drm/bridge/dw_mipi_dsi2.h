@@ -54,10 +54,8 @@ struct dw_mipi_dsi2_phy_ops {
 };
 
 struct dw_mipi_dsi2_host_ops {
-	int (*attach)(void *priv_data,
-		      struct mipi_dsi_device *dsi);
-	int (*detach)(void *priv_data,
-		      struct mipi_dsi_device *dsi);
+	int (*attach)(void *priv_data);
+	int (*detach)(void *priv_data);
 };
 
 struct dw_mipi_dsi2_plat_data {

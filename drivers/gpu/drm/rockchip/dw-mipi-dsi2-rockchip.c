@@ -335,8 +335,7 @@ static const struct component_ops dw_mipi_dsi2_rockchip_ops = {
 	.unbind	= dw_mipi_dsi2_rockchip_unbind,
 };
 
-static int dw_mipi_dsi2_rockchip_host_attach(void *priv_data,
-					     struct mipi_dsi_device *device)
+static int dw_mipi_dsi2_rockchip_host_attach(void *priv_data)
 {
 	struct dw_mipi_dsi2_rockchip *dsi2 = priv_data;
 	int ret;
@@ -348,8 +347,7 @@ static int dw_mipi_dsi2_rockchip_host_attach(void *priv_data,
 	return 0;
 }
 
-static int dw_mipi_dsi2_rockchip_host_detach(void *priv_data,
-					     struct mipi_dsi_device *device)
+static int dw_mipi_dsi2_rockchip_host_detach(void *priv_data)
 {
 	struct dw_mipi_dsi2_rockchip *dsi2 = priv_data;
 

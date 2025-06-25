@@ -538,7 +538,7 @@ static int dw_mipi_dsi2_host_attach(struct mipi_dsi_host *host,
 	drm_bridge_add(&dsi2->bridge);
 
 	if (pdata->host_ops && pdata->host_ops->attach) {
-		ret = pdata->host_ops->attach(pdata->priv_data, device);
+		ret = pdata->host_ops->attach(pdata->priv_data);
 		if (ret < 0)
 			return ret;
 	}
@@ -554,7 +554,7 @@ static int dw_mipi_dsi2_host_detach(struct mipi_dsi_host *host,
 	int ret;
 
 	if (pdata->host_ops && pdata->host_ops->detach) {
-		ret = pdata->host_ops->detach(pdata->priv_data, device);
+		ret = pdata->host_ops->detach(pdata->priv_data);
 		if (ret < 0)
 			return ret;
 	}
