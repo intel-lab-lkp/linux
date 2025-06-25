@@ -1101,6 +1101,46 @@ static void blk_zone_wplug_handle_native_zone_append(struct bio *bio)
 }
 
 /**
+ * bio_needs_zone_write_plugging - Check if a BIO needs to be handled with zone
+ *				   write plugging
+ * @bio: The BIO being submitted
+ *
+ * Return true whenever @bio execution needs to be handled through zone
+ * write plugging. Return false otherwise.
+ */
+bool bio_needs_zone_write_plugging(struct bio *bio)
+{
+	enum req_op op = bio_op(bio);
+
+	if (!bdev_is_zoned(bio->bi_bdev) || !op_is_write(op))
+		return false;
+
+	/* Already handled ? */
+	if (bio_flagged(bio, BIO_ZONE_WRITE_PLUGGING))
+		return false;
+
+	/* Ignore empty flush */
+	if (op_is_flush(bio->bi_opf) && !bio_sectors(bio))
+		return false;
+
+	/*
+	 * Regular writes and write zeroes need to be handled through zone
+	 * write plugging. Zone append operations only need zone write plugging
+	 * if they are emulated.
+	 */
+	switch (op) {
+	case REQ_OP_ZONE_APPEND:
+		return bdev_emulates_zone_append(bio->bi_bdev);
+	case REQ_OP_WRITE:
+	case REQ_OP_WRITE_ZEROES:
+		return true;
+	default:
+		return false;
+	}
+}
+EXPORT_SYMBOL_GPL(bio_needs_zone_write_plugging);
+
+/**
  * blk_zone_plug_bio - Handle a zone write BIO with zone write plugging
  * @bio: The BIO being submitted
  * @nr_segs: The number of physical segments of @bio
