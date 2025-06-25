@@ -129,6 +129,13 @@ static const struct dmi_system_id dmi_invalid_acpi_index[] = {
 	{} /* Terminating entry */
 };
 
+static const struct acpi_device_id force_software_debounce_ids[] = {
+	{ "INT33FF" },
+	{ "INT33B2" },
+	{ "INT33FC" },
+	{ }
+};
+
 /*
  * Get the Nth GPIO number from the ACPI object.
  */
@@ -149,11 +156,17 @@ static int soc_button_lookup_gpio(struct device *dev, int acpi_index,
 	return 0;
 }
 
+static int soc_button_match_acpi_device_ids(struct device *dev, const void *data)
+{
+	return acpi_match_device(data, dev) ? 1 : 0;
+}
+
 static struct platform_device *
 soc_button_device_create(struct platform_device *pdev,
 			 const struct soc_button_info *button_info,
 			 bool autorepeat)
 {
+	struct device *quirkdev __free(put_device) = NULL;
 	const struct soc_button_info *info;
 	struct platform_device *pd;
 	struct gpio_keys_button *gpio_keys;
@@ -180,6 +193,10 @@ soc_button_device_create(struct platform_device *pdev,
 	dmi_id = dmi_first_match(dmi_invalid_acpi_index);
 	if (dmi_id)
 		invalid_acpi_index = (long)dmi_id->driver_data;
+
+	quirkdev = bus_find_device(&platform_bus_type, NULL,
+				   force_software_debounce_ids,
+				   soc_button_match_acpi_device_ids);
 
 	for (info = button_info; info->name; info++) {
 		if (info->autorepeat != autorepeat)
@@ -220,7 +237,8 @@ soc_button_device_create(struct platform_device *pdev,
 		gpio_keys[n_buttons].desc = info->name;
 		gpio_keys[n_buttons].wakeup = info->wakeup;
 		/* These devices often use cheap buttons, use 50 ms debounce */
-		gpio_keys[n_buttons].debounce_interval = 50;
+		if (quirkdev)
+			gpio_keys[n_buttons].debounce_interval = 50;
 		n_buttons++;
 	}
 
