@@ -15,7 +15,8 @@
 /*
  * Export and import functions.  crypto_shash wants a particular format that
  * matches that used by some legacy drivers.  It currently is the same as the
- * library SHA context but with the partial block length as a u8 appended to it.
+ * library SHA context, except the value in bytecount_lo must be block-aligned
+ * and the remainder must be stored in an extra u8 appended to the struct.
  */
 
 #define SHA512_SHASH_STATE_SIZE 209
@@ -25,16 +26,27 @@ static_assert(offsetof(struct __sha512_ctx, bytecount_hi) == 72);
 static_assert(offsetof(struct __sha512_ctx, buf) == 80);
 static_assert(sizeof(struct __sha512_ctx) + 1 == SHA512_SHASH_STATE_SIZE);
 
-static int __crypto_sha512_export(const struct __sha512_ctx *ctx, void *out)
+static int __crypto_sha512_export(const struct __sha512_ctx *ctx0, void *out)
 {
-	memcpy(out, ctx, sizeof(*ctx));
-	*((u8 *)out + sizeof(*ctx)) = ctx->bytecount_lo % SHA512_BLOCK_SIZE;
+	struct __sha512_ctx ctx = *ctx0;
+	unsigned int partial;
+	u8 *p = out;
+
+	partial = ctx.bytecount_lo % SHA512_BLOCK_SIZE;
+	ctx.bytecount_lo -= partial;
+	memcpy(p, &ctx, sizeof(ctx));
+	p += sizeof(ctx);
+	*p = partial;
 	return 0;
 }
 
 static int __crypto_sha512_import(struct __sha512_ctx *ctx, const void *in)
 {
-	memcpy(ctx, in, sizeof(*ctx));
+	const u8 *p = in;
+
+	memcpy(ctx, p, sizeof(*ctx));
+	p += sizeof(*ctx);
+	ctx->bytecount_lo += *p;
 	return 0;
 }
 
