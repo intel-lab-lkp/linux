@@ -19900,6 +19900,7 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/printk/linux.git
 F:	include/linux/printk.h
 F:	kernel/printk/
+F:	scripts/gdb/linux/dmesg.py
 
 PRINTK INDEXING
 R:	Chris Down <chris@chrisdown.name>
