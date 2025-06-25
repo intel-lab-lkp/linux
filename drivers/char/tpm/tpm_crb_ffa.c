@@ -10,7 +10,11 @@
 #define pr_fmt(fmt) "CRB_FFA: " fmt
 
 #include <linux/arm_ffa.h>
+#include <linux/delay.h>
+#include <linux/moduleparam.h>
 #include "tpm_crb_ffa.h"
+
+#define memzero(s, n) memset((s), 0, (n))
 
 /* TPM service function status codes */
 #define CRB_FFA_OK			0x05000001
@@ -178,22 +182,18 @@ int tpm_crb_ffa_init(void)
 }
 EXPORT_SYMBOL_GPL(tpm_crb_ffa_init);
 
-static int __tpm_crb_ffa_send_receive(unsigned long func_id,
-				      unsigned long a0,
-				      unsigned long a1,
-				      unsigned long a2)
+static int __tpm_crb_ffa_try_send_receive(unsigned long func_id,
+					  unsigned long a0, unsigned long a1,
+					  unsigned long a2)
 {
 	const struct ffa_msg_ops *msg_ops;
 	int ret;
 
-	if (!tpm_crb_ffa)
-		return -ENOENT;
-
 	msg_ops = tpm_crb_ffa->ffa_dev->ops->msg_ops;
 
 	if (ffa_partition_supports_direct_req2_recv(tpm_crb_ffa->ffa_dev)) {
-		memset(&tpm_crb_ffa->direct_msg_data2, 0x00,
-		       sizeof(struct ffa_send_direct_data2));
+		memzero(&tpm_crb_ffa->direct_msg_data2,
+			sizeof(struct ffa_send_direct_data2));
 
 		tpm_crb_ffa->direct_msg_data2.data[0] = func_id;
 		tpm_crb_ffa->direct_msg_data2.data[1] = a0;
@@ -201,12 +201,12 @@ static int __tpm_crb_ffa_send_receive(unsigned long func_id,
 		tpm_crb_ffa->direct_msg_data2.data[3] = a2;
 
 		ret = msg_ops->sync_send_receive2(tpm_crb_ffa->ffa_dev,
-				&tpm_crb_ffa->direct_msg_data2);
+						&tpm_crb_ffa->direct_msg_data2);
 		if (!ret)
 			ret = tpm_crb_ffa_to_linux_errno(tpm_crb_ffa->direct_msg_data2.data[0]);
 	} else {
-		memset(&tpm_crb_ffa->direct_msg_data, 0x00,
-		       sizeof(struct ffa_send_direct_data));
+		memzero(&tpm_crb_ffa->direct_msg_data,
+			sizeof(struct ffa_send_direct_data));
 
 		tpm_crb_ffa->direct_msg_data.data1 = func_id;
 		tpm_crb_ffa->direct_msg_data.data2 = a0;
@@ -214,11 +214,50 @@ static int __tpm_crb_ffa_send_receive(unsigned long func_id,
 		tpm_crb_ffa->direct_msg_data.data4 = a2;
 
 		ret = msg_ops->sync_send_receive(tpm_crb_ffa->ffa_dev,
-				&tpm_crb_ffa->direct_msg_data);
+						 &tpm_crb_ffa->direct_msg_data);
 		if (!ret)
 			ret = tpm_crb_ffa_to_linux_errno(tpm_crb_ffa->direct_msg_data.data1);
 	}
 
+	return ret;
+}
+
+static unsigned int busy_timeout_ms = 2000;
+/**
+ * busy_timeout_ms - Maximum time to retry before giving up on busy
+ *
+ * This parameter defines the maximum time in milliseconds to retry
+ * sending a message to the TPM service before giving up.
+ */
+module_param(busy_timeout_ms, uint, 0644);
+MODULE_PARM_DESC(busy_timeout_ms,
+		 "Maximum time(in ms) to retry before giving up on busy");
+
+static int __tpm_crb_ffa_send_receive(unsigned long func_id, unsigned long a0,
+				      unsigned long a1, unsigned long a2)
+{
+	ktime_t start, stop;
+	int ret;
+
+	if (!tpm_crb_ffa)
+		return -ENOENT;
+
+	start = ktime_get();
+	stop = ktime_add(start, ms_to_ktime(busy_timeout_ms));
+
+	for (;;) {
+		ret = __tpm_crb_ffa_try_send_receive(func_id, a0, a1, a2);
+
+		if (ret != -EBUSY)
+			break;
+
+		usleep_range(50, 100);
+		if (ktime_after(ktime_get(), stop)) {
+			dev_warn(&tpm_crb_ffa->ffa_dev->dev,
+				 "Busy retry timed out\n");
+			break;
+		}
+	}
 
 	return ret;
 }
