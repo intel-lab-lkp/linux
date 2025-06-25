@@ -6,7 +6,7 @@
 #include "sha224-testvecs.h"
 
 #define HASH sha224
-#define HASH_CTX sha256_state
+#define HASH_CTX sha224_ctx
 #define HASH_SIZE SHA224_DIGEST_SIZE
 #define HASH_INIT sha224_init
 #define HASH_UPDATE sha224_update
