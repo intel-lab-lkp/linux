@@ -1610,20 +1610,20 @@ static irqreturn_t dsi_host_irq(int irq, void *ptr)
 }
 
 static int dsi_host_attach(struct mipi_dsi_host *host,
-					struct mipi_dsi_device *dsi)
+			   const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 	int ret;
 
-	if (dsi->lanes > msm_host->num_data_lanes)
+	if (bus_fmt->lanes > msm_host->num_data_lanes)
 		return -EINVAL;
 
-	msm_host->channel = dsi->channel;
-	msm_host->lanes = dsi->lanes;
-	msm_host->format = dsi->format;
-	msm_host->mode_flags = dsi->mode_flags;
-	if (dsi->dsc)
-		msm_host->dsc = dsi->dsc;
+	msm_host->channel = bus_fmt->channel;
+	msm_host->lanes = bus_fmt->lanes;
+	msm_host->format = bus_fmt->format;
+	msm_host->mode_flags = bus_fmt->mode_flags;
+	if (bus_fmt->dsc)
+		msm_host->dsc = bus_fmt->dsc;
 
 	ret = dsi_dev_attach(msm_host->pdev);
 	if (ret)
@@ -1663,7 +1663,7 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops dsi_host_ops = {
-	.attach = dsi_host_attach,
+	.attach_new = dsi_host_attach,
 	.detach = dsi_host_detach,
 	.transfer = dsi_host_transfer,
 };
