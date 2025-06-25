@@ -171,7 +171,7 @@ static const struct component_ops adp_dsi_component_ops = {
 };
 
 static int adp_dsi_host_attach(struct mipi_dsi_host *host,
-			       struct mipi_dsi_device *dev)
+			       const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct adp_mipi_drv_private *adp = mipi_to_adp(host);
 	struct drm_bridge *next;
@@ -207,7 +207,7 @@ static int adp_dsi_host_detach(struct mipi_dsi_host *host,
 
 static const struct mipi_dsi_host_ops adp_dsi_host_ops = {
 	.transfer = adp_dsi_host_transfer,
-	.attach = adp_dsi_host_attach,
+	.attach_new = adp_dsi_host_attach,
 	.detach = adp_dsi_host_detach,
 };
 
