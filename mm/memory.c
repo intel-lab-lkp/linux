@@ -6820,9 +6820,10 @@ static int __copy_remote_vm_str(struct mm_struct *mm, unsigned long addr,
 	}
 
 	while (len) {
-		int bytes, offset, retval;
+		int bytes, folio_offset, page_offset retval;
 		void *maddr;
 		struct page *page;
+		struct folio *folio;
 		struct vm_area_struct *vma = NULL;
 
 		page = get_user_page_vma_remote(mm, addr, gup_flags, &vma);
@@ -6837,17 +6838,20 @@ static int __copy_remote_vm_str(struct mm_struct *mm, unsigned long addr,
 			goto out;
 		}
 
+		folio = page_folio(page);
 		bytes = len;
-		offset = addr & (PAGE_SIZE - 1);
-		if (bytes > PAGE_SIZE - offset)
-			bytes = PAGE_SIZE - offset;
+		folio_offset = offset_in_folio(folio, addr);
+		page_offset = offset_in_page(folio_offset);
 
-		maddr = kmap_local_page(page);
-		retval = strscpy(buf, maddr + offset, bytes);
+		if (bytes > PAGE_SIZE - page_offset)
+			bytes = PAGE_SIZE - page_offset;
+
+		maddr = kmap_local_folio(folio, folio_offset);
+		retval = strscpy(buf, maddr, bytes);
 		if (retval >= 0) {
 			/* Found the end of the string */
 			buf += retval;
-			unmap_and_put_page(page, maddr);
+			folio_release_kmap(folio, maddr);
 			break;
 		}
 
@@ -6859,13 +6863,16 @@ static int __copy_remote_vm_str(struct mm_struct *mm, unsigned long addr,
 		 */
 		if (bytes != len) {
 			addr += bytes - 1;
-			copy_from_user_page(vma, page, addr, buf, maddr + (PAGE_SIZE - 1), 1);
+			copy_from_user_page(vma,
+				folio_page(folio, folio_offset / PAGE_SIZE),
+				addr, buf,
+				maddr + (PAGE_SIZE - page_offset - 1), 1);
 			buf += 1;
 			addr += 1;
 		}
 		len -= bytes;
 
-		unmap_and_put_page(page, maddr);
+		folio_release_kmap(folio, maddr);
 	}
 
 out:
