@@ -355,6 +355,51 @@ sub run_if_interactive($)
 	}
 }
 
+sub fallback_unknown_distro()
+{
+	# Fall-back to generic hint code for other distros
+	# That's far from ideal, especially for LaTeX dependencies.
+	my %map = (
+		"sphinx-build" => "sphinx"
+	);
+	check_missing_tex(2) if ($pdf);
+	check_missing(\%map);
+	print "I don't know distro $system_release.\n";
+	print "So, I can't provide you a hint with the install procedure.\n";
+	print "There are likely missing dependencies.\n";
+}
+
+#
+# if the distribution is not recognised
+# but it is derived from the available options
+#
+sub derived_distro_detection()
+{
+	my @distros = (
+		{ name => "Debian/Ubuntu", func => \&give_debian_hints },
+		{ name => "RedHat/CentOS/Fedora", func => \&give_redhat_hints },
+		{ name => "OpenSUSE", func => \&give_opensuse_hints },
+		{ name => "Mageia", func => \&give_mageia_hints },
+		{ name => "Arch Linux", func => \&give_arch_linux_hints },
+		{ name => "Gentoo", func => \&give_gentoo_hints },
+	);
+	print "Which distro is your OS based on?\n";
+	for my $i (0 .. $#distros) {
+		printf("[%d] %s\n", $i + 1, $distros[$i]->{name});
+	}
+	print "[99] Others\n";
+
+	print "Select a number: ";
+	my $choice = <STDIN>;
+	chomp $choice;
+
+	if ($choice =~ /^\d+$/ && $choice >= 1 && $choice <= scalar(@distros)) {
+		$distros[$choice - 1]->{func}->();
+	} else {
+		fallback_unknown_distro();
+	}
+}
+
 #
 # Subroutines that check distro-specific hints
 #
@@ -695,19 +740,11 @@ sub check_distros()
 		give_gentoo_hints;
 		return;
 	}
-
-	#
-	# Fall-back to generic hint code for other distros
-	# That's far from ideal, specially for LaTeX dependencies.
-	#
-	my %map = (
-		"sphinx-build" => "sphinx"
-	);
-	check_missing_tex(2) if ($pdf);
-	check_missing(\%map);
-	print "I don't know distro $system_release.\n";
-	print "So, I can't provide you a hint with the install procedure.\n";
-	print "There are likely missing dependencies.\n";
+	if ( $interactive ) {
+		derived_distro_detection();
+		return;
+	}
+	fallback_unknown_distro();
 }
 
 #
