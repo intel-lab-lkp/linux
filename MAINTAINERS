@@ -12754,6 +12754,7 @@ F:	include/linux/irqnr.h
 F:	include/linux/irqreturn.h
 F:	kernel/irq/
 F:	lib/group_cpus.c
+F:	scripts/gdb/linux/interrupts.py
 
 IRQCHIP DRIVERS
 M:	Thomas Gleixner <tglx@linutronix.de>
