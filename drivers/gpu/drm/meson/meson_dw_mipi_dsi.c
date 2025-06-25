@@ -252,11 +252,6 @@ static int meson_dw_mipi_dsi_host_detach(void *priv_data,
 {
 	struct meson_dw_mipi_dsi *mipi_dsi = priv_data;
 
-	if (device == mipi_dsi->dsi_device)
-		mipi_dsi->dsi_device = NULL;
-	else
-		return -EINVAL;
-
 	return phy_exit(mipi_dsi->phy);
 }
 
