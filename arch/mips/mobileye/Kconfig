@@ -12,6 +12,8 @@ choice
 
 	config MACH_EYEQ6H
 		bool "Mobileye EyeQ6H SoC"
+		select GINVT_UNSUPPORTED_NOC
+
 endchoice
 
 config FIT_IMAGE_FDT_EPM5

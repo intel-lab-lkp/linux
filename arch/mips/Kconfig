@@ -2575,6 +2575,12 @@ config WAR_R10000_LLSC
 config WAR_MIPS34K_MISSED_ITLB
 	bool
 
+# Some I6500 based SoC do not support the global invalidation on their
+# System-level Interconnect (aka Network on Chip), this have an
+# influence on the MMID support.
+config GINVT_UNSUPPORTED_NOC
+	bool
+
 #
 # - Highmem only makes sense for the 32-bit kernel.
 # - The current highmem code will only work properly on physically indexed
