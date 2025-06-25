@@ -5,6 +5,7 @@
  * (C) ST-Ericsson SA 2013
  */
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_mipi_dsi.h>
 
 #ifndef _MCDE_DRM_H_
 #define _MCDE_DRM_H_
@@ -74,7 +75,7 @@ struct mcde {
 	struct drm_connector *connector;
 	struct drm_simple_display_pipe pipe;
 	struct mipi_dsi_host *dsi_host;
-	struct mipi_dsi_device *mdsi;
+	struct mipi_dsi_bus_fmt *bus_fmt;
 	bool dpi_output;
 	s16 stride;
 	enum mcde_flow_mode flow_mode;

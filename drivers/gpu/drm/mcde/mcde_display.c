@@ -796,9 +796,9 @@ static void mcde_configure_dsi_formatter(struct mcde *mcde,
 	 * 8 bit commands and DCS commands (notgen = not generic)
 	 */
 	val = MCDE_DSICONF0_CMD8 | MCDE_DSICONF0_DCSVID_NOTGEN;
-	if (mcde->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO)
+	if (mcde->bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO)
 		val |= MCDE_DSICONF0_VID_MODE_VID;
-	switch (mcde->mdsi->format) {
+	switch (mcde->bus_fmt->format) {
 	case MIPI_DSI_FMT_RGB888:
 		val |= MCDE_DSICONF0_PACKING_RGB888 <<
 			MCDE_DSICONF0_PACKING_SHIFT;
@@ -1081,11 +1081,11 @@ static void mcde_setup_dsi(struct mcde *mcde, const struct drm_display_mode *mod
 	u32 val;
 
 	dev_info(mcde->dev, "output in %s mode, format %dbpp\n",
-		 (mcde->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO) ?
+		 (mcde->bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO) ?
 		 "VIDEO" : "CMD",
-		 mipi_dsi_pixel_format_to_bpp(mcde->mdsi->format));
+		 mipi_dsi_pixel_format_to_bpp(mcde->bus_fmt->format));
 	formatter_cpp =
-		mipi_dsi_pixel_format_to_bpp(mcde->mdsi->format) / 8;
+		mipi_dsi_pixel_format_to_bpp(mcde->bus_fmt->format) / 8;
 	dev_info(mcde->dev, "Overlay CPP: %d bytes, DSI formatter CPP %d bytes\n",
 		 cpp, formatter_cpp);
 
@@ -1117,7 +1117,7 @@ static void mcde_setup_dsi(struct mcde *mcde, const struct drm_display_mode *mod
 	 * 192 for HDMI 16bpp
 	 */
 	fifo_wtrmrk = mode->hdisplay;
-	if (mcde->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO) {
+	if (mcde->bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO) {
 		fifo_wtrmrk = min(fifo_wtrmrk, 128);
 		pkt_div = 1;
 	} else {
@@ -1132,7 +1132,7 @@ static void mcde_setup_dsi(struct mcde *mcde, const struct drm_display_mode *mod
 	/* NOTE: pkt_div is 1 for video mode */
 	pkt_size = (formatter_ppl * formatter_cpp) / pkt_div;
 	/* Commands CMD8 need one extra byte */
-	if (!(mcde->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO))
+	if (!(mcde->bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO))
 		pkt_size++;
 
 	dev_dbg(mcde->dev, "DSI packet size: %d * %d bytes per line\n",

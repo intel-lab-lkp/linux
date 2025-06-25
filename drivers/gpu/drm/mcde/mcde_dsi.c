@@ -42,7 +42,7 @@ struct mcde_dsi {
 	struct drm_panel *panel;
 	struct drm_bridge *bridge_out;
 	struct mipi_dsi_host dsi_host;
-	struct mipi_dsi_device *mdsi;
+	struct mipi_dsi_bus_fmt bus_fmt;
 	const struct drm_display_mode *mode;
 	struct clk *hs_clk;
 	struct clk *lp_clk;
@@ -147,8 +147,8 @@ bool mcde_dsi_irq(struct mipi_dsi_host *host)
 
 static void mcde_dsi_attach_to_mcde(struct mcde_dsi *d)
 {
-	d->mcde->mdsi = d->mdsi;
 	d->mcde->dsi_host = &d->dsi_host;
+	d->mcde->bus_fmt = &d->bus_fmt;
 
 	/*
 	 * Select the way the DSI data flow is pushing to the display:
@@ -162,23 +162,23 @@ static void mcde_dsi_attach_to_mcde(struct mcde_dsi *d)
 	 * single frame on-demand updates with DRM for command mode
 	 * displays (MCDE_COMMAND_ONESHOT_FLOW).
 	 */
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO)
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO)
 		d->mcde->flow_mode = MCDE_VIDEO_FORMATTER_FLOW;
 	else
 		d->mcde->flow_mode = MCDE_COMMAND_TE_FLOW;
 }
 
 static int mcde_dsi_host_attach(struct mipi_dsi_host *host,
-				struct mipi_dsi_device *mdsi)
+				const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct mcde_dsi *d = host_to_mcde_dsi(host);
 
-	if (mdsi->lanes > 2) {
+	if (bus_fmt->lanes > 2) {
 		DRM_ERROR("dsi device params invalid, 1 or 2 lanes supported\n");
 		return -EINVAL;
 	}
 
-	d->mdsi = mdsi;
+	d->bus_fmt = *bus_fmt;
 	if (d->mcde)
 		mcde_dsi_attach_to_mcde(d);
 
@@ -190,10 +190,10 @@ static int mcde_dsi_host_detach(struct mipi_dsi_host *host,
 {
 	struct mcde_dsi *d = host_to_mcde_dsi(host);
 
-	d->mdsi = NULL;
+	memset(&d->mcde->bus_fmt, 0, sizeof(d->mcde->bus_fmt));
 	if (d->mcde) {
-		d->mcde->mdsi = NULL;
 		d->mcde->dsi_host = NULL;
+		d->mcde->bus_fmt = NULL;
 	}
 
 	return 0;
@@ -378,7 +378,7 @@ static ssize_t mcde_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops mcde_dsi_host_ops = {
-	.attach = mcde_dsi_host_attach,
+	.attach_new = mcde_dsi_host_attach,
 	.detach = mcde_dsi_host_detach,
 	.transfer = mcde_dsi_host_transfer,
 };
@@ -426,7 +426,7 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 				      const struct drm_display_mode *mode)
 {
 	/* cpp, characters per pixel, number of bytes per pixel */
-	u8 cpp = mipi_dsi_pixel_format_to_bpp(d->mdsi->format) / 8;
+	u8 cpp = mipi_dsi_pixel_format_to_bpp(d->bus_fmt.format) / 8;
 	u64 pclk;
 	u64 bpl;
 	int hfp;
@@ -436,14 +436,14 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 	u32 val;
 
 	val = 0;
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST)
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_BURST)
 		val |= DSI_VID_MAIN_CTL_BURST_MODE;
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
 		val |= DSI_VID_MAIN_CTL_SYNC_PULSE_ACTIVE;
 		val |= DSI_VID_MAIN_CTL_SYNC_PULSE_HORIZONTAL;
 	}
 	/* RGB header and pixel mode */
-	switch (d->mdsi->format) {
+	switch (d->bus_fmt.format) {
 	case MIPI_DSI_FMT_RGB565:
 		val |= MIPI_DSI_PACKED_PIXEL_STREAM_16 <<
 			DSI_VID_MAIN_CTL_HEADER_SHIFT;
@@ -516,7 +516,7 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 	 * 6 + 2 is HFP header + checksum
 	 */
 	hfp = (mode->hsync_start - mode->hdisplay) * cpp - 6 - 2;
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
 		/*
 		 * Use sync pulse for sync: explicit HSA time
 		 * 6 is HBP header + checksum
@@ -596,21 +596,21 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 	bpl = pclk * mode->htotal; /* (1) picoseconds per line */
 	dev_dbg(d->dev, "picoseconds per line: %llu\n", bpl);
 	/* Multiply with bytes per second (3) */
-	bpl *= (d->mdsi->hs_rate / 8);
+	bpl *= (d->bus_fmt.hs_rate / 8);
 	/* Pixels per second (2) */
 	bpl = DIV_ROUND_DOWN_ULL(bpl, 1000000); /* microseconds */
 	bpl = DIV_ROUND_DOWN_ULL(bpl, 1000000); /* seconds */
 	/* parallel transactions in all lanes */
-	bpl *= d->mdsi->lanes;
+	bpl *= d->bus_fmt.lanes;
 	dev_dbg(d->dev,
 		"calculated bytes per line: %llu @ %d Hz with HS %lu Hz\n",
-		bpl, drm_mode_vrefresh(mode), d->mdsi->hs_rate);
+		bpl, drm_mode_vrefresh(mode), d->bus_fmt.hs_rate);
 
 	/*
 	 * 6 is header + checksum, header = 4 bytes, checksum = 2 bytes
 	 * 4 is short packet for vsync/hsync
 	 */
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
 		/* Set the event packet size to 0 (not used) */
 		writel(0, d->regs + DSI_VID_BLKSIZE1);
 		/*
@@ -646,10 +646,10 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 	 * the line duration by 1 under very specific circumstances.
 	 * Here we also imply that LP is used during burst EOL.
 	 */
-	if (d->mdsi->lanes == 2 && (hsa & 0x01) && (hfp & 0x01)
-	    && (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST))
+	if (d->bus_fmt.lanes == 2 && (hsa & 0x01) && (hfp & 0x01)
+	    && (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_BURST))
 		line_duration--;
-	line_duration = DIV_ROUND_CLOSEST(line_duration, d->mdsi->lanes);
+	line_duration = DIV_ROUND_CLOSEST(line_duration, d->bus_fmt.lanes);
 	dev_dbg(d->dev, "line duration %u bytes\n", line_duration);
 	val = line_duration << DSI_VID_DPHY_TIME_REG_LINE_DURATION_SHIFT;
 	/*
@@ -665,7 +665,7 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 	 * See the manual figure 657 page 2203 for understanding the impact
 	 * of the different burst mode settings.
 	 */
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO_BURST) {
 		int blkeol_pck, blkeol_duration;
 		/*
 		 * Packet size at EOL for burst mode, this is only used
@@ -716,7 +716,7 @@ static void mcde_dsi_setup_video_mode(struct mcde_dsi *d,
 		 * according to figure 565 page 2202?
 		 */
 		blkeol_duration = DIV_ROUND_CLOSEST(blkeol_pck + 6,
-						    d->mdsi->lanes);
+						    d->bus_fmt.lanes);
 		dev_dbg(d->dev, "BLKEOL duration: %d clock cycles\n",
 			blkeol_duration);
 
@@ -757,7 +757,7 @@ static void mcde_dsi_start(struct mcde_dsi *d)
 		DSI_MCTL_MAIN_DATA_CTL_BTA_EN |
 		DSI_MCTL_MAIN_DATA_CTL_READ_EN |
 		DSI_MCTL_MAIN_DATA_CTL_REG_TE_EN;
-	if (!(d->mdsi->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET))
+	if (!(d->bus_fmt.mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET))
 		val |= DSI_MCTL_MAIN_DATA_CTL_HOST_EOT_GEN;
 	writel(val, d->regs + DSI_MCTL_MAIN_DATA_CTL);
 
@@ -785,9 +785,9 @@ static void mcde_dsi_start(struct mcde_dsi *d)
 	 * all the lines.
 	 */
 	val = 0x0f << DSI_MCTL_MAIN_PHY_CTL_WAIT_BURST_TIME_SHIFT;
-	if (d->mdsi->lanes == 2)
+	if (d->bus_fmt.lanes == 2)
 		val |= DSI_MCTL_MAIN_PHY_CTL_LANE2_EN;
-	if (!(d->mdsi->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS))
+	if (!(d->bus_fmt.mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS))
 		val |= DSI_MCTL_MAIN_PHY_CTL_CLK_CONTINUOUS;
 	val |= DSI_MCTL_MAIN_PHY_CTL_CLK_ULPM_EN |
 		DSI_MCTL_MAIN_PHY_CTL_DAT1_ULPM_EN |
@@ -811,7 +811,7 @@ static void mcde_dsi_start(struct mcde_dsi *d)
 		DSI_MCTL_MAIN_EN_CKLANE_EN |
 		DSI_MCTL_MAIN_EN_DAT1_EN |
 		DSI_MCTL_MAIN_EN_IF1_EN;
-	if (d->mdsi->lanes == 2)
+	if (d->bus_fmt.lanes == 2)
 		val |= DSI_MCTL_MAIN_EN_DAT2_EN;
 	writel(val, d->regs + DSI_MCTL_MAIN_EN);
 
@@ -820,7 +820,7 @@ static void mcde_dsi_start(struct mcde_dsi *d)
 	val = DSI_MCTL_MAIN_STS_PLL_LOCK |
 		DSI_MCTL_MAIN_STS_CLKLANE_READY |
 		DSI_MCTL_MAIN_STS_DAT1_READY;
-	if (d->mdsi->lanes == 2)
+	if (d->bus_fmt.lanes == 2)
 		val |= DSI_MCTL_MAIN_STS_DAT2_READY;
 	while ((readl(d->regs + DSI_MCTL_MAIN_STS) & val) != val) {
 		/* Sleep for a millisecond */
@@ -839,7 +839,7 @@ static void mcde_dsi_start(struct mcde_dsi *d)
 	 * If we enable low-power mode here,
 	 * then display updates become really slow.
 	 */
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_LPM)
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_LPM)
 		val |= DSI_CMD_MODE_CTL_IF1_LP_EN;
 	val &= ~DSI_CMD_MODE_CTL_IF1_ID_MASK;
 	writel(val, d->regs + DSI_CMD_MODE_CTL);
@@ -861,12 +861,12 @@ void mcde_dsi_enable(struct drm_bridge *bridge)
 	int ret;
 
 	/* Copy maximum clock frequencies */
-	if (d->mdsi->lp_rate)
-		lp_freq = d->mdsi->lp_rate;
+	if (d->bus_fmt.lp_rate)
+		lp_freq = d->bus_fmt.lp_rate;
 	else
 		lp_freq = DSI_DEFAULT_LP_FREQ_HZ;
-	if (d->mdsi->hs_rate)
-		hs_freq = d->mdsi->hs_rate;
+	if (d->bus_fmt.hs_rate)
+		hs_freq = d->bus_fmt.hs_rate;
 	else
 		hs_freq = DSI_DEFAULT_HS_FREQ_HZ;
 
@@ -912,7 +912,7 @@ void mcde_dsi_enable(struct drm_bridge *bridge)
 	/* Start up the hardware */
 	mcde_dsi_start(d);
 
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO) {
 		/* Set up the video mode from the DRM mode */
 		mcde_dsi_setup_video_mode(d, d->mode);
 
@@ -943,7 +943,7 @@ void mcde_dsi_enable(struct drm_bridge *bridge)
 		 * If we enable low-power mode here
 		 * the display updates become really slow.
 		 */
-		if (d->mdsi->mode_flags & MIPI_DSI_MODE_LPM)
+		if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_LPM)
 			val |= DSI_CMD_MODE_CTL_IF1_LP_EN;
 		val &= ~DSI_CMD_MODE_CTL_IF1_ID_MASK;
 		writel(val, d->regs + DSI_CMD_MODE_CTL);
@@ -958,7 +958,7 @@ static void mcde_dsi_bridge_mode_set(struct drm_bridge *bridge,
 {
 	struct mcde_dsi *d = bridge_to_mcde_dsi(bridge);
 
-	if (!d->mdsi) {
+	if (!d->bus_fmt.lanes) {
 		dev_err(d->dev, "no DSI device attached to encoder!\n");
 		return;
 	}
@@ -967,7 +967,7 @@ static void mcde_dsi_bridge_mode_set(struct drm_bridge *bridge,
 
 	dev_info(d->dev, "set DSI master to %dx%d %u Hz %s mode\n",
 		 mode->hdisplay, mode->vdisplay, mode->clock * 1000,
-		 (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO) ? "VIDEO" : "CMD"
+		 (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO) ? "VIDEO" : "CMD"
 		);
 }
 
@@ -1021,7 +1021,7 @@ void mcde_dsi_disable(struct drm_bridge *bridge)
 	struct mcde_dsi *d = bridge_to_mcde_dsi(bridge);
 	u32 val;
 
-	if (d->mdsi->mode_flags & MIPI_DSI_MODE_VIDEO) {
+	if (d->bus_fmt.mode_flags & MIPI_DSI_MODE_VIDEO) {
 		/* Stop video mode */
 		val = readl(d->regs + DSI_MCTL_MAIN_DATA_CTL);
 		val &= ~DSI_MCTL_MAIN_DATA_CTL_VID_EN;
@@ -1082,7 +1082,7 @@ static int mcde_dsi_bind(struct device *dev, struct device *master,
 	}
 	d->mcde = mcde;
 	/* If the display attached before binding, set this up */
-	if (d->mdsi)
+	if (d->bus_fmt.lanes)
 		mcde_dsi_attach_to_mcde(d);
 
 	/* Obtain the clocks */
