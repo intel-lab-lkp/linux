@@ -19,9 +19,9 @@ struct clk;
 struct reset_control;
 
 struct cdns_dsi_output {
-	struct mipi_dsi_device *dev;
 	struct drm_bridge *bridge;
 	union phy_configure_opts phy_opts;
+	struct mipi_dsi_bus_fmt bus_fmt;
 };
 
 enum cdns_dsi_input_id {
