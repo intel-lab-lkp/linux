@@ -348,6 +348,8 @@ snd-soc-wcd938x-y := wcd938x.o
 snd-soc-wcd938x-sdw-y := wcd938x-sdw.o
 snd-soc-wcd939x-y := wcd939x.o
 snd-soc-wcd939x-sdw-y := wcd939x-sdw.o
+snd-soc-pm4125-y := pm4125.o
+snd-soc-pm4125-sdw-y := pm4125-sdw.o
 snd-soc-wl1273-y := wl1273.o
 snd-soc-wm-adsp-y := wm_adsp.o
 snd-soc-wm0010-y := wm0010.o
@@ -778,6 +780,12 @@ obj-$(CONFIG_SND_SOC_WCD939X)	+= snd-soc-wcd939x.o
 ifdef CONFIG_SND_SOC_WCD939X_SDW
 # avoid link failure by forcing sdw code built-in when needed
 obj-$(CONFIG_SND_SOC_WCD939X) += snd-soc-wcd939x-sdw.o
+endif
+obj-$(CONFIG_SND_SOC_PM4125_SDW) += snd-soc-pm4125-sdw.o
+obj-$(CONFIG_SND_SOC_PM4125)   += snd-soc-pm4125.o
+ifdef CONFIG_SND_SOC_PM4125_SDW
+# avoid link failure by forcing sdw code built-in when needed
+obj-$(CONFIG_SND_SOC_PM4125) += snd-soc-pm4125-sdw.o
 endif
 obj-$(CONFIG_SND_SOC_WL1273)	+= snd-soc-wl1273.o
 obj-$(CONFIG_SND_SOC_WM0010)	+= snd-soc-wm0010.o
