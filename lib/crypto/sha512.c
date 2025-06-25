@@ -9,11 +9,12 @@
  */
 
 #include <crypto/hmac.h>
-#include <crypto/internal/sha2.h>
+#include <crypto/sha2.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
+#include <linux/unaligned.h>
 #include <linux/wordpart.h>
 
 static const struct sha512_block_state sha384_iv = {
