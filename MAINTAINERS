@@ -19784,6 +19784,7 @@ F:	include/trace/events/timer*
 F:	kernel/time/itimer.c
 F:	kernel/time/posix-*
 F:	kernel/time/namespace.c
+F:	scripts/gdb/linux/timerlist.py
 
 POWER MANAGEMENT CORE
 M:	"Rafael J. Wysocki" <rafael@kernel.org>
