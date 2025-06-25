@@ -1796,7 +1796,7 @@ W:	apparmor.net
 B:	https://gitlab.com/apparmor/apparmor-kernel
 C:	irc://irc.oftc.net/apparmor
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jj/linux-apparmor
-T:	https://gitlab.com/apparmor/apparmor-kernel.git
+T:	git https://gitlab.com/apparmor/apparmor-kernel.git
 F:	Documentation/admin-guide/LSM/apparmor.rst
 F:	security/apparmor/
 
@@ -2830,7 +2830,7 @@ M:	Nicolas Ferre <nicolas.ferre@microchip.com>
 M:	Claudiu Beznea <claudiu.beznea@tuxon.dev>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Supported
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux.git
 F:	arch/arm64/boot/dts/microchip/
 
 ARM/Microchip (AT91) SoC support
@@ -3927,7 +3927,7 @@ W:	https://github.com/linux-audit
 Q:	https://patchwork.kernel.org/project/audit/list
 B:	mailto:audit@vger.kernel.org
 P:	https://github.com/linux-audit/audit-kernel/blob/main/README.md
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/audit.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/audit.git
 F:	include/asm-generic/audit_*.h
 F:	include/linux/audit.h
 F:	include/linux/audit_arch.h
@@ -6357,7 +6357,7 @@ M:	Eric Biggers <ebiggers@kernel.org>
 R:	Ard Biesheuvel <ardb@kernel.org>
 L:	linux-crypto@vger.kernel.org
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git crc-next
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git crc-next
 F:	Documentation/staging/crc*
 F:	arch/*/lib/crc*
 F:	include/linux/crc*
@@ -6376,7 +6376,7 @@ M:	Paul Moore <paul@paul-moore.com>
 R:	Serge Hallyn <sergeh@kernel.org>
 L:	linux-security-module@vger.kernel.org
 S:	Supported
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
 F:	include/linux/cred.h
 F:	kernel/cred.c
 F:	Documentation/security/credentials.rst
@@ -6409,8 +6409,8 @@ M:	Jason A. Donenfeld <Jason@zx2c4.com>
 M:	Ard Biesheuvel <ardb@kernel.org>
 L:	linux-crypto@vger.kernel.org
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git libcrypto-next
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git libcrypto-fixes
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git libcrypto-next
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ebiggers/linux.git libcrypto-fixes
 F:	arch/*/lib/crypto/
 F:	lib/crypto/
 
@@ -7396,7 +7396,7 @@ M:	Oded Gabbay <ogabbay@kernel.org>
 L:	dri-devel@lists.freedesktop.org
 S:	Maintained
 C:	irc://irc.oftc.net/dri-devel
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ogabbay/accel.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ogabbay/accel.git
 F:	Documentation/accel/
 F:	drivers/accel/
 F:	include/drm/drm_accel.h
@@ -9237,7 +9237,7 @@ M:	Christian Brauner <brauner@kernel.org>
 R:	Jan Kara <jack@suse.cz>
 L:	linux-fsdevel@vger.kernel.org
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/vfs/vfs.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/vfs/vfs.git
 F:	fs/*
 F:	include/linux/fs.h
 F:	include/linux/fs_types.h
@@ -9799,7 +9799,7 @@ M:	Jaegeuk Kim <jaegeuk@kernel.org>
 L:	linux-fscrypt@vger.kernel.org
 S:	Supported
 Q:	https://patchwork.kernel.org/project/linux-fscrypt/list/
-T:	git https://git.kernel.org/pub/scm/fs/fscrypt/linux.git
+T:	git git://git.kernel.org/pub/scm/fs/fscrypt/linux.git
 F:	Documentation/filesystems/fscrypt.rst
 F:	fs/crypto/
 F:	include/linux/fscrypt.h
@@ -9845,7 +9845,7 @@ M:	Theodore Y. Ts'o <tytso@mit.edu>
 L:	fsverity@lists.linux.dev
 S:	Supported
 Q:	https://patchwork.kernel.org/project/fsverity/list/
-T:	git https://git.kernel.org/pub/scm/fs/fsverity/linux.git
+T:	git git://git.kernel.org/pub/scm/fs/fsverity/linux.git
 F:	Documentation/filesystems/fsverity.rst
 F:	fs/verity/
 F:	include/linux/fsverity.h
@@ -13596,7 +13596,7 @@ R:	Günther Noack <gnoack@google.com>
 L:	linux-security-module@vger.kernel.org
 S:	Supported
 W:	https://landlock.io
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/mic/linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mic/linux.git
 F:	Documentation/admin-guide/LSM/landlock.rst
 F:	Documentation/security/landlock.rst
 F:	Documentation/userspace-api/landlock.rst
@@ -13959,7 +13959,7 @@ M:	Stephen Rothwell <sfr@canb.auug.org.au>
 L:	linux-next@vger.kernel.org
 S:	Supported
 B:	mailto:linux-next@vger.kernel.org and the appropriate development tree
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
 
 LIS3LV02D ACCELEROMETER DRIVER
 M:	Eric Piel <eric.piel@tremplin-utc.net>
@@ -14063,7 +14063,7 @@ F:	security/loadpin/
 LOCKDOWN SECURITY MODULE
 L:	linux-security-module@vger.kernel.org
 S:	Odd Fixes
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
 F:	security/lockdown/
 
 LOCKING PRIMITIVES
@@ -16431,7 +16431,7 @@ F:	drivers/power/reset/at91-sama5d2_shdwc.c
 MICROCHIP SOC DRIVERS
 M:	Conor Dooley <conor@kernel.org>
 S:	Supported
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git
 F:	Documentation/devicetree/bindings/soc/microchip/
 F:	drivers/soc/microchip/
 
@@ -20072,7 +20072,7 @@ M:	Uwe Kleine-König <ukleinek@kernel.org>
 L:	linux-pwm@vger.kernel.org
 S:	Maintained
 Q:	https://patchwork.ozlabs.org/project/linux-pwm/list/
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/ukleinek/linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ukleinek/linux.git
 F:	Documentation/devicetree/bindings/gpio/gpio-mvebu.yaml
 F:	Documentation/devicetree/bindings/pwm/
 F:	Documentation/driver-api/pwm.rst
@@ -20705,7 +20705,7 @@ RANDOM NUMBER DRIVER
 M:	"Theodore Ts'o" <tytso@mit.edu>
 M:	Jason A. Donenfeld <Jason@zx2c4.com>
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/crng/random.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/crng/random.git
 F:	Documentation/devicetree/bindings/rng/microsoft,vmgenid.yaml
 F:	drivers/char/random.c
 F:	include/linux/random.h
@@ -20964,7 +20964,7 @@ M:	Bjorn Andersson <andersson@kernel.org>
 M:	Mathieu Poirier <mathieu.poirier@linaro.org>
 L:	linux-remoteproc@vger.kernel.org
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/remoteproc/linux.git rproc-next
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/remoteproc/linux.git rproc-next
 F:	Documentation/ABI/testing/sysfs-class-remoteproc
 F:	Documentation/devicetree/bindings/remoteproc/
 F:	Documentation/staging/remoteproc.rst
@@ -20977,7 +20977,7 @@ M:	Bjorn Andersson <andersson@kernel.org>
 M:	Mathieu Poirier <mathieu.poirier@linaro.org>
 L:	linux-remoteproc@vger.kernel.org
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/remoteproc/linux.git rpmsg-next
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/remoteproc/linux.git rpmsg-next
 F:	Documentation/ABI/testing/sysfs-bus-rpmsg
 F:	Documentation/staging/rpmsg.rst
 F:	drivers/rpmsg/
@@ -21360,7 +21360,7 @@ M:	Conor Dooley <conor@kernel.org>
 L:	linux-riscv@lists.infradead.org
 S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-riscv/list/
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git
 F:	arch/riscv/boot/dts/canaan/
 F:	arch/riscv/boot/dts/microchip/
 F:	arch/riscv/boot/dts/sifive/
@@ -22188,7 +22188,7 @@ R:	Changwoo Min <changwoo@igalia.com>
 L:	sched-ext@lists.linux.dev
 S:	Maintained
 W:	https://github.com/sched-ext/scx
-T:	git://git.kernel.org/pub/scm/linux/kernel/git/tj/sched_ext.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tj/sched_ext.git
 F:	include/linux/sched/ext.h
 F:	kernel/sched/ext*
 F:	tools/sched_ext/
@@ -22421,7 +22421,7 @@ S:	Supported
 Q:	https://patchwork.kernel.org/project/linux-security-module/list
 B:	mailto:linux-security-module@vger.kernel.org
 P:	https://github.com/LinuxSecurityModule/kernel/blob/main/README.md
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/lsm.git
 F:	include/linux/lsm/
 F:	include/linux/lsm_audit.h
 F:	include/linux/lsm_hook_defs.h
@@ -22443,7 +22443,7 @@ W:	https://github.com/SELinuxProject
 Q:	https://patchwork.kernel.org/project/selinux/list
 B:	mailto:selinux@vger.kernel.org
 P:	https://github.com/SELinuxProject/selinux-kernel/blob/main/README.md
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/selinux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pcmoore/selinux.git
 F:	Documentation/ABI/removed/sysfs-selinux-checkreqprot
 F:	Documentation/ABI/removed/sysfs-selinux-disable
 F:	Documentation/admin-guide/LSM/SELinux.rst
@@ -23584,7 +23584,7 @@ F:	drivers/staging/
 STANDALONE CACHE CONTROLLER DRIVERS
 M:	Conor Dooley <conor@kernel.org>
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git
 F:	Documentation/devicetree/bindings/cache/
 F:	drivers/cache
 
@@ -23708,7 +23708,7 @@ F:	include/dt-bindings/power/starfive,jh7110-pmu.h
 STARFIVE SOC DRIVERS
 M:	Conor Dooley <conor@kernel.org>
 S:	Maintained
-T:	git https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/conor/linux.git
 F:	Documentation/devicetree/bindings/soc/starfive/
 
 STARFIVE STARLINK PMU DRIVER
