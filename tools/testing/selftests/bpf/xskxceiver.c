@@ -109,6 +109,8 @@
 
 #include <network_helpers.h>
 
+#define MAX_TX_BUDGET_DEFAULT 32
+
 static bool opt_verbose;
 static bool opt_print_tests;
 static enum test_mode opt_mode = TEST_MODE_ALL;
@@ -1323,7 +1325,8 @@ static int receive_pkts(struct test_spec *test)
 	return TEST_PASS;
 }
 
-static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, bool timeout)
+static int __send_pkts(struct test_spec *test, struct ifobject *ifobject,
+		       struct xsk_socket_info *xsk, bool timeout)
 {
 	u32 i, idx = 0, valid_pkts = 0, valid_frags = 0, buffer_len;
 	struct pkt_stream *pkt_stream = xsk->pkt_stream;
@@ -1437,8 +1440,20 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, b
 	}
 
 	if (!timeout) {
+		int prev_tx_consumer;
+
+		if (!strncmp("TX_QUEUE_CONSUMER", test->name, MAX_TEST_NAME_SIZE))
+			prev_tx_consumer = *xsk->tx.consumer;
+
 		if (complete_pkts(xsk, i))
 			return TEST_FAILURE;
+
+		if (!strncmp("TX_QUEUE_CONSUMER", test->name, MAX_TEST_NAME_SIZE)) {
+			int delta = *xsk->tx.consumer - prev_tx_consumer;
+
+			if (delta != MAX_TX_BUDGET_DEFAULT)
+				return TEST_FAILURE;
+		}
 
 		usleep(10);
 		return TEST_PASS;
@@ -1492,7 +1507,7 @@ static int send_pkts(struct test_spec *test, struct ifobject *ifobject)
 				__set_bit(i, bitmap);
 				continue;
 			}
-			ret = __send_pkts(ifobject, &ifobject->xsk_arr[i], timeout);
+			ret = __send_pkts(test, ifobject, &ifobject->xsk_arr[i], timeout);
 			if (ret == TEST_CONTINUE && !test->fail)
 				continue;
 
@@ -2613,6 +2628,16 @@ static int testapp_adjust_tail_grow_mb(struct test_spec *test)
 				   XSK_UMEM__LARGE_FRAME_SIZE * 2);
 }
 
+static int testapp_tx_queue_consumer(struct test_spec *test)
+{
+	int nr_packets = MAX_TX_BUDGET_DEFAULT + 1;
+
+	pkt_stream_replace(test, nr_packets, MIN_PKT_SIZE);
+	test->ifobj_tx->xsk->batch_size = nr_packets;
+
+	return testapp_validate_traffic(test);
+}
+
 static void run_pkt_test(struct test_spec *test)
 {
 	int ret;
@@ -2723,6 +2748,7 @@ static const struct test_spec tests[] = {
 	{.name = "XDP_ADJUST_TAIL_SHRINK_MULTI_BUFF", .test_func = testapp_adjust_tail_shrink_mb},
 	{.name = "XDP_ADJUST_TAIL_GROW", .test_func = testapp_adjust_tail_grow},
 	{.name = "XDP_ADJUST_TAIL_GROW_MULTI_BUFF", .test_func = testapp_adjust_tail_grow_mb},
+	{.name = "TX_QUEUE_CONSUMER", .test_func = testapp_tx_queue_consumer},
 	};
 
 static void print_tests(void)
