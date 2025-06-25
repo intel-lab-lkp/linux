@@ -76,6 +76,12 @@ struct async_entry {
 	struct async_domain	*domain;
 };
 
+struct async_wait_entry {
+	wait_queue_entry_t wait;
+	async_cookie_t cookie;
+	struct async_domain *domain;
+};
+
 static DECLARE_WAIT_QUEUE_HEAD(async_done);
 
 static atomic_t entry_count;
@@ -299,6 +305,24 @@ void async_synchronize_full_domain(struct async_domain *domain)
 EXPORT_SYMBOL_GPL(async_synchronize_full_domain);
 
 /**
+ * async_domain_wake_function - wait function for cooking synchronization
+ *
+ * Custom wait function for async_synchronize_cookie_domain to check cookie
+ * value.  This prevents waking up waiting threads unnecessarily.
+ */
+static int async_domain_wake_function(struct wait_queue_entry *wait,
+				      unsigned int mode, int sync, void *key)
+{
+	struct async_wait_entry *await =
+		container_of(wait, struct async_wait_entry, wait);
+
+	if (lowest_in_progress(await->domain) < await->cookie)
+		return 0;
+
+	return autoremove_wake_function(wait, mode, sync, key);
+}
+
+/**
  * async_synchronize_cookie_domain - synchronize asynchronous function calls within a certain domain with cookie checkpointing
  * @cookie: async_cookie_t to use as checkpoint
  * @domain: the domain to synchronize (%NULL for all registered domains)
@@ -310,11 +334,27 @@ EXPORT_SYMBOL_GPL(async_synchronize_full_domain);
 void async_synchronize_cookie_domain(async_cookie_t cookie, struct async_domain *domain)
 {
 	ktime_t starttime;
+	struct async_wait_entry await = {
+		.cookie = cookie,
+		.domain = domain,
+		.wait = {
+			.func = async_domain_wake_function,
+			.private = current,
+			.flags = 0,
+			.entry = LIST_HEAD_INIT(await.wait.entry),
+		}};
 
 	pr_debug("async_waiting @ %i\n", task_pid_nr(current));
 	starttime = ktime_get();
 
-	wait_event(async_done, lowest_in_progress(domain) >= cookie);
+	for (;;) {
+		prepare_to_wait(&async_done, &await.wait, TASK_UNINTERRUPTIBLE);
+
+		if (lowest_in_progress(domain) >= cookie)
+			break;
+		schedule();
+	}
+	finish_wait(&async_done, &await.wait);
 
 	pr_debug("async_continuing @ %i after %lli usec\n", task_pid_nr(current),
 		 microseconds_since(starttime));
