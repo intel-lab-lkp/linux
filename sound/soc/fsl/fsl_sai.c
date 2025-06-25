@@ -841,6 +841,18 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		/*
+		 * Force a software reset if we are not the clock provider, as we
+		 * might have lost frame sync during xrun recovery.
+		 */
+		if (sai->is_consumer_mode[tx]) {
+			regmap_update_bits(sai->regmap,
+					FSL_SAI_xCSR(tx, ofs), FSL_SAI_CSR_SR,
+					FSL_SAI_CSR_SR);
+			regmap_update_bits(sai->regmap,
+					FSL_SAI_xCSR(tx, ofs), FSL_SAI_CSR_SR,
+					0);
+		}
 		regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx, ofs),
 				   FSL_SAI_CSR_FRDE, FSL_SAI_CSR_FRDE);
 
