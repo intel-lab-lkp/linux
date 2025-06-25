@@ -689,19 +689,19 @@ static const struct drm_bridge_funcs rzg2l_mipi_dsi_bridge_ops = {
  */
 
 static int rzg2l_mipi_dsi_host_attach(struct mipi_dsi_host *host,
-				      struct mipi_dsi_device *device)
+				      const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct rzg2l_mipi_dsi *dsi = host_to_rzg2l_mipi_dsi(host);
 	int ret;
 
-	if (device->lanes > dsi->num_data_lanes) {
+	if (bus_fmt->lanes > dsi->num_data_lanes) {
 		dev_err(dsi->dev,
 			"Number of lines of device (%u) exceeds host (%u)\n",
-			device->lanes, dsi->num_data_lanes);
+			bus_fmt->lanes, dsi->num_data_lanes);
 		return -EINVAL;
 	}
 
-	switch (mipi_dsi_pixel_format_to_bpp(device->format)) {
+	switch (mipi_dsi_pixel_format_to_bpp(bus_fmt->format)) {
 	case 24:
 		break;
 	case 18:
@@ -714,13 +714,13 @@ static int rzg2l_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 		}
 		break;
 	default:
-		dev_err(dsi->dev, "Unsupported format 0x%04x\n", device->format);
+		dev_err(dsi->dev, "Unsupported format 0x%04x\n", bus_fmt->format);
 		return -EINVAL;
 	}
 
-	dsi->lanes = device->lanes;
-	dsi->format = device->format;
-	dsi->mode_flags = device->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->format = bus_fmt->format;
+	dsi->mode_flags = bus_fmt->mode_flags;
 
 	dsi->next_bridge = devm_drm_of_get_bridge(dsi->dev, dsi->dev->of_node,
 						  1, 0);
@@ -904,7 +904,7 @@ static ssize_t rzg2l_mipi_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops rzg2l_mipi_dsi_host_ops = {
-	.attach = rzg2l_mipi_dsi_host_attach,
+	.attach_new = rzg2l_mipi_dsi_host_attach,
 	.detach = rzg2l_mipi_dsi_host_detach,
 	.transfer = rzg2l_mipi_dsi_host_transfer,
 };
