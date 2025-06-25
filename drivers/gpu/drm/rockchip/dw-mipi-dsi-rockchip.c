@@ -1030,7 +1030,7 @@ static const struct component_ops dw_mipi_dsi_rockchip_ops = {
 };
 
 static int dw_mipi_dsi_rockchip_host_attach(void *priv_data,
-					    struct mipi_dsi_device *device)
+					    const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct dw_mipi_dsi_rockchip *dsi = priv_data;
 	struct device *second;

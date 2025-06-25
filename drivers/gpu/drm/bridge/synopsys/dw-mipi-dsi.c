@@ -315,23 +315,23 @@ static inline u32 dsi_read(struct dw_mipi_dsi *dsi, u32 reg)
 }
 
 static int dw_mipi_dsi_host_attach(struct mipi_dsi_host *host,
-				   struct mipi_dsi_device *device)
+				   const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct dw_mipi_dsi *dsi = host_to_dsi(host);
 	const struct dw_mipi_dsi_plat_data *pdata = dsi->plat_data;
 	struct drm_bridge *bridge;
 	int ret;
 
-	if (device->lanes > dsi->plat_data->max_data_lanes) {
+	if (bus_fmt->lanes > dsi->plat_data->max_data_lanes) {
 		dev_err(dsi->dev, "the number of data lanes(%u) is too many\n",
-			device->lanes);
+			bus_fmt->lanes);
 		return -EINVAL;
 	}
 
-	dsi->lanes = device->lanes;
-	dsi->channel = device->channel;
-	dsi->format = device->format;
-	dsi->mode_flags = device->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->channel = bus_fmt->channel;
+	dsi->format = bus_fmt->format;
+	dsi->mode_flags = bus_fmt->mode_flags;
 
 	bridge = devm_drm_of_get_bridge(dsi->dev, dsi->dev->of_node, 1, 0);
 	if (IS_ERR(bridge))
@@ -343,7 +343,7 @@ static int dw_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 	drm_bridge_add(&dsi->bridge);
 
 	if (pdata->host_ops && pdata->host_ops->attach) {
-		ret = pdata->host_ops->attach(pdata->priv_data, device);
+		ret = pdata->host_ops->attach(pdata->priv_data, bus_fmt);
 		if (ret < 0)
 			return ret;
 	}
@@ -537,7 +537,7 @@ static ssize_t dw_mipi_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops dw_mipi_dsi_host_ops = {
-	.attach = dw_mipi_dsi_host_attach,
+	.attach_new = dw_mipi_dsi_host_attach,
 	.detach = dw_mipi_dsi_host_detach,
 	.transfer = dw_mipi_dsi_host_transfer,
 };

@@ -816,11 +816,11 @@ static const struct dw_mipi_dsi_phy_ops imx93_dsi_phy_ops = {
 	.get_timing = imx93_dsi_phy_get_timing,
 };
 
-static int imx93_dsi_host_attach(void *priv_data, struct mipi_dsi_device *device)
+static int imx93_dsi_host_attach(void *priv_data, const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct imx93_dsi *dsi = priv_data;
 
-	dsi->format = device->format;
+	dsi->format = bus_fmt->format;
 
 	return 0;
 }

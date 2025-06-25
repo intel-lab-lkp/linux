@@ -15,6 +15,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 
 struct drm_display_mode;
@@ -45,7 +46,7 @@ struct dw_mipi_dsi_phy_ops {
 
 struct dw_mipi_dsi_host_ops {
 	int (*attach)(void *priv_data,
-		      struct mipi_dsi_device *dsi);
+		      const struct mipi_dsi_bus_fmt *bus_fmt);
 	int (*detach)(void *priv_data,
 		      struct mipi_dsi_device *dsi);
 };

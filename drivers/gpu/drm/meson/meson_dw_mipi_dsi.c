@@ -41,7 +41,7 @@ struct meson_dw_mipi_dsi {
 	union phy_configure_opts phy_opts;
 	struct dw_mipi_dsi *dmd;
 	struct dw_mipi_dsi_plat_data pdata;
-	struct mipi_dsi_device *dsi_device;
+	struct mipi_dsi_bus_fmt bus_fmt;
 	const struct drm_display_mode *mode;
 	struct clk *bit_clk;
 	struct clk *px_clk;
@@ -110,7 +110,7 @@ static int dw_mipi_dsi_phy_init(void *priv_data)
 		return ret;
 	}
 
-	switch (mipi_dsi->dsi_device->format) {
+	switch (mipi_dsi->bus_fmt.format) {
 	case MIPI_DSI_FMT_RGB888:
 		dpi_data_format = DPI_COLOR_24BIT;
 		venc_data_width = VENC_IN_COLOR_24B;
@@ -164,10 +164,10 @@ dw_mipi_dsi_get_lane_mbps(void *priv_data, const struct drm_display_mode *mode,
 
 	mipi_dsi->mode = mode;
 
-	bpp = mipi_dsi_pixel_format_to_bpp(mipi_dsi->dsi_device->format);
+	bpp = mipi_dsi_pixel_format_to_bpp(mipi_dsi->bus_fmt.format);
 
 	phy_mipi_dphy_get_default_config(mode->clock * 1000,
-					 bpp, mipi_dsi->dsi_device->lanes,
+					 bpp, mipi_dsi->bus_fmt.lanes,
 					 &mipi_dsi->phy_opts.mipi_dphy);
 
 	*lane_mbps = DIV_ROUND_UP(mipi_dsi->phy_opts.mipi_dphy.hs_clk_rate, USEC_PER_SEC);
@@ -220,21 +220,21 @@ static const struct dw_mipi_dsi_phy_ops meson_dw_mipi_dsi_phy_ops = {
 };
 
 static int meson_dw_mipi_dsi_host_attach(void *priv_data,
-					 struct mipi_dsi_device *device)
+					 const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct meson_dw_mipi_dsi *mipi_dsi = priv_data;
 	int ret;
 
-	mipi_dsi->dsi_device = device;
+	mipi_dsi->bus_fmt = *bus_fmt;
 
-	switch (device->format) {
+	switch (bus_fmt->format) {
 	case MIPI_DSI_FMT_RGB888:
 		break;
 	case MIPI_DSI_FMT_RGB666:
 		break;
 	case MIPI_DSI_FMT_RGB666_PACKED:
 	case MIPI_DSI_FMT_RGB565:
-		dev_err(mipi_dsi->dev, "invalid pixel format %d\n", device->format);
+		dev_err(mipi_dsi->dev, "invalid pixel format %d\n", bus_fmt->format);
 		return -EINVAL;
 	}
 
