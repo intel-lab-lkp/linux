@@ -1102,6 +1102,29 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 }
 
 /*
+ * Zero any post-EOF range of the EOF folio about to be exposed by size
+ * extension.
+ */
+static void shmem_zero_eof(struct inode *inode, loff_t pos)
+{
+	struct folio *folio;
+	loff_t i_size = i_size_read(inode);
+	size_t from, len;
+
+	folio = shmem_get_partial_folio(inode, i_size >> PAGE_SHIFT);
+	if (!folio)
+		return;
+
+	/* zero to the end of the folio or start of extending operation */
+	from = offset_in_folio(folio, i_size);
+	len = min_t(loff_t, folio_size(folio) - from, pos - i_size);
+	folio_zero_range(folio, from, len);
+
+	folio_unlock(folio);
+	folio_put(folio);
+}
+
+/*
  * Remove range of pages and swap entries from page cache, and free them.
  * If !unfalloc, truncate or punch hole; if unfalloc, undo failed fallocate.
  */
@@ -1326,6 +1349,8 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 			return -EPERM;
 
 		if (newsize != oldsize) {
+			if (newsize > oldsize)
+				shmem_zero_eof(inode, newsize);
 			error = shmem_reacct_size(SHMEM_I(inode)->flags,
 					oldsize, newsize);
 			if (error)
@@ -3465,6 +3490,8 @@ static ssize_t shmem_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ret = file_update_time(file);
 	if (ret)
 		goto unlock;
+	if (iocb->ki_pos > i_size_read(inode))
+		shmem_zero_eof(inode, iocb->ki_pos);
 	ret = generic_perform_write(iocb, from);
 unlock:
 	inode_unlock(inode);
@@ -3792,8 +3819,15 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		cond_resched();
 	}
 
-	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size)
+	/*
+	 * The post-eof portion of the eof folio isn't guaranteed to be zeroed
+	 * by fallocate, so zero through the end of the fallocated range
+	 * instead of the start.
+	 */
+	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size) {
+		shmem_zero_eof(inode, offset + len);
 		i_size_write(inode, offset + len);
+	}
 undone:
 	spin_lock(&inode->i_lock);
 	inode->i_private = NULL;
