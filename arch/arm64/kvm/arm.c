@@ -2387,15 +2387,22 @@ static void __init teardown_hyp_mode(void)
 	int cpu;
 
 	free_hyp_pgds();
+	/* Order matches the order of initialization init_hyp_mode() */
 	for_each_possible_cpu(cpu) {
+		if (!per_cpu(kvm_arm_hyp_stack_base, cpu))
+			continue;
 		free_pages(per_cpu(kvm_arm_hyp_stack_base, cpu), NVHE_STACK_SHIFT - PAGE_SHIFT);
+
+		if (!kvm_nvhe_sym(kvm_arm_hyp_percpu_base)[cpu])
+			continue;
 		free_pages(kvm_nvhe_sym(kvm_arm_hyp_percpu_base)[cpu], nvhe_percpu_order());
 
 		if (free_sve) {
 			struct cpu_sve_state *sve_state;
 
 			sve_state = per_cpu_ptr_nvhe_sym(kvm_host_data, cpu)->sve_state;
-			free_pages((unsigned long) sve_state, pkvm_host_sve_state_order());
+			if (sve_state)
+				free_pages((unsigned long) sve_state, pkvm_host_sve_state_order());
 		}
 	}
 }
