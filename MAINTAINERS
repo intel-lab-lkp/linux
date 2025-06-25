@@ -10129,6 +10129,7 @@ S:	Supported
 C:	irc://irc.oftc.net/bcache
 F:	include/linux/generic-radix-tree.h
 F:	lib/generic-radix-tree.c
+F:	scripts/gdb/linux/radixtree.py
 
 GENERIC RESISTIVE TOUCHSCREEN ADC DRIVER
 M:	Eugen Hristev <eugen.hristev@microchip.com>
