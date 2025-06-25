@@ -88,6 +88,12 @@ MODULE_DESCRIPTION("Broadcom NetXtreme network driver");
 
 #define BNXT_TX_PUSH_THRESH 164
 
+#ifdef CONFIG_BNXT_SRIOV
+static bool disable_vf_bind;
+module_param(disable_vf_bind, bool, 0);
+MODULE_PARM_DESC(disable_vf_bind, "Whether to disable binding to virtual functions (VFs)");
+#endif
+
 /* indexed by enum board_idx */
 static const struct {
 	char *name;
@@ -144,7 +150,12 @@ static const struct {
 	[NETXTREME_E_P7_VF] = { "Broadcom BCM5760X Virtual Function" },
 };
 
-static const struct pci_device_id bnxt_pci_tbl[] = {
+/* The boundary between PF and VF devices in bnxt_pci_tbl */
+#ifdef CONFIG_BNXT_SRIOV
+#define FIRST_VF_DEV_ID 0x1606
+#endif
+
+static struct pci_device_id bnxt_pci_tbl[] = {
 	{ PCI_VDEVICE(BROADCOM, 0x1604), .driver_data = BCM5745x_NPAR },
 	{ PCI_VDEVICE(BROADCOM, 0x1605), .driver_data = BCM5745x_NPAR },
 	{ PCI_VDEVICE(BROADCOM, 0x1614), .driver_data = BCM57454 },
@@ -196,7 +207,7 @@ static const struct pci_device_id bnxt_pci_tbl[] = {
 	{ PCI_VDEVICE(BROADCOM, 0xd802), .driver_data = BCM58802 },
 	{ PCI_VDEVICE(BROADCOM, 0xd804), .driver_data = BCM58804 },
 #ifdef CONFIG_BNXT_SRIOV
-	{ PCI_VDEVICE(BROADCOM, 0x1606), .driver_data = NETXTREME_E_VF },
+	{ PCI_VDEVICE(BROADCOM, FIRST_VF_DEV_ID), .driver_data = NETXTREME_E_VF },
 	{ PCI_VDEVICE(BROADCOM, 0x1607), .driver_data = NETXTREME_E_VF_HV },
 	{ PCI_VDEVICE(BROADCOM, 0x1608), .driver_data = NETXTREME_E_VF_HV },
 	{ PCI_VDEVICE(BROADCOM, 0x1609), .driver_data = NETXTREME_E_VF },
@@ -17129,10 +17140,36 @@ static struct pci_driver bnxt_pci_driver = {
 #endif
 };
 
+#ifdef CONFIG_BNXT_SRIOV
+static void bnxt_vf_bind_init(void)
+{
+	s32 idx;
+
+	if (!disable_vf_bind)
+		return;
+
+	for (idx = 0; bnxt_pci_tbl[idx].device != 0; idx++) {
+		if (bnxt_pci_tbl[idx].device == FIRST_VF_DEV_ID) {
+			/* Truncate off VF devices */
+			memset(&bnxt_pci_tbl[idx], 0, sizeof(struct pci_device_id));
+			pr_info("%s: Disabled VF binding, id table offset %u",
+				DRV_MODULE_NAME, idx);
+			return;
+		}
+	}
+
+	/* Should not reach here! */
+	pr_crit("%s: Unknown VF dev id %u", DRV_MODULE_NAME, FIRST_VF_DEV_ID);
+}
+#endif
+
 static int __init bnxt_init(void)
 {
 	int err;
 
+#ifdef CONFIG_BNXT_SRIOV
+	bnxt_vf_bind_init();
+#endif
 	bnxt_debug_init();
 	err = pci_register_driver(&bnxt_pci_driver);
 	if (err) {
