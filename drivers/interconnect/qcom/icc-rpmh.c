@@ -276,13 +276,17 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 		qcom_icc_bcm_init(qp->bcms[i], dev);
 
 	for (i = 0; i < num_nodes; i++) {
+		bool is_dyn_node = false;
+
 		qn = qnodes[i];
 		if (!qn)
 			continue;
 
 		if (desc->alloc_dyn_id) {
-			if (!qn->node)
+			if (!qn->node) {
 				qn->node = icc_node_create_dyn();
+				is_dyn_node = true;
+			}
 			node = qn->node;
 		} else {
 			node = icc_node_create(qn->id);
@@ -293,7 +297,19 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 			goto err_remove_nodes;
 		}
 
-		node->name = qn->name;
+		if (is_dyn_node) {
+			node->name = devm_kasprintf(provider->dev, GFP_KERNEL,
+						    "%s@%s", qn->name,
+						    dev_name(provider->dev));
+			if (!node->name) {
+				icc_node_destroy(node->id);
+				ret = -ENOMEM;
+				goto err_remove_nodes;
+			}
+		} else {
+			node->name = qn->name;
+		}
+
 		node->data = qn;
 		icc_node_add(node, provider);
 
