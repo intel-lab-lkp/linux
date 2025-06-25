@@ -7,6 +7,7 @@
  * https://www.ti.com/lit/ds/symlink/adc128s052.pdf
  * https://www.ti.com/lit/ds/symlink/adc122s021.pdf
  * https://www.ti.com/lit/ds/symlink/adc124s021.pdf
+ * https://www.ti.com/lit/ds/symlink/adc121s021.pdf
  */
 
 #include <linux/cleanup.h>
@@ -110,6 +111,10 @@ static const struct iio_chan_spec adc128s052_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(7),
 };
 
+static const struct iio_chan_spec adc121s021_channels[] = {
+	ADC128_VOLTAGE_CHANNEL(0),
+};
+
 static const struct iio_chan_spec adc122s021_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(0),
 	ADC128_VOLTAGE_CHANNEL(1),
@@ -143,6 +148,10 @@ static const struct adc128_configuration adc128_config[] = {
 		.refname = "vdd",
 		.other_regulators = &bd79104_regulators,
 		.num_other_regulators = 1,
+	}, {
+		.channels = adc121s021_channels,
+		.num_channels = ARRAY_SIZE(adc121s021_channels),
+		.refname = "vref",
 	},
 };
 
@@ -207,7 +216,10 @@ static const struct of_device_id adc128_of_match[] = {
 	{ .compatible = "ti,adc124s051", .data = &adc128_config[2] },
 	{ .compatible = "ti,adc124s101", .data = &adc128_config[2] },
 	{ .compatible = "rohm,bd79104", .data = &adc128_config[3] },
-	{ }
+	{ .compatible = "ti,adc121s021", .data = &adc128_config[4] },
+	{ .compatible = "ti,adc121s051", .data = &adc128_config[4] },
+	{ .compatible = "ti,adc121s101", .data = &adc128_config[4] },
+	{ },
 };
 MODULE_DEVICE_TABLE(of, adc128_of_match);
 
@@ -220,6 +232,9 @@ static const struct spi_device_id adc128_id[] = {
 	{ "adc124s051", (kernel_ulong_t)&adc128_config[2] },
 	{ "adc124s101", (kernel_ulong_t)&adc128_config[2] },
 	{ "bd79104", (kernel_ulong_t)&adc128_config[3] },
+	{ "adc121s021", (kernel_ulong_t)&adc128_config[4] },
+	{ "adc121s051", (kernel_ulong_t)&adc128_config[4] },
+	{ "adc121s101", (kernel_ulong_t)&adc128_config[4] },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adc128_id);
