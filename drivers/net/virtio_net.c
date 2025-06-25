@@ -2277,21 +2277,32 @@ static void *mergeable_xdp_get_buf(struct virtnet_info *vi,
 					      len);
 		if (!xdp_page)
 			return NULL;
+
+		*frame_sz = PAGE_SIZE;
 	} else {
+		unsigned int total_len;
+
 		xdp_room = SKB_DATA_ALIGN(XDP_PACKET_HEADROOM +
 					  sizeof(struct skb_shared_info));
-		if (*len + xdp_room > PAGE_SIZE)
+		total_len = *len + xdp_room;
+
+		/* This must never happen because len cannot exceed PAGE_SIZE */
+		if (unlikely(total_len > 2 * PAGE_SIZE))
 			return NULL;
 
-		xdp_page = alloc_page(GFP_ATOMIC);
+		if (total_len > PAGE_SIZE) {
+			xdp_page = alloc_pages(GFP_ATOMIC, 1);
+			*frame_sz = 2 * PAGE_SIZE;
+		} else {
+			xdp_page = alloc_page(GFP_ATOMIC);
+			*frame_sz = PAGE_SIZE;
+		}
 		if (!xdp_page)
 			return NULL;
 
 		memcpy(page_address(xdp_page) + XDP_PACKET_HEADROOM,
 		       page_address(*page) + offset, *len);
 	}
-
-	*frame_sz = PAGE_SIZE;
 
 	put_page(*page);
 
