@@ -593,9 +593,9 @@ __FORTIFY_INLINE bool fortify_memcpy_chk(__kernel_size_t size,
 	 * (The SIZE_MAX test is to optimize away checks where the buffer
 	 * lengths are unknown.)
 	 */
-	if (p_size != SIZE_MAX && p_size < size)
+	if (unlikely(p_size != SIZE_MAX && p_size < size))
 		fortify_panic(func, FORTIFY_WRITE, p_size, size, true);
-	else if (q_size != SIZE_MAX && q_size < size)
+	else if (unlikely(q_size != SIZE_MAX && q_size < size))
 		fortify_panic(func, FORTIFY_READ, p_size, size, true);
 
 	/*
