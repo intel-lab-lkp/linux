@@ -10,6 +10,8 @@
 #include <asm/hvcall.h>
 #endif
 
+DECLARE_STATIC_KEY_FALSE(paravirt_cpu_avoid_enabled);
+
 #ifdef CONFIG_PPC_SPLPAR
 #include <linux/smp.h>
 #include <asm/kvm_guest.h>

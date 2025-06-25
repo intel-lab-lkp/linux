@@ -64,6 +64,7 @@
 #include <asm/systemcfg.h>
 
 #include <trace/events/ipi.h>
+#include <linux/debugfs.h>
 
 #ifdef DEBUG
 #include <asm/udbg.h>
@@ -82,6 +83,7 @@ bool has_big_cores __ro_after_init;
 bool coregroup_enabled __ro_after_init;
 bool thread_group_shares_l2 __ro_after_init;
 bool thread_group_shares_l3 __ro_after_init;
+static int vp_manual_hint = NR_CPUS;
 
 DEFINE_PER_CPU(cpumask_var_t, cpu_sibling_map);
 DEFINE_PER_CPU(cpumask_var_t, cpu_smallcore_map);
@@ -1727,6 +1729,7 @@ static void __init build_sched_topology(void)
 	BUG_ON(i >= ARRAY_SIZE(powerpc_topology) - 1);
 
 	set_sched_topology(powerpc_topology);
+	vp_manual_hint = num_present_cpus();
 }
 
 void __init smp_cpus_done(unsigned int max_cpus)
@@ -1807,4 +1810,51 @@ void __noreturn arch_cpu_idle_dead(void)
 	start_secondary_resume();
 }
 
+/*
+ * sysfs hint to mark CPUs as Avoid. This will help in restricting
+ * the workload to specified number of CPUs.
+ * For example 40 > vp_manual_hint means, workload will run on
+ * 0-39 CPUs.
+ */
+
+static int pv_vp_manual_hint_set(void *data, u64 val)
+{
+	int cpu;
+
+	if (val == 0 || vp_manual_hint > num_present_cpus())
+		vp_manual_hint = num_present_cpus();
+
+	if (val != vp_manual_hint)
+		vp_manual_hint = val;
+
+	if (vp_manual_hint < num_present_cpus())
+		static_branch_enable(&paravirt_cpu_avoid_enabled);
+	else
+		static_branch_disable(&paravirt_cpu_avoid_enabled);
+
+	for_each_present_cpu(cpu) {
+		if (cpu >= vp_manual_hint)
+			set_cpu_avoid(cpu, true);
+		else
+			set_cpu_avoid(cpu, false);
+	}
+	return 0;
+}
+
+static int pv_vp_manual_hint_get(void *data, u64 *val)
+{
+	*val = vp_manual_hint;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fops_pv_vp_manual_hint, pv_vp_manual_hint_get, pv_vp_manual_hint_set, "%llu\n");
+
+static __init int paravirt_debugfs_init(void)
+{
+	if (is_shared_processor())
+		debugfs_create_file("vp_manual_hint", 0600, arch_debugfs_dir, NULL, &fops_pv_vp_manual_hint);
+	return 0;
+}
+
+device_initcall(paravirt_debugfs_init)
 #endif
