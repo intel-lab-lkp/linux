@@ -11,16 +11,15 @@ maintainers:
   - Jaehoon Chung <jh80.chung@samsung.com>
 
 description: |+
-  Exynos5433 SoC PCIe host controller is based on the Synopsys DesignWare
+  Samsung SoCs PCIe host controller is based on the Synopsys DesignWare
   PCIe IP and thus inherits all the common properties defined in
   snps,dw-pcie.yaml.
 
-allOf:
-  - $ref: /schemas/pci/snps,dw-pcie.yaml#
-
 properties:
   compatible:
-    const: samsung,exynos5433-pcie
+    enum:
+      - samsung,exynos5433-pcie
+      - tesla,fsd-pcie
 
   reg:
     items:
@@ -37,32 +36,8 @@ properties:
   interrupts:
     maxItems: 1
 
-  clocks:
-    items:
-      - description: PCIe bridge clock
-      - description: PCIe bus clock
-
-  clock-names:
-    items:
-      - const: pcie
-      - const: pcie_bus
-
   phys:
     maxItems: 1
-
-  vdd10-supply:
-    description:
-      Phandle to a regulator that provides 1.0V power to the PCIe block.
-
-  vdd18-supply:
-    description:
-      Phandle to a regulator that provides 1.8V power to the PCIe block.
-
-  num-lanes:
-    const: 1
-
-  num-viewport:
-    const: 3
 
 required:
   - reg
@@ -70,19 +45,93 @@ required:
   - interrupts
   - "#address-cells"
   - "#size-cells"
-  - "#interrupt-cells"
-  - interrupt-map
-  - interrupt-map-mask
   - ranges
-  - bus-range
   - device_type
   - num-lanes
-  - num-viewport
   - clocks
   - clock-names
   - phys
-  - vdd10-supply
-  - vdd18-supply
+
+allOf:
+  - $ref: /schemas/pci/snps,dw-pcie.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - tesla,fsd-pcie
+    then:
+      properties:
+        clocks:
+          maxItems: 4
+
+        clock-names:
+          items:
+            - const: aux
+            - const: dbi
+            - const: mstr
+            - const: slv
+
+        samsung,syscon-pcie:
+          $ref: /schemas/types.yaml#/definitions/phandle-array
+          description: phandle for system control registers, used to
+                       control signals at system level
+
+        num-lanes:
+          maximum: 4
+
+      required:
+        - samsung,syscon-pcie
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - samsung,exynos5433-pcie
+    then:
+      properties:
+        clocks:
+          items:
+            - description: pcie bridge clock
+            - description: pcie bus clock
+
+        clock-names:
+          items:
+            - const: pcie
+            - const: pcie_bus
+
+        vdd10-supply:
+          description:
+            phandle to a regulator that provides 1.0v power to the pcie block.
+
+        vdd18-supply:
+          description:
+            phandle to a regulator that provides 1.8v power to the pcie block.
+
+        num-lanes:
+          const: 1
+
+        num-viewport:
+          const: 3
+
+        assigned-clocks:
+          maxItems: 2
+
+        assigned-clock-parents:
+          maxItems: 2
+
+        assigned-clock-rates:
+          maxItems: 2
+
+      required:
+        - "#interrupt-cells"
+        - interrupt-map
+        - interrupt-map-mask
+        - bus-range
+        - num-viewport
+        - vdd10-supply
+        - vdd18-supply
 
 unevaluatedProperties: false
 
