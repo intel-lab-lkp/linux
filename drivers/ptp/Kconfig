@@ -252,4 +252,17 @@ config PTP_S390
 	  driver provides the raw clock value without the delta to
 	  userspace. That way userspace programs like chrony could steer
 	  the kernel clock.
+
+config PTP_1588_CLOCK_CIPU
+	tristate "Alibaba CIPU PTP clock"
+	depends on PTP_1588_CLOCK
+	depends on 64BIT
+	default m
+	help
+	  This driver adds support for using Alibaba CIPU clock device
+	  as a PTP clock. This is only useful in Alibaba Cloud CIPU
+	  infrastructure.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ptp_cipu.
 endmenu
