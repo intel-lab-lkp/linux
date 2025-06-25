@@ -436,7 +436,8 @@ sub give_debian_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo apt-get install $install\n");
+	my $command = "sudo apt-get install $install";
+	run_if_interactive($command);
 }
 
 sub give_redhat_hints()
@@ -514,11 +515,13 @@ sub give_redhat_hints()
 	if (!$old) {
 		# dnf, for Fedora 18+
 		printf("You should run:\n") if ($verbose_warn_install);
-		printf("\n\tsudo dnf install -y $install\n");
+		my $command = "sudo dnf install -y $install";
+		run_if_interactive($command);
 	} else {
 		# yum, for RHEL (and clones) or Fedora version < 18
 		printf("You should run:\n") if ($verbose_warn_install);
-		printf("\n\tsudo yum install -y $install\n");
+		my $command = "sudo yum install -y $install";
+		run_if_interactive($command);
 	}
 }
 
@@ -567,7 +570,8 @@ sub give_opensuse_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo zypper install --no-recommends $install\n");
+	my $command = "sudo zypper install --no-recommends $install";
+	run_if_interactive($command);
 }
 
 sub give_mageia_hints()
@@ -612,7 +616,8 @@ sub give_mageia_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo $packager_cmd $install\n");
+	my $command = "sudo $packager_cmd $install";
+	run_if_interactive($command);
 }
 
 sub give_arch_linux_hints()
@@ -643,7 +648,8 @@ sub give_arch_linux_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo pacman -S $install\n");
+	my $command = "sudo pacman -S $install";
+	run_if_interactive($command);
 }
 
 sub give_gentoo_hints()
@@ -679,13 +685,16 @@ sub give_gentoo_hints()
 	my $portage_cairo = "/etc/portage/package.use/graphviz";
 
 	if (qx(grep imagemagick $portage_imagemagick 2>/dev/null) eq "") {
-		printf("\tsudo su -c 'echo \"$imagemagick\" > $portage_imagemagick'\n")
+		my $imagemagick_command = "sudo su -c 'echo \"$imagemagick\" > $portage_imagemagick'";
+		run_if_interactive($imagemagick_command);
 	}
 	if (qx(grep graphviz $portage_cairo 2>/dev/null) eq  "") {
-		printf("\tsudo su -c 'echo \"$cairo\" > $portage_cairo'\n");
+		my $portage_command = "sudo su -c 'echo \"$cairo\" > $portage_cairo'";
+		run_if_interactive($portage_command);
 	}
 
-	printf("\tsudo emerge --ask $install\n");
+	my $command = "sudo emerge --ask $install";
+	run_if_interactive($command);
 
 }
 
