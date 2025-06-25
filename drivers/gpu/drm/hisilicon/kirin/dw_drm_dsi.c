@@ -722,20 +722,20 @@ static int dw_drm_encoder_init(struct device *dev,
 
 static const struct component_ops dsi_ops;
 static int dsi_host_attach(struct mipi_dsi_host *host,
-			   struct mipi_dsi_device *mdsi)
+			   const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct dw_dsi *dsi = host_to_dsi(host);
 	struct device *dev = host->dev;
 	int ret;
 
-	if (mdsi->lanes > 4) {
+	if (bus_fmt->lanes > 4) {
 		DRM_ERROR("dsi device params invalid\n");
 		return -EINVAL;
 	}
 
-	dsi->lanes = mdsi->lanes;
-	dsi->format = mdsi->format;
-	dsi->mode_flags = mdsi->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->format = bus_fmt->format;
+	dsi->mode_flags = bus_fmt->mode_flags;
 
 	ret = component_add(dev, &dsi_ops);
 	if (ret)
@@ -755,7 +755,7 @@ static int dsi_host_detach(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops dsi_host_ops = {
-	.attach = dsi_host_attach,
+	.attach_new = dsi_host_attach,
 	.detach = dsi_host_detach,
 };
 
