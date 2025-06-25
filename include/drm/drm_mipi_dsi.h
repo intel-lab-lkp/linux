@@ -64,6 +64,44 @@ struct mipi_dsi_packet {
 int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
 			   const struct mipi_dsi_msg *msg);
 
+/* DSI mode flags */
+
+/* video mode */
+#define MIPI_DSI_MODE_VIDEO		BIT(0)
+/* video burst mode */
+#define MIPI_DSI_MODE_VIDEO_BURST	BIT(1)
+/* video pulse mode */
+#define MIPI_DSI_MODE_VIDEO_SYNC_PULSE	BIT(2)
+/* enable auto vertical count mode */
+#define MIPI_DSI_MODE_VIDEO_AUTO_VERT	BIT(3)
+/* enable hsync-end packets in vsync-pulse and v-porch area */
+#define MIPI_DSI_MODE_VIDEO_HSE		BIT(4)
+/* disable hfront-porch area */
+#define MIPI_DSI_MODE_VIDEO_NO_HFP	BIT(5)
+/* disable hback-porch area */
+#define MIPI_DSI_MODE_VIDEO_NO_HBP	BIT(6)
+/* disable hsync-active area */
+#define MIPI_DSI_MODE_VIDEO_NO_HSA	BIT(7)
+/* flush display FIFO on vsync pulse */
+#define MIPI_DSI_MODE_VSYNC_FLUSH	BIT(8)
+/* disable EoT packets in HS mode */
+#define MIPI_DSI_MODE_NO_EOT_PACKET	BIT(9)
+/* device supports non-continuous clock behavior (DSI spec 5.6.1) */
+#define MIPI_DSI_CLOCK_NON_CONTINUOUS	BIT(10)
+/* transmit data in low power */
+#define MIPI_DSI_MODE_LPM		BIT(11)
+/* transmit data ending at the same time for all lanes within one hsync */
+#define MIPI_DSI_HS_PKT_END_ALIGNED	BIT(12)
+
+enum mipi_dsi_pixel_format {
+	MIPI_DSI_FMT_RGB888,
+	MIPI_DSI_FMT_RGB666,
+	MIPI_DSI_FMT_RGB666_PACKED,
+	MIPI_DSI_FMT_RGB565,
+};
+
+#define DSI_DEV_NAME_SIZE		20
+
 /**
  * struct mipi_dsi_host_ops - DSI bus operations
  * @attach: attach DSI device to DSI host
@@ -111,44 +149,6 @@ struct mipi_dsi_host {
 int mipi_dsi_host_register(struct mipi_dsi_host *host);
 void mipi_dsi_host_unregister(struct mipi_dsi_host *host);
 struct mipi_dsi_host *of_find_mipi_dsi_host_by_node(struct device_node *node);
-
-/* DSI mode flags */
-
-/* video mode */
-#define MIPI_DSI_MODE_VIDEO		BIT(0)
-/* video burst mode */
-#define MIPI_DSI_MODE_VIDEO_BURST	BIT(1)
-/* video pulse mode */
-#define MIPI_DSI_MODE_VIDEO_SYNC_PULSE	BIT(2)
-/* enable auto vertical count mode */
-#define MIPI_DSI_MODE_VIDEO_AUTO_VERT	BIT(3)
-/* enable hsync-end packets in vsync-pulse and v-porch area */
-#define MIPI_DSI_MODE_VIDEO_HSE		BIT(4)
-/* disable hfront-porch area */
-#define MIPI_DSI_MODE_VIDEO_NO_HFP	BIT(5)
-/* disable hback-porch area */
-#define MIPI_DSI_MODE_VIDEO_NO_HBP	BIT(6)
-/* disable hsync-active area */
-#define MIPI_DSI_MODE_VIDEO_NO_HSA	BIT(7)
-/* flush display FIFO on vsync pulse */
-#define MIPI_DSI_MODE_VSYNC_FLUSH	BIT(8)
-/* disable EoT packets in HS mode */
-#define MIPI_DSI_MODE_NO_EOT_PACKET	BIT(9)
-/* device supports non-continuous clock behavior (DSI spec 5.6.1) */
-#define MIPI_DSI_CLOCK_NON_CONTINUOUS	BIT(10)
-/* transmit data in low power */
-#define MIPI_DSI_MODE_LPM		BIT(11)
-/* transmit data ending at the same time for all lanes within one hsync */
-#define MIPI_DSI_HS_PKT_END_ALIGNED	BIT(12)
-
-enum mipi_dsi_pixel_format {
-	MIPI_DSI_FMT_RGB888,
-	MIPI_DSI_FMT_RGB666,
-	MIPI_DSI_FMT_RGB666_PACKED,
-	MIPI_DSI_FMT_RGB565,
-};
-
-#define DSI_DEV_NAME_SIZE		20
 
 /**
  * struct mipi_dsi_device_info - template for creating a mipi_dsi_device
