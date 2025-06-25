@@ -6,7 +6,7 @@
 #include "sha256-testvecs.h"
 
 #define HASH sha256
-#define HASH_CTX sha256_state
+#define HASH_CTX sha256_ctx
 #define HASH_SIZE SHA256_DIGEST_SIZE
 #define HASH_INIT sha256_init
 #define HASH_UPDATE sha256_update
