@@ -1342,16 +1342,16 @@ reset_fifo_and_return:
 
 static const struct component_ops vc4_dsi_ops;
 static int vc4_dsi_host_attach(struct mipi_dsi_host *host,
-			       struct mipi_dsi_device *device)
+			       const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct vc4_dsi *dsi = host_to_dsi(host);
 	int ret;
 
-	dsi->lanes = device->lanes;
-	dsi->channel = device->channel;
-	dsi->mode_flags = device->mode_flags;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->channel = bus_fmt->channel;
+	dsi->mode_flags = bus_fmt->mode_flags;
 
-	switch (device->format) {
+	switch (bus_fmt->format) {
 	case MIPI_DSI_FMT_RGB888:
 		dsi->format = DSI_PFORMAT_RGB888;
 		dsi->divider = 24 / dsi->lanes;
@@ -1402,7 +1402,7 @@ static int vc4_dsi_host_detach(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops vc4_dsi_host_ops = {
-	.attach = vc4_dsi_host_attach,
+	.attach_new = vc4_dsi_host_attach,
 	.detach = vc4_dsi_host_detach,
 	.transfer = vc4_dsi_host_transfer,
 };
