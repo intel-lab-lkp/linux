@@ -26966,6 +26966,7 @@ F:	include/linux/xarray.h
 F:	lib/idr.c
 F:	lib/test_xarray.c
 F:	lib/xarray.c
+F:	scripts/gdb/linux/xarray.py
 F:	tools/testing/radix-tree
 
 XARRAY API [RUST]
