@@ -383,10 +383,18 @@ int mipi_dsi_attach(struct mipi_dsi_device *dsi)
 		return dev_err_probe(&dsi->dev, -EINVAL, "Incorrect lanes number\n");
 
 	ret = ops->attach(dsi->host, dsi);
-	if (ret)
+	if (ret) {
+		dev_err(dsi->host->dev,
+			"Failed to attach %s device (lanes:%d bpp:%d mode-flags:0x%lx) (%d)\n",
+			dsi->name, dsi->lanes, mipi_dsi_pixel_format_to_bpp(dsi->format),
+			dsi->mode_flags, ret);
 		return ret;
+	}
 
 	dsi->attached = true;
+
+	dev_dbg(dsi->host->dev, "Attached %s device (lanes:%d bpp:%d mode-flags:0x%lx)\n",
+		dsi->name, dsi->lanes, mipi_dsi_pixel_format_to_bpp(dsi->format), dsi->mode_flags);
 
 	return 0;
 }
@@ -405,6 +413,10 @@ int mipi_dsi_detach(struct mipi_dsi_device *dsi)
 
 	if (!ops || !ops->detach)
 		return -ENOSYS;
+
+	dev_dbg(dsi->host->dev, "Detaching %s device (lanes:%d bpp:%d mode-flags:0x%lx)\n",
+		dsi->name, dsi->lanes, mipi_dsi_pixel_format_to_bpp(dsi->format),
+		dsi->mode_flags);
 
 	dsi->attached = false;
 
