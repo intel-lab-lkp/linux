@@ -898,16 +898,16 @@ static const struct drm_bridge_funcs rcar_mipi_dsi_bridge_ops = {
  */
 
 static int rcar_mipi_dsi_host_attach(struct mipi_dsi_host *host,
-				     struct mipi_dsi_device *device)
+				     const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct rcar_mipi_dsi *dsi = host_to_rcar_mipi_dsi(host);
 	int ret;
 
-	if (device->lanes > dsi->num_data_lanes)
+	if (bus_fmt->lanes > dsi->num_data_lanes)
 		return -EINVAL;
 
-	dsi->lanes = device->lanes;
-	dsi->format = device->format;
+	dsi->lanes = bus_fmt->lanes;
+	dsi->format = bus_fmt->format;
 
 	dsi->next_bridge = devm_drm_of_get_bridge(dsi->dev, dsi->dev->of_node,
 						  1, 0);
@@ -935,7 +935,7 @@ static int rcar_mipi_dsi_host_detach(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops rcar_mipi_dsi_host_ops = {
-	.attach = rcar_mipi_dsi_host_attach,
+	.attach_new = rcar_mipi_dsi_host_attach,
 	.detach = rcar_mipi_dsi_host_detach,
 };
 
