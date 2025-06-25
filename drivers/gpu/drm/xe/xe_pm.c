@@ -127,6 +127,8 @@ int xe_pm_suspend(struct xe_device *xe)
 	if (err)
 		goto err;
 
+	xe_late_bind_wait_for_worker_completion(&xe->late_bind);
+
 	for_each_gt(gt, xe, id)
 		xe_gt_suspend_prepare(gt);
 
@@ -204,6 +206,8 @@ int xe_pm_resume(struct xe_device *xe)
 		goto err;
 
 	xe_pxp_pm_resume(xe->pxp);
+
+	xe_late_bind_fw_load(&xe->late_bind);
 
 	drm_dbg(&xe->drm, "Device resumed\n");
 	return 0;
