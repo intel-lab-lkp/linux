@@ -267,6 +267,42 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long tva_flags,
 					 unsigned long orders);
 
+/* Strictly mask requested anonymous orders according to sysfs settings. */
+static inline unsigned long __thp_mask_anon_orders(unsigned long vm_flags,
+		unsigned long tva_flags, unsigned long orders)
+{
+	const unsigned long always = READ_ONCE(huge_anon_orders_always);
+	const unsigned long madvise = READ_ONCE(huge_anon_orders_madvise);
+	const unsigned long inherit = READ_ONCE(huge_anon_orders_inherit);
+	const unsigned long never = ~(always | madvise | inherit);
+	const bool inherit_never = !hugepage_global_enabled();
+
+	/* Disallow orders that are set to NEVER directly ... */
+	orders &= ~never;
+
+	/* ... or through inheritance (global == NEVER). */
+	if (inherit_never)
+		orders &= ~inherit;
+
+	/*
+	 * Otherwise, we only enforce sysfs settings if asked. In addition,
+	 * if the user sets a sysfs mode of madvise and if TVA_ENFORCE_SYSFS
+	 * is not set, we don't bother checking whether the VMA has VM_HUGEPAGE
+	 * set.
+	 */
+	if (!(tva_flags & TVA_ENFORCE_SYSFS))
+		return orders;
+
+	/* We already excluded never inherit above. */
+	if (vm_flags & VM_HUGEPAGE)
+		return orders & (always | madvise | inherit);
+
+	if (hugepage_global_always())
+		return orders & (always | inherit);
+
+	return orders & always;
+}
+
 /**
  * thp_vma_allowable_orders - determine hugepage orders that are allowed for vma
  * @vma:  the vm area to check
@@ -289,19 +325,8 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 				       unsigned long orders)
 {
 	/* Optimization to check if required orders are enabled early. */
-	if ((tva_flags & TVA_ENFORCE_SYSFS) && vma_is_anonymous(vma)) {
-		unsigned long mask = READ_ONCE(huge_anon_orders_always);
-
-		if (vm_flags & VM_HUGEPAGE)
-			mask |= READ_ONCE(huge_anon_orders_madvise);
-		if (hugepage_global_always() ||
-		    ((vm_flags & VM_HUGEPAGE) && hugepage_global_enabled()))
-			mask |= READ_ONCE(huge_anon_orders_inherit);
-
-		orders &= mask;
-		if (!orders)
-			return 0;
-	}
+	if (vma_is_anonymous(vma))
+		orders = __thp_mask_anon_orders(vm_flags, tva_flags, orders);
 
 	return __thp_vma_allowable_orders(vma, vm_flags, tva_flags, orders);
 }

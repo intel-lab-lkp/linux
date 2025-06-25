@@ -501,11 +501,7 @@ static void __madvise_collapse(const char *msg, char *p, int nr_hpages,
 
 	printf("%s...", msg);
 
-	/*
-	 * Prevent khugepaged interference and tests that MADV_COLLAPSE
-	 * ignores /sys/kernel/mm/transparent_hugepage/enabled
-	 */
-	settings.thp_enabled = THP_NEVER;
+	settings.thp_enabled = THP_ALWAYS;
 	settings.shmem_enabled = SHMEM_NEVER;
 	thp_push_settings(&settings);
 
