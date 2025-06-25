@@ -371,21 +371,17 @@ unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 	 * kernel memory *and* userspace memory. To achieve that:
 	 * - use a NULL file pointer to reference physical memory, and
 	 * - use the kernel virtual address of the shared io_uring context
-	 *   (instead of the userspace-provided address, which has to be 0UL
-	 *   anyway).
-	 * - use the same pgoff which the get_unmapped_area() uses to
-	 *   calculate the page colouring.
+	 *   to calculate pgoff, which will be used later in parisc va
+	 *   allocator to calculate VIPT-safe aliasing va.
 	 * For architectures without such aliasing requirements, the
-	 * architecture will return any suitable mapping because addr is 0.
+	 * architecture will return any suitable mapping because pgoff is 0.
 	 */
 	filp = NULL;
 	flags |= MAP_SHARED;
-	pgoff = 0;	/* has been translated to ptr above */
 #ifdef SHM_COLOUR
-	addr = (uintptr_t) ptr;
-	pgoff = addr >> PAGE_SHIFT;
+	pgoff = (uintptr_t)ptr >> PAGE_SHIFT;
 #else
-	addr = 0UL;
+	pgoff = 0;
 #endif
 	return mm_get_unmapped_area(current->mm, filp, addr, len, pgoff, flags);
 }
