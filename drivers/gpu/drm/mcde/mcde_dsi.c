@@ -177,12 +177,6 @@ static int mcde_dsi_host_attach(struct mipi_dsi_host *host,
 		return -EINVAL;
 	}
 
-	dev_info(d->dev, "attached DSI device with %d lanes\n", mdsi->lanes);
-	/* MIPI_DSI_FMT_RGB88 etc */
-	dev_info(d->dev, "format %08x, %dbpp\n", mdsi->format,
-		 mipi_dsi_pixel_format_to_bpp(mdsi->format));
-	dev_info(d->dev, "mode flags: %08lx\n", mdsi->mode_flags);
-
 	d->mdsi = mdsi;
 	if (d->mcde)
 		mcde_dsi_attach_to_mcde(d);
