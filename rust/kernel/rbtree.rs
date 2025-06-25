@@ -365,6 +365,11 @@ where
 
     /// Used for accessing the given node, if it exists.
     pub fn find_mut(&mut self, key: &K) -> Option<OccupiedEntry<'_, K, V>> {
+        // Fast path: return `None` when tree is empty.
+        if self.root.rb_node.is_null() {
+            return None;
+        }
+
         match self.raw_entry(key) {
             RawEntry::Occupied(entry) => Some(entry),
             RawEntry::Vacant(_entry) => None,
