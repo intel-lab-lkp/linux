@@ -5979,6 +5979,7 @@ F:	include/dt-bindings/clock/
 F:	include/linux/clk-pr*
 F:	include/linux/clk/
 F:	include/linux/of_clk.h
+F:	scripts/gdb/linux/clk.py
 F:	rust/helpers/clk.c
 F:	rust/kernel/clk.rs
 X:	drivers/clk/clkdev.c
@@ -7374,6 +7375,7 @@ F:	rust/kernel/faux.rs
 F:	rust/kernel/platform.rs
 F:	samples/rust/rust_driver_platform.rs
 F:	samples/rust/rust_driver_faux.rs
+F:	scripts/gdb/linux/device.py
 
 DRIVERS FOR OMAP ADAPTIVE VOLTAGE SCALING (AVS)
 M:	Nishanth Menon <nm@ti.com>
@@ -10119,6 +10121,7 @@ F:	Documentation/devicetree/bindings/power/power?domain*
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ulfh/linux-pm.git
 F:	drivers/pmdomain/
 F:	include/linux/pm_domain.h
+F:	scripts/gdb/linux/genpd.py
 
 GENERIC RADIX TREE
 M:	Kent Overstreet <kent.overstreet@linux.dev>
@@ -10126,6 +10129,7 @@ S:	Supported
 C:	irc://irc.oftc.net/bcache
 F:	include/linux/generic-radix-tree.h
 F:	lib/generic-radix-tree.c
+F:	scripts/gdb/linux/radixtree.py
 
 GENERIC RESISTIVE TOUCHSCREEN ADC DRIVER
 M:	Eugen Hristev <eugen.hristev@microchip.com>
@@ -12750,6 +12754,7 @@ F:	include/linux/irqnr.h
 F:	include/linux/irqreturn.h
 F:	kernel/irq/
 F:	lib/group_cpus.c
+F:	scripts/gdb/linux/interrupts.py
 
 IRQCHIP DRIVERS
 M:	Thomas Gleixner <tglx@linutronix.de>
@@ -12985,6 +12990,7 @@ F:	include/linux/kasan*.h
 F:	lib/Kconfig.kasan
 F:	mm/kasan/
 F:	scripts/Makefile.kasan
+F:	scripts/gdb/linux/kasan.py
 
 KCONFIG
 M:	Masahiro Yamada <masahiroy@kernel.org>
@@ -14464,6 +14470,7 @@ F:	include/linux/maple_tree.h
 F:	include/trace/events/maple_tree.h
 F:	lib/maple_tree.c
 F:	lib/test_maple_tree.c
+F:	scripts/gdb/linux/mapletree.py
 F:	tools/testing/radix-tree/maple.c
 F:	tools/testing/shared/linux/maple_tree.h
 
@@ -15750,6 +15757,10 @@ F:	include/linux/mmu_notifier.h
 F:	include/linux/pagewalk.h
 F:	include/trace/events/ksm.h
 F:	mm/
+F:	scripts/gdb/linux/mm.py
+F:	scripts/gdb/linux/page_owner.py
+F:	scripts/gdb/linux/pgtable.py
+F:	scripts/gdb/linux/slab.py
 F:	tools/mm/
 F:	tools/testing/selftests/mm/
 N:	include/linux/page[-_]*
@@ -16831,6 +16842,7 @@ F:	include/linux/module*.h
 F:	kernel/module/
 F:	lib/test_kmod.c
 F:	lib/tests/module/
+F:	scripts/gdb/linux/modules.py
 F:	scripts/module*
 F:	tools/testing/selftests/kmod/
 F:	tools/testing/selftests/module/
@@ -19457,6 +19469,7 @@ F:	arch/*/include/asm/percpu.h
 F:	include/linux/percpu*.h
 F:	lib/percpu*.c
 F:	mm/percpu*.c
+F:	scripts/gdb/linux/cpus.py
 
 PER-TASK DELAY ACCOUNTING
 M:	Balbir Singh <bsingharora@gmail.com>
@@ -19798,6 +19811,7 @@ F:	include/trace/events/timer*
 F:	kernel/time/itimer.c
 F:	kernel/time/posix-*
 F:	kernel/time/namespace.c
+F:	scripts/gdb/linux/timerlist.py
 
 POWER MANAGEMENT CORE
 M:	"Rafael J. Wysocki" <rafael@kernel.org>
@@ -19913,6 +19927,7 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/printk/linux.git
 F:	include/linux/printk.h
 F:	kernel/printk/
+F:	scripts/gdb/linux/dmesg.py
 
 PRINTK INDEXING
 R:	Chris Down <chris@chrisdown.name>
@@ -19928,6 +19943,7 @@ S:	Maintained
 F:	Documentation/filesystems/proc.rst
 F:	fs/proc/
 F:	include/linux/proc_fs.h
+F:	scripts/gdb/linux/proc.py
 F:	tools/testing/selftests/proc/
 
 PROC SYSCTL
@@ -26468,6 +26484,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/akpm/mm
 F:	include/linux/vmalloc.h
 F:	mm/vmalloc.c
 F:	lib/test_vmalloc.c
+F:	scripts/gdb/linux/vmalloc.py
 
 VME SUBSYSTEM
 L:	linux-kernel@vger.kernel.org
@@ -26977,6 +26994,7 @@ F:	include/linux/xarray.h
 F:	lib/idr.c
 F:	lib/test_xarray.c
 F:	lib/xarray.c
+F:	scripts/gdb/linux/xarray.py
 F:	tools/testing/radix-tree
 
 XARRAY API [RUST]
