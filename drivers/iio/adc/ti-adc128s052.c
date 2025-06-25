@@ -18,6 +18,7 @@
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/units.h>
 
 struct adc128_configuration {
 	const struct iio_chan_spec	*channels;
@@ -189,7 +190,7 @@ static int adc128_probe(struct spi_device *spi)
 				     "failed to read '%s' voltage",
 				     config->refname);
 
-	adc->vref_mv = ret / 1000;
+	adc->vref_mv = ret / MILLI;
 
 	if (config->num_other_regulators) {
 		ret = devm_regulator_bulk_get_enable(&spi->dev,
