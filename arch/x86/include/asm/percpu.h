@@ -57,7 +57,7 @@
 /*
  * arch_raw_cpu_ptr should not be used in 32-bit VDSO for a 64-bit
  * kernel, because games are played with CONFIG_X86_64 there and
- * sizeof(this_cpu_off) becames 4.
+ * sizeof(this_cpu_off) becomes 4.
  */
 #ifndef BUILD_VDSO32_64
 #define arch_raw_cpu_ptr(_ptr)						\
