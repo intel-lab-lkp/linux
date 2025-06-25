@@ -1540,9 +1540,12 @@ static inline int of_get_available_child_count(const struct device_node *np)
 	_OF_DECLARE_STUB(table, name, compat, fn, fn_type)
 #endif
 
+struct platform_device;
+
 typedef int (*of_init_fn_2)(struct device_node *, struct device_node *);
 typedef int (*of_init_fn_1_ret)(struct device_node *);
 typedef void (*of_init_fn_1)(struct device_node *);
+typedef int (*of_init_fn_pdev)(struct platform_device *);
 
 #define OF_DECLARE_1(table, name, compat, fn) \
 		_OF_DECLARE(table, name, compat, fn, of_init_fn_1)
@@ -1550,6 +1553,8 @@ typedef void (*of_init_fn_1)(struct device_node *);
 		_OF_DECLARE(table, name, compat, fn, of_init_fn_1_ret)
 #define OF_DECLARE_2(table, name, compat, fn) \
 		_OF_DECLARE(table, name, compat, fn, of_init_fn_2)
+#define OF_DECLARE_PDEV(table, name, compat, fn) \
+		_OF_DECLARE(table, name, compat, fn, of_init_fn_pdev)
 
 /**
  * struct of_changeset_entry	- Holds a changeset entry

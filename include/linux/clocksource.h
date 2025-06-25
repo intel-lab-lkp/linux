@@ -289,6 +289,9 @@ extern int clocksource_i8253_init(void);
 #define TIMER_OF_DECLARE(name, compat, fn) \
 	OF_DECLARE_1_RET(timer, name, compat, fn)
 
+#define TIMER_OF_DECLARE_PDEV(name, compat, fn) \
+	OF_DECLARE_PDEV(timer_pdev, name, compat, fn)
+
 #ifdef CONFIG_TIMER_PROBE
 extern void timer_probe(void);
 #else
