@@ -863,18 +863,22 @@ static int magicmouse_probe(struct hid_device *hdev,
 		return ret;
 	}
 
-	timer_setup(&msc->battery_timer, magicmouse_battery_timer_tick, 0);
-	mod_timer(&msc->battery_timer,
-		  jiffies + msecs_to_jiffies(USB_BATTERY_TIMEOUT_MS));
-	magicmouse_fetch_battery(hdev);
+	if (id->vendor == USB_VENDOR_ID_APPLE) {
+		bool is_mouse2 = (id->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2 ||
+				  id->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2_USBC);
+		bool is_trackpad2 = (id->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2 ||
+				     id->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC);
 
-	if (id->vendor == USB_VENDOR_ID_APPLE &&
-	    (id->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2 ||
-	     id->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2_USBC ||
-	     ((id->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2 ||
-	       id->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC) &&
-	      hdev->type != HID_TYPE_USBMOUSE)))
-		return 0;
+		if (is_mouse2 || is_trackpad2) {
+			timer_setup(&msc->battery_timer, magicmouse_battery_timer_tick, 0);
+			mod_timer(&msc->battery_timer,
+				  jiffies + msecs_to_jiffies(USB_BATTERY_TIMEOUT_MS));
+			magicmouse_fetch_battery(hdev);
+		}
+
+		if (is_mouse2 || (is_trackpad2 && hdev->type != HID_TYPE_USBMOUSE))
+			return 0;
+	}
 
 	if (!msc->input) {
 		hid_err(hdev, "magicmouse input not registered\n");
@@ -947,7 +951,13 @@ static void magicmouse_remove(struct hid_device *hdev)
 
 	if (msc) {
 		cancel_delayed_work_sync(&msc->work);
-		timer_delete_sync(&msc->battery_timer);
+		if (hdev->vendor == USB_VENDOR_ID_APPLE &&
+		    (hdev->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2 ||
+		     hdev->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2_USBC ||
+		     hdev->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2 ||
+		     hdev->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC))
+
+			timer_delete_sync(&msc->battery_timer);
 	}
 
 	hid_hw_stop(hdev);
