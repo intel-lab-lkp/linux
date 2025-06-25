@@ -148,9 +148,9 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
  * Limited because this is done with IRQs disabled.
  */
 __read_mostly unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
-
 __read_mostly int scheduler_running;
 
+DEFINE_STATIC_KEY_FALSE(paravirt_cpu_avoid_enabled);
 #ifdef CONFIG_SCHED_CORE
 
 DEFINE_STATIC_KEY_FALSE(__sched_core_enabled);
@@ -2438,7 +2438,7 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 		return false;
 
 	/* CPU marked as avoid, shouldn't chosen to run any task*/
-	if (cpu_avoid(cpu))
+	if (cpu_avoid_check(cpu))
 		return false;
 
 	/* But are allowed during online. */
@@ -5578,7 +5578,7 @@ void sched_tick(void)
 	sched_clock_tick();
 
 	/* push the current task out if cpu is marked as avoid */
-	if (cpu_avoid(cpu))
+	if (cpu_avoid_check(cpu))
 		push_current_task(rq);
 
 	rq_lock(rq, &rf);
@@ -8048,7 +8048,7 @@ void push_current_task(struct rq *rq)
 	unsigned long flags;
 
 	/* idle task can't be pused out */
-	if (rq->curr == rq->idle || !cpu_avoid(rq->cpu))
+	if (rq->curr == rq->idle || !cpu_avoid_check(rq->cpu))
 		return;
 
 	/* Do for only SCHED_NORMAL AND RT for now */

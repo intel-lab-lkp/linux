@@ -1710,6 +1710,15 @@ struct rq_flags {
 
 extern struct balance_callback balance_push_callback;
 void push_current_task(struct rq *rq);
+DECLARE_STATIC_KEY_FALSE(paravirt_cpu_avoid_enabled);
+
+static inline bool cpu_avoid_check(int cpu)
+{
+	if (static_branch_unlikely(&paravirt_cpu_avoid_enabled))
+		return cpu_avoid(cpu);
+
+	return false;
+}
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 extern const struct sched_class ext_sched_class;

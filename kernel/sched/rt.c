@@ -1549,7 +1549,7 @@ select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 		if (!test && target != -1 && !rt_task_fits_capacity(p, target))
 			goto out_unlock;
 
-		if (cpu_avoid(target))
+		if (cpu_avoid_check(target))
 			goto out_unlock;
 		/*
 		 * Don't bother moving it if the destination CPU is
@@ -1873,7 +1873,7 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 	for (tries = 0; tries < RT_MAX_TRIES; tries++) {
 		cpu = find_lowest_rq(task);
 
-		if ((cpu == -1) || (cpu == rq->cpu) || cpu_avoid(cpu))
+		if ((cpu == -1) || (cpu == rq->cpu) || cpu_avoid_check(cpu))
 			break;
 
 		lowest_rq = cpu_rq(cpu);
@@ -1971,7 +1971,7 @@ retry:
 			return 0;
 
 		cpu = find_lowest_rq(rq->curr);
-		if (cpu == -1 || cpu == rq->cpu || cpu_avoid(cpu))
+		if (cpu == -1 || cpu == rq->cpu || cpu_avoid_check(cpu))
 			return 0;
 
 		/*
@@ -2234,7 +2234,7 @@ static void pull_rt_task(struct rq *this_rq)
 	if (likely(!rt_overload_count))
 		return;
 
-	if (cpu_avoid(this_rq->cpu))
+	if (cpu_avoid_check(this_rq->cpu))
 		return;
 
 	/*
