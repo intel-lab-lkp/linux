@@ -4447,7 +4447,7 @@ static void __ieee80211_disconnect(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
-	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -7214,7 +7214,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	u8 erp_value = 0;
 	u32 ncrc = 0;
 	u8 *bssid, *variable = mgmt->u.beacon.variable;
-	u8 deauth_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 deauth_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 	struct ieee80211_elems_parse_params parse_params = {
 		.mode = link->u.mgd.conn.mode,
 		.link_id = -1,
@@ -8094,7 +8094,7 @@ static void ieee80211_sta_timer(struct timer_list *t)
 void ieee80211_sta_connection_lost(struct ieee80211_sub_if_data *sdata,
 				   u8 reason, bool tx)
 {
-	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 
 	ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH, reason,
 			       tx, frame_buf);
@@ -9090,7 +9090,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		ieee80211_mark_sta_auth(sdata);
 
 	if (ifmgd->associated) {
-		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new auth to %pM\n",
@@ -9393,7 +9393,7 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	assoc_data->ext_mld_capa_ops = cpu_to_le16(req->ext_mld_capa_ops);
 
 	if (ifmgd->associated) {
-		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new assoc to %pM\n",
@@ -9724,7 +9724,7 @@ int ieee80211_mgd_deauth(struct ieee80211_sub_if_data *sdata,
 			 struct cfg80211_deauth_request *req)
 {
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
-	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 	bool tx = !req->local_state_change;
 	struct ieee80211_prep_tx_info info = {
 		.subtype = IEEE80211_STYPE_DEAUTH,
@@ -9793,7 +9793,7 @@ int ieee80211_mgd_deauth(struct ieee80211_sub_if_data *sdata,
 int ieee80211_mgd_disassoc(struct ieee80211_sub_if_data *sdata,
 			   struct cfg80211_disassoc_request *req)
 {
-	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {};
 
 	if (!sdata->u.mgd.associated ||
 	    memcmp(sdata->vif.cfg.ap_addr, req->ap_addr, ETH_ALEN))
