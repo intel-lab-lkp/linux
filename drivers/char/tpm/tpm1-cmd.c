@@ -323,7 +323,7 @@ unsigned long tpm1_calc_ordinal_duration(struct tpm_chip *chip, u32 ordinal)
  */
 static int tpm1_startup(struct tpm_chip *chip)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	dev_info(&chip->dev, "starting up the TPM manually\n");
@@ -335,7 +335,6 @@ static int tpm1_startup(struct tpm_chip *chip)
 	tpm_buf_append_u16(&buf, TPM_ST_CLEAR);
 
 	rc = tpm_transmit_cmd(chip, &buf, 0, "attempting to start the TPM");
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
@@ -463,7 +462,7 @@ int tpm1_get_timeouts(struct tpm_chip *chip)
 int tpm1_pcr_extend(struct tpm_chip *chip, u32 pcr_idx, const u8 *hash,
 		    const char *log_msg)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM_TAG_RQU_COMMAND, TPM_ORD_PCR_EXTEND);
@@ -474,7 +473,6 @@ int tpm1_pcr_extend(struct tpm_chip *chip, u32 pcr_idx, const u8 *hash,
 	tpm_buf_append(&buf, hash, TPM_DIGEST_SIZE);
 
 	rc = tpm_transmit_cmd(chip, &buf, TPM_DIGEST_SIZE, log_msg);
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
@@ -482,7 +480,7 @@ int tpm1_pcr_extend(struct tpm_chip *chip, u32 pcr_idx, const u8 *hash,
 ssize_t tpm1_getcap(struct tpm_chip *chip, u32 subcap_id, cap_t *cap,
 		    const char *desc, size_t min_cap_length)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM_TAG_RQU_COMMAND, TPM_ORD_GET_CAP);
@@ -506,7 +504,6 @@ ssize_t tpm1_getcap(struct tpm_chip *chip, u32 subcap_id, cap_t *cap,
 	rc = tpm_transmit_cmd(chip, &buf, min_cap_length, desc);
 	if (!rc)
 		*cap = *(cap_t *)&buf.data[TPM_HEADER_SIZE + 4];
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(tpm1_getcap);
@@ -529,9 +526,9 @@ struct tpm1_get_random_out {
  */
 int tpm1_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm1_get_random_out *out;
 	u32 num_bytes =  min_t(u32, max, TPM_MAX_RNG_DATA);
-	struct tpm_buf buf;
 	u32 total = 0;
 	int retries = 5;
 	u32 recd;
@@ -549,22 +546,18 @@ int tpm1_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 		if (rc) {
 			if (rc > 0)
 				rc = -EIO;
-			goto out;
+			return rc;
 		}
 
 		out = (struct tpm1_get_random_out *)&buf.data[TPM_HEADER_SIZE];
 
 		recd = be32_to_cpu(out->rng_data_len);
-		if (recd > num_bytes) {
-			rc = -EFAULT;
-			goto out;
-		}
+		if (recd > num_bytes)
+			return -EFAULT;
 
 		if (tpm_buf_length(&buf) < TPM_HEADER_SIZE +
-					   sizeof(out->rng_data_len) + recd) {
-			rc = -EFAULT;
-			goto out;
-		}
+					   sizeof(out->rng_data_len) + recd)
+			return -EFAULT;
 		memcpy(dest, out->rng_data, recd);
 
 		dest += recd;
@@ -575,15 +568,13 @@ int tpm1_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 	} while (retries-- && total < max);
 
 	rc = total ? (int)total : -EIO;
-out:
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
 #define TPM_ORD_PCRREAD 21
 int tpm1_pcr_read(struct tpm_chip *chip, u32 pcr_idx, u8 *res_buf)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM_TAG_RQU_COMMAND, TPM_ORD_PCRREAD);
@@ -595,17 +586,12 @@ int tpm1_pcr_read(struct tpm_chip *chip, u32 pcr_idx, u8 *res_buf)
 	rc = tpm_transmit_cmd(chip, &buf, TPM_DIGEST_SIZE,
 			      "attempting to read a pcr value");
 	if (rc)
-		goto out;
+		return rc;
 
-	if (tpm_buf_length(&buf) < TPM_DIGEST_SIZE) {
-		rc = -EFAULT;
-		goto out;
-	}
+	if (tpm_buf_length(&buf) < TPM_DIGEST_SIZE)
+		return -EFAULT;
 
 	memcpy(res_buf, &buf.data[TPM_HEADER_SIZE], TPM_DIGEST_SIZE);
-
-out:
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
@@ -619,7 +605,7 @@ out:
  */
 static int tpm1_continue_selftest(struct tpm_chip *chip)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM_TAG_RQU_COMMAND, TPM_ORD_CONTINUE_SELFTEST);
@@ -627,7 +613,6 @@ static int tpm1_continue_selftest(struct tpm_chip *chip)
 		return rc;
 
 	rc = tpm_transmit_cmd(chip, &buf, 0, "continue selftest");
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
@@ -742,7 +727,7 @@ out:
 int tpm1_pm_suspend(struct tpm_chip *chip, u32 tpm_suspend_pcr)
 {
 	u8 dummy_hash[TPM_DIGEST_SIZE] = { 0 };
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	unsigned int try;
 	int rc;
 
@@ -781,8 +766,6 @@ int tpm1_pm_suspend(struct tpm_chip *chip, u32 tpm_suspend_pcr)
 	else if (try > 0)
 		dev_warn(&chip->dev, "TPM savestate took %dms\n",
 			 try * TPM_TIMEOUT_RETRY);
-
-	tpm_buf_destroy(&buf);
 
 	return rc;
 }

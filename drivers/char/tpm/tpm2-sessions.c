@@ -182,7 +182,7 @@ static int tpm2_parse_read_public(char *name, struct tpm_buf *buf)
 
 static int tpm2_read_public(struct tpm_chip *chip, u32 handle, char *name)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_NO_SESSIONS, TPM2_CC_READ_PUBLIC);
@@ -193,8 +193,6 @@ static int tpm2_read_public(struct tpm_chip *chip, u32 handle, char *name)
 	rc = tpm_transmit_cmd(chip, &buf, 0, "read public");
 	if (rc == TPM2_RC_SUCCESS)
 		rc = tpm2_parse_read_public(name, &buf);
-
-	tpm_buf_destroy(&buf);
 
 	return rc;
 }
@@ -968,8 +966,8 @@ err:
  */
 int tpm2_start_auth_session(struct tpm_chip *chip)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm2_auth *auth;
-	struct tpm_buf buf;
 	u32 null_key;
 	int rc;
 
@@ -1021,8 +1019,6 @@ int tpm2_start_auth_session(struct tpm_chip *chip)
 
 	if (rc == TPM2_RC_SUCCESS)
 		rc = tpm2_parse_start_auth_session(auth, &buf);
-
-	tpm_buf_destroy(&buf);
 
 	if (rc == TPM2_RC_SUCCESS) {
 		chip->auth = auth;
@@ -1243,19 +1239,17 @@ static int tpm2_parse_create_primary(struct tpm_chip *chip, struct tpm_buf *buf,
 static int tpm2_create_primary(struct tpm_chip *chip, u32 hierarchy,
 			       u32 *handle, u8 *name)
 {
+	CLASS(tpm_buf, buf)();
+	CLASS(tpm_buf, template)();
 	int rc;
-	struct tpm_buf buf;
-	struct tpm_buf template;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_SESSIONS, TPM2_CC_CREATE_PRIMARY);
 	if (rc)
 		return rc;
 
 	rc = tpm_buf_init_sized(&template);
-	if (rc) {
-		tpm_buf_destroy(&buf);
+	if (rc)
 		return rc;
-	}
 
 	/*
 	 * create the template.  Note: in order for userspace to
@@ -1319,7 +1313,6 @@ static int tpm2_create_primary(struct tpm_chip *chip, u32 hierarchy,
 
 	/* the public template */
 	tpm_buf_append(&buf, template.data, template.length);
-	tpm_buf_destroy(&template);
 
 	/* outside info (empty) */
 	tpm_buf_append_u16(&buf, 0);
@@ -1333,8 +1326,6 @@ static int tpm2_create_primary(struct tpm_chip *chip, u32 hierarchy,
 	if (rc == TPM2_RC_SUCCESS)
 		rc = tpm2_parse_create_primary(chip, &buf, handle, hierarchy,
 					       name);
-
-	tpm_buf_destroy(&buf);
 
 	return rc;
 }

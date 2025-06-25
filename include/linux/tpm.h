@@ -425,6 +425,8 @@ u16 tpm_buf_read_u16(struct tpm_buf *buf, off_t *offset);
 u32 tpm_buf_read_u32(struct tpm_buf *buf, off_t *offset);
 void tpm_buf_append_handle(struct tpm_chip *chip, struct tpm_buf *buf, u32 handle);
 
+DEFINE_CLASS(tpm_buf, struct tpm_buf, tpm_buf_destroy(&_T), (struct tpm_buf) {}, void)
+
 /*
  * Check if TPM device is in the firmware upgrade mode.
  */

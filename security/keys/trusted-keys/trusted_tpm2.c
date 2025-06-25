@@ -241,8 +241,9 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 		      struct trusted_key_payload *payload,
 		      struct trusted_key_options *options)
 {
+	CLASS(tpm_buf, buf)();
+	CLASS(tpm_buf, sized)();
 	off_t offset = TPM_HEADER_SIZE;
-	struct tpm_buf buf, sized;
 	int blob_len = 0;
 	u32 hash;
 	u32 flags;
@@ -278,7 +279,6 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 
 	rc = tpm_buf_init_sized(&sized);
 	if (rc) {
-		tpm_buf_destroy(&buf);
 		tpm2_end_auth_session(chip);
 		goto out_put;
 	}
@@ -350,9 +350,6 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 	blob_len = tpm2_key_encode(payload, options, &buf.data[offset], blob_len);
 
 out:
-	tpm_buf_destroy(&sized);
-	tpm_buf_destroy(&buf);
-
 	if (rc > 0) {
 		if (tpm2_rc_value(rc) == TPM2_RC_HASH)
 			rc = -EINVAL;
@@ -387,7 +384,7 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 			 struct trusted_key_options *options,
 			 u32 *blob_handle)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	unsigned int private_len;
 	unsigned int public_len;
 	unsigned int blob_len;
@@ -466,7 +463,6 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 out:
 	if (blob != payload->blob)
 		kfree(blob);
-	tpm_buf_destroy(&buf);
 
 	if (rc > 0)
 		rc = -EPERM;
@@ -491,7 +487,7 @@ static int tpm2_unseal_cmd(struct tpm_chip *chip,
 			   struct trusted_key_options *options,
 			   u32 blob_handle)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	u16 data_len;
 	u8 *data;
 	int rc;
@@ -540,15 +536,11 @@ static int tpm2_unseal_cmd(struct tpm_chip *chip,
 	if (!rc) {
 		data_len = be16_to_cpup(
 			(__be16 *) &buf.data[TPM_HEADER_SIZE + 4]);
-		if (data_len < MIN_KEY_SIZE ||  data_len > MAX_KEY_SIZE) {
-			rc = -EFAULT;
-			goto out;
-		}
+		if (data_len < MIN_KEY_SIZE ||  data_len > MAX_KEY_SIZE)
+			return -EFAULT;
 
-		if (tpm_buf_length(&buf) < TPM_HEADER_SIZE + 6 + data_len) {
-			rc = -EFAULT;
-			goto out;
-		}
+		if (tpm_buf_length(&buf) < TPM_HEADER_SIZE + 6 + data_len)
+			return -EFAULT;
 		data = &buf.data[TPM_HEADER_SIZE + 6];
 
 		if (payload->old_format) {
@@ -566,8 +558,6 @@ static int tpm2_unseal_cmd(struct tpm_chip *chip,
 		}
 	}
 
-out:
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 

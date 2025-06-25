@@ -672,7 +672,7 @@ static int tpm_unseal(struct tpm_buf *tb,
 static int key_seal(struct trusted_key_payload *p,
 		    struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
+	CLASS(tpm_buf, tb)();
 	int ret;
 
 	ret = tpm_buf_init(&tb, 0, 0);
@@ -688,7 +688,6 @@ static int key_seal(struct trusted_key_payload *p,
 	if (ret < 0)
 		pr_info("srkseal failed (%d)\n", ret);
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 
@@ -698,7 +697,7 @@ static int key_seal(struct trusted_key_payload *p,
 static int key_unseal(struct trusted_key_payload *p,
 		      struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
+	CLASS(tpm_buf, tb)();
 	int ret;
 
 	ret = tpm_buf_init(&tb, 0, 0);
@@ -713,7 +712,6 @@ static int key_unseal(struct trusted_key_payload *p,
 		/* pull migratable flag out of sealed key */
 		p->migratable = p->key[--p->key_len];
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 

@@ -165,9 +165,9 @@ struct tpm2_pcr_read_out {
 int tpm2_pcr_read(struct tpm_chip *chip, u32 pcr_idx,
 		  struct tpm_digest *digest, u16 *digest_size_ptr)
 {
+	CLASS(tpm_buf, buf)();
 	int i;
 	int rc;
-	struct tpm_buf buf;
 	struct tpm2_pcr_read_out *out;
 	u8 pcr_select[TPM2_PCR_SELECT_MIN] = {0};
 	u16 digest_size;
@@ -216,7 +216,6 @@ int tpm2_pcr_read(struct tpm_chip *chip, u32 pcr_idx,
 
 	memcpy(digest->digest, out->digest, digest_size);
 out:
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 
@@ -232,7 +231,7 @@ out:
 int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 		    struct tpm_digest *digests)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 	int i;
 
@@ -271,8 +270,6 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 	if (!disable_pcr_integrity)
 		rc = tpm_buf_check_hmac_response(chip, &buf, rc);
 
-	tpm_buf_destroy(&buf);
-
 	return rc;
 }
 
@@ -294,9 +291,9 @@ struct tpm2_get_random_out {
  */
 int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm2_get_random_out *out;
 	struct tpm_header *head;
-	struct tpm_buf buf;
 	u32 recd;
 	u32 num_bytes = max;
 	int err;
@@ -358,11 +355,9 @@ int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 		num_bytes -= recd;
 	} while (retries-- && total < max);
 
-	tpm_buf_destroy(&buf);
-
 	return total ? total : -EIO;
+
 out:
-	tpm_buf_destroy(&buf);
 	tpm2_end_auth_session(chip);
 	return err;
 }
@@ -374,7 +369,7 @@ out:
  */
 void tpm2_flush_context(struct tpm_chip *chip, u32 handle)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_NO_SESSIONS, TPM2_CC_FLUSH_CONTEXT);
@@ -387,7 +382,6 @@ void tpm2_flush_context(struct tpm_chip *chip, u32 handle)
 	tpm_buf_append_u32(&buf, handle);
 
 	tpm_transmit_cmd(chip, &buf, 0, "flushing context");
-	tpm_buf_destroy(&buf);
 }
 EXPORT_SYMBOL_GPL(tpm2_flush_context);
 
@@ -413,8 +407,8 @@ struct tpm2_get_cap_out {
 ssize_t tpm2_get_tpm_pt(struct tpm_chip *chip, u32 property_id,  u32 *value,
 			const char *desc)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm2_get_cap_out *out;
-	struct tpm_buf buf;
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_NO_SESSIONS, TPM2_CC_GET_CAPABILITY);
@@ -438,7 +432,6 @@ ssize_t tpm2_get_tpm_pt(struct tpm_chip *chip, u32 property_id,  u32 *value,
 		else
 			rc = -ENODATA;
 	}
-	tpm_buf_destroy(&buf);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(tpm2_get_tpm_pt);
@@ -455,7 +448,7 @@ EXPORT_SYMBOL_GPL(tpm2_get_tpm_pt);
  */
 void tpm2_shutdown(struct tpm_chip *chip, u16 shutdown_type)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_NO_SESSIONS, TPM2_CC_SHUTDOWN);
@@ -463,7 +456,6 @@ void tpm2_shutdown(struct tpm_chip *chip, u16 shutdown_type)
 		return;
 	tpm_buf_append_u16(&buf, shutdown_type);
 	tpm_transmit_cmd(chip, &buf, 0, "stopping the TPM");
-	tpm_buf_destroy(&buf);
 }
 
 /**
@@ -481,7 +473,7 @@ void tpm2_shutdown(struct tpm_chip *chip, u16 shutdown_type)
  */
 static int tpm2_do_selftest(struct tpm_chip *chip)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int full;
 	int rc;
 
@@ -493,7 +485,6 @@ static int tpm2_do_selftest(struct tpm_chip *chip)
 		tpm_buf_append_u8(&buf, full);
 		rc = tpm_transmit_cmd(chip, &buf, 0,
 				      "attempting the self test");
-		tpm_buf_destroy(&buf);
 
 		if (rc == TPM2_RC_TESTING)
 			rc = TPM2_RC_SUCCESS;
@@ -518,8 +509,8 @@ static int tpm2_do_selftest(struct tpm_chip *chip)
  */
 int tpm2_probe(struct tpm_chip *chip)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm_header *out;
-	struct tpm_buf buf;
 	int rc;
 
 	rc = tpm_buf_init(&buf, TPM2_ST_NO_SESSIONS, TPM2_CC_GET_CAPABILITY);
@@ -535,7 +526,6 @@ int tpm2_probe(struct tpm_chip *chip)
 		if (be16_to_cpu(out->tag) == TPM2_ST_NO_SESSIONS)
 			chip->flags |= TPM_CHIP_FLAG_TPM2;
 	}
-	tpm_buf_destroy(&buf);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tpm2_probe);
@@ -574,8 +564,8 @@ struct tpm2_pcr_selection {
 
 ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 {
+	CLASS(tpm_buf, buf)();
 	struct tpm2_pcr_selection pcr_selection;
-	struct tpm_buf buf;
 	void *marker;
 	void *end;
 	void *pcr_select_offset;
@@ -597,7 +587,7 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 
 	rc = tpm_transmit_cmd(chip, &buf, 9, "get tpm pcr allocation");
 	if (rc)
-		goto out;
+		return rc;
 
 	nr_possible_banks = be32_to_cpup(
 		(__be32 *)&buf.data[TPM_HEADER_SIZE + 5]);
@@ -605,23 +595,20 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 	chip->allocated_banks = kcalloc(nr_possible_banks,
 					sizeof(*chip->allocated_banks),
 					GFP_KERNEL);
-	if (!chip->allocated_banks) {
-		rc = -ENOMEM;
-		goto out;
-	}
+	if (!chip->allocated_banks)
+		return -ENOMEM;
 
 	marker = &buf.data[TPM_HEADER_SIZE + 9];
 
 	rsp_len = be32_to_cpup((__be32 *)&buf.data[2]);
 	end = &buf.data[rsp_len];
 
+	return rc;
 	for (i = 0; i < nr_possible_banks; i++) {
 		pcr_select_offset = marker +
 			offsetof(struct tpm2_pcr_selection, size_of_select);
-		if (pcr_select_offset >= end) {
-			rc = -EFAULT;
-			break;
-		}
+		if (pcr_select_offset >= end)
+			return -EFAULT;
 
 		memcpy(&pcr_selection, marker, sizeof(pcr_selection));
 		hash_alg = be16_to_cpu(pcr_selection.hash_alg);
@@ -633,7 +620,7 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 
 			rc = tpm2_init_bank_info(chip, nr_alloc_banks);
 			if (rc < 0)
-				break;
+				return rc;
 
 			nr_alloc_banks++;
 		}
@@ -645,15 +632,12 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 	}
 
 	chip->nr_allocated_banks = nr_alloc_banks;
-out:
-	tpm_buf_destroy(&buf);
-
-	return rc;
+	return 0;
 }
 
 int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	u32 nr_commands;
 	__be32 *attrs;
 	u32 cc;
@@ -685,15 +669,12 @@ int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 	tpm_buf_append_u32(&buf, nr_commands);
 
 	rc = tpm_transmit_cmd(chip, &buf, 9 + 4 * nr_commands, NULL);
-	if (rc) {
-		tpm_buf_destroy(&buf);
+	if (rc)
 		goto out;
-	}
 
 	if (nr_commands !=
 	    be32_to_cpup((__be32 *)&buf.data[TPM_HEADER_SIZE + 5])) {
 		rc = -EFAULT;
-		tpm_buf_destroy(&buf);
 		goto out;
 	}
 
@@ -710,8 +691,6 @@ int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 			chip->cc_attrs_tbl[i] |= 1 << TPM2_CC_ATTR_CHANDLES;
 		}
 	}
-
-	tpm_buf_destroy(&buf);
 
 out:
 	if (rc > 0)
@@ -733,7 +712,7 @@ EXPORT_SYMBOL_GPL(tpm2_get_cc_attrs_tbl);
 
 static int tpm2_startup(struct tpm_chip *chip)
 {
-	struct tpm_buf buf;
+	CLASS(tpm_buf, buf)();
 	int rc;
 
 	dev_info(&chip->dev, "starting up the TPM manually\n");
@@ -743,10 +722,8 @@ static int tpm2_startup(struct tpm_chip *chip)
 		return rc;
 
 	tpm_buf_append_u16(&buf, TPM2_SU_CLEAR);
-	rc = tpm_transmit_cmd(chip, &buf, 0, "attempting to start the TPM");
-	tpm_buf_destroy(&buf);
 
-	return rc;
+	return tpm_transmit_cmd(chip, &buf, 0, "attempting to start the TPM");
 }
 
 /**
