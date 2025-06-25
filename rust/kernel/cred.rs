@@ -11,7 +11,8 @@
 use crate::{
     bindings,
     task::Kuid,
-    types::{AlwaysRefCounted, Opaque},
+    sync::aref::AlwaysRefCounted,
+    types::Opaque,
 };
 
 /// Wraps the kernel's `struct cred`.

@@ -11,7 +11,7 @@ use crate::{
     error::{to_result, Result},
     prelude::*,
     str::CStr,
-    types::ARef,
+    sync::aref::ARef,
 };
 use macros::vtable;
 

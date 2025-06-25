@@ -2,7 +2,7 @@
 
 //! Rust Platform driver sample.
 
-use kernel::{c_str, device::Core, of, platform, prelude::*, types::ARef};
+use kernel::{c_str, device::Core, of, platform, prelude::*, sync::aref::ARef};
 
 struct SampleDriver {
     pdev: ARef<platform::Device>,
