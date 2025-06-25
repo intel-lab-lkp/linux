@@ -413,6 +413,7 @@ static int pppoe_rcv(struct sk_buff *skb, struct net_device *dev,
 	struct pppoe_hdr *ph;
 	struct pppox_sock *po;
 	struct pppoe_net *pn;
+	struct sock *sk;
 	int len;
 
 	if (skb->pkt_type == PACKET_OTHERHOST)
@@ -448,7 +449,14 @@ static int pppoe_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (!po)
 		goto drop;
 
-	return sk_receive_skb(sk_pppox(po), skb, 0);
+	sk = sk_pppox(po);
+	if (sk->sk_state & PPPOX_BOUND) {
+		ppp_input(&po->chan, skb);
+		sock_put(sk);
+		return NET_RX_SUCCESS;
+	}
+
+	return sk_receive_skb(sk, skb, 0);
 
 drop:
 	kfree_skb(skb);
