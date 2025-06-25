@@ -498,14 +498,6 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 	num_registered_fb++;
 	registered_fb[i] = fb_info;
 
-#ifdef CONFIG_GUMSTIX_AM200EPD
-	{
-		struct fb_event event;
-		event.info = fb_info;
-		fb_notifier_call_chain(FB_EVENT_FB_REGISTERED, &event);
-	}
-#endif
-
 	return fbcon_fb_registered(fb_info);
 }
 
@@ -544,13 +536,6 @@ static void do_unregister_framebuffer(struct fb_info *fb_info)
 	fb_destroy_modelist(&fb_info->modelist);
 	registered_fb[fb_info->node] = NULL;
 	num_registered_fb--;
-#ifdef CONFIG_GUMSTIX_AM200EPD
-	{
-		struct fb_event event;
-		event.info = fb_info;
-		fb_notifier_call_chain(FB_EVENT_FB_UNREGISTERED, &event);
-	}
-#endif
 	fbcon_fb_unregistered(fb_info);
 
 	/* this may free fb info */
