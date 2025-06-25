@@ -339,6 +339,22 @@ sub which($)
 	return undef;
 }
 
+sub run_if_interactive($)
+{
+	my $command = shift;
+	printf("\n\t$command\n");
+
+	if ($interactive) {
+		printf("Run the command now? [Y/n]: ");
+		my $user_input = <STDIN>;
+		chomp $user_input;
+		if ($user_input eq '' or $user_input =~ /^y(es)?$/i) {
+			system($command) == 0
+				or die "Failed to run the command";
+		}
+	}
+}
+
 #
 # Subroutines that check distro-specific hints
 #
