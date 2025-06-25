@@ -10121,6 +10121,7 @@ F:	Documentation/devicetree/bindings/power/power?domain*
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/ulfh/linux-pm.git
 F:	drivers/pmdomain/
 F:	include/linux/pm_domain.h
+F:	scripts/gdb/linux/genpd.py
 
 GENERIC RADIX TREE
 M:	Kent Overstreet <kent.overstreet@linux.dev>
