@@ -15,7 +15,6 @@ struct unwind_task_info {
 	struct callback_head	work;
 	unsigned long		unwind_mask;
 	local64_t		timestamp;
-	local_t			pending;
 };
 
 #endif /* _LINUX_UNWIND_USER_DEFERRED_TYPES_H */
