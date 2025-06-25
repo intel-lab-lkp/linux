@@ -8546,7 +8546,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	}
 	rcu_read_unlock();
 
-	return new_cpu;
+	/* Don't select a CPU marked as avoid for wakeup */
+	if (cpu_avoid(new_cpu))
+		return cpu;
+	else
+		return new_cpu;
+
 }
 
 /*
@@ -11661,6 +11666,9 @@ static int sched_balance_rq(int this_cpu, struct rq *this_rq,
 	};
 
 	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
+
+	/* Don't spread load into CPUs marked as avoid */
+	cpumask_andnot(cpus, cpus, cpu_avoid_mask);
 
 	schedstat_inc(sd->lb_count[idle]);
 
