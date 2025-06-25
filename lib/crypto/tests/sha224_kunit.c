@@ -12,7 +12,15 @@
 #define HASH_UPDATE sha224_update
 #define HASH_FINAL sha224_final
 #define HASH_TESTVECS sha224_testvecs
-/* TODO: add HMAC-SHA224 support to the library, then enable the tests for it */
+#define HMAC_KEY hmac_sha224_key
+#define HMAC_CTX hmac_sha224_ctx
+#define HMAC_SETKEY hmac_sha224_preparekey
+#define HMAC_INIT hmac_sha224_init
+#define HMAC_UPDATE hmac_sha224_update
+#define HMAC_FINAL hmac_sha224_final
+#define HMAC hmac_sha224
+#define HMAC_USINGRAWKEY hmac_sha224_usingrawkey
+#define HMAC_TESTVECS hmac_sha224_testvecs
 #include "hash-test-template.h"
 
 static struct kunit_case hash_test_cases[] = {
@@ -23,6 +31,7 @@ static struct kunit_case hash_test_cases[] = {
 	KUNIT_CASE(test_hash_alignment_consistency),
 	KUNIT_CASE(test_hash_interrupt_context),
 	KUNIT_CASE(test_hash_ctx_zeroization),
+	KUNIT_CASE(test_hmac),
 	KUNIT_CASE(benchmark_hash),
 	{},
 };
@@ -35,5 +44,5 @@ static struct kunit_suite hash_test_suite = {
 };
 kunit_test_suite(hash_test_suite);
 
-MODULE_DESCRIPTION("KUnit tests and benchmark for SHA-224");
+MODULE_DESCRIPTION("KUnit tests and benchmark for SHA-224 and HMAC-SHA224");
 MODULE_LICENSE("GPL");
