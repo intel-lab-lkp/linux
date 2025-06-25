@@ -58,7 +58,11 @@ static DEFINE_PER_CPU(int, tracing_irq_cpu);
  */
 void trace_hardirqs_on_prepare(void)
 {
-	if (this_cpu_read(tracing_irq_cpu)) {
+	int tracing_count = this_cpu_read(tracing_irq_cpu);
+
+	if (in_nmi() && tracing_count > 1)
+		this_cpu_dec(tracing_irq_cpu);
+	else if (tracing_count) {
 		trace(irq_enable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
 		tracer_hardirqs_on(CALLER_ADDR0, CALLER_ADDR1);
 		this_cpu_write(tracing_irq_cpu, 0);
@@ -89,8 +93,7 @@ NOKPROBE_SYMBOL(trace_hardirqs_on);
  */
 void trace_hardirqs_off_finish(void)
 {
-	if (!this_cpu_read(tracing_irq_cpu)) {
-		this_cpu_write(tracing_irq_cpu, 1);
+	if (this_cpu_inc_return(tracing_irq_cpu) == 1) {
 		tracer_hardirqs_off(CALLER_ADDR0, CALLER_ADDR1);
 		trace(irq_disable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
 	}
@@ -103,8 +106,7 @@ void trace_hardirqs_off(void)
 {
 	lockdep_hardirqs_off(CALLER_ADDR0);
 
-	if (!this_cpu_read(tracing_irq_cpu)) {
-		this_cpu_write(tracing_irq_cpu, 1);
+	if (this_cpu_inc_return(tracing_irq_cpu) == 1) {
 		tracer_hardirqs_off(CALLER_ADDR0, CALLER_ADDR1);
 		trace(irq_disable, TP_ARGS(CALLER_ADDR0, CALLER_ADDR1));
 	}

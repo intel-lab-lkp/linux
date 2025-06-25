@@ -343,10 +343,9 @@ void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t irq_state)
 {
 	instrumentation_begin();
 	ftrace_nmi_exit();
-	if (irq_state.lockdep) {
-		trace_hardirqs_on_prepare();
+	trace_hardirqs_on_prepare();
+	if (irq_state.lockdep)
 		lockdep_hardirqs_on_prepare();
-	}
 	instrumentation_end();
 
 	ct_nmi_exit();

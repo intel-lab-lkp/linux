@@ -213,10 +213,9 @@ static void noinstr arm64_exit_nmi(struct pt_regs *regs)
 	bool restore = regs->lockdep_hardirqs;
 
 	ftrace_nmi_exit();
-	if (restore) {
-		trace_hardirqs_on_prepare();
+	trace_hardirqs_on_prepare();
+	if (restore)
 		lockdep_hardirqs_on_prepare();
-	}
 
 	ct_nmi_exit();
 	lockdep_hardirq_exit();
