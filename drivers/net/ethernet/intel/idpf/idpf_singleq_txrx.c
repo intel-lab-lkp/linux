@@ -220,7 +220,7 @@ static void idpf_tx_singleq_map(struct idpf_tx_queue *tx_q,
 		unsigned int max_data = IDPF_TX_MAX_DESC_DATA_ALIGNED;
 
 		if (dma_mapping_error(tx_q->dev, dma))
-			return idpf_tx_dma_map_error(tx_q, skb, first, i);
+			return idpf_tx_dma_map_unwind(tx_q, skb, first, i);
 
 		/* record length, and DMA address */
 		dma_unmap_len_set(tx_buf, len, size);
