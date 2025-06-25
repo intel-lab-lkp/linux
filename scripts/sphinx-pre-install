@@ -42,6 +42,7 @@ my $latest_avail_ver;
 my $pdf = 1;
 my $virtualenv = 1;
 my $version_check = 0;
+my $interactive = 0;
 
 #
 # List of required texlive packages on Fedora and OpenSuse
@@ -1002,12 +1003,18 @@ while (@ARGV) {
 		$pdf = 0;
 	} elsif ($arg eq "--version-check"){
 		$version_check = 1;
+	} elsif ($arg eq "--interactive") {
+		# check if the user can interact with the script
+		if (-t STDIN) {
+			$interactive = 1;
+		}
 	} else {
-		print "Usage:\n\t$0 <--no-virtualenv> <--no-pdf> <--version-check>\n\n";
+		print "Usage:\n\t$0 <--no-virtualenv> <--no-pdf> <--version-check> <--interactive>\n\n";
 		print "Where:\n";
 		print "\t--no-virtualenv\t- Recommend installing Sphinx instead of using a virtualenv\n";
 		print "\t--version-check\t- if version is compatible, don't check for missing dependencies\n";
-		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n\n";
+		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n";
+		print "\t--interactive\t- ask to install missing dependencies\n\n";
 		exit -1;
 	}
 }
