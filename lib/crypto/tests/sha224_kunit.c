@@ -5,22 +5,11 @@
 #include <crypto/sha2.h>
 #include "sha224-testvecs.h"
 
-/* TODO: add sha224() to the library itself */
-static inline void sha224(const u8 *data, size_t len,
-			  u8 out[SHA224_DIGEST_SIZE])
-{
-	struct sha256_state state;
-
-	sha224_init(&state);
-	sha256_update(&state, data, len);
-	sha224_final(&state, out);
-}
-
 #define HASH sha224
 #define HASH_CTX sha256_state
 #define HASH_SIZE SHA224_DIGEST_SIZE
 #define HASH_INIT sha224_init
-#define HASH_UPDATE sha256_update
+#define HASH_UPDATE sha224_update
 #define HASH_FINAL sha224_final
 #define HASH_TESTVECS sha224_testvecs
 /* TODO: add HMAC-SHA224 support to the library, then enable the tests for it */
