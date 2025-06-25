@@ -133,9 +133,9 @@ static const char * const tc358768_supplies[] = {
 };
 
 struct tc358768_dsi_output {
-	struct mipi_dsi_device *dev;
 	struct drm_panel *panel;
 	struct drm_bridge *bridge;
+	struct mipi_dsi_bus_fmt bus_fmt;
 };
 
 struct tc358768_priv {
@@ -406,7 +406,7 @@ found:
 }
 
 static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
-				    struct mipi_dsi_device *dev)
+				    const struct mipi_dsi_bus_fmt *bus_fmt)
 {
 	struct tc358768_priv *priv = dsi_host_to_tc358768(host);
 	struct drm_bridge *bridge;
@@ -414,9 +414,9 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 	struct device_node *ep;
 	int ret;
 
-	if (dev->lanes > 4) {
+	if (bus_fmt->lanes > 4) {
 		dev_err(priv->dev, "unsupported number of data lanes(%u)\n",
-			dev->lanes);
+			bus_fmt->lanes);
 		return -EINVAL;
 	}
 
@@ -424,7 +424,7 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 	 * tc358768 supports both Video and Pulse mode, but the driver only
 	 * implements Video (event) mode currently
 	 */
-	if (!(dev->mode_flags & MIPI_DSI_MODE_VIDEO)) {
+	if (!(bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO)) {
 		dev_err(priv->dev, "Only MIPI_DSI_MODE_VIDEO is supported\n");
 		return -ENOTSUPP;
 	}
@@ -433,7 +433,7 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 	 * tc358768 supports RGB888, RGB666, RGB666_PACKED and RGB565, but only
 	 * RGB888 is verified.
 	 */
-	if (dev->format != MIPI_DSI_FMT_RGB888) {
+	if (bus_fmt->format != MIPI_DSI_FMT_RGB888) {
 		dev_warn(priv->dev, "Only MIPI_DSI_FMT_RGB888 tested!\n");
 		return -ENOTSUPP;
 	}
@@ -450,12 +450,12 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 			return PTR_ERR(bridge);
 	}
 
-	priv->output.dev = dev;
+	priv->output.bus_fmt = *bus_fmt;
 	priv->output.bridge = bridge;
 	priv->output.panel = panel;
 
-	priv->dsi_lanes = dev->lanes;
-	priv->dsi_bpp = mipi_dsi_pixel_format_to_bpp(dev->format);
+	priv->dsi_lanes = bus_fmt->lanes;
+	priv->dsi_bpp = mipi_dsi_pixel_format_to_bpp(bus_fmt->format);
 
 	/* get input ep (port0/endpoint0) */
 	ret = -EINVAL;
@@ -548,7 +548,7 @@ static ssize_t tc358768_dsi_host_transfer(struct mipi_dsi_host *host,
 }
 
 static const struct mipi_dsi_host_ops tc358768_dsi_host_ops = {
-	.attach = tc358768_dsi_host_attach,
+	.attach_new = tc358768_dsi_host_attach,
 	.detach = tc358768_dsi_host_detach,
 	.transfer = tc358768_dsi_host_transfer,
 };
@@ -689,8 +689,8 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 					      struct drm_atomic_state *state)
 {
 	struct tc358768_priv *priv = bridge_to_tc358768(bridge);
-	struct mipi_dsi_device *dsi_dev = priv->output.dev;
-	unsigned long mode_flags = dsi_dev->mode_flags;
+	const struct mipi_dsi_bus_fmt *bus_fmt = &priv->output.bus_fmt;
+	unsigned long mode_flags = bus_fmt->mode_flags;
 	u32 val, val2, lptxcnt, hact, data_type;
 	s32 raw_val;
 	struct drm_crtc_state *crtc_state;
@@ -744,7 +744,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 
 	/* Data Format Control Register */
 	val = BIT(2) | BIT(1) | BIT(0); /* rdswap_en | dsitx_en | txdt_en */
-	switch (dsi_dev->format) {
+	switch (bus_fmt->format) {
 	case MIPI_DSI_FMT_RGB888:
 		val |= (0x3 << 4);
 		hact = vm.hactive * 3;
@@ -769,7 +769,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 		break;
 	default:
 		dev_err(dev, "Invalid data format (%u)\n",
-			dsi_dev->format);
+			bus_fmt->format);
 		tc358768_hw_disable(priv);
 		return;
 	}
@@ -811,7 +811,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	dsi_dpi_htot = tc358768_dpi_to_dsi_bytes(priv, dpi_htot);
 	dsi_dpi_data_start = tc358768_dpi_to_dsi_bytes(priv, dpi_data_start);
 
-	if (dsi_dev->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+	if (bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
 		dsi_hsw = tc358768_dpi_to_dsi_bytes(priv, vm.hsync_len);
 		dsi_hbp = tc358768_dpi_to_dsi_bytes(priv, vm.hback_porch);
 	} else {
@@ -927,7 +927,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	/* Enable D-PHY (HiZ->LP11) */
 	tc358768_write(priv, TC358768_CLW_CNTRL, 0x0000);
 	/* Enable lanes */
-	for (i = 0; i < dsi_dev->lanes; i++)
+	for (i = 0; i < bus_fmt->lanes; i++)
 		tc358768_write(priv, TC358768_D0W_CNTRL + i * 4, 0x0000);
 
 	/* DSI Timings */
@@ -995,7 +995,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	tc358768_write(priv, TC358768_THS_TRAILCNT, val);
 
 	val = BIT(0);
-	for (i = 0; i < dsi_dev->lanes; i++)
+	for (i = 0; i < bus_fmt->lanes; i++)
 		val |= BIT(i + 1);
 	tc358768_write(priv, TC358768_HSTXVREGEN, val);
 
@@ -1015,7 +1015,7 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	/* START[0] */
 	tc358768_write(priv, TC358768_STARTCNTRL, 1);
 
-	if (dsi_dev->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
+	if (bus_fmt->mode_flags & MIPI_DSI_MODE_VIDEO_SYNC_PULSE) {
 		/* Set pulse mode */
 		tc358768_write(priv, TC358768_DSI_EVENT, 0);
 
@@ -1069,14 +1069,14 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	tc358768_write(priv, TC358768_DSI_CONFW, val);
 
 	val = TC358768_DSI_CONFW_MODE_SET | TC358768_DSI_CONFW_ADDR_DSI_CONTROL;
-	val |= (dsi_dev->lanes - 1) << 1;
+	val |= (bus_fmt->lanes - 1) << 1;
 
 	val |= TC358768_DSI_CONTROL_TXMD;
 
 	if (!(mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS))
 		val |= TC358768_DSI_CONTROL_HSCKMD;
 
-	if (dsi_dev->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET)
+	if (bus_fmt->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET)
 		val |= TC358768_DSI_CONTROL_EOTDIS;
 
 	tc358768_write(priv, TC358768_DSI_CONFW, val);
