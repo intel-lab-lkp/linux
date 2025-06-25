@@ -73,6 +73,7 @@ struct mcde {
 	struct drm_bridge *bridge;
 	struct drm_connector *connector;
 	struct drm_simple_display_pipe pipe;
+	struct mipi_dsi_host *dsi_host;
 	struct mipi_dsi_device *mdsi;
 	bool dpi_output;
 	s16 stride;
@@ -104,7 +105,7 @@ static inline bool mcde_flow_is_video(struct mcde *mcde)
 }
 
 bool mcde_dsi_irq(struct mipi_dsi_device *mdsi);
-void mcde_dsi_te_request(struct mipi_dsi_device *mdsi);
+void mcde_dsi_te_request(struct mcde *mcde);
 void mcde_dsi_enable(struct drm_bridge *bridge);
 void mcde_dsi_disable(struct drm_bridge *bridge);
 extern struct platform_driver mcde_dsi_driver;

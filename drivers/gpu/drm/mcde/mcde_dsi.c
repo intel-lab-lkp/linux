@@ -148,6 +148,7 @@ bool mcde_dsi_irq(struct mipi_dsi_device *mdsi)
 static void mcde_dsi_attach_to_mcde(struct mcde_dsi *d)
 {
 	d->mcde->mdsi = d->mdsi;
+	d->mcde->dsi_host = &d->dsi_host;
 
 	/*
 	 * Select the way the DSI data flow is pushing to the display:
@@ -190,8 +191,10 @@ static int mcde_dsi_host_detach(struct mipi_dsi_host *host,
 	struct mcde_dsi *d = host_to_mcde_dsi(host);
 
 	d->mdsi = NULL;
-	if (d->mcde)
+	if (d->mcde) {
 		d->mcde->mdsi = NULL;
+		d->mcde->dsi_host = NULL;
+	}
 
 	return 0;
 }
@@ -381,12 +384,12 @@ static const struct mipi_dsi_host_ops mcde_dsi_host_ops = {
 };
 
 /* This sends a direct (short) command to request TE */
-void mcde_dsi_te_request(struct mipi_dsi_device *mdsi)
+void mcde_dsi_te_request(struct mcde *mcde)
 {
 	struct mcde_dsi *d;
 	u32 val;
 
-	d = host_to_mcde_dsi(mdsi->host);
+	d = host_to_mcde_dsi(mcde->dsi_host);
 
 	/* Command "nature" TE request */
 	val = DSI_DIRECT_CMD_MAIN_SETTINGS_CMD_NAT_TE_REQ;

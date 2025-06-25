@@ -1339,7 +1339,7 @@ static void mcde_start_flow(struct mcde *mcde)
 {
 	/* Request a TE ACK only in TE+BTA mode */
 	if (mcde->flow_mode == MCDE_COMMAND_BTA_TE_FLOW)
-		mcde_dsi_te_request(mcde->mdsi);
+		mcde_dsi_te_request(mcde);
 
 	/* Enable FIFO A flow */
 	mcde_enable_fifo(mcde, MCDE_FIFO_A);
