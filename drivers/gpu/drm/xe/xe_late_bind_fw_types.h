@@ -71,6 +71,8 @@ struct xe_late_bind {
 	struct workqueue_struct *wq;
 	/** @late_bind.component_added: whether the component has been added */
 	bool component_added;
+	/** @late_bind.disable to block late binding reload during pm resume flow*/
+	bool disable;
 };
 
 #endif
