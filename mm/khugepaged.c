@@ -31,6 +31,7 @@ enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
 	SCAN_PMD_NULL,
+	SCAN_PMD_MIGRATION,
 	SCAN_PMD_NONE,
 	SCAN_PMD_MAPPED,
 	SCAN_EXCEED_NONE_PTE,
@@ -956,6 +957,8 @@ static inline int check_pmd_state(pmd_t *pmd)
 
 	if (pmd_none(pmde))
 		return SCAN_PMD_NONE;
+	if (is_pmd_migration_entry(pmde))
+		return SCAN_PMD_MIGRATION;
 	if (!pmd_present(pmde))
 		return SCAN_PMD_NULL;
 	if (pmd_trans_huge(pmde))
@@ -1518,9 +1521,12 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	    !range_in_vma(vma, haddr, haddr + HPAGE_PMD_SIZE))
 		return SCAN_VMA_CHECK;
 
-	/* Fast check before locking page if already PMD-mapped */
+	/*
+	 * Fast check before locking folio if already PMD-mapped, or if the
+	 * folio is under migration
+	 */
 	result = find_pmd_or_thp_or_none(mm, haddr, &pmd);
-	if (result == SCAN_PMD_MAPPED)
+	if (result == SCAN_PMD_MAPPED || result == SCAN_PMD_MIGRATION)
 		return result;
 
 	/*
@@ -2745,6 +2751,7 @@ static int madvise_collapse_errno(enum scan_result r)
 	case SCAN_PAGE_LRU:
 	case SCAN_DEL_PAGE_LRU:
 	case SCAN_PAGE_FILLED:
+	case SCAN_PMD_MIGRATION:
 		return -EAGAIN;
 	/*
 	 * Other: Trying again likely not to succeed / error intrinsic to
@@ -2831,6 +2838,7 @@ handle_result:
 			goto handle_result;
 		/* Whitelisted set of results where continuing OK */
 		case SCAN_PMD_NULL:
+		case SCAN_PMD_MIGRATION:
 		case SCAN_PTE_NON_PRESENT:
 		case SCAN_PTE_UFFD_WP:
 		case SCAN_PAGE_RO:
