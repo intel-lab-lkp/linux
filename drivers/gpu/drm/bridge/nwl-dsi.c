@@ -352,7 +352,7 @@ static int nwl_dsi_host_attach(struct mipi_dsi_host *dsi_host,
 	DRM_DEV_INFO(dev, "lanes=%u, format=0x%x flags=0x%lx\n", device->lanes,
 		     device->format, device->mode_flags);
 
-	if (device->lanes < 1 || device->lanes > 4)
+	if (device->lanes > 4)
 		return -EINVAL;
 
 	dsi->lanes = device->lanes;
