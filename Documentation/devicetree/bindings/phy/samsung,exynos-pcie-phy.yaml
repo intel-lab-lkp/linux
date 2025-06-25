@@ -15,10 +15,13 @@ properties:
     const: 0
 
   compatible:
-    const: samsung,exynos5433-pcie-phy
+    enum:
+      - samsung,exynos5433-pcie-phy
+      - tesla,fsd-pcie-phy
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
 
   samsung,pmu-syscon:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -29,6 +32,24 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: phandle for FSYS sysreg interface, used to control
                  sysreg registers bits for PCIe PHY
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - tesla,fsd-pcie-phy
+    then:
+      description:
+        The PHY controller nodes are represented in the aliases node
+        using the following format 'pciephy{n}'. Depending on whether
+        n is 0 or 1, the phy init sequence is chosen.
+      properties:
+        reg:
+          items:
+            - description: PHY
+            - description: PCS
 
 required:
   - "#phy-cells"
