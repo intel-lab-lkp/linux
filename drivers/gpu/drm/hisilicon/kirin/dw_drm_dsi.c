@@ -728,7 +728,7 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 	struct device *dev = host->dev;
 	int ret;
 
-	if (mdsi->lanes < 1 || mdsi->lanes > 4) {
+	if (mdsi->lanes > 4) {
 		DRM_ERROR("dsi device params invalid\n");
 		return -EINVAL;
 	}
