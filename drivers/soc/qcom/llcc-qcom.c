@@ -3853,30 +3853,25 @@ static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
 struct llcc_slice_desc *llcc_slice_getd(u32 uid)
 {
 	const struct llcc_slice_config *cfg;
-	struct llcc_slice_desc *desc;
 	u32 sz, count;
 
-	if (IS_ERR(drv_data))
+	if (IS_ERR(drv_data) || !drv_data)
 		return ERR_CAST(drv_data);
+
+	if (IS_ERR_OR_NULL(drv_data->desc) || !drv_data->cfg)
+		return ERR_PTR(-ENODEV);
 
 	cfg = drv_data->cfg;
 	sz = drv_data->cfg_size;
 
-	for (count = 0; cfg && count < sz; count++, cfg++)
+	for (count = 0; count < sz; count++, cfg++)
 		if (cfg->usecase_id == uid)
 			break;
 
-	if (count == sz || !cfg)
+	if (count == sz)
 		return ERR_PTR(-ENODEV);
 
-	desc = kzalloc(sizeof(*desc), GFP_KERNEL);
-	if (!desc)
-		return ERR_PTR(-ENOMEM);
-
-	desc->slice_id = cfg->slice_id;
-	desc->slice_size = cfg->max_cap;
-
-	return desc;
+	return &drv_data->desc[count];
 }
 EXPORT_SYMBOL_GPL(llcc_slice_getd);
 
@@ -3887,7 +3882,7 @@ EXPORT_SYMBOL_GPL(llcc_slice_getd);
 void llcc_slice_putd(struct llcc_slice_desc *desc)
 {
 	if (!IS_ERR_OR_NULL(desc))
-		kfree(desc);
+		WARN(atomic_read(&desc->refcount), " Slice %d is still active\n", desc->slice_id);
 }
 EXPORT_SYMBOL_GPL(llcc_slice_putd);
 
@@ -3963,7 +3958,8 @@ int llcc_slice_activate(struct llcc_slice_desc *desc)
 		return -EINVAL;
 
 	mutex_lock(&drv_data->lock);
-	if (test_bit(desc->slice_id, drv_data->bitmap)) {
+	if ((atomic_read(&desc->refcount)) >= 1) {
+		atomic_inc(&desc->refcount);
 		mutex_unlock(&drv_data->lock);
 		return 0;
 	}
@@ -3977,7 +3973,7 @@ int llcc_slice_activate(struct llcc_slice_desc *desc)
 		return ret;
 	}
 
-	__set_bit(desc->slice_id, drv_data->bitmap);
+	atomic_inc(&desc->refcount);
 	mutex_unlock(&drv_data->lock);
 
 	return ret;
@@ -4003,10 +3999,12 @@ int llcc_slice_deactivate(struct llcc_slice_desc *desc)
 		return -EINVAL;
 
 	mutex_lock(&drv_data->lock);
-	if (!test_bit(desc->slice_id, drv_data->bitmap)) {
+	if ((atomic_read(&desc->refcount)) > 1) {
+		atomic_dec(&desc->refcount);
 		mutex_unlock(&drv_data->lock);
 		return 0;
 	}
+
 	act_ctrl_val = ACT_CTRL_OPCODE_DEACTIVATE << ACT_CTRL_OPCODE_SHIFT;
 
 	ret = llcc_update_act_ctrl(desc->slice_id, act_ctrl_val,
@@ -4016,7 +4014,7 @@ int llcc_slice_deactivate(struct llcc_slice_desc *desc)
 		return ret;
 	}
 
-	__clear_bit(desc->slice_id, drv_data->bitmap);
+	atomic_set(&desc->refcount, 0);
 	mutex_unlock(&drv_data->lock);
 
 	return ret;
@@ -4060,7 +4058,7 @@ static int _qcom_llcc_cfg_program(const struct llcc_slice_config *config,
 	u32 attr1_val;
 	u32 attr0_val;
 	u32 max_cap_cacheline;
-	struct llcc_slice_desc desc;
+	struct llcc_slice_desc *desc;
 
 	attr1_val = config->cache_mode;
 	attr1_val |= config->probe_target_ways << ATTR1_PROBE_TARGET_WAYS_SHIFT;
@@ -4209,8 +4207,11 @@ static int _qcom_llcc_cfg_program(const struct llcc_slice_config *config,
 	}
 
 	if (config->activate_on_init) {
-		desc.slice_id = config->slice_id;
-		ret = llcc_slice_activate(&desc);
+		desc = llcc_slice_getd(config->usecase_id);
+		if (PTR_ERR_OR_ZERO(desc))
+			return -EINVAL;
+
+		ret = llcc_slice_activate(desc);
 	}
 
 	return ret;
@@ -4359,6 +4360,12 @@ static int qcom_llcc_cfg_program(struct platform_device *pdev,
 
 	sz = drv_data->cfg_size;
 	llcc_table = drv_data->cfg;
+
+	for (i = 0; i < sz; i++) {
+		drv_data->desc[i].slice_id = llcc_table[i].slice_id;
+		drv_data->desc[i].slice_size = llcc_table[i].max_cap;
+		atomic_set(&drv_data->desc[i].refcount, 0);
+	}
 
 	if (drv_data->version >= LLCC_VERSION_6_0_0_0) {
 		for (i = 0; i < sz; i++) {
@@ -4525,16 +4532,15 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	llcc_cfg = cfg->sct_data;
 	sz = cfg->size;
 
-	for (i = 0; i < sz; i++)
-		if (llcc_cfg[i].slice_id > drv_data->max_slices)
-			drv_data->max_slices = llcc_cfg[i].slice_id;
-
-	drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices,
-					      GFP_KERNEL);
-	if (!drv_data->bitmap) {
+	drv_data->desc = devm_kcalloc(dev, sz, sizeof(struct llcc_slice_desc), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(drv_data->desc)) {
 		ret = -ENOMEM;
 		goto err;
 	}
+
+	for (i = 0; i < sz; i++)
+		if (llcc_cfg[i].slice_id > drv_data->max_slices)
+			drv_data->max_slices = llcc_cfg[i].slice_id;
 
 	drv_data->cfg = llcc_cfg;
 	drv_data->cfg_size = sz;
