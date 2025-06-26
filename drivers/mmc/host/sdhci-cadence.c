@@ -36,6 +36,23 @@
 #define   SDHCI_CDNS_HRS06_MODE_MMC_HS400	0x5
 #define   SDHCI_CDNS_HRS06_MODE_MMC_HS400ES	0x6
 
+/* Read block gap */
+#define SDHCI_CDNS_HRS37		0x94	/* interface mode select */
+#define   SDHCI_CDNS_HRS37_MODE_DS		0x0
+#define   SDHCI_CDNS_HRS37_MODE_HS		0x1
+#define   SDHCI_CDNS_HRS37_MODE_UDS_SDR12	0x8
+#define   SDHCI_CDNS_HRS37_MODE_UDS_SDR25	0x9
+#define   SDHCI_CDNS_HRS37_MODE_UDS_SDR50	0xa
+#define   SDHCI_CDNS_HRS37_MODE_UDS_SDR104	0xb
+#define   SDHCI_CDNS_HRS37_MODE_UDS_DDR50	0xc
+#define   SDHCI_CDNS_HRS37_MODE_MMC_LEGACY	0x20
+#define   SDHCI_CDNS_HRS37_MODE_MMC_SDR		0x21
+#define   SDHCI_CDNS_HRS37_MODE_MMC_DDR		0x22
+#define   SDHCI_CDNS_HRS37_MODE_MMC_HS200	0x23
+#define   SDHCI_CDNS_HRS37_MODE_MMC_HS400	0x24
+#define   SDHCI_CDNS_HRS37_MODE_MMC_HS400ES	0x25
+#define SDHCI_CDNS_HRS38		0x98	/* Read block gap coefficient */
+#define   SDHCI_CDNS_HRS38_BLKGAP_MAX		0xf
 /* SRS - Slot Register Set (SDHCI-compatible) */
 #define SDHCI_CDNS_SRS_BASE		0x200
 
@@ -251,6 +268,123 @@ static int sdhci_cdns_set_tune_val(struct sdhci_host *host, unsigned int val)
 	return 0;
 }
 
+/**
+ * mmc_send_mb_read() - send multi-block read command
+ * @host: MMC host
+ *
+ * Sends multi-block read command, CMD23/CMD18/CMD12, ignore read data
+ *
+ * Return: error code
+ */
+static int mmc_send_mb_read(struct mmc_host *host)
+{
+	const int blksz = 512;
+	const int blocks = 32;
+	struct scatterlist sg;
+	struct mmc_command sbc = {
+		.opcode = MMC_SET_BLOCK_COUNT,
+		.arg = blocks,
+		.flags = MMC_RSP_R1 | MMC_CMD_AC,
+	};
+	struct mmc_command cmd = {
+		.opcode = MMC_READ_MULTIPLE_BLOCK,
+		.arg = 0,
+		.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC,
+	};
+	struct mmc_command stop = {
+		.opcode = MMC_STOP_TRANSMISSION,
+		.arg = 0,
+		.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_AC,
+	};
+	struct mmc_data data = {
+		.flags = MMC_DATA_READ,
+		.blksz = blksz,
+		.blocks = blocks,
+		.blk_addr = 0,
+		.timeout_ns =  800000000,	/* 800ms */
+		.timeout_clks = 1000,
+		.sg = &sg,
+		.sg_len = 1,
+	};
+	struct mmc_request mrq = {
+		.sbc = &sbc,
+		.cmd = &cmd,
+		.data = &data,
+		.stop = &stop,
+	};
+	int size = blksz * blocks, err = 0;
+	u8 *data_buf;
+
+	data_buf = kzalloc(size, GFP_KERNEL);
+	if (!data_buf)
+		return -ENOMEM;
+
+	sg_init_one(&sg, data_buf, size);
+
+	mmc_wait_for_req(host, &mrq);
+
+	if (sbc.error) {
+		err = sbc.error;
+		goto out;
+	}
+
+	if (cmd.error) {
+		err = cmd.error;
+		goto out;
+	}
+
+	if (data.error) {
+		err = data.error;
+		goto out;
+	}
+
+out:
+	kfree(data_buf);
+	return err;
+}
+
+/**
+ * sdhci_cdns_tune_blkgap() - tune multi-block read gap
+ * @mmc: MMC host
+ *
+ * Tune delay used in multi block read. To do so,
+ * try sending multi-block read command with incremented gap, unless
+ * it succeeds.
+ *
+ * Return: error code
+ */
+static int sdhci_cdns_tune_blkgap(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_cdns_priv *priv = sdhci_pltfm_priv(pltfm_host);
+	void __iomem *hrs37_reg = priv->hrs_addr + SDHCI_CDNS_HRS37;
+	void __iomem *hrs38_reg = priv->hrs_addr + SDHCI_CDNS_HRS38;
+	bool tuned = false;
+	u8 gap;
+	u8 hrs37_mode;
+
+	switch (host->timing) {
+	case MMC_TIMING_MMC_HS200:
+		hrs37_mode = SDHCI_CDNS_HRS37_MODE_MMC_HS200;
+		break;
+	default:
+		return 0; /* no tuning in this mode */
+	}
+
+	writel(hrs37_mode, hrs37_reg);
+
+	for (gap = 0; gap <= SDHCI_CDNS_HRS38_BLKGAP_MAX; gap++) {
+		writel(gap, hrs38_reg);
+		tuned = !mmc_send_mb_read(mmc);
+		if (tuned)
+			break;
+	}
+	dev_dbg(mmc_dev(mmc), "read block gap tune %s, gap %d\n",
+		tuned ? "OK" : "failed", gap);
+	return tuned ? 0 : -EIO;
+}
+
 /*
  * In SD mode, software must not use the hardware tuning and instead perform
  * an almost identical procedure to eMMC.
@@ -261,6 +395,7 @@ static int sdhci_cdns_execute_tuning(struct sdhci_host *host, u32 opcode)
 	int max_streak = 0;
 	int end_of_streak = 0;
 	int i;
+	int ret;
 
 	/*
 	 * Do not execute tuning for UHS_SDR50 or UHS_DDR50.
@@ -288,7 +423,12 @@ static int sdhci_cdns_execute_tuning(struct sdhci_host *host, u32 opcode)
 		return -EIO;
 	}
 
-	return sdhci_cdns_set_tune_val(host, end_of_streak - max_streak / 2);
+	ret = sdhci_cdns_set_tune_val(host, end_of_streak - max_streak / 2);
+
+	if (!ret)
+		ret = sdhci_cdns_tune_blkgap(host->mmc);
+
+	return ret;
 }
 
 static void sdhci_cdns_set_uhs_signaling(struct sdhci_host *host,
