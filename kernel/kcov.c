@@ -29,6 +29,10 @@
 
 #include <asm/setup.h>
 
+#ifdef CONFIG_KCOV_UNIQUE
+atomic_t kcov_guard_max_index = ATOMIC_INIT(0);
+#endif
+
 #define kcov_debug(fmt, ...) pr_debug("%s: " fmt, __func__, ##__VA_ARGS__)
 
 /* Number of 64-bit words written per one comparison: */
@@ -163,10 +167,9 @@ static __always_inline bool in_softirq_really(void)
 	return in_serving_softirq() && !in_hardirq() && !in_nmi();
 }
 
-static notrace bool check_kcov_mode(enum kcov_mode needed_mode,
-				    struct task_struct *t)
+static notrace enum kcov_mode get_kcov_mode(struct task_struct *t)
 {
-	unsigned int mode;
+	enum kcov_mode mode;
 
 	/*
 	 * We are interested in code coverage as a function of a syscall inputs,
@@ -174,7 +177,7 @@ static notrace bool check_kcov_mode(enum kcov_mode needed_mode,
 	 * coverage collection section in a softirq.
 	 */
 	if (!in_task() && !(in_softirq_really() && t->kcov_softirq))
-		return false;
+		return KCOV_MODE_INVALID;
 	mode = READ_ONCE(t->kcov_mode);
 	/*
 	 * There is some code that runs in interrupts but for which
@@ -184,7 +187,7 @@ static notrace bool check_kcov_mode(enum kcov_mode needed_mode,
 	 * kcov_start().
 	 */
 	barrier();
-	return mode == needed_mode;
+	return mode;
 }
 
 static notrace unsigned long canonicalize_ip(unsigned long ip)
@@ -203,7 +206,7 @@ static notrace void kcov_append_to_buffer(unsigned long *trace, int size,
 
 	if (likely(pos < size)) {
 		/*
-		 * Some early interrupt code could bypass check_kcov_mode() check
+		 * Some early interrupt code could bypass get_kcov_mode() check
 		 * and invoke __sanitizer_cov_trace_pc(). If such interrupt is
 		 * raised between writing pc and updating pos, the pc could be
 		 * overitten by the recursive __sanitizer_cov_trace_pc().
@@ -220,14 +223,76 @@ static notrace void kcov_append_to_buffer(unsigned long *trace, int size,
  * This is called once per basic-block/edge.
  */
 #ifdef CONFIG_KCOV_UNIQUE
+DEFINE_PER_CPU(u32, saved_index);
+/*
+ * Assign an index to a guard variable that does not have one yet.
+ * For an unlikely case of a race with another task executing the same basic
+ * block for the first time with kcov enabled, we store the unused index in a
+ * per-cpu variable.
+ * In an even less likely case of the current task losing the race and getting
+ * rescheduled onto a CPU that already has a saved index, the index is
+ * discarded. This will result in an unused hole in the bitmap, but such events
+ * should have minor impact on the overall memory consumption.
+ */
+static __always_inline u32 init_pc_guard(u32 *guard)
+{
+	/* If the current CPU has a saved free index, use it. */
+	u32 index = this_cpu_xchg(saved_index, 0);
+	u32 old_guard;
+
+	if (likely(!index))
+		/*
+		 * Allocate a new index. No overflow is possible, because 2**32
+		 * unique basic blocks will take more space than the max size
+		 * of the kernel text segment.
+		 */
+		index = atomic_inc_return(&kcov_guard_max_index);
+
+	/*
+	 * Make sure another task is not initializing the same guard
+	 * concurrently.
+	 */
+	old_guard = cmpxchg(guard, 0, index);
+	if (unlikely(old_guard)) {
+		/* We lost the race, save the index for future use. */
+		this_cpu_write(saved_index, index);
+		return old_guard;
+	}
+	return index;
+}
+
 void notrace __sanitizer_cov_trace_pc_guard(u32 *guard)
 {
-	if (!check_kcov_mode(KCOV_MODE_TRACE_PC, current))
-		return;
+	enum kcov_mode mode = get_kcov_mode(current);
+	u32 pc_index;
 
-	kcov_append_to_buffer(current->kcov_state.trace,
-			      current->kcov_state.trace_size,
-			      canonicalize_ip(_RET_IP_));
+	switch (mode) {
+	case KCOV_MODE_UNIQUE_PC:
+		pc_index = READ_ONCE(*guard);
+		if (unlikely(!pc_index))
+			pc_index = init_pc_guard(guard);
+
+		/*
+		 * Use the bitmap for coverage deduplication. We assume both
+		 * s.bitmap and s.trace are non-NULL.
+		 */
+		if (likely(pc_index < current->kcov_state.bitmap_size))
+			if (__test_and_set_bit(pc_index,
+					       current->kcov_state.bitmap))
+				return;
+		/*
+		 * If the PC is new, or the bitmap is too small, write PC to the
+		 * trace.
+		 */
+		fallthrough;
+	case KCOV_MODE_TRACE_PC:
+		kcov_append_to_buffer(current->kcov_state.trace,
+				      current->kcov_state.trace_size,
+				      canonicalize_ip(_RET_IP_));
+		break;
+	default:
+		return;
+	}
 }
 EXPORT_SYMBOL(__sanitizer_cov_trace_pc_guard);
 
@@ -239,7 +304,7 @@ EXPORT_SYMBOL(__sanitizer_cov_trace_pc_guard_init);
 #else /* !CONFIG_KCOV_UNIQUE */
 void notrace __sanitizer_cov_trace_pc(void)
 {
-	if (!check_kcov_mode(KCOV_MODE_TRACE_PC, current))
+	if (get_kcov_mode(current) != KCOV_MODE_TRACE_PC)
 		return;
 
 	kcov_append_to_buffer(current->kcov_state.trace,
@@ -257,7 +322,7 @@ static void notrace write_comp_data(u64 type, u64 arg1, u64 arg2, u64 ip)
 	u64 *trace;
 
 	t = current;
-	if (!check_kcov_mode(KCOV_MODE_TRACE_CMP, t))
+	if (get_kcov_mode(t) != KCOV_MODE_TRACE_CMP)
 		return;
 
 	ip = canonicalize_ip(ip);
@@ -376,7 +441,7 @@ static void kcov_start(struct task_struct *t, struct kcov *kcov,
 	/* Cache in task struct for performance. */
 	t->kcov_state = *state;
 	barrier();
-	/* See comment in check_kcov_mode(). */
+	/* See comment in get_kcov_mode(). */
 	WRITE_ONCE(t->kcov_mode, mode);
 }
 
@@ -410,6 +475,10 @@ static void kcov_reset(struct kcov *kcov)
 	kcov->mode = KCOV_MODE_INIT;
 	kcov->remote = false;
 	kcov->remote_size = 0;
+	kcov->state.trace = kcov->state.area;
+	kcov->state.trace_size = kcov->state.size;
+	kcov->state.bitmap = NULL;
+	kcov->state.bitmap_size = 0;
 	kcov->state.sequence++;
 }
 
@@ -550,18 +619,23 @@ static int kcov_close(struct inode *inode, struct file *filep)
 	return 0;
 }
 
-static int kcov_get_mode(unsigned long arg)
+static enum kcov_mode kcov_arg_to_mode(unsigned long arg, int *error)
 {
-	if (arg == KCOV_TRACE_PC)
+	if (arg == KCOV_TRACE_PC) {
 		return KCOV_MODE_TRACE_PC;
-	else if (arg == KCOV_TRACE_CMP)
+	} else if (arg == KCOV_TRACE_CMP) {
 #ifdef CONFIG_KCOV_ENABLE_COMPARISONS
 		return KCOV_MODE_TRACE_CMP;
 #else
-		return -ENOTSUPP;
+		if (error)
+			*error = -ENOTSUPP;
+		return KCOV_MODE_INVALID;
 #endif
-	else
-		return -EINVAL;
+	} else {
+		if (error)
+			*error = -EINVAL;
+		return KCOV_MODE_INVALID;
+	}
 }
 
 /*
@@ -596,12 +670,47 @@ static inline bool kcov_check_handle(u64 handle, bool common_valid,
 	return false;
 }
 
+static long kcov_handle_unique_enable(struct kcov *kcov,
+				      unsigned long bitmap_words)
+{
+	struct task_struct *t = current;
+
+	if (!IS_ENABLED(CONFIG_KCOV_UNIQUE))
+		return -ENOTSUPP;
+	if (kcov->mode != KCOV_MODE_INIT || !kcov->state.area)
+		return -EINVAL;
+	if (kcov->t != NULL || t->kcov != NULL)
+		return -EBUSY;
+
+	/*
+	 * Cannot use zero-sized bitmap, also the bitmap must leave at least two
+	 * words for the trace.
+	 */
+	if ((!bitmap_words) || (bitmap_words >= (kcov->state.size - 1)))
+		return -EINVAL;
+
+	kcov->state.bitmap_size = bitmap_words * sizeof(unsigned long) * 8;
+	kcov->state.bitmap = kcov->state.area;
+	kcov->state.trace_size = kcov->state.size - bitmap_words;
+	kcov->state.trace = ((unsigned long *)kcov->state.area + bitmap_words);
+
+	kcov_fault_in_area(kcov);
+	kcov->mode = KCOV_MODE_UNIQUE_PC;
+	kcov_start(t, kcov, kcov->mode, &kcov->state);
+	kcov->t = t;
+	/* Put either in kcov_task_exit() or in KCOV_DISABLE. */
+	kcov_get(kcov);
+
+	return 0;
+}
+
 static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 			     unsigned long arg)
 {
 	struct task_struct *t;
 	unsigned long flags, unused;
-	int mode, i;
+	enum kcov_mode mode;
+	int error = 0, i;
 	struct kcov_remote_arg *remote_arg;
 	struct kcov_remote *remote;
 
@@ -619,9 +728,9 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 		t = current;
 		if (kcov->t != NULL || t->kcov != NULL)
 			return -EBUSY;
-		mode = kcov_get_mode(arg);
-		if (mode < 0)
-			return mode;
+		mode = kcov_arg_to_mode(arg, &error);
+		if (mode == KCOV_MODE_INVALID)
+			return error;
 		kcov_fault_in_area(kcov);
 		kcov->mode = mode;
 		kcov_start(t, kcov, mode, &kcov->state);
@@ -629,6 +738,8 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 		/* Put either in kcov_task_exit() or in KCOV_DISABLE. */
 		kcov_get(kcov);
 		return 0;
+	case KCOV_UNIQUE_ENABLE:
+		return kcov_handle_unique_enable(kcov, arg);
 	case KCOV_DISABLE:
 		/* Disable coverage for the current task. */
 		unused = arg;
@@ -647,9 +758,9 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 		if (kcov->t != NULL || t->kcov != NULL)
 			return -EBUSY;
 		remote_arg = (struct kcov_remote_arg *)arg;
-		mode = kcov_get_mode(remote_arg->trace_mode);
-		if (mode < 0)
-			return mode;
+		mode = kcov_arg_to_mode(remote_arg->trace_mode, &error);
+		if (mode == KCOV_MODE_INVALID)
+			return error;
 		if ((unsigned long)remote_arg->area_size >
 		    LONG_MAX / sizeof(unsigned long))
 			return -EINVAL;
