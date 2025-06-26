@@ -417,7 +417,7 @@ static void sn65dsi83_reset_work(struct work_struct *ws)
 		enable_irq(ctx->irq);
 }
 
-static void sn65dsi83_handle_errors(struct sn65dsi83 *ctx)
+static bool sn65dsi83_handle_errors(struct sn65dsi83 *ctx)
 {
 	unsigned int irq_stat;
 	int ret;
@@ -430,17 +430,20 @@ static void sn65dsi83_handle_errors(struct sn65dsi83 *ctx)
 
 	ret = regmap_read(ctx->regmap, REG_IRQ_STAT, &irq_stat);
 	if (ret || irq_stat) {
-		/*
-		 * IRQ acknowledged is not always possible (the bridge can be in
-		 * a state where it doesn't answer anymore). To prevent an
-		 * interrupt storm, disable interrupt. The interrupt will be
-		 * after the reset.
-		 */
-		if (ctx->irq)
-			disable_irq_nosync(ctx->irq);
+		if (ret) {
+			dev_err(ctx->dev, "Communication failure\n");
+		} else {
+			dev_err(ctx->dev, "Error status: 0x%02x\n", irq_stat);
+			/* Clear errors if the chip was still responding */
+			regmap_write(ctx->regmap, REG_IRQ_STAT, irq_stat);
+		}
 
 		schedule_work(&ctx->reset_work);
+
+		return false;
 	}
+
+	return true;
 }
 
 static void sn65dsi83_monitor_work(struct work_struct *work)
@@ -448,9 +451,8 @@ static void sn65dsi83_monitor_work(struct work_struct *work)
 	struct sn65dsi83 *ctx = container_of(to_delayed_work(work),
 					     struct sn65dsi83, monitor_work);
 
-	sn65dsi83_handle_errors(ctx);
-
-	schedule_delayed_work(&ctx->monitor_work, msecs_to_jiffies(1000));
+	if (sn65dsi83_handle_errors(ctx))
+		schedule_delayed_work(&ctx->monitor_work, msecs_to_jiffies(1000));
 }
 
 static void sn65dsi83_monitor_start(struct sn65dsi83 *ctx)
@@ -639,18 +641,13 @@ static void sn65dsi83_atomic_enable(struct drm_bridge *bridge,
 				    struct drm_atomic_state *state)
 {
 	struct sn65dsi83 *ctx = bridge_to_sn65dsi83(bridge);
-	unsigned int pval;
 
+	/* Wait 5 ms after starting DSI stream */
+	usleep_range(5000, 5500);
 	/* Clear all errors that got asserted during initialization. */
-	regmap_read(ctx->regmap, REG_IRQ_STAT, &pval);
-	regmap_write(ctx->regmap, REG_IRQ_STAT, pval);
+	regmap_write(ctx->regmap, REG_IRQ_STAT, 0xff);
 
-	/* Wait for 1ms and check for errors in status register */
-	usleep_range(1000, 1100);
-	regmap_read(ctx->regmap, REG_IRQ_STAT, &pval);
-	if (pval)
-		dev_err(ctx->dev, "Unexpected link status 0x%02x\n", pval);
-
+	/* Start checking for errors in status register */
 	if (ctx->irq) {
 		/* Enable irq to detect errors */
 		regmap_write(ctx->regmap, REG_IRQ_GLOBAL, REG_IRQ_GLOBAL_IRQ_EN);
@@ -929,7 +926,16 @@ static irqreturn_t sn65dsi83_irq(int irq, void *data)
 {
 	struct sn65dsi83 *ctx = data;
 
-	sn65dsi83_handle_errors(ctx);
+	if (!sn65dsi83_handle_errors(ctx)) {
+		/*
+		 * IRQ acknowledged is not always possible (the bridge can be in
+		 * a state where it doesn't answer anymore). To prevent an
+		 * interrupt storm, disable interrupt. The interrupt will be
+		 * re-enabled after the reset.
+		 */
+		disable_irq_nosync(ctx->irq);
+	}
+
 	return IRQ_HANDLED;
 }
 
