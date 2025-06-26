@@ -233,4 +233,14 @@ config CXL_MCE
 	def_bool y
 	depends on X86_MCE && MEMORY_FAILURE
 
+config CXL_DEBUG
+	bool "CXL Debugging"
+	depends on DEBUG_KERNEL
+	help
+	  Say Y here if you want the CXL core to produce a bunch of debug
+	  messages to the system log.  Select this if you are having a
+	  problem with CXL support and want to see more of what is going on.
+
+	  When in doubt, say N.
+
 endif
