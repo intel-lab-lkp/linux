@@ -80,6 +80,14 @@ properties:
       - const: vsync
       - const: lcd_sys
 
+  iommus:
+    maxItems: 1
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    description:
+      Contains a port which is connected to mic or dsim node.
+
   power-domains:
     maxItems: 1
 
