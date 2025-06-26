@@ -2192,6 +2192,8 @@ interpolate the memory barrier in the right place:
 	wait_event_timeout();
 	wait_on_bit();
 	wait_on_bit_lock();
+	wait_event_cmd();
+	wait_event_exclusive_cmd();
 
 
 Secondly, code that performs a wake up normally follows something like this:
@@ -2295,6 +2297,15 @@ and the waker should do:
 	smp_wmb();
 	event_indicated = 1;
 	wake_up(&event_wait_queue);
+
+Note that the wait_event_cmd() and wait_event_exclusive_cmd() are the
+kernel's polymorphic implementation of userspace's
+pthread_cond_wait().
+
+Using wait_event_cmd() or wait_event_exclusive_cmd(), cmd1 is
+typically a lock-release call and cmd2 a lock-acquire call. The
+locking primitive can be chosen, contrary to pthread_cond_wait(),
+where the locking type is cast in stone and is a pthread_mutex_t.
 
 
 MISCELLANEOUS FUNCTIONS
