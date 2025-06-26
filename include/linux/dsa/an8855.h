@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+
+#ifndef _NET_AN8855_H
+#define _NET_AN8855_H
+
+#define AN8855_GPHY_ACCESS		0xa0800000
+#define	  AN8855_GPHY_PORT		GENMASK(26, 24)
+#define	  AN8855_DEVAD_ADDR		GENMASK(23, 18)
+#define	  AN8855_PAGE_SELECT		GENMASK(14, 12)
+#define	  AN8855_ADDR			GENMASK(11, 0)
+#define	    AN8855_CL45_ADDR		AN8855_ADDR
+#define	    AN8855_CL22_ADDR		GENMASK(8, 4)
+
+#define AN8855_PHY_SELECT_PAGE		0x1f
+
+#define AN8855_NUM_PHY_PORT		5
+
+#endif /* _NET_AN8855_H */
