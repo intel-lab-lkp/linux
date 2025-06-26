@@ -1351,19 +1351,11 @@ static int ucan_probe(struct usb_interface *intf,
 	out_ep_size = 0;
 	for (i = 0; i < iface_desc->desc.bNumEndpoints; i++) {
 		ep = &iface_desc->endpoint[i].desc;
-
-		if (((ep->bEndpointAddress & USB_ENDPOINT_DIR_MASK) != 0) &&
-		    ((ep->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
-		     USB_ENDPOINT_XFER_BULK)) {
-			/* In Endpoint */
+		if (usb_endpoint_is_bulk_in(ep)) {
 			in_ep_addr = ep->bEndpointAddress;
 			in_ep_addr &= USB_ENDPOINT_NUMBER_MASK;
 			in_ep_size = le16_to_cpu(ep->wMaxPacketSize);
-		} else if (((ep->bEndpointAddress & USB_ENDPOINT_DIR_MASK) ==
-			    0) &&
-			   ((ep->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
-			    USB_ENDPOINT_XFER_BULK)) {
-			/* Out Endpoint */
+		} else if (usb_endpoint_is_bulk_out(ep)) {
 			out_ep_addr = ep->bEndpointAddress;
 			out_ep_addr &= USB_ENDPOINT_NUMBER_MASK;
 			out_ep_size = le16_to_cpu(ep->wMaxPacketSize);
