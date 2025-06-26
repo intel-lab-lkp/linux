@@ -376,8 +376,6 @@ void acpi_processor_init_invariance_cppc(void)
 
 #ifdef CONFIG_CPU_FREQ
 static cpumask_var_t cpus_to_visit;
-static void parsing_done_workfn(struct work_struct *work);
-static DECLARE_WORK(parsing_done_work, parsing_done_workfn);
 
 static int
 init_cpu_capacity_callback(struct notifier_block *nb,
@@ -406,10 +404,8 @@ init_cpu_capacity_callback(struct notifier_block *nb,
 		if (raw_capacity) {
 			topology_normalize_cpu_scale();
 			schedule_work(&update_topology_flags_work);
-			free_raw_capacity();
 		}
 		pr_debug("cpu_capacity: parsing done\n");
-		schedule_work(&parsing_done_work);
 	}
 
 	return 0;
@@ -444,13 +440,6 @@ static int __init register_cpufreq_notifier(void)
 	return ret;
 }
 core_initcall(register_cpufreq_notifier);
-
-static void parsing_done_workfn(struct work_struct *work)
-{
-	cpufreq_unregister_notifier(&init_cpu_capacity_notifier,
-					 CPUFREQ_POLICY_NOTIFIER);
-	free_cpumask_var(cpus_to_visit);
-}
 
 #else
 core_initcall(free_raw_capacity);

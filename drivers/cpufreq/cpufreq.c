@@ -2798,6 +2798,9 @@ int cpufreq_boost_set_sw(struct cpufreq_policy *policy, int state)
 		return ret;
 	}
 
+	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
+				     CPUFREQ_CREATE_POLICY, policy);
+
 	ret = freq_qos_update_request(policy->max_freq_req, policy->max);
 	if (ret < 0)
 		return ret;
