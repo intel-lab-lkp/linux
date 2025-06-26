@@ -20,7 +20,7 @@
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
  * @sleep_us: Maximum time to sleep between reads in us (0 tight-loops). Please
- *            read usleep_range() function description for details and
+ *            read fsleep() function description for details and
  *            limitations.
  * @timeout_us: Timeout in us, 0 means never timeout
  * @sleep_before_read: if it is true, sleep @sleep_us before read.
@@ -41,7 +41,7 @@
 	ktime_t __timeout = ktime_add_us(ktime_get(), __timeout_us); \
 	might_sleep_if((__sleep_us) != 0); \
 	if (sleep_before_read && __sleep_us) \
-		usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		fsleep(__sleep_us); \
 	for (;;) { \
 		(val) = op(args); \
 		if (cond) \
@@ -52,7 +52,7 @@
 			break; \
 		} \
 		if (__sleep_us) \
-			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+			fsleep(__sleep_us); \
 		cpu_relax(); \
 	} \
 	(cond) ? 0 : -ETIMEDOUT; \
@@ -120,7 +120,7 @@
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
  * @sleep_us: Maximum time to sleep between reads in us (0 tight-loops). Please
- *            read usleep_range() function description for details and
+ *            read fsleep() function description for details and
  *            limitations.
  * @timeout_us: Timeout in us, 0 means never timeout
  *
