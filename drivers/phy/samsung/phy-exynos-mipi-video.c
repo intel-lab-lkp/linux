@@ -37,10 +37,10 @@ enum exynos_mipi_phy_regmap_id {
 };
 
 struct mipi_phy_device_desc {
-	int num_phys;
 	int num_regmaps;
 	const char *regmap_names[EXYNOS_MIPI_REGMAPS_NUM];
 	struct exynos_mipi_phy_desc {
+		bool present;
 		enum exynos_mipi_phy_id	coupled_phy_id;
 		u32 enable_val;
 		unsigned int enable_reg;
@@ -54,10 +54,9 @@ struct mipi_phy_device_desc {
 static const struct mipi_phy_device_desc s5pv210_mipi_phy = {
 	.num_regmaps = 1,
 	.regmap_names = {"syscon"},
-	.num_phys = 4,
 	.phys = {
-		{
-			/* EXYNOS_MIPI_PHY_ID_CSIS0 */
+		[EXYNOS_MIPI_PHY_ID_CSIS0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
@@ -65,8 +64,9 @@ static const struct mipi_phy_device_desc s5pv210_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_SRESETN,
 			.resetn_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM0 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
@@ -74,8 +74,9 @@ static const struct mipi_phy_device_desc s5pv210_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_MRESETN,
 			.resetn_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM1,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(1),
@@ -83,8 +84,9 @@ static const struct mipi_phy_device_desc s5pv210_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_SRESETN,
 			.resetn_reg = EXYNOS4_MIPI_PHY_CONTROL(1),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS1,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(1),
@@ -99,10 +101,9 @@ static const struct mipi_phy_device_desc s5pv210_mipi_phy = {
 static const struct mipi_phy_device_desc exynos5420_mipi_phy = {
 	.num_regmaps = 1,
 	.regmap_names = {"syscon"},
-	.num_phys = 5,
 	.phys = {
-		{
-			/* EXYNOS_MIPI_PHY_ID_CSIS0 */
+		[EXYNOS_MIPI_PHY_ID_CSIS0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS5420_MIPI_PHY_CONTROL(0),
@@ -110,8 +111,9 @@ static const struct mipi_phy_device_desc exynos5420_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_SRESETN,
 			.resetn_reg = EXYNOS5420_MIPI_PHY_CONTROL(0),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM0 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS5420_MIPI_PHY_CONTROL(0),
@@ -119,8 +121,9 @@ static const struct mipi_phy_device_desc exynos5420_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_MRESETN,
 			.resetn_reg = EXYNOS5420_MIPI_PHY_CONTROL(0),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM1,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS5420_MIPI_PHY_CONTROL(1),
@@ -128,8 +131,9 @@ static const struct mipi_phy_device_desc exynos5420_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_SRESETN,
 			.resetn_reg = EXYNOS5420_MIPI_PHY_CONTROL(1),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS1,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS5420_MIPI_PHY_CONTROL(1),
@@ -137,8 +141,9 @@ static const struct mipi_phy_device_desc exynos5420_mipi_phy = {
 			.resetn_val = EXYNOS4_MIPI_PHY_MRESETN,
 			.resetn_reg = EXYNOS5420_MIPI_PHY_CONTROL(1),
 			.resetn_map = EXYNOS_MIPI_REGMAP_PMU,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS2 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS2] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS5420_MIPI_PHY_CONTROL(2),
@@ -162,10 +167,9 @@ static const struct mipi_phy_device_desc exynos5433_mipi_phy = {
 		"samsung,cam0-sysreg",
 		"samsung,cam1-sysreg"
 	},
-	.num_phys = 5,
 	.phys = {
-		{
-			/* EXYNOS_MIPI_PHY_ID_CSIS0 */
+		[EXYNOS_MIPI_PHY_ID_CSIS0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
@@ -173,8 +177,9 @@ static const struct mipi_phy_device_desc exynos5433_mipi_phy = {
 			.resetn_val = BIT(0),
 			.resetn_reg = EXYNOS5433_SYSREG_CAM0_MIPI_DPHY_CON,
 			.resetn_map = EXYNOS_MIPI_REGMAP_CAM0,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM0 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(0),
@@ -182,8 +187,9 @@ static const struct mipi_phy_device_desc exynos5433_mipi_phy = {
 			.resetn_val = BIT(0),
 			.resetn_reg = EXYNOS5433_SYSREG_DISP_MIPI_PHY,
 			.resetn_map = EXYNOS_MIPI_REGMAP_DISP,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(1),
@@ -191,8 +197,9 @@ static const struct mipi_phy_device_desc exynos5433_mipi_phy = {
 			.resetn_val = BIT(1),
 			.resetn_reg = EXYNOS5433_SYSREG_CAM0_MIPI_DPHY_CON,
 			.resetn_map = EXYNOS_MIPI_REGMAP_CAM0,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(1),
@@ -200,8 +207,9 @@ static const struct mipi_phy_device_desc exynos5433_mipi_phy = {
 			.resetn_val = BIT(1),
 			.resetn_reg = EXYNOS5433_SYSREG_DISP_MIPI_PHY,
 			.resetn_map = EXYNOS_MIPI_REGMAP_DISP,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS2 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS2] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS4_MIPI_PHY_CONTROL(2),
@@ -220,10 +228,9 @@ static const struct mipi_phy_device_desc exynos7870_mipi_phy = {
 		"samsung,disp-sysreg",
 		"samsung,cam0-sysreg",
 	},
-	.num_phys = 4,
 	.phys = {
-		{
-			/* EXYNOS_MIPI_PHY_ID_CSIS0 */
+		[EXYNOS_MIPI_PHY_ID_CSIS0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_DSIM0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS7870_MIPI_PHY_CONTROL0,
@@ -231,8 +238,9 @@ static const struct mipi_phy_device_desc exynos7870_mipi_phy = {
 			.resetn_val = BIT(0),
 			.resetn_reg = 0,
 			.resetn_map = EXYNOS_MIPI_REGMAP_CAM0,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_DSIM0 */
+		},
+		[EXYNOS_MIPI_PHY_ID_DSIM0] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_CSIS0,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS7870_MIPI_PHY_CONTROL0,
@@ -240,8 +248,9 @@ static const struct mipi_phy_device_desc exynos7870_mipi_phy = {
 			.resetn_val = BIT(0),
 			.resetn_reg = 0,
 			.resetn_map = EXYNOS_MIPI_REGMAP_DISP,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS1 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS1] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS7870_MIPI_PHY_CONTROL1,
@@ -249,8 +258,9 @@ static const struct mipi_phy_device_desc exynos7870_mipi_phy = {
 			.resetn_val = BIT(1),
 			.resetn_reg = 0,
 			.resetn_map = EXYNOS_MIPI_REGMAP_CAM0,
-		}, {
-			/* EXYNOS_MIPI_PHY_ID_CSIS2 */
+		},
+		[EXYNOS_MIPI_PHY_ID_CSIS2] = {
+			.present = true,
 			.coupled_phy_id = EXYNOS_MIPI_PHY_ID_NONE,
 			.enable_val = EXYNOS4_PHY_ENABLE,
 			.enable_reg = EXYNOS7870_MIPI_PHY_CONTROL2,
@@ -365,12 +375,15 @@ static int exynos_mipi_video_phy_probe(struct platform_device *pdev)
 		if (IS_ERR(state->regmaps[i]))
 			return PTR_ERR(state->regmaps[i]);
 	}
-	state->num_phys = phy_dev->num_phys;
+	state->num_phys = 0;
 	spin_lock_init(&state->slock);
 
 	dev_set_drvdata(dev, state);
 
-	for (i = 0; i < state->num_phys; i++) {
+	for (i = 0; i < EXYNOS_MIPI_PHYS_NUM; i++) {
+		if (!phy_dev->phys[i].present)
+			continue;
+
 		struct phy *phy = devm_phy_create(dev, NULL,
 						  &exynos_mipi_video_phy_ops);
 		if (IS_ERR(phy)) {
@@ -378,6 +391,7 @@ static int exynos_mipi_video_phy_probe(struct platform_device *pdev)
 			return PTR_ERR(phy);
 		}
 
+		state->num_phys++;
 		state->phys[i].phy = phy;
 		state->phys[i].index = i;
 		state->phys[i].data = &phy_dev->phys[i];
