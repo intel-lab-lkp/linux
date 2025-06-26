@@ -16,6 +16,11 @@ static int sys_membarrier(int cmd, int flags)
 	return syscall(__NR_membarrier, cmd, flags);
 }
 
+static int sys_membarrier_cpu(int cmd, int cpu)
+{
+	return syscall(__NR_membarrier, cmd, MEMBARRIER_CMD_FLAG_CPU, cpu);
+}
+
 static int test_membarrier_get_registrations(int cmd)
 {
 	int ret, flags = 0;
