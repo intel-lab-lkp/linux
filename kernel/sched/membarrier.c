@@ -595,7 +595,9 @@ static int membarrier_get_registrations(void)
  *          contains the CPU on which to interrupt (= restart)
  *          the RSEQ critical section.
  * @cpu_id: if @flags == MEMBARRIER_CMD_FLAG_CPU, indicates the cpu on which
- *          RSEQ CS should be interrupted (@cmd must be
+ *          RSEQ CS should be interrupted (@cmd must be one of
+ *          MEMBARRIER_CMD_PRIVATE_EXPEDITED,
+ *          MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE,
  *          MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ).
  *
  * If this system call is not implemented, -ENOSYS is returned. If the
@@ -625,6 +627,8 @@ static int membarrier_get_registrations(void)
 SYSCALL_DEFINE3(membarrier, int, cmd, unsigned int, flags, int, cpu_id)
 {
 	switch (cmd) {
+	case MEMBARRIER_CMD_PRIVATE_EXPEDITED:
+	case MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE:
 	case MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ:
 		if (unlikely(flags && flags != MEMBARRIER_CMD_FLAG_CPU))
 			return -EINVAL;
