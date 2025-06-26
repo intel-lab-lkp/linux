@@ -33,28 +33,38 @@
 #ifndef MLX5_DRIVER_H
 #define MLX5_DRIVER_H
 
-#include <linux/kernel.h>
-#include <linux/completion.h>
-#include <linux/pci.h>
-#include <linux/irq.h>
-#include <linux/spinlock_types.h>
-#include <linux/semaphore.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/xarray.h>
-#include <linux/workqueue.h>
-#include <linux/mempool.h>
-#include <linux/interrupt.h>
-#include <linux/notifier.h>
-#include <linux/refcount.h>
 #include <linux/auxiliary_bus.h>
-#include <linux/mutex.h>
+#include <linux/completion.h>
+#include <linux/idr.h>
+#include <linux/io.h>
+#include <linux/kref.h>
+#include <linux/lockdep_types.h>
+#include <linux/minmax.h>
+#include <linux/mutex_types.h>
+#include <linux/notifier.h>
+#include <linux/pci.h>
+#include <linux/printk.h>
+#include <linux/refcount.h>
+#include <linux/semaphore.h>
+#include <linux/spinlock_types.h>
+#include <linux/timer_types.h>
+#include <linux/types.h>
+#include <linux/workqueue.h>
+#include <linux/xarray.h>
+
+#include <rdma/ib_verbs.h>
+
+#include <asm/page.h>
 
 #include <linux/mlx5/device.h>
 #include <linux/mlx5/doorbell.h>
 #include <linux/mlx5/eq.h>
-#include <linux/timecounter.h>
-#include <net/devlink.h>
+
+struct dentry;
+struct device;
+struct dma_pool;
+struct net_device;
+struct pci_dev;
 
 #define MLX5_ADEV_NAME "mlx5_core"
 
@@ -243,6 +253,7 @@ struct mlx5_cmd_first {
 	__be32		data[4];
 };
 
+struct cmd_msg_cache;
 struct mlx5_cmd_msg {
 	struct list_head		list;
 	struct cmd_msg_cache	       *parent;
