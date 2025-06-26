@@ -106,6 +106,12 @@ properties:
             be connected to a single source of the periodic signal).
           const: ref
         - description:
+            Some dwc wrappers (like i.MX95 PCIes) have two reference clock
+            inputs, one from internal PLL, the other from off chip crystal
+            oscillator. Use extref clock name to be onhalf of the reference
+            clock comes form external crystal oscillator.
+          const: extref
+        - description:
             Clock for the PHY registers interface. Originally this is
             a PHY-viewport-based interface, but some platform may have
             specifically designed one.
