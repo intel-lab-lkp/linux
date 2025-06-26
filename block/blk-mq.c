@@ -4974,7 +4974,6 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	struct request_queue *q;
 	int prev_nr_hw_queues = set->nr_hw_queues;
 	unsigned int memflags;
-	int i;
 
 	lockdep_assert_held(&set->tag_list_lock);
 
@@ -5034,7 +5033,7 @@ reregister:
 	memalloc_noio_restore(memflags);
 
 	/* Free the excess tags when nr_hw_queues shrink. */
-	for (i = set->nr_hw_queues; i < prev_nr_hw_queues; i++)
+	for (int i = set->nr_hw_queues; i < prev_nr_hw_queues; i++)
 		__blk_mq_free_map_and_rqs(set, i);
 }
 
