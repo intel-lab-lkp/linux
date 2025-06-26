@@ -633,8 +633,16 @@ static int drm_syncobj_create_as_handle(struct drm_file *file_private,
 	return ret;
 }
 
-static int drm_syncobj_destroy(struct drm_file *file_private,
-			       u32 handle)
+/**
+ * drm_syncobj_destroy - remove a userspace handle from a syncobj
+ * @file_private: drm file private pointer
+ * @handle: the userspace handle to remove
+ *
+ * Removes the userspace syncobj handle @handle from the idr.
+ *
+ * Returns 0 on success or a negative error value on failure.
+ */
+int drm_syncobj_destroy(struct drm_file *file_private, u32 handle)
 {
 	struct drm_syncobj *syncobj;
 
@@ -648,6 +656,7 @@ static int drm_syncobj_destroy(struct drm_file *file_private,
 	drm_syncobj_put(syncobj);
 	return 0;
 }
+EXPORT_SYMBOL(drm_syncobj_destroy);
 
 static int drm_syncobj_file_release(struct inode *inode, struct file *file)
 {
