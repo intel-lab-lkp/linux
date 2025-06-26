@@ -285,3 +285,13 @@ config SQUASHFS_FRAGMENT_CACHE_SIZE
 
 	  Note there must be at least one cached fragment.  Anything
 	  much more than three will probably not make much difference.
+
+config SQUASHFS_PAGE_CACHE_SHARE
+	bool "SQUASHFS page cache share support"
+	depends on SQUASHFS
+	default n
+	help
+	 Saying Y here includes support for permiting SQUASHFS to share
+	 page cache for files with same fingerprints.
+
+	 If unsure, say N.

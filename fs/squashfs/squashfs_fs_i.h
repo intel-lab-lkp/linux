@@ -30,6 +30,11 @@ struct squashfs_inode_info {
 			int		parent;
 		};
 	};
+
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+	unsigned long fprt_hash;
+	struct inode *pcs_inode;
+#endif
 	struct inode	vfs_inode;
 };
 

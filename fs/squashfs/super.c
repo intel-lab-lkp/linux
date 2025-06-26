@@ -29,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/magic.h>
 #include <linux/xattr.h>
+#include <linux/pseudo_fs.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"
@@ -36,6 +37,7 @@
 #include "squashfs.h"
 #include "decompressor.h"
 #include "xattr.h"
+#include "pagecache_share.h"
 
 static struct file_system_type squashfs_fs_type;
 static const struct super_operations squashfs_super_ops;
@@ -654,6 +656,15 @@ static int __init init_squashfs_fs(void)
 		return err;
 	}
 
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+	err = squashfs_pcs_init_mnt();
+	if (err) {
+		destroy_inodecache();
+		unregister_filesystem(&squashfs_fs_type);
+		return err;
+	}
+#endif
+
 	pr_info("version 4.0 (2009/01/31) Phillip Lougher\n");
 
 	return 0;
@@ -662,6 +673,9 @@ static int __init init_squashfs_fs(void)
 
 static void __exit exit_squashfs_fs(void)
 {
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+	squashfs_pcs_mnt_exit();
+#endif
 	unregister_filesystem(&squashfs_fs_type);
 	destroy_inodecache();
 }
@@ -674,7 +688,6 @@ static struct inode *squashfs_alloc_inode(struct super_block *sb)
 
 	return ei ? &ei->vfs_inode : NULL;
 }
-
 
 static void squashfs_free_inode(struct inode *inode)
 {
@@ -697,6 +710,36 @@ static const struct super_operations squashfs_super_ops = {
 	.statfs = squashfs_statfs,
 	.put_super = squashfs_put_super,
 	.show_options = squashfs_show_options,
+};
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+static void squashfs_free_anon_inode(struct inode *inode)
+{
+	kfree(inode->i_private);
+	iput(inode);
+}
+#endif
+
+static const struct super_operations squashfs_anon_sops = {
+	.statfs = simple_statfs,
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+	.free_inode = squashfs_free_anon_inode,
+#endif
+};
+
+static int squashfs_anon_init_fs_context(struct fs_context *fc)
+{
+	struct pseudo_fs_context *ctx = init_pseudo(fc, SQUASHFS_MAGIC);
+
+	if (ctx)
+		ctx->ops = &squashfs_anon_sops;
+	return ctx ? 0 : -ENOMEM;
+}
+
+struct file_system_type squashfs_anon_fs_type = {
+	.owner = THIS_MODULE,
+	.name = "pseudo_squashfs",
+	.init_fs_context = squashfs_anon_init_fs_context,
+	.kill_sb = kill_anon_super,
 };
 
 module_init(init_squashfs_fs);

@@ -117,3 +117,5 @@ extern const struct inode_operations squashfs_symlink_inode_ops;
 
 /* xattr.c */
 extern const struct xattr_handler * const squashfs_xattr_handlers[];
+
+extern struct file_system_type squashfs_anon_fs_type;

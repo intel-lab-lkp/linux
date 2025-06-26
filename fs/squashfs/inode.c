@@ -35,6 +35,7 @@
 #include "squashfs_fs_i.h"
 #include "squashfs.h"
 #include "xattr.h"
+#include "pagecache_share.h"
 
 /*
  * Initialise VFS inode with the base inode information common to all
@@ -90,8 +91,15 @@ struct inode *squashfs_iget(struct super_block *sb, long long ino,
 		iget_failed(inode);
 		return ERR_PTR(err);
 	}
-
 	unlock_new_inode(inode);
+
+#ifdef CONFIG_SQUASHFS_PAGE_CACHE_SHARE
+		if ((inode->i_mode & S_IFMT) == S_IFREG) {
+			if (squashfs_pcs_fill_inode(inode) > 0)
+				inode->i_fop = &squashfs_pcs_file_fops;
+		}
+#endif
+
 	return inode;
 }
 
