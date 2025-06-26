@@ -3,7 +3,7 @@
 #include <linux/vmalloc.h>
 
 void * __must_check __realloc_size(2)
-rust_helper_vrealloc(const void *p, size_t size, unsigned long align, gfp_t flags)
+rust_helper_vrealloc_node(const void *p, size_t size, unsigned long align, gfp_t flags, int node)
 {
-	return vrealloc_node(p, size, align, flags, NUMA_NO_NODE);
+	return vrealloc_node(p, size, align, flags, node);
 }
