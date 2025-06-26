@@ -25,7 +25,6 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptdump.h>
 
-
 #define pt_dump_seq_printf(m, fmt, args...)	\
 ({						\
 	if (m)					\
@@ -311,7 +310,9 @@ void ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 		}
 	};
 
+	static_branch_enable(&ptdump_lock_key);
 	ptdump_walk_pgd(&st.ptdump, info->mm, NULL);
+	static_branch_disable(&ptdump_lock_key);
 }
 
 static void __init ptdump_initialize(void)
@@ -353,7 +354,9 @@ bool ptdump_check_wx(void)
 		}
 	};
 
+	static_branch_enable(&ptdump_lock_key);
 	ptdump_walk_pgd(&st.ptdump, &init_mm, NULL);
+	static_branch_disable(&ptdump_lock_key);
 
 	if (st.wx_pages || st.uxn_pages) {
 		pr_warn("Checked W+X mappings: FAILED, %lu W+X pages found, %lu non-UXN pages found\n",
