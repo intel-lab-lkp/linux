@@ -12,6 +12,8 @@
 #include <linux/arm_ffa.h>
 #include "tpm_crb_ffa.h"
 
+#define memzero(s, n) memset((s), 0, (n))
+
 /* TPM service function status codes */
 #define CRB_FFA_OK			0x05000001
 #define CRB_FFA_OK_RESULTS_RETURNED	0x05000002
@@ -192,7 +194,7 @@ static int __tpm_crb_ffa_send_receive(unsigned long func_id,
 	msg_ops = tpm_crb_ffa->ffa_dev->ops->msg_ops;
 
 	if (ffa_partition_supports_direct_req2_recv(tpm_crb_ffa->ffa_dev)) {
-		memset(&tpm_crb_ffa->direct_msg_data2, 0x00,
+		memzero(&tpm_crb_ffa->direct_msg_data2,
 		       sizeof(struct ffa_send_direct_data2));
 
 		tpm_crb_ffa->direct_msg_data2.data[0] = func_id;
@@ -205,7 +207,7 @@ static int __tpm_crb_ffa_send_receive(unsigned long func_id,
 		if (!ret)
 			ret = tpm_crb_ffa_to_linux_errno(tpm_crb_ffa->direct_msg_data2.data[0]);
 	} else {
-		memset(&tpm_crb_ffa->direct_msg_data, 0x00,
+		memzero(&tpm_crb_ffa->direct_msg_data,
 		       sizeof(struct ffa_send_direct_data));
 
 		tpm_crb_ffa->direct_msg_data.data1 = func_id;
