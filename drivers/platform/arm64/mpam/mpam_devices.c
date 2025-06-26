@@ -3192,6 +3192,9 @@ static void mpam_extend_config(struct mpam_class *class, struct mpam_config *cfg
 	u16 min, min_hw_granule, delta;
 	u16 max_hw_value, res0_bits;
 
+	if (!mpam_has_feature(mpam_feat_mbw_max, cfg))
+		return;
+
 	/*
 	 * Calculate the values the 'min' control can hold.
 	 * e.g. on a platform with bwa_wd = 8, min_hw_granule is 0x00ff because
@@ -3211,23 +3214,17 @@ static void mpam_extend_config(struct mpam_class *class, struct mpam_config *cfg
 	 *
 	 * Resctrl can only configure the MAX.
 	 */
-	if (mpam_has_feature(mpam_feat_mbw_max, cfg) &&
-	    !mpam_has_feature(mpam_feat_mbw_min, cfg)) {
-		delta = ((5 * MPAMCFG_MBW_MAX_MAX) / 100) - 1;
-		if (cfg->mbw_max > delta)
-			min = cfg->mbw_max - delta;
-		else
-			min = 0;
+	delta = ((5 * MPAMCFG_MBW_MAX_MAX) / 100) - 1;
+	if (cfg->mbw_max > delta)
+		min = cfg->mbw_max - delta;
+	else
+		min = 0;
 
-		cfg->mbw_min = max(min, min_hw_granule);
-		mpam_set_feature(mpam_feat_mbw_min, cfg);
-	}
+	cfg->mbw_min = max(min, min_hw_granule);
+	mpam_set_feature(mpam_feat_mbw_min, cfg);
+	if (mpam_has_quirk(T241_FORCE_MBW_MIN_TO_ONE, class))
+		cfg->mbw_min = max(cfg->mbw_min, min_hw_granule + 1);
 
-	if (mpam_has_quirk(T241_FORCE_MBW_MIN_TO_ONE, class) &&
-	    cfg->mbw_min <= min_hw_granule) {
-		cfg->mbw_min = min_hw_granule + 1;
-		mpam_set_feature(mpam_feat_mbw_min, cfg);
-	}
 }
 
 /* TODO: split into write_config/sync_config */
