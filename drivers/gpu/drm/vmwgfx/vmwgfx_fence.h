@@ -41,9 +41,8 @@ struct vmw_fence_manager;
 
 struct vmw_fence_obj {
 	struct dma_fence base;
-	bool   waiter_added;
 	struct list_head head;
-	void (*destroy)(struct vmw_fence_obj *fence);
+	bool   waiter_added;
 };
 
 extern struct vmw_fence_manager *

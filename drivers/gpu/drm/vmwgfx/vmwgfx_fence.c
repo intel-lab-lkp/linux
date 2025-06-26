@@ -7,6 +7,7 @@
  **************************************************************************/
 
 #include "vmwgfx_drv.h"
+#include <drm/drm_syncobj.h>
 
 #define VMW_FENCE_WRAP (1 << 31)
 
@@ -16,11 +17,6 @@ struct vmw_fence_manager {
 	struct list_head fence_list;
 	bool fifo_down;
 	u64 ctx;
-};
-
-struct vmw_user_fence {
-	struct ttm_base_object base;
-	struct vmw_fence_obj fence;
 };
 
 /**
@@ -74,7 +70,7 @@ static void vmw_fence_obj_destroy(struct dma_fence *f)
 			vmw_seqno_waiter_remove(fman->dev_priv);
 		spin_unlock(&fman->lock);
 	}
-	fence->destroy(fence);
+	dma_fence_free(f);
 }
 
 static const char *vmw_fence_get_driver_name(struct dma_fence *f)
@@ -156,14 +152,12 @@ void vmw_fence_manager_takedown(struct vmw_fence_manager *fman)
 }
 
 static int vmw_fence_obj_init(struct vmw_fence_manager *fman,
-			      struct vmw_fence_obj *fence, u32 seqno,
-			      void (*destroy) (struct vmw_fence_obj *fence))
+			      struct vmw_fence_obj *fence, u32 seqno)
 {
 	int ret = 0;
 
 	dma_fence_init(&fence->base, &vmw_fence_ops, &fman->lock,
 		       fman->ctx, seqno);
-	fence->destroy = destroy;
 
 	spin_lock(&fman->lock);
 	if (unlikely(fman->fifo_down)) {
@@ -239,11 +233,6 @@ int vmw_fence_obj_wait(struct vmw_fence_obj *fence, bool lazy,
 		return ret;
 }
 
-static void vmw_fence_destroy(struct vmw_fence_obj *fence)
-{
-	dma_fence_free(&fence->base);
-}
-
 int vmw_fence_create(struct vmw_fence_manager *fman,
 		     uint32_t seqno,
 		     struct vmw_fence_obj **p_fence)
@@ -255,7 +244,7 @@ int vmw_fence_create(struct vmw_fence_manager *fman,
 	if (unlikely(!fence))
 		return -ENOMEM;
 
-	ret = vmw_fence_obj_init(fman, fence, seqno, vmw_fence_destroy);
+	ret = vmw_fence_obj_init(fman, fence, seqno);
 	if (unlikely(ret != 0))
 		goto out_err_init;
 
@@ -267,77 +256,31 @@ out_err_init:
 	return ret;
 }
 
-
-static void vmw_user_fence_destroy(struct vmw_fence_obj *fence)
-{
-	struct vmw_user_fence *ufence =
-		container_of(fence, struct vmw_user_fence, fence);
-
-	ttm_base_object_kfree(ufence, base);
-}
-
-static void vmw_user_fence_base_release(struct ttm_base_object **p_base)
-{
-	struct ttm_base_object *base = *p_base;
-	struct vmw_user_fence *ufence =
-		container_of(base, struct vmw_user_fence, base);
-	struct vmw_fence_obj *fence = &ufence->fence;
-
-	*p_base = NULL;
-	vmw_fence_obj_unreference(&fence);
-}
-
 int vmw_user_fence_create(struct drm_file *file_priv,
 			  struct vmw_fence_manager *fman,
 			  uint32_t seqno,
 			  struct vmw_fence_obj **p_fence,
 			  uint32_t *p_handle)
 {
-	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
-	struct vmw_user_fence *ufence;
+	struct drm_syncobj *ufence;
 	struct vmw_fence_obj *tmp;
 	int ret;
 
-	ufence = kzalloc(sizeof(*ufence), GFP_KERNEL);
-	if (unlikely(!ufence)) {
-		ret = -ENOMEM;
-		goto out_no_object;
-	}
+	ret = vmw_fence_create(fman, seqno, &tmp);
+	if (ret != 0)
+		return ret;
 
-	ret = vmw_fence_obj_init(fman, &ufence->fence, seqno,
-				 vmw_user_fence_destroy);
-	if (unlikely(ret != 0)) {
-		kfree(ufence);
-		goto out_no_object;
-	}
-
-	/*
-	 * The base object holds a reference which is freed in
-	 * vmw_user_fence_base_release.
-	 */
-	tmp = vmw_fence_obj_reference(&ufence->fence);
-
-	ret = ttm_base_object_init(tfile, &ufence->base, false,
-				   VMW_RES_FENCE,
-				   &vmw_user_fence_base_release);
-
-
-	if (unlikely(ret != 0)) {
-		/*
-		 * Free the base object's reference
-		 */
+	ret = drm_syncobj_create(&ufence, 0, &tmp->base);
+	if (ret != 0) {
 		vmw_fence_obj_unreference(&tmp);
-		goto out_err;
+		return ret;
 	}
 
-	*p_fence = &ufence->fence;
-	*p_handle = ufence->base.handle;
-
-	return 0;
-out_err:
-	tmp = &ufence->fence;
-	vmw_fence_obj_unreference(&tmp);
-out_no_object:
+	ret = drm_syncobj_get_handle(file_priv, ufence, p_handle);
+	drm_syncobj_put(ufence);
+	if (ret != 0)
+		vmw_fence_obj_unreference(&tmp);
+	*p_fence = tmp;
 	return ret;
 }
 
@@ -385,51 +328,13 @@ void vmw_fence_fifo_up(struct vmw_fence_manager *fman)
 	spin_unlock(&fman->lock);
 }
 
-
-/**
- * vmw_fence_obj_lookup - Look up a user-space fence object
- *
- * @tfile: A struct ttm_object_file identifying the caller.
- * @handle: A handle identifying the fence object.
- * @return: A struct vmw_user_fence base ttm object on success or
- * an error pointer on failure.
- *
- * The fence object is looked up and type-checked. The caller needs
- * to have opened the fence object first, but since that happens on
- * creation and fence objects aren't shareable, that's not an
- * issue currently.
- */
-static struct ttm_base_object *
-vmw_fence_obj_lookup(struct ttm_object_file *tfile, u32 handle)
-{
-	struct ttm_base_object *base = ttm_base_object_lookup(tfile, handle);
-
-	if (!base) {
-		pr_err("Invalid fence object handle 0x%08lx.\n",
-		       (unsigned long)handle);
-		return ERR_PTR(-EINVAL);
-	}
-
-	if (base->refcount_release != vmw_user_fence_base_release) {
-		pr_err("Invalid fence object handle 0x%08lx.\n",
-		       (unsigned long)handle);
-		ttm_base_object_unref(&base);
-		return ERR_PTR(-EINVAL);
-	}
-
-	return base;
-}
-
-
 int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 			     struct drm_file *file_priv)
 {
 	struct drm_vmw_fence_wait_arg *arg =
 	    (struct drm_vmw_fence_wait_arg *)data;
 	unsigned long timeout;
-	struct ttm_base_object *base;
 	struct vmw_fence_obj *fence;
-	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	int ret;
 	uint64_t wait_timeout = ((uint64_t)arg->timeout_us * HZ);
 
@@ -446,11 +351,10 @@ int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 		arg->kernel_cookie = jiffies + wait_timeout;
 	}
 
-	base = vmw_fence_obj_lookup(tfile, arg->handle);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
-
-	fence = &(container_of(base, struct vmw_user_fence, base)->fence);
+	ret = drm_syncobj_find_fence(file_priv, arg->handle, 0, 0,
+				     (struct dma_fence **)&fence);
+	if (ret != 0)
+		return ret;
 
 	timeout = jiffies;
 	if (time_after_eq(timeout, (unsigned long)arg->kernel_cookie)) {
@@ -464,14 +368,14 @@ int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 	ret = vmw_fence_obj_wait(fence, arg->lazy, true, timeout);
 
 out:
-	ttm_base_object_unref(&base);
+	vmw_fence_obj_unreference(&fence); // from find_fence
 
 	/*
 	 * Optionally unref the fence object.
 	 */
 
 	if (ret == 0 && (arg->wait_options & DRM_VMW_WAIT_OPTION_UNREF))
-		return ttm_ref_object_base_unref(tfile, arg->handle);
+		ret = drm_syncobj_destroy(file_priv, arg->handle);
 	return ret;
 }
 
@@ -480,36 +384,33 @@ int vmw_fence_obj_signaled_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_vmw_fence_signaled_arg *arg =
 		(struct drm_vmw_fence_signaled_arg *) data;
-	struct ttm_base_object *base;
 	struct vmw_fence_obj *fence;
-	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_private *dev_priv = vmw_priv(dev);
 
-	base = vmw_fence_obj_lookup(tfile, arg->handle);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	int ret = drm_syncobj_find_fence(file_priv, arg->handle, 0, 0,
+					 (struct dma_fence **)&fence);
+	if (ret != 0)
+		return ret;
 
-	fence = &(container_of(base, struct vmw_user_fence, base)->fence);
 
 	arg->signaled = vmw_fence_obj_signaled(fence);
 
 	arg->signaled_flags = arg->flags;
 	arg->passed_seqno = atomic_read_acquire(&dev_priv->last_read_seqno);
 
-	ttm_base_object_unref(&base);
+	vmw_fence_obj_unreference(&fence); // from find_fence
 
 	return 0;
 }
 
 
 int vmw_fence_obj_unref_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv)
+				struct drm_file *file_priv)
 {
 	struct drm_vmw_fence_arg *arg =
 		(struct drm_vmw_fence_arg *) data;
 
-	return ttm_ref_object_base_unref(vmw_fpriv(file_priv)->tfile,
-					 arg->handle);
+	return drm_syncobj_destroy(file_priv, arg->handle);
 }
 
 /**
@@ -660,50 +561,34 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct drm_vmw_fence_event_arg *arg =
 		(struct drm_vmw_fence_event_arg *) data;
+	struct drm_syncobj  *ufence = NULL;
 	struct vmw_fence_obj *fence = NULL;
-	struct vmw_fpriv *vmw_fp = vmw_fpriv(file_priv);
-	struct ttm_object_file *tfile = vmw_fp->tfile;
 	struct drm_vmw_fence_rep __user *user_fence_rep =
-		(struct drm_vmw_fence_rep __user *)(unsigned long)
-		arg->fence_rep;
-	uint32_t handle;
+		(struct drm_vmw_fence_rep __user *)(unsigned long)arg->fence_rep;
+	u32 handle = 0;
 	int ret;
 
 	/*
-	 * Look up an existing fence object,
-	 * and if user-space wants a new reference,
-	 * add one.
+	 * Look up an existing fence object and if user-space
+	 * wants a new reference add one.
 	 */
 	if (arg->handle) {
-		struct ttm_base_object *base =
-			vmw_fence_obj_lookup(tfile, arg->handle);
+		ufence = drm_syncobj_find(file_priv, arg->handle);
+		if (!ufence)
+			return -ENOENT;
 
-		if (IS_ERR(base))
-			return PTR_ERR(base);
-
-		fence = &(container_of(base, struct vmw_user_fence,
-				       base)->fence);
-		(void) vmw_fence_obj_reference(fence);
+		fence = container_of(drm_syncobj_fence_get(ufence),
+				     typeof(*fence), base);
 
 		if (user_fence_rep != NULL) {
-			ret = ttm_ref_object_add(vmw_fp->tfile, base,
-						 NULL, false);
-			if (unlikely(ret != 0)) {
-				DRM_ERROR("Failed to reference a fence "
-					  "object.\n");
-				goto out_no_ref_obj;
+			ret = drm_syncobj_get_handle(file_priv, ufence, &handle);
+			if (ret != 0) {
+				DRM_ERROR("Failed to get a fence handle.\n");
+				goto out_err;
 			}
-			handle = base->handle;
 		}
-		ttm_base_object_unref(&base);
-	}
-
-	/*
-	 * Create a new fence object.
-	 */
-	if (!fence) {
-		ret = vmw_execbuf_fence_commands(file_priv, dev_priv,
-						 &fence,
+	} else {
+		ret = vmw_execbuf_fence_commands(file_priv, dev_priv, &fence,
 						 (user_fence_rep) ?
 						 &handle : NULL);
 		if (unlikely(ret != 0)) {
@@ -714,24 +599,21 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 
 	BUG_ON(fence == NULL);
 
-	ret = vmw_event_fence_action_create(file_priv, fence,
-					    arg->flags,
-					    arg->user_data,
-					    true);
-	if (unlikely(ret != 0)) {
+	ret = vmw_event_fence_action_create(file_priv, fence, arg->flags,
+					    arg->user_data, true);
+	if (ret != 0) {
 		if (ret != -ERESTARTSYS)
 			DRM_ERROR("Failed to attach event to fence.\n");
-		goto out_no_create;
+		if (handle)
+			drm_syncobj_destroy(file_priv, handle);
+		goto out_err;
 	}
 
-	vmw_execbuf_copy_fence_user(dev_priv, vmw_fp, 0, user_fence_rep, fence,
-				    handle, -1);
+	ret = vmw_execbuf_copy_fence_user(dev_priv, file_priv, 0, user_fence_rep,
+					  fence, handle, -1);
+out_err:
 	vmw_fence_obj_unreference(&fence);
-	return 0;
-out_no_create:
-	if (user_fence_rep != NULL)
-		ttm_ref_object_base_unref(tfile, handle);
-out_no_ref_obj:
-	vmw_fence_obj_unreference(&fence);
+	if (ufence)
+		drm_syncobj_put(ufence);
 	return ret;
 }

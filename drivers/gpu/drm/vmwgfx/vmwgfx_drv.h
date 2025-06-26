@@ -983,7 +983,7 @@ extern int vmw_execbuf_fence_commands(struct drm_file *file_priv,
 				      struct vmw_fence_obj **p_fence,
 				      uint32_t *p_handle);
 extern int vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
-					struct vmw_fpriv *vmw_fp,
+					struct drm_file *,
 					int ret,
 					struct drm_vmw_fence_rep __user
 					*user_fence_rep,

@@ -14,6 +14,7 @@
 
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
+#include <drm/drm_syncobj.h>
 
 #include <linux/sync_file.h>
 #include <linux/hashtable.h>
@@ -3859,7 +3860,7 @@ int vmw_execbuf_fence_commands(struct drm_file *file_priv,
  */
 int
 vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
-			    struct vmw_fpriv *vmw_fp, int ret,
+			    struct drm_file *file_priv, int ret,
 			    struct drm_vmw_fence_rep __user *user_fence_rep,
 			    struct vmw_fence_obj *fence, uint32_t fence_handle,
 			    int32_t out_fence_fd)
@@ -3894,7 +3895,7 @@ vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 	 * handle.
 	 */
 	if (unlikely(ret != 0) && (fence_rep.error == 0)) {
-		ttm_ref_object_base_unref(vmw_fp->tfile, fence_handle);
+		drm_syncobj_destroy(file_priv, fence_handle);
 		VMW_DEBUG_USER("Fence copy error. Syncing.\n");
 		(void) vmw_fence_obj_wait(fence, false, false,
 					  VMW_FENCE_WAIT_TIMEOUT);
@@ -4236,8 +4237,9 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 		}
 	}
 
-	ret = vmw_execbuf_copy_fence_user(dev_priv, vmw_fpriv(file_priv), ret,
-				    user_fence_rep, fence, handle, out_fence_fd);
+	ret = vmw_execbuf_copy_fence_user(dev_priv, file_priv, ret,
+					  user_fence_rep, fence, handle,
+					  out_fence_fd);
 
 	if (sync_file) {
 		if (ret) {
