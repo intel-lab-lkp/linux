@@ -427,6 +427,8 @@ static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
 		perf_regs->zmmh = get_xsave_addr(xsave, XFEATURE_ZMM_Hi256);
 	if (mask & XFEATURE_MASK_Hi16_ZMM)
 		perf_regs->h16zmm = get_xsave_addr(xsave, XFEATURE_Hi16_ZMM);
+	if (mask & XFEATURE_MASK_OPMASK)
+		perf_regs->opmask = get_xsave_addr(xsave, XFEATURE_OPMASK);
 }
 
 static void release_ext_regs_buffers(void)
@@ -459,6 +461,8 @@ static void reserve_ext_regs_buffers(void)
 		mask |= XFEATURE_MASK_ZMM_Hi256;
 	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_H16ZMM)
 		mask |= XFEATURE_MASK_Hi16_ZMM;
+	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_OPMASK)
+		mask |= XFEATURE_MASK_OPMASK;
 
 	size = xstate_calculate_size(mask, true);
 
@@ -1831,6 +1835,9 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 			data->dyn_size += hweight64(attr->sample_simd_vec_reg_user) *
 					  sizeof(u64) *
 					  attr->sample_simd_vec_reg_qwords;
+			data->dyn_size += hweight32(attr->sample_simd_pred_reg_user) *
+					  sizeof(u64) *
+					  attr->sample_simd_pred_reg_qwords;
 			data->regs_user.abi |= PERF_SAMPLE_REGS_ABI_SIMD;
 		}
 		perf_regs->abi = data->regs_user.abi;
@@ -1850,6 +1857,9 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 			data->dyn_size += hweight64(attr->sample_simd_vec_reg_intr) *
 					  sizeof(u64) *
 					  attr->sample_simd_vec_reg_qwords;
+			data->dyn_size += hweight32(attr->sample_simd_pred_reg_intr) *
+					  sizeof(u64) *
+					  attr->sample_simd_pred_reg_qwords;
 			data->regs_intr.abi |= PERF_SAMPLE_REGS_ABI_SIMD;
 		}
 		perf_regs->abi = data->regs_intr.abi;
@@ -1874,6 +1884,11 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		    fls64(attr->sample_simd_vec_reg_user) > PERF_X86_H16ZMM_BASE) {
 			perf_regs->h16zmm_regs = NULL;
 			mask |= XFEATURE_MASK_Hi16_ZMM;
+		}
+		if (attr->sample_simd_pred_reg_intr ||
+		    attr->sample_simd_pred_reg_user) {
+			perf_regs->opmask_regs = NULL;
+			mask |= XFEATURE_MASK_OPMASK;
 		}
 	}
 
