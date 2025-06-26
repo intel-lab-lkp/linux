@@ -5469,6 +5469,9 @@ static __init void svm_set_cpu_caps(void)
 
 	/* Don't advertise Bus Lock Detect to guest if SVM support is absent */
 	kvm_cpu_cap_clear(X86_FEATURE_BUS_LOCK_DETECT);
+
+	/* Don't advertise ARCH_CAPABILITIES on AMD */
+	kvm_cpu_cap_clear(X86_FEATURE_ARCH_CAPABILITIES);
 }
 
 static __init int svm_hardware_setup(void)
