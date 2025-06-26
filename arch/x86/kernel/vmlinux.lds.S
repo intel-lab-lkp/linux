@@ -375,6 +375,7 @@ SECTIONS
 		. = ALIGN(PAGE_SIZE);
 		__bss_stop = .;
 	}
+	SANCOV_GUARDS_BSS
 
 	/*
 	 * The memory occupied from _text to here, __end_of_kernel_reserve, is

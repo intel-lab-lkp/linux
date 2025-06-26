@@ -102,7 +102,8 @@
  * sections to be brought in with rodata.
  */
 #if defined(CONFIG_LD_DEAD_CODE_DATA_ELIMINATION) || defined(CONFIG_LTO_CLANG) || \
-defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
+	defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG) || \
+	defined(CONFIG_KCOV_UNIQUE)
 #define TEXT_MAIN .text .text.[0-9a-zA-Z_]*
 #else
 #define TEXT_MAIN .text
@@ -119,6 +120,17 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 #define RODATA_MAIN .rodata
 #define BSS_MAIN .bss
 #define SBSS_MAIN .sbss
+#endif
+
+#if defined(CONFIG_KCOV_UNIQUE)
+#define SANCOV_GUARDS_BSS			\
+	__sancov_guards(NOLOAD) : {		\
+		__start___sancov_guards = .;	\
+		*(__sancov_guards);		\
+		__stop___sancov_guards = .;	\
+	}
+#else
+#define SANCOV_GUARDS_BSS
 #endif
 
 /*

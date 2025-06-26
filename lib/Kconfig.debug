@@ -2156,6 +2156,8 @@ config ARCH_HAS_KCOV
 config CC_HAS_SANCOV_TRACE_PC
 	def_bool $(cc-option,-fsanitize-coverage=trace-pc)
 
+config CC_HAS_SANCOV_TRACE_PC_GUARD
+	def_bool $(cc-option,-fsanitize-coverage=trace-pc-guard)
 
 config KCOV
 	bool "Code coverage for fuzzing"
@@ -2171,6 +2173,28 @@ config KCOV
 	  for coverage-guided fuzzing (randomized testing).
 
 	  For more details, see Documentation/dev-tools/kcov.rst.
+
+config ARCH_HAS_KCOV_UNIQUE
+	bool
+	help
+	  An architecture should select this when it can successfully
+	  build and run with CONFIG_KCOV_UNIQUE.
+
+config KCOV_UNIQUE
+	depends on KCOV
+	depends on CC_HAS_SANCOV_TRACE_PC_GUARD && ARCH_HAS_KCOV_UNIQUE
+	bool "Use coverage guards for KCOV"
+	help
+	  Use coverage guards instrumentation for KCOV, passing
+	  -fsanitize-coverage=trace-pc-guard to the compiler.
+
+	  Every coverage callback is associated with a global variable that
+	  allows to efficiently deduplicate coverage at collection time.
+	  This drastically reduces the buffer size required for coverage
+	  collection.
+
+	  This config comes at a cost of increased binary size (4 bytes of .bss
+	  plus 1-2 instructions to pass an extra parameter, per basic block).
 
 config KCOV_ENABLE_COMPARISONS
 	bool "Enable comparison operands collection by KCOV"
