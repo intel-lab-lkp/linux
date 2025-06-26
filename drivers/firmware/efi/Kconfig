@@ -248,6 +248,16 @@ config EFI_DISABLE_RUNTIME
 
 	  This default can be overridden by using the efi=runtime option.
 
+config EFI_KERNEL_LOCK_DOWN_IN_SECURE_BOOT
+	bool "Lock down the kernel in EFI Secure Boot mode"
+	default n
+	depends on EFI
+	depends on SECURITY_LOCKDOWN_LSM
+	select SECURITY_LOCKDOWN_LSM_EARLY
+	help
+	  Enabling this option results in kernel lockdown being
+	  set in integrity mode if EFI Secure Boot is enabled.
+
 config EFI_COCO_SECRET
 	bool "EFI Confidential Computing Secret Area Support"
 	help

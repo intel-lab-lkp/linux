@@ -427,6 +427,15 @@ static int __init efisubsys_init(void)
 		}
 	}
 
+#ifdef CONFIG_EFI_KERNEL_LOCK_DOWN_IN_SECURE_BOOT
+	if (efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE)) {
+		if (efi_get_secureboot_mode(efi.get_variable) ==
+		    efi_secureboot_mode_enabled)
+			security_lock_kernel_down("EFI Secure Boot",
+						  LOCKDOWN_INTEGRITY_MAX);
+	}
+#endif
+
 	if (efi_rt_services_supported(EFI_RT_SUPPORTED_TIME_SERVICES))
 		platform_device_register_simple("rtc-efi", 0, NULL, 0);
 
