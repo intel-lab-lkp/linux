@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/timerqueue.h>
 #include <trace/events/ipi.h>
+#include <linux/sched/isolation.h>
 
 #include "timer_migration.h"
 #include "tick-internal.h"
@@ -425,12 +426,33 @@ static DEFINE_PER_CPU(struct tmigr_cpu, tmigr_cpu);
 /* CPUs available for timer migration */
 static cpumask_var_t tmigr_available_cpumask;
 
+/* Enabled during late initcall */
+static bool tmigr_exclude_isolated __read_mostly;
+
 #define TMIGR_NONE	0xFF
 #define BIT_CNT		8
 
 static inline bool tmigr_is_not_available(struct tmigr_cpu *tmc)
 {
 	return !(tmc->tmgroup && tmc->available);
+}
+
+/*
+ * Returns true if @cpu should be excluded from the hierarchy as isolated.
+ * Domain isolated CPUs don't participate in timer migration, nohz_full
+ * CPUs are still part of the hierarchy but are always considered idle.
+ * This behaviour depends on the value of tmigr_exclude_isolated, which is
+ * normally disabled during early boot.
+ * This check is necessary, for instance, to prevent offline isolated CPU from
+ * being incorrectly marked as available once getting back online.
+ */
+static inline bool tmigr_is_isolated(int cpu)
+{
+	if (!tmigr_exclude_isolated)
+		return false;
+	return (!housekeeping_cpu(cpu, HK_TYPE_DOMAIN) ||
+		cpuset_cpu_is_isolated(cpu)) &&
+	       housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE);
 }
 
 /*
@@ -1450,6 +1472,8 @@ static int tmigr_clear_cpu_available(unsigned int cpu)
 	u64 firstexp;
 
 	scoped_guard(raw_spinlock_irq, &tmc->lock) {
+		if (!tmc->available)
+			return 0;
 		tmc->available = false;
 		WRITE_ONCE(tmc->wakeup, KTIME_MAX);
 		cpumask_clear_cpu(cpu, tmigr_available_cpumask);
@@ -1478,7 +1502,11 @@ static int tmigr_set_cpu_available(unsigned int cpu)
 	if (WARN_ON_ONCE(!tmc->tmgroup))
 		return -EINVAL;
 
+	if (tmigr_is_isolated(cpu))
+		return 0;
 	scoped_guard(raw_spinlock_irq, &tmc->lock) {
+		if (tmc->available)
+			return 0;
 		trace_tmigr_cpu_available(tmc);
 		tmc->idle = timer_base_is_idle();
 		if (!tmc->idle)
@@ -1486,6 +1514,63 @@ static int tmigr_set_cpu_available(unsigned int cpu)
 		tmc->available = true;
 		cpumask_set_cpu(cpu, tmigr_available_cpumask);
 	}
+	return 0;
+}
+
+static void tmigr_cpu_isolate(void *ignored)
+{
+	/*
+	 * The tick CPU can be marked as isolated by the cpuset code, however
+	 * we cannot mark it as unavailable to avoid having no global migrator
+	 * for the nohz_full CPUs.
+	 */
+	if (!tick_nohz_cpu_hotpluggable(smp_processor_id()))
+		return;
+	tmigr_clear_cpu_available(smp_processor_id());
+}
+
+static void tmigr_cpu_unisolate(void *ignored)
+{
+	tmigr_set_cpu_available(smp_processor_id());
+}
+
+int tmigr_isolated_exclude_cpumask(struct cpumask *exclude_cpumask)
+{
+	cpumask_var_t cpumask;
+
+	lockdep_assert_cpus_held();
+
+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_and(cpumask, exclude_cpumask, tmigr_available_cpumask);
+	cpumask_and(cpumask, cpumask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	on_each_cpu_mask(cpumask, tmigr_cpu_isolate, NULL, 1);
+
+	cpumask_andnot(cpumask, cpu_online_mask, exclude_cpumask);
+	cpumask_andnot(cpumask, cpumask, tmigr_available_cpumask);
+	on_each_cpu_mask(cpumask, tmigr_cpu_unisolate, NULL, 1);
+
+	free_cpumask_var(cpumask);
+	return 0;
+}
+
+static int __init tmigr_init_isolation(void)
+{
+	cpumask_var_t cpumask;
+
+	if (!housekeeping_enabled(HK_TYPE_DOMAIN))
+		return 0;
+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+		return -ENOMEM;
+	cpumask_andnot(cpumask, tmigr_available_cpumask,
+		       housekeeping_cpumask(HK_TYPE_DOMAIN));
+	cpumask_and(cpumask, cpumask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	on_each_cpu_mask(cpumask, tmigr_cpu_isolate, NULL, 1);
+
+	tmigr_exclude_isolated = true;
+
+	free_cpumask_var(cpumask);
 	return 0;
 }
 
@@ -1871,3 +1956,4 @@ err:
 	return ret;
 }
 early_initcall(tmigr_init);
+late_initcall(tmigr_init_isolation);
