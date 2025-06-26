@@ -5428,33 +5428,43 @@ static void intel_dp_handle_device_service_irq(struct intel_dp *intel_dp, u8 irq
 		drm_dbg_kms(display->drm, "Sink specific irq unhandled\n");
 }
 
-static bool intel_dp_check_link_service_irq(struct intel_dp *intel_dp)
+static bool intel_dp_get_and_ack_link_service_irq(struct intel_dp *intel_dp, u8 *irq_mask)
 {
-	struct intel_display *display = to_intel_display(intel_dp);
-	bool reprobe_needed = false;
 	u8 val;
 
+	*irq_mask = 0;
+
 	if (intel_dp->dpcd[DP_DPCD_REV] < DP_DPCD_REV_12)
-		return false;
+		return true;
 
 	if (drm_dp_dpcd_readb(&intel_dp->aux,
 			      DP_LINK_SERVICE_IRQ_VECTOR_ESI0, &val) != 1)
-		return true;
+		return false;
 
 	if (!val)
-		return false;
+		return true;
 
 	if (drm_dp_dpcd_writeb(&intel_dp->aux,
 			       DP_LINK_SERVICE_IRQ_VECTOR_ESI0, val) != 1)
-		return true;
+		return false;
 
-	if (val & RX_CAP_CHANGED)
+	*irq_mask = val;
+
+	return true;
+}
+
+static bool intel_dp_handle_link_service_irq(struct intel_dp *intel_dp, u8 irq_mask)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	bool reprobe_needed = false;
+
+	if (irq_mask & RX_CAP_CHANGED)
 		reprobe_needed = true;
 
-	if (val & HDMI_LINK_STATUS_CHANGED)
+	if (irq_mask & HDMI_LINK_STATUS_CHANGED)
 		intel_dp_handle_hdmi_link_status_change(intel_dp);
 
-	if ((val & DP_TUNNELING_IRQ) &&
+	if ((irq_mask & DP_TUNNELING_IRQ) &&
 	    drm_dp_tunnel_handle_irq(display->dp_tunnel_mgr,
 				     &intel_dp->aux))
 		reprobe_needed = true;
@@ -5499,7 +5509,10 @@ intel_dp_short_pulse(struct intel_dp *intel_dp)
 
 	intel_dp_handle_device_service_irq(intel_dp, irq_mask);
 
-	if (intel_dp_check_link_service_irq(intel_dp))
+	if (!intel_dp_get_and_ack_link_service_irq(intel_dp, &irq_mask))
+		return false;
+
+	if (intel_dp_handle_link_service_irq(intel_dp, irq_mask))
 		reprobe_needed = true;
 
 	/* Handle CEC interrupts, if any */
