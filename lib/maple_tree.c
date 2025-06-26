@@ -338,7 +338,7 @@ static inline void mte_set_node_dead(struct maple_enode *mn)
 	smp_wmb(); /* Needed for RCU */
 }
 
-/* Bit 1 indicates the root is a node */
+/* Bit 1 indicates the node is the root */
 #define MAPLE_ROOT_NODE			0x02
 /* maple_type stored bit 3-6 */
 #define MAPLE_ENODE_TYPE_SHIFT		0x03
@@ -1053,7 +1053,7 @@ static inline void mte_set_gap(const struct maple_enode *mn,
  * mas_ascend() - Walk up a level of the tree.
  * @mas: The maple state
  *
- * Sets the @mas->max and @mas->min to the correct values when walking up.  This
+ * Sets the @mas->max and @mas->min for the parent node of mas->node.  This
  * may cause several levels of walking up to find the correct min and max.
  * May find a dead node which will cause a premature return.
  * Return: 1 on dead node, 0 otherwise
@@ -1098,6 +1098,11 @@ static int mas_ascend(struct ma_state *mas)
 
 	min = 0;
 	max = ULONG_MAX;
+
+	/*
+	 * !mas->offset => parent node min == mas->min. mas->offset => need
+	 * to walk up to find the implied pivot min.
+	 */
 	if (!mas->offset) {
 		min = mas->min;
 		set_min = true;
