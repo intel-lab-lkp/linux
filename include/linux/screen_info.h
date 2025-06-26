@@ -138,9 +138,14 @@ ssize_t screen_info_resources(const struct screen_info *si, struct resource *r, 
 u32 __screen_info_lfb_bits_per_pixel(const struct screen_info *si);
 
 #if defined(CONFIG_PCI)
+bool screen_info_is_useful(void);
 void screen_info_apply_fixups(void);
 struct pci_dev *screen_info_pci_dev(const struct screen_info *si);
 #else
+bool screen_info_is_useful(void)
+{
+	return true;
+}
 static inline void screen_info_apply_fixups(void)
 { }
 static inline struct pci_dev *screen_info_pci_dev(const struct screen_info *si)

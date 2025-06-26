@@ -9,6 +9,8 @@ static struct pci_dev *screen_info_lfb_pdev;
 static size_t screen_info_lfb_bar;
 static resource_size_t screen_info_lfb_res_start; // original start of resource
 static resource_size_t screen_info_lfb_offset; // framebuffer offset within resource
+static bool screen_info_changed;
+static bool screen_info_fixuped;
 
 static bool __screen_info_relocation_is_valid(const struct screen_info *si, struct resource *pr)
 {
@@ -24,6 +26,24 @@ static bool __screen_info_relocation_is_valid(const struct screen_info *si, stru
 	return true;
 }
 
+bool screen_info_is_useful(void)
+{
+	unsigned int type;
+	const struct screen_info *si = &screen_info;
+
+	type = screen_info_video_type(si);
+	if (type != VIDEO_TYPE_EFI)
+		return true;
+
+	if (screen_info_changed && !screen_info_fixuped) {
+		pr_warn("The screen_info has changed but not fixuped");
+		return false;
+	}
+
+	pr_info("The screen_info is useful");
+	return true;
+}
+
 void screen_info_apply_fixups(void)
 {
 	struct screen_info *si = &screen_info;
@@ -32,18 +52,22 @@ void screen_info_apply_fixups(void)
 		struct resource *pr = &screen_info_lfb_pdev->resource[screen_info_lfb_bar];
 
 		if (pr->start != screen_info_lfb_res_start) {
+			screen_info_changed = true;
 			if (__screen_info_relocation_is_valid(si, pr)) {
 				/*
 				 * Only update base if we have an actual
 				 * relocation to a valid I/O range.
 				 */
 				__screen_info_set_lfb_base(si, pr->start + screen_info_lfb_offset);
+				screen_info_fixuped = true;
 				pr_info("Relocating firmware framebuffer to offset %pa[d] within %pr\n",
 					&screen_info_lfb_offset, pr);
 			} else {
 				pr_warn("Invalid relocating, disabling firmware framebuffer\n");
 			}
 		}
+	} else {
+		screen_info_changed = true;
 	}
 }
 

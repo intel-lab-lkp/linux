@@ -303,6 +303,10 @@ static void efifb_setup(struct screen_info *si, char *options)
 
 static inline bool fb_base_is_valid(struct screen_info *si)
 {
+	/* check whether fb_base has changed but not fixuped */
+	if (!screen_info_is_useful())
+		return false;
+
 	if (si->lfb_base)
 		return true;
 
