@@ -111,8 +111,8 @@ int iopt_read_and_clear_dirty_data(struct io_pagetable *iopt,
 int iopt_set_dirty_tracking(struct io_pagetable *iopt,
 			    struct iommu_domain *domain, bool enable);
 
-void iommufd_access_notify_unmap(struct io_pagetable *iopt, unsigned long iova,
-				 unsigned long length);
+int iommufd_access_notify_unmap(struct io_pagetable *iopt, unsigned long iova,
+				unsigned long length);
 int iopt_table_add_domain(struct io_pagetable *iopt,
 			  struct iommu_domain *domain);
 void iopt_table_remove_domain(struct io_pagetable *iopt,

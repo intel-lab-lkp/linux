@@ -740,7 +740,15 @@ again:
 			up_write(&iopt->iova_rwsem);
 			up_read(&iopt->domains_rwsem);
 
-			iommufd_access_notify_unmap(iopt, area_first, length);
+			rc = iommufd_access_notify_unmap(iopt, area_first,
+							 length);
+			if (rc) {
+				down_read(&iopt->domains_rwsem);
+				down_write(&iopt->iova_rwsem);
+				area->prevent_access = false;
+				goto out_unlock_iova;
+			}
+
 			/* Something is not responding to unmap requests. */
 			tries++;
 			if (WARN_ON(tries > 100)) {
