@@ -141,9 +141,14 @@ static void bdev_count_inflight_rw(struct block_device *part,
 		}
 	}
 
-	if (WARN_ON_ONCE((int)inflight[READ] < 0))
+	/*
+	 * While iterating all cpus, some IOs might issued from traversed cpu
+	 * and then completed from the cpu that is not traversed yet, causing
+	 * the inflight number to be negative.
+	 */
+	if ((int)inflight[READ] < 0)
 		inflight[READ] = 0;
-	if (WARN_ON_ONCE((int)inflight[WRITE] < 0))
+	if ((int)inflight[WRITE] < 0)
 		inflight[WRITE] = 0;
 }
 
