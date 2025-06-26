@@ -2126,8 +2126,10 @@ static void setup_pebs_adaptive_sample_data(struct perf_event *event,
 			regs->flags &= ~PERF_EFLAGS_EXACT;
 		}
 
-		if (sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER))
+		if (sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER)) {
 			adaptive_pebs_save_regs(regs, gprs);
+			x86_pmu_setup_regs_data(event, data, regs);
+		}
 	}
 
 	if (format_group & PEBS_DATACFG_MEMINFO) {
