@@ -4157,8 +4157,7 @@ int skb_store_bits(struct sk_buff *skb, int offset, const void *from, int len);
 __wsum skb_copy_and_csum_bits(const struct sk_buff *skb, int offset, u8 *to,
 			      int len);
 int skb_splice_bits(struct sk_buff *skb, struct sock *sk, unsigned int offset,
-		    struct pipe_inode_info *pipe, unsigned int len,
-		    unsigned int flags);
+		    struct pipe_inode_info *pipe, unsigned int len);
 int skb_send_sock_locked(struct sock *sk, struct sk_buff *skb, int offset,
 			 int len);
 int skb_send_sock_locked_with_flags(struct sock *sk, struct sk_buff *skb,

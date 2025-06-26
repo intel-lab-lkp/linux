@@ -2266,7 +2266,7 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	}
 
 	chunk = min_t(unsigned int, rxm->full_len, len);
-	copied = skb_splice_bits(skb, sk, rxm->offset, pipe, chunk, flags);
+	copied = skb_splice_bits(skb, sk, rxm->offset, pipe, chunk);
 	if (copied < 0)
 		goto splice_requeue;
 
