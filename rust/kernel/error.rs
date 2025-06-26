@@ -263,7 +263,7 @@ impl From<core::convert::Infallible> for Error {
 /// [`samples/rust/rust_minimal.rs`]):
 ///
 /// ```
-/// # #[allow(clippy::single_match)]
+/// # #[expect(clippy::single_match)]
 /// fn example() -> Result {
 ///     let mut numbers = KVec::new();
 ///
@@ -413,7 +413,7 @@ pub fn from_err_ptr<T>(ptr: *mut T) -> Result<*mut T> {
         // SAFETY: The FFI function does not deref the pointer.
         let err = unsafe { bindings::PTR_ERR(const_ptr) };
 
-        #[allow(clippy::unnecessary_cast)]
+        #[expect(clippy::unnecessary_cast)]
         // CAST: If `IS_ERR()` returns `true`,
         // then `PTR_ERR()` is guaranteed to return a
         // negative value greater-or-equal to `-bindings::MAX_ERRNO`,

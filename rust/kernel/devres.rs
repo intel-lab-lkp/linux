@@ -157,7 +157,7 @@ impl<T> DevresInner<T> {
         success
     }
 
-    #[allow(clippy::missing_safety_doc)]
+    #[expect(clippy::missing_safety_doc)]
     unsafe extern "C" fn devres_callback(ptr: *mut kernel::ffi::c_void) {
         let ptr = ptr as *mut DevresInner<T>;
         // Devres owned this memory; now that we received the callback, drop the `Arc` and hence the
