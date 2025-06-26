@@ -710,6 +710,22 @@ int x86_pmu_hw_config(struct perf_event *event)
 				return -EINVAL;
 			if (!(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
 				return -EINVAL;
+			if (event->attr.sample_simd_regs_enabled)
+				return -EINVAL;
+		}
+
+		if (event_has_simd_regs(event)) {
+			if (!(event->pmu->capabilities & PERF_PMU_CAP_SIMD_REGS))
+				return -EINVAL;
+			/* Not require any vector registers but set width */
+			if (event->attr.sample_simd_vec_reg_qwords &&
+			    !event->attr.sample_simd_vec_reg_intr &&
+			    !event->attr.sample_simd_vec_reg_user)
+				return -EINVAL;
+			/* The vector registers set is not supported */
+			if (event->attr.sample_simd_vec_reg_qwords >= PERF_X86_XMM_QWORDS &&
+			    !(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
+				return -EINVAL;
 		}
 	}
 	return x86_setup_perfctr(event);
@@ -1785,6 +1801,16 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		data->dyn_size += sizeof(u64);
 		if (data->regs_user.regs)
 			data->dyn_size += hweight64(attr->sample_regs_user) * sizeof(u64);
+		if (attr->sample_simd_regs_enabled && data->regs_user.abi) {
+			/* num and qwords of vector and pred registers */
+			data->dyn_size += sizeof(u64);
+			/* data[] */
+			data->dyn_size += hweight64(attr->sample_simd_vec_reg_user) *
+					  sizeof(u64) *
+					  attr->sample_simd_vec_reg_qwords;
+			data->regs_user.abi |= PERF_SAMPLE_REGS_ABI_SIMD;
+		}
+		perf_regs->abi = data->regs_user.abi;
 		data->sample_flags |= PERF_SAMPLE_REGS_USER;
 	}
 
@@ -1794,10 +1820,20 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		data->dyn_size += sizeof(u64);
 		if (data->regs_intr.regs)
 			data->dyn_size += hweight64(attr->sample_regs_intr) * sizeof(u64);
+		if (attr->sample_simd_regs_enabled && data->regs_intr.abi) {
+			/* num and qwords of vector and pred registers */
+			data->dyn_size += sizeof(u64);
+			/* data[] */
+			data->dyn_size += hweight64(attr->sample_simd_vec_reg_intr) *
+					  sizeof(u64) *
+					  attr->sample_simd_vec_reg_qwords;
+			data->regs_intr.abi |= PERF_SAMPLE_REGS_ABI_SIMD;
+		}
+		perf_regs->abi = data->regs_intr.abi;
 		data->sample_flags |= PERF_SAMPLE_REGS_INTR;
 	}
 
-	if (event_has_extended_regs(event)) {
+	if (event_needs_xmm(event)) {
 		perf_regs->xmm_regs = NULL;
 		mask |= XFEATURE_MASK_SSE;
 	}
