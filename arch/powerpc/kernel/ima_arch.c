@@ -5,9 +5,10 @@
  */
 
 #include <linux/ima.h>
+#include <linux/integrity.h>
 #include <asm/secure_boot.h>
 
-bool arch_ima_get_secureboot(void)
+bool arch_integrity_get_secureboot(void)
 {
 	return is_ppc_secureboot_enabled();
 }
