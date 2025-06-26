@@ -1220,7 +1220,6 @@ static void exit_robust_list64(struct task_struct *curr,
 }
 #endif
 
-#if defined(CONFIG_COMPAT) || !defined(CONFIG_64BIT)
 static void __user *futex_uaddr(struct robust_list __user *entry,
 				compat_long_t futex_offset)
 {
@@ -1319,7 +1318,70 @@ static void exit_robust_list32(struct task_struct *curr,
 		handle_futex_death(uaddr, curr, pip, HANDLE_DEATH_PENDING);
 	}
 }
-#endif
+
+long do_set_robust_list2(struct robust_list_head __user *head,
+			 int index, unsigned int type)
+{
+	struct list_head *list2 = &current->robust_list2;
+	struct robust_list2_entry *prev, *new = NULL;
+
+	if (index == -1) {
+		if (list_empty(list2)) {
+			index = 0;
+		} else {
+			prev = list_last_entry(list2, struct robust_list2_entry, list);
+			index = prev->index + 1;
+		}
+
+		if (index >= ROBUST_LISTS_PER_TASK)
+			return -EINVAL;
+
+		new = kmalloc(sizeof(struct robust_list2_entry), GFP_KERNEL);
+		if (!new)
+			return -ENOMEM;
+
+		list_add_tail(&new->list, list2);
+		new->index = index;
+
+	} else if (index >= 0) {
+		struct robust_list2_entry *curr;
+
+		if (list_empty(list2))
+			return -ENOENT;
+
+		list_for_each_entry(curr, list2, list) {
+			if (index == curr->index) {
+				new = curr;
+				break;
+			}
+		}
+
+		if (!new)
+			return -ENOENT;
+	}
+
+	BUG_ON(!new);
+	new->head = head;
+	new->list_type = type;
+
+	return index;
+}
+
+struct robust_list_head __user *get_robust_list2(int index, struct task_struct *task)
+{
+	struct list_head *list2 = &task->robust_list2;
+	struct robust_list2_entry *curr;
+
+	if (list_empty(list2) || index == -1)
+		return NULL;
+
+	list_for_each_entry(curr, list2, list) {
+		if (index == curr->index)
+			return curr->head;
+	}
+
+	return NULL;
+}
 
 #ifdef CONFIG_FUTEX_PI
 
@@ -1414,25 +1476,28 @@ static inline void exit_pi_state_list(struct task_struct *curr) { }
 
 static void futex_cleanup(struct task_struct *tsk)
 {
-#ifdef CONFIG_64BIT
-	if (unlikely(tsk->robust_list)) {
-		exit_robust_list64(tsk, tsk->robust_list);
-		tsk->robust_list = NULL;
-	}
-#else
-	if (unlikely(tsk->robust_list)) {
-		exit_robust_list32(tsk,
-				  (struct robust_list_head32 __user *) tsk->robust_list);
-		tsk->robust_list = NULL;
-	}
-#endif
+	struct robust_list2_entry *curr, *n;
+	struct list_head *list2 = &tsk->robust_list2;
 
-#ifdef CONFIG_COMPAT
-	if (unlikely(tsk->compat_robust_list)) {
-		exit_robust_list32(tsk, tsk->compat_robust_list);
-		tsk->compat_robust_list = NULL;
+	/*
+	 * Walk through the linked list, parsing robust lists and freeing the
+	 * allocated lists
+	 */
+	if (unlikely(!list_empty(list2))) {
+		list_for_each_entry_safe(curr, n, list2, list) {
+			if (curr->head != NULL) {
+				if (curr->list_type == ROBUST_LIST_64BIT)
+					exit_robust_list64(tsk, curr->head);
+				else if (curr->list_type == ROBUST_LIST_32BIT)
+					exit_robust_list32(tsk, curr->head);
+				curr->head = NULL;
+			}
+			list_del_init(&curr->list);
+			kfree(curr);
+		}
 	}
-#endif
+
+	tsk->robust_list_index = -1;
 
 	if (unlikely(!list_empty(&tsk->pi_state_list)))
 		exit_pi_state_list(tsk);

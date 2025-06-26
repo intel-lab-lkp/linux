@@ -1331,10 +1331,11 @@ struct task_struct {
 	u32				rmid;
 #endif
 #ifdef CONFIG_FUTEX
-	struct robust_list_head __user	*robust_list;
+	int				robust_list_index;
 #ifdef CONFIG_COMPAT
-	struct robust_list_head32 __user *compat_robust_list;
+	int				compat_robust_list_index;
 #endif
+	struct list_head		robust_list2;
 	struct list_head		pi_state_list;
 	struct futex_pi_state		*pi_state_cache;
 	struct mutex			futex_exit_mutex;

@@ -66,6 +66,21 @@ struct robust_list_head32 {
 };
 
 #ifdef CONFIG_FUTEX
+/*
+ * This is an entry of a linked list of robust lists.
+ *
+ * @head: can point to a 64bit list or a 32bit list
+ * @list_type: determine the size of the futex pointers in the list
+ * @index: the index of this entry in the list
+ * @list: linked list element
+ */
+struct robust_list2_entry {
+	void __user *head;
+	enum robust_list2_type list_type;
+	unsigned int index;
+	struct list_head list;
+};
+
 enum {
 	FUTEX_STATE_OK,
 	FUTEX_STATE_EXITING,
@@ -74,10 +89,11 @@ enum {
 
 static inline void futex_init_task(struct task_struct *tsk)
 {
-	tsk->robust_list = NULL;
+	tsk->robust_list_index = -1;
 #ifdef CONFIG_COMPAT
-	tsk->compat_robust_list = NULL;
+	tsk->compat_robust_list_index = -1;
 #endif
+	INIT_LIST_HEAD(&tsk->robust_list2);
 	INIT_LIST_HEAD(&tsk->pi_state_list);
 	tsk->pi_state_cache = NULL;
 	tsk->futex_state = FUTEX_STATE_OK;
