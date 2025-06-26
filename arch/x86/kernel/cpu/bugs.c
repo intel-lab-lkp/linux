@@ -1210,8 +1210,6 @@ static int __init retbleed_parse_cmdline(char *str)
 			retbleed_mitigation = RETBLEED_MITIGATION_STUFF;
 		} else if (!strcmp(str, "nosmt")) {
 			retbleed_nosmt = true;
-		} else if (!strcmp(str, "force")) {
-			setup_force_cpu_bug(X86_BUG_RETBLEED);
 		} else {
 			pr_err("Ignoring unknown retbleed option (%s).", str);
 		}
@@ -1411,9 +1409,6 @@ static int __init its_parse_cmdline(char *str)
 		its_mitigation = ITS_MITIGATION_OFF;
 	} else if (!strcmp(str, "on")) {
 		its_mitigation = ITS_MITIGATION_ALIGNED_THUNKS;
-	} else if (!strcmp(str, "force")) {
-		its_mitigation = ITS_MITIGATION_ALIGNED_THUNKS;
-		setup_force_cpu_bug(X86_BUG_ITS);
 	} else if (!strcmp(str, "vmexit")) {
 		its_mitigation = ITS_MITIGATION_VMEXIT_ONLY;
 	} else if (!strcmp(str, "stuff")) {
