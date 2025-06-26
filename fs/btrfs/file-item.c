@@ -61,7 +61,7 @@ void btrfs_inode_safe_disk_i_size_write(struct btrfs_inode *inode, u64 new_i_siz
 		i_size = min(i_size, end + 1);
 	else
 		i_size = 0;
-	inode->disk_i_size = i_size;
+	data_race(inode->disk_i_size = i_size);
 out_unlock:
 	spin_unlock(&inode->lock);
 }
