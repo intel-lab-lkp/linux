@@ -907,7 +907,6 @@ pub struct Registration<T: Driver>(KBox<UnsafeCell<bindings::cpufreq_driver>>, P
 /// or CPUs, so it is safe to share it.
 unsafe impl<T: Driver> Sync for Registration<T> {}
 
-#[expect(clippy::non_send_fields_in_send_ty)]
 /// SAFETY: Registration with and unregistration from the cpufreq subsystem can happen from any
 /// thread.
 unsafe impl<T: Driver> Send for Registration<T> {}
