@@ -5790,6 +5790,21 @@ void security_bpf_token_free(struct bpf_token *token)
 #endif /* CONFIG_BPF_SYSCALL */
 
 /**
+ * security_lock_kernel_down() - Lock down the kernel
+ * @where: the location from where the lock down is being initiated
+ * @level: requested lock down level
+ *
+ * Attempt to lock down the kernel at the requested level.
+ *
+ * Return: Returns 0 on success, error on failure.
+ */
+int security_lock_kernel_down(const char *where, enum lockdown_reason level)
+{
+	return call_int_hook(lock_down, where, level);
+}
+EXPORT_SYMBOL(security_lock_kernel_down);
+
+/**
  * security_locked_down() - Check if a kernel feature is allowed
  * @what: requested kernel feature
  *
