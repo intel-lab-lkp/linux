@@ -7,24 +7,38 @@
 #include <linux/module.h>
 #include <linux/tpm.h>
 
-/**
- * tpm_buf_init() - Allocate and initialize a TPM command
- * @buf:	A &tpm_buf
- * @tag:	TPM_TAG_RQU_COMMAND, TPM2_ST_NO_SESSIONS or TPM2_ST_SESSIONS
- * @ordinal:	A command ordinal
- *
- * Return: 0 or -ENOMEM
- */
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal)
-{
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
+#undef pr_fmt
+#define pr_fmt(fmt) "tpm_buf: " fmt
 
-	tpm_buf_reset(buf, tag, ordinal);
-	return 0;
+/**
+ * tpm_buf_alloc() - Allocate a &tpm_buf instance
+ * @size:	the buffer size in bytes
+ *
+ * As &tpm_buf header is placed in the beginning of the buffer before contents,
+ * the total capacity will be a eight bytes less than the requested size. E.g,
+ * if 4096 bytes is requested, the capacity for data is 4088 bytes.
+ *
+ * Return:
+ * * &tpm_buf:	success
+ * * NULL:	out of memory
+ */
+struct tpm_buf *tpm_buf_alloc(u16 size)
+{
+	struct tpm_buf *buf;
+
+	if (size < sizeof(*buf)) {
+		pr_warn("too small buffer size: %lu\n", size);
+		return NULL;
+	}
+
+	buf = kzalloc(size, GFP_KERNEL);
+	if (!buf)
+		return NULL;
+
+	buf->capacity = size - sizeof(*buf);
+	return buf;
 }
-EXPORT_SYMBOL_GPL(tpm_buf_init);
+EXPORT_SYMBOL_GPL(tpm_buf_alloc);
 
 /**
  * tpm_buf_reset() - Initialize a TPM command
@@ -49,23 +63,6 @@ void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal)
 EXPORT_SYMBOL_GPL(tpm_buf_reset);
 
 /**
- * tpm_buf_init_sized() - Allocate and initialize a sized (TPM2B) buffer
- * @buf:	A @tpm_buf
- *
- * Return: 0 or -ENOMEM
- */
-int tpm_buf_init_sized(struct tpm_buf *buf)
-{
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
-
-	tpm_buf_reset_sized(buf);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tpm_buf_init_sized);
-
-/**
  * tpm_buf_reset_sized() - Initialize a sized buffer
  * @buf:	A &tpm_buf
  */
@@ -77,12 +74,6 @@ void tpm_buf_reset_sized(struct tpm_buf *buf)
 	buf->data[1] = 0;
 }
 EXPORT_SYMBOL_GPL(tpm_buf_reset_sized);
-
-void tpm_buf_destroy(struct tpm_buf *buf)
-{
-	free_page((unsigned long)buf->data);
-}
-EXPORT_SYMBOL_GPL(tpm_buf_destroy);
 
 /**
  * tpm_buf_length() - Return the number of bytes consumed by the data
@@ -108,7 +99,7 @@ void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length)
 	if (buf->flags & TPM_BUF_OVERFLOW)
 		return;
 
-	if ((buf->length + new_length) > PAGE_SIZE) {
+	if ((buf->length + new_length) > buf->capacity) {
 		WARN(1, "tpm_buf: write overflow\n");
 		buf->flags |= TPM_BUF_OVERFLOW;
 		return;

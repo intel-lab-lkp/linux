@@ -373,13 +373,15 @@ enum tpm_buf_flags {
 };
 
 /*
- * A string buffer type for constructing TPM commands.
+ * A buffer for constructing and parsing TPM commands, responses and sized
+ * (TPM2B) buffers.
  */
 struct tpm_buf {
-	u32 flags;
-	u32 length;
-	u8 *data;
-	u8 handles;
+	u16 flags;
+	u16 capacity;
+	u16 length;
+	u16 handles;
+	u8 data[];
 };
 
 enum tpm2_object_attributes {
@@ -410,11 +412,9 @@ struct tpm2_hash {
 	unsigned int tpm_id;
 };
 
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal);
+struct tpm_buf *tpm_buf_alloc(u16 size);
 void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal);
-int tpm_buf_init_sized(struct tpm_buf *buf);
 void tpm_buf_reset_sized(struct tpm_buf *buf);
-void tpm_buf_destroy(struct tpm_buf *buf);
 u32 tpm_buf_length(struct tpm_buf *buf);
 void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length);
 void tpm_buf_append_u8(struct tpm_buf *buf, const u8 value);
@@ -424,6 +424,10 @@ u8 tpm_buf_read_u8(struct tpm_buf *buf, off_t *offset);
 u16 tpm_buf_read_u16(struct tpm_buf *buf, off_t *offset);
 u32 tpm_buf_read_u32(struct tpm_buf *buf, off_t *offset);
 void tpm_buf_append_handle(struct tpm_chip *chip, struct tpm_buf *buf, u32 handle);
+
+DEFINE_CLASS(tpm_buf, struct tpm_buf *, kfree(_T), tpm_buf_alloc(size), u16 size);
+
+#define CLASS_TPM_BUF(buf, size) CLASS(tpm_buf, buf)(size)
 
 /*
  * Check if TPM device is in the firmware upgrade mode.
