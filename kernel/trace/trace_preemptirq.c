@@ -118,6 +118,25 @@ EXPORT_TRACEPOINT_SYMBOL(irq_enable);
 
 #ifdef CONFIG_TRACE_PREEMPT_TOGGLE
 
+#if !defined(CONFIG_DEBUG_PREEMPT)
+EXPORT_SYMBOL(__tracepoint_preempt_disable);
+EXPORT_SYMBOL(__tracepoint_preempt_enable);
+
+void __trace_preempt_on(void)
+{
+	trace_preempt_on(CALLER_ADDR0, get_lock_parent_ip());
+}
+EXPORT_SYMBOL(__trace_preempt_on);
+NOKPROBE_SYMBOL(__trace_preempt_on);
+
+void __trace_preempt_off(void)
+{
+	trace_preempt_off(CALLER_ADDR0, get_lock_parent_ip());
+}
+EXPORT_SYMBOL(__trace_preempt_off);
+NOKPROBE_SYMBOL(__trace_preempt_off);
+#endif /* !CONFIG_DEBUG_PREEMPT */
+
 void trace_preempt_on(unsigned long a0, unsigned long a1)
 {
 	trace(preempt_enable, TP_ARGS(a0, a1));
