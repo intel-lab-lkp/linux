@@ -3332,6 +3332,9 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 	u32 level_size = 0;
 	u64 nums;
 
+	if (!btrfs_qgroup_enabled(fs_info))
+		return 0;
+
 	prealloc = kzalloc(sizeof(*prealloc), GFP_NOFS);
 	if (!prealloc)
 		return -ENOMEM;
@@ -3355,8 +3358,6 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 
 	if (!committing)
 		mutex_lock(&fs_info->qgroup_ioctl_lock);
-	if (!btrfs_qgroup_enabled(fs_info))
-		goto out;
 
 	quota_root = fs_info->quota_root;
 	if (!quota_root) {
