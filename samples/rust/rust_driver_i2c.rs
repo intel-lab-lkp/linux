@@ -2,10 +2,17 @@
 
 //! Rust I2C driver sample.
 
-use kernel::{c_str, device::Core, i2c, of, prelude::*, types::ARef};
+use kernel::{acpi, c_str, device::Core, i2c, of, prelude::*, types::ARef};
 
 struct SampleDriver {
     pdev: ARef<i2c::Device>,
+}
+
+kernel::acpi_device_table! {
+    ACPI_TABLE,
+    MODULE_ACPI_TABLE,
+    <SampleDriver as i2c::Driver>::IdInfo,
+    [(acpi::DeviceId::new(b"TST0001"), 0)]
 }
 
 kernel::i2c_device_table! {
@@ -25,6 +32,7 @@ kernel::of_device_table! {
 impl i2c::Driver for SampleDriver {
     type IdInfo = u32;
 
+    const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
     const I2C_ID_TABLE: Option<i2c::IdTable<Self::IdInfo>> = Some(&I2C_TABLE);
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 
