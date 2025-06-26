@@ -431,6 +431,8 @@ static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
 		perf_regs->opmask = get_xsave_addr(xsave, XFEATURE_OPMASK);
 	if (mask & XFEATURE_MASK_APX)
 		perf_regs->egpr = get_xsave_addr(xsave, XFEATURE_APX);
+	if (mask & XFEATURE_MASK_CET_USER)
+		perf_regs->cet = get_xsave_addr(xsave, XFEATURE_CET_USER);
 }
 
 static void release_ext_regs_buffers(void)
@@ -467,6 +469,8 @@ static void reserve_ext_regs_buffers(void)
 		mask |= XFEATURE_MASK_OPMASK;
 	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_EGPRS)
 		mask |= XFEATURE_MASK_APX;
+	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_CET)
+		mask |= XFEATURE_MASK_CET_USER;
 
 	size = xstate_calculate_size(mask, true);
 
@@ -723,7 +727,7 @@ int x86_pmu_hw_config(struct perf_event *event)
 
 	if (event->attr.sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER)) {
 		if (event->attr.sample_simd_regs_enabled) {
-			u64 reserved = ~GENMASK_ULL(PERF_REG_X86_64_MAX - 1, 0);
+			u64 reserved = ~GENMASK_ULL(PERF_REG_MISC_MAX - 1, 0);
 
 			if (!(event->pmu->capabilities & PERF_PMU_CAP_SIMD_REGS))
 				return -EINVAL;
@@ -738,6 +742,11 @@ int x86_pmu_hw_config(struct perf_event *event)
 			     event->attr.sample_regs_intr & PERF_X86_EGPRS_MASK) &&
 			     !(x86_pmu.ext_regs_mask & X86_EXT_REGS_EGPRS))
 				return -EINVAL;
+			if ((event->attr.sample_regs_user & BIT_ULL(PERF_REG_X86_SSP) ||
+			     event->attr.sample_regs_intr & BIT_ULL(PERF_REG_X86_SSP)) &&
+			     !(x86_pmu.ext_regs_mask & X86_EXT_REGS_CET))
+				return -EINVAL;
+
 		} else {
 			/*
 			 * Besides the general purpose registers, XMM registers may
@@ -1914,6 +1923,11 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		    attr->sample_regs_intr & PERF_X86_EGPRS_MASK) {
 			perf_regs->egpr_regs = NULL;
 			mask |= XFEATURE_MASK_APX;
+		}
+		if (attr->sample_regs_user & BIT_ULL(PERF_REG_X86_SSP) ||
+		    attr->sample_regs_intr & BIT_ULL(PERF_REG_X86_SSP)) {
+			perf_regs->cet_regs = NULL;
+			mask |= XFEATURE_MASK_CET_USER;
 		}
 	}
 
