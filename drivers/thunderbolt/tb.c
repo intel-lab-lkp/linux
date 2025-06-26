@@ -1060,6 +1060,9 @@ static int tb_configure_asym(struct tb *tb, struct tb_port *src_port,
 			break;
 
 		if (downstream) {
+			/* Does consumed + requested exceed the threshold */
+			if (consumed_down + requested_down < asym_threshold)
+				continue;
 			/*
 			 * Downstream so make sure upstream is within the 36G
 			 * (40G - guard band 10%), and the requested is above
@@ -1069,20 +1072,17 @@ static int tb_configure_asym(struct tb *tb, struct tb_port *src_port,
 				ret = -ENOBUFS;
 				break;
 			}
-			/* Does consumed + requested exceed the threshold */
-			if (consumed_down + requested_down < asym_threshold)
-				continue;
 
 			width_up = TB_LINK_WIDTH_ASYM_RX;
 			width_down = TB_LINK_WIDTH_ASYM_TX;
 		} else {
 			/* Upstream, the opposite of above */
+			if (consumed_up + requested_up < asym_threshold)
+				continue;
 			if (consumed_down + requested_down >= TB_ASYM_MIN) {
 				ret = -ENOBUFS;
 				break;
 			}
-			if (consumed_up + requested_up < asym_threshold)
-				continue;
 
 			width_up = TB_LINK_WIDTH_ASYM_TX;
 			width_down = TB_LINK_WIDTH_ASYM_RX;
