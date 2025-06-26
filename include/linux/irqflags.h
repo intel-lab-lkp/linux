@@ -17,6 +17,7 @@
 #include <linux/cleanup.h>
 #include <asm/irqflags.h>
 #include <asm/percpu.h>
+#include <linux/tracepoint-defs.h>
 
 struct task_struct;
 
@@ -197,9 +198,13 @@ extern void warn_bogus_irq_restore(void);
  */
 #ifdef CONFIG_TRACE_IRQFLAGS
 
+DECLARE_TRACEPOINT(irq_enable);
+DECLARE_TRACEPOINT(irq_disable);
+
 #define local_irq_enable()				\
 	do {						\
-		trace_hardirqs_on();			\
+		if (tracepoint_enabled(irq_enable))	\
+			trace_hardirqs_on();		\
 		raw_local_irq_enable();			\
 	} while (0)
 
@@ -207,28 +212,32 @@ extern void warn_bogus_irq_restore(void);
 	do {						\
 		bool was_disabled = raw_irqs_disabled();\
 		raw_local_irq_disable();		\
-		if (!was_disabled)			\
+		if (tracepoint_enabled(irq_disable) &&	\
+		    !was_disabled)			\
 			trace_hardirqs_off();		\
 	} while (0)
 
 #define local_irq_save(flags)				\
 	do {						\
 		raw_local_irq_save(flags);		\
-		if (!raw_irqs_disabled_flags(flags))	\
+		if (tracepoint_enabled(irq_disable) &&	\
+		    !raw_irqs_disabled_flags(flags))	\
 			trace_hardirqs_off();		\
 	} while (0)
 
 #define local_irq_restore(flags)			\
 	do {						\
-		if (!raw_irqs_disabled_flags(flags))	\
+		if (tracepoint_enabled(irq_enable) &&	\
+		    !raw_irqs_disabled_flags(flags))	\
 			trace_hardirqs_on();		\
 		raw_local_irq_restore(flags);		\
 	} while (0)
 
-#define safe_halt()				\
-	do {					\
-		trace_hardirqs_on();		\
-		raw_safe_halt();		\
+#define safe_halt()					\
+	do {						\
+		if (tracepoint_enabled(irq_enable))	\
+			trace_hardirqs_on();		\
+		raw_safe_halt();			\
 	} while (0)
 
 
