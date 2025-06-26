@@ -55,6 +55,16 @@ union futex_key {
 
 #define FUTEX_KEY_INIT (union futex_key) { .both = { .ptr = 0ULL } }
 
+struct robust_list32 {
+	u32 next;
+};
+
+struct robust_list_head32 {
+	struct robust_list32	list;
+	s32			futex_offset;
+	u32			list_op_pending;
+};
+
 #ifdef CONFIG_FUTEX
 enum {
 	FUTEX_STATE_OK,
