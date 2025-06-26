@@ -2,8 +2,10 @@
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/export.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/remoteproc.h>
@@ -1216,6 +1218,7 @@ void ath12k_fw_stats_init(struct ath12k *ar)
 	INIT_LIST_HEAD(&ar->fw_stats.pdevs);
 	INIT_LIST_HEAD(&ar->fw_stats.bcn);
 	init_completion(&ar->fw_stats_complete);
+	init_completion(&ar->fw_stats_done);
 }
 
 void ath12k_fw_stats_free(struct ath12k_fw_stats *stats)
@@ -1228,8 +1231,9 @@ void ath12k_fw_stats_free(struct ath12k_fw_stats *stats)
 void ath12k_fw_stats_reset(struct ath12k *ar)
 {
 	spin_lock_bh(&ar->data_lock);
-	ar->fw_stats.fw_stats_done = false;
 	ath12k_fw_stats_free(&ar->fw_stats);
+	ar->fw_stats.num_vdev_recvd = 0;
+	ar->fw_stats.num_bcn_recvd = 0;
 	spin_unlock_bh(&ar->data_lock);
 }
 
@@ -1407,6 +1411,7 @@ void ath12k_core_halt(struct ath12k *ar)
 	ath12k_mac_peer_cleanup_all(ar);
 	cancel_delayed_work_sync(&ar->scan.timeout);
 	cancel_work_sync(&ar->regd_update_work);
+	cancel_work_sync(&ar->regd_channel_update_work);
 	cancel_work_sync(&ab->rfkill_work);
 	cancel_work_sync(&ab->update_11d_work);
 
@@ -1470,6 +1475,7 @@ static void ath12k_core_pre_reconfigure_recovery(struct ath12k_base *ab)
 			complete(&ar->vdev_setup_done);
 			complete(&ar->vdev_delete_done);
 			complete(&ar->bss_survey_done);
+			complete(&ar->regd_update_completed);
 
 			wake_up(&ar->dp.tx_empty_waitq);
 			idr_for_each(&ar->txmgmt_idr,
@@ -1509,6 +1515,9 @@ static void ath12k_update_11d(struct work_struct *work)
 		ar = pdev->ar;
 
 		memcpy(&ar->alpha2, &arg.alpha2, 2);
+
+		reinit_completion(&ar->regd_update_completed);
+
 		ret = ath12k_wmi_send_set_current_country_cmd(ar, &arg);
 		if (ret)
 			ath12k_warn(ar->ab,
@@ -2129,7 +2138,8 @@ int ath12k_core_init(struct ath12k_base *ab)
 	if (!ag) {
 		mutex_unlock(&ath12k_hw_group_mutex);
 		ath12k_warn(ab, "unable to get hw group\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_unregister_notifier;
 	}
 
 	mutex_unlock(&ath12k_hw_group_mutex);
@@ -2144,7 +2154,7 @@ int ath12k_core_init(struct ath12k_base *ab)
 		if (ret) {
 			mutex_unlock(&ag->mutex);
 			ath12k_warn(ab, "unable to create hw group\n");
-			goto err;
+			goto err_destroy_hw_group;
 		}
 	}
 
@@ -2152,9 +2162,12 @@ int ath12k_core_init(struct ath12k_base *ab)
 
 	return 0;
 
-err:
+err_destroy_hw_group:
 	ath12k_core_hw_group_destroy(ab->ag);
 	ath12k_core_hw_group_unassign(ab);
+err_unregister_notifier:
+	ath12k_core_panic_notifier_unregister(ab);
+
 	return ret;
 }
 
