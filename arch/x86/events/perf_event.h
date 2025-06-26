@@ -701,6 +701,7 @@ enum {
 
 enum {
 	X86_EXT_REGS_XMM	= BIT_ULL(0),
+	X86_EXT_REGS_YMM	= BIT_ULL(1),
 };
 
 #define PERF_PEBS_DATA_SOURCE_MAX	0x100

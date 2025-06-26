@@ -420,6 +420,9 @@ static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
 	if (mask & XFEATURE_MASK_SSE &&
 	    xsave->header.xfeatures & BIT_ULL(XFEATURE_SSE))
 		perf_regs->xmm_space = xsave->i387.xmm_space;
+
+	if (mask & XFEATURE_MASK_YMM)
+		perf_regs->ymmh = get_xsave_addr(xsave, XFEATURE_YMM);
 }
 
 static void release_ext_regs_buffers(void)
@@ -446,6 +449,8 @@ static void reserve_ext_regs_buffers(void)
 
 	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM)
 		mask |= XFEATURE_MASK_SSE;
+	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_YMM)
+		mask |= XFEATURE_MASK_YMM;
 
 	size = xstate_calculate_size(mask, true);
 
@@ -725,6 +730,9 @@ int x86_pmu_hw_config(struct perf_event *event)
 			/* The vector registers set is not supported */
 			if (event->attr.sample_simd_vec_reg_qwords >= PERF_X86_XMM_QWORDS &&
 			    !(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
+				return -EINVAL;
+			if (event->attr.sample_simd_vec_reg_qwords >= PERF_X86_YMM_QWORDS &&
+			    !(x86_pmu.ext_regs_mask & X86_EXT_REGS_YMM))
 				return -EINVAL;
 		}
 	}
@@ -1836,6 +1844,13 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 	if (event_needs_xmm(event)) {
 		perf_regs->xmm_regs = NULL;
 		mask |= XFEATURE_MASK_SSE;
+	}
+
+	if (attr->sample_simd_regs_enabled) {
+		if (attr->sample_simd_vec_reg_qwords >= PERF_X86_YMM_QWORDS) {
+			perf_regs->ymmh_regs = NULL;
+			mask |= XFEATURE_MASK_YMM;
+		}
 	}
 
 	mask &= ~ignore_mask;
