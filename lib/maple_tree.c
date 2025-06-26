@@ -2770,13 +2770,8 @@ static inline void *mtree_range_walk(struct ma_state *mas)
 		end = ma_data_end(node, type, pivots, max);
 		prev_min = min;
 		prev_max = max;
-		if (pivots[0] >= mas->index) {
-			offset = 0;
-			max = pivots[0];
-			goto next;
-		}
 
-		offset = 1;
+		offset = 0;
 		while (offset < end) {
 			if (pivots[offset] >= mas->index) {
 				max = pivots[offset];
@@ -2784,9 +2779,9 @@ static inline void *mtree_range_walk(struct ma_state *mas)
 			}
 			offset++;
 		}
+		if (likely(offset))
+			min = pivots[offset - 1] + 1;
 
-		min = pivots[offset - 1] + 1;
-next:
 		slots = ma_slots(node, type);
 		next = mt_slot(mas->tree, slots, offset);
 		if (unlikely(ma_dead_node(node)))
