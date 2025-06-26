@@ -277,7 +277,7 @@ static int dw_pcie_ep_set_bar_resizable(struct dw_pcie_ep *ep, u8 func_no,
 	int flags = epf_bar->flags;
 	u32 reg = PCI_BASE_ADDRESS_0 + (4 * bar);
 	unsigned int rebar_offset;
-	u32 rebar_cap, rebar_ctrl;
+	u32 rebar_cap;
 	int ret;
 
 	rebar_offset = dw_pcie_ep_get_rebar_offset(pci, bar);
@@ -310,9 +310,8 @@ static int dw_pcie_ep_set_bar_resizable(struct dw_pcie_ep *ep, u8 func_no,
 	 * 1 MB to 128 TB. Bits 31:16 in PCI_REBAR_CTRL define "supported sizes"
 	 * bits for sizes 256 TB to 8 EB. Disallow sizes 256 TB to 8 EB.
 	 */
-	rebar_ctrl = dw_pcie_readl_dbi(pci, rebar_offset + PCI_REBAR_CTRL);
-	rebar_ctrl &= ~GENMASK(31, 16);
-	dw_pcie_writel_dbi(pci, rebar_offset + PCI_REBAR_CTRL, rebar_ctrl);
+	dw_pcie_clear_and_set_dword(pci, rebar_offset + PCI_REBAR_CTRL,
+				    GENMASK(31, 16), 0);
 
 	/*
 	 * The "selected size" (bits 13:8) in PCI_REBAR_CTRL are automatically
@@ -925,7 +924,7 @@ int dw_pcie_ep_init_registers(struct dw_pcie_ep *ep)
 	struct dw_pcie_ep_func *ep_func;
 	struct device *dev = pci->dev;
 	struct pci_epc *epc = ep->epc;
-	u32 ptm_cap_base, reg;
+	u32 ptm_cap_base;
 	u8 hdr_type;
 	u8 func_no;
 	void *addr;
@@ -1001,13 +1000,12 @@ int dw_pcie_ep_init_registers(struct dw_pcie_ep *ep)
 	 */
 	if (ptm_cap_base) {
 		dw_pcie_dbi_ro_wr_en(pci);
-		reg = dw_pcie_readl_dbi(pci, ptm_cap_base + PCI_PTM_CAP);
-		reg &= ~PCI_PTM_CAP_ROOT;
-		dw_pcie_writel_dbi(pci, ptm_cap_base + PCI_PTM_CAP, reg);
+		dw_pcie_clear_and_set_dword(pci, ptm_cap_base + PCI_PTM_CAP,
+					    PCI_PTM_CAP_ROOT, 0);
 
-		reg = dw_pcie_readl_dbi(pci, ptm_cap_base + PCI_PTM_CAP);
-		reg &= ~(PCI_PTM_CAP_RES | PCI_PTM_GRANULARITY_MASK);
-		dw_pcie_writel_dbi(pci, ptm_cap_base + PCI_PTM_CAP, reg);
+		dw_pcie_clear_and_set_dword(pci, ptm_cap_base + PCI_PTM_CAP,
+					    PCI_PTM_CAP_RES |
+					    PCI_PTM_GRANULARITY_MASK, 0);
 		dw_pcie_dbi_ro_wr_dis(pci);
 	}
 
