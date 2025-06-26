@@ -1059,6 +1059,7 @@ int __init sev_es_efi_map_ghcbs(pgd_t *pgd)
 {
 	struct sev_es_runtime_data *data;
 	unsigned long address, pflags;
+	int retval;
 	int cpu;
 	u64 pfn;
 
@@ -1073,8 +1074,9 @@ int __init sev_es_efi_map_ghcbs(pgd_t *pgd)
 		address = __pa(&data->ghcb_page);
 		pfn = address >> PAGE_SHIFT;
 
-		if (kernel_map_pages_in_pgd(pgd, pfn, address, 1, pflags))
-			return 1;
+		retval = kernel_map_pages_in_pgd(pgd, pfn, address, 1, pflags);
+		if (retval != 0)
+			return retval;
 	}
 
 	return 0;
