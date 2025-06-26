@@ -1152,7 +1152,8 @@ static inline int fetch_robust_entry(struct robust_list __user **entry,
  * We silently return on any sign of list-walking problem.
  */
 static void exit_robust_list64(struct task_struct *curr,
-			       struct robust_list_head __user *head)
+			       struct robust_list_head __user *head,
+			       bool destroyable)
 {
 	struct robust_list __user *entry, *next_entry, *pending;
 	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
@@ -1196,13 +1197,17 @@ static void exit_robust_list64(struct task_struct *curr,
 		}
 		if (rc)
 			return;
-		entry = next_entry;
-		pi = next_pi;
+
 		/*
 		 * Avoid excessively long or circular lists:
 		 */
-		if (!--limit)
+		if (!destroyable && !--limit)
 			break;
+		else
+			put_user(&head->list, &entry->next);
+
+		entry = next_entry;
+		pi = next_pi;
 
 		cond_resched();
 	}
@@ -1214,7 +1219,8 @@ static void exit_robust_list64(struct task_struct *curr,
 }
 #else
 static void exit_robust_list64(struct task_struct *curr,
-			       struct robust_list_head __user *head)
+			       struct robust_list_head __user *head,
+			       bool destroyable)
 {
 	pr_warn("32bit kernel should not allow ROBUST_LIST_64BIT");
 }
@@ -1252,7 +1258,8 @@ fetch_robust_entry32(u32 *uentry, struct robust_list __user **entry,
  * We silently return on any sign of list-walking problem.
  */
 static void exit_robust_list32(struct task_struct *curr,
-			       struct robust_list_head32 __user *head)
+			       struct robust_list_head32 __user *head,
+			       bool destroyable)
 {
 	struct robust_list __user *entry, *next_entry, *pending;
 	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
@@ -1474,10 +1481,19 @@ static void exit_pi_state_list(struct task_struct *curr)
 static inline void exit_pi_state_list(struct task_struct *curr) { }
 #endif
 
+/*
+ * futex_cleanup - After the task exists, process the robust lists
+ *
+ * Walk through the linked list, parsing robust lists and freeing the
+ * allocated lists. Lists created with the set_robust_list2 don't have a limit
+ * for sizing and can be destroyed while we walk on it to avoid circular list.
+ */
 static void futex_cleanup(struct task_struct *tsk)
 {
 	struct robust_list2_entry *curr, *n;
 	struct list_head *list2 = &tsk->robust_list2;
+	bool destroyable = true;
+	int i = 0;
 
 	/*
 	 * Walk through the linked list, parsing robust lists and freeing the
@@ -1485,15 +1501,20 @@ static void futex_cleanup(struct task_struct *tsk)
 	 */
 	if (unlikely(!list_empty(list2))) {
 		list_for_each_entry_safe(curr, n, list2, list) {
+			destroyable = true;
+			if (tsk->robust_list_index == i)
+				destroyable = false;
+
 			if (curr->head != NULL) {
 				if (curr->list_type == ROBUST_LIST_64BIT)
-					exit_robust_list64(tsk, curr->head);
+					exit_robust_list64(tsk, curr->head, destroyable);
 				else if (curr->list_type == ROBUST_LIST_32BIT)
-					exit_robust_list32(tsk, curr->head);
+					exit_robust_list32(tsk, curr->head, destroyable);
 				curr->head = NULL;
 			}
 			list_del_init(&curr->list);
 			kfree(curr);
+			i++;
 		}
 	}
 
