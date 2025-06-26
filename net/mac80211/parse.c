@@ -815,6 +815,9 @@ static size_t ieee802_11_find_bssid_profile(const u8 *start, size_t len,
 				break;
 			}
 		}
+
+		if (found)
+			break;
 	}
 
 	return found ? profile_len : 0;
