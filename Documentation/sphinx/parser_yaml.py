@@ -18,9 +18,9 @@ from sphinx.util import logging
 from sphinx.parsers import Parser
 
 srctree = os.path.abspath(os.environ["srctree"])
-sys.path.insert(0, os.path.join(srctree, "tools/net/ynl/pyynl"))
+sys.path.insert(0, os.path.join(srctree, "tools/net/ynl/pyynl/lib"))
 
-from netlink_yml_parser import YnlDocGenerator        # pylint: disable=C0413
+from doc_generator import YnlDocGenerator        # pylint: disable=C0413
 
 logger = logging.getLogger(__name__)
 
