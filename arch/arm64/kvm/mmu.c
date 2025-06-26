@@ -1666,6 +1666,24 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		return -ENOEXEC;
 
 	/*
+	 * Target address is normal memory on the Host. We come here
+	 * because:
+	 * 1) Guest map it as device memory and perform LS64 operations
+	 * 2) VMM report it as device memory mistakenly
+	 * Hand it to the userspace.
+	 */
+	if (esr_fsc_is_excl_atomic_fault(kvm_vcpu_get_esr(vcpu))) {
+		struct kvm_run *run = vcpu->run;
+
+		run->exit_reason = KVM_EXIT_ARM_LDST64B;
+		run->arm_nisv.esr_iss = kvm_vcpu_dabt_iss_nisv_sanitized(vcpu);
+		run->arm_nisv.fault_ipa = fault_ipa |
+			(kvm_vcpu_get_hfar(vcpu) & (vma_pagesize - 1));
+
+		return -EAGAIN;
+	}
+
+	/*
 	 * Potentially reduce shadow S2 permissions to match the guest's own
 	 * S2. For exec faults, we'd only reach this point if the guest
 	 * actually allowed it (see kvm_s2_handle_perm_fault).
@@ -1850,7 +1868,8 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 	/* Check the stage-2 fault is trans. fault or write fault */
 	if (!esr_fsc_is_translation_fault(esr) &&
 	    !esr_fsc_is_permission_fault(esr) &&
-	    !esr_fsc_is_access_flag_fault(esr)) {
+	    !esr_fsc_is_access_flag_fault(esr) &&
+	    !esr_fsc_is_excl_atomic_fault(esr)) {
 		kvm_err("Unsupported FSC: EC=%#x xFSC=%#lx ESR_EL2=%#lx\n",
 			kvm_vcpu_trap_get_class(vcpu),
 			(unsigned long)kvm_vcpu_trap_get_fault(vcpu),
