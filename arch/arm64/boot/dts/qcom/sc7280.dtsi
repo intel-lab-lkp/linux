@@ -5735,11 +5735,14 @@
 			qup_uart5_tx: qup-uart5-tx-state {
 				pins = "gpio22";
 				function = "qup05";
+				bootph-all;
 			};
 
 			qup_uart5_rx: qup-uart5-rx-state {
 				pins = "gpio23";
 				function = "qup05";
+				bootph-all;
+				bias-pull-up;
 			};
 
 			qup_uart6_cts: qup-uart6-cts-state {
