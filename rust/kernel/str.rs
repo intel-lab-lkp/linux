@@ -936,3 +936,31 @@ impl fmt::Debug for CString {
 macro_rules! fmt {
     ($($f:tt)*) => ( ::core::format_args!($($f)*) )
 }
+
+/// Returns the index of the last occurrence of `needle` in `haystack`, or [`None`].
+///
+/// Similar to [`str::rfind()`], except this one is const.  It also only supports
+/// ASCII strings.
+///
+/// # Examples
+///
+/// ```
+/// # use ::kernel::str::rfind_const;
+/// let l = rfind_const("when will then be now?", 'l');
+/// assert!(l == Some(8));
+///
+/// let q = rfind_const("when will then be now?", 'q');
+/// assert!(q == None);
+/// ```
+#[inline]
+pub const fn rfind_const(haystack: &str, needle: char) -> Option<usize> {
+    let haystack = haystack.as_bytes();
+    let mut i = haystack.len();
+    while i > 0 {
+        i -= 1;
+        if haystack[i] == needle as u8 {
+            return Some(i);
+        }
+    }
+    None
+}

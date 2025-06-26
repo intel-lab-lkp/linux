@@ -423,3 +423,66 @@ macro_rules! pr_cont (
         $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
     )
 );
+
+/// Returns just the base filename of the current file.
+///
+/// This differs from the built-in [`file!()`] macro, which returns the full
+/// path of the current file.
+///
+/// # Examples
+///
+/// Useful for succinct logging purposes.
+///
+/// ```
+/// # use kernel::sfile;
+/// // Output: `example:42`.
+/// pr_err!("{}:{}\n", sfile!(), line!());
+/// ```
+///
+/// The value is a constant expression, so it can be used in const
+/// contexts, e.g.:
+///
+/// ```
+/// # use kernel::sfile;
+/// // Contains: `example`.
+/// const SFILE: &'static str = sfile!();
+/// ```
+#[macro_export]
+macro_rules! sfile {
+    () => {{
+        const fn shortname() -> Option<&'static str> {
+            const FILE: &str = core::file!();
+
+            let start = ::kernel::str::rfind_const(FILE, '/').unwrap() + 1;
+            let end = ::kernel::str::rfind_const(FILE, '.').unwrap();
+
+            // Make sure that there actually is something to return.  This also
+            // covers a lot of corner cases, such as eliminating filenames that
+            // end in a slash (not possible) or don't have an extension,
+            // and making sure that `start` < `FILE.len()` and `end` - `start` > 0.
+            if end <= start {
+                return None;
+            }
+
+            // The following code is the equivalent of &FILE[start..start+len],
+            // except that it is allowed in const contexts.
+
+            let base_ptr: *const u8 = FILE.as_ptr();
+
+            // SAFETY: The above assertion ensures that `start` points to inside
+            // the string.
+            let p = unsafe { <*const ::core::primitive::u8>::add(base_ptr, start) };
+            // SAFETY: Based on all constraints on `start` and `end`, this slice
+            // will never extend beyond the string.
+            let p = unsafe { core::slice::from_raw_parts(p, end - start) };
+            // SAFETY: We know that the slice is valid UTF-8, because we checked
+            // that `FILE` is ASCII (via `is_ascii()` above).
+            match core::str::from_utf8(p) {
+                Ok(slice) => Some(slice),
+                Err(_) => None,
+            }
+        }
+
+        shortname().unwrap()
+    }};
+}
