@@ -59,6 +59,7 @@ struct usb_wwan_port_private {
 	int ri_state;
 
 	unsigned long tx_start_time[N_OUT_URB];
+	struct mutex lock;
 };
 
 #endif /* __LINUX_USB_USB_WWAN */

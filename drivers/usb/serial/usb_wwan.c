@@ -80,11 +80,12 @@ void usb_wwan_dtr_rts(struct usb_serial_port *port, int on)
 		return;
 
 	portdata = usb_get_serial_port_data(port);
-	/* FIXME: locking */
+	mutex_lock(&portdata->lock);
 	portdata->rts_state = on;
 	portdata->dtr_state = on;
 
 	usb_wwan_send_setup(port);
+	mutex_unlock(&portdata->lock);
 }
 EXPORT_SYMBOL(usb_wwan_dtr_rts);
 
@@ -113,6 +114,7 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 	struct usb_serial_port *port = tty->driver_data;
 	struct usb_wwan_port_private *portdata;
 	struct usb_wwan_intf_private *intfdata;
+	int ret;
 
 	portdata = usb_get_serial_port_data(port);
 	intfdata = usb_get_serial_data(port->serial);
@@ -120,7 +122,7 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 	if (!intfdata->use_send_setup)
 		return -EINVAL;
 
-	/* FIXME: what locks portdata fields ? */
+	mutex_lock(&portdata->lock);
 	if (set & TIOCM_RTS)
 		portdata->rts_state = 1;
 	if (set & TIOCM_DTR)
@@ -130,7 +132,9 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 		portdata->rts_state = 0;
 	if (clear & TIOCM_DTR)
 		portdata->dtr_state = 0;
-	return usb_wwan_send_setup(port);
+	ret = usb_wwan_send_setup(port);
+	mutex_unlock(&portdata->lock);
+	return ret;
 }
 EXPORT_SYMBOL(usb_wwan_tiocmset);
 
@@ -452,7 +456,7 @@ int usb_wwan_port_probe(struct usb_serial_port *port)
 	portdata = kzalloc(sizeof(*portdata), GFP_KERNEL);
 	if (!portdata)
 		return -ENOMEM;
-
+	mutex_init(&portdata->lock);
 	init_usb_anchor(&portdata->delayed);
 
 	for (i = 0; i < N_IN_URB; i++) {
