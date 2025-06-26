@@ -419,6 +419,9 @@ int bitmap_parselist_user(const char __user *ubuf,
 	char *buf;
 	int ret;
 
+	if (ulen > PAGE_SIZE)
+		return -ENOMEM;
+
 	buf = memdup_user_nul(ubuf, ulen);
 	if (IS_ERR(buf))
 		return PTR_ERR(buf);
