@@ -687,6 +687,10 @@ enum {
 	x86_lbr_exclusive_max,
 };
 
+enum {
+	X86_EXT_REGS_XMM	= BIT_ULL(0),
+};
+
 #define PERF_PEBS_DATA_SOURCE_MAX	0x100
 #define PERF_PEBS_DATA_SOURCE_MASK	(PERF_PEBS_DATA_SOURCE_MAX - 1)
 #define PERF_PEBS_DATA_SOURCE_GRT_MAX	0x10
@@ -993,6 +997,11 @@ struct x86_pmu {
 	unsigned int flags;
 
 	/*
+	 * Extended regs, e.g., vector registers
+	 */
+	u64		ext_regs_mask;
+
+	/*
 	 * Intel host/guest support (KVM)
 	 */
 	struct perf_guest_switch_msr *(*guest_get_msrs)(int *nr, void *data);
@@ -1280,7 +1289,8 @@ int x86_pmu_handle_irq(struct pt_regs *regs);
 
 void x86_pmu_setup_regs_data(struct perf_event *event,
 			     struct perf_sample_data *data,
-			     struct pt_regs *regs);
+			     struct pt_regs *regs,
+			     u64 ignore_mask);
 
 void x86_pmu_show_pmu_cap(struct pmu *pmu);
 

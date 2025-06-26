@@ -406,6 +406,62 @@ set_ext_hw_attr(struct hw_perf_event *hwc, struct perf_event *event)
 	return x86_pmu_extra_regs(val, event);
 }
 
+static DEFINE_PER_CPU(struct xregs_state *, ext_regs_buf);
+
+static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
+{
+	struct xregs_state *xsave = per_cpu(ext_regs_buf, smp_processor_id());
+
+	if (WARN_ON_ONCE(!xsave))
+		return;
+
+	xsaves_nmi(xsave, mask);
+
+	if (mask & XFEATURE_MASK_SSE &&
+	    xsave->header.xfeatures & BIT_ULL(XFEATURE_SSE))
+		perf_regs->xmm_space = xsave->i387.xmm_space;
+}
+
+static void release_ext_regs_buffers(void)
+{
+	int cpu;
+
+	if (!x86_pmu.ext_regs_mask)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		kfree(per_cpu(ext_regs_buf, cpu));
+		per_cpu(ext_regs_buf, cpu) = NULL;
+	}
+}
+
+static void reserve_ext_regs_buffers(void)
+{
+	unsigned int size;
+	u64 mask = 0;
+	int cpu;
+
+	if (!x86_pmu.ext_regs_mask)
+		return;
+
+	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM)
+		mask |= XFEATURE_MASK_SSE;
+
+	size = xstate_calculate_size(mask, true);
+
+	for_each_possible_cpu(cpu) {
+		per_cpu(ext_regs_buf, cpu) = kzalloc_node(size, GFP_KERNEL,
+							  cpu_to_node(cpu));
+		if (!per_cpu(ext_regs_buf, cpu))
+			goto err;
+	}
+
+	return;
+
+err:
+	release_ext_regs_buffers();
+}
+
 int x86_reserve_hardware(void)
 {
 	int err = 0;
@@ -418,6 +474,7 @@ int x86_reserve_hardware(void)
 			} else {
 				reserve_ds_buffers();
 				reserve_lbr_buffers();
+				reserve_ext_regs_buffers();
 			}
 		}
 		if (!err)
@@ -434,6 +491,7 @@ void x86_release_hardware(void)
 		release_pmc_hardware();
 		release_ds_buffers();
 		release_lbr_buffers();
+		release_ext_regs_buffers();
 		mutex_unlock(&pmc_reserve_mutex);
 	}
 }
@@ -642,21 +700,18 @@ int x86_pmu_hw_config(struct perf_event *event)
 			return -EINVAL;
 	}
 
-	/* sample_regs_user never support XMM registers */
-	if (unlikely(event->attr.sample_regs_user & PERF_REG_EXTENDED_MASK))
-		return -EINVAL;
-	/*
-	 * Besides the general purpose registers, XMM registers may
-	 * be collected in PEBS on some platforms, e.g. Icelake
-	 */
-	if (unlikely(event->attr.sample_regs_intr & PERF_REG_EXTENDED_MASK)) {
-		if (!(event->pmu->capabilities & PERF_PMU_CAP_EXTENDED_REGS))
-			return -EINVAL;
-
-		if (!event->attr.precise_ip)
-			return -EINVAL;
+	if (event->attr.sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER)) {
+		/*
+		 * Besides the general purpose registers, XMM registers may
+		 * be collected as well.
+		 */
+		if (event_has_extended_regs(event)) {
+			if (!(event->pmu->capabilities & PERF_PMU_CAP_EXTENDED_REGS))
+				return -EINVAL;
+			if (!(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
+				return -EINVAL;
+		}
 	}
-
 	return x86_setup_perfctr(event);
 }
 
@@ -1685,25 +1740,51 @@ do_del:
 	static_call_cond(x86_pmu_del)(event);
 }
 
+static DEFINE_PER_CPU(struct x86_perf_regs, x86_user_regs);
+
+static struct x86_perf_regs *
+x86_pmu_perf_get_regs_user(struct perf_sample_data *data,
+			   struct pt_regs *regs)
+{
+	struct x86_perf_regs *x86_regs_user = this_cpu_ptr(&x86_user_regs);
+	struct perf_regs regs_user;
+
+	perf_get_regs_user(&regs_user, regs);
+	data->regs_user.abi = regs_user.abi;
+	if (regs_user.regs) {
+		x86_regs_user->regs = *regs_user.regs;
+		data->regs_user.regs = &x86_regs_user->regs;
+	} else
+		data->regs_user.regs = NULL;
+	return x86_regs_user;
+}
+
 void x86_pmu_setup_regs_data(struct perf_event *event,
 			     struct perf_sample_data *data,
-			     struct pt_regs *regs)
+			     struct pt_regs *regs,
+			     u64 ignore_mask)
 {
-	u64 sample_type = event->attr.sample_type;
+	struct x86_perf_regs *perf_regs = container_of(regs, struct x86_perf_regs, regs);
+	struct perf_event_attr *attr = &event->attr;
+	u64 sample_type = attr->sample_type;
+	u64 mask = 0;
+
+	if (!(attr->sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER)))
+		return;
 
 	if (sample_type & PERF_SAMPLE_REGS_USER) {
 		if (user_mode(regs)) {
 			data->regs_user.abi = perf_reg_abi(current);
 			data->regs_user.regs = regs;
 		} else if (!(current->flags & PF_KTHREAD)) {
-			perf_get_regs_user(&data->regs_user, regs);
+			perf_regs = x86_pmu_perf_get_regs_user(data, regs);
 		} else {
 			data->regs_user.abi = PERF_SAMPLE_REGS_ABI_NONE;
 			data->regs_user.regs = NULL;
 		}
 		data->dyn_size += sizeof(u64);
 		if (data->regs_user.regs)
-			data->dyn_size += hweight64(event->attr.sample_regs_user) * sizeof(u64);
+			data->dyn_size += hweight64(attr->sample_regs_user) * sizeof(u64);
 		data->sample_flags |= PERF_SAMPLE_REGS_USER;
 	}
 
@@ -1712,9 +1793,18 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		data->regs_intr.abi = perf_reg_abi(current);
 		data->dyn_size += sizeof(u64);
 		if (data->regs_intr.regs)
-			data->dyn_size += hweight64(event->attr.sample_regs_intr) * sizeof(u64);
+			data->dyn_size += hweight64(attr->sample_regs_intr) * sizeof(u64);
 		data->sample_flags |= PERF_SAMPLE_REGS_INTR;
 	}
+
+	if (event_has_extended_regs(event)) {
+		perf_regs->xmm_regs = NULL;
+		mask |= XFEATURE_MASK_SSE;
+	}
+
+	mask &= ~ignore_mask;
+	if (mask)
+		x86_pmu_get_ext_regs(perf_regs, mask);
 }
 
 int x86_pmu_handle_irq(struct pt_regs *regs)
