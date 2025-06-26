@@ -27,16 +27,16 @@ EXPORT_SYMBOL(__asm_copy_from_user)
 
 SYM_FUNC_START(fallback_scalar_usercopy)
 	/* Enable access to user memory */
-	li	t6, SR_SUM
-	csrs 	CSR_STATUS, t6
-	mv 	t6, ra
+	li	a7, SR_SUM
+	csrs 	CSR_STATUS, a7
+	mv 	a7, ra
 
 	call 	fallback_scalar_usercopy_sum_enabled
 
 	/* Disable access to user memory */
-	mv 	ra, t6
-	li 	t6, SR_SUM
-	csrc 	CSR_STATUS, t6
+	mv 	ra, a7
+	li 	a7, SR_SUM
+	csrc 	CSR_STATUS, a7
 	ret
 SYM_FUNC_END(fallback_scalar_usercopy)
 
@@ -117,7 +117,7 @@ SYM_FUNC_START(fallback_scalar_usercopy_sum_enabled)
 	fixup REG_L   a4,        0(a1), 10f
 	fixup REG_L   a5,    SZREG(a1), 10f
 	fixup REG_L   a6,  2*SZREG(a1), 10f
-	fixup REG_L   a7,  3*SZREG(a1), 10f
+	fixup REG_L   a2,  3*SZREG(a1), 10f
 	fixup REG_L   t1,  4*SZREG(a1), 10f
 	fixup REG_L   t2,  5*SZREG(a1), 10f
 	fixup REG_L   t3,  6*SZREG(a1), 10f
@@ -125,7 +125,7 @@ SYM_FUNC_START(fallback_scalar_usercopy_sum_enabled)
 	fixup REG_S   a4,        0(a0), 10f
 	fixup REG_S   a5,    SZREG(a0), 10f
 	fixup REG_S   a6,  2*SZREG(a0), 10f
-	fixup REG_S   a7,  3*SZREG(a0), 10f
+	fixup REG_S   a2,  3*SZREG(a0), 10f
 	fixup REG_S   t1,  4*SZREG(a0), 10f
 	fixup REG_S   t2,  5*SZREG(a0), 10f
 	fixup REG_S   t3,  6*SZREG(a0), 10f
@@ -217,8 +217,8 @@ SYM_FUNC_END(fallback_scalar_usercopy_sum_enabled)
 SYM_FUNC_START(__clear_user)
 
 	/* Enable access to user memory */
-	li t6, SR_SUM
-	csrs CSR_STATUS, t6
+	li t5, SR_SUM
+	csrs CSR_STATUS, t5
 
 	add a3, a0, a1
 	addi t0, a0, SZREG-1
@@ -240,7 +240,7 @@ SYM_FUNC_START(__clear_user)
 
 3:
 	/* Disable access to user memory */
-	csrc CSR_STATUS, t6
+	csrc CSR_STATUS, t5
 	li a0, 0
 	ret
 4: /* Edge case: unalignment */
@@ -257,7 +257,7 @@ SYM_FUNC_START(__clear_user)
 	/* Exception fixup code */
 11:
 	/* Disable access to user memory */
-	csrc CSR_STATUS, t6
+	csrc CSR_STATUS, t5
 	sub a0, a3, a0
 	ret
 SYM_FUNC_END(__clear_user)

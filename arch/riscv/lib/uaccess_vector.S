@@ -22,16 +22,16 @@
 
 SYM_FUNC_START(__asm_vector_usercopy)
 	/* Enable access to user memory */
-	li	t6, SR_SUM
-	csrs	CSR_STATUS, t6
-	mv	t6, ra
+	li	a7, SR_SUM
+	csrs	CSR_STATUS, a7
+	mv	a7, ra
 
 	call 	__asm_vector_usercopy_sum_enabled
 
 	/* Disable access to user memory */
-	mv 	ra, t6
-	li 	t6, SR_SUM
-	csrc	CSR_STATUS, t6
+	mv 	ra, a7
+	li 	a7, SR_SUM
+	csrc	CSR_STATUS, a7
 	ret
 SYM_FUNC_END(__asm_vector_usercopy)
 

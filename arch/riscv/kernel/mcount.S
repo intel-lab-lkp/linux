@@ -89,8 +89,8 @@ SYM_FUNC_START(_mcount)
 
 	la	t3, ftrace_graph_entry
 	REG_L	t2, 0(t3)
-	la	t6, ftrace_graph_entry_stub
-	bne	t2, t6, .Ldo_ftrace_graph_caller
+	la	t5, ftrace_graph_entry_stub
+	bne	t2, t5, .Ldo_ftrace_graph_caller
 #endif
 	la	t3, ftrace_trace_function
 	REG_L	t5, 0(t3)

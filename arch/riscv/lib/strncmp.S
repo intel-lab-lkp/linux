@@ -63,7 +63,7 @@ strncmp_zbb:
 	 *   a2 - number of characters to compare
 	 *
 	 * Clobbers
-	 *   t0, t1, t2, t3, t4, t5, t6
+	 *   t0, t1, t2, t3, t4, t5
 	 */
 
 	or	t2, a0, a1
@@ -73,12 +73,12 @@ strncmp_zbb:
 	bnez	t2, 3f
 
 	/* Adjust limit for fast-path.  */
-	andi	t6, t4, -SZREG
+	andi	t0, t4, -SZREG
 
 	/* Main loop for aligned string.  */
 	.p2align 3
 1:
-	bge	a0, t6, 3f
+	bge	a0, t0, 3f
 	REG_L	t0, 0(a0)
 	REG_L	t1, 0(a1)
 	orc.b	t3, t0

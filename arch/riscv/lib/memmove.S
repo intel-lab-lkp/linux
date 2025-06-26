@@ -35,7 +35,7 @@ SYM_FUNC_START(__memmove)
 	 *      Forward Copy: t3 - Index counter of dest
 	 *      Reverse Copy: t4 - Index counter of dest
 	 *   Both Copy Modes: t5 - Inclusive first multibyte/aligned of dest
-	 *   Both Copy Modes: t6 - Non-Inclusive last multibyte/aligned of dest
+	 *   Both Copy Modes: a3 - Non-Inclusive last multibyte/aligned of dest
 	 *   Both Copy Modes: t0 - Link / Temporary for load-store
 	 *   Both Copy Modes: t1 - Temporary for load-store
 	 *   Both Copy Modes: t2 - Temporary for load-store
@@ -47,7 +47,7 @@ SYM_FUNC_START(__memmove)
 
 	/*
 	 * Solve for some register values now.
-	 * Byte copy does not need t5 or t6.
+	 * Byte copy does not need t5 or a3.
 	 */
 	mv   t3, a0
 	add  t4, a0, a2
@@ -62,10 +62,10 @@ SYM_FUNC_START(__memmove)
 	beqz t0, .Lbyte_copy
 
 	/*
-	 * Now solve for t5 and t6.
+	 * Now solve for t5 and a3.
 	 */
 	andi t5, t3, -SZREG
-	andi t6, t4, -SZREG
+	andi a3, t4, -SZREG
 	/*
 	 * If dest(Register t3) rounded down to the nearest naturally
 	 * aligned SZREG address, does not equal dest, then add SZREG
@@ -99,7 +99,7 @@ SYM_FUNC_START(__memmove)
 	slli a6, a5, 3 /* Multiply by 8 to convert that to bits to shift */
 	sub  a5, a1, t3 /* Find the difference between src and dest */
 	andi a1, a1, -SZREG /* Align the src pointer */
-	addi a2, t6, SZREG /* The other breakpoint for the unrolled loop*/
+	addi a2, a3, SZREG /* The other breakpoint for the unrolled loop*/
 
 	/*
 	 * Compute The Inverse Shift
@@ -147,9 +147,9 @@ SYM_FUNC_START(__memmove)
 	or    t2, t1, t2
 	REG_S t2, ((1 * SZREG) - (2 * SZREG))(t3)
 
-	bne   t3, t6, 1b
+	bne   t3, a3, 1b
 	2:
-	mv    t3, t6 /* Fix the dest pointer in case the loop was broken */
+	mv    t3, a3 /* Fix the dest pointer in case the loop was broken */
 
 	add  a1, t3, a5 /* Restore the src pointer */
 	j .Lbyte_copy_forward /* Copy any remaining bytes */
@@ -232,7 +232,7 @@ SYM_FUNC_START(__memmove)
 	addi  a1, a1, SZREG
 	addi  t3, t3, SZREG
 	REG_S t1, (-1 * SZREG)(t3)
-	bne   t3, t6, 1b
+	bne   t3, a3, 1b
 
 	j .Lbyte_copy_forward /* Copy any remaining bytes */
 
@@ -269,13 +269,13 @@ SYM_FUNC_START(__memmove)
 	jalr zero, 0x0(t0) /* Return to multibyte copy loop */
 
 .Lbyte_copy_until_aligned_reverse:
-	beq  t4, t6, 2f
+	beq  t4, a3, 2f
 	1:
 	lb   t1, -1(a4)
 	addi a4, a4, -1
 	addi t4, t4, -1
 	sb   t1,  0(t4)
-	bne  t4, t6, 1b
+	bne  t4, a3, 1b
 	2:
 	jalr zero, 0x0(t0) /* Return to multibyte copy loop */
 

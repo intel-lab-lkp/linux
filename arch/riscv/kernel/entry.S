@@ -285,13 +285,13 @@ ASM_NOKPROBE(ret_from_exception)
 #ifdef CONFIG_VMAP_STACK
 SYM_CODE_START_LOCAL(handle_kernel_stack_overflow)
 	/* we reach here from kernel context, sscratch must be 0 */
-	csrrw x31, CSR_SCRATCH, x31
-	asm_per_cpu sp, overflow_stack, x31
-	li x31, OVERFLOW_STACK_SIZE
-	add sp, sp, x31
-	/* zero out x31 again and restore x31 */
-	xor x31, x31, x31
-	csrrw x31, CSR_SCRATCH, x31
+	csrrw x30, CSR_SCRATCH, x30
+	asm_per_cpu sp, overflow_stack, x30
+	li x30, OVERFLOW_STACK_SIZE
+	add sp, sp, x30
+	/* zero out x30 again and restore x30 */
+	xor x30, x30, x30
+	csrrw x30, CSR_SCRATCH, x30
 
 	addi sp, sp, -(PT_SIZE_ON_STACK)
 
