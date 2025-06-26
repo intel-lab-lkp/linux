@@ -423,6 +423,13 @@ static int bcm54811_config_init(struct phy_device *phydev)
 	/* With BCM54811, BroadR-Reach implies no autoneg */
 	if (priv->brr_mode)
 		phydev->autoneg = 0;
+	/* Enable MII Lite (No TXER, RXER, CRS, COL) if configured */
+	err = bcm_phy_modify_exp(phydev, BCM_EXP_SYNC_ETHERNET,
+				 BCM_EXP_SYNC_ETHERNET_MII_LITE,
+				 phydev->interface == PHY_INTERFACE_MODE_MIILITE ?
+				 BCM_EXP_SYNC_ETHERNET_MII_LITE : 0);
+	if (err < 0)
+		return err;
 
 	return bcm5481x_set_brrmode(phydev, priv->brr_mode);
 }
