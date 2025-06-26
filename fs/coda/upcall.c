@@ -62,8 +62,12 @@ static void *alloc_upcall(int opcode, int size)
 do {\
 	inp = (union inputArgs *)alloc_upcall(op, insize); \
         if (IS_ERR(inp)) { return PTR_ERR(inp); }\
-        outp = (union outputArgs *)(inp); \
         outsize = insize; \
+} while (0)
+#define UPARG2(op)\
+do {\
+	UPARG(op); \
+	outp = (union outputArgs *)(inp); \
 } while (0)
 
 #define INSIZE(tag) sizeof(struct coda_ ## tag ## _in)
@@ -79,7 +83,7 @@ int venus_rootfid(struct super_block *sb, struct CodaFid *fidp)
         int insize, outsize, error;
 
         insize = SIZE(root);
-        UPARG(CODA_ROOT);
+	UPARG2(CODA_ROOT);
 
 	error = coda_upcall(coda_vcp(sb), insize, &outsize, inp);
 	if (!error)
@@ -97,7 +101,7 @@ int venus_getattr(struct super_block *sb, struct CodaFid *fid,
         int insize, outsize, error;
 
         insize = SIZE(getattr); 
-	UPARG(CODA_GETATTR);
+	UPARG2(CODA_GETATTR);
         inp->coda_getattr.VFid = *fid;
 
 	error = coda_upcall(coda_vcp(sb), insize, &outsize, inp);
@@ -112,7 +116,6 @@ int venus_setattr(struct super_block *sb, struct CodaFid *fid,
 		  struct coda_vattr *vattr)
 {
         union inputArgs *inp;
-        union outputArgs *outp;
         int insize, outsize, error;
 	
 	insize = SIZE(setattr);
@@ -138,7 +141,7 @@ int venus_lookup(struct super_block *sb, struct CodaFid *fid,
 
 	offset = INSIZE(lookup);
         insize = max_t(unsigned int, offset + length +1, OUTSIZE(lookup));
-	UPARG(CODA_LOOKUP);
+	UPARG2(CODA_LOOKUP);
 
         inp->coda_lookup.VFid = *fid;
 	inp->coda_lookup.name = offset;
@@ -161,7 +164,6 @@ int venus_close(struct super_block *sb, struct CodaFid *fid, int flags,
 		kuid_t uid)
 {
 	union inputArgs *inp;
-	union outputArgs *outp;
 	int insize, outsize, error;
 	
 	insize = SIZE(release);
@@ -185,7 +187,7 @@ int venus_open(struct super_block *sb, struct CodaFid *fid,
         int insize, outsize, error;
        
 	insize = SIZE(open_by_fd);
-	UPARG(CODA_OPEN_BY_FD);
+	UPARG2(CODA_OPEN_BY_FD);
 
 	inp->coda_open_by_fd.VFid = *fid;
 	inp->coda_open_by_fd.flags = flags;
@@ -209,7 +211,7 @@ int venus_mkdir(struct super_block *sb, struct CodaFid *dirfid,
 
 	offset = INSIZE(mkdir);
 	insize = max_t(unsigned int, offset + length + 1, OUTSIZE(mkdir));
-	UPARG(CODA_MKDIR);
+	UPARG2(CODA_MKDIR);
 
         inp->coda_mkdir.VFid = *dirfid;
         inp->coda_mkdir.attr = *attrs;
@@ -235,7 +237,6 @@ int venus_rename(struct super_block *sb, struct CodaFid *old_fid,
 		 const char *new_name)
 {
 	union inputArgs *inp;
-        union outputArgs *outp;
         int insize, outsize, error; 
 	int offset, s;
 	
@@ -277,7 +278,7 @@ int venus_create(struct super_block *sb, struct CodaFid *dirfid,
 
         offset = INSIZE(create);
 	insize = max_t(unsigned int, offset + length + 1, OUTSIZE(create));
-	UPARG(CODA_CREATE);
+	UPARG2(CODA_CREATE);
 
         inp->coda_create.VFid = *dirfid;
         inp->coda_create.attr.va_mode = mode;
@@ -303,7 +304,6 @@ int venus_rmdir(struct super_block *sb, struct CodaFid *dirfid,
 		    const char *name, int length)
 {
         union inputArgs *inp;
-        union outputArgs *outp;
         int insize, outsize, error;
         int offset;
 
@@ -326,7 +326,6 @@ int venus_remove(struct super_block *sb, struct CodaFid *dirfid,
 		    const char *name, int length)
 {
         union inputArgs *inp;
-        union outputArgs *outp;
         int error=0, insize, outsize, offset;
 
         offset = INSIZE(remove);
@@ -355,7 +354,7 @@ int venus_readlink(struct super_block *sb, struct CodaFid *fid,
         
 	insize = max_t(unsigned int,
 		     INSIZE(readlink), OUTSIZE(readlink)+ *length);
-	UPARG(CODA_READLINK);
+	UPARG2(CODA_READLINK);
 
         inp->coda_readlink.VFid = *fid;
 
@@ -380,7 +379,6 @@ int venus_link(struct super_block *sb, struct CodaFid *fid,
 		  struct CodaFid *dirfid, const char *name, int len )
 {
         union inputArgs *inp;
-        union outputArgs *outp;
         int insize, outsize, error;
         int offset;
 
@@ -407,7 +405,6 @@ int venus_symlink(struct super_block *sb, struct CodaFid *fid,
 		     const char *symname, int symlen)
 {
         union inputArgs *inp;
-        union outputArgs *outp;
         int insize, outsize, error;
         int offset, s;
 
@@ -440,7 +437,6 @@ int venus_symlink(struct super_block *sb, struct CodaFid *fid,
 int venus_fsync(struct super_block *sb, struct CodaFid *fid)
 {
         union inputArgs *inp;
-        union outputArgs *outp; 
 	int insize, outsize, error;
 	
 	insize=SIZE(fsync);
@@ -456,7 +452,6 @@ int venus_fsync(struct super_block *sb, struct CodaFid *fid)
 int venus_access(struct super_block *sb, struct CodaFid *fid, int mask)
 {
         union inputArgs *inp;
-        union outputArgs *outp; 
 	int insize, outsize, error;
 
 	insize = SIZE(access);
@@ -481,7 +476,7 @@ int venus_pioctl(struct super_block *sb, struct CodaFid *fid,
 	int iocsize;
 
 	insize = VC_MAXMSGSIZE;
-	UPARG(CODA_IOCTL);
+	UPARG2(CODA_IOCTL);
 
         /* build packet for Venus */
         if (data->vi.in_size > VC_MAXDATASIZE) {
@@ -554,7 +549,7 @@ int venus_statfs(struct dentry *dentry, struct kstatfs *sfs)
         int insize, outsize, error;
         
 	insize = SIZE(statfs);
-	UPARG(CODA_STATFS);
+	UPARG2(CODA_STATFS);
 
 	error = coda_upcall(coda_vcp(dentry->d_sb), insize, &outsize, inp);
 	if (!error) {
@@ -574,7 +569,6 @@ int venus_access_intent(struct super_block *sb, struct CodaFid *fid,
 			size_t count, loff_t ppos, int type)
 {
 	union inputArgs *inp;
-	union outputArgs *outp;
 	int insize, outsize, error;
 	bool finalizer =
 		type == CODA_ACCESS_TYPE_READ_FINISH ||
