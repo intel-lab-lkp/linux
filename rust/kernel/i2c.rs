@@ -4,7 +4,7 @@
 
 // I2C Driver abstractions.
 use crate::{
-    container_of, device,
+    acpi, container_of, device,
     device_id::RawDeviceId,
     driver,
     error::*,
@@ -96,6 +96,11 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
             None => core::ptr::null(),
         };
 
+        let acpi_table = match T::ACPI_ID_TABLE {
+            Some(table) => table.as_ptr(),
+            None => core::ptr::null(),
+        };
+
         // SAFETY: It's safe to set the fields of `struct i2c_client` on initialization.
         unsafe {
             (*pdrv.get()).driver.name = name.as_char_ptr();
@@ -104,6 +109,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
             (*pdrv.get()).shutdown = Some(Self::shutdown_callback);
             (*pdrv.get()).id_table = i2c_table;
             (*pdrv.get()).driver.of_match_table = of_table;
+            (*pdrv.get()).driver.acpi_match_table = acpi_table;
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
@@ -187,6 +193,10 @@ impl<T: Driver + 'static> driver::Adapter for Adapter<T> {
     fn of_id_table() -> Option<of::IdTable<Self::IdInfo>> {
         T::OF_ID_TABLE
     }
+
+    fn acpi_id_table() -> Option<acpi::IdTable<Self::IdInfo>> {
+        T::ACPI_ID_TABLE
+    }
 }
 
 /// Declares a kernel module that exposes a single i2c driver.
@@ -216,9 +226,18 @@ macro_rules! module_i2c_driver {
 /// # Example
 ///
 ///```
-/// # use kernel::{bindings, c_str, device::Core, i2c, of};
+/// # use kernel::{acpi, bindings, c_str, device::Core, i2c, of};
 ///
 /// struct MyDriver;
+///
+/// kernel::acpi_device_table!(
+///     ACPI_TABLE,
+///     MODULE_ACPI_TABLE,
+///     <MyDriver as i2c::Driver>::IdInfo,
+///     [
+///         (acpi::DeviceId::new(b"TST0001"), ())
+///     ]
+/// );
 ///
 /// kernel::i2c_device_table!(
 ///     I2C_TABLE,
@@ -242,6 +261,7 @@ macro_rules! module_i2c_driver {
 ///     type IdInfo = ();
 ///     const I2C_ID_TABLE: Option<i2c::IdTable<Self::IdInfo>> = Some(&I2C_TABLE);
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
+///     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 ///
 ///     fn probe(
 ///         _pdev: &i2c::Device<Core>,
@@ -268,6 +288,9 @@ pub trait Driver: Send {
 
     /// The table of OF device ids supported by the driver.
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
+
+    /// The table of ACPI device ids supported by the driver.
+    const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = None;
 
     /// I2C driver probe.
     ///
