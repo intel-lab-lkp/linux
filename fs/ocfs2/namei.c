@@ -142,6 +142,8 @@ static struct dentry *ocfs2_lookup(struct inode *dir, struct dentry *dentry,
 
 bail_add:
 	ret = d_splice_alias(inode, dentry);
+	if (ret == ERR_PTR(-ELOOP))
+		goto bail_unlock;
 
 	if (inode) {
 		/*
