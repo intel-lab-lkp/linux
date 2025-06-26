@@ -4199,4 +4199,24 @@ static inline bool page_pool_page_is_pp(struct page *page)
 }
 #endif
 
+#define PAGE_SNAPSHOT_FAITHFUL     (1 << 0)
+#define PAGE_SNAPSHOT_PG_HUGE_ZERO (1 << 1)
+#define PAGE_SNAPSHOT_PG_FREE      (1 << 2)
+#define PAGE_SNAPSHOT_PG_IDLE      (1 << 3)
+
+struct page_snapshot {
+	struct folio folio_snapshot;
+	struct page page_snapshot;
+	unsigned long pfn;
+	unsigned long idx;
+	unsigned long flags;
+};
+
+static inline bool snapshot_page_is_faithful(const struct page_snapshot *ps)
+{
+	return ps->flags & 0x1;
+}
+
+void snapshot_page(struct page_snapshot *ps, const struct page *page);
+
 #endif /* _LINUX_MM_H */
