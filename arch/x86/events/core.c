@@ -429,6 +429,8 @@ static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
 		perf_regs->h16zmm = get_xsave_addr(xsave, XFEATURE_Hi16_ZMM);
 	if (mask & XFEATURE_MASK_OPMASK)
 		perf_regs->opmask = get_xsave_addr(xsave, XFEATURE_OPMASK);
+	if (mask & XFEATURE_MASK_APX)
+		perf_regs->egpr = get_xsave_addr(xsave, XFEATURE_APX);
 }
 
 static void release_ext_regs_buffers(void)
@@ -463,6 +465,8 @@ static void reserve_ext_regs_buffers(void)
 		mask |= XFEATURE_MASK_Hi16_ZMM;
 	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_OPMASK)
 		mask |= XFEATURE_MASK_OPMASK;
+	if (x86_pmu.ext_regs_mask & X86_EXT_REGS_EGPRS)
+		mask |= XFEATURE_MASK_APX;
 
 	size = xstate_calculate_size(mask, true);
 
@@ -718,17 +722,33 @@ int x86_pmu_hw_config(struct perf_event *event)
 	}
 
 	if (event->attr.sample_type & (PERF_SAMPLE_REGS_INTR | PERF_SAMPLE_REGS_USER)) {
-		/*
-		 * Besides the general purpose registers, XMM registers may
-		 * be collected as well.
-		 */
-		if (event_has_extended_regs(event)) {
-			if (!(event->pmu->capabilities & PERF_PMU_CAP_EXTENDED_REGS))
+		if (event->attr.sample_simd_regs_enabled) {
+			u64 reserved = ~GENMASK_ULL(PERF_REG_X86_64_MAX - 1, 0);
+
+			if (!(event->pmu->capabilities & PERF_PMU_CAP_SIMD_REGS))
 				return -EINVAL;
-			if (!(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
+			/*
+			 * The XMM space in the perf_event_x86_regs is reclaimed
+			 * for eGPRs and other general registers.
+			 */
+			if (event->attr.sample_regs_user & reserved ||
+			    event->attr.sample_regs_intr & reserved)
 				return -EINVAL;
-			if (event->attr.sample_simd_regs_enabled)
+			if ((event->attr.sample_regs_user & PERF_X86_EGPRS_MASK ||
+			     event->attr.sample_regs_intr & PERF_X86_EGPRS_MASK) &&
+			     !(x86_pmu.ext_regs_mask & X86_EXT_REGS_EGPRS))
 				return -EINVAL;
+		} else {
+			/*
+			 * Besides the general purpose registers, XMM registers may
+			 * be collected as well.
+			 */
+			if (event_has_extended_regs(event)) {
+				if (!(event->pmu->capabilities & PERF_PMU_CAP_EXTENDED_REGS))
+					return -EINVAL;
+				if (!(x86_pmu.ext_regs_mask & X86_EXT_REGS_XMM))
+					return -EINVAL;
+			}
 		}
 
 		if (event_has_simd_regs(event)) {
@@ -1889,6 +1909,11 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		    attr->sample_simd_pred_reg_user) {
 			perf_regs->opmask_regs = NULL;
 			mask |= XFEATURE_MASK_OPMASK;
+		}
+		if (attr->sample_regs_user & PERF_X86_EGPRS_MASK ||
+		    attr->sample_regs_intr & PERF_X86_EGPRS_MASK) {
+			perf_regs->egpr_regs = NULL;
+			mask |= XFEATURE_MASK_APX;
 		}
 	}
 
