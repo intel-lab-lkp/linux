@@ -127,21 +127,26 @@ static int lenovo_super_hotkey_wmi_led_init(enum mute_led_type led_type, struct 
 	else
 		return -EIO;
 
-	wpriv->cdev[led_type].max_brightness = LED_ON;
-	wpriv->cdev[led_type].flags = LED_CORE_SUSPENDRESUME;
-
 	switch (led_type) {
 	case MIC_MUTE:
+		/*
+		 * A missing hardware feature is not an error, so do not return
+		 * an error here.
+		 */
 		if (led_version != WMI_LUD_SUPPORT_MICMUTE_LED_VER)
-			return -EIO;
+			return 0;
 
 		wpriv->cdev[led_type].name = "platform::micmute";
 		wpriv->cdev[led_type].brightness_set_blocking = &lsh_wmi_micmute_led_set;
 		wpriv->cdev[led_type].default_trigger = "audio-micmute";
 		break;
 	case AUDIO_MUTE:
+		/*
+		 * A missing hardware feature is not an error, so do not return
+		 * an error here.
+		 */
 		if (led_version != WMI_LUD_SUPPORT_AUDIOMUTE_LED_VER)
-			return -EIO;
+			return 0;
 
 		wpriv->cdev[led_type].name = "platform::mute";
 		wpriv->cdev[led_type].brightness_set_blocking = &lsh_wmi_audiomute_led_set;
@@ -151,6 +156,9 @@ static int lenovo_super_hotkey_wmi_led_init(enum mute_led_type led_type, struct 
 		dev_err(dev, "Unknown LED type %d\n", led_type);
 		return -EINVAL;
 	}
+
+	wpriv->cdev[led_type].max_brightness = LED_ON;
+	wpriv->cdev[led_type].flags = LED_CORE_SUSPENDRESUME;
 
 	err = devm_led_classdev_register(dev, &wpriv->cdev[led_type]);
 	if (err < 0) {
