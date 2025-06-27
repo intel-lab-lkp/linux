@@ -438,6 +438,10 @@ void wx_get_channels(struct net_device *dev,
 	/* record RSS queues */
 	ch->combined_count = wx->ring_feature[RING_F_RSS].indices;
 
+	/* nothing else to report if RSS is disabled */
+	if (ch->combined_count == 1)
+		return;
+
 	if (test_bit(WX_FLAG_FDIR_CAPABLE, wx->flags))
 		ch->combined_count = wx->ring_feature[RING_F_FDIR].indices;
 }
