@@ -1360,6 +1360,13 @@ int sdw_slave_get_scale_index(struct sdw_slave *slave, u8 *base)
 }
 EXPORT_SYMBOL(sdw_slave_get_scale_index);
 
+int sdw_slave_get_current_bank(struct sdw_slave *sdev)
+{
+	return FIELD_GET(SDW_SCP_STAT_CURR_BANK,
+			 sdw_read(sdev, SDW_SCP_CTRL));
+}
+EXPORT_SYMBOL_GPL(sdw_slave_get_current_bank);
+
 static int sdw_slave_set_frequency(struct sdw_slave *slave)
 {
 	int scale_index;
