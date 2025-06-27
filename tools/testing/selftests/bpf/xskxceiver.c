@@ -109,6 +109,8 @@
 
 #include <network_helpers.h>
 
+#define MAX_TX_BUDGET_DEFAULT 32
+
 static bool opt_verbose;
 static bool opt_print_tests;
 static enum test_mode opt_mode = TEST_MODE_ALL;
@@ -1091,11 +1093,34 @@ static bool is_pkt_valid(struct pkt *pkt, void *buffer, u64 addr, u32 len)
 	return true;
 }
 
-static int kick_tx(struct xsk_socket_info *xsk)
+static u32 load_value(u32 *a)
 {
+	return __atomic_load_n(a, __ATOMIC_ACQUIRE);
+}
+
+static int kick_tx_with_check(struct xsk_socket_info *xsk)
+{
+	int ret, cons_delta;
+	u32 prev_cons;
+
+	prev_cons = load_value(xsk->tx.consumer);
+	ret = sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
+	cons_delta = load_value(xsk->tx.consumer) - prev_cons;
+	if (cons_delta != MAX_TX_BUDGET_DEFAULT)
+		return TEST_FAILURE;
+
+	return ret;
+}
+
+static int kick_tx(struct xsk_socket_info *xsk, bool check_cons)
+{
+	u32 ready_to_send = load_value(xsk->tx.producer) - load_value(xsk->tx.consumer);
 	int ret;
 
-	ret = sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
+	if (!check_cons || ready_to_send <= MAX_TX_BUDGET_DEFAULT)
+		ret = sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
+	else
+		ret = kick_tx_with_check(xsk);
 	if (ret >= 0)
 		return TEST_PASS;
 	if (errno == ENOBUFS || errno == EAGAIN || errno == EBUSY || errno == ENETDOWN) {
@@ -1116,14 +1141,14 @@ static int kick_rx(struct xsk_socket_info *xsk)
 	return TEST_PASS;
 }
 
-static int complete_pkts(struct xsk_socket_info *xsk, int batch_size)
+static int complete_pkts(struct xsk_socket_info *xsk, int batch_size, bool check_cons)
 {
 	unsigned int rcvd;
 	u32 idx;
 	int ret;
 
 	if (xsk_ring_prod__needs_wakeup(&xsk->tx)) {
-		ret = kick_tx(xsk);
+		ret = kick_tx(xsk, check_cons);
 		if (ret)
 			return TEST_FAILURE;
 	}
@@ -1323,7 +1348,17 @@ static int receive_pkts(struct test_spec *test)
 	return TEST_PASS;
 }
 
-static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, bool timeout)
+bool check_consumer(struct test_spec *test)
+{
+	if (test->mode & TEST_MODE_ZC ||
+	    !strncmp("STAT_TX_INVALID", test->name, MAX_TEST_NAME_SIZE))
+		return false;
+
+	return true;
+}
+
+static int __send_pkts(struct test_spec *test, struct ifobject *ifobject,
+		       struct xsk_socket_info *xsk, bool timeout)
 {
 	u32 i, idx = 0, valid_pkts = 0, valid_frags = 0, buffer_len;
 	struct pkt_stream *pkt_stream = xsk->pkt_stream;
@@ -1336,7 +1371,7 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, b
 	/* pkts_in_flight might be negative if many invalid packets are sent */
 	if (pkts_in_flight >= (int)((umem_size(umem) - xsk->batch_size * buffer_len) /
 	    buffer_len)) {
-		ret = kick_tx(xsk);
+		ret = kick_tx(xsk, check_consumer(test));
 		if (ret)
 			return TEST_FAILURE;
 		return TEST_CONTINUE;
@@ -1365,7 +1400,7 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, b
 			}
 		}
 
-		complete_pkts(xsk, xsk->batch_size);
+		complete_pkts(xsk, xsk->batch_size, check_consumer(test));
 	}
 
 	for (i = 0; i < xsk->batch_size; i++) {
@@ -1437,7 +1472,7 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, b
 	}
 
 	if (!timeout) {
-		if (complete_pkts(xsk, i))
+		if (complete_pkts(xsk, i, check_consumer(test)))
 			return TEST_FAILURE;
 
 		usleep(10);
@@ -1447,7 +1482,7 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk, b
 	return TEST_CONTINUE;
 }
 
-static int wait_for_tx_completion(struct xsk_socket_info *xsk)
+static int wait_for_tx_completion(struct xsk_socket_info *xsk, bool check_cons)
 {
 	struct timeval tv_end, tv_now, tv_timeout = {THREAD_TMOUT, 0};
 	int ret;
@@ -1466,7 +1501,7 @@ static int wait_for_tx_completion(struct xsk_socket_info *xsk)
 			return TEST_FAILURE;
 		}
 
-		complete_pkts(xsk, xsk->batch_size);
+		complete_pkts(xsk, xsk->batch_size, check_cons);
 	}
 
 	return TEST_PASS;
@@ -1492,7 +1527,7 @@ static int send_pkts(struct test_spec *test, struct ifobject *ifobject)
 				__set_bit(i, bitmap);
 				continue;
 			}
-			ret = __send_pkts(ifobject, &ifobject->xsk_arr[i], timeout);
+			ret = __send_pkts(test, ifobject, &ifobject->xsk_arr[i], timeout);
 			if (ret == TEST_CONTINUE && !test->fail)
 				continue;
 
@@ -1502,7 +1537,8 @@ static int send_pkts(struct test_spec *test, struct ifobject *ifobject)
 			if (ret == TEST_PASS && timeout)
 				return ret;
 
-			ret = wait_for_tx_completion(&ifobject->xsk_arr[i]);
+			ret = wait_for_tx_completion(&ifobject->xsk_arr[i],
+						     check_consumer(test));
 			if (ret)
 				return TEST_FAILURE;
 		}
