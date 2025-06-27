@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/types.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/io.h>
@@ -35,13 +36,31 @@ DEFINE_CORESIGHT_DEVLIST(etb_devs, "tmc_etb");
 DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
 DEFINE_CORESIGHT_DEVLIST(etr_devs, "tmc_etr");
 
+static u32 tmc_timeout;
+
+static void tmc_extend_timeout(struct csdev_access *csa, u32 offset, int pos, int val)
+{
+	int i;
+
+	for (i = tmc_timeout; i > 0; i--) {
+		if (i - 1)
+			udelay(1);
+	}
+}
+
+static int tmc_wait_status(struct csdev_access *csa, u32 offset, int pos, int val)
+{
+	return coresight_timeout_action(csa, offset, pos, val,
+			tmc_extend_timeout);
+}
+
 int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata)
 {
 	struct coresight_device *csdev = drvdata->csdev;
 	struct csdev_access *csa = &csdev->access;
 
 	/* Ensure formatter, unformatter and hardware fifo are empty */
-	if (coresight_timeout(csa, TMC_STS, TMC_STS_TMCREADY_BIT, 1)) {
+	if (tmc_wait_status(csa, TMC_STS, TMC_STS_TMCREADY_BIT, 1)) {
 		dev_err(&csdev->dev,
 			"timeout while waiting for TMC to be Ready\n");
 		return -EBUSY;
@@ -61,7 +80,7 @@ void tmc_flush_and_stop(struct tmc_drvdata *drvdata)
 	ffcr |= BIT(TMC_FFCR_FLUSHMAN_BIT);
 	writel_relaxed(ffcr, drvdata->base + TMC_FFCR);
 	/* Ensure flush completes */
-	if (coresight_timeout(csa, TMC_FFCR, TMC_FFCR_FLUSHMAN_BIT, 0)) {
+	if (tmc_wait_status(csa, TMC_FFCR, TMC_FFCR_FLUSHMAN_BIT, 0)) {
 		dev_err(&csdev->dev,
 		"timeout while waiting for completion of Manual Flush\n");
 	}
@@ -561,11 +580,31 @@ static ssize_t stop_on_flush_store(struct device *dev,
 
 static DEVICE_ATTR_RW(stop_on_flush);
 
+static ssize_t timeout_cfg_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", tmc_timeout);
+}
+
+static ssize_t timeout_cfg_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t size)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+	tmc_timeout = val;
+
+	return size;
+}
+static DEVICE_ATTR_RW(timeout_cfg);
 
 static struct attribute *coresight_tmc_attrs[] = {
 	&dev_attr_trigger_cntr.attr,
 	&dev_attr_buffer_size.attr,
 	&dev_attr_stop_on_flush.attr,
+	&dev_attr_timeout_cfg.attr,
 	NULL,
 };
 
