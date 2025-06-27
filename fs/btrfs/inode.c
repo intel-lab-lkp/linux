@@ -8673,7 +8673,6 @@ static int start_delalloc_inodes(struct btrfs_root *root,
 	int ret = 0;
 	bool full_flush = wbc->nr_to_write == LONG_MAX;
 
-	mutex_lock(&root->delalloc_mutex);
 	spin_lock(&root->delalloc_lock);
 	list_splice_init(&root->delalloc_inodes, &splice);
 	while (!list_empty(&splice)) {
@@ -8730,7 +8729,6 @@ out:
 		list_splice_tail(&splice, &root->delalloc_inodes);
 		spin_unlock(&root->delalloc_lock);
 	}
-	mutex_unlock(&root->delalloc_mutex);
 	return ret;
 }
 

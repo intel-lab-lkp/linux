@@ -238,7 +238,6 @@ struct btrfs_root {
 	spinlock_t root_item_lock;
 	refcount_t refs;
 
-	struct mutex delalloc_mutex;
 	spinlock_t delalloc_lock;
 	/*
 	 * all of the inodes that have delalloc bytes.  It is possible for
