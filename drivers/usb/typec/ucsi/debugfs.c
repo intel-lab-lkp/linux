@@ -35,7 +35,7 @@ static int ucsi_cmd(void *data, u64 val)
 	case UCSI_SET_SINK_PATH:
 	case UCSI_SET_NEW_CAM:
 	case UCSI_SET_USB:
-		ret = ucsi_send_command(ucsi, val, NULL, 0);
+		ret = ucsi_send_command(ucsi, val, NULL, 0, NULL);
 		break;
 	case UCSI_GET_CAPABILITY:
 	case UCSI_GET_CONNECTOR_CAPABILITY:
@@ -52,7 +52,7 @@ static int ucsi_cmd(void *data, u64 val)
 	case UCSI_GET_LPM_PPM_INFO:
 		ret = ucsi_send_command(ucsi, val,
 					&ucsi->debugfs->response,
-					sizeof(ucsi->debugfs->response));
+					sizeof(ucsi->debugfs->response), NULL);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
