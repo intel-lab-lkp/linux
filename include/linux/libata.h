@@ -499,16 +499,23 @@ enum ata_completion_errors {
 };
 
 /*
- * Link power management policy: If you alter this, you also need to
- * alter libata-sata.c (for the ascii descriptions)
+ * Link power management policy: If you alter this, you also need to alter
+ * the policy names used with the sysfs attribute link_power_management_policy
+ * defined in libata-sata.c
  */
 enum ata_lpm_policy {
+	/* 0 => Keep firmware settings */
 	ATA_LPM_UNKNOWN,
+	/* 1 => No power savings (maximum performance) */
 	ATA_LPM_MAX_POWER,
+	/* 2 => HIPM (Partial) */
 	ATA_LPM_MED_POWER,
-	ATA_LPM_MED_POWER_WITH_DIPM, /* Med power + DIPM as win IRST does */
-	ATA_LPM_MIN_POWER_WITH_PARTIAL, /* Min Power + partial and slumber */
-	ATA_LPM_MIN_POWER, /* Min power + no partial (slumber only) */
+	/* 3 => HIPM (Partial) and DIPM (Partial and Slumber) */
+	ATA_LPM_MED_POWER_WITH_DIPM,
+	/* 4 => HIPM (Partial and DevSleep) and DIPM (Partial and Slumber) */
+	ATA_LPM_MIN_POWER_WITH_PARTIAL,
+	/* 5 => HIPM (Slumber and DevSleep) and DIPM (Partial and Slumber) */
+	ATA_LPM_MIN_POWER,
 };
 
 enum ata_lpm_hints {
