@@ -489,7 +489,7 @@ static int journal_replay_entry_early(struct bch_fs *c,
 		if (unlikely(!entry->u64s))
 			return 0;
 
-		if (fsck_err_on(entry->btree_id >= BTREE_ID_NR_MAX,
+		if (mustfix_fsck_err_on(entry->btree_id >= BTREE_ID_NR_MAX,
 				c, invalid_btree_id,
 				"invalid btree id %u (max %u)",
 				entry->btree_id, BTREE_ID_NR_MAX))
