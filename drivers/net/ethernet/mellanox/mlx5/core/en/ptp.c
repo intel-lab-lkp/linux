@@ -378,7 +378,7 @@ static int mlx5e_ptp_alloc_traffic_db(struct mlx5e_ptpsq *ptpsq, int numa)
 	int db_sz;
 	int md;
 
-	cqe_list = kvzalloc_node(sizeof(*ptpsq->ts_cqe_pending_list), GFP_KERNEL, numa);
+	cqe_list = kvzalloc_node(sizeof(*ptpsq->ts_cqe_pending_list), 1, GFP_KERNEL, numa);
 	if (!cqe_list)
 		return -ENOMEM;
 	ptpsq->ts_cqe_pending_list = cqe_list;
@@ -388,7 +388,7 @@ static int mlx5e_ptp_alloc_traffic_db(struct mlx5e_ptpsq *ptpsq, int numa)
 					  ts_cqe_metadata_size2wqe_counter));
 	ptpsq->ts_cqe_ctr_mask = db_sz - 1;
 
-	cqe_list->nodes = kvzalloc_node(array_size(db_sz, sizeof(*cqe_list->nodes)),
+	cqe_list->nodes = kvzalloc_node(array_size(db_sz, sizeof(*cqe_list->nodes)), 1,
 					GFP_KERNEL, numa);
 	if (!cqe_list->nodes)
 		goto free_cqe_list;
@@ -396,7 +396,7 @@ static int mlx5e_ptp_alloc_traffic_db(struct mlx5e_ptpsq *ptpsq, int numa)
 	spin_lock_init(&cqe_list->tracker_list_lock);
 
 	metadata_freelist->data =
-		kvzalloc_node(array_size(db_sz, sizeof(*metadata_freelist->data)),
+		kvzalloc_node(array_size(db_sz, sizeof(*metadata_freelist->data)), 1,
 			      GFP_KERNEL, numa);
 	if (!metadata_freelist->data)
 		goto free_cqe_list_nodes;
@@ -409,7 +409,7 @@ static int mlx5e_ptp_alloc_traffic_db(struct mlx5e_ptpsq *ptpsq, int numa)
 	metadata_freelist->pc = db_sz;
 
 	metadata_map->data =
-		kvzalloc_node(array_size(db_sz, sizeof(*metadata_map->data)),
+		kvzalloc_node(array_size(db_sz, sizeof(*metadata_map->data)), 1,
 			      GFP_KERNEL, numa);
 	if (!metadata_map->data)
 		goto free_metadata_freelist;
@@ -886,7 +886,7 @@ int mlx5e_ptp_open(struct mlx5e_priv *priv, struct mlx5e_params *params,
 	int err;
 
 
-	c = kvzalloc_node(sizeof(*c), GFP_KERNEL, dev_to_node(mlx5_core_dma_dev(mdev)));
+	c = kvzalloc_node(sizeof(*c), 1, GFP_KERNEL, dev_to_node(mlx5_core_dma_dev(mdev)));
 	cparams = kvzalloc(sizeof(*cparams), GFP_KERNEL);
 	if (!c || !cparams) {
 		err = -ENOMEM;

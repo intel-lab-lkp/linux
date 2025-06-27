@@ -40,7 +40,7 @@ void *fun_alloc_ring_mem(struct device *dma_dev, size_t depth,
 		return NULL;
 
 	if (sw_desc_sz) {
-		*sw_va = kvzalloc_node(sw_desc_sz * depth, GFP_KERNEL,
+		*sw_va = kvzalloc_node(sw_desc_sz * depth, 1, GFP_KERNEL,
 				       numa_node);
 		if (!*sw_va) {
 			dma_free_coherent(dma_dev, dma_sz, va, *dma_addr);

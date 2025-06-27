@@ -567,7 +567,7 @@ static int fun_rxq_init_cache(struct funeth_rx_cache *c, unsigned int depth,
 			      int node)
 {
 	c->mask = depth - 1;
-	c->bufs = kvzalloc_node(depth * sizeof(*c->bufs), GFP_KERNEL, node);
+	c->bufs = kvzalloc_node(depth * sizeof(*c->bufs), 1, GFP_KERNEL, node);
 	return c->bufs ? 0 : -ENOMEM;
 }
 

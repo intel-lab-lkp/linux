@@ -70,7 +70,7 @@ static struct dim *mlx5e_dim_enable(struct mlx5_core_dev *mdev,
 	struct dim *dim;
 	int err;
 
-	dim = kvzalloc_node(sizeof(*dim), GFP_KERNEL, cpu_to_node(cpu));
+	dim = kvzalloc_node(sizeof(*dim), 1, GFP_KERNEL, cpu_to_node(cpu));
 	if (!dim)
 		return ERR_PTR(-ENOMEM);
 

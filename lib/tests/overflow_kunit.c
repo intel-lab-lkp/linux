@@ -608,18 +608,19 @@ static void shift_nonsense_test(struct kunit *test)
  * the DEFINE_TEST_ALLOC() instances for mapping of the "bits".
  */
 #define alloc_GFP		 (GFP_KERNEL | __GFP_NOWARN)
-#define alloc010(alloc, arg, sz) alloc(sz, alloc_GFP)
-#define alloc011(alloc, arg, sz) alloc(sz, alloc_GFP, NUMA_NO_NODE)
-#define alloc000(alloc, arg, sz) alloc(sz)
-#define alloc001(alloc, arg, sz) alloc(sz, NUMA_NO_NODE)
-#define alloc110(alloc, arg, sz) alloc(arg, sz, alloc_GFP)
+#define alloc0010(alloc, arg, sz) alloc(sz, alloc_GFP)
+#define alloc0011(alloc, arg, sz) alloc(sz, alloc_GFP, NUMA_NO_NODE)
+#define alloc0000(alloc, arg, sz) alloc(sz)
+#define alloc0111(alloc, arg, sz) alloc(sz, 1, alloc_GFP, NUMA_NO_NODE)
+#define alloc0001(alloc, arg, sz) alloc(sz, NUMA_NO_NODE)
+#define alloc1010(alloc, arg, sz) alloc(arg, sz, alloc_GFP)
 #define free0(free, arg, ptr)	 free(ptr)
 #define free1(free, arg, ptr)	 free(arg, ptr)
 
 /* Wrap around to 16K */
 #define TEST_SIZE		(5 * 4096)
 
-#define DEFINE_TEST_ALLOC(func, free_func, want_arg, want_gfp, want_node)\
+#define DEFINE_TEST_ALLOC(func, free_func, want_arg, want_align, want_gfp, want_node)\
 static void test_ ## func (struct kunit *test, void *arg)		\
 {									\
 	volatile size_t a = TEST_SIZE;					\
@@ -627,21 +628,22 @@ static void test_ ## func (struct kunit *test, void *arg)		\
 	void *ptr;							\
 									\
 	/* Tiny allocation test. */					\
-	ptr = alloc ## want_arg ## want_gfp ## want_node (func, arg, 1);\
+	ptr = alloc ## want_arg ## want_align ## want_gfp ##		\
+		want_node(func, arg, 1);				\
 	KUNIT_ASSERT_NOT_ERR_OR_NULL_MSG(test, ptr,			\
 			    #func " failed regular allocation?!\n");	\
 	free ## want_arg (free_func, arg, ptr);				\
 									\
 	/* Wrapped allocation test. */					\
-	ptr = alloc ## want_arg ## want_gfp ## want_node (func, arg,	\
-							  a * b);	\
+	ptr = alloc ## want_arg ## want_align ## want_gfp ##		\
+		want_node(func, arg, a * b);				\
 	KUNIT_ASSERT_NOT_ERR_OR_NULL_MSG(test, ptr,			\
 			    #func " unexpectedly failed bad wrapping?!\n"); \
 	free ## want_arg (free_func, arg, ptr);				\
 									\
 	/* Saturated allocation test. */				\
-	ptr = alloc ## want_arg ## want_gfp ## want_node (func, arg,	\
-						   array_size(a, b));	\
+	ptr = alloc ## want_arg ## want_align ## want_gfp ##		\
+		want_node(func, arg, array_size(a, b));			\
 	if (ptr) {							\
 		KUNIT_FAIL(test, #func " missed saturation!\n");	\
 		free ## want_arg (free_func, arg, ptr);			\
@@ -649,22 +651,23 @@ static void test_ ## func (struct kunit *test, void *arg)		\
 }
 
 /*
- * Allocator uses a trailing node argument --------+  (e.g. kmalloc_node())
- * Allocator uses the gfp_t argument -----------+  |  (e.g. kmalloc())
- * Allocator uses a special leading argument +  |  |  (e.g. devm_kmalloc())
- *                                           |  |  |
+ * Allocator uses a trailing node argument -----------+  (e.g. kmalloc_node())
+ * Allocator uses the gfp_t argument --------------+  |  (e.g. kmalloc())
+ * Allocator uses align argument ---------------+  |  |  (e.g. kvmalloc_node())
+ * Allocator uses a special leading argument +  |  |  |  (e.g. devm_kmalloc())
+ *                                           |  |  |  |
  */
-DEFINE_TEST_ALLOC(kmalloc,	 kfree,	     0, 1, 0);
-DEFINE_TEST_ALLOC(kmalloc_node,	 kfree,	     0, 1, 1);
-DEFINE_TEST_ALLOC(kzalloc,	 kfree,	     0, 1, 0);
-DEFINE_TEST_ALLOC(kzalloc_node,  kfree,	     0, 1, 1);
-DEFINE_TEST_ALLOC(__vmalloc,	 vfree,	     0, 1, 0);
-DEFINE_TEST_ALLOC(kvmalloc,	 kvfree,     0, 1, 0);
-DEFINE_TEST_ALLOC(kvmalloc_node, kvfree,     0, 1, 1);
-DEFINE_TEST_ALLOC(kvzalloc,	 kvfree,     0, 1, 0);
-DEFINE_TEST_ALLOC(kvzalloc_node, kvfree,     0, 1, 1);
-DEFINE_TEST_ALLOC(devm_kmalloc,  devm_kfree, 1, 1, 0);
-DEFINE_TEST_ALLOC(devm_kzalloc,  devm_kfree, 1, 1, 0);
+DEFINE_TEST_ALLOC(kmalloc,	 kfree,	     0, 0, 1, 0);
+DEFINE_TEST_ALLOC(kmalloc_node,	 kfree,	     0, 0, 1, 1);
+DEFINE_TEST_ALLOC(kzalloc,	 kfree,	     0, 0, 1, 0);
+DEFINE_TEST_ALLOC(kzalloc_node,  kfree,	     0, 0, 1, 1);
+DEFINE_TEST_ALLOC(__vmalloc,	 vfree,	     0, 0, 1, 0);
+DEFINE_TEST_ALLOC(kvmalloc,	 kvfree,     0, 0, 1, 0);
+DEFINE_TEST_ALLOC(kvmalloc_node, kvfree,     0, 1, 1, 1);
+DEFINE_TEST_ALLOC(kvzalloc,	 kvfree,     0, 0, 1, 0);
+DEFINE_TEST_ALLOC(kvzalloc_node, kvfree,     0, 1, 1, 1);
+DEFINE_TEST_ALLOC(devm_kmalloc,  devm_kfree, 1, 0, 1, 0);
+DEFINE_TEST_ALLOC(devm_kzalloc,  devm_kfree, 1, 0, 1, 0);
 
 static void overflow_allocation_test(struct kunit *test)
 {

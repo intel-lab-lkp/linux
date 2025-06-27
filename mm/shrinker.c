@@ -82,7 +82,7 @@ int alloc_shrinker_info(struct mem_cgroup *memcg)
 	mutex_lock(&shrinker_mutex);
 	array_size = shrinker_unit_size(shrinker_nr_max);
 	for_each_node(nid) {
-		struct shrinker_info *info = kvzalloc_node(sizeof(*info) + array_size,
+		struct shrinker_info *info = kvzalloc_node(sizeof(*info) + array_size, 1,
 							   GFP_KERNEL, nid);
 		if (!info)
 			goto err;
@@ -128,7 +128,7 @@ static int expand_one_shrinker_info(struct mem_cgroup *memcg, int new_size,
 		if (new_nr_max <= old->map_nr_max)
 			continue;
 
-		new = kvzalloc_node(sizeof(*new) + new_size, GFP_KERNEL, nid);
+		new = kvzalloc_node(sizeof(*new) + new_size, 1, GFP_KERNEL, nid);
 		if (!new)
 			return -ENOMEM;
 

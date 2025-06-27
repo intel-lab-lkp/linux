@@ -2249,7 +2249,7 @@ static struct mapped_device *alloc_dev(int minor)
 	struct mapped_device *md;
 	void *old_md;
 
-	md = kvzalloc_node(sizeof(*md), GFP_KERNEL, numa_node_id);
+	md = kvzalloc_node(sizeof(*md), 1, GFP_KERNEL, numa_node_id);
 	if (!md) {
 		DMERR("unable to allocate device, out of memory.");
 		return NULL;

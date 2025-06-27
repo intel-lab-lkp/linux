@@ -135,7 +135,7 @@ static struct mlx5e_trap *mlx5e_open_trap(struct mlx5e_priv *priv)
 	struct mlx5e_trap *t;
 	int err;
 
-	t = kvzalloc_node(sizeof(*t), GFP_KERNEL, cpu_to_node(cpu));
+	t = kvzalloc_node(sizeof(*t), 1, GFP_KERNEL, cpu_to_node(cpu));
 	if (!t)
 		return ERR_PTR(-ENOMEM);
 

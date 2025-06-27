@@ -432,7 +432,7 @@ int mlx5_eq_table_init(struct mlx5_core_dev *dev)
 	struct mlx5_eq_table *eq_table;
 	int i;
 
-	eq_table = kvzalloc_node(sizeof(*eq_table), GFP_KERNEL,
+	eq_table = kvzalloc_node(sizeof(*eq_table), 1, GFP_KERNEL,
 				 dev->priv.numa_node);
 	if (!eq_table)
 		return -ENOMEM;
@@ -746,7 +746,7 @@ struct mlx5_eq *
 mlx5_eq_create_generic(struct mlx5_core_dev *dev,
 		       struct mlx5_eq_param *param)
 {
-	struct mlx5_eq *eq = kvzalloc_node(sizeof(*eq), GFP_KERNEL,
+	struct mlx5_eq *eq = kvzalloc_node(sizeof(*eq), 1, GFP_KERNEL,
 					   dev->priv.numa_node);
 	int err;
 

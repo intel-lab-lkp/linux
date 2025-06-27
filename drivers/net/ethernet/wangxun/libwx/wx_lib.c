@@ -2658,7 +2658,7 @@ static int wx_setup_rx_resources(struct wx_ring *rx_ring)
 	if (rx_ring->q_vector)
 		numa_node = rx_ring->q_vector->numa_node;
 
-	rx_ring->rx_buffer_info = kvmalloc_node(size, GFP_KERNEL, numa_node);
+	rx_ring->rx_buffer_info = kvmalloc_node(size, 1, GFP_KERNEL, numa_node);
 	if (!rx_ring->rx_buffer_info)
 		rx_ring->rx_buffer_info = kvmalloc(size, GFP_KERNEL);
 	if (!rx_ring->rx_buffer_info)
@@ -2749,7 +2749,7 @@ static int wx_setup_tx_resources(struct wx_ring *tx_ring)
 	if (tx_ring->q_vector)
 		numa_node = tx_ring->q_vector->numa_node;
 
-	tx_ring->tx_buffer_info = kvmalloc_node(size, GFP_KERNEL, numa_node);
+	tx_ring->tx_buffer_info = kvmalloc_node(size, 1, GFP_KERNEL, numa_node);
 	if (!tx_ring->tx_buffer_info)
 		tx_ring->tx_buffer_info = kvmalloc(size, GFP_KERNEL);
 	if (!tx_ring->tx_buffer_info)

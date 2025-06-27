@@ -298,13 +298,13 @@ DEFINE_ALLOC_SIZE_TEST_PAIR(vmalloc)
 		kvmalloc((alloc_pages) * PAGE_SIZE, gfp),		\
 		kvfree(p));						\
 	checker((expected_pages) * PAGE_SIZE,				\
-		kvmalloc_node((alloc_pages) * PAGE_SIZE, gfp, NUMA_NO_NODE), \
+		kvmalloc_node((alloc_pages) * PAGE_SIZE, 1, gfp, NUMA_NO_NODE), \
 		kvfree(p));						\
 	checker((expected_pages) * PAGE_SIZE,				\
 		kvzalloc((alloc_pages) * PAGE_SIZE, gfp),		\
 		kvfree(p));						\
 	checker((expected_pages) * PAGE_SIZE,				\
-		kvzalloc_node((alloc_pages) * PAGE_SIZE, gfp, NUMA_NO_NODE), \
+		kvzalloc_node((alloc_pages) * PAGE_SIZE, 1, gfp, NUMA_NO_NODE), \
 		kvfree(p));						\
 	checker((expected_pages) * PAGE_SIZE,				\
 		kvcalloc(1, (alloc_pages) * PAGE_SIZE, gfp),		\

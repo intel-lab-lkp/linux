@@ -333,7 +333,7 @@ static inline void mlx5e_build_umr_wqe(struct mlx5e_rq *rq,
 
 static int mlx5e_rq_shampo_hd_alloc(struct mlx5e_rq *rq, int node)
 {
-	rq->mpwqe.shampo = kvzalloc_node(sizeof(*rq->mpwqe.shampo),
+	rq->mpwqe.shampo = kvzalloc_node(sizeof(*rq->mpwqe.shampo), 1,
 					 GFP_KERNEL, node);
 	if (!rq->mpwqe.shampo)
 		return -ENOMEM;
@@ -353,7 +353,7 @@ static int mlx5e_rq_shampo_hd_info_alloc(struct mlx5e_rq *rq, int node)
 					    node);
 	shampo->pages = kvzalloc_node(array_size(shampo->hd_per_wq,
 						 sizeof(*shampo->pages)),
-				     GFP_KERNEL, node);
+				     1, GFP_KERNEL, node);
 	if (!shampo->bitmap || !shampo->pages)
 		goto err_nomem;
 
@@ -381,7 +381,7 @@ static int mlx5e_rq_alloc_mpwqe_info(struct mlx5e_rq *rq, int node)
 						   alloc_units.frag_pages,
 						   rq->mpwqe.pages_per_wqe));
 
-	rq->mpwqe.info = kvzalloc_node(alloc_size, GFP_KERNEL, node);
+	rq->mpwqe.info = kvzalloc_node(alloc_size, 1, GFP_KERNEL, node);
 	if (!rq->mpwqe.info)
 		return -ENOMEM;
 
@@ -673,11 +673,11 @@ static int mlx5e_init_wqe_alloc_info(struct mlx5e_rq *rq, int node)
 	else
 		aus_sz = sizeof(*aus->frag_pages);
 
-	aus = kvzalloc_node(array_size(len, aus_sz), GFP_KERNEL, node);
+	aus = kvzalloc_node(array_size(len, aus_sz), 1, GFP_KERNEL, node);
 	if (!aus)
 		return -ENOMEM;
 
-	frags = kvzalloc_node(array_size(len, sizeof(*frags)), GFP_KERNEL, node);
+	frags = kvzalloc_node(array_size(len, sizeof(*frags)), 1, GFP_KERNEL, node);
 	if (!frags) {
 		kvfree(aus);
 		return -ENOMEM;
@@ -780,7 +780,7 @@ static int mlx5_rq_shampo_alloc(struct mlx5_core_dev *mdev,
 	err = mlx5e_rq_shampo_hd_info_alloc(rq, node);
 	if (err)
 		goto err_shampo_info;
-	rq->hw_gro_data = kvzalloc_node(sizeof(*rq->hw_gro_data), GFP_KERNEL, node);
+	rq->hw_gro_data = kvzalloc_node(sizeof(*rq->hw_gro_data), 1, GFP_KERNEL, node);
 	if (!rq->hw_gro_data) {
 		err = -ENOMEM;
 		goto err_hw_gro_data;
@@ -1409,7 +1409,7 @@ static int mlx5e_alloc_xdpsq_fifo(struct mlx5e_xdpsq *sq, int numa)
 				     MLX5E_XDP_FIFO_ENTRIES2DS_MAX_RATIO);
 
 	size = array_size(sizeof(*xdpi_fifo->xi), entries);
-	xdpi_fifo->xi = kvzalloc_node(size, GFP_KERNEL, numa);
+	xdpi_fifo->xi = kvzalloc_node(size, 1, GFP_KERNEL, numa);
 	if (!xdpi_fifo->xi)
 		return -ENOMEM;
 
@@ -1427,7 +1427,7 @@ static int mlx5e_alloc_xdpsq_db(struct mlx5e_xdpsq *sq, int numa)
 	int err;
 
 	size = array_size(sizeof(*sq->db.wqe_info), wq_sz);
-	sq->db.wqe_info = kvzalloc_node(size, GFP_KERNEL, numa);
+	sq->db.wqe_info = kvzalloc_node(size, 1, GFP_KERNEL, numa);
 	if (!sq->db.wqe_info)
 		return -ENOMEM;
 
@@ -1504,7 +1504,7 @@ static int mlx5e_alloc_icosq_db(struct mlx5e_icosq *sq, int numa)
 	size_t size;
 
 	size = array_size(wq_sz, sizeof(*sq->db.wqe_info));
-	sq->db.wqe_info = kvzalloc_node(size, GFP_KERNEL, numa);
+	sq->db.wqe_info = kvzalloc_node(size, 1, GFP_KERNEL, numa);
 	if (!sq->db.wqe_info)
 		return -ENOMEM;
 
@@ -1583,13 +1583,13 @@ int mlx5e_alloc_txqsq_db(struct mlx5e_txqsq *sq, int numa)
 
 	sq->db.dma_fifo = kvzalloc_node(array_size(df_sz,
 						   sizeof(*sq->db.dma_fifo)),
-					GFP_KERNEL, numa);
+					1, GFP_KERNEL, numa);
 	sq->db.skb_fifo.fifo = kvzalloc_node(array_size(df_sz,
 							sizeof(*sq->db.skb_fifo.fifo)),
-					GFP_KERNEL, numa);
+					1, GFP_KERNEL, numa);
 	sq->db.wqe_info = kvzalloc_node(array_size(wq_sz,
 						   sizeof(*sq->db.wqe_info)),
-					GFP_KERNEL, numa);
+					1, GFP_KERNEL, numa);
 	if (!sq->db.dma_fifo || !sq->db.skb_fifo.fifo || !sq->db.wqe_info) {
 		mlx5e_free_txqsq_db(sq);
 		return -ENOMEM;
@@ -2074,7 +2074,7 @@ static struct mlx5e_xdpsq *mlx5e_open_xdpredirect_sq(struct mlx5e_channel *c,
 	struct mlx5e_xdpsq *xdpsq;
 	int err;
 
-	xdpsq = kvzalloc_node(sizeof(*xdpsq), GFP_KERNEL, cpu_to_node(c->cpu));
+	xdpsq = kvzalloc_node(sizeof(*xdpsq), 1, GFP_KERNEL, cpu_to_node(c->cpu));
 	if (!xdpsq)
 		return ERR_PTR(-ENOMEM);
 
@@ -2643,7 +2643,7 @@ static int mlx5e_channel_stats_alloc(struct mlx5e_priv *priv, int ix, int cpu)
 	 */
 	netdev_dbg(priv->netdev, "Creating channel stats %d\n", ix);
 	priv->channel_stats[ix] = kvzalloc_node(sizeof(**priv->channel_stats),
-						GFP_KERNEL, cpu_to_node(cpu));
+						1, GFP_KERNEL, cpu_to_node(cpu));
 	if (!priv->channel_stats[ix])
 		return -ENOMEM;
 	priv->stats_nch++;
@@ -2692,7 +2692,7 @@ static int mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 	if (err)
 		return err;
 
-	c = kvzalloc_node(sizeof(*c), GFP_KERNEL, cpu_to_node(cpu));
+	c = kvzalloc_node(sizeof(*c), 1, GFP_KERNEL, cpu_to_node(cpu));
 	cparam = kvzalloc(sizeof(*cparam), GFP_KERNEL);
 	if (!c || !cparam) {
 		err = -ENOMEM;

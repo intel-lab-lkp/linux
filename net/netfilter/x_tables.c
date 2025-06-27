@@ -1352,7 +1352,7 @@ static int xt_jumpstack_alloc(struct xt_table_info *i)
 	 */
 	size = sizeof(void *) * i->stacksize * 2u;
 	for_each_possible_cpu(cpu) {
-		i->jumpstack[cpu] = kvmalloc_node(size, GFP_KERNEL,
+		i->jumpstack[cpu] = kvmalloc_node(size, 1, GFP_KERNEL,
 			cpu_to_node(cpu));
 		if (i->jumpstack[cpu] == NULL)
 			/*

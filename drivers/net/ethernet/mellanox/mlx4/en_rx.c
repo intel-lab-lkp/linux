@@ -280,7 +280,7 @@ int mlx4_en_create_rx_ring(struct mlx4_en_priv *priv,
 
 	tmp = size * roundup_pow_of_two(MLX4_EN_MAX_RX_FRAGS *
 					sizeof(struct mlx4_en_rx_alloc));
-	ring->rx_info = kvzalloc_node(tmp, GFP_KERNEL, node);
+	ring->rx_info = kvzalloc_node(tmp, 1, GFP_KERNEL, node);
 	if (!ring->rx_info) {
 		err = -ENOMEM;
 		goto err_xdp_info;

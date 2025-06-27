@@ -729,7 +729,7 @@ int hfi1_ipoib_txreq_init(struct hfi1_ipoib_dev_priv *priv)
 					     priv->dd->node);
 
 		txq->tx_ring.items =
-			kvzalloc_node(array_size(tx_ring_size, tx_item_size),
+			kvzalloc_node(array_size(tx_ring_size, tx_item_size), 1,
 				      GFP_KERNEL, priv->dd->node);
 		if (!txq->tx_ring.items)
 			goto free_txqs;

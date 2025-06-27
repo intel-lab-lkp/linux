@@ -69,7 +69,7 @@ int mlx4_en_create_tx_ring(struct mlx4_en_priv *priv,
 	ring->full_size = ring->size - HEADROOM - MLX4_MAX_DESC_TXBBS;
 
 	tmp = size * sizeof(struct mlx4_en_tx_info);
-	ring->tx_info = kvmalloc_node(tmp, GFP_KERNEL, node);
+	ring->tx_info = kvmalloc_node(tmp, 1, GFP_KERNEL, node);
 	if (!ring->tx_info) {
 		err = -ENOMEM;
 		goto err_ring;

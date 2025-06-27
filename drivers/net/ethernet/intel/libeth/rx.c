@@ -172,7 +172,7 @@ int libeth_rx_fq_create(struct libeth_fq *fq, struct napi_struct *napi)
 	if (IS_ERR(pool))
 		return PTR_ERR(pool);
 
-	fqes = kvcalloc_node(fq->count, sizeof(*fqes), GFP_KERNEL, fq->nid);
+	fqes = kvcalloc_node(fq->count, sizeof(*fqes), 1, GFP_KERNEL, fq->nid);
 	if (!fqes)
 		goto err_buf;
 

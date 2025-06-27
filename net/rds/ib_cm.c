@@ -471,12 +471,12 @@ static struct rds_header **rds_dma_hdrs_alloc(struct rds_ib_device *dev,
 	dma_addr_t *hdr_daddrs;
 	u32 i;
 
-	hdrs = kvmalloc_node(sizeof(*hdrs) * num_hdrs, GFP_KERNEL,
+	hdrs = kvmalloc_node(sizeof(*hdrs) * num_hdrs, 1, GFP_KERNEL,
 			     ibdev_to_node(dev->dev));
 	if (!hdrs)
 		return NULL;
 
-	hdr_daddrs = kvmalloc_node(sizeof(*hdr_daddrs) * num_hdrs, GFP_KERNEL,
+	hdr_daddrs = kvmalloc_node(sizeof(*hdr_daddrs) * num_hdrs, 1, GFP_KERNEL,
 				   ibdev_to_node(dev->dev));
 	if (!hdr_daddrs) {
 		kvfree(hdrs);

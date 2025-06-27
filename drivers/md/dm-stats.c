@@ -150,7 +150,7 @@ static void *dm_kvzalloc(size_t alloc_size, int node)
 	if (!claim_shared_memory(alloc_size))
 		return NULL;
 
-	p = kvzalloc_node(alloc_size, GFP_KERNEL | __GFP_NOMEMALLOC, node);
+	p = kvzalloc_node(alloc_size, 1, GFP_KERNEL | __GFP_NOMEMALLOC, node);
 	if (p)
 		return p;
 
