@@ -8766,7 +8766,6 @@ int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr,
 	if (BTRFS_FS_ERROR(fs_info))
 		return -EROFS;
 
-	mutex_lock(&fs_info->delalloc_root_mutex);
 	spin_lock(&fs_info->delalloc_root_lock);
 	list_splice_init(&fs_info->delalloc_roots, &splice);
 	while (!list_empty(&splice)) {
@@ -8800,7 +8799,6 @@ out:
 		list_splice_tail(&splice, &fs_info->delalloc_roots);
 		spin_unlock(&fs_info->delalloc_root_lock);
 	}
-	mutex_unlock(&fs_info->delalloc_root_mutex);
 	return ret;
 }
 

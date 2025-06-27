@@ -606,7 +606,6 @@ struct btrfs_fs_info {
 	 */
 	struct list_head ordered_roots;
 
-	struct mutex delalloc_root_mutex;
 	spinlock_t delalloc_root_lock;
 	/* All fs/file tree roots that have delalloc inodes. */
 	struct list_head delalloc_roots;
