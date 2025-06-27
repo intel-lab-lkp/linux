@@ -35,7 +35,9 @@ struct pci_controller;
  * struct drm_wedge_task_info - information about the guilty task of a wedge dev
  */
 struct drm_wedge_task_info {
+ 	/** @pid: the pid of the task */
 	pid_t pid;
+ 	/** @comm: the command name of the task */
 	char comm[TASK_COMM_LEN];
 };
 
