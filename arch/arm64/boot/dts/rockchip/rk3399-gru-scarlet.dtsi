@@ -627,18 +627,10 @@ camera: &i2c7 {
 };
 
 &mipi_dsi {
-	status = "okay";
 	clock-master;
-
-	ports {
-		mipi_out: port@1 {
-			reg = <1>;
-
-			mipi_out_panel: endpoint {
-				remote-endpoint = <&mipi_in_panel>;
-			};
-		};
-	};
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
 
 	mipi_panel: panel@0 {
 		/* 2 different panels are used, compatibles are in dts files */
@@ -673,15 +665,17 @@ camera: &i2c7 {
 
 &mipi_dsi1 {
 	status = "okay";
+};
 
-	ports {
-		mipi1_out: port@1 {
-			reg = <1>;
+&mipi_out {
+	mipi_out_panel: endpoint {
+		remote-endpoint = <&mipi_in_panel>;
+	};
+};
 
-			mipi1_out_panel: endpoint {
-				remote-endpoint = <&mipi1_in_panel>;
-			};
-		};
+&mipi1_out {
+	mipi1_out_panel: endpoint {
+		remote-endpoint = <&mipi1_in_panel>;
 	};
 };
 
