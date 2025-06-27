@@ -289,7 +289,7 @@ static int __bch2_truncate_folio(struct bch_inode_info *inode,
 	u64 end_pos;
 
 	folio = filemap_lock_folio(mapping, index);
-	if (IS_ERR_OR_NULL(folio)) {
+	if (IS_ERR(folio)) {
 		/*
 		 * XXX: we're doing two index lookups when we end up reading the
 		 * folio
