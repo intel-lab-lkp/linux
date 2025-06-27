@@ -111,6 +111,7 @@ static void bond_info_show_master(struct seq_file *seq)
 
 	/* ARP information */
 	if (bond->params.arp_interval > 0) {
+		char pbuf[BOND_OPTION_STRING_MAX_SIZE];
 		int printed = 0;
 
 		seq_printf(seq, "ARP Polling Interval (ms): %d\n",
@@ -125,7 +126,9 @@ static void bond_info_show_master(struct seq_file *seq)
 				break;
 			if (printed)
 				seq_printf(seq, ",");
-			seq_printf(seq, " %pI4", &bond->params.arp_targets[i].target_ip);
+			bond_arp_target_to_string(&bond->params.arp_targets[i],
+						  pbuf, sizeof(pbuf));
+			seq_printf(seq, " %s", pbuf);
 			printed = 1;
 		}
 		seq_printf(seq, "\n");
