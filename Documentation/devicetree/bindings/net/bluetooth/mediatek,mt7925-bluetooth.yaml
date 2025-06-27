@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/bluetooth/mediatek,mt7925-bluetooth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Bluetooth mediatek add gpio pin to reset bt
+
+maintainers:
+  - Sean Wang <sean.wang@mediatek.com>
+
+description:
+  7925 uses the USB bus to communicate with the host.
+  Two methods are used to reset Bluetooth.
+  Provide hardware pin, when an exception occurs,
+  resetting Bluetooth by hardware pin is more stable
+  than resetting Bluetooth by software.
+  If the corresponding pin is not found in dts,
+  bluetooth can also be reset successfully.
+
+allOf:
+  - $ref: bluetooth-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - mediatek,usb-bluetooth
+
+  gpio-controller:
+    description:
+      Marks the device node as s GPIO controller.
+
+  "#gpio-cells":
+    const: 2
+
+  reset-gpios:
+    maxItems: 1
+
+    description:
+      An active-high reset pin for the Bluetooth core; on typical M.2
+      key E modules this is the W_DISABLE2# pin.
+
+required:
+  - compatible
+  - "#gpio-cells"
+  - reset-gpios
+
+unevaluatedProperties: false
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+      bluetooth {
+        compatible = "mediatek,usb-bluetooth";
+        #gpio-cells = <2>;
+        reset-gpios = <&pio 248 GPIO_ACTIVE_HIGH>;
+      };
