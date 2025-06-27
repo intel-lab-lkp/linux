@@ -30,6 +30,7 @@
 #include <linux/export.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
+#include <linux/iopoll.h>
 
 #include <drm/display/drm_hdcp_helper.h>
 
@@ -385,11 +386,17 @@ static int gmbus_wait(struct intel_display *display, u32 status, u32 irq_en)
 	intel_de_write_fw(display, GMBUS4(display), irq_en);
 
 	status |= GMBUS_SATOER;
-	ret = wait_for_us((gmbus2 = intel_de_read_fw(display, GMBUS2(display))) & status,
-			  2);
+
+	ret = read_poll_timeout_atomic(intel_de_read_fw, gmbus2,
+				       gmbus2 & status,
+				       0, 2, false,
+				       display, GMBUS2(display));
+
 	if (ret)
-		ret = wait_for((gmbus2 = intel_de_read_fw(display, GMBUS2(display))) & status,
-			       50);
+		ret = read_poll_timeout(intel_de_read_fw, gmbus2,
+					gmbus2 & status,
+					500, 50 * 1000, false,
+					display, GMBUS2(display));
 
 	intel_de_write_fw(display, GMBUS4(display), 0);
 	remove_wait_queue(&display->gmbus.wait_queue, &wait);
