@@ -357,8 +357,10 @@ Format Functions Reference
 .. kernel-doc:: include/drm/drm_fourcc.h
    :internal:
 
+.. c:namespace-push:: gpu_drm
 .. kernel-doc:: drivers/gpu/drm/drm_fourcc.c
    :export:
+.. c:namespace-pop::
 
 .. _kms_dumb_buffer_objects:
 
@@ -473,8 +475,10 @@ KMS Locking
 .. kernel-doc:: include/drm/drm_modeset_lock.h
    :internal:
 
+.. c:namespace:: gpu_drm
 .. kernel-doc:: drivers/gpu/drm/drm_modeset_lock.c
    :export:
+.. c:namespace-pop::
 
 KMS Properties
 ==============
