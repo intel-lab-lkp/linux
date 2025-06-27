@@ -21,6 +21,7 @@
    :maxdepth: 1
 
    msg_zerocopy
+   alias
 
 Todolist:
 
@@ -45,7 +46,6 @@ Todolist:
 *   page_pool
 *   phy
 *   sfp-phylink
-*   alias
 *   bridge
 *   snmp_counter
 *   checksum-offloads
