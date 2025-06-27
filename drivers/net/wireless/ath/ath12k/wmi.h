@@ -734,6 +734,8 @@ enum wmi_tlv_event_id {
 	WMI_SERVICE_READY_EXT2_EVENTID,
 	WMI_PDEV_GET_HALPHY_CAL_STATUS_EVENTID =
 					WMI_SERVICE_READY_EXT2_EVENTID + 4,
+	WMI_PDEV_RSSI_DBM_CONVERSION_PARAMS_INFO_EVENTID =
+				WMI_PDEV_GET_HALPHY_CAL_STATUS_EVENTID + 5,
 	WMI_VDEV_START_RESP_EVENTID = WMI_TLV_CMD(WMI_GRP_VDEV),
 	WMI_VDEV_STOPPED_EVENTID,
 	WMI_VDEV_INSTALL_KEY_COMPLETE_EVENTID,
@@ -1974,6 +1976,7 @@ enum wmi_tlv_tag {
 	WMI_TAG_TPC_STATS_CTL_PWR_TABLE_EVENT,
 	WMI_TAG_VDEV_SET_TPC_POWER_CMD = 0x3B5,
 	WMI_TAG_VDEV_CH_POWER_INFO,
+	WMI_TAG_MLO_LINK_SET_ACTIVE_CMD = 0x3BE,
 	WMI_TAG_EHT_RATE_SET = 0x3C4,
 	WMI_TAG_DCS_AWGN_INT_TYPE = 0x3C5,
 	WMI_TAG_MLO_TX_SEND_PARAMS,
@@ -1991,6 +1994,9 @@ enum wmi_tlv_tag {
 	WMI_TAG_PDEV_SET_BIOS_SAR_TABLE_CMD = 0x3D8,
 	WMI_TAG_PDEV_SET_BIOS_GEO_TABLE_CMD = 0x3D9,
 	WMI_TAG_PDEV_SET_BIOS_INTERFACE_CMD = 0x3FB,
+	WMI_TAG_RSSI_DBM_CONVERSION_PARAMS_INFO_FIXED_PARAM = 0x427,
+	WMI_TAG_RSSI_DBM_CONVERSION_PARAMS_INFO,
+	WMI_TAG_RSSI_DBM_CONVERSION_TEMP_OFFSET_INFO,
 	WMI_TAG_HALPHY_CTRL_PATH_CMD_FIXED_PARAM = 0x442,
 	WMI_TAG_HALPHY_CTRL_PATH_EVENT_FIXED_PARAM,
 	WMI_TAG_MAX
@@ -2617,6 +2623,8 @@ struct ath12k_wmi_soc_mac_phy_hw_mode_caps_params {
 	__le32 num_chainmask_tables;
 } __packed;
 
+#define WMI_HW_MODE_CAP_CFG_TYPE	GENMASK(27, 0)
+
 struct ath12k_wmi_hw_mode_cap_params {
 	__le32 tlv_header;
 	__le32 hw_mode_id;
@@ -2666,6 +2674,12 @@ struct ath12k_wmi_mac_phy_caps_params {
 	__le32 he_cap_info_2g_ext;
 	__le32 he_cap_info_5g_ext;
 	__le32 he_cap_info_internal;
+	__le32 wireless_modes;
+	__le32 low_2ghz_chan_freq;
+	__le32 high_2ghz_chan_freq;
+	__le32 low_5ghz_chan_freq;
+	__le32 high_5ghz_chan_freq;
+	__le32 nss_ratio;
 } __packed;
 
 struct ath12k_wmi_hal_reg_caps_ext_params {
@@ -2737,6 +2751,11 @@ struct wmi_service_ready_ext2_event {
 	__le32 max_num_linkview_peers;
 	__le32 max_num_msduq_supported_per_tid;
 	__le32 default_num_msduq_supported_per_tid;
+} __packed;
+
+struct ath12k_wmi_dbs_or_sbs_cap_params {
+	__le32 hw_mode_id;
+	__le32 sbs_lower_band_end_freq;
 } __packed;
 
 struct ath12k_wmi_caps_ext_params {
@@ -3746,6 +3765,7 @@ struct wmi_vdev_install_key_arg {
 	u32 key_idx;
 	u32 key_flags;
 	u32 key_cipher;
+	u32 ieee80211_key_cipher;
 	u32 key_len;
 	u32 key_txmic_len;
 	u32 key_rxmic_len;
@@ -3934,6 +3954,7 @@ struct wmi_stop_scan_cmd {
 } __packed;
 
 struct ath12k_wmi_scan_chan_list_arg {
+	struct list_head list;
 	u32 pdev_id;
 	u16 nallchans;
 	struct ath12k_wmi_channel_arg channel[];
@@ -5049,6 +5070,53 @@ struct ath12k_wmi_pdev {
 	u32 rx_decap_mode;
 };
 
+struct ath12k_hw_mode_freq_range_arg {
+	u32 low_2ghz_freq;
+	u32 high_2ghz_freq;
+	u32 low_5ghz_freq;
+	u32 high_5ghz_freq;
+};
+
+struct ath12k_svc_ext_mac_phy_info {
+	enum wmi_host_hw_mode_config_type hw_mode_config_type;
+	u32 phy_id;
+	u32 supported_bands;
+	struct ath12k_hw_mode_freq_range_arg hw_freq_range;
+};
+
+#define ATH12K_MAX_MAC_PHY_CAP	8
+
+struct ath12k_svc_ext_info {
+	u32 num_hw_modes;
+	struct ath12k_svc_ext_mac_phy_info mac_phy_info[ATH12K_MAX_MAC_PHY_CAP];
+};
+
+/**
+ * enum ath12k_hw_mode - enum for host mode
+ * @ATH12K_HW_MODE_SMM: Single mac mode
+ * @ATH12K_HW_MODE_DBS: DBS mode
+ * @ATH12K_HW_MODE_SBS: SBS mode with either high share or low share
+ * @ATH12K_HW_MODE_SBS_UPPER_SHARE: Higher 5 GHz shared with 2.4 GHz
+ * @ATH12K_HW_MODE_SBS_LOWER_SHARE: Lower 5 GHz shared with 2.4 GHz
+ * @ATH12K_HW_MODE_MAX: Max, used to indicate invalid mode
+ */
+enum ath12k_hw_mode {
+	ATH12K_HW_MODE_SMM,
+	ATH12K_HW_MODE_DBS,
+	ATH12K_HW_MODE_SBS,
+	ATH12K_HW_MODE_SBS_UPPER_SHARE,
+	ATH12K_HW_MODE_SBS_LOWER_SHARE,
+	ATH12K_HW_MODE_MAX,
+};
+
+struct ath12k_hw_mode_info {
+	bool support_dbs:1;
+	bool support_sbs:1;
+
+	struct ath12k_hw_mode_freq_range_arg freq_range_caps[ATH12K_HW_MODE_MAX]
+							    [MAX_RADIOS];
+};
+
 struct ath12k_wmi_base {
 	struct ath12k_base *ab;
 	struct ath12k_wmi_pdev wmi[MAX_RADIOS];
@@ -5066,6 +5134,10 @@ struct ath12k_wmi_base {
 	enum wmi_host_hw_mode_config_type preferred_hw_mode;
 
 	struct ath12k_wmi_target_cap_arg *targ_cap;
+
+	struct ath12k_svc_ext_info svc_ext_info;
+	u32 sbs_lower_band_end_freq;
+	struct ath12k_hw_mode_info hw_mode_info;
 };
 
 struct wmi_pdev_set_bios_interface_cmd {
@@ -5997,6 +6069,155 @@ struct wmi_vdev_set_tpc_power_cmd {
 	 */
 } __packed;
 
+#define CRTL_F_DYNC_FORCE_LINK_NUM GENMASK(3, 2)
+
+struct wmi_mlo_link_set_active_cmd {
+	__le32 tlv_header;
+	__le32 force_mode;
+	__le32 reason;
+	__le32 use_ieee_link_id_bitmap;
+	struct ath12k_wmi_mac_addr_params ap_mld_mac_addr;
+	__le32 ctrl_flags;
+} __packed;
+
+struct wmi_mlo_set_active_link_number_params {
+	__le32 tlv_header;
+	__le32 num_of_link;
+	__le32 vdev_type;
+	__le32 vdev_subtype;
+	__le32 home_freq;
+} __packed;
+
+#define WMI_DISALW_MLO_MODE_BMAP_IEEE_LINK_ID_COMB_1 GENMASK(7, 0)
+#define WMI_DISALW_MLO_MODE_BMAP_IEEE_LINK_ID_COMB_2 GENMASK(15, 8)
+#define WMI_DISALW_MLO_MODE_BMAP_IEEE_LINK_ID_COMB_3 GENMASK(23, 16)
+#define WMI_DISALW_MLO_MODE_BMAP_IEEE_LINK_ID_COMB_4 GENMASK(31, 24)
+
+struct wmi_disallowed_mlo_mode_bitmap_params {
+	__le32 tlv_header;
+	__le32 disallowed_mode_bitmap;
+	__le32 ieee_link_id_comb;
+} __packed;
+
+enum wmi_mlo_link_force_mode {
+	WMI_MLO_LINK_FORCE_MODE_ACTIVE			= 1,
+	WMI_MLO_LINK_FORCE_MODE_INACTIVE		= 2,
+	WMI_MLO_LINK_FORCE_MODE_ACTIVE_LINK_NUM		= 3,
+	WMI_MLO_LINK_FORCE_MODE_INACTIVE_LINK_NUM	= 4,
+	WMI_MLO_LINK_FORCE_MODE_NO_FORCE		= 5,
+	WMI_MLO_LINK_FORCE_MODE_ACTIVE_INACTIVE		= 6,
+	WMI_MLO_LINK_FORCE_MODE_NON_FORCE_UPDATE	= 7,
+};
+
+enum wmi_mlo_link_force_reason {
+	WMI_MLO_LINK_FORCE_REASON_NEW_CONNECT		= 1,
+	WMI_MLO_LINK_FORCE_REASON_NEW_DISCONNECT	= 2,
+	WMI_MLO_LINK_FORCE_REASON_LINK_REMOVAL		= 3,
+	WMI_MLO_LINK_FORCE_REASON_TDLS			= 4,
+	WMI_MLO_LINK_FORCE_REASON_REVERT_FAILURE	= 5,
+	WMI_MLO_LINK_FORCE_REASON_LINK_DELETE		= 6,
+	WMI_MLO_LINK_FORCE_REASON_SINGLE_LINK_EMLSR_OP	= 7,
+};
+
+struct wmi_mlo_link_num_arg {
+	u32 num_of_link;
+	u32 vdev_type;
+	u32 vdev_subtype;
+	u32 home_freq;
+};
+
+struct wmi_mlo_control_flags_arg {
+	bool overwrite_force_active_bitmap;
+	bool overwrite_force_inactive_bitmap;
+	bool dync_force_link_num;
+	bool post_re_evaluate;
+	u8 post_re_evaluate_loops;
+	bool dont_reschedule_workqueue;
+};
+
+struct wmi_ml_link_force_cmd_arg {
+	u8 ap_mld_mac_addr[ETH_ALEN];
+	u16 ieee_link_id_bitmap;
+	u16 ieee_link_id_bitmap2;
+	u8 link_num;
+};
+
+struct wmi_ml_disallow_mode_bmap_arg {
+	u32 disallowed_mode;
+	union {
+		u32 ieee_link_id_comb;
+		u8 ieee_link_id[4];
+	};
+};
+
+/* maximum size of link number param array
+ * for MLO link set active command
+ */
+#define WMI_MLO_LINK_NUM_SZ 2
+
+/* maximum size of vdev bitmap array for
+ * MLO link set active command
+ */
+#define WMI_MLO_VDEV_BITMAP_SZ 2
+
+/* Max number of disallowed bitmap combination
+ * sent to firmware
+ */
+#define WMI_ML_MAX_DISALLOW_BMAP_COMB 4
+
+struct wmi_mlo_link_set_active_arg {
+	enum wmi_mlo_link_force_mode force_mode;
+	enum wmi_mlo_link_force_reason reason;
+	u32 num_link_entry;
+	u32 num_vdev_bitmap;
+	u32 num_inactive_vdev_bitmap;
+	struct wmi_mlo_link_num_arg link_num[WMI_MLO_LINK_NUM_SZ];
+	u32 vdev_bitmap[WMI_MLO_VDEV_BITMAP_SZ];
+	u32 inactive_vdev_bitmap[WMI_MLO_VDEV_BITMAP_SZ];
+	struct wmi_mlo_control_flags_arg ctrl_flags;
+	bool use_ieee_link_id;
+	struct wmi_ml_link_force_cmd_arg force_cmd;
+	u32 num_disallow_mode_comb;
+	struct wmi_ml_disallow_mode_bmap_arg disallow_bmap[WMI_ML_MAX_DISALLOW_BMAP_COMB];
+};
+
+#define ATH12K_MAX_20MHZ_SEGMENTS	16
+#define ATH12K_MAX_NUM_ANTENNA		8
+#define ATH12K_MAX_NUM_NF_HW_DBM	32
+
+struct ath12k_wmi_rssi_dbm_conv_info_fixed_params {
+	__le32 pdev_id;
+} __packed;
+
+struct ath12k_wmi_rssi_dbm_conv_info_params {
+	__le32 curr_bw;
+	__le32 curr_rx_chainmask;
+	__le32 xbar_config;
+	a_sle32 xlna_bypass_offset;
+	a_sle32 xlna_bypass_threshold;
+	a_sle32 nf_hw_dbm[ATH12K_MAX_NUM_NF_HW_DBM];
+} __packed;
+
+struct ath12k_wmi_rssi_dbm_conv_temp_info_params {
+	a_sle32 offset;
+} __packed;
+
+struct ath12k_wmi_rssi_dbm_conv_param_arg {
+	u32 curr_bw;
+	u32 curr_rx_chainmask;
+	u32 xbar_config;
+	s32 xlna_bypass_offset;
+	s32 xlna_bypass_threshold;
+	s8 nf_hw_dbm[ATH12K_MAX_NUM_ANTENNA][ATH12K_MAX_20MHZ_SEGMENTS];
+};
+
+struct ath12k_wmi_rssi_dbm_conv_info_arg {
+	bool temp_offset_present;
+	s32 temp_offset;
+	bool nf_dbm_present;
+	s8 min_nf_dbm;
+};
+
 void ath12k_wmi_init_qcn9274(struct ath12k_base *ab,
 			     struct ath12k_wmi_resource_config_arg *config);
 void ath12k_wmi_init_wcn7850(struct ath12k_base *ab,
@@ -6195,5 +6416,6 @@ bool ath12k_wmi_supports_6ghz_cc_ext(struct ath12k *ar);
 int ath12k_wmi_send_vdev_set_tpc_power(struct ath12k *ar,
 				       u32 vdev_id,
 				       struct ath12k_reg_tpc_power_info *param);
-
+int ath12k_wmi_send_mlo_link_set_active_cmd(struct ath12k_base *ab,
+					    struct wmi_mlo_link_set_active_arg *param);
 #endif
