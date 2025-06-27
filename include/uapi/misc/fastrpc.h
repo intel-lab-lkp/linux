@@ -22,8 +22,9 @@
 #define MDSP_DOMAIN_ID (1)
 #define SDSP_DOMAIN_ID (2)
 #define CDSP_DOMAIN_ID (3)
+#define GDSP_DOMAIN_ID (4)
 
-#define FASTRPC_DOMAIN_MAX    3
+#define FASTRPC_DOMAIN_MAX    4
 
 /**
  * enum fastrpc_map_flags - control flags for mapping memory on DSP user process
