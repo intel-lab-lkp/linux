@@ -25,6 +25,7 @@
 enum scmi_imx_misc_protocol_cmd {
 	SCMI_IMX_MISC_CTRL_SET	= 0x3,
 	SCMI_IMX_MISC_CTRL_GET	= 0x4,
+	SCMI_IMX_MISC_DISCOVER_BUILDINFO = 0x6,
 	SCMI_IMX_MISC_CTRL_NOTIFY = 0x8,
 };
 
@@ -63,6 +64,13 @@ struct scmi_imx_misc_ctrl_notify_payld {
 struct scmi_imx_misc_ctrl_get_out {
 	__le32 num;
 	__le32 val[];
+};
+
+struct scmi_imx_misc_buildinfo_out {
+	__le32 buildnum;
+	__le32 buildcommit;
+	u8 builddate[MISC_MAX_BUILDDATE];
+	u8 buildtime[MISC_MAX_BUILDTIME];
 };
 
 static int scmi_imx_misc_attributes_get(const struct scmi_protocol_handle *ph,
@@ -272,10 +280,37 @@ static int scmi_imx_misc_ctrl_set(const struct scmi_protocol_handle *ph,
 	return ret;
 }
 
+static int scmi_imx_discover_build_info(const struct scmi_protocol_handle *ph,
+					struct scmi_imx_misc_system_info *info)
+{
+	struct scmi_imx_misc_buildinfo_out *out;
+	struct scmi_xfer *t;
+	int ret;
+
+	ret = ph->xops->xfer_get_init(ph, SCMI_IMX_MISC_DISCOVER_BUILDINFO, 0,
+				      sizeof(*out), &t);
+	if (ret)
+		return ret;
+
+	ret = ph->xops->do_xfer(ph, t);
+	if (!ret) {
+		out = t->rx.buf;
+		info->buildnum = le32_to_cpu(out->buildnum);
+		info->buildcommit = le32_to_cpu(out->buildcommit);
+		strscpy(info->date, out->builddate, MISC_MAX_BUILDDATE);
+		strscpy(info->time, out->buildtime, MISC_MAX_BUILDTIME);
+	}
+
+	ph->xops->xfer_put(ph, t);
+
+	return ret;
+}
+
 static const struct scmi_imx_misc_proto_ops scmi_imx_misc_proto_ops = {
 	.misc_ctrl_set = scmi_imx_misc_ctrl_set,
 	.misc_ctrl_get = scmi_imx_misc_ctrl_get,
 	.misc_ctrl_req_notify = scmi_imx_misc_ctrl_notify,
+	.misc_discover_build_info = scmi_imx_discover_build_info,
 };
 
 static int scmi_imx_misc_protocol_init(const struct scmi_protocol_handle *ph)

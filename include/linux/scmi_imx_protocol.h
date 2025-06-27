@@ -52,6 +52,16 @@ struct scmi_imx_misc_ctrl_notify_report {
 	unsigned int		flags;
 };
 
+#define MISC_MAX_BUILDDATE	16
+#define MISC_MAX_BUILDTIME	16
+
+struct scmi_imx_misc_system_info {
+	u32 buildnum;
+	u32 buildcommit;
+	u8 date[MISC_MAX_BUILDDATE];
+	u8 time[MISC_MAX_BUILDTIME];
+};
+
 struct scmi_imx_misc_proto_ops {
 	int (*misc_ctrl_set)(const struct scmi_protocol_handle *ph, u32 id,
 			     u32 num, u32 *val);
@@ -59,6 +69,8 @@ struct scmi_imx_misc_proto_ops {
 			     u32 *num, u32 *val);
 	int (*misc_ctrl_req_notify)(const struct scmi_protocol_handle *ph,
 				    u32 ctrl_id, u32 evt_id, u32 flags);
+	int (*misc_discover_build_info)(const struct scmi_protocol_handle *ph,
+					struct scmi_imx_misc_system_info *info);
 };
 
 /* See LMM_ATTRIBUTES in imx95.rst */
