@@ -272,7 +272,7 @@ struct symbol *sym_choice_default(struct menu *choice)
 		if (prop->visible.tri == no)
 			continue;
 		def_sym = prop_get_symbol(prop);
-		if (def_sym->visible != no)
+		if (def_sym && def_sym->visible != no)
 			return def_sym;
 	}
 
