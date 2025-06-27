@@ -25,6 +25,7 @@
  *	Yogesh Mohan Marimuthu <yogesh.mohan.marimuthu@intel.com>
  */
 
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/string_helpers.h>
 
@@ -216,6 +217,8 @@ void vlv_dsi_pll_enable(struct intel_encoder *encoder,
 			const struct intel_crtc_state *config)
 {
 	struct intel_display *display = to_intel_display(encoder);
+	u32 val;
+	int ret;
 
 	drm_dbg_kms(display->drm, "\n");
 
@@ -233,8 +236,11 @@ void vlv_dsi_pll_enable(struct intel_encoder *encoder,
 
 	vlv_cck_write(display->drm, CCK_REG_DSI_PLL_CONTROL, config->dsi_pll.ctrl);
 
-	if (wait_for(vlv_cck_read(display->drm, CCK_REG_DSI_PLL_CONTROL) &
-						DSI_PLL_LOCK, 20)) {
+	ret = read_poll_timeout(vlv_cck_read, val,
+				val & DSI_PLL_LOCK,
+				500, 20 * 1000, false,
+				display->drm, CCK_REG_DSI_PLL_CONTROL);
+	if (ret) {
 
 		vlv_cck_put(display->drm);
 		drm_err(display->drm, "DSI PLL lock failed\n");
