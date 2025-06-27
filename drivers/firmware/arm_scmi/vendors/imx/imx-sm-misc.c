@@ -26,6 +26,7 @@ enum scmi_imx_misc_protocol_cmd {
 	SCMI_IMX_MISC_CTRL_SET	= 0x3,
 	SCMI_IMX_MISC_CTRL_GET	= 0x4,
 	SCMI_IMX_MISC_DISCOVER_BUILDINFO = 0x6,
+	SCMI_IMX_MISC_SI_INFO = 0xB,
 	SCMI_IMX_MISC_CFG_INFO = 0xC,
 	SCMI_IMX_MISC_CTRL_NOTIFY = 0x8,
 };
@@ -77,6 +78,13 @@ struct scmi_imx_misc_buildinfo_out {
 struct scmi_imx_misc_cfg_info_out {
 	__le32 msel;
 	u8 cfgname[MISC_MAX_CFGNAME];
+};
+
+struct scmi_imx_misc_si_info_out {
+	__le32 deviceid;
+	__le32 sirev;
+	__le32 partnum;
+	u8 siname[MISC_MAX_SINAME];
 };
 
 static int scmi_imx_misc_attributes_get(const struct scmi_protocol_handle *ph,
@@ -335,12 +343,38 @@ static int scmi_imx_misc_cfg_info(const struct scmi_protocol_handle *ph,
 	return ret;
 }
 
+static int scmi_imx_misc_silicon_info(const struct scmi_protocol_handle *ph,
+				      struct scmi_imx_misc_system_info *info)
+{
+	struct scmi_imx_misc_si_info_out *out;
+	struct scmi_xfer *t;
+	int ret;
+
+	ret = ph->xops->xfer_get_init(ph, SCMI_IMX_MISC_SI_INFO, 0, sizeof(*out), &t);
+	if (ret)
+		return ret;
+
+	ret = ph->xops->do_xfer(ph, t);
+	if (!ret) {
+		out = t->rx.buf;
+		info->deviceid = le32_to_cpu(out->deviceid);
+		info->sirev = le32_to_cpu(out->sirev);
+		info->partnum = le32_to_cpu(out->partnum);
+		strscpy(info->siname, out->siname, MISC_MAX_SINAME);
+	}
+
+	ph->xops->xfer_put(ph, t);
+
+	return ret;
+}
+
 static const struct scmi_imx_misc_proto_ops scmi_imx_misc_proto_ops = {
 	.misc_cfg_info = scmi_imx_misc_cfg_info,
 	.misc_ctrl_set = scmi_imx_misc_ctrl_set,
 	.misc_ctrl_get = scmi_imx_misc_ctrl_get,
 	.misc_ctrl_req_notify = scmi_imx_misc_ctrl_notify,
 	.misc_discover_build_info = scmi_imx_discover_build_info,
+	.misc_silicon_info = scmi_imx_misc_silicon_info,
 };
 
 static int scmi_imx_misc_protocol_init(const struct scmi_protocol_handle *ph)

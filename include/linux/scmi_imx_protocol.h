@@ -55,6 +55,7 @@ struct scmi_imx_misc_ctrl_notify_report {
 #define MISC_MAX_BUILDDATE	16
 #define MISC_MAX_BUILDTIME	16
 #define MISC_MAX_CFGNAME	16
+#define MISC_MAX_SINAME		16
 
 struct scmi_imx_misc_system_info {
 	u32 buildnum;
@@ -63,6 +64,11 @@ struct scmi_imx_misc_system_info {
 	u8 time[MISC_MAX_BUILDTIME];
 	u32 msel;
 	u8 cfgname[MISC_MAX_CFGNAME];
+	/* silicon */
+	u32 deviceid;
+	u32 sirev;
+	u32 partnum;
+	u8 siname[MISC_MAX_SINAME];
 };
 
 struct scmi_imx_misc_proto_ops {
@@ -76,6 +82,8 @@ struct scmi_imx_misc_proto_ops {
 				    u32 ctrl_id, u32 evt_id, u32 flags);
 	int (*misc_discover_build_info)(const struct scmi_protocol_handle *ph,
 					struct scmi_imx_misc_system_info *info);
+	int (*misc_silicon_info)(const struct scmi_protocol_handle *ph,
+				 struct scmi_imx_misc_system_info *info);
 };
 
 /* See LMM_ATTRIBUTES in imx95.rst */
