@@ -37,6 +37,9 @@ static int ucsi_cmd(void *data, u64 val)
 	case UCSI_SET_USB:
 		ret = ucsi_send_command(ucsi, val, NULL, 0, NULL);
 		break;
+	case UCSI_SET_PDOS:
+		ret = ucsi_send_command(ucsi, val, NULL, 0, ucsi->debugfs->message_out);
+		break;
 	case UCSI_GET_CAPABILITY:
 	case UCSI_GET_CONNECTOR_CAPABILITY:
 	case UCSI_GET_ALTERNATE_MODES:
