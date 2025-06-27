@@ -705,7 +705,7 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
  * The I/O scheduler depends on the number of hardware queues, this forces a
  * reattachment when nr_hw_queues changes.
  */
-void elv_update_nr_hw_queues(struct request_queue *q)
+void elv_update_nr_hw_queues(struct request_queue *q, struct xarray *et_table)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
 	struct elv_change_ctx ctx = {};
@@ -720,7 +720,7 @@ void elv_update_nr_hw_queues(struct request_queue *q)
 	 * acquires same lock in the reader context) can't run concurrently.
 	 */
 	if (q->elevator) {
-		ctx.et = blk_mq_alloc_sched_tags(set, set->nr_hw_queues);
+		ctx.et = xa_load(et_table, q->id);
 		if (!ctx.et) {
 			WARN_ON_ONCE(1);
 			return;
