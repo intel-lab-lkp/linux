@@ -56,6 +56,7 @@ struct scmi_imx_misc_ctrl_notify_report {
 #define MISC_MAX_BUILDTIME	16
 #define MISC_MAX_CFGNAME	16
 #define MISC_MAX_SINAME		16
+#define MISC_MAX_BRDNAME	16
 
 struct scmi_imx_misc_system_info {
 	u32 buildnum;
@@ -69,6 +70,8 @@ struct scmi_imx_misc_system_info {
 	u32 sirev;
 	u32 partnum;
 	u8 siname[MISC_MAX_SINAME];
+	u32 brd_attributes;
+	u8 brdname[MISC_MAX_BRDNAME];
 };
 
 struct scmi_imx_misc_sys_sleep_rec {
@@ -89,6 +92,8 @@ struct scmi_imx_misc_syslog {
 };
 
 struct scmi_imx_misc_proto_ops {
+	int (*misc_board_info)(const struct scmi_protocol_handle *ph,
+			       struct scmi_imx_misc_system_info *info);
 	int (*misc_cfg_info)(const struct scmi_protocol_handle *ph,
 			     struct scmi_imx_misc_system_info *info);
 	int (*misc_ctrl_set)(const struct scmi_protocol_handle *ph, u32 id,

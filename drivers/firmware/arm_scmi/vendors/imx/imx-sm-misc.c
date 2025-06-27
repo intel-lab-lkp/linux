@@ -29,6 +29,7 @@ enum scmi_imx_misc_protocol_cmd {
 	SCMI_IMX_MISC_SI_INFO = 0xB,
 	SCMI_IMX_MISC_CFG_INFO = 0xC,
 	SCMI_IMX_MISC_SYSLOG = 0xD,
+	SCMI_IMX_MISC_BOARD_INFO = 0xE,
 	SCMI_IMX_MISC_CTRL_NOTIFY = 0x8,
 };
 
@@ -74,6 +75,11 @@ struct scmi_imx_misc_buildinfo_out {
 	__le32 buildcommit;
 	u8 builddate[MISC_MAX_BUILDDATE];
 	u8 buildtime[MISC_MAX_BUILDTIME];
+};
+
+struct scmi_imx_misc_board_info_out {
+	__le32 attributes;
+	u8 brdname[MISC_MAX_BRDNAME];
 };
 
 struct scmi_imx_misc_cfg_info_out {
@@ -334,6 +340,29 @@ static int scmi_imx_discover_build_info(const struct scmi_protocol_handle *ph,
 	return ret;
 }
 
+static int scmi_imx_misc_board_info(const struct scmi_protocol_handle *ph,
+				    struct scmi_imx_misc_system_info *info)
+{
+	struct scmi_imx_misc_board_info_out *out;
+	struct scmi_xfer *t;
+	int ret;
+
+	ret = ph->xops->xfer_get_init(ph, SCMI_IMX_MISC_BOARD_INFO, 0, sizeof(*out), &t);
+	if (ret)
+		return ret;
+
+	ret = ph->xops->do_xfer(ph, t);
+	if (!ret) {
+		out = t->rx.buf;
+		info->brd_attributes = le32_to_cpu(out->attributes);
+		strscpy(info->brdname, out->brdname, MISC_MAX_BRDNAME);
+	}
+
+	ph->xops->xfer_put(ph, t);
+
+	return ret;
+}
+
 static int scmi_imx_misc_cfg_info(const struct scmi_protocol_handle *ph,
 				  struct scmi_imx_misc_system_info *info)
 {
@@ -446,6 +475,7 @@ static int scmi_imx_misc_syslog(const struct scmi_protocol_handle *ph, u16 size,
 }
 
 static const struct scmi_imx_misc_proto_ops scmi_imx_misc_proto_ops = {
+	.misc_board_info = scmi_imx_misc_board_info,
 	.misc_cfg_info = scmi_imx_misc_cfg_info,
 	.misc_ctrl_set = scmi_imx_misc_ctrl_set,
 	.misc_ctrl_get = scmi_imx_misc_ctrl_get,
