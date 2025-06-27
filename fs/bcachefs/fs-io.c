@@ -814,6 +814,12 @@ static noinline long bchfs_fallocate(struct bch_inode_info *inode, int mode,
 	return ret ?: ret2;
 }
 
+#define BCH2_FALLOC_FL_SUPPORTED					\
+		(FALLOC_FL_KEEP_SIZE |					\
+		 FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_PUNCH_HOLE |	\
+		 FALLOC_FL_COLLAPSE_RANGE | FALLOC_FL_ZERO_RANGE |	\
+		 FALLOC_FL_INSERT_RANGE)
+
 long bch2_fallocate_dispatch(struct file *file, int mode,
 			     loff_t offset, loff_t len)
 {
@@ -824,6 +830,9 @@ long bch2_fallocate_dispatch(struct file *file, int mode,
 	if (!enumerated_ref_tryget(&c->writes, BCH_WRITE_REF_fallocate))
 		return -EROFS;
 
+	if (mode & ~BCH2_FALLOC_FL_SUPPORTED)
+		return bch2_err_class(bch_err_throw(c, unsupported_fallocate_mode));
+
 	inode_lock(&inode->v);
 	inode_dio_wait(&inode->v);
 	bch2_pagecache_block_get(inode);
@@ -832,16 +841,24 @@ long bch2_fallocate_dispatch(struct file *file, int mode,
 	if (ret)
 		goto err;
 
-	if (!(mode & ~(FALLOC_FL_KEEP_SIZE|FALLOC_FL_ZERO_RANGE)))
+	switch (mode & FALLOC_FL_MODE_MASK) {
+	case FALLOC_FL_ALLOCATE_RANGE:
+	case FALLOC_FL_ZERO_RANGE:
 		ret = bchfs_fallocate(inode, mode, offset, len);
-	else if (mode == (FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE))
+		break;
+	case FALLOC_FL_PUNCH_HOLE:
 		ret = bchfs_fpunch(inode, offset, len);
-	else if (mode == FALLOC_FL_INSERT_RANGE)
+		break;
+	case FALLOC_FL_INSERT_RANGE:
 		ret = bchfs_fcollapse_finsert(inode, offset, len, true);
-	else if (mode == FALLOC_FL_COLLAPSE_RANGE)
+		break;
+	case FALLOC_FL_COLLAPSE_RANGE:
 		ret = bchfs_fcollapse_finsert(inode, offset, len, false);
-	else
+		break;
+	default:
 		ret = bch_err_throw(c, unsupported_fallocate_mode);
+		break;
+	}
 err:
 	bch2_pagecache_block_put(inode);
 	inode_unlock(&inode->v);
