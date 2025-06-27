@@ -27,6 +27,7 @@
 
 #include <linux/export.h>
 #include <linux/i2c.h>
+#include <linux/iopoll.h>
 #include <linux/log2.h>
 #include <linux/math.h>
 #include <linux/notifier.h>
@@ -3836,10 +3837,12 @@ static int intel_dp_pcon_start_frl_training(struct intel_dp *intel_dp)
 	if (ret < 0)
 		return ret;
 	/* Wait for PCON to be FRL Ready */
-	wait_for(is_active = drm_dp_pcon_is_frl_ready(&intel_dp->aux) == true, TIMEOUT_FRL_READY_MS);
-
-	if (!is_active)
-		return -ETIMEDOUT;
+	ret = read_poll_timeout(drm_dp_pcon_is_frl_ready, is_active,
+				is_active,
+				1000, TIMEOUT_FRL_READY_MS * 1000, false,
+				&intel_dp->aux);
+	if (ret)
+		return ret;
 
 	ret = drm_dp_pcon_frl_configure_1(&intel_dp->aux, max_frl_bw,
 					  DP_PCON_ENABLE_SEQUENTIAL_LINK);
@@ -3856,12 +3859,12 @@ static int intel_dp_pcon_start_frl_training(struct intel_dp *intel_dp)
 	 * Wait for FRL to be completed
 	 * Check if the HDMI Link is up and active.
 	 */
-	wait_for(is_active =
-		 intel_dp_pcon_is_frl_trained(intel_dp, max_frl_bw_mask, &frl_trained_mask),
-		 TIMEOUT_HDMI_LINK_ACTIVE_MS);
-
-	if (!is_active)
-		return -ETIMEDOUT;
+	ret = read_poll_timeout(intel_dp_pcon_is_frl_trained, is_active,
+				is_active,
+				1000, TIMEOUT_HDMI_LINK_ACTIVE_MS * 1000, false,
+				intel_dp, max_frl_bw_mask, &frl_trained_mask);
+	if (ret)
+		return ret;
 
 frl_trained:
 	drm_dbg(display->drm, "FRL_TRAINED_MASK = %u\n", frl_trained_mask);
