@@ -2469,7 +2469,7 @@ out:
 	return error;
 }
 
-static int gfs2_map_blocks(struct iomap_writepage_ctx *wpc, struct inode *inode,
+static int gfs2_map_blocks(struct iomap_writeback_ctx *wpc, struct inode *inode,
 		loff_t offset, unsigned int len)
 {
 	int ret;

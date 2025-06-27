@@ -283,9 +283,9 @@ The ``ops`` structure must be specified and is as follows:
 .. code-block:: c
 
  struct iomap_writeback_ops {
-     int (*map_blocks)(struct iomap_writepage_ctx *wpc, struct inode *inode,
+     int (*map_blocks)(struct iomap_writeback_ctx *wpc, struct inode *inode,
                        loff_t offset, unsigned len);
-     int (*submit_ioend)(struct iomap_writepage_ctx *wpc, int status);
+     int (*submit_ioend)(struct iomap_writeback_ctx *wpc, int status);
      void (*discard_folio)(struct folio *folio, loff_t pos);
  };
 

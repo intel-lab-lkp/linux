@@ -15,7 +15,7 @@ struct fiemap_extent_info;
 struct inode;
 struct iomap_iter;
 struct iomap_dio;
-struct iomap_writepage_ctx;
+struct iomap_writeback_ctx;
 struct iov_iter;
 struct kiocb;
 struct page;
@@ -426,7 +426,7 @@ struct iomap_writeback_ops {
 	 * An existing mapping from a previous call to this method can be reused
 	 * by the file system if it is still valid.
 	 */
-	int (*map_blocks)(struct iomap_writepage_ctx *wpc, struct inode *inode,
+	int (*map_blocks)(struct iomap_writeback_ctx *wpc, struct inode *inode,
 			  loff_t offset, unsigned len);
 
 	/*
@@ -437,7 +437,7 @@ struct iomap_writeback_ops {
 	 * error code if status was non-zero or another error happened and
 	 * the bio could not be submitted.
 	 */
-	int (*submit_ioend)(struct iomap_writepage_ctx *wpc, int status);
+	int (*submit_ioend)(struct iomap_writeback_ctx *wpc, int status);
 
 	/*
 	 * Optional, allows the file system to discard state on a page where
@@ -446,8 +446,10 @@ struct iomap_writeback_ops {
 	void (*discard_folio)(struct folio *folio, loff_t pos);
 };
 
-struct iomap_writepage_ctx {
+struct iomap_writeback_ctx {
 	struct iomap		iomap;
+	struct inode		*inode;
+	struct writeback_control *wbc;
 	struct iomap_ioend	*ioend;
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
@@ -461,9 +463,7 @@ void iomap_finish_ioends(struct iomap_ioend *ioend, int error);
 void iomap_ioend_try_merge(struct iomap_ioend *ioend,
 		struct list_head *more_ioends);
 void iomap_sort_ioends(struct list_head *ioend_list);
-int iomap_writepages(struct address_space *mapping,
-		struct writeback_control *wbc, struct iomap_writepage_ctx *wpc,
-		const struct iomap_writeback_ops *ops);
+int iomap_writepages(struct iomap_writeback_ctx *wpc);
 
 /*
  * Flags for direct I/O ->end_io:
