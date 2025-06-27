@@ -50,7 +50,6 @@
 ########################################################################
 
 #include <linux/linkage.h>
-#include <linux/objtool.h>
 
 .text
 
@@ -568,7 +567,6 @@ frame_size = frame_CTX + CTX_SIZE
 # "nblocks" is the message length in SHA512 blocks.  Must be >= 1.
 ########################################################################
 SYM_FUNC_START(sha512_transform_rorx)
-	ANNOTATE_NOENDBR	# since this is called only via static_call
 
 	# Save GPRs
 	push	%rbx
