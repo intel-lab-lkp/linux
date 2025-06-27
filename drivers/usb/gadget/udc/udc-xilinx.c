@@ -814,6 +814,12 @@ static int __xudc_ep_enable(struct xusb_ep *ep,
 	ep->is_in = ((desc->bEndpointAddress & USB_DIR_IN) != 0);
 	/* Bit 3...0:endpoint number */
 	ep->epnumber = usb_endpoint_num(desc);
+	if (ep->epnumber >= XUSB_MAX_ENDPOINTS) {
+		dev_dbg(udc->dev, "bad endpoint index %d: only 0 to %d supported\n",
+				ep->epnumber, (XUSB_MAX_ENDPOINTS - 1));
+		return -EINVAL;
+	}
+
 	ep->desc = desc;
 	ep->ep_usb.desc = desc;
 	tmp = usb_endpoint_type(desc);
