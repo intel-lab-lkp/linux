@@ -11,4 +11,8 @@ int netdev_queue_update_kobjects(struct net_device *net,
 int netdev_change_owner(struct net_device *, const struct net *net_old,
 			const struct net *net_new);
 
+#if IS_ENABLED(CONFIG_SYSCTL) && IS_ENABLED(CONFIG_RPS)
+extern struct mutex rps_default_mask_mutex;
+#endif
+
 #endif
