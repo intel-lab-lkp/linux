@@ -1457,10 +1457,13 @@ static void nbd_config_put(struct nbd_device *nbd)
 	}
 }
 
-static int nbd_start_device(struct nbd_device *nbd)
+static int nbd_start_device(struct nbd_device *nbd, bool netlink)
+	__releases(&nbd->config_lock)
+	__acquires(&nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	int num_connections = config->num_connections;
+	struct task_struct *old;
 	int error = 0, i;
 
 	if (nbd->pid)
@@ -1473,8 +1476,21 @@ static int nbd_start_device(struct nbd_device *nbd)
 		return -EINVAL;
 	}
 
-	blk_mq_update_nr_hw_queues(&nbd->tag_set, config->num_connections);
+	/*
+	 * synchronize with concurrent nbd_start_device() and
+	 * nbd_add_socket()
+	 */
 	nbd->pid = task_pid_nr(current);
+	if (!netlink) {
+		old = nbd->task_setup;
+		nbd->task_setup = current;
+	}
+
+	mutex_unlock(&nbd->config_lock);
+	blk_mq_update_nr_hw_queues(&nbd->tag_set, config->num_connections);
+	mutex_lock(&nbd->config_lock);
+	if (!netlink)
+		nbd->task_setup = old;
 
 	nbd_parse_flags(nbd);
 
@@ -1524,7 +1540,7 @@ static int nbd_start_device_ioctl(struct nbd_device *nbd)
 	struct nbd_config *config = nbd->config;
 	int ret;
 
-	ret = nbd_start_device(nbd);
+	ret = nbd_start_device(nbd, false);
 	if (ret)
 		return ret;
 
@@ -1995,7 +2011,7 @@ static struct nbd_device *nbd_find_get_unused(void)
 	lockdep_assert_held(&nbd_index_mutex);
 
 	idr_for_each_entry(&nbd_index_idr, nbd, id) {
-		if (refcount_read(&nbd->config_refs) ||
+		if (refcount_read(&nbd->config_refs) || nbd->pid ||
 		    test_bit(NBD_DESTROY_ON_DISCONNECT, &nbd->flags))
 			continue;
 		if (refcount_inc_not_zero(&nbd->refs))
@@ -2109,7 +2125,7 @@ again:
 	}
 
 	mutex_lock(&nbd->config_lock);
-	if (refcount_read(&nbd->config_refs)) {
+	if (refcount_read(&nbd->config_refs) || nbd->pid) {
 		mutex_unlock(&nbd->config_lock);
 		nbd_put(nbd);
 		if (index == -1)
@@ -2198,7 +2214,7 @@ again:
 				goto out;
 		}
 	}
-	ret = nbd_start_device(nbd);
+	ret = nbd_start_device(nbd, true);
 	if (ret)
 		goto out;
 	if (info->attrs[NBD_ATTR_BACKEND_IDENTIFIER]) {
