@@ -155,6 +155,13 @@ int k3_rproc_release(struct k3_rproc *kproc)
 }
 EXPORT_SYMBOL_GPL(k3_rproc_release);
 
+static void k3_rproc_free_channel(void *data)
+{
+	struct k3_rproc *kproc = data;
+
+	mbox_free_channel(kproc->mbox);
+}
+
 int k3_rproc_request_mbox(struct rproc *rproc)
 {
 	struct k3_rproc *kproc = rproc->priv;
@@ -173,6 +180,10 @@ int k3_rproc_request_mbox(struct rproc *rproc)
 		return dev_err_probe(dev, PTR_ERR(kproc->mbox),
 				     "mbox_request_channel failed\n");
 
+	ret = devm_add_action_or_reset(dev, k3_rproc_free_channel, kproc);
+	if (ret)
+		return ret;
+
 	/*
 	 * Ping the remote processor, this is only for sanity-sake for now;
 	 * there is no functional effect whatsoever.
@@ -183,7 +194,6 @@ int k3_rproc_request_mbox(struct rproc *rproc)
 	ret = mbox_send_message(kproc->mbox, (void *)RP_MBOX_ECHO_REQUEST);
 	if (ret < 0) {
 		dev_err(dev, "mbox_send_message failed (%pe)\n", ERR_PTR(ret));
-		mbox_free_channel(kproc->mbox);
 		return ret;
 	}
 
