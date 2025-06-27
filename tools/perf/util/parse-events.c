@@ -192,10 +192,20 @@ static struct perf_cpu_map *get_config_cpu(const struct parse_events_terms *head
 
 	list_for_each_entry(term, &head_terms->terms, list) {
 		if (term->type_term == PARSE_EVENTS__TERM_TYPE_CPU) {
-			struct perf_cpu_map *cpu = perf_cpu_map__new_int(term->val.num);
+			struct perf_cpu_map *term_cpus;
 
-			perf_cpu_map__merge(&cpus, cpu);
-			perf_cpu_map__put(cpu);
+			if (term->type_val == PARSE_EVENTS__TERM_TYPE_NUM) {
+				term_cpus = perf_cpu_map__new_int(term->val.num);
+			} else {
+				struct perf_pmu *pmu = perf_pmus__find(term->val.str);
+
+				if (perf_cpu_map__is_empty(pmu->cpus))
+					term_cpus = pmu->is_core ? cpu_map__online() : NULL;
+				else
+					term_cpus = perf_cpu_map__get(pmu->cpus);
+			}
+			perf_cpu_map__merge(&cpus, term_cpus);
+			perf_cpu_map__put(term_cpus);
 		}
 	}
 
@@ -1054,12 +1064,21 @@ do {									   \
 		}
 		break;
 	case PARSE_EVENTS__TERM_TYPE_CPU:
-		CHECK_TYPE_VAL(NUM);
-		if (term->val.num >= (u64)cpu__max_present_cpu().cpu) {
-			parse_events_error__handle(err, term->err_val,
-						strdup("too big"),
-						NULL);
-			return -EINVAL;
+		if (term->type_val == PARSE_EVENTS__TERM_TYPE_NUM) {
+			if (term->val.num >= (u64)cpu__max_present_cpu().cpu) {
+				parse_events_error__handle(err, term->err_val,
+							strdup("too big"),
+							/*help=*/NULL);
+				return -EINVAL;
+			}
+		} else {
+			assert(term->type_val == PARSE_EVENTS__TERM_TYPE_STR);
+			if (perf_pmus__find(term->val.str) == NULL) {
+				parse_events_error__handle(err, term->err_val,
+							strdup("not a valid PMU"),
+							/*help=*/NULL);
+				return -EINVAL;
+			}
 		}
 		break;
 	case PARSE_EVENTS__TERM_TYPE_DRV_CFG:
