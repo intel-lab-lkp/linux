@@ -491,11 +491,19 @@ static void push_udp(struct netpoll *np, struct sk_buff *skb, int len)
 	netpoll_udp_checksum(np, skb, len);
 }
 
+static void push_eth(struct netpoll *np, struct sk_buff *skb)
+{
+	struct ethhdr *eth;
+
+	eth = eth_hdr(skb);
+	ether_addr_copy(eth->h_source, np->dev->dev_addr);
+	ether_addr_copy(eth->h_dest, np->remote_mac);
+}
+
 int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 {
 	int total_len, ip_len, udp_len;
 	struct sk_buff *skb;
-	struct ethhdr *eth;
 
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		WARN_ON_ONCE(!irqs_disabled());
@@ -521,11 +529,7 @@ int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 		push_ipv6(np, skb, len);
 	else
 		push_ipv4(np, skb, len);
-
-	eth = eth_hdr(skb);
-	ether_addr_copy(eth->h_source, np->dev->dev_addr);
-	ether_addr_copy(eth->h_dest, np->remote_mac);
-
+	push_eth(np, skb);
 	skb->dev = np->dev;
 
 	return (int)netpoll_send_skb(np, skb);
