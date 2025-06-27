@@ -11388,6 +11388,7 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
 		 * average load.
 		 */
 		if (env->sd->flags & SD_ASYM_CPUCAPACITY &&
+		    capacity_of(env->dst_cpu) != capacity &&
 		    !capacity_greater(capacity_of(env->dst_cpu), capacity) &&
 		    nr_running == 1)
 			continue;
