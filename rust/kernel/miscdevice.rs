@@ -177,6 +177,14 @@ pub trait MiscDevice: Sized {
     }
 }
 
+/// Determines whether a given `File` is backed by the `T` `MiscDevice` based on vtable matching.
+pub fn is_miscdevice_file<T: MiscDevice>(file: &File) -> bool {
+    let vtable = core::ptr::from_ref(&MiscdeviceVTable::<T>::VTABLE);
+    // SAFETY: `f_op` is not mutated after file creation
+    let file_vtable = unsafe { (*file.as_ptr()).f_op };
+    vtable == file_vtable
+}
+
 /// A vtable for the file operations of a Rust miscdevice.
 struct MiscdeviceVTable<T: MiscDevice>(PhantomData<T>);
 
