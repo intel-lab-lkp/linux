@@ -1571,6 +1571,7 @@ core_scsi3_decode_spec_i_port(
 			dest_rtpi = tmp_lun->lun_tpg->tpg_rtpi;
 
 			iport_ptr = NULL;
+			kfree(i_str);
 			i_str = target_parse_pr_out_transport_id(tmp_tpg,
 					ptr, &tid_len, &iport_ptr);
 			if (!i_str)
@@ -1808,6 +1809,7 @@ core_scsi3_decode_spec_i_port(
 		core_scsi3_tpg_undepend_item(dest_tpg);
 	}
 
+	kfree(i_str);
 	return 0;
 out_unmap:
 	transport_kunmap_data_sg(cmd);
@@ -1850,6 +1852,7 @@ out:
 		core_scsi3_nodeacl_undepend_item(dest_node_acl);
 		core_scsi3_tpg_undepend_item(dest_tpg);
 	}
+	kfree(i_str);
 	return ret;
 }
 
@@ -3151,7 +3154,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	struct t10_pr_registration *pr_reg, *pr_res_holder, *dest_pr_reg;
 	struct t10_reservation *pr_tmpl = &dev->t10_pr;
 	unsigned char *buf;
-	const unsigned char *initiator_str;
+	const unsigned char *initiator_str = NULL;
 	char *iport_ptr = NULL, i_buf[PR_REG_ISID_ID_LEN] = { };
 	u32 tid_len, tmp_tid_len;
 	int new_reg = 0, type, scope, matching_iname;
@@ -3524,6 +3527,7 @@ after_iport_check:
 	core_scsi3_update_and_write_aptpl(cmd->se_dev, aptpl);
 
 	core_scsi3_put_pr_reg(dest_pr_reg);
+	kfree(initiator_str);
 	return 0;
 out:
 	if (buf)
@@ -3536,6 +3540,7 @@ out:
 
 out_put_pr_reg:
 	core_scsi3_put_pr_reg(pr_reg);
+	kfree(initiator_str);
 	return ret;
 }
 

@@ -390,7 +390,10 @@ int target_get_pr_transport_id(struct se_node_acl *nacl,
 const char *target_parse_pr_out_transport_id(struct se_portal_group *tpg,
 		char *buf, u32 *out_tid_len, char **port_nexus_ptr)
 {
-	u32 offset;
+	u32 offset = 8;
+	u32 len = 8;
+	char *prefix;
+	char hex[40];
 
 	switch (tpg->proto_id) {
 	case SCSI_PROTOCOL_SAS:
@@ -399,15 +402,21 @@ const char *target_parse_pr_out_transport_id(struct se_portal_group *tpg,
 		 * for initiator ports using SCSI over SAS Serial SCSI Protocol.
 		 */
 		offset = 4;
+		prefix = "naa";
+		break;
+	case SCSI_PROTOCOL_SRP:
+		prefix = "ib";
+		len = 16;
+		break;
+	case SCSI_PROTOCOL_FCP:
+		prefix = "naa";
 		break;
 	case SCSI_PROTOCOL_SBP:
-	case SCSI_PROTOCOL_SRP:
-	case SCSI_PROTOCOL_FCP:
-		offset = 8;
+		prefix = "eui";
 		break;
 	case SCSI_PROTOCOL_ISCSI:
-		return iscsi_parse_pr_out_transport_id(tpg, buf, out_tid_len,
-					port_nexus_ptr);
+		return kstrdup(iscsi_parse_pr_out_transport_id(tpg, buf,
+				out_tid_len, port_nexus_ptr), GFP_KERNEL);
 	default:
 		pr_err("Unknown proto_id: 0x%02x\n", tpg->proto_id);
 		return NULL;
@@ -415,5 +424,6 @@ const char *target_parse_pr_out_transport_id(struct se_portal_group *tpg,
 
 	*port_nexus_ptr = NULL;
 	*out_tid_len = 24;
-	return buf + offset;
+	bin2hex(hex, buf + offset, len);
+	return kasprintf(GFP_KERNEL, "%s.%s", prefix, hex);
 }
