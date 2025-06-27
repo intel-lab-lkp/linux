@@ -396,4 +396,15 @@ int btrfs_use_block_group_size_class(struct btrfs_block_group *bg,
 				     bool force_wrong_size_class);
 bool btrfs_block_group_should_use_size_class(const struct btrfs_block_group *bg);
 
+static inline bool btrfs_has_unused_block_groups(struct btrfs_fs_info *fs_info)
+{
+	bool unused_bgs;
+
+	spin_lock(&fs_info->unused_bgs_lock);
+	unused_bgs = !list_empty(&fs_info->unused_bgs);
+	spin_unlock(&fs_info->unused_bgs_lock);
+
+	return unused_bgs;
+}
+
 #endif /* BTRFS_BLOCK_GROUP_H */

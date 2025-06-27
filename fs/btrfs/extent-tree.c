@@ -4683,6 +4683,11 @@ again:
 	if (!ret && !is_data) {
 		btrfs_dec_block_group_reservations(fs_info, ins->objectid);
 	} else if (ret == -ENOSPC) {
+		if (!btrfs_is_data_reloc_root(root) &&
+		    btrfs_has_unused_block_groups(fs_info)) {
+			btrfs_delete_unused_bgs(fs_info);
+			goto again;
+		}
 		if (!final_tried && ins->offset) {
 			num_bytes = min(num_bytes >> 1, ins->offset);
 			num_bytes = round_down(num_bytes,
