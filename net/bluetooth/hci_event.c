@@ -32,6 +32,7 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/mgmt.h>
+#include <net/bluetooth/l2cap.h>
 
 #include "hci_debugfs.h"
 #include "hci_codec.h"
@@ -766,9 +767,22 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
 		/* Update the key encryption size with the connection one */
 		if (key_enc_size && *key_enc_size != conn->enc_key_size)
 			*key_enc_size = conn->enc_key_size;
+		set_bit(HCI_CONN_ENC_KEY_READY, &conn->flags);
 	}
 
 	hci_encrypt_cfm(conn, status);
+
+	/*Defer l2cap_connect here if it's triggered before key size is read.*/
+	if (conn->pending_connect) {
+		struct l2cap_pending_connect *pc = conn->pending_connect;
+
+		conn->pending_connect = NULL;
+
+		bt_dev_dbg(hdev, "Defer l2cap_connect");
+		l2cap_process_pending_connect(pc->conn, &pc->cmd, pc->data, pc->rsp_code);
+
+		kfree(pc);
+	}
 
 done:
 	hci_dev_unlock(hdev);
@@ -3395,6 +3409,8 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, void *data,
 	conn = hci_conn_hash_lookup_handle(hdev, __le16_to_cpu(ev->handle));
 	if (!conn)
 		goto unlock;
+
+	clear_bit(HCI_CONN_ENC_KEY_READY, &conn->flags);
 
 	if (ev->status) {
 		mgmt_disconnect_failed(hdev, &conn->dst, conn->type,

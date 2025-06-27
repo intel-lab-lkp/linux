@@ -767,6 +767,8 @@ struct hci_conn {
 
 	struct bt_codec codec;
 
+	struct l2cap_pending_connect *pending_connect;
+
 	void (*connect_cfm_cb)	(struct hci_conn *conn, u8 status);
 	void (*security_cfm_cb)	(struct hci_conn *conn, u8 status);
 	void (*disconn_cfm_cb)	(struct hci_conn *conn, u8 reason);
@@ -970,6 +972,7 @@ enum {
 	HCI_CONN_CREATE_PA_SYNC,
 	HCI_CONN_PA_SYNC,
 	HCI_CONN_PA_SYNC_FAILED,
+	HCI_CONN_ENC_KEY_READY,
 };
 
 static inline bool hci_conn_ssp_enabled(struct hci_conn *conn)

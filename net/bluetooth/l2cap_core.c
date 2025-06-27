@@ -3982,6 +3982,30 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 	struct l2cap_chan *chan = NULL, *pchan = NULL;
 	int result, status = L2CAP_CS_NO_INFO;
 
+	/* If encryption is requested, but the key size is not ready yet,
+	 * we need to wait for the key size to be ready before we can
+	 * proceed with the connection. We do this by deferring the
+	 * connection request until the key size is ready. This is done
+	 * by storing the connection request in the hcon->pending_connect
+	 * field. The connection request will be retried when the key size
+	 * is ready.
+	 */
+	if (test_bit(HCI_CONN_ENCRYPT, &conn->hcon->flags) &&
+	    !test_bit(HCI_CONN_ENC_KEY_READY, &conn->hcon->flags)) {
+		struct l2cap_pending_connect *pc;
+
+		pc = kzalloc(sizeof(*pc), GFP_KERNEL);
+		if (!pc)
+			return;
+		pc->conn = conn;
+		memcpy(&pc->cmd, cmd, sizeof(*cmd));
+		memcpy(pc->data, data, sizeof(struct l2cap_conn_req));
+		pc->rsp_code = rsp_code;
+		BT_DBG("store request and retried when keysize is ready");
+		conn->hcon->pending_connect = pc;
+		return;
+	}
+
 	u16 dcid = 0, scid = __le16_to_cpu(req->scid);
 	__le16 psm = req->psm;
 
@@ -4103,6 +4127,12 @@ response:
 
 	l2cap_chan_unlock(pchan);
 	l2cap_chan_put(pchan);
+}
+
+void l2cap_process_pending_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
+				   u8 *data, u8 rsp_code)
+{
+	l2cap_connect(conn, cmd, data, rsp_code);
 }
 
 static int l2cap_connect_req(struct l2cap_conn *conn,

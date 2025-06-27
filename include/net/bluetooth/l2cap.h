@@ -679,6 +679,13 @@ struct l2cap_user {
 	void (*remove) (struct l2cap_conn *conn, struct l2cap_user *user);
 };
 
+struct l2cap_pending_connect {
+	struct l2cap_conn *conn;
+	struct l2cap_cmd_hdr cmd;
+	u8 data[sizeof(struct l2cap_conn_req)];
+	u8 rsp_code;
+};
+
 #define L2CAP_INFO_CL_MTU_REQ_SENT	0x01
 #define L2CAP_INFO_FEAT_MASK_REQ_SENT	0x04
 #define L2CAP_INFO_FEAT_MASK_REQ_DONE	0x08
@@ -976,5 +983,6 @@ void l2cap_conn_put(struct l2cap_conn *conn);
 
 int l2cap_register_user(struct l2cap_conn *conn, struct l2cap_user *user);
 void l2cap_unregister_user(struct l2cap_conn *conn, struct l2cap_user *user);
-
+void l2cap_process_pending_connect(struct l2cap_conn *conn,
+				   struct l2cap_cmd_hdr *cmd, u8 *data, u8 rsp_code);
 #endif /* __L2CAP_H */
