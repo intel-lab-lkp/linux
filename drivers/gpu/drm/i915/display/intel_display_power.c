@@ -3,6 +3,7 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/iopoll.h>
 #include <linux/string_helpers.h>
 
 #include "soc/intel_dram.h"
@@ -1278,6 +1279,7 @@ static void hsw_disable_lcpll(struct intel_display *display,
 			      bool switch_to_fclk, bool allow_power_down)
 {
 	u32 val;
+	int ret;
 
 	assert_can_disable_lcpll(display);
 
@@ -1306,8 +1308,11 @@ static void hsw_disable_lcpll(struct intel_display *display,
 	hsw_write_dcomp(display, val);
 	ndelay(100);
 
-	if (wait_for((hsw_read_dcomp(display) &
-		      D_COMP_RCOMP_IN_PROGRESS) == 0, 1))
+	ret = read_poll_timeout(hsw_read_dcomp, val,
+				(val & D_COMP_RCOMP_IN_PROGRESS) == 0,
+				100, 1000, false,
+				display);
+	if (ret)
 		drm_err(display->drm, "D_COMP RCOMP still in progress\n");
 
 	if (allow_power_down) {
