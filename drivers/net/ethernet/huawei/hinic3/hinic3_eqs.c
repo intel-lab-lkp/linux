@@ -361,10 +361,13 @@ static void ceq_tasklet(ulong ceq_data)
 
 static irqreturn_t aeq_interrupt(int irq, void *data)
 {
-	struct hinic3_eq *aeq = data;
-	struct hinic3_aeqs *aeqs = aeq_to_aeqs(aeq);
-	struct hinic3_hwdev *hwdev = aeq->hwdev;
 	struct workqueue_struct *workq;
+	struct hinic3_eq *aeq = data;
+	struct hinic3_hwdev *hwdev;
+	struct hinic3_aeqs *aeqs;
+
+	aeqs = aeq_to_aeqs(aeq);
+	hwdev = aeq->hwdev;
 
 	/* clear resend timer cnt register */
 	workq = aeqs->workq;
