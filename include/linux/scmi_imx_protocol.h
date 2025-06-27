@@ -54,15 +54,20 @@ struct scmi_imx_misc_ctrl_notify_report {
 
 #define MISC_MAX_BUILDDATE	16
 #define MISC_MAX_BUILDTIME	16
+#define MISC_MAX_CFGNAME	16
 
 struct scmi_imx_misc_system_info {
 	u32 buildnum;
 	u32 buildcommit;
 	u8 date[MISC_MAX_BUILDDATE];
 	u8 time[MISC_MAX_BUILDTIME];
+	u32 msel;
+	u8 cfgname[MISC_MAX_CFGNAME];
 };
 
 struct scmi_imx_misc_proto_ops {
+	int (*misc_cfg_info)(const struct scmi_protocol_handle *ph,
+			     struct scmi_imx_misc_system_info *info);
 	int (*misc_ctrl_set)(const struct scmi_protocol_handle *ph, u32 id,
 			     u32 num, u32 *val);
 	int (*misc_ctrl_get)(const struct scmi_protocol_handle *ph, u32 id,
