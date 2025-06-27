@@ -167,7 +167,7 @@ int iommufd_object_remove(struct iommufd_ctx *ictx,
 		goto err_xa;
 	}
 
-	xas_store(&xas, NULL);
+	xas_store(&xas, (flags & REMOVE_OBJ_TOMBSTONE) ? XA_ZERO_ENTRY : NULL);
 	if (ictx->vfio_ioas == container_of(obj, struct iommufd_ioas, obj))
 		ictx->vfio_ioas = NULL;
 	xa_unlock(&ictx->objects);
@@ -239,6 +239,7 @@ static int iommufd_fops_release(struct inode *inode, struct file *filp)
 	struct iommufd_sw_msi_map *next;
 	struct iommufd_sw_msi_map *cur;
 	struct iommufd_object *obj;
+	bool empty;
 
 	/*
 	 * The objects in the xarray form a graph of "users" counts, and we have
@@ -249,23 +250,35 @@ static int iommufd_fops_release(struct inode *inode, struct file *filp)
 	 * until the entire list is destroyed. If this can't progress then there
 	 * is some bug related to object refcounting.
 	 */
-	while (!xa_empty(&ictx->objects)) {
+	for (;;) {
 		unsigned int destroyed = 0;
 		unsigned long index;
 
+		empty = true;
 		xa_for_each(&ictx->objects, index, obj) {
+			empty = false;
 			if (!refcount_dec_if_one(&obj->users))
 				continue;
+
 			destroyed++;
 			xa_erase(&ictx->objects, index);
 			iommufd_object_ops[obj->type].destroy(obj);
 			kfree(obj);
 		}
+
+		if (empty)
+			break;
+
 		/* Bug related to users refcount */
 		if (WARN_ON(!destroyed))
 			break;
 	}
-	WARN_ON(!xa_empty(&ictx->groups));
+
+	/*
+	 * There may be some tombstones left over from
+	 * iommufd_object_tombstone_user()
+	 */
+	xa_destroy(&ictx->groups);
 
 	mutex_destroy(&ictx->sw_msi_lock);
 	list_for_each_entry_safe(cur, next, &ictx->sw_msi_list, sw_msi_item)
