@@ -5459,9 +5459,9 @@ static vm_fault_t hugetlb_vm_op_fault(struct vm_fault *vmf)
 
 #ifdef CONFIG_USERFAULTFD
 static const vm_uffd_ops hugetlb_uffd_ops = {
-	.uffd_features	= 	__VM_UFFD_FLAGS,
+	.uffd_features	=	__VM_UFFD_FLAGS,
 	/* _UFFDIO_ZEROPAGE not supported */
-	.uffd_ioctls	= 	BIT(_UFFDIO_COPY) |
+	.uffd_ioctls	=	BIT(_UFFDIO_COPY) |
 				BIT(_UFFDIO_WRITEPROTECT) |
 				BIT(_UFFDIO_CONTINUE) |
 				BIT(_UFFDIO_POISON),
