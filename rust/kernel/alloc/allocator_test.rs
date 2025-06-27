@@ -7,7 +7,7 @@
 //! `Cmalloc` allocator within the `allocator_test` module and type alias all kernel allocators to
 //! `Cmalloc`. The `Cmalloc` allocator uses libc's `realloc()` function as allocator backend.
 
-#![allow(missing_docs)]
+#![expect(missing_docs)]
 
 use super::{flags::*, AllocError, Allocator, Flags};
 use core::alloc::Layout;
