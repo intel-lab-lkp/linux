@@ -470,11 +470,11 @@ enum {
  */
 struct lru_gen_folio {
 	/* the aging increments the youngest generation number */
-	unsigned long max_seq;
+	unsigned long max_seq[ANON_AND_FILE];
 	/* the eviction increments the oldest generation numbers */
 	unsigned long min_seq[ANON_AND_FILE];
 	/* the birth time of each generation in jiffies */
-	unsigned long timestamps[MAX_NR_GENS];
+	unsigned long timestamps[ANON_AND_FILE][MAX_NR_GENS];
 	/* the multi-gen LRU lists, lazily sorted on eviction */
 	struct list_head folios[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
 	/* the multi-gen LRU sizes, eventually consistent */
@@ -526,16 +526,17 @@ struct lru_gen_mm_walk {
 	/* the lruvec under reclaim */
 	struct lruvec *lruvec;
 	/* max_seq from lru_gen_folio: can be out of date */
-	unsigned long seq;
+	unsigned long seq[ANON_AND_FILE];
 	/* the next address within an mm to scan */
 	unsigned long next_addr;
 	/* to batch promoted pages */
 	int nr_pages[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
 	/* to batch the mm stats */
-	int mm_stats[NR_MM_STATS];
+	int mm_stats[ANON_AND_FILE][NR_MM_STATS];
+	/* the type can be aged */
+	bool can_age[ANON_AND_FILE];
 	/* total batched items */
 	int batched;
-	int swappiness;
 	bool force_scan;
 };
 
@@ -669,7 +670,7 @@ struct lruvec {
 	struct lru_gen_folio		lrugen;
 #ifdef CONFIG_LRU_GEN_WALKS_MMU
 	/* to concurrently iterate lru_gen_mm_list */
-	struct lru_gen_mm_state		mm_state;
+	struct lru_gen_mm_state		mm_state[ANON_AND_FILE];
 #endif
 #endif /* CONFIG_LRU_GEN */
 #ifdef CONFIG_MEMCG
