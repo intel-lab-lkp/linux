@@ -33,6 +33,10 @@
 #include <linux/sizes.h>
 #include <linux/string.h>
 #include <linux/watchdog.h>
+#include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
+#include <linux/hwmon-vid.h>
+#include <linux/err.h>
 
 #define PORTWELL_EC_IOSPACE              0xe300
 #define PORTWELL_EC_IOSPACE_LEN          SZ_256
@@ -52,9 +56,51 @@
 #define PORTWELL_EC_FW_VENDOR_LENGTH     3
 #define PORTWELL_EC_FW_VENDOR_NAME       "PWG"
 
+#define PORTWELL_EC_ADC_MAX              1023
+
 static bool force;
 module_param(force, bool, 0444);
 MODULE_PARM_DESC(force, "Force loading EC driver without checking DMI boardname");
+
+enum pwec_board_id {
+	PWEC_BOARD_NANO6064,
+	PWEC_BOARD_ID_MAX
+};
+
+struct pwec_hwmon_data {
+	const char *label;
+	u8 lsb_reg;
+	u8 msb_reg;
+	u32 scale;
+};
+
+struct pwec_data {
+	const struct pwec_hwmon_data *hwmon_in_data;
+	int hwmon_in_num;
+	const struct pwec_hwmon_data *hwmon_temp_data;
+	int hwmon_temp_num;
+};
+
+static const struct pwec_hwmon_data pwec_nano_hwmon_in[] = {
+	{ "Vcore", 0x20, 0x21, 3000 },
+	{ "VDIMM", 0x32, 0x33, 3000 },
+	{ "3.3V",  0x22, 0x23, 6000 },
+	{ "5V",    0x24, 0x25, 9600 },
+	{ "12V",   0x30, 0x31, 19800 },
+};
+
+static const struct pwec_hwmon_data pwec_nano_hwmon_temp[] = {
+	{ "System Temperature", 0x02, 0, 0 },
+};
+
+static const struct pwec_data pwec_board_data[] = {
+	[PWEC_BOARD_NANO6064] = {
+		.hwmon_in_data = pwec_nano_hwmon_in,
+		.hwmon_in_num = ARRAY_SIZE(pwec_nano_hwmon_in),
+		.hwmon_temp_data = pwec_nano_hwmon_temp,
+		.hwmon_temp_num = ARRAY_SIZE(pwec_nano_hwmon_temp),
+	},
+};
 
 static const struct dmi_system_id pwec_dmi_table[] = {
 	{
@@ -62,6 +108,7 @@ static const struct dmi_system_id pwec_dmi_table[] = {
 		.matches = {
 			DMI_MATCH(DMI_BOARD_NAME, "NANO-6064"),
 		},
+		.driver_data = (void *)&pwec_board_data[PWEC_BOARD_NANO6064],
 	},
 	{ }
 };
@@ -77,6 +124,19 @@ static void pwec_write(u8 index, u8 data)
 static u8 pwec_read(u8 address)
 {
 	return inb(PORTWELL_EC_IOSPACE + address);
+}
+
+static u16 pwec_read16_stable(u8 lsb_reg, u8 msb_reg)
+{
+	u8 lsb, msb, old_msb;
+
+	do {
+		old_msb = pwec_read(msb_reg);
+		lsb = pwec_read(lsb_reg);
+		msb = pwec_read(msb_reg);
+	} while (msb != old_msb);
+
+	return (msb << 8) | lsb;
 }
 
 /* GPIO functions */
@@ -204,6 +264,122 @@ static struct watchdog_device ec_wdt_dev = {
 	.max_timeout = PORTWELL_WDT_EC_MAX_COUNT_SECOND,
 };
 
+/* HWMON functions */
+
+static umode_t pwec_hwmon_is_visible(const void *data, enum hwmon_sensor_types type,
+		u32 attr, int channel)
+{
+	const struct pwec_data *d = data;
+
+	switch (type) {
+	case hwmon_temp:
+		if (channel < d->hwmon_temp_num)
+			return 0444;
+		break;
+	case hwmon_in:
+		if (channel < d->hwmon_in_num)
+			return 0444;
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int pwec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
+			   u32 attr, int channel, long *val)
+{
+	struct pwec_data *data = dev_get_drvdata(dev);
+	u16 tmp;
+
+	switch (type) {
+	case hwmon_temp:
+		if (channel < data->hwmon_temp_num) {
+			*val = pwec_read(data->hwmon_temp_data[channel].lsb_reg) * 1000;
+			return 0;
+		}
+		break;
+	case hwmon_in:
+		if (channel < data->hwmon_in_num) {
+			tmp = pwec_read16_stable(data->hwmon_in_data[channel].lsb_reg,
+						 data->hwmon_in_data[channel].msb_reg);
+			*val = (data->hwmon_in_data[channel].scale * tmp) / PORTWELL_EC_ADC_MAX;
+			return 0;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return -EOPNOTSUPP;
+}
+
+static int pwec_hwmon_read_string(struct device *dev, enum hwmon_sensor_types type,
+				  u32 attr, int channel, const char **str)
+{
+	struct pwec_data *data = dev_get_drvdata(dev);
+
+	switch (type) {
+	case hwmon_temp:
+		if (channel < data->hwmon_temp_num) {
+			*str = data->hwmon_temp_data[channel].label;
+			return 0;
+		}
+		break;
+	case hwmon_in:
+		if (channel < data->hwmon_in_num) {
+			*str = data->hwmon_in_data[channel].label;
+			return 0;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return -EOPNOTSUPP;
+}
+
+static const struct hwmon_channel_info *pwec_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_LABEL),
+	HWMON_CHANNEL_INFO(in,
+			   HWMON_I_INPUT | HWMON_I_LABEL,
+			   HWMON_I_INPUT | HWMON_I_LABEL,
+			   HWMON_I_INPUT | HWMON_I_LABEL,
+			   HWMON_I_INPUT | HWMON_I_LABEL,
+			   HWMON_I_INPUT | HWMON_I_LABEL),
+	NULL
+};
+
+static const struct hwmon_ops pwec_hwmon_ops = {
+	.is_visible = pwec_hwmon_is_visible,
+	.read = pwec_hwmon_read,
+	.read_string = pwec_hwmon_read_string,
+};
+
+static const struct hwmon_chip_info pwec_chip_info = {
+	.ops = &pwec_hwmon_ops,
+	.info = pwec_hwmon_info,
+};
+
+static int pwec_hwmon_init(struct device *dev)
+{
+	struct pwec_data *data = dev_get_platdata(dev);
+	void *hwmon;
+	int ret;
+
+	if (!IS_REACHABLE(CONFIG_HWMON))
+		return 0;
+
+	hwmon = devm_hwmon_device_register_with_info(dev, "portwell_ec", data, &pwec_chip_info,
+						     NULL);
+	ret = PTR_ERR_OR_ZERO(hwmon);
+	if (ret)
+		dev_err(dev, "Failed to register hwmon_dev: %d\n", ret);
+
+	return ret;
+}
+
 static int pwec_firmware_vendor_check(void)
 {
 	u8 buf[PORTWELL_EC_FW_VENDOR_LENGTH + 1];
@@ -242,6 +418,10 @@ static int pwec_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = pwec_hwmon_init(&pdev->dev);
+	if (ret < 0)
+		return ret;
+
 	return 0;
 }
 
@@ -274,11 +454,14 @@ static struct platform_device *pwec_dev;
 
 static int __init pwec_init(void)
 {
+	const struct dmi_system_id *match;
 	int ret;
 
-	if (!dmi_check_system(pwec_dmi_table)) {
+	match = dmi_first_match(pwec_dmi_table);
+	if (!match) {
 		if (!force)
 			return -ENODEV;
+		match = &pwec_dmi_table[0];
 		pr_warn("force load portwell-ec without DMI check\n");
 	}
 
@@ -286,7 +469,8 @@ static int __init pwec_init(void)
 	if (ret)
 		return ret;
 
-	pwec_dev = platform_device_register_simple("portwell-ec", -1, NULL, 0);
+	pwec_dev = platform_device_register_data(NULL, "portwell-ec", -1, match->driver_data,
+						 sizeof(struct pwec_data));
 	if (IS_ERR(pwec_dev)) {
 		platform_driver_unregister(&pwec_driver);
 		return PTR_ERR(pwec_dev);
