@@ -99,8 +99,10 @@ void drm_gem_fb_destroy(struct drm_framebuffer *fb)
 {
 	unsigned int i;
 
-	for (i = 0; i < fb->format->num_planes; i++)
+	for (i = 0; i < fb->format->num_planes; i++) {
+		drm_gem_object_handle_put_unlocked(fb->obj[i]);
 		drm_gem_object_put(fb->obj[i]);
+	}
 
 	drm_framebuffer_cleanup(fb);
 	kfree(fb);
@@ -185,6 +187,7 @@ int drm_gem_fb_init_with_funcs(struct drm_device *dev,
 			ret = -ENOENT;
 			goto err_gem_object_put;
 		}
+		drm_gem_object_handle_get_unlocked(objs[i]);
 
 		min_size = (height - 1) * mode_cmd->pitches[i]
 			 + drm_format_info_min_pitch(info, i, width)
@@ -195,6 +198,7 @@ int drm_gem_fb_init_with_funcs(struct drm_device *dev,
 				    "GEM object size (%zu) smaller than minimum size (%u) for plane %d\n",
 				    objs[i]->size, min_size, i);
 			drm_gem_object_put(objs[i]);
+			drm_gem_object_handle_put_unlocked(objs[i]);
 			ret = -EINVAL;
 			goto err_gem_object_put;
 		}
@@ -210,6 +214,7 @@ err_gem_object_put:
 	while (i > 0) {
 		--i;
 		drm_gem_object_put(objs[i]);
+		drm_gem_object_handle_put_unlocked(objs[i]);
 	}
 	return ret;
 }
