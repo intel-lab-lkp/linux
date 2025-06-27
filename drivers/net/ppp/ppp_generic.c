@@ -120,7 +120,7 @@ struct ppp {
 	int		n_channels;	/* how many channels are attached 54 */
 	spinlock_t	rlock;		/* lock for receive side 58 */
 	spinlock_t	wlock;		/* lock for transmit side 5c */
-	int __percpu	*xmit_recursion; /* xmit recursion detect */
+	struct task_struct *wlock_owner;/* xmit recursion detect */
 	int		mru;		/* max receive unit 60 */
 	unsigned int	flags;		/* control bits 64 */
 	unsigned int	xstate;		/* transmit state bits 68 */
@@ -173,6 +173,7 @@ struct channel {
 	struct ppp_channel *chan;	/* public channel data structure */
 	struct rw_semaphore chan_sem;	/* protects `chan' during chan ioctl */
 	spinlock_t	downl;		/* protects `chan', file.xq dequeue */
+	struct task_struct *downl_owner;/* xmit recursion detect */
 	struct ppp	*ppp;		/* ppp unit we're connected to */
 	struct net	*chan_net;	/* the net channel belongs to */
 	netns_tracker	ns_tracker;
@@ -377,6 +378,24 @@ static const int npindex_to_ethertype[NUM_NP] = {
 				     ppp_recv_lock(ppp); } while (0)
 #define ppp_unlock(ppp)		do { ppp_recv_unlock(ppp); \
 				     ppp_xmit_unlock(ppp); } while (0)
+
+static bool pch_downl_lock(struct channel *pch, struct ppp *ppp)
+{
+	if (pch->downl_owner == current) {
+		if (net_ratelimit())
+			netdev_err(ppp->dev, "recursion detected\n");
+		return false;
+	}
+	spin_lock(&pch->downl);
+	pch->downl_owner = current;
+	return true;
+}
+
+static void pch_downl_unlock(struct channel *pch)
+{
+	pch->downl_owner = NULL;
+	spin_unlock(&pch->downl);
+}
 
 /*
  * /dev/ppp device routines.
@@ -1233,7 +1252,6 @@ static int ppp_dev_configure(struct net *src_net, struct net_device *dev,
 	struct ppp *ppp = netdev_priv(dev);
 	int indx;
 	int err;
-	int cpu;
 
 	ppp->dev = dev;
 	ppp->ppp_net = src_net;
@@ -1249,14 +1267,6 @@ static int ppp_dev_configure(struct net *src_net, struct net_device *dev,
 	spin_lock_init(&ppp->rlock);
 	spin_lock_init(&ppp->wlock);
 
-	ppp->xmit_recursion = alloc_percpu(int);
-	if (!ppp->xmit_recursion) {
-		err = -ENOMEM;
-		goto err1;
-	}
-	for_each_possible_cpu(cpu)
-		(*per_cpu_ptr(ppp->xmit_recursion, cpu)) = 0;
-
 #ifdef CONFIG_PPP_MULTILINK
 	ppp->minseq = -1;
 	skb_queue_head_init(&ppp->mrq);
@@ -1268,15 +1278,11 @@ static int ppp_dev_configure(struct net *src_net, struct net_device *dev,
 
 	err = ppp_unit_register(ppp, conf->unit, conf->ifname_is_set);
 	if (err < 0)
-		goto err2;
+		return err;
 
 	conf->file->private_data = &ppp->file;
 
 	return 0;
-err2:
-	free_percpu(ppp->xmit_recursion);
-err1:
-	return err;
 }
 
 static const struct nla_policy ppp_nl_policy[IFLA_PPP_MAX + 1] = {
@@ -1637,7 +1643,6 @@ static void ppp_setup(struct net_device *dev)
 /* Called to do any work queued up on the transmit side that can now be done */
 static void __ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb)
 {
-	ppp_xmit_lock(ppp);
 	if (!ppp->closing) {
 		ppp_push(ppp);
 
@@ -1655,27 +1660,21 @@ static void __ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb)
 	} else {
 		kfree_skb(skb);
 	}
-	ppp_xmit_unlock(ppp);
 }
 
 static void ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb)
 {
-	local_bh_disable();
-
-	if (unlikely(*this_cpu_ptr(ppp->xmit_recursion)))
+	if (ppp->wlock_owner == current)
 		goto err;
 
-	(*this_cpu_ptr(ppp->xmit_recursion))++;
+	ppp_xmit_lock(ppp);
+	ppp->wlock_owner = current;
 	__ppp_xmit_process(ppp, skb);
-	(*this_cpu_ptr(ppp->xmit_recursion))--;
-
-	local_bh_enable();
-
+	ppp->wlock_owner = NULL;
+	ppp_xmit_unlock(ppp);
 	return;
 
 err:
-	local_bh_enable();
-
 	kfree_skb(skb);
 
 	if (net_ratelimit())
@@ -1879,7 +1878,9 @@ ppp_push(struct ppp *ppp)
 		list = list->next;
 		pch = list_entry(list, struct channel, clist);
 
-		spin_lock(&pch->downl);
+		if (!pch_downl_lock(pch, ppp))
+			goto free_out;
+
 		if (pch->chan) {
 			if (pch->chan->ops->start_xmit(pch->chan, skb))
 				ppp->xmit_pending = NULL;
@@ -1888,7 +1889,7 @@ ppp_push(struct ppp *ppp)
 			kfree_skb(skb);
 			ppp->xmit_pending = NULL;
 		}
-		spin_unlock(&pch->downl);
+		pch_downl_unlock(pch);
 		return;
 	}
 
@@ -1899,6 +1900,7 @@ ppp_push(struct ppp *ppp)
 		return;
 #endif /* CONFIG_PPP_MULTILINK */
 
+free_out:
 	ppp->xmit_pending = NULL;
 	kfree_skb(skb);
 }
@@ -2017,8 +2019,10 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 			pch->avail = 1;
 		}
 
+		if (!pch_downl_lock(pch, ppp))
+			continue;
+
 		/* check the channel's mtu and whether it is still attached. */
-		spin_lock(&pch->downl);
 		if (pch->chan == NULL) {
 			/* can't use this channel, it's being deregistered */
 			if (pch->speed == 0)
@@ -2026,7 +2030,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 			else
 				totspeed -= pch->speed;
 
-			spin_unlock(&pch->downl);
+			pch_downl_unlock(pch);
 			pch->avail = 0;
 			totlen = len;
 			totfree--;
@@ -2077,7 +2081,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 		 */
 		if (flen <= 0) {
 			pch->avail = 2;
-			spin_unlock(&pch->downl);
+			pch_downl_unlock(pch);
 			continue;
 		}
 
@@ -2122,14 +2126,14 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 		len -= flen;
 		++ppp->nxseq;
 		bits = 0;
-		spin_unlock(&pch->downl);
+		pch_downl_unlock(pch);
 	}
 	ppp->nxchan = i;
 
 	return 1;
 
  noskb:
-	spin_unlock(&pch->downl);
+	pch_downl_unlock(pch);
 	if (ppp->debug & 1)
 		netdev_err(ppp->dev, "PPP: no memory (fragment)\n");
 	++ppp->dev->stats.tx_errors;
@@ -2139,12 +2143,15 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 #endif /* CONFIG_PPP_MULTILINK */
 
 /* Try to send data out on a channel */
-static void __ppp_channel_push(struct channel *pch)
+static void ppp_channel_push(struct channel *pch)
 {
 	struct sk_buff *skb;
 	struct ppp *ppp;
 
+	read_lock_bh(&pch->upl);
 	spin_lock(&pch->downl);
+	pch->downl_owner = current;
+
 	if (pch->chan) {
 		while (!skb_queue_empty(&pch->file.xq)) {
 			skb = skb_dequeue(&pch->file.xq);
@@ -2158,24 +2165,13 @@ static void __ppp_channel_push(struct channel *pch)
 		/* channel got deregistered */
 		skb_queue_purge(&pch->file.xq);
 	}
+	pch->downl_owner = NULL;
 	spin_unlock(&pch->downl);
 	/* see if there is anything from the attached unit to be sent */
 	if (skb_queue_empty(&pch->file.xq)) {
 		ppp = pch->ppp;
 		if (ppp)
-			__ppp_xmit_process(ppp, NULL);
-	}
-}
-
-static void ppp_channel_push(struct channel *pch)
-{
-	read_lock_bh(&pch->upl);
-	if (pch->ppp) {
-		(*this_cpu_ptr(pch->ppp->xmit_recursion))++;
-		__ppp_channel_push(pch);
-		(*this_cpu_ptr(pch->ppp->xmit_recursion))--;
-	} else {
-		__ppp_channel_push(pch);
+			ppp_xmit_process(ppp, NULL);
 	}
 	read_unlock_bh(&pch->upl);
 }
@@ -3410,8 +3406,6 @@ static void ppp_destroy_interface(struct ppp *ppp)
 #endif /* CONFIG_PPP_FILTER */
 
 	kfree_skb(ppp->xmit_pending);
-	free_percpu(ppp->xmit_recursion);
-
 	free_netdev(ppp->dev);
 }
 
