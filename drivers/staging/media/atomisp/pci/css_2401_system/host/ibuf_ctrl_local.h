@@ -10,8 +10,8 @@
 #include "ibuf_ctrl_global.h"
 #include "ibuf_ctrl_local.h"
 
-typedef struct ibuf_ctrl_proc_state_s	ibuf_ctrl_proc_state_t;
-typedef struct ibuf_ctrl_state_s		ibuf_ctrl_state_t;
+typedef struct ibuf_ctrl_proc_state_s ibuf_ctrl_proc_state_t;
+typedef struct ibuf_ctrl_state_s ibuf_ctrl_state_t;
 
 struct ibuf_ctrl_proc_state_s {
 	hrt_data num_items;
@@ -43,9 +43,9 @@ struct ibuf_ctrl_proc_state_s {
 };
 
 struct ibuf_ctrl_state_s {
-	hrt_data	recalc_words;
-	hrt_data	arbiters;
-	ibuf_ctrl_proc_state_t	proc_state[N_STREAM2MMIO_SID_ID];
+	hrt_data recalc_words;
+	hrt_data arbiters;
+	ibuf_ctrl_proc_state_t proc_state[N_STREAM2MMIO_SID_ID];
 };
 
 #endif /* __IBUF_CTRL_LOCAL_H_INCLUDED__ */

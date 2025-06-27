@@ -11,28 +11,25 @@
 #include "mmu/sh_mmu_mrfld.h"
 #include "atomisp_compat.h"
 
-#define MERR_VALID_PTE_MASK	0x80000000
+#define MERR_VALID_PTE_MASK 0x80000000
 
 /*
  * include SH header file here
  */
 
-static unsigned int sh_phys_to_pte(struct isp_mmu *mmu,
-				   phys_addr_t phys)
+static unsigned int sh_phys_to_pte(struct isp_mmu *mmu, phys_addr_t phys)
 {
 	return phys >> ISP_PAGE_OFFSET;
 }
 
-static phys_addr_t sh_pte_to_phys(struct isp_mmu *mmu,
-				  unsigned int pte)
+static phys_addr_t sh_pte_to_phys(struct isp_mmu *mmu, unsigned int pte)
 {
 	unsigned int mask = mmu->driver->pte_valid_mask;
 
 	return (phys_addr_t)((pte & ~mask) << ISP_PAGE_OFFSET);
 }
 
-static unsigned int sh_get_pd_base(struct isp_mmu *mmu,
-				   phys_addr_t phys)
+static unsigned int sh_get_pd_base(struct isp_mmu *mmu, phys_addr_t phys)
 {
 	unsigned int pte = sh_phys_to_pte(mmu, phys);
 

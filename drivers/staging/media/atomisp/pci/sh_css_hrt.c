@@ -55,7 +55,7 @@ bool sh_css_hrt_system_is_idle(void)
 
 int sh_css_hrt_sp_wait(void)
 {
-	irq_sw_channel_id_t	irq_id = IRQ_SW_CHANNEL0_ID;
+	irq_sw_channel_id_t irq_id = IRQ_SW_CHANNEL0_ID;
 	/*
 	 * Wait till SP is idle or till there is a SW2 interrupt
 	 * The SW2 interrupt will be used when frameloop runs on SP
@@ -63,8 +63,7 @@ int sh_css_hrt_sp_wait(void)
 	 * (e.g. frame_done)
 	 */
 	while (!sp_ctrl_getbit(SP0_ID, SP_SC_REG, SP_IDLE_BIT) &&
-	       ((irq_reg_load(IRQ0_ID,
-			      _HRT_IRQ_CONTROLLER_STATUS_REG_IDX) &
+	       ((irq_reg_load(IRQ0_ID, _HRT_IRQ_CONTROLLER_STATUS_REG_IDX) &
 		 (1U << (irq_id + IRQ_SW_CHANNEL_OFFSET))) == 0)) {
 		udelay(1);
 	}

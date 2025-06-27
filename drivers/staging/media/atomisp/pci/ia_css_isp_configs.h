@@ -64,14 +64,16 @@ struct ia_css_config_memory_offsets {
 
 #if defined(IA_CSS_INCLUDE_CONFIGURATIONS)
 
-#include "ia_css_stream.h"   /* struct ia_css_stream */
-#include "ia_css_binary.h"   /* struct ia_css_binary */
+#include "ia_css_stream.h" /* struct ia_css_stream */
+#include "ia_css_binary.h" /* struct ia_css_binary */
 
-int ia_css_configure_iterator(const struct ia_css_binary *binary,
-			      const struct ia_css_iterator_configuration *config_dmem);
+int ia_css_configure_iterator(
+	const struct ia_css_binary *binary,
+	const struct ia_css_iterator_configuration *config_dmem);
 
-int ia_css_configure_copy_output(const struct ia_css_binary *binary,
-				 const struct ia_css_copy_output_configuration *config_dmem);
+int ia_css_configure_copy_output(
+	const struct ia_css_binary *binary,
+	const struct ia_css_copy_output_configuration *config_dmem);
 
 int ia_css_configure_crop(const struct ia_css_binary *binary,
 			  const struct ia_css_crop_configuration *config_dmem);
@@ -82,16 +84,20 @@ int ia_css_configure_fpn(const struct ia_css_binary *binary,
 int ia_css_configure_dvs(const struct ia_css_binary *binary,
 			 const struct ia_css_dvs_configuration *config_dmem);
 
-int ia_css_configure_qplane(const struct ia_css_binary *binary,
-			    const struct ia_css_qplane_configuration *config_dmem);
-int ia_css_configure_output0(const struct ia_css_binary *binary,
-			     const struct ia_css_output0_configuration *config_dmem);
+int ia_css_configure_qplane(
+	const struct ia_css_binary *binary,
+	const struct ia_css_qplane_configuration *config_dmem);
+int ia_css_configure_output0(
+	const struct ia_css_binary *binary,
+	const struct ia_css_output0_configuration *config_dmem);
 
-int ia_css_configure_output1(const struct ia_css_binary *binary,
-			     const struct ia_css_output1_configuration *config_dmem);
+int ia_css_configure_output1(
+	const struct ia_css_binary *binary,
+	const struct ia_css_output1_configuration *config_dmem);
 
-int ia_css_configure_output(const struct ia_css_binary *binary,
-			    const struct ia_css_output_configuration *config_dmem);
+int ia_css_configure_output(
+	const struct ia_css_binary *binary,
+	const struct ia_css_output_configuration *config_dmem);
 
 int ia_css_configure_raw(const struct ia_css_binary *binary,
 			 const struct ia_css_raw_configuration *config_dmem);

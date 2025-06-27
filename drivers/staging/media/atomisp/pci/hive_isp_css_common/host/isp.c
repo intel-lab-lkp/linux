@@ -15,17 +15,14 @@
 
 #include "assert_support.h"
 
-void cnd_isp_irq_enable(
-    const isp_ID_t		ID,
-    const bool		cnd)
+void cnd_isp_irq_enable(const isp_ID_t ID, const bool cnd)
 {
 	if (cnd) {
 		isp_ctrl_setbit(ID, ISP_IRQ_READY_REG, ISP_IRQ_READY_BIT);
 		/* Enabling the IRQ immediately triggers an interrupt, clear it */
 		isp_ctrl_setbit(ID, ISP_IRQ_CLEAR_REG, ISP_IRQ_CLEAR_BIT);
 	} else {
-		isp_ctrl_clearbit(ID, ISP_IRQ_READY_REG,
-				  ISP_IRQ_READY_BIT);
+		isp_ctrl_clearbit(ID, ISP_IRQ_READY_REG, ISP_IRQ_READY_BIT);
 	}
 	return;
 }

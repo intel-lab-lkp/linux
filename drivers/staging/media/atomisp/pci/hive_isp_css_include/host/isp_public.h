@@ -17,9 +17,7 @@
 
  \return none, if(cnd) enable(ISP[ID].irq) else disable(ISP[ID].irq)
  */
-void cnd_isp_irq_enable(
-    const isp_ID_t		ID,
-    const bool			cnd);
+void cnd_isp_irq_enable(const isp_ID_t ID, const bool cnd);
 
 /*! Write to the status and control register of ISP[ID]
 
@@ -29,10 +27,8 @@ void cnd_isp_irq_enable(
 
  \return none, ISP[ID].sc[reg] = value
  */
-STORAGE_CLASS_ISP_H void isp_ctrl_store(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const hrt_data		value);
+STORAGE_CLASS_ISP_H void
+isp_ctrl_store(const isp_ID_t ID, const unsigned int reg, const hrt_data value);
 
 /*! Read from the status and control register of ISP[ID]
 
@@ -42,9 +38,8 @@ STORAGE_CLASS_ISP_H void isp_ctrl_store(
 
  \return ISP[ID].sc[reg]
  */
-STORAGE_CLASS_ISP_H hrt_data isp_ctrl_load(
-    const isp_ID_t		ID,
-    const unsigned int	reg);
+STORAGE_CLASS_ISP_H hrt_data isp_ctrl_load(const isp_ID_t ID,
+					   const unsigned int reg);
 
 /*! Get the status of a bitfield in the control register of ISP[ID]
 
@@ -54,10 +49,9 @@ STORAGE_CLASS_ISP_H hrt_data isp_ctrl_load(
 
  \return  (ISP[ID].sc[reg] & (1<<bit)) != 0
  */
-STORAGE_CLASS_ISP_H bool isp_ctrl_getbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_ISP_H bool isp_ctrl_getbit(const isp_ID_t ID,
+					 const unsigned int reg,
+					 const unsigned int bit);
 
 /*! Set a bitfield in the control register of ISP[ID]
 
@@ -67,10 +61,9 @@ STORAGE_CLASS_ISP_H bool isp_ctrl_getbit(
 
  \return none, ISP[ID].sc[reg] |= (1<<bit)
  */
-STORAGE_CLASS_ISP_H void isp_ctrl_setbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_ISP_H void isp_ctrl_setbit(const isp_ID_t ID,
+					 const unsigned int reg,
+					 const unsigned int bit);
 
 /*! Clear a bitfield in the control register of ISP[ID]
 
@@ -80,10 +73,9 @@ STORAGE_CLASS_ISP_H void isp_ctrl_setbit(
 
  \return none, ISP[ID].sc[reg] &= ~(1<<bit)
  */
-STORAGE_CLASS_ISP_H void isp_ctrl_clearbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_ISP_H void isp_ctrl_clearbit(const isp_ID_t ID,
+					   const unsigned int reg,
+					   const unsigned int bit);
 
 /*! Write to the DMEM of ISP[ID]
 
@@ -94,11 +86,8 @@ STORAGE_CLASS_ISP_H void isp_ctrl_clearbit(
 
  \return none, ISP[ID].dmem[addr...addr+size-1] = data
  */
-STORAGE_CLASS_ISP_H void isp_dmem_store(
-    const isp_ID_t		ID,
-    unsigned int		addr,
-    const void			*data,
-    const size_t		size);
+STORAGE_CLASS_ISP_H void isp_dmem_store(const isp_ID_t ID, unsigned int addr,
+					const void *data, const size_t size);
 
 /*! Read from the DMEM of ISP[ID]
 
@@ -109,11 +98,9 @@ STORAGE_CLASS_ISP_H void isp_dmem_store(
 
  \return none, data = ISP[ID].dmem[addr...addr+size-1]
  */
-STORAGE_CLASS_ISP_H void isp_dmem_load(
-    const isp_ID_t		ID,
-    const unsigned int	addr,
-    void				*data,
-    const size_t		size);
+STORAGE_CLASS_ISP_H void isp_dmem_load(const isp_ID_t ID,
+				       const unsigned int addr, void *data,
+				       const size_t size);
 
 /*! Write a 32-bit datum to the DMEM of ISP[ID]
 
@@ -124,10 +111,9 @@ STORAGE_CLASS_ISP_H void isp_dmem_load(
 
  \return none, ISP[ID].dmem[addr] = data
  */
-STORAGE_CLASS_ISP_H void isp_dmem_store_uint32(
-    const isp_ID_t		ID,
-    unsigned int		addr,
-    const uint32_t		data);
+STORAGE_CLASS_ISP_H void isp_dmem_store_uint32(const isp_ID_t ID,
+					       unsigned int addr,
+					       const uint32_t data);
 
 /*! Load a 32-bit datum from the DMEM of ISP[ID]
 
@@ -138,9 +124,8 @@ STORAGE_CLASS_ISP_H void isp_dmem_store_uint32(
 
  \return none, data = ISP[ID].dmem[addr]
  */
-STORAGE_CLASS_ISP_H uint32_t isp_dmem_load_uint32(
-    const isp_ID_t		ID,
-    const unsigned int	addr);
+STORAGE_CLASS_ISP_H uint32_t isp_dmem_load_uint32(const isp_ID_t ID,
+						  const unsigned int addr);
 
 /*! Concatenate the LSW and MSW into a double precision word
 
@@ -149,9 +134,7 @@ STORAGE_CLASS_ISP_H uint32_t isp_dmem_load_uint32(
 
  \return x0 | (x1 << bits_per_vector_element)
  */
-STORAGE_CLASS_ISP_H uint32_t isp_2w_cat_1w(
-    const u16		x0,
-    const uint16_t		x1);
+STORAGE_CLASS_ISP_H uint32_t isp_2w_cat_1w(const u16 x0, const uint16_t x1);
 
 unsigned int isp_is_ready(isp_ID_t ID);
 

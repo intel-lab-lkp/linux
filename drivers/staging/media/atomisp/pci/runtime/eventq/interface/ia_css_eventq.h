@@ -7,7 +7,7 @@
 #ifndef _IA_CSS_EVENTQ_H
 #define _IA_CSS_EVENTQ_H
 
-#include "ia_css_queue.h"	/* queue APIs */
+#include "ia_css_queue.h" /* queue APIs */
 
 /**
  * @brief HOST receives event from SP.
@@ -18,9 +18,7 @@
  * @return	-EINVAL		- Invalid argument.
  * @return	-ENODATA		- Queue is empty.
  */
-int ia_css_eventq_recv(
-    ia_css_queue_t *eventq_handle,
-    uint8_t *payload);
+int ia_css_eventq_recv(ia_css_queue_t *eventq_handle, uint8_t *payload);
 
 /**
  * @brief The Host sends the event to SP.
@@ -36,10 +34,7 @@ int ia_css_eventq_recv(
  * @return	-EINVAL		- Invalid argument.
  * @return	-ENOBUFS		- Queue is full.
  */
-int ia_css_eventq_send(
-    ia_css_queue_t *eventq_handle,
-    u8 evt_id,
-    u8 evt_payload_0,
-    u8 evt_payload_1,
-    uint8_t evt_payload_2);
+int ia_css_eventq_send(ia_css_queue_t *eventq_handle, u8 evt_id,
+		       u8 evt_payload_0, u8 evt_payload_1,
+		       uint8_t evt_payload_2);
 #endif /* _IA_CSS_EVENTQ_H */

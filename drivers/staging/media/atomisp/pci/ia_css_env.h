@@ -20,9 +20,9 @@
 
 /* Memory allocation attributes, for use in ia_css_css_mem_env. */
 enum ia_css_mem_attr {
-	IA_CSS_MEM_ATTR_CACHED     = BIT(0),
-	IA_CSS_MEM_ATTR_ZEROED     = BIT(1),
-	IA_CSS_MEM_ATTR_PAGEALIGN  = BIT(2),
+	IA_CSS_MEM_ATTR_CACHED = BIT(0),
+	IA_CSS_MEM_ATTR_ZEROED = BIT(1),
+	IA_CSS_MEM_ATTR_PAGEALIGN = BIT(2),
 	IA_CSS_MEM_ATTR_CONTIGUOUS = BIT(3),
 };
 
@@ -67,9 +67,9 @@ struct ia_css_hw_access_env {
 /* Environment with function pointers to print error and debug messages.
  */
 struct ia_css_print_env {
-	int  __printf(1, 0) (*debug_print)(const char *fmt, va_list args);
+	int __printf(1, 0) (*debug_print)(const char *fmt, va_list args);
 	/** Print a debug message. */
-	int  __printf(1, 0) (*error_print)(const char *fmt, va_list args);
+	int __printf(1, 0) (*error_print)(const char *fmt, va_list args);
 	/** Print an error message.*/
 };
 
@@ -79,9 +79,9 @@ struct ia_css_print_env {
  *  Windows and several simulation environments.
  */
 struct ia_css_env {
-	struct ia_css_cpu_mem_env   cpu_mem_env;   /** local flush. */
+	struct ia_css_cpu_mem_env cpu_mem_env; /** local flush. */
 	struct ia_css_hw_access_env hw_access_env; /** CSS HW access functions */
-	struct ia_css_print_env     print_env;     /** Message printing env. */
+	struct ia_css_print_env print_env; /** Message printing env. */
 };
 
 #endif /* __IA_CSS_ENV_H */

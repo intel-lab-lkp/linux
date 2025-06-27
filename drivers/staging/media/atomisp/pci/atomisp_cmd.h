@@ -7,8 +7,8 @@
  * Copyright (c) 2010 Silicon Hive www.siliconhive.com.
  */
 
-#ifndef	__ATOMISP_CMD_H__
-#define	__ATOMISP_CMD_H__
+#ifndef __ATOMISP_CMD_H__
+#define __ATOMISP_CMD_H__
 
 #include "../../include/linux/atomisp.h"
 #include <linux/interrupt.h>
@@ -24,12 +24,12 @@
 struct atomisp_device;
 struct ia_css_frame;
 
-#define MSI_ENABLE_BIT		16
-#define INTR_DISABLE_BIT	10
-#define BUS_MASTER_ENABLE	2
-#define MEMORY_SPACE_ENABLE	1
-#define INTR_IER		24
-#define INTR_IIR		16
+#define MSI_ENABLE_BIT 16
+#define INTR_DISABLE_BIT 10
+#define BUS_MASTER_ENABLE 2
+#define MEMORY_SPACE_ENABLE 1
+#define INTR_IER 24
+#define INTR_IIR 16
 
 /* Helper function */
 void dump_sp_dmem(struct atomisp_device *isp, unsigned int addr,
@@ -38,8 +38,10 @@ struct camera_mipi_info *atomisp_to_sensor_mipi_info(struct v4l2_subdev *sd);
 struct atomisp_video_pipe *atomisp_to_video_pipe(struct video_device *dev);
 int atomisp_reset(struct atomisp_device *isp);
 int atomisp_buffers_in_css(struct atomisp_video_pipe *pipe);
-void atomisp_buffer_done(struct ia_css_frame *frame, enum vb2_buffer_state state);
-void atomisp_flush_video_pipe(struct atomisp_video_pipe *pipe, enum vb2_buffer_state state,
+void atomisp_buffer_done(struct ia_css_frame *frame,
+			 enum vb2_buffer_state state);
+void atomisp_flush_video_pipe(struct atomisp_video_pipe *pipe,
+			      enum vb2_buffer_state state,
 			      bool warn_on_css_frames);
 void atomisp_clear_css_buffer_counters(struct atomisp_sub_device *asd);
 
@@ -49,8 +51,8 @@ void atomisp_msi_irq_uninit(struct atomisp_device *isp);
 void atomisp_assert_recovery_work(struct work_struct *work);
 irqreturn_t atomisp_isr(int irq, void *dev);
 irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr);
-const struct atomisp_format_bridge *get_atomisp_format_bridge_from_mbus(
-    u32 mbus_code);
+const struct atomisp_format_bridge *
+get_atomisp_format_bridge_from_mbus(u32 mbus_code);
 bool atomisp_is_mbuscode_raw(uint32_t code);
 
 /* Get internal fmt according to V4L2 fmt */
@@ -62,12 +64,10 @@ bool atomisp_is_viewfinder_support(struct atomisp_device *isp);
  * Function to enable/disable lens geometry distortion correction (GDC) and
  * chromatic aberration correction (CAC)
  */
-int atomisp_gdc_cac(struct atomisp_sub_device *asd, int flag,
-		    __s32 *value);
+int atomisp_gdc_cac(struct atomisp_sub_device *asd, int flag, __s32 *value);
 
 /* Function to enable/disable low light mode (including ANR) */
-int atomisp_low_light(struct atomisp_sub_device *asd, int flag,
-		      __s32 *value);
+int atomisp_low_light(struct atomisp_sub_device *asd, int flag, __s32 *value);
 
 /*
  * Function to enable/disable extra noise reduction (XNR) in low light
@@ -146,8 +146,7 @@ int atomisp_color_effect(struct atomisp_sub_device *asd, int flag,
 			 __s32 *effect);
 
 /* Function to configure bad pixel correction */
-int atomisp_bad_pixel(struct atomisp_sub_device *asd, int flag,
-		      __s32 *value);
+int atomisp_bad_pixel(struct atomisp_sub_device *asd, int flag, __s32 *value);
 
 /* Function to configure bad pixel correction params */
 int atomisp_bad_pixel_param(struct atomisp_sub_device *asd, int flag,
@@ -166,8 +165,7 @@ int atomisp_fixed_pattern_table(struct atomisp_sub_device *asd,
 				struct v4l2_framebuffer *config);
 
 /* Function to configure false color correction */
-int atomisp_false_color(struct atomisp_sub_device *asd, int flag,
-			__s32 *value);
+int atomisp_false_color(struct atomisp_sub_device *asd, int flag, __s32 *value);
 
 /* Function to configure false color correction params */
 int atomisp_false_color_param(struct atomisp_sub_device *asd, int flag,
@@ -186,11 +184,11 @@ int atomisp_digital_zoom(struct atomisp_sub_device *asd, int flag,
 
 /* Function  set camera_prefiles.xml current sensor pixel array size */
 int atomisp_set_array_res(struct atomisp_sub_device *asd,
-			  struct atomisp_resolution  *config);
+			  struct atomisp_resolution *config);
 
 /* Function to calculate real zoom region for every pipe */
 int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
-				       struct ia_css_dz_config   *dz_config,
+				       struct ia_css_dz_config *dz_config,
 				       enum ia_css_pipe_id css_pipe_id);
 
 int atomisp_cp_general_isp_parameters(struct atomisp_sub_device *asd,
@@ -200,8 +198,7 @@ int atomisp_cp_general_isp_parameters(struct atomisp_sub_device *asd,
 
 int atomisp_cp_lsc_table(struct atomisp_sub_device *asd,
 			 struct atomisp_shading_table *source_st,
-			 struct atomisp_css_params *css_param,
-			 bool from_user);
+			 struct atomisp_css_params *css_param, bool from_user);
 
 int atomisp_css_cp_dvs2_coefs(struct atomisp_sub_device *asd,
 			      struct ia_css_dvs2_coefficients *coefs,
@@ -213,10 +210,10 @@ int atomisp_cp_morph_table(struct atomisp_sub_device *asd,
 			   struct atomisp_css_params *css_param,
 			   bool from_user);
 
-int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
-				struct atomisp_dvs_6axis_config *user_6axis_config,
-				struct atomisp_css_params *css_param,
-				bool from_user);
+int atomisp_cp_dvs_6axis_config(
+	struct atomisp_sub_device *asd,
+	struct atomisp_dvs_6axis_config *user_6axis_config,
+	struct atomisp_css_params *css_param, bool from_user);
 
 int atomisp_makeup_css_parameters(struct atomisp_sub_device *asd,
 				  struct atomisp_parameters *arg,
@@ -230,7 +227,8 @@ void atomisp_get_padding(struct atomisp_device *isp, u32 width, u32 height,
 			 u32 *padding_w, u32 *padding_h);
 
 /* Set sensor power (no-op if already on/off) */
-int atomisp_s_sensor_power(struct atomisp_device *isp, unsigned int input, bool on);
+int atomisp_s_sensor_power(struct atomisp_device *isp, unsigned int input,
+			   bool on);
 
 /* Select which sensor to use, must be called with a valid input */
 int atomisp_select_input(struct atomisp_device *isp, unsigned int input);
@@ -251,13 +249,12 @@ int atomisp_set_shading_table(struct atomisp_sub_device *asd,
 void atomisp_free_internal_buffers(struct atomisp_sub_device *asd);
 
 int atomisp_freq_scaling(struct atomisp_device *vdev,
-			 enum atomisp_dfs_mode mode,
-			 bool force);
+			 enum atomisp_dfs_mode mode, bool force);
 
 void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 		      enum ia_css_buffer_type buf_type,
-		      enum ia_css_pipe_id css_pipe_id,
-		      bool q_buffers, enum atomisp_input_stream_id stream_id);
+		      enum ia_css_pipe_id css_pipe_id, bool q_buffers,
+		      enum atomisp_input_stream_id stream_id);
 
 /* Events. Only one event has to be exported for now. */
 void atomisp_eof_event(struct atomisp_sub_device *asd, uint8_t exp_id);
@@ -265,9 +262,8 @@ void atomisp_eof_event(struct atomisp_sub_device *asd, uint8_t exp_id);
 enum mipi_port_id atomisp_port_to_mipi_port(struct atomisp_device *isp,
 					    enum atomisp_camera_port port);
 
-void atomisp_apply_css_parameters(
-    struct atomisp_sub_device *asd,
-    struct atomisp_css_params *css_param);
+void atomisp_apply_css_parameters(struct atomisp_sub_device *asd,
+				  struct atomisp_css_params *css_param);
 void atomisp_free_css_parameters(struct atomisp_css_params *css_param);
 
 void atomisp_handle_parameter_and_buffer(struct atomisp_video_pipe *pipe);

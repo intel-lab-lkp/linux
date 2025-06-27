@@ -12,8 +12,8 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/mm.h>
-#include <linux/highmem.h>	/* for kmap */
-#include <linux/io.h>		/* for page_to_phys */
+#include <linux/highmem.h> /* for kmap */
+#include <linux/io.h> /* for page_to_phys */
 #include <linux/sysfs.h>
 
 #include "hmm/hmm.h"
@@ -57,8 +57,8 @@ static ssize_t bo_show(struct device *dev, struct device_attribute *attr,
 		if ((active && (bo->status & HMM_BO_ALLOCED)) ||
 		    (!active && !(bo->status & HMM_BO_ALLOCED))) {
 			ret = scnprintf(buf + index1, PAGE_SIZE - index1,
-					"%c %d\n",
-					hmm_bo_type_string[bo->type], bo->pgnr);
+					"%c %d\n", hmm_bo_type_string[bo->type],
+					bo->pgnr);
 
 			total[bo->type] += bo->pgnr;
 			count[bo->type]++;
@@ -96,26 +96,22 @@ static ssize_t free_bo_show(struct device *dev, struct device_attribute *attr,
 	return bo_show(dev, attr, buf, &bo_device.entire_bo_list, false);
 }
 
-
 static DEVICE_ATTR_RO(active_bo);
 static DEVICE_ATTR_RO(free_bo);
 
-static struct attribute *sysfs_attrs_ctrl[] = {
-	&dev_attr_active_bo.attr,
-	&dev_attr_free_bo.attr,
-	NULL
-};
+static struct attribute *sysfs_attrs_ctrl[] = { &dev_attr_active_bo.attr,
+						&dev_attr_free_bo.attr, NULL };
 
 static struct attribute_group atomisp_attribute_group[] = {
-	{.attrs = sysfs_attrs_ctrl },
+	{ .attrs = sysfs_attrs_ctrl },
 };
 
 int hmm_init(void)
 {
 	int ret;
 
-	ret = hmm_bo_device_init(&bo_device, &sh_mmu_mrfld,
-				 ISP_VM_START, ISP_VM_SIZE);
+	ret = hmm_bo_device_init(&bo_device, &sh_mmu_mrfld, ISP_VM_START,
+				 ISP_VM_SIZE);
 	if (ret)
 		dev_err(atomisp_dev, "hmm_bo_device_init failed.\n");
 
@@ -134,8 +130,8 @@ int hmm_init(void)
 		ret = sysfs_create_group(&atomisp_dev->kobj,
 					 atomisp_attribute_group);
 		if (ret)
-			dev_err(atomisp_dev,
-				"%s Failed to create sysfs\n", __func__);
+			dev_err(atomisp_dev, "%s Failed to create sysfs\n",
+				__func__);
 	}
 
 	return ret;
@@ -244,8 +240,7 @@ static inline int hmm_check_bo(struct hmm_buffer_object *bo, unsigned int ptr)
 	}
 
 	if (!hmm_bo_page_allocated(bo)) {
-		dev_err(atomisp_dev,
-			"buffer object has no page allocated.\n");
+		dev_err(atomisp_dev, "buffer object has no page allocated.\n");
 		return -EINVAL;
 	}
 
@@ -287,7 +282,7 @@ static int load_and_flush_by_kmap(ia_css_ptr virt, void *data,
 			bytes = 0;
 		}
 
-		virt += len;	/* update virt for next loop */
+		virt += len; /* update virt for next loop */
 
 		if (des) {
 			memcpy(des, src, len);
@@ -341,13 +336,11 @@ static int load_and_flush(ia_css_ptr virt, void *data, unsigned int bytes)
 int hmm_load(ia_css_ptr virt, void *data, unsigned int bytes)
 {
 	if (!virt) {
-		dev_warn(atomisp_dev,
-			"hmm_store: address is NULL\n");
+		dev_warn(atomisp_dev, "hmm_store: address is NULL\n");
 		return -EINVAL;
 	}
 	if (!data) {
-		dev_err(atomisp_dev,
-			"hmm_store: data is a NULL argument\n");
+		dev_err(atomisp_dev, "hmm_store: data is a NULL argument\n");
 		return -EINVAL;
 	}
 	return load_and_flush(virt, data, bytes);
@@ -368,13 +361,11 @@ int hmm_store(ia_css_ptr virt, const void *data, unsigned int bytes)
 	int ret;
 
 	if (!virt) {
-		dev_warn(atomisp_dev,
-			"hmm_store: address is NULL\n");
+		dev_warn(atomisp_dev, "hmm_store: address is NULL\n");
 		return -EINVAL;
 	}
 	if (!data) {
-		dev_err(atomisp_dev,
-			"hmm_store: data is a NULL argument\n");
+		dev_err(atomisp_dev, "hmm_store: data is a NULL argument\n");
 		return -EINVAL;
 	}
 

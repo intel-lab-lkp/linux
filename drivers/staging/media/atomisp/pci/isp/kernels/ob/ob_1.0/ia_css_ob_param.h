@@ -11,7 +11,7 @@
 #include "vmem.h"
 
 #define OBAREA_MASK_SIZE 64
-#define OBAREA_LENGTHBQ_INVERSE_SHIFT     12
+#define OBAREA_LENGTHBQ_INVERSE_SHIFT 12
 
 /* AREA_LENGTH_UNIT is dependent on NWAY, requires rewrite */
 #define AREA_LENGTH_UNIT BIT(12)

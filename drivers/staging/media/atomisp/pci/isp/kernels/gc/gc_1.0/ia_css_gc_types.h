@@ -11,18 +11,20 @@
 * CSS-API header file for Gamma Correction parameters.
 */
 
-#include "isp/kernels/ctc/ctc_1.0/ia_css_ctc_types.h"  /* FIXME: Needed for ia_css_vamem_type */
+#include "isp/kernels/ctc/ctc_1.0/ia_css_ctc_types.h" /* FIXME: Needed for ia_css_vamem_type */
 
 /* Fractional bits for GAMMA gain */
-#define IA_CSS_GAMMA_GAIN_K_SHIFT      13
+#define IA_CSS_GAMMA_GAIN_K_SHIFT 13
 
 /* Number of elements in the gamma table. */
-#define IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE_LOG2    10
-#define IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE         BIT(IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE_LOG2)
+#define IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE_LOG2 10
+#define IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE \
+	BIT(IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE_LOG2)
 
 /* Number of elements in the gamma table. */
-#define IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE_LOG2    8
-#define IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE         ((1U << IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE_LOG2) + 1)
+#define IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE_LOG2 8
+#define IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE \
+	((1U << IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE_LOG2) + 1)
 
 /* Gamma table, used for Y(Luma) Gamma Correction.
  *
@@ -82,7 +84,7 @@ struct ia_css_ce_config {
  *  ISP2: MACC2 is used.
  */
 struct ia_css_macc_config {
-	u8 exp;	/** Common exponent of ia_css_macc_table.
+	u8 exp; /** Common exponent of ia_css_macc_table.
 				u8.0, [0,13], default 1, ineffective 1 */
 };
 

@@ -6,7 +6,6 @@
 
 #include "system_global.h"
 
-
 #include "assert_support.h"
 #include "platform_support.h"
 #include "ia_css_isys.h"
@@ -25,14 +24,13 @@ void ia_css_isys_dma_channel_rmgr_uninit(void)
 	memset(&isys_dma_rsrc, 0, sizeof(isys_dma_rsrc_t));
 }
 
-bool ia_css_isys_dma_channel_rmgr_acquire(
-    isys2401_dma_ID_t	dma_id,
-    isys2401_dma_channel	*channel)
+bool ia_css_isys_dma_channel_rmgr_acquire(isys2401_dma_ID_t dma_id,
+					  isys2401_dma_channel *channel)
 {
 	bool retval = false;
-	isys2401_dma_channel	i;
-	isys2401_dma_channel	max_dma_channel;
-	isys_dma_rsrc_t		*cur_rsrc = NULL;
+	isys2401_dma_channel i;
+	isys2401_dma_channel max_dma_channel;
+	isys_dma_rsrc_t *cur_rsrc = NULL;
 
 	assert(dma_id < N_ISYS2401_DMA_ID);
 	assert(channel);
@@ -41,7 +39,8 @@ bool ia_css_isys_dma_channel_rmgr_acquire(
 	cur_rsrc = &isys_dma_rsrc[dma_id];
 
 	if (cur_rsrc->num_active < max_dma_channel) {
-		for (i = ISYS2401_DMA_CHANNEL_0; i < N_ISYS2401_DMA_CHANNEL; i++) {
+		for (i = ISYS2401_DMA_CHANNEL_0; i < N_ISYS2401_DMA_CHANNEL;
+		     i++) {
 			if (bitop_getbit(cur_rsrc->active_table, i) == 0) {
 				bitop_setbit(cur_rsrc->active_table, i);
 				*channel = i;
@@ -55,12 +54,11 @@ bool ia_css_isys_dma_channel_rmgr_acquire(
 	return retval;
 }
 
-void ia_css_isys_dma_channel_rmgr_release(
-    isys2401_dma_ID_t	dma_id,
-    isys2401_dma_channel	*channel)
+void ia_css_isys_dma_channel_rmgr_release(isys2401_dma_ID_t dma_id,
+					  isys2401_dma_channel *channel)
 {
-	isys2401_dma_channel	max_dma_channel;
-	isys_dma_rsrc_t		*cur_rsrc = NULL;
+	isys2401_dma_channel max_dma_channel;
+	isys_dma_rsrc_t *cur_rsrc = NULL;
 
 	assert(dma_id < N_ISYS2401_DMA_ID);
 	assert(channel);

@@ -13,10 +13,10 @@
 #include "sh_css_internal.h"
 
 #define MULTIPLE_PCS 0
-#define SUSPEND      0
-#define NOF_PCS      1
-#define RESUME_MASK  0x8
-#define STOP_MASK    0x0
+#define SUSPEND 0
+#define NOF_PCS 1
+#define RESUME_MASK 0x8
+#define STOP_MASK 0x0
 
 static bool pc_histogram_enabled;
 static struct sh_css_pc_histogram *isp_histogram;
@@ -24,14 +24,12 @@ static struct sh_css_pc_histogram *sp_histogram;
 
 struct sh_css_metrics sh_css_metrics;
 
-void
-sh_css_metrics_start_frame(void)
+void sh_css_metrics_start_frame(void)
 {
 	sh_css_metrics.frame_metrics.num_frames++;
 }
 
-static void
-clear_histogram(struct sh_css_pc_histogram *histogram)
+static void clear_histogram(struct sh_css_pc_histogram *histogram)
 {
 	unsigned int i;
 
@@ -44,14 +42,13 @@ clear_histogram(struct sh_css_pc_histogram *histogram)
 	}
 }
 
-void
-sh_css_metrics_enable_pc_histogram(bool enable)
+void sh_css_metrics_enable_pc_histogram(bool enable)
 {
 	pc_histogram_enabled = enable;
 }
 
-static void
-make_histogram(struct sh_css_pc_histogram *histogram, unsigned int length)
+static void make_histogram(struct sh_css_pc_histogram *histogram,
+			   unsigned int length)
 {
 	assert(histogram);
 
@@ -59,16 +56,15 @@ make_histogram(struct sh_css_pc_histogram *histogram, unsigned int length)
 		return;
 	if (histogram->run)
 		return;
-	histogram->run = kvmalloc(length * sizeof(*histogram->run),
-				  GFP_KERNEL);
+	histogram->run = kvmalloc(length * sizeof(*histogram->run), GFP_KERNEL);
 	if (!histogram->run)
 		return;
-	histogram->stall = kvmalloc(length * sizeof(*histogram->stall),
-				    GFP_KERNEL);
+	histogram->stall =
+		kvmalloc(length * sizeof(*histogram->stall), GFP_KERNEL);
 	if (!histogram->stall)
 		return;
-	histogram->msink = kvmalloc(length * sizeof(*histogram->msink),
-				    GFP_KERNEL);
+	histogram->msink =
+		kvmalloc(length * sizeof(*histogram->msink), GFP_KERNEL);
 	if (!histogram->msink)
 		return;
 
@@ -76,9 +72,8 @@ make_histogram(struct sh_css_pc_histogram *histogram, unsigned int length)
 	clear_histogram(histogram);
 }
 
-static void
-insert_binary_metrics(struct sh_css_binary_metrics **l,
-		      struct sh_css_binary_metrics *metrics)
+static void insert_binary_metrics(struct sh_css_binary_metrics **l,
+				  struct sh_css_binary_metrics *metrics)
 {
 	assert(l);
 	assert(*l);
@@ -92,8 +87,7 @@ insert_binary_metrics(struct sh_css_binary_metrics **l,
 	metrics->next = NULL;
 }
 
-void
-sh_css_metrics_start_binary(struct sh_css_binary_metrics *metrics)
+void sh_css_metrics_start_binary(struct sh_css_binary_metrics *metrics)
 {
 	assert(metrics);
 
@@ -107,14 +101,11 @@ sh_css_metrics_start_binary(struct sh_css_binary_metrics *metrics)
 	insert_binary_metrics(&sh_css_metrics.binary_metrics, metrics);
 }
 
-void
-sh_css_metrics_sample_pcs(void)
+void sh_css_metrics_sample_pcs(void)
 {
 	bool stall;
 	unsigned int pc;
 	unsigned int msink;
-
-
 
 	if (!pc_histogram_enabled)
 		return;

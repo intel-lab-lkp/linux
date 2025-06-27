@@ -18,13 +18,13 @@
  *  ISP2: DE2 is used.
  */
 struct ia_css_ecd_config {
-	u16 zip_strength;	/** Strength of zipper reduction.
+	u16 zip_strength; /** Strength of zipper reduction.
 				u0.13, [0,8191],
 				default 5489(0.67), ineffective 0 */
-	u16 fc_strength;	/** Strength of false color reduction.
+	u16 fc_strength; /** Strength of false color reduction.
 				u0.13, [0,8191],
 				default 8191(almost 1.0), ineffective 0 */
-	u16 fc_debias;	/** Prevent color change
+	u16 fc_debias; /** Prevent color change
 				     on noise or Gr/Gb imbalance.
 				u0.13, [0,8191],
 				default 0, ineffective 0 */

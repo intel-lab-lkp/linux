@@ -17,9 +17,7 @@
 
  \return none, if(cnd) enable(SP[ID].irq) else disable(SP[ID].irq)
  */
-void cnd_sp_irq_enable(
-    const sp_ID_t		ID,
-    const bool			cnd);
+void cnd_sp_irq_enable(const sp_ID_t ID, const bool cnd);
 
 /*! Write to the status and control register of SP[ID]
 
@@ -29,10 +27,8 @@ void cnd_sp_irq_enable(
 
  \return none, SP[ID].sc[reg] = value
  */
-STORAGE_CLASS_SP_H void sp_ctrl_store(
-    const sp_ID_t		ID,
-    const hrt_address	reg,
-    const hrt_data		value);
+STORAGE_CLASS_SP_H void sp_ctrl_store(const sp_ID_t ID, const hrt_address reg,
+				      const hrt_data value);
 
 /*! Read from the status and control register of SP[ID]
 
@@ -42,9 +38,8 @@ STORAGE_CLASS_SP_H void sp_ctrl_store(
 
  \return SP[ID].sc[reg]
  */
-STORAGE_CLASS_SP_H hrt_data sp_ctrl_load(
-    const sp_ID_t		ID,
-    const hrt_address	reg);
+STORAGE_CLASS_SP_H hrt_data sp_ctrl_load(const sp_ID_t ID,
+					 const hrt_address reg);
 
 /*! Get the status of a bitfield in the control register of SP[ID]
 
@@ -54,10 +49,8 @@ STORAGE_CLASS_SP_H hrt_data sp_ctrl_load(
 
  \return  (SP[ID].sc[reg] & (1<<bit)) != 0
  */
-STORAGE_CLASS_SP_H bool sp_ctrl_getbit(
-    const sp_ID_t		ID,
-    const hrt_address	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_SP_H bool sp_ctrl_getbit(const sp_ID_t ID, const hrt_address reg,
+				       const unsigned int bit);
 
 /*! Set a bitfield in the control register of SP[ID]
 
@@ -67,10 +60,8 @@ STORAGE_CLASS_SP_H bool sp_ctrl_getbit(
 
  \return none, SP[ID].sc[reg] |= (1<<bit)
  */
-STORAGE_CLASS_SP_H void sp_ctrl_setbit(
-    const sp_ID_t		ID,
-    const hrt_address	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_SP_H void sp_ctrl_setbit(const sp_ID_t ID, const hrt_address reg,
+				       const unsigned int bit);
 
 /*! Clear a bitfield in the control register of SP[ID]
 
@@ -80,10 +71,9 @@ STORAGE_CLASS_SP_H void sp_ctrl_setbit(
 
  \return none, SP[ID].sc[reg] &= ~(1<<bit)
  */
-STORAGE_CLASS_SP_H void sp_ctrl_clearbit(
-    const sp_ID_t		ID,
-    const hrt_address	reg,
-    const unsigned int	bit);
+STORAGE_CLASS_SP_H void sp_ctrl_clearbit(const sp_ID_t ID,
+					 const hrt_address reg,
+					 const unsigned int bit);
 
 /*! Write to the DMEM of SP[ID]
 
@@ -94,11 +84,8 @@ STORAGE_CLASS_SP_H void sp_ctrl_clearbit(
 
  \return none, SP[ID].dmem[addr...addr+size-1] = data
  */
-STORAGE_CLASS_SP_H void sp_dmem_store(
-    const sp_ID_t		ID,
-    hrt_address		addr,
-    const void			*data,
-    const size_t		size);
+STORAGE_CLASS_SP_H void sp_dmem_store(const sp_ID_t ID, hrt_address addr,
+				      const void *data, const size_t size);
 
 /*! Read from the DMEM of SP[ID]
 
@@ -109,11 +96,8 @@ STORAGE_CLASS_SP_H void sp_dmem_store(
 
  \return none, data = SP[ID].dmem[addr...addr+size-1]
  */
-STORAGE_CLASS_SP_H void sp_dmem_load(
-    const sp_ID_t		ID,
-    const hrt_address	addr,
-    void			*data,
-    const size_t		size);
+STORAGE_CLASS_SP_H void sp_dmem_load(const sp_ID_t ID, const hrt_address addr,
+				     void *data, const size_t size);
 
 /*! Write a 8-bit datum to the DMEM of SP[ID]
 
@@ -124,10 +108,8 @@ STORAGE_CLASS_SP_H void sp_dmem_load(
 
  \return none, SP[ID].dmem[addr...addr+size-1] = data
  */
-STORAGE_CLASS_SP_H void sp_dmem_store_uint8(
-    const sp_ID_t		ID,
-    hrt_address		addr,
-    const uint8_t		data);
+STORAGE_CLASS_SP_H void sp_dmem_store_uint8(const sp_ID_t ID, hrt_address addr,
+					    const uint8_t data);
 
 /*! Write a 16-bit datum to the DMEM of SP[ID]
 
@@ -138,10 +120,8 @@ STORAGE_CLASS_SP_H void sp_dmem_store_uint8(
 
  \return none, SP[ID].dmem[addr...addr+size-1] = data
  */
-STORAGE_CLASS_SP_H void sp_dmem_store_uint16(
-    const sp_ID_t		ID,
-    hrt_address		addr,
-    const uint16_t		data);
+STORAGE_CLASS_SP_H void sp_dmem_store_uint16(const sp_ID_t ID, hrt_address addr,
+					     const uint16_t data);
 
 /*! Write a 32-bit datum to the DMEM of SP[ID]
 
@@ -152,10 +132,8 @@ STORAGE_CLASS_SP_H void sp_dmem_store_uint16(
 
  \return none, SP[ID].dmem[addr...addr+size-1] = data
  */
-STORAGE_CLASS_SP_H void sp_dmem_store_uint32(
-    const sp_ID_t		ID,
-    hrt_address		addr,
-    const uint32_t		data);
+STORAGE_CLASS_SP_H void sp_dmem_store_uint32(const sp_ID_t ID, hrt_address addr,
+					     const uint32_t data);
 
 /*! Load a 8-bit datum from the DMEM of SP[ID]
 
@@ -166,9 +144,8 @@ STORAGE_CLASS_SP_H void sp_dmem_store_uint32(
 
  \return none, data = SP[ID].dmem[addr...addr+size-1]
  */
-STORAGE_CLASS_SP_H uint8_t sp_dmem_load_uint8(
-    const sp_ID_t		ID,
-    const hrt_address	addr);
+STORAGE_CLASS_SP_H uint8_t sp_dmem_load_uint8(const sp_ID_t ID,
+					      const hrt_address addr);
 
 /*! Load a 16-bit datum from the DMEM of SP[ID]
 
@@ -179,9 +156,8 @@ STORAGE_CLASS_SP_H uint8_t sp_dmem_load_uint8(
 
  \return none, data = SP[ID].dmem[addr...addr+size-1]
  */
-STORAGE_CLASS_SP_H uint16_t sp_dmem_load_uint16(
-    const sp_ID_t		ID,
-    const hrt_address	addr);
+STORAGE_CLASS_SP_H uint16_t sp_dmem_load_uint16(const sp_ID_t ID,
+						const hrt_address addr);
 
 /*! Load a 32-bit datum from the DMEM of SP[ID]
 
@@ -192,8 +168,7 @@ STORAGE_CLASS_SP_H uint16_t sp_dmem_load_uint16(
 
  \return none, data = SP[ID].dmem[addr...addr+size-1]
  */
-STORAGE_CLASS_SP_H uint32_t sp_dmem_load_uint32(
-    const sp_ID_t		ID,
-    const hrt_address	addr);
+STORAGE_CLASS_SP_H uint32_t sp_dmem_load_uint32(const sp_ID_t ID,
+						const hrt_address addr);
 
 #endif /* __SP_PUBLIC_H_INCLUDED__ */

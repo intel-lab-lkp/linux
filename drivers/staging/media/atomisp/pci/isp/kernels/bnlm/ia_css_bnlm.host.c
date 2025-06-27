@@ -12,14 +12,15 @@
 #endif
 #include <assert_support.h>
 
-#define BNLM_DIV_LUT_SIZE	(12)
+#define BNLM_DIV_LUT_SIZE (12)
 static const s32 div_lut_nearests[BNLM_DIV_LUT_SIZE] = {
 	0, 454, 948, 1484, 2070, 2710, 3412, 4184, 5035, 5978, 7025, 8191
 };
 
-static const s32 div_lut_slopes[BNLM_DIV_LUT_SIZE] = {
-	-7760, -6960, -6216, -5536, -4912, -4344, -3832, -3360, -2936, -2552, -2208, -2208
-    };
+static const s32 div_lut_slopes[BNLM_DIV_LUT_SIZE] = { -7760, -6960, -6216,
+						       -5536, -4912, -4344,
+						       -3832, -3360, -2936,
+						       -2552, -2208, -2208 };
 
 static const s32 div_lut_intercepts[BNLM_DIV_LUT_SIZE] = {
 	8184, 7752, 7336, 6928, 6536, 6152, 5776, 5416, 5064, 4728, 4408, 4408
@@ -32,9 +33,8 @@ static const s32 div_lut_intercepts[BNLM_DIV_LUT_SIZE] = {
  *	lut_val	:	array containing output values related to lut_thr
  *	lut_size:	Size of lut_val array
  */
-static inline void
-bnlm_lut_encode(struct bnlm_lut *lut, const int32_t *lut_thr,
-		const s32 *lut_val, const uint32_t lut_size)
+static inline void bnlm_lut_encode(struct bnlm_lut *lut, const int32_t *lut_thr,
+				   const s32 *lut_val, const uint32_t lut_size)
 {
 	u32 blk, i;
 	const u32 block_size = 16;
@@ -85,30 +85,31 @@ bnlm_lut_encode(struct bnlm_lut *lut, const int32_t *lut_thr,
  * - Encodes BNLM public parameters into VMEM parameters
  * - Generates VMEM parameters which will needed internally ISP
  */
-void
-ia_css_bnlm_vmem_encode(
-    struct bnlm_vmem_params *to,
-    const struct ia_css_bnlm_config *from,
-    size_t size)
+void ia_css_bnlm_vmem_encode(struct bnlm_vmem_params *to,
+			     const struct ia_css_bnlm_config *from, size_t size)
 {
 	int i;
 	(void)size;
 
 	/* Initialize LUTs in VMEM parameters */
-	bnlm_lut_encode(&to->mu_root_lut, from->mu_root_lut_thr, from->mu_root_lut_val,
-			16);
+	bnlm_lut_encode(&to->mu_root_lut, from->mu_root_lut_thr,
+			from->mu_root_lut_val, 16);
 	bnlm_lut_encode(&to->sad_norm_lut, from->sad_norm_lut_thr,
 			from->sad_norm_lut_val, 16);
 	bnlm_lut_encode(&to->sig_detail_lut, from->sig_detail_lut_thr,
 			from->sig_detail_lut_val, 16);
-	bnlm_lut_encode(&to->sig_rad_lut, from->sig_rad_lut_thr, from->sig_rad_lut_val,
+	bnlm_lut_encode(&to->sig_rad_lut, from->sig_rad_lut_thr,
+			from->sig_rad_lut_val, 16);
+	bnlm_lut_encode(&to->rad_pow_lut, from->rad_pow_lut_thr,
+			from->rad_pow_lut_val, 16);
+	bnlm_lut_encode(&to->nl_0_lut, from->nl_0_lut_thr, from->nl_0_lut_val,
 			16);
-	bnlm_lut_encode(&to->rad_pow_lut, from->rad_pow_lut_thr, from->rad_pow_lut_val,
+	bnlm_lut_encode(&to->nl_1_lut, from->nl_1_lut_thr, from->nl_1_lut_val,
 			16);
-	bnlm_lut_encode(&to->nl_0_lut, from->nl_0_lut_thr, from->nl_0_lut_val, 16);
-	bnlm_lut_encode(&to->nl_1_lut, from->nl_1_lut_thr, from->nl_1_lut_val, 16);
-	bnlm_lut_encode(&to->nl_2_lut, from->nl_2_lut_thr, from->nl_2_lut_val, 16);
-	bnlm_lut_encode(&to->nl_3_lut, from->nl_3_lut_thr, from->nl_3_lut_val, 16);
+	bnlm_lut_encode(&to->nl_2_lut, from->nl_2_lut_thr, from->nl_2_lut_val,
+			16);
+	bnlm_lut_encode(&to->nl_3_lut, from->nl_3_lut_thr, from->nl_3_lut_val,
+			16);
 
 	/* Initialize arrays in VMEM parameters */
 	memset(to->nl_th, 0, sizeof(to->nl_th));
@@ -136,11 +137,8 @@ ia_css_bnlm_vmem_encode(
 }
 
 /* - Encodes BNLM public parameters into DMEM parameters */
-void
-ia_css_bnlm_encode(
-    struct bnlm_dmem_params *to,
-    const struct ia_css_bnlm_config *from,
-    size_t size)
+void ia_css_bnlm_encode(struct bnlm_dmem_params *to,
+			const struct ia_css_bnlm_config *from, size_t size)
 {
 	(void)size;
 	to->rad_enable = from->rad_enable;
@@ -156,23 +154,24 @@ ia_css_bnlm_encode(
 }
 
 /* Prints debug traces for BNLM public parameters */
-void
-ia_css_bnlm_debug_trace(
-    const struct ia_css_bnlm_config *config,
-    unsigned int level)
+void ia_css_bnlm_debug_trace(const struct ia_css_bnlm_config *config,
+			     unsigned int level)
 {
 	if (!config)
 		return;
 
 #ifndef IA_CSS_NO_DEBUG
 	ia_css_debug_dtrace(level, "BNLM:\n");
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "rad_enable", config->rad_enable);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "rad_enable",
+			    config->rad_enable);
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "rad_x_origin",
 			    config->rad_x_origin);
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "rad_y_origin",
 			    config->rad_y_origin);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "avg_min_th", config->avg_min_th);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "max_min_th", config->max_min_th);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "avg_min_th",
+			    config->avg_min_th);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "max_min_th",
+			    config->max_min_th);
 
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "exp_coeff_a",
 			    config->exp_coeff_a);

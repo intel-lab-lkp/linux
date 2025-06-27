@@ -24,7 +24,7 @@ struct sh_css_isp_sc_params {
  *     Max grid cell bqs to support the shading table centerting: N = 32
  *     CEIL_DIV(N-1, ISP_SLICE_NELEMS) = CEIL_DIV(31, 4) = 8
  */
-#define SH_CSS_SC_INTERPED_GAIN_HOR_SLICE_TIMES   8
+#define SH_CSS_SC_INTERPED_GAIN_HOR_SLICE_TIMES 8
 
 struct sh_css_isp_sc_isp_config {
 	u32 interped_gain_hor_slice_bqs[SH_CSS_SC_INTERPED_GAIN_HOR_SLICE_TIMES];

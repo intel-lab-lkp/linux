@@ -8,12 +8,10 @@
 #include "assert_support.h"
 #include "ia_css_queue.h" /* sp2host_dequeue_irq_event() */
 #include "ia_css_eventq.h"
-#include "ia_css_event.h"	/* ia_css_event_encode()
+#include "ia_css_event.h" /* ia_css_event_encode()
 				ia_css_event_decode()
 				*/
-int ia_css_eventq_recv(
-    ia_css_queue_t *eventq_handle,
-    uint8_t *payload)
+int ia_css_eventq_recv(ia_css_queue_t *eventq_handle, uint8_t *payload)
 {
 	u32 sp_event;
 	int error;
@@ -31,12 +29,9 @@ int ia_css_eventq_recv(
  * @brief The Host sends the event to the SP.
  * Refer to "sh_css_sp.h" for details.
  */
-int ia_css_eventq_send(
-    ia_css_queue_t *eventq_handle,
-    u8 evt_id,
-    u8 evt_payload_0,
-    u8 evt_payload_1,
-    uint8_t evt_payload_2)
+int ia_css_eventq_send(ia_css_queue_t *eventq_handle, u8 evt_id,
+		       u8 evt_payload_0, u8 evt_payload_1,
+		       uint8_t evt_payload_2)
 {
 	u8 tmp[4];
 	u32 sw_event;
@@ -53,7 +48,7 @@ int ia_css_eventq_send(
 	ia_css_event_encode(tmp, 4, &sw_event);
 
 	/* queue the software event (busy-waiting) */
-	for ( ; ; ) {
+	for (;;) {
 		error = ia_css_queue_enqueue(eventq_handle, sw_event);
 		if (error != -ENOBUFS) {
 			/* We were able to successfully send the event

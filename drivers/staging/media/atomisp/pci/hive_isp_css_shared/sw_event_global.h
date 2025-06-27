@@ -20,8 +20,6 @@ enum ia_css_psys_sw_event {
 	IA_CSS_PSYS_SW_EVENT_STAGE_ENABLE_DISABLE /* for extension state change enable/disable */
 };
 
-enum ia_css_isys_sw_event {
-	IA_CSS_ISYS_SW_EVENT_EVENT_DEQUEUED
-};
+enum ia_css_isys_sw_event { IA_CSS_ISYS_SW_EVENT_EVENT_DEQUEUED };
 
 #endif /* __SW_EVENT_GLOBAL_H_INCLUDED__ */

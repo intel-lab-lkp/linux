@@ -13,9 +13,8 @@
 #include "ia_css_binary.h"
 
 /* MW: Table look-up ??? */
-unsigned int ia_css_util_input_format_bpp(
-    enum atomisp_input_format format,
-    bool two_ppc)
+unsigned int ia_css_util_input_format_bpp(enum atomisp_input_format format,
+					  bool two_ppc)
 {
 	unsigned int rval = 0;
 
@@ -76,8 +75,7 @@ unsigned int ia_css_util_input_format_bpp(
 	return rval;
 }
 
-int ia_css_util_check_vf_info(
-    const struct ia_css_frame_info *const info)
+int ia_css_util_check_vf_info(const struct ia_css_frame_info *const info)
 {
 	int err;
 	unsigned int max_vf_width;
@@ -92,9 +90,8 @@ int ia_css_util_check_vf_info(
 	return 0;
 }
 
-int ia_css_util_check_vf_out_info(
-    const struct ia_css_frame_info *const out_info,
-    const struct ia_css_frame_info *const vf_info)
+int ia_css_util_check_vf_out_info(const struct ia_css_frame_info *const out_info,
+				  const struct ia_css_frame_info *const vf_info)
 {
 	int err;
 
@@ -124,7 +121,8 @@ bool ia_css_util_resolution_is_zero(const struct ia_css_resolution resolution)
 
 int ia_css_util_check_res(unsigned int width, unsigned int height)
 {
-	const struct ia_css_resolution resolution = { .width = width, .height = height };
+	const struct ia_css_resolution resolution = { .width = width,
+						      .height = height };
 
 	if (ia_css_util_resolution_is_zero(resolution))
 		return -EINVAL;
@@ -152,18 +150,17 @@ bool ia_css_util_is_input_format_raw(enum atomisp_input_format format)
 bool ia_css_util_is_input_format_yuv(enum atomisp_input_format format)
 {
 	return format == ATOMISP_INPUT_FORMAT_YUV420_8_LEGACY ||
-	       format == ATOMISP_INPUT_FORMAT_YUV420_8  ||
+	       format == ATOMISP_INPUT_FORMAT_YUV420_8 ||
 	       format == ATOMISP_INPUT_FORMAT_YUV420_10 ||
 	       format == ATOMISP_INPUT_FORMAT_YUV420_16 ||
-	       format == ATOMISP_INPUT_FORMAT_YUV422_8  ||
+	       format == ATOMISP_INPUT_FORMAT_YUV422_8 ||
 	       format == ATOMISP_INPUT_FORMAT_YUV422_10 ||
 	       format == ATOMISP_INPUT_FORMAT_YUV422_16;
 }
 
 int ia_css_util_check_input(
-    const struct ia_css_stream_config *const stream_config,
-    bool must_be_raw,
-    bool must_be_yuv)
+	const struct ia_css_stream_config *const stream_config,
+	bool must_be_raw, bool must_be_yuv)
 {
 	assert(stream_config);
 
@@ -173,12 +170,12 @@ int ia_css_util_check_input(
 	if (stream_config->input_config.effective_res.width == 0 ||
 	    stream_config->input_config.effective_res.height == 0)
 		return -EINVAL;
-	if (must_be_raw &&
-	    !ia_css_util_is_input_format_raw(stream_config->input_config.format))
+	if (must_be_raw && !ia_css_util_is_input_format_raw(
+				   stream_config->input_config.format))
 		return -EINVAL;
 
-	if (must_be_yuv &&
-	    !ia_css_util_is_input_format_yuv(stream_config->input_config.format))
+	if (must_be_yuv && !ia_css_util_is_input_format_yuv(
+				   stream_config->input_config.format))
 		return -EINVAL;
 
 	return 0;

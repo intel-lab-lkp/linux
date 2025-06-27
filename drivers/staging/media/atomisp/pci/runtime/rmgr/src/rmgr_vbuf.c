@@ -27,16 +27,16 @@ static struct ia_css_rmgr_vbuf_pool refpool;
  * @brief VBUF resource pool - writepool
  */
 static struct ia_css_rmgr_vbuf_pool writepool = {
-	.copy_on_write	= true,
+	.copy_on_write = true,
 };
 
 /*
  * @brief VBUF resource pool - hmmbufferpool
  */
 static struct ia_css_rmgr_vbuf_pool hmmbufferpool = {
-	.copy_on_write	= true,
-	.recycle	= true,
-	.size		= 32,
+	.copy_on_write = true,
+	.recycle = true,
+	.size = 32,
 };
 
 struct ia_css_rmgr_vbuf_pool *vbuf_ref = &refpool;
@@ -80,8 +80,9 @@ void ia_css_rmgr_refcount_retain_vbuf(struct ia_css_rmgr_vbuf_handle **handle)
 		 * this is an error handle and report it.
 		 */
 		if (!*handle) {
-			ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR,
-					    "ia_css_i_host_refcount_retain_vbuf() failed to find empty slot!\n");
+			ia_css_debug_dtrace(
+				IA_CSS_DEBUG_ERROR,
+				"ia_css_i_host_refcount_retain_vbuf() failed to find empty slot!\n");
 			return;
 		}
 		(*handle)->vptr = h->vptr;
@@ -98,7 +99,8 @@ void ia_css_rmgr_refcount_retain_vbuf(struct ia_css_rmgr_vbuf_handle **handle)
 void ia_css_rmgr_refcount_release_vbuf(struct ia_css_rmgr_vbuf_handle **handle)
 {
 	if ((!handle) || ((*handle) == NULL) || (((*handle)->count) == 0)) {
-		ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR, "%s invalid arguments!\n", __func__);
+		ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR,
+				    "%s invalid arguments!\n", __func__);
 		return;
 	}
 	/* decrease reference count */
@@ -128,9 +130,7 @@ int ia_css_rmgr_init_vbuf(struct ia_css_rmgr_vbuf_pool *pool)
 	/* initialize the recycle pool if used */
 	if (pool->recycle && pool->size) {
 		/* allocate memory for storing the handles */
-		bytes_needed =
-		    sizeof(void *) *
-		    pool->size;
+		bytes_needed = sizeof(void *) * pool->size;
 		pool->handles = kvmalloc(bytes_needed, GFP_KERNEL);
 		if (pool->handles)
 			memset(pool->handles, 0, bytes_needed);
@@ -155,21 +155,24 @@ void ia_css_rmgr_uninit_vbuf(struct ia_css_rmgr_vbuf_pool *pool)
 
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "%s\n", __func__);
 	if (!pool) {
-		ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR, "%s NULL argument\n", __func__);
+		ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR, "%s NULL argument\n",
+				    __func__);
 		return;
 	}
 	if (pool->handles) {
 		/* free the hmm buffers */
 		for (i = 0; i < pool->size; i++) {
 			if (pool->handles[i]) {
-				ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
-						    "   freeing/releasing %x (count=%d)\n",
-						    pool->handles[i]->vptr,
-						    pool->handles[i]->count);
+				ia_css_debug_dtrace(
+					IA_CSS_DEBUG_TRACE,
+					"   freeing/releasing %x (count=%d)\n",
+					pool->handles[i]->vptr,
+					pool->handles[i]->count);
 				/* free memory */
 				hmm_free(pool->handles[i]->vptr);
 				/* remove from refcount admin */
-				ia_css_rmgr_refcount_release_vbuf(&pool->handles[i]);
+				ia_css_rmgr_refcount_release_vbuf(
+					&pool->handles[i]);
 			}
 		}
 		/* now free the pool handles list */
@@ -184,9 +187,8 @@ void ia_css_rmgr_uninit_vbuf(struct ia_css_rmgr_vbuf_pool *pool)
  * @param pool		The pointer to the pool
  * @param handle	The pointer to the handle
  */
-static
-void rmgr_push_handle(struct ia_css_rmgr_vbuf_pool *pool,
-		      struct ia_css_rmgr_vbuf_handle **handle)
+static void rmgr_push_handle(struct ia_css_rmgr_vbuf_pool *pool,
+			     struct ia_css_rmgr_vbuf_handle **handle)
 {
 	u32 i;
 	bool success = false;
@@ -212,9 +214,8 @@ void rmgr_push_handle(struct ia_css_rmgr_vbuf_pool *pool,
  * @param pool		The pointer to the pool
  * @param handle	The pointer to the handle
  */
-static
-void rmgr_pop_handle(struct ia_css_rmgr_vbuf_pool *pool,
-		     struct ia_css_rmgr_vbuf_handle **handle)
+static void rmgr_pop_handle(struct ia_css_rmgr_vbuf_pool *pool,
+			    struct ia_css_rmgr_vbuf_handle **handle)
 {
 	u32 i;
 

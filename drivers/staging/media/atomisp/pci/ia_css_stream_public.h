@@ -26,9 +26,9 @@
  */
 enum ia_css_input_mode {
 	IA_CSS_INPUT_MODE_SENSOR, /** data from sensor */
-	IA_CSS_INPUT_MODE_FIFO,   /** data from input-fifo */
-	IA_CSS_INPUT_MODE_TPG,    /** data from test-pattern generator */
-	IA_CSS_INPUT_MODE_PRBS,   /** data from pseudo-random bit stream */
+	IA_CSS_INPUT_MODE_FIFO, /** data from input-fifo */
+	IA_CSS_INPUT_MODE_TPG, /** data from test-pattern generator */
+	IA_CSS_INPUT_MODE_PRBS, /** data from pseudo-random bit stream */
 	IA_CSS_INPUT_MODE_MEMORY, /** data from a frame in memory */
 	IA_CSS_INPUT_MODE_BUFFERED_SENSOR /** data is sent through mipi buffer */
 };
@@ -38,9 +38,10 @@ enum ia_css_input_mode {
 struct ia_css_mipi_buffer_config {
 	unsigned int size_mem_words; /** The frame size in the system memory
 					  words (32B) */
-	bool contiguous;	     /** Allocated memory physically
+	bool contiguous; /** Allocated memory physically
 					  contiguously or not. \deprecated{Will be false always.}*/
-	unsigned int nof_mipi_buffers; /** The number of MIPI buffers required for this
+	unsigned int
+		nof_mipi_buffers; /** The number of MIPI buffers required for this
 					stream */
 };
 
@@ -55,7 +56,7 @@ enum {
  *  multiple of this in one virtual channel.
  */
 struct ia_css_stream_isys_stream_config {
-	struct ia_css_resolution  input_res; /** Resolution of input data */
+	struct ia_css_resolution input_res; /** Resolution of input data */
 	enum atomisp_input_format format; /** Format of input stream. This data
 					       format will be mapped to MIPI data
 					       type internally. */
@@ -66,8 +67,8 @@ struct ia_css_stream_isys_stream_config {
 };
 
 struct ia_css_stream_input_config {
-	struct ia_css_resolution  input_res; /** Resolution of input data */
-	struct ia_css_resolution  effective_res; /** Resolution of input data.
+	struct ia_css_resolution input_res; /** Resolution of input data */
+	struct ia_css_resolution effective_res; /** Resolution of input data.
 							Used for CSS 2400/1 System and deprecated for other
 							systems (replaced by input_effective_res in
 							ia_css_pipe_config) */
@@ -81,12 +82,12 @@ struct ia_css_stream_input_config {
  *  CSS. This is used to program the CSS hardware.
  */
 struct ia_css_stream_config {
-	enum ia_css_input_mode    mode; /** Input mode */
+	enum ia_css_input_mode mode; /** Input mode */
 	union {
-		struct ia_css_input_port  port; /** Port, for sensor only. */
+		struct ia_css_input_port port; /** Port, for sensor only. */
 		struct ia_css_prbs_config prbs; /** PRBS configuration */
 	} source; /** Source of input data */
-	unsigned int	      channel_id; /** Channel on which input data
+	unsigned int channel_id; /** Channel on which input data
 						   will arrive. Use this field
 						   to specify virtual channel id.
 						   Valid values are: 0, 1, 2, 3 */
@@ -103,7 +104,8 @@ struct ia_css_stream_config {
 	unsigned int sensor_binning_factor; /** Binning factor used by sensor
 						 to produce image data. This is
 						 used for shading correction. */
-	unsigned int pixels_per_clock; /** Number of pixels per clock, which can be
+	unsigned int
+		pixels_per_clock; /** Number of pixels per clock, which can be
 					    1, 2 or 4. */
 	bool online; /** offline will activate RAW copy on SP, use this for
 			  continuous capture. */
@@ -121,7 +123,7 @@ struct ia_css_stream_config {
 	struct ia_css_mipi_buffer_config
 		mipi_buffer_config; /** mipi buffer configuration */
 	struct ia_css_metadata_config
-		metadata_config;     /** Metadata configuration. */
+		metadata_config; /** Metadata configuration. */
 	bool ia_css_enable_raw_buffer_locking; /** Enable Raw Buffer Locking for HALv3 Support */
 	bool lock_all;
 	/** Lock all RAW buffers (true) or lock only buffers processed by
@@ -166,11 +168,9 @@ void ia_css_stream_config_defaults(struct ia_css_stream_config *stream_config);
 *
 * This function will create a stream with a given configuration and given pipes.
 */
-int
-ia_css_stream_create(const struct ia_css_stream_config *stream_config,
-		     int num_pipes,
-		     struct ia_css_pipe *pipes[],
-		     struct ia_css_stream **stream);
+int ia_css_stream_create(const struct ia_css_stream_config *stream_config,
+			 int num_pipes, struct ia_css_pipe *pipes[],
+			 struct ia_css_stream **stream);
 
 /* @brief Destroys a stream
  * @param[in]	stream The stream.
@@ -178,8 +178,7 @@ ia_css_stream_create(const struct ia_css_stream_config *stream_config,
  *
  * This function will destroy a given stream.
  */
-int
-ia_css_stream_destroy(struct ia_css_stream *stream);
+int ia_css_stream_destroy(struct ia_css_stream *stream);
 
 /* @brief Provides information about a stream
  * @param[in]	stream The stream.
@@ -188,10 +187,8 @@ ia_css_stream_destroy(struct ia_css_stream *stream);
  *
  * This function will destroy a given stream.
  */
-int
-ia_css_stream_get_info(const struct ia_css_stream *stream,
-		       struct ia_css_stream_info *stream_info);
-
+int ia_css_stream_get_info(const struct ia_css_stream *stream,
+			   struct ia_css_stream_info *stream_info);
 
 /* @brief Starts the stream.
  * @param[in]	stream The stream.
@@ -203,8 +200,7 @@ ia_css_stream_get_info(const struct ia_css_stream *stream,
  * NOTE: this function will only send start event to corresponding
  * thread and will not start SP any more.
  */
-int
-ia_css_stream_start(struct ia_css_stream *stream);
+int ia_css_stream_start(struct ia_css_stream *stream);
 
 /* @brief Stop the stream.
  * @param[in]	stream The stream.
@@ -213,8 +209,7 @@ ia_css_stream_start(struct ia_css_stream *stream);
  * NOTE: this function will send stop event to pipes belong to this
  * stream but will not terminate threads.
  */
-int
-ia_css_stream_stop(struct ia_css_stream *stream);
+int ia_css_stream_stop(struct ia_css_stream *stream);
 
 /* @brief Check if a stream has stopped
  * @param[in]	stream The stream.
@@ -222,8 +217,7 @@ ia_css_stream_stop(struct ia_css_stream *stream);
  *
  * This function will check if the stream has stopped and return the correspondent boolean flag.
  */
-bool
-ia_css_stream_has_stopped(struct ia_css_stream *stream);
+bool ia_css_stream_has_stopped(struct ia_css_stream *stream);
 
 /* @brief	destroy a stream according to the stream seed previosly saved in the seed array.
  * @param[in]	stream The stream.
@@ -231,8 +225,7 @@ ia_css_stream_has_stopped(struct ia_css_stream *stream);
  *
  * Destroy the stream and all the pipes related to it.
  */
-int
-ia_css_stream_unload(struct ia_css_stream *stream);
+int ia_css_stream_unload(struct ia_css_stream *stream);
 
 /* @brief Returns stream format
  * @param[in]	stream The stream.
@@ -250,8 +243,7 @@ ia_css_stream_get_format(const struct ia_css_stream *stream);
  * This function will check if the stream is configured for 2 pixels per clock and
  * return the correspondent boolean flag.
  */
-bool
-ia_css_stream_get_two_pixels_per_clock(const struct ia_css_stream *stream);
+bool ia_css_stream_get_two_pixels_per_clock(const struct ia_css_stream *stream);
 
 /* @brief Sets the output frame stride (at the last pipe)
  * @param[in]	stream The stream
@@ -260,9 +252,8 @@ ia_css_stream_get_two_pixels_per_clock(const struct ia_css_stream *stream);
  *
  * This function will Set the output frame stride (at the last pipe)
  */
-int
-ia_css_stream_set_output_padded_width(struct ia_css_stream *stream,
-				      unsigned int output_padded_width);
+int ia_css_stream_set_output_padded_width(struct ia_css_stream *stream,
+					  unsigned int output_padded_width);
 
 /* @brief Return max number of continuous RAW frames.
  * @param[in]	stream The stream.
@@ -272,9 +263,8 @@ ia_css_stream_set_output_padded_width(struct ia_css_stream *stream,
  * This function will return the maximum number of continuous RAW frames
  * the system can support.
  */
-int
-ia_css_stream_get_max_buffer_depth(struct ia_css_stream *stream,
-				   int *buffer_depth);
+int ia_css_stream_get_max_buffer_depth(struct ia_css_stream *stream,
+				       int *buffer_depth);
 
 /* @brief Set nr of continuous RAW frames to use.
  *
@@ -284,8 +274,8 @@ ia_css_stream_get_max_buffer_depth(struct ia_css_stream *stream,
  *
  * Set the number of continuous frames to use during continuous modes.
  */
-int
-ia_css_stream_set_buffer_depth(struct ia_css_stream *stream, int buffer_depth);
+int ia_css_stream_set_buffer_depth(struct ia_css_stream *stream,
+				   int buffer_depth);
 
 /* @brief Get number of continuous RAW frames to use.
  * @param[in]	stream The stream.
@@ -295,8 +285,8 @@ ia_css_stream_set_buffer_depth(struct ia_css_stream *stream, int buffer_depth);
  * Get the currently set number of continuous frames
  * to use during continuous modes.
  */
-int
-ia_css_stream_get_buffer_depth(struct ia_css_stream *stream, int *buffer_depth);
+int ia_css_stream_get_buffer_depth(struct ia_css_stream *stream,
+				   int *buffer_depth);
 
 /* ===== CAPTURE ===== */
 
@@ -326,11 +316,8 @@ ia_css_stream_get_buffer_depth(struct ia_css_stream *stream, int *buffer_depth);
  *  frames and 2 subsequent frames, you would call
  *  ia_css_stream_capture(5, 0, -2).
  */
-int
-ia_css_stream_capture(struct ia_css_stream *stream,
-		      int num_captures,
-		      unsigned int skip,
-		      int offset);
+int ia_css_stream_capture(struct ia_css_stream *stream, int num_captures,
+			  unsigned int skip, int offset);
 
 /* @brief Specify which raw frame to tag based on exp_id found in frame info
  *
@@ -342,9 +329,8 @@ ia_css_stream_capture(struct ia_css_stream *stream,
  * This function allows the user to tag a raw frame based on the exposure id
  * found in the viewfinder frames' frame info.
  */
-int
-ia_css_stream_capture_frame(struct ia_css_stream *stream,
-			    unsigned int exp_id);
+int ia_css_stream_capture_frame(struct ia_css_stream *stream,
+				unsigned int exp_id);
 
 /* ===== VIDEO ===== */
 
@@ -374,11 +360,9 @@ ia_css_stream_capture_frame(struct ia_css_stream *stream,
  * These 3 functions are for testing purpose only and can be used in
  * conjunction with ia_css_stream_send_input_frame
  */
-void
-ia_css_stream_send_input_frame(const struct ia_css_stream *stream,
-			       const unsigned short *data,
-			       unsigned int width,
-			       unsigned int height);
+void ia_css_stream_send_input_frame(const struct ia_css_stream *stream,
+				    const unsigned short *data,
+				    unsigned int width, unsigned int height);
 
 /* @brief Start an input frame on the CSS input FIFO.
  *
@@ -393,8 +377,7 @@ ia_css_stream_send_input_frame(const struct ia_css_stream *stream,
  * To simulate an error, the user can provide "incorrect" values for
  * input_format and/or two_pixels_per_clock.
  */
-void
-ia_css_stream_start_input_frame(const struct ia_css_stream *stream);
+void ia_css_stream_start_input_frame(const struct ia_css_stream *stream);
 
 /* @brief Send a line of input data into the CSS input FIFO.
  *
@@ -413,12 +396,11 @@ ia_css_stream_start_input_frame(const struct ia_css_stream *stream);
  * This function blocks until the entire line has been written into the
  * input FIFO.
  */
-void
-ia_css_stream_send_input_line(const struct ia_css_stream *stream,
-			      const unsigned short *data,
-			      unsigned int width,
-			      const unsigned short *data2,
-			      unsigned int width2);
+void ia_css_stream_send_input_line(const struct ia_css_stream *stream,
+				   const unsigned short *data,
+				   unsigned int width,
+				   const unsigned short *data2,
+				   unsigned int width2);
 
 /* @brief Send a line of input embedded data into the CSS input FIFO.
  *
@@ -436,11 +418,10 @@ ia_css_stream_send_input_line(const struct ia_css_stream *stream,
  * This function blocks until the entire line has been written into the
  * input FIFO.
  */
-void
-ia_css_stream_send_input_embedded_line(const struct ia_css_stream *stream,
-				       enum atomisp_input_format format,
-				       const unsigned short *data,
-				       unsigned int width);
+void ia_css_stream_send_input_embedded_line(const struct ia_css_stream *stream,
+					    enum atomisp_input_format format,
+					    const unsigned short *data,
+					    unsigned int width);
 
 /* @brief End an input frame on the CSS input FIFO.
  *
@@ -449,8 +430,7 @@ ia_css_stream_send_input_embedded_line(const struct ia_css_stream *stream,
  *
  * Send the end-of-frame signal into the CSS input FIFO.
  */
-void
-ia_css_stream_end_input_frame(const struct ia_css_stream *stream);
+void ia_css_stream_end_input_frame(const struct ia_css_stream *stream);
 
 /* @brief Configure a stream with filter coefficients.
  *	   @deprecated {Replaced by
@@ -469,10 +449,9 @@ ia_css_stream_end_input_frame(const struct ia_css_stream *stream);
  * in fact this is the expected behavior most of the time. Proper
  * resource locking and double buffering is in place to allow for this.
  */
-int
-ia_css_stream_set_isp_config_on_pipe(struct ia_css_stream *stream,
-				     const struct ia_css_isp_config *config,
-				     struct ia_css_pipe *pipe);
+int ia_css_stream_set_isp_config_on_pipe(struct ia_css_stream *stream,
+					 const struct ia_css_isp_config *config,
+					 struct ia_css_pipe *pipe);
 
 /* @brief Configure a stream with filter coefficients.
  *	   @deprecated {Replaced by
@@ -489,19 +468,16 @@ ia_css_stream_set_isp_config_on_pipe(struct ia_css_stream *stream,
  * in fact this is the expected behaviour most of the time. Proper
  * resource locking and double buffering is in place to allow for this.
  */
-int
-ia_css_stream_set_isp_config(
-    struct ia_css_stream *stream,
-    const struct ia_css_isp_config *config);
+int ia_css_stream_set_isp_config(struct ia_css_stream *stream,
+				 const struct ia_css_isp_config *config);
 
 /* @brief Get selected configuration settings
  * @param[in]	stream	The stream.
  * @param[out]	config	Configuration settings.
  * @return		None
  */
-void
-ia_css_stream_get_isp_config(const struct ia_css_stream *stream,
-			     struct ia_css_isp_config *config);
+void ia_css_stream_get_isp_config(const struct ia_css_stream *stream,
+				  struct ia_css_isp_config *config);
 
 /* @brief allocate continuous raw frames for continuous capture
  * @param[in]	stream The stream.
@@ -512,8 +488,7 @@ ia_css_stream_get_isp_config(const struct ia_css_stream *stream,
  *  this function without locking. This function is the allocation part
  *  and next one is update part
  */
-int
-ia_css_alloc_continuous_frame_remain(struct ia_css_stream *stream);
+int ia_css_alloc_continuous_frame_remain(struct ia_css_stream *stream);
 
 /* @brief allocate continuous raw frames for continuous capture
  * @param[in]	stream The stream.
@@ -523,8 +498,7 @@ ia_css_alloc_continuous_frame_remain(struct ia_css_stream *stream);
  *  we separate the allocation part and update part to let driver call
  *  this function without locking. This function is the update part
  */
-int
-ia_css_update_continuous_frames(struct ia_css_stream *stream);
+int ia_css_update_continuous_frames(struct ia_css_stream *stream);
 
 /* @brief ia_css_unlock_raw_frame . unlock a raw frame (HALv3 Support)
  * @param[in]	stream The stream.
@@ -535,8 +509,7 @@ ia_css_update_continuous_frames(struct ia_css_stream *stream);
  * releases its reference to a raw buffer (which are managed by SP), this function allows
  * application to explicitly unlock that buffer in SP.
  */
-int
-ia_css_unlock_raw_frame(struct ia_css_stream *stream, uint32_t exp_id);
+int ia_css_unlock_raw_frame(struct ia_css_stream *stream, uint32_t exp_id);
 
 /* @brief ia_css_en_dz_capt_pipe . Enable/Disable digital zoom for capture pipe
  * @param[in]   stream The stream.
@@ -548,6 +521,5 @@ ia_css_unlock_raw_frame(struct ia_css_stream *stream, uint32_t exp_id);
  * In process_zoom_and_motion(), decision to enable or disable zoom for every stage depends
  * on this flag.
  */
-void
-ia_css_en_dz_capt_pipe(struct ia_css_stream *stream, bool enable);
+void ia_css_en_dz_capt_pipe(struct ia_css_stream *stream, bool enable);
 #endif /* __IA_CSS_STREAM_PUBLIC_H */

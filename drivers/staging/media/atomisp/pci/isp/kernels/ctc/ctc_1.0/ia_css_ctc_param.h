@@ -13,8 +13,8 @@
 #include "ia_css_ctc_types.h"
 
 #ifndef PIPE_GENERATION
-#define SH_CSS_ISP_CTC_TABLE_SIZE_LOG2       IA_CSS_VAMEM_2_CTC_TABLE_SIZE_LOG2
-#define SH_CSS_ISP_CTC_TABLE_SIZE            IA_CSS_VAMEM_2_CTC_TABLE_SIZE
+#define SH_CSS_ISP_CTC_TABLE_SIZE_LOG2 IA_CSS_VAMEM_2_CTC_TABLE_SIZE_LOG2
+#define SH_CSS_ISP_CTC_TABLE_SIZE IA_CSS_VAMEM_2_CTC_TABLE_SIZE
 
 #else
 /* For pipe generation, the size is not relevant */

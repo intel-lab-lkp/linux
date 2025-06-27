@@ -29,9 +29,9 @@
 #define STORAGE_CLASS_RESOURCE_H extern
 #define STORAGE_CLASS_RESOURCE_C
 #include "resource_public.h"
-#else  /* __INLINE_RESOURCE__ */
-#define STORAGE_CLASS_RESOURCE_H static inline
-#define STORAGE_CLASS_RESOURCE_C static inline
+#else /* __INLINE_RESOURCE__ */
+#define STORAGE_CLASS_RESOURCE_H (static inline)
+#define STORAGE_CLASS_RESOURCE_C (static inline)
 #include "resource_private.h"
 #endif /* __INLINE_RESOURCE__ */
 

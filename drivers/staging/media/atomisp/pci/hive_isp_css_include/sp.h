@@ -28,9 +28,9 @@
 #define STORAGE_CLASS_SP_H extern
 #define STORAGE_CLASS_SP_C
 #include "sp_public.h"
-#else  /* __INLINE_SP__ */
-#define STORAGE_CLASS_SP_H static inline
-#define STORAGE_CLASS_SP_C static inline
+#else /* __INLINE_SP__ */
+#define STORAGE_CLASS_SP_H (static inline)
+#define STORAGE_CLASS_SP_C (static inline)
 #include "sp_private.h"
 #endif /* __INLINE_SP__ */
 

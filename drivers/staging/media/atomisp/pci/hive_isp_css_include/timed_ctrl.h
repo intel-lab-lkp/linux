@@ -28,9 +28,9 @@
 #define STORAGE_CLASS_TIMED_CTRL_H extern
 #define STORAGE_CLASS_TIMED_CTRL_C
 #include "timed_ctrl_public.h"
-#else  /* __INLINE_TIMED_CTRL__ */
-#define STORAGE_CLASS_TIMED_CTRL_H static inline
-#define STORAGE_CLASS_TIMED_CTRL_C static inline
+#else /* __INLINE_TIMED_CTRL__ */
+#define STORAGE_CLASS_TIMED_CTRL_H (static inline)
+#define STORAGE_CLASS_TIMED_CTRL_C (static inline)
 #include "timed_ctrl_private.h"
 #endif /* __INLINE_TIMED_CTRL__ */
 

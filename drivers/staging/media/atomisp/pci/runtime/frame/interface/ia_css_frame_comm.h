@@ -10,7 +10,7 @@
 #include "type_support.h"
 #include "platform_support.h"
 #include "runtime/bufq/interface/ia_css_bufq_comm.h"
-#include <system_local.h>	 /* ia_css_ptr */
+#include <system_local.h> /* ia_css_ptr */
 
 /*
  * These structs are derived from structs defined in ia_css_types.h
@@ -18,7 +18,7 @@
  * All the fields that are not needed by the SP are removed.
  */
 struct ia_css_frame_sp_plane {
-	unsigned int offset;	/* offset in bytes to start of frame data */
+	unsigned int offset; /* offset in bytes to start of frame data */
 	/* offset is wrt data in sh_css_sp_sp_frame */
 };
 
@@ -54,8 +54,8 @@ struct ia_css_frame_sp_plane6 {
 };
 
 struct ia_css_sp_resolution {
-	u16 width;		/* width of valid data in pixels */
-	u16 height;	/* Height of valid data in lines */
+	u16 width; /* width of valid data in pixels */
+	u16 height; /* Height of valid data in lines */
 };
 
 /*
@@ -63,14 +63,14 @@ struct ia_css_sp_resolution {
  */
 struct ia_css_frame_sp_info {
 	struct ia_css_sp_resolution res;
-	u16 padded_width;		/* stride of line in memory
+	u16 padded_width; /* stride of line in memory
 					(in pixels) */
-	unsigned char format;		/* format of the frame data */
-	unsigned char raw_bit_depth;	/* number of valid bits per pixel,
+	unsigned char format; /* format of the frame data */
+	unsigned char raw_bit_depth; /* number of valid bits per pixel,
 					only valid for RAW bayer frames */
-	unsigned char raw_bayer_order;	/* bayer order, only valid
+	unsigned char raw_bayer_order; /* bayer order, only valid
 					for RAW bayer frames */
-	unsigned char padding[3];	/* Extend to 32 bit multiple */
+	unsigned char padding[3]; /* Extend to 32 bit multiple */
 };
 
 struct ia_css_buffer_sp {
@@ -96,12 +96,10 @@ struct ia_css_frame_sp {
 	} planes;
 };
 
-void ia_css_frame_info_to_frame_sp_info(
-    struct ia_css_frame_sp_info *sp_info,
-    const struct ia_css_frame_info *info);
+void ia_css_frame_info_to_frame_sp_info(struct ia_css_frame_sp_info *sp_info,
+					const struct ia_css_frame_info *info);
 
-void ia_css_resolution_to_sp_resolution(
-    struct ia_css_sp_resolution *sp_info,
-    const struct ia_css_resolution *info);
+void ia_css_resolution_to_sp_resolution(struct ia_css_sp_resolution *sp_info,
+					const struct ia_css_resolution *info);
 
 #endif /*__IA_CSS_FRAME_COMM_H__*/

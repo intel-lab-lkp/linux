@@ -17,12 +17,12 @@
  */
 typedef struct isp2401_sync_generator_cfg_s isp2401_sync_generator_cfg_t;
 struct isp2401_sync_generator_cfg_s {
-	u32	hblank_cycles;
-	u32	vblank_cycles;
-	u32	pixels_per_clock;
-	u32	nr_of_frames;
-	u32	pixels_per_line;
-	u32	lines_per_frame;
+	u32 hblank_cycles;
+	u32 vblank_cycles;
+	u32 pixels_per_clock;
+	u32 nr_of_frames;
+	u32 pixels_per_line;
+	u32 lines_per_frame;
 };
 
 typedef enum {
@@ -38,7 +38,7 @@ typedef enum {
  */
 typedef struct pixelgen_tpg_cfg_s pixelgen_tpg_cfg_t;
 struct pixelgen_tpg_cfg_s {
-	pixelgen_tpg_mode_t	mode;	/* CHBO, MONO */
+	pixelgen_tpg_mode_t mode; /* CHBO, MONO */
 
 	struct {
 		/* be used by CHBO and MON */
@@ -53,17 +53,17 @@ struct pixelgen_tpg_cfg_s {
 	} color_cfg;
 
 	struct {
-		u32	h_mask;		/* horizontal mask */
-		u32	v_mask;		/* vertical mask */
-		u32	hv_mask;	/* horizontal+vertical mask? */
+		u32 h_mask; /* horizontal mask */
+		u32 v_mask; /* vertical mask */
+		u32 hv_mask; /* horizontal+vertical mask? */
 	} mask_cfg;
 
 	struct {
-		s32	h_delta;	/* horizontal delta? */
-		s32	v_delta;	/* vertical delta? */
+		s32 h_delta; /* horizontal delta? */
+		s32 v_delta; /* vertical delta? */
 	} delta_cfg;
 
-	isp2401_sync_generator_cfg_t	 sync_gen_cfg;
+	isp2401_sync_generator_cfg_t sync_gen_cfg;
 };
 
 /*
@@ -72,10 +72,10 @@ struct pixelgen_tpg_cfg_s {
  */
 typedef struct pixelgen_prbs_cfg_s pixelgen_prbs_cfg_t;
 struct pixelgen_prbs_cfg_s {
-	s32	seed0;
-	s32	seed1;
+	s32 seed0;
+	s32 seed1;
 
-	isp2401_sync_generator_cfg_t	sync_gen_cfg;
+	isp2401_sync_generator_cfg_t sync_gen_cfg;
 };
 
 /* end of Pixel-generator: TPG. ("pixelgen_global.h") */

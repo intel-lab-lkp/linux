@@ -14,8 +14,8 @@
 #include "ia_css_binary.h"
 #include "sh_css_legacy.h"
 
-#define PIPE_ENTRY_EMPTY_TOKEN                (~0U)
-#define PIPE_ENTRY_RESERVED_TOKEN             (0x1)
+#define PIPE_ENTRY_EMPTY_TOKEN (~0U)
+#define PIPE_ENTRY_RESERVED_TOKEN (0x1)
 
 struct ia_css_preview_settings {
 	struct ia_css_binary copy_binary;
@@ -30,11 +30,12 @@ struct ia_css_preview_settings {
 	struct ia_css_pipe *capture_pipe;
 };
 
-#define IA_CSS_DEFAULT_PREVIEW_SETTINGS { \
-	.copy_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.preview_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.vf_pp_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-}
+#define IA_CSS_DEFAULT_PREVIEW_SETTINGS                           \
+	{                                                         \
+		.copy_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,    \
+		.preview_binary = IA_CSS_BINARY_DEFAULT_SETTINGS, \
+		.vf_pp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,   \
+	}
 
 struct ia_css_capture_settings {
 	struct ia_css_binary copy_binary;
@@ -54,16 +55,17 @@ struct ia_css_capture_settings {
 	unsigned int num_yuv_scaler;
 };
 
-#define IA_CSS_DEFAULT_CAPTURE_SETTINGS { \
-	.copy_binary		= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.primary_binary		= {IA_CSS_BINARY_DEFAULT_SETTINGS}, \
-	.pre_isp_binary		= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.anr_gdc_binary		= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.post_isp_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.capture_pp_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.vf_pp_binary		= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.capture_ldc_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-}
+#define IA_CSS_DEFAULT_CAPTURE_SETTINGS                               \
+	{                                                             \
+		.copy_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,        \
+		.primary_binary = { IA_CSS_BINARY_DEFAULT_SETTINGS }, \
+		.pre_isp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,     \
+		.anr_gdc_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,     \
+		.post_isp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,    \
+		.capture_pp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,  \
+		.vf_pp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,       \
+		.capture_ldc_binary = IA_CSS_BINARY_DEFAULT_SETTINGS, \
+	}
 
 struct ia_css_video_settings {
 	struct ia_css_binary copy_binary;
@@ -79,11 +81,12 @@ struct ia_css_video_settings {
 	unsigned int num_yuv_scaler;
 };
 
-#define IA_CSS_DEFAULT_VIDEO_SETTINGS { \
-	.copy_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.video_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-	.vf_pp_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-}
+#define IA_CSS_DEFAULT_VIDEO_SETTINGS                           \
+	{                                                       \
+		.copy_binary = IA_CSS_BINARY_DEFAULT_SETTINGS,  \
+		.video_binary = IA_CSS_BINARY_DEFAULT_SETTINGS, \
+		.vf_pp_binary = IA_CSS_BINARY_DEFAULT_SETTINGS, \
+	}
 
 struct ia_css_yuvpp_settings {
 	struct ia_css_binary copy_binary;
@@ -95,41 +98,42 @@ struct ia_css_yuvpp_settings {
 	unsigned int num_output;
 };
 
-#define IA_CSS_DEFAULT_YUVPP_SETTINGS { \
-	.copy_binary	= IA_CSS_BINARY_DEFAULT_SETTINGS, \
-}
+#define IA_CSS_DEFAULT_YUVPP_SETTINGS                          \
+	{                                                      \
+		.copy_binary = IA_CSS_BINARY_DEFAULT_SETTINGS, \
+	}
 
 struct osys_object;
 
 struct ia_css_pipe {
 	/* TODO: Remove stop_requested and use stop_requested in the pipeline */
-	bool                            stop_requested;
-	struct ia_css_pipe_config       config;
+	bool stop_requested;
+	struct ia_css_pipe_config config;
 	struct ia_css_pipe_extra_config extra_config;
-	struct ia_css_pipe_info         info;
-	enum ia_css_pipe_id		mode;
-	struct ia_css_shading_table	*shading_table;
-	struct ia_css_pipeline		pipeline;
-	struct ia_css_frame_info	output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	struct ia_css_frame_info	bds_output_info;
-	struct ia_css_frame_info	vf_output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	struct ia_css_frame_info	out_yuv_ds_input_info;
-	struct ia_css_frame_info	vf_yuv_ds_input_info;
-	struct ia_css_fw_info		*output_stage;	/* extra output stage */
-	struct ia_css_fw_info		*vf_stage;	/* extra vf_stage */
-	unsigned int			required_bds_factor;
-	unsigned int			dvs_frame_delay;
-	int				num_invalid_frames;
-	bool				enable_viewfinder[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	struct ia_css_stream		*stream;
-	struct ia_css_frame		in_frame_struct;
-	struct ia_css_frame		out_frame_struct;
-	struct ia_css_frame		vf_frame_struct;
-	struct ia_css_frame		*continuous_frames[NUM_CONTINUOUS_FRAMES];
-	struct ia_css_metadata	*cont_md_buffers[NUM_CONTINUOUS_FRAMES];
+	struct ia_css_pipe_info info;
+	enum ia_css_pipe_id mode;
+	struct ia_css_shading_table *shading_table;
+	struct ia_css_pipeline pipeline;
+	struct ia_css_frame_info output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
+	struct ia_css_frame_info bds_output_info;
+	struct ia_css_frame_info vf_output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
+	struct ia_css_frame_info out_yuv_ds_input_info;
+	struct ia_css_frame_info vf_yuv_ds_input_info;
+	struct ia_css_fw_info *output_stage; /* extra output stage */
+	struct ia_css_fw_info *vf_stage; /* extra vf_stage */
+	unsigned int required_bds_factor;
+	unsigned int dvs_frame_delay;
+	int num_invalid_frames;
+	bool enable_viewfinder[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
+	struct ia_css_stream *stream;
+	struct ia_css_frame in_frame_struct;
+	struct ia_css_frame out_frame_struct;
+	struct ia_css_frame vf_frame_struct;
+	struct ia_css_frame *continuous_frames[NUM_CONTINUOUS_FRAMES];
+	struct ia_css_metadata *cont_md_buffers[NUM_CONTINUOUS_FRAMES];
 	union {
 		struct ia_css_preview_settings preview;
-		struct ia_css_video_settings   video;
+		struct ia_css_video_settings video;
 		struct ia_css_capture_settings capture;
 		struct ia_css_yuvpp_settings yuvpp;
 	} pipe_settings;
@@ -143,33 +147,30 @@ struct ia_css_pipe {
 	unsigned int pipe_num;
 };
 
-#define IA_CSS_DEFAULT_PIPE { \
-	.config			= DEFAULT_PIPE_CONFIG, \
-	.info			= DEFAULT_PIPE_INFO, \
-	.mode			= IA_CSS_PIPE_ID_VIDEO, /* (pipe_id) */ \
-	.pipeline		= DEFAULT_PIPELINE, \
-	.output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.bds_output_info	= IA_CSS_BINARY_DEFAULT_FRAME_INFO, \
-	.vf_output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.out_yuv_ds_input_info	= IA_CSS_BINARY_DEFAULT_FRAME_INFO, \
-	.vf_yuv_ds_input_info	= IA_CSS_BINARY_DEFAULT_FRAME_INFO, \
-	.required_bds_factor	= SH_CSS_BDS_FACTOR_1_00, \
-	.dvs_frame_delay	= 1, \
-	.enable_viewfinder	= {true}, \
-	.in_frame_struct	= DEFAULT_FRAME, \
-	.out_frame_struct	= DEFAULT_FRAME, \
-	.vf_frame_struct	= DEFAULT_FRAME, \
-	.pipe_settings		= { \
-		.preview = IA_CSS_DEFAULT_PREVIEW_SETTINGS \
-	}, \
-	.pipe_num		= PIPE_ENTRY_EMPTY_TOKEN, \
-}
+#define IA_CSS_DEFAULT_PIPE                                                   \
+	{                                                                     \
+		.config = DEFAULT_PIPE_CONFIG, .info = DEFAULT_PIPE_INFO,     \
+		.mode = IA_CSS_PIPE_ID_VIDEO, /* (pipe_id) */                 \
+			.pipeline = DEFAULT_PIPELINE,                         \
+		.output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO },          \
+		.bds_output_info = IA_CSS_BINARY_DEFAULT_FRAME_INFO,          \
+		.vf_output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO },       \
+		.out_yuv_ds_input_info = IA_CSS_BINARY_DEFAULT_FRAME_INFO,    \
+		.vf_yuv_ds_input_info = IA_CSS_BINARY_DEFAULT_FRAME_INFO,     \
+		.required_bds_factor = SH_CSS_BDS_FACTOR_1_00,                \
+		.dvs_frame_delay = 1, .enable_viewfinder = { true },          \
+		.in_frame_struct = DEFAULT_FRAME,                             \
+		.out_frame_struct = DEFAULT_FRAME,                            \
+		.vf_frame_struct = DEFAULT_FRAME,                             \
+		.pipe_settings = { .preview =                                 \
+					   IA_CSS_DEFAULT_PREVIEW_SETTINGS }, \
+		.pipe_num = PIPE_ENTRY_EMPTY_TOKEN,                           \
+	}
 
 void ia_css_pipe_map_queue(struct ia_css_pipe *pipe, bool map);
 
-int
-sh_css_param_update_isp_params(struct ia_css_pipe *curr_pipe,
-			       struct ia_css_isp_parameters *params,
-			       bool commit, struct ia_css_pipe *pipe);
+int sh_css_param_update_isp_params(struct ia_css_pipe *curr_pipe,
+				   struct ia_css_isp_parameters *params,
+				   bool commit, struct ia_css_pipe *pipe);
 
 #endif /* __IA_CSS_PIPE_H__ */

@@ -16,9 +16,9 @@
 /* Optical black mode.
  */
 enum ia_css_ob_mode {
-	IA_CSS_OB_MODE_NONE,	/** OB has no effect. */
-	IA_CSS_OB_MODE_FIXED,	/** Fixed OB */
-	IA_CSS_OB_MODE_RASTER	/** Raster OB */
+	IA_CSS_OB_MODE_NONE, /** OB has no effect. */
+	IA_CSS_OB_MODE_FIXED, /** Fixed OB */
+	IA_CSS_OB_MODE_RASTER /** Raster OB */
 };
 
 /* Optical Black level configuration.
@@ -31,19 +31,19 @@ struct ia_css_ob_config {
 	enum ia_css_ob_mode mode; /** Mode (None / Fixed / Raster).
 					enum, [0,2],
 					default 1, ineffective 0 */
-	ia_css_u0_16 level_gr;    /** Black level for GR pixels
+	ia_css_u0_16 level_gr; /** Black level for GR pixels
 					(used for Fixed Mode only).
 					u0.16, [0,65535],
 					default/ineffective 0 */
-	ia_css_u0_16 level_r;     /** Black level for R pixels
+	ia_css_u0_16 level_r; /** Black level for R pixels
 					(used for Fixed Mode only).
 					u0.16, [0,65535],
 					default/ineffective 0 */
-	ia_css_u0_16 level_b;     /** Black level for B pixels
+	ia_css_u0_16 level_b; /** Black level for B pixels
 					(used for Fixed Mode only).
 					u0.16, [0,65535],
 					default/ineffective 0 */
-	ia_css_u0_16 level_gb;    /** Black level for GB pixels
+	ia_css_u0_16 level_gb; /** Black level for GB pixels
 					(used for Fixed Mode only).
 					u0.16, [0,65535],
 					default/ineffective 0 */
@@ -51,7 +51,7 @@ struct ia_css_ob_config {
 					(used for Raster Mode only).
 					u16.0, [0,63],
 					default/ineffective 0 */
-	u16 end_position;  /** End position of OB area
+	u16 end_position; /** End position of OB area
 					(used for Raster Mode only).
 					u16.0, [0,63],
 					default/ineffective 0 */

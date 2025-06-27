@@ -4,8 +4,8 @@
  *
  * Copyright (c) 2013 Intel Corporation. All Rights Reserved.
  */
-#ifndef	__ATOMISP_DFS_TABLES_H__
-#define	__ATOMISP_DFS_TABLES_H__
+#ifndef __ATOMISP_DFS_TABLES_H__
+#define __ATOMISP_DFS_TABLES_H__
 
 #include <linux/kernel.h>
 

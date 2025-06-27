@@ -7,12 +7,14 @@
 #ifndef _IA_CSS_SDIS_COMMON_HOST_H
 #define _IA_CSS_SDIS_COMMON_HOST_H
 
-#define ISP_MAX_SDIS_HOR_PROJ_NUM_ISP \
-	__ISP_SDIS_HOR_PROJ_NUM_ISP(ISP_MAX_INTERNAL_WIDTH, ISP_MAX_INTERNAL_HEIGHT, \
-		SH_CSS_DIS_DECI_FACTOR_LOG2, ISP_PIPE_VERSION)
-#define ISP_MAX_SDIS_VER_PROJ_NUM_ISP \
+#define ISP_MAX_SDIS_HOR_PROJ_NUM_ISP                            \
+	__ISP_SDIS_HOR_PROJ_NUM_ISP(ISP_MAX_INTERNAL_WIDTH,      \
+				    ISP_MAX_INTERNAL_HEIGHT,     \
+				    SH_CSS_DIS_DECI_FACTOR_LOG2, \
+				    ISP_PIPE_VERSION)
+#define ISP_MAX_SDIS_VER_PROJ_NUM_ISP                       \
 	__ISP_SDIS_VER_PROJ_NUM_ISP(ISP_MAX_INTERNAL_WIDTH, \
-		SH_CSS_DIS_DECI_FACTOR_LOG2)
+				    SH_CSS_DIS_DECI_FACTOR_LOG2)
 
 #define _ISP_SDIS_HOR_COEF_NUM_VECS \
 	__ISP_SDIS_HOR_COEF_NUM_VECS(ISP_INTERNAL_WIDTH)
@@ -24,7 +26,7 @@
 /* SDIS Coefficients: */
 /* The ISP uses vectors to store the coefficients, so we round
    the number of coefficients up to vectors. */
-#define __ISP_SDIS_HOR_COEF_NUM_VECS(in_width)  _ISP_VECS(_ISP_BQS(in_width))
+#define __ISP_SDIS_HOR_COEF_NUM_VECS(in_width) _ISP_VECS(_ISP_BQS(in_width))
 #define __ISP_SDIS_VER_COEF_NUM_VECS(in_height) _ISP_VECS(_ISP_BQS(in_height))
 
 /* SDIS Projections:
@@ -35,18 +37,18 @@
  * valid. The host needs to use the bigger one for the stride but
  * should only return the valid ones to the 3A. */
 #define __ISP_SDIS_HOR_PROJ_NUM_ISP(in_width, in_height, deci_factor_log2, \
-	isp_pipe_version) \
-	((isp_pipe_version == 1) ? \
-		CEIL_SHIFT(_ISP_BQS(in_height), deci_factor_log2) : \
-		CEIL_SHIFT(_ISP_BQS(in_width), deci_factor_log2))
+				    isp_pipe_version)                      \
+	((isp_pipe_version == 1) ?                                         \
+		 CEIL_SHIFT(_ISP_BQS(in_height), deci_factor_log2) :       \
+		 CEIL_SHIFT(_ISP_BQS(in_width), deci_factor_log2))
 
 #define __ISP_SDIS_VER_PROJ_NUM_ISP(in_width, deci_factor_log2) \
 	CEIL_SHIFT(_ISP_BQS(in_width), deci_factor_log2)
 
-#define SH_CSS_DIS_VER_NUM_COEF_TYPES(b) \
-  (((b)->info->sp.pipeline.isp_pipe_version == 2) ? \
-	IA_CSS_DVS2_NUM_COEF_TYPES : \
-	IA_CSS_DVS_NUM_COEF_TYPES)
+#define SH_CSS_DIS_VER_NUM_COEF_TYPES(b)                  \
+	(((b)->info->sp.pipeline.isp_pipe_version == 2) ? \
+		 IA_CSS_DVS2_NUM_COEF_TYPES :             \
+		 IA_CSS_DVS_NUM_COEF_TYPES)
 
 #ifndef PIPE_GENERATION
 #if defined(__ISP) || defined(MK_FIRMWARE)
@@ -68,12 +70,12 @@ struct sh_css_isp_sdis_vert_proj_tbl {
 
 struct sh_css_isp_sdis_hori_coef_tbl {
 	VMEM_ARRAY(tbl[ISP_DVS_NUM_COEF_TYPES],
-		   ISP_MAX_SDIS_HOR_COEF_NUM_VECS * ISP_NWAY);
+		   ISP_MAX_SDIS_HOR_COEF_NUM_VECS *ISP_NWAY);
 };
 
 struct sh_css_isp_sdis_vert_coef_tbl {
 	VMEM_ARRAY(tbl[ISP_DVS_NUM_COEF_TYPES],
-		   ISP_MAX_SDIS_VER_COEF_NUM_VECS * ISP_NWAY);
+		   ISP_MAX_SDIS_VER_COEF_NUM_VECS *ISP_NWAY);
 };
 
 #endif /* defined(__ISP) || defined (MK_FIRMWARE) */

@@ -8,7 +8,7 @@
 #ifndef __SH_CSS_HOST_DATA_H
 #define __SH_CSS_HOST_DATA_H
 
-#include <ia_css_types.h>	/* ia_css_pipe */
+#include <ia_css_types.h> /* ia_css_pipe */
 
 /**
  * @brief Allocate structure ia_css_host_data.
@@ -19,8 +19,7 @@
  *	- NULL, can't allocate requested size
  *	- pointer to structure, field address points to host data with size bytes
  */
-struct ia_css_host_data *
-ia_css_host_data_allocate(size_t size);
+struct ia_css_host_data *ia_css_host_data_allocate(size_t size);
 
 /**
  * @brief Free structure ia_css_host_data.

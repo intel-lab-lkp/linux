@@ -30,7 +30,7 @@ struct ia_css_frame_metrics {
 
 struct sh_css_metrics {
 	struct sh_css_binary_metrics *binary_metrics;
-	struct ia_css_frame_metrics   frame_metrics;
+	struct ia_css_frame_metrics frame_metrics;
 };
 
 extern struct sh_css_metrics sh_css_metrics;

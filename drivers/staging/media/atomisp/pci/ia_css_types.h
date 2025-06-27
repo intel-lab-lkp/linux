@@ -53,16 +53,16 @@
 #define IA_CSS_DVS_STAT_GRID_INFO_SUPPORTED
 /** Should be removed after Driver adaptation will be done */
 
-#define IA_CSS_VERSION_MAJOR    2
-#define IA_CSS_VERSION_MINOR    0
+#define IA_CSS_VERSION_MAJOR 2
+#define IA_CSS_VERSION_MINOR 0
 #define IA_CSS_VERSION_REVISION 2
 
-#define IA_CSS_MORPH_TABLE_NUM_PLANES  6
+#define IA_CSS_MORPH_TABLE_NUM_PLANES 6
 
 /* Min and max exposure IDs. These macros are here to allow
  * the drivers to get this information. Changing these macros
  * constitutes a CSS API change. */
-#define IA_CSS_ISYS_MIN_EXPOSURE_ID 1   /** Minimum exposure ID */
+#define IA_CSS_ISYS_MIN_EXPOSURE_ID 1 /** Minimum exposure ID */
 #define IA_CSS_ISYS_MAX_EXPOSURE_ID 250 /** Maximum exposure ID */
 
 /* opaque types */
@@ -75,20 +75,20 @@ struct ia_css_state_memory_offsets;
 /* Virtual address within the CSS address space. */
 typedef u32 ia_css_ptr;
 
-#define SIZE_OF_IA_CSS_PTR		sizeof(uint32_t)
+#define SIZE_OF_IA_CSS_PTR sizeof(uint32_t)
 
 /* Generic resolution structure.
  */
 struct ia_css_resolution {
-	u32 width;  /** Width */
+	u32 width; /** Width */
 	u32 height; /** Height */
 };
 
 /* Generic coordinate structure.
  */
 struct ia_css_coordinate {
-	s32 x;	/** Value of a coordinate on the horizontal axis */
-	s32 y;	/** Value of a coordinate on the vertical axis */
+	s32 x; /** Value of a coordinate on the horizontal axis */
+	s32 y; /** Value of a coordinate on the vertical axis */
 };
 
 /* Vector with signed values. This is used to indicate motion for
@@ -106,24 +106,24 @@ struct ia_css_vector {
 /* CSS data descriptor */
 struct ia_css_data {
 	ia_css_ptr address; /** CSS virtual address */
-	u32   size;    /** Disabled if 0 */
+	u32 size; /** Disabled if 0 */
 };
 
 /* Host data descriptor */
 struct ia_css_host_data {
-	char      *address; /** Host address */
-	u32   size;    /** Disabled if 0 */
+	char *address; /** Host address */
+	u32 size; /** Disabled if 0 */
 };
 
 /* ISP data descriptor */
 struct ia_css_isp_data {
-	u32   address; /** ISP address */
-	u32   size;    /** Disabled if 0 */
+	u32 address; /** ISP address */
+	u32 size; /** Disabled if 0 */
 };
 
 /* Shading Correction types. */
 enum ia_css_shading_correction_type {
-	IA_CSS_SHADING_CORRECTION_NONE,	 /** Shading Correction is not processed in the pipe. */
+	IA_CSS_SHADING_CORRECTION_NONE, /** Shading Correction is not processed in the pipe. */
 	IA_CSS_SHADING_CORRECTION_TYPE_1 /** Shading Correction 1.0 (pipe 1.0 on ISP2300, pipe 2.2 on ISP2400/2401) */
 
 	/** More shading correction types can be added in the future. */
@@ -133,7 +133,7 @@ enum ia_css_shading_correction_type {
 struct ia_css_shading_info {
 	enum ia_css_shading_correction_type type; /** Shading Correction type. */
 
-	union {	/* Shading Correction information of each Shading Correction types. */
+	union { /* Shading Correction information of each Shading Correction types. */
 
 		/* Shading Correction information of IA_CSS_SHADING_CORRECTION_TYPE_1.
 		 *
@@ -279,12 +279,12 @@ struct ia_css_shading_info {
 		 */
 		struct {
 			/* ISP2400 */
-			u32 enable;	/** Shading correction enabled.
+			u32 enable; /** Shading correction enabled.
 						     0:disabled, 1:enabled */
 
 			/* ISP2401 */
-			u32 num_hor_grids;	/** Number of data points per line per color on shading table. */
-			u32 num_ver_grids;	/** Number of lines of data points per color on shading table. */
+			u32 num_hor_grids; /** Number of data points per line per color on shading table. */
+			u32 num_ver_grids; /** Number of lines of data points per color on shading table. */
 			u32 bqs_per_grid_cell; /** Grid cell size in BQ unit.
 							 NOTE: bqs = size in BQ(Bayer Quad) unit.
 							       1BQ means {Gr,R,B,Gb} (2x2 pixels).
@@ -351,9 +351,10 @@ struct ia_css_shading_info {
 };
 
 /* Default Shading Correction information of Shading Correction Type 1. */
-#define DEFAULT_SHADING_INFO_TYPE_1 \
-(struct ia_css_shading_info) { \
-	.type = IA_CSS_SHADING_CORRECTION_TYPE_1, \
+#define DEFAULT_SHADING_INFO_TYPE_1                         ( \
+	(struct ia_css_shading_info)                        \
+	{                                                   \
+		.type = IA_CSS_SHADING_CORRECTION_TYPE_1, \
 	.info = { \
 		.type_1 = { \
 			.bayer_scale_hor_ratio_in	= 1, \
@@ -362,10 +363,10 @@ struct ia_css_shading_info {
 			.bayer_scale_ver_ratio_out	= 1, \
 		} \
 	} \
-}
+	})
 
 /* Default Shading Correction information. */
-#define DEFAULT_SHADING_INFO	DEFAULT_SHADING_INFO_TYPE_1
+#define DEFAULT_SHADING_INFO DEFAULT_SHADING_INFO_TYPE_1
 
 /* structure that describes the 3A and DIS grids */
 struct ia_css_grid_info {
@@ -377,7 +378,7 @@ struct ia_css_grid_info {
 	u32 isp_in_height;
 	/* @}*/
 
-	struct ia_css_3a_grid_info  s3a_grid; /** 3A grid info */
+	struct ia_css_3a_grid_info s3a_grid; /** 3A grid info */
 	union ia_css_dvs_grid_u dvs_grid;
 	/** All types of DVS statistics grid info union */
 
@@ -385,10 +386,11 @@ struct ia_css_grid_info {
 };
 
 /* defaults for ia_css_grid_info structs */
-#define DEFAULT_GRID_INFO { \
-	.dvs_grid	= DEFAULT_DVS_GRID_INFO, \
-	.vamem_type	= IA_CSS_VAMEM_TYPE_1 \
-}
+#define DEFAULT_GRID_INFO                          \
+	{                                          \
+		.dvs_grid = DEFAULT_DVS_GRID_INFO, \
+		.vamem_type = IA_CSS_VAMEM_TYPE_1  \
+	}
 
 /* Morphing table, used for geometric distortion and chromatic abberration
  *  correction (GDCAC, also called GDC).
@@ -399,7 +401,7 @@ struct ia_css_morph_table {
 	u32 enable; /** To disable GDC, set this field to false. The
 			  coordinates fields can be set to NULL in this case. */
 	u32 height; /** Table height */
-	u32 width;  /** Table width */
+	u32 width; /** Table width */
 	u16 *coordinates_x[IA_CSS_MORPH_TABLE_NUM_PLANES];
 	/** X coordinates that describe the sensor imperfection */
 	u16 *coordinates_y[IA_CSS_MORPH_TABLE_NUM_PLANES];
@@ -431,7 +433,8 @@ struct ia_css_point {
  * This specifies the region
  */
 struct ia_css_region {
-	struct ia_css_point origin; /** Starting point coordinates for the region */
+	struct ia_css_point
+		origin; /** Starting point coordinates for the region */
 	struct ia_css_resolution resolution; /** Region resolution */
 };
 
@@ -462,24 +465,25 @@ struct ia_css_dz_config {
  *  Primary ISP, the Advanced ISP (GDC) or the low-light ISP (ANR).
  */
 enum ia_css_capture_mode {
-	IA_CSS_CAPTURE_MODE_RAW,      /** no processing, copy data only */
-	IA_CSS_CAPTURE_MODE_BAYER,    /** bayer processing, up to demosaic */
-	IA_CSS_CAPTURE_MODE_PRIMARY,  /** primary ISP */
+	IA_CSS_CAPTURE_MODE_RAW, /** no processing, copy data only */
+	IA_CSS_CAPTURE_MODE_BAYER, /** bayer processing, up to demosaic */
+	IA_CSS_CAPTURE_MODE_PRIMARY, /** primary ISP */
 	IA_CSS_CAPTURE_MODE_ADVANCED, /** advanced ISP (GDC) */
 	IA_CSS_CAPTURE_MODE_LOW_LIGHT /** low light ISP (ANR) */
 };
 
 struct ia_css_capture_config {
 	enum ia_css_capture_mode mode; /** Still capture mode */
-	u32 enable_xnr;	       /** Enable/disable XNR */
+	u32 enable_xnr; /** Enable/disable XNR */
 	u32 enable_raw_output;
-	bool enable_capture_pp_bli;    /** Enable capture_pp_bli mode */
+	bool enable_capture_pp_bli; /** Enable capture_pp_bli mode */
 };
 
 /* default settings for ia_css_capture_config structs */
-#define DEFAULT_CAPTURE_CONFIG { \
-	.mode	= IA_CSS_CAPTURE_MODE_PRIMARY, \
-}
+#define DEFAULT_CAPTURE_CONFIG                       \
+	{                                            \
+		.mode = IA_CSS_CAPTURE_MODE_PRIMARY, \
+	}
 
 /* ISP filter configuration. This is a collection of configurations
  *  for each of the ISP filters (modules).
@@ -496,78 +500,78 @@ struct ia_css_capture_config {
  *    ["ISP block", 2only] : ISP block is used only for ISP2.
  */
 struct ia_css_isp_config {
-	struct ia_css_wb_config   *wb_config;	/** White Balance
+	struct ia_css_wb_config *wb_config; /** White Balance
 							[WB1, 1&2] */
-	struct ia_css_cc_config   *cc_config;	/** Color Correction
+	struct ia_css_cc_config *cc_config; /** Color Correction
 							[CSC1, 1only] */
-	struct ia_css_tnr_config  *tnr_config;	/** Temporal Noise Reduction
+	struct ia_css_tnr_config *tnr_config; /** Temporal Noise Reduction
 							[TNR1, 1&2] */
-	struct ia_css_ecd_config  *ecd_config;	/** Eigen Color Demosaicing
+	struct ia_css_ecd_config *ecd_config; /** Eigen Color Demosaicing
 							[DE2, 2only] */
-	struct ia_css_ynr_config  *ynr_config;	/** Y(Luma) Noise Reduction
+	struct ia_css_ynr_config *ynr_config; /** Y(Luma) Noise Reduction
 							[YNR2&YEE2, 2only] */
-	struct ia_css_fc_config   *fc_config;	/** Fringe Control
+	struct ia_css_fc_config *fc_config; /** Fringe Control
 							[FC2, 2only] */
 	struct ia_css_formats_config
-		*formats_config;	/** Formats Control for main output
+		*formats_config; /** Formats Control for main output
 							[FORMATS, 1&2] */
-	struct ia_css_cnr_config  *cnr_config;	/** Chroma Noise Reduction
+	struct ia_css_cnr_config *cnr_config; /** Chroma Noise Reduction
 							[CNR2, 2only] */
-	struct ia_css_macc_config *macc_config;	/** MACC
+	struct ia_css_macc_config *macc_config; /** MACC
 							[MACC2, 2only] */
-	struct ia_css_ctc_config  *ctc_config;	/** Chroma Tone Control
+	struct ia_css_ctc_config *ctc_config; /** Chroma Tone Control
 							[CTC2, 2only] */
-	struct ia_css_aa_config   *aa_config;	/** YUV Anti-Aliasing
+	struct ia_css_aa_config *aa_config; /** YUV Anti-Aliasing
 							[AA2, 2only]
 							(not used currently) */
-	struct ia_css_aa_config   *baa_config;	/** Bayer Anti-Aliasing
+	struct ia_css_aa_config *baa_config; /** Bayer Anti-Aliasing
 							[BAA2, 1&2] */
-	struct ia_css_ce_config   *ce_config;	/** Chroma Enhancement
+	struct ia_css_ce_config *ce_config; /** Chroma Enhancement
 							[CE1, 1only] */
 	struct ia_css_dvs_6axis_config *dvs_6axis_config;
-	struct ia_css_ob_config   *ob_config;  /** Objective Black
+	struct ia_css_ob_config *ob_config; /** Objective Black
 							[OB1, 1&2] */
-	struct ia_css_dp_config   *dp_config;  /** Defect Pixel Correction
+	struct ia_css_dp_config *dp_config; /** Defect Pixel Correction
 							[DPC1/DPC2, 1&2] */
-	struct ia_css_nr_config   *nr_config;  /** Noise Reduction
+	struct ia_css_nr_config *nr_config; /** Noise Reduction
 							[BNR1&YNR1&CNR1, 1&2]*/
-	struct ia_css_ee_config   *ee_config;  /** Edge Enhancement
+	struct ia_css_ee_config *ee_config; /** Edge Enhancement
 							[YEE1, 1&2] */
-	struct ia_css_de_config   *de_config;  /** Demosaic
+	struct ia_css_de_config *de_config; /** Demosaic
 							[DE1, 1only] */
-	struct ia_css_gc_config   *gc_config;  /** Gamma Correction (for YUV)
+	struct ia_css_gc_config *gc_config; /** Gamma Correction (for YUV)
 							[GC1, 1only] */
-	struct ia_css_anr_config  *anr_config; /** Advanced Noise Reduction */
-	struct ia_css_3a_config   *s3a_config; /** 3A Statistics config */
-	struct ia_css_xnr_config  *xnr_config; /** eXtra Noise Reduction */
-	struct ia_css_dz_config   *dz_config;  /** Digital Zoom */
+	struct ia_css_anr_config *anr_config; /** Advanced Noise Reduction */
+	struct ia_css_3a_config *s3a_config; /** 3A Statistics config */
+	struct ia_css_xnr_config *xnr_config; /** eXtra Noise Reduction */
+	struct ia_css_dz_config *dz_config; /** Digital Zoom */
 	struct ia_css_cc_config *yuv2rgb_cc_config; /** Color Correction
 							[CCM2, 2only] */
 	struct ia_css_cc_config *rgb2yuv_cc_config; /** Color Correction
 							[CSC2, 2only] */
-	struct ia_css_macc_table  *macc_table;	/** MACC
+	struct ia_css_macc_table *macc_table; /** MACC
 							[MACC1/MACC2, 1&2]*/
-	struct ia_css_gamma_table *gamma_table;	/** Gamma Correction (for YUV)
+	struct ia_css_gamma_table *gamma_table; /** Gamma Correction (for YUV)
 							[GC1, 1only] */
-	struct ia_css_ctc_table   *ctc_table;	/** Chroma Tone Control
+	struct ia_css_ctc_table *ctc_table; /** Chroma Tone Control
 							[CTC1, 1only] */
 
 	/* \deprecated */
-	struct ia_css_xnr_table   *xnr_table;	/** eXtra Noise Reduction
+	struct ia_css_xnr_table *xnr_table; /** eXtra Noise Reduction
 							[XNR1, 1&2] */
-	struct ia_css_rgb_gamma_table *r_gamma_table;/** sRGB Gamma Correction
+	struct ia_css_rgb_gamma_table *r_gamma_table; /** sRGB Gamma Correction
 							[GC2, 2only] */
-	struct ia_css_rgb_gamma_table *g_gamma_table;/** sRGB Gamma Correction
+	struct ia_css_rgb_gamma_table *g_gamma_table; /** sRGB Gamma Correction
 							[GC2, 2only] */
-	struct ia_css_rgb_gamma_table *b_gamma_table;/** sRGB Gamma Correction
+	struct ia_css_rgb_gamma_table *b_gamma_table; /** sRGB Gamma Correction
 							[GC2, 2only] */
-	struct ia_css_vector      *motion_vector; /** For 2-axis DVS */
+	struct ia_css_vector *motion_vector; /** For 2-axis DVS */
 	struct ia_css_shading_table *shading_table;
-	struct ia_css_morph_table   *morph_table;
+	struct ia_css_morph_table *morph_table;
 	struct ia_css_dvs_coefficients *dvs_coefs; /** DVS 1.0 coefficients */
 	struct ia_css_dvs2_coefficients *dvs2_coefs; /** DVS 2.0 coefficients */
-	struct ia_css_capture_config   *capture_config;
-	struct ia_css_anr_thres   *anr_thres;
+	struct ia_css_capture_config *capture_config;
+	struct ia_css_anr_thres *anr_thres;
 	/* @deprecated{Old shading settings, see bugzilla bz675 for details} */
 	struct ia_css_shading_settings *shading_settings;
 	struct ia_css_xnr3_config *xnr3_config; /** eXtreme Noise Reduction v3 */
@@ -578,19 +582,19 @@ struct ia_css_isp_config {
 	 *  the risk for regression is not in the individual blocks, but how they
 	 *  integrate together. */
 	struct ia_css_output_config
-		*output_config;	/** Main Output Mirroring, flipping */
+		*output_config; /** Main Output Mirroring, flipping */
 
 	struct ia_css_scaler_config
-		*scaler_config;         /** Skylake: scaler config (optional) */
-	struct ia_css_formats_config
-		*formats_config_display;/** Formats control for viewfinder/display output (optional)
+		*scaler_config; /** Skylake: scaler config (optional) */
+	struct ia_css_formats_config *
+		formats_config_display; /** Formats control for viewfinder/display output (optional)
 										[OSYS, n/a] */
-	struct ia_css_output_config
-		*output_config_display; /** Viewfinder/display output mirroring, flipping (optional) */
+	struct ia_css_output_config *
+		output_config_display; /** Viewfinder/display output mirroring, flipping (optional) */
 
-	struct ia_css_frame
-		*output_frame;          /** Output frame the config is to be applied to (optional) */
-	u32			isp_config_id;	/** Unique ID to track which config was actually applied to a particular frame */
+	struct ia_css_frame *
+		output_frame; /** Output frame the config is to be applied to (optional) */
+	u32 isp_config_id; /** Unique ID to track which config was actually applied to a particular frame */
 };
 
 #endif /* _IA_CSS_TYPES_H */

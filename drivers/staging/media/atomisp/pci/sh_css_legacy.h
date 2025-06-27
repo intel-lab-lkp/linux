@@ -36,26 +36,21 @@ struct ia_css_pipe_extra_config {
 	bool disable_vf_pp;
 };
 
-int
-ia_css_pipe_create_extra(const struct ia_css_pipe_config *config,
-			 const struct ia_css_pipe_extra_config *extra_config,
-			 struct ia_css_pipe **pipe);
+int ia_css_pipe_create_extra(const struct ia_css_pipe_config *config,
+			     const struct ia_css_pipe_extra_config *extra_config,
+			     struct ia_css_pipe **pipe);
 
-void
-ia_css_pipe_extra_config_defaults(struct ia_css_pipe_extra_config
-				  *extra_config);
+void ia_css_pipe_extra_config_defaults(
+	struct ia_css_pipe_extra_config *extra_config);
 
-int
-ia_css_temp_pipe_to_pipe_id(const struct ia_css_pipe *pipe,
-			    enum ia_css_pipe_id *pipe_id);
+int ia_css_temp_pipe_to_pipe_id(const struct ia_css_pipe *pipe,
+				enum ia_css_pipe_id *pipe_id);
 
 /* DEPRECATED. FPN is not supported. */
-int
-sh_css_set_black_frame(struct ia_css_stream *stream,
-		       const struct ia_css_frame *raw_black_frame);
+int sh_css_set_black_frame(struct ia_css_stream *stream,
+			   const struct ia_css_frame *raw_black_frame);
 
 /* ISP2400 */
-void
-sh_css_enable_cont_capt(bool enable, bool stop_copy_preview);
+void sh_css_enable_cont_capt(bool enable, bool stop_copy_preview);
 
 #endif /* _SH_CSS_LEGACY_H_ */

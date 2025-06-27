@@ -15,10 +15,10 @@
 
 /**@{*/
 /* Floating point constants for different metrics. */
-#define METRIC1_ONE_FP	BIT(12)
-#define METRIC2_ONE_FP	BIT(5)
-#define METRIC3_ONE_FP	BIT(12)
-#define WBGAIN_ONE_FP	BIT(9)
+#define METRIC1_ONE_FP BIT(12)
+#define METRIC2_ONE_FP BIT(5)
+#define METRIC3_ONE_FP BIT(12)
+#define WBGAIN_ONE_FP BIT(9)
 /**@}*/
 
 /**@{*/

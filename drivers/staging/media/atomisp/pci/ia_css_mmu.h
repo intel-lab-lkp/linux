@@ -18,7 +18,6 @@
  * buffer (TLB) that's inside the CSS MMU. This function should be called
  * every time the page tables used by the MMU change.
  */
-void
-ia_css_mmu_invalidate_cache(void);
+void ia_css_mmu_invalidate_cache(void);
 
 #endif /* __IA_CSS_MMU_H */

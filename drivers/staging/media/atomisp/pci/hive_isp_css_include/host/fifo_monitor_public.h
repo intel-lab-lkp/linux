@@ -9,9 +9,9 @@
 
 #include "system_local.h"
 
-typedef struct fifo_channel_state_s		fifo_channel_state_t;
-typedef struct fifo_switch_state_s		fifo_switch_state_t;
-typedef struct fifo_monitor_state_s		fifo_monitor_state_t;
+typedef struct fifo_channel_state_s fifo_channel_state_t;
+typedef struct fifo_switch_state_s fifo_switch_state_t;
+typedef struct fifo_monitor_state_s fifo_monitor_state_t;
 
 /*! Set a fifo switch multiplex
 
@@ -21,10 +21,9 @@ typedef struct fifo_monitor_state_s		fifo_monitor_state_t;
 
  \return none, fifo_switch[switch_id].sel = sel
  */
-STORAGE_CLASS_FIFO_MONITOR_H void fifo_switch_set(
-    const fifo_monitor_ID_t		ID,
-    const fifo_switch_t			switch_id,
-    const hrt_data				sel);
+STORAGE_CLASS_FIFO_MONITOR_H void fifo_switch_set(const fifo_monitor_ID_t ID,
+						  const fifo_switch_t switch_id,
+						  const hrt_data sel);
 
 /*! Get a fifo switch multiplex
 
@@ -33,9 +32,8 @@ STORAGE_CLASS_FIFO_MONITOR_H void fifo_switch_set(
 
  \return fifo_switch[switch_id].sel
  */
-STORAGE_CLASS_FIFO_MONITOR_H hrt_data fifo_switch_get(
-    const fifo_monitor_ID_t		ID,
-    const fifo_switch_t			switch_id);
+STORAGE_CLASS_FIFO_MONITOR_H hrt_data
+fifo_switch_get(const fifo_monitor_ID_t ID, const fifo_switch_t switch_id);
 
 /*! Read the state of FIFO_MONITOR[ID]
 
@@ -44,9 +42,8 @@ STORAGE_CLASS_FIFO_MONITOR_H hrt_data fifo_switch_get(
 
  \return none, state = FIFO_MONITOR[ID].state
  */
-void fifo_monitor_get_state(
-    const fifo_monitor_ID_t		ID,
-    fifo_monitor_state_t		*state);
+void fifo_monitor_get_state(const fifo_monitor_ID_t ID,
+			    fifo_monitor_state_t *state);
 
 /*! Read the state of a fifo channel
 
@@ -56,10 +53,9 @@ void fifo_monitor_get_state(
 
  \return none, state = fifo_channel[channel_id].state
  */
-void fifo_channel_get_state(
-    const fifo_monitor_ID_t		ID,
-    const fifo_channel_t		channel_id,
-    fifo_channel_state_t		*state);
+void fifo_channel_get_state(const fifo_monitor_ID_t ID,
+			    const fifo_channel_t channel_id,
+			    fifo_channel_state_t *state);
 
 /*! Read the state of a fifo switch
 
@@ -69,10 +65,9 @@ void fifo_channel_get_state(
 
  \return none, state = fifo_switch[switch_id].state
  */
-void fifo_switch_get_state(
-    const fifo_monitor_ID_t		ID,
-    const fifo_switch_t			switch_id,
-    fifo_switch_state_t			*state);
+void fifo_switch_get_state(const fifo_monitor_ID_t ID,
+			   const fifo_switch_t switch_id,
+			   fifo_switch_state_t *state);
 
 /*! Write to a control register of FIFO_MONITOR[ID]
 
@@ -82,10 +77,9 @@ void fifo_switch_get_state(
 
  \return none, FIFO_MONITOR[ID].ctrl[reg] = value
  */
-STORAGE_CLASS_FIFO_MONITOR_H void fifo_monitor_reg_store(
-    const fifo_monitor_ID_t		ID,
-    const unsigned int			reg,
-    const hrt_data				value);
+STORAGE_CLASS_FIFO_MONITOR_H void
+fifo_monitor_reg_store(const fifo_monitor_ID_t ID, const unsigned int reg,
+		       const hrt_data value);
 
 /*! Read from a control register of FIFO_MONITOR[ID]
 
@@ -95,8 +89,7 @@ STORAGE_CLASS_FIFO_MONITOR_H void fifo_monitor_reg_store(
 
  \return FIFO_MONITOR[ID].ctrl[reg]
  */
-STORAGE_CLASS_FIFO_MONITOR_H hrt_data fifo_monitor_reg_load(
-    const fifo_monitor_ID_t		ID,
-    const unsigned int			reg);
+STORAGE_CLASS_FIFO_MONITOR_H hrt_data
+fifo_monitor_reg_load(const fifo_monitor_ID_t ID, const unsigned int reg);
 
 #endif /* __FIFO_MONITOR_PUBLIC_H_INCLUDED__ */

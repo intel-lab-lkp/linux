@@ -18,10 +18,8 @@
 
  \return none, IRQ[ID].ctrl[reg] = value
  */
-STORAGE_CLASS_IRQ_H void irq_reg_store(
-    const irq_ID_t		ID,
-    const unsigned int	reg,
-    const hrt_data		value);
+STORAGE_CLASS_IRQ_H void
+irq_reg_store(const irq_ID_t ID, const unsigned int reg, const hrt_data value);
 
 /*! Read from a control register of IRQ[ID]
 
@@ -31,9 +29,8 @@ STORAGE_CLASS_IRQ_H void irq_reg_store(
 
  \return IRQ[ID].ctrl[reg]
  */
-STORAGE_CLASS_IRQ_H hrt_data irq_reg_load(
-    const irq_ID_t		ID,
-    const unsigned int	reg);
+STORAGE_CLASS_IRQ_H hrt_data irq_reg_load(const irq_ID_t ID,
+					  const unsigned int reg);
 
 /*! Enable an IRQ channel of IRQ[ID] with a mode
 
@@ -42,9 +39,7 @@ STORAGE_CLASS_IRQ_H hrt_data irq_reg_load(
 
  \return none, enable(IRQ[ID].channel[irq_ID])
  */
-void irq_enable_channel(
-    const irq_ID_t				ID,
-    const unsigned int			irq_ID);
+void irq_enable_channel(const irq_ID_t ID, const unsigned int irq_ID);
 
 /*! Enable pulse interrupts for IRQ[ID] with a mode
 
@@ -53,9 +48,7 @@ void irq_enable_channel(
 
  \return none
  */
-void irq_enable_pulse(
-    const irq_ID_t	ID,
-    bool			pulse);
+void irq_enable_pulse(const irq_ID_t ID, bool pulse);
 
 /*! Disable an IRQ channel of IRQ[ID]
 
@@ -64,9 +57,7 @@ void irq_enable_pulse(
 
  \return none, disable(IRQ[ID].channel[irq_ID])
  */
-void irq_disable_channel(
-    const irq_ID_t				ID,
-    const unsigned int			irq);
+void irq_disable_channel(const irq_ID_t ID, const unsigned int irq);
 
 /*! Clear the state of all IRQ channels of IRQ[ID]
 
@@ -74,8 +65,7 @@ void irq_disable_channel(
 
  \return none, clear(IRQ[ID].channel[])
  */
-void irq_clear_all(
-    const irq_ID_t				ID);
+void irq_clear_all(const irq_ID_t ID);
 
 /*! Return the ID of a signalling IRQ channel of IRQ[ID]
 
@@ -88,9 +78,8 @@ void irq_clear_all(
 
  \return state(IRQ[ID])
  */
-enum hrt_isp_css_irq_status irq_get_channel_id(
-    const irq_ID_t				ID,
-    unsigned int				*irq_id);
+enum hrt_isp_css_irq_status irq_get_channel_id(const irq_ID_t ID,
+					       unsigned int *irq_id);
 
 /*! Raise an interrupt on channel irq_id of device IRQ[ID]
 
@@ -99,9 +88,7 @@ enum hrt_isp_css_irq_status irq_get_channel_id(
 
  \return none, signal(IRQ[ID].channel[irq_id])
  */
-void irq_raise(
-    const irq_ID_t				ID,
-    const irq_sw_channel_id_t	irq_id);
+void irq_raise(const irq_ID_t ID, const irq_sw_channel_id_t irq_id);
 
 /*! Test if any IRQ channel of the virtual super IRQ has raised a signal
 
@@ -116,9 +103,7 @@ bool any_virq_signal(void);
 
  \return none, VIRQ.channel[irq_ID].enable = en
  */
-void cnd_virq_enable_channel(
-    const enum virq_id				irq_ID,
-    const bool					en);
+void cnd_virq_enable_channel(const enum virq_id irq_ID, const bool en);
 
 /*! Clear the state of all IRQ channels of the virtual super IRQ
 
@@ -144,8 +129,7 @@ void virq_clear_info(struct virq_info *irq_info);
 
  \return state(IRQ[...])
  */
-enum hrt_isp_css_irq_status virq_get_channel_id(
-    enum virq_id					*irq_id);
+enum hrt_isp_css_irq_status virq_get_channel_id(enum virq_id *irq_id);
 
 /*! Return the IDs of all signaling IRQ channels of the virtual super IRQ
 

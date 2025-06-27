@@ -21,45 +21,37 @@ const struct ia_css_tnr_config default_tnr_config = {
 	32,
 };
 
-void
-ia_css_tnr_encode(
-    struct sh_css_isp_tnr_params *to,
-    const struct ia_css_tnr_config *from,
-    unsigned int size)
+void ia_css_tnr_encode(struct sh_css_isp_tnr_params *to,
+		       const struct ia_css_tnr_config *from, unsigned int size)
 {
 	(void)size;
-	to->coef =
-	    uDIGIT_FITTING(from->gain, 16, SH_CSS_TNR_COEF_SHIFT);
+	to->coef = uDIGIT_FITTING(from->gain, 16, SH_CSS_TNR_COEF_SHIFT);
 	to->threshold_Y =
-	    uDIGIT_FITTING(from->threshold_y, 16, SH_CSS_ISP_YUV_BITS);
+		uDIGIT_FITTING(from->threshold_y, 16, SH_CSS_ISP_YUV_BITS);
 	to->threshold_C =
-	    uDIGIT_FITTING(from->threshold_uv, 16, SH_CSS_ISP_YUV_BITS);
+		uDIGIT_FITTING(from->threshold_uv, 16, SH_CSS_ISP_YUV_BITS);
 }
 
-void
-ia_css_tnr_dump(
-    const struct sh_css_isp_tnr_params *tnr,
-    unsigned int level)
+void ia_css_tnr_dump(const struct sh_css_isp_tnr_params *tnr,
+		     unsigned int level)
 {
-	if (!tnr) return;
+	if (!tnr)
+		return;
 	ia_css_debug_dtrace(level, "Temporal Noise Reduction:\n");
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n",
-			    "tnr_coef", tnr->coef);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n",
-			    "tnr_threshold_Y", tnr->threshold_Y);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n",
-			    "tnr_threshold_C", tnr->threshold_C);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "tnr_coef", tnr->coef);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "tnr_threshold_Y",
+			    tnr->threshold_Y);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "tnr_threshold_C",
+			    tnr->threshold_C);
 }
 
-void
-ia_css_tnr_debug_dtrace(
-    const struct ia_css_tnr_config *config,
-    unsigned int level)
+void ia_css_tnr_debug_dtrace(const struct ia_css_tnr_config *config,
+			     unsigned int level)
 {
-	ia_css_debug_dtrace(level,
-			    "config.gain=%d, config.threshold_y=%d, config.threshold_uv=%d\n",
-			    config->gain,
-			    config->threshold_y, config->threshold_uv);
+	ia_css_debug_dtrace(
+		level,
+		"config.gain=%d, config.threshold_y=%d, config.threshold_uv=%d\n",
+		config->gain, config->threshold_y, config->threshold_uv);
 }
 
 int ia_css_tnr_config(struct sh_css_isp_tnr_isp_config *to,
@@ -70,7 +62,8 @@ int ia_css_tnr_config(struct sh_css_isp_tnr_isp_config *to,
 	unsigned int i;
 	int ret;
 
-	ret = ia_css_dma_configure_from_info(&to->port_b, &from->tnr_frames[0]->frame_info);
+	ret = ia_css_dma_configure_from_info(&to->port_b,
+					     &from->tnr_frames[0]->frame_info);
 	if (ret)
 		return ret;
 	to->width_a_over_b = elems_a / to->port_b.elems;
@@ -87,8 +80,8 @@ int ia_css_tnr_config(struct sh_css_isp_tnr_isp_config *to,
 	return 0;
 }
 
-int ia_css_tnr_configure(const struct ia_css_binary     *binary,
-			 const struct ia_css_frame * const *frames)
+int ia_css_tnr_configure(const struct ia_css_binary *binary,
+			 const struct ia_css_frame *const *frames)
 {
 	struct ia_css_tnr_configuration config;
 	unsigned int i;
@@ -99,10 +92,7 @@ int ia_css_tnr_configure(const struct ia_css_binary     *binary,
 	return ia_css_configure_tnr(binary, &config);
 }
 
-void
-ia_css_init_tnr_state(
-    struct sh_css_isp_tnr_dmem_state *state,
-    size_t size)
+void ia_css_init_tnr_state(struct sh_css_isp_tnr_dmem_state *state, size_t size)
 {
 	(void)size;
 

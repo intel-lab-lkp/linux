@@ -7,8 +7,8 @@
 #include "sh_css_stream_format.h"
 #include <ia_css_stream_format.h>
 
-unsigned int sh_css_stream_format_2_bits_per_subpixel(
-    enum atomisp_input_format format)
+unsigned int
+sh_css_stream_format_2_bits_per_subpixel(enum atomisp_input_format format)
 {
 	unsigned int rval;
 

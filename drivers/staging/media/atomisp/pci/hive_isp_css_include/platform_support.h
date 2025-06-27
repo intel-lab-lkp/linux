@@ -18,8 +18,8 @@
 
 #define UINT16_MAX USHRT_MAX
 #define UINT32_MAX UINT_MAX
-#define UCHAR_MAX  (255)
+#define UCHAR_MAX (255)
 
-#define CSS_ALIGN(d, a) d __attribute__((aligned(a)))
+#define CSS_ALIGN(d, a) (d __attribute__((aligned(a))))
 
 #endif /* __PLATFORM_SUPPORT_H_INCLUDED__ */

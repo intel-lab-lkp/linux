@@ -27,7 +27,7 @@
 
 #ifndef __INLINE_CSI_RX__
 #include "csi_rx_public.h"
-#else  /* __INLINE_CSI_RX__ */
+#else /* __INLINE_CSI_RX__ */
 #include "csi_rx_private.h"
 #endif /* __INLINE_CSI_RX__ */
 

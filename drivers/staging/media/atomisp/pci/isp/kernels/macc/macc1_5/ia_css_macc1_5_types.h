@@ -17,9 +17,9 @@
  */
 
 /* Number of axes in the MACC table. */
-#define IA_CSS_MACC_NUM_AXES           16
+#define IA_CSS_MACC_NUM_AXES 16
 /* Number of coefficients per MACC axes. */
-#define IA_CSS_MACC_NUM_COEFS          4
+#define IA_CSS_MACC_NUM_COEFS 4
 
 /* Multi-Axes Color Correction (MACC) table.
  *
@@ -58,7 +58,7 @@ struct ia_css_macc1_5_table {
  *  ISP2: MACC1_5 is used.
  */
 struct ia_css_macc1_5_config {
-	u8 exp;	/** Common exponent of ia_css_macc_table.
+	u8 exp; /** Common exponent of ia_css_macc_table.
 				u8.0, [0,13], default 1, ineffective 1 */
 };
 

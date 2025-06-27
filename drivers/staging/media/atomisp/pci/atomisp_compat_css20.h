@@ -15,18 +15,18 @@
 #include "ia_css_acc_types.h"
 #include "sh_css_legacy.h"
 
-#define ATOMISP_CSS2_PIPE_MAX	2
-#define ATOMISP_CSS2_NUM_OFFLINE_INIT_CONTINUOUS_FRAMES     3
-#define ATOMISP_CSS2_NUM_OFFLINE_INIT_CONTINUOUS_FRAMES_LOCK_EN     4
-#define ATOMISP_CSS2_NUM_DVS_FRAME_DELAY     2
+#define ATOMISP_CSS2_PIPE_MAX 2
+#define ATOMISP_CSS2_NUM_OFFLINE_INIT_CONTINUOUS_FRAMES 3
+#define ATOMISP_CSS2_NUM_OFFLINE_INIT_CONTINUOUS_FRAMES_LOCK_EN 4
+#define ATOMISP_CSS2_NUM_DVS_FRAME_DELAY 2
 
-#define CSS_MIPI_FRAME_BUFFER_SIZE_1	0x60000
-#define CSS_MIPI_FRAME_BUFFER_SIZE_2	0x80000
+#define CSS_MIPI_FRAME_BUFFER_SIZE_1 0x60000
+#define CSS_MIPI_FRAME_BUFFER_SIZE_2 0x80000
 
 struct atomisp_device;
 struct atomisp_sub_device;
 
-#define MAX_STREAMS_PER_CHANNEL	2
+#define MAX_STREAMS_PER_CHANNEL 2
 
 /*
  * These are used to indicate the css stream state, corresponding
@@ -124,11 +124,13 @@ void atomisp_css_set_cnr_config(struct atomisp_sub_device *asd,
 void atomisp_css_set_ctc_config(struct atomisp_sub_device *asd,
 				struct ia_css_ctc_config *ctc_config);
 
-void atomisp_css_set_yuv2rgb_cc_config(struct atomisp_sub_device *asd,
-				       struct ia_css_cc_config *yuv2rgb_cc_config);
+void atomisp_css_set_yuv2rgb_cc_config(
+	struct atomisp_sub_device *asd,
+	struct ia_css_cc_config *yuv2rgb_cc_config);
 
-void atomisp_css_set_rgb2yuv_cc_config(struct atomisp_sub_device *asd,
-				       struct ia_css_cc_config *rgb2yuv_cc_config);
+void atomisp_css_set_rgb2yuv_cc_config(
+	struct atomisp_sub_device *asd,
+	struct ia_css_cc_config *rgb2yuv_cc_config);
 
 void atomisp_css_set_anr_thres(struct atomisp_sub_device *asd,
 			       struct ia_css_anr_thres *anr_thres);
@@ -147,12 +149,12 @@ int atomisp_css_dump_blob_infor(struct atomisp_device *isp);
 void atomisp_css_set_isp_config_id(struct atomisp_sub_device *asd,
 				   uint32_t isp_config_id);
 
-void atomisp_css_set_isp_config_applied_frame(struct atomisp_sub_device *asd,
-	struct ia_css_frame *output_frame);
+void atomisp_css_set_isp_config_applied_frame(
+	struct atomisp_sub_device *asd, struct ia_css_frame *output_frame);
 
 int atomisp_get_css_dbgfunc(void);
 
 int atomisp_set_css_dbgfunc(struct atomisp_device *isp, int opt);
-struct ia_css_dvs_grid_info *atomisp_css_get_dvs_grid_info(
-    struct ia_css_grid_info *grid_info);
+struct ia_css_dvs_grid_info *
+atomisp_css_get_dvs_grid_info(struct ia_css_grid_info *grid_info);
 #endif

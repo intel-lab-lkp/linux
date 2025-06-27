@@ -32,7 +32,7 @@
  * The longest allowed (uninteruptible) bus transfer, does not
  * take stalling into account
  */
-#define HIVE_ISP_MAX_BURST_LENGTH	1024
+#define HIVE_ISP_MAX_BURST_LENGTH 1024
 
 /*
  * Maximum allowed burst length in words for the ISP DMA
@@ -41,8 +41,8 @@
  * 2 lines on Moorefield and Cherrytrail, the input system buffers
  * may overflow if blocked for too long (BZ 2726).
  */
-#define ISP2400_DMA_MAX_BURST_LENGTH	128
-#define ISP2401_DMA_MAX_BURST_LENGTH	2
+#define ISP2400_DMA_MAX_BURST_LENGTH 128
+#define ISP2401_DMA_MAX_BURST_LENGTH 2
 
 #include <hive_isp_css_defs.h>
 #include <type_support.h>
@@ -53,93 +53,56 @@
 /*
  * Semi global. "HRT" is accessible from SP, but the HRT types do not fully apply
  */
-#define HRT_VADDRESS_WIDTH	32
+#define HRT_VADDRESS_WIDTH 32
 
-#define SIZEOF_HRT_REG		(HRT_DATA_WIDTH >> 3)
+#define SIZEOF_HRT_REG (HRT_DATA_WIDTH >> 3)
 #define HIVE_ISP_CTRL_DATA_BYTES (HIVE_ISP_CTRL_DATA_WIDTH / 8)
 
 /* The main bus connecting all devices */
-#define HRT_BUS_WIDTH		HIVE_ISP_CTRL_DATA_WIDTH
-#define HRT_BUS_BYTES		HIVE_ISP_CTRL_DATA_BYTES
+#define HRT_BUS_WIDTH HIVE_ISP_CTRL_DATA_WIDTH
+#define HRT_BUS_BYTES HIVE_ISP_CTRL_DATA_BYTES
 
-typedef u32			hrt_bus_align_t;
+typedef u32 hrt_bus_align_t;
 
 /*
  * Enumerate the devices, device access through the API is by ID,
  * through the DLI by address. The enumerator terminators are used
  * to size the wiring arrays and as an exception value.
  */
-typedef enum {
-	DDR0_ID = 0,
-	N_DDR_ID
-} ddr_ID_t;
+typedef enum { DDR0_ID = 0, N_DDR_ID } ddr_ID_t;
 
-typedef enum {
-	ISP0_ID = 0,
-	N_ISP_ID
-} isp_ID_t;
+typedef enum { ISP0_ID = 0, N_ISP_ID } isp_ID_t;
 
-typedef enum {
-	SP0_ID = 0,
-	N_SP_ID
-} sp_ID_t;
+typedef enum { SP0_ID = 0, N_SP_ID } sp_ID_t;
 
-typedef enum {
-	MMU0_ID = 0,
-	MMU1_ID,
-	N_MMU_ID
-} mmu_ID_t;
+typedef enum { MMU0_ID = 0, MMU1_ID, N_MMU_ID } mmu_ID_t;
 
-typedef enum {
-	DMA0_ID = 0,
-	N_DMA_ID
-} dma_ID_t;
+typedef enum { DMA0_ID = 0, N_DMA_ID } dma_ID_t;
 
-typedef enum {
-	GDC0_ID = 0,
-	GDC1_ID,
-	N_GDC_ID
-} gdc_ID_t;
+typedef enum { GDC0_ID = 0, GDC1_ID, N_GDC_ID } gdc_ID_t;
 
 /* this extra define is needed because we want to use it also
    in the preprocessor, and that doesn't work with enums.
  */
 #define N_GDC_ID_CPP 2
 
-typedef enum {
-	VAMEM0_ID = 0,
-	VAMEM1_ID,
-	VAMEM2_ID,
-	N_VAMEM_ID
-} vamem_ID_t;
+typedef enum { VAMEM0_ID = 0, VAMEM1_ID, VAMEM2_ID, N_VAMEM_ID } vamem_ID_t;
+
+typedef enum { BAMEM0_ID = 0, N_BAMEM_ID } bamem_ID_t;
+
+typedef enum { HMEM0_ID = 0, N_HMEM_ID } hmem_ID_t;
 
 typedef enum {
-	BAMEM0_ID = 0,
-	N_BAMEM_ID
-} bamem_ID_t;
-
-typedef enum {
-	HMEM0_ID = 0,
-	N_HMEM_ID
-} hmem_ID_t;
-
-typedef enum {
-	IRQ0_ID = 0,	/* GP IRQ block */
-	IRQ1_ID,	/* Input formatter */
-	IRQ2_ID,	/* input system */
-	IRQ3_ID,	/* input selector */
+	IRQ0_ID = 0, /* GP IRQ block */
+	IRQ1_ID, /* Input formatter */
+	IRQ2_ID, /* input system */
+	IRQ3_ID, /* input selector */
 	N_IRQ_ID
 } irq_ID_t;
 
-typedef enum {
-	FIFO_MONITOR0_ID = 0,
-	N_FIFO_MONITOR_ID
-} fifo_monitor_ID_t;
+typedef enum { FIFO_MONITOR0_ID = 0, N_FIFO_MONITOR_ID } fifo_monitor_ID_t;
 
-typedef enum {
-	GP_DEVICE0_ID = 0,
-	N_GP_DEVICE_ID
-} gp_device_ID_t;
+typedef enum { GP_DEVICE0_ID = 0, N_GP_DEVICE_ID } gp_device_ID_t;
 
 typedef enum {
 	GP_TIMER0_ID = 0,
@@ -153,15 +116,9 @@ typedef enum {
 	N_GP_TIMER_ID
 } gp_timer_ID_t;
 
-typedef enum {
-	GPIO0_ID = 0,
-	N_GPIO_ID
-} gpio_ID_t;
+typedef enum { GPIO0_ID = 0, N_GPIO_ID } gpio_ID_t;
 
-typedef enum {
-	TIMED_CTRL0_ID = 0,
-	N_TIMED_CTRL_ID
-} timed_ctrl_ID_t;
+typedef enum { TIMED_CTRL0_ID = 0, N_TIMED_CTRL_ID } timed_ctrl_ID_t;
 
 typedef enum {
 	INPUT_FORMATTER0_ID = 0,
@@ -172,25 +129,19 @@ typedef enum {
 } input_formatter_ID_t;
 
 /* The IF RST is outside the IF */
-#define INPUT_FORMATTER0_SRST_OFFSET	0x0824
-#define INPUT_FORMATTER1_SRST_OFFSET	0x0624
-#define INPUT_FORMATTER2_SRST_OFFSET	0x0424
-#define INPUT_FORMATTER3_SRST_OFFSET	0x0224
+#define INPUT_FORMATTER0_SRST_OFFSET 0x0824
+#define INPUT_FORMATTER1_SRST_OFFSET 0x0624
+#define INPUT_FORMATTER2_SRST_OFFSET 0x0424
+#define INPUT_FORMATTER3_SRST_OFFSET 0x0224
 
-#define INPUT_FORMATTER0_SRST_MASK		0x0001
-#define INPUT_FORMATTER1_SRST_MASK		0x0002
-#define INPUT_FORMATTER2_SRST_MASK		0x0004
-#define INPUT_FORMATTER3_SRST_MASK		0x0008
+#define INPUT_FORMATTER0_SRST_MASK 0x0001
+#define INPUT_FORMATTER1_SRST_MASK 0x0002
+#define INPUT_FORMATTER2_SRST_MASK 0x0004
+#define INPUT_FORMATTER3_SRST_MASK 0x0008
 
-typedef enum {
-	INPUT_SYSTEM0_ID = 0,
-	N_INPUT_SYSTEM_ID
-} input_system_ID_t;
+typedef enum { INPUT_SYSTEM0_ID = 0, N_INPUT_SYSTEM_ID } input_system_ID_t;
 
-typedef enum {
-	RX0_ID = 0,
-	N_RX_ID
-} rx_ID_t;
+typedef enum { RX0_ID = 0, N_RX_ID } rx_ID_t;
 
 enum mipi_port_id {
 	MIPI_PORT0_ID = 0,
@@ -199,7 +150,7 @@ enum mipi_port_id {
 	N_MIPI_PORT_ID
 };
 
-#define	N_RX_CHANNEL_ID		4
+#define N_RX_CHANNEL_ID 4
 
 typedef enum {
 	CAPTURE_UNIT0_ID = 0,
@@ -214,10 +165,9 @@ typedef enum {
 	N_SUB_SYSTEM_ID
 } sub_system_ID_t;
 
-#define	N_CAPTURE_UNIT_ID		3
-#define	N_ACQUISITION_UNIT_ID		1
-#define	N_CTRL_UNIT_ID			1
-
+#define N_CAPTURE_UNIT_ID 3
+#define N_ACQUISITION_UNIT_ID 1
+#define N_CTRL_UNIT_ID 1
 
 enum ia_css_isp_memories {
 	IA_CSS_ISP_PMEM0 = 0,
@@ -234,7 +184,7 @@ enum ia_css_isp_memories {
 
 #define IA_CSS_NUM_MEMORIES 9
 /* For driver compatibility */
-#define N_IA_CSS_ISP_MEMORIES   IA_CSS_NUM_MEMORIES
+#define N_IA_CSS_ISP_MEMORIES IA_CSS_NUM_MEMORIES
 #define IA_CSS_NUM_ISP_MEMORIES IA_CSS_NUM_MEMORIES
 
 /*
@@ -242,20 +192,19 @@ enum ia_css_isp_memories {
  */
 
 typedef enum {
-	ISYS_IRQ0_ID = 0,	/* port a */
-	ISYS_IRQ1_ID,	/* port b */
-	ISYS_IRQ2_ID,	/* port c */
+	ISYS_IRQ0_ID = 0, /* port a */
+	ISYS_IRQ1_ID, /* port b */
+	ISYS_IRQ2_ID, /* port c */
 	N_ISYS_IRQ_ID
 } isys_irq_ID_t;
-
 
 /*
  * Input-buffer Controller.
  */
 typedef enum {
-	IBUF_CTRL0_ID = 0,	/* map to ISYS2401_IBUF_CNTRL_A */
-	IBUF_CTRL1_ID,		/* map to ISYS2401_IBUF_CNTRL_B */
-	IBUF_CTRL2_ID,		/* map ISYS2401_IBUF_CNTRL_C */
+	IBUF_CTRL0_ID = 0, /* map to ISYS2401_IBUF_CNTRL_A */
+	IBUF_CTRL1_ID, /* map to ISYS2401_IBUF_CNTRL_B */
+	IBUF_CTRL2_ID, /* map ISYS2401_IBUF_CNTRL_C */
 	N_IBUF_CTRL_ID
 } ibuf_ctrl_ID_t;
 /* end of Input-buffer Controller */
@@ -264,9 +213,9 @@ typedef enum {
  * Stream2MMIO.
  */
 typedef enum {
-	STREAM2MMIO0_ID = 0,	/* map to ISYS2401_S2M_A */
-	STREAM2MMIO1_ID,	/* map to ISYS2401_S2M_B */
-	STREAM2MMIO2_ID,	/* map to ISYS2401_S2M_C */
+	STREAM2MMIO0_ID = 0, /* map to ISYS2401_S2M_A */
+	STREAM2MMIO1_ID, /* map to ISYS2401_S2M_B */
+	STREAM2MMIO2_ID, /* map to ISYS2401_S2M_C */
 	N_STREAM2MMIO_ID
 } stream2mmio_ID_t;
 
@@ -297,32 +246,29 @@ typedef enum {
  * Input System 2401: CSI-MIPI recevier.
  */
 typedef enum {
-	CSI_RX_BACKEND0_ID = 0,	/* map to ISYS2401_MIPI_BE_A */
-	CSI_RX_BACKEND1_ID,		/* map to ISYS2401_MIPI_BE_B */
-	CSI_RX_BACKEND2_ID,		/* map to ISYS2401_MIPI_BE_C */
+	CSI_RX_BACKEND0_ID = 0, /* map to ISYS2401_MIPI_BE_A */
+	CSI_RX_BACKEND1_ID, /* map to ISYS2401_MIPI_BE_B */
+	CSI_RX_BACKEND2_ID, /* map to ISYS2401_MIPI_BE_C */
 	N_CSI_RX_BACKEND_ID
 } csi_rx_backend_ID_t;
 
 typedef enum {
-	CSI_RX_FRONTEND0_ID = 0,	/* map to ISYS2401_CSI_RX_A */
-	CSI_RX_FRONTEND1_ID,		/* map to ISYS2401_CSI_RX_B */
-	CSI_RX_FRONTEND2_ID,		/* map to ISYS2401_CSI_RX_C */
+	CSI_RX_FRONTEND0_ID = 0, /* map to ISYS2401_CSI_RX_A */
+	CSI_RX_FRONTEND1_ID, /* map to ISYS2401_CSI_RX_B */
+	CSI_RX_FRONTEND2_ID, /* map to ISYS2401_CSI_RX_C */
 #define N_CSI_RX_FRONTEND_ID (CSI_RX_FRONTEND2_ID + 1)
 } csi_rx_frontend_ID_t;
 
 typedef enum {
-	CSI_RX_DLANE0_ID = 0,		/* map to DLANE0 in CSI RX */
-	CSI_RX_DLANE1_ID,		/* map to DLANE1 in CSI RX */
-	CSI_RX_DLANE2_ID,		/* map to DLANE2 in CSI RX */
-	CSI_RX_DLANE3_ID,		/* map to DLANE3 in CSI RX */
+	CSI_RX_DLANE0_ID = 0, /* map to DLANE0 in CSI RX */
+	CSI_RX_DLANE1_ID, /* map to DLANE1 in CSI RX */
+	CSI_RX_DLANE2_ID, /* map to DLANE2 in CSI RX */
+	CSI_RX_DLANE3_ID, /* map to DLANE3 in CSI RX */
 	N_CSI_RX_DLANE_ID
 } csi_rx_fe_dlane_ID_t;
 /* end of CSI-MIPI receiver */
 
-typedef enum {
-	ISYS2401_DMA0_ID = 0,
-	N_ISYS2401_DMA_ID
-} isys2401_dma_ID_t;
+typedef enum { ISYS2401_DMA0_ID = 0, N_ISYS2401_DMA_ID } isys2401_dma_ID_t;
 
 /**
  * Pixel-generator. ("system_global.h")
@@ -347,7 +293,7 @@ typedef enum {
 	N_INPUT_SYSTEM_INPUT_PORT_ID
 } input_system_input_port_ID_t;
 
-#define N_INPUT_SYSTEM_CSI_PORT	3
+#define N_INPUT_SYSTEM_CSI_PORT 3
 
 typedef enum {
 	ISYS2401_DMA_CHANNEL_0 = 0,

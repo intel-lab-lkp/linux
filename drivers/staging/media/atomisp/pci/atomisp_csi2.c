@@ -11,11 +11,10 @@
 #include "atomisp_internal.h"
 #include "atomisp-regs.h"
 
-static struct
-v4l2_mbus_framefmt *__csi2_get_format(struct atomisp_mipi_csi2_device *csi2,
-				      struct v4l2_subdev_state *sd_state,
-				      enum v4l2_subdev_format_whence which,
-				      unsigned int pad)
+static struct v4l2_mbus_framefmt *
+__csi2_get_format(struct atomisp_mipi_csi2_device *csi2,
+		  struct v4l2_subdev_state *sd_state,
+		  enum v4l2_subdev_format_whence which, unsigned int pad)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
 		return v4l2_subdev_state_get_format(sd_state, pad);
@@ -76,9 +75,8 @@ int atomisp_csi2_set_ffmt(struct v4l2_subdev *sd,
 			  struct v4l2_mbus_framefmt *ffmt)
 {
 	struct atomisp_mipi_csi2_device *csi2 = v4l2_get_subdevdata(sd);
-	struct v4l2_mbus_framefmt *actual_ffmt = __csi2_get_format(csi2,
-								   sd_state,
-								   which, pad);
+	struct v4l2_mbus_framefmt *actual_ffmt =
+		__csi2_get_format(csi2, sd_state, which, pad);
 
 	if (pad == CSI2_PAD_SINK) {
 		const struct atomisp_in_fmt_conv *ic;
@@ -103,13 +101,12 @@ int atomisp_csi2_set_ffmt(struct v4l2_subdev *sd,
 		/* Always use V4L2_FIELD_ANY to match the ISP sink pad */
 		tmp_ffmt.field = V4L2_FIELD_ANY;
 		return atomisp_csi2_set_ffmt(sd, sd_state, which,
-					     CSI2_PAD_SOURCE,
-					     &tmp_ffmt);
+					     CSI2_PAD_SOURCE, &tmp_ffmt);
 	}
 
 	/* FIXME: DPCM decompression */
-	*actual_ffmt = *ffmt = *__csi2_get_format(csi2, sd_state, which,
-						  CSI2_PAD_SINK);
+	*actual_ffmt = *ffmt =
+		*__csi2_get_format(csi2, sd_state, which, CSI2_PAD_SINK);
 
 	return 0;
 }
@@ -182,8 +179,7 @@ static int mipi_csi2_init_entities(struct atomisp_mipi_csi2_device *csi2,
 	return 0;
 }
 
-void
-atomisp_mipi_csi2_unregister_entities(struct atomisp_mipi_csi2_device *csi2)
+void atomisp_mipi_csi2_unregister_entities(struct atomisp_mipi_csi2_device *csi2)
 {
 	media_entity_cleanup(&csi2->subdev.entity);
 	v4l2_device_unregister_subdev(&csi2->subdev);
@@ -206,13 +202,13 @@ error:
 	return ret;
 }
 
-static const int LIMIT_SHIFT = 6;	/* Limit numeric range into 31 bits */
+static const int LIMIT_SHIFT = 6; /* Limit numeric range into 31 bits */
 
-static int
-atomisp_csi2_configure_calc(const short int coeffs[2], int mipi_freq, int def)
+static int atomisp_csi2_configure_calc(const short int coeffs[2], int mipi_freq,
+				       int def)
 {
 	/* Delay counter accuracy, 1/0.0625 for ANN/CHT, 1/0.125 for BXT */
-	static const int accinv = 16;		/* 1 / COUNT_ACC */
+	static const int accinv = 16; /* 1 / COUNT_ACC */
 	int r;
 
 	if (mipi_freq >> LIMIT_SHIFT <= 0)
@@ -261,26 +257,23 @@ static void atomisp_csi2_configure_isp2401(struct atomisp_sub_device *asd)
 	static const short int coeff_clk_settle[] = { 95, -8 };
 	static const short int coeff_dat_termen[] = { 0, 0 };
 	static const short int coeff_dat_settle[] = { 85, -2 };
-	static const int TERMEN_DEFAULT		  = 0 * 0;
-	static const int SETTLE_DEFAULT		  = 0x480;
+	static const int TERMEN_DEFAULT = 0 * 0;
+	static const int SETTLE_DEFAULT = 0x480;
 
 	static const hrt_address csi2_port_base[] = {
-		[ATOMISP_CAMERA_PORT_PRIMARY]     = CSI2_PORT_A_BASE,
-		[ATOMISP_CAMERA_PORT_SECONDARY]   = CSI2_PORT_B_BASE,
-		[ATOMISP_CAMERA_PORT_TERTIARY]    = CSI2_PORT_C_BASE,
+		[ATOMISP_CAMERA_PORT_PRIMARY] = CSI2_PORT_A_BASE,
+		[ATOMISP_CAMERA_PORT_SECONDARY] = CSI2_PORT_B_BASE,
+		[ATOMISP_CAMERA_PORT_TERTIARY] = CSI2_PORT_C_BASE,
 	};
 	/* Number of lanes on each port, excluding clock lane */
 	static const unsigned char csi2_port_lanes[] = {
-		[ATOMISP_CAMERA_PORT_PRIMARY]     = 4,
-		[ATOMISP_CAMERA_PORT_SECONDARY]   = 2,
-		[ATOMISP_CAMERA_PORT_TERTIARY]    = 2,
+		[ATOMISP_CAMERA_PORT_PRIMARY] = 4,
+		[ATOMISP_CAMERA_PORT_SECONDARY] = 2,
+		[ATOMISP_CAMERA_PORT_TERTIARY] = 2,
 	};
 	static const hrt_address csi2_lane_base[] = {
-		CSI2_LANE_CL_BASE,
-		CSI2_LANE_D0_BASE,
-		CSI2_LANE_D1_BASE,
-		CSI2_LANE_D2_BASE,
-		CSI2_LANE_D3_BASE,
+		CSI2_LANE_CL_BASE, CSI2_LANE_D0_BASE, CSI2_LANE_D1_BASE,
+		CSI2_LANE_D2_BASE, CSI2_LANE_D3_BASE,
 	};
 
 	int clk_termen;
@@ -297,8 +290,8 @@ static void atomisp_csi2_configure_isp2401(struct atomisp_sub_device *asd)
 	port = isp->inputs[asd->input_curr].port;
 
 	ctrl.id = V4L2_CID_LINK_FREQ;
-	if (v4l2_g_ctrl
-	    (isp->inputs[asd->input_curr].sensor->ctrl_handler, &ctrl) == 0)
+	if (v4l2_g_ctrl(isp->inputs[asd->input_curr].sensor->ctrl_handler,
+			&ctrl) == 0)
 		mipi_freq = ctrl.value;
 
 	clk_termen = atomisp_csi2_configure_calc(coeff_clk_termen, mipi_freq,

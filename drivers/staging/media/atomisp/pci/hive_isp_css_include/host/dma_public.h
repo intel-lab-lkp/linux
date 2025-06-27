@@ -17,10 +17,8 @@
 
  \return none, DMA[ID].ctrl[reg] = value
  */
-STORAGE_CLASS_DMA_H void dma_reg_store(
-    const dma_ID_t		ID,
-    const unsigned int	reg,
-    const hrt_data		value);
+STORAGE_CLASS_DMA_H void
+dma_reg_store(const dma_ID_t ID, const unsigned int reg, const hrt_data value);
 
 /*! Read from a control register of DMA[ID]
 
@@ -30,9 +28,8 @@ STORAGE_CLASS_DMA_H void dma_reg_store(
 
  \return DMA[ID].ctrl[reg]
  */
-STORAGE_CLASS_DMA_H hrt_data dma_reg_load(
-    const dma_ID_t		ID,
-    const unsigned int	reg);
+STORAGE_CLASS_DMA_H hrt_data dma_reg_load(const dma_ID_t ID,
+					  const unsigned int reg);
 
 /*! Set maximum burst size of DMA[ID]
 
@@ -42,10 +39,7 @@ STORAGE_CLASS_DMA_H hrt_data dma_reg_load(
 
  \return none
 */
-void
-dma_set_max_burst_size(
-    dma_ID_t		ID,
-    dma_connection		conn,
-    uint32_t		max_burst_size);
+void dma_set_max_burst_size(dma_ID_t ID, dma_connection conn,
+			    uint32_t max_burst_size);
 
 #endif /* __DMA_PUBLIC_H_INCLUDED__ */

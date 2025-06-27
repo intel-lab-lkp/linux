@@ -18,7 +18,7 @@
 /* CSS firmware package structure.
  */
 struct ia_css_fw {
-	void	    *data;  /** pointer to the firmware data */
+	void *data; /** pointer to the firmware data */
 	unsigned int bytes; /** length in bytes of firmware data */
 };
 
@@ -38,9 +38,8 @@ struct device;
  * contents of this firmware package are copied into local data structures, so
  * the fw pointer could be freed after this function completes.
  */
-int
-ia_css_load_firmware(struct device *dev, const struct ia_css_env *env,
-		     const struct ia_css_fw  *fw);
+int ia_css_load_firmware(struct device *dev, const struct ia_css_env *env,
+			 const struct ia_css_fw *fw);
 
 /* @brief Unloads the firmware
  * @return	None
@@ -51,7 +50,6 @@ ia_css_load_firmware(struct device *dev, const struct ia_css_env *env,
  * This function may only be called when the CSS API is in uninitialized state
  * (e.g. after calling ia_css_uninit()).
  */
-void
-ia_css_unload_firmware(void);
+void ia_css_unload_firmware(void);
 
 #endif /* __IA_CSS_FIRMWARE_H */

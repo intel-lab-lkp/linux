@@ -25,19 +25,19 @@ struct ia_css_metadata_config {
 			data. The default value is ATOMISP_INPUT_FORMAT_EMBEDDED. For
 			certain sensors, user can choose non-default data type for embedded
 			data. */
-	struct ia_css_resolution  resolution; /** Resolution */
+	struct ia_css_resolution resolution; /** Resolution */
 };
 
 struct ia_css_metadata_info {
 	struct ia_css_resolution resolution; /** Resolution */
-	u32                 stride;     /** Stride in bytes */
-	u32                 size;       /** Total size in bytes */
+	u32 stride; /** Stride in bytes */
+	u32 size; /** Total size in bytes */
 };
 
 struct ia_css_metadata {
-	struct ia_css_metadata_info info;    /** Layout info */
-	ia_css_ptr		    address; /** CSS virtual address */
-	u32		    exp_id;
+	struct ia_css_metadata_info info; /** Layout info */
+	ia_css_ptr address; /** CSS virtual address */
+	u32 exp_id;
 	/** Exposure ID, see ia_css_event_public.h for more detail */
 };
 
@@ -62,7 +62,6 @@ ia_css_metadata_allocate(const struct ia_css_metadata_info *metadata_info);
  *
  * This function frees a metadata buffer.
  */
-void
-ia_css_metadata_free(struct ia_css_metadata *metadata);
+void ia_css_metadata_free(struct ia_css_metadata *metadata);
 
 #endif /* __IA_CSS_METADATA_H */

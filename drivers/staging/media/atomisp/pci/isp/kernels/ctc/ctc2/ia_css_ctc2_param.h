@@ -7,7 +7,7 @@
 #ifndef __IA_CSS_CTC2_PARAM_H
 #define __IA_CSS_CTC2_PARAM_H
 
-#define IA_CSS_CTC_COEF_SHIFT          13
+#define IA_CSS_CTC_COEF_SHIFT 13
 #include "vmem.h" /* needed for VMEM_ARRAY */
 
 /* CTC (Chroma Tone Control)ISP Parameters */
@@ -35,6 +35,5 @@ struct ia_css_isp_ctc2_dmem_params {
 
 	/* Slope of line interconnecting uv_x0 -> uv_x1*/
 	s32 uv_dydx;
-
 };
 #endif /* __IA_CSS_CTC2_PARAM_H */

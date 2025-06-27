@@ -33,10 +33,8 @@
  * ia_css_load_firmware() must be called to load the firmware before calling
  * this function.
  */
-int ia_css_init(struct device           *dev,
-		const struct ia_css_env *env,
-		u32                     l1_base,
-		enum ia_css_irq_type    irq_type);
+int ia_css_init(struct device *dev, const struct ia_css_env *env, u32 l1_base,
+		enum ia_css_irq_type irq_type);
 
 /* @brief Un-initialize the CSS API.
  * @return	None
@@ -44,8 +42,7 @@ int ia_css_init(struct device           *dev,
  * This function deallocates all memory that has been allocated by the CSS API.
  * After this function is called, no other CSS functions should be called.
  */
-void
-ia_css_uninit(void);
+void ia_css_uninit(void);
 
 /* @brief Enable use of a separate queue for ISYS events.
  *
@@ -58,8 +55,7 @@ ia_css_uninit(void);
  * This function should only be called when the SP is not running, calling it
  * when the SP is running will result in an error value being returned. }
  */
-int
-ia_css_enable_isys_event_queue(bool enable);
+int ia_css_enable_isys_event_queue(bool enable);
 
 /* @brief Test whether the ISP has started.
  *
@@ -67,8 +63,7 @@ ia_css_enable_isys_event_queue(bool enable);
  *
  * Temporary function to poll whether the ISP has been started. Once it has,
  * the sensor can also be started. */
-bool
-ia_css_isp_has_started(void);
+bool ia_css_isp_has_started(void);
 
 /* @brief Test whether the SP has initialized.
  *
@@ -76,8 +71,7 @@ ia_css_isp_has_started(void);
  *
  * Temporary function to poll whether the SP has been initialized. Once it has,
  * we can enqueue buffers. */
-bool
-ia_css_sp_has_initialized(void);
+bool ia_css_sp_has_initialized(void);
 
 /* @brief Test whether the SP has terminated.
  *
@@ -85,8 +79,7 @@ ia_css_sp_has_initialized(void);
  *
  * Temporary function to poll whether the SP has been terminated. Once it has,
  * we can switch mode. */
-bool
-ia_css_sp_has_terminated(void);
+bool ia_css_sp_has_terminated(void);
 
 /* @brief start SP hardware
  *
@@ -96,8 +89,7 @@ ia_css_sp_has_terminated(void);
  * All threads will be started and blocked by semaphore. This function should
  * be called before any ia_css_stream_start().
  */
-int
-ia_css_start_sp(void);
+int ia_css_start_sp(void);
 
 /* @brief stop SP hardware
  *
@@ -106,7 +98,6 @@ ia_css_start_sp(void);
  * This function will terminate all threads and shut down SP. It should be
  * called after all ia_css_stream_stop().
  */
-int
-ia_css_stop_sp(void);
+int ia_css_stop_sp(void);
 
 #endif /* __IA_CSS_CONTROL_H */

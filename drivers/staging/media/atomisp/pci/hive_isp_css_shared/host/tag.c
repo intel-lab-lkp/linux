@@ -5,7 +5,7 @@
  */
 
 #include "tag.h"
-#include <platform_support.h>	/* NULL */
+#include <platform_support.h> /* NULL */
 #include <assert_support.h>
 #include "tag_local.h"
 
@@ -16,19 +16,16 @@
  * @param[in]	offset
  * @param[out]	tag_descr
  */
-void
-sh_css_create_tag_descr(int num_captures,
-			unsigned int skip,
-			int offset,
-			unsigned int exp_id,
-			struct sh_css_tag_descr *tag_descr)
+void sh_css_create_tag_descr(int num_captures, unsigned int skip, int offset,
+			     unsigned int exp_id,
+			     struct sh_css_tag_descr *tag_descr)
 {
 	assert(tag_descr);
 
 	tag_descr->num_captures = num_captures;
-	tag_descr->skip		= skip;
-	tag_descr->offset	= offset;
-	tag_descr->exp_id	= exp_id;
+	tag_descr->skip = skip;
+	tag_descr->offset = offset;
+	tag_descr->exp_id = exp_id;
 }
 
 /*
@@ -36,8 +33,7 @@ sh_css_create_tag_descr(int num_captures,
  * @param[in]	tag		Pointer to the tag description
  * @return	(unsigned int)	Encoded 32-bit tag-info
  */
-unsigned int
-sh_css_encode_tag_descr(struct sh_css_tag_descr *tag)
+unsigned int sh_css_encode_tag_descr(struct sh_css_tag_descr *tag)
 {
 	int num_captures;
 	unsigned int num_captures_sign;
@@ -72,12 +68,15 @@ sh_css_encode_tag_descr(struct sh_css_tag_descr *tag)
 
 		encoded_tag = TAG_EXP | (exp_id & 0xFF) << TAG_EXP_ID_SHIFT;
 	} else {
-		encoded_tag = TAG_CAP
-			      | ((num_captures_sign & 0x00000001) << TAG_NUM_CAPTURES_SIGN_SHIFT)
-			      | ((offset_sign       & 0x00000001) << TAG_OFFSET_SIGN_SHIFT)
-			      | ((num_captures      & 0x000000FF) << TAG_NUM_CAPTURES_SHIFT)
-			      | ((skip              & 0x000000FF) << TAG_OFFSET_SHIFT)
-			      | ((offset            & 0x000000FF) << TAG_SKIP_SHIFT);
+		encoded_tag =
+			TAG_CAP |
+			((num_captures_sign & 0x00000001)
+			 << TAG_NUM_CAPTURES_SIGN_SHIFT) |
+			((offset_sign & 0x00000001) << TAG_OFFSET_SIGN_SHIFT) |
+			((num_captures & 0x000000FF)
+			 << TAG_NUM_CAPTURES_SHIFT) |
+			((skip & 0x000000FF) << TAG_OFFSET_SHIFT) |
+			((offset & 0x000000FF) << TAG_SKIP_SHIFT);
 	}
 	return encoded_tag;
 }

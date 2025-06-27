@@ -12,7 +12,7 @@
 */
 
 /* Number of DVS coefficient types */
-#define IA_CSS_DVS2_NUM_COEF_TYPES     4
+#define IA_CSS_DVS2_NUM_COEF_TYPES 4
 
 #ifndef PIPE_GENERATION
 #include "isp/kernels/sdis/common/ia_css_sdis_common_types.h"
@@ -24,8 +24,8 @@
 struct ia_css_dvs2_coef_types {
 	s16 *odd_real; /** real part of the odd coefficients*/
 	s16 *odd_imag; /** imaginary part of the odd coefficients*/
-	s16 *even_real;/** real part of the even coefficients*/
-	s16 *even_imag;/** imaginary part of the even coefficients*/
+	s16 *even_real; /** real part of the even coefficients*/
+	s16 *even_imag; /** imaginary part of the even coefficients*/
 };
 
 /* DVS 2.0 Coefficients. This structure describes the coefficients that are needed for the dvs statistics.
@@ -34,7 +34,7 @@ struct ia_css_dvs2_coef_types {
  */
 struct ia_css_dvs2_coefficients {
 	struct ia_css_dvs_grid_info
-		grid;        /** grid info contains the dimensions of the dvs grid */
+		grid; /** grid info contains the dimensions of the dvs grid */
 	struct ia_css_dvs2_coef_types
 		hor_coefs; /** struct with pointers that contain the horizontal coefficients */
 	struct ia_css_dvs2_coef_types
@@ -47,8 +47,8 @@ struct ia_css_dvs2_coefficients {
 struct ia_css_dvs2_stat_types {
 	s32 *odd_real; /** real part of the odd statistics*/
 	s32 *odd_imag; /** imaginary part of the odd statistics*/
-	s32 *even_real;/** real part of the even statistics*/
-	s32 *even_imag;/** imaginary part of the even statistics*/
+	s32 *even_real; /** real part of the even statistics*/
+	s32 *even_imag; /** imaginary part of the even statistics*/
 };
 
 /* DVS 2.0 Statistics. This structure describes the statistics that are generated using the provided coefficients.
@@ -57,7 +57,7 @@ struct ia_css_dvs2_stat_types {
  */
 struct ia_css_dvs2_statistics {
 	struct ia_css_dvs_grid_info
-		grid;       /** grid info contains the dimensions of the dvs grid */
+		grid; /** grid info contains the dimensions of the dvs grid */
 	struct ia_css_dvs2_stat_types
 		hor_prod; /** struct with pointers that contain the horizontal statistics */
 	struct ia_css_dvs2_stat_types

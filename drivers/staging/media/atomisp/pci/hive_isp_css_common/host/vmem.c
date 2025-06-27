@@ -19,46 +19,48 @@ typedef hive_uedge *hive_wide;
 /* Copied from SDK: sim_semantics.c */
 
 /* subword bits move like this:         MSB[____xxxx____]LSB -> MSB[00000000xxxx]LSB */
-static inline hive_uedge
-subword(hive_uedge w, unsigned int start, unsigned int end)
+static inline hive_uedge subword(hive_uedge w, unsigned int start,
+				 unsigned int end)
 {
 	return (w & (((1ULL << (end - 1)) - 1) << 1 | 1)) >> start;
 }
 
 /* inverse subword bits move like this: MSB[xxxx____xxxx]LSB -> MSB[xxxx0000xxxx]LSB */
-static inline hive_uedge
-inv_subword(hive_uedge w, unsigned int start, unsigned int end)
+static inline hive_uedge inv_subword(hive_uedge w, unsigned int start,
+				     unsigned int end)
 {
-	return w & (~(((1ULL << (end - 1)) - 1) << 1 | 1) | ((1ULL << start) - 1));
+	return w &
+	       (~(((1ULL << (end - 1)) - 1) << 1 | 1) | ((1ULL << start) - 1));
 }
 
 #define uedge_bits (8 * sizeof(hive_uedge))
-#define move_lower_bits(target, target_bit, src, src_bit) move_subword(target, target_bit, src, 0, src_bit)
-#define move_upper_bits(target, target_bit, src, src_bit) move_subword(target, target_bit, src, src_bit, uedge_bits)
-#define move_word(target, target_bit, src) move_subword(target, target_bit, src, 0, uedge_bits)
+#define move_lower_bits(target, target_bit, src, src_bit) \
+	move_subword(target, target_bit, src, 0, src_bit)
+#define move_upper_bits(target, target_bit, src, src_bit) \
+	move_subword(target, target_bit, src, src_bit, uedge_bits)
+#define move_word(target, target_bit, src) \
+	move_subword(target, target_bit, src, 0, uedge_bits)
 
-static void
-move_subword(
-    hive_uedge *target,
-    unsigned int target_bit,
-    hive_uedge src,
-    unsigned int src_start,
-    unsigned int src_end)
+static void move_subword(hive_uedge *target, unsigned int target_bit,
+			 hive_uedge src, unsigned int src_start,
+			 unsigned int src_end)
 {
 	unsigned int start_elem = target_bit / uedge_bits;
-	unsigned int start_bit  = target_bit % uedge_bits;
+	unsigned int start_bit = target_bit % uedge_bits;
 	unsigned int subword_width = src_end - src_start;
 
 	hive_uedge src_subword = subword(src, src_start, src_end);
 
 	if (subword_width + start_bit > uedge_bits) { /* overlap */
 		hive_uedge old_val1;
-		hive_uedge old_val0 = inv_subword(target[start_elem], start_bit, uedge_bits);
+		hive_uedge old_val0 =
+			inv_subword(target[start_elem], start_bit, uedge_bits);
 
 		target[start_elem] = old_val0 | (src_subword << start_bit);
 		old_val1 = inv_subword(target[start_elem + 1], 0,
 				       subword_width + start_bit - uedge_bits);
-		target[start_elem + 1] = old_val1 | (src_subword >> (uedge_bits - start_bit));
+		target[start_elem + 1] =
+			old_val1 | (src_subword >> (uedge_bits - start_bit));
 	} else {
 		hive_uedge old_val = inv_subword(target[start_elem], start_bit,
 						 start_bit + subword_width);
@@ -67,18 +69,14 @@ move_subword(
 	}
 }
 
-static void
-hive_sim_wide_unpack(
-    hive_wide vector,
-    hive_wide elem,
-    hive_uint elem_bits,
-    hive_uint index)
+static void hive_sim_wide_unpack(hive_wide vector, hive_wide elem,
+				 hive_uint elem_bits, hive_uint index)
 {
 	/* pointers into wide_type: */
 	unsigned int start_elem = (elem_bits * index) / uedge_bits;
-	unsigned int start_bit  = (elem_bits * index) % uedge_bits;
-	unsigned int end_elem   = (elem_bits * (index + 1) - 1) / uedge_bits;
-	unsigned int end_bit    = ((elem_bits * (index + 1) - 1) % uedge_bits) + 1;
+	unsigned int start_bit = (elem_bits * index) % uedge_bits;
+	unsigned int end_elem = (elem_bits * (index + 1) - 1) / uedge_bits;
+	unsigned int end_bit = ((elem_bits * (index + 1) - 1) % uedge_bits) + 1;
 
 	if (elem_bits == uedge_bits) {
 		/* easy case for speedup: */
@@ -91,7 +89,8 @@ hive_sim_wide_unpack(
 		unsigned int bits_written = 0;
 		unsigned int i;
 
-		move_upper_bits(elem, bits_written, vector[start_elem], start_bit);
+		move_upper_bits(elem, bits_written, vector[start_elem],
+				start_bit);
 		bits_written += (64 - start_bit);
 		for (i = start_elem + 1; i < end_elem; i++) {
 			move_word(elem, bits_written, vector[i]);
@@ -101,12 +100,8 @@ hive_sim_wide_unpack(
 	}
 }
 
-static void
-hive_sim_wide_pack(
-    hive_wide vector,
-    hive_wide elem,
-    hive_uint elem_bits,
-    hive_uint index)
+static void hive_sim_wide_pack(hive_wide vector, hive_wide elem,
+			       hive_uint elem_bits, hive_uint index)
 {
 	/* pointers into wide_type: */
 	unsigned int start_elem = (elem_bits * index) / uedge_bits;
@@ -119,8 +114,9 @@ hive_sim_wide_pack(
 		unsigned int start_bit = elem_bits * index;
 		unsigned int i = 0;
 
-		for (; bits_to_write > uedge_bits;
-		     bits_to_write -= uedge_bits, i++, start_bit += uedge_bits) {
+		for (; bits_to_write > uedge_bits; bits_to_write -= uedge_bits,
+						   i++,
+						   start_bit += uedge_bits) {
 			move_word(vector, start_bit, elem[i]);
 		}
 		move_lower_bits(vector, start_bit, elem[i], bits_to_write);
@@ -130,21 +126,23 @@ hive_sim_wide_pack(
 	}
 }
 
-static void load_vector(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from)
+static void load_vector(const isp_ID_t ID, t_vmem_elem *to,
+			const t_vmem_elem *from)
 {
 	unsigned int i;
 	hive_uedge *data;
 	unsigned int size = sizeof(short) * ISP_NWAY;
 
-	VMEM_ARRAY(v, 2 * ISP_NWAY); /* Need 2 vectors to work around vmem hss bug */
-	assert(ISP_BAMEM_BASE[ID] != (hrt_address) - 1);
+	VMEM_ARRAY(
+		v,
+		2 * ISP_NWAY); /* Need 2 vectors to work around vmem hss bug */
+	assert(ISP_BAMEM_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
-	ia_css_device_load(ISP_BAMEM_BASE[ID] + (unsigned long)from, &v[0][0], size);
+	ia_css_device_load(ISP_BAMEM_BASE[ID] + (unsigned long)from, &v[0][0],
+			   size);
 #else
-	hrt_master_port_load(ISP_BAMEM_BASE[ID] + (unsigned long)from, &v[0][0], size);
+	hrt_master_port_load(ISP_BAMEM_BASE[ID] + (unsigned long)from, &v[0][0],
+			     size);
 #endif
 	data = (hive_uedge *)v;
 	for (i = 0; i < ISP_NWAY; i++) {
@@ -156,22 +154,23 @@ static void load_vector(
 	udelay(1); /* Spend at least 1 cycles per vector */
 }
 
-static void store_vector(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from)
+static void store_vector(const isp_ID_t ID, t_vmem_elem *to,
+			 const t_vmem_elem *from)
 {
 	unsigned int i;
 	unsigned int size = sizeof(short) * ISP_NWAY;
 
-	VMEM_ARRAY(v, 2 * ISP_NWAY); /* Need 2 vectors to work around vmem hss bug */
+	VMEM_ARRAY(
+		v,
+		2 * ISP_NWAY); /* Need 2 vectors to work around vmem hss bug */
 	//load_vector (&v[1][0], &to[ISP_NWAY]); /* Fetch the next vector, since it will be overwritten. */
 	hive_uedge *data = (hive_uedge *)v;
 
 	for (i = 0; i < ISP_NWAY; i++) {
-		hive_sim_wide_pack(data, (hive_wide)&from[i], ISP_VEC_ELEMBITS, i);
+		hive_sim_wide_pack(data, (hive_wide)&from[i], ISP_VEC_ELEMBITS,
+				   i);
 	}
-	assert(ISP_BAMEM_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_BAMEM_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
 	ia_css_device_store(ISP_BAMEM_BASE[ID] + (unsigned long)to, &v, size);
 #else
@@ -181,11 +180,8 @@ static void store_vector(
 	udelay(1); /* Spend at least 1 cycles per vector */
 }
 
-void isp_vmem_load(
-    const isp_ID_t		ID,
-    const t_vmem_elem	*from,
-    t_vmem_elem		*to,
-    unsigned int elems) /* In t_vmem_elem */
+void isp_vmem_load(const isp_ID_t ID, const t_vmem_elem *from, t_vmem_elem *to,
+		   unsigned int elems) /* In t_vmem_elem */
 {
 	unsigned int c;
 	const t_vmem_elem *vp = from;
@@ -199,11 +195,8 @@ void isp_vmem_load(
 	}
 }
 
-void isp_vmem_store(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from,
-    unsigned int elems) /* In t_vmem_elem */
+void isp_vmem_store(const isp_ID_t ID, t_vmem_elem *to, const t_vmem_elem *from,
+		    unsigned int elems) /* In t_vmem_elem */
 {
 	unsigned int c;
 	t_vmem_elem *vp = to;
@@ -217,15 +210,11 @@ void isp_vmem_store(
 	}
 }
 
-void isp_vmem_2d_load(
-    const isp_ID_t		ID,
-    const t_vmem_elem	*from,
-    t_vmem_elem		*to,
-    unsigned int height,
-    unsigned int width,
-    unsigned int stride_to,  /* In t_vmem_elem */
+void isp_vmem_2d_load(const isp_ID_t ID, const t_vmem_elem *from,
+		      t_vmem_elem *to, unsigned int height, unsigned int width,
+		      unsigned int stride_to, /* In t_vmem_elem */
 
-    unsigned stride_from /* In t_vmem_elem */)
+		      unsigned stride_from /* In t_vmem_elem */)
 {
 	unsigned int h;
 
@@ -241,20 +230,18 @@ void isp_vmem_2d_load(
 			load_vector(ID, &to[stride_to * h + c], vp);
 			vp = (t_vmem_elem *)((char *)vp + ISP_VEC_ALIGN);
 		}
-		from = (const t_vmem_elem *)((const char *)from + stride_from / ISP_NWAY *
-					     ISP_VEC_ALIGN);
+		from = (const t_vmem_elem *)((const char *)from +
+					     stride_from / ISP_NWAY *
+						     ISP_VEC_ALIGN);
 	}
 }
 
-void isp_vmem_2d_store(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from,
-    unsigned int height,
-    unsigned int width,
-    unsigned int stride_to,  /* In t_vmem_elem */
+void isp_vmem_2d_store(const isp_ID_t ID, t_vmem_elem *to,
+		       const t_vmem_elem *from, unsigned int height,
+		       unsigned int width,
+		       unsigned int stride_to, /* In t_vmem_elem */
 
-    unsigned stride_from /* In t_vmem_elem */)
+		       unsigned stride_from /* In t_vmem_elem */)
 {
 	unsigned int h;
 
@@ -270,6 +257,7 @@ void isp_vmem_2d_store(
 			store_vector(ID, vp, &from[stride_from * h + c]);
 			vp = (t_vmem_elem *)((char *)vp + ISP_VEC_ALIGN);
 		}
-		to = (t_vmem_elem *)((char *)to + stride_to / ISP_NWAY * ISP_VEC_ALIGN);
+		to = (t_vmem_elem *)((char *)to +
+				     stride_to / ISP_NWAY * ISP_VEC_ALIGN);
 	}
 }

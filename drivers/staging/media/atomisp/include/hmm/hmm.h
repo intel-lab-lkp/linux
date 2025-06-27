@@ -7,8 +7,8 @@
  * Copyright (c) 2010 Silicon Hive www.siliconhive.com.
  */
 
-#ifndef	__HMM_H__
-#define	__HMM_H__
+#ifndef __HMM_H__
+#define __HMM_H__
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -19,8 +19,8 @@
 #include "hmm/hmm_bo.h"
 #include "ia_css_types.h"
 
-#define mmgr_NULL              ((ia_css_ptr)0)
-#define mmgr_EXCEPTION         ((ia_css_ptr) - 1)
+#define mmgr_NULL ((ia_css_ptr)0)
+#define mmgr_EXCEPTION ((ia_css_ptr)-1)
 
 int hmm_init(void);
 void hmm_cleanup(void);

@@ -25,8 +25,9 @@
  */
 typedef struct ia_css_circbuf_s ia_css_circbuf_t;
 struct ia_css_circbuf_s {
-	ia_css_circbuf_desc_t *desc;    /* Pointer to the descriptor of the circbuf */
-	ia_css_circbuf_elem_t *elems;	/* an array of elements    */
+	ia_css_circbuf_desc_t
+		*desc; /* Pointer to the descriptor of the circbuf */
+	ia_css_circbuf_elem_t *elems; /* an array of elements    */
 };
 
 /**
@@ -36,18 +37,15 @@ struct ia_css_circbuf_s {
  * @param elems	An array of elements.
  * @param desc	The descriptor set to the size using ia_css_circbuf_desc_init().
  */
-void ia_css_circbuf_create(
-    ia_css_circbuf_t *cb,
-    ia_css_circbuf_elem_t *elems,
-    ia_css_circbuf_desc_t *desc);
+void ia_css_circbuf_create(ia_css_circbuf_t *cb, ia_css_circbuf_elem_t *elems,
+			   ia_css_circbuf_desc_t *desc);
 
 /**
  * @brief Destroy the circular buffer.
  *
  * @param cb The pointer to the circular buffer.
  */
-void ia_css_circbuf_destroy(
-    ia_css_circbuf_t *cb);
+void ia_css_circbuf_destroy(ia_css_circbuf_t *cb);
 
 /**
  * @brief Pop a value out of the circular buffer.
@@ -59,8 +57,7 @@ void ia_css_circbuf_destroy(
  *
  * @return the pop-out value.
  */
-uint32_t ia_css_circbuf_pop(
-    ia_css_circbuf_t *cb);
+uint32_t ia_css_circbuf_pop(ia_css_circbuf_t *cb);
 
 /**
  * @brief Extract a value out of the circular buffer.
@@ -73,9 +70,7 @@ uint32_t ia_css_circbuf_pop(
  *
  * @return the extracted value.
  */
-uint32_t ia_css_circbuf_extract(
-    ia_css_circbuf_t *cb,
-    int offset);
+uint32_t ia_css_circbuf_extract(ia_css_circbuf_t *cb, int offset);
 
 /****************************************************************
  *
@@ -88,9 +83,8 @@ uint32_t ia_css_circbuf_extract(
  * @param elem The pointer to the element.
  * @param val  The value to be set.
  */
-static inline void ia_css_circbuf_elem_set_val(
-    ia_css_circbuf_elem_t *elem,
-    uint32_t val)
+static inline void ia_css_circbuf_elem_set_val(ia_css_circbuf_elem_t *elem,
+					       uint32_t val)
 {
 	OP___assert(elem);
 
@@ -102,8 +96,7 @@ static inline void ia_css_circbuf_elem_set_val(
  *
  * @param elem The pointer to the element.
  */
-static inline void ia_css_circbuf_elem_init(
-    ia_css_circbuf_elem_t *elem)
+static inline void ia_css_circbuf_elem_init(ia_css_circbuf_elem_t *elem)
 {
 	OP___assert(elem);
 	ia_css_circbuf_elem_set_val(elem, 0);
@@ -115,9 +108,8 @@ static inline void ia_css_circbuf_elem_init(
  * @param src  The element as the copy source.
  * @param dest The element as the copy destination.
  */
-static inline void ia_css_circbuf_elem_cpy(
-    ia_css_circbuf_elem_t *src,
-    ia_css_circbuf_elem_t *dest)
+static inline void ia_css_circbuf_elem_cpy(ia_css_circbuf_elem_t *src,
+					   ia_css_circbuf_elem_t *dest)
 {
 	OP___assert(src);
 	OP___assert(dest);
@@ -134,10 +126,8 @@ static inline void ia_css_circbuf_elem_cpy(
  *
  * @return the position at offset.
  */
-static inline uint8_t ia_css_circbuf_get_pos_at_offset(
-    ia_css_circbuf_t *cb,
-    u32 base,
-    int offset)
+static inline uint8_t ia_css_circbuf_get_pos_at_offset(ia_css_circbuf_t *cb,
+						       u32 base, int offset)
 {
 	u8 dest;
 
@@ -167,10 +157,8 @@ static inline uint8_t ia_css_circbuf_get_pos_at_offset(
  *
  * @return the offset.
  */
-static inline int ia_css_circbuf_get_offset(
-    ia_css_circbuf_t *cb,
-    u32 src_pos,
-    uint32_t dest_pos)
+static inline int ia_css_circbuf_get_offset(ia_css_circbuf_t *cb, u32 src_pos,
+					    uint32_t dest_pos)
 {
 	int offset;
 
@@ -192,8 +180,7 @@ static inline int ia_css_circbuf_get_offset(
  *
  * TODO: Test this API.
  */
-static inline uint32_t ia_css_circbuf_get_size(
-    ia_css_circbuf_t *cb)
+static inline uint32_t ia_css_circbuf_get_size(ia_css_circbuf_t *cb)
 {
 	OP___assert(cb);
 	OP___assert(cb->desc);
@@ -208,8 +195,7 @@ static inline uint32_t ia_css_circbuf_get_size(
  *
  * @return the number of available elements.
  */
-static inline uint32_t ia_css_circbuf_get_num_elems(
-    ia_css_circbuf_t *cb)
+static inline uint32_t ia_css_circbuf_get_num_elems(ia_css_circbuf_t *cb)
 {
 	int num;
 
@@ -230,8 +216,7 @@ static inline uint32_t ia_css_circbuf_get_num_elems(
  *	- true when it is empty.
  *	- false when it is not empty.
  */
-static inline bool ia_css_circbuf_is_empty(
-    ia_css_circbuf_t *cb)
+static inline bool ia_css_circbuf_is_empty(ia_css_circbuf_t *cb)
 {
 	OP___assert(cb);
 	OP___assert(cb->desc);
@@ -265,9 +250,8 @@ static inline bool ia_css_circbuf_is_full(ia_css_circbuf_t *cb)
  * @param cb	The pointer to the circular buffer.
  * @param elem	The new element.
  */
-static inline void ia_css_circbuf_write(
-    ia_css_circbuf_t *cb,
-    ia_css_circbuf_elem_t elem)
+static inline void ia_css_circbuf_write(ia_css_circbuf_t *cb,
+					ia_css_circbuf_elem_t elem)
 {
 	OP___assert(cb);
 	OP___assert(cb->desc);
@@ -289,9 +273,7 @@ static inline void ia_css_circbuf_write(
  * @param cb	The pointer to the circular buffer.
  * @param val	The value to be pushed in.
  */
-static inline void ia_css_circbuf_push(
-    ia_css_circbuf_t *cb,
-    uint32_t val)
+static inline void ia_css_circbuf_push(ia_css_circbuf_t *cb, uint32_t val)
 {
 	ia_css_circbuf_elem_t elem;
 
@@ -312,8 +294,7 @@ static inline void ia_css_circbuf_push(
  *
  * @return: The number of free elements.
  */
-static inline uint32_t ia_css_circbuf_get_free_elems(
-    ia_css_circbuf_t *cb)
+static inline uint32_t ia_css_circbuf_get_free_elems(ia_css_circbuf_t *cb)
 {
 	OP___assert(cb);
 	OP___assert(cb->desc);
@@ -329,9 +310,7 @@ static inline uint32_t ia_css_circbuf_get_free_elems(
  *
  * @return the elements value.
  */
-uint32_t ia_css_circbuf_peek(
-    ia_css_circbuf_t *cb,
-    int offset);
+uint32_t ia_css_circbuf_peek(ia_css_circbuf_t *cb, int offset);
 
 /**
  * @brief Get an element in Circular Buffer.
@@ -341,9 +320,7 @@ uint32_t ia_css_circbuf_peek(
  *
  * @return the elements value.
  */
-uint32_t ia_css_circbuf_peek_from_start(
-    ia_css_circbuf_t *cb,
-    int offset);
+uint32_t ia_css_circbuf_peek_from_start(ia_css_circbuf_t *cb, int offset);
 
 /**
  * @brief Increase Size of a Circular Buffer.
@@ -360,9 +337,7 @@ uint32_t ia_css_circbuf_peek_from_start(
  * @return	true on successfully increasing the size
  *			false on failure
  */
-bool ia_css_circbuf_increase_size(
-    ia_css_circbuf_t *cb,
-    unsigned int sz_delta,
-    ia_css_circbuf_elem_t *elems);
+bool ia_css_circbuf_increase_size(ia_css_circbuf_t *cb, unsigned int sz_delta,
+				  ia_css_circbuf_elem_t *elems);
 
 #endif /*_IA_CSS_CIRCBUF_H */

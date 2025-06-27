@@ -15,7 +15,7 @@
  *
  */
 struct ia_css_conversion_config {
-	u32 en;     /** en parameter */
+	u32 en; /** en parameter */
 	u32 dummy0; /** dummy0 dummy parameter 0 */
 	u32 dummy1; /** dummy1 dummy parameter 1 */
 	u32 dummy2; /** dummy2 dummy parameter 2 */

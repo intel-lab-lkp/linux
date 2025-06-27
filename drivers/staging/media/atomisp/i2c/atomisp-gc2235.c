@@ -26,8 +26,8 @@
 #include "gc2235.h"
 
 /* i2c read/write stuff */
-static int gc2235_read_reg(struct i2c_client *client,
-			   u16 data_length, u16 reg, u16 *val)
+static int gc2235_read_reg(struct i2c_client *client, u16 data_length, u16 reg,
+			   u16 *val)
 {
 	int err;
 	struct i2c_msg msg[2];
@@ -64,8 +64,8 @@ static int gc2235_read_reg(struct i2c_client *client,
 	if (err != 2) {
 		if (err >= 0)
 			err = -EIO;
-		dev_err(&client->dev,
-			"read from offset 0x%x error %d", reg, err);
+		dev_err(&client->dev, "read from offset 0x%x error %d", reg,
+			err);
 		return err;
 	}
 
@@ -92,16 +92,16 @@ static int gc2235_i2c_write(struct i2c_client *client, u16 len, u8 *data)
 	return ret == num_msg ? 0 : -EIO;
 }
 
-static int gc2235_write_reg(struct i2c_client *client, u16 data_length,
-			    u8 reg, u8 val)
+static int gc2235_write_reg(struct i2c_client *client, u16 data_length, u8 reg,
+			    u8 val)
 {
 	int ret;
-	unsigned char data[4] = {0};
+	unsigned char data[4] = { 0 };
 	const u16 len = data_length + sizeof(u8); /* 16-bit address + data */
 
 	if (data_length != GC2235_8BIT) {
-		dev_err(&client->dev,
-			"%s error, invalid data_length\n", __func__);
+		dev_err(&client->dev, "%s error, invalid data_length\n",
+			__func__);
 		return -EINVAL;
 	}
 
@@ -112,8 +112,8 @@ static int gc2235_write_reg(struct i2c_client *client, u16 data_length,
 	ret = gc2235_i2c_write(client, len, data);
 	if (ret)
 		dev_err(&client->dev,
-			"write error: wrote 0x%x to offset 0x%x error %d",
-			val, reg, ret);
+			"write error: wrote 0x%x to offset 0x%x error %d", val,
+			reg, ret);
 
 	return ret;
 }
@@ -199,8 +199,8 @@ static int gc2235_write_reg_array(struct i2c_client *client,
 			}
 			err = __gc2235_buf_reg_array(client, &ctrl, next);
 			if (err) {
-				dev_err(&client->dev, "%s: write error, aborted\n",
-					__func__);
+				dev_err(&client->dev,
+					"%s: write error, aborted\n", __func__);
 				return err;
 			}
 			break;
@@ -222,10 +222,10 @@ static long __gc2235_set_exposure(struct v4l2_subdev *sd, int coarse_itg,
 	expo_coarse_h = coarse_integration >> 8;
 	expo_coarse_l = coarse_integration & 0xff;
 
-	ret = gc2235_write_reg(client, GC2235_8BIT,
-			       GC2235_EXPOSURE_H, expo_coarse_h);
-	ret = gc2235_write_reg(client, GC2235_8BIT,
-			       GC2235_EXPOSURE_L, expo_coarse_l);
+	ret = gc2235_write_reg(client, GC2235_8BIT, GC2235_EXPOSURE_H,
+			       expo_coarse_h);
+	ret = gc2235_write_reg(client, GC2235_8BIT, GC2235_EXPOSURE_L,
+			       expo_coarse_l);
 
 	if (gain <= 0x58) {
 		gain_val = 0x40;
@@ -238,16 +238,16 @@ static long __gc2235_set_exposure(struct v4l2_subdev *sd, int coarse_itg,
 		gain_val = 0xff;
 	}
 
-	ret = gc2235_write_reg(client, GC2235_8BIT,
-			       GC2235_GLOBAL_GAIN, (u8)gain_val);
-	ret = gc2235_write_reg(client, GC2235_8BIT,
-			       GC2235_PRE_GAIN, (u8)gain_val2);
+	ret = gc2235_write_reg(client, GC2235_8BIT, GC2235_GLOBAL_GAIN,
+			       (u8)gain_val);
+	ret = gc2235_write_reg(client, GC2235_8BIT, GC2235_PRE_GAIN,
+			       (u8)gain_val2);
 
 	return ret;
 }
 
-static int gc2235_set_exposure(struct v4l2_subdev *sd, int exposure,
-			       int gain, int digitgain)
+static int gc2235_set_exposure(struct v4l2_subdev *sd, int exposure, int gain,
+			       int digitgain)
 {
 	struct gc2235_device *dev = to_gc2235_sensor(sd);
 	int ret;
@@ -299,15 +299,11 @@ static int gc2235_q_exposure(struct v4l2_subdev *sd, s32 *value)
 	int ret;
 
 	/* get exposure */
-	ret = gc2235_read_reg(client, GC2235_8BIT,
-			      GC2235_EXPOSURE_L,
-			      &reg_v);
+	ret = gc2235_read_reg(client, GC2235_8BIT, GC2235_EXPOSURE_L, &reg_v);
 	if (ret)
 		goto err;
 
-	ret = gc2235_read_reg(client, GC2235_8BIT,
-			      GC2235_EXPOSURE_H,
-			      &reg_v2);
+	ret = gc2235_read_reg(client, GC2235_8BIT, GC2235_EXPOSURE_H, &reg_v2);
 	if (ret)
 		goto err;
 
@@ -321,7 +317,7 @@ err:
 static int gc2235_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct gc2235_device *dev =
-	    container_of(ctrl->handler, struct gc2235_device, ctrl_handler);
+		container_of(ctrl->handler, struct gc2235_device, ctrl_handler);
 	int ret = 0;
 
 	switch (ctrl->id) {
@@ -335,9 +331,8 @@ static int gc2235_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 	return ret;
 }
 
-static const struct v4l2_ctrl_ops ctrl_ops = {
-	.g_volatile_ctrl = gc2235_g_volatile_ctrl
-};
+static const struct v4l2_ctrl_ops ctrl_ops = { .g_volatile_ctrl =
+						       gc2235_g_volatile_ctrl };
 
 static struct v4l2_ctrl_config gc2235_controls[] = {
 	{
@@ -408,8 +403,7 @@ static int power_up(struct v4l2_subdev *sd)
 	int ret;
 
 	if (!dev->platform_data) {
-		dev_err(&client->dev,
-			"no camera_sensor_platform_data");
+		dev_err(&client->dev, "no camera_sensor_platform_data");
 		return -ENODEV;
 	}
 	/* power control */
@@ -452,8 +446,7 @@ static int power_down(struct v4l2_subdev *sd)
 	int ret = 0;
 
 	if (!dev->platform_data) {
-		dev_err(&client->dev,
-			"no camera_sensor_platform_data");
+		dev_err(&client->dev, "no camera_sensor_platform_data");
 		return -ENODEV;
 	}
 	/* gpio ctrl */
@@ -626,8 +619,7 @@ static int gc2235_s_stream(struct v4l2_subdev *sd, int enable)
 	return ret;
 }
 
-static int gc2235_s_config(struct v4l2_subdev *sd,
-			   int irq, void *platform_data)
+static int gc2235_s_config(struct v4l2_subdev *sd, int irq, void *platform_data)
 {
 	struct gc2235_device *dev = to_gc2235_sensor(sd);
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
@@ -637,7 +629,7 @@ static int gc2235_s_config(struct v4l2_subdev *sd,
 		return -ENODEV;
 
 	dev->platform_data =
-	    (struct camera_sensor_platform_data *)platform_data;
+		(struct camera_sensor_platform_data *)platform_data;
 
 	mutex_lock(&dev->input_lock);
 	/*
@@ -688,9 +680,10 @@ fail_power_off:
 	return ret;
 }
 
-static int gc2235_get_frame_interval(struct v4l2_subdev *sd,
-				     struct v4l2_subdev_state *sd_state,
-				     struct v4l2_subdev_frame_interval *interval)
+static int
+gc2235_get_frame_interval(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_frame_interval *interval)
 {
 	struct gc2235_device *dev = to_gc2235_sensor(sd);
 
@@ -747,7 +740,7 @@ static int gc2235_g_skip_frames(struct v4l2_subdev *sd, u32 *frames)
 }
 
 static const struct v4l2_subdev_sensor_ops gc2235_sensor_ops = {
-	.g_skip_frames	= gc2235_g_skip_frames,
+	.g_skip_frames = gc2235_g_skip_frames,
 };
 
 static const struct v4l2_subdev_video_ops gc2235_video_ops = {
@@ -817,9 +810,8 @@ static int gc2235_probe(struct i2c_client *client)
 	dev->pad.flags = MEDIA_PAD_FL_SOURCE;
 	dev->format.code = MEDIA_BUS_FMT_SBGGR10_1X10;
 	dev->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
-	ret =
-	    v4l2_ctrl_handler_init(&dev->ctrl_handler,
-				   ARRAY_SIZE(gc2235_controls));
+	ret = v4l2_ctrl_handler_init(&dev->ctrl_handler,
+				     ARRAY_SIZE(gc2235_controls));
 	if (ret) {
 		gc2235_remove(client);
 		return ret;

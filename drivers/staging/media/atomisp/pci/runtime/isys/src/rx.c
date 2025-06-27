@@ -13,9 +13,8 @@
 
 void ia_css_isys_rx_enable_all_interrupts(enum mipi_port_id port)
 {
-	hrt_data bits = receiver_port_reg_load(RX0_ID,
-					       port,
-					       _HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX);
+	hrt_data bits = receiver_port_reg_load(
+		RX0_ID, port, _HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX);
 
 	bits |= (1U << _HRT_CSS_RECEIVER_IRQ_OVERRUN_BIT) |
 		(1U << _HRT_CSS_RECEIVER_IRQ_INIT_TIMEOUT_BIT) |
@@ -35,8 +34,7 @@ void ia_css_isys_rx_enable_all_interrupts(enum mipi_port_id port)
 		(1U << _HRT_CSS_RECEIVER_IRQ_ERR_ESCAPE_BIT);
 	/*(1U << _HRT_CSS_RECEIVER_IRQ_ERR_LINE_SYNC_BIT); */
 
-	receiver_port_reg_store(RX0_ID,
-				port,
+	receiver_port_reg_store(RX0_ID, port,
 				_HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX, bits);
 
 	/*
@@ -70,8 +68,7 @@ enum mipi_port_id ia_css_isys_port_to_mipi_port(enum mipi_port_id api_port)
 
 unsigned int ia_css_isys_rx_get_interrupt_reg(enum mipi_port_id port)
 {
-	return receiver_port_reg_load(RX0_ID,
-				      port,
+	return receiver_port_reg_load(RX0_ID, port,
 				      _HRT_CSS_RECEIVER_IRQ_STATUS_REG_IDX);
 }
 
@@ -155,9 +152,8 @@ void ia_css_rx_port_clear_irq_info(enum mipi_port_id api_port,
 void ia_css_isys_rx_clear_irq_info(enum mipi_port_id port,
 				   unsigned int irq_infos)
 {
-	hrt_data bits = receiver_port_reg_load(RX0_ID,
-					       port,
-					       _HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX);
+	hrt_data bits = receiver_port_reg_load(
+		RX0_ID, port, _HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX);
 
 	/* MW: Why do we remap the receiver bitmap */
 	if (irq_infos & IA_CSS_RX_IRQ_INFO_BUFFER_OVERRUN)
@@ -193,8 +189,7 @@ void ia_css_isys_rx_clear_irq_info(enum mipi_port_id port,
 	if (irq_infos & IA_CSS_RX_IRQ_INFO_ERR_LINE_SYNC)
 		bits |= 1U << _HRT_CSS_RECEIVER_IRQ_ERR_LINE_SYNC_BIT;
 
-	receiver_port_reg_store(RX0_ID,
-				port,
+	receiver_port_reg_store(RX0_ID, port,
 				_HRT_CSS_RECEIVER_IRQ_ENABLE_REG_IDX, bits);
 
 	return;
@@ -361,9 +356,8 @@ static int ia_css_isys_2401_set_fmt_type(enum atomisp_input_format input_format,
 }
 
 int ia_css_isys_convert_stream_format_to_mipi_format(
-    enum atomisp_input_format input_format,
-    mipi_predictor_t compression,
-    unsigned int *fmt_type)
+	enum atomisp_input_format input_format, mipi_predictor_t compression,
+	unsigned int *fmt_type)
 {
 	assert(fmt_type);
 	/*
@@ -415,7 +409,7 @@ int ia_css_isys_convert_stream_format_to_mipi_format(
 }
 
 static mipi_predictor_t sh_css_csi2_compression_type_2_mipi_predictor(
-    enum ia_css_csi2_compression_type type)
+	enum ia_css_csi2_compression_type type)
 {
 	mipi_predictor_t predictor = MIPI_PREDICTOR_NONE;
 
@@ -432,9 +426,8 @@ static mipi_predictor_t sh_css_csi2_compression_type_2_mipi_predictor(
 	return predictor;
 }
 
-int ia_css_isys_convert_compressed_format(
-    struct ia_css_csi2_compression *comp,
-    struct isp2401_input_system_cfg_s *cfg)
+int ia_css_isys_convert_compressed_format(struct ia_css_csi2_compression *comp,
+					  struct isp2401_input_system_cfg_s *cfg)
 {
 	int err = 0;
 
@@ -455,16 +448,20 @@ int ia_css_isys_convert_compressed_format(
 				110 12-8-12
 			1 bit indicate predictor
 		*/
-		if (comp->uncompressed_bits_per_pixel == UNCOMPRESSED_BITS_PER_PIXEL_10) {
+		if (comp->uncompressed_bits_per_pixel ==
+		    UNCOMPRESSED_BITS_PER_PIXEL_10) {
 			switch (comp->compressed_bits_per_pixel) {
 			case COMPRESSED_BITS_PER_PIXEL_6:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_10_6_10;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_10_6_10;
 				break;
 			case COMPRESSED_BITS_PER_PIXEL_7:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_10_7_10;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_10_7_10;
 				break;
 			case COMPRESSED_BITS_PER_PIXEL_8:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_10_8_10;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_10_8_10;
 				break;
 			default:
 				err = -EINVAL;
@@ -473,13 +470,16 @@ int ia_css_isys_convert_compressed_format(
 			   UNCOMPRESSED_BITS_PER_PIXEL_12) {
 			switch (comp->compressed_bits_per_pixel) {
 			case COMPRESSED_BITS_PER_PIXEL_6:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_12_6_12;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_12_6_12;
 				break;
 			case COMPRESSED_BITS_PER_PIXEL_7:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_12_7_12;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_12_7_12;
 				break;
 			case COMPRESSED_BITS_PER_PIXEL_8:
-				cfg->csi_port_attr.comp_scheme = MIPI_COMPRESSOR_12_8_12;
+				cfg->csi_port_attr.comp_scheme =
+					MIPI_COMPRESSOR_12_8_12;
 				break;
 			default:
 				err = -EINVAL;
@@ -487,15 +487,16 @@ int ia_css_isys_convert_compressed_format(
 		} else
 			err = -EINVAL;
 		cfg->csi_port_attr.comp_predictor =
-		    sh_css_csi2_compression_type_2_mipi_predictor(comp->type);
+			sh_css_csi2_compression_type_2_mipi_predictor(
+				comp->type);
 		cfg->csi_port_attr.comp_enable = true;
 	} else /* No compression */
 		cfg->csi_port_attr.comp_enable = false;
 	return err;
 }
 
-unsigned int ia_css_csi2_calculate_input_system_alignment(
-    enum atomisp_input_format fmt_type)
+unsigned int
+ia_css_csi2_calculate_input_system_alignment(enum atomisp_input_format fmt_type)
 {
 	unsigned int memory_alignment_in_bytes = HIVE_ISP_DDR_WORD_BYTES;
 
@@ -530,16 +531,15 @@ unsigned int ia_css_csi2_calculate_input_system_alignment(
 	return memory_alignment_in_bytes;
 }
 
-
 static const mipi_lane_cfg_t MIPI_PORT_LANES[N_RX_MODE][N_MIPI_PORT_ID] = {
-	{MIPI_4LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG},
-	{MIPI_3LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG},
-	{MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG},
-	{MIPI_1LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG},
-	{MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_2LANE_CFG},
-	{MIPI_3LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG},
-	{MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG},
-	{MIPI_1LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG}
+	{ MIPI_4LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG },
+	{ MIPI_3LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG },
+	{ MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG },
+	{ MIPI_1LANE_CFG, MIPI_1LANE_CFG, MIPI_0LANE_CFG },
+	{ MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_2LANE_CFG },
+	{ MIPI_3LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG },
+	{ MIPI_2LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG },
+	{ MIPI_1LANE_CFG, MIPI_1LANE_CFG, MIPI_1LANE_CFG }
 };
 
 void ia_css_isys_rx_configure(const rx_cfg_t *config,
@@ -548,9 +548,8 @@ void ia_css_isys_rx_configure(const rx_cfg_t *config,
 	bool any_port_enabled = false;
 	enum mipi_port_id port;
 
-	if ((!config)
-	    || (config->mode >= N_RX_MODE)
-	    || (config->port >= N_MIPI_PORT_ID)) {
+	if ((!config) || (config->mode >= N_RX_MODE) ||
+	    (config->port >= N_MIPI_PORT_ID)) {
 		assert(0);
 		return;
 	}
@@ -571,12 +570,12 @@ void ia_css_isys_rx_configure(const rx_cfg_t *config,
 		receiver_port_reg_store(RX0_ID, port,
 					_HRT_CSS_RECEIVER_FUNC_PROG_REG_IDX,
 					config->timeout);
-		receiver_port_reg_store(RX0_ID, port,
-					_HRT_CSS_RECEIVER_2400_INIT_COUNT_REG_IDX,
-					config->initcount);
-		receiver_port_reg_store(RX0_ID, port,
-					_HRT_CSS_RECEIVER_2400_SYNC_COUNT_REG_IDX,
-					config->synccount);
+		receiver_port_reg_store(
+			RX0_ID, port, _HRT_CSS_RECEIVER_2400_INIT_COUNT_REG_IDX,
+			config->initcount);
+		receiver_port_reg_store(
+			RX0_ID, port, _HRT_CSS_RECEIVER_2400_SYNC_COUNT_REG_IDX,
+			config->synccount);
 		receiver_port_reg_store(RX0_ID, port,
 					_HRT_CSS_RECEIVER_2400_RX_COUNT_REG_IDX,
 					config->rxcount);
@@ -584,30 +583,30 @@ void ia_css_isys_rx_configure(const rx_cfg_t *config,
 		if (input_mode != IA_CSS_INPUT_MODE_BUFFERED_SENSOR) {
 			/* MW: A bit of a hack, straight wiring of the capture
 			 * units,assuming they are linearly enumerated. */
-			input_system_sub_system_reg_store(INPUT_SYSTEM0_ID,
-							  GPREGS_UNIT0_ID,
-							  HIVE_ISYS_GPREG_MULTICAST_A_IDX
-							  + (unsigned int)port,
-							  INPUT_SYSTEM_CSI_BACKEND);
+			input_system_sub_system_reg_store(
+				INPUT_SYSTEM0_ID, GPREGS_UNIT0_ID,
+				HIVE_ISYS_GPREG_MULTICAST_A_IDX +
+					(unsigned int)port,
+				INPUT_SYSTEM_CSI_BACKEND);
 			/* MW: Like the integration test example we overwite,
 			 * the GPREG_MUX register */
-			input_system_sub_system_reg_store(INPUT_SYSTEM0_ID,
-							  GPREGS_UNIT0_ID,
-							  HIVE_ISYS_GPREG_MUX_IDX,
-							  (input_system_multiplex_t)port);
+			input_system_sub_system_reg_store(
+				INPUT_SYSTEM0_ID, GPREGS_UNIT0_ID,
+				HIVE_ISYS_GPREG_MUX_IDX,
+				(input_system_multiplex_t)port);
 		} else {
 			/*
 			 * AM: A bit of a hack, wiring the input system.
 			 */
-			input_system_sub_system_reg_store(INPUT_SYSTEM0_ID,
-							  GPREGS_UNIT0_ID,
-							  HIVE_ISYS_GPREG_MULTICAST_A_IDX
-							  + (unsigned int)port,
-							  INPUT_SYSTEM_INPUT_BUFFER);
-			input_system_sub_system_reg_store(INPUT_SYSTEM0_ID,
-							  GPREGS_UNIT0_ID,
-							  HIVE_ISYS_GPREG_MUX_IDX,
-							  INPUT_SYSTEM_ACQUISITION_UNIT);
+			input_system_sub_system_reg_store(
+				INPUT_SYSTEM0_ID, GPREGS_UNIT0_ID,
+				HIVE_ISYS_GPREG_MULTICAST_A_IDX +
+					(unsigned int)port,
+				INPUT_SYSTEM_INPUT_BUFFER);
+			input_system_sub_system_reg_store(
+				INPUT_SYSTEM0_ID, GPREGS_UNIT0_ID,
+				HIVE_ISYS_GPREG_MUX_IDX,
+				INPUT_SYSTEM_ACQUISITION_UNIT);
 		}
 	}
 	/*

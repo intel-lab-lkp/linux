@@ -13,4 +13,4 @@ struct sh_css_bds_factor {
 	unsigned int bds_factor;
 };
 
-#endif	/*__IA_CSS_FIXEDBDS_TYPES_H*/
+#endif /*__IA_CSS_FIXEDBDS_TYPES_H*/

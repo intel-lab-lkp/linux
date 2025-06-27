@@ -11,24 +11,24 @@
 #include "vmem.h" /* for VMEM_ARRAY*/
 
 /* 4 planes : GR, R, B, GB */
-#define NUM_PLANES		4
+#define NUM_PLANES 4
 
 /* ToDo: Move this to testsetup */
-#define MAX_FRAME_SIMDWIDTH	30
+#define MAX_FRAME_SIMDWIDTH 30
 
 /* 3 lines state per color plane input_line_state */
-#define DPC2_STATE_INPUT_BUFFER_HEIGHT	(3 * NUM_PLANES)
+#define DPC2_STATE_INPUT_BUFFER_HEIGHT (3 * NUM_PLANES)
 /* Each plane has width equal to half frame line */
-#define DPC2_STATE_INPUT_BUFFER_WIDTH	CEIL_DIV(MAX_FRAME_SIMDWIDTH, 2)
+#define DPC2_STATE_INPUT_BUFFER_WIDTH CEIL_DIV(MAX_FRAME_SIMDWIDTH, 2)
 
 /* 1 line state per color plane for local deviation state*/
-#define DPC2_STATE_LOCAL_DEVIATION_BUFFER_HEIGHT	(1 * NUM_PLANES)
+#define DPC2_STATE_LOCAL_DEVIATION_BUFFER_HEIGHT (1 * NUM_PLANES)
 /* Each plane has width equal to half frame line */
-#define DPC2_STATE_LOCAL_DEVIATION_BUFFER_WIDTH		CEIL_DIV(MAX_FRAME_SIMDWIDTH, 2)
+#define DPC2_STATE_LOCAL_DEVIATION_BUFFER_WIDTH CEIL_DIV(MAX_FRAME_SIMDWIDTH, 2)
 
 /* MINMAX state buffer stores 1 full input line (GR-R color line) */
-#define DPC2_STATE_SECOND_MINMAX_BUFFER_HEIGHT	1
-#define DPC2_STATE_SECOND_MINMAX_BUFFER_WIDTH	MAX_FRAME_SIMDWIDTH
+#define DPC2_STATE_SECOND_MINMAX_BUFFER_HEIGHT 1
+#define DPC2_STATE_SECOND_MINMAX_BUFFER_WIDTH MAX_FRAME_SIMDWIDTH
 
 struct ia_css_isp_dpc2_params {
 	s32 metric1;

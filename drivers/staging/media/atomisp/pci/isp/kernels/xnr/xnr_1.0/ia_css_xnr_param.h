@@ -11,8 +11,8 @@
 #include <system_global.h>
 
 #ifndef PIPE_GENERATION
-#define SH_CSS_ISP_XNR_TABLE_SIZE_LOG2       IA_CSS_VAMEM_2_XNR_TABLE_SIZE_LOG2
-#define SH_CSS_ISP_XNR_TABLE_SIZE            IA_CSS_VAMEM_2_XNR_TABLE_SIZE
+#define SH_CSS_ISP_XNR_TABLE_SIZE_LOG2 IA_CSS_VAMEM_2_XNR_TABLE_SIZE_LOG2
+#define SH_CSS_ISP_XNR_TABLE_SIZE IA_CSS_VAMEM_2_XNR_TABLE_SIZE
 
 #else
 /* For pipe generation, the size is not relevant */

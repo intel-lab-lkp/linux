@@ -10,15 +10,15 @@
 #include <type_support.h>
 #include "fifo_monitor_global.h"
 
-#include "hive_isp_css_defs.h"	/* ISP_STR_MON_PORT_SND_SP, ... */
+#include "hive_isp_css_defs.h" /* ISP_STR_MON_PORT_SND_SP, ... */
 
-#define _hive_str_mon_valid_offset   0
-#define _hive_str_mon_accept_offset  1
+#define _hive_str_mon_valid_offset 0
+#define _hive_str_mon_accept_offset 1
 
-#define	FIFO_CHANNEL_SP_VALID_MASK		0x55555555
-#define	FIFO_CHANNEL_SP_VALID_B_MASK	0x00000055
-#define	FIFO_CHANNEL_ISP_VALID_MASK		0x15555555
-#define	FIFO_CHANNEL_MOD_VALID_MASK		0x55555555
+#define FIFO_CHANNEL_SP_VALID_MASK 0x55555555
+#define FIFO_CHANNEL_SP_VALID_B_MASK 0x00000055
+#define FIFO_CHANNEL_ISP_VALID_MASK 0x15555555
+#define FIFO_CHANNEL_MOD_VALID_MASK 0x55555555
 
 typedef enum fifo_switch {
 	FIFO_SWITCH_IF,
@@ -70,22 +70,22 @@ typedef enum fifo_channel {
 } fifo_channel_t;
 
 struct fifo_channel_state_s {
-	bool	src_valid;
-	bool	fifo_accept;
-	bool	fifo_valid;
-	bool	sink_accept;
+	bool src_valid;
+	bool fifo_accept;
+	bool fifo_valid;
+	bool sink_accept;
 };
 
 /* The switch is tri-state */
 struct fifo_switch_state_s {
-	bool	is_none;
-	bool	is_isp;
-	bool	is_sp;
+	bool is_none;
+	bool is_isp;
+	bool is_sp;
 };
 
 struct fifo_monitor_state_s {
-	struct fifo_channel_state_s	fifo_channels[N_FIFO_CHANNEL];
-	struct fifo_switch_state_s	fifo_switches[N_FIFO_SWITCH];
+	struct fifo_channel_state_s fifo_channels[N_FIFO_CHANNEL];
+	struct fifo_switch_state_s fifo_switches[N_FIFO_SWITCH];
 };
 
 #endif /* __FIFO_MONITOR_LOCAL_H_INCLUDED__ */

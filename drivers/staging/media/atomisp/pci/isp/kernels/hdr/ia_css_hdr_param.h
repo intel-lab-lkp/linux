@@ -10,24 +10,24 @@
 
 #include "type_support.h"
 
-#define HDR_NUM_INPUT_FRAMES         (3)
+#define HDR_NUM_INPUT_FRAMES (3)
 
 /* HDR irradiance map parameters on ISP. */
 struct sh_css_hdr_irradiance_params {
 	s32 test_irr;
 	s32 match_shift[HDR_NUM_INPUT_FRAMES -
-					     1];  /* Histogram matching shift parameter */
+			1]; /* Histogram matching shift parameter */
 	s32 match_mul[HDR_NUM_INPUT_FRAMES -
-					   1];    /* Histogram matching multiplication parameter */
+		      1]; /* Histogram matching multiplication parameter */
 	s32 thr_low[HDR_NUM_INPUT_FRAMES -
-					 1];      /* Weight map soft threshold low bound parameter */
+		    1]; /* Weight map soft threshold low bound parameter */
 	s32 thr_high[HDR_NUM_INPUT_FRAMES -
-					  1];     /* Weight map soft threshold high bound parameter */
+		     1]; /* Weight map soft threshold high bound parameter */
 	s32 thr_coeff[HDR_NUM_INPUT_FRAMES -
-					   1];    /* Soft threshold linear function coefficient */
+		      1]; /* Soft threshold linear function coefficient */
 	s32 thr_shift[HDR_NUM_INPUT_FRAMES -
-					   1];    /* Soft threshold precision shift parameter */
-	s32 weight_bpp;                             /* Weight map bits per pixel */
+		      1]; /* Soft threshold precision shift parameter */
+	s32 weight_bpp; /* Weight map bits per pixel */
 };
 
 /* HDR deghosting parameters on ISP */
@@ -43,8 +43,8 @@ struct sh_css_hdr_exclusion_params {
 /* HDR ISP parameters */
 struct sh_css_isp_hdr_params {
 	struct sh_css_hdr_irradiance_params irradiance;
-	struct sh_css_hdr_deghost_params    deghost;
-	struct sh_css_hdr_exclusion_params  exclusion;
+	struct sh_css_hdr_deghost_params deghost;
+	struct sh_css_hdr_exclusion_params exclusion;
 };
 
 #endif /* __IA_CSS_HDR_PARAMS_H */

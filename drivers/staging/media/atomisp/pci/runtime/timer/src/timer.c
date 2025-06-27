@@ -4,7 +4,7 @@
  * Copyright (c) 2015, Intel Corporation.
  */
 
-#include <type_support.h>		/* for uint32_t */
+#include <type_support.h> /* for uint32_t */
 #include "ia_css_timer.h" /*struct ia_css_clock_tick */
 #include "sh_css_legacy.h" /* IA_CSS_PIPE_ID_NUM*/
 #include "gp_timer.h" /*gp_timer_read()*/

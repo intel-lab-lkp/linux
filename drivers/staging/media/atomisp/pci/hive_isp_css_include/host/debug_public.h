@@ -30,12 +30,12 @@
  * implementation is followed)
  */
 
-typedef struct debug_data_s		debug_data_t;
-typedef struct debug_data_ddr_s	debug_data_ddr_t;
+typedef struct debug_data_s debug_data_t;
+typedef struct debug_data_ddr_s debug_data_ddr_t;
 
-extern debug_data_t				*debug_data_ptr;
-extern hrt_address				debug_buffer_address;
-extern ia_css_ptr				debug_buffer_ddr_address;
+extern debug_data_t *debug_data_ptr;
+extern hrt_address debug_buffer_address;
+extern ia_css_ptr debug_buffer_ddr_address;
 
 /*! Check the empty state of the local debug data buffer
 
@@ -71,21 +71,18 @@ STORAGE_CLASS_DEBUG_H void debug_synch_queue_ddr(void);
 
  \return none
  */
-void debug_buffer_init(
-    const hrt_address		addr);
+void debug_buffer_init(const hrt_address addr);
 
 /*! Set the offset/address of the (remote) debug buffer
 
  \return none
  */
-void debug_buffer_ddr_init(
-    const ia_css_ptr		addr);
+void debug_buffer_ddr_init(const ia_css_ptr addr);
 
 /*! Set the (remote) operating mode of the debug buffer
 
  \return none
  */
-void debug_buffer_setmode(
-    const debug_buf_mode_t	mode);
+void debug_buffer_setmode(const debug_buf_mode_t mode);
 
 #endif /* __DEBUG_PUBLIC_H_INCLUDED__ */

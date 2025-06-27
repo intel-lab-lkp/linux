@@ -22,25 +22,25 @@
  * ISP2.6.1: BNLM is used.
  */
 struct ia_css_bnlm_config {
-	bool		rad_enable;	/** Enable a radial dependency in a weight calculation */
-	s32		rad_x_origin;	/** Initial x coordinate for a radius calculation */
-	s32		rad_y_origin;	/** Initial x coordinate for a radius calculation */
+	bool rad_enable; /** Enable a radial dependency in a weight calculation */
+	s32 rad_x_origin; /** Initial x coordinate for a radius calculation */
+	s32 rad_y_origin; /** Initial x coordinate for a radius calculation */
 	/* a threshold for average of weights if this < Th, do not denoise pixel */
-	s32		avg_min_th;
+	s32 avg_min_th;
 	/* minimum weight for denoising if max < th, do not denoise pixel */
-	s32		max_min_th;
+	s32 max_min_th;
 
 	/**@{*/
 	/* Coefficient for approximation, in the form of (1 + x / N)^N,
 	 * that fits the first-order exp() to default exp_lut in BNLM sheet
 	 * */
-	s32		exp_coeff_a;
-	u32	exp_coeff_b;
-	s32		exp_coeff_c;
-	u32	exp_exponent;
+	s32 exp_coeff_a;
+	u32 exp_coeff_b;
+	s32 exp_coeff_c;
+	u32 exp_exponent;
 	/**@}*/
 
-	s32 nl_th[3];	/** Detail thresholds */
+	s32 nl_th[3]; /** Detail thresholds */
 
 	/* Index for n-th maximum candidate weight for each detail group */
 	s32 match_quality_max_idx[4];

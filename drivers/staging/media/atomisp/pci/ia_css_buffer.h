@@ -49,13 +49,15 @@ struct ia_css_buffer {
 	/** exposure id for this buffer; 0 = not available
 	     see ia_css_event_public.h for more detail. */
 	union {
-		struct ia_css_isp_3a_statistics
-			*stats_3a;    /** 3A statistics & optionally RGBY statistics. */
-		struct ia_css_isp_dvs_statistics *stats_dvs;   /** DVS statistics. */
-		struct ia_css_isp_skc_dvs_statistics *stats_skc_dvs;  /** SKC DVS statistics. */
-		struct ia_css_frame              *frame;       /** Frame buffer. */
-		struct ia_css_acc_param          *custom_data; /** Custom buffer. */
-		struct ia_css_metadata           *metadata;    /** Sensor metadata. */
+		struct ia_css_isp_3a_statistics *
+			stats_3a; /** 3A statistics & optionally RGBY statistics. */
+		struct ia_css_isp_dvs_statistics
+			*stats_dvs; /** DVS statistics. */
+		struct ia_css_isp_skc_dvs_statistics
+			*stats_skc_dvs; /** SKC DVS statistics. */
+		struct ia_css_frame *frame; /** Frame buffer. */
+		struct ia_css_acc_param *custom_data; /** Custom buffer. */
+		struct ia_css_metadata *metadata; /** Sensor metadata. */
 	} data; /** Buffer data pointer. */
 	u64 driver_cookie; /** cookie for the driver */
 	struct ia_css_time_meas
@@ -71,7 +73,6 @@ struct ia_css_buffer {
  * This function must be called at every driver interrupt handler to prevent
  * overflow of sp2host_queue.
  */
-void
-ia_css_dequeue_param_buffers(void);
+void ia_css_dequeue_param_buffers(void);
 
 #endif /* __IA_CSS_BUFFER_H */

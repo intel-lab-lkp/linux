@@ -23,7 +23,7 @@
 #include "event_fifo.h"
 #define __INLINE_SP__
 
-#include "input_system.h"	/* MIPI_PREDICTOR_NONE,... */
+#include "input_system.h" /* MIPI_PREDICTOR_NONE,... */
 
 #include "assert_support.h"
 
@@ -54,36 +54,34 @@ enum inputfifo_mipi_data_type {
 
 static unsigned int inputfifo_curr_ch_id, inputfifo_curr_fmt_type;
 struct inputfifo_instance {
-	unsigned int				ch_id;
-	enum atomisp_input_format	input_format;
-	bool						two_ppc;
-	bool						streaming;
-	unsigned int				hblank_cycles;
-	unsigned int				marker_cycles;
-	unsigned int				fmt_type;
-	enum inputfifo_mipi_data_type	type;
+	unsigned int ch_id;
+	enum atomisp_input_format input_format;
+	bool two_ppc;
+	bool streaming;
+	unsigned int hblank_cycles;
+	unsigned int marker_cycles;
+	unsigned int fmt_type;
+	enum inputfifo_mipi_data_type type;
 };
 
 /*
  * Maintain a basic streaming to Mipi administration with ch_id as index
  * ch_id maps on the "Mipi virtual channel ID" and can have value 0..3
  */
-#define INPUTFIFO_NR_OF_S2M_CHANNELS	(4)
+#define INPUTFIFO_NR_OF_S2M_CHANNELS (4)
 static struct inputfifo_instance
 	inputfifo_inst_admin[INPUTFIFO_NR_OF_S2M_CHANNELS];
 
 /* Streaming to MIPI */
 static unsigned int inputfifo_wrap_marker(
-    /* static inline unsigned inputfifo_wrap_marker( */
-    unsigned int marker)
+	/* static inline unsigned inputfifo_wrap_marker( */
+	unsigned int marker)
 {
-	return marker |
-	       (inputfifo_curr_ch_id << HIVE_STR_TO_MIPI_CH_ID_LSB) |
+	return marker | (inputfifo_curr_ch_id << HIVE_STR_TO_MIPI_CH_ID_LSB) |
 	       (inputfifo_curr_fmt_type << _HIVE_STR_TO_MIPI_FMT_TYPE_LSB);
 }
 
-static inline void
-_sh_css_fifo_snd(unsigned int token)
+static inline void _sh_css_fifo_snd(unsigned int token)
 {
 	while (!can_event_send_token(STR2MIPI_EVENT_ID))
 		udelay(1);
@@ -92,8 +90,8 @@ _sh_css_fifo_snd(unsigned int token)
 }
 
 static void inputfifo_send_data_a(
-    /* static inline void inputfifo_send_data_a( */
-    unsigned int data)
+	/* static inline void inputfifo_send_data_a( */
+	unsigned int data)
 {
 	unsigned int token = (1 << HIVE_STR_TO_MIPI_VALID_A_BIT) |
 			     (data << HIVE_STR_TO_MIPI_DATA_A_LSB);
@@ -102,8 +100,8 @@ static void inputfifo_send_data_a(
 }
 
 static void inputfifo_send_data_b(
-    /* static inline void inputfifo_send_data_b( */
-    unsigned int data)
+	/* static inline void inputfifo_send_data_b( */
+	unsigned int data)
 {
 	unsigned int token = (1 << HIVE_STR_TO_MIPI_VALID_B_BIT) |
 			     (data << _HIVE_STR_TO_MIPI_DATA_B_LSB);
@@ -112,9 +110,8 @@ static void inputfifo_send_data_b(
 }
 
 static void inputfifo_send_data(
-    /* static inline void inputfifo_send_data( */
-    unsigned int a,
-    unsigned int b)
+	/* static inline void inputfifo_send_data( */
+	unsigned int a, unsigned int b)
 {
 	unsigned int token = ((1 << HIVE_STR_TO_MIPI_VALID_A_BIT) |
 			      (1 << HIVE_STR_TO_MIPI_VALID_B_BIT) |
@@ -127,8 +124,7 @@ static void inputfifo_send_data(
 static void inputfifo_send_sol(void)
 /* static inline void inputfifo_send_sol(void) */
 {
-	hrt_data	token = inputfifo_wrap_marker(
-				1 << HIVE_STR_TO_MIPI_SOL_BIT);
+	hrt_data token = inputfifo_wrap_marker(1 << HIVE_STR_TO_MIPI_SOL_BIT);
 
 	_sh_css_fifo_snd(token);
 	return;
@@ -137,8 +133,7 @@ static void inputfifo_send_sol(void)
 static void inputfifo_send_eol(void)
 /* static inline void inputfifo_send_eol(void) */
 {
-	hrt_data	token = inputfifo_wrap_marker(
-				1 << HIVE_STR_TO_MIPI_EOL_BIT);
+	hrt_data token = inputfifo_wrap_marker(1 << HIVE_STR_TO_MIPI_EOL_BIT);
 	_sh_css_fifo_snd(token);
 	return;
 }
@@ -146,8 +141,7 @@ static void inputfifo_send_eol(void)
 static void inputfifo_send_sof(void)
 /* static inline void inputfifo_send_sof(void) */
 {
-	hrt_data	token = inputfifo_wrap_marker(
-				1 << HIVE_STR_TO_MIPI_SOF_BIT);
+	hrt_data token = inputfifo_wrap_marker(1 << HIVE_STR_TO_MIPI_SOF_BIT);
 
 	_sh_css_fifo_snd(token);
 	return;
@@ -156,19 +150,17 @@ static void inputfifo_send_sof(void)
 static void inputfifo_send_eof(void)
 /* static inline void inputfifo_send_eof(void) */
 {
-	hrt_data	token = inputfifo_wrap_marker(
-				1 << HIVE_STR_TO_MIPI_EOF_BIT);
+	hrt_data token = inputfifo_wrap_marker(1 << HIVE_STR_TO_MIPI_EOF_BIT);
 	_sh_css_fifo_snd(token);
 	return;
 }
 
 static void inputfifo_send_ch_id_and_fmt_type(
-    /* static inline
+	/* static inline
     void inputfifo_send_ch_id_and_fmt_type( */
-    unsigned int ch_id,
-    unsigned int fmt_type)
+	unsigned int ch_id, unsigned int fmt_type)
 {
-	hrt_data	token;
+	hrt_data token;
 
 	inputfifo_curr_ch_id = ch_id & _HIVE_ISP_CH_ID_MASK;
 	inputfifo_curr_fmt_type = fmt_type & _HIVE_ISP_FMT_TYPE_MASK;
@@ -183,24 +175,22 @@ static void inputfifo_send_ch_id_and_fmt_type(
 static void inputfifo_send_empty_token(void)
 /* static inline void inputfifo_send_empty_token(void) */
 {
-	hrt_data	token = inputfifo_wrap_marker(0);
+	hrt_data token = inputfifo_wrap_marker(0);
 
 	_sh_css_fifo_snd(token);
 	return;
 }
 
 static void inputfifo_start_frame(
-    /* static inline void inputfifo_start_frame( */
-    unsigned int ch_id,
-    unsigned int fmt_type)
+	/* static inline void inputfifo_start_frame( */
+	unsigned int ch_id, unsigned int fmt_type)
 {
 	inputfifo_send_ch_id_and_fmt_type(ch_id, fmt_type);
 	inputfifo_send_sof();
 	return;
 }
 
-static void inputfifo_end_frame(
-    unsigned int marker_cycles)
+static void inputfifo_end_frame(unsigned int marker_cycles)
 {
 	unsigned int i;
 
@@ -210,15 +200,11 @@ static void inputfifo_end_frame(
 	return;
 }
 
-static void inputfifo_send_line2(
-    const unsigned short *data,
-    unsigned int width,
-    const unsigned short *data2,
-    unsigned int width2,
-    unsigned int hblank_cycles,
-    unsigned int marker_cycles,
-    unsigned int two_ppc,
-    enum inputfifo_mipi_data_type type)
+static void
+inputfifo_send_line2(const unsigned short *data, unsigned int width,
+		     const unsigned short *data2, unsigned int width2,
+		     unsigned int hblank_cycles, unsigned int marker_cycles,
+		     unsigned int two_ppc, enum inputfifo_mipi_data_type type)
 {
 	unsigned int i, is_rgb = 0, is_legacy = 0;
 
@@ -249,11 +235,9 @@ static void inputfifo_send_line2(
 				/* for jpg (binary) copy, this can occur
 				 * if the file contains an odd number of bytes.
 				 */
-				inputfifo_send_data(
-				    data[0], 0);
+				inputfifo_send_data(data[0], 0);
 			} else {
-				inputfifo_send_data(
-				    data[0], data[1]);
+				inputfifo_send_data(data[0], data[1]);
 			}
 			/* Additional increment because we send 2 pixels */
 			data++;
@@ -279,11 +263,9 @@ static void inputfifo_send_line2(
 				/* for jpg (binary) copy, this can occur
 				 * if the file contains an odd number of bytes.
 				 */
-				inputfifo_send_data(
-				    data2[0], 0);
+				inputfifo_send_data(data2[0], 0);
 			} else {
-				inputfifo_send_data(
-				    data2[0], data2[1]);
+				inputfifo_send_data(data2[0], data2[1]);
 			}
 			/* Additional increment because we send 2 pixels */
 			data2++;
@@ -300,20 +282,15 @@ static void inputfifo_send_line2(
 	return;
 }
 
-static void
-inputfifo_send_line(const unsigned short *data,
-		    unsigned int width,
-		    unsigned int hblank_cycles,
-		    unsigned int marker_cycles,
-		    unsigned int two_ppc,
-		    enum inputfifo_mipi_data_type type)
+static void inputfifo_send_line(const unsigned short *data, unsigned int width,
+				unsigned int hblank_cycles,
+				unsigned int marker_cycles,
+				unsigned int two_ppc,
+				enum inputfifo_mipi_data_type type)
 {
 	assert(data);
-	inputfifo_send_line2(data, width, NULL, 0,
-			     hblank_cycles,
-			     marker_cycles,
-			     two_ppc,
-			     type);
+	inputfifo_send_line2(data, width, NULL, 0, hblank_cycles, marker_cycles,
+			     two_ppc, type);
 }
 
 /* Send a frame of data into the input network via the GP FIFO.
@@ -344,16 +321,13 @@ inputfifo_send_line(const unsigned short *data,
  * documentation for details on the data formats.
  */
 
-static void inputfifo_send_frame(
-    const unsigned short *data,
-    unsigned int width,
-    unsigned int height,
-    unsigned int ch_id,
-    unsigned int fmt_type,
-    unsigned int hblank_cycles,
-    unsigned int marker_cycles,
-    unsigned int two_ppc,
-    enum inputfifo_mipi_data_type type)
+static void inputfifo_send_frame(const unsigned short *data, unsigned int width,
+				 unsigned int height, unsigned int ch_id,
+				 unsigned int fmt_type,
+				 unsigned int hblank_cycles,
+				 unsigned int marker_cycles,
+				 unsigned int two_ppc,
+				 enum inputfifo_mipi_data_type type)
 {
 	unsigned int i;
 
@@ -361,18 +335,13 @@ static void inputfifo_send_frame(
 	inputfifo_start_frame(ch_id, fmt_type);
 
 	for (i = 0; i < height; i++) {
-		if ((type == inputfifo_mipi_data_type_yuv420) &&
-		    (i & 1) == 1) {
-			inputfifo_send_line(data, 2 * width,
-					    hblank_cycles,
-					    marker_cycles,
-					    two_ppc, type);
+		if ((type == inputfifo_mipi_data_type_yuv420) && (i & 1) == 1) {
+			inputfifo_send_line(data, 2 * width, hblank_cycles,
+					    marker_cycles, two_ppc, type);
 			data += 2 * width;
 		} else {
-			inputfifo_send_line(data, width,
-					    hblank_cycles,
-					    marker_cycles,
-					    two_ppc, type);
+			inputfifo_send_line(data, width, hblank_cycles,
+					    marker_cycles, two_ppc, type);
 			data += width;
 		}
 	}
@@ -380,41 +349,35 @@ static void inputfifo_send_frame(
 	return;
 }
 
-static enum inputfifo_mipi_data_type inputfifo_determine_type(
-    enum atomisp_input_format input_format)
+static enum inputfifo_mipi_data_type
+inputfifo_determine_type(enum atomisp_input_format input_format)
 {
 	enum inputfifo_mipi_data_type type;
 
 	type = inputfifo_mipi_data_type_regular;
 	if (input_format == ATOMISP_INPUT_FORMAT_YUV420_8_LEGACY) {
-		type =
-		    inputfifo_mipi_data_type_yuv420_legacy;
-	} else if (input_format == ATOMISP_INPUT_FORMAT_YUV420_8  ||
+		type = inputfifo_mipi_data_type_yuv420_legacy;
+	} else if (input_format == ATOMISP_INPUT_FORMAT_YUV420_8 ||
 		   input_format == ATOMISP_INPUT_FORMAT_YUV420_10 ||
 		   input_format == ATOMISP_INPUT_FORMAT_YUV420_16) {
-		type =
-		    inputfifo_mipi_data_type_yuv420;
+		type = inputfifo_mipi_data_type_yuv420;
 	} else if (input_format >= ATOMISP_INPUT_FORMAT_RGB_444 &&
 		   input_format <= ATOMISP_INPUT_FORMAT_RGB_888) {
-		type =
-		    inputfifo_mipi_data_type_rgb;
+		type = inputfifo_mipi_data_type_rgb;
 	}
 	return type;
 }
 
-static struct inputfifo_instance *inputfifo_get_inst(
-    unsigned int ch_id)
+static struct inputfifo_instance *inputfifo_get_inst(unsigned int ch_id)
 {
 	return &inputfifo_inst_admin[ch_id];
 }
 
-void ia_css_inputfifo_send_input_frame(
-    const unsigned short *data,
-    unsigned int width,
-    unsigned int height,
-    unsigned int ch_id,
-    enum atomisp_input_format input_format,
-    bool two_ppc)
+void ia_css_inputfifo_send_input_frame(const unsigned short *data,
+				       unsigned int width, unsigned int height,
+				       unsigned int ch_id,
+				       enum atomisp_input_format input_format,
+				       bool two_ppc)
 {
 	unsigned int fmt_type, hblank_cycles, marker_cycles;
 	enum inputfifo_mipi_data_type type;
@@ -422,30 +385,26 @@ void ia_css_inputfifo_send_input_frame(
 	assert(data);
 	hblank_cycles = HBLANK_CYCLES;
 	marker_cycles = MARKER_CYCLES;
-	ia_css_isys_convert_stream_format_to_mipi_format(input_format,
-		MIPI_PREDICTOR_NONE,
-		&fmt_type);
+	ia_css_isys_convert_stream_format_to_mipi_format(
+		input_format, MIPI_PREDICTOR_NONE, &fmt_type);
 
 	type = inputfifo_determine_type(input_format);
 
-	inputfifo_send_frame(data, width, height,
-			     ch_id, fmt_type, hblank_cycles, marker_cycles,
-			     two_ppc, type);
+	inputfifo_send_frame(data, width, height, ch_id, fmt_type,
+			     hblank_cycles, marker_cycles, two_ppc, type);
 }
 
-void ia_css_inputfifo_start_frame(
-    unsigned int ch_id,
-    enum atomisp_input_format input_format,
-    bool two_ppc)
+void ia_css_inputfifo_start_frame(unsigned int ch_id,
+				  enum atomisp_input_format input_format,
+				  bool two_ppc)
 {
 	struct inputfifo_instance *s2mi;
 
 	s2mi = inputfifo_get_inst(ch_id);
 
 	s2mi->ch_id = ch_id;
-	ia_css_isys_convert_stream_format_to_mipi_format(input_format,
-		MIPI_PREDICTOR_NONE,
-		&s2mi->fmt_type);
+	ia_css_isys_convert_stream_format_to_mipi_format(
+		input_format, MIPI_PREDICTOR_NONE, &s2mi->fmt_type);
 	s2mi->two_ppc = two_ppc;
 	s2mi->type = inputfifo_determine_type(input_format);
 	s2mi->hblank_cycles = HBLANK_CYCLES;
@@ -456,12 +415,9 @@ void ia_css_inputfifo_start_frame(
 	return;
 }
 
-void ia_css_inputfifo_send_line(
-    unsigned int ch_id,
-    const unsigned short *data,
-    unsigned int width,
-    const unsigned short *data2,
-    unsigned int width2)
+void ia_css_inputfifo_send_line(unsigned int ch_id, const unsigned short *data,
+				unsigned int width, const unsigned short *data2,
+				unsigned int width2)
 {
 	struct inputfifo_instance *s2mi;
 
@@ -473,36 +429,32 @@ void ia_css_inputfifo_send_line(
 	inputfifo_curr_ch_id = (s2mi->ch_id) & _HIVE_ISP_CH_ID_MASK;
 	inputfifo_curr_fmt_type = (s2mi->fmt_type) & _HIVE_ISP_FMT_TYPE_MASK;
 
-	inputfifo_send_line2(data, width, data2, width2,
-			     s2mi->hblank_cycles,
-			     s2mi->marker_cycles,
-			     s2mi->two_ppc,
-			     s2mi->type);
+	inputfifo_send_line2(data, width, data2, width2, s2mi->hblank_cycles,
+			     s2mi->marker_cycles, s2mi->two_ppc, s2mi->type);
 }
 
-void ia_css_inputfifo_send_embedded_line(
-    unsigned int	ch_id,
-    enum atomisp_input_format	data_type,
-    const unsigned short	*data,
-    unsigned int	width)
+void ia_css_inputfifo_send_embedded_line(unsigned int ch_id,
+					 enum atomisp_input_format data_type,
+					 const unsigned short *data,
+					 unsigned int width)
 {
 	struct inputfifo_instance *s2mi;
 	unsigned int fmt_type;
 
 	assert(data);
 	s2mi = inputfifo_get_inst(ch_id);
-	ia_css_isys_convert_stream_format_to_mipi_format(data_type,
-		MIPI_PREDICTOR_NONE, &fmt_type);
+	ia_css_isys_convert_stream_format_to_mipi_format(
+		data_type, MIPI_PREDICTOR_NONE, &fmt_type);
 
 	/* Set format_type for metadata line. */
 	inputfifo_curr_fmt_type = fmt_type & _HIVE_ISP_FMT_TYPE_MASK;
 
-	inputfifo_send_line(data, width, s2mi->hblank_cycles, s2mi->marker_cycles,
-			    s2mi->two_ppc, inputfifo_mipi_data_type_regular);
+	inputfifo_send_line(data, width, s2mi->hblank_cycles,
+			    s2mi->marker_cycles, s2mi->two_ppc,
+			    inputfifo_mipi_data_type_regular);
 }
 
-void ia_css_inputfifo_end_frame(
-    unsigned int	ch_id)
+void ia_css_inputfifo_end_frame(unsigned int ch_id)
 {
 	struct inputfifo_instance *s2mi;
 

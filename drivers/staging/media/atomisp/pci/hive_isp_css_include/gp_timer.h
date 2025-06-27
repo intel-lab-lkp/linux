@@ -21,17 +21,17 @@
  *	- local:   system and cell specific constants and identifiers
  */
 
-#include "system_local.h"    /*GP_TIMER_BASE address */
-#include "gp_timer_local.h"  /*GP_TIMER register offsets */
+#include "system_local.h" /*GP_TIMER_BASE address */
+#include "gp_timer_local.h" /*GP_TIMER register offsets */
 
 #ifndef __INLINE_GP_TIMER__
 #define STORAGE_CLASS_GP_TIMER_H extern
 #define STORAGE_CLASS_GP_TIMER_C
-#include "gp_timer_public.h"   /* functions*/
-#else  /* __INLINE_GP_TIMER__ */
-#define STORAGE_CLASS_GP_TIMER_H static inline
-#define STORAGE_CLASS_GP_TIMER_C static inline
-#include "gp_timer_private.h"  /* inline functions*/
+#include "gp_timer_public.h" /* functions*/
+#else /* __INLINE_GP_TIMER__ */
+#define STORAGE_CLASS_GP_TIMER_H (static inline)
+#define STORAGE_CLASS_GP_TIMER_C (static inline)
+#include "gp_timer_private.h" /* inline functions*/
 #endif /* __INLINE_GP_TIMER__ */
 
 #endif /* __GP_TIMER_H_INCLUDED__ */

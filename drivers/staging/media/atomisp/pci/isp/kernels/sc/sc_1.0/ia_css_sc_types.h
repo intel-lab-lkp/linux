@@ -12,16 +12,16 @@
 */
 
 /* Number of color planes in the shading table. */
-#define IA_CSS_SC_NUM_COLORS           4
+#define IA_CSS_SC_NUM_COLORS 4
 
 /* The 4 colors that a shading table consists of.
  *  For each color we store a grid of values.
  */
 enum ia_css_sc_color {
 	IA_CSS_SC_COLOR_GR, /** Green on a green-red line */
-	IA_CSS_SC_COLOR_R,  /** Red */
-	IA_CSS_SC_COLOR_B,  /** Blue */
-	IA_CSS_SC_COLOR_GB  /** Green on a green-blue line */
+	IA_CSS_SC_COLOR_R, /** Red */
+	IA_CSS_SC_COLOR_B, /** Blue */
+	IA_CSS_SC_COLOR_GB /** Green on a green-blue line */
 };
 
 /* Lens Shading Correction table.
@@ -58,7 +58,7 @@ struct ia_css_shading_table {
 	u32 enable; /** Set to false for no shading correction.
 			  The data field can be NULL when enable == true */
 	/* ------ deprecated(bz675) : from ------ */
-	u32 sensor_width;  /** Native sensor width in pixels. */
+	u32 sensor_width; /** Native sensor width in pixels. */
 	u32 sensor_height; /** Native sensor height in lines.
 		When shading_settings.enable_shading_table_conversion is set
 		as 0, sensor_width and sensor_height are NOT used.
@@ -66,7 +66,7 @@ struct ia_css_shading_table {
 		in the css, when shading_settings.
 		enable_shading_table_conversion is set as 1. */
 	/* ------ deprecated(bz675) : to ------ */
-	u32 width;  /** Number of data points per line per color.
+	u32 width; /** Number of data points per line per color.
 				u8.0, [0,81] */
 	u32 height; /** Number of lines of data points per color.
 				u8.0, [0,61] */

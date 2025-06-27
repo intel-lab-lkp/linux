@@ -12,9 +12,9 @@
 */
 
 /* Number of axes in the MACC table. */
-#define IA_CSS_MACC_NUM_AXES           16
+#define IA_CSS_MACC_NUM_AXES 16
 /* Number of coefficients per MACC axes. */
-#define IA_CSS_MACC_NUM_COEFS          4
+#define IA_CSS_MACC_NUM_COEFS 4
 /* The number of planes in the morphing table. */
 
 /* Multi-Axis Color Correction (MACC) table.

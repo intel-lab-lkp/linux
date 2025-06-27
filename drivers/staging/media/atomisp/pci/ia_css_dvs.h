@@ -31,11 +31,11 @@ enum dvs_statistics_type {
 struct ia_css_isp_dvs_statistics {
 	ia_css_ptr hor_proj;
 	ia_css_ptr ver_proj;
-	u32   hor_size;
-	u32   ver_size;
-	u32   exp_id;   /** see ia_css_event_public.h for more detail */
+	u32 hor_size;
+	u32 ver_size;
+	u32 exp_id; /** see ia_css_event_public.h for more detail */
 	ia_css_ptr data_ptr; /* base pointer containing all memory */
-	u32   size;     /* size of allocated memory in data_ptr */
+	u32 size; /* size of allocated memory in data_ptr */
 };
 
 /* Structure that holds SKC DVS statistics in the ISP internal
@@ -44,11 +44,11 @@ struct ia_css_isp_dvs_statistics {
  * */
 struct ia_css_isp_skc_dvs_statistics;
 
-#define SIZE_OF_IA_CSS_ISP_DVS_STATISTICS_STRUCT			\
-	((3 * SIZE_OF_IA_CSS_PTR) +					\
-	 (4 * sizeof(uint32_t)))
+#define SIZE_OF_IA_CSS_ISP_DVS_STATISTICS_STRUCT \
+	((3 * SIZE_OF_IA_CSS_PTR) + (4 * sizeof(uint32_t)))
 
-static_assert(sizeof(struct ia_css_isp_dvs_statistics) == SIZE_OF_IA_CSS_ISP_DVS_STATISTICS_STRUCT);
+static_assert(sizeof(struct ia_css_isp_dvs_statistics) ==
+	      SIZE_OF_IA_CSS_ISP_DVS_STATISTICS_STRUCT);
 
 /* Map with host-side pointers to ISP-format statistics.
  * These pointers can either be copies of ISP data or memory mapped
@@ -58,10 +58,10 @@ static_assert(sizeof(struct ia_css_isp_dvs_statistics) == SIZE_OF_IA_CSS_ISP_DVS
  * point into this one block of data.
  */
 struct ia_css_isp_dvs_statistics_map {
-	void    *data_ptr;
+	void *data_ptr;
 	s32 *hor_proj;
 	s32 *ver_proj;
-	u32 size;		 /* total size in bytes */
+	u32 size; /* total size in bytes */
 	u32 data_allocated; /* indicate whether data was allocated */
 };
 
@@ -90,9 +90,8 @@ union ia_css_dvs_statistics_host {
  * advised to map the ISP memory into a host-side pointer and use
  * the ia_css_translate_dvs_statistics() function instead.
  */
-int
-ia_css_get_dvs_statistics(struct ia_css_dvs_statistics *host_stats,
-			  const struct ia_css_isp_dvs_statistics *isp_stats);
+int ia_css_get_dvs_statistics(struct ia_css_dvs_statistics *host_stats,
+			      const struct ia_css_isp_dvs_statistics *isp_stats);
 
 /* @brief Translate DVS statistics from ISP format to host format
  * @param[in]	host_stats Host buffer
@@ -105,10 +104,9 @@ ia_css_get_dvs_statistics(struct ia_css_dvs_statistics *host_stats,
  * point to a copy of the data or be a memory mapped pointer to the
  * ISP memory pages.
  */
-void
-ia_css_translate_dvs_statistics(
-    struct ia_css_dvs_statistics *host_stats,
-    const struct ia_css_isp_dvs_statistics_map *isp_stats);
+void ia_css_translate_dvs_statistics(
+	struct ia_css_dvs_statistics *host_stats,
+	const struct ia_css_isp_dvs_statistics_map *isp_stats);
 
 /* @brief Copy DVS 2.0 statistics from an ISP buffer to a host buffer.
  * @param[in]	host_stats Host buffer
@@ -124,9 +122,9 @@ ia_css_translate_dvs_statistics(
  * advised to map the ISP memory into a host-side pointer and use
  * the ia_css_translate_dvs2_statistics() function instead.
  */
-int
-ia_css_get_dvs2_statistics(struct ia_css_dvs2_statistics *host_stats,
-			   const struct ia_css_isp_dvs_statistics *isp_stats);
+int ia_css_get_dvs2_statistics(
+	struct ia_css_dvs2_statistics *host_stats,
+	const struct ia_css_isp_dvs_statistics *isp_stats);
 
 /* @brief Translate DVS2 statistics from ISP format to host format
  * @param[in]	host_stats Host buffer
@@ -139,10 +137,9 @@ ia_css_get_dvs2_statistics(struct ia_css_dvs2_statistics *host_stats,
  * point to a copy of the data or be a memory mapped pointer to the
  * ISP memory pages.
  */
-void
-ia_css_translate_dvs2_statistics(
-    struct ia_css_dvs2_statistics	   *host_stats,
-    const struct ia_css_isp_dvs_statistics_map *isp_stats);
+void ia_css_translate_dvs2_statistics(
+	struct ia_css_dvs2_statistics *host_stats,
+	const struct ia_css_isp_dvs_statistics_map *isp_stats);
 
 /* @brief Copy DVS statistics from an ISP buffer to a host buffer.
  * @param[in] type - DVS statistics type
@@ -150,10 +147,9 @@ ia_css_translate_dvs2_statistics(
  * @param[in] isp_stats ISP buffer
  * @return None
  */
-void
-ia_css_dvs_statistics_get(enum dvs_statistics_type type,
-			  union ia_css_dvs_statistics_host  *host_stats,
-			  const union ia_css_dvs_statistics_isp *isp_stats);
+void ia_css_dvs_statistics_get(enum dvs_statistics_type type,
+			       union ia_css_dvs_statistics_host *host_stats,
+			       const union ia_css_dvs_statistics_isp *isp_stats);
 
 /* @brief Allocate the DVS statistics memory on the ISP
  * @param[in]	grid The grid.
@@ -166,8 +162,7 @@ ia_css_isp_dvs_statistics_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS statistics buffer on the ISP.
  * @return	None
 */
-void
-ia_css_isp_dvs_statistics_free(struct ia_css_isp_dvs_statistics *me);
+void ia_css_isp_dvs_statistics_free(struct ia_css_isp_dvs_statistics *me);
 
 /* @brief Allocate the DVS 2.0 statistics memory
  * @param[in]	grid The grid.
@@ -180,8 +175,7 @@ ia_css_isp_dvs2_statistics_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS statistics buffer on the ISP.
  * @return	None
 */
-void
-ia_css_isp_dvs2_statistics_free(struct ia_css_isp_dvs_statistics *me);
+void ia_css_isp_dvs2_statistics_free(struct ia_css_isp_dvs_statistics *me);
 
 /* @brief Allocate the DVS statistics memory on the host
  * @param[in]	grid The grid.
@@ -194,8 +188,7 @@ ia_css_dvs_statistics_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS statistics buffer on the host.
  * @return	None
 */
-void
-ia_css_dvs_statistics_free(struct ia_css_dvs_statistics *me);
+void ia_css_dvs_statistics_free(struct ia_css_dvs_statistics *me);
 
 /* @brief Allocate the DVS coefficients memory
  * @param[in]	grid The grid.
@@ -208,8 +201,7 @@ ia_css_dvs_coefficients_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS coefficients buffer.
  * @return	None
  */
-void
-ia_css_dvs_coefficients_free(struct ia_css_dvs_coefficients *me);
+void ia_css_dvs_coefficients_free(struct ia_css_dvs_coefficients *me);
 
 /* @brief Allocate the DVS 2.0 statistics memory on the host
  * @param[in]	grid The grid.
@@ -222,8 +214,7 @@ ia_css_dvs2_statistics_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS 2.0 statistics buffer on the host.
  * @return	None
 */
-void
-ia_css_dvs2_statistics_free(struct ia_css_dvs2_statistics *me);
+void ia_css_dvs2_statistics_free(struct ia_css_dvs2_statistics *me);
 
 /* @brief Allocate the DVS 2.0 coefficients memory
  * @param[in]	grid The grid.
@@ -236,8 +227,7 @@ ia_css_dvs2_coefficients_allocate(const struct ia_css_dvs_grid_info *grid);
  * @param[in]	me Pointer to the DVS 2.0 coefficients buffer.
  * @return	None
 */
-void
-ia_css_dvs2_coefficients_free(struct ia_css_dvs2_coefficients *me);
+void ia_css_dvs2_coefficients_free(struct ia_css_dvs2_coefficients *me);
 
 /* @brief Allocate the DVS 2.0 6-axis config memory
  * @param[in]	stream The stream.
@@ -250,8 +240,8 @@ ia_css_dvs2_6axis_config_allocate(const struct ia_css_stream *stream);
  * @param[in]	dvs_6axis_config Pointer to the DVS 6axis configuration buffer
  * @return	None
  */
-void
-ia_css_dvs2_6axis_config_free(struct ia_css_dvs_6axis_config *dvs_6axis_config);
+void ia_css_dvs2_6axis_config_free(
+	struct ia_css_dvs_6axis_config *dvs_6axis_config);
 
 /* @brief Allocate a dvs statistics map structure
  * @param[in]	isp_stats pointer to ISP dvs statistis struct
@@ -269,10 +259,8 @@ ia_css_dvs2_6axis_config_free(struct ia_css_dvs_6axis_config *dvs_6axis_config);
  * Note that this function does not allocate or map any ISP
  * memory.
 */
-struct ia_css_isp_dvs_statistics_map *
-ia_css_isp_dvs_statistics_map_allocate(
-    const struct ia_css_isp_dvs_statistics *isp_stats,
-    void *data_ptr);
+struct ia_css_isp_dvs_statistics_map *ia_css_isp_dvs_statistics_map_allocate(
+	const struct ia_css_isp_dvs_statistics *isp_stats, void *data_ptr);
 
 /* @brief Free the dvs statistics map
  * @param[in]	me Pointer to the dvs statistics map
@@ -282,8 +270,8 @@ ia_css_isp_dvs_statistics_map_allocate(
  * was allocated inside ia_css_isp_dvs_statistics_map_allocate(), it
  * will be freed in this function. Otherwise it will not be freed.
  */
-void
-ia_css_isp_dvs_statistics_map_free(struct ia_css_isp_dvs_statistics_map *me);
+void ia_css_isp_dvs_statistics_map_free(
+	struct ia_css_isp_dvs_statistics_map *me);
 
 /* @brief Allocate memory for the SKC DVS statistics on the ISP
  * @return		Pointer to the allocated ACC DVS statistics buffer on the ISP

@@ -21,7 +21,7 @@
 
 #include "assert_support.h"
 
-#include "isp.h"				/* PMEM_WIDTH_LOG2 */
+#include "isp.h" /* PMEM_WIDTH_LOG2 */
 
 #include "ia_css_isp_params.h"
 #include "ia_css_isp_configs.h"
@@ -32,7 +32,7 @@
 
 struct firmware_header {
 	struct sh_css_fw_bi_file_h file_header;
-	struct ia_css_fw_info      binary_header;
+	struct ia_css_fw_info binary_header;
 };
 
 struct fw_param {
@@ -47,13 +47,15 @@ static struct firmware_header *firmware_header;
  * which will be replaced with the actual RELEASE_VERSION
  * during package generation. Please do not modify
  */
-static const char *release_version_2401 = STR(irci_stable_candrpv_0415_20150521_0458);
-static const char *release_version_2400 = STR(irci_stable_candrpv_0415_20150423_1753);
+static const char *release_version_2401 =
+	STR(irci_stable_candrpv_0415_20150521_0458);
+static const char *release_version_2400 =
+	STR(irci_stable_candrpv_0415_20150423_1753);
 
-#define MAX_FW_REL_VER_NAME	300
+#define MAX_FW_REL_VER_NAME 300
 static char FW_rel_ver_name[MAX_FW_REL_VER_NAME] = "---";
 
-struct ia_css_fw_info	  sh_css_sp_fw;
+struct ia_css_fw_info sh_css_sp_fw;
 struct ia_css_blob_descr *sh_css_blob_info; /* Only ISP blob info (no SP) */
 unsigned int sh_css_num_binaries; /* This includes 1 SP binary */
 
@@ -69,9 +71,9 @@ char *sh_css_get_fw_version(void)
  */
 
 /* Setup sp/sp1 binary */
-static int
-setup_binary(struct ia_css_fw_info *fw, const char *fw_data,
-	     struct ia_css_fw_info *sh_css_fw, unsigned int binary_id)
+static int setup_binary(struct ia_css_fw_info *fw, const char *fw_data,
+			struct ia_css_fw_info *sh_css_fw,
+			unsigned int binary_id)
 {
 	const char *blob_data;
 
@@ -87,16 +89,15 @@ setup_binary(struct ia_css_fw_info *fw, const char *fw_data,
 		return -ENOMEM;
 
 	memcpy((void *)sh_css_fw->blob.code, blob_data, fw->blob.size);
-	sh_css_fw->blob.data = (char *)sh_css_fw->blob.code + fw->blob.data_source;
+	sh_css_fw->blob.data =
+		(char *)sh_css_fw->blob.code + fw->blob.data_source;
 	fw_minibuffer[binary_id].buffer = sh_css_fw->blob.code;
 
 	return 0;
 }
 
-int
-sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi,
-		      struct ia_css_blob_descr *bd,
-		      unsigned int index)
+int sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi,
+			  struct ia_css_blob_descr *bd, unsigned int index)
 {
 	const char *name;
 	const unsigned char *blob;
@@ -112,9 +113,9 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi,
 	blob = (const unsigned char *)fw + bi->blob.offset;
 
 	/* sanity check */
-	if (bi->blob.size !=
-		bi->blob.text_size + bi->blob.icache_size +
-			bi->blob.data_size + bi->blob.padding_size) {
+	if (bi->blob.size != bi->blob.text_size + bi->blob.icache_size +
+				     bi->blob.data_size +
+				     bi->blob.padding_size) {
 		/* sanity check, note the padding bytes added for section to DDR alignment */
 		return -EINVAL;
 	}
@@ -138,11 +139,13 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi,
 
 	if (bi->type == ia_css_isp_firmware) {
 		size_t paramstruct_size = sizeof(struct ia_css_memory_offsets);
-		size_t configstruct_size = sizeof(struct ia_css_config_memory_offsets);
-		size_t statestruct_size = sizeof(struct ia_css_state_memory_offsets);
+		size_t configstruct_size =
+			sizeof(struct ia_css_config_memory_offsets);
+		size_t statestruct_size =
+			sizeof(struct ia_css_state_memory_offsets);
 
 		char *parambuf = kmalloc(paramstruct_size + configstruct_size +
-					 statestruct_size,
+						 statestruct_size,
 					 GFP_KERNEL);
 		if (!parambuf)
 			return -ENOMEM;
@@ -154,30 +157,35 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi,
 		fw_minibuffer[index].buffer = parambuf;
 
 		/* copy ia_css_memory_offsets */
-		memcpy(parambuf, (void *)(fw +
-					  bi->blob.memory_offsets.offsets[IA_CSS_PARAM_CLASS_PARAM]),
+		memcpy(parambuf,
+		       (void *)(fw +
+				bi->blob.memory_offsets
+					.offsets[IA_CSS_PARAM_CLASS_PARAM]),
 		       paramstruct_size);
 		bd->mem_offsets.array[IA_CSS_PARAM_CLASS_PARAM].ptr = parambuf;
 
 		/* copy ia_css_config_memory_offsets */
 		memcpy(parambuf + paramstruct_size,
-		       (void *)(fw + bi->blob.memory_offsets.offsets[IA_CSS_PARAM_CLASS_CONFIG]),
+		       (void *)(fw +
+				bi->blob.memory_offsets
+					.offsets[IA_CSS_PARAM_CLASS_CONFIG]),
 		       configstruct_size);
-		bd->mem_offsets.array[IA_CSS_PARAM_CLASS_CONFIG].ptr = parambuf +
-		paramstruct_size;
+		bd->mem_offsets.array[IA_CSS_PARAM_CLASS_CONFIG].ptr =
+			parambuf + paramstruct_size;
 
 		/* copy ia_css_state_memory_offsets */
 		memcpy(parambuf + paramstruct_size + configstruct_size,
-		       (void *)(fw + bi->blob.memory_offsets.offsets[IA_CSS_PARAM_CLASS_STATE]),
+		       (void *)(fw +
+				bi->blob.memory_offsets
+					.offsets[IA_CSS_PARAM_CLASS_STATE]),
 		       statestruct_size);
-		bd->mem_offsets.array[IA_CSS_PARAM_CLASS_STATE].ptr = parambuf +
-		paramstruct_size + configstruct_size;
+		bd->mem_offsets.array[IA_CSS_PARAM_CLASS_STATE].ptr =
+			parambuf + paramstruct_size + configstruct_size;
 	}
 	return 0;
 }
 
-bool
-sh_css_check_firmware_version(struct device *dev, const char *fw_data)
+bool sh_css_check_firmware_version(struct device *dev, const char *fw_data)
 {
 	const char *release_version;
 	struct sh_css_fw_bi_file_h *file_header;
@@ -191,7 +199,8 @@ sh_css_check_firmware_version(struct device *dev, const char *fw_data)
 	file_header = &firmware_header->file_header;
 
 	if (strcmp(file_header->version, release_version) != 0) {
-		dev_err(dev, "Firmware version may not be compatible with this driver\n");
+		dev_err(dev,
+			"Firmware version may not be compatible with this driver\n");
 		dev_err(dev, "Expecting version '%s', but firmware is '%s'.\n",
 			release_version, file_header->version);
 	}
@@ -200,23 +209,22 @@ sh_css_check_firmware_version(struct device *dev, const char *fw_data)
 	return false;
 }
 
-static const char * const fw_type_name[] = {
-	[ia_css_sp_firmware]		= "SP",
-	[ia_css_isp_firmware]		= "ISP",
-	[ia_css_bootloader_firmware]	= "BootLoader",
-	[ia_css_acc_firmware]		= "accel",
+static const char *const fw_type_name[] = {
+	[ia_css_sp_firmware] = "SP",
+	[ia_css_isp_firmware] = "ISP",
+	[ia_css_bootloader_firmware] = "BootLoader",
+	[ia_css_acc_firmware] = "accel",
 };
 
-static const char * const fw_acc_type_name[] = {
-	[IA_CSS_ACC_NONE] =		"Normal",
-	[IA_CSS_ACC_OUTPUT] =		"Accel for output",
-	[IA_CSS_ACC_VIEWFINDER] =	"Accel for viewfinder",
-	[IA_CSS_ACC_STANDALONE] =	"Stand-alone accel",
+static const char *const fw_acc_type_name[] = {
+	[IA_CSS_ACC_NONE] = "Normal",
+	[IA_CSS_ACC_OUTPUT] = "Accel for output",
+	[IA_CSS_ACC_VIEWFINDER] = "Accel for viewfinder",
+	[IA_CSS_ACC_STANDALONE] = "Stand-alone accel",
 };
 
-int
-sh_css_load_firmware(struct device *dev, const char *fw_data,
-		     unsigned int fw_size)
+int sh_css_load_firmware(struct device *dev, const char *fw_data,
+			 unsigned int fw_size)
 {
 	unsigned int i;
 	const char *release_version;
@@ -243,19 +251,21 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 		release_version = release_version_2400;
 	ret = sh_css_check_firmware_version(dev, fw_data);
 	if (ret) {
-		IA_CSS_ERROR("CSS code version (%s) and firmware version (%s) mismatch!",
-			     file_header->version, release_version);
+		IA_CSS_ERROR(
+			"CSS code version (%s) and firmware version (%s) mismatch!",
+			file_header->version, release_version);
 		return -EINVAL;
 	} else {
-		IA_CSS_LOG("successfully load firmware version %s", release_version);
+		IA_CSS_LOG("successfully load firmware version %s",
+			   release_version);
 	}
 
 	sh_css_num_binaries = file_header->binary_nr;
 	/* Only allocate memory for ISP blob info */
 	if (sh_css_num_binaries > NUM_OF_SPS) {
-		sh_css_blob_info = kmalloc(
-		    (sh_css_num_binaries - NUM_OF_SPS) *
-		    sizeof(*sh_css_blob_info), GFP_KERNEL);
+		sh_css_blob_info = kmalloc((sh_css_num_binaries - NUM_OF_SPS) *
+						   sizeof(*sh_css_blob_info),
+					   GFP_KERNEL);
 		if (!sh_css_blob_info)
 			return -ENOMEM;
 	} else {
@@ -295,19 +305,15 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 
 			dev_dbg(dev,
 				"binary #%-2d type %s (%s), binary id is %2d: %s\n",
-				i,
-				fw_type_name[bd.header.type],
+				i, fw_type_name[bd.header.type],
 				fw_acc_type_name[bd.header.info.isp.type],
-				bd.header.info.isp.sp.id,
-				bd.name);
+				bd.header.info.isp.sp.id, bd.name);
 			break;
 		case ia_css_sp_firmware:
 		case ia_css_bootloader_firmware:
 		case ia_css_acc_firmware:
-			dev_dbg(dev,
-				"binary #%-2d type %s: %s\n",
-				i, fw_type_name[bd.header.type],
-				bd.name);
+			dev_dbg(dev, "binary #%-2d type %s: %s\n", i,
+				fw_type_name[bd.header.type], bd.name);
 			break;
 		default:
 			if (bd.header.info.isp.type > IA_CSS_ACC_STANDALONE) {
@@ -366,8 +372,7 @@ void sh_css_unload_firmware(void)
 	sh_css_num_binaries = 0;
 }
 
-ia_css_ptr
-sh_css_load_blob(const unsigned char *blob, unsigned int size)
+ia_css_ptr sh_css_load_blob(const unsigned char *blob, unsigned int size)
 {
 	ia_css_ptr target_addr = hmm_alloc(size);
 	/*

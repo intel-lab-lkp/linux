@@ -18,74 +18,69 @@
 #include "assert_support.h"
 #include "type_support.h"
 
-STORAGE_CLASS_ISP_C void isp_ctrl_store(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const hrt_data		value)
+STORAGE_CLASS_ISP_C void
+isp_ctrl_store(const isp_ID_t ID, const unsigned int reg, const hrt_data value)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_CTRL_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_CTRL_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
-	ia_css_device_store_uint32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data), value);
+	ia_css_device_store_uint32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data),
+				   value);
 #else
-	hrt_master_port_store_32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data), value);
+	hrt_master_port_store_32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data),
+				 value);
 #endif
 	return;
 }
 
-STORAGE_CLASS_ISP_C hrt_data isp_ctrl_load(
-    const isp_ID_t		ID,
-    const unsigned int	reg)
+STORAGE_CLASS_ISP_C hrt_data isp_ctrl_load(const isp_ID_t ID,
+					   const unsigned int reg)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_CTRL_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_CTRL_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
-	return ia_css_device_load_uint32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data));
+	return ia_css_device_load_uint32(ISP_CTRL_BASE[ID] +
+					 reg * sizeof(hrt_data));
 #else
-	return hrt_master_port_uload_32(ISP_CTRL_BASE[ID] + reg * sizeof(hrt_data));
+	return hrt_master_port_uload_32(ISP_CTRL_BASE[ID] +
+					reg * sizeof(hrt_data));
 #endif
 }
 
-STORAGE_CLASS_ISP_C bool isp_ctrl_getbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit)
+STORAGE_CLASS_ISP_C bool isp_ctrl_getbit(const isp_ID_t ID,
+					 const unsigned int reg,
+					 const unsigned int bit)
 {
 	hrt_data val = isp_ctrl_load(ID, reg);
 
 	return (val & (1UL << bit)) != 0;
 }
 
-STORAGE_CLASS_ISP_C void isp_ctrl_setbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit)
+STORAGE_CLASS_ISP_C void isp_ctrl_setbit(const isp_ID_t ID,
+					 const unsigned int reg,
+					 const unsigned int bit)
 {
-	hrt_data	data = isp_ctrl_load(ID, reg);
+	hrt_data data = isp_ctrl_load(ID, reg);
 
 	isp_ctrl_store(ID, reg, (data | (1UL << bit)));
 	return;
 }
 
-STORAGE_CLASS_ISP_C void isp_ctrl_clearbit(
-    const isp_ID_t		ID,
-    const unsigned int	reg,
-    const unsigned int	bit)
+STORAGE_CLASS_ISP_C void isp_ctrl_clearbit(const isp_ID_t ID,
+					   const unsigned int reg,
+					   const unsigned int bit)
 {
-	hrt_data	data = isp_ctrl_load(ID, reg);
+	hrt_data data = isp_ctrl_load(ID, reg);
 
 	isp_ctrl_store(ID, reg, (data & ~(1UL << bit)));
 	return;
 }
 
-STORAGE_CLASS_ISP_C void isp_dmem_store(
-    const isp_ID_t		ID,
-    unsigned int		addr,
-    const void		*data,
-    const size_t		size)
+STORAGE_CLASS_ISP_C void isp_dmem_store(const isp_ID_t ID, unsigned int addr,
+					const void *data, const size_t size)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_DMEM_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_DMEM_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
 	ia_css_device_store(ISP_DMEM_BASE[ID] + addr, data, size);
 #else
@@ -94,14 +89,12 @@ STORAGE_CLASS_ISP_C void isp_dmem_store(
 	return;
 }
 
-STORAGE_CLASS_ISP_C void isp_dmem_load(
-    const isp_ID_t		ID,
-    const unsigned int	addr,
-    void			*data,
-    const size_t		size)
+STORAGE_CLASS_ISP_C void isp_dmem_load(const isp_ID_t ID,
+				       const unsigned int addr, void *data,
+				       const size_t size)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_DMEM_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_DMEM_BASE[ID] != (hrt_address)-1);
 #if !defined(HRT_MEMORY_ACCESS)
 	ia_css_device_load(ISP_DMEM_BASE[ID] + addr, data, size);
 #else
@@ -110,13 +103,11 @@ STORAGE_CLASS_ISP_C void isp_dmem_load(
 	return;
 }
 
-STORAGE_CLASS_ISP_C void isp_dmem_store_uint32(
-    const isp_ID_t		ID,
-    unsigned int		addr,
-    const uint32_t		data)
+STORAGE_CLASS_ISP_C void
+isp_dmem_store_uint32(const isp_ID_t ID, unsigned int addr, const uint32_t data)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_DMEM_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_DMEM_BASE[ID] != (hrt_address)-1);
 	(void)ID;
 #if !defined(HRT_MEMORY_ACCESS)
 	ia_css_device_store_uint32(ISP_DMEM_BASE[ID] + addr, data);
@@ -126,12 +117,11 @@ STORAGE_CLASS_ISP_C void isp_dmem_store_uint32(
 	return;
 }
 
-STORAGE_CLASS_ISP_C uint32_t isp_dmem_load_uint32(
-    const isp_ID_t		ID,
-    const unsigned int	addr)
+STORAGE_CLASS_ISP_C uint32_t isp_dmem_load_uint32(const isp_ID_t ID,
+						  const unsigned int addr)
 {
 	assert(ID < N_ISP_ID);
-	assert(ISP_DMEM_BASE[ID] != (hrt_address) - 1);
+	assert(ISP_DMEM_BASE[ID] != (hrt_address)-1);
 	(void)ID;
 #if !defined(HRT_MEMORY_ACCESS)
 	return ia_css_device_load_uint32(ISP_DMEM_BASE[ID] + addr);
@@ -140,12 +130,10 @@ STORAGE_CLASS_ISP_C uint32_t isp_dmem_load_uint32(
 #endif
 }
 
-STORAGE_CLASS_ISP_C uint32_t isp_2w_cat_1w(
-    const u16		x0,
-    const uint16_t		x1)
+STORAGE_CLASS_ISP_C uint32_t isp_2w_cat_1w(const u16 x0, const uint16_t x1)
 {
-	u32 out = ((uint32_t)(x1 & HIVE_ISP_VMEM_MASK) << ISP_VMEM_ELEMBITS)
-		  | (x0 & HIVE_ISP_VMEM_MASK);
+	u32 out = ((uint32_t)(x1 & HIVE_ISP_VMEM_MASK) << ISP_VMEM_ELEMBITS) |
+		  (x0 & HIVE_ISP_VMEM_MASK);
 	return out;
 }
 

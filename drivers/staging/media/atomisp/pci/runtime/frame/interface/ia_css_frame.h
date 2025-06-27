@@ -49,8 +49,7 @@ void ia_css_frame_info_set_format(struct ia_css_frame_info *info,
  * @param[in]	aligned     The aligned to be set to info
  * @return
  */
-void ia_css_frame_info_init(struct ia_css_frame_info *info,
-			    unsigned int width,
+void ia_css_frame_info_init(struct ia_css_frame_info *info, unsigned int width,
 			    unsigned int height,
 			    enum ia_css_frame_format format,
 			    unsigned int aligned);
@@ -63,8 +62,8 @@ void ia_css_frame_info_init(struct ia_css_frame_info *info,
  * @return      Returns true if the frames are equal
  */
 bool ia_css_frame_info_is_same_resolution(
-    const struct ia_css_frame_info *info_a,
-    const struct ia_css_frame_info *info_b);
+	const struct ia_css_frame_info *info_a,
+	const struct ia_css_frame_info *info_b);
 
 /* @brief Check the frame info is valid
  *
@@ -115,9 +114,8 @@ int ia_css_frame_allocate_with_buffer_size(struct ia_css_frame **frame,
  * @param[in]	frame_b         The second frame to be compared
  * @return      Returns true if the frames are equal
  */
-bool ia_css_frame_is_same_type(
-    const struct ia_css_frame *frame_a,
-    const struct ia_css_frame *frame_b);
+bool ia_css_frame_is_same_type(const struct ia_css_frame *frame_a,
+			       const struct ia_css_frame *frame_b);
 
 /* @brief Configure a dma port from frame info
  *
@@ -129,6 +127,7 @@ bool ia_css_frame_is_same_type(
 int ia_css_dma_configure_from_info(struct dma_port_config *config,
 				   const struct ia_css_frame_info *info);
 
-unsigned int ia_css_frame_pad_width(unsigned int width, enum ia_css_frame_format format);
+unsigned int ia_css_frame_pad_width(unsigned int width,
+				    enum ia_css_frame_format format);
 
 #endif /* __IA_CSS_FRAME_H__ */

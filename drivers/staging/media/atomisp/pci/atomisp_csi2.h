@@ -15,11 +15,11 @@
 
 #include "../../include/linux/atomisp.h"
 
-#define CSI2_PAD_SINK		0
-#define CSI2_PAD_SOURCE		1
-#define CSI2_PADS_NUM		2
+#define CSI2_PAD_SINK 0
+#define CSI2_PAD_SOURCE 1
+#define CSI2_PADS_NUM 2
 
-#define CSI2_MAX_ACPI_GPIOS	2u
+#define CSI2_MAX_ACPI_GPIOS 2u
 
 struct acpi_device;
 struct v4l2_device;
@@ -57,7 +57,7 @@ int atomisp_csi2_set_ffmt(struct v4l2_subdev *sd,
 int atomisp_mipi_csi2_init(struct atomisp_device *isp);
 void atomisp_mipi_csi2_cleanup(struct atomisp_device *isp);
 void atomisp_mipi_csi2_unregister_entities(
-    struct atomisp_mipi_csi2_device *csi2);
+	struct atomisp_mipi_csi2_device *csi2);
 int atomisp_mipi_csi2_register_entities(struct atomisp_mipi_csi2_device *csi2,
 					struct v4l2_device *vdev);
 int atomisp_csi2_bridge_init(struct atomisp_device *isp);

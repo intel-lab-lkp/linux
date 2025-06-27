@@ -19,9 +19,8 @@
  * @param[in]	id	The global unique ID of the csi rx fe controller.
  * @param[out]	state	Point to the register-state.
  */
-void csi_rx_fe_ctrl_get_state(
-    const csi_rx_frontend_ID_t ID,
-    csi_rx_fe_ctrl_state_t *state);
+void csi_rx_fe_ctrl_get_state(const csi_rx_frontend_ID_t ID,
+			      csi_rx_fe_ctrl_state_t *state);
 /**
  * @brief Dump the csi rx frontend state.
  * Dump the state of the csi rx frontend regiester-set.
@@ -29,9 +28,8 @@ void csi_rx_fe_ctrl_get_state(
  * @param[in]	id	The global unique ID of the csi rx fe controller.
  * @param[in]	state	Point to the register-state.
  */
-void csi_rx_fe_ctrl_dump_state(
-    const csi_rx_frontend_ID_t ID,
-    csi_rx_fe_ctrl_state_t *state);
+void csi_rx_fe_ctrl_dump_state(const csi_rx_frontend_ID_t ID,
+			       csi_rx_fe_ctrl_state_t *state);
 /**
  * @brief Get the state of the csi rx fe dlane.
  * Get the state of the register set per dlane process.
@@ -40,10 +38,9 @@ void csi_rx_fe_ctrl_dump_state(
  * @param[in]	lane		The lane ID.
  * @param[out]	state		Point to the dlane state.
  */
-void csi_rx_fe_ctrl_get_dlane_state(
-    const csi_rx_frontend_ID_t ID,
-    const u32 lane,
-    csi_rx_fe_ctrl_lane_t *dlane_state);
+void csi_rx_fe_ctrl_get_dlane_state(const csi_rx_frontend_ID_t ID,
+				    const u32 lane,
+				    csi_rx_fe_ctrl_lane_t *dlane_state);
 /**
  * @brief Get the csi rx backend state.
  * Get the state of the csi rx backend regiester-set.
@@ -51,9 +48,8 @@ void csi_rx_fe_ctrl_get_dlane_state(
  * @param[in]	id	The global unique ID of the csi rx be controller.
  * @param[out]	state	Point to the register-state.
  */
-void csi_rx_be_ctrl_get_state(
-    const csi_rx_backend_ID_t ID,
-    csi_rx_be_ctrl_state_t *state);
+void csi_rx_be_ctrl_get_state(const csi_rx_backend_ID_t ID,
+			      csi_rx_be_ctrl_state_t *state);
 /**
  * @brief Dump the csi rx backend state.
  * Dump the state of the csi rx backend regiester-set.
@@ -61,9 +57,8 @@ void csi_rx_be_ctrl_get_state(
  * @param[in]	id	The global unique ID of the csi rx be controller.
  * @param[in]	state	Point to the register-state.
  */
-void csi_rx_be_ctrl_dump_state(
-    const csi_rx_backend_ID_t ID,
-    csi_rx_be_ctrl_state_t *state);
+void csi_rx_be_ctrl_dump_state(const csi_rx_backend_ID_t ID,
+			       csi_rx_be_ctrl_state_t *state);
 /* end of NCI */
 
 /*****************************************************
@@ -80,9 +75,8 @@ void csi_rx_be_ctrl_dump_state(
  *
  * @return the value of the register.
  */
-hrt_data csi_rx_fe_ctrl_reg_load(
-    const csi_rx_frontend_ID_t ID,
-    const hrt_address reg);
+hrt_data csi_rx_fe_ctrl_reg_load(const csi_rx_frontend_ID_t ID,
+				 const hrt_address reg);
 /**
  * @brief Store a value to the register.
  * Store a value to the register of the csi rx fe.
@@ -92,10 +86,8 @@ hrt_data csi_rx_fe_ctrl_reg_load(
  * @param[in]	value	The value to be stored.
  *
  */
-void csi_rx_fe_ctrl_reg_store(
-    const csi_rx_frontend_ID_t ID,
-    const hrt_address reg,
-    const hrt_data value);
+void csi_rx_fe_ctrl_reg_store(const csi_rx_frontend_ID_t ID,
+			      const hrt_address reg, const hrt_data value);
 /**
  * @brief Load the register value.
  * Load the value of the register of the csirx be.
@@ -105,9 +97,8 @@ void csi_rx_fe_ctrl_reg_store(
  *
  * @return the value of the register.
  */
-hrt_data csi_rx_be_ctrl_reg_load(
-    const csi_rx_backend_ID_t ID,
-    const hrt_address reg);
+hrt_data csi_rx_be_ctrl_reg_load(const csi_rx_backend_ID_t ID,
+				 const hrt_address reg);
 /**
  * @brief Store a value to the register.
  * Store a value to the register of the csi rx be.
@@ -117,9 +108,7 @@ hrt_data csi_rx_be_ctrl_reg_load(
  * @param[in]	value	The value to be stored.
  *
  */
-void csi_rx_be_ctrl_reg_store(
-    const csi_rx_backend_ID_t ID,
-    const hrt_address reg,
-    const hrt_data value);
+void csi_rx_be_ctrl_reg_store(const csi_rx_backend_ID_t ID,
+			      const hrt_address reg, const hrt_data value);
 /* end of DLI */
 #endif /* __CSI_RX_PUBLIC_H_INCLUDED__ */

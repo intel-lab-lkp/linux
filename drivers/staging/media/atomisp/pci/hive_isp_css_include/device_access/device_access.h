@@ -43,7 +43,7 @@ Copyright (c) 2010 - 2015, Intel Corporation.
  */
 
 /*typedef	char *sys_address;*/
-typedef	hrt_address		sys_address;
+typedef hrt_address sys_address;
 
 /*! Set the (sub)system base address
 
@@ -52,8 +52,7 @@ typedef	hrt_address		sys_address;
 
  \return none,
  */
-void device_set_base_address(
-    const sys_address		base_addr);
+void device_set_base_address(const sys_address base_addr);
 
 /*! Get the (sub)system base address
 
@@ -67,8 +66,7 @@ sys_address device_get_base_address(void);
 
  \return device[addr]
  */
-uint8_t ia_css_device_load_uint8(
-    const hrt_address		addr);
+uint8_t ia_css_device_load_uint8(const hrt_address addr);
 
 /*! Read a 16-bit value from a device register or memory in the device
 
@@ -76,8 +74,7 @@ uint8_t ia_css_device_load_uint8(
 
  \return device[addr]
  */
-uint16_t ia_css_device_load_uint16(
-    const hrt_address		addr);
+uint16_t ia_css_device_load_uint16(const hrt_address addr);
 
 /*! Read a 32-bit value from a device register or memory in the device
 
@@ -85,8 +82,7 @@ uint16_t ia_css_device_load_uint16(
 
  \return device[addr]
  */
-uint32_t ia_css_device_load_uint32(
-    const hrt_address		addr);
+uint32_t ia_css_device_load_uint32(const hrt_address addr);
 
 /*! Read a 64-bit value from a device register or memory in the device
 
@@ -94,8 +90,7 @@ uint32_t ia_css_device_load_uint32(
 
  \return device[addr]
  */
-uint64_t ia_css_device_load_uint64(
-    const hrt_address		addr);
+uint64_t ia_css_device_load_uint64(const hrt_address addr);
 
 /*! Write an 8-bit value to a device register or memory in the device
 
@@ -104,9 +99,7 @@ uint64_t ia_css_device_load_uint64(
 
  \return none, device[addr] = value
  */
-void ia_css_device_store_uint8(
-    const hrt_address		addr,
-    const uint8_t			data);
+void ia_css_device_store_uint8(const hrt_address addr, const uint8_t data);
 
 /*! Write a 16-bit value to a device register or memory in the device
 
@@ -115,9 +108,7 @@ void ia_css_device_store_uint8(
 
  \return none, device[addr] = value
  */
-void ia_css_device_store_uint16(
-    const hrt_address		addr,
-    const uint16_t			data);
+void ia_css_device_store_uint16(const hrt_address addr, const uint16_t data);
 
 /*! Write a 32-bit value to a device register or memory in the device
 
@@ -126,9 +117,7 @@ void ia_css_device_store_uint16(
 
  \return none, device[addr] = value
  */
-void ia_css_device_store_uint32(
-    const hrt_address		addr,
-    const uint32_t			data);
+void ia_css_device_store_uint32(const hrt_address addr, const uint32_t data);
 
 /*! Write a 64-bit value to a device register or memory in the device
 
@@ -137,9 +126,7 @@ void ia_css_device_store_uint32(
 
  \return none, device[addr] = value
  */
-void ia_css_device_store_uint64(
-    const hrt_address		addr,
-    const uint64_t			data);
+void ia_css_device_store_uint64(const hrt_address addr, const uint64_t data);
 
 /*! Read an array of bytes from device registers or memory in the device
 
@@ -149,10 +136,7 @@ void ia_css_device_store_uint64(
 
  \return none
  */
-void ia_css_device_load(
-    const hrt_address		addr,
-    void					*data,
-    const size_t			size);
+void ia_css_device_load(const hrt_address addr, void *data, const size_t size);
 
 /*! Write an array of bytes to device registers or memory in the device
 
@@ -162,9 +146,7 @@ void ia_css_device_load(
 
  \return none
  */
-void ia_css_device_store(
-    const hrt_address		addr,
-    const void				*data,
-    const size_t			size);
+void ia_css_device_store(const hrt_address addr, const void *data,
+			 const size_t size);
 
 #endif /* __DEVICE_ACCESS_H_INCLUDED__ */

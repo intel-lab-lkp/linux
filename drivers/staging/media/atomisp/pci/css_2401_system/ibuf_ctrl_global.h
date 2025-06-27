@@ -9,7 +9,7 @@
 
 #include <type_support.h>
 
-#include <ibuf_cntrl_defs.h>	/* _IBUF_CNTRL_RECALC_WORDS_STATUS,
+#include <ibuf_cntrl_defs.h> /* _IBUF_CNTRL_RECALC_WORDS_STATUS,
 				 * _IBUF_CNTRL_ARBITERS_STATUS,
 				 * _IBUF_CNTRL_PROC_REG_ALIGN,
 				 * etc.
@@ -18,21 +18,21 @@
 /* Definition of contents of main controller state register is lacking
  * in ibuf_cntrl_defs.h, so define these here:
  */
-#define _IBUF_CNTRL_MAIN_CNTRL_FSM_MASK			0xf
-#define _IBUF_CNTRL_MAIN_CNTRL_FSM_NEXT_COMMAND_CHECK	0x9
-#define _IBUF_CNTRL_MAIN_CNTRL_MEM_INP_BUF_ALLOC	BIT(8)
-#define _IBUF_CNTRL_DMA_SYNC_WAIT_FOR_SYNC		1
-#define _IBUF_CNTRL_DMA_SYNC_FSM_WAIT_FOR_ACK		(0x3 << 1)
+#define _IBUF_CNTRL_MAIN_CNTRL_FSM_MASK 0xf
+#define _IBUF_CNTRL_MAIN_CNTRL_FSM_NEXT_COMMAND_CHECK 0x9
+#define _IBUF_CNTRL_MAIN_CNTRL_MEM_INP_BUF_ALLOC BIT(8)
+#define _IBUF_CNTRL_DMA_SYNC_WAIT_FOR_SYNC 1
+#define _IBUF_CNTRL_DMA_SYNC_FSM_WAIT_FOR_ACK (0x3 << 1)
 
-struct	isp2401_ib_buffer_s {
-	u32	start_addr;	/* start address of the buffer in the
+struct isp2401_ib_buffer_s {
+	u32 start_addr; /* start address of the buffer in the
 					 * "input-buffer hardware block"
 					 */
 
-	u32	stride;		/* stride per buffer line (in bytes) */
-	u32	lines;		/* lines in the buffer */
+	u32 stride; /* stride per buffer line (in bytes) */
+	u32 lines; /* lines in the buffer */
 };
-typedef struct isp2401_ib_buffer_s	isp2401_ib_buffer_t;
+typedef struct isp2401_ib_buffer_s isp2401_ib_buffer_t;
 
 typedef struct ibuf_ctrl_cfg_s ibuf_ctrl_cfg_t;
 struct ibuf_ctrl_cfg_s {
@@ -61,8 +61,8 @@ struct ibuf_ctrl_cfg_s {
 	u32 stores_per_frame;
 
 	struct {
-		u32 sync_cmd;	/* must be _STREAM2MMIO_CMD_TOKEN_SYNC_FRAME */
-		u32 store_cmd;	/* must be _STREAM2MMIO_CMD_TOKEN_STORE_PACKETS */
+		u32 sync_cmd; /* must be _STREAM2MMIO_CMD_TOKEN_SYNC_FRAME */
+		u32 store_cmd; /* must be _STREAM2MMIO_CMD_TOKEN_STORE_PACKETS */
 	} stream2mmio_cfg;
 };
 

@@ -19,50 +19,50 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 
-#define GC0310_NATIVE_WIDTH			656
-#define GC0310_NATIVE_HEIGHT			496
+#define GC0310_NATIVE_WIDTH 656
+#define GC0310_NATIVE_HEIGHT 496
 
-#define GC0310_FPS				30
-#define GC0310_SKIP_FRAMES			3
+#define GC0310_FPS 30
+#define GC0310_SKIP_FRAMES 3
 
-#define GC0310_FOCAL_LENGTH_NUM			278 /* 2.78mm */
+#define GC0310_FOCAL_LENGTH_NUM 278 /* 2.78mm */
 
-#define GC0310_ID				0xa310
+#define GC0310_ID 0xa310
 
-#define GC0310_RESET_RELATED			0xFE
-#define GC0310_REGISTER_PAGE_0			0x0
-#define GC0310_REGISTER_PAGE_3			0x3
+#define GC0310_RESET_RELATED 0xFE
+#define GC0310_REGISTER_PAGE_0 0x0
+#define GC0310_REGISTER_PAGE_3 0x3
 
 /*
  * GC0310 System control registers
  */
-#define GC0310_SW_STREAM			0x10
+#define GC0310_SW_STREAM 0x10
 
-#define GC0310_SC_CMMN_CHIP_ID_H		0xf0
-#define GC0310_SC_CMMN_CHIP_ID_L		0xf1
+#define GC0310_SC_CMMN_CHIP_ID_H 0xf0
+#define GC0310_SC_CMMN_CHIP_ID_L 0xf1
 
-#define GC0310_AEC_PK_EXPO_H			0x03
-#define GC0310_AEC_PK_EXPO_L			0x04
-#define GC0310_AGC_ADJ				0x48
-#define GC0310_DGC_ADJ				0x71
-#define GC0310_GROUP_ACCESS			0x3208
+#define GC0310_AEC_PK_EXPO_H 0x03
+#define GC0310_AEC_PK_EXPO_L 0x04
+#define GC0310_AGC_ADJ 0x48
+#define GC0310_DGC_ADJ 0x71
+#define GC0310_GROUP_ACCESS 0x3208
 
-#define GC0310_H_CROP_START_H			0x09
-#define GC0310_H_CROP_START_L			0x0A
-#define GC0310_V_CROP_START_H			0x0B
-#define GC0310_V_CROP_START_L			0x0C
-#define GC0310_H_OUTSIZE_H			0x0F
-#define GC0310_H_OUTSIZE_L			0x10
-#define GC0310_V_OUTSIZE_H			0x0D
-#define GC0310_V_OUTSIZE_L			0x0E
-#define GC0310_H_BLANKING_H			0x05
-#define GC0310_H_BLANKING_L			0x06
-#define GC0310_V_BLANKING_H			0x07
-#define GC0310_V_BLANKING_L			0x08
-#define GC0310_SH_DELAY				0x11
+#define GC0310_H_CROP_START_H 0x09
+#define GC0310_H_CROP_START_L 0x0A
+#define GC0310_V_CROP_START_H 0x0B
+#define GC0310_V_CROP_START_L 0x0C
+#define GC0310_H_OUTSIZE_H 0x0F
+#define GC0310_H_OUTSIZE_L 0x10
+#define GC0310_V_OUTSIZE_H 0x0D
+#define GC0310_V_OUTSIZE_L 0x0E
+#define GC0310_H_BLANKING_H 0x05
+#define GC0310_H_BLANKING_L 0x06
+#define GC0310_V_BLANKING_H 0x07
+#define GC0310_V_BLANKING_L 0x08
+#define GC0310_SH_DELAY 0x11
 
-#define GC0310_START_STREAMING			0x94 /* 8-bit enable */
-#define GC0310_STOP_STREAMING			0x0 /* 8-bit disable */
+#define GC0310_START_STREAMING 0x94 /* 8-bit enable */
+#define GC0310_STOP_STREAMING 0x0 /* 8-bit disable */
 
 #define to_gc0310_sensor(x) container_of(x, struct gc0310_device, sd)
 
@@ -236,24 +236,18 @@ static const struct gc0310_reg gc0310_reset_register[] = {
 };
 
 static const struct gc0310_reg gc0310_VGA_30fps[] = {
-	{ 0xfe, 0x00 },
-	{ 0x0d, 0x01 }, /* height */
+	{ 0xfe, 0x00 }, { 0x0d, 0x01 }, /* height */
 	{ 0x0e, 0xf2 }, /* 0xf7 //height */
 	{ 0x0f, 0x02 }, /* width */
 	{ 0x10, 0x94 }, /* 0xa0 //height */
 
 	{ 0x50, 0x01 }, /* crop enable */
-	{ 0x51, 0x00 },
-	{ 0x52, 0x00 },
-	{ 0x53, 0x00 },
-	{ 0x54, 0x01 },
-	{ 0x55, 0x01 }, /* crop window height */
-	{ 0x56, 0xf0 },
-	{ 0x57, 0x02 }, /* crop window width */
+	{ 0x51, 0x00 }, { 0x52, 0x00 }, { 0x53, 0x00 },
+	{ 0x54, 0x01 }, { 0x55, 0x01 }, /* crop window height */
+	{ 0x56, 0xf0 }, { 0x57, 0x02 }, /* crop window width */
 	{ 0x58, 0x90 },
 
-	{ 0xfe, 0x03 },
-	{ 0x12, 0x90 }, /* 00 //04 //00 //04//00 //LWC[7:0]  */
+	{ 0xfe, 0x03 }, { 0x12, 0x90 }, /* 00 //04 //00 //04//00 //LWC[7:0]  */
 	{ 0x13, 0x02 }, /* 05 //05 //LWC[15:8] */
 
 	{ 0xfe, 0x00 },
@@ -271,9 +265,11 @@ static int gc0310_write_reg_array(struct i2c_client *client,
 	int i, err;
 
 	for (i = 0; i < count; i++) {
-		err = i2c_smbus_write_byte_data(client, reglist[i].reg, reglist[i].val);
+		err = i2c_smbus_write_byte_data(client, reglist[i].reg,
+						reglist[i].val);
 		if (err) {
-			dev_err(&client->dev, "write error: wrote 0x%x to offset 0x%x error %d",
+			dev_err(&client->dev,
+				"write error: wrote 0x%x to offset 0x%x error %d",
 				reglist[i].val, reglist[i].reg, err);
 			return err;
 		}
@@ -317,8 +313,8 @@ static int gc0310_gain_set(struct gc0310_device *dev, u32 gain)
 
 static int gc0310_s_ctrl(struct v4l2_ctrl *ctrl)
 {
-	struct gc0310_device *dev =
-		container_of(ctrl->handler, struct gc0310_device, ctrls.handler);
+	struct gc0310_device *dev = container_of(
+		ctrl->handler, struct gc0310_device, ctrls.handler);
 	int ret;
 
 	/* Only apply changes to the controls if the device is powered up */
@@ -347,8 +343,8 @@ static const struct v4l2_ctrl_ops ctrl_ops = {
 
 static struct v4l2_mbus_framefmt *
 gc0310_get_pad_format(struct gc0310_device *dev,
-		      struct v4l2_subdev_state *state,
-		      unsigned int pad, enum v4l2_subdev_format_whence which)
+		      struct v4l2_subdev_state *state, unsigned int pad,
+		      enum v4l2_subdev_format_whence which)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
 		return v4l2_subdev_state_get_format(state, pad);
@@ -402,7 +398,8 @@ static int gc0310_detect(struct i2c_client *client)
 
 	ret = pm_runtime_get_sync(&client->dev);
 	if (ret >= 0)
-		ret = i2c_smbus_read_word_swapped(client, GC0310_SC_CMMN_CHIP_ID_H);
+		ret = i2c_smbus_read_word_swapped(client,
+						  GC0310_SC_CMMN_CHIP_ID_H);
 	pm_runtime_put(&client->dev);
 	if (ret < 0) {
 		dev_err(&client->dev, "read sensor_id failed: %d\n", ret);
@@ -412,7 +409,8 @@ static int gc0310_detect(struct i2c_client *client)
 	dev_dbg(&client->dev, "sensor ID = 0x%x\n", ret);
 
 	if (ret != GC0310_ID) {
-		dev_err(&client->dev, "sensor ID error, read id = 0x%x, target id = 0x%x\n",
+		dev_err(&client->dev,
+			"sensor ID error, read id = 0x%x, target id = 0x%x\n",
 			ret, GC0310_ID);
 		return -ENODEV;
 	}
@@ -459,16 +457,19 @@ static int gc0310_s_stream(struct v4l2_subdev *sd, int enable)
 			goto error_power_down;
 	}
 
-	ret = i2c_smbus_write_byte_data(client, GC0310_RESET_RELATED, GC0310_REGISTER_PAGE_3);
+	ret = i2c_smbus_write_byte_data(client, GC0310_RESET_RELATED,
+					GC0310_REGISTER_PAGE_3);
 	if (ret)
 		goto error_power_down;
 
 	ret = i2c_smbus_write_byte_data(client, GC0310_SW_STREAM,
-					enable ? GC0310_START_STREAMING : GC0310_STOP_STREAMING);
+					enable ? GC0310_START_STREAMING :
+						 GC0310_STOP_STREAMING);
 	if (ret)
 		goto error_power_down;
 
-	ret = i2c_smbus_write_byte_data(client, GC0310_RESET_RELATED, GC0310_REGISTER_PAGE_0);
+	ret = i2c_smbus_write_byte_data(client, GC0310_RESET_RELATED,
+					GC0310_REGISTER_PAGE_0);
 	if (ret)
 		goto error_power_down;
 
@@ -486,9 +487,10 @@ error_power_down:
 	return ret;
 }
 
-static int gc0310_get_frame_interval(struct v4l2_subdev *sd,
-				     struct v4l2_subdev_state *sd_state,
-				     struct v4l2_subdev_frame_interval *interval)
+static int
+gc0310_get_frame_interval(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_frame_interval *interval)
 {
 	/*
 	 * FIXME: Implement support for V4L2_SUBDEV_FORMAT_TRY, using the V4L2
@@ -538,7 +540,7 @@ static int gc0310_g_skip_frames(struct v4l2_subdev *sd, u32 *frames)
 }
 
 static const struct v4l2_subdev_sensor_ops gc0310_sensor_ops = {
-	.g_skip_frames	= gc0310_g_skip_frames,
+	.g_skip_frames = gc0310_g_skip_frames,
 };
 
 static const struct v4l2_subdev_video_ops gc0310_video_ops = {
@@ -569,8 +571,8 @@ static int gc0310_init_controls(struct gc0310_device *dev)
 	hdl->lock = &dev->input_lock;
 	dev->sd.ctrl_handler = hdl;
 
-	dev->ctrls.exposure =
-		v4l2_ctrl_new_std(hdl, &ctrl_ops, V4L2_CID_EXPOSURE, 0, 4095, 1, 1023);
+	dev->ctrls.exposure = v4l2_ctrl_new_std(
+		hdl, &ctrl_ops, V4L2_CID_EXPOSURE, 0, 4095, 1, 1023);
 
 	/* 32 steps at base gain 1 + 64 half steps at base gain 2 */
 	dev->ctrls.gain =
@@ -603,9 +605,11 @@ static int gc0310_probe(struct i2c_client *client)
 	 * Sometimes the fwnode graph is initialized by the bridge driver.
 	 * Bridge drivers doing this may also add GPIO mappings, wait for this.
 	 */
-	ep_fwnode = fwnode_graph_get_next_endpoint(dev_fwnode(&client->dev), NULL);
+	ep_fwnode =
+		fwnode_graph_get_next_endpoint(dev_fwnode(&client->dev), NULL);
 	if (!ep_fwnode)
-		return dev_err_probe(&client->dev, -EPROBE_DEFER, "waiting for fwnode graph endpoint\n");
+		return dev_err_probe(&client->dev, -EPROBE_DEFER,
+				     "waiting for fwnode graph endpoint\n");
 
 	fwnode_handle_put(ep_fwnode);
 
@@ -619,7 +623,8 @@ static int gc0310_probe(struct i2c_client *client)
 				     "getting reset GPIO\n");
 	}
 
-	dev->powerdown = devm_gpiod_get(&client->dev, "powerdown", GPIOD_OUT_HIGH);
+	dev->powerdown =
+		devm_gpiod_get(&client->dev, "powerdown", GPIOD_OUT_HIGH);
 	if (IS_ERR(dev->powerdown)) {
 		return dev_err_probe(&client->dev, PTR_ERR(dev->powerdown),
 				     "getting powerdown GPIO\n");
@@ -688,10 +693,11 @@ static int gc0310_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_RUNTIME_DEV_PM_OPS(gc0310_pm_ops, gc0310_suspend, gc0310_resume, NULL);
+static DEFINE_RUNTIME_DEV_PM_OPS(gc0310_pm_ops, gc0310_suspend, gc0310_resume,
+				 NULL);
 
 static const struct acpi_device_id gc0310_acpi_match[] = {
-	{"INT0310"},
+	{ "INT0310" },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, gc0310_acpi_match);

@@ -27,7 +27,7 @@ enum sh_stream_format {
 	sh_stream_format_yuv422,
 	sh_stream_format_rgb,
 	sh_stream_format_raw,
-	sh_stream_format_binary,	/* bytestream such as jpeg */
+	sh_stream_format_binary, /* bytestream such as jpeg */
 };
 
 struct s_isp_frames {

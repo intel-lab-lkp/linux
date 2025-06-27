@@ -9,13 +9,13 @@
 
 #include <type_support.h>
 
-#define HIVE_ISYS2401_DMA_IBUF_DDR_CONN	0
-#define HIVE_ISYS2401_DMA_IBUF_VMEM_CONN	1
-#define _DMA_V2_ZERO_EXTEND		0
-#define _DMA_V2_SIGN_EXTEND		1
+#define HIVE_ISYS2401_DMA_IBUF_DDR_CONN 0
+#define HIVE_ISYS2401_DMA_IBUF_VMEM_CONN 1
+#define _DMA_V2_ZERO_EXTEND 0
+#define _DMA_V2_SIGN_EXTEND 1
 
-#define _DMA_ZERO_EXTEND     _DMA_V2_ZERO_EXTEND
-#define _DMA_SIGN_EXTEND     _DMA_V2_SIGN_EXTEND
+#define _DMA_ZERO_EXTEND _DMA_V2_ZERO_EXTEND
+#define _DMA_SIGN_EXTEND _DMA_V2_SIGN_EXTEND
 
 /********************************************************
  *
@@ -56,8 +56,8 @@ struct isys2401_dma_port_cfg_s {
  *
  ************************************************/
 typedef enum {
-	isys2401_dma_ibuf_to_ddr_connection	= HIVE_ISYS2401_DMA_IBUF_DDR_CONN,
-	isys2401_dma_ibuf_to_vmem_connection	= HIVE_ISYS2401_DMA_IBUF_VMEM_CONN
+	isys2401_dma_ibuf_to_ddr_connection = HIVE_ISYS2401_DMA_IBUF_DDR_CONN,
+	isys2401_dma_ibuf_to_vmem_connection = HIVE_ISYS2401_DMA_IBUF_VMEM_CONN
 } isys2401_dma_connection;
 
 typedef enum {
@@ -67,16 +67,16 @@ typedef enum {
 
 typedef struct isys2401_dma_cfg_s isys2401_dma_cfg_t;
 struct isys2401_dma_cfg_s {
-	isys2401_dma_channel	channel;
-	isys2401_dma_connection	connection;
-	isys2401_dma_extension	extension;
-	u32		height;
+	isys2401_dma_channel channel;
+	isys2401_dma_connection connection;
+	isys2401_dma_extension extension;
+	u32 height;
 };
 
 /* end of DMA Device */
 
 /* isys2401_dma_channel limits per DMA ID */
 extern const isys2401_dma_channel
-N_ISYS2401_DMA_CHANNEL_PROCS[N_ISYS2401_DMA_ID];
+	N_ISYS2401_DMA_CHANNEL_PROCS[N_ISYS2401_DMA_ID];
 
 #endif /* __ISYS_DMA_GLOBAL_H_INCLUDED__ */

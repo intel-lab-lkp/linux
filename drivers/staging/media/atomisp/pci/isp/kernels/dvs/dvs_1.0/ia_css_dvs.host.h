@@ -20,31 +20,25 @@
 #define DVS_GDC_BLI_INTERP_ENVELOPE 1
 #define DVS_GDC_BCI_INTERP_ENVELOPE 3
 
-void
-ia_css_dvs_config(
-    struct sh_css_isp_dvs_isp_config      *to,
-    const struct ia_css_dvs_configuration *from,
-    unsigned int size);
+void ia_css_dvs_config(struct sh_css_isp_dvs_isp_config *to,
+		       const struct ia_css_dvs_configuration *from,
+		       unsigned int size);
 
-int ia_css_dvs_configure(const struct ia_css_binary     *binary,
+int ia_css_dvs_configure(const struct ia_css_binary *binary,
 			 const struct ia_css_frame_info *from);
 
-void
-convert_dvs_6axis_config(
-    struct ia_css_isp_parameters *params,
-    const struct ia_css_binary *binary);
+void convert_dvs_6axis_config(struct ia_css_isp_parameters *params,
+			      const struct ia_css_binary *binary);
 
-struct ia_css_host_data *
-convert_allocate_dvs_6axis_config(
-    const struct ia_css_dvs_6axis_config *dvs_6axis_config,
-    const struct ia_css_binary *binary,
-    const struct ia_css_frame_info *dvs_in_frame_info);
+struct ia_css_host_data *convert_allocate_dvs_6axis_config(
+	const struct ia_css_dvs_6axis_config *dvs_6axis_config,
+	const struct ia_css_binary *binary,
+	const struct ia_css_frame_info *dvs_in_frame_info);
 
-int
-store_dvs_6axis_config(
-    const struct ia_css_dvs_6axis_config *dvs_6axis_config,
-    const struct ia_css_binary *binary,
-    const struct ia_css_frame_info *dvs_in_frame_info,
-    ia_css_ptr ddr_addr_y);
+int store_dvs_6axis_config(
+	const struct ia_css_dvs_6axis_config *dvs_6axis_config,
+	const struct ia_css_binary *binary,
+	const struct ia_css_frame_info *dvs_in_frame_info,
+	ia_css_ptr ddr_addr_y);
 
 #endif /* __IA_CSS_DVS_HOST_H */

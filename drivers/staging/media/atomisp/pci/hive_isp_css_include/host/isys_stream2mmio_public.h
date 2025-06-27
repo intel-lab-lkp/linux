@@ -19,9 +19,8 @@
  * @param[in]	id		The global unique ID of the steeam2mmio controller.
  * @param[out]	state	Point to the register-state.
  */
-STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_get_state(
-    const stream2mmio_ID_t ID,
-    stream2mmio_state_t *state);
+STORAGE_CLASS_STREAM2MMIO_H void
+stream2mmio_get_state(const stream2mmio_ID_t ID, stream2mmio_state_t *state);
 
 /**
  * @brief Get the state of the stream2mmio-controller sidess.
@@ -31,10 +30,10 @@ STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_get_state(
  * @param[in]	sid_id		The sid ID.
  * @param[out]	state		Point to the sid state.
  */
-STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_get_sid_state(
-    const stream2mmio_ID_t ID,
-    const stream2mmio_sid_ID_t sid_id,
-    stream2mmio_sid_state_t *state);
+STORAGE_CLASS_STREAM2MMIO_H void
+stream2mmio_get_sid_state(const stream2mmio_ID_t ID,
+			  const stream2mmio_sid_ID_t sid_id,
+			  stream2mmio_sid_state_t *state);
 /* end of NCI */
 
 /*****************************************************
@@ -52,10 +51,9 @@ STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_get_sid_state(
  *
  * @return the value of the register.
  */
-STORAGE_CLASS_STREAM2MMIO_H hrt_data stream2mmio_reg_load(
-    const stream2mmio_ID_t ID,
-    const stream2mmio_sid_ID_t sid_id,
-    const uint32_t reg_idx);
+STORAGE_CLASS_STREAM2MMIO_H hrt_data
+stream2mmio_reg_load(const stream2mmio_ID_t ID,
+		     const stream2mmio_sid_ID_t sid_id, const uint32_t reg_idx);
 
 /**
  * @brief Dump the SID processor state.
@@ -63,8 +61,8 @@ STORAGE_CLASS_STREAM2MMIO_H hrt_data stream2mmio_reg_load(
  *
  * @param[in]	state		Pointer to the register-state.
  */
-STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_print_sid_state(
-    stream2mmio_sid_state_t	*state);
+STORAGE_CLASS_STREAM2MMIO_H void
+stream2mmio_print_sid_state(stream2mmio_sid_state_t *state);
 /**
  * @brief Dump the stream2mmio state.
  * Dump the state of the ibuf-controller regiester-set.
@@ -72,9 +70,8 @@ STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_print_sid_state(
  * @param[in]	id		The global unique ID of the st2mmio
  * @param[in]	state		Pointer to the register-state.
  */
-STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_dump_state(
-    const stream2mmio_ID_t ID,
-    stream2mmio_state_t *state);
+STORAGE_CLASS_STREAM2MMIO_H void
+stream2mmio_dump_state(const stream2mmio_ID_t ID, stream2mmio_state_t *state);
 /**
  * @brief Store a value to the register.
  * Store a value to the registe of the stream2mmio-controller.
@@ -84,10 +81,9 @@ STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_dump_state(
  * @param[in]	value	The value to be stored.
  *
  */
-STORAGE_CLASS_STREAM2MMIO_H void stream2mmio_reg_store(
-    const stream2mmio_ID_t ID,
-    const hrt_address reg,
-    const hrt_data value);
+STORAGE_CLASS_STREAM2MMIO_H void
+stream2mmio_reg_store(const stream2mmio_ID_t ID, const hrt_address reg,
+		      const hrt_data value);
 /* end of DLI */
 
 #endif /* __ISYS_STREAM2MMIO_PUBLIC_H_INCLUDED__ */

@@ -11,10 +11,10 @@
  * This file contains CSS-API events functionality
  */
 
-#include <type_support.h>	/* uint8_t */
-#include <ia_css_err.h>		/* ia_css_err */
-#include <ia_css_types.h>	/* ia_css_pipe */
-#include <ia_css_timer.h>	/* ia_css_timer */
+#include <type_support.h> /* uint8_t */
+#include <ia_css_err.h> /* ia_css_err */
+#include <ia_css_types.h> /* ia_css_pipe */
+#include <ia_css_timer.h> /* ia_css_timer */
 #include <linux/bits.h>
 
 /* The event type, distinguishes the kind of events that
@@ -27,38 +27,38 @@
  * 4) "enum ia_css_event_type convert_event_sp_to_host_domain"	(sh_css.c)
  */
 enum ia_css_event_type {
-	IA_CSS_EVENT_TYPE_OUTPUT_FRAME_DONE		= BIT(0),
+	IA_CSS_EVENT_TYPE_OUTPUT_FRAME_DONE = BIT(0),
 	/** Output frame ready. */
-	IA_CSS_EVENT_TYPE_SECOND_OUTPUT_FRAME_DONE	= BIT(1),
+	IA_CSS_EVENT_TYPE_SECOND_OUTPUT_FRAME_DONE = BIT(1),
 	/** Second output frame ready. */
-	IA_CSS_EVENT_TYPE_VF_OUTPUT_FRAME_DONE		= BIT(2),
+	IA_CSS_EVENT_TYPE_VF_OUTPUT_FRAME_DONE = BIT(2),
 	/** Viewfinder Output frame ready. */
-	IA_CSS_EVENT_TYPE_SECOND_VF_OUTPUT_FRAME_DONE	= BIT(3),
+	IA_CSS_EVENT_TYPE_SECOND_VF_OUTPUT_FRAME_DONE = BIT(3),
 	/** Second viewfinder Output frame ready. */
-	IA_CSS_EVENT_TYPE_3A_STATISTICS_DONE		= BIT(4),
+	IA_CSS_EVENT_TYPE_3A_STATISTICS_DONE = BIT(4),
 	/** Indication that 3A statistics are available. */
-	IA_CSS_EVENT_TYPE_DIS_STATISTICS_DONE		= BIT(5),
+	IA_CSS_EVENT_TYPE_DIS_STATISTICS_DONE = BIT(5),
 	/** Indication that DIS statistics are available. */
-	IA_CSS_EVENT_TYPE_PIPELINE_DONE			= BIT(6),
+	IA_CSS_EVENT_TYPE_PIPELINE_DONE = BIT(6),
 	/** Pipeline Done event, sent after last pipeline stage. */
-	IA_CSS_EVENT_TYPE_FRAME_TAGGED			= BIT(7),
+	IA_CSS_EVENT_TYPE_FRAME_TAGGED = BIT(7),
 	/** Frame tagged. */
-	IA_CSS_EVENT_TYPE_INPUT_FRAME_DONE		= BIT(8),
+	IA_CSS_EVENT_TYPE_INPUT_FRAME_DONE = BIT(8),
 	/** Input frame ready. */
-	IA_CSS_EVENT_TYPE_METADATA_DONE			= BIT(9),
+	IA_CSS_EVENT_TYPE_METADATA_DONE = BIT(9),
 	/** Metadata ready. */
-	IA_CSS_EVENT_TYPE_LACE_STATISTICS_DONE		= BIT(10),
+	IA_CSS_EVENT_TYPE_LACE_STATISTICS_DONE = BIT(10),
 	/** Indication that LACE statistics are available. */
-	IA_CSS_EVENT_TYPE_ACC_STAGE_COMPLETE		= BIT(11),
+	IA_CSS_EVENT_TYPE_ACC_STAGE_COMPLETE = BIT(11),
 	/** Extension stage complete. */
-	IA_CSS_EVENT_TYPE_TIMER				= BIT(12),
+	IA_CSS_EVENT_TYPE_TIMER = BIT(12),
 	/** Timer event for measuring the SP side latencies. It contains the
 	     32-bit timer value from the SP */
-	IA_CSS_EVENT_TYPE_PORT_EOF			= BIT(13),
+	IA_CSS_EVENT_TYPE_PORT_EOF = BIT(13),
 	/** End Of Frame event, sent when in buffered sensor mode. */
-	IA_CSS_EVENT_TYPE_FW_WARNING			= BIT(14),
+	IA_CSS_EVENT_TYPE_FW_WARNING = BIT(14),
 	/** Performance warning encounter by FW */
-	IA_CSS_EVENT_TYPE_FW_ASSERT			= BIT(15),
+	IA_CSS_EVENT_TYPE_FW_ASSERT = BIT(15),
 	/** Assertion hit by FW */
 };
 
@@ -68,18 +68,17 @@ enum ia_css_event_type {
  * The other events (such as PORT_EOF) cannot be enabled/disabled
  * and are hence excluded from this macro.
  */
-#define IA_CSS_EVENT_TYPE_ALL \
-	(IA_CSS_EVENT_TYPE_OUTPUT_FRAME_DONE		| \
-	 IA_CSS_EVENT_TYPE_SECOND_OUTPUT_FRAME_DONE	| \
-	 IA_CSS_EVENT_TYPE_VF_OUTPUT_FRAME_DONE		| \
-	 IA_CSS_EVENT_TYPE_SECOND_VF_OUTPUT_FRAME_DONE	| \
-	 IA_CSS_EVENT_TYPE_3A_STATISTICS_DONE		| \
-	 IA_CSS_EVENT_TYPE_DIS_STATISTICS_DONE		| \
-	 IA_CSS_EVENT_TYPE_PIPELINE_DONE		| \
-	 IA_CSS_EVENT_TYPE_FRAME_TAGGED			| \
-	 IA_CSS_EVENT_TYPE_INPUT_FRAME_DONE		| \
-	 IA_CSS_EVENT_TYPE_METADATA_DONE		| \
-	 IA_CSS_EVENT_TYPE_LACE_STATISTICS_DONE		| \
+#define IA_CSS_EVENT_TYPE_ALL                                               \
+	(IA_CSS_EVENT_TYPE_OUTPUT_FRAME_DONE |                              \
+	 IA_CSS_EVENT_TYPE_SECOND_OUTPUT_FRAME_DONE |                       \
+	 IA_CSS_EVENT_TYPE_VF_OUTPUT_FRAME_DONE |                           \
+	 IA_CSS_EVENT_TYPE_SECOND_VF_OUTPUT_FRAME_DONE |                    \
+	 IA_CSS_EVENT_TYPE_3A_STATISTICS_DONE |                             \
+	 IA_CSS_EVENT_TYPE_DIS_STATISTICS_DONE |                            \
+	 IA_CSS_EVENT_TYPE_PIPELINE_DONE | IA_CSS_EVENT_TYPE_FRAME_TAGGED | \
+	 IA_CSS_EVENT_TYPE_INPUT_FRAME_DONE |                               \
+	 IA_CSS_EVENT_TYPE_METADATA_DONE |                                  \
+	 IA_CSS_EVENT_TYPE_LACE_STATISTICS_DONE |                           \
 	 IA_CSS_EVENT_TYPE_ACC_STAGE_COMPLETE)
 
 /* The event struct, container for the event type and its related values.
@@ -89,14 +88,14 @@ enum ia_css_event_type {
  * filled.
  */
 struct ia_css_event {
-	struct ia_css_pipe    *pipe;
+	struct ia_css_pipe *pipe;
 	/** Pipe handle on which event happened, NULL for non pipe related
 	     events. */
 	enum ia_css_event_type type;
 	/** Type of Event, always valid/filled. */
-	u8                port;
+	u8 port;
 	/** Port number for EOF event (not valid for other events). */
-	u8                exp_id;
+	u8 exp_id;
 	/** Exposure id for EOF/FRAME_TAGGED/FW_WARNING event (not valid for other events)
 	     The exposure ID is unique only within a logical stream and it is
 	     only generated on systems that have an input system (such as 2400
@@ -112,22 +111,22 @@ struct ia_css_event {
 	     Note that in case frames are dropped, this will not be reflected
 	     in the exposure IDs. Therefor applications should not use this
 	     to detect frame drops. */
-	u32               fw_handle;
+	u32 fw_handle;
 	/** Firmware Handle for ACC_STAGE_COMPLETE event (not valid for other
 	     events). */
 	enum ia_css_fw_warning fw_warning;
 	/** Firmware warning code, only for WARNING events. */
-	u8                fw_assert_module_id;
+	u8 fw_assert_module_id;
 	/** Firmware module id, only for ASSERT events, should be logged by driver. */
-	u16               fw_assert_line_no;
+	u16 fw_assert_line_no;
 	/** Firmware line number, only for ASSERT events, should be logged by driver. */
-	clock_value_t	       timer_data;
+	clock_value_t timer_data;
 	/** For storing the full 32-bit of the timer value. Valid only for TIMER
 	     event */
-	u8                timer_code;
+	u8 timer_code;
 	/** For storing the code of the TIMER event. Valid only for
 	     TIMER event */
-	u8                timer_subcode;
+	u8 timer_subcode;
 	/** For storing the subcode of the TIMER event. Valid only
 	     for TIMER event */
 };
@@ -146,8 +145,7 @@ struct ia_css_event {
  * was available and can be used in a polling-like situation where the NO_EVENT
  * return value is used to determine whether an event was available or not.
  */
-int
-ia_css_dequeue_psys_event(struct ia_css_event *event);
+int ia_css_dequeue_psys_event(struct ia_css_event *event);
 
 /* @brief Dequeue an ISYS event from the CSS system.
  *
@@ -168,7 +166,6 @@ ia_css_dequeue_psys_event(struct ia_css_event *event);
  * incurring additional latency due to locks being held by other CSS API
  * functions.
  */
-int
-ia_css_dequeue_isys_event(struct ia_css_event *event);
+int ia_css_dequeue_isys_event(struct ia_css_event *event);
 
 #endif /* __IA_CSS_EVENT_PUBLIC_H */

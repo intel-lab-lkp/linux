@@ -62,47 +62,39 @@
  * fall. We extrapolate the shading table into the
  * padded area and then interpolate.
  */
-static void
-crop_and_interpolate(unsigned int cropped_width,
-		     unsigned int cropped_height,
-		     unsigned int left_padding,
-		     int right_padding,
-		     int top_padding,
-		     const struct ia_css_shading_table *in_table,
-		     struct ia_css_shading_table *out_table,
-		     enum ia_css_sc_color color)
+static void crop_and_interpolate(unsigned int cropped_width,
+				 unsigned int cropped_height,
+				 unsigned int left_padding, int right_padding,
+				 int top_padding,
+				 const struct ia_css_shading_table *in_table,
+				 struct ia_css_shading_table *out_table,
+				 enum ia_css_sc_color color)
 {
-	unsigned int i, j,
-		 sensor_width,
-		 sensor_height,
-		 table_width,
-		 table_height,
-		 table_cell_h,
-		 out_cell_size,
-		 in_cell_size,
-		 out_start_row,
-		 padded_width;
+	unsigned int i, j, sensor_width, sensor_height, table_width,
+		table_height, table_cell_h, out_cell_size, in_cell_size,
+		out_start_row, padded_width;
 	int out_start_col, /* can be negative to indicate padded space */
-	    table_cell_w;
-	unsigned short *in_ptr,
-		 *out_ptr;
+		table_cell_w;
+	unsigned short *in_ptr, *out_ptr;
 
 	assert(in_table);
 	assert(out_table);
 
-	sensor_width  = in_table->sensor_width;
+	sensor_width = in_table->sensor_width;
 	sensor_height = in_table->sensor_height;
-	table_width   = in_table->width;
-	table_height  = in_table->height;
+	table_width = in_table->width;
+	table_height = in_table->height;
 	in_ptr = in_table->data[color];
 	out_ptr = out_table->data[color];
 
 	padded_width = cropped_width + left_padding + right_padding;
 	out_cell_size = CEIL_DIV(padded_width, out_table->width - 1);
-	in_cell_size  = CEIL_DIV(sensor_width, table_width - 1);
+	in_cell_size = CEIL_DIV(sensor_width, table_width - 1);
 
-	out_start_col = ((int)sensor_width - (int)cropped_width) / 2 - left_padding;
-	out_start_row = ((int)sensor_height - (int)cropped_height) / 2 - top_padding;
+	out_start_col =
+		((int)sensor_width - (int)cropped_width) / 2 - left_padding;
+	out_start_row =
+		((int)sensor_height - (int)cropped_height) / 2 - top_padding;
 	table_cell_w = (int)((table_width - 1) * in_cell_size);
 	table_cell_h = (table_height - 1) * in_cell_size;
 
@@ -189,18 +181,18 @@ crop_and_interpolate(unsigned int cropped_width,
 			s_ll = in_ptr[(table_width * src_y1) + src_x0];
 			s_lr = in_ptr[(table_width * src_y1) + src_x1];
 
-			*out_ptr = (unsigned short)((dx0 * dy0 * s_lr + dx0 * dy1 * s_ur + dx1 * dy0 *
-						     s_ll + dx1 * dy1 * s_ul) /
+			*out_ptr = (unsigned short)((dx0 * dy0 * s_lr +
+						     dx0 * dy1 * s_ur +
+						     dx1 * dy0 * s_ll +
+						     dx1 * dy1 * s_ul) /
 						    (divx * divy));
 		}
 	}
 }
 
-void
-sh_css_params_shading_id_table_generate(
-    struct ia_css_shading_table **target_table,
-    unsigned int table_width,
-    unsigned int table_height)
+void sh_css_params_shading_id_table_generate(
+	struct ia_css_shading_table **target_table, unsigned int table_width,
+	unsigned int table_height)
 {
 	/* initialize table with ones, shift becomes zero */
 	unsigned int i, j;
@@ -222,12 +214,11 @@ sh_css_params_shading_id_table_generate(
 	*target_table = result;
 }
 
-void
-prepare_shading_table(const struct ia_css_shading_table *in_table,
-		      unsigned int sensor_binning,
-		      struct ia_css_shading_table **target_table,
-		      const struct ia_css_binary *binary,
-		      unsigned int bds_factor)
+void prepare_shading_table(const struct ia_css_shading_table *in_table,
+			   unsigned int sensor_binning,
+			   struct ia_css_shading_table **target_table,
+			   const struct ia_css_binary *binary,
+			   unsigned int bds_factor)
 {
 	unsigned int input_width, input_height, table_width, table_height, i;
 	unsigned int left_padding, top_padding, left_cropping;
@@ -239,9 +230,9 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 	assert(binary);
 
 	if (!in_table) {
-		sh_css_params_shading_id_table_generate(target_table,
-							binary->sctbl_width_per_color,
-							binary->sctbl_height);
+		sh_css_params_shading_id_table_generate(
+			target_table, binary->sctbl_width_per_color,
+			binary->sctbl_height);
 		return;
 	}
 
@@ -250,22 +241,26 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 	 * shading correction is performed in the bayer domain (before bayer
 	 * down scaling).
 	 */
-	input_height  = binary->in_frame_info.res.height;
-	input_width   = binary->in_frame_info.res.width;
-	left_padding  = binary->left_padding;
+	input_height = binary->in_frame_info.res.height;
+	input_width = binary->in_frame_info.res.width;
+	left_padding = binary->left_padding;
 	left_cropping = (binary->info->sp.pipeline.left_cropping == 0) ?
-			binary->dvs_envelope.width : 2 * ISP_VEC_NELEMS;
+				binary->dvs_envelope.width :
+				2 * ISP_VEC_NELEMS;
 
 	sh_css_bds_factor_get_fract(bds_factor, &bds);
 
-	left_padding  = (left_padding + binary->info->sp.pipeline.left_cropping) *
+	left_padding =
+		(left_padding + binary->info->sp.pipeline.left_cropping) *
 			bds.numerator / bds.denominator -
-			binary->info->sp.pipeline.left_cropping;
+		binary->info->sp.pipeline.left_cropping;
 	right_padding = (binary->internal_frame_info.res.width -
-			 binary->effective_in_frame_res.width * bds.denominator /
-			 bds.numerator - left_cropping) * bds.numerator / bds.denominator;
+			 binary->effective_in_frame_res.width *
+				 bds.denominator / bds.numerator -
+			 left_cropping) *
+			bds.numerator / bds.denominator;
 	top_padding = binary->info->sp.pipeline.top_cropping * bds.numerator /
-		      bds.denominator -
+			      bds.denominator -
 		      binary->info->sp.pipeline.top_cropping;
 
 	/*
@@ -273,27 +268,27 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 	 * by cropping the non-binned part of the shading table and then
 	 * increasing the size of a grid cell with this same binning factor.
 	 */
-	input_width  <<= sensor_binning;
+	input_width <<= sensor_binning;
 	input_height <<= sensor_binning;
 	/*
 	 * We also scale the padding by the same binning factor. This will
 	 * make it much easier later on to calculate the padding of the
 	 * shading table.
 	 */
-	left_padding  <<= sensor_binning;
+	left_padding <<= sensor_binning;
 	right_padding <<= sensor_binning;
-	top_padding   <<= sensor_binning;
+	top_padding <<= sensor_binning;
 
 	/*
 	 * during simulation, the used resolution can exceed the sensor
 	 * resolution, so we clip it.
 	 */
-	input_width  = min(input_width,  in_table->sensor_width);
+	input_width = min(input_width, in_table->sensor_width);
 	input_height = min(input_height, in_table->sensor_height);
 
 	/* This prepare_shading_table() function is called only in legacy API (not in new API).
 	   Then, the legacy shading table width and height should be used. */
-	table_width  = binary->sctbl_width_per_color;
+	table_width = binary->sctbl_width_per_color;
 	table_height = binary->sctbl_height;
 
 	result = ia_css_shading_table_alloc(table_width, table_height);
@@ -301,7 +296,7 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 		*target_table = NULL;
 		return;
 	}
-	result->sensor_width  = in_table->sensor_width;
+	result->sensor_width = in_table->sensor_width;
 	result->sensor_height = in_table->sensor_height;
 	result->fraction_bits = in_table->fraction_bits;
 
@@ -310,18 +305,15 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 	 * requested resolution and decimation factor.
 	 */
 	for (i = 0; i < IA_CSS_SC_NUM_COLORS; i++) {
-		crop_and_interpolate(input_width, input_height,
-				     left_padding, right_padding, top_padding,
-				     in_table,
+		crop_and_interpolate(input_width, input_height, left_padding,
+				     right_padding, top_padding, in_table,
 				     result, i);
 	}
 	*target_table = result;
 }
 
-struct ia_css_shading_table *
-ia_css_shading_table_alloc(
-    unsigned int width,
-    unsigned int height)
+struct ia_css_shading_table *ia_css_shading_table_alloc(unsigned int width,
+							unsigned int height)
 {
 	unsigned int i;
 	struct ia_css_shading_table *me;
@@ -332,15 +324,14 @@ ia_css_shading_table_alloc(
 	if (!me)
 		return me;
 
-	me->width         = width;
-	me->height        = height;
-	me->sensor_width  = 0;
+	me->width = width;
+	me->height = height;
+	me->sensor_width = 0;
 	me->sensor_height = 0;
 	me->fraction_bits = 0;
 	for (i = 0; i < IA_CSS_SC_NUM_COLORS; i++) {
-		me->data[i] =
-		    kvmalloc(width * height * sizeof(*me->data[0]),
-			     GFP_KERNEL);
+		me->data[i] = kvmalloc(width * height * sizeof(*me->data[0]),
+				       GFP_KERNEL);
 		if (!me->data[i]) {
 			unsigned int j;
 
@@ -357,8 +348,7 @@ ia_css_shading_table_alloc(
 	return me;
 }
 
-void
-ia_css_shading_table_free(struct ia_css_shading_table *table)
+void ia_css_shading_table_free(struct ia_css_shading_table *table)
 {
 	unsigned int i;
 

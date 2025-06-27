@@ -4,21 +4,21 @@
  * Copyright (c) 2015, Intel Corporation.
  */
 
-#include "assert_support.h"		/* assert */
+#include "assert_support.h" /* assert */
 #include "ia_css_buffer.h"
 #include "sp.h"
-#include "ia_css_bufq.h"		/* Bufq API's */
-#include "ia_css_queue.h"		/* ia_css_queue_t */
-#include "sw_event_global.h"		/* Event IDs.*/
-#include "ia_css_eventq.h"		/* ia_css_eventq_recv()*/
-#include "ia_css_debug.h"		/* ia_css_debug_dtrace*/
-#include "sh_css_internal.h"		/* sh_css_queue_type */
-#include "sp_local.h"			/* sp_address_of */
-#include "sh_css_firmware.h"		/* sh_css_sp_fw*/
+#include "ia_css_bufq.h" /* Bufq API's */
+#include "ia_css_queue.h" /* ia_css_queue_t */
+#include "sw_event_global.h" /* Event IDs.*/
+#include "ia_css_eventq.h" /* ia_css_eventq_recv()*/
+#include "ia_css_debug.h" /* ia_css_debug_dtrace*/
+#include "sh_css_internal.h" /* sh_css_queue_type */
+#include "sp_local.h" /* sp_address_of */
+#include "sh_css_firmware.h" /* sh_css_sp_fw*/
 
 #define BUFQ_DUMP_FILE_NAME_PREFIX_SIZE 256
 
-static char prefix[BUFQ_DUMP_FILE_NAME_PREFIX_SIZE] = {0};
+static char prefix[BUFQ_DUMP_FILE_NAME_PREFIX_SIZE] = { 0 };
 
 /*********************************************************/
 /* Global Queue objects used by CSS                      */
@@ -26,11 +26,10 @@ static char prefix[BUFQ_DUMP_FILE_NAME_PREFIX_SIZE] = {0};
 
 struct sh_css_queues {
 	/* Host2SP buffer queue */
-	ia_css_queue_t host2sp_buffer_queue_handles
-	[SH_CSS_MAX_SP_THREADS][SH_CSS_MAX_NUM_QUEUES];
+	ia_css_queue_t host2sp_buffer_queue_handles[SH_CSS_MAX_SP_THREADS]
+						   [SH_CSS_MAX_NUM_QUEUES];
 	/* SP2Host buffer queue */
-	ia_css_queue_t sp2host_buffer_queue_handles
-	[SH_CSS_MAX_NUM_QUEUES];
+	ia_css_queue_t sp2host_buffer_queue_handles[SH_CSS_MAX_NUM_QUEUES];
 
 	/* Host2SP event queue */
 	ia_css_queue_t host2sp_psys_event_queue_handle;
@@ -52,27 +51,20 @@ struct sh_css_queues {
 ********************************************************/
 static struct sh_css_queues css_queues;
 
-static int
-buffer_type_to_queue_id_map[SH_CSS_MAX_SP_THREADS][IA_CSS_NUM_DYNAMIC_BUFFER_TYPE];
+static int buffer_type_to_queue_id_map[SH_CSS_MAX_SP_THREADS]
+				      [IA_CSS_NUM_DYNAMIC_BUFFER_TYPE];
 static bool queue_availability[SH_CSS_MAX_SP_THREADS][SH_CSS_MAX_NUM_QUEUES];
 
 /*******************************************************
 *** Static functions
 ********************************************************/
-static void map_buffer_type_to_queue_id(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type
-);
-static void unmap_buffer_type_to_queue_id(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type
-);
+static void map_buffer_type_to_queue_id(unsigned int thread_id,
+					enum ia_css_buffer_type buf_type);
+static void unmap_buffer_type_to_queue_id(unsigned int thread_id,
+					  enum ia_css_buffer_type buf_type);
 
-static ia_css_queue_t *bufq_get_qhandle(
-    enum sh_css_queue_type type,
-    enum sh_css_queue_id id,
-    int thread
-);
+static ia_css_queue_t *bufq_get_qhandle(enum sh_css_queue_type type,
+					enum sh_css_queue_id id, int thread);
 
 /*******************************************************
 *** Public functions
@@ -88,20 +80,21 @@ void ia_css_queue_map_init(void)
 
 	for (i = 0; i < SH_CSS_MAX_SP_THREADS; i++) {
 		for (j = 0; j < IA_CSS_NUM_DYNAMIC_BUFFER_TYPE; j++)
-			buffer_type_to_queue_id_map[i][j] = SH_CSS_INVALID_QUEUE_ID;
+			buffer_type_to_queue_id_map[i][j] =
+				SH_CSS_INVALID_QUEUE_ID;
 	}
 }
 
-void ia_css_queue_map(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type,
-    bool map)
+void ia_css_queue_map(unsigned int thread_id, enum ia_css_buffer_type buf_type,
+		      bool map)
 {
 	assert(buf_type < IA_CSS_NUM_DYNAMIC_BUFFER_TYPE);
 	assert(thread_id < SH_CSS_MAX_SP_THREADS);
 
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
-			    "ia_css_queue_map() enter: buf_type=%d, thread_id=%d\n", buf_type, thread_id);
+	ia_css_debug_dtrace(
+		IA_CSS_DEBUG_TRACE,
+		"ia_css_queue_map() enter: buf_type=%d, thread_id=%d\n",
+		buf_type, thread_id);
 
 	if (map)
 		map_buffer_type_to_queue_id(thread_id, buf_type);
@@ -112,12 +105,12 @@ void ia_css_queue_map(
 /*
  * @brief Query the internal queue ID.
  */
-bool ia_css_query_internal_queue_id(
-    enum ia_css_buffer_type buf_type,
-    unsigned int thread_id,
-    enum sh_css_queue_id *val)
+bool ia_css_query_internal_queue_id(enum ia_css_buffer_type buf_type,
+				    unsigned int thread_id,
+				    enum sh_css_queue_id *val)
 {
-	IA_CSS_ENTER("buf_type=%d, thread_id=%d, val = %p", buf_type, thread_id, val);
+	IA_CSS_ENTER("buf_type=%d, thread_id=%d, val = %p", buf_type, thread_id,
+		     val);
 
 	if ((!val) || (thread_id >= SH_CSS_MAX_SP_THREADS) ||
 	    (buf_type >= IA_CSS_NUM_DYNAMIC_BUFFER_TYPE)) {
@@ -126,7 +119,8 @@ bool ia_css_query_internal_queue_id(
 	}
 
 	*val = buffer_type_to_queue_id_map[thread_id][buf_type];
-	if ((*val == SH_CSS_INVALID_QUEUE_ID) || (*val >= SH_CSS_MAX_NUM_QUEUES)) {
+	if ((*val == SH_CSS_INVALID_QUEUE_ID) ||
+	    (*val >= SH_CSS_MAX_NUM_QUEUES)) {
 		IA_CSS_LOG("INVALID queue ID MAP = %d\n", *val);
 		IA_CSS_LEAVE("return_val = false");
 		return false;
@@ -138,9 +132,8 @@ bool ia_css_query_internal_queue_id(
 /*******************************************************
 *** Static functions
 ********************************************************/
-static void map_buffer_type_to_queue_id(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type)
+static void map_buffer_type_to_queue_id(unsigned int thread_id,
+					enum ia_css_buffer_type buf_type)
 {
 	unsigned int i;
 
@@ -151,19 +144,25 @@ static void map_buffer_type_to_queue_id(
 
 	/* queue 0 is reserved for parameters because it doesn't depend on events */
 	if (buf_type == IA_CSS_BUFFER_TYPE_PARAMETER_SET) {
-		assert(queue_availability[thread_id][IA_CSS_PARAMETER_SET_QUEUE_ID]);
-		queue_availability[thread_id][IA_CSS_PARAMETER_SET_QUEUE_ID] = false;
+		assert(queue_availability[thread_id]
+					 [IA_CSS_PARAMETER_SET_QUEUE_ID]);
+		queue_availability[thread_id][IA_CSS_PARAMETER_SET_QUEUE_ID] =
+			false;
 		buffer_type_to_queue_id_map[thread_id][buf_type] =
-		    IA_CSS_PARAMETER_SET_QUEUE_ID;
+			IA_CSS_PARAMETER_SET_QUEUE_ID;
 		return;
 	}
 
 	/* queue 1 is reserved for per frame parameters because it doesn't depend on events */
 	if (buf_type == IA_CSS_BUFFER_TYPE_PER_FRAME_PARAMETER_SET) {
-		assert(queue_availability[thread_id][IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID]);
-		queue_availability[thread_id][IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID] = false;
+		assert(queue_availability
+			       [thread_id]
+			       [IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID]);
+		queue_availability[thread_id]
+				  [IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID] =
+					  false;
 		buffer_type_to_queue_id_map[thread_id][buf_type] =
-		    IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID;
+			IA_CSS_PER_FRAME_PARAMETER_SET_QUEUE_ID;
 		return;
 	}
 
@@ -179,9 +178,8 @@ static void map_buffer_type_to_queue_id(
 	return;
 }
 
-static void unmap_buffer_type_to_queue_id(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type)
+static void unmap_buffer_type_to_queue_id(unsigned int thread_id,
+					  enum ia_css_buffer_type buf_type)
 {
 	int queue_id;
 
@@ -191,14 +189,13 @@ static void unmap_buffer_type_to_queue_id(
 	       SH_CSS_INVALID_QUEUE_ID);
 
 	queue_id = buffer_type_to_queue_id_map[thread_id][buf_type];
-	buffer_type_to_queue_id_map[thread_id][buf_type] = SH_CSS_INVALID_QUEUE_ID;
+	buffer_type_to_queue_id_map[thread_id][buf_type] =
+		SH_CSS_INVALID_QUEUE_ID;
 	queue_availability[thread_id][queue_id] = true;
 }
 
-static ia_css_queue_t *bufq_get_qhandle(
-    enum sh_css_queue_type type,
-    enum sh_css_queue_id id,
-    int thread)
+static ia_css_queue_t *bufq_get_qhandle(enum sh_css_queue_type type,
+					enum sh_css_queue_id id, int thread)
 {
 	ia_css_queue_t *q = NULL;
 
@@ -239,10 +236,8 @@ static ia_css_queue_t *bufq_get_qhandle(
 /* Local function to initialize a buffer queue. This reduces
  * the chances of copy-paste errors or typos.
  */
-static inline void
-init_bufq(unsigned int desc_offset,
-	  unsigned int elems_offset,
-	  ia_css_queue_t *handle)
+static inline void init_bufq(unsigned int desc_offset,
+			     unsigned int elems_offset, ia_css_queue_t *handle)
 {
 	const struct ia_css_fw_info *fw;
 	unsigned int q_base_addr;
@@ -269,55 +264,64 @@ void ia_css_bufq_init(void)
 	/* Setup all the local queue descriptors for Host2SP Buffer Queues */
 	for (i = 0; i < SH_CSS_MAX_SP_THREADS; i++)
 		for (j = 0; j < SH_CSS_MAX_NUM_QUEUES; j++) {
-			init_bufq((uint32_t)offsetof(struct host_sp_queues,
-						     host2sp_buffer_queues_desc[i][j]),
-				  (uint32_t)offsetof(struct host_sp_queues, host2sp_buffer_queues_elems[i][j]),
-				  &css_queues.host2sp_buffer_queue_handles[i][j]);
+			init_bufq(
+				(uint32_t)offsetof(
+					struct host_sp_queues,
+					host2sp_buffer_queues_desc[i][j]),
+				(uint32_t)offsetof(
+					struct host_sp_queues,
+					host2sp_buffer_queues_elems[i][j]),
+				&css_queues.host2sp_buffer_queue_handles[i][j]);
 		}
 
 	/* Setup all the local queue descriptors for SP2Host Buffer Queues */
 	for (i = 0; i < SH_CSS_MAX_NUM_QUEUES; i++) {
-		init_bufq(offsetof(struct host_sp_queues, sp2host_buffer_queues_desc[i]),
-			  offsetof(struct host_sp_queues, sp2host_buffer_queues_elems[i]),
+		init_bufq(offsetof(struct host_sp_queues,
+				   sp2host_buffer_queues_desc[i]),
+			  offsetof(struct host_sp_queues,
+				   sp2host_buffer_queues_elems[i]),
 			  &css_queues.sp2host_buffer_queue_handles[i]);
 	}
 
 	/* Host2SP event queue*/
 	init_bufq((uint32_t)offsetof(struct host_sp_queues,
 				     host2sp_psys_event_queue_desc),
-		  (uint32_t)offsetof(struct host_sp_queues, host2sp_psys_event_queue_elems),
+		  (uint32_t)offsetof(struct host_sp_queues,
+				     host2sp_psys_event_queue_elems),
 		  &css_queues.host2sp_psys_event_queue_handle);
 
 	/* SP2Host event queue */
 	init_bufq((uint32_t)offsetof(struct host_sp_queues,
 				     sp2host_psys_event_queue_desc),
-		  (uint32_t)offsetof(struct host_sp_queues, sp2host_psys_event_queue_elems),
+		  (uint32_t)offsetof(struct host_sp_queues,
+				     sp2host_psys_event_queue_elems),
 		  &css_queues.sp2host_psys_event_queue_handle);
 
 	/* Host2SP ISYS event queue */
 	init_bufq((uint32_t)offsetof(struct host_sp_queues,
 				     host2sp_isys_event_queue_desc),
-		  (uint32_t)offsetof(struct host_sp_queues, host2sp_isys_event_queue_elems),
+		  (uint32_t)offsetof(struct host_sp_queues,
+				     host2sp_isys_event_queue_elems),
 		  &css_queues.host2sp_isys_event_queue_handle);
 
 	/* SP2Host ISYS event queue*/
 	init_bufq((uint32_t)offsetof(struct host_sp_queues,
 				     sp2host_isys_event_queue_desc),
-		  (uint32_t)offsetof(struct host_sp_queues, sp2host_isys_event_queue_elems),
+		  (uint32_t)offsetof(struct host_sp_queues,
+				     sp2host_isys_event_queue_elems),
 		  &css_queues.sp2host_isys_event_queue_handle);
 
 	/* Host2SP tagger command queue */
-	init_bufq((uint32_t)offsetof(struct host_sp_queues, host2sp_tag_cmd_queue_desc),
-		  (uint32_t)offsetof(struct host_sp_queues, host2sp_tag_cmd_queue_elems),
+	init_bufq((uint32_t)offsetof(struct host_sp_queues,
+				     host2sp_tag_cmd_queue_desc),
+		  (uint32_t)offsetof(struct host_sp_queues,
+				     host2sp_tag_cmd_queue_elems),
 		  &css_queues.host2sp_tag_cmd_queue_handle);
 
 	IA_CSS_LEAVE_PRIVATE("");
 }
 
-int ia_css_bufq_enqueue_buffer(
-    int thread_index,
-    int queue_id,
-    uint32_t item)
+int ia_css_bufq_enqueue_buffer(int thread_index, int queue_id, uint32_t item)
 {
 	ia_css_queue_t *q;
 	int error;
@@ -328,8 +332,7 @@ int ia_css_bufq_enqueue_buffer(
 		return -EINVAL;
 
 	/* Get the queue for communication */
-	q = bufq_get_qhandle(sh_css_host2sp_buffer_queue,
-			     queue_id,
+	q = bufq_get_qhandle(sh_css_host2sp_buffer_queue, queue_id,
 			     thread_index);
 	if (q) {
 		error = ia_css_queue_enqueue(q, item);
@@ -342,23 +345,17 @@ int ia_css_bufq_enqueue_buffer(
 	return error;
 }
 
-int ia_css_bufq_dequeue_buffer(
-    int queue_id,
-    uint32_t *item)
+int ia_css_bufq_dequeue_buffer(int queue_id, uint32_t *item)
 {
 	int error;
 	ia_css_queue_t *q;
 
 	IA_CSS_ENTER_PRIVATE("queue_id=%d", queue_id);
-	if ((!item) ||
-	    (queue_id <= SH_CSS_INVALID_QUEUE_ID) ||
-	    (queue_id >= SH_CSS_MAX_NUM_QUEUES)
-	   )
+	if ((!item) || (queue_id <= SH_CSS_INVALID_QUEUE_ID) ||
+	    (queue_id >= SH_CSS_MAX_NUM_QUEUES))
 		return -EINVAL;
 
-	q = bufq_get_qhandle(sh_css_sp2host_buffer_queue,
-			     queue_id,
-			     -1);
+	q = bufq_get_qhandle(sh_css_sp2host_buffer_queue, queue_id, -1);
 	if (q) {
 		error = ia_css_queue_dequeue(q, item);
 	} else {
@@ -370,11 +367,8 @@ int ia_css_bufq_dequeue_buffer(
 	return error;
 }
 
-int ia_css_bufq_enqueue_psys_event(
-    u8 evt_id,
-    u8 evt_payload_0,
-    u8 evt_payload_1,
-    uint8_t evt_payload_2)
+int ia_css_bufq_enqueue_psys_event(u8 evt_id, u8 evt_payload_0,
+				   u8 evt_payload_1, uint8_t evt_payload_2)
 {
 	int error = 0;
 	ia_css_queue_t *q;
@@ -386,15 +380,14 @@ int ia_css_bufq_enqueue_psys_event(
 		return -EBUSY;
 	}
 
-	error = ia_css_eventq_send(q,
-				   evt_id, evt_payload_0, evt_payload_1, evt_payload_2);
+	error = ia_css_eventq_send(q, evt_id, evt_payload_0, evt_payload_1,
+				   evt_payload_2);
 
 	IA_CSS_LEAVE_ERR_PRIVATE(error);
 	return error;
 }
 
-int ia_css_bufq_dequeue_psys_event(
-    u8 item[BUFQ_EVENT_SIZE])
+int ia_css_bufq_dequeue_psys_event(u8 item[BUFQ_EVENT_SIZE])
 {
 	int error = 0;
 	ia_css_queue_t *q;
@@ -415,8 +408,7 @@ int ia_css_bufq_dequeue_psys_event(
 	return error;
 }
 
-int ia_css_bufq_dequeue_isys_event(
-    u8 item[BUFQ_EVENT_SIZE])
+int ia_css_bufq_dequeue_isys_event(u8 item[BUFQ_EVENT_SIZE])
 {
 	int error = 0;
 	ia_css_queue_t *q;
@@ -454,8 +446,7 @@ int ia_css_bufq_enqueue_isys_event(uint8_t evt_id)
 	return error;
 }
 
-int ia_css_bufq_enqueue_tag_cmd(
-    uint32_t item)
+int ia_css_bufq_enqueue_tag_cmd(uint32_t item)
 {
 	int error;
 	ia_css_queue_t *q;
@@ -484,8 +475,8 @@ static void bufq_dump_queue_info(const char *prefix, ia_css_queue_t *qhandle)
 	assert(prefix && qhandle);
 	ia_css_queue_get_used_space(qhandle, &used);
 	ia_css_queue_get_free_space(qhandle, &free);
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "%s: used=%u free=%u\n",
-			    prefix, used, free);
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "%s: used=%u free=%u\n", prefix,
+			    used, free);
 }
 
 void ia_css_bufq_dump_queue_info(void)
@@ -498,16 +489,17 @@ void ia_css_bufq_dump_queue_info(void)
 		for (j = 0; j < SH_CSS_MAX_NUM_QUEUES; j++) {
 			snprintf(prefix, BUFQ_DUMP_FILE_NAME_PREFIX_SIZE,
 				 "host2sp_buffer_queue[%u][%u]", i, j);
-			bufq_dump_queue_info(prefix,
-					     &css_queues.host2sp_buffer_queue_handles[i][j]);
+			bufq_dump_queue_info(
+				prefix,
+				&css_queues.host2sp_buffer_queue_handles[i][j]);
 		}
 	}
 
 	for (i = 0; i < SH_CSS_MAX_NUM_QUEUES; i++) {
 		snprintf(prefix, BUFQ_DUMP_FILE_NAME_PREFIX_SIZE,
 			 "sp2host_buffer_queue[%u]", i);
-		bufq_dump_queue_info(prefix,
-				     &css_queues.sp2host_buffer_queue_handles[i]);
+		bufq_dump_queue_info(
+			prefix, &css_queues.sp2host_buffer_queue_handles[i]);
 	}
 	bufq_dump_queue_info("host2sp_psys_event",
 			     &css_queues.host2sp_psys_event_queue_handle);

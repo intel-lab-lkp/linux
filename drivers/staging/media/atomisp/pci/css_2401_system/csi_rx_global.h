@@ -17,10 +17,10 @@ typedef enum {
 	N_CSI_MIPI_PACKET_TYPE
 } csi_mipi_packet_type_t;
 
-typedef struct csi_rx_backend_lut_entry_s	csi_rx_backend_lut_entry_t;
+typedef struct csi_rx_backend_lut_entry_s csi_rx_backend_lut_entry_t;
 struct csi_rx_backend_lut_entry_s {
-	u32	long_packet_entry;
-	u32	short_packet_entry;
+	u32 long_packet_entry;
+	u32 short_packet_entry;
 };
 
 typedef struct csi_rx_backend_cfg_s csi_rx_backend_cfg_t;
@@ -32,7 +32,7 @@ struct csi_rx_backend_cfg_s {
 	csi_mipi_packet_type_t csi_mipi_packet_type;
 
 	struct {
-		bool     comp_enable;
+		bool comp_enable;
 		u32 virtual_channel;
 		u32 data_type;
 		u32 comp_scheme;

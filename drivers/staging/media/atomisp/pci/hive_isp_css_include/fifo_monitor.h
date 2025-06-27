@@ -28,9 +28,9 @@
 #define STORAGE_CLASS_FIFO_MONITOR_H extern
 #define STORAGE_CLASS_FIFO_MONITOR_C
 #include "fifo_monitor_public.h"
-#else  /* __INLINE_FIFO_MONITOR__ */
-#define STORAGE_CLASS_FIFO_MONITOR_H static inline
-#define STORAGE_CLASS_FIFO_MONITOR_C static inline
+#else /* __INLINE_FIFO_MONITOR__ */
+#define STORAGE_CLASS_FIFO_MONITOR_H (static inline)
+#define STORAGE_CLASS_FIFO_MONITOR_C (static inline)
 #include "fifo_monitor_private.h"
 #endif /* __INLINE_FIFO_MONITOR__ */
 

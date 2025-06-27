@@ -6,7 +6,7 @@
 
 #include "sh_css_sp.h"
 
-#include "dma.h"	/* N_DMA_CHANNEL_ID */
+#include "dma.h" /* N_DMA_CHANNEL_ID */
 
 #include <type_support.h>
 #include "ia_css_binary.h"
@@ -17,22 +17,19 @@
 #include "ia_css_debug_internal.h"
 #include "sh_css_legacy.h"
 
-#include "gdc_device.h"				/* HRT_GDC_N */
+#include "gdc_device.h" /* HRT_GDC_N */
 
-/*#include "sp.h"*/	/* host2sp_enqueue_frame_data() */
+/*#include "sp.h"*/ /* host2sp_enqueue_frame_data() */
 
 #include "assert_support.h"
 
-#include "ia_css_queue.h"	/* host_sp_enqueue_XXX */
-#include "ia_css_event.h"	/* ia_css_event_encode */
+#include "ia_css_queue.h" /* host_sp_enqueue_XXX */
+#include "ia_css_event.h" /* ia_css_event_encode */
 /*
  * @brief Encode the information into the software-event.
  * Refer to "sw_event_public.h" for details.
  */
-bool ia_css_event_encode(
-    u8	*in,
-    u8	nr,
-    uint32_t	*out)
+bool ia_css_event_encode(u8 *in, u8 nr, uint32_t *out)
 {
 	bool ret;
 	u32 nr_of_bits;
@@ -60,9 +57,7 @@ bool ia_css_event_encode(
 	return ret;
 }
 
-void ia_css_event_decode(
-    u32 event,
-    uint8_t *payload)
+void ia_css_event_decode(u32 event, uint8_t *payload)
 {
 	assert(payload[1] == 0);
 	assert(payload[2] == 0);
@@ -77,7 +72,7 @@ void ia_css_event_decode(
 	 * This is somewhat ugly but probably somewhat efficient
 	 * (and it avoids some code duplication)
 	 */
-	payload[0] = event & 0xff;  /*event_code */
+	payload[0] = event & 0xff; /*event_code */
 	payload[1] = (event >> 8) & 0xff;
 	payload[2] = (event >> 16) & 0xff;
 	payload[3] = 0;

@@ -14,12 +14,12 @@
 #include "ia_css_xnr3.host.h"
 
 /* Maximum value for alpha on ISP interface */
-#define XNR_MAX_ALPHA  ((1 << (ISP_VEC_ELEMBITS - 1)) - 1)
+#define XNR_MAX_ALPHA ((1 << (ISP_VEC_ELEMBITS - 1)) - 1)
 
 /* Minimum value for sigma on host interface. Lower values translate to
  * max_alpha.
  */
-#define XNR_MIN_SIGMA  (IA_CSS_XNR3_SIGMA_SCALE / 100)
+#define XNR_MIN_SIGMA (IA_CSS_XNR3_SIGMA_SCALE / 100)
 
 /*
  * division look-up table
@@ -27,24 +27,23 @@
  */
 #define XNR3_LOOK_UP_TABLE_POINTS 16
 
-static const s16 x[XNR3_LOOK_UP_TABLE_POINTS] = {
-	1024, 1164, 1320, 1492, 1680, 1884, 2108, 2352,
-	2616, 2900, 3208, 3540, 3896, 4276, 4684, 5120
-};
+static const s16 x[XNR3_LOOK_UP_TABLE_POINTS] = { 1024, 1164, 1320, 1492,
+						  1680, 1884, 2108, 2352,
+						  2616, 2900, 3208, 3540,
+						  3896, 4276, 4684, 5120 };
 
-static const s16 a[XNR3_LOOK_UP_TABLE_POINTS] = {
-	-7213, -5580, -4371, -3421, -2722, -2159, -6950, -5585,
-	    -4529, -3697, -3010, -2485, -2070, -1727, -1428, 0
-    };
+static const s16 a[XNR3_LOOK_UP_TABLE_POINTS] = { -7213, -5580, -4371, -3421,
+						  -2722, -2159, -6950, -5585,
+						  -4529, -3697, -3010, -2485,
+						  -2070, -1727, -1428, 0 };
 
-static const s16 b[XNR3_LOOK_UP_TABLE_POINTS] = {
-	4096, 3603, 3178, 2811, 2497, 2226, 1990, 1783,
-	1603, 1446, 1307, 1185, 1077, 981, 895, 819
-};
+static const s16 b[XNR3_LOOK_UP_TABLE_POINTS] = { 4096, 3603, 3178, 2811,
+						  2497, 2226, 1990, 1783,
+						  1603, 1446, 1307, 1185,
+						  1077, 981,  895,  819 };
 
-static const s16 c[XNR3_LOOK_UP_TABLE_POINTS] = {
-	1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
+static const s16 c[XNR3_LOOK_UP_TABLE_POINTS] = { 1, 1, 1, 1, 1, 1, 0, 0,
+						  0, 0, 0, 0, 0, 0, 0, 0 };
 
 /*
  * Default kernel parameters. In general, default is bypass mode or as close
@@ -65,8 +64,7 @@ const struct ia_css_xnr3_config default_xnr3_config = {
  * Compute an alpha value for the ISP kernel from sigma value on the host
  * parameter interface as: alpha_scale * 1/(sigma/sigma_scale)
  */
-static int32_t
-compute_alpha(int sigma)
+static int32_t compute_alpha(int sigma)
 {
 	s32 alpha;
 	int offset = sigma / 2;
@@ -74,7 +72,9 @@ compute_alpha(int sigma)
 	if (sigma < XNR_MIN_SIGMA) {
 		alpha = XNR_MAX_ALPHA;
 	} else {
-		alpha = ((IA_CSS_XNR3_SIGMA_SCALE * XNR_ALPHA_SCALE_FACTOR) + offset) / sigma;
+		alpha = ((IA_CSS_XNR3_SIGMA_SCALE * XNR_ALPHA_SCALE_FACTOR) +
+			 offset) /
+			sigma;
 
 		if (alpha > XNR_MAX_ALPHA)
 			alpha = XNR_MAX_ALPHA;
@@ -87,8 +87,7 @@ compute_alpha(int sigma)
  * Compute the scaled coring value for the ISP kernel from the value on the
  * host parameter interface.
  */
-static int32_t
-compute_coring(int coring)
+static int32_t compute_coring(int coring)
 {
 	s32 isp_coring;
 	s32 isp_scale = XNR_CORING_SCALE_FACTOR;
@@ -106,8 +105,7 @@ compute_coring(int coring)
  * Compute the scaled blending strength for the ISP kernel from the value on
  * the host parameter interface.
  */
-static int32_t
-compute_blending(int strength)
+static int32_t compute_blending(int strength)
 {
 	s32 isp_strength;
 	s32 isp_scale = XNR_BLENDING_SCALE_FACTOR;
@@ -123,11 +121,9 @@ compute_blending(int strength)
 	return MAX(MIN(isp_strength, 0), -isp_scale);
 }
 
-void
-ia_css_xnr3_encode(
-    struct sh_css_isp_xnr3_params *to,
-    const struct ia_css_xnr3_config *from,
-    unsigned int size)
+void ia_css_xnr3_encode(struct sh_css_isp_xnr3_params *to,
+			const struct ia_css_xnr3_config *from,
+			unsigned int size)
 {
 	int kernel_size = XNR_FILTER_SIZE;
 	int adjust_factor = roundup_pow_of_two(kernel_size);
@@ -148,8 +144,10 @@ ia_css_xnr3_encode(
 	s32 coring_u1 = compute_coring(from->coring.u1);
 	s32 coring_v0 = compute_coring(from->coring.v0);
 	s32 coring_v1 = compute_coring(from->coring.v1);
-	s32 coring_udiff = (coring_u1 - coring_u0) * adjust_factor / kernel_size;
-	s32 coring_vdiff = (coring_v1 - coring_v0) * adjust_factor / kernel_size;
+	s32 coring_udiff =
+		(coring_u1 - coring_u0) * adjust_factor / kernel_size;
+	s32 coring_vdiff =
+		(coring_v1 - coring_v0) * adjust_factor / kernel_size;
 
 	s32 blending = compute_blending(from->blending.strength);
 
@@ -178,11 +176,9 @@ ia_css_xnr3_encode(
  * -----------------------------------------------
  * VMEM Encode Function to translate UV parameters from userspace into ISP space
 */
-void
-ia_css_xnr3_vmem_encode(
-    struct sh_css_isp_xnr3_vmem_params *to,
-    const struct ia_css_xnr3_config *from,
-    unsigned int size)
+void ia_css_xnr3_vmem_encode(struct sh_css_isp_xnr3_vmem_params *to,
+			     const struct ia_css_xnr3_config *from,
+			     unsigned int size)
 {
 	unsigned int i, j, base;
 	const unsigned int total_blocks = 4;
@@ -230,10 +226,8 @@ ia_css_xnr3_vmem_encode(
 }
 
 /* Dummy Function added as the tool expects it*/
-void
-ia_css_xnr3_debug_dtrace(
-    const struct ia_css_xnr3_config *config,
-    unsigned int level)
+void ia_css_xnr3_debug_dtrace(const struct ia_css_xnr3_config *config,
+			      unsigned int level)
 {
 	(void)config;
 	(void)level;

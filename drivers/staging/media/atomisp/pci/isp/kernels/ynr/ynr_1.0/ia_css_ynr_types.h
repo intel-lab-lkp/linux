@@ -20,13 +20,13 @@
  *        BNR1,YNR2,CNR2 are used for Still.
  */
 struct ia_css_nr_config {
-	ia_css_u0_16 bnr_gain;	   /** Strength of noise reduction (BNR).
+	ia_css_u0_16 bnr_gain; /** Strength of noise reduction (BNR).
 				u0.16, [0,65535],
 				default 14336(0.21875), ineffective 0 */
-	ia_css_u0_16 ynr_gain;	   /** Strength of noise reduction (YNR).
+	ia_css_u0_16 ynr_gain; /** Strength of noise reduction (YNR).
 				u0.16, [0,65535],
 				default 14336(0.21875), ineffective 0 */
-	ia_css_u0_16 direction;    /** Sensitivity of edge (BNR).
+	ia_css_u0_16 direction; /** Sensitivity of edge (BNR).
 				u0.16, [0,65535],
 				default 512(0.0078125), ineffective 0 */
 	ia_css_u0_16 threshold_cb; /** Coring threshold for Cb (CNR).
@@ -49,10 +49,10 @@ struct ia_css_nr_config {
  *       (YEE2 is used for Still.)
  */
 struct ia_css_ee_config {
-	ia_css_u5_11 gain;	  /** The strength of sharpness.
+	ia_css_u5_11 gain; /** The strength of sharpness.
 					u5.11, [0,65535],
 					default 8192(4.0), ineffective 0 */
-	ia_css_u8_8 threshold;    /** The threshold that divides noises from
+	ia_css_u8_8 threshold; /** The threshold that divides noises from
 					edge.
 					u8.8, [0,65535],
 					default 256(1.0), ineffective 65535 */

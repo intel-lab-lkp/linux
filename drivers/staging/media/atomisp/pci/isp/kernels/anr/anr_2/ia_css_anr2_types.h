@@ -13,7 +13,7 @@
 
 #include "type_support.h"
 
-#define ANR_PARAM_SIZE          13
+#define ANR_PARAM_SIZE 13
 
 /* Advanced Noise Reduction (ANR) thresholds */
 struct ia_css_anr_thres {

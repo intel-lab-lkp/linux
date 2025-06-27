@@ -11,7 +11,7 @@ Copyright (c) 2010 - 2015, Intel Corporation.
 /* @file
  * Timer interface definitions
  */
-#include <type_support.h>		/* for uint32_t */
+#include <type_support.h> /* for uint32_t */
 #include "ia_css_err.h"
 
 /* @brief timer reading definition */
@@ -38,15 +38,15 @@ enum ia_css_tm_event {
 
 /* @brief code measurement common struct */
 struct ia_css_time_meas {
-	clock_value_t	start_timer_value;	/** measured time in ticks */
-	clock_value_t	end_timer_value;	/** measured time in ticks */
+	clock_value_t start_timer_value; /** measured time in ticks */
+	clock_value_t end_timer_value; /** measured time in ticks */
 };
 
 /**@brief SIZE_OF_IA_CSS_CLOCK_TICK_STRUCT checks to ensure correct alignment for struct ia_css_clock_tick. */
 #define SIZE_OF_IA_CSS_CLOCK_TICK_STRUCT sizeof(clock_value_t)
 /* @brief checks to ensure correct alignment for ia_css_time_meas. */
-#define SIZE_OF_IA_CSS_TIME_MEAS_STRUCT (sizeof(clock_value_t) \
-					+ sizeof(clock_value_t))
+#define SIZE_OF_IA_CSS_TIME_MEAS_STRUCT \
+	(sizeof(clock_value_t) + sizeof(clock_value_t))
 
 /* @brief API to fetch timer count directly
 *
@@ -54,8 +54,6 @@ struct ia_css_time_meas {
 * @return 0 if success
 *
 */
-int
-ia_css_timer_get_current_tick(
-    struct ia_css_clock_tick *curr_ts);
+int ia_css_timer_get_current_tick(struct ia_css_clock_tick *curr_ts);
 
-#endif  /* __IA_CSS_TIMER_H */
+#endif /* __IA_CSS_TIMER_H */

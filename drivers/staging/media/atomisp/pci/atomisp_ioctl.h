@@ -7,8 +7,8 @@
  * Copyright (c) 2010 Silicon Hive www.siliconhive.com.
  */
 
-#ifndef	__ATOMISP_IOCTL_H__
-#define	__ATOMISP_IOCTL_H__
+#ifndef __ATOMISP_IOCTL_H__
+#define __ATOMISP_IOCTL_H__
 
 #include "ia_css.h"
 
@@ -17,11 +17,11 @@ struct atomisp_video_pipe;
 
 extern const struct atomisp_format_bridge atomisp_output_fmts[];
 
-const struct
-atomisp_format_bridge *atomisp_get_format_bridge(unsigned int pixelformat);
+const struct atomisp_format_bridge *
+atomisp_get_format_bridge(unsigned int pixelformat);
 
-const struct
-atomisp_format_bridge *atomisp_get_format_bridge_from_mbus(u32 mbus_code);
+const struct atomisp_format_bridge *
+atomisp_get_format_bridge_from_mbus(u32 mbus_code);
 
 int atomisp_pipe_check(struct atomisp_video_pipe *pipe, bool streaming_ok);
 

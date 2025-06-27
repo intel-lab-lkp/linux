@@ -9,7 +9,8 @@
 
 #include <type_support.h>
 
-#if !defined(ENABLE_TPROXY) && !defined(ENABLE_CRUN_FOR_TD) && !defined(PARAMBIN_GENERATION)
+#if !defined(ENABLE_TPROXY) && !defined(ENABLE_CRUN_FOR_TD) && \
+	!defined(PARAMBIN_GENERATION)
 #include "dma.h"
 #endif /* !defined(ENABLE_TPROXY) && !defined(ENABLE_CRUN_FOR_TD) */
 

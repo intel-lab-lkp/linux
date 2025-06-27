@@ -24,63 +24,50 @@
 #define NUMBER_OF_TCINV_POINTS 9
 #define NUMBER_OF_FCINV_POINTS 9
 
-static const s16 chgrinv_x[NUMBER_OF_CHGRINV_POINTS] = {
-	0, 16, 64, 144, 272, 448, 672, 976,
-	1376, 1888, 2528, 3312, 4256, 5376, 6688
-};
+static const s16 chgrinv_x[NUMBER_OF_CHGRINV_POINTS] = { 0,    16,   64,   144,
+							 272,  448,  672,  976,
+							 1376, 1888, 2528, 3312,
+							 4256, 5376, 6688 };
 
 static const s16 chgrinv_a[NUMBER_OF_CHGRINV_POINTS] = {
 	-7171, -256, -29, -3456, -1071, -475, -189, -102,
-	    -48, -38, -10, -9, -7, -6, 0
-    };
+	-48,   -38,  -10, -9,	 -7,	-6,   0
+};
 
 static const s16 chgrinv_b[NUMBER_OF_CHGRINV_POINTS] = {
-	8191, 1021, 256, 114, 60, 37, 24, 17,
-	12, 9, 6, 5, 4, 3, 2
+	8191, 1021, 256, 114, 60, 37, 24, 17, 12, 9, 6, 5, 4, 3, 2
 };
 
-static const s16 chgrinv_c[NUMBER_OF_CHGRINV_POINTS] = {
-	1, 1, 1, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0
-};
+static const s16 chgrinv_c[NUMBER_OF_CHGRINV_POINTS] = { 1, 1, 1, 0, 0, 0, 0, 0,
+							 0, 0, 0, 0, 0, 0, 0 };
 
-static const s16 tcinv_x[NUMBER_OF_TCINV_POINTS] = {
-	0, 4, 11, 23, 42, 68, 102, 148, 205
-};
+static const s16 tcinv_x[NUMBER_OF_TCINV_POINTS] = { 0,	 4,   11,  23, 42,
+						     68, 102, 148, 205 };
 
-static const s16 tcinv_a[NUMBER_OF_TCINV_POINTS] = {
-	-6364, -631, -126, -34, -13, -6, -4452, -2156, 0
-    };
+static const s16 tcinv_a[NUMBER_OF_TCINV_POINTS] = { -6364, -631,  -126,
+						     -34,   -13,   -6,
+						     -4452, -2156, 0 };
 
-static const s16 tcinv_b[NUMBER_OF_TCINV_POINTS] = {
-	8191, 1828, 726, 352, 197, 121, 80, 55, 40
-};
+static const s16 tcinv_b[NUMBER_OF_TCINV_POINTS] = { 8191, 1828, 726, 352, 197,
+						     121,  80,	 55,  40 };
 
-static const s16 tcinv_c[NUMBER_OF_TCINV_POINTS] = {
-	1, 1, 1, 1, 1, 1, 0, 0, 0
-};
+static const s16 tcinv_c[NUMBER_OF_TCINV_POINTS] = { 1, 1, 1, 1, 1, 1, 0, 0, 0 };
 
-static const s16 fcinv_x[NUMBER_OF_FCINV_POINTS] = {
-	0, 80, 216, 456, 824, 1344, 2040, 2952, 4096
-};
+static const s16 fcinv_x[NUMBER_OF_FCINV_POINTS] = { 0,	   80,	 216,  456, 824,
+						     1344, 2040, 2952, 4096 };
 
-static const s16 fcinv_a[NUMBER_OF_FCINV_POINTS] = {
-	-5244, -486, -86, -2849, -961, -400, -180, -86, 0
-    };
+static const s16 fcinv_a[NUMBER_OF_FCINV_POINTS] = { -5244, -486, -86,
+						     -2849, -961, -400,
+						     -180,  -86,  0 };
 
-static const s16 fcinv_b[NUMBER_OF_FCINV_POINTS] = {
-	8191, 1637, 607, 287, 159, 98, 64, 44, 32
-};
+static const s16 fcinv_b[NUMBER_OF_FCINV_POINTS] = { 8191, 1637, 607, 287, 159,
+						     98,   64,	 44,  32 };
 
-static const s16 fcinv_c[NUMBER_OF_FCINV_POINTS] = {
-	1, 1, 1, 0, 0, 0, 0, 0, 0
-};
+static const s16 fcinv_c[NUMBER_OF_FCINV_POINTS] = { 1, 1, 1, 0, 0, 0, 0, 0, 0 };
 
-void
-ia_css_eed1_8_vmem_encode(
-    struct eed1_8_vmem_params *to,
-    const struct ia_css_eed1_8_config *from,
-    size_t size)
+void ia_css_eed1_8_vmem_encode(struct eed1_8_vmem_params *to,
+			       const struct ia_css_eed1_8_config *from,
+			       size_t size)
 {
 	unsigned int i, j, base;
 	const unsigned int total_blocks = 4;
@@ -124,8 +111,10 @@ ia_css_eed1_8_vmem_encode(
 	}
 
 	for (j = 1; j < IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS; j++) {
-		assert(from->dew_enhance_seg_x[j] > from->dew_enhance_seg_x[j - 1]);
-		assert(from->dew_enhance_seg_y[j] > from->dew_enhance_seg_y[j - 1]);
+		assert(from->dew_enhance_seg_x[j] >
+		       from->dew_enhance_seg_x[j - 1]);
+		assert(from->dew_enhance_seg_y[j] >
+		       from->dew_enhance_seg_y[j - 1]);
 	}
 
 	assert(from->dew_enhance_seg_x[0] == 0);
@@ -163,29 +152,34 @@ ia_css_eed1_8_vmem_encode(
 		base = shuffle_block * i;
 
 		for (j = 0; j < IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS; j++) {
-			to->e_dew_enh_x[0][base + j] = clamp(from->dew_enhance_seg_x[j],
-							     0, 8191);
-			to->e_dew_enh_y[0][base + j] = clamp(from->dew_enhance_seg_y[j],
-							     -8192, 8191);
+			to->e_dew_enh_x[0][base + j] =
+				clamp(from->dew_enhance_seg_x[j], 0, 8191);
+			to->e_dew_enh_y[0][base + j] =
+				clamp(from->dew_enhance_seg_y[j], -8192, 8191);
 		}
 
-		for (j = 0; j < (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1); j++) {
-			to->e_dew_enh_a[0][base + j] = clamp(from->dew_enhance_seg_slope[j],
-							     -8192, 8191);
+		for (j = 0; j < (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1);
+		     j++) {
+			to->e_dew_enh_a[0][base + j] = clamp(
+				from->dew_enhance_seg_slope[j], -8192, 8191);
 			/* Convert dew_enhance_seg_exp to flag:
 			 * 0 -> 0
 			 * 1...13 -> 1
 			 */
-			to->e_dew_enh_f[0][base + j] = clamp(from->dew_enhance_seg_exp[j],
-							     0, 13) > 0;
+			to->e_dew_enh_f[0][base + j] =
+				clamp(from->dew_enhance_seg_exp[j], 0, 13) > 0;
 		}
 
 		/* Hard-coded to 0, in order to be able to handle out of
 		 * range input in the same way as the other segments.
 		 * See KFS for more details.
 		 */
-		to->e_dew_enh_a[0][base + (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1)] = 0;
-		to->e_dew_enh_f[0][base + (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1)] = 0;
+		to->e_dew_enh_a[0][base +
+				   (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1)] =
+			0;
+		to->e_dew_enh_f[0][base +
+				   (IA_CSS_NUMBER_OF_DEW_ENHANCE_SEGMENTS - 1)] =
+			0;
 
 		for (j = 0; j < NUMBER_OF_CHGRINV_POINTS; j++) {
 			to->chgrinv_x[0][base + j] = chgrinv_x[j];
@@ -210,11 +204,8 @@ ia_css_eed1_8_vmem_encode(
 	}
 }
 
-void
-ia_css_eed1_8_encode(
-    struct eed1_8_dmem_params *to,
-    const struct ia_css_eed1_8_config *from,
-    size_t size)
+void ia_css_eed1_8_encode(struct eed1_8_dmem_params *to,
+			  const struct ia_css_eed1_8_config *from, size_t size)
 {
 	int i;
 	int min_exp = 0;
@@ -268,19 +259,14 @@ ia_css_eed1_8_encode(
 	to->dedgew_max = from->dedgew_max;
 }
 
-void
-ia_css_init_eed1_8_state(
-    void *state,
-    size_t size)
+void ia_css_init_eed1_8_state(void *state, size_t size)
 {
 	memset(state, 0, size);
 }
 
 #ifndef IA_CSS_NO_DEBUG
-void
-ia_css_eed1_8_debug_dtrace(
-    const struct ia_css_eed1_8_config *eed,
-    unsigned int level)
+void ia_css_eed1_8_debug_dtrace(const struct ia_css_eed1_8_config *eed,
+				unsigned int level)
 {
 	if (!eed)
 		return;
@@ -288,39 +274,64 @@ ia_css_eed1_8_debug_dtrace(
 	ia_css_debug_dtrace(level, "Edge Enhancing Demosaic 1.8:\n");
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "rbzp_strength",
 			    eed->rbzp_strength);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcstrength", eed->fcstrength);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcthres_0", eed->fcthres_0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcthres_1", eed->fcthres_1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fc_sat_coef", eed->fc_sat_coef);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcstrength",
+			    eed->fcstrength);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcthres_0",
+			    eed->fcthres_0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fcthres_1",
+			    eed->fcthres_1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fc_sat_coef",
+			    eed->fc_sat_coef);
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "fc_coring_prm",
 			    eed->fc_coring_prm);
 
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_thres0", eed->aerel_thres0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_gain0", eed->aerel_gain0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_thres1", eed->aerel_thres1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_gain1", eed->aerel_gain1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_thres0",
+			    eed->aerel_thres0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_gain0",
+			    eed->aerel_gain0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_thres1",
+			    eed->aerel_thres1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "aerel_gain1",
+			    eed->aerel_gain1);
 
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_thres0", eed->derel_thres0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_gain0", eed->derel_gain0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_thres1", eed->derel_thres1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_gain1", eed->derel_gain1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_thres0",
+			    eed->derel_thres0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_gain0",
+			    eed->derel_gain0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_thres1",
+			    eed->derel_thres1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "derel_gain1",
+			    eed->derel_gain1);
 
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_pos0", eed->coring_pos0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_pos1", eed->coring_pos1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_neg0", eed->coring_neg0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_neg1", eed->coring_neg1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_pos0",
+			    eed->coring_pos0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_pos1",
+			    eed->coring_pos1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_neg0",
+			    eed->coring_neg0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "coring_neg1",
+			    eed->coring_neg1);
 
 	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_exp", eed->gain_exp);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_pos0", eed->gain_pos0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_pos1", eed->gain_pos1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_neg0", eed->gain_neg0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_neg1", eed->gain_neg1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_pos0",
+			    eed->gain_pos0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_pos1",
+			    eed->gain_pos1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_neg0",
+			    eed->gain_neg0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "gain_neg1",
+			    eed->gain_neg1);
 
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "pos_margin0", eed->pos_margin0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "pos_margin1", eed->pos_margin1);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "neg_margin0", eed->neg_margin0);
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "neg_margin1", eed->neg_margin1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "pos_margin0",
+			    eed->pos_margin0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "pos_margin1",
+			    eed->pos_margin1);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "neg_margin0",
+			    eed->neg_margin0);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "neg_margin1",
+			    eed->neg_margin1);
 
-	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "dedgew_max", eed->dedgew_max);
+	ia_css_debug_dtrace(level, "\t%-32s = %d\n", "dedgew_max",
+			    eed->dedgew_max);
 }
 #endif

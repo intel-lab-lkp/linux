@@ -17,11 +17,9 @@ static const struct ia_css_crop_configuration default_config = {
 	.info = (struct ia_css_frame_info *)NULL,
 };
 
-void
-ia_css_crop_encode(
-    struct sh_css_isp_crop_isp_params *to,
-    const struct ia_css_crop_config *from,
-    unsigned int size)
+void ia_css_crop_encode(struct sh_css_isp_crop_isp_params *to,
+			const struct ia_css_crop_config *from,
+			unsigned int size)
 {
 	(void)size;
 	to->crop_pos = from->crop_pos;
@@ -47,7 +45,7 @@ int ia_css_crop_config(struct sh_css_isp_crop_isp_config *to,
 	return 0;
 }
 
-int ia_css_crop_configure(const struct ia_css_binary     *binary,
+int ia_css_crop_configure(const struct ia_css_binary *binary,
 			  const struct ia_css_frame_info *info)
 {
 	struct ia_css_crop_configuration config = default_config;

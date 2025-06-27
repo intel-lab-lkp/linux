@@ -11,7 +11,7 @@
 
 #include "dma.h"
 
-#define FPN_BITS_PER_PIXEL	16
+#define FPN_BITS_PER_PIXEL 16
 
 /* FPNR (Fixed Pattern Noise Reduction) */
 struct sh_css_isp_fpn_params {

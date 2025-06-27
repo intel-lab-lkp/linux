@@ -28,9 +28,9 @@
 #define STORAGE_CLASS_INPUT_SYSTEM_H extern
 #define STORAGE_CLASS_INPUT_SYSTEM_C
 #include "input_system_public.h"
-#else  /* __INLINE_INPUT_SYSTEM__ */
-#define STORAGE_CLASS_INPUT_SYSTEM_H static inline
-#define STORAGE_CLASS_INPUT_SYSTEM_C static inline
+#else /* __INLINE_INPUT_SYSTEM__ */
+#define STORAGE_CLASS_INPUT_SYSTEM_H (static inline)
+#define STORAGE_CLASS_INPUT_SYSTEM_C (static inline)
 #include "input_system_private.h"
 #endif /* __INLINE_INPUT_SYSTEM__ */
 

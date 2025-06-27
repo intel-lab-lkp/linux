@@ -22,7 +22,7 @@
 #include "atomisp_csi2.h"
 #include "atomisp_internal.h"
 
-#define PMC_CLK_RATE_19_2MHZ			19200000
+#define PMC_CLK_RATE_19_2MHZ 19200000
 
 /*
  * 79234640-9e10-4fea-a5c1-b5aa8b19756f
@@ -31,22 +31,23 @@
  * Subsequent functions return 32 bit ints encoding information about the GPIO.
  */
 static const guid_t intel_sensor_gpio_info_guid =
-	GUID_INIT(0x79234640, 0x9e10, 0x4fea,
-		  0xa5, 0xc1, 0xb5, 0xaa, 0x8b, 0x19, 0x75, 0x6f);
+	GUID_INIT(0x79234640, 0x9e10, 0x4fea, 0xa5, 0xc1, 0xb5, 0xaa, 0x8b,
+		  0x19, 0x75, 0x6f);
 
-#define INTEL_GPIO_DSM_TYPE_SHIFT			0
-#define INTEL_GPIO_DSM_TYPE_MASK			GENMASK(7, 0)
-#define INTEL_GPIO_DSM_PIN_SHIFT			8
-#define INTEL_GPIO_DSM_PIN_MASK				GENMASK(15, 8)
-#define INTEL_GPIO_DSM_SENSOR_ON_VAL_SHIFT		24
-#define INTEL_GPIO_DSM_SENSOR_ON_VAL_MASK		GENMASK(31, 24)
+#define INTEL_GPIO_DSM_TYPE_SHIFT 0
+#define INTEL_GPIO_DSM_TYPE_MASK GENMASK(7, 0)
+#define INTEL_GPIO_DSM_PIN_SHIFT 8
+#define INTEL_GPIO_DSM_PIN_MASK GENMASK(15, 8)
+#define INTEL_GPIO_DSM_SENSOR_ON_VAL_SHIFT 24
+#define INTEL_GPIO_DSM_SENSOR_ON_VAL_MASK GENMASK(31, 24)
 
 #define INTEL_GPIO_DSM_TYPE(x) \
-	(((x) & INTEL_GPIO_DSM_TYPE_MASK) >> INTEL_GPIO_DSM_TYPE_SHIFT)
+	(((x)&INTEL_GPIO_DSM_TYPE_MASK) >> INTEL_GPIO_DSM_TYPE_SHIFT)
 #define INTEL_GPIO_DSM_PIN(x) \
-	(((x) & INTEL_GPIO_DSM_PIN_MASK) >> INTEL_GPIO_DSM_PIN_SHIFT)
-#define INTEL_GPIO_DSM_SENSOR_ON_VAL(x) \
-	(((x) & INTEL_GPIO_DSM_SENSOR_ON_VAL_MASK) >> INTEL_GPIO_DSM_SENSOR_ON_VAL_SHIFT)
+	(((x)&INTEL_GPIO_DSM_PIN_MASK) >> INTEL_GPIO_DSM_PIN_SHIFT)
+#define INTEL_GPIO_DSM_SENSOR_ON_VAL(x)             \
+	(((x)&INTEL_GPIO_DSM_SENSOR_ON_VAL_MASK) >> \
+	 INTEL_GPIO_DSM_SENSOR_ON_VAL_SHIFT)
 
 /*
  * 822ace8f-2814-4174-a56b-5f029fe079ee
@@ -54,39 +55,39 @@ static const guid_t intel_sensor_gpio_info_guid =
  * module identifier.
  */
 static const guid_t intel_sensor_module_guid =
-	GUID_INIT(0x822ace8f, 0x2814, 0x4174,
-		  0xa5, 0x6b, 0x5f, 0x02, 0x9f, 0xe0, 0x79, 0xee);
+	GUID_INIT(0x822ace8f, 0x2814, 0x4174, 0xa5, 0x6b, 0x5f, 0x02, 0x9f,
+		  0xe0, 0x79, 0xee);
 
 /*
  * dc2f6c4f-045b-4f1d-97b9-882a6860a4be
  * This _DSM GUID returns a package with n*2 strings, with each set of 2 strings
  * forming a key, value pair for settings like e.g. "CsiLanes" = "1".
  */
-static const guid_t atomisp_dsm_guid =
-	GUID_INIT(0xdc2f6c4f, 0x045b, 0x4f1d,
-		  0x97, 0xb9, 0x88, 0x2a, 0x68, 0x60, 0xa4, 0xbe);
+static const guid_t atomisp_dsm_guid = GUID_INIT(0xdc2f6c4f, 0x045b, 0x4f1d,
+						 0x97, 0xb9, 0x88, 0x2a, 0x68,
+						 0x60, 0xa4, 0xbe);
 
 /*
  * 75c9a639-5c8a-4a00-9f48-a9c3b5da789f
  * This _DSM GUID returns a string giving the VCM type e.g. "AD5823".
  */
-static const guid_t vcm_dsm_guid =
-	GUID_INIT(0x75c9a639, 0x5c8a, 0x4a00,
-		  0x9f, 0x48, 0xa9, 0xc3, 0xb5, 0xda, 0x78, 0x9f);
+static const guid_t vcm_dsm_guid = GUID_INIT(0x75c9a639, 0x5c8a, 0x4a00, 0x9f,
+					     0x48, 0xa9, 0xc3, 0xb5, 0xda, 0x78,
+					     0x9f);
 
 struct atomisp_sensor_config {
 	int lanes;
 	bool vcm;
 };
 
-#define ATOMISP_SENSOR_CONFIG(_HID, _LANES, _VCM)			\
-{									\
-	.id = _HID,							\
-	.driver_data = (long)&((const struct atomisp_sensor_config) {	\
-		.lanes = _LANES,					\
-		.vcm = _VCM,						\
-	})								\
-}
+#define ATOMISP_SENSOR_CONFIG(_HID, _LANES, _VCM)                            \
+	{                                                                    \
+		.id = _HID,                                                  \
+		.driver_data = (long)&((const struct atomisp_sensor_config){ \
+			.lanes = _LANES,                                     \
+			.vcm = _VCM,                                         \
+		})                                                           \
+	}
 
 /*
  * gmin_cfg parsing code. This is a cleaned up version of the gmin_cfg parsing
@@ -149,7 +150,8 @@ static char *gmin_cfg_get_dsm(struct acpi_device *adev, const char *key)
 		key_el = &obj->package.elements[i + 0];
 		val_el = &obj->package.elements[i + 1];
 
-		if (key_el->type != ACPI_TYPE_STRING || val_el->type != ACPI_TYPE_STRING)
+		if (key_el->type != ACPI_TYPE_STRING ||
+		    val_el->type != ACPI_TYPE_STRING)
 			break;
 
 		if (!strcmp(key_el->string.pointer, key)) {
@@ -157,7 +159,8 @@ static char *gmin_cfg_get_dsm(struct acpi_device *adev, const char *key)
 			if (!val)
 				break;
 
-			acpi_handle_info(adev->handle, "%s: Using DSM entry %s=%s\n",
+			acpi_handle_info(adev->handle,
+					 "%s: Using DSM entry %s=%s\n",
 					 dev_name(&adev->dev), key, val);
 			break;
 		}
@@ -167,7 +170,8 @@ static char *gmin_cfg_get_dsm(struct acpi_device *adev, const char *key)
 	return val;
 }
 
-static char *gmin_cfg_get_dmi_override(struct acpi_device *adev, const char *key)
+static char *gmin_cfg_get_dmi_override(struct acpi_device *adev,
+				       const char *key)
 {
 	const struct dmi_system_id *id;
 	struct gmin_cfg_var *gv;
@@ -202,7 +206,8 @@ static char *gmin_cfg_get(struct acpi_device *adev, const char *key)
 	return gmin_cfg_get_dsm(adev, key);
 }
 
-static int gmin_cfg_get_int(struct acpi_device *adev, const char *key, int default_val)
+static int gmin_cfg_get_int(struct acpi_device *adev, const char *key,
+			    int default_val)
 {
 	char *str_val;
 	long int_val;
@@ -237,7 +242,8 @@ static int atomisp_csi2_get_pmc_clk_nr_from_acpi_pr0(struct acpi_device *adev)
 	acpi_status status;
 	u8 clock_num;
 
-	status = acpi_evaluate_object_typed(adev->handle, "_PR0", NULL, &buffer, ACPI_TYPE_PACKAGE);
+	status = acpi_evaluate_object_typed(adev->handle, "_PR0", NULL, &buffer,
+					    ACPI_TYPE_PACKAGE);
 	if (ACPI_FAILURE(status))
 		return -ENOENT;
 
@@ -254,8 +260,8 @@ static int atomisp_csi2_get_pmc_clk_nr_from_acpi_pr0(struct acpi_device *adev)
 
 		acpi_get_name(rhandle, ACPI_SINGLE_NAME, &b_name);
 
-		if (str_has_prefix(name, "CLK") && !kstrtou8(&name[3], 10, &clock_num) &&
-		    clock_num <= 4) {
+		if (str_has_prefix(name, "CLK") &&
+		    !kstrtou8(&name[3], 10, &clock_num) && clock_num <= 4) {
 			ret = clock_num;
 			break;
 		}
@@ -264,13 +270,15 @@ static int atomisp_csi2_get_pmc_clk_nr_from_acpi_pr0(struct acpi_device *adev)
 	ACPI_FREE(buffer.pointer);
 
 	if (ret < 0)
-		acpi_handle_warn(adev->handle, "%s: Could not find PMC clk in _PR0\n",
+		acpi_handle_warn(adev->handle,
+				 "%s: Could not find PMC clk in _PR0\n",
 				 dev_name(&adev->dev));
 
 	return ret;
 }
 
-static int atomisp_csi2_set_pmc_clk_freq(struct acpi_device *adev, int clock_num)
+static int atomisp_csi2_set_pmc_clk_freq(struct acpi_device *adev,
+					 int clock_num)
 {
 	struct clk *clk;
 	char name[14];
@@ -299,7 +307,8 @@ static int atomisp_csi2_set_pmc_clk_freq(struct acpi_device *adev, int clock_num
 	if (!ret)
 		ret = clk_set_rate(clk, PMC_CLK_RATE_19_2MHZ);
 	if (ret)
-		acpi_handle_err(adev->handle, "%s: Error setting clk-rate for %s: %d\n",
+		acpi_handle_err(adev->handle,
+				"%s: Error setting clk-rate for %s: %d\n",
 				dev_name(&adev->dev), name, ret);
 
 	clk_put(clk);
@@ -324,7 +333,8 @@ static int atomisp_csi2_get_port(struct acpi_device *adev, int clock_num)
 }
 
 /* Note this always returns 1 to continue looping so that res_count is accurate */
-static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares, void *_data)
+static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares,
+					     void *_data)
 {
 	struct atomisp_csi2_acpi_gpio_parsing_data *data = _data;
 	struct acpi_resource_gpio *agpio;
@@ -348,9 +358,10 @@ static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares, void *_
 	}
 
 	if (i == data->settings_count) {
-		acpi_handle_warn(data->adev->handle,
-				 "%s: Could not find DSM GPIO settings for pin %u\n",
-				 dev_name(&data->adev->dev), pin);
+		acpi_handle_warn(
+			data->adev->handle,
+			"%s: Could not find DSM GPIO settings for pin %u\n",
+			dev_name(&data->adev->dev), pin);
 		return 1;
 	}
 
@@ -362,7 +373,8 @@ static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares, void *_
 		name = "powerdown-gpios";
 		break;
 	default:
-		acpi_handle_warn(data->adev->handle, "%s: Unknown GPIO type 0x%02lx for pin %u\n",
+		acpi_handle_warn(data->adev->handle,
+				 "%s: Unknown GPIO type 0x%02lx for pin %u\n",
 				 dev_name(&data->adev->dev),
 				 INTEL_GPIO_DSM_TYPE(settings), pin);
 		return 1;
@@ -388,10 +400,11 @@ static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares, void *_
 	data->map->mapping[i].size = 1;
 	data->map_count++;
 
-	acpi_handle_info(data->adev->handle, "%s: %s crs %d %s pin %u active-%s\n",
-			 dev_name(&data->adev->dev), name,
-			 data->res_count - 1, agpio->resource_source.string_ptr,
-			 pin, active_low ? "low" : "high");
+	acpi_handle_info(data->adev->handle,
+			 "%s: %s crs %d %s pin %u active-%s\n",
+			 dev_name(&data->adev->dev), name, data->res_count - 1,
+			 agpio->resource_source.string_ptr, pin,
+			 active_low ? "low" : "high");
 
 	return 1;
 }
@@ -417,7 +430,7 @@ static int atomisp_csi2_handle_acpi_gpio_res(struct acpi_resource *ares, void *_
  */
 static int atomisp_csi2_add_gpio_mappings(struct acpi_device *adev)
 {
-	struct atomisp_csi2_acpi_gpio_parsing_data data = { };
+	struct atomisp_csi2_acpi_gpio_parsing_data data = {};
 	LIST_HEAD(resource_list);
 	union acpi_object *obj;
 	unsigned int i, j;
@@ -441,7 +454,8 @@ static int atomisp_csi2_add_gpio_mappings(struct acpi_device *adev)
 				      &intel_sensor_gpio_info_guid, 0x00, 1,
 				      NULL, ACPI_TYPE_INTEGER);
 	if (!obj) {
-		acpi_handle_err(adev->handle, "%s: No _DSM entry for GPIO pin count\n",
+		acpi_handle_err(adev->handle,
+				"%s: No _DSM entry for GPIO pin count\n",
 				dev_name(&adev->dev));
 		return -EIO;
 	}
@@ -463,10 +477,11 @@ static int atomisp_csi2_add_gpio_mappings(struct acpi_device *adev)
 		 */
 		obj = acpi_evaluate_dsm_typed(adev->handle,
 					      &intel_sensor_gpio_info_guid,
-					      0x00, i + 2,
-					      NULL, ACPI_TYPE_INTEGER);
+					      0x00, i + 2, NULL,
+					      ACPI_TYPE_INTEGER);
 		if (!obj) {
-			acpi_handle_err(adev->handle, "%s: No _DSM entry for pin %u\n",
+			acpi_handle_err(adev->handle,
+					"%s: No _DSM entry for pin %u\n",
 					dev_name(&adev->dev), i);
 			return -EIO;
 		}
@@ -482,7 +497,8 @@ static int atomisp_csi2_add_gpio_mappings(struct acpi_device *adev)
 			    INTEL_GPIO_DSM_PIN(data.settings[j]))
 				continue;
 
-			acpi_handle_err(adev->handle, "%s: Duplicate pin number %lu\n",
+			acpi_handle_err(adev->handle,
+					"%s: Duplicate pin number %lu\n",
 					dev_name(&adev->dev),
 					INTEL_GPIO_DSM_PIN(data.settings[i]));
 			return -EIO;
@@ -504,13 +520,16 @@ static int atomisp_csi2_add_gpio_mappings(struct acpi_device *adev)
 
 	if (data.map_count != data.settings_count ||
 	    data.res_count != data.settings_count)
-		acpi_handle_warn(adev->handle, "%s: ACPI GPIO resources vs DSM GPIO-info count mismatch (dsm: %d res: %d map %d\n",
-				 dev_name(&adev->dev), data.settings_count,
-				 data.res_count, data.map_count);
+		acpi_handle_warn(
+			adev->handle,
+			"%s: ACPI GPIO resources vs DSM GPIO-info count mismatch (dsm: %d res: %d map %d\n",
+			dev_name(&adev->dev), data.settings_count,
+			data.res_count, data.map_count);
 
 	ret = acpi_dev_add_driver_gpios(adev, data.map->mapping);
 	if (ret)
-		acpi_handle_err(adev->handle, "%s: Error adding driver GPIOs: %d\n",
+		acpi_handle_err(adev->handle,
+				"%s: Error adding driver GPIOs: %d\n",
 				dev_name(&adev->dev), ret);
 
 	return ret;
@@ -521,8 +540,8 @@ static char *atomisp_csi2_get_vcm_type(struct acpi_device *adev)
 	union acpi_object *obj;
 	char *vcm_type;
 
-	obj = acpi_evaluate_dsm_typed(adev->handle, &vcm_dsm_guid, 0, 0,
-				      NULL, ACPI_TYPE_STRING);
+	obj = acpi_evaluate_dsm_typed(adev->handle, &vcm_dsm_guid, 0, 0, NULL,
+				      ACPI_TYPE_STRING);
 	if (!obj)
 		return NULL;
 
@@ -542,7 +561,7 @@ static const struct acpi_device_id atomisp_sensor_configs[] = {
 	 * the sensor fails to start streaming when instantiating
 	 * an i2c-client for the VCM, so it is disabled for now.
 	 */
-	ATOMISP_SENSOR_CONFIG("INT33BE", 2, false),	/* OV5693 */
+	ATOMISP_SENSOR_CONFIG("INT33BE", 2, false), /* OV5693 */
 	{}
 };
 
@@ -596,7 +615,8 @@ static int atomisp_csi2_parse_sensor_fwnode(struct acpi_device *adev,
 	sensor->mclkspeed = PMC_CLK_RATE_19_2MHZ;
 	sensor->rotation = 0;
 	sensor->orientation = (sensor->link == 1) ?
-		V4L2_FWNODE_ORIENTATION_BACK : V4L2_FWNODE_ORIENTATION_FRONT;
+				      V4L2_FWNODE_ORIENTATION_BACK :
+				      V4L2_FWNODE_ORIENTATION_FRONT;
 
 	if (vcm)
 		sensor->vcm_type = atomisp_csi2_get_vcm_type(adev);
@@ -629,8 +649,8 @@ struct sensor_async_subdev {
 	int port;
 };
 
-#define to_sensor_asd(a)	container_of(a, struct sensor_async_subdev, asd)
-#define notifier_to_atomisp(n)	container_of(n, struct atomisp_device, notifier)
+#define to_sensor_asd(a) container_of(a, struct sensor_async_subdev, asd)
+#define notifier_to_atomisp(n) container_of(n, struct atomisp_device, notifier)
 
 /* .bound() notifier callback when a match is found */
 static int atomisp_notifier_bound(struct v4l2_async_notifier *notifier,
@@ -647,7 +667,8 @@ static int atomisp_notifier_bound(struct v4l2_async_notifier *notifier,
 	}
 
 	if (isp->sensor_subdevs[s_asd->port]) {
-		dev_err(isp->dev, "port %d already has a sensor attached\n", s_asd->port);
+		dev_err(isp->dev, "port %d already has a sensor attached\n",
+			s_asd->port);
 		return -EBUSY;
 	}
 
@@ -698,8 +719,8 @@ int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp)
 		struct sensor_async_subdev *s_asd;
 		struct fwnode_handle *ep;
 
-		ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(isp->dev), i, 0,
-						     FWNODE_GRAPH_ENDPOINT_NEXT);
+		ep = fwnode_graph_get_endpoint_by_id(
+			dev_fwnode(isp->dev), i, 0, FWNODE_GRAPH_ENDPOINT_NEXT);
 		if (!ep)
 			continue;
 
@@ -708,7 +729,8 @@ int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp)
 			goto err_parse;
 
 		if (vep.base.port >= ATOMISP_CAMERA_NR_PORTS) {
-			dev_err(isp->dev, "port %d not supported\n", vep.base.port);
+			dev_err(isp->dev, "port %d not supported\n",
+				vep.base.port);
 			ret = -EINVAL;
 			goto err_parse;
 		}
@@ -716,8 +738,8 @@ int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp)
 		mipi_port = atomisp_port_to_mipi_port(isp, vep.base.port);
 		isp->sensor_lanes[mipi_port] = vep.bus.mipi_csi2.num_data_lanes;
 
-		s_asd = v4l2_async_nf_add_fwnode_remote(&isp->notifier, ep,
-							struct sensor_async_subdev);
+		s_asd = v4l2_async_nf_add_fwnode_remote(
+			&isp->notifier, ep, struct sensor_async_subdev);
 		if (IS_ERR(s_asd)) {
 			ret = PTR_ERR(s_asd);
 			goto err_parse;

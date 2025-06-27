@@ -15,8 +15,8 @@
  *****************************************************************************/
 int ia_css_queue_local_init(ia_css_queue_t *qhandle, ia_css_queue_local_t *desc)
 {
-	if (NULL == qhandle || NULL == desc
-	    || NULL == desc->cb_elems || NULL == desc->cb_desc) {
+	if (NULL == qhandle || NULL == desc || NULL == desc->cb_elems ||
+	    NULL == desc->cb_desc) {
 		/* Invalid parameters, return error*/
 		return -EINVAL;
 	}
@@ -25,14 +25,14 @@ int ia_css_queue_local_init(ia_css_queue_t *qhandle, ia_css_queue_local_t *desc)
 	qhandle->type = IA_CSS_QUEUE_TYPE_LOCAL;
 
 	/* Create a local circular buffer queue*/
-	ia_css_circbuf_create(&qhandle->desc.cb_local,
-			      desc->cb_elems,
+	ia_css_circbuf_create(&qhandle->desc.cb_local, desc->cb_elems,
 			      desc->cb_desc);
 
 	return 0;
 }
 
-int ia_css_queue_remote_init(ia_css_queue_t *qhandle, ia_css_queue_remote_t *desc)
+int ia_css_queue_remote_init(ia_css_queue_t *qhandle,
+			     ia_css_queue_remote_t *desc)
 {
 	if (NULL == qhandle || NULL == desc) {
 		/* Invalid parameters, return error*/
@@ -119,7 +119,8 @@ int ia_css_queue_enqueue(ia_css_queue_t *qhandle, uint32_t item)
 		 */
 		ignore_desc_flags = QUEUE_IGNORE_SIZE_START_STEP_FLAGS;
 
-		error = ia_css_queue_store(qhandle, &cb_desc, ignore_desc_flags);
+		error = ia_css_queue_store(qhandle, &cb_desc,
+					   ignore_desc_flags);
 		if (error != 0)
 			return error;
 	}
@@ -161,7 +162,8 @@ int ia_css_queue_dequeue(ia_css_queue_t *qhandle, uint32_t *item)
 		if (ia_css_circbuf_desc_is_empty(&cb_desc))
 			return -ENODATA;
 
-		error = ia_css_queue_item_load(qhandle, cb_desc.start, &cb_elem);
+		error = ia_css_queue_item_load(qhandle, cb_desc.start,
+					       &cb_elem);
 		if (error != 0)
 			return error;
 
@@ -175,7 +177,8 @@ int ia_css_queue_dequeue(ia_css_queue_t *qhandle, uint32_t *item)
 		 * to load/store functions
 		 */
 		ignore_desc_flags = QUEUE_IGNORE_SIZE_END_STEP_FLAGS;
-		error = ia_css_queue_store(qhandle, &cb_desc, ignore_desc_flags);
+		error = ia_css_queue_store(qhandle, &cb_desc,
+					   ignore_desc_flags);
 		if (error != 0)
 			return error;
 	}
@@ -292,11 +295,13 @@ int ia_css_queue_peek(ia_css_queue_t *qhandle, u32 offset, uint32_t *element)
 		 * operate on the queue
 		 */
 		/* Check if offset is valid */
-		num_elems = ia_css_circbuf_get_num_elems(&qhandle->desc.cb_local);
+		num_elems =
+			ia_css_circbuf_get_num_elems(&qhandle->desc.cb_local);
 		if (offset > num_elems)
 			return -EINVAL;
 
-		*element = ia_css_circbuf_peek_from_start(&qhandle->desc.cb_local, (int)offset);
+		*element = ia_css_circbuf_peek_from_start(
+			&qhandle->desc.cb_local, (int)offset);
 		return 0;
 	} else if (qhandle->type == IA_CSS_QUEUE_TYPE_REMOTE) {
 		/* a. Load the queue from remote */
@@ -306,7 +311,7 @@ int ia_css_queue_peek(ia_css_queue_t *qhandle, u32 offset, uint32_t *element)
 
 		QUEUE_CB_DESC_INIT(&cb_desc);
 
-		error =  ia_css_queue_load(qhandle, &cb_desc, ignore_desc_flags);
+		error = ia_css_queue_load(qhandle, &cb_desc, ignore_desc_flags);
 		if (error != 0)
 			return error;
 
@@ -316,7 +321,8 @@ int ia_css_queue_peek(ia_css_queue_t *qhandle, u32 offset, uint32_t *element)
 			return -EINVAL;
 
 		offset = OP_std_modadd(cb_desc.start, offset, cb_desc.size);
-		error = ia_css_queue_item_load(qhandle, (uint8_t)offset, &cb_elem);
+		error = ia_css_queue_item_load(qhandle, (uint8_t)offset,
+					       &cb_elem);
 		if (error != 0)
 			return error;
 

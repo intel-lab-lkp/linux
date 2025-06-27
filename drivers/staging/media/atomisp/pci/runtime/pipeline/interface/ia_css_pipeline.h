@@ -11,17 +11,17 @@
 #include "ia_css_pipe_public.h"
 #include "ia_css_pipeline_common.h"
 
-#define IA_CSS_PIPELINE_NUM_MAX		(20)
+#define IA_CSS_PIPELINE_NUM_MAX (20)
 
 /* Pipeline stage to be executed on SP/ISP */
 struct ia_css_pipeline_stage {
 	unsigned int stage_num;
-	struct ia_css_binary *binary;	/* built-in binary */
+	struct ia_css_binary *binary; /* built-in binary */
 	struct ia_css_binary_info *binary_info;
-	const struct ia_css_fw_info *firmware;	/* acceleration binary */
+	const struct ia_css_fw_info *firmware; /* acceleration binary */
 	/* SP function for SP stage */
 	enum ia_css_pipeline_stage_sp_func sp_func;
-	unsigned int max_input_width;	/* For SP raw copy */
+	unsigned int max_input_width; /* For SP raw copy */
 	struct sh_css_binary_args args;
 	int mode;
 	bool out_frame_allocated[IA_CSS_BINARY_MAX_OUTPUT_PORTS];
@@ -47,15 +47,13 @@ struct ia_css_pipeline {
 	bool acquire_isp_each_stage;
 };
 
-#define DEFAULT_PIPELINE { \
-	.pipe_id		= IA_CSS_PIPE_ID_PREVIEW, \
-	.in_frame		= DEFAULT_FRAME, \
-	.out_frame		= {DEFAULT_FRAME}, \
-	.vf_frame		= {DEFAULT_FRAME}, \
-	.dvs_frame_delay	= IA_CSS_FRAME_DELAY_1, \
-	.num_execs		= -1, \
-	.acquire_isp_each_stage	= true, \
-}
+#define DEFAULT_PIPELINE                                                       \
+	{                                                                      \
+		.pipe_id = IA_CSS_PIPE_ID_PREVIEW, .in_frame = DEFAULT_FRAME,  \
+		.out_frame = { DEFAULT_FRAME }, .vf_frame = { DEFAULT_FRAME }, \
+		.dvs_frame_delay = IA_CSS_FRAME_DELAY_1, .num_execs = -1,      \
+		.acquire_isp_each_stage = true,                                \
+	}
 
 /* Stage descriptor used to create a new stage in the pipeline */
 struct ia_css_pipeline_stage_desc {
@@ -89,11 +87,9 @@ void ia_css_pipeline_init(void);
  * This API is expected to be used when a pipeline structure is allocated
  * externally and needs sane defaults
  */
-int ia_css_pipeline_create(
-    struct ia_css_pipeline *pipeline,
-    enum ia_css_pipe_id pipe_id,
-    unsigned int pipe_num,
-    unsigned int dvs_frame_delay);
+int ia_css_pipeline_create(struct ia_css_pipeline *pipeline,
+			   enum ia_css_pipe_id pipe_id, unsigned int pipe_num,
+			   unsigned int dvs_frame_delay);
 
 /* @brief destroy a pipeline
  *
@@ -149,9 +145,9 @@ void ia_css_pipeline_clean(struct ia_css_pipeline *pipeline);
  * arguments.
 */
 int ia_css_pipeline_create_and_add_stage(
-    struct ia_css_pipeline *pipeline,
-    struct ia_css_pipeline_stage_desc *stage_desc,
-    struct ia_css_pipeline_stage **stage);
+	struct ia_css_pipeline *pipeline,
+	struct ia_css_pipeline_stage_desc *stage_desc,
+	struct ia_css_pipeline_stage **stage);
 
 /* @brief Finalize the stages in a pipeline
  *
@@ -169,9 +165,8 @@ void ia_css_pipeline_finalize_stages(struct ia_css_pipeline *pipeline,
  * @return                     0 or error code upon error.
  *
  */
-int ia_css_pipeline_get_stage(struct ia_css_pipeline *pipeline,
-	int mode,
-	struct ia_css_pipeline_stage **stage);
+int ia_css_pipeline_get_stage(struct ia_css_pipeline *pipeline, int mode,
+			      struct ia_css_pipeline_stage **stage);
 
 /* @brief Gets a pipeline stage corresponding Firmware handle from the pipeline
  *
@@ -182,10 +177,9 @@ int ia_css_pipeline_get_stage(struct ia_css_pipeline *pipeline,
  * @return   0 or error code upon error.
  *
  */
-int ia_css_pipeline_get_stage_from_fw(struct ia_css_pipeline
-	*pipeline,
-	u32 fw_handle,
-	struct ia_css_pipeline_stage **stage);
+int ia_css_pipeline_get_stage_from_fw(struct ia_css_pipeline *pipeline,
+				      u32 fw_handle,
+				      struct ia_css_pipeline_stage **stage);
 
 /* @brief Gets the Firmware handle corresponding the stage num from the pipeline
  *
@@ -196,10 +190,8 @@ int ia_css_pipeline_get_stage_from_fw(struct ia_css_pipeline
  * @return   0 or error code upon error.
  *
  */
-int ia_css_pipeline_get_fw_from_stage(struct ia_css_pipeline
-	*pipeline,
-	u32 stage_num,
-	uint32_t *fw_handle);
+int ia_css_pipeline_get_fw_from_stage(struct ia_css_pipeline *pipeline,
+				      u32 stage_num, uint32_t *fw_handle);
 
 /* @brief gets the output stage from the pipeline
  *
@@ -207,10 +199,8 @@ int ia_css_pipeline_get_fw_from_stage(struct ia_css_pipeline
  * @return                     0 or error code upon error.
  *
  */
-int ia_css_pipeline_get_output_stage(
-    struct ia_css_pipeline *pipeline,
-    int mode,
-    struct ia_css_pipeline_stage **stage);
+int ia_css_pipeline_get_output_stage(struct ia_css_pipeline *pipeline, int mode,
+				     struct ia_css_pipeline_stage **stage);
 
 /* @brief Checks whether the pipeline uses params
  *

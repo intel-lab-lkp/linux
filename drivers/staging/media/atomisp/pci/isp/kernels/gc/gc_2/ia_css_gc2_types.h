@@ -7,7 +7,7 @@
 #ifndef __IA_CSS_GC2_TYPES_H
 #define __IA_CSS_GC2_TYPES_H
 
-#include "isp/kernels/ctc/ctc_1.0/ia_css_ctc_types.h"  /* FIXME: needed for ia_css_vamem_type */
+#include "isp/kernels/ctc/ctc_1.0/ia_css_ctc_types.h" /* FIXME: needed for ia_css_vamem_type */
 
 /* @file
 * CSS-API header file for Gamma Correction parameters.
@@ -22,11 +22,13 @@
 
 /* Number of elements in the sRGB gamma table. */
 #define IA_CSS_VAMEM_1_RGB_GAMMA_TABLE_SIZE_LOG2 8
-#define IA_CSS_VAMEM_1_RGB_GAMMA_TABLE_SIZE      BIT(IA_CSS_VAMEM_1_RGB_GAMMA_TABLE_SIZE_LOG2)
+#define IA_CSS_VAMEM_1_RGB_GAMMA_TABLE_SIZE \
+	BIT(IA_CSS_VAMEM_1_RGB_GAMMA_TABLE_SIZE_LOG2)
 
 /* Number of elements in the sRGB gamma table. */
-#define IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE_LOG2    8
-#define IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE     ((1U << IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE_LOG2) + 1)
+#define IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE_LOG2 8
+#define IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE \
+	((1U << IA_CSS_VAMEM_2_RGB_GAMMA_TABLE_SIZE_LOG2) + 1)
 
 /** IA_CSS_VAMEM_TYPE_1(ISP2300) or
      IA_CSS_VAMEM_TYPE_2(ISP2400) */

@@ -5,8 +5,8 @@
  * Copyright (c) 2014 Intel Corporation. All Rights Reserved.
  */
 
-#ifndef	__ATOMISP_DRVFS_H__
-#define	__ATOMISP_DRVFS_H__
+#ifndef __ATOMISP_DRVFS_H__
+#define __ATOMISP_DRVFS_H__
 
 #include <linux/sysfs.h>
 

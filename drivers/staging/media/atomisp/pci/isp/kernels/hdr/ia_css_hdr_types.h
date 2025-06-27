@@ -8,27 +8,27 @@
 #ifndef __IA_CSS_HDR_TYPES_H
 #define __IA_CSS_HDR_TYPES_H
 
-#define IA_CSS_HDR_MAX_NUM_INPUT_FRAMES         (3)
+#define IA_CSS_HDR_MAX_NUM_INPUT_FRAMES (3)
 
 /**
  * \brief HDR Irradiance Parameters
  * \detail Currently HDR parameters are used only for testing purposes
  */
 struct ia_css_hdr_irradiance_params {
-	int test_irr;                                          /** Test parameter */
+	int test_irr; /** Test parameter */
 	int match_shift[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-							1];  /** Histogram matching shift parameter */
+			1]; /** Histogram matching shift parameter */
 	int match_mul[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-						      1];    /** Histogram matching multiplication parameter */
+		      1]; /** Histogram matching multiplication parameter */
 	int thr_low[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-						    1];      /** Weight map soft threshold low bound parameter */
+		    1]; /** Weight map soft threshold low bound parameter */
 	int thr_high[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-						     1];     /** Weight map soft threshold high bound parameter */
+		     1]; /** Weight map soft threshold high bound parameter */
 	int thr_coeff[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-						      1];    /** Soft threshold linear function coefficien */
+		      1]; /** Soft threshold linear function coefficien */
 	int thr_shift[IA_CSS_HDR_MAX_NUM_INPUT_FRAMES -
-						      1];    /** Soft threshold precision shift parameter */
-	int weight_bpp;                                        /** Weight map bits per pixel */
+		      1]; /** Soft threshold precision shift parameter */
+	int weight_bpp; /** Weight map bits per pixel */
 };
 
 /**
@@ -53,9 +53,11 @@ struct ia_css_hdr_exclusion_params {
  * the CSS API. Currently, only test parameters are defined.
  */
 struct ia_css_hdr_config {
-	struct ia_css_hdr_irradiance_params irradiance; /** HDR irradiance parameters */
-	struct ia_css_hdr_deghost_params    deghost;    /** HDR deghosting parameters */
-	struct ia_css_hdr_exclusion_params  exclusion; /** HDR exclusion parameters */
+	struct ia_css_hdr_irradiance_params
+		irradiance; /** HDR irradiance parameters */
+	struct ia_css_hdr_deghost_params deghost; /** HDR deghosting parameters */
+	struct ia_css_hdr_exclusion_params
+		exclusion; /** HDR exclusion parameters */
 };
 
 #endif /* __IA_CSS_HDR_TYPES_H */

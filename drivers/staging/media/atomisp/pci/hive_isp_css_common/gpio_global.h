@@ -9,6 +9,6 @@
 
 #include <gpio_block_defs.h>
 
-#define HIVE_GPIO_STROBE_TRIGGER_PIN		2
+#define HIVE_GPIO_STROBE_TRIGGER_PIN 2
 
 #endif /* __GPIO_GLOBAL_H_INCLUDED__ */

@@ -24,15 +24,15 @@
 /*
  * FIXME: non-preview resolutions are currently broken
  */
-#define ENABLE_NON_PREVIEW     0
+#define ENABLE_NON_PREVIEW 0
 
 /* Defines for register writes and register array processing */
-#define I2C_MSG_LENGTH		0x2
-#define I2C_RETRY_COUNT		5
+#define I2C_MSG_LENGTH 0x2
+#define I2C_RETRY_COUNT 5
 
-#define GC2235_FOCAL_LENGTH_NUM	278	/*2.78mm*/
+#define GC2235_FOCAL_LENGTH_NUM 278 /*2.78mm*/
 
-#define MAX_FMTS		1
+#define MAX_FMTS 1
 
 /*
  * focal length bits definition:
@@ -54,7 +54,7 @@
  * bits 7-0: min f-number denominator
  */
 #define GC2235_F_NUMBER_RANGE 0x1a0a1a0a
-#define GC2235_ID	0x2235
+#define GC2235_ID 0x2235
 
 #define GC2235_FINE_INTG_TIME_MIN 0
 #define GC2235_FINE_INTG_TIME_MAX_MARGIN 0
@@ -64,43 +64,43 @@
 /*
  * GC2235 System control registers
  */
-#define GC2235_SENSOR_ID_H		0xF0
-#define GC2235_SENSOR_ID_L		0xF1
-#define GC2235_RESET_RELATED		0xFE
-#define GC2235_SW_RESET			0x8
-#define GC2235_MIPI_RESET		0x3
-#define GC2235_RESET_BIT		0x4
-#define GC2235_REGISTER_PAGE_0		0x0
-#define GC2235_REGISTER_PAGE_3		0x3
+#define GC2235_SENSOR_ID_H 0xF0
+#define GC2235_SENSOR_ID_L 0xF1
+#define GC2235_RESET_RELATED 0xFE
+#define GC2235_SW_RESET 0x8
+#define GC2235_MIPI_RESET 0x3
+#define GC2235_RESET_BIT 0x4
+#define GC2235_REGISTER_PAGE_0 0x0
+#define GC2235_REGISTER_PAGE_3 0x3
 
-#define GC2235_V_CROP_START_H		0x91
-#define GC2235_V_CROP_START_L		0x92
-#define GC2235_H_CROP_START_H		0x93
-#define GC2235_H_CROP_START_L		0x94
-#define GC2235_V_OUTSIZE_H		0x95
-#define GC2235_V_OUTSIZE_L		0x96
-#define GC2235_H_OUTSIZE_H		0x97
-#define GC2235_H_OUTSIZE_L		0x98
+#define GC2235_V_CROP_START_H 0x91
+#define GC2235_V_CROP_START_L 0x92
+#define GC2235_H_CROP_START_H 0x93
+#define GC2235_H_CROP_START_L 0x94
+#define GC2235_V_OUTSIZE_H 0x95
+#define GC2235_V_OUTSIZE_L 0x96
+#define GC2235_H_OUTSIZE_H 0x97
+#define GC2235_H_OUTSIZE_L 0x98
 
-#define GC2235_HB_H			0x5
-#define GC2235_HB_L			0x6
-#define GC2235_VB_H			0x7
-#define GC2235_VB_L			0x8
-#define GC2235_SH_DELAY_H		0x11
-#define GC2235_SH_DELAY_L		0x12
+#define GC2235_HB_H 0x5
+#define GC2235_HB_L 0x6
+#define GC2235_VB_H 0x7
+#define GC2235_VB_L 0x8
+#define GC2235_SH_DELAY_H 0x11
+#define GC2235_SH_DELAY_L 0x12
 
-#define GC2235_CSI2_MODE		0x10
+#define GC2235_CSI2_MODE 0x10
 
-#define GC2235_EXPOSURE_H		0x3
-#define GC2235_EXPOSURE_L		0x4
-#define GC2235_GLOBAL_GAIN		0xB0
-#define GC2235_PRE_GAIN			0xB1
-#define GC2235_AWB_R_GAIN		0xB3
-#define GC2235_AWB_G_GAIN		0xB4
-#define GC2235_AWB_B_GAIN		0xB5
+#define GC2235_EXPOSURE_H 0x3
+#define GC2235_EXPOSURE_L 0x4
+#define GC2235_GLOBAL_GAIN 0xB0
+#define GC2235_PRE_GAIN 0xB1
+#define GC2235_AWB_R_GAIN 0xB3
+#define GC2235_AWB_G_GAIN 0xB4
+#define GC2235_AWB_B_GAIN 0xB5
 
-#define GC2235_START_STREAMING		0x91
-#define GC2235_STOP_STREAMING		0x0
+#define GC2235_START_STREAMING 0x91
+#define GC2235_STOP_STREAMING 0x0
 
 struct regval_list {
 	u16 reg_num;
@@ -143,11 +143,11 @@ struct gc2235_device {
 };
 
 enum gc2235_tok_type {
-	GC2235_8BIT  = 0x0001,
+	GC2235_8BIT = 0x0001,
 	GC2235_16BIT = 0x0002,
 	GC2235_32BIT = 0x0004,
-	GC2235_TOK_TERM   = 0xf000,	/* terminating token for reg list */
-	GC2235_TOK_DELAY  = 0xfe00,	/* delay token for reg list */
+	GC2235_TOK_TERM = 0xf000, /* terminating token for reg list */
+	GC2235_TOK_DELAY = 0xfe00, /* delay token for reg list */
 	GC2235_TOK_MASK = 0xfff0
 };
 
@@ -162,12 +162,12 @@ enum gc2235_tok_type {
 struct gc2235_reg {
 	enum gc2235_tok_type type;
 	u8 reg;
-	u32 val;	/* @set value for read/mod/write, @mask */
+	u32 val; /* @set value for read/mod/write, @mask */
 };
 
 #define to_gc2235_sensor(x) container_of(x, struct gc2235_device, sd)
 
-#define GC2235_MAX_WRITE_BUF_SIZE	30
+#define GC2235_MAX_WRITE_BUF_SIZE 30
 
 struct gc2235_write_buffer {
 	u8 addr;
@@ -180,16 +180,16 @@ struct gc2235_write_ctrl {
 };
 
 static struct gc2235_reg const gc2235_stream_on[] = {
-	{ GC2235_8BIT, 0xfe, 0x03}, /* switch to P3 */
-	{ GC2235_8BIT, 0x10, 0x91}, /* start mipi */
-	{ GC2235_8BIT, 0xfe, 0x00}, /* switch to P0 */
+	{ GC2235_8BIT, 0xfe, 0x03 }, /* switch to P3 */
+	{ GC2235_8BIT, 0x10, 0x91 }, /* start mipi */
+	{ GC2235_8BIT, 0xfe, 0x00 }, /* switch to P0 */
 	{ GC2235_TOK_TERM, 0, 0 }
 };
 
 static struct gc2235_reg const gc2235_stream_off[] = {
-	{ GC2235_8BIT, 0xfe, 0x03}, /* switch to P3 */
-	{ GC2235_8BIT, 0x10, 0x01}, /* stop mipi */
-	{ GC2235_8BIT, 0xfe, 0x00}, /* switch to P0 */
+	{ GC2235_8BIT, 0xfe, 0x03 }, /* switch to P3 */
+	{ GC2235_8BIT, 0x10, 0x01 }, /* stop mipi */
+	{ GC2235_8BIT, 0xfe, 0x00 }, /* switch to P0 */
 	{ GC2235_TOK_TERM, 0, 0 }
 };
 

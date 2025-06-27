@@ -10,7 +10,7 @@
 #include "system_global.h"
 
 enum sh_css_queue_id {
-	SH_CSS_INVALID_QUEUE_ID     = -1,
+	SH_CSS_INVALID_QUEUE_ID = -1,
 	SH_CSS_QUEUE_A_ID = 0,
 	SH_CSS_QUEUE_B_ID,
 	SH_CSS_QUEUE_C_ID,

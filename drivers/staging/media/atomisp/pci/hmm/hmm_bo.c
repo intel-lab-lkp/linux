@@ -11,12 +11,12 @@
  */
 #include <linux/kernel.h>
 #include <linux/types.h>
-#include <linux/gfp.h>		/* for GFP_ATOMIC */
+#include <linux/gfp.h> /* for GFP_ATOMIC */
 #include <linux/mm.h>
 #include <linux/mm_types.h>
 #include <linux/hugetlb.h>
 #include <linux/highmem.h>
-#include <linux/slab.h>		/* for kmalloc */
+#include <linux/slab.h> /* for kmalloc */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/string.h>
@@ -63,24 +63,23 @@ static int __bo_init(struct hmm_bo_device *bdev, struct hmm_buffer_object *bo,
 	return 0;
 }
 
-static struct hmm_buffer_object *__bo_search_and_remove_from_free_rbtree(
-    struct rb_node *node, unsigned int pgnr)
+static struct hmm_buffer_object *
+__bo_search_and_remove_from_free_rbtree(struct rb_node *node, unsigned int pgnr)
 {
 	struct hmm_buffer_object *this, *ret_bo, *temp_bo;
 
 	this = rb_entry(node, struct hmm_buffer_object, node);
-	if (this->pgnr == pgnr ||
-	    (this->pgnr > pgnr && !this->node.rb_left)) {
+	if (this->pgnr == pgnr || (this->pgnr > pgnr && !this->node.rb_left)) {
 		goto remove_bo_and_return;
 	} else {
 		if (this->pgnr < pgnr) {
 			if (!this->node.rb_right)
 				return NULL;
 			ret_bo = __bo_search_and_remove_from_free_rbtree(
-				     this->node.rb_right, pgnr);
+				this->node.rb_right, pgnr);
 		} else {
 			ret_bo = __bo_search_and_remove_from_free_rbtree(
-				     this->node.rb_left, pgnr);
+				this->node.rb_left, pgnr);
 		}
 		if (!ret_bo) {
 			if (this->pgnr > pgnr)
@@ -115,7 +114,7 @@ remove_bo_and_return:
 }
 
 static struct hmm_buffer_object *__bo_search_by_addr(struct rb_root *root,
-	ia_css_ptr start)
+						     ia_css_ptr start)
 {
 	struct rb_node *n = root->rb_node;
 	struct hmm_buffer_object *bo;
@@ -139,8 +138,8 @@ static struct hmm_buffer_object *__bo_search_by_addr(struct rb_root *root,
 	return NULL;
 }
 
-static struct hmm_buffer_object *__bo_search_by_addr_in_range(
-    struct rb_root *root, unsigned int start)
+static struct hmm_buffer_object *
+__bo_search_by_addr_in_range(struct rb_root *root, unsigned int start)
 {
 	struct rb_node *n = root->rb_node;
 	struct hmm_buffer_object *bo;
@@ -223,8 +222,8 @@ static void __bo_insert_to_alloc_rbtree(struct rb_root *root,
 }
 
 static struct hmm_buffer_object *__bo_break_up(struct hmm_bo_device *bdev,
-	struct hmm_buffer_object *bo,
-	unsigned int pgnr)
+					       struct hmm_buffer_object *bo,
+					       unsigned int pgnr)
 {
 	struct hmm_buffer_object *new_bo;
 	unsigned long flags;
@@ -296,7 +295,7 @@ static void __bo_take_off_handling(struct hmm_buffer_object *bo)
 }
 
 static struct hmm_buffer_object *__bo_merge(struct hmm_buffer_object *bo,
-	struct hmm_buffer_object *next_bo)
+					    struct hmm_buffer_object *next_bo)
 {
 	struct hmm_bo_device *bdev;
 	unsigned long flags;
@@ -319,8 +318,7 @@ static struct hmm_buffer_object *__bo_merge(struct hmm_buffer_object *bo,
  */
 int hmm_bo_device_init(struct hmm_bo_device *bdev,
 		       struct isp_mmu_client *mmu_driver,
-		       unsigned int vaddr_start,
-		       unsigned int size)
+		       unsigned int vaddr_start, unsigned int size)
 {
 	struct hmm_buffer_object *bo;
 	unsigned long flags;
@@ -347,8 +345,8 @@ int hmm_bo_device_init(struct hmm_bo_device *bdev,
 	bdev->allocated_rbtree = RB_ROOT;
 	bdev->free_rbtree = RB_ROOT;
 
-	bdev->bo_cache = kmem_cache_create("bo_cache",
-					   sizeof(struct hmm_buffer_object), 0, 0, NULL);
+	bdev->bo_cache = kmem_cache_create(
+		"bo_cache", sizeof(struct hmm_buffer_object), 0, 0, NULL);
 	if (!bdev->bo_cache) {
 		dev_err(atomisp_dev, "%s: create cache failed!\n", __func__);
 		isp_mmu_exit(&bdev->mmu);
@@ -444,17 +442,20 @@ void hmm_bo_release(struct hmm_buffer_object *bo)
 	 */
 	if (bo->status & HMM_BO_MMAPED) {
 		mutex_unlock(&bdev->rbtree_mutex);
-		dev_dbg(atomisp_dev, "destroy bo which is MMAPED, do nothing\n");
+		dev_dbg(atomisp_dev,
+			"destroy bo which is MMAPED, do nothing\n");
 		return;
 	}
 
 	if (bo->status & HMM_BO_BINDED) {
-		dev_warn(atomisp_dev, "the bo is still binded, unbind it first...\n");
+		dev_warn(atomisp_dev,
+			 "the bo is still binded, unbind it first...\n");
 		hmm_bo_unbind(bo);
 	}
 
 	if (bo->status & HMM_BO_PAGE_ALLOCED) {
-		dev_warn(atomisp_dev, "the pages is not freed, free pages first\n");
+		dev_warn(atomisp_dev,
+			 "the pages is not freed, free pages first\n");
 		hmm_bo_free_pages(bo);
 	}
 	if (bo->status & HMM_BO_VMAPED || bo->status & HMM_BO_VMAPED_CACHED) {
@@ -502,7 +503,7 @@ void hmm_bo_device_exit(struct hmm_bo_device *bdev)
 	 */
 	while (!RB_EMPTY_ROOT(&bdev->allocated_rbtree))
 		hmm_bo_release(
-		    rbtree_node_to_hmm_bo(bdev->allocated_rbtree.rb_node));
+			rbtree_node_to_hmm_bo(bdev->allocated_rbtree.rb_node));
 
 	dev_dbg(atomisp_dev, "%s: finished releasing all allocated bos!\n",
 		__func__);
@@ -539,8 +540,8 @@ int hmm_bo_allocated(struct hmm_buffer_object *bo)
 	return bo->status & HMM_BO_ALLOCED;
 }
 
-struct hmm_buffer_object *hmm_bo_device_search_start(
-    struct hmm_bo_device *bdev, ia_css_ptr vaddr)
+struct hmm_buffer_object *hmm_bo_device_search_start(struct hmm_bo_device *bdev,
+						     ia_css_ptr vaddr)
 {
 	struct hmm_buffer_object *bo;
 
@@ -559,8 +560,8 @@ struct hmm_buffer_object *hmm_bo_device_search_start(
 	return bo;
 }
 
-struct hmm_buffer_object *hmm_bo_device_search_in_range(
-    struct hmm_bo_device *bdev, unsigned int vaddr)
+struct hmm_buffer_object *
+hmm_bo_device_search_in_range(struct hmm_bo_device *bdev, unsigned int vaddr)
 {
 	struct hmm_buffer_object *bo;
 
@@ -579,8 +580,8 @@ struct hmm_buffer_object *hmm_bo_device_search_in_range(
 	return bo;
 }
 
-struct hmm_buffer_object *hmm_bo_device_search_vmap_start(
-    struct hmm_bo_device *bdev, const void *vaddr)
+struct hmm_buffer_object *
+hmm_bo_device_search_vmap_start(struct hmm_bo_device *bdev, const void *vaddr)
 {
 	struct list_head *pos;
 	struct hmm_buffer_object *bo;
@@ -604,7 +605,8 @@ found:
 	return bo;
 }
 
-static void free_pages_bulk_array(unsigned long nr_pages, struct page **page_array)
+static void free_pages_bulk_array(unsigned long nr_pages,
+				  struct page **page_array)
 {
 	unsigned long i;
 
@@ -649,7 +651,9 @@ static int alloc_vmalloc_pages(struct hmm_buffer_object *bo, void *vmalloc_addr)
 	for (i = 0; i < bo->pgnr; i++) {
 		bo->pages[i] = vmalloc_to_page(vaddr);
 		if (!bo->pages[i]) {
-			dev_err(atomisp_dev, "Error could not get page %d of vmalloc buf\n", i);
+			dev_err(atomisp_dev,
+				"Error could not get page %d of vmalloc buf\n",
+				i);
 			return -ENOMEM;
 		}
 		vaddr += PAGE_SIZE;
@@ -666,8 +670,7 @@ static int alloc_vmalloc_pages(struct hmm_buffer_object *bo, void *vmalloc_addr)
  *
  * vmalloc_addr is only valid when type is HMM_BO_VMALLOC.
  */
-int hmm_bo_alloc_pages(struct hmm_buffer_object *bo,
-		       enum hmm_bo_type type,
+int hmm_bo_alloc_pages(struct hmm_buffer_object *bo, enum hmm_bo_type type,
 		       void *vmalloc_addr)
 {
 	int ret = -EINVAL;
@@ -709,8 +712,7 @@ alloc_err:
 	return ret;
 status_err:
 	mutex_unlock(&bo->mutex);
-	dev_err(atomisp_dev,
-		"buffer object has already page allocated.\n");
+	dev_err(atomisp_dev, "buffer object has already page allocated.\n");
 	return -EINVAL;
 }
 
@@ -742,8 +744,7 @@ void hmm_bo_free_pages(struct hmm_buffer_object *bo)
 
 status_err2:
 	mutex_unlock(&bo->mutex);
-	dev_err(atomisp_dev,
-		"buffer object not page allocated yet.\n");
+	dev_err(atomisp_dev, "buffer object not page allocated yet.\n");
 }
 
 int hmm_bo_page_allocated(struct hmm_buffer_object *bo)
@@ -767,8 +768,7 @@ int hmm_bo_bind(struct hmm_buffer_object *bo)
 
 	mutex_lock(&bo->mutex);
 
-	check_bo_status_yes_goto(bo,
-				 HMM_BO_PAGE_ALLOCED | HMM_BO_ALLOCED,
+	check_bo_status_yes_goto(bo, HMM_BO_PAGE_ALLOCED | HMM_BO_ALLOCED,
 				 status_err1);
 
 	check_bo_status_no_goto(bo, HMM_BO_BINDED, status_err2);
@@ -778,9 +778,8 @@ int hmm_bo_bind(struct hmm_buffer_object *bo)
 	virt = bo->start;
 
 	for (i = 0; i < bo->pgnr; i++) {
-		ret =
-		    isp_mmu_map(&bdev->mmu, virt,
-				page_to_phys(bo->pages[i]), 1);
+		ret = isp_mmu_map(&bdev->mmu, virt, page_to_phys(bo->pages[i]),
+				  1);
 		if (ret)
 			goto map_err;
 		virt += (1 << PAGE_SHIFT);
@@ -810,14 +809,13 @@ int hmm_bo_bind(struct hmm_buffer_object *bo)
 map_err:
 	/* unbind the physical pages with related virtual address space */
 	virt = bo->start;
-	for ( ; i > 0; i--) {
+	for (; i > 0; i--) {
 		isp_mmu_unmap(&bdev->mmu, virt, 1);
 		virt += pgnr_to_size(1);
 	}
 
 	mutex_unlock(&bo->mutex);
-	dev_err(atomisp_dev,
-		"setup MMU address mapping failed.\n");
+	dev_err(atomisp_dev, "setup MMU address mapping failed.\n");
 	return ret;
 
 status_err2:
@@ -826,8 +824,7 @@ status_err2:
 	return -EINVAL;
 status_err1:
 	mutex_unlock(&bo->mutex);
-	dev_err(atomisp_dev,
-		"buffer object vm_node or page not allocated.\n");
+	dev_err(atomisp_dev, "buffer object vm_node or page not allocated.\n");
 	return -EINVAL;
 }
 
@@ -844,10 +841,9 @@ void hmm_bo_unbind(struct hmm_buffer_object *bo)
 
 	mutex_lock(&bo->mutex);
 
-	check_bo_status_yes_goto(bo,
-				 HMM_BO_PAGE_ALLOCED |
-				 HMM_BO_ALLOCED |
-				 HMM_BO_BINDED, status_err);
+	check_bo_status_yes_goto(
+		bo, HMM_BO_PAGE_ALLOCED | HMM_BO_ALLOCED | HMM_BO_BINDED,
+		status_err);
 
 	bdev = bo->bdev;
 
@@ -977,7 +973,7 @@ void hmm_bo_unref(struct hmm_buffer_object *bo)
 static void hmm_bo_vm_open(struct vm_area_struct *vma)
 {
 	struct hmm_buffer_object *bo =
-	    (struct hmm_buffer_object *)vma->vm_private_data;
+		(struct hmm_buffer_object *)vma->vm_private_data;
 
 	check_bo_null_return_void(bo);
 
@@ -995,7 +991,7 @@ static void hmm_bo_vm_open(struct vm_area_struct *vma)
 static void hmm_bo_vm_close(struct vm_area_struct *vma)
 {
 	struct hmm_buffer_object *bo =
-	    (struct hmm_buffer_object *)vma->vm_private_data;
+		(struct hmm_buffer_object *)vma->vm_private_data;
 
 	check_bo_null_return_void(bo);
 
@@ -1041,8 +1037,9 @@ int hmm_bo_mmap(struct vm_area_struct *vma, struct hmm_buffer_object *bo)
 	 * must be the same.
 	 */
 	if ((start + pgnr_to_size(pgnr)) != end) {
-		dev_warn(atomisp_dev,
-			 "vma's address space size not equal to buffer object's size");
+		dev_warn(
+			atomisp_dev,
+			"vma's address space size not equal to buffer object's size");
 		return -EINVAL;
 	}
 
@@ -1050,9 +1047,10 @@ int hmm_bo_mmap(struct vm_area_struct *vma, struct hmm_buffer_object *bo)
 	for (i = 0; i < pgnr; i++) {
 		pfn = page_to_pfn(bo->pages[i]);
 		if (remap_pfn_range(vma, virt, pfn, PAGE_SIZE, PAGE_SHARED)) {
-			dev_warn(atomisp_dev,
-				 "remap_pfn_range failed: virt = 0x%x, pfn = 0x%x, mapped_pgnr = %d\n",
-				 virt, pfn, 1);
+			dev_warn(
+				atomisp_dev,
+				"remap_pfn_range failed: virt = 0x%x, pfn = 0x%x, mapped_pgnr = %d\n",
+				virt, pfn, 1);
 			return -EINVAL;
 		}
 		virt += PAGE_SIZE;

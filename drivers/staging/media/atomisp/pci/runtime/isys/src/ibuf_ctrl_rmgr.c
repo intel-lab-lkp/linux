@@ -11,7 +11,7 @@
 #include "ia_css_isys.h"
 #include "ibuf_ctrl_rmgr.h"
 
-static ibuf_rsrc_t	ibuf_rsrc;
+static ibuf_rsrc_t ibuf_rsrc;
 
 static ibuf_handle_t *getHandle(uint16_t index)
 {
@@ -34,9 +34,7 @@ void ia_css_isys_ibuf_rmgr_uninit(void)
 	ibuf_rsrc.free_size = MAX_INPUT_BUFFER_SIZE;
 }
 
-bool ia_css_isys_ibuf_rmgr_acquire(
-    u32	size,
-    uint32_t	*start_addr)
+bool ia_css_isys_ibuf_rmgr_acquire(u32 size, uint32_t *start_addr)
 {
 	bool retval = false;
 	bool input_buffer_found = false;
@@ -73,9 +71,9 @@ bool ia_css_isys_ibuf_rmgr_acquire(
 		if ((ibuf_rsrc.num_allocated < MAX_IBUF_HANDLES) &&
 		    (ibuf_rsrc.free_size >= aligned_size)) {
 			handle = getHandle(ibuf_rsrc.num_allocated);
-			handle->start_addr	= ibuf_rsrc.free_start_addr;
-			handle->size		= aligned_size;
-			handle->active		= true;
+			handle->start_addr = ibuf_rsrc.free_start_addr;
+			handle->size = aligned_size;
+			handle->active = true;
 
 			ibuf_rsrc.free_start_addr += aligned_size;
 			ibuf_rsrc.free_size -= aligned_size;
@@ -94,8 +92,7 @@ bool ia_css_isys_ibuf_rmgr_acquire(
 	return retval;
 }
 
-void ia_css_isys_ibuf_rmgr_release(
-    uint32_t	*start_addr)
+void ia_css_isys_ibuf_rmgr_release(uint32_t *start_addr)
 {
 	u16 i;
 	ibuf_handle_t *handle = NULL;

@@ -13,7 +13,7 @@
 #include "ia_css_frame_comm.h" /* ia_css_frame_sp_info */
 #include "ia_css_vf_types.h"
 
-#define VFDEC_BITS_PER_PIXEL	GAMMA_OUTPUT_BITS
+#define VFDEC_BITS_PER_PIXEL GAMMA_OUTPUT_BITS
 
 /* Viewfinder decimation */
 struct sh_css_isp_vf_isp_config {

@@ -24,19 +24,19 @@
 
 /* available levels */
 /*! Level for tracing errors */
-#define IA_CSS_DEBUG_ERROR   1
+#define IA_CSS_DEBUG_ERROR 1
 /*! Level for tracing warnings */
 #define IA_CSS_DEBUG_WARNING 3
 /*! Level for tracing debug messages */
-#define IA_CSS_DEBUG_VERBOSE   5
+#define IA_CSS_DEBUG_VERBOSE 5
 /*! Level for tracing trace messages a.o. ia_css public function calls */
-#define IA_CSS_DEBUG_TRACE   6
+#define IA_CSS_DEBUG_TRACE 6
 /*! Level for tracing trace messages a.o. ia_css private function calls */
-#define IA_CSS_DEBUG_TRACE_PRIVATE   7
+#define IA_CSS_DEBUG_TRACE_PRIVATE 7
 /*! Level for tracing parameter messages e.g. in and out params of functions */
-#define IA_CSS_DEBUG_PARAM   8
+#define IA_CSS_DEBUG_PARAM 8
 /*! Level for tracing info messages */
-#define IA_CSS_DEBUG_INFO    9
+#define IA_CSS_DEBUG_INFO 9
 
 /* Global variable which controls the verbosity levels of the debug tracing */
 extern int dbg_level;
@@ -45,75 +45,80 @@ extern int dbg_level;
  *  Values can be combined to dump a combination of sets.
  */
 enum ia_css_debug_enable_param_dump {
-	IA_CSS_DEBUG_DUMP_FPN = BIT(0),  /** FPN table */
-	IA_CSS_DEBUG_DUMP_OB  = BIT(1),  /** OB table */
-	IA_CSS_DEBUG_DUMP_SC  = BIT(2),  /** Shading table */
-	IA_CSS_DEBUG_DUMP_WB  = BIT(3),  /** White balance */
-	IA_CSS_DEBUG_DUMP_DP  = BIT(4),  /** Defect Pixel */
-	IA_CSS_DEBUG_DUMP_BNR = BIT(5),  /** Bayer Noise Reductions */
-	IA_CSS_DEBUG_DUMP_S3A = BIT(6),  /** 3A Statistics */
-	IA_CSS_DEBUG_DUMP_DE  = BIT(7),  /** De Mosaicing */
-	IA_CSS_DEBUG_DUMP_YNR = BIT(8),  /** Luma Noise Reduction */
-	IA_CSS_DEBUG_DUMP_CSC = BIT(9),  /** Color Space Conversion */
-	IA_CSS_DEBUG_DUMP_GC  = BIT(10), /** Gamma Correction */
+	IA_CSS_DEBUG_DUMP_FPN = BIT(0), /** FPN table */
+	IA_CSS_DEBUG_DUMP_OB = BIT(1), /** OB table */
+	IA_CSS_DEBUG_DUMP_SC = BIT(2), /** Shading table */
+	IA_CSS_DEBUG_DUMP_WB = BIT(3), /** White balance */
+	IA_CSS_DEBUG_DUMP_DP = BIT(4), /** Defect Pixel */
+	IA_CSS_DEBUG_DUMP_BNR = BIT(5), /** Bayer Noise Reductions */
+	IA_CSS_DEBUG_DUMP_S3A = BIT(6), /** 3A Statistics */
+	IA_CSS_DEBUG_DUMP_DE = BIT(7), /** De Mosaicing */
+	IA_CSS_DEBUG_DUMP_YNR = BIT(8), /** Luma Noise Reduction */
+	IA_CSS_DEBUG_DUMP_CSC = BIT(9), /** Color Space Conversion */
+	IA_CSS_DEBUG_DUMP_GC = BIT(10), /** Gamma Correction */
 	IA_CSS_DEBUG_DUMP_TNR = BIT(11), /** Temporal Noise Reduction */
 	IA_CSS_DEBUG_DUMP_ANR = BIT(12), /** Advanced Noise Reduction */
-	IA_CSS_DEBUG_DUMP_CE  = BIT(13), /** Chroma Enhancement */
+	IA_CSS_DEBUG_DUMP_CE = BIT(13), /** Chroma Enhancement */
 	IA_CSS_DEBUG_DUMP_ALL = BIT(14), /** Dump all device parameters */
 };
 
-#define IA_CSS_ERROR(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR, \
-		"%s() %d: error: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+#define IA_CSS_ERROR(fmt, ...)                                               \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_ERROR, "%s() %d: error: " fmt "\n", \
+			    __func__, __LINE__, ##__VA_ARGS__)
 
-#define IA_CSS_WARNING(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_WARNING, \
-		"%s() %d: warning: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+#define IA_CSS_WARNING(fmt, ...)                                               \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_WARNING,                              \
+			    "%s() %d: warning: " fmt "\n", __func__, __LINE__, \
+			    ##__VA_ARGS__)
 
 /* Logging macros for public functions (API functions) */
-#define IA_CSS_ENTER(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, \
-		"%s(): enter: " fmt "\n", __func__, ##__VA_ARGS__)
+#define IA_CSS_ENTER(fmt, ...)                                            \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "%s(): enter: " fmt "\n", \
+			    __func__, ##__VA_ARGS__)
 
 /* Use this macro for small functions that do not call other functions. */
-#define IA_CSS_ENTER_LEAVE(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, \
-		"%s(): enter: leave: " fmt "\n", __func__, ##__VA_ARGS__)
+#define IA_CSS_ENTER_LEAVE(fmt, ...)                                   \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,                        \
+			    "%s(): enter: leave: " fmt "\n", __func__, \
+			    ##__VA_ARGS__)
 
-#define IA_CSS_LEAVE(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, \
-		"%s(): leave: " fmt "\n", __func__, ##__VA_ARGS__)
+#define IA_CSS_LEAVE(fmt, ...)                                            \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "%s(): leave: " fmt "\n", \
+			    __func__, ##__VA_ARGS__)
 
 /* Shorthand for returning an int return value */
-#define IA_CSS_LEAVE_ERR(__err) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, \
-		"%s() %d: leave: return_err=%d\n", __func__, __LINE__, __err)
+#define IA_CSS_LEAVE_ERR(__err)                                          \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,                          \
+			    "%s() %d: leave: return_err=%d\n", __func__, \
+			    __LINE__, __err)
 
 /* Use this macro for logging other than enter/leave.
  * Note that this macro always uses the PRIVATE logging level.
  */
-#define IA_CSS_LOG(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, \
-		"%s(): " fmt "\n", __func__, ##__VA_ARGS__)
+#define IA_CSS_LOG(fmt, ...)                                               \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, "%s(): " fmt "\n", \
+			    __func__, ##__VA_ARGS__)
 
 /* Logging macros for non-API functions. These have a lower trace level */
-#define IA_CSS_ENTER_PRIVATE(fmt, ...) \
+#define IA_CSS_ENTER_PRIVATE(fmt, ...)                  \
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, \
-		"%s(): enter: " fmt "\n", __func__, ##__VA_ARGS__)
+			    "%s(): enter: " fmt "\n", __func__, ##__VA_ARGS__)
 
-#define IA_CSS_LEAVE_PRIVATE(fmt, ...) \
+#define IA_CSS_LEAVE_PRIVATE(fmt, ...)                  \
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, \
-		"%s(): leave: " fmt "\n", __func__, ##__VA_ARGS__)
+			    "%s(): leave: " fmt "\n", __func__, ##__VA_ARGS__)
 
 /* Shorthand for returning an int return value */
-#define IA_CSS_LEAVE_ERR_PRIVATE(__err) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, \
-		"%s() %d: leave: return_err=%d\n", __func__, __LINE__, __err)
+#define IA_CSS_LEAVE_ERR_PRIVATE(__err)                                  \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,                  \
+			    "%s() %d: leave: return_err=%d\n", __func__, \
+			    __LINE__, __err)
 
 /* Use this macro for small functions that do not call other functions. */
-#define IA_CSS_ENTER_LEAVE_PRIVATE(fmt, ...) \
-	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE, \
-		"%s(): enter: leave: " fmt "\n", __func__, ##__VA_ARGS__)
+#define IA_CSS_ENTER_LEAVE_PRIVATE(fmt, ...)                           \
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,                \
+			    "%s(): enter: leave: " fmt "\n", __func__, \
+			    ##__VA_ARGS__)
 
 /*! @brief Function for tracing to the provided printf function in the
  *	environment.
@@ -121,24 +126,21 @@ enum ia_css_debug_enable_param_dump {
  * @param[in]	fmt		printf like format string
  * @param[in]	args		arguments for the format string
  */
-static inline void __printf(2, 0) ia_css_debug_vdtrace(unsigned int level,
-						       const char *fmt,
-						       va_list args)
+static inline void __printf(2, 0)
+	ia_css_debug_vdtrace(unsigned int level, const char *fmt, va_list args)
 {
 	if (dbg_level >= level)
 		sh_css_vprint(fmt, args);
 }
 
-__printf(2, 3) void ia_css_debug_dtrace(unsigned int level,
-					const char *fmt, ...);
-
+__printf(2, 3) void ia_css_debug_dtrace(unsigned int level, const char *fmt,
+					...);
 
 /*! @brief Function to set the global dtrace verbosity level.
  * @param[in]	trace_level	Maximum level of the messages to be traced.
  * @return	None
  */
-void ia_css_debug_set_dtrace_level(
-    const unsigned int	trace_level);
+void ia_css_debug_set_dtrace_level(const unsigned int trace_level);
 
 /*! @brief Function to get the global dtrace verbosity level.
  * @return	global dtrace verbosity level
@@ -161,15 +163,14 @@ void ia_css_debug_dump_sp_sw_debug_info(void);
 
 #if SP_DEBUG != SP_DEBUG_NONE
 void ia_css_debug_print_sp_debug_state(
-    const struct sh_css_sp_debug_state *state);
+	const struct sh_css_sp_debug_state *state);
 #endif
 
 /*! @brief Dump all related binary info data
  * @param[in]  bi	Binary info struct.
  * @return	None
  */
-void ia_css_debug_binary_print(
-    const struct ia_css_binary *bi);
+void ia_css_debug_binary_print(const struct ia_css_binary *bi);
 
 void ia_css_debug_sp_dump_mipi_fifo_high_water(void);
 
@@ -203,9 +204,8 @@ void ia_css_debug_dump_all_fifo_state(void);
  * @param[in]	descr		description output along with the frame info
  * @return	None
  */
-void ia_css_debug_frame_print(
-    const struct ia_css_frame	*frame,
-    const char	*descr);
+void ia_css_debug_frame_print(const struct ia_css_frame *frame,
+			      const char *descr);
 
 /*! @brief Function to enable sp sleep mode.
  * Function that enables sp sleep mode
@@ -240,9 +240,8 @@ void sh_css_dump_sp_raw_copy_linecount(bool reduced);
  * @param[in]	label	description of resolution output
  * @return	None
  */
-void ia_css_debug_dump_resolution(
-    const struct ia_css_resolution *res,
-    const char *label);
+void ia_css_debug_dump_resolution(const struct ia_css_resolution *res,
+				  const char *label);
 
 /*! @brief Dump the frame info to the trace output
  * Dumps the frame info to the trace output.
@@ -250,9 +249,8 @@ void ia_css_debug_dump_resolution(
  * @param[in]	label	description of frame_info output
  * @return	None
  */
-void ia_css_debug_dump_frame_info(
-    const struct ia_css_frame_info *info,
-    const char *label);
+void ia_css_debug_dump_frame_info(const struct ia_css_frame_info *info,
+				  const char *label);
 
 /*! @brief Dump the capture config info to the trace output
  * Dumps the capture config info to the trace output.
@@ -260,7 +258,7 @@ void ia_css_debug_dump_frame_info(
  * @return	None
  */
 void ia_css_debug_dump_capture_config(
-    const struct ia_css_capture_config *config);
+	const struct ia_css_capture_config *config);
 
 /*! @brief Dump the pipe extra config info to the trace output
  * Dumps the pipe extra config info to the trace output.
@@ -268,15 +266,14 @@ void ia_css_debug_dump_capture_config(
  * @return	None
  */
 void ia_css_debug_dump_pipe_extra_config(
-    const struct ia_css_pipe_extra_config *extra_config);
+	const struct ia_css_pipe_extra_config *extra_config);
 
 /*! @brief Dump the pipe config info to the trace output
  * Dumps the pipe config info to the trace output.
  * @param[in]	config	pointer to struct ia_css_pipe_config
  * @return	None
  */
-void ia_css_debug_dump_pipe_config(
-    const struct ia_css_pipe_config *config);
+void ia_css_debug_dump_pipe_config(const struct ia_css_pipe_config *config);
 
 /*! @brief Dump the stream config source info to the trace output
  * Dumps the stream config source info to the trace output.
@@ -284,7 +281,7 @@ void ia_css_debug_dump_pipe_config(
  * @return	None
  */
 void ia_css_debug_dump_stream_config_source(
-    const struct ia_css_stream_config *config);
+	const struct ia_css_stream_config *config);
 
 /*! @brief Dump the mipi buffer config info to the trace output
  * Dumps the mipi buffer config info to the trace output.
@@ -292,7 +289,7 @@ void ia_css_debug_dump_stream_config_source(
  * @return	None
  */
 void ia_css_debug_dump_mipi_buffer_config(
-    const struct ia_css_mipi_buffer_config *config);
+	const struct ia_css_mipi_buffer_config *config);
 
 /*! @brief Dump the metadata config info to the trace output
  * Dumps the metadata config info to the trace output.
@@ -300,7 +297,7 @@ void ia_css_debug_dump_mipi_buffer_config(
  * @return	None
  */
 void ia_css_debug_dump_metadata_config(
-    const struct ia_css_metadata_config *config);
+	const struct ia_css_metadata_config *config);
 
 /*! @brief Dump the stream config info to the trace output
  * Dumps the stream config info to the trace output.
@@ -308,9 +305,8 @@ void ia_css_debug_dump_metadata_config(
  * @param[in]	num_pipes	number of pipes for the stream
  * @return	None
  */
-void ia_css_debug_dump_stream_config(
-    const struct ia_css_stream_config *config,
-    int num_pipes);
+void ia_css_debug_dump_stream_config(const struct ia_css_stream_config *config,
+				     int num_pipes);
 
 /**
  * @brief Initialize the debug mode.
@@ -340,10 +336,8 @@ bool ia_css_debug_mode_init(void);
  *	- true, if it is successful.
  *	- false, otherwise.
  */
-bool ia_css_debug_mode_disable_dma_channel(
-    int dma_ID,
-    int channel_id,
-    int request_type);
+bool ia_css_debug_mode_disable_dma_channel(int dma_ID, int channel_id,
+					   int request_type);
 /**
  * @brief Enable the DMA channel.
  *
@@ -358,10 +352,8 @@ bool ia_css_debug_mode_disable_dma_channel(
  *	- true, if it is successful.
  *	- false, otherwise.
  */
-bool ia_css_debug_mode_enable_dma_channel(
-    int dma_ID,
-    int channel_id,
-    int request_type);
+bool ia_css_debug_mode_enable_dma_channel(int dma_ID, int channel_id,
+					  int request_type);
 
 /**
  * @brief Dump tracer data.
@@ -393,8 +385,7 @@ void ia_css_debug_pc_dump(sp_ID_t id, unsigned int num_of_dumps);
  *
  * @return	None
  */
-void ia_css_debug_dump_hang_status(
-    struct ia_css_pipe *pipe);
+void ia_css_debug_dump_hang_status(struct ia_css_pipe *pipe);
 
 /*! @brief External command handler
  * External command handler

@@ -12,8 +12,8 @@ Copyright (c) 2010 - 2015, Intel Corporation.
 #include "sh_css_defs.h"
 #include "isp_const.h" /* MAX_VECTORS_PER_INPUT_LINE */
 
-#define INPUT_BUF_HEIGHT	2 /* double buffer */
-#define INPUT_BUF_LINES		2
+#define INPUT_BUF_HEIGHT 2 /* double buffer */
+#define INPUT_BUF_LINES 2
 
 #ifndef ENABLE_CONTINUOUS
 #define ENABLE_CONTINUOUS 0
@@ -21,8 +21,9 @@ Copyright (c) 2010 - 2015, Intel Corporation.
 
 /* In continuous mode, the input buffer must be a fixed size for all binaries
  * and at a fixed address since it will be used by the SP. */
-#define EXTRA_INPUT_VECTORS	2 /* For left padding */
-#define MAX_VECTORS_PER_INPUT_LINE_CONT (CEIL_DIV(SH_CSS_MAX_SENSOR_WIDTH, ISP_NWAY) + EXTRA_INPUT_VECTORS)
+#define EXTRA_INPUT_VECTORS 2 /* For left padding */
+#define MAX_VECTORS_PER_INPUT_LINE_CONT \
+	(CEIL_DIV(SH_CSS_MAX_SENSOR_WIDTH, ISP_NWAY) + EXTRA_INPUT_VECTORS)
 
 /* The input buffer should be on a fixed address in vmem, for continuous capture */
 #define INPUT_BUF_ADDR 0x0

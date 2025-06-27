@@ -4,7 +4,6 @@
  *    (c) 2020 Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
  */
 
-
 #ifndef __INPUT_SYSTEM_GLOBAL_H_INCLUDED__
 #define __INPUT_SYSTEM_GLOBAL_H_INCLUDED__
 typedef enum {

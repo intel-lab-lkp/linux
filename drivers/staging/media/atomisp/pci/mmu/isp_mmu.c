@@ -12,8 +12,8 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/gfp.h>
-#include <linux/mm.h>		/* for GFP_ATOMIC */
-#include <linux/slab.h>		/* for kmalloc */
+#include <linux/mm.h> /* for GFP_ATOMIC */
+#include <linux/slab.h> /* for kmalloc */
 #include <linux/list.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -41,7 +41,7 @@
  *
  * For any confusion, contact bin.gao@intel.com.
  */
-#define NR_PAGES_2GB	(SZ_2G / PAGE_SIZE)
+#define NR_PAGES_2GB (SZ_2G / PAGE_SIZE)
 
 static void free_mmu_map(struct isp_mmu *mmu, unsigned int start_isp_virt,
 			 unsigned int end_isp_virt);
@@ -53,8 +53,7 @@ static unsigned int atomisp_get_pte(phys_addr_t pt, unsigned int idx)
 	return *(pt_virt + idx);
 }
 
-static void atomisp_set_pte(phys_addr_t pt,
-			    unsigned int idx, unsigned int pte)
+static void atomisp_set_pte(phys_addr_t pt, unsigned int idx, unsigned int pte)
 {
 	unsigned int *pt_virt = phys_to_virt(pt);
 	*(pt_virt + idx) = pte;
@@ -65,14 +64,13 @@ static void *isp_pt_phys_to_virt(phys_addr_t phys)
 	return phys_to_virt(phys);
 }
 
-static phys_addr_t isp_pte_to_pgaddr(struct isp_mmu *mmu,
-				     unsigned int pte)
+static phys_addr_t isp_pte_to_pgaddr(struct isp_mmu *mmu, unsigned int pte)
 {
 	return mmu->driver->pte_to_phys(mmu, pte);
 }
 
 static unsigned int isp_pgaddr_to_pte_valid(struct isp_mmu *mmu,
-	phys_addr_t phys)
+					    phys_addr_t phys)
 {
 	unsigned int pte = mmu->driver->phys_to_pte(mmu, phys);
 
@@ -94,10 +92,10 @@ static phys_addr_t alloc_page_table(struct isp_mmu *mmu)
 	if (!virt)
 		return (phys_addr_t)NULL_PAGE;
 
-	/*
+		/*
 	 * we need a uncacheable page table.
 	 */
-#ifdef	CONFIG_X86
+#ifdef CONFIG_X86
 	set_memory_uc((unsigned long)virt, 1);
 #endif
 
@@ -121,64 +119,61 @@ static void free_page_table(struct isp_mmu *mmu, phys_addr_t page)
 	 */
 	virt = phys_to_virt(page);
 
-#ifdef	CONFIG_X86
+#ifdef CONFIG_X86
 	set_memory_wb((unsigned long)virt, 1);
 #endif
 
 	free_page((unsigned long)virt);
 }
 
-static void mmu_remap_error(struct isp_mmu *mmu,
-			    phys_addr_t l1_pt, unsigned int l1_idx,
-			    phys_addr_t l2_pt, unsigned int l2_idx,
-			    unsigned int isp_virt, phys_addr_t old_phys,
-			    phys_addr_t new_phys)
+static void mmu_remap_error(struct isp_mmu *mmu, phys_addr_t l1_pt,
+			    unsigned int l1_idx, phys_addr_t l2_pt,
+			    unsigned int l2_idx, unsigned int isp_virt,
+			    phys_addr_t old_phys, phys_addr_t new_phys)
 {
-	dev_err(atomisp_dev, "address remap:\n\n"
+	dev_err(atomisp_dev,
+		"address remap:\n\n"
 		"\tL1 PT: virt = %p, phys = 0x%llx, idx = %d\n"
 		"\tL2 PT: virt = %p, phys = 0x%llx, idx = %d\n"
 		"\told: isp_virt = 0x%x, phys = 0x%llx\n"
 		"\tnew: isp_virt = 0x%x, phys = 0x%llx\n",
-		isp_pt_phys_to_virt(l1_pt),
-		(u64)l1_pt, l1_idx,
-		isp_pt_phys_to_virt(l2_pt),
-		(u64)l2_pt, l2_idx, isp_virt,
-		(u64)old_phys, isp_virt,
-		(u64)new_phys);
+		isp_pt_phys_to_virt(l1_pt), (u64)l1_pt, l1_idx,
+		isp_pt_phys_to_virt(l2_pt), (u64)l2_pt, l2_idx, isp_virt,
+		(u64)old_phys, isp_virt, (u64)new_phys);
 }
 
-static void mmu_unmap_l2_pte_error(struct isp_mmu *mmu,
-				   phys_addr_t l1_pt, unsigned int l1_idx,
-				   phys_addr_t l2_pt, unsigned int l2_idx,
-				   unsigned int isp_virt, unsigned int pte)
+static void mmu_unmap_l2_pte_error(struct isp_mmu *mmu, phys_addr_t l1_pt,
+				   unsigned int l1_idx, phys_addr_t l2_pt,
+				   unsigned int l2_idx, unsigned int isp_virt,
+				   unsigned int pte)
 {
-	dev_err(atomisp_dev, "unmap invalid L2 pte:\n\n"
+	dev_err(atomisp_dev,
+		"unmap invalid L2 pte:\n\n"
 		"\tL1 PT: virt = %p, phys = 0x%llx, idx = %d\n"
 		"\tL2 PT: virt = %p, phys = 0x%llx, idx = %d\n"
 		"\tisp_virt = 0x%x, pte(page phys) = 0x%x\n",
-		isp_pt_phys_to_virt(l1_pt),
-		(u64)l1_pt, l1_idx,
-		isp_pt_phys_to_virt(l2_pt),
-		(u64)l2_pt, l2_idx, isp_virt,
-		pte);
+		isp_pt_phys_to_virt(l1_pt), (u64)l1_pt, l1_idx,
+		isp_pt_phys_to_virt(l2_pt), (u64)l2_pt, l2_idx, isp_virt, pte);
 }
 
-static void mmu_unmap_l1_pte_error(struct isp_mmu *mmu,
-				   phys_addr_t l1_pt, unsigned int l1_idx,
-				   unsigned int isp_virt, unsigned int pte)
+static void mmu_unmap_l1_pte_error(struct isp_mmu *mmu, phys_addr_t l1_pt,
+				   unsigned int l1_idx, unsigned int isp_virt,
+				   unsigned int pte)
 {
-	dev_err(atomisp_dev, "unmap invalid L1 pte (L2 PT):\n\n"
+	dev_err(atomisp_dev,
+		"unmap invalid L1 pte (L2 PT):\n\n"
 		"\tL1 PT: virt = %p, phys = 0x%llx, idx = %d\n"
 		"\tisp_virt = 0x%x, l1_pte(L2 PT) = 0x%x\n",
-		isp_pt_phys_to_virt(l1_pt),
-		(u64)l1_pt, l1_idx, (unsigned int)isp_virt,
-		pte);
+		isp_pt_phys_to_virt(l1_pt), (u64)l1_pt, l1_idx,
+		(unsigned int)isp_virt, pte);
 }
 
 static void mmu_unmap_l1_pt_error(struct isp_mmu *mmu, unsigned int pte)
 {
-	dev_err(atomisp_dev, "unmap invalid L1PT:\n\n"
-		"L1PT = 0x%x\n", (unsigned int)pte);
+	dev_err(atomisp_dev,
+		"unmap invalid L1PT:\n\n"
+		"L1PT = 0x%x\n",
+		(unsigned int)pte);
 }
 
 /*
@@ -206,8 +201,8 @@ static int mmu_l2_map(struct isp_mmu *mmu, phys_addr_t l1_pt,
 		pte = atomisp_get_pte(l2_pt, idx);
 
 		if (ISP_PTE_VALID(mmu, pte)) {
-			mmu_remap_error(mmu, l1_pt, l1_idx,
-					l2_pt, idx, ptr, pte, phys);
+			mmu_remap_error(mmu, l1_pt, l1_idx, l2_pt, idx, ptr,
+					pte, phys);
 
 			/* free all mapped pages */
 			free_mmu_map(mmu, start, ptr);
@@ -231,8 +226,7 @@ static int mmu_l2_map(struct isp_mmu *mmu, phys_addr_t l1_pt,
  * address
  */
 static int mmu_l1_map(struct isp_mmu *mmu, phys_addr_t l1_pt,
-		      unsigned int start, unsigned int end,
-		      phys_addr_t phys)
+		      unsigned int start, unsigned int end, phys_addr_t phys)
 {
 	phys_addr_t l2_pt;
 	unsigned int ptr, l1_aligned;
@@ -275,13 +269,13 @@ static int mmu_l1_map(struct isp_mmu *mmu, phys_addr_t l1_pt,
 		l1_aligned = (ptr & ISP_PAGE_MASK) + (1U << ISP_L1PT_OFFSET);
 
 		if (l1_aligned < end) {
-			ret = mmu_l2_map(mmu, l1_pt, idx,
-					 l2_pt, ptr, l1_aligned, phys);
+			ret = mmu_l2_map(mmu, l1_pt, idx, l2_pt, ptr,
+					 l1_aligned, phys);
 			phys += (l1_aligned - ptr);
 			ptr = l1_aligned;
 		} else {
-			ret = mmu_l2_map(mmu, l1_pt, idx,
-					 l2_pt, ptr, end, phys);
+			ret = mmu_l2_map(mmu, l1_pt, idx, l2_pt, ptr, end,
+					 phys);
 			phys += (end - ptr);
 			ptr = end;
 		}
@@ -303,8 +297,8 @@ static int mmu_l1_map(struct isp_mmu *mmu, phys_addr_t l1_pt,
  * Update page table according to isp virtual address and page physical
  * address
  */
-static int mmu_map(struct isp_mmu *mmu, unsigned int isp_virt,
-		   phys_addr_t phys, unsigned int pgnr)
+static int mmu_map(struct isp_mmu *mmu, unsigned int isp_virt, phys_addr_t phys,
+		   unsigned int pgnr)
 {
 	unsigned int start, end;
 	phys_addr_t l1_pt;
@@ -332,7 +326,7 @@ static int mmu_map(struct isp_mmu *mmu, unsigned int isp_virt,
 
 	l1_pt = isp_pte_to_pgaddr(mmu, mmu->l1_pte);
 
-	start = (isp_virt) & ISP_PAGE_MASK;
+	start = (isp_virt)&ISP_PAGE_MASK;
 	end = start + (pgnr << ISP_PAGE_OFFSET);
 	phys &= ISP_PAGE_MASK;
 
@@ -369,8 +363,8 @@ static void mmu_l2_unmap(struct isp_mmu *mmu, phys_addr_t l1_pt,
 		pte = atomisp_get_pte(l2_pt, idx);
 
 		if (!ISP_PTE_VALID(mmu, pte))
-			mmu_unmap_l2_pte_error(mmu, l1_pt, l1_idx,
-					       l2_pt, idx, ptr, pte);
+			mmu_unmap_l2_pte_error(mmu, l1_pt, l1_idx, l2_pt, idx,
+					       ptr, pte);
 
 		atomisp_set_pte(l2_pt, idx, mmu->driver->null_pte);
 		mmu->l2_pgt_refcount[l1_idx]--;
@@ -449,7 +443,7 @@ static void mmu_unmap(struct isp_mmu *mmu, unsigned int isp_virt,
 
 	l1_pt = isp_pte_to_pgaddr(mmu, mmu->l1_pte);
 
-	start = (isp_virt) & ISP_PAGE_MASK;
+	start = (isp_virt)&ISP_PAGE_MASK;
 	end = start + (pgnr << ISP_PAGE_OFFSET);
 
 	mmu_l1_unmap(mmu, l1_pt, start, end);
@@ -466,14 +460,14 @@ static void free_mmu_map(struct isp_mmu *mmu, unsigned int start_isp_virt,
 	unsigned int pgnr;
 	unsigned int start, end;
 
-	start = (start_isp_virt) & ISP_PAGE_MASK;
-	end = (end_isp_virt) & ISP_PAGE_MASK;
+	start = (start_isp_virt)&ISP_PAGE_MASK;
+	end = (end_isp_virt)&ISP_PAGE_MASK;
 	pgnr = (end - start) >> ISP_PAGE_OFFSET;
 	mmu_unmap(mmu, start, pgnr);
 }
 
-int isp_mmu_map(struct isp_mmu *mmu, unsigned int isp_virt,
-		phys_addr_t phys, unsigned int pgnr)
+int isp_mmu_map(struct isp_mmu *mmu, unsigned int isp_virt, phys_addr_t phys,
+		unsigned int pgnr)
 {
 	return mmu_map(mmu, isp_virt, phys, pgnr);
 }
@@ -485,8 +479,8 @@ void isp_mmu_unmap(struct isp_mmu *mmu, unsigned int isp_virt,
 }
 
 static void isp_mmu_flush_tlb_range_default(struct isp_mmu *mmu,
-	unsigned int start,
-	unsigned int size)
+					    unsigned int start,
+					    unsigned int size)
 {
 	isp_mmu_flush_tlb(mmu);
 }
@@ -494,9 +488,9 @@ static void isp_mmu_flush_tlb_range_default(struct isp_mmu *mmu,
 /*MMU init for internal structure*/
 int isp_mmu_init(struct isp_mmu *mmu, struct isp_mmu_client *driver)
 {
-	if (!mmu)		/* error */
+	if (!mmu) /* error */
 		return -EINVAL;
-	if (!driver)		/* error */
+	if (!driver) /* error */
 		return -EINVAL;
 
 	if (!driver->name)

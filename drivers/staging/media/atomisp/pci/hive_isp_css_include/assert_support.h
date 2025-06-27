@@ -9,7 +9,7 @@
 
 /* Compile time assertion */
 #ifndef CT_ASSERT
-#define CT_ASSERT(cnd) ((void)sizeof(char[(cnd) ? 1 :  -1]))
+#define CT_ASSERT(cnd) ((void)sizeof(char[(cnd) ? 1 : -1]))
 #endif /* CT_ASSERT */
 
 #include <linux/bug.h>
@@ -20,9 +20,9 @@
  * because it seems that the BUG_ON() macro is not seen as a check by
  * gcc like the BUG() macro is.
  */
-#define assert(cnd) \
-	do { \
-		if (!(cnd)) \
+#define assert(cnd)            \
+	do {                   \
+		if (!(cnd))    \
 			BUG(); \
 	} while (0)
 
@@ -37,7 +37,8 @@ static inline void compile_time_assert(unsigned int cond)
 {
 	/* Call undefined function if cond is false */
 	void _compile_time_assert(void);
-	if (!cond) _compile_time_assert();
+	if (!cond)
+		_compile_time_assert();
 }
 #endif /* PIPE_GENERATION */
 

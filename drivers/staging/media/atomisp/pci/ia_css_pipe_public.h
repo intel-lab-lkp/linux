@@ -33,11 +33,11 @@ enum {
  *  create a continuous capture stream.
  */
 enum ia_css_pipe_mode {
-	IA_CSS_PIPE_MODE_PREVIEW,	/** Preview pipe */
-	IA_CSS_PIPE_MODE_VIDEO,		/** Video pipe */
-	IA_CSS_PIPE_MODE_CAPTURE,	/** Still capture pipe */
-	IA_CSS_PIPE_MODE_COPY,		/** Copy pipe, only used for embedded/image data copying */
-	IA_CSS_PIPE_MODE_YUVPP,		/** YUV post processing pipe, used for all use cases with YUV input,
+	IA_CSS_PIPE_MODE_PREVIEW, /** Preview pipe */
+	IA_CSS_PIPE_MODE_VIDEO, /** Video pipe */
+	IA_CSS_PIPE_MODE_CAPTURE, /** Still capture pipe */
+	IA_CSS_PIPE_MODE_COPY, /** Copy pipe, only used for embedded/image data copying */
+	IA_CSS_PIPE_MODE_YUVPP, /** YUV post processing pipe, used for all use cases with YUV input,
 									for SoC sensor and external ISP */
 };
 
@@ -49,10 +49,10 @@ enum ia_css_pipe_mode {
  * the order should match with definition in sh_css_defs.h
  */
 enum ia_css_pipe_version {
-	IA_CSS_PIPE_VERSION_1 = 1,		/** ISP1.0 pipe */
-	IA_CSS_PIPE_VERSION_2_2 = 2,		/** ISP2.2 pipe */
-	IA_CSS_PIPE_VERSION_2_6_1 = 3,		/** ISP2.6.1 pipe */
-	IA_CSS_PIPE_VERSION_2_7 = 4		/** ISP2.7 pipe */
+	IA_CSS_PIPE_VERSION_1 = 1, /** ISP1.0 pipe */
+	IA_CSS_PIPE_VERSION_2_2 = 2, /** ISP2.2 pipe */
+	IA_CSS_PIPE_VERSION_2_6_1 = 3, /** ISP2.6.1 pipe */
+	IA_CSS_PIPE_VERSION_2_7 = 4 /** ISP2.7 pipe */
 };
 
 /**
@@ -102,7 +102,7 @@ struct ia_css_pipe_config {
 	     instead of vf_pp. This only applies to viewfinder post
 	     processing stages. */
 
-/* ISP2401 */
+	/* ISP2401 */
 	bool enable_tnr;
 	/** Enabling of TNR (temporal noise reduction). This is only applicable to video
 	     pipes. Non video-pipes should always set this parameter to false. */
@@ -114,7 +114,7 @@ struct ia_css_pipe_config {
 	struct ia_css_point gdc_in_buffer_offset;
 	/** GDC in buffer offset - indicates the pixel coordinates of the first valid pixel inside the buffer */
 
-/* ISP2401 */
+	/* ISP2401 */
 	struct ia_css_coordinate internal_frame_origin_bqs_on_sctbl;
 	/** Origin of internal frame positioned on shading table at shading correction in ISP.
 	     NOTE: Shading table is larger than or equal to internal frame.
@@ -126,14 +126,14 @@ struct ia_css_pipe_config {
 /**
  * Default settings for newly created pipe configurations.
  */
-#define DEFAULT_PIPE_CONFIG { \
-	.mode			= IA_CSS_PIPE_MODE_PREVIEW, \
-	.isp_pipe_version	= 1, \
-	.output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.vf_output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.default_capture_config	= DEFAULT_CAPTURE_CONFIG, \
-	.dvs_frame_delay	= IA_CSS_FRAME_DELAY_1, \
-}
+#define DEFAULT_PIPE_CONFIG                                              \
+	{                                                                \
+		.mode = IA_CSS_PIPE_MODE_PREVIEW, .isp_pipe_version = 1, \
+		.output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO },     \
+		.vf_output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO },  \
+		.default_capture_config = DEFAULT_CAPTURE_CONFIG,        \
+		.dvs_frame_delay = IA_CSS_FRAME_DELAY_1,                 \
+	}
 
 /* Pipe info, this struct describes properties of a pipe after it's stream has
  * been created.
@@ -164,7 +164,7 @@ struct ia_css_pipe_info {
 	struct ia_css_shading_info shading_info;
 	/** After an image pipe is created, this field will contain the info
 	     for the shading correction. */
-	struct ia_css_grid_info  grid_info;
+	struct ia_css_grid_info grid_info;
 	/** After an image pipe is created, this field will contain the grid
 	     info for 3A and DVS. */
 	int num_invalid_frames;
@@ -178,13 +178,14 @@ struct ia_css_pipe_info {
 /**
  * Defaults for ia_css_pipe_info structs.
  */
-#define DEFAULT_PIPE_INFO {\
-	.output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.vf_output_info		= {IA_CSS_BINARY_DEFAULT_FRAME_INFO}, \
-	.raw_output_info	= IA_CSS_BINARY_DEFAULT_FRAME_INFO, \
-	.shading_info		= DEFAULT_SHADING_INFO, \
-	.grid_info		= DEFAULT_GRID_INFO, \
-}
+#define DEFAULT_PIPE_INFO                                               \
+	{                                                               \
+		.output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO },    \
+		.vf_output_info = { IA_CSS_BINARY_DEFAULT_FRAME_INFO }, \
+		.raw_output_info = IA_CSS_BINARY_DEFAULT_FRAME_INFO,    \
+		.shading_info = DEFAULT_SHADING_INFO,                   \
+		.grid_info = DEFAULT_GRID_INFO,                         \
+	}
 
 /* @brief Load default pipe configuration
  * @param[out]	pipe_config The pipe configuration.
@@ -225,9 +226,8 @@ void ia_css_pipe_config_defaults(struct ia_css_pipe_config *pipe_config);
  * This function will create a pipe with the given
  * configuration.
  */
-int
-ia_css_pipe_create(const struct ia_css_pipe_config *config,
-		   struct ia_css_pipe **pipe);
+int ia_css_pipe_create(const struct ia_css_pipe_config *config,
+		       struct ia_css_pipe **pipe);
 
 /* @brief Destroy a pipe
  * @param[in]	pipe The pipe.
@@ -235,8 +235,7 @@ ia_css_pipe_create(const struct ia_css_pipe_config *config,
  *
  * This function will destroy a given pipe.
  */
-int
-ia_css_pipe_destroy(struct ia_css_pipe *pipe);
+int ia_css_pipe_destroy(struct ia_css_pipe *pipe);
 
 /* @brief Provides information about a pipe
  * @param[in]	pipe The pipe.
@@ -245,9 +244,8 @@ ia_css_pipe_destroy(struct ia_css_pipe *pipe);
  *
  * This function will provide information about a given pipe.
  */
-int
-ia_css_pipe_get_info(const struct ia_css_pipe *pipe,
-		     struct ia_css_pipe_info *pipe_info);
+int ia_css_pipe_get_info(const struct ia_css_pipe *pipe,
+			 struct ia_css_pipe_info *pipe_info);
 
 /* @brief Configure a pipe with filter coefficients.
  * @param[in]	pipe	The pipe.
@@ -257,9 +255,8 @@ ia_css_pipe_get_info(const struct ia_css_pipe *pipe,
  * This function configures the filter coefficients for an image
  * pipe.
  */
-int
-ia_css_pipe_set_isp_config(struct ia_css_pipe *pipe,
-			   struct ia_css_isp_config *config);
+int ia_css_pipe_set_isp_config(struct ia_css_pipe *pipe,
+			       struct ia_css_isp_config *config);
 
 /* @brief Controls when the Event generator raises an IRQ to the Host.
  *
@@ -333,10 +330,8 @@ ia_css_pipe_set_isp_config(struct ia_css_pipe *pipe,
  All other events (3A, VF output, pipeline done) will not raise an interrupt
  to the Host. These events are not lost but always stored in the event queue.
  */
-int
-ia_css_pipe_set_irq_mask(struct ia_css_pipe *pipe,
-			 unsigned int or_mask,
-			 unsigned int and_mask);
+int ia_css_pipe_set_irq_mask(struct ia_css_pipe *pipe, unsigned int or_mask,
+			     unsigned int and_mask);
 
 /* @brief Reads the current event IRQ mask from the CSS.
  *
@@ -354,10 +349,8 @@ Precondition:\n
 SP must be running.\n
 
 */
-int
-ia_css_event_get_irq_mask(const struct ia_css_pipe *pipe,
-			  unsigned int *or_mask,
-			  unsigned int *and_mask);
+int ia_css_event_get_irq_mask(const struct ia_css_pipe *pipe,
+			      unsigned int *or_mask, unsigned int *and_mask);
 
 /* @brief Queue a buffer for an image pipe.
  *
@@ -377,9 +370,8 @@ ia_css_event_get_irq_mask(const struct ia_css_pipe *pipe,
  * host code via an interrupt. Buffers will be consumed in the same order they
  * get queued, but may be returned to the host out of order.
  */
-int
-ia_css_pipe_enqueue_buffer(struct ia_css_pipe *pipe,
-			   const struct ia_css_buffer *buffer);
+int ia_css_pipe_enqueue_buffer(struct ia_css_pipe *pipe,
+			       const struct ia_css_buffer *buffer);
 
 /* @brief Dequeue a buffer from an image pipe.
  *
@@ -397,18 +389,16 @@ ia_css_pipe_enqueue_buffer(struct ia_css_pipe *pipe,
  * be used in a polling-like situation where the NO_BUFFER return value is used
  * to determine whether a buffer was available or not.
  */
-int
-ia_css_pipe_dequeue_buffer(struct ia_css_pipe *pipe,
-			   struct ia_css_buffer *buffer);
+int ia_css_pipe_dequeue_buffer(struct ia_css_pipe *pipe,
+			       struct ia_css_buffer *buffer);
 
 /* @brief Get selected configuration settings
  * @param[in]	pipe	The pipe.
  * @param[out]	config	Configuration settings.
  * @return		None
  */
-void
-ia_css_pipe_get_isp_config(struct ia_css_pipe *pipe,
-			   struct ia_css_isp_config *config);
+void ia_css_pipe_get_isp_config(struct ia_css_pipe *pipe,
+				struct ia_css_isp_config *config);
 
 /* @brief Set the scaler lut on this pipe. A copy of lut is made in the inuit
  *         address space. So the LUT can be freed by caller.
@@ -426,9 +416,7 @@ ia_css_pipe_get_isp_config(struct ia_css_pipe *pipe,
  * 3) This function must be called before stream start
  *
  */
-int
-ia_css_pipe_set_bci_scaler_lut(struct ia_css_pipe *pipe,
-			       const void *lut);
+int ia_css_pipe_set_bci_scaler_lut(struct ia_css_pipe *pipe, const void *lut);
 /* @brief Checking of DVS statistics ability
  * @param[in]	pipe_info	The pipe info.
  * @return		true - has DVS statistics ability
@@ -456,9 +444,7 @@ bool ia_css_pipe_has_dvs_stats(struct ia_css_pipe_info *pipe_info);
  * 4) If this function is used, it MUST be called after ia_css_pipe_create.
  * 5) If this function is used, this function MUST be called before ia_css_stream_start.
  */
-int
-ia_css_pipe_override_frame_format(struct ia_css_pipe *pipe,
-				  int output_pin,
-				  enum ia_css_frame_format format);
+int ia_css_pipe_override_frame_format(struct ia_css_pipe *pipe, int output_pin,
+				      enum ia_css_frame_format format);
 
 #endif /* __IA_CSS_PIPE_PUBLIC_H */

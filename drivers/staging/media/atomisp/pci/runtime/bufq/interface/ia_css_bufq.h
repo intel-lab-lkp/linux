@@ -23,11 +23,9 @@
  *	true, if the query succeeds;
  *	false, if the query fails.
  */
-bool ia_css_query_internal_queue_id(
-    enum ia_css_buffer_type buf_type,
-    unsigned int thread_id,
-    enum sh_css_queue_id *val
-);
+bool ia_css_query_internal_queue_id(enum ia_css_buffer_type buf_type,
+				    unsigned int thread_id,
+				    enum sh_css_queue_id *val);
 
 /**
  * @brief  Map buffer type to a internal queue id.
@@ -37,11 +35,8 @@ bool ia_css_query_internal_queue_id(
  * @param[in] map		boolean flag to specify map or unmap
  * @return none
  */
-void ia_css_queue_map(
-    unsigned int thread_id,
-    enum ia_css_buffer_type buf_type,
-    bool map
-);
+void ia_css_queue_map(unsigned int thread_id, enum ia_css_buffer_type buf_type,
+		      bool map);
 
 /**
  * @brief  Initialize buffer type to a queue id mapping
@@ -72,10 +67,7 @@ void ia_css_bufq_init(void);
  * @return	0 or error code upon error.
  *
 */
-int ia_css_bufq_enqueue_buffer(
-    int thread_index,
-    int queue_id,
-    uint32_t item);
+int ia_css_bufq_enqueue_buffer(int thread_index, int queue_id, uint32_t item);
 
 /**
 * @brief Dequeues an item from SP to host buffer queue.
@@ -86,9 +78,7 @@ int ia_css_bufq_enqueue_buffer(
  * @return	0 or error code upon error.
  *
 */
-int ia_css_bufq_dequeue_buffer(
-    int queue_id,
-    uint32_t *item);
+int ia_css_bufq_dequeue_buffer(int queue_id, uint32_t *item);
 
 /**
 * @brief  Enqueue an event item into host to SP communication event queue.
@@ -100,12 +90,8 @@ int ia_css_bufq_dequeue_buffer(
  * @return	0 or error code upon error.
  *
 */
-int ia_css_bufq_enqueue_psys_event(
-    u8 evt_id,
-    u8 evt_payload_0,
-    u8 evt_payload_1,
-    uint8_t evt_payload_2
-);
+int ia_css_bufq_enqueue_psys_event(u8 evt_id, u8 evt_payload_0,
+				   u8 evt_payload_1, uint8_t evt_payload_2);
 
 /**
  * @brief   Dequeue an item from  SP to host communication event queue.
@@ -114,8 +100,7 @@ int ia_css_bufq_enqueue_psys_event(
  * @return	0 or error code upon error.
  *
 */
-int ia_css_bufq_dequeue_psys_event(
-    u8 item[BUFQ_EVENT_SIZE]
+int ia_css_bufq_dequeue_psys_event(u8 item[BUFQ_EVENT_SIZE]
 
 );
 
@@ -126,8 +111,7 @@ int ia_css_bufq_dequeue_psys_event(
  * @return	0 or error code upon error.
  *
  */
-int ia_css_bufq_enqueue_isys_event(
-    uint8_t evt_id);
+int ia_css_bufq_enqueue_isys_event(uint8_t evt_id);
 
 /**
 * @brief   Dequeue an item from  SP to host communication EOF event queue.
@@ -137,8 +121,7 @@ int ia_css_bufq_enqueue_isys_event(
  * @return	0 or error code upon error.
  *
  */
-int ia_css_bufq_dequeue_isys_event(
-    u8 item[BUFQ_EVENT_SIZE]);
+int ia_css_bufq_dequeue_isys_event(u8 item[BUFQ_EVENT_SIZE]);
 
 /**
 * @brief   Enqueue a tagger command item into tagger command queue..
@@ -147,8 +130,7 @@ int ia_css_bufq_dequeue_isys_event(
  * @return	0 or error code upon error.
  *
 */
-int ia_css_bufq_enqueue_tag_cmd(
-    uint32_t item);
+int ia_css_bufq_enqueue_tag_cmd(uint32_t item);
 
 /**
 * @brief  Uninitializes bufq module.
@@ -166,4 +148,4 @@ int ia_css_bufq_deinit(void);
 */
 void ia_css_bufq_dump_queue_info(void);
 
-#endif	/* _IA_CSS_BUFQ_H */
+#endif /* _IA_CSS_BUFQ_H */

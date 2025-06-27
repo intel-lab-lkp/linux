@@ -16,9 +16,9 @@
 #include "hmm/hmm.h"
 #include "ia_css_debug.h"
 
-#define OPTION_BIN_LIST			BIT(0)
-#define OPTION_BIN_RUN			BIT(1)
-#define OPTION_VALID			(OPTION_BIN_LIST | OPTION_BIN_RUN)
+#define OPTION_BIN_LIST BIT(0)
+#define OPTION_BIN_RUN BIT(1)
+#define OPTION_VALID (OPTION_BIN_LIST | OPTION_BIN_RUN)
 
 /*
  * dbgopt: iunit debug option:
@@ -37,7 +37,8 @@ static inline int iunit_dump_dbgopt(struct atomisp_device *isp,
 		if (opt & OPTION_BIN_LIST) {
 			ret = atomisp_css_dump_blob_infor(isp);
 			if (ret) {
-				dev_err(isp->dev, "%s dump blob infor err[ret:%d]\n",
+				dev_err(isp->dev,
+					"%s dump blob infor err[ret:%d]\n",
 					__func__, ret);
 				goto opt_err;
 			}
@@ -49,7 +50,8 @@ static inline int iunit_dump_dbgopt(struct atomisp_device *isp,
 				atomisp_css_debug_dump_isp_binary();
 			} else {
 				ret = -EPERM;
-				dev_err(isp->dev, "%s dump running bin err[ret:%d]\n",
+				dev_err(isp->dev,
+					"%s dump running bin err[ret:%d]\n",
 					__func__, ret);
 				goto opt_err;
 			}
@@ -138,18 +140,12 @@ static ssize_t dbgopt_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(dbgopt);
 
-static struct attribute *dbg_attrs[] = {
-	&dev_attr_dbglvl.attr,
-	&dev_attr_dbgfun.attr,
-	&dev_attr_dbgopt.attr,
-	NULL
-};
+static struct attribute *dbg_attrs[] = { &dev_attr_dbglvl.attr,
+					 &dev_attr_dbgfun.attr,
+					 &dev_attr_dbgopt.attr, NULL };
 
 static const struct attribute_group dbg_attr_group = {
 	.attrs = dbg_attrs,
 };
 
-const struct attribute_group *dbg_attr_groups[] = {
-	&dbg_attr_group,
-	NULL
-};
+const struct attribute_group *dbg_attr_groups[] = { &dbg_attr_group, NULL };

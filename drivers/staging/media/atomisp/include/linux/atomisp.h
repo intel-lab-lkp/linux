@@ -11,22 +11,22 @@
 #include <linux/types.h>
 
 /* struct media_device_info.hw_revision */
-#define ATOMISP_HW_REVISION_MASK	0x0000ff00
-#define ATOMISP_HW_REVISION_SHIFT	8
-#define ATOMISP_HW_REVISION_ISP2300	0x00
-#define ATOMISP_HW_REVISION_ISP2400	0x10
+#define ATOMISP_HW_REVISION_MASK 0x0000ff00
+#define ATOMISP_HW_REVISION_SHIFT 8
+#define ATOMISP_HW_REVISION_ISP2300 0x00
+#define ATOMISP_HW_REVISION_ISP2400 0x10
 #define ATOMISP_HW_REVISION_ISP2401_LEGACY 0x11
-#define ATOMISP_HW_REVISION_ISP2401	0x20
+#define ATOMISP_HW_REVISION_ISP2401 0x20
 
-#define ATOMISP_HW_STEPPING_MASK	0x000000ff
-#define ATOMISP_HW_STEPPING_A0		0x00
-#define ATOMISP_HW_STEPPING_B0		0x10
+#define ATOMISP_HW_STEPPING_MASK 0x000000ff
+#define ATOMISP_HW_STEPPING_A0 0x00
+#define ATOMISP_HW_STEPPING_B0 0x10
 
 /*ISP binary running mode*/
-#define CI_MODE_PREVIEW		0x8000
-#define CI_MODE_VIDEO		0x4000
-#define CI_MODE_STILL_CAPTURE	0x2000
-#define CI_MODE_NONE		0x0000
+#define CI_MODE_PREVIEW 0x8000
+#define CI_MODE_VIDEO 0x4000
+#define CI_MODE_STILL_CAPTURE 0x2000
+#define CI_MODE_NONE 0x0000
 
 #define OUTPUT_MODE_FILE 0x0100
 #define OUTPUT_MODE_TEXT 0x0200
@@ -35,26 +35,26 @@
  * Camera HAL sets this flag in v4l2_buffer reserved2 to indicate this
  * buffer has a per-frame parameter.
  */
-#define ATOMISP_BUFFER_HAS_PER_FRAME_SETTING	0x80000000
+#define ATOMISP_BUFFER_HAS_PER_FRAME_SETTING 0x80000000
 
 /* Custom format for RAW capture from M10MO 0x3130314d */
-#define V4L2_PIX_FMT_CUSTOM_M10MO_RAW	v4l2_fourcc('M', '1', '0', '1')
+#define V4L2_PIX_FMT_CUSTOM_M10MO_RAW v4l2_fourcc('M', '1', '0', '1')
 
 /* Custom media bus formats being used in atomisp */
-#define V4L2_MBUS_FMT_CUSTOM_YUV420	0x8001
-#define V4L2_MBUS_FMT_CUSTOM_YVU420	0x8002
-#define V4L2_MBUS_FMT_CUSTOM_YUV422P	0x8003
-#define V4L2_MBUS_FMT_CUSTOM_YUV444	0x8004
-#define V4L2_MBUS_FMT_CUSTOM_NV12	0x8005
-#define V4L2_MBUS_FMT_CUSTOM_NV21	0x8006
-#define V4L2_MBUS_FMT_CUSTOM_NV16	0x8007
-#define V4L2_MBUS_FMT_CUSTOM_YUYV	0x8008
-#define V4L2_MBUS_FMT_CUSTOM_SBGGR16	0x8009
-#define V4L2_MBUS_FMT_CUSTOM_RGB32	0x800a
+#define V4L2_MBUS_FMT_CUSTOM_YUV420 0x8001
+#define V4L2_MBUS_FMT_CUSTOM_YVU420 0x8002
+#define V4L2_MBUS_FMT_CUSTOM_YUV422P 0x8003
+#define V4L2_MBUS_FMT_CUSTOM_YUV444 0x8004
+#define V4L2_MBUS_FMT_CUSTOM_NV12 0x8005
+#define V4L2_MBUS_FMT_CUSTOM_NV21 0x8006
+#define V4L2_MBUS_FMT_CUSTOM_NV16 0x8007
+#define V4L2_MBUS_FMT_CUSTOM_YUYV 0x8008
+#define V4L2_MBUS_FMT_CUSTOM_SBGGR16 0x8009
+#define V4L2_MBUS_FMT_CUSTOM_RGB32 0x800a
 
 /* Custom media bus format for M10MO RAW capture */
 #if 0
-#define V4L2_MBUS_FMT_CUSTOM_M10MO_RAW	0x800b
+#define V4L2_MBUS_FMT_CUSTOM_M10MO_RAW 0x800b
 #endif
 
 /* Configuration used by Bayer noise reduction and YCC noise reduction */
@@ -73,9 +73,9 @@ struct atomisp_nr_config {
 
 /* Temporal noise reduction configuration */
 struct atomisp_tnr_config {
-	unsigned int gain;	 /* [gain] Strength of NR */
-	unsigned int threshold_y;/* [intensity] Motion sensitivity for Y */
-	unsigned int threshold_uv;/* [intensity] Motion sensitivity for U/V */
+	unsigned int gain; /* [gain] Strength of NR */
+	unsigned int threshold_y; /* [intensity] Motion sensitivity for Y */
+	unsigned int threshold_uv; /* [intensity] Motion sensitivity for U/V */
 };
 
 /* Histogram. This contains num_elements values of type unsigned int.
@@ -143,15 +143,15 @@ struct atomisp_gc_config {
 };
 
 struct atomisp_3a_config {
-	unsigned int ae_y_coef_r;	/* [gain] Weight of R for Y */
-	unsigned int ae_y_coef_g;	/* [gain] Weight of G for Y */
-	unsigned int ae_y_coef_b;	/* [gain] Weight of B for Y */
-	unsigned int awb_lg_high_raw;	/* [intensity]
+	unsigned int ae_y_coef_r; /* [gain] Weight of R for Y */
+	unsigned int ae_y_coef_g; /* [gain] Weight of G for Y */
+	unsigned int ae_y_coef_b; /* [gain] Weight of B for Y */
+	unsigned int awb_lg_high_raw; /* [intensity]
 					   AWB level gate high for raw */
-	unsigned int awb_lg_low;	/* [intensity] AWB level gate low */
-	unsigned int awb_lg_high;	/* [intensity] AWB level gate high */
-	int af_fir1_coef[7];	/* [factor] AF FIR coefficients of fir1 */
-	int af_fir2_coef[7];	/* [factor] AF FIR coefficients of fir2 */
+	unsigned int awb_lg_low; /* [intensity] AWB level gate low */
+	unsigned int awb_lg_high; /* [intensity] AWB level gate high */
+	int af_fir1_coef[7]; /* [factor] AF FIR coefficients of fir1 */
+	int af_fir2_coef[7]; /* [factor] AF FIR coefficients of fir2 */
 };
 
 struct atomisp_dvs_grid_info {
@@ -194,8 +194,8 @@ struct atomisp_dis_vector {
 struct atomisp_dvs2_coef_types {
 	short __user *odd_real; /** real part of the odd coefficients*/
 	short __user *odd_imag; /** imaginary part of the odd coefficients*/
-	short __user *even_real;/** real part of the even coefficients*/
-	short __user *even_imag;/** imaginary part of the even coefficients*/
+	short __user *even_real; /** real part of the even coefficients*/
+	short __user *even_imag; /** imaginary part of the even coefficients*/
 };
 
 /*
@@ -205,8 +205,8 @@ struct atomisp_dvs2_coef_types {
 struct atomisp_dvs2_stat_types {
 	int __user *odd_real; /** real part of the odd statistics*/
 	int __user *odd_imag; /** imaginary part of the odd statistics*/
-	int __user *even_real;/** real part of the even statistics*/
-	int __user *even_imag;/** imaginary part of the even statistics*/
+	int __user *even_real; /** real part of the even statistics*/
+	int __user *even_imag; /** imaginary part of the even statistics*/
 };
 
 struct atomisp_dis_coefficients {
@@ -253,7 +253,7 @@ struct atomisp_ext_isp_ctrl {
 };
 
 struct atomisp_3a_statistics {
-	struct atomisp_grid_info  grid_info;
+	struct atomisp_grid_info grid_info;
 	struct atomisp_3a_output __user *data;
 	struct atomisp_3a_rgby_output __user *rgby_data;
 	u32 exp_id; /* exposure ID */
@@ -263,16 +263,16 @@ struct atomisp_3a_statistics {
 /* White Balance (Gain Adjust) */
 struct atomisp_wb_config {
 	unsigned int integer_bits;
-	unsigned int gr;	/* unsigned <integer_bits>.<16-integer_bits> */
-	unsigned int r;		/* unsigned <integer_bits>.<16-integer_bits> */
-	unsigned int b;		/* unsigned <integer_bits>.<16-integer_bits> */
-	unsigned int gb;	/* unsigned <integer_bits>.<16-integer_bits> */
+	unsigned int gr; /* unsigned <integer_bits>.<16-integer_bits> */
+	unsigned int r; /* unsigned <integer_bits>.<16-integer_bits> */
+	unsigned int b; /* unsigned <integer_bits>.<16-integer_bits> */
+	unsigned int gb; /* unsigned <integer_bits>.<16-integer_bits> */
 };
 
 /* Color Space Conversion settings */
 struct atomisp_cc_config {
 	unsigned int fraction_bits;
-	int matrix[3 * 3];	/* RGB2YUV Color matrix, signed
+	int matrix[3 * 3]; /* RGB2YUV Color matrix, signed
 				   <13-fraction_bits>.<fraction_bits> */
 };
 
@@ -322,7 +322,7 @@ struct atomisp_metadata_config {
  * Generic resolution structure.
  */
 struct atomisp_resolution {
-	u32 width;  /** Width */
+	u32 width; /** Width */
 	u32 height; /** Height */
 };
 
@@ -367,8 +367,8 @@ struct atomisp_parm {
 };
 
 struct dvs2_bq_resolution {
-	int width_bq;         /* width [BQ] */
-	int height_bq;        /* height [BQ] */
+	int width_bq; /* width [BQ] */
+	int height_bq; /* height [BQ] */
 };
 
 struct atomisp_dvs2_bq_resolutions {
@@ -401,80 +401,80 @@ struct atomisp_formats_config {
 };
 
 struct atomisp_parameters {
-	struct atomisp_wb_config   *wb_config;  /* White Balance config */
-	struct atomisp_cc_config   *cc_config;  /* Color Correction config */
-	struct atomisp_tnr_config  *tnr_config; /* Temporal Noise Reduction */
-	struct atomisp_ecd_config  *ecd_config; /* Eigen Color Demosaicing */
-	struct atomisp_ynr_config  *ynr_config; /* Y(Luma) Noise Reduction */
-	struct atomisp_fc_config   *fc_config;  /* Fringe Control */
+	struct atomisp_wb_config *wb_config; /* White Balance config */
+	struct atomisp_cc_config *cc_config; /* Color Correction config */
+	struct atomisp_tnr_config *tnr_config; /* Temporal Noise Reduction */
+	struct atomisp_ecd_config *ecd_config; /* Eigen Color Demosaicing */
+	struct atomisp_ynr_config *ynr_config; /* Y(Luma) Noise Reduction */
+	struct atomisp_fc_config *fc_config; /* Fringe Control */
 	struct atomisp_formats_config *formats_config; /* Formats Control */
-	struct atomisp_cnr_config  *cnr_config; /* Chroma Noise Reduction */
-	struct atomisp_macc_config *macc_config;  /* MACC */
-	struct atomisp_ctc_config  *ctc_config; /* Chroma Tone Control */
-	struct atomisp_aa_config   *aa_config;  /* Anti-Aliasing */
-	struct atomisp_aa_config   *baa_config;  /* Anti-Aliasing */
-	struct atomisp_ce_config   *ce_config;
+	struct atomisp_cnr_config *cnr_config; /* Chroma Noise Reduction */
+	struct atomisp_macc_config *macc_config; /* MACC */
+	struct atomisp_ctc_config *ctc_config; /* Chroma Tone Control */
+	struct atomisp_aa_config *aa_config; /* Anti-Aliasing */
+	struct atomisp_aa_config *baa_config; /* Anti-Aliasing */
+	struct atomisp_ce_config *ce_config;
 	struct atomisp_dvs_6axis_config *dvs_6axis_config;
-	struct atomisp_ob_config   *ob_config;  /* Objective Black config */
-	struct atomisp_dp_config   *dp_config;  /* Dead Pixel config */
-	struct atomisp_nr_config   *nr_config;  /* Noise Reduction config */
-	struct atomisp_ee_config   *ee_config;  /* Edge Enhancement config */
-	struct atomisp_de_config   *de_config;  /* Demosaic config */
-	struct atomisp_gc_config   *gc_config;  /* Gamma Correction config */
-	struct atomisp_anr_config  *anr_config; /* Advanced Noise Reduction */
-	struct atomisp_3a_config   *a3a_config; /* 3A Statistics config */
-	struct atomisp_xnr_config  *xnr_config; /* eXtra Noise Reduction */
-	struct atomisp_dz_config   *dz_config;  /* Digital Zoom */
+	struct atomisp_ob_config *ob_config; /* Objective Black config */
+	struct atomisp_dp_config *dp_config; /* Dead Pixel config */
+	struct atomisp_nr_config *nr_config; /* Noise Reduction config */
+	struct atomisp_ee_config *ee_config; /* Edge Enhancement config */
+	struct atomisp_de_config *de_config; /* Demosaic config */
+	struct atomisp_gc_config *gc_config; /* Gamma Correction config */
+	struct atomisp_anr_config *anr_config; /* Advanced Noise Reduction */
+	struct atomisp_3a_config *a3a_config; /* 3A Statistics config */
+	struct atomisp_xnr_config *xnr_config; /* eXtra Noise Reduction */
+	struct atomisp_dz_config *dz_config; /* Digital Zoom */
 	struct atomisp_cc_config *yuv2rgb_cc_config; /* Color
 							Correction config */
 	struct atomisp_cc_config *rgb2yuv_cc_config; /* Color
 							Correction config */
-	struct atomisp_macc_table  *macc_table;
+	struct atomisp_macc_table *macc_table;
 	struct atomisp_gamma_table *gamma_table;
-	struct atomisp_ctc_table   *ctc_table;
-	struct atomisp_xnr_table   *xnr_table;
+	struct atomisp_ctc_table *ctc_table;
+	struct atomisp_xnr_table *xnr_table;
 	struct atomisp_rgb_gamma_table *r_gamma_table;
 	struct atomisp_rgb_gamma_table *g_gamma_table;
 	struct atomisp_rgb_gamma_table *b_gamma_table;
-	struct atomisp_vector      *motion_vector; /* For 2-axis DVS */
+	struct atomisp_vector *motion_vector; /* For 2-axis DVS */
 	struct atomisp_shading_table *shading_table;
-	struct atomisp_morph_table   *morph_table;
+	struct atomisp_morph_table *morph_table;
 	struct atomisp_dvs_coefficients *dvs_coefs; /* DVS 1.0 coefficients */
 	struct atomisp_dis_coefficients *dvs2_coefs; /* DVS 2.0 coefficients */
-	struct atomisp_capture_config   *capture_config;
-	struct atomisp_anr_thres   *anr_thres;
+	struct atomisp_capture_config *capture_config;
+	struct atomisp_anr_thres *anr_thres;
 
-	void	*lin_2500_config;       /* Skylake: Linearization config */
-	void	*obgrid_2500_config;    /* Skylake: OBGRID config */
-	void	*bnr_2500_config;       /* Skylake: bayer denoise config */
-	void	*shd_2500_config;       /* Skylake: shading config */
-	void	*dm_2500_config;        /* Skylake: demosaic config */
-	void	*rgbpp_2500_config;     /* Skylake: RGBPP config */
-	void	*dvs_stat_2500_config;  /* Skylake: DVS STAT config */
-	void	*lace_stat_2500_config; /* Skylake: LACE STAT config */
-	void	*yuvp1_2500_config;     /* Skylake: yuvp1 config */
-	void	*yuvp2_2500_config;     /* Skylake: yuvp2 config */
-	void	*tnr_2500_config;       /* Skylake: TNR config */
-	void	*dpc_2500_config;       /* Skylake: DPC config */
-	void	*awb_2500_config;       /* Skylake: auto white balance config */
-	void	*awb_fr_2500_config;    /* Skylake: auto white balance filter response config */
-	void	*anr_2500_config;       /* Skylake: ANR config */
-	void	*af_2500_config;        /* Skylake: auto focus config */
-	void	*ae_2500_config;        /* Skylake: auto exposure config */
-	void	*bds_2500_config;       /* Skylake: bayer downscaler config */
-	void	*dvs_2500_config;       /* Skylake: digital video stabilization config */
-	void	*res_mgr_2500_config;
+	void *lin_2500_config; /* Skylake: Linearization config */
+	void *obgrid_2500_config; /* Skylake: OBGRID config */
+	void *bnr_2500_config; /* Skylake: bayer denoise config */
+	void *shd_2500_config; /* Skylake: shading config */
+	void *dm_2500_config; /* Skylake: demosaic config */
+	void *rgbpp_2500_config; /* Skylake: RGBPP config */
+	void *dvs_stat_2500_config; /* Skylake: DVS STAT config */
+	void *lace_stat_2500_config; /* Skylake: LACE STAT config */
+	void *yuvp1_2500_config; /* Skylake: yuvp1 config */
+	void *yuvp2_2500_config; /* Skylake: yuvp2 config */
+	void *tnr_2500_config; /* Skylake: TNR config */
+	void *dpc_2500_config; /* Skylake: DPC config */
+	void *awb_2500_config; /* Skylake: auto white balance config */
+	void *awb_fr_2500_config; /* Skylake: auto white balance filter response config */
+	void *anr_2500_config; /* Skylake: ANR config */
+	void *af_2500_config; /* Skylake: auto focus config */
+	void *ae_2500_config; /* Skylake: auto exposure config */
+	void *bds_2500_config; /* Skylake: bayer downscaler config */
+	void *dvs_2500_config; /* Skylake: digital video stabilization config */
+	void *res_mgr_2500_config;
 
 	/*
 	 * Output frame pointer the config is to be applied to (optional),
 	 * set to NULL to make this config is applied as global.
 	 */
-	void	*output_frame;
+	void *output_frame;
 	/*
 	 * Unique ID to track which config was actually applied to a particular
 	 * frame, driver will send this id back with output frame together.
 	 */
-	u32	isp_config_id;
+	u32 isp_config_id;
 
 	/*
 	 * Switch to control per_frame setting:
@@ -482,10 +482,10 @@ struct atomisp_parameters {
 	 * 1: this is a per_frame setting
 	 * PLEASE KEEP THIS AT THE END OF THE STRUCTURE!!
 	 */
-	u32	per_frame_setting;
+	u32 per_frame_setting;
 };
 
-#define ATOMISP_GAMMA_TABLE_SIZE        1024
+#define ATOMISP_GAMMA_TABLE_SIZE 1024
 struct atomisp_gamma_table {
 	unsigned short data[ATOMISP_GAMMA_TABLE_SIZE];
 };
@@ -494,18 +494,18 @@ struct atomisp_gamma_table {
  * Each line of width elements takes up COORD_TABLE_EXT_WIDTH elements
  * in memory.
  */
-#define ATOMISP_MORPH_TABLE_NUM_PLANES  6
+#define ATOMISP_MORPH_TABLE_NUM_PLANES 6
 struct atomisp_morph_table {
 	unsigned int enabled;
 
 	unsigned int height;
-	unsigned int width;	/* number of valid elements per line */
+	unsigned int width; /* number of valid elements per line */
 	unsigned short __user *coordinates_x[ATOMISP_MORPH_TABLE_NUM_PLANES];
 	unsigned short __user *coordinates_y[ATOMISP_MORPH_TABLE_NUM_PLANES];
 };
 
-#define ATOMISP_NUM_SC_COLORS	4
-#define ATOMISP_SC_FLAG_QUERY	BIT(0)
+#define ATOMISP_NUM_SC_COLORS 4
+#define ATOMISP_SC_FLAG_QUERY BIT(0)
 
 struct atomisp_shading_table {
 	__u32 enable;
@@ -520,7 +520,7 @@ struct atomisp_shading_table {
 };
 
 /* parameter for MACC */
-#define ATOMISP_NUM_MACC_AXES           16
+#define ATOMISP_NUM_MACC_AXES 16
 struct atomisp_macc_table {
 	short data[4 * ATOMISP_NUM_MACC_AXES];
 };
@@ -531,7 +531,7 @@ struct atomisp_macc_config {
 };
 
 /* Parameter for ctc parameter control */
-#define ATOMISP_CTC_TABLE_SIZE          1024
+#define ATOMISP_CTC_TABLE_SIZE 1024
 struct atomisp_ctc_table {
 	unsigned short data[ATOMISP_CTC_TABLE_SIZE];
 };
@@ -586,14 +586,14 @@ struct atomisp_bc_video_package {
 
 enum atomisp_focus_hp {
 	ATOMISP_FOCUS_HP_IN_PROGRESS = (1U << 2),
-	ATOMISP_FOCUS_HP_COMPLETE    = (2U << 2),
-	ATOMISP_FOCUS_HP_FAILED      = (3U << 2)
+	ATOMISP_FOCUS_HP_COMPLETE = (2U << 2),
+	ATOMISP_FOCUS_HP_FAILED = (3U << 2)
 };
 
 /* Masks */
-#define ATOMISP_FOCUS_STATUS_MOVING           BIT(0)
+#define ATOMISP_FOCUS_STATUS_MOVING BIT(0)
 #define ATOMISP_FOCUS_STATUS_ACCEPTS_NEW_MOVE BIT(1)
-#define ATOMISP_FOCUS_STATUS_HOME_POSITION    (3U << 2)
+#define ATOMISP_FOCUS_STATUS_HOME_POSITION (3U << 2)
 
 enum atomisp_camera_port {
 	ATOMISP_CAMERA_PORT_SECONDARY,
@@ -618,52 +618,50 @@ enum atomisp_ext_isp_id {
 	EXT_ISP_CID_SHOT_MODE
 };
 
-#define EXT_ISP_FOCUS_MODE_NORMAL	0
-#define EXT_ISP_FOCUS_MODE_MACRO	1
-#define EXT_ISP_FOCUS_MODE_TOUCH_AF	2
-#define EXT_ISP_FOCUS_MODE_PREVIEW_CAF	3
-#define EXT_ISP_FOCUS_MODE_MOVIE_CAF	4
-#define EXT_ISP_FOCUS_MODE_FACE_CAF	5
-#define EXT_ISP_FOCUS_MODE_TOUCH_MACRO	6
-#define EXT_ISP_FOCUS_MODE_TOUCH_CAF	7
+#define EXT_ISP_FOCUS_MODE_NORMAL 0
+#define EXT_ISP_FOCUS_MODE_MACRO 1
+#define EXT_ISP_FOCUS_MODE_TOUCH_AF 2
+#define EXT_ISP_FOCUS_MODE_PREVIEW_CAF 3
+#define EXT_ISP_FOCUS_MODE_MOVIE_CAF 4
+#define EXT_ISP_FOCUS_MODE_FACE_CAF 5
+#define EXT_ISP_FOCUS_MODE_TOUCH_MACRO 6
+#define EXT_ISP_FOCUS_MODE_TOUCH_CAF 7
 
-#define EXT_ISP_FOCUS_STOP		0
-#define EXT_ISP_FOCUS_SEARCH		1
-#define EXT_ISP_PAN_FOCUSING		2
+#define EXT_ISP_FOCUS_STOP 0
+#define EXT_ISP_FOCUS_SEARCH 1
+#define EXT_ISP_PAN_FOCUSING 2
 
-#define EXT_ISP_CAF_RESTART_CHECK	1
-#define EXT_ISP_CAF_STATUS_FOCUSING	2
-#define EXT_ISP_CAF_STATUS_SUCCESS	3
-#define EXT_ISP_CAF_STATUS_FAIL         4
+#define EXT_ISP_CAF_RESTART_CHECK 1
+#define EXT_ISP_CAF_STATUS_FOCUSING 2
+#define EXT_ISP_CAF_STATUS_SUCCESS 3
+#define EXT_ISP_CAF_STATUS_FAIL 4
 
-#define EXT_ISP_AF_STATUS_INVALID	1
-#define EXT_ISP_AF_STATUS_FOCUSING	2
-#define EXT_ISP_AF_STATUS_SUCCESS	3
-#define EXT_ISP_AF_STATUS_FAIL		4
+#define EXT_ISP_AF_STATUS_INVALID 1
+#define EXT_ISP_AF_STATUS_FOCUSING 2
+#define EXT_ISP_AF_STATUS_SUCCESS 3
+#define EXT_ISP_AF_STATUS_FAIL 4
 
 enum atomisp_burst_capture_options {
 	EXT_ISP_BURST_CAPTURE_CTRL_START = 0,
 	EXT_ISP_BURST_CAPTURE_CTRL_STOP
 };
 
-#define EXT_ISP_SHOT_MODE_AUTO		0
-#define EXT_ISP_SHOT_MODE_BEAUTY_FACE	1
-#define EXT_ISP_SHOT_MODE_BEST_PHOTO	2
-#define EXT_ISP_SHOT_MODE_DRAMA		3
-#define EXT_ISP_SHOT_MODE_BEST_FACE	4
-#define EXT_ISP_SHOT_MODE_ERASER	5
-#define EXT_ISP_SHOT_MODE_PANORAMA	6
-#define EXT_ISP_SHOT_MODE_RICH_TONE_HDR	7
-#define EXT_ISP_SHOT_MODE_NIGHT		8
-#define EXT_ISP_SHOT_MODE_SOUND_SHOT	9
-#define EXT_ISP_SHOT_MODE_ANIMATED_PHOTO	10
-#define EXT_ISP_SHOT_MODE_SPORTS	11
+#define EXT_ISP_SHOT_MODE_AUTO 0
+#define EXT_ISP_SHOT_MODE_BEAUTY_FACE 1
+#define EXT_ISP_SHOT_MODE_BEST_PHOTO 2
+#define EXT_ISP_SHOT_MODE_DRAMA 3
+#define EXT_ISP_SHOT_MODE_BEST_FACE 4
+#define EXT_ISP_SHOT_MODE_ERASER 5
+#define EXT_ISP_SHOT_MODE_PANORAMA 6
+#define EXT_ISP_SHOT_MODE_RICH_TONE_HDR 7
+#define EXT_ISP_SHOT_MODE_NIGHT 8
+#define EXT_ISP_SHOT_MODE_SOUND_SHOT 9
+#define EXT_ISP_SHOT_MODE_ANIMATED_PHOTO 10
+#define EXT_ISP_SHOT_MODE_SPORTS 11
 
 /*Private IOCTLs for ISP */
-#define ATOMISP_IOC_G_XNR \
-	_IOR('v', BASE_VIDIOC_PRIVATE + 0, int)
-#define ATOMISP_IOC_S_XNR \
-	_IOW('v', BASE_VIDIOC_PRIVATE + 0, int)
+#define ATOMISP_IOC_G_XNR _IOR('v', BASE_VIDIOC_PRIVATE + 0, int)
+#define ATOMISP_IOC_S_XNR _IOW('v', BASE_VIDIOC_PRIVATE + 0, int)
 #define ATOMISP_IOC_G_NR \
 	_IOR('v', BASE_VIDIOC_PRIVATE + 1, struct atomisp_nr_config)
 #define ATOMISP_IOC_S_NR \
@@ -783,11 +781,9 @@ enum atomisp_burst_capture_options {
 #define ATOMISP_IOC_S_PARAMETERS \
 	_IOW('v', BASE_VIDIOC_PRIVATE + 32, struct atomisp_parameters)
 
-#define ATOMISP_IOC_EXP_ID_UNLOCK \
-	_IOW('v', BASE_VIDIOC_PRIVATE + 36, int)
+#define ATOMISP_IOC_EXP_ID_UNLOCK _IOW('v', BASE_VIDIOC_PRIVATE + 36, int)
 
-#define ATOMISP_IOC_EXP_ID_CAPTURE \
-	_IOW('v', BASE_VIDIOC_PRIVATE + 37, int)
+#define ATOMISP_IOC_EXP_ID_CAPTURE _IOW('v', BASE_VIDIOC_PRIVATE + 37, int)
 
 #define ATOMISP_IOC_S_ENABLE_DZ_CAPT_PIPE \
 	_IOWR('v', BASE_VIDIOC_PRIVATE + 38, unsigned int)
@@ -798,8 +794,7 @@ enum atomisp_burst_capture_options {
 #define ATOMISP_IOC_S_FORMATS_CONFIG \
 	_IOW('v', BASE_VIDIOC_PRIVATE + 39, struct atomisp_formats_config)
 
-#define ATOMISP_IOC_INJECT_A_FAKE_EVENT \
-	_IOW('v', BASE_VIDIOC_PRIVATE + 42, int)
+#define ATOMISP_IOC_INJECT_A_FAKE_EVENT _IOW('v', BASE_VIDIOC_PRIVATE + 42, int)
 
 #define ATOMISP_IOC_S_ARRAY_RESOLUTION \
 	_IOW('v', BASE_VIDIOC_PRIVATE + 45, struct atomisp_resolution)
@@ -823,62 +818,55 @@ enum atomisp_burst_capture_options {
  */
 
 /*  ISP Private control IDs */
-#define V4L2_CID_ATOMISP_BAD_PIXEL_DETECTION \
-	(V4L2_CID_PRIVATE_BASE + 0)
-#define V4L2_CID_ATOMISP_POSTPROCESS_GDC_CAC \
-	(V4L2_CID_PRIVATE_BASE + 1)
-#define V4L2_CID_ATOMISP_VIDEO_STABLIZATION \
-	(V4L2_CID_PRIVATE_BASE + 2)
-#define V4L2_CID_ATOMISP_FIXED_PATTERN_NR \
-	(V4L2_CID_PRIVATE_BASE + 3)
-#define V4L2_CID_ATOMISP_FALSE_COLOR_CORRECTION \
-	(V4L2_CID_PRIVATE_BASE + 4)
-#define V4L2_CID_ATOMISP_LOW_LIGHT \
-	(V4L2_CID_PRIVATE_BASE + 5)
+#define V4L2_CID_ATOMISP_BAD_PIXEL_DETECTION (V4L2_CID_PRIVATE_BASE + 0)
+#define V4L2_CID_ATOMISP_POSTPROCESS_GDC_CAC (V4L2_CID_PRIVATE_BASE + 1)
+#define V4L2_CID_ATOMISP_VIDEO_STABLIZATION (V4L2_CID_PRIVATE_BASE + 2)
+#define V4L2_CID_ATOMISP_FIXED_PATTERN_NR (V4L2_CID_PRIVATE_BASE + 3)
+#define V4L2_CID_ATOMISP_FALSE_COLOR_CORRECTION (V4L2_CID_PRIVATE_BASE + 4)
+#define V4L2_CID_ATOMISP_LOW_LIGHT (V4L2_CID_PRIVATE_BASE + 5)
 
 /* Camera class:
  * Exposure, Flash and privacy (indicator) light controls, to be upstreamed */
-#define V4L2_CID_CAMERA_LASTP1             (V4L2_CID_CAMERA_CLASS_BASE + 1024)
+#define V4L2_CID_CAMERA_LASTP1 (V4L2_CID_CAMERA_CLASS_BASE + 1024)
 
-#define V4L2_CID_RUN_MODE			(V4L2_CID_CAMERA_LASTP1 + 20)
-#define ATOMISP_RUN_MODE_VIDEO			1
-#define ATOMISP_RUN_MODE_STILL_CAPTURE		2
-#define ATOMISP_RUN_MODE_PREVIEW		3
-#define ATOMISP_RUN_MODE_MIN			1
-#define ATOMISP_RUN_MODE_MAX			3
+#define V4L2_CID_RUN_MODE (V4L2_CID_CAMERA_LASTP1 + 20)
+#define ATOMISP_RUN_MODE_VIDEO 1
+#define ATOMISP_RUN_MODE_STILL_CAPTURE 2
+#define ATOMISP_RUN_MODE_PREVIEW 3
+#define ATOMISP_RUN_MODE_MIN 1
+#define ATOMISP_RUN_MODE_MAX 3
 
-#define V4L2_CID_ENABLE_VFPP			(V4L2_CID_CAMERA_LASTP1 + 21)
-#define V4L2_CID_ATOMISP_CONTINUOUS_MODE	(V4L2_CID_CAMERA_LASTP1 + 22)
+#define V4L2_CID_ENABLE_VFPP (V4L2_CID_CAMERA_LASTP1 + 21)
+#define V4L2_CID_ATOMISP_CONTINUOUS_MODE (V4L2_CID_CAMERA_LASTP1 + 22)
 #define V4L2_CID_ATOMISP_CONTINUOUS_RAW_BUFFER_SIZE \
-						(V4L2_CID_CAMERA_LASTP1 + 23)
-#define V4L2_CID_ATOMISP_CONTINUOUS_VIEWFINDER \
-						(V4L2_CID_CAMERA_LASTP1 + 24)
+	(V4L2_CID_CAMERA_LASTP1 + 23)
+#define V4L2_CID_ATOMISP_CONTINUOUS_VIEWFINDER (V4L2_CID_CAMERA_LASTP1 + 24)
 
-#define V4L2_CID_VFPP				(V4L2_CID_CAMERA_LASTP1 + 25)
-#define ATOMISP_VFPP_ENABLE			0
-#define ATOMISP_VFPP_DISABLE_SCALER		1
-#define ATOMISP_VFPP_DISABLE_LOWLAT		2
+#define V4L2_CID_VFPP (V4L2_CID_CAMERA_LASTP1 + 25)
+#define ATOMISP_VFPP_ENABLE 0
+#define ATOMISP_VFPP_DISABLE_SCALER 1
+#define ATOMISP_VFPP_DISABLE_LOWLAT 2
 
-#define V4L2_CID_START_ZSL_CAPTURE	(V4L2_CID_CAMERA_LASTP1 + 28)
+#define V4L2_CID_START_ZSL_CAPTURE (V4L2_CID_CAMERA_LASTP1 + 28)
 /* Lock and unlock raw buffer */
 #define V4L2_CID_ENABLE_RAW_BUFFER_LOCK (V4L2_CID_CAMERA_LASTP1 + 29)
 
-#define V4L2_CID_EXPOSURE_ZONE_NUM	(V4L2_CID_CAMERA_LASTP1 + 31)
+#define V4L2_CID_EXPOSURE_ZONE_NUM (V4L2_CID_CAMERA_LASTP1 + 31)
 /* Disable digital zoom */
-#define V4L2_CID_DISABLE_DZ		(V4L2_CID_CAMERA_LASTP1 + 32)
+#define V4L2_CID_DISABLE_DZ (V4L2_CID_CAMERA_LASTP1 + 32)
 
-#define V4L2_CID_ATOMISP_SELECT_ISP_VERSION	(V4L2_CID_CAMERA_LASTP1 + 38)
+#define V4L2_CID_ATOMISP_SELECT_ISP_VERSION (V4L2_CID_CAMERA_LASTP1 + 38)
 
-#define V4L2_BUF_FLAG_BUFFER_INVALID       0x0400
-#define V4L2_BUF_FLAG_BUFFER_VALID         0x0800
+#define V4L2_BUF_FLAG_BUFFER_INVALID 0x0400
+#define V4L2_BUF_FLAG_BUFFER_VALID 0x0800
 
-#define V4L2_BUF_TYPE_VIDEO_CAPTURE_ION  (V4L2_BUF_TYPE_PRIVATE + 1024)
+#define V4L2_BUF_TYPE_VIDEO_CAPTURE_ION (V4L2_BUF_TYPE_PRIVATE + 1024)
 
-#define V4L2_EVENT_ATOMISP_3A_STATS_READY   (V4L2_EVENT_PRIVATE_START + 1)
-#define V4L2_EVENT_ATOMISP_METADATA_READY   (V4L2_EVENT_PRIVATE_START + 2)
-#define V4L2_EVENT_ATOMISP_ACC_COMPLETE     (V4L2_EVENT_PRIVATE_START + 4)
-#define V4L2_EVENT_ATOMISP_PAUSE_BUFFER	    (V4L2_EVENT_PRIVATE_START + 5)
-#define V4L2_EVENT_ATOMISP_CSS_RESET	    (V4L2_EVENT_PRIVATE_START + 6)
+#define V4L2_EVENT_ATOMISP_3A_STATS_READY (V4L2_EVENT_PRIVATE_START + 1)
+#define V4L2_EVENT_ATOMISP_METADATA_READY (V4L2_EVENT_PRIVATE_START + 2)
+#define V4L2_EVENT_ATOMISP_ACC_COMPLETE (V4L2_EVENT_PRIVATE_START + 4)
+#define V4L2_EVENT_ATOMISP_PAUSE_BUFFER (V4L2_EVENT_PRIVATE_START + 5)
+#define V4L2_EVENT_ATOMISP_CSS_RESET (V4L2_EVENT_PRIVATE_START + 6)
 /* Nonstandard color effects for V4L2_CID_COLORFX */
 enum {
 	V4L2_COLORFX_SKIN_WHITEN_LOW = 1001,
