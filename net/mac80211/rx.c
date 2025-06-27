@@ -5123,9 +5123,14 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 	 * have the link information if needed.
 	 */
 	link_sta = link_sta_info_get_bss(rx->sdata, hdr->addr2);
+
 	if (link_sta) {
 		sta = link_sta->sta;
-		link_id = link_sta->link_id;
+		/* Do no use sta link id information on management frames to allow for
+		 * offchannel scan, roaming, etc.
+		 */
+		if (!ieee80211_is_mgmt(hdr->frame_control))
+			link_id = link_sta->link_id;
 	} else {
 		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 
