@@ -3168,7 +3168,7 @@ static int shmem_uffd_get_folio(struct inode *inode, pgoff_t pgoff,
 	return shmem_get_folio(inode, pgoff, 0, folio, SGP_NOALLOC);
 }
 
-int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
+static int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
 			   struct vm_area_struct *dst_vma,
 			   unsigned long dst_addr,
 			   unsigned long src_addr,
