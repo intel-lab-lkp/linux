@@ -2131,6 +2131,14 @@ struct drm_connector {
 	uint8_t polled;
 
 	/**
+	 * @sysfs_hotplug:
+	 *
+	 * Set in by sysfs connector status to propagate CONNECTOR_ID to udev
+	 * and further down the stack.
+	 */
+	bool sysfs_hotplug;
+
+	/**
 	 * @dpms: Current dpms state. For legacy drivers the
 	 * &drm_connector_funcs.dpms callback must update this. For atomic
 	 * drivers, this is handled by the core atomic code, and drivers must

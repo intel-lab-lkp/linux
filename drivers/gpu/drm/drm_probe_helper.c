@@ -843,9 +843,33 @@ static void output_poll_execute(struct work_struct *work)
 	mutex_unlock(&dev->mode_config.mutex);
 
 out:
-	if (changed)
-		drm_kms_helper_hotplug_event(dev);
+	if (changed) {
+		struct drm_connector *first_changed_connector = NULL;
+		if (!mutex_trylock(&dev->mode_config.mutex)) {
+			repoll = true;
+			goto repoll;
+		}
 
+		drm_connector_list_iter_begin(dev, &conn_iter);
+		drm_for_each_connector_iter(connector, &conn_iter) {
+			if (connector->sysfs_hotplug) {
+				drm_connector_get(connector);
+				first_changed_connector = connector;
+				connector->sysfs_hotplug = false;
+				break;
+			}
+		}
+		drm_connector_list_iter_end(&conn_iter);
+		mutex_unlock(&dev->mode_config.mutex);
+
+		if (first_changed_connector) {
+			drm_sysfs_connector_hotplug_event(connector);
+			drm_connector_put(first_changed_connector);
+		} else {
+			drm_kms_helper_hotplug_event(dev);
+		}
+	}
+repoll:
 	if (repoll)
 		schedule_delayed_work(delayed_work, DRM_OUTPUT_POLL_PERIOD);
 }
