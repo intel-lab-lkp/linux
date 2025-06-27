@@ -469,6 +469,14 @@ do {										\
  *
  * wake_up() has to be called after changing any variable that could
  * change the result of the wait condition.
+ *
+ * This is the kernel's polymorphic implementation of userspace's
+ * pthread_cond_wait().
+ *
+ * When calling this function, cmd1 is typically a lock-release call
+ * and cmd2 a lock-acquire call. The locking primitive can be chosen,
+ * contrary to pthread_cond_wait(), where the locking type is cast in
+ * stone and is a pthread_mutex_t.
  */
 #define wait_event_cmd(wq_head, condition, cmd1, cmd2)				\
 do {										\
