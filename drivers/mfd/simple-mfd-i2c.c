@@ -24,27 +24,21 @@
 
 #include "simple-mfd-i2c.h"
 
-static const struct regmap_config regmap_config_8r_8v = {
-	.reg_bits = 8,
-	.val_bits = 8,
-};
-
 static int simple_mfd_i2c_probe(struct i2c_client *i2c)
 {
 	const struct simple_mfd_data *simple_mfd_data;
-	const struct regmap_config *regmap_config;
+	struct regmap_config regmap_config = { };
 	struct regmap *regmap;
 	int ret;
 
 	simple_mfd_data = device_get_match_data(&i2c->dev);
 
-	/* If no regmap_config is specified, use the default 8reg and 8val bits */
-	if (!simple_mfd_data || !simple_mfd_data->regmap_config)
-		regmap_config = &regmap_config_8r_8v;
-	else
-		regmap_config = simple_mfd_data->regmap_config;
+	regmap_config.reg_bits = 8;
+	regmap_config.val_bits = 8;
+	if (simple_mfd_data)
+		regmap_config.max_register = simple_mfd_data->max_register;
 
-	regmap = devm_regmap_init_i2c(i2c, regmap_config);
+	regmap = devm_regmap_init_i2c(i2c, &regmap_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
