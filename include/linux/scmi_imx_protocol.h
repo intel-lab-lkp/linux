@@ -71,6 +71,23 @@ struct scmi_imx_misc_system_info {
 	u8 siname[MISC_MAX_SINAME];
 };
 
+struct scmi_imx_misc_sys_sleep_rec {
+	u32 sleepentryusec;
+	u32 sleepexitusec;
+	u32 sleepcnt;
+	u32 wakesource;
+	u32 mixpwrstat;
+	u32 mempwrstat;
+	u32 pllpwrstat;
+	u32 syssleepmode;
+	u32 syssleepflags;
+};
+
+struct scmi_imx_misc_syslog {
+	struct scmi_imx_misc_sys_sleep_rec syssleeprecord;
+	uint32_t deverrlog;
+};
+
 struct scmi_imx_misc_proto_ops {
 	int (*misc_cfg_info)(const struct scmi_protocol_handle *ph,
 			     struct scmi_imx_misc_system_info *info);
@@ -84,6 +101,8 @@ struct scmi_imx_misc_proto_ops {
 					struct scmi_imx_misc_system_info *info);
 	int (*misc_silicon_info)(const struct scmi_protocol_handle *ph,
 				 struct scmi_imx_misc_system_info *info);
+	int (*misc_syslog)(const struct scmi_protocol_handle *ph, u16 size,
+			  void *array);
 };
 
 /* See LMM_ATTRIBUTES in imx95.rst */
