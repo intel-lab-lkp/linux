@@ -145,6 +145,8 @@ static inline char mon_text_get_setup(struct mon_event_text *ep,
 static inline char mon_text_get_data(struct mon_event_text *ep, struct urb *urb,
     int len, char ev_type, struct mon_bus *mbus)
 {
+	struct usb_iso_packet_descriptor *isoc_desc;
+	int i, offset = 0;
 	void *src;
 
 	if (len <= 0)
@@ -160,8 +162,16 @@ static inline char mon_text_get_data(struct mon_event_text *ep, struct urb *urb,
 			return '>';
 	}
 
+	if (usb_pipeisoc(urb->pipe)) {
+		isoc_desc = urb->iso_frame_desc;
+		for (i = 0; i < urb->number_of_packets &&
+		     !isoc_desc[i].actual_length; i++)
+			continue;
+		offset = isoc_desc[i].offset;
+	}
+
 	if (urb->num_sgs == 0) {
-		src = urb->transfer_buffer;
+		src = urb->transfer_buffer + offset;
 		if (src == NULL)
 			return 'Z';	/* '0' would be not as pretty. */
 	} else {
