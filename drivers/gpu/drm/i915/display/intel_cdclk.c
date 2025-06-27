@@ -22,6 +22,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/iopoll.h>
 #include <linux/time.h>
 
 #include <drm/drm_fixed.h>
@@ -672,6 +673,7 @@ static void vlv_set_cdclk(struct intel_display *display,
 	int cdclk = cdclk_config->cdclk;
 	u32 val, cmd = cdclk_config->voltage_level;
 	intel_wakeref_t wakeref;
+	int ret;
 
 	switch (cdclk) {
 	case 400000:
@@ -702,12 +704,13 @@ static void vlv_set_cdclk(struct intel_display *display,
 	val &= ~DSPFREQGUAR_MASK;
 	val |= (cmd << DSPFREQGUAR_SHIFT);
 	vlv_punit_write(display->drm, PUNIT_REG_DSPSSPM, val);
-	if (wait_for((vlv_punit_read(display->drm, PUNIT_REG_DSPSSPM) &
-		      DSPFREQSTAT_MASK) == (cmd << DSPFREQSTAT_SHIFT),
-		     50)) {
-		drm_err(display->drm,
-			"timed out waiting for CDclk change\n");
-	}
+
+	ret = read_poll_timeout(vlv_punit_read, val,
+				(val & DSPFREQSTAT_MASK) == (cmd << DSPFREQSTAT_SHIFT),
+				500, 50 * 1000, false,
+				display->drm, PUNIT_REG_DSPSSPM);
+	if (ret)
+		drm_err(display->drm, "timed out waiting for CDCLK change\n");
 
 	if (cdclk == 400000) {
 		u32 divider;
@@ -721,11 +724,12 @@ static void vlv_set_cdclk(struct intel_display *display,
 		val |= divider;
 		vlv_cck_write(display->drm, CCK_DISPLAY_CLOCK_CONTROL, val);
 
-		if (wait_for((vlv_cck_read(display->drm, CCK_DISPLAY_CLOCK_CONTROL) &
-			      CCK_FREQUENCY_STATUS) == (divider << CCK_FREQUENCY_STATUS_SHIFT),
-			     50))
-			drm_err(display->drm,
-				"timed out waiting for CDclk change\n");
+		ret = read_poll_timeout(vlv_cck_read, val,
+					(val & CCK_FREQUENCY_STATUS) == (divider << CCK_FREQUENCY_STATUS_SHIFT),
+					500, 50 * 1000, false,
+					display->drm, CCK_DISPLAY_CLOCK_CONTROL);
+		if (ret)
+			drm_err(display->drm, "timed out waiting for CDCLK change\n");
 	}
 
 	/* adjust self-refresh exit latency value */
@@ -761,6 +765,7 @@ static void chv_set_cdclk(struct intel_display *display,
 	int cdclk = cdclk_config->cdclk;
 	u32 val, cmd = cdclk_config->voltage_level;
 	intel_wakeref_t wakeref;
+	int ret;
 
 	switch (cdclk) {
 	case 333333:
@@ -786,12 +791,14 @@ static void chv_set_cdclk(struct intel_display *display,
 	val &= ~DSPFREQGUAR_MASK_CHV;
 	val |= (cmd << DSPFREQGUAR_SHIFT_CHV);
 	vlv_punit_write(display->drm, PUNIT_REG_DSPSSPM, val);
-	if (wait_for((vlv_punit_read(display->drm, PUNIT_REG_DSPSSPM) &
-		      DSPFREQSTAT_MASK_CHV) == (cmd << DSPFREQSTAT_SHIFT_CHV),
-		     50)) {
-		drm_err(display->drm,
-			"timed out waiting for CDclk change\n");
-	}
+
+	ret = read_poll_timeout(vlv_punit_read, val,
+				(val & DSPFREQSTAT_MASK_CHV) == (cmd << DSPFREQSTAT_SHIFT_CHV),
+				500, 50 * 1000, false,
+				display->drm, PUNIT_REG_DSPSSPM);
+
+	if (ret)
+		drm_err(display->drm, "timed out waiting for CDCLK change\n");
 
 	vlv_punit_put(display->drm);
 
