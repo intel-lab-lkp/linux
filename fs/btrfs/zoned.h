@@ -383,14 +383,13 @@ static inline void btrfs_zoned_meta_io_unlock(struct btrfs_fs_info *fs_info)
 static inline void btrfs_clear_treelog_bg(struct btrfs_block_group *bg)
 {
 	struct btrfs_fs_info *fs_info = bg->fs_info;
+	u64 treelog_bg = READ_ONCE(fs_info->treelog_bg);
 
 	if (!btrfs_is_zoned(fs_info))
 		return;
 
-	spin_lock(&fs_info->treelog_bg_lock);
-	if (fs_info->treelog_bg == bg->start)
-		fs_info->treelog_bg = 0;
-	spin_unlock(&fs_info->treelog_bg_lock);
+	if (treelog_bg == bg->start)
+		WRITE_ONCE(fs_info->treelog_bg, 0);
 }
 
 static inline void btrfs_zoned_data_reloc_lock(struct btrfs_inode *inode)
