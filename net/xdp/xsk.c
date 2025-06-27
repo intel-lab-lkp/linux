@@ -33,8 +33,8 @@
 #include "xdp_umem.h"
 #include "xsk.h"
 
-#define TX_BATCH_SIZE 32
-#define MAX_PER_SOCKET_BUDGET (TX_BATCH_SIZE)
+#define TX_BUDGET_SIZE 32
+#define MAX_PER_SOCKET_BUDGET 32
 
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
@@ -779,7 +779,7 @@ free_err:
 static int __xsk_generic_xmit(struct sock *sk)
 {
 	struct xdp_sock *xs = xdp_sk(sk);
-	u32 max_batch = TX_BATCH_SIZE;
+	u32 max_budget = READ_ONCE(xs->max_tx_budget);
 	bool sent_frame = false;
 	struct xdp_desc desc;
 	struct sk_buff *skb;
@@ -797,7 +797,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 		goto out;
 
 	while (xskq_cons_peek_desc(xs->tx, &desc, xs->pool)) {
-		if (max_batch-- == 0) {
+		if (max_budget-- == 0) {
 			err = -EAGAIN;
 			goto out;
 		}
@@ -1437,6 +1437,21 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		mutex_unlock(&xs->mutex);
 		return err;
 	}
+	case XDP_MAX_TX_BUDGET:
+	{
+		unsigned int budget;
+
+		if (optlen != sizeof(budget))
+			return -EINVAL;
+		if (copy_from_sockptr(&budget, optval, sizeof(budget)))
+			return -EFAULT;
+		if (!xs->tx || xs->tx->nentries < TX_BUDGET_SIZE)
+			return -EACCES;
+
+		WRITE_ONCE(xs->max_tx_budget,
+			   clamp(budget, TX_BUDGET_SIZE, xs->tx->nentries));
+		return 0;
+	}
 	default:
 		break;
 	}
@@ -1588,6 +1603,21 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 
 		return 0;
 	}
+	case XDP_MAX_TX_BUDGET:
+	{
+		unsigned int budget;
+
+		if (len < sizeof(budget))
+			return -EINVAL;
+
+		budget = READ_ONCE(xs->max_tx_budget);
+		if (copy_to_user(optval, &budget, sizeof(budget)))
+			return -EFAULT;
+		if (put_user(sizeof(budget), optlen))
+			return -EFAULT;
+
+		return 0;
+	}
 	default:
 		break;
 	}
@@ -1734,6 +1764,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	xs = xdp_sk(sk);
 	xs->state = XSK_READY;
+	xs->max_tx_budget = TX_BUDGET_SIZE;
 	mutex_init(&xs->mutex);
 
 	INIT_LIST_HEAD(&xs->map_list);
