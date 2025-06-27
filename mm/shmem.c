@@ -5213,8 +5213,8 @@ static int shmem_error_remove_folio(struct address_space *mapping,
 
 #ifdef CONFIG_USERFAULTFD
 static const vm_uffd_ops shmem_uffd_ops = {
-	.uffd_features	= 	__VM_UFFD_FLAGS,
-	.uffd_ioctls	= 	BIT(_UFFDIO_COPY) |
+	.uffd_features	=	__VM_UFFD_FLAGS,
+	.uffd_ioctls	=	BIT(_UFFDIO_COPY) |
 				BIT(_UFFDIO_ZEROPAGE) |
 				BIT(_UFFDIO_WRITEPROTECT) |
 				BIT(_UFFDIO_CONTINUE) |
