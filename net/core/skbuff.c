@@ -3231,104 +3231,95 @@ static int sendmsg_unlocked(struct sock *sk, struct msghdr *msg)
 	return sock_sendmsg(sock, msg);
 }
 
+#define MAX_SKB_SEND_BIOVEC_SIZE	16
 typedef int (*sendmsg_func)(struct sock *sk, struct msghdr *msg);
 static int __skb_send_sock(struct sock *sk, struct sk_buff *skb, int offset,
 			   int len, sendmsg_func sendmsg, int flags)
 {
-	unsigned int orig_len = len;
 	struct sk_buff *head = skb;
 	unsigned short fragidx;
-	int slen, ret;
+	struct msghdr msg;
+	struct bio_vec bvec[MAX_SKB_SEND_BIOVEC_SIZE];
+	int ret, slen, total_len = 0;
+	int bvec_count = 0;
+	unsigned int copied = 0;
 
-do_frag_list:
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_flags = MSG_SPLICE_PAGES | MSG_DONTWAIT | flags;
 
-	/* Deal with head data */
-	while (offset < skb_headlen(skb) && len) {
-		struct kvec kv;
-		struct msghdr msg;
+	while (copied < len) {
+		/* Deal with head data */
+		if (offset < skb_headlen(skb) && bvec_count < MAX_SKB_SEND_BIOVEC_SIZE) {
+			struct page *page = virt_to_page(skb->data + offset);
+			unsigned int page_offset = offset_in_page(skb->data + offset);
 
-		slen = min_t(int, len, skb_headlen(skb) - offset);
-		kv.iov_base = skb->data + offset;
-		kv.iov_len = slen;
-		memset(&msg, 0, sizeof(msg));
-		msg.msg_flags = MSG_DONTWAIT | flags;
+			if (!sendpage_ok(page))
+				msg.msg_flags &= ~MSG_SPLICE_PAGES;
 
-		iov_iter_kvec(&msg.msg_iter, ITER_SOURCE, &kv, 1, slen);
-		ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked,
-				      sendmsg_unlocked, sk, &msg);
-		if (ret <= 0)
-			goto error;
+			slen = min_t(int, skb_headlen(skb) - offset, len - copied);
+			bvec_set_page(&bvec[bvec_count++], page, slen, page_offset);
+			copied += slen;
+			offset += slen;
+		}
 
-		offset += ret;
-		len -= ret;
-	}
+		/* Make offset relative to start of frags */
+		offset -= skb_headlen(skb);
 
-	/* All the data was skb head? */
-	if (!len)
-		goto out;
+		if (copied < len && bvec_count < MAX_SKB_SEND_BIOVEC_SIZE) {
+			for (fragidx = 0; fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
+				skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
+				unsigned int frag_size = skb_frag_size(frag);
 
-	/* Make offset relative to start of frags */
-	offset -= skb_headlen(skb);
+				/* Find where we are in frag list */
+				if (offset >= frag_size) {
+					offset -= frag_size;
+					continue;
+				}
 
-	/* Find where we are in frag list */
-	for (fragidx = 0; fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
-		skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
+				slen = min_t(size_t, frag_size - offset, len - copied);
+				bvec_set_page(&bvec[bvec_count++], skb_frag_page(frag), slen,
+					      skb_frag_off(frag) + offset);
 
-		if (offset < skb_frag_size(frag))
-			break;
+				copied += slen;
+				offset = 0;
 
-		offset -= skb_frag_size(frag);
-	}
+				if (copied >= len || bvec_count >= MAX_SKB_SEND_BIOVEC_SIZE)
+					break;
+			}
+		}
 
-	for (; len && fragidx < skb_shinfo(skb)->nr_frags; fragidx++) {
-		skb_frag_t *frag  = &skb_shinfo(skb)->frags[fragidx];
+		if (copied < len && bvec_count < MAX_SKB_SEND_BIOVEC_SIZE) {
+			/* Process any frag lists */
+			if (skb == head) {
+				if (skb_has_frag_list(skb))
+					skb = skb_shinfo(skb)->frag_list;
+			} else if (skb->next) {
+				skb = skb->next;
+			}
+		}
 
-		slen = min_t(size_t, len, skb_frag_size(frag) - offset);
+		if (bvec_count == MAX_SKB_SEND_BIOVEC_SIZE || copied == len) {
+			iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, bvec, bvec_count, len);
+			ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked, sendmsg_unlocked, sk, &msg);
 
-		while (slen) {
-			struct bio_vec bvec;
-			struct msghdr msg = {
-				.msg_flags = MSG_SPLICE_PAGES | MSG_DONTWAIT |
-					     flags,
-			};
+			if (ret < 0)
+				return ret;
 
-			bvec_set_page(&bvec, skb_frag_page(frag), slen,
-				      skb_frag_off(frag) + offset);
-			iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, &bvec, 1,
-				      slen);
-
-			ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked,
-					      sendmsg_unlocked, sk, &msg);
-			if (ret <= 0)
-				goto error;
-
+			/* Statistical data */
 			len -= ret;
 			offset += ret;
-			slen -= ret;
-		}
+			total_len += ret;
 
-		offset = 0;
-	}
-
-	if (len) {
-		/* Process any frag lists */
-
-		if (skb == head) {
-			if (skb_has_frag_list(skb)) {
-				skb = skb_shinfo(skb)->frag_list;
-				goto do_frag_list;
-			}
-		} else if (skb->next) {
-			skb = skb->next;
-			goto do_frag_list;
+			/* Restore initial value */
+			memset(&msg, 0, sizeof(msg));
+			msg.msg_flags = MSG_SPLICE_PAGES | MSG_DONTWAIT | flags;
+			copied = 0;
+			bvec_count = 0;
+			skb = head;
 		}
 	}
 
-out:
-	return orig_len - len;
-
-error:
-	return orig_len == len ? ret : orig_len - len;
+	return total_len;
 }
 
 /* Send skb data on a socket. Socket must be locked. */
