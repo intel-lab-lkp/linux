@@ -357,6 +357,7 @@ Format Functions Reference
 .. kernel-doc:: include/drm/drm_fourcc.h
    :internal:
 
+.. c:namespace:: gpu_drm_fourcc
 .. kernel-doc:: drivers/gpu/drm/drm_fourcc.c
    :export:
 
@@ -473,6 +474,7 @@ KMS Locking
 .. kernel-doc:: include/drm/drm_modeset_lock.h
    :internal:
 
+.. c:namespace:: gpu_drm_modeset_lock
 .. kernel-doc:: drivers/gpu/drm/drm_modeset_lock.c
    :export:
 
