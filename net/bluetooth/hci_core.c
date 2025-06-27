@@ -3757,8 +3757,7 @@ static void hci_sched_iso(struct hci_dev *hdev)
 	    !hci_conn_num(hdev, BIS_LINK))
 		return;
 
-	cnt = hdev->iso_pkts ? &hdev->iso_cnt :
-		hdev->le_pkts ? &hdev->le_cnt : &hdev->acl_cnt;
+	cnt = &hdev->iso_cnt;
 	while (*cnt && (conn = hci_low_sent(hdev, CIS_LINK, BIS_LINK,
 					    &quote))) {
 		while (quote-- && (skb = skb_dequeue(&conn->data_q))) {
