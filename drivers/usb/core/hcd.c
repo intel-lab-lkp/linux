@@ -1496,6 +1496,34 @@ int usb_hcd_map_urb_for_dma(struct usb_hcd *hcd, struct urb *urb,
 }
 EXPORT_SYMBOL_GPL(usb_hcd_map_urb_for_dma);
 
+static void usb_dma_noncoherent_sync_for_cpu(struct usb_hcd *hcd,
+					     struct urb *urb)
+{
+	enum dma_data_direction dir;
+
+	if (!urb->sgt)
+		return;
+
+	dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	invalidate_kernel_vmap_range(urb->transfer_buffer,
+				     urb->transfer_buffer_length);
+	dma_sync_sgtable_for_cpu(hcd->self.sysdev, urb->sgt, dir);
+}
+
+static void usb_dma_noncoherent_sync_for_device(struct usb_hcd *hcd,
+						struct urb *urb)
+{
+	enum dma_data_direction dir;
+
+	if (!urb->sgt)
+		return;
+
+	dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	flush_kernel_vmap_range(urb->transfer_buffer,
+				urb->transfer_buffer_length);
+	dma_sync_sgtable_for_device(hcd->self.sysdev, urb->sgt, dir);
+}
+
 /*-------------------------------------------------------------------------*/
 
 /* may be called in any context with a valid urb->dev usecount
@@ -1516,6 +1544,7 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 	atomic_inc(&urb->use_count);
 	atomic_inc(&urb->dev->urbnum);
 	usbmon_urb_submit(&hcd->self, urb);
+	usb_dma_noncoherent_sync_for_device(hcd, urb);
 
 	/* NOTE requirements on root-hub callers (usbfs and the hub
 	 * driver, for now):  URBs' urb->transfer_buffer must be
@@ -1632,6 +1661,7 @@ static void __usb_hcd_giveback_urb(struct urb *urb)
 		status = -EREMOTEIO;
 
 	unmap_urb_for_dma(hcd, urb);
+	usb_dma_noncoherent_sync_for_cpu(hcd, urb);
 	usbmon_urb_complete(&hcd->self, urb, status);
 	usb_anchor_suspend_wakeups(anchor);
 	usb_unanchor_urb(urb);
