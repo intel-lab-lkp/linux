@@ -10302,7 +10302,9 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		if (local_group)
 			continue;
 
-		if (sd_flags & SD_ASYM_CPUCAPACITY) {
+		/* Only look for misfit load if dst_cpu can help */
+		if (sd_flags & SD_ASYM_CPUCAPACITY &&
+		    capacity_greater(capacity_of(env->dst_cpu), group->sgc->max_capacity)) {
 			/* Check for a misfit task on the cpu */
 			if (sgs->group_misfit_task_load < rq->misfit_task_load) {
 				sgs->group_misfit_task_load = rq->misfit_task_load;
