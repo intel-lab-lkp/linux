@@ -1975,13 +1975,15 @@ unlock:
 	return ERR_PTR(error);
 }
 
-static struct folio *shmem_swap_alloc_folio(struct inode *inode,
+static struct folio *shmem_swapin_direct(struct inode *inode,
 		struct vm_area_struct *vma, pgoff_t index,
 		swp_entry_t entry, int order, gfp_t gfp)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	int nr_pages = 1 << order;
 	struct folio *new;
+	pgoff_t offset;
+	gfp_t swap_gfp;
 	void *shadow;
 
 	/*
@@ -1989,6 +1991,7 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 	 * limit chance of success with further cpuset and node constraints.
 	 */
 	gfp &= ~GFP_CONSTRAINT_MASK;
+	swap_gfp = gfp;
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 		if (WARN_ON_ONCE(order))
 			return ERR_PTR(-EINVAL);
@@ -2003,20 +2006,23 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 		if ((vma && unlikely(userfaultfd_armed(vma))) ||
 		     !zswap_never_enabled() ||
 		     non_swapcache_batch(entry, nr_pages) != nr_pages) {
-			return ERR_PTR(-EINVAL);
+			goto fallback;
 		} else {
-			gfp = limit_gfp_mask(vma_thp_gfp_mask(vma), gfp);
+			swap_gfp = limit_gfp_mask(vma_thp_gfp_mask(vma), gfp);
 		}
 	}
-
-	new = shmem_alloc_folio(gfp, order, info, index);
-	if (!new)
-		return ERR_PTR(-ENOMEM);
+retry:
+	new = shmem_alloc_folio(swap_gfp, order, info, index);
+	if (!new) {
+		new = ERR_PTR(-ENOMEM);
+		goto fallback;
+	}
 
 	if (mem_cgroup_swapin_charge_folio(new, vma ? vma->vm_mm : NULL,
-					   gfp, entry)) {
+					   swap_gfp, entry)) {
 		folio_put(new);
-		return ERR_PTR(-ENOMEM);
+		new = ERR_PTR(-ENOMEM);
+		goto fallback;
 	}
 
 	/*
@@ -2045,6 +2051,17 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 	folio_add_lru(new);
 	swap_read_folio(new, NULL);
 	return new;
+fallback:
+	/* Order 0 swapin failed, nothing to fallback to, abort */
+	if (!order)
+		return new;
+	/* High order swapin failed, fallback to order 0 and retry */
+	order = 0;
+	nr_pages = 1;
+	swap_gfp = gfp;
+	offset = index - round_down(index, nr_pages);
+	entry = swp_entry(swp_type(entry), swp_offset(entry) + offset);
+	goto retry;
 }
 
 /*
@@ -2243,7 +2260,6 @@ static int shmem_split_swap_entry(struct inode *inode, pgoff_t index,
 			cur_order = split_order;
 			split_order = xas_try_split_min_order(split_order);
 		}
-
 unlock:
 		xas_unlock_irq(&xas);
 
@@ -2306,34 +2322,26 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 			count_vm_event(PGMAJFAULT);
 			count_memcg_event_mm(fault_mm, PGMAJFAULT);
 		}
-
-		/* Skip swapcache for synchronous device. */
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
-			folio = shmem_swap_alloc_folio(inode, vma, index, swap, order, gfp);
-			if (!IS_ERR(folio)) {
+			/* Direct mTHP swapin without swap cache or readahead */
+			folio = shmem_swapin_direct(inode, vma, index,
+						    swap, order, gfp);
+			if (IS_ERR(folio)) {
+				error = PTR_ERR(folio);
+				folio = NULL;
+			} else {
 				skip_swapcache = true;
-				goto alloced;
 			}
-
+		} else {
 			/*
-			 * Fallback to swapin order-0 folio unless the swap entry
-			 * already exists.
+			 * Order 0 swapin using swap cache and readahead, it
+			 * may return order > 0 folio due to raced swap cache
 			 */
-			error = PTR_ERR(folio);
-			folio = NULL;
-			if (error == -EEXIST)
-				goto failed;
+			folio = shmem_swapin_cluster(swap, gfp, info, index);
 		}
-
-		/* Here we actually start the io */
-		folio = shmem_swapin_cluster(swap, gfp, info, index);
-		if (!folio) {
-			error = -ENOMEM;
+		if (!folio)
 			goto failed;
-		}
 	}
-
-alloced:
 	/*
 	 * We need to split an existing large entry if swapin brought in a
 	 * smaller folio due to various of reasons.
