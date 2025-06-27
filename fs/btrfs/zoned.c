@@ -2495,11 +2495,10 @@ void btrfs_schedule_zone_finish_bg(struct btrfs_block_group *bg,
 void btrfs_clear_data_reloc_bg(struct btrfs_block_group *bg)
 {
 	struct btrfs_fs_info *fs_info = bg->fs_info;
+	u64 data_reloc_bg = READ_ONCE(fs_info->data_reloc_bg);
 
-	spin_lock(&fs_info->relocation_bg_lock);
-	if (fs_info->data_reloc_bg == bg->start)
-		fs_info->data_reloc_bg = 0;
-	spin_unlock(&fs_info->relocation_bg_lock);
+	if (data_reloc_bg == bg->start)
+		WRITE_ONCE(fs_info->data_reloc_bg, 0);
 }
 
 void btrfs_zoned_reserve_data_reloc_bg(struct btrfs_fs_info *fs_info)
@@ -2518,7 +2517,7 @@ void btrfs_zoned_reserve_data_reloc_bg(struct btrfs_fs_info *fs_info)
 	if (!btrfs_is_zoned(fs_info))
 		return;
 
-	if (fs_info->data_reloc_bg)
+	if (READ_ONCE(fs_info->data_reloc_bg))
 		return;
 
 	if (sb_rdonly(fs_info->sb))
@@ -2539,7 +2538,7 @@ again:
 			continue;
 		}
 
-		fs_info->data_reloc_bg = bg->start;
+		WRITE_ONCE(fs_info->data_reloc_bg, bg->start);
 		set_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &bg->runtime_flags);
 		btrfs_zone_activate(bg);
 
