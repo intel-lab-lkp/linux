@@ -22,8 +22,7 @@
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-
-#include "ad9832.h"
+#include <linux/iio/dac/ad9832.h>
 
 #include "dds.h"
 
