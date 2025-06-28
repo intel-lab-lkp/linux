@@ -876,6 +876,9 @@ struct pci_error_handlers {
 	/* PCI slot has been reset */
 	pci_ers_result_t (*slot_reset)(struct pci_dev *dev);
 
+	/* PCI slot has been disconnected */
+        void (*disconnect)(struct pci_dev *dev);
+
 	/* PCI function reset prepare or completed */
 	void (*reset_prepare)(struct pci_dev *dev);
 	void (*reset_done)(struct pci_dev *dev);
