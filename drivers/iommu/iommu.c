@@ -2151,10 +2151,14 @@ EXPORT_SYMBOL_GPL(iommu_attach_device);
 
 int iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
 {
-	if (dev->iommu && dev->iommu->attach_deferred)
-		return __iommu_attach_device(domain, dev);
+	struct iommu_group *group = dev->iommu_group;
+	int ret = 0;
 
-	return 0;
+	mutex_lock(&group->mutex);
+	if (dev->iommu && dev->iommu->attach_deferred)
+		ret = __iommu_attach_device(domain, dev);
+	mutex_unlock(&group->mutex);
+	return ret;
 }
 
 void iommu_detach_device(struct iommu_domain *domain, struct device *dev)
