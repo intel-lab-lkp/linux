@@ -1589,15 +1589,17 @@ static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
 		return -EINVAL;
 	}
 
-	WRITE_ONCE(netdev->mtu, new_mtu);
 
-	if (!netif_running(netdev))
+	if (!netif_running(netdev)) {
+		WRITE_ONCE(netdev->mtu, new_mtu);
 		return 0;
+	}
 
 	if (nicvf_update_hw_max_frs(nic, new_mtu)) {
-		netdev->mtu = orig_mtu;
 		return -EINVAL;
 	}
+
+	WRITE_ONCE(netdev->mtu, new_mtu);
 
 	return 0;
 }
