@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
 
 	if (setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
 		perror("setsockopt");
-		return 1;
+		goto failure;
 	}
 
 	address.sin_family = AF_INET;
@@ -43,12 +43,12 @@ int main(int argc, char *argv[])
 
 	if (bind(server, (struct sockaddr *)&address, sizeof(address)) < 0) {
 		perror("bind failed");
-		return 1;
+		goto failure;
 	}
 
 	if (listen(server, 1) < 0) {
 		perror("listen");
-		return 1;
+		goto failure;
 	}
 
 	ksft_ready();
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
 	client = accept(server, NULL, 0);
 	if (client < 0) {
 		perror("accept");
-		return 1;
+		goto failure;
 	}
 
 	optlen = sizeof(napi_id);
@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 			 &optlen);
 	if (ret != 0) {
 		perror("getsockopt");
-		return 1;
+		goto failure;
 	}
 
 	read(client, buf, 1024);
@@ -73,11 +73,18 @@ int main(int argc, char *argv[])
 
 	if (napi_id == 0) {
 		fprintf(stderr, "napi ID is 0\n");
-		return 1;
+		goto failure;
 	}
 
 	close(client);
 	close(server);
 
 	return 0;
+
+failure:
+	if (client >= 0)
+		close(client);
+	if (server >= 0)
+		close(server);
+	return 1;
 }
