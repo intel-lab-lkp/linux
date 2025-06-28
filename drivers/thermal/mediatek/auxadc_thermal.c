@@ -1150,6 +1150,10 @@ static const struct of_device_id mtk_thermal_of_match[] = {
 		.data = (void *)&mt7622_thermal_data,
 	},
 	{
+		.compatible = "mediatek,mt7981-thermal",
+		.data = (void *)&mt7986_thermal_data,
+	},
+	{
 		.compatible = "mediatek,mt7986-thermal",
 		.data = (void *)&mt7986_thermal_data,
 	},
