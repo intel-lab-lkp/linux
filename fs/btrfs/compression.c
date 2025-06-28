@@ -972,12 +972,7 @@ static int btrfs_compress_set_level(unsigned int type, int level)
 {
 	const struct btrfs_compress_op *ops = btrfs_compress_op[type];
 
-	if (level == 0)
-		level = ops->default_level;
-	else
-		level = min(max(level, ops->min_level), ops->max_level);
-
-	return level;
+	return level == 0 ? ops->default_level : clamp(level, ops->min_level, ops->max_level);
 }
 
 /*
