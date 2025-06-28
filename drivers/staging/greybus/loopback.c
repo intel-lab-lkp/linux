@@ -1110,13 +1110,6 @@ static void gb_loopback_disconnect(struct gb_bundle *bundle)
 	gb_connection_latency_tag_disable(gb->connection);
 	debugfs_remove(gb->file);
 
-	/*
-	 * FIXME: gb_loopback_async_wait_all() is redundant now, as connection
-	 * is disabled at the beginning and so we can't have any more
-	 * incoming/outgoing requests.
-	 */
-	gb_loopback_async_wait_all(gb);
-
 	spin_lock_irqsave(&gb_dev.lock, flags);
 	gb_dev.count--;
 	spin_unlock_irqrestore(&gb_dev.lock, flags);
