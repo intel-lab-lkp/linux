@@ -168,7 +168,7 @@ pub trait Adapter {
     }
 
     #[cfg(not(CONFIG_OF))]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     fn of_id_info(_dev: &device::Device) -> Option<&'static Self::IdInfo> {
         None
     }

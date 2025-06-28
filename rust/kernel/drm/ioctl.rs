@@ -9,28 +9,28 @@ use crate::ioctl;
 const BASE: u32 = uapi::DRM_IOCTL_BASE as u32;
 
 /// Construct a DRM ioctl number with no argument.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[inline(always)]
 pub const fn IO(nr: u32) -> u32 {
     ioctl::_IO(BASE, nr)
 }
 
 /// Construct a DRM ioctl number with a read-only argument.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[inline(always)]
 pub const fn IOR<T>(nr: u32) -> u32 {
     ioctl::_IOR::<T>(BASE, nr)
 }
 
 /// Construct a DRM ioctl number with a write-only argument.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[inline(always)]
 pub const fn IOW<T>(nr: u32) -> u32 {
     ioctl::_IOW::<T>(BASE, nr)
 }
 
 /// Construct a DRM ioctl number with a read-write argument.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[inline(always)]
 pub const fn IOWR<T>(nr: u32) -> u32 {
     ioctl::_IOWR::<T>(BASE, nr)

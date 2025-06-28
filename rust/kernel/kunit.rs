@@ -280,7 +280,7 @@ macro_rules! kunit_unsafe_test_suite {
             static mut KUNIT_TEST_SUITE: ::kernel::bindings::kunit_suite =
                 ::kernel::bindings::kunit_suite {
                     name: KUNIT_TEST_SUITE_NAME,
-                    #[allow(unused_unsafe)]
+                    #[expect(unused_unsafe)]
                     // SAFETY: `$test_cases` is passed in by the user, and
                     // (as documented) must be valid for the lifetime of
                     // the suite (i.e., static).

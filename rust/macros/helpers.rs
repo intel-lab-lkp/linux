@@ -98,7 +98,7 @@ pub(crate) fn file() -> String {
     }
 
     #[cfg(CONFIG_RUSTC_HAS_SPAN_FILE)]
-    #[allow(clippy::incompatible_msrv)]
+    #[expect(clippy::incompatible_msrv)]
     {
         proc_macro::Span::call_site().file()
     }

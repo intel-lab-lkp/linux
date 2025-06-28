@@ -600,9 +600,9 @@ impl<T: ConfigOps + Default> Config<T> {
 pub struct Table {
     ptr: *mut bindings::opp_table,
     dev: ARef<Device>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     em: bool,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     of: bool,
     cpus: Option<CpumaskVar>,
 }
