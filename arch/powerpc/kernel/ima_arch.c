@@ -5,9 +5,10 @@
  */
 
 #include <linux/ima.h>
+#include <linux/integrity.h>
 #include <asm/secure_boot.h>
 
-bool arch_ima_get_secureboot(void)
+bool arch_integrity_get_secureboot(void)
 {
 	return is_ppc_secureboot_enabled();
 }
@@ -56,6 +57,7 @@ static const char *const secure_and_trusted_rules[] = {
 	NULL
 };
 
+#ifdef CONFIG_IMA_SECURE_AND_OR_TRUSTED_BOOT
 /*
  * Returns the relevant IMA arch-specific policies based on the system secure
  * boot state.
@@ -76,3 +78,4 @@ const char *const *arch_get_ima_policy(void)
 
 	return NULL;
 }
+#endif
