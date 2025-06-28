@@ -40,35 +40,47 @@
 
 #include "internal.h"
 
-bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t pte)
-{
-	struct page *page;
+enum tristate {
+	TRI_FALSE = 0,
+	TRI_TRUE = 1,
+	TRI_MAYBE = -1,
+};
 
+/*
+ * Returns enum tristate indicating whether the pte can be changed to writable.
+ * If TRI_MAYBE is returned, then the folio is anonymous and the user must
+ * additionally check PageAnonExclusive() for every page in the desired range.
+ */
+static int maybe_change_pte_writable(struct vm_area_struct *vma,
+				     unsigned long addr, pte_t pte,
+				     struct folio *folio)
+{
 	if (WARN_ON_ONCE(!(vma->vm_flags & VM_WRITE)))
-		return false;
+		return TRI_FALSE;
 
 	/* Don't touch entries that are not even readable. */
 	if (pte_protnone(pte))
-		return false;
+		return TRI_FALSE;
 
 	/* Do we need write faults for softdirty tracking? */
 	if (pte_needs_soft_dirty_wp(vma, pte))
-		return false;
+		return TRI_FALSE;
 
 	/* Do we need write faults for uffd-wp tracking? */
 	if (userfaultfd_pte_wp(vma, pte))
-		return false;
+		return TRI_FALSE;
 
 	if (!(vma->vm_flags & VM_SHARED)) {
 		/*
 		 * Writable MAP_PRIVATE mapping: We can only special-case on
 		 * exclusive anonymous pages, because we know that our
 		 * write-fault handler similarly would map them writable without
-		 * any additional checks while holding the PT lock.
+		 * any additional checks while holding the PT lock. So if the
+		 * folio is not anonymous, we know we cannot change pte to
+		 * writable. If it is anonymous then the caller must further
+		 * check that the page is AnonExclusive().
 		 */
-		page = vm_normal_page(vma, addr, pte);
-		return page && PageAnon(page) && PageAnonExclusive(page);
+		return (!folio || folio_test_anon(folio)) ? TRI_MAYBE : TRI_FALSE;
 	}
 
 	VM_WARN_ON_ONCE(is_zero_pfn(pte_pfn(pte)) && pte_dirty(pte));
@@ -80,15 +92,61 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 	 * FS was already notified and we can simply mark the PTE writable
 	 * just like the write-fault handler would do.
 	 */
-	return pte_dirty(pte);
+	return pte_dirty(pte) ? TRI_TRUE : TRI_FALSE;
+}
+
+/*
+ * Returns the number of pages within the folio, starting from the page
+ * indicated by pgidx and up to pgidx + max_nr, that have the same value of
+ * PageAnonExclusive(). Must only be called for anonymous folios. Value of
+ * PageAnonExclusive() is returned in *exclusive.
+ */
+static int anon_exclusive_batch(struct folio *folio, int pgidx, int max_nr,
+				bool *exclusive)
+{
+	struct page *page;
+	int nr = 1;
+
+	if (!folio) {
+		*exclusive = false;
+		return nr;
+	}
+
+	page = folio_page(folio, pgidx++);
+	*exclusive = PageAnonExclusive(page);
+	while (nr < max_nr) {
+		page = folio_page(folio, pgidx++);
+		if ((*exclusive) != PageAnonExclusive(page))
+			break;
+		nr++;
+	}
+
+	return nr;
+}
+
+bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
+			     pte_t pte)
+{
+	struct page *page;
+	int ret;
+
+	ret = maybe_change_pte_writable(vma, addr, pte, NULL);
+	if (ret == TRI_MAYBE) {
+		page = vm_normal_page(vma, addr, pte);
+		ret = page && PageAnon(page) && PageAnonExclusive(page);
+	}
+
+	return ret;
 }
 
 static int mprotect_folio_pte_batch(struct folio *folio, unsigned long addr,
-		pte_t *ptep, pte_t pte, int max_nr_ptes)
+		pte_t *ptep, pte_t pte, int max_nr_ptes, fpb_t switch_off_flags)
 {
-	const fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
+	fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
 
-	if (!folio || !folio_test_large(folio) || (max_nr_ptes == 1))
+	flags &= ~switch_off_flags;
+
+	if (!folio || !folio_test_large(folio))
 		return 1;
 
 	return folio_pte_batch(folio, addr, ptep, pte, max_nr_ptes, flags,
@@ -154,7 +212,8 @@ static int prot_numa_skip_ptes(struct folio **foliop, struct vm_area_struct *vma
 	}
 
 skip_batch:
-	nr_ptes = mprotect_folio_pte_batch(folio, addr, pte, oldpte, max_nr_ptes);
+	nr_ptes = mprotect_folio_pte_batch(folio, addr, pte, oldpte,
+					   max_nr_ptes, 0);
 out:
 	*foliop = folio;
 	return nr_ptes;
@@ -191,7 +250,10 @@ static long change_pte_range(struct mmu_gather *tlb,
 		if (pte_present(oldpte)) {
 			int max_nr_ptes = (end - addr) >> PAGE_SHIFT;
 			struct folio *folio = NULL;
-			pte_t ptent;
+			int sub_nr_ptes, pgidx = 0;
+			pte_t ptent, newpte;
+			bool sub_set_write;
+			int set_write;
 
 			/*
 			 * Avoid trapping faults against the zero or KSM
@@ -206,6 +268,11 @@ static long change_pte_range(struct mmu_gather *tlb,
 					continue;
 			}
 
+			if (!folio)
+				folio = vm_normal_folio(vma, addr, oldpte);
+
+			nr_ptes = mprotect_folio_pte_batch(folio, addr, pte, oldpte,
+							   max_nr_ptes, FPB_IGNORE_SOFT_DIRTY);
 			oldpte = modify_prot_start_ptes(vma, addr, pte, nr_ptes);
 			ptent = pte_modify(oldpte, newprot);
 
@@ -227,15 +294,39 @@ static long change_pte_range(struct mmu_gather *tlb,
 			 * example, if a PTE is already dirty and no other
 			 * COW or special handling is required.
 			 */
-			if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) &&
-			    !pte_write(ptent) &&
-			    can_change_pte_writable(vma, addr, ptent))
-				ptent = pte_mkwrite(ptent, vma);
+			set_write = (cp_flags & MM_CP_TRY_CHANGE_WRITABLE) &&
+				    !pte_write(ptent);
+			if (set_write)
+				set_write = maybe_change_pte_writable(vma, addr, ptent, folio);
 
-			modify_prot_commit_ptes(vma, addr, pte, oldpte, ptent, nr_ptes);
-			if (pte_needs_flush(oldpte, ptent))
-				tlb_flush_pte_range(tlb, addr, PAGE_SIZE);
-			pages++;
+			while (nr_ptes) {
+				if (set_write == TRI_MAYBE) {
+					sub_nr_ptes = anon_exclusive_batch(folio,
+						pgidx, nr_ptes, &sub_set_write);
+				} else {
+					sub_nr_ptes = nr_ptes;
+					sub_set_write = (set_write == TRI_TRUE);
+				}
+
+				if (sub_set_write)
+					newpte = pte_mkwrite(ptent, vma);
+				else
+					newpte = ptent;
+
+				modify_prot_commit_ptes(vma, addr, pte, oldpte,
+							newpte, sub_nr_ptes);
+				if (pte_needs_flush(oldpte, newpte))
+					tlb_flush_pte_range(tlb, addr,
+						sub_nr_ptes * PAGE_SIZE);
+
+				addr += sub_nr_ptes * PAGE_SIZE;
+				pte += sub_nr_ptes;
+				oldpte = pte_advance_pfn(oldpte, sub_nr_ptes);
+				ptent = pte_advance_pfn(ptent, sub_nr_ptes);
+				nr_ptes -= sub_nr_ptes;
+				pages += sub_nr_ptes;
+				pgidx += sub_nr_ptes;
+			}
 		} else if (is_swap_pte(oldpte)) {
 			swp_entry_t entry = pte_to_swp_entry(oldpte);
 			pte_t newpte;
