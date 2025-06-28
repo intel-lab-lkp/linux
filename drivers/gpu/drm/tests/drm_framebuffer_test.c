@@ -677,6 +677,7 @@ static void drm_test_framebuffer_free(struct kunit *test)
 	};
 	int id, ret;
 
+	INIT_LIST_HEAD(&fb.filp_head);
 	priv->buffer_freed = false;
 
 	/*
