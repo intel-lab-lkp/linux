@@ -70,7 +70,7 @@ static struct page *brd_insert_page(struct brd_device *brd, sector_t sector,
 
 	xa_lock(&brd->brd_pages);
 	ret = __xa_cmpxchg(&brd->brd_pages, sector >> PAGE_SECTORS_SHIFT, NULL,
-			page, gfp);
+			page, GFP_NOWAIT | __GFP_NOWARN);
 	if (ret) {
 		xa_unlock(&brd->brd_pages);
 		__free_page(page);
