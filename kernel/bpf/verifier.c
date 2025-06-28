@@ -19854,16 +19854,15 @@ static int do_check(struct bpf_verifier_env *env)
 	struct bpf_insn *insns = env->prog->insnsi;
 	int insn_cnt = env->prog->len;
 	bool do_print_state = false;
-	int prev_insn_idx = -1;
 
+	env->prev_insn_idx = -1;
 	for (;;) {
 		struct bpf_insn *insn;
-		int err;
+		int err, tmp;
 
 		/* reset current history entry on each new instruction */
 		env->cur_hist_ent = NULL;
 
-		env->prev_insn_idx = prev_insn_idx;
 		if (env->insn_idx >= insn_cnt) {
 			verbose(env, "invalid insn idx %d insn_cnt %d\n",
 				env->insn_idx, insn_cnt);
@@ -19942,7 +19941,6 @@ static int do_check(struct bpf_verifier_env *env)
 		}
 
 		sanitize_mark_insn_seen(env);
-		prev_insn_idx = env->insn_idx;
 
 		/* Reduce verification complexity by stopping speculative path
 		 * verification when a nospec is encountered.
@@ -19950,7 +19948,9 @@ static int do_check(struct bpf_verifier_env *env)
 		if (state->speculative && cur_aux(env)->nospec)
 			goto process_bpf_exit;
 
+		tmp = env->insn_idx;
 		err = do_check_insn(env, &do_print_state);
+		env->prev_insn_idx = tmp;
 		if (error_recoverable_with_nospec(err) && state->speculative) {
 			/* Prevent this speculative path from ever reaching the
 			 * insn that would have been unsafe to execute.
@@ -19984,7 +19984,7 @@ process_bpf_exit:
 			err = update_branch_counts(env, env->cur_state);
 			if (err)
 				return err;
-			err = pop_stack(env, &prev_insn_idx, &env->insn_idx,
+			err = pop_stack(env, &env->prev_insn_idx, &env->insn_idx,
 					pop_log);
 			if (err < 0) {
 				if (err != -ENOENT)
