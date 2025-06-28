@@ -50,7 +50,7 @@ struct dlh_state {
 	u8 rx_buf[DLH_NUM_READ_BYTES];
 };
 
-static struct dlh_info dlh_info_tbl[] = {
+static const struct dlh_info dlh_info_tbl[] = {
 	[dlhl60d] = {
 		.osdig = 2,
 		.fss = 120,
