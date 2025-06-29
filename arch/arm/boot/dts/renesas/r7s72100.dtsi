@@ -41,6 +41,7 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges = <0 0 0x18000000>;
+		bootph-all;
 	};
 
 	cpus {
@@ -107,6 +108,8 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
+
+		bootph-all;
 
 		L2: cache-controller@3ffff000 {
 			compatible = "arm,pl310-cache";
@@ -557,6 +560,7 @@
 
 		pinctrl: pinctrl@fcfe3000 {
 			compatible = "renesas,r7s72100-ports";
+			bootph-all;
 
 			reg = <0xfcfe3000 0x4230>;
 
@@ -639,6 +643,7 @@
 			interrupts = <GIC_SPI 102 IRQ_TYPE_EDGE_RISING>;
 			clocks = <&mstp5_clks R7S72100_CLK_OSTM0>;
 			power-domains = <&cpg_clocks>;
+			bootph-all;
 			status = "disabled";
 		};
 

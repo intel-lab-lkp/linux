@@ -258,6 +258,7 @@
 	};
 
 	scif2_pins: serial2 {
+		bootph-all;
 		/* P3_0 as TxD2; P3_2 as RxD2 */
 		pinmux = <RZA1_PINMUX(3, 0, 6)>, <RZA1_PINMUX(3, 2, 4)>;
 	};
@@ -286,7 +287,7 @@
 &scif2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&scif2_pins>;
-
+	bootph-all;
 	status = "okay";
 };
 
