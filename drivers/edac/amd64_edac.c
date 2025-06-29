@@ -552,7 +552,7 @@ static ssize_t reg##_show(struct device *dev,				\
 	struct mem_ctl_info *mci = to_mci(dev);				\
 	struct amd64_pvt *pvt = mci->pvt_info;				\
 									\
-	return sprintf(data, "0x%016llx\n", (u64)pvt->reg);		\
+	return  sysfs_emit(data, "0x%016llx\n", (u64)pvt->reg);		\
 }
 
 EDAC_DCT_ATTR_SHOW(dhar);
@@ -571,7 +571,7 @@ static ssize_t dram_hole_show(struct device *dev, struct device_attribute *mattr
 
 	get_dram_hole_info(mci, &hole_base, &hole_offset, &hole_size);
 
-	return sprintf(data, "%llx %llx %llx\n", hole_base, hole_offset,
+	return sysfs_emit(data, "%llx %llx %llx\n", hole_base, hole_offset,
 						 hole_size);
 }
 
@@ -602,7 +602,7 @@ static ssize_t inject_section_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
-	return sprintf(buf, "0x%x\n", pvt->injection.section);
+	return sysfs_emit(buf, "0x%x\n", pvt->injection.section);
 }
 
 /*
@@ -638,7 +638,7 @@ static ssize_t inject_word_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
-	return sprintf(buf, "0x%x\n", pvt->injection.word);
+	return sysfs_emit(buf, "0x%x\n", pvt->injection.word);
 }
 
 /*
@@ -675,7 +675,7 @@ static ssize_t inject_ecc_vector_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
-	return sprintf(buf, "0x%x\n", pvt->injection.bit_map);
+	return sysfs_emit(buf, "0x%x\n", pvt->injection.bit_map);
 }
 
 /*
