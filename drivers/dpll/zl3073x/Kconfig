@@ -2,7 +2,9 @@
 
 config ZL3073X
 	tristate "Microchip Azurite DPLL/PTP/SyncE devices"
+	depends on NET
 	select DPLL
+	select NET_DEVLINK
 	help
 	  This driver supports Microchip Azurite DPLL/PTP/SyncE devices.
 
