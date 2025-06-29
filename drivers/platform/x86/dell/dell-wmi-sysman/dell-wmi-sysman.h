@@ -90,6 +90,13 @@ extern struct wmi_sysman_priv wmi_priv;
 enum { ENUM, INT, STR, PO };
 
 enum {
+	ENUM_MIN_ELEMENTS	= 8,
+	INT_MIN_ELEMENTS	= 9,
+	STR_MIN_ELEMENTS	= 8,
+	PO_MIN_ELEMENTS		= 4,
+};
+
+enum {
 	ATTR_NAME,
 	DISPL_NAME_LANG_CODE,
 	DISPLAY_NAME,
