@@ -3427,37 +3427,35 @@ static ssize_t receive_timing_debugfs_show(struct file *file, char __user *buf,
 	struct it6505 *it6505 = file->private_data;
 	struct drm_display_mode *vid;
 	u8 read_buf[READ_BUFFER_SIZE];
-	u8 *str = read_buf, *end = read_buf + READ_BUFFER_SIZE;
-	ssize_t ret, count;
+	ssize_t ret;
+	ssize_t count = 0;
 
 	if (!it6505)
 		return -ENODEV;
 
 	it6505_calc_video_info(it6505);
 	vid = &it6505->video_info;
-	str += scnprintf(str, end - str, "---video timing---\n");
-	str += scnprintf(str, end - str, "PCLK:%d.%03dMHz\n",
-			 vid->clock / 1000, vid->clock % 1000);
-	str += scnprintf(str, end - str, "HTotal:%d\n", vid->htotal);
-	str += scnprintf(str, end - str, "HActive:%d\n", vid->hdisplay);
-	str += scnprintf(str, end - str, "HFrontPorch:%d\n",
-			 vid->hsync_start - vid->hdisplay);
-	str += scnprintf(str, end - str, "HSyncWidth:%d\n",
-			 vid->hsync_end - vid->hsync_start);
-	str += scnprintf(str, end - str, "HBackPorch:%d\n",
-			 vid->htotal - vid->hsync_end);
-	str += scnprintf(str, end - str, "VTotal:%d\n", vid->vtotal);
-	str += scnprintf(str, end - str, "VActive:%d\n", vid->vdisplay);
-	str += scnprintf(str, end - str, "VFrontPorch:%d\n",
-			 vid->vsync_start - vid->vdisplay);
-	str += scnprintf(str, end - str, "VSyncWidth:%d\n",
-			 vid->vsync_end - vid->vsync_start);
-	str += scnprintf(str, end - str, "VBackPorch:%d\n",
-			 vid->vtotal - vid->vsync_end);
-
-	count = str - read_buf;
+	count += sysfs_emit_at(read_buf, count, "---video timing---\n");
+	count += sysfs_emit_at(read_buf, count, "PCLK:%d.%03dMHz\n",
+			vid->clock / 1000, vid->clock % 1000);
+	count += sysfs_emit_at(read_buf, count, "HTotal:%d\n", vid->htotal);
+	count += sysfs_emit_at(read_buf, count, "HActive:%d\n", vid->hdisplay);
+	count += sysfs_emit_at(read_buf, count, "HFrontPorch:%d\n",
+			vid->hsync_start - vid->hdisplay);
+	count += sysfs_emit_at(read_buf, count, "HSyncWidth:%d\n",
+			vid->hsync_end - vid->hsync_start);
+	count += sysfs_emit_at(read_buf, count, "HBackPorch:%d\n",
+			vid->htotal - vid->hsync_end);
+	count += sysfs_emit_at(read_buf, count, "VTotal:%d\n", vid->vtotal);
+	count += sysfs_emit_at(read_buf, count, "VActive:%d\n", vid->vdisplay);
+	count += sysfs_emit_at(read_buf, count, "VFrontPorch:%d\n",
+			vid->vsync_start - vid->vdisplay);
+	count += sysfs_emit_at(read_buf, count, "VSyncWidth:%d\n",
+			vid->vsync_end - vid->vsync_start);
+	count += sysfs_emit_at(read_buf, count, "VBackPorch:%d\n",
+			vid->vtotal - vid->vsync_end);
+	
 	ret = simple_read_from_buffer(buf, len, ppos, read_buf, count);
-
 	return ret;
 }
 
