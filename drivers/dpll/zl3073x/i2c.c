@@ -22,7 +22,9 @@ static int zl3073x_i2c_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(zldev->regmap),
 				     "Failed to initialize regmap\n");
 
-	return zl3073x_dev_probe(zldev, i2c_get_match_data(client));
+	/* Initialize device and use I2C address as dev ID */
+	return zl3073x_dev_probe(zldev, i2c_get_match_data(client),
+				 client->addr);
 }
 
 static const struct i2c_device_id zl3073x_i2c_id[] = {
