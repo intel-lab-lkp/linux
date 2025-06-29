@@ -1503,7 +1503,7 @@ int mlx5vf_start_page_tracker(struct vfio_device *vdev,
 	struct mlx5_vhca_qp *fw_qp;
 	struct mlx5_core_dev *mdev;
 	u32 log_max_msg_size;
-	u32 max_msg_size;
+	u64 max_msg_size;
 	u64 rq_size = SZ_2M;
 	u32 max_recv_wr;
 	int err;
