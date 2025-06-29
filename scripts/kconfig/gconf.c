@@ -57,7 +57,7 @@ enum {
 };
 
 static void display_tree(GtkTreeStore *store, struct menu *menu);
-static void display_tree_part(void);
+static void recreate_tree(void);
 
 static void conf_changed(bool dirty)
 {
@@ -279,7 +279,7 @@ static void set_view_mode(enum view_mode mode)
 			browsed = menu_get_parent_menu(selected) ?: &rootmenu;
 		else
 			browsed = &rootmenu;
-		display_tree_part();
+		recreate_tree();
 		select_menu(GTK_TREE_VIEW(tree2_w), selected);
 		gtk_widget_set_sensitive(single_btn, FALSE);
 		break;
@@ -556,7 +556,7 @@ static void on_back_clicked(GtkButton *button, gpointer user_data)
 	ptype = browsed->prompt ? browsed->prompt->type : P_UNKNOWN;
 	if (ptype != P_MENU)
 		browsed = browsed->parent;
-	display_tree_part();
+	recreate_tree();
 
 	if (browsed == &rootmenu)
 		gtk_widget_set_sensitive(back_btn, FALSE);
@@ -793,7 +793,7 @@ static gboolean on_treeview2_button_press_event(GtkWidget *widget,
 		if (ptype == P_MENU && view_mode == SINGLE_VIEW && col == COL_OPTION) {
 			// goes down into menu
 			browsed = menu;
-			display_tree_part();
+			recreate_tree();
 			gtk_widget_set_sensitive(back_btn, TRUE);
 		} else if (col == COL_OPTION) {
 			toggle_sym_value(menu);
@@ -898,7 +898,7 @@ static gboolean on_treeview1_button_press_event(GtkWidget *widget,
 
 	if (menu->type == M_MENU) {
 		browsed = menu;
-		display_tree_part();
+		recreate_tree();
 	}
 
 	gtk_tree_view_set_cursor(view, path, NULL, FALSE);
@@ -960,7 +960,7 @@ static void display_tree(GtkTreeStore *store, struct menu *menu)
 }
 
 /* Display a part of the tree starting at current node (single/split view) */
-static void display_tree_part(void)
+static void recreate_tree(void)
 {
 	gtk_tree_store_clear(tree2);
 	display_tree(tree2, browsed);
