@@ -4,6 +4,7 @@
 import datetime
 import random
 import re
+import time
 from lib.py import ksft_run, ksft_pr, ksft_exit
 from lib.py import ksft_eq, ksft_ne, ksft_ge, ksft_in, ksft_lt, ksft_true, ksft_raises
 from lib.py import NetDrvEpEnv
@@ -492,6 +493,7 @@ def test_rss_context(cfg, ctx_cnt=1, create_with_cfg=None):
                             { 'target': (2+i*2, 3+i*2),
                               'noise': (0, 1),
                               'empty': list(range(2, 2+i*2)) + list(range(4+i*2, 2+2*ctx_cnt)) })
+        time.sleep(1)
 
     if requested_ctx_cnt != ctx_cnt:
         raise KsftSkipEx(f"Tested only {ctx_cnt} contexts, wanted {requested_ctx_cnt}")
@@ -559,6 +561,7 @@ def test_rss_context_out_of_order(cfg, ctx_cnt=4):
                 }
 
             _send_traffic_check(cfg, ports[i], f"context {i}", expected)
+            time.sleep(1)
 
     # Use queues 0 and 1 for normal traffic
     ethtool(f"-X {cfg.ifname} equal 2")
