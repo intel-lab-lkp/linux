@@ -3205,7 +3205,7 @@ struct btrfs_chunk_map *btrfs_get_chunk_map(struct btrfs_fs_info *fs_info,
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (unlikely(map->start > logical || map->start + map->chunk_len <= logical)) {
+	if (unlikely(!in_range(logical, map->start, map->chunk_len))) {
 		btrfs_crit(fs_info,
 			   "found a bad chunk map, wanted %llu-%llu, found %llu-%llu",
 			   logical, logical + length, map->start,
@@ -3848,7 +3848,7 @@ static bool chunk_usage_range_filter(struct btrfs_fs_info *fs_info, u64 chunk_of
 	else
 		user_thresh_max = mult_perc(cache->length, bargs->usage_max);
 
-	if (user_thresh_min <= chunk_used && chunk_used < user_thresh_max)
+	if (in_range(chunk_used, user_thresh_min, user_thresh_max))
 		ret = false;
 
 	btrfs_put_block_group(cache);
@@ -6218,9 +6218,7 @@ struct btrfs_discard_stripe *btrfs_map_discard(struct btrfs_fs_info *fs_info,
 			if (i < sub_stripes)
 				stripes[i].length -= stripe_offset;
 
-			if (stripe_index >= last_stripe &&
-			    stripe_index <= (last_stripe +
-					     sub_stripes - 1))
+			if (in_range(stripe_index, last_stripe, sub_stripes))
 				stripes[i].length -= stripe_end_offset;
 
 			if (i == sub_stripes - 1)
@@ -7054,11 +7052,10 @@ static int read_one_chunk(struct btrfs_key *key, struct extent_buffer *leaf,
 	map = btrfs_find_chunk_map(fs_info, logical, 1);
 
 	/* already mapped? */
-	if (map && map->start <= logical && map->start + map->chunk_len > logical) {
+	if (map) {
 		btrfs_free_chunk_map(map);
-		return 0;
-	} else if (map) {
-		btrfs_free_chunk_map(map);
+		if (in_range(logical, map->start, map->chunk_len))
+			return 0;
 	}
 
 	map = btrfs_alloc_chunk_map(num_stripes, GFP_NOFS);
@@ -8246,8 +8243,7 @@ static void map_raid56_repair_block(struct btrfs_io_context *bioc,
 		u64 stripe_start = bioc->full_stripe_logical +
 				   btrfs_stripe_nr_to_offset(i);
 
-		if (logical >= stripe_start &&
-		    logical < stripe_start + BTRFS_STRIPE_LEN)
+		if (in_range(logical, stripe_start, BTRFS_STRIPE_LEN))
 			break;
 	}
 	ASSERT(i < data_stripes, "i=%d data_stripes=%d", i, data_stripes);
