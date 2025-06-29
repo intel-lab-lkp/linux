@@ -1010,8 +1010,13 @@ static void clear_feature(struct m66592 *m66592, struct usb_ctrlrequest *ctrl)
 		struct m66592_ep *ep;
 		struct m66592_request *req;
 		u16 w_index = le16_to_cpu(ctrl->wIndex);
+		u16 ep_num = w_index & USB_ENDPOINT_NUMBER_MASK;
 
-		ep = m66592->epaddr2ep[w_index & USB_ENDPOINT_NUMBER_MASK];
+		if (ep_num == 0) {
+			control_end(m66592, 1);
+			break;
+		}
+		ep = m66592->epaddr2ep[ep_num];
 		pipe_stop(m66592, ep->pipenum);
 		control_reg_sqclr(m66592, ep->pipenum);
 
@@ -1067,8 +1072,13 @@ static void set_feature(struct m66592 *m66592, struct usb_ctrlrequest *ctrl)
 	case USB_RECIP_ENDPOINT: {
 		struct m66592_ep *ep;
 		u16 w_index = le16_to_cpu(ctrl->wIndex);
+		u16 ep_num = w_index & USB_ENDPOINT_NUMBER_MASK;
 
-		ep = m66592->epaddr2ep[w_index & USB_ENDPOINT_NUMBER_MASK];
+		if (ep_num == 0) {
+			control_end(m66592, 1);
+			break;
+		}
+		ep = m66592->epaddr2ep[ep_num];
 		pipe_stall(m66592, ep->pipenum);
 
 		control_end(m66592, 1);
