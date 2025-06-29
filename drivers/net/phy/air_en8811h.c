@@ -11,6 +11,7 @@
  * Copyright (C) 2023 Airoha Technology Corp.
  */
 
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/phy.h>
 #include <linux/firmware.h>
@@ -865,11 +866,20 @@ static int en8811h_clk_is_enabled(struct clk_hw *hw)
 	return (pbus_value & EN8811H_CLK_CGM_CKO);
 }
 
+static void en8811h_clk_restore_context(struct clk_hw *hw)
+{
+	if (!__clk_get_enable_count(hw->clk))
+		en8811h_clk_disable(hw);
+	else
+		en8811h_clk_enable(hw);
+}
+
 static const struct clk_ops en8811h_clk_ops = {
-	.recalc_rate	= en8811h_clk_recalc_rate,
-	.enable		= en8811h_clk_enable,
-	.disable	= en8811h_clk_disable,
-	.is_enabled	= en8811h_clk_is_enabled,
+	.recalc_rate		= en8811h_clk_recalc_rate,
+	.enable			= en8811h_clk_enable,
+	.disable		= en8811h_clk_disable,
+	.is_enabled		= en8811h_clk_is_enabled,
+	.restore_context	= en8811h_clk_restore_context,
 };
 
 static int en8811h_clk_provider_setup(struct device *dev, struct clk_hw *hw)
@@ -1149,6 +1159,13 @@ static irqreturn_t en8811h_handle_interrupt(struct phy_device *phydev)
 	return IRQ_HANDLED;
 }
 
+static int en8811h_resume(struct phy_device *phydev)
+{
+	clk_restore_context();
+
+	return genphy_resume(phydev);
+}
+
 static struct phy_driver en8811h_driver[] = {
 {
 	PHY_ID_MATCH_MODEL(EN8811H_PHY_ID),
@@ -1159,6 +1176,8 @@ static struct phy_driver en8811h_driver[] = {
 	.get_rate_matching	= en8811h_get_rate_matching,
 	.config_aneg		= en8811h_config_aneg,
 	.read_status		= en8811h_read_status,
+	.resume			= en8811h_resume,
+	.suspend		= genphy_suspend,
 	.config_intr		= en8811h_clear_intr,
 	.handle_interrupt	= en8811h_handle_interrupt,
 	.led_hw_is_supported	= en8811h_led_hw_is_supported,
