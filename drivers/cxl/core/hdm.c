@@ -547,6 +547,11 @@ resource_size_t cxl_dpa_resource_start(struct cxl_endpoint_decoder *cxled)
 	return base;
 }
 
+bool is_valid_dpa(struct resource *res, u64 dpa)
+{
+	return (dpa >= res->start && dpa <= res->end);
+}
+
 int cxl_dpa_free(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_port *port = cxled_to_port(cxled);

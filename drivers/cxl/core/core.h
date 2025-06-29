@@ -136,4 +136,5 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 		    u16 *return_code);
 #endif
 
+bool is_valid_dpa(struct resource *res, u64 dpa);
 #endif /* __CXL_CORE_H__ */
