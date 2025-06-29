@@ -11607,9 +11607,10 @@ static void bnxt_free_irq(struct bnxt *bp)
 
 static int bnxt_request_irq(struct bnxt *bp)
 {
-	int i, j, rc = 0;
+	int i, rc = 0;
 	unsigned long flags = 0;
 #ifdef CONFIG_RFS_ACCEL
+	int j = 0;
 	struct cpu_rmap *rmap;
 #endif
 
@@ -11628,7 +11629,7 @@ static int bnxt_request_irq(struct bnxt *bp)
 	if (!rc)
 		bp->tph_mode = PCI_TPH_ST_IV_MODE;
 
-	for (i = 0, j = 0; i < bp->cp_nr_rings; i++) {
+	for (i = 0; i < bp->cp_nr_rings; i++) {
 		int map_idx = bnxt_cp_num_to_irq_num(bp, i);
 		struct bnxt_irq *irq = &bp->irq_tbl[map_idx];
 
