@@ -953,15 +953,19 @@ static int gntdev_grant_copy_seg(struct gntdev_copy_batch *batch,
 static long gntdev_ioctl_grant_copy(struct gntdev_priv *priv, void __user *u)
 {
 	struct ioctl_gntdev_grant_copy copy;
-	struct gntdev_copy_batch batch;
+	struct gntdev_copy_batch *batch;
 	unsigned int i;
 	int ret = 0;
 
 	if (copy_from_user(&copy, u, sizeof(copy)))
 		return -EFAULT;
 
-	batch.nr_ops = 0;
-	batch.nr_pages = 0;
+	batch = kmalloc(sizeof(*batch), GFP_KERNEL);
+	if (!batch)
+		return -ENOMEM;
+
+	batch->nr_ops = 0;
+	batch->nr_pages = 0;
 
 	for (i = 0; i < copy.count; i++) {
 		struct gntdev_grant_copy_segment seg;
@@ -971,18 +975,20 @@ static long gntdev_ioctl_grant_copy(struct gntdev_priv *priv, void __user *u)
 			goto out;
 		}
 
-		ret = gntdev_grant_copy_seg(&batch, &seg, &copy.segments[i].status);
+		ret = gntdev_grant_copy_seg(batch, &seg, &copy.segments[i].status);
 		if (ret < 0)
 			goto out;
 
 		cond_resched();
 	}
-	if (batch.nr_ops)
-		ret = gntdev_copy(&batch);
-	return ret;
+	if (batch->nr_ops)
+		ret = gntdev_copy(batch);
+	goto free_batch;
 
   out:
-	gntdev_put_pages(&batch);
+	gntdev_put_pages(batch);
+  free_batch:
+	kfree(batch);
 	return ret;
 }
 
