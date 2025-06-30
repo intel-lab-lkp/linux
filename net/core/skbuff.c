@@ -3252,6 +3252,8 @@ do_frag_list:
 		kv.iov_len = slen;
 		memset(&msg, 0, sizeof(msg));
 		msg.msg_flags = MSG_DONTWAIT | flags;
+		if (slen < len)
+			msg.msg_flags |= MSG_MORE;
 
 		iov_iter_kvec(&msg.msg_iter, ITER_SOURCE, &kv, 1, slen);
 		ret = INDIRECT_CALL_2(sendmsg, sendmsg_locked,
@@ -3292,6 +3294,8 @@ do_frag_list:
 					     flags,
 			};
 
+			if (slen < len)
+				msg.msg_flags |= MSG_MORE;
 			bvec_set_page(&bvec, skb_frag_page(frag), slen,
 				      skb_frag_off(frag) + offset);
 			iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, &bvec, 1,
