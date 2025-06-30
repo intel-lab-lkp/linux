@@ -29,11 +29,15 @@ config PCIE_CADENCE_EP
 config PCIE_CADENCE_PLAT
 	bool
 
+config PCIE_CADENCE_PLAT_HPA
+	bool
+
 config PCIE_CADENCE_PLAT_HOST
 	bool "Cadence platform PCIe controller (host mode)"
 	depends on OF
 	select PCIE_CADENCE_HOST
 	select PCIE_CADENCE_PLAT
+	select PCIE_CADENCE_PLAT_HPA
 	help
 	  Say Y here if you want to support the Cadence PCIe platform controller in
 	  host mode. This PCIe controller may be embedded into many different
@@ -45,6 +49,7 @@ config PCIE_CADENCE_PLAT_EP
 	depends on PCI_ENDPOINT
 	select PCIE_CADENCE_EP
 	select PCIE_CADENCE_PLAT
+	select PCIE_CADENCE_PLAT_HPA
 	help
 	  Say Y here if you want to support the Cadence PCIe platform controller in
 	  endpoint mode. This PCIe controller may be embedded into many
