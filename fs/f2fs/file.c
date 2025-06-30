@@ -1070,6 +1070,23 @@ int f2fs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (err)
 		return err;
 
+	/*
+	 * To prevent scattered pin block generation, we don't allow
+	 * smaller/equal size unaligned truncation for pinned file.
+	 * We only support overwrite IO to pinned file, so don't
+	 * care about larger size truncation.
+	 * We need to check this after setattr_prepare() because xfstests
+	 * #494 assumes truncation on active swapfile(pinned) will
+	 * return ETXTBSY by setattr_prepare() -> inode_newsize_ok().
+	 */
+	if (attr->ia_valid & ATTR_SIZE) {
+		if (f2fs_is_pinned_file(inode) &&
+			attr->ia_size <= i_size_read(inode) &&
+			!IS_ALIGNED(attr->ia_size,
+			F2FS_BLK_TO_BYTES(CAP_BLKS_PER_SEC(sbi))))
+			return -EINVAL;
+	}
+
 	err = fscrypt_prepare_setattr(dentry, attr);
 	if (err)
 		return err;
