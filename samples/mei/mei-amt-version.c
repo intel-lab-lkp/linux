@@ -73,7 +73,9 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdbool.h>
+#if defined(__GLIBC__)
 #include <bits/wordsize.h>
+#endif
 #include <linux/mei.h>
 
 /*****************************************************************************
