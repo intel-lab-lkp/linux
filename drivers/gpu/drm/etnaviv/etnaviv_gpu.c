@@ -18,6 +18,7 @@
 
 #include "etnaviv_cmdbuf.h"
 #include "etnaviv_dump.h"
+#include "etnaviv_flop_reset.h"
 #include "etnaviv_gpu.h"
 #include "etnaviv_gem.h"
 #include "etnaviv_mmu.h"
@@ -836,6 +837,10 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 		ret = -ENXIO;
 		goto fail;
 	}
+
+	if (etnaviv_flop_reset_ppu_require(&gpu->identity) &&
+	    !priv->flop_reset_data_ppu)
+		etnaviv_flop_reset_ppu_init(priv);
 
 	if (gpu->identity.nn_core_count > 0)
 		dev_warn(gpu->dev, "etnaviv has been instantiated on a NPU, "

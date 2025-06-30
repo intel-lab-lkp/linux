@@ -18,6 +18,8 @@
 #include "state_3d.xml.h"
 #include "cmdstream.xml.h"
 
+#include "etnaviv_flop_reset.h"
+
 static void etnaviv_cmd_select_pipe(struct etnaviv_gpu *gpu,
 	struct etnaviv_cmdbuf *buffer, u8 pipe)
 {
@@ -99,6 +101,10 @@ u16 etnaviv_buffer_init(struct etnaviv_gpu *gpu)
 
 	/* initialize buffer */
 	buffer->user_size = 0;
+
+	/* Queue in PPU flop reset */
+	if (etnaviv_flop_reset_ppu_require(&gpu->identity))
+		etnaviv_flop_reset_ppu_run(gpu);
 
 	CMD_WAIT(buffer, gpu->fe_waitcycles);
 	CMD_LINK(buffer, 2,
