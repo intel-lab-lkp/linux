@@ -13,7 +13,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/landlock.h>
+#if defined(__GLIBC__)
 #include <linux/prctl.h>
+#endif
 #include <linux/socket.h>
 #include <stddef.h>
 #include <stdio.h>
