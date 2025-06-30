@@ -439,6 +439,8 @@
 	 | (trans) << 11 | (phy) << 10 | (ele) << 9 | (u4) << 8			\
 	 | ((hops) & 0x3) << 6 | (u2) << 5 | (u32) << 4 | (lane) << 3		\
 	 | (iso) << 2 | (gen))
+#define VDO_TYPEC_CABLE_VERSION(vdo) (((vdo) >> 21) & 0x7)
+#define VDO_TYPEC_CABLE_USB4_SUPP(vdo) (((vdo) & BIT(8)) == ACAB2_USB4_SUPP)
 
 /*
  * AMA VDO (PD Rev2.0)
