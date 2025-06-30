@@ -337,6 +337,8 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_SOCK,
 	MEMCG_PERCPU_B,
 	MEMCG_VMALLOC,
+	MEMCG_GPU,
+	MEMCG_GPU_RECLAIM,
 	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
@@ -1345,6 +1347,8 @@ static const struct memory_stat memory_stats[] = {
 	{ "percpu",			MEMCG_PERCPU_B			},
 	{ "sock",			MEMCG_SOCK			},
 	{ "vmalloc",			MEMCG_VMALLOC			},
+	{ "gpu",			MEMCG_GPU			},
+	{ "gpu_reclaim",		MEMCG_GPU_RECLAIM		},
 	{ "shmem",			NR_SHMEM			},
 #ifdef CONFIG_ZSWAP
 	{ "zswap",			MEMCG_ZSWAP_B			},
@@ -5131,6 +5135,112 @@ void mem_cgroup_uncharge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 
 	refill_stock(memcg, nr_pages);
 }
+
+/**
+ * mem_cgroup_charge_gpu_page - charge a page to GPU memory tracking
+ * @objcg: objcg to charge, NULL charges root memcg
+ * @page: page to charge
+ * @order: page allocation order
+ * @gfp_mask: gfp mode
+ * @reclaim: charge the reclaim counter instead of the active one.
+ *
+ * Charge the order sized @page to the objcg. Returns %true if the charge fit within
+ * @objcg's configured limit, %false if it doesn't.
+ */
+bool mem_cgroup_charge_gpu_page(struct obj_cgroup *objcg, struct page *page,
+				unsigned int order, gfp_t gfp_mask, bool reclaim)
+{
+	unsigned int nr_pages = 1 << order;
+	struct mem_cgroup *memcg;
+	int ret;
+
+        if (!objcg) {
+		mod_memcg_state(root_mem_cgroup, reclaim ? MEMCG_GPU_RECLAIM : MEMCG_GPU, nr_pages);
+		return true;
+	}
+
+	memcg = get_mem_cgroup_from_objcg(objcg);
+	ret = try_charge_memcg(memcg, gfp_mask, nr_pages);
+	if (ret) {
+		css_put(&memcg->css);
+		return false;
+	}
+
+	if (page) {
+		obj_cgroup_get(objcg);
+		page_set_objcg(page, objcg);
+	}
+
+	mod_memcg_state(memcg, reclaim ? MEMCG_GPU_RECLAIM : MEMCG_GPU, nr_pages);
+	css_put(&memcg->css);
+	return true;
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_charge_gpu_page);
+
+/**
+ * mem_cgroup_uncharge_gpu_page - uncharge a page from GPU memory tracking
+ * @page: page to uncharge
+ * @order: order of the page allocation
+ * @reclaim: uncharge the reclaim counter instead of the active.
+ */
+void mem_cgroup_uncharge_gpu_page(struct page *page,
+				  unsigned int order, bool reclaim)
+{
+	struct obj_cgroup *objcg = page_objcg(page);
+	struct mem_cgroup *memcg;
+
+	int nr_pages = 1 << order;
+	if (!objcg) {
+		mod_memcg_state(root_mem_cgroup, reclaim ? MEMCG_GPU_RECLAIM : MEMCG_GPU, -nr_pages);
+		return;
+	}
+
+	memcg = get_mem_cgroup_from_objcg(objcg);
+
+	mod_memcg_state(memcg, reclaim ? MEMCG_GPU_RECLAIM : MEMCG_GPU, -nr_pages);
+
+	if (page) {
+		page->memcg_data = 0;
+		obj_cgroup_put(objcg);
+	}
+	if (!mem_cgroup_is_root(memcg))
+		refill_stock(memcg, nr_pages);
+	css_put(&memcg->css);
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_uncharge_gpu_page);
+
+/**
+ * mem_cgroup_move_gpu_reclaim - move pages from gpu to gpu reclaim and back
+ * @new_objcg: objcg to move page to, NULL if just stats update.
+ * @nr_pages: number of pages to move
+ * @to_reclaim: true moves pages into reclaim, false moves them back
+ */
+bool mem_cgroup_move_gpu_page_reclaim(struct obj_cgroup *new_objcg,
+				      struct page *page,
+				      unsigned int order,
+				      bool to_reclaim)
+{
+	struct obj_cgroup *objcg = page_objcg(page);
+	struct mem_cgroup *memcg;
+	int nr_pages = 1 << order;
+	bool ret = true;
+
+	if (!objcg)
+		return false;
+
+	memcg = get_mem_cgroup_from_objcg(objcg);
+	if (!new_objcg || objcg == new_objcg) {
+		mod_memcg_state(memcg, to_reclaim ? MEMCG_GPU_RECLAIM : MEMCG_GPU, nr_pages);
+		mod_memcg_state(memcg, to_reclaim ? MEMCG_GPU : MEMCG_GPU_RECLAIM, -nr_pages);
+	} else {
+		mem_cgroup_uncharge_gpu_page(page, order, true);
+
+		ret = mem_cgroup_charge_gpu_page(new_objcg, page, order, 0, false);
+	}
+	css_put(&memcg->css);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_move_gpu_page_reclaim);
 
 static int __init cgroup_memory(char *s)
 {
