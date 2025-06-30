@@ -1126,9 +1126,11 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 
 	mutex_lock(&mhi_cntrl->pm_mutex);
 
-	ret = mhi_init_dev_ctxt(mhi_cntrl);
-	if (ret)
-		goto error_dev_ctxt;
+	if (!mhi_cntrl->mhi_ctxt) {
+		ret = mhi_init_dev_ctxt(mhi_cntrl);
+		if (ret)
+			goto error_dev_ctxt;
+	}
 
 	ret = mhi_read_reg(mhi_cntrl, mhi_cntrl->regs, BHIOFF, &bhi_off);
 	if (ret) {
@@ -1205,8 +1207,6 @@ void mhi_deinit_dev_ctxt(struct mhi_controller *mhi_cntrl)
 {
 	mhi_cntrl->bhi = NULL;
 	mhi_cntrl->bhie = NULL;
-
-	__mhi_deinit_dev_ctxt(mhi_cntrl);
 }
 
 void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
@@ -1227,6 +1227,7 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 	}
 
 	mhi_deinit_dev_ctxt(mhi_cntrl);
+	__mhi_deinit_dev_ctxt(mhi_cntrl);
 }
 EXPORT_SYMBOL_GPL(mhi_unprepare_after_power_down);
 
