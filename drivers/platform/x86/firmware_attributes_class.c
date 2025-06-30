@@ -11,7 +11,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/string_choices.h>
-#include "firmware_attributes_class.h"
+#include <linux/firmware_attributes_class.h>
 
 #define FWAT_TYPE_NONE				-1
 
