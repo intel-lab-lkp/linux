@@ -142,17 +142,14 @@ static umode_t scrub_attr_visible(struct kobject *kobj, struct attribute *a, int
 	return 0;
 }
 
-#define EDAC_SCRUB_ATTR_RO(_name, _instance)       \
-	((struct edac_scrub_dev_attr) { .dev_attr = __ATTR_RO(_name), \
-					.instance = _instance })
-
-#define EDAC_SCRUB_ATTR_WO(_name, _instance)       \
-	((struct edac_scrub_dev_attr) { .dev_attr = __ATTR_WO(_name), \
-					.instance = _instance })
-
-#define EDAC_SCRUB_ATTR_RW(_name, _instance)       \
-	((struct edac_scrub_dev_attr) { .dev_attr = __ATTR_RW(_name), \
-					.instance = _instance })
+static const struct device_attribute scrub_dev_attr[] = {
+	[SCRUB_ADDRESS]		    = __ATTR_RW(addr),
+	[SCRUB_SIZE]		    = __ATTR_RW(size),
+	[SCRUB_ENABLE_BACKGROUND]   = __ATTR_RW(enable_background),
+	[SCRUB_MIN_CYCLE_DURATION]  = __ATTR_RO(min_cycle_duration),
+	[SCRUB_MAX_CYCLE_DURATION]  = __ATTR_RO(max_cycle_duration),
+	[SCRUB_CUR_CYCLE_DURATION]  = __ATTR_RW(current_cycle_duration)
+};
 
 static int scrub_create_desc(struct device *scrub_dev,
 			     const struct attribute_group **attr_groups, u8 instance)
@@ -160,14 +157,6 @@ static int scrub_create_desc(struct device *scrub_dev,
 	struct edac_scrub_context *scrub_ctx;
 	struct attribute_group *group;
 	int i;
-	struct edac_scrub_dev_attr dev_attr[] = {
-		[SCRUB_ADDRESS] = EDAC_SCRUB_ATTR_RW(addr, instance),
-		[SCRUB_SIZE] = EDAC_SCRUB_ATTR_RW(size, instance),
-		[SCRUB_ENABLE_BACKGROUND] = EDAC_SCRUB_ATTR_RW(enable_background, instance),
-		[SCRUB_MIN_CYCLE_DURATION] = EDAC_SCRUB_ATTR_RO(min_cycle_duration, instance),
-		[SCRUB_MAX_CYCLE_DURATION] = EDAC_SCRUB_ATTR_RO(max_cycle_duration, instance),
-		[SCRUB_CUR_CYCLE_DURATION] = EDAC_SCRUB_ATTR_RW(current_cycle_duration, instance)
-	};
 
 	scrub_ctx = devm_kzalloc(scrub_dev, sizeof(*scrub_ctx), GFP_KERNEL);
 	if (!scrub_ctx)
@@ -175,7 +164,9 @@ static int scrub_create_desc(struct device *scrub_dev,
 
 	group = &scrub_ctx->group;
 	for (i = 0; i < SCRUB_MAX_ATTRS; i++) {
-		memcpy(&scrub_ctx->scrub_dev_attr[i], &dev_attr[i], sizeof(dev_attr[i]));
+		scrub_ctx->scrub_dev_attr[i].dev_attr = scrub_dev_attr[i];
+		scrub_ctx->scrub_dev_attr[i].instance = instance;
+
 		sysfs_attr_init(&scrub_ctx->scrub_dev_attr[i].dev_attr.attr);
 		scrub_ctx->scrub_attrs[i] = &scrub_ctx->scrub_dev_attr[i].dev_attr.attr;
 	}
