@@ -2,8 +2,10 @@
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/export.h>
 #include "dp_rx.h"
 #include "debug.h"
 #include "hif.h"
@@ -392,9 +394,6 @@ static int ath11k_ce_completed_recv_next(struct ath11k_ce_pipe *pipe,
 		ret = -EIO;
 		goto err;
 	}
-
-	/* Make sure descriptor is read after the head pointer. */
-	dma_rmb();
 
 	*nbytes = ath11k_hal_ce_dst_status_get_length(desc);
 
