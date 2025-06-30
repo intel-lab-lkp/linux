@@ -11988,11 +11988,7 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 		rxfh.rss_delete = true;
 
 		xa_erase(&dev->ethtool->rss_ctx, context);
-		if (dev->ethtool_ops->create_rxfh_context)
-			dev->ethtool_ops->remove_rxfh_context(dev, ctx,
-							      context, NULL);
-		else
-			dev->ethtool_ops->set_rxfh(dev, &rxfh, NULL);
+		dev->ethtool_ops->remove_rxfh_context(dev, ctx, context, NULL);
 		kfree(ctx);
 	}
 	xa_destroy(&dev->ethtool->rss_ctx);

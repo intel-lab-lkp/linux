@@ -1391,8 +1391,7 @@ static noinline_for_stack int ethtool_get_rxfh(struct net_device *dev,
 	if (rxfh.rsvd8[0] || rxfh.rsvd8[1] || rxfh.rsvd32)
 		return -EINVAL;
 	/* Most drivers don't handle rss_context, check it's 0 as well */
-	if (rxfh.rss_context && !(ops->cap_rss_ctx_supported ||
-				  ops->create_rxfh_context))
+	if (rxfh.rss_context && !ops->create_rxfh_context)
 		return -EOPNOTSUPP;
 
 	rxfh.indir_size = rxfh_dev.indir_size;
@@ -1534,8 +1533,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 	if (rxfh.rsvd8[0] || rxfh.rsvd8[1] || rxfh.rsvd32)
 		return -EINVAL;
 	/* Most drivers don't handle rss_context, check it's 0 as well */
-	if (rxfh.rss_context && !(ops->cap_rss_ctx_supported ||
-				  ops->create_rxfh_context))
+	if (rxfh.rss_context && !ops->create_rxfh_context)
 		return -EOPNOTSUPP;
 	/* Check input data transformation capabilities */
 	if (rxfh.input_xfrm && rxfh.input_xfrm != RXH_XFRM_SYM_XOR &&
@@ -1670,7 +1668,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 	rxfh_dev.rss_context = rxfh.rss_context;
 	rxfh_dev.input_xfrm = rxfh.input_xfrm;
 
-	if (rxfh.rss_context && ops->create_rxfh_context) {
+	if (rxfh.rss_context) {
 		if (create) {
 			ret = ops->create_rxfh_context(dev, ctx, &rxfh_dev,
 						       extack);
@@ -1711,37 +1709,6 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 			dev->priv_flags &= ~IFF_RXFH_CONFIGURED;
 		else if (rxfh.indir_size != ETH_RXFH_INDIR_NO_CHANGE)
 			dev->priv_flags |= IFF_RXFH_CONFIGURED;
-	}
-	/* Update rss_ctx tracking */
-	if (create && !ops->create_rxfh_context) {
-		/* driver uses old API, it chose context ID */
-		if (WARN_ON(xa_load(&dev->ethtool->rss_ctx, rxfh_dev.rss_context))) {
-			/* context ID reused, our tracking is screwed */
-			kfree(ctx);
-			goto out_unlock;
-		}
-		/* Allocate the exact ID the driver gave us */
-		if (xa_is_err(xa_store(&dev->ethtool->rss_ctx, rxfh_dev.rss_context,
-				       ctx, GFP_KERNEL))) {
-			kfree(ctx);
-			goto out_unlock;
-		}
-
-		/* Fetch the defaults for the old API, in the new API drivers
-		 * should write defaults into ctx themselves.
-		 */
-		rxfh_dev.indir = (u32 *)rss_config;
-		rxfh_dev.indir_size = dev_indir_size;
-
-		rxfh_dev.key = rss_config + indir_bytes;
-		rxfh_dev.key_size = dev_key_size;
-
-		ret = ops->get_rxfh(dev, &rxfh_dev);
-		if (WARN_ON(ret)) {
-			xa_erase(&dev->ethtool->rss_ctx, rxfh.rss_context);
-			kfree(ctx);
-			goto out_unlock;
-		}
 	}
 	if (rxfh_dev.rss_delete) {
 		WARN_ON(xa_erase(&dev->ethtool->rss_ctx, rxfh.rss_context) != ctx);
