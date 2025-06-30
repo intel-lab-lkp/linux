@@ -19,6 +19,7 @@ mpi-y = \
 	mpi-cmp.o			\
 	mpi-sub-ui.o			\
 	mpi-div.o			\
+	mpi-inv.o			\
 	mpi-mod.o			\
 	mpi-mul.o			\
 	mpih-cmp.o			\
