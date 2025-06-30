@@ -9,7 +9,9 @@
 #define _GNU_SOURCE
 #define __SANE_USERSPACE_TYPES__
 #include <errno.h>
+#if defined(__GLIBC__)
 #include <linux/prctl.h>
+#endif
 #include <linux/securebits.h>
 #include <stdbool.h>
 #include <stdio.h>

@@ -14,7 +14,9 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <linux/fcntl.h>
+#if defined(__GLIBC__)
 #include <linux/prctl.h>
+#endif
 #include <linux/securebits.h>
 #include <stdbool.h>
 #include <stdio.h>
