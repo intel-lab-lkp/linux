@@ -29,8 +29,10 @@
 #define IBMVNIC_BUFFS_PER_POOL	100
 #define IBMVNIC_MAX_QUEUES	16
 #define IBMVNIC_MAX_QUEUE_SZ   4096
-#define IBMVNIC_MAX_IND_DESCS  16
-#define IBMVNIC_IND_ARR_SZ	(IBMVNIC_MAX_IND_DESCS * 32)
+#define IBMVNIC_IND_DESC_SZ	32
+#define IBMVNIC_MAX_IND_DESCS_DEFAULT	128
+#define IBMVNIC_MAX_IND_DESC_MAX	128
+#define IBMVNIC_MAX_IND_DESC_MIN	16
 
 #define IBMVNIC_TSO_BUF_SZ	65536
 #define IBMVNIC_TSO_BUFS	64
@@ -945,6 +947,7 @@ struct ibmvnic_adapter {
 	int replenish_task_cycles;
 	int tx_send_failed;
 	int tx_map_failed;
+	u32 max_ind_descs;
 
 	struct ibmvnic_tx_queue_stats *tx_stats_buffers;
 	struct ibmvnic_rx_queue_stats *rx_stats_buffers;

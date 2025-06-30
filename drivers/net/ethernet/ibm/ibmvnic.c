@@ -154,6 +154,11 @@ static const struct ibmvnic_stat ibmvnic_stats[] = {
 	{"internal_mac_rx_errors", IBMVNIC_STAT_OFF(internal_mac_rx_errors)},
 };
 
+/* Module parameter for max_ind_descs */
+static unsigned int max_ind_descs = IBMVNIC_MAX_IND_DESCS_DEFAULT;
+module_param(max_ind_descs, uint, 0444);
+MODULE_PARM_DESC(max_ind_descs, "Max indirect subcrq descriptors (16 to 128, default 128)");
+
 static int send_crq_init_complete(struct ibmvnic_adapter *adapter)
 {
 	union ibmvnic_crq crq;
@@ -844,7 +849,7 @@ static void replenish_rx_pool(struct ibmvnic_adapter *adapter,
 		sub_crq->rx_add.len = cpu_to_be32(pool->buff_size << shift);
 
 		/* if send_subcrq_indirect queue is full, flush to VIOS */
-		if (ind_bufp->index == IBMVNIC_MAX_IND_DESCS ||
+		if (ind_bufp->index == max_ind_descs ||
 		    i == count - 1) {
 			lpar_rc =
 				send_subcrq_indirect(adapter, handle,
@@ -2590,7 +2595,7 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	tx_crq.v1.n_crq_elem = num_entries;
 	tx_buff->num_entries = num_entries;
 	/* flush buffer if current entry can not fit */
-	if (num_entries + ind_bufp->index > IBMVNIC_MAX_IND_DESCS) {
+	if (num_entries + ind_bufp->index > max_ind_descs) {
 		lpar_rc = ibmvnic_tx_scrq_flush(adapter, tx_scrq, true);
 		if (lpar_rc != H_SUCCESS)
 			goto tx_flush_err;
@@ -2603,7 +2608,7 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	ind_bufp->index += num_entries;
 	if (__netdev_tx_sent_queue(txq, skb->len,
 				   netdev_xmit_more() &&
-				   ind_bufp->index < IBMVNIC_MAX_IND_DESCS)) {
+				   ind_bufp->index < max_ind_descs)) {
 		lpar_rc = ibmvnic_tx_scrq_flush(adapter, tx_scrq, true);
 		if (lpar_rc != H_SUCCESS)
 			goto tx_err;
@@ -4006,7 +4011,7 @@ static void release_sub_crq_queue(struct ibmvnic_adapter *adapter,
 	}
 
 	dma_free_coherent(dev,
-			  IBMVNIC_IND_ARR_SZ,
+			  max_ind_descs * IBMVNIC_IND_DESC_SZ,
 			  scrq->ind_buf.indir_arr,
 			  scrq->ind_buf.indir_dma);
 
@@ -4063,7 +4068,7 @@ static struct ibmvnic_sub_crq_queue *init_sub_crq_queue(struct ibmvnic_adapter
 
 	scrq->ind_buf.indir_arr =
 		dma_alloc_coherent(dev,
-				   IBMVNIC_IND_ARR_SZ,
+				   max_ind_descs * IBMVNIC_IND_DESC_SZ,
 				   &scrq->ind_buf.indir_dma,
 				   GFP_KERNEL);
 
@@ -6724,6 +6729,20 @@ static struct vio_driver ibmvnic_driver = {
 static int __init ibmvnic_module_init(void)
 {
 	int ret;
+
+	if (max_ind_descs < IBMVNIC_MAX_IND_DESC_MIN ||
+	    max_ind_descs > IBMVNIC_MAX_IND_DESC_MAX) {
+		pr_info("ibmvnic: max_ind_descs=%u, must be between %d and %d. default %u\n",
+			max_ind_descs,
+			IBMVNIC_MAX_IND_DESC_MIN,
+			IBMVNIC_MAX_IND_DESC_MAX,
+			IBMVNIC_MAX_IND_DESCS_DEFAULT);
+
+		pr_info("ibmvnic: resetting max_ind_descs to default\n");
+		max_ind_descs = IBMVNIC_MAX_IND_DESCS_DEFAULT;
+	}
+
+	pr_info("ibmvnic: max_ind_descs set to %u\n", max_ind_descs);
 
 	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN, "net/ibmvnic:online",
 				      ibmvnic_cpu_online,
