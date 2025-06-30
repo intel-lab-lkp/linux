@@ -23,6 +23,7 @@
 #include <crypto/hash_info.h>
 
 #include "../integrity.h"
+#include "ima_rot.h"
 
 enum ima_show_type { IMA_SHOW_BINARY, IMA_SHOW_BINARY_NO_FIELD_LEN,
 		     IMA_SHOW_BINARY_OLD_STRING_FMT, IMA_SHOW_ASCII };
@@ -64,6 +65,7 @@ extern struct ima_algo_desc *ima_algo_array __ro_after_init;
 
 extern int ima_appraise;
 extern struct tpm_chip *ima_tpm_chip;
+extern struct ima_rot *ima_rot_inst;
 extern const char boot_aggregate_name[];
 
 /* IMA event related data */

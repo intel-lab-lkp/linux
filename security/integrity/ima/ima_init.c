@@ -23,6 +23,7 @@
 /* name for boot aggregate entry */
 const char boot_aggregate_name[] = "boot_aggregate";
 struct tpm_chip *ima_tpm_chip;
+struct ima_rot *ima_rot_inst;
 
 /* Add the boot aggregate to the IMA measurement list and extend
  * the PCR register.
