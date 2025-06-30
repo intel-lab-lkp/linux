@@ -28,7 +28,9 @@ pub use self::kvec::Vec;
 /// Indicates an allocation error.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AllocError;
+
 use core::{alloc::Layout, ptr::NonNull};
+use crate::error::{code::EINVAL, Result};
 
 /// Flags to be used when allocating memory.
 ///
@@ -115,6 +117,31 @@ pub mod flags {
     pub const __GFP_NOWARN: Flags = Flags(bindings::__GFP_NOWARN);
 }
 
+/// Non Uniform Memory Access (NUMA) node identifier
+#[derive(Clone, Copy, PartialEq)]
+pub struct NumaNode(i32);
+
+impl NumaNode {
+    /// create a new NUMA node identifer (non-negative integer)
+    /// returns EINVAL if a negative id or an id exceeding MAX_NUMNODES is specified
+    pub fn new(node: i32) -> Result<Self> {
+        // SAFETY: MAX_NUMNODES never exceeds 2**10 because NODES_SHIFT is 0..10
+        if node < 0 || node >= bindings::MAX_NUMNODES as i32 {
+            return Err(EINVAL);
+        }
+        Ok(Self(node))
+    }
+}
+
+/// Specify necessary constant to pass the information to Allocator that the caller doesn't care
+/// about the NUMA node to allocate memory from.
+pub mod numa {
+    use super::NumaNode;
+
+    /// No preference for NUMA node
+    pub const NUMA_NO_NODE: NumaNode = NumaNode(bindings::NUMA_NO_NODE);
+}
+
 /// The kernel's [`Allocator`] trait.
 ///
 /// An implementation of [`Allocator`] can allocate, re-allocate and free memory buffers described
@@ -148,7 +175,7 @@ pub unsafe trait Allocator {
     ///
     /// When the return value is `Ok(ptr)`, then `ptr` is
     /// - valid for reads and writes for `layout.size()` bytes, until it is passed to
-    ///   [`Allocator::free`] or [`Allocator::realloc`],
+    ///   [`Allocator::free`], [`Allocator::realloc`] or [`Allocator::realloc_node`],
     /// - aligned to `layout.align()`,
     ///
     /// Additionally, `Flags` are honored as documented in
@@ -159,7 +186,38 @@ pub unsafe trait Allocator {
         unsafe { Self::realloc(None, layout, Layout::new::<()>(), flags) }
     }
 
-    /// Re-allocate an existing memory allocation to satisfy the requested `layout`.
+    /// Allocate memory based on `layout`, `flags` and `nid`.
+    ///
+    /// On success, returns a buffer represented as `NonNull<[u8]>` that satisfies the layout
+    /// constraints (i.e. minimum size and alignment as specified by `layout`).
+    ///
+    /// This function is equivalent to `realloc_node` when called with `None`.
+    ///
+    /// # Guarantees
+    ///
+    /// When the return value is `Ok(ptr)`, then `ptr` is
+    /// - valid for reads and writes for `layout.size()` bytes, until it is passed to
+    ///   [`Allocator::free`], [`Allocator::realloc`] or [`Allocator::realloc_node`],
+    /// - aligned to `layout.align()`,
+    ///
+    /// Additionally, `Flags` are honored as documented in
+    /// <https://docs.kernel.org/core-api/mm-api.html#mm-api-gfp-flags>.
+    fn alloc_node(layout: Layout, flags: Flags, nid: NumaNode)
+                -> Result<NonNull<[u8]>, AllocError> {
+        // SAFETY: Passing `None` to `realloc_node` is valid by its safety requirements and
+        // asks for a new memory allocation.
+        unsafe { Self::realloc_node(None, layout, Layout::new::<()>(), flags, nid) }
+    }
+
+    /// Re-allocate an existing memory allocation to satisfy the requested `layout` and
+    /// a specific NUMA node request to allocate the memory for.
+    ///
+    /// Systems employing a Non Uniform Memory Access (NUMA) architecture contain collections of
+    /// hardware resources including processors, memory, and I/O buses, that comprise what is
+    /// commonly known as a NUMA node.
+    ///
+    /// `nid` stands for NUMA id, i. e. NUMA node identifier, which is a non-negative
+    /// integer if a node needs to be specified, or NUMA_NO_NODE if the caller doesn't care.
     ///
     /// If the requested size is zero, `realloc` behaves equivalent to `free`.
     ///
@@ -191,12 +249,28 @@ pub unsafe trait Allocator {
     ///   and old size, i.e. `ret_ptr[0..min(layout.size(), old_layout.size())] ==
     ///   p[0..min(layout.size(), old_layout.size())]`.
     /// - when the return value is `Err(AllocError)`, then `ptr` is still valid.
+    unsafe fn realloc_node(
+        ptr: Option<NonNull<u8>>,
+        layout: Layout,
+        old_layout: Layout,
+        flags: Flags,
+        nid: NumaNode,
+    ) -> Result<NonNull<[u8]>, AllocError>;
+
+
+    /// Re-allocate an existing memory allocation to satisfy the requested `layout`. This
+    /// function works exactly as realloc_node() but it doesn't give the ability to specify
+    /// the NUMA node in the call.
     unsafe fn realloc(
         ptr: Option<NonNull<u8>>,
         layout: Layout,
         old_layout: Layout,
         flags: Flags,
-    ) -> Result<NonNull<[u8]>, AllocError>;
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        // SAFETY: guaranteed by realloc_node()
+        unsafe { Self::realloc_node(ptr, layout, old_layout, flags, numa::NUMA_NO_NODE) }
+    }
+
 
     /// Free an existing memory allocation.
     ///
