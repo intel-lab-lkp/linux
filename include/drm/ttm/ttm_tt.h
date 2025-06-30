@@ -250,6 +250,7 @@ int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
  * Calls the driver method to allocate pages for a ttm
  */
 int ttm_tt_populate(struct ttm_device *bdev, struct ttm_tt *ttm,
+		    bool memcg_account,
 		    struct ttm_operation_ctx *ctx);
 
 /**

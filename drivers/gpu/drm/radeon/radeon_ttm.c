@@ -526,6 +526,7 @@ static struct radeon_ttm_tt *radeon_ttm_tt_to_gtt(struct radeon_device *rdev,
 
 static int radeon_ttm_tt_populate(struct ttm_device *bdev,
 				  struct ttm_tt *ttm,
+				  bool memcg_account,
 				  struct ttm_operation_ctx *ctx)
 {
 	struct radeon_device *rdev = radeon_get_rdev(bdev);
@@ -547,7 +548,7 @@ static int radeon_ttm_tt_populate(struct ttm_device *bdev,
 		return 0;
 	}
 
-	return ttm_pool_alloc(&rdev->mman.bdev.pool, ttm, ctx);
+	return ttm_pool_alloc(&rdev->mman.bdev.pool, ttm, memcg_account, ctx);
 }
 
 static void radeon_ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)

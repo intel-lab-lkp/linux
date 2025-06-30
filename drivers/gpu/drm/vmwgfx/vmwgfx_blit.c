@@ -569,13 +569,13 @@ int vmw_bo_cpu_blit(struct vmw_bo *vmw_dst,
 		dma_resv_assert_held(src->base.resv);
 
 	if (!ttm_tt_is_populated(dst->ttm)) {
-		ret = dst->bdev->funcs->ttm_tt_populate(dst->bdev, dst->ttm, &ctx);
+		ret = dst->bdev->funcs->ttm_tt_populate(dst->bdev, dst->ttm, false, &ctx);
 		if (ret)
 			return ret;
 	}
 
 	if (!ttm_tt_is_populated(src->ttm)) {
-		ret = src->bdev->funcs->ttm_tt_populate(src->bdev, src->ttm, &ctx);
+		ret = src->bdev->funcs->ttm_tt_populate(src->bdev, src->ttm, false, &ctx);
 		if (ret)
 			return ret;
 	}

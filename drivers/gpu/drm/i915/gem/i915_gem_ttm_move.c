@@ -624,7 +624,7 @@ int i915_ttm_move(struct ttm_buffer_object *bo, bool evict,
 
 	/* Populate ttm with pages if needed. Typically system memory. */
 	if (ttm && (dst_man->use_tt || (ttm->page_flags & TTM_TT_FLAG_SWAPPED))) {
-		ret = ttm_bo_populate(bo, ctx);
+		ret = ttm_bo_populate(bo, false, ctx);
 		if (ret)
 			return ret;
 	}
