@@ -50,6 +50,8 @@ static u32 l2cap_feat_mask = L2CAP_FEAT_FIXED_CHAN | L2CAP_FEAT_UCD;
 static LIST_HEAD(chan_list);
 static DEFINE_RWLOCK(chan_list_lock);
 
+static u16 le_min_credits = L2CAP_LE_MIN_CREDITS;
+
 static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn,
 				       u8 code, u8 ident, u16 dlen, void *data);
 static void l2cap_send_cmd(struct l2cap_conn *conn, u8 ident, u8 code, u16 len,
@@ -547,8 +549,17 @@ static __u16 l2cap_le_rx_credits(struct l2cap_chan *chan)
 	/* If we don't know the available space in the receiver buffer, give
 	 * enough credits for a full packet.
 	 */
-	if (chan->rx_avail == -1)
-		return (chan->imtu / chan->mps) + 1;
+	if (chan->rx_avail == -1) {
+		u16 rx_credits = (chan->imtu / chan->mps) + 1;
+
+		if (rx_credits < le_min_credits) {
+			rx_credits = le_min_credits;
+			BT_DBG("chan %p: set rx_credits to minimum value: %u",
+			       chan, chan->rx_credits);
+		}
+
+		return rx_credits;
+	}
 
 	/* If we know how much space is available in the receive buffer, give
 	 * out as many credits as would fill the buffer.
@@ -7674,6 +7685,8 @@ int __init l2cap_init(void)
 	l2cap_debugfs = debugfs_create_file("l2cap", 0444, bt_debugfs,
 					    NULL, &l2cap_debugfs_fops);
 
+	debugfs_create_u16("l2cap_le_min_credits", 0644, bt_debugfs,
+			   &le_min_credits);
 	return 0;
 }
 
