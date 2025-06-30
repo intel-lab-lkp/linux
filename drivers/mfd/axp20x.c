@@ -1055,6 +1055,7 @@ static const struct mfd_cell axp152_cells[] = {
 static struct mfd_cell axp313a_cells[] = {
 	/* AXP323 is sometimes paired with AXP717 as sub-PMIC */
 	MFD_CELL_BASIC("axp20x-regulator", NULL, NULL, 0, 1),
+	/* Keep PEK as last entry for exclusion in no-irq cases */
 	MFD_CELL_RES("axp313a-pek", axp313a_pek_resources),
 };
 
@@ -1306,12 +1307,18 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
 		axp20x->irq_flags = IRQF_TRIGGER_LOW;
 		break;
 	case AXP313A_ID:
+		/* Exclude PEK if no IRQ is available */
+		nr_cells_no_irq = ARRAY_SIZE(axp313a_cells) - 1;
+		cells_no_irq = axp313a_cells;
 		axp20x->nr_cells = ARRAY_SIZE(axp313a_cells);
 		axp20x->cells = axp313a_cells;
 		axp20x->regmap_cfg = &axp313a_regmap_config;
 		axp20x->regmap_irq_chip = &axp313a_regmap_irq_chip;
 		break;
 	case AXP323_ID:
+		/* Exclude PEK if no IRQ is available */
+		nr_cells_no_irq = ARRAY_SIZE(axp313a_cells) - 1;
+		cells_no_irq = axp313a_cells;
 		axp20x->nr_cells = ARRAY_SIZE(axp313a_cells);
 		axp20x->cells = axp313a_cells;
 		axp20x->regmap_cfg = &axp323_regmap_config;
