@@ -83,7 +83,7 @@ static void appldata_get_net_sum_data(void *data)
 		const struct rtnl_link_stats64 *stats;
 		struct rtnl_link_stats64 temp;
 
-		stats = dev_get_stats(dev, &temp);
+		stats = netif_get_stats(dev, &temp);
 		rx_packets += stats->rx_packets;
 		tx_packets += stats->tx_packets;
 		rx_bytes   += stats->rx_bytes;

@@ -657,7 +657,7 @@ static void netdev_trig_work(struct work_struct *work)
 	    !test_bit(TRIGGER_NETDEV_RX_ERR, &trigger_data->mode))
 		return;
 
-	dev_stats = dev_get_stats(trigger_data->net_dev, &temp);
+	dev_stats = netif_get_stats(trigger_data->net_dev, &temp);
 	new_activity =
 	    (test_bit(TRIGGER_NETDEV_TX, &trigger_data->mode) ?
 		dev_stats->tx_packets : 0) +

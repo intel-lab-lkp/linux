@@ -2050,7 +2050,7 @@ static void e1000_get_ethtool_stats(struct net_device *netdev,
 	int i;
 	char *p = NULL;
 
-	dev_get_stats(netdev, &net_stats);
+	netif_get_stats(netdev, &net_stats);
 
 	for (i = 0; i < E1000_GLOBAL_STATS_LEN; i++) {
 		switch (e1000_gstrings_stats[i].type) {

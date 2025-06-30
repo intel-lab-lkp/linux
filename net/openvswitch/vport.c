@@ -286,7 +286,7 @@ void ovs_vport_get_stats(struct vport *vport, struct ovs_vport_stats *stats)
 	const struct rtnl_link_stats64 *dev_stats;
 	struct rtnl_link_stats64 temp;
 
-	dev_stats = dev_get_stats(vport->dev, &temp);
+	dev_stats = netif_get_stats(vport->dev, &temp);
 	stats->rx_errors  = dev_stats->rx_errors;
 	stats->tx_errors  = dev_stats->tx_errors;
 	stats->tx_dropped = dev_stats->tx_dropped;
