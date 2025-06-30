@@ -1177,6 +1177,14 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_DV_RX_POWER_PRESENT:	return "Power Present";
 	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 	case V4L2_CID_DV_RX_IT_CONTENT_TYPE:	return "Rx IT Content Type";
+	case V4L2_CID_DV_RX_HDCP_DETECTED:	return "HDCP Detected";
+	case V4L2_CID_DV_RX_HDCP_ENABLE:	return "Rx HDCP Enable";
+	case V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT: return "HDCP Rep Device Count";
+	case V4L2_CID_DV_RX_HDCP_REP_DEPTH:	return "HDCP Rep Depth";
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED: return "HDCP Rep Max Devs Exceeded";
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED: return "HDCP Rep Max Cascade Exceeded";
+	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:	return "Rx HDCP Rep KSV FIFO";
+	case V4L2_CID_DV_RX_HDCP_REP_READY:	return "Rx HDCP Rep Ready";
 
 	case V4L2_CID_FM_RX_CLASS:		return "FM Radio Receiver Controls";
 	case V4L2_CID_TUNE_DEEMPHASIS:		return "De-Emphasis";
@@ -1293,6 +1301,11 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_AU_DELIMITER:
 	case V4L2_CID_WIDE_DYNAMIC_RANGE:
 	case V4L2_CID_IMAGE_STABILIZATION:
+	case V4L2_CID_DV_RX_HDCP_DETECTED:
+	case V4L2_CID_DV_RX_HDCP_ENABLE:
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED:
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED:
+	case V4L2_CID_DV_RX_HDCP_REP_READY:
 	case V4L2_CID_RDS_RECEPTION:
 	case V4L2_CID_RF_TUNER_LNA_GAIN_AUTO:
 	case V4L2_CID_RF_TUNER_MIXER_GAIN_AUTO:
@@ -1516,6 +1529,9 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		*type = V4L2_CTRL_TYPE_INTEGER64;
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
 		break;
+	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:
+		*type = V4L2_CTRL_TYPE_U8;
+		break;
 	case V4L2_CID_DETECT_MD_REGION_GRID:
 		*type = V4L2_CTRL_TYPE_U8;
 		break;
@@ -1667,6 +1683,7 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_DV_TX_EDID_PRESENT:
 	case V4L2_CID_DV_RX_POWER_PRESENT:
 	case V4L2_CID_DV_RX_IT_CONTENT_TYPE:
+	case V4L2_CID_DV_RX_HDCP_DETECTED:
 	case V4L2_CID_RDS_RX_PTY:
 	case V4L2_CID_RDS_RX_PS_NAME:
 	case V4L2_CID_RDS_RX_RADIO_TEXT:
