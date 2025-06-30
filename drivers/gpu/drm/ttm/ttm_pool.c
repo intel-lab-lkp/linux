@@ -131,6 +131,16 @@ static struct list_head shrinker_list;
 static struct shrinker *mm_shrinker;
 static DECLARE_RWSEM(pool_shrink_rwsem);
 
+/* helper to get a current valid node id from a pool */
+static int ttm_pool_nid(struct ttm_pool *pool) {
+	int nid = NUMA_NO_NODE;
+	if (pool)
+		nid = pool->nid;
+	if (nid == NUMA_NO_NODE)
+		nid = numa_node_id();
+	return nid;
+}
+
 /* Allocate pages of size 1 << order with the given gfp_flags */
 static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 					unsigned int order)
@@ -150,8 +160,10 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 
 	if (!pool->use_dma_alloc) {
 		p = alloc_pages_node(pool->nid, gfp_flags, order);
-		if (p)
+		if (p) {
 			p->private = order;
+			mod_node_page_state(NODE_DATA(ttm_pool_nid(pool)), NR_GPU_ACTIVE, (1 << order));
+		}
 		return p;
 	}
 
@@ -186,7 +198,7 @@ error_free:
 
 /* Reset the caching and pages of size 1 << order */
 static void ttm_pool_free_page(struct ttm_pool *pool, enum ttm_caching caching,
-			       unsigned int order, struct page *p)
+			       unsigned int order, struct page *p, bool reclaim)
 {
 	unsigned long attr = DMA_ATTR_FORCE_CONTIGUOUS;
 	struct ttm_pool_dma *dma;
@@ -201,6 +213,9 @@ static void ttm_pool_free_page(struct ttm_pool *pool, enum ttm_caching caching,
 #endif
 
 	if (!pool || !pool->use_dma_alloc) {
+		mod_node_page_state(NODE_DATA(ttm_pool_nid(pool)),
+				    reclaim ? NR_GPU_RECLAIM : NR_GPU_ACTIVE,
+				    -(1 << order));
 		__free_pages(p, order);
 		return;
 	}
@@ -276,6 +291,7 @@ static void ttm_pool_unmap(struct ttm_pool *pool, dma_addr_t dma_addr,
 static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 {
 	unsigned int i, num_pages = 1 << pt->order;
+	int nid = ttm_pool_nid(pt->pool);
 
 	for (i = 0; i < num_pages; ++i) {
 		if (PageHighMem(p))
@@ -288,17 +304,23 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 	list_add(&p->lru, &pt->pages);
 	spin_unlock(&pt->lock);
 	atomic_long_add(1 << pt->order, &allocated_pages);
+
+	mod_node_page_state(NODE_DATA(nid), NR_GPU_ACTIVE, -num_pages);
+	mod_node_page_state(NODE_DATA(nid), NR_GPU_RECLAIM, num_pages);
 }
 
 /* Take pages from a specific pool_type, return NULL when nothing available */
 static struct page *ttm_pool_type_take(struct ttm_pool_type *pt)
 {
 	struct page *p;
+	int nid = ttm_pool_nid(pt->pool);
 
 	spin_lock(&pt->lock);
 	p = list_first_entry_or_null(&pt->pages, typeof(*p), lru);
 	if (p) {
 		atomic_long_sub(1 << pt->order, &allocated_pages);
+		mod_node_page_state(NODE_DATA(nid), NR_GPU_ACTIVE, (1 << pt->order));
+		mod_node_page_state(NODE_DATA(nid), NR_GPU_RECLAIM, -(1 << pt->order));
 		list_del(&p->lru);
 	}
 	spin_unlock(&pt->lock);
@@ -331,7 +353,7 @@ static void ttm_pool_type_fini(struct ttm_pool_type *pt)
 	spin_unlock(&shrinker_lock);
 
 	while ((p = ttm_pool_type_take(pt)))
-		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p);
+		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p, true);
 }
 
 /* Return the pool_type to use for the given caching and order */
@@ -383,7 +405,7 @@ static unsigned int ttm_pool_shrink(void)
 
 	p = ttm_pool_type_take(pt);
 	if (p) {
-		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p);
+		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p, true);
 		num_pages = 1 << pt->order;
 	} else {
 		num_pages = 0;
@@ -475,7 +497,7 @@ static pgoff_t ttm_pool_unmap_and_free(struct ttm_pool *pool, struct page *page,
 	if (pt)
 		ttm_pool_type_give(pt, page);
 	else
-		ttm_pool_free_page(pool, caching, order, page);
+		ttm_pool_free_page(pool, caching, order, page, false);
 
 	return nr;
 }
@@ -780,7 +802,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	return 0;
 
 error_free_page:
-	ttm_pool_free_page(pool, page_caching, order, p);
+	ttm_pool_free_page(pool, page_caching, order, p, false);
 
 error_free_all:
 	if (tt->restore)
