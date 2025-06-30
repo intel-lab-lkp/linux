@@ -313,21 +313,11 @@ static irqreturn_t hal2_interrupt(int irq, void *dev_id)
 
 static int hal2_compute_rate(struct hal2_codec *codec, unsigned int rate)
 {
-	unsigned short mod;
-
-	if (44100 % rate < 48000 % rate) {
-		mod = 4 * 44100 / rate;
-		codec->master = 44100;
-	} else {
-		mod = 4 * 48000 / rate;
-		codec->master = 48000;
-	}
-
 	codec->inc = 4;
-	codec->mod = mod;
-	rate = 4 * codec->master / mod;
+	codec->master = (44100 % rate < 48000 % rate) ? 44100 : 48000;
+	codec->mod = codec->inc * codec->master / rate;
 
-	return rate;
+	return codec->inc * codec->master / codec->mod;
 }
 
 static void hal2_set_dac_rate(struct snd_hal2 *hal2)
