@@ -26,7 +26,7 @@ struct edac_ecs_dev_attr {
 
 struct edac_ecs_fru_context {
 	char name[EDAC_FEAT_NAME_LEN];
-	struct edac_ecs_dev_attr dev_attr[ECS_MAX_ATTRS];
+	struct edac_ecs_dev_attr ecs_dev_attr[ECS_MAX_ATTRS];
 	struct attribute *ecs_attrs[ECS_MAX_ATTRS + 1];
 	struct attribute_group group;
 };
@@ -131,17 +131,12 @@ static umode_t ecs_attr_visible(struct kobject *kobj, struct attribute *a, int a
 	return 0;
 }
 
-#define EDAC_ECS_ATTR_RO(_name, _fru_id)       \
-	((struct edac_ecs_dev_attr) { .dev_attr = __ATTR_RO(_name), \
-				     .fru_id = _fru_id })
-
-#define EDAC_ECS_ATTR_WO(_name, _fru_id)       \
-	((struct edac_ecs_dev_attr) { .dev_attr = __ATTR_WO(_name), \
-				     .fru_id = _fru_id })
-
-#define EDAC_ECS_ATTR_RW(_name, _fru_id)       \
-	((struct edac_ecs_dev_attr) { .dev_attr = __ATTR_RW(_name), \
-				     .fru_id = _fru_id })
+static const struct device_attribute ecs_dev_attr[] = {
+	[ECS_LOG_ENTRY_TYPE]	= __ATTR_RW(log_entry_type),
+	[ECS_MODE]		= __ATTR_RW(mode),
+	[ECS_RESET]		= __ATTR_WO(reset),
+	[ECS_THRESHOLD]		= __ATTR_RW(threshold)
+};
 
 static int ecs_create_desc(struct device *ecs_dev, const struct attribute_group **attr_groups,
 			   u16 num_media_frus)
@@ -165,14 +160,12 @@ static int ecs_create_desc(struct device *ecs_dev, const struct attribute_group 
 		struct attribute_group *group = &fru_ctx->group;
 		int i;
 
-		fru_ctx->dev_attr[ECS_LOG_ENTRY_TYPE]	= EDAC_ECS_ATTR_RW(log_entry_type, fru);
-		fru_ctx->dev_attr[ECS_MODE]		= EDAC_ECS_ATTR_RW(mode, fru);
-		fru_ctx->dev_attr[ECS_RESET]		= EDAC_ECS_ATTR_WO(reset, fru);
-		fru_ctx->dev_attr[ECS_THRESHOLD]	= EDAC_ECS_ATTR_RW(threshold, fru);
-
 		for (i = 0; i < ECS_MAX_ATTRS; i++) {
+			fru_ctx->ecs_dev_attr[i].dev_attr = ecs_dev_attr[i];
+			fru_ctx->ecs_dev_attr[i].fru_id = fru;
+
 			sysfs_attr_init(&fru_ctx->dev_attr[i].dev_attr.attr);
-			fru_ctx->ecs_attrs[i] = &fru_ctx->dev_attr[i].dev_attr.attr;
+			fru_ctx->ecs_attrs[i] = &fru_ctx->ecs_dev_attr[i].dev_attr.attr;
 		}
 
 		sprintf(fru_ctx->name, "%s%d", EDAC_ECS_FRU_NAME, fru);
