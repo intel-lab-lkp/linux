@@ -135,6 +135,12 @@ struct ttm_buffer_object {
 	 * reservation lock.
 	 */
 	struct sg_table *sg;
+
+	/**
+	 * @objcg: object cgroup to charge this to if it ends up using system memory.
+	 * NULL means don't charge.
+	 */
+	struct obj_cgroup *objcg;
 };
 
 #define TTM_BO_MAP_IOMEM_MASK 0x80
