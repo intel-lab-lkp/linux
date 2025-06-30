@@ -567,10 +567,6 @@ static int __cmd_test(struct test_suite **suites, int argc, const char *argv[],
 
 			for (unsigned int run = 0; run < runs_per_test; run++) {
 				test_suite__for_each_test_case(*t, curr_test_case) {
-					if (!perf_test__matches(test_description(*t, curr_test_case),
-								curr_suite, argc, argv))
-						continue;
-
 					err = start_test(*t, curr_suite, curr_test_case,
 							 &child_tests[child_test_num++],
 							 width, pass);
