@@ -156,7 +156,7 @@ id_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct dfl_feature_dev_data *fdata = to_dfl_feature_dev_data(dev);
 	int id = port_get_id(fdata);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", id);
+	return sysfs_emit(buf, PAGE_SIZE, "%d\n", id);
 }
 static DEVICE_ATTR_RO(id);
 
@@ -475,7 +475,7 @@ afu_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 	guidh = readq(base + GUID_H);
 	mutex_unlock(&fdata->lock);
 
-	return scnprintf(buf, PAGE_SIZE, "%016llx%016llx\n", guidh, guidl);
+	return sysfs_emit(buf, PAGE_SIZE, "%016llx%016llx\n", guidh, guidl);
 }
 static DEVICE_ATTR_RO(afu_id);
 
