@@ -86,6 +86,15 @@ int crypto_shash_init(struct shash_desc *desc)
 }
 EXPORT_SYMBOL_GPL(crypto_shash_init);
 
+int crypto_shash_squeeze(struct shash_desc *desc, u8 *out, size_t outlen,
+			 bool final)
+{
+	if (!crypto_shash_alg(desc->tfm)->squeeze)
+		return -EINVAL;
+	return crypto_shash_alg(desc->tfm)->squeeze(desc, out, outlen, final);
+}
+EXPORT_SYMBOL_GPL(crypto_shash_squeeze);
+
 static int shash_default_finup(struct shash_desc *desc, const u8 *data,
 			       unsigned int len, u8 *out)
 {

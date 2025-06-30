@@ -209,6 +209,7 @@ struct shash_desc {
  * @final: see struct ahash_alg
  * @finup: see struct ahash_alg
  * @digest: see struct ahash_alg
+ * @squeeze: Get data from an XOF type of hash
  * @export: see struct ahash_alg
  * @import: see struct ahash_alg
  * @export_core: see struct ahash_alg
@@ -241,6 +242,8 @@ struct shash_alg {
 		     unsigned int len, u8 *out);
 	int (*digest)(struct shash_desc *desc, const u8 *data,
 		      unsigned int len, u8 *out);
+	int (*squeeze)(struct shash_desc *desc, u8 *out, size_t outlen,
+		       bool final);
 	int (*export)(struct shash_desc *desc, void *out);
 	int (*import)(struct shash_desc *desc, const void *in);
 	int (*export_core)(struct shash_desc *desc, void *out);
@@ -1010,6 +1013,22 @@ static inline int crypto_shash_final(struct shash_desc *desc, u8 *out)
 {
 	return crypto_shash_finup(desc, NULL, 0, out);
 }
+
+/**
+ * crypto_shash_squeeze() - get xof message digest data
+ * @desc: operational state handle that is already filled with data
+ * @out: output buffer filled with the XOF message digest
+ * @outlen: number of bytes to get from the XOF
+ * @final: whether this is the final squeeze call
+ *
+ * Get message digest data from an extend output function (XOF)
+ *
+ * Context: Any context.
+ * Return: 0 if the data could be created successfully; < 0 if an error
+ *         occurred
+ */
+int crypto_shash_squeeze(struct shash_desc *desc, u8 *out, size_t outlen,
+			 bool final);
 
 static inline void shash_desc_zero(struct shash_desc *desc)
 {
