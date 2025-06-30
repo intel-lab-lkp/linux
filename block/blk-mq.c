@@ -3195,10 +3195,9 @@ void blk_mq_submit_bio(struct bio *bio)
 	if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
 		goto queue_exit;
 
-	if (bio_needs_zone_write_plugging(bio)) {
-		if (blk_zone_plug_bio(bio, nr_segs))
-			goto queue_exit;
-	}
+	if (bio_needs_zone_write_plugging(bio) &&
+	    blk_zone_plug_bio(bio, nr_segs, &from_cpu))
+		goto queue_exit;
 
 new_request:
 	if (rq && (from_cpu == -1 || from_cpu == rq->mq_ctx->cpu)) {
