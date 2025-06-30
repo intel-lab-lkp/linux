@@ -2071,6 +2071,14 @@ static int mpage_submit_folio(struct mpage_da_data *mpd, struct folio *folio)
 #define MAX_WRITEPAGES_EXTENT_LEN 2048
 
 /*
+ * Maximum blocks per folio to avoid JBD2 credit overflow.
+ * This is the value we'd get with 32MB folios and 4KB blocks,
+ * or 8MB folios with 1KB blocks, which is reasonable and safe
+ * for typical journal configurations.
+ */
+#define MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK 8192
+
+/*
  * mpage_add_bh_to_extent - try to add bh to extent of blocks to map
  *
  * @mpd - extent of blocks
@@ -2481,6 +2489,18 @@ static int ext4_da_writepages_trans_blocks(struct inode *inode)
 {
 	int bpp = ext4_journal_blocks_per_folio(inode);
 
+	/*
+	 * With large folios, blocks per folio can get excessively large,
+	 * especially with small block sizes. For example, with 32MB folios
+	 * (order 11) and 1KB blocks, we get 32768 blocks per folio. This
+	 * leads to credit requests that overflow the journal's transaction
+	 * limit.
+	 *
+	 * Limit the value to avoid excessive credit requests.
+	 */
+	if (bpp > MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK)
+		bpp = MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK;
+
 	return ext4_meta_trans_blocks(inode,
 				MAX_WRITEPAGES_EXTENT_LEN + bpp - 1, bpp);
 }
@@ -2558,6 +2578,13 @@ static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
 	struct buffer_head *head;
 	handle_t *handle = NULL;
 	int bpp = ext4_journal_blocks_per_folio(mpd->inode);
+
+	/*
+	 * With large folios, blocks per folio can get excessively large,
+	 * especially with small block sizes. Cap it to avoid credit overflow.
+	 */
+	if (bpp > MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK)
+		bpp = MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK;
 
 	if (mpd->wbc->sync_mode == WB_SYNC_ALL || mpd->wbc->tagged_writepages)
 		tag = PAGECACHE_TAG_TOWRITE;
@@ -6178,6 +6205,13 @@ int ext4_writepage_trans_blocks(struct inode *inode)
 {
 	int bpp = ext4_journal_blocks_per_folio(inode);
 	int ret;
+
+	/*
+	 * With large folios, blocks per folio can get excessively large,
+	 * especially with small block sizes. Cap it to avoid credit overflow.
+	 */
+	if (bpp > MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK)
+		bpp = MAX_BLOCKS_PER_FOLIO_FOR_WRITEBACK;
 
 	ret = ext4_meta_trans_blocks(inode, bpp, bpp);
 
