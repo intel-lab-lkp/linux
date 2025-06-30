@@ -7,3 +7,4 @@ obj-$(CONFIG_PCIE_CADENCE_EP) += pcie-cadence-ep.o pcie-cadence-ep-hpa.o
 obj-$(CONFIG_PCIE_CADENCE_PLAT) += pcie-cadence-plat.o
 obj-$(CONFIG_PCIE_CADENCE_PLAT_HPA) += pcie-cadence-plat-hpa.o
 obj-$(CONFIG_PCI_J721E) += pci-j721e.o
+obj-$(CONFIG_PCI_SKY1) += pci-sky1.o
