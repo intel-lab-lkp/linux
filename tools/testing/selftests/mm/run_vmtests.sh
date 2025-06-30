@@ -59,6 +59,8 @@ separated by spaces:
 	ksm tests that require >=2 NUMA nodes
 - pkey
 	memory protection key tests
+- process_madvise
+	test process_madvise
 - soft_dirty
 	test soft dirty page bit semantics
 - pagemap
@@ -421,6 +423,9 @@ CATEGORY="hmm" run_test bash ./test_hmm.sh smoke
 
 # MADV_GUARD_INSTALL and MADV_GUARD_REMOVE tests
 CATEGORY="madv_guard" run_test ./guard-regions
+
+# PROCESS_MADVISE TEST
+CATEGORY="process_madv" run_test ./process_madv
 
 # MADV_POPULATE_READ and MADV_POPULATE_WRITE tests
 CATEGORY="madv_populate" run_test ./madv_populate

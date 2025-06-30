@@ -26,6 +26,7 @@ protection_keys
 protection_keys_32
 protection_keys_64
 madv_populate
+process_madv
 uffd-stress
 uffd-unit-tests
 uffd-wp-mremap
