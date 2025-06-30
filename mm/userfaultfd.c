@@ -1443,14 +1443,15 @@ retry:
 
 		entry = pte_to_swp_entry(orig_src_pte);
 		if (non_swap_entry(entry)) {
+			pte_unmap(src_pte);
+			pte_unmap(dst_pte);
+			src_pte = dst_pte = NULL;
 			if (is_migration_entry(entry)) {
-				pte_unmap(src_pte);
-				pte_unmap(dst_pte);
-				src_pte = dst_pte = NULL;
 				migration_entry_wait(mm, src_pmd, src_addr);
 				err = -EAGAIN;
-			} else
+			} else {
 				err = -EFAULT;
+			}
 			goto out;
 		}
 
