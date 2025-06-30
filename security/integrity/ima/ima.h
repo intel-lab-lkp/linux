@@ -42,6 +42,9 @@ enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8, TPM_PCR10 = 10 };
 #define IMA_TEMPLATE_IMA_NAME "ima"
 #define IMA_TEMPLATE_IMA_FMT "d|n"
 
+#define IMA_DEFAULT_PCR_IDX CONFIG_IMA_ROT_TPM_PCR_IDX
+#define IMA_MEASURE_PCR_IDX (ima_rot_inst ? ima_rot_inst->default_pcr : IMA_DEFAULT_PCR_IDX)
+
 #define NR_BANKS(rot) ((rot != NULL) ? rot->nr_allocated_banks : 0)
 
 /* current content of the policy */

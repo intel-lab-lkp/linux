@@ -44,14 +44,18 @@ config IMA_KEXEC
 	   Depending on the IMA policy, the measurement list can grow to
 	   be very large.
 
-config IMA_MEASURE_PCR_IDX
+config IMA_ROT_TPM_PCR_IDX
 	int
 	range 8 14
 	default 10
 	help
-	  IMA_MEASURE_PCR_IDX determines the TPM PCR register index
-	  that IMA uses to maintain the integrity aggregate of the
-	  measurement list.  If unsure, use the default 10.
+	  IMA_ROT_TPM_PCR_IDX determines the index of PCR that IMA, when
+	  choosing TPM as the Root of Trust (RoT), would use to maintain
+	  the integrity aggregate of the measurement list. Its value is
+	  also used as a dummy PCR index IMA would use in the absence of
+	  RoT.
+
+	  If unsure, use the default 10.
 
 config IMA_LSM_RULES
 	bool

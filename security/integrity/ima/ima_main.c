@@ -245,7 +245,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	char filename[NAME_MAX];
 	const char *pathname = NULL;
 	int rc = 0, action, must_appraise = 0;
-	int pcr = CONFIG_IMA_MEASURE_PCR_IDX;
+	int pcr = IMA_MEASURE_PCR_IDX;
 	struct evm_ima_xattr_data *xattr_value = NULL;
 	struct modsig *modsig = NULL;
 	int xattr_len = 0;
@@ -1060,7 +1060,7 @@ int process_buffer_measurement(struct mnt_idmap *idmap,
 	}
 
 	if (!pcr)
-		pcr = CONFIG_IMA_MEASURE_PCR_IDX;
+		pcr = IMA_MEASURE_PCR_IDX;
 
 	iint.ima_hash = hash_hdr;
 	iint.ima_hash->algo = ima_hash_algo;
