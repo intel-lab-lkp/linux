@@ -19,7 +19,6 @@
 #include <generated/utsrelease.h>
 
 #include "ima.h"
-#include "ima_tpm.h"
 
 /* name for boot aggregate entry */
 const char boot_aggregate_name[] = "boot_aggregate";
@@ -72,8 +71,8 @@ static int __init ima_add_boot_aggregate(void)
 	 * Ultimately select SHA1 also for TPM 2.0 if the SHA256 PCR bank
 	 * is not found.
 	 */
-	if (ima_tpm_chip) {
-		result = ima_tpm_calc_boot_aggregate(hash_hdr);
+	if (ima_rot_inst) {
+		result = ima_rot_inst->calc_boot_aggregate(hash_hdr);
 		if (result < 0) {
 			audit_cause = "hashing_error";
 			goto err_out;
@@ -120,9 +119,9 @@ int __init ima_init(void)
 {
 	int rc;
 
-	ima_tpm_chip = tpm_default_chip();
-	if (!ima_tpm_chip)
-		pr_info("No TPM chip found, activating TPM-bypass!\n");
+	ima_rot_inst = ima_rot_init();
+	if (!ima_rot_inst)
+		pr_info("No RoT found, activating RoT-bypass!\n");
 
 	rc = integrity_init_keyring(INTEGRITY_KEYRING_IMA);
 	if (rc)

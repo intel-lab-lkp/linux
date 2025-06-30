@@ -19,7 +19,6 @@
 #include <linux/reboot.h>
 #include <linux/slab.h>
 #include "ima.h"
-#include "ima_tpm.h"
 
 #define AUDIT_CAUSE_LEN_MAX 32
 
@@ -158,9 +157,9 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 	u8 *digest = entry->digests[ima_hash_algo_idx].digest;
 	struct tpm_digest *digests_arg = entry->digests;
 	const char *audit_cause = "hash_added";
-	char tpm_audit_cause[AUDIT_CAUSE_LEN_MAX];
+	char rot_audit_cause[AUDIT_CAUSE_LEN_MAX];
 	int audit_info = 1;
-	int result = 0, tpmresult = 0;
+	int result = 0, rotresult = 0;
 
 	mutex_lock(&ima_extend_list_mutex);
 
@@ -194,11 +193,11 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 	if (violation)		/* invalidate pcr */
 		digests_arg = digests;
 
-	tpmresult = ima_pcr_extend(digests_arg, entry->pcr);
-	if (tpmresult != 0) {
-		snprintf(tpm_audit_cause, AUDIT_CAUSE_LEN_MAX, "TPM_error(%d)",
-			 tpmresult);
-		audit_cause = tpm_audit_cause;
+	rotresult = ima_rot_inst->extend(digests_arg, &entry->pcr);
+	if (rotresult != 0) {
+		snprintf(rot_audit_cause, AUDIT_CAUSE_LEN_MAX, "%s_error(%d)",
+			 ima_rot_inst->name, rotresult);
+		audit_cause = rot_audit_cause;
 		audit_info = 0;
 	}
 out:
@@ -254,18 +253,18 @@ int __init ima_init_digests(void)
 	u16 crypto_id;
 	int i;
 
-	if (!ima_tpm_chip)
+	if (!ima_rot_inst)
 		return 0;
 
-	digests = kcalloc(ima_tpm_chip->nr_allocated_banks, sizeof(*digests),
+	digests = kcalloc(ima_rot_inst->nr_allocated_banks, sizeof(*digests),
 			  GFP_NOFS);
 	if (!digests)
 		return -ENOMEM;
 
-	for (i = 0; i < ima_tpm_chip->nr_allocated_banks; i++) {
-		digests[i].alg_id = ima_tpm_chip->allocated_banks[i].alg_id;
-		digest_size = ima_tpm_chip->allocated_banks[i].digest_size;
-		crypto_id = ima_tpm_chip->allocated_banks[i].crypto_id;
+	for (i = 0; i < ima_rot_inst->nr_allocated_banks; i++) {
+		digests[i].alg_id = ima_rot_inst->allocated_banks[i].alg_id;
+		digest_size = ima_rot_inst->allocated_banks[i].digest_size;
+		crypto_id = ima_rot_inst->allocated_banks[i].crypto_id;
 
 		/* for unmapped TPM algorithms digest is still a padded SHA1 */
 		if (crypto_id == HASH_ALGO__LAST)

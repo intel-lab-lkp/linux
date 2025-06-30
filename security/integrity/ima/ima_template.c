@@ -367,7 +367,7 @@ static int ima_restore_template_data(struct ima_template_desc *template_desc,
 	if (!*entry)
 		return -ENOMEM;
 
-	digests = kcalloc(NR_BANKS(ima_tpm_chip) + ima_extra_slots,
+	digests = kcalloc(NR_BANKS(ima_rot_inst) + ima_extra_slots,
 			  sizeof(*digests), GFP_NOFS);
 	if (!digests) {
 		kfree(*entry);

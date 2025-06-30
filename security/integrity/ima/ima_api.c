@@ -52,7 +52,7 @@ int ima_alloc_init_template(struct ima_event_data *event_data,
 	if (!*entry)
 		return -ENOMEM;
 
-	digests = kcalloc(NR_BANKS(ima_tpm_chip) + ima_extra_slots,
+	digests = kcalloc(NR_BANKS(ima_rot_inst) + ima_extra_slots,
 			  sizeof(*digests), GFP_NOFS);
 	if (!digests) {
 		kfree(*entry);

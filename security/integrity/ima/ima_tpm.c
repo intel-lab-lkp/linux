@@ -15,7 +15,7 @@
 #include "ima.h"
 #include "ima_tpm.h"
 
-struct tpm_chip *ima_tpm_chip;
+static struct tpm_chip *ima_tpm_chip;
 
 int ima_tpm_init(struct ima_rot *rot)
 {
@@ -29,7 +29,7 @@ int ima_tpm_init(struct ima_rot *rot)
 	return 0;
 }
 
-int ima_pcr_extend(struct tpm_digest *digests_arg, int pcr)
+static int ima_pcr_extend(struct tpm_digest *digests_arg, int pcr)
 {
 	int result = 0;
 

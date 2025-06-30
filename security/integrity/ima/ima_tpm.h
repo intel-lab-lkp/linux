@@ -16,6 +16,4 @@ int ima_tpm_init(struct ima_rot *rot);
 int ima_tpm_extend(struct tpm_digest *digests_arg, const void *args);
 int ima_tpm_calc_boot_aggregate(struct ima_digest_data *hash);
 
-int ima_pcr_extend(struct tpm_digest *digests_arg, int pcr);
-
 #endif /* __IMA_IMA_TPM_H */

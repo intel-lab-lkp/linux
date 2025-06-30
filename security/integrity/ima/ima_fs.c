@@ -394,9 +394,9 @@ static const struct seq_operations ima_policy_seqops = {
 
 static int __init create_securityfs_measurement_lists(void)
 {
-	int count = NR_BANKS(ima_tpm_chip);
+	int count = NR_BANKS(ima_rot_inst);
 
-	if (ima_sha1_idx >= NR_BANKS(ima_tpm_chip))
+	if (ima_sha1_idx >= NR_BANKS(ima_rot_inst))
 		count++;
 
 	for (int i = 0; i < count; i++) {
