@@ -31,6 +31,8 @@
 #include "mtk_eth_soc.h"
 #include "mtk_wed.h"
 
+MODULE_IMPORT_NS("NETDEV_INTERNAL");
+
 static int mtk_msg_level = -1;
 module_param_named(msg_level, mtk_msg_level, int, 0);
 MODULE_PARM_DESC(msg_level, "Message level (-1=defaults,0=none,...,16=all)");
@@ -4960,7 +4962,7 @@ void mtk_eth_set_dma_device(struct mtk_eth *eth, struct device *dma_dev)
 		list_add_tail(&dev->close_list, &dev_list);
 	}
 
-	dev_close_many(&dev_list, false);
+	netif_close_many(&dev_list, false);
 
 	eth->dma_dev = dma_dev;
 

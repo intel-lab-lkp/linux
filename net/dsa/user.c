@@ -31,6 +31,8 @@
 #include "tag.h"
 #include "user.h"
 
+MODULE_IMPORT_NS("NETDEV_INTERNAL");
+
 struct dsa_switchdev_event_work {
 	struct net_device *dev;
 	struct net_device *orig_dev;
@@ -3604,7 +3606,7 @@ static int dsa_user_netdevice_event(struct notifier_block *nb,
 			list_add(&dp->user->close_list, &close_list);
 		}
 
-		dev_close_many(&close_list, true);
+		netif_close_many(&close_list, true);
 
 		return NOTIFY_OK;
 	}

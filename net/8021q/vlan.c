@@ -35,6 +35,8 @@
 #include "vlan.h"
 #include "vlanproc.h"
 
+MODULE_IMPORT_NS("NETDEV_INTERNAL");
+
 #define DRV_VERSION "1.8"
 
 /* Global VLAN variables */
@@ -446,7 +448,7 @@ static int vlan_device_event(struct notifier_block *unused, unsigned long event,
 				list_add(&vlandev->close_list, &close_list);
 		}
 
-		dev_close_many(&close_list, false);
+		netif_close_many(&close_list, false);
 
 		list_for_each_entry_safe(vlandev, tmp, &close_list, close_list) {
 			vlan_stacked_transfer_operstate(dev, vlandev,
