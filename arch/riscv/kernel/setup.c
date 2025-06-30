@@ -249,7 +249,7 @@ static int __init reserve_memblock_reserved_regions(void)
 			if (start > mem->end || end < mem->start)
 				continue;
 
-			reserve_region_with_split(mem, start, end, "Reserved");
+			reserve_region_with_split(mem, start, end, "Reserved-memblock");
 		}
 	}
 
