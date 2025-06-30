@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <i915_utils.h>
+#include "intel_display_core.h"
 
 struct intel_display;
 
@@ -24,6 +25,7 @@ bool intel_display_needs_wa_16023588340(struct intel_display *display);
 
 enum intel_display_wa {
 	INTEL_DISPLAY_WA_16023588340,
+	INTEL_DISPLAY_WA_16025573575,
 };
 
 bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa);
