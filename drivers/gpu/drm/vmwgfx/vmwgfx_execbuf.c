@@ -4085,6 +4085,23 @@ static void seqno_waiter_rm_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 	kfree(ctx);
 }
 
+static void seqno_waiter_create(struct dma_fence *f,
+				struct vmw_private *dev_priv)
+{
+	struct seqno_waiter_rm_context *ctx;
+
+	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return;
+
+	ctx->dev_priv = dev_priv;
+	vmw_seqno_waiter_add(dev_priv);
+	if (dma_fence_add_callback(f, &ctx->base, seqno_waiter_rm_cb) < 0) {
+		vmw_seqno_waiter_remove(dev_priv);
+		kfree(ctx);
+	}
+}
+
 int vmw_execbuf_process(struct drm_file *file_priv,
 			struct vmw_private *dev_priv,
 			void __user *user_commands, void *kernel_commands,
@@ -4265,15 +4282,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 		} else {
 			/* Link the fence with the FD created earlier */
 			fd_install(out_fence_fd, sync_file->file);
-			struct seqno_waiter_rm_context *ctx =
-				kmalloc(sizeof(*ctx), GFP_KERNEL);
-			ctx->dev_priv = dev_priv;
-			vmw_seqno_waiter_add(dev_priv);
-			if (dma_fence_add_callback(&fence->base, &ctx->base,
-						   seqno_waiter_rm_cb) < 0) {
-				vmw_seqno_waiter_remove(dev_priv);
-				kfree(ctx);
-			}
+			seqno_waiter_create(&fence->base, dev_priv);
 		}
 	}
 
