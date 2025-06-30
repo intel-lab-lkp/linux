@@ -29,6 +29,8 @@
 #define SHA3_INLINE	noinline
 #endif
 
+#define DOMAIN_SEPARATOR_SHAKE	0x1F
+
 #define KECCAK_ROUNDS 24
 
 static const u64 keccakf_rndc[24] = {
@@ -218,6 +220,216 @@ static int crypto_sha3_finup(struct shash_desc *desc, const u8 *src,
 	return 0;
 }
 
+static int crypto_shake_init(struct shash_desc *desc)
+{
+	struct shake_state *sctx = shash_desc_ctx(desc);
+	unsigned int digest_size = crypto_shash_digestsize(desc->tfm);
+
+	sctx->rsiz = 200 - 2 * digest_size;
+	sctx->rsizw = sctx->rsiz / 8;
+	sctx->partial = 0;
+	sctx->ridx = 0;
+	sctx->finalized = false;
+	sctx->permute = false;
+	memset(sctx->st, 0, sizeof(sctx->st));
+
+	return 0;
+}
+
+static int crypto_shake_update(struct shash_desc *desc, const u8 *data,
+			       unsigned int len)
+{
+	struct shake_state *sctx = shash_desc_ctx(desc);
+	unsigned int done;
+	const u8 *src;
+
+	done = 0;
+	src = data;
+
+	if ((sctx->partial + len) > (sctx->rsiz - 1)) {
+		if (sctx->partial) {
+			done = -sctx->partial;
+			memcpy(sctx->buf + sctx->partial, data,
+			       done + sctx->rsiz);
+			src = sctx->buf;
+		}
+
+		do {
+			unsigned int i;
+
+			for (i = 0; i < sctx->rsizw; i++)
+				sctx->st[i] ^= get_unaligned_le64(src + 8 * i);
+			keccakf(sctx->st);
+
+			done += sctx->rsiz;
+			src = data + done;
+		} while (done + (sctx->rsiz - 1) < len);
+
+		sctx->partial = 0;
+	}
+	memcpy(sctx->buf + sctx->partial, src, len - done);
+	sctx->partial += (len - done);
+
+	return 0;
+}
+
+/*
+ * crypto_shake_squeeze_blocks - squeeze whole blocks
+ *
+ * @sctx: shake context
+ * @out: pointer to output buffer pointer
+ * @nblocks: number of whole blocks to return in @out
+ */
+static void crypto_shake_squeeze_blocks(struct shake_state *sctx,
+					u8 **out, size_t nblocks)
+{
+	__le64 *digest = (__le64 *)*out;
+	size_t i, j;
+
+	for (i = 0; i < nblocks; i++) {
+		if (sctx->permute)
+			keccakf(sctx->st);
+		sctx->permute = true;
+
+		for (j = 0; j < sctx->rsiz / 8; j++)
+			put_unaligned_le64(sctx->st[j], digest++);
+	}
+	*out = (u8 *)digest;
+}
+
+/*
+ * crypto_shake_squeeze_bytes - squeeze arbitrary number of bytes
+ *
+ * @sctx: shake context
+ * @out: output buffer
+ * @n: number of bytes to return in @out
+ */
+static void crypto_shake_squeeze_bytes(struct shake_state *sctx,
+				       u8 *out, size_t n)
+{
+	size_t i, j, to_copy, loops, nblocks;
+	__le64 *digest;
+
+	if (sctx->permute) {
+		keccakf(sctx->st);
+		sctx->permute = false;
+	}
+
+	while (n) {
+		to_copy = min(8 - (sctx->ridx & 7), n);
+		while (to_copy < 8) {
+			for (i = sctx->ridx; i < sctx->ridx + to_copy; i++)
+				*out++ = sctx->st[i / 8] >> 8 * (i & 7);
+
+			sctx->ridx += to_copy;
+			n -= to_copy;
+			if (sctx->ridx == sctx->rsiz) {
+				sctx->ridx = 0;
+				if (n == 0) {
+					sctx->permute = true;
+					return;
+				}
+				keccakf(sctx->st);
+			}
+			if (n == 0)
+				return;
+			if (n >= 8)
+				break;
+			to_copy = n;
+		}
+		/* sctx->ridx is 8-byte aligned now */
+
+		if (sctx->ridx == 0 && n >= sctx->rsiz) {
+			/* whole blocks */
+			nblocks = n / sctx->rsiz;
+			crypto_shake_squeeze_blocks(sctx, &out, nblocks);
+			n -= nblocks * sctx->rsiz;
+			if (n == 0)
+				return;
+			keccakf(sctx->st);
+			sctx->permute = false;
+		}
+
+		to_copy = min(n, sctx->rsiz - sctx->ridx);
+		while (to_copy >= 8) {
+			loops = to_copy / 8;
+
+			digest = (__le64 *)out;
+
+			j = sctx->ridx / 8;
+			for (i = j; i < j + loops; i++)
+				put_unaligned_le64(sctx->st[i], digest++);
+
+			sctx->ridx += loops * 8;
+			n -= loops * 8;
+			if (sctx->ridx == sctx->rsiz) {
+				sctx->ridx = 0;
+				if (n == 0) {
+					sctx->permute = true;
+					return;
+				}
+				keccakf(sctx->st);
+			}
+			if (n == 0)
+				return;
+
+			out = (u8 *)digest;
+			if (n >= sctx->rsiz || n < 8)
+				break;
+
+			to_copy = n;
+		}
+	}
+}
+
+static void crypto_shake_finalize(struct shake_state *sctx,
+				  u8 domsep)
+{
+	unsigned int inlen, i;
+
+	if (sctx->finalized)
+		return;
+
+	inlen = sctx->partial;
+	sctx->buf[inlen++] = domsep;
+	memset(sctx->buf + inlen, 0, sctx->rsiz - inlen);
+	sctx->buf[sctx->rsiz - 1] |= 0x80;
+
+	for (i = 0; i < sctx->rsizw; i++)
+		sctx->st[i] ^= get_unaligned_le64(sctx->buf + 8 * i);
+
+	sctx->finalized = true;
+	sctx->permute = true;
+}
+
+static int crypto_shake_squeeze(struct shash_desc *desc,
+				u8 *out, size_t outlen,
+				bool final)
+{
+	struct shake_state *sctx = shash_desc_ctx(desc);
+
+	if (!outlen)
+		goto done;
+
+	if (!sctx->finalized)
+		crypto_shake_finalize(sctx, DOMAIN_SEPARATOR_SHAKE);
+
+	crypto_shake_squeeze_bytes(sctx, out, outlen);
+done:
+	if (final)
+		memset(sctx, 0, sizeof(*sctx));
+
+	return 0;
+}
+
+static int crypto_shake_final(struct shash_desc *desc, u8 *out)
+{
+	unsigned int digest_size = crypto_shash_digestsize(desc->tfm);
+
+	return crypto_shake_squeeze(desc, out, digest_size, true);
+}
+
+
 static struct shash_alg algs[] = { {
 	.digestsize		= SHA3_224_DIGEST_SIZE,
 	.init			= crypto_sha3_init,
@@ -262,6 +474,28 @@ static struct shash_alg algs[] = { {
 	.base.cra_flags		= CRYPTO_AHASH_ALG_BLOCK_ONLY,
 	.base.cra_blocksize	= SHA3_512_BLOCK_SIZE,
 	.base.cra_module	= THIS_MODULE,
+}, {
+	.digestsize		= SHAKE128_DIGEST_SIZE,
+	.init			= crypto_shake_init,
+	.update			= crypto_shake_update,
+	.final			= crypto_shake_final,
+	.squeeze		= crypto_shake_squeeze,
+	.descsize		= sizeof(struct shake_state),
+	.base.cra_name		= "shake128",
+	.base.cra_driver_name	= "shake128-generic",
+	.base.cra_blocksize	= SHAKE128_BLOCK_SIZE,
+	.base.cra_module	= THIS_MODULE,
+}, {
+	.digestsize		= SHAKE256_DIGEST_SIZE,
+	.init			= crypto_shake_init,
+	.update			= crypto_shake_update,
+	.final			= crypto_shake_final,
+	.squeeze		= crypto_shake_squeeze,
+	.descsize		= sizeof(struct shake_state),
+	.base.cra_name		= "shake256",
+	.base.cra_driver_name	= "shake256-generic",
+	.base.cra_blocksize	= SHAKE256_BLOCK_SIZE,
+	.base.cra_module	= THIS_MODULE,
 } };
 
 static int __init sha3_generic_mod_init(void)
@@ -288,3 +522,7 @@ MODULE_ALIAS_CRYPTO("sha3-384");
 MODULE_ALIAS_CRYPTO("sha3-384-generic");
 MODULE_ALIAS_CRYPTO("sha3-512");
 MODULE_ALIAS_CRYPTO("sha3-512-generic");
+MODULE_ALIAS_CRYPTO("shake128");
+MODULE_ALIAS_CRYPTO("shake128-generic");
+MODULE_ALIAS_CRYPTO("shake256");
+MODULE_ALIAS_CRYPTO("shake256-generic");
