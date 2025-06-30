@@ -1524,6 +1524,8 @@ static int rp1_pinconf_get(struct pinctrl_dev *pctldev, unsigned int offset,
 		case RP1_PAD_DRIVE_12MA:
 			arg = 12;
 			break;
+		default:
+			return -ENOTSUPP;
 		}
 		break;
 	case PIN_CONFIG_BIAS_DISABLE:
