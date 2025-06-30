@@ -10,6 +10,8 @@
 
 #include <linux/key.h>
 
+struct asymmetric_key_id;
+
 enum blacklist_hash_type {
 	/* TBSCertificate hash */
 	BLACKLIST_HASH_X509_TBS = 1,
@@ -18,6 +20,10 @@ enum blacklist_hash_type {
 };
 
 #ifdef CONFIG_SYSTEM_TRUSTED_KEYRING
+
+extern struct key *find_asymmetric_pub_key(const struct asymmetric_key_id *id_0,
+					   const struct asymmetric_key_id *id_1,
+					   const struct asymmetric_key_id *id_2);
 
 extern int restrict_link_by_builtin_trusted(struct key *keyring,
 					    const struct key_type *type,
@@ -30,6 +36,13 @@ int restrict_link_by_digsig_builtin(struct key *dest_keyring,
 extern __init int load_module_cert(struct key *keyring);
 
 #else
+static inline struct key *find_asymmetric_pub_key(const struct asymmetric_key_id *id_0,
+						  const struct asymmetric_key_id *id_1,
+						  const struct asymmetric_key_id *id_2)
+{
+	return NULL;
+}
+
 #define restrict_link_by_builtin_trusted restrict_link_reject
 #define restrict_link_by_digsig_builtin restrict_link_reject
 

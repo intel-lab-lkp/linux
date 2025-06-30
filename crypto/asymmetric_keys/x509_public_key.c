@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) "X.509: "fmt
 #include <crypto/hash.h>
+#include <crypto/sm2.h>
 #include <keys/asymmetric-parser.h>
 #include <keys/asymmetric-subtype.h>
 #include <keys/system_keyring.h>
@@ -28,6 +29,8 @@ int x509_get_sig_params(struct x509_certificate *cert)
 	struct shash_desc *desc;
 	size_t desc_size;
 	int ret;
+	struct key *key;
+	struct public_key *pkey;
 
 	pr_devel("==>%s()\n", __func__);
 
@@ -63,8 +66,30 @@ int x509_get_sig_params(struct x509_certificate *cert)
 
 	desc->tfm = tfm;
 
-	ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size,
+	if (strcmp(cert->pub->pkey_algo, "sm2") == 0) {
+		if (!sig->auth_ids[0] && !sig->auth_ids[1] && !sig->auth_ids[2])
+			return -ENOKEY;
+
+		key = find_asymmetric_pub_key(sig->auth_ids[0], sig->auth_ids[1],
+					      sig->auth_ids[2]);
+		if (IS_ERR(key))
+			pkey = cert->pub;
+		else
+			pkey = key->payload.data[asym_crypto];
+
+		ret = strcmp(sig->hash_algo, "sm3") != 0 ? -EINVAL :
+			crypto_shash_init(desc) ?:
+			sm2_compute_z_digest(desc, pkey->key,
+					     pkey->keylen, sig->digest) ?:
+			crypto_shash_init(desc) ?:
+			crypto_shash_update(desc, sig->digest,
+					    sig->digest_size) ?:
+			crypto_shash_finup(desc, cert->tbs, cert->tbs_size,
+					   sig->digest);
+	} else {
+		ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size,
 				  sig->digest);
+	}
 
 	if (ret < 0)
 		goto error_2;

@@ -32,6 +32,14 @@ extern __initconst const u8 system_certificate_list[];
 extern __initconst const unsigned long system_certificate_list_size;
 extern __initconst const unsigned long module_cert_size;
 
+struct key *find_asymmetric_pub_key(const struct asymmetric_key_id *id_0,
+				    const struct asymmetric_key_id *id_1,
+				    const struct asymmetric_key_id *id_2)
+{
+	return find_asymmetric_key(builtin_trusted_keys, id_0,
+				   id_1, id_2, false);
+}
+
 /**
  * restrict_link_by_builtin_trusted - Restrict keyring addition by built-in CA
  * @dest_keyring: Keyring being linked to.
