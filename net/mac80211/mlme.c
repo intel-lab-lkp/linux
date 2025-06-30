@@ -3934,6 +3934,9 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
+	if (frame_buf)
+		memset(frame_buf, 0, ieee80211_set_disassoc);
+
 	if (WARN_ON(!ap_sta))
 		return;
 
