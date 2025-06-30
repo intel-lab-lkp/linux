@@ -1902,12 +1902,28 @@ int freeze_secondary_cpus(int primary)
 
 	cpu_maps_update_begin();
 	if (primary == -1) {
-		primary = cpumask_first(cpu_online_mask);
-		if (!housekeeping_cpu(primary, HK_TYPE_TIMER))
-			primary = housekeeping_any_cpu(HK_TYPE_TIMER);
+		primary = cpumask_first_and_and(cpu_online_mask,
+								housekeeping_cpumask(HK_TYPE_TIMER),
+								housekeeping_cpumask(HK_TYPE_DOMAIN));
+		if (primary >= nr_cpu_ids) {
+			error = -ENODEV;
+			pr_err("No suitable primary CPU found. Ensure at least one non-isolated, non-nohz_full CPU is online\n");
+			goto abort;
+		}
 	} else {
-		if (!cpu_online(primary))
-			primary = cpumask_first(cpu_online_mask);
+		if (!cpu_online(primary)) {
+			primary = cpumask_first_and(cpu_online_mask,
+								housekeeping_cpumask(HK_TYPE_DOMAIN));
+			if (primary >= nr_cpu_ids) {
+				error = -ENODEV;
+				pr_err("No suitable primary CPU found. Ensure at least one non-isolated CPU is online\n");
+				goto abort;
+			}
+		} else if (!housekeeping_cpu(primary, HK_TYPE_DOMAIN)) {
+			error = -ENODEV;
+			pr_err("Primary CPU %d should not be isolated\n", primary);
+			goto abort;
+		}
 	}
 
 	/*
@@ -1943,6 +1959,7 @@ int freeze_secondary_cpus(int primary)
 	else
 		pr_err("Non-boot CPUs are not disabled\n");
 
+abort:
 	/*
 	 * Make sure the CPUs won't be enabled by someone else. We need to do
 	 * this even in case of failure as all freeze_secondary_cpus() users are
