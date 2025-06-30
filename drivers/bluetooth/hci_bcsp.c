@@ -739,8 +739,6 @@ static int bcsp_close(struct hci_uart *hu)
 
 	timer_shutdown_sync(&bcsp->tbcsp);
 
-	hu->priv = NULL;
-
 	BT_DBG("hu %p", hu);
 
 	skb_queue_purge(&bcsp->unack);
@@ -753,6 +751,8 @@ static int bcsp_close(struct hci_uart *hu)
 	}
 
 	kfree(bcsp);
+	hu->priv = NULL;
+
 	return 0;
 }
 
