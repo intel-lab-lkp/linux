@@ -1183,31 +1183,28 @@ void rtl8723b_read_chip_version(struct adapter *padapter)
 	ReadChipVersion8723B(padapter);
 }
 
+/* Beacon Configuration */
+#define TBTT_PROHIBIT_DEFAULT_MS	0x6404  /* 100ms interval + 4ms margin */
+#define BCNTCFG_AIFS_LARGEST		0x660F  /* Max AIFS for beacon priority */
+
 void rtl8723b_InitBeaconParameters(struct adapter *padapter)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 	u16 val16;
 	u8 val8 = DIS_TSF_UDT;
 
-
-	val16 = val8 | (val8 << 8); /*  port0 and port1 */
-
-	/*  Enable prot0 beacon function for PSTDMA */
-	val16 |= EN_BCN_FUNCTION;
-
+	val16 = val8 | (val8 << 8); /* port0 and port1 */
+	val16 |= EN_BCN_FUNCTION;   /* Enable prot0 beacon function */
 	rtw_write16(padapter, REG_BCN_CTRL, val16);
 
-	/*  TODO: Remove these magic number */
-	rtw_write16(padapter, REG_TBTT_PROHIBIT, 0x6404);/*  ms */
-	/*  Firmware will control REG_DRVERLYINT when power saving is enable, */
-	/*  so don't set this register on STA mode. */
-	if (check_fwstate(&padapter->mlmepriv, WIFI_STATION_STATE) == false)
-		rtw_write8(padapter, REG_DRVERLYINT, DRIVER_EARLY_INT_TIME_8723B); /*  5ms */
-	rtw_write8(padapter, REG_BCNDMATIM, BCN_DMA_ATIME_INT_TIME_8723B); /*  2ms */
+	/* Fixed: Replaced magic numbers with defines */
+	rtw_write16(padapter, REG_TBTT_PROHIBIT, TBTT_PROHIBIT_DEFAULT_MS);
 
-	/*  Suggested by designer timchen. Change beacon AIFS to the largest number */
-	/*  because test chip does not contension before sending beacon. by tynli. 2009.11.03 */
-	rtw_write16(padapter, REG_BCNTCFG, 0x660F);
+	if (check_fwstate(&padapter->mlmepriv, WIFI_STATION_STATE) == false)
+		rtw_write8(padapter, REG_DRVERLYINT, DRIVER_EARLY_INT_TIME_8723B);
+
+	rtw_write8(padapter, REG_BCNDMATIM, BCN_DMA_ATIME_INT_TIME_8723B);
+	rtw_write16(padapter, REG_BCNTCFG, BCNTCFG_AIFS_LARGEST);
 
 	pHalData->RegBcnCtrlVal = rtw_read8(padapter, REG_BCN_CTRL);
 	pHalData->RegTxPause = rtw_read8(padapter, REG_TXPAUSE);
