@@ -1856,6 +1856,35 @@ config LATENCYTOP
 	  Enable this option if you want to use the LatencyTOP tool
 	  to find out which userspace is blocking on what kernel operations.
 
+config IRQ_LATENCY_WARN
+	bool "Warn on IRQ latency"
+	depends on NR_CPUS >= 2
+	default n
+	help
+	  Enable this option to receive warnings when IRQ handlers take too long.
+
+	  To keep overhead very low, this implementation uses jiffies-based
+	  timing - which is coarse, but sufficient to detect problematic IRQs.
+
+	  The minimal possible threshold is hardcoded by MAX_STALLED_JIFFIES
+	  as the reporting condition hits only when there are at least two CPUs
+	  with active ticks. The reporting threshold can be extended by adding
+	  additional jiffies to CONFIG_IRQ_LATENCY_WARN_THRESHOLD.
+
+	  The warning includes the affected CPU, IRQ number, handler address,
+	  name, and the duration it took to execute.
+
+	  Say Y if you want to identify problematic IRQs in the system.
+
+config IRQ_LATENCY_WARN_THRESHOLD
+	int "IRQ latency warning threshold in jiffies"
+	depends on IRQ_LATENCY_WARN
+	range 0 10000
+	default 0
+	help
+	  Set the latency threshold (in jiffies) for the IRQ warning messages.
+	  Consider it will be added to MAX_STALLED_JIFFIES.
+
 config DEBUG_CGROUP_REF
 	bool "Disable inlining of cgroup css reference count functions"
 	depends on DEBUG_KERNEL

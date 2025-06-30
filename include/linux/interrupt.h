@@ -15,6 +15,7 @@
 #include <linux/cpumask_types.h>
 #include <linux/workqueue.h>
 #include <linux/jump_label.h>
+#include <linux/tick.h>
 
 #include <linux/atomic.h>
 #include <asm/ptrace.h>
@@ -880,5 +881,29 @@ extern int arch_early_irq_init(void);
 #endif
 
 #define __softirq_entry  __section(".softirqentry.text")
+
+#ifdef CONFIG_IRQ_LATENCY_WARN
+static inline void warn_on_irq_latency(struct irqaction *action, unsigned int irq,
+				       unsigned long jiffies_start)
+{
+	unsigned long delta = jiffies - jiffies_start;
+
+	/*
+	 * Warn about long IRQ handler latency only if jiffies are reliable.
+	 * The reporting condition hits only when there are at least two CPUs
+	 * with active ticks.
+	 * Jiffies updates are stalled on this CPU until MAX_STALLED_JIFFIES
+	 * reaches and a force update happens on another CPU with active ticks.
+	 */
+	if (unlikely(delta >= (MAX_STALLED_JIFFIES + CONFIG_IRQ_LATENCY_WARN_THRESHOLD))) {
+		pr_warn_ratelimited("[CPU%d] latency on IRQ[%u:%pS], took: %lu jiffies (~%u ms)\n",
+				    smp_processor_id(), irq, action->handler,
+				    delta, jiffies_to_msecs(delta));
+	}
+}
+#else
+static inline void warn_on_irq_latency(struct irqaction *action, unsigned int irq,
+				       unsigned long jiffies_start) { }
+#endif
 
 #endif

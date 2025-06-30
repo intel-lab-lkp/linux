@@ -145,6 +145,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
 	record_irq_time(desc);
 
 	for_each_action_of_desc(desc, action) {
+		unsigned long __maybe_unused jiffies_start = jiffies;
 		irqreturn_t res;
 
 		/*
@@ -156,6 +157,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
 
 		trace_irq_handler_entry(irq, action);
 		res = action->handler(irq, action->dev_id);
+		warn_on_irq_latency(action, irq, jiffies_start);
 		trace_irq_handler_exit(irq, action, res);
 
 		if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pS enabled interrupts\n",

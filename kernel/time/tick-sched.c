@@ -201,8 +201,6 @@ static inline void tick_sched_flag_clear(struct tick_sched *ts,
 	ts->flags &= ~flag;
 }
 
-#define MAX_STALLED_JIFFIES 5
-
 static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 {
 	int tick_cpu, cpu = smp_processor_id();

@@ -14,6 +14,8 @@
 #include <linux/rcupdate.h>
 #include <linux/static_key.h>
 
+#define MAX_STALLED_JIFFIES 5
+
 #ifdef CONFIG_GENERIC_CLOCKEVENTS
 extern void __init tick_init(void);
 /* Should be core only, but ARM BL switcher requires it */
