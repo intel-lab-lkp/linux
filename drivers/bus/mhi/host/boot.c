@@ -302,8 +302,8 @@ invalid_pm_state:
 	return -EIO;
 }
 
-static void mhi_free_bhi_buffer(struct mhi_controller *mhi_cntrl,
-				struct image_info *image_info)
+void mhi_free_bhi_buffer(struct mhi_controller *mhi_cntrl,
+			 struct image_info *image_info)
 {
 	struct mhi_buf *mhi_buf = image_info->mhi_buf;
 
@@ -455,18 +455,19 @@ static enum mhi_fw_load_type mhi_fw_load_type_get(const struct mhi_controller *m
 
 static int mhi_load_image_bhi(struct mhi_controller *mhi_cntrl, const u8 *fw_data, size_t size)
 {
-	struct image_info *image;
+	struct image_info *image = mhi_cntrl->bhi_image;
 	int ret;
 
-	ret = mhi_alloc_bhi_buffer(mhi_cntrl, &image, size);
-	if (ret)
-		return ret;
+	if (!image) {
+		ret = mhi_alloc_bhi_buffer(mhi_cntrl, &image, size);
+		if (ret)
+			return ret;
 
-	/* Load the firmware into BHI vec table */
-	memcpy(image->mhi_buf->buf, fw_data, size);
+		/* Load the firmware into BHI vec table */
+		memcpy(image->mhi_buf->buf, fw_data, size);
+	}
 
 	ret = mhi_fw_load_bhi(mhi_cntrl, &image->mhi_buf[image->entries - 1]);
-	mhi_free_bhi_buffer(mhi_cntrl, image);
 
 	return ret;
 }
