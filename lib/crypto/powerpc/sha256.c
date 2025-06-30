@@ -42,7 +42,7 @@ static void spe_end(void)
 	preempt_enable();
 }
 
-void sha256_blocks_arch(u32 state[SHA256_STATE_WORDS],
+void sha256_blocks_arch(struct sha256_block_state *state,
 			const u8 *data, size_t nblocks)
 {
 	do {
