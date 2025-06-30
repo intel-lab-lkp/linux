@@ -349,6 +349,72 @@ static int configure_headersplit(bool on)
 	return ret;
 }
 
+static int configure_hds_thresh(int len)
+{
+	struct ethtool_rings_get_req *get_req;
+	struct ethtool_rings_get_rsp *get_rsp;
+	struct ethtool_rings_set_req *req;
+	struct ynl_error yerr;
+	struct ynl_sock *ys;
+	int ret;
+
+	ys = ynl_sock_create(&ynl_ethtool_family, &yerr);
+	if (!ys) {
+		fprintf(stderr, "YNL: %s\n", yerr.msg);
+		return -1;
+	}
+
+	req = ethtool_rings_set_req_alloc();
+	ethtool_rings_set_req_set_header_dev_index(req, ifindex);
+	ethtool_rings_set_req_set_hds_thresh(req, len);
+	ret = ethtool_rings_set(ys, req);
+	if (ret < 0)
+		fprintf(stderr, "YNL failed: %s\n", ys->err.msg);
+	ethtool_rings_set_req_free(req);
+
+	if (ret == 0) {
+		get_req = ethtool_rings_get_req_alloc();
+		ethtool_rings_get_req_set_header_dev_index(get_req, ifindex);
+		get_rsp = ethtool_rings_get(ys, get_req);
+		ethtool_rings_get_req_free(get_req);
+		if (get_rsp)
+			fprintf(stderr, "HDS threshold: %d\n",
+				get_rsp->hds_thresh);
+		ethtool_rings_get_rsp_free(get_rsp);
+	}
+
+	ynl_sock_destroy(ys);
+
+	return ret;
+}
+
+static int get_hds_thresh_max(void)
+{
+	struct ethtool_rings_get_req *get_req;
+	struct ethtool_rings_get_rsp *get_rsp;
+	struct ynl_error yerr;
+	unsigned int ret = 0;
+	struct ynl_sock *ys;
+
+	ys = ynl_sock_create(&ynl_ethtool_family, &yerr);
+	if (!ys) {
+		fprintf(stderr, "YNL: %s\n", yerr.msg);
+		return -1;
+	}
+
+	get_req = ethtool_rings_get_req_alloc();
+	ethtool_rings_get_req_set_header_dev_index(get_req, ifindex);
+	get_rsp = ethtool_rings_get(ys, get_req);
+	ethtool_rings_get_req_free(get_req);
+	if (get_rsp)
+		ret = get_rsp->hds_thresh_max;
+	ethtool_rings_get_rsp_free(get_rsp);
+
+	ynl_sock_destroy(ys);
+
+	return ret;
+}
+
 static int configure_rss(void)
 {
 	return run_command("sudo ethtool -X %s equal %d >&2", ifname, start_queue);
@@ -565,6 +631,9 @@ static int do_server(struct memory_buffer *mem)
 	if (configure_headersplit(1))
 		error(1, 0, "Failed to enable TCP header split\n");
 
+	if (configure_hds_thresh(0))
+		error(1, 0, "Failed to set HDS threshold\n");
+
 	/* Configure RSS to divert all traffic from our devmem queues */
 	if (configure_rss())
 		error(1, 0, "Failed to configure rss\n");
@@ -725,10 +794,14 @@ cleanup:
 void run_devmem_tests(void)
 {
 	struct memory_buffer *mem;
+	int hds_thresh_max = 0;
 	struct ynl_sock *ys;
 
 	mem = provider->alloc(getpagesize() * NUM_PAGES);
 
+	hds_thresh_max = get_hds_thresh_max();
+	if (hds_thresh_max < 0)
+		error(1, 0, "Failed to get hds_thresh_max");
 	/* Configure RSS to divert all traffic from our devmem queues */
 	if (configure_rss())
 		error(1, 0, "rss error\n");
@@ -749,6 +822,19 @@ void run_devmem_tests(void)
 
 	if (configure_headersplit(1))
 		error(1, 0, "Failed to configure header split\n");
+
+	/* Do not test hds_thresh if hds_thresh_max value is 0 */
+	if (hds_thresh_max) {
+		if (configure_hds_thresh(1))
+			error(1, 0, "Failed to configure HDS threshold\n");
+
+		if (!bind_rx_queue(ifindex, mem->fd, create_queues(),
+				   num_queues, &ys))
+			error(1, 0, "Configure dmabuf with non-zero HDS threshold should have failed\n");
+
+		if (configure_hds_thresh(0))
+			error(1, 0, "Failed to configure HDS threshold\n");
+	}
 
 	if (bind_rx_queue(ifindex, mem->fd, create_queues(), num_queues, &ys))
 		error(1, 0, "Failed to bind\n");
