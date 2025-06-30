@@ -7,6 +7,7 @@
 #define __INTEL_DISPLAY_WA_H__
 
 #include <linux/types.h>
+#include <i915_utils.h>
 
 struct intel_display;
 
@@ -21,4 +22,12 @@ static inline bool intel_display_needs_wa_16023588340(struct intel_display *disp
 bool intel_display_needs_wa_16023588340(struct intel_display *display);
 #endif
 
+enum intel_display_wa {
+	INTEL_DISPLAY_WA_16023588340,
+};
+
+bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa);
+
+#define _intel_display_wa_expand(__wa) INTEL_DISPLAY_WA_##__wa
+#define intel_display_wa(__display, __wa) __intel_display_wa((__display), _intel_display_wa_expand(__wa))
 #endif

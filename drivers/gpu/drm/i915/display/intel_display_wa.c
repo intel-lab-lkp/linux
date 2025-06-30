@@ -39,3 +39,16 @@ void intel_display_wa_apply(struct intel_display *display)
 	else if (DISPLAY_VER(display) == 11)
 		gen11_display_wa_apply(display);
 }
+
+bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa)
+{
+	switch (wa) {
+	case INTEL_DISPLAY_WA_16023588340:
+		return intel_display_needs_wa_16023588340(display);
+	default:
+		MISSING_CASE(wa);
+		break;
+	}
+
+	return false;
+}
