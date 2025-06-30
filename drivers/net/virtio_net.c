@@ -6211,7 +6211,8 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_tx_timeout		= virtnet_tx_timeout,
 };
 
-static void virtnet_config_changed_work(struct work_struct *work)
+static void __virtnet_config_changed_work(struct work_struct *work,
+					  bool check_announce)
 {
 	struct virtnet_info *vi =
 		container_of(work, struct virtnet_info, config_work);
@@ -6221,7 +6222,7 @@ static void virtnet_config_changed_work(struct work_struct *work)
 				 struct virtio_net_config, status, &v) < 0)
 		return;
 
-	if (v & VIRTIO_NET_S_ANNOUNCE) {
+	if (check_announce && (v & VIRTIO_NET_S_ANNOUNCE)) {
 		netdev_notify_peers(vi->dev);
 		virtnet_ack_link_announce(vi);
 	}
@@ -6242,6 +6243,11 @@ static void virtnet_config_changed_work(struct work_struct *work)
 		netif_carrier_off(vi->dev);
 		netif_tx_stop_all_queues(vi->dev);
 	}
+}
+
+static void virtnet_config_changed_work(struct work_struct *work)
+{
+	__virtnet_config_changed_work(work, true);
 }
 
 static void virtnet_config_changed(struct virtio_device *vdev)
@@ -7030,7 +7036,10 @@ static int virtnet_probe(struct virtio_device *vdev)
 	   otherwise get link status from config. */
 	netif_carrier_off(dev);
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_STATUS)) {
-		virtnet_config_changed_work(&vi->config_work);
+		/* The check_annouce work will get scheduled when ndo_open()
+		 * doing the virtio_config_driver_enable().
+		 */
+		__virtnet_config_changed_work(&vi->config_work, false);
 	} else {
 		vi->status = VIRTIO_NET_S_LINK_UP;
 		virtnet_update_settings(vi);
