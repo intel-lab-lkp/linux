@@ -19,10 +19,10 @@
 #include <generated/utsrelease.h>
 
 #include "ima.h"
+#include "ima_tpm.h"
 
 /* name for boot aggregate entry */
 const char boot_aggregate_name[] = "boot_aggregate";
-struct tpm_chip *ima_tpm_chip;
 struct ima_rot *ima_rot_inst;
 
 /* Add the boot aggregate to the IMA measurement list and extend
@@ -73,7 +73,7 @@ static int __init ima_add_boot_aggregate(void)
 	 * is not found.
 	 */
 	if (ima_tpm_chip) {
-		result = ima_calc_boot_aggregate(hash_hdr);
+		result = ima_tpm_calc_boot_aggregate(hash_hdr);
 		if (result < 0) {
 			audit_cause = "hashing_error";
 			goto err_out;
