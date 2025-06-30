@@ -5526,6 +5526,20 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.hash = __VECS(sha512_tv_template)
 		}
 	}, {
+		.alg = "shake128",
+		.test = alg_test_hash,
+		.fips_allowed = 1,
+		.suite = {
+			.hash = __VECS(shake128_tv_template)
+		}
+	}, {
+		.alg = "shake256",
+		.test = alg_test_hash,
+		.fips_allowed = 1,
+		.suite = {
+			.hash = __VECS(shake256_tv_template)
+		}
+	}, {
 		.alg = "sm3",
 		.test = alg_test_hash,
 		.suite = {
