@@ -4253,7 +4253,13 @@ void scx_group_set_weight(struct task_group *tg, unsigned long weight)
 
 void scx_group_set_idle(struct task_group *tg, bool idle)
 {
-	/* TODO: Implement ops->cgroup_set_idle() */
+	struct sched_ext_ops *ops;
+
+	rcu_read_lock();
+	ops = rcu_dereference(ext_ops);
+	if (ops && ops->cgroup_set_idle)
+		ops->cgroup_set_idle(tg, idle);
+	rcu_read_unlock();
 }
 
 static void scx_cgroup_lock(void)
