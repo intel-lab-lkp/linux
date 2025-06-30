@@ -3455,6 +3455,8 @@ static void ath12k_mac_init_arvif(struct ath12k_vif *ahvif,
 	INIT_DELAYED_WORK(&arvif->connection_loss_work,
 			  ath12k_mac_vif_sta_connection_loss_work);
 
+	arvif->num_stations = 0;
+
 	for (i = 0; i < ARRAY_SIZE(arvif->bitrate_mask.control); i++) {
 		arvif->bitrate_mask.control[i].legacy = 0xffffffff;
 		memset(arvif->bitrate_mask.control[i].ht_mcs, 0xff,
@@ -5660,6 +5662,11 @@ static int ath12k_mac_inc_num_stations(struct ath12k_link_vif *arvif,
 		return -ENOBUFS;
 
 	ar->num_stations++;
+	arvif->num_stations++;
+
+	ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+		   "mac station %pM connected to vdev %u num_stations %u\n",
+		   arsta->addr, arvif->vdev_id, arvif->num_stations);
 
 	return 0;
 }
@@ -5676,6 +5683,17 @@ static void ath12k_mac_dec_num_stations(struct ath12k_link_vif *arvif,
 		return;
 
 	ar->num_stations--;
+
+	if (arvif->num_stations) {
+		arvif->num_stations--;
+		ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+			   "mac station %pM disconnected from vdev %u num_stations %u\n",
+			   arsta->addr, arvif->vdev_id, arvif->num_stations);
+	} else {
+		ath12k_warn(ar->ab,
+			    "mac station %pM disconnect for vdev %u without any connected station\n",
+			    arsta->addr, arvif->vdev_id);
+	}
 }
 
 static void ath12k_mac_station_post_remove(struct ath12k *ar,
