@@ -12,11 +12,15 @@ config PCIE_CADENCE_HOST
 	select IRQ_DOMAIN
 	select PCIE_CADENCE
 
+config PCIE_CADENCE_COMMON
+	bool
+
 config PCIE_CADENCE_EP
 	tristate
 	depends on OF
 	depends on PCI_ENDPOINT
 	select PCIE_CADENCE
+	select PCIE_CADENCE_COMMON
 
 config PCIE_CADENCE_PLAT
 	bool
