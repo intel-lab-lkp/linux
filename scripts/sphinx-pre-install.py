@@ -530,7 +530,7 @@ class SphinxDependencyChecker:
             "python-sphinx": "python3-sphinx",
             "virtualenv":    "python3-virtualenv",
             "xelatex":       "texlive-xetex-bin",
-            "yaml":          "python3-pyyaml",
+            "yaml":          "python3-pyyaml",     # or python3-PyYAML?
         }
 
         # On Tumbleweed, this package is also named rsvg-convert
@@ -569,7 +569,7 @@ class SphinxDependencyChecker:
                 progs.update({
                     "python-sphinx": "python311-Sphinx",
                     "virtualenv":    "python311-virtualenv",
-                    "yaml":          "python311-pyyaml",
+                    "yaml":          "python311-PyYAML",
                 })
 
         # FIXME: add support for installing CJK fonts
