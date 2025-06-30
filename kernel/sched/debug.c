@@ -1044,6 +1044,7 @@ static int sched_debug_show(struct seq_file *m, void *v)
 	else
 		sched_debug_header(m);
 
+	cond_resched();
 	return 0;
 }
 
