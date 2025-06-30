@@ -5,6 +5,7 @@
 
 #include <linux/device.h>
 #include <linux/usb/typec.h>
+#include <linux/usb/typec_altmode.h>
 
 struct typec_mux;
 struct typec_switch;
@@ -82,6 +83,7 @@ struct typec_port {
 	struct device			*usb3_dev;
 
 	bool				alt_mode_override;
+	int				mode_priority_list[TYPEC_MODE_MAX];
 };
 
 #define to_typec_port(_dev_) container_of(_dev_, struct typec_port, dev)
@@ -110,5 +112,7 @@ void typec_unlink_ports(struct typec_port *connector);
 static inline int typec_link_ports(struct typec_port *connector) { return 0; }
 static inline void typec_unlink_ports(struct typec_port *connector) { }
 #endif
+
+#define ALTERNATE_MODE_DEVICE_TYPE_NAME "typec_alternate_mode"
 
 #endif /* __USB_TYPEC_CLASS__ */
