@@ -21,6 +21,7 @@
 #include <linux/pgtable.h>
 #include <linux/crc32.h>
 #include <linux/dma-direct.h>
+#include <linux/pci.h>
 
 #include "internal.h"
 #include "sleep.h"
@@ -435,12 +436,17 @@ static int acpi_generic_hotplug_event(struct acpi_device *adev, u32 type)
 	return -EINVAL;
 }
 
+void __weak arch_wait_pcibios_init_complete(void) {}
+
 void acpi_device_hotplug(struct acpi_device *adev, u32 src)
 {
 	u32 ost_code = ACPI_OST_SC_NON_SPECIFIC_FAILURE;
 	int error = -ENODEV;
 
 	lock_device_hotplug();
+
+	arch_wait_pcibios_init_complete();
+
 	mutex_lock(&acpi_scan_lock);
 
 	/*

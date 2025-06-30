@@ -37,6 +37,8 @@ unsigned long pirq_table_addr;
 const struct pci_raw_ops *__read_mostly raw_pci_ops;
 const struct pci_raw_ops *__read_mostly raw_pci_ext_ops;
 
+DECLARE_COMPLETION(pcibios_init_completion);
+
 int raw_pci_read(unsigned int domain, unsigned int bus, unsigned int devfn,
 						int reg, int len, u32 *val)
 {
@@ -498,6 +500,17 @@ void __init pcibios_set_cache_line_size(void)
 	}
 }
 
+static DEFINE_STATIC_KEY_FALSE(pcibios_init_done);
+
+void arch_wait_pcibios_init_complete(void)
+{
+	if (static_branch_likely(&pcibios_init_done))
+		return;
+
+	wait_for_completion(&pcibios_init_completion);
+	static_branch_enable(&pcibios_init_done);
+}
+
 int __init pcibios_init(void)
 {
 	if (!raw_pci_ops && !raw_pci_ext_ops) {
@@ -510,6 +523,9 @@ int __init pcibios_init(void)
 
 	if (pci_bf_sort >= pci_force_bf)
 		pci_sort_breadthfirst();
+
+	complete(&pcibios_init_completion);
+
 	return 0;
 }
 
