@@ -239,6 +239,7 @@ static struct ipv6_devconf ipv6_devconf __read_mostly = {
 	.ndisc_evict_nocarrier	= 1,
 	.ra_honor_pio_life	= 0,
 	.ra_honor_pio_pflag	= 0,
+	.force_forwarding	= 0,
 };
 
 static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
@@ -303,6 +304,7 @@ static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
 	.ndisc_evict_nocarrier	= 1,
 	.ra_honor_pio_life	= 0,
 	.ra_honor_pio_pflag	= 0,
+	.force_forwarding	= 0,
 };
 
 /* Check if link is ready: is it up and is a valid qdisc available */
@@ -857,6 +859,15 @@ static void addrconf_forward_change(struct net *net, __s32 newf)
 		idev = __in6_dev_get_rtnl_net(dev);
 		if (idev) {
 			int changed = (!idev->cnf.forwarding) ^ (!newf);
+			/*
+			 * With the introduction of force_forwarding, we need to be backwards
+			 * compatible, so that means we need to set the force_forwarding flag
+			 * on every interface to 0 if net.ipv6.conf.all.forwarding is set to 0.
+			 * This allows the global forwarding flag to disable forwarding for
+			 * all interfaces.
+			 */
+			if (newf == 0)
+				WRITE_ONCE(idev->cnf.force_forwarding, newf);
 
 			WRITE_ONCE(idev->cnf.forwarding, newf);
 			if (changed)
@@ -895,6 +906,16 @@ static int addrconf_fixup_forwarding(const struct ctl_table *table, int *p, int 
 						     NETCONFA_FORWARDING,
 						     NETCONFA_IFINDEX_DEFAULT,
 						     net->ipv6.devconf_dflt);
+
+		/*
+		 * With the introduction of force_forwarding, we need to be backwards
+		 * compatible, so that means we need to set the force_forwarding global
+		 * flag to 0 if the global forwarding flag is set to 0. Below in
+		 * addrconf_forward_change(), we also set the force_forwarding flag on every
+		 * interface to 0 if the global forwarding flag is set to 0.
+		 */
+		if (newf == 0)
+			WRITE_ONCE(net->ipv6.devconf_all->force_forwarding, newf);
 
 		addrconf_forward_change(net, newf);
 		if ((!newf) ^ (!old))
@@ -5719,6 +5740,7 @@ static void ipv6_store_devconf(const struct ipv6_devconf *cnf,
 	array[DEVCONF_ACCEPT_UNTRACKED_NA] =
 		READ_ONCE(cnf->accept_untracked_na);
 	array[DEVCONF_ACCEPT_RA_MIN_LFT] = READ_ONCE(cnf->accept_ra_min_lft);
+	array[DEVCONF_FORCE_FORWARDING] = READ_ONCE(cnf->force_forwarding);
 }
 
 static inline size_t inet6_ifla6_size(void)
@@ -6747,6 +6769,70 @@ static int addrconf_sysctl_disable_policy(const struct ctl_table *ctl, int write
 	return ret;
 }
 
+/* called with RTNL locked */
+static void addrconf_force_forward_change(struct net *net, __s32 newf)
+{
+	struct net_device *dev;
+	struct inet6_dev *idev;
+
+	for_each_netdev(net, dev) {
+		idev = __in6_dev_get_rtnl_net(dev);
+		if (idev) {
+			int changed = (!idev->cnf.force_forwarding) ^ (!newf);
+
+			WRITE_ONCE(idev->cnf.force_forwarding, newf);
+			if (changed) {
+				inet6_netconf_notify_devconf(dev_net(dev), RTM_NEWNETCONF,
+							     NETCONFA_FORCE_FORWARDING,
+							     dev->ifindex, &idev->cnf);
+			}
+		}
+	}
+}
+
+static int addrconf_sysctl_force_forwarding(const struct ctl_table *ctl, int write,
+					    void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int *valp = ctl->data;
+	int ret;
+	int old, new;
+
+	old = *valp;
+	ret = proc_douintvec(ctl, write, buffer, lenp, ppos);
+	new = *valp;
+
+	if (write && old != new) {
+		struct net *net = ctl->extra2;
+
+		if (!rtnl_net_trylock(net))
+			return restart_syscall();
+
+		if (valp == &net->ipv6.devconf_dflt->force_forwarding) {
+			inet6_netconf_notify_devconf(net, RTM_NEWNETCONF,
+						     NETCONFA_FORCE_FORWARDING,
+						     NETCONFA_IFINDEX_DEFAULT,
+						     net->ipv6.devconf_dflt);
+		} else if (valp == &net->ipv6.devconf_all->force_forwarding) {
+			inet6_netconf_notify_devconf(net, RTM_NEWNETCONF,
+						     NETCONFA_FORCE_FORWARDING,
+						     NETCONFA_IFINDEX_ALL,
+						     net->ipv6.devconf_all);
+
+			addrconf_force_forward_change(net, new);
+		} else {
+			struct inet6_dev *idev = ctl->extra1;
+
+			inet6_netconf_notify_devconf(net, RTM_NEWNETCONF,
+						     NETCONFA_FORCE_FORWARDING,
+						     idev->dev->ifindex,
+						     &idev->cnf);
+		}
+		rtnl_net_unlock(net);
+	}
+
+	return ret;
+}
+
 static int minus_one = -1;
 static const int two_five_five = 255;
 static u32 ioam6_if_id_max = U16_MAX;
@@ -7216,6 +7302,13 @@ static const struct ctl_table addrconf_sysctl[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_TWO,
+	},
+	{
+		.procname	= "force_forwarding",
+		.data		= &ipv6_devconf.force_forwarding,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= addrconf_sysctl_force_forwarding,
 	},
 };
 
