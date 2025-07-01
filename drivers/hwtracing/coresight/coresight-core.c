@@ -477,7 +477,8 @@ static void coresight_restore_source(struct coresight_device *csdev)
  * disabled.
  */
 static void coresight_disable_path_from(struct coresight_path *path,
-					struct coresight_node *nd)
+					struct coresight_node *nd,
+					bool in_idle)
 {
 	u32 type;
 	struct coresight_device *csdev, *parent, *child;
@@ -499,6 +500,10 @@ static void coresight_disable_path_from(struct coresight_path *path,
 			type = (csdev == coresight_get_sink(path)) ?
 						CORESIGHT_DEV_TYPE_SINK :
 						CORESIGHT_DEV_TYPE_LINK;
+
+		/* To reduce latency, CPU idle does not touch the sink */
+		if (in_idle && type == CORESIGHT_DEV_TYPE_SINK)
+			continue;
 
 		switch (type) {
 		case CORESIGHT_DEV_TYPE_SINK:
@@ -535,7 +540,7 @@ void coresight_disable_path(struct coresight_path *path)
 	if (coresight_is_percpu_source(source))
 		per_cpu(csdev_cpu_path, source->cpu) = NULL;
 
-	coresight_disable_path_from(path, NULL);
+	coresight_disable_path_from(path, NULL, false);
 }
 EXPORT_SYMBOL_GPL(coresight_disable_path);
 
@@ -559,7 +564,8 @@ static int coresight_enable_helpers(struct coresight_device *csdev,
 }
 
 static int _coresight_enable_path(struct coresight_path *path,
-				  enum cs_mode mode, void *sink_data)
+				  enum cs_mode mode, void *sink_data,
+				  bool in_idle)
 {
 	int ret = 0;
 	u32 type;
@@ -572,10 +578,6 @@ static int _coresight_enable_path(struct coresight_path *path,
 		csdev = nd->csdev;
 		type = csdev->type;
 
-		/* Enable all helpers adjacent to the path first */
-		ret = coresight_enable_helpers(csdev, mode, path);
-		if (ret)
-			goto err_disable_path;
 		/*
 		 * ETF devices are tricky... They can be a link or a sink,
 		 * depending on how they are configured.  If an ETF has been
@@ -586,6 +588,15 @@ static int _coresight_enable_path(struct coresight_path *path,
 			type = (csdev == coresight_get_sink(path)) ?
 						CORESIGHT_DEV_TYPE_SINK :
 						CORESIGHT_DEV_TYPE_LINK;
+
+		/* To reduce latency, CPU idle does not touch the sink */
+		if (in_idle && type == CORESIGHT_DEV_TYPE_SINK)
+			continue;
+
+		/* Enable all helpers adjacent to the path first */
+		ret = coresight_enable_helpers(csdev, mode, path);
+		if (ret)
+			goto err_disable_path;
 
 		switch (type) {
 		case CORESIGHT_DEV_TYPE_SINK:
@@ -622,7 +633,7 @@ out:
 err_disable_helpers:
 	coresight_disable_helpers(csdev, path);
 err_disable_path:
-	coresight_disable_path_from(path, nd);
+	coresight_disable_path_from(path, nd, false);
 	goto out;
 }
 
@@ -632,7 +643,7 @@ int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
 	int ret;
 	struct coresight_device *source;
 
-	ret = _coresight_enable_path(path, mode, sink_data);
+	ret = _coresight_enable_path(path, mode, sink_data, false);
 	if (ret)
 		return ret;
 
