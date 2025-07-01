@@ -3858,11 +3858,11 @@ bool call_function_single_prep_ipi(int cpu)
  * via sched_ttwu_wakeup() for activation so the wakee incurs the cost
  * of the wakeup instead of the waker.
  */
-static void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
+static void __ttwu_queue_wakelist(struct task_struct *p, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
 
-	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+	sched_clock_cpu(cpu); /* Sync clocks across CPUs */
 
 	WRITE_ONCE(rq->ttwu_pending, 1);
 #ifdef CONFIG_SMP
@@ -3964,8 +3964,9 @@ static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 	if (!ttwu_queue_cond(p, cpu, def))
 		return false;
 
-	sched_clock_cpu(cpu); /* Sync clocks across CPUs */
-	__ttwu_queue_wakelist(p, cpu, wake_flags);
+	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+
+	__ttwu_queue_wakelist(p, cpu);
 	return true;
 }
 
