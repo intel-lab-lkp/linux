@@ -645,9 +645,8 @@ test_cpucg_nested_weight_underprovisioned(const char *root)
 static int test_cpucg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
-	long usage_usec, user_usec;
+	long usage_usec, expected_usage_usec;
 	long duration_seconds = 1;
-	long duration_usec = duration_seconds * USEC_PER_SEC;
 	char *cpucg;
 
 	cpucg = cg_name(root, "cpucg_test");
@@ -672,14 +671,18 @@ static int test_cpucg_max(const char *root)
 		goto cleanup;
 
 	usage_usec = cg_read_key_long(cpucg, "cpu.stat", "usage_usec");
-	user_usec = cg_read_key_long(cpucg, "cpu.stat", "user_usec");
-	if (user_usec <= 0)
+	if (usage_usec <= 0)
 		goto cleanup;
 
-	if (user_usec >= duration_usec)
-		goto cleanup;
+	/*
+	 * Since the cpu hog is set to run as per wall clock time, it's expected to
+	 * run for 10 periods (duration_usec/default_period_usec), and in each
+	 * period, it's throttled to run for 1000 usec. So its expected usage is
+	 * 1000 * 10 = 10000 usec.
+	 */
+	expected_usage_usec = 10000;
 
-	if (values_close(usage_usec, duration_usec, 95))
+	if (labs(usage_usec - expected_usage_usec) > 2000)
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -698,9 +701,8 @@ cleanup:
 static int test_cpucg_max_nested(const char *root)
 {
 	int ret = KSFT_FAIL;
-	long usage_usec, user_usec;
+	long usage_usec, expected_usage_usec;
 	long duration_seconds = 1;
-	long duration_usec = duration_seconds * USEC_PER_SEC;
 	char *parent, *child;
 
 	parent = cg_name(root, "cpucg_parent");
@@ -732,14 +734,18 @@ static int test_cpucg_max_nested(const char *root)
 		goto cleanup;
 
 	usage_usec = cg_read_key_long(child, "cpu.stat", "usage_usec");
-	user_usec = cg_read_key_long(child, "cpu.stat", "user_usec");
-	if (user_usec <= 0)
+	if (usage_usec <= 0)
 		goto cleanup;
 
-	if (user_usec >= duration_usec)
-		goto cleanup;
+	/*
+	 * Since the cpu hog is set to run as per wall clock time, it's expected to
+	 * run for 10 periods (duration_usec/default_period_usec), and in each
+	 * period, it's throttled to run for 1000 usec. So its expected usage is
+	 * 1000 * 10 = 10000 usec.
+	 */
+	expected_usage_usec = 10000;
 
-	if (values_close(usage_usec, duration_usec, 95))
+	if (labs(usage_usec - expected_usage_usec) > 2000)
 		goto cleanup;
 
 	ret = KSFT_PASS;
