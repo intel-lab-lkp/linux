@@ -373,13 +373,14 @@ enum tpm_buf_flags {
 };
 
 /*
- * A string buffer type for constructing TPM commands.
+ * A buffer for constructing and parsing TPM commands, responses and sized
+ * (TPM2B) buffers.
  */
 struct tpm_buf {
-	u32 flags;
-	u32 length;
-	u8 *data;
-	u8 handles;
+	u16 flags;
+	u16 length;
+	u16 handles;
+	u8 data[];
 };
 
 enum tpm2_object_attributes {
@@ -410,11 +411,25 @@ struct tpm2_hash {
 	unsigned int tpm_id;
 };
 
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal);
+/**
+ * tpm_buf_alloc() - Allocates a buffer for reading and writing TPM binary data
+ *
+ * Allocates %PAGE_SIZE of memory and places &tpm_buf to the beginning of the
+ * allocated buffer. For that reason the total capacity can be at most 4090
+ * bytes. If a caller tries to surpass the maximum capacity, %TPM_BUF_OVERFLOW
+ * will be set and any future operations will be ignored.
+ *
+ * Return:
+ * * &tpm_buf:	success
+ * * NULL:	out of memory
+ */
+static inline struct tpm_buf *tpm_buf_alloc(void)
+{
+	return kzalloc(PAGE_SIZE, GFP_KERNEL);
+}
+
 void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal);
-int tpm_buf_init_sized(struct tpm_buf *buf);
 void tpm_buf_reset_sized(struct tpm_buf *buf);
-void tpm_buf_destroy(struct tpm_buf *buf);
 u32 tpm_buf_length(struct tpm_buf *buf);
 void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length);
 void tpm_buf_append_u8(struct tpm_buf *buf, const u8 value);
