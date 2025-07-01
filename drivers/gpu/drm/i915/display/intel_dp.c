@@ -2708,8 +2708,6 @@ bool intel_dp_limited_color_range(const struct intel_crtc_state *crtc_state,
 {
 	const struct intel_digital_connector_state *intel_conn_state =
 		to_intel_digital_connector_state(conn_state);
-	const struct drm_display_mode *adjusted_mode =
-		&crtc_state->hw.adjusted_mode;
 
 	/*
 	 * Our YCbCr output is always limited range.
@@ -2721,18 +2719,13 @@ bool intel_dp_limited_color_range(const struct intel_crtc_state *crtc_state,
 	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB)
 		return false;
 
-	if (intel_conn_state->broadcast_rgb == INTEL_BROADCAST_RGB_AUTO) {
-		/*
-		 * See:
-		 * CEA-861-E - 5.1 Default Encoding Parameters
-		 * VESA DisplayPort Ver.1.2a - 5.1.1.1 Video Colorimetry
-		 */
-		return crtc_state->pipe_bpp != 18 &&
-			drm_default_rgb_quant_range(adjusted_mode) ==
-			HDMI_QUANTIZATION_RANGE_LIMITED;
-	} else {
-		return intel_conn_state->broadcast_rgb ==
-			INTEL_BROADCAST_RGB_LIMITED;
+	switch (intel_conn_state->broadcast_rgb) {
+	case INTEL_BROADCAST_RGB_LIMITED:
+		return true;
+	case INTEL_BROADCAST_RGB_FULL:
+	case INTEL_BROADCAST_RGB_AUTO:
+	default:
+		return false;
 	}
 }
 
