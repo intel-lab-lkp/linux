@@ -258,6 +258,12 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 
 		while (ctx->pos < inode->i_size
 		       && offset < sb->s_blocksize) {
+			/* Ensure that at least the shortest possible
+			 * dirent will be read from within the bh's data.
+			 */
+			if (offset + offsetof(struct ext4_dir_entry_2, name)
+			    > bh->b_size)
+				break;
 			de = (struct ext4_dir_entry_2 *) (bh->b_data + offset);
 			if (ext4_check_dir_entry(inode, file, de, bh,
 						 bh->b_data, bh->b_size,
