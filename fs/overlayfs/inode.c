@@ -722,7 +722,7 @@ int ovl_real_fileattr_get(const struct path *realpath, struct fileattr *fa)
 
 	err = vfs_fileattr_get(realpath->dentry, fa);
 	if (err == -ENOIOCTLCMD)
-		err = -ENOTTY;
+		err = -EOPNOTSUPP;
 	return err;
 }
 
