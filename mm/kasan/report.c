@@ -387,7 +387,7 @@ static inline struct vm_struct *kasan_find_vm_area(void *addr)
 	static DEFINE_WAIT_OVERRIDE_MAP(vmalloc_map, LD_WAIT_SLEEP);
 	struct vm_struct *va;
 
-	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) || in_interrupt())
 		return NULL;
 
 	/*
