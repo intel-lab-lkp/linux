@@ -459,13 +459,6 @@ static int etm4_enable_trace_unit(struct etmv4_drvdata *drvdata)
 		return -ETIME;
 	}
 
-	/*
-	 * As recommended by section 4.3.7 ("Synchronization when using the
-	 * memory-mapped interface") of ARM IHI 0064D
-	 */
-	dsb(sy);
-	isb();
-
 	return 0;
 }
 
@@ -579,6 +572,13 @@ static int etm4_enable_hw(struct etmv4_drvdata *drvdata)
 
 	if (!drvdata->paused)
 		rc = etm4_enable_trace_unit(drvdata);
+
+	/*
+	 * As recommended by section 4.3.7 (Synchronization of register updates)
+	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
+	 * ISB instruction after programming the trace unit registers.
+	 */
+	isb();
 done:
 	etm4_cs_lock(drvdata, csa);
 
@@ -954,11 +954,6 @@ static void etm4_disable_trace_unit(struct etmv4_drvdata *drvdata)
 	if (etm4x_wait_status(csa, TRCSTATR_PMSTABLE_BIT, 1))
 		dev_err(etm_dev,
 			"timeout while waiting for PM stable Trace Status\n");
-	/*
-	 * As recommended by section 4.3.7 (Synchronization of register updates)
-	 * of ARM IHI 0064H.b.
-	 */
-	isb();
 }
 
 static void etm4_disable_hw(struct etmv4_drvdata *drvdata)
@@ -980,6 +975,13 @@ static void etm4_disable_hw(struct etmv4_drvdata *drvdata)
 	}
 
 	etm4_disable_trace_unit(drvdata);
+
+	/*
+	 * As recommended by section 4.3.7 (Synchronization of register updates)
+	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
+	 * ISB instruction after programming the trace unit registers.
+	 */
+	isb();
 
 	/* read the status of the single shot comparators */
 	for (i = 0; i < drvdata->nr_ss_cmp; i++) {
@@ -1118,6 +1120,12 @@ static int etm4_resume_perf(struct coresight_device *csdev)
 
 	etm4_cs_unlock(drvdata, csa);
 	etm4_enable_trace_unit(drvdata);
+	/*
+	 * As recommended by section 4.3.7 (Synchronization of register updates)
+	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
+	 * ISB instruction after programming the trace unit registers.
+	 */
+	isb();
 	etm4_cs_lock(drvdata, csa);
 
 	drvdata->paused = false;
@@ -1134,6 +1142,12 @@ static void etm4_pause_perf(struct coresight_device *csdev)
 
 	etm4_cs_unlock(drvdata, csa);
 	etm4_disable_trace_unit(drvdata);
+	/*
+	 * As recommended by section 4.3.7 (Synchronization of register updates)
+	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
+	 * ISB instruction after programming the trace unit registers.
+	 */
+	isb();
 	etm4_cs_lock(drvdata, csa);
 
 	drvdata->paused = true;
