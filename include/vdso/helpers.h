@@ -28,32 +28,46 @@ static __always_inline u32 vdso_read_retry(const struct vdso_clock *vc,
 	return seq != start;
 }
 
+static __always_inline void vdso_write_begin_clock(struct vdso_clock *vc, bool last)
+{
+	/*
+	 * WRITE_ONCE() is required otherwise the compiler can validly tear
+	 * updates to vc->seq and it is possible that the value seen by the
+	 * reader is inconsistent.
+	 */
+	WRITE_ONCE(vc->seq, vc->seq + 1);
+
+	if (last)
+		smp_wmb();
+}
+
+static __always_inline void vdso_write_end_clock(struct vdso_clock *vc, bool first)
+{
+	if (first)
+		smp_wmb();
+
+	/*
+	 * WRITE_ONCE() is required otherwise the compiler can validly tear
+	 * updates to vc->seq and it is possible that the value seen by the
+	 * reader is inconsistent.
+	 */
+	WRITE_ONCE(vc->seq, vc->seq + 1);
+}
+
 static __always_inline void vdso_write_begin(struct vdso_time_data *vd)
 {
 	struct vdso_clock *vc = vd->clock_data;
 
-	/*
-	 * WRITE_ONCE() is required otherwise the compiler can validly tear
-	 * updates to vd[x].seq and it is possible that the value seen by the
-	 * reader is inconsistent.
-	 */
-	WRITE_ONCE(vc[CS_HRES_COARSE].seq, vc[CS_HRES_COARSE].seq + 1);
-	WRITE_ONCE(vc[CS_RAW].seq, vc[CS_RAW].seq + 1);
-	smp_wmb();
+	vdso_write_begin_clock(&vc[CS_HRES_COARSE], false);
+	vdso_write_begin_clock(&vc[CS_RAW], true);
 }
 
 static __always_inline void vdso_write_end(struct vdso_time_data *vd)
 {
 	struct vdso_clock *vc = vd->clock_data;
 
-	smp_wmb();
-	/*
-	 * WRITE_ONCE() is required otherwise the compiler can validly tear
-	 * updates to vd[x].seq and it is possible that the value seen by the
-	 * reader is inconsistent.
-	 */
-	WRITE_ONCE(vc[CS_HRES_COARSE].seq, vc[CS_HRES_COARSE].seq + 1);
-	WRITE_ONCE(vc[CS_RAW].seq, vc[CS_RAW].seq + 1);
+	vdso_write_end_clock(&vc[CS_HRES_COARSE], true);
+	vdso_write_end_clock(&vc[CS_RAW], false);
 }
 
 #endif /* !__ASSEMBLY__ */
