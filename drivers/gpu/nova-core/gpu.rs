@@ -91,7 +91,7 @@ impl Chipset {
 // Hence, replace with something like strum_macros derive(Display).
 //
 // For now, redirect to fmt::Debug for convenience.
-impl fmt::Display for Chipset {
+impl kernel::fmt::Display for Chipset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
@@ -132,7 +132,7 @@ impl Revision {
     }
 }
 
-impl fmt::Display for Revision {
+impl kernel::fmt::Display for Revision {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}.{:x}", self.major, self.minor)
     }
