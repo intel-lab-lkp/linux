@@ -1377,7 +1377,8 @@ static void do_sched_yield(void)
  */
 SYSCALL_DEFINE0(sched_yield)
 {
-	if (IS_ENABLED(CONFIG_RSEQ) && current->sched_time_delay) {
+	if (IS_ENABLED(CONFIG_SCHED_PREEMPT_DELAY) &&
+				current->sched_time_delay) {
 		schedule();
 		return 0;
 	}

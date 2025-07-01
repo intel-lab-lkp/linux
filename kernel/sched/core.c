@@ -149,7 +149,7 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
  */
 __read_mostly unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 /*
  * Scheduler time slice extension, duration in microsecs.
  * Max value allowed 100us, default is 30us.
@@ -941,7 +941,7 @@ void hrtick_local_start(u64 delay)
 	rq_unlock(rq, &rf);
 }
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 void update_stat_preempt_delayed(struct task_struct *t)
 {
 	schedstat_inc(t->stats.nr_preempt_delay_granted);
@@ -4697,7 +4697,7 @@ static int sysctl_schedstats(const struct ctl_table *table, int write, void *buf
 #endif /* CONFIG_SCHEDSTATS */
 
 #ifdef CONFIG_PROC_SYSCTL
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 static int sysctl_sched_preempt_delay(const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -4711,7 +4711,7 @@ static int sysctl_sched_preempt_delay(const struct ctl_table *table, int write,
 			SCHED_PREEMPT_DELAY_DEFAULT_US);
 	return err;
 }
-#endif /* CONFIG_RSEQ */
+#endif /* CONFIG_SCHED_PREEMPT_DELAY */
 #endif /* CONFIG_PROC_SYSCTL */
 
 #ifdef CONFIG_SYSCTL
@@ -4761,7 +4761,7 @@ static const struct ctl_table sched_core_sysctls[] = {
 		.extra2		= SYSCTL_FOUR,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 	{
 		.procname	= "sched_preempt_delay_us",
 		.data		= &sysctl_sched_preempt_delay_us,
@@ -4771,7 +4771,7 @@ static const struct ctl_table sched_core_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
-#endif /* CONFIG_RSEQ */
+#endif /* CONFIG_SCHED_PREEMPT_DELAY */
 };
 static int __init sched_core_sysctl_init(void)
 {

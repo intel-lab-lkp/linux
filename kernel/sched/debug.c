@@ -1224,7 +1224,7 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 		P_SCHEDSTAT(nr_wakeups_passive);
 		P_SCHEDSTAT(nr_wakeups_idle);
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 		P_SCHEDSTAT(nr_preempt_delay_granted);
 #endif
 

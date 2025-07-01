@@ -402,7 +402,7 @@ static __always_inline void syscall_exit_to_user_mode_work(struct pt_regs *regs)
 	CT_WARN_ON(ct_state() != CT_STATE_KERNEL);
 
 	/* reschedule if sched delay was granted */
-	if (IS_ENABLED(CONFIG_RSEQ) && current->sched_time_delay)
+	if (IS_ENABLED(CONFIG_SCHED_PREEMPT_DELAY) && current->sched_time_delay)
 		set_tsk_need_resched(current);
 
 	if (IS_ENABLED(CONFIG_PROVE_LOCKING)) {

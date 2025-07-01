@@ -448,6 +448,7 @@ error:
 	force_sigsegv(sig);
 }
 
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 bool rseq_delay_resched(void)
 {
 	struct task_struct *t = current;
@@ -526,6 +527,7 @@ void rseq_delay_schedule(struct task_struct *tsk)
 	}
 #endif
 }
+#endif /* CONFIG_SCHED_PREEMPT_DELAY */
 
 #ifdef CONFIG_DEBUG_RSEQ
 
@@ -581,7 +583,8 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len,
 	if (flags & RSEQ_FLAG_QUERY_CS_FLAGS) {
 		u32 rseq_csflags = RSEQ_CS_FLAG_DELAY_RESCHED |
 				   RSEQ_CS_FLAG_RESCHEDULED;
-		if (!IS_ENABLED(CONFIG_SCHED_HRTICK))
+		if (!IS_ENABLED(CONFIG_SCHED_PREEMPT_DELAY) ||
+					!IS_ENABLED(CONFIG_SCHED_HRTICK))
 			return -EINVAL;
 		if (!rseq)
 			return -EINVAL;

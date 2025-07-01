@@ -339,7 +339,7 @@ extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
 extern void hrtick_local_start(u64 delay);
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 extern void update_stat_preempt_delayed(struct task_struct *t);
 #endif
 
@@ -409,7 +409,7 @@ static inline void sched_domains_mutex_lock(void) { }
 static inline void sched_domains_mutex_unlock(void) { }
 #endif
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 /* Scheduler time slice extension */
 extern unsigned int sysctl_sched_preempt_delay_us;
 #endif
@@ -572,7 +572,7 @@ struct sched_statistics {
 	u64				nr_wakeups_passive;
 	u64				nr_wakeups_idle;
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 	u64				nr_preempt_delay_granted;
 #endif
 
@@ -2258,7 +2258,7 @@ static inline bool owner_on_cpu(struct task_struct *owner)
 unsigned long sched_cpu_util(int cpu);
 #endif /* CONFIG_SMP */
 
-#ifdef CONFIG_RSEQ
+#ifdef CONFIG_SCHED_PREEMPT_DELAY
 
 extern bool rseq_delay_resched(void);
 extern void rseq_delay_resched_fini(void);
