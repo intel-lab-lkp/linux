@@ -2,7 +2,11 @@
 
 //! Device Tree / Open Firmware abstractions.
 
-use crate::{bindings, device_id::RawDeviceId, prelude::*};
+use crate::{
+    bindings,
+    device_id::{RawDeviceId, RawDeviceIdIndex},
+    prelude::*,
+};
 
 /// IdTable type for OF drivers.
 pub type IdTable<T> = &'static dyn kernel::device_id::IdTable<DeviceId, T>;
@@ -15,10 +19,13 @@ pub struct DeviceId(bindings::of_device_id);
 // SAFETY:
 // * `DeviceId` is a `#[repr(transparent)` wrapper of `struct of_device_id` and does not add
 //   additional invariants, so it's safe to transmute to `RawType`.
-// * `DRIVER_DATA_OFFSET` is the offset to the `data` field.
 unsafe impl RawDeviceId for DeviceId {
     type RawType = bindings::of_device_id;
+}
 
+// SAFETY:
+// * `DRIVER_DATA_OFFSET` is the offset to the `data` field.
+unsafe impl RawDeviceIdIndex for DeviceId {
     const DRIVER_DATA_OFFSET: usize = core::mem::offset_of!(bindings::of_device_id, data);
 
     fn index(&self) -> usize {
