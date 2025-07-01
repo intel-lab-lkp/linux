@@ -35,6 +35,27 @@ DEFINE_MUTEX(coresight_mutex);
 static DEFINE_PER_CPU(struct coresight_device *, csdev_sink);
 static DEFINE_PER_CPU(struct coresight_device *, csdev_source);
 
+/*
+ * Activated path pointer for a per-CPU source device. When enabling a path,
+ * the path pointer is first assigned, followed by a synchronous SMP call on
+ * the target CPU to transition the device mode from DISABLED to an enabled
+ * state. Conversely, during the disable flow, an SMP call on the target CPU
+ * transitions the device mode to DISABLED, after which the path pointer is
+ * cleared.
+ *
+ *  per_cpu(csdev_cpu_path, csdev->cpu) = path
+ *  coresight_take_mode(csdev, CS_MODE_SYSFS or CS_MODE_PERF)
+ *
+ *  // Safe to access per_cpu(csdev_cpu_path, cpu);
+ *
+ *  coresight_set_mode(csdev, CS_MODE_DISABLED)
+ *  per_cpu(csdev_cpu_path, csdev->cpu) = NULL
+ *
+ * As a result, the device mode is used to determine whether it is safe
+ * to access the path pointer.
+ */
+static DEFINE_PER_CPU(struct coresight_path *, csdev_cpu_path);
+
 /**
  * struct coresight_node - elements of a path, from source to sink
  * @csdev:	Address of an element.
@@ -508,6 +529,12 @@ static void coresight_disable_path_from(struct coresight_path *path,
 
 void coresight_disable_path(struct coresight_path *path)
 {
+	struct coresight_device *source;
+
+	source = coresight_get_source(path);
+	if (coresight_is_percpu_source(source))
+		per_cpu(csdev_cpu_path, source->cpu) = NULL;
+
 	coresight_disable_path_from(path, NULL);
 }
 EXPORT_SYMBOL_GPL(coresight_disable_path);
@@ -531,8 +558,8 @@ static int coresight_enable_helpers(struct coresight_device *csdev,
 	return 0;
 }
 
-int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
-			  void *sink_data)
+static int _coresight_enable_path(struct coresight_path *path,
+				  enum cs_mode mode, void *sink_data)
 {
 	int ret = 0;
 	u32 type;
@@ -597,6 +624,23 @@ err_disable_helpers:
 err_disable_path:
 	coresight_disable_path_from(path, nd);
 	goto out;
+}
+
+int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
+			  void *sink_data)
+{
+	int ret;
+	struct coresight_device *source;
+
+	ret = _coresight_enable_path(path, mode, sink_data);
+	if (ret)
+		return ret;
+
+	source = coresight_get_source(path);
+	if (coresight_is_percpu_source(source))
+		per_cpu(csdev_cpu_path, source->cpu) = path;
+
+	return 0;
 }
 
 struct coresight_device *coresight_get_sink(struct coresight_path *path)
