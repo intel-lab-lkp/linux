@@ -307,7 +307,12 @@ out_rcu:
 
 static void virtio_vsock_rx_fill(struct virtio_vsock *vsock)
 {
-	int total_len = VIRTIO_VSOCK_DEFAULT_RX_BUF_SIZE + VIRTIO_VSOCK_SKB_HEADROOM;
+	/* Dimension the SKB so that the entire thing fits exactly into
+	 * a single page. This avoids wasting memory due to alloc_skb()
+	 * rounding up to the next page order and also means that we
+	 * don't leave higher-order pages sitting around in the RX queue.
+	 */
+	int total_len = SKB_WITH_OVERHEAD(PAGE_SIZE);
 	struct scatterlist pkt, *p;
 	struct virtqueue *vq;
 	struct sk_buff *skb;
