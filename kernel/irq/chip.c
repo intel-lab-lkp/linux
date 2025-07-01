@@ -764,6 +764,8 @@ EXPORT_SYMBOL_GPL(handle_fasteoi_nmi);
  */
 void handle_edge_irq(struct irq_desc *desc)
 {
+	bool need_unmask = false;
+
 	guard(raw_spinlock)(&desc->lock);
 
 	if (!irq_can_handle(desc)) {
@@ -791,12 +793,16 @@ void handle_edge_irq(struct irq_desc *desc)
 		if (unlikely(desc->istate & IRQS_PENDING)) {
 			if (!irqd_irq_disabled(&desc->irq_data) &&
 			    irqd_irq_masked(&desc->irq_data))
-				unmask_irq(desc);
+				need_unmask = true;
 		}
 
 		handle_irq_event(desc);
 
 	} while ((desc->istate & IRQS_PENDING) && !irqd_irq_disabled(&desc->irq_data));
+
+	if (need_unmask && !irqd_irq_disabled(&desc->irq_data) &&
+	    irqd_irq_masked(&desc->irq_data))
+		unmask_irq(desc);
 }
 EXPORT_SYMBOL(handle_edge_irq);
 
