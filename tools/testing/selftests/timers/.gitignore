@@ -20,3 +20,4 @@ valid-adjtimex
 adjtick
 set-tz
 freq-step
+auxclock
