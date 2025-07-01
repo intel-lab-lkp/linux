@@ -862,61 +862,6 @@ struct etmv4_config {
 };
 
 /**
- * struct etm4_save_state - state to be preserved when ETM is without power
- */
-struct etmv4_save_state {
-	u32	trcprocselr;
-	u32	trcconfigr;
-	u32	trcauxctlr;
-	u32	trceventctl0r;
-	u32	trceventctl1r;
-	u32	trcstallctlr;
-	u32	trctsctlr;
-	u32	trcsyncpr;
-	u32	trcccctlr;
-	u32	trcbbctlr;
-	u32	trctraceidr;
-	u32	trcqctlr;
-
-	u32	trcvictlr;
-	u32	trcviiectlr;
-	u32	trcvissctlr;
-	u32	trcvipcssctlr;
-
-	u32	trcseqevr[ETM_MAX_SEQ_STATES];
-	u32	trcseqrstevr;
-	u32	trcseqstr;
-	u32	trcextinselr;
-	u32	trccntrldvr[ETMv4_MAX_CNTR];
-	u32	trccntctlr[ETMv4_MAX_CNTR];
-	u32	trccntvr[ETMv4_MAX_CNTR];
-
-	u32	trcrsctlr[ETM_MAX_RES_SEL];
-
-	u32	trcssccr[ETM_MAX_SS_CMP];
-	u32	trcsscsr[ETM_MAX_SS_CMP];
-	u32	trcsspcicr[ETM_MAX_SS_CMP];
-
-	u64	trcacvr[ETM_MAX_SINGLE_ADDR_CMP];
-	u64	trcacatr[ETM_MAX_SINGLE_ADDR_CMP];
-	u64	trccidcvr[ETMv4_MAX_CTXID_CMP];
-	u64	trcvmidcvr[ETM_MAX_VMID_CMP];
-	u32	trccidcctlr0;
-	u32	trccidcctlr1;
-	u32	trcvmidcctlr0;
-	u32	trcvmidcctlr1;
-
-	u32	trcclaimset;
-
-	u32	cntr_val[ETMv4_MAX_CNTR];
-	u32	seq_state;
-	u32	vinst_ctrl;
-	u32	ss_status[ETM_MAX_SS_CMP];
-
-	u32	trcpdcr;
-};
-
-/**
  * struct etm4_drvdata - specifics associated to an ETM component
  * @pclk        APB clock if present, otherwise NULL
  * @base:       Memory mapped base address for this component.
@@ -977,7 +922,6 @@ struct etmv4_save_state {
  *		at runtime, due to the additional setting of TRFCR_CX when
  *		in EL2. Otherwise, 0.
  * @config:	structure holding configuration parameters.
- * @save_state:	State to be preserved across power loss
  * @skip_power_up: Indicates if an implementation can skip powering up
  *		   the trace unit.
  * @paused:	Indicates if the trace unit is paused.
@@ -1030,7 +974,6 @@ struct etmv4_drvdata {
 	bool				lpoverride;
 	u64				trfcr;
 	struct etmv4_config		config;
-	struct etmv4_save_state		*save_state;
 	bool				skip_power_up;
 	bool				paused;
 	DECLARE_BITMAP(arch_features, ETM4_IMPDEF_FEATURE_MAX);

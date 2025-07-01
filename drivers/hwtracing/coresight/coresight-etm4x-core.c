@@ -1851,8 +1851,7 @@ static int etm4_dying_cpu(unsigned int cpu)
 
 static int __etm4_cpu_save(struct etmv4_drvdata *drvdata)
 {
-	int i, ret = 0;
-	struct etmv4_save_state *state;
+	int ret = 0;
 	struct coresight_device *csdev = drvdata->csdev;
 	struct csdev_access *csa;
 	struct device *etm_dev;
@@ -1882,98 +1881,11 @@ static int __etm4_cpu_save(struct etmv4_drvdata *drvdata)
 		ret = -EBUSY;
 		goto out;
 	}
+	etm4_cs_lock(drvdata, csa);
 
-	if (!drvdata->paused)
-		etm4_disable_trace_unit(drvdata);
+	etm4_disable_hw(drvdata);
 
-	/*
-	 * As recommended by section 4.3.7 (Synchronization of register updates)
-	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
-	 * ISB instruction after programming the trace unit registers.
-	 */
-	isb();
-
-	state = drvdata->save_state;
-
-	if (drvdata->nr_pe)
-		state->trcprocselr = etm4x_read32(csa, TRCPROCSELR);
-	state->trcconfigr = etm4x_read32(csa, TRCCONFIGR);
-	state->trcauxctlr = etm4x_read32(csa, TRCAUXCTLR);
-	state->trceventctl0r = etm4x_read32(csa, TRCEVENTCTL0R);
-	state->trceventctl1r = etm4x_read32(csa, TRCEVENTCTL1R);
-	if (drvdata->stallctl)
-		state->trcstallctlr = etm4x_read32(csa, TRCSTALLCTLR);
-	state->trctsctlr = etm4x_read32(csa, TRCTSCTLR);
-	state->trcsyncpr = etm4x_read32(csa, TRCSYNCPR);
-	state->trcccctlr = etm4x_read32(csa, TRCCCCTLR);
-	state->trcbbctlr = etm4x_read32(csa, TRCBBCTLR);
-	state->trctraceidr = etm4x_read32(csa, TRCTRACEIDR);
-	if (drvdata->q_filt)
-		state->trcqctlr = etm4x_read32(csa, TRCQCTLR);
-
-	state->trcvictlr = etm4x_read32(csa, TRCVICTLR);
-	state->trcviiectlr = etm4x_read32(csa, TRCVIIECTLR);
-	state->trcvissctlr = etm4x_read32(csa, TRCVISSCTLR);
-	if (drvdata->nr_pe_cmp)
-		state->trcvipcssctlr = etm4x_read32(csa, TRCVIPCSSCTLR);
-
-	for (i = 0; i < drvdata->nrseqstate - 1; i++)
-		state->trcseqevr[i] = etm4x_read32(csa, TRCSEQEVRn(i));
-
-	if (drvdata->nrseqstate) {
-		state->trcseqrstevr = etm4x_read32(csa, TRCSEQRSTEVR);
-		state->trcseqstr = etm4x_read32(csa, TRCSEQSTR);
-	}
-	state->trcextinselr = etm4x_read32(csa, TRCEXTINSELR);
-
-	for (i = 0; i < drvdata->nr_cntr; i++) {
-		state->trccntrldvr[i] = etm4x_read32(csa, TRCCNTRLDVRn(i));
-		state->trccntctlr[i] = etm4x_read32(csa, TRCCNTCTLRn(i));
-		state->trccntvr[i] = etm4x_read32(csa, TRCCNTVRn(i));
-	}
-
-	/* Resource selector pair 0 is reserved */
-	for (i = 2; i < drvdata->nr_resource * 2; i++)
-		state->trcrsctlr[i] = etm4x_read32(csa, TRCRSCTLRn(i));
-
-	for (i = 0; i < drvdata->nr_ss_cmp; i++) {
-		state->trcssccr[i] = etm4x_read32(csa, TRCSSCCRn(i));
-		state->trcsscsr[i] = etm4x_read32(csa, TRCSSCSRn(i));
-		if (etm4x_sspcicrn_present(drvdata, i))
-			state->trcsspcicr[i] = etm4x_read32(csa, TRCSSPCICRn(i));
-	}
-
-	for (i = 0; i < drvdata->nr_addr_cmp * 2; i++) {
-		state->trcacvr[i] = etm4x_read64(csa, TRCACVRn(i));
-		state->trcacatr[i] = etm4x_read64(csa, TRCACATRn(i));
-	}
-
-	/*
-	 * Data trace stream is architecturally prohibited for A profile cores
-	 * so we don't save (or later restore) trcdvcvr and trcdvcmr - As per
-	 * section 1.3.4 ("Possible functional configurations of an ETMv4 trace
-	 * unit") of ARM IHI 0064D.
-	 */
-
-	for (i = 0; i < drvdata->numcidc; i++)
-		state->trccidcvr[i] = etm4x_read64(csa, TRCCIDCVRn(i));
-
-	for (i = 0; i < drvdata->numvmidc; i++)
-		state->trcvmidcvr[i] = etm4x_read64(csa, TRCVMIDCVRn(i));
-
-	state->trccidcctlr0 = etm4x_read32(csa, TRCCIDCCTLR0);
-	if (drvdata->numcidc > 4)
-		state->trccidcctlr1 = etm4x_read32(csa, TRCCIDCCTLR1);
-
-	state->trcvmidcctlr0 = etm4x_read32(csa, TRCVMIDCCTLR0);
-	if (drvdata->numvmidc > 4)
-		state->trcvmidcctlr0 = etm4x_read32(csa, TRCVMIDCCTLR1);
-
-	state->trcclaimset = etm4x_read32(csa, TRCCLAIMCLR);
-
-	if (!drvdata->skip_power_up)
-		state->trcpdcr = etm4x_read32(csa, TRCPDCR);
-
+	etm4_cs_unlock(drvdata, csa);
 	/* wait for TRCSTATR.IDLE to go up */
 	if (etm4x_wait_status(csa, TRCSTATR_IDLE_BIT, 1)) {
 		dev_err(etm_dev,
@@ -1983,14 +1895,6 @@ static int __etm4_cpu_save(struct etmv4_drvdata *drvdata)
 		goto out;
 	}
 
-	/*
-	 * Power can be removed from the trace unit now. We do this to
-	 * potentially save power on systems that respect the TRCPDCR_PU
-	 * despite requesting software to save/restore state.
-	 */
-	if (!drvdata->skip_power_up)
-		etm4x_relaxed_write32(csa, (state->trcpdcr & ~TRCPDCR_PU),
-				      TRCPDCR);
 out:
 	etm4_cs_lock(drvdata, csa);
 	return ret;
@@ -2014,109 +1918,10 @@ static int etm4_cpu_save(struct etmv4_drvdata *drvdata)
 
 static void __etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 {
-	int i;
-	struct etmv4_save_state *state = drvdata->save_state;
-	struct csdev_access *csa = &drvdata->csdev->access;
-
 	if (WARN_ON(!drvdata->csdev))
 		return;
 
-	etm4_cs_unlock(drvdata, csa);
-	etm4x_relaxed_write32(csa, state->trcclaimset, TRCCLAIMSET);
-
-	if (drvdata->nr_pe)
-		etm4x_relaxed_write32(csa, state->trcprocselr, TRCPROCSELR);
-	etm4x_relaxed_write32(csa, state->trcconfigr, TRCCONFIGR);
-	etm4x_relaxed_write32(csa, state->trcauxctlr, TRCAUXCTLR);
-	etm4x_relaxed_write32(csa, state->trceventctl0r, TRCEVENTCTL0R);
-	etm4x_relaxed_write32(csa, state->trceventctl1r, TRCEVENTCTL1R);
-	if (drvdata->stallctl)
-		etm4x_relaxed_write32(csa, state->trcstallctlr, TRCSTALLCTLR);
-	etm4x_relaxed_write32(csa, state->trctsctlr, TRCTSCTLR);
-	etm4x_relaxed_write32(csa, state->trcsyncpr, TRCSYNCPR);
-	etm4x_relaxed_write32(csa, state->trcccctlr, TRCCCCTLR);
-	etm4x_relaxed_write32(csa, state->trcbbctlr, TRCBBCTLR);
-	etm4x_relaxed_write32(csa, state->trctraceidr, TRCTRACEIDR);
-	if (drvdata->q_filt)
-		etm4x_relaxed_write32(csa, state->trcqctlr, TRCQCTLR);
-
-	etm4x_relaxed_write32(csa, state->trcvictlr, TRCVICTLR);
-	etm4x_relaxed_write32(csa, state->trcviiectlr, TRCVIIECTLR);
-	etm4x_relaxed_write32(csa, state->trcvissctlr, TRCVISSCTLR);
-	if (drvdata->nr_pe_cmp)
-		etm4x_relaxed_write32(csa, state->trcvipcssctlr, TRCVIPCSSCTLR);
-
-	for (i = 0; i < drvdata->nrseqstate - 1; i++)
-		etm4x_relaxed_write32(csa, state->trcseqevr[i], TRCSEQEVRn(i));
-
-	if (drvdata->nrseqstate) {
-		etm4x_relaxed_write32(csa, state->trcseqrstevr, TRCSEQRSTEVR);
-		etm4x_relaxed_write32(csa, state->trcseqstr, TRCSEQSTR);
-	}
-	etm4x_relaxed_write32(csa, state->trcextinselr, TRCEXTINSELR);
-
-	for (i = 0; i < drvdata->nr_cntr; i++) {
-		etm4x_relaxed_write32(csa, state->trccntrldvr[i], TRCCNTRLDVRn(i));
-		etm4x_relaxed_write32(csa, state->trccntctlr[i], TRCCNTCTLRn(i));
-		etm4x_relaxed_write32(csa, state->trccntvr[i], TRCCNTVRn(i));
-	}
-
-	/* Resource selector pair 0 is reserved */
-	for (i = 2; i < drvdata->nr_resource * 2; i++)
-		etm4x_relaxed_write32(csa, state->trcrsctlr[i], TRCRSCTLRn(i));
-
-	for (i = 0; i < drvdata->nr_ss_cmp; i++) {
-		etm4x_relaxed_write32(csa, state->trcssccr[i], TRCSSCCRn(i));
-		etm4x_relaxed_write32(csa, state->trcsscsr[i], TRCSSCSRn(i));
-		if (etm4x_sspcicrn_present(drvdata, i))
-			etm4x_relaxed_write32(csa, state->trcsspcicr[i], TRCSSPCICRn(i));
-	}
-
-	for (i = 0; i < drvdata->nr_addr_cmp * 2; i++) {
-		etm4x_relaxed_write64(csa, state->trcacvr[i], TRCACVRn(i));
-		etm4x_relaxed_write64(csa, state->trcacatr[i], TRCACATRn(i));
-	}
-
-	for (i = 0; i < drvdata->numcidc; i++)
-		etm4x_relaxed_write64(csa, state->trccidcvr[i], TRCCIDCVRn(i));
-
-	for (i = 0; i < drvdata->numvmidc; i++)
-		etm4x_relaxed_write64(csa, state->trcvmidcvr[i], TRCVMIDCVRn(i));
-
-	etm4x_relaxed_write32(csa, state->trccidcctlr0, TRCCIDCCTLR0);
-	if (drvdata->numcidc > 4)
-		etm4x_relaxed_write32(csa, state->trccidcctlr1, TRCCIDCCTLR1);
-
-	etm4x_relaxed_write32(csa, state->trcvmidcctlr0, TRCVMIDCCTLR0);
-	if (drvdata->numvmidc > 4)
-		etm4x_relaxed_write32(csa, state->trcvmidcctlr0, TRCVMIDCCTLR1);
-
-	etm4x_relaxed_write32(csa, state->trcclaimset, TRCCLAIMSET);
-
-	if (!drvdata->skip_power_up)
-		etm4x_relaxed_write32(csa, state->trcpdcr, TRCPDCR);
-
-	/*
-	 * As recommended by section 4.3.7 ("Synchronization when using the
-	 * memory-mapped interface") of ARM IHI 0064D
-	 */
-	dsb(sy);
-	isb();
-
-	/* Unlock the OS lock to re-enable trace and external debug access */
-	etm4_os_unlock(drvdata);
-
-	if (!drvdata->paused)
-		etm4_enable_trace_unit(drvdata);
-
-	/*
-	 * As recommended by section 4.3.7 (Synchronization of register updates)
-	 * of ARM IHI 0064H.b, the self-hosted trace analyzer always executes an
-	 * ISB instruction after programming the trace unit registers.
-	 */
-	isb();
-
-	etm4_cs_lock(drvdata, csa);
+	etm4_enable_hw(drvdata, false);
 }
 
 static void etm4_cpu_restore(struct etmv4_drvdata *drvdata)
@@ -2297,13 +2102,6 @@ static int etm4_probe(struct device *dev)
 	if (pm_save_enable == PARAM_PM_SAVE_FIRMWARE)
 		pm_save_enable = coresight_loses_context_with_cpu(dev) ?
 			       PARAM_PM_SAVE_SELF_HOSTED : PARAM_PM_SAVE_NEVER;
-
-	if (pm_save_enable != PARAM_PM_SAVE_NEVER) {
-		drvdata->save_state = devm_kmalloc(dev,
-				sizeof(struct etmv4_save_state), GFP_KERNEL);
-		if (!drvdata->save_state)
-			return -ENOMEM;
-	}
 
 	raw_spin_lock_init(&drvdata->spinlock);
 
