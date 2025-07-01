@@ -62,5 +62,9 @@ extern unsigned int aa_g_path_max;
 #define AA_DEFAULT_CLEVEL 0
 #endif /* CONFIG_SECURITY_APPARMOR_EXPORT_BINARY */
 
+/* Syscall-related buffer size limits */
+
+#define AA_PROFILE_NAME_MAX_SIZE (1 << 9)
+#define AA_PROFILE_MAX_SIZE (1 << 28)
 
 #endif /* __APPARMOR_H */
