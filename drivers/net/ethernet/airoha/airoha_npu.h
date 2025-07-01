@@ -5,6 +5,7 @@
  */
 
 #define NPU_NUM_CORES		8
+#define NPU_NUM_IRQ		6
 
 struct airoha_npu {
 	struct device *dev;
@@ -16,6 +17,8 @@ struct airoha_npu {
 		spinlock_t lock;
 		struct work_struct wdt_work;
 	} cores[NPU_NUM_CORES];
+
+	int irqs[NPU_NUM_IRQ];
 
 	struct airoha_foe_stats __iomem *stats;
 
