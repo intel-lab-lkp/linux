@@ -366,6 +366,7 @@ static const struct ib_device_ops efa_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_EFA,
 	.uverbs_abi_ver = EFA_UVERBS_ABI_VERSION,
+	.uverbs_support_cq_with_umem = 1,
 
 	.alloc_hw_port_stats = efa_alloc_hw_port_stats,
 	.alloc_hw_device_stats = efa_alloc_hw_device_stats,
