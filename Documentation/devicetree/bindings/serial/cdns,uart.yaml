@@ -20,6 +20,10 @@ properties:
         items:
           - const: xlnx,zynqmp-uart
           - const: cdns,uart-r1p12
+      - description: UART controller for Axiado AX3000 SoC
+        items:
+          - const: axiado,ax3000-uart
+          - const: cdns,uart-r1p12
 
   reg:
     maxItems: 1
