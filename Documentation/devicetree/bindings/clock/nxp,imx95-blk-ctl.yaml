@@ -19,6 +19,8 @@ properties:
           - nxp,imx95-lvds-csr
           - nxp,imx95-netcmix-blk-ctrl
           - nxp,imx95-vpu-csr
+          - nxp,imx94-display-csr
+          - nxp,imx94-lvds-csr
       - const: syscon
 
   reg:
