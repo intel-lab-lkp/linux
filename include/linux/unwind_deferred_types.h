@@ -7,8 +7,20 @@ struct unwind_cache {
 	unsigned long		entries[];
 };
 
+
+union unwind_task_id {
+	struct {
+		u32		cpu;
+		u32		cnt;
+	};
+	u64			id;
+};
+
 struct unwind_task_info {
 	struct unwind_cache	*cache;
+	struct callback_head	work;
+	union unwind_task_id	id;
+	int			pending;
 };
 
 #endif /* _LINUX_UNWIND_USER_DEFERRED_TYPES_H */
