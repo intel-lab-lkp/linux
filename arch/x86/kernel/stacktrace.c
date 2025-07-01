@@ -9,7 +9,10 @@
 #include <linux/stacktrace.h>
 #include <linux/export.h>
 #include <linux/uaccess.h>
+#include <asm/unwind_user.h>
 #include <asm/stacktrace.h>
+#include <asm/insn.h>
+#include <asm/insn-eval.h>
 #include <asm/unwind.h>
 
 void arch_stack_walk(stack_trace_consume_fn consume_entry, void *cookie,
@@ -128,3 +131,28 @@ void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
 	}
 }
 
+#ifdef CONFIG_IA32_EMULATION
+void arch_unwind_user_init(struct unwind_user_state *state,
+			   struct pt_regs *regs)
+{
+	unsigned long cs_base, ss_base;
+
+	if (state->type != UNWIND_USER_TYPE_COMPAT_FP)
+		return;
+
+	cs_base = insn_get_seg_base(regs, INAT_SEG_REG_CS);
+	ss_base = insn_get_seg_base(regs, INAT_SEG_REG_SS);
+
+	if (cs_base == -1)
+		cs_base = 0;
+	if (ss_base == -1)
+		ss_base = 0;
+
+	state->arch.cs_base = cs_base;
+	state->arch.ss_base = ss_base;
+
+	state->ip += cs_base;
+	state->sp += ss_base;
+	state->fp += ss_base;
+}
+#endif /* CONFIG_IA32_EMULATION */
