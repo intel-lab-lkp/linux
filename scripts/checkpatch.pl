@@ -685,6 +685,64 @@ our $tracing_logging_tags = qr{(?xi:
 	[\.\!:\s]*
 )};
 
+# Device ID types from include/linux/mod_devicetable.h.
+our $dev_id_types = qr{(?x:
+	acpi |
+	ap |
+	apr |
+	auxiliary |
+	bcma |
+	ccw |
+	cdx |
+	coreboot |
+	css |
+	dfl |
+	eisa |
+	fsl_mc |
+	hda |
+	hid |
+	hv_vmbus |
+	i2c |
+	i3c |
+	ieee1394 |
+	input |
+	ipack |
+	isapnp |
+	ishtp |
+	mcb |
+	mdio |
+	mei_cl |
+	mhi |
+	mips_cdmm |
+	of |
+	parisc |
+	pci |
+	pci_epf |
+	pcmcia |
+	platform |
+	pnp |
+	pnp_card |
+	rio |
+	rpmsg |
+	sdio |
+	sdw |
+	serio |
+	slim |
+	spi |
+	spmi |
+	ssam |
+	ssb |
+	tee_client |
+	typec |
+	ulpi |
+	usb |
+	vchiq |
+	vio |
+	virtio |
+	wmi |
+	zorro
+)_device_id};
+
 sub edit_distance_min {
 	my (@arr) = @_;
 	my $len = scalar @arr;
@@ -7677,6 +7735,30 @@ sub process {
 		if ($line =~ /\.extra[12]\s*=\s*&(zero|one|int_max)\b/) {
 			WARN("DUPLICATED_SYSCTL_CONST",
 				"duplicated sysctl range checking value '$1', consider using the shared one in include/linux/sysctl.h\n" . $herecurr);
+		}
+
+# Check that *_device_id tables have sentinel entries.
+		if (defined $stat && $line =~ /struct $dev_id_types .*\[\] = \{/) {
+			my $stripped = $stat;
+
+			# Strip diff line prefixes.
+			$stripped =~ s/(^|\n)./$1/g;
+			# Line continuations.
+			$stripped =~ s/\\\n/\n/g;
+			# Strip whitespace, empty strings, zeroes, and commas.
+			$stripped =~ s/""//g;
+			$stripped =~ s/0x0//g;
+			$stripped =~ s/[\s$;,0]//g;
+			# Strip field assignments.
+			$stripped =~ s/\.$Ident=//g;
+
+			if (!(substr($stripped, -4) eq "{}};" ||
+			      substr($stripped, -6) eq "{{}}};" ||
+			      $stripped =~ /PCMCIA_DEVICE_NULL};$/ ||
+			      $stripped =~ /ISAPNP_DEVICE_SINGLE_END}};$/ ||
+			      $stripped =~ /ISAPNP_CARD_END}};$/)) {
+				ERROR("MISSING_SENTINEL", "missing sentinel in ID array\n" . "$here\n$stat\n");
+			}
 		}
 	}
 
