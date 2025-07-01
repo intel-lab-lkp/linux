@@ -18,7 +18,8 @@ static bool nbp_switchdev_can_offload_tx_fwd(const struct net_bridge_port *p,
 		return false;
 
 	return (p->flags & BR_TX_FWD_OFFLOAD) &&
-	       (p->hwdom != BR_INPUT_SKB_CB(skb)->src_hwdom);
+	       (p->hwdom != BR_INPUT_SKB_CB(skb)->src_hwdom) &&
+	       !br_multicast_igmp_type(skb);
 }
 
 bool br_switchdev_frame_uses_tx_fwd_offload(struct sk_buff *skb)
