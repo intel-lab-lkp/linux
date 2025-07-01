@@ -3804,22 +3804,26 @@ void sched_ttwu_pending(void *arg)
 	struct llist_node *llist = arg;
 	struct rq *rq = this_rq();
 	struct task_struct *p, *t;
-	struct rq_flags rf;
 
 	if (!llist)
 		return;
 
-	rq_lock_irqsave(rq, &rf);
+	CLASS(rq_lock_irqsave, guard)(rq);
 	update_rq_clock(rq);
 
 	llist_for_each_entry_safe(p, t, llist, wake_entry.llist) {
+		int wake_flags = WF_TTWU;
+
 		if (WARN_ON_ONCE(p->on_cpu))
 			smp_cond_load_acquire(&p->on_cpu, !VAL);
 
 		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
 			set_task_cpu(p, cpu_of(rq));
 
-		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+		if (p->sched_remote_wakeup)
+			wake_flags |= WF_MIGRATED;
+
+		ttwu_do_activate(rq, p, wake_flags, &guard.rf);
 	}
 
 	/*
@@ -3833,7 +3837,6 @@ void sched_ttwu_pending(void *arg)
 	 * Since now nr_running > 0, idle_cpu() will always get correct result.
 	 */
 	WRITE_ONCE(rq->ttwu_pending, 0);
-	rq_unlock_irqrestore(rq, &rf);
 }
 
 /*
