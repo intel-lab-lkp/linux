@@ -2251,12 +2251,14 @@ unsigned long sched_cpu_util(int cpu);
 extern bool rseq_delay_resched(void);
 extern void rseq_delay_resched_fini(void);
 extern void rseq_delay_resched_tick(void);
+extern void rseq_delay_schedule(struct task_struct *tsk);
 
 #else
 
 static inline bool rseq_delay_resched(void) { return false; }
 static inline void rseq_delay_resched_fini(void) { }
 static inline void rseq_delay_resched_tick(void) { }
+static inline void rseq_delay_schedule(struct task_struct *tsk) { }
 
 #endif
 
