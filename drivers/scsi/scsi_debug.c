@@ -8082,12 +8082,18 @@ static ssize_t add_host_store(struct device_driver *ddp, const char *buf,
 	bool found;
 	unsigned long idx;
 	struct sdeb_store_info *sip;
+	bool uniq_uuid_required = false;
 	bool want_phs = (sdebug_fake_rw == 0) && sdebug_per_host_store;
 	int delta_hosts;
 
 	if (sscanf(buf, "%d", &delta_hosts) != 1)
 		return -EINVAL;
 	if (delta_hosts > 0) {
+		if (delta_hosts > 1) {
+			uniq_uuid_required = true;
+			if (sdebug_fake_rw == 0)
+				want_phs = true;
+		}
 		do {
 			found = false;
 			if (want_phs) {
@@ -8102,7 +8108,7 @@ static ssize_t add_host_store(struct device_driver *ddp, const char *buf,
 				else
 					sdebug_do_add_host(true);
 			} else {
-				sdebug_do_add_host(false);
+				sdebug_do_add_host(uniq_uuid_required);
 			}
 		} while (--delta_hosts);
 	} else if (delta_hosts < 0) {
@@ -8431,6 +8437,7 @@ static struct device *pseudo_primary;
 static int __init scsi_debug_init(void)
 {
 	bool want_store = (sdebug_fake_rw == 0);
+	bool uniq_uuid_required = false;
 	unsigned long sz;
 	int k, ret, hosts_to_add;
 	int idx = -1;
@@ -8626,6 +8633,9 @@ static int __init scsi_debug_init(void)
 	}
 
 	hosts_to_add = sdebug_add_host;
+	if (hosts_to_add > 1)
+		uniq_uuid_required = true;
+
 	sdebug_add_host = 0;
 
 	sdebug_debugfs_root = debugfs_create_dir("scsi_debug", NULL);
@@ -8641,8 +8651,9 @@ static int __init scsi_debug_init(void)
 				break;
 			}
 		} else {
-			ret = sdebug_do_add_host(want_store &&
-						 sdebug_per_host_store);
+			bool use_store = want_store &&
+				(sdebug_per_host_store || uniq_uuid_required);
+			ret = sdebug_do_add_host(use_store);
 			if (ret < 0) {
 				pr_err("add_host k=%d error=%d\n", k, -ret);
 				break;
