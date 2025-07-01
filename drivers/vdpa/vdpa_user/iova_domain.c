@@ -506,6 +506,12 @@ void vduse_domain_free_coherent(struct vduse_iova_domain *domain, size_t size,
 	free_pages_exact(phys_to_virt(pa), size);
 }
 
+bool vduse_domain_need_sync(struct vduse_iova_domain *domain,
+			    dma_addr_t dma_addr)
+{
+	return dma_addr < domain->bounce_size;
+}
+
 static vm_fault_t vduse_domain_mmap_fault(struct vm_fault *vmf)
 {
 	struct vduse_iova_domain *domain = vmf->vma->vm_private_data;

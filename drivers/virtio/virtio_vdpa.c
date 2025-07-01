@@ -500,6 +500,7 @@ static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 	vd_dev->vdev.dev.parent = vdpa_get_map_token(vdpa);
 	vd_dev->vdev.dev.release = virtio_vdpa_release_dev;
 	vd_dev->vdev.config = &virtio_vdpa_config_ops;
+	vd_dev->vdev.map = vdpa->map;
 	vd_dev->vdpa = vdpa;
 	INIT_LIST_HEAD(&vd_dev->virtqueues);
 	spin_lock_init(&vd_dev->lock);

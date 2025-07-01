@@ -1320,13 +1320,20 @@ static int vhost_vdpa_alloc_domain(struct vhost_vdpa *v)
 {
 	struct vdpa_device *vdpa = v->vdpa;
 	const struct vdpa_config_ops *ops = vdpa->config;
-	struct device *dma_dev = vdpa_get_map_token(vdpa);
+	const struct virtio_map_ops *map = vdpa->map;
+	struct device *dma_dev;
 	int ret;
 
 	/* Device want to do DMA by itself */
 	if (ops->set_map || ops->dma_map)
 		return 0;
 
+	if (map) {
+		dev_warn(&v->dev, "Can't allocate a domian, device use vendor specific mappings\n");
+		return -EINVAL;
+	}
+
+	dma_dev = vdpa_get_map_token(vdpa);
 	if (!device_iommu_capable(dma_dev, IOMMU_CAP_CACHE_COHERENCY)) {
 		dev_warn_once(&v->dev,
 			      "Failed to allocate domain, device is not IOMMU cache coherent capable\n");
