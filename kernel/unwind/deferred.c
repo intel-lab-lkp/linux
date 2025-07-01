@@ -41,10 +41,11 @@ static inline bool try_assign_cnt(struct unwind_task_info *info, u32 cnt)
 #define UNWIND_MAX_ENTRIES					\
 	((SZ_4K - sizeof(struct unwind_cache)) / sizeof(long))
 
-/* Guards adding to and reading the list of callbacks */
+/* Guards adding to or removing from the list of callbacks */
 static DEFINE_MUTEX(callback_mutex);
 static LIST_HEAD(callbacks);
 static unsigned long unwind_mask;
+DEFINE_STATIC_SRCU(unwind_srcu);
 
 /*
  * This is a unique percpu identifier for a given task entry context.
@@ -143,6 +144,7 @@ static void unwind_deferred_task_work(struct callback_head *head)
 	struct unwind_stacktrace trace;
 	struct unwind_work *work;
 	u64 cookie;
+	int idx;
 
 	if (WARN_ON_ONCE(!local_read(&info->pending)))
 		return;
@@ -161,13 +163,15 @@ static void unwind_deferred_task_work(struct callback_head *head)
 
 	cookie = info->id.id;
 
-	guard(mutex)(&callback_mutex);
-	list_for_each_entry(work, &callbacks, list) {
+	idx = srcu_read_lock(&unwind_srcu);
+	list_for_each_entry_srcu(work, &callbacks, list,
+				 srcu_read_lock_held(&unwind_srcu)) {
 		if (test_bit(work->bit, &info->unwind_mask)) {
 			work->func(work, &trace, cookie);
 			clear_bit(work->bit, &info->unwind_mask);
 		}
 	}
+	srcu_read_unlock(&unwind_srcu, idx);
 }
 
 /**
@@ -199,6 +203,7 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 {
 	struct unwind_task_info *info = &current->unwind_info;
 	long pending;
+	int bit;
 	int ret;
 
 	*cookie = 0;
@@ -211,12 +216,17 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 	if (!CAN_USE_IN_NMI && in_nmi())
 		return -EINVAL;
 
+	/* Do not allow cancelled works to request again */
+	bit = READ_ONCE(work->bit);
+	if (WARN_ON_ONCE(bit < 0))
+		return -EINVAL;
+
 	guard(irqsave)();
 
 	*cookie = get_cookie(info);
 
 	/* This is already queued */
-	if (test_bit(work->bit, &info->unwind_mask))
+	if (test_bit(bit, &info->unwind_mask))
 		return 1;
 
 	/* callback already pending? */
@@ -240,25 +250,32 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 	}
 
  out:
-	return test_and_set_bit(work->bit, &info->unwind_mask);
+	return test_and_set_bit(bit, &info->unwind_mask);
 }
 
 void unwind_deferred_cancel(struct unwind_work *work)
 {
 	struct task_struct *g, *t;
+	int bit;
 
 	if (!work)
 		return;
 
 	guard(mutex)(&callback_mutex);
-	list_del(&work->list);
+	list_del_rcu(&work->list);
+	bit = work->bit;
 
-	__clear_bit(work->bit, &unwind_mask);
+	/* Do not allow any more requests and prevent callbacks */
+	work->bit = -1;
+
+	__clear_bit(bit, &unwind_mask);
+
+	synchronize_srcu(&unwind_srcu);
 
 	guard(rcu)();
 	/* Clear this bit from all threads */
 	for_each_process_thread(g, t) {
-		clear_bit(work->bit, &t->unwind_info.unwind_mask);
+		clear_bit(bit, &t->unwind_info.unwind_mask);
 	}
 }
 
@@ -275,7 +292,7 @@ int unwind_deferred_init(struct unwind_work *work, unwind_callback_t func)
 	work->bit = ffz(unwind_mask);
 	__set_bit(work->bit, &unwind_mask);
 
-	list_add(&work->list, &callbacks);
+	list_add_rcu(&work->list, &callbacks);
 	work->func = func;
 	return 0;
 }
