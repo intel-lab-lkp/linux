@@ -11,12 +11,39 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/string.h>
 
 static unsigned long node0_mem_used_bp __read_mostly = 9970;
 module_param(node0_mem_used_bp, ulong, 0600);
 
 static unsigned long node0_mem_free_bp __read_mostly = 50;
 module_param(node0_mem_free_bp, ulong, 0600);
+
+static int get_migrate_hot(
+		char *val, const struct kernel_param *kp);
+
+static const struct kernel_param_ops migrate_hot_ops = {
+	.set = param_set_charp,
+	.get = get_migrate_hot,
+};
+
+static char *migrate_hot __read_mostly = "";
+module_param_cb(migrate_hot, &migrate_hot_ops, &migrate_hot, 0600);
+MODULE_PARM_DESC(migrate_hot,
+	"Specify source and destination node id as a comma-seperated pair");
+
+static int get_migrate_cold(
+		char *val, const struct kernel_param *kp);
+
+static const struct kernel_param_ops migrate_cold_ops = {
+	.set = param_set_charp,
+	.get = get_migrate_cold,
+};
+
+static char *migrate_cold __read_mostly = "";
+module_param_cb(migrate_cold, &migrate_cold_ops, &migrate_cold, 0600);
+MODULE_PARM_DESC(migrate_cold,
+	"Specify source and destination node id as a comma-seperated pair");
 
 static int damon_sample_mtier_enable_store(
 		const char *val, const struct kernel_param *kp);
@@ -36,6 +63,30 @@ struct region_range {
 	phys_addr_t start;
 	phys_addr_t end;
 };
+
+static int parse_migrate_node(int *src, int *dst, bool promote) {
+	char *comma;
+	char buf[32];
+
+	if (promote)
+		strscpy(buf, migrate_hot, sizeof(buf));
+	else
+		strscpy(buf, migrate_cold, sizeof(buf));
+
+	comma = strchr(buf, ',');
+	if (!comma)
+		return -EINVAL;
+
+	*comma = '\0';
+	comma++;
+
+	if (kstrtoint(buf, 0, src))
+		return -EINVAL;
+	if (kstrtoint(comma, 0, dst))
+		return -EINVAL;
+
+	return 0;
+}
 
 static int numa_info_init(int target_node, struct region_range *range) {
 
@@ -64,6 +115,7 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	struct damos_quota_goal *quota_goal;
 	struct damos_filter *filter;
 	struct region_range addr;
+	int src, dst;
 
 	ctx = damon_new_ctx();
 	if (!ctx)
@@ -94,8 +146,10 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 		goto free_out;
 	damon_add_target(ctx, target);
 
-	int ret = promote ? numa_info_init(1, &addr) : numa_info_init(0, &addr);
-	if (ret)
+	if (parse_migrate_node(&src, &dst, promote))
+		goto free_out;
+
+	if (numa_info_init(src, &addr))
 		goto free_out;
 
 	region = damon_new_region(addr.start, addr.end);
@@ -169,6 +223,16 @@ static void damon_sample_mtier_stop(void)
 	damon_stop(ctxs, 2);
 	damon_destroy_ctx(ctxs[0]);
 	damon_destroy_ctx(ctxs[1]);
+}
+
+static int get_migrate_hot(char *buf, const struct kernel_param *kp)
+{
+       return scnprintf(buf, PAGE_SIZE, "%s", migrate_hot);
+}
+
+static int get_migrate_cold(char *buf, const struct kernel_param *kp)
+{
+       return scnprintf(buf, PAGE_SIZE, "%s", migrate_cold);
 }
 
 static int damon_sample_mtier_enable_store(
