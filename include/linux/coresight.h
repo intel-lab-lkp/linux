@@ -330,21 +330,24 @@ static struct coresight_dev_list (var) = {				\
 
 #define to_coresight_device(d) container_of(d, struct coresight_device, dev)
 
-/**
- * struct coresight_path - data needed by enable/disable path
- * @path_list:              path from source to sink.
- * @trace_id:          trace_id of the whole path.
- */
-struct coresight_path {
-	struct list_head	path_list;
-	u8			trace_id;
-};
-
 enum cs_mode {
 	CS_MODE_DISABLED,
 	CS_MODE_SYSFS,
 	CS_MODE_PERF,
 	CS_MODE_DEBUG,
+};
+
+/**
+ * struct coresight_path - data needed by enable/disable path
+ * @path_list:              path from source to sink.
+ * @trace_id:          trace_id of the whole path.
+ * @saved_mode:        The saved device mode. It stores the source device's mode
+ *                     to represent the path mode during CPU hotplug off.
+ */
+struct coresight_path {
+	struct list_head	path_list;
+	u8			trace_id;
+	enum cs_mode		saved_mode;
 };
 
 #define coresight_ops(csdev)	csdev->ops
