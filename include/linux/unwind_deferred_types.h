@@ -21,6 +21,7 @@ union unwind_task_id {
 struct unwind_task_info {
 	struct unwind_cache	*cache;
 	struct callback_head	work;
+	unsigned long		unwind_mask;
 	union unwind_task_id	id;
 	local_t			pending;
 };
