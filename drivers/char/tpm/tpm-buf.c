@@ -8,23 +8,28 @@
 #include <linux/tpm.h>
 
 /**
- * tpm_buf_init() - Allocate and initialize a TPM command
- * @buf:	A &tpm_buf
- * @tag:	TPM_TAG_RQU_COMMAND, TPM2_ST_NO_SESSIONS or TPM2_ST_SESSIONS
- * @ordinal:	A command ordinal
+ * tpm_buf_alloc() - Allocate a TPM buffer
  *
- * Return: 0 or -ENOMEM
+ * Allocates `PAGE_SIZE` of memory and places &tpm_buf to the beginning of the
+ * allocated buffer. For that reason the total capacity can be at most 4088
+ * bytes. If a caller tries to surpass the maximum capacity, `TPM_BUF_OVERFLOW`
+ * will be set and any future operations will be ignored.
+ *
+ * Return:
+ * * &tpm_buf:	success
+ * * NULL:	out of memory
  */
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal)
+struct tpm_buf *tpm_buf_alloc(void)
 {
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
+	struct tpm_buf *buf;
 
-	tpm_buf_reset(buf, tag, ordinal);
-	return 0;
+	buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return NULL;
+
+	return buf;
 }
-EXPORT_SYMBOL_GPL(tpm_buf_init);
+EXPORT_SYMBOL_GPL(tpm_buf_alloc);
 
 /**
  * tpm_buf_reset() - Initialize a TPM command
@@ -49,23 +54,6 @@ void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal)
 EXPORT_SYMBOL_GPL(tpm_buf_reset);
 
 /**
- * tpm_buf_init_sized() - Allocate and initialize a sized (TPM2B) buffer
- * @buf:	A @tpm_buf
- *
- * Return: 0 or -ENOMEM
- */
-int tpm_buf_init_sized(struct tpm_buf *buf)
-{
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
-
-	tpm_buf_reset_sized(buf);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tpm_buf_init_sized);
-
-/**
  * tpm_buf_reset_sized() - Initialize a sized buffer
  * @buf:	A &tpm_buf
  */
@@ -77,12 +65,6 @@ void tpm_buf_reset_sized(struct tpm_buf *buf)
 	buf->data[1] = 0;
 }
 EXPORT_SYMBOL_GPL(tpm_buf_reset_sized);
-
-void tpm_buf_destroy(struct tpm_buf *buf)
-{
-	free_page((unsigned long)buf->data);
-}
-EXPORT_SYMBOL_GPL(tpm_buf_destroy);
 
 /**
  * tpm_buf_length() - Return the number of bytes consumed by the data
