@@ -475,6 +475,7 @@ bool rseq_delay_resched(void)
 		return false;
 
 	t->sched_time_delay = 1;
+	update_stat_preempt_delayed(t);
 
 	return true;
 }
