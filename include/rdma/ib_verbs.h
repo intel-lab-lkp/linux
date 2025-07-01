@@ -1625,6 +1625,7 @@ struct ib_cq {
 	};
 	struct workqueue_struct *comp_wq;
 	struct dim *dim;
+	struct ib_umem *umem;
 
 	/* updated only by trace points */
 	ktime_t timestamp;
@@ -2343,6 +2344,11 @@ struct ib_device_ops {
 	enum rdma_driver_id driver_id;
 	u32 uverbs_abi_ver;
 	unsigned int uverbs_no_driver_id_binding:1;
+	/*
+	 * Driver gets ownership over the umem and is responsible for releasing
+	 * it on CQ destroy or when it's no longer needed.
+	 */
+	unsigned int uverbs_support_cq_with_umem:1;
 
 	/*
 	 * NOTE: New drivers should not make use of device_group; instead new

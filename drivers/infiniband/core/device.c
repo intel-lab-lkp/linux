@@ -2677,6 +2677,9 @@ void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 	dev_ops->uverbs_no_driver_id_binding |=
 		ops->uverbs_no_driver_id_binding;
 
+	dev_ops->uverbs_support_cq_with_umem |=
+		ops->uverbs_support_cq_with_umem;
+
 	SET_DEVICE_OP(dev_ops, add_gid);
 	SET_DEVICE_OP(dev_ops, add_sub_dev);
 	SET_DEVICE_OP(dev_ops, advise_mr);
