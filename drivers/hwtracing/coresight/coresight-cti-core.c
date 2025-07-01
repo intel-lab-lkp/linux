@@ -141,6 +141,9 @@ static void cti_cpuhp_enable_hw(struct cti_drvdata *drvdata)
 	raw_spin_lock(&drvdata->spinlock);
 	config->hw_powered = true;
 
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_DEBUG)
+		goto cti_hp_not_enabled;
+
 	/* no need to do anything if no enable request */
 	if (!drvdata->config.enable_req_count)
 		goto cti_hp_not_enabled;
@@ -697,21 +700,27 @@ static int cti_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
 	case CPU_PM_ENTER:
 		/* CTI regs all static - we have a copy & nothing to save */
 		drvdata->config.hw_powered = false;
-		if (drvdata->config.hw_enabled)
+		if ((coresight_get_mode(drvdata->csdev) == CS_MODE_DEBUG) &&
+		    drvdata->config.hw_enabled)
 			coresight_disclaim_device(csdev);
 		break;
 
 	case CPU_PM_ENTER_FAILED:
 		drvdata->config.hw_powered = true;
-		if (drvdata->config.hw_enabled) {
+		if ((coresight_get_mode(drvdata->csdev) == CS_MODE_DEBUG) &&
+		    drvdata->config.hw_enabled) {
 			if (coresight_claim_device(csdev))
 				drvdata->config.hw_enabled = false;
 		}
 		break;
 
 	case CPU_PM_EXIT:
-		/* write hardware registers to re-enable. */
 		drvdata->config.hw_powered = true;
+
+		if (coresight_get_mode(drvdata->csdev) != CS_MODE_DEBUG)
+			break;
+
+		/* write hardware registers to re-enable. */
 		drvdata->config.hw_enabled = false;
 
 		/* check enable reference count to enable HW */
@@ -760,7 +769,8 @@ static int cti_dying_cpu(unsigned int cpu)
 
 	raw_spin_lock(&drvdata->spinlock);
 	drvdata->config.hw_powered = false;
-	if (drvdata->config.hw_enabled)
+	if ((coresight_get_mode(drvdata->csdev) == CS_MODE_DEBUG) &&
+	    drvdata->config.hw_enabled)
 		coresight_disclaim_device(drvdata->csdev);
 	raw_spin_unlock(&drvdata->spinlock);
 	return 0;
