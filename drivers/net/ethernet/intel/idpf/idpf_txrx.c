@@ -827,6 +827,8 @@ int idpf_rx_bufs_init_all(struct idpf_vport *vport)
 	bool split = idpf_is_queue_model_split(vport->rxq_model);
 	int i, j, err;
 
+	idpf_xdp_copy_prog_to_rqs(vport, vport->xdp_prog);
+
 	for (i = 0; i < vport->num_rxq_grp; i++) {
 		struct idpf_rxq_group *rx_qgrp = &vport->rxq_grps[i];
 		u32 truesize = 0;
@@ -1674,8 +1676,6 @@ int idpf_vport_queues_alloc(struct idpf_vport *vport)
 	err = idpf_rx_desc_alloc_all(vport);
 	if (err)
 		goto err_out;
-
-	idpf_xdp_copy_prog_to_rqs(vport, vport->xdp_prog);
 
 	return 0;
 
