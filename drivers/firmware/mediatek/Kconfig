@@ -11,4 +11,13 @@ config MTK_ADSP_IPC
 	  ADSP exists on some mtk processors.
 	  Client might use shared memory to exchange information with ADSP.
 
+config MTK_HARDWARE_VOTER
+	tristate "MediaTek Hardware Resources Voter"
+	depends on MTK_ADSP_MBOX
+	help
+	  Say yes here to add support for the MediaTek Hardware Voter (HWV),
+	  an interface to the HWV MCU which is used to synchronize requests
+	  for hardware resources between host AP (Linux) and the firmwares
+	  that are running on various integrated remote processors.
+
 endmenu
