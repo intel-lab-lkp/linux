@@ -1781,7 +1781,7 @@ static inline void uclamp_rq_inc(struct rq *rq, struct task_struct *p, int flags
 		rq->uclamp_flags &= ~UCLAMP_FLAG_IDLE;
 }
 
-static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p)
+static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p, int flags)
 {
 	enum uclamp_id clamp_id;
 
@@ -1797,7 +1797,8 @@ static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p)
 	if (unlikely(!p->sched_class->uclamp_enabled))
 		return;
 
-	if (p->se.sched_delayed)
+	/* Skip dec if this is a delayed task not being truly dequeued */
+	if (p->se.sched_delayed && !(flags & DEQUEUE_DELAYED))
 		return;
 
 	for_each_clamp_id(clamp_id)
@@ -2039,7 +2040,7 @@ static void __init init_uclamp(void)
 
 #else /* !CONFIG_UCLAMP_TASK */
 static inline void uclamp_rq_inc(struct rq *rq, struct task_struct *p, int flags) { }
-static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p) { }
+static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p, int flags) { }
 static inline void uclamp_fork(struct task_struct *p) { }
 static inline void uclamp_post_fork(struct task_struct *p) { }
 static inline void init_uclamp(void) { }
@@ -2112,7 +2113,7 @@ inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	 * Must be before ->dequeue_task() because ->dequeue_task() can 'fail'
 	 * and mark the task ->sched_delayed.
 	 */
-	uclamp_rq_dec(rq, p);
+	uclamp_rq_dec(rq, p, flags);
 	return p->sched_class->dequeue_task(rq, p, flags);
 }
 
