@@ -21,11 +21,14 @@
 #define PMBUS_FLASH_KEY_WRITE		0xEC
 
 enum chips {
-	q54sj108a2
+	q50sn12072,
+	q54sj108a2,
+	q54sn120a1
 };
 
 enum {
-	Q54SJ108A2_DEBUGFS_OPERATION = 0,
+	Q50SN12072_DEBUGFS_VOUT_COMMAND = 0,
+	Q54SJ108A2_DEBUGFS_OPERATION,
 	Q54SJ108A2_DEBUGFS_CLEARFAULT,
 	Q54SJ108A2_DEBUGFS_WRITEPROTECT,
 	Q54SJ108A2_DEBUGFS_STOREDEFAULT,
@@ -54,6 +57,20 @@ struct q54sj108a2_data {
 #define to_psu(x, y) container_of((x), struct q54sj108a2_data, debugfs_entries[(y)])
 
 static struct pmbus_driver_info q54sj108a2_info[] = {
+	[q50sn12072] = {
+		.pages = 1,
+
+		/* Source : Delta Q50SN12072 */
+		.format[PSC_TEMPERATURE] = linear,
+		.format[PSC_VOLTAGE_IN] = linear,
+		.format[PSC_CURRENT_OUT] = linear,
+
+		.func[0] = PMBUS_HAVE_VIN | PMBUS_HAVE_IIN | PMBUS_HAVE_PIN |
+		PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT |
+		PMBUS_HAVE_IOUT | PMBUS_HAVE_STATUS_IOUT |
+		PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP |
+		PMBUS_HAVE_STATUS_INPUT | PMBUS_HAVE_POUT,
+	},
 	[q54sj108a2] = {
 		.pages = 1,
 
@@ -67,6 +84,20 @@ static struct pmbus_driver_info q54sj108a2_info[] = {
 		PMBUS_HAVE_IOUT | PMBUS_HAVE_STATUS_IOUT |
 		PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP |
 		PMBUS_HAVE_STATUS_INPUT,
+	},
+	[q54sn120a1] = {
+		.pages = 1,
+
+		/* Source : Delta Q54SN120A1 */
+		.format[PSC_TEMPERATURE] = linear,
+		.format[PSC_VOLTAGE_IN] = linear,
+		.format[PSC_CURRENT_OUT] = linear,
+
+		.func[0] = PMBUS_HAVE_VIN | PMBUS_HAVE_IIN | PMBUS_HAVE_PIN |
+		PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT |
+		PMBUS_HAVE_IOUT | PMBUS_HAVE_STATUS_IOUT |
+		PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP |
+		PMBUS_HAVE_STATUS_INPUT | PMBUS_HAVE_POUT,
 	},
 };
 
@@ -177,6 +208,7 @@ static ssize_t q54sj108a2_debugfs_write(struct file *file, const char __user *bu
 {
 	u8 flash_key[4];
 	u8 dst_data;
+	u16 val;
 	ssize_t rc;
 	int *idxp = file->private_data;
 	int idx = *idxp;
@@ -187,6 +219,17 @@ static ssize_t q54sj108a2_debugfs_write(struct file *file, const char __user *bu
 		return rc;
 
 	switch (idx) {
+	case Q50SN12072_DEBUGFS_VOUT_COMMAND:
+		rc = kstrtou16_from_user(buf, count, 0, &val);
+		if (rc < 0)
+			return rc;
+
+		rc = pmbus_write_word_data(psu->client, 0x00,
+					   PMBUS_VOUT_COMMAND, (const u16)val);
+		if (rc < 0)
+			return rc;
+
+		break;
 	case Q54SJ108A2_DEBUGFS_OPERATION:
 		rc = kstrtou8_from_user(buf, count, 0, &dst_data);
 		if (rc < 0)
@@ -268,7 +311,9 @@ static const struct file_operations q54sj108a2_fops = {
 };
 
 static const struct i2c_device_id q54sj108a2_id[] = {
+	{ "q50sn12072", q50sn12072 },
 	{ "q54sj108a2", q54sj108a2 },
+	{ "q54sn120a1", q54sn120a1 },
 	{ },
 };
 
@@ -401,7 +446,9 @@ static int q54sj108a2_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id q54sj108a2_of_match[] = {
+	{ .compatible = "delta,q50sn12072", .data = (void *)q50sn12072 },
 	{ .compatible = "delta,q54sj108a2", .data = (void *)q54sj108a2 },
+	{ .compatible = "delta,q54sn120a1", .data = (void *)q54sn120a1 },
 	{ },
 };
 
