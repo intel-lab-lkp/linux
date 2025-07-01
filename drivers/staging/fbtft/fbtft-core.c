@@ -695,7 +695,6 @@ struct fb_info *fbtft_framebuffer_alloc(struct fbtft_display *display,
 cleanup_deferred:
 	fb_deferred_io_cleanup(info);
 release_framebuf:
-	fb_deferred_io_cleanup(info);
 	framebuffer_release(info);
 
 alloc_fail:
