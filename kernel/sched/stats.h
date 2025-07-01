@@ -191,23 +191,24 @@ static inline void psi_dequeue(struct task_struct *p, int flags)
 	psi_task_change(p, p->psi_flags, 0);
 }
 
-static inline void psi_ttwu_dequeue(struct task_struct *p)
+static inline bool psi_ttwu_need_dequeue(struct task_struct *p)
 {
 	if (static_branch_likely(&psi_disabled))
-		return;
+		return false;
 	/*
 	 * Is the task being migrated during a wakeup? Make sure to
 	 * deregister its sleep-persistent psi states from the old
 	 * queue, and let psi_enqueue() know it has to requeue.
 	 */
-	if (unlikely(p->psi_flags)) {
-		struct rq_flags rf;
-		struct rq *rq;
+	if (!likely(!p->psi_flags))
+		return false;
 
-		rq = __task_rq_lock(p, &rf);
-		psi_task_change(p, p->psi_flags, 0);
-		__task_rq_unlock(rq, &rf);
-	}
+	return true;
+}
+
+static inline void __psi_ttwu_dequeue(struct task_struct *p)
+{
+	psi_task_change(p, p->psi_flags, 0);
 }
 
 static inline void psi_sched_switch(struct task_struct *prev,
@@ -223,7 +224,8 @@ static inline void psi_sched_switch(struct task_struct *prev,
 #else /* !CONFIG_PSI: */
 static inline void psi_enqueue(struct task_struct *p, bool migrate) {}
 static inline void psi_dequeue(struct task_struct *p, bool migrate) {}
-static inline void psi_ttwu_dequeue(struct task_struct *p) {}
+static inline bool psi_ttwu_need_dequeue(struct task_struct *p) { return false; }
+static inline void __psi_ttwu_dequeue(struct task_struct *p) {}
 static inline void psi_sched_switch(struct task_struct *prev,
 				    struct task_struct *next,
 				    bool sleep) {}
