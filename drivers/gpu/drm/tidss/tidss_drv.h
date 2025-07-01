@@ -23,6 +23,8 @@ struct tidss_device {
 	const struct dispc_features *feat;
 	struct dispc_device *dispc;
 	bool is_oldi_vp[TIDSS_MAX_PORTS];
+	/* stores max supported pixel clock requested during checking modes */
+	unsigned long curr_max_pclk[TIDSS_MAX_PORTS];
 
 
 	unsigned int num_crtcs;
