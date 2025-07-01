@@ -387,17 +387,18 @@ xfs_buf_map_verify(
 	struct xfs_buftarg	*btp,
 	struct xfs_buf_map	*map)
 {
+	struct xfs_mount	*mp = btp->bt_mount;
 	xfs_daddr_t		eofs;
 
 	/* Check for IOs smaller than the sector size / not sector aligned */
-	ASSERT(!(BBTOB(map->bm_len) < btp->bt_meta_sectorsize));
-	ASSERT(!(BBTOB(map->bm_bn) & (xfs_off_t)btp->bt_meta_sectormask));
+	ASSERT(!(BBTOB(map->bm_len) < mp->m_sb.sb_sectsize));
+	ASSERT(!(BBTOB(map->bm_bn) & (xfs_off_t)(mp->m_sb.sb_sectsize - 1)));
 
 	/*
 	 * Corrupted block numbers can get through to here, unfortunately, so we
 	 * have to check that the buffer falls within the filesystem bounds.
 	 */
-	eofs = XFS_FSB_TO_BB(btp->bt_mount, btp->bt_mount->m_sb.sb_dblocks);
+	eofs = XFS_FSB_TO_BB(mp, mp->m_sb.sb_dblocks);
 	if (map->bm_bn < 0 || map->bm_bn >= eofs) {
 		xfs_alert(btp->bt_mount,
 			  "%s: daddr 0x%llx out of range, EOFS 0x%llx",
@@ -1726,10 +1727,6 @@ xfs_configure_buftarg(
 
 	ASSERT(btp->bt_bdev != NULL);
 
-	/* Set up metadata sector size info */
-	btp->bt_meta_sectorsize = sectorsize;
-	btp->bt_meta_sectormask = sectorsize - 1;
-
 	error = bdev_validate_blocksize(btp->bt_bdev, sectorsize);
 	if (error) {
 		xfs_warn(btp->bt_mount,
@@ -1816,14 +1813,7 @@ xfs_alloc_buftarg(
 	if (error)
 		goto error_free;
 
-	/*
-	 * When allocating the buftargs we have not yet read the super block and
-	 * thus don't know the file system sector size yet.
-	 */
-	btp->bt_meta_sectorsize = bdev_logical_block_size(btp->bt_bdev);
-	btp->bt_meta_sectormask = btp->bt_meta_sectorsize - 1;
-
-	error = xfs_init_buftarg(btp, btp->bt_meta_sectorsize,
+	error = xfs_init_buftarg(btp, bdev_logical_block_size(btp->bt_bdev),
 				mp->m_super->s_id);
 	if (error)
 		goto error_free;

@@ -90,8 +90,6 @@ xmbuf_alloc(
 	btp->bt_dev = (dev_t)-1U;
 	btp->bt_bdev = NULL; /* in-memory buftargs have no bdev */
 	btp->bt_file = file;
-	btp->bt_meta_sectorsize = XMBUF_BLOCKSIZE;
-	btp->bt_meta_sectormask = XMBUF_BLOCKSIZE - 1;
 
 	error = xfs_init_buftarg(btp, XMBUF_BLOCKSIZE, descr);
 	if (error)
