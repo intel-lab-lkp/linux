@@ -2,7 +2,7 @@
 
 // Required to retain the original register names used by OpenRM, which are all capital snake case
 // but are mapped to types.
-#![allow(non_camel_case_types)]
+#![expect(non_camel_case_types)]
 
 #[macro_use]
 mod macros;
