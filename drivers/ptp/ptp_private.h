@@ -95,39 +95,23 @@ static inline int queue_cnt(const struct timestamp_event_queue *q)
 	return cnt < 0 ? PTP_MAX_TIMESTAMPS + cnt : cnt;
 }
 
-/* Check if ptp virtual clock is in use */
-static inline bool ptp_vclock_in_use(struct ptp_clock *ptp)
+/* Check if ptp clock shall be free running */
+static inline bool ptp_clock_freerun(struct ptp_clock *ptp)
 {
-	bool in_use = false;
+	bool ret = false;
 
-	/* Virtual clocks can't be stacked on top of virtual clocks.
-	 * Avoid acquiring the n_vclocks_mux on virtual clocks, to allow this
-	 * function to be called from code paths where the n_vclocks_mux of the
-	 * parent physical clock is already held. Functionally that's not an
-	 * issue, but lockdep would complain, because they have the same lock
-	 * class.
-	 */
-	if (ptp->is_virtual_clock)
-		return false;
+	if (ptp->has_cycles)
+		return ret;
 
 	if (mutex_lock_interruptible(&ptp->n_vclocks_mux))
 		return true;
 
-	if (ptp->n_vclocks)
-		in_use = true;
+	if (!ptp->is_virtual_clock && ptp->n_vclocks)
+		ret = true;
 
 	mutex_unlock(&ptp->n_vclocks_mux);
 
-	return in_use;
-}
-
-/* Check if ptp clock shall be free running */
-static inline bool ptp_clock_freerun(struct ptp_clock *ptp)
-{
-	if (ptp->has_cycles)
-		return false;
-
-	return ptp_vclock_in_use(ptp);
+	return ret;
 }
 
 extern const struct class ptp_class;
