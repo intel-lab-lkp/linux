@@ -228,11 +228,34 @@ impl Delta {
     /// A span of time equal to zero.
     pub const ZERO: Self = Self { nanos: 0 };
 
+    /// Create a new [`Delta`] from a number of nanoseconds.
+    ///
+    /// The `nanos` can range from [`i64::MIN`] to [`i64::MAX`].
+    #[inline]
+    pub const fn from_nanos(nanos: i64) -> Self {
+        Self { nanos }
+    }
+
     /// Create a new [`Delta`] from a number of microseconds.
     ///
     /// The `micros` can range from -9_223_372_036_854_775 to 9_223_372_036_854_775.
     /// If `micros` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let delta = kernel::time::Delta::from_micros(5);
+    /// assert_eq!(delta.as_nanos(), 5_000);
+    /// let delta = kernel::time::Delta::from_micros(9_223_372_036_854_775);
+    /// assert_eq!(delta.as_nanos(), 9_223_372_036_854_775_000);
+    /// let delta = kernel::time::Delta::from_micros(9_223_372_036_854_776);
+    /// assert_eq!(delta.as_nanos(), i64::MAX);
+    /// let delta = kernel::time::Delta::from_micros(-9_223_372_036_854_775);
+    /// assert_eq!(delta.as_nanos(), -9_223_372_036_854_775_000);
+    /// let delta = kernel::time::Delta::from_micros(-9_223_372_036_854_776);
+    /// assert_eq!(delta.as_nanos(), i64::MIN);
+    /// ```
     #[inline]
     pub const fn from_micros(micros: i64) -> Self {
         Self {
@@ -245,6 +268,21 @@ impl Delta {
     /// The `millis` can range from -9_223_372_036_854 to 9_223_372_036_854.
     /// If `millis` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let delta = kernel::time::Delta::from_millis(5);
+    /// assert_eq!(delta.as_nanos(), 5_000_000);
+    /// let delta = kernel::time::Delta::from_millis(9_223_372_036_854);
+    /// assert_eq!(delta.as_nanos(), 9_223_372_036_854_000_000);
+    /// let delta = kernel::time::Delta::from_millis(9_223_372_036_855);
+    /// assert_eq!(delta.as_nanos(), i64::MAX);
+    /// let delta = kernel::time::Delta::from_millis(-9_223_372_036_854);
+    /// assert_eq!(delta.as_nanos(), -9_223_372_036_854_000_000);
+    /// let delta = kernel::time::Delta::from_millis(-9_223_372_036_855);
+    /// assert_eq!(delta.as_nanos(), i64::MIN);
+    /// ```
     #[inline]
     pub const fn from_millis(millis: i64) -> Self {
         Self {
@@ -257,6 +295,21 @@ impl Delta {
     /// The `secs` can range from -9_223_372_036 to 9_223_372_036.
     /// If `secs` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let delta = kernel::time::Delta::from_secs(5);
+    /// assert_eq!(delta.as_nanos(), 5_000_000_000);
+    /// let delta = kernel::time::Delta::from_secs(9_223_372_036);
+    /// assert_eq!(delta.as_nanos(), 9_223_372_036_000_000_000);
+    /// let delta = kernel::time::Delta::from_secs(9_223_372_037);
+    /// assert_eq!(delta.as_nanos(), i64::MAX);
+    /// let delta = kernel::time::Delta::from_secs(-9_223_372_036);
+    /// assert_eq!(delta.as_nanos(), -9_223_372_036_000_000_000);
+    /// let delta = kernel::time::Delta::from_secs(-9_223_372_037);
+    /// assert_eq!(delta.as_nanos(), i64::MIN);
+    /// ```
     #[inline]
     pub const fn from_secs(secs: i64) -> Self {
         Self {
@@ -284,6 +337,13 @@ impl Delta {
 
     /// Return the smallest number of microseconds greater than or equal
     /// to the value in the [`Delta`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let delta = kernel::time::Delta::from_nanos(123_456_789);
+    /// assert_eq!(delta.as_micros_ceil(), 123_457);
+    /// ```
     #[inline]
     pub fn as_micros_ceil(self) -> i64 {
         #[cfg(CONFIG_64BIT)]
@@ -299,6 +359,13 @@ impl Delta {
     }
 
     /// Return the number of milliseconds in the [`Delta`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let delta = kernel::time::Delta::from_nanos(123_456_789);
+    /// assert_eq!(delta.as_millis(), 123);
+    /// ```
     #[inline]
     pub fn as_millis(self) -> i64 {
         #[cfg(CONFIG_64BIT)]
