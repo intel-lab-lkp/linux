@@ -10,11 +10,11 @@ use crate::{
     driver,
     error::{to_result, Result},
     prelude::*,
-    str::CStr,
     types::{ForeignOwnable, Opaque},
     ThisModule,
 };
 use core::{
+    ffi::CStr,
     marker::PhantomData,
     ptr::{addr_of_mut, NonNull},
 };

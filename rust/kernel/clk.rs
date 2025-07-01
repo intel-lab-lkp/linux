@@ -78,10 +78,9 @@ mod common_clk {
     use crate::{
         device::Device,
         error::{from_err_ptr, to_result, Result},
-        prelude::*,
     };
 
-    use core::{ops::Deref, ptr};
+    use core::{ffi::CStr, ops::Deref, ptr};
 
     /// A reference-counted clock.
     ///
