@@ -44,9 +44,9 @@
 #define WD_BTIMEOUT	(jiffies + (HZ * 1000))
 #define WD_BLIMIT	0xFFFF
 
-#define WD0_MINOR	212
-#define WD1_MINOR	213
-#define WD2_MINOR	214
+#define WD0_MINOR	WATCHDOG_MINOR_1
+#define WD1_MINOR	WATCHDOG_MINOR_2
+#define WD2_MINOR	WATCHDOG_MINOR_3
 
 /* Internal driver definitions.  */
 #define WD0_ID			0

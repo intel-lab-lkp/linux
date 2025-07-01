@@ -1084,7 +1084,8 @@ static int fschmd_probe(struct i2c_client *client)
 	struct fschmd_data *data;
 	static const char * const names[7] = { "Poseidon", "Hermes", "Scylla",
 				"Heracles", "Heimdall", "Hades", "Syleus" };
-	static const int watchdog_minors[] = { WATCHDOG_MINOR, 212, 213, 214, 215 };
+	static const int watchdog_minors[] = { WATCHDOG_MINOR, WATCHDOG_MINOR_1,
+		WATCHDOG_MINOR_2, WATCHDOG_MINOR_3, WATCHDOG_MINOR_4 };
 	int i, err;
 	enum chips kind = (uintptr_t)i2c_get_match_data(client);
 

@@ -1642,7 +1642,8 @@ static int w83793_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	static const int watchdog_minors[] = {
-		WATCHDOG_MINOR, 212, 213, 214, 215
+		WATCHDOG_MINOR, WATCHDOG_MINOR_1, WATCHDOG_MINOR_2,
+		WATCHDOG_MINOR_3, WATCHDOG_MINOR_4
 	};
 	struct w83793_data *data;
 	int i, tmp, val, err;
