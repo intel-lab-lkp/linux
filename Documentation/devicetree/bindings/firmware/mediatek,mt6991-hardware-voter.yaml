@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2025 Collabora Ltd
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/mediatek,mt6991-hardware-voter.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Hardware Voter (HWV)
+
+maintainers:
+  - AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+
+description:
+  The MediaTek Hardware Voter (HWV) is a SoC-internal fixed-function MCU
+  used to collect votes from both the Application Processor and from the
+  various other remote processors present in the SoC, and transparently
+  turn on or off various hardware resources (for example, power domains
+  or system clocks) based on aggregation of votes done in the HWV MCU's
+  internal state machine, therefore guaranteeing synchronization of the
+  hardware resource requests between all components of the SoC and hence
+  avoiding, for example, unclocked or unpowered access to the hardware.
+
+properties:
+  $nodename:
+    pattern: "^system-controller@[0-9a-f]+$"
+
+  compatible:
+    const: mediatek,mt6991-hardware-voter
+
+  reg:
+    items:
+      - description: Address and size of the Hardware Voter MMIO
+
+  power-controller:
+    $ref: /schemas/power/mediatek,power-controller.yaml
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: true
+
+examples:
+ - |
+   scp_hwv: system-controller@14500000 {
+     compatible = "mediatek,mt6991-hardware-voter";
+     reg = <0 0x14500000 0 0x3000>;
+
+     power-controller {
+       compatible = "mediatek,mt8196-hwv-scp-power-controller";
+       #address-cells = <1>;
+       #size-cells = <0>;
+       #power-domain-cells = <1>;
+     };
+   };
+
+   /*
+    * For RFC patch only, this will be removed at patch v1
+    * Note 1: Clock controllers have more than 90 registers in HWV
+    * Note 2: The HWV integrates the power controller, so that's why
+    *         that is a child node of HWV, but the clock controllers
+    *         are completely separated (in hardware) from the HWV's
+    *         physical location (other than address space)... so it
+    *         would be wrong to place those as children of HWV I think.
+    */
+   clock-controller@16640000 {
+     comaptible = "mediatek,mt8196-pericfg-ao";
+     mediatek,hardware-voter = <&scp_hwv>;
+     #clock-cells = <1>;
+   };
