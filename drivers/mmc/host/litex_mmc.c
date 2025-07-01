@@ -531,8 +531,7 @@ static int litex_mmc_probe(struct platform_device *pdev)
 
 	ret = devm_add_action_or_reset(dev, litex_mmc_free_host_wrapper, mmc);
 	if (ret)
-		return dev_err_probe(dev, ret,
-				     "Can't register mmc_free_host action\n");
+		return ret;
 
 	host = mmc_priv(mmc);
 	host->mmc = mmc;

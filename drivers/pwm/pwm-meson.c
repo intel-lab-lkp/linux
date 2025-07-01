@@ -520,8 +520,7 @@ static int meson_pwm_init_channels_s4(struct pwm_chip *chip)
 		ret = devm_add_action_or_reset(dev, meson_pwm_s4_put_clk,
 					       meson->channels[i].clk);
 		if (ret)
-			return dev_err_probe(dev, ret,
-					     "Failed to add clk_put action\n");
+			return ret;
 	}
 
 	return 0;

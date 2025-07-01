@@ -1859,8 +1859,7 @@ static int exynos5_usbdrd_setup_notifiers(struct exynos5_usbdrd_phy *phy_drd)
 					       exynos5_usbdrd_orien_switch_unregister,
 					       phy_drd);
 		if (ret)
-			return dev_err_probe(phy_drd->dev, ret,
-					     "Failed to register TypeC orientation devm action\n");
+			return ret;
 	}
 
 	return 0;
