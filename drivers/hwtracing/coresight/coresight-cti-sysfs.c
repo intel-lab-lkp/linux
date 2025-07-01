@@ -112,7 +112,7 @@ static ssize_t enable_store(struct device *dev,
 		ret = pm_runtime_resume_and_get(dev->parent);
 		if (ret)
 			return ret;
-		ret = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
+		ret = cti_enable(drvdata->csdev, CS_MODE_DEBUG, NULL);
 		if (ret)
 			pm_runtime_put(dev->parent);
 	} else {

@@ -932,6 +932,7 @@ static int etm4_enable(struct coresight_device *csdev, struct perf_event *event,
 	case CS_MODE_PERF:
 		ret = etm4_enable_perf(csdev, event, path);
 		break;
+	case CS_MODE_DEBUG:
 	default:
 		ret = -EINVAL;
 	}
@@ -1130,6 +1131,7 @@ static void etm4_disable(struct coresight_device *csdev,
 	mode = coresight_get_mode(csdev);
 
 	switch (mode) {
+	case CS_MODE_DEBUG:
 	case CS_MODE_DISABLED:
 		break;
 	case CS_MODE_SYSFS:

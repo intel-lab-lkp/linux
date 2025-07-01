@@ -253,10 +253,10 @@ struct coresight_trace_id_map {
  *		by @coresight_ops.
  * @access:	Device i/o access abstraction for this device.
  * @dev:	The device entity associated to this component.
- * @mode:	The device mode, i.e sysFS, Perf or disabled. This is actually
- *		an 'enum cs_mode' but stored in an atomic type. Access is always
- *		through atomic APIs, ensuring SMP-safe synchronisation between
- *		racing from sysFS and Perf mode. A compare-and-exchange
+ * @mode:	The device mode, i.e sysFS, Perf, debug or disabled. This is
+ *		actually an 'enum cs_mode' but stored in an atomic type. Access
+ *		is always through atomic APIs, ensuring SMP-safe synchronisation
+ *		between racing from sysFS and Perf mode. A compare-and-exchange
  *		operation is done to atomically claim one mode or the other.
  * @refcnt:	keep track of what is in use. Only access this outside of the
  *		device's spinlock when the coresight_mutex held and mode ==
@@ -344,6 +344,7 @@ enum cs_mode {
 	CS_MODE_DISABLED,
 	CS_MODE_SYSFS,
 	CS_MODE_PERF,
+	CS_MODE_DEBUG,
 };
 
 #define coresight_ops(csdev)	csdev->ops
