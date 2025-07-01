@@ -55,7 +55,7 @@ impl kernel::InPlaceModule for NullBlkModule {
         })();
 
         try_pin_init!(Self {
-            _disk <- new_mutex!(disk?, "nullb:disk"),
+            _disk <- new_mutex!(disk?, c"nullb:disk"),
         })
     }
 }
