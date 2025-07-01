@@ -409,7 +409,6 @@ static int amdgpu_move_blit(struct ttm_buffer_object *bo,
 		if (r) {
 			goto error;
 		} else if (wipe_fence) {
-			amdgpu_vram_mgr_set_cleared(bo->resource);
 			dma_fence_put(fence);
 			fence = wipe_fence;
 		}
