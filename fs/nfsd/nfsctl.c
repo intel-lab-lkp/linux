@@ -1082,10 +1082,15 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 		case 'Y':
 		case 'y':
 		case '1':
+			/* This test ensures we don't try to
+			 * end grace before the server has been started,
+			 * but doesn't guarantee we don't end grace
+			 * while the server is being shut down.
+			 */
 			if (!nn->nfsd_serv)
 				return -EBUSY;
 			trace_nfsd_end_grace(netns(file));
-			nfsd4_end_grace(nn);
+			nfsd4_force_end_grace(nn);
 			break;
 		default:
 			return -EINVAL;
