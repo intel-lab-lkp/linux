@@ -5879,10 +5879,10 @@ static int virtnet_xsk_pool_enable(struct net_device *dev,
 	 * But vq->dma_dev allows every vq has the respective dma dev. So I
 	 * check the dma dev of vq and sq is the same dev.
 	 */
-	if (virtqueue_dma_dev(rq->vq) != virtqueue_dma_dev(sq->vq))
+	if (virtqueue_map_token(rq->vq) != virtqueue_map_token(sq->vq))
 		return -EINVAL;
 
-	dma_dev = virtqueue_dma_dev(rq->vq);
+	dma_dev = virtqueue_map_token(rq->vq);
 	if (!dma_dev)
 		return -EINVAL;
 

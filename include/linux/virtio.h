@@ -74,7 +74,7 @@ int virtqueue_add_sgs(struct virtqueue *vq,
 		      void *data,
 		      gfp_t gfp);
 
-struct device *virtqueue_dma_dev(struct virtqueue *vq);
+void *virtqueue_map_token(struct virtqueue *vq);
 
 bool virtqueue_kick(struct virtqueue *vq);
 
