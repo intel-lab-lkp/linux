@@ -10,10 +10,15 @@
 #include <linux/timex.h>
 #include <sched.h>
 #include <stdio.h>
+#include <sys/auxv.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
 #include "../kselftest_harness.h"
+
+#include "../vDSO/parse_vdso.c"
+#include "../vDSO/vdso_config.h"
+#include "../vDSO/vdso_call.h"
 
 #ifndef CLOCK_AUX
 #define	CLOCK_AUX	16
@@ -133,7 +138,45 @@ static int sys_clock_adjtime64(__kernel_clockid_t clockid, struct __kernel_timex
 #endif
 }
 
-FIXTURE(auxclock) {};
+FIXTURE(auxclock) {
+	int (*vdso_clock_gettime)(__kernel_clockid_t clockid, struct timespec *ts);
+	int (*vdso_clock_gettime64)(__kernel_clockid_t clockid, struct __kernel_timespec *ts);
+	int (*vdso_clock_getres)(__kernel_clockid_t clockid, struct timespec *ts);
+};
+
+static int vdso_clock_gettime64(FIXTURE_DATA(auxclock) *self, __kernel_clockid_t clockid,
+				struct __kernel_timespec *ts)
+{
+	struct timespec _ts;
+	int ret;
+
+	if (self->vdso_clock_gettime64) {
+		return VDSO_CALL(self->vdso_clock_gettime64, 2, clockid, ts);
+	} else if (self->vdso_clock_gettime) {
+		ret = VDSO_CALL(self->vdso_clock_gettime, 2, clockid, &_ts);
+		if (!ret)
+			timespec_to_kernel_timespec(&_ts, ts);
+		return ret;
+	} else {
+		return -ENOSYS;
+	}
+}
+
+static int vdso_clock_getres_time64(FIXTURE_DATA(auxclock) *self, __kernel_clockid_t clockid,
+				    struct __kernel_timespec *ts)
+{
+	struct timespec _ts;
+	int ret;
+
+	if (self->vdso_clock_getres) {
+		ret = VDSO_CALL(self->vdso_clock_getres, 2, clockid, &_ts);
+		if (!ret)
+			timespec_to_kernel_timespec(&_ts, ts);
+		return ret;
+	} else {
+		return -ENOSYS;
+	}
+}
 
 FIXTURE_VARIANT(auxclock) {
 	__kernel_clockid_t clock;
@@ -193,6 +236,18 @@ static void enter_timens(struct __test_metadata *_metadata)
 FIXTURE_SETUP(auxclock) {
 	int ret;
 
+#ifdef AT_SYSINFO_EHDR
+	unsigned long sysinfo_ehdr;
+
+	sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
+	if (sysinfo_ehdr)
+		vdso_init_from_sysinfo_ehdr(sysinfo_ehdr);
+
+	self->vdso_clock_gettime = vdso_sym(versions[VDSO_VERSION], names[VDSO_NAMES][1]);
+	self->vdso_clock_gettime64 = vdso_sym(versions[VDSO_VERSION], names[VDSO_NAMES][5]);
+	self->vdso_clock_getres = vdso_sym(versions[VDSO_VERSION], names[VDSO_NAMES][3]);
+#endif /* !AT_SYSINFO_EHDR */
+
 	ret = configure_auxclock(variant->clock, variant->clock_enabled);
 	if (ret == -ENOENT)
 		SKIP(return, "auxclocks not enabled");
@@ -220,6 +275,20 @@ TEST_F(auxclock, sys_clock_getres) {
 	ASSERT_EQ(1, ts.tv_nsec);
 }
 
+TEST_F(auxclock, vdso_clock_getres) {
+	struct __kernel_timespec ts;
+	int ret;
+
+	ret = vdso_clock_getres_time64(self, variant->clock, &ts);
+	if (ret == -ENOSYS) {
+		SKIP(return, "no clock_getres() in vDSO");
+	} else {
+		ASSERT_EQ(0, ret);
+		ASSERT_EQ(0, ts.tv_sec);
+		ASSERT_EQ(1, ts.tv_nsec);
+	}
+}
+
 TEST_F(auxclock, sys_clock_gettime) {
 	struct __kernel_timespec ts;
 	int ret;
@@ -230,6 +299,20 @@ TEST_F(auxclock, sys_clock_gettime) {
 	} else {
 		ASSERT_EQ(-1, ret);
 		ASSERT_EQ(ENODEV, errno);
+	}
+}
+
+TEST_F(auxclock, vdso_clock_gettime) {
+	struct __kernel_timespec ts;
+	int ret;
+
+	ret = vdso_clock_gettime64(self, variant->clock, &ts);
+	if (ret == -ENOSYS) {
+		SKIP(return, "no clock_gettime() in vDSO");
+	} else if (variant->clock_enabled) {
+		ASSERT_EQ(0, ret);
+	} else {
+		ASSERT_EQ(-ENODEV, ret);
 	}
 }
 
@@ -310,9 +393,13 @@ TEST_F(auxclock, progression) {
 		auxclock_validate_progression(_metadata, &a, &b);
 
 		memset(&a, 0, sizeof(a));
-		ret = sys_clock_gettime64(variant->clock, &a);
-		ASSERT_EQ(0, ret);
-		auxclock_validate_progression(_metadata, &b, &a);
+		ret = vdso_clock_gettime64(self, variant->clock, &a);
+		if (ret == -ENOSYS) {
+			a = b;
+		} else {
+			ASSERT_EQ(0, ret);
+			auxclock_validate_progression(_metadata, &b, &a);
+		}
 	}
 }
 
