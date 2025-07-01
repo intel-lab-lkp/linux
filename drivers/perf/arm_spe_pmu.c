@@ -92,6 +92,7 @@ struct arm_spe_pmu {
 	u16					max_record_sz;
 	u16					align;
 	struct perf_output_handle __percpu	*handle;
+	u64					max_buff_size;
 };
 
 #define to_spe_pmu(p) (container_of(p, struct arm_spe_pmu, pmu))
@@ -115,6 +116,7 @@ enum arm_spe_pmu_capabilities {
 	SPE_PMU_CAP_FEAT_MAX,
 	SPE_PMU_CAP_CNT_SZ = SPE_PMU_CAP_FEAT_MAX,
 	SPE_PMU_CAP_MIN_IVAL,
+	SPE_PMU_CAP_MAX_BUFF_SIZE,
 };
 
 static int arm_spe_pmu_feat_caps[SPE_PMU_CAP_FEAT_MAX] = {
@@ -132,6 +134,8 @@ static u32 arm_spe_pmu_cap_get(struct arm_spe_pmu *spe_pmu, int cap)
 		return spe_pmu->counter_sz;
 	case SPE_PMU_CAP_MIN_IVAL:
 		return spe_pmu->min_period;
+	case SPE_PMU_CAP_MAX_BUFF_SIZE:
+		return spe_pmu->max_buff_size;
 	default:
 		WARN(1, "unknown cap %d\n", cap);
 	}
@@ -164,6 +168,7 @@ static struct attribute *arm_spe_pmu_cap_attr[] = {
 	SPE_CAP_EXT_ATTR_ENTRY(ernd, SPE_PMU_CAP_ERND),
 	SPE_CAP_EXT_ATTR_ENTRY(count_size, SPE_PMU_CAP_CNT_SZ),
 	SPE_CAP_EXT_ATTR_ENTRY(min_interval, SPE_PMU_CAP_MIN_IVAL),
+	SPE_CAP_EXT_ATTR_ENTRY(max_buff_size, SPE_PMU_CAP_MAX_BUFF_SIZE),
 	NULL,
 };
 
@@ -631,6 +636,9 @@ arm_spe_pmu_buf_get_fault_act(struct perf_output_handle *handle)
 	case PMBSR_EL1_BUF_BSC_FULL:
 		ret = SPE_PMU_BUF_FAULT_ACT_OK;
 		goto out_stop;
+	case PMBSR_EL1_BUF_BSC_SIZE:
+		err_str = "Buffer size too large";
+		goto out_err;
 	default:
 		err_str = "Unknown buffer status code";
 	}
@@ -896,6 +904,7 @@ static void *arm_spe_pmu_setup_aux(struct perf_event *event, void **pages,
 	int i, cpu = event->cpu;
 	struct page **pglist;
 	struct arm_spe_pmu_buf *buf;
+	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
 
 	/* We need at least two pages for this to work. */
 	if (nr_pages < 2)
@@ -908,6 +917,10 @@ static void *arm_spe_pmu_setup_aux(struct perf_event *event, void **pages,
 	 * useful data out of it.
 	 */
 	if (snapshot && (nr_pages & 1))
+		return NULL;
+
+	if (spe_pmu->max_buff_size &&
+	    nr_pages * PAGE_SIZE > spe_pmu->max_buff_size)
 		return NULL;
 
 	if (cpu == -1)
@@ -999,6 +1012,17 @@ static void arm_spe_pmu_perf_destroy(struct arm_spe_pmu *spe_pmu)
 	perf_pmu_unregister(&spe_pmu->pmu);
 }
 
+static u64 arm_spe_decode_buf_size(u64 pmbidr)
+{
+	u64 mantissa = FIELD_GET(PMBIDR_EL1_MaxBuffSize_M, pmbidr);
+	u8 exp = FIELD_GET(PMBIDR_EL1_MaxBuffSize_E, pmbidr);
+
+	if (exp == 0)
+		return mantissa << 12;
+
+	return (mantissa | 0b1000000000) << (exp + 11);
+}
+
 static void __arm_spe_pmu_dev_probe(void *info)
 {
 	int fld;
@@ -1032,6 +1056,8 @@ static void __arm_spe_pmu_dev_probe(void *info)
 			fld, smp_processor_id());
 		return;
 	}
+
+	spe_pmu->max_buff_size = arm_spe_decode_buf_size(reg);
 
 	/* It's now safe to read PMSIDR and figure out what we've got */
 	reg = read_sysreg_s(SYS_PMSIDR_EL1);

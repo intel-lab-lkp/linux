@@ -2976,7 +2976,11 @@ Field	7:0	Attr
 EndSysreg
 
 Sysreg	PMBIDR_EL1	3	0	9	10	7
-Res0	63:12
+Res0	63:48
+Field	47:46	MaxBuffSize_RES
+Field	45:41	MaxBuffSize_E
+Field	40:32	MaxBuffSize_M
+Res0	31:12
 Enum	11:8	EA
 	0b0000	NotDescribed
 	0b0001	Ignored
