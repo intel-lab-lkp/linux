@@ -534,11 +534,10 @@ int tidss_oldi_init(struct tidss_device *tidss)
 			continue;
 		}
 
-		oldi = devm_kzalloc(tidss->dev, sizeof(*oldi), GFP_KERNEL);
-		if (!oldi) {
-			ret = -ENOMEM;
-			goto err_put_node;
-		}
+		oldi = devm_drm_bridge_alloc(tidss->dev, struct tidss_oldi, bridge,
+					     &tidss_oldi_bridge_funcs);
+		if (IS_ERR(oldi))
+			return PTR_ERR(oldi);
 
 		oldi->parent_vp = parent_vp;
 		oldi->oldi_instance = oldi_instance;
@@ -577,7 +576,6 @@ int tidss_oldi_init(struct tidss_device *tidss)
 		/* Register the bridge. */
 		oldi->bridge.of_node = child;
 		oldi->bridge.driver_private = oldi;
-		oldi->bridge.funcs = &tidss_oldi_bridge_funcs;
 		oldi->bridge.timings = &default_tidss_oldi_timings;
 
 		tidss->oldis[tidss->num_oldis++] = oldi;
