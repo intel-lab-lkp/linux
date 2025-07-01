@@ -14,7 +14,13 @@ allOf:
 
 properties:
   compatible:
-    const: cdns,i3c-master
+    oneOf:
+      - description: Cadence I3C controller
+        const: cdns,i3c-master
+      - description: Axiado AX3000 I3C controller
+        items:
+          - const: axiado,ax3000-i3c
+          - const: cdns,i3c-master
 
   reg:
     maxItems: 1
