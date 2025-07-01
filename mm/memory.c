@@ -5383,10 +5383,10 @@ fallback:
 
 	/*
 	 * Using per-page fault to maintain the uffd semantics, and same
-	 * approach also applies to non-anonymous-shmem faults to avoid
+	 * approach also applies to non shmem/tmpfs faults to avoid
 	 * inflating the RSS of the process.
 	 */
-	if (!vma_is_anon_shmem(vma) || unlikely(userfaultfd_armed(vma)) ||
+	if (!vma_is_shmem(vma) || unlikely(userfaultfd_armed(vma)) ||
 	    unlikely(needs_fallback)) {
 		nr_pages = 1;
 	} else if (nr_pages > 1) {
@@ -5395,15 +5395,20 @@ fallback:
 		pgoff_t vma_off = vmf->pgoff - vmf->vma->vm_pgoff;
 		/* The index of the entry in the pagetable for fault page. */
 		pgoff_t pte_off = pte_index(vmf->address);
+		unsigned long hpage_size = PAGE_SIZE << folio_order(folio);
 
 		/*
 		 * Fallback to per-page fault in case the folio size in page
-		 * cache beyond the VMA limits and PMD pagetable limits.
+		 * cache beyond the VMA limits or PMD pagetable limits. And
+		 * also check if the linear page offset of vma is order-aligned
+		 * within the file for tmpfs.
 		 */
 		if (unlikely(vma_off < idx ||
 			    vma_off + (nr_pages - idx) > vma_pages(vma) ||
 			    pte_off < idx ||
-			    pte_off + (nr_pages - idx)  > PTRS_PER_PTE)) {
+			    pte_off + (nr_pages - idx)  > PTRS_PER_PTE) ||
+			    !IS_ALIGNED((vma->vm_start >> PAGE_SHIFT) - vma->vm_pgoff,
+					hpage_size >> PAGE_SHIFT)) {
 			nr_pages = 1;
 		} else {
 			/* Now we can set mappings for the whole large folio. */
