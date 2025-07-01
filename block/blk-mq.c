@@ -4972,6 +4972,8 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	struct request_queue *q;
 	int prev_nr_hw_queues = set->nr_hw_queues;
 	unsigned int memflags;
+	struct xarray et_table;
+	struct elevator_tags *et;
 	int i;
 
 	lockdep_assert_held(&set->tag_list_lock);
@@ -4984,6 +4986,11 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 		return;
 
 	memflags = memalloc_noio_save();
+
+	xa_init(&et_table);
+	if (blk_mq_alloc_sched_tags_batch(&et_table, set, nr_hw_queues) < 0)
+		goto out_memalloc_restore;
+
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		blk_mq_debugfs_unregister_hctxs(q);
 		blk_mq_sysfs_unregister_hctxs(q);
@@ -4995,6 +5002,7 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	if (blk_mq_realloc_tag_set_tags(set, nr_hw_queues) < 0) {
 		list_for_each_entry(q, &set->tag_list, tag_set_list)
 			blk_mq_unfreeze_queue_nomemrestore(q);
+		blk_mq_free_sched_tags_batch(&et_table, set);
 		goto reregister;
 	}
 
@@ -5018,8 +5026,10 @@ fallback:
 	}
 
 	/* elv_update_nr_hw_queues() unfreeze queue for us */
-	list_for_each_entry(q, &set->tag_list, tag_set_list)
-		elv_update_nr_hw_queues(q);
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		et = xa_load(&et_table, q->id);
+		elv_update_nr_hw_queues(q, et);
+	}
 
 reregister:
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
@@ -5029,7 +5039,9 @@ reregister:
 		blk_mq_remove_hw_queues_cpuhp(q);
 		blk_mq_add_hw_queues_cpuhp(q);
 	}
+out_memalloc_restore:
 	memalloc_noio_restore(memflags);
+	xa_destroy(&et_table);
 
 	/* Free the excess tags when nr_hw_queues shrink. */
 	for (i = set->nr_hw_queues; i < prev_nr_hw_queues; i++)
