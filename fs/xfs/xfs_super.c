@@ -1277,7 +1277,8 @@ xfs_fs_free_cached_objects(
 
 static void
 xfs_fs_shutdown(
-	struct super_block	*sb)
+	struct super_block	*sb,
+	struct block_device	*bdev)
 {
 	xfs_force_shutdown(XFS_M(sb), SHUTDOWN_DEVICE_REMOVED);
 }
@@ -1308,7 +1309,7 @@ static const struct super_operations xfs_super_operations = {
 	.show_options		= xfs_fs_show_options,
 	.nr_cached_objects	= xfs_fs_nr_cached_objects,
 	.free_cached_objects	= xfs_fs_free_cached_objects,
-	.shutdown		= xfs_fs_shutdown,
+	.remove_bdev		= xfs_fs_shutdown,
 	.show_stats		= xfs_fs_show_stats,
 };
 

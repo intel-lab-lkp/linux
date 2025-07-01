@@ -764,7 +764,7 @@ static int ntfs_show_options(struct seq_file *m, struct dentry *root)
 /*
  * ntfs_shutdown - super_operations::shutdown
  */
-static void ntfs_shutdown(struct super_block *sb)
+static void ntfs_shutdown(struct super_block *sb, struct block_device *bdev)
 {
 	set_bit(NTFS_FLAGS_SHUTDOWN_BIT, &ntfs_sb(sb)->flags);
 }
@@ -821,7 +821,7 @@ static const struct super_operations ntfs_sops = {
 	.put_super = ntfs_put_super,
 	.statfs = ntfs_statfs,
 	.show_options = ntfs_show_options,
-	.shutdown = ntfs_shutdown,
+	.remove_bdev = ntfs_shutdown,
 	.sync_fs = ntfs_sync_fs,
 	.write_inode = ntfs3_write_inode,
 };
