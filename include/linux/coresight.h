@@ -400,6 +400,7 @@ struct coresight_ops_link {
  * @disable:	disables tracing for a source.
  * @resume_perf: resumes tracing for a source in perf session.
  * @pause_perf:	pauses tracing for a source in perf session.
+ * @need_context_save_restore: if need to save and restore context.
  * @save:	save context for a source.
  * @restore:	restore context for a source.
  */
@@ -411,6 +412,7 @@ struct coresight_ops_source {
 			struct perf_event *event);
 	int (*resume_perf)(struct coresight_device *csdev);
 	void (*pause_perf)(struct coresight_device *csdev);
+	bool (*need_context_save_restore)(struct coresight_device *csdev);
 	int (*save)(struct coresight_device *csdev);
 	void (*restore)(struct coresight_device *csdev);
 };

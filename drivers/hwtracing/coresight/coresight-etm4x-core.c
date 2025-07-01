@@ -1836,6 +1836,21 @@ static int etm4_dying_cpu(unsigned int cpu)
 	return 0;
 }
 
+static bool etm4_need_context_save_restore(struct coresight_device *csdev)
+{
+	if (pm_save_enable != PARAM_PM_SAVE_SELF_HOSTED)
+		return false;
+
+	/*
+	 * Save and restore the ETM Trace registers only if
+	 * the ETM is active.
+	 */
+	if (coresight_get_mode(csdev))
+		return true;
+
+	return false;
+}
+
 static int __etm4_cpu_save(struct etmv4_drvdata *drvdata)
 {
 	int ret = 0;
@@ -1924,13 +1939,14 @@ static void etm4_cpu_restore(struct coresight_device *csdev)
 }
 
 static const struct coresight_ops_source etm4_source_ops = {
-	.cpu_id		= etm4_cpu_id,
-	.enable		= etm4_enable,
-	.disable	= etm4_disable,
-	.resume_perf	= etm4_resume_perf,
-	.pause_perf	= etm4_pause_perf,
-	.save		= etm4_cpu_save,
-	.restore	= etm4_cpu_restore,
+	.cpu_id			   = etm4_cpu_id,
+	.enable			   = etm4_enable,
+	.disable		   = etm4_disable,
+	.resume_perf		   = etm4_resume_perf,
+	.pause_perf		   = etm4_pause_perf,
+	.save			   = etm4_cpu_save,
+	.restore		   = etm4_cpu_restore,
+	.need_context_save_restore = etm4_need_context_save_restore,
 };
 
 static const struct coresight_ops etm4_cs_ops = {

@@ -421,6 +421,20 @@ int coresight_resume_source(struct coresight_device *csdev)
 }
 EXPORT_SYMBOL_GPL(coresight_resume_source);
 
+static bool coresight_need_save_restore_source(struct coresight_device *csdev)
+{
+	if (!csdev)
+		return false;
+
+	if (source_ops(csdev)->need_context_save_restore)
+		return source_ops(csdev)->need_context_save_restore(csdev);
+
+	if (coresight_get_mode(csdev))
+		return true;
+
+	return false;
+}
+
 static int coresight_save_source(struct coresight_device *csdev)
 {
 	if (csdev && source_ops(csdev)->save)
@@ -1594,7 +1608,7 @@ static int coresight_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
 	unsigned int cpu = smp_processor_id();
 	struct coresight_device *source = per_cpu(csdev_source, cpu);
 
-	if (!source)
+	if (!coresight_need_save_restore_source(source))
 		return NOTIFY_OK;
 
 	switch (cmd) {
