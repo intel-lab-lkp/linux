@@ -4245,8 +4245,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 * __schedule().  See the comment for smp_mb__after_spinlock().
 		 *
 		 * Form a control-dep-acquire with p->on_rq == 0 above, to ensure
-		 * schedule()'s deactivate_task() has 'happened' and p will no longer
-		 * care about it's own p->state. See the comment in __schedule().
+		 * schedule()'s try_to_block_task() has 'happened' and p will no longer
+		 * care about its own p->state. See the comment in try_to_block_task().
 		 */
 		smp_acquire__after_ctrl_dep();
 
@@ -6647,8 +6647,8 @@ static void __sched notrace __schedule(int sched_mode)
 	preempt = sched_mode == SM_PREEMPT;
 
 	/*
-	 * We must load prev->state once (task_struct::state is volatile), such
-	 * that we form a control dependency vs deactivate_task() below.
+	 * We must load prev->state once, such that we form a control
+	 * dependency vs try_to_block_task() below.
 	 */
 	prev_state = READ_ONCE(prev->__state);
 	if (sched_mode == SM_IDLE) {
