@@ -70,6 +70,12 @@ static inline struct sk_buff *virtio_vsock_alloc_skb(unsigned int size, gfp_t ma
 	return skb;
 }
 
+static inline struct sk_buff *
+virtio_vsock_alloc_linear_skb(unsigned int size, gfp_t mask)
+{
+	return virtio_vsock_alloc_skb(size, mask);
+}
+
 static inline void
 virtio_vsock_skb_queue_head(struct sk_buff_head *list, struct sk_buff *skb)
 {
