@@ -34,6 +34,7 @@ properties:
       - samsung,exynos7870-usbdrd-phy
       - samsung,exynos850-usbdrd-phy
       - samsung,exynos990-usbdrd-phy
+      - samsung,exynosautov920-usbdrd-phy
 
   clocks:
     minItems: 1
@@ -109,6 +110,15 @@ properties:
 
   vddh-usbdp-supply:
     description: VDDh power supply for the USB DP phy.
+
+  avdd075_usb-supply:
+    description: 0.75V power supply for USB phy
+
+  avdd18_usb20-supply:
+    description: 1.8V power supply for USB phy
+
+  avdd33_usb20-supply:
+    description: 3.3V power supply for USB phy
 
 required:
   - compatible
@@ -235,6 +245,33 @@ allOf:
 
         reg-names:
           maxItems: 1
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - samsung,exynosautov920-usbdrd-phy
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+
+        clock-names:
+          items:
+            - const: phy
+            - const: ref
+
+        reg:
+          maxItems: 1
+
+        reg-names:
+          maxItems: 1
+
+      required:
+        - avdd075_usb-supply
+        - avdd18_usb20-supply
+        - avdd33_usb20-supply
 
 unevaluatedProperties: false
 
