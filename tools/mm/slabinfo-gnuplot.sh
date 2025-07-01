@@ -38,6 +38,23 @@ usage()
 	echo "-r %d,%d		- use data samples from a given range"
 }
 
+
+# This varialble could have space separated commands
+my_needed_commands="gnuplot"
+
+missing_counter=0
+for needed_command in $my_needed_commands; do
+  if ! hash "$needed_command" >/dev/null 2>&1; then
+    printf "Command not found in PATH: %s\n" "$needed_command" >&2
+    ((missing_counter++))
+  fi
+done
+
+if ((missing_counter > 0)); then
+  printf "Minimum %d commands are missing in PATH, aborting\n" "$missing_counter" >&2
+  exit 1
+fi
+
 check_file_exist()
 {
 	if [ ! -f "$1" ]; then
@@ -58,13 +75,13 @@ do_slabs_plotting()
 
 	check_file_exist "$file"
 
-	out_file=`basename "$file"`
+	out_file=$(basename "$file")
 	if [ $xmax -ne 0 ]; then
 		range="$range::$xmax"
 		lines=$((xmax-xmin))
 	fi
 
-	wc_lines=`cat "$file" | wc -l`
+	wc_lines=$(cat "$file" | wc -l)
 	if [ $? -ne 0 ] || [ "$wc_lines" -eq 0 ] ; then
 		wc_lines=$lines
 	fi
@@ -78,7 +95,7 @@ do_slabs_plotting()
 		xtic_rotate=90
 	fi
 
-gnuplot -p << EOF
+$(command -v gnuplot) -p << EOF
 #!/usr/bin/env gnuplot
 
 set terminal png enhanced size $width,$height large
@@ -113,14 +130,14 @@ do_totals_plotting()
 	for i in "${t_files[@]}"; do
 		check_file_exist "$i"
 
-		file="$file"`basename "$i"`
+		file="$file"$(basename "$i")
 		gnuplot_cmd="$gnuplot_cmd '$i' $range using 1 title\
 			'$i Memory usage' with lines,"
 		gnuplot_cmd="$gnuplot_cmd '' $range using 2 title \
 			'$i Loss' with lines,"
 	done
 
-gnuplot -p << EOF
+$(command -v gnuplot) -p << EOF
 #!/usr/bin/env gnuplot
 
 set terminal png enhanced size $width,$height large
@@ -148,26 +165,26 @@ do_preprocess()
 
 	# use only 'TOP' slab (biggest memory usage or loss)
 	let lines=3
-	out=`basename "$in"`"-slabs-by-loss"
-	`cat "$in" | grep -A "$lines" 'Slabs sorted by loss' |\
+	out=$(basename "$in")"-slabs-by-loss"
+	$(cat "$in" | grep -A "$lines" 'Slabs sorted by loss' |\
 		grep -E -iv '\-\-|Name|Slabs'\
-		| awk '{print $1" "$4+$2*$3" "$4}' > "$out"`
+		| awk '{print $1" "$4+$2*$3" "$4}' > "$out")
 	if [ $? -eq 0 ]; then
 		do_slabs_plotting "$out"
 	fi
 
 	let lines=3
-	out=`basename "$in"`"-slabs-by-size"
-	`cat "$in" | grep -A "$lines" 'Slabs sorted by size' |\
+	out=$(basename "$in")"-slabs-by-size"
+	$(cat "$in" | grep -A "$lines" 'Slabs sorted by size' |\
 		grep -E -iv '\-\-|Name|Slabs'\
-		| awk '{print $1" "$4" "$4-$2*$3}' > "$out"`
+		| awk '{print $1" "$4" "$4-$2*$3}' > "$out")
 	if [ $? -eq 0 ]; then
 		do_slabs_plotting "$out"
 	fi
 
-	out=`basename "$in"`"-totals"
-	`cat "$in" | grep "Memory used" |\
-		awk '{print $3" "$7}' > "$out"`
+	out=$(basename "$in")"-totals"
+	$(cat "$in" | grep "Memory used" |\
+		awk '{print $3" "$7}' > "$out")
 	if [ $? -eq 0 ]; then
 		t_files[0]=$out
 		do_totals_plotting
