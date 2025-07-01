@@ -1448,7 +1448,10 @@ static unsigned long damon_get_intervals_score(struct damon_ctx *c)
 			access_events += sz_region * r->nr_accesses;
 		}
 	}
-	target_access_events = max_access_events * goal_bp / 10000;
+	if (likely(max_access_events) > 0)
+		target_access_events = max_access_events * goal_bp / 10000;
+	else
+		target_access_events = 1;
 	return access_events * 10000 / target_access_events;
 }
 
