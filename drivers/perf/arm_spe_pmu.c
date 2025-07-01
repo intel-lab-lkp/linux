@@ -559,7 +559,12 @@ static void arm_spe_perf_aux_output_end(struct perf_output_handle *handle)
 
 static void arm_spe_pmu_disable_and_drain_local(void)
 {
-	/* Disable profiling at EL0 and EL1 */
+	/*
+	 * To prevent the CONSTRAINED UNPREDICTABLE behavior of either writing
+	 * to memory after the buffer is disabled, or SPE reporting an access
+	 * not allowed event, we must disable sampling before draining the
+	 * buffer.
+	 */
 	write_sysreg_s(0, SYS_PMSCR_EL1);
 	isb();
 
@@ -661,16 +666,24 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 	 */
 	irq_work_run();
 
+	/*
+	 * arm_spe_pmu_buf_get_fault_act() already drained, and PMBSR_EL1.S == 1
+	 * means that StatisticalProfilingEnabled() == false. So now we can
+	 * safely disable the buffer.
+	 */
+	write_sysreg_s(0, SYS_PMBLIMITR_EL1);
+	isb();
+
+	/* Status can be cleared now that PMBLIMITR_EL1.E == 0 */
+	write_sysreg_s(0, SYS_PMBSR_EL1);
+
 	switch (act) {
 	case SPE_PMU_BUF_FAULT_ACT_FATAL:
 		/*
-		 * If a fatal exception occurred then leaving the profiling
-		 * buffer enabled is a recipe waiting to happen. Since
-		 * fatal faults don't always imply truncation, make sure
-		 * that the profiling buffer is disabled explicitly before
-		 * clearing the syndrome register.
+		 * To complete the full disable sequence, also disable profiling
+		 * at EL0 and EL1, we don't want to continue at all anymore.
 		 */
-		arm_spe_pmu_disable_and_drain_local();
+		write_sysreg_s(0, SYS_PMSCR_EL1);
 		break;
 	case SPE_PMU_BUF_FAULT_ACT_OK:
 		/*
@@ -679,18 +692,14 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 		 * PMBPTR might be misaligned, but we'll burn that bridge
 		 * when we get to it.
 		 */
-		if (!(handle->aux_flags & PERF_AUX_FLAG_TRUNCATED)) {
+		if (!(handle->aux_flags & PERF_AUX_FLAG_TRUNCATED))
 			arm_spe_perf_aux_output_begin(handle, event);
-			isb();
-		}
 		break;
 	case SPE_PMU_BUF_FAULT_ACT_SPURIOUS:
 		/* We've seen you before, but GCC has the memory of a sieve. */
 		break;
 	}
 
-	/* The buffer pointers are now sane, so resume profiling. */
-	write_sysreg_s(0, SYS_PMBSR_EL1);
 	return IRQ_HANDLED;
 }
 
