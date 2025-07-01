@@ -38,19 +38,16 @@
  * Generate DTR/RTS signals on the port using the SET_CONTROL_LINE_STATE request
  * in CDC ACM.
  */
-static int usb_wwan_send_setup(struct usb_serial_port *port)
+static int usb_wwan_send_setup(struct usb_serial_port *port, int rts_state, int dtr_state)
 {
 	struct usb_serial *serial = port->serial;
-	struct usb_wwan_port_private *portdata;
 	int val = 0;
 	int ifnum;
 	int res;
 
-	portdata = usb_get_serial_port_data(port);
-
-	if (portdata->dtr_state)
+	if (dtr_state)
 		val |= USB_CDC_CTRL_DTR;
-	if (portdata->rts_state)
+	if (rts_state)
 		val |= USB_CDC_CTRL_RTS;
 
 	ifnum = serial->interface->cur_altsetting->desc.bInterfaceNumber;
@@ -80,11 +77,12 @@ void usb_wwan_dtr_rts(struct usb_serial_port *port, int on)
 		return;
 
 	portdata = usb_get_serial_port_data(port);
-	/* FIXME: locking */
+	{
+	guard(mutex)(&portdata->lock);
 	portdata->rts_state = on;
 	portdata->dtr_state = on;
-
-	usb_wwan_send_setup(port);
+	}
+	usb_wwan_send_setup(port,on,on);
 }
 EXPORT_SYMBOL(usb_wwan_dtr_rts);
 
@@ -113,14 +111,15 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 	struct usb_serial_port *port = tty->driver_data;
 	struct usb_wwan_port_private *portdata;
 	struct usb_wwan_intf_private *intfdata;
+	int rts, dtr;
 
 	portdata = usb_get_serial_port_data(port);
 	intfdata = usb_get_serial_data(port->serial);
 
 	if (!intfdata->use_send_setup)
 		return -EINVAL;
-
-	/* FIXME: what locks portdata fields ? */
+	{
+	guard(mutex)(&portdata->lock);
 	if (set & TIOCM_RTS)
 		portdata->rts_state = 1;
 	if (set & TIOCM_DTR)
@@ -130,7 +129,11 @@ int usb_wwan_tiocmset(struct tty_struct *tty,
 		portdata->rts_state = 0;
 	if (clear & TIOCM_DTR)
 		portdata->dtr_state = 0;
-	return usb_wwan_send_setup(port);
+
+	rts = portdata->rts_state;
+	dtr = portdata->dtr_state;
+	}
+	return usb_wwan_send_setup(port, rts, dtr);
 }
 EXPORT_SYMBOL(usb_wwan_tiocmset);
 
@@ -452,7 +455,7 @@ int usb_wwan_port_probe(struct usb_serial_port *port)
 	portdata = kzalloc(sizeof(*portdata), GFP_KERNEL);
 	if (!portdata)
 		return -ENOMEM;
-
+	mutex_init(&portdata->lock);
 	init_usb_anchor(&portdata->delayed);
 
 	for (i = 0; i < N_IN_URB; i++) {
