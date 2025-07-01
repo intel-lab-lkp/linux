@@ -30,6 +30,27 @@ struct airoha_npu {
 					    u32 entry_size, u32 hash,
 					    bool ppe2);
 		int (*wlan_init_reserved_memory)(struct airoha_npu *npu);
+		int (*wlan_set_txrx_reg_addr)(struct airoha_npu *npu,
+					      int ifindex, u32 dir,
+					      u32 in_counter_addr,
+					      u32 out_status_addr,
+					      u32 out_counter_addr);
+		int (*wlan_set_pcie_port_type)(struct airoha_npu *npu,
+					       int ifindex, u32 port_type);
+		int (*wlan_set_pcie_addr)(struct airoha_npu *npu, int ifindex,
+					  u32 addr);
+		int (*wlan_set_desc)(struct airoha_npu *npu, int ifindex,
+				     u32 desc);
+		int (*wlan_set_tx_ring_pcie_addr)(struct airoha_npu *npu,
+						  int ifindex, u32 addr);
+		int (*wlan_get_rx_desc_base)(struct airoha_npu *npu,
+					     int ifindex, u32 *data);
+		int (*wlan_set_tx_buf_space_base)(struct airoha_npu *npu,
+						  int ifindex, u32 addr);
+		int (*wlan_set_rx_ring_for_txdone)(struct airoha_npu *npu,
+						   int ifindex, u32 addr);
+		u32 (*wlan_get_queue_addr)(struct airoha_npu *npu, int qid,
+					   bool xmit);
 	} ops;
 };
 
