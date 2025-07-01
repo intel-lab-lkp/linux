@@ -746,10 +746,6 @@ static struct phy_driver smsc_phy_driver[] = {
 	.soft_reset	= smsc_phy_reset,
 	.config_aneg	= lan87xx_config_aneg,
 
-	/* IRQ related */
-	.config_intr	= smsc_phy_config_intr,
-	.handle_interrupt = smsc_phy_handle_interrupt,
-
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
 	.get_strings	= smsc_get_strings,
