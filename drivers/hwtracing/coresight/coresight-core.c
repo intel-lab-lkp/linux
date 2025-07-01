@@ -391,6 +391,25 @@ static void coresight_disable_helper(struct coresight_device *csdev, void *data)
 	helper_ops(csdev)->disable(csdev, data);
 }
 
+static int coresight_enable_helpers(struct coresight_device *csdev,
+				    enum cs_mode mode, void *data)
+{
+	int i, ret = 0;
+	struct coresight_device *helper;
+
+	for (i = 0; i < csdev->pdata->nr_outconns; ++i) {
+		helper = csdev->pdata->out_conns[i]->dest_dev;
+		if (!helper || !coresight_is_helper(helper))
+			continue;
+
+		ret = coresight_enable_helper(helper, mode, data);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static void coresight_disable_helpers(struct coresight_device *csdev, void *data)
 {
 	int i;
@@ -478,6 +497,43 @@ static void coresight_restore_source(struct coresight_device *csdev)
 		source_ops(csdev)->restore(csdev);
 }
 
+static int coresight_save_percpu_sink(struct coresight_device *csdev)
+{
+	int ret;
+
+	if (csdev && sink_ops(csdev)->save) {
+		ret = sink_ops(csdev)->save(csdev);
+		if (ret)
+			return ret;
+
+		coresight_disable_helpers(csdev, NULL);
+	}
+
+	/* Return success if callback is not supported */
+	return 0;
+}
+
+static int coresight_restore_percpu_sink(struct coresight_device *csdev,
+					 struct coresight_path *path,
+					 enum cs_mode mode)
+{
+	int ret = 0;
+
+	if (csdev && sink_ops(csdev)->restore) {
+		ret = coresight_enable_helpers(csdev, mode, path);
+		if (ret)
+			return ret;
+
+		ret = sink_ops(csdev)->restore(csdev);
+		if (ret) {
+			coresight_disable_helpers(csdev, path);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 /*
  * coresight_disable_path_from : Disable components in the given path beyond
  * @nd in the list. If @nd is NULL, all the components, except the SOURCE are
@@ -550,25 +606,6 @@ void coresight_disable_path(struct coresight_path *path)
 	coresight_disable_path_from(path, NULL, false);
 }
 EXPORT_SYMBOL_GPL(coresight_disable_path);
-
-static int coresight_enable_helpers(struct coresight_device *csdev,
-				    enum cs_mode mode, void *data)
-{
-	int i, ret = 0;
-	struct coresight_device *helper;
-
-	for (i = 0; i < csdev->pdata->nr_outconns; ++i) {
-		helper = csdev->pdata->out_conns[i]->dest_dev;
-		if (!helper || !coresight_is_helper(helper))
-			continue;
-
-		ret = coresight_enable_helper(helper, mode, data);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
 
 static int _coresight_enable_path(struct coresight_path *path,
 				  enum cs_mode mode, void *sink_data,
@@ -1667,9 +1704,12 @@ EXPORT_SYMBOL_GPL(coresight_alloc_device_name);
 static int coresight_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
 				   void *v)
 {
+	int ret;
 	unsigned int cpu = smp_processor_id();
 	struct coresight_device *source = per_cpu(csdev_source, cpu);
 	struct coresight_path *path;
+	struct coresight_device *sink;
+	enum cs_mode mode;
 
 	if (!coresight_need_save_restore_source(source))
 		return NOTIFY_OK;
@@ -1682,18 +1722,33 @@ static int coresight_cpu_pm_notify(struct notifier_block *nb, unsigned long cmd,
 	if (WARN_ON(!path))
 		return NOTIFY_BAD;
 
+	sink = coresight_get_sink(path);
+	mode = coresight_get_mode(source);
+
 	switch (cmd) {
 	case CPU_PM_ENTER:
 		if (coresight_save_source(source))
 			return NOTIFY_BAD;
 
-		coresight_disable_path_from(path, NULL, true);
+		ret = 0;
+		if (coresight_is_percpu_sink(sink))
+			ret = coresight_save_percpu_sink(sink);
+		else
+			coresight_disable_path_from(path, NULL, true);
+
+		if (ret) {
+			coresight_restore_source(source);
+			return NOTIFY_BAD;
+		}
 		break;
 	case CPU_PM_EXIT:
 	case CPU_PM_ENTER_FAILED:
-		if (_coresight_enable_path(path,
-					   coresight_get_mode(source),
-					   NULL, true))
+		if (coresight_is_percpu_sink(sink))
+			ret = coresight_restore_percpu_sink(sink, path, mode);
+		else
+			ret = _coresight_enable_path(path, mode, NULL, true);
+
+		if (ret)
 			return NOTIFY_BAD;
 
 		coresight_restore_source(source);
