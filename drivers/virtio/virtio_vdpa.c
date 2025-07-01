@@ -147,7 +147,6 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 {
 	struct virtio_vdpa_device *vd_dev = to_virtio_vdpa_device(vdev);
 	struct vdpa_device *vdpa = vd_get_vdpa(vdev);
-	struct device *dma_dev;
 	const struct vdpa_config_ops *ops = vdpa->config;
 	struct virtio_vdpa_vq_info *info;
 	bool (*notify)(struct virtqueue *vq) = virtio_vdpa_notify;
@@ -159,6 +158,7 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 	unsigned long flags;
 	u32 align, max_num, min_num = 1;
 	bool may_reduce_num = true;
+	void *map_token;
 	int err;
 
 	if (!name)
@@ -201,13 +201,13 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 	/* Create the vring */
 	align = ops->get_vq_align(vdpa);
 
-	if (ops->get_vq_dma_dev)
-		dma_dev = ops->get_vq_dma_dev(vdpa, index);
+	if (ops->get_vq_map_token)
+		map_token = ops->get_vq_map_token(vdpa, index);
 	else
-		dma_dev = vdpa_get_dma_dev(vdpa);
+		map_token = vdpa_get_map_token(vdpa);
 	vq = vring_create_virtqueue_map(index, max_num, align, vdev,
 					true, may_reduce_num, ctx,
-					notify, callback, name, dma_dev);
+					notify, callback, name, map_token);
 	if (!vq) {
 		err = -ENOMEM;
 		goto error_new_virtqueue;
@@ -497,7 +497,7 @@ static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 	if (!vd_dev)
 		return -ENOMEM;
 
-	vd_dev->vdev.dev.parent = vdpa_get_dma_dev(vdpa);
+	vd_dev->vdev.dev.parent = vdpa_get_map_token(vdpa);
 	vd_dev->vdev.dev.release = virtio_vdpa_release_dev;
 	vd_dev->vdev.config = &virtio_vdpa_config_ops;
 	vd_dev->vdpa = vdpa;
