@@ -12,18 +12,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-static unsigned long node0_start_addr __read_mostly;
-module_param(node0_start_addr, ulong, 0600);
-
-static unsigned long node0_end_addr __read_mostly;
-module_param(node0_end_addr, ulong, 0600);
-
-static unsigned long node1_start_addr __read_mostly;
-module_param(node1_start_addr, ulong, 0600);
-
-static unsigned long node1_end_addr __read_mostly;
-module_param(node1_end_addr, ulong, 0600);
-
 static unsigned long node0_mem_used_bp __read_mostly = 9970;
 module_param(node0_mem_used_bp, ulong, 0600);
 
@@ -44,6 +32,28 @@ MODULE_PARM_DESC(enable, "Enable of disable DAMON_SAMPLE_MTIER");
 
 static struct damon_ctx *ctxs[2];
 
+struct region_range {
+	phys_addr_t start;
+	phys_addr_t end;
+};
+
+static int numa_info_init(int target_node, struct region_range *range) {
+
+	if (!node_online(target_node)) {
+		pr_err("NUMA node %d is not online\n", target_node);
+		return -EINVAL;
+	}
+
+	/* TODO: Do we need to support more accurate region range?  */
+	unsigned long start_pfn = node_start_pfn(target_node);
+	unsigned long end_pfn   = node_end_pfn(target_node);
+
+	range->start = (phys_addr_t)start_pfn << PAGE_SHIFT;
+	range->end  = (phys_addr_t)end_pfn << PAGE_SHIFT;
+
+	return 0;
+}
+
 static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 {
 	struct damon_ctx *ctx;
@@ -53,6 +63,7 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	struct damos *scheme;
 	struct damos_quota_goal *quota_goal;
 	struct damos_filter *filter;
+	struct region_range addr;
 
 	ctx = damon_new_ctx();
 	if (!ctx)
@@ -82,9 +93,12 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	if (!target)
 		goto free_out;
 	damon_add_target(ctx, target);
-	region = damon_new_region(
-			promote ? node1_start_addr : node0_start_addr,
-			promote ? node1_end_addr : node0_end_addr);
+
+	int ret = promote ? numa_info_init(1, &addr) : numa_info_init(0, &addr);
+	if (ret)
+		goto free_out;
+
+	region = damon_new_region(addr.start, addr.end);
 	if (!region)
 		goto free_out;
 	damon_add_region(region, target);
