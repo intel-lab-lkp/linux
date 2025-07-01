@@ -2183,6 +2183,8 @@ int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 				   struct ath12k_wmi_peer_assoc_arg *arg)
 {
 	struct ath12k_wmi_pdev *wmi = ar->wmi;
+	struct ath12k_base *ab = ar->ab;
+	struct ath12k_link_vif *arvif;
 	struct wmi_peer_assoc_complete_cmd *cmd;
 	struct ath12k_wmi_vht_rate_set_params *mcs;
 	struct ath12k_wmi_he_rate_set_params *he_mcs;
@@ -2197,6 +2199,13 @@ int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 	int i, ret, len;
 	u16 eml_cap;
 	__le32 v;
+
+	arvif = ath12k_mac_get_arvif(ar, arg->vdev_id);
+	if (!arvif) {
+		ath12k_warn(ab, "failed to find arvif with vdev id %d\n",
+			    arg->vdev_id);
+		return -EINVAL;
+	}
 
 	peer_legacy_rates_align = roundup(arg->peer_legacy_rates.num_rates,
 					  sizeof(u32));
@@ -2333,8 +2342,14 @@ int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 		he_mcs->tlv_header = ath12k_wmi_tlv_cmd_hdr(WMI_TAG_HE_RATE_SET,
 							    sizeof(*he_mcs));
 
-		he_mcs->rx_mcs_set = cpu_to_le32(arg->peer_he_rx_mcs_set[i]);
-		he_mcs->tx_mcs_set = cpu_to_le32(arg->peer_he_tx_mcs_set[i]);
+		if (arvif->ahvif->vdev_type == WMI_VDEV_TYPE_STA) {
+			he_mcs->rx_mcs_set = cpu_to_le32(arg->peer_he_rx_mcs_set[i]);
+			he_mcs->tx_mcs_set = cpu_to_le32(arg->peer_he_tx_mcs_set[i]);
+
+		} else {
+			he_mcs->rx_mcs_set = cpu_to_le32(arg->peer_he_tx_mcs_set[i]);
+			he_mcs->tx_mcs_set = cpu_to_le32(arg->peer_he_rx_mcs_set[i]);
+		}
 		ptr += sizeof(*he_mcs);
 	}
 
