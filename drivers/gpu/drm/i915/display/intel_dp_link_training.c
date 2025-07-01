@@ -252,6 +252,7 @@ int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int lttpr_count = 0;
+	u8 adapter_cap = 0;
 
 	/*
 	 * Detecting LTTPRs must be avoided on platforms with an AUX timeout
@@ -276,6 +277,12 @@ int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 		intel_dp_reset_lttpr_common_caps(intel_dp);
 		return -EIO;
 	}
+
+	/* Read DP_ADAPTET_CAP to pass LinkLayer CTS */
+	drm_dp_dpcd_readb(&intel_dp->aux, DP_ADAPTER_CAP,
+				   &adapter_cap);
+	drm_dp_dpcd_readb(&intel_dp->aux, 0x220f,
+				   &adapter_cap);
 
 	return lttpr_count;
 }
