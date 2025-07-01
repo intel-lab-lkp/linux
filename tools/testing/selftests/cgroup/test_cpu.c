@@ -646,8 +646,8 @@ static int test_cpucg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
 	long usage_usec, user_usec;
-	long usage_seconds = 1;
-	long expected_usage_usec = usage_seconds * USEC_PER_SEC;
+	long duration_seconds = 1;
+	long duration_usec = duration_seconds * USEC_PER_SEC;
 	char *cpucg;
 
 	cpucg = cg_name(root, "cpucg_test");
@@ -663,7 +663,7 @@ static int test_cpucg_max(const char *root)
 	struct cpu_hog_func_param param = {
 		.nprocs = 1,
 		.ts = {
-			.tv_sec = usage_seconds,
+			.tv_sec = duration_seconds,
 			.tv_nsec = 0,
 		},
 		.clock_type = CPU_HOG_CLOCK_WALL,
@@ -676,10 +676,10 @@ static int test_cpucg_max(const char *root)
 	if (user_usec <= 0)
 		goto cleanup;
 
-	if (user_usec >= expected_usage_usec)
+	if (user_usec >= duration_usec)
 		goto cleanup;
 
-	if (values_close(usage_usec, expected_usage_usec, 95))
+	if (values_close(usage_usec, duration_usec, 95))
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -699,8 +699,8 @@ static int test_cpucg_max_nested(const char *root)
 {
 	int ret = KSFT_FAIL;
 	long usage_usec, user_usec;
-	long usage_seconds = 1;
-	long expected_usage_usec = usage_seconds * USEC_PER_SEC;
+	long duration_seconds = 1;
+	long duration_usec = duration_seconds * USEC_PER_SEC;
 	char *parent, *child;
 
 	parent = cg_name(root, "cpucg_parent");
@@ -723,7 +723,7 @@ static int test_cpucg_max_nested(const char *root)
 	struct cpu_hog_func_param param = {
 		.nprocs = 1,
 		.ts = {
-			.tv_sec = usage_seconds,
+			.tv_sec = duration_seconds,
 			.tv_nsec = 0,
 		},
 		.clock_type = CPU_HOG_CLOCK_WALL,
@@ -736,10 +736,10 @@ static int test_cpucg_max_nested(const char *root)
 	if (user_usec <= 0)
 		goto cleanup;
 
-	if (user_usec >= expected_usage_usec)
+	if (user_usec >= duration_usec)
 		goto cleanup;
 
-	if (values_close(usage_usec, expected_usage_usec, 95))
+	if (values_close(usage_usec, duration_usec, 95))
 		goto cleanup;
 
 	ret = KSFT_PASS;
