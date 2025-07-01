@@ -558,12 +558,20 @@ void page_cache_sync_ra(struct readahead_control *ractl,
 	 * Even if readahead is disabled, issue this request as readahead
 	 * as we'll need it to satisfy the requested range. The forced
 	 * readahead will do the right thing and limit the read to just the
-	 * requested range, which we'll set to 1 page for this case.
+	 * requested range.
 	 */
-	if (!ra->ra_pages || blk_cgroup_congested()) {
+	if (blk_cgroup_congested()) {
 		if (!ractl->file)
 			return;
+		/*
+		 * If the cgroup is congested, ensure to do at least 1 page of
+		 * readahead to make progress on the read.
+		 */
 		req_count = 1;
+		do_forced_ra = true;
+	} else if (!ra->ra_pages) {
+		if (!ractl->file)
+			return;
 		do_forced_ra = true;
 	}
 
