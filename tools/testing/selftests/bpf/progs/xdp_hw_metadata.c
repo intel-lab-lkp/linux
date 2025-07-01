@@ -27,6 +27,7 @@ extern int bpf_xdp_metadata_rx_vlan_tag(const struct xdp_md *ctx,
 SEC("xdp.frags")
 int rx(struct xdp_md *ctx)
 {
+	int metalen_used, metalen_to_adjust;
 	void *data, *data_meta, *data_end;
 	struct ipv6hdr *ip6h = NULL;
 	struct udphdr *udp = NULL;
@@ -72,7 +73,14 @@ int rx(struct xdp_md *ctx)
 		return XDP_PASS;
 	}
 
-	err = bpf_xdp_adjust_meta(ctx, -(int)sizeof(struct xdp_meta));
+	metalen_used = ctx->data - ctx->data_meta;
+	metalen_to_adjust = XDP_METADATA_SIZE - metalen_used;
+	if (metalen_to_adjust < (int)sizeof(struct xdp_meta)) {
+		__sync_add_and_fetch(&pkts_skip, 1);
+		return XDP_PASS;
+	}
+
+	err = bpf_xdp_adjust_meta(ctx, -metalen_to_adjust);
 	if (err) {
 		__sync_add_and_fetch(&pkts_fail, 1);
 		return XDP_PASS;

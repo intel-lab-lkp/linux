@@ -37,6 +37,7 @@ extern int bpf_xdp_metadata_rx_vlan_tag(const struct xdp_md *ctx,
 SEC("xdp")
 int rx(struct xdp_md *ctx)
 {
+	int metalen_used, metalen_to_adjust;
 	void *data, *data_meta, *data_end;
 	struct ipv6hdr *ip6h = NULL;
 	struct ethhdr *eth = NULL;
@@ -73,7 +74,12 @@ int rx(struct xdp_md *ctx)
 
 	/* Reserve enough for all custom metadata. */
 
-	ret = bpf_xdp_adjust_meta(ctx, -(int)sizeof(struct xdp_meta));
+	metalen_used = ctx->data - ctx->data_meta;
+	metalen_to_adjust = XDP_METADATA_SIZE - metalen_used;
+	if (metalen_to_adjust < (int)sizeof(struct xdp_meta))
+		return XDP_DROP;
+
+	ret = bpf_xdp_adjust_meta(ctx, -metalen_to_adjust);
 	if (ret != 0)
 		return XDP_DROP;
 
