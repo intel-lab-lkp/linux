@@ -3774,6 +3774,21 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	return 1;
 }
 
+static inline bool ttwu_do_migrate(struct task_struct *p, int cpu)
+{
+	if (task_cpu(p) == cpu)
+		return false;
+
+	if (p->in_iowait) {
+		delayacct_blkio_end(p);
+		atomic_dec(&task_rq(p)->nr_iowait);
+	}
+
+	psi_ttwu_dequeue(p);
+	set_task_cpu(p, cpu);
+	return true;
+}
+
 void sched_ttwu_pending(void *arg)
 {
 	struct llist_node *llist = arg;
@@ -4268,17 +4283,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 * their previous state and preserve Program Order.
 		 */
 		smp_cond_load_acquire(&p->on_cpu, !VAL);
-
-		if (task_cpu(p) != cpu) {
-			if (p->in_iowait) {
-				delayacct_blkio_end(p);
-				atomic_dec(&task_rq(p)->nr_iowait);
-			}
-
+		if (ttwu_do_migrate(p, cpu))
 			wake_flags |= WF_MIGRATED;
-			psi_ttwu_dequeue(p);
-			set_task_cpu(p, cpu);
-		}
 
 		ttwu_queue(p, cpu, wake_flags);
 	}
