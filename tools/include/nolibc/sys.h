@@ -14,7 +14,6 @@
 
 /* system includes */
 #include <linux/unistd.h>
-#include <linux/signal.h>  /* for SIGCHLD */
 #include <linux/termios.h>
 #include <linux/mman.h>
 #include <linux/fs.h>
@@ -23,6 +22,7 @@
 #include <linux/auxvec.h>
 #include <linux/fcntl.h> /* for O_* and AT_* */
 #include <linux/stat.h>  /* for statx() */
+/* signal definitions are included by arch.h */
 
 #include "errno.h"
 #include "stdarg.h"

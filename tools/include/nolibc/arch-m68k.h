@@ -13,6 +13,16 @@
 #include "compiler.h"
 #include "crt.h"
 
+/*
+ * Needed to get the correct struct sigaction definition. m68k does not use
+ * sa_restorer, but it is included in the structure.
+ */
+#define SA_RESTORER	0x04000000
+
+/* Avoid linux/signal.h, it has an incorrect _NSIG and sigset_t */
+#include <asm-generic/signal.h>
+#include <asm-generic/siginfo.h>
+
 #define _NOLIBC_SYSCALL_CLOBBERLIST "memory"
 
 #define my_syscall0(num)                                                      \

@@ -14,6 +14,9 @@
 #error Unsupported MIPS ABI
 #endif
 
+/* Architecture has a usable linux/signal.h */
+#include <linux/signal.h>
+
 /* Syscalls for MIPS ABI O32 :
  *   - WARNING! there's always a delayed slot!
  *   - WARNING again, the syntax is different, registers take a '$' and numbers

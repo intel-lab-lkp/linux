@@ -1750,6 +1750,57 @@ static int run_protection(int min __attribute__((unused)),
 	}
 }
 
+volatile int signal_check;
+
+void test_sighandler(int signum)
+{
+	if (signum == SIGUSR1) {
+		kill(getpid(), SIGUSR2);
+		signal_check = 1;
+	} else {
+		signal_check++;
+	}
+}
+
+int run_signal(int min, int max)
+{
+	struct sigaction sa = {
+		.sa_flags = 0,
+		.sa_handler = test_sighandler,
+	};
+	int llen; /* line length */
+	int ret = 0;
+	int res;
+
+	(void)min;
+	(void)max;
+
+	signal_check = 0;
+
+	sigemptyset(&sa.sa_mask);
+	sigaddset(&sa.sa_mask, SIGUSR2);
+
+	res = sigaction(SIGUSR1, &sa, NULL);
+	llen = printf("register SIGUSR1: %d", res);
+	EXPECT_EQ(1, 0, res);
+	res = sigaction(SIGUSR2, &sa, NULL);
+	llen = printf("register SIGUSR2: %d", res);
+	EXPECT_EQ(1, 0, res);
+
+	/* Trigger the first signal. */
+	kill(getpid(), SIGUSR1);
+
+	/* If signal_check is 1 or higher, then signal emission worked */
+	llen = printf("signal emission: 1 <= signal_check");
+	EXPECT_GE(1, signal_check, 1);
+
+	/* If it is 2, then signal masking worked */
+	llen = printf("signal masking: 2 == signal_check");
+	EXPECT_EQ(1, signal_check, 2);
+
+	return ret;
+}
+
 /* prepare what needs to be prepared for pid 1 (stdio, /dev, /proc, etc) */
 int prepare(void)
 {
@@ -1815,6 +1866,7 @@ static const struct test test_names[] = {
 	{ .name = "stdlib",     .func = run_stdlib     },
 	{ .name = "printf",     .func = run_printf     },
 	{ .name = "protection", .func = run_protection },
+	{ .name = "signal",     .func = run_signal },
 	{ 0 }
 };
 

@@ -12,6 +12,19 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* Otherwise we would need to use sigreturn instead of rt_sigreturn */
+#define _NOLIBC_ARCH_FORCE_SIG_FLAGS SA_SIGINFO
+
+/* The includes are sane, if one sets __WANT_POSIX1B_SIGNALS__ */
+#define __WANT_POSIX1B_SIGNALS__
+#include <linux/signal.h>
+
+/*
+ * sparc has ODD_RT_SIGACTION, we always pass our restorer as an argument
+ * to rt_sigaction. The restorer is implemented in this file.
+ */
+#define _NOLIBC_RT_SIGACTION_PASSES_RESTORER
+
 /*
  * Syscalls for SPARC:
  *   - registers are native word size
@@ -187,5 +200,35 @@ pid_t sys_fork(void)
 		return ret;
 }
 #define sys_fork sys_fork
+
+#define __nolibc_stringify_1(x...)     #x
+#define __nolibc_stringify(x...)       __stringify_1(x)
+
+/* The compiler insists on adding a SAVE call to the start of every function */
+#define __nolibc_sa_restorer __nolibc_sa_restorer
+void __nolibc_sa_restorer (void);
+#ifdef __arch64__
+__asm__(                                                        \
+	".section .text\n"                                      \
+	".align  4 \n"                                          \
+	"__nolibc_sa_restorer:\n"                               \
+	"nop\n"                                                 \
+	"nop\n"                                                 \
+	"mov     " __stringify(__NR_rt_sigreturn) ", %g1 \n"    \
+	"t       0x6d \n");
+#else
+__asm__(                                                        \
+	".section .text\n"                                      \
+	".align  4 \n"                                          \
+	"__nolibc_sa_restorer:\n"                               \
+	"nop\n"                                                 \
+	"nop\n"                                                 \
+	"mov     " __stringify(__NR_rt_sigreturn) ", %g1 \n"    \
+	"t       0x10 \n"                                       \
+	);
+#endif
+
+#undef __nolibc_stringify_1(x...)
+#undef __nolibc_stringify
 
 #endif /* _NOLIBC_ARCH_SPARC_H */
