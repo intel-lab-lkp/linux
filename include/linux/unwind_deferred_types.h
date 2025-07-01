@@ -2,8 +2,6 @@
 #ifndef _LINUX_UNWIND_USER_DEFERRED_TYPES_H
 #define _LINUX_UNWIND_USER_DEFERRED_TYPES_H
 
-#include <asm/local.h>
-
 struct unwind_cache {
 	unsigned int		nr_entries;
 	unsigned long		entries[];
@@ -23,7 +21,6 @@ struct unwind_task_info {
 	struct callback_head	work;
 	unsigned long		unwind_mask;
 	union unwind_task_id	id;
-	local_t			pending;
 };
 
 #endif /* _LINUX_UNWIND_USER_DEFERRED_TYPES_H */
