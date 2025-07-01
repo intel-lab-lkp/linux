@@ -205,6 +205,19 @@ static int pwm_imx_tpm_apply_hw(struct pwm_chip *chip,
 		writel(val, tpm->base + PWM_IMX_TPM_SC);
 
 		/*
+		 * VERY IMPORTANT: if CMOD is set to 0 then writing
+		 * MOD will NOT reset the value of the TPM counter.
+		 *
+		 * Therefore, if CNT.COUNT > MOD.MOD, the counter will reset
+		 * after UINT32_MAX - CNT.COUNT + MOD.MOD cycles, which is
+		 * incorrect.
+		 *
+		 * To avoid this, we need to force a reset of the
+		 * counter before writing the new MOD value.
+		 */
+		if (!cmod)
+			writel(0x0, tpm->base + PWM_IMX_TPM_CNT);
+		/*
 		 * set period count:
 		 * if the PWM is disabled (CMOD[1:0] = 2b00), then MOD register
 		 * is updated when MOD register is written.
