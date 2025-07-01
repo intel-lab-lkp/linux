@@ -600,5 +600,5 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// constructed.
 ///
 /// [`NotThreadSafe`]: type@NotThreadSafe
-#[allow(non_upper_case_globals)]
+#[expect(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
