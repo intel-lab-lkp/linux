@@ -249,6 +249,11 @@ static unsigned int mon_copy_to_buff(const struct mon_reader_bin *this,
 		 * Copy data and advance pointers.
 		 */
 		buf = this->b_vec[off / CHUNK_SIZE].ptr + off % CHUNK_SIZE;
+		if (!strlen(from)) {
+			printk(KERN_ERR TAG
+			       ": src buffer is empty, cannot copy from it\n");
+			return -ENOMEM;
+		}
 		memcpy(buf, from, step_len);
 		if ((off += step_len) >= this->b_size) off = 0;
 		from += step_len;
