@@ -1906,6 +1906,11 @@ static void check_graph_child_address(struct check *c, struct dt_info *dti,
 		cnt++;
 	}
 
+	/*
+	 * This check can produce false warnings if the bindings allow for more
+	 * then one endpoint in the node but only one is present and it has a
+	 * unit address of zero.
+	 */
 	if (cnt == 1 && node->addr_cells != -1)
 		FAIL(c, dti, node, "graph node has single child node '%s', #address-cells/#size-cells are not necessary",
 		     node->children->name);
