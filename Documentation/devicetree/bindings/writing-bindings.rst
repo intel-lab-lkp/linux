@@ -39,10 +39,15 @@ Overall design
 Properties
 ==========
 
-- DO make 'compatible' properties specific. DON'T use wildcards in compatible
-  strings. DO use fallback compatibles when devices are the same as or a subset
-  of prior implementations. DO add new compatibles in case there are new
-  features or bugs.
+- DO make 'compatible' properties specific. DON'T use wildcards or
+  device-family names in compatible strings. DO use fallback compatibles when
+  devices are the same as or a subset of prior implementations. DO add new
+  compatibles in case there are new features or bugs.
+
+   - Use SoC-specific compatible for all SoC devices, followed by a fallback if
+     appropriate.
+
+   - Specific SoC compatible is also preferred for the fallbacks.
 
 - DO use a vendor prefix on device-specific property names. Consider if
   properties could be common among devices of the same class. Check other
@@ -51,12 +56,22 @@ Properties
 - DON'T redefine common properties. Just reference the definition and define
   constraints specific to the device.
 
+- DON'T add properties to avoid a specific compatible.  DON'T add properties if
+  they are implied by (deducible from) the compatible.
+
 - DO use common property unit suffixes for properties with scientific units.
   Recommended suffixes are listed at
   https://github.com/devicetree-org/dt-schema/blob/main/dtschema/schemas/property-units.yaml
 
 - DO define properties in terms of constraints. How many entries? What are
-  possible values? What is the order?
+  possible values? What is the order? All these constraints represent the ABI
+  as well.
+
+- DON't change the ABI, but if ever needed to change, then DO explicitly
+  document that in the commit msg with rationale WHY ABI has to be broken and
+  what is the impact. ABI impact is beyond Linux kernel, because it covers also
+  other open-source upstream projects.
+
 
 Typical cases and caveats
 =========================
