@@ -20,12 +20,14 @@ void aie_part_release(struct aie_partition *apart)
 {
 	struct aie_aperture *aperture = apart->aperture;
 
+	aie_part_set_freq(apart, 0);
 	mutex_lock(&aperture->mlock);
-
 	aie_resource_put_region(&aperture->cols_res,
 				apart->range.start.col -
 				aperture->range.start.col,
 				apart->range.size.col);
+	aie_resource_uninitialize(&apart->cores_clk_state);
+	aie_resource_uninitialize(&apart->tiles_inuse);
 	list_del(&apart->node);
 	devm_kfree(aperture->dev, apart);
 	mutex_unlock(&aperture->mlock);
@@ -48,6 +50,7 @@ struct aie_partition *aie_part_create(struct aie_aperture *aperture,
 				      u8 start_col, u8 num_col)
 {
 	struct aie_partition *apart;
+	int ret, num_tiles;
 
 	apart = devm_kzalloc(aperture->dev, sizeof(*apart), GFP_KERNEL);
 	if (!apart)
@@ -60,6 +63,29 @@ struct aie_partition *aie_part_create(struct aie_aperture *aperture,
 	apart->range.size.col = num_col;
 	apart->range.start.row = aperture->range.start.row;
 	apart->range.size.row = aperture->range.size.row;
+
+	/* SHIM row always enabled so it is not needed in the bitmap */
+	num_tiles = apart->range.size.col * (apart->range.size.row - 1);
+	ret = aie_resource_initialize(&apart->cores_clk_state, num_tiles);
+	if (ret) {
+		dev_err(aperture->dev, "failed to initialize clock state resource.");
+		return ERR_PTR(ret);
+	}
+
+	ret = aie_resource_initialize(&apart->tiles_inuse, num_tiles);
+	if (ret) {
+		dev_err(aperture->dev, "failed to initialize tiles in use resource.");
+		aie_resource_uninitialize(&apart->cores_clk_state);
+		return ERR_PTR(ret);
+	}
+
+	ret = aie_part_scan_clk_state(apart);
+	if (ret) {
+		dev_err(aperture->dev, "failed to scan clock state.");
+		aie_resource_uninitialize(&apart->cores_clk_state);
+		aie_resource_uninitialize(&apart->tiles_inuse);
+		return ERR_PTR(ret);
+	}
 
 	return apart;
 }

@@ -42,5 +42,8 @@ struct aie_location {
 
 void *aie_partition_request(struct device *dev, struct aie_partition_req *req);
 void aie_partition_release(void *apart);
+int aie_partition_set_freq_req(void *apart, u64 freq);
+int aie_partition_get_freq(void *apart, u64 *freq);
+int aie_partition_get_freq_req(void *apart, u64 *freq);
 
 #endif

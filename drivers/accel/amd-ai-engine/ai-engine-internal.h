@@ -70,11 +70,25 @@ struct aie_aperture;
 /**
  * struct aie_tile_operations - AI engine device operations
  * @get_tile_type: get type of tile based on tile operation
+ * @scan_part_clocks: scan partition modules to check whether the modules are
+ *		      clock gated or not, and update the soft clock states
+ *		      structure. It is required to be called when the partition
+ *		      is requested so that the driver knows which modules are
+ *		      clock gated when the partition is requested. This function
+ *		      expects the caller to apply partition lock before calling
+ *		      this function.
+ * @set_part_clocks: set partition modules clocks gate registers based on the
+ *		     partition clock states bitmap. This function expects the
+ *		     caller to apply partition lock before calling this
+ *		     function. The caller function will need to set the bitmap
+ *		     on which tiles are required to be clocked on.
  * Different AI engine device version has its own device
  * operation.
  */
 struct aie_tile_operations {
 	u32 (*get_tile_type)(struct aie_device *adev, struct aie_location *loc);
+	int (*scan_part_clocks)(struct aie_partition *apart);
+	int (*set_part_clocks)(struct aie_partition *apart);
 };
 
 /**
@@ -171,14 +185,20 @@ struct aie_aperture {
  * @aperture: pointer to AI engine aperture
  * @adev: pointer to AI device instance
  * @range: range of partition
+ * @cores_clk_state: bitmap to indicate the power state of core and mem tiles
+ * @tiles_inuse: bitmap to indicate if a tile is in use
  * @mlock: protection for AI engine partition operations
+ * @freq_req: required frequency
  */
 struct aie_partition {
 	struct list_head node;
 	struct aie_aperture *aperture;
 	struct aie_device *adev;
 	struct aie_range range;
+	struct aie_resource cores_clk_state;
+	struct aie_resource tiles_inuse;
 	struct mutex mlock; /* protection for AI engine partition operations */
+	u64 freq_req;
 };
 
 #define dev_to_aiedev(_dev) container_of((_dev), struct aie_device, dev)
@@ -210,6 +230,21 @@ struct aie_partition {
 #define aie_cal_tile_reg(adev, regoff) ( \
 	aie_tile_reg_field_get(aie_tile_reg_mask(adev), 0, regoff))
 
+/**
+ * aie_cal_regoff() - calculate register offset to the whole AI engine
+ *		      device start address
+ * @adev: AI engine device
+ * @loc: AI engine tile location
+ * @regoff_intile: register offset within a tile
+ * @return: register offset to the whole AI engine device start address
+ */
+static inline u32 aie_cal_regoff(struct aie_device *adev,
+				 struct aie_location loc, u32 regoff_intile)
+{
+	return regoff_intile + (loc.col << adev->col_shift) +
+	       (loc.row << adev->row_shift);
+}
+
 void aie_device_init(struct aie_device *adev);
 struct aie_partition *
 aie_aperture_request_part(struct aie_aperture *aperture,
@@ -219,6 +254,14 @@ void aie_aperture_remove(struct platform_device *pdev);
 struct aie_partition *aie_part_create(struct aie_aperture *aperture,
 				      u8 start_col, u8 num_col);
 void aie_part_release(struct aie_partition *apart);
+int aie_part_set_freq(struct aie_partition *apart, u64 freq);
+int aie_part_scan_clk_state(struct aie_partition *apart);
+bool aie_part_check_clk_enable_loc(struct aie_partition *apart,
+				   struct aie_location *loc);
+int aie_part_request_tiles(struct aie_partition *apart, int num_tiles,
+			   struct aie_location *locs);
+int aie_part_release_tiles(struct aie_partition *apart, int num_tiles,
+			   struct aie_location *locs);
 int aie_resource_initialize(struct aie_resource *res, int count);
 void aie_resource_uninitialize(struct aie_resource *res);
 int aie_resource_check_region(struct aie_resource *res, u32 start,
@@ -226,5 +269,8 @@ int aie_resource_check_region(struct aie_resource *res, u32 start,
 int aie_resource_get_region(struct aie_resource *res, u32 start,
 			    u32 count);
 void aie_resource_put_region(struct aie_resource *res, int start, u32 count);
+int aie_resource_set(struct aie_resource *res, u32 start, u32 count);
+int aie_resource_clear(struct aie_resource *res, u32 start, u32 count);
+bool aie_resource_testbit(struct aie_resource *res, u32 bit);
 
 #endif /* AIE_INTERNAL_H */
