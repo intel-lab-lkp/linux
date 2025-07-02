@@ -137,6 +137,16 @@
 #define SD_OTAPDLYSEL	0xFF180318
 
 /**
+ * XPM_VERSAL_EVENT_ERROR_MASK_AIE_CR: Error event mask for ME Correctable Error.
+ */
+#define XPM_VERSAL_EVENT_ERROR_MASK_AIE_CR	BIT(16)
+
+/**
+ * XPM_VERSAL_EVENT_ERROR_MASK_AIE_NCR: Error event mask for ME Non-Correctable Error.
+ */
+#define XPM_VERSAL_EVENT_ERROR_MASK_AIE_NCR	BIT(17)
+
+/**
  * XPM_EVENT_ERROR_MASK_DDRMC_CR: Error event mask for DDRMC MC Correctable ECC Error.
  */
 #define XPM_EVENT_ERROR_MASK_DDRMC_CR		BIT(18)
@@ -154,6 +164,17 @@ enum pm_module_id {
 	XSEM_MODULE_ID = 0x3,
 	TF_A_MODULE_ID = 0xa,
 };
+
+/* AIE Operation */
+#define XILINX_AIE_OPS_COL_RST			BIT(0)
+#define XILINX_AIE_OPS_SHIM_RST			BIT(1)
+#define XILINX_AIE_OPS_ENB_COL_CLK_BUFF		BIT(2)
+#define XILINX_AIE_OPS_ZEROISATION		BIT(3)
+#define XILINX_AIE_OPS_DIS_COL_CLK_BUFF		BIT(4)
+#define XILINX_AIE_OPS_ENB_AXI_MM_ERR_EVENT	BIT(5)
+#define XILINX_AIE_OPS_SET_L2_CTRL_NPI_INTR	BIT(6)
+#define XILINX_AIE_OPS_DATA_MEM_ZEROIZATION	BIT(8U)
+#define XILINX_AIE_OPS_MEM_TILE_ZEROIZATION	BIT(9U)
 
 enum pm_api_cb_id {
 	PM_INIT_SUSPEND_CB = 30,
@@ -244,6 +265,8 @@ enum pm_ioctl_id {
 	/* Dynamic SD/GEM configuration */
 	IOCTL_SET_SD_CONFIG = 30,
 	IOCTL_SET_GEM_CONFIG = 31,
+	/* AIE/AIEML Operations */
+	IOCTL_AIE_OPS = 33,
 	/* IOCTL to get default/current QoS */
 	IOCTL_GET_QOS = 34,
 };
@@ -633,6 +656,7 @@ int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode);
 int zynqmp_pm_set_sd_config(u32 node, enum pm_sd_config_type config, u32 value);
 int zynqmp_pm_set_gem_config(u32 node, enum pm_gem_config_type config,
 			     u32 value);
+int zynqmp_pm_aie_operation(u32 node, u16 start_col, u16 num_col, u32 operation);
 #else
 static inline int zynqmp_pm_get_api_version(u32 *version)
 {
@@ -947,6 +971,12 @@ static inline int zynqmp_pm_set_sd_config(u32 node,
 static inline int zynqmp_pm_set_gem_config(u32 node,
 					   enum pm_gem_config_type config,
 					   u32 value)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_aie_operation(u32 node, u16 start_col,
+					  u16 num_col, u32 operation)
 {
 	return -ENODEV;
 }
