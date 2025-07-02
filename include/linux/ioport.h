@@ -308,6 +308,14 @@ static inline bool resource_contains(const struct resource *r1, const struct res
 	return r1->start <= r2->start && r1->end >= r2->end;
 }
 
+/* True if res contains addr */
+static inline bool resource_contains_addr(const struct resource *res, const resource_size_t addr)
+{
+	if (res->flags & IORESOURCE_UNSET)
+		return false;
+	return res->start <= addr && addr <= res->end;
+}
+
 /* True if any part of r1 overlaps r2 */
 static inline bool resource_overlaps(const struct resource *r1, const struct resource *r2)
 {
