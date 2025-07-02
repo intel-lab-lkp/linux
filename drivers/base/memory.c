@@ -810,15 +810,14 @@ void memory_block_add_nid(struct memory_block *mem, int nid,
 			mem->zone = early_node_zone_for_memory_block(mem, nid);
 		else
 			mem->zone = NULL;
+		/*
+		 * If this memory block spans multiple nodes, we only indicate
+		 * the last processed node. If we span multiple nodes (not applicable
+		 * to hotplugged memory), zone == NULL will prohibit memory offlining
+		 * and consequently unplug.
+		 */
+		mem->nid = nid;
 	}
-
-	/*
-	 * If this memory block spans multiple nodes, we only indicate
-	 * the last processed node. If we span multiple nodes (not applicable
-	 * to hotplugged memory), zone == NULL will prohibit memory offlining
-	 * and consequently unplug.
-	 */
-	mem->nid = nid;
 }
 #endif
 
@@ -892,7 +891,7 @@ static void remove_memory_block(struct memory_block *memory)
  * Called under device_hotplug_lock.
  */
 int create_memory_block_devices(unsigned long start, unsigned long size,
-				struct vmem_altmap *altmap,
+				int nid, struct vmem_altmap *altmap,
 				struct memory_group *group)
 {
 	const unsigned long start_block_id = pfn_to_block_id(PFN_DOWN(start));
@@ -906,7 +905,7 @@ int create_memory_block_devices(unsigned long start, unsigned long size,
 		return -EINVAL;
 
 	for (block_id = start_block_id; block_id != end_block_id; block_id++) {
-		ret = add_memory_block(block_id, NUMA_NO_NODE, MEM_OFFLINE, altmap, group);
+		ret = add_memory_block(block_id, nid, MEM_OFFLINE, altmap, group);
 		if (ret)
 			break;
 	}
