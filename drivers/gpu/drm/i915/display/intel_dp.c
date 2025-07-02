@@ -1507,6 +1507,9 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		dsc = dsc_max_compressed_bpp && dsc_slice_count;
 	}
 
+	if (target_clock > (intel_dotclock_limit(display) * num_joined_pipes) && !dsc)
+		return MODE_CLOCK_HIGH;
+
 	if (intel_dp_joiner_needs_dsc(display, num_joined_pipes) && !dsc)
 		return MODE_CLOCK_HIGH;
 
