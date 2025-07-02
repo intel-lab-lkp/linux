@@ -27,6 +27,7 @@
 #include <asm/suspend.h>
 
 #include "cpuidle.h"
+#include "cpuidle-riscv-sbi.h"
 #include "dt_idle_states.h"
 #include "dt_idle_genpd.h"
 
@@ -43,7 +44,6 @@ struct sbi_domain_state {
 static DEFINE_PER_CPU_READ_MOSTLY(struct sbi_cpuidle_data, sbi_cpuidle_data);
 static DEFINE_PER_CPU(struct sbi_domain_state, domain_state);
 static bool sbi_cpuidle_use_osi;
-static bool sbi_cpuidle_use_cpuhp;
 static bool sbi_cpuidle_pd_allow_domain_state;
 
 static inline void sbi_set_domain_state(u32 state)
@@ -171,9 +171,6 @@ static void sbi_idle_init_cpuhp(void)
 {
 	int err;
 
-	if (!sbi_cpuidle_use_cpuhp)
-		return;
-
 	err = cpuhp_setup_state_nocalls(CPUHP_AP_CPU_PM_STARTING,
 					"cpuidle/sbi:online",
 					sbi_cpuidle_cpuhp_up,
@@ -188,7 +185,7 @@ static const struct of_device_id sbi_cpuidle_state_match[] = {
 	{ },
 };
 
-static int sbi_dt_parse_state_node(struct device_node *np, u32 *state)
+int sbi_dt_parse_state_node(struct device_node *np, u32 *state)
 {
 	int err = of_property_read_u32(np, "riscv,sbi-suspend-param", state);
 
@@ -213,10 +210,6 @@ static int sbi_dt_cpu_init_topology(struct cpuidle_driver *drv,
 	if (!sbi_cpuidle_use_osi)
 		return 0;
 
-	data->dev = dt_idle_attach_cpu(cpu, "sbi");
-	if (IS_ERR_OR_NULL(data->dev))
-		return PTR_ERR_OR_ZERO(data->dev);
-
 	/*
 	 * Using the deepest state for the CPU to trigger a potential selection
 	 * of a shared state for the domain, assumes the domain states are all
@@ -226,7 +219,6 @@ static int sbi_dt_cpu_init_topology(struct cpuidle_driver *drv,
 	drv->states[state_count - 1].enter = sbi_enter_domain_idle_state;
 	drv->states[state_count - 1].enter_s2idle =
 					sbi_enter_s2idle_domain_idle_state;
-	sbi_cpuidle_use_cpuhp = true;
 
 	return 0;
 }
@@ -282,7 +274,6 @@ static void sbi_cpuidle_deinit_cpu(int cpu)
 	struct sbi_cpuidle_data *data = per_cpu_ptr(&sbi_cpuidle_data, cpu);
 
 	dt_idle_detach_cpu(data->dev);
-	sbi_cpuidle_use_cpuhp = false;
 }
 
 static int sbi_cpuidle_init_cpu(struct device *dev, int cpu)
@@ -325,8 +316,9 @@ static int sbi_cpuidle_init_cpu(struct device *dev, int cpu)
 	/* Initialize idle states from DT. */
 	ret = sbi_cpuidle_dt_init_states(dev, drv, cpu, state_count);
 	if (ret) {
-		pr_err("HART%ld: failed to init idle states\n",
-		       cpuid_to_hartid_map(cpu));
+		if (ret != -EPROBE_DEFER)
+			pr_err("HART%ld: failed to init idle states\n",
+			       cpuid_to_hartid_map(cpu));
 		return ret;
 	}
 
@@ -356,7 +348,7 @@ static void sbi_cpuidle_domain_sync_state(struct device *dev)
 
 #ifdef CONFIG_DT_IDLE_GENPD
 
-static int sbi_cpuidle_pd_power_off(struct generic_pm_domain *pd)
+int sbi_cpuidle_pd_power_off(struct generic_pm_domain *pd)
 {
 	struct genpd_power_state *state = &pd->states[pd->state_idx];
 	u32 *pd_state;
@@ -529,6 +521,27 @@ static int sbi_cpuidle_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	/* Attaching the cpu to the corresponding power domain */
+	if (sbi_cpuidle_use_osi) {
+		for_each_present_cpu(cpu) {
+			struct sbi_cpuidle_data *data = per_cpu_ptr(&sbi_cpuidle_data, cpu);
+
+			data->dev = dt_idle_attach_cpu(cpu, "sbi");
+			if (IS_ERR_OR_NULL(data->dev)) {
+				ret = PTR_ERR_OR_ZERO(data->dev);
+				if (ret != -EPROBE_DEFER)
+					pr_debug("Hart%ld: fail to attach the power domain\n",
+						 cpuid_to_hartid_map(cpu));
+
+				while (--cpu >= 0)
+					dt_idle_detach_cpu(data->dev);
+				return ret;
+			}
+		}
+		/* Setup CPU hotplut notifiers */
+		sbi_idle_init_cpuhp();
+	}
+
 	/* Initialize CPU idle driver for each present CPU */
 	for_each_present_cpu(cpu) {
 		ret = sbi_cpuidle_init_cpu(&pdev->dev, cpu);
@@ -538,9 +551,6 @@ static int sbi_cpuidle_probe(struct platform_device *pdev)
 			goto out_fail;
 		}
 	}
-
-	/* Setup CPU hotplut notifiers */
-	sbi_idle_init_cpuhp();
 
 	if (cpuidle_disabled())
 		pr_info("cpuidle is disabled\n");
@@ -556,7 +566,7 @@ out_fail:
 		cpuidle_unregister(drv);
 		sbi_cpuidle_deinit_cpu(cpu);
 	}
-
+out:
 	return ret;
 }
 
