@@ -331,6 +331,12 @@ static int configure_headersplit(bool on)
 	ret = ethtool_rings_set(ys, req);
 	if (ret < 0)
 		fprintf(stderr, "YNL failed: %s\n", ys->err.msg);
+	if (on) {
+		ethtool_rings_set_req_set_hds_thresh(req, 0);
+		ret = ethtool_rings_set(ys, req);
+		if (ret < 0)
+			fprintf(stderr, "YNL failed: %s\n", ys->err.msg);
+	}
 	ethtool_rings_set_req_free(req);
 
 	if (ret == 0) {
@@ -338,9 +344,12 @@ static int configure_headersplit(bool on)
 		ethtool_rings_get_req_set_header_dev_index(get_req, ifindex);
 		get_rsp = ethtool_rings_get(ys, get_req);
 		ethtool_rings_get_req_free(get_req);
-		if (get_rsp)
+		if (get_rsp) {
 			fprintf(stderr, "TCP header split: %s\n",
 				tcp_data_split_str(get_rsp->tcp_data_split));
+			fprintf(stderr, "HDS threshold: %u\n",
+				get_rsp->hds_thresh);
+		}
 		ethtool_rings_get_rsp_free(get_rsp);
 	}
 
