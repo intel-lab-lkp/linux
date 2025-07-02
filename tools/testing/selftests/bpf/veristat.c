@@ -23,6 +23,7 @@
 #include <float.h>
 #include <math.h>
 #include <limits.h>
+#include <assert.h>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -238,6 +239,14 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 }
 
 #define log_errno(fmt, ...) log_errno_aux(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
+
+#ifndef __printf
+#define __printf(a, b)	__attribute__((format(printf, a, b)))
+#endif
+
+#ifndef __scanf
+#define __scanf(a, b)	__attribute__((format(scanf, a, b)))
+#endif
 
 __printf(3, 4)
 static int log_errno_aux(const char *file, int line, const char *fmt, ...)
