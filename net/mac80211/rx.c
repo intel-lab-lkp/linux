@@ -5130,8 +5130,28 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 
 		sta = sta_info_get_bss(rx->sdata, hdr->addr2);
-		if (status->link_valid)
+		if (status->link_valid) {
 			link_id = status->link_id;
+		} else if (ieee80211_vif_is_mld(&rx->sdata->vif)) {
+			struct ieee80211_supported_band *sband;
+			struct ieee80211_link_data *link;
+			int i;
+
+			for_each_valid_link(&rx->sdata->wdev, i) {
+				link = rcu_dereference(rx->sdata->link[i]);
+				if (!link)
+					continue;
+
+				sband = ieee80211_get_link_sband(link);
+				if (!sband)
+					continue;
+
+				if (status->band == sband->band) {
+					link_id = i;
+					break;
+				}
+			}
+		}
 	}
 
 	if (!ieee80211_rx_data_set_sta(rx, sta, link_id))
