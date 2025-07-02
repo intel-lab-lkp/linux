@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 /*
- * Copyright 2018-2024 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2025 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #include "efa_com.h"
@@ -557,17 +557,19 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 		if (comp_ctx->status == EFA_CMD_COMPLETED)
 			ibdev_err_ratelimited(
 				aq->efa_dev,
-				"The device sent a completion but the driver didn't receive any MSI-X interrupt for admin cmd %s(%d) status %d (ctx: 0x%p, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
+				"The device sent a completion but the driver didn't receive any MSI-X interrupt for admin cmd %s(%d) status %d (ctx[%d]: 0x%p, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
-				comp_ctx, aq->sq.pc, aq->sq.cc, aq->cq.cc);
+				comp_ctx - aq->comp_ctx, comp_ctx, aq->sq.pc,
+				aq->sq.cc, aq->cq.cc);
 		else
 			ibdev_err_ratelimited(
 				aq->efa_dev,
-				"The device didn't send any completion for admin cmd %s(%d) status %d (ctx 0x%p, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
+				"The device didn't send any completion for admin cmd %s(%d) status %d (ctx[%d]: 0x%p, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
-				comp_ctx, aq->sq.pc, aq->sq.cc, aq->cq.cc);
+				comp_ctx - aq->comp_ctx, comp_ctx, aq->sq.pc,
+				aq->sq.cc, aq->cq.cc);
 
 		clear_bit(EFA_AQ_STATE_RUNNING_BIT, &aq->state);
 		err = -ETIME;
