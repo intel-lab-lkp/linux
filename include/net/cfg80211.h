@@ -8612,11 +8612,13 @@ int cfg80211_link_sinfo_alloc_tid_stats(struct link_station_info *link_sinfo,
 static inline void cfg80211_sinfo_release_content(struct station_info *sinfo)
 {
 	kfree(sinfo->pertid);
+	sinfo->pertid = NULL;
 
 	for (int link_id = 0; link_id < ARRAY_SIZE(sinfo->links); link_id++) {
 		if (sinfo->links[link_id]) {
 			kfree(sinfo->links[link_id]->pertid);
 			kfree(sinfo->links[link_id]);
+			sinfo->links[link_id] = NULL;
 		}
 	}
 }
