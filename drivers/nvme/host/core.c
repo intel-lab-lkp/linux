@@ -3155,12 +3155,12 @@ static inline bool nvme_admin_ctrl(struct nvme_ctrl *ctrl)
 }
 
 /*
- * An admin controller has one admin queue, but no I/O queues.
+ * An admin or discovery controller has one admin queue, but no I/O queues.
  * Override queue_count so it only creates an admin queue.
  */
 void nvme_override_prohibited_io_queues(struct nvme_ctrl *ctrl)
 {
-	if (nvme_admin_ctrl(ctrl))
+	if (nvme_admin_ctrl(ctrl) || nvme_discovery_ctrl(ctrl))
 		ctrl->queue_count = 1;
 }
 EXPORT_SYMBOL_GPL(nvme_override_prohibited_io_queues);
