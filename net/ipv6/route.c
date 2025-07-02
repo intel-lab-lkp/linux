@@ -1145,6 +1145,7 @@ static void ip6_rt_init_dst(struct rt6_info *rt, const struct fib6_result *res)
 		rt->dst.input = ip6_input;
 	} else if (ipv6_addr_type(&f6i->fib6_dst.addr) & IPV6_ADDR_MULTICAST) {
 		rt->dst.input = ip6_mc_input;
+		rt->dst.output = ip6_mr_output;
 	} else {
 		rt->dst.input = ip6_forward;
 	}
@@ -3010,7 +3011,7 @@ void ip6_sk_update_pmtu(struct sk_buff *skb, struct sock *sk, __be32 mtu)
 		oif = l3mdev_master_ifindex(skb->dev);
 
 	ip6_update_pmtu(skb, sock_net(sk), mtu, oif, READ_ONCE(sk->sk_mark),
-			sk->sk_uid);
+			sk_uid(sk));
 
 	dst = __sk_dst_get(sk);
 	if (!dst || !dst->obsolete ||
@@ -3232,7 +3233,7 @@ void ip6_redirect_no_header(struct sk_buff *skb, struct net *net, int oif)
 void ip6_sk_redirect(struct sk_buff *skb, struct sock *sk)
 {
 	ip6_redirect(skb, sock_net(sk), sk->sk_bound_dev_if,
-		     READ_ONCE(sk->sk_mark), sk->sk_uid);
+		     READ_ONCE(sk->sk_mark), sk_uid(sk));
 }
 EXPORT_SYMBOL_GPL(ip6_sk_redirect);
 
@@ -3737,6 +3738,53 @@ void fib6_nh_release_dsts(struct fib6_nh *fib6_nh)
 	}
 }
 
+static int fib6_config_validate(struct fib6_config *cfg,
+				struct netlink_ext_ack *extack)
+{
+	/* RTF_PCPU is an internal flag; can not be set by userspace */
+	if (cfg->fc_flags & RTF_PCPU) {
+		NL_SET_ERR_MSG(extack, "Userspace can not set RTF_PCPU");
+		goto errout;
+	}
+
+	/* RTF_CACHE is an internal flag; can not be set by userspace */
+	if (cfg->fc_flags & RTF_CACHE) {
+		NL_SET_ERR_MSG(extack, "Userspace can not set RTF_CACHE");
+		goto errout;
+	}
+
+	if (cfg->fc_type > RTN_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid route type");
+		goto errout;
+	}
+
+	if (cfg->fc_dst_len > 128) {
+		NL_SET_ERR_MSG(extack, "Invalid prefix length");
+		goto errout;
+	}
+
+#ifdef CONFIG_IPV6_SUBTREES
+	if (cfg->fc_src_len > 128) {
+		NL_SET_ERR_MSG(extack, "Invalid source address length");
+		goto errout;
+	}
+
+	if (cfg->fc_nh_id && cfg->fc_src_len) {
+		NL_SET_ERR_MSG(extack, "Nexthops can not be used with source routing");
+		goto errout;
+	}
+#else
+	if (cfg->fc_src_len) {
+		NL_SET_ERR_MSG(extack,
+			       "Specifying source address requires IPV6_SUBTREES to be enabled");
+		goto errout;
+	}
+#endif
+	return 0;
+errout:
+	return -EINVAL;
+}
+
 static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 					       gfp_t gfp_flags,
 					       struct netlink_ext_ack *extack)
@@ -3885,6 +3933,10 @@ int ip6_route_add(struct fib6_config *cfg, gfp_t gfp_flags,
 {
 	struct fib6_info *rt;
 	int err;
+
+	err = fib6_config_validate(cfg, extack);
+	if (err)
+		return err;
 
 	rt = ip6_route_info_create(cfg, gfp_flags, extack);
 	if (IS_ERR(rt))
@@ -4479,53 +4531,6 @@ void rt6_purge_dflt_routers(struct net *net)
 	rcu_read_unlock();
 }
 
-static int fib6_config_validate(struct fib6_config *cfg,
-				struct netlink_ext_ack *extack)
-{
-	/* RTF_PCPU is an internal flag; can not be set by userspace */
-	if (cfg->fc_flags & RTF_PCPU) {
-		NL_SET_ERR_MSG(extack, "Userspace can not set RTF_PCPU");
-		goto errout;
-	}
-
-	/* RTF_CACHE is an internal flag; can not be set by userspace */
-	if (cfg->fc_flags & RTF_CACHE) {
-		NL_SET_ERR_MSG(extack, "Userspace can not set RTF_CACHE");
-		goto errout;
-	}
-
-	if (cfg->fc_type > RTN_MAX) {
-		NL_SET_ERR_MSG(extack, "Invalid route type");
-		goto errout;
-	}
-
-	if (cfg->fc_dst_len > 128) {
-		NL_SET_ERR_MSG(extack, "Invalid prefix length");
-		goto errout;
-	}
-
-#ifdef CONFIG_IPV6_SUBTREES
-	if (cfg->fc_src_len > 128) {
-		NL_SET_ERR_MSG(extack, "Invalid source address length");
-		goto errout;
-	}
-
-	if (cfg->fc_nh_id && cfg->fc_src_len) {
-		NL_SET_ERR_MSG(extack, "Nexthops can not be used with source routing");
-		goto errout;
-	}
-#else
-	if (cfg->fc_src_len) {
-		NL_SET_ERR_MSG(extack,
-			       "Specifying source address requires IPV6_SUBTREES to be enabled");
-		goto errout;
-	}
-#endif
-	return 0;
-errout:
-	return -EINVAL;
-}
-
 static void rtmsg_to_fib6_config(struct net *net,
 				 struct in6_rtmsg *rtmsg,
 				 struct fib6_config *cfg)
@@ -4563,10 +4568,6 @@ int ipv6_route_ioctl(struct net *net, unsigned int cmd, struct in6_rtmsg *rtmsg)
 
 	switch (cmd) {
 	case SIOCADDRT:
-		err = fib6_config_validate(&cfg, NULL);
-		if (err)
-			break;
-
 		/* Only do the default setting of fc_metric in route adding */
 		if (cfg.fc_metric == 0)
 			cfg.fc_metric = IP6_RT_PRIO_USER;
@@ -5402,6 +5403,10 @@ static int ip6_route_multipath_add(struct fib6_config *cfg,
 	int nhn = 0;
 	int err;
 
+	err = fib6_config_validate(cfg, extack);
+	if (err)
+		return err;
+
 	replace = (cfg->fc_nlinfo.nlh &&
 		   (cfg->fc_nlinfo.nlh->nlmsg_flags & NLM_F_REPLACE));
 
@@ -5636,10 +5641,6 @@ static int inet6_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		return err;
 
-	err = fib6_config_validate(&cfg, extack);
-	if (err)
-		return err;
-
 	if (cfg.fc_metric == 0)
 		cfg.fc_metric = IP6_RT_PRIO_USER;
 
@@ -5851,8 +5852,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 		if (dst->dev && nla_put_u32(skb, RTA_OIF, dst->dev->ifindex))
 			goto nla_put_failure;
 
-		if (dst->lwtstate &&
-		    lwtunnel_fill_encap(skb, dst->lwtstate, RTA_ENCAP, RTA_ENCAP_TYPE) < 0)
+		if (lwtunnel_fill_encap(skb, dst->lwtstate, RTA_ENCAP, RTA_ENCAP_TYPE) < 0)
 			goto nla_put_failure;
 	} else if (rt->fib6_nsiblings) {
 		struct fib6_info *sibling;
