@@ -377,6 +377,30 @@ static int __init cma_fixed_reserve(phys_addr_t base, phys_addr_t size)
 	return 0;
 }
 
+static phys_addr_t __init cma_alloc_highmem(phys_addr_t base, phys_addr_t size,
+			phys_addr_t align, phys_addr_t *limit, int nid)
+{
+	phys_addr_t addr = 0;
+
+	if (IS_ENABLED(CONFIG_HIGHMEM)) {
+		phys_addr_t highmem = __pa(high_memory - 1) + 1;
+
+		/*
+		 * All pages in the reserved area must come from the same zone.
+		 * If the requested region crosses the low/high memory boundary,
+		 * try allocating from high memory first and fall back to low
+		 * memory in case of failure.
+		 */
+		if (base < highmem && *limit > highmem) {
+			addr = memblock_alloc_range_nid(size, align, highmem,
+							*limit, nid, true);
+			*limit = highmem;
+		}
+	}
+
+	return addr;
+}
+
 static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 			phys_addr_t size, phys_addr_t limit,
 			phys_addr_t alignment, unsigned int order_per_bit,
@@ -384,19 +408,9 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 			int nid)
 {
 	phys_addr_t memblock_end = memblock_end_of_DRAM();
-	phys_addr_t highmem_start, base = *basep;
+	phys_addr_t base = *basep;
 	int ret;
 
-	/*
-	 * We can't use __pa(high_memory) directly, since high_memory
-	 * isn't a valid direct map VA, and DEBUG_VIRTUAL will (validly)
-	 * complain. Find the boundary by adding one to the last valid
-	 * address.
-	 */
-	if (IS_ENABLED(CONFIG_HIGHMEM))
-		highmem_start = __pa(high_memory - 1) + 1;
-	else
-		highmem_start = memblock_end_of_DRAM();
 	pr_debug("%s(size %pa, base %pa, limit %pa alignment %pa)\n",
 		__func__, &size, &base, &limit, &alignment);
 
@@ -473,18 +487,10 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 		}
 #endif
 
-		/*
-		 * All pages in the reserved area must come from the same zone.
-		 * If the requested region crosses the low/high memory boundary,
-		 * try allocating from high memory first and fall back to low
-		 * memory in case of failure.
-		 */
-		if (!addr && base < highmem_start && limit > highmem_start) {
-			addr = memblock_alloc_range_nid(size, alignment,
-					highmem_start, limit, nid, true);
-			limit = highmem_start;
-		}
-
+		/* On systems with HIGHMEM try allocating from there first */
+		if (!addr)
+			addr = cma_alloc_highmem(base, size, alignment, &limit,
+						 nid);
 		if (!addr) {
 			addr = memblock_alloc_range_nid(size, alignment, base,
 					limit, nid, true);
