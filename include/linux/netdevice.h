@@ -2550,6 +2550,9 @@ struct net_device {
 
 	struct hwtstamp_provider __rcu	*hwprov;
 
+	/* To be set by devices that can do DMA but not via parent. */
+	struct device		*dma_dev;
+
 	u8			priv[] ____cacheline_aligned
 				       __counted_by(priv_len);
 } ____cacheline_aligned;
@@ -5559,5 +5562,15 @@ extern struct net_device *blackhole_netdev;
 #define DEV_STATS_ADD(DEV, FIELD, VAL) 	\
 		atomic_long_add((VAL), &(DEV)->stats.__##FIELD)
 #define DEV_STATS_READ(DEV, FIELD) atomic_long_read(&(DEV)->stats.__##FIELD)
+
+static inline struct device *netdev_get_dma_dev(const struct net_device *dev)
+{
+	struct device *dma_dev = dev->dma_dev ? dev->dma_dev : dev->dev.parent;
+
+	if (!dma_dev->dma_mask)
+		dma_dev = NULL;
+
+	return dma_dev;
+}
 
 #endif	/* _LINUX_NETDEVICE_H */
