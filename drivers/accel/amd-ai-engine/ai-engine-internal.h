@@ -69,30 +69,6 @@ struct aie_partition;
 struct aie_aperture;
 
 /**
- * struct aie_tile_operations - AI engine device operations
- * @get_tile_type: get type of tile based on tile operation
- * @scan_part_clocks: scan partition modules to check whether the modules are
- *		      clock gated or not, and update the soft clock states
- *		      structure. It is required to be called when the partition
- *		      is requested so that the driver knows which modules are
- *		      clock gated when the partition is requested. This function
- *		      expects the caller to apply partition lock before calling
- *		      this function.
- * @set_part_clocks: set partition modules clocks gate registers based on the
- *		     partition clock states bitmap. This function expects the
- *		     caller to apply partition lock before calling this
- *		     function. The caller function will need to set the bitmap
- *		     on which tiles are required to be clocked on.
- * Different AI engine device version has its own device
- * operation.
- */
-struct aie_tile_operations {
-	u32 (*get_tile_type)(struct aie_device *adev, struct aie_location *loc);
-	int (*scan_part_clocks)(struct aie_partition *apart);
-	int (*set_part_clocks)(struct aie_partition *apart);
-};
-
-/**
  * struct aie_resource - AI engine resource structure
  * @bitmap: resource bitmap
  * @total: total number of resource
@@ -113,6 +89,37 @@ struct aie_range {
 };
 
 /**
+ * struct aie_mem - AIE memory information
+ * @range: range of tiles of the memory
+ * @offset: register offset within a tile of the memory
+ * @size: of a the memory in one tile
+ */
+struct aie_mem {
+	struct aie_range range;
+	__kernel_size_t offset;
+	__kernel_size_t size;
+};
+
+/**
+ * struct aie_part_mem - AI engine partition memory information structure
+ * @apart: AI engine partition
+ * @mem: memory information of a type of memory
+ * @size: size of the total memories in the partition
+ *
+ * This structure is to keep the information of a type of memory in a
+ * partition. The memory information will be stored in @mem property.
+ * The following information will be kept:
+ *  * memory start address offset within a tile
+ *  * memory size
+ *  * what tiles contain this type of memory
+ */
+struct aie_part_mem {
+	struct aie_partition *apart;
+	struct aie_mem mem;
+	size_t size;
+};
+
+/**
  * struct aie_tile_attr - AI engine device tile type attributes
  * @start_row: start row
  * @num_rows: number of rows
@@ -124,6 +131,34 @@ struct aie_tile_attr {
 	u8 num_rows;
 	u8 num_mods;
 	const enum aie_module_type *mods;
+};
+
+/**
+ * struct aie_tile_operations - AI engine device operations
+ * @get_tile_type: get type of tile based on tile operation
+ * @get_mem_info: get different types of memories information
+ * @scan_part_clocks: scan partition modules to check whether the modules are
+ *		      clock gated or not, and update the soft clock states
+ *		      structure. It is required to be called when the partition
+ *		      is requested so that the driver knows which modules are
+ *		      clock gated when the partition is requested. This function
+ *		      expects the caller to apply partition lock before calling
+ *		      this function.
+ * @set_part_clocks: set partition modules clocks gate registers based on the
+ *		     partition clock states bitmap. This function expects the
+ *		     caller to apply partition lock before calling this
+ *		     function. The caller function will need to set the bitmap
+ *		     on which tiles are required to be clocked on.
+ * Different AI engine device version has its own device
+ * operation.
+ */
+struct aie_tile_operations {
+	u32 (*get_tile_type)(struct aie_device *adev, struct aie_location *loc);
+	unsigned int (*get_mem_info)(struct aie_device *adev,
+				     struct aie_range *range,
+				     struct aie_part_mem *pmem);
+	int (*scan_part_clocks)(struct aie_partition *apart);
+	int (*set_part_clocks)(struct aie_partition *apart);
 };
 
 /**
@@ -188,6 +223,7 @@ struct aie_aperture {
  * @range: range of partition
  * @cores_clk_state: bitmap to indicate the power state of core and mem tiles
  * @tiles_inuse: bitmap to indicate if a tile is in use
+ * @pmems: pointer to partition memories types
  * @mlock: protection for AI engine partition operations
  * @freq_req: required frequency
  */
@@ -198,6 +234,7 @@ struct aie_partition {
 	struct aie_range range;
 	struct aie_resource cores_clk_state;
 	struct aie_resource tiles_inuse;
+	struct aie_part_mem *pmems;
 	struct mutex mlock; /* protection for AI engine partition operations */
 	u64 freq_req;
 };

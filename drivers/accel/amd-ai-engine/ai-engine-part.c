@@ -13,6 +13,44 @@
 #include "ai-engine-internal.h"
 
 /**
+ * aie_part_create_mems_info() - creates array to store the AI engine partition
+ *				 different memories types information
+ * @apart: AI engine partition
+ *
+ * Return: 0 for success, negative value for failure
+ *
+ * This function will create array to store the information of different
+ * memories types in the partition. This array is stored in @apart->pmems.
+ */
+static int aie_part_create_mems_info(struct aie_partition *apart)
+{
+	unsigned int i, num_mems;
+
+	num_mems = apart->adev->ops->get_mem_info(apart->adev, &apart->range,
+						  NULL);
+	if (!num_mems)
+		return 0;
+
+	apart->pmems = devm_kcalloc(apart->aperture->dev, num_mems,
+				    sizeof(struct aie_part_mem),
+				    GFP_KERNEL);
+	if (!apart->pmems)
+		return -ENOMEM;
+
+	apart->adev->ops->get_mem_info(apart->adev, &apart->range,
+				       apart->pmems);
+	for (i = 0; i < num_mems; i++) {
+		struct aie_mem *mem = &apart->pmems[i].mem;
+
+		apart->pmems[i].apart = apart;
+		apart->pmems[i].size = mem->size *
+				       mem->range.size.col *
+				       mem->range.size.row;
+	}
+	return 0;
+}
+
+/**
  * aie_part_release() - release an AI engine partition instance
  * @apart: AI engine partition device
  */
@@ -29,6 +67,7 @@ void aie_part_release(struct aie_partition *apart)
 	aie_resource_uninitialize(&apart->cores_clk_state);
 	aie_resource_uninitialize(&apart->tiles_inuse);
 	list_del(&apart->node);
+	devm_kfree(aperture->dev, apart->pmems);
 	devm_kfree(aperture->dev, apart);
 	mutex_unlock(&aperture->mlock);
 }
@@ -63,6 +102,12 @@ struct aie_partition *aie_part_create(struct aie_aperture *aperture,
 	apart->range.size.col = num_col;
 	apart->range.start.row = aperture->range.start.row;
 	apart->range.size.row = aperture->range.size.row;
+
+	ret = aie_part_create_mems_info(apart);
+	if (ret) {
+		dev_err(aperture->dev, "failed to create tile memory information.");
+		return ERR_PTR(ret);
+	}
 
 	/* SHIM row always enabled so it is not needed in the bitmap */
 	num_tiles = apart->range.size.col * (apart->range.size.row - 1);

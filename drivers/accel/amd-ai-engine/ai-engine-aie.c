@@ -16,6 +16,8 @@
 #define AIE_COL_SHIFT		23U
 #define AIE_ROW_SHIFT		18U
 
+#define NUM_TYPES_OF_MEM	2U
+
 /*
  * Register offsets
  */
@@ -39,6 +41,42 @@ static u32 aie_get_tile_type(struct aie_device *adev, struct aie_location *loc)
 		return AIE_TILE_TYPE_SHIMPL;
 
 	return AIE_TILE_TYPE_SHIMNOC;
+}
+
+static unsigned int aie_get_mem_info(struct aie_device *adev,
+				     struct aie_range *range,
+				     struct aie_part_mem *pmem)
+{
+	u8 start_row, num_rows;
+	unsigned int i;
+
+	if (range->start.row + range->size.row <= 1) {
+		/* SHIM row only, no memories in this range */
+		return 0;
+	}
+	if (!pmem)
+		return NUM_TYPES_OF_MEM;
+
+	for (i = 0; i < NUM_TYPES_OF_MEM; i++) {
+		struct aie_mem *mem = &pmem[i].mem;
+
+		memcpy(&mem->range, range, sizeof(*range));
+	}
+
+	start_row = adev->ttype_attr[AIE_TILE_TYPE_TILE].start_row;
+	num_rows = adev->ttype_attr[AIE_TILE_TYPE_TILE].num_rows;
+	/* Setup tile data memory information */
+	pmem[0].mem.offset = 0;
+	pmem[0].mem.size = KBYTES(32);
+	pmem[0].mem.range.start.row = start_row;
+	pmem[0].mem.range.size.row = num_rows;
+	/* Setup program memory information */
+	pmem[1].mem.offset = 0x20000;
+	pmem[1].mem.size = KBYTES(16);
+	pmem[1].mem.range.start.row = start_row;
+	pmem[1].mem.range.size.row = num_rows;
+
+	return NUM_TYPES_OF_MEM;
 }
 
 /* aie_scan_part_clocks() - scan clocks of a partition
@@ -258,6 +296,7 @@ static int aie_set_part_clocks(struct aie_partition *apart)
 }
 static const struct aie_tile_operations aie_ops = {
 	.get_tile_type = aie_get_tile_type,
+	.get_mem_info = aie_get_mem_info,
 	.scan_part_clocks = aie_scan_part_clocks,
 	.set_part_clocks = aie_set_part_clocks,
 };
