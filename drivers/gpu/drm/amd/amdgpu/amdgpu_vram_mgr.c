@@ -499,6 +499,14 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 
 	INIT_LIST_HEAD(&vres->blocks);
 
+	/* Trimming create smaller blocks that may never be given to the driver.
+	 * Such blocks won't be cleared until being seen by the driver, which might
+	 * never occur (for instance UMD might request large alignment) => in such
+	 * case, upon release of the block, the drm_buddy allocator won't merge them
+	 * back, because their clear status is different.
+	 */
+	vres->flags = DRM_BUDDY_TRIM_IF_CLEAR;
+
 	if (place->flags & TTM_PL_FLAG_TOPDOWN)
 		vres->flags |= DRM_BUDDY_TOPDOWN_ALLOCATION;
 

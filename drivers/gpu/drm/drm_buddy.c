@@ -1091,6 +1091,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 
 	/* Trim the allocated block to the required size */
 	if (!(flags & DRM_BUDDY_TRIM_DISABLE) &&
+	    (!(flags & DRM_BUDDY_TRIM_IF_CLEAR) || drm_buddy_block_is_clear(block)) &&
 	    original_size != size) {
 		struct list_head *trim_list;
 		LIST_HEAD(temp);
