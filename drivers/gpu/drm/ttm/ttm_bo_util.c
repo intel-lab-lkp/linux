@@ -988,7 +988,7 @@ __ttm_bo_lru_cursor_next(struct ttm_bo_lru_cursor *curs)
 	}
 
 	spin_unlock(lru_lock);
-	return res ? bo : NULL;
+	return NULL;
 }
 
 /**
