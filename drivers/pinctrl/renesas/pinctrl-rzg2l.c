@@ -257,6 +257,8 @@ enum rzg2l_iolh_index {
  * @func_base: base number for port function (see register PFC)
  * @oen_max_pin: the maximum pin number supporting output enable
  * @oen_max_port: the maximum port number supporting output enable
+ * @oen_pin_names: array of pin names for output enable
+ * @oen_pin_names_len: length of the oen_pin_names array
  */
 struct rzg2l_hwcfg {
 	const struct rzg2l_register_offsets regs;
@@ -269,6 +271,8 @@ struct rzg2l_hwcfg {
 	u8 func_base;
 	u8 oen_max_pin;
 	u8 oen_max_port;
+	const char * const *oen_pin_names;
+	u8 oen_pin_names_len;
 };
 
 struct rzg2l_dedicated_configs {
@@ -1218,14 +1222,11 @@ static int rzv2h_bias_param_to_hw(enum pin_config_param param)
 
 static u8 rzv2h_pin_to_oen_bit(struct rzg2l_pinctrl *pctrl, unsigned int _pin)
 {
-	static const char * const pin_names[] = { "ET0_TXC_TXCLK", "ET1_TXC_TXCLK",
-						  "XSPI0_RESET0N", "XSPI0_CS0N",
-						  "XSPI0_CKN", "XSPI0_CKP" };
 	const struct pinctrl_pin_desc *pin_desc = &pctrl->desc.pins[_pin];
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(pin_names); i++) {
-		if (!strcmp(pin_desc->name, pin_names[i]))
+	for (i = 0; i < pctrl->data->hwcfg->oen_pin_names_len; i++) {
+		if (!strcmp(pin_desc->name, pctrl->data->hwcfg->oen_pin_names[i]))
 			return i;
 	}
 
@@ -3284,11 +3285,18 @@ static const struct rzg2l_hwcfg rzg3s_hwcfg = {
 	.oen_max_port = 7, /* P7_1 is the maximum OEN port. */
 };
 
+static const char * const rzv2h_oen_pin_names[] = {
+	"ET0_TXC_TXCLK", "ET1_TXC_TXCLK", "XSPI0_RESET0N", "XSPI0_CS0N",
+	"XSPI0_CKN", "XSPI0_CKP"
+};
+
 static const struct rzg2l_hwcfg rzv2h_hwcfg = {
 	.regs = {
 		.pwpr = 0x3c04,
 	},
 	.tint_start_index = 17,
+	.oen_pin_names = rzv2h_oen_pin_names,
+	.oen_pin_names_len = ARRAY_SIZE(rzv2h_oen_pin_names),
 };
 
 static struct rzg2l_pinctrl_data r9a07g043_data = {
