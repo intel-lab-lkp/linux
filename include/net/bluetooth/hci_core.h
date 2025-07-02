@@ -1400,6 +1400,13 @@ hci_conn_hash_lookup_pa_sync_handle(struct hci_dev *hdev, __u16 sync_handle)
 		if (c->type != BIS_LINK)
 			continue;
 
+		/* Ignore the big sync connections, we are looking
+		 * for the PA sync connection that was created as
+		 * a result of the PA sync established event.
+		 */
+		if (test_bit(HCI_CONN_BIG_SYNC, &c->flags))
+			continue;
+
 		/* Ignore the listen hcon, we are looking
 		 * for the child hcon that was created as
 		 * a result of the PA sync established event.
