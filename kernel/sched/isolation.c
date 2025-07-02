@@ -11,6 +11,7 @@
 enum hk_flags {
 	HK_FLAG_DOMAIN		= BIT(HK_TYPE_DOMAIN),
 	HK_FLAG_MANAGED_IRQ	= BIT(HK_TYPE_MANAGED_IRQ),
+	HK_FLAG_IO_QUEUE	= BIT(HK_TYPE_IO_QUEUE),
 	HK_FLAG_KERNEL_NOISE	= BIT(HK_TYPE_KERNEL_NOISE),
 };
 
@@ -221,6 +222,12 @@ static int __init housekeeping_isolcpus_setup(char *str)
 		if (!strncmp(str, "managed_irq,", 12)) {
 			str += 12;
 			flags |= HK_FLAG_MANAGED_IRQ;
+			continue;
+		}
+
+		if (!strncmp(str, "io_queue,", 9)) {
+			str += 9;
+			flags |= HK_FLAG_IO_QUEUE;
 			continue;
 		}
 
