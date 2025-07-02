@@ -1200,6 +1200,55 @@ struct media_pipeline *video_device_pipeline(struct video_device *vdev)
 }
 EXPORT_SYMBOL_GPL(video_device_pipeline);
 
+static int __video_device_pipeline_started(struct media_pipeline *pipe)
+{
+	unsigned int n_video_devices = 0;
+	struct media_entity *entity;
+
+	media_pipeline_for_each_entity(pipe, entity) {
+		if (entity->obj_type == MEDIA_ENTITY_TYPE_VIDEO_DEVICE)
+			n_video_devices++;
+	}
+
+	return n_video_devices - pipe->start_count;
+}
+
+int video_device_pipeline_started(struct video_device *vdev)
+{
+	struct media_pipeline *pipe;
+	int ret;
+
+	pipe = video_device_pipeline(vdev);
+	if (!pipe)
+		return -ENODEV;
+
+	ret = __video_device_pipeline_started(pipe);
+	if (ret)
+		return ret;
+
+	return media_pipeline_started(pipe);
+}
+EXPORT_SYMBOL_GPL(video_device_pipeline_started);
+
+int video_device_pipeline_stopped(struct video_device *vdev)
+{
+	struct media_pipeline *pipe;
+	int ret;
+
+	pipe = video_device_pipeline(vdev);
+	if (!pipe)
+		return -ENODEV;
+
+	ret = __video_device_pipeline_started(pipe);
+	if (ret)
+		return ret;
+
+	media_pipeline_stopped(pipe);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(video_device_pipeline_stopped);
+
 #endif /* CONFIG_MEDIA_CONTROLLER */
 
 /*

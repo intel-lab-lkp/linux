@@ -654,6 +654,52 @@ __must_check int video_device_pipeline_alloc_start(struct video_device *vdev);
  */
 struct media_pipeline *video_device_pipeline(struct video_device *vdev);
 
+/**
+ * video_device_pipeline_started - Run the pipeline_started() entity operation
+ *				   for a fully-started media pipeline
+ * @vdev: A video device that's part of the pipeline
+ *
+ * This function checks whether all MEDIA_ENTITY_TYPE_VIDEO_DEVICE entities
+ * connected to a given video device through enabled links have been marked as
+ * streaming through the use of video_device_pipeline_start() or one of its
+ * equivalent functions. If so, media_pipeline_started() is called to inform
+ * entities in the pipeline of that fact. The intention is to provide drivers
+ * with a shortcut for checking whether their pipeline is fully ready to start
+ * processing data.
+ *
+ * Returns:
+ *
+ * The number of video devices in the pipeline remaining to be started, or a
+ * negative error number on failure.
+ *
+ * * %-ENODEV		- The given video device is not part of a pipeline
+ * * Other errors	- media_pipeline_started() may pass through other error
+ *			  codes.
+ */
+int video_device_pipeline_started(struct video_device *vdev);
+
+/**
+ * video_device_pipeline_stopped - Run the pipeline_stopped() entity operation
+ *				   for a fully-started media pipeline
+ * @vdev: A video device that's part of the pipeline
+ *
+ * This function checks whether all MEDIA_ENTITY_TYPE_VIDEO_DEVICE entities
+ * connected to a given video device through enabled links have been marked as
+ * streaming through the use of video_device_pipeline_start() or one of its
+ * equivalent functions. If so, media_pipeline_stopped() is called for each
+ * entity in the pipeline. The intention is to provide drivers with a shortcut
+ * for checking whether this video device is the first device in the pipeline
+ * to be stopped.
+ *
+ * Returns:
+ *
+ * The number of video devices in the pipeline remaining to be started, or a
+ * negative error number on failure.
+ *
+ * * %-ENODEV		- The given video device is not part of a pipeline
+ */
+int video_device_pipeline_stopped(struct video_device *vdev);
+
 #endif /* CONFIG_MEDIA_CONTROLLER */
 
 #endif /* _V4L2_DEV_H */
