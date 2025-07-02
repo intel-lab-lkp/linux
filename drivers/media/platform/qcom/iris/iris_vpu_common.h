@@ -24,8 +24,8 @@ void iris_vpu_clear_interrupt(struct iris_core *core);
 int iris_vpu_watchdog(struct iris_core *core, u32 intr_status);
 int iris_vpu_prepare_pc(struct iris_core *core);
 int iris_vpu_power_on(struct iris_core *core);
-int iris_vpu_power_off_controller(struct iris_core *core);
-void iris_vpu_power_off_hw(struct iris_core *core);
+int iris_vpu2_power_off_controller(struct iris_core *core);
+void iris_vpu2_power_off_hw(struct iris_core *core);
 void iris_vpu_power_off(struct iris_core *core);
 
 #endif

@@ -33,7 +33,7 @@ static u64 iris_vpu2_calc_freq(struct iris_inst *inst, size_t data_size)
 }
 
 const struct vpu_ops iris_vpu2_ops = {
-	.power_off_hw = iris_vpu_power_off_hw,
-	.power_off_controller = iris_vpu_power_off_controller,
+	.power_off_hw = iris_vpu2_power_off_hw,
+	.power_off_controller = iris_vpu2_power_off_controller,
 	.calc_freq = iris_vpu2_calc_freq,
 };

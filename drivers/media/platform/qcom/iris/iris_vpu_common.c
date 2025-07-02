@@ -211,7 +211,7 @@ skip_power_off:
 	return -EAGAIN;
 }
 
-int iris_vpu_power_off_controller(struct iris_core *core)
+int iris_vpu2_power_off_controller(struct iris_core *core)
 {
 	u32 val = 0;
 	int ret;
@@ -253,7 +253,7 @@ disable_power:
 	return 0;
 }
 
-void iris_vpu_power_off_hw(struct iris_core *core)
+void iris_vpu2_power_off_hw(struct iris_core *core)
 {
 	dev_pm_genpd_set_hwmode(core->pmdomain_tbl->pd_devs[IRIS_HW_POWER_DOMAIN], false);
 	iris_disable_power_domains(core, core->pmdomain_tbl->pd_devs[IRIS_HW_POWER_DOMAIN]);

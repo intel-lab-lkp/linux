@@ -104,7 +104,7 @@ static void iris_vpu3_power_off_hardware(struct iris_core *core)
 	writel(0x0, core->reg_base + CPU_CS_AHB_BRIDGE_SYNC_RESET);
 
 disable_power:
-	iris_vpu_power_off_hw(core);
+	iris_vpu2_power_off_hw(core);
 }
 
 static void iris_vpu33_power_off_hardware(struct iris_core *core)
@@ -142,7 +142,7 @@ static void iris_vpu33_power_off_hardware(struct iris_core *core)
 	writel(0x0, core->reg_base + CPU_CS_AHB_BRIDGE_SYNC_RESET);
 
 disable_power:
-	iris_vpu_power_off_hw(core);
+	iris_vpu2_power_off_hw(core);
 }
 
 static int iris_vpu33_power_off_controller(struct iris_core *core)
@@ -264,7 +264,7 @@ static u64 iris_vpu3x_calculate_frequency(struct iris_inst *inst, size_t data_si
 
 const struct vpu_ops iris_vpu3_ops = {
 	.power_off_hw = iris_vpu3_power_off_hardware,
-	.power_off_controller = iris_vpu_power_off_controller,
+	.power_off_controller = iris_vpu2_power_off_controller,
 	.calc_freq = iris_vpu3x_calculate_frequency,
 };
 
