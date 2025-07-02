@@ -468,9 +468,14 @@ static int __init pci_proc_init(void)
 	proc_create_seq("devices", 0, proc_bus_pci_dir,
 		    &proc_bus_pci_devices_op);
 	proc_initialized = 1;
-	for_each_pci_dev(dev)
-		pci_proc_attach_device(dev);
-
+	pci_lock_rescan_remove();
+	for_each_pci_dev(dev) {
+		if (pci_dev_is_added(dev))
+			continue;
+		if (!pci_proc_attach_device(dev))
+			pci_dev_assign_added(dev, true);
+	}
+	pci_unlock_rescan_remove();
 	return 0;
 }
 device_initcall(pci_proc_init);
