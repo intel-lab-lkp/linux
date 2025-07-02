@@ -1212,6 +1212,7 @@ struct nvme_ctrl *nvme_ctrl_from_file(struct file *file);
 struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid);
 bool nvme_get_ns(struct nvme_ns *ns);
 void nvme_put_ns(struct nvme_ns *ns);
+void nvme_override_prohibited_io_queues(struct nvme_ctrl *ctrl);
 
 static inline bool nvme_multi_css(struct nvme_ctrl *ctrl)
 {

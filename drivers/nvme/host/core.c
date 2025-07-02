@@ -3149,6 +3149,22 @@ static inline bool nvme_discovery_ctrl(struct nvme_ctrl *ctrl)
 	return ctrl->opts && ctrl->opts->discovery_nqn;
 }
 
+static inline bool nvme_admin_ctrl(struct nvme_ctrl *ctrl)
+{
+	return (ctrl->cntrltype == NVME_CTRL_ADMIN);
+}
+
+/*
+ * An admin controller has one admin queue, but no I/O queues.
+ * Override queue_count so it only creates an admin queue.
+ */
+void nvme_override_prohibited_io_queues(struct nvme_ctrl *ctrl)
+{
+	if (nvme_admin_ctrl(ctrl))
+		ctrl->queue_count = 1;
+}
+EXPORT_SYMBOL_GPL(nvme_override_prohibited_io_queues);
+
 static bool nvme_validate_cntlid(struct nvme_subsystem *subsys,
 		struct nvme_ctrl *ctrl, struct nvme_id_ctrl *id)
 {
@@ -3215,6 +3231,11 @@ static int nvme_init_subsystem(struct nvme_ctrl *ctrl, struct nvme_id_ctrl *id)
 		kfree(subsys);
 		return -EINVAL;
 	}
+	if (nvme_admin_ctrl(ctrl))
+		dev_info(ctrl->device,
+			"Subsystem %s is an administrative controller",
+			subsys->subnqn);
+
 	nvme_mpath_default_iopolicy(subsys);
 
 	subsys->dev.class = &nvme_subsys_class;
