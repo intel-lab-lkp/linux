@@ -286,10 +286,19 @@ static int msm_pinmux_request_gpio(struct pinctrl_dev *pctldev,
 	return msm_pinmux_set_mux(pctldev, g->funcs[pctrl->soc->gpio_func], offset);
 }
 
+static bool msm_pinmux_function_is_gpio(struct pinctrl_dev *pctldev,
+					unsigned int selector)
+{
+	struct msm_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
+
+	return (pctrl->soc->functions[selector].flags & PINFUNCTION_FLAG_GPIO);
+}
+
 static const struct pinmux_ops msm_pinmux_ops = {
 	.request		= msm_pinmux_request,
 	.get_functions_count	= msm_get_functions_count,
 	.get_function_name	= msm_get_function_name,
+	.function_is_gpio	= msm_pinmux_function_is_gpio,
 	.get_function_groups	= msm_get_function_groups,
 	.gpio_request_enable	= msm_pinmux_request_gpio,
 	.set_mux		= msm_pinmux_set_mux,
