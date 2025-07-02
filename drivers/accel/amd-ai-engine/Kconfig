@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config DRM_ACCEL_AMDAIE
+	tristate "AMD Versal AI Engine"
+	depends on ARM64 || COMPILE_TEST
+	depends on ZYNQMP_FIRMWARE
+	depends on DRM_ACCEL
+	help
+	  This option enables support for the AMD AI engine driver.
+	  One AMD AI engine device can have multiple partitions (groups of
+	  AI engine tiles). AMD AI engine device driver instance manages
+	  AI engine partitions. Applications access its partitions through
+	  AI engine partition device instance.
+
+	  If unsure, say N
