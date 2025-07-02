@@ -1198,7 +1198,8 @@ static int ag71xx_buffer_size(struct ag71xx *ag)
 
 static bool ag71xx_fill_rx_buf(struct ag71xx *ag, struct ag71xx_buf *buf,
 			       int offset,
-			       void *(*alloc)(unsigned int size))
+			       void *(*alloc)(unsigned int size),
+			       void (*free)(void *))
 {
 	struct ag71xx_ring *ring = &ag->rx_ring;
 	struct ag71xx_desc *desc;
@@ -1213,6 +1214,11 @@ static bool ag71xx_fill_rx_buf(struct ag71xx *ag, struct ag71xx_buf *buf,
 	buf->rx.rx_buf = data;
 	buf->rx.dma_addr = dma_map_single(&ag->pdev->dev, data, ag->rx_buf_size,
 					  DMA_FROM_DEVICE);
+	if (dma_mapping_error(&ag->pdev->dev, buf->rx.dma_addr)) {
+		free(data);
+		buf->rx.rx_buf = NULL;
+		return false;
+	}
 	desc->data = (u32)buf->rx.dma_addr + offset;
 	return true;
 }
@@ -1241,7 +1247,7 @@ static int ag71xx_ring_rx_init(struct ag71xx *ag)
 		struct ag71xx_desc *desc = ag71xx_ring_desc(ring, i);
 
 		if (!ag71xx_fill_rx_buf(ag, &ring->buf[i], ag->rx_buf_offset,
-					netdev_alloc_frag)) {
+					netdev_alloc_frag, skb_free_frag)) {
 			ret = -ENOMEM;
 			break;
 		}
@@ -1275,7 +1281,7 @@ static int ag71xx_ring_rx_refill(struct ag71xx *ag)
 
 		if (!ring->buf[i].rx.rx_buf &&
 		    !ag71xx_fill_rx_buf(ag, &ring->buf[i], offset,
-					napi_alloc_frag))
+					napi_alloc_frag, skb_free_frag))
 			break;
 
 		desc->ctrl = DESC_EMPTY;
@@ -1511,6 +1517,10 @@ static netdev_tx_t ag71xx_hard_start_xmit(struct sk_buff *skb,
 
 	dma_addr = dma_map_single(&ag->pdev->dev, skb->data, skb->len,
 				  DMA_TO_DEVICE);
+	if (dma_mapping_error(&ag->pdev->dev, dma_addr)) {
+		netif_dbg(ag, tx_err, ndev, "DMA mapping error\n");
+		goto err_drop;
+	}
 
 	i = ring->curr & ring_mask;
 	desc = ag71xx_ring_desc(ring, i);
