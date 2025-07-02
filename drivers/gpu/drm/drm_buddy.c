@@ -472,7 +472,7 @@ EXPORT_SYMBOL(drm_buddy_free_list);
 
 static bool block_incompatible(struct drm_buddy_block *block, unsigned int flags)
 {
-	bool needs_clear = flags & DRM_BUDDY_CLEAR_ALLOCATION;
+	bool needs_clear = flags & DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
 
 	return needs_clear != drm_buddy_block_is_clear(block);
 }
@@ -592,21 +592,30 @@ get_maxblock(struct drm_buddy *mm, unsigned int order,
 	     unsigned long flags)
 {
 	struct drm_buddy_block *max_block = NULL, *block = NULL;
+	bool wants_clear;
 	unsigned int i;
 
 	for (i = order; i <= mm->max_order; ++i) {
 		struct drm_buddy_block *tmp_block;
 
+		wants_clear = flags & DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
+
+retry:
 		list_for_each_entry_reverse(tmp_block, &mm->free_list[i], link) {
-			if (block_incompatible(tmp_block, flags))
+			if (wants_clear && !drm_buddy_block_is_clear(tmp_block))
 				continue;
 
 			block = tmp_block;
 			break;
 		}
 
-		if (!block)
+		if (!block) {
+			if (wants_clear) {
+				wants_clear = false;
+				goto retry;
+			}
 			continue;
+		}
 
 		if (!max_block) {
 			max_block = block;
@@ -629,6 +638,7 @@ alloc_from_freelist(struct drm_buddy *mm,
 {
 	struct drm_buddy_block *block = NULL;
 	unsigned int tmp;
+	bool wants_clear;
 	int err;
 
 	if (flags & DRM_BUDDY_TOPDOWN_ALLOCATION) {
@@ -639,9 +649,11 @@ alloc_from_freelist(struct drm_buddy *mm,
 	} else {
 		for (tmp = order; tmp <= mm->max_order; ++tmp) {
 			struct drm_buddy_block *tmp_block;
+			wants_clear = flags & DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
 
+retry:
 			list_for_each_entry_reverse(tmp_block, &mm->free_list[tmp], link) {
-				if (block_incompatible(tmp_block, flags))
+				if (wants_clear && !drm_buddy_block_is_clear(tmp_block))
 					continue;
 
 				block = tmp_block;
@@ -650,24 +662,19 @@ alloc_from_freelist(struct drm_buddy *mm,
 
 			if (block)
 				break;
-		}
-	}
 
-	if (!block) {
-		/* Fallback method */
-		for (tmp = order; tmp <= mm->max_order; ++tmp) {
-			if (!list_empty(&mm->free_list[tmp])) {
-				block = list_last_entry(&mm->free_list[tmp],
-							struct drm_buddy_block,
-							link);
-				if (block)
-					break;
+			if (wants_clear) {
+				/* Relax this requirement to avoid splitting up higher order
+				 * blocks.
+				 */
+				wants_clear = false;
+				goto retry;
 			}
 		}
-
-		if (!block)
-			return ERR_PTR(-ENOSPC);
 	}
+
+	if (!block)
+		return ERR_PTR(-ENOSPC);
 
 	BUG_ON(!drm_buddy_block_is_free(block));
 

@@ -514,7 +514,7 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 		vres->flags |= DRM_BUDDY_CONTIGUOUS_ALLOCATION;
 
 	if (bo->flags & AMDGPU_GEM_CREATE_VRAM_CLEARED)
-		vres->flags |= DRM_BUDDY_CLEAR_ALLOCATION;
+		vres->flags |= DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
 
 	if (fpfn || lpfn != mgr->mm.size)
 		/* Allocate blocks in desired range */

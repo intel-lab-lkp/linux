@@ -240,7 +240,7 @@ static void drm_test_buddy_alloc_range_bias(struct kunit *test)
 	bias_end = max(bias_end, bias_start + ps);
 	bias_rem = bias_end - bias_start;
 
-	flags = DRM_BUDDY_CLEAR_ALLOCATION | DRM_BUDDY_RANGE_ALLOCATION;
+	flags = DRM_BUDDY_PREFER_CLEAR_ALLOCATION | DRM_BUDDY_RANGE_ALLOCATION;
 	size = max(round_up(prandom_u32_state(&prng) % bias_rem, ps), ps);
 
 	KUNIT_ASSERT_FALSE_MSG(test,
@@ -272,67 +272,9 @@ static void drm_test_buddy_alloc_clear(struct kunit *test)
 	LIST_HEAD(clean);
 
 	mm_size = SZ_4K << max_order;
-	KUNIT_EXPECT_FALSE(test, drm_buddy_init(&mm, mm_size, ps));
 
+	KUNIT_EXPECT_FALSE(test, drm_buddy_init(&mm, mm_size, ps));
 	KUNIT_EXPECT_EQ(test, mm.max_order, max_order);
-
-	/*
-	 * Idea is to allocate and free some random portion of the address space,
-	 * returning those pages as non-dirty and randomly alternate between
-	 * requesting dirty and non-dirty pages (not going over the limit
-	 * we freed as non-dirty), putting that into two separate lists.
-	 * Loop over both lists at the end checking that the dirty list
-	 * is indeed all dirty pages and vice versa. Free it all again,
-	 * keeping the dirty/clear status.
-	 */
-	KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, 0, mm_size,
-							    5 * ps, ps, &allocated,
-							    DRM_BUDDY_TOPDOWN_ALLOCATION),
-				"buddy_alloc hit an error size=%lu\n", 5 * ps);
-	drm_buddy_free_list(&mm, &allocated, DRM_BUDDY_CLEARED);
-
-	n_pages = 10;
-	do {
-		unsigned long flags;
-		struct list_head *list;
-		int slot = i % 2;
-
-		if (slot == 0) {
-			list = &dirty;
-			flags = 0;
-		} else {
-			list = &clean;
-			flags = DRM_BUDDY_CLEAR_ALLOCATION;
-		}
-
-		KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, 0, mm_size,
-								    ps, ps, list,
-								    flags),
-					"buddy_alloc hit an error size=%lu\n", ps);
-	} while (++i < n_pages);
-
-	list_for_each_entry(block, &clean, link)
-		KUNIT_EXPECT_EQ(test, drm_buddy_block_is_clear(block), true);
-
-	list_for_each_entry(block, &dirty, link)
-		KUNIT_EXPECT_EQ(test, drm_buddy_block_is_clear(block), false);
-
-	drm_buddy_free_list(&mm, &clean, DRM_BUDDY_CLEARED);
-
-	/*
-	 * Trying to go over the clear limit for some allocation.
-	 * The allocation should never fail with reasonable page-size.
-	 */
-	KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, 0, mm_size,
-							    10 * ps, ps, &clean,
-							    DRM_BUDDY_CLEAR_ALLOCATION),
-				"buddy_alloc hit an error size=%lu\n", 10 * ps);
-
-	drm_buddy_free_list(&mm, &clean, DRM_BUDDY_CLEARED);
-	drm_buddy_free_list(&mm, &dirty, 0);
-	drm_buddy_fini(&mm);
-
-	KUNIT_EXPECT_FALSE(test, drm_buddy_init(&mm, mm_size, ps));
 
 	/*
 	 * Create a new mm. Intentionally fragment the address space by creating
@@ -366,14 +308,13 @@ static void drm_test_buddy_alloc_clear(struct kunit *test)
 	do {
 		size = SZ_4K << order;
 
-		KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, 0, mm_size,
-								    size, size, &allocated,
-								    DRM_BUDDY_CLEAR_ALLOCATION),
-					"buddy_alloc hit an error size=%u\n", size);
+		KUNIT_ASSERT_FALSE_MSG(
+			test, drm_buddy_alloc_blocks(&mm, 0, mm_size,
+						     size, size, &allocated,
+						     DRM_BUDDY_PREFER_CLEAR_ALLOCATION),
+			"buddy_alloc hit an error size=%u\n", size);
 		total = 0;
 		list_for_each_entry(block, &allocated, link) {
-			if (size != mm_size)
-				KUNIT_EXPECT_EQ(test, drm_buddy_block_is_clear(block), false);
 			total += drm_buddy_block_size(&mm, block);
 		}
 		KUNIT_EXPECT_EQ(test, total, size);
@@ -399,7 +340,7 @@ static void drm_test_buddy_alloc_clear(struct kunit *test)
 	drm_buddy_free_list(&mm, &allocated, DRM_BUDDY_CLEARED);
 	KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, 0, SZ_4K << max_order,
 							    2 * ps, ps, &allocated,
-							    DRM_BUDDY_CLEAR_ALLOCATION),
+							    DRM_BUDDY_PREFER_CLEAR_ALLOCATION),
 				"buddy_alloc hit an error size=%lu\n", 2 * ps);
 	drm_buddy_free_list(&mm, &allocated, DRM_BUDDY_CLEARED);
 	KUNIT_ASSERT_FALSE_MSG(test, drm_buddy_alloc_blocks(&mm, SZ_4K << max_order, mm_size,
