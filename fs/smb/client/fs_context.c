@@ -1825,9 +1825,11 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 			goto cifs_parse_mount_err;
 		}
 		kfree(ctx->symlinkroot);
-		ctx->symlinkroot = kstrdup(param->string, GFP_KERNEL);
-		if (!ctx->symlinkroot)
+		ctx->symlinkroot = kstrndup(param->string, PATH_MAX, GFP_KERNEL);
+		if (!ctx->symlinkroot) {
+			cifs_errorf(fc, "OOM when copying symlinkroot string\n");
 			goto cifs_parse_mount_err;
+		}
 		break;
 	}
 	/* case Opt_ignore: - is ignored as expected ... */
@@ -1836,13 +1838,6 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 		cifs_errorf(fc, "multiuser mount option not supported with upcalltarget set as 'mount'\n");
 		goto cifs_parse_mount_err;
 	}
-
-	/*
-	 * By default resolve all native absolute symlinks relative to "/mnt/".
-	 * Same default has drvfs driver running in WSL for resolving SMB shares.
-	 */
-	if (!ctx->symlinkroot)
-		ctx->symlinkroot = kstrdup("/mnt/", GFP_KERNEL);
 
 	return 0;
 
