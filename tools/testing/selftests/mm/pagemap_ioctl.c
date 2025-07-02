@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <fcntl.h>
@@ -1480,6 +1481,86 @@ static void transact_test(int page_size)
 			      extra_thread_faults);
 }
 
+bool is_use_zero_page_set(void)
+{
+	ssize_t bytes_read;
+	char buffer[2];
+	int fd;
+
+	fd = open("/sys/kernel/mm/transparent_hugepage/use_zero_page", O_RDONLY);
+	if (fd < 0)
+		return 0;
+
+	bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+	if (bytes_read <= 0) {
+		close(fd);
+		return 0;
+	}
+
+	close(fd);
+	if (atoi(buffer) != 1)
+		return 0;
+
+	return 1;
+}
+
+void zeropfn_tests(void)
+{
+	unsigned long long mem_size;
+	struct page_region vec;
+	int i, ret;
+	char *mem;
+
+	/* Test with normal memory */
+	mem_size = 10 * page_size;
+	mem = mmap(NULL, mem_size, PROT_READ, MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (mem == MAP_FAILED)
+		ksft_exit_fail_msg("error nomem\n");
+
+	/* Touch each page to ensure it's mapped */
+	for (i = 0; i < mem_size; i += page_size)
+		(void)((volatile char *)mem)[i];
+
+	ret = pagemap_ioctl(mem, mem_size, &vec, 1, 0,
+			    (mem_size / page_size), PAGE_IS_PFNZERO, 0, 0, PAGE_IS_PFNZERO);
+	if (ret < 0)
+		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+
+	ksft_test_result(ret == 1 && LEN(vec) == (mem_size / page_size),
+			 "%s all pages must have PFNZERO set\n", __func__);
+
+	munmap(mem, mem_size);
+
+	/* Test with huge page if user_zero_page is set to 1 */
+	if (!is_use_zero_page_set()) {
+		ksft_test_result_skip("%s use_zero_page not supported or set to 1\n", __func__);
+		return;
+	}
+
+	mem_size = 10 * hpage_size;
+	mem = memalign(hpage_size, mem_size);
+	if (!mem)
+		ksft_exit_fail_msg("error nomem\n");
+
+	ret = madvise(mem, mem_size, MADV_HUGEPAGE);
+	if (!ret) {
+		for (i = 0; i < mem_size; i += hpage_size)
+			(void)((volatile char *)mem)[i];
+
+		ret = pagemap_ioctl(mem, mem_size, &vec, 1, 0,
+				    (mem_size / page_size), PAGE_IS_PFNZERO, 0, 0, PAGE_IS_PFNZERO);
+		if (ret < 0)
+			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+
+		ksft_test_result(ret == 1 && LEN(vec) == (mem_size / page_size),
+				 "%s all huge pages must have PFNZERO set\n", __func__);
+
+		free(mem);
+	} else {
+		ksft_test_result_skip("%s huge page not supported\n", __func__);
+	}
+}
+
 int main(int __attribute__((unused)) argc, char *argv[])
 {
 	int shmid, buf_size, fd, i, ret;
@@ -1494,7 +1575,7 @@ int main(int __attribute__((unused)) argc, char *argv[])
 	if (init_uffd())
 		ksft_exit_pass();
 
-	ksft_set_plan(115);
+	ksft_set_plan(117);
 
 	page_size = getpagesize();
 	hpage_size = read_pmd_pagesize();
@@ -1668,6 +1749,9 @@ int main(int __attribute__((unused)) argc, char *argv[])
 
 	/* 16. Userfaultfd tests */
 	userfaultfd_tests();
+
+	/* 17. ZEROPFN tests */
+	zeropfn_tests();
 
 	close(pagemap_fd);
 	ksft_exit_pass();
