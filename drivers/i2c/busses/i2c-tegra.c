@@ -604,10 +604,25 @@ static int tegra_i2c_wait_for_config_load(struct tegra_i2c_dev *i2c_dev)
 	return 0;
 }
 
+static int tegra_i2c_reset(struct tegra_i2c_dev *i2c_dev)
+{
+	acpi_handle handle = ACPI_HANDLE(i2c_dev->dev);
+	int err;
+
+	if (handle) {
+		err = acpi_evaluate_object(handle, "_RST", NULL, NULL);
+		if (ACPI_FAILURE(err))
+			return -EIO;
+
+		return 0;
+	}
+
+	return reset_control_reset(i2c_dev->rst);
+}
+
 static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 {
 	u32 val, clk_divisor, clk_multiplier, tsu_thd, tlow, thigh, non_hs_mode;
-	acpi_handle handle = ACPI_HANDLE(i2c_dev->dev);
 	struct i2c_timings *t = &i2c_dev->timings;
 	int err;
 
@@ -619,11 +634,7 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 	 * emit a noisy warning on error, which won't stay unnoticed and
 	 * won't hose machine entirely.
 	 */
-	if (handle)
-		err = acpi_evaluate_object(handle, "_RST", NULL, NULL);
-	else
-		err = reset_control_reset(i2c_dev->rst);
-
+	err = tegra_i2c_reset(i2c_dev);
 	WARN_ON_ONCE(err);
 
 	if (IS_DVC(i2c_dev))
