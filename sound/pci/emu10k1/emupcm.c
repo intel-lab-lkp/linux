@@ -991,7 +991,7 @@ static snd_pcm_uframes_t snd_emu10k1_capture_pointer(struct snd_pcm_substream *s
 	if (!epcm->running)
 		return 0;
 	if (epcm->first_ptr) {
-		udelay(50);	/* hack, it takes awhile until capture is started */
+		udelay(50);	/* hack, it takes a while until capture is started */
 		epcm->first_ptr = 0;
 	}
 	ptr = snd_emu10k1_ptr_read(emu, epcm->capture_idx_reg, 0) & 0x0000ffff;

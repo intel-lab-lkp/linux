@@ -1189,7 +1189,7 @@ static irqreturn_t neo_intr(int irq, void *voidbrd)
 			/*
 			 * The UART triggered us with a bogus interrupt type.
 			 * It appears the Exar chip, when REALLY bogged down, will throw
-			 * these once and awhile.
+			 * these periodically.
 			 * Its harmless, just ignore it and move on.
 			 */
 			jsm_dbg(INTR, &brd->pci_dev,

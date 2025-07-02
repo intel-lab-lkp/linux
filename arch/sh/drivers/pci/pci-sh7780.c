@@ -153,7 +153,7 @@ static irqreturn_t sh7780_pci_serr_irq(int irq, void *dev_id)
 	/* Deassert SERR */
 	__raw_writel(SH4_PCIINTM_SDIM, hose->reg_base + SH4_PCIINTM);
 
-	/* Back off the IRQ for awhile */
+	/* Back off the IRQ for a while */
 	disable_irq_nosync(irq);
 	hose->serr_timer.expires = jiffies + HZ;
 	add_timer(&hose->serr_timer);

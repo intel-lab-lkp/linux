@@ -257,7 +257,7 @@ err:
 
 	/*
 	 * But if it's not a writeback write we'd rather just bail out if
-	 * there aren't any buckets ready to write to - it might take awhile and
+	 * there aren't any buckets ready to write to - it might take a while and
 	 * we might be starving btree writes for gc or something.
 	 */
 

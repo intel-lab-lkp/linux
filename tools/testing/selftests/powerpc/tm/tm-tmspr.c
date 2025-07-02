@@ -14,7 +14,7 @@
  * (1) create more threads than cpus
  * (2) in each thread:
  * 	(a) set TFIAR and TFHAR a unique value
- * 	(b) loop for awhile, continually checking to see if
+ * 	(b) loop for a while, continually checking to see if
  * 	either register has been corrupted.
  *
  * (3) Loop:

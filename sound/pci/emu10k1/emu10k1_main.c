@@ -606,7 +606,7 @@ static int snd_emu10k1_ecard_init(struct snd_emu10k1 *emu)
 	/* Step 2: Calibrate the ADC and DAC */
 	snd_emu10k1_ecard_write(emu, EC_DACCAL | EC_LEDN | EC_TRIM_CSN);
 
-	/* Step 3: Wait for awhile;   XXX We can't get away with this
+	/* Step 3: Wait for a while;   XXX We can't get away with this
 	 * under a real operating system; we'll need to block and wait that
 	 * way. */
 	snd_emu10k1_wait(emu, 48000);
