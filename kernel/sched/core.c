@@ -3335,7 +3335,14 @@ static void __migrate_swap_task(struct task_struct *p, int cpu)
 {
 	__schedstat_inc(p->stats.numa_task_swapped);
 	count_vm_numa_event(NUMA_TASK_SWAP);
-	count_memcg_event_mm(p->mm, NUMA_TASK_SWAP);
+	/* exiting task has NULL mm */
+	if (!(p->flags & PF_EXITING)) {
+		WARN_ONCE(!p->mm, "swap task %d %s %x has no mm\n",
+			  p->pid, p->comm, p->flags);
+
+		if (p->mm)
+			count_memcg_event_mm(p->mm, NUMA_TASK_SWAP);
+	}
 
 	if (task_on_rq_queued(p)) {
 		struct rq *src_rq, *dst_rq;
