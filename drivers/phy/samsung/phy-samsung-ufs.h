@@ -143,7 +143,6 @@ static inline void samsung_ufs_phy_ctrl_isol(
 }
 
 int samsung_ufs_phy_wait_for_lock_acq(struct phy *phy, u8 lane);
-int exynosautov920_ufs_phy_wait_cdr_lock(struct phy *phy, u8 lane);
 void samsung_ufs_phy_config(struct samsung_ufs_phy *phy,
 			    const struct samsung_ufs_phy_cfg *cfg, u8 lane);
 
