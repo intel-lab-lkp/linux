@@ -925,6 +925,8 @@ void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
 		busy_tag_iter_fn *fn, void *priv);
 void blk_mq_tagset_wait_completed_request(struct blk_mq_tag_set *tagset);
 void blk_mq_freeze_queue_nomemsave(struct request_queue *q);
+int blk_mq_freeze_queue_nomemsave_timeout(struct request_queue *q,
+					  unsigned long timeout);
 void blk_mq_unfreeze_queue_nomemrestore(struct request_queue *q);
 static inline unsigned int __must_check
 blk_mq_freeze_queue(struct request_queue *q)

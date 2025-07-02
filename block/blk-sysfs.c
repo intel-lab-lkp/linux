@@ -65,7 +65,7 @@ static ssize_t
 queue_requests_store(struct gendisk *disk, const char *page, size_t count)
 {
 	unsigned long nr;
-	int ret, err;
+	int ret;
 	unsigned int memflags;
 	struct request_queue *q = disk->queue;
 
@@ -76,17 +76,18 @@ queue_requests_store(struct gendisk *disk, const char *page, size_t count)
 	if (ret < 0)
 		return ret;
 
-	memflags = blk_mq_freeze_queue(q);
+	memflags = memalloc_noio_save();
+	ret = blk_mq_freeze_queue_nomemsave_timeout(q, q->rq_timeout);
+	if (ret < 0)
+		return ret;
 	mutex_lock(&q->elevator_lock);
 	if (nr < BLKDEV_MIN_RQ)
 		nr = BLKDEV_MIN_RQ;
 
-	err = blk_mq_update_nr_requests(disk->queue, nr);
-	if (err)
-		ret = err;
+	ret = blk_mq_update_nr_requests(disk->queue, nr);
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
-	return ret;
+	return ret < 0 ? ret : count;
 }
 
 static ssize_t queue_ra_show(struct gendisk *disk, char *page)
@@ -582,7 +583,8 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 	if (val < -1)
 		return -EINVAL;
 
-	memflags = blk_mq_freeze_queue(q);
+	memflags = memalloc_noio_save();
+	ret = blk_mq_freeze_queue_nomemsave_timeout(q, q->rq_timeout);
 
 	rqos = wbt_rq_qos(q);
 	if (!rqos) {
@@ -782,7 +784,8 @@ queue_attr_store(struct kobject *kobj, struct attribute *attr,
 			return res;
 		}
 
-		res = queue_limits_commit_update_frozen(q, &lim);
+		res = queue_limits_commit_update_frozen_timeout(q, &lim,
+								q->rq_timeout);
 		if (res)
 			return res;
 		return length;

@@ -191,6 +191,7 @@ void blk_mq_freeze_queue_wait(struct request_queue *q)
 }
 EXPORT_SYMBOL_GPL(blk_mq_freeze_queue_wait);
 
+/* Returns > 0 upon success; 0 upon failure. */
 int blk_mq_freeze_queue_wait_timeout(struct request_queue *q,
 				     unsigned long timeout)
 {
@@ -206,6 +207,19 @@ void blk_mq_freeze_queue_nomemsave(struct request_queue *q)
 	blk_mq_freeze_queue_wait(q);
 }
 EXPORT_SYMBOL_GPL(blk_mq_freeze_queue_nomemsave);
+
+/*
+ * Try to freeze @q. Returns 0 if successful or a negative value if freezing @q
+ * did not succeed before the timeout expired.
+ */
+int blk_mq_freeze_queue_nomemsave_timeout(struct request_queue *q,
+					  unsigned long timeout)
+{
+	blk_freeze_queue_start(q);
+	if (blk_mq_freeze_queue_wait_timeout(q, timeout) <= 0)
+		return -EAGAIN;
+	return 0;
+}
 
 bool __blk_mq_unfreeze_queue(struct request_queue *q, bool force_atomic)
 {

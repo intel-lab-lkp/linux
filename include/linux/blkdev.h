@@ -1059,6 +1059,8 @@ queue_limits_start_update(struct request_queue *q)
 }
 int queue_limits_commit_update_frozen(struct request_queue *q,
 		struct queue_limits *lim);
+int queue_limits_commit_update_frozen_timeout(struct request_queue *q,
+		struct queue_limits *lim, unsigned long timeout);
 int queue_limits_commit_update(struct request_queue *q,
 		struct queue_limits *lim);
 int queue_limits_set(struct request_queue *q, struct queue_limits *lim);

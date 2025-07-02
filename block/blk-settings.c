@@ -488,6 +488,38 @@ int queue_limits_commit_update_frozen(struct request_queue *q,
 EXPORT_SYMBOL_GPL(queue_limits_commit_update_frozen);
 
 /**
+ * queue_limits_commit_update_frozen_timeout - commit an atomic update of queue
+ *	limits
+ * @q:		queue to update
+ * @lim:	limits to apply
+ * @timeout:	maximum time to wait until @q is frozen
+ *
+ * Apply the limits in @lim that were obtained from queue_limits_start_update()
+ * and updated with the new values by the caller to @q.  Freezes the queue
+ * before the update and unfreezes it after.
+ *
+ * Returns 0 if successful, else a negative error code.
+ */
+int queue_limits_commit_update_frozen_timeout(struct request_queue *q,
+			struct queue_limits *lim, unsigned long timeout)
+{
+	unsigned int memflags;
+	int ret;
+
+	memflags = memalloc_noio_save();
+	ret = blk_mq_freeze_queue_nomemsave_timeout(q, timeout);
+	if (ret < 0) {
+		memalloc_flags_restore(memflags);
+		queue_limits_cancel_update(q);
+		return ret;
+	}
+	ret = queue_limits_commit_update(q, lim);
+	blk_mq_unfreeze_queue(q, memflags);
+
+	return ret;
+}
+
+/**
  * queue_limits_set - apply queue limits to queue
  * @q:		queue to update
  * @lim:	limits to apply
