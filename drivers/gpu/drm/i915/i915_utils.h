@@ -32,6 +32,7 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include <linux/sched/clock.h>
+#include <linux/iopoll.h>
 
 #ifdef CONFIG_X86
 #include <asm/hypervisor.h>
@@ -238,7 +239,7 @@ wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
  * timeout could be due to preemption or similar and we've never had a chance to
  * check the condition before the timeout.
  */
-#define __wait_for(OP, COND, US, Wmin, Wmax) ({ \
+#define __wait_for_old(OP, COND, US, Wmin, Wmax) ({ \
 	const ktime_t end__ = ktime_add_ns(ktime_get_raw(), 1000ll * (US)); \
 	long wait__ = (Wmin); /* recommended min for usleep is 10 us */	\
 	int ret__;							\
@@ -263,6 +264,8 @@ wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
 	ret__;								\
 })
 
+#define __wait_for(OP, COND, US, Wmin, Wmax)				\
+	poll_timeout_us(OP, COND, (Wmin), (US), false)
 #define _wait_for(COND, US, Wmin, Wmax)	__wait_for(, (COND), (US), (Wmin), \
 						   (Wmax))
 #define wait_for(COND, MS)		_wait_for((COND), (MS) * 1000, 10, 1000)
