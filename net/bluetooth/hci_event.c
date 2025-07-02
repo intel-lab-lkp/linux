@@ -6968,6 +6968,9 @@ static void hci_le_big_sync_established_evt(struct hci_dev *hdev, void *data,
 
 		if (!ev->status) {
 			conn->state = BT_CONNECTED;
+			/* Prevent cleanup in hci_conn_timeout. */
+			hci_conn_hold(conn);
+
 			set_bit(HCI_CONN_BIG_SYNC, &bis->flags);
 			hci_debugfs_create_conn(conn);
 			hci_conn_add_sysfs(conn);
