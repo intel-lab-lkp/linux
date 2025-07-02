@@ -129,7 +129,10 @@ static ssize_t survivability_mode_show(struct device *dev,
 	struct xe_survivability_info *info = survivability->info;
 	int index = 0, count = 0;
 
-	for (index = 0; index < MAX_SCRATCH_MMIO; index++) {
+	count += sysfs_emit_at(buff, count, "Survivability mode: %s\n",
+			       survivability->type ? "Runtime" : "Boot");
+
+	for (index = 0; survivability->boot_status && index < MAX_SCRATCH_MMIO; index++) {
 		if (info[index].reg)
 			count += sysfs_emit_at(buff, count, "%s: 0x%x - 0x%x\n", info[index].name,
 					       info[index].reg, info[index].value);
@@ -169,6 +172,10 @@ static int enable_survivability_mode(struct pci_dev *pdev)
 	if (ret)
 		return ret;
 
+	/* Only create sysfs for runtime survivability mode */
+	if (xe_survivability_mode_is_runtime(xe))
+		return 0;
+
 	/* Make sure xe_heci_gsc_init() knows about survivability mode */
 	survivability->mode = true;
 
@@ -187,6 +194,17 @@ static int enable_survivability_mode(struct pci_dev *pdev)
 	dev_err(dev, "In Survivability Mode\n");
 
 	return 0;
+}
+
+/**
+ * xe_survivability_mode_is_runtime - check if survivability mode is runtime
+ * @xe: xe device instance
+ *
+ * Returns true if in runtime survivability mode, false otherwise
+ */
+bool xe_survivability_mode_is_runtime(struct xe_device *xe)
+{
+	return xe->survivability.type == XE_SURVIVABILITY_TYPE_RUNTIME;
 }
 
 /**
@@ -251,16 +269,18 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
  * Return: 0 if survivability mode is enabled or not requested; negative error
  * code otherwise.
  */
-int xe_survivability_mode_enable(struct xe_device *xe)
+int xe_survivability_mode_enable(struct xe_device *xe, const enum xe_survivability_type type)
 {
 	struct xe_survivability *survivability = &xe->survivability;
 	struct xe_survivability_info *info;
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 
-	if (!xe_survivability_mode_is_requested(xe))
+	if (!xe_survivability_mode_is_requested(xe) &&
+	    type != XE_SURVIVABILITY_TYPE_RUNTIME)
 		return 0;
 
 	survivability->size = MAX_SCRATCH_MMIO;
+	survivability->type = type;
 
 	info = devm_kcalloc(xe->drm.dev, survivability->size, sizeof(*info),
 			    GFP_KERNEL);
