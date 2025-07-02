@@ -11,4 +11,5 @@ amd-aie-$(CONFIG_DRM_ACCEL_AMDAIE) := \
 	ai-engine-clock.o	\
 	ai-engine-dev.o		\
 	ai-engine-part.o	\
-	ai-engine-res.o
+	ai-engine-res.o		\
+	ai-engine-reset.o

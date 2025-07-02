@@ -22,7 +22,14 @@
  * Register offsets
  */
 #define AIE_SHIMPL_CLKCNTR_REGOFF		0x00036040U
+#define AIE_SHIMPL_TILECTRL_REGOFF		0x00036030U
+
+#define AIE_TILE_CORE_AMH3_PART3_REGOFF		0x000307a0U
 #define AIE_TILE_CORE_CLKCNTR_REGOFF		0x00036040U
+#define AIE_TILE_CORE_LC_REGOFF			0x00030520U
+#define AIE_TILE_CORE_R0_REGOFF			0x00030000U
+#define AIE_TILE_CORE_TILECTRL_REGOFF		0x00036030U
+#define AIE_TILE_CORE_VRL0_REGOFF		0x00030530U
 
 /*
  * Register masks
@@ -31,6 +38,27 @@
 #define AIE_SHIMPL_CLKCNTR_NEXTCLK_MASK		BIT(1)
 #define AIE_TILE_CLKCNTR_COLBUF_MASK		BIT(0)
 #define AIE_TILE_CLKCNTR_NEXTCLK_MASK		BIT(1)
+
+static const struct aie_tile_regs aie_core_32bit_regs = {
+	.attribute = AIE_TILE_TYPE_TILE << AIE_REGS_ATTR_TILE_TYPE_SHIFT,
+	.soff = AIE_TILE_CORE_R0_REGOFF,
+	.eoff = AIE_TILE_CORE_LC_REGOFF,
+};
+
+static const struct aie_tile_regs aie_core_128bit_regs = {
+	.attribute = AIE_TILE_TYPE_TILE << AIE_REGS_ATTR_TILE_TYPE_SHIFT,
+	.soff = AIE_TILE_CORE_VRL0_REGOFF,
+	.eoff = AIE_TILE_CORE_AMH3_PART3_REGOFF,
+};
+
+static const struct aie_core_regs_attr aie_core_regs[] = {
+	{.core_regs = &aie_core_32bit_regs,
+	 .width = 1,
+	},
+	{.core_regs = &aie_core_128bit_regs,
+	 .width = 4,
+	},
+};
 
 static u32 aie_get_tile_type(struct aie_device *adev, struct aie_location *loc)
 {
@@ -77,6 +105,43 @@ static unsigned int aie_get_mem_info(struct aie_device *adev,
 	pmem[1].mem.range.size.row = num_rows;
 
 	return NUM_TYPES_OF_MEM;
+}
+
+/**
+ * aie_part_clear_mems() - clear memories of every tile in a partition
+ * @apart: AI engine partition
+ *
+ * Return: return 0 always.
+ */
+static int aie_part_clear_mems(struct aie_partition *apart)
+{
+	struct aie_part_mem *pmems = apart->pmems;
+	struct aie_device *adev = apart->adev;
+	u32 i;
+
+	/* Clear each type of memories in the partition */
+	for (i = 0; i < NUM_TYPES_OF_MEM; i++) {
+		struct aie_mem *mem = &pmems[i].mem;
+		struct aie_range *range = &mem->range;
+		u32 c, r;
+
+		for (c = range->start.col;
+		     c < range->start.col + range->size.col; c++) {
+			for (r = range->start.row;
+			     r < range->start.row + range->size.row; r++) {
+				struct aie_location loc;
+				u32 memoff;
+
+				loc.col = c;
+				loc.row = r;
+				memoff = aie_cal_regoff(adev, loc, mem->offset);
+				memset_io(apart->aperture->base + memoff, 0,
+					  mem->size);
+			}
+		}
+	}
+
+	return 0;
 }
 
 /* aie_scan_part_clocks() - scan clocks of a partition
@@ -294,11 +359,48 @@ static int aie_set_part_clocks(struct aie_partition *apart)
 
 	return 0;
 }
+
+/**
+ * aie_set_tile_isolation() - Set isolation boundary of AI engine tile
+ * @apart: AI engine partition
+ * @loc: Location of tile
+ * @dir: Direction to block
+ *
+ * Possible direction values are:
+ *      - AIE_ISOLATE_EAST_MASK
+ *      - AIE_ISOLATE_NORTH_MASK
+ *      - AIE_ISOLATE_WEST_MASK
+ *      - AIE_ISOLATE_SOUTH_MASK
+ *      - AIE_ISOLATE_ALL_MASK
+ *      - or "OR" of multiple values
+ */
+static void aie_set_tile_isolation(struct aie_partition *apart,
+				   struct aie_location *loc, u8 dir)
+{
+	struct aie_aperture *aperture = apart->aperture;
+	struct aie_device *adev = apart->adev;
+	void __iomem *va;
+	u32 ttype, val;
+
+	val = (u32)dir;
+	ttype = aie_get_tile_type(adev, loc);
+	if (ttype == AIE_TILE_TYPE_TILE) {
+		va = aperture->base +
+		     aie_cal_regoff(adev, *loc, AIE_TILE_CORE_TILECTRL_REGOFF);
+	} else {
+		va = aperture->base +
+		     aie_cal_regoff(adev, *loc, AIE_SHIMPL_TILECTRL_REGOFF);
+	}
+	writel(val, va);
+}
+
 static const struct aie_tile_operations aie_ops = {
 	.get_tile_type = aie_get_tile_type,
 	.get_mem_info = aie_get_mem_info,
+	.mem_clear = aie_part_clear_mems,
 	.scan_part_clocks = aie_scan_part_clocks,
 	.set_part_clocks = aie_set_part_clocks,
+	.set_tile_isolation = aie_set_tile_isolation,
 };
 
 /**
@@ -316,4 +418,6 @@ void aie_device_init(struct aie_device *adev)
 	adev->col_shift = AIE_COL_SHIFT;
 	adev->row_shift = AIE_ROW_SHIFT;
 	adev->ops = &aie_ops;
+	adev->num_core_regs = ARRAY_SIZE(aie_core_regs);
+	adev->core_regs = aie_core_regs;
 }

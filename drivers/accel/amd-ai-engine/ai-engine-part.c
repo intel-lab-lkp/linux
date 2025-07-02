@@ -12,6 +12,35 @@
 
 #include "ai-engine-internal.h"
 
+/*
+ * aie_partition_initialize() - Initialize AI engine partition
+ * @apart: AI engine partition instance
+ * @args: User initialization options
+ *
+ * Return: 0 for success, negative value for failure
+ */
+int aie_partition_initialize(void *apart, struct aie_partition_init_args *args)
+{
+	if (!apart)
+		return -EINVAL;
+	return aie_part_initialize((struct aie_partition *)apart, args);
+}
+EXPORT_SYMBOL_GPL(aie_partition_initialize);
+
+/*
+ * aie_partition_reset() - Reset AI engine partition
+ * @apart: AI engine partition instance
+ *
+ * Return: 0 for success, negative value for failure
+ */
+int aie_partition_teardown(void *apart)
+{
+	if (!apart)
+		return -EINVAL;
+	return aie_part_teardown((struct aie_partition *)apart);
+}
+EXPORT_SYMBOL_GPL(aie_partition_teardown);
+
 /**
  * aie_part_create_mems_info() - creates array to store the AI engine partition
  *				 different memories types information
@@ -58,6 +87,8 @@ void aie_part_release(struct aie_partition *apart)
 {
 	struct aie_aperture *aperture = apart->aperture;
 
+	/* aie_part_clean() will do hardware reset */
+	aie_part_clean(apart);
 	aie_part_set_freq(apart, 0);
 	mutex_lock(&aperture->mlock);
 	aie_resource_put_region(&aperture->cols_res,

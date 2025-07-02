@@ -81,9 +81,6 @@ bool aie_part_check_clk_enable_loc(struct aie_partition *apart,
 int aie_part_request_tiles(struct aie_partition *apart, int num_tiles,
 			   struct aie_location *locs)
 {
-	int ret;
-
-	mutex_lock(&apart->mlock);
 	if (num_tiles == 0) {
 		aie_resource_set(&apart->tiles_inuse, 0,
 				 apart->tiles_inuse.total);
@@ -102,10 +99,7 @@ int aie_part_request_tiles(struct aie_partition *apart, int num_tiles,
 				aie_resource_set(&apart->tiles_inuse, bit, 1);
 		}
 	}
-	ret = apart->adev->ops->set_part_clocks(apart);
-	mutex_unlock(&apart->mlock);
-
-	return ret;
+	return apart->adev->ops->set_part_clocks(apart);
 }
 
 /**
@@ -121,9 +115,6 @@ int aie_part_request_tiles(struct aie_partition *apart, int num_tiles,
 int aie_part_release_tiles(struct aie_partition *apart, int num_tiles,
 			   struct aie_location *locs)
 {
-	int ret;
-
-	mutex_lock(&apart->mlock);
 	if (num_tiles == 0) {
 		aie_resource_clear(&apart->tiles_inuse, 0,
 				   apart->tiles_inuse.total);
@@ -143,10 +134,7 @@ int aie_part_release_tiles(struct aie_partition *apart, int num_tiles,
 		}
 	}
 
-	ret = apart->adev->ops->set_part_clocks(apart);
-	mutex_unlock(&apart->mlock);
-
-	return ret;
+	return apart->adev->ops->set_part_clocks(apart);
 }
 
 /**

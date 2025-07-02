@@ -23,6 +23,9 @@
 
 #define KBYTES(n)		((n) * SZ_1K)
 
+/* AIE core registers step size */
+#define AIE_CORE_REGS_STEP	0x10
+
 /*
  * Macros for AI engine tile type bitmasks
  */
@@ -39,6 +42,24 @@ enum aie_tile_type {
 /* SHIM NOC tile includes SHIM PL and SHIM NOC modules */
 #define AIE_TILE_TYPE_MASK_SHIMNOC	BIT(AIE_TILE_TYPE_SHIMNOC)
 #define AIE_TILE_TYPE_MASK_MEMORY	BIT(AIE_TILE_TYPE_MEMORY)
+
+/*
+ * Macros for attribute property of AI engine registers accessed by kernel
+ * 0 - 7 bits: tile type bits
+ * 8 - 15 bits: permission bits. If it is 1, it allows write from userspace
+ */
+#define AIE_REGS_ATTR_TILE_TYPE_SHIFT	0U
+#define AIE_REGS_ATTR_PERM_SHIFT	8U
+#define AIE_REGS_ATTR_TILE_TYPE_MASK	GENMASK(AIE_REGS_ATTR_PERM_SHIFT - 1, \
+						AIE_REGS_ATTR_TILE_TYPE_SHIFT)
+#define AIE_REGS_ATTR_PERM_MASK		GENMASK(15, \
+						AIE_REGS_ATTR_PERM_SHIFT)
+
+#define AIE_ISOLATE_EAST_MASK		BIT(3)
+#define AIE_ISOLATE_NORTH_MASK		BIT(2)
+#define AIE_ISOLATE_WEST_MASK		BIT(1)
+#define AIE_ISOLATE_SOUTH_MASK		BIT(0)
+#define AIE_ISOLATE_ALL_MASK		GENMASK(3, 0)
 
 /**
  * struct aie_tile_regs - contiguous range of AI engine register
@@ -134,9 +155,20 @@ struct aie_tile_attr {
 };
 
 /**
+ * struct aie_core_regs_attr - AI engine core register attributes structure
+ * @core_regs: core registers
+ * @width: number of 32 bit words
+ */
+struct aie_core_regs_attr {
+	const struct aie_tile_regs *core_regs;
+	u32 width;
+};
+
+/**
  * struct aie_tile_operations - AI engine device operations
  * @get_tile_type: get type of tile based on tile operation
  * @get_mem_info: get different types of memories information
+ * @mem_clear: clear data memory banks of the partition.
  * @scan_part_clocks: scan partition modules to check whether the modules are
  *		      clock gated or not, and update the soft clock states
  *		      structure. It is required to be called when the partition
@@ -149,6 +181,7 @@ struct aie_tile_attr {
  *		     caller to apply partition lock before calling this
  *		     function. The caller function will need to set the bitmap
  *		     on which tiles are required to be clocked on.
+ * @set_tile_isolation: set tile isolation boundary for input direction.
  * Different AI engine device version has its own device
  * operation.
  */
@@ -157,8 +190,11 @@ struct aie_tile_operations {
 	unsigned int (*get_mem_info)(struct aie_device *adev,
 				     struct aie_range *range,
 				     struct aie_part_mem *pmem);
+	int (*mem_clear)(struct aie_partition *apart);
 	int (*scan_part_clocks)(struct aie_partition *apart);
 	int (*set_part_clocks)(struct aie_partition *apart);
+	void (*set_tile_isolation)(struct aie_partition *apart,
+				   struct aie_location *loc, u8 dir);
 };
 
 /**
@@ -167,12 +203,14 @@ struct aie_tile_operations {
  * @dev: device pointer for the AI engine device
  * @mlock: protection for AI engine device operations
  * @clk: AI enigne device clock
+ * @core_regs: array of core registers
  * @ops: tile operations
  * @array_shift: array address shift
  * @col_shift: column address shift
  * @row_shift: row address shift
  * @dev_gen: aie hardware device generation
  * @pm_node_id: AI Engine platform management node ID
+ * @num_core_regs: number of core registers range
  * @ttype_attr: tile type attributes
  */
 struct aie_device {
@@ -180,12 +218,14 @@ struct aie_device {
 	struct device *dev;
 	struct mutex mlock; /* protection for AI engine apertures */
 	struct clk *clk;
+	const struct aie_core_regs_attr *core_regs;
 	const struct aie_tile_operations *ops;
 	u32 array_shift;
 	u32 col_shift;
 	u32 row_shift;
 	u32 dev_gen;
 	u32 pm_node_id;
+	u32 num_core_regs;
 	struct aie_tile_attr ttype_attr[AIE_TILE_TYPE_MAX];
 };
 
@@ -301,6 +341,10 @@ int aie_part_request_tiles(struct aie_partition *apart, int num_tiles,
 			   struct aie_location *locs);
 int aie_part_release_tiles(struct aie_partition *apart, int num_tiles,
 			   struct aie_location *locs);
+int aie_part_clean(struct aie_partition *apart);
+int aie_part_initialize(struct aie_partition *apart,
+			struct aie_partition_init_args *args);
+int aie_part_teardown(struct aie_partition *apart);
 int aie_resource_initialize(struct aie_resource *res, int count);
 void aie_resource_uninitialize(struct aie_resource *res);
 int aie_resource_check_region(struct aie_resource *res, u32 start,
@@ -310,6 +354,7 @@ int aie_resource_get_region(struct aie_resource *res, u32 start,
 void aie_resource_put_region(struct aie_resource *res, int start, u32 count);
 int aie_resource_set(struct aie_resource *res, u32 start, u32 count);
 int aie_resource_clear(struct aie_resource *res, u32 start, u32 count);
+int aie_resource_clear_all(struct aie_resource *res);
 bool aie_resource_testbit(struct aie_resource *res, u32 bit);
 
 #endif /* AIE_INTERNAL_H */

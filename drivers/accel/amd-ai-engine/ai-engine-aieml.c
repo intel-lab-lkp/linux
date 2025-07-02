@@ -27,12 +27,53 @@
  * Register offsets
  */
 #define AIEML_SHIMPL_COLCLOCK_CTRL_REGOFF		0x000fff20U
+#define AIEML_SHIMPL_TILECTRL_REGOFF			0x00036030U
+
+#define AIEML_MEMORY_TILECTRL_REGOFF			0x00096030U
+
+#define AIEML_TILE_COREMOD_AMLL0_PART1_REGOFF		0x00030000U
+#define AIEML_TILE_COREMOD_AMHH8_PART2_REGOFF		0x00030470U
+#define AIEML_TILE_COREMOD_R0_REGOFF			0x00030c00U
+#define AIEML_TILE_COREMOD_R31_REGOFF			0x00030df0U
+#define AIEML_TILE_COREMOD_TILECTRL_REGOFF		0x00036030U
+#define AIEML_TILE_COREMOD_WL0_PART1_REGOFF		0x00030800U
+#define AIEML_TILE_COREMOD_WH11_PART2_REGOFF		0x00030af0U
 
 /*
  * Register masks
  */
 #define AIEML_SHIMPL_COLRESET_CTRL_MASK			GENMASK(1, 0)
 #define AIEML_SHIMPL_COLCLOCK_CTRL_MASK			GENMASK(1, 0)
+
+static const struct aie_tile_regs aieml_core_amxx_regs = {
+	.attribute = AIE_TILE_TYPE_TILE << AIE_REGS_ATTR_TILE_TYPE_SHIFT,
+	.soff = AIEML_TILE_COREMOD_AMLL0_PART1_REGOFF,
+	.eoff = AIEML_TILE_COREMOD_AMHH8_PART2_REGOFF,
+};
+
+static const struct aie_tile_regs aieml_core_wx_regs = {
+	.attribute = AIE_TILE_TYPE_TILE << AIE_REGS_ATTR_TILE_TYPE_SHIFT,
+	.soff = AIEML_TILE_COREMOD_WL0_PART1_REGOFF,
+	.eoff = AIEML_TILE_COREMOD_WH11_PART2_REGOFF,
+};
+
+static const struct aie_tile_regs aieml_core_32bit_regs = {
+	.attribute = AIE_TILE_TYPE_TILE << AIE_REGS_ATTR_TILE_TYPE_SHIFT,
+	.soff = AIEML_TILE_COREMOD_R0_REGOFF,
+	.eoff = AIEML_TILE_COREMOD_R31_REGOFF,
+};
+
+static const struct aie_core_regs_attr aieml_core_regs[] = {
+	{.core_regs = &aieml_core_amxx_regs,
+	 .width = 4,
+	},
+	{.core_regs = &aieml_core_wx_regs,
+	 .width = 4,
+	},
+	{.core_regs = &aieml_core_32bit_regs,
+	 .width = 1,
+	},
+};
 
 static u32 aieml_get_tile_type(struct aie_device *adev,
 			       struct aie_location *loc)
@@ -94,6 +135,27 @@ static unsigned int aieml_get_mem_info(struct aie_device *adev,
 	pmem[2].mem.range.size.row = num_rows;
 
 	return NUM_TYPES_OF_MEM;
+}
+
+/**
+ * aieml_part_clear_mems() - clear memories of every tile in a partition
+ * @apart: AI engine partition
+ *
+ * Return: return 0 for success, error code for failure
+ */
+static int aieml_part_clear_mems(struct aie_partition *apart)
+{
+	struct aie_range *range = &apart->range;
+	u32 node_id = apart->adev->pm_node_id;
+	int ret;
+
+	ret = zynqmp_pm_aie_operation(node_id, range->start.col,
+				      range->size.col,
+				      XILINX_AIE_OPS_ZEROISATION);
+	if (ret < 0)
+		dev_err(apart->aperture->dev, "failed to clear memory for partition\n");
+
+	return ret;
 }
 
 /* aieml_scan_part_clocks() - scan clocks of a partition
@@ -232,11 +294,52 @@ static int aieml_set_part_clocks(struct aie_partition *apart)
 	return 0;
 }
 
+/**
+ * aieml_set_tile_isolation() - Set isolation boundary of AI engile tile
+ * @apart: AI engine partition
+ * @loc: Location of tile
+ * @dir: Direction to block
+ *
+ * Possible direction values are:
+ *      - AIE_ISOLATE_EAST_MASK
+ *      - AIE_ISOLATE_NORTH_MASK
+ *      - AIE_ISOLATE_WEST_MASK
+ *      - AIE_ISOLATE_SOUTH_MASK
+ *      - AIE_ISOLATE_ALL_MASK
+ *      - or "OR" of multiple values
+ */
+static void aieml_set_tile_isolation(struct aie_partition *apart,
+				     struct aie_location *loc, u8 dir)
+{
+	struct aie_aperture *aperture = apart->aperture;
+	struct aie_device *adev = apart->adev;
+	void __iomem *va;
+	u32 ttype, val;
+
+	/* For AIEML device, dir input will match register mask */
+	val = (u32)dir;
+	ttype = aieml_get_tile_type(adev, loc);
+	if (ttype == AIE_TILE_TYPE_TILE) {
+		va = aperture->base +
+		     aie_cal_regoff(adev, *loc,
+				    AIEML_TILE_COREMOD_TILECTRL_REGOFF);
+	} else if (ttype == AIE_TILE_TYPE_MEMORY) {
+		va = aperture->base +
+		     aie_cal_regoff(adev, *loc, AIEML_MEMORY_TILECTRL_REGOFF);
+	} else {
+		va = aperture->base +
+		     aie_cal_regoff(adev, *loc, AIEML_SHIMPL_TILECTRL_REGOFF);
+	}
+	writel(val, va);
+}
+
 static const struct aie_tile_operations aieml_ops = {
 	.get_tile_type = aieml_get_tile_type,
 	.get_mem_info = aieml_get_mem_info,
+	.mem_clear = aieml_part_clear_mems,
 	.scan_part_clocks = aieml_scan_part_clocks,
 	.set_part_clocks = aieml_set_part_clocks,
+	.set_tile_isolation = aieml_set_tile_isolation,
 };
 
 /**
@@ -254,4 +357,6 @@ void aieml_device_init(struct aie_device *adev)
 	adev->col_shift = AIEML_COL_SHIFT;
 	adev->row_shift = AIEML_ROW_SHIFT;
 	adev->ops = &aieml_ops;
+	adev->num_core_regs = ARRAY_SIZE(aieml_core_regs);
+	adev->core_regs = aieml_core_regs;
 }
