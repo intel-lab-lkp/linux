@@ -1899,6 +1899,10 @@ ieee80211_rx_get_bigtk(struct ieee80211_rx_data *rx, int idx)
 	 * index (i.e., a key that we do not have).
 	 */
 
+	/* AP interface sould not use BIGTK to decrypt */
+	if (rx->sdata->vif.type == NL80211_IFTYPE_AP)
+		return NULL;
+
 	if (idx < 0) {
 		idx = NUM_DEFAULT_KEYS + NUM_DEFAULT_MGMT_KEYS;
 		idx2 = idx + 1;
