@@ -424,7 +424,9 @@ uevent environment as ``WEDGED=<method1>[,..,<methodN>]`` in order of less to
 more side-effects. If driver is unsure about recovery or method is unknown
 (like soft/hard system reboot, firmware flashing, physical device replacement
 or any other procedure which can't be attempted on the fly), ``WEDGED=unknown``
-will be sent instead.
+will be sent instead. If recovery method is specific to vendor
+``WEDGED=vendor-specific`` will be sent and userspace should refer to vendor
+specific documentation for further recovery steps.
 
 Userspace consumers can parse this event and attempt recovery as per the
 following expectations.
@@ -435,6 +437,7 @@ following expectations.
     none            optional telemetry collection
     rebind          unbind + bind driver
     bus-reset       unbind + bus reset/re-enumeration + bind
+    vendor-specific vendor specific recovery method
     unknown         consumer policy
     =============== ========================================
 
