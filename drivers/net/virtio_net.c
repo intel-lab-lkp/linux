@@ -3151,6 +3151,10 @@ static int virtnet_open(struct net_device *dev)
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_STATUS)) {
 		if (vi->status & VIRTIO_NET_S_LINK_UP)
 			netif_carrier_on(vi->dev);
+		if (vi->status & VIRTIO_NET_S_ANNOUNCE) {
+			vi->status &= ~VIRTIO_NET_S_ANNOUNCE;
+			schedule_work(&vi->config_work);
+		}
 		virtio_config_driver_enable(vi->vdev);
 	} else {
 		vi->status = VIRTIO_NET_S_LINK_UP;
@@ -6215,33 +6219,34 @@ static void virtnet_config_changed_work(struct work_struct *work)
 {
 	struct virtnet_info *vi =
 		container_of(work, struct virtnet_info, config_work);
-	u16 v;
+	u16 v, changed;
 
 	if (virtio_cread_feature(vi->vdev, VIRTIO_NET_F_STATUS,
 				 struct virtio_net_config, status, &v) < 0)
 		return;
 
-	if (v & VIRTIO_NET_S_ANNOUNCE) {
+	changed = vi->status ^ v;
+
+	/* Assume the device will clear announce status when ack received. */
+	if ((changed & VIRTIO_NET_S_ANNOUNCE) && (v & VIRTIO_NET_S_ANNOUNCE)) {
 		netdev_notify_peers(vi->dev);
 		virtnet_ack_link_announce(vi);
+		v &= ~VIRTIO_NET_S_ANNOUNCE;
+	}
+
+	if (changed & VIRTIO_NET_S_LINK_UP) {
+		if (v & VIRTIO_NET_S_LINK_UP) {
+			virtnet_update_settings(vi);
+			netif_carrier_on(vi->dev);
+			netif_tx_wake_all_queues(vi->dev);
+		} else {
+			netif_carrier_off(vi->dev);
+			netif_tx_stop_all_queues(vi->dev);
+		}
 	}
 
 	/* Ignore unknown (future) status bits */
-	v &= VIRTIO_NET_S_LINK_UP;
-
-	if (vi->status == v)
-		return;
-
-	vi->status = v;
-
-	if (vi->status & VIRTIO_NET_S_LINK_UP) {
-		virtnet_update_settings(vi);
-		netif_carrier_on(vi->dev);
-		netif_tx_wake_all_queues(vi->dev);
-	} else {
-		netif_carrier_off(vi->dev);
-		netif_tx_stop_all_queues(vi->dev);
-	}
+	vi->status = v & (VIRTIO_NET_S_LINK_UP | VIRTIO_NET_S_ANNOUNCE);
 }
 
 static void virtnet_config_changed(struct virtio_device *vdev)
@@ -7030,6 +7035,10 @@ static int virtnet_probe(struct virtio_device *vdev)
 	   otherwise get link status from config. */
 	netif_carrier_off(dev);
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_STATUS)) {
+		/* If there's (rarely) an announcement, the actual work will be
+		 * scheduled on ndo_open() to avoid recursive rtnl_lock() here.
+		 */
+		vi->status = VIRTIO_NET_S_ANNOUNCE;
 		virtnet_config_changed_work(&vi->config_work);
 	} else {
 		vi->status = VIRTIO_NET_S_LINK_UP;
