@@ -2751,6 +2751,7 @@ int kvm_arch_irq_bypass_add_producer(struct irq_bypass_consumer *cons,
 void kvm_arch_irq_bypass_del_producer(struct irq_bypass_consumer *cons,
 				      struct irq_bypass_producer *prod)
 {
+	bool pending = false;
 	struct kvm_kernel_irqfd *irqfd =
 		container_of(cons, struct kvm_kernel_irqfd, consumer);
 	struct kvm_kernel_irq_routing_entry *irq_entry = &irqfd->irq_entry;
@@ -2758,7 +2759,10 @@ void kvm_arch_irq_bypass_del_producer(struct irq_bypass_consumer *cons,
 	if (irq_entry->type != KVM_IRQ_ROUTING_MSI)
 		return;
 
-	kvm_vgic_v4_unset_forwarding(irqfd->kvm, prod->irq);
+	kvm_vgic_v4_unset_forwarding(irqfd->kvm, prod->irq, &pending);
+
+	if (pending)
+		eventfd_signal((struct eventfd_ctx *)prod->token);
 }
 
 bool kvm_arch_irqfd_route_changed(struct kvm_kernel_irq_routing_entry *old,
@@ -2781,7 +2785,7 @@ int kvm_arch_update_irqfd_routing(struct kvm *kvm, unsigned int host_irq,
 	 *
 	 * Unmap the vLPI and fall back to software LPI injection.
 	 */
-	return kvm_vgic_v4_unset_forwarding(kvm, host_irq);
+	return kvm_vgic_v4_unset_forwarding(kvm, host_irq, NULL);
 }
 
 void kvm_arch_irq_bypass_stop(struct irq_bypass_consumer *cons)

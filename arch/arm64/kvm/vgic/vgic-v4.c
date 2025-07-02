@@ -527,13 +527,14 @@ static struct vgic_irq *__vgic_host_irq_get_vlpi(struct kvm *kvm, int host_irq)
 	return NULL;
 }
 
-int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq)
+int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq, bool *pending)
 {
 	struct vgic_irq *irq;
 	unsigned long flags;
 	int ret = 0;
+	bool direct_msi = vgic_supports_direct_msis(kvm);
 
-	if (!vgic_supports_direct_msis(kvm))
+	if (!pending && !direct_msi)
 		return 0;
 
 	irq = __vgic_host_irq_get_vlpi(kvm, host_irq);
@@ -542,7 +543,13 @@ int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq)
 
 	raw_spin_lock_irqsave(&irq->irq_lock, flags);
 	WARN_ON(irq->hw && irq->host_irq != host_irq);
-	if (irq->hw) {
+
+	if (pending) {
+		*pending = irq->pending_latch;
+		irq->pending_latch = false;
+	}
+
+	if (direct_msi && irq->hw) {
 		atomic_dec(&irq->target_vcpu->arch.vgic_cpu.vgic_v3.its_vpe.vlpi_count);
 		irq->hw = false;
 		ret = its_unmap_vlpi(host_irq);
