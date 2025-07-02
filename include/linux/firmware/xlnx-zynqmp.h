@@ -657,6 +657,7 @@ int zynqmp_pm_set_sd_config(u32 node, enum pm_sd_config_type config, u32 value);
 int zynqmp_pm_set_gem_config(u32 node, enum pm_gem_config_type config,
 			     u32 value);
 int zynqmp_pm_aie_operation(u32 node, u16 start_col, u16 num_col, u32 operation);
+int zynqmp_pm_get_qos(u32 node, u32 *const def_qos, u32 *const qos);
 #else
 static inline int zynqmp_pm_get_api_version(u32 *version)
 {
@@ -977,6 +978,11 @@ static inline int zynqmp_pm_set_gem_config(u32 node,
 
 static inline int zynqmp_pm_aie_operation(u32 node, u16 start_col,
 					  u16 num_col, u32 operation)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_get_qos(u32 node, u32 *const def_qos, u32 *const qos)
 {
 	return -ENODEV;
 }
