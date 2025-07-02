@@ -2035,7 +2035,7 @@ st_lsm6dsx_sysfs_sampling_frequency_avail(struct device *dev,
 
 	odr_table = &sensor->hw->settings->odr_table[sensor->id];
 	for (i = 0; i < odr_table->odr_len; i++)
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%d.%03d ",
+		len += sysfs_emit_at(buf, len, "%d.%03d ",
 				 odr_table->odr_avl[i].milli_hz / 1000,
 				 odr_table->odr_avl[i].milli_hz % 1000);
 	buf[len - 1] = '\n';
@@ -2054,7 +2054,7 @@ static ssize_t st_lsm6dsx_sysfs_scale_avail(struct device *dev,
 
 	fs_table = &hw->settings->fs_table[sensor->id];
 	for (i = 0; i < fs_table->fs_len; i++)
-		len += scnprintf(buf + len, PAGE_SIZE - len, "0.%09u ",
+		len += sysfs_emit_at(buf, len, "0.%09u ",
 				 fs_table->fs_avl[i].gain);
 	buf[len - 1] = '\n';
 
