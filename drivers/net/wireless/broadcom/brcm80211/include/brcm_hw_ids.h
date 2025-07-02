@@ -59,6 +59,7 @@
 #define CY_CC_4373_CHIP_ID		0x4373
 #define CY_CC_43012_CHIP_ID		43012
 #define CY_CC_43439_CHIP_ID		43439
+#define CY_CC_43751_CHIP_ID		43751
 #define CY_CC_43752_CHIP_ID		43752
 
 /* USB Device IDs */
