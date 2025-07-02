@@ -589,13 +589,14 @@ __drm_buddy_alloc_range_bias(struct drm_buddy *mm,
 
 static struct drm_buddy_block *
 get_maxblock(struct drm_buddy *mm, unsigned int order,
+	     unsigned int max_order,
 	     unsigned long flags)
 {
 	struct drm_buddy_block *max_block = NULL, *block = NULL;
 	bool wants_clear;
 	unsigned int i;
 
-	for (i = order; i <= mm->max_order; ++i) {
+	for (i = order; i <= max_order; ++i) {
 		struct drm_buddy_block *tmp_block;
 
 		wants_clear = flags & DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
@@ -634,6 +635,7 @@ retry:
 static struct drm_buddy_block *
 alloc_from_freelist(struct drm_buddy *mm,
 		    unsigned int order,
+		    unsigned int max_order,
 		    unsigned long flags)
 {
 	struct drm_buddy_block *block = NULL;
@@ -642,12 +644,12 @@ alloc_from_freelist(struct drm_buddy *mm,
 	int err;
 
 	if (flags & DRM_BUDDY_TOPDOWN_ALLOCATION) {
-		block = get_maxblock(mm, order, flags);
+		block = get_maxblock(mm, order, max_order, flags);
 		if (block)
 			/* Store the obtained block order */
 			tmp = drm_buddy_block_order(block);
 	} else {
-		for (tmp = order; tmp <= mm->max_order; ++tmp) {
+		for (tmp = order; tmp <= max_order; ++tmp) {
 			struct drm_buddy_block *tmp_block;
 			wants_clear = flags & DRM_BUDDY_PREFER_CLEAR_ALLOCATION;
 
@@ -955,6 +957,7 @@ static struct drm_buddy_block *
 __drm_buddy_alloc_blocks(struct drm_buddy *mm,
 			 u64 start, u64 end,
 			 unsigned int order,
+			 unsigned int max_order,
 			 unsigned long flags)
 {
 	if (flags & DRM_BUDDY_RANGE_ALLOCATION)
@@ -963,7 +966,7 @@ __drm_buddy_alloc_blocks(struct drm_buddy *mm,
 						     order, flags);
 	else
 		/* Allocate from freelist */
-		return alloc_from_freelist(mm, order, flags);
+		return alloc_from_freelist(mm, order, max_order, flags);
 }
 
 /**
@@ -994,7 +997,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 {
 	struct drm_buddy_block *block = NULL;
 	u64 original_size, original_min_size;
-	unsigned int min_order, order;
+	unsigned int min_order, max_order, order;
 	LIST_HEAD(allocated);
 	unsigned long pages;
 	int err;
@@ -1043,6 +1046,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 
 	do {
 		order = min(order, (unsigned int)fls(pages) - 1);
+		max_order = mm->max_order;
 		BUG_ON(order > mm->max_order);
 		BUG_ON(order < min_order);
 
@@ -1050,6 +1054,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 			block = __drm_buddy_alloc_blocks(mm, start,
 							 end,
 							 order,
+							 max_order,
 							 flags);
 			if (!IS_ERR(block))
 				break;
@@ -1061,6 +1066,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 					block = __drm_buddy_alloc_blocks(mm, start,
 									 end,
 									 min_order,
+									 mm->max_order,
 									 flags);
 					if (!IS_ERR(block)) {
 						order = min_order;
@@ -1081,6 +1087,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 				err = -ENOSPC;
 				goto err_free;
 			}
+			max_order = order;
 		} while (1);
 
 		mark_allocated(block);
