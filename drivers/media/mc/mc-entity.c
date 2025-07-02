@@ -1059,6 +1059,35 @@ __media_pipeline_pad_iter_next(struct media_pipeline *pipe,
 }
 EXPORT_SYMBOL_GPL(__media_pipeline_pad_iter_next);
 
+int media_pipeline_started(struct media_pipeline *pipe)
+{
+	struct media_entity *entity;
+	int ret;
+
+	media_pipeline_for_each_entity(pipe, entity) {
+		ret = media_entity_call(entity, pipeline_started);
+		if (ret && ret != -ENOIOCTLCMD)
+			break;
+	}
+
+	ret = ret == -ENOIOCTLCMD ? 0 : ret;
+	if (ret)
+		media_pipeline_stopped(pipe);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(media_pipeline_started);
+
+void media_pipeline_stopped(struct media_pipeline *pipe)
+{
+	struct media_entity *entity;
+
+	media_pipeline_for_each_entity(pipe, entity)
+		if (entity->ops && entity->ops->pipeline_stopped)
+			entity->ops->pipeline_stopped(entity);
+}
+EXPORT_SYMBOL_GPL(media_pipeline_stopped);
+
 /* -----------------------------------------------------------------------------
  * Links management
  */
