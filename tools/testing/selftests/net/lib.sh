@@ -240,6 +240,23 @@ create_netdevsim() {
     echo nsim$id
 }
 
+create_netdevsim_port() {
+    local nsim_id="$1"
+    local ns="$2"
+    local port_id="$3"
+    local perm_addr="$4"
+
+    echo "$port_id $perm_addr" | ip netns exec $ns tee /sys/bus/netdevsim/devices/netdevsim$nsim_id/new_port > /dev/null
+
+    local orig_dev=$(basename $(ip netns exec $ns find /sys/bus/netdevsim/devices/netdevsim$nsim_id/net/ -maxdepth 1 -name 'e*' | tail -n 1))
+    local new_dev=nsim${id}p$port_id
+
+    ip -netns $ns link set dev $orig_dev name $new_dev
+    ip -netns $ns link set dev $new_dev up
+
+    echo $new_dev
+}
+
 # Remove netdevsim with given id.
 cleanup_netdevsim() {
     local id="$1"
