@@ -2308,6 +2308,9 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 				goto drop;
 			}
 
+			/* Record the timestamp to skb*/
+			skb->skb_mstamp_ns = le32_to_cpu(hdr->ts);
+
 			len = __le16_to_cpu(hdr->slen);
 		} else {
 			struct hci_iso_data_hdr *hdr;
