@@ -766,12 +766,9 @@ static int __ref get_nid_for_pfn(unsigned long pfn)
 }
 
 static void do_register_memory_block_under_node(int nid,
-						struct memory_block *mem_blk,
-						enum meminit_context context)
+						struct memory_block *mem_blk)
 {
 	int ret;
-
-	memory_block_add_nid(mem_blk, nid, context);
 
 	ret = sysfs_create_link_nowarn(&node_devices[nid]->dev.kobj,
 				       &mem_blk->dev.kobj,
@@ -824,7 +821,8 @@ static int register_mem_block_under_node_early(struct memory_block *mem_blk,
 		if (page_nid != nid)
 			continue;
 
-		do_register_memory_block_under_node(nid, mem_blk, MEMINIT_EARLY);
+		memory_block_add_nid_early(mem_blk, nid);
+		do_register_memory_block_under_node(nid, mem_blk);
 		return 0;
 	}
 	/* mem section does not span the specified node */
@@ -840,7 +838,7 @@ static int register_mem_block_under_node_hotplug(struct memory_block *mem_blk,
 {
 	int nid = *(int *)arg;
 
-	do_register_memory_block_under_node(nid, mem_blk, MEMINIT_HOTPLUG);
+	do_register_memory_block_under_node(nid, mem_blk);
 	return 0;
 }
 
