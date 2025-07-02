@@ -790,7 +790,6 @@ class KernelDoc:
                 level += 1
 
         self.output_declaration(decl_type, declaration_name,
-                                struct=declaration_name,
                                 definition=declaration,
                                 purpose=self.entry.declaration_purpose)
 
@@ -859,7 +858,6 @@ class KernelDoc:
                               f"Excess enum value '%{k}' description in '{declaration_name}'")
 
         self.output_declaration('enum', declaration_name,
-                                enum=declaration_name,
                                 purpose=self.entry.declaration_purpose)
 
     def dump_declaration(self, ln, prototype):
@@ -1020,14 +1018,12 @@ class KernelDoc:
 
         if 'typedef' in return_type:
             self.output_declaration(decl_type, declaration_name,
-                                    function=declaration_name,
                                     typedef=True,
                                     functiontype=return_type,
                                     purpose=self.entry.declaration_purpose,
                                     func_macro=func_macro)
         else:
             self.output_declaration(decl_type, declaration_name,
-                                    function=declaration_name,
                                     typedef=False,
                                     functiontype=return_type,
                                     purpose=self.entry.declaration_purpose,
@@ -1066,7 +1062,6 @@ class KernelDoc:
             self.create_parameter_list(ln, decl_type, args, ',', declaration_name)
 
             self.output_declaration(decl_type, declaration_name,
-                                    function=declaration_name,
                                     typedef=True,
                                     functiontype=return_type,
                                     purpose=self.entry.declaration_purpose)
@@ -1088,7 +1083,6 @@ class KernelDoc:
                 return
 
             self.output_declaration('typedef', declaration_name,
-                                    typedef=declaration_name,
                                     purpose=self.entry.declaration_purpose)
             return
 
