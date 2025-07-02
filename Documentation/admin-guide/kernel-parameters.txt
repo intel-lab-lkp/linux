@@ -2590,7 +2590,6 @@
 			  "number of CPUs in system - 1".
 
 			managed_irq
-
 			  Isolate from being targeted by managed interrupts
 			  which have an interrupt mask containing isolated
 			  CPUs. The affinity of managed interrupts is
@@ -2612,6 +2611,24 @@
 			  isolated CPUs submit IO. IO submitted on
 			  housekeeping CPUs has no influence on those
 			  queues.
+
+			io_queue
+			  Isolate from I/O queue work caused by multiqueue
+			  device drivers. Restrict the placement of
+			  queues to housekeeping CPUs only, ensuring that
+			  all I/O work is processed by a housekeeping CPU.
+
+			  Housekeeping CPUs that serve isolated CPUs
+			  cannot be offlined.
+
+			  The io_queue configuration takes precedence over
+			  managed_irq; thus, when io_queue is used,
+			  managed_irq has no effect.
+
+			  Note: When an isolated CPU issues an I/O request,
+			  it is forwarded to a housekeeping CPU. This will
+			  trigger a software interrupt on the completion
+			  path.
 
 			The format of <cpu-list> is described above.
 
