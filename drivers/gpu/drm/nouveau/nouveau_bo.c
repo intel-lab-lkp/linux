@@ -887,6 +887,9 @@ nouveau_bo_evict_flags(struct ttm_buffer_object *bo, struct ttm_placement *pl)
 {
 	struct nouveau_bo *nvbo = nouveau_bo(bo);
 
+	if (bo->destroy != nouveau_bo_del_ttm)
+		return;
+
 	switch (bo->resource->mem_type) {
 	case TTM_PL_VRAM:
 		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART,
