@@ -4522,6 +4522,7 @@ qla24xx_enable_msix(struct qla_hw_data *ha, struct rsp_que *rsp)
 	int min_vecs = QLA_BASE_VECTORS;
 	struct irq_affinity desc = {
 		.pre_vectors = QLA_BASE_VECTORS,
+		.mask = blk_mq_online_queue_affinity(),
 	};
 
 	if (QLA_TGT_MODE_ENABLED() && (ql2xenablemsix != 0) &&

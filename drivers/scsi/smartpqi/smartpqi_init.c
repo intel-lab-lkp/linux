@@ -4109,13 +4109,16 @@ static int pqi_enable_msix_interrupts(struct pqi_ctrl_info *ctrl_info)
 {
 	int num_vectors_enabled;
 	unsigned int flags = PCI_IRQ_MSIX;
+	struct irq_affinity desc = {
+		.mask = blk_mq_online_queue_affinity(),
+	};
 
 	if (!pqi_disable_managed_interrupts)
 		flags |= PCI_IRQ_AFFINITY;
 
-	num_vectors_enabled = pci_alloc_irq_vectors(ctrl_info->pci_dev,
+	num_vectors_enabled = pci_alloc_irq_vectors_affinity(ctrl_info->pci_dev,
 			PQI_MIN_MSIX_VECTORS, ctrl_info->num_queue_groups,
-			flags);
+			flags, &desc);
 	if (num_vectors_enabled < 0) {
 		dev_err(&ctrl_info->pci_dev->dev,
 			"MSI-X init failed with error %d\n",
