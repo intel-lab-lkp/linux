@@ -154,6 +154,8 @@ static int amd_ai_engine_probe(struct platform_device *pdev)
 	adev->dev_gen = aie_gen;
 	if (aie_gen == AIE_DEVICE_GEN_AIE) {
 		aie_device_init(adev);
+	} else if (aie_gen == AIE_DEVICE_GEN_AIEML) {
+		aieml_device_init(adev);
 	} else {
 		dev_err(&pdev->dev, "Invalid device generation");
 		return -EINVAL;

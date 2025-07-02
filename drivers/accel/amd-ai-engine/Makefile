@@ -6,6 +6,7 @@ obj-$(CONFIG_DRM_ACCEL_AMDAIE)	+= amd-aie.o
 
 amd-aie-$(CONFIG_DRM_ACCEL_AMDAIE) := \
 	ai-engine-aie.o		\
+	ai-engine-aieml.o	\
 	ai-engine-aperture.o	\
 	ai-engine-clock.o	\
 	ai-engine-dev.o		\

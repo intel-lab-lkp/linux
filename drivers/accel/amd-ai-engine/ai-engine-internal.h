@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 
 #define AIE_DEVICE_GEN_AIE	1U
+#define AIE_DEVICE_GEN_AIEML	2U
 
 #define KBYTES(n)		((n) * SZ_1K)
 
@@ -246,6 +247,7 @@ static inline u32 aie_cal_regoff(struct aie_device *adev,
 }
 
 void aie_device_init(struct aie_device *adev);
+void aieml_device_init(struct aie_device *adev);
 struct aie_partition *
 aie_aperture_request_part(struct aie_aperture *aperture,
 			  struct aie_partition_req *req);
