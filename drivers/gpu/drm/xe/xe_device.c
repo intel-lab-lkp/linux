@@ -1154,6 +1154,7 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
  */
 void xe_device_declare_wedged(struct xe_device *xe)
 {
+	unsigned long recovery_method;
 	struct xe_gt *gt;
 	u8 id;
 
@@ -1169,6 +1170,12 @@ void xe_device_declare_wedged(struct xe_device *xe)
 		return;
 	}
 
+	/* Default recovery method */
+	recovery_method = DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET;
+
+	if (xe_survivability_mode_is_runtime(xe))
+		recovery_method = DRM_WEDGE_RECOVERY_VENDOR;
+
 	for_each_gt(gt, xe, id)
 		xe_gt_declare_wedged(gt);
 
@@ -1181,8 +1188,6 @@ void xe_device_declare_wedged(struct xe_device *xe)
 			dev_name(xe->drm.dev));
 
 		/* Notify userspace of wedged device */
-		drm_dev_wedged_event(&xe->drm,
-				     DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET,
-				     NULL);
+		drm_dev_wedged_event(&xe->drm, recovery_method, NULL);
 	}
 }
