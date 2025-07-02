@@ -52,6 +52,14 @@
 		      <0x8 0x80000000 0x1 0xfba00000>,
 		      <0xa 0x00000000 0x2 0x00000000>;
 	};
+
+	ufs_fixed_vcc_reg: regulator-0 {
+		compatible = "regulator-fixed";
+		regulator-name = "ufs-vcc";
+		gpio = <&gpg3 2 GPIO_ACTIVE_HIGH>;
+		regulator-boot-on;
+		enable-active-high;
+	};
 };
 
 &pinctrl_alive {
@@ -80,6 +88,15 @@
 
 &usi_0 {
 	samsung,clkreq-on; /* needed for UART mode */
+	status = "okay";
+};
+
+&ufs_0 {
+	status = "okay";
+	vcc-supply = <&ufs_fixed_vcc_reg>;
+};
+
+&ufs_0_phy {
 	status = "okay";
 };
 
