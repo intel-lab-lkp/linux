@@ -211,7 +211,6 @@ struct ibmvnic_statistics {
 	u8 reserved[72];
 } __packed __aligned(8);
 
-#define NUM_TX_STATS 3
 struct ibmvnic_tx_queue_stats {
 	atomic64_t batched_packets;
 	atomic64_t direct_packets;
@@ -219,12 +218,17 @@ struct ibmvnic_tx_queue_stats {
 	atomic64_t dropped_packets;
 };
 
-#define NUM_RX_STATS 3
+#define NUM_TX_STATS \
+	(sizeof(struct ibmvnic_tx_queue_stats) / sizeof(atomic64_t))
+
 struct ibmvnic_rx_queue_stats {
 	atomic64_t packets;
 	atomic64_t bytes;
 	atomic64_t interrupts;
 };
+
+#define NUM_RX_STATS \
+	(sizeof(struct ibmvnic_rx_queue_stats) / sizeof(atomic64_t))
 
 struct ibmvnic_acl_buffer {
 	__be32 len;
