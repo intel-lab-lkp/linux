@@ -1554,7 +1554,7 @@ void tick_irq_enter(void)
 	tick_nohz_irq_enter();
 }
 
-static int sched_skew_tick;
+static int sched_skew_tick = -1;
 
 static int __init skew_tick(char *str)
 {
@@ -1572,6 +1572,16 @@ void tick_setup_sched_timer(bool hrtimer)
 {
 	struct tick_sched *ts = this_cpu_ptr(&tick_cpu_sched);
 
+	/* Figure out if we should skew the tick */
+	if (sched_skew_tick < 0) {
+		if (num_possible_cpus() >= CONFIG_TICK_SKEW_LIMIT) {
+			sched_skew_tick = 1;
+			pr_info("Tick skewed mode enabled. Possible cpus %u > %u\n",
+				num_possible_cpus(), CONFIG_TICK_SKEW_LIMIT);
+		} else
+			sched_skew_tick = 0;
+	}
+
 	/* Emulate tick processing via per-CPU hrtimers: */
 	hrtimer_setup(&ts->sched_timer, tick_nohz_handler, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_HARD);
 
@@ -1587,7 +1597,9 @@ void tick_setup_sched_timer(bool hrtimer)
 		do_div(offset, num_possible_cpus());
 		offset *= smp_processor_id();
 		hrtimer_add_expires_ns(&ts->sched_timer, offset);
-	}
+	} else
+		pr_info("Tick operating in synchronized mode.\n");
+
 
 	hrtimer_forward_now(&ts->sched_timer, TICK_NSEC);
 	if (IS_ENABLED(CONFIG_HIGH_RES_TIMERS) && hrtimer)

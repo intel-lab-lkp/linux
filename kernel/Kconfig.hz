@@ -57,3 +57,13 @@ config HZ
 
 config SCHED_HRTICK
 	def_bool HIGH_RES_TIMERS
+
+config TICK_SKEW_LIMIT
+	int
+	default 64
+	help
+	  If the kernel is booted on systems with a large number of cpus then the
+	  concurrent execution of timer ticks causes long holdoffs due to
+	  serialization. Synchrononous executions of interrupts can also cause
+	  voltage droop in SOCs. So switch to skewed mode. This mechanism
+	  can be overridden by specifying "tick_skew=x" on the kernel command line.
