@@ -1141,6 +1141,7 @@ retry:
 			unmap_poisoned_folio(folio, folio_pfn(folio), false);
 			folio_unlock(folio);
 			folio_put(folio);
+			sc->nr_reclaimed += folio_nr_pages(folio);
 			continue;
 		}
 
