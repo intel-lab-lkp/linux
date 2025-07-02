@@ -3355,7 +3355,13 @@ void __init setup_per_cpu_areas(void)
  */
 unsigned long pcpu_nr_pages(void)
 {
-	return pcpu_nr_populated * pcpu_nr_units;
+	unsigned long flags, ret;
+
+	spin_lock_irqsave(&pcpu_lock, flags);
+	ret = pcpu_nr_populated * pcpu_nr_units;
+	spin_unlock_irqrestore(&pcpu_lock, flags);
+
+	return ret;
 }
 
 /*
