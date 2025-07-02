@@ -1180,7 +1180,7 @@ restart:
 
 		skb = tcp_write_queue_tail(sk);
 		if (skb)
-			copy = size_goal - skb->len;
+			copy = size_goal - (ssize_t)skb->len;
 
 		trace_tcp_sendmsg_locked(sk, msg, skb, size_goal);
 
