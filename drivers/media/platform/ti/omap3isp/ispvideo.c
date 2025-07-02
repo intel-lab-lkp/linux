@@ -221,16 +221,11 @@ isp_video_remote_subdev(struct isp_video *video, u32 *pad)
 static int isp_video_get_graph_data(struct isp_video *video,
 				    struct isp_pipeline *pipe)
 {
-	struct media_pipeline_entity_iter iter;
 	struct media_entity *entity;
 	struct isp_video *far_end = NULL;
 	int ret;
 
-	ret = media_pipeline_entity_iter_init(&pipe->pipe, &iter);
-	if (ret)
-		return ret;
-
-	media_pipeline_for_each_entity(&pipe->pipe, &iter, entity) {
+	media_pipeline_for_each_entity(&pipe->pipe, entity) {
 		struct isp_video *__video;
 
 		media_entity_enum_set(&pipe->ent_enum, entity);
@@ -248,8 +243,6 @@ static int isp_video_get_graph_data(struct isp_video *video,
 		if (__video->type != video->type)
 			far_end = __video;
 	}
-
-	media_pipeline_entity_iter_cleanup(&iter);
 
 	if (video->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
 		pipe->input = far_end;

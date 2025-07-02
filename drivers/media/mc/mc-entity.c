@@ -704,24 +704,22 @@ done:
 	return 0;
 }
 
-int media_pipeline_entity_iter_init(struct media_pipeline *pipe,
-				    struct media_pipeline_entity_iter *iter)
+static int media_pipeline_entity_iter_init(struct media_pipeline *pipe)
 {
-	return media_entity_enum_init(&iter->ent_enum, pipe->mdev);
+	return media_entity_enum_init(&pipe->entity_iter.ent_enum, pipe->mdev);
 }
-EXPORT_SYMBOL_GPL(media_pipeline_entity_iter_init);
 
-void media_pipeline_entity_iter_cleanup(struct media_pipeline_entity_iter *iter)
+static void media_pipeline_entity_iter_cleanup(struct media_pipeline *pipe)
 {
-	media_entity_enum_cleanup(&iter->ent_enum);
+	media_entity_enum_cleanup(&pipe->entity_iter.ent_enum);
 }
-EXPORT_SYMBOL_GPL(media_pipeline_entity_iter_cleanup);
 
 struct media_entity *
 __media_pipeline_entity_iter_next(struct media_pipeline *pipe,
-				  struct media_pipeline_entity_iter *iter,
 				  struct media_entity *entity)
 {
+	struct media_pipeline_entity_iter *iter = &pipe->entity_iter;
+
 	if (!entity)
 		iter->cursor = pipe->pads.next;
 
@@ -733,7 +731,7 @@ __media_pipeline_entity_iter_next(struct media_pipeline *pipe,
 		entity = ppad->pad->entity;
 		iter->cursor = iter->cursor->next;
 
-		if (!media_entity_enum_test_and_set(&iter->ent_enum, entity))
+		if (!media_entity_enum_test(&iter->ent_enum, entity))
 			return entity;
 	}
 
@@ -743,6 +741,8 @@ EXPORT_SYMBOL_GPL(__media_pipeline_entity_iter_next);
 
 static void media_pipeline_cleanup(struct media_pipeline *pipe)
 {
+	media_pipeline_entity_iter_cleanup(pipe);
+
 	while (!list_empty(&pipe->pads)) {
 		struct media_pipeline_pad *ppad;
 
@@ -926,6 +926,12 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 
 		/* Validation passed, store the pipe pointer in the pad. */
 		pad->pipe = pipe;
+	}
+
+	ret = media_pipeline_entity_iter_init(pipe);
+	if (ret) {
+		dev_err(mdev->dev, "Failed to init pipeline iterator\n");
+		goto error;
 	}
 
 	pipe->start_count++;

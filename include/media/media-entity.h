@@ -98,18 +98,31 @@ struct media_graph {
 };
 
 /**
+ * struct media_pipeline_entity_iter - Iterator for media_pipeline_for_each_entity
+ *
+ * @ent_enum: The entity enumeration tracker
+ * @cursor: The current element
+ */
+struct media_pipeline_entity_iter {
+	struct media_entity_enum ent_enum;
+	struct list_head *cursor;
+};
+
+/**
  * struct media_pipeline - Media pipeline related information
  *
  * @allocated:		Media pipeline allocated and freed by the framework
  * @mdev:		The media device the pipeline is part of
  * @pads:		List of media_pipeline_pad
  * @start_count:	Media pipeline start - stop count
+ * @entity_iter:	Iterator for media_pipeline_for_each_entity()
  */
 struct media_pipeline {
 	bool allocated;
 	struct media_device *mdev;
 	struct list_head pads;
 	int start_count;
+	struct media_pipeline_entity_iter entity_iter;
 };
 
 /**
@@ -136,17 +149,6 @@ struct media_pipeline_pad {
  * @cursor: The current element
  */
 struct media_pipeline_pad_iter {
-	struct list_head *cursor;
-};
-
-/**
- * struct media_pipeline_entity_iter - Iterator for media_pipeline_for_each_entity
- *
- * @ent_enum: The entity enumeration tracker
- * @cursor: The current element
- */
-struct media_pipeline_entity_iter {
-	struct media_entity_enum ent_enum;
 	struct list_head *cursor;
 };
 
@@ -1211,55 +1213,23 @@ __media_pipeline_pad_iter_next(struct media_pipeline *pipe,
 	     pad != NULL;						\
 	     pad = __media_pipeline_pad_iter_next((pipe), iter, pad))
 
-/**
- * media_pipeline_entity_iter_init - Initialize a pipeline entity iterator
- * @pipe: The pipeline
- * @iter: The iterator
- *
- * This function must be called to initialize the iterator before using it in a
- * media_pipeline_for_each_entity() loop. The iterator must be destroyed by a
- * call to media_pipeline_entity_iter_cleanup after the loop (including in code
- * paths that break from the loop).
- *
- * The same iterator can be used in multiple consecutive loops without being
- * destroyed and reinitialized.
- *
- * Return: 0 on success or a negative error code otherwise.
- */
-int media_pipeline_entity_iter_init(struct media_pipeline *pipe,
-				    struct media_pipeline_entity_iter *iter);
-
-/**
- * media_pipeline_entity_iter_cleanup - Destroy a pipeline entity iterator
- * @iter: The iterator
- *
- * This function must be called to destroy iterators initialized with
- * media_pipeline_entity_iter_init().
- */
-void media_pipeline_entity_iter_cleanup(struct media_pipeline_entity_iter *iter);
-
 struct media_entity *
 __media_pipeline_entity_iter_next(struct media_pipeline *pipe,
-				  struct media_pipeline_entity_iter *iter,
 				  struct media_entity *entity);
 
 /**
  * media_pipeline_for_each_entity - Iterate on all entities in a media pipeline
  * @pipe: The pipeline
- * @iter: The iterator (struct media_pipeline_entity_iter)
  * @entity: The iterator entity
  *
  * Iterate on all entities in a media pipeline. This is only valid after the
  * pipeline has been built with media_pipeline_start() and before it gets
- * destroyed with media_pipeline_stop(). The iterator must be initialized with
- * media_pipeline_entity_iter_init() before iteration, and destroyed with
- * media_pipeline_entity_iter_cleanup() after (including in code paths that
- * break from the loop).
+ * destroyed with media_pipeline_stop().
  */
-#define media_pipeline_for_each_entity(pipe, iter, entity)			\
-	for (entity = __media_pipeline_entity_iter_next((pipe), iter, NULL);	\
+#define media_pipeline_for_each_entity(pipe, entity)			\
+	for (entity = __media_pipeline_entity_iter_next((pipe), NULL);	\
 	     entity != NULL;							\
-	     entity = __media_pipeline_entity_iter_next((pipe), iter, entity))
+	     entity = __media_pipeline_entity_iter_next((pipe), entity))
 
 /**
  * media_pipeline_alloc_start - Mark a pipeline as streaming
