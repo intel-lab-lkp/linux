@@ -5841,6 +5841,9 @@ static int mlx5e_nic_init(struct mlx5_core_dev *mdev,
 	/* update XDP supported features */
 	mlx5e_set_xdp_feature(netdev);
 
+	/* Set pci device for dma. Useful for SFs. */
+	netdev->dma_dev = &mdev->pdev->dev;
+
 	if (take_rtnl)
 		rtnl_unlock();
 
