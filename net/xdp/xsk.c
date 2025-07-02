@@ -528,25 +528,16 @@ static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 	return dev->netdev_ops->ndo_xsk_wakeup(dev, xs->queue_id, flags);
 }
 
-static int xsk_cq_reserve_addr_locked(struct xsk_buff_pool *pool, u64 addr)
+static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
 {
 	unsigned long flags;
 	int ret;
 
 	spin_lock_irqsave(&pool->cq_lock, flags);
-	ret = xskq_prod_reserve_addr(pool->cq, addr);
+	ret = xskq_prod_reserve(pool->cq);
 	spin_unlock_irqrestore(&pool->cq_lock, flags);
 
 	return ret;
-}
-
-static void xsk_cq_submit_locked(struct xsk_buff_pool *pool, u32 n)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&pool->cq_lock, flags);
-	xskq_prod_submit_n(pool->cq, n);
-	spin_unlock_irqrestore(&pool->cq_lock, flags);
 }
 
 static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
@@ -561,19 +552,6 @@ static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
 static u32 xsk_get_num_desc(struct sk_buff *skb)
 {
 	return skb ? (long)skb_shinfo(skb)->destructor_arg : 0;
-}
-
-static void xsk_destruct_skb(struct sk_buff *skb)
-{
-	struct xsk_tx_metadata_compl *compl = &skb_shinfo(skb)->xsk_meta;
-
-	if (compl->tx_timestamp) {
-		/* sw completion timestamp, not a real one */
-		*compl->tx_timestamp = ktime_get_tai_fast_ns();
-	}
-
-	xsk_cq_submit_locked(xdp_sk(skb->sk)->pool, xsk_get_num_desc(skb));
-	sock_wfree(skb);
 }
 
 static void xsk_set_destructor_arg(struct sk_buff *skb)
@@ -600,11 +578,52 @@ static void xsk_drop_skb(struct sk_buff *skb)
 	xsk_consume_skb(skb);
 }
 
+static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
+				      struct sk_buff *skb)
+{
+	unsigned long flags;
+	u32 num_desc, i;
+	u64 *addr;
+	u32 idx;
+
+	if (unlikely(skb->data <= skb->head + sizeof(u64) * (MAX_SKB_FRAGS + 1))) {
+		WARN(1, "possible corruption of umem addr array; dropping skb");
+		xsk_drop_skb(skb);
+		return;
+	}
+
+	num_desc = xsk_get_num_desc(skb);
+
+	spin_lock_irqsave(&pool->cq_lock, flags);
+	idx = xskq_get_prod(pool->cq);
+
+	for (i = 0, addr = (u64 *)(skb->head); i < num_desc; i++, addr++, idx++)
+		xskq_prod_write_addr(pool->cq, idx, *addr);
+	xskq_prod_submit_n(pool->cq, num_desc);
+
+	spin_unlock_irqrestore(&pool->cq_lock, flags);
+}
+
+static void xsk_destruct_skb(struct sk_buff *skb)
+{
+	struct xsk_tx_metadata_compl *compl = &skb_shinfo(skb)->xsk_meta;
+
+	if (compl->tx_timestamp) {
+		/* sw completion timestamp, not a real one */
+		*compl->tx_timestamp = ktime_get_tai_fast_ns();
+	}
+
+	xsk_cq_submit_addr_locked(xdp_sk(skb->sk)->pool, skb);
+	sock_wfree(skb);
+}
+
 static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 					      struct xdp_desc *desc)
 {
+	size_t addr_arr_sz = sizeof(desc->addr) * (MAX_SKB_FRAGS + 1);
 	struct xsk_buff_pool *pool = xs->pool;
 	u32 hr, len, ts, offset, copy, copied;
+	size_t addr_sz = sizeof(desc->addr);
 	struct sk_buff *skb = xs->skb;
 	struct page *page;
 	void *buffer;
@@ -614,11 +633,11 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 	if (!skb) {
 		hr = max(NET_SKB_PAD, L1_CACHE_ALIGN(xs->dev->needed_headroom));
 
-		skb = sock_alloc_send_skb(&xs->sk, hr, 1, &err);
+		skb = sock_alloc_send_skb(&xs->sk, hr + addr_arr_sz, 1, &err);
 		if (unlikely(!skb))
 			return ERR_PTR(err);
 
-		skb_reserve(skb, hr);
+		skb_reserve(skb, hr + addr_arr_sz);
 	}
 
 	addr = desc->addr;
@@ -648,6 +667,9 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 	skb->data_len += len;
 	skb->truesize += ts;
 
+	memcpy(skb->head + (addr_sz * xsk_get_num_desc(skb)),
+	       &desc->addr, addr_sz);
+
 	refcount_add(ts, &xs->sk.sk_wmem_alloc);
 
 	return skb;
@@ -656,10 +678,13 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 				     struct xdp_desc *desc)
 {
+	size_t addr_arr_sz = sizeof(desc->addr) * (MAX_SKB_FRAGS + 1);
+	size_t addr_sz = sizeof(desc->addr);
 	struct xsk_tx_metadata *meta = NULL;
 	struct net_device *dev = xs->dev;
 	struct sk_buff *skb = xs->skb;
 	bool first_frag = false;
+	u8 *addr_arr;
 	int err;
 
 	if (dev->priv_flags & IFF_TX_SKB_NO_LINEAR) {
@@ -680,16 +705,21 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 
 			hr = max(NET_SKB_PAD, L1_CACHE_ALIGN(dev->needed_headroom));
 			tr = dev->needed_tailroom;
-			skb = sock_alloc_send_skb(&xs->sk, hr + len + tr, 1, &err);
+			skb = sock_alloc_send_skb(&xs->sk,
+						  hr + addr_arr_sz + len + tr,
+						  1, &err);
 			if (unlikely(!skb))
 				goto free_err;
 
-			skb_reserve(skb, hr);
+			skb_reserve(skb, hr + addr_arr_sz);
 			skb_put(skb, len);
 
 			err = skb_store_bits(skb, 0, buffer, len);
 			if (unlikely(err))
 				goto free_err;
+			addr_arr = skb->head;
+			memcpy(addr_arr, &desc->addr, addr_sz);
+
 		} else {
 			int nr_frags = skb_shinfo(skb)->nr_frags;
 			struct page *page;
@@ -712,6 +742,10 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 
 			skb_add_rx_frag(skb, nr_frags, page, 0, len, PAGE_SIZE);
 			refcount_add(PAGE_SIZE, &xs->sk.sk_wmem_alloc);
+
+			addr_arr = skb->head;
+			memcpy(addr_arr + (addr_sz * skb_shinfo(skb)->nr_frags),
+			       &desc->addr, addr_sz);
 		}
 
 		if (first_frag && desc->options & XDP_TX_METADATA) {
@@ -807,7 +841,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 		 * if there is space in it. This avoids having to implement
 		 * any buffering in the Tx path.
 		 */
-		err = xsk_cq_reserve_addr_locked(xs->pool, desc.addr);
+		err = xsk_cq_reserve_locked(xs->pool);
 		if (err) {
 			err = -EAGAIN;
 			goto out;
