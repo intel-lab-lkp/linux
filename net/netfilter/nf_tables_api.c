@@ -2366,7 +2366,8 @@ static struct nft_hook *nft_hook_list_find(struct list_head *hook_list,
 static int nf_tables_parse_netdev_hooks(struct net *net,
 					const struct nlattr *attr,
 					struct list_head *hook_list,
-					struct netlink_ext_ack *extack)
+					struct netlink_ext_ack *extack,
+					bool relaxed)
 {
 	struct nft_hook *hook, *next;
 	const struct nlattr *tmp;
@@ -2382,6 +2383,12 @@ static int nf_tables_parse_netdev_hooks(struct net *net,
 		if (IS_ERR(hook)) {
 			NL_SET_BAD_ATTR(extack, tmp);
 			err = PTR_ERR(hook);
+			goto err_hook;
+		}
+		if (!relaxed && list_empty(&hook->ops_list)) {
+			NL_SET_BAD_ATTR(extack, tmp);
+			nft_netdev_hook_free(hook);
+			err = -ENOENT;
 			goto err_hook;
 		}
 		if (nft_hook_list_find(hook_list, hook)) {
@@ -2433,7 +2440,8 @@ static int nft_chain_parse_netdev(struct net *net, struct nlattr *tb[],
 		list_add_tail(&hook->list, hook_list);
 	} else if (tb[NFTA_HOOK_DEVS]) {
 		err = nf_tables_parse_netdev_hooks(net, tb[NFTA_HOOK_DEVS],
-						   hook_list, extack);
+						   hook_list, extack,
+						   flags & NFT_CHAIN_NAME_BASED);
 		if (err < 0)
 			return err;
 
@@ -8832,6 +8840,7 @@ static int nft_flowtable_parse_hook(const struct nft_ctx *ctx,
 				    struct nft_flowtable *flowtable,
 				    struct netlink_ext_ack *extack, bool add)
 {
+	bool relaxed = flowtable->data.flags & NFT_FLOWTABLE_NAME_BASED;
 	struct nlattr *tb[NFTA_FLOWTABLE_HOOK_MAX + 1];
 	struct nf_hook_ops *ops;
 	struct nft_hook *hook;
@@ -8882,7 +8891,7 @@ static int nft_flowtable_parse_hook(const struct nft_ctx *ctx,
 		err = nf_tables_parse_netdev_hooks(ctx->net,
 						   tb[NFTA_FLOWTABLE_HOOK_DEVS],
 						   &flowtable_hook->list,
-						   extack);
+						   extack, relaxed);
 		if (err < 0)
 			return err;
 	}

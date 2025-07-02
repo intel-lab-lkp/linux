@@ -219,10 +219,12 @@ enum nft_chain_flags {
 	NFT_CHAIN_BASE		= (1 << 0),
 	NFT_CHAIN_HW_OFFLOAD	= (1 << 1),
 	NFT_CHAIN_BINDING	= (1 << 2),
+	NFT_CHAIN_NAME_BASED	= (1 << 3),
 };
 #define NFT_CHAIN_FLAGS		(NFT_CHAIN_BASE		| \
 				 NFT_CHAIN_HW_OFFLOAD	| \
-				 NFT_CHAIN_BINDING)
+				 NFT_CHAIN_BINDING	| \
+				 NFT_CHAIN_NAME_BASED)
 
 /**
  * enum nft_chain_attributes - nf_tables chain netlink attributes
@@ -1699,12 +1701,15 @@ enum nft_object_attributes {
  *
  * @NFT_FLOWTABLE_HW_OFFLOAD: flowtable hardware offload is enabled
  * @NFT_FLOWTABLE_COUNTER: enable flow counters
+ * @NFT_FLOWTABLE_NAME_BASED: relax interface hooks
  */
 enum nft_flowtable_flags {
 	NFT_FLOWTABLE_HW_OFFLOAD	= 0x1,
 	NFT_FLOWTABLE_COUNTER		= 0x2,
+	NFT_FLOWTABLE_NAME_BASED	= 0x4,
 	NFT_FLOWTABLE_MASK		= (NFT_FLOWTABLE_HW_OFFLOAD |
-					   NFT_FLOWTABLE_COUNTER)
+					   NFT_FLOWTABLE_COUNTER |
+					   NFT_FLOWTABLE_NAME_BASED)
 };
 
 /**
