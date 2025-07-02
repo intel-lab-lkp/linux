@@ -1073,6 +1073,15 @@ static void kvm_wait(u8 *ptr, u8 val)
 void __init kvm_spinlock_init(void)
 {
 	/*
+	 * Disable PV spinlocks and use native qspinlock when dedicated pCPUs
+	 * are available.
+	 */
+	if (kvm_para_has_hint(KVM_HINTS_REALTIME)) {
+		pr_info("PV spinlocks disabled with KVM_HINTS_REALTIME hints\n");
+		goto out;
+	}
+
+	/*
 	 * In case host doesn't support KVM_FEATURE_PV_UNHALT there is still an
 	 * advantage of keeping virt_spin_lock_key enabled: virt_spin_lock() is
 	 * preferred over native qspinlock when vCPU is preempted.
@@ -1080,15 +1089,6 @@ void __init kvm_spinlock_init(void)
 	if (!kvm_para_has_feature(KVM_FEATURE_PV_UNHALT)) {
 		pr_info("PV spinlocks disabled, no host support\n");
 		return;
-	}
-
-	/*
-	 * Disable PV spinlocks and use native qspinlock when dedicated pCPUs
-	 * are available.
-	 */
-	if (kvm_para_has_hint(KVM_HINTS_REALTIME)) {
-		pr_info("PV spinlocks disabled with KVM_HINTS_REALTIME hints\n");
-		goto out;
 	}
 
 	if (num_possible_cpus() == 1) {
