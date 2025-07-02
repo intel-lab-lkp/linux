@@ -12,8 +12,7 @@
 #define EXYNOSAUTOV920_EMBEDDED_COMBO_PHY_CTRL_EN		BIT(0)
 #define EXYNOSAUTOV920_EMBEDDED_COMBO_PHY_CDR_LOCK_STATUS	0x5e
 
-#define EXYNOSAUTOV920_CDR_LOCK_OFFSET				0xce4
-
+#define EXYNOSAUTOV920_CAL_DONE_OFFSET				0xce0
 #define PHY_EXYNOSAUTOV920_LANE_OFFSET				0x200
 #define PHY_TRSV_REG_CFG_AUTOV920(o, v, d) \
 	PHY_TRSV_REG_CFG_OFFSET(o, v, d, PHY_EXYNOSAUTOV920_LANE_OFFSET)
@@ -32,7 +31,7 @@ static const struct samsung_ufs_phy_cfg exynosautov920_pre_init_cfg[] = {
 	PHY_TRSV_REG_CFG_AUTOV920(0x202, 0x06, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x203, 0x0a, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x204, 0x00, PWR_MODE_ANY),
-	PHY_TRSV_REG_CFG_AUTOV920(0x205, 0x10, PWR_MODE_ANY),
+	PHY_TRSV_REG_CFG_AUTOV920(0x205, 0x11, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x207, 0x0c, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x2e1, 0xc0, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x22d, 0xf8, PWR_MODE_ANY),
@@ -46,6 +45,7 @@ static const struct samsung_ufs_phy_cfg exynosautov920_pre_init_cfg[] = {
 	PHY_TRSV_REG_CFG_AUTOV920(0x23e, 0x14, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x23f, 0x13, PWR_MODE_ANY),
 
+	PHY_TRSV_REG_CFG_AUTOV920(0x36e, 0x05, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x240, 0x4a, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x243, 0x40, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x244, 0x02, PWR_MODE_ANY),
@@ -76,6 +76,10 @@ static const struct samsung_ufs_phy_cfg exynosautov920_pre_init_cfg[] = {
 	PHY_TRSV_REG_CFG_AUTOV920(0x2bc, 0x06, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x2bd, 0x06, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x2be, 0x06, PWR_MODE_ANY),
+	PHY_TRSV_REG_CFG_AUTOV920(0x2e4, 0x1a, PWR_MODE_ANY),
+	PHY_TRSV_REG_CFG_AUTOV920(0x2ed, 0x25, PWR_MODE_ANY),
+	PHY_TRSV_REG_CFG_AUTOV920(0x269, 0x1a, PWR_MODE_ANY),
+	PHY_TRSV_REG_CFG_AUTOV920(0x2f4, 0x2f, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x34b, 0x01, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x34c, 0x24, PWR_MODE_ANY),
 	PHY_TRSV_REG_CFG_AUTOV920(0x34d, 0x23, PWR_MODE_ANY),
@@ -107,40 +111,25 @@ static const struct samsung_ufs_phy_cfg exynosautov920_post_pwr_hs_cfg[] = {
 
 #define DELAY_IN_US	40
 #define RETRY_CNT	100
-#define EXYNOSAUTOV920_CDR_LOCK_MASK	0x8
+#define EXYNOSAUTOV920_CAL_DONE_MASK	0x8
 
-int exynosautov920_ufs_phy_wait_cdr_lock(struct phy *phy, u8 lane)
+static int exynosautov920_ufs_phy_wait_for_cal(struct phy *phy, u8 lane)
 {
 	struct samsung_ufs_phy *ufs_phy = get_samsung_ufs_phy(phy);
 	u32 reg, i;
 
-	struct samsung_ufs_phy_cfg cfg[4] = {
-		PHY_TRSV_REG_CFG_AUTOV920(0x222, 0x10, PWR_MODE_ANY),
-		PHY_TRSV_REG_CFG_AUTOV920(0x222, 0x18, PWR_MODE_ANY),
-		PHY_TRSV_REG_CFG_AUTOV920(0x246, 0x01, PWR_MODE_ANY),
-		END_UFS_PHY_CFG,
-	};
-
 	for (i = 0; i < RETRY_CNT; i++) {
 		udelay(DELAY_IN_US);
 
-		reg = readl(ufs_phy->reg_pma + EXYNOSAUTOV920_CDR_LOCK_OFFSET +
+		reg = readl(ufs_phy->reg_pma + EXYNOSAUTOV920_CAL_DONE_OFFSET +
 			(PHY_APB_ADDR(PHY_EXYNOSAUTOV920_LANE_OFFSET) * lane));
 
-		if ((reg & EXYNOSAUTOV920_CDR_LOCK_MASK)
-					== EXYNOSAUTOV920_CDR_LOCK_MASK) {
-			samsung_ufs_phy_config(ufs_phy, &cfg[2], lane);
+		if ((reg & EXYNOSAUTOV920_CAL_DONE_MASK)
+					== EXYNOSAUTOV920_CAL_DONE_MASK)
 			return 0;
-		}
-
-		udelay(DELAY_IN_US);
-
-		/* Disable and enable CDR */
-		samsung_ufs_phy_config(ufs_phy, &cfg[0], lane);
-		samsung_ufs_phy_config(ufs_phy, &cfg[1], lane);
 	}
 
-	dev_err(ufs_phy->dev, "failed to get phy cdr lock\n");
+	dev_err(ufs_phy->dev, "failed to wait for cal done\n");
 	return -ETIMEDOUT;
 }
 
@@ -164,5 +153,5 @@ const struct samsung_ufs_phy_drvdata exynosautov920_ufs_phy = {
 	.clk_list = exynosautov920_ufs_phy_clks,
 	.num_clks = ARRAY_SIZE(exynosautov920_ufs_phy_clks),
 	.cdr_lock_status_offset = EXYNOSAUTOV920_EMBEDDED_COMBO_PHY_CDR_LOCK_STATUS,
-	.wait_for_cdr = exynosautov920_ufs_phy_wait_cdr_lock,
+	.wait_for_cal = exynosautov920_ufs_phy_wait_for_cal,
 };
