@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: GPL-2.0-only
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/foursemi,fs210x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: FourSemi FS2104/5S Digital Audio Amplifier
+
+maintainers:
+  - Nick <nick.li@foursemi.com>
+
+description: |
+    The FS2104 is a 15W Inductor-Less, Stereo, Closed-Loop,
+    Digital Input Class-D Power Amplifier with Enhanced Signal Processing.
+    The FS2105S is a 30W Inductor-Less, Stereo, Closed-Loop,
+    Digital Input Class-D Power Amplifier with Enhanced Signal Processing.
+
+properties:
+  compatible:
+    enum:
+      - foursemi,fs2104
+      - foursemi,fs2105s
+
+  reg:
+    maxItems: 1
+    description: |
+      I2C address of the amplifier. Refer to datasheet for possible values:
+      0x68/0x69/0x6A/0x6B
+
+  clocks:
+    items:
+      - description: The clock of I2S BCLK
+
+  clock-names:
+    items:
+      - const: bclk
+
+  '#sound-dai-cells':
+    const: 0
+
+  pvdd-supply:
+    description: |
+      Regulator for power supply(PVDD in datasheet).
+
+  dvdd-supply:
+    description: |
+      Regulator for digital supply(DVDD in datasheet).
+
+  sdz-gpios:
+    maxItems: 1
+    description: |
+      SDZ(Shut Down) pin is active low, it will power down the chip,
+      and then reset the chip to shut down state.
+
+  fs,fwm-name:
+    description: |
+      The name of firmware that should be loaded for this
+      instance. The firmware is gernerated by FourSemi's tuning tool.
+    $ref: /schemas/types.yaml#/definitions/string
+
+  fs,dai-name:
+    description: |
+      The name of FS210x DAI, it can be set different name when
+      there are multiple FS210x devices in the system.
+    $ref: /schemas/types.yaml#/definitions/string
+
+required:
+  - compatible
+  - reg
+  - sdz-gpios
+  - fs,fwm-name
+  - '#sound-dai-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        audio-codec@68 {
+            compatible = "foursemi,fs2105s";
+            reg = <0x68>;
+            pvdd-supply = <&pvdd_supply>;
+            dvdd-supply = <&dvdd_supply>;
+            sdz-gpios = <&gpio 18 GPIO_ACTIVE_LOW>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&fs210x_pins_default>;
+            fs,fwm-name = "fs2105s-btl-2p0-0s.bin";
+            clocks = <&clocks 18>;
+            clock-names = "bclk";
+            #sound-dai-cells = <0>;
+        };
+    };
