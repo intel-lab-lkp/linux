@@ -13751,6 +13751,7 @@ M:	Derek J. Clark <derekjohn.clark@gmail.com>
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/ABI/testing/sysfs-driver-lenovo-legos-hid
+F:	drivers/hid/lenovo-legos-hid/*
 
 LETSKETCH HID TABLET DRIVER
 M:	Hans de Goede <hansg@kernel.org>
