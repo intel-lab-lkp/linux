@@ -57,7 +57,7 @@ static int k3_dsp_rproc_start(struct rproc *rproc)
 }
 
 static const struct rproc_ops k3_dsp_rproc_ops = {
-	.start			= k3_dsp_rproc_start,
+	.start		= k3_dsp_rproc_start,
 	.stop			= k3_rproc_stop,
 	.attach			= k3_rproc_attach,
 	.detach			= k3_rproc_detach,
