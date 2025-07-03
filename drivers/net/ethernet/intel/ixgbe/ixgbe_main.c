@@ -10868,6 +10868,12 @@ static int ixgbe_xdp_xmit(struct net_device *dev, int n,
 	return nxmit;
 }
 
+static int ixgbe_get_phys_port_name(struct net_device *netdev, char *name, size_t len)
+{
+	/* Avoid devlink adding unwanted suffix to interface name. */
+	return 0;
+}
+
 static const struct net_device_ops ixgbe_netdev_ops = {
 	.ndo_open		= ixgbe_open,
 	.ndo_stop		= ixgbe_close,
@@ -10913,6 +10919,7 @@ static const struct net_device_ops ixgbe_netdev_ops = {
 	.ndo_bpf		= ixgbe_xdp,
 	.ndo_xdp_xmit		= ixgbe_xdp_xmit,
 	.ndo_xsk_wakeup         = ixgbe_xsk_wakeup,
+	.ndo_get_phys_port_name = ixgbe_get_phys_port_name,
 };
 
 static void ixgbe_disable_txr_hw(struct ixgbe_adapter *adapter,
