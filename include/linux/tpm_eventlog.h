@@ -202,8 +202,7 @@ static __always_inline u32 __calc_tpm2_event_size(struct tcg_pcr_event2_head *ev
 	event_type = event->event_type;
 
 	/* Verify that it's the log header */
-	if (event_header->pcr_idx != 0 ||
-	    event_header->event_type != NO_ACTION ||
+	if (event_header->event_type != NO_ACTION ||
 	    memcmp(event_header->digest, zero_digest, sizeof(zero_digest))) {
 		size = 0;
 		goto out;
