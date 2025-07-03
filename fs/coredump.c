@@ -898,12 +898,6 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		retval = kernel_connect(socket, (struct sockaddr *)(&addr),
 					addr_len, O_NONBLOCK | SOCK_COREDUMP);
 
-		/*
-		 * ... Make sure to only put our reference after connect() took
-		 * its own reference keeping the pidfs entry alive ...
-		 */
-		pidfs_put_pid(cprm.pid);
-
 		if (retval) {
 			if (retval == -EAGAIN)
 				coredump_report_failure("Coredump socket %s receive queue full", addr.sun_path);
@@ -1002,6 +996,8 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 close_fail:
 	if (cprm.file)
 		filp_close(cprm.file, NULL);
+	if (cn.core_type == COREDUMP_SOCK)
+		pidfs_put_pid(cprm.pid);
 fail_dropcount:
 	if (cn.core_type == COREDUMP_PIPE)
 		atomic_dec(&core_dump_count);
