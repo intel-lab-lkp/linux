@@ -71,18 +71,18 @@ bool __refrigerator(bool check_kthr_stop)
 	for (;;) {
 		bool freeze;
 
-		raw_spin_lock_irq(&current->pi_lock);
-		WRITE_ONCE(current->__state, TASK_FROZEN);
-		/* unstale saved_state so that __thaw_task() will wake us up */
-		current->saved_state = TASK_RUNNING;
-		raw_spin_unlock_irq(&current->pi_lock);
-
 		spin_lock_irq(&freezer_lock);
 		freeze = freezing(current) && !(check_kthr_stop && kthread_should_stop());
 		spin_unlock_irq(&freezer_lock);
 
 		if (!freeze)
 			break;
+
+		raw_spin_lock_irq(&current->pi_lock);
+		WRITE_ONCE(current->__state, TASK_FROZEN);
+		/* unstale saved_state so that __thaw_task() will wake us up */
+		current->saved_state = TASK_RUNNING;
+		raw_spin_unlock_irq(&current->pi_lock);
 
 		was_frozen = true;
 		schedule();
