@@ -45,6 +45,8 @@
  * @sideband_wake: Devices using dedicated sideband GPIO for wakeup instead
  *		   of inband wake support (such as sdx24)
  * @no_m3: M3 not supported
+ * @bool reset_on_driver_unbind: Set true for devices support SOC reset and
+ *				 perform it when unbinding driver
  */
 struct mhi_pci_dev_info {
 	const struct mhi_controller_config *config;
@@ -58,6 +60,7 @@ struct mhi_pci_dev_info {
 	unsigned int mru_default;
 	bool sideband_wake;
 	bool no_m3;
+	bool reset_on_driver_unbind;
 };
 
 #define MHI_CHANNEL_CONFIG_UL(ch_num, ch_name, el_count, ev_ring) \
@@ -300,6 +303,7 @@ static const struct mhi_pci_dev_info mhi_qcom_qdu100_info = {
 	.dma_data_width = 32,
 	.sideband_wake = false,
 	.no_m3 = true,
+	.reset_on_driver_unbind = true,
 };
 
 static const struct mhi_channel_config mhi_qcom_sa8775p_channels[] = {
@@ -970,6 +974,7 @@ struct mhi_pci_device {
 	struct work_struct recovery_work;
 	struct timer_list health_check_timer;
 	unsigned long status;
+	bool reset_on_driver_unbind;
 };
 
 static int mhi_pci_read_reg(struct mhi_controller *mhi_cntrl,
@@ -1270,6 +1275,11 @@ static int mhi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	mhi_cntrl->mru = info->mru_default;
 	mhi_cntrl->name = info->name;
 
+	/* Assign reset functionalities only for PF */
+	if (pdev->is_physfn)
+		mhi_pdev->reset_on_driver_unbind = info->reset_on_driver_unbind;
+
+
 	if (info->edl_trigger)
 		mhi_cntrl->edl_trigger = mhi_pci_generic_edl_trigger;
 
@@ -1336,7 +1346,7 @@ err_unregister:
 	return err;
 }
 
-static void mhi_pci_remove(struct pci_dev *pdev)
+static void mhi_pci_resource_deinit(struct pci_dev *pdev)
 {
 	struct mhi_pci_device *mhi_pdev = pci_get_drvdata(pdev);
 	struct mhi_controller *mhi_cntrl = &mhi_pdev->mhi_cntrl;
@@ -1352,13 +1362,32 @@ static void mhi_pci_remove(struct pci_dev *pdev)
 	/* balancing probe put_noidle */
 	if (pci_pme_capable(pdev, PCI_D3hot))
 		pm_runtime_get_noresume(&pdev->dev);
+}
 
+static void mhi_pci_remove(struct pci_dev *pdev)
+{
+	struct mhi_pci_device *mhi_pdev = pci_get_drvdata(pdev);
+	struct mhi_controller *mhi_cntrl = &mhi_pdev->mhi_cntrl;
+
+	/* Disable SRIOV */
+	pci_disable_sriov(pdev);
+	mhi_pci_resource_deinit(pdev);
+	if (mhi_pdev->reset_on_driver_unbind) {
+		dev_info(&pdev->dev, "perform SOC reset\n");
+		mhi_soc_reset(mhi_cntrl);
+	}
+
+	/* Perform FLR if supported*/
 	mhi_unregister_controller(mhi_cntrl);
 }
 
 static void mhi_pci_shutdown(struct pci_dev *pdev)
 {
-	mhi_pci_remove(pdev);
+	struct mhi_pci_device *mhi_pdev = pci_get_drvdata(pdev);
+	struct mhi_controller *mhi_cntrl = &mhi_pdev->mhi_cntrl;
+
+	mhi_pci_resource_deinit(pdev);
+	mhi_unregister_controller(mhi_cntrl);
 	pci_set_power_state(pdev, PCI_D3hot);
 }
 
