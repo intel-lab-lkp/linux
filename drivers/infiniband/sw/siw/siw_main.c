@@ -169,7 +169,7 @@ static int siw_mpa_version_set(const char *val, const struct kernel_param *kp)
 
 	switch (uval) {
 	case MPA_REVISION_2:
-	/* TODO case MPA_REVISION_1: */
+	case MPA_REVISION_1:
 		siw_default_options.mpa_version = uval;
 		return 0;
 	}

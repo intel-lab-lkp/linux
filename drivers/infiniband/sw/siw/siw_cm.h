@@ -28,6 +28,8 @@ struct siw_mpa_info {
 	struct mpa_rr hdr; /* peer mpa hdr in host byte order */
 	struct mpa_v2_data v2_ctrl;
 	struct mpa_v2_data v2_ctrl_req;
+	struct mpa_v1_smbd_data v1_ctrl;
+	struct mpa_v1_smbd_data v1_ctrl_req;
 	char *pdata;
 	int bytes_rcvd;
 };

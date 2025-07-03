@@ -71,6 +71,14 @@ struct mpa_v2_data {
 	__be16 ord;
 };
 
+/*
+ * [MS-SMBD] 6 Appendix A: RDMA Provider IRD/ORD Negotiation
+ */
+struct mpa_v1_smbd_data {
+	__be32 ird;
+	__be32 ord;
+};
+
 struct mpa_marker {
 	__be16 rsvd;
 	__be16 fpdu_hmd; /* FPDU header-marker distance (= MPA's FPDUPTR) */

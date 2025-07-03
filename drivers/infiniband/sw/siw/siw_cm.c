@@ -27,6 +27,8 @@
 
 static const bool relaxed_ird_negotiation = true;
 
+static size_t siw_cep_mpa_vX_ctrl_len(struct siw_cep *cep);
+
 static void siw_cm_llp_state_change(struct sock *s);
 static void siw_cm_llp_data_ready(struct sock *s);
 static void siw_cm_llp_write_space(struct sock *s);
@@ -330,18 +332,18 @@ static int siw_cm_upcall(struct siw_cep *cep, enum iw_cm_event_type reason,
 		u16 pd_len = be16_to_cpu(cep->mpa.hdr.params.pd_len);
 
 		if (pd_len) {
+			size_t hide_len = siw_cep_mpa_vX_ctrl_len(cep);
+
 			/*
 			 * hand over MPA private data
 			 */
 			event.private_data_len = pd_len;
 			event.private_data = cep->mpa.pdata;
 
-			/* Hide MPA V2 IRD/ORD control */
-			if (cep->enhanced_rdma_conn_est) {
-				event.private_data_len -=
-					sizeof(struct mpa_v2_data);
-				event.private_data +=
-					sizeof(struct mpa_v2_data);
+			/* Hide MPA IRD/ORD control */
+			if (event.private_data_len >= hide_len) {
+				event.private_data_len -= hide_len;
+				event.private_data += hide_len;
 			}
 		}
 		getname_local(cep->sock, &event.local_addr);
@@ -454,6 +456,40 @@ void siw_cep_get(struct siw_cep *cep)
 	kref_get(&cep->ref);
 }
 
+static u8 *siw_cep_mpa_vX_ctrl_ptr(struct siw_cep *cep)
+{
+	if (!cep->enhanced_rdma_conn_est) {
+		return NULL;
+	}
+
+	switch (cep->sdev->options.mpa_version) {
+	case MPA_REVISION_2:
+		return (u8 *)&cep->mpa.v2_ctrl;
+
+	case MPA_REVISION_1:
+		return (u8 *)&cep->mpa.v1_ctrl;
+	}
+
+	return NULL;
+}
+
+static size_t siw_cep_mpa_vX_ctrl_len(struct siw_cep *cep)
+{
+	if (!cep->enhanced_rdma_conn_est) {
+		return 0;
+	}
+
+	switch (cep->sdev->options.mpa_version) {
+	case MPA_REVISION_2:
+		return sizeof(cep->mpa.v2_ctrl);
+
+	case MPA_REVISION_1:
+		return sizeof(cep->mpa.v1_ctrl);
+	}
+
+	return 0;
+}
+
 /*
  * Expects params->pd_len in host byte order
  */
@@ -466,6 +502,8 @@ static int siw_send_mpareqrep(struct siw_cep *cep, const void *pdata, u8 pd_len)
 	int rv;
 	int iovec_num = 0;
 	int mpa_len;
+	u8 *vX_ctrl = siw_cep_mpa_vX_ctrl_ptr(cep);
+	size_t vX_ctrl_len = siw_cep_mpa_vX_ctrl_len(cep);
 
 	memset(&msg, 0, sizeof(msg));
 
@@ -473,11 +511,11 @@ static int siw_send_mpareqrep(struct siw_cep *cep, const void *pdata, u8 pd_len)
 	iov[iovec_num].iov_len = sizeof(*rr);
 	mpa_len = sizeof(*rr);
 
-	if (cep->enhanced_rdma_conn_est) {
+	if (vX_ctrl) {
 		iovec_num++;
-		iov[iovec_num].iov_base = &cep->mpa.v2_ctrl;
-		iov[iovec_num].iov_len = sizeof(cep->mpa.v2_ctrl);
-		mpa_len += sizeof(cep->mpa.v2_ctrl);
+		iov[iovec_num].iov_base = vX_ctrl;
+		iov[iovec_num].iov_len = vX_ctrl_len;
+		mpa_len += vX_ctrl_len;
 	}
 	if (pd_len) {
 		iovec_num++;
@@ -485,8 +523,8 @@ static int siw_send_mpareqrep(struct siw_cep *cep, const void *pdata, u8 pd_len)
 		iov[iovec_num].iov_len = pd_len;
 		mpa_len += pd_len;
 	}
-	if (cep->enhanced_rdma_conn_est)
-		pd_len += sizeof(cep->mpa.v2_ctrl);
+	if (vX_ctrl)
+		pd_len += vX_ctrl_len;
 
 	rr->params.pd_len = cpu_to_be16(pd_len);
 
@@ -611,6 +649,8 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 
 	version = __mpa_rr_revision(req->params.bits);
 	pd_len = be16_to_cpu(req->params.pd_len);
+	siw_dbg_cep(cep, "GOT MPA REQUEST: version got %d local %d pd_len=%u\n",
+		version, sdev->options.mpa_version, pd_len);
 
 	if (version > MPA_REVISION_2)
 		/* allow for 0, 1, and 2 only */
@@ -635,6 +675,18 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 		cep->enhanced_rdma_conn_est = true;
 	}
 
+	if (version == MPA_REVISION_1 &&
+	    sdev->options.peer_to_peer) {
+		/*
+		 * MPA version 1 must signal IRD/ORD values and P2P mode
+		 * in private data.
+		 */
+		if (pd_len < sizeof(struct mpa_v1_smbd_data))
+			goto reject_conn;
+
+		cep->enhanced_rdma_conn_est = true;
+	}
+
 	/* MPA Markers: currently not supported. Marker TX to be added. */
 	if (req->params.bits & MPA_RR_FLAG_MARKERS)
 		goto reject_conn;
@@ -653,7 +705,7 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 		if (local_crc_required)
 			req->params.bits |= MPA_RR_FLAG_CRC;
 	}
-	if (cep->enhanced_rdma_conn_est) {
+	if (cep->enhanced_rdma_conn_est && version == MPA_REVISION_2) {
 		struct mpa_v2_data *v2 = (struct mpa_v2_data *)cep->mpa.pdata;
 
 		/*
@@ -689,8 +741,42 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 				cep->mpa.v2_ctrl.ord |= MPA_V2_RDMA_WRITE_RTR;
 		}
 	}
+	if (cep->enhanced_rdma_conn_est && version == MPA_REVISION_1) {
+		struct mpa_v1_smbd_data *v1 = (struct mpa_v1_smbd_data *)cep->mpa.pdata;
 
+		/*
+		 * Peer requested ORD becomes requested local IRD,
+		 * peer requested IRD becomes requested local ORD.
+		 * IRD and ORD get limited by global maximum values.
+		 */
+		cep->ord = ntohl(v1->ird);
+		cep->ord = min(cep->ord, SIW_MAX_ORD_QP);
+		cep->ird = ntohl(v1->ord);
+		cep->ird = min(cep->ird, SIW_MAX_IRD_QP);
+
+		/* May get overwritten by locally negotiated values */
+		cep->mpa.v1_ctrl.ird = htons(cep->ird);
+		cep->mpa.v1_ctrl.ord = htons(cep->ord);
+
+		/*
+		 * Keep the v2 values in sync.
+		 */
+		req->params.bits |= MPA_RR_FLAG_ENHANCED;
+		cep->mpa.v2_ctrl.ird = htons(cep->ird);
+		cep->mpa.v2_ctrl.ord = htons(cep->ord);
+		cep->mpa.v2_ctrl.ird |= MPA_V2_PEER_TO_PEER;
+		cep->mpa.v2_ctrl.ord |= MPA_V2_RDMA_READ_RTR;
+	}
+
+	siw_dbg_cep(cep, "set SIW_EPSTATE_RECVD_MPAREQ\n");
 	cep->state = SIW_EPSTATE_RECVD_MPAREQ;
+	siw_dbg_cep(
+		cep,
+		"ord (cep %d) (max %d), ird (cep %d) (max %d)\n",
+		cep->ord,
+		sdev->attrs.max_ord,
+		cep->ird,
+		sdev->attrs.max_ird);
 
 	/* Keep reference until IWCM accepts/rejects */
 	siw_cep_get(cep);
@@ -736,6 +822,8 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 	u16 rep_ird;
 	bool ird_insufficient = false;
 	enum mpa_v2_ctrl mpa_p2p_mode = MPA_V2_RDMA_NO_RTR;
+	int version;
+	u16 pd_len;
 
 	rv = siw_recv_mpa_rr(cep);
 	if (rv)
@@ -744,6 +832,11 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 	siw_cancel_mpatimer(cep);
 
 	rep = &cep->mpa.hdr;
+
+	version = __mpa_rr_revision(rep->params.bits);
+	pd_len = be16_to_cpu(rep->params.pd_len);
+	siw_dbg_cep(cep, "GOT MPA REPLY: version got %d local %d pd_len=%u\n",
+		version, sdev->options.mpa_version, pd_len);
 
 	if (__mpa_rr_revision(rep->params.bits) > MPA_REVISION_2) {
 		/* allow for 0, 1,  and 2 only */
@@ -781,10 +874,34 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 		return -EINVAL;
 	}
 	if (cep->enhanced_rdma_conn_est) {
-		struct mpa_v2_data *v2;
+		struct mpa_v2_data *v2 = NULL;
 
-		if (__mpa_rr_revision(rep->params.bits) < MPA_REVISION_2 ||
-		    !(rep->params.bits & MPA_RR_FLAG_ENHANCED)) {
+		v2 = (struct mpa_v2_data *)cep->mpa.pdata;
+		if (version == MPA_REVISION_1) {
+			struct mpa_v1_smbd_data *v1 = (struct mpa_v1_smbd_data *)cep->mpa.pdata;
+
+			/*
+			 * Peer requested ORD becomes requested local IRD,
+			 * peer requested IRD becomes requested local ORD.
+			 * IRD and ORD get limited by global maximum values.
+			 */
+			cep->ord = ntohl(v1->ird);
+			cep->ord = min(cep->ord, SIW_MAX_ORD_QP);
+			cep->ird = ntohl(v1->ord);
+			cep->ird = min(cep->ird, SIW_MAX_IRD_QP);
+
+			/*
+			 * Keep the v2 values in sync.
+			 */
+			rep->params.bits |= MPA_RR_FLAG_ENHANCED;
+			cep->mpa.v2_ctrl.ird = htons(cep->ird);
+			cep->mpa.v2_ctrl.ord = htons(cep->ord);
+			cep->mpa.v2_ctrl.ird |= MPA_V2_PEER_TO_PEER;
+			cep->mpa.v2_ctrl.ord |= MPA_V2_RDMA_READ_RTR;
+			v2 = &cep->mpa.v2_ctrl;
+		}
+
+		if (!(rep->params.bits & MPA_RR_FLAG_ENHANCED)) {
 			/*
 			 * Protocol failure: The responder MUST reply with
 			 * MPA version 2 and MUST set MPA_RR_FLAG_ENHANCED.
@@ -799,7 +916,6 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 				      -ECONNRESET);
 			return -EINVAL;
 		}
-		v2 = (struct mpa_v2_data *)cep->mpa.pdata;
 		rep_ird = ntohs(v2->ird) & MPA_IRD_ORD_MASK;
 		rep_ord = ntohs(v2->ord) & MPA_IRD_ORD_MASK;
 
@@ -1442,7 +1558,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	cep->ird = params->ird;
 	cep->ord = params->ord;
 
-	if (p2p_mode && cep->ord == 0)
+	if (p2p_mode && rtr_type & MPA_V2_RDMA_WRITE_RTR && cep->ord == 0)
 		cep->ord = 1;
 
 	cep->state = SIW_EPSTATE_CONNECTING;
@@ -1461,7 +1577,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	cep->mpa.hdr.params.bits = 0;
 	__mpa_rr_set_revision(&cep->mpa.hdr.params.bits, version);
 
-	if (sdev->options.try_gso)
+	if (sdev->options.try_gso && version >= MPA_REVISION_2)
 		cep->mpa.hdr.params.bits |= MPA_RR_FLAG_GSO_EXP;
 
 	if (sdev->options.crc_required)
@@ -1485,6 +1601,26 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 			cep->mpa.v2_ctrl.ord |= rtr_type;
 		}
 		/* Remember own P2P mode requested */
+		cep->mpa.v2_ctrl_req.ird = cep->mpa.v2_ctrl.ird;
+		cep->mpa.v2_ctrl_req.ord = cep->mpa.v2_ctrl.ord;
+	}
+	if (version == MPA_REVISION_1 && p2p_mode) {
+		cep->enhanced_rdma_conn_est = true;
+
+		cep->mpa.v1_ctrl.ird = htonl(cep->ird);
+		cep->mpa.v1_ctrl.ord = htonl(cep->ord);
+		/* Remember own P2P mode requested */
+		cep->mpa.v1_ctrl_req.ird = cep->mpa.v1_ctrl.ird;
+		cep->mpa.v1_ctrl_req.ord = cep->mpa.v1_ctrl.ord;
+
+		/*
+		 * Also setup the v2 values in order
+		 * to allow the callers to be unchanged
+		 */
+		cep->mpa.v2_ctrl.ird = htons(cep->ird);
+		cep->mpa.v2_ctrl.ord = htons(cep->ord);
+		cep->mpa.v2_ctrl.ird |= MPA_V2_PEER_TO_PEER;
+		cep->mpa.v2_ctrl.ord |= MPA_V2_RDMA_READ_RTR;
 		cep->mpa.v2_ctrl_req.ird = cep->mpa.v2_ctrl.ird;
 		cep->mpa.v2_ctrl_req.ord = cep->mpa.v2_ctrl.ord;
 	}
@@ -1551,6 +1687,7 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 {
 	struct siw_device *sdev = to_siw_dev(id->device);
 	struct siw_cep *cep = (struct siw_cep *)id->provider_data;
+	size_t hide_len = siw_cep_mpa_vX_ctrl_len(cep);
 	struct siw_qp *qp;
 	struct siw_qp_attrs qp_attrs;
 	int rv = -EINVAL, max_priv_data = MPA_MAX_PRIVDATA;
@@ -1582,6 +1719,17 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 		goto error_unlock;
 	siw_dbg_cep(cep, "[QP %d]\n", params->qpn);
 
+	siw_dbg_cep(
+		cep,
+		"[QP %u]: START ord (params %d) (cep %d) (max %d), ird (params %d) (cep %d) (max %d)\n",
+		qp_id(qp),
+		params->ord,
+		cep->ord,
+		sdev->attrs.max_ord,
+		params->ird,
+		cep->ird,
+		sdev->attrs.max_ird);
+
 	if (sdev->options.try_gso &&
 	    cep->mpa.hdr.params.bits & MPA_RR_FLAG_GSO_EXP) {
 		siw_dbg_cep(cep, "peer allows GSO on TX\n");
@@ -1596,8 +1744,8 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 			params->ird, sdev->attrs.max_ird);
 		goto error_unlock;
 	}
-	if (cep->enhanced_rdma_conn_est)
-		max_priv_data -= sizeof(struct mpa_v2_data);
+	if (max_priv_data >= hide_len)
+		max_priv_data -= hide_len;
 
 	if (params->private_data_len > max_priv_data) {
 		siw_dbg_cep(
@@ -1637,9 +1785,23 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 		cep->mpa.v2_ctrl.ird =
 			htons(params->ird & MPA_IRD_ORD_MASK) |
 			(cep->mpa.v2_ctrl.ird & ~MPA_V2_MASK_IRD_ORD);
+
+		cep->mpa.v1_ctrl.ord = htonl(params->ord & MPA_IRD_ORD_MASK);
+		cep->mpa.v1_ctrl.ird = htonl(params->ird & MPA_IRD_ORD_MASK);
 	}
 	cep->ird = params->ird;
 	cep->ord = params->ord;
+
+	siw_dbg_cep(
+		cep,
+		"[QP %u]: NEGOTIATED ord (params %d) (cep %d) (max %d), ird (params %d) (cep %d) (max %d)\n",
+		qp_id(qp),
+		params->ord,
+		cep->ord,
+		sdev->attrs.max_ord,
+		params->ird,
+		cep->ird,
+		sdev->attrs.max_ird);
 
 	cep->cm_id = id;
 	id->add_ref(id);
@@ -1675,6 +1837,16 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	siw_dbg_cep(cep, "[QP %u]: send mpa reply, %d byte pdata\n",
 		    qp_id(qp), params->private_data_len);
 
+	siw_dbg_cep(
+		cep,
+		"[QP %u]: MPA RESPONSE ord (params %d) (cep %d) (qp_attrs %d), ird (params %d) (cep %d) (qp_attrs %d)\n",
+		qp_id(qp),
+		params->ord,
+		cep->ord,
+		qp_attrs.orq_size,
+		params->ird,
+		cep->ird,
+		qp_attrs.irq_size);
 	rv = siw_send_mpareqrep(cep, params->private_data,
 				params->private_data_len);
 	if (rv != 0)
