@@ -909,8 +909,10 @@ extern "C" {
 #define __fourcc_mod_nvidia_pkind_shift 12
 #define __fourcc_mod_nvidia_kgen_mask 0x3ULL
 #define __fourcc_mod_nvidia_kgen_shift 20
-#define __fourcc_mod_nvidia_slayout_mask 0x1ULL
-#define __fourcc_mod_nvidia_slayout_shift 22
+#define __fourcc_mod_nvidia_slayout_low_mask 0x1ULL
+#define __fourcc_mod_nvidia_slayout_low_shift 22
+#define __fourcc_mod_nvidia_slayout_high_mask 0x2ULL
+#define __fourcc_mod_nvidia_slayout_high_shift 25
 #define __fourcc_mod_nvidia_comp_mask 0x7ULL
 #define __fourcc_mod_nvidia_comp_shift 23
 
@@ -973,14 +975,16 @@ extern "C" {
  *               2 = Gob Height 8, Turing+ Page Kind mapping
  *               3 = Reserved for future use.
  *
- * 22:22 s     Sector layout.  On Tegra GPUs prior to Xavier, there is a further
- *             bit remapping step that occurs at an even lower level than the
- *             page kind and block linear swizzles.  This causes the layout of
- *             surfaces mapped in those SOC's GPUs to be incompatible with the
- *             equivalent mapping on other GPUs in the same system.
+ * 22:22 s     Sector layout.  There is a further bit remapping step that occurs
+ * 26:26       at an even lower level than the page kind and block linear
+ *             swizzles.  This causes the bit arrangement of surfaces in memory
+ *             to differ subtly, and prevents direct sharing of surfaces between
+ *             GPUs with different layouts.
  *
- *               0 = Tegra K1 - Tegra Parker/TX2 Layout.
- *               1 = Desktop GPU and Tegra Xavier+ Layout
+ *               0 = Tegra K1 - Tegra Parker/TX2 Layout
+ *               1 = Pre-GB20x, Tegra Xavier-Orin, GB10 Layout
+ *               2 = GB20x(Blackwell 2)+ Layout for some pixel/texel sizes
+ *               3 = reserved for future use.
  *
  * 25:23 c     Lossless Framebuffer Compression type.
  *
@@ -995,7 +999,7 @@ extern "C" {
  *               6 = Reserved for future use
  *               7 = Reserved for future use
  *
- * 55:26 -     Reserved for future use.  Must be zero.
+ * 55:27 -     Reserved for future use.  Must be zero.
  */
 #define DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D(c, s, g, k, h) \
 	fourcc_mod_code(NVIDIA, \
@@ -1006,8 +1010,10 @@ extern "C" {
 			  __fourcc_mod_nvidia_pkind_shift) | \
 			 (((g) & __fourcc_mod_nvidia_kgen_mask) << \
 			  __fourcc_mod_nvidia_kgen_shift) | \
-			 (((s) & __fourcc_mod_nvidia_slayout_mask) << \
-			  __fourcc_mod_nvidia_slayout_shift) | \
+			 (((s) & __fourcc_mod_nvidia_slayout_low_mask) << \
+			  __fourcc_mod_nvidia_slayout_low_shift) | \
+			 (((s) & __fourcc_mod_nvidia_slayout_high_mask) << \
+			  __fourcc_mod_nvidia_slayout_high_shift) | \
 			 (((c) & __fourcc_mod_nvidia_comp_mask) << \
 			  __fourcc_mod_nvidia_comp_shift)))
 
@@ -1038,18 +1044,22 @@ __DRM_FOURCC_MKNVHELPER_FUNC(pkind)
 __DRM_FOURCC_MKNVHELPER_FUNC(kgen)
 
 /*
- * Get the sector layout specified by mod:
- * static inline __u64 drm_fourcc_nvidia_format_mod_slayout(__u64 mod)
- */
-__DRM_FOURCC_MKNVHELPER_FUNC(slayout)
-
-/*
  * Get the lossless framebuffer compression specified by mod:
  * static inline __u64 drm_fourcc_nvidia_format_mod_kgen(__u64 mod)
  */
 __DRM_FOURCC_MKNVHELPER_FUNC(comp)
 
 #undef __DRM_FOURCC_MKNVHELPER_FUNC
+
+/* Get the sector layout specified by mod: */
+static inline __u64
+drm_fourcc_nvidia_format_mod_slayout(__u64 mod)
+{
+	return ((mod >> __fourcc_mod_nvidia_slayout_low_shift) &
+		__fourcc_mod_nvidia_slayout_low_mask) |
+		((mod >> __fourcc_mod_nvidia_slayout_high_shift) &
+		 __fourcc_mod_nvidia_slayout_high_mask);
+}
 
 /* To grandfather in prior block linear format modifiers to the above layout,
  * the page kind "0", which corresponds to "pitch/linear" and hence is unusable
