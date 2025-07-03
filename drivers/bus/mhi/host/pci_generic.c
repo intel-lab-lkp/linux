@@ -1025,8 +1025,10 @@ static bool mhi_pci_is_alive(struct mhi_controller *mhi_cntrl)
 	struct pci_dev *pdev = to_pci_dev(mhi_cntrl->cntrl_dev);
 	u16 vendor = 0;
 
-	if (pci_read_config_word(pdev, PCI_VENDOR_ID, &vendor))
-		return false;
+	if (pdev->is_virtfn)
+		pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &vendor);
+	else
+		pci_read_config_word(pdev, PCI_VENDOR_ID, &vendor);
 
 	if (vendor == (u16) ~0 || vendor == 0)
 		return false;
