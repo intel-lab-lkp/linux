@@ -54,11 +54,15 @@ config SYSC_R8A7790
 	select SYSC_RCAR
 
 config SYSC_R8A7791
-	bool "System Controller support for R8A7791/R8A7793 (R-Car M2-W/N)" if COMPILE_TEST
+	bool "System Controller support for R8A7791 (R-Car M2-W)" if COMPILE_TEST
 	select SYSC_RCAR
 
 config SYSC_R8A7792
 	bool "System Controller support for R8A7792 (R-Car V2H)" if COMPILE_TEST
+	select SYSC_RCAR
+
+config SYSC_R8A7793
+	bool "System Controller support for R8A7793 (R-Car M2-N)" if COMPILE_TEST
 	select SYSC_RCAR
 
 config SYSC_R8A7794

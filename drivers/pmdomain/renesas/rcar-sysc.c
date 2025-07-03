@@ -300,11 +300,12 @@ static const struct of_device_id rcar_sysc_matches[] __initconst = {
 #endif
 #ifdef CONFIG_SYSC_R8A7791
 	{ .compatible = "renesas,r8a7791-sysc", .data = &r8a7791_sysc_info },
-	/* R-Car M2-N is identical to R-Car M2-W w.r.t. power domains. */
-	{ .compatible = "renesas,r8a7793-sysc", .data = &r8a7791_sysc_info },
 #endif
 #ifdef CONFIG_SYSC_R8A7792
 	{ .compatible = "renesas,r8a7792-sysc", .data = &r8a7792_sysc_info },
+#endif
+#ifdef CONFIG_SYSC_R8A7793
+	{ .compatible = "renesas,r8a7793-sysc", .data = &r8a7791_sysc_info }, /* same as r8a7791 */
 #endif
 #ifdef CONFIG_SYSC_R8A7794
 	{ .compatible = "renesas,r8a7794-sysc", .data = &r8a7794_sysc_info },
