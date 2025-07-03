@@ -70,8 +70,19 @@ struct siw_pd {
 	struct ib_pd base_pd;
 };
 
+struct siw_device_options {
+	bool zcopy_tx;
+	bool try_gso;
+	bool crc_required;
+	bool crc_strict;
+	bool tcp_nagle;
+	bool peer_to_peer;
+	u8 mpa_version;
+};
+
 struct siw_device {
 	struct ib_device base_dev;
+	struct siw_device_options options;
 	struct siw_dev_cap attrs;
 
 	u32 vendor_part_id;

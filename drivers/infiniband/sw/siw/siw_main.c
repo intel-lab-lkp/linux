@@ -324,6 +324,14 @@ static struct siw_device *siw_device_create(struct net_device *netdev)
 	/* Disable TCP port mapping */
 	base_dev->iw_driver_flags = IW_F_NO_PORT_MAP;
 
+	sdev->options.zcopy_tx = zcopy_tx;
+	sdev->options.try_gso = try_gso;
+	sdev->options.crc_required = mpa_crc_required;
+	sdev->options.crc_strict = mpa_crc_strict;
+	sdev->options.tcp_nagle = siw_tcp_nagle;
+	sdev->options.peer_to_peer = peer_to_peer;
+	sdev->options.mpa_version = mpa_version;
+
 	sdev->attrs.max_qp = SIW_MAX_QP;
 	sdev->attrs.max_qp_wr = SIW_MAX_QP_WR;
 	sdev->attrs.max_ord = SIW_MAX_ORD_QP;
