@@ -938,6 +938,11 @@ static void dc_destruct(struct dc *dc)
 	if (dc->link_srv)
 		link_destroy_link_service(&dc->link_srv);
 
+	if (!dc->ctx) {
+		dm_error("%s: called with NULL ctx\n", __func__);
+		goto skip_ctx_cleanup;
+	}
+
 	if (dc->ctx->gpio_service)
 		dal_gpio_service_destroy(&dc->ctx->gpio_service);
 
@@ -950,6 +955,7 @@ static void dc_destruct(struct dc *dc)
 	kfree(dc->ctx);
 	dc->ctx = NULL;
 
+skip_ctx_cleanup:
 	kfree(dc->bw_vbios);
 	dc->bw_vbios = NULL;
 
