@@ -1600,6 +1600,9 @@ unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 {
 	struct uclamp_se uc_eff;
 
+	if (p->flags & PF_KTHREAD)
+		return uclamp_none(clamp_id);
+
 	/* Task currently refcounted: use back-annotated (effective) value */
 	if (p->uclamp[clamp_id].active)
 		return (unsigned long)p->uclamp[clamp_id].value;
@@ -1739,6 +1742,9 @@ static inline void uclamp_rq_inc(struct rq *rq, struct task_struct *p, int flags
 	if (unlikely(!p->sched_class->uclamp_enabled))
 		return;
 
+	if (p->flags & PF_KTHREAD)
+		return;
+
 	/* Only inc the delayed task which being woken up. */
 	if (p->se.sched_delayed && !(flags & ENQUEUE_DELAYED))
 		return;
@@ -1765,6 +1771,9 @@ static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p)
 		return;
 
 	if (unlikely(!p->sched_class->uclamp_enabled))
+		return;
+
+	if (p->flags & PF_KTHREAD)
 		return;
 
 	if (p->se.sched_delayed)
@@ -1947,6 +1956,8 @@ static void uclamp_fork(struct task_struct *p)
 {
 	enum uclamp_id clamp_id;
 
+	if (p->flags & PF_KTHREAD)
+		return;
 	/*
 	 * We don't need to hold task_rq_lock() when updating p->uclamp_* here
 	 * as the task is still at its early fork stages.
@@ -1965,6 +1976,8 @@ static void uclamp_fork(struct task_struct *p)
 
 static void uclamp_post_fork(struct task_struct *p)
 {
+	if (p->flags & PF_KTHREAD)
+		return;
 	uclamp_update_util_min_rt_default(p);
 }
 
