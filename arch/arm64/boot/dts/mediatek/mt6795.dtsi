@@ -275,6 +275,7 @@
 		infracfg: syscon@10001000 {
 			compatible = "mediatek,mt6795-infracfg", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
@@ -295,8 +296,10 @@
 			spm: power-controller {
 				compatible = "mediatek,mt6795-power-controller";
 				#address-cells = <1>;
+
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg>;
 
 				/* power domains of the SoC */
 				power-domain@MT6795_POWER_DOMAIN_VDEC {
@@ -324,7 +327,6 @@
 					clocks = <&topckgen CLK_TOP_MM_SEL>;
 					clock-names = "mm";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 
 				power-domain@MT6795_POWER_DOMAIN_MJC {
@@ -357,7 +359,6 @@
 						power-domain@MT6795_POWER_DOMAIN_MFG {
 							reg = <MT6795_POWER_DOMAIN_MFG>;
 							#power-domain-cells = <0>;
-							mediatek,infracfg = <&infracfg>;
 						};
 					};
 				};

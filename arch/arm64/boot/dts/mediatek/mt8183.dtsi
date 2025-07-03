@@ -809,6 +809,7 @@
 		infracfg: syscon@10001000 {
 			compatible = "mediatek,mt8183-infracfg", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
@@ -853,6 +854,7 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg>, <&smi_common>;
 
 				/* power domain of the SoC */
 				power-domain@MT8183_POWER_DOMAIN_AUDIO {
@@ -866,7 +868,6 @@
 
 				power-domain@MT8183_POWER_DOMAIN_CONN {
 					reg = <MT8183_POWER_DOMAIN_CONN>;
-					mediatek,infracfg = <&infracfg>;
 					#power-domain-cells = <0>;
 				};
 
@@ -894,7 +895,6 @@
 
 						power-domain@MT8183_POWER_DOMAIN_MFG_2D {
 							reg = <MT8183_POWER_DOMAIN_MFG_2D>;
-							mediatek,infracfg = <&infracfg>;
 							#power-domain-cells = <0>;
 						};
 					};
@@ -916,8 +916,6 @@
 					clock-names = "mm", "mm-0", "mm-1", "mm-2", "mm-3",
 						      "mm-4", "mm-5", "mm-6", "mm-7",
 						      "mm-8", "mm-9";
-					mediatek,infracfg = <&infracfg>;
-					mediatek,smi = <&smi_common>;
 					#address-cells = <1>;
 					#size-cells = <0>;
 					#power-domain-cells = <1>;
@@ -935,8 +933,6 @@
 						clock-names = "cam", "cam-0", "cam-1",
 							      "cam-2", "cam-3", "cam-4",
 							      "cam-5", "cam-6";
-						mediatek,infracfg = <&infracfg>;
-						mediatek,smi = <&smi_common>;
 						#power-domain-cells = <0>;
 					};
 
@@ -946,20 +942,16 @@
 							 <&imgsys CLK_IMG_LARB5>,
 							 <&imgsys CLK_IMG_LARB2>;
 						clock-names = "isp", "isp-0", "isp-1";
-						mediatek,infracfg = <&infracfg>;
-						mediatek,smi = <&smi_common>;
 						#power-domain-cells = <0>;
 					};
 
 					power-domain@MT8183_POWER_DOMAIN_VDEC {
 						reg = <MT8183_POWER_DOMAIN_VDEC>;
-						mediatek,smi = <&smi_common>;
 						#power-domain-cells = <0>;
 					};
 
 					power-domain@MT8183_POWER_DOMAIN_VENC {
 						reg = <MT8183_POWER_DOMAIN_VENC>;
-						mediatek,smi = <&smi_common>;
 						#power-domain-cells = <0>;
 					};
 
@@ -975,8 +967,6 @@
 							 <&ipu_conn CLK_IPU_CONN_IMG_ADL>;
 						clock-names = "vpu", "vpu1", "vpu-0", "vpu-1",
 							      "vpu-2", "vpu-3", "vpu-4", "vpu-5";
-						mediatek,infracfg = <&infracfg>;
-						mediatek,smi = <&smi_common>;
 						#address-cells = <1>;
 						#size-cells = <0>;
 						#power-domain-cells = <1>;
@@ -985,7 +975,6 @@
 							reg = <MT8183_POWER_DOMAIN_VPU_CORE0>;
 							clocks = <&topckgen CLK_TOP_MUX_DSP1>;
 							clock-names = "vpu2";
-							mediatek,infracfg = <&infracfg>;
 							#power-domain-cells = <0>;
 						};
 
@@ -993,7 +982,6 @@
 							reg = <MT8183_POWER_DOMAIN_VPU_CORE1>;
 							clocks = <&topckgen CLK_TOP_MUX_DSP2>;
 							clock-names = "vpu3";
-							mediatek,infracfg = <&infracfg>;
 							#power-domain-cells = <0>;
 						};
 					};
@@ -1887,6 +1875,7 @@
 				 <&mmsys CLK_MM_GALS_COMM1>;
 			clock-names = "apb", "smi", "gals0", "gals1";
 			power-domains = <&spm MT8183_POWER_DOMAIN_DISP>;
+			#access-controller-cells = <0>;
 		};
 
 		mdp3-ccorr@1401c000 {

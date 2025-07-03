@@ -26,6 +26,7 @@
 		infracfg: infracfg@10001000 {
 			compatible = "mediatek,mt8167-infracfg", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 		};
 
@@ -44,6 +45,7 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg>;
 
 				/* power domains of the SoC */
 				power-domain@MT8167_POWER_DOMAIN_MM {
@@ -51,7 +53,6 @@
 					clocks = <&topckgen CLK_TOP_SMI_MM>;
 					clock-names = "mm";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 
 				power-domain@MT8167_POWER_DOMAIN_VDEC {
@@ -77,7 +78,6 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 					#power-domain-cells = <1>;
-					mediatek,infracfg = <&infracfg>;
 
 					power-domain@MT8167_POWER_DOMAIN_MFG_2D {
 						reg = <MT8167_POWER_DOMAIN_MFG_2D>;
@@ -88,7 +88,6 @@
 						power-domain@MT8167_POWER_DOMAIN_MFG {
 							reg = <MT8167_POWER_DOMAIN_MFG>;
 							#power-domain-cells = <0>;
-							mediatek,infracfg = <&infracfg>;
 						};
 					};
 				};
@@ -96,7 +95,6 @@
 				power-domain@MT8167_POWER_DOMAIN_CONN {
 					reg = <MT8167_POWER_DOMAIN_CONN>;
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 			};
 		};
