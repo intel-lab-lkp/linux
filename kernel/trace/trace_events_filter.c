@@ -1371,6 +1371,11 @@ int filter_assign_type(const char *type)
 	if (strcmp(type, "char *") == 0 || strcmp(type, "const char *") == 0)
 		return FILTER_PTR_STRING;
 
+	/* Ignore attributes */
+	if (glob_match("char __attribute(*) \\*", type) ||
+	    glob_match("const char __attribute(*) \\*", type))
+		return FILTER_PTR_STRING;
+
 	return FILTER_OTHER;
 }
 
