@@ -12,6 +12,10 @@ maintainers:
 properties:
   compatible:
     oneOf:
+      - items:
+          - enum:
+              - axiado,ax3000-uart
+          - const: cdns,uart-r1p12
       - description: UART controller for Zynq-7xxx SoC
         items:
           - const: xlnx,xuartps
