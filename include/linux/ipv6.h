@@ -19,6 +19,7 @@ struct ipv6_devconf {
 	__s32		forwarding;
 	__s32		disable_policy;
 	__s32		proxy_ndp;
+	__s32		force_forwarding;
 	__cacheline_group_end(ipv6_devconf_read_txrx);
 
 	__s32		accept_ra;
