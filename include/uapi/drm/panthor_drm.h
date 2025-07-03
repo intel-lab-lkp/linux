@@ -497,6 +497,17 @@ enum drm_panthor_vm_bind_op_flags {
 	DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED = 1 << 2,
 
 	/**
+	 * @DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT: Repeat a BO range
+	 *
+	 * Only valid with DRM_PANTHOR_VM_BIND_OP_TYPE_MAP.
+	 *
+	 * When this is set, a BO range is repeated over the VA range.
+	 * drm_panthor_vm_bind_op::bo_repeat_range defines the size of the
+	 * BO range to repeat.
+	 */
+	DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT = 1 << 3,
+
+	/**
 	 * @DRM_PANTHOR_VM_BIND_OP_TYPE_MASK: Mask used to determine the type of operation.
 	 */
 	DRM_PANTHOR_VM_BIND_OP_TYPE_MASK = (int)(0xfu << 28),
@@ -560,6 +571,18 @@ struct drm_panthor_vm_bind_op {
 	 */
 	struct drm_panthor_obj_array syncs;
 
+	/**
+	 * @bo_repeat_range: The size of the range to be repeated.
+	 *
+	 * Must be zero if DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT is not set in
+	 * flags.
+	 *
+	 * Size must be a multiple of bo_repeat_range.
+	 */
+	__u32 bo_repeat_range;
+
+	/** @pad: Padding field. MBZ. */
+	__u32 pad;
 };
 
 /**
