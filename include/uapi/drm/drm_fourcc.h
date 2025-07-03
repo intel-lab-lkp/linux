@@ -1011,6 +1011,46 @@ extern "C" {
 			 (((c) & __fourcc_mod_nvidia_comp_mask) << \
 			  __fourcc_mod_nvidia_comp_shift)))
 
+#define __DRM_FOURCC_MKNVHELPER_FUNC(f__) \
+	static inline __u64 \
+	drm_fourcc_nvidia_format_mod_##f__(__u64 mod) \
+{ \
+	return (mod >> __fourcc_mod_nvidia_##f__##_shift) & \
+		__fourcc_mod_nvidia_##f__##_mask; \
+}
+
+/*
+ * Get log2 of the block height in gobs specified by mod:
+ * static inline __u64 drm_fourcc_nvidia_format_mod_l2gpbh(__u64 mod)
+ */
+__DRM_FOURCC_MKNVHELPER_FUNC(l2gpbh)
+
+/*
+ * Get the page kind specified by mod:
+ * static inline __u64 drm_fourcc_nvidia_format_mod_pkind(__u64 mod)
+ */
+__DRM_FOURCC_MKNVHELPER_FUNC(pkind)
+
+/*
+ * Get the page kind generation specified by mod:
+ * static inline __u64 drm_fourcc_nvidia_format_mod_kgen(__u64 mod)
+ */
+__DRM_FOURCC_MKNVHELPER_FUNC(kgen)
+
+/*
+ * Get the sector layout specified by mod:
+ * static inline __u64 drm_fourcc_nvidia_format_mod_slayout(__u64 mod)
+ */
+__DRM_FOURCC_MKNVHELPER_FUNC(slayout)
+
+/*
+ * Get the lossless framebuffer compression specified by mod:
+ * static inline __u64 drm_fourcc_nvidia_format_mod_kgen(__u64 mod)
+ */
+__DRM_FOURCC_MKNVHELPER_FUNC(comp)
+
+#undef __DRM_FOURCC_MKNVHELPER_FUNC
+
 /* To grandfather in prior block linear format modifiers to the above layout,
  * the page kind "0", which corresponds to "pitch/linear" and hence is unusable
  * with block-linear layouts, is remapped within drivers to the value 0xfe,
@@ -1020,9 +1060,7 @@ extern "C" {
 static inline __u64
 drm_fourcc_canonicalize_nvidia_format_mod(__u64 modifier)
 {
-	if (!(modifier & 0x10) ||
-	    (modifier & (__fourcc_mod_nvidia_pkind_mask <<
-			 __fourcc_mod_nvidia_pkind_shift)))
+	if (!(modifier & 0x10) || drm_fourcc_nvidia_format_mod_pkind(modifier))
 		return modifier;
 	else
 		return modifier | (0xfeULL << __fourcc_mod_nvidia_pkind_shift);
