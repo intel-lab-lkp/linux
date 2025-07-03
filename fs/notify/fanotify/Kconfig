@@ -24,3 +24,8 @@ config FANOTIFY_ACCESS_PERMISSIONS
 	   hierarchical storage management systems.
 
 	   If unsure, say N.
+
+config FANOTIFY_PERM_WATCHDOG
+       bool "fanotify permission event watchdog"
+       depends on FANOTIFY_ACCESS_PERMISSIONS
+       default n
