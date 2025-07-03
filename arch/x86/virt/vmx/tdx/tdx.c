@@ -641,6 +641,14 @@ void tdx_quirk_reset_paddr(unsigned long base, unsigned long size)
 	const void *zero_page = (const void *)page_address(ZERO_PAGE(0));
 	unsigned long phys, end;
 
+	/*
+	 * Typically, any write to the page will convert it from TDX
+	 * private back to normal kernel memory. Systems with the
+	 * erratum need to do the conversion explicitly.
+	 */
+	if (!boot_cpu_has_bug(X86_BUG_TDX_PW_MCE))
+		return;
+
 	end = base + size;
 	for (phys = base; phys < end; phys += 64)
 		movdir64b(__va(phys), zero_page);
