@@ -1454,12 +1454,6 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	 * MPA Rev. according to module parameter 'mpa_version', Key 'Request'.
 	 */
 	cep->mpa.hdr.params.bits = 0;
-	if (version > MPA_REVISION_2) {
-		pr_warn("Setting MPA version to %u\n", MPA_REVISION_2);
-		version = MPA_REVISION_2;
-		/* Adjust also module parameter */
-		mpa_version = MPA_REVISION_2;
-	}
 	__mpa_rr_set_revision(&cep->mpa.hdr.params.bits, version);
 
 	if (try_gso)

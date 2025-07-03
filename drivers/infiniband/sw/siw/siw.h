@@ -494,7 +494,7 @@ extern const bool loopback_enabled;
 extern const bool mpa_crc_required;
 extern const bool mpa_crc_strict;
 extern const bool siw_tcp_nagle;
-extern u_char mpa_version;
+extern const u_char mpa_version;
 extern const bool peer_to_peer;
 extern struct task_struct *siw_tx_thread[];
 

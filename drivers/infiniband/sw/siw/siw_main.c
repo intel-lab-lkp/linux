@@ -51,7 +51,7 @@ const bool mpa_crc_strict;
 const bool siw_tcp_nagle;
 
 /* Select MPA version to be used during connection setup */
-u_char mpa_version = MPA_REVISION_2;
+const u_char mpa_version = MPA_REVISION_2;
 
 /* Selects MPA P2P mode (additional handshake during connection
  * setup, if true.
