@@ -197,12 +197,28 @@
 
 /*
  * NDI (www.ndigital.com) product ids
+ * Almost all of these devices use FTDI's VID (0x0403).
+ * Newer devices use NDI Vendor ID
  */
+/* Using DA70 to DA74 block of FTDI VID (0x0403 ) */
 #define FTDI_NDI_HUC_PID		0xDA70	/* NDI Host USB Converter */
 #define FTDI_NDI_SPECTRA_SCU_PID	0xDA71	/* NDI Spectra SCU */
 #define FTDI_NDI_FUTURE_2_PID		0xDA72	/* NDI future device #2 */
 #define FTDI_NDI_FUTURE_3_PID		0xDA73	/* NDI future device #3 */
 #define FTDI_NDI_AURORA_SCU_PID		0xDA74	/* NDI Aurora SCU */
+
+#define FTDI_NDI_VID 0x23F2 /* NDI Vendor ID */
+/*
+ * VID 0x23F2 PIDs 0x0001 and 0x0002 were used for products that do not use FTDI
+ * The following NDI devices use NDI VID
+ */
+#define FTDI_NDI_EMGUIDE_GEMINI_PID	0x0003  /* NDI Emguide Gemini */
+#define FTDI_NDI_FUTURE_4_PID		0x0004 /* NDI future device #4 */
+#define FTDI_NDI_FUTURE_5_PID		0x0005 /* NDI future device #5 */
+#define FTDI_NDI_FUTURE_6_PID		0x0006 /* NDI future device #6 */
+#define FTDI_NDI_FUTURE_7_PID		0x0007 /* NDI future device #7 */
+#define FTDI_NDI_FUTURE_8_PID		0x0008 /* NDI future device #8 */
+#define FTDI_NDI_FUTURE_9_PID		0x0009 /* NDI future device #9 */
 
 /*
  * ChamSys Limited (www.chamsys.co.uk) USB wing/interface product IDs
