@@ -902,6 +902,18 @@ extern "C" {
  */
 #define DRM_FORMAT_MOD_NVIDIA_TEGRA_TILED fourcc_mod_code(NVIDIA, 1)
 
+/* Fields in the parameteric NVIDIA block linear format modifiers */
+#define __fourcc_mod_nvidia_l2gpbh_mask 0xfULL
+#define __fourcc_mod_nvidia_l2gpbh_shift 0
+#define __fourcc_mod_nvidia_pkind_mask 0xffULL
+#define __fourcc_mod_nvidia_pkind_shift 12
+#define __fourcc_mod_nvidia_kgen_mask 0x3ULL
+#define __fourcc_mod_nvidia_kgen_shift 20
+#define __fourcc_mod_nvidia_slayout_mask 0x1ULL
+#define __fourcc_mod_nvidia_slayout_shift 22
+#define __fourcc_mod_nvidia_comp_mask 0x7ULL
+#define __fourcc_mod_nvidia_comp_shift 23
+
 /*
  * Generalized Block Linear layout, used by desktop GPUs starting with NV50/G80,
  * and Tegra GPUs starting with Tegra K1.
@@ -983,15 +995,21 @@ extern "C" {
  *               6 = Reserved for future use
  *               7 = Reserved for future use
  *
- * 55:25 -     Reserved for future use.  Must be zero.
+ * 55:26 -     Reserved for future use.  Must be zero.
  */
 #define DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D(c, s, g, k, h) \
-	fourcc_mod_code(NVIDIA, (0x10 | \
-				 ((h) & 0xf) | \
-				 (((k) & 0xff) << 12) | \
-				 (((g) & 0x3) << 20) | \
-				 (((s) & 0x1) << 22) | \
-				 (((c) & 0x7) << 23)))
+	fourcc_mod_code(NVIDIA, \
+			(0x10 | \
+			 (((h) & __fourcc_mod_nvidia_l2gpbh_mask) << \
+			  __fourcc_mod_nvidia_l2gpbh_shift) | \
+			 (((k) & __fourcc_mod_nvidia_pkind_mask) << \
+			  __fourcc_mod_nvidia_pkind_shift) | \
+			 (((g) & __fourcc_mod_nvidia_kgen_mask) << \
+			  __fourcc_mod_nvidia_kgen_shift) | \
+			 (((s) & __fourcc_mod_nvidia_slayout_mask) << \
+			  __fourcc_mod_nvidia_slayout_shift) | \
+			 (((c) & __fourcc_mod_nvidia_comp_mask) << \
+			  __fourcc_mod_nvidia_comp_shift)))
 
 /* To grandfather in prior block linear format modifiers to the above layout,
  * the page kind "0", which corresponds to "pitch/linear" and hence is unusable
@@ -1002,10 +1020,12 @@ extern "C" {
 static inline __u64
 drm_fourcc_canonicalize_nvidia_format_mod(__u64 modifier)
 {
-	if (!(modifier & 0x10) || (modifier & (0xff << 12)))
+	if (!(modifier & 0x10) ||
+	    (modifier & (__fourcc_mod_nvidia_pkind_mask <<
+			 __fourcc_mod_nvidia_pkind_shift)))
 		return modifier;
 	else
-		return modifier | (0xfe << 12);
+		return modifier | (0xfeULL << __fourcc_mod_nvidia_pkind_shift);
 }
 
 /*
