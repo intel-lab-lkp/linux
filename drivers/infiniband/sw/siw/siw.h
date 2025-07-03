@@ -498,14 +498,6 @@ struct siw_user_mmap_entry {
 	void *address;
 };
 
-/* Global siw parameters. Currently set in siw_main.c */
-extern const bool zcopy_tx;
-extern const bool try_gso;
-extern const bool mpa_crc_required;
-extern const bool mpa_crc_strict;
-extern const bool siw_tcp_nagle;
-extern const u_char mpa_version;
-extern const bool peer_to_peer;
 extern struct task_struct *siw_tx_thread[];
 
 extern struct iwarp_msg_info iwarp_pktinfo[RDMAP_TERMINATE + 1];

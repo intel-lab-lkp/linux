@@ -29,32 +29,45 @@ MODULE_AUTHOR("Bernard Metzler");
 MODULE_DESCRIPTION("Software iWARP Driver");
 MODULE_LICENSE("Dual BSD/GPL");
 
-/* transmit from user buffer, if possible */
-const bool zcopy_tx = true;
+static const struct siw_device_options siw_default_options = {
+	/*
+	 * transmit from user buffer, if possible
+	 */
+	.zcopy_tx = true,
 
-/* Restrict usage of GSO, if hardware peer iwarp is unable to process
- * large packets. try_gso = true lets siw try to use local GSO,
- * if peer agrees.  Not using GSO severly limits siw maximum tx bandwidth.
- */
-const bool try_gso;
+	/*
+	 * Restrict usage of GSO, if hardware peer iwarp is unable to process
+	 * large packets. try_gso = true lets siw try to use local GSO, if peer
+	 * agrees.  Not using GSO severly limits siw maximum tx bandwidth.
+	 */
+	.try_gso = true,
 
+	/*
+	 * We try to negotiate CRC on, if true
+	 */
+	.crc_required = false,
 
-/* We try to negotiate CRC on, if true */
-const bool mpa_crc_required;
+	/*
+	 * MPA CRC on/off enforced
+	 */
+	.crc_strict = false,
 
-/* MPA CRC on/off enforced */
-const bool mpa_crc_strict;
+	/*
+	 * Control TCP_NODELAY socket option
+	 */
+	.tcp_nagle = false,
 
-/* Control TCP_NODELAY socket option */
-const bool siw_tcp_nagle;
+	/*
+	 * Selects MPA P2P mode (additional handshake during connection
+	 * setup, if true.
+	 */
+	.peer_to_peer = false,
 
-/* Select MPA version to be used during connection setup */
-const u_char mpa_version = MPA_REVISION_2;
-
-/* Selects MPA P2P mode (additional handshake during connection
- * setup, if true.
- */
-const bool peer_to_peer;
+	/*
+	 * Select MPA version to be used during connection setup
+	 */
+	.mpa_version = MPA_REVISION_2,
+};
 
 struct task_struct *siw_tx_thread[NR_CPUS];
 
@@ -324,13 +337,7 @@ static struct siw_device *siw_device_create(struct net_device *netdev)
 	/* Disable TCP port mapping */
 	base_dev->iw_driver_flags = IW_F_NO_PORT_MAP;
 
-	sdev->options.zcopy_tx = zcopy_tx;
-	sdev->options.try_gso = try_gso;
-	sdev->options.crc_required = mpa_crc_required;
-	sdev->options.crc_strict = mpa_crc_strict;
-	sdev->options.tcp_nagle = siw_tcp_nagle;
-	sdev->options.peer_to_peer = peer_to_peer;
-	sdev->options.mpa_version = mpa_version;
+	sdev->options = siw_default_options;
 
 	sdev->attrs.max_qp = SIW_MAX_QP;
 	sdev->attrs.max_qp_wr = SIW_MAX_QP_WR;
