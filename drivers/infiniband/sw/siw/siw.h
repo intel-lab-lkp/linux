@@ -490,7 +490,6 @@ struct siw_user_mmap_entry {
 /* Global siw parameters. Currently set in siw_main.c */
 extern const bool zcopy_tx;
 extern const bool try_gso;
-extern const bool loopback_enabled;
 extern const bool mpa_crc_required;
 extern const bool mpa_crc_strict;
 extern const bool siw_tcp_nagle;

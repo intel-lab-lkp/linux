@@ -38,8 +38,6 @@ const bool zcopy_tx = true;
  */
 const bool try_gso;
 
-/* Attach siw also with loopback devices */
-const bool loopback_enabled = true;
 
 /* We try to negotiate CRC on, if true */
 const bool mpa_crc_required;
@@ -94,8 +92,7 @@ static int siw_dev_qualified(struct net_device *netdev)
 	 * <linux/if_arp.h> for type identifiers.
 	 */
 	if (netdev->type == ARPHRD_ETHER || netdev->type == ARPHRD_IEEE802 ||
-	    netdev->type == ARPHRD_NONE ||
-	    (netdev->type == ARPHRD_LOOPBACK && loopback_enabled))
+	    netdev->type == ARPHRD_NONE || netdev->type == ARPHRD_LOOPBACK)
 		return 1;
 
 	return 0;
