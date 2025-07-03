@@ -3630,6 +3630,11 @@ after_split:
 			if (release == origin_folio)
 				continue;
 
+			if (folio_is_device_private(origin_folio) &&
+					origin_folio->pgmap->ops->folio_split)
+				origin_folio->pgmap->ops->folio_split(
+					origin_folio, release);
+
 			folio_ref_unfreeze(release, 1 +
 					((mapping || swap_cache) ?
 						folio_nr_pages(release) : 0));
@@ -3660,6 +3665,15 @@ after_split:
 			}
 		}
 	}
+
+	/*
+	 * Mark the end of the split, so that the driver can setup origin_folio's
+	 * order and other metadata
+	 */
+	if (folio_is_device_private(origin_folio) &&
+			origin_folio->pgmap->ops->folio_split)
+		origin_folio->pgmap->ops->folio_split(
+			origin_folio, NULL);
 
 	/*
 	 * Unfreeze origin_folio only after all page cache entries, which used
