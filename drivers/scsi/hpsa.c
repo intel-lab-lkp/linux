@@ -7795,7 +7795,7 @@ static int hpsa_wait_for_mode_change_ack(struct ctlr_info *h)
 	u32 doorbell_value;
 	unsigned long flags;
 
-	/* under certain very rare conditions, this can take awhile.
+	/* under certain very rare conditions, this can take a while.
 	 * (e.g.: hot replace a failed 144GB drive in a RAID 5 set right
 	 * as we enter this code.)
 	 */
