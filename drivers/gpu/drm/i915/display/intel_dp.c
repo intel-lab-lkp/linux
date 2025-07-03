@@ -1774,6 +1774,9 @@ intel_dp_compute_link_config_wide(struct intel_dp *intel_dp,
 	     bpp -= 2 * 3) {
 		int link_bpp = intel_dp_output_bpp(pipe_config->output_format, bpp);
 
+		if (intel_dp_in_hdr_mode(conn_state) && bpp < 30)
+			return -EINVAL;
+
 		mode_rate = intel_dp_link_required(clock, link_bpp);
 
 		for (i = 0; i < intel_dp->num_common_rates; i++) {
@@ -2908,6 +2911,19 @@ static void intel_dp_compute_vsc_sdp(struct intel_dp *intel_dp,
 		vsc->revision = 0x2;
 		vsc->length = 0x8;
 	}
+}
+
+bool
+intel_dp_in_hdr_mode(const struct drm_connector_state *conn_state)
+{
+	struct hdr_output_metadata *hdr_metadata;
+
+	if (!conn_state->hdr_output_metadata)
+		return false;
+
+	hdr_metadata = conn_state->hdr_output_metadata->data;
+
+	return hdr_metadata->hdmi_metadata_type1.eotf == HDMI_EOTF_SMPTE_ST2084;
 }
 
 static void
