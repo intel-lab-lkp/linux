@@ -1245,6 +1245,9 @@ struct mctp_test_bind_setup {
 	bool have_peer;
 	mctp_eid_t peer_addr;
 	int peer_net;
+
+	/* optional name. Used for comparison in "lookup" tests */
+	const char *name;
 };
 
 static const struct mctp_test_bind_setup bind_addrany_netdefault_type1 = {
@@ -1384,11 +1387,17 @@ static void mctp_test_bind_invalid(struct kunit *test)
 	int rc;
 
 	/* bind() fails if the bind() vs connect() networks mismatch. */
-	const struct mctp_test_bind_setup bind_connect_net_mismatch = {
+	const struct mctp_test_bind_setup bind_connect_net_mismatch1 = {
 		.bind_addr = MCTP_ADDR_ANY, .bind_net = 1, .bind_type = 1,
 		.have_peer = true, .peer_addr = 9, .peer_net = 2,
 	};
-	mctp_test_bind_run(test, &bind_connect_net_mismatch, &rc, &sock);
+	const struct mctp_test_bind_setup bind_connect_net_mismatch5 = {
+		.bind_addr = MCTP_ADDR_ANY, .bind_net = 5, .bind_type = 1,
+		.have_peer = true, .peer_addr = 9, .peer_net = 2,
+	};
+
+	mctp_test_bind_run(test, &bind_connect_net_mismatch1, &rc, &sock);
+	mctp_test_bind_run(test, &bind_connect_net_mismatch5, &rc, &sock);
 	KUNIT_EXPECT_EQ(test, -rc, EINVAL);
 	sock_release(sock);
 }
@@ -1436,6 +1445,176 @@ static void mctp_test_bind_conflicts(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, -bind_errno, pair->error);
 }
 
+struct mctp_bind_lookup_test {
+	/* header of incoming message */
+	struct mctp_hdr hdr;
+	u8 ty;
+	/* mctp network of incoming interface (smctp_network) */
+	unsigned int net;
+
+	/* expected socket, matches .name in lookup_binds, or NULL for dropped */
+	const char *expect;
+};
+
+/* Single-packet TO-set message */
+#define LK(src, dst) RX_HDR(1, (src), (dst), FL_S | FL_E | FL_TO)
+
+/* Input message test cases for bind lookup tests.
+ *
+ * 10 and 11 are local EIDs.
+ * 20 and 21 are remote EIDs.
+ */
+static const struct mctp_bind_lookup_test mctp_bind_lookup_tests[] = {
+	/* have both local-eid and remote-eid binds, remote eid is preferenced */
+	{ .hdr = LK(20, 10),  .ty = 1, .net = 1, .expect = "remote20" },
+
+	{ .hdr = LK(20, 255), .ty = 1, .net = 1, .expect = "remote20" },
+	{ .hdr = LK(20, 0),   .ty = 1, .net = 1, .expect = "remote20" },
+	{ .hdr = LK(0, 255),  .ty = 1, .net = 1, .expect = "any" },
+	{ .hdr = LK(0, 11),   .ty = 1, .net = 1, .expect = "any" },
+	{ .hdr = LK(0, 0),    .ty = 1, .net = 1, .expect = "any" },
+	{ .hdr = LK(0, 10),   .ty = 1, .net = 1, .expect = "local10" },
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 1, .expect = "local10" },
+	{ .hdr = LK(21, 11),  .ty = 1, .net = 1, .expect = "remote21local11" },
+
+	/* both src and dest set to eid=99. unusual, but accepted
+	 * by MCTP stack currently.
+	 */
+	{ .hdr = LK(99, 99),  .ty = 1, .net = 1, .expect = "any" },
+
+	/* unbound smctp_type */
+	{ .hdr = LK(20, 10),  .ty = 3, .net = 1, .expect = NULL },
+
+	/* smctp_network tests */
+
+	{ .hdr = LK(0, 0),    .ty = 1, .net = 7, .expect = "any" },
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 2, .expect = "any" },
+
+	/* remote EID 20 matches, but MCTP_NET_ANY in "remote20" resolved to net=1,
+	 * so lookup doesn't match "remote20"
+	 */
+	{ .hdr = LK(20, 10),  .ty = 1, .net = 3, .expect = "any" },
+
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 3, .expect = "remote21net3" },
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 4, .expect = "remote21net4" },
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 5, .expect = "remote21net5" },
+
+	{ .hdr = LK(21, 10),  .ty = 1, .net = 5, .expect = "remote21net5" },
+
+	{ .hdr = LK(99, 10),  .ty = 1, .net = 8, .expect = "local10net8" },
+
+	{ .hdr = LK(99, 10),  .ty = 1, .net = 9, .expect = "anynet9" },
+	{ .hdr = LK(0, 0),    .ty = 1, .net = 9, .expect = "anynet9" },
+	{ .hdr = LK(99, 99),  .ty = 1, .net = 9, .expect = "anynet9" },
+	{ .hdr = LK(20, 10),  .ty = 1, .net = 9, .expect = "anynet9" },
+};
+
+/* Binds to create during the lookup tests */
+static const struct mctp_test_bind_setup lookup_binds[] = {
+	/* any address and net, type 1 */
+	{ .name = "any", .bind_addr = MCTP_ADDR_ANY, .bind_net = MCTP_NET_ANY, .bind_type = 1, },
+	/* local eid 10, net 1 (resolved from MCTP_NET_ANY) */
+	{ .name = "local10", .bind_addr = 10, .bind_net = MCTP_NET_ANY, .bind_type = 1, },
+	/* local eid 10, net 8 */
+	{ .name = "local10net8", .bind_addr = 10, .bind_net = 8, .bind_type = 1, },
+	/* any EID, net 9 */
+	{ .name = "anynet9", .bind_addr = MCTP_ADDR_ANY, .bind_net = 9, .bind_type = 1, },
+
+	/* remote eid 20, net 1, any local eid */
+	{ .name = "remote20", .bind_addr = MCTP_ADDR_ANY, .bind_net = MCTP_NET_ANY, .bind_type = 1,
+		.have_peer = true, .peer_addr = 20, .peer_net = MCTP_NET_ANY, },
+
+	/* remote eid 20, net 1, local eid 11 */
+	{ .name = "remote21local11", .bind_addr = 11, .bind_net = MCTP_NET_ANY, .bind_type = 1,
+		.have_peer = true, .peer_addr = 21, .peer_net = MCTP_NET_ANY, },
+
+	/* remote eid 21, specific net=3 for connect() */
+	{ .name = "remote21net3", .bind_addr = MCTP_ADDR_ANY,
+		.bind_net = MCTP_NET_ANY, .bind_type = 1,
+		.have_peer = true, .peer_addr = 21, .peer_net = 3, },
+
+	/* remote eid 21, net 4 for bind, specific net=4 for connect() */
+	{ .name = "remote21net4", .bind_addr = MCTP_ADDR_ANY, .bind_net = 4, .bind_type = 1,
+		.have_peer = true, .peer_addr = 21, .peer_net = 4, },
+
+	/* remote eid 21, net 5 for bind, specific net=5 for connect() */
+	{ .name = "remote21net5", .bind_addr = MCTP_ADDR_ANY, .bind_net = 5, .bind_type = 1,
+		.have_peer = true, .peer_addr = 21, .peer_net = 5, },
+};
+
+static void mctp_bind_lookup_desc(const struct mctp_bind_lookup_test *t, char *desc)
+{
+	snprintf(desc, KUNIT_PARAM_DESC_SIZE, "{src %d dst %d ty %d net %d expect %s}",
+		 t->hdr.src, t->hdr.dest, t->ty, t->net, t->expect);
+}
+
+KUNIT_ARRAY_PARAM(mctp_bind_lookup, mctp_bind_lookup_tests, mctp_bind_lookup_desc);
+
+static void mctp_test_bind_lookup(struct kunit *test)
+{
+	const struct mctp_bind_lookup_test *rx;
+	struct socket *socks[ARRAY_SIZE(lookup_binds)];
+	struct sk_buff *skb_pkt = NULL, *skb_sock = NULL;
+	struct mctp_test_route *rt;
+	struct mctp_test_dev *dev;
+	struct socket *sock_ty0, *sock_expect = NULL;
+	int rc;
+
+	rx = test->param_value;
+
+	__mctp_route_test_init(test, &dev, &rt, &sock_ty0, rx->net);
+	/* Create all binds */
+	for (size_t i = 0; i < ARRAY_SIZE(lookup_binds); i++) {
+		mctp_test_bind_run(test, &lookup_binds[i],
+				   &rc, &socks[i]);
+		KUNIT_ASSERT_EQ(test, rc, 0);
+
+		/* Record the expected receive socket */
+		if (rx->expect && strcmp(rx->expect, lookup_binds[i].name) == 0) {
+			KUNIT_ASSERT_NULL(test, sock_expect);
+			sock_expect = socks[i];
+		}
+	}
+	KUNIT_ASSERT_EQ(test, !!sock_expect, !!rx->expect);
+
+	/* Create test message */
+	skb_pkt = mctp_test_create_skb_data(&rx->hdr, &rx->ty);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, skb_pkt);
+	mctp_test_skb_set_dev(skb_pkt, dev);
+
+	rc = mctp_route_input(&rt->rt, skb_pkt);
+	if (rx->expect) {
+		/* Test the message is received on the expected socket */
+		KUNIT_EXPECT_EQ(test, rc, 0);
+		skb_sock = skb_recv_datagram(sock_expect->sk, MSG_DONTWAIT, &rc);
+		if (!skb_sock) {
+			/* Find which socket received it instead */
+			for (size_t i = 0; i < ARRAY_SIZE(lookup_binds); i++) {
+				skb_sock = skb_recv_datagram(socks[i]->sk, MSG_DONTWAIT, &rc);
+				if (skb_sock) {
+					KUNIT_FAIL(test,
+						   "received on incorrect socket '%s', expect '%s'",
+						   lookup_binds[i].name, rx->expect);
+					goto cleanup;
+				}
+			}
+			KUNIT_FAIL(test, "no message received");
+		}
+	} else {
+		KUNIT_EXPECT_NE(test, rc, 0);
+	}
+
+cleanup:
+	kfree_skb(skb_sock);
+	kfree_skb(skb_pkt);
+
+	/* Drop all binds */
+	for (size_t i = 0; i < ARRAY_SIZE(lookup_binds); i++)
+		sock_release(socks[i]);
+
+	__mctp_route_test_fini(test, dev, rt, sock_ty0);
+}
+
 static void mctp_test_assumptions(struct kunit *test)
 {
 	/* check assumption of default net from bind_addr8_net1_type1 */
@@ -1461,6 +1640,7 @@ static struct kunit_case mctp_test_cases[] = {
 	KUNIT_CASE(mctp_test_route_input_cloned_frag),
 	KUNIT_CASE_PARAM(mctp_test_bind_conflicts, mctp_bind_pair_gen_params),
 	KUNIT_CASE(mctp_test_bind_invalid),
+	KUNIT_CASE_PARAM(mctp_test_bind_lookup, mctp_bind_lookup_gen_params),
 
 	{ /* terminator */ },
 };
