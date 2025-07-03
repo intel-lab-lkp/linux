@@ -653,6 +653,12 @@ static void reset_tdx_pages(unsigned long base, unsigned long size)
 	mb();
 }
 
+void tdx_clear_page(struct page *page)
+{
+	reset_tdx_pages(page_to_phys(page), PAGE_SIZE);
+}
+EXPORT_SYMBOL_GPL(tdx_clear_page);
+
 static void tdmr_reset_pamt(struct tdmr_info *tdmr)
 {
 	tdmr_do_pamt_func(tdmr, reset_tdx_pages);
