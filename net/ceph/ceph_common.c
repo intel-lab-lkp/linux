@@ -790,8 +790,18 @@ EXPORT_SYMBOL(ceph_reset_client_addr);
  */
 static bool have_mon_and_osd_map(struct ceph_client *client)
 {
-	return client->monc.monmap && client->monc.monmap->epoch &&
-	       client->osdc.osdmap && client->osdc.osdmap->epoch;
+	bool have_mon_map = false;
+	bool have_osd_map = false;
+
+	mutex_lock(&client->monc.mutex);
+	have_mon_map = client->monc.monmap && client->monc.monmap->epoch;
+	mutex_unlock(&client->monc.mutex);
+
+	down_read(&client->osdc.lock);
+	have_osd_map = client->osdc.osdmap && client->osdc.osdmap->epoch;
+	up_read(&client->osdc.lock);
+
+	return have_mon_map && have_osd_map;
 }
 
 /*
@@ -800,6 +810,7 @@ static bool have_mon_and_osd_map(struct ceph_client *client)
 int __ceph_open_session(struct ceph_client *client, unsigned long started)
 {
 	unsigned long timeout = client->options->mount_timeout;
+	int auth_err = 0;
 	long err;
 
 	/* open session, and wait for mon and osd maps */
@@ -808,18 +819,36 @@ int __ceph_open_session(struct ceph_client *client, unsigned long started)
 		return err;
 
 	while (!have_mon_and_osd_map(client)) {
+		mutex_lock(&client->monc.mutex);
+		auth_err = client->auth_err;
+		mutex_unlock(&client->monc.mutex);
+
+		if (auth_err < 0)
+			return auth_err;
+
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			return -ETIMEDOUT;
 
 		/* wait */
 		dout("mount waiting for mon_map\n");
-		err = wait_event_interruptible_timeout(client->auth_wq,
-			have_mon_and_osd_map(client) || (client->auth_err < 0),
-			ceph_timeout_jiffies(timeout));
+
+		DEFINE_WAIT_FUNC(wait, woken_wake_function);
+
+		add_wait_queue(&client->auth_wq, &wait);
+
+		while (!have_mon_and_osd_map(client)) {
+			if (signal_pending(current)) {
+				err = -ERESTARTSYS;
+				break;
+			}
+			wait_woken(&wait, TASK_INTERRUPTIBLE,
+				   ceph_timeout_jiffies(timeout));
+		}
+
+		remove_wait_queue(&client->auth_wq, &wait);
+
 		if (err < 0)
 			return err;
-		if (client->auth_err < 0)
-			return client->auth_err;
 	}
 
 	pr_info("client%llu fsid %pU\n", ceph_client_gid(client),
