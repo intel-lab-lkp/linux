@@ -146,14 +146,18 @@ nouveau_decode_mod(struct nouveau_drm *drm,
 		 * Extract the block height and kind from the corresponding
 		 * modifier fields.  See drm_fourcc.h for details.
 		 */
+		uint64_t pkind = drm_fourcc_nvidia_format_mod_pkind(modifier);
 
-		if ((modifier & (0xffull << 12)) == 0ull) {
+		if (pkind == 0ull) {
 			/* Legacy modifier.  Translate to this dev's 'kind.' */
-			modifier |= disp->format_modifiers[0] & (0xffull << 12);
+			const uint64_t any_dev_mod = disp->format_modifiers[0];
+
+			pkind = drm_fourcc_nvidia_format_mod_pkind(any_dev_mod);
 		}
 
-		*tile_mode = (uint32_t)(modifier & 0xF);
-		*kind = (uint8_t)((modifier >> 12) & 0xFF);
+		*tile_mode =
+			(uint32_t)drm_fourcc_nvidia_format_mod_l2gpbh(modifier);
+		*kind = (uint8_t)pkind;
 
 		if (drm->client.device.info.chipset >= 0xc0)
 			*tile_mode <<= 4;
