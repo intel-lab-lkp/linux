@@ -180,7 +180,7 @@ static void blk_atomic_writes_update_limits(struct queue_limits *lim)
 
 static void blk_validate_atomic_write_limits(struct queue_limits *lim)
 {
-	unsigned int boundary_sectors;
+	unsigned int boundary_sectors, chunk_bytes;
 
 	if (!(lim->features & BLK_FEAT_ATOMIC_WRITES))
 		goto unsupported;
@@ -201,6 +201,13 @@ static void blk_validate_atomic_write_limits(struct queue_limits *lim)
 	if (WARN_ON_ONCE(lim->atomic_write_hw_unit_max >
 			 lim->atomic_write_hw_max))
 		goto unsupported;
+
+	chunk_bytes = lim->chunk_sectors << SECTOR_SHIFT;
+	if (chunk_bytes) {
+		if (WARN_ON_ONCE(lim->atomic_write_hw_unit_max >
+			chunk_bytes))
+			goto unsupported;
+	}
 
 	boundary_sectors = lim->atomic_write_hw_boundary >> SECTOR_SHIFT;
 
