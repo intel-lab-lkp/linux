@@ -1161,23 +1161,6 @@ static void devlink_port_type_netdev_checks(struct devlink_port *devlink_port,
 {
 	const struct net_device_ops *ops = netdev->netdev_ops;
 
-	/* If driver registers devlink port, it should set devlink port
-	 * attributes accordingly so the compat functions are called
-	 * and the original ops are not used.
-	 */
-	if (ops->ndo_get_phys_port_name) {
-		/* Some drivers use the same set of ndos for netdevs
-		 * that have devlink_port registered and also for
-		 * those who don't. Make sure that ndo_get_phys_port_name
-		 * returns -EOPNOTSUPP here in case it is defined.
-		 * Warn if not.
-		 */
-		char name[IFNAMSIZ];
-		int err;
-
-		err = ops->ndo_get_phys_port_name(netdev, name, sizeof(name));
-		WARN_ON(err != -EOPNOTSUPP);
-	}
 	if (ops->ndo_get_port_parent_id) {
 		/* Some drivers use the same set of ndos for netdevs
 		 * that have devlink_port registered and also for
