@@ -64,6 +64,12 @@ static const struct siw_device_options siw_default_options = {
 	.peer_to_peer = false,
 
 	/*
+	 * Set to any combination of
+	 * MPA_V2_RDMA_NO_RTR, MPA_V2_RDMA_READ_RTR, MPA_V2_RDMA_WRITE_RTR
+	 */
+	.rtr_type = MPA_V2_RDMA_READ_RTR | MPA_V2_RDMA_WRITE_RTR,
+
+	/*
 	 * Select MPA version to be used during connection setup
 	 */
 	.mpa_version = MPA_REVISION_2,

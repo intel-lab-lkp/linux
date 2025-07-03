@@ -25,11 +25,6 @@
 #include "siw.h"
 #include "siw_cm.h"
 
-/*
- * Set to any combination of
- * MPA_V2_RDMA_NO_RTR, MPA_V2_RDMA_READ_RTR, MPA_V2_RDMA_WRITE_RTR
- */
-static __be16 rtr_type = MPA_V2_RDMA_READ_RTR | MPA_V2_RDMA_WRITE_RTR;
 static const bool relaxed_ird_negotiation = true;
 
 static void siw_cm_llp_state_change(struct sock *s);
@@ -1365,6 +1360,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	struct sockaddr *laddr = (struct sockaddr *)&id->local_addr,
 			*raddr = (struct sockaddr *)&id->remote_addr;
 	bool p2p_mode = sdev->options.peer_to_peer;
+	__be16 rtr_type = sdev->options.rtr_type;
 	bool v4 = true;
 	u16 pd_len = params->private_data_len;
 	int version = sdev->options.mpa_version;

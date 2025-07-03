@@ -77,6 +77,7 @@ struct siw_device_options {
 	bool crc_strict;
 	bool tcp_nagle;
 	bool peer_to_peer;
+	__be16 rtr_type;
 	u8 mpa_version;
 };
 
