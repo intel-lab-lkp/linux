@@ -1565,6 +1565,7 @@ int famfs_file_init_dax(struct fuse_mount *fm,
 			     struct inode *inode, void *fmap_buf,
 			     size_t fmap_size);
 void __famfs_meta_free(void *map);
+void famfs_teardown(struct fuse_conn *fc);
 #endif
 
 static inline struct fuse_backing *famfs_meta_set(struct fuse_inode *fi,
