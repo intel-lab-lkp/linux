@@ -230,6 +230,77 @@ static void fuse_truncate_update_attr(struct inode *inode, struct file *file)
 	fuse_invalidate_attr_mask(inode, FUSE_STATX_MODSIZE);
 }
 
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+
+#define FMAP_BUFSIZE 4096
+
+static int
+fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
+{
+	struct fuse_get_fmap_in inarg = { 0 };
+	size_t fmap_bufsize = FMAP_BUFSIZE;
+	ssize_t fmap_size;
+	int retries = 1;
+	void *fmap_buf;
+	int rc;
+
+	FUSE_ARGS(args);
+
+	fmap_buf = kcalloc(1, FMAP_BUFSIZE, GFP_KERNEL);
+	if (!fmap_buf)
+		return -EIO;
+
+ retry_once:
+	inarg.size = fmap_bufsize;
+
+	args.opcode = FUSE_GET_FMAP;
+	args.nodeid = nodeid;
+
+	args.in_numargs = 1;
+	args.in_args[0].size = sizeof(inarg);
+	args.in_args[0].value = &inarg;
+
+	/* Variable-sized output buffer
+	 * this causes fuse_simple_request() to return the size of the
+	 * output payload
+	 */
+	args.out_argvar = true;
+	args.out_numargs = 1;
+	args.out_args[0].size = fmap_bufsize;
+	args.out_args[0].value = fmap_buf;
+
+	/* Send GET_FMAP command */
+	rc = fuse_simple_request(fm, &args);
+	if (rc < 0) {
+		pr_err("%s: err=%d from fuse_simple_request()\n",
+		       __func__, rc);
+		return rc;
+	}
+	fmap_size = rc;
+
+	if (retries && fmap_size == sizeof(uint32_t)) {
+		/* fmap size exceeded fmap_bufsize;
+		 * actual fmap size returned in fmap_buf;
+		 * realloc and retry once
+		 */
+		fmap_bufsize = *((uint32_t *)fmap_buf);
+
+		--retries;
+		kfree(fmap_buf);
+		fmap_buf = kcalloc(1, fmap_bufsize, GFP_KERNEL);
+		if (!fmap_buf)
+			return -EIO;
+
+		goto retry_once;
+	}
+
+	/* Will call famfs_file_init_dax() when that gets added */
+
+	kfree(fmap_buf);
+	return 0;
+}
+#endif
+
 static int fuse_open(struct inode *inode, struct file *file)
 {
 	struct fuse_mount *fm = get_fuse_mount(inode);
@@ -263,6 +334,19 @@ static int fuse_open(struct inode *inode, struct file *file)
 
 	err = fuse_do_open(fm, get_node_id(inode), file, false);
 	if (!err) {
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+		if (fm->fc->famfs_iomap) {
+			if (S_ISREG(inode->i_mode)) {
+				int rc;
+				/* Get the famfs fmap */
+				rc = fuse_get_fmap(fm, inode,
+						   get_node_id(inode));
+				if (rc)
+					pr_err("%s: fuse_get_fmap err=%d\n",
+					       __func__, rc);
+			}
+		}
+#endif
 		ff = file->private_data;
 		err = fuse_finish_open(inode, file);
 		if (err)

@@ -654,6 +654,10 @@ enum fuse_opcode {
 	FUSE_TMPFILE		= 51,
 	FUSE_STATX		= 52,
 
+	/* Famfs / devdax opcodes */
+	FUSE_GET_FMAP           = 53,
+	FUSE_GET_DAXDEV         = 54,
+
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
 
@@ -885,6 +889,16 @@ struct fuse_lk_out {
 
 struct fuse_access_in {
 	uint32_t	mask;
+	uint32_t	padding;
+};
+
+struct fuse_get_fmap_in {
+	uint32_t	size;
+	uint32_t	padding;
+};
+
+struct fuse_get_fmap_out {
+	uint32_t	size;
 	uint32_t	padding;
 };
 
@@ -1283,5 +1297,9 @@ struct fuse_uring_cmd_req {
 	uint16_t qid;
 	uint8_t padding[6];
 };
+
+/* Famfs fmap message components */
+
+#define FAMFS_FMAP_MAX 32768 /* Largest supported fmap message */
 
 #endif /* _LINUX_FUSE_H */
