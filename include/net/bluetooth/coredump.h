@@ -66,6 +66,7 @@ void hci_devcd_timeout(struct work_struct *work);
 
 int hci_devcd_register(struct hci_dev *hdev, coredump_t coredump,
 		       dmp_hdr_t dmp_hdr, notify_change_t notify_change);
+void hci_devcd_unregister(struct hci_dev *hdev);
 int hci_devcd_init(struct hci_dev *hdev, u32 dump_size);
 int hci_devcd_append(struct hci_dev *hdev, struct sk_buff *skb);
 int hci_devcd_append_pattern(struct hci_dev *hdev, u8 pattern, u32 len);
@@ -84,6 +85,8 @@ static inline int hci_devcd_register(struct hci_dev *hdev, coredump_t coredump,
 {
 	return -EOPNOTSUPP;
 }
+
+static inline void hci_devcd_unregister(struct hci_dev *hdev) {}
 
 static inline int hci_devcd_init(struct hci_dev *hdev, u32 dump_size)
 {

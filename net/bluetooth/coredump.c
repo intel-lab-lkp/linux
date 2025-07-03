@@ -442,6 +442,14 @@ int hci_devcd_register(struct hci_dev *hdev, coredump_t coredump,
 }
 EXPORT_SYMBOL(hci_devcd_register);
 
+void hci_devcd_unregister(struct hci_dev *hdev)
+{
+	cancel_delayed_work(&hdev->dump.dump_timeout);
+	skb_queue_purge(&hdev->dump.dump_q);
+	dev_coredump_put(&hdev->dev);
+}
+EXPORT_SYMBOL_GPL(hci_devcd_unregister);
+
 static inline bool hci_devcd_enabled(struct hci_dev *hdev)
 {
 	return hdev->dump.supported;
