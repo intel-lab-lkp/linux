@@ -1471,7 +1471,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	 * If MPA version == 2:
 	 * o Include ORD and IRD.
 	 * o Indicate peer-to-peer mode, if required by module
-	 *   parameter 'peer_to_peer'.
+	 *   parameter 'mpa_peer_to_peer'.
 	 */
 	if (version == MPA_REVISION_2) {
 		cep->enhanced_rdma_conn_est = true;

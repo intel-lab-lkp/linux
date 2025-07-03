@@ -29,7 +29,7 @@ MODULE_AUTHOR("Bernard Metzler");
 MODULE_DESCRIPTION("Software iWARP Driver");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static const struct siw_device_options siw_default_options = {
+static struct siw_device_options siw_default_options = {
 	/*
 	 * transmit from user buffer, if possible
 	 */
@@ -74,6 +74,115 @@ static const struct siw_device_options siw_default_options = {
 	 */
 	.mpa_version = MPA_REVISION_2,
 };
+
+module_param_named(zcopy_tx, siw_default_options.zcopy_tx, bool, 0644);
+MODULE_PARM_DESC(zcopy_tx, "Transmit from user buffer, if possible");
+
+module_param_named(try_gso, siw_default_options.try_gso, bool, 0644);
+MODULE_PARM_DESC(try_gso, "Try usage of GSO");
+
+module_param_named(mpa_crc_required, siw_default_options.crc_required, bool, 0644);
+MODULE_PARM_DESC(mpa_crc_required, "We try to negotiate CRC on, if true");
+
+module_param_named(mpa_crc_strict, siw_default_options.crc_strict, bool, 0644);
+MODULE_PARM_DESC(mpa_crc_strict, "MPA CRC on/off enforced");
+
+module_param_named(tcp_nagle, siw_default_options.tcp_nagle, bool, 0644);
+MODULE_PARM_DESC(tcp_nagle, "Control TCP_NODELAY socket option");
+
+module_param_named(mpa_peer_to_peer, siw_default_options.peer_to_peer, bool, 0644);
+MODULE_PARM_DESC(mpa_peer_to_peer, "Selects MPA P2P mode setup, if true");
+
+static int siw_rtr_type_set_bit(const char *val,
+				const struct kernel_param *kp,
+				__be16 bit)
+{
+	bool bval = true;
+	int ret;
+
+	/* No equals means "set"... */
+	if (!val) val = "1";
+
+	/* One of =[yYnN01] */
+	ret = kstrtobool(val, &bval);
+	if (ret != 0)
+		return ret;
+
+	if (bval)
+		*((__be16 *)kp->arg) |= bit;
+	else
+		*((__be16 *)kp->arg) &= ~bit;
+
+	return 0;
+}
+
+static int siw_rtr_type_get_bit(char *buffer,
+				const struct kernel_param *kp,
+				__be16 bit)
+{
+	bool bval = (*((__be16 *)kp->arg) & bit);
+
+	/* Y and N chosen as being relatively non-coder friendly */
+	return sprintf(buffer, "%c\n", bval ? 'Y' : 'N');
+}
+
+static int siw_rdma_read_rtr_set(const char *val, const struct kernel_param *kp)
+{
+	return siw_rtr_type_set_bit(val, kp, MPA_V2_RDMA_READ_RTR);
+}
+
+static int siw_rdma_read_rtr_get(char *buffer, const struct kernel_param *kp)
+{
+	return siw_rtr_type_get_bit(buffer, kp, MPA_V2_RDMA_READ_RTR);
+}
+module_param_call(mpa_rdma_read_rtr,
+		  siw_rdma_read_rtr_set,
+		  siw_rdma_read_rtr_get,
+		  &siw_default_options.rtr_type,
+		  0644);
+MODULE_PARM_DESC(mpa_rdma_read_rtr, "MPA P2P mode setup enable MPA_V2_RDMA_READ_RTR, if true");
+
+static int siw_rdma_write_rtr_set(const char *val, const struct kernel_param *kp)
+{
+	return siw_rtr_type_set_bit(val, kp, MPA_V2_RDMA_WRITE_RTR);
+}
+
+static int siw_rdma_write_rtr_get(char *buffer, const struct kernel_param *kp)
+{
+	return siw_rtr_type_get_bit(buffer, kp, MPA_V2_RDMA_WRITE_RTR);
+}
+module_param_call(mpa_rdma_write_rtr,
+		  siw_rdma_write_rtr_set,
+		  siw_rdma_write_rtr_get,
+		  &siw_default_options.rtr_type,
+		  0644);
+MODULE_PARM_DESC(mpa_rdma_write_rtr, "MPA P2P mode setup enable MPA_V2_RDMA_WRITE_RTR, if true");
+
+static int siw_mpa_version_set(const char *val, const struct kernel_param *kp)
+{
+	u8 uval = MPA_REVISION_2;
+	int ret;
+
+	ret = kstrtou8(val, 10, &uval);
+	if (ret != 0)
+		return ret;
+
+	switch (uval) {
+	case MPA_REVISION_2:
+	/* TODO case MPA_REVISION_1: */
+		siw_default_options.mpa_version = uval;
+		return 0;
+	}
+
+	return -ERANGE;
+}
+
+module_param_call(mpa_version,
+		  siw_mpa_version_set,
+		  param_get_byte,
+		  &siw_default_options.mpa_version,
+		  0644);
+MODULE_PARM_DESC(mpa_version, "Select MPA version to be used during connection setup");
 
 struct task_struct *siw_tx_thread[NR_CPUS];
 
