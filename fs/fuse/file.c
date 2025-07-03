@@ -277,7 +277,8 @@ static int fuse_open(struct inode *inode, struct file *file)
 		if (is_truncate)
 			truncate_pagecache(inode, 0);
 		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
-			invalidate_inode_pages2(inode->i_mapping);
+			filemap_invalidate_pages(inode->i_mapping, 0,
+					OFFSET_MAX, false);
 	}
 	if (dax_truncate)
 		filemap_invalidate_unlock(inode->i_mapping);
@@ -1566,7 +1567,8 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		return -ENOMEM;
 
 	if (fopen_direct_io && fc->direct_io_allow_mmap) {
-		res = filemap_write_and_wait_range(mapping, pos, pos + count - 1);
+		res = filemap_invalidate_pages(mapping, pos, (pos + count - 1),
+				false);
 		if (res) {
 			fuse_io_free(ia);
 			return res;
@@ -1578,14 +1580,6 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		fuse_sync_writes(inode);
 		if (!write)
 			inode_unlock(inode);
-	}
-
-	if (fopen_direct_io && write) {
-		res = invalidate_inode_pages2_range(mapping, idx_from, idx_to);
-		if (res) {
-			fuse_io_free(ia);
-			return res;
-		}
 	}
 
 	io->should_dirty = !write && user_backed_iter(iter);
@@ -2380,7 +2374,7 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 		if ((vma->vm_flags & VM_MAYSHARE) && !fc->direct_io_allow_mmap)
 			return -ENODEV;
 
-		invalidate_inode_pages2(file->f_mapping);
+		filemap_invalidate_pages(file->f_mapping, 0, OFFSET_MAX, false);
 
 		if (!(vma->vm_flags & VM_MAYSHARE)) {
 			/* MAP_PRIVATE */
