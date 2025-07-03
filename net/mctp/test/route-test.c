@@ -1237,7 +1237,160 @@ static void mctp_test_route_output_key_create(struct kunit *test)
 	mctp_test_destroy_dev(dev);
 }
 
+struct mctp_test_bind_setup {
+	mctp_eid_t bind_addr;
+	int bind_net;
+	u8 bind_type;
+};
+
+static const struct mctp_test_bind_setup bind_addrany_netdefault_type1 = {
+	.bind_addr = MCTP_ADDR_ANY, .bind_net = MCTP_NET_ANY, .bind_type = 1,
+};
+
+static const struct mctp_test_bind_setup bind_addrany_net2_type1 = {
+	.bind_addr = MCTP_ADDR_ANY, .bind_net = 2, .bind_type = 1,
+};
+
+static const struct mctp_test_bind_setup bind_addr8_netdefault, type1 = {
+	.bind_addr = 8, .bind_net = MCTP_NET_ANY, .bind_type = 1,
+};
+
+/* 1 is default net */
+static const struct mctp_test_bind_setup bind_addr8_net1_type1 = {
+	.bind_addr = 8, .bind_net = 1, .bind_type = 1,
+};
+
+static const struct mctp_test_bind_setup bind_addrany_net1_type1 = {
+	.bind_addr = MCTP_ADDR_ANY, .bind_net = 1, .bind_type = 1,
+};
+
+/* 2 is an arbitrary net */
+static const struct mctp_test_bind_setup bind_addr8_net2_type1 = {
+	.bind_addr = 8, .bind_net = 2, .bind_type = 1,
+};
+
+static const struct mctp_test_bind_setup bind_addr8_netdefault_type1 = {
+	.bind_addr = 8, .bind_net = MCTP_NET_ANY, .bind_type = 1,
+};
+
+static const struct mctp_test_bind_setup bind_addrany_net2_type2 = {
+	.bind_addr = MCTP_ADDR_ANY, .bind_net = 2, .bind_type = 2,
+};
+
+struct mctp_bind_pair_test {
+	const struct mctp_test_bind_setup *bind1;
+	const struct mctp_test_bind_setup *bind2;
+	int error;
+};
+
+static const struct mctp_bind_pair_test mctp_bind_pair_tests[] = {
+	/* Both ADDR_ANY, conflict */
+	{ &bind_addrany_netdefault_type1, &bind_addrany_netdefault_type1, EADDRINUSE },
+	/* Same specific EID, conflict */
+	{ &bind_addr8_netdefault_type1, &bind_addr8_netdefault_type1, EADDRINUSE },
+	/* ADDR_ANY vs specific EID, OK */
+	{ &bind_addrany_netdefault_type1, &bind_addr8_netdefault_type1, 0 },
+	/* ADDR_ANY different types, OK */
+	{ &bind_addrany_net2_type2, &bind_addrany_net2_type1, 0 },
+	/* ADDR_ANY different nets, OK */
+	{ &bind_addrany_net2_type1, &bind_addrany_netdefault_type1, 0 },
+
+	/* specific EID, NET_ANY (resolves to default)
+	 *  vs specific EID, explicit default net 1, conflict
+	 */
+	{ &bind_addr8_netdefault_type1, &bind_addr8_net1_type1, EADDRINUSE },
+
+	/* specific EID, net 1 vs specific EID, net 2, ok */
+	{ &bind_addr8_net1_type1, &bind_addr8_net2_type1, 0 },
+
+	/* ANY_ADDR, NET_ANY (doesn't resolve to default)
+	 *  vs ADDR_ANY, explicit default net 1, OK
+	 */
+	{ &bind_addrany_netdefault_type1, &bind_addrany_net1_type1, 0 },
+};
+
+static void mctp_bind_pair_desc(const struct mctp_bind_pair_test *t, char *desc)
+{
+	snprintf(desc, KUNIT_PARAM_DESC_SIZE,
+		 "{bind(addr %d, type %d, net %d)} {bind(addr %d, type %d, net %d)} -> error %d",
+		 t->bind1->bind_addr, t->bind1->bind_type, t->bind1->bind_net,
+		 t->bind2->bind_addr, t->bind2->bind_type, t->bind2->bind_net,
+		 t->error);
+}
+
+KUNIT_ARRAY_PARAM(mctp_bind_pair, mctp_bind_pair_tests, mctp_bind_pair_desc);
+
+static void mctp_test_bind_run(struct kunit *test, const struct mctp_test_bind_setup *setup,
+			       int *ret_bind_errno, struct socket **sock)
+{
+	struct sockaddr_mctp addr;
+	int rc;
+
+	*ret_bind_errno = -EIO;
+
+	rc = sock_create_kern(&init_net, AF_MCTP, SOCK_DGRAM, 0, sock);
+	KUNIT_ASSERT_EQ(test, rc, 0);
+
+	memset(&addr, 0x0, sizeof(addr));
+	addr.smctp_family = AF_MCTP;
+	addr.smctp_network = setup->bind_net;
+	addr.smctp_addr.s_addr = setup->bind_addr;
+	addr.smctp_type = setup->bind_type;
+
+	*ret_bind_errno = kernel_bind(*sock, (struct sockaddr *)&addr, sizeof(addr));
+}
+
+static int mctp_test_bind_conflicts_inner(struct kunit *test,
+					  const struct mctp_test_bind_setup *bind1,
+	const struct mctp_test_bind_setup *bind2)
+{
+	struct socket *sock1 = NULL, *sock2 = NULL, *sock3 = NULL;
+	int bind_errno;
+
+	/* Bind to first address, always succeeds */
+	mctp_test_bind_run(test, bind1, &bind_errno, &sock1);
+	KUNIT_EXPECT_EQ(test, bind_errno, 0);
+
+	/* A second identical bind always fails */
+	mctp_test_bind_run(test, bind1, &bind_errno, &sock2);
+	KUNIT_EXPECT_EQ(test, -bind_errno, EADDRINUSE);
+
+	/* A different bind, result is returned */
+	mctp_test_bind_run(test, bind2, &bind_errno, &sock3);
+
+	if (sock1)
+		sock_release(sock1);
+	if (sock2)
+		sock_release(sock2);
+	if (sock3)
+		sock_release(sock3);
+
+	return bind_errno;
+}
+
+static void mctp_test_bind_conflicts(struct kunit *test)
+{
+	const struct mctp_bind_pair_test *pair;
+	int bind_errno;
+
+	pair = test->param_value;
+
+	bind_errno = mctp_test_bind_conflicts_inner(test, pair->bind1, pair->bind2);
+	KUNIT_EXPECT_EQ(test, -bind_errno, pair->error);
+
+	/* swapping the calls, the second bind should still fail */
+	bind_errno = mctp_test_bind_conflicts_inner(test, pair->bind2, pair->bind1);
+	KUNIT_EXPECT_EQ(test, -bind_errno, pair->error);
+}
+
+static void mctp_test_assumptions(struct kunit *test)
+{
+	/* check assumption of default net from bind_addr8_net1_type1 */
+	KUNIT_ASSERT_EQ(test, mctp_default_net(&init_net), 1);
+}
+
 static struct kunit_case mctp_test_cases[] = {
+	KUNIT_CASE(mctp_test_assumptions),
 	KUNIT_CASE_PARAM(mctp_test_fragment, mctp_frag_gen_params),
 	KUNIT_CASE_PARAM(mctp_test_rx_input, mctp_rx_input_gen_params),
 	KUNIT_CASE_PARAM(mctp_test_route_input_sk, mctp_route_input_sk_gen_params),
@@ -1253,7 +1406,9 @@ static struct kunit_case mctp_test_cases[] = {
 	KUNIT_CASE(mctp_test_fragment_flow),
 	KUNIT_CASE(mctp_test_route_output_key_create),
 	KUNIT_CASE(mctp_test_route_input_cloned_frag),
-	{}
+	KUNIT_CASE_PARAM(mctp_test_bind_conflicts, mctp_bind_pair_gen_params),
+
+	{ /* terminator */ },
 };
 
 static struct kunit_suite mctp_test_suite = {
