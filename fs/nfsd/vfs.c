@@ -49,6 +49,7 @@
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
 bool nfsd_disable_splice_read __read_mostly;
+bool nfsd_enable_fadvise_dontneed __read_mostly;
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -1280,6 +1281,7 @@ bool nfsd_read_splice_ok(struct svc_rqst *rqstp)
  * @offset: starting byte offset
  * @count: IN: requested number of bytes; OUT: number of bytes read
  * @eof: OUT: set non-zero if operation reached the end of the file
+ * @pnf: optional return pointer to pass back nfsd_file reference
  *
  * The caller must verify that there is enough space in @rqstp.rq_res
  * to perform this operation.
@@ -1290,7 +1292,8 @@ bool nfsd_read_splice_ok(struct svc_rqst *rqstp)
  * returned.
  */
 __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		 loff_t offset, unsigned long *count, u32 *eof)
+		 loff_t offset, unsigned long *count, u32 *eof,
+		 struct nfsd_file **pnf)
 {
 	struct nfsd_file	*nf;
 	struct file *file;
@@ -1307,7 +1310,10 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	else
 		err = nfsd_iter_read(rqstp, fhp, file, offset, count, 0, eof);
 
-	nfsd_file_put(nf);
+	if (pnf && err == nfs_ok)
+		*pnf = nf;
+	else
+		nfsd_file_put(nf);
 	trace_nfsd_read_done(rqstp, fhp, offset, *count);
 	return err;
 }
@@ -1321,8 +1327,10 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * @cnt: IN: number of bytes to write, OUT: number of bytes actually written
  * @stable: An NFS stable_how value
  * @verf: NFS WRITE verifier
+ * @pnf: optional return pointer to pass back nfsd_file reference
  *
- * Upon return, caller must invoke fh_put on @fhp.
+ * Upon return, caller must invoke fh_put() on @fhp. If it sets @pnf,
+ * then it must also call nfsd_file_put() on the returned reference.
  *
  * Return values:
  *   An nfsstat value in network byte order.
@@ -1330,7 +1338,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 __be32
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	   const struct xdr_buf *payload, unsigned long *cnt, int stable,
-	   __be32 *verf)
+	   __be32 *verf, struct nfsd_file **pnf)
 {
 	struct nfsd_file *nf;
 	__be32 err;
@@ -1343,7 +1351,10 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 	err = nfsd_vfs_write(rqstp, fhp, nf, offset, payload, cnt,
 			     stable, verf);
-	nfsd_file_put(nf);
+	if (pnf && err == nfs_ok)
+		*pnf = nf;
+	else
+		nfsd_file_put(nf);
 out:
 	trace_nfsd_write_done(rqstp, fhp, offset, *cnt);
 	return err;

@@ -9,6 +9,7 @@
 #include <linux/ext2_fs.h>
 #include <linux/magic.h>
 #include <linux/namei.h>
+#include <linux/fadvise.h>
 
 #include "cache.h"
 #include "xdr3.h"
@@ -206,9 +207,23 @@ nfsd3_proc_read(struct svc_rqst *rqstp)
 
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = nfsd_read(rqstp, &resp->fh, argp->offset,
-				 &resp->count, &resp->eof);
+				 &resp->count, &resp->eof, &resp->nf);
 	resp->status = nfsd3_map_status(resp->status);
 	return rpc_success;
+}
+
+static void
+nfsd3_release_read(struct svc_rqst *rqstp)
+{
+	struct nfsd3_readargs *argp = rqstp->rq_argp;
+	struct nfsd3_readres *resp = rqstp->rq_resp;
+
+	if (nfsd_enable_fadvise_dontneed && resp->status == nfs_ok)
+		generic_fadvise(nfsd_file_file(resp->nf), argp->offset, resp->count,
+				POSIX_FADV_DONTNEED);
+	if (resp->nf)
+		nfsd_file_put(resp->nf);
+	fh_put(&resp->fh);
 }
 
 /*
@@ -236,10 +251,24 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 	resp->committed = argp->stable;
 	resp->status = nfsd_write(rqstp, &resp->fh, argp->offset,
 				  &argp->payload, &cnt,
-				  resp->committed, resp->verf);
+				  resp->committed, resp->verf, &resp->nf);
 	resp->count = cnt;
 	resp->status = nfsd3_map_status(resp->status);
 	return rpc_success;
+}
+
+static void
+nfsd3_release_write(struct svc_rqst *rqstp)
+{
+	struct nfsd3_writeargs *argp = rqstp->rq_argp;
+	struct nfsd3_writeres *resp = rqstp->rq_resp;
+
+	if (nfsd_enable_fadvise_dontneed && resp->status == nfs_ok && resp->committed)
+		generic_fadvise(nfsd_file_file(resp->nf), argp->offset, resp->count,
+				POSIX_FADV_DONTNEED);
+	if (resp->nf)
+		nfsd_file_put(resp->nf);
+	fh_put(&resp->fh);
 }
 
 /*
@@ -748,7 +777,6 @@ nfsd3_proc_commit(struct svc_rqst *rqstp)
 {
 	struct nfsd3_commitargs *argp = rqstp->rq_argp;
 	struct nfsd3_commitres *resp = rqstp->rq_resp;
-	struct nfsd_file *nf;
 
 	dprintk("nfsd: COMMIT(3)   %s %u@%Lu\n",
 				SVCFH_fmt(&argp->fh),
@@ -757,15 +785,28 @@ nfsd3_proc_commit(struct svc_rqst *rqstp)
 
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = nfsd_file_acquire_gc(rqstp, &resp->fh, NFSD_MAY_WRITE |
-					    NFSD_MAY_NOT_BREAK_LEASE, &nf);
+					    NFSD_MAY_NOT_BREAK_LEASE, &resp->nf);
 	if (resp->status)
 		goto out;
-	resp->status = nfsd_commit(rqstp, &resp->fh, nf, argp->offset,
+	resp->status = nfsd_commit(rqstp, &resp->fh, resp->nf, argp->offset,
 				   argp->count, resp->verf);
-	nfsd_file_put(nf);
 out:
 	resp->status = nfsd3_map_status(resp->status);
 	return rpc_success;
+}
+
+static void
+nfsd3_release_commit(struct svc_rqst *rqstp)
+{
+	struct nfsd3_commitargs *argp = rqstp->rq_argp;
+	struct nfsd3_commitres *resp = rqstp->rq_resp;
+
+	if (nfsd_enable_fadvise_dontneed && resp->status == nfs_ok)
+		generic_fadvise(nfsd_file_file(resp->nf), argp->offset, argp->count,
+				POSIX_FADV_DONTNEED);
+	if (resp->nf)
+		nfsd_file_put(resp->nf);
+	fh_put(&resp->fh);
 }
 
 
@@ -864,7 +905,7 @@ static const struct svc_procedure nfsd_procedures3[22] = {
 		.pc_func = nfsd3_proc_read,
 		.pc_decode = nfs3svc_decode_readargs,
 		.pc_encode = nfs3svc_encode_readres,
-		.pc_release = nfs3svc_release_fhandle,
+		.pc_release = nfsd3_release_read,
 		.pc_argsize = sizeof(struct nfsd3_readargs),
 		.pc_argzero = sizeof(struct nfsd3_readargs),
 		.pc_ressize = sizeof(struct nfsd3_readres),
@@ -876,7 +917,7 @@ static const struct svc_procedure nfsd_procedures3[22] = {
 		.pc_func = nfsd3_proc_write,
 		.pc_decode = nfs3svc_decode_writeargs,
 		.pc_encode = nfs3svc_encode_writeres,
-		.pc_release = nfs3svc_release_fhandle,
+		.pc_release = nfsd3_release_write,
 		.pc_argsize = sizeof(struct nfsd3_writeargs),
 		.pc_argzero = sizeof(struct nfsd3_writeargs),
 		.pc_ressize = sizeof(struct nfsd3_writeres),
@@ -1039,7 +1080,7 @@ static const struct svc_procedure nfsd_procedures3[22] = {
 		.pc_func = nfsd3_proc_commit,
 		.pc_decode = nfs3svc_decode_commitargs,
 		.pc_encode = nfs3svc_encode_commitres,
-		.pc_release = nfs3svc_release_fhandle,
+		.pc_release = nfsd3_release_commit,
 		.pc_argsize = sizeof(struct nfsd3_commitargs),
 		.pc_argzero = sizeof(struct nfsd3_commitargs),
 		.pc_ressize = sizeof(struct nfsd3_commitres),

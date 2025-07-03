@@ -44,4 +44,6 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_file("disable-splice-read", S_IWUSR | S_IRUGO,
 			    nfsd_top_dir, NULL, &nfsd_dsr_fops);
+	debugfs_create_bool("enable-fadvise-dontneed", 0644,
+			    nfsd_top_dir, &nfsd_enable_fadvise_dontneed);
 }

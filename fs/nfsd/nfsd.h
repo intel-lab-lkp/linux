@@ -152,6 +152,7 @@ static inline void nfsd_debugfs_exit(void) {}
 #endif
 
 extern bool nfsd_disable_splice_read __read_mostly;
+extern bool nfsd_enable_fadvise_dontneed __read_mostly;
 
 extern int nfsd_max_blksize;
 

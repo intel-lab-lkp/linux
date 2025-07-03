@@ -146,6 +146,7 @@ struct nfsd3_readres {
 	unsigned long		count;
 	__u32			eof;
 	struct page		**pages;
+	struct nfsd_file	*nf;
 };
 
 struct nfsd3_writeres {
@@ -154,6 +155,7 @@ struct nfsd3_writeres {
 	unsigned long		count;
 	int			committed;
 	__be32			verf[2];
+	struct nfsd_file	*nf;
 };
 
 struct nfsd3_renameres {
@@ -217,6 +219,7 @@ struct nfsd3_commitres {
 	__be32			status;
 	struct svc_fh		fh;
 	__be32			verf[2];
+	struct nfsd_file	*nf;
 };
 
 struct nfsd3_getaclres {
