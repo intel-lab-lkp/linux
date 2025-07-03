@@ -1630,6 +1630,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	struct mii_bus *bus = phydev->mdio.bus;
 	struct device *d = &phydev->mdio.dev;
 	struct module *ndev_owner = NULL;
+	struct device_link *devlink;
 	int err;
 
 	/* For Ethernet device drivers that register their own MDIO bus, we
@@ -1760,9 +1761,14 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 * another mac interface, so we should create a device link between
 	 * phy dev and mac dev.
 	 */
-	if (dev && phydev->mdio.bus->parent && dev->dev.parent != phydev->mdio.bus->parent)
-		phydev->devlink = device_link_add(dev->dev.parent, &phydev->mdio.dev,
-						  DL_FLAG_PM_RUNTIME | DL_FLAG_STATELESS);
+	if (dev && phydev->mdio.bus->parent && dev->dev.parent != phydev->mdio.bus->parent) {
+		devlink = device_link_add(dev->dev.parent, &phydev->mdio.dev,
+					  DL_FLAG_PM_RUNTIME | DL_FLAG_AUTOREMOVE_SUPPLIER);
+		if (!devlink) {
+			err = -ENOMEM;
+			goto error;
+		}
+	}
 
 	return err;
 
@@ -1833,11 +1839,6 @@ void phy_detach(struct phy_device *phydev)
 	struct net_device *dev = phydev->attached_dev;
 	struct module *ndev_owner = NULL;
 	struct mii_bus *bus;
-
-	if (phydev->devlink) {
-		device_link_del(phydev->devlink);
-		phydev->devlink = NULL;
-	}
 
 	if (phydev->sysfs_links) {
 		if (dev)
