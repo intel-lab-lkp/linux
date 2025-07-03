@@ -11,6 +11,7 @@
 #include <linux/usb.h>
 
 #include "core.h"
+#include "config.h"
 #include "../hid-ids.h"
 
 u8 get_endpoint_address(struct hid_device *hdev)
@@ -35,6 +36,8 @@ static int lenovo_legos_raw_event(struct hid_device *hdev,
 	ep = get_endpoint_address(hdev);
 
 	switch (ep) {
+	case LEGION_GO_S_CFG_INTF_IN:
+		return legos_cfg_raw_event(data, size);
 	default:
 		break;
 	}
@@ -70,6 +73,9 @@ static int lenovo_legos_hid_probe(struct hid_device *hdev,
 	}
 
 	switch (ep) {
+	case LEGION_GO_S_CFG_INTF_IN:
+		ret = legos_cfg_probe(hdev, id);
+		break;
 	default:
 		break;
 	}
@@ -82,6 +88,9 @@ static void lenovo_legos_hid_remove(struct hid_device *hdev)
 	int ep = get_endpoint_address(hdev);
 
 	switch (ep) {
+	case LEGION_GO_S_CFG_INTF_IN:
+		legos_cfg_remove(hdev);
+		break;
 	default:
 		hid_hw_close(hdev);
 		hid_hw_stop(hdev);
