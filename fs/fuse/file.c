@@ -237,6 +237,7 @@ static void fuse_truncate_update_attr(struct inode *inode, struct file *file)
 static int
 fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
 {
+	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_get_fmap_in inarg = { 0 };
 	size_t fmap_bufsize = FMAP_BUFSIZE;
 	ssize_t fmap_size;
@@ -245,6 +246,10 @@ fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
 	int rc;
 
 	FUSE_ARGS(args);
+
+	/* Don't retrieve if we already have the famfs metadata */
+	if (fi->famfs_meta)
+		return 0;
 
 	fmap_buf = kcalloc(1, FMAP_BUFSIZE, GFP_KERNEL);
 	if (!fmap_buf)
@@ -285,6 +290,13 @@ fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
 		 */
 		fmap_bufsize = *((uint32_t *)fmap_buf);
 
+		if (fmap_bufsize < fmap_msg_min_size()
+		    || fmap_bufsize > FAMFS_FMAP_MAX) {
+			pr_err("%s: fmap_size=%ld out of range\n",
+			       __func__, fmap_bufsize);
+			return -EIO;
+		}
+
 		--retries;
 		kfree(fmap_buf);
 		fmap_buf = kcalloc(1, fmap_bufsize, GFP_KERNEL);
@@ -294,7 +306,8 @@ fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
 		goto retry_once;
 	}
 
-	/* Will call famfs_file_init_dax() when that gets added */
+	/* Convert fmap into in-memory format and hang from inode */
+	famfs_file_init_dax(fm, inode, fmap_buf, fmap_size);
 
 	kfree(fmap_buf);
 	return 0;
