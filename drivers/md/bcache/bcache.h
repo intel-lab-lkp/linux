@@ -499,7 +499,7 @@ struct gc_stat {
  * won't automatically reattach).
  *
  * CACHE_SET_STOPPING always gets set first when we're closing down a cache set;
- * we'll continue to run normally for awhile with CACHE_SET_STOPPING set (i.e.
+ * we'll continue to run normally for a while with CACHE_SET_STOPPING set (i.e.
  * flushing dirty data).
  *
  * CACHE_SET_RUNNING means all cache devices have been registered and journal
