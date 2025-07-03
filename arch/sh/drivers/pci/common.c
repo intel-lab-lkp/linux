@@ -148,7 +148,7 @@ unsigned int pcibios_handle_status_errors(unsigned long addr,
 
 		cmd |= PCI_STATUS_PARITY | PCI_STATUS_DETECTED_PARITY;
 
-		/* Now back off of the IRQ for awhile */
+		/* Now back off of the IRQ for a while */
 		if (hose->err_irq) {
 			disable_irq_nosync(hose->err_irq);
 			hose->err_timer.expires = jiffies + HZ;
