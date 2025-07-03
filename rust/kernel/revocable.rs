@@ -163,8 +163,10 @@ impl<T> Revocable<T> {
                 unsafe { bindings::synchronize_rcu() };
             }
 
-            // SAFETY: We know `self.data` is valid because only one CPU can succeed the
-            // `compare_exchange` above that takes `is_available` from `true` to `false`.
+            // SAFETY: We just used an atomic `swap` to check if the data was still marked
+            // as available. If it returns `true`, that means we are the first (and only)
+            // thread to see it as available and mark it as unavailable. So no other thread
+            // can access or drop the data after this. That makes it safe to drop the data here.
             unsafe { drop_in_place(self.data.get()) };
         }
 
