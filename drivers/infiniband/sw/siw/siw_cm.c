@@ -601,6 +601,9 @@ static int siw_recv_mpa_rr(struct siw_cep *cep)
  */
 static int siw_proc_mpareq(struct siw_cep *cep)
 {
+	struct siw_device *sdev = cep->sdev;
+	const bool local_crc_required = sdev->options.crc_required;
+	const bool local_crc_strict = sdev->options.crc_strict;
 	struct mpa_rr *req;
 	int version, rv;
 	u16 pd_len;
@@ -648,11 +651,11 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 		 * connection with CRC if local CRC off enforced by
 		 * 'mpa_crc_strict' module parameter.
 		 */
-		if (!mpa_crc_required && mpa_crc_strict)
+		if (!local_crc_required && local_crc_strict)
 			goto reject_conn;
 
 		/* Enable CRC if requested by module parameter */
-		if (mpa_crc_required)
+		if (local_crc_required)
 			req->params.bits |= MPA_RR_FLAG_CRC;
 	}
 	if (cep->enhanced_rdma_conn_est) {
@@ -705,13 +708,13 @@ static int siw_proc_mpareq(struct siw_cep *cep)
 reject_conn:
 	siw_dbg_cep(cep, "reject: crc %d:%d:%d, m %d:%d\n",
 		    req->params.bits & MPA_RR_FLAG_CRC ? 1 : 0,
-		    mpa_crc_required, mpa_crc_strict,
+		    local_crc_required, local_crc_strict,
 		    req->params.bits & MPA_RR_FLAG_MARKERS ? 1 : 0, 0);
 
 	req->params.bits &= ~MPA_RR_FLAG_MARKERS;
 	req->params.bits |= MPA_RR_FLAG_REJECT;
 
-	if (!mpa_crc_required && mpa_crc_strict)
+	if (!local_crc_required && local_crc_strict)
 		req->params.bits &= ~MPA_RR_FLAG_CRC;
 
 	if (pd_len)
@@ -729,6 +732,9 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 	struct siw_qp_attrs qp_attrs;
 	enum siw_qp_attr_mask qp_attr_mask;
 	struct siw_qp *qp = cep->qp;
+	struct siw_device *sdev = cep->sdev;
+	const bool local_crc_required = sdev->options.crc_required;
+	const bool local_crc_strict = sdev->options.crc_strict;
 	struct mpa_rr *rep;
 	int rv;
 	u16 rep_ord;
@@ -762,17 +768,17 @@ static int siw_proc_mpareply(struct siw_cep *cep)
 
 		return -ECONNRESET;
 	}
-	if (try_gso && rep->params.bits & MPA_RR_FLAG_GSO_EXP) {
+	if (sdev->options.try_gso && rep->params.bits & MPA_RR_FLAG_GSO_EXP) {
 		siw_dbg_cep(cep, "peer allows GSO on TX\n");
 		qp->tx_ctx.gso_seg_limit = 0;
 	}
 	if ((rep->params.bits & MPA_RR_FLAG_MARKERS) ||
-	    (mpa_crc_required && !(rep->params.bits & MPA_RR_FLAG_CRC)) ||
-	    (mpa_crc_strict && !mpa_crc_required &&
+	    (local_crc_required && !(rep->params.bits & MPA_RR_FLAG_CRC)) ||
+	    (local_crc_strict && !local_crc_required &&
 	     (rep->params.bits & MPA_RR_FLAG_CRC))) {
 		siw_dbg_cep(cep, "reply unsupp: crc %d:%d:%d, m %d:%d\n",
 			    rep->params.bits & MPA_RR_FLAG_CRC ? 1 : 0,
-			    mpa_crc_required, mpa_crc_strict,
+			    local_crc_required, local_crc_strict,
 			    rep->params.bits & MPA_RR_FLAG_MARKERS ? 1 : 0, 0);
 
 		siw_cm_upcall(cep, IW_CM_EVENT_CONNECT_REPLY, -ECONNREFUSED);
@@ -920,6 +926,7 @@ out_err:
 static void siw_accept_newconn(struct siw_cep *cep)
 {
 	struct socket *s = cep->sock;
+	struct siw_device *sdev = cep->sdev;
 	struct socket *new_s = NULL;
 	struct siw_cep *new_cep = NULL;
 	int rv = 0; /* debug only. should disappear */
@@ -927,7 +934,7 @@ static void siw_accept_newconn(struct siw_cep *cep)
 	if (cep->state != SIW_EPSTATE_LISTENING)
 		goto error;
 
-	new_cep = siw_cep_alloc(cep->sdev);
+	new_cep = siw_cep_alloc(sdev);
 	if (!new_cep)
 		goto error;
 
@@ -960,7 +967,7 @@ static void siw_accept_newconn(struct siw_cep *cep)
 	siw_cep_get(new_cep);
 	new_s->sk->sk_user_data = new_cep;
 
-	if (siw_tcp_nagle == false)
+	if (sdev->options.tcp_nagle == false)
 		tcp_sock_set_nodelay(new_s->sk);
 	new_cep->state = SIW_EPSTATE_AWAIT_MPAREQ;
 
@@ -1357,9 +1364,11 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	struct socket *s = NULL;
 	struct sockaddr *laddr = (struct sockaddr *)&id->local_addr,
 			*raddr = (struct sockaddr *)&id->remote_addr;
-	bool p2p_mode = peer_to_peer, v4 = true;
+	bool p2p_mode = sdev->options.peer_to_peer;
+	bool v4 = true;
 	u16 pd_len = params->private_data_len;
-	int version = mpa_version, rv;
+	int version = sdev->options.mpa_version;
+	int rv;
 
 	if (pd_len > MPA_MAX_PRIVDATA)
 		return -EINVAL;
@@ -1405,7 +1414,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 		siw_dbg_qp(qp, "kernel_bindconnect: error %d\n", rv);
 		goto error;
 	}
-	if (siw_tcp_nagle == false)
+	if (sdev->options.tcp_nagle == false)
 		tcp_sock_set_nodelay(s->sk);
 	cep = siw_cep_alloc(sdev);
 	if (!cep) {
@@ -1456,10 +1465,10 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	cep->mpa.hdr.params.bits = 0;
 	__mpa_rr_set_revision(&cep->mpa.hdr.params.bits, version);
 
-	if (try_gso)
+	if (sdev->options.try_gso)
 		cep->mpa.hdr.params.bits |= MPA_RR_FLAG_GSO_EXP;
 
-	if (mpa_crc_required)
+	if (sdev->options.crc_required)
 		cep->mpa.hdr.params.bits |= MPA_RR_FLAG_CRC;
 
 	/*
@@ -1577,7 +1586,8 @@ int siw_accept(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 		goto error_unlock;
 	siw_dbg_cep(cep, "[QP %d]\n", params->qpn);
 
-	if (try_gso && cep->mpa.hdr.params.bits & MPA_RR_FLAG_GSO_EXP) {
+	if (sdev->options.try_gso &&
+	    cep->mpa.hdr.params.bits & MPA_RR_FLAG_GSO_EXP) {
 		siw_dbg_cep(cep, "peer allows GSO on TX\n");
 		qp->tx_ctx.gso_seg_limit = 0;
 	}

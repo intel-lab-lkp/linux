@@ -434,7 +434,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 
 	/* Make those two tunables fixed for now. */
 	qp->tx_ctx.gso_seg_limit = 1;
-	qp->tx_ctx.zcopy_tx = zcopy_tx;
+	qp->tx_ctx.zcopy_tx = sdev->options.zcopy_tx;
 
 	qp->attrs.state = SIW_QP_STATE_IDLE;
 

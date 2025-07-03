@@ -794,6 +794,7 @@ static int siw_check_sgl_tx(struct ib_pd *pd, struct siw_wqe *wqe,
 static int siw_qp_sq_proc_tx(struct siw_qp *qp, struct siw_wqe *wqe)
 {
 	struct siw_iwarp_tx *c_tx = &qp->tx_ctx;
+	struct siw_device *sdev = qp->sdev;
 	struct socket *s = qp->attrs.sk;
 	int rv = 0, burst_len = qp->tx_ctx.burst;
 	enum rdmap_ecode ecode = RDMAP_ECODE_CATASTROPHIC_STREAM;
@@ -868,7 +869,7 @@ next_segment:
 		enum siw_opcode tx_type = tx_type(wqe);
 		unsigned int msg_flags;
 
-		if (siw_sq_empty(qp) || !siw_tcp_nagle || burst_len == 1)
+		if (siw_sq_empty(qp) || !sdev->options.tcp_nagle || burst_len == 1)
 			/*
 			 * End current TCP segment, if SQ runs empty,
 			 * or siw_tcp_nagle is not set, or we bail out
