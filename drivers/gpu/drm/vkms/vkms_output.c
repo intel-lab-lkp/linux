@@ -77,9 +77,21 @@ int vkms_output_init(struct vkms_device *vkmsdev)
 			return ret;
 		}
 
+		encoder_cfg->encoder->possible_clones |= BIT(drm_encoder_index(encoder_cfg->encoder));
+
 		vkms_config_encoder_for_each_possible_crtc(encoder_cfg, idx, possible_crtc) {
 			encoder_cfg->encoder->possible_crtcs |=
 				drm_crtc_mask(&possible_crtc->crtc->crtc);
+
+			if (vkms_config_crtc_get_writeback(possible_crtc)) {
+				struct drm_encoder *wb_encoder =
+					&possible_crtc->crtc->wb_encoder;
+
+				encoder_cfg->encoder->possible_clones |=
+					BIT(drm_encoder_index(wb_encoder));
+				wb_encoder->possible_clones |=
+					BIT(drm_encoder_index(encoder_cfg->encoder));
+			}
 		}
 	}
 
