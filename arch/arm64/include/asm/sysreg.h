@@ -1223,6 +1223,15 @@
 	par;								\
 })
 
+#define read_sysreg_pmr() ({						\
+	u64 pmr = read_sysreg_s(SYS_ICC_PMR_EL1);			\
+	asm(ALTERNATIVE("nop", "and %0, %0, #0xf0",			\
+			ARM64_WORKAROUND_AMPERE_AC03_CPU_50)		\
+			: "+r" (pmr)					\
+			);						\
+	pmr;								\
+})
+
 #define SYS_FIELD_VALUE(reg, field, val)	reg##_##field##_##val
 
 #define SYS_FIELD_GET(reg, field, val)		\

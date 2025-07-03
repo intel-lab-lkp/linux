@@ -481,6 +481,20 @@ config AMPERE_ERRATUM_AC04_CPU_23
 	  for corruption, and an ISB after is sufficient to prevent younger
 	  instructions from hitting the window for corruption.
 
+config AMPERE_ERRATUM_AC03_CPU_50
+	bool "AmpereOne: AC03_CPU_50: Certain checks for ICC_PMR_EL1 that expects the value 0xf0 may read 0xf8 instead"
+	default y
+	help
+	  This option adds an alternative code sequence to work around Ampere
+	  erratum AC03_CPU_50 on AmperOne and AC04_CPU_19 on AmpereOne AC04.
+
+	  Due to AC03_CPU_50, when ICC_PMR_EL1 should have a value of 0xf0 a
+	  direct read of the register will return a value of 0xf8. An incorrect
+	  value from a direct read can only happen with the value 0xf0.
+
+	  The workaround for the erratum will do logical AND 0xf0 to the
+	  value read from ICC_PMR_EL1 register before returning the value.
+
 	  If unsure, say Y.
 
 config ARM64_WORKAROUND_CLEAN_CACHE

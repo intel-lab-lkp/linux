@@ -22,8 +22,7 @@
 static inline void local_daif_mask(void)
 {
 	WARN_ON(system_has_prio_mask_debugging() &&
-		(read_sysreg_s(SYS_ICC_PMR_EL1) == (GIC_PRIO_IRQOFF |
-						    GIC_PRIO_PSR_I_SET)));
+		(read_sysreg_pmr() == (GIC_PRIO_IRQOFF | GIC_PRIO_PSR_I_SET)));
 
 	asm volatile(
 		"msr	daifset, #0xf		// local_daif_mask\n"
@@ -46,7 +45,7 @@ static inline unsigned long local_daif_save_flags(void)
 
 	if (system_uses_irq_prio_masking()) {
 		/* If IRQs are masked with PMR, reflect it in the flags */
-		if (read_sysreg_s(SYS_ICC_PMR_EL1) != GIC_PRIO_IRQON)
+		if (read_sysreg_pmr() != GIC_PRIO_IRQON)
 			flags |= PSR_I_BIT | PSR_F_BIT;
 	}
 

@@ -564,6 +564,14 @@ static const struct midr_range erratum_ac04_cpu_23_list[] = {
 };
 #endif
 
+#ifdef CONFIG_AMPERE_ERRATUM_AC03_CPU_50
+static const struct midr_range erratum_ac03_cpu_50_list[] = {
+	MIDR_ALL_VERSIONS(MIDR_AMPERE1),
+	MIDR_ALL_VERSIONS(MIDR_AMPERE1A),
+	{},
+};
+#endif
+
 const struct arm64_cpu_capabilities arm64_errata[] = {
 #ifdef CONFIG_ARM64_WORKAROUND_CLEAN_CACHE
 	{
@@ -905,6 +913,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = has_impdef_pmuv3,
 		.cpu_enable = cpu_enable_impdef_pmuv3_traps,
 	},
+#ifdef CONFIG_AMPERE_ERRATUM_AC03_CPU_50
+	{
+		.desc = "AmpereOne erratum AC03_CPU_50",
+		.capability = ARM64_WORKAROUND_AMPERE_AC03_CPU_50,
+		ERRATA_MIDR_RANGE_LIST(erratum_ac03_cpu_50_list),
+	},
+#endif
 	{
 	}
 };

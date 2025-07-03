@@ -127,7 +127,7 @@ static inline void gic_write_bpr1(u32 val)
 
 static inline u32 gic_read_pmr(void)
 {
-	return read_sysreg_s(SYS_ICC_PMR_EL1);
+	return read_sysreg_pmr();
 }
 
 static __always_inline void gic_write_pmr(u32 val)
