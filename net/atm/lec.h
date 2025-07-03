@@ -152,4 +152,6 @@ struct lec_vcc_priv {
 
 #define LEC_VCC_PRIV(vcc)	((struct lec_vcc_priv *)((vcc)->user_back))
 
+bool is_netdev_lec(const struct net_device *dev);
+
 #endif				/* _LEC_H_ */

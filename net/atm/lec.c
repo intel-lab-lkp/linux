@@ -563,6 +563,11 @@ static const struct net_device_ops lec_netdev_ops = {
 	.ndo_set_rx_mode	= lec_set_multicast_list,
 };
 
+bool is_netdev_lec(const struct net_device *dev)
+{
+	return dev->netdev_ops == &lec_netdev_ops;
+}
+
 static const unsigned char lec_ctrl_magic[] = {
 	0xff,
 	0x00,
