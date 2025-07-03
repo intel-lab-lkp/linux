@@ -277,13 +277,37 @@ static unsigned int nf_flow_xmit_xfrm(struct sk_buff *skb,
 	return NF_STOLEN;
 }
 
+static bool nf_flow_ip4_encap_proto(struct sk_buff *skb, u16 *size)
+{
+	struct iphdr *iph;
+
+	if (!pskb_may_pull(skb, sizeof(*iph)))
+		return false;
+
+	iph = (struct iphdr *)skb_network_header(skb);
+	*size = iph->ihl << 2;
+
+	if (ip_is_fragment(iph) || unlikely(ip_has_options(*size)))
+		return false;
+
+	if (iph->ttl <= 1)
+		return false;
+
+	return iph->protocol == IPPROTO_IPIP;
+}
+
 static bool nf_flow_skb_encap_protocol(struct sk_buff *skb, __be16 proto,
 				       u32 *offset)
 {
 	struct vlan_ethhdr *veth;
 	__be16 inner_proto;
+	u16 size;
 
 	switch (skb->protocol) {
+	case htons(ETH_P_IP):
+		if (nf_flow_ip4_encap_proto(skb, &size))
+			*offset += size;
+		return true;
 	case htons(ETH_P_8021Q):
 		if (!pskb_may_pull(skb, skb_mac_offset(skb) + sizeof(*veth)))
 			return false;
@@ -310,6 +334,7 @@ static void nf_flow_encap_pop(struct sk_buff *skb,
 			      struct flow_offload_tuple_rhash *tuplehash)
 {
 	struct vlan_hdr *vlan_hdr;
+	u16 size;
 	int i;
 
 	for (i = 0; i < tuplehash->tuple.encap_num; i++) {
@@ -330,6 +355,12 @@ static void nf_flow_encap_pop(struct sk_buff *skb,
 			skb_reset_network_header(skb);
 			break;
 		}
+	}
+
+	if (skb->protocol == htons(ETH_P_IP) &&
+	    nf_flow_ip4_encap_proto(skb, &size)) {
+		skb_pull(skb, size);
+		skb_reset_network_header(skb);
 	}
 }
 
@@ -357,8 +388,7 @@ nf_flow_offload_lookup(struct nf_flowtable_ctx *ctx,
 {
 	struct flow_offload_tuple tuple = {};
 
-	if (skb->protocol != htons(ETH_P_IP) &&
-	    !nf_flow_skb_encap_protocol(skb, htons(ETH_P_IP), &ctx->offset))
+	if (!nf_flow_skb_encap_protocol(skb, htons(ETH_P_IP), &ctx->offset))
 		return NULL;
 
 	if (nf_flow_tuple_ip(ctx, skb, &tuple) < 0)
