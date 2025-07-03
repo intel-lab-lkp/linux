@@ -641,6 +641,15 @@ static void reset_tdx_pages(unsigned long base, unsigned long size)
 	const void *zero_page = (const void *)page_address(ZERO_PAGE(0));
 	unsigned long phys, end;
 
+	/*
+	 * Linux uses only KeyID 0 which can read or write pages
+	 * that were formerly TDX private pages, without poisoning
+	 * memory. However on platforms with the partial-write errata,
+	 * poisoning still happens for partial writes.
+	 */
+	if (!boot_cpu_has_bug(X86_BUG_TDX_PW_MCE))
+		return;
+
 	end = base + size;
 	for (phys = base; phys < end; phys += 64)
 		movdir64b(__va(phys), zero_page);
