@@ -226,6 +226,15 @@ struct lskcipher_alg {
 			crypto_sync_skcipher_tfm((_tfm)), \
 		 (void *)__##name##_desc)
 
+
+#define SKCIPHER_REQUEST_ON_STACK(name, _tfm, reqsize) \
+	char __##name##_desc[sizeof(struct skcipher_request) + reqsize \
+		] CRYPTO_MINALIGN_ATTR; \
+	struct skcipher_request *name = \
+		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
+			crypto_skcipher_tfm((_tfm)), \
+		 (void *)__##name##_desc)
+
 /**
  * DOC: Symmetric Key Cipher API
  *
