@@ -1896,21 +1896,21 @@ static int ufs_qcom_mcq_config_resource(struct ufs_hba *hba)
 {
 	struct platform_device *pdev = to_platform_device(hba->dev);
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct resource *sqd_res;
+	struct resource *opr_res;
 
 	hba->mcq_base = devm_platform_ioremap_resource_byname(pdev, "mcq");
 	if (!hba->mcq_base)
 		return -EINVAL;
 
-	sqd_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mcq_sqd");
-	if (!sqd_res)
+	opr_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mcq_opr");
+	if (!opr_res)
 		return -EINVAL;
 
-	host->opr_start_base = devm_ioremap_resource(hba->dev, sqd_res);
+	host->opr_start_base = devm_ioremap_resource(hba->dev, opr_res);
 	if (!host->opr_start_base)
 		return -EINVAL;
 
-	host->opr_start_off = sqd_res->start - hba->hci_res->start;
+	host->opr_start_off = opr_res->start - hba->hci_res->start;
 
 	host->mcq_vs_base = devm_platform_ioremap_resource_byname(pdev, "mcq_vs");
 	if (!host->mcq_vs_base)
