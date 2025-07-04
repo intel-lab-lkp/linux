@@ -232,6 +232,12 @@ static struct usb_ss_ep_comp_descriptor ss_iso_source_comp_desc = {
 	.wBytesPerInterval =	cpu_to_le16(1024),
 };
 
+static struct usb_ssp_isoc_ep_comp_descriptor ssp_iso_source_comp_desc = {
+	.bLength =		USB_DT_SSP_ISOC_EP_COMP_SIZE,
+	.bDescriptorType =	USB_DT_SSP_ISOC_ENDPOINT_COMP,
+	.dwBytesPerInterval =	cpu_to_le32(1024),
+};
+
 static struct usb_endpoint_descriptor ss_iso_sink_desc = {
 	.bLength =		USB_DT_ENDPOINT_SIZE,
 	.bDescriptorType =	USB_DT_ENDPOINT,
@@ -250,6 +256,12 @@ static struct usb_ss_ep_comp_descriptor ss_iso_sink_comp_desc = {
 	.wBytesPerInterval =	cpu_to_le16(1024),
 };
 
+static struct usb_ssp_isoc_ep_comp_descriptor ssp_iso_sink_comp_desc = {
+	.bLength =		USB_DT_SSP_ISOC_EP_COMP_SIZE,
+	.bDescriptorType =	USB_DT_SSP_ISOC_ENDPOINT_COMP,
+	.dwBytesPerInterval =	cpu_to_le32(1024),
+};
+
 static struct usb_descriptor_header *ss_source_sink_descs[] = {
 	(struct usb_descriptor_header *) &source_sink_intf_alt0,
 	(struct usb_descriptor_header *) &ss_source_desc,
@@ -264,8 +276,10 @@ static struct usb_descriptor_header *ss_source_sink_descs[] = {
 	(struct usb_descriptor_header *) &ss_sink_comp_desc,
 	(struct usb_descriptor_header *) &ss_iso_source_desc,
 	(struct usb_descriptor_header *) &ss_iso_source_comp_desc,
+	(struct usb_descriptor_header *)&ssp_iso_source_comp_desc,
 	(struct usb_descriptor_header *) &ss_iso_sink_desc,
 	(struct usb_descriptor_header *) &ss_iso_sink_comp_desc,
+	(struct usb_descriptor_header *)&ssp_iso_sink_comp_desc,
 	NULL,
 };
 
@@ -428,7 +442,7 @@ no_iso:
 	 */
 	ss_iso_source_desc.wMaxPacketSize = ss->isoc_maxpacket;
 	ss_iso_source_desc.bInterval = ss->isoc_interval;
-	ss_iso_source_comp_desc.bmAttributes = ss->isoc_mult;
+	ss_iso_source_comp_desc.bmAttributes = 0x80 | ss->isoc_mult;
 	ss_iso_source_comp_desc.bMaxBurst = ss->isoc_maxburst;
 	ss_iso_source_comp_desc.wBytesPerInterval = ss->isoc_maxpacket *
 		(ss->isoc_mult + 1) * (ss->isoc_maxburst + 1);
@@ -437,11 +451,16 @@ no_iso:
 
 	ss_iso_sink_desc.wMaxPacketSize = ss->isoc_maxpacket;
 	ss_iso_sink_desc.bInterval = ss->isoc_interval;
-	ss_iso_sink_comp_desc.bmAttributes = ss->isoc_mult;
+	ss_iso_sink_comp_desc.bmAttributes = 0x80 | ss->isoc_mult;
 	ss_iso_sink_comp_desc.bMaxBurst = ss->isoc_maxburst;
 	ss_iso_sink_comp_desc.wBytesPerInterval = ss->isoc_maxpacket *
 		(ss->isoc_mult + 1) * (ss->isoc_maxburst + 1);
 	ss_iso_sink_desc.bEndpointAddress = fs_iso_sink_desc.bEndpointAddress;
+
+	ssp_iso_source_comp_desc.dwBytesPerInterval = ss->isoc_maxpacket *
+		(ss->isoc_mult + 1) * (ss->isoc_maxburst + 1) * 2;
+	ssp_iso_sink_comp_desc.dwBytesPerInterval = ss->isoc_maxpacket *
+		(ss->isoc_mult + 1) * (ss->isoc_maxburst + 1) * 2;
 
 	ret = usb_assign_descriptors(f, fs_source_sink_descs,
 			hs_source_sink_descs, ss_source_sink_descs,
