@@ -11365,6 +11365,7 @@ F:	include/uapi/linux/i2c-*.h
 F:	include/uapi/linux/i2c.h
 F:	rust/helpers/i2c.c
 F:	rust/kernel/i2c.rs
+F:	samples/rust/rust_device_i2c.rs
 F:	samples/rust/rust_driver_i2c.rs
 
 I2C SUBSYSTEM HOST DRIVERS
