@@ -2331,6 +2331,7 @@ config MIPS_CPS
 
 config MIPS_CPS_CLUSTER_MAX
        int "Maximum cluster supported"
+       default 2 if EYEQ
        default 4
        help
 	Maximum number of cluster available on the SoC.
