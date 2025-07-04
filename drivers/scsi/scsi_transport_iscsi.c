@@ -5025,6 +5025,7 @@ static void __exit iscsi_transport_exit(void)
 	class_unregister(&iscsi_endpoint_class);
 	class_unregister(&iscsi_iface_class);
 	class_unregister(&iscsi_transport_class);
+	idr_destroy(&iscsi_ep_idr);
 }
 
 module_init(iscsi_transport_init);
