@@ -6,6 +6,7 @@
 
 #include <linux/crypto.h>
 #include <linux/idxd.h>
+#include <linux/iaa_comp.h>
 #include <uapi/linux/idxd.h>
 
 #define IDXD_SUBDRIVER_NAME		"crypto"
@@ -28,8 +29,6 @@
 #define IAA_ERROR_DECOMP_BUF_OVERFLOW	0x0b
 #define IAA_ERROR_COMP_BUF_OVERFLOW	0x19
 #define IAA_ERROR_WATCHDOG_EXPIRED	0x24
-
-#define IAA_COMP_MODES_MAX		2
 
 #define FIXED_HDR			0x2
 #define FIXED_HDR_SIZE			3
@@ -137,10 +136,6 @@ int add_iaa_compression_mode(const char *name,
 			     iaa_dev_comp_free_fn_t free);
 
 void remove_iaa_compression_mode(const char *name);
-
-enum iaa_mode {
-	IAA_MODE_FIXED,
-};
 
 struct iaa_compression_ctx {
 	enum iaa_mode	mode;
