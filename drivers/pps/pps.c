@@ -456,6 +456,7 @@ static void __exit pps_exit(void)
 {
 	class_destroy(pps_class);
 	__unregister_chrdev(pps_major, 0, PPS_MAX_SOURCES, "pps");
+	idr_destroy(&pps_idr);
 }
 
 static int __init pps_init(void)
