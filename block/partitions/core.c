@@ -67,6 +67,9 @@ static int (*const check_part[])(struct parsed_partitions *) = {
 #ifdef CONFIG_AMIGA_PARTITION
 	amiga_partition,
 #endif
+#ifdef CONFIG_LUKS_PARTITION
+	luks_partition, /* this must come before atari */
+#endif
 #ifdef CONFIG_ATARI_PARTITION
 	atari_partition,
 #endif

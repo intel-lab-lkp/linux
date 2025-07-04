@@ -60,6 +60,7 @@ int efi_partition(struct parsed_partitions *state);
 int ibm_partition(struct parsed_partitions *);
 int karma_partition(struct parsed_partitions *state);
 int ldm_partition(struct parsed_partitions *state);
+int luks_partition(struct parsed_partitions *state);
 int mac_partition(struct parsed_partitions *state);
 int msdos_partition(struct parsed_partitions *state);
 int of_partition(struct parsed_partitions *state);

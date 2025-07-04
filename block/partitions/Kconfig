@@ -96,6 +96,14 @@ config AMIGA_PARTITION
 	  Say Y here if you would like to use hard disks under Linux which
 	  were partitioned under AmigaOS.
 
+config LUKS_PARTITION
+	bool "LUKS partition support" if PARTITION_ADVANCED
+	default y if ATARI_PARTITION
+	help
+	  Say Y here to detect hard disks which have a LUKS header instead of a
+	  partition table. This is valuable as LUKS header may also be wrongly
+	  detected as other partition types.
+
 config ATARI_PARTITION
 	bool "Atari partition table support" if PARTITION_ADVANCED
 	default y if ATARI
