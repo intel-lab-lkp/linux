@@ -9,6 +9,29 @@ extern int page_cluster;
 #include <linux/swapops.h> /* for swp_offset */
 #include <linux/blk_types.h> /* for bio_end_io_t */
 
+/* linux/mm/zswap.c */
+/*
+ * A compression algorithm that wants to batch compressions/decompressions
+ * must define its own internal data structures that exactly mirror
+ * @struct swap_batch_comp_data and @struct swap_batch_decomp_data.
+ */
+struct swap_batch_comp_data {
+	struct page **pages;
+	u8 **dsts;
+	unsigned int *dlens;
+	int *errors;
+	u8 nr_comps;
+};
+
+struct swap_batch_decomp_data {
+	u8 **srcs;
+	struct page **pages;
+	unsigned int *slens;
+	unsigned int *dlens;
+	int *errors;
+	u8 nr_decomps;
+};
+
 /* linux/mm/page_io.c */
 int sio_pool_init(void);
 struct swap_iocb;
