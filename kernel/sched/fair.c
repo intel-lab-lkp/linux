@@ -884,16 +884,20 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 /*
  * HACK, Set the vruntime up to which an entity can run before picking another
  * one, in vlag, which isn't used until dequeue.
- * In case of run to parity, we let the entity run to its deadline.
+ * In case of run to parity, we use the shortest slice of the enqueued entities
+ * to define the longest runtime.
  * When run to parity is disabled, we give a minimum quantum to the running
  * entity to ensure progress.
  */
 static inline void set_protect_slice(struct sched_entity *se)
 {
-	u64 quantum = se->slice;
+	u64 quantum;
 
-	if (!sched_feat(RUN_TO_PARITY))
-		quantum = min(quantum, normalized_sysctl_sched_base_slice);
+	if (sched_feat(RUN_TO_PARITY))
+		quantum = cfs_rq_min_slice(cfs_rq_of(se));
+	else
+		quantum = normalized_sysctl_sched_base_slice;
+	quantum = min(quantum, se->slice);
 
 	if (quantum != se->slice)
 		se->vlag = min(se->deadline, se->vruntime + calc_delta_fair(quantum, se));
