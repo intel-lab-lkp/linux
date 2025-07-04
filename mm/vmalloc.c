@@ -2017,6 +2017,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	unsigned long freed;
 	unsigned long addr;
 	unsigned int vn_id;
+	bool allow_block;
 	int purged = 0;
 	int ret;
 
@@ -2026,7 +2027,9 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	if (unlikely(!vmap_initialized))
 		return ERR_PTR(-EBUSY);
 
-	might_sleep();
+	allow_block = gfpflags_allow_blocking(gfp_mask);
+	if (allow_block)
+		might_sleep();
 
 	/*
 	 * If a VA is obtained from a global heap(if it fails here)
@@ -2038,7 +2041,8 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	 */
 	va = node_alloc(size, align, vstart, vend, &addr, &vn_id);
 	if (!va) {
-		gfp_mask = gfp_mask & GFP_RECLAIM_MASK;
+		if (allow_block)
+			gfp_mask = gfp_mask & GFP_RECLAIM_MASK;
 
 		va = kmem_cache_alloc_node(vmap_area_cachep, gfp_mask, node);
 		if (unlikely(!va))
@@ -2065,8 +2069,14 @@ retry:
 	 * If an allocation fails, the error value is
 	 * returned. Therefore trigger the overflow path.
 	 */
-	if (IS_ERR_VALUE(addr))
+	if (IS_ERR_VALUE(addr)) {
+		if (!allow_block) {
+			kmem_cache_free(vmap_area_cachep, va);
+			return ERR_PTR(-ENOMEM);
+		}
+
 		goto overflow;
+	}
 
 	va->va_start = addr;
 	va->va_end = addr + size;
