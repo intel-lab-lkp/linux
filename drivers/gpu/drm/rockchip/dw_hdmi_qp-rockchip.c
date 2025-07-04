@@ -431,8 +431,8 @@ static int dw_hdmi_qp_rockchip_bind(struct device *dev, struct device *master,
 				    void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
+	struct dw_hdmi_qp_plat_data plat_data = {};
 	const struct rockchip_hdmi_qp_cfg *cfg;
-	struct dw_hdmi_qp_plat_data plat_data;
 	struct drm_device *drm = data;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
@@ -513,6 +513,17 @@ static int dw_hdmi_qp_rockchip_bind(struct device *dev, struct device *master,
 	if (ret < 0) {
 		dev_err(hdmi->dev, "Failed to get clocks: %d\n", ret);
 		return ret;
+	}
+
+	for (i = 0; i < ret; i++) {
+		if (!strcmp(clks[i].id, "ref")) {
+			plat_data.ref_clk_rate = clk_get_rate(clks[i].clk);
+			break;
+		}
+	}
+	if (!plat_data.ref_clk_rate) {
+		dev_err(hdmi->dev, "Missing ref clock\n");
+		return -EINVAL;
 	}
 
 	hdmi->enable_gpio = devm_gpiod_get_optional(hdmi->dev, "enable",
