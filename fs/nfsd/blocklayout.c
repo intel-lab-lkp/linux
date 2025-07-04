@@ -118,7 +118,7 @@ nfsd4_block_commit_blocks(struct inode *inode, struct nfsd4_layoutcommit *lcp,
 		struct iomap *iomaps, int nr_iomaps)
 {
 	struct timespec64 mtime = inode_get_mtime(inode);
-	loff_t new_size = lcp->lc_last_wr + 1;
+	loff_t new_size = (lcp->lc_newoffset) ? lcp->lc_last_wr + 1 : 0;
 	struct iattr iattr = { .ia_valid = 0 };
 	int error;
 
