@@ -1188,7 +1188,7 @@ static inline bool resched_next_quantum(struct cfs_rq *cfs_rq, struct sched_enti
 	if (protect_slice(curr))
 		return false;
 
-	return !entity_eligible(cfs_rq, curr);
+	return true;
 }
 
 /*
