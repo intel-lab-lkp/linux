@@ -204,6 +204,26 @@ extern unsigned long sysctl_admin_reserve_kbytes;
 #define folio_page_idx(folio, p)	((p) - &(folio)->page)
 #endif
 
+/*
+ * num_pages_contiguous() - determine the number of contiguous pages
+ * starting from the first page.
+ *
+ * @pages: an array of page pointers
+ * @nr_pages: length of the array
+ */
+static inline unsigned long num_pages_contiguous(struct page **pages,
+						 unsigned long nr_pages)
+{
+	struct page *first_page = pages[0];
+	unsigned long i;
+
+	for (i = 1; i < nr_pages; i++)
+		if (pages[i] != nth_page(first_page, i))
+			break;
+
+	return i;
+}
+
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr) ALIGN(addr, PAGE_SIZE)
 
