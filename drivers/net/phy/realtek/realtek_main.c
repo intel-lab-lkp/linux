@@ -231,6 +231,10 @@ static int rtl821x_probe(struct phy_device *phydev)
 		return dev_err_probe(dev, PTR_ERR(priv->clk),
 				     "failed to get phy clock\n");
 
+	/* enabling the clock might produce glitches, so hard-reset the PHY */
+	phy_device_reset(phydev, 1);
+	phy_device_reset(phydev, 0);
+
 	ret = phy_read_paged(phydev, RTL8211F_PHYCR_PAGE, RTL8211F_PHYCR1);
 	if (ret < 0)
 		return ret;
