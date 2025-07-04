@@ -89,12 +89,18 @@ struct dentry;
  *	set by the core when the sub-devices device nodes are registered with
  *	v4l2_device_register_ro_subdev_nodes() and used by the sub-device ioctl
  *	handler to restrict access to some ioctl calls.
+ * @V4L2_FL_USES_STATE:
+ *	indicates that the &struct video_device has state support.
+ *	The active video and metadata formats are stored in video_device.state,
+ *	and the try video and metadata formats are stored in v4l2_fh.state.
+ *	All new drivers should use it.
  */
 enum v4l2_video_device_flags {
 	V4L2_FL_REGISTERED		= 0,
 	V4L2_FL_USES_V4L2_FH		= 1,
 	V4L2_FL_QUIRK_INVERTED_CROP	= 2,
 	V4L2_FL_SUBDEV_RO_DEVNODE	= 3,
+	V4L2_FL_USES_STATE		= 4,
 };
 
 /* Priority helper functions */
@@ -214,6 +220,30 @@ struct v4l2_file_operations {
 	int (*release) (struct file *);
 };
 
+/**
+ * enum video_device_format_whence - Video device format type
+ *
+ * @V4L2_DEVICE_FORMAT_TRY: from VIDIOC_TRY_FMT, for negotiation only
+ * @V4L2_DEVICE_FORMAT_ACTIVE: from VIDIOC_S_FMT, applied to the device
+ */
+enum video_device_format_whence {
+	VIDEO_DEVICE_FORMAT_TRY = 0,
+	VIDEO_DEVICE_FORMAT_ACTIVE = 1,
+};
+
+/**
+ * struct video_device_state - Used for storing video device state information.
+ *
+ * @vid_fmt: Format of the video capture stream
+ * @meta_fmt: Format of the metadata capture stream
+ * @which: is this a TRY or ACTIVE format?
+ */
+struct video_device_state {
+	struct v4l2_format vid_fmt;
+	struct v4l2_format meta_fmt;
+	enum video_device_format_whence which;
+};
+
 /*
  * Newer version of video_device, handled by videodev2.c
  *	This version moves redundant code from video device code to
@@ -238,6 +268,7 @@ struct v4l2_file_operations {
  * @queue: &struct vb2_queue associated with this device node. May be NULL.
  * @prio: pointer to &struct v4l2_prio_state with device's Priority state.
  *	 If NULL, then v4l2_dev->prio will be used.
+ * @state: &struct video_device_state, holds the active state for the device.
  * @name: video device name
  * @vfl_type: V4L device type, as defined by &enum vfl_devnode_type
  * @vfl_dir: V4L receiver, transmitter or m2m
@@ -283,6 +314,7 @@ struct video_device {
 	struct vb2_queue *queue;
 
 	struct v4l2_prio_state *prio;
+	struct video_device_state state;
 
 	/* device info */
 	char name[64];
@@ -539,6 +571,26 @@ static inline int video_is_registered(struct video_device *vdev)
 {
 	return test_bit(V4L2_FL_REGISTERED, &vdev->flags);
 }
+
+/**
+ * video_device_g_fmt_vid() - fill video v4l2_format from the state.
+ *
+ * @file: pointer to struct file
+ * @state: pointer to video device state
+ * @format: pointer to &struct v4l2_format
+ */
+int video_device_g_fmt_vid(struct file *file, void *state,
+			   struct v4l2_format *format);
+
+/**
+ * video_device_g_fmt_meta() - fill metadata v4l2_format from the state.
+ *
+ * @file: pointer to struct file
+ * @state: pointer to video device state
+ * @format: pointer to &struct v4l2_format
+ */
+int video_device_g_fmt_meta(struct file *file, void *state,
+			    struct v4l2_format *format);
 
 /**
  * v4l2_debugfs_root - returns the dentry of the top-level "v4l2" debugfs dir

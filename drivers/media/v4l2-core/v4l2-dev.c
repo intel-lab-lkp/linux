@@ -27,6 +27,7 @@
 #include <linux/uaccess.h>
 
 #include <media/v4l2-common.h>
+#include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
@@ -162,6 +163,34 @@ void video_device_release_empty(struct video_device *vdev)
 	/* Only valid when the video_device struct is a static. */
 }
 EXPORT_SYMBOL(video_device_release_empty);
+
+int video_device_g_fmt_vid(struct file *file, void *priv,
+			   struct v4l2_format *fmt)
+{
+	struct video_device_state *state = priv;
+
+	if (WARN_ON_ONCE(!state))
+		return -EINVAL;
+
+	*fmt = state->vid_fmt;
+
+	return 0;
+}
+EXPORT_SYMBOL(video_device_g_fmt_vid);
+
+int video_device_g_fmt_meta(struct file *file, void *priv,
+			    struct v4l2_format *fmt)
+{
+	struct video_device_state *state = priv;
+
+	if (WARN_ON_ONCE(!state))
+		return -EINVAL;
+
+	*fmt = state->meta_fmt;
+
+	return 0;
+}
+EXPORT_SYMBOL(video_device_g_fmt_meta);
 
 static inline void video_get(struct video_device *vdev)
 {
@@ -926,6 +955,9 @@ int __video_register_device(struct video_device *vdev,
 	/* v4l2_fh support */
 	spin_lock_init(&vdev->fh_lock);
 	INIT_LIST_HEAD(&vdev->fh_list);
+
+	/* video_device_state support */
+	vdev->state.which = VIDEO_DEVICE_FORMAT_ACTIVE;
 
 	/* Part 1: check device type */
 	switch (type) {
