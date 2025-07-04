@@ -45,6 +45,7 @@ struct f_sourcesink {
 	unsigned isoc_maxpacket;
 	unsigned isoc_mult;
 	unsigned isoc_maxburst;
+	unsigned bulk_maxburst;
 	unsigned buflen;
 	unsigned bulk_qlen;
 	unsigned iso_qlen;
@@ -328,6 +329,10 @@ sourcesink_bind(struct usb_configuration *c, struct usb_function *f)
 	source_sink_intf_alt0.bInterfaceNumber = id;
 	source_sink_intf_alt1.bInterfaceNumber = id;
 
+	/* sanity check the bulk module parameters */
+	if (ss->bulk_maxburst > 15)
+		ss->bulk_maxburst = 15;
+
 	/* allocate bulk endpoints */
 	ss->in_ep = usb_ep_autoconfig(cdev->gadget, &fs_source_desc);
 	if (!ss->in_ep) {
@@ -340,6 +345,14 @@ autoconf_fail:
 	ss->out_ep = usb_ep_autoconfig(cdev->gadget, &fs_sink_desc);
 	if (!ss->out_ep)
 		goto autoconf_fail;
+
+	/*
+	 * Fill in the SS bulk descriptors from the module parameters.
+	 * We assume that the user knows what they are doing and won't
+	 * give parameters that their UDC doesn't support.
+	 */
+	ss_source_comp_desc.bMaxBurst = ss->bulk_maxburst;
+	ss_sink_comp_desc.bMaxBurst = ss->bulk_maxburst;
 
 	/* sanity check the isoc module parameters */
 	if (ss->isoc_interval < 1)
@@ -852,6 +865,7 @@ static struct usb_function *source_sink_alloc_func(
 	ss->isoc_maxpacket = ss_opts->isoc_maxpacket;
 	ss->isoc_mult = ss_opts->isoc_mult;
 	ss->isoc_maxburst = ss_opts->isoc_maxburst;
+	ss->bulk_maxburst = ss_opts->bulk_maxburst;
 	ss->buflen = ss_opts->bulk_buflen;
 	ss->bulk_qlen = ss_opts->bulk_qlen;
 	ss->iso_qlen = ss_opts->iso_qlen;

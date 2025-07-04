@@ -20,6 +20,7 @@ struct usb_zero_options {
 	unsigned isoc_maxpacket;
 	unsigned isoc_mult;
 	unsigned isoc_maxburst;
+	unsigned bulk_maxburst;
 	unsigned bulk_buflen;
 	unsigned qlen;
 	unsigned ss_bulk_qlen;
@@ -33,6 +34,7 @@ struct f_ss_opts {
 	unsigned isoc_maxpacket;
 	unsigned isoc_mult;
 	unsigned isoc_maxburst;
+	unsigned bulk_maxburst;
 	unsigned bulk_buflen;
 	unsigned bulk_qlen;
 	unsigned iso_qlen;
