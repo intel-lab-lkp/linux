@@ -28,12 +28,6 @@
 #include "ufshcd-pltfrm.h"
 #include "ufs-qcom.h"
 
-#define MCQ_QCFGPTR_MASK	GENMASK(7, 0)
-#define MCQ_QCFGPTR_UNIT	0x200
-#define MCQ_SQATTR_OFFSET(c) \
-	((((c) >> 16) & MCQ_QCFGPTR_MASK) * MCQ_QCFGPTR_UNIT)
-#define MCQ_QCFG_SIZE	0x40
-
 /* De-emphasis for gear-5 */
 #define DEEMPHASIS_3_5_dB	0x04
 #define NO_DEEMPHASIS		0x0
@@ -1899,7 +1893,6 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 
 /* Resources */
 static const struct ufshcd_res_info ufs_res_info[RES_MAX] = {
-	{.name = "std",},
 	{.name = "mcq",},
 	/* Submission Queue DAO */
 	{.name = "mcq_sqd",},
@@ -1917,7 +1910,6 @@ static int ufs_qcom_mcq_config_resource(struct ufs_hba *hba)
 {
 	struct platform_device *pdev = to_platform_device(hba->dev);
 	struct ufshcd_res_info *res;
-	struct resource *res_mem, *res_mcq;
 	int i, ret;
 
 	memcpy(hba->res, ufs_res_info, sizeof(ufs_res_info));
@@ -1929,12 +1921,6 @@ static int ufs_qcom_mcq_config_resource(struct ufs_hba *hba)
 							     res->name);
 		if (!res->resource) {
 			dev_info(hba->dev, "Resource %s not provided\n", res->name);
-			if (i == RES_UFS)
-				return -ENODEV;
-			continue;
-		} else if (i == RES_UFS) {
-			res_mem = res->resource;
-			res->base = hba->mmio_base;
 			continue;
 		}
 
@@ -1948,63 +1934,29 @@ static int ufs_qcom_mcq_config_resource(struct ufs_hba *hba)
 		}
 	}
 
-	/* MCQ resource provided in DT */
 	res = &hba->res[RES_MCQ];
-	/* Bail if MCQ resource is provided */
 	if (res->base)
-		goto out;
+		return -EINVAL;
 
-	/* Explicitly allocate MCQ resource from ufs_mem */
-	res_mcq = devm_kzalloc(hba->dev, sizeof(*res_mcq), GFP_KERNEL);
-	if (!res_mcq)
-		return -ENOMEM;
-
-	res_mcq->start = res_mem->start +
-			 MCQ_SQATTR_OFFSET(hba->mcq_capabilities);
-	res_mcq->end = res_mcq->start + hba->nr_hw_queues * MCQ_QCFG_SIZE - 1;
-	res_mcq->flags = res_mem->flags;
-	res_mcq->name = "mcq";
-
-	ret = insert_resource(&iomem_resource, res_mcq);
-	if (ret) {
-		dev_err(hba->dev, "Failed to insert MCQ resource, err=%d\n",
-			ret);
-		return ret;
-	}
-
-	res->base = devm_ioremap_resource(hba->dev, res_mcq);
-	if (IS_ERR(res->base)) {
-		dev_err(hba->dev, "MCQ registers mapping failed, err=%d\n",
-			(int)PTR_ERR(res->base));
-		ret = PTR_ERR(res->base);
-		goto ioremap_err;
-	}
-
-out:
 	hba->mcq_base = res->base;
+
 	return 0;
-ioremap_err:
-	res->base = NULL;
-	remove_resource(res_mcq);
-	return ret;
 }
 
 static int ufs_qcom_op_runtime_config(struct ufs_hba *hba)
 {
-	struct ufshcd_res_info *mem_res, *sqdao_res;
+	struct ufshcd_res_info *sqdao_res;
 	struct ufshcd_mcq_opr_info_t *opr;
 	int i;
 
-	mem_res = &hba->res[RES_UFS];
 	sqdao_res = &hba->res[RES_MCQ_SQD];
-
-	if (!mem_res->base || !sqdao_res->base)
+	if (!sqdao_res->base)
 		return -EINVAL;
 
 	for (i = 0; i < OPR_MAX; i++) {
 		opr = &hba->mcq_opr[i];
 		opr->offset = sqdao_res->resource->start -
-			      mem_res->resource->start + 0x40 * i;
+			      hba->hci_res->start + 0x40 * i;
 		opr->stride = 0x100;
 		opr->base = sqdao_res->base + 0x40 * i;
 	}

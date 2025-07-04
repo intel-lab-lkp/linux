@@ -808,7 +808,6 @@ struct ufshcd_res_info {
 };
 
 enum ufshcd_res {
-	RES_UFS,
 	RES_MCQ,
 	RES_MCQ_SQD,
 	RES_MCQ_SQIS,
@@ -970,6 +969,7 @@ enum ufshcd_mcq_opr {
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
+	struct resource *hci_res;
 
 	/* Virtual memory reference */
 	struct utp_transfer_cmd_desc *ucdl_base_addr;

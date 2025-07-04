@@ -463,8 +463,9 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	void __iomem *mmio_base;
 	int irq, err;
 	struct device *dev = &pdev->dev;
+	struct resource *hci_res;
 
-	mmio_base = devm_platform_ioremap_resource(pdev, 0);
+	mmio_base = devm_platform_get_and_ioremap_resource(pdev, 0, &hci_res);
 	if (IS_ERR(mmio_base))
 		return PTR_ERR(mmio_base);
 
@@ -479,6 +480,7 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	}
 
 	hba->vops = vops;
+	hba->hci_res = hci_res;
 
 	err = ufshcd_parse_clock_info(hba);
 	if (err) {
