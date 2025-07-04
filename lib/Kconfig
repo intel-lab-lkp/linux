@@ -669,6 +669,12 @@ config STACKDEPOT_MAX_FRAMES
 	default 64
 	depends on STACKDEPOT
 
+config STACKDEPOT_MAX_POOLS
+	int "Maximum number of stack depot pools to store stack traces" if EXPERT
+	range 1024 131071
+	default 8192
+	depends on STACKDEPOT
+
 config REF_TRACKER
 	bool
 	depends on STACKTRACE_SUPPORT
