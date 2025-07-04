@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <media/v4l2-common.h>
+#include <media/v4l2-dev.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ioctl.h>
@@ -482,7 +483,9 @@ static void rkisp1_irq_frame_end_enable(struct rkisp1_capture *cap)
 
 static void rkisp1_mp_config(struct rkisp1_capture *cap)
 {
-	const struct v4l2_pix_format_mplane *pixm = &cap->pix.fmt;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
+	u32 stride = pixm->plane_fmt[0].bytesperline / cap->pix.info->bpp[0];
 	struct rkisp1_device *rkisp1 = cap->rkisp1;
 	u32 reg;
 
@@ -494,11 +497,11 @@ static void rkisp1_mp_config(struct rkisp1_capture *cap)
 		     rkisp1_pixfmt_comp_size(pixm, RKISP1_PLANE_CR));
 
 	if (rkisp1_has_feature(rkisp1, MAIN_STRIDE)) {
-		rkisp1_write(rkisp1, RKISP1_CIF_MI_MP_Y_LLENGTH, cap->stride);
+		rkisp1_write(rkisp1, RKISP1_CIF_MI_MP_Y_LLENGTH, stride);
 		rkisp1_write(rkisp1, RKISP1_CIF_MI_MP_Y_PIC_WIDTH, pixm->width);
 		rkisp1_write(rkisp1, RKISP1_CIF_MI_MP_Y_PIC_HEIGHT, pixm->height);
 		rkisp1_write(rkisp1, RKISP1_CIF_MI_MP_Y_PIC_SIZE,
-			     cap->stride * pixm->height);
+			     stride * pixm->height);
 	}
 
 	rkisp1_irq_frame_end_enable(cap);
@@ -546,7 +549,9 @@ static void rkisp1_mp_config(struct rkisp1_capture *cap)
 
 static void rkisp1_sp_config(struct rkisp1_capture *cap)
 {
-	const struct v4l2_pix_format_mplane *pixm = &cap->pix.fmt;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
+	u32 stride = pixm->plane_fmt[0].bytesperline / cap->pix.info->bpp[0];
 	struct rkisp1_device *rkisp1 = cap->rkisp1;
 	u32 mi_ctrl, reg;
 
@@ -557,11 +562,11 @@ static void rkisp1_sp_config(struct rkisp1_capture *cap)
 	rkisp1_write(rkisp1, cap->config->mi.cr_size_init,
 		     rkisp1_pixfmt_comp_size(pixm, RKISP1_PLANE_CR));
 
-	rkisp1_write(rkisp1, RKISP1_CIF_MI_SP_Y_LLENGTH, cap->stride);
+	rkisp1_write(rkisp1, RKISP1_CIF_MI_SP_Y_LLENGTH, stride);
 	rkisp1_write(rkisp1, RKISP1_CIF_MI_SP_Y_PIC_WIDTH, pixm->width);
 	rkisp1_write(rkisp1, RKISP1_CIF_MI_SP_Y_PIC_HEIGHT, pixm->height);
 	rkisp1_write(rkisp1, RKISP1_CIF_MI_SP_Y_PIC_SIZE,
-		     cap->stride * pixm->height);
+		     stride * pixm->height);
 
 	rkisp1_irq_frame_end_enable(cap);
 
@@ -704,7 +709,8 @@ static const struct rkisp1_capture_ops rkisp1_capture_ops_sp = {
 
 static int rkisp1_dummy_buf_create(struct rkisp1_capture *cap)
 {
-	const struct v4l2_pix_format_mplane *pixm = &cap->pix.fmt;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
 	struct rkisp1_dummy_buffer *dummy_buf = &cap->buf.dummy;
 
 	dummy_buf->size = max3(rkisp1_pixfmt_comp_size(pixm, RKISP1_PLANE_Y),
@@ -869,7 +875,8 @@ static int rkisp1_vb2_queue_setup(struct vb2_queue *queue,
 				  struct device *alloc_devs[])
 {
 	struct rkisp1_capture *cap = queue->drv_priv;
-	const struct v4l2_pix_format_mplane *pixm = &cap->pix.fmt;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
 	unsigned int i;
 
 	if (*num_planes) {
@@ -894,7 +901,8 @@ static int rkisp1_vb2_buf_init(struct vb2_buffer *vb)
 	struct rkisp1_buffer *ispbuf =
 		container_of(vbuf, struct rkisp1_buffer, vb);
 	struct rkisp1_capture *cap = vb->vb2_queue->drv_priv;
-	const struct v4l2_pix_format_mplane *pixm = &cap->pix.fmt;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
 	unsigned int i;
 
 	memset(ispbuf->buff_addr, 0, sizeof(ispbuf->buff_addr));
@@ -936,10 +944,12 @@ static void rkisp1_vb2_buf_queue(struct vb2_buffer *vb)
 static int rkisp1_vb2_buf_prepare(struct vb2_buffer *vb)
 {
 	struct rkisp1_capture *cap = vb->vb2_queue->drv_priv;
+	const struct v4l2_pix_format_mplane *pixm =
+		&cap->vnode.vdev.state.vid_fmt.fmt.pix_mp;
 	unsigned int i;
 
-	for (i = 0; i < cap->pix.fmt.num_planes; i++) {
-		unsigned long size = cap->pix.fmt.plane_fmt[i].sizeimage;
+	for (i = 0; i < pixm->num_planes; i++) {
+		unsigned long size = pixm->plane_fmt[i].sizeimage;
 
 		if (vb2_plane_size(vb, i) < size) {
 			dev_err(cap->rkisp1->dev,
@@ -1278,7 +1288,7 @@ rkisp1_find_fmt_cfg(const struct rkisp1_capture *cap, const u32 pixelfmt)
 	return NULL;
 }
 
-static void rkisp1_try_fmt(const struct rkisp1_capture *cap,
+static void rkisp1_adj_fmt(const struct rkisp1_capture *cap,
 			   struct v4l2_pix_format_mplane *pixm,
 			   const struct rkisp1_capture_fmt_cfg **fmt_cfg,
 			   const struct v4l2_format_info **fmt_info)
@@ -1317,22 +1327,20 @@ static void rkisp1_try_fmt(const struct rkisp1_capture *cap,
 		*fmt_info = info;
 }
 
-static void rkisp1_set_fmt(struct rkisp1_capture *cap,
-			   struct v4l2_pix_format_mplane *pixm)
-{
-	rkisp1_try_fmt(cap, pixm, &cap->pix.cfg, &cap->pix.info);
-
-	cap->pix.fmt = *pixm;
-	cap->stride = pixm->plane_fmt[0].bytesperline / cap->pix.info->bpp[0];
-}
-
-static int rkisp1_try_fmt_vid_cap_mplane(struct file *file, void *fh,
+static int rkisp1_adj_fmt_vid_cap_mplane(struct file *file, void *priv,
 					 struct v4l2_format *f)
 {
 	struct rkisp1_capture *cap = video_drvdata(file);
+	struct video_device_state *state = priv;
 
-	rkisp1_try_fmt(cap, &f->fmt.pix_mp, NULL, NULL);
+	if (state->which == VIDEO_DEVICE_FORMAT_ACTIVE) {
+		rkisp1_adj_fmt(cap, &f->fmt.pix_mp, &cap->pix.cfg,
+			       &cap->pix.info);
+	} else {
+		rkisp1_adj_fmt(cap, &f->fmt.pix_mp, NULL, NULL);
+	}
 
+	state->vid_fmt = *f;
 	return 0;
 }
 
@@ -1399,31 +1407,6 @@ static int rkisp1_enum_framesizes(struct file *file, void *fh,
 	return 0;
 }
 
-static int rkisp1_s_fmt_vid_cap_mplane(struct file *file,
-				       void *priv, struct v4l2_format *f)
-{
-	struct rkisp1_capture *cap = video_drvdata(file);
-	struct rkisp1_vdev_node *node =
-				rkisp1_vdev_to_node(&cap->vnode.vdev);
-
-	if (vb2_is_busy(&node->buf_queue))
-		return -EBUSY;
-
-	rkisp1_set_fmt(cap, &f->fmt.pix_mp);
-
-	return 0;
-}
-
-static int rkisp1_g_fmt_vid_cap_mplane(struct file *file, void *fh,
-				       struct v4l2_format *f)
-{
-	struct rkisp1_capture *cap = video_drvdata(file);
-
-	f->fmt.pix_mp = cap->pix.fmt;
-
-	return 0;
-}
-
 static int
 rkisp1_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
@@ -1444,9 +1427,9 @@ static const struct v4l2_ioctl_ops rkisp1_v4l2_ioctl_ops = {
 	.vidioc_prepare_buf = vb2_ioctl_prepare_buf,
 	.vidioc_streamon = vb2_ioctl_streamon,
 	.vidioc_streamoff = vb2_ioctl_streamoff,
-	.vidioc_try_fmt_vid_cap_mplane = rkisp1_try_fmt_vid_cap_mplane,
-	.vidioc_s_fmt_vid_cap_mplane = rkisp1_s_fmt_vid_cap_mplane,
-	.vidioc_g_fmt_vid_cap_mplane = rkisp1_g_fmt_vid_cap_mplane,
+	.vidioc_try_fmt_vid_cap_mplane = rkisp1_adj_fmt_vid_cap_mplane,
+	.vidioc_s_fmt_vid_cap_mplane = rkisp1_adj_fmt_vid_cap_mplane,
+	.vidioc_g_fmt_vid_cap_mplane = video_device_g_fmt_vid,
 	.vidioc_enum_fmt_vid_cap = rkisp1_enum_fmt_vid_cap_mplane,
 	.vidioc_enum_framesizes = rkisp1_enum_framesizes,
 	.vidioc_querycap = rkisp1_querycap,
@@ -1461,8 +1444,10 @@ static int rkisp1_capture_link_validate(struct media_link *link)
 	struct v4l2_subdev *sd =
 		media_entity_to_v4l2_subdev(link->source->entity);
 	struct rkisp1_capture *cap = video_get_drvdata(vdev);
+	const struct v4l2_pix_format_mplane *pixm =
+		&vdev->state.vid_fmt.fmt.pix_mp;
 	const struct rkisp1_capture_fmt_cfg *fmt =
-		rkisp1_find_fmt_cfg(cap, cap->pix.fmt.pixelformat);
+		rkisp1_find_fmt_cfg(cap, pixm->pixelformat);
 	struct v4l2_subdev_format sd_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 		.pad = link->source->index,
@@ -1473,16 +1458,16 @@ static int rkisp1_capture_link_validate(struct media_link *link)
 	if (ret)
 		return ret;
 
-	if (sd_fmt.format.height != cap->pix.fmt.height ||
-	    sd_fmt.format.width != cap->pix.fmt.width ||
+	if (sd_fmt.format.height != pixm->height ||
+	    sd_fmt.format.width != pixm->width ||
 	    sd_fmt.format.code != fmt->mbus) {
 		dev_dbg(cap->rkisp1->dev,
 			"link '%s':%u -> '%s':%u not valid: 0x%04x/%ux%u != 0x%04x/%ux%u\n",
 			link->source->entity->name, link->source->index,
 			link->sink->entity->name, link->sink->index,
 			sd_fmt.format.code, sd_fmt.format.width,
-			sd_fmt.format.height, fmt->mbus, cap->pix.fmt.width,
-			cap->pix.fmt.height);
+			sd_fmt.format.height, fmt->mbus, pixm->width,
+			pixm->height);
 		return -EPIPE;
 	}
 
@@ -1531,6 +1516,7 @@ static int rkisp1_register_capture(struct rkisp1_capture *cap)
 	};
 	struct v4l2_device *v4l2_dev = &cap->rkisp1->v4l2_dev;
 	struct video_device *vdev = &cap->vnode.vdev;
+	struct v4l2_pix_format_mplane *pixm;
 	struct rkisp1_vdev_node *node;
 	struct vb2_queue *q;
 	int ret;
@@ -1548,6 +1534,7 @@ static int rkisp1_register_capture(struct rkisp1_capture *cap)
 	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
 			    V4L2_CAP_STREAMING | V4L2_CAP_IO_MC;
 	vdev->entity.ops = &rkisp1_media_ops;
+	set_bit(V4L2_FL_USES_STATE, &vdev->flags);
 	video_set_drvdata(vdev, cap);
 	vdev->vfl_dir = VFL_DIR_RX;
 	node->pad.flags = MEDIA_PAD_FL_SINK;
@@ -1571,6 +1558,13 @@ static int rkisp1_register_capture(struct rkisp1_capture *cap)
 	}
 
 	vdev->queue = q;
+
+	vdev->state.vid_fmt.type = q->type;
+	pixm = &vdev->state.vid_fmt.fmt.pix_mp;
+	pixm->pixelformat = V4L2_PIX_FMT_YUYV;
+	pixm->width = RKISP1_DEFAULT_WIDTH;
+	pixm->height = RKISP1_DEFAULT_HEIGHT;
+	rkisp1_adj_fmt(cap, pixm, &cap->pix.cfg, &cap->pix.info);
 
 	ret = media_entity_pads_init(&vdev->entity, 1, &node->pad);
 	if (ret)
@@ -1598,7 +1592,6 @@ static void
 rkisp1_capture_init(struct rkisp1_device *rkisp1, enum rkisp1_stream_id id)
 {
 	struct rkisp1_capture *cap = &rkisp1->capture_devs[id];
-	struct v4l2_pix_format_mplane pixm;
 
 	memset(cap, 0, sizeof(*cap));
 	cap->id = id;
@@ -1616,12 +1609,6 @@ rkisp1_capture_init(struct rkisp1_device *rkisp1, enum rkisp1_stream_id id)
 	}
 
 	cap->is_streaming = false;
-
-	memset(&pixm, 0, sizeof(pixm));
-	pixm.pixelformat = V4L2_PIX_FMT_YUYV;
-	pixm.width = RKISP1_DEFAULT_WIDTH;
-	pixm.height = RKISP1_DEFAULT_HEIGHT;
-	rkisp1_set_fmt(cap, &pixm);
 }
 
 int rkisp1_capture_devs_register(struct rkisp1_device *rkisp1)

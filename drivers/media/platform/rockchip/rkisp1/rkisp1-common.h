@@ -304,7 +304,6 @@ struct rkisp1_device;
  *		  handler to stop the streaming by waiting on the 'done' wait queue.
  *		  If the irq handler is not called, the stream is stopped by the callback
  *		  after timeout.
- * @stride:       the line stride for the first plane, in pixel units
  * @buf.lock:	  lock to protect buf.queue
  * @buf.queue:	  queued buffer list
  * @buf.dummy:	  dummy space to store dropped data
@@ -314,7 +313,6 @@ struct rkisp1_device;
  * @buf.next:	  the buffer used for next frame
  * @pix.cfg:	  pixel configuration
  * @pix.info:	  a pointer to the v4l2_format_info of the pixel format
- * @pix.fmt:	  buffer format
  */
 struct rkisp1_capture {
 	struct rkisp1_vdev_node vnode;
@@ -325,7 +323,6 @@ struct rkisp1_capture {
 	bool is_streaming;
 	bool is_stopping;
 	wait_queue_head_t done;
-	unsigned int stride;
 	struct {
 		/* protects queue, curr and next */
 		spinlock_t lock;
@@ -337,7 +334,6 @@ struct rkisp1_capture {
 	struct {
 		const struct rkisp1_capture_fmt_cfg *cfg;
 		const struct v4l2_format_info *info;
-		struct v4l2_pix_format_mplane fmt;
 	} pix;
 };
 
