@@ -238,25 +238,31 @@ static int cs40l50_upload_owt(struct cs40l50_work *work_data)
 	header.data_words = len / sizeof(u32);
 
 	new_owt_effect_data = kmalloc(sizeof(header) + len, GFP_KERNEL);
+	if (!new_owt_effect_data)
+		return -ENOMEM;
 
 	memcpy(new_owt_effect_data, &header, sizeof(header));
 	memcpy(new_owt_effect_data + sizeof(header), work_data->custom_data, len);
 
 	error = regmap_read(vib->regmap, vib->dsp.owt_offset_reg, &offset);
 	if (error)
-		return error;
+		goto free_owt_data;
 
 	error = regmap_bulk_write(vib->regmap, vib->dsp.owt_base_reg +
 				  (offset * sizeof(u32)), new_owt_effect_data,
 				  sizeof(header) + len);
 	if (error)
-		return error;
+		goto free_owt_data;
 
 	error = vib->dsp.write(vib->dev, vib->regmap, vib->dsp.push_owt_cmd);
 	if (error)
-		return error;
+		goto free_owt_data;
 
 	return 0;
+
+free_owt_data:
+	kfree(new_owt_effect_data);
+	return error;
 }
 
 static void cs40l50_add_worker(struct work_struct *work)
