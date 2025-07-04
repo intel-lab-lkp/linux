@@ -176,15 +176,19 @@ out:
 	return res;
 }
 
-static bool cwd_matches_fs(unsigned int fs_magic)
+static bool path_is_fs(const char *path, unsigned int fs_magic)
 {
 	struct statfs statfs_buf;
 
-	if (!fs_magic)
+	if (!fs_magic || !path)
 		return true;
 
-	if (statfs(".", &statfs_buf))
-		return true;
+	/* Hack for the hostfs test because TMP_DIR doesn't exist yet. */
+	if (strcmp(path, TMP_DIR) == 0)
+		path = ".";
+
+	if (statfs(path, &statfs_buf))
+		return false;
 
 	return statfs_buf.f_type == fs_magic;
 }
@@ -5294,7 +5298,7 @@ FIXTURE_VARIANT(layout3_fs)
 {
 	const struct mnt_opt mnt;
 	const char *const file_path;
-	unsigned int cwd_fs_magic;
+	unsigned int fs_magic;
 };
 
 /* clang-format off */
@@ -5342,7 +5346,34 @@ FIXTURE_VARIANT_ADD(layout3_fs, hostfs) {
 		.flags = MS_BIND,
 	},
 	.file_path = TMP_DIR "/dir/file",
-	.cwd_fs_magic = HOSTFS_SUPER_MAGIC,
+	.fs_magic = HOSTFS_SUPER_MAGIC,
+};
+
+/*
+ * This test requires a mounted 9p filesystem e.g., with:
+ * diod -n -l 127.0.0.1:564 -e /mnt/test-v9fs-src
+ * mount.diod -n 127.0.0.1:/mnt/test-v9fs-src /mnt/test-v9fs
+ */
+FIXTURE_VARIANT_ADD(layout3_fs, v9fs) {
+	.mnt = {
+		.source = "/mnt/test-v9fs",
+		.flags = MS_BIND,
+	},
+	.file_path = TMP_DIR "/dir/file",
+	.fs_magic = V9FS_MAGIC,
+};
+
+/*
+ * This test requires a mounted FUSE filesystem e.g., with:
+ * bindfs /mnt/test-fuse-src /mnt/test-fuse
+ */
+FIXTURE_VARIANT_ADD(layout3_fs, fuse) {
+	.mnt = {
+		.source = "/mnt/test-fuse",
+		.flags = MS_BIND,
+	},
+	.file_path = TMP_DIR "/dir/file",
+	.fs_magic = FUSE_SUPER_MAGIC,
 };
 
 static char *dirname_alloc(const char *path)
@@ -5365,7 +5396,7 @@ FIXTURE_SETUP(layout3_fs)
 	char *dir_path = dirname_alloc(variant->file_path);
 
 	if (!supports_filesystem(variant->mnt.type) ||
-	    !cwd_matches_fs(variant->cwd_fs_magic)) {
+	    !path_is_fs(variant->mnt.source, variant->fs_magic)) {
 		self->skip_test = true;
 		SKIP(return, "this filesystem is not supported (setup)");
 	}
