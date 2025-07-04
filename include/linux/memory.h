@@ -186,8 +186,7 @@ int walk_dynamic_memory_groups(int nid, walk_memory_groups_func_t func,
 })
 
 #ifdef CONFIG_NUMA
-void memory_block_add_nid(struct memory_block *mem, int nid,
-			  enum meminit_context context);
+void memory_block_add_nid_early(struct memory_block *mem, int nid);
 #endif /* CONFIG_NUMA */
 int memory_block_advise_max_size(unsigned long size);
 unsigned long memory_block_advised_max_size(void);
