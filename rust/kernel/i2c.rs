@@ -10,7 +10,7 @@ use crate::{
     error::*,
     of,
     prelude::*,
-    types::{ForeignOwnable, Opaque},
+    types::{ARef, ForeignOwnable, Opaque},
 };
 
 use core::{
@@ -312,6 +312,102 @@ pub trait Driver: Send {
     }
 }
 
+/// The i2c adapter reference
+///
+/// This represents the Rust abstraction for a reference to an existing
+/// C `struct i2c_adapter`.
+///
+/// # Invariants
+///
+/// A [`I2cAdapterRef`] instance represents a valid `struct i2c_adapter` created by the C portion of
+/// the kernel.
+#[repr(transparent)]
+pub struct I2cAdapterRef(NonNull<bindings::i2c_adapter>);
+
+impl I2cAdapterRef {
+    fn as_raw(&self) -> *mut bindings::i2c_adapter {
+        self.0.as_ptr()
+    }
+
+    /// Gets pointer to an `i2c_adapter` by index.
+    pub fn get(index: i32) -> Option<Self> {
+        // SAFETY: `index` must refer to a valid I²C adapter; the kernel
+        // guarantees that `i2c_get_adapter(index)` returns either a valid
+        // pointer or NULL. `NonNull::new` guarantees the correct check.
+        let adapter = NonNull::new(unsafe { bindings::i2c_get_adapter(index) })?;
+        Some(Self(adapter))
+    }
+}
+
+impl Drop for I2cAdapterRef {
+    fn drop(&mut self) {
+        // SAFETY: This `I2cAdapterRef` was obtained from `i2c_get_adapter`,
+        // and calling `i2c_put_adapter` exactly once will correctly release
+        // the reference count in the I²C core. It is safe to call from any context
+        unsafe { bindings::i2c_put_adapter(self.as_raw()) }
+    }
+}
+
+/// The i2c board info representation
+///
+/// This structure represents the Rust abstraction for a C `struct i2c_board_info` structure,
+/// which is used for manual I2C client creation.
+#[repr(transparent)]
+pub struct I2cBoardInfo(bindings::i2c_board_info);
+
+impl I2cBoardInfo {
+    const I2C_TYPE_SIZE: usize = 20;
+    /// Create a new board‐info for a kernel driver.
+    #[inline(always)]
+    pub const fn new(type_: &'static CStr, addr: u16) -> Self {
+        build_assert!(
+            type_.len_with_nul() <= Self::I2C_TYPE_SIZE,
+            "Type exceeds 20 bytes"
+        );
+        let src = type_.as_bytes_with_nul();
+        // Replace with `bindings::acpi_device_id::default()` once stabilized for `const`.
+        // SAFETY: FFI type is valid to be zero-initialized.
+        let mut i2c_board_info: bindings::i2c_board_info = unsafe { core::mem::zeroed() };
+        let mut i: usize = 0;
+        while i < src.len() {
+            i2c_board_info.type_[i] = src[i];
+            i += 1;
+        }
+
+        i2c_board_info.addr = addr;
+        Self(i2c_board_info)
+    }
+
+    fn as_raw(&self) -> *const bindings::i2c_board_info {
+        &self.0 as *const _
+    }
+}
+
+/// Marker trait for the state of a bus specific device.
+pub trait DeviceState: private::Sealed {}
+
+/// State module which aggregates existing Device States.
+pub mod state {
+    /// The [`Borrowed`] state is the state of a bus specific device when it was not
+    /// manually created using `DeviceOwned::new`
+    pub struct Borrowed;
+
+    /// The [`Owned`] state is the state of a bus specific device when it was
+    /// manually created using `DeviceOwned::new` and thus will be automatically
+    /// unregistered when the corresponding `DeviceOwned` is dropped
+    pub struct Owned;
+}
+
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::state::Borrowed {}
+    impl Sealed for super::state::Owned {}
+}
+
+impl DeviceState for state::Borrowed {}
+impl DeviceState for state::Owned {}
+
 /// The i2c client representation.
 ///
 /// This structure represents the Rust abstraction for a C `struct i2c_client`. The
@@ -323,14 +419,18 @@ pub trait Driver: Send {
 /// A [`Device`] instance represents a valid `struct i2c_client` created by the C portion of
 /// the kernel.
 #[repr(transparent)]
-pub struct Device<Ctx: device::DeviceContext = device::Normal>(
+pub struct Device<Ctx: device::DeviceContext = device::Normal, State: DeviceState = state::Borrowed>(
     Opaque<bindings::i2c_client>,
     PhantomData<Ctx>,
+    PhantomData<State>,
 );
 
-impl<Ctx: device::DeviceContext> Device<Ctx> {
+impl<Ctx: device::DeviceContext, State: DeviceState> Device<Ctx, State> {
     fn as_raw(&self) -> *mut bindings::i2c_client {
         self.0.get()
+    }
+    fn from_raw(raw: *mut bindings::i2c_client) -> &'static Self {
+        unsafe { &*raw.cast::<Device<Ctx, State>>() }
     }
 }
 
@@ -340,7 +440,9 @@ kernel::impl_device_context_deref!(unsafe { Device });
 kernel::impl_device_context_into_aref!(Device);
 
 // SAFETY: Instances of `Device` are always reference-counted.
-unsafe impl crate::types::AlwaysRefCounted for Device {
+unsafe impl<Ctx: device::DeviceContext, State: DeviceState> crate::types::AlwaysRefCounted
+    for Device<Ctx, State>
+{
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
         unsafe { bindings::get_device(self.as_ref().as_raw()) };
@@ -352,7 +454,9 @@ unsafe impl crate::types::AlwaysRefCounted for Device {
     }
 }
 
-impl<Ctx: device::DeviceContext> AsRef<device::Device<Ctx>> for Device<Ctx> {
+impl<Ctx: device::DeviceContext, State: DeviceState> AsRef<device::Device<Ctx>>
+    for Device<Ctx, State>
+{
     fn as_ref(&self) -> &device::Device<Ctx> {
         // SAFETY: By the type invariant of `Self`, `self.as_raw()` is a pointer to a valid
         // `struct i2c_client`.
@@ -389,3 +493,73 @@ unsafe impl Send for Device {}
 // SAFETY: `Device` can be shared among threads because all methods of `Device`
 // (i.e. `Device<Normal>) are thread safe.
 unsafe impl Sync for Device {}
+
+/// The representation of reference counted pointer to a manually created i2c client.
+///
+/// This structure represents the Rust wrapper upon i2c::Device with the i2c::state::Owned state
+#[repr(transparent)]
+pub struct DeviceOwned<Ctx: device::DeviceContext + 'static = device::Normal>(
+    ARef<Device<Ctx, state::Owned>>,
+);
+
+/// The main purpose of the DeviceOwned wrapper is to automatically
+/// take care of i2c client created by i2c_new_client_device.
+///
+/// The example of usage:
+///
+/// ```
+/// use kernel::{c_str, device::Core, i2c, prelude::*};
+///
+/// struct Context {
+///     _owned: i2c::DeviceOwned<Core>,
+/// }
+///
+/// const BOARD_INFO: i2c::I2cBoardInfo = i2c::I2cBoardInfo::new(c_str!("rust_driver_i2c"), 0x30);
+///
+/// impl Context {
+///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///
+///         let adapter = i2c::I2cAdapterRef::get(0)
+///             .ok_or(EINVAL)?;
+///
+///         let device = i2c::DeviceOwned::<Core>::new(&adapter, &BOARD_INFO)
+///             .ok_or(EINVAL)?;
+///
+///         Ok(Self { _owned: device })
+///     }
+/// }
+///
+/// impl Drop for Context {
+///     fn drop(&mut self) {
+///
+///     }
+/// }
+///
+/// ```
+impl<Ctx: device::DeviceContext> DeviceOwned<Ctx> {
+    fn as_raw_client(&self) -> *mut bindings::i2c_client {
+        self.0.as_raw()
+    }
+
+    /// The C `i2c_new_client_device` function wrapper for manual I2C client creation.
+    pub fn new(i2c_adapter: &I2cAdapterRef, i2c_board_info: &I2cBoardInfo) -> Option<Self> {
+        // SAFETY: the kernel guarantees that `i2c_new_client_device()` returns either a valid
+        // pointer or NULL. `NonNull::new` guarantees the correct check.
+        let raw_dev = NonNull::new(unsafe {
+            bindings::i2c_new_client_device(i2c_adapter.as_raw(), i2c_board_info.as_raw())
+        })?;
+
+        let dev = Device::<Ctx, state::Owned>::from_raw(raw_dev.as_ptr());
+
+        Some(Self(dev.into()))
+    }
+}
+
+impl<Ctx: device::DeviceContext> Drop for DeviceOwned<Ctx> {
+    fn drop(&mut self) {
+        unsafe { bindings::i2c_unregister_device(self.as_raw_client()) }
+    }
+}
+
+// SAFETY: A `Device` is always reference-counted and can be released from any thread.
+unsafe impl<Ctx: device::DeviceContext> Send for DeviceOwned<Ctx> {}
