@@ -50,6 +50,19 @@ properties:
 
   ieee80211-freq-limit: true
 
+  led:
+    type: object
+    $ref: /schemas/leds/common.yaml#
+    additionalProperties: false
+    properties:
+      led-active-low:
+        description:
+          LED is enabled with ground signal.
+        type: boolean
+
+      led-sources:
+        maxItems: 1
+
   qca,no-eeprom:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
@@ -102,5 +115,8 @@ examples:
         compatible = "qca,ar9130-wifi";
         reg = <0x180c0000 0x230000>;
         interrupts = <2>;
+        led {
+          led-sources = <0>;
+        };
       };
     };
