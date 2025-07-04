@@ -125,9 +125,10 @@ static inline void
 ice_xdp_meta_set_desc(struct xdp_buff *xdp,
 		      union ice_32b_rx_flex_desc *eop_desc)
 {
-	struct ice_xdp_buff *xdp_ext = container_of(xdp, struct ice_xdp_buff,
-						    xdp_buff);
+	struct libeth_xdp_buff *xdp_ext = container_of(xdp,
+						       struct libeth_xdp_buff,
+						       base);
 
-	xdp_ext->eop_desc = eop_desc;
+	xdp_ext->desc = eop_desc;
 }
 #endif /* !_ICE_TXRX_LIB_H_ */
