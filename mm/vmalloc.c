@@ -3719,7 +3719,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 				 pgprot_t prot, unsigned int page_shift,
 				 int node)
 {
-	const gfp_t nested_gfp = (gfp_mask & GFP_RECLAIM_MASK) | __GFP_ZERO;
+	gfp_t nested_gfp = (gfp_mask & GFP_RECLAIM_MASK) | __GFP_ZERO;
 	bool nofail = gfp_mask & __GFP_NOFAIL;
 	unsigned long addr = (unsigned long)area->addr;
 	unsigned long size = get_vm_area_size(area);
@@ -3727,12 +3727,28 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	unsigned int nr_small_pages = size >> PAGE_SHIFT;
 	unsigned int page_order;
 	unsigned int flags;
+	bool noblock;
 	int ret;
 
 	array_size = (unsigned long)nr_small_pages * sizeof(struct page *);
+	noblock = !gfpflags_allow_blocking(gfp_mask);
 
-	if (!(gfp_mask & (GFP_DMA | GFP_DMA32)))
-		gfp_mask |= __GFP_HIGHMEM;
+	if (noblock) {
+		/* __GFP_NOFAIL is incompatible with non-blocking contexts. */
+		WARN_ON_ONCE(gfp_mask & __GFP_NOFAIL);
+		gfp_mask &= ~__GFP_NOFAIL;
+
+		/*
+		 * In non-sleeping contexts, ensure nested allocations follow
+		 * same non-blocking rules.
+		 */
+		nested_gfp = gfp_mask | __GFP_ZERO;
+		nofail = false;
+	} else {
+		/* Allow highmem allocations if there are no DMA constraints. */
+		if (!(gfp_mask & (GFP_DMA | GFP_DMA32)))
+			gfp_mask |= __GFP_HIGHMEM;
+	}
 
 	/* Please note that the recursion is strictly bounded. */
 	if (array_size > PAGE_SIZE) {
@@ -3796,7 +3812,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	 * page tables allocations ignore external gfp mask, enforce it
 	 * by the scope API
 	 */
-	if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
+	if (noblock)
+		flags = memalloc_noreclaim_save();
+	else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
 		flags = memalloc_nofs_save();
 	else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == 0)
 		flags = memalloc_noio_save();
@@ -3808,7 +3826,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			schedule_timeout_uninterruptible(1);
 	} while (nofail && (ret < 0));
 
-	if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
+	if (noblock)
+		memalloc_noreclaim_restore(flags);
+	else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
 		memalloc_nofs_restore(flags);
 	else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == 0)
 		memalloc_noio_restore(flags);
