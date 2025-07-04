@@ -209,6 +209,8 @@ static struct platform_inst_caps platform_inst_cap_sm8550 = {
 	.mb_cycles_fw = 489583,
 	.mb_cycles_fw_vpp = 66234,
 	.num_comv = 0,
+	.max_frame_rate = MAXIMUM_FPS << 16,
+	.max_operating_rate = MAXIMUM_FPS << 16,
 };
 
 static void iris_set_sm8550_preset_registers(struct iris_core *core)
@@ -502,7 +504,7 @@ struct iris_platform_data qcs8300_data = {
 	.num_vpp_pipe = 2,
 	.max_session_count = 16,
 	.max_core_mbpf = ((4096 * 2176) / 256) * 4,
-	.max_core_mbps = ((7680 * 4320) / 256) * 60, //TODO confirm!!
+	.max_core_mbps = (((3840 * 2176) / 256) * 120),
 	.input_config_params_default =
 		sm8550_vdec_input_config_params_default,
 	.input_config_params_default_size =
