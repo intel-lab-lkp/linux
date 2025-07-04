@@ -213,6 +213,7 @@ struct lskcipher_alg {
 };
 
 #define MAX_SYNC_SKCIPHER_REQSIZE      384
+#define MAX_SKCIPHER_REQSIZE	       384
 /*
  * This performs a type-check against the "_tfm" argument to make sure
  * all users have the correct skcipher tfm for doing on-stack requests.
@@ -224,6 +225,14 @@ struct lskcipher_alg {
 	struct skcipher_request *name = \
 		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
 			crypto_sync_skcipher_tfm((_tfm)), \
+		 (void *)__##name##_desc)
+
+#define SKCIPHER_REQUEST_ON_STACK(name, _tfm, reqsize) \
+	char __##name##_desc[sizeof(struct skcipher_request) + reqsize \
+		] CRYPTO_MINALIGN_ATTR; \
+	struct skcipher_request *name = \
+		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
+			crypto_skcipher_tfm((_tfm)), \
 		 (void *)__##name##_desc)
 
 /**
