@@ -161,6 +161,21 @@ parameters.
        * ``balanced`` : Merges fewer CQEs, resulting in a moderate compression ratio but maintaining a balance between bandwidth savings and performance
        * ``aggressive`` : Merges more CQEs into a single entry, achieving a higher compression rate and maximizing performance, particularly under high traffic loads
 
+   * - ``esw_hairpin_per_prio_log_queue_size``
+     - u32 array[8]
+     - permanent
+     - each item is log(base 2) of the number of packet descriptors allocated
+       internally for hairpin for IEEE802.1p priorities.
+       0 means that no descriptors are allocated for this priority
+       and traffic with this priority will be dropped.
+
+   * - ``esw_hairpin_per_prio_log_buf_size``
+     - u32 array[8]
+     - permanent
+     - each item is log(base 2) of the buffer size (in bytes) allocated internally
+       for hairpin for IEEE802.1p priorities.
+       0 means no buffer for this priority and traffic with this priority will be dropped.
+
 The ``mlx5`` driver supports reloading via ``DEVLINK_CMD_RELOAD``
 
 Info versions
