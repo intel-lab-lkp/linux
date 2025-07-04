@@ -4901,6 +4901,16 @@ static bool __maybe_unused its_enable_rk3568002(void *data)
 	return true;
 }
 
+static bool __maybe_unused its_enable_agilex5(void *data)
+{
+	if (!of_machine_is_compatible("intel,socfpga-agilex5"))
+		return false;
+
+	gfp_flags_quirk |= GFP_DMA32;
+
+	return true;
+}
+
 static const struct gic_quirk its_quirks[] = {
 #ifdef CONFIG_CAVIUM_ERRATUM_22375
 	{
@@ -4974,6 +4984,14 @@ static const struct gic_quirk its_quirks[] = {
 		.iidr   = 0x0201743b,
 		.mask   = 0xffffffff,
 		.init   = its_enable_rk3568002,
+	},
+#endif
+#ifdef ALTERA_AGILEX5_ADDR_BUS_WIDTH_LIMITATION
+	{
+		.desc   = "ITS: Altera Agilex5 address bus width limitation",
+		.iidr   = 0x0201743b,
+		.mask   = 0xffffffff,
+		.init   = its_enable_agilex5,
 	},
 #endif
 	{

@@ -1350,6 +1350,16 @@ config SOCIONEXT_SYNQUACER_PREITS
 
 	  If unsure, say Y.
 
+config ALTERA_AGILEX5_ADDR_BUS_WIDTH_LIMITATION
+	bool "Altera Agilex: GIC600 can not access physical addresses higher than 4GB"
+	default y
+	help
+	  Agilex5 address bus width for the ACE-lite interface is only 32 bits. Hence
+	  the GIC600 SoC integration for Agilex5 can only access the first 32bit of the
+	  physical address space.
+
+	  If unsure, say Y.
+
 endmenu # "ARM errata workarounds via the alternatives framework"
 
 choice
