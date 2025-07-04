@@ -281,6 +281,10 @@ struct ufs_qcom_host {
 	u32 phy_gear;
 
 	bool esi_enabled;
+
+	void __iomem *opr_start_base;
+	resource_size_t opr_start_off;
+	void __iomem *mcq_vs_base;
 };
 
 struct ufs_qcom_drvdata {

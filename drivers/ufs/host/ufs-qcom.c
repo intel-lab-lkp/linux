@@ -1715,7 +1715,7 @@ static void ufs_qcom_dump_testbus(struct ufs_hba *hba)
 }
 
 static int ufs_qcom_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
-			      const char *prefix, enum ufshcd_res id)
+			      const char *prefix, void __iomem *base)
 {
 	u32 *regs __free(kfree) = NULL;
 	size_t pos;
@@ -1728,7 +1728,7 @@ static int ufs_qcom_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		return -ENOMEM;
 
 	for (pos = 0; pos < len; pos += 4)
-		regs[pos / 4] = readl(hba->res[id].base + offset + pos);
+		regs[pos / 4] = readl(base + offset + pos);
 
 	print_hex_dump(KERN_ERR, prefix,
 		       len > 4 ? DUMP_PREFIX_OFFSET : DUMP_PREFIX_NONE,
@@ -1739,30 +1739,31 @@ static int ufs_qcom_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 
 static void ufs_qcom_dump_mcq_hci_regs(struct ufs_hba *hba)
 {
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct dump_info {
+		void __iomem *base;
 		size_t offset;
 		size_t len;
 		const char *prefix;
-		enum ufshcd_res id;
 	};
 
 	struct dump_info mcq_dumps[] = {
-		{0x0, 256 * 4, "MCQ HCI-0 ", RES_MCQ},
-		{0x400, 256 * 4, "MCQ HCI-1 ", RES_MCQ},
-		{0x0, 5 * 4, "MCQ VS-0 ", RES_MCQ_VS},
-		{0x0, 256 * 4, "MCQ SQD-0 ", RES_MCQ_SQD},
-		{0x400, 256 * 4, "MCQ SQD-1 ", RES_MCQ_SQD},
-		{0x800, 256 * 4, "MCQ SQD-2 ", RES_MCQ_SQD},
-		{0xc00, 256 * 4, "MCQ SQD-3 ", RES_MCQ_SQD},
-		{0x1000, 256 * 4, "MCQ SQD-4 ", RES_MCQ_SQD},
-		{0x1400, 256 * 4, "MCQ SQD-5 ", RES_MCQ_SQD},
-		{0x1800, 256 * 4, "MCQ SQD-6 ", RES_MCQ_SQD},
-		{0x1c00, 256 * 4, "MCQ SQD-7 ", RES_MCQ_SQD},
+		{hba->mcq_base, 0x0, 256 * 4, "MCQ HCI-0 "},
+		{hba->mcq_base, 0x400, 256 * 4, "MCQ HCI-1 "},
+		{host->mcq_vs_base, 0x0, 5 * 4, "MCQ VS-0 "},
+		{host->opr_start_base, 0x0, 256 * 4, "MCQ SQD-0 "},
+		{host->opr_start_base, 0x400, 256 * 4, "MCQ SQD-1 "},
+		{host->opr_start_base, 0x800, 256 * 4, "MCQ SQD-2 "},
+		{host->opr_start_base, 0xc00, 256 * 4, "MCQ SQD-3 "},
+		{host->opr_start_base, 0x1000, 256 * 4, "MCQ SQD-4 "},
+		{host->opr_start_base, 0x1400, 256 * 4, "MCQ SQD-5 "},
+		{host->opr_start_base, 0x1800, 256 * 4, "MCQ SQD-6 "},
+		{host->opr_start_base, 0x1c00, 256 * 4, "MCQ SQD-7 "},
 	};
 
 	for (int i = 0; i < ARRAY_SIZE(mcq_dumps); i++) {
 		ufs_qcom_dump_regs(hba, mcq_dumps[i].offset, mcq_dumps[i].len,
-				   mcq_dumps[i].prefix, mcq_dumps[i].id);
+				   mcq_dumps[i].prefix, mcq_dumps[i].base);
 		cond_resched();
 	}
 }
@@ -1891,74 +1892,44 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 }
 #endif
 
-/* Resources */
-static const struct ufshcd_res_info ufs_res_info[RES_MAX] = {
-	{.name = "mcq",},
-	/* Submission Queue DAO */
-	{.name = "mcq_sqd",},
-	/* Submission Queue Interrupt Status */
-	{.name = "mcq_sqis",},
-	/* Completion Queue DAO */
-	{.name = "mcq_cqd",},
-	/* Completion Queue Interrupt Status */
-	{.name = "mcq_cqis",},
-	/* MCQ vendor specific */
-	{.name = "mcq_vs",},
-};
-
 static int ufs_qcom_mcq_config_resource(struct ufs_hba *hba)
 {
 	struct platform_device *pdev = to_platform_device(hba->dev);
-	struct ufshcd_res_info *res;
-	int i, ret;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct resource *sqd_res;
 
-	memcpy(hba->res, ufs_res_info, sizeof(ufs_res_info));
-
-	for (i = 0; i < RES_MAX; i++) {
-		res = &hba->res[i];
-		res->resource = platform_get_resource_byname(pdev,
-							     IORESOURCE_MEM,
-							     res->name);
-		if (!res->resource) {
-			dev_info(hba->dev, "Resource %s not provided\n", res->name);
-			continue;
-		}
-
-		res->base = devm_ioremap_resource(hba->dev, res->resource);
-		if (IS_ERR(res->base)) {
-			dev_err(hba->dev, "Failed to map res %s, err=%d\n",
-					 res->name, (int)PTR_ERR(res->base));
-			ret = PTR_ERR(res->base);
-			res->base = NULL;
-			return ret;
-		}
-	}
-
-	res = &hba->res[RES_MCQ];
-	if (res->base)
+	hba->mcq_base = devm_platform_ioremap_resource_byname(pdev, "mcq");
+	if (!hba->mcq_base)
 		return -EINVAL;
 
-	hba->mcq_base = res->base;
+	sqd_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mcq_sqd");
+	if (!sqd_res)
+		return -EINVAL;
+
+	host->opr_start_base = devm_ioremap_resource(hba->dev, sqd_res);
+	if (!host->opr_start_base)
+		return -EINVAL;
+
+	host->opr_start_off = sqd_res->start - hba->hci_res->start;
+
+	host->mcq_vs_base = devm_platform_ioremap_resource_byname(pdev, "mcq_vs");
+	if (!host->mcq_vs_base)
+		return -EINVAL;
 
 	return 0;
 }
 
 static int ufs_qcom_op_runtime_config(struct ufs_hba *hba)
 {
-	struct ufshcd_res_info *sqdao_res;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufshcd_mcq_opr_info_t *opr;
 	int i;
 
-	sqdao_res = &hba->res[RES_MCQ_SQD];
-	if (!sqdao_res->base)
-		return -EINVAL;
-
 	for (i = 0; i < OPR_MAX; i++) {
 		opr = &hba->mcq_opr[i];
-		opr->offset = sqdao_res->resource->start -
-			      hba->hci_res->start + 0x40 * i;
+		opr->offset = host->opr_start_off + 0x40 * i;
 		opr->stride = 0x100;
-		opr->base = sqdao_res->base + 0x40 * i;
+		opr->base = host->opr_start_base + 0x40 * i;
 	}
 
 	return 0;
@@ -1973,12 +1944,12 @@ static int ufs_qcom_get_hba_mac(struct ufs_hba *hba)
 static int ufs_qcom_get_outstanding_cqs(struct ufs_hba *hba,
 					unsigned long *ocqs)
 {
-	struct ufshcd_res_info *mcq_vs_res = &hba->res[RES_MCQ_VS];
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
-	if (!mcq_vs_res->base)
+	if (!host->mcq_vs_base)
 		return -EINVAL;
 
-	*ocqs = readl(mcq_vs_res->base + UFS_MEM_CQIS_VS);
+	*ocqs = readl(host->mcq_vs_base + UFS_MEM_CQIS_VS);
 
 	return 0;
 }
