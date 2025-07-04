@@ -17,39 +17,21 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/module.h>
+#include <linux/prandom.h>
 #include <linux/hash.h>
 #include <linux/stringhash.h>
 #include <kunit/test.h>
 
-/* 32-bit XORSHIFT generator.  Seed must not be zero. */
-static u32 __attribute_const__
-xorshift(u32 seed)
-{
-	seed ^= seed << 13;
-	seed ^= seed >> 17;
-	seed ^= seed << 5;
-	return seed;
-}
-
-/* Given a non-zero x, returns a non-zero byte. */
-static u8 __attribute_const__
-mod255(u32 x)
-{
-	x = (x & 0xffff) + (x >> 16);	/* 1 <= x <= 0x1fffe */
-	x = (x & 0xff) + (x >> 8);	/* 1 <= x <= 0x2fd */
-	x = (x & 0xff) + (x >> 8);	/* 1 <= x <= 0x100 */
-	x = (x & 0xff) + (x >> 8);	/* 1 <= x <= 0xff */
-	return x;
-}
-
 /* Fill the buffer with non-zero bytes. */
-static void fill_buf(char *buf, size_t len, u32 seed)
+static void fill_buf(char *buf, size_t len, struct rnd_state *prng)
 {
 	size_t i;
 
 	for (i = 0; i < len; i++) {
-		seed = xorshift(seed);
-		buf[i] = mod255(seed);
+		/* we know our seeds, no need to worry about endless runtime */
+		do {
+			buf[i] = (u8) prandom_u32_state(prng);
+		} while (!buf[i]);
 	}
 }
 
@@ -143,11 +125,13 @@ test_int_hash(struct kunit *test, unsigned long long h64, u32 hash_or[2][33])
 
 static void test_string_or(struct kunit *test)
 {
-	char buf[SIZE+1];
+	struct rnd_state prng;
 	u32 string_or = 0;
+	char buf[SIZE+1];
 	int i, j;
 
-	fill_buf(buf, SIZE, 1);
+	prandom_seed_state(&prng, 0x1);
+	fill_buf(buf, SIZE, &prng);
 
 	/* Test every possible non-empty substring in the buffer. */
 	for (j = SIZE; j > 0; --j) {
@@ -171,9 +155,11 @@ static void test_hash_or(struct kunit *test)
 	char buf[SIZE+1];
 	u32 hash_or[2][33] = { { 0, } };
 	unsigned long long h64 = 0;
+	struct rnd_state prng;
 	int i, j;
 
-	fill_buf(buf, SIZE, 1);
+	prandom_seed_state(&prng, 0x1);
+	fill_buf(buf, SIZE, &prng);
 
 	/* Test every possible non-empty substring in the buffer. */
 	for (j = SIZE; j > 0; --j) {
