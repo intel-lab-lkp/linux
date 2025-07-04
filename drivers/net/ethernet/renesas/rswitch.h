@@ -849,6 +849,7 @@ enum rswitch_gwca_mode {
 #define FWMACAGC_MACDESOG	BIT(29)
 
 #define RSW_AGEING_TIME		300
+#define RSW_MAX_AGEING_TIME	65535
 
 /* TOP */
 #define TPEMIMC7(queue)		(TPEMIMC70 + (queue) * 4)
