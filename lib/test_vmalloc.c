@@ -54,6 +54,7 @@ __param(int, run_test_mask, 7,
 		"\t\tid: 256,  name: kvfree_rcu_1_arg_vmalloc_test\n"
 		"\t\tid: 512,  name: kvfree_rcu_2_arg_vmalloc_test\n"
 		"\t\tid: 1024, name: vm_map_ram_test\n"
+		"\t\tid: 2048, name: no_block_alloc_test\n"
 		/* Add a new test case description here. */
 );
 
@@ -283,6 +284,31 @@ static int fix_size_alloc_test(void)
 	return 0;
 }
 
+static DEFINE_SPINLOCK(no_block_alloc_lock);
+
+static int no_block_alloc_test(void)
+{
+	void *ptr;
+	u8 rnd;
+	int i;
+
+	for (i = 0; i < test_loop_count; i++) {
+		rnd = get_random_u8();
+
+		spin_lock(&no_block_alloc_lock);
+		ptr = __vmalloc(PAGE_SIZE, (rnd % 2) ? GFP_NOWAIT : GFP_ATOMIC);
+		spin_unlock(&no_block_alloc_lock);
+
+		if (!ptr)
+			return -1;
+
+		*((__u8 *)ptr) = 0;
+		vfree(ptr);
+	}
+
+	return 0;
+}
+
 static int
 pcpu_alloc_test(void)
 {
@@ -410,6 +436,7 @@ static struct test_case_desc test_case_array[] = {
 	{ "kvfree_rcu_1_arg_vmalloc_test", kvfree_rcu_1_arg_vmalloc_test },
 	{ "kvfree_rcu_2_arg_vmalloc_test", kvfree_rcu_2_arg_vmalloc_test },
 	{ "vm_map_ram_test", vm_map_ram_test },
+	{ "no_block_alloc_test", no_block_alloc_test },
 	/* Add a new test case here. */
 };
 
