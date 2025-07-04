@@ -1120,14 +1120,13 @@ static void hdm_disconnect(struct usb_interface *interface)
 
 	if (mdev->dci)
 		device_unregister(&mdev->dci->dev);
-	most_deregister_interface(&mdev->iface);
 
 	kfree(mdev->busy_urbs);
 	kfree(mdev->cap);
 	kfree(mdev->conf);
 	kfree(mdev->ep_address);
 	put_device(&mdev->dci->dev);
-	put_device(&mdev->dev);
+	most_deregister_interface(&mdev->iface);
 }
 
 static int hdm_suspend(struct usb_interface *interface, pm_message_t message)
