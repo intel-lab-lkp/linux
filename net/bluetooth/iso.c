@@ -2301,12 +2301,20 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 		if (ts) {
 			struct hci_iso_ts_data_hdr *hdr;
 
-			/* TODO: add timestamp to the packet? */
 			hdr = skb_pull_data(skb, HCI_ISO_TS_DATA_HDR_SIZE);
 			if (!hdr) {
 				BT_ERR("Frame is too short (len %d)", skb->len);
 				goto drop;
 			}
+
+			/* The ISO ts is based on the controller’s clock domain,
+			 * so hardware timestamping (hwtimestamp) must be used.
+			 * Ref: Documentation/networking/timestamping.rst,
+			 * chapter 3.1 Hardware Timestamping.
+ 			 */
+			struct skb_shared_hwtstamps *hwts = skb_hwtstamps(skb);
+			if (hwts)
+				hwts->hwtstamp = us_to_ktime(le32_to_cpu(hdr->ts));
 
 			len = __le16_to_cpu(hdr->slen);
 		} else {
