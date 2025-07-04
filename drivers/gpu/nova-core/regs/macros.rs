@@ -76,15 +76,17 @@
 /// for cases where a register's interpretation depends on the context:
 ///
 /// ```no_run
-/// register!(SCRATCH_0 @ 0x0000100, "Scratch register 0" {
+/// register!(SCRATCH @ 0x0000200, "Scratch register" {
 ///    31:0     value as u32, "Raw value";
+/// });
 ///
-/// register!(SCRATCH_0_BOOT_STATUS => SCRATCH_0, "Boot status of the firmware" {
+/// register!(SCRATCH_BOOT_STATUS => SCRATCH, "Boot status of the firmware" {
 ///     0:0     completed as bool, "Whether the firmware has completed booting";
+/// });
 /// ```
 ///
 /// In this example, `SCRATCH_0_BOOT_STATUS` uses the same I/O address as `SCRATCH_0`, while also
-/// providing its own `completed` method.
+/// providing its own `completed` field.
 macro_rules! register {
     // Creates a register at a fixed offset of the MMIO space.
     (
