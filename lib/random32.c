@@ -26,6 +26,8 @@
 #include <linux/slab.h>
 #include <linux/unaligned.h>
 
+#define IS_ALL_ZERO_STATE(state) (!state->s[0] && !state->s[1] && !state->s[2] && !state->s[3])
+
 /**
  *	prandom_u64_state - seeded pseudo-random number generator.
  *	@state: pointer to state structure holding seeded state.
@@ -39,6 +41,9 @@ u64 prandom_u64_state(struct rnd_state *state)
 {
 	const u64 result = rol64(state->s[0] + state->s[3], 23) + state->s[0];
 	const u64 t = state->s[1] << 17;
+
+	/* defensive check, as this fn returns always zero otherwise */
+	BUG_ON(IS_ALL_ZERO_STATE(state));
 
 	state->s[2] ^= state->s[0];
 	state->s[3] ^= state->s[1];
@@ -108,6 +113,12 @@ EXPORT_SYMBOL(prandom_bytes_state);
  *
  * splitmix64 init as suggested for xoshiro256++
  * See: https://prng.di.unimi.it/splitmix64.c
+ *
+ * Seeding with this routine cannot result in an
+ * all zeroes state due to the addition operation
+ * with the fixed constant 0x9e3779b97f4a7c15!
+ * Nevertheless check early for such a state
+ * as a defensive mechanism.
  */
 void prandom_seed_state(struct rnd_state *state, u64 seed)
 {
@@ -120,6 +131,9 @@ void prandom_seed_state(struct rnd_state *state, u64 seed)
 		z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
 		state->s[i] = z ^ (z >> 31);
 	}
+
+	/* shall never happen */
+	BUG_ON(IS_ALL_ZERO_STATE(state));
 }
 EXPORT_SYMBOL(prandom_seed_state);
 
@@ -133,7 +147,16 @@ void prandom_seed_full_state(struct rnd_state __percpu *pcpu_state)
 
 	for_each_possible_cpu(i) {
 		struct rnd_state *state = per_cpu_ptr(pcpu_state, i);
-		get_random_bytes(&state->s, sizeof(state->s));
+		memset(state, 0, sizeof(struct rnd_state));
+		/*
+		 * Internal state MUST not be all zeroes. Check and repeat if necessary.
+		 *
+		 * Highly unlikely, that we ever need more than one round. Just defensive
+		 * coding, as this could happen in theory.
+		 */
+		while (IS_ALL_ZERO_STATE(state)) {
+			get_random_bytes(&state->s, sizeof(state->s));
+		}
 	}
 }
 EXPORT_SYMBOL(prandom_seed_full_state);
