@@ -1406,6 +1406,8 @@ ressizes||resizes
 ressource||resource
 ressources||resources
 restesting||retesting
+restiction||restriction
+restictions||restrictions
 resumbmitting||resubmitting
 retransmited||retransmitted
 retreived||retrieved
