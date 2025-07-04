@@ -579,14 +579,14 @@ iris_helper_find_buf(struct iris_inst *inst, u32 type, u32 idx)
 		return v4l2_m2m_dst_buf_remove_by_idx(m2m_ctx, idx);
 }
 
-static void iris_get_ts_metadata(struct iris_inst *inst, u64 timestamp_ns,
+static void iris_get_ts_metadata(struct iris_inst *inst, u64 timestamp_us,
 				 struct vb2_v4l2_buffer *vbuf)
 {
 	u32 mask = V4L2_BUF_FLAG_TIMECODE | V4L2_BUF_FLAG_TSTAMP_SRC_MASK;
 	u32 i;
 
 	for (i = 0; i < ARRAY_SIZE(inst->tss); ++i) {
-		if (inst->tss[i].ts_ns != timestamp_ns)
+		if (inst->tss[i].ts_us != timestamp_us)
 			continue;
 
 		vbuf->flags &= ~mask;
@@ -653,7 +653,7 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 	}
 
 	state = VB2_BUF_STATE_DONE;
-	vb2->timestamp = buf->timestamp;
+	vb2->timestamp = buf->timestamp * NSEC_PER_USEC;
 	v4l2_m2m_buf_done(vbuf, state);
 
 	return 0;
