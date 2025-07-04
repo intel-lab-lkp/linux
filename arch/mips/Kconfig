@@ -2329,6 +2329,12 @@ config MIPS_CPS
 	  no external assistance. It is safe to enable this when hardware
 	  support is unavailable.
 
+config MIPS_CPS_CLUSTER_MAX
+       int "Maximum cluster supported"
+       default 4
+       help
+	Maximum number of cluster available on the SoC.
+
 config MIPS_CPS_PM
 	depends on MIPS_CPS
 	bool

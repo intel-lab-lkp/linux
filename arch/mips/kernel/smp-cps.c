@@ -40,6 +40,7 @@ static u64 core_entry_reg;
 static phys_addr_t cps_vec_pa;
 
 struct cluster_boot_config *mips_cps_cluster_bootcfg;
+struct cpumask __cpu_cluster_mask[CONFIG_MIPS_CPS_CLUSTER_MAX] __read_mostly;
 
 static void power_up_other_cluster(unsigned int cluster)
 {
@@ -242,6 +243,7 @@ static void __init cps_smp_setup(void)
 				cpu_set_cluster(&cpu_data[nvpes + v], cl);
 				cpu_set_core(&cpu_data[nvpes + v], c);
 				cpu_set_vpe_id(&cpu_data[nvpes + v], v);
+				cpumask_set_cpu(nvpes + v, &__cpu_cluster_mask[cl]);
 			}
 
 			nvpes += core_vpes;

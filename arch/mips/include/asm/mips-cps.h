@@ -12,6 +12,8 @@
 #include <linux/io.h>
 #include <linux/types.h>
 
+extern struct cpumask __cpu_cluster_mask[CONFIG_MIPS_CPS_CLUSTER_MAX] __read_mostly;
+
 extern unsigned long __cps_access_bad_size(void)
 	__compiletime_error("Bad size for CPS accessor");
 
@@ -114,10 +116,20 @@ static inline void clear_##unit##_##name(uint##sz##_t val)		\
  */
 static inline unsigned int mips_cps_numclusters(void)
 {
+	unsigned int nclusters;
+
 	if (mips_cm_revision() < CM_REV_CM3_5)
 		return 1;
 
-	return FIELD_GET(CM_GCR_CONFIG_NUM_CLUSTERS, read_gcr_config());
+	nclusters = FIELD_GET(CM_GCR_CONFIG_NUM_CLUSTERS, read_gcr_config());
+	if (nclusters > CONFIG_MIPS_CPS_CLUSTER_MAX) {
+		pr_warn("%d clusters detected but limited to %d because of CONFIG_MIPS_CPU_CLUSTER_MAX value\n"
+			"consider modifying it to match the hardware capability.\n",
+			nclusters, CONFIG_MIPS_CPS_CLUSTER_MAX);
+		nclusters = CONFIG_MIPS_CPS_CLUSTER_MAX;
+	}
+
+	return nclusters;
 }
 
 /**
@@ -258,6 +270,8 @@ static inline bool mips_cps_multicluster_cpus(void)
 
 /**
  * mips_cps_first_online_in_cluster() - Detect if CPU is first online in cluster
+ * @first_cpu: The first other online CPU in cluster, or nr_cpu_ids if
+ * the function returns true.
  *
  * Determine whether the local CPU is the first to be brought online in its
  * cluster - that is, whether there are any other online CPUs in the local
@@ -265,6 +279,6 @@ static inline bool mips_cps_multicluster_cpus(void)
  *
  * Returns true if this CPU is first online, else false.
  */
-extern unsigned int mips_cps_first_online_in_cluster(void);
+extern unsigned int mips_cps_first_online_in_cluster(int *first_cpu);
 
 #endif /* __MIPS_ASM_MIPS_CPS_H__ */
