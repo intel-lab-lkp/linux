@@ -1899,7 +1899,7 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 
 /* Resources */
 static const struct ufshcd_res_info ufs_res_info[RES_MAX] = {
-	{.name = "ufs_mem",},
+	{.name = "std",},
 	{.name = "mcq",},
 	/* Submission Queue DAO */
 	{.name = "mcq_sqd",},
