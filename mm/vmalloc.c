@@ -3685,6 +3685,36 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 	return nr_allocated;
 }
 
+static LLIST_HEAD(pending_vm_area_cleanup);
+
+static void cleanup_vm_area_work(struct work_struct *work)
+{
+	struct llist_node *node, *next;
+	struct vm_struct *vm;
+
+	llist_for_each_safe(node, next, llist_del_all(&pending_vm_area_cleanup)) {
+		vm = (void *) node - offsetof(struct vm_struct, next);
+
+		if (!vm->nr_pages)
+			free_vm_area(vm);
+		else
+			vfree(vm->addr);
+	}
+}
+
+static DECLARE_WORK(cleanup_vm_area, cleanup_vm_area_work);
+
+/*
+ * Helper for __vmalloc_area_node() to defer cleanup
+ * of partially initialized vm_struct in error paths.
+ */
+static void
+defer_vm_area_cleanup(struct vm_struct *area)
+{
+	if (llist_add((struct llist_node *) &area->next, &pending_vm_area_cleanup))
+		schedule_work(&cleanup_vm_area);
+}
+
 static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 				 pgprot_t prot, unsigned int page_shift,
 				 int node)
@@ -3716,8 +3746,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		warn_alloc(gfp_mask, NULL,
 			"vmalloc error: size %lu, failed to allocated page array size %lu",
 			nr_small_pages * PAGE_SIZE, array_size);
-		free_vm_area(area);
-		return NULL;
+		goto fail;
 	}
 
 	set_vm_area_page_order(area, page_shift - PAGE_SHIFT);
@@ -3794,7 +3823,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	return area->addr;
 
 fail:
-	vfree(area->addr);
+	defer_vm_area_cleanup(area);
 	return NULL;
 }
 
