@@ -14,7 +14,7 @@
 #include <linux/prctl.h>
 #include <sys/prctl.h>
 
-#include "logging.h"
+#include "../../kselftest_harness.h"
 
 #define MAX_THREADS	64
 
@@ -111,50 +111,42 @@ static void join_max_threads(void)
 	}
 }
 
-static void usage(char *prog)
-{
-	printf("Usage: %s\n", prog);
-	printf("  -c    Use color\n");
-	printf("  -g    Test global hash instead intead local immutable \n");
-	printf("  -h    Display this help message\n");
-	printf("  -v L  Verbosity level: %d=QUIET %d=CRITICAL %d=INFO\n",
-	       VQUIET, VCRITICAL, VINFO);
-}
-
 static const char *test_msg_auto_create = "Automatic hash bucket init on thread creation.\n";
 static const char *test_msg_auto_inc = "Automatic increase with more than 16 CPUs\n";
 
-int main(int argc, char *argv[])
+FIXTURE(global_hash)
+{
+};
+
+FIXTURE_VARIANT(global_hash)
+{
+	bool use_global_hash;
+};
+
+FIXTURE_VARIANT_ADD(global_hash, enabled)
+{
+	.use_global_hash = true,
+};
+
+FIXTURE_VARIANT_ADD(global_hash, disabled)
+{
+	.use_global_hash = false,
+};
+
+FIXTURE_SETUP(global_hash)
+{
+}
+
+FIXTURE_TEARDOWN(global_hash)
+{
+}
+
+TEST_F(global_hash, priv_hash)
 {
 	int futex_slots1, futex_slotsn, online_cpus;
 	pthread_mutexattr_t mutex_attr_pi;
-	int use_global_hash = 0;
+	int use_global_hash = variant->use_global_hash;
 	int ret;
-	int c;
-
-	while ((c = getopt(argc, argv, "cghv:")) != -1) {
-		switch (c) {
-		case 'c':
-			log_color(1);
-			break;
-		case 'g':
-			use_global_hash = 1;
-			break;
-		case 'h':
-			usage(basename(argv[0]));
-			exit(0);
-			break;
-		case 'v':
-			log_verbosity(atoi(optarg));
-			break;
-		default:
-			usage(basename(argv[0]));
-			exit(1);
-		}
-	}
-
-	ksft_print_header();
-	ksft_set_plan(22);
 
 	ret = pthread_mutexattr_init(&mutex_attr_pi);
 	ret |= pthread_mutexattr_setprotocol(&mutex_attr_pi, PTHREAD_PRIO_INHERIT);
@@ -259,7 +251,7 @@ int main(int argc, char *argv[])
 		ksft_test_result(ret == 0, "Immutable resize to 4\n");
 	}
 	if (ret != 0)
-		goto out;
+		return;
 
 	futex_hash_slots_set_must_fail(4, 0);
 	futex_hash_slots_set_must_fail(4, FH_FLAG_IMMUTABLE);
@@ -269,10 +261,9 @@ int main(int argc, char *argv[])
 	futex_hash_slots_set_must_fail(6, FH_FLAG_IMMUTABLE);
 
 	ret = pthread_barrier_init(&barrier_main, NULL, MAX_THREADS);
-	if (ret != 0) {
+	if (ret != 0)
 		ksft_exit_fail_msg("pthread_barrier_init failed: %m\n");
-		return 1;
-	}
+
 	create_max_threads(thread_lock_fn);
 	join_max_threads();
 
@@ -285,8 +276,6 @@ int main(int argc, char *argv[])
 
 	ret = futex_hash_immutable_get();
 	ksft_test_result(ret == 1, "Hash reports to be immutable\n");
-
-out:
-	ksft_finished();
-	return 0;
 }
+
+TEST_HARNESS_MAIN
