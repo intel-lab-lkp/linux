@@ -30,6 +30,8 @@ devlink_attr_param_type_validate(const struct nlattr *attr,
 		fallthrough;
 	case DEVLINK_VAR_ATTR_TYPE_NUL_STRING:
 		fallthrough;
+	case DEVLINK_VAR_ATTR_TYPE_U32_ARRAY:
+		fallthrough;
 	case DEVLINK_VAR_ATTR_TYPE_BINARY:
 		return 0;
 	}
