@@ -775,18 +775,10 @@ impl<'a, K, V> Cursor<'a, K, V> {
         // the tree cannot change. By the tree invariant, all nodes are valid.
         unsafe { bindings::rb_erase(&mut (*this).links, addr_of_mut!(self.tree.root)) };
 
-        let current = match (prev, next) {
-            (_, Some(next)) => next,
-            (Some(prev), None) => prev,
-            (None, None) => {
-                return (None, node);
-            }
-        };
-
         (
-            // INVARIANT:
-            // - `current` is a valid node in the [`RBTree`] pointed to by `self.tree`.
-            Some(Self {
+            next.or(prev).map(|current| Self {
+                // INVARIANT:
+                // - `current` is a valid node in the [`RBTree`] pointed to by `self.tree`.
                 current,
                 tree: self.tree,
             }),
