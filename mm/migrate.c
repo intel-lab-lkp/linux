@@ -1588,7 +1588,7 @@ static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 			 *	-ENOMEM: stay on the from list
 			 *	Other errno: put on ret_folios list
 			 */
-			switch(rc) {
+			switch (rc) {
 			case -ENOMEM:
 				/*
 				 * When memory is low, don't bother to try to migrate
@@ -1815,7 +1815,7 @@ static int migrate_pages_batch(struct list_head *from,
 			 *	-ENOMEM: stay on the from list
 			 *	Other errno: put on ret_folios list
 			 */
-			switch(rc) {
+			switch (rc) {
 			case -ENOMEM:
 				/*
 				 * When memory is low, don't bother to try to migrate
