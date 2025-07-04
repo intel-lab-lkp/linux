@@ -16,9 +16,9 @@
 #include <linux/futex.h>
 #include <sys/mman.h>
 
-#include "logging.h"
 #include "futextest.h"
 #include "futex2test.h"
+#include "../../kselftest_harness.h"
 
 #define MAX_THREADS	64
 
@@ -130,44 +130,25 @@ static void test_futex_mpol(void *futex_ptr, int must_fail)
 	__test_futex(futex_ptr, must_fail, FUTEX2_SIZE_U32 | FUTEX_PRIVATE_FLAG | FUTEX2_NUMA | FUTEX2_MPOL);
 }
 
-static void usage(char *prog)
-{
-	printf("Usage: %s\n", prog);
-	printf("  -c    Use color\n");
-	printf("  -h    Display this help message\n");
-	printf("  -v L  Verbosity level: %d=QUIET %d=CRITICAL %d=INFO\n",
-	       VQUIET, VCRITICAL, VINFO);
-}
-
-int main(int argc, char *argv[])
+TEST(futex_numa_mpol)
 {
 	struct futex32_numa *futex_numa;
 	int mem_size, i;
-	void *futex_ptr;
-	int c;
-
-	while ((c = getopt(argc, argv, "chv:")) != -1) {
-		switch (c) {
-		case 'c':
-			log_color(1);
-			break;
-		case 'h':
-			usage(basename(argv[0]));
-			exit(0);
-			break;
-		case 'v':
-			log_verbosity(atoi(optarg));
-			break;
-		default:
-			usage(basename(argv[0]));
-			exit(1);
-		}
-	}
-
-	ksft_print_header();
-	ksft_set_plan(1);
+	void *futex_ptr, *buffer_zone;
 
 	mem_size = sysconf(_SC_PAGE_SIZE);
+
+	/*
+	 * test_harness_run() calls mmap(..., MAP_SHARED, ...), which can create
+	 * a valid access memory region just bellow the mmap() issue here. Then,
+	 * the test for "Memory out of range" will fail because it will succeed
+	 * accessing the memory address after the range. To avoid this we create
+	 * a "Buffer zone" with PROT_NONE between the two mmap's.
+	 */
+	buffer_zone = mmap(NULL, mem_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	if (buffer_zone == MAP_FAILED)
+		ksft_exit_fail_msg("mmap() for %d bytes failed\n", mem_size);
+
 	futex_ptr = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if (futex_ptr == MAP_FAILED)
 		ksft_exit_fail_msg("mmap() for %d bytes failed\n", mem_size);
@@ -229,7 +210,9 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-	ksft_test_result_pass("NUMA MPOL tests passed\n");
-	ksft_finished();
-	return 0;
+
+	munmap(buffer_zone, mem_size);
+	munmap(futex_ptr, mem_size);
 }
+
+TEST_HARNESS_MAIN
