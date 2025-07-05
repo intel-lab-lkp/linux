@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config GREYBUS_CPC
+	tristate "Greybus CPC driver"
+	depends on SPI
+	select CRC_ITU_T
+	help
+	  Select this option if you have a Silicon Labs EFR32 device that acts
+	  as a Greybus SVC.
+
+	  To compile this code as a module, chose M here: the module will be
+	  called gb-cpc.ko

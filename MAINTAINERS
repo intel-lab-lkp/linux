@@ -10416,6 +10416,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/net/ti,cc1352p7.yaml
 F:	drivers/greybus/gb-beagleplay.c
 
+GREYBUS CPC DRIVERS
+M:	Damien Riégel <damien.riegel@silabs.com>
+R:	Silicon Labs Kernel Team <linux-devel@silabs.com>
+S:	Supported
+F:	drivers/greybus/cpc/*
+
 GREYBUS SUBSYSTEM
 M:	Johan Hovold <johan@kernel.org>
 M:	Alex Elder <elder@kernel.org>

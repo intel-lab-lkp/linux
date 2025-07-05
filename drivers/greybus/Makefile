@@ -21,6 +21,8 @@ ccflags-y += -I$(src)
 # Greybus Host controller drivers
 obj-$(CONFIG_GREYBUS_BEAGLEPLAY)	+= gb-beagleplay.o
 
+obj-$(CONFIG_GREYBUS_CPC)	+= cpc/
+
 gb-es2-y := es2.o
 
 obj-$(CONFIG_GREYBUS_ES2)	+= gb-es2.o
