@@ -12,7 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/wmi.h>
 #include "bioscfg.h"
-#include "../../firmware_attributes_class.h"
+#include <linux/firmware_attributes_class.h>
 #include <linux/nls.h>
 #include <linux/errno.h>
 
