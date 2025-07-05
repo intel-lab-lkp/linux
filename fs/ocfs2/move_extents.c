@@ -617,6 +617,8 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 	 */
 	credits += OCFS2_INODE_UPDATE_CREDITS + 1;
 
+	inode_lock(tl_inode);
+
 	/*
 	 * ocfs2_move_extent() didn't reserve any clusters in lock_allocators()
 	 * logic, while we still need to lock the global_bitmap.
@@ -636,8 +638,6 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 		mlog_errno(ret);
 		goto out_unlock_gb_mutex;
 	}
-
-	inode_lock(tl_inode);
 
 	handle = ocfs2_start_trans(osb, credits);
 	if (IS_ERR(handle)) {
