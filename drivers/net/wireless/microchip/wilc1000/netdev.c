@@ -960,7 +960,7 @@ struct wilc_vif *wilc_netdev_ifc_init(struct wilc *wl, const char *name,
 
 	vif = netdev_priv(ndev);
 	ndev->ieee80211_ptr = &vif->priv.wdev;
-	strcpy(ndev->name, name);
+	strscpy(ndev->name, name, sizeof(ndev->name));
 	vif->wilc = wl;
 	vif->ndev = ndev;
 	ndev->ml_priv = vif;
