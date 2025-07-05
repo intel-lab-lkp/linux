@@ -40,15 +40,18 @@ void __init init_environ(void)
 static int __init init_cpu_fullname(void)
 {
 	struct device_node *root;
+	const char *model;
 	int cpu, ret;
-	char *model;
+	char *tmp;
 
 	/* Parsing cpuname from DTS model property */
 	root = of_find_node_by_path("/");
-	ret = of_property_read_string(root, "model", (const char **)&model);
+	ret = of_property_read_string(root, "model", &model);
+	if (ret == 0) {
+		tmp = kstrdup(model, GFP_KERNEL);
+		loongson_sysconf.cpuname = strsep(&tmp, " ");
+	}
 	of_node_put(root);
-	if (ret == 0)
-		loongson_sysconf.cpuname = strsep(&model, " ");
 
 	if (loongson_sysconf.cpuname && !strncmp(loongson_sysconf.cpuname, "Loongson", 8)) {
 		for (cpu = 0; cpu < NR_CPUS; cpu++)
