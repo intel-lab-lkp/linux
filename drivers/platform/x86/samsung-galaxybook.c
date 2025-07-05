@@ -36,8 +36,6 @@ struct samsung_galaxybook {
 	struct platform_device *platform;
 	struct acpi_device *acpi;
 
-	struct device *fw_attrs_dev;
-	struct kset *fw_attrs_kset;
 	/* block in case firmware attributes are updated in multiple threads */
 	struct mutex fw_attr_lock;
 
@@ -58,36 +56,6 @@ struct samsung_galaxybook {
 	struct acpi_battery_hook battery_hook;
 
 	u8 profile_performance_modes[PLATFORM_PROFILE_LAST];
-};
-
-enum galaxybook_fw_attr_id {
-	GB_ATTR_POWER_ON_LID_OPEN,
-	GB_ATTR_USB_CHARGING,
-	GB_ATTR_BLOCK_RECORDING,
-};
-
-static const char * const galaxybook_fw_attr_name[] = {
-	[GB_ATTR_POWER_ON_LID_OPEN] = "power_on_lid_open",
-	[GB_ATTR_USB_CHARGING]      = "usb_charging",
-	[GB_ATTR_BLOCK_RECORDING]   = "block_recording",
-};
-
-static const char * const galaxybook_fw_attr_desc[] = {
-	[GB_ATTR_POWER_ON_LID_OPEN] = "Power On Lid Open",
-	[GB_ATTR_USB_CHARGING]      = "USB Charging",
-	[GB_ATTR_BLOCK_RECORDING]   = "Block Recording",
-};
-
-#define GB_ATTR_LANGUAGE_CODE "en_US.UTF-8"
-
-struct galaxybook_fw_attr {
-	struct samsung_galaxybook *galaxybook;
-	enum galaxybook_fw_attr_id fw_attr_id;
-	struct attribute_group attr_group;
-	struct kobj_attribute display_name;
-	struct kobj_attribute current_value;
-	int (*get_value)(struct samsung_galaxybook *galaxybook, bool *value);
-	int (*set_value)(struct samsung_galaxybook *galaxybook, const bool value);
 };
 
 struct sawb {
@@ -908,193 +876,106 @@ static int galaxybook_block_recording_init(struct samsung_galaxybook *galaxybook
 
 /* Firmware Attributes setup */
 
-static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+static const char * const galaxybook_possible_vals[] = {
+	[false] = "0", [true] = "1", NULL
+};
+
+static int power_on_lid_open_read(struct device *dev, long id, int *val_idx)
 {
-	return sysfs_emit(buf, "enumeration\n");
-}
-
-static struct kobj_attribute fw_attr_type = __ATTR_RO(type);
-
-static ssize_t default_value_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	return sysfs_emit(buf, "0\n");
-}
-
-static struct kobj_attribute fw_attr_default_value = __ATTR_RO(default_value);
-
-static ssize_t possible_values_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	return sysfs_emit(buf, "0;1\n");
-}
-
-static struct kobj_attribute fw_attr_possible_values = __ATTR_RO(possible_values);
-
-static ssize_t display_name_language_code_show(struct kobject *kobj, struct kobj_attribute *attr,
-					       char *buf)
-{
-	return sysfs_emit(buf, "%s\n", GB_ATTR_LANGUAGE_CODE);
-}
-
-static struct kobj_attribute fw_attr_display_name_language_code =
-	__ATTR_RO(display_name_language_code);
-
-static ssize_t display_name_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	struct galaxybook_fw_attr *fw_attr =
-		container_of(attr, struct galaxybook_fw_attr, display_name);
-
-	return sysfs_emit(buf, "%s\n", galaxybook_fw_attr_desc[fw_attr->fw_attr_id]);
-}
-
-static ssize_t current_value_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	struct galaxybook_fw_attr *fw_attr =
-		container_of(attr, struct galaxybook_fw_attr, current_value);
-	bool value;
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
+	bool val;
 	int err;
 
-	err = fw_attr->get_value(fw_attr->galaxybook, &value);
+	err = power_on_lid_open_acpi_get(galaxybook, &val);
 	if (err)
 		return err;
 
-	return sysfs_emit(buf, "%u\n", value);
+	*val_idx = val;
+
+	return 0;
 }
 
-static ssize_t current_value_store(struct kobject *kobj, struct kobj_attribute *attr,
-				   const char *buf, size_t count)
+static int power_on_lid_open_write(struct device *dev, long id, int val_idx)
 {
-	struct galaxybook_fw_attr *fw_attr =
-		container_of(attr, struct galaxybook_fw_attr, current_value);
-	struct samsung_galaxybook *galaxybook = fw_attr->galaxybook;
-	bool value;
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
+
+	return power_on_lid_open_acpi_set(galaxybook, val_idx ? true : false);
+}
+
+DEFINE_FWAT_ENUM_GROUP(power_on_lid_open, "Power On Lid Open", galaxybook_possible_vals,
+		       false, 0644, FWAT_ENUM_ALL_ATTRS);
+
+static int usb_charging_read(struct device *dev, long id, int *val_idx)
+{
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
+	bool val;
 	int err;
 
-	if (!count)
-		return -EINVAL;
-
-	err = kstrtobool(buf, &value);
+	err = usb_charging_acpi_get(galaxybook, &val);
 	if (err)
 		return err;
 
-	guard(mutex)(&galaxybook->fw_attr_lock);
+	*val_idx = val;
 
-	err = fw_attr->set_value(galaxybook, value);
+	return 0;
+}
+
+static int usb_charging_write(struct device *dev, long id, int val_idx)
+{
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
+
+	return usb_charging_acpi_set(galaxybook, val_idx ? true : false);
+}
+
+DEFINE_FWAT_ENUM_GROUP(usb_charging, "USB Charging", galaxybook_possible_vals,
+		       false, 0644, FWAT_ENUM_ALL_ATTRS);
+
+static int block_recording_read(struct device *dev, long id, int *val_idx)
+{
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
+	bool val;
+	int err;
+
+	err = block_recording_acpi_get(galaxybook, &val);
 	if (err)
 		return err;
 
-	return count;
+	*val_idx = val;
+
+	return 0;
 }
 
-#define NUM_FW_ATTR_ENUM_ATTRS  6
-
-static int galaxybook_fw_attr_init(struct samsung_galaxybook *galaxybook,
-				   const enum galaxybook_fw_attr_id fw_attr_id,
-				   int (*get_value)(struct samsung_galaxybook *galaxybook,
-						    bool *value),
-				   int (*set_value)(struct samsung_galaxybook *galaxybook,
-						    const bool value))
+static int block_recording_write(struct device *dev, long id, int val_idx)
 {
-	struct galaxybook_fw_attr *fw_attr;
-	struct attribute **attrs;
 
-	fw_attr = devm_kzalloc(&galaxybook->platform->dev, sizeof(*fw_attr), GFP_KERNEL);
-	if (!fw_attr)
-		return -ENOMEM;
+	struct samsung_galaxybook *galaxybook = dev_get_drvdata(dev);
 
-	attrs = devm_kcalloc(&galaxybook->platform->dev, NUM_FW_ATTR_ENUM_ATTRS + 1,
-			     sizeof(*attrs), GFP_KERNEL);
-	if (!attrs)
-		return -ENOMEM;
-
-	attrs[0] = &fw_attr_type.attr;
-	attrs[1] = &fw_attr_default_value.attr;
-	attrs[2] = &fw_attr_possible_values.attr;
-	attrs[3] = &fw_attr_display_name_language_code.attr;
-
-	sysfs_attr_init(&fw_attr->display_name.attr);
-	fw_attr->display_name.attr.name = "display_name";
-	fw_attr->display_name.attr.mode = 0444;
-	fw_attr->display_name.show = display_name_show;
-	attrs[4] = &fw_attr->display_name.attr;
-
-	sysfs_attr_init(&fw_attr->current_value.attr);
-	fw_attr->current_value.attr.name = "current_value";
-	fw_attr->current_value.attr.mode = 0644;
-	fw_attr->current_value.show = current_value_show;
-	fw_attr->current_value.store = current_value_store;
-	attrs[5] = &fw_attr->current_value.attr;
-
-	attrs[6] = NULL;
-
-	fw_attr->galaxybook = galaxybook;
-	fw_attr->fw_attr_id = fw_attr_id;
-	fw_attr->attr_group.name = galaxybook_fw_attr_name[fw_attr_id];
-	fw_attr->attr_group.attrs = attrs;
-	fw_attr->get_value = get_value;
-	fw_attr->set_value = set_value;
-
-	return sysfs_create_group(&galaxybook->fw_attrs_kset->kobj, &fw_attr->attr_group);
+	return block_recording_acpi_set(galaxybook, val_idx ? true : false);
 }
 
-static void galaxybook_kset_unregister(void *data)
-{
-	struct kset *kset = data;
-
-	kset_unregister(kset);
-}
-
-static void galaxybook_fw_attrs_dev_unregister(void *data)
-{
-	struct device *fw_attrs_dev = data;
-
-	device_unregister(fw_attrs_dev);
-}
+DEFINE_FWAT_ENUM_GROUP(block_recording, "Block Recording", galaxybook_possible_vals,
+		       false, 0644, FWAT_ENUM_ALL_ATTRS);
 
 static int galaxybook_fw_attrs_init(struct samsung_galaxybook *galaxybook)
 {
+	struct fwat_device *fdev;
 	bool value;
 	int err;
 
-	err = devm_mutex_init(&galaxybook->platform->dev, &galaxybook->fw_attr_lock);
-	if (err)
-		return err;
-
-	galaxybook->fw_attrs_dev = device_create(&firmware_attributes_class, NULL, MKDEV(0, 0),
-						 NULL, "%s", DRIVER_NAME);
-	if (IS_ERR(galaxybook->fw_attrs_dev))
-		return PTR_ERR(galaxybook->fw_attrs_dev);
-
-	err = devm_add_action_or_reset(&galaxybook->platform->dev,
-				       galaxybook_fw_attrs_dev_unregister,
-				       galaxybook->fw_attrs_dev);
-	if (err)
-		return err;
-
-	galaxybook->fw_attrs_kset = kset_create_and_add("attributes", NULL,
-							&galaxybook->fw_attrs_dev->kobj);
-	if (!galaxybook->fw_attrs_kset)
-		return -ENOMEM;
-	err = devm_add_action_or_reset(&galaxybook->platform->dev,
-				       galaxybook_kset_unregister, galaxybook->fw_attrs_kset);
-	if (err)
-		return err;
+	fdev = devm_fwat_device_register(&galaxybook->platform->dev, DRIVER_NAME, galaxybook, NULL);
+	if (IS_ERR(fdev))
+		return PTR_ERR(fdev);
 
 	err = power_on_lid_open_acpi_get(galaxybook, &value);
 	if (!err) {
-		err = galaxybook_fw_attr_init(galaxybook,
-					      GB_ATTR_POWER_ON_LID_OPEN,
-					      &power_on_lid_open_acpi_get,
-					      &power_on_lid_open_acpi_set);
+		err = fwat_create_group(fdev, &power_on_lid_open_group_data);
 		if (err)
 			return err;
 	}
 
 	err = usb_charging_acpi_get(galaxybook, &value);
 	if (!err) {
-		err = galaxybook_fw_attr_init(galaxybook,
-					      GB_ATTR_USB_CHARGING,
-					      &usb_charging_acpi_get,
-					      &usb_charging_acpi_set);
+		err = fwat_create_group(fdev, &usb_charging_group_data);
 		if (err)
 			return err;
 	}
@@ -1107,10 +988,7 @@ static int galaxybook_fw_attrs_init(struct samsung_galaxybook *galaxybook)
 
 	galaxybook->has_block_recording = true;
 
-	return galaxybook_fw_attr_init(galaxybook,
-				       GB_ATTR_BLOCK_RECORDING,
-				       &block_recording_acpi_get,
-				       &block_recording_acpi_set);
+	return fwat_create_group(fdev, &block_recording_group_data);
 }
 
 /*
