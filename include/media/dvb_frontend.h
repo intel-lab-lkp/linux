@@ -818,7 +818,7 @@ void dvb_frontend_reinitialise(struct dvb_frontend *fe);
  * as possible, as it affects the detection of the dish tone command at the
  * satellite subsystem.
  *
- * Its used internally by the DVB frontend core, in order to emulate
+ * It's used internally by the DVB frontend core, in order to emulate
  * FE_DISHNETWORK_SEND_LEGACY_CMD() using the &dvb_frontend_ops.set_voltage\(\)
  * callback.
  *
