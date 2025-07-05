@@ -803,12 +803,13 @@ void qdisc_tree_reduce_backlog(struct Qdisc *sch, int n, int len)
 			break;
 		}
 		cops = sch->ops->cl_ops;
-		if (notify && cops->qlen_notify) {
+		if (notify && cops && cops->qlen_notify) {
 			/* Note that qlen_notify must be idempotent as it may get called
 			 * multiple times.
 			 */
 			cl = cops->find(sch, parentid);
-			cops->qlen_notify(sch, cl);
+			if (cl)
+				cops->qlen_notify(sch, cl);
 		}
 		sch->q.qlen -= n;
 		sch->qstats.backlog -= len;
