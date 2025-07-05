@@ -28,7 +28,7 @@
 	aliases {
 		ethernet0 = &eth0;
 		ethernet1 = &eth1;
-		i2c2 = &i2c2;
+		i2c8 = &i2c8;
 		mmc0 = &sdhi0;
 		mmc2 = &sdhi2;
 	};
@@ -102,8 +102,8 @@
 	mali-supply = <&reg_vdd0p8v_others>;
 };
 
-&i2c2 {
-	pinctrl-0 = <&i2c2_pins>;
+&i2c8 {
+	pinctrl-0 = <&i2c8_pins>;
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
 	status = "okay";
@@ -214,9 +214,9 @@
 		};
 	};
 
-	i2c2_pins: i2c {
-		pinmux = <RZG3E_PORT_PINMUX(3, 4, 1)>, /* SCL2 */
-			 <RZG3E_PORT_PINMUX(3, 5, 1)>; /* SDA2 */
+	i2c8_pins: i2c8 {
+		pinmux = <RZG3E_PORT_PINMUX(3, 4, 4)>, /* SCL8 */
+			 <RZG3E_PORT_PINMUX(3, 5, 4)>; /* SDA8 */
 	};
 
 	rtc_irq_pin: rtc-irq {
