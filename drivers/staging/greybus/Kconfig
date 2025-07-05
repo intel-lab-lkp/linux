@@ -213,4 +213,13 @@ config GREYBUS_ARCHE
 	  To compile this code as a module, chose M here: the module
 	  will be called gb-arche.ko
 
+config GREYBUS_SILABS_BLUETOOTH
+	tristate "Greybus Silabs Bluetooth Class driver"
+	help
+	  Select this option if you have a Silicon Labs device that
+	  supports Bluetooth over Greybus.
+
+	  To compile this code as a module, chose M here: the module
+	  will be called gb-silabs-ble.ko
+
 endif	# GREYBUS

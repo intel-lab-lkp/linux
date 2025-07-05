@@ -71,3 +71,9 @@ obj-$(CONFIG_GREYBUS_USB)		+= gb-usb.o
 gb-arche-y	:= arche-platform.o arche-apb-ctrl.o
 
 obj-$(CONFIG_GREYBUS_ARCHE)	+= gb-arche.o
+
+
+# Greybus vendor driver
+gb-silabs-ble-y := silabs-ble.o
+
+obj-$(CONFIG_GREYBUS_SILABS_BLUETOOTH)	+= gb-silabs-ble.o
