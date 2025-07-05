@@ -1310,6 +1310,10 @@ static int takedown_cpu(unsigned int cpu)
 
 	/*
 	 * So now all preempt/rcu users must observe !cpu_active().
+	 *
+	 * stop_machine() waits for all CPUs to enable preemption. This lets
+	 * take_cpu_down() atomically update CPU masks and flush last IPI
+	 * before new IPIs can be attempted to be sent.
 	 */
 	err = stop_machine_cpuslocked(take_cpu_down, NULL, cpumask_of(cpu));
 	if (err) {
