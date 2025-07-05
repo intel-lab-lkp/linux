@@ -1176,6 +1176,58 @@ int gb_operation_sync_timeout(struct gb_connection *connection, int type,
 EXPORT_SYMBOL_GPL(gb_operation_sync_timeout);
 
 /**
+ * gb_operation_unidirectional_async_timeout() - initiate an asynchronous unidirectional operation
+ * @connection:		connection to use
+ * @callback:		function called when operation completes
+ * @data:		user-data, retrieved with gb_operation_get_data()
+ * @type:		type of operation to send
+ * @request:		memory buffer to copy the request from
+ * @request_size:	size of @request
+ * @timeout:		send timeout in milliseconds
+ *
+ * Initiate a unidirectional operation by sending a request message. Completion is notified by the
+ * user-provided callback. User can determine operation status with gb_operation_result().
+ * operation must be released with gb_operation_put().
+ *
+ * Note that successful send of a unidirectional operation does not imply that
+ * the request as actually reached the remote end of the connection.
+ */
+int gb_operation_unidirectional_async_timeout(struct gb_connection *connection,
+					      gb_operation_callback callback, void *data,
+					      int type, void *request, int request_size,
+					      unsigned int timeout)
+{
+	struct gb_operation *operation;
+	int ret;
+
+	if (request_size && !request)
+		return -EINVAL;
+
+	operation = gb_operation_create_flags(connection, type,
+					      request_size, 0,
+					      GB_OPERATION_FLAG_UNIDIRECTIONAL,
+					      GFP_KERNEL);
+	if (!operation)
+		return -ENOMEM;
+
+	gb_operation_set_data(operation, data);
+
+	if (request_size)
+		memcpy(operation->request->payload, request, request_size);
+
+	ret = gb_operation_request_send(operation, callback, timeout, GFP_KERNEL);
+	if (ret) {
+		dev_err(&connection->hd->dev,
+			"%s: asynchronous operation id 0x%04x of type 0x%02x failed: %d\n",
+			connection->name, operation->id, type, ret);
+		gb_operation_put(operation);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(gb_operation_unidirectional_async_timeout);
+
+/**
  * gb_operation_unidirectional_timeout() - initiate a unidirectional operation
  * @connection:		connection to use
  * @type:		type of operation to send

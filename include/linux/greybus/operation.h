@@ -192,6 +192,10 @@ int gb_operation_sync_timeout(struct gb_connection *connection, int type,
 				void *request, int request_size,
 				void *response, int response_size,
 				unsigned int timeout);
+int gb_operation_unidirectional_async_timeout(struct gb_connection *connection,
+					      gb_operation_callback callback, void *data,
+					      int type, void *request, int request_size,
+					      unsigned int timeout);
 int gb_operation_unidirectional_timeout(struct gb_connection *connection,
 				int type, void *request, int request_size,
 				unsigned int timeout);
