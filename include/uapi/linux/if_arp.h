@@ -38,6 +38,7 @@
 #define	ARPHRD_APPLETLK	8		/* APPLEtalk			*/
 #define ARPHRD_DLCI	15		/* Frame Relay DLCI		*/
 #define ARPHRD_ATM	19		/* ATM 				*/
+#define ARPHRD_ATM_LANE	20		/* ATM LAN Emulation		*/
 #define ARPHRD_METRICOM	23		/* Metricom STRIP (new IANA id)	*/
 #define	ARPHRD_IEEE1394	24		/* IEEE 1394 IPv4 - RFC 2734	*/
 #define ARPHRD_EUI64	27		/* EUI-64                       */

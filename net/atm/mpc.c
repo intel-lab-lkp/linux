@@ -275,6 +275,9 @@ static struct net_device *find_lec_by_itfnum(int itf)
 	sprintf(name, "lec%d", itf);
 	dev = dev_get_by_name(&init_net, name);
 
+	if (!dev || dev->type != ARPHRD_ATM_LANE)
+		return NULL;
+
 	return dev;
 }
 
@@ -1006,7 +1009,7 @@ static int mpoa_event_listener(struct notifier_block *mpoa_notifier,
 	if (!net_eq(dev_net(dev), &init_net))
 		return NOTIFY_DONE;
 
-	if (strncmp(dev->name, "lec", 3))
+	if (dev->type != ARPHRD_ATM_LANE)
 		return NOTIFY_DONE; /* we are only interested in lec:s */
 
 	switch (event) {

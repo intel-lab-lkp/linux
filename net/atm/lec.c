@@ -743,6 +743,7 @@ static int lecd_attach(struct atm_vcc *vcc, int arg)
 			return -ENOMEM;
 		dev_lec[i]->netdev_ops = &lec_netdev_ops;
 		dev_lec[i]->max_mtu = 18190;
+		dev_lec[i]->type = ARPHRD_ATM_LANE;
 		snprintf(dev_lec[i]->name, IFNAMSIZ, "lec%d", i);
 		if (register_netdev(dev_lec[i])) {
 			free_netdev(dev_lec[i]);
