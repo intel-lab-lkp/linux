@@ -327,8 +327,10 @@ static int q6usb_component_probe(struct snd_soc_component *component)
 		return ret;
 
 	usb = snd_soc_usb_allocate_port(component, &data->priv);
-	if (IS_ERR(usb))
-		return -ENOMEM;
+	if (IS_ERR(usb)) {
+		ret = PTR_ERR(usb);
+		goto free_aux_devices;
+	}
 
 	usb->connection_status_cb = q6usb_alsa_connection_cb;
 	usb->update_offload_route_info = q6usb_update_offload_route;
@@ -337,6 +339,12 @@ static int q6usb_component_probe(struct snd_soc_component *component)
 	data->usb = usb;
 
 	return 0;
+
+free_aux_devices:
+	auxiliary_device_delete(&data->uauxdev);
+	auxiliary_device_uninit(&data->uauxdev);
+
+	return ret;
 }
 
 static void q6usb_component_remove(struct snd_soc_component *component)
