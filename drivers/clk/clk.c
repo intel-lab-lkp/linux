@@ -3606,7 +3606,7 @@ static void possible_parent_show(struct seq_file *s, struct clk_core *core,
 	} else if (core->parents[i].fw_name) {
 		seq_printf(s, "<%s>(fw)", core->parents[i].fw_name);
 	} else {
-		if (core->parents[i].index >= 0)
+		if (!core->parents[i].hw && core->parents[i].index >= 0)
 			name = of_clk_get_parent_name(core->of_node, core->parents[i].index);
 		if (!name)
 			name = "(missing)";
