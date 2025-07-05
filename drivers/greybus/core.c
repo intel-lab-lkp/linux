@@ -68,6 +68,10 @@ static bool greybus_match_one_id(struct gb_bundle *bundle,
 	    (id->product != bundle->intf->product_id))
 		return false;
 
+	if ((id->match_flags & GREYBUS_ID_MATCH_BUNDLE_ID) &&
+	    (id->bundle_id != bundle->id))
+		return false;
+
 	if ((id->match_flags & GREYBUS_ID_MATCH_CLASS) &&
 	    (id->class != bundle->class))
 		return false;

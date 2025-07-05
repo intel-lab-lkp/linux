@@ -38,12 +38,13 @@
 #define GREYBUS_VERSION_MINOR	0x01
 
 #define GREYBUS_ID_MATCH_DEVICE \
-	(GREYBUS_ID_MATCH_VENDOR | GREYBUS_ID_MATCH_PRODUCT)
+	(GREYBUS_ID_MATCH_VENDOR | GREYBUS_ID_MATCH_PRODUCT | GREYBUS_ID_MATCH_BUNDLE_ID)
 
-#define GREYBUS_DEVICE(v, p)					\
+#define GREYBUS_DEVICE(v, p, id)				\
 	.match_flags	= GREYBUS_ID_MATCH_DEVICE,		\
 	.vendor		= (v),					\
-	.product	= (p),
+	.product	= (p),					\
+	.bundle_id	= (id),
 
 #define GREYBUS_DEVICE_CLASS(c)					\
 	.match_flags	= GREYBUS_ID_MATCH_CLASS,		\
