@@ -959,8 +959,12 @@ int cifs_open(struct inode *inode, struct file *file)
 	const char *full_path;
 	bool posix_open_ok = false;
 	struct cifs_fid fid = {};
-	struct cifs_pending_open open;
+	struct cifs_pending_open *open __free(kfree) = NULL;
 	struct cifs_open_info_data data = {};
+
+	open = kmalloc(sizeof(*open),GFP_KERNEL);
+	if (!open)
+		return -ENOMEM;
 
 	xid = get_xid();
 
@@ -1057,7 +1061,7 @@ int cifs_open(struct inode *inode, struct file *file)
 	if (server->ops->get_lease_key)
 		server->ops->get_lease_key(inode, &fid);
 
-	cifs_add_pending_open(&fid, tlink, &open);
+	cifs_add_pending_open(&fid, tlink, open);
 
 	if (!posix_open_ok) {
 		if (server->ops->get_lease_key)
@@ -1066,7 +1070,7 @@ int cifs_open(struct inode *inode, struct file *file)
 		rc = cifs_nt_open(full_path, inode, cifs_sb, tcon, file->f_flags, &oplock, &fid,
 				  xid, &data);
 		if (rc) {
-			cifs_del_pending_open(&open);
+			cifs_del_pending_open(open);
 			goto out;
 		}
 	}
@@ -1075,7 +1079,7 @@ int cifs_open(struct inode *inode, struct file *file)
 	if (cfile == NULL) {
 		if (server->ops->close)
 			server->ops->close(xid, tcon, &fid);
-		cifs_del_pending_open(&open);
+		cifs_del_pending_open(open);
 		rc = -ENOMEM;
 		goto out;
 	}
