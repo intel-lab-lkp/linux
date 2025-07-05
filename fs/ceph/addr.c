@@ -1639,8 +1639,12 @@ static int ceph_writepages_start(struct address_space *mapping,
 	struct inode *inode = mapping->host;
 	struct ceph_fs_client *fsc = ceph_inode_to_fs_client(inode);
 	struct ceph_client *cl = fsc->client;
-	struct ceph_writeback_ctl ceph_wbc;
+	struct ceph_writeback_ctl *ceph_wbc __free(kfree) = NULL;
 	int rc = 0;
+
+	ceph_wbc = kmalloc(sizeof(*ceph_wbc), GFP_NOFS);
+	if (!ceph_wbc)
+		return -ENOMEM;
 
 	if (wbc->sync_mode == WB_SYNC_NONE && fsc->write_congested)
 		return 0;
@@ -1654,7 +1658,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 		return -EIO;
 	}
 
-	ceph_init_writeback_ctl(mapping, wbc, &ceph_wbc);
+	ceph_init_writeback_ctl(mapping, wbc, ceph_wbc);
 
 	if (!ceph_inc_osd_stopping_blocker(fsc->mdsc)) {
 		rc = -EIO;
@@ -1662,7 +1666,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	}
 
 retry:
-	rc = ceph_define_writeback_range(mapping, wbc, &ceph_wbc);
+	rc = ceph_define_writeback_range(mapping, wbc, ceph_wbc);
 	if (rc == -ENODATA) {
 		/* hmm, why does writepages get called when there
 		   is no dirty data? */
@@ -1671,55 +1675,55 @@ retry:
 	}
 
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
-		tag_pages_for_writeback(mapping, ceph_wbc.index, ceph_wbc.end);
+		tag_pages_for_writeback(mapping, ceph_wbc->index, ceph_wbc->end);
 
-	while (!has_writeback_done(&ceph_wbc)) {
-		ceph_wbc.locked_pages = 0;
-		ceph_wbc.max_pages = ceph_wbc.wsize >> PAGE_SHIFT;
+	while (!has_writeback_done(ceph_wbc)) {
+		ceph_wbc->locked_pages = 0;
+		ceph_wbc->max_pages = ceph_wbc->wsize >> PAGE_SHIFT;
 
 get_more_pages:
-		ceph_folio_batch_reinit(&ceph_wbc);
+		ceph_folio_batch_reinit(ceph_wbc);
 
-		ceph_wbc.nr_folios = filemap_get_folios_tag(mapping,
-							    &ceph_wbc.index,
-							    ceph_wbc.end,
-							    ceph_wbc.tag,
-							    &ceph_wbc.fbatch);
+		ceph_wbc->nr_folios = filemap_get_folios_tag(mapping,
+							    &ceph_wbc->index,
+							    ceph_wbc->end,
+							    ceph_wbc->tag,
+							    &ceph_wbc->fbatch);
 		doutc(cl, "pagevec_lookup_range_tag for tag %#x got %d\n",
-			ceph_wbc.tag, ceph_wbc.nr_folios);
+			ceph_wbc->tag, ceph_wbc->nr_folios);
 
-		if (!ceph_wbc.nr_folios && !ceph_wbc.locked_pages)
+		if (!ceph_wbc->nr_folios && !ceph_wbc->locked_pages)
 			break;
 
 process_folio_batch:
-		rc = ceph_process_folio_batch(mapping, wbc, &ceph_wbc);
+		rc = ceph_process_folio_batch(mapping, wbc, ceph_wbc);
 		if (rc)
 			goto release_folios;
 
 		/* did we get anything? */
-		if (!ceph_wbc.locked_pages)
+		if (!ceph_wbc->locked_pages)
 			goto release_folios;
 
-		if (ceph_wbc.processed_in_fbatch) {
-			ceph_shift_unused_folios_left(&ceph_wbc.fbatch);
+		if (ceph_wbc->processed_in_fbatch) {
+			ceph_shift_unused_folios_left(&ceph_wbc->fbatch);
 
-			if (folio_batch_count(&ceph_wbc.fbatch) == 0 &&
-			    ceph_wbc.locked_pages < ceph_wbc.max_pages) {
+			if (folio_batch_count(&ceph_wbc->fbatch) == 0 &&
+			    ceph_wbc->locked_pages < ceph_wbc->max_pages) {
 				doutc(cl, "reached end fbatch, trying for more\n");
 				goto get_more_pages;
 			}
 		}
 
-		rc = ceph_submit_write(mapping, wbc, &ceph_wbc);
+		rc = ceph_submit_write(mapping, wbc, ceph_wbc);
 		if (rc)
 			goto release_folios;
 
-		ceph_wbc.locked_pages = 0;
-		ceph_wbc.strip_unit_end = 0;
+		ceph_wbc->locked_pages = 0;
+		ceph_wbc->strip_unit_end = 0;
 
-		if (folio_batch_count(&ceph_wbc.fbatch) > 0) {
-			ceph_wbc.nr_folios =
-				folio_batch_count(&ceph_wbc.fbatch);
+		if (folio_batch_count(&ceph_wbc->fbatch) > 0) {
+			ceph_wbc->nr_folios =
+				folio_batch_count(&ceph_wbc->fbatch);
 			goto process_folio_batch;
 		}
 
@@ -1730,38 +1734,38 @@ process_folio_batch:
 		 * we tagged for writeback prior to entering this loop.
 		 */
 		if (wbc->nr_to_write <= 0 && wbc->sync_mode == WB_SYNC_NONE)
-			ceph_wbc.done = true;
+			ceph_wbc->done = true;
 
 release_folios:
 		doutc(cl, "folio_batch release on %d folios (%p)\n",
-		      (int)ceph_wbc.fbatch.nr,
-		      ceph_wbc.fbatch.nr ? ceph_wbc.fbatch.folios[0] : NULL);
-		folio_batch_release(&ceph_wbc.fbatch);
+		      (int)ceph_wbc->fbatch.nr,
+		      ceph_wbc->fbatch.nr ? ceph_wbc->fbatch.folios[0] : NULL);
+		folio_batch_release(&ceph_wbc->fbatch);
 	}
 
-	if (ceph_wbc.should_loop && !ceph_wbc.done) {
+	if (ceph_wbc->should_loop && !ceph_wbc->done) {
 		/* more to do; loop back to beginning of file */
 		doutc(cl, "looping back to beginning of file\n");
 		/* OK even when start_index == 0 */
-		ceph_wbc.end = ceph_wbc.start_index - 1;
+		ceph_wbc->end = ceph_wbc->start_index - 1;
 
 		/* to write dirty pages associated with next snapc,
 		 * we need to wait until current writes complete */
-		ceph_wait_until_current_writes_complete(mapping, wbc, &ceph_wbc);
+		ceph_wait_until_current_writes_complete(mapping, wbc, ceph_wbc);
 
-		ceph_wbc.start_index = 0;
-		ceph_wbc.index = 0;
+		ceph_wbc->start_index = 0;
+		ceph_wbc->index = 0;
 		goto retry;
 	}
 
-	if (wbc->range_cyclic || (ceph_wbc.range_whole && wbc->nr_to_write > 0))
-		mapping->writeback_index = ceph_wbc.index;
+	if (wbc->range_cyclic || (ceph_wbc->range_whole && wbc->nr_to_write > 0))
+		mapping->writeback_index = ceph_wbc->index;
 
 dec_osd_stopping_blocker:
 	ceph_dec_osd_stopping_blocker(fsc->mdsc);
 
 out:
-	ceph_put_snap_context(ceph_wbc.last_snapc);
+	ceph_put_snap_context(ceph_wbc->last_snapc);
 	doutc(cl, "%llx.%llx dend - startone, rc = %d\n", ceph_vinop(inode),
 	      rc);
 
