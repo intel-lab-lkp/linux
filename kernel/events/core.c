@@ -7208,7 +7208,8 @@ static void perf_sigtrap(struct perf_event *event)
 	 * ctx->task or current has changed in the meantime. This can be the
 	 * case on architectures that do not implement arch_irq_work_raise().
 	 */
-	if (WARN_ON_ONCE(event->ctx->task != current))
+	if (WARN_ON_ONCE(event->ctx->task != current &&
+			 event->ctx->task != TASK_TOMBSTONE))
 		return;
 
 	/*
