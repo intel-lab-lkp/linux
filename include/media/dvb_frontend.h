@@ -810,7 +810,7 @@ void dvb_frontend_reinitialise(struct dvb_frontend *fe);
  * dvb_frontend_sleep_until() - Sleep for the amount of time given by
  *                      add_usec parameter
  *
- * @waketime: pointer to &struct ktime_t
+ * @waketime: pointer to &ktime_t
  * @add_usec: time to sleep, in microseconds
  *
  * This function is used to measure the time required for the
