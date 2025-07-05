@@ -24,10 +24,17 @@ struct qcom_smmu_config {
 	const u32 *reg_offset;
 };
 
+struct qcom_smmu_impl {
+	struct arm_smmu_impl base;
+
+	void (*set_prr_bit)(const void *cookie, bool set);
+	void (*set_prr_addr)(const void *cookie, phys_addr_t page_addr);
+};
+
 struct qcom_smmu_match_data {
 	const struct qcom_smmu_config *cfg;
-	const struct arm_smmu_impl *impl;
-	const struct arm_smmu_impl *adreno_impl;
+	const struct qcom_smmu_impl *impl;
+	const struct qcom_smmu_impl *adreno_impl;
 	const struct of_device_id * const client_match;
 };
 

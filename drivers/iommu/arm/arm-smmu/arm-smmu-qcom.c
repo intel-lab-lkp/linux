@@ -55,6 +55,11 @@ static struct qcom_smmu *to_qcom_smmu(struct arm_smmu_device *smmu)
 	return container_of(smmu, struct qcom_smmu, smmu);
 }
 
+static const struct qcom_smmu_impl *to_qcom_smmu_impl(const struct arm_smmu_impl *base)
+{
+	return container_of(base, struct qcom_smmu_impl, base);
+}
+
 static void qcom_smmu_tlb_sync(struct arm_smmu_device *smmu, int page,
 				int sync, int status)
 {
@@ -313,9 +318,9 @@ static void qcom_smmu_set_actlr_dev(struct device *dev, struct arm_smmu_device *
 static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 		struct io_pgtable_cfg *pgtbl_cfg, struct device *dev)
 {
-	const struct device_node *np = smmu_domain->smmu->dev->of_node;
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	struct qcom_smmu *qsmmu = to_qcom_smmu(smmu);
+	const struct qcom_smmu_impl *qsmmu_impl = to_qcom_smmu_impl(smmu->impl);
 	const struct of_device_id *client_match;
 	int cbndx = smmu_domain->cfg.cbndx;
 	struct adreno_smmu_priv *priv;
@@ -351,14 +356,8 @@ static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 	priv->set_ttbr0_cfg = qcom_adreno_smmu_set_ttbr0_cfg;
 	priv->get_fault_info = qcom_adreno_smmu_get_fault_info;
 	priv->set_stall = qcom_adreno_smmu_set_stall;
-	priv->set_prr_bit = NULL;
-	priv->set_prr_addr = NULL;
-
-	if (of_device_is_compatible(np, "qcom,smmu-500") &&
-			of_device_is_compatible(np, "qcom,adreno-smmu")) {
-		priv->set_prr_bit = qcom_adreno_smmu_set_prr_bit;
-		priv->set_prr_addr = qcom_adreno_smmu_set_prr_addr;
-	}
+	priv->set_prr_bit = qsmmu_impl->set_prr_bit;
+	priv->set_prr_addr = qsmmu_impl->set_prr_addr;
 
 	return 0;
 }
@@ -558,65 +557,89 @@ static int qcom_sdm845_smmu500_reset(struct arm_smmu_device *smmu)
 	return ret;
 }
 
-static const struct arm_smmu_impl qcom_smmu_v2_impl = {
-	.init_context = qcom_smmu_init_context,
-	.cfg_probe = qcom_smmu_cfg_probe,
-	.def_domain_type = qcom_smmu_def_domain_type,
-	.write_s2cr = qcom_smmu_write_s2cr,
-	.tlb_sync = qcom_smmu_tlb_sync,
+static const struct qcom_smmu_impl qcom_smmu_v2_impl = {
+	.base = {
+		.init_context = qcom_smmu_init_context,
+		.cfg_probe = qcom_smmu_cfg_probe,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.write_s2cr = qcom_smmu_write_s2cr,
+		.tlb_sync = qcom_smmu_tlb_sync,
+	},
 };
 
-static const struct arm_smmu_impl qcom_smmu_500_impl = {
-	.init_context = qcom_smmu_init_context,
-	.cfg_probe = qcom_smmu_cfg_probe,
-	.def_domain_type = qcom_smmu_def_domain_type,
-	.reset = arm_mmu500_reset,
-	.write_s2cr = qcom_smmu_write_s2cr,
-	.tlb_sync = qcom_smmu_tlb_sync,
+static const struct qcom_smmu_impl qcom_smmu_500_impl = {
+	.base = {
+		.init_context = qcom_smmu_init_context,
+		.cfg_probe = qcom_smmu_cfg_probe,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.reset = arm_mmu500_reset,
+		.write_s2cr = qcom_smmu_write_s2cr,
+		.tlb_sync = qcom_smmu_tlb_sync,
 #ifdef CONFIG_ARM_SMMU_QCOM_DEBUG
-	.context_fault = qcom_smmu_context_fault,
-	.context_fault_needs_threaded_irq = true,
+		.context_fault = qcom_smmu_context_fault,
+		.context_fault_needs_threaded_irq = true,
 #endif
+	},
 };
 
-static const struct arm_smmu_impl sdm845_smmu_500_impl = {
-	.init_context = qcom_smmu_init_context,
-	.cfg_probe = qcom_smmu_cfg_probe,
-	.def_domain_type = qcom_smmu_def_domain_type,
-	.reset = qcom_sdm845_smmu500_reset,
-	.write_s2cr = qcom_smmu_write_s2cr,
-	.tlb_sync = qcom_smmu_tlb_sync,
+static const struct qcom_smmu_impl sdm845_smmu_500_impl = {
+	.base = {
+		.init_context = qcom_smmu_init_context,
+		.cfg_probe = qcom_smmu_cfg_probe,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.reset = qcom_sdm845_smmu500_reset,
+		.write_s2cr = qcom_smmu_write_s2cr,
+		.tlb_sync = qcom_smmu_tlb_sync,
 #ifdef CONFIG_ARM_SMMU_QCOM_DEBUG
-	.context_fault = qcom_smmu_context_fault,
-	.context_fault_needs_threaded_irq = true,
+		.context_fault = qcom_smmu_context_fault,
+		.context_fault_needs_threaded_irq = true,
 #endif
+	},
 };
 
-static const struct arm_smmu_impl qcom_adreno_smmu_v2_impl = {
-	.init_context = qcom_adreno_smmu_init_context,
-	.cfg_probe = qcom_adreno_smmuv2_cfg_probe,
-	.def_domain_type = qcom_smmu_def_domain_type,
-	.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
-	.write_sctlr = qcom_adreno_smmu_write_sctlr,
-	.tlb_sync = qcom_smmu_tlb_sync,
-	.context_fault_needs_threaded_irq = true,
+static const struct qcom_smmu_impl qcom_adreno_smmu_v2_impl = {
+	.base = {
+		.init_context = qcom_adreno_smmu_init_context,
+		.cfg_probe = qcom_adreno_smmuv2_cfg_probe,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
+		.write_sctlr = qcom_adreno_smmu_write_sctlr,
+		.tlb_sync = qcom_smmu_tlb_sync,
+		.context_fault_needs_threaded_irq = true,
+	},
 };
 
-static const struct arm_smmu_impl qcom_adreno_smmu_500_impl = {
-	.init_context = qcom_adreno_smmu_init_context,
-	.def_domain_type = qcom_smmu_def_domain_type,
-	.reset = arm_mmu500_reset,
-	.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
-	.write_sctlr = qcom_adreno_smmu_write_sctlr,
-	.tlb_sync = qcom_smmu_tlb_sync,
-	.context_fault_needs_threaded_irq = true,
+static const struct qcom_smmu_impl qcom_adreno_smmu_500_noprr_impl = {
+	.base = {
+		.init_context = qcom_adreno_smmu_init_context,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.reset = arm_mmu500_reset,
+		.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
+		.write_sctlr = qcom_adreno_smmu_write_sctlr,
+		.tlb_sync = qcom_smmu_tlb_sync,
+		.context_fault_needs_threaded_irq = true,
+	},
+};
+
+static const struct qcom_smmu_impl qcom_adreno_smmu_500_impl = {
+	.base = {
+		.init_context = qcom_adreno_smmu_init_context,
+		.def_domain_type = qcom_smmu_def_domain_type,
+		.reset = arm_mmu500_reset,
+		.alloc_context_bank = qcom_adreno_smmu_alloc_context_bank,
+		.write_sctlr = qcom_adreno_smmu_write_sctlr,
+		.tlb_sync = qcom_smmu_tlb_sync,
+		.context_fault_needs_threaded_irq = true,
+	},
+	.set_prr_bit = qcom_adreno_smmu_set_prr_bit,
+	.set_prr_addr = qcom_adreno_smmu_set_prr_addr,
 };
 
 static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 		const struct qcom_smmu_match_data *data)
 {
 	const struct device_node *np = smmu->dev->of_node;
-	const struct arm_smmu_impl *impl;
+	const struct qcom_smmu_impl *impl;
 	struct qcom_smmu *qsmmu;
 
 	if (!data)
@@ -639,7 +662,7 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 	if (!qsmmu)
 		return ERR_PTR(-ENOMEM);
 
-	qsmmu->smmu.impl = impl;
+	qsmmu->smmu.impl = &impl->base;
 	qsmmu->data = data;
 
 	return &qsmmu->smmu;
@@ -686,6 +709,13 @@ static const struct qcom_smmu_match_data qcom_smmu_500_impl0_data = {
 	.client_match = qcom_smmu_actlr_client_of_match,
 };
 
+static const struct qcom_smmu_match_data qcom_smmu_500_impl0_noprr_data = {
+	.impl = &qcom_smmu_500_impl,
+	.adreno_impl = &qcom_adreno_smmu_500_noprr_impl,
+	.cfg = &qcom_smmu_impl0_cfg,
+	.client_match = qcom_smmu_actlr_client_of_match,
+};
+
 /*
  * Do not add any more qcom,SOC-smmu-500 entries to this list, unless they need
  * special handling and can not be covered by the qcom,smmu-500 entry.
@@ -712,7 +742,7 @@ static const struct of_device_id __maybe_unused qcom_smmu_impl_of_match[] = {
 	{ .compatible = "qcom,sm6375-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,sm7150-smmu-v2", .data = &qcom_smmu_v2_data },
 	{ .compatible = "qcom,sm8150-smmu-500", .data = &qcom_smmu_500_impl0_data },
-	{ .compatible = "qcom,sm8250-smmu-500", .data = &qcom_smmu_500_impl0_data },
+	{ .compatible = "qcom,sm8250-smmu-500", .data = &qcom_smmu_500_impl0_noprr_data },
 	{ .compatible = "qcom,sm8350-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,sm8450-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,smmu-500", .data = &qcom_smmu_500_impl0_data },
