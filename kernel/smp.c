@@ -93,6 +93,9 @@ int smpcfd_dying_cpu(unsigned int cpu)
 	 * explicitly (without waiting for the IPIs to arrive), to
 	 * ensure that the outgoing CPU doesn't go offline with work
 	 * still pending.
+	 *
+	 * This runs in stop_machine's atomic context with interrupts disabled,
+	 * thus CPU offlining and IPI flushing happen together atomically.
 	 */
 	__flush_smp_call_function_queue(false);
 	irq_work_run();
@@ -418,6 +421,10 @@ void __smp_call_single_queue(int cpu, struct llist_node *node)
  */
 static int generic_exec_single(int cpu, call_single_data_t *csd)
 {
+	/*
+	 * Preemption must be disabled by caller to mutually exclude with
+	 * stop_machine() atomically updating CPU masks and flushing IPIs.
+	 */
 	if (cpu == smp_processor_id()) {
 		smp_call_func_t func = csd->func;
 		void *info = csd->info;
@@ -640,6 +647,11 @@ int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 	/*
 	 * prevent preemption and reschedule on another processor,
 	 * as well as CPU removal
+	 *
+	 * get_cpu() disables preemption, ensuring mutual exclusion with
+	 * stop_machine() where CPU offlining and last IPI flushing happen
+	 * atomically versus.This guarantees here that the cpu_online()
+	 * check and IPI sending are safe.
 	 */
 	this_cpu = get_cpu();
 
