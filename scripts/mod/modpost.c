@@ -178,8 +178,12 @@ static struct module *find_module(const char *filename, const char *modname)
 	struct module *mod;
 
 	list_for_each_entry(mod, &modules, list) {
-		if (!strcmp(mod->dump_file, filename) &&
-		    !strcmp(mod->name, modname))
+		if (strcmp(mod->name, modname) != 0)
+			continue;
+		if (!mod->dump_file && !filename)
+			return mod;
+		if (mod->dump_file && filename &&
+		    !strcmp(mod->dump_file, filename))
 			return mod;
 	}
 	return NULL;
