@@ -369,6 +369,19 @@ static __cold struct io_ring_ctx *io_ring_ctx_alloc(struct io_uring_params *p)
 	io_napi_init(ctx);
 	mutex_init(&ctx->mmap_lock);
 
+	/*
+	 * Number of times we'll try and do receives if there's more data. If
+	 * we exceed this limit, then add us to the back of the queue and retry
+	 * from there. This helps fairness between flooding clients.
+	 */
+	ctx->net_mshot_retry = 32;
+
+	/*
+	 * 256 for the default bundle peek max limit, which is a single page
+	 * alloc at most.
+	 */
+	ctx->net_bundle_peek_max = 256;
+
 	return ctx;
 
 free_ref:

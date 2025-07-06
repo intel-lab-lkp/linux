@@ -212,9 +212,6 @@ void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
 	return ret;
 }
 
-/* cap it at a reasonable 256, will be one page even for 4K */
-#define PEEK_MAX_IMPORT		256
-
 static int io_ring_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 				struct io_buffer_list *bl)
 {
@@ -238,7 +235,7 @@ static int io_ring_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 		if (unlikely(!len))
 			return -ENOBUFS;
 		needed = (arg->max_len + len - 1) / len;
-		needed = min_not_zero(needed, (size_t) PEEK_MAX_IMPORT);
+		needed = min_not_zero(needed, (size_t) req->ctx->net_bundle_peek_max);
 		if (nr_avail > needed)
 			nr_avail = needed;
 	}

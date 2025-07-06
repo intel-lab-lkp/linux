@@ -661,6 +661,8 @@ enum io_uring_register_op {
 
 	IORING_REGISTER_MEM_REGION		= 34,
 
+	IORING_REGISTER_SETTINGS		= 35,
+
 	/* this goes last */
 	IORING_REGISTER_LAST,
 
@@ -704,6 +706,18 @@ struct io_uring_mem_region_reg {
 	__u64 region_uptr; /* struct io_uring_region_desc * */
 	__u64 flags;
 	__u64 __resv[2];
+};
+
+enum {
+	/* Apply new values. If not set, old values are still copied back */
+	IORING_REGISTER_SETTINGS_APPLY		= 1,
+};
+
+struct io_uring_settings {
+	__u32 flags;
+	__u16 net_mshot_retry;
+	__u16 net_bundle_peek_max;
+	__u32 __resv[30];
 };
 
 /*
