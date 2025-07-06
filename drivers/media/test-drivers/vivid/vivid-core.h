@@ -345,6 +345,17 @@ struct vivid_dev {
 		struct v4l2_ctrl	*ctrl_dv_timings_signal_mode;
 		struct v4l2_ctrl	*ctrl_dv_timings;
 	};
+	struct v4l2_ctrl		*ctrl_dv_tx_hdcp_mode;
+	struct v4l2_ctrl		*ctrl_dv_tx_hdcp_rep_ksv_fifo;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_detected;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_enable;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_device_count;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_depth;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_max_devs_exceeded;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_max_cascade_exceeded;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_ksv_fifo;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_ready;
+
 	struct v4l2_ctrl		*ctrl_has_crop_cap;
 	struct v4l2_ctrl		*ctrl_has_compose_cap;
 	struct v4l2_ctrl		*ctrl_has_scaler_cap;

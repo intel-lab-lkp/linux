@@ -1078,6 +1078,18 @@ static const struct v4l2_ctrl_config vivid_ctrl_limited_rgb_range = {
 	.step = 1,
 };
 
+static const struct v4l2_ctrl_config vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo = {
+	.ops = &vivid_vid_cap_ctrl_ops,
+	.id = V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO,
+	.type = V4L2_CTRL_TYPE_U8,
+	.flags = V4L2_CTRL_FLAG_DYNAMIC_ARRAY,
+	.def = 0,
+	.min = 0,
+	.max = 255,
+	.step = 1,
+	.dims = { 16, 5 },
+};
+
 
 /* VBI Capture Control */
 
@@ -1185,6 +1197,18 @@ static const struct v4l2_ctrl_config vivid_ctrl_has_scaler_out = {
 	.max = 1,
 	.def = 1,
 	.step = 1,
+};
+
+static const struct v4l2_ctrl_config vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo = {
+	.ops = &vivid_vid_out_ctrl_ops,
+	.id = V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO,
+	.type = V4L2_CTRL_TYPE_U8,
+	.flags = V4L2_CTRL_FLAG_DYNAMIC_ARRAY,
+	.def = 0,
+	.min = 0,
+	.max = 255,
+	.step = 1,
+	.dims = { 16, 5 },
 };
 
 /* Streaming Controls */
@@ -1659,9 +1683,9 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 	v4l2_ctrl_new_custom(hdl_loop_cap, &vivid_ctrl_class, NULL);
 	v4l2_ctrl_handler_init(hdl_fb, 1);
 	v4l2_ctrl_new_custom(hdl_fb, &vivid_ctrl_class, NULL);
-	v4l2_ctrl_handler_init(hdl_vid_cap, 55);
+	v4l2_ctrl_handler_init(hdl_vid_cap, 63);
 	v4l2_ctrl_new_custom(hdl_vid_cap, &vivid_ctrl_class, NULL);
-	v4l2_ctrl_handler_init(hdl_vid_out, 26);
+	v4l2_ctrl_handler_init(hdl_vid_out, 28);
 	if (!no_error_inj || dev->has_fb || dev->num_hdmi_outputs)
 		v4l2_ctrl_new_custom(hdl_vid_out, &vivid_ctrl_class, NULL);
 	v4l2_ctrl_handler_init(hdl_vbi_cap, 21);
@@ -1882,7 +1906,22 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 		dev->ctrl_rx_power_present = v4l2_ctrl_new_std(hdl_vid_cap,
 			NULL, V4L2_CID_DV_RX_POWER_PRESENT, 0, hdmi_input_mask,
 			0, hdmi_input_mask);
-
+		dev->ctrl_dv_rx_hdcp_detected = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_DETECTED, 0, 1, 1, 0);
+		dev->ctrl_dv_rx_hdcp_enable = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_ENABLE, 0, 1, 1, 0);
+		dev->ctrl_dv_rx_hdcp_rep_device_count = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT, 0, 16, 1, 0);
+		dev->ctrl_dv_rx_hdcp_rep_depth = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_REP_DEPTH, 0, 7, 1, 0);
+		dev->ctrl_dv_rx_hdcp_rep_max_devs_exceeded = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED, 0, 1, 1, 0);
+		dev->ctrl_dv_rx_hdcp_rep_max_cascade_exceeded = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED, 0, 1, 1, 0);
+		dev->ctrl_dv_rx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_cap,
+			&vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo, NULL);
+		dev->ctrl_dv_rx_hdcp_rep_ready = v4l2_ctrl_new_std(hdl_vid_cap,
+			NULL, V4L2_CID_DV_RX_HDCP_REP_READY, 0, 1, 1, 0);
 	}
 	if (dev->num_hdmi_outputs) {
 		s64 hdmi_output_mask = GENMASK(dev->num_hdmi_outputs - 1, 0);
@@ -1903,6 +1942,11 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 			V4L2_CID_DV_TX_RXSENSE, 0, hdmi_output_mask, 0, 0);
 		dev->ctrl_tx_edid_present = v4l2_ctrl_new_std(hdl_vid_out, NULL,
 			V4L2_CID_DV_TX_EDID_PRESENT, 0, hdmi_output_mask, 0, 0);
+		dev->ctrl_dv_tx_hdcp_mode = v4l2_ctrl_new_std_menu(hdl_vid_out, NULL,
+			V4L2_CID_DV_TX_HDCP_MODE, V4L2_DV_TX_HDCP_ENABLED, 0,
+			V4L2_DV_TX_HDCP_DISABLED);
+		dev->ctrl_dv_tx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_out,
+			&vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo, NULL);
 	}
 
 	if (dev->has_fb)
