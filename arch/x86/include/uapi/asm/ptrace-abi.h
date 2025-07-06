@@ -26,17 +26,14 @@
 #else /* __i386__ */
 
 #if defined(__ASSEMBLER__) || defined(__FRAME_OFFSETS)
-/*
- * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
- * unless syscall needs a complete, fully filled "struct pt_regs".
- */
+/* C ABI says these regs are callee-preserved. */
 #define R15 0
 #define R14 8
 #define R13 16
 #define R12 24
 #define RBP 32
 #define RBX 40
-/* These regs are callee-clobbered. Always saved on kernel entry. */
+/* These regs are callee-clobbered. */
 #define R11 48
 #define R10 56
 #define R9 64

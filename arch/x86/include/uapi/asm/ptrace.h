@@ -42,17 +42,14 @@ struct pt_regs {
 #ifndef __KERNEL__
 
 struct pt_regs {
-/*
- * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
- * unless syscall needs a complete, fully filled "struct pt_regs".
- */
+/* C ABI says these regs are callee-preserved. */
 	unsigned long r15;
 	unsigned long r14;
 	unsigned long r13;
 	unsigned long r12;
 	unsigned long rbp;
 	unsigned long rbx;
-/* These regs are callee-clobbered. Always saved on kernel entry. */
+/* These regs are callee-clobbered. */
 	unsigned long r11;
 	unsigned long r10;
 	unsigned long r9;
