@@ -13,7 +13,6 @@
 #include <asm/cacheflush.h>
 #include <asm/text-patching.h>
 
-#ifdef CONFIG_DYNAMIC_FTRACE
 unsigned long ftrace_call_adjust(unsigned long addr)
 {
 	if (IS_ENABLED(CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS))
@@ -191,13 +190,6 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	return 0;
 }
 
-#else /* CONFIG_DYNAMIC_FTRACE */
-unsigned long ftrace_call_adjust(unsigned long addr)
-{
-	return addr;
-}
-#endif /* CONFIG_DYNAMIC_FTRACE */
-
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
 int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 		       unsigned long addr)
@@ -236,7 +228,6 @@ void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr,
 		*parent = return_hooker;
 }
 
-#ifdef CONFIG_DYNAMIC_FTRACE
 void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 		       struct ftrace_ops *op, struct ftrace_regs *fregs)
 {
@@ -257,5 +248,5 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 	if (!function_graph_enter_regs(old, ip, frame_pointer, parent, fregs))
 		*parent = return_hooker;
 }
-#endif /* CONFIG_DYNAMIC_FTRACE */
+
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */

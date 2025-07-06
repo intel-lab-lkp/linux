@@ -49,7 +49,6 @@ struct dyn_arch_ftrace {
 };
 #endif
 
-#ifdef CONFIG_DYNAMIC_FTRACE
 /*
  * A general call in RISC-V is a pair of insts:
  * 1) auipc: setting high-20 pc-related bits to ra register
@@ -236,7 +235,5 @@ static inline void arch_ftrace_set_direct_caller(struct ftrace_regs *fregs, unsi
 #endif /* CONFIG_DYNAMIC_FTRACE_WITH_ARGS */
 
 #endif /* __ASSEMBLY__ */
-
-#endif /* CONFIG_DYNAMIC_FTRACE */
 
 #endif /* _ASM_RISCV_FTRACE_H */
