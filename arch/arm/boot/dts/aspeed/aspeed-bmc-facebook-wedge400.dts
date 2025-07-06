@@ -92,7 +92,7 @@
  * Both firmware flashes are 128MB on Wedge400 BMC.
  */
 &fmc_flash0 {
-#include "facebook-bmc-flash-layout-128.dtsi"
+#include "facebook-bmc-flash-layout-128-data64.dtsi"
 };
 
 &fmc_flash1 {
