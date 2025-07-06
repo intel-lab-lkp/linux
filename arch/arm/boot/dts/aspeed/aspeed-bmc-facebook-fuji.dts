@@ -223,6 +223,12 @@
 	};
 };
 
+&fmc {
+	flash@0 {
+#include "facebook-bmc-flash-layout-128-data64.dtsi"
+	};
+};
+
 &i2c0 {
 	multi-master;
 	bus-frequency = <1000000>;

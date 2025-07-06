@@ -50,6 +50,12 @@
 	};
 };
 
+&fmc {
+	flash@0 {
+#include "facebook-bmc-flash-layout-128.dtsi"
+	};
+};
+
 &lpc_ctrl {
 	status = "okay";
 };
