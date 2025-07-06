@@ -1593,6 +1593,8 @@ static noinline void __init kernel_init_freeable(void)
 	 * the work
 	 */
 	if (init_eaccess(ramdisk_execute_command) != 0) {
+		pr_warn("WARNING: rdinit=%s is inaccessible or not existing, ignoring\n",
+			ramdisk_execute_command);
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}
