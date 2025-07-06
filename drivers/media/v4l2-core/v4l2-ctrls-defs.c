@@ -1183,18 +1183,18 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_DV_TX_RGB_RANGE:		return "Tx RGB Quantization Range";
 	case V4L2_CID_DV_TX_IT_CONTENT_TYPE:	return "Tx IT Content Type";
 	case V4L2_CID_DV_TX_HDCP_MODE:		return "HDCP Mode";
-	case V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO:	return "Tx HDCP Rep KSV FIFO";
+	case V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO:	return "HDCP Tx Rep KSV FIFO";
 	case V4L2_CID_DV_RX_POWER_PRESENT:	return "Power Present";
 	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 	case V4L2_CID_DV_RX_IT_CONTENT_TYPE:	return "Rx IT Content Type";
 	case V4L2_CID_DV_RX_HDCP_DETECTED:	return "HDCP Detected";
-	case V4L2_CID_DV_RX_HDCP_ENABLE:	return "Rx HDCP Enable";
+	case V4L2_CID_DV_RX_HDCP_ENABLE:	return "HDCP Enable";
 	case V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT: return "HDCP Rep Device Count";
 	case V4L2_CID_DV_RX_HDCP_REP_DEPTH:	return "HDCP Rep Depth";
 	case V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED: return "HDCP Rep Max Devs Exceeded";
 	case V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED: return "HDCP Rep Max Cascade Exceeded";
-	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:	return "Rx HDCP Rep KSV FIFO";
-	case V4L2_CID_DV_RX_HDCP_REP_READY:	return "Rx HDCP Rep Ready";
+	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:	return "HDCP Rx Rep KSV FIFO";
+	case V4L2_CID_DV_RX_HDCP_REP_READY:	return "HDCP Rep Ready";
 
 	case V4L2_CID_FM_RX_CLASS:		return "FM Radio Receiver Controls";
 	case V4L2_CID_TUNE_DEEMPHASIS:		return "De-Emphasis";
