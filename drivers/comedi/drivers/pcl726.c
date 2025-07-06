@@ -328,6 +328,9 @@ static int pcl726_attach(struct comedi_device *dev,
 	 * Hook up the external trigger source interrupt only if the
 	 * user config option is valid and the board supports interrupts.
 	 */
+	if (it->options[1] < 0 || it->options[1] > 31)
+		return -EINVAL;
+
 	if (it->options[1] && (board->irq_mask & (1 << it->options[1]))) {
 		ret = request_irq(it->options[1], pcl726_interrupt, 0,
 				  dev->board_name, dev);
