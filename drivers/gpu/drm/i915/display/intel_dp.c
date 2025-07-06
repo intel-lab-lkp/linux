@@ -171,6 +171,15 @@ int intel_dp_link_symbol_clock(int rate)
 	return DIV_ROUND_CLOSEST(rate * 10, intel_dp_link_symbol_size(rate));
 }
 
+static bool intel_dp_reject_hbr3_due_to_tps4(struct intel_dp *intel_dp)
+{
+	/* TPS4 is not mandatory for eDP with DPCD rev 1.4 */
+	if (intel_dp_is_edp(intel_dp) && intel_dp->dpcd[DP_DPCD_REV] == 0x14)
+		return false;
+
+	return !drm_dp_tps4_supported(intel_dp->dpcd);
+}
+
 static int max_dprx_rate(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -187,12 +196,21 @@ static int max_dprx_rate(struct intel_dp *intel_dp)
 	 * HBR3 without TPS4, and are unable to produce a stable
 	 * output. Reject HBR3 when TPS4 is not available.
 	 */
-	if (max_rate >= 810000 && !drm_dp_tps4_supported(intel_dp->dpcd)) {
+	if (max_rate >= 810000 && intel_dp_reject_hbr3_due_to_tps4(intel_dp)) {
 		drm_dbg_kms(display->drm,
 			    "[ENCODER:%d:%s] Rejecting HBR3 due to missing TPS4 support\n",
 			    encoder->base.base.id, encoder->base.name);
 		max_rate = 540000;
 	}
+
+	/*
+	 * Some platforms + eDP panels may not reliably support HBR3
+	 * due to signal integrity limitations, despite advertising it.
+	 * Cap the link rate to HBR2 to avoid unstable configurations for the
+	 * known machines.
+	 */
+	if (intel_dp_is_edp(intel_dp) && intel_has_quirk(display, QUIRK_EDP_LIMIT_RATE_HBR2))
+		max_rate = min(max_rate, 540000);
 
 	return max_rate;
 }
@@ -4296,12 +4314,21 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 			 * HBR3 without TPS4, and are unable to produce a stable
 			 * output. Reject HBR3 when TPS4 is not available.
 			 */
-			if (rate >= 810000 && !drm_dp_tps4_supported(intel_dp->dpcd)) {
+			if (rate >= 810000 && intel_dp_reject_hbr3_due_to_tps4(intel_dp)) {
 				drm_dbg_kms(display->drm,
 					    "[ENCODER:%d:%s] Rejecting HBR3 due to missing TPS4 support\n",
 					    encoder->base.base.id, encoder->base.name);
 				break;
 			}
+
+			/*
+			 * Some platforms cannot reliably drive HBR3 rates due to PHY limitations,
+			 * even if the sink advertises support. Reject any sink rates above HBR2 on
+			 * the known machines for stable output.
+			 */
+			if (rate >= 810000 &&
+			    intel_has_quirk(display, QUIRK_EDP_LIMIT_RATE_HBR2))
+				break;
 
 			intel_dp->sink_rates[i] = rate;
 		}
