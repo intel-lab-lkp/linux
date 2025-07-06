@@ -1154,20 +1154,39 @@ static ssize_t interface_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(interface);
 
+static void ascii_filter(char *d, const char *s)
+{
+	/* Filter out characters we don't want to see in the modalias string */
+	for (; *s; s++)
+		if (*s > ' ' && *s < 127 && *s != ':')
+			*(d++) = *s;
+
+	*d = 0;
+}
+
 static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
 	struct usb_interface *intf;
 	struct usb_device *udev;
 	struct usb_host_interface *alt;
+	char *manufacturer;
+	int emit;
 
 	intf = to_usb_interface(dev);
 	udev = interface_to_usbdev(intf);
 	alt = READ_ONCE(intf->cur_altsetting);
 
-	return sysfs_emit(buf,
+	if (udev->manufacturer) {
+		manufacturer = kmalloc(strlen(udev->manufacturer) + 1, GFP_KERNEL);
+		ascii_filter(manufacturer, udev->manufacturer);
+	} else {
+		manufacturer = kstrdup("", GFP_KERNEL);
+	}
+
+	emit = sysfs_emit(buf,
 			"usb:v%04Xp%04Xd%04Xdc%02Xdsc%02Xdp%02X"
-			"ic%02Xisc%02Xip%02Xin%02X\n",
+			"ic%02Xisc%02Xip%02Xin%02Xmnf%s\n",
 			le16_to_cpu(udev->descriptor.idVendor),
 			le16_to_cpu(udev->descriptor.idProduct),
 			le16_to_cpu(udev->descriptor.bcdDevice),
@@ -1177,7 +1196,11 @@ static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 			alt->desc.bInterfaceClass,
 			alt->desc.bInterfaceSubClass,
 			alt->desc.bInterfaceProtocol,
-			alt->desc.bInterfaceNumber);
+			alt->desc.bInterfaceNumber,
+			manufacturer
+		);
+	kfree(manufacturer);
+	return emit;
 }
 static DEVICE_ATTR_RO(modalias);
 
