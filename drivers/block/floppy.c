@@ -3482,6 +3482,7 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 		memcpy(&inparam.g, outparam,
 				offsetof(struct floppy_struct, name));
 		outparam = &inparam.g;
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDMSGON:
 		drive_params[drive].flags |= FTD_MSG;
@@ -3515,6 +3516,7 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return 0;
 	case FDGETMAXERRS:
 		outparam = &drive_params[drive].max_errors;
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDSETMAXERRS:
 		drive_params[drive].max_errors = inparam.max_errors;
@@ -3522,6 +3524,7 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 	case FDGETDRVTYP:
 		outparam = drive_name(type, drive);
 		SUPBOUND(size, strlen((const char *)outparam) + 1);
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDSETDRVPRM:
 		if (!valid_floppy_drive_params(inparam.dp.autodetect,
@@ -3531,6 +3534,7 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 		break;
 	case FDGETDRVPRM:
 		outparam = &drive_params[drive];
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDPOLLDRVSTAT:
 		if (lock_fdc(drive))
@@ -3541,17 +3545,20 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 		fallthrough;
 	case FDGETDRVSTAT:
 		outparam = &drive_state[drive];
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDRESET:
 		return user_reset_fdc(drive, (int)param, true);
 	case FDGETFDCSTAT:
 		outparam = &fdc_state[FDC(drive)];
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDWERRORCLR:
 		memset(&write_errors[drive], 0, sizeof(write_errors[drive]));
 		return 0;
 	case FDWERRORGET:
 		outparam = &write_errors[drive];
+		return fd_copyout((void __user *)param, outparam, size);
 		break;
 	case FDRAWCMD:
 		return floppy_raw_cmd_ioctl(type, drive, cmd, (void __user *)param);
@@ -3564,9 +3571,6 @@ static int fd_locked_ioctl(struct block_device *bdev, blk_mode_t mode,
 	default:
 		return -EINVAL;
 	}
-
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		return fd_copyout((void __user *)param, outparam, size);
 
 	return 0;
 }
