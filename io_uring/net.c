@@ -76,6 +76,7 @@ struct io_sr_msg {
 	/* initialised and used only by !msg send variants */
 	u16				buf_group;
 	unsigned short			retry_flags;
+	unsigned short			mshot_retry;
 	void __user			*msg_control;
 	/* used only for send zerocopy */
 	struct io_kiocb 		*notif;
@@ -85,13 +86,6 @@ enum sr_retry_flags {
 	IO_SR_MSG_RETRY		= 1,
 	IO_SR_MSG_PARTIAL_MAP	= 2,
 };
-
-/*
- * Number of times we'll try and do receives if there's more data. If we
- * exceed this limit, then add us to the back of the queue and retry from
- * there. This helps fairness between flooding clients.
- */
-#define MULTISHOT_MAX_RETRY	32
 
 struct io_recvzc {
 	struct file			*file;
@@ -800,6 +794,7 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (io_is_compat(req->ctx))
 		sr->msg_flags |= MSG_CMSG_COMPAT;
 
+	sr->mshot_retry = req->ctx->net_mshot_retry;
 	sr->nr_multishot_loops = 0;
 	return io_recvmsg_prep_setup(req);
 }
@@ -859,7 +854,7 @@ static inline bool io_recv_finish(struct io_kiocb *req, int *ret,
 		io_mshot_prep_retry(req, kmsg);
 		/* Known not-empty or unknown state, retry */
 		if (cflags & IORING_CQE_F_SOCK_NONEMPTY || kmsg->msg.msg_inq < 0) {
-			if (sr->nr_multishot_loops++ < MULTISHOT_MAX_RETRY)
+			if (sr->nr_multishot_loops++ < sr->mshot_retry)
 				return false;
 			/* mshot retries exceeded, force a requeue */
 			sr->nr_multishot_loops = 0;

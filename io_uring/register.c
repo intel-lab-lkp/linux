@@ -629,6 +629,35 @@ static int io_register_mem_region(struct io_ring_ctx *ctx, void __user *uarg)
 	return 0;
 }
 
+static int io_register_settings(struct io_ring_ctx *ctx, void __user *uarg)
+{
+	struct io_uring_settings set, old_set = { };
+	size_t size;
+
+	if (copy_from_user(&set, uarg, sizeof(set)))
+		return -EFAULT;
+	if (set.flags & ~IORING_REGISTER_SETTINGS_APPLY)
+		return -EINVAL;
+	if (memchr_inv(&set.__resv, 0, sizeof(set.__resv)))
+		return -EINVAL;
+
+	old_set.net_mshot_retry = ctx->net_mshot_retry;
+	old_set.net_bundle_peek_max = ctx->net_bundle_peek_max;
+
+	if (copy_to_user(uarg, &old_set, sizeof(old_set)))
+		return -EFAULT;
+
+	if (!(set.flags & IORING_REGISTER_SETTINGS_APPLY))
+		return 0;
+
+	size = set.net_bundle_peek_max * sizeof(struct iovec);
+	if (size > KMALLOC_MAX_SIZE)
+		return -EINVAL;
+	ctx->net_mshot_retry = set.net_mshot_retry;
+	ctx->net_bundle_peek_max = set.net_bundle_peek_max;
+	return 0;
+}
+
 static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 			       void __user *arg, unsigned nr_args)
 	__releases(ctx->uring_lock)
@@ -834,6 +863,12 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 		if (!arg || nr_args != 1)
 			break;
 		ret = io_register_mem_region(ctx, arg);
+		break;
+	case IORING_REGISTER_SETTINGS:
+		ret = -EINVAL;
+		if (!arg || nr_args != 1)
+			break;
+		ret = io_register_settings(ctx, arg);
 		break;
 	default:
 		ret = -EINVAL;
