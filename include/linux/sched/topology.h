@@ -197,9 +197,9 @@ struct sched_domain_topology_level {
 extern void __init set_sched_topology(struct sched_domain_topology_level *tl);
 extern void sched_update_asym_prefer_cpu(int cpu, int old_prio, int new_prio);
 
-
-# define SD_INIT_NAME(type)		.name = #type
-
+#define SDTL(maskfn, flagsfn, dname) \
+	((struct sched_domain_topology_level) \
+	    { .mask = maskfn, .sd_flags = flagsfn, .name = #dname, .numa_level = 0 })
 #else /* CONFIG_SMP */
 
 struct sched_domain_attr;
