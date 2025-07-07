@@ -417,6 +417,8 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 		zone_info->nr_zones++;
 
 	max_active_zones = bdev_max_active_zones(bdev);
+	if (!max_active_zones)
+		max_active_zones = bdev_max_open_zones(bdev);
 	if (max_active_zones && max_active_zones < BTRFS_MIN_ACTIVE_ZONES) {
 		btrfs_err(fs_info,
 "zoned: %s: max active zones %u is too small, need at least %u active zones",
