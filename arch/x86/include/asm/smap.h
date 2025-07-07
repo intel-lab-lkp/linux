@@ -23,16 +23,45 @@
 
 #else /* __ASSEMBLER__ */
 
+/*
+ * The CLAC/STAC instructions toggle the enforcement of X86_FEATURE_SMAP and
+ * X86_FEATURE_LASS.
+ *
+ * SMAP enforcement is based on the _PAGE_BIT_USER bit in the page tables: the
+ * kernel is not allowed to touch pages with the bit set unless the AC bit is
+ * set.
+ *
+ * LASS enforcement is based on bit 63 of the virtual address. The kernel is
+ * not allowed to touch memory in the lower half of the virtual address space
+ * unless the AC bit is set.
+ *
+ * Use stac()/clac() when accessing userspace (_PAGE_USER) mappings,
+ * regardless of location.
+ *
+ * Use lass_stac()/lass_clac() when accessing kernel mappings (!_PAGE_USER)
+ * in the lower half of the address space.
+ *
+ * Note: a barrier is implicit in alternative().
+ */
+
 static __always_inline void clac(void)
 {
-	/* Note: a barrier is implicit in alternative() */
 	alternative("", "clac", X86_FEATURE_SMAP);
 }
 
 static __always_inline void stac(void)
 {
-	/* Note: a barrier is implicit in alternative() */
 	alternative("", "stac", X86_FEATURE_SMAP);
+}
+
+static __always_inline void lass_clac(void)
+{
+	alternative("", "clac", X86_FEATURE_LASS);
+}
+
+static __always_inline void lass_stac(void)
+{
+	alternative("", "stac", X86_FEATURE_LASS);
 }
 
 static __always_inline unsigned long smap_save(void)

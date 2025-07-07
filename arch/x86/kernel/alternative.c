@@ -2416,16 +2416,40 @@ void __init_or_module text_poke_early(void *addr, const void *opcode,
 __ro_after_init struct mm_struct *text_poke_mm;
 __ro_after_init unsigned long text_poke_mm_addr;
 
+/*
+ * Text poking creates and uses a mapping in the lower half of the
+ * address space. Relax LASS enforcement when accessing the poking
+ * address.
+ */
+
 static void text_poke_memcpy(void *dst, const void *src, size_t len)
 {
-	memcpy(dst, src, len);
+	lass_stac();
+
+	/*
+	 * Objtool is picky about what occurs within the STAC/CLAC region
+	 * because this code runs with protection disabled. Objtool typically
+	 * does not permit function calls in this area.
+	 *
+	 * Avoid using memcpy() here. Instead, open code it.
+	 */
+	asm volatile("rep movsb"
+		     : "+D" (dst), "+S" (src), "+c" (len) : : "memory");
+
+	lass_clac();
 }
 
 static void text_poke_memset(void *dst, const void *src, size_t len)
 {
 	int c = *(const int *)src;
 
-	memset(dst, c, len);
+	lass_stac();
+
+	/* Open code memset(): make objtool happy. See text_poke_memcpy(). */
+	asm volatile("rep stosb"
+		     : "+D" (dst), "+c" (len) : "a" (c) : "memory");
+
+	lass_clac();
 }
 
 typedef void text_poke_f(void *dst, const void *src, size_t len);
