@@ -64,6 +64,143 @@ static int convert_prio(int prio)
 	return cpupri;
 }
 
+#ifdef	CONFIG_CPUMASK_OFFSTACK
+static inline int alloc_vec_masks(struct cpupri_vec *vec)
+{
+	int i;
+
+	for (i = 0; i < nr_node_ids; i++) {
+		if (!zalloc_cpumask_var_node(&vec->masks[i], GFP_KERNEL, i))
+			goto cleanup;
+
+		// Clear masks of cur node, set others
+		bitmap_complement(cpumask_bits(vec->masks[i]),
+			cpumask_bits(cpumask_of_node(i)), small_cpumask_bits);
+	}
+	return 0;
+
+cleanup:
+	while (i--)
+		free_cpumask_var(vec->masks[i]);
+	return -ENOMEM;
+}
+
+static inline void free_vec_masks(struct cpupri_vec *vec)
+{
+	for (int i = 0; i < nr_node_ids; i++)
+		free_cpumask_var(vec->masks[i]);
+}
+
+static inline int setup_vec_mask_var_ts(struct cpupri *cp)
+{
+	int i;
+
+	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
+		struct cpupri_vec *vec = &cp->pri_to_cpu[i];
+
+		vec->masks = kcalloc(nr_node_ids, sizeof(cpumask_var_t), GFP_KERNEL);
+		if (!vec->masks)
+			goto cleanup;
+	}
+	return 0;
+
+cleanup:
+	/* Free any already allocated masks */
+	while (i--) {
+		kfree(cp->pri_to_cpu[i].masks);
+		cp->pri_to_cpu[i].masks = NULL;
+	}
+
+	return -ENOMEM;
+}
+
+static inline void free_vec_mask_var_ts(struct cpupri *cp)
+{
+	for (int i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
+		kfree(cp->pri_to_cpu[i].masks);
+		cp->pri_to_cpu[i].masks = NULL;
+	}
+}
+
+static inline int
+available_cpu_in_nodes(struct task_struct *p, struct cpupri_vec *vec)
+{
+	int cur_node = numa_node_id();
+
+	for (int i = 0; i < nr_node_ids; i++) {
+		int nid = (cur_node + i) % nr_node_ids;
+
+		if (cpumask_first_and_and(&p->cpus_mask, vec->masks[nid],
+					cpumask_of_node(nid)) < nr_cpu_ids)
+			return 1;
+	}
+
+	return 0;
+}
+
+#define available_cpu_in_vec available_cpu_in_nodes
+
+#else /* !CONFIG_CPUMASK_OFFSTACK */
+
+static inline int alloc_vec_masks(struct cpupri_vec *vec)
+{
+	if (!zalloc_cpumask_var(&vec->mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	return 0;
+}
+
+static inline void free_vec_masks(struct cpupri_vec *vec)
+{
+	free_cpumask_var(vec->mask);
+}
+
+static inline int setup_vec_mask_var_ts(struct cpupri *cp)
+{
+	return 0;
+}
+
+static inline void free_vec_mask_var_ts(struct cpupri *cp)
+{
+}
+
+static inline int
+available_cpu_in_vec(struct task_struct *p, struct cpupri_vec *vec)
+{
+	if (cpumask_any_and(&p->cpus_mask, vec->mask) >= nr_cpu_ids)
+		return 0;
+
+	return 1;
+}
+#endif
+
+static inline int alloc_all_masks(struct cpupri *cp)
+{
+	int i;
+
+	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
+		if (alloc_vec_masks(&cp->pri_to_cpu[i]))
+			goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	while (i--)
+		free_vec_masks(&cp->pri_to_cpu[i]);
+
+	return -ENOMEM;
+}
+
+static inline void setup_vec_counts(struct cpupri *cp)
+{
+	for (int i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
+		struct cpupri_vec *vec = &cp->pri_to_cpu[i];
+
+		atomic_set(&vec->count, 0);
+	}
+}
+
 static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 				struct cpumask *lowest_mask, int idx)
 {
@@ -96,11 +233,24 @@ static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 	if (skip)
 		return 0;
 
-	if (cpumask_any_and(&p->cpus_mask, vec->mask) >= nr_cpu_ids)
+	if (!available_cpu_in_vec(p, vec))
 		return 0;
 
+#ifdef	CONFIG_CPUMASK_OFFSTACK
+	struct cpumask *cpupri_mask = lowest_mask;
+
+	// available && lowest_mask
 	if (lowest_mask) {
-		cpumask_and(lowest_mask, &p->cpus_mask, vec->mask);
+		cpumask_copy(cpupri_mask, vec->masks[0]);
+		for (int nid = 1; nid < nr_node_ids; nid++)
+			cpumask_and(cpupri_mask, cpupri_mask, vec->masks[nid]);
+	}
+#else
+	struct cpumask *cpupri_mask = vec->mask;
+#endif
+
+	if (lowest_mask) {
+		cpumask_and(lowest_mask, &p->cpus_mask, cpupri_mask);
 		cpumask_and(lowest_mask, lowest_mask, cpu_active_mask);
 
 		/*
@@ -229,7 +379,11 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 	if (likely(newpri != CPUPRI_INVALID)) {
 		struct cpupri_vec *vec = &cp->pri_to_cpu[newpri];
 
+#ifdef	CONFIG_CPUMASK_OFFSTACK
+		cpumask_set_cpu(cpu, vec->masks[cpu_to_node(cpu)]);
+#else
 		cpumask_set_cpu(cpu, vec->mask);
+#endif
 		/*
 		 * When adding a new vector, we update the mask first,
 		 * do a write memory barrier, and then update the count, to
@@ -263,7 +417,11 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 		 */
 		atomic_dec(&(vec)->count);
 		smp_mb__after_atomic();
+#ifdef	CONFIG_CPUMASK_OFFSTACK
+		cpumask_clear_cpu(cpu, vec->masks[cpu_to_node(cpu)]);
+#else
 		cpumask_clear_cpu(cpu, vec->mask);
+#endif
 	}
 
 	*currpri = newpri;
@@ -279,26 +437,31 @@ int cpupri_init(struct cpupri *cp)
 {
 	int i;
 
-	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
-		struct cpupri_vec *vec = &cp->pri_to_cpu[i];
-
-		atomic_set(&vec->count, 0);
-		if (!zalloc_cpumask_var(&vec->mask, GFP_KERNEL))
-			goto cleanup;
-	}
-
+	/* Allocate the cpu_to_pri array */
 	cp->cpu_to_pri = kcalloc(nr_cpu_ids, sizeof(int), GFP_KERNEL);
 	if (!cp->cpu_to_pri)
-		goto cleanup;
+		return -ENOMEM;
 
+	/* Initialize all CPUs to invalid priority */
 	for_each_possible_cpu(i)
 		cp->cpu_to_pri[i] = CPUPRI_INVALID;
 
+	/* Setup priority vectors */
+	setup_vec_counts(cp);
+	if (setup_vec_mask_var_ts(cp))
+		goto fail_setup_vectors;
+
+	/* Allocate masks for each priority vector */
+	if (alloc_all_masks(cp))
+		goto fail_alloc_masks;
+
 	return 0;
 
-cleanup:
-	for (i--; i >= 0; i--)
-		free_cpumask_var(cp->pri_to_cpu[i].mask);
+fail_alloc_masks:
+	free_vec_mask_var_ts(cp);
+
+fail_setup_vectors:
+	kfree(cp->cpu_to_pri);
 	return -ENOMEM;
 }
 
@@ -308,9 +471,10 @@ cleanup:
  */
 void cpupri_cleanup(struct cpupri *cp)
 {
-	int i;
-
 	kfree(cp->cpu_to_pri);
-	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++)
-		free_cpumask_var(cp->pri_to_cpu[i].mask);
+
+	for (int i = 0; i < CPUPRI_NR_PRIORITIES; i++)
+		free_vec_masks(&cp->pri_to_cpu[i]);
+
+	free_vec_mask_var_ts(cp);
 }
