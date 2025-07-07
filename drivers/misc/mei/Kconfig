@@ -81,6 +81,17 @@ config INTEL_MEI_VSC
 	  This driver can also be built as a module. If so, the module
 	  will be called mei-vsc.
 
+config INTEL_MEI_LATE_BIND
+	tristate "Intel late binding support on ME Interface"
+	depends on INTEL_MEI_ME
+	depends on DRM_XE
+	help
+	  MEI Support for Late Binding for Intel graphics card.
+
+	  Enables the ME FW interfaces for Late Binding feature,
+	  allowing loading of firmware for the devices like Fan
+	  Controller by Intel Xe driver.
+
 source "drivers/misc/mei/hdcp/Kconfig"
 source "drivers/misc/mei/pxp/Kconfig"
 source "drivers/misc/mei/gsc_proxy/Kconfig"
