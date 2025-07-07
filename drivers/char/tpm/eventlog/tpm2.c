@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/tpm_eventlog.h>
+#include <linux/cc_platform.h>
 
 #include "../tpm.h"
 #include "common.h"
@@ -36,7 +37,8 @@
 static size_t calc_tpm2_event_size(struct tcg_pcr_event2_head *event,
 				   struct tcg_pcr_event *event_header)
 {
-	return __calc_tpm2_event_size(event, event_header, false);
+	return __calc_tpm2_event_size(event, event_header, false,
+			cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT));
 }
 
 static void *tpm2_bios_measurements_start(struct seq_file *m, loff_t *pos)

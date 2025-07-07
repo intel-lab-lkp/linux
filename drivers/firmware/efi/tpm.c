@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/memblock.h>
 #include <linux/tpm_eventlog.h>
+#include <linux/cc_platform.h>
 
 int efi_tpm_final_log_size;
 EXPORT_SYMBOL(efi_tpm_final_log_size);
@@ -23,7 +24,8 @@ static int __init tpm2_calc_event_log_size(void *data, int count, void *size_inf
 
 	while (count > 0) {
 		header = data + size;
-		event_size = __calc_tpm2_event_size(header, size_info, true);
+		event_size = __calc_tpm2_event_size(header, size_info, true,
+				     cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT));
 		if (event_size == 0)
 			return -1;
 		size += event_size;

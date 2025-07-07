@@ -143,6 +143,7 @@ struct tcg_algorithm_info {
  * @event:        Pointer to the event whose size should be calculated
  * @event_header: Pointer to the initial event containing the digest lengths
  * @do_mapping:   Whether or not the event needs to be mapped
+ * @is_cc_event:  Whether or not the event is from a CC platform
  *
  * The TPM2 event log format can contain multiple digests corresponding to
  * separate PCR banks, and also contains a variable length of the data that
@@ -159,7 +160,8 @@ struct tcg_algorithm_info {
 
 static __always_inline u32 __calc_tpm2_event_size(struct tcg_pcr_event2_head *event,
 					 struct tcg_pcr_event *event_header,
-					 bool do_mapping)
+					 bool do_mapping,
+					 bool is_cc_event)
 {
 	struct tcg_efi_specid_event_head *efispecid;
 	struct tcg_event_field *event_field;
@@ -201,8 +203,14 @@ static __always_inline u32 __calc_tpm2_event_size(struct tcg_pcr_event2_head *ev
 	count = event->count;
 	event_type = event->event_type;
 
-	/* Verify that it's the log header */
-	if (event_header->pcr_idx != 0 ||
+	/*
+	 * Verify that it's the log header. According to the TCG PC Client
+	 * Specification, when identifying a log header, the check for a
+	 * pcr_idx value of 0 is not required. For CC platforms, skipping
+	 * this check during log header is necessary; otherwise, the CC
+	 * platform's log header may fail to be recognized.
+	 */
+	if ((!is_cc_event && event_header->pcr_idx != 0) ||
 	    event_header->event_type != NO_ACTION ||
 	    memcmp(event_header->digest, zero_digest, sizeof(zero_digest))) {
 		size = 0;
