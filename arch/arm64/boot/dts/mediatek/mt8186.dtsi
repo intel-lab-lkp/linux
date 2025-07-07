@@ -861,6 +861,7 @@
 		infracfg_ao: syscon@10001000 {
 			compatible = "mediatek,mt8186-infracfg_ao", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
@@ -900,6 +901,7 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg_ao>;
 
 				/* power domain of the SoC */
 				mfg0: power-domain@MT8186_POWER_DOMAIN_MFG0 {
@@ -912,7 +914,6 @@
 
 					mfg1: power-domain@MT8186_POWER_DOMAIN_MFG1 {
 						reg = <MT8186_POWER_DOMAIN_MFG1>;
-						mediatek,infracfg = <&infracfg_ao>;
 						#address-cells = <1>;
 						#size-cells = <0>;
 						#power-domain-cells = <1>;
@@ -972,7 +973,6 @@
 
 						power-domain@MT8186_POWER_DOMAIN_ADSP_TOP {
 							reg = <MT8186_POWER_DOMAIN_ADSP_TOP>;
-							mediatek,infracfg = <&infracfg_ao>;
 							#power-domain-cells = <0>;
 						};
 					};
@@ -980,7 +980,6 @@
 
 				power-domain@MT8186_POWER_DOMAIN_CONN_ON {
 					reg = <MT8186_POWER_DOMAIN_CONN_ON>;
-					mediatek,infracfg = <&infracfg_ao>;
 					#power-domain-cells = <0>;
 				};
 
@@ -997,7 +996,6 @@
 						      "subsys-smi-common",
 						      "subsys-smi-gals",
 						      "subsys-smi-iommu";
-					mediatek,infracfg = <&infracfg_ao>;
 					#address-cells = <1>;
 					#size-cells = <0>;
 					#power-domain-cells = <1>;
@@ -1007,7 +1005,6 @@
 						clocks = <&topckgen CLK_TOP_VDEC>,
 							 <&vdecsys CLK_VDEC_LARB1_CKEN>;
 						clock-names = "vdec0", "larb";
-						mediatek,infracfg = <&infracfg_ao>;
 						#power-domain-cells = <0>;
 					};
 
@@ -1024,7 +1021,6 @@
 							      "cam3", "gals",
 							      "subsys-cam-tm",
 							      "subsys-cam-top";
-						mediatek,infracfg = <&infracfg_ao>;
 						#address-cells = <1>;
 						#size-cells = <0>;
 						#power-domain-cells = <1>;
@@ -1045,7 +1041,6 @@
 						clocks = <&imgsys1 CLK_IMG1_GALS_IMG1>,
 							 <&topckgen CLK_TOP_IMG1>;
 						clock-names = "gals", "subsys-img-top";
-						mediatek,infracfg = <&infracfg_ao>;
 						#address-cells = <1>;
 						#size-cells = <0>;
 						#power-domain-cells = <1>;
@@ -1068,7 +1063,6 @@
 							      "subsys-ipe-larb1",
 							      "subsys-ipe-smi",
 							      "subsys-ipe-gals";
-						mediatek,infracfg = <&infracfg_ao>;
 						#power-domain-cells = <0>;
 					};
 
@@ -1077,7 +1071,6 @@
 						clocks = <&topckgen CLK_TOP_VENC>,
 							 <&vencsys CLK_VENC_CKE1_VENC>;
 						clock-names = "venc0", "subsys-larb";
-						mediatek,infracfg = <&infracfg_ao>;
 						#power-domain-cells = <0>;
 					};
 
@@ -1089,7 +1082,6 @@
 						clock-names = "wpe0",
 							      "subsys-larb-ck",
 							      "subsys-larb-pclk";
-						mediatek,infracfg = <&infracfg_ao>;
 						#power-domain-cells = <0>;
 					};
 				};

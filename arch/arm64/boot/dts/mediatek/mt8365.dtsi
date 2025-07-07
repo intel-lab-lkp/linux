@@ -301,6 +301,7 @@
 		infracfg: syscon@10001000 {
 			compatible = "mediatek,mt8365-infracfg", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 		};
 
@@ -325,6 +326,8 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg>, <&infracfg_nao>,
+						     <&smi_common>;
 
 				/* power domains of the SoC */
 				power-domain@MT8365_POWER_DOMAIN_MM {
@@ -337,8 +340,6 @@
 					clock-names = "mm", "mm-0", "mm-1",
 						      "mm-2", "mm-3";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
-					mediatek,infracfg-nao = <&infracfg_nao>;
 					#address-cells = <1>;
 					#size-cells = <0>;
 
@@ -354,20 +355,16 @@
 							      "cam-2", "cam-3",
 							      "cam-4", "cam-5";
 						#power-domain-cells = <0>;
-						mediatek,infracfg = <&infracfg>;
-						mediatek,smi = <&smi_common>;
 					};
 
 					power-domain@MT8365_POWER_DOMAIN_VDEC {
 						reg = <MT8365_POWER_DOMAIN_VDEC>;
 						#power-domain-cells = <0>;
-						mediatek,smi = <&smi_common>;
 					};
 
 					power-domain@MT8365_POWER_DOMAIN_VENC {
 						reg = <MT8365_POWER_DOMAIN_VENC>;
 						#power-domain-cells = <0>;
-						mediatek,smi = <&smi_common>;
 					};
 
 					power-domain@MT8365_POWER_DOMAIN_APU {
@@ -384,8 +381,6 @@
 							      "apu-3", "apu-4",
 							      "apu-5";
 						#power-domain-cells = <0>;
-						mediatek,infracfg = <&infracfg>;
-						mediatek,smi = <&smi_common>;
 					};
 				};
 
@@ -395,7 +390,6 @@
 						 <&topckgen CLK_TOP_CONN_26M>;
 					clock-names = "conn", "conn1";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 
 				power-domain@MT8365_POWER_DOMAIN_MFG {
@@ -403,7 +397,6 @@
 					clocks = <&topckgen CLK_TOP_MFG_SEL>;
 					clock-names = "mfg";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 
 				power-domain@MT8365_POWER_DOMAIN_AUDIO {
@@ -413,7 +406,6 @@
 						 <&infracfg CLK_IFR_AUD_26M_BK>;
 					clock-names = "audio", "audio1", "audio2";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 
 				power-domain@MT8365_POWER_DOMAIN_DSP {
@@ -422,7 +414,6 @@
 						 <&topckgen CLK_TOP_DSP_26M>;
 					clock-names = "dsp", "dsp1";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 			};
 		};
@@ -795,6 +786,7 @@
 				 <&mmsys CLK_MM_MM_SMI_COMM1>;
 			clock-names = "apb", "smi", "gals0", "gals1";
 			power-domains = <&spm MT8365_POWER_DOMAIN_MM>;
+			#access-controller-cells = <0>;
 		};
 
 		larb0: larb@14003000 {
