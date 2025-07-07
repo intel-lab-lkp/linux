@@ -119,6 +119,14 @@
 #define XGBE_MSI_BASE_COUNT	4
 #define XGBE_MSI_MIN_COUNT	(XGBE_MSI_BASE_COUNT + 1)
 
+/* Initial PTP register values based on Link Speed. */
+#define MAC_TICNR_1G_INITVAL	0x10
+#define MAC_TECNR_1G_INITVAL	0x28
+
+#define MAC_TICSNR_10G_INITVAL	0x33
+#define MAC_TECNR_10G_INITVAL	0x14
+#define MAC_TECSNR_10G_INITVAL	0xCC
+
 /* PCI clock frequencies */
 #define XGBE_V2_DMA_CLOCK_FREQ	500000000	/* 500 MHz */
 #define XGBE_V2_PTP_CLOCK_FREQ	125000000	/* 125 MHz */
@@ -129,6 +137,8 @@
 #define XGBE_TSTAMP_SSINC	20
 #define XGBE_TSTAMP_SNSINC	0
 
+#define XGBE_V2_TSTAMP_SSINC	0xA
+#define XGBE_V2_TSTAMP_SNSINC	0
 /* Driver PMT macros */
 #define XGMAC_DRIVER_CONTEXT	1
 #define XGMAC_IOCTL_CONTEXT	2
@@ -742,10 +752,16 @@ struct xgbe_hw_if {
 	void (*read_mmc_stats)(struct xgbe_prv_data *);
 
 	/* For Timestamp config */
-	int (*config_tstamp)(struct xgbe_prv_data *, unsigned int);
-	void (*update_tstamp_addend)(struct xgbe_prv_data *, unsigned int);
-	void (*set_tstamp_time)(struct xgbe_prv_data *, unsigned int sec,
+	void (*init_ptp)(struct xgbe_prv_data *pdata);
+	void (*config_tstamp)(struct xgbe_prv_data *pdata,
+			      unsigned int mac_tscr);
+	void (*update_tstamp_addend)(struct xgbe_prv_data *pdata,
+				     unsigned int addend);
+	void (*set_tstamp_time)(struct xgbe_prv_data *pdata, unsigned int sec,
 				unsigned int nsec);
+	void (*update_tstamp_time)(struct xgbe_prv_data *pdata,
+				   unsigned int sec,
+				   unsigned int nsec);
 	u64 (*get_tstamp_time)(struct xgbe_prv_data *);
 	u64 (*get_tx_tstamp)(struct xgbe_prv_data *);
 
@@ -946,6 +962,7 @@ struct xgbe_version_data {
 	unsigned int tx_max_fifo_size;
 	unsigned int rx_max_fifo_size;
 	unsigned int tx_tstamp_workaround;
+	unsigned int tstamp_ptp_clock_freq;
 	unsigned int ecc_support;
 	unsigned int i2c_support;
 	unsigned int irq_reissue_support;
@@ -1131,8 +1148,6 @@ struct xgbe_prv_data {
 	struct ptp_clock_info ptp_clock_info;
 	struct ptp_clock *ptp_clock;
 	struct hwtstamp_config tstamp_config;
-	struct cyclecounter tstamp_cc;
-	struct timecounter tstamp_tc;
 	unsigned int tstamp_addend;
 	struct work_struct tx_tstamp_work;
 	struct sk_buff *tx_tstamp_skb;
