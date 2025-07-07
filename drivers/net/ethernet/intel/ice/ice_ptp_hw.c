@@ -131,6 +131,11 @@ static const struct ice_cgu_pin_desc ice_e823_zl_cgu_outputs[] = {
 	{ "NONE",	   ZL_OUT5, 0, 0 },
 };
 
+static const struct ice_cgu_pin_desc ice_e825c_inputs[] = {
+	{ "CLK_IN_0",	 0, DPLL_PIN_TYPE_MUX, 0 },
+	{ "CLK_IN_1",	 0, DPLL_PIN_TYPE_MUX, 0 },
+};
+
 /* Low level functions for interacting with and managing the device clock used
  * for the Precision Time Protocol.
  *
@@ -5602,7 +5607,7 @@ int ice_get_phy_tx_tstamp_ready(struct ice_hw *hw, u8 block, u64 *tstamp_ready)
 }
 
 /**
- * ice_cgu_get_pin_desc_e823 - get pin description array
+ * ice_get_pin_desc_e82x - get pin description array
  * @hw: pointer to the hw struct
  * @input: if request is done against input or output pin
  * @size: number of inputs/outputs
@@ -5610,9 +5615,19 @@ int ice_get_phy_tx_tstamp_ready(struct ice_hw *hw, u8 block, u64 *tstamp_ready)
  * Return: pointer to pin description array associated to given hw.
  */
 static const struct ice_cgu_pin_desc *
-ice_cgu_get_pin_desc_e823(struct ice_hw *hw, bool input, int *size)
+ice_get_pin_desc_e82x(struct ice_hw *hw, bool input, int *size)
 {
 	static const struct ice_cgu_pin_desc *t;
+	if (hw->mac_type == ICE_MAC_GENERIC_3K_E825) {
+		if (input) {
+			t = ice_e825c_inputs;
+			*size = ARRAY_SIZE(ice_e825c_inputs);
+			return t;
+		}
+		t = NULL;
+		*size = 0;
+		return t;
+	}
 
 	if (hw->cgu_part_number ==
 	    ICE_AQC_GET_LINK_TOPO_NODE_NR_ZL30632_80032) {
@@ -5682,7 +5697,11 @@ ice_cgu_get_pin_desc(struct ice_hw *hw, bool input, int *size)
 	case ICE_DEV_ID_E823C_QSFP:
 	case ICE_DEV_ID_E823C_SFP:
 	case ICE_DEV_ID_E823C_SGMII:
-		t = ice_cgu_get_pin_desc_e823(hw, input, size);
+	case ICE_DEV_ID_E825C_BACKPLANE:
+	case ICE_DEV_ID_E825C_QSFP:
+	case ICE_DEV_ID_E825C_SFP:
+	case ICE_DEV_ID_E825C_SGMII:
+		t = ice_get_pin_desc_e82x(hw, input, size);
 		break;
 	default:
 		break;
@@ -5730,7 +5749,6 @@ enum dpll_pin_type ice_cgu_get_pin_type(struct ice_hw *hw, u8 pin, bool input)
 
 	if (pin >= t_size)
 		return 0;
-
 	return t[pin].type;
 }
 
@@ -5903,7 +5921,14 @@ int ice_get_cgu_rclk_pin_info(struct ice_hw *hw, u8 *base_idx, u8 *pin_num)
 			*base_idx = SI_REF1P;
 		else
 			ret = -ENODEV;
-
+		break;
+	case ICE_DEV_ID_E825C_BACKPLANE:
+	case ICE_DEV_ID_E825C_QSFP:
+	case ICE_DEV_ID_E825C_SFP:
+	case ICE_DEV_ID_E825C_SGMII:
+		*pin_num = 2;
+		*base_idx = 0;
+		ret = 0;
 		break;
 	default:
 		ret = -ENODEV;
