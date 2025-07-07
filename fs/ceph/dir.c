@@ -1261,7 +1261,9 @@ static void ceph_async_unlink_cb(struct ceph_mds_client *mdsc,
 	spin_unlock(&fsc->async_unlink_conflict_lock);
 
 	spin_lock(&dentry->d_lock);
-	di->flags &= ~CEPH_DENTRY_ASYNC_UNLINK;
+	clear_bit(CEPH_DENTRY_ASYNC_UNLINK_BIT, &di->flags);
+	/* ensure modified bit is visible */
+	smp_mb__after_atomic();
 	wake_up_bit(&di->flags, CEPH_DENTRY_ASYNC_UNLINK_BIT);
 	spin_unlock(&dentry->d_lock);
 
