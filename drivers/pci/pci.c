@@ -1708,7 +1708,6 @@ static int pci_save_pcie_state(struct pci_dev *dev)
 	pcie_capability_read_word(dev, PCI_EXP_LNKCTL2, &cap[i++]);
 	pcie_capability_read_word(dev, PCI_EXP_SLTCTL2, &cap[i++]);
 
-	pci_save_aspm_l1ss_state(dev);
 	pci_save_ltr_state(dev);
 
 	return 0;
@@ -1725,7 +1724,6 @@ static void pci_restore_pcie_state(struct pci_dev *dev)
 	 * LTR itself in PCI_EXP_DEVCTL2.
 	 */
 	pci_restore_ltr_state(dev);
-	pci_restore_aspm_l1ss_state(dev);
 
 	save_state = pci_find_saved_cap(dev, PCI_CAP_ID_EXP);
 	if (!save_state)
