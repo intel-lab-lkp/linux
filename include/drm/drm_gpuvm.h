@@ -1049,10 +1049,37 @@ struct drm_gpuva_ops {
  */
 #define drm_gpuva_next_op(op) list_next_entry(op, entry)
 
+/**
+ * struct drm_gpuvm_map_req - arguments passed to drm_gpuvm_sm_map[_ops_create]()
+ */
+struct drm_gpuvm_map_req {
+	/** @va: virtual address related fields */
+	struct {
+		/** @va.addr: start of the virtual address range to map to */
+		u64 addr;
+
+		/** @va.size: size of the virtual address range to map to */
+		u64 range;
+	} va;
+
+	/** @gem: GEM related fields */
+	struct {
+		/**
+		 * @obj: GEM object to map.
+		 *
+		 * Can be NULL if the virtual range is not backed by a GEM object.
+		 */
+		struct drm_gem_object *obj;
+
+		/** @offset: offset in the GEM */
+		u64 offset;
+	} gem;
+};
+
 struct drm_gpuva_ops *
 drm_gpuvm_sm_map_ops_create(struct drm_gpuvm *gpuvm,
-			    u64 addr, u64 range,
-			    struct drm_gem_object *obj, u64 offset);
+			    const struct drm_gpuvm_map_req *req);
+
 struct drm_gpuva_ops *
 drm_gpuvm_sm_unmap_ops_create(struct drm_gpuvm *gpuvm,
 			      u64 addr, u64 range);
@@ -1198,8 +1225,7 @@ struct drm_gpuvm_ops {
 };
 
 int drm_gpuvm_sm_map(struct drm_gpuvm *gpuvm, void *priv,
-		     u64 addr, u64 range,
-		     struct drm_gem_object *obj, u64 offset);
+		     const struct drm_gpuvm_map_req *req);
 
 int drm_gpuvm_sm_unmap(struct drm_gpuvm *gpuvm, void *priv,
 		       u64 addr, u64 range);
