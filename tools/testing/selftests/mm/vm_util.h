@@ -74,6 +74,8 @@ static inline void skip_test_dodgy_fs(const char *op_name)
 extern volatile sig_atomic_t signal_jump_set;
 extern sigjmp_buf signal_jmp_buf;
 
+bool detect_huge_zeropage(void);
+
 /*
  * Ignore the checkpatch warning, we must read from x but don't want to do
  * anything with it in order to trigger a read page fault. We therefore must use
