@@ -5743,6 +5743,9 @@ static void intel_crtc_check_fastset(const struct intel_crtc_state *old_crtc_sta
 				   &new_crtc_state->dp_m_n))
 		new_crtc_state->update_m_n = false;
 
+	if (new_crtc_state->update_m_n && intel_vrr_always_use_vrr_tg(display))
+		intel_vrr_compute_fixed_rr_for_seamless_m_n(old_crtc_state, new_crtc_state);
+
 	if (!lrr_params_changed(&old_crtc_state->hw.adjusted_mode,
 				&new_crtc_state->hw.adjusted_mode))
 		new_crtc_state->update_lrr = false;

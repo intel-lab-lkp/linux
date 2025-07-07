@@ -42,5 +42,7 @@ void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state);
 void intel_vrr_transcoder_disable(const struct intel_crtc_state *crtc_state);
 void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state);
 bool intel_vrr_always_use_vrr_tg(struct intel_display *display);
+void intel_vrr_compute_fixed_rr_for_seamless_m_n(const struct intel_crtc_state *old_crtc_state,
+						 struct intel_crtc_state *new_crtc_state);
 
 #endif /* __INTEL_VRR_H__ */

@@ -435,6 +435,7 @@ int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 {
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *highest_mode;
 	struct intel_dp *intel_dp;
 	int dsc_prefill_time = 0;
 	int psr2_pr_latency = 0;
@@ -447,8 +448,22 @@ int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 	int vblank_us;
 	int pm_delay;
 
-	linetime_us = DIV_ROUND_UP(adjusted_mode->crtc_htotal * 1000,
-				   adjusted_mode->crtc_clock);
+	/*
+	 * For seamless m_n the clock is changed while other modeline
+	 * parameters are same. In that case the linetime_us will change,
+	 * causing the guardband to change, and the seamless switch to
+	 * lower mode would not take place.
+	 * To avoid this, take the highest mode where panel supports
+	 * seamless drrs.
+	 */
+	highest_mode = intel_panel_highest_mode(connector, adjusted_mode);
+	if (crtc_state->has_drrs && highest_mode) {
+		linetime_us = DIV_ROUND_UP(highest_mode->htotal * 1000,
+					   highest_mode->clock);
+	} else {
+		linetime_us = DIV_ROUND_UP(adjusted_mode->crtc_htotal * 1000,
+					   adjusted_mode->crtc_clock);
+	}
 
 	/* Assuming max wm0 lines = 4 */
 	wm0_prefill_time = 4 * linetime_us + 20;
@@ -858,4 +873,26 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 	 */
 	if (crtc_state->vrr.enable)
 		crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
+}
+
+void intel_vrr_compute_fixed_rr_for_seamless_m_n(const struct intel_crtc_state *old_crtc_state,
+						 struct intel_crtc_state *new_crtc_state)
+{
+	int old_clock = old_crtc_state->hw.adjusted_mode.crtc_clock;
+	int new_clock = new_crtc_state->hw.adjusted_mode.crtc_clock;
+	int new_vtotal = new_crtc_state->hw.adjusted_mode.crtc_vtotal;
+	int vtotal_lower_mode;
+
+	/*
+	 * For switching seamlessly from higher to lower mode with VRR TG on,
+	 * we need to set flipline, vmin, vmax to the vtotal computed for the
+	 * lower mode. Since for seamless drrs, user changes the clock as per
+	 * the required lower mode, (keeping vtotal same), we need to compute
+	 * flipline, vmin, vmax as per the lower mode.
+	 */
+
+	vtotal_lower_mode = (old_clock * new_vtotal  / new_clock);
+	new_crtc_state->vrr.flipline = vtotal_lower_mode;
+	new_crtc_state->vrr.vmin = new_crtc_state->vrr.flipline;
+	new_crtc_state->vrr.vmax = new_crtc_state->vrr.flipline;
 }
