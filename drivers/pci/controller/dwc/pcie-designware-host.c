@@ -492,6 +492,7 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 		return -ENOMEM;
 
 	pp->bridge = bridge;
+	bridge->perst = pp->perst;
 
 	ret = dw_pcie_host_get_resources(pp);
 	if (ret)

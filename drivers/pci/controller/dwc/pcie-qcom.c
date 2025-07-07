@@ -313,6 +313,11 @@ static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
 
 static void qcom_ep_reset_deassert(struct qcom_pcie *pcie)
 {
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
+
+	if (pp->perst)
+		return;
+
 	/* Ensure that PERST has been asserted for at least 100 ms */
 	msleep(PCIE_T_PVPERL_MS);
 	qcom_perst_assert(pcie, false);
@@ -1701,11 +1706,12 @@ static const struct pci_ecam_ops pci_qcom_ecam_ops = {
 
 static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node)
 {
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
 	struct device *dev = pcie->pci->dev;
 	struct qcom_pcie_port *port;
 	struct gpio_desc *reset;
 	struct phy *phy;
-	int ret;
+	int ret, devfn;
 
 	reset = devm_fwnode_gpiod_get(dev, of_fwnode_handle(node),
 				      "reset", GPIOD_OUT_HIGH, "PERST#");
@@ -1724,6 +1730,12 @@ static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node
 	if (ret)
 		return ret;
 
+	devfn = of_pci_get_devfn(node);
+	if (devfn < 0)
+		return -ENOENT;
+
+	pp->perst[PCI_SLOT(devfn)] = reset;
+
 	port->reset = reset;
 	port->phy = phy;
 	INIT_LIST_HEAD(&port->list);
@@ -1734,9 +1746,19 @@ static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node
 
 static int qcom_pcie_parse_ports(struct qcom_pcie *pcie)
 {
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
 	struct device *dev = pcie->pci->dev;
 	struct qcom_pcie_port *port, *tmp;
+	int child_cnt;
 	int ret = -ENOENT;
+
+	child_cnt = of_get_available_child_count(dev->of_node);
+	if (!child_cnt)
+		return ret;
+
+	pp->perst = kcalloc(child_cnt, sizeof(struct gpio_desc *), GFP_KERNEL);
+	if (!pp->perst)
+		return -ENOMEM;
 
 	for_each_available_child_of_node_scoped(dev->of_node, of_port) {
 		ret = qcom_pcie_parse_port(pcie, of_port);
@@ -1747,6 +1769,7 @@ static int qcom_pcie_parse_ports(struct qcom_pcie *pcie)
 	return ret;
 
 err_port_del:
+	kfree(pp->perst);
 	list_for_each_entry_safe(port, tmp, &pcie->ports, list)
 		list_del(&port->list);
 
@@ -1984,6 +2007,7 @@ err_host_deinit:
 	dw_pcie_host_deinit(pp);
 err_phy_exit:
 	qcom_pcie_phy_exit(pcie);
+	kfree(pp->perst);
 	list_for_each_entry_safe(port, tmp, &pcie->ports, list)
 		list_del(&port->list);
 err_pm_runtime_put:

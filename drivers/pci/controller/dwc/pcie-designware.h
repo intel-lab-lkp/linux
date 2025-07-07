@@ -430,6 +430,7 @@ struct dw_pcie_rp {
 	struct resource		*msg_res;
 	bool			use_linkup_irq;
 	struct pci_eq_presets	presets;
+	struct gpio_desc	**perst;
 };
 
 struct dw_pcie_ep_ops {
