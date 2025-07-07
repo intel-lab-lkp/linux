@@ -5970,18 +5970,21 @@ static int intel_async_flip_check_uapi(struct intel_atomic_state *state,
 		 * this(vlv/chv and icl+) should be added when async flip is
 		 * enabled in the atomic IOCTL path.
 		 */
-		if (!plane->async_flip) {
+		if (!plane->async_flip && new_plane_state->uapi.fb) {
 			drm_dbg_kms(display->drm,
 				    "[PLANE:%d:%s] async flip not supported\n",
 				    plane->base.base.id, plane->base.name);
 			return -EINVAL;
 		}
 
-		if (!old_plane_state->uapi.fb || !new_plane_state->uapi.fb) {
-			drm_dbg_kms(display->drm,
-				    "[PLANE:%d:%s] no old or new framebuffer\n",
-				    plane->base.base.id, plane->base.name);
-			return -EINVAL;
+		if (plane->base.type != DRM_PLANE_TYPE_CURSOR &&
+		    plane->base.type != DRM_PLANE_TYPE_OVERLAY) {
+			if (!old_plane_state->uapi.fb || !new_plane_state->uapi.fb) {
+				drm_dbg_kms(display->drm,
+					    "[PLANE:%d:%s] no old or new framebuffer\n",
+					    plane->base.base.id, plane->base.name);
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -6034,7 +6037,8 @@ static int intel_async_flip_check_hw(struct intel_atomic_state *state, struct in
 		 * an async flip. We should never get this far otherwise.
 		 */
 		if (drm_WARN_ON(display->drm,
-				new_crtc_state->do_async_flip && !plane->async_flip))
+				new_crtc_state->do_async_flip && !plane->async_flip &&
+				new_plane_state->hw.fb))
 			return -EINVAL;
 
 		/*

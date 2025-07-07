@@ -1425,9 +1425,33 @@ static int intel_get_scanout_buffer(struct drm_plane *plane,
 	return 0;
 }
 
+static int
+intel_plane_atomic_async_check(struct drm_plane *plane,
+			       struct drm_atomic_state *_state, bool flip)
+{
+	struct intel_atomic_state *state = to_intel_atomic_state(_state);
+	struct intel_plane *intel_plane;
+	const struct intel_plane_state *old_plane_state;
+	struct intel_plane_state *new_plane_state;
+	int i;
+
+	for_each_oldnew_intel_plane_in_state(state, intel_plane, old_plane_state,
+					     new_plane_state, i) {
+		if (intel_plane->id != to_intel_plane(plane)->id)
+			continue;
+
+		/* no old or new framebuffer */
+		if (flip && !old_plane_state->uapi.fb && !new_plane_state->uapi.fb)
+			return 0;
+	}
+
+	return -EINVAL;
+}
+
 static const struct drm_plane_helper_funcs intel_plane_helper_funcs = {
 	.prepare_fb = intel_prepare_plane_fb,
 	.cleanup_fb = intel_cleanup_plane_fb,
+	.atomic_async_check = intel_plane_atomic_async_check,
 };
 
 static const struct drm_plane_helper_funcs intel_primary_plane_helper_funcs = {
