@@ -20,6 +20,7 @@
 #include <linux/tick.h>
 #include <linux/pm_qos.h>
 #include <linux/delay.h>
+#include <linux/string_choices.h>
 #include <linux/sched/isolation.h>
 
 #include "base.h"
@@ -647,6 +648,70 @@ static const struct attribute_group cpu_root_vulnerabilities_group = {
 	.attrs = cpu_root_vulnerabilities_attrs,
 };
 
+static const char *attack_vector_state(enum cpu_attack_vectors v)
+{
+	return str_on_off(cpu_attack_vector_mitigated(v));
+}
+
+static ssize_t cpu_show_user_kernel_vector(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n",  attack_vector_state(CPU_MITIGATE_USER_KERNEL));
+}
+
+static ssize_t cpu_show_user_user_vector(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", attack_vector_state(CPU_MITIGATE_USER_USER));
+}
+
+static ssize_t cpu_show_guest_host_vector(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", attack_vector_state(CPU_MITIGATE_GUEST_HOST));
+}
+
+static ssize_t cpu_show_guest_guest_vector(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", attack_vector_state(CPU_MITIGATE_GUEST_GUEST));
+}
+
+static ssize_t cpu_show_smt_vector(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	switch (smt_mitigations) {
+	case SMT_MITIGATIONS_OFF:
+		return sysfs_emit(buf, "off\n");
+	case SMT_MITIGATIONS_ON:
+		return sysfs_emit(buf, "on\n");
+	case SMT_MITIGATIONS_AUTO:
+		return sysfs_emit(buf, "auto\n");
+	}
+
+	return 0;
+}
+
+static DEVICE_ATTR(user_kernel, 0444, cpu_show_user_kernel_vector, NULL);
+static DEVICE_ATTR(user_user, 0444, cpu_show_user_user_vector, NULL);
+static DEVICE_ATTR(guest_host, 0444, cpu_show_guest_host_vector, NULL);
+static DEVICE_ATTR(guest_guest, 0444, cpu_show_guest_guest_vector, NULL);
+static DEVICE_ATTR(smt, 0444, cpu_show_smt_vector, NULL);
+
+static struct attribute *cpu_vector_mitigations_attrs[] = {
+	&dev_attr_user_kernel.attr,
+	&dev_attr_user_user.attr,
+	&dev_attr_guest_host.attr,
+	&dev_attr_guest_guest.attr,
+	&dev_attr_smt.attr,
+	NULL
+};
+
+static const struct attribute_group cpu_vector_mitigations_group = {
+	.name  = "vector_mitigations",
+	.attrs = cpu_vector_mitigations_attrs,
+};
+
 static void __init cpu_register_vulnerabilities(void)
 {
 	struct device *dev = bus_get_dev_root(&cpu_subsys);
@@ -654,6 +719,8 @@ static void __init cpu_register_vulnerabilities(void)
 	if (dev) {
 		if (sysfs_create_group(&dev->kobj, &cpu_root_vulnerabilities_group))
 			pr_err("Unable to register CPU vulnerabilities\n");
+		if (sysfs_create_group(&dev->kobj, &cpu_vector_mitigations_group))
+			pr_err("Unable to register CPU attack vectors\n");
 		put_device(dev);
 	}
 }
