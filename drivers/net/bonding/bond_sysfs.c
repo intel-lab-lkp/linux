@@ -479,6 +479,18 @@ static ssize_t bonding_show_carrier(struct device *d,
 static DEVICE_ATTR(use_carrier, 0644,
 		   bonding_show_carrier, bonding_sysfs_store_option);
 
+/* Show the coupled_control flag. */
+static ssize_t bonding_show_coupled_control(struct device *d,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct bonding *bond = to_bond(d);
+
+	return sysfs_emit(buf, "%d\n", bond->params.coupled_control);
+}
+static DEVICE_ATTR(coupled_control, 0644,
+		   bonding_show_coupled_control, bonding_sysfs_store_option);
+
 
 /* Show currently active_slave. */
 static ssize_t bonding_show_active_slave(struct device *d,
@@ -791,6 +803,7 @@ static struct attribute *per_bond_attrs[] = {
 	&dev_attr_ad_actor_system.attr,
 	&dev_attr_ad_user_port_key.attr,
 	&dev_attr_arp_missed_max.attr,
+	&dev_attr_coupled_control.attr,
 	NULL,
 };
 
