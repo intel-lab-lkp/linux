@@ -12,6 +12,7 @@
 #include <linux/nfs_page.h>
 #include <linux/nfslocalio.h>
 #include <linux/wait_bit.h>
+#include <linux/workqueue.h>
 
 #define NFS_SB_MASK (SB_NOSUID|SB_NODEV|SB_NOEXEC|SB_SYNCHRONOUS)
 
@@ -669,9 +670,18 @@ nfs_write_match_verf(const struct nfs_writeverf *verf,
 		!nfs_write_verifier_cmp(&req->wb_verf, &verf->verifier);
 }
 
+static inline bool is_nfsiod(void)
+{
+	struct workqueue_struct *current_wq = current_workqueue();
+
+	if (current_wq)
+		return current_wq == nfsiod_workqueue;
+	return false;
+}
+
 static inline gfp_t nfs_io_gfp_mask(void)
 {
-	if (current->flags & PF_WQ_WORKER)
+	if (is_nfsiod())
 		return GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN;
 	return GFP_KERNEL;
 }
