@@ -6011,6 +6011,24 @@ struct work_struct *current_work(void)
 EXPORT_SYMBOL(current_work);
 
 /**
+ * current_workqueue - retrieve %current task's work queue
+ *
+ * Determine if %current task is a workqueue worker and what workqueue it's
+ * working on.  Useful to find out the context that the %current task is
+ * running in.
+ *
+ * Return: workqueue_struct if %current task is a workqueue worker, %NULL
+ * otherwise.
+ */
+struct workqueue_struct *current_workqueue(void)
+{
+	struct worker *worker = current_wq_worker();
+
+	return worker ? worker->current_pwq->wq : NULL;
+}
+EXPORT_SYMBOL(current_workqueue);
+
+/**
  * current_is_workqueue_rescuer - is %current workqueue rescuer?
  *
  * Determine whether %current is a workqueue rescuer.  Can be used from
