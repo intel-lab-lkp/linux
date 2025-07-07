@@ -23436,6 +23436,72 @@ static int check_non_sleepable_error_inject(u32 btf_id)
 	return btf_id_set_contains(&btf_non_sleepable_error_inject, btf_id);
 }
 
+struct symbol_lookup_ctx {
+	const char *name;
+	unsigned long addr;
+};
+
+static int symbol_callback(void *data, unsigned long addr)
+{
+	struct symbol_lookup_ctx *ctx = data;
+
+	if (!ftrace_location(addr))
+		return 0;
+
+	if (ctx->addr)
+		return -EADDRNOTAVAIL;
+
+	ctx->addr = addr;
+
+	return 0;
+}
+
+static int symbol_mod_callback(void *data, const char *name, unsigned long addr)
+{
+	if (strcmp(((struct symbol_lookup_ctx *)data)->name, name) != 0)
+		return 0;
+
+	return symbol_callback(data, addr);
+}
+
+/**
+ * bpf_lookup_attach_addr: Lookup address for a symbol
+ *
+ * @mod: kernel module to lookup the symbol, NULL means to lookup the kernel
+ * symbols
+ * @sym: the symbol to resolve
+ * @addr: pointer to store the result
+ *
+ * Lookup the address of the symbol @sym, and the address should has
+ * corresponding ftrace location. If multiple symbols with the name @sym
+ * exist, the one that has ftrace location will be returned. If more than
+ * 1 has ftrace location, -EADDRNOTAVAIL will be returned.
+ *
+ * Returns: 0 on success, -errno otherwise.
+ */
+static int bpf_lookup_attach_addr(const struct module *mod, const char *sym,
+				  unsigned long *addr)
+{
+	struct symbol_lookup_ctx ctx = { .addr = 0, .name = sym };
+	int err;
+
+	if (!mod)
+		err = kallsyms_on_each_match_symbol(symbol_callback, sym, &ctx);
+	else
+		err = module_kallsyms_on_each_symbol(mod->name, symbol_mod_callback,
+						     &ctx);
+
+	if (!ctx.addr)
+		return -ENOENT;
+
+	if (err)
+		return err;
+
+	*addr = ctx.addr;
+
+	return 0;
+}
+
 int bpf_check_attach_target(struct bpf_verifier_log *log,
 			    const struct bpf_prog *prog,
 			    const struct bpf_prog *tgt_prog,
@@ -23689,18 +23755,18 @@ int bpf_check_attach_target(struct bpf_verifier_log *log,
 			if (btf_is_module(btf)) {
 				mod = btf_try_get_module(btf);
 				if (mod)
-					addr = find_kallsyms_symbol_value(mod, tname);
+					ret = bpf_lookup_attach_addr(mod, tname, &addr);
 				else
-					addr = 0;
+					ret = -ENOENT;
 			} else {
-				addr = kallsyms_lookup_name(tname);
+				ret = bpf_lookup_attach_addr(NULL, tname, &addr);
 			}
-			if (!addr) {
+			if (ret) {
 				module_put(mod);
 				bpf_log(log,
 					"The address of function %s cannot be found\n",
 					tname);
-				return -ENOENT;
+				return ret;
 			}
 		}
 
