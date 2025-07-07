@@ -4,6 +4,10 @@
 
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>
+#include <linux/array_size.h>
+
+#define STPRINTF(a, fmt, ...)  stprintf(a, ARRAY_SIZE(a), fmt, ##__VA_ARGS__)
+#define VSTPRINTF(a, fmt, ap)  vstprintf(a, ARRAY_SIZE(a), fmt, ap)
 
 int num_to_str(char *buf, int size, unsigned long long num, unsigned int width);
 
