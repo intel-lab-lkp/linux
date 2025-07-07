@@ -39,6 +39,17 @@
 /* interval between phylib state machine runs in ms */
 #define PHY_STATE_MACH_MS		1000
 
+/* Poll every 1 s when we have no IRQ line.
+ * Matches the default phylib state-machine cadence.
+ */
+#define SMSC_NOIRQ_POLLING_INTERVAL	secs_to_jiffies(1)
+/* When IRQs are present and the link is already up,
+ * fall back to a light 30 s poll:
+ *  – avoids needless wake-ups for power-management purposes
+ *  – still short enough to recover if the final link-up IRQ was lost
+ */
+#define SMSC_IRQ_POLLING_INTERVAL	secs_to_jiffies(30)
+
 struct smsc_hw_stat {
 	const char *string;
 	u8 reg;
@@ -54,6 +65,7 @@ struct smsc_phy_priv {
 	unsigned int edpd_mode_set_by_user:1;
 	unsigned int edpd_max_wait_ms;
 	bool wol_arp;
+	unsigned long last_irq;
 };
 
 static int smsc_phy_ack_interrupt(struct phy_device *phydev)
@@ -100,6 +112,7 @@ static int smsc_phy_config_edpd(struct phy_device *phydev)
 
 irqreturn_t smsc_phy_handle_interrupt(struct phy_device *phydev)
 {
+	struct smsc_phy_priv *priv = phydev->priv;
 	int irq_status;
 
 	irq_status = phy_read(phydev, MII_LAN83C185_ISF);
@@ -112,6 +125,8 @@ irqreturn_t smsc_phy_handle_interrupt(struct phy_device *phydev)
 
 	if (!(irq_status & MII_LAN83C185_ISF_INT_PHYLIB_EVENTS))
 		return IRQ_NONE;
+
+	priv->last_irq = jiffies;
 
 	phy_trigger_machine(phydev);
 
@@ -637,6 +652,33 @@ int smsc_phy_probe(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(smsc_phy_probe);
 
+static unsigned int smsc_phy_get_next_update(struct phy_device *phydev)
+{
+	struct smsc_phy_priv *priv = phydev->priv;
+
+	/* If interrupts are disabled, fall back to default polling */
+	if (phydev->irq == PHY_POLL)
+		return SMSC_NOIRQ_POLLING_INTERVAL;
+
+	/* The PHY sometimes drops the *final* link-up IRQ when we run
+	 * with autoneg OFF (10 Mbps HD/FD) against an autonegotiating
+	 * partner: we see several “link down” IRQs, none for “link up”.
+	 *
+	 * Work-around philosophy:
+	 *   - If the link is already up, the hazard is past, so we
+	 *     revert to a relaxed 30 s poll to save power.
+	 *   - Otherwise we stay in a tighter polling loop for up to one
+	 *     full interval after the last IRQ in case the crucial
+	 *     link-up IRQ was lost.  Empirically 5 s is enough but we
+	 *     keep 30 s to be extra conservative.
+	 */
+	if (!priv->last_irq || phydev->link ||
+	    time_is_before_jiffies(priv->last_irq + SMSC_IRQ_POLLING_INTERVAL))
+		return SMSC_IRQ_POLLING_INTERVAL;
+
+	return SMSC_NOIRQ_POLLING_INTERVAL;
+}
+
 static struct phy_driver smsc_phy_driver[] = {
 {
 	.phy_id		= 0x0007c0a0, /* OUI=0x00800f, Model#=0x0a */
@@ -749,6 +791,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	/* IRQ related */
 	.config_intr	= smsc_phy_config_intr,
 	.handle_interrupt = smsc_phy_handle_interrupt,
+	.get_next_update_time = smsc_phy_get_next_update,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
