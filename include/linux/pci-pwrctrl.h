@@ -31,6 +31,7 @@ struct device_link;
 /**
  * struct pci_pwrctrl - PCI device power control context.
  * @dev: Address of the power controlling device.
+ * @perst: PERST# GPIO connected to the PCI device.
  *
  * An object of this type must be allocated by the PCI power control device and
  * passed to the pwrctrl subsystem to trigger a bus rescan and setup a device
@@ -38,6 +39,7 @@ struct device_link;
  */
 struct pci_pwrctrl {
 	struct device *dev;
+	struct gpio_desc *perst;
 
 	/* Private: don't use. */
 	struct notifier_block nb;

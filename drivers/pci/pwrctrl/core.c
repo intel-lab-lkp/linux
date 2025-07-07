@@ -3,13 +3,18 @@
  * Copyright (C) 2024 Linaro Ltd.
  */
 
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/export.h>
+#include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
+#include <linux/of_pci.h>
 #include <linux/pci.h>
 #include <linux/pci-pwrctrl.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+
+#include "../pci.h"
 
 static int pci_pwrctrl_notify(struct notifier_block *nb, unsigned long action,
 			      void *data)
@@ -56,10 +61,41 @@ static void rescan_work_func(struct work_struct *work)
  */
 void pci_pwrctrl_init(struct pci_pwrctrl *pwrctrl, struct device *dev)
 {
+	struct pci_host_bridge *host_bridge = to_pci_host_bridge(dev->parent);
+	int devfn;
+
 	pwrctrl->dev = dev;
 	INIT_WORK(&pwrctrl->work, rescan_work_func);
+
+	if (!host_bridge->perst)
+		return;
+
+	devfn = of_pci_get_devfn(dev_of_node(dev));
+	if (devfn >= 0 && host_bridge->perst[PCI_SLOT(devfn)])
+		pwrctrl->perst = host_bridge->perst[PCI_SLOT(devfn)];
 }
 EXPORT_SYMBOL_GPL(pci_pwrctrl_init);
+
+static void pci_pwrctrl_perst_deassert(struct pci_pwrctrl *pwrctrl)
+{
+	/* Bail out early to avoid the delay if PERST# is not available */
+	if (!pwrctrl->perst)
+		return;
+
+	msleep(PCIE_T_PVPERL_MS);
+	gpiod_set_value_cansleep(pwrctrl->perst, 0);
+	/*
+	 * FIXME: The following delay is only required for downstream ports not
+	 * supporting link speed greater than 5.0 GT/s.
+	 */
+	msleep(PCIE_RESET_CONFIG_DEVICE_WAIT_MS);
+}
+
+static void pci_pwrctrl_perst_assert(struct pci_pwrctrl *pwrctrl)
+{
+	/* No need to validate desc here as gpiod APIs handle it for us */
+	gpiod_set_value_cansleep(pwrctrl->perst, 1);
+}
 
 /**
  * pci_pwrctrl_device_set_ready() - Notify the pwrctrl subsystem that the PCI
@@ -82,6 +118,8 @@ int pci_pwrctrl_device_set_ready(struct pci_pwrctrl *pwrctrl)
 	if (!pwrctrl->dev)
 		return -ENODEV;
 
+	pci_pwrctrl_perst_deassert(pwrctrl);
+
 	pwrctrl->nb.notifier_call = pci_pwrctrl_notify;
 	ret = bus_register_notifier(&pci_bus_type, &pwrctrl->nb);
 	if (ret)
@@ -103,6 +141,7 @@ void pci_pwrctrl_device_unset_ready(struct pci_pwrctrl *pwrctrl)
 {
 	cancel_work_sync(&pwrctrl->work);
 
+	pci_pwrctrl_perst_assert(pwrctrl);
 	/*
 	 * We don't have to delete the link here. Typically, this function
 	 * is only called when the power control device is being detached. If
