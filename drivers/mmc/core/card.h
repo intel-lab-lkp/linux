@@ -11,6 +11,7 @@
 #define _MMC_CORE_CARD_H
 
 #include <linux/mmc/card.h>
+#include <linux/mmc/mmc.h>
 
 #define mmc_card_name(c)	((c)->cid.prod_name)
 #define mmc_card_id(c)		(dev_name(&(c)->dev))
@@ -298,6 +299,15 @@ static inline int mmc_card_broken_sd_poweroff_notify(const struct mmc_card *c)
 static inline int mmc_card_no_uhs_ddr50_tuning(const struct mmc_card *c)
 {
 	return c->quirks & MMC_QUIRK_NO_UHS_DDR50_TUNING;
+}
+
+static inline bool mmc_card_can_cmd23(struct mmc_card *card)
+{
+	return ((mmc_card_mmc(card) &&
+		 card->csd.mmca_vsn >= CSD_SPEC_VER_3) ||
+		(mmc_card_sd(card) && !mmc_card_ult_capacity(card) &&
+		 card->scr.cmds & SD_SCR_CMD23_SUPPORT)) &&
+		!(card->quirks & MMC_QUIRK_BLK_NO_CMD23);
 }
 
 #endif

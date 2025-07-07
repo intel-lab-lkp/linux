@@ -1077,3 +1077,72 @@ int mmc_sanitize(struct mmc_card *card, unsigned int timeout_ms)
 	return err;
 }
 EXPORT_SYMBOL_GPL(mmc_sanitize);
+
+/**
+ * mmc_read_blocks() - read data blocks from the mmc
+ * @card: mmc card to read from, can be NULL
+ * @host: mmc host doing the read
+ * @blksz: data block size
+ * @blocks: number of blocks to read
+ * @blk_addr: first block address
+ * @buf: output buffer
+ * @len: size of the buffer
+ *
+ * Read one or more blocks of data from the mmc. This is a low-level helper for
+ * tuning operation. If card is NULL, it is assumed that CMD23 can be used for
+ * multi-block read.
+ *
+ * Return: 0 in case of success, otherwise -EIO
+ */
+int mmc_read_blocks(struct mmc_card *card, struct mmc_host *host,
+		    unsigned int blksz, unsigned int blocks,
+		    unsigned int blk_addr, void *buf, unsigned int len)
+{
+	struct mmc_request mrq = {};
+	struct mmc_command sbc = {};
+	struct mmc_command cmd = {};
+	struct mmc_command stop = {};
+	struct mmc_data data = {};
+	struct scatterlist sg;
+
+	if (blocks > 1) {
+		if (mmc_host_can_cmd23(host) &&
+		    (!card || mmc_card_can_cmd23(card))) {
+			mrq.sbc = &sbc;
+			sbc.opcode = MMC_SET_BLOCK_COUNT;
+			sbc.arg = blocks;
+			sbc.flags = MMC_RSP_R1 | MMC_CMD_AC;
+		}
+		cmd.opcode = MMC_READ_MULTIPLE_BLOCK;
+		mrq.stop = &stop;
+		stop.opcode = MMC_STOP_TRANSMISSION;
+		stop.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_AC;
+	} else {
+		cmd.opcode = MMC_READ_SINGLE_BLOCK;
+	}
+
+	mrq.cmd = &cmd;
+	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
+
+	mrq.data = &data;
+	data.flags = MMC_DATA_READ;
+	data.blksz = blksz;
+	data.blocks = blocks;
+	data.blk_addr = blk_addr;
+	data.sg = &sg;
+	data.sg_len = 1;
+	if (card)
+		mmc_set_data_timeout(&data, card);
+	else
+		data.timeout_ns = 1000000000;
+
+	sg_init_one(&sg, buf, len);
+
+	mmc_wait_for_req(host, &mrq);
+
+	if (sbc.error || cmd.error || data.error)
+		return -EIO;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mmc_read_blocks);
