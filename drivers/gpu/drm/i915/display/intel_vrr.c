@@ -10,6 +10,8 @@
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
+#include "intel_panel.h"
+#include "intel_psr.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
 
@@ -413,15 +415,88 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	}
 }
 
-void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state)
+static
+int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
+				struct intel_connector *connector)
+{
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_dp *intel_dp;
+	int dsc_prefill_time = 0;
+	int psr2_pr_latency = 0;
+	int scaler_prefill_time;
+	int wm0_prefill_time;
+	int sdp_latency = 0;
+	int guardband_us;
+	int linetime_us;
+	int guardband;
+	int vblank_us;
+	int pm_delay;
+
+	linetime_us = DIV_ROUND_UP(adjusted_mode->crtc_htotal * 1000,
+				   adjusted_mode->crtc_clock);
+
+	/* Assuming max wm0 lines = 4 */
+	wm0_prefill_time = 4 * linetime_us + 20;
+
+	/*
+	 * Assuming both scaler enabled.
+	 * scaler 1 downscaling factor as 2 x 2 (Horiz x Vert)
+	 * scaler 2 downscaling factor as 2 x 1 (Horiz x Vert)
+	 */
+	scaler_prefill_time = 4 * 2 * 2 * linetime_us;
+
+	if (crtc_state->dsc.compression_enable)
+		dsc_prefill_time = (3 * 2 * 2 * 2 * linetime_us) / 2;
+
+	pm_delay = crtc_state->framestart_delay +
+		   display->sagv.block_time_us +
+		   wm0_prefill_time +
+		   scaler_prefill_time +
+		   dsc_prefill_time;
+
+	switch (connector->base.connector_type) {
+	case DRM_MODE_CONNECTOR_eDP:
+	case DRM_MODE_CONNECTOR_DisplayPort:
+		intel_dp = intel_attached_dp(connector);
+		psr2_pr_latency = intel_psr_compute_max_link_wake_latency(intel_dp, crtc_state);
+		/* Assuming VSC_EXT is required */
+		sdp_latency = 10 * linetime_us;
+		break;
+	default:
+		break;
+	}
+
+	guardband_us = max(sdp_latency, psr2_pr_latency);
+	guardband_us = max(guardband_us, pm_delay);
+	vblank_us = (adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vblank_start) * linetime_us;
+
+	if (vblank_us > 0 && guardband_us > vblank_us) {
+		drm_dbg_kms(display->drm, "guardband_us %dus  > vblank_us %dus\n", guardband_us, vblank_us);
+		guardband_us = vblank_us;
+	}
+
+	guardband = DIV_ROUND_UP(guardband_us, linetime_us);
+	return guardband;
+}
+
+void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state,
+				   struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
 
 	if (!intel_vrr_possible(crtc_state))
 		return;
 
-	if (DISPLAY_VER(display) >= 13) {
+	if (intel_vrr_always_use_vrr_tg(display)) {
+		crtc_state->vrr.guardband = intel_vrr_compute_guardband(crtc_state, connector);
+		if (crtc_state->uapi.vrr_enabled)
+			crtc_state->vrr.flipline = crtc_state->vrr.guardband +
+						   adjusted_mode->crtc_vblank_start;
+	} else if (DISPLAY_VER(display) >= 13) {
 		crtc_state->vrr.guardband =
 			crtc_state->vrr.vmin - adjusted_mode->crtc_vblank_start;
 	} else {

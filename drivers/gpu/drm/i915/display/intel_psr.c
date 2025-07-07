@@ -33,6 +33,7 @@
 #include "intel_atomic.h"
 #include "intel_crtc.h"
 #include "intel_cursor_regs.h"
+#include "intel_cx0_phy.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
@@ -4269,4 +4270,44 @@ bool intel_psr_needs_alpm_aux_less(struct intel_dp *intel_dp,
 				   const struct intel_crtc_state *crtc_state)
 {
 	return intel_dp_is_edp(intel_dp) && crtc_state->has_panel_replay;
+}
+
+int intel_psr_compute_max_link_wake_latency(struct intel_dp *intel_dp,
+					    struct intel_crtc_state *crtc_state)
+{
+#define PHY_ESTABLISHMENT_PERIOD_MS	50000
+#define TFW_EXIT_LATENCY_MS		20000
+#define FAST_WAKE_LATENCY_MS		12000 /* Preamble: 8us; PHY wake: 4us */
+#define LFPS_PERIOD_MS			800
+#define SILENCE_MAX_MS			180
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	int linkrate_mhz = crtc_state->port_clock / 1000;
+	int io_buffer_wake_ms;
+	int clock_data_switch_ms;
+	int aux_wake_latency_us;
+	int auxless_latency_us;
+	int time_ml_phy_lock_ms;
+	int num_ml_phy_lock;
+
+	io_buffer_wake_ms = intel_encoder_is_c10phy(encoder) ? 9790 : 14790;
+
+	aux_wake_latency_us =
+		DIV_ROUND_UP(io_buffer_wake_ms + TFW_EXIT_LATENCY_MS + FAST_WAKE_LATENCY_MS, 1000);
+
+	/*
+	 * TPS4 length = 252
+	 * tML_PHY_LOCK = TPS4 Length * ( 10 / (Link Rate in MHz) )
+	 * Number ML_PHY_LOCK = ( 7 + CEILING( 6.5us / tML_PHY_LOCK ) + 1)
+	 * t2 = Number ML_PHY_LOCK * tML_PHY_LOCK
+	 * tCDS term  = 2 * t2
+	 * =>tCDS_term  = 2 * (7 * (252 * (10 /linkrate))+6.5)
+	 */
+	time_ml_phy_lock_ms = (1000 * 252 * 10) / linkrate_mhz;
+	num_ml_phy_lock = 7 + DIV_ROUND_UP(6500 * 1000, time_ml_phy_lock_ms) / 1000 + 1;
+	clock_data_switch_ms = 2 * time_ml_phy_lock_ms * num_ml_phy_lock;
+
+	auxless_latency_us = (LFPS_PERIOD_MS  + SILENCE_MAX_MS + PHY_ESTABLISHMENT_PERIOD_MS +
+			      clock_data_switch_ms) / 1000;
+
+	return max(aux_wake_latency_us, auxless_latency_us);
 }
