@@ -2797,7 +2797,8 @@ noinline int btrfs_should_cancel_balance(const struct btrfs_fs_info *fs_info)
 {
 	return atomic_read(&fs_info->balance_cancel_req) ||
 		atomic_read(&fs_info->reloc_cancel_req) ||
-		fatal_signal_pending(current);
+		fatal_signal_pending(current) ||
+		fs_info->sb->s_writers.frozen > SB_UNFROZEN;
 }
 ALLOW_ERROR_INJECTION(btrfs_should_cancel_balance, TRUE);
 

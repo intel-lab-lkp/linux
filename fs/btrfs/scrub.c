@@ -2244,6 +2244,12 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 		u64 found_logical = U64_MAX;
 		u64 cur_physical = physical + cur_logical - logical_start;
 
+		/* Fs being frozen, need to exit early or freezing will timeout. */
+		if (fs_info->sb->s_writers.frozen > SB_UNFROZEN) {
+			ret = -ECANCELED;
+			break;
+		}
+
 		/* Canceled? */
 		if (atomic_read(&fs_info->scrub_cancel_req) ||
 		    atomic_read(&sctx->cancel_req)) {
