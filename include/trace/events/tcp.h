@@ -13,17 +13,38 @@
 #include <linux/sock_diag.h>
 #include <net/rstreason.h>
 
-/*
- * tcp event with arguments sk and skb
- *
- * Note: this class requires a valid sk pointer; while skb pointer could
- *       be NULL.
- */
-DECLARE_EVENT_CLASS(tcp_event_sk_skb,
+#define TCP_RETRANSMIT_RESULT		\
+		ENUM(TCP_RETRANS_ERR_DEFAULT,		"retrans_err_default")	\
+		ENUM(TCP_RETRANS_SUCCESS,		"retrans_succ")		\
+		ENUM(TCP_RETRANS_IN_HOST_QUEUE,		"packet_in_driver")	\
+		ENUM(TCP_RETRANS_END_SEQ_ERROR,		"end_seq_error")	\
+		ENUM(TCP_RETRANS_TRIM_HEAD_NOMEM,	"trim_head_nomem")	\
+		ENUM(TCP_RETRANS_UNCLONE_NOMEM,		"skb_unclone_nomem")	\
+		ENUM(TCP_RETRANS_FRAG_NOMEM,		"frag_nomem")		\
+		ENUM(TCP_RETRANS_ROUTE_FAIL,		"route_fail")		\
+		ENUM(TCP_RETRANS_RCV_ZERO_WINDOW,	"rcv_zero_window")	\
+		ENUMe(TCP_RETRANS_PSKB_COPY_NOBUFS,	"pskb_copy_nobufs")	\
 
-	TP_PROTO(const struct sock *sk, const struct sk_buff *skb),
+/* Redefine for export. */
+#undef ENUM
+#undef ENUMe
+#define ENUM(a, b)	TRACE_DEFINE_ENUM(a);
+#define ENUMe(a, b)	TRACE_DEFINE_ENUM(a);
 
-	TP_ARGS(sk, skb),
+TCP_RETRANSMIT_RESULT
+
+/* Redefine for symbolic printing. */
+#undef ENUM
+#undef ENUMe
+#define ENUM(a, b)	{ a, b },
+#define ENUMe(a, b)	{ a, b }
+
+TRACE_EVENT(tcp_retransmit_skb,
+
+	TP_PROTO(const struct sock *sk, const struct sk_buff *skb,
+		enum tcp_retransmit_result result),
+
+	TP_ARGS(sk, skb, result),
 
 	TP_STRUCT__entry(
 		__field(const void *, skbaddr)
@@ -36,6 +57,7 @@ DECLARE_EVENT_CLASS(tcp_event_sk_skb,
 		__array(__u8, daddr, 4)
 		__array(__u8, saddr_v6, 16)
 		__array(__u8, daddr_v6, 16)
+		__field(enum tcp_retransmit_result, result)
 	),
 
 	TP_fast_assign(
@@ -58,21 +80,17 @@ DECLARE_EVENT_CLASS(tcp_event_sk_skb,
 
 		TP_STORE_ADDRS(__entry, inet->inet_saddr, inet->inet_daddr,
 			      sk->sk_v6_rcv_saddr, sk->sk_v6_daddr);
+
+		__entry->result = result;
 	),
 
-	TP_printk("skbaddr=%p skaddr=%p family=%s sport=%hu dport=%hu saddr=%pI4 daddr=%pI4 saddrv6=%pI6c daddrv6=%pI6c state=%s",
+	TP_printk("skbaddr=%p skaddr=%p family=%s sport=%hu dport=%hu saddr=%pI4 daddr=%pI4 saddrv6=%pI6c daddrv6=%pI6c state=%s result=%s",
 		  __entry->skbaddr, __entry->skaddr,
 		  show_family_name(__entry->family),
 		  __entry->sport, __entry->dport, __entry->saddr, __entry->daddr,
 		  __entry->saddr_v6, __entry->daddr_v6,
-		  show_tcp_state_name(__entry->state))
-);
-
-DEFINE_EVENT(tcp_event_sk_skb, tcp_retransmit_skb,
-
-	TP_PROTO(const struct sock *sk, const struct sk_buff *skb),
-
-	TP_ARGS(sk, skb)
+		  show_tcp_state_name(__entry->state),
+		  __print_symbolic(__entry->result, TCP_RETRANSMIT_RESULT))
 );
 
 #undef FN

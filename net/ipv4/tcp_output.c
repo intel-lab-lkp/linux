@@ -3320,6 +3320,7 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *to,
  */
 int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 {
+	enum tcp_retransmit_result result = TCP_RETRANS_ERR_DEFAULT;
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int cur_mss;
@@ -3330,8 +3331,11 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 	if (icsk->icsk_mtup.probe_size)
 		icsk->icsk_mtup.probe_size = 0;
 
-	if (skb_still_in_host_queue(sk, skb))
-		return -EBUSY;
+	if (skb_still_in_host_queue(sk, skb)) {
+		result = TCP_RETRANS_IN_HOST_QUEUE;
+		err = -EBUSY;
+		goto out;
+	}
 
 start:
 	if (before(TCP_SKB_CB(skb)->seq, tp->snd_una)) {
@@ -3342,14 +3346,22 @@ start:
 		}
 		if (unlikely(before(TCP_SKB_CB(skb)->end_seq, tp->snd_una))) {
 			WARN_ON_ONCE(1);
-			return -EINVAL;
+			result = TCP_RETRANS_END_SEQ_ERROR;
+			err = -EINVAL;
+			goto out;
 		}
-		if (tcp_trim_head(sk, skb, tp->snd_una - TCP_SKB_CB(skb)->seq))
-			return -ENOMEM;
+		if (tcp_trim_head(sk, skb, tp->snd_una - TCP_SKB_CB(skb)->seq)) {
+			result = TCP_RETRANS_TRIM_HEAD_NOMEM;
+			err = -ENOMEM;
+			goto out;
+		}
 	}
 
-	if (inet_csk(sk)->icsk_af_ops->rebuild_header(sk))
-		return -EHOSTUNREACH; /* Routing failure or similar. */
+	if (inet_csk(sk)->icsk_af_ops->rebuild_header(sk)) {
+		result = TCP_RETRANS_ROUTE_FAIL;
+		err = -EHOSTUNREACH; /* Routing failure or similar. */
+		goto out;
+	}
 
 	cur_mss = tcp_current_mss(sk);
 	avail_wnd = tcp_wnd_end(tp) - TCP_SKB_CB(skb)->seq;
@@ -3360,8 +3372,11 @@ start:
 	 * our retransmit of one segment serves as a zero window probe.
 	 */
 	if (avail_wnd <= 0) {
-		if (TCP_SKB_CB(skb)->seq != tp->snd_una)
-			return -EAGAIN;
+		if (TCP_SKB_CB(skb)->seq != tp->snd_una) {
+			result = TCP_RETRANS_RCV_ZERO_WINDOW;
+			err = -EAGAIN;
+			goto out;
+		}
 		avail_wnd = cur_mss;
 	}
 
@@ -3373,11 +3388,17 @@ start:
 	}
 	if (skb->len > len) {
 		if (tcp_fragment(sk, TCP_FRAG_IN_RTX_QUEUE, skb, len,
-				 cur_mss, GFP_ATOMIC))
-			return -ENOMEM; /* We'll try again later. */
+				 cur_mss, GFP_ATOMIC)) {
+			result = TCP_RETRANS_FRAG_NOMEM;
+			err = -ENOMEM;  /* We'll try again later. */
+			goto out;
+		}
 	} else {
-		if (skb_unclone_keeptruesize(skb, GFP_ATOMIC))
-			return -ENOMEM;
+		if (skb_unclone_keeptruesize(skb, GFP_ATOMIC)) {
+			result = TCP_RETRANS_UNCLONE_NOMEM;
+			err = -ENOMEM;
+			goto out;
+		}
 
 		diff = tcp_skb_pcount(skb);
 		tcp_set_skb_tso_segs(skb, cur_mss);
@@ -3415,6 +3436,7 @@ start:
 				nskb->dev = NULL;
 				err = tcp_transmit_skb(sk, nskb, 0, GFP_ATOMIC);
 			} else {
+				result = TCP_RETRANS_PSKB_COPY_NOBUFS;
 				err = -ENOBUFS;
 			}
 		} tcp_skb_tsorted_restore(skb);
@@ -3432,7 +3454,7 @@ start:
 				  TCP_SKB_CB(skb)->seq, segs, err);
 
 	if (likely(!err)) {
-		trace_tcp_retransmit_skb(sk, skb);
+		result = TCP_RETRANS_SUCCESS;
 	} else if (err != -EBUSY) {
 		NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPRETRANSFAIL, segs);
 	}
@@ -3442,6 +3464,8 @@ start:
 	 */
 	TCP_SKB_CB(skb)->sacked |= TCPCB_EVER_RETRANS;
 
+out:
+	trace_tcp_retransmit_skb(sk, skb, result);
 	return err;
 }
 

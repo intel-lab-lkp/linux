@@ -527,6 +527,19 @@ enum tsq_flags {
 	TCPF_ACK_DEFERRED		= BIT(TCP_ACK_DEFERRED),
 };
 
+enum tcp_retransmit_result {
+	TCP_RETRANS_ERR_DEFAULT,
+	TCP_RETRANS_SUCCESS,
+	TCP_RETRANS_IN_HOST_QUEUE,
+	TCP_RETRANS_END_SEQ_ERROR,
+	TCP_RETRANS_TRIM_HEAD_NOMEM,
+	TCP_RETRANS_UNCLONE_NOMEM,
+	TCP_RETRANS_FRAG_NOMEM,
+	TCP_RETRANS_ROUTE_FAIL,
+	TCP_RETRANS_RCV_ZERO_WINDOW,
+	TCP_RETRANS_PSKB_COPY_NOBUFS,
+};
+
 #define tcp_sk(ptr) container_of_const(ptr, struct tcp_sock, inet_conn.icsk_inet.sk)
 
 /* Variant of tcp_sk() upgrading a const sock to a read/write tcp socket.
