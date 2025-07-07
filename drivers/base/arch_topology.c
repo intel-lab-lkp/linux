@@ -473,22 +473,22 @@ static unsigned int max_smt_thread_num = 1;
  */
 static int __init get_cpu_for_node(struct device_node *node)
 {
+	struct device_node *cpu_node __free(device_node) = NULL;
 	int cpu;
-	struct device_node *cpu_node __free(device_node) =
-		of_parse_phandle(node, "cpu", 0);
 
-	if (!cpu_node)
-		return -1;
+	cpu = of_cpu_phandle_to_id(node, &cpu_node, 0);
 
-	cpu = of_cpu_node_to_id(cpu_node);
 	if (cpu >= 0)
 		topology_parse_cpu_capacity(cpu_node, cpu);
-	else
+	else if (cpu == -ENODEV)
 		pr_info("CPU node for %pOF exist but the possible cpu range is :%*pbl\n",
 			cpu_node, cpumask_pr_args(cpu_possible_mask));
+	else
+		return -1;
 
 	return cpu;
 }
+
 
 static int __init parse_core(struct device_node *core, int package_id,
 			     int cluster_id, int core_id)
