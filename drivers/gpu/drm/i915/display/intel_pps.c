@@ -22,6 +22,7 @@
 #include "intel_pps.h"
 #include "intel_pps_regs.h"
 #include "intel_quirks.h"
+#include <linux/iopoll.h>
 
 static void vlv_steal_power_sequencer(struct intel_display *display,
 				      enum pipe pipe);
@@ -600,7 +601,63 @@ void intel_pps_check_power_unlocked(struct intel_dp *intel_dp)
 #define IDLE_CYCLE_MASK		(PP_ON | PP_SEQUENCE_MASK | PP_CYCLE_DELAY_ACTIVE | PP_SEQUENCE_STATE_MASK)
 #define IDLE_CYCLE_VALUE	(0     | PP_SEQUENCE_NONE | 0                     | PP_SEQUENCE_STATE_OFF_IDLE)
 
+#define PANEL_MAXIMUM_ON_TIME_MS		(5000)
+
 static void intel_pps_verify_state(struct intel_dp *intel_dp);
+
+/*
+ * Panel power-on typically completes within ~200ms. Using a large timeout
+ * (5000ms) with intel_de_wait() results in unnecessary delays,
+ * especially under Xe, where xe_mmio_wait32() uses an exponential backoff.
+ *
+ * To optimize resume and power-on latency, use intel_de_read + read_poll_timeout
+ * instead of intel_de_wait()
+ */
+static void wait_panel_on_status(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+	i915_reg_t pp_stat_reg, pp_ctrl_reg;
+	u32 mask = IDLE_ON_MASK;
+	u32 value = IDLE_ON_VALUE;
+	u32 reg_val;
+	int ret;
+
+	lockdep_assert_held(&display->pps.mutex);
+
+	intel_pps_verify_state(intel_dp);
+
+	pp_stat_reg = _pp_stat_reg(intel_dp);
+	pp_ctrl_reg = _pp_ctrl_reg(intel_dp);
+
+	drm_dbg_kms(display->drm,
+		    "dibin [ENCODER:%d:%s] %s mask: 0x%08x value: 0x%08x PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
+		    dig_port->base.base.base.id, dig_port->base.base.name,
+		    pps_name(intel_dp),
+		    mask, value,
+		    intel_de_read(display, pp_stat_reg),
+		    intel_de_read(display, pp_ctrl_reg));
+
+	ret = read_poll_timeout(intel_de_read, reg_val,
+				((reg_val & mask) == value),
+				(20 * 1000),                        // poll every 20ms
+				(PANEL_MAXIMUM_ON_TIME_MS * 1000),  // total timeout (us)
+				true,
+				display, pp_stat_reg);
+
+	if (ret == 0)
+		goto panel_wait_complete;
+
+	drm_err(display->drm,
+		"dibin [ENCODER:%d:%s] %s panel status timeout: PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
+		dig_port->base.base.base.id, dig_port->base.base.name,
+		pps_name(intel_dp),
+		intel_de_read(display, pp_stat_reg),
+		intel_de_read(display, pp_ctrl_reg));
+
+panel_wait_complete:
+	drm_dbg_kms(display->drm, "dibin Wait complete\n");
+}
 
 static void wait_panel_status(struct intel_dp *intel_dp,
 			      u32 mask, u32 value)
@@ -644,7 +701,7 @@ static void wait_panel_on(struct intel_dp *intel_dp)
 		    "[ENCODER:%d:%s] %s wait for panel power on\n",
 		    dig_port->base.base.base.id, dig_port->base.base.name,
 		    pps_name(intel_dp));
-	wait_panel_status(intel_dp, IDLE_ON_MASK, IDLE_ON_VALUE);
+	wait_panel_on_status(intel_dp);
 }
 
 static void wait_panel_off(struct intel_dp *intel_dp)
