@@ -2765,6 +2765,7 @@ void __init mm_core_init(void)
 	 */
 	kho_memory_init();
 
+	static_pmd_zero_init();
 	memblock_free_all();
 	mem_init();
 	kmem_cache_init();

@@ -42,6 +42,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
+#include <linux/memblock.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
@@ -158,6 +159,30 @@ static int __init init_zero_pfn(void)
 	return 0;
 }
 early_initcall(init_zero_pfn);
+
+#ifdef CONFIG_STATIC_PMD_ZERO_PAGE
+struct folio *huge_zero_folio __read_mostly = NULL;
+unsigned long huge_zero_pfn __read_mostly = ~0UL;
+
+void __init static_pmd_zero_init(void)
+{
+	void *alloc = memblock_alloc(PMD_SIZE, PAGE_SIZE);
+
+	if (!alloc)
+		return;
+
+	huge_zero_folio = virt_to_folio(alloc);
+	huge_zero_pfn = page_to_pfn(virt_to_page(alloc));
+
+	__folio_set_head(huge_zero_folio);
+	prep_compound_head((struct page *)huge_zero_folio, PMD_ORDER);
+	/* Ensure zero folio won't have large_rmappable flag set. */
+	folio_clear_large_rmappable(huge_zero_folio);
+	folio_zero_range(huge_zero_folio, 0, PMD_SIZE);
+
+	return;
+}
+#endif
 
 void mm_trace_rss_stat(struct mm_struct *mm, int member)
 {
