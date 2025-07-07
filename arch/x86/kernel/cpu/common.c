@@ -489,11 +489,14 @@ void cr4_init(void)
  * parsed), record any of the sensitive CR bits that are set, and
  * enable CR pinning.
  */
-static void __init setup_cr_pinning(void)
+static int __init setup_cr_pinning(void)
 {
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & cr4_pinned_mask;
 	static_key_enable(&cr_pinning.key);
+
+	return 0;
 }
+core_initcall(setup_cr_pinning);
 
 static __init int x86_nofsgsbase_setup(char *arg)
 {
@@ -2081,7 +2084,6 @@ static __init void identify_boot_cpu(void)
 	enable_sep_cpu();
 #endif
 	cpu_detect_tlb(&boot_cpu_data);
-	setup_cr_pinning();
 
 	tsx_init();
 	tdx_init();
