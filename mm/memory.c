@@ -3387,7 +3387,7 @@ static vm_fault_t fault_dirty_shared_page(struct vm_fault *vmf)
 	mapping = folio_raw_mapping(folio);
 	folio_unlock(folio);
 
-	if (!page_mkwrite)
+	if (!page_mkwrite && vma->vm_file)
 		file_update_time(vma->vm_file);
 
 	/*
