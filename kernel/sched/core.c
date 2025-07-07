@@ -4542,7 +4542,6 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->wake_entry.u_flags = CSD_TYPE_TTWU;
 	p->migration_pending = NULL;
 #endif
-	init_sched_mm_cid(p);
 }
 
 DEFINE_STATIC_KEY_FALSE(sched_numa_balancing);
@@ -10594,37 +10593,15 @@ static void sched_mm_cid_remote_clear_weight(struct mm_struct *mm, int cpu,
 	sched_mm_cid_remote_clear(mm, pcpu_cid, cpu);
 }
 
-static void task_mm_cid_work(struct callback_head *work)
+void task_mm_cid_scan(struct timer_list *timer)
 {
-	unsigned long now = jiffies, old_scan, next_scan;
-	struct task_struct *t = current;
 	struct cpumask *cidmask;
-	struct mm_struct *mm;
+	struct mm_struct *mm = container_of(timer, struct mm_struct, cid_timer);
 	int weight, cpu;
 
-	WARN_ON_ONCE(t != container_of(work, struct task_struct, cid_work));
-
-	work->next = work;	/* Prevent double-add */
-	if (t->flags & PF_EXITING)
-		return;
-	mm = t->mm;
-	if (!mm)
-		return;
-	old_scan = READ_ONCE(mm->mm_cid_next_scan);
-	next_scan = now + msecs_to_jiffies(MM_CID_SCAN_DELAY);
-	if (!old_scan) {
-		unsigned long res;
-
-		res = cmpxchg(&mm->mm_cid_next_scan, old_scan, next_scan);
-		if (res != old_scan)
-			old_scan = res;
-		else
-			old_scan = next_scan;
-	}
-	if (time_before(now, old_scan))
-		return;
-	if (!try_cmpxchg(&mm->mm_cid_next_scan, &old_scan, next_scan))
-		return;
+	/* We are the last user, process already terminated. */
+	if (atomic_read(&mm->mm_count) == 1)
+		goto out_drop;
 	cidmask = mm_cidmask(mm);
 	/* Clear cids that were not recently used. */
 	for_each_possible_cpu(cpu)
@@ -10636,35 +10613,65 @@ static void task_mm_cid_work(struct callback_head *work)
 	 */
 	for_each_possible_cpu(cpu)
 		sched_mm_cid_remote_clear_weight(mm, cpu, weight);
+	WRITE_ONCE(mm->mm_cid_last_scan, jiffies);
+out_drop:
+	mmdrop(mm);
 }
 
-void init_sched_mm_cid(struct task_struct *t)
+void task_tick_mm_cid(struct rq *rq, struct task_struct *t)
 {
-	struct mm_struct *mm = t->mm;
-	int mm_users = 0;
+	u64 rtime = t->se.sum_exec_runtime - t->se.prev_sum_exec_runtime;
 
-	if (mm) {
-		mm_users = atomic_read(&mm->mm_users);
-		if (mm_users == 1)
-			mm->mm_cid_next_scan = jiffies + msecs_to_jiffies(MM_CID_SCAN_DELAY);
+	/*
+	 * If a task is running unpreempted for a long time, it won't get its
+	 * mm_cid compacted and won't update its mm_cid value after a
+	 * compaction occurs.
+	 * For such a task, this function does two things:
+	 * A) trigger the mm_cid recompaction,
+	 * B) trigger an update of the task's rseq->mm_cid field at some point
+	 * after recompaction, so it can get a mm_cid value closer to 0.
+	 * A change in the mm_cid triggers an rseq_preempt.
+	 *
+	 * B occurs once after the compaction work completes, both A and B
+	 * don't run as long as the compaction work is pending.
+	 */
+	if (!t->mm || (t->flags & (PF_EXITING | PF_KTHREAD)) ||
+	    mm_cid_scan_pending(t->mm))
+		return;
+	if (rtime < RSEQ_UNPREEMPTED_THRESHOLD)
+		return;
+	if (time_after(t->mm->mm_cid_last_scan, t->last_cid_reset)) {
+		/* Update mm_cid field */
+		int old_cid = t->mm_cid;
+
+		if (!t->mm_cid_active)
+			return;
+		mm_cid_snapshot_time(rq, t->mm);
+		mm_cid_put_lazy(t);
+		t->last_mm_cid = t->mm_cid = mm_cid_get(rq, t, t->mm);
+		if (old_cid != t->mm_cid)
+			rseq_preempt(t);
+	} else {
+		/* Trigger mm_cid recompaction */
+		rseq_set_notify_resume(t);
 	}
-	t->cid_work.next = &t->cid_work;	/* Protect against double add */
-	init_task_work(&t->cid_work, task_mm_cid_work);
 }
 
-void task_tick_mm_cid(struct rq *rq, struct task_struct *curr)
+void task_queue_mm_cid(struct task_struct *curr)
 {
-	struct callback_head *work = &curr->cid_work;
-	unsigned long now = jiffies;
+	int requeued;
 
-	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) ||
-	    work->next != work)
-		return;
-	if (time_before(now, READ_ONCE(curr->mm->mm_cid_next_scan)))
-		return;
-
-	/* No page allocation under rq lock */
-	task_work_add(curr, work, TWA_RESUME);
+	/*
+	 * @curr must be a user thread and the timer must not be pending.
+	 * Access to this timer is not serialised across threads sharing the
+	 * same mm: ensure racing threads don't postpone enqueued timers and
+	 * don't mmgrab() if they didn't enqueue the timer themselves.
+	 * mmgrab() is necessary to ensure the mm exists until the timer runs.
+	 */
+	requeued = timer_reduce(&curr->mm->cid_timer,
+				jiffies + msecs_to_jiffies(MM_CID_SCAN_DELAY));
+	if (!requeued && timer_pending(&curr->mm->cid_timer))
+		mmgrab(curr->mm);
 }
 
 void sched_mm_cid_exit_signals(struct task_struct *t)

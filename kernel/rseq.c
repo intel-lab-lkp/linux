@@ -441,6 +441,8 @@ void __rseq_handle_notify_resume(struct ksignal *ksig, struct pt_regs *regs)
 	}
 	if (unlikely(rseq_update_cpu_node_id(t)))
 		goto error;
+	if (!mm_cid_scan_pending(t->mm))
+		task_queue_mm_cid(t);
 	return;
 
 error:

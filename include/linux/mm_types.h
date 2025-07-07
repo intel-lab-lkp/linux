@@ -990,11 +990,11 @@ struct mm_struct {
 		 */
 		struct mm_cid __percpu *pcpu_cid;
 		/*
-		 * @mm_cid_next_scan: Next mm_cid scan (in jiffies).
+		 * @mm_cid_next_scan: Last mm_cid scan (in jiffies).
 		 *
-		 * When the next mm_cid scan is due (in jiffies).
+		 * When the last mm_cid scan occurred (in jiffies).
 		 */
-		unsigned long mm_cid_next_scan;
+		unsigned long mm_cid_last_scan;
 		/**
 		 * @nr_cpus_allowed: Number of CPUs allowed for mm.
 		 *
@@ -1017,6 +1017,10 @@ struct mm_struct {
 		 * mm nr_cpus_allowed updates.
 		 */
 		raw_spinlock_t cpus_allowed_lock;
+		/*
+		 * @cid_timer: Timer to run the mm_cid scan.
+		 */
+		struct timer_list cid_timer;
 #endif
 #ifdef CONFIG_MMU
 		atomic_long_t pgtables_bytes;	/* size of all page tables */
@@ -1321,6 +1325,8 @@ enum mm_cid_state {
 	MM_CID_LAZY_PUT = (1U << 31),
 };
 
+extern void task_mm_cid_scan(struct timer_list *timer);
+
 static inline bool mm_cid_is_unset(int cid)
 {
 	return cid == MM_CID_UNSET;
@@ -1393,12 +1399,14 @@ static inline int mm_alloc_cid_noprof(struct mm_struct *mm, struct task_struct *
 	if (!mm->pcpu_cid)
 		return -ENOMEM;
 	mm_init_cid(mm, p);
+	timer_setup(&mm->cid_timer, task_mm_cid_scan, TIMER_DEFERRABLE);
 	return 0;
 }
 #define mm_alloc_cid(...)	alloc_hooks(mm_alloc_cid_noprof(__VA_ARGS__))
 
 static inline void mm_destroy_cid(struct mm_struct *mm)
 {
+	timer_shutdown(&mm->cid_timer);
 	free_percpu(mm->pcpu_cid);
 	mm->pcpu_cid = NULL;
 }
@@ -1420,6 +1428,11 @@ static inline void mm_set_cpus_allowed(struct mm_struct *mm, const struct cpumas
 	WRITE_ONCE(mm->nr_cpus_allowed, cpumask_weight(mm_allowed));
 	raw_spin_unlock(&mm->cpus_allowed_lock);
 }
+
+static inline bool mm_cid_scan_pending(struct mm_struct *mm)
+{
+	return mm && timer_pending(&mm->cid_timer);
+}
 #else /* CONFIG_SCHED_MM_CID */
 static inline void mm_init_cid(struct mm_struct *mm, struct task_struct *p) { }
 static inline int mm_alloc_cid(struct mm_struct *mm, struct task_struct *p) { return 0; }
@@ -1430,6 +1443,10 @@ static inline unsigned int mm_cid_size(void)
 	return 0;
 }
 static inline void mm_set_cpus_allowed(struct mm_struct *mm, const struct cpumask *cpumask) { }
+static inline bool mm_cid_scan_pending(struct mm_struct *mm)
+{
+	return false;
+}
 #endif /* CONFIG_SCHED_MM_CID */
 
 struct mmu_gather;
