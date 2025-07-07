@@ -267,6 +267,11 @@ extern long sysctl_tcp_mem[3];
 #define TCP_RACK_STATIC_REO_WND  0x2 /* Use static RACK reo wnd */
 #define TCP_RACK_NO_DUPTHRESH    0x4 /* Do not use DUPACK threshold in RACK */
 
+#define TCP_INC_STATS(net, field)	SNMP_INC_STATS((net)->mib.tcp_statistics, field)
+#define __TCP_INC_STATS(net, field)	__SNMP_INC_STATS((net)->mib.tcp_statistics, field)
+#define TCP_DEC_STATS(net, field)	SNMP_DEC_STATS((net)->mib.tcp_statistics, field)
+#define TCP_ADD_STATS(net, field, val)	SNMP_ADD_STATS((net)->mib.tcp_statistics, field, val)
+
 extern atomic_long_t tcp_memory_allocated;
 DECLARE_PER_CPU(int, tcp_memory_per_cpu_fw_alloc);
 
@@ -277,8 +282,10 @@ extern unsigned long tcp_memory_pressure;
 static inline bool tcp_under_memory_pressure(const struct sock *sk)
 {
 	if (mem_cgroup_sockets_enabled && sk->sk_memcg &&
-	    mem_cgroup_under_socket_pressure(sk->sk_memcg))
+	    mem_cgroup_under_socket_pressure(sk->sk_memcg)) {
+		TCP_INC_STATS(sock_net(sk), LINUX_MIB_TCPCGROUPSOCKETPRESSURE);
 		return true;
+	}
 
 	return READ_ONCE(tcp_memory_pressure);
 }
@@ -315,11 +322,6 @@ bool tcp_check_oom(const struct sock *sk, int shift);
 
 
 extern struct proto tcp_prot;
-
-#define TCP_INC_STATS(net, field)	SNMP_INC_STATS((net)->mib.tcp_statistics, field)
-#define __TCP_INC_STATS(net, field)	__SNMP_INC_STATS((net)->mib.tcp_statistics, field)
-#define TCP_DEC_STATS(net, field)	SNMP_DEC_STATS((net)->mib.tcp_statistics, field)
-#define TCP_ADD_STATS(net, field, val)	SNMP_ADD_STATS((net)->mib.tcp_statistics, field, val)
 
 void tcp_tsq_work_init(void);
 
