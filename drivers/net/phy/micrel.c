@@ -362,6 +362,8 @@
 /* Delay used to get the second part from the LTC */
 #define LAN8841_GET_SEC_LTC_DELAY		(500 * NSEC_PER_MSEC)
 
+static void ksz9131_restore_rgmii_delay(struct phy_device *phydev);
+
 struct kszphy_hw_stat {
 	const char *string;
 	u8 reg;
@@ -374,6 +376,7 @@ static struct kszphy_hw_stat kszphy_hw_stats[] = {
 };
 
 struct kszphy_type {
+	void (*resume)(struct phy_device *phydev);
 	u32 led_mode_reg;
 	u16 interrupt_level_mask;
 	u16 cable_diag_reg;
@@ -444,6 +447,7 @@ struct kszphy_priv {
 	bool rmii_ref_clk_sel;
 	bool rmii_ref_clk_sel_val;
 	bool clk_enable;
+	bool is_suspended;
 	u64 stats[ARRAY_SIZE(kszphy_hw_stats)];
 	struct kszphy_phy_stats phy_stats;
 };
@@ -491,6 +495,7 @@ static const struct kszphy_type ksz9021_type = {
 };
 
 static const struct kszphy_type ksz9131_type = {
+	.resume = ksz9131_restore_rgmii_delay,
 	.interrupt_level_mask	= BIT(14),
 	.disable_dll_tx_bit	= BIT(12),
 	.disable_dll_rx_bit	= BIT(12),
@@ -1385,6 +1390,12 @@ static int ksz9131_config_rgmii_delay(struct phy_device *phydev)
 	return phy_modify_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
 			      KSZ9131RN_TXC_DLL_CTRL, type->disable_dll_mask,
 			      txcdll_val);
+}
+
+static void ksz9131_restore_rgmii_delay(struct phy_device *phydev)
+{
+	if (phy_interface_is_rgmii(phydev))
+		ksz9131_config_rgmii_delay(phydev);
 }
 
 /* Silicon Errata DS80000693B
@@ -2345,6 +2356,11 @@ static int kszphy_generic_suspend(struct phy_device *phydev)
 
 static int kszphy_suspend(struct phy_device *phydev)
 {
+	struct kszphy_priv *priv = phydev->priv;
+
+	if (priv)
+		priv->is_suspended = true;
+
 	/* Disable PHY Interrupts */
 	if (phy_interrupt_is_valid(phydev)) {
 		phydev->interrupts = PHY_INTERRUPT_DISABLED;
@@ -2381,7 +2397,16 @@ static void kszphy_parse_led_mode(struct phy_device *phydev)
 
 static int kszphy_resume(struct phy_device *phydev)
 {
+	struct kszphy_priv *priv = phydev->priv;
 	int ret;
+
+	if (priv && priv->is_suspended) {
+		const struct kszphy_type *type = priv->type;
+
+		priv->is_suspended = false;
+		if (type->resume)
+			type->resume(phydev);
+	}
 
 	ret = kszphy_generic_resume(phydev);
 	if (ret)
