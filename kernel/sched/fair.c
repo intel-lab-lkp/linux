@@ -9443,6 +9443,7 @@ static int detach_tasks(struct lb_env *env)
 {
 	struct list_head *tasks = &env->src_rq->cfs_tasks;
 	unsigned long util, load;
+	struct task_struct *first_back = NULL;
 	struct task_struct *p;
 	int detached = 0;
 
@@ -9481,6 +9482,8 @@ static int detach_tasks(struct lb_env *env)
 		}
 
 		p = list_last_entry(tasks, struct task_struct, se.group_node);
+		if (p == first_back)
+			break;
 
 		if (!can_migrate_task(p, env))
 			goto next;
@@ -9562,6 +9565,8 @@ next:
 			schedstat_inc(p->stats.nr_failed_migrations_hot);
 
 		list_move(&p->se.group_node, tasks);
+		if (!first_back)
+			first_back = p;
 	}
 
 	/*
