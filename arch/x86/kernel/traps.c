@@ -633,28 +633,28 @@ DEFINE_IDTENTRY(exc_bounds)
 	cond_local_irq_disable(regs);
 }
 
-enum kernel_gp_hint {
-	GP_NO_HINT,
-	GP_NON_CANONICAL,
-	GP_CANONICAL,
-	GP_LASS_VIOLATION,
-	GP_NULL_POINTER,
+enum kernel_exc_hint {
+	EXC_NO_HINT,
+	EXC_NON_CANONICAL,
+	EXC_CANONICAL,
+	EXC_LASS_VIOLATION,
+	EXC_NULL_POINTER,
 };
 
-static const char * const kernel_gp_hint_help[] = {
-	[GP_NON_CANONICAL]	= "probably for non-canonical address",
-	[GP_CANONICAL]		= "maybe for address",
-	[GP_LASS_VIOLATION]	= "LASS prevented access to address",
-	[GP_NULL_POINTER]	= "kernel NULL pointer dereference",
+static const char * const kernel_exc_hint_help[] = {
+	[EXC_NON_CANONICAL]	= "probably for non-canonical address",
+	[EXC_CANONICAL]		= "maybe for address",
+	[EXC_LASS_VIOLATION]	= "LASS prevented access to address",
+	[EXC_NULL_POINTER]	= "kernel NULL pointer dereference",
 };
 
 /*
- * When an uncaught #GP occurs, try to determine the memory address accessed by
- * the instruction and return that address to the caller. Also, try to figure
- * out whether any part of the access to that address was non-canonical.
+ * When an uncaught #GP/#SS occurs, try to determine the memory address accessed
+ * by  the instruction and return that address to the caller. Also, try to
+ * figure out whether any part of the access to that address was non-canonical.
  */
-static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
-						 unsigned long *addr)
+static enum kernel_exc_hint get_kernel_exc_address(struct pt_regs *regs,
+						   unsigned long *addr)
 {
 	u8 insn_buf[MAX_INSN_SIZE];
 	struct insn insn;
@@ -662,37 +662,37 @@ static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
 
 	if (copy_from_kernel_nofault(insn_buf, (void *)regs->ip,
 			MAX_INSN_SIZE))
-		return GP_NO_HINT;
+		return EXC_NO_HINT;
 
 	ret = insn_decode_kernel(&insn, insn_buf);
 	if (ret < 0)
-		return GP_NO_HINT;
+		return EXC_NO_HINT;
 
 	*addr = (unsigned long)insn_get_addr_ref(&insn, regs);
 	if (*addr == -1UL)
-		return GP_NO_HINT;
+		return EXC_NO_HINT;
 
 #ifdef CONFIG_X86_64
 	/* Operand is in the kernel half */
 	if (*addr >= ~__VIRTUAL_MASK)
-		return GP_CANONICAL;
+		return EXC_CANONICAL;
 
 	/* The last byte of the operand is not in the user canonical half */
 	if (*addr + insn.opnd_bytes - 1 > __VIRTUAL_MASK)
-		return GP_NON_CANONICAL;
+		return EXC_NON_CANONICAL;
 
 	/*
 	 * If LASS is enabled, NULL pointer dereference generates
 	 * #GP instead of #PF.
 	 */
 	if (*addr < PAGE_SIZE)
-		return GP_NULL_POINTER;
+		return EXC_NULL_POINTER;
 
 	if (cpu_feature_enabled(X86_FEATURE_LASS))
-		return GP_LASS_VIOLATION;
+		return EXC_LASS_VIOLATION;
 #endif
 
-	return GP_CANONICAL;
+	return EXC_CANONICAL;
 }
 
 #define GPFSTR "general protection fault"
@@ -811,7 +811,7 @@ static void gp_user_force_sig_segv(struct pt_regs *regs, int trapnr,
 DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 {
 	char desc[sizeof(GPFSTR) + 50 + 2*sizeof(unsigned long) + 1] = GPFSTR;
-	enum kernel_gp_hint hint = GP_NO_HINT;
+	enum kernel_exc_hint hint = EXC_NO_HINT;
 	unsigned long gp_addr;
 
 	if (user_mode(regs) && try_fixup_enqcmd_gp())
@@ -849,18 +849,18 @@ DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 	if (error_code)
 		snprintf(desc, sizeof(desc), "segment-related " GPFSTR);
 	else
-		hint = get_kernel_gp_address(regs, &gp_addr);
+		hint = get_kernel_exc_address(regs, &gp_addr);
 
-	if (hint != GP_NO_HINT) {
+	if (hint != EXC_NO_HINT) {
 		snprintf(desc, sizeof(desc), GPFSTR ", %s 0x%lx",
-			 kernel_gp_hint_help[hint], gp_addr);
+			 kernel_exc_hint_help[hint], gp_addr);
 	}
 
 	/*
 	 * KASAN is interested only in the non-canonical case, clear it
 	 * otherwise.
 	 */
-	if (hint != GP_NON_CANONICAL)
+	if (hint != EXC_NON_CANONICAL)
 		gp_addr = 0;
 
 	die_addr(desc, regs, error_code, gp_addr);
