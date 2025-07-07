@@ -280,6 +280,9 @@ int intel_vrr_fixed_rr_vmin(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 
+	if (crtc_state->vrr.in_range)
+		return crtc_state->vrr.vmin;
+
 	return intel_vrr_fixed_rr_vtotal(crtc_state) -
 		intel_vrr_flipline_offset(display);
 }
@@ -310,24 +313,35 @@ static
 void intel_vrr_compute_fixed_rr_timings(struct intel_crtc_state *crtc_state)
 {
 	/*
-	 * For fixed rr,  vmin = vmax = flipline.
-	 * vmin is already set to crtc_vtotal set vmax and flipline the same.
+	 * For fixed rr vmax = flipline.
+	 * set vmax and flipline same as vtotal.
 	 */
 	crtc_state->vrr.vmax = crtc_state->hw.adjusted_mode.crtc_vtotal;
 	crtc_state->vrr.flipline = crtc_state->hw.adjusted_mode.crtc_vtotal;
 }
 
 static
-int intel_vrr_compute_vmin(struct intel_crtc_state *crtc_state)
+int intel_vrr_compute_fixed_vmin(struct intel_crtc_state *crtc_state)
 {
 	/*
-	 * To make fixed rr and vrr work seamless the guardband/pipeline full
-	 * should be set such that it satisfies both the fixed and variable
-	 * timings.
-	 * For this set the vmin as crtc_vtotal. With this we never need to
-	 * change anything to do with the guardband.
+	 * For non VRR supporting panels/config, set the vmin to crtc_vtotal.
+	 * This will help the case where VRR TG is used even for non-vrr panels/config.
 	 */
 	return crtc_state->hw.adjusted_mode.crtc_vtotal;
+}
+
+static
+int intel_vrr_compute_vmin(struct intel_connector *connector,
+			   const struct drm_display_mode *adjusted_mode)
+{
+	const struct drm_display_info *info = &connector->base.display_info;
+	int vmin;
+
+	vmin = adjusted_mode->crtc_clock * 1000 /
+		(adjusted_mode->crtc_htotal * info->monitor_range.max_vfreq);
+	vmin = min_t(int, vmin, adjusted_mode->crtc_vtotal);
+
+	return vmin;
 }
 
 static
@@ -376,13 +390,13 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	if (crtc_state->joiner_pipes)
 		crtc_state->vrr.in_range = false;
 
-	vmin = intel_vrr_compute_vmin(crtc_state);
-
 	if (crtc_state->vrr.in_range) {
 		if (HAS_LRR(display))
 			crtc_state->update_lrr = true;
 		vmax = intel_vrr_compute_vmax(connector, adjusted_mode);
+		vmin = intel_vrr_compute_vmin(connector, adjusted_mode);
 	} else {
+		vmin = intel_vrr_compute_fixed_vmin(crtc_state);
 		vmax = vmin;
 	}
 
@@ -769,8 +783,7 @@ void intel_vrr_transcoder_disable(const struct intel_crtc_state *crtc_state)
 bool intel_vrr_is_fixed_rr(const struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->vrr.flipline &&
-	       crtc_state->vrr.flipline == crtc_state->vrr.vmax &&
-	       crtc_state->vrr.flipline == intel_vrr_vmin_flipline(crtc_state);
+	       crtc_state->vrr.flipline == crtc_state->vrr.vmax;
 }
 
 void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
