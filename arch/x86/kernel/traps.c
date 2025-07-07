@@ -418,12 +418,6 @@ DEFINE_IDTENTRY_ERRORCODE(exc_segment_not_present)
 		      SIGBUS, 0, NULL);
 }
 
-DEFINE_IDTENTRY_ERRORCODE(exc_stack_segment)
-{
-	do_error_trap(regs, error_code, "stack segment", X86_TRAP_SS, SIGBUS,
-		      0, NULL);
-}
-
 DEFINE_IDTENTRY_ERRORCODE(exc_alignment_check)
 {
 	char *str = "alignment check";
@@ -867,6 +861,41 @@ DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 
 exit:
 	cond_local_irq_disable(regs);
+}
+
+#define SSFSTR "stack segment"
+
+DEFINE_IDTENTRY_ERRORCODE(exc_stack_segment)
+{
+	enum kernel_exc_hint hint;
+	unsigned long exc_addr;
+
+	if (user_mode(regs))
+		goto error_trap;
+
+	if (cpu_feature_enabled(X86_FEATURE_FRED) &&
+	    fixup_exception(regs, X86_TRAP_SS, error_code, 0))
+		return;
+
+	if (!cpu_feature_enabled(X86_FEATURE_LASS))
+		goto error_trap;
+
+	if (notify_die(DIE_TRAP, SSFSTR, regs, error_code,
+		       X86_TRAP_SS, SIGBUS) == NOTIFY_STOP)
+		return;
+
+	hint = get_kernel_exc_address(regs, &exc_addr);
+	if (hint != EXC_NO_HINT)
+		printk(SSFSTR ", %s 0x%lx", kernel_exc_hint_help[hint], exc_addr);
+
+	if (hint != EXC_NON_CANONICAL)
+		exc_addr = 0;
+
+	die_addr(SSFSTR, regs, error_code, exc_addr);
+	return;
+
+error_trap:
+	do_error_trap(regs, error_code, SSFSTR, X86_TRAP_SS, SIGBUS, 0, NULL);
 }
 
 static bool do_int3(struct pt_regs *regs)
