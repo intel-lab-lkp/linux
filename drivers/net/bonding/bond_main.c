@@ -123,6 +123,7 @@ static struct bond_params bonding_defaults;
 static int resend_igmp = BOND_DEFAULT_RESEND_IGMP;
 static int packets_per_slave = 1;
 static int lp_interval = BOND_ALB_DEFAULT_LP_INTERVAL;
+static int coupled_control = 1;
 
 module_param(max_bonds, int, 0);
 MODULE_PARM_DESC(max_bonds, "Max number of bonded devices");
@@ -144,6 +145,11 @@ MODULE_PARM_DESC(downdelay, "Delay before considering link down, "
 module_param(use_carrier, int, 0);
 MODULE_PARM_DESC(use_carrier, "Use netif_carrier_ok (vs MII ioctls) in miimon; "
 			      "0 for off, 1 for on (default)");
+
+module_param(coupled_control, int, 0);
+MODULE_PARM_DESC(coupled_control, "Coupled and Independent control state machine; "
+			      "0 for off, 1 for on (default)");
+
 module_param(mode, charp, 0);
 MODULE_PARM_DESC(mode, "Mode of operation; 0 for balance-rr, "
 		       "1 for active-backup, 2 for balance-xor, "
@@ -6195,6 +6201,12 @@ static int __init bond_check_params(struct bond_params *params)
 		use_carrier = 1;
 	}
 
+	if ((coupled_control != 0) && (coupled_control != 1)) {
+		pr_warn("Warning: coupled_control module parameter (%d), not of valid value (0/1), so it was set to 1\n",
+			coupled_control);
+		coupled_control = 1;
+	}
+
 	if (num_peer_notif < 0 || num_peer_notif > 255) {
 		pr_warn("Warning: num_grat_arp/num_unsol_na (%d) not in range 0-255 so it was reset to 1\n",
 			num_peer_notif);
@@ -6455,7 +6467,7 @@ static int __init bond_check_params(struct bond_params *params)
 	params->ad_actor_sys_prio = ad_actor_sys_prio;
 	eth_zero_addr(params->ad_actor_system);
 	params->ad_user_port_key = ad_user_port_key;
-	params->coupled_control = 1;
+	params->coupled_control = coupled_control;
 	if (packets_per_slave > 0) {
 		params->reciprocal_packets_per_slave =
 			reciprocal_value(packets_per_slave);
