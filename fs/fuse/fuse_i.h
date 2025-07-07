@@ -975,6 +975,15 @@ struct fuse_conn {
 		/* Request timeout (in jiffies). 0 = no timeout */
 		unsigned int req_timeout;
 	} timeout;
+
+	/** Cache dentries tree */
+	struct rb_root dentry_tree;
+	/** Look to protect dentry_tree access */
+	spinlock_t dentry_tree_lock;
+	/** Periodic delayed work to invalidate expired dentries */
+	struct delayed_work dentry_tree_work;
+	/** Period for the invalidation work queue */
+	unsigned int inval_wq;
 };
 
 /*
@@ -1258,6 +1267,9 @@ void fuse_wait_aborted(struct fuse_conn *fc);
 
 /* Check if any requests timed out */
 void fuse_check_timeout(struct work_struct *work);
+
+void fuse_dentry_tree_prune(struct fuse_conn *fc);
+void fuse_dentry_tree_work(struct work_struct *work);
 
 /**
  * Invalidate inode attributes

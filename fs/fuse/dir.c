@@ -34,33 +34,152 @@ static void fuse_advise_use_readdirplus(struct inode *dir)
 	set_bit(FUSE_I_ADVISE_RDPLUS, &fi->state);
 }
 
-#if BITS_PER_LONG >= 64
-static inline void __fuse_dentry_settime(struct dentry *entry, u64 time)
-{
-	entry->d_fsdata = (void *) time;
-}
-
-static inline u64 fuse_dentry_time(const struct dentry *entry)
-{
-	return (u64)entry->d_fsdata;
-}
-
-#else
-union fuse_dentry {
+struct fuse_dentry {
 	u64 time;
-	struct rcu_head rcu;
+	union {
+		struct rcu_head rcu;
+		struct rb_node node;
+	};
+	struct dentry *dentry;
 };
+
+static void __fuse_dentry_tree_del_node(struct fuse_conn *fc,
+					struct fuse_dentry *fd)
+{
+	if (!RB_EMPTY_NODE(&fd->node)) {
+		rb_erase(&fd->node, &fc->dentry_tree);
+		RB_CLEAR_NODE(&fd->node);
+	}
+}
+
+static void fuse_dentry_tree_del_node(struct dentry *dentry)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(dentry->d_sb);
+	struct fuse_dentry *fd = dentry->d_fsdata;
+
+	if (!fc->inval_wq)
+		return;
+
+	spin_lock(&fc->dentry_tree_lock);
+	__fuse_dentry_tree_del_node(fc, fd);
+	spin_unlock(&fc->dentry_tree_lock);
+}
+
+static void fuse_dentry_tree_add_node(struct dentry *dentry)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(dentry->d_sb);
+	struct fuse_dentry *fd = dentry->d_fsdata;
+	struct fuse_dentry *cur;
+	struct rb_node **p, *parent = NULL;
+	bool start_work = false;
+
+	if (!fc->inval_wq)
+		return;
+
+	spin_lock(&fc->dentry_tree_lock);
+
+	if (!fc->inval_wq) {
+		spin_unlock(&fc->dentry_tree_lock);
+		return;
+	}
+
+	start_work = RB_EMPTY_ROOT(&fc->dentry_tree);
+	__fuse_dentry_tree_del_node(fc, fd);
+
+	p = &fc->dentry_tree.rb_node;
+	while (*p) {
+		parent = *p;
+		cur = rb_entry(*p, struct fuse_dentry, node);
+		if (fd->time > cur->time)
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
+	rb_link_node(&fd->node, parent, p);
+	rb_insert_color(&fd->node, &fc->dentry_tree);
+	spin_unlock(&fc->dentry_tree_lock);
+
+	if (start_work)
+		schedule_delayed_work(&fc->dentry_tree_work,
+				      secs_to_jiffies(fc->inval_wq));
+}
+
+void fuse_dentry_tree_prune(struct fuse_conn *fc)
+{
+	struct rb_node *n;
+
+	if (!fc->inval_wq)
+		return;
+
+	fc->inval_wq = 0;
+	cancel_delayed_work_sync(&fc->dentry_tree_work);
+
+	spin_lock(&fc->dentry_tree_lock);
+	while (!RB_EMPTY_ROOT(&fc->dentry_tree)) {
+		n = rb_first(&fc->dentry_tree);
+		rb_erase(n, &fc->dentry_tree);
+		RB_CLEAR_NODE(&rb_entry(n, struct fuse_dentry, node)->node);
+	}
+	spin_unlock(&fc->dentry_tree_lock);
+}
+
+/*
+ * work queue that, when enabled, will periodically check for expired dentries
+ * in the dentries tree.
+ *
+ * A dentry has expired if:
+ *
+ *   1) it has been around for too long (timeout) or if
+ *
+ *   2) the connection epoch has been incremented.
+ *
+ * The work queue will be rescheduled itself as long as the dentries tree is not
+ * empty.
+ */
+void fuse_dentry_tree_work(struct work_struct *work)
+{
+	struct fuse_conn *fc = container_of(work, struct fuse_conn,
+					    dentry_tree_work.work);
+	struct fuse_dentry *fd;
+	struct rb_node *node;
+	u64 start;
+	int epoch;
+	bool reschedule;
+
+	spin_lock(&fc->dentry_tree_lock);
+	start = get_jiffies_64();
+	epoch = atomic_read(&fc->epoch);
+
+	node = rb_first(&fc->dentry_tree);
+	while (node && !need_resched()) {
+		fd = rb_entry(node, struct fuse_dentry, node);
+		if ((fd->dentry->d_time < epoch) || (fd->time < start)) {
+			rb_erase(&fd->node, &fc->dentry_tree);
+			RB_CLEAR_NODE(&fd->node);
+			spin_unlock(&fc->dentry_tree_lock);
+			d_invalidate(fd->dentry);
+			spin_lock(&fc->dentry_tree_lock);
+		} else
+			break;
+		node = rb_first(&fc->dentry_tree);
+	}
+	reschedule = !RB_EMPTY_ROOT(&fc->dentry_tree);
+	spin_unlock(&fc->dentry_tree_lock);
+
+	if (reschedule)
+		schedule_delayed_work(&fc->dentry_tree_work,
+				      secs_to_jiffies(fc->inval_wq));
+}
 
 static inline void __fuse_dentry_settime(struct dentry *dentry, u64 time)
 {
-	((union fuse_dentry *) dentry->d_fsdata)->time = time;
+	((struct fuse_dentry *) dentry->d_fsdata)->time = time;
 }
 
 static inline u64 fuse_dentry_time(const struct dentry *entry)
 {
-	return ((union fuse_dentry *) entry->d_fsdata)->time;
+	return ((struct fuse_dentry *) entry->d_fsdata)->time;
 }
-#endif
 
 static void fuse_dentry_settime(struct dentry *dentry, u64 time)
 {
@@ -81,6 +200,7 @@ static void fuse_dentry_settime(struct dentry *dentry, u64 time)
 	}
 
 	__fuse_dentry_settime(dentry, time);
+	fuse_dentry_tree_add_node(dentry);
 }
 
 /*
@@ -283,21 +403,36 @@ invalid:
 	goto out;
 }
 
-#if BITS_PER_LONG < 64
 static int fuse_dentry_init(struct dentry *dentry)
 {
-	dentry->d_fsdata = kzalloc(sizeof(union fuse_dentry),
-				   GFP_KERNEL_ACCOUNT | __GFP_RECLAIMABLE);
+	struct fuse_dentry *fd;
 
-	return dentry->d_fsdata ? 0 : -ENOMEM;
+	fd = kzalloc(sizeof(struct fuse_dentry),
+			  GFP_KERNEL_ACCOUNT | __GFP_RECLAIMABLE);
+	if (!fd)
+		return -ENOMEM;
+
+	fd->dentry = dentry;
+	RB_CLEAR_NODE(&fd->node);
+	dentry->d_fsdata = fd;
+
+	return 0;
 }
+
+static void fuse_dentry_prune(struct dentry *dentry)
+{
+	struct fuse_dentry *fd = dentry->d_fsdata;
+
+	if (!RB_EMPTY_NODE(&fd->node))
+		fuse_dentry_tree_del_node(dentry);
+}
+
 static void fuse_dentry_release(struct dentry *dentry)
 {
-	union fuse_dentry *fd = dentry->d_fsdata;
+	struct fuse_dentry *fd = dentry->d_fsdata;
 
 	kfree_rcu(fd, rcu);
 }
-#endif
 
 static int fuse_dentry_delete(const struct dentry *dentry)
 {
@@ -331,18 +466,16 @@ static struct vfsmount *fuse_dentry_automount(struct path *path)
 const struct dentry_operations fuse_dentry_operations = {
 	.d_revalidate	= fuse_dentry_revalidate,
 	.d_delete	= fuse_dentry_delete,
-#if BITS_PER_LONG < 64
 	.d_init		= fuse_dentry_init,
+	.d_prune	= fuse_dentry_prune,
 	.d_release	= fuse_dentry_release,
-#endif
 	.d_automount	= fuse_dentry_automount,
 };
 
 const struct dentry_operations fuse_root_dentry_operations = {
-#if BITS_PER_LONG < 64
 	.d_init		= fuse_dentry_init,
+	.d_prune	= fuse_dentry_prune,
 	.d_release	= fuse_dentry_release,
-#endif
 };
 
 int fuse_valid_type(int m)
