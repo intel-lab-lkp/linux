@@ -953,6 +953,8 @@ struct perf_domain {
 	struct rcu_head rcu;
 };
 
+typedef atomic_t *atomic_tp;
+
 /*
  * We add the notion of a root-domain which will be used to define per-domain
  * variables. Each exclusive cpuset essentially defines an island domain by
@@ -963,12 +965,15 @@ struct perf_domain {
  */
 struct root_domain {
 	atomic_t		refcount;
-	atomic_t		rto_count;
 	struct rcu_head		rcu;
 	cpumask_var_t		span;
 	cpumask_var_t		online;
 
 	atomic_t		dlo_count;
+
+	/* rto_count per node */
+	atomic_tp		*rto_counts;
+
 	struct dl_bw		dl_bw;
 	struct cpudl		cpudl;
 
@@ -1030,6 +1035,8 @@ extern int sched_init_domains(const struct cpumask *cpu_map);
 extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
 extern void sched_get_rd(struct root_domain *rd);
 extern void sched_put_rd(struct root_domain *rd);
+extern int rto_counts_init(atomic_tp **rto_counts);
+extern void rto_counts_cleanup(atomic_tp *rto_counts);
 
 static inline int get_rd_overloaded(struct root_domain *rd)
 {

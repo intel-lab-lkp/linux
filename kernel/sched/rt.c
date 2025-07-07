@@ -337,9 +337,58 @@ static inline bool need_pull_rt_task(struct rq *rq, struct task_struct *prev)
 	return rq->online && rq->rt.highest_prio.curr > prev->prio;
 }
 
+int rto_counts_init(atomic_tp **rto_counts)
+{
+	int i;
+	atomic_tp *counts = kzalloc(nr_node_ids * sizeof(atomic_tp), GFP_KERNEL);
+
+	if (!counts)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_node_ids; i++) {
+		counts[i] = kzalloc_node(sizeof(atomic_t), GFP_KERNEL, i);
+
+		if (!counts[i])
+			goto cleanup;
+	}
+
+	*rto_counts = counts;
+	return 0;
+
+cleanup:
+	while (i--)
+		kfree(counts[i]);
+
+	kfree(counts);
+	return -ENOMEM;
+}
+
+void rto_counts_cleanup(atomic_tp *rto_counts)
+{
+	for (int i = 0; i < nr_node_ids; i++)
+		kfree(rto_counts[i]);
+
+	kfree(rto_counts);
+}
+
 static inline int rt_overloaded(struct rq *rq)
 {
-	return atomic_read(&rq->rd->rto_count);
+	int count = 0;
+	int cur_node, nid;
+
+	cur_node = numa_node_id();
+
+	for (int i = 0; i < nr_node_ids; i++) {
+		nid = (cur_node + i) % nr_node_ids;
+		count += atomic_read(rq->rd->rto_counts[nid]);
+
+		// The caller only checks if it is 0
+		// or 1, so that return once > 1
+		if (count > 1)
+			return count;
+	}
+
+	return count;
 }
 
 static inline void rt_set_overload(struct rq *rq)
@@ -358,7 +407,7 @@ static inline void rt_set_overload(struct rq *rq)
 	 * Matched by the barrier in pull_rt_task().
 	 */
 	smp_wmb();
-	atomic_inc(&rq->rd->rto_count);
+	atomic_inc(rq->rd->rto_counts[cpu_to_node(rq->cpu)]);
 }
 
 static inline void rt_clear_overload(struct rq *rq)
@@ -367,7 +416,7 @@ static inline void rt_clear_overload(struct rq *rq)
 		return;
 
 	/* the order here really doesn't matter */
-	atomic_dec(&rq->rd->rto_count);
+	atomic_dec(rq->rd->rto_counts[cpu_to_node(rq->cpu)]);
 	cpumask_clear_cpu(rq->cpu, rq->rd->rto_mask);
 }
 
@@ -443,6 +492,16 @@ static inline void dequeue_pushable_task(struct rq *rq, struct task_struct *p)
 static inline void rt_queue_push_tasks(struct rq *rq)
 {
 }
+
+int rto_counts_init(atomic_tp **rto_counts)
+{
+	return 0;
+}
+
+void rto_counts_cleanup(atomic_tp *rto_counts)
+{
+}
+
 #endif /* CONFIG_SMP */
 
 static void enqueue_top_rt_rq(struct rt_rq *rt_rq);
