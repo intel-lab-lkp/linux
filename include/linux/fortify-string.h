@@ -10,6 +10,12 @@
 #define __FORTIFY_INLINE extern __always_inline __gnu_inline __overloadable
 #define __RENAME(x) __asm__(#x)
 
+#if defined(CONFIG_TRACE_BRANCH_PROFILING)
+#define fortify_unlikely(x)		(x)
+#else
+#define fortify_unlikely(x)		unlikely(x)
+#endif
+
 #define FORTIFY_REASON_DIR(r)		FIELD_GET(BIT(0), r)
 #define FORTIFY_REASON_FUNC(r)		FIELD_GET(GENMASK(7, 1), r)
 #define FORTIFY_REASON(func, write)	(FIELD_PREP(BIT(0), write) | \
@@ -593,9 +599,9 @@ __FORTIFY_INLINE bool fortify_memcpy_chk(__kernel_size_t size,
 	 * (The SIZE_MAX test is to optimize away checks where the buffer
 	 * lengths are unknown.)
 	 */
-	if (p_size != SIZE_MAX && p_size < size)
+	if (fortify_unlikely(p_size != SIZE_MAX && p_size < size))
 		fortify_panic(func, FORTIFY_WRITE, p_size, size, true);
-	else if (q_size != SIZE_MAX && q_size < size)
+	else if (fortify_unlikely(q_size != SIZE_MAX && q_size < size))
 		fortify_panic(func, FORTIFY_READ, p_size, size, true);
 
 	/*
