@@ -98,13 +98,13 @@ static void igc_regdump(struct igc_hw *hw, struct igc_reg_info *reginfo)
 			regs[n] = rd32(IGC_TXDCTL(n));
 		break;
 	default:
-		netdev_info(dev, "%-15s %08x\n", reginfo->name,
+		netdev_dbg(dev, "%-15s %08x\n", reginfo->name,
 			    rd32(reginfo->ofs));
 		return;
 	}
 
 	snprintf(rname, 16, "%s%s", reginfo->name, "[0-3]");
-	netdev_info(dev, "%-15s %08x %08x %08x %08x\n", rname, regs[0], regs[1],
+	netdev_dbg(dev, "%-15s %08x %08x %08x %08x\n", rname, regs[0], regs[1],
 		    regs[2], regs[3]);
 }
 
@@ -123,22 +123,22 @@ void igc_rings_dump(struct igc_adapter *adapter)
 	if (!netif_msg_hw(adapter))
 		return;
 
-	netdev_info(netdev, "Device info: state %016lX trans_start %016lX\n",
+	netdev_dbg(netdev, "Device info: state %016lX trans_start %016lX\n",
 		    netdev->state, dev_trans_start(netdev));
 
 	/* Print TX Ring Summary */
 	if (!netif_running(netdev))
 		goto exit;
 
-	netdev_info(netdev, "TX Rings Summary\n");
-	netdev_info(netdev, "Queue [NTU] [NTC] [bi(ntc)->dma  ] leng ntw timestamp\n");
+	netdev_dbg(netdev, "TX Rings Summary\n");
+	netdev_dbg(netdev, "Queue [NTU] [NTC] [bi(ntc)->dma  ] leng ntw timestamp\n");
 	for (n = 0; n < adapter->num_tx_queues; n++) {
 		struct igc_tx_buffer *buffer_info;
 
 		tx_ring = adapter->tx_ring[n];
 		buffer_info = &tx_ring->tx_buffer_info[tx_ring->next_to_clean];
 
-		netdev_info(netdev, "%5d %5X %5X %016llX %04X %p %016llX\n",
+		netdev_dbg(netdev, "%5d %5X %5X %016llX %04X %p %016llX\n",
 			    n, tx_ring->next_to_use, tx_ring->next_to_clean,
 			    (u64)dma_unmap_addr(buffer_info, dma),
 			    dma_unmap_len(buffer_info, len),
@@ -150,7 +150,7 @@ void igc_rings_dump(struct igc_adapter *adapter)
 	if (!netif_msg_tx_done(adapter))
 		goto rx_ring_summary;
 
-	netdev_info(netdev, "TX Rings Dump\n");
+	netdev_dbg(netdev, "TX Rings Dump\n");
 
 	/* Transmit Descriptor Formats
 	 *
@@ -165,11 +165,11 @@ void igc_rings_dump(struct igc_adapter *adapter)
 
 	for (n = 0; n < adapter->num_tx_queues; n++) {
 		tx_ring = adapter->tx_ring[n];
-		netdev_info(netdev, "------------------------------------\n");
-		netdev_info(netdev, "TX QUEUE INDEX = %d\n",
+		netdev_dbg(netdev, "------------------------------------\n");
+		netdev_dbg(netdev, "TX QUEUE INDEX = %d\n",
 			    tx_ring->queue_index);
-		netdev_info(netdev, "------------------------------------\n");
-		netdev_info(netdev, "T [desc]     [address 63:0  ] [PlPOCIStDDM Ln] [bi->dma       ] leng  ntw timestamp        bi->skb\n");
+		netdev_dbg(netdev, "------------------------------------\n");
+		netdev_dbg(netdev, "T [desc]     [address 63:0  ] [PlPOCIStDDM Ln] [bi->dma       ] leng  ntw timestamp        bi->skb\n");
 
 		for (i = 0; tx_ring->desc && (i < tx_ring->count); i++) {
 			const char *next_desc;
@@ -188,7 +188,7 @@ void igc_rings_dump(struct igc_adapter *adapter)
 			else
 				next_desc = "";
 
-			netdev_info(netdev, "T [0x%03X]    %016llX %016llX %016llX %04X  %p %016llX %p%s\n",
+			netdev_dbg(netdev, "T [0x%03X]    %016llX %016llX %016llX %04X  %p %016llX %p%s\n",
 				    i, le64_to_cpu(u0->a),
 				    le64_to_cpu(u0->b),
 				    (u64)dma_unmap_addr(buffer_info, dma),
@@ -198,7 +198,7 @@ void igc_rings_dump(struct igc_adapter *adapter)
 				    buffer_info->skb, next_desc);
 
 			if (netif_msg_pktdata(adapter) && buffer_info->skb)
-				print_hex_dump(KERN_INFO, "",
+				print_hex_dump(KERN_DEBUG, "",
 					       DUMP_PREFIX_ADDRESS,
 					       16, 1, buffer_info->skb->data,
 					       dma_unmap_len(buffer_info, len),
@@ -208,11 +208,11 @@ void igc_rings_dump(struct igc_adapter *adapter)
 
 	/* Print RX Rings Summary */
 rx_ring_summary:
-	netdev_info(netdev, "RX Rings Summary\n");
-	netdev_info(netdev, "Queue [NTU] [NTC]\n");
+	netdev_dbg(netdev, "RX Rings Summary\n");
+	netdev_dbg(netdev, "Queue [NTU] [NTC]\n");
 	for (n = 0; n < adapter->num_rx_queues; n++) {
 		rx_ring = adapter->rx_ring[n];
-		netdev_info(netdev, "%5d %5X %5X\n", n, rx_ring->next_to_use,
+		netdev_dbg(netdev, "%5d %5X %5X\n", n, rx_ring->next_to_use,
 			    rx_ring->next_to_clean);
 	}
 
@@ -220,7 +220,7 @@ rx_ring_summary:
 	if (!netif_msg_rx_status(adapter))
 		goto exit;
 
-	netdev_info(netdev, "RX Rings Dump\n");
+	netdev_dbg(netdev, "RX Rings Dump\n");
 
 	/* Advanced Receive Descriptor (Read) Format
 	 *    63                                           1        0
@@ -245,12 +245,12 @@ rx_ring_summary:
 
 	for (n = 0; n < adapter->num_rx_queues; n++) {
 		rx_ring = adapter->rx_ring[n];
-		netdev_info(netdev, "------------------------------------\n");
-		netdev_info(netdev, "RX QUEUE INDEX = %d\n",
+		netdev_dbg(netdev, "------------------------------------\n");
+		netdev_dbg(netdev, "RX QUEUE INDEX = %d\n",
 			    rx_ring->queue_index);
-		netdev_info(netdev, "------------------------------------\n");
-		netdev_info(netdev, "R  [desc]      [ PktBuf     A0] [  HeadBuf   DD] [bi->dma       ] [bi->skb] <-- Adv Rx Read format\n");
-		netdev_info(netdev, "RWB[desc]      [PcsmIpSHl PtRs] [vl er S cks ln] ---------------- [bi->skb] <-- Adv Rx Write-Back format\n");
+		netdev_dbg(netdev, "------------------------------------\n");
+		netdev_dbg(netdev, "R  [desc]      [ PktBuf     A0] [  HeadBuf   DD] [bi->dma       ] [bi->skb] <-- Adv Rx Read format\n");
+		netdev_dbg(netdev, "RWB[desc]      [PcsmIpSHl PtRs] [vl er S cks ln] ---------------- [bi->skb] <-- Adv Rx Write-Back format\n");
 
 		for (i = 0; i < rx_ring->count; i++) {
 			const char *next_desc;
@@ -270,13 +270,13 @@ rx_ring_summary:
 
 			if (staterr & IGC_RXD_STAT_DD) {
 				/* Descriptor Done */
-				netdev_info(netdev, "%s[0x%03X]     %016llX %016llX ---------------- %s\n",
+				netdev_dbg(netdev, "%s[0x%03X]     %016llX %016llX ---------------- %s\n",
 					    "RWB", i,
 					    le64_to_cpu(u0->a),
 					    le64_to_cpu(u0->b),
 					    next_desc);
 			} else {
-				netdev_info(netdev, "%s[0x%03X]     %016llX %016llX %016llX %s\n",
+				netdev_dbg(netdev, "%s[0x%03X]     %016llX %016llX %016llX %s\n",
 					    "R  ", i,
 					    le64_to_cpu(u0->a),
 					    le64_to_cpu(u0->b),
@@ -285,7 +285,7 @@ rx_ring_summary:
 
 				if (netif_msg_pktdata(adapter) &&
 				    buffer_info->dma && buffer_info->page) {
-					print_hex_dump(KERN_INFO, "",
+					print_hex_dump(KERN_DEBUG, "",
 						       DUMP_PREFIX_ADDRESS,
 						       16, 1,
 						       page_address
@@ -309,8 +309,8 @@ void igc_regs_dump(struct igc_adapter *adapter)
 	struct igc_reg_info *reginfo;
 
 	/* Print Registers */
-	netdev_info(adapter->netdev, "Register Dump\n");
-	netdev_info(adapter->netdev, "Register Name   Value\n");
+	netdev_dbg(adapter->netdev, "Register Dump\n");
+	netdev_dbg(adapter->netdev, "Register Name   Value\n");
 	for (reginfo = (struct igc_reg_info *)igc_reg_info_tbl;
 	     reginfo->name; reginfo++) {
 		igc_regdump(hw, reginfo);
