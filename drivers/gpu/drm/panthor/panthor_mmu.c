@@ -202,6 +202,9 @@ struct panthor_vm_op_ctx {
 		/** @map.bo_offset: Offset in the buffer object. */
 		u64 bo_offset;
 
+		/** @map.bo_repeat_range: Repeated BO range. */
+		u32 bo_repeat_range;
+
 		/**
 		 * @map.sgt: sg-table pointing to pages backing the GEM object.
 		 *
@@ -1007,6 +1010,26 @@ panthor_vm_map_pages(struct panthor_vm *vm, u64 iova, int prot,
 	return 0;
 }
 
+static int
+panthor_vm_repeated_map_pages(struct panthor_vm *vm, u64 iova, int prot,
+			      struct sg_table *sgt, u64 offset, u64 size,
+			      u64 count)
+{
+	/* FIXME: we really need to optimize this at the io_pgtable level. */
+	for (u64 i = 0; i < count; i++) {
+		int ret;
+
+		ret = panthor_vm_map_pages(vm, iova + (size * i), prot,
+					   sgt, offset, size);
+		if (ret) {
+			panthor_vm_unmap_pages(vm, iova, size * (i - 1));
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int flags_to_prot(u32 flags)
 {
 	int prot = 0;
@@ -1203,12 +1226,14 @@ panthor_vm_op_ctx_prealloc_vmas(struct panthor_vm_op_ctx *op_ctx)
 	(DRM_PANTHOR_VM_BIND_OP_MAP_READONLY | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED | \
+	 DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT | \
 	 DRM_PANTHOR_VM_BIND_OP_TYPE_MASK)
 
 static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 					 struct panthor_vm *vm,
 					 struct panthor_gem_object *bo,
 					 u64 offset,
+					 u32 repeat_range,
 					 u64 size, u64 va,
 					 u32 flags)
 {
@@ -1224,9 +1249,22 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	    (flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) != DRM_PANTHOR_VM_BIND_OP_TYPE_MAP)
 		return -EINVAL;
 
-	/* Make sure the VA and size are aligned and in-bounds. */
-	if (size > bo->base.base.size || offset > bo->base.base.size - size)
-		return -EINVAL;
+	if (!(flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT)) {
+		/* Make sure the VA and size are in-bounds. */
+		if (size > bo->base.base.size || offset > bo->base.base.size - size)
+			return -EINVAL;
+	} else {
+		/* Make sure the repeat_range is in-bounds. */
+		if (repeat_range > bo->base.base.size || offset > bo->base.base.size - repeat_range)
+			return -EINVAL;
+
+		/* Make sure size is a multiple of repeat_range */
+
+		u64 repeat_count = size;
+
+		if (do_div(repeat_count, repeat_range))
+			return -EINVAL;
+	}
 
 	/* If the BO has an exclusive VM attached, it can't be mapped to other VMs. */
 	if (bo->exclusive_vm_root_gem &&
@@ -1295,6 +1333,7 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 		drm_gem_shmem_unpin(&bo->base);
 
 	op_ctx->map.bo_offset = offset;
+	op_ctx->map.bo_repeat_range = repeat_range;
 
 	/* L1, L2 and L3 page tables.
 	 * We could optimize L3 allocation by iterating over the sgt and merging
@@ -2112,9 +2151,22 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 
 	panthor_vma_init(vma, op_ctx->flags & PANTHOR_VM_MAP_FLAGS);
 
-	ret = panthor_vm_map_pages(vm, op->map.va.addr, flags_to_prot(vma->flags),
-				   op_ctx->map.sgt, op->map.gem.offset,
-				   op->map.va.range);
+	if (op_ctx->flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT) {
+		u64 repeat_count = op->map.va.range;
+
+		do_div(repeat_count, op->map.gem.range);
+		ret = panthor_vm_repeated_map_pages(vm, op->map.va.addr,
+						    flags_to_prot(vma->flags),
+						    op_ctx->map.sgt,
+						    op->map.gem.offset,
+						    op->map.gem.range,
+						    repeat_count);
+	} else {
+		ret = panthor_vm_map_pages(vm, op->map.va.addr,
+					   flags_to_prot(vma->flags),
+					   op_ctx->map.sgt, op->map.gem.offset,
+					   op->map.va.range);
+	}
 	if (ret)
 		return ret;
 
@@ -2237,7 +2289,7 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 
 	switch (op_type) {
 	case DRM_PANTHOR_VM_BIND_OP_TYPE_MAP: {
-		const struct drm_gpuvm_map_req map_req = {
+		struct drm_gpuvm_map_req map_req = {
 			.va.addr = op->va.addr,
 			.va.range = op->va.range,
 			.gem.obj = op->map.vm_bo->obj,
@@ -2247,6 +2299,11 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 		if (vm->unusable) {
 			ret = -EINVAL;
 			break;
+		}
+
+		if (op->flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT) {
+			map_req.flags |= DRM_GPUVA_REPEAT;
+			map_req.gem.range = op->map.bo_repeat_range;
 		}
 
 		ret = drm_gpuvm_sm_map(&vm->base, vm, &map_req);
@@ -2497,6 +2554,7 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 		ret = panthor_vm_prepare_map_op_ctx(op_ctx, vm,
 						    gem ? to_panthor_bo(gem) : NULL,
 						    op->bo_offset,
+						    op->bo_repeat_range,
 						    op->size,
 						    op->va,
 						    op->flags);
@@ -2698,7 +2756,11 @@ int panthor_vm_map_bo_range(struct panthor_vm *vm, struct panthor_gem_object *bo
 	struct panthor_vm_op_ctx op_ctx;
 	int ret;
 
-	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, vm, bo, offset, size, va, flags);
+	/* TODO: would be nice to replace with assert instead */
+	if (flags & DRM_PANTHOR_VM_BIND_OP_MAP_REPEAT)
+		return -EINVAL;
+
+	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, vm, bo, offset, 0, size, va, flags);
 	if (ret)
 		return ret;
 
