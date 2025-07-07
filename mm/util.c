@@ -25,6 +25,7 @@
 #include <linux/sizes.h>
 #include <linux/compat.h>
 #include <linux/fsnotify.h>
+#include <linux/page_idle.h>
 
 #include <linux/uaccess.h>
 
@@ -1171,3 +1172,79 @@ int compat_vma_mmap_prepare(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 EXPORT_SYMBOL(compat_vma_mmap_prepare);
+
+static void set_flags(struct page_snapshot *ps, const struct folio *folio,
+		      const struct page *page)
+{
+	/*
+	 * Caveats on high order pages: PG_buddy and PG_slab will only be set
+	 * on the head page.
+	 */
+	if (PageBuddy(page))
+		ps->flags |= PAGE_SNAPSHOT_PG_FREE;
+	else if (page_count(page) == 0 && is_free_buddy_page(page))
+		ps->flags |= PAGE_SNAPSHOT_PG_FREE;
+
+	if (folio_test_idle(folio))
+		ps->flags |= PAGE_SNAPSHOT_PG_IDLE;
+}
+
+/*
+ * Create a snapshot of a page and store its struct page and struct folio
+ * representations in a struct page_snapshot.
+ *
+ * @ps: struct page_snapshot to store the page snapshot
+ * @page: the page we want to snapshot
+ *
+ * Note that creating a faithful snapshot of a page may fail if the page
+ * compound keeps changing (eg. due to folio split). In this case we set
+ * ps->faithful to false and the snapshot will assume that @page refers
+ * to a single page.
+ */
+void snapshot_page(struct page_snapshot *ps, const struct page *page)
+{
+	unsigned long head, nr_pages = 1;
+	struct folio *foliop, folio;
+	int loops = 5;
+
+	ps->pfn = page_to_pfn(page);
+	ps->flags = PAGE_SNAPSHOT_FAITHFUL;
+
+again:
+	memcpy(&ps->page_snapshot, page, sizeof(*page));
+	head = ps->page_snapshot.compound_head;
+	if ((head & 1) == 0) {
+		foliop = (struct folio *)&ps->page_snapshot;
+		ps->idx = 0;
+		if (!folio_test_large(foliop)) {
+			set_flags(ps, page_folio(page), page);
+			goto out;
+		}
+		foliop = (struct folio *)page;
+	} else {
+		foliop = (struct folio *)(page->compound_head - 1);
+		ps->idx = folio_page_idx(foliop, page);
+	}
+
+	if (ps->idx < MAX_FOLIO_NR_PAGES) {
+		memcpy(&folio, foliop, 2 * sizeof(struct page));
+		nr_pages = folio_nr_pages(&folio);
+		if (nr_pages > 1)
+			memcpy(&folio.__page_2, &foliop->__page_2,
+			       sizeof(struct page));
+		set_flags(ps, foliop, page);
+		foliop = &folio;
+	}
+
+	if (ps->idx > nr_pages) {
+		if (loops-- > 0)
+			goto again;
+		ps->page_snapshot.compound_head &= ~1UL;
+		foliop = (struct folio *)&ps->page_snapshot;
+		ps->flags = 0;
+		ps->idx = 0;
+	}
+
+out:
+	memcpy(&ps->folio_snapshot, foliop, sizeof(struct folio));
+}
