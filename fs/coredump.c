@@ -1016,7 +1016,7 @@ static bool coredump_pipe(struct core_name *cn, struct coredump_params *cprm,
 	if (!sub_info)
 		return false;
 
-	if (!call_usermodehelper_exec(sub_info, UMH_WAIT_EXEC)) {
+	if (call_usermodehelper_exec(sub_info, UMH_WAIT_EXEC)) {
 		coredump_report_failure("|%s pipe failed", cn->corename);
 		return false;
 	}
