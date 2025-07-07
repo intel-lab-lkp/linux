@@ -2281,8 +2281,8 @@ conf/all/disable_ipv6 - BOOLEAN
 conf/all/forwarding - BOOLEAN
 	Enable global IPv6 forwarding between all interfaces.
 
-	IPv4 and IPv6 work differently here; e.g. netfilter must be used
-	to control which interfaces may forward packets and which not.
+	IPv4 and IPv6 work differently here; the ``force_forwarding`` flag must
+	be used to control which interfaces may forward packets.
 
 	This also sets all interfaces' Host/Router setting
 	'forwarding' to the specified value.  See below for details.
@@ -2291,6 +2291,11 @@ conf/all/forwarding - BOOLEAN
 
 proxy_ndp - BOOLEAN
 	Do proxy ndp.
+
+force_forwarding - BOOLEAN
+	Enable forwarding on this interface only -- regardless of the setting on
+	``conf/all/forwarding``. When setting ``conf.all.forwarding`` to 0,
+	the ``force_forwarding`` flag will be reset on all interfaces.
 
 fwmark_reflect - BOOLEAN
 	Controls the fwmark of kernel-generated IPv6 reply packets that are not
