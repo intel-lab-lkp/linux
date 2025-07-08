@@ -51,8 +51,6 @@ bool intel_opregion_asle_present(struct intel_display *display);
 void intel_opregion_asle_intr(struct intel_display *display);
 int intel_opregion_notify_encoder(struct intel_encoder *encoder,
 				  bool enable);
-int intel_opregion_notify_adapter(struct intel_display *display,
-				  pci_power_t state);
 int intel_opregion_get_panel_type(struct intel_display *display);
 const struct drm_edid *intel_opregion_get_edid(struct intel_connector *connector);
 
@@ -110,12 +108,6 @@ static inline void intel_opregion_asle_intr(struct intel_display *display)
 
 static inline int
 intel_opregion_notify_encoder(struct intel_encoder *encoder, bool enable)
-{
-	return 0;
-}
-
-static inline int
-intel_opregion_notify_adapter(struct intel_display *display, pci_power_t state)
 {
 	return 0;
 }

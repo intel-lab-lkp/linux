@@ -467,8 +467,8 @@ static const struct {
 	{ PCI_D3cold,	0x04 },
 };
 
-int intel_opregion_notify_adapter(struct intel_display *display,
-				  pci_power_t state)
+static int intel_opregion_notify_adapter(struct intel_display *display,
+					 pci_power_t state)
 {
 	int i;
 
