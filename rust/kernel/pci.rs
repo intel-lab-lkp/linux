@@ -369,6 +369,17 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
     }
 }
 
+impl<'a, Ctx: device::DeviceContext> From<&'a kernel::pci::Device<Ctx>>
+    for &'a device::Device<Ctx>
+{
+    fn from(pdev: &kernel::pci::Device<Ctx>) -> &device::Device<Ctx> {
+        // SAFETY: The returned reference has the same lifetime as the
+        // pci::Device which holds a reference on the underlying device
+        // pointer.
+        unsafe { device::Device::as_ref(&(*pdev.as_raw()).dev as *const _ as *mut _) }
+    }
+}
+
 impl Device {
     /// Returns the PCI vendor ID.
     pub fn vendor_id(&self) -> u16 {
@@ -392,6 +403,18 @@ impl Device {
         // - `bar` is a valid bar number, as guaranteed by the above call to `Bar::index_is_valid`,
         // - by its type invariant `self.as_raw` is always a valid pointer to a `struct pci_dev`.
         Ok(unsafe { bindings::pci_resource_len(self.as_raw(), bar.try_into()?) })
+    }
+
+    /// Set the DMA mask for PCI device.
+    pub fn dma_set_mask(&self, mask: u64) -> Result {
+        let dev: &device::Device = self.into();
+        dev.dma_set_mask(mask)
+    }
+
+    /// Set the coherent DMA mask for the PCI device.
+    pub fn dma_set_coherent_mask(&self, mask: u64) -> Result {
+        let dev: &device::Device = self.into();
+        dev.dma_set_coherent_mask(mask)
     }
 }
 

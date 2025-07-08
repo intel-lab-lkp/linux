@@ -10,6 +10,7 @@ use crate::{
     types::{ARef, Opaque},
 };
 use core::{fmt, marker::PhantomData, ptr};
+use kernel::prelude::*;
 
 #[cfg(CONFIG_PRINTK)]
 use crate::c_str;
@@ -65,6 +66,30 @@ impl<Ctx: DeviceContext> Device<Ctx> {
     /// Obtain the raw `struct device *`.
     pub(crate) fn as_raw(&self) -> *mut bindings::device {
         self.0.get()
+    }
+
+    /// Sets the DMA mask for the device.
+    pub fn dma_set_mask(&self, mask: u64) -> Result {
+        // SAFETY: By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
+        let ret = unsafe { bindings::dma_set_mask(&(*self.as_raw()) as *const _ as *mut _, mask) };
+        if ret != 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Sets the coherent DMA mask for the device.
+    pub fn dma_set_coherent_mask(&self, mask: u64) -> Result {
+        // SAFETY: By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
+        let ret = unsafe {
+            bindings::dma_set_coherent_mask(&(*self.as_raw()) as *const _ as *mut _, mask)
+        };
+        if ret != 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(())
+        }
     }
 
     /// Returns a reference to the parent device, if any.
