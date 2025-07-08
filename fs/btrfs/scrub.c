@@ -2250,6 +2250,27 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 			ret = -ECANCELED;
 			break;
 		}
+
+		/* Freezing? */
+		if (test_bit(BTRFS_FS_FREEZING, &fs_info->flags)) {
+			atomic_inc(&fs_info->scrubs_paused);
+			smp_mb();
+			wake_up(&fs_info->scrub_pause_wait);
+
+			if (!sctx->readonly)
+				sb_end_write(fs_info->sb);
+
+			try_to_freeze();
+			wait_on_bit(&fs_info->flags, BTRFS_FS_FREEZING, TASK_UNINTERRUPTIBLE);
+
+			if (!sctx->readonly)
+				sb_start_write(fs_info->sb);
+
+			atomic_dec(&fs_info->scrubs_paused);
+			smp_mb();
+			wake_up(&fs_info->scrub_pause_wait);
+		}
+
 		/* Paused? */
 		if (atomic_read(&fs_info->scrub_pause_req)) {
 			/* Push queued extents */

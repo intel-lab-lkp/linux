@@ -2285,7 +2285,33 @@ out:
 	return ret;
 }
 
-static int btrfs_freeze(struct super_block *sb)
+static int btrfs_freeze_super(struct super_block *sb, enum freeze_holder who,
+			      const void *freeze_owner)
+{
+	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
+	int ret;
+
+	set_bit(BTRFS_FS_FREEZING, &fs_info->flags);
+	ret = freeze_super(sb, who, freeze_owner);
+	if (ret < 0)
+		clear_bit(BTRFS_FS_FREEZING, &fs_info->flags);
+	return ret;
+}
+
+static int btrfs_thaw_super(struct super_block *sb, enum freeze_holder who,
+			    const void *freeze_owner)
+{
+	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
+	int ret;
+
+	ret = thaw_super(sb, who, freeze_owner);
+	clear_bit(BTRFS_FS_FREEZING, &fs_info->flags);
+	smp_mb();
+	wake_up_bit(&fs_info->flags, BTRFS_FS_FREEZING);
+	return ret;
+}
+
+static int btrfs_freeze_fs(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 
@@ -2351,7 +2377,7 @@ out:
 	return ret;
 }
 
-static int btrfs_unfreeze(struct super_block *sb)
+static int btrfs_unfreeze_fs(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_device *device;
@@ -2432,8 +2458,10 @@ static const struct super_operations btrfs_super_ops = {
 	.destroy_inode	= btrfs_destroy_inode,
 	.free_inode	= btrfs_free_inode,
 	.statfs		= btrfs_statfs,
-	.freeze_fs	= btrfs_freeze,
-	.unfreeze_fs	= btrfs_unfreeze,
+	.freeze_super   = btrfs_freeze_super,
+	.thaw_super     = btrfs_thaw_super,
+	.freeze_fs	= btrfs_freeze_fs,
+	.unfreeze_fs	= btrfs_unfreeze_fs,
 	.nr_cached_objects = btrfs_nr_cached_objects,
 	.free_cached_objects = btrfs_free_cached_objects,
 };

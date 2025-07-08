@@ -137,6 +137,8 @@ enum {
 	BTRFS_FS_QUOTA_OVERRIDE,
 	/* Used to record internally whether fs has been frozen */
 	BTRFS_FS_FROZEN,
+	/* Started freezing, pause your progress. */
+	BTRFS_FS_FREEZING,
 	/*
 	 * Indicate that balance has been set up from the ioctl and is in the
 	 * main phase. The fs_info::balance_ctl is initialized.
