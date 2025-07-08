@@ -642,6 +642,7 @@ extern struct efi {
 	unsigned long			esrt;			/* ESRT table */
 	unsigned long			tpm_log;		/* TPM2 Event Log table */
 	unsigned long			tpm_final_log;		/* TPM2 Final Events Log table */
+	unsigned long			cc_final_log;		/* CC Final Events Log table */
 	unsigned long			mokvar_table;		/* MOK variable config table */
 	unsigned long			coco_secret;		/* Confidential computing secret table */
 	unsigned long			unaccepted;		/* Unaccepted memory table */
@@ -1209,7 +1210,8 @@ struct linux_efi_tpm_eventlog {
 	u8	log[];
 };
 
-extern int efi_tpm_eventlog_init(void);
+extern int efi_tcg2_eventlog_init(unsigned long *log, unsigned long *final_log,
+				   bool is_cc_event);
 
 struct efi_tcg2_final_events_table {
 	u64 version;

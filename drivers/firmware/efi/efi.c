@@ -45,6 +45,7 @@ struct efi __read_mostly efi = {
 	.esrt			= EFI_INVALID_TABLE_ADDR,
 	.tpm_log		= EFI_INVALID_TABLE_ADDR,
 	.tpm_final_log		= EFI_INVALID_TABLE_ADDR,
+	.cc_final_log		= EFI_INVALID_TABLE_ADDR,
 #ifdef CONFIG_LOAD_UEFI_KEYS
 	.mokvar_table		= EFI_INVALID_TABLE_ADDR,
 #endif
@@ -612,7 +613,7 @@ static const efi_config_table_type_t common_tables[] __initconst = {
 	{LINUX_EFI_RANDOM_SEED_TABLE_GUID,	&efi_rng_seed,		"RNG"		},
 	{LINUX_EFI_TPM_EVENT_LOG_GUID,		&efi.tpm_log,		"TPMEventLog"	},
 	{EFI_TCG2_FINAL_EVENTS_TABLE_GUID,	&efi.tpm_final_log,	"TPMFinalLog"	},
-	{EFI_CC_FINAL_EVENTS_TABLE_GUID,	&efi.tpm_final_log,	"CCFinalLog"	},
+	{EFI_CC_FINAL_EVENTS_TABLE_GUID,	&efi.cc_final_log,	"CCFinalLog"	},
 	{LINUX_EFI_MEMRESERVE_TABLE_GUID,	&mem_reserve,		"MEMRESERVE"	},
 	{LINUX_EFI_INITRD_MEDIA_GUID,		&initrd,		"INITRD"	},
 	{EFI_RT_PROPERTIES_TABLE_GUID,		&rt_prop,		"RTPROP"	},
@@ -751,7 +752,10 @@ int __init efi_config_parse_tables(const efi_config_table_t *config_tables,
 	if (!IS_ENABLED(CONFIG_X86_32) && efi_enabled(EFI_MEMMAP))
 		efi_memattr_init();
 
-	efi_tpm_eventlog_init();
+	if (efi.tpm_final_log != EFI_INVALID_TABLE_ADDR)
+		efi_tcg2_eventlog_init(&efi.tpm_log, &efi.tpm_final_log, 0);
+	else if (efi.cc_final_log != EFI_INVALID_TABLE_ADDR)
+		efi_tcg2_eventlog_init(&efi.tpm_log, &efi.cc_final_log, 1);
 
 	if (mem_reserve != EFI_INVALID_TABLE_ADDR) {
 		unsigned long prsv = mem_reserve;

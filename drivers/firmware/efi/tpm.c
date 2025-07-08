@@ -16,14 +16,16 @@
 int efi_tpm_final_log_size;
 EXPORT_SYMBOL(efi_tpm_final_log_size);
 
-static int __init tpm2_calc_event_log_size(void *data, int count, void *size_info)
+static int __init tpm2_calc_event_log_size(void *data, int count,
+					    void *size_info, bool is_cc_event)
 {
 	struct tcg_pcr_event2_head *header;
 	u32 event_size, size = 0;
 
 	while (count > 0) {
 		header = data + size;
-		event_size = __calc_tpm2_event_size(header, size_info, true);
+		event_size = __calc_tpm2_event_size(header, size_info, true,
+						    is_cc_event);
 		if (event_size == 0)
 			return -1;
 		size += event_size;
@@ -36,7 +38,8 @@ static int __init tpm2_calc_event_log_size(void *data, int count, void *size_inf
 /*
  * Reserve the memory associated with the TPM Event Log configuration table.
  */
-int __init efi_tpm_eventlog_init(void)
+int __init efi_tcg2_eventlog_init(unsigned long *log, unsigned long *final_log,
+				   bool is_cc_event)
 {
 	struct linux_efi_tpm_eventlog *log_tbl;
 	struct efi_tcg2_final_events_table *final_tbl;
@@ -44,7 +47,7 @@ int __init efi_tpm_eventlog_init(void)
 	int final_tbl_size;
 	int ret = 0;
 
-	if (efi.tpm_log == EFI_INVALID_TABLE_ADDR) {
+	if (*log == EFI_INVALID_TABLE_ADDR) {
 		/*
 		 * We can't calculate the size of the final events without the
 		 * first entry in the TPM log, so bail here.
@@ -52,23 +55,23 @@ int __init efi_tpm_eventlog_init(void)
 		return 0;
 	}
 
-	log_tbl = early_memremap(efi.tpm_log, sizeof(*log_tbl));
+	log_tbl = early_memremap(*log, sizeof(*log_tbl));
 	if (!log_tbl) {
 		pr_err("Failed to map TPM Event Log table @ 0x%lx\n",
-		       efi.tpm_log);
-		efi.tpm_log = EFI_INVALID_TABLE_ADDR;
+		       *log);
+		*log = EFI_INVALID_TABLE_ADDR;
 		return -ENOMEM;
 	}
 
 	tbl_size = sizeof(*log_tbl) + log_tbl->size;
-	if (memblock_reserve(efi.tpm_log, tbl_size)) {
+	if (memblock_reserve(*log, tbl_size)) {
 		pr_err("TPM Event Log memblock reserve fails (0x%lx, 0x%x)\n",
-		       efi.tpm_log, tbl_size);
+		       *log, tbl_size);
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	if (efi.tpm_final_log == EFI_INVALID_TABLE_ADDR) {
+	if (*final_log == EFI_INVALID_TABLE_ADDR) {
 		pr_info("TPM Final Events table not present\n");
 		goto out;
 	} else if (log_tbl->version != EFI_TCG2_EVENT_LOG_FORMAT_TCG_2) {
@@ -76,25 +79,26 @@ int __init efi_tpm_eventlog_init(void)
 		goto out;
 	}
 
-	final_tbl = early_memremap(efi.tpm_final_log, sizeof(*final_tbl));
+	final_tbl = early_memremap(*final_log, sizeof(*final_tbl));
 
 	if (!final_tbl) {
 		pr_err("Failed to map TPM Final Event Log table @ 0x%lx\n",
-		       efi.tpm_final_log);
-		efi.tpm_final_log = EFI_INVALID_TABLE_ADDR;
+		       *final_log);
+		*final_log = EFI_INVALID_TABLE_ADDR;
 		ret = -ENOMEM;
 		goto out;
 	}
 
 	final_tbl_size = 0;
 	if (final_tbl->nr_events != 0) {
-		void *events = (void *)efi.tpm_final_log
+		void *events = (void *)*final_log
 				+ sizeof(final_tbl->version)
 				+ sizeof(final_tbl->nr_events);
 
 		final_tbl_size = tpm2_calc_event_log_size(events,
 							  final_tbl->nr_events,
-							  log_tbl->log);
+							  log_tbl->log,
+							  is_cc_event);
 	}
 
 	if (final_tbl_size < 0) {
@@ -103,7 +107,7 @@ int __init efi_tpm_eventlog_init(void)
 		goto out_calc;
 	}
 
-	memblock_reserve(efi.tpm_final_log,
+	memblock_reserve(*final_log,
 			 final_tbl_size + sizeof(*final_tbl));
 	efi_tpm_final_log_size = final_tbl_size;
 

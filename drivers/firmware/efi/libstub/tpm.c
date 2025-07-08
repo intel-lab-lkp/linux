@@ -50,7 +50,8 @@ void efi_enable_reset_attack_mitigation(void)
 static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_location,
 				       efi_physical_addr_t log_last_entry,
 				       efi_bool_t truncated,
-				       struct efi_tcg2_final_events_table *final_events_table)
+				       struct efi_tcg2_final_events_table *final_events_table,
+				       bool is_cc_event)
 {
 	efi_guid_t linux_eventlog_guid = LINUX_EFI_TPM_EVENT_LOG_GUID;
 	efi_status_t status;
@@ -87,7 +88,8 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 			last_entry_size =
 				__calc_tpm2_event_size((void *)last_entry_addr,
 						    (void *)(long)log_location,
-						    false);
+						    false,
+						    is_cc_event);
 		} else {
 			last_entry_size = sizeof(struct tcpa_event) +
 			   ((struct tcpa_event *) last_entry_addr)->event_size;
@@ -123,7 +125,8 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 			header = data + offset + final_events_size;
 			event_size = __calc_tpm2_event_size(header,
 						   (void *)(long)log_location,
-						   false);
+						   false,
+						   is_cc_event);
 			/* If calc fails this is a malformed log */
 			if (!event_size)
 				break;
@@ -157,6 +160,7 @@ void efi_retrieve_eventlog(void)
 	efi_tcg2_protocol_t *tpm2 = NULL;
 	efi_bool_t truncated;
 	efi_status_t status;
+	bool is_cc_event = false;
 
 	status = efi_bs_call(locate_protocol, &tpm2_guid, NULL, (void **)&tpm2);
 	if (status == EFI_SUCCESS) {
@@ -186,11 +190,12 @@ void efi_retrieve_eventlog(void)
 
 		final_events_table =
 			get_efi_config_table(EFI_CC_FINAL_EVENTS_TABLE_GUID);
+		is_cc_event = true;
 	}
 
 	if (status != EFI_SUCCESS || !log_location)
 		return;
 
 	efi_retrieve_tcg2_eventlog(version, log_location, log_last_entry,
-				   truncated, final_events_table);
+				   truncated, final_events_table, is_cc_event);
 }

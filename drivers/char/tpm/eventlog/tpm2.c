@@ -36,7 +36,11 @@
 static size_t calc_tpm2_event_size(struct tcg_pcr_event2_head *event,
 				   struct tcg_pcr_event *event_header)
 {
-	return __calc_tpm2_event_size(event, event_header, false);
+	/*
+	 * This function is only used by TPM2 and will not be used by CC.
+	 * Therefore, the argument is_cc_event is set to 0.
+	 */
+	return __calc_tpm2_event_size(event, event_header, false, 0);
 }
 
 static void *tpm2_bios_measurements_start(struct seq_file *m, loff_t *pos)
