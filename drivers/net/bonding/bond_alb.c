@@ -19,7 +19,6 @@
 #include <linux/in.h>
 #include <net/arp.h>
 #include <net/ipv6.h>
-#include <net/ndisc.h>
 #include <asm/byteorder.h>
 #include <net/bonding.h>
 #include <net/bond_alb.h>
@@ -1280,27 +1279,6 @@ unwind:
 	return res;
 }
 
-/* determine if the packet is NA or NS */
-static bool alb_determine_nd(struct sk_buff *skb, struct bonding *bond)
-{
-	struct ipv6hdr *ip6hdr;
-	struct icmp6hdr *hdr;
-
-	if (!pskb_network_may_pull(skb, sizeof(*ip6hdr)))
-		return true;
-
-	ip6hdr = ipv6_hdr(skb);
-	if (ip6hdr->nexthdr != IPPROTO_ICMPV6)
-		return false;
-
-	if (!pskb_network_may_pull(skb, sizeof(*ip6hdr) + sizeof(*hdr)))
-		return true;
-
-	hdr = icmp6_hdr(skb);
-	return hdr->icmp6_type == NDISC_NEIGHBOUR_ADVERTISEMENT ||
-		hdr->icmp6_type == NDISC_NEIGHBOUR_SOLICITATION;
-}
-
 /************************ exported alb functions ************************/
 
 int bond_alb_initialize(struct bonding *bond, int rlb_enabled)
@@ -1381,7 +1359,7 @@ struct slave *bond_xmit_tlb_slave_get(struct bonding *bond,
 	if (!is_multicast_ether_addr(eth_data->h_dest)) {
 		switch (skb->protocol) {
 		case htons(ETH_P_IPV6):
-			if (alb_determine_nd(skb, bond))
+			if (bond_is_icmpv6_nd(skb))
 				break;
 			fallthrough;
 		case htons(ETH_P_IP):
@@ -1467,16 +1445,20 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 			break;
 		}
 
-		if (alb_determine_nd(skb, bond)) {
+		if (bond_is_icmpv6_nd(skb)) {
 			do_tx_balance = false;
 			break;
 		}
 
-		/* The IPv6 header is pulled by alb_determine_nd */
 		/* Additionally, DAD probes should not be tx-balanced as that
 		 * will lead to false positives for duplicate addresses and
 		 * prevent address configuration from working.
 		 */
+		if (!pskb_network_may_pull(skb, sizeof(*ip6hdr))) {
+			do_tx_balance = false;
+			break;
+		}
+
 		ip6hdr = ipv6_hdr(skb);
 		if (ipv6_addr_any(&ip6hdr->saddr)) {
 			do_tx_balance = false;

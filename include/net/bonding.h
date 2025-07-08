@@ -29,6 +29,7 @@
 #include <net/bond_options.h>
 #include <net/ipv6.h>
 #include <net/addrconf.h>
+#include <net/ndisc.h>
 
 #define BOND_MAX_ARP_TARGETS	16
 #define BOND_MAX_NS_TARGETS	BOND_MAX_ARP_TARGETS
@@ -812,6 +813,24 @@ static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *s
 	dev_core_stats_tx_dropped_inc(dev);
 	dev_kfree_skb_any(skb);
 	return NET_XMIT_DROP;
+}
+
+static inline bool bond_is_icmpv6_nd(struct sk_buff *skb)
+{
+	struct {
+		struct ipv6hdr ip6;
+		struct icmp6hdr icmp6;
+	} *combined, _combined;
+
+	combined = skb_header_pointer(skb, skb_mac_header_len(skb),
+				      sizeof(_combined),
+				      &_combined);
+	if (combined && combined->ip6.nexthdr == NEXTHDR_ICMP &&
+	    (combined->icmp6.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION ||
+	     combined->icmp6.icmp6_type == NDISC_NEIGHBOUR_ADVERTISEMENT))
+		return true;
+
+	return false;
 }
 
 #endif /* _NET_BONDING_H */
