@@ -271,6 +271,8 @@ static int sync_fill_fence_info(struct dma_fence *fence,
 	const char __rcu *timeline;
 	const char __rcu *driver;
 
+	dma_fence_enable_sw_signaling(fence);
+
 	rcu_read_lock();
 
 	driver = dma_fence_driver_name(fence);
@@ -320,6 +322,7 @@ static long sync_file_ioctl_fence_info(struct sync_file *sync_file,
 	 * info->num_fences.
 	 */
 	if (!info.num_fences) {
+		dma_fence_enable_sw_signaling(sync_file->fence);
 		info.status = dma_fence_get_status(sync_file->fence);
 		goto no_fences;
 	} else {
