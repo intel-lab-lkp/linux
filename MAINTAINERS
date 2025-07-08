@@ -22030,6 +22030,13 @@ F:	drivers/regulator/s5m*.c
 F:	drivers/rtc/rtc-s5m.c
 F:	include/linux/mfd/samsung/
 
+SAMSUNG PPMU DRIVER
+M:	Vivek Yadav <vivek.2311@samsung.com>
+M:	Ravi Patel <ravi.patel@samsung.com>
+S:	Supported
+F:	Documentation/devicetree/bindings/perf/samsung,ppmu-v2.yaml
+F:	drivers/perf/samsung/
+
 SAMSUNG S3C24XX/S3C64XX SOC SERIES CAMIF DRIVER
 M:	Sylwester Nawrocki <sylvester.nawrocki@gmail.com>
 L:	linux-media@vger.kernel.org
