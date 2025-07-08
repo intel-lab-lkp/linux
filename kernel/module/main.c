@@ -1157,7 +1157,8 @@ static int verify_namespace_is_imported(const struct load_info *info,
 	namespace = kernel_symbol_namespace(sym);
 	if (namespace && namespace[0]) {
 
-		if (verify_module_namespace(namespace, mod->name))
+		if (get_modinfo(info, "intree") &&
+		    verify_module_namespace(namespace, mod->name))
 			return 0;
 
 		for_each_modinfo_entry(imported_namespace, info, "import_ns") {

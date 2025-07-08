@@ -1695,7 +1695,8 @@ void buf_write(struct buffer *buf, const char *s, int len)
  * @modname: module name
  *
  * If @namespace is prefixed with "module:" to indicate it is a module namespace
- * then test if @modname matches any of the comma separated patterns.
+ * then test if @modname matches any of the comma separated patterns. Access to
+ * module namespaces is restricted to in-tree modules only.
  *
  * The patterns only support tail-glob.
  */
@@ -1705,6 +1706,9 @@ static bool verify_module_namespace(const char *namespace, const char *modname)
 	const char *prefix = "module:";
 	const char *sep;
 	bool glob;
+
+	if (external_module)
+		return false;
 
 	if (!strstarts(namespace, prefix))
 		return false;

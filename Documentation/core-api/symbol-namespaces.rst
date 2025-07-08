@@ -83,13 +83,14 @@ Symbols exported using this macro are put into a module namespace. This
 namespace cannot be imported.
 
 The macro takes a comma separated list of module names, allowing only those
-modules to access this symbol. Simple tail-globs are supported.
+modules to access this symbol. The access is restricted to in-tree modules.
+Simple tail-globs are supported.
 
 For example::
 
   EXPORT_SYMBOL_GPL_FOR_MODULES(preempt_notifier_inc, "kvm,kvm-*")
 
-will limit usage of this symbol to modules whoes name matches the given
+will limit usage of this symbol to in-tree modules whoes name matches the given
 patterns.
 
 How to use Symbols exported in Namespaces
