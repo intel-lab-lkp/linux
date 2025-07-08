@@ -14,6 +14,40 @@ MODULE_AUTHOR("Matus Ujhelyi");
 MODULE_AUTHOR("Christian Marangi <ansuelsmth@gmail.com>");
 MODULE_LICENSE("GPL");
 
+struct qcom_phy_hw_stat {
+	const char *string;
+	int devad;
+	u16 cnt_31_16_reg;
+	u16 cnt_15_0_reg;
+};
+
+static const struct qcom_phy_hw_stat qcom_phy_hw_stats[] = {
+	{
+		.string		= "phy_rx_good_frame",
+		.devad		= MDIO_MMD_AN,
+		.cnt_31_16_reg	= QCA808X_MMD7_CNT_RX_GOOD_CRC_31_16,
+		.cnt_15_0_reg	= QCA808X_MMD7_CNT_RX_GOOD_CRC_15_0,
+	},
+	{
+		.string		= "phy_rx_bad_frame",
+		.devad		= MDIO_MMD_AN,
+		.cnt_31_16_reg	= 0xffff,
+		.cnt_15_0_reg	= QCA808X_MMD7_CNT_RX_BAD_CRC,
+	},
+	{
+		.string		= "phy_tx_good_frame",
+		.devad		= MDIO_MMD_AN,
+		.cnt_31_16_reg	= QCA808X_MMD7_CNT_TX_GOOD_CRC_31_16,
+		.cnt_15_0_reg	= QCA808X_MMD7_CNT_TX_GOOD_CRC_15_0,
+	},
+	{
+		.string		= "phy_tx_bad_frame",
+		.devad		= MDIO_MMD_AN,
+		.cnt_31_16_reg	= 0xffff,
+		.cnt_15_0_reg	= QCA808X_MMD7_CNT_TX_BAD_CRC,
+	},
+};
+
 int at803x_debug_reg_read(struct phy_device *phydev, u16 reg)
 {
 	int ret;
@@ -674,3 +708,51 @@ int qca808x_led_reg_blink_set(struct phy_device *phydev, u16 reg,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qca808x_led_reg_blink_set);
+
+/* Enable CRC checking for both received and transmitted frames to support
+ * accurate counter recording.
+ */
+int qcom_phy_counter_crc_check_en(struct phy_device *phydev)
+{
+	return phy_set_bits_mmd(phydev, MDIO_MMD_AN, QCA808X_MMD7_CNT_CTRL,
+				QCA808X_MMD7_CNT_CTRL_CRC_CHECK_EN);
+}
+EXPORT_SYMBOL_GPL(qcom_phy_counter_crc_check_en);
+
+int qcom_phy_get_sset_count(struct phy_device *phydev)
+{
+	return ARRAY_SIZE(qcom_phy_hw_stats);
+}
+EXPORT_SYMBOL_GPL(qcom_phy_get_sset_count);
+
+void qcom_phy_get_strings(struct phy_device *phydev, u8 *data)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(qcom_phy_hw_stats); i++)
+		ethtool_puts(&data, qcom_phy_hw_stats[i].string);
+}
+EXPORT_SYMBOL_GPL(qcom_phy_get_strings);
+
+void qcom_phy_get_stats(struct phy_device *phydev, struct ethtool_stats *stats,
+			u64 *data)
+{
+	struct qcom_phy_hw_stat stat;
+	unsigned int i;
+	int ret, cnt;
+
+	for (i = 0; i < ARRAY_SIZE(qcom_phy_hw_stats); i++) {
+		stat = qcom_phy_hw_stats[i];
+		data[i] = U64_MAX;
+
+		ret = phy_read_mmd(phydev, stat.devad, stat.cnt_15_0_reg);
+		if (ret >= 0) {
+			cnt = ret;
+
+			ret = phy_read_mmd(phydev, stat.devad, stat.cnt_31_16_reg);
+			if (ret >= 0)
+				data[i] = cnt | ret << 16;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(qcom_phy_get_stats);

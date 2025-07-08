@@ -192,6 +192,17 @@
 #define AT803X_MIN_DOWNSHIFT			2
 #define AT803X_MAX_DOWNSHIFT			9
 
+#define QCA808X_MMD7_CNT_CTRL			0x8029
+#define QCA808X_MMD7_CNT_CTRL_READ_CLEAR_EN	BIT(1)
+#define QCA808X_MMD7_CNT_CTRL_CRC_CHECK_EN	BIT(0)
+
+#define QCA808X_MMD7_CNT_RX_GOOD_CRC_31_16	0x802a
+#define QCA808X_MMD7_CNT_RX_GOOD_CRC_15_0	0x802b
+#define QCA808X_MMD7_CNT_RX_BAD_CRC		0x802c
+#define QCA808X_MMD7_CNT_TX_GOOD_CRC_31_16	0x802d
+#define QCA808X_MMD7_CNT_TX_GOOD_CRC_15_0	0x802e
+#define QCA808X_MMD7_CNT_TX_BAD_CRC		0x802f
+
 enum stat_access_type {
 	PHY,
 	MMD
@@ -241,3 +252,8 @@ int qca808x_led_reg_brightness_set(struct phy_device *phydev,
 int qca808x_led_reg_blink_set(struct phy_device *phydev, u16 reg,
 			      unsigned long *delay_on,
 			      unsigned long *delay_off);
+int qcom_phy_counter_crc_check_en(struct phy_device *phydev);
+int qcom_phy_get_sset_count(struct phy_device *phydev);
+void qcom_phy_get_strings(struct phy_device *phydev, u8 *data);
+void qcom_phy_get_stats(struct phy_device *phydev, struct ethtool_stats *stats,
+			u64 *data);
