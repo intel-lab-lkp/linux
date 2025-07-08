@@ -27,6 +27,7 @@ struct net_packet_attrs {
 	int max_size;
 	u8 id;
 	u16 queue_mapping;
+	bool bad_csum;
 };
 
 struct net_test_priv {
@@ -157,15 +158,46 @@ static struct sk_buff *net_test_get_skb(struct net_device *ndev,
 		memset(pad, 0, pad_len);
 	}
 
-	skb->csum = 0;
-	skb->ip_summed = CHECKSUM_PARTIAL;
 	if (attr->tcp) {
 		int l4len = skb->len - skb_transport_offset(skb);
 
-		thdr->check = ~tcp_v4_check(l4len, ihdr->saddr, ihdr->daddr, 0);
-		skb->csum_start = skb_transport_header(skb) - skb->head;
-		skb->csum_offset = offsetof(struct tcphdr, check);
+		if (attr->bad_csum) {
+			__sum16 good_csum;
+			u16 bad_csum;
+
+			skb->ip_summed = CHECKSUM_NONE;
+			thdr->check = 0;
+			skb->csum = skb_checksum(skb, skb_transport_offset(skb),
+						 l4len, 0);
+			good_csum = csum_tcpudp_magic(ihdr->saddr, ihdr->daddr,
+						      l4len, IPPROTO_TCP,
+						      skb->csum);
+
+			/* Flip the least-significant bit.  This is fast,
+			 * deterministic, and cannot accidentally turn the
+			 * checksum back into a value the stack treats as valid
+			 * (0 or 0xFFFF).
+			 */
+			bad_csum = (__force u16)good_csum ^ 0x0001;
+			if (bad_csum == 0 || bad_csum == 0xFFFF) {
+				/* If the checksum is 0 or 0xFFFF, flip another
+				 * bit to ensure it is not valid.
+				 */
+				bad_csum ^= 0x0002;
+			}
+
+			thdr->check = (__force __sum16)bad_csum;
+		} else {
+			skb->csum = 0;
+			skb->ip_summed = CHECKSUM_PARTIAL;
+			thdr->check = ~tcp_v4_check(l4len, ihdr->saddr,
+						    ihdr->daddr, 0);
+			skb->csum_start = skb_transport_header(skb) - skb->head;
+			skb->csum_offset = offsetof(struct tcphdr, check);
+		}
 	} else {
+		skb->csum = 0;
+		skb->ip_summed = CHECKSUM_PARTIAL;
 		udp4_hwcsum(skb, ihdr->saddr, ihdr->daddr);
 	}
 
@@ -239,7 +271,11 @@ static int net_test_loopback_validate(struct sk_buff *skb,
 	if (tpriv->packet->id != shdr->id)
 		goto out;
 
-	tpriv->ok = true;
+	if (tpriv->packet->bad_csum && skb->ip_summed == CHECKSUM_UNNECESSARY)
+		tpriv->ok = -EIO;
+	else
+		tpriv->ok = true;
+
 	complete(&tpriv->comp);
 out:
 	kfree_skb(skb);
@@ -285,7 +321,12 @@ static int __net_test_loopback(struct net_device *ndev,
 		attr->timeout = NET_LB_TIMEOUT;
 
 	wait_for_completion_timeout(&tpriv->comp, attr->timeout);
-	ret = tpriv->ok ? 0 : -ETIMEDOUT;
+	if (tpriv->ok < 0)
+		ret = tpriv->ok;
+	else if (!tpriv->ok)
+		ret = -ETIMEDOUT;
+	else
+		ret = 0;
 
 cleanup:
 	dev_remove_pack(&tpriv->pt);
@@ -345,6 +386,16 @@ static int net_test_phy_loopback_tcp(struct net_device *ndev)
 	return __net_test_loopback(ndev, &attr);
 }
 
+static int net_test_phy_loopback_tcp_bad_csum(struct net_device *ndev)
+{
+	struct net_packet_attrs attr = { };
+
+	attr.dst = ndev->dev_addr;
+	attr.tcp = true;
+	attr.bad_csum = true;
+	return __net_test_loopback(ndev, &attr);
+}
+
 static const struct net_test {
 	char name[ETH_GSTRING_LEN];
 	int (*fn)(struct net_device *ndev);
@@ -368,6 +419,9 @@ static const struct net_test {
 	}, {
 		.name = "PHY internal loopback, TCP    ",
 		.fn = net_test_phy_loopback_tcp,
+	}, {
+		.name = "PHY loopback, bad TCP csum    ",
+		.fn = net_test_phy_loopback_tcp_bad_csum,
 	}, {
 		/* This test should be done after all PHY loopback test */
 		.name = "PHY internal loopback, disable",
