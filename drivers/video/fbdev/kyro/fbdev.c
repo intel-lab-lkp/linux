@@ -685,8 +685,14 @@ static int kyrofb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	info = framebuffer_alloc(sizeof(struct kyrofb_info), &pdev->dev);
-	if (!info)
-		return -ENOMEM;
+	if (!info) {
+		err = -ENOMEM;
+		goto out_disable;
+	}
+
+	err = pci_request_regions(pdev, "kyrofb");
+	if (err)
+		goto out_free_fb;
 
 	currentpar = info->par;
 
@@ -695,10 +701,11 @@ static int kyrofb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	kyro_fix.mmio_start = pci_resource_start(pdev, 1);
 	kyro_fix.mmio_len   = pci_resource_len(pdev, 1);
 
+	err = -EINVAL;
 	currentpar->regbase = deviceInfo.pSTGReg =
 		ioremap(kyro_fix.mmio_start, kyro_fix.mmio_len);
 	if (!currentpar->regbase)
-		goto out_free_fb;
+		goto out_release;
 
 	info->screen_base = pci_ioremap_wc_bar(pdev, 0);
 	if (!info->screen_base)
@@ -752,10 +759,13 @@ out_unmap:
 	iounmap(info->screen_base);
 out_unmap_regs:
 	iounmap(currentpar->regbase);
+out_release:
+	pci_release_regions(pdev);
 out_free_fb:
 	framebuffer_release(info);
-
-	return -EINVAL;
+out_disable:
+	pci_disable_device(pdev);
+	return err;
 }
 
 static void kyrofb_remove(struct pci_dev *pdev)
@@ -780,6 +790,9 @@ static void kyrofb_remove(struct pci_dev *pdev)
 
 	unregister_framebuffer(info);
 	framebuffer_release(info);
+
+	pci_release_regions(pdev);
+	pci_disable_device(pdev);
 }
 
 static int __init kyrofb_init(void)
