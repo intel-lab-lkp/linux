@@ -399,9 +399,14 @@ int inv_icm42600_set_gyro_conf(struct inv_icm42600_state *st,
 int inv_icm42600_set_temp_conf(struct inv_icm42600_state *st, bool enable,
 			       unsigned int *sleep_ms)
 {
-	return inv_icm42600_set_pwr_mgmt0(st, st->conf.gyro.mode,
-					  st->conf.accel.mode, enable,
-					  sleep_ms);
+	enum inv_icm42600_sensor_mode accel = st->conf.accel.mode;
+
+	if (st->conf.gyro.mode == INV_ICM42600_SENSOR_MODE_OFF &&
+	    st->conf.accel.mode == INV_ICM42600_SENSOR_MODE_OFF)
+		accel = INV_ICM42600_SENSOR_MODE_LOW_POWER;
+
+	return inv_icm42600_set_pwr_mgmt0(st, st->conf.gyro.mode, accel,
+					  enable, sleep_ms);
 }
 
 int inv_icm42600_enable_wom(struct inv_icm42600_state *st)
