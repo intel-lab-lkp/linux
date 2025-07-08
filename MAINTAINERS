@@ -26951,12 +26951,18 @@ L:	linux-coco@lists.linux.dev
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/tdx
 F:	Documentation/ABI/testing/sysfs-devices-virtual-misc-tdx_guest
+F:	Documentation/arch/x86/tdx.rst
+F:	Documentation/virt/coco/tdx-guest.rst
+F:	Documentation/virt/kvm/x86/intel-tdx.rst
 F:	arch/x86/boot/compressed/tdx*
+F:	arch/x86/boot/compressed/tdcall.S
 F:	arch/x86/coco/tdx/
-F:	arch/x86/include/asm/shared/tdx.h
-F:	arch/x86/include/asm/tdx.h
+F:	arch/x86/include/asm/shared/tdx*
+F:	arch/x86/include/asm/tdx*
+F:	arch/x86/kvm/vmx/tdx*
 F:	arch/x86/virt/vmx/tdx/
-F:	drivers/virt/coco/tdx-guest
+F:	drivers/virt/coco/tdx-guest/
+F:	tools/testing/selftests/tdx/
 
 X86 VDSO
 M:	Andy Lutomirski <luto@kernel.org>
