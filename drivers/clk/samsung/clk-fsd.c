@@ -88,7 +88,7 @@
 #define CLKS_NR_FSYS0		(FSYS0_DOUT_FSYS0_PERIBUS_GRP + 1)
 #define CLKS_NR_FSYS1		(PCIE_LINK1_IPCLKPORT_SLV_ACLK + 1)
 #define CLKS_NR_IMEM		(IMEM_TMU_GT_IPCLKPORT_I_CLK_TS + 1)
-#define CLKS_NR_MFC		(MFC_MFC_IPCLKPORT_ACLK + 1)
+#define CLKS_NR_MFC		(MFC_PPMU_MFCD1_IPCLKPORT_PCLK + 1)
 #define CLKS_NR_CAM_CSI		(CAM_CSI2_3_IPCLKPORT_I_ACLK + 1)
 
 static const unsigned long cmu_clk_regs[] __initconst = {
@@ -1519,13 +1519,13 @@ static const struct samsung_gate_clock mfc_gate_clks[] __initconst = {
 	     GAT_MFC_NS_BRDG_MFC_IPCLKPORT_CLK__PMFC__CLK_MFC_D, 21, CLK_IGNORE_UNUSED, 0),
 	GATE(0, "mfc_ns_brdg_mfc_ipclkport_clk__pmfc__clk_mfc_p", "mout_mfc_busp",
 	     GAT_MFC_NS_BRDG_MFC_IPCLKPORT_CLK__PMFC__CLK_MFC_P, 21, CLK_IGNORE_UNUSED, 0),
-	GATE(0, "mfc_ppmu_mfcd0_ipclkport_aclk", "mout_mfc_busd",
+	GATE(MFC_PPMU_MFCD0_IPCLKPORT_ACLK, "mfc_ppmu_mfcd0_ipclkport_aclk", "mout_mfc_busd",
 	     GAT_MFC_PPMU_MFCD0_IPCLKPORT_ACLK, 21, CLK_IGNORE_UNUSED, 0),
-	GATE(0, "mfc_ppmu_mfcd0_ipclkport_pclk", "mout_mfc_busp",
+	GATE(MFC_PPMU_MFCD0_IPCLKPORT_PCLK, "mfc_ppmu_mfcd0_ipclkport_pclk", "mout_mfc_busp",
 	     GAT_MFC_PPMU_MFCD0_IPCLKPORT_PCLK, 21, CLK_IGNORE_UNUSED, 0),
-	GATE(0, "mfc_ppmu_mfcd1_ipclkport_aclk", "mout_mfc_busd",
+	GATE(MFC_PPMU_MFCD1_IPCLKPORT_ACLK, "mfc_ppmu_mfcd1_ipclkport_aclk", "mout_mfc_busd",
 	     GAT_MFC_PPMU_MFCD1_IPCLKPORT_ACLK, 21, CLK_IGNORE_UNUSED, 0),
-	GATE(0, "mfc_ppmu_mfcd1_ipclkport_pclk", "mout_mfc_busp",
+	GATE(MFC_PPMU_MFCD1_IPCLKPORT_PCLK, "mfc_ppmu_mfcd1_ipclkport_pclk", "mout_mfc_busp",
 	     GAT_MFC_PPMU_MFCD1_IPCLKPORT_PCLK, 21, CLK_IGNORE_UNUSED, 0),
 	GATE(0, "mfc_sysreg_mfc_ipclkport_pclk", "mout_mfc_busp",
 	     GAT_MFC_SYSREG_MFC_IPCLKPORT_PCLK, 21, CLK_IGNORE_UNUSED, 0),
