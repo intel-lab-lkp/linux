@@ -271,6 +271,8 @@ source "drivers/perf/arm_cspmu/Kconfig"
 
 source "drivers/perf/amlogic/Kconfig"
 
+source "drivers/perf/samsung/Kconfig"
+
 config CXL_PMU
 	tristate "CXL Performance Monitoring Unit"
 	depends on CXL_BUS

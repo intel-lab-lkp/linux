@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Programmable Performance Monitoring Unit (PPMU) driver
+#
+
+config SAMSUNG_PPMU24
+	tristate "Samsung PPMU24 drivers"
+	depends on ARM64 && ARCH_EXYNOS
+	help
+	 The Platform Performance Measuring Unit (PPMU) is an AMBA-compliant
+	 performance measurement tool designed to provide observability into
+	 system-level operations. It provides performance statistics such as
+	 as bandwidth, read and write request, transactions count for AXI masters.
