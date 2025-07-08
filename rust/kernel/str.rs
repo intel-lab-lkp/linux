@@ -3,10 +3,11 @@
 //! String representations.
 
 use crate::alloc::{flags::*, AllocError, KVec};
-use core::fmt::{self, Write};
-use core::ops::{self, Deref, DerefMut, Index};
-
 use crate::prelude::*;
+use core::{
+    fmt::{self, Write},
+    ops::{self, Deref, DerefMut, Index},
+};
 
 /// Byte string without UTF-8 validity guarantee.
 #[repr(transparent)]
