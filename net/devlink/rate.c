@@ -346,19 +346,23 @@ static int devlink_nl_rate_tc_bw_parse(struct nlattr *parent_nest, u32 *tc_bw,
 				       unsigned long *bitmap,
 				       struct netlink_ext_ack *extack)
 {
-	struct nlattr *tb[DEVLINK_ATTR_MAX + 1];
+	struct nlattr **tb;
 	u8 tc_index;
 	int err;
 
+	tb = kcalloc(DEVLINK_ATTR_MAX + 1, sizeof(struct nlattr *), GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
 	err = nla_parse_nested(tb, DEVLINK_ATTR_MAX, parent_nest,
 			       devlink_dl_rate_tc_bws_nl_policy, extack);
 	if (err)
-		return err;
+		goto out;
 
+	err = -EINVAL;
 	if (!tb[DEVLINK_ATTR_RATE_TC_INDEX]) {
 		NL_SET_ERR_ATTR_MISS(extack, parent_nest,
 				     DEVLINK_ATTR_RATE_TC_INDEX);
-		return -EINVAL;
+		goto out;
 	}
 
 	tc_index = nla_get_u8(tb[DEVLINK_ATTR_RATE_TC_INDEX]);
@@ -366,19 +370,21 @@ static int devlink_nl_rate_tc_bw_parse(struct nlattr *parent_nest, u32 *tc_bw,
 	if (!tb[DEVLINK_ATTR_RATE_TC_BW]) {
 		NL_SET_ERR_ATTR_MISS(extack, parent_nest,
 				     DEVLINK_ATTR_RATE_TC_BW);
-		return -EINVAL;
+		goto out;
 	}
 
 	if (test_and_set_bit(tc_index, bitmap)) {
 		NL_SET_ERR_MSG_FMT(extack,
 				   "Duplicate traffic class index specified (%u)",
 				   tc_index);
-		return -EINVAL;
+		goto out;
 	}
 
 	tc_bw[tc_index] = nla_get_u32(tb[DEVLINK_ATTR_RATE_TC_BW]);
 
-	return 0;
+out:
+	kfree(tb);
+	return err;
 }
 
 static int devlink_nl_rate_tc_bw_set(struct devlink_rate *devlink_rate,
