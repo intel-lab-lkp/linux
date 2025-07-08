@@ -51,6 +51,9 @@ register!(NV_PBUS_SW_SCRATCH_0E@0x00001438  {
 
 /* PFB */
 
+// These two registers together hold the physical system memory address that is used by the GPU for
+// perform sysmembar operation (see `fb::SysmemFlush`).
+
 register!(NV_PFB_NISO_FLUSH_SYSMEM_ADDR @ 0x00100c10 {
     31:0    adr_39_08 as u32;
 });
