@@ -84,6 +84,8 @@ static void pci_msi_domain_update_dom_ops(struct msi_domain_info *info)
 	} else {
 		if (ops->set_desc == NULL)
 			ops->set_desc = pci_msi_domain_set_desc;
+		if (ops->prepare_desc == NULL)
+			ops->prepare_desc = pci_msix_prepare_desc;
 	}
 }
 
