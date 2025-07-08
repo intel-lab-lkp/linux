@@ -45,11 +45,12 @@ enum nfs_param {
 	Opt_acregmin,
 	Opt_actimeo,
 	Opt_addr,
+	Opt_alignwrite,
 	Opt_bg,
 	Opt_bsize,
 	Opt_clientaddr,
 	Opt_cto,
-	Opt_alignwrite,
+	Opt_delegts,
 	Opt_fatal_neterrors,
 	Opt_fg,
 	Opt_fscache,
@@ -164,12 +165,13 @@ static const struct fs_parameter_spec nfs_fs_parameters[] = {
 	fsparam_u32   ("acregmax",	Opt_acregmax),
 	fsparam_u32   ("acregmin",	Opt_acregmin),
 	fsparam_u32   ("actimeo",	Opt_actimeo),
+	fsparam_flag_no("alignwrite",	Opt_alignwrite),
 	fsparam_string("addr",		Opt_addr),
 	fsparam_flag  ("bg",		Opt_bg),
 	fsparam_u32   ("bsize",		Opt_bsize),
 	fsparam_string("clientaddr",	Opt_clientaddr),
 	fsparam_flag_no("cto",		Opt_cto),
-	fsparam_flag_no("alignwrite",	Opt_alignwrite),
+	fsparam_flag_no("delegts",	Opt_delegts),
 	fsparam_enum("fatal_neterrors", Opt_fatal_neterrors,
 		     nfs_param_enums_fatal_neterrors),
 	fsparam_flag  ("fg",		Opt_fg),
@@ -655,6 +657,12 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 			ctx->flags |= NFS_MOUNT_NO_ALIGNWRITE;
 		else
 			ctx->flags &= ~NFS_MOUNT_NO_ALIGNWRITE;
+		break;
+	case Opt_delegts:
+		if (result.negated)
+			ctx->flags |= NFS_MOUNT_NO_DELEG_TS;
+		else
+			ctx->flags &= ~NFS_MOUNT_NO_DELEG_TS;
 		break;
 	case Opt_ac:
 		if (result.negated)

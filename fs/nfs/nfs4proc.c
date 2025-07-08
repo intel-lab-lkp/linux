@@ -4064,7 +4064,8 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 		if (res.open_caps.oa_share_access_want[0] &
 		    NFS4_SHARE_WANT_OPEN_XOR_DELEGATION)
 			server->caps |= NFS_CAP_OPEN_XOR;
-		if (nfs4_server_delegtime_capable(&res))
+		if (!(server->flags & NFS_MOUNT_NO_DELEG_TS) &&
+		    nfs4_server_delegtime_capable(&res))
 			server->caps |= NFS_CAP_DELEGTIME;
 
 		memcpy(server->cache_consistency_bitmask, res.attr_bitmask, sizeof(server->cache_consistency_bitmask));

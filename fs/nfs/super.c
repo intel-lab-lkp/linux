@@ -558,6 +558,8 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 
 	if (nfss->flags & NFS_MOUNT_NO_ALIGNWRITE)
 		seq_puts(m, ",noalignwrite");
+	if (nfss->flags & NFS_MOUNT_NO_DELEG_TS)
+		seq_puts(m, ",nodelegts");
 
 	if (nfss->flags & NFS_MOUNT_WRITE_EAGER) {
 		if (nfss->flags & NFS_MOUNT_WRITE_WAIT)
