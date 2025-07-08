@@ -768,6 +768,10 @@ static int qca807x_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
+	ret = qcom_phy_counter_crc_check_en(phydev);
+	if (ret)
+		return ret;
+
 	control_dac = phy_read_mmd(phydev, MDIO_MMD_AN,
 				   QCA807X_MMD7_1000BASE_T_POWER_SAVE_PER_CABLE_LENGTH);
 	control_dac &= ~QCA807X_CONTROL_DAC_MASK;
@@ -800,6 +804,9 @@ static struct phy_driver qca807x_drivers[] = {
 		.suspend	= genphy_suspend,
 		.cable_test_start	= qca807x_cable_test_start,
 		.cable_test_get_status	= qca808x_cable_test_get_status,
+		.get_sset_count		= qcom_phy_get_sset_count,
+		.get_strings		= qcom_phy_get_strings,
+		.get_stats		= qcom_phy_get_stats,
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_QCA8075),
@@ -823,6 +830,9 @@ static struct phy_driver qca807x_drivers[] = {
 		.led_hw_is_supported = qca807x_led_hw_is_supported,
 		.led_hw_control_set = qca807x_led_hw_control_set,
 		.led_hw_control_get = qca807x_led_hw_control_get,
+		.get_sset_count		= qcom_phy_get_sset_count,
+		.get_strings		= qcom_phy_get_strings,
+		.get_stats		= qcom_phy_get_stats,
 	},
 };
 module_phy_driver(qca807x_drivers);
