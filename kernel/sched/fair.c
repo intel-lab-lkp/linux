@@ -884,16 +884,20 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 /*
  * Set the vruntime up to which an entity can run before looking
  * for another entity to pick.
- * In case of run to parity, we protect the entity up to its deadline.
+ * In case of run to parity, we use the shortest slice of the enqueued
+ * entities to set the protected period.
  * When run to parity is disabled, we give a minimum quantum to the running
  * entity to ensure progress.
  */
 static inline void set_protect_slice(struct sched_entity *se)
 {
-	u64 quantum = se->slice;
+	u64 quantum;
 
-	if (!sched_feat(RUN_TO_PARITY))
-		quantum = min(quantum, normalized_sysctl_sched_base_slice);
+	if (sched_feat(RUN_TO_PARITY))
+		quantum = cfs_rq_min_slice(cfs_rq_of(se));
+	else
+		quantum = normalized_sysctl_sched_base_slice;
+	quantum = min(quantum, se->slice);
 
 	if (quantum != se->slice)
 		se->vprot = min_vruntime(se->deadline, se->vruntime + calc_delta_fair(quantum, se));
