@@ -485,10 +485,36 @@ static inline struct regmap *ksz_regmap_32(struct ksz_device *dev)
 	return dev->regmap[KSZ_REGMAP_32];
 }
 
+static inline bool ksz_is_ksz8463(struct ksz_device *dev)
+{
+	return dev->chip_id == KSZ8463_CHIP_ID;
+}
+
+static inline u32 reg8(struct ksz_device *dev, u32 reg)
+{
+	if (ksz_is_ksz8463(dev))
+		return ((reg >> 2) << 4) | (1 << (reg & 3));
+	return reg;
+}
+
+static inline u32 reg16(struct ksz_device *dev, u32 reg)
+{
+	if (ksz_is_ksz8463(dev))
+		return ((reg >> 2) << 4) | (reg & 2 ? 0x0c : 0x03);
+	return reg;
+}
+
+static inline u32 reg32(struct ksz_device *dev, u32 reg)
+{
+	if (ksz_is_ksz8463(dev))
+		return ((reg >> 2) << 4) | 0xf;
+	return reg;
+}
+
 static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 {
 	unsigned int value;
-	int ret = regmap_read(ksz_regmap_8(dev), reg, &value);
+	int ret = regmap_read(ksz_regmap_8(dev), reg8(dev, reg), &value);
 
 	if (ret)
 		dev_err(dev->dev, "can't read 8bit reg: 0x%x %pe\n", reg,
@@ -501,7 +527,7 @@ static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 {
 	unsigned int value;
-	int ret = regmap_read(ksz_regmap_16(dev), reg, &value);
+	int ret = regmap_read(ksz_regmap_16(dev), reg16(dev, reg), &value);
 
 	if (ret)
 		dev_err(dev->dev, "can't read 16bit reg: 0x%x %pe\n", reg,
@@ -514,7 +540,7 @@ static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 static inline int ksz_read32(struct ksz_device *dev, u32 reg, u32 *val)
 {
 	unsigned int value;
-	int ret = regmap_read(ksz_regmap_32(dev), reg, &value);
+	int ret = regmap_read(ksz_regmap_32(dev), reg32(dev, reg), &value);
 
 	if (ret)
 		dev_err(dev->dev, "can't read 32bit reg: 0x%x %pe\n", reg,
@@ -529,7 +555,17 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
 	u32 value[2];
 	int ret;
 
-	ret = regmap_bulk_read(ksz_regmap_32(dev), reg, value, 2);
+	if (ksz_is_ksz8463(dev)) {
+		int i;
+
+		for (i = 0; i < 2; i++)
+			ret = regmap_read(ksz_regmap_32(dev),
+					  reg32(dev, reg + i * 4),
+					  &value[i]);
+		*val = (u64)value[0] << 32 | value[1];
+		return ret;
+	}
+	ret = regmap_bulk_read(ksz_regmap_32(dev), reg32(dev, reg), value, 2);
 	if (ret)
 		dev_err(dev->dev, "can't read 64bit reg: 0x%x %pe\n", reg,
 			ERR_PTR(ret));
@@ -543,7 +579,7 @@ static inline int ksz_write8(struct ksz_device *dev, u32 reg, u8 value)
 {
 	int ret;
 
-	ret = regmap_write(ksz_regmap_8(dev), reg, value);
+	ret = regmap_write(ksz_regmap_8(dev), reg8(dev, reg), value);
 	if (ret)
 		dev_err(dev->dev, "can't write 8bit reg: 0x%x %pe\n", reg,
 			ERR_PTR(ret));
@@ -555,7 +591,7 @@ static inline int ksz_write16(struct ksz_device *dev, u32 reg, u16 value)
 {
 	int ret;
 
-	ret = regmap_write(ksz_regmap_16(dev), reg, value);
+	ret = regmap_write(ksz_regmap_16(dev), reg16(dev, reg), value);
 	if (ret)
 		dev_err(dev->dev, "can't write 16bit reg: 0x%x %pe\n", reg,
 			ERR_PTR(ret));
@@ -567,7 +603,7 @@ static inline int ksz_write32(struct ksz_device *dev, u32 reg, u32 value)
 {
 	int ret;
 
-	ret = regmap_write(ksz_regmap_32(dev), reg, value);
+	ret = regmap_write(ksz_regmap_32(dev), reg32(dev, reg), value);
 	if (ret)
 		dev_err(dev->dev, "can't write 32bit reg: 0x%x %pe\n", reg,
 			ERR_PTR(ret));
@@ -580,7 +616,7 @@ static inline int ksz_rmw16(struct ksz_device *dev, u32 reg, u16 mask,
 {
 	int ret;
 
-	ret = regmap_update_bits(ksz_regmap_16(dev), reg, mask, value);
+	ret = regmap_update_bits(ksz_regmap_16(dev), reg16(dev, reg), mask, value);
 	if (ret)
 		dev_err(dev->dev, "can't rmw 16bit reg 0x%x: %pe\n", reg,
 			ERR_PTR(ret));
@@ -593,7 +629,7 @@ static inline int ksz_rmw32(struct ksz_device *dev, u32 reg, u32 mask,
 {
 	int ret;
 
-	ret = regmap_update_bits(ksz_regmap_32(dev), reg, mask, value);
+	ret = regmap_update_bits(ksz_regmap_32(dev), reg32(dev, reg), mask, value);
 	if (ret)
 		dev_err(dev->dev, "can't rmw 32bit reg 0x%x: %pe\n", reg,
 			ERR_PTR(ret));
@@ -610,14 +646,22 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
 	val[0] = swab32(value & 0xffffffffULL);
 	val[1] = swab32(value >> 32ULL);
 
-	return regmap_bulk_write(ksz_regmap_32(dev), reg, val, 2);
+	if (ksz_is_ksz8463(dev)) {
+		int i, ret;
+
+		for (i = 0; i < 2; i++)
+			ret = regmap_write(ksz_regmap_32(dev),
+					   reg32(dev, reg + i * 4), val[i]);
+		return ret;
+	}
+	return regmap_bulk_write(ksz_regmap_32(dev), reg32(dev, reg), val, 2);
 }
 
 static inline int ksz_rmw8(struct ksz_device *dev, int offset, u8 mask, u8 val)
 {
 	int ret;
 
-	ret = regmap_update_bits(ksz_regmap_8(dev), offset, mask, val);
+	ret = regmap_update_bits(ksz_regmap_8(dev), reg8(dev, offset), mask, val);
 	if (ret)
 		dev_err(dev->dev, "can't rmw 8bit reg 0x%x: %pe\n", offset,
 			ERR_PTR(ret));
@@ -710,12 +754,13 @@ static inline bool ksz_is_8895_family(struct ksz_device *dev)
 static inline bool is_ksz8(struct ksz_device *dev)
 {
 	return ksz_is_ksz87xx(dev) || ksz_is_ksz88x3(dev) ||
-	       ksz_is_8895_family(dev);
+	       ksz_is_8895_family(dev) || ksz_is_ksz8463(dev);
 }
 
 static inline bool is_ksz88xx(struct ksz_device *dev)
 {
-	return ksz_is_ksz88x3(dev) || ksz_is_8895_family(dev);
+	return ksz_is_ksz88x3(dev) || ksz_is_8895_family(dev) ||
+	       ksz_is_ksz8463(dev);
 }
 
 static inline bool is_ksz9477(struct ksz_device *dev)

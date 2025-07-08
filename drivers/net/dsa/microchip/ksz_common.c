@@ -2991,7 +2991,8 @@ static int ksz_setup(struct dsa_switch *ds)
 
 	ds->num_tx_queues = dev->info->num_tx_queues;
 
-	regmap_update_bits(ksz_regmap_8(dev), regs[S_MULTICAST_CTRL],
+	regmap_update_bits(ksz_regmap_8(dev),
+			   reg8(dev, regs[S_MULTICAST_CTRL]),
 			   MULTICAST_STORM_DISABLE, MULTICAST_STORM_DISABLE);
 
 	ksz_init_mib_timer(dev);
@@ -3051,7 +3052,7 @@ static int ksz_setup(struct dsa_switch *ds)
 		goto out_ptp_clock_unregister;
 
 	/* start switch */
-	regmap_update_bits(ksz_regmap_8(dev), regs[S_START_CTRL],
+	regmap_update_bits(ksz_regmap_8(dev), reg8(dev, regs[S_START_CTRL]),
 			   SW_START, SW_START);
 
 	return 0;
