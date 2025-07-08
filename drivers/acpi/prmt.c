@@ -155,11 +155,21 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 		th->handler_addr =
 			(void *)efi_pa_va_lookup(&th->guid, handler_info->handler_address);
 
-		th->static_data_buffer_addr =
-			efi_pa_va_lookup(&th->guid, handler_info->static_data_buffer_address);
+		/*
+		 * Per section "4.1.2 PRM Handler Information Structure" in
+		 * spec "Platform Runtime Mechanism", the static data buffer
+		 * and acpi parameter buffer may be NULL if they are not
+		 * needed.
+		 */
+		if (handler_info->static_data_buffer_address) {
+			th->static_data_buffer_addr =
+				efi_pa_va_lookup(&th->guid, handler_info->static_data_buffer_address);
+		}
 
-		th->acpi_param_buffer_addr =
-			efi_pa_va_lookup(&th->guid, handler_info->acpi_param_buffer_address);
+		if (handler_info->acpi_param_buffer_address) {
+			th->acpi_param_buffer_addr =
+				efi_pa_va_lookup(&th->guid, handler_info->acpi_param_buffer_address);
+		}
 
 	} while (++cur_handler < tm->handler_count && (handler_info = get_next_handler(handler_info)));
 
