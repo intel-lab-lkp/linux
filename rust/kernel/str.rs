@@ -881,7 +881,6 @@ impl<'a> NullBorrowFormatter<'a> {
         Ok(Self { buffer, pos: 0 })
     }
 
-    #[expect(dead_code)]
     pub(crate) fn from_array<const N: usize>(
         a: &'a mut [crate::ffi::c_char; N],
     ) -> Result<NullBorrowFormatter<'a>> {
@@ -890,12 +889,6 @@ impl<'a> NullBorrowFormatter<'a> {
             // at least `N` bytes.
             unsafe { core::slice::from_raw_parts_mut(a.as_mut_ptr().cast::<u8>(), N) },
         )
-    }
-
-    /// Return the position of the write pointer in the underlying buffer.
-    #[expect(dead_code)]
-    pub(crate) fn pos(&self) -> usize {
-        self.pos
     }
 }
 
