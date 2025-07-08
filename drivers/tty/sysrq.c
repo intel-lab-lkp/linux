@@ -59,11 +59,25 @@
 static int __read_mostly sysrq_enabled = CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
 
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	* In CRASH_ONLY mode, sysrq is considered "on" only for the purpose
+	* of allowing the crash command. The actual check for individual
+	* commands happens in sysrq_on_mask().
+	* For general "is sysrq on?" queries (like for input handler reg),
+	* it should reflect that at least something (crash) is possible.
+	*/
+static bool sysrq_on(void)
+{
+	return true;
+}
+#else
 static bool sysrq_on(void)
 {
 	return sysrq_enabled || sysrq_always_enabled;
 }
 
+#endif
 /**
  * sysrq_mask - Getter for sysrq_enabled mask.
  *
@@ -80,12 +94,25 @@ EXPORT_SYMBOL_GPL(sysrq_mask);
 /*
  * A value of 1 means 'all', other nonzero values are an op mask:
  */
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+	/*
+	* If CRASH_ONLY is set, only allow operations that have the
+	* SYSRQ_ENABLE_DUMP mask (which sysrq_crash_op uses).
+	* This makes sysrq_enabled and sysrq_always_enabled irrelevant
+	* for other operations.
+	*/
+static bool sysrq_on_mask(int mask)
+{
+	return mask == SYSRQ_ENABLE_DUMP;
+}
+#else
 static bool sysrq_on_mask(int mask)
 {
 	return sysrq_always_enabled ||
 	       sysrq_enabled == 1 ||
 	       (sysrq_enabled & mask);
 }
+#endif
 
 static int __init sysrq_always_enabled_setup(char *str)
 {
@@ -462,7 +489,9 @@ static struct sysrq_key_op sysrq_replay_logs_op = {
 };
 
 /* Key Operations table and lock */
+#ifndef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
 static DEFINE_SPINLOCK(sysrq_key_table_lock);
+#endif
 
 static const struct sysrq_key_op *sysrq_key_table[62] = {
 	&sysrq_loglevel_op,		/* 0 */
@@ -542,6 +571,28 @@ static const struct sysrq_key_op *sysrq_key_table[62] = {
 	NULL,				/* Z */
 };
 
+
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+/* key2index calculation, -1 on anything except 'c' */
+static int sysrq_key_table_key2index(u8 key)
+{
+	if (key == 'c')
+		return key - 'a' + 10;
+	return -1;
+}
+/*
+ * Initialize the sysrq_key_table at boot time if CRASH_ONLY is set.
+ * This ensures only the crash handler is active.
+ */
+static void __init sysrq_init_crash_only_table(void)
+{
+	int i;
+	const struct sysrq_key_op *crash_op = &sysrq_crash_op;
+	for (i = 0; i < ARRAY_SIZE(sysrq_key_table); i++)
+		sysrq_key_table[i] = NULL;
+	sysrq_key_table[sysrq_key_table_key2index('c')] = crash_op;
+}
+#else
 /* key2index calculation, -1 on invalid index */
 static int sysrq_key_table_key2index(u8 key)
 {
@@ -556,6 +607,10 @@ static int sysrq_key_table_key2index(u8 key)
 		return -1;
 	}
 }
+static void __init sysrq_init_crash_only_table(void)
+{
+}
+#endif
 
 /*
  * get and put functions for the table, exposed to modules.
@@ -572,6 +627,7 @@ static const struct sysrq_key_op *__sysrq_get_key_op(u8 key)
 	return op_p;
 }
 
+#ifndef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
 static void __sysrq_put_key_op(u8 key, const struct sysrq_key_op *op_p)
 {
 	int i = sysrq_key_table_key2index(key);
@@ -579,6 +635,7 @@ static void __sysrq_put_key_op(u8 key, const struct sysrq_key_op *op_p)
 	if (i != -1)
 		sysrq_key_table[i] = op_p;
 }
+#endif
 
 void __handle_sysrq(u8 key, bool check_mask)
 {
@@ -1103,6 +1160,24 @@ static inline void sysrq_unregister_handler(void)
 
 #endif /* CONFIG_INPUT */
 
+#ifdef CONFIG_MAGIC_SYSRQ_CRASH_ONLY
+int sysrq_toggle_support(int enable_mask)
+{
+	pr_warn_ratelimited("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Runtime toggle is not allowed.\n");
+	return -EPERM;
+}
+
+int register_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
+{
+	pr_warn_ratelimited("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Cannot register new SysRq key '%c'.\n", key);
+	return -EPERM;
+}
+int unregister_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
+{
+	pr_warn_ratelimited("SysRq: CONFIG_MAGIC_SYSRQ_CRASH_ONLY is set. Cannot unregister the crash SysRq key '%c'.\n", key);
+	return -EPERM;
+}
+#else
 int sysrq_toggle_support(int enable_mask)
 {
 	bool was_enabled = sysrq_on();
@@ -1118,7 +1193,6 @@ int sysrq_toggle_support(int enable_mask)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sysrq_toggle_support);
 
 static int __sysrq_swap_key_ops(u8 key, const struct sysrq_key_op *insert_op_p,
 				const struct sysrq_key_op *remove_op_p)
@@ -1148,12 +1222,14 @@ int register_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
 {
 	return __sysrq_swap_key_ops(key, op_p, NULL);
 }
-EXPORT_SYMBOL(register_sysrq_key);
 
 int unregister_sysrq_key(u8 key, const struct sysrq_key_op *op_p)
 {
 	return __sysrq_swap_key_ops(key, NULL, op_p);
 }
+#endif
+EXPORT_SYMBOL_GPL(sysrq_toggle_support);
+EXPORT_SYMBOL(register_sysrq_key);
 EXPORT_SYMBOL(unregister_sysrq_key);
 
 #ifdef CONFIG_PROC_FS
@@ -1174,6 +1250,9 @@ static ssize_t write_sysrq_trigger(struct file *file, const char __user *buf,
 
 		if (get_user(c, buf + i))
 			return -EFAULT;
+
+		if (c != 'c')
+			return -EPERM;
 
 		if (c == '_')
 			bulk = true;
@@ -1211,8 +1290,10 @@ static int __init sysrq_init(void)
 {
 	sysrq_init_procfs();
 
-	if (sysrq_on())
+	if (sysrq_on()) {
 		sysrq_register_handler();
+		sysrq_init_crash_only_table();
+	}
 
 	return 0;
 }

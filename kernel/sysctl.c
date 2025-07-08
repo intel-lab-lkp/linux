@@ -982,9 +982,9 @@ static int sysrq_sysctl_handler(const struct ctl_table *table, int write,
 		return ret;
 
 	if (write)
-		sysrq_toggle_support(tmp);
+		ret = sysrq_toggle_support(tmp);
 
-	return 0;
+	return ret;
 }
 #endif
 

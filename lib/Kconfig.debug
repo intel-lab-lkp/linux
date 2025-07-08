@@ -640,6 +640,33 @@ config MAGIC_SYSRQ_DEFAULT_ENABLE
 	  This may be set to 1 or 0 to enable or disable them all, or
 	  to a bitmask as described in Documentation/admin-guide/sysrq.rst.
 
+config MAGIC_SYSRQ_CRASH_ONLY
+	bool "Only allow the crash command for Magic SysRq"
+	depends on MAGIC_SYSRQ
+	default n
+	help
+	  This option provides a significant security hardening for the Magic
+	  SysRq facility by restricting its functionality at compile time to
+	  only the 'c' (crash) command.
+
+	  If you say Y here, the kernel will be built with the following
+	  restrictions:
+	  - Only the 'c' command to trigger a system crash/kdump will be
+	    operational. All other built-in commands (reboot, sync, SAK,
+	    show-memory, etc.) are completely disabled.
+	  - Registration of new SysRq commands at runtime will be blocked.
+	  - The /proc/sys/kernel/sysrq interface will be hardened,
+	    preventing any runtime changes to the SysRq mask.
+	  - Writing any character other than 'c' to /proc/sysrq-trigger
+	    will be rejected.
+
+	  This is useful for production or hardened systems where generating
+	  a kernel crash dump for post-mortem analysis is essential, but
+	  the other SysRq commands (which can cause denial-of-service or
+	  hide intrusion) are considered an unacceptable security risk.
+
+	  If you need the full suite of SysRq commands for debugging, say N.
+
 config MAGIC_SYSRQ_SERIAL
 	bool "Enable magic SysRq key over serial"
 	depends on MAGIC_SYSRQ
