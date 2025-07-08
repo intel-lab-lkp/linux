@@ -724,48 +724,6 @@ static const struct hclge_dbg_reg_type_info hclge_dbg_reg_info[] = {
 		       .cmd = HCLGE_OPC_DFX_TQP_REG } },
 };
 
-/* make sure: len(name) + interval >= maxlen(item data) + 2,
- * for example, name = "pkt_num"(len: 7), the prototype of item data is u32,
- * and print as "%u"(maxlen: 10), so the interval should be at least 5.
- */
-static void hclge_dbg_fill_content(char *content, u16 len,
-				   const struct hclge_dbg_item *items,
-				   const char **result, u16 size)
-{
-#define HCLGE_DBG_LINE_END_LEN	2
-	char *pos = content;
-	u16 item_len;
-	u16 i;
-
-	if (!len) {
-		return;
-	} else if (len <= HCLGE_DBG_LINE_END_LEN) {
-		*pos++ = '\0';
-		return;
-	}
-
-	memset(content, ' ', len);
-	len -= HCLGE_DBG_LINE_END_LEN;
-
-	for (i = 0; i < size; i++) {
-		item_len = strlen(items[i].name) + items[i].interval;
-		if (len < item_len)
-			break;
-
-		if (result) {
-			if (item_len < strlen(result[i]))
-				break;
-			memcpy(pos, result[i], strlen(result[i]));
-		} else {
-			memcpy(pos, items[i].name, strlen(items[i].name));
-		}
-		pos += item_len;
-		len -= item_len;
-	}
-	*pos++ = '\n';
-	*pos++ = '\0';
-}
-
 static char *hclge_dbg_get_func_id_str(char *buf, u8 id)
 {
 	if (id)
@@ -2976,29 +2934,6 @@ static const struct hclge_dbg_func hclge_dbg_cmd_func[] = {
 		.dbg_read_func = hclge_dbg_dump_umv_info,
 	},
 };
-
-int hclge_dbg_read_cmd(struct hnae3_handle *handle, enum hnae3_dbg_cmd cmd,
-		       char *buf, int len)
-{
-	struct hclge_vport *vport = hclge_get_vport(handle);
-	const struct hclge_dbg_func *cmd_func;
-	struct hclge_dev *hdev = vport->back;
-	u32 i;
-
-	for (i = 0; i < ARRAY_SIZE(hclge_dbg_cmd_func); i++) {
-		if (cmd == hclge_dbg_cmd_func[i].cmd) {
-			cmd_func = &hclge_dbg_cmd_func[i];
-			if (cmd_func->dbg_dump)
-				return cmd_func->dbg_dump(hdev, buf, len);
-			else
-				return cmd_func->dbg_dump_reg(hdev, cmd, buf,
-							      len);
-		}
-	}
-
-	dev_err(&hdev->pdev->dev, "invalid command(%d)\n", cmd);
-	return -EINVAL;
-}
 
 int hclge_dbg_get_read_func(struct hnae3_handle *handle, enum hnae3_dbg_cmd cmd,
 			    read_func *func)
