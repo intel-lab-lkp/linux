@@ -112,18 +112,59 @@ trace_find_event_field(struct trace_event_call *call, char *name)
 	return __find_event_field(&ftrace_common_fields, name);
 }
 
-static int __trace_define_field(struct list_head *head, const char *type,
+#define ATTRIBUTE_STR "__attribute__"
+
+/* Remove all __attribute__() from type */
+static void sanitize_field_type(char *type)
+{
+	static const int attr_len = strlen(ATTRIBUTE_STR);
+	char *attr, *tmp, *next;
+	int depth;
+
+	next = type;
+	while ((attr = strstr(next, ATTRIBUTE_STR))) {
+		next = attr + attr_len;
+
+		/* Retry if __attribute__ is a part of type name. */
+		if ((attr != type && !isspace(attr[-1])) ||
+		    attr[attr_len] != '(')
+			continue;
+
+		depth = 0;
+		while ((tmp = strpbrk(next, "()"))) {
+			if (*tmp == '(')
+				depth++;
+			else
+				depth--;
+			next = tmp + 1;
+			if (depth == 0)
+				break;
+		}
+		next = skip_spaces(next);
+		strcpy(attr, next);
+	}
+}
+
+static int __trace_define_field(struct list_head *head, const char *__type,
 				const char *name, int offset, int size,
 				int is_signed, int filter_type, int len,
 				int need_test)
 {
 	struct ftrace_event_field *field;
+	char *type;
 
 	field = kmem_cache_alloc(field_cachep, GFP_TRACE);
 	if (!field)
 		return -ENOMEM;
 
 	field->name = name;
+
+	type = kstrdup(__type, GFP_KERNEL);
+	if (!type) {
+		kfree(field);
+		return -ENOMEM;
+	}
+	sanitize_field_type(type);
 	field->type = type;
 
 	if (filter_type == FILTER_OTHER)
@@ -225,6 +266,7 @@ static void trace_destroy_fields(struct trace_event_call *call)
 	head = trace_get_fields(call);
 	list_for_each_entry_safe(field, next, head, link) {
 		list_del(&field->link);
+		kfree(field->type);
 		kmem_cache_free(field_cachep, field);
 	}
 }
