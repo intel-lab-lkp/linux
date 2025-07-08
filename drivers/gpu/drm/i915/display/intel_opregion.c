@@ -1292,6 +1292,8 @@ void intel_opregion_runtime_suspend(struct intel_display *display)
 		 */
 		intel_opregion_notify_adapter(display, PCI_D1);
 	}
+
+	flush_work(&opregion->asle_work);
 }
 
 void intel_opregion_unregister(struct intel_display *display)
