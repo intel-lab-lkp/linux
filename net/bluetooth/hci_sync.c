@@ -6815,8 +6815,19 @@ int hci_get_random_address(struct hci_dev *hdev, bool require_privacy,
 		return 0;
 	}
 
-	/* No privacy so use a public address. */
-	*own_addr_type = ADDR_LE_DEV_PUBLIC;
+	/* No privacy
+	 *
+	 * Even though no privacy is requested, we have to use the assigned random static address
+	 * if we don't have a public address.
+	 */
+	if (bacmp(&hdev->bdaddr, BDADDR_ANY) == 0 && bacmp(&hdev->static_addr, BDADDR_ANY) != 0) {
+		/* Re-use the static address if one is set */
+		bacpy(rand_addr, &hdev->static_addr);
+		*own_addr_type = ADDR_LE_DEV_RANDOM;
+	} else {
+		/* Use a public address. */
+		*own_addr_type = ADDR_LE_DEV_PUBLIC;
+	}
 
 	return 0;
 }
