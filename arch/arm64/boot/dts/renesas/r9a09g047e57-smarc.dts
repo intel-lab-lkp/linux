@@ -89,7 +89,7 @@
 	pinctrl-names = "default";
 };
 
-&keys{
+&keys {
 	key-sleep {
 		pinctrl-0 = <&nmi_pins>;
 		pinctrl-names = "default";

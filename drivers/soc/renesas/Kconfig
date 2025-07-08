@@ -87,9 +87,6 @@ config ARCH_R7S9210
 	select RENESAS_OSTM
 	select RENESAS_RZA1_IRQC
 
-
-
-
 config ARCH_R8A73A4
 	bool "ARM32 Platform support for R8A73A4 (R-Mobile APE6)"
 	default ARCH_RENESAS
