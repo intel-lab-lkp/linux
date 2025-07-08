@@ -1253,6 +1253,47 @@ void intel_opregion_suspend(struct intel_display *display, pci_power_t state)
 		intel_opregion_suspend_display(display);
 }
 
+void intel_opregion_runtime_resume(struct intel_display *display)
+{
+	struct intel_opregion *opregion = display->opregion;
+
+	if (!opregion)
+		return;
+
+	intel_opregion_notify_adapter(display, PCI_D0);
+}
+
+void intel_opregion_runtime_suspend(struct intel_display *display)
+{
+	struct intel_opregion *opregion = display->opregion;
+
+	if (!opregion)
+		return;
+
+	/*
+	 * FIXME: We really should find a document that references the arguments
+	 * used below!
+	 */
+	if (display->platform.broadwell) {
+		/*
+		 * On Broadwell, if we use PCI_D1 the PCH DDI ports will stop
+		 * being detected, and the call we do at intel_runtime_resume()
+		 * won't be able to restore them. Since PCI_D3hot matches the
+		 * actual specification and appears to be working, use it.
+		 */
+		intel_opregion_notify_adapter(display, PCI_D3hot);
+	} else {
+		/*
+		 * current versions of firmware which depend on this opregion
+		 * notification have repurposed the D1 definition to mean
+		 * "runtime suspended" vs. what you would normally expect (D3)
+		 * to distinguish it from notifications that might be sent via
+		 * the suspend path.
+		 */
+		intel_opregion_notify_adapter(display, PCI_D1);
+	}
+}
+
 void intel_opregion_unregister(struct intel_display *display)
 {
 	struct intel_opregion *opregion = display->opregion;

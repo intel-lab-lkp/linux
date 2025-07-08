@@ -44,6 +44,9 @@ void intel_opregion_resume(struct intel_display *display);
 void intel_opregion_suspend(struct intel_display *display,
 			    pci_power_t state);
 
+void intel_opregion_runtime_resume(struct intel_display *display);
+void intel_opregion_runtime_suspend(struct intel_display *display);
+
 bool intel_opregion_asle_present(struct intel_display *display);
 void intel_opregion_asle_intr(struct intel_display *display);
 int intel_opregion_notify_encoder(struct intel_encoder *encoder,
@@ -85,6 +88,14 @@ static inline void intel_opregion_resume(struct intel_display *display)
 
 static inline void intel_opregion_suspend(struct intel_display *display,
 					  pci_power_t state)
+{
+}
+
+static inline void intel_opregion_runtime_resume(struct intel_display *display)
+{
+}
+
+static inline void intel_opregion_runtime_suspend(struct intel_display *display)
 {
 }
 
