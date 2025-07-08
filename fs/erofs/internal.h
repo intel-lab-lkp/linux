@@ -125,6 +125,7 @@ struct erofs_sb_info {
 	struct erofs_sb_lz4_info lz4;
 #endif	/* CONFIG_EROFS_FS_ZIP */
 	struct inode *packed_inode;
+	struct inode *meta_inode;
 	struct erofs_dev_context *devs;
 	u64 total_blocks;
 
@@ -148,6 +149,7 @@ struct erofs_sb_info {
 	/* what we really care is nid, rather than ino.. */
 	erofs_nid_t root_nid;
 	erofs_nid_t packed_nid;
+	erofs_nid_t meta_nid;
 	/* used for statfs, f_files - f_favail */
 	u64 inos;
 
@@ -188,6 +190,11 @@ static inline bool erofs_is_fscache_mode(struct super_block *sb)
 {
 	return IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) &&
 			!erofs_is_fileio_mode(EROFS_SB(sb)) && !sb->s_bdev;
+}
+
+static inline bool erofs_is_metadata_comp_mode(struct erofs_sb_info *sbi)
+{
+	return sbi->meta_inode;
 }
 
 enum {

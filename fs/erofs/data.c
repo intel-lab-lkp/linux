@@ -55,7 +55,9 @@ void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb)
 
 	buf->file = NULL;
 	buf->off = sbi->dif0.fsoff;
-	if (erofs_is_fileio_mode(sbi)) {
+	if (erofs_is_metadata_comp_mode(sbi))
+		buf->mapping = sbi->meta_inode->i_mapping;
+	else if (erofs_is_fileio_mode(sbi)) {
 		buf->file = sbi->dif0.file;	/* some fs like FUSE needs it */
 		buf->mapping = buf->file->f_mapping;
 	} else if (erofs_is_fscache_mode(sb))

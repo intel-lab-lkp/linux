@@ -324,6 +324,7 @@ static int erofs_read_superblock(struct super_block *sb)
 	sbi->epoch = (s64)le64_to_cpu(dsb->epoch);
 	sbi->fixed_nsec = le32_to_cpu(dsb->fixed_nsec);
 	super_set_uuid(sb, (void *)dsb->uuid, sizeof(dsb->uuid));
+	sbi->meta_nid = le64_to_cpu(dsb->meta_nid);
 
 	/* parse on-disk compression configurations */
 	ret = z_erofs_parse_cfgs(sb, dsb);
@@ -691,6 +692,13 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 		sbi->packed_inode = inode;
 	}
 
+	if (sbi->meta_nid) {
+		inode = erofs_iget(sb, sbi->meta_nid);
+		if (IS_ERR(inode))
+			return PTR_ERR(inode);
+		sbi->meta_inode = inode;
+	}
+
 	inode = erofs_iget(sb, sbi->root_nid);
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
@@ -845,6 +853,8 @@ static void erofs_drop_internal_inodes(struct erofs_sb_info *sbi)
 {
 	iput(sbi->packed_inode);
 	sbi->packed_inode = NULL;
+	iput(sbi->meta_inode);
+	sbi->meta_inode = NULL;
 #ifdef CONFIG_EROFS_FS_ZIP
 	iput(sbi->managed_cache);
 	sbi->managed_cache = NULL;
