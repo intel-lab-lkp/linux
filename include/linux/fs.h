@@ -3631,7 +3631,7 @@ extern const struct address_space_operations ram_aops;
 extern int always_delete_dentry(const struct dentry *);
 extern struct inode *alloc_anon_inode(struct super_block *);
 struct inode *anon_inode_make_secure_inode(struct super_block *sb, const char *name,
-					   const struct inode *context_inode);
+					   const struct inode *context_inode, bool secmem);
 extern int simple_nosetlease(struct file *, int, struct file_lease **, void **);
 extern const struct dentry_operations simple_dentry_operations;
 

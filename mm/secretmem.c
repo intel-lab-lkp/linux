@@ -196,7 +196,7 @@ static struct file *secretmem_file_create(unsigned long flags)
 	struct inode *inode;
 	const char *anon_name = "[secretmem]";
 
-	inode = anon_inode_make_secure_inode(secretmem_mnt->mnt_sb, anon_name, NULL);
+	inode = anon_inode_make_secure_inode(secretmem_mnt->mnt_sb, anon_name, NULL, true);
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 

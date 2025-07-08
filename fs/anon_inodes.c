@@ -104,6 +104,7 @@ static struct file_system_type anon_inode_fs_type = {
  * @name:	[in]	Name of the class of the newfile (e.g., "secretmem")
  * @context_inode:
  *		[in]	Optional parent inode for security inheritance
+ * @secmem	[in]	Indicates wheather the inode should be threaded as secretmem
  *
  * The function ensures proper security initialization through the LSM hook
  * security_inode_init_security_anon().
@@ -111,7 +112,7 @@ static struct file_system_type anon_inode_fs_type = {
  * Return:	Pointer to new inode on success, ERR_PTR on failure.
  */
 struct inode *anon_inode_make_secure_inode(struct super_block *sb, const char *name,
-					   const struct inode *context_inode)
+					   const struct inode *context_inode, bool secmem)
 {
 	struct inode *inode;
 	int error;
@@ -119,8 +120,10 @@ struct inode *anon_inode_make_secure_inode(struct super_block *sb, const char *n
 	inode = alloc_anon_inode(sb);
 	if (IS_ERR(inode))
 		return inode;
-	inode->i_flags &= ~S_PRIVATE;
-	inode->i_op = &anon_inode_operations;
+	if (!secmem) {
+		inode->i_flags &= ~S_PRIVATE;
+		inode->i_op = &anon_inode_operations;
+	}
 	error =	security_inode_init_security_anon(inode, &QSTR(name),
 						  context_inode);
 	if (error) {
@@ -145,7 +148,7 @@ static struct file *__anon_inode_getfile(const char *name,
 
 	if (make_inode) {
 		inode =	anon_inode_make_secure_inode(anon_inode_mnt->mnt_sb,
-						     name, context_inode);
+						     name, context_inode, false);
 		if (IS_ERR(inode)) {
 			file = ERR_CAST(inode);
 			goto err;
