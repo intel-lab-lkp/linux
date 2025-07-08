@@ -233,7 +233,8 @@ impl<T> PinnedDrop for Revocable<T> {
 ///
 /// # Invariants
 ///
-/// The RCU read-side lock is held while the guard is alive.
+/// - `data_ref` is a valid pointer to a `T` object for the entire lifetime of this guard.
+/// - The RCU read-side lock is held while the guard is alive.
 pub struct RevocableGuard<'a, T> {
     // This can't use the `&'a T` type because references that appear in function arguments must
     // not become dangling during the execution of the function, which can happen if the
@@ -258,8 +259,8 @@ impl<T> Deref for RevocableGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: By the type invariants, we hold the rcu read-side lock, so the object is
-        // guaranteed to remain valid.
+        // SAFETY: `self.data_ref` is valid for writes because of `Self`'s type invariants,
+        // and `_rcu_guard` ensures the data's accessibility for the lifetime of this guard.
         unsafe { &*self.data_ref }
     }
 }
