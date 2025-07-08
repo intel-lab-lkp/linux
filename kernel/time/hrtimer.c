@@ -2298,8 +2298,11 @@ int hrtimers_cpu_dying(unsigned int dying_cpu)
 	/*
 	 * The migration might have changed the first expiring softirq
 	 * timer on this CPU. Update it.
+	 * We also need to update 'softirq_expires_next' here, because it will
+	 * not be updated in retrigger_next_event() if high resolution mode
+	 * and nohz are both inactive.
 	 */
-	__hrtimer_get_next_event(new_base, HRTIMER_ACTIVE_SOFT);
+	hrtimer_update_next_event(new_base);
 	/* Tell the other CPU to retrigger the next event */
 	smp_call_function_single(ncpu, retrigger_next_event, NULL, 0);
 
