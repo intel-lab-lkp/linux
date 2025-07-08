@@ -547,6 +547,14 @@ resource_size_t cxl_dpa_resource_start(struct cxl_endpoint_decoder *cxled)
 	return base;
 }
 
+bool resource_contains_addr(const struct resource *res, const resource_size_t addr)
+{
+	if (res->flags & IORESOURCE_MEM)
+		return res->start <= addr && addr <= res->end;
+
+	return false;
+}
+
 int cxl_dpa_free(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_port *port = cxled_to_port(cxled);
