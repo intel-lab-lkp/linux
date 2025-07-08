@@ -145,6 +145,11 @@ static void sanitize_field_type(char *type)
 	}
 }
 
+static bool need_sanitize_field_type(const char *type)
+{
+	return !!strstr(type, ATTRIBUTE_STR);
+}
+
 static int __trace_define_field(struct list_head *head, const char *__type,
 				const char *name, int offset, int size,
 				int is_signed, int filter_type, int len,
@@ -159,16 +164,22 @@ static int __trace_define_field(struct list_head *head, const char *__type,
 
 	field->name = name;
 
-	type = kstrdup(__type, GFP_KERNEL);
-	if (!type) {
-		kfree(field);
-		return -ENOMEM;
+	if (need_sanitize_field_type(__type)) {
+		type = kstrdup(__type, GFP_KERNEL);
+		if (!type) {
+			kfree(field);
+			return -ENOMEM;
+		}
+		sanitize_field_type(type);
+		field->type = type;
+		field->alloc_type = 1;
+	} else {
+		field->type = __type;
+		field->alloc_type = 0;
 	}
-	sanitize_field_type(type);
-	field->type = type;
 
 	if (filter_type == FILTER_OTHER)
-		field->filter_type = filter_assign_type(type);
+		field->filter_type = filter_assign_type(field->type);
 	else
 		field->filter_type = filter_type;
 
@@ -266,7 +277,8 @@ static void trace_destroy_fields(struct trace_event_call *call)
 	head = trace_get_fields(call);
 	list_for_each_entry_safe(field, next, head, link) {
 		list_del(&field->link);
-		kfree(field->type);
+		if (field->alloc_type)
+			kfree(field->type);
 		kmem_cache_free(field_cachep, field);
 	}
 }

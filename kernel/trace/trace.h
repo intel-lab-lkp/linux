@@ -1468,6 +1468,7 @@ struct ftrace_event_field {
 	int			size;
 	unsigned int		is_signed:1;
 	unsigned int		needs_test:1;
+	unsigned int		alloc_type:1;
 	int			len;
 };
 
