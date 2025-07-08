@@ -724,9 +724,11 @@ static int netlink_release(struct socket *sock)
 	if (!sk)
 		return 0;
 
+	nlk = nlk_sk(sk);
+	mutex_lock(&nlk->nl_cb_mutex);
+
 	netlink_remove(sk);
 	sock_orphan(sk);
-	nlk = nlk_sk(sk);
 
 	/*
 	 * OK. Socket is unlinked, any packets that arrive now
@@ -773,6 +775,7 @@ static int netlink_release(struct socket *sock)
 		WRITE_ONCE(nlk->cb_running, false);
 	}
 
+	mutex_unlock(&nlk->nl_cb_mutex);
 	module_put(nlk->module);
 
 	if (netlink_is_kernel(sk)) {
