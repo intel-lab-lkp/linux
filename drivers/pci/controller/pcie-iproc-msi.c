@@ -81,7 +81,6 @@ struct iproc_msi_grp {
  * @bitmap_lock: lock to protect access to the MSI bitmap
  * @nr_msi_vecs: total number of MSI vectors
  * @inner_domain: inner IRQ domain
- * @msi_domain: MSI IRQ domain
  * @nr_eq_region: required number of 4K aligned memory region for MSI event
  * queues
  * @nr_msi_region: required number of 4K aligned address region for MSI posted
