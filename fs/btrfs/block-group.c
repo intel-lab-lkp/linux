@@ -1963,12 +1963,6 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 		reserved = bg->reserved;
 		spin_unlock(&bg->lock);
 
-		btrfs_info(fs_info,
-	"reclaiming chunk %llu with %llu%% used %llu%% reserved %llu%% unusable",
-				bg->start,
-				div64_u64(used * 100, bg->length),
-				div64_u64(reserved * 100, bg->length),
-				div64_u64(zone_unusable * 100, bg->length));
 		trace_btrfs_reclaim_block_group(bg);
 		ret = btrfs_relocate_chunk(fs_info, bg->start);
 		if (ret) {
