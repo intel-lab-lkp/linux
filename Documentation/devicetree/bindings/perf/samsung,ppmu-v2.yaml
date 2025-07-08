@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/perf/samsung,ppmu-v2.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Samsung PPMU (Platform Performance Monitoring Unit)
+
+maintainers:
+  - Vivek Yadav <vivek.2311@samsung.com>
+  - Ravi Patel <ravi.patel@samsung.com>
+
+description:
+  PPMU (Platform Performance Monitoring Unit) provides performance statistics
+  such as bandwidth, read and write request, transactions count for AXI masters
+  like MFC.
+
+properties:
+  compatible:
+    const: samsung,ppmu-v2
+
+  reg:
+    maxItems: 1
+    description: Memory-mapped register address
+
+  clocks:
+    items:
+      - description: AXI bus clock
+      - description: Peripheral clock
+
+  clock-names:
+    items:
+      - const: aclk
+      - const: pclk
+
+  interrupts:
+    items:
+      - description: Overflow interrupt for Counters
+      - description: Conditional Interrupt Generation (CIG)
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/fsd-clk.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    ppmu@12840000 {
+        compatible = "samsung,ppmu-v2";
+        reg = <0x12840000 0x1000>;
+        interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 134 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&clock_mfc MFC_PPMU_MFCD0_IPCLKPORT_ACLK>,
+                 <&clock_mfc MFC_PPMU_MFCD0_IPCLKPORT_PCLK>;
+        clock-names = "aclk", "pclk";
+     };
