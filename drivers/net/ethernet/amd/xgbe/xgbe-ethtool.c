@@ -47,6 +47,8 @@ static const struct xgbe_stats xgbe_gstring_stats[] = {
 	XGMAC_MMC_STAT("tx_1024_to_max_byte_packets", tx1024tomaxoctets_gb),
 	XGMAC_MMC_STAT("tx_underflow_errors", txunderflowerror),
 	XGMAC_MMC_STAT("tx_pause_frames", txpauseframes),
+	XGMAC_MMC_STAT("tx_errors", tx_errors),
+	XGMAC_MMC_STAT("tx_dropped", tx_dropped),
 
 	XGMAC_MMC_STAT("rx_bytes", rxoctetcount_gb),
 	XGMAC_MMC_STAT("rx_packets", rxframecount_gb),
@@ -75,6 +77,8 @@ static const struct xgbe_stats xgbe_gstring_stats[] = {
 	XGMAC_MMC_STAT("rx_pause_frames", rxpauseframes),
 	XGMAC_EXT_STAT("rx_split_header_packets", rx_split_header_packets),
 	XGMAC_EXT_STAT("rx_buffer_unavailable", rx_buffer_unavailable),
+	XGMAC_MMC_STAT("rx_errors", rx_errors),
+	XGMAC_MMC_STAT("rx_dropped", rx_dropped),
 };
 
 #define XGBE_STATS_COUNT	ARRAY_SIZE(xgbe_gstring_stats)
@@ -107,10 +111,18 @@ static void xgbe_get_ethtool_stats(struct net_device *netdev,
 				   struct ethtool_stats *stats, u64 *data)
 {
 	struct xgbe_prv_data *pdata = netdev_priv(netdev);
+	struct xgbe_mmc_stats *pstats = &pdata->mmc_stats;
 	u8 *stat;
 	int i;
 
 	pdata->hw_if.read_mmc_stats(pdata);
+	pstats->tx_errors = pstats->txframecount_gb - pstats->txframecount_g;
+	pstats->tx_dropped = netdev->stats.tx_dropped;
+	pstats->rx_errors = pstats->rxframecount_gb -
+			    pstats->rxbroadcastframes_g -
+			    pstats->rxmulticastframes_g -
+			    pstats->rxunicastframes_g;
+	pstats->rx_dropped = netdev->stats.rx_dropped;
 	for (i = 0; i < XGBE_STATS_COUNT; i++) {
 		stat = (u8 *)pdata + xgbe_gstring_stats[i].stat_offset;
 		*data++ = *(u64 *)stat;

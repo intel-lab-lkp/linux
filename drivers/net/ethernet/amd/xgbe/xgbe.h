@@ -616,8 +616,12 @@ struct xgbe_mmc_stats {
 	u64 txframecount_g;
 	u64 txpauseframes;
 	u64 txvlanframes_g;
+	u64 tx_errors;
+	u64 tx_dropped;
 
 	/* Rx Stats */
+	u64 rx_errors;
+	u64 rx_dropped;
 	u64 rxframecount_gb;
 	u64 rxoctetcount_gb;
 	u64 rxoctetcount_g;
