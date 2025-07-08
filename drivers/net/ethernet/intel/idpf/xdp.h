@@ -8,9 +8,9 @@
 
 #include "idpf_txrx.h"
 
-int idpf_xdp_rxq_info_init_all(const struct idpf_vport *vport);
-void idpf_xdp_rxq_info_deinit_all(const struct idpf_vport *vport);
-void idpf_xdp_copy_prog_to_rqs(const struct idpf_vport *vport,
+int idpf_xdp_rxq_info_init_all(const struct idpf_q_vec_rsrc *rsrc);
+void idpf_xdp_rxq_info_deinit_all(const struct idpf_q_vec_rsrc *rsrc);
+void idpf_xdp_copy_prog_to_rqs(const struct idpf_q_vec_rsrc *rsrc,
 			       struct bpf_prog *xdp_prog);
 
 int idpf_xdpsqs_get(const struct idpf_vport *vport);
