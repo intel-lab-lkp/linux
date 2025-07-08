@@ -467,6 +467,7 @@ static void ti_sn65dsi86_aux_device_release(struct device *dev)
 {
 	struct auxiliary_device *aux = container_of(dev, struct auxiliary_device, dev);
 
+	of_node_put(dev->of_node);
 	kfree(aux);
 }
 
@@ -490,6 +491,7 @@ static int ti_sn65dsi86_add_aux_device(struct ti_sn65dsi86 *pdata,
 	device_set_of_node_from_dev(&aux->dev, dev);
 	ret = auxiliary_device_init(aux);
 	if (ret) {
+		of_node_put(aux->dev.of_node);
 		kfree(aux);
 		return ret;
 	}
