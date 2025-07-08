@@ -1239,7 +1239,7 @@ again:
 	if (ps->idx > nr_pages) {
 		if (loops-- > 0)
 			goto again;
-		ps->page_snapshot.compound_head &= ~1UL;
+		clear_compound_head(&ps->page_snapshot);
 		foliop = (struct folio *)&ps->page_snapshot;
 		ps->flags = 0;
 		ps->idx = 0;
