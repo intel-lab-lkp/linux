@@ -283,18 +283,21 @@ interrupts, start DMA engine, etc.
 
 ``->error_handler()`` is a driver's hook into probe, hotplug, and recovery
 and other exceptional conditions. The primary responsibility of an
-implementation is to call :c:func:`ata_do_eh` or :c:func:`ata_bmdma_drive_eh`
-with a set of EH hooks as arguments:
+implementation is to call :c:func:`ata_std_error_handler`.
 
-'prereset' hook (may be NULL) is called during an EH reset, before any
-other actions are taken.
+:c:func:`ata_std_error_handler` will call the various port reset operations as
+needed.
 
-'postreset' hook (may be NULL) is called after the EH reset is
-performed. Based on existing conditions, severity of the problem, and
-hardware capabilities,
+* The 'prereset' operation (may be NULL) is called during an EH reset, before
+  any other action is taken.
 
-Either 'softreset' (may be NULL) or 'hardreset' (may be NULL) will be
-called to perform the low-level EH reset.
+* The 'postreset' hook (may be NULL) is called after the EH reset is performed.
+  Based on existing conditions, severity of the problem, and hardware
+  capabilities,
+
+* Either the 'softreset' operation (may be NULL) or the 'hardreset' operation
+  (may be NULL) will be called to perform the low-level EH reset. If both
+  operations are defined, 'hardreset' is preferred and used.
 
 ::
 
