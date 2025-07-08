@@ -6,6 +6,7 @@ use crate::alloc::{flags::*, AllocError, KVec};
 use crate::prelude::*;
 use core::{
     fmt::{self, Write},
+    marker::PhantomData,
     ops::{self, Deref, DerefMut, Index},
 };
 
@@ -702,7 +703,7 @@ mod tests {
 ///
 /// The memory region between `pos` (inclusive) and `end` (exclusive) is valid for writes if `pos`
 /// is less than `end`.
-pub(crate) struct RawFormatter {
+pub struct RawFormatter {
     // Use `usize` to use `saturating_*` functions.
     beg: usize,
     pos: usize,
@@ -760,7 +761,7 @@ impl RawFormatter {
     }
 
     /// Returns the number of bytes written to the formatter.
-    pub(crate) fn bytes_written(&self) -> usize {
+    pub fn bytes_written(&self) -> usize {
         self.pos - self.beg
     }
 }
@@ -794,7 +795,7 @@ impl fmt::Write for RawFormatter {
 /// Allows formatting of [`fmt::Arguments`] into a raw buffer.
 ///
 /// Fails if callers attempt to write more than will fit in the buffer.
-pub(crate) struct Formatter(RawFormatter);
+pub struct Formatter(RawFormatter);
 
 impl Formatter {
     /// Creates a new instance of [`Formatter`] with the given buffer.
@@ -827,6 +828,35 @@ impl fmt::Write for Formatter {
         } else {
             Ok(())
         }
+    }
+}
+
+/// A mutable reference to a byte buffer where a string can be written into.
+pub struct BorrowFormatter<'a>(Formatter, PhantomData<&'a mut ()>);
+
+impl<'a> BorrowFormatter<'a> {
+    /// Create a new [`Self`] instance.
+    pub fn new(buffer: &'a mut [u8]) -> Result<BorrowFormatter<'a>> {
+        Ok(Self(
+            // SAFETY: `buffer` is valid for writes for the entire length for
+            // the lifetime of `Self`.
+            unsafe { Formatter::from_buffer(buffer.as_mut_ptr(), buffer.len()) },
+            PhantomData,
+        ))
+    }
+}
+
+impl Deref for BorrowFormatter<'_> {
+    type Target = Formatter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for BorrowFormatter<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
