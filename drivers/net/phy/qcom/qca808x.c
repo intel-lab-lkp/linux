@@ -243,6 +243,10 @@ static int qca808x_config_init(struct phy_device *phydev)
 
 	qca808x_fill_possible_interfaces(phydev);
 
+	ret = qcom_phy_counter_crc_check_en(phydev);
+	if (ret)
+		return ret;
+
 	/* Configure adc threshold as 100mv for the link 10M */
 	return at803x_debug_reg_mask(phydev, QCA808X_PHY_DEBUG_ADC_THRESHOLD,
 				     QCA808X_ADC_THRESHOLD_MASK,
@@ -651,6 +655,9 @@ static struct phy_driver qca808x_driver[] = {
 	.led_hw_control_set	= qca808x_led_hw_control_set,
 	.led_hw_control_get	= qca808x_led_hw_control_get,
 	.led_polarity_set	= qca808x_led_polarity_set,
+	.get_sset_count		= qcom_phy_get_sset_count,
+	.get_strings		= qcom_phy_get_strings,
+	.get_stats		= qcom_phy_get_stats,
 }, };
 
 module_phy_driver(qca808x_driver);
