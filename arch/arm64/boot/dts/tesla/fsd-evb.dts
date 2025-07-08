@@ -130,3 +130,11 @@
 &ufs {
 	status = "okay";
 };
+
+&ppmu0_mfc {
+	status = "okay";
+};
+
+&ppmu1_mfc {
+	status = "okay";
+};

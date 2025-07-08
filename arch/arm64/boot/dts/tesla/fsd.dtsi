@@ -970,6 +970,26 @@
 			clock-names = "fin_pll", "mct";
 		};
 
+		ppmu0_mfc: ppmu@12840000 {
+			compatible = "samsung,ppmu-v2";
+			reg = <0x0 0x12840000 0x0 0x1000>;
+			interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 134 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clock_mfc MFC_PPMU_MFCD0_IPCLKPORT_ACLK>,
+				 <&clock_mfc MFC_PPMU_MFCD0_IPCLKPORT_PCLK>;
+			clock-names = "aclk", "pclk";
+		};
+
+		ppmu1_mfc: ppmu@12850000 {
+			compatible = "samsung,ppmu-v2";
+			reg = <0x0 0x12850000 0x0 0x1000>;
+			interrupts = <GIC_SPI 135 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clock_mfc MFC_PPMU_MFCD1_IPCLKPORT_ACLK>,
+				 <&clock_mfc MFC_PPMU_MFCD1_IPCLKPORT_PCLK>;
+			clock-names = "aclk", "pclk";
+		};
+
 		mfc: mfc@12880000 {
 			compatible = "tesla,fsd-mfc";
 			reg = <0x0 0x12880000 0x0 0x10000>;
