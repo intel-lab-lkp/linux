@@ -1418,7 +1418,7 @@ static void log_fs_change_topology_dentry(
  * inherit these new constraints.  Anyway, for backward compatibility reasons,
  * a dedicated user space option would be required (e.g. as a ruleset flag).
  */
-static int hook_sb_mount(const char *const dev_name,
+static int hook_sb_mount(const char *const dev_name, const struct path *dev_path,
 			 const struct path *const path, const char *const type,
 			 const unsigned long flags, void *const data)
 {

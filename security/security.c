@@ -1550,6 +1550,7 @@ int security_sb_statfs(struct dentry *dentry)
 /**
  * security_sb_mount() - Check permission for mounting a filesystem
  * @dev_name: filesystem backing device
+ * @dev_path: path of filesystem backing device
  * @path: mount point
  * @type: filesystem type
  * @flags: mount flags
@@ -1564,10 +1565,11 @@ int security_sb_statfs(struct dentry *dentry)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_sb_mount(const char *dev_name, const struct path *path,
+int security_sb_mount(const char *dev_name, const struct path *dev_path,
+		      const struct path *path,
 		      const char *type, unsigned long flags, void *data)
 {
-	return call_int_hook(sb_mount, dev_name, path, type, flags, data);
+	return call_int_hook(sb_mount, dev_name, dev_path, path, type, flags, data);
 }
 
 /**

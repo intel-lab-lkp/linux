@@ -3073,37 +3073,28 @@ static struct mount *__do_loopback(struct path *old_path, int recurse)
 /*
  * do loopback mount.
  */
-static int do_loopback(struct path *path, const char *old_name,
+static int do_loopback(struct path *path, struct path *old_path,
 				int recurse)
 {
-	struct path old_path;
 	struct mount *mnt = NULL, *parent;
 	struct mountpoint *mp;
-	int err;
-	if (!old_name || !*old_name)
-		return -EINVAL;
-	err = kern_path(old_name, LOOKUP_FOLLOW|LOOKUP_AUTOMOUNT, &old_path);
-	if (err)
-		return err;
+	int err = -EINVAL;
 
-	err = -EINVAL;
-	if (mnt_ns_loop(old_path.dentry))
-		goto out;
+	if (mnt_ns_loop(old_path->dentry))
+		return -EINVAL;
 
 	mp = lock_mount(path);
-	if (IS_ERR(mp)) {
-		err = PTR_ERR(mp);
-		goto out;
-	}
+	if (IS_ERR(mp))
+		return PTR_ERR(mp);
 
 	parent = real_mount(path->mnt);
 	if (!check_mnt(parent))
-		goto out2;
+		goto out;
 
-	mnt = __do_loopback(&old_path, recurse);
+	mnt = __do_loopback(old_path, recurse);
 	if (IS_ERR(mnt)) {
 		err = PTR_ERR(mnt);
-		goto out2;
+		goto out;
 	}
 
 	err = graft_tree(mnt, parent, mp);
@@ -3112,10 +3103,8 @@ static int do_loopback(struct path *path, const char *old_name,
 		umount_tree(mnt, UMOUNT_SYNC);
 		unlock_mount_hash();
 	}
-out2:
-	unlock_mount(mp);
 out:
-	path_put(&old_path);
+	unlock_mount(mp);
 	return err;
 }
 
@@ -3758,23 +3747,6 @@ out:
 	return err;
 }
 
-static int do_move_mount_old(struct path *path, const char *old_name)
-{
-	struct path old_path;
-	int err;
-
-	if (!old_name || !*old_name)
-		return -EINVAL;
-
-	err = kern_path(old_name, LOOKUP_FOLLOW, &old_path);
-	if (err)
-		return err;
-
-	err = do_move_mount(&old_path, path, 0);
-	path_put(&old_path);
-	return err;
-}
-
 /*
  * add a mount into a namespace's mount tree
  */
@@ -4134,6 +4106,31 @@ static char *copy_mount_string(const void __user *data)
 	return data ? strndup_user(data, PATH_MAX) : NULL;
 }
 
+enum mount_operation {
+	MOUNT_OP_RECONFIGURE,
+	MOUNT_OP_REMOUNT,
+	MOUNT_OP_BIND,
+	MOUNT_OP_CHANGE_TYPE,
+	MOUNT_OP_MOVE,
+	MOUNT_OP_NEW,
+};
+
+static enum mount_operation get_mount_op(unsigned long flags)
+{
+	if ((flags & (MS_REMOUNT | MS_BIND)) == (MS_REMOUNT | MS_BIND))
+		return MOUNT_OP_RECONFIGURE;
+	if (flags & MS_REMOUNT)
+		return MOUNT_OP_REMOUNT;
+	if (flags & MS_BIND)
+		return MOUNT_OP_BIND;
+	if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE))
+		return MOUNT_OP_CHANGE_TYPE;
+	if (flags & MS_MOVE)
+		return MOUNT_OP_MOVE;
+
+	return MOUNT_OP_NEW;
+}
+
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -4152,6 +4149,8 @@ int path_mount(const char *dev_name, struct path *path,
 		const char *type_page, unsigned long flags, void *data_page)
 {
 	unsigned int mnt_flags = 0, sb_flags;
+	enum mount_operation op;
+	struct path dev_path = {};
 	int ret;
 
 	/* Discard magic */
@@ -4165,11 +4164,29 @@ int path_mount(const char *dev_name, struct path *path,
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
-	ret = security_sb_mount(dev_name, path, type_page, flags, data_page);
+	if (!may_mount()) {
+		ret = -EPERM;
+		goto out;
+	}
+
+	op = get_mount_op(flags);
+
+	if (op == MOUNT_OP_BIND || op == MOUNT_OP_MOVE) {
+		unsigned int lookup_flags = LOOKUP_FOLLOW;
+
+		if (!dev_name || !*dev_name)
+			return -EINVAL;
+
+		if (op == MOUNT_OP_BIND)
+			lookup_flags |= LOOKUP_AUTOMOUNT;
+		ret = kern_path(dev_name, lookup_flags, &dev_path);
+		if (ret)
+			return ret;
+	}
+
+	ret = security_sb_mount(dev_name, &dev_path, path, type_page, flags, data_page);
 	if (ret)
-		return ret;
-	if (!may_mount())
-		return -EPERM;
+		goto out;
 	if (flags & SB_MANDLOCK)
 		warn_mandlock();
 
@@ -4212,19 +4229,34 @@ int path_mount(const char *dev_name, struct path *path,
 			    SB_LAZYTIME |
 			    SB_I_VERSION);
 
-	if ((flags & (MS_REMOUNT | MS_BIND)) == (MS_REMOUNT | MS_BIND))
-		return do_reconfigure_mnt(path, mnt_flags);
-	if (flags & MS_REMOUNT)
-		return do_remount(path, flags, sb_flags, mnt_flags, data_page);
-	if (flags & MS_BIND)
-		return do_loopback(path, dev_name, flags & MS_REC);
-	if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE))
-		return do_change_type(path, flags);
-	if (flags & MS_MOVE)
-		return do_move_mount_old(path, dev_name);
-
-	return do_new_mount(path, type_page, sb_flags, mnt_flags, dev_name,
-			    data_page);
+	switch (op) {
+	case MOUNT_OP_RECONFIGURE:
+		ret = do_reconfigure_mnt(path, mnt_flags);
+		break;
+	case MOUNT_OP_REMOUNT:
+		ret = do_remount(path, flags, sb_flags, mnt_flags, data_page);
+		break;
+	case MOUNT_OP_BIND:
+		ret = do_loopback(path, &dev_path, flags & MS_REC);
+		break;
+	case MOUNT_OP_CHANGE_TYPE:
+		ret = do_change_type(path, flags);
+		break;
+	case MOUNT_OP_MOVE:
+		ret = do_move_mount(&dev_path, path, 0);
+		break;
+	case MOUNT_OP_NEW:
+		ret = do_new_mount(path, type_page, sb_flags, mnt_flags, dev_name,
+				   data_page);
+		break;
+	default:
+		/* unknown op? */
+		WARN_ON_ONCE(1);
+		break;
+	}
+out:
+	path_put(&dev_path);
+	return ret;
 }
 
 int do_mount(const char *dev_name, const char __user *dir_name,

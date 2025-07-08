@@ -701,7 +701,8 @@ static int apparmor_uring_sqpoll(void)
 }
 #endif /* CONFIG_IO_URING */
 
-static int apparmor_sb_mount(const char *dev_name, const struct path *path,
+static int apparmor_sb_mount(const char *dev_name, const struct path *dev_path,
+			     const struct path *path,
 			     const char *type, unsigned long flags, void *data)
 {
 	struct aa_label *label;
@@ -720,14 +721,13 @@ static int apparmor_sb_mount(const char *dev_name, const struct path *path,
 					   data);
 		else if (flags & MS_BIND)
 			error = aa_bind_mount(current_cred(), label, path,
-					      dev_name, flags);
+					      dev_path, flags);
 		else if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE |
 				  MS_UNBINDABLE))
 			error = aa_mount_change_type(current_cred(), label,
 						     path, flags);
 		else if (flags & MS_MOVE)
-			error = aa_move_mount_old(current_cred(), label, path,
-						  dev_name);
+			error = aa_move_mount(current_cred(), label, dev_path, path);
 		else
 			error = aa_new_mount(current_cred(), label, dev_name,
 					     path, type, flags, data);

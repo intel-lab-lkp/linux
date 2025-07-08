@@ -402,6 +402,7 @@ static int tomoyo_path_chroot(const struct path *path)
  * tomoyo_sb_mount - Target for security_sb_mount().
  *
  * @dev_name: Name of device file. Maybe NULL.
+ * @dev_path: Path to of device file. Maybe zero'ed.
  * @path:     Pointer to "struct path".
  * @type:     Name of filesystem type. Maybe NULL.
  * @flags:    Mount options.
@@ -409,10 +410,11 @@ static int tomoyo_path_chroot(const struct path *path)
  *
  * Returns 0 on success, negative value otherwise.
  */
-static int tomoyo_sb_mount(const char *dev_name, const struct path *path,
+static int tomoyo_sb_mount(const char *dev_name, const struct path *dev_path,
+			   const struct path *path,
 			   const char *type, unsigned long flags, void *data)
 {
-	return tomoyo_mount_permission(dev_name, path, type, flags, data);
+	return tomoyo_mount_permission(dev_name, dev_path, path, type, flags, data);
 }
 
 /**
