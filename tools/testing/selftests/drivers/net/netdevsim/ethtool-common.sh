@@ -53,3 +53,18 @@ function make_netdev {
     # get new device name
     ls /sys/bus/netdevsim/devices/netdevsim${NSIM_ID}/net/
 }
+
+function make_phydev_on_netdev {
+    local parent_ndev_nsim_id=$1
+    local parent=$2
+
+    local ndev_dfs=/sys/kernel/debug/netdevsim/netdevsim$parent_ndev_nsim_id/ports/0
+
+    old_dev_dfs=$(find $ndev_dfs -type d)
+    echo $parent > $ndev_dfs/phy_add
+    new_dev_dfs=$(find $ndev_dfs -type d)
+
+    # The new phydev name corresponds to the new file that was created. Its
+    # name isn't predictable.
+    echo $old_dev_dfs $new_dev_dfs | xargs -n1 | sort  | uniq -u
+}
