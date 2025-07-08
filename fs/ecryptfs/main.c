@@ -755,7 +755,7 @@ static struct kobject *ecryptfs_kobj;
 static ssize_t version_show(struct kobject *kobj,
 			    struct kobj_attribute *attr, char *buff)
 {
-	return snprintf(buff, PAGE_SIZE, "%d\n", ECRYPTFS_VERSIONING_MASK);
+	return sysfs_emit(buff, "%d\n", ECRYPTFS_VERSIONING_MASK);
 }
 
 static struct kobj_attribute version_attr = __ATTR_RO(version);
