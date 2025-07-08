@@ -952,6 +952,7 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 
 	nsim_macsec_init(ns);
 	nsim_ipsec_init(ns);
+	nsim_phy_init(ns);
 
 	err = register_netdevice(ns->netdev);
 	if (err)
@@ -968,6 +969,7 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 	return 0;
 
 err_ipsec_teardown:
+	nsim_phy_teardown(ns);
 	nsim_ipsec_teardown(ns);
 	nsim_macsec_teardown(ns);
 	nsim_bpf_uninit(ns);
@@ -1058,6 +1060,7 @@ void nsim_destroy(struct netdevsim *ns)
 	RCU_INIT_POINTER(ns->peer, NULL);
 	unregister_netdevice(dev);
 	if (nsim_dev_port_is_pf(ns->nsim_dev_port)) {
+		nsim_phy_teardown(ns);
 		nsim_macsec_teardown(ns);
 		nsim_ipsec_teardown(ns);
 		nsim_bpf_uninit(ns);
@@ -1098,6 +1101,10 @@ static int __init nsim_module_init(void)
 {
 	int err;
 
+	err = nsim_phy_drv_register();
+	if (err)
+		return err;
+
 	err = nsim_dev_init();
 	if (err)
 		return err;
@@ -1124,6 +1131,7 @@ static void __exit nsim_module_exit(void)
 	rtnl_link_unregister(&nsim_link_ops);
 	nsim_bus_exit();
 	nsim_dev_exit();
+	nsim_phy_drv_unregister();
 }
 
 module_init(nsim_module_init);
