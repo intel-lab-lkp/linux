@@ -543,8 +543,6 @@ inline int vma_expand(struct ma_state *mas, struct vm_area_struct *vma,
 	if (mas_preallocate(mas, vma, GFP_KERNEL))
 		goto nomem;
 
-	vma_adjust_trans_huge(vma, start, end, 0);
-
 	if (file) {
 		mapping = file->f_mapping;
 		root = &mapping->i_mmap;
@@ -561,6 +559,8 @@ inline int vma_expand(struct ma_state *mas, struct vm_area_struct *vma,
 		flush_dcache_mmap_lock(mapping);
 		vma_interval_tree_remove(vma, root);
 	}
+
+	vma_adjust_trans_huge(vma, start, end, 0);
 
 	vma->vm_start = start;
 	vma->vm_end = end;
@@ -727,15 +727,6 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 		return -ENOMEM;
 	}
 
-	/*
-	 * Get rid of huge pages and shared page tables straddling the split
-	 * boundary.
-	 */
-	vma_adjust_trans_huge(orig_vma, start, end, adjust_next);
-	if (is_vm_hugetlb_page(orig_vma)) {
-		hugetlb_split(orig_vma, start);
-		hugetlb_split(orig_vma, end);
-	}
 	if (file) {
 		mapping = file->f_mapping;
 		root = &mapping->i_mmap;
@@ -773,6 +764,16 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 		vma_interval_tree_remove(vma, root);
 		if (adjust_next)
 			vma_interval_tree_remove(next, root);
+	}
+
+	/*
+	 * Get rid of huge pages and shared page tables straddling the split
+	 * boundary.
+	 */
+	vma_adjust_trans_huge(orig_vma, start, end, adjust_next);
+	if (is_vm_hugetlb_page(orig_vma)) {
+		hugetlb_split(orig_vma, start);
+		hugetlb_split(orig_vma, end);
 	}
 
 	if (start != vma->vm_start) {
