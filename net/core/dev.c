@@ -11559,17 +11559,17 @@ noinline void netdev_core_stats_inc(struct net_device *dev, u32 offset)
 EXPORT_SYMBOL_GPL(netdev_core_stats_inc);
 
 /**
- *	dev_get_stats	- get network device statistics
- *	@dev: device to get statistics from
- *	@storage: place to store stats
+ * netif_get_stats() - get network device statistics
+ * @dev: device to get statistics from
+ * @storage: place to store stats
  *
- *	Get network statistics from device. Return @storage.
- *	The device driver may provide its own method by setting
- *	dev->netdev_ops->get_stats64 or dev->netdev_ops->get_stats;
- *	otherwise the internal statistics structure is used.
+ * Get network statistics from device. Return @storage.
+ * The device driver may provide its own method by setting
+ * dev->netdev_ops->get_stats64 or dev->netdev_ops->get_stats;
+ * otherwise the internal statistics structure is used.
  */
-struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
-					struct rtnl_link_stats64 *storage)
+struct rtnl_link_stats64 *netif_get_stats(struct net_device *dev,
+					  struct rtnl_link_stats64 *storage)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 	const struct net_device_core_stats __percpu *p;
@@ -11617,7 +11617,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 	}
 	return storage;
 }
-EXPORT_SYMBOL(dev_get_stats);
+EXPORT_SYMBOL(netif_get_stats);
 
 /**
  *	dev_fetch_sw_netstats - get per-cpu network device statistics

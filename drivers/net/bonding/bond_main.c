@@ -2162,7 +2162,7 @@ skip_mac_set:
 
 	slave_dev->priv_flags |= IFF_BONDING;
 	/* initialize slave stats */
-	dev_get_stats(new_slave->dev, &new_slave->slave_stats);
+	netif_get_stats(new_slave->dev, &new_slave->slave_stats);
 
 	if (bond_is_lb(bond)) {
 		/* bond_alb_init_slave() must be called before all other stages since
@@ -4605,7 +4605,7 @@ static void bond_get_stats(struct net_device *bond_dev,
 
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		const struct rtnl_link_stats64 *new =
-			dev_get_stats(slave->dev, &temp);
+			netif_get_stats(slave->dev, &temp);
 
 		bond_fold_stats(stats, new, &slave->slave_stats);
 

@@ -218,7 +218,7 @@ struct net_device_stats {
 #undef NET_DEV_STAT
 
 /* per-cpu stats, allocated on demand.
- * Try to fit them in a single cache line, for dev_get_stats() sake.
+ * Try to fit them in a single cache line, for netif_get_stats() sake.
  */
 struct net_device_core_stats {
 	unsigned long	rx_dropped;
@@ -4997,8 +4997,8 @@ void netdev_notify_peers(struct net_device *dev);
 void netdev_features_change(struct net_device *dev);
 /* Load a device via the kmod */
 void dev_load(struct net *net, const char *name);
-struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
-					struct rtnl_link_stats64 *storage);
+struct rtnl_link_stats64 *netif_get_stats(struct net_device *dev,
+					  struct rtnl_link_stats64 *storage);
 void netdev_stats_to_stats64(struct rtnl_link_stats64 *stats64,
 			     const struct net_device_stats *netdev_stats);
 void dev_fetch_sw_netstats(struct rtnl_link_stats64 *s,

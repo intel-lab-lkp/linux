@@ -857,7 +857,7 @@ static void hns_get_ethtool_stats(struct net_device *netdev,
 
 	h->dev->ops->update_stats(h, &netdev->stats);
 
-	net_stats = dev_get_stats(netdev, &temp);
+	net_stats = netif_get_stats(netdev, &temp);
 
 	/* get netdev statistics */
 	p[0] = net_stats->rx_packets;

@@ -268,7 +268,7 @@ static void xgene_get_ethtool_stats(struct net_device *ndev,
 	struct rtnl_link_stats64 stats;
 	int i;
 
-	dev_get_stats(ndev, &stats);
+	netif_get_stats(ndev, &stats);
 	for (i = 0; i < XGENE_STATS_LEN; i++)
 		data[i] = *(u64 *)((char *)&stats + gstrings_stats[i].offset);
 

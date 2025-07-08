@@ -190,14 +190,14 @@ static void net_failover_get_stats(struct net_device *dev,
 
 	slave_dev = rcu_dereference(nfo_info->primary_dev);
 	if (slave_dev) {
-		new = dev_get_stats(slave_dev, &temp);
+		new = netif_get_stats(slave_dev, &temp);
 		net_failover_fold_stats(stats, new, &nfo_info->primary_stats);
 		memcpy(&nfo_info->primary_stats, new, sizeof(*new));
 	}
 
 	slave_dev = rcu_dereference(nfo_info->standby_dev);
 	if (slave_dev) {
-		new = dev_get_stats(slave_dev, &temp);
+		new = netif_get_stats(slave_dev, &temp);
 		net_failover_fold_stats(stats, new, &nfo_info->standby_stats);
 		memcpy(&nfo_info->standby_stats, new, sizeof(*new));
 	}
@@ -540,11 +540,11 @@ static int net_failover_slave_register(struct net_device *slave_dev,
 	if (slave_is_standby) {
 		rcu_assign_pointer(nfo_info->standby_dev, slave_dev);
 		standby_dev = slave_dev;
-		dev_get_stats(standby_dev, &nfo_info->standby_stats);
+		netif_get_stats(standby_dev, &nfo_info->standby_stats);
 	} else {
 		rcu_assign_pointer(nfo_info->primary_dev, slave_dev);
 		primary_dev = slave_dev;
-		dev_get_stats(primary_dev, &nfo_info->primary_stats);
+		netif_get_stats(primary_dev, &nfo_info->primary_stats);
 		failover_dev->min_mtu = slave_dev->min_mtu;
 		failover_dev->max_mtu = slave_dev->max_mtu;
 	}
@@ -606,7 +606,7 @@ static int net_failover_slave_unregister(struct net_device *slave_dev,
 	dev_close(slave_dev);
 
 	nfo_info = netdev_priv(failover_dev);
-	dev_get_stats(failover_dev, &nfo_info->failover_stats);
+	netif_get_stats(failover_dev, &nfo_info->failover_stats);
 
 	slave_is_standby = slave_dev->dev.parent == failover_dev->dev.parent;
 	if (slave_is_standby) {
@@ -648,7 +648,7 @@ static int net_failover_slave_link_change(struct net_device *slave_dev,
 		netif_carrier_on(failover_dev);
 		netif_tx_wake_all_queues(failover_dev);
 	} else {
-		dev_get_stats(failover_dev, &nfo_info->failover_stats);
+		netif_get_stats(failover_dev, &nfo_info->failover_stats);
 		netif_carrier_off(failover_dev);
 		netif_tx_stop_all_queues(failover_dev);
 	}
