@@ -1064,7 +1064,8 @@ static ssize_t webusb_landingPage_store(struct config_item *item, const char *pa
 	struct gadget_info *gi = webusb_item_to_gadget_info(item);
 	unsigned int bytes_to_strip = 0;
 	int l = len;
-
+	if (!len)
+		return len;
 	if (page[l - 1] == '\n') {
 		--l;
 		++bytes_to_strip;
@@ -1187,7 +1188,8 @@ static ssize_t os_desc_qw_sign_store(struct config_item *item, const char *page,
 {
 	struct gadget_info *gi = os_desc_item_to_gadget_info(item);
 	int res, l;
-
+	if (!len)
+		return len;
 	l = min_t(int, len, OS_STRING_QW_SIGN_LEN >> 1);
 	if (page[l - 1] == '\n')
 		--l;
