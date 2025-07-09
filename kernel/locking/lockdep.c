@@ -4963,6 +4963,7 @@ void lockdep_init_map_type(struct lockdep_map *lock, const char *name,
 	lock->wait_type_outer = outer;
 	lock->wait_type_inner = inner;
 	lock->lock_type = lock_type;
+	lock->flags = 0;
 
 	/*
 	 * No key, no joy, we need to hash something.
@@ -5843,6 +5844,9 @@ void lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 	 * memory errors.
 	 */
 	kasan_check_byte(lock);
+
+	if (unlikely(lock->flags == LOCAL_LOCK_UNLOCKED))
+		trylock = 1;
 
 	if (unlikely(!lockdep_enabled())) {
 		/* XXX allow trylock from NMI ?!? */

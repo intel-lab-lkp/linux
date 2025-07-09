@@ -190,12 +190,14 @@ struct lockdep_map {
 	u8				wait_type_outer; /* can be taken in this context */
 	u8				wait_type_inner; /* presents this context */
 	u8				lock_type;
-	/* u8				hole; */
+	u8				flags;
 #ifdef CONFIG_LOCK_STAT
 	int				cpu;
 	unsigned long			ip;
 #endif
 };
+
+#define LOCAL_LOCK_UNLOCKED		1
 
 struct pin_cookie { unsigned int val; };
 

@@ -81,6 +81,21 @@
 #define local_trylock_irqsave(lock, flags)			\
 	__local_trylock_irqsave(lock, flags)
 
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+#define local_lock_lockdep_start(lock)					\
+	do {								\
+		lockdep_assert(!__local_lock_is_locked(lock));		\
+		this_cpu_ptr(lock)->dep_map.flags = LOCAL_LOCK_UNLOCKED;\
+	} while (0)
+
+#define local_lock_lockdep_end(lock)					\
+	do { this_cpu_ptr(lock)->dep_map.flags = 0; } while (0)
+
+#else
+#define local_lock_lockdep_start(lock) /**/
+#define local_lock_lockdep_end(lock) /**/
+#endif
+
 DEFINE_GUARD(local_lock, local_lock_t __percpu*,
 	     local_lock(_T),
 	     local_unlock(_T))
