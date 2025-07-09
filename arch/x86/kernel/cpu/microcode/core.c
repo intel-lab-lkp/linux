@@ -17,27 +17,27 @@
 
 #define pr_fmt(fmt) "microcode: " fmt
 
+#include <linux/capability.h>
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
+#include <linux/delay.h>
+#include <linux/firmware.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/miscdevice.h>
+#include <linux/mm.h>
+#include <linux/mutex.h>
+#include <linux/nmi.h>
 #include <linux/platform_device.h>
 #include <linux/stop_machine.h>
 #include <linux/syscore_ops.h>
-#include <linux/miscdevice.h>
-#include <linux/capability.h>
-#include <linux/firmware.h>
-#include <linux/cpumask.h>
-#include <linux/kernel.h>
-#include <linux/delay.h>
-#include <linux/mutex.h>
-#include <linux/cpu.h>
-#include <linux/nmi.h>
-#include <linux/fs.h>
-#include <linux/mm.h>
 
 #include <asm/apic.h>
+#include <asm/cmdline.h>
 #include <asm/cpu_device_id.h>
+#include <asm/msr.h>
 #include <asm/perf_event.h>
 #include <asm/processor.h>
-#include <asm/cmdline.h>
-#include <asm/msr.h>
 #include <asm/setup.h>
 
 #include "internal.h"

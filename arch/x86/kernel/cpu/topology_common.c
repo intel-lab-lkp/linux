@@ -3,8 +3,8 @@
 
 #include <xen/xen.h>
 
-#include <asm/intel-family.h>
 #include <asm/apic.h>
+#include <asm/intel-family.h>
 #include <asm/processor.h>
 #include <asm/smp.h>
 
