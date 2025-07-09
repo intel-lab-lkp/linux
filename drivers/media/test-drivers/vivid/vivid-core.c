@@ -144,6 +144,12 @@ MODULE_PARM_DESC(input_types, " input types, default is 0xe4. Two bits per input
 			      "\t\t    bits 0-1 == input 0, bits 31-30 == input 15.\n"
 			      "\t\t    Type 0 == webcam, 1 == TV, 2 == S-Video, 3 == HDMI");
 
+/* Default: no HDCP */
+static unsigned input_hdcp;
+module_param(input_hdcp, uint, 0444);
+MODULE_PARM_DESC(input_hdcp, " input HDCP type, default is 0.\n"
+			     "\t\t    Type 0 == no HDCP, 1 == HDCP 1.x, 2 == HDCP 2.x, 3 == HDCP 1.x Repeater, 4 == HDCP 2.x Repeater");
+
 /* Default: 2 outputs */
 static unsigned num_outputs[VIVID_MAX_DEVS] = { [0 ... (VIVID_MAX_DEVS - 1)] = 2 };
 module_param_array(num_outputs, uint, NULL, 0444);
@@ -155,6 +161,12 @@ module_param_array(output_types, uint, NULL, 0444);
 MODULE_PARM_DESC(output_types, " output types, default is 0x02. One bit per output,\n"
 			      "\t\t    bit 0 == output 0, bit 15 == output 15.\n"
 			      "\t\t    Type 0 == S-Video, 1 == HDMI");
+
+/* Default: no HDCP */
+static unsigned output_hdcp;
+module_param(output_hdcp, uint, 0444);
+MODULE_PARM_DESC(output_hdcp, " output HDCP type, default is 0.\n"
+			     "\t\t    Type 0 == no HDCP, 1 == HDCP 1.x, 2 == HDCP 2.x");
 
 unsigned vivid_debug;
 module_param(vivid_debug, uint, 0644);
@@ -973,6 +985,8 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 		dev->num_inputs--;
 	}
 	dev->num_hdmi_inputs = in_type_counter[HDMI];
+	if (input_hdcp <= HDCP2_REP)
+		dev->input_hdcp = input_hdcp;
 	dev->num_svid_inputs = in_type_counter[SVID];
 
 	/* how many outputs do we have and of what type? */
@@ -1000,6 +1014,8 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 		dev->num_outputs--;
 	}
 	dev->num_hdmi_outputs = out_type_counter[HDMI];
+	if (output_hdcp <= HDCP2)
+		dev->output_hdcp = output_hdcp;
 
 	/* do we create a video capture device? */
 	dev->has_vid_cap = node_type & 0x0001;

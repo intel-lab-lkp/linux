@@ -194,6 +194,14 @@ enum vivid_colorspace {
 	VIVID_CS_SYS_BG,
 };
 
+enum vivid_hdcp {
+	NO_HDCP,
+	HDCP1,
+	HDCP2,
+	HDCP1_REP,
+	HDCP2_REP
+};
+
 #define VIVID_INVALID_SIGNAL(mode) \
 	((mode) == NO_SIGNAL || (mode) == NO_LOCK || (mode) == OUT_OF_RANGE)
 
@@ -270,10 +278,12 @@ struct vivid_dev {
 	u8				num_svid_inputs;
 	u8				input_type[MAX_INPUTS];
 	u8				input_name_counter[MAX_INPUTS];
+	enum vivid_hdcp			input_hdcp;
 	u8				num_outputs;
 	u8				num_hdmi_outputs;
 	u8				output_type[MAX_OUTPUTS];
 	u8				output_name_counter[MAX_OUTPUTS];
+	enum vivid_hdcp			output_hdcp;
 	bool				has_audio_inputs;
 	bool				has_audio_outputs;
 	bool				has_vid_cap;
