@@ -474,15 +474,13 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 	int i, index, irq, bits, ret = 0;
 	u8 cpu;
 	u64 data, old_data;
-	u64 coreisr, old_coreisr;
-	gpa_t offset;
 
 	data = *(u64 *)val;
-	offset = addr - EIOINTC_BASE;
+	addr -= EIOINTC_BASE;
 
-	switch (offset) {
+	switch (addr) {
 	case EIOINTC_NODETYPE_START ... EIOINTC_NODETYPE_END:
-		index = (offset - EIOINTC_NODETYPE_START) >> 3;
+		index = (addr - EIOINTC_NODETYPE_START) >> 3;
 		s->nodetype.reg_u64[index] = data;
 		break;
 	case EIOINTC_IPMAP_START ... EIOINTC_IPMAP_END:
@@ -490,11 +488,11 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 		 * ipmap cannot be set at runtime, can be set only at the beginning
 		 * of irqchip driver, need not update upper irq level
 		 */
-		index = (offset - EIOINTC_IPMAP_START) >> 3;
+		index = (addr - EIOINTC_IPMAP_START) >> 3;
 		s->ipmap.reg_u64 = data;
 		break;
 	case EIOINTC_ENABLE_START ... EIOINTC_ENABLE_END:
-		index = (offset - EIOINTC_ENABLE_START) >> 3;
+		index = (addr - EIOINTC_ENABLE_START) >> 3;
 		old_data = s->enable.reg_u64[index];
 		s->enable.reg_u64[index] = data;
 		/*
@@ -518,28 +516,27 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 		break;
 	case EIOINTC_BOUNCE_START ... EIOINTC_BOUNCE_END:
 		/* do not emulate hw bounced irq routing */
-		index = (offset - EIOINTC_BOUNCE_START) >> 3;
+		index = (addr - EIOINTC_BOUNCE_START) >> 3;
 		s->bounce.reg_u64[index] = data;
 		break;
 	case EIOINTC_COREISR_START ... EIOINTC_COREISR_END:
-		index = (offset - EIOINTC_COREISR_START) >> 3;
+		index = (addr - EIOINTC_COREISR_START) >> 3;
 		/* use attrs to get current cpu index */
 		cpu = vcpu->vcpu_id;
-		coreisr = data;
-		old_coreisr = s->coreisr.reg_u64[cpu][index];
+		old_data = s->coreisr.reg_u64[cpu][index];
 		/* write 1 to clear interrupt */
-		s->coreisr.reg_u64[cpu][index] = old_coreisr & ~coreisr;
-		coreisr &= old_coreisr;
+		s->coreisr.reg_u64[cpu][index] = old_data & ~data;
+		data &= old_data;
 		bits = sizeof(data) * 8;
-		irq = find_first_bit((void *)&coreisr, bits);
+		irq = find_first_bit((void *)&data, bits);
 		while (irq < bits) {
 			eiointc_update_irq(s, irq + index * bits, 0);
-			bitmap_clear((void *)&coreisr, irq, 1);
-			irq = find_first_bit((void *)&coreisr, bits);
+			bitmap_clear((void *)&data, irq, 1);
+			irq = find_first_bit((void *)&data, bits);
 		}
 		break;
 	case EIOINTC_COREMAP_START ... EIOINTC_COREMAP_END:
-		irq = offset - EIOINTC_COREMAP_START;
+		irq = addr - EIOINTC_COREMAP_START;
 		index = irq >> 3;
 		s->coremap.reg_u64[index] = data;
 		eiointc_update_sw_coremap(s, irq, data, sizeof(data), true);
