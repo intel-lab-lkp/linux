@@ -69,6 +69,7 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct ipv6_ac_socklist *pac = NULL;
 	struct net *net = sock_net(sk);
+	netdevice_tracker dev_tracker;
 	struct net_device *dev = NULL;
 	struct inet6_dev *idev;
 	int err = 0, ishost;
@@ -112,8 +113,8 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 			goto error;
 		} else {
 			/* router, no matching interface: just pick one */
-			dev = dev_get_by_flags_rcu(net, IFF_UP,
-						   IFF_UP | IFF_LOOPBACK);
+			dev = netdev_get_by_flags_rcu(net, &dev_tracker, IFF_UP,
+						      IFF_UP | IFF_LOOPBACK);
 		}
 		rcu_read_unlock();
 	}
@@ -159,7 +160,7 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 error_idev:
 	in6_dev_put(idev);
 error:
-	dev_put(dev);
+	netdev_put(dev, &dev_tracker);
 
 	if (pac)
 		sock_kfree_s(sk, pac, sizeof(*pac));
