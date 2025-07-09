@@ -23,24 +23,11 @@ properties:
   clock-names:
     maxItems: 8
 
-  '#clock-cells':
-    const: 1
-
-  '#reset-cells':
-    const: 1
-
-  reg:
-    maxItems: 1
-
 required:
   - compatible
-  - reg
-  - '#clock-cells'
-  - '#reset-cells'
-
-additionalProperties: false
 
 allOf:
+  - $ref: qcom,gcc.yaml#
   - if:
       properties:
         compatible:
@@ -109,6 +96,8 @@ allOf:
       required:
         - clocks
         - clock-names
+
+unevaluatedProperties: false
 
 examples:
   - |
