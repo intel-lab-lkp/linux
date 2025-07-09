@@ -7,20 +7,23 @@
 #ifndef MLX5_IB_H
 #define MLX5_IB_H
 
-#include <linux/kernel.h>
+#include <linux/mempool.h>
 #include <linux/sched.h>
-#include <rdma/ib_verbs.h>
-#include <rdma/ib_umem.h>
+#include <linux/types.h>
+
 #include <rdma/ib_smi.h>
-#include <linux/mlx5/driver.h>
+#include <rdma/ib_umem.h>
+#include <rdma/ib_user_verbs.h>
+#include <rdma/ib_verbs.h>
+#include <rdma/uverbs_ioctl.h>
+
 #include <linux/mlx5/cq.h>
+#include <linux/mlx5/driver.h>
 #include <linux/mlx5/fs.h>
 #include <linux/mlx5/qp.h>
-#include <linux/types.h>
 #include <linux/mlx5/transobj.h>
-#include <rdma/ib_user_verbs.h>
+
 #include <rdma/mlx5-abi.h>
-#include <rdma/uverbs_ioctl.h>
 #include <rdma/mlx5_user_ioctl_cmds.h>
 #include <rdma/mlx5_user_ioctl_verbs.h>
 
