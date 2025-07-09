@@ -1147,6 +1147,8 @@ drm_atomic_bridge_propagate_bus_flags(struct drm_bridge *bridge,
 	} else {
 		next_bridge_state = drm_atomic_get_new_bridge_state(state,
 								next_bridge);
+		drm_bridge_put(next_bridge);
+
 		/*
 		 * No bridge state attached to the next bridge, just leave the
 		 * flags to 0.
