@@ -1095,7 +1095,7 @@ static const struct v4l2_ctrl_config vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo = {
 	.min = 0,
 	.max = 255,
 	.step = 1,
-	.dims = { 16, 5 },
+	.dims = { 127, 5 },
 };
 
 
@@ -1230,7 +1230,7 @@ static const struct v4l2_ctrl_config vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo = {
 	.min = 0,
 	.max = 255,
 	.step = 1,
-	.dims = { 16, 5 },
+	.dims = { 127, 5 },
 };
 
 /* Streaming Controls */
@@ -1936,16 +1936,22 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 				V4L2_CID_DV_RX_HDCP_ENABLE, 0, 1, 1, 0);
 		}
 		if (dev->input_hdcp >= HDCP1_REP) {
+			struct v4l2_ctrl_config cfg = vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo;
+			bool is_hdcp1 = dev->input_hdcp == HDCP1_REP;
+			int max_dev_cnt = is_hdcp1 ? 127 : 31;
+			int max_depth = is_hdcp1 ? 7 : 4;
+
+			cfg.dims[0] = max_dev_cnt;
 			dev->ctrl_dv_rx_hdcp_rep_device_count = v4l2_ctrl_new_std(hdl_vid_cap,
-				NULL, V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT, 0, 16, 1, 0);
+				NULL, V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT, 0, max_dev_cnt, 1, 0);
 			dev->ctrl_dv_rx_hdcp_rep_depth = v4l2_ctrl_new_std(hdl_vid_cap,
-				NULL, V4L2_CID_DV_RX_HDCP_REP_DEPTH, 0, 7, 1, 0);
+				NULL, V4L2_CID_DV_RX_HDCP_REP_DEPTH, 0, max_depth, 1, 0);
 			dev->ctrl_dv_rx_hdcp_rep_max_devs_exceeded = v4l2_ctrl_new_std(hdl_vid_cap,
 				NULL, V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED, 0, 1, 1, 0);
 			dev->ctrl_dv_rx_hdcp_rep_max_cascade_exceeded = v4l2_ctrl_new_std(hdl_vid_cap,
 				NULL, V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED, 0, 1, 1, 0);
 			dev->ctrl_dv_rx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_cap,
-				&vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo, NULL);
+				&cfg, NULL);
 			dev->ctrl_dv_rx_hdcp_rep_ready = v4l2_ctrl_new_std(hdl_vid_cap,
 				NULL, V4L2_CID_DV_RX_HDCP_REP_READY, 0, 1, 1, 0);
 		}
@@ -1970,12 +1976,17 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 		dev->ctrl_tx_edid_present = v4l2_ctrl_new_std(hdl_vid_out, NULL,
 			V4L2_CID_DV_TX_EDID_PRESENT, 0, hdmi_output_mask, 0, 0);
 		if (dev->output_hdcp) {
+			struct v4l2_ctrl_config cfg = vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo;
+			bool is_hdcp1 = dev->output_hdcp == HDCP1;
+			int max_dev_cnt = is_hdcp1 ? 127 : 31;
+
+			cfg.dims[0] = max_dev_cnt;
 			dev->ctrl_dv_tx_hdcp_mode = v4l2_ctrl_new_std_menu(hdl_vid_out,
 				&vivid_vid_out_ctrl_ops,
 				V4L2_CID_DV_TX_HDCP_MODE, V4L2_DV_TX_HDCP_ENABLED, 0,
 				V4L2_DV_TX_HDCP_DISABLED);
 			dev->ctrl_dv_tx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_out,
-				&vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo, NULL);
+				&cfg, NULL);
 		}
 	}
 
