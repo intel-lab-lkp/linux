@@ -912,9 +912,15 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	 * Release the lock before (potentially) taking the spinlock such that
 	 * other contenders can get on with things ASAP.
 	 *
+	 * Preemption is disabled to minimize the time gap between releasing
+	 * the lock and acquiring the wait_lock. Callers may consider using
+	 * kfree_rcu() if the memory holding the mutex may be freed after
+	 * another mutex_unlock() call to ensure that UAF will not happen.
+	 *
 	 * Except when HANDOFF, in that case we must not clear the owner field,
 	 * but instead set it to the top waiter.
 	 */
+	guard(preempt)();
 	owner = atomic_long_read(&lock->owner);
 	for (;;) {
 		MUTEX_WARN_ON(__owner_task(owner) != current);

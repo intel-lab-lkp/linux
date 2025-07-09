@@ -117,8 +117,10 @@ the structure anymore.
 
 The mutex user must ensure that the mutex is not destroyed while a
 release operation is still in progress - in other words, callers of
-mutex_unlock() must ensure that the mutex stays alive until mutex_unlock()
-has returned.
+mutex_unlock() must ensure that the mutex stays alive until
+mutex_unlock() has returned. One possible way to do that is to use
+kfree_rcu() or its variants to delay the actual freeing the memory
+object containing the mutex.
 
 Interfaces
 ----------
