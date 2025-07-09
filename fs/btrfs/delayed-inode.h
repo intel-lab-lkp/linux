@@ -7,6 +7,7 @@
 #ifndef BTRFS_DELAYED_INODE_H
 #define BTRFS_DELAYED_INODE_H
 
+#include "linux/ref_tracker.h"
 #include <linux/types.h>
 #include <linux/rbtree.h>
 #include <linux/spinlock.h>
@@ -44,6 +45,51 @@ struct btrfs_delayed_root {
 	wait_queue_head_t wait;
 };
 
+#ifdef CONFIG_BTRFS_DELAYED_NODE_REF_TRACKER
+typedef struct ref_tracker *btrfs_delayed_node_ref_tracker;
+typedef struct ref_tracker_dir btrfs_delayed_node_ref_tracker_dir;
+#else
+typedef struct {} btrfs_delayed_node_ref_tracker;
+typedef struct {} btrfs_delayed_node_ref_tracker_dir;
+#endif
+
+static inline void btrfs_delayed_node_ref_tracker_dir_init(btrfs_delayed_node_ref_tracker_dir *dir, 
+						       unsigned int quarantine_count,
+						       const char *name)
+{
+#ifdef CONFIG_BTRFS_DELAYED_NODE_REF_TRACKER
+	ref_tracker_dir_init(dir, quarantine_count, name);
+#endif
+}
+
+static inline void btrfs_delayed_node_ref_tracker_dir_exit(btrfs_delayed_node_ref_tracker_dir *dir)
+{
+#ifdef CONFIG_BTRFS_DELAYED_NODE_REF_TRACKER
+	ref_tracker_dir_exit(dir);
+#endif
+}
+
+static inline int btrfs_delayed_node_ref_tracker_alloc(btrfs_delayed_node_ref_tracker_dir *dir,
+						    btrfs_delayed_node_ref_tracker *tracker,
+						    gfp_t gfp)
+{
+#ifdef CONFIG_BTRFS_DELAYED_NODE_REF_TRACKER
+	return ref_tracker_alloc(dir, tracker, gfp);
+#else
+	return 0;
+#endif
+}
+
+static inline int btrfs_delayed_node_ref_tracker_free(btrfs_delayed_node_ref_tracker_dir *dir,
+						   btrfs_delayed_node_ref_tracker *tracker)
+{
+#ifdef CONFIG_BTRFS_DELAYED_NODE_REF_TRACKER
+	return ref_tracker_free(dir, tracker);
+#else
+	return 0;
+#endif
+}
+
 #define BTRFS_DELAYED_NODE_IN_LIST	0
 #define BTRFS_DELAYED_NODE_INODE_DIRTY	1
 #define BTRFS_DELAYED_NODE_DEL_IREF	2
@@ -63,10 +109,18 @@ struct btrfs_delayed_node {
 	struct rb_root_cached del_root;
 	struct mutex mutex;
 	struct btrfs_inode_item inode_item;
+
 	refcount_t refs;
-	int count;
+	/* Used to track all references to this delayed node. */
+	btrfs_delayed_node_ref_tracker_dir ref_dir;
+	/* Used to track delayed node reference stored in node list. */
+	btrfs_delayed_node_ref_tracker node_list_tracker;
+	/* Used to track delayed node reference stored in inode cache. */
+	btrfs_delayed_node_ref_tracker inode_cache_tracker;
+
 	u64 index_cnt;
 	unsigned long flags;
+	int count;
 	/*
 	 * The size of the next batch of dir index items to insert (if this
 	 * node is from a directory inode). Protected by @mutex.

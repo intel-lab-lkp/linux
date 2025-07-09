@@ -73,6 +73,20 @@ config BTRFS_DEBUG
 
 	  If unsure, say N.
 
+config BTRFS_DELAYED_NODE_REF_TRACKER
+	bool "Btrfs delayed node reference tracking"
+	depends on BTRFS_DEBUG
+	select REF_TRACKER
+	help
+	  Enable run-time reference tracking for delayed nodes in btrfs filesystem.
+
+	  This option tracks stack traces when references to delayed nodes are taken
+	  and released. It will alert if there are outstanding references when a
+	  delayed node is freed. Note that enabling this option may negatively impact
+	  performance and is primarily intended for debugging purposes.
+
+	  If unsure, say N.
+
 config BTRFS_ASSERT
 	bool "Btrfs assert support"
 	depends on BTRFS_FS
