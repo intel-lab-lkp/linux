@@ -9,6 +9,7 @@ use crate::prelude::*;
 use crate::str::CStr;
 #[cfg(CONFIG_DEBUG_FS)]
 use crate::sync::Arc;
+use core::fmt;
 use core::fmt::Display;
 use core::marker::PhantomPinned;
 use core::ops::Deref;
@@ -191,6 +192,54 @@ impl Dir {
         // `open`'s only requirement beyond what is provided to all open functions is that the
         // inode's data pointer must point to a `T` that will outlive it, which is provided by
         // `create_file`'s safety requirements.
+        unsafe { self.create_file(name, data, vtable) }
+    }
+
+    /// Create a file in a DebugFS directory with the provided name, and contents from invoking `f`
+    /// on the provided reference.
+    ///
+    /// `f` must be a function item or a non-capturing closure, or this will fail to compile.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use core::sync::atomic::{AtomicU32, Ordering};
+    /// # use kernel::c_str;
+    /// # use kernel::debugfs::Dir;
+    /// let dir = Dir::new(c_str!("foo"));
+    /// static MY_ATOMIC: AtomicU32 = AtomicU32::new(3);
+    /// let file = dir.fmt_file(c_str!("bar"), &MY_ATOMIC, &|val, f| {
+    ///   let out = val.load(Ordering::Relaxed);
+    ///   writeln!(f, "{out:#010x}")
+    /// });
+    /// MY_ATOMIC.store(10, Ordering::Relaxed);
+    /// ```
+    pub fn fmt_file<
+        'b,
+        T: Send + Sync,
+        E,
+        TI: PinInit<T, E>,
+        F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
+    >(
+        &self,
+        name: &'b CStr,
+        data: TI,
+        _f: &'static F,
+    ) -> impl PinInit<File<T>, E> + use<'_, 'b, T, TI, E, F> {
+        #[cfg(CONFIG_DEBUG_FS)]
+        let vtable = &<display_file::FormatAdapter<T, F> as display_file::DisplayFile>::VTABLE;
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        let vtable = ();
+
+        // SAFETY: `vtable` is all stock `seq_file` implementations except for `open`.
+        // `open`'s only requirement beyond what is provided to all open functions is that the
+        // inode's data pointer must point to a `FormatAdapter<T, F>` that will outlive it.
+        // `create_file`'s safety requirements provide the lifetime aspect of this, but we are
+        // using a private `T` pointer. This is legal because:
+        // 1. `FormatAdapter<T, F>` is a `#[repr(transparent)]` wrapper around `T`, so the
+        //    implicit transmute is legal.
+        // 2. The invariant in `FormatAdapter` that `F` is inhabited is upheld because we have
+        //    `_f`, so constructing a `FormatAdapter<T, F> is legal.
         unsafe { self.create_file(name, data, vtable) }
     }
 
