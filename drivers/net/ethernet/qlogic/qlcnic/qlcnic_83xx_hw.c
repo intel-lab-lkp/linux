@@ -1181,10 +1181,7 @@ int qlcnic_83xx_create_rx_ctx(struct qlcnic_adapter *adapter)
 	struct qlcnic_hardware_context *ahw = adapter->ahw;
 	num_rds = adapter->max_rds_rings;
 
-	if (adapter->drv_sds_rings <= QLCNIC_MAX_SDS_RINGS)
-		num_sds = adapter->drv_sds_rings;
-	else
-		num_sds = QLCNIC_MAX_SDS_RINGS;
+	num_sds = min(adapter->drv_sds_rings, QLCNIC_MAX_SDS_RINGS);
 
 	sds_mbx_size = sizeof(struct qlcnic_sds_mbx);
 	rds_mbx_size = sizeof(struct qlcnic_rds_mbx);
