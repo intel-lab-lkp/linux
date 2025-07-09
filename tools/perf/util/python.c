@@ -1568,6 +1568,32 @@ static PyObject *pyrf_evsel__from_evsel(struct evsel *evsel)
 	return (PyObject *)pevsel;
 }
 
+static int evlist__leader_pos(struct evlist *evlist, struct evsel *leader)
+{
+	struct evsel *pos;
+	int idx = 0;
+
+	evlist__for_each_entry(evlist, pos) {
+		if (leader == evsel__leader(pos))
+			return idx;
+		idx++;
+	}
+	return -1;
+}
+
+static struct evsel *evlist__at(struct evlist *evlist, int idx)
+{
+	struct evsel *pos;
+	int idx2 = 0;
+
+	evlist__for_each_entry(evlist, pos) {
+		if (idx == idx2)
+			return pos;
+		idx++;
+	}
+	return NULL;
+}
+
 static PyObject *pyrf_evlist__from_evlist(struct evlist *evlist)
 {
 	struct pyrf_evlist *pevlist = PyObject_New(struct pyrf_evlist, &pyrf_evlist__type);
@@ -1582,6 +1608,13 @@ static PyObject *pyrf_evlist__from_evlist(struct evlist *evlist)
 		struct pyrf_evsel *pevsel = (void *)pyrf_evsel__from_evsel(pos);
 
 		evlist__add(&pevlist->evlist, &pevsel->evsel);
+	}
+	evlist__for_each_entry(&pevlist->evlist, pos) {
+		struct evsel *leader = evsel__leader(pos);
+		int idx = evlist__leader_pos(evlist, leader);
+
+		if (idx >= 0)
+			evsel__set_leader(pos, evlist__at(&pevlist->evlist, idx));
 	}
 	metricgroup__copy_metric_events(&pevlist->evlist, /*cgrp=*/NULL,
 					&pevlist->evlist.metric_events,
