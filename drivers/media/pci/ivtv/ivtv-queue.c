@@ -221,6 +221,16 @@ int ivtv_stream_alloc(struct ivtv_stream *s)
 		s->sg_handle = dma_map_single(&itv->pdev->dev, s->sg_dma,
 					      sizeof(struct ivtv_sg_element),
 					      DMA_TO_DEVICE);
+		if (dma_mapping_error(&itv->pdev->dev, s->sg_handle)) {
+			IVTV_ERR("Could not dma map sg_dma for %s stream\n", s->name);
+			kfree(s->sg_pending);
+			s->sg_pending = NULL;
+			kfree(s->sg_processing);
+			s->sg_processing = NULL;
+			kfree(s->sg_dma);
+			s->sg_dma = NULL;
+			return -ENOMEM;
+		}
 		ivtv_stream_sync_for_cpu(s);
 	}
 
@@ -240,6 +250,12 @@ int ivtv_stream_alloc(struct ivtv_stream *s)
 		if (ivtv_might_use_dma(s)) {
 			buf->dma_handle = dma_map_single(&s->itv->pdev->dev,
 				buf->buf, s->buf_size + 256, s->dma);
+			if (dma_mapping_error(&s->itv->pdev->dev,
+					      buf->dma_handle)) {
+				kfree(buf->buf);
+				kfree(buf);
+				break;
+			}
 			ivtv_buf_sync_for_cpu(s, buf);
 		}
 		ivtv_enqueue(s, buf, &s->q_free);
