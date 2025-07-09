@@ -468,7 +468,7 @@ static int mhi_ep_read_channel(struct mhi_ep_cntrl *mhi_cntrl,
 
 			mhi_chan->rd_offset = (mhi_chan->rd_offset + 1) % ring->ring_size;
 		}
-	} while (buf_left && !tr_done);
+	} while (buf_left && !tr_done && mhi_chan->rd_offset != ring->wr_offset);
 
 	return 0;
 
