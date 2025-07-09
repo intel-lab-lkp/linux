@@ -5,18 +5,18 @@
  * Author: Jacob Shin <jacob.shin@amd.com>
  */
 
-#include <linux/perf_event.h>
-#include <linux/percpu.h>
-#include <linux/types.h>
-#include <linux/slab.h>
-#include <linux/init.h>
 #include <linux/cpu.h>
-#include <linux/cpumask.h>
 #include <linux/cpufeature.h>
+#include <linux/cpumask.h>
+#include <linux/init.h>
+#include <linux/percpu.h>
+#include <linux/perf_event.h>
+#include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/types.h>
 
-#include <asm/perf_event.h>
 #include <asm/msr.h>
+#include <asm/perf_event.h>
 
 #define NUM_COUNTERS_NB		4
 #define NUM_COUNTERS_L2		4

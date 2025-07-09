@@ -8,16 +8,17 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/kexec.h>
+
 #include <asm/coco.h>
-#include <asm/tdx.h>
-#include <asm/vmx.h>
 #include <asm/ia32.h>
 #include <asm/insn.h>
 #include <asm/insn-eval.h>
 #include <asm/paravirt_types.h>
 #include <asm/pgtable.h>
 #include <asm/set_memory.h>
+#include <asm/tdx.h>
 #include <asm/traps.h>
+#include <asm/vmx.h>
 
 /* MMIO direction */
 #define EPT_READ	0
