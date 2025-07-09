@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2020 Samsung Electronics Co., Ltd.
+ *        http://www.samsung.com/
+ *
+ * EXYNOS - Audio Device Tree source
+ */
+
+/ {
+	abox_generic: abox_generic@generic {
+		compatible = "samsung,abox_generic";
+		samsung,num-of-pcm_playback = <32>;
+		samsung,num-of-pcm_capture = <32>;
+		samsung,num-of-i2s-dummy-backend = <5>;
+		status = "disabled";
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges;
+	};
+};
