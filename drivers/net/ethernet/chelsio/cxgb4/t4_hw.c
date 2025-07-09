@@ -10192,10 +10192,7 @@ int t4_load_cfg(struct adapter *adap, const u8 *cfg_data, unsigned int size)
 
 	/* this will write to the flash up to SF_PAGE_SIZE at a time */
 	for (i = 0; i < size; i += SF_PAGE_SIZE) {
-		if ((size - i) <  SF_PAGE_SIZE)
-			n = size - i;
-		else
-			n = SF_PAGE_SIZE;
+		n = min(size - i, SF_PAGE_SIZE);
 		ret = t4_write_flash(adap, addr, n, cfg_data, true);
 		if (ret)
 			goto out;
