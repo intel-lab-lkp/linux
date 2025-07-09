@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/snps,mipi-dphy-rx.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synopsys Designware MIPI D-PHY RX
+
+maintainers:
+  - Karthik Poduval <kpoduval@lab126.com>
+  - Jason Xiong <jyxiong@amazon.com>
+  - Miguel Lopes <miguel.lopes@synopsys.com
+
+description: |
+  These are the bindings for Synopsys Designware MIPI DPHY RX phy driver.
+  Currently only supported phy version is v1.2.
+
+properties:
+  compatible:
+    const: snps,dw-dphy-1p2
+
+  '#phy-cells':
+    const: 0
+
+  reg:
+    - minItems: 2
+    - maxItems: 2
+
+required:
+  - compatible
+  - '#phy-cells'
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    dw_dphy_rx: dw-dphy@900000040 {
+        compatible = "snps,dw-dphy-1p2";
+        #phy-cells = <0>;
+        reg = <0x0 0x90000040 0x0 0x20>, <0x0 0x90001000 0x0 0x8>;
+        status = "disabled";
+    };
+
