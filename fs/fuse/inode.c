@@ -909,6 +909,8 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 			seq_puts(m, ",default_permissions");
 		if (fc->allow_other)
 			seq_puts(m, ",allow_other");
+		if (fc->io_uring)
+			seq_puts(m, ",io_uring");
 		if (fc->max_read != ~0)
 			seq_printf(m, ",max_read=%u", fc->max_read);
 		if (sb->s_bdev && sb->s_blocksize != FUSE_DEFAULT_BLKSIZE)
