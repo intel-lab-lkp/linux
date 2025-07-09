@@ -400,6 +400,7 @@ static struct btrfs_fs_devices *alloc_fs_devices(const u8 *fsid)
 static void btrfs_free_device(struct btrfs_device *device)
 {
 	WARN_ON(!list_empty(&device->post_commit_list));
+	WARN_ON(atomic_read(&device->sb_write_running) != 0);
 	/*
 	 * No need to call kfree_rcu() nor do RCU lock/unlock, nothing is
 	 * reading the device name.
@@ -6895,6 +6896,8 @@ struct btrfs_device *btrfs_alloc_device(struct btrfs_fs_info *fs_info,
 	INIT_LIST_HEAD(&dev->post_commit_list);
 
 	atomic_set(&dev->dev_stats_ccnt, 0);
+	atomic_set(&dev->sb_write_running, 0);
+	init_waitqueue_head(&dev->sb_write_wait);
 	btrfs_device_data_ordered_init(dev);
 	btrfs_extent_io_tree_init(fs_info, &dev->alloc_state, IO_TREE_DEVICE_ALLOC_STATE);
 

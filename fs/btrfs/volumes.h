@@ -20,6 +20,7 @@
 #include <linux/rbtree.h>
 #include <uapi/linux/btrfs.h>
 #include <uapi/linux/btrfs_tree.h>
+#include "disk-io.h"
 #include "messages.h"
 #include "extent-io-tree.h"
 
@@ -181,6 +182,10 @@ struct btrfs_device {
 	/* Bio used for flushing device barriers */
 	struct bio flush_bio;
 	struct completion flush_wait;
+
+	/* How many super block write bios are running. */
+	atomic_t sb_write_running;
+	wait_queue_head_t sb_write_wait;
 
 	/* per-device scrub information */
 	struct scrub_ctx *scrub_ctx;
