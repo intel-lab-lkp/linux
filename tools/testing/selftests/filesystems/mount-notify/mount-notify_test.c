@@ -15,13 +15,6 @@
 #include "../statmount/statmount.h"
 #include "../utils.h"
 
-// Needed for linux/fanotify.h
-#ifndef __kernel_fsid_t
-typedef struct {
-	int	val[2];
-} __kernel_fsid_t;
-#endif
-
 #include <sys/fanotify.h>
 
 static const char root_mntpoint_templ[] = "/tmp/mount-notify_test_root.XXXXXX";
