@@ -15,20 +15,20 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/cpufreq.h>
+#include <linux/dmi.h>
+#include <linux/init.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/init.h>
-#include <linux/cpufreq.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/dmi.h>
 #include <linux/timex.h>
-#include <linux/io.h>
 
-#include <asm/timer.h>		/* Needed for recalibrate_cpu_khz() */
-#include <asm/msr.h>
 #include <asm/cpu_device_id.h>
+#include <asm/msr.h>
+#include <asm/timer.h>		/* Needed for recalibrate_cpu_khz() */
 
 #ifdef CONFIG_X86_POWERNOW_K7_ACPI
 #include <linux/acpi.h>
@@ -691,4 +691,3 @@ MODULE_LICENSE("GPL");
 
 late_initcall(powernow_init);
 module_exit(powernow_exit);
-
