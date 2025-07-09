@@ -8,6 +8,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/cpu.h>
+#include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/irqchip.h>
 #include <linux/irqchip/chained_irq.h>
@@ -169,6 +170,16 @@ static void aplic_idc_set_delivery(struct aplic_idc *idc, bool en)
 
 	/* Delivery must be set to 1 for interrupt triggering */
 	writel(de, idc->regs + APLIC_IDC_IDELIVERY);
+}
+
+void aplic_direct_restore(struct aplic_priv *priv)
+{
+	struct aplic_direct *direct =
+			container_of(priv, struct aplic_direct, priv);
+	int cpu;
+
+	for_each_cpu(cpu, &direct->lmask)
+		aplic_idc_set_delivery(per_cpu_ptr(&aplic_idcs, cpu), true);
 }
 
 static int aplic_direct_dying_cpu(unsigned int cpu)
@@ -343,5 +354,6 @@ int aplic_direct_setup(struct device *dev, void __iomem *regs)
 	dev_info(dev, "%d interrupts directly connected to %d CPUs\n",
 		 priv->nr_irqs, priv->nr_idcs);
 
-	return 0;
+	/* Add the aplic_priv to the list */
+	return aplic_add(dev, priv);
 }
