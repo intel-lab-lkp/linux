@@ -1805,6 +1805,86 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 
 #define CXL_ITER_LEVEL_SWITCH	1
 
+static int get_hostbridge_port_devices(struct cxl_memdev *cxlmd,
+				       struct device **hb_uport_dev,
+				       struct device **hb_dport_dev)
+{
+	struct device *dev = &cxlmd->dev;
+	struct device *iter;
+
+	for (iter = dev; iter; iter = grandparent(iter)) {
+		struct device *dport_dev = grandparent(iter);
+		struct device *uport_dev = dport_dev->parent;
+
+		if (is_cxl_hierarchy_head(uport_dev->parent)) {
+			*hb_uport_dev = uport_dev;
+			*hb_dport_dev = dport_dev;
+			return 0;
+		}
+	}
+
+	return -ENODEV;
+}
+
+static int cxl_hostbridge_port_setup(struct cxl_memdev *cxlmd)
+{
+	struct device *hb_uport_dev, *hb_dport_dev;
+	struct cxl_dport *dport = NULL;
+	int rc;
+
+	rc = get_hostbridge_port_devices(cxlmd, &hb_uport_dev, &hb_dport_dev);
+	if (rc)
+		return -ENODEV;
+
+	struct cxl_root *cxl_root __free(put_cxl_root) =
+		cxl_hb_uport_dev_to_root(hb_uport_dev);
+	if (!cxl_root)
+		return -ENODEV;
+
+	guard(device)(&cxl_root->port.dev);
+	struct cxl_port *port __free(put_cxl_port) =
+		find_cxl_port(hb_dport_dev, &dport);
+	if (!port)
+		port = find_cxl_port_by_uport(hb_uport_dev);
+
+	/* Port already established, add the associated dport if needed. */
+	if (port) {
+		if (dport)
+			return 0;
+
+		guard(device)(&port->dev);
+		dport = devm_cxl_port_add_dport(port, hb_dport_dev);
+		if (IS_ERR(dport) && PTR_ERR(dport) != -EEXIST) {
+			dev_dbg(&cxlmd->dev,
+				"failed to add dport %s to port %s: %ld\n",
+				dev_name(hb_dport_dev), dev_name(&port->dev),
+				PTR_ERR(dport));
+			return PTR_ERR(dport);
+		}
+		return 0;
+	}
+
+	/* No port found, setup a port via the root port ops */
+	if (!cxl_root->ops || !cxl_root->ops->setup_hostbridge_uport)
+		return -EOPNOTSUPP;
+
+	rc = cxl_root->ops->setup_hostbridge_uport(cxl_root, hb_uport_dev);
+	if (rc)
+		return rc;
+
+	/* Add the dport that goes with the newly created port */
+	dport = devm_cxl_add_dport_by_uport(hb_uport_dev, hb_dport_dev);
+	if (IS_ERR(dport) && PTR_ERR(dport) != -EEXIST) {
+		dev_dbg(&cxlmd->dev,
+			"failed to add dport %s to port %s: %ld\n",
+			dev_name(hb_dport_dev), dev_name(&cxl_root->port.dev),
+			PTR_ERR(dport));
+		return PTR_ERR(dport);
+	}
+
+	return 0;
+}
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
@@ -1818,6 +1898,10 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 */
 	if (cxlmd->cxlds->rcd)
 		return 0;
+
+	rc = cxl_hostbridge_port_setup(cxlmd);
+	if (rc)
+		return rc;
 
 	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
 	if (rc)
