@@ -700,12 +700,8 @@ static int inv_icm42600_enable_regulator_vddio(struct inv_icm42600_state *st)
 static void inv_icm42600_disable_vddio_reg(void *_data)
 {
 	struct inv_icm42600_state *st = _data;
-	const struct device *dev = regmap_get_device(st->map);
-	int ret;
 
-	ret = regulator_disable(st->vddio_supply);
-	if (ret)
-		dev_err(dev, "failed to disable vddio error %d\n", ret);
+	regulator_disable(st->vddio_supply);
 }
 
 static void inv_icm42600_disable_pm(void *_data)
