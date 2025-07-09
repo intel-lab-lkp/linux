@@ -658,7 +658,6 @@ void iommufd_vdevice_abort(struct iommufd_object *obj);
 struct iommufd_vdevice {
 	struct iommufd_object obj;
 	struct iommufd_viommu *viommu;
-	struct device *dev;
 	u64 id; /* per-vIOMMU virtual ID */
 	struct iommufd_device *idev;
 };
