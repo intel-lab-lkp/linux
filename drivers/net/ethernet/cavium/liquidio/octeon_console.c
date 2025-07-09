@@ -873,10 +873,7 @@ int octeon_download_firmware(struct octeon_device *oct, const u8 *data,
 		rem = image_len;
 
 		while (rem) {
-			if (rem < FBUF_SIZE)
-				size = rem;
-			else
-				size = FBUF_SIZE;
+			size = min(rem, FBUF_SIZE);
 
 			/* download the image */
 			octeon_pci_write_core_mem(oct, load_addr, data, (u32)size);
