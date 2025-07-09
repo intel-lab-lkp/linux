@@ -4949,10 +4949,7 @@ static void rtl_ram_code_speed_up(struct r8152 *tp, struct fw_phy_speed_up *phy,
 		u32 ocp_data, size;
 		int i;
 
-		if (len < 2048)
-			size = len;
-		else
-			size = 2048;
+		size = min(len, 2048);
 
 		ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_GPHY_CTRL);
 		ocp_data |= GPHY_PATCH_DONE | BACKUP_RESTRORE;
