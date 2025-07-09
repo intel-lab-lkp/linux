@@ -239,10 +239,7 @@ ath9k_postprocess_radar_event(struct ath_softc *sc,
 		 * Radiated testing, when pulse is on DC, different pri and
 		 * ext durations are reported, so take the larger of the two
 		 */
-		if (ard->pulse_length_ext >= ard->pulse_length_pri)
-			dur = ard->pulse_length_ext;
-		else
-			dur = ard->pulse_length_pri;
+		dur = max(ard->pulse_length_ext, ard->pulse_length_pri);
 		DFS_STAT_INC(sc, dc_phy_errors);
 
 		/* when both are present use stronger one */
