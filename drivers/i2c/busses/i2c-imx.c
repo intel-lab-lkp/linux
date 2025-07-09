@@ -1676,6 +1676,8 @@ static int i2c_imx_init_recovery_info(struct imx_i2c_struct *i2c_imx,
 	if (IS_ERR(bri->pinctrl))
 		return PTR_ERR(bri->pinctrl);
 
+	bri->recover_bus = i2c_generic_scl_recovery;
+
 	i2c_imx->adapter.bus_recovery_info = bri;
 
 	return 0;
