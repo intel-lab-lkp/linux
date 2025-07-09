@@ -418,18 +418,22 @@ struct cxl_switch_decoder {
 };
 
 struct cxl_root_decoder;
-typedef u64 (*cxl_hpa_to_spa_fn)(struct cxl_root_decoder *cxlrd, u64 hpa);
 
+/**
+ * struct cxl_rd_ops - CXL root decoder callback operations
+ * @get_extended_linear_cache_size: Get the extended linear cache size
+ * @hpa_to_spa: Convert host physical address to system physical address
+ */
 struct cxl_rd_ops {
 	int (*get_extended_linear_cache_size)(struct resource *backing_res,
 					      int nid, resource_size_t *size);
+	u64 (*hpa_to_spa)(struct cxl_root_decoder *cxlrd, u64 hpa);
 };
 
 /**
  * struct cxl_root_decoder - Static platform CXL address decoder
  * @res: host / parent resource for region allocations
  * @region_id: region id for next region provisioning event
- * @hpa_to_spa: translate CXL host-physical-address to Platform system-physical-address
  * @platform_data: platform specific configuration data
  * @range_lock: sync region autodiscovery by address range
  * @qos_class: QoS performance class cookie
@@ -439,11 +443,10 @@ struct cxl_rd_ops {
 struct cxl_root_decoder {
 	struct resource *res;
 	atomic_t region_id;
-	cxl_hpa_to_spa_fn hpa_to_spa;
 	void *platform_data;
 	struct mutex range_lock;
 	int qos_class;
-	const struct cxl_rd_ops *ops;
+	struct cxl_rd_ops *ops;
 	struct cxl_switch_decoder cxlsd;
 };
 
@@ -783,7 +786,7 @@ bool is_switch_decoder(struct device *dev);
 bool is_endpoint_decoder(struct device *dev);
 struct cxl_root_decoder *cxl_root_decoder_alloc(struct cxl_port *port,
 						unsigned int nr_targets,
-						const struct cxl_rd_ops *ops);
+						struct cxl_rd_ops *ops);
 struct cxl_switch_decoder *cxl_switch_decoder_alloc(struct cxl_port *port,
 						    unsigned int nr_targets);
 int cxl_decoder_add(struct cxl_decoder *cxld, int *target_map);

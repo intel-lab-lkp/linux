@@ -20,6 +20,10 @@ static const guid_t acpi_cxl_qtg_id_guid =
 	GUID_INIT(0xF365F9A6, 0xA7DE, 0x4071,
 		  0xA6, 0x6A, 0xB4, 0x0C, 0x0B, 0x4F, 0x8E, 0x52);
 
+static u64 cxl_default_hpa_to_spa(struct cxl_root_decoder *cxlrd, u64 hpa)
+{
+	return hpa;
+}
 
 static u64 cxl_xor_hpa_to_spa(struct cxl_root_decoder *cxlrd, u64 hpa)
 {
@@ -342,8 +346,9 @@ static int cxl_acpi_get_extended_linear_cache_size(struct resource *backing_res,
 	return hmat_get_extended_linear_cache_size(backing_res, nid, size);
 }
 
-static const struct cxl_rd_ops acpi_rd_ops = {
+static struct cxl_rd_ops acpi_rd_ops = {
 	.get_extended_linear_cache_size = cxl_acpi_get_extended_linear_cache_size,
+	.hpa_to_spa = cxl_default_hpa_to_spa,
 };
 
 DEFINE_FREE(put_cxlrd, struct cxl_root_decoder *,
@@ -425,7 +430,7 @@ static int __cxl_parse_cfmws(struct acpi_cedt_cfmws *cfmws,
 	cxlrd->qos_class = cfmws->qtg_id;
 
 	if (cfmws->interleave_arithmetic == ACPI_CEDT_CFMWS_ARITHMETIC_XOR)
-		cxlrd->hpa_to_spa = cxl_xor_hpa_to_spa;
+		cxlrd->ops->hpa_to_spa = cxl_xor_hpa_to_spa;
 
 	rc = cxl_decoder_add(cxld, target_map);
 	if (rc)
