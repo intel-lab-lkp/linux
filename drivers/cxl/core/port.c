@@ -1551,6 +1551,116 @@ static resource_size_t find_component_registers(struct device *dev)
 	return map.resource;
 }
 
+static int match_port_by_uport(struct device *dev, const void *data)
+{
+	const struct device *uport_dev = data;
+	struct cxl_port *port;
+
+	if (!is_cxl_port(dev))
+		return 0;
+
+	port = to_cxl_port(dev);
+	return uport_dev == port->uport_dev;
+}
+
+/*
+ * Function takes a device reference on the port device. Caller should do a
+ * put_device() when done.
+ */
+static struct cxl_port *find_cxl_port_by_uport(struct device *uport_dev)
+{
+	struct device *dev;
+
+	dev = bus_find_device(&cxl_bus_type, NULL, uport_dev, match_port_by_uport);
+	if (dev)
+		return to_cxl_port(dev);
+	return NULL;
+}
+
+static int update_switch_decoder(struct device *dev, void *data)
+{
+	struct cxl_dport *dport = data;
+	struct cxl_switch_decoder *cxlsd;
+	struct cxl_decoder *cxld;
+	int i;
+
+	if (!is_switch_decoder(dev))
+		return 0;
+
+	cxlsd = to_cxl_switch_decoder(dev);
+	cxld = &cxlsd->cxld;
+	guard(rwsem_write)(&cxl_region_rwsem);
+	for (i = 0; i < cxld->interleave_ways; i++) {
+		if (cxlsd->target_map[i] == dport->port_id) {
+			cxlsd->target[i] = dport;
+			return 0;
+		}
+	}
+
+	dev_dbg(dev, "Updating decoder target_map with %s and none found\n",
+		dev_name(dport->dport_dev));
+
+	return 0;
+}
+
+static int update_decoders_with_dport(struct cxl_port *port, struct cxl_dport *dport)
+{
+	device_lock_assert(&port->dev);
+	return device_for_each_child(&port->dev, dport, update_switch_decoder);
+}
+
+static int cxl_port_setup_with_dport(struct cxl_port *port,
+				     struct cxl_dport *dport)
+{
+	device_lock_assert(&port->dev);
+
+	cxl_switch_parse_cdat(port);
+
+	return update_decoders_with_dport(port, dport);
+}
+
+static struct cxl_dport *devm_cxl_port_add_dport(struct cxl_port *port,
+						 struct device *dport_dev)
+{
+	struct cxl_dport *dport;
+	int rc;
+
+	device_lock_assert(&port->dev);
+
+	/* Port driver not attached yet, wait for cxl_acpi reprobe */
+	if (!port->dev.driver)
+		return ERR_PTR(-ENODEV);
+
+	dport = cxl_find_dport_by_dev(port, dport_dev);
+	if (dport)
+		return ERR_PTR(-EEXIST);
+
+	dport = devm_cxl_add_dport_by_dev(port, dport_dev);
+	if (IS_ERR(dport))
+		return dport;
+
+	rc = cxl_port_setup_with_dport(port, dport);
+	if (rc) {
+		reap_dport(port, dport);
+		return ERR_PTR(rc);
+	}
+
+	return dport;
+}
+
+static struct cxl_dport *devm_cxl_add_dport_by_uport(struct device *uport_dev,
+						     struct device *dport_dev)
+{
+	struct cxl_port *port __free(put_cxl_port) =
+		find_cxl_port_by_uport(uport_dev);
+
+	if (!port)
+		return ERR_PTR(-ENODEV);
+
+	guard(device)(&port->dev);
+	return devm_cxl_port_add_dport(port, dport_dev);
+}
+
 static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 			      struct device *uport_dev,
 			      struct device *dport_dev)
@@ -1584,6 +1694,8 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 	 */
 	struct cxl_port *port __free(put_cxl_port) = NULL;
 	scoped_guard(device, &parent_port->dev) {
+		struct cxl_dport *new_dport;
+
 		if (!parent_port->dev.driver) {
 			dev_warn(&cxlmd->dev,
 				 "port %s:%s disabled, failed to enumerate CXL.mem\n",
@@ -1592,6 +1704,8 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		}
 
 		port = find_cxl_port_at(parent_port, dport_dev, &dport);
+		if (!port)
+			port = find_cxl_port_by_uport(uport_dev);
 		if (!port) {
 			component_reg_phys = find_component_registers(uport_dev);
 			port = devm_cxl_add_port(&parent_port->dev, uport_dev,
@@ -1599,11 +1713,27 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 			if (IS_ERR(port))
 				return PTR_ERR(port);
 
-			/* retry find to pick up the new dport information */
-			port = find_cxl_port_at(parent_port, dport_dev, &dport);
-			if (!port)
-				return -ENXIO;
+			/*
+			 * The port holds a device reference via find_cxl_port_at()
+			 * if the port is valid. But if the port is newly created
+			 * via devm_cxl_add_port(), no reference is held. Therefore
+			 * the driver needs to get a device reference here.
+			 */
+			get_device(&port->dev);
 		}
+
+		guard(device)(&port->dev);
+		new_dport = devm_cxl_port_add_dport(port, dport_dev);
+		if (IS_ERR(new_dport)) {
+			if (PTR_ERR(new_dport) != -EEXIST)
+				return PTR_ERR(new_dport);
+
+			new_dport = cxl_find_dport_by_dev(port, dport_dev);
+			if (!new_dport)
+				return -ENODEV;
+		}
+
+		dport = new_dport;
 	}
 
 	dev_dbg(&cxlmd->dev, "add to new port %s:%s\n",
@@ -1620,11 +1750,14 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 	return rc;
 }
 
+#define CXL_ITER_LEVEL_SWITCH	1
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
+	struct device *dgparent;
 	struct device *iter;
-	int rc;
+	int rc, i;
 
 	/*
 	 * Skip intermediate port enumeration in the RCH case, there
@@ -1643,7 +1776,7 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 * attempt fails.
 	 */
 retry:
-	for (iter = dev; iter; iter = grandparent(iter)) {
+	for (i = 0, iter = dev; iter; i++, iter = grandparent(iter)) {
 		struct device *dport_dev = grandparent(iter);
 		struct device *uport_dev;
 		struct cxl_dport *dport;
@@ -1686,16 +1819,41 @@ retry:
 			if (!dev_is_cxl_root_child(&port->dev))
 				continue;
 
+			/*
+			 * This is a corner case where the rootport is setup but
+			 * the switch dport is not. It needs to go back to the
+			 * beginning to setup the switch port.
+			 */
+			if (i >= CXL_ITER_LEVEL_SWITCH) {
+				struct cxl_port *pport __free(put_cxl_port) =
+					cxl_mem_find_port(cxlmd, &dport);
+				if (!pport)
+					goto retry;
+			}
+
 			return 0;
 		}
 
-		rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
-		/* port missing, try to add parent */
-		if (rc == -EAGAIN)
-			continue;
-		/* failed to add ep or port */
-		if (rc)
-			return rc;
+		dgparent = grandparent(dport_dev);
+		/* Only go down this path if we are at the root port */
+		if (is_cxl_hierarchy_head(dgparent)) {
+			dport = devm_cxl_add_dport_by_uport(uport_dev,
+							    dport_dev);
+			/* Added a dport, restart enumeration */
+			if (!IS_ERR(dport) || PTR_ERR(dport) == -EEXIST)
+				goto retry;
+			if (IS_ERR(dport))
+				return PTR_ERR(dport);
+		} else {
+			rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
+			/* port missing, try to add parent */
+			if (rc == -EAGAIN)
+				continue;
+			/* failed to add ep or port */
+			if (rc)
+				return rc;
+		}
+
 		/* port added, new descendants possible, start over */
 		goto retry;
 	}
@@ -1727,16 +1885,19 @@ static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 		return 0;
 
 	device_lock_assert(&port->dev);
+	memcpy(cxlsd->target_map, target_map, sizeof(cxlsd->target_map));
 
 	if (xa_empty(&port->dports))
-		return -EINVAL;
+		return 0;
 
 	guard(rwsem_write)(&cxl_region_rwsem);
 	for (i = 0; i < cxlsd->cxld.interleave_ways; i++) {
 		struct cxl_dport *dport = find_dport(port, target_map[i]);
 
-		if (!dport)
-			return -ENXIO;
+		if (!dport) {
+			/* dport may be activated later */
+			continue;
+		}
 		cxlsd->target[i] = dport;
 	}
 
