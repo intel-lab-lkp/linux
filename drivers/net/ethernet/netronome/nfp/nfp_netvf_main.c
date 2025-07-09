@@ -205,15 +205,10 @@ static int nfp_netvf_pci_probe(struct pci_dev *pdev,
 		resource_size_t map_addr;
 
 		/* Make a single overlapping BAR mapping */
-		if (tx_bar_off < rx_bar_off)
-			bar_off = tx_bar_off;
-		else
-			bar_off = rx_bar_off;
+		bar_off = min(tx_bar_off, rx_bar_off);
 
-		if ((tx_bar_off + tx_bar_sz) > (rx_bar_off + rx_bar_sz))
-			bar_sz = (tx_bar_off + tx_bar_sz) - bar_off;
-		else
-			bar_sz = (rx_bar_off + rx_bar_sz) - bar_off;
+		bar_sz = max(tx_bar_off + tx_bar_sz,
+			     rx_bar_off + rx_bar_sz) - bar_off;
 
 		map_addr = pci_resource_start(pdev, tx_bar_no) + bar_off;
 		vf->q_bar = ioremap(map_addr, bar_sz);
