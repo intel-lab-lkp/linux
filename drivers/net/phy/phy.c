@@ -39,8 +39,6 @@
 #include "phylib-internal.h"
 #include "phy-caps.h"
 
-#define PHY_STATE_TIME	HZ
-
 #define PHY_STATE_STR(_state)			\
 	case PHY_##_state:			\
 		return __stringify(_state);	\
@@ -1575,16 +1573,22 @@ static enum phy_state_work _phy_state_machine(struct phy_device *phydev)
 	phy_process_state_change(phydev, old_state);
 
 	/* Only re-schedule a PHY state machine change if we are polling the
-	 * PHY, if PHY_MAC_INTERRUPT is set, then we will be moving
-	 * between states from phy_mac_interrupt().
+	 * PHY. If PHY_MAC_INTERRUPT is set or get_next_update_time() returns
+	 * PHY_STATE_IRQ, then we rely on interrupts for state changes.
 	 *
 	 * In state PHY_HALTED the PHY gets suspended, so rescheduling the
 	 * state machine would be pointless and possibly error prone when
 	 * called from phy_disconnect() synchronously.
 	 */
-	if (phy_polling_mode(phydev) && phy_is_started(phydev))
-		phy_queue_state_machine(phydev,
-					phy_get_next_update_time(phydev));
+	if (phy_polling_mode(phydev) && phy_is_started(phydev)) {
+		unsigned int next_time = phy_get_next_update_time(phydev);
+
+		/* Drivers returning PHY_STATE_IRQ opt out of polling.
+		 * Use IRQ-only mode by not re-queuing the state machine.
+		 */
+		if (next_time != PHY_STATE_IRQ)
+			phy_queue_state_machine(phydev, next_time);
+	}
 
 	return state_work;
 }

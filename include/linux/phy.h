@@ -66,6 +66,10 @@ extern const int phy_basic_ports_array[3];
 #define PHY_ALWAYS_CALL_SUSPEND	0x00000008
 #define MDIO_DEVICE_IS_PHY	0x80000000
 
+#define PHY_STATE_TIME		HZ
+/* disable polling, rely on IRQs */
+#define PHY_STATE_IRQ		UINT_MAX
+
 /**
  * enum phy_interface_t - Interface Mode definitions
  *
@@ -1237,7 +1241,11 @@ struct phy_driver {
 	 * dynamically adjust polling intervals based on link state or other
 	 * conditions.
 	 *
-	 * Returns the time in jiffies until the next update event.
+	 * Returning PHY_STATE_IRQ disables polling and indicates that the
+	 * driver relies solely on IRQs for link state changes.
+	 *
+	 * Returns the time in jiffies until the next update event, or
+	 * PHY_STATE_IRQ to disable polling.
 	 */
 	unsigned int (*get_next_update_time)(struct phy_device *dev);
 };
