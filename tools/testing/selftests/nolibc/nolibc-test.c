@@ -1270,6 +1270,72 @@ out:
 	return ret;
 }
 
+sig_atomic_t signal_check;
+
+static void sighandler(int signum)
+{
+	if (signum == SIGUSR1) {
+		kill(getpid(), SIGUSR2);
+		signal_check = 1;
+	} else {
+		signal_check++;
+	}
+}
+
+int test_signals(int test_idx)
+{
+	struct sigaction sa = {
+		.sa_flags = 0,
+		.sa_handler = sighandler,
+	};
+	struct sigaction sa_old = {
+		/* Anything other than SIG_DFL */
+		.sa_handler = sighandler,
+	};
+	int llen; /* line length */
+	int ret = 0;
+	int res;
+
+	signal_check = 0;
+
+	sigemptyset(&sa.sa_mask);
+	sigaddset(&sa.sa_mask, SIGUSR2);
+
+	res = sigaction(SIGUSR1, &sa, &sa_old);
+	llen = printf("    register SIGUSR1: %d", res);
+	EXPECT_SYSZR(1, res);
+	if (res)
+		goto out;
+
+	llen = printf("    sa_old.sa_handler: SIG_DFL (%p)", SIG_DFL);
+	EXPECT_PTREQ(1, SIG_DFL, sa_old.sa_handler);
+	if (res)
+		goto out;
+
+	res = sigaction(SIGUSR2, &sa, NULL);
+	llen = printf("    register SIGUSR2: %d", res);
+	EXPECT_SYSZR(1, res);
+	if (res)
+		goto out;
+
+	/* Trigger the first signal. */
+	kill(getpid(), SIGUSR1);
+
+	/* If signal_check is 1 or higher, then signal emission worked */
+	llen = printf("    signal emission: 1 <= signal_check");
+	EXPECT_GE(1, signal_check, 1);
+
+	/* If it is 2, then signal masking worked */
+	llen = printf("    signal masking: 2 == signal_check");
+	EXPECT_EQ(1, signal_check, 2);
+
+out:
+	llen = printf("%d %s", test_idx, "sigaction");
+	EXPECT_EQ(1, res, 0);
+
+	return ret;
+}
+
 /* Run syscall tests between IDs <min> and <max>.
  * Return 0 on success, non-zero on failure.
  */
@@ -1398,6 +1464,7 @@ int run_syscall(int min, int max)
 		CASE_TEST(syscall_noargs);    EXPECT_SYSEQ(1, syscall(__NR_getpid), getpid()); break;
 		CASE_TEST(syscall_args);      EXPECT_SYSER(1, syscall(__NR_statx, 0, NULL, 0, 0, NULL), -1, EFAULT); break;
 		CASE_TEST(namespace);         EXPECT_SYSZR(euid0 && proc, test_namespace()); break;
+		case __LINE__:                ret += test_signals(test); break;
 		case __LINE__:
 			return ret; /* must be last */
 		/* note: do not set any defaults so as to permit holes above */

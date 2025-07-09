@@ -10,6 +10,9 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* Architecture has a usable linux/signal.h */
+#include <linux/signal.h>
+
 /* Syscalls for ARM64 :
  *   - registers are 64-bit
  *   - stack is 16-byte aligned

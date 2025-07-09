@@ -10,7 +10,20 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* Needed to get the correct struct sigaction definition */
+#define SA_RESTORER	0x04000000
+
+/* Restorer must be set on x86 for both 32 and 64 bit */
+#define _NOLIBC_ARCH_NEEDS_SA_RESTORER
+
+/* Avoid linux/signal.h, it has an incorrect _NSIG and sigset_t */
+#include <asm-generic/signal.h>
+#include <asm-generic/siginfo.h>
+
 #if !defined(__x86_64__)
+
+/* On i386 we need to set SA_SIGINFO to use rt_sigreturn */
+#define _NOLIBC_ARCH_FORCE_SIG_FLAGS SA_SIGINFO
 
 /* Syscalls for i386 :
  *   - mostly similar to x86_64

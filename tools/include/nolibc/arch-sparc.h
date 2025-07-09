@@ -12,6 +12,10 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* The includes are sane, if one sets __WANT_POSIX1B_SIGNALS__ */
+#define __WANT_POSIX1B_SIGNALS__
+#include <linux/signal.h>
+
 /*
  * Syscalls for SPARC:
  *   - registers are native word size
@@ -203,5 +207,48 @@ pid_t sys_vfork(void)
 		return ret;
 }
 #define sys_vfork sys_vfork
+
+#define __nolibc_sa_restorer __nolibc_sa_restorer
+void __nolibc_sa_restorer(void);
+void __nolibc_sa_restorer_wrapper(void);
+void __attribute__((weak,noreturn)) __nolibc_entrypoint __no_stack_protector
+__nolibc_sa_restorer_wrapper(void)
+{
+	/* The C function will have a prologue corrupting "sp" */
+	__asm__  volatile (
+		".section .text\n"
+		".align 4\n"
+		".type __nolibc_sa_restorer, @function\n"
+		"__nolibc_sa_restorer:\n"
+		"nop\n"
+		"nop\n"
+		"mov %0, %%g1 \n"
+#ifdef __arch64__
+		"t 0x6d\n"
+#else
+		"t 0x10\n"
+#endif
+		".size __nolibc_sa_restorer, .-__nolibc_sa_restorer\n"
+		:: "n"(__NR_rt_sigreturn)
+	);
+	__nolibc_entrypoint_epilogue();
+}
+
+/*
+ * sparc has ODD_RT_SIGACTION, we need to pass the restorer as an argument
+ * to rt_sigaction.
+ */
+#define sys_rt_sigaction sys_rt_sigaction
+static __attribute__((unused))
+int sys_rt_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
+{
+	struct sigaction real_act = *act;
+
+	/* Otherwise we would need to use sigreturn instead of rt_sigreturn */
+	real_act.sa_flags |= SA_SIGINFO;
+
+	return my_syscall5(__NR_rt_sigaction, signum, &real_act, oldact,
+			   __nolibc_sa_restorer, sizeof(act->sa_mask));
+}
 
 #endif /* _NOLIBC_ARCH_SPARC_H */

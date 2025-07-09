@@ -14,9 +14,8 @@
 #include "arch.h"
 #include "types.h"
 #include "sys.h"
-
-#include <linux/signal.h>
 #include <linux/time.h>
+/* signal definitions are included by arch.h */
 
 static __inline__
 void __nolibc_timespec_user_to_kernel(const struct timespec *ts, struct __kernel_timespec *kts)
