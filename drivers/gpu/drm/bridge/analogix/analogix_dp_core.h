@@ -10,6 +10,7 @@
 #define _ANALOGIX_DP_CORE_H
 
 #include <drm/display/drm_dp_helper.h>
+#include <drm/drm_bridge.h>
 #include <drm/drm_crtc.h>
 
 #define DP_TIMEOUT_LOOP_COUNT 100
@@ -153,8 +154,7 @@ struct analogix_dp_device {
 	struct drm_encoder	*encoder;
 	struct device		*dev;
 	struct drm_device	*drm_dev;
-	struct drm_connector	connector;
-	struct drm_bridge	*bridge;
+	struct drm_bridge	bridge;
 	struct drm_dp_aux	aux;
 	struct clk		*clock;
 	unsigned int		irq;
