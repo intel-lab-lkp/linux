@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR MIT)
 /*
  * Copyright 2015 Savoir-faire Linux
  *
  * This device tree is based on imx51-babbage.dts
- *
- * Licensed under the X11 license or the GPL v2 (or later)
  */
 
 /dts-v1/;
