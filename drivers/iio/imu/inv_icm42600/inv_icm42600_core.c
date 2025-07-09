@@ -892,7 +892,7 @@ static int inv_icm42600_suspend(struct device *dev)
 
 	/* disable vddio regulator if chip is sleeping */
 	if (!wakeup)
-		regulator_disable(st->vddio_supply);
+		inv_icm42600_disable_vddio_reg(st);
 
 out_unlock:
 	mutex_unlock(&st->lock);
@@ -973,7 +973,7 @@ static int inv_icm42600_runtime_suspend(struct device *dev)
 	if (ret)
 		goto error_unlock;
 
-	regulator_disable(st->vddio_supply);
+	inv_icm42600_disable_vddio_reg(st);
 
 error_unlock:
 	mutex_unlock(&st->lock);
