@@ -1207,6 +1207,11 @@ err_release:
 	return ret;
 }
 
+/*
+ * Stop streaming, discard buffers and release the pipeline without further
+ * checking if we are or there is any queue owner. This function asserts the
+ * &video->lock is held.
+ */
 static void mxc_isi_video_cleanup_streaming(struct mxc_isi_video *video)
 {
 	lockdep_assert_held(&video->lock);
@@ -1333,7 +1338,11 @@ static int mxc_isi_video_release(struct file *file)
 		dev_err(video->pipe->isi->dev, "%s fail\n", __func__);
 
 	mutex_lock(&video->lock);
-	mxc_isi_video_cleanup_streaming(video);
+	/* cleanup streaming if there's no queue owner (if we were queue
+	 * owner this was cleaned already by vb2_fop_release())
+	 */
+	if (!video->vdev.queue->owner)
+		mxc_isi_video_cleanup_streaming(video);
 	mutex_unlock(&video->lock);
 
 	pm_runtime_put(video->pipe->isi->dev);
