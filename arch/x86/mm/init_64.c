@@ -223,6 +223,86 @@ static void sync_global_pgds(unsigned long start, unsigned long end)
 		sync_global_pgds_l4(start, end);
 }
 
+static void sync_kernel_pagetables_l4(unsigned long addr)
+{
+	pgd_t *pgd_ref = pgd_offset_k(addr);
+	const p4d_t *p4d_ref;
+	struct page *page;
+
+	VM_WARN_ON_ONCE(pgtable_l5_enabled());
+	/*
+	 * With folded p4d, pgd_none() is always false, we need to
+	 * handle synchronization on p4d level.
+	 */
+	MAYBE_BUILD_BUG_ON(pgd_none(*pgd_ref));
+	p4d_ref = p4d_offset(pgd_ref, addr);
+
+	if (p4d_none(*p4d_ref))
+		return;
+
+	spin_lock(&pgd_lock);
+	list_for_each_entry(page, &pgd_list, lru) {
+		pgd_t *pgd;
+		p4d_t *p4d;
+		spinlock_t *pgt_lock;
+
+		pgd = (pgd_t *)page_address(page) + pgd_index(addr);
+		p4d = p4d_offset(pgd, addr);
+		/* the pgt_lock only for Xen */
+		pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
+		spin_lock(pgt_lock);
+
+		if (!p4d_none(*p4d_ref) && !p4d_none(*p4d))
+			BUG_ON(p4d_pgtable(*p4d)
+			       != p4d_pgtable(*p4d_ref));
+
+		if (p4d_none(*p4d))
+			set_p4d(p4d, *p4d_ref);
+
+		spin_unlock(pgt_lock);
+	}
+	spin_unlock(&pgd_lock);
+}
+
+static void sync_kernel_pagetables_l5(unsigned long addr)
+{
+	const pgd_t *pgd_ref = pgd_offset_k(addr);
+	struct page *page;
+
+	VM_WARN_ON_ONCE(!pgtable_l5_enabled());
+
+	if (pgd_none(*pgd_ref))
+		return;
+
+	spin_lock(&pgd_lock);
+	list_for_each_entry(page, &pgd_list, lru) {
+		pgd_t *pgd;
+		spinlock_t *pgt_lock;
+
+		pgd = (pgd_t *)page_address(page) + pgd_index(addr);
+		/* the pgt_lock only for Xen */
+		pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
+		spin_lock(pgt_lock);
+
+		if (!pgd_none(*pgd_ref) && !pgd_none(*pgd))
+			BUG_ON(pgd_page_vaddr(*pgd) != pgd_page_vaddr(*pgd_ref));
+
+		if (pgd_none(*pgd))
+			set_pgd(pgd, *pgd_ref);
+
+		spin_unlock(pgt_lock);
+	}
+	spin_unlock(&pgd_lock);
+}
+
+void arch_sync_kernel_pagetables(unsigned long addr)
+{
+	if (pgtable_l5_enabled())
+		sync_kernel_pagetables_l5(addr);
+	else
+		sync_kernel_pagetables_l4(addr);
+}
+
 /*
  * NOTE: This function is marked __ref because it calls __init function
  * (alloc_bootmem_pages). It's safe to do it ONLY when after_bootmem == 0.
