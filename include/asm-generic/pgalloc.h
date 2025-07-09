@@ -295,6 +295,10 @@ static inline void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 	__pgd_free(mm, pgd);
 }
 #endif
+#ifndef __HAVE_ARCH_SYNC_KERNEL_PGTABLE
+#define pgd_populate_kernel(addr, pgd, p4d) pgd_populate(&init_mm, pgd, p4d)
+#define p4d_populate_kernel(addr, p4d, pud) p4d_populate(&init_mm, p4d, pud)
+#endif
 
 #endif /* CONFIG_MMU */
 
