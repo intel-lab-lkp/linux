@@ -1518,7 +1518,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 	u8 *rss_config;
 	int ret;
 
-	if (!ops->get_rxnfc || !ops->get_rxfh_fields || !ops->set_rxfh)
+	if (!ops->get_rxnfc || !ops->set_rxfh)
 		return -EOPNOTSUPP;
 
 	if (ops->get_rxfh_indir_size)
@@ -1621,9 +1621,11 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 
 	mutex_lock(&dev->ethtool->rss_lock);
 
-	ret = ethtool_check_flow_types(dev, rxfh.input_xfrm);
-	if (ret)
-		goto out_unlock;
+	if (ops->get_rxfh_fields) {
+		ret = ethtool_check_flow_types(dev, rxfh.input_xfrm);
+		if (ret)
+			goto out_unlock;
+	}
 
 	if (rxfh.rss_context && rxfh_dev.rss_delete) {
 		ret = ethtool_check_rss_ctx_busy(dev, rxfh.rss_context);
