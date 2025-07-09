@@ -19,6 +19,7 @@
 #include <linux/time.h>
 #include <linux/topology.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/processor.h>
 
