@@ -18,3 +18,11 @@ config SUN50I_H6_PRCM_PPU
 	  Say y to enable the Allwinner H6/H616 PRCM power domain driver.
 	  This is required to enable the Mali GPU in the H616 SoC, it is
 	  optional for the H6.
+
+config SUN55I_PCK600
+	bool "Allwinner A523 PCK-600 power domain driver"
+	depends on PM
+	select PM_GENERIC_DOMAINS
+	help
+	  Say y to enable the PCK-600 power domain driver. This saves power
+	  when certain peripherals, such as the video engine, are idle.
