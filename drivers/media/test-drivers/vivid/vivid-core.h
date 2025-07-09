@@ -463,6 +463,7 @@ struct vivid_dev {
 	struct vivid_vbi_gen_data	vbi_gen;
 	bool				rx_hdcp_detected;
 	bool				rx_hdcp_enabled;
+	u8				rx_hdcp_bksv[V4L2_HDCP_KSV_SIZE];
 	u8				*edid;
 	unsigned			edid_blocks;
 	unsigned			edid_max_blocks;
@@ -494,6 +495,7 @@ struct vivid_dev {
 	u8				vbi_out_cc[2][2];
 	bool				dvi_d_out;
 	u8				tx_hdcp_mode;
+	u8				tx_hdcp_bksv[V4L2_HDCP_KSV_SIZE];
 	u8				*scaled_line;
 	u8				*blended_line;
 	unsigned			cur_scaled_line;
