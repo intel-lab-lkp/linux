@@ -666,6 +666,8 @@ static void __update_default_selected(struct port *port)
  */
 static void __update_ntt(struct lacpdu *lacpdu, struct port *port)
 {
+	struct bonding *bond;
+
 	/* validate lacpdu and port */
 	if (lacpdu && port) {
 		/* check if any parameter is different then
@@ -683,6 +685,10 @@ static void __update_ntt(struct lacpdu *lacpdu, struct port *port)
 		   ) {
 			port->ntt = true;
 		}
+
+		bond = __get_bond_by_port(port);
+		if (bond && !bond->params.lacp_active)
+			port->ntt = true;
 	}
 }
 
