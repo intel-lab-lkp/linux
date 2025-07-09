@@ -471,7 +471,7 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 				struct loongarch_eiointc *s,
 				gpa_t addr, const void *val)
 {
-	int i, index, irq, bits, ret = 0;
+	int index, irq, ret = 0;
 	u8 cpu;
 	u64 data, old_data;
 
@@ -500,18 +500,20 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 		 * update irq when isr is set.
 		 */
 		data = s->enable.reg_u64[index] & ~old_data & s->isr.reg_u64[index];
-		for (i = 0; i < sizeof(data); i++) {
-			u8 mask = (data >> (i * 8)) & 0xff;
-			eiointc_enable_irq(vcpu, s, index * 8 + i, mask, 1);
+		while (data) {
+			irq = __ffs(data);
+			eiointc_update_irq(s, irq + index * 64, 1);
+			data &= ~BIT_ULL(irq);
 		}
 		/*
 		 * 0: disable irq.
 		 * update irq when isr is set.
 		 */
 		data = ~s->enable.reg_u64[index] & old_data & s->isr.reg_u64[index];
-		for (i = 0; i < sizeof(data); i++) {
-			u8 mask = (data >> (i * 8)) & 0xff;
-			eiointc_enable_irq(vcpu, s, index * 8 + i, mask, 0);
+		while (data) {
+			irq = __ffs(data);
+			eiointc_update_irq(s, irq + index * 64, 0);
+			data &= ~BIT_ULL(irq);
 		}
 		break;
 	case EIOINTC_BOUNCE_START ... EIOINTC_BOUNCE_END:
@@ -527,12 +529,10 @@ static int loongarch_eiointc_writeq(struct kvm_vcpu *vcpu,
 		/* write 1 to clear interrupt */
 		s->coreisr.reg_u64[cpu][index] = old_data & ~data;
 		data &= old_data;
-		bits = sizeof(data) * 8;
-		irq = find_first_bit((void *)&data, bits);
-		while (irq < bits) {
-			eiointc_update_irq(s, irq + index * bits, 0);
-			bitmap_clear((void *)&data, irq, 1);
-			irq = find_first_bit((void *)&data, bits);
+		while (data) {
+			irq = __ffs(data);
+			eiointc_update_irq(s, irq + index * 64, 0);
+			data &= ~BIT_ULL(irq);
 		}
 		break;
 	case EIOINTC_COREMAP_START ... EIOINTC_COREMAP_END:
