@@ -5,12 +5,13 @@
 //!
 //! C header: [`include/linux/debugfs.h`](srctree/include/linux/debugfs.h)
 
-#[cfg(CONFIG_DEBUG_FS)]
-use crate::prelude::GFP_KERNEL;
+use crate::prelude::*;
 use crate::str::CStr;
 #[cfg(CONFIG_DEBUG_FS)]
 use crate::sync::Arc;
 use core::fmt::Display;
+use core::marker::PhantomPinned;
+use core::ops::Deref;
 
 #[cfg(CONFIG_DEBUG_FS)]
 mod display_file;
@@ -63,40 +64,78 @@ impl Dir {
     }
 
     #[cfg(CONFIG_DEBUG_FS)]
-    fn create_file<T: Display + Sized + Sync>(&self, name: &CStr, data: &'static T) -> File {
-        let Some(parent) = &self.0 else {
-            return File {
+    /// Creates a DebugFS file which will own the data produced by the initializer provided in
+    /// `data`.
+    ///
+    /// # Safety
+    ///
+    /// The provided vtable must be appropriate for implementing a seq_file if provided
+    /// with a private data pointer which provides shared access to a `T`.
+    unsafe fn create_file<'a, T: Sync, E, TI: PinInit<T, E>>(
+        &self,
+        name: &'a CStr,
+        data: TI,
+        vtable: &'static bindings::file_operations,
+    ) -> impl PinInit<File<T>, E> + use<'_, 'a, T, E, TI> {
+        try_pin_init! {
+            File {
                 _entry: Entry::empty(),
+                data <- data,
+                _pin: PhantomPinned,
+            } ? E
+        }
+        .pin_chain(|file| {
+            let Some(parent) = &self.0 else {
+                return Ok(());
             };
-        };
-        // SAFETY:
-        // * `name` is a NUL-terminated C string, living across the call, by `CStr` invariant.
-        // * `parent` is a live `dentry` since we have a reference to it.
-        // * `vtable` is all stock `seq_file` implementations except for `open`.
-        //   `open`'s only requirement beyond what is provided to all open functions is that the
-        //   inode's data pointer must point to a `T` that will outlive it, which we know because
-        //   we have a static reference.
-        let ptr = unsafe {
-            bindings::debugfs_create_file_full(
-                name.as_char_ptr(),
-                0o444,
-                parent.as_ptr(),
-                data as *const _ as *mut _,
-                core::ptr::null(),
-                &<T as display_file::DisplayFile>::VTABLE,
-            )
-        };
 
-        // SAFETY: `debugfs_create_file_full` either returns an error code or a legal
-        // dentry pointer, so `Entry::new` is safe to call here.
-        let entry = unsafe { Entry::new(ptr, Some(parent.clone())) };
+            // SAFETY:
+            // * `name` is a NUL-terminated C string, living across the call, by `CStr` invariant.
+            // * `parent` is a live `dentry` since we have a reference to it.
+            // * Since the file owns the `T` and it is pinned, we can safely assume the pointer
+            //   lives and is valid as long as we are.
+            // * Since the `Entry` will live in the `File`, it will be dropped before the pointer
+            //   is invalidated. Dropping the `Entry` will remove the DebugFS file and avoid
+            //   further access.
+            let ptr = unsafe {
+                bindings::debugfs_create_file_full(
+                    name.as_char_ptr(),
+                    0o444,
+                    parent.as_ptr(),
+                    &file.data as *const _ as *mut c_void,
+                    core::ptr::null(),
+                    vtable,
+                )
+            };
 
-        File { _entry: entry }
+            // SAFETY: `debugfs_create_file_full` either returns an error code or a legal
+            // dentry pointer, so `Entry::new` is safe to call here.
+            *file.entry_mut() = unsafe { Entry::new(ptr, Some(parent.clone())) };
+
+            Ok(())
+        })
     }
 
     #[cfg(not(CONFIG_DEBUG_FS))]
-    fn create_file<T: Display + Sized + Sync>(&self, _name: &CStr, _data: &'static T) -> File {
-        File {}
+    /// Creates a DebugFS file which will own the data produced by the initializer provided in
+    /// `data`.
+    ///
+    /// # Safety
+    ///
+    /// As DebugFS is disabled, this is actually entirely safe. It is marked unsafe for code
+    /// compatibility with the DebugFS-enabled variant.
+    unsafe fn create_file<'a, T: Sync, E, TI: PinInit<T, E>>(
+        &self,
+        _name: &'a CStr,
+        data: TI,
+        _vtable: (),
+    ) -> impl PinInit<File<T>, E> + use<'_, 'a, T, E, TI> {
+        try_pin_init! {
+            File {
+                data <- data,
+                _pin: PhantomPinned,
+            } ? E
+        }
     }
 
     /// Create a DebugFS subdirectory.
@@ -127,8 +166,32 @@ impl Dir {
     /// dir.display_file(c_str!("foo"), &200);
     /// // "my_debugfs_dir/foo" now contains the number 200.
     /// ```
-    pub fn display_file<T: Display + Sized + Sync>(&self, name: &CStr, data: &'static T) -> File {
-        self.create_file(name, data)
+    ///
+    /// ```
+    /// # use kernel::c_str;
+    /// # use kernel::debugfs::Dir;
+    /// # use kernel::prelude::*;
+    /// let val = KBox::new(300, GFP_KERNEL)?;
+    /// let dir = Dir::new(c_str!("my_debugfs_dir"));
+    /// dir.display_file(c_str!("foo"), val);
+    /// // "my_debugfs_dir/foo" now contains the number 300.
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn display_file<'b, T: Display + Send + Sync, E, TI: PinInit<T, E>>(
+        &self,
+        name: &'b CStr,
+        data: TI,
+    ) -> impl PinInit<File<T>, E> + use<'_, 'b, T, E, TI> {
+        #[cfg(CONFIG_DEBUG_FS)]
+        let vtable = &<T as display_file::DisplayFile>::VTABLE;
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        let vtable = ();
+
+        // SAFETY: `vtable` is all stock `seq_file` implementations except for `open`.
+        // `open`'s only requirement beyond what is provided to all open functions is that the
+        // inode's data pointer must point to a `T` that will outlive it, which is provided by
+        // `create_file`'s safety requirements.
+        unsafe { self.create_file(name, data, vtable) }
     }
 
     /// Create a new directory in DebugFS at the root.
@@ -146,7 +209,29 @@ impl Dir {
 }
 
 /// Handle to a DebugFS file.
-pub struct File {
+#[pin_data]
+pub struct File<T> {
+    // This order is load-bearing for drops - `_entry` must be dropped before `data`.
     #[cfg(CONFIG_DEBUG_FS)]
     _entry: Entry,
+    #[pin]
+    data: T,
+    // Even if `T` is `Unpin`, we still can't allow it to be moved.
+    #[pin]
+    _pin: PhantomPinned,
+}
+
+#[cfg(CONFIG_DEBUG_FS)]
+impl<T> File<T> {
+    fn entry_mut(self: Pin<&mut Self>) -> &mut Entry {
+        // SAFETY: _entry is not structurally pinned
+        unsafe { &mut Pin::into_inner_unchecked(self)._entry }
+    }
+}
+
+impl<T> Deref for File<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.data
+    }
 }
