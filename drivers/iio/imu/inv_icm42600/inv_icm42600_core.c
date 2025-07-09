@@ -708,7 +708,6 @@ static void inv_icm42600_disable_pm(void *_data)
 {
 	struct device *dev = _data;
 
-	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
 }
 
@@ -806,11 +805,10 @@ int inv_icm42600_core_probe(struct regmap *regmap, int chip,
 	ret = pm_runtime_set_active(dev);
 	if (ret)
 		return ret;
-	pm_runtime_get_noresume(dev);
+
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, INV_ICM42600_SUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
-	pm_runtime_put(dev);
 
 	return devm_add_action_or_reset(dev, inv_icm42600_disable_pm, dev);
 }
