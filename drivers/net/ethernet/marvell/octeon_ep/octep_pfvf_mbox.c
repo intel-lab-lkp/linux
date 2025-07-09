@@ -39,10 +39,7 @@ static void octep_pfvf_validate_version(struct octep_device *oct,  u32 vf_id,
 
 	dev_dbg(&oct->pdev->dev, "VF id:%d VF version:%d PF version:%d\n",
 		vf_id, vf_version, OCTEP_PFVF_MBOX_VERSION_CURRENT);
-	if (vf_version < OCTEP_PFVF_MBOX_VERSION_CURRENT)
-		rsp->s_version.version = vf_version;
-	else
-		rsp->s_version.version = OCTEP_PFVF_MBOX_VERSION_CURRENT;
+	rsp->s_version.version = min(vf_version, OCTEP_PFVF_MBOX_VERSION_CURRENT);
 
 	oct->vf_info[vf_id].mbox_version = rsp->s_version.version;
 	dev_dbg(&oct->pdev->dev, "VF id:%d negotiated VF version:%d\n",
