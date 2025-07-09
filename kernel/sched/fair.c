@@ -732,7 +732,7 @@ static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 		load += weight;
 	}
 
-	return avg >= (s64)(vruntime - cfs_rq->min_vruntime) * load;
+	return avg - (s64)(vruntime - cfs_rq->min_vruntime) * load >= 0;
 }
 
 int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
