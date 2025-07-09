@@ -139,8 +139,24 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 	}
 
 	is_c45 = fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45");
-	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
-		phy = get_phy_device(bus, addr, is_c45);
+	if (is_c45 || fwnode_get_phy_id(child, &phy_id)) {
+		/* get_phy_device is NOT SAFE HERE, since the PHY may need a HW RESET.
+		 * First create a dummy PHY device, reset the PHY, then call
+		 * get_phy_device.
+		 */
+		phy = phy_device_create(bus, addr, 0, 0, NULL);
+		if (!IS_ERR(phy)) {
+			if (is_of_node(child)) {
+				/* fwnode_mdiobus_phy_device_register performs the reset */
+				rc = fwnode_mdiobus_phy_device_register(bus, phy, child, addr);
+				if (!rc)
+					phy_device_remove(phy);
+				/* PHY has been reset at this point. */
+			}
+			phy_device_free(phy);
+			phy = get_phy_device(bus, addr, is_c45);
+		}
+	}
 	else
 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
 	if (IS_ERR(phy)) {
