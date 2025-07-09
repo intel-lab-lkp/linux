@@ -797,6 +797,17 @@ int __init efi_config_parse_tables(const efi_config_table_t *config_tables,
 		}
 	}
 
+	/*
+	 * After bootup, the runtime_supported_mask was set to be capable of
+	 * all features, which could be kind of too optimistici. In real
+	 * world, many platforms don't support advanced RTC wakeup runtime
+	 * service, while they don't provide RT_PROPERTY table either, which
+	 * led to rtc-wakeup capability being worngly claimed.
+	 *
+	 * So remove the wakeup capbility from default value, and let the
+	 * RT_PROPERTY do the judge.
+	 */
+	efi.runtime_supported_mask &= ~EFI_RT_SUPPORTED_WAKEUP_SERVICES;
 	if (rt_prop != EFI_INVALID_TABLE_ADDR) {
 		efi_rt_properties_table_t *tbl;
 
