@@ -104,16 +104,32 @@ out_put_idev:
 	return rc;
 }
 
-void iommufd_vdevice_destroy(struct iommufd_object *obj)
+void iommufd_vdevice_abort(struct iommufd_object *obj)
 {
 	struct iommufd_vdevice *vdev =
 		container_of(obj, struct iommufd_vdevice, obj);
 	struct iommufd_viommu *viommu = vdev->viommu;
+	struct iommufd_device *idev = vdev->idev;
+
+	lockdep_assert_held(&idev->igroup->lock);
 
 	/* xa_cmpxchg is okay to fail if alloc failed xa_cmpxchg previously */
 	xa_cmpxchg(&viommu->vdevs, vdev->id, vdev, NULL, GFP_KERNEL);
 	refcount_dec(&viommu->obj.users);
+	idev->vdev = NULL;
 	put_device(vdev->dev);
+}
+
+void iommufd_vdevice_destroy(struct iommufd_object *obj)
+{
+	struct iommufd_vdevice *vdev =
+		container_of(obj, struct iommufd_vdevice, obj);
+	struct iommufd_device *idev = vdev->idev;
+
+	mutex_lock(&idev->igroup->lock);
+	iommufd_vdevice_abort(obj);
+	mutex_unlock(&idev->igroup->lock);
+	iommufd_put_object(idev->ictx, &idev->obj);
 }
 
 int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
@@ -144,10 +160,21 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 		goto out_put_idev;
 	}
 
+	mutex_lock(&idev->igroup->lock);
+	if (idev->destroying) {
+		rc = -ENOENT;
+		goto out_unlock_igroup;
+	}
+
+	if (idev->vdev) {
+		rc = -EEXIST;
+		goto out_unlock_igroup;
+	}
+
 	vdev = iommufd_object_alloc(ucmd->ictx, vdev, IOMMUFD_OBJ_VDEVICE);
 	if (IS_ERR(vdev)) {
 		rc = PTR_ERR(vdev);
-		goto out_put_idev;
+		goto out_unlock_igroup;
 	}
 
 	vdev->id = virt_id;
@@ -155,6 +182,19 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	get_device(idev->dev);
 	vdev->viommu = viommu;
 	refcount_inc(&viommu->obj.users);
+	/*
+	 * A short term users reference is held on the idev so long as we have
+	 * the pointer. iommufd_device_pre_destroy() will revoke it before the
+	 * idev real destruction.
+	 */
+	vdev->idev = idev;
+
+	/*
+	 * iommufd_device_destroy() delays until idev->vdev is NULL before
+	 * freeing the idev, which only happens once the vdev is finished
+	 * destruction.
+	 */
+	idev->vdev = vdev;
 
 	curr = xa_cmpxchg(&viommu->vdevs, virt_id, NULL, vdev, GFP_KERNEL);
 	if (curr) {
@@ -167,12 +207,15 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	if (rc)
 		goto out_abort;
 	iommufd_object_finalize(ucmd->ictx, &vdev->obj);
-	goto out_put_idev;
+	goto out_unlock_igroup;
 
 out_abort:
 	iommufd_object_abort_and_destroy(ucmd->ictx, &vdev->obj);
+out_unlock_igroup:
+	mutex_unlock(&idev->igroup->lock);
 out_put_idev:
-	iommufd_put_object(ucmd->ictx, &idev->obj);
+	if (rc)
+		iommufd_put_object(ucmd->ictx, &idev->obj);
 out_put_viommu:
 	iommufd_put_object(ucmd->ictx, &viommu->obj);
 	return rc;
