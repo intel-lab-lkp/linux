@@ -47,6 +47,7 @@ properties:
       - description: LS1C based boards
         items:
           - enum:
+              - loongson,cq-t300b
               - loongmasses,smartloong-1c
           - const: loongson,ls1c
 
