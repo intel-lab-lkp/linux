@@ -424,7 +424,7 @@ pmt_feature_get_feature_table(struct pmt_features_priv *priv,
 	size = sizeof(*header) + FEAT_ATTR_SIZE(header->attr_size) +
 	       PMT_GUID_SIZE(header->num_guids);
 	res_size = resource_size(&res);
-	if (WARN(size > res_size, "Bad table size %ld > %pa", size, &res_size))
+	if (WARN(size > res_size, "Bad table size %zd > %pa", size, &res_size))
 		return -EINVAL;
 
 	/* Get the feature attributes, including capability fields */
@@ -502,7 +502,7 @@ static int pmt_features_discovery(struct pmt_features_priv *priv,
 	}
 
 	ret = kobject_init_and_add(&feature->kobj, ktype, &priv->dev->kobj,
-				   pmt_feature_names[feature->id]);
+				   "%s", pmt_feature_names[feature->id]);
 	if (ret)
 		return ret;
 
