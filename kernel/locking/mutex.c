@@ -931,6 +931,17 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 		}
 	}
 
+#if defined(CONFIG_KASAN) && defined(CONFIG_DEBUG_MUTEXES)
+	/*
+	 * Mutex users must ensure that the memory object holding the mutex
+	 * remains valid until after the return of all the outstanding and
+	 * upcoming mutex_unlock() calls. Enforce a context switch here if
+	 * another runnable task is present and this CPU is not in an atomic
+	 * context to increase the chance that KASAN can catch a violation of
+	 * this rule.
+	 */
+	cond_resched();
+#endif
 	raw_spin_lock_irqsave(&lock->wait_lock, flags);
 	debug_mutex_unlock(lock);
 	if (!list_empty(&lock->wait_list)) {
