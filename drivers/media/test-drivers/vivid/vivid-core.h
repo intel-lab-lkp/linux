@@ -461,6 +461,8 @@ struct vivid_dev {
 	int				dv_timings_cap_sel[MAX_INPUTS];
 	u32				service_set_cap;
 	struct vivid_vbi_gen_data	vbi_gen;
+	bool				rx_hdcp_detected;
+	bool				rx_hdcp_enabled;
 	u8				*edid;
 	unsigned			edid_blocks;
 	unsigned			edid_max_blocks;
@@ -491,6 +493,7 @@ struct vivid_dev {
 	bool				vbi_out_have_cc[2];
 	u8				vbi_out_cc[2][2];
 	bool				dvi_d_out;
+	u8				tx_hdcp_mode;
 	u8				*scaled_line;
 	u8				*blended_line;
 	unsigned			cur_scaled_line;

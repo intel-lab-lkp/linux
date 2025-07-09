@@ -262,6 +262,26 @@ const struct vb2_ops vivid_vid_cap_qops = {
 	.buf_request_complete	= vid_cap_buf_request_complete,
 };
 
+/* Update the HDCP status */
+void vivid_update_hdcp(struct vivid_dev *dev)
+{
+	unsigned int menu_idx;
+
+	dev->rx_hdcp_detected = false;
+
+	if (!dev->input_hdcp || !dev->rx_hdcp_enabled)
+		return;
+
+	menu_idx = dev->input_is_connected_to_output[dev->input];
+
+	if (menu_idx >= FIXED_MENU_ITEMS) {
+		struct vivid_dev *dev_tx = vivid_ctrl_hdmi_to_output_instance[menu_idx];
+
+		if (dev_tx->tx_hdcp_mode)
+			dev->rx_hdcp_detected = true;
+	}
+}
+
 /*
  * Determine the 'picture' quality based on the current TV frequency: either
  * COLOR for a good 'signal', GRAY (grayscale picture) for a slightly off
@@ -1162,6 +1182,8 @@ int vidioc_s_input(struct file *file, void *priv, unsigned i)
 	dev->vbi_cap_dev.tvnorms = dev->vid_cap_dev.tvnorms;
 	dev->meta_cap_dev.tvnorms = dev->vid_cap_dev.tvnorms;
 	vivid_update_format_cap(dev, false);
+	vivid_update_hdcp(dev);
+	v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
 
 	if (dev->colorspace) {
 		switch (dev->input_type[i]) {
