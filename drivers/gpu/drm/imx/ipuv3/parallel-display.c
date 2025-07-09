@@ -138,9 +138,11 @@ static int imx_pd_bridge_atomic_check(struct drm_bridge *bridge,
 	u32 bus_flags, bus_fmt;
 
 	next_bridge = drm_bridge_get_next_bridge(bridge);
-	if (next_bridge)
+	if (next_bridge) {
 		next_bridge_state = drm_atomic_get_new_bridge_state(crtc_state->state,
 								    next_bridge);
+		drm_bridge_put(next_bridge);
+	}
 
 	if (next_bridge_state)
 		bus_flags = next_bridge_state->input_bus_cfg.flags;
