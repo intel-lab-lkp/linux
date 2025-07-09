@@ -11,4 +11,5 @@ dtb-y	:= $(addsuffix .dtb, $(CONFIG_BUILTIN_DTB_NAME))
 else
 dtb-$(CONFIG_MACH_LOONGSON32)	+= ls1b-demo.dtb
 dtb-$(CONFIG_MACH_LOONGSON32)	+= lsgz_1b_dev.dtb
+dtb-$(CONFIG_MACH_LOONGSON32)	+= smartloong-1c.dtb
 endif
