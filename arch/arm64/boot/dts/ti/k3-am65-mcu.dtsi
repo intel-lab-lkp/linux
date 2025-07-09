@@ -211,6 +211,7 @@
 			ti,sci = <&dmsc>;
 			ti,sci-dev-id = <195>;
 			msi-parent = <&inta_main_udmass>;
+			bootph-all;
 		};
 
 		mcu_udmap: dma-controller@285c0000 {
@@ -235,6 +236,7 @@
 			ti,sci-rm-range-rchan = <0xb>, /* RX_HCHAN */
 						<0xa>; /* RX_CHAN */
 			ti,sci-rm-range-rflow = <0x0>; /* GP RFLOW */
+			bootph-all;
 		};
 	};
 
