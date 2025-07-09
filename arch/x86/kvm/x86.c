@@ -7194,6 +7194,10 @@ set_pit2_out:
 		u32 user_tsc_khz;
 
 		r = -EINVAL;
+
+		if (kvm->created_vcpus)
+			goto out;
+
 		user_tsc_khz = (u32)arg;
 
 		if (kvm_caps.has_tsc_control &&
