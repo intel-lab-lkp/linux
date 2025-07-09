@@ -3,8 +3,11 @@
 #define ARCH_X86_KVM_CPUID_H
 
 #include "reverse_cpuid.h"
+
 #include <asm/cpu.h>
+#include <asm/cpuid/api.h>
 #include <asm/processor.h>
+
 #include <uapi/asm/kvm_para.h>
 
 extern u32 kvm_cpu_caps[NR_KVM_CPU_CAPS] __read_mostly;

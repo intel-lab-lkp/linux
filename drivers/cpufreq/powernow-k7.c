@@ -27,6 +27,7 @@
 #include <linux/timex.h>
 
 #include <asm/cpu_device_id.h>
+#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/timer.h>		/* Needed for recalibrate_cpu_khz() */
 

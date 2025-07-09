@@ -22,6 +22,7 @@
 #include <hyperv/hvhdk.h>
 
 #include <asm/apic.h>
+#include <asm/cpuid/api.h>
 #include <asm/desc.h>
 #include <asm/hypervisor.h>
 #include <asm/i8259.h>
