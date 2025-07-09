@@ -75,6 +75,19 @@ DEFINE_POPULATE(pgd_populate, pgd, p4d, init)
 DEFINE_POPULATE(pud_populate, pud, pmd, init)
 DEFINE_POPULATE(pmd_populate_kernel, pmd, pte, init)
 
+#define DEFINE_POPULATE_KERNEL(fname, type1, type2, init)		\
+static inline void fname##_init(unsigned long addr,		\
+		type1##_t *arg1, type2##_t *arg2, bool init)	\
+{								\
+	if (init)						\
+		fname##_safe(addr, arg1, arg2);			\
+	else							\
+		fname(addr, arg1, arg2);			\
+}
+
+DEFINE_POPULATE_KERNEL(pgd_populate_kernel, pgd, p4d, init)
+DEFINE_POPULATE_KERNEL(p4d_populate_kernel, p4d, pud, init)
+
 #define DEFINE_ENTRY(type1, type2, init)			\
 static inline void set_##type1##_init(type1##_t *arg1,		\
 			type2##_t arg2, bool init)		\
@@ -129,99 +142,6 @@ static int __init nonx32_setup(char *str)
 	return 1;
 }
 __setup("noexec32=", nonx32_setup);
-
-static void sync_global_pgds_l5(unsigned long start, unsigned long end)
-{
-	unsigned long addr;
-
-	for (addr = start; addr <= end; addr = ALIGN(addr + 1, PGDIR_SIZE)) {
-		const pgd_t *pgd_ref = pgd_offset_k(addr);
-		struct page *page;
-
-		/* Check for overflow */
-		if (addr < start)
-			break;
-
-		if (pgd_none(*pgd_ref))
-			continue;
-
-		spin_lock(&pgd_lock);
-		list_for_each_entry(page, &pgd_list, lru) {
-			pgd_t *pgd;
-			spinlock_t *pgt_lock;
-
-			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
-			/* the pgt_lock only for Xen */
-			pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
-			spin_lock(pgt_lock);
-
-			if (!pgd_none(*pgd_ref) && !pgd_none(*pgd))
-				BUG_ON(pgd_page_vaddr(*pgd) != pgd_page_vaddr(*pgd_ref));
-
-			if (pgd_none(*pgd))
-				set_pgd(pgd, *pgd_ref);
-
-			spin_unlock(pgt_lock);
-		}
-		spin_unlock(&pgd_lock);
-	}
-}
-
-static void sync_global_pgds_l4(unsigned long start, unsigned long end)
-{
-	unsigned long addr;
-
-	for (addr = start; addr <= end; addr = ALIGN(addr + 1, PGDIR_SIZE)) {
-		pgd_t *pgd_ref = pgd_offset_k(addr);
-		const p4d_t *p4d_ref;
-		struct page *page;
-
-		/*
-		 * With folded p4d, pgd_none() is always false, we need to
-		 * handle synchronization on p4d level.
-		 */
-		MAYBE_BUILD_BUG_ON(pgd_none(*pgd_ref));
-		p4d_ref = p4d_offset(pgd_ref, addr);
-
-		if (p4d_none(*p4d_ref))
-			continue;
-
-		spin_lock(&pgd_lock);
-		list_for_each_entry(page, &pgd_list, lru) {
-			pgd_t *pgd;
-			p4d_t *p4d;
-			spinlock_t *pgt_lock;
-
-			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
-			p4d = p4d_offset(pgd, addr);
-			/* the pgt_lock only for Xen */
-			pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
-			spin_lock(pgt_lock);
-
-			if (!p4d_none(*p4d_ref) && !p4d_none(*p4d))
-				BUG_ON(p4d_pgtable(*p4d)
-				       != p4d_pgtable(*p4d_ref));
-
-			if (p4d_none(*p4d))
-				set_p4d(p4d, *p4d_ref);
-
-			spin_unlock(pgt_lock);
-		}
-		spin_unlock(&pgd_lock);
-	}
-}
-
-/*
- * When memory was added make sure all the processes MM have
- * suitable PGD entries in the local PGD level page.
- */
-static void sync_global_pgds(unsigned long start, unsigned long end)
-{
-	if (pgtable_l5_enabled())
-		sync_global_pgds_l5(start, end);
-	else
-		sync_global_pgds_l4(start, end);
-}
 
 static void sync_kernel_pagetables_l4(unsigned long addr)
 {
@@ -295,6 +215,10 @@ static void sync_kernel_pagetables_l5(unsigned long addr)
 	spin_unlock(&pgd_lock);
 }
 
+/*
+ * When memory was added make sure all the processes MM have
+ * suitable PGD entries in the local PGD level page.
+ */
 void arch_sync_kernel_pagetables(unsigned long addr)
 {
 	if (pgtable_l5_enabled())
@@ -330,7 +254,7 @@ static p4d_t *fill_p4d(pgd_t *pgd, unsigned long vaddr)
 {
 	if (pgd_none(*pgd)) {
 		p4d_t *p4d = (p4d_t *)spp_getpage();
-		pgd_populate(&init_mm, pgd, p4d);
+		pgd_populate_kernel(vaddr, pgd, p4d);
 		if (p4d != p4d_offset(pgd, 0))
 			printk(KERN_ERR "PAGETABLE BUG #00! %p <-> %p\n",
 			       p4d, p4d_offset(pgd, 0));
@@ -342,7 +266,7 @@ static pud_t *fill_pud(p4d_t *p4d, unsigned long vaddr)
 {
 	if (p4d_none(*p4d)) {
 		pud_t *pud = (pud_t *)spp_getpage();
-		p4d_populate(&init_mm, p4d, pud);
+		p4d_populate_kernel(vaddr, p4d, pud);
 		if (pud != pud_offset(p4d, 0))
 			printk(KERN_ERR "PAGETABLE BUG #01! %p <-> %p\n",
 			       pud, pud_offset(p4d, 0));
@@ -795,7 +719,7 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 					   page_size_mask, prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
-		p4d_populate_init(&init_mm, p4d, pud, init);
+		p4d_populate_kernel_init(vaddr, p4d, pud, init);
 		spin_unlock(&init_mm.page_table_lock);
 	}
 
@@ -808,7 +732,6 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 			       unsigned long page_size_mask,
 			       pgprot_t prot, bool init)
 {
-	bool pgd_changed = false;
 	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next, paddr_last;
 
 	paddr_last = paddr_end;
@@ -837,17 +760,13 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 
 		spin_lock(&init_mm.page_table_lock);
 		if (pgtable_l5_enabled())
-			pgd_populate_init(&init_mm, pgd, p4d, init);
+			pgd_populate_kernel_init(vaddr, pgd, p4d, init);
 		else
-			p4d_populate_init(&init_mm, p4d_offset(pgd, vaddr),
-					  (pud_t *) p4d, init);
+			p4d_populate_kernel_init(vaddr, p4d_offset(pgd, vaddr),
+						 (pud_t *) p4d, init);
 
 		spin_unlock(&init_mm.page_table_lock);
-		pgd_changed = true;
 	}
-
-	if (pgd_changed)
-		sync_global_pgds(vaddr_start, vaddr_end - 1);
 
 	return paddr_last;
 }
@@ -1642,8 +1561,6 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		err = -ENOMEM;
 	} else
 		err = vmemmap_populate_basepages(start, end, node, NULL);
-	if (!err)
-		sync_global_pgds(start, end - 1);
 	return err;
 }
 
