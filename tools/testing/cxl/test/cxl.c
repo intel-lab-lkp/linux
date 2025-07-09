@@ -996,36 +996,6 @@ static int mock_cxl_port_update_total_dports(struct cxl_port *port)
 	return 0;
 }
 
-static int mock_cxl_port_enumerate_dports(struct cxl_port *port)
-{
-	struct platform_device **array;
-	int rc, i, array_size;
-
-	rc = get_port_array(port, &array, &array_size);
-	if (rc)
-		return rc;
-
-	for (i = 0; i < array_size; i++) {
-		struct platform_device *pdev = array[i];
-		struct cxl_dport *dport;
-
-		if (pdev->dev.parent != port->uport_dev) {
-			dev_dbg(&port->dev, "%s: mismatch parent %s\n",
-				dev_name(port->uport_dev),
-				dev_name(pdev->dev.parent));
-			continue;
-		}
-
-		dport = devm_cxl_add_dport(port, &pdev->dev, pdev->id,
-					   CXL_RESOURCE_NONE);
-
-		if (IS_ERR(dport))
-			return PTR_ERR(dport);
-	}
-
-	return 0;
-}
-
 static struct cxl_dport *mock_cxl_add_dport_by_dev(struct cxl_port *port,
 						   struct device *dport_dev)
 {
@@ -1112,7 +1082,6 @@ static struct cxl_mock_ops cxl_mock_ops = {
 	.acpi_table_parse_cedt = mock_acpi_table_parse_cedt,
 	.acpi_evaluate_integer = mock_acpi_evaluate_integer,
 	.acpi_pci_find_root = mock_acpi_pci_find_root,
-	.devm_cxl_port_enumerate_dports = mock_cxl_port_enumerate_dports,
 	.cxl_port_update_total_dports = mock_cxl_port_update_total_dports,
 	.devm_cxl_setup_hdm = mock_cxl_setup_hdm,
 	.devm_cxl_add_passthrough_decoder = mock_cxl_add_passthrough_decoder,
