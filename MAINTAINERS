@@ -26944,6 +26944,7 @@ M:	Kirill A. Shutemov <kirill.shutemov@linux.intel.com>
 R:	Dave Hansen <dave.hansen@linux.intel.com>
 L:	x86@kernel.org
 L:	linux-coco@lists.linux.dev
+L:	kvm@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/tdx
 F:	Documentation/ABI/testing/sysfs-devices-virtual-misc-tdx_guest
