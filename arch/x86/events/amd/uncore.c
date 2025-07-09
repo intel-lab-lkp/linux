@@ -15,6 +15,7 @@
 #include <linux/smp.h>
 #include <linux/types.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/perf_event.h>
 

@@ -18,6 +18,7 @@
 
 #include <asm/apic.h>
 #include <asm/bug.h>
+#include <asm/cpuid/api.h>
 #include <asm/debugreg.h>
 #include <asm/delay.h>
 #include <asm/desc.h>
