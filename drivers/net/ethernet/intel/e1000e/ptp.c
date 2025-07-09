@@ -124,8 +124,11 @@ static int e1000e_phc_get_syncdevicetime(ktime_t *device,
 	sys_cycles = er32(PLTSTMPH);
 	sys_cycles <<= 32;
 	sys_cycles |= er32(PLTSTMPL);
-	system->cycles = sys_cycles;
-	system->cs_id = CSID_X86_ART;
+	*system = (struct system_counterval_t) {
+		.cycles = sys_cycles,
+		.cs_id = CSID_X86_ART,
+		.use_nsecs = false,
+	};
 
 	return 0;
 }
