@@ -1027,9 +1027,6 @@ void phy_device_remove(struct phy_device *phydev)
 
 	device_del(&phydev->mdio.dev);
 
-	/* Assert the reset signal */
-	phy_device_reset(phydev, 1);
-
 	mdiobus_unregister_device(&phydev->mdio);
 }
 EXPORT_SYMBOL(phy_device_remove);
