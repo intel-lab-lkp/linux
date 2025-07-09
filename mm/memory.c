@@ -42,6 +42,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
+#include <linux/moduleparam.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
@@ -480,6 +481,13 @@ static inline void add_mm_rss_vec(struct mm_struct *mm, int *rss)
 }
 
 /*
+ * Oops instead of printing "Bad page map in process" message and
+ * trying to continue.
+ */
+static bool oops_if_bad_pte __ro_after_init = false;
+module_param(oops_if_bad_pte, bool, 0444);
+
+/*
  * This function is called to print an error when a bad pte
  * is found. For example, we might have a PFN-mapped pte in
  * a region that doesn't allow it.
@@ -489,6 +497,13 @@ static inline void add_mm_rss_vec(struct mm_struct *mm, int *rss)
 static void print_bad_pte(struct vm_area_struct *vma, unsigned long addr,
 			  pte_t pte, struct page *page)
 {
+	/*
+	 * This line is a formality to collect vmcore ASAP. Real bug
+	 * (hardware or software) happened earlier, current registers and
+	 * backtrace aren't interesting.
+	 */
+	BUG_ON(oops_if_bad_pte);
+
 	pgd_t *pgd = pgd_offset(vma->vm_mm, addr);
 	p4d_t *p4d = p4d_offset(pgd, addr);
 	pud_t *pud = pud_offset(p4d, addr);
