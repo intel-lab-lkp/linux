@@ -67,4 +67,10 @@
 #define AUDIO_EARCRX_CMDC_CLK_CTRL	0x0D0
 #define AUDIO_EARCRX_DMAC_CLK_CTRL	0x0D4
 
+/* s4 clock pads use new reg base */
+#define AUDIO_S4_MCLK_PAD_CTRL0 0x0
+#define AUDIO_S4_MCLK_PAD_CTRL1 0x4
+#define AUDIO_S4_SCLK_PAD_CTRL0 0x8
+#define AUDIO_S4_SCLK_PAD_CTRL1 0xC
+
 #endif /*__AXG_AUDIO_CLKC_H */
