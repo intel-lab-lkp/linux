@@ -21,6 +21,8 @@ properties:
       - amlogic,axg-audio-clkc
       - amlogic,g12a-audio-clkc
       - amlogic,sm1-audio-clkc
+      - amlogic,s4-audio-clkc
+      - amlogic,clock-pads-clkc
 
   '#clock-cells':
     const: 1
@@ -100,13 +102,15 @@ properties:
   resets:
     description: internal reset line
 
+  power-domains:
+    maxItems: 1
+
 required:
   - compatible
   - '#clock-cells'
   - reg
   - clocks
   - clock-names
-  - resets
 
 allOf:
   - if:
@@ -116,12 +120,37 @@ allOf:
             enum:
               - amlogic,g12a-audio-clkc
               - amlogic,sm1-audio-clkc
+              - amlogic,s4-audio-clkc
     then:
       required:
         - '#reset-cells'
     else:
       properties:
         '#reset-cells': false
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amlogic,s4-audio-clkc
+    then:
+      required:
+        - power-domains
+    else:
+      properties:
+        power-domains: false
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amlogic,clock-pads-clkc
+    then:
+      properties:
+        resets: false
+    else:
+      required:
+        - resets
 
 additionalProperties: false
 
@@ -129,6 +158,7 @@ examples:
   - |
     #include <dt-bindings/clock/axg-clkc.h>
     #include <dt-bindings/reset/amlogic,meson-axg-reset.h>
+    #include <dt-bindings/power/meson-s4-power.h>
     apb {
         #address-cells = <2>;
         #size-cells = <2>;
@@ -198,4 +228,27 @@ examples:
                           "slv_lrclk9";
             resets = <&reset RESET_AUDIO>;
         };
+      clk_pad: clock-controller@330e80 {
+        compatible = "amlogic,clock-pads-clkc";
+        reg = <0x0 0x330e80 0x0 0x10>;
+        #clock-cells = <1>;
+        clocks = <&clkc_periphs CLKID_AUDIO>,
+                 <&clkc_pll CLKID_MPLL0>,
+                 <&clkc_pll CLKID_MPLL1>,
+                 <&clkc_pll CLKID_MPLL2>,
+                 <&clkc_pll CLKID_MPLL3>,
+                 <&clkc_pll CLKID_HIFI_PLL>,
+                 <&clkc_pll CLKID_FCLK_DIV3>,
+                 <&clkc_pll CLKID_FCLK_DIV4>,
+                 <&clkc_pll CLKID_FCLK_DIV5>;
+        clock-names = "pclk",
+                      "mst_in0",
+                      "mst_in1",
+                      "mst_in2",
+                      "mst_in3",
+                      "mst_in4",
+                      "mst_in5",
+                      "mst_in6",
+                      "mst_in7";
+      };
     };
