@@ -39,9 +39,13 @@ struct mlx5e_pcie_cong_event {
 
 	/* For ethtool stats group. */
 	struct mlx5e_pcie_cong_stats stats;
+
+	struct device_attribute attr;
 };
 
 /* In units of 0.01 % */
+#define MLX5E_PCIE_CONG_THRESH_MAX 10000
+
 static const struct mlx5e_pcie_cong_thresh default_thresh_config = {
 	.inbound_high = 9000,
 	.inbound_low = 7500,
@@ -97,6 +101,7 @@ MLX5E_DEFINE_STATS_GRP(pcie_cong, 0);
 static int
 mlx5_cmd_pcie_cong_event_set(struct mlx5_core_dev *dev,
 			     const struct mlx5e_pcie_cong_thresh *config,
+			     bool modify,
 			     u64 *obj_id)
 {
 	u32 in[MLX5_ST_SZ_DW(pcie_cong_event_cmd_in)] = {};
@@ -108,8 +113,16 @@ mlx5_cmd_pcie_cong_event_set(struct mlx5_core_dev *dev,
 	hdr = MLX5_ADDR_OF(pcie_cong_event_cmd_in, in, hdr);
 	cong_obj = MLX5_ADDR_OF(pcie_cong_event_cmd_in, in, cong_obj);
 
-	MLX5_SET(general_obj_in_cmd_hdr, hdr, opcode,
-		 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	if (!modify) {
+		MLX5_SET(general_obj_in_cmd_hdr, hdr, opcode,
+			 MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	} else {
+		MLX5_SET(general_obj_in_cmd_hdr, hdr, opcode,
+			 MLX5_CMD_OP_MODIFY_GENERAL_OBJECT);
+		MLX5_SET(general_obj_in_cmd_hdr, in, obj_id, *obj_id);
+		MLX5_SET64(pcie_cong_event_obj, cong_obj, modify_select_field,
+			   MLX5_PCIE_CONG_EVENT_MOD_THRESH);
+	}
 
 	MLX5_SET(general_obj_in_cmd_hdr, hdr, obj_type,
 		 MLX5_GENERAL_OBJECT_TYPES_PCIE_CONG_EVENT);
@@ -131,10 +144,12 @@ mlx5_cmd_pcie_cong_event_set(struct mlx5_core_dev *dev,
 	if (err)
 		return err;
 
-	*obj_id = MLX5_GET(general_obj_out_cmd_hdr, out, obj_id);
+	if (!modify)
+		*obj_id = MLX5_GET(general_obj_out_cmd_hdr, out, obj_id);
 
-	mlx5_core_dbg(dev, "PCIe congestion event (obj_id=%llu) created. Config: in: [%u, %u], out: [%u, %u]\n",
+	mlx5_core_dbg(dev, "PCIe congestion event (obj_id=%llu) %s. Config: in: [%u, %u], out: [%u, %u]\n",
 		      *obj_id,
+		      modify ? "modified" : "created",
 		      config->inbound_high, config->inbound_low,
 		      config->outbound_high, config->outbound_low);
 
@@ -160,13 +175,13 @@ static int mlx5_cmd_pcie_cong_event_destroy(struct mlx5_core_dev *dev,
 
 static int mlx5_cmd_pcie_cong_event_query(struct mlx5_core_dev *dev,
 					  u64 obj_id,
-					  u32 *state)
+					  u32 *state,
+					  struct mlx5e_pcie_cong_thresh *config)
 {
 	u32 in[MLX5_ST_SZ_DW(pcie_cong_event_cmd_in)] = {};
 	u32 out[MLX5_ST_SZ_DW(pcie_cong_event_cmd_out)];
 	void *obj;
 	void *hdr;
-	u8 cong;
 	int err;
 
 	hdr = MLX5_ADDR_OF(pcie_cong_event_cmd_in, in, hdr);
@@ -184,6 +199,8 @@ static int mlx5_cmd_pcie_cong_event_query(struct mlx5_core_dev *dev,
 	obj = MLX5_ADDR_OF(pcie_cong_event_cmd_out, out, cong_obj);
 
 	if (state) {
+		u8 cong;
+
 		cong = MLX5_GET(pcie_cong_event_obj, obj, inbound_cong_state);
 		if (cong == MLX5E_CONG_HIGH_STATE)
 			*state |= MLX5E_INBOUND_CONG;
@@ -191,6 +208,19 @@ static int mlx5_cmd_pcie_cong_event_query(struct mlx5_core_dev *dev,
 		cong = MLX5_GET(pcie_cong_event_obj, obj, outbound_cong_state);
 		if (cong == MLX5E_CONG_HIGH_STATE)
 			*state |= MLX5E_OUTBOUND_CONG;
+	}
+
+	if (config) {
+		*config = (struct mlx5e_pcie_cong_thresh) {
+			.inbound_low = MLX5_GET(pcie_cong_event_obj, obj,
+						inbound_cong_low_threshold),
+			.inbound_high = MLX5_GET(pcie_cong_event_obj, obj,
+						inbound_cong_high_threshold),
+			.outbound_low = MLX5_GET(pcie_cong_event_obj, obj,
+						 outbound_cong_low_threshold),
+			.outbound_high = MLX5_GET(pcie_cong_event_obj, obj,
+						  outbound_cong_high_threshold),
+		};
 	}
 
 	return 0;
@@ -210,7 +240,7 @@ static void mlx5e_pcie_cong_event_work(struct work_struct *work)
 	dev = priv->mdev;
 
 	err = mlx5_cmd_pcie_cong_event_query(dev, cong_event->obj_id,
-					     &new_cong_state);
+					     &new_cong_state, NULL);
 	if (err) {
 		mlx5_core_warn(dev, "Error %d when querying PCIe cong event object (obj_id=%llu).\n",
 			       err, cong_event->obj_id);
@@ -249,6 +279,101 @@ static int mlx5e_pcie_cong_event_handler(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static bool mlx5e_thresh_check_val(u64 val)
+{
+	return val > 0 && val <= MLX5E_PCIE_CONG_THRESH_MAX;
+}
+
+static bool
+mlx5e_thresh_config_check_order(const struct mlx5e_pcie_cong_thresh *config)
+{
+	if (config->inbound_high <= config->inbound_low)
+		return false;
+
+	if (config->outbound_high <= config->outbound_low)
+		return false;
+
+	return true;
+}
+
+#define MLX5E_PCIE_CONG_THRESH_SYSFS_VALUES 4
+
+static ssize_t thresh_config_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf,
+				   size_t count)
+{
+	struct mlx5e_pcie_cong_thresh config = {};
+	struct mlx5e_pcie_cong_event *cong_event;
+	u64 outbound_high, outbound_low;
+	u64 inbound_high, inbound_low;
+	struct mlx5e_priv *priv;
+	int ret;
+	int err;
+
+	cong_event = container_of(attr, struct mlx5e_pcie_cong_event, attr);
+	priv = cong_event->priv;
+
+	ret = sscanf(buf, "%llu %llu %llu %llu",
+		     &inbound_low, &inbound_high,
+		     &outbound_low, &outbound_high);
+	if (ret != MLX5E_PCIE_CONG_THRESH_SYSFS_VALUES) {
+		mlx5_core_err(priv->mdev, "Invalid format for PCIe congestion threshold configuration. Expected %d, got %d.\n",
+			      MLX5E_PCIE_CONG_THRESH_SYSFS_VALUES, ret);
+		return -EINVAL;
+	}
+
+	if (!mlx5e_thresh_check_val(inbound_high) ||
+	    !mlx5e_thresh_check_val(inbound_low) ||
+	    !mlx5e_thresh_check_val(outbound_high) ||
+	    !mlx5e_thresh_check_val(outbound_low)) {
+		mlx5_core_err(priv->mdev, "Invalid values for PCIe congestion threshold configuration. Valid range [1, %d]\n",
+			      MLX5E_PCIE_CONG_THRESH_MAX);
+		return -EINVAL;
+	}
+
+	config = (struct mlx5e_pcie_cong_thresh) {
+		.inbound_low = inbound_low,
+		.inbound_high = inbound_high,
+		.outbound_low = outbound_low,
+		.outbound_high = outbound_high,
+
+	};
+
+	if (!mlx5e_thresh_config_check_order(&config)) {
+		mlx5_core_err(priv->mdev, "Invalid order of values for PCIe congestion threshold configuration.\n");
+		return -EINVAL;
+	}
+
+	err = mlx5_cmd_pcie_cong_event_set(priv->mdev, &config,
+					   true, &cong_event->obj_id);
+
+	return err ? err : count;
+}
+
+static ssize_t thresh_config_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct mlx5e_pcie_cong_event *cong_event;
+	struct mlx5e_pcie_cong_thresh config;
+	struct mlx5e_priv *priv;
+	int err;
+
+	cong_event = container_of(attr, struct mlx5e_pcie_cong_event, attr);
+	priv = cong_event->priv;
+
+	err = mlx5_cmd_pcie_cong_event_query(priv->mdev, cong_event->obj_id,
+					     NULL, &config);
+
+	if (err)
+		return err;
+
+	return sysfs_emit(buf, "%u %u %u %u\n",
+			  config.inbound_low, config.inbound_high,
+			  config.outbound_low, config.outbound_high);
+}
+
 bool mlx5e_pcie_cong_event_supported(struct mlx5_core_dev *dev)
 {
 	u64 features = MLX5_CAP_GEN_2_64(dev, general_obj_types_127_64);
@@ -283,7 +408,7 @@ int mlx5e_pcie_cong_event_init(struct mlx5e_priv *priv)
 	cong_event->priv = priv;
 
 	err = mlx5_cmd_pcie_cong_event_set(mdev, &default_thresh_config,
-					   &cong_event->obj_id);
+					   false, &cong_event->obj_id);
 	if (err) {
 		mlx5_core_warn(mdev, "Error creating a PCIe congestion event object\n");
 		goto err_free;
@@ -295,10 +420,20 @@ int mlx5e_pcie_cong_event_init(struct mlx5e_priv *priv)
 		goto err_obj_destroy;
 	}
 
+	cong_event->attr = (struct device_attribute)__ATTR_RW(thresh_config);
+	err = sysfs_create_file(&mdev->device->kobj,
+				&cong_event->attr.attr);
+	if (err) {
+		mlx5_core_warn(mdev, "Error creating a sysfs entry for pcie_cong limits.\n");
+		goto err_unregister_nb;
+	}
+
 	priv->cong_event = cong_event;
 
 	return 0;
 
+err_unregister_nb:
+	mlx5_eq_notifier_unregister(mdev, &cong_event->nb);
 err_obj_destroy:
 	mlx5_cmd_pcie_cong_event_destroy(mdev, cong_event->obj_id);
 err_free:
@@ -316,6 +451,7 @@ void mlx5e_pcie_cong_event_cleanup(struct mlx5e_priv *priv)
 		return;
 
 	priv->cong_event = NULL;
+	sysfs_remove_file(&mdev->device->kobj, &cong_event->attr.attr);
 
 	mlx5_eq_notifier_unregister(mdev, &cong_event->nb);
 	cancel_work_sync(&cong_event->work);
