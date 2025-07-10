@@ -7005,6 +7005,7 @@ static inline int process_huge_page(
 	return 0;
 }
 
+#ifndef CONFIG_CLEAR_PAGE_EXTENT
 static void clear_gigantic_page(struct folio *folio, unsigned long addr_hint,
 				unsigned int nr_pages)
 {
@@ -7029,7 +7030,10 @@ static int clear_subpage(unsigned long addr, int idx, void *arg)
 /**
  * folio_zero_user - Zero a folio which will be mapped to userspace.
  * @folio: The folio to zero.
- * @addr_hint: The address will be accessed or the base address if uncelar.
+ * @addr_hint: The address accessed by the user or the base address.
+ *
+ * folio_zero_user() uses clear_gigantic_page() or process_huge_page() to
+ * do page-at-a-time zeroing because it needs to handle CONFIG_HIGHMEM.
  */
 void folio_zero_user(struct folio *folio, unsigned long addr_hint)
 {
@@ -7040,6 +7044,86 @@ void folio_zero_user(struct folio *folio, unsigned long addr_hint)
 	else
 		process_huge_page(addr_hint, nr_pages, clear_subpage, folio);
 }
+
+#else /* CONFIG_CLEAR_PAGE_EXTENT */
+
+static void clear_pages_resched(void *addr, int npages)
+{
+	int i, remaining;
+
+	if (preempt_model_preemptible()) {
+		clear_pages(addr, npages);
+		goto out;
+	}
+
+	for (i = 0; i < npages/ARCH_CLEAR_PAGE_EXTENT; i++) {
+		clear_pages(addr + i * ARCH_CLEAR_PAGE_EXTENT * PAGE_SIZE,
+			    ARCH_CLEAR_PAGE_EXTENT);
+		cond_resched();
+	}
+
+	remaining = npages % ARCH_CLEAR_PAGE_EXTENT;
+
+	if (remaining)
+		clear_pages(addr + i * ARCH_CLEAR_PAGE_EXTENT * PAGE_SHIFT,
+			    remaining);
+out:
+	cond_resched();
+}
+
+/*
+ * folio_zero_user - Zero a folio which will be mapped to userspace.
+ * @folio: The folio to zero.
+ * @addr_hint: The address accessed by the user or the base address.
+ *
+ * Uses architectural support for clear_pages() to zero page extents
+ * instead of clearing page-at-a-time.
+ *
+ * Clearing of small folios (< MAX_ORDER_NR_PAGES) is split in three parts:
+ * pages in the immediate locality of the faulting page, and its left, right
+ * regions; the local neighbourhood cleared last in order to keep cache
+ * lines of the target region hot.
+ *
+ * For larger folios we assume that there is no expectation of cache locality
+ * and just do a straight zero.
+ */
+void folio_zero_user(struct folio *folio, unsigned long addr_hint)
+{
+	unsigned long base_addr = ALIGN_DOWN(addr_hint, folio_size(folio));
+	const long fault_idx = (addr_hint - base_addr) / PAGE_SIZE;
+	const struct range pg = DEFINE_RANGE(0, folio_nr_pages(folio) - 1);
+	const int width = 2; /* number of pages cleared last on either side */
+	struct range r[3];
+	int i;
+
+	if (folio_nr_pages(folio) > MAX_ORDER_NR_PAGES) {
+		clear_pages_resched(page_address(folio_page(folio, 0)), folio_nr_pages(folio));
+		return;
+	}
+
+	/*
+	 * Faulting page and its immediate neighbourhood. Cleared at the end to
+	 * ensure it sticks around in the cache.
+	 */
+	r[2] = DEFINE_RANGE(clamp_t(s64, fault_idx - width, pg.start, pg.end),
+			    clamp_t(s64, fault_idx + width, pg.start, pg.end));
+
+	/* Region to the left of the fault */
+	r[1] = DEFINE_RANGE(pg.start,
+			    clamp_t(s64, r[2].start-1, pg.start-1, r[2].start));
+
+	/* Region to the right of the fault: always valid for the common fault_idx=0 case. */
+	r[0] = DEFINE_RANGE(clamp_t(s64, r[2].end+1, r[2].end, pg.end+1),
+			    pg.end);
+
+	for (i = 0; i <= 2; i++) {
+		int npages = range_len(&r[i]);
+
+		if (npages > 0)
+			clear_pages_resched(page_address(folio_page(folio, r[i].start)), npages);
+	}
+}
+#endif /* CONFIG_CLEAR_PAGE_EXTENT */
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
 				   unsigned long addr_hint,
