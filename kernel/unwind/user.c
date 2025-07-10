@@ -189,3 +189,4 @@ int unwind_user(struct unwind_stacktrace *trace, unsigned int max_entries)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(unwind_user);
