@@ -371,14 +371,18 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
 
 impl Device {
     /// Returns the PCI vendor ID.
+    #[inline]
     pub fn vendor_id(&self) -> u16 {
-        // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
+        // SAFETY: by its type invariant `self.as_raw` is always a valid pointer to a
+        // `struct pci_dev`.
         unsafe { (*self.as_raw()).vendor }
     }
 
     /// Returns the PCI device ID.
+    #[inline]
     pub fn device_id(&self) -> u16 {
-        // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
+        // SAFETY: by its type invariant `self.as_raw` is always a valid pointer to a
+        // `struct pci_dev`.
         unsafe { (*self.as_raw()).device }
     }
 
