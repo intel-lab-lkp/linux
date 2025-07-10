@@ -68,14 +68,14 @@ mt76s_build_rx_skb(void *data, int data_len, int buf_len)
 
 	skb_put_data(skb, data, len);
 	if (data_len > len) {
-		struct page *page;
+		netmem_ref netmem;
 
 		data += len;
-		page = virt_to_head_page(data);
-		skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
-				page, data - page_address(page),
-				data_len - len, buf_len);
-		get_page(page);
+		netmem = virt_to_head_netmem(data);
+		skb_add_rx_frag_netmem(skb, skb_shinfo(skb)->nr_frags,
+				       netmem, data - netmem_address(netmem),
+				       data_len - len, buf_len);
+		get_netmem(netmem);
 	}
 
 	return skb;
@@ -88,7 +88,7 @@ mt76s_rx_run_queue(struct mt76_dev *dev, enum mt76_rxq_id qid,
 	struct mt76_queue *q = &dev->q_rx[qid];
 	struct mt76_sdio *sdio = &dev->sdio;
 	int len = 0, err, i;
-	struct page *page;
+	netmem_ref netmem;
 	u8 *buf, *end;
 
 	for (i = 0; i < intr->rx.num[qid]; i++)
@@ -100,11 +100,11 @@ mt76s_rx_run_queue(struct mt76_dev *dev, enum mt76_rxq_id qid,
 	if (len > sdio->func->cur_blksize)
 		len = roundup(len, sdio->func->cur_blksize);
 
-	page = __dev_alloc_pages(GFP_KERNEL, get_order(len));
-	if (!page)
+	netmem = page_to_netmem(__dev_alloc_pages(GFP_KERNEL, get_order(len)));
+	if (!netmem)
 		return -ENOMEM;
 
-	buf = page_address(page);
+	buf = netmem_address(netmem);
 
 	sdio_claim_host(sdio->func);
 	err = sdio_readsb(sdio->func, buf, MCR_WRDR(qid), len);
@@ -112,7 +112,7 @@ mt76s_rx_run_queue(struct mt76_dev *dev, enum mt76_rxq_id qid,
 
 	if (err < 0) {
 		dev_err(dev->dev, "sdio read data failed:%d\n", err);
-		put_page(page);
+		put_netmem(netmem);
 		return err;
 	}
 
@@ -140,7 +140,7 @@ mt76s_rx_run_queue(struct mt76_dev *dev, enum mt76_rxq_id qid,
 		}
 		buf += round_up(len + 4, 4);
 	}
-	put_page(page);
+	put_netmem(netmem);
 
 	spin_lock_bh(&q->lock);
 	q->head = (q->head + i) % q->ndesc;
