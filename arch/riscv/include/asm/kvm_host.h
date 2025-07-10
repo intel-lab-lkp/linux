@@ -44,7 +44,11 @@
 #define KVM_REQ_STEAL_UPDATE		KVM_ARCH_REQ(6)
 
 #define KVM_HEDELEG_DEFAULT		(BIT(EXC_INST_MISALIGNED) | \
+					 BIT(EXC_INST_ACCESS)     | \
+					 BIT(EXC_INST_ILLEGAL)    | \
 					 BIT(EXC_BREAKPOINT)      | \
+					 BIT(EXC_LOAD_ACCESS)     | \
+					 BIT(EXC_STORE_ACCESS)    | \
 					 BIT(EXC_SYSCALL)         | \
 					 BIT(EXC_INST_PAGE_FAULT) | \
 					 BIT(EXC_LOAD_PAGE_FAULT) | \
