@@ -161,6 +161,8 @@ struct iopf_queue {
 
 typedef int (*iommu_fault_handler_t)(struct iommu_domain *,
 			struct device *, unsigned long, int, void *);
+typedef void (*iommu_fault_rid_notifier_t)(struct device *, struct iommu_fault *,
+					   enum iommu_page_response_code, void *);
 
 struct iommu_domain_geometry {
 	dma_addr_t aperture_start; /* First address that can be mapped    */
@@ -803,6 +805,7 @@ struct iommu_fault_param {
  */
 struct dev_iommu {
 	struct mutex lock;
+	struct xarray			rid_notifiers;
 	struct iommu_fault_param __rcu	*fault_param;
 	struct iommu_fwspec		*fwspec;
 	struct iommu_device		*iommu_dev;
@@ -812,8 +815,6 @@ struct dev_iommu {
 	u32				pci_32bit_workaround:1;
 	u32				require_direct:1;
 	u32				shadow_on_flush:1;
-
-	struct xarray			rid_notifiers;
 };
 
 int iommu_device_register(struct iommu_device *iommu,
@@ -930,6 +931,10 @@ void iommu_set_dma_strict(void);
 
 extern int report_iommu_fault(struct iommu_domain *domain, struct device *dev,
 			      unsigned long iova, int flags);
+
+extern int iommu_set_rid_fault_notifier(struct device *dev,
+					iommu_fault_rid_notifier_t notifier,
+					void *data);
 
 static inline void iommu_flush_iotlb_all(struct iommu_domain *domain)
 {
@@ -1480,6 +1485,14 @@ static inline int iommu_dma_prepare_msi(struct msi_desc *desc,
 {
 	return 0;
 }
+
+static inline int iommu_set_rid_fault_notifier(struct device *dev,
+					       iommu_fault_rid_notifier_t notifier,
+					       void *data)
+{
+	return 0;
+}
+
 #endif /* CONFIG_IOMMU_API */
 #endif /* CONFIG_IRQ_MSI_IOMMU */
 

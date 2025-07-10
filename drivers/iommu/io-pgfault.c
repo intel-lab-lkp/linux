@@ -5,6 +5,7 @@
  * Copyright (C) 2020 ARM Ltd.
  */
 
+#include <linux/cleanup.h>
 #include <linux/iommu.h>
 #include <linux/list.h>
 #include <linux/sched/mm.h>
@@ -547,3 +548,55 @@ void iopf_queue_free(struct iopf_queue *queue)
 	kfree(queue);
 }
 EXPORT_SYMBOL_GPL(iopf_queue_free);
+
+/**
+ * iommu_set_rid_fault_notifier() - Set a Requester ID fault notifier
+ * @dev: the requester device
+ * @notifier: notifier function pointer (NULL unsets the notifier)
+ * @data: data to pass to the notifier function as a parameter
+ *
+ * Set or remove a device Requester ID based IOMMU fault failure
+ * notifier function.
+ *
+ * Return: 0 on success, or an error code.
+ */
+int iommu_set_rid_fault_notifier(struct device *dev,
+				 iommu_fault_rid_notifier_t notifier,
+				 void *data)
+{
+	struct iommu_rid_notifier *entry, *old;
+	struct dev_iommu *param = dev->iommu;
+	u32 rid;
+	int ret;
+
+	if (!param || !param->fault_param)
+		return -EINVAL;
+
+	rid = iommu_get_dev_rid(dev);
+
+	if (rid == IOMMU_INVALID_RID)
+		return -EINVAL;
+
+	guard(mutex)(&param->lock);
+
+	entry = kmalloc(sizeof(struct iommu_rid_notifier), GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+
+	entry->notifier = notifier;
+	entry->data = data;
+	entry->dev = dev;
+
+	old = xa_store(&param->rid_notifiers, rid, entry, GFP_KERNEL);
+
+	ret = xa_err(old);
+	if (ret) {
+		kfree(entry);
+		return ret;
+	}
+
+	kfree(old);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_set_rid_fault_notifier);

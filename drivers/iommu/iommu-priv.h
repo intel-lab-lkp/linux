@@ -63,4 +63,15 @@ static inline int iommufd_sw_msi(struct iommu_domain *domain,
 int iommu_replace_device_pasid(struct iommu_domain *domain,
 			       struct device *dev, ioasid_t pasid,
 			       struct iommu_attach_handle *handle);
+
+struct iommu_rid_notifier {
+	iommu_fault_rid_notifier_t notifier;
+	struct device *dev;
+	void *data;
+};
+
+#define IOMMU_INVALID_RID	U32_MAX
+
+u32 iommu_get_dev_rid(struct device *dev);
+
 #endif /* __LINUX_IOMMU_PRIV_H */
