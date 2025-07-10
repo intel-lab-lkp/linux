@@ -5338,10 +5338,6 @@ static bool bond_should_broadcast_neighbor(struct sk_buff *skb,
 					   struct net_device *dev)
 {
 	struct bonding *bond = netdev_priv(dev);
-	struct {
-		struct ipv6hdr ip6;
-		struct icmp6hdr icmp6;
-	} *combined, _combined;
 
 	if (!static_branch_unlikely(&bond_bcast_neigh_enabled))
 		return false;
@@ -5349,18 +5345,9 @@ static bool bond_should_broadcast_neighbor(struct sk_buff *skb,
 	if (!bond->params.broadcast_neighbor)
 		return false;
 
-	if (skb->protocol == htons(ETH_P_ARP))
+	if (skb->protocol == htons(ETH_P_ARP) ||
+	    (skb->protocol == htons(ETH_P_IPV6) && bond_is_icmpv6_nd(skb)))
 		return true;
-
-	if (skb->protocol == htons(ETH_P_IPV6)) {
-		combined = skb_header_pointer(skb, skb_mac_header_len(skb),
-					      sizeof(_combined),
-					      &_combined);
-		if (combined && combined->ip6.nexthdr == NEXTHDR_ICMP &&
-		    (combined->icmp6.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION ||
-		     combined->icmp6.icmp6_type == NDISC_NEIGHBOUR_ADVERTISEMENT))
-			return true;
-	}
 
 	return false;
 }
