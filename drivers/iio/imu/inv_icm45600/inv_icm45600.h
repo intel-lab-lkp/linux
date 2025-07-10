@@ -10,6 +10,8 @@
 #include <linux/iio/iio.h>
 #include <linux/types.h>
 
+#include "inv_icm45600_buffer.h"
+
 #define INV_ICM45600_REG_BANK_MASK	GENMASK(15, 8)
 #define INV_ICM45600_REG_ADDR_MASK	GENMASK(7, 0)
 
@@ -128,6 +130,7 @@ extern const struct inv_icm45600_chip_info inv_icm45689_chip_info;
  *  @indio_gyro:	gyroscope IIO device.
  *  @indio_accel:	accelerometer IIO device.
  *  @timestamp:		interrupt timestamps.
+ *  @fifo:		FIFO management structure.
  *  @buffer:		data transfer buffer aligned for DMA.
  */
 struct inv_icm45600_state {
@@ -144,6 +147,7 @@ struct inv_icm45600_state {
 		s64 gyro;
 		s64 accel;
 	} timestamp;
+	struct inv_icm45600_fifo fifo;
 	union {
 		u8 buff[2];
 		__le16 u16;
