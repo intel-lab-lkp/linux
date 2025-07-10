@@ -17,6 +17,25 @@ struct pcc_mbox_chan {
 	u32 latency;
 	u32 max_access_rate;
 	u16 min_turnaround_time;
+
+	/* Set to true When a message is sent that has the flag
+	 * set that the client requests an Interrupt
+	 * indicating that the transmission is complete.
+	 */
+	bool irq_ack;
+	/* Optional callback that allows the driver
+	 * to allocate the memory used for receiving
+	 * messages.  The return value is the location
+	 * inside the buffer where the mailbox should write the data.
+	 */
+	void *(*rx_alloc)(struct mbox_client *cl,  int size);
+};
+
+struct pcc_header {
+	u32 signature;
+	u32 flags;
+	u32 length;
+	u32 command;
 };
 
 /* Generic Communications Channel Shared Memory Region */
