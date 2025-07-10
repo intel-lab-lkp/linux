@@ -3,7 +3,7 @@
  * NXP S32G pinctrl driver
  *
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2017-2018, 2020-2022 NXP
+ * Copyright 2017-2018, 2020-2022, 2024-2025 NXP
  * Copyright (C) 2022 SUSE LLC
  */
 
@@ -762,7 +762,7 @@ static const struct pinctrl_pin_desc s32_pinctrl_pads_siul2[] = {
 	S32_PINCTRL_PIN(S32G_IMCR_SIUL_EIRQ31),
 };
 
-static const struct s32_pin_range s32_pin_ranges_siul2[] = {
+static const struct s32_pin_range legacy_s32_pin_ranges_siul2[] = {
 	/* MSCR pin ID ranges */
 	S32_PIN_RANGE(0, 101),
 	S32_PIN_RANGE(112, 122),
@@ -773,27 +773,47 @@ static const struct s32_pin_range s32_pin_ranges_siul2[] = {
 	S32_PIN_RANGE(942, 1007),
 };
 
-static const struct s32_pinctrl_soc_data s32_pinctrl_data = {
+static const struct s32_pinctrl_soc_data legacy_s32_pinctrl_data = {
 	.pins = s32_pinctrl_pads_siul2,
 	.npins = ARRAY_SIZE(s32_pinctrl_pads_siul2),
-	.mem_pin_ranges = s32_pin_ranges_siul2,
-	.mem_regions = ARRAY_SIZE(s32_pin_ranges_siul2),
+	.mem_pin_ranges = legacy_s32_pin_ranges_siul2,
+	.mem_regions = ARRAY_SIZE(legacy_s32_pin_ranges_siul2),
+	.legacy = true,
 };
 
 static const struct of_device_id s32_pinctrl_of_match[] = {
 	{
 		.compatible = "nxp,s32g2-siul2-pinctrl",
-		.data = &s32_pinctrl_data,
+		.data = &legacy_s32_pinctrl_data,
 	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, s32_pinctrl_of_match);
+
+static const struct s32_pin_range s32_pin_ranges_siul2[] = {
+	/* MSCR pin ID ranges */
+	S32_PIN_RANGE(0, 101),
+	S32_PIN_RANGE(112, 190),
+	/* IMCR pin ID ranges */
+	S32_PIN_RANGE(512, 595),
+	S32_PIN_RANGE(631, 1007),
+};
+
+static const struct s32_pinctrl_soc_data s32_pinctrl_data = {
+	.pins = s32_pinctrl_pads_siul2,
+	.npins = ARRAY_SIZE(s32_pinctrl_pads_siul2),
+	.mem_pin_ranges = s32_pin_ranges_siul2,
+	.mem_regions = ARRAY_SIZE(s32_pin_ranges_siul2),
+	.legacy = false,
+};
 
 static int s32g_pinctrl_probe(struct platform_device *pdev)
 {
 	const struct s32_pinctrl_soc_data *soc_data;
 
 	soc_data = of_device_get_match_data(&pdev->dev);
+	if (!soc_data)
+		soc_data = &s32_pinctrl_data;
 
 	return s32_pinctrl_probe(pdev, soc_data);
 }
