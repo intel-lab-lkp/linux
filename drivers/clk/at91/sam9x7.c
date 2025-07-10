@@ -739,16 +739,16 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 {
 	u8 td_slck_index = 0, md_slck_index = 1, main_xtal_index = 2;
 	struct clk_hw *hw, *main_rc_hw, *main_osc_hw, *usbck_hw;
-	struct clk_range range = CLK_RANGE(0, 0);
 	const char *const main_xtal_name = "main_xtal";
 	const char *const td_slck_name = "td_slck";
 	const char *const md_slck_name = "md_slck";
+	struct clk_range range = CLK_RANGE(0, 0);
+	struct clk_parent_data parent_data[9];
 	struct pmc_data *sam9x7_pmc;
 	void **clk_mux_buffer = NULL;
 	int clk_mux_buffer_size = 0;
 	struct clk *main_xtal;
 	struct regmap *regmap;
-	struct clk_parent_data parent_data[9];
 	int i, j;
 
 	main_xtal = of_clk_get(np, main_xtal_index);
@@ -943,6 +943,7 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 		PMC_INIT_TABLE(mux_table, 4);
 		PMC_FILL_TABLE(&mux_table[4], sam9x7_gck[i].pp_mux_table,
 			       sam9x7_gck[i].pp_count);
+
 		for (j = 0; j < sam9x7_gck[i].pp_count; j++) {
 			u8 pll_id = sam9x7_gck[i].pp[j].pll_id;
 			u8 pll_compid = sam9x7_gck[i].pp[j].pll_compid;
