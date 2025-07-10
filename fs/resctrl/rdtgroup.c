@@ -2036,6 +2036,115 @@ out_unlock:
 	return ret;
 }
 
+static int resctrl_io_alloc_parse_line(char *line,  struct rdt_resource *r,
+				       struct resctrl_schema *s, u32 closid)
+{
+	struct rdt_parse_data data;
+	struct rdt_ctrl_domain *d;
+	char *dom = NULL, *id;
+	unsigned long dom_id;
+
+next:
+	if (!line || line[0] == '\0')
+		return 0;
+
+	dom = strsep(&line, ";");
+	id = strsep(&dom, "=");
+	if (!dom || kstrtoul(id, 10, &dom_id)) {
+		rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
+		return -EINVAL;
+	}
+
+	dom = strim(dom);
+	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+		if (d->hdr.id == dom_id) {
+			data.buf = dom;
+			data.mode = RDT_MODE_SHAREABLE;
+			data.closid = closid;
+			if (parse_cbm(&data, s, d))
+				return -EINVAL;
+			goto next;
+		}
+	}
+	return -EINVAL;
+}
+
+static ssize_t resctrl_io_alloc_cbm_write(struct kernfs_open_file *of,
+					  char *buf, size_t nbytes, loff_t off)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	enum resctrl_conf_type peer_type;
+	struct rdt_resource *r = s->res;
+	struct resctrl_schema *peer_s;
+	u32 io_alloc_closid;
+	char *peer_buf;
+	int ret = 0;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+
+	buf[nbytes - 1] = '\0';
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	if (!r->cache.io_alloc_capable) {
+		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	rdt_last_cmd_clear();
+	rdt_staged_configs_clear();
+
+	if (!resctrl_arch_get_io_alloc_enabled(r)) {
+		rdt_last_cmd_printf("io_alloc is not enabled on %s\n", s->name);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	io_alloc_closid = resctrl_io_alloc_closid(r);
+
+	/*
+	 * When CDP is enabled, update the schema for both CDP_DATA and CDP_CODE.
+	 * Since the buffer is altered during parsing, create a copy to handle
+	 * peer schemata separately.
+	 */
+	if (resctrl_arch_get_cdp_enabled(r->rid)) {
+		peer_type = resctrl_peer_type(s->conf_type);
+		peer_s = resctrl_get_schema(peer_type);
+		peer_buf = kmalloc(nbytes, GFP_KERNEL);
+		if (!peer_buf) {
+			rdt_last_cmd_puts("Out of Memory - io_alloc update failed\n");
+			ret = -ENOMEM;
+			goto out_unlock;
+		}
+
+		memcpy(peer_buf, buf, nbytes);
+
+		if (peer_s)
+			ret = resctrl_io_alloc_parse_line(peer_buf, r, peer_s, io_alloc_closid);
+
+		kfree(peer_buf);
+	}
+
+	if (!ret)
+		ret = resctrl_io_alloc_parse_line(buf, r, s, io_alloc_closid);
+
+	if (ret)
+		goto out_unlock;
+
+	ret = resctrl_arch_update_domains(r, io_alloc_closid);
+
+out_unlock:
+	rdt_staged_configs_clear();
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2135,9 +2244,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "io_alloc_cbm",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_io_alloc_cbm_show,
+		.write		= resctrl_io_alloc_cbm_write,
 	},
 	{
 		.name		= "max_threshold_occupancy",
