@@ -3265,7 +3265,7 @@ static int gfar_probe(struct platform_device *ofdev)
 	/* Carrier starts down, phylib will bring it up */
 	netif_carrier_off(dev);
 
-	err = register_netdev(dev);
+	err = devm_register_netdev(&ofdev->dev, dev);
 
 	if (err) {
 		pr_err("%s: Cannot register net device, aborting\n", dev->name);
@@ -3333,8 +3333,6 @@ static void gfar_remove(struct platform_device *ofdev)
 
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
-
-	unregister_netdev(priv->ndev);
 
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
