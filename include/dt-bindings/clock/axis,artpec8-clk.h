@@ -1,0 +1,122 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+/*
+ * Copyright (c) 2022-2025 Samsung Electronics Co., Ltd.
+ *             https://www.samsung.com
+ * Copyright (c) 2022-2025  Axis Communications AB.
+ *             https://www.axis.com
+ *
+ * Device Tree binding constants for ARTPEC-8 clock controller.
+ */
+
+#ifndef _DT_BINDINGS_CLOCK_ARTPEC8_H
+#define _DT_BINDINGS_CLOCK_ARTPEC8_H
+
+/* CMU_CMU */
+#define PLL_SHARED0				1
+#define DOUT_PLL_SHARED0_DIV2			2
+#define DOUT_PLL_SHARED0_DIV3			3
+#define DOUT_PLL_SHARED0_DIV4			4
+#define PLL_SHARED1				5
+#define DOUT_PLL_SHARED1_DIV2			6
+#define DOUT_PLL_SHARED1_DIV3			7
+#define DOUT_PLL_SHARED1_DIV4			8
+#define PLL_AUDIO				9
+#define DOUT_CLKCMU_BUS_BUS			10
+#define DOUT_CLKCMU_BUS_DLP			11
+#define DOUT_CLKCMU_CDC_CORE			12
+#define DOUT_CLKCMU_OTP				13
+#define DOUT_CLKCMU_CORE_MAIN			14
+#define DOUT_CLKCMU_CORE_DLP			15
+#define DOUT_CLKCMU_CPUCL_SWITCH		16
+#define DOUT_CLKCMU_DLP_CORE			17
+#define DOUT_CLKCMU_FSYS_BUS			18
+#define DOUT_CLKCMU_FSYS_IP			19
+#define DOUT_CLKCMU_FSYS_SCAN0			20
+#define DOUT_CLKCMU_FSYS_SCAN1			21
+#define DOUT_CLKCMU_GPU_3D			22
+#define DOUT_CLKCMU_GPU_2D			23
+#define DOUT_CLKCMU_IMEM_ACLK			24
+#define DOUT_CLKCMU_IMEM_JPEG			25
+#define DOUT_CLKCMU_MIF_SWITCH			26
+#define DOUT_CLKCMU_MIF_BUSP			27
+#define DOUT_CLKCMU_PERI_DISP			28
+#define DOUT_CLKCMU_PERI_IP			29
+#define DOUT_CLKCMU_PERI_AUDIO			30
+#define DOUT_CLKCMU_RSP_CORE			31
+#define DOUT_CLKCMU_TRFM_CORE			32
+#define DOUT_CLKCMU_VCA_ACE			33
+#define DOUT_CLKCMU_VCA_OD			34
+#define DOUT_CLKCMU_VIO_CORE			35
+#define DOUT_CLKCMU_VIO_AUDIO			36
+#define DOUT_CLKCMU_VIP0_CORE			37
+#define DOUT_CLKCMU_VIP1_CORE			38
+#define DOUT_CLKCMU_VPP_CORE			39
+
+/* CMU_BUS */
+#define MOUT_CLK_BUS_ACLK_USER			1
+#define MOUT_CLK_BUS_DLP_USER			2
+#define DOUT_CLK_BUS_PCLK			3
+
+/* CMU_CORE */
+#define MOUT_CLK_CORE_ACLK_USER			1
+#define MOUT_CLK_CORE_DLP_USER			2
+#define DOUT_CLK_CORE_PCLK			3
+
+/* CMU_CPUCL */
+#define PLL_CPUCL				1
+#define MOUT_CLK_CPUCL_PLL			2
+#define MOUT_CLKCMU_CPUCL_SWITCH_USER		3
+#define DOUT_CLK_CPUCL_CPU			4
+#define DOUT_CLK_CLUSTER_ACLK			5
+#define DOUT_CLK_CLUSTER_PCLKDBG		6
+#define DOUT_CLK_CLUSTER_CNTCLK			7
+#define DOUT_CLK_CLUSTER_ATCLK			8
+#define DOUT_CLK_CPUCL_PCLK			9
+#define DOUT_CLK_CPUCL_CMUREF			10
+#define DOUT_CLK_CPUCL_DBG			11
+#define DOUT_CLK_CPUCL_PCLKDBG			12
+
+/* CMU_FSYS */
+#define PLL_FSYS				1
+#define MOUT_FSYS_SCAN0_USER			2
+#define MOUT_FSYS_SCAN1_USER			3
+#define MOUT_FSYS_BUS_USER			4
+#define MOUT_FSYS_MMC_USER			5
+#define DOUT_FSYS_PCIE_PIPE			6
+#define DOUT_FSYS_ADC				7
+#define DOUT_FSYS_PCIE_PHY_REFCLK_SYSPLL	8
+#define DOUT_FSYS_EQOS_INT125			9
+#define DOUT_FSYS_OTP_MEM			10
+#define DOUT_FSYS_SCLK_UART			11
+#define DOUT_FSYS_EQOS_25			12
+#define DOUT_FSYS_EQOS_2p5			13
+#define DOUT_FSYS_BUS300			14
+#define DOUT_FSYS_BUS_QSPI			15
+#define DOUT_FSYS_MMC_CARD0			16
+#define DOUT_FSYS_MMC_CARD1			17
+#define DOUT_SCAN_CLK_FSYS_125			18
+#define DOUT_FSYS_QSPI				19
+#define DOUT_FSYS_SFMC_NAND			20
+#define DOUT_SCAN_CLK_FSYS_MMC			21
+
+/* CMU_IMEM */
+#define MOUT_IMEM_ACLK_USER			1
+#define MOUT_IMEM_GIC_CA53			2
+#define MOUT_IMEM_GIC_CA5			3
+#define MOUT_IMEM_JPEG_USER			4
+
+/* CMU_PERI */
+#define MOUT_PERI_IP_USER			1
+#define MOUT_PERI_AUDIO_USER			2
+#define MOUT_PERI_I2S0				3
+#define MOUT_PERI_I2S1				4
+#define MOUT_PERI_DISP_USER			5
+#define DOUT_PERI_SPI				6
+#define DOUT_PERI_UART1				7
+#define DOUT_PERI_UART2				8
+#define DOUT_PERI_PCLK				9
+#define DOUT_PERI_I2S0				10
+#define DOUT_PERI_I2S1				11
+#define DOUT_PERI_DSIM				12
+
+#endif /* _DT_BINDINGS_CLOCK_ARTPEC8_H */
