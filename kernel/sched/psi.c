@@ -1341,9 +1341,6 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	t->state = state;
 	t->threshold = threshold_us * NSEC_PER_USEC;
 	t->win.size = window_us * NSEC_PER_USEC;
-	window_reset(&t->win, sched_clock(),
-			group->total[PSI_POLL][t->state], 0);
-
 	t->event = 0;
 	t->last_event_time = 0;
 	t->of = of;
@@ -1354,6 +1351,8 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 
 	if (privileged) {
 		mutex_lock(&group->rtpoll_trigger_lock);
+		window_reset(&t->win, sched_clock(),
+				group->total[PSI_POLL][t->state], 0);
 
 		if (!rcu_access_pointer(group->rtpoll_task)) {
 			struct task_struct *task;
@@ -1378,6 +1377,9 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 		mutex_unlock(&group->rtpoll_trigger_lock);
 	} else {
 		mutex_lock(&group->avgs_lock);
+
+		window_reset(&t->win, sched_clock(),
+				group->total[PSI_AVGS][t->state], 0);
 
 		list_add(&t->node, &group->avg_triggers);
 		group->avg_nr_triggers[t->state]++;
