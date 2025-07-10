@@ -145,6 +145,37 @@ int unwind_user_faultable(struct unwind_stacktrace *trace)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(unwind_user_faultable);
+
+/**
+ * unwind_user_trace_cached - Copy user stack trace from cache
+ * @trace: The descriptor that will store the user stacktrace
+ *
+ * Copy user stack trace from cache if the cache was populated by
+ * unwind_user_faultable prior to this call. The returned trace
+ * entries are only valid until the cache is reset.
+ *
+ * Return: 0 on success and negative on error
+ *         On success @trace will contain the user space stacktrace
+ */
+int unwind_user_trace_cached(struct unwind_stacktrace *trace)
+{
+	struct unwind_task_info *info = &current->unwind_info;
+	struct unwind_cache *cache;
+
+	if (!current->mm)
+		return -EINVAL;
+
+	cache = info->cache;
+	if (!cache || !cache->nr_entries)
+		return -ENOENT;
+
+	trace->nr = cache->nr_entries;
+	trace->entries = cache->entries;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(unwind_user_trace_cached);
 
 static void process_unwind_deferred(struct task_struct *task)
 {
