@@ -12,6 +12,16 @@ void *rust_helper_pci_get_drvdata(struct pci_dev *pdev)
 	return pci_get_drvdata(pdev);
 }
 
+u16 rust_helper_pci_dev_id(struct pci_dev *dev)
+{
+	return PCI_DEVID(dev->bus->number, dev->devfn);
+}
+
+resource_size_t rust_helper_pci_resource_start(struct pci_dev *pdev, int bar)
+{
+	return pci_resource_start(pdev, bar);
+}
+
 resource_size_t rust_helper_pci_resource_len(struct pci_dev *pdev, int bar)
 {
 	return pci_resource_len(pdev, bar);
