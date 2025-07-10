@@ -444,7 +444,10 @@ struct fanotify_perm_event {
 	size_t count;
 	u32 response;			/* userspace answer to the event */
 	unsigned short state;		/* state of the event */
-	int fd;		/* fd we passed to userspace for this event */
+	union {
+		__s32 fd;			/* fd we passed to userspace for this event */
+		__s32 id;			/* FAN_REPORT_RESPONSE_ID */
+	};
 	union {
 		struct fanotify_response_info_header hdr;
 		struct fanotify_response_info_audit_rule audit_rule;
