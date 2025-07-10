@@ -467,17 +467,6 @@ static void unmap_group_regs(struct gfar_private *priv)
 			iounmap(priv->gfargrp[i].regs);
 }
 
-static void free_gfar_dev(struct gfar_private *priv)
-{
-	int i, j;
-
-	for (i = 0; i < priv->num_grps; i++)
-		for (j = 0; j < GFAR_NUM_IRQS; j++) {
-			kfree(priv->gfargrp[i].irqinfo[j]);
-			priv->gfargrp[i].irqinfo[j] = NULL;
-		}
-}
-
 static void disable_napi(struct gfar_private *priv)
 {
 	int i;
@@ -505,8 +494,8 @@ static int gfar_parse_group(struct device_node *np,
 	int i;
 
 	for (i = 0; i < GFAR_NUM_IRQS; i++) {
-		grp->irqinfo[i] = kzalloc(sizeof(struct gfar_irqinfo),
-					  GFP_KERNEL);
+		grp->irqinfo[i] = devm_kzalloc(
+			priv->dev, sizeof(struct gfar_irqinfo), GFP_KERNEL);
 		if (!grp->irqinfo[i])
 			return -ENOMEM;
 	}
@@ -811,7 +800,6 @@ rx_alloc_failed:
 	gfar_free_rx_queues(priv);
 tx_alloc_failed:
 	gfar_free_tx_queues(priv);
-	free_gfar_dev(priv);
 	return err;
 }
 
@@ -3324,7 +3312,6 @@ register_fail:
 	gfar_free_tx_queues(priv);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
-	free_gfar_dev(priv);
 	return err;
 }
 
@@ -3342,7 +3329,6 @@ static void gfar_remove(struct platform_device *ofdev)
 	unmap_group_regs(priv);
 	gfar_free_rx_queues(priv);
 	gfar_free_tx_queues(priv);
-	free_gfar_dev(priv);
 }
 
 #ifdef CONFIG_PM
