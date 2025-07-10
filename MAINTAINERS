@@ -11737,6 +11737,7 @@ F:	include/uapi/linux/input-event-codes.h
 F:	include/uapi/linux/input.h
 F:	include/uapi/linux/serio.h
 F:	include/uapi/linux/uinput.h
+F:	tools/testing/selftests/input/
 
 INPUT MULTITOUCH (MT) PROTOCOL
 M:	Henrik Rydberg <rydberg@bitmath.org>
@@ -24664,6 +24665,7 @@ F:	kernel/trace/
 F:	kernel/tracepoint.c
 F:	scripts/tracing/
 F:	tools/testing/selftests/ftrace/
+F:	tools/testing/selftests/input/test_input_tracepoints.sh
 
 TRACING MMIO ACCESSES (MMIOTRACE)
 M:	Steven Rostedt <rostedt@goodmis.org>
