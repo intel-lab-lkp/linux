@@ -1154,12 +1154,14 @@ static void mlx5e_lro_update_tcp_hdr(struct mlx5_cqe64 *cqe, struct tcphdr *tcp)
 	}
 }
 
-static void mlx5e_lro_update_hdr(struct sk_buff *skb, struct mlx5_cqe64 *cqe,
-				 u32 cqe_bcnt)
+static unsigned int mlx5e_lro_update_hdr(struct sk_buff *skb,
+					 struct mlx5_cqe64 *cqe,
+					 u32 cqe_bcnt)
 {
 	struct ethhdr	*eth = (struct ethhdr *)(skb->data);
 	struct tcphdr	*tcp;
 	int network_depth = 0;
+	unsigned int hdrlen;
 	__wsum check;
 	__be16 proto;
 	u16 tot_len;
@@ -1169,11 +1171,14 @@ static void mlx5e_lro_update_hdr(struct sk_buff *skb, struct mlx5_cqe64 *cqe,
 
 	tot_len = cqe_bcnt - network_depth;
 	ip_p = skb->data + network_depth;
+	hdrlen = network_depth;
 
 	if (proto == htons(ETH_P_IP)) {
 		struct iphdr *ipv4 = ip_p;
 
 		tcp = ip_p + sizeof(struct iphdr);
+		hdrlen += sizeof(struct iphdr);
+
 		skb_shinfo(skb)->gso_type = SKB_GSO_TCPV4;
 
 		ipv4->ttl               = cqe->lro.min_ttl;
@@ -1193,6 +1198,8 @@ static void mlx5e_lro_update_hdr(struct sk_buff *skb, struct mlx5_cqe64 *cqe,
 		struct ipv6hdr *ipv6 = ip_p;
 
 		tcp = ip_p + sizeof(struct ipv6hdr);
+		hdrlen += sizeof(struct ipv6hdr);
+
 		skb_shinfo(skb)->gso_type = SKB_GSO_TCPV6;
 
 		ipv6->hop_limit         = cqe->lro.min_ttl;
@@ -1205,6 +1212,10 @@ static void mlx5e_lro_update_hdr(struct sk_buff *skb, struct mlx5_cqe64 *cqe,
 		tcp->check = tcp_v6_check(payload_len, &ipv6->saddr,
 					  &ipv6->daddr, check);
 	}
+
+	hdrlen += tcp->doff * 4;
+
+	return hdrlen;
 }
 
 static void *mlx5e_shampo_get_packet_hd(struct mlx5e_rq *rq, u16 header_index)
@@ -1561,8 +1572,9 @@ static inline void mlx5e_build_rx_skb(struct mlx5_cqe64 *cqe,
 		mlx5e_macsec_offload_handle_rx_skb(netdev, skb, cqe);
 
 	if (lro_num_seg > 1) {
-		mlx5e_lro_update_hdr(skb, cqe, cqe_bcnt);
-		skb_shinfo(skb)->gso_size = DIV_ROUND_UP(cqe_bcnt, lro_num_seg);
+		unsigned int hdrlen = mlx5e_lro_update_hdr(skb, cqe, cqe_bcnt);
+
+		skb_shinfo(skb)->gso_size = DIV_ROUND_UP(cqe_bcnt - hdrlen, lro_num_seg);
 		/* Subtract one since we already counted this as one
 		 * "regular" packet in mlx5e_complete_rx_cqe()
 		 */
