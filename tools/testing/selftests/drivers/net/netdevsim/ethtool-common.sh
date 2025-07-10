@@ -43,13 +43,11 @@ function check {
 }
 
 function make_netdev {
-    # Make a netdevsim
-    old_netdevs=$(ls /sys/class/net)
-
     if ! $(lsmod | grep -q netdevsim); then
 	modprobe netdevsim
     fi
 
+    # Make a netdevsim
     echo $NSIM_ID $@ > /sys/bus/netdevsim/new_device
     udevadm settle
     # get new device name
