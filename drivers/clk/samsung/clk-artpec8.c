@@ -18,6 +18,7 @@
 #define CMU_BUS_NR_CLK			(DOUT_CLK_BUS_PCLK + 1)
 #define CMU_CORE_NR_CLK			(DOUT_CLK_CORE_PCLK + 1)
 #define CMU_CPUCL_NR_CLK		(DOUT_CLK_CPUCL_PCLKDBG + 1)
+#define CMU_FSYS_NR_CLK			(DOUT_SCAN_CLK_FSYS_MMC + 1)
 #define CMU_IMEM_NR_CLK			(MOUT_IMEM_JPEG_USER + 1)
 
 /* register offset definitions for cmu_cmu (0x12400000) */
@@ -619,6 +620,139 @@ static void __init artpec8_clk_cmu_cpucl_init(struct device_node *np)
 
 CLK_OF_DECLARE(artpec8_clk_cmu_cpucl, "axis,artpec8-cmu-cpucl",
 	       artpec8_clk_cmu_cpucl_init);
+
+/* Register Offset definitions for CMU_FSYS (0x16c10000) */
+#define PLL_LOCKTIME_PLL_FSYS				0x0004
+#define PLL_CON0_MUX_CLK_FSYS_BUS_USER			0x0120
+#define PLL_CON0_MUX_CLK_FSYS_MMC_USER			0x0140
+#define PLL_CON0_MUX_CLK_FSYS_SCAN0_USER		0x0160
+#define PLL_CON0_MUX_CLK_FSYS_SCAN1_USER		0x0180
+#define PLL_CON0_PLL_FSYS				0x01c0
+#define DIV_CLK_FSYS_ADC				0x1804
+#define DIV_CLK_FSYS_BUS300				0x1808
+#define DIV_CLK_FSYS_BUS_QSPI				0x180c
+#define DIV_CLK_FSYS_EQOS_25				0x1810
+#define DIV_CLK_FSYS_EQOS_2P5				0x1814
+#define DIV_CLK_FSYS_EQOS_500				0x1818
+#define DIV_CLK_FSYS_EQOS_INT125			0x181c
+#define DIV_CLK_FSYS_MMC_CARD0				0x1820
+#define DIV_CLK_FSYS_MMC_CARD1				0x1824
+#define DIV_CLK_FSYS_OTP_MEM				0x1828
+#define DIV_CLK_FSYS_PCIE_PHY_REFCLK_SYSPLL		0x182c
+#define DIV_CLK_FSYS_QSPI				0x1830
+#define DIV_CLK_FSYS_SCLK_UART				0x1834
+#define DIV_CLK_FSYS_SFMC_NAND				0x1838
+#define DIV_SCAN_CLK_FSYS_125				0x183c
+#define DIV_SCAN_CLK_FSYS_MMC				0x1840
+#define DIV_SCAN_CLK_FSYS_PCIE_PIPE			0x1844
+
+static const unsigned long cmu_fsys_clk_regs[] __initconst = {
+	PLL_LOCKTIME_PLL_FSYS,
+	PLL_CON0_MUX_CLK_FSYS_BUS_USER,
+	PLL_CON0_MUX_CLK_FSYS_MMC_USER,
+	PLL_CON0_MUX_CLK_FSYS_SCAN0_USER,
+	PLL_CON0_MUX_CLK_FSYS_SCAN1_USER,
+	PLL_CON0_PLL_FSYS,
+	DIV_CLK_FSYS_ADC,
+	DIV_CLK_FSYS_BUS300,
+	DIV_CLK_FSYS_BUS_QSPI,
+	DIV_CLK_FSYS_EQOS_25,
+	DIV_CLK_FSYS_EQOS_2P5,
+	DIV_CLK_FSYS_EQOS_500,
+	DIV_CLK_FSYS_EQOS_INT125,
+	DIV_CLK_FSYS_MMC_CARD0,
+	DIV_CLK_FSYS_MMC_CARD1,
+	DIV_CLK_FSYS_OTP_MEM,
+	DIV_CLK_FSYS_PCIE_PHY_REFCLK_SYSPLL,
+	DIV_CLK_FSYS_QSPI,
+	DIV_CLK_FSYS_SCLK_UART,
+	DIV_CLK_FSYS_SFMC_NAND,
+	DIV_SCAN_CLK_FSYS_125,
+	DIV_SCAN_CLK_FSYS_MMC,
+	DIV_SCAN_CLK_FSYS_PCIE_PIPE,
+};
+
+static const struct samsung_pll_clock cmu_fsys_pll_clks[] __initconst = {
+	PLL(pll_1017x, PLL_FSYS, "fout_pll_fsys", "fin_pll",
+	    PLL_LOCKTIME_PLL_FSYS, PLL_CON0_PLL_FSYS, NULL),
+};
+
+PNAME(mout_fsys_scan0_user_p) = { "fin_pll", "dout_clkcmu_fsys_scan0" };
+PNAME(mout_fsys_scan1_user_p) = { "fin_pll", "dout_clkcmu_fsys_scan1" };
+PNAME(mout_fsys_bus_user_p) = { "fin_pll", "dout_clkcmu_fsys_bus" };
+PNAME(mout_fsys_mmc_user_p) = { "fin_pll", "dout_clkcmu_fsys_ip" };
+PNAME(mout_fsys_pll_fsys_p) = { "fin_pll", "fout_pll_fsys" };
+
+static const struct samsung_mux_clock cmu_fsys_mux_clks[] __initconst = {
+	MUX(0, "mout_clk_pll_fsys", mout_fsys_pll_fsys_p, PLL_CON0_PLL_FSYS, 4, 1),
+	MUX(MOUT_FSYS_SCAN0_USER, "mout_fsys_scan0_user",
+	    mout_fsys_scan0_user_p, PLL_CON0_MUX_CLK_FSYS_SCAN0_USER, 4, 1),
+	MUX(MOUT_FSYS_SCAN1_USER, "mout_fsys_scan1_user",
+	    mout_fsys_scan1_user_p, PLL_CON0_MUX_CLK_FSYS_SCAN1_USER, 4, 1),
+	MUX(MOUT_FSYS_BUS_USER, "mout_fsys_bus_user",
+	    mout_fsys_bus_user_p, PLL_CON0_MUX_CLK_FSYS_BUS_USER, 4, 1),
+	MUX(MOUT_FSYS_MMC_USER, "mout_fsys_mmc_user",
+	    mout_fsys_mmc_user_p, PLL_CON0_MUX_CLK_FSYS_MMC_USER, 4, 1),
+};
+
+static const struct samsung_div_clock cmu_fsys_div_clks[] __initconst = {
+	DIV(DOUT_FSYS_PCIE_PIPE, "dout_fsys_pcie_pipe", "mout_clk_pll_fsys",
+	    DIV_SCAN_CLK_FSYS_PCIE_PIPE, 0, 4),
+	DIV(DOUT_FSYS_ADC, "dout_fsys_adc", "mout_clk_pll_fsys",
+	    DIV_CLK_FSYS_ADC, 0, 7),
+	DIV(DOUT_FSYS_PCIE_PHY_REFCLK_SYSPLL,
+	    "dout_fsys_pcie_phy_refclk_syspll", "mout_clk_pll_fsys",
+	    DIV_CLK_FSYS_PCIE_PHY_REFCLK_SYSPLL, 0, 8),
+	DIV(DOUT_FSYS_QSPI, "dout_fsys_qspi", "mout_fsys_mmc_user",
+	    DIV_CLK_FSYS_QSPI, 0, 4),
+	DIV(DOUT_FSYS_EQOS_INT125, "dout_fsys_eqos_int125", "mout_clk_pll_fsys",
+	    DIV_CLK_FSYS_EQOS_INT125, 0, 4),
+	DIV(DOUT_FSYS_OTP_MEM, "dout_fsys_otp_mem", "fin_pll",
+	    DIV_CLK_FSYS_OTP_MEM, 0, 9),
+	DIV(DOUT_FSYS_SCLK_UART, "dout_fsys_sclk_uart", "mout_clk_pll_fsys",
+	    DIV_CLK_FSYS_SCLK_UART, 0, 10),
+	DIV(DOUT_FSYS_SFMC_NAND, "dout_fsys_sfmc_nand", "mout_fsys_mmc_user",
+	    DIV_CLK_FSYS_SFMC_NAND, 0, 4),
+	DIV(DOUT_SCAN_CLK_FSYS_125,
+	    "dout_scan_clk_fsys_125", "mout_clk_pll_fsys",
+	    DIV_SCAN_CLK_FSYS_125, 0, 4),
+	DIV(DOUT_SCAN_CLK_FSYS_MMC, "dout_scan_clk_fsys_mmc", "fout_pll_fsys",
+	    DIV_SCAN_CLK_FSYS_MMC, 0, 4),
+	DIV(DOUT_FSYS_EQOS_25, "dout_fsys_eqos_25", "dout_fsys_eqos_int125",
+	    DIV_CLK_FSYS_EQOS_25, 0, 4),
+	DIV_F(DOUT_FSYS_EQOS_2p5, "dout_fsys_eqos_2p5", "dout_fsys_eqos_25",
+	      DIV_CLK_FSYS_EQOS_2P5, 0, 4, CLK_SET_RATE_PARENT, 0),
+	DIV(0, "dout_fsys_eqos_500", "mout_clk_pll_fsys",
+	    DIV_CLK_FSYS_EQOS_500, 0, 4),
+	DIV(DOUT_FSYS_BUS300, "dout_fsys_bus300", "mout_fsys_bus_user",
+	    DIV_CLK_FSYS_BUS300, 0, 4),
+	DIV(DOUT_FSYS_BUS_QSPI, "dout_fsys_bus_qspi", "mout_fsys_mmc_user",
+	    DIV_CLK_FSYS_BUS_QSPI, 0, 4),
+	DIV(DOUT_FSYS_MMC_CARD0, "dout_fsys_mmc_card0", "mout_fsys_mmc_user",
+	    DIV_CLK_FSYS_MMC_CARD0, 0, 10),
+	DIV(DOUT_FSYS_MMC_CARD1, "dout_fsys_mmc_card1", "mout_fsys_mmc_user",
+	    DIV_CLK_FSYS_MMC_CARD1, 0, 10),
+};
+
+static const struct samsung_cmu_info cmu_fsys_info __initconst = {
+	.pll_clks		= cmu_fsys_pll_clks,
+	.nr_pll_clks		= ARRAY_SIZE(cmu_fsys_pll_clks),
+	.mux_clks		= cmu_fsys_mux_clks,
+	.nr_mux_clks		= ARRAY_SIZE(cmu_fsys_mux_clks),
+	.div_clks		= cmu_fsys_div_clks,
+	.nr_div_clks		= ARRAY_SIZE(cmu_fsys_div_clks),
+	.nr_clk_ids		= CMU_FSYS_NR_CLK,
+	.clk_regs		= cmu_fsys_clk_regs,
+	.nr_clk_regs		= ARRAY_SIZE(cmu_fsys_clk_regs),
+};
+
+static void __init artpec8_clk_cmu_fsys_init(struct device_node *np)
+{
+	samsung_cmu_register_one(np, &cmu_fsys_info);
+}
+
+CLK_OF_DECLARE(artpec8_clk_cmu_fsys, "axis,artpec8-cmu-fsys",
+	       artpec8_clk_cmu_fsys_init);
 
 /* Register Offset definitions for CMU_IMEM (0x10010000) */
 #define PLL_CON0_MUX_CLK_IMEM_ACLK_USER			0x0100
