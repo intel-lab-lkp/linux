@@ -355,6 +355,23 @@ static inline void *nmdesc_address(struct netmem_desc *nmdesc)
 	return page_address(nmdesc_to_page(nmdesc));
 }
 
+#ifdef CONFIG_PAGE_POOL
+/* XXX: This would better be moved to mm, once mm gets its way to
+ * identify the type of page for page pool.
+ */
+static inline bool page_pool_page_is_pp(struct page *page)
+{
+	struct netmem_desc *desc = page_to_nmdesc(page);
+
+	return (desc->pp_magic & PP_MAGIC_MASK) == PP_SIGNATURE;
+}
+#else
+static inline bool page_pool_page_is_pp(struct page *page)
+{
+	return false;
+}
+#endif
+
 /**
  * __netmem_address - unsafely get pointer to the memory backing @netmem
  * @netmem: netmem reference to get the pointer for
