@@ -1090,34 +1090,33 @@ static const struct clk_pcr_layout sama7d65_pcr_layout = {
 static void __init sama7d65_pmc_setup(struct device_node *np)
 {
 	u8 td_slck_index = 0, md_slck_index = 1, main_xtal_index = 2;
-	struct clk_hw *hw, *main_rc_hw, *main_osc_hw, *main_xtal_hw;
+	struct clk_hw *hw, *main_rc_hw, *main_osc_hw, *usbck_hw;
 	const char * const main_xtal_name = "main_xtal";
 	const char * const td_slck_name = "td_slck";
 	const char * const md_slck_name = "md_slck";
 	struct clk_parent_data parent_data[10];
 	struct pmc_data *sama7d65_pmc;
-	const char *parent_names[11];
 	void **alloc_mem = NULL;
 	int alloc_mem_size = 0;
+	struct clk *main_xtal;
 	struct regmap *regmap;
 	bool bypass;
 	int i, j;
 
-	main_xtal_hw = __clk_get_hw(of_clk_get_by_name(np, main_xtal_name));
-
-	if (!main_xtal_hw)
+	main_xtal = of_clk_get(np, main_xtal_index);
+	if (IS_ERR(main_xtal))
 		return;
 
 	regmap = device_node_to_regmap(np);
 	if (IS_ERR(regmap))
-		return;
+		goto put_main_xtal;
 
 	sama7d65_pmc = pmc_data_allocate(PMC_INDEX_MAX,
 					 nck(sama7d65_systemck),
 					 nck(sama7d65_periphck),
 					 nck(sama7d65_gck), 8);
 	if (!sama7d65_pmc)
-		return;
+		goto put_main_xtal;
 
 	alloc_mem = kmalloc(sizeof(void *) *
 			    (ARRAY_SIZE(sama7d65_mckx) + ARRAY_SIZE(sama7d65_gck)),
@@ -1158,18 +1157,18 @@ static void __init sama7d65_pmc_setup(struct device_node *np)
 				switch (sama7d65_plls[i][j].p) {
 				case SAMA7D65_PLL_PARENT_MAINCK:
 					parent_data[0] = AT91_CLK_PD_NAME("mainck", -1);
-					hw = sama7d65_pmc->chws[PMC_MAIN];
+					parent_rate = clk_hw_get_rate(sama7d65_pmc->chws[PMC_MAIN]);
 					break;
 				case SAMA7D65_PLL_PARENT_MAIN_XTAL:
 					parent_data[0] = AT91_CLK_PD_NAME(main_xtal_name,
 									  main_xtal_index);
-					hw = main_xtal_hw;
+					parent_rate = clk_get_rate(main_xtal);
 					break;
 				default:
 					/* Should not happen. */
 					break;
 				}
-				parent_rate = clk_hw_get_rate(hw);
+
 				if (!parent_rate)
 					return;
 
@@ -1253,11 +1252,11 @@ static void __init sama7d65_pmc_setup(struct device_node *np)
 			sama7d65_pmc->chws[sama7d65_mckx[i].eid] = hw;
 	}
 
-	parent_names[0] = "syspll_divpmcck";
-	parent_names[1] = "usbpll_divpmcck";
-	parent_names[2] = "main_osc";
-	hw = sam9x60_clk_register_usb(regmap, "usbck", parent_names, 3);
-	if (IS_ERR(hw))
+	parent_data[0] = AT91_CLK_PD_HW(sama7d65_plls[PLL_ID_SYS][PLL_COMPID_DIV0].hw);
+	parent_data[1] = AT91_CLK_PD_HW(sama7d65_plls[PLL_ID_USB][PLL_COMPID_DIV0].hw);
+	parent_data[2] = AT91_CLK_PD_HW(main_osc_hw);
+	usbck_hw = sam9x60_clk_register_usb(regmap, "usbck", NULL, parent_data, 3);
+	if (IS_ERR(usbck_hw))
 		goto err_free;
 
 	parent_data[0] = AT91_CLK_PD_NAME(md_slck_name, md_slck_index);
@@ -1353,7 +1352,7 @@ static void __init sama7d65_pmc_setup(struct device_node *np)
 	of_clk_add_hw_provider(np, of_clk_hw_pmc_get, sama7d65_pmc);
 	kfree(alloc_mem);
 
-	return;
+	goto put_main_xtal;
 
 err_free:
 	if (alloc_mem) {
@@ -1363,6 +1362,8 @@ err_free:
 	}
 
 	kfree(sama7d65_pmc);
+put_main_xtal:
+	clk_put(main_xtal);
 }
 
 /* Some clks are used for a clocksource */
