@@ -24017,6 +24017,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/dma/snps,dw-axi-dmac.yaml
 F:	drivers/dma/dw-axi-dmac/
 
+SYNOPSYS DESIGNWARE MIPI D-PHY RX DRIVER
+M:	Karthik Poduval <kpoduval@lab126.com>
+M:	Jason Xiong <jyxiong@amazon.com>
+M:	Miguel Lopes <miguel.lopes@synopsys.com>
+S:	Supported
+F:	Documentation/devicetree/bindings/phy/snps,dw-dphy-rx.yaml
+
 SYNOPSYS DESIGNWARE DMAC DRIVER
 M:	Viresh Kumar <vireshk@kernel.org>
 R:	Andy Shevchenko <andriy.shevchenko@linux.intel.com>
