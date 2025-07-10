@@ -478,6 +478,7 @@ static inline bool pwm_might_sleep(struct pwm_device *pwm)
 
 /* PWM provider APIs */
 void pwmchip_put(struct pwm_chip *chip);
+void pwmchip_release(struct device *dev);
 struct pwm_chip *pwmchip_alloc(struct device *parent, unsigned int npwm, size_t sizeof_priv);
 struct pwm_chip *devm_pwmchip_alloc(struct device *parent, unsigned int npwm, size_t sizeof_priv);
 
@@ -548,6 +549,10 @@ static inline void pwm_disable(struct pwm_device *pwm)
 }
 
 static inline void pwmchip_put(struct pwm_chip *chip)
+{
+}
+
+static inline void pwmchip_release(struct device *dev)
 {
 }
 
