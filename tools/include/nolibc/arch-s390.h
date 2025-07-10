@@ -5,12 +5,18 @@
 
 #ifndef _NOLIBC_ARCH_S390_H
 #define _NOLIBC_ARCH_S390_H
-#include <linux/signal.h>
 #include <linux/unistd.h>
 
 #include "compiler.h"
 #include "crt.h"
 #include "std.h"
+
+/* Needed to get the correct struct sigaction definition */
+#define SA_RESTORER	0x04000000
+
+/* Avoid linux/signal.h, it has an incorrect _NSIG and sigset_t */
+#include <asm-generic/signal.h>
+#include <asm-generic/siginfo.h>
 
 /* Syscalls for s390:
  *   - registers are 64-bit

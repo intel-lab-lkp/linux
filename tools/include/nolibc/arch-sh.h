@@ -7,8 +7,13 @@
 #ifndef _NOLIBC_ARCH_SH_H
 #define _NOLIBC_ARCH_SH_H
 
+#include <linux/unistd.h>
+
 #include "compiler.h"
 #include "crt.h"
+
+/* Architecture has a usable linux/signal.h */
+#include <linux/signal.h>
 
 /*
  * Syscalls for SuperH:

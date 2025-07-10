@@ -10,6 +10,14 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* Needed to get the correct struct sigaction definition */
+#define SA_RESTORER	0x04000000
+#define _NOLIBC_ARCH_NEEDS_SA_RESTORER
+
+/* Avoid linux/signal.h, it has an incorrect _NSIG and sigset_t */
+#include <asm-generic/signal.h>
+#include <asm-generic/siginfo.h>
+
 /* Syscalls for PowerPC :
  *   - stack is 16-byte aligned
  *   - syscall number is passed in r0

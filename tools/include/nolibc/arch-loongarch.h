@@ -10,6 +10,9 @@
 #include "compiler.h"
 #include "crt.h"
 
+/* Architecture has a usable linux/signal.h */
+#include <linux/signal.h>
+
 /* Syscalls for LoongArch :
  *   - stack is 16-byte aligned
  *   - syscall number is passed in a7
