@@ -299,6 +299,11 @@ kci_test_addrlft()
 	done
 
 	sleep 5
+	# Schedule out for a bit, address GC runs from the power efficient WQ
+	# if the long sleep above has put the whole system into sleep state
+	# the WQ may have not had a chance to run.
+	sleep 0.1
+
 	run_cmd_grep_fail "10.23.11." ip addr show dev "$devdummy"
 	if [ $? -eq 0 ]; then
 		check_err 1
