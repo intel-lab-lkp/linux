@@ -101,6 +101,17 @@ config PHY_NXP_PTN3222
 	  schemes. It supports all three USB 2.0 data rates: Low Speed, Full
 	  Speed and High Speed.
 
+config PHY_SYNOPSYS_DW_DPHY_RX
+	tristate "Synopsys DesignWare D-PHY Rx Support"
+	depends on HAS_IOMEM && REGMAP_MMIO
+	select GENERIC_PHY
+	select GENERIC_PHY_MIPI_DPHY
+	help
+	  This option enables support for Synopsys DW MIPI D-PHY RX IP. This driver
+	  provides D-PHY functionality using Generic PHY framework and is meant to
+	  be used by MIPI CSI2 receivers over the PPI hardware interface. MIPI CSI2
+	  receivers may find this driver and use it via Generic PHY Framework API.
+
 source "drivers/phy/allwinner/Kconfig"
 source "drivers/phy/amlogic/Kconfig"
 source "drivers/phy/broadcom/Kconfig"
