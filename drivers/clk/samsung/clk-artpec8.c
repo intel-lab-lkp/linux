@@ -17,6 +17,7 @@
 #define CMU_CMU_NR_CLK			(DOUT_CLKCMU_VPP_CORE + 1)
 #define CMU_BUS_NR_CLK			(DOUT_CLK_BUS_PCLK + 1)
 #define CMU_CORE_NR_CLK			(DOUT_CLK_CORE_PCLK + 1)
+#define CMU_CPUCL_NR_CLK		(DOUT_CLK_CPUCL_PCLKDBG + 1)
 #define CMU_IMEM_NR_CLK			(MOUT_IMEM_JPEG_USER + 1)
 
 /* register offset definitions for cmu_cmu (0x12400000) */
@@ -520,6 +521,104 @@ static void __init artpec8_clk_cmu_core_init(struct device_node *np)
 
 CLK_OF_DECLARE(artpec8_clk_cmu_core, "axis,artpec8-cmu-core",
 	       artpec8_clk_cmu_core_init);
+
+/* Register Offset definitions for CMU_CPUCL (0x11410000) */
+#define PLL_LOCKTIME_PLL_CPUCL				0x0000
+#define PLL_CON0_MUX_CLKCMU_CPUCL_SWITCH_USER		0x0120
+#define PLL_CON0_PLL_CPUCL				0x0140
+#define MUX_CLK_CPUCL_PLL				0x1000
+#define DIV_CLK_CLUSTER_ACLK				0x1800
+#define DIV_CLK_CLUSTER_CNTCLK				0x1804
+#define DIV_CLK_CLUSTER_PCLKDBG				0x1808
+#define DIV_CLK_CPUCL_CMUREF				0x180c
+#define DIV_CLK_CPUCL_PCLK				0x1814
+#define DIV_CLK_CLUSTER_ATCLK				0x1818
+#define DIV_CLK_CPUCL_DBG				0x181c
+#define DIV_CLK_CPUCL_PCLKDBG				0x1820
+
+static const unsigned long cmu_cpucl_clk_regs[] __initconst = {
+	PLL_LOCKTIME_PLL_CPUCL,
+	PLL_CON0_MUX_CLKCMU_CPUCL_SWITCH_USER,
+	PLL_CON0_PLL_CPUCL,
+	MUX_CLK_CPUCL_PLL,
+	DIV_CLK_CLUSTER_ACLK,
+	DIV_CLK_CLUSTER_CNTCLK,
+	DIV_CLK_CLUSTER_PCLKDBG,
+	DIV_CLK_CPUCL_CMUREF,
+	DIV_CLK_CPUCL_PCLK,
+	DIV_CLK_CLUSTER_ATCLK,
+	DIV_CLK_CPUCL_DBG,
+	DIV_CLK_CPUCL_PCLKDBG,
+};
+
+static const struct samsung_pll_clock cmu_cpucl_pll_clks[] __initconst = {
+	PLL(pll_1017x, PLL_CPUCL, "fout_pll_cpucl", "fin_pll",
+	    PLL_LOCKTIME_PLL_CPUCL, PLL_CON0_PLL_CPUCL, NULL),
+};
+
+PNAME(mout_clkcmu_cpucl_switch_user_p) = {
+	"fin_pll", "dout_clkcmu_cpucl_switch" };
+PNAME(mout_pll_cpucl_p) = {
+	"fin_pll", "fout_pll_cpucl" };
+PNAME(mout_clk_cpucl_pll_p) = {
+	"mout_pll_cpucl", "mout_clkcmu_cpucl_switch_user" };
+
+static const struct samsung_mux_clock cmu_cpucl_mux_clks[] __initconst = {
+	MUX_F(0, "mout_pll_cpucl", mout_pll_cpucl_p,
+	      PLL_CON0_PLL_CPUCL, 4, 1,
+	      CLK_SET_RATE_PARENT | CLK_RECALC_NEW_RATES, 0),
+	MUX(MOUT_CLKCMU_CPUCL_SWITCH_USER, "mout_clkcmu_cpucl_switch_user",
+	    mout_clkcmu_cpucl_switch_user_p,
+	    PLL_CON0_MUX_CLKCMU_CPUCL_SWITCH_USER, 4, 1),
+	MUX_F(MOUT_CLK_CPUCL_PLL, "mout_clk_cpucl_pll", mout_clk_cpucl_pll_p,
+	      MUX_CLK_CPUCL_PLL, 0, 1, CLK_SET_RATE_PARENT, 0),
+};
+
+static const struct samsung_fixed_factor_clock cpucl_ffactor_clks[] __initconst = {
+	FFACTOR(DOUT_CLK_CPUCL_CPU, "dout_clk_cpucl_cpu",
+		"mout_clk_cpucl_pll", 1, 1, CLK_SET_RATE_PARENT),
+};
+
+static const struct samsung_div_clock cmu_cpucl_div_clks[] __initconst = {
+	DIV(DOUT_CLK_CLUSTER_ACLK, "dout_clk_cluster_aclk",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CLUSTER_ACLK, 0, 4),
+	DIV(DOUT_CLK_CLUSTER_PCLKDBG, "dout_clk_cluster_pclkdbg",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CLUSTER_PCLKDBG, 0, 4),
+	DIV(DOUT_CLK_CLUSTER_CNTCLK, "dout_clk_cluster_cntclk",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CLUSTER_CNTCLK, 0, 4),
+	DIV(DOUT_CLK_CLUSTER_ATCLK, "dout_clk_cluster_atclk",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CLUSTER_ATCLK, 0, 4),
+	DIV(DOUT_CLK_CPUCL_PCLK, "dout_clk_cpucl_pclk",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CPUCL_PCLK, 0, 4),
+	DIV(DOUT_CLK_CPUCL_CMUREF, "dout_clk_cpucl_cmuref",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CPUCL_CMUREF, 0, 3),
+	DIV(DOUT_CLK_CPUCL_DBG, "dout_clk_cpucl_dbg",
+	    "dout_clk_cpucl_cpu", DIV_CLK_CPUCL_DBG, 0, 4),
+	DIV(DOUT_CLK_CPUCL_PCLKDBG, "dout_clk_cpucl_pclkdbg",
+	    "dout_clk_cpucl_dbg", DIV_CLK_CPUCL_PCLKDBG, 0, 4),
+};
+
+static const struct samsung_cmu_info cmu_cpucl_info __initconst = {
+	.pll_clks		= cmu_cpucl_pll_clks,
+	.nr_pll_clks		= ARRAY_SIZE(cmu_cpucl_pll_clks),
+	.fixed_factor_clks	= cpucl_ffactor_clks,
+	.nr_fixed_factor_clks	= ARRAY_SIZE(cpucl_ffactor_clks),
+	.mux_clks		= cmu_cpucl_mux_clks,
+	.nr_mux_clks		= ARRAY_SIZE(cmu_cpucl_mux_clks),
+	.div_clks		= cmu_cpucl_div_clks,
+	.nr_div_clks		= ARRAY_SIZE(cmu_cpucl_div_clks),
+	.nr_clk_ids		= CMU_CPUCL_NR_CLK,
+	.clk_regs		= cmu_cpucl_clk_regs,
+	.nr_clk_regs		= ARRAY_SIZE(cmu_cpucl_clk_regs),
+};
+
+static void __init artpec8_clk_cmu_cpucl_init(struct device_node *np)
+{
+	samsung_cmu_register_one(np, &cmu_cpucl_info);
+}
+
+CLK_OF_DECLARE(artpec8_clk_cmu_cpucl, "axis,artpec8-cmu-cpucl",
+	       artpec8_clk_cmu_cpucl_init);
 
 /* Register Offset definitions for CMU_IMEM (0x10010000) */
 #define PLL_CON0_MUX_CLK_IMEM_ACLK_USER			0x0100
