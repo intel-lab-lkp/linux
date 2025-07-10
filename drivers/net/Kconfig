@@ -630,6 +630,7 @@ config NETDEVSIM
 	depends on IPV6 || IPV6=n
 	depends on PSAMPLE || PSAMPLE=n
 	depends on PTP_1588_CLOCK_MOCK || PTP_1588_CLOCK_MOCK=n
+	depends on PHYLIB || PHYLIB=n
 	select NET_DEVLINK
 	select PAGE_POOL
 	select NET_SHAPER

@@ -21,3 +21,7 @@ endif
 ifneq ($(CONFIG_MACSEC),)
 netdevsim-objs += macsec.o
 endif
+
+ifneq ($(CONFIG_PHYLIB),)
+netdevsim-objs += phy.o
+endif

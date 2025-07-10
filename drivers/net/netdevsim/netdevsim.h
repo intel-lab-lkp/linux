@@ -314,6 +314,7 @@ struct nsim_dev {
 	struct list_head bpf_bound_maps;
 	struct netdev_phys_item_id switch_id;
 	struct list_head port_list;
+	struct list_head phy_list;
 	bool fw_update_status;
 	u32 fw_update_overwrite_mask;
 	u32 max_macs;
@@ -415,6 +416,30 @@ static inline void nsim_macsec_init(struct netdevsim *ns)
 }
 
 static inline void nsim_macsec_teardown(struct netdevsim *ns)
+{
+}
+#endif
+
+#if IS_ENABLED(CONFIG_PHYLIB)
+void nsim_phy_init(struct netdevsim *ns);
+void nsim_phy_teardown(struct netdevsim *dev);
+int nsim_phy_drv_register(void);
+void nsim_phy_drv_unregister(void);
+#else
+static inline void nsim_phy_init(struct netdevsim *ns)
+{
+}
+
+static inline void nsim_phy_teardown(struct netdevsim *ns)
+{
+}
+
+static inline int __init nsim_phy_drv_register(void)
+{
+	return 0;
+}
+
+static inline void __exit nsim_phy_drv_unregister(void)
 {
 }
 #endif
