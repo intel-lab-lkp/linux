@@ -36,6 +36,12 @@
 #include "acl.h"
 #include "truncate.h"
 
+enum {
+	SHOULD_NOT_DIO,
+	SHOULD_DIO,
+	SHOULD_PARTIAL_DIO,
+};
+
 /*
  * Returns %true if the given DIO request should be attempted with DIO, or
  * %false if it should fall back to buffered I/O.
@@ -52,23 +58,89 @@
  *
  * This function implements the traditional ext4 behavior in all these cases.
  */
-static bool ext4_should_use_dio(struct kiocb *iocb, struct iov_iter *iter)
+static int ext4_should_use_dio(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
+	unsigned int len_mask = i_blocksize(inode) - 1;
+	unsigned int addr_mask = bdev_dma_alignment(inode->i_sb->s_bdev);
 	u32 dio_align = ext4_dio_alignment(inode);
 
+	/* inode doesn't support dio, fall back to buffered IO*/
 	if (dio_align == 0)
-		return false;
+		return SHOULD_NOT_DIO;
 
-	if (dio_align == 1)
-		return true;
+	/* addr is misaligned, fall back to buffered IO*/
+	if (!iov_iter_is_aligned(iter, addr_mask, 0))
+		return SHOULD_NOT_DIO;
 
-	return IS_ALIGNED(iocb->ki_pos | iov_iter_alignment(iter), dio_align);
+	/* pos is misaligned, fall back to buffered IO*/
+	if (!IS_ALIGNED(iocb->ki_pos, len_mask))
+		return SHOULD_NOT_DIO;
+
+	/* length is misaligned*/
+	if (!iov_iter_is_aligned(iter, 0, len_mask)) {
+		/* if length is less than a block, fall back to buffered IO*/
+		if (iov_iter_count(iter) < i_blocksize(inode))
+			return SHOULD_NOT_DIO;
+		/*direct IO for aligned part, buffered IO for misaligned part*/
+		return SHOULD_PARTIAL_DIO;
+	}
+
+	return SHOULD_DIO;
+}
+
+/*
+ * First of all, truncate the length to block size aligned and start
+ * a direct IO. If it goes well in iomap_dio_rw, fall back the rest
+ * unaligned part to buffered IO.
+ *
+ * At the end, return the sum bytes of direct IO and buffered IO.
+ */
+static ssize_t ext4_mixed_read_iter(struct kiocb *iocb, struct iov_iter *to)
+{
+	struct inode *inode = file_inode(iocb->ki_filp);
+	struct iov_iter to_misaligned = *to;
+	struct iovec iov;
+	ssize_t ret, ret_dio, ret_generic;
+
+	/* truncate iter->count to blocksize aligned and start direct IO */
+	iov_iter_truncate(to, ALIGN_DOWN(to->count, i_blocksize(inode)));
+	ret_dio = iomap_dio_rw(iocb, to, &ext4_iomap_ops, NULL, 0, NULL, 0);
+
+	if (ret_dio <= 0) {
+		ret = ret_dio;
+		goto out;
+	}
+
+	/* set up iter to misaligned part and start buffered IO*/
+	iov.iov_base = to->__iov->iov_base +  ret_dio;
+	iov.iov_len	 = to->__iov->iov_len -  ret_dio;
+
+	to_misaligned.__iov = &iov;
+	iov_iter_truncate(&to_misaligned, iov.iov_len);
+
+	iocb->ki_flags &= ~IOCB_DIRECT;
+	ret_generic = generic_file_read_iter(iocb, &to_misaligned);
+
+	if (ret_generic <= 0) {
+		ret  = ret_generic;
+		goto out;
+	}
+
+	ret = ret_dio + ret_generic;
+
+out:
+	iocb->ki_flags |= IOCB_DIRECT;
+	inode_unlock_shared(inode);
+	file_accessed(iocb->ki_filp);
+
+	return ret;
 }
 
 static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	ssize_t ret;
+	int dio_supported;
 	struct inode *inode = file_inode(iocb->ki_filp);
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
@@ -78,7 +150,8 @@ static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		inode_lock_shared(inode);
 	}
 
-	if (!ext4_should_use_dio(iocb, to)) {
+	dio_supported = ext4_should_use_dio(iocb, to);
+	if (dio_supported == SHOULD_NOT_DIO) {
 		inode_unlock_shared(inode);
 		/*
 		 * Fallback to buffered I/O if the operation being performed on
@@ -90,6 +163,9 @@ static ssize_t ext4_dio_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		iocb->ki_flags &= ~IOCB_DIRECT;
 		return generic_file_read_iter(iocb, to);
 	}
+
+	if (dio_supported == SHOULD_PARTIAL_DIO)
+		return ext4_mixed_read_iter(iocb, to);
 
 	ret = iomap_dio_rw(iocb, to, &ext4_iomap_ops, NULL, 0, NULL, 0);
 	inode_unlock_shared(inode);
@@ -537,7 +613,7 @@ static ssize_t ext4_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	/* Fallback to buffered I/O if the inode does not support direct I/O. */
-	if (!ext4_should_use_dio(iocb, from)) {
+	if (ext4_should_use_dio(iocb, from) != SHOULD_DIO) {
 		if (ilock_shared)
 			inode_unlock_shared(inode);
 		else
