@@ -20,6 +20,7 @@
 #define CMU_CPUCL_NR_CLK		(DOUT_CLK_CPUCL_PCLKDBG + 1)
 #define CMU_FSYS_NR_CLK			(DOUT_SCAN_CLK_FSYS_MMC + 1)
 #define CMU_IMEM_NR_CLK			(MOUT_IMEM_JPEG_USER + 1)
+#define CMU_PERI_NR_CLK			(DOUT_PERI_DSIM + 1)
 
 /* register offset definitions for cmu_cmu (0x12400000) */
 #define PLL_LOCKTIME_PLL_AUDIO			0x0000
@@ -798,3 +799,92 @@ static void __init artpec8_clk_cmu_imem_init(struct device_node *np)
 
 CLK_OF_DECLARE(artpec8_clk_cmu_imem, "axis,artpec8-cmu-imem",
 	       artpec8_clk_cmu_imem_init);
+
+/* Register Offset definitions for CMU_PERI (0x16410000) */
+#define PLL_CON0_MUX_CLK_PERI_AUDIO_USER		0x0100
+#define PLL_CON0_MUX_CLK_PERI_DISP_USER			0x0120
+#define PLL_CON0_MUX_CLK_PERI_IP_USER			0x0140
+#define MUX_CLK_PERI_I2S0				0x1000
+#define MUX_CLK_PERI_I2S1				0x1004
+#define DIV_CLK_PERI_DSIM				0x1800
+#define DIV_CLK_PERI_I2S0				0x1804
+#define DIV_CLK_PERI_I2S1				0x1808
+#define DIV_CLK_PERI_PCLK				0x180c
+#define DIV_CLK_PERI_SPI				0x1810
+#define DIV_CLK_PERI_UART1				0x1814
+#define DIV_CLK_PERI_UART2				0x1818
+
+static const unsigned long cmu_peri_clk_regs[] __initconst = {
+	PLL_CON0_MUX_CLK_PERI_AUDIO_USER,
+	PLL_CON0_MUX_CLK_PERI_DISP_USER,
+	PLL_CON0_MUX_CLK_PERI_IP_USER,
+	MUX_CLK_PERI_I2S0,
+	MUX_CLK_PERI_I2S1,
+	DIV_CLK_PERI_DSIM,
+	DIV_CLK_PERI_I2S0,
+	DIV_CLK_PERI_I2S1,
+	DIV_CLK_PERI_PCLK,
+	DIV_CLK_PERI_SPI,
+	DIV_CLK_PERI_UART1,
+	DIV_CLK_PERI_UART2,
+};
+
+static const struct samsung_fixed_rate_clock peri_fixed_clks[] __initconst = {
+	FRATE(0, "clk_peri_audio", NULL, 0, 100000000),
+};
+
+PNAME(mout_peri_ip_user_p) = { "fin_pll", "dout_clkcmu_peri_ip" };
+PNAME(mout_peri_audio_user_p) = { "fin_pll", "dout_clkcmu_peri_audio" };
+PNAME(mout_peri_disp_user_p) = { "fin_pll", "dout_clkcmu_peri_disp" };
+PNAME(mout_peri_i2s0_p) = { "dout_peri_i2s0", "clk_peri_audio" };
+PNAME(mout_peri_i2s1_p) = { "dout_peri_i2s1", "clk_peri_audio" };
+
+static const struct samsung_mux_clock cmu_peri_mux_clks[] __initconst = {
+	MUX(MOUT_PERI_IP_USER, "mout_peri_ip_user", mout_peri_ip_user_p,
+	    PLL_CON0_MUX_CLK_PERI_IP_USER, 4, 1),
+	MUX(MOUT_PERI_AUDIO_USER, "mout_peri_audio_user",
+	    mout_peri_audio_user_p, PLL_CON0_MUX_CLK_PERI_AUDIO_USER, 4, 1),
+	MUX(MOUT_PERI_DISP_USER, "mout_peri_disp_user", mout_peri_disp_user_p,
+	    PLL_CON0_MUX_CLK_PERI_DISP_USER, 4, 1),
+	MUX(MOUT_PERI_I2S0, "mout_peri_i2s0", mout_peri_i2s0_p,
+	    MUX_CLK_PERI_I2S0, 0, 1),
+	MUX(MOUT_PERI_I2S1, "mout_peri_i2s1", mout_peri_i2s1_p,
+	    MUX_CLK_PERI_I2S1, 0, 1),
+};
+
+static const struct samsung_div_clock cmu_peri_div_clks[] __initconst = {
+	DIV(DOUT_PERI_SPI, "dout_peri_spi", "mout_peri_ip_user",
+	    DIV_CLK_PERI_SPI, 0, 10),
+	DIV(DOUT_PERI_UART1, "dout_peri_uart1", "mout_peri_ip_user",
+	    DIV_CLK_PERI_UART1, 0, 10),
+	DIV(DOUT_PERI_UART2, "dout_peri_uart2", "mout_peri_ip_user",
+	    DIV_CLK_PERI_UART2, 0, 10),
+	DIV(DOUT_PERI_PCLK, "dout_peri_pclk", "mout_peri_ip_user",
+	    DIV_CLK_PERI_PCLK, 0, 4),
+	DIV(DOUT_PERI_I2S0, "dout_peri_i2s0", "mout_peri_audio_user",
+	    DIV_CLK_PERI_I2S0, 0, 4),
+	DIV(DOUT_PERI_I2S1, "dout_peri_i2s1", "mout_peri_audio_user",
+	    DIV_CLK_PERI_I2S1, 0, 4),
+	DIV(DOUT_PERI_DSIM, "dout_peri_dsim", "mout_peri_disp_user",
+	    DIV_CLK_PERI_DSIM, 0, 4),
+};
+
+static const struct samsung_cmu_info cmu_peri_info __initconst = {
+	.mux_clks		= cmu_peri_mux_clks,
+	.nr_mux_clks		= ARRAY_SIZE(cmu_peri_mux_clks),
+	.div_clks		= cmu_peri_div_clks,
+	.nr_div_clks		= ARRAY_SIZE(cmu_peri_div_clks),
+	.fixed_clks		= peri_fixed_clks,
+	.nr_fixed_clks		= ARRAY_SIZE(peri_fixed_clks),
+	.nr_clk_ids		= CMU_PERI_NR_CLK,
+	.clk_regs		= cmu_peri_clk_regs,
+	.nr_clk_regs		= ARRAY_SIZE(cmu_peri_clk_regs),
+};
+
+static void __init artpec8_clk_cmu_peri_init(struct device_node *np)
+{
+	samsung_cmu_register_one(np, &cmu_peri_info);
+}
+
+CLK_OF_DECLARE(artpec8_clk_cmu_peri, "axis,artpec8-cmu-peri",
+	       artpec8_clk_cmu_peri_init);
