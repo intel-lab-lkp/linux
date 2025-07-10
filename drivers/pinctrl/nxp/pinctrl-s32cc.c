@@ -1273,6 +1273,7 @@ int s32_pinctrl_probe(struct platform_device *pdev,
 	s32_pinctrl_desc->pctlops = &s32_pctrl_ops;
 	s32_pinctrl_desc->pmxops = &s32_pmx_ops;
 	s32_pinctrl_desc->confops = &s32_pinconf_ops;
+	s32_pinctrl_desc->num_custom_params = 0;
 	s32_pinctrl_desc->owner = THIS_MODULE;
 
 	ipctl->regions = devm_kcalloc(&pdev->dev, soc_data->mem_regions,
