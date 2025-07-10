@@ -29,6 +29,9 @@
 #include "input-core-private.h"
 #include "input-poller.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/input.h>
+
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -363,6 +366,7 @@ void input_handle_event(struct input_dev *dev,
 
 	disposition = input_get_disposition(dev, type, code, &value);
 	if (disposition != INPUT_IGNORE_EVENT) {
+		trace_input_event(dev, type, code, value);
 		if (type != EV_SYN)
 			add_input_randomness(type, code, value);
 
@@ -525,6 +529,7 @@ int input_grab_device(struct input_handle *handle)
 			return -EBUSY;
 
 		rcu_assign_pointer(dev->grab, handle);
+		trace_input_grab_device(dev, handle);
 	}
 
 	return 0;
@@ -539,6 +544,7 @@ static void __input_release_device(struct input_handle *handle)
 	grabber = rcu_dereference_protected(dev->grab,
 					    lockdep_is_held(&dev->mutex));
 	if (grabber == handle) {
+		trace_input_release_device(dev, handle);
 		rcu_assign_pointer(dev->grab, NULL);
 		/* Make sure input_pass_values() notices that grab is gone */
 		synchronize_rcu();
@@ -612,6 +618,7 @@ int input_open_device(struct input_handle *handle)
 
 		if (dev->poller)
 			input_dev_poller_start(dev->poller);
+		trace_input_open_device(dev);
 	}
 
 	return 0;
@@ -652,6 +659,7 @@ void input_close_device(struct input_handle *handle)
 				input_dev_poller_stop(dev->poller);
 			if (dev->close)
 				dev->close(dev);
+			trace_input_close_device(dev);
 		}
 	}
 
@@ -991,9 +999,13 @@ static int input_attach_handler(struct input_dev *dev, struct input_handler *han
 		return -ENODEV;
 
 	error = handler->connect(handler, dev, id);
-	if (error && error != -ENODEV)
+	if (error && error != -ENODEV) {
 		pr_err("failed to attach handler %s to device %s, error: %d\n",
 		       handler->name, kobject_name(&dev->dev.kobj), error);
+	} else if (!error) {
+		/* Connection successful, trace it */
+		trace_input_handler_connect(handler, dev, handler->minor);
+	}
 
 	return error;
 }
@@ -1791,6 +1803,7 @@ static int input_inhibit_device(struct input_dev *dev)
 	}
 
 	dev->inhibited = true;
+	trace_input_inhibit_device(dev);
 
 	return 0;
 }
@@ -1818,6 +1831,7 @@ static int input_uninhibit_device(struct input_dev *dev)
 
 	scoped_guard(spinlock_irq, &dev->event_lock)
 		input_dev_toggle(dev, true);
+	trace_input_uninhibit_device(dev);
 
 	return 0;
 }
@@ -2216,6 +2230,7 @@ static void __input_unregister_device(struct input_dev *dev)
 {
 	struct input_handle *handle, *next;
 
+	trace_input_device_unregister(dev);
 	input_disconnect_device(dev);
 
 	scoped_guard(mutex, &input_mutex) {
@@ -2414,6 +2429,7 @@ int input_register_device(struct input_dev *dev)
 		input_wakeup_procfs_readers();
 	}
 
+	trace_input_device_register(dev);
 	if (dev->devres_managed) {
 		dev_dbg(dev->dev.parent, "%s: registering %s with devres.\n",
 			__func__, dev_name(&dev->dev));
