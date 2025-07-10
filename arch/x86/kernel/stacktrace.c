@@ -137,7 +137,7 @@ void arch_unwind_user_init(struct unwind_user_state *state,
 {
 	unsigned long cs_base, ss_base;
 
-	if (state->type != UNWIND_USER_TYPE_COMPAT_FP)
+	if (!unwind_compat_mode(regs))
 		return;
 
 	cs_base = insn_get_seg_base(regs, INAT_SEG_REG_CS);

@@ -10,6 +10,8 @@
 	.fp_off		= (s32)sizeof(long) * -2,				\
 	.use_fp		= true,
 
+#define unwind_compat_mode(regs) (!user_64bit_mode(regs))
+
 #ifdef CONFIG_IA32_EMULATION
 
 #define ARCH_INIT_USER_COMPAT_FP_FRAME						\
@@ -18,14 +20,12 @@
 	.fp_off		= (s32)sizeof(u32)  * -2,				\
 	.use_fp		= true,
 
-#define in_compat_mode(regs) !user_64bit_mode(regs)
-
 void arch_unwind_user_init(struct unwind_user_state *state,
 			   struct pt_regs *regs);
 
 static inline void arch_unwind_user_next(struct unwind_user_state *state)
 {
-	if (state->type != UNWIND_USER_TYPE_COMPAT_FP)
+	if (!unwind_compat_mode(task_pt_regs(current)))
 		return;
 
 	state->ip += state->arch.cs_base;

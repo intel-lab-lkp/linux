@@ -5,15 +5,6 @@
 #include <linux/unwind_user_types.h>
 #include <asm/unwind_user.h>
 
-#ifndef ARCH_INIT_USER_FP_FRAME
- #define ARCH_INIT_USER_FP_FRAME
-#endif
-
-#ifndef ARCH_INIT_USER_COMPAT_FP_FRAME
- #define ARCH_INIT_USER_COMPAT_FP_FRAME
- #define in_compat_mode(regs) false
-#endif
-
 /*
  * If an architecture needs to initialize the state for a specific
  * reason, for example, it may need to do something different
