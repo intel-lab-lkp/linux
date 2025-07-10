@@ -126,6 +126,9 @@
 #define XAXIDMA_DFT_TX_USEC		50
 #define XAXIDMA_DFT_RX_USEC		16
 
+/* Default TX delay timer value for SGDMA mode with DMAEngine */
+#define XAXIDMAENGINE_DFT_TX_USEC	16
+
 #define XAXIDMA_BD_CTRL_TXSOF_MASK	0x08000000 /* First tx packet */
 #define XAXIDMA_BD_CTRL_TXEOF_MASK	0x04000000 /* Last tx packet */
 #define XAXIDMA_BD_CTRL_ALL_MASK	0x0C000000 /* All control bits */
@@ -485,8 +488,11 @@ struct skbuf_dma_descriptor {
  * @dma_regs:	Base address for the axidma device address space
  * @napi_rx:	NAPI RX control structure
  * @rx_dim:     DIM state for the receive queue
- * @rx_dim_enabled: Whether DIM is enabled or not
- * @rx_irqs:    Number of interrupts
+ * @tx_dim:     DIM state for the transmit queue
+ * @rx_dim_enabled: Whether Rx DIM is enabled or not
+ * @tx_dim_enabled: Whether Tx DIM is enabled or not
+ * @rx_irqs:    Number of Rx interrupts
+ * @tx_irqs:    Number of Tx interrupts
  * @rx_cr_lock: Lock protecting @rx_dma_cr, its register, and @rx_dma_started
  * @rx_dma_cr:  Nominal content of RX DMA control register
  * @rx_dma_started: Set when RX DMA is started
@@ -570,8 +576,11 @@ struct axienet_local {
 
 	struct napi_struct napi_rx;
 	struct dim rx_dim;
+	struct dim tx_dim;
 	bool rx_dim_enabled;
+	bool tx_dim_enabled;
 	u16 rx_irqs;
+	u16 tx_irqs;
 	spinlock_t rx_cr_lock;
 	u32 rx_dma_cr;
 	bool rx_dma_started;

@@ -54,7 +54,7 @@
 #define RX_BD_NUM_MAX			4096
 #define DMA_NUM_APP_WORDS		5
 #define LEN_APP				4
-#define RX_BUF_NUM_DEFAULT		128
+#define RX_BUF_NUM_DEFAULT		512
 
 /* Must be shorter than length of ethtool_drvinfo.driver field to fit */
 #define DRIVER_NAME		"xaxienet"
@@ -869,6 +869,7 @@ static void axienet_dma_tx_cb(void *data, const struct dmaengine_result *result)
 	struct netdev_queue *txq;
 	int len;
 
+	WRITE_ONCE(lp->tx_irqs, READ_ONCE(lp->tx_irqs) + 1);
 	skbuf_dma = axienet_get_tx_desc(lp, lp->tx_ring_tail++);
 	len = skbuf_dma->skb->len;
 	txq = skb_get_tx_queue(lp->ndev, skbuf_dma->skb);
@@ -881,6 +882,17 @@ static void axienet_dma_tx_cb(void *data, const struct dmaengine_result *result)
 	netif_txq_completed_wake(txq, 1, len,
 				 CIRC_SPACE(lp->tx_ring_head, lp->tx_ring_tail, TX_BD_NUM_MAX),
 				 2);
+
+	if (READ_ONCE(lp->tx_dim_enabled)) {
+		struct dim_sample sample = {
+			.time = ktime_get(),
+			.pkt_ctr = u64_stats_read(&lp->tx_packets),
+			.byte_ctr = u64_stats_read(&lp->tx_bytes),
+			.event_ctr = READ_ONCE(lp->tx_irqs),
+		};
+
+		net_dim(&lp->tx_dim, &sample);
+	}
 }
 
 /**
@@ -1161,6 +1173,7 @@ static void axienet_dma_rx_cb(void *data, const struct dmaengine_result *result)
 	struct sk_buff *skb;
 	u32 *app_metadata;
 
+	WRITE_ONCE(lp->rx_irqs, READ_ONCE(lp->rx_irqs) + 1);
 	skbuf_dma = axienet_get_rx_desc(lp, lp->rx_ring_tail++);
 	skb = skbuf_dma->skb;
 	app_metadata = dmaengine_desc_get_metadata_ptr(skbuf_dma->desc, &meta_len,
@@ -1179,7 +1192,18 @@ static void axienet_dma_rx_cb(void *data, const struct dmaengine_result *result)
 	u64_stats_add(&lp->rx_bytes, rx_len);
 	u64_stats_update_end(&lp->rx_stat_sync);
 	axienet_rx_submit_desc(lp->ndev);
+
 	dma_async_issue_pending(lp->rx_chan);
+	if (READ_ONCE(lp->rx_dim_enabled)) {
+		struct dim_sample sample = {
+			.time = ktime_get(),
+			.pkt_ctr = u64_stats_read(&lp->rx_packets),
+			.byte_ctr = u64_stats_read(&lp->rx_bytes),
+			.event_ctr = READ_ONCE(lp->rx_irqs),
+		};
+
+		net_dim(&lp->rx_dim, &sample);
+	}
 }
 
 /**
@@ -1492,6 +1516,9 @@ rx_submit_err_free_skb:
 	dev_kfree_skb(skb);
 }
 
+static u32 axienet_dim_coalesce_count_rx(struct axienet_local *lp);
+static u32 axienet_dim_coalesce_count_tx(struct axienet_local *lp);
+
 /**
  * axienet_init_dmaengine - init the dmaengine code.
  * @ndev:       Pointer to net_device structure
@@ -1505,6 +1532,7 @@ static int axienet_init_dmaengine(struct net_device *ndev)
 {
 	struct axienet_local *lp = netdev_priv(ndev);
 	struct skbuf_dma_descriptor *skbuf_dma;
+	struct dma_slave_config tx_config, rx_config;
 	int i, ret;
 
 	lp->tx_chan = dma_request_chan(lp->dev, "tx_chan0");
@@ -1517,6 +1545,22 @@ static int axienet_init_dmaengine(struct net_device *ndev)
 	if (IS_ERR(lp->rx_chan)) {
 		ret = PTR_ERR(lp->rx_chan);
 		dev_err(lp->dev, "No Ethernet DMA (RX) channel found\n");
+		goto err_dma_release_tx;
+	}
+
+	tx_config.coalesce_cnt = axienet_dim_coalesce_count_tx(lp);
+	tx_config.coalesce_usecs = XAXIDMAENGINE_DFT_TX_USEC;
+	rx_config.coalesce_cnt = axienet_dim_coalesce_count_rx(lp);
+	rx_config.coalesce_usecs =  XAXIDMA_DFT_RX_USEC;
+
+	ret = dmaengine_slave_config(lp->tx_chan, &tx_config);
+	if (ret) {
+		dev_err(lp->dev, "Failed to configure Tx coalesce parameters\n");
+		goto err_dma_release_tx;
+	}
+	ret = dmaengine_slave_config(lp->rx_chan, &rx_config);
+	if (ret) {
+		dev_err(lp->dev, "Failed to configure Rx coalesce parameters\n");
 		goto err_dma_release_tx;
 	}
 
@@ -1692,6 +1736,7 @@ err_free_eth_irq:
 		free_irq(lp->eth_irq, ndev);
 err_phy:
 	cancel_work_sync(&lp->rx_dim.work);
+	cancel_work_sync(&lp->tx_dim.work);
 	cancel_delayed_work_sync(&lp->stats_work);
 	phylink_stop(lp->phylink);
 	phylink_disconnect_phy(lp->phylink);
@@ -1722,6 +1767,7 @@ static int axienet_stop(struct net_device *ndev)
 	}
 
 	cancel_work_sync(&lp->rx_dim.work);
+	cancel_work_sync(&lp->tx_dim.work);
 	cancel_delayed_work_sync(&lp->stats_work);
 
 	phylink_stop(lp->phylink);
@@ -2105,6 +2151,15 @@ static u32 axienet_dim_coalesce_count_rx(struct axienet_local *lp)
 }
 
 /**
+ * axienet_dim_coalesce_count_tx() - TX coalesce count for DIM
+ * @lp: Device private data
+ */
+static u32 axienet_dim_coalesce_count_tx(struct axienet_local *lp)
+{
+	return min(1 << (lp->tx_dim.profile_ix << 1), 255);
+}
+
+/**
  * axienet_rx_dim_work() - Adjust RX DIM settings
  * @work: The work struct
  */
@@ -2118,6 +2173,40 @@ static void axienet_rx_dim_work(struct work_struct *work)
 
 	axienet_update_coalesce_rx(lp, cr, mask);
 	lp->rx_dim.state = DIM_START_MEASURE;
+}
+
+/**
+ * axienet_rx_dim_work_dmaengine() - Adjust RX DIM settings in dmaengine
+ * @work: The work struct
+ */
+static void axienet_rx_dim_work_dmaengine(struct work_struct *work)
+{
+	struct axienet_local *lp =
+		container_of(work, struct axienet_local, rx_dim.work);
+	struct dma_slave_config cfg = {
+		.coalesce_cnt	= axienet_dim_coalesce_count_rx(lp),
+		.coalesce_usecs	= 16,
+	};
+
+	dmaengine_slave_config(lp->rx_chan, &cfg);
+	lp->rx_dim.state = DIM_START_MEASURE;
+}
+
+/**
+ * axienet_tx_dim_work_dmaengine() - Adjust RX DIM settings in dmaengine
+ * @work: The work struct
+ */
+static void axienet_tx_dim_work_dmaengine(struct work_struct *work)
+{
+	struct axienet_local *lp =
+		container_of(work, struct axienet_local, tx_dim.work);
+	struct dma_slave_config cfg = {
+		.coalesce_cnt	= axienet_dim_coalesce_count_tx(lp),
+		.coalesce_usecs	= 16,
+	};
+
+	dmaengine_slave_config(lp->tx_chan, &cfg);
+	lp->tx_dim.state = DIM_START_MEASURE;
 }
 
 /**
@@ -2171,6 +2260,20 @@ axienet_ethtools_get_coalesce(struct net_device *ndev,
 	u32 cr;
 
 	ecoalesce->use_adaptive_rx_coalesce = lp->rx_dim_enabled;
+	ecoalesce->use_adaptive_tx_coalesce = lp->tx_dim_enabled;
+
+	if (lp->use_dmaengine) {
+		struct dma_slave_caps tx_caps, rx_caps;
+
+		dma_get_slave_caps(lp->tx_chan, &tx_caps);
+		dma_get_slave_caps(lp->rx_chan, &rx_caps);
+
+		ecoalesce->tx_max_coalesced_frames = tx_caps.coalesce_cnt;
+		ecoalesce->tx_coalesce_usecs = tx_caps.coalesce_usecs;
+		ecoalesce->rx_max_coalesced_frames = rx_caps.coalesce_cnt;
+		ecoalesce->rx_coalesce_usecs = rx_caps.coalesce_usecs;
+		return 0;
+	}
 
 	spin_lock_irq(&lp->rx_cr_lock);
 	cr = lp->rx_dma_cr;
@@ -2208,8 +2311,10 @@ axienet_ethtools_set_coalesce(struct net_device *ndev,
 			      struct netlink_ext_ack *extack)
 {
 	struct axienet_local *lp = netdev_priv(ndev);
-	bool new_dim = ecoalesce->use_adaptive_rx_coalesce;
-	bool old_dim = lp->rx_dim_enabled;
+	bool new_rxdim = ecoalesce->use_adaptive_rx_coalesce;
+	bool new_txdim = ecoalesce->use_adaptive_tx_coalesce;
+	bool old_rxdim = lp->rx_dim_enabled;
+	bool old_txdim = lp->tx_dim_enabled;
 	u32 cr, mask = ~XAXIDMA_CR_RUNSTOP_MASK;
 
 	if (ecoalesce->rx_max_coalesced_frames > 255 ||
@@ -2224,20 +2329,76 @@ axienet_ethtools_set_coalesce(struct net_device *ndev,
 		return -EINVAL;
 	}
 
-	if (((ecoalesce->rx_max_coalesced_frames > 1 || new_dim) &&
+	if (((ecoalesce->rx_max_coalesced_frames > 1 || new_rxdim) &&
 	     !ecoalesce->rx_coalesce_usecs) ||
-	    (ecoalesce->tx_max_coalesced_frames > 1 &&
+	    ((ecoalesce->tx_max_coalesced_frames > 1 || new_txdim) &&
 	     !ecoalesce->tx_coalesce_usecs)) {
 		NL_SET_ERR_MSG(extack,
 			       "usecs must be non-zero when frames is greater than one");
 		return -EINVAL;
 	}
 
-	if (new_dim && !old_dim) {
+	if (lp->use_dmaengine)	{
+		struct dma_slave_config tx_cfg, rx_cfg;
+		int ret;
+
+		if (new_rxdim && !old_rxdim) {
+			rx_cfg.coalesce_cnt = axienet_dim_coalesce_count_rx(lp);
+			rx_cfg.coalesce_usecs = ecoalesce->rx_coalesce_usecs;
+		} else if (!new_rxdim) {
+			if (old_rxdim) {
+				WRITE_ONCE(lp->rx_dim_enabled, false);
+				flush_work(&lp->rx_dim.work);
+			}
+
+			rx_cfg.coalesce_cnt = ecoalesce->rx_max_coalesced_frames;
+			rx_cfg.coalesce_usecs = ecoalesce->rx_coalesce_usecs;
+		} else {
+			rx_cfg.coalesce_cnt = ecoalesce->rx_max_coalesced_frames;
+			rx_cfg.coalesce_usecs = ecoalesce->rx_coalesce_usecs;
+		}
+
+		if (new_txdim && !old_txdim) {
+			tx_cfg.coalesce_cnt = axienet_dim_coalesce_count_tx(lp);
+			tx_cfg.coalesce_usecs = ecoalesce->tx_coalesce_usecs;
+		} else if (!new_txdim) {
+			if (old_txdim) {
+				WRITE_ONCE(lp->tx_dim_enabled, false);
+				flush_work(&lp->tx_dim.work);
+			}
+
+			tx_cfg.coalesce_cnt = ecoalesce->tx_max_coalesced_frames;
+			tx_cfg.coalesce_usecs = ecoalesce->tx_coalesce_usecs;
+		} else {
+			tx_cfg.coalesce_cnt = ecoalesce->tx_max_coalesced_frames;
+			tx_cfg.coalesce_usecs = ecoalesce->tx_coalesce_usecs;
+		}
+
+		ret = dmaengine_slave_config(lp->rx_chan, &rx_cfg);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "failed to set rx coalesce parameters");
+			return ret;
+		}
+
+		if (new_rxdim && !old_rxdim)
+			WRITE_ONCE(lp->rx_dim_enabled, true);
+
+		ret = dmaengine_slave_config(lp->tx_chan, &tx_cfg);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "failed to set tx coalesce parameters");
+			return ret;
+		}
+		if (new_txdim && !old_txdim)
+			WRITE_ONCE(lp->tx_dim_enabled, true);
+
+		return 0;
+	}
+
+	if (new_rxdim && !old_rxdim) {
 		cr = axienet_calc_cr(lp, axienet_dim_coalesce_count_rx(lp),
 				     ecoalesce->rx_coalesce_usecs);
-	} else if (!new_dim) {
-		if (old_dim) {
+	} else if (!new_rxdim) {
+		if (old_rxdim) {
 			WRITE_ONCE(lp->rx_dim_enabled, false);
 			napi_synchronize(&lp->napi_rx);
 			flush_work(&lp->rx_dim.work);
@@ -2252,7 +2413,7 @@ axienet_ethtools_set_coalesce(struct net_device *ndev,
 	}
 
 	axienet_update_coalesce_rx(lp, cr, mask);
-	if (new_dim && !old_dim)
+	if (new_rxdim && !old_rxdim)
 		WRITE_ONCE(lp->rx_dim_enabled, true);
 
 	cr = axienet_calc_cr(lp, ecoalesce->tx_max_coalesced_frames,
@@ -2496,7 +2657,7 @@ axienet_ethtool_get_rmon_stats(struct net_device *dev,
 static const struct ethtool_ops axienet_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_MAX_FRAMES |
 				     ETHTOOL_COALESCE_USECS |
-				     ETHTOOL_COALESCE_USE_ADAPTIVE_RX,
+				     ETHTOOL_COALESCE_USE_ADAPTIVE,
 	.get_drvinfo    = axienet_ethtools_get_drvinfo,
 	.get_regs_len   = axienet_ethtools_get_regs_len,
 	.get_regs       = axienet_ethtools_get_regs,
@@ -3041,7 +3202,14 @@ static int axienet_probe(struct platform_device *pdev)
 
 	spin_lock_init(&lp->rx_cr_lock);
 	spin_lock_init(&lp->tx_cr_lock);
-	INIT_WORK(&lp->rx_dim.work, axienet_rx_dim_work);
+	if (lp->use_dmaengine) {
+		INIT_WORK(&lp->rx_dim.work, axienet_rx_dim_work_dmaengine);
+		INIT_WORK(&lp->tx_dim.work, axienet_tx_dim_work_dmaengine);
+		lp->tx_dim_enabled = true;
+		lp->tx_dim.profile_ix = 1;
+	} else {
+		INIT_WORK(&lp->rx_dim.work, axienet_rx_dim_work);
+	}
 	lp->rx_dim_enabled = true;
 	lp->rx_dim.profile_ix = 1;
 	lp->rx_dma_cr = axienet_calc_cr(lp, axienet_dim_coalesce_count_rx(lp),
