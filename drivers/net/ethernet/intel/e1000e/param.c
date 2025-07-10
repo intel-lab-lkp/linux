@@ -136,6 +136,15 @@ E1000_PARAM(WriteProtectNVM,
 E1000_PARAM(CrcStripping,
 	    "Enable CRC Stripping, disable if your BMC needs the CRC");
 
+/* Enable K1
+ *
+ * Valid Range: 0, 1
+ *
+ * Default Value: 1 (enabled)
+ */
+E1000_PARAM(EnableK1,
+	    "Enable Kumeran K1 state [WARNING: Disabling K1 may cause increased power consumption]");
+
 struct e1000_option {
 	enum { enable_option, range_option, list_option } type;
 	const char *name;
@@ -522,6 +531,24 @@ void e1000e_check_options(struct e1000_adapter *adapter)
 				if (opt.def)
 					adapter->flags |= FLAG_READ_ONLY_NVM;
 			}
+		}
+	}
+	/* Enable K1 */
+	{
+		static const struct e1000_option opt = {
+			.type = enable_option,
+			.name = "Kumeran K1 State",
+			.err = "defaulting to Enabled",
+			.def = OPTION_ENABLED
+		};
+
+		if (num_EnableK1 > bd) {
+			unsigned int enable_k1 = EnableK1[bd];
+			e1000_validate_option(&enable_k1, &opt, adapter);
+
+			if (hw->mac.type >= e1000_ich8lan)
+				if (!enable_k1)
+					adapter->flags2 |= FLAG2_DISABLE_K1;
 		}
 	}
 }

@@ -5267,6 +5267,11 @@ static void e1000_watchdog_task(struct work_struct *work)
 						  &adapter->link_duplex);
 			e1000_print_link_info(adapter);
 
+			if (adapter->flags2 & FLAG2_DISABLE_K1) {
+				adapter->hw.dev_spec.ich8lan.disable_k1 = true;
+				e1000_reconfigure_k1_params(&adapter->hw);
+			}
+
 			/* check if SmartSpeed worked */
 			e1000e_check_downshift(hw);
 			if (phy->speed_downgraded)
@@ -7474,6 +7479,8 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	adapter->bd_number = cards_found++;
 
 	e1000e_check_options(adapter);
+	if (adapter->flags2 & FLAG2_DISABLE_K1)
+		adapter->hw.dev_spec.ich8lan.disable_k1 = true;
 
 	/* setup adapter struct */
 	err = e1000_sw_init(adapter);
