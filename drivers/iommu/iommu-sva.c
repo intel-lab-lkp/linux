@@ -256,11 +256,19 @@ out_put_mm:
 	return status;
 }
 
+static struct iommu_rid_notifier *iommu_get_rid_notifier(struct device *dev, u32 rid)
+{
+	struct dev_iommu *param = dev->iommu;
+
+	return xa_load(&param->rid_notifiers, rid);
+}
+
 static void iommu_sva_handle_iopf(struct work_struct *work)
 {
 	struct iopf_fault *iopf;
 	struct iopf_group *group;
 	enum iommu_page_response_code status = IOMMU_PAGE_RESP_SUCCESS;
+	struct iommu_rid_notifier *rid_notifier;
 
 	group = container_of(work, struct iopf_group, work);
 	list_for_each_entry(iopf, &group->faults, list) {
@@ -268,8 +276,17 @@ static void iommu_sva_handle_iopf(struct work_struct *work)
 		 * For the moment, errors are sticky: don't handle subsequent
 		 * faults in the group if there is an error.
 		 */
-		if (status != IOMMU_PAGE_RESP_SUCCESS)
+		if (status != IOMMU_PAGE_RESP_SUCCESS) {
+			/* Notify the requester of a failure. */
+			rid_notifier = iommu_get_rid_notifier(group->fault_param->dev,
+							      iopf->fault.prm.rid);
+
+			if (rid_notifier && rid_notifier->notifier)
+				rid_notifier->notifier(rid_notifier->dev, &iopf->fault,
+						       status, rid_notifier->data);
+
 			break;
+		}
 
 		status = iommu_sva_handle_mm(&iopf->fault,
 					     group->attach_handle->domain->mm);
