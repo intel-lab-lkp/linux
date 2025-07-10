@@ -399,6 +399,13 @@ out:
 static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 				    loff_t len)
 {
+	struct ext4_xattr_ibody_find is = {
+		.s = { .not_found = -ENODATA, },
+	};
+	struct ext4_xattr_info i = {
+		.name_index = EXT4_XATTR_INDEX_SYSTEM,
+		.name = EXT4_XATTR_SYSTEM_DATA,
+	};
 	int ret, size, no_expand;
 	struct ext4_inode_info *ei = EXT4_I(inode);
 
@@ -409,6 +416,19 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 	if (size < len)
 		return -ENOSPC;
 
+	ret = ext4_get_inode_loc(inode, &is.iloc);
+	if (ret)
+		goto out;
+
+	ret = ext4_xattr_ibody_find(inode, &i, &is);
+	if (ret)
+		goto out;
+
+	if (is.s.not_found) {
+		ret = -EFSCORRUPTED;
+		goto out;
+	}
+
 	ext4_write_lock_xattr(inode, &no_expand);
 
 	if (ei->i_inline_off)
@@ -417,6 +437,8 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 		ret = ext4_create_inline_data(handle, inode, len);
 
 	ext4_write_unlock_xattr(inode, &no_expand);
+out:
+	brelse(is.iloc.bh);
 	return ret;
 }
 
