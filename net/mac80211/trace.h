@@ -1137,7 +1137,7 @@ TRACE_EVENT(drv_conf_tx,
 	),
 
 	TP_printk(
-		LOCAL_PR_FMT  VIF_PR_FMT  " link_id: %d, AC:%d",
+		LOCAL_PR_FMT  VIF_PR_FMT  " link_id: %u, AC:%d",
 		LOCAL_PR_ARG, VIF_PR_ARG, __entry->link_id, __entry->ac
 	)
 );
@@ -1856,7 +1856,7 @@ DECLARE_EVENT_CLASS(local_sdata_chanctx,
 	),
 
 	TP_printk(
-		LOCAL_PR_FMT VIF_PR_FMT " link_id:%d" CHANCTX_PR_FMT,
+		LOCAL_PR_FMT VIF_PR_FMT " link_id:%u" CHANCTX_PR_FMT,
 		LOCAL_PR_ARG, VIF_PR_ARG, __entry->link_id, CHANCTX_PR_ARG
 	)
 );
@@ -2265,7 +2265,7 @@ TRACE_EVENT(drv_get_txpower,
 	),
 
 	TP_printk(
-		LOCAL_PR_FMT VIF_PR_FMT " link_id:%d dbm:%d ret:%d",
+		LOCAL_PR_FMT VIF_PR_FMT " link_id:%u dbm:%d ret:%d",
 		LOCAL_PR_ARG, VIF_PR_ARG, __entry->link_id, __entry->dbm, __entry->ret
 	)
 );
@@ -2983,7 +2983,7 @@ TRACE_EVENT(api_chswitch_done,
 	),
 
 	TP_printk(
-		VIF_PR_FMT " success=%d link_id=%d",
+		VIF_PR_FMT " success=%d link_id=%u",
 		VIF_PR_ARG, __entry->success, __entry->link_id
 	)
 );
