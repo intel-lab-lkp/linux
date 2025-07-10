@@ -1335,9 +1335,23 @@ unlock:
 	return 0;
 }
 
+static int rk_udphy_usb3_phy_set_mode(struct phy *phy, enum phy_mode mode, int submode)
+{
+	struct rk_udphy *udphy = phy_get_drvdata(phy);
+	int ret = 0;
+
+	mutex_lock(&udphy->mutex);
+	if (udphy->mode != UDPHY_MODE_NONE)
+		ret = rk_udphy_init(udphy);
+	mutex_unlock(&udphy->mutex);
+
+	return ret;
+}
+
 static const struct phy_ops rk_udphy_usb3_phy_ops = {
 	.init		= rk_udphy_usb3_phy_init,
 	.exit		= rk_udphy_usb3_phy_exit,
+	.set_mode	= rk_udphy_usb3_phy_set_mode,
 	.owner		= THIS_MODULE,
 };
 
