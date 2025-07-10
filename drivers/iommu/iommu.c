@@ -354,6 +354,7 @@ static struct dev_iommu *dev_iommu_get(struct device *dev)
 		return NULL;
 
 	mutex_init(&param->lock);
+	xa_init(&param->rid_notifiers);
 	dev->iommu = param;
 	return param;
 }
@@ -361,8 +362,16 @@ static struct dev_iommu *dev_iommu_get(struct device *dev)
 void dev_iommu_free(struct device *dev)
 {
 	struct dev_iommu *param = dev->iommu;
+	struct rid_notifier *notifier;
+	unsigned long rid;
 
 	dev->iommu = NULL;
+
+	xa_for_each(&param->rid_notifiers, rid, notifier)
+		kfree(notifier);
+
+	xa_destroy(&param->rid_notifiers);
+
 	if (param->fwspec) {
 		fwnode_handle_put(param->fwspec->iommu_fwnode);
 		kfree(param->fwspec);
