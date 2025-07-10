@@ -21,6 +21,9 @@
 
 #define AT91_CLK_PD_HW(h) ((struct clk_parent_data){ .hw = (h) })
 
+/* Used to create an array entry identifying a PLL by its components. */
+#define PLL_IDS_TO_ARR_ENTRY(_id, _comp) { PLL_ID_##_id, PLL_COMPID_##_comp}
+
 extern spinlock_t pmc_pcr_lock;
 
 struct pmc_data {
