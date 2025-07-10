@@ -1106,6 +1106,9 @@ static void fanotify_free_event(struct fsnotify_group *group,
 
 	event = FANOTIFY_E(fsn_event);
 	put_pid(event->pid);
+	if (fanotify_is_perm_event(event->mask) &&
+	    FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID))
+		idr_remove(&group->response_idr, -FANOTIFY_PERM(event)->id);
 	switch (event->type) {
 	case FANOTIFY_EVENT_TYPE_PATH:
 		fanotify_free_path_event(event);

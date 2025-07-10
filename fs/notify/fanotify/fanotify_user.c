@@ -330,14 +330,16 @@ static int process_access_response(struct fsnotify_group *group,
 				   size_t info_len)
 {
 	struct fanotify_perm_event *event;
-	int fd = response_struct->fd;
+	int id = FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) ?
+			 response_struct->id :
+			 response_struct->fd;
 	u32 response = response_struct->response;
 	int errno = fanotify_get_response_errno(response);
 	int ret = info_len;
 	struct fanotify_response_info_audit_rule friar;
 
-	pr_debug("%s: group=%p fd=%d response=%x errno=%d buf=%p size=%zu\n",
-		 __func__, group, fd, response, errno, info, info_len);
+	pr_debug("%s: group=%p id=%d response=%x errno=%d buf=%p size=%zu\n",
+		 __func__, group, id, response, errno, info, info_len);
 	/*
 	 * make sure the response is valid, if invalid we do nothing and either
 	 * userspace can send a valid response or we will clean it up after the
@@ -385,19 +387,24 @@ static int process_access_response(struct fsnotify_group *group,
 		ret = process_access_response_info(info, info_len, &friar);
 		if (ret < 0)
 			return ret;
-		if (fd == FAN_NOFD)
+		if (id == FAN_NOFD)
 			return ret;
 	} else {
 		ret = 0;
 	}
+	if (FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) && id >= -255)
+		return -EINVAL;
 
-	if (fd < 0)
+	if (!FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) && id < 0)
 		return -EINVAL;
 
 	spin_lock(&group->notification_lock);
 	list_for_each_entry(event, &group->fanotify_data.access_list,
 			    fae.fse.list) {
-		if (event->fd != fd)
+		int other_id = FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) ?
+				       event->id :
+				       event->fd;
+		if (other_id != id)
 			continue;
 
 		list_del_init(&event->fae.fse.list);
@@ -765,48 +772,58 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 	    task_tgid(current) != event->pid)
 		metadata.pid = 0;
 
-	/*
-	 * For now, fid mode is required for an unprivileged listener and
-	 * fid mode does not report fd in events.  Keep this check anyway
-	 * for safety in case fid mode requirement is relaxed in the future
-	 * to allow unprivileged listener to get events with no fd and no fid.
-	 */
-	if (!FAN_GROUP_FLAG(group, FANOTIFY_UNPRIV) &&
-	    path && path->mnt && path->dentry) {
-		fd = create_fd(group, path, &f);
+	if (FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID)) {
+		ret = idr_alloc_cyclic(&group->response_idr, event, 256, INT_MAX,
+				       GFP_NOWAIT);
+		if (ret < 0)
+			return ret;
+		metadata.id = -ret;
+	} else {
 		/*
-		 * Opening an fd from dentry can fail for several reasons.
-		 * For example, when tasks are gone and we try to open their
-		 * /proc files or we try to open a WRONLY file like in sysfs
-		 * or when trying to open a file that was deleted on the
-		 * remote network server.
-		 *
-		 * For a group with FAN_REPORT_FD_ERROR, we will send the
-		 * event with the error instead of the open fd, otherwise
-		 * Userspace may not get the error at all.
-		 * In any case, userspace will not know which file failed to
-		 * open, so add a debug print for further investigation.
+		 * For now, fid mode is required for an unprivileged listener and
+		 * fid mode does not report fd in events.  Keep this check anyway
+		 * for safety in case fid mode requirement is relaxed in the future
+		 * to allow unprivileged listener to get events with no fd and no fid.
 		 */
-		if (fd < 0) {
-			pr_debug("fanotify: create_fd(%pd2) failed err=%d\n",
-				 path->dentry, fd);
-			if (!FAN_GROUP_FLAG(group, FAN_REPORT_FD_ERROR)) {
-				/*
-				 * Historically, we've handled EOPENSTALE in a
-				 * special way and silently dropped such
-				 * events. Now we have to keep it to maintain
-				 * backward compatibility...
-				 */
-				if (fd == -EOPENSTALE)
-					fd = 0;
-				return fd;
+		if (!FAN_GROUP_FLAG(group, FANOTIFY_UNPRIV) && path &&
+		    path->mnt && path->dentry) {
+			fd = create_fd(group, path, &f);
+			/*
+			 * Opening an fd from dentry can fail for several reasons.
+			 * For example, when tasks are gone and we try to open their
+			 * /proc files or we try to open a WRONLY file like in sysfs
+			 * or when trying to open a file that was deleted on the
+			 * remote network server.
+			 *
+			 * For a group with FAN_REPORT_FD_ERROR, we will send the
+			 * event with the error instead of the open fd, otherwise
+			 * Userspace may not get the error at all.
+			 * In any case, userspace will not know which file failed to
+			 * open, so add a debug print for further investigation.
+			 */
+			if (fd < 0) {
+				pr_debug(
+					"fanotify: create_fd(%pd2) failed err=%d\n",
+					path->dentry, fd);
+				if (!FAN_GROUP_FLAG(group,
+						    FAN_REPORT_FD_ERROR)) {
+					/*
+					 * Historically, we've handled EOPENSTALE in a
+					 * special way and silently dropped such
+					 * events. Now we have to keep it to maintain
+					 * backward compatibility...
+					 */
+					if (fd == -EOPENSTALE)
+						fd = 0;
+					return fd;
+				}
 			}
 		}
+		if (FAN_GROUP_FLAG(group, FAN_REPORT_FD_ERROR))
+			metadata.fd = fd;
+		else
+			metadata.fd = fd >= 0 ? fd : FAN_NOFD;
 	}
-	if (FAN_GROUP_FLAG(group, FAN_REPORT_FD_ERROR))
-		metadata.fd = fd;
-	else
-		metadata.fd = fd >= 0 ? fd : FAN_NOFD;
 
 	if (pidfd_mode) {
 		/*
@@ -858,8 +875,12 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 	if (pidfd_file)
 		fd_install(pidfd, pidfd_file);
 
-	if (fanotify_is_perm_event(event->mask))
-		FANOTIFY_PERM(event)->fd = fd;
+	if (fanotify_is_perm_event(event->mask)) {
+		if (FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID))
+			FANOTIFY_PERM(event)->id = metadata.id;
+		else
+			FANOTIFY_PERM(event)->fd = fd;
+	}
 
 	return metadata.event_len;
 
@@ -944,7 +965,11 @@ static ssize_t fanotify_read(struct file *file, char __user *buf,
 		if (!fanotify_is_perm_event(event->mask)) {
 			fsnotify_destroy_event(group, &event->fse);
 		} else {
-			if (ret <= 0 || FANOTIFY_PERM(event)->fd < 0) {
+			if (ret <= 0 ||
+			    ((FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) &&
+			      FANOTIFY_PERM(event)->id >= -255) ||
+			     (!FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID) &&
+			      FANOTIFY_PERM(event)->fd < 0))) {
 				spin_lock(&group->notification_lock);
 				finish_permission_event(group,
 					FANOTIFY_PERM(event), FAN_DENY, NULL);
@@ -1584,6 +1609,15 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 		return -EINVAL;
 
 	/*
+     * With group that reports fid info and allows only pre-content events,
+     * user may request to get a response id instead of event->fd.
+     * FAN_REPORT_FD_ERROR does not make sense in this case.
+     */
+	if ((flags & FAN_REPORT_RESPONSE_ID) &&
+	    (!fid_mode || class == FAN_CLASS_NOTIF))
+		return -EINVAL;
+
+	/*
 	 * Child name is reported with parent fid so requires dir fid.
 	 * We can report both child fid and dir fid with or without name.
 	 */
@@ -1660,6 +1694,7 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 		fd = -EINVAL;
 		goto out_destroy_group;
 	}
+	idr_init(&group->response_idr);
 
 	BUILD_BUG_ON(!(FANOTIFY_ADMIN_INIT_FLAGS & FAN_UNLIMITED_QUEUE));
 	if (flags & FAN_UNLIMITED_QUEUE) {
@@ -2145,7 +2180,7 @@ static int __init fanotify_user_setup(void)
 				     FANOTIFY_DEFAULT_MAX_USER_MARKS);
 
 	BUILD_BUG_ON(FANOTIFY_INIT_FLAGS & FANOTIFY_INTERNAL_GROUP_FLAGS);
-	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_INIT_FLAGS) != 14);
+	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_INIT_FLAGS) != 15);
 	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_MARK_FLAGS) != 11);
 
 	fanotify_mark_cache = KMEM_CACHE(fanotify_mark,
