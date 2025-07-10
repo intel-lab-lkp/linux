@@ -922,6 +922,15 @@ config NO_PAGE_MAPCOUNT
 
 endif # TRANSPARENT_HUGEPAGE
 
+config CLEAR_PAGE_EXTENT
+	def_bool y
+	depends on !HIGHMEM && ARCH_HAS_CLEAR_PAGES
+	depends on TRANSPARENT_HUGEPAGE || HUGETLBFS
+
+	help
+	  Use architectural support for clear_pages() to zero page-extents.
+	  This is likely to be faster than zeroing page-at-a-time.
+
 # simple helper to make the code a bit easier to read
 config PAGE_MAPCOUNT
 	def_bool !NO_PAGE_MAPCOUNT
