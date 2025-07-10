@@ -43,6 +43,18 @@ properties:
   touchscreen-size-x: true
   touchscreen-size-y: true
   touchscreen-swapped-x-y: true
+  touchscreen-x-mm: true
+  touchscreen-y-mm: true
+
+  goodix,stylus-enable:
+    type: boolean
+
+  goodix,stylus-pressure-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Number of discrete pressure levels supported by the stylus.
+      The reported ABS_PRESSURE range will be 0 to
+      (goodix,stylus-pressure-level - 1).
 
 additionalProperties: false
 
