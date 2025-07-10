@@ -427,7 +427,7 @@ static struct ccu_mux c910_i0_clk = {
 };
 
 static const struct clk_parent_data c910_parents[] = {
-	{ .hw = &c910_i0_clk.common.hw },
+	{ .index = -1, .name = "c910-i0" },
 	{ .hw = &cpu_pll1_clk.common.hw }
 };
 
