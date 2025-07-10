@@ -423,7 +423,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	new_bus = mdiobus_alloc_size(sizeof(*priv));
+	new_bus = devm_mdiobus_alloc_size(dev, sizeof(*priv));
 	if (!new_bus)
 		return -ENOMEM;
 
@@ -437,17 +437,15 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	err = of_address_to_resource(np, 0, &res);
 	if (err < 0) {
 		dev_err(dev, "could not obtain address information\n");
-		goto error;
+		return err;
 	}
 
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pOFn@%llx", np,
 		 (unsigned long long)res.start);
 
 	priv->map = of_iomap(np, 0);
-	if (!priv->map) {
-		err = -ENOMEM;
-		goto error;
-	}
+	if (!priv->map)
+		return -ENOMEM;
 
 	/*
 	 * Some device tree nodes represent only the MII registers, and
@@ -502,8 +500,6 @@ error:
 	if (priv->map)
 		iounmap(priv->map);
 
-	kfree(new_bus);
-
 	return err;
 }
 
@@ -517,7 +513,6 @@ static void fsl_pq_mdio_remove(struct platform_device *pdev)
 	mdiobus_unregister(bus);
 
 	iounmap(priv->map);
-	mdiobus_free(bus);
 }
 
 static struct platform_driver fsl_pq_mdio_driver = {
