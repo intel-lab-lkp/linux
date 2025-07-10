@@ -40,6 +40,13 @@ extern unsigned long __phys_addr_symbol(unsigned long);
 
 #define __phys_reloc_hide(x)	(x)
 
+/*
+ * When running under voluntary preemption models, limit the max extent
+ * to pages worth 8MB. With a clearing BW of ~10GBps, this should result
+ * in a worst case scheduling latency of ~1ms.
+ */
+#define ARCH_CLEAR_PAGE_EXTENT (8 << (20 - PAGE_SHIFT))
+
 void memzero_page_aligned_unrolled(void *addr, u64 len);
 
 /*
