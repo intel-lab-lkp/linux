@@ -678,6 +678,8 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	priv = netdev_priv(dev);
 	priv->ndev = dev;
+	priv->ofdev = ofdev;
+	priv->dev = &ofdev->dev;
 
 	priv->mode = mode;
 
