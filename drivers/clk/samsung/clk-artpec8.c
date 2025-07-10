@@ -16,6 +16,7 @@
 /* NOTE: Must be equal to the last clock ID increased by one */
 #define CMU_CMU_NR_CLK			(DOUT_CLKCMU_VPP_CORE + 1)
 #define CMU_BUS_NR_CLK			(DOUT_CLK_BUS_PCLK + 1)
+#define CMU_CORE_NR_CLK			(DOUT_CLK_CORE_PCLK + 1)
 #define CMU_IMEM_NR_CLK			(MOUT_IMEM_JPEG_USER + 1)
 
 /* register offset definitions for cmu_cmu (0x12400000) */
@@ -475,6 +476,50 @@ static void __init artpec8_clk_cmu_bus_init(struct device_node *np)
 
 CLK_OF_DECLARE(artpec8_clk_cmu_bus, "axis,artpec8-cmu-bus",
 	       artpec8_clk_cmu_bus_init);
+
+/* Register Offset definitions for CMU_CORE (0x12410000) */
+#define PLL_CON0_MUX_CLK_CORE_ACLK_USER			0x0100
+#define PLL_CON0_MUX_CLK_CORE_DLP_USER			0x0120
+#define DIV_CLK_CORE_PCLK				0x1800
+
+static const unsigned long cmu_core_clk_regs[] __initconst = {
+	PLL_CON0_MUX_CLK_CORE_ACLK_USER,
+	PLL_CON0_MUX_CLK_CORE_DLP_USER,
+	DIV_CLK_CORE_PCLK,
+};
+
+PNAME(mout_clk_core_aclk_user_p) = { "fin_pll", "dout_clkcmu_core_main" };
+PNAME(mout_clk_core_dlp_user_p) = { "fin_pll", "dout_clkcmu_core_dlp" };
+
+static const struct samsung_mux_clock cmu_core_mux_clks[] __initconst = {
+	MUX(MOUT_CLK_CORE_ACLK_USER, "mout_clk_core_aclk_user",
+	    mout_clk_core_aclk_user_p, PLL_CON0_MUX_CLK_CORE_ACLK_USER, 4, 1),
+	MUX(MOUT_CLK_CORE_DLP_USER, "mout_clk_core_dlp_user",
+	    mout_clk_core_dlp_user_p, PLL_CON0_MUX_CLK_CORE_DLP_USER, 4, 1),
+};
+
+static const struct samsung_div_clock cmu_core_div_clks[] __initconst = {
+	DIV(DOUT_CLK_CORE_PCLK, "dout_clk_core_pclk",
+	    "mout_clk_core_aclk_user", DIV_CLK_CORE_PCLK, 0, 4),
+};
+
+static const struct samsung_cmu_info cmu_core_info __initconst = {
+	.mux_clks		= cmu_core_mux_clks,
+	.nr_mux_clks		= ARRAY_SIZE(cmu_core_mux_clks),
+	.div_clks		= cmu_core_div_clks,
+	.nr_div_clks		= ARRAY_SIZE(cmu_core_div_clks),
+	.nr_clk_ids		= CMU_CORE_NR_CLK,
+	.clk_regs		= cmu_core_clk_regs,
+	.nr_clk_regs		= ARRAY_SIZE(cmu_core_clk_regs),
+};
+
+static void __init artpec8_clk_cmu_core_init(struct device_node *np)
+{
+	samsung_cmu_register_one(np, &cmu_core_info);
+}
+
+CLK_OF_DECLARE(artpec8_clk_cmu_core, "axis,artpec8-cmu-core",
+	       artpec8_clk_cmu_core_init);
 
 /* Register Offset definitions for CMU_IMEM (0x10010000) */
 #define PLL_CON0_MUX_CLK_IMEM_ACLK_USER			0x0100
