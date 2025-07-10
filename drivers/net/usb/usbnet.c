@@ -1115,7 +1115,9 @@ static void __handle_link_change(struct usbnet *dev)
 
 	if (!netif_carrier_ok(dev->net)) {
 		/* kill URBs for reading packets to save bus bandwidth */
+		usbnet_pause_rx(dev);
 		unlink_urbs(dev, &dev->rxq);
+		usbnet_resume_rx(dev);
 
 		/*
 		 * tx_timeout will unlink URBs for sending packets and
