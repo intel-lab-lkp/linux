@@ -200,6 +200,9 @@
  *  enabled + panel_replay_enabled + sel_update_enabled:	Panel Replay SU
  */
 
+#define PSR_PARAM_DISABLE_PSR2		BIT(0)
+#define PSR_PARAM_DISABLE_PANEL_REPLAY	BIT(1)
+
 #define CAN_PSR(intel_dp) ((intel_dp)->psr.sink_support && \
 			   (intel_dp)->psr.source_support)
 
@@ -254,13 +257,16 @@ static bool psr2_global_enabled(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
+	return display->params.enable_psr == -1 ||
+		!(display->params.enable_psr & PSR_PARAM_DISABLE_PSR2);
+}
+
+static bool sel_update_global_enabled(struct intel_dp *intel_dp)
+{
 	switch (intel_dp->psr.debug & I915_PSR_DEBUG_MODE_MASK) {
-	case I915_PSR_DEBUG_DISABLE:
 	case I915_PSR_DEBUG_FORCE_PSR1:
 		return false;
 	default:
-		if (display->params.enable_psr == 1)
-			return false;
 		return true;
 	}
 }
@@ -269,7 +275,8 @@ static bool panel_replay_global_enabled(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
-	if ((display->params.enable_psr != -1) ||
+	if ((display->params.enable_psr != -1 &&
+	     display->params.enable_psr & PSR_PARAM_DISABLE_PANEL_REPLAY) ||
 	    (intel_dp->psr.debug & I915_PSR_DEBUG_PANEL_REPLAY_DISABLE))
 		return false;
 	return true;
@@ -1415,6 +1422,12 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 	if (!intel_dp->psr.sink_psr2_support)
 		return false;
 
+	if (!psr2_global_enabled(intel_dp)) {
+		drm_dbg_kms(display->drm,
+			    "PSR2 disabled by flag\n");
+		return false;
+	}
+
 	/* JSL and EHL only supports eDP 1.3 */
 	if (display->platform.jasperlake || display->platform.elkhartlake) {
 		drm_dbg_kms(display->drm, "PSR2 not supported by phy\n");
@@ -1517,7 +1530,7 @@ static bool intel_sel_update_config_valid(struct intel_dp *intel_dp,
 		goto unsupported;
 	}
 
-	if (!psr2_global_enabled(intel_dp)) {
+	if (!sel_update_global_enabled(intel_dp)) {
 		drm_dbg_kms(display->drm,
 			    "Selective update disabled by flag\n");
 		goto unsupported;
@@ -1664,7 +1677,7 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	u8 active_pipes = 0;
 
 	if (!psr_global_enabled(intel_dp)) {
-		drm_dbg_kms(display->drm, "PSR disabled by flag\n");
+		drm_dbg_kms(display->drm, "PSR/Panel Replay disabled by flag\n");
 		return;
 	}
 
