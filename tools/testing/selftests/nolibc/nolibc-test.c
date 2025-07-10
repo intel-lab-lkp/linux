@@ -72,6 +72,15 @@ static const int is_nolibc =
 #endif
 ;
 
+/* Set BIT(step + 1), BIT(0) shows whether all steps ran once and in order */
+#define MARK_STEP_DONE(val, step) do {					\
+	if ((val) == 0 && (step) == 0)					\
+		(val) |= 0x1;						\
+	else if ((val) & (1 << ((step) + 1)) || !(val & (1 << (step))))	\
+		(val) &= ~0x1;						\
+	(val) |= 1 << ((step) + 1);					\
+	} while (0)
+
 /* definition of a series of tests */
 struct test {
 	const char *name;              /* test name */
@@ -389,6 +398,20 @@ int expect_syserr2(int expr, int expret, int experr1, int experr2, int llen)
 }
 
 
+#define EXPECT_STEPS(cond, expr, num_steps)			\
+	do { if (!(cond)) result(llen, SKIPPED); else ret += expect_steps(expr, llen, num_steps); } while (0)
+
+static __attribute__((unused))
+int expect_steps(uint64_t expr, int llen, int num_steps)
+{
+	int ret = !(expr == ((uint64_t)1 << (num_steps + 1)) - 1);
+
+	llen += printf(" = %llx ", (long long)expr);
+	result(llen, ret ? FAIL : OK);
+	return ret;
+}
+
+
 #define EXPECT_PTRZR(cond, expr)				\
 	do { if (!(cond)) result(llen, SKIPPED); else ret += expect_ptrzr(expr, llen); } while (0)
 
@@ -690,14 +713,14 @@ int expect_strtox(int llen, void *func, const char *input, int base, intmax_t ex
 __attribute__((constructor))
 static void constructor1(void)
 {
-	constructor_test_value |= 1 << 0;
+	MARK_STEP_DONE(constructor_test_value, 0);
 }
 
 __attribute__((constructor))
 static void constructor2(int argc, char **argv, char **envp)
 {
 	if (argc && argv && envp)
-		constructor_test_value |= 1 << 1;
+		MARK_STEP_DONE(constructor_test_value, 1);
 }
 
 int run_startup(int min, int max)
@@ -736,9 +759,9 @@ int run_startup(int min, int max)
 		CASE_TEST(environ_HOME);     EXPECT_PTRNZ(1, getenv("HOME")); break;
 		CASE_TEST(auxv_addr);        EXPECT_PTRGT(test_auxv != (void *)-1, test_auxv, brk); break;
 		CASE_TEST(auxv_AT_UID);      EXPECT_EQ(1, getauxval(AT_UID), getuid()); break;
-		CASE_TEST(constructor);      EXPECT_EQ(is_nolibc, constructor_test_value, 0x3); break;
+		CASE_TEST(constructor);      EXPECT_STEPS(is_nolibc, constructor_test_value, 2); break;
 		CASE_TEST(linkage_errno);    EXPECT_PTREQ(1, linkage_test_errno_addr(), &errno); break;
-		CASE_TEST(linkage_constr);   EXPECT_EQ(1, linkage_test_constructor_test_value, 0x3); break;
+		CASE_TEST(linkage_constr);   EXPECT_STEPS(1, linkage_test_constructor_test_value, 2); break;
 		case __LINE__:
 			return ret; /* must be last */
 		/* note: do not set any defaults so as to permit holes above */
