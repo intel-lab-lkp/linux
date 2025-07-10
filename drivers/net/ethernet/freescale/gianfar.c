@@ -442,15 +442,6 @@ static int gfar_alloc_rx_queues(struct gfar_private *priv)
 	return 0;
 }
 
-static void unmap_group_regs(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < MAXGROUPS; i++)
-		if (priv->gfargrp[i].regs)
-			iounmap(priv->gfargrp[i].regs);
-}
-
 static void disable_napi(struct gfar_private *priv)
 {
 	int i;
@@ -484,7 +475,7 @@ static int gfar_parse_group(struct device_node *np,
 			return -ENOMEM;
 	}
 
-	grp->regs = of_iomap(np, 0);
+	grp->regs = devm_of_iomap(priv->dev, np, 0, NULL);
 	if (!grp->regs)
 		return -ENOMEM;
 
@@ -691,13 +682,13 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 			err = gfar_parse_group(child, priv, model);
 			if (err) {
 				of_node_put(child);
-				goto err_grp_init;
+				return err;
 			}
 		}
 	} else { /* SQ_SG_MODE */
 		err = gfar_parse_group(np, priv, model);
 		if (err)
-			goto err_grp_init;
+			return err;
 	}
 
 	if (of_property_read_bool(np, "bd-stash")) {
@@ -720,7 +711,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	err = of_get_ethdev_address(np, dev);
 	if (err == -EPROBE_DEFER)
-		goto err_grp_init;
+		return err;
 	if (err) {
 		eth_hw_addr_random(dev);
 		dev_info(&ofdev->dev, "Using random MAC address: %pM\n", dev->dev_addr);
@@ -768,7 +759,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	if (!priv->phy_node && of_phy_is_fixed_link(np)) {
 		err = of_phy_register_fixed_link(np);
 		if (err)
-			goto err_grp_init;
+			return err;
 
 		priv->phy_node = of_node_get(np);
 	}
@@ -777,10 +768,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	priv->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
 
 	return 0;
-
-err_grp_init:
-	unmap_group_regs(priv);
-	return err;
 }
 
 static u32 cluster_entry_per_class(struct gfar_private *priv, u32 rqfar,
@@ -3287,7 +3274,6 @@ static int gfar_probe(struct platform_device *ofdev)
 register_fail:
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-	unmap_group_regs(priv);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
 	return err;
@@ -3303,8 +3289,6 @@ static void gfar_remove(struct platform_device *ofdev)
 
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-
-	unmap_group_regs(priv);
 }
 
 #ifdef CONFIG_PM
