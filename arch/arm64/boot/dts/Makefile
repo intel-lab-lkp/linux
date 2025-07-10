@@ -9,6 +9,7 @@ subdir-y += amlogic
 subdir-y += apm
 subdir-y += apple
 subdir-y += arm
+subdir-y += axis
 subdir-y += bitmain
 subdir-y += blaize
 subdir-y += broadcom

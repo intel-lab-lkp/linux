@@ -40,6 +40,19 @@ config ARCH_APPLE
 	  This enables support for Apple's in-house ARM SoC family, such
 	  as the Apple M1.
 
+config ARCH_ARTPEC
+	bool "Axis Communications ARTPEC SoC Family"
+	help
+	   This enables support for the ARMv8 based ARTPEC SoC Family.
+
+config ARCH_ARTPEC8
+	bool "Axis ARTPEC-8 SoC Platform"
+	depends on ARCH_ARTPEC
+	depends on ARCH_EXYNOS
+	select ARM_GIC
+	help
+	  This enables support for the Axis ARTPEC-8 SoC.
+
 menuconfig ARCH_BCM
 	bool "Broadcom SoC Support"
 
