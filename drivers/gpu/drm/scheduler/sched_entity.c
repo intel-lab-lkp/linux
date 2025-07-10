@@ -180,6 +180,7 @@ static void drm_sched_entity_kill_jobs_work(struct work_struct *wrk)
 	drm_sched_fence_finished(job->s_fence, -ESRCH);
 	WARN_ON(job->s_fence->parent);
 	job->sched->ops->free_job(job);
+	drm_sched_wakeup(job->sched);
 }
 
 /* Signal the scheduler finished fence when the entity in question is killed. */
