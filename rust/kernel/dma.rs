@@ -6,9 +6,9 @@
 
 use crate::{
     bindings, build_assert, device,
-    device::Bound,
+    device::{Bound, Core},
     error::code::*,
-    error::Result,
+    error::{to_result, Result},
     transmute::{AsBytes, FromBytes},
     types::ARef,
 };
@@ -18,7 +18,83 @@ use crate::{
 /// The [`dma::Device`](Device) trait should be implemented by bus specific device representations,
 /// where the underlying bus is DMA capable, such as [`pci::Device`](::kernel::pci::Device) or
 /// [`platform::Device`](::kernel::platform::Device).
-pub trait Device: AsRef<device::Device<Core>> {}
+pub trait Device: AsRef<device::Device<Core>> {
+    /// Set up the device's DMA streaming addressing capabilities.
+    ///
+    /// This method is usually called once from `probe()` as soon as the device capabilities are
+    /// known.
+    ///
+    /// # Safety
+    ///
+    /// This method must not be called concurrently with any DMA allocation or mapping primitives,
+    /// such as [`CoherentAllocation::alloc_attrs`].
+    unsafe fn dma_set_mask(&self, mask: u64) -> Result {
+        // SAFETY:
+        // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
+        // - The safety requirement of this function guarantees that there are no concurrent calls
+        //   to DMA allocation and mapping primitives using this mask.
+        to_result(unsafe { bindings::dma_set_mask(self.as_ref().as_raw(), mask) })
+    }
+
+    /// Set up the device's DMA coherent addressing capabilities.
+    ///
+    /// This method is usually called once from `probe()` as soon as the device capabilities are
+    /// known.
+    ///
+    /// # Safety
+    ///
+    /// This method must not be called concurrently with any DMA allocation or mapping primitives,
+    /// such as [`CoherentAllocation::alloc_attrs`].
+    unsafe fn dma_set_coherent_mask(&self, mask: u64) -> Result {
+        // SAFETY:
+        // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
+        // - The safety requirement of this function guarantees that there are no concurrent calls
+        //   to DMA allocation and mapping primitives using this mask.
+        to_result(unsafe { bindings::dma_set_coherent_mask(self.as_ref().as_raw(), mask) })
+    }
+
+    /// Set up the device's DMA addressing capabilities.
+    ///
+    /// This is a combination of [`Device::dma_set_mask`] and [`Device::dma_set_coherent_mask`].
+    ///
+    /// This method is usually called once from `probe()` as soon as the device capabilities are
+    /// known.
+    ///
+    /// # Safety
+    ///
+    /// This method must not be called concurrently with any DMA allocation or mapping primitives,
+    /// such as [`CoherentAllocation::alloc_attrs`].
+    unsafe fn dma_set_mask_and_coherent(&self, mask: u64) -> Result {
+        // SAFETY:
+        // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
+        // - The safety requirement of this function guarantees that there are no concurrent calls
+        //   to DMA allocation and mapping primitives using this mask.
+        to_result(unsafe { bindings::dma_set_mask_and_coherent(self.as_ref().as_raw(), mask) })
+    }
+}
+
+/// Returns a bitmask with the lowest `n` bits set to `1`.
+///
+/// For `n` in `0..=64`, returns a mask with the lowest `n` bits set.
+/// For `n > 64`, returns `u64::MAX` (all bits set).
+///
+/// # Examples
+///
+/// ```
+/// use kernel::dma::dma_bit_mask;
+///
+/// assert_eq!(dma_bit_mask(0), 0);
+/// assert_eq!(dma_bit_mask(1), 0b1);
+/// assert_eq!(dma_bit_mask(64), u64::MAX);
+/// assert_eq!(dma_bit_mask(100), u64::MAX); // Saturates at all bits set.
+/// ```
+pub const fn dma_bit_mask(n: usize) -> u64 {
+    match n {
+        0 => 0,
+        1..=64 => u64::MAX >> (64 - n),
+        _ => u64::MAX,
+    }
+}
 
 /// Possible attributes associated with a DMA mapping.
 ///
