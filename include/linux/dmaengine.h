@@ -431,6 +431,9 @@ enum dma_slave_buswidth {
  * @peripheral_config: peripheral configuration for programming peripheral
  * for dmaengine transfer
  * @peripheral_size: peripheral configuration buffer size
+ * @coalesce_cnt: Maximum number of transfers before receiving an interrupt.
+ * @coalesce_usecs: How many usecs to delay an interrupt after a transfer
+ * is completed.
  *
  * This struct is passed in as configuration data to a DMA engine
  * in order to set up a certain channel for DMA transport at runtime.
@@ -457,6 +460,8 @@ struct dma_slave_config {
 	bool device_fc;
 	void *peripheral_config;
 	size_t peripheral_size;
+	u32 coalesce_cnt;
+	u32 coalesce_usecs;
 };
 
 /**
@@ -507,6 +512,9 @@ enum dma_residue_granularity {
  * @residue_granularity: granularity of the reported transfer residue
  * @descriptor_reuse: if a descriptor can be reused by client and
  * resubmitted multiple times
+ * @coalesce_cnt: Maximum number of transfers before receiving an interrupt.
+ * @coalesce_usecs: How many usecs to delay an interrupt after a transfer
+ * is completed.
  */
 struct dma_slave_caps {
 	u32 src_addr_widths;
@@ -520,6 +528,8 @@ struct dma_slave_caps {
 	bool cmd_terminate;
 	enum dma_residue_granularity residue_granularity;
 	bool descriptor_reuse;
+	u32 coalesce_cnt;
+	u32 coalesce_usecs;
 };
 
 static inline const char *dma_chan_name(struct dma_chan *chan)
