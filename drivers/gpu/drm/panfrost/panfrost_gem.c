@@ -49,6 +49,7 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 		kvfree(bo->sgts);
 	}
 
+	mutex_destroy(&bo->mappings.lock);
 	drm_gem_shmem_free(&bo->base);
 }
 
