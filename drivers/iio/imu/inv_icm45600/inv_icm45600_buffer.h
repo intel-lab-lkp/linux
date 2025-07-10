@@ -93,6 +93,8 @@ int inv_icm45600_buffer_update_watermark(struct inv_icm45600_state *st);
 int inv_icm45600_buffer_fifo_read(struct inv_icm45600_state *st,
 				  unsigned int max);
 
+int inv_icm45600_buffer_fifo_parse(struct inv_icm45600_state *st);
+
 int inv_icm45600_buffer_hwfifo_flush(struct inv_icm45600_state *st,
 				     unsigned int count);
 
