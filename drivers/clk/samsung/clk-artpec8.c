@@ -15,6 +15,7 @@
 
 /* NOTE: Must be equal to the last clock ID increased by one */
 #define CMU_CMU_NR_CLK			(DOUT_CLKCMU_VPP_CORE + 1)
+#define CMU_BUS_NR_CLK			(DOUT_CLK_BUS_PCLK + 1)
 #define CMU_IMEM_NR_CLK			(MOUT_IMEM_JPEG_USER + 1)
 
 /* register offset definitions for cmu_cmu (0x12400000) */
@@ -430,6 +431,50 @@ static void __init artpec8_clk_cmu_cmu_init(struct device_node *np)
 
 CLK_OF_DECLARE(artpec8_clk_cmu_cmu, "axis,artpec8-cmu-cmu",
 	       artpec8_clk_cmu_cmu_init);
+
+/* Register Offset definitions for CMU_BUS (0x12c10000) */
+#define PLL_CON0_MUX_CLK_BUS_ACLK_USER			0x0100
+#define PLL_CON0_MUX_CLK_BUS_DLP_USER			0x0120
+#define DIV_CLK_BUS_PCLK				0x1800
+
+static const unsigned long cmu_bus_clk_regs[] __initconst = {
+	PLL_CON0_MUX_CLK_BUS_ACLK_USER,
+	PLL_CON0_MUX_CLK_BUS_DLP_USER,
+	DIV_CLK_BUS_PCLK,
+};
+
+PNAME(mout_clk_bus_aclk_user_p) = { "fin_pll", "dout_clkcmu_bus_bus" };
+PNAME(mout_clk_bus_dlp_user_p) = { "fin_pll", "dout_clkcmu_bus_dlp" };
+
+static const struct samsung_mux_clock cmu_bus_mux_clks[] __initconst = {
+	MUX(MOUT_CLK_BUS_ACLK_USER, "mout_clk_bus_aclk_user",
+	    mout_clk_bus_aclk_user_p, PLL_CON0_MUX_CLK_BUS_ACLK_USER, 4, 1),
+	MUX(MOUT_CLK_BUS_DLP_USER, "mout_clk_bus_dlp_user",
+	    mout_clk_bus_dlp_user_p, PLL_CON0_MUX_CLK_BUS_DLP_USER, 4, 1),
+};
+
+static const struct samsung_div_clock cmu_bus_div_clks[] __initconst = {
+	DIV(DOUT_CLK_BUS_PCLK, "dout_clk_bus_pclk", "mout_clk_bus_aclk_user",
+	    DIV_CLK_BUS_PCLK, 0, 4),
+};
+
+static const struct samsung_cmu_info cmu_bus_info __initconst = {
+	.mux_clks		= cmu_bus_mux_clks,
+	.nr_mux_clks		= ARRAY_SIZE(cmu_bus_mux_clks),
+	.div_clks		= cmu_bus_div_clks,
+	.nr_div_clks		= ARRAY_SIZE(cmu_bus_div_clks),
+	.nr_clk_ids		= CMU_BUS_NR_CLK,
+	.clk_regs		= cmu_bus_clk_regs,
+	.nr_clk_regs		= ARRAY_SIZE(cmu_bus_clk_regs),
+};
+
+static void __init artpec8_clk_cmu_bus_init(struct device_node *np)
+{
+	samsung_cmu_register_one(np, &cmu_bus_info);
+}
+
+CLK_OF_DECLARE(artpec8_clk_cmu_bus, "axis,artpec8-cmu-bus",
+	       artpec8_clk_cmu_bus_init);
 
 /* Register Offset definitions for CMU_IMEM (0x10010000) */
 #define PLL_CON0_MUX_CLK_IMEM_ACLK_USER			0x0100
