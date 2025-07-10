@@ -21,6 +21,7 @@
 #include "pci_irq.h"
 #include "devlink.h"
 #include "en_accel/ipsec.h"
+#include "en/pcie_cong_event.h"
 
 enum {
 	MLX5_EQE_OWNER_INIT_VAL	= 0x1,
@@ -584,6 +585,9 @@ static void gather_async_events_mask(struct mlx5_core_dev *dev, u64 mask[4])
 	if (mlx5_ipsec_device_caps(dev) & MLX5_IPSEC_CAP_PACKET_OFFLOAD)
 		async_event_mask |=
 			(1ull << MLX5_EVENT_TYPE_OBJECT_CHANGE);
+
+	if (mlx5e_pcie_cong_event_supported(dev))
+		async_event_mask |= (1ull << MLX5_EVENT_TYPE_OBJECT_CHANGE);
 
 	mask[0] = async_event_mask;
 
