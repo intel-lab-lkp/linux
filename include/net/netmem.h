@@ -198,6 +198,32 @@ static inline struct page *netmem_to_page(netmem_ref netmem)
 	return __netmem_to_page(netmem);
 }
 
+/**
+ * __netmem_to_nmdesc - unsafely get pointer to the &netmem_desc backing
+ * @netmem
+ * @netmem: netmem reference to convert
+ *
+ * Unsafe version of netmem_to_nmdesc(). When @netmem is always backed
+ * by system memory, performs faster and generates smaller object code
+ * (no check for the LSB, no WARN). When @netmem points to IOV, provokes
+ * undefined behaviour.
+ *
+ * Return: pointer to the &netmem_desc (garbage if @netmem is not backed
+ * by system memory).
+ */
+static inline struct netmem_desc *__netmem_to_nmdesc(netmem_ref netmem)
+{
+	return (__force struct netmem_desc *)netmem;
+}
+
+static inline struct netmem_desc *netmem_to_nmdesc(netmem_ref netmem)
+{
+	if (WARN_ON_ONCE(netmem_is_net_iov(netmem)))
+		return NULL;
+
+	return __netmem_to_nmdesc(netmem);
+}
+
 static inline struct net_iov *netmem_to_net_iov(netmem_ref netmem)
 {
 	if (netmem_is_net_iov(netmem))
@@ -312,6 +338,21 @@ static inline netmem_ref netmem_compound_head(netmem_ref netmem)
 		return netmem;
 
 	return page_to_netmem(compound_head(netmem_to_page(netmem)));
+}
+
+#define nmdesc_to_page(nmdesc)		(_Generic((nmdesc),		\
+	const struct netmem_desc * :	(const struct page *)(nmdesc),	\
+	struct netmem_desc * :		(struct page *)(nmdesc)))
+
+static inline struct netmem_desc *page_to_nmdesc(struct page *page)
+{
+	VM_BUG_ON_PAGE(PageTail(page), page);
+	return (struct netmem_desc *)page;
+}
+
+static inline void *nmdesc_address(struct netmem_desc *nmdesc)
+{
+	return page_address(nmdesc_to_page(nmdesc));
 }
 
 /**
