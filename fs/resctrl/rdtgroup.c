@@ -70,6 +70,7 @@ static struct seq_buf last_cmd_status;
 static char last_cmd_status_buf[512];
 
 static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
+static int rdtgroup_init_cat(struct resctrl_schema *s, u32 closid);
 
 static void rdtgroup_destroy_root(void);
 
@@ -230,6 +231,16 @@ bool closid_allocated(unsigned int closid)
 	lockdep_assert_held(&rdtgroup_mutex);
 
 	return !test_bit(closid, closid_free_map);
+}
+
+static bool resctrl_io_alloc_closid_alloc(u32 io_alloc_closid)
+{
+	return __test_and_clear_bit(io_alloc_closid, closid_free_map);
+}
+
+static void resctrl_io_alloc_closid_free(u32 io_alloc_closid)
+{
+	closid_free(io_alloc_closid);
 }
 
 /**
@@ -1028,6 +1039,16 @@ static int rdt_shareable_bits_show(struct kernfs_open_file *of,
 
 	seq_printf(seq, "%x\n", r->cache.shareable_bits);
 	return 0;
+}
+
+/*
+ * resctrl_io_alloc_closid_supported() - io_alloc feature utilizes the
+ * highest CLOSID value to direct I/O traffic. Ensure that io_alloc_closid
+ * is in the supported range.
+ */
+static bool resctrl_io_alloc_closid_supported(u32 io_alloc_closid)
+{
+	return io_alloc_closid < closids_supported();
 }
 
 /*
@@ -1858,6 +1879,131 @@ static int resctrl_io_alloc_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * Initialize io_alloc CLOSID cache resource CBM with all usable (shared
+ * and unused) cache portions.
+ */
+static int resctrl_io_alloc_init_cat(struct rdt_resource *r,
+				     struct resctrl_schema *s, u32 closid)
+{
+	int ret;
+
+	rdt_staged_configs_clear();
+
+	ret = rdtgroup_init_cat(s, closid);
+	if (ret < 0)
+		goto out;
+
+	ret = resctrl_arch_update_domains(r, closid);
+
+out:
+	rdt_staged_configs_clear();
+	return ret;
+}
+
+static const char *rdtgroup_name_by_closid(int closid)
+{
+	struct rdtgroup *rdtgrp;
+
+	list_for_each_entry(rdtgrp, &rdt_all_groups, rdtgroup_list) {
+		if (rdtgrp->closid == closid)
+			return rdt_kn_name(rdtgrp->kn);
+	}
+
+	return NULL;
+}
+
+static struct resctrl_schema *resctrl_get_schema(enum resctrl_conf_type type)
+{
+	struct resctrl_schema *schema;
+
+	list_for_each_entry(schema, &resctrl_schema_all, list) {
+		if (schema->conf_type == type)
+			return schema;
+	}
+
+	return NULL;
+}
+
+static ssize_t resctrl_io_alloc_write(struct kernfs_open_file *of, char *buf,
+				      size_t nbytes, loff_t off)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	enum resctrl_conf_type peer_type;
+	struct rdt_resource *r = s->res;
+	struct resctrl_schema *peer_s;
+	char const *grp_name;
+	u32 io_alloc_closid;
+	bool enable;
+	int ret;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	if (!r->cache.io_alloc_capable) {
+		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	io_alloc_closid = resctrl_io_alloc_closid(r);
+	if (!resctrl_io_alloc_closid_supported(io_alloc_closid)) {
+		rdt_last_cmd_printf("io_alloc CLOSID (ctrl_hw_id) %d is not available\n",
+				    io_alloc_closid);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	/* If the feature is already up to date, no action is needed. */
+	if (resctrl_arch_get_io_alloc_enabled(r) == enable)
+		goto out_unlock;
+
+	if (enable) {
+		if (!resctrl_io_alloc_closid_alloc(io_alloc_closid)) {
+			grp_name = rdtgroup_name_by_closid(io_alloc_closid);
+			WARN_ON_ONCE(!grp_name);
+			rdt_last_cmd_printf("CLOSID (ctrl_hw_id) %d for io_alloc is used by %s group\n",
+					    io_alloc_closid, grp_name ? grp_name : "another");
+			ret = -ENOSPC;
+			goto out_unlock;
+		}
+
+		/* Initialize schema for both CDP_DATA and CDP_CODE when CDP is enabled */
+		if (resctrl_arch_get_cdp_enabled(r->rid)) {
+			peer_type = resctrl_peer_type(s->conf_type);
+			peer_s = resctrl_get_schema(peer_type);
+			if (peer_s)
+				ret = resctrl_io_alloc_init_cat(r, peer_s, io_alloc_closid);
+		}
+
+		if (!ret)
+			ret = resctrl_io_alloc_init_cat(r, s, io_alloc_closid);
+
+		if (ret) {
+			rdt_last_cmd_puts("Failed to initialize io_alloc allocations\n");
+			resctrl_io_alloc_closid_free(io_alloc_closid);
+			goto out_unlock;
+		}
+
+	} else {
+		resctrl_io_alloc_closid_free(io_alloc_closid);
+	}
+
+	ret = resctrl_arch_io_alloc_enable(r, enable);
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -1950,9 +2096,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "io_alloc",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_io_alloc_show,
+		.write          = resctrl_io_alloc_write,
 	},
 	{
 		.name		= "max_threshold_occupancy",
