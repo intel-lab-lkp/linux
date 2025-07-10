@@ -11,6 +11,8 @@ maintainers:
   - Ghennadi Procopciuc <Ghennadi.Procopciuc@oss.nxp.com>
   - Chester Lin <chester62515@gmail.com>
 
+deprecated: true
+
 description: |
   S32G2 pinmux is implemented in SIUL2 (System Integration Unit Lite2),
   whose memory map is split into two regions:
