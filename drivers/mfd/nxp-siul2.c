@@ -31,7 +31,11 @@
 static const struct mfd_cell nxp_siul2_devs[] = {
 	{
 		.name = "s32g-siul2-pinctrl",
-	}
+	},
+	{
+
+		.name = "s32g2-siul2-nvmem",
+	},
 };
 
 /**

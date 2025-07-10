@@ -454,4 +454,14 @@ config NVMEM_QORIQ_EFUSE
 	  This driver can also be built as a module. If so, the module
 	  will be called nvmem_qoriq_efuse.
 
+config NVMEM_S32G2_SIUL2
+	tristate "S32G2 SIUL2 nvmem support: SoC revision"
+	depends on ARCH_S32 || COMPILE_TEST
+	default y
+	help
+	  This is a driver to access hardware related data like SoC revision
+	  for S32G2/S32G3 SoCs.
+
+	  The revision information is retrieved from the SIUL2 module.
+
 endif
