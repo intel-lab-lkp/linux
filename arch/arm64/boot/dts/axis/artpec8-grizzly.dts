@@ -10,6 +10,7 @@
 
 /dts-v1/;
 #include "artpec8.dtsi"
+#include "artpec8-pinctrl.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 / {
 	model = "ARTPEC-8 grizzly board";
