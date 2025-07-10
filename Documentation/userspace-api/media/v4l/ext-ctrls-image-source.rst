@@ -92,3 +92,15 @@ Image Source Control IDs
     representing a gain of exactly 1.0. For example, if this default value
     is reported as being (say) 128, then a value of 192 would represent
     a gain of exactly 1.5.
+
+``V4L2_CID_EXPOSURE_MULTI (__u32 array)``
+    Same as V4L2_CID_EXPOSURE, but for multiple exposure sensors. Each
+    element of the array holds the exposure value for one capture.
+
+``V4L2_CID_AGAIN_MULTI (__u32 array)``
+    Same as V4L2_CID_ANALOGUE_GAIN, but for multiple exposure sensors. Each
+    element of the array holds the analog gain value for one capture.
+
+``V4L2_CID_DGAIN_MULTI (__u32 array)``
+    Same as V4L2_CID_DIGITAL_GAIN, but for multiple exposure sensors. Each
+    element of the array holds the digital gain value for one capture.
