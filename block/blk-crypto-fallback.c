@@ -209,9 +209,13 @@ blk_crypto_fallback_alloc_cipher_req(struct blk_crypto_keyslot *slot,
 	return true;
 }
 
-static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
+/*
+ * The encryption fallback code allocates bounce pages individually. This limits
+ * the bio size supported by the encryption fallback code. This function
+ * calculates the upper limit for the bio size.
+ */
+static unsigned int blk_crypto_max_io_size(struct bio *bio)
 {
-	struct bio *bio = *bio_ptr;
 	unsigned int i = 0;
 	unsigned int num_sectors = 0;
 	struct bio_vec bv;
@@ -222,6 +226,16 @@ static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
 		if (++i == BIO_MAX_VECS)
 			break;
 	}
+
+	return num_sectors;
+}
+
+static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
+{
+	struct bio *bio = *bio_ptr;
+	unsigned int num_sectors;
+
+	num_sectors = blk_crypto_max_io_size(bio);
 	if (num_sectors < bio_sectors(bio)) {
 		struct bio *split_bio;
 
