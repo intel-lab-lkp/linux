@@ -2935,29 +2935,6 @@ static const struct hclge_dbg_func hclge_dbg_cmd_func[] = {
 	},
 };
 
-int hclge_dbg_read_cmd(struct hnae3_handle *handle, enum hnae3_dbg_cmd cmd,
-		       char *buf, int len)
-{
-	struct hclge_vport *vport = hclge_get_vport(handle);
-	const struct hclge_dbg_func *cmd_func;
-	struct hclge_dev *hdev = vport->back;
-	u32 i;
-
-	for (i = 0; i < ARRAY_SIZE(hclge_dbg_cmd_func); i++) {
-		if (cmd == hclge_dbg_cmd_func[i].cmd) {
-			cmd_func = &hclge_dbg_cmd_func[i];
-			if (cmd_func->dbg_dump)
-				return cmd_func->dbg_dump(hdev, buf, len);
-			else
-				return cmd_func->dbg_dump_reg(hdev, cmd, buf,
-							      len);
-		}
-	}
-
-	dev_err(&hdev->pdev->dev, "invalid command(%d)\n", cmd);
-	return -EINVAL;
-}
-
 int hclge_dbg_get_read_func(struct hnae3_handle *handle, enum hnae3_dbg_cmd cmd,
 			    read_func *func)
 {

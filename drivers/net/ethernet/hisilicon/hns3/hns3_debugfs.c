@@ -49,315 +49,270 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.name = "tm_nodes",
 		.cmd = HNAE3_DBG_CMD_TM_NODES,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tm_priority",
 		.cmd = HNAE3_DBG_CMD_TM_PRI,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tm_qset",
 		.cmd = HNAE3_DBG_CMD_TM_QSET,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tm_map",
 		.cmd = HNAE3_DBG_CMD_TM_MAP,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tm_pg",
 		.cmd = HNAE3_DBG_CMD_TM_PG,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tm_port",
 		.cmd = HNAE3_DBG_CMD_TM_PORT,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tc_sch_info",
 		.cmd = HNAE3_DBG_CMD_TC_SCH_INFO,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "qos_pause_cfg",
 		.cmd = HNAE3_DBG_CMD_QOS_PAUSE_CFG,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "qos_pri_map",
 		.cmd = HNAE3_DBG_CMD_QOS_PRI_MAP,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "qos_dscp_map",
 		.cmd = HNAE3_DBG_CMD_QOS_DSCP_MAP,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "qos_buf_cfg",
 		.cmd = HNAE3_DBG_CMD_QOS_BUF_CFG,
 		.dentry = HNS3_DBG_DENTRY_TM,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "dev_info",
 		.cmd = HNAE3_DBG_CMD_DEV_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t1,
 	},
 	{
 		.name = "tx_bd_queue",
 		.cmd = HNAE3_DBG_CMD_TX_BD,
 		.dentry = HNS3_DBG_DENTRY_TX_BD,
-		.buf_len = HNS3_DBG_READ_LEN_5MB,
 		.init = hns3_dbg_bd_file_init,
 	},
 	{
 		.name = "rx_bd_queue",
 		.cmd = HNAE3_DBG_CMD_RX_BD,
 		.dentry = HNS3_DBG_DENTRY_RX_BD,
-		.buf_len = HNS3_DBG_READ_LEN_4MB,
 		.init = hns3_dbg_bd_file_init,
 	},
 	{
 		.name = "uc",
 		.cmd = HNAE3_DBG_CMD_MAC_UC,
 		.dentry = HNS3_DBG_DENTRY_MAC,
-		.buf_len = HNS3_DBG_READ_LEN_128KB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "mc",
 		.cmd = HNAE3_DBG_CMD_MAC_MC,
 		.dentry = HNS3_DBG_DENTRY_MAC,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "mng_tbl",
 		.cmd = HNAE3_DBG_CMD_MNG_TBL,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "loopback",
 		.cmd = HNAE3_DBG_CMD_LOOPBACK,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "interrupt_info",
 		.cmd = HNAE3_DBG_CMD_INTERRUPT_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "reset_info",
 		.cmd = HNAE3_DBG_CMD_RESET_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "imp_info",
 		.cmd = HNAE3_DBG_CMD_IMP_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "ncl_config",
 		.cmd = HNAE3_DBG_CMD_NCL_CONFIG,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN_128KB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "mac_tnl_status",
 		.cmd = HNAE3_DBG_CMD_MAC_TNL_STATUS,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "bios_common",
 		.cmd = HNAE3_DBG_CMD_REG_BIOS_COMMON,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "ssu",
 		.cmd = HNAE3_DBG_CMD_REG_SSU,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "igu_egu",
 		.cmd = HNAE3_DBG_CMD_REG_IGU_EGU,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "rpu",
 		.cmd = HNAE3_DBG_CMD_REG_RPU,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "ncsi",
 		.cmd = HNAE3_DBG_CMD_REG_NCSI,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "rtc",
 		.cmd = HNAE3_DBG_CMD_REG_RTC,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "ppp",
 		.cmd = HNAE3_DBG_CMD_REG_PPP,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "rcb",
 		.cmd = HNAE3_DBG_CMD_REG_RCB,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "tqp",
 		.cmd = HNAE3_DBG_CMD_REG_TQP,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN_128KB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "mac",
 		.cmd = HNAE3_DBG_CMD_REG_MAC,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "dcb",
 		.cmd = HNAE3_DBG_CMD_REG_DCB,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "queue_map",
 		.cmd = HNAE3_DBG_CMD_QUEUE_MAP,
 		.dentry = HNS3_DBG_DENTRY_QUEUE,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t1,
 	},
 	{
 		.name = "rx_queue_info",
 		.cmd = HNAE3_DBG_CMD_RX_QUEUE_INFO,
 		.dentry = HNS3_DBG_DENTRY_QUEUE,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t1,
 	},
 	{
 		.name = "tx_queue_info",
 		.cmd = HNAE3_DBG_CMD_TX_QUEUE_INFO,
 		.dentry = HNS3_DBG_DENTRY_QUEUE,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t1,
 	},
 	{
 		.name = "fd_tcam",
 		.cmd = HNAE3_DBG_CMD_FD_TCAM,
 		.dentry = HNS3_DBG_DENTRY_FD,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "service_task_info",
 		.cmd = HNAE3_DBG_CMD_SERV_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "vlan_config",
 		.cmd = HNAE3_DBG_CMD_VLAN_CONFIG,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "ptp_info",
 		.cmd = HNAE3_DBG_CMD_PTP_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "fd_counter",
 		.cmd = HNAE3_DBG_CMD_FD_COUNTER,
 		.dentry = HNS3_DBG_DENTRY_FD,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "umv_info",
 		.cmd = HNAE3_DBG_CMD_UMV_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t2,
 	},
 	{
 		.name = "page_pool_info",
 		.cmd = HNAE3_DBG_CMD_PAGE_POOL_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN,
 		.init = hns3_dbg_common_init_t1,
 	},
 	{
 		.name = "coalesce_info",
 		.cmd = HNAE3_DBG_CMD_COAL_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
-		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_init_t1,
 	},
 };
@@ -859,104 +814,6 @@ static int hns3_dbg_page_pool_info(struct seq_file *s, void *data)
 
 	return 0;
 }
-
-static int hns3_dbg_get_cmd_index(struct hns3_dbg_data *dbg_data, u32 *index)
-{
-	u32 i;
-
-	for (i = 0; i < ARRAY_SIZE(hns3_dbg_cmd); i++) {
-		if (hns3_dbg_cmd[i].cmd == dbg_data->cmd) {
-			*index = i;
-			return 0;
-		}
-	}
-
-	dev_err(&dbg_data->handle->pdev->dev, "unknown command(%d)\n",
-		dbg_data->cmd);
-	return -EINVAL;
-}
-
-static const struct hns3_dbg_func hns3_dbg_cmd_func[] = {
-};
-
-static int hns3_dbg_read_cmd(struct hns3_dbg_data *dbg_data,
-			     enum hnae3_dbg_cmd cmd, char *buf, int len)
-{
-	const struct hnae3_ae_ops *ops = hns3_get_ops(dbg_data->handle);
-	const struct hns3_dbg_func *cmd_func;
-	u32 i;
-
-	for (i = 0; i < ARRAY_SIZE(hns3_dbg_cmd_func); i++) {
-		if (cmd == hns3_dbg_cmd_func[i].cmd) {
-			cmd_func = &hns3_dbg_cmd_func[i];
-			if (cmd_func->dbg_dump)
-				return cmd_func->dbg_dump(dbg_data->handle, buf,
-							  len);
-			else
-				return cmd_func->dbg_dump_bd(dbg_data, buf,
-							     len);
-		}
-	}
-
-	if (!ops->dbg_read_cmd)
-		return -EOPNOTSUPP;
-
-	return ops->dbg_read_cmd(dbg_data->handle, cmd, buf, len);
-}
-
-static ssize_t hns3_dbg_read(struct file *filp, char __user *buffer,
-			     size_t count, loff_t *ppos)
-{
-	char *buf = filp->private_data;
-
-	return simple_read_from_buffer(buffer, count, ppos, buf, strlen(buf));
-}
-
-static int hns3_dbg_open(struct inode *inode, struct file *filp)
-{
-	struct hns3_dbg_data *dbg_data = inode->i_private;
-	struct hnae3_handle *handle = dbg_data->handle;
-	struct hns3_nic_priv *priv = handle->priv;
-	u32 index;
-	char *buf;
-	int ret;
-
-	if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
-	    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
-		return -EBUSY;
-
-	ret = hns3_dbg_get_cmd_index(dbg_data, &index);
-	if (ret)
-		return ret;
-
-	buf = kvzalloc(hns3_dbg_cmd[index].buf_len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	ret = hns3_dbg_read_cmd(dbg_data, hns3_dbg_cmd[index].cmd,
-				buf, hns3_dbg_cmd[index].buf_len);
-	if (ret) {
-		kvfree(buf);
-		return ret;
-	}
-
-	filp->private_data = buf;
-	return 0;
-}
-
-static int hns3_dbg_release(struct inode *inode, struct file *filp)
-{
-	kvfree(filp->private_data);
-	filp->private_data = NULL;
-	return 0;
-}
-
-static const struct file_operations hns3_dbg_fops = {
-	.owner = THIS_MODULE,
-	.open  = hns3_dbg_open,
-	.read  = hns3_dbg_read,
-	.release = hns3_dbg_release,
-};
 
 static int hns3_dbg_bd_info_show(struct seq_file *s, void *private)
 {
