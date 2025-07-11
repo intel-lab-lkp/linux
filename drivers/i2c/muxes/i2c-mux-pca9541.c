@@ -64,8 +64,8 @@
 #define busoff(x)	(!((x) & BUSON) || ((x) & BUSON) == BUSON)
 
 /* arbitration timeouts, in jiffies */
-#define ARB_TIMEOUT	(HZ / 8)	/* 125 ms until forcing bus ownership */
-#define ARB2_TIMEOUT	(HZ / 4)	/* 250 ms until acquisition failure */
+#define ARB_TIMEOUT	(HZ)		/* 1 s until forcing bus ownership */
+#define ARB2_TIMEOUT	(2 * HZ)	/* 2 s until acquisition failure */
 
 /* arbitration retry delays, in us */
 #define SELECT_DELAY_SHORT	50
@@ -229,6 +229,7 @@ static int pca9541_arbitrate(struct i2c_client *client)
 		 */
 		data->select_timeout = SELECT_DELAY_LONG;
 		if (time_is_before_eq_jiffies(data->arb_timeout)) {
+			dev_info(&client->dev, "I2C Bus Arbiter timeout, forcing take bus\n");
 			/* Time is up, take the bus and reset it. */
 			pca9541_reg_write(client,
 					  PCA9541_CONTROL,
@@ -267,6 +268,7 @@ static int pca9541_select_chan(struct i2c_mux_core *muxc, u32 chan)
 		else
 			msleep(data->select_timeout / 1000);
 	} while (time_is_after_eq_jiffies(timeout));
+	dev_info(&client->dev, "Timeout acquiring I2C bus\n");
 
 	return -ETIMEDOUT;
 }
