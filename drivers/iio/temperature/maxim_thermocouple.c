@@ -18,6 +18,8 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
 
+#include <asm/byteorder.h>
+
 #define MAXIM_THERMOCOUPLE_DRV_NAME	"maxim_thermocouple"
 
 enum {
@@ -121,8 +123,8 @@ struct maxim_thermocouple_data {
 	struct spi_device *spi;
 	const struct maxim_thermocouple_chip *chip;
 	char tc_type;
-
-	u8 buffer[16] __aligned(IIO_DMA_MINALIGN);
+	/* Buffer for reading up to 2 hardware channels. */
+	IIO_DECLARE_DMA_BUFFER_WITH_TS(__be16, buffer, 2);
 };
 
 static int maxim_thermocouple_read(struct maxim_thermocouple_data *data,
