@@ -27,15 +27,20 @@ properties:
           - const: brcm,sdhci-brcmstb
 
   reg:
-    maxItems: 2
+    minItems: 2
+    maxItems: 4
 
   reg-names:
+    minItems: 2
     items:
       - const: host
       - const: cfg
+      - const: share       # Optional reg
+      - const: flshr_ipis0 # Optional reg
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
 
   clocks:
     minItems: 1
@@ -59,6 +64,9 @@ properties:
   sdhci,auto-cmd12:
     type: boolean
     description: Specifies that controller should use auto CMD12
+
+  hwlocks:
+    maxItems: 1
 
 allOf:
   - $ref: mmc-controller.yaml#
@@ -112,6 +120,23 @@ examples:
       non-removable;
       bus-width = <0x8>;
       interrupts = <0x0 0x27 0x4>;
+      clocks = <&scmi_clk 245>;
+      clock-names = "sw_sdio";
+    };
+  - |
+    mmc@84b1000 {
+      mmc-ddr-1_8v;
+      mmc-hs200-1_8v;
+      mmc-hs400-1_8v;
+      no-sd;
+      no-sdio;
+      non-removable;
+      bus-width = <0x8>;
+      compatible = "brcm,bcm74165b0-sdhci", "brcm,sdhci-brcmstb";
+      reg = <0x84b1000 0x260>, <0x84b1300 0x200>,  <0x84b1600 0x10>, <0x84a5404 0x4>;
+      reg-names = "host", "cfg", "share", "flshr_ipis0";
+      hwlocks = <&hw_lock 0x0>;
+      interrupts = <0x1 0x0 0x1f 0x4 0x1b 0x11>;
       clocks = <&scmi_clk 245>;
       clock-names = "sw_sdio";
     };
