@@ -40,6 +40,9 @@ struct alloc_tag_kernel_section kernel_tags = { NULL, 0 };
 unsigned long alloc_tag_ref_mask;
 int alloc_tag_ref_offs;
 
+/* Total size of all alloc_tag_counters of each CPU */
+static unsigned long pcpu_counters_size;
+
 struct allocinfo_private {
 	struct codetag_iterator iter;
 	bool print_header;
@@ -81,7 +84,7 @@ static void print_allocinfo_header(struct seq_buf *buf)
 {
 	/* Output format version, so we can change it. */
 	seq_buf_printf(buf, "allocinfo - version: 1.0\n");
-	seq_buf_printf(buf, "#     <size>  <calls> <tag info>\n");
+	seq_buf_printf(buf, "<size> <calls> <tag info>\n");
 }
 
 static void alloc_tag_to_text(struct seq_buf *out, struct codetag *ct)
@@ -90,11 +93,31 @@ static void alloc_tag_to_text(struct seq_buf *out, struct codetag *ct)
 	struct alloc_tag_counters counter = alloc_tag_read(tag);
 	s64 bytes = counter.bytes;
 
-	seq_buf_printf(out, "%12lli %8llu ", bytes, counter.calls);
+	seq_buf_printf(out, "%-12lli %-8llu ", bytes, counter.calls);
 	codetag_to_text(out, ct);
 	seq_buf_putc(out, ' ');
 	seq_buf_putc(out, '\n');
 }
+
+#ifdef CONFIG_MEM_ALLOC_PROFILING_PER_NUMA_STATS
+static void alloc_tag_to_text_all_nids(struct seq_buf *out, struct codetag *ct)
+{
+	struct alloc_tag *tag = ct_to_alloc_tag(ct);
+	struct alloc_tag_counters counter;
+	s64 bytes;
+
+	for (int nid = 0; nid < ALLOC_TAG_NUM_NODES; nid++) {
+		counter = alloc_tag_read_nid(tag, nid);
+		bytes = counter.bytes;
+		seq_buf_printf(out, "        nid%-5u %-12lli %-8llu\n",
+				nid, bytes, counter.calls);
+	}
+}
+#else
+static void alloc_tag_to_text_all_nids(struct seq_buf *out, struct codetag *ct)
+{
+}
+#endif
 
 static int allocinfo_show(struct seq_file *m, void *arg)
 {
@@ -109,6 +132,7 @@ static int allocinfo_show(struct seq_file *m, void *arg)
 		priv->print_header = false;
 	}
 	alloc_tag_to_text(&buf, priv->iter.ct);
+	alloc_tag_to_text_all_nids(&buf, priv->iter.ct);
 	seq_commit(m, seq_buf_used(&buf));
 	return 0;
 }
@@ -180,7 +204,7 @@ void pgalloc_tag_split(struct folio *folio, int old_order, int new_order)
 
 		if (get_page_tag_ref(folio_page(folio, i), &ref, &handle)) {
 			/* Set new reference to point to the original tag */
-			alloc_tag_ref_set(&ref, tag);
+			alloc_tag_ref_set(&ref, tag, folio_nid(folio));
 			update_page_tag_ref(handle, &ref);
 			put_page_tag_ref(handle);
 		}
@@ -247,14 +271,28 @@ void __init alloc_tag_sec_init(void)
 	if (!mem_profiling_support)
 		return;
 
-	if (!static_key_enabled(&mem_profiling_compressed))
-		return;
-
 	kernel_tags.first_tag = (struct alloc_tag *)kallsyms_lookup_name(
 					SECTION_START(ALLOC_TAG_SECTION_NAME));
 	last_codetag = (struct alloc_tag *)kallsyms_lookup_name(
 					SECTION_STOP(ALLOC_TAG_SECTION_NAME));
 	kernel_tags.count = last_codetag - kernel_tags.first_tag;
+
+	pcpu_counters_size = ALLOC_TAG_NUM_NODES * sizeof(struct alloc_tag_counters);
+	for (int i = 0; i < kernel_tags.count; i++) {
+		/* Each CPU has one alloc_tag_counters per numa node */
+		kernel_tags.first_tag[i].counters =
+			pcpu_alloc_noprof(pcpu_counters_size,
+					  sizeof(struct alloc_tag_counters),
+					  false, GFP_KERNEL | __GFP_ZERO);
+		if (!kernel_tags.first_tag[i].counters) {
+			while (--i >= 0)
+				free_percpu(kernel_tags.first_tag[i].counters);
+			panic("Failed to allocate per-cpu alloc_tag counters\n");
+		}
+	}
+
+	if (!static_key_enabled(&mem_profiling_compressed))
+		return;
 
 	/* Check if kernel tags fit into page flags */
 	if (kernel_tags.count > (1UL << NR_UNUSED_PAGEFLAG_BITS)) {
@@ -618,7 +656,9 @@ static int load_module(struct module *mod, struct codetag *start, struct codetag
 	stop_tag = ct_to_alloc_tag(stop);
 	for (tag = start_tag; tag < stop_tag; tag++) {
 		WARN_ON(tag->counters);
-		tag->counters = alloc_percpu(struct alloc_tag_counters);
+		tag->counters = __alloc_percpu_gfp(pcpu_counters_size,
+						   sizeof(struct alloc_tag_counters),
+						   GFP_KERNEL | __GFP_ZERO);
 		if (!tag->counters) {
 			while (--tag >= start_tag) {
 				free_percpu(tag->counters);

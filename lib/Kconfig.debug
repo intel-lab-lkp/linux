@@ -1037,6 +1037,13 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config MEM_ALLOC_PROFILING_PER_NUMA_STATS
+	bool "Memory allocation profiling per-NUMA stats"
+	default n
+	depends on MEM_ALLOC_PROFILING
+	help
+	  Display allocation stats on every NUMA node.
+
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
 source "lib/Kconfig.kmsan"

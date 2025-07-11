@@ -16,6 +16,10 @@ struct module;
 #define CODETAG_SECTION_START_PREFIX	"__start_"
 #define CODETAG_SECTION_STOP_PREFIX	"__stop_"
 
+enum codetag_flags {
+	CODETAG_PERCPU_ALLOC	= (1 << 0), /* codetag tracking percpu allocation */
+};
+
 /*
  * An instance of this structure is created in a special ELF section at every
  * code location being tagged.  At runtime, the special section is treated as
