@@ -8,6 +8,7 @@
 #define CN10K_IPSEC_H
 
 #include <linux/types.h>
+#include "otx2_struct.h"
 
 DECLARE_STATIC_KEY_FALSE(cn10k_ipsec_sa_enabled);
 
@@ -302,6 +303,41 @@ struct cpt_sg_s {
 	u64 rsvd_63_50	: 14;
 };
 
+/* CPT Parse Header Structure for Inbound packets */
+struct cpt_parse_hdr_s {
+	/* Word 0 */
+	__be64 pkt_out     : 2;
+	__be64 num_frags   : 3;
+	__be64 pad_len     : 3;
+	__be64 pkt_fmt     : 1;
+	__be64 et_owr      : 1;
+	__be64 reserved_53 : 1;
+	__be64 reas_sts    : 4;
+	__be64 err_sum     : 1;
+	__be64 match_id    : 16;
+	__be64 cookie      : 32;
+
+	/* Word 1 */
+	__be64 wqe_ptr;
+
+	/* Word 2 */
+	__be64 fi_offset   : 5;
+	__be64 fi_pad      : 3;
+	__be64 il3_off     : 8;
+	__be64 pf_func     : 16;
+	__be64 res_32_16   : 16;
+	__be64 frag_age    : 16;
+
+	/* Word 3 */
+	__be64 spi         : 32;
+	__be64 res3_32_16  : 16;
+	__be64 uc_ccode    : 8;
+	__be64 hw_ccode    : 8;
+
+	/* Word 4 */
+	__be64 misc;
+};
+
 /* CPT LF_INPROG Register */
 #define CPT_LF_INPROG_INFLIGHT	GENMASK_ULL(8, 0)
 #define CPT_LF_INPROG_GRB_CNT	GENMASK_ULL(39, 32)
@@ -330,6 +366,9 @@ bool cn10k_ipsec_transmit(struct otx2_nic *pf, struct netdev_queue *txq,
 			  struct otx2_snd_queue *sq, struct sk_buff *skb,
 			  int num_segs, int size);
 void cn10k_ipsec_free_aura_ptrs(struct otx2_nic *pfvf);
+struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
+						     struct sk_buff *skb,
+						     dma_addr_t seg_addr);
 #else
 static inline __maybe_unused int cn10k_ipsec_init(struct net_device *netdev)
 {
@@ -366,5 +405,12 @@ void cn10k_ipsec_free_aura_ptrs(struct otx2_nic *pfvf)
 {
 }
 
+static inline __maybe_unused
+struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
+						     struct sk_buff *skb,
+						     dma_addr_t seg_addr)
+{
+	return NULL;
+}
 #endif
 #endif // CN10K_IPSEC_H
