@@ -136,6 +136,7 @@ struct snd_compr_stream {
  * @trigger: Trigger operations like start, pause, resume, drain, stop.
  * This callback is mandatory
  * @pointer: Retrieve current h/w pointer information. Mandatory
+ * @pointer64: Retrieve current h/w pointer information in 64 bit. Optional
  * @copy: Copy the compressed data to/from userspace, Optional
  * Can't be implemented if DSP supports mmap
  * @mmap: DSP mmap method to mmap DSP memory
@@ -162,6 +163,8 @@ struct snd_compr_ops {
 	int (*trigger)(struct snd_compr_stream *stream, int cmd);
 	int (*pointer)(struct snd_compr_stream *stream,
 			struct snd_compr_tstamp *tstamp);
+	int (*pointer64)(struct snd_compr_stream *stream,
+			 struct snd_compr_tstamp64 *tstamp);
 	int (*copy)(struct snd_compr_stream *stream, char __user *buf,
 		       size_t count);
 	int (*mmap)(struct snd_compr_stream *stream,
