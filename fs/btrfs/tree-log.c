@@ -1385,7 +1385,7 @@ static noinline int add_inode_ref(struct btrfs_trans_handle *trans,
 	unsigned long ref_end;
 	struct fscrypt_str name = { 0 };
 	int ret;
-	int log_ref_ver = 0;
+	const bool is_extref_item = (key->type == BTRFS_INODE_EXTREF_KEY);
 	u64 parent_objectid;
 	u64 inode_objectid;
 	u64 ref_index = 0;
@@ -1398,7 +1398,6 @@ static noinline int add_inode_ref(struct btrfs_trans_handle *trans,
 		struct btrfs_inode_extref *r;
 
 		ref_struct_size = sizeof(struct btrfs_inode_extref);
-		log_ref_ver = 1;
 		r = (struct btrfs_inode_extref *)ref_ptr;
 		parent_objectid = btrfs_inode_extref_parent(eb, r);
 	} else {
@@ -1430,7 +1429,7 @@ static noinline int add_inode_ref(struct btrfs_trans_handle *trans,
 	}
 
 	while (ref_ptr < ref_end) {
-		if (log_ref_ver) {
+		if (is_extref_item) {
 			ret = extref_get_fields(eb, ref_ptr, &name,
 						&ref_index, &parent_objectid);
 			if (ret)
@@ -1505,7 +1504,7 @@ next:
 		ref_ptr = (unsigned long)(ref_ptr + ref_struct_size) + name.len;
 		kfree(name.name);
 		name.name = NULL;
-		if (log_ref_ver) {
+		if (is_extref_item) {
 			iput(&dir->vfs_inode);
 			dir = NULL;
 		}
