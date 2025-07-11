@@ -475,6 +475,7 @@ const struct nla_policy ethnl_rss_set_policy[ETHTOOL_A_RSS_START_CONTEXT + 1] = 
 	[ETHTOOL_A_RSS_CONTEXT] = { .type = NLA_U32, },
 	[ETHTOOL_A_RSS_HFUNC] = NLA_POLICY_MIN(NLA_U32, 1),
 	[ETHTOOL_A_RSS_INDIR] = { .type = NLA_BINARY, },
+	[ETHTOOL_A_RSS_HKEY] = NLA_POLICY_MIN(NLA_BINARY, 1),
 };
 
 static int
@@ -488,8 +489,10 @@ ethnl_rss_set_validate(struct ethnl_req_info *req_info, struct genl_info *info)
 	if (request->rss_context && !ops->create_rxfh_context)
 		bad_attr = bad_attr ?: tb[ETHTOOL_A_RSS_CONTEXT];
 
-	if (request->rss_context && !ops->rxfh_per_ctx_key)
+	if (request->rss_context && !ops->rxfh_per_ctx_key) {
 		bad_attr = bad_attr ?: tb[ETHTOOL_A_RSS_HFUNC];
+		bad_attr = bad_attr ?: tb[ETHTOOL_A_RSS_HKEY];
+	}
 
 	if (bad_attr) {
 		NL_SET_BAD_ATTR(info->extack, bad_attr);
@@ -579,6 +582,33 @@ err_free:
 	return err;
 }
 
+static int
+rss_set_prep_hkey(struct net_device *dev, struct genl_info *info,
+		  struct rss_reply_data *data, struct ethtool_rxfh_param *rxfh,
+		  bool *mod)
+{
+	struct nlattr **tb = info->attrs;
+
+	if (!tb[ETHTOOL_A_RSS_HKEY])
+		return 0;
+
+	if (nla_len(tb[ETHTOOL_A_RSS_HKEY]) != data->hkey_size) {
+		NL_SET_BAD_ATTR(info->extack, tb[ETHTOOL_A_RSS_HKEY]);
+		return -EINVAL;
+	}
+
+	rxfh->key_size = data->hkey_size;
+	rxfh->key = kzalloc(data->hkey_size, GFP_KERNEL);
+	if (!rxfh->key)
+		return -ENOMEM;
+
+	nla_memcpy(rxfh->key, tb[ETHTOOL_A_RSS_HKEY], rxfh->key_size);
+
+	*mod |= memcmp(rxfh->key, data->hkey, data->hkey_size);
+
+	return 0;
+}
+
 static void
 rss_set_ctx_update(struct ethtool_rxfh_context *ctx, struct nlattr **tb,
 		   struct rss_reply_data *data, struct ethtool_rxfh_param *rxfh)
@@ -589,6 +619,11 @@ rss_set_ctx_update(struct ethtool_rxfh_context *ctx, struct nlattr **tb,
 		for (i = 0; i < data->indir_size; i++)
 			ethtool_rxfh_context_indir(ctx)[i] = rxfh->indir[i];
 		ctx->indir_configured = !!nla_len(tb[ETHTOOL_A_RSS_INDIR]);
+	}
+	if (rxfh->key) {
+		memcpy(ethtool_rxfh_context_key(ctx), rxfh->key,
+		       data->hkey_size);
+		ctx->key_configured = !!rxfh->key_size;
 	}
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE)
 		ctx->hfunc = rxfh->hfunc;
@@ -628,6 +663,10 @@ ethnl_rss_set(struct ethnl_req_info *req_info, struct genl_info *info)
 	if (rxfh.hfunc == data.hfunc)
 		rxfh.hfunc = ETH_RSS_HASH_NO_CHANGE;
 
+	ret = rss_set_prep_hkey(dev, info, &data, &rxfh, &mod);
+	if (ret)
+		goto exit_clean_data;
+
 	rxfh.input_xfrm = RXH_XFRM_NO_CHANGE;
 
 	mutex_lock(&dev->ethtool->rss_lock);
@@ -657,6 +696,7 @@ ethnl_rss_set(struct ethnl_req_info *req_info, struct genl_info *info)
 
 exit_unlock:
 	mutex_unlock(&dev->ethtool->rss_lock);
+	kfree(rxfh.key);
 	kfree(rxfh.indir);
 exit_clean_data:
 	rss_cleanup_data(&data.base);
