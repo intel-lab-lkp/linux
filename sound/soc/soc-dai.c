@@ -786,6 +786,20 @@ int snd_soc_dai_compr_pointer(struct snd_soc_dai *dai,
 }
 EXPORT_SYMBOL_GPL(snd_soc_dai_compr_pointer);
 
+int snd_soc_dai_compr_pointer64(struct snd_soc_dai *dai,
+				struct snd_compr_stream *cstream,
+				struct snd_compr_tstamp64 *tstamp)
+{
+	int ret = 0;
+
+	if (dai->driver->cops &&
+	    dai->driver->cops->pointer64)
+		ret = dai->driver->cops->pointer64(cstream, tstamp, dai);
+
+	return soc_dai_ret(dai, ret);
+}
+EXPORT_SYMBOL_GPL(snd_soc_dai_compr_pointer64);
+
 int snd_soc_dai_compr_set_metadata(struct snd_soc_dai *dai,
 				   struct snd_compr_stream *cstream,
 				   struct snd_compr_metadata *metadata)

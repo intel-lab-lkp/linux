@@ -475,6 +475,25 @@ out:
 	return ret;
 }
 
+static int soc_compr_pointer64(struct snd_compr_stream *cstream,
+			       struct snd_compr_tstamp64 *tstamp)
+{
+	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
+	int ret;
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+
+	snd_soc_dpcm_mutex_lock(rtd);
+
+	ret = snd_soc_dai_compr_pointer64(cpu_dai, cstream, tstamp);
+	if (ret < 0)
+		goto out;
+
+	ret = snd_soc_component_compr_pointer64(cstream, tstamp);
+out:
+	snd_soc_dpcm_mutex_unlock(rtd);
+	return ret;
+}
+
 static int soc_compr_set_metadata(struct snd_compr_stream *cstream,
 				  struct snd_compr_metadata *metadata)
 {
@@ -513,6 +532,7 @@ static struct snd_compr_ops soc_compr_ops = {
 	.get_params	= soc_compr_get_params,
 	.trigger	= soc_compr_trigger,
 	.pointer	= soc_compr_pointer,
+	.pointer64	= soc_compr_pointer64,
 	.ack		= soc_compr_ack,
 	.get_caps	= snd_soc_component_compr_get_caps,
 	.get_codec_caps = snd_soc_component_compr_get_codec_caps,
@@ -528,6 +548,7 @@ static struct snd_compr_ops soc_compr_dyn_ops = {
 	.get_metadata	= soc_compr_get_metadata,
 	.trigger	= soc_compr_trigger_fe,
 	.pointer	= soc_compr_pointer,
+	.pointer64	= soc_compr_pointer64,
 	.ack		= soc_compr_ack,
 	.get_caps	= snd_soc_component_compr_get_caps,
 	.get_codec_caps = snd_soc_component_compr_get_codec_caps,
