@@ -403,6 +403,8 @@ static long hidraw_ioctl(struct file *file, unsigned int cmd,
 	struct hidraw *dev;
 	struct hidraw_list *list = file->private_data;
 	void __user *user_arg = (void __user*) arg;
+	struct hid_device *hid;
+	int len;
 
 	down_read(&minors_rwsem);
 	dev = hidraw_table[minor];
@@ -453,81 +455,56 @@ static long hidraw_ioctl(struct file *file, unsigned int cmd,
 				break;
 			}
 		default:
-			{
-				struct hid_device *hid = dev->hid;
-				if (_IOC_TYPE(cmd) != 'H') {
-					ret = -EINVAL;
-					break;
-				}
+			break;
+	}
 
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSFEATURE(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
-					break;
-				}
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGFEATURE(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSINPUT(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_send_report(file, user_arg, len, HID_INPUT_REPORT);
-					break;
-				}
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGINPUT(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_get_report(file, user_arg, len, HID_INPUT_REPORT);
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCSOUTPUT(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_send_report(file, user_arg, len, HID_OUTPUT_REPORT);
-					break;
-				}
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGOUTPUT(0))) {
-					int len = _IOC_SIZE(cmd);
-					ret = hidraw_get_report(file, user_arg, len, HID_OUTPUT_REPORT);
-					break;
-				}
-
-				/* Begin Read-only ioctls. */
-				if (_IOC_DIR(cmd) != _IOC_READ) {
-					ret = -EINVAL;
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWNAME(0))) {
-					int len = strlen(hid->name) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					ret = copy_to_user(user_arg, hid->name, len) ?
-						-EFAULT : len;
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWPHYS(0))) {
-					int len = strlen(hid->phys) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					ret = copy_to_user(user_arg, hid->phys, len) ?
-						-EFAULT : len;
-					break;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWUNIQ(0))) {
-					int len = strlen(hid->uniq) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					ret = copy_to_user(user_arg, hid->uniq, len) ?
-						-EFAULT : len;
-					break;
-				}
-			}
-
+	hid = dev->hid;
+	switch (cmd & ~IOCSIZE_MASK) {
+	case HIDIOCSFEATURE(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_send_report(file, user_arg, len, HID_FEATURE_REPORT);
+		break;
+	case HIDIOCGFEATURE(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_get_report(file, user_arg, len, HID_FEATURE_REPORT);
+		break;
+	case HIDIOCSINPUT(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_send_report(file, user_arg, len, HID_INPUT_REPORT);
+		break;
+	case HIDIOCGINPUT(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_get_report(file, user_arg, len, HID_INPUT_REPORT);
+		break;
+	case HIDIOCSOUTPUT(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_send_report(file, user_arg, len, HID_OUTPUT_REPORT);
+		break;
+	case HIDIOCGOUTPUT(0):
+		len = _IOC_SIZE(cmd);
+		ret = hidraw_get_report(file, user_arg, len, HID_OUTPUT_REPORT);
+		break;
+	case HIDIOCGRAWNAME(0):
+		len = strlen(hid->name) + 1;
+		if (len > _IOC_SIZE(cmd))
+			len = _IOC_SIZE(cmd);
+		ret = copy_to_user(user_arg, hid->name, len) ?  -EFAULT : len;
+		break;
+	case HIDIOCGRAWPHYS(0):
+		len = strlen(hid->phys) + 1;
+		if (len > _IOC_SIZE(cmd))
+			len = _IOC_SIZE(cmd);
+		ret = copy_to_user(user_arg, hid->phys, len) ?  -EFAULT : len;
+		break;
+	case HIDIOCGRAWUNIQ(0):
+		len = strlen(hid->uniq) + 1;
+		if (len > _IOC_SIZE(cmd))
+			len = _IOC_SIZE(cmd);
+		ret = copy_to_user(user_arg, hid->uniq, len) ?  -EFAULT : len;
+		break;
+	default:
 		ret = -ENOTTY;
+		break;
 	}
 out:
 	up_read(&minors_rwsem);
