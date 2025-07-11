@@ -109,6 +109,7 @@ sys.path.insert(0, os.path.join(SRC_DIR, LIB_DIR))
 
 from kdoc_files import KernelFiles                      # pylint: disable=C0413
 from kdoc_output import RestFormat, ManFormat           # pylint: disable=C0413
+from kdoc_apispec import ApiSpecFormat                  # pylint: disable=C0413
 
 DESC = """
 Read C language source or header FILEs, extract embedded documentation comments,
@@ -225,6 +226,8 @@ def main():
                          help="Output reStructuredText format (default).")
     out_fmt.add_argument("-N", "-none", "--none", action="store_true",
                          help="Do not output documentation, only warnings.")
+    out_fmt.add_argument("-apispec", "--apispec", action="store_true",
+                         help="Output C macro invocations for kernel API specifications.")
 
     # Output selection mutually-exclusive group
 
@@ -275,6 +278,8 @@ def main():
         out_style = ManFormat(modulename=args.modulename)
     elif args.none:
         out_style = None
+    elif args.apispec:
+        out_style = ApiSpecFormat()
     else:
         out_style = RestFormat()
 

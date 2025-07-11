@@ -127,7 +127,10 @@ class OutputFormat:
         warnings = args.get('warnings', [])
 
         for log_msg in warnings:
-            self.config.warning(log_msg)
+            # Skip numeric warnings (line numbers) which are false positives
+            # from parameter-specific sections like "param-constraint: name, value"
+            if not isinstance(log_msg, int):
+                self.config.warning(log_msg)
 
     def check_doc(self, name, args):
         """Check if DOC should be output"""

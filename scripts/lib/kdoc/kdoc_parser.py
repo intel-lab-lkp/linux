@@ -43,7 +43,25 @@ doc_decl = doc_com + KernRe(r'(\w+)', cache=False)
 # while trying to not match literal block starts like "example::"
 #
 doc_sect = doc_com + \
-            KernRe(r'\s*(\@[.\w]+|\@\.\.\.|description|context|returns?|notes?|examples?)\s*:([^:].*)?$',
+            KernRe(r'\s*(\@[.\w\-]+|\@\.\.\.|description|context|returns?|notes?|examples?|' +
+                   r'@?api-type|@?api-version|@?param-type|@?param-flags|@?param-constraint|@?param-range|@?param-mask|' +
+                   r'@?param-constraint-type|@?param-size|@?param-alignment|@?param-enum|@?param-validate|' +
+                   r'@?param-size-param|@?param-size-multiplier|' +
+                   r'@?struct-type|@?struct-field|@?struct-field-[a-z\-]+|' +
+                   r'@?validation-group|@?validation-policy|@?validation-flag|@?validation-rule|' +
+                   r'@?error-code|@?error-condition|@?error-count|' +
+                   r'@?capability|@?capability-allows|@?capability-without|@?capability-condition|@?capability-priority|' +
+                   r'@?capability-count|' +
+                   r'@?signal|@?signal-direction|@?signal-action|@?signal-condition|@?signal-desc|@?signal-error|' +
+                   r'@?signal-timing|@?signal-priority|@?signal-interruptible|@?signal-state-req|@?signal-count|' +
+                   r'@?lock|@?lock-type|@?lock-acquired|@?lock-released|@?lock-desc|@?lock-count|' +
+                   r'@?since|@?since-version|' +
+                   r'@?context-flags|@?return-type|@?return-check|@?return-check-type|@?return-success|' +
+                   r'@?long-desc|@?constraint|@?constraint-expr|@?constraint-count|' +
+                   r'@?side-effect|@?side-effect-type|@?side-effect-desc|@?side-effect-condition|' +
+                   r'@?side-effect-reversible|@?side-effect-count|' +
+                   r'@?state-trans|@?state-trans-desc|@?state-trans-count|' +
+                   r'@?param-count|@?kapi-.*)\s*:([^:].*)?$',
                 flags=re.I, cache=False)
 
 doc_content = doc_com_body + KernRe(r'(.*)', cache=False)
@@ -159,7 +177,39 @@ class KernelEntry:
         name = self.section
         contents = self.contents
 
-        if type_param.match(name):
+        # Check if this is an API specification section
+        # These should always be treated as sections, not parameters
+        api_sections = {
+            'api-type', 'api-version', 'param-type', 'param-flags', 'param-constraint',
+            'param-range', 'param-mask', 'param-constraint-type', 'param-size',
+            'param-alignment', 'param-enum', 'param-validate', 'param-size-param',
+            'param-size-multiplier', 'struct-type', 'struct-field', 'struct-field-range',
+            'struct-field-enum', 'struct-field-mask', 'struct-field-policy',
+            'struct-field-version', 'struct-field-flag', 'struct-field-validate',
+            'validation-group', 'validation-policy', 'validation-flag', 'validation-rule',
+            'error-code', 'error-condition', 'error-count',
+            'capability', 'capability-allows', 'capability-without', 'capability-condition',
+            'capability-priority', 'capability-count', 'signal', 'signal-direction',
+            'signal-action', 'signal-condition', 'signal-desc', 'signal-error',
+            'signal-timing', 'signal-priority', 'signal-interruptible', 'signal-state-req',
+            'signal-count', 'lock', 'lock-type', 'lock-acquired', 'lock-released',
+            'lock-desc', 'lock-count', 'since', 'since-version', 'context-flags',
+            'return-type', 'return-check', 'return-check-type', 'return-success',
+            'long-desc', 'constraint', 'constraint-expr', 'constraint-count',
+            'side-effect', 'side-effect-type', 'side-effect-desc', 'side-effect-condition',
+            'side-effect-reversible', 'side-effect-count', 'state-trans',
+            'state-trans-desc', 'state-trans-count', 'param-count',
+            # Also include notes and examples which can appear with or without @
+            'notes', 'note', 'examples', 'example'
+        }
+
+        # Check if name starts with @ and matches kapi-.* pattern
+        is_api_section = (name.lower() in api_sections or
+                         (name.startswith('@') and name[1:].lower() in api_sections) or
+                         (name.lower().startswith('kapi-')) or
+                         (name.lower().startswith('@kapi-')))
+
+        if not is_api_section and type_param.match(name):
             name = type_param.group(1)
 
             self.parameterdescs[name] = contents
