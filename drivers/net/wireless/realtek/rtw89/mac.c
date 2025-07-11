@@ -6891,7 +6891,7 @@ int rtw89_fwdl_check_path_ready_ax(struct rtw89_dev *rtwdev,
 	u8 val;
 
 	return read_poll_timeout_atomic(rtw89_read8, val, val & check,
-					1, FWDL_WAIT_CNT, false,
+					250, FWDL_WAIT_CNT, false,
 					rtwdev, R_AX_WCPU_FW_CTRL);
 }
 

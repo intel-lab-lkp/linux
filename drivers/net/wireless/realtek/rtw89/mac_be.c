@@ -571,7 +571,7 @@ static int rtw89_fwdl_check_path_ready_be(struct rtw89_dev *rtwdev,
 	u32 val;
 
 	return read_poll_timeout_atomic(rtw89_read32, val, val & check,
-					1, 1000000, false,
+					250, 1000000, false,
 					rtwdev, R_BE_WCPU_FW_CTRL);
 }
 
