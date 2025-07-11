@@ -361,6 +361,7 @@ out:
 
 static irqreturn_t sx_common_trigger_handler(int irq, void *private)
 {
+	IIO_DECLARE_BUFFER_WITH_TS(__be16, buffer, SX_COMMON_MAX_NUM_CHANNELS);
 	struct iio_poll_func *pf = private;
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct sx_common_data *data = iio_priv(indio_dev);
@@ -376,11 +377,11 @@ static irqreturn_t sx_common_trigger_handler(int irq, void *private)
 		if (ret)
 			goto out;
 
-		data->buffer.channels[i++] = val;
+		buffer[i++] = val;
 	}
 
-	iio_push_to_buffers_with_ts(indio_dev, &data->buffer,
-				    sizeof(data->buffer), pf->timestamp);
+	iio_push_to_buffers_with_ts(indio_dev, buffer, sizeof(buffer),
+				    pf->timestamp);
 
 out:
 	mutex_unlock(&data->mutex);

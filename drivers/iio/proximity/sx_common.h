@@ -122,12 +122,6 @@ struct sx_common_data {
 	unsigned long chan_prox_stat;
 	bool trigger_enabled;
 
-	/* Ensure correct alignment of timestamp when present. */
-	struct {
-		__be16 channels[SX_COMMON_MAX_NUM_CHANNELS];
-		aligned_s64 ts;
-	} buffer;
-
 	unsigned int suspend_ctrl;
 	unsigned long chan_read;
 	unsigned long chan_event;
