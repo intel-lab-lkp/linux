@@ -152,6 +152,17 @@ static const char * const iio_modifier_names[] = {
 	[IIO_MOD_PITCH] = "pitch",
 	[IIO_MOD_YAW] = "yaw",
 	[IIO_MOD_ROLL] = "roll",
+	[IIO_MOD_RMS] = "rms",
+	[IIO_MOD_ACTIVE] = "active",
+	[IIO_MOD_REACTIVE] = "reactive",
+	[IIO_MOD_APPARENT] = "apparent",
+	[IIO_MOD_FUND_REACTIVE] = "fund_reactive",
+	[IIO_MOD_FACTOR] = "factor",
+	[IIO_MOD_ACTIVE_ACCUM] = "active_accum",
+	[IIO_MOD_APPARENT_ACCUM] = "apparent_accum",
+	[IIO_MOD_REACTIVE_ACCUM] = "reactive_accum",
+	[IIO_MOD_SWELL] = "swell",
+	[IIO_MOD_DIP] = "dip",
 };
 
 /* relies on pairs of these shared then separate */
