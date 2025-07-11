@@ -858,7 +858,6 @@ impl<'a> NullTerminatedFormatter<'a> {
         Some(Self { buffer })
     }
 
-    #[expect(dead_code)]
     pub(crate) fn from_array<const N: usize>(
         buffer: &'a mut [crate::ffi::c_char; N],
     ) -> Option<NullTerminatedFormatter<'a>> {
