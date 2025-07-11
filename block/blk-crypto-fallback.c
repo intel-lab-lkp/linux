@@ -214,7 +214,7 @@ blk_crypto_fallback_alloc_cipher_req(struct blk_crypto_keyslot *slot,
  * the bio size supported by the encryption fallback code. This function
  * calculates the upper limit for the bio size.
  */
-static unsigned int blk_crypto_max_io_size(struct bio *bio)
+unsigned int blk_crypto_max_io_size(struct bio *bio)
 {
 	unsigned int i = 0;
 	unsigned int num_sectors = 0;
@@ -228,29 +228,6 @@ static unsigned int blk_crypto_max_io_size(struct bio *bio)
 	}
 
 	return num_sectors;
-}
-
-static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
-{
-	struct bio *bio = *bio_ptr;
-	unsigned int num_sectors;
-
-	num_sectors = blk_crypto_max_io_size(bio);
-	if (num_sectors < bio_sectors(bio)) {
-		struct bio *split_bio;
-
-		split_bio = bio_split(bio, num_sectors, GFP_NOIO,
-				      &crypto_bio_split);
-		if (IS_ERR(split_bio)) {
-			bio->bi_status = BLK_STS_RESOURCE;
-			return false;
-		}
-		bio_chain(split_bio, bio);
-		submit_bio_noacct(bio);
-		*bio_ptr = split_bio;
-	}
-
-	return true;
 }
 
 union blk_crypto_iv {
@@ -289,9 +266,12 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 	bool ret = false;
 	blk_status_t blk_st;
 
-	/* Split the bio if it's too big for single page bvec */
-	if (!blk_crypto_fallback_split_bio_if_needed(bio_ptr))
+	/* Verify that bio splitting has occurred. */
+	if (WARN_ON_ONCE(bio_sectors(*bio_ptr) >
+			 blk_crypto_max_io_size(*bio_ptr))) {
+		(*bio_ptr)->bi_status = BLK_STS_IOERR;
 		return false;
+	}
 
 	src_bio = *bio_ptr;
 	bc = src_bio->bi_crypt_context;
@@ -488,10 +468,8 @@ static void blk_crypto_fallback_decrypt_endio(struct bio *bio)
  *
  * @bio_ptr: pointer to the bio to prepare
  *
- * If bio is doing a WRITE operation, this splits the bio into two parts if it's
- * too big (see blk_crypto_fallback_split_bio_if_needed()). It then allocates a
- * bounce bio for the first part, encrypts it, and updates bio_ptr to point to
- * the bounce bio.
+ * For WRITE operations, a bounce bio is allocated, encrypted, and *bio_ptr is
+ * updated to point to the bounce bio.
  *
  * For a READ operation, we mark the bio for decryption by using bi_private and
  * bi_end_io.

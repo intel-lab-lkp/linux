@@ -223,6 +223,8 @@ bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr);
 
 int blk_crypto_fallback_evict_key(const struct blk_crypto_key *key);
 
+unsigned int blk_crypto_max_io_size(struct bio *bio);
+
 #else /* CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK */
 
 static inline int
@@ -243,6 +245,11 @@ static inline int
 blk_crypto_fallback_evict_key(const struct blk_crypto_key *key)
 {
 	return 0;
+}
+
+static inline unsigned int blk_crypto_max_io_size(struct bio *bio)
+{
+	return UINT_MAX;
 }
 
 #endif /* CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK */

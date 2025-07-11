@@ -9,6 +9,7 @@
 #include <linux/blk-integrity.h>
 #include <linux/part_stat.h>
 #include <linux/blk-cgroup.h>
+#include <linux/blk-crypto.h>
 
 #include <trace/events/block.h>
 
@@ -124,8 +125,12 @@ static struct bio *bio_submit_split(struct bio *bio, int split_sectors)
 		trace_block_split(split, bio->bi_iter.bi_sector);
 		WARN_ON_ONCE(bio_zone_write_plugging(bio));
 		submit_bio_noacct(bio);
-		return split;
+
+		bio = split;
 	}
+
+	if (unlikely(!blk_crypto_bio_prep(&bio)))
+		return NULL;
 
 	return bio;
 error:
@@ -355,9 +360,12 @@ EXPORT_SYMBOL_GPL(bio_split_rw_at);
 struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 		unsigned *nr_segs)
 {
+	u32 max_sectors =
+		min(get_max_io_size(bio, lim), blk_crypto_max_io_size(bio));
+
 	return bio_submit_split(bio,
 		bio_split_rw_at(bio, lim, nr_segs,
-			get_max_io_size(bio, lim) << SECTOR_SHIFT));
+				(u64)max_sectors << SECTOR_SHIFT));
 }
 
 /*
