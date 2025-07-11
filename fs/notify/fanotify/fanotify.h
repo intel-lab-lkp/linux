@@ -444,7 +444,7 @@ struct fanotify_perm_event {
 	size_t count;
 	u32 response;			/* userspace answer to the event */
 	unsigned short state;		/* state of the event */
-	int fd;		/* fd we passed to userspace for this event */
+	int id;		/* id we passed to userspace for this event */
 	union {
 		struct fanotify_response_info_header hdr;
 		struct fanotify_response_info_audit_rule audit_rule;
@@ -558,4 +558,13 @@ static inline unsigned int fanotify_mark_user_flags(struct fsnotify_mark *mark)
 static inline u32 fanotify_get_response_errno(int res)
 {
 	return (res >> FAN_ERRNO_SHIFT) & FAN_ERRNO_MASK;
+}
+
+static inline bool fanotify_is_valid_response_id(struct fsnotify_group *group,
+						 int id)
+{
+	if (FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID))
+		return id < -255;
+
+	return id >= 0;
 }
