@@ -33,6 +33,7 @@ static int erofs_init_inode_xattrs(struct inode *inode)
 	struct erofs_xattr_ibody_header *ih;
 	struct super_block *sb = inode->i_sb;
 	int ret = 0;
+	bool meta_compr = false;
 
 	/* the most case is that xattrs of this inode are initialized. */
 	if (test_bit(EROFS_I_EA_INITED_BIT, &vi->flags)) {
@@ -77,8 +78,10 @@ static int erofs_init_inode_xattrs(struct inode *inode)
 	}
 
 	it.buf = __EROFS_BUF_INITIALIZER;
-	erofs_init_metabuf(&it.buf, sb);
-	it.pos = erofs_iloc(inode) + vi->inode_isize;
+	it.pos = erofs_iloc(inode, &meta_compr) + vi->inode_isize;
+	if (!erofs_is_metacompr_mode(inode))
+		meta_compr = false;
+	erofs_init_metabuf(&it.buf, sb, meta_compr);
 
 	/* read in shared xattr array (non-atomic, see kmalloc below) */
 	it.kaddr = erofs_bread(&it.buf, it.pos, true);
@@ -318,6 +321,7 @@ static int erofs_xattr_iter_inline(struct erofs_xattr_iter *it,
 	unsigned int xattr_header_sz, remaining, entry_sz;
 	erofs_off_t next_pos;
 	int ret;
+	bool meta_compr = false;
 
 	xattr_header_sz = sizeof(struct erofs_xattr_ibody_header) +
 			  sizeof(u32) * vi->xattr_shared_count;
@@ -327,7 +331,7 @@ static int erofs_xattr_iter_inline(struct erofs_xattr_iter *it,
 	}
 
 	remaining = vi->xattr_isize - xattr_header_sz;
-	it->pos = erofs_iloc(inode) + vi->inode_isize + xattr_header_sz;
+	it->pos = erofs_iloc(inode, &meta_compr) + vi->inode_isize + xattr_header_sz;
 
 	while (remaining) {
 		it->kaddr = erofs_bread(&it->buf, it->pos, true);
@@ -389,6 +393,7 @@ int erofs_getxattr(struct inode *inode, int index, const char *name,
 	struct erofs_xattr_iter it;
 	struct erofs_inode *vi = EROFS_I(inode);
 	struct erofs_sb_info *sbi = EROFS_SB(inode->i_sb);
+	bool meta_compr = false;
 
 	if (!name)
 		return -EINVAL;
@@ -411,9 +416,12 @@ int erofs_getxattr(struct inode *inode, int index, const char *name,
 	if (it.name.len > EROFS_NAME_LEN)
 		return -ERANGE;
 
+	if (erofs_sb_has_xattr_compr(sbi))
+		meta_compr = erofs_is_metacompr_mode(inode);
+
 	it.sb = inode->i_sb;
 	it.buf = __EROFS_BUF_INITIALIZER;
-	erofs_init_metabuf(&it.buf, it.sb);
+	erofs_init_metabuf(&it.buf, it.sb, meta_compr);
 	it.buffer = buffer;
 	it.buffer_size = buffer_size;
 	it.buffer_ofs = 0;
@@ -430,16 +438,21 @@ ssize_t erofs_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 	int ret;
 	struct erofs_xattr_iter it;
 	struct inode *inode = d_inode(dentry);
+	struct erofs_sb_info *sbi = EROFS_SB(inode->i_sb);
+	bool meta_compr = false;
 
 	ret = erofs_init_inode_xattrs(inode);
 	if (ret == -ENOATTR)
 		return 0;
 	if (ret)
+
 		return ret;
+	if (erofs_sb_has_xattr_compr(sbi))
+		meta_compr = erofs_is_metacompr_mode(inode);
 
 	it.sb = dentry->d_sb;
 	it.buf = __EROFS_BUF_INITIALIZER;
-	erofs_init_metabuf(&it.buf, it.sb);
+	erofs_init_metabuf(&it.buf, it.sb, meta_compr);
 	it.dentry = dentry;
 	it.buffer = buffer;
 	it.buffer_size = buffer_size;
@@ -474,6 +487,7 @@ int erofs_xattr_prefixes_init(struct super_block *sb)
 	erofs_off_t pos = (erofs_off_t)sbi->xattr_prefix_start << 2;
 	struct erofs_xattr_prefix_item *pfs;
 	int ret = 0, i, len;
+	bool meta_compr = false;
 
 	if (!sbi->xattr_prefix_count)
 		return 0;
@@ -482,10 +496,13 @@ int erofs_xattr_prefixes_init(struct super_block *sb)
 	if (!pfs)
 		return -ENOMEM;
 
+	if (erofs_sb_has_xattr_compr(sbi) && sbi->meta_inode)
+		meta_compr = true;
+
 	if (sbi->packed_inode)
 		buf.mapping = sbi->packed_inode->i_mapping;
 	else
-		erofs_init_metabuf(&buf, sb);
+		erofs_init_metabuf(&buf, sb, meta_compr);
 
 	for (i = 0; i < sbi->xattr_prefix_count; i++) {
 		void *ptr = erofs_read_metadata(sb, &buf, &pos, &len);

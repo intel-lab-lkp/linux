@@ -24,14 +24,15 @@ static int z_erofs_load_full_lcluster(struct z_erofs_maprecorder *m,
 				      unsigned long lcn)
 {
 	struct inode *const inode = m->inode;
+	bool meta_compr = false;
 	struct erofs_inode *const vi = EROFS_I(inode);
-	const erofs_off_t pos = Z_EROFS_FULL_INDEX_START(erofs_iloc(inode) +
+	const erofs_off_t pos = Z_EROFS_FULL_INDEX_START(erofs_iloc(inode, &meta_compr) +
 			vi->inode_isize + vi->xattr_isize) +
 			lcn * sizeof(struct z_erofs_lcluster_index);
 	struct z_erofs_lcluster_index *di;
 	unsigned int advise;
 
-	di = erofs_read_metabuf(&m->map->buf, inode->i_sb, pos, true);
+	di = erofs_read_metabuf(&m->map->buf, inode->i_sb, pos, true, meta_compr);
 	if (IS_ERR(di))
 		return PTR_ERR(di);
 	m->lcn = lcn;
@@ -102,7 +103,8 @@ static int z_erofs_load_compact_lcluster(struct z_erofs_maprecorder *m,
 {
 	struct inode *const inode = m->inode;
 	struct erofs_inode *const vi = EROFS_I(inode);
-	const erofs_off_t ebase = Z_EROFS_MAP_HEADER_END(erofs_iloc(inode) +
+	bool meta_compr = false;
+	const erofs_off_t ebase = Z_EROFS_MAP_HEADER_END(erofs_iloc(inode, &meta_compr) +
 			vi->inode_isize + vi->xattr_isize);
 	const unsigned int lclusterbits = vi->z_lclusterbits;
 	const unsigned int totalidx = erofs_iblks(inode);
@@ -146,7 +148,7 @@ static int z_erofs_load_compact_lcluster(struct z_erofs_maprecorder *m,
 	else
 		return -EOPNOTSUPP;
 
-	in = erofs_read_metabuf(&m->map->buf, m->inode->i_sb, pos, true);
+	in = erofs_read_metabuf(&m->map->buf, m->inode->i_sb, pos, true, meta_compr);
 	if (IS_ERR(in))
 		return PTR_ERR(in);
 
@@ -519,8 +521,9 @@ static int z_erofs_map_blocks_ext(struct inode *inode,
 	struct erofs_inode *vi = EROFS_I(inode);
 	struct super_block *sb = inode->i_sb;
 	bool interlaced = vi->z_advise & Z_EROFS_ADVISE_INTERLACED_PCLUSTER;
+	bool meta_compr = false;
 	unsigned int recsz = z_erofs_extent_recsize(vi->z_advise);
-	erofs_off_t pos = round_up(Z_EROFS_MAP_HEADER_END(erofs_iloc(inode) +
+	erofs_off_t pos = round_up(Z_EROFS_MAP_HEADER_END(erofs_iloc(inode, &meta_compr) +
 				   vi->inode_isize + vi->xattr_isize), recsz);
 	erofs_off_t lend = inode->i_size;
 	erofs_off_t l, r, mid, pa, la, lstart;
@@ -531,7 +534,7 @@ static int z_erofs_map_blocks_ext(struct inode *inode,
 	map->m_flags = 0;
 	if (recsz <= offsetof(struct z_erofs_extent, pstart_hi)) {
 		if (recsz <= offsetof(struct z_erofs_extent, pstart_lo)) {
-			ext = erofs_read_metabuf(&map->buf, sb, pos, true);
+			ext = erofs_read_metabuf(&map->buf, sb, pos, true, meta_compr);
 			if (IS_ERR(ext))
 				return PTR_ERR(ext);
 			pa = le64_to_cpu(*(__le64 *)ext);
@@ -544,7 +547,7 @@ static int z_erofs_map_blocks_ext(struct inode *inode,
 		}
 
 		for (; lstart <= map->m_la; lstart += 1 << vi->z_lclusterbits) {
-			ext = erofs_read_metabuf(&map->buf, sb, pos, true);
+			ext = erofs_read_metabuf(&map->buf, sb, pos, true, meta_compr);
 			if (IS_ERR(ext))
 				return PTR_ERR(ext);
 			map->m_plen = le32_to_cpu(ext->plen);
@@ -564,7 +567,7 @@ static int z_erofs_map_blocks_ext(struct inode *inode,
 		for (l = 0, r = vi->z_extents; l < r; ) {
 			mid = l + (r - l) / 2;
 			ext = erofs_read_metabuf(&map->buf, sb,
-						 pos + mid * recsz, true);
+						 pos + mid * recsz, true, meta_compr);
 			if (IS_ERR(ext))
 				return PTR_ERR(ext);
 
@@ -629,6 +632,7 @@ static int z_erofs_fill_inode_lazy(struct inode *inode)
 	erofs_off_t pos;
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 	struct z_erofs_map_header *h;
+	bool meta_compr = false;
 
 	if (test_bit(EROFS_I_Z_INITED_BIT, &vi->flags)) {
 		/*
@@ -646,8 +650,8 @@ static int z_erofs_fill_inode_lazy(struct inode *inode)
 	if (test_bit(EROFS_I_Z_INITED_BIT, &vi->flags))
 		goto out_unlock;
 
-	pos = ALIGN(erofs_iloc(inode) + vi->inode_isize + vi->xattr_isize, 8);
-	h = erofs_read_metabuf(&buf, sb, pos, true);
+	pos = ALIGN(erofs_iloc(inode, &meta_compr) + vi->inode_isize + vi->xattr_isize, 8);
+	h = erofs_read_metabuf(&buf, sb, pos, true, meta_compr);
 	if (IS_ERR(h)) {
 		err = PTR_ERR(h);
 		goto out_unlock;

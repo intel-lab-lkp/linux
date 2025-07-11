@@ -125,6 +125,7 @@ struct erofs_sb_info {
 	struct erofs_sb_lz4_info lz4;
 #endif	/* CONFIG_EROFS_FS_ZIP */
 	struct inode *packed_inode;
+	struct inode *meta_inode;
 	struct erofs_dev_context *devs;
 	u64 total_blocks;
 
@@ -148,6 +149,7 @@ struct erofs_sb_info {
 	/* what we really care is nid, rather than ino.. */
 	erofs_nid_t root_nid;
 	erofs_nid_t packed_nid;
+	erofs_nid_t meta_nid;
 	/* used for statfs, f_files - f_favail */
 	u64 inos;
 
@@ -227,8 +229,10 @@ EROFS_FEATURE_FUNCS(fragments, incompat, INCOMPAT_FRAGMENTS)
 EROFS_FEATURE_FUNCS(dedupe, incompat, INCOMPAT_DEDUPE)
 EROFS_FEATURE_FUNCS(xattr_prefixes, incompat, INCOMPAT_XATTR_PREFIXES)
 EROFS_FEATURE_FUNCS(48bit, incompat, INCOMPAT_48BIT)
+EROFS_FEATURE_FUNCS(meta_compr, incompat, INCOMPAT_META_COMPR)
 EROFS_FEATURE_FUNCS(sb_chksum, compat, COMPAT_SB_CHKSUM)
 EROFS_FEATURE_FUNCS(xattr_filter, compat, COMPAT_XATTR_FILTER)
+EROFS_FEATURE_FUNCS(xattr_compr, compat, COMPAT_XATTR_COMPR)
 
 /* atomic flag definitions */
 #define EROFS_I_EA_INITED_BIT	0
@@ -279,12 +283,26 @@ struct erofs_inode {
 
 #define EROFS_I(ptr)	container_of(ptr, struct erofs_inode, vfs_inode)
 
-static inline erofs_off_t erofs_iloc(struct inode *inode)
+static inline bool erofs_is_metacompr_mode(struct inode *inode)
+{
+	return EROFS_I(inode)->nid >> 63;
+}
+
+static inline erofs_off_t erofs_iloc(struct inode *inode, bool *meta_compr)
 {
 	struct erofs_sb_info *sbi = EROFS_I_SB(inode);
+	erofs_nid_t nid;
+
+	if (erofs_is_metacompr_mode(inode)) {
+		*meta_compr = true;
+		nid = EROFS_I(inode)->nid & ~(0x1ULL << 63);
+	} else {
+		*meta_compr = false;
+		nid = EROFS_I(inode)->nid;
+	}
 
 	return erofs_pos(inode->i_sb, sbi->meta_blkaddr) +
-		(EROFS_I(inode)->nid << sbi->islotbits);
+			(nid << sbi->islotbits);
 }
 
 static inline unsigned int erofs_inode_version(unsigned int ifmt)
@@ -381,9 +399,10 @@ void *erofs_read_metadata(struct super_block *sb, struct erofs_buf *buf,
 void erofs_unmap_metabuf(struct erofs_buf *buf);
 void erofs_put_metabuf(struct erofs_buf *buf);
 void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap);
-void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb);
+void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb,
+			bool meta_compr);
 void *erofs_read_metabuf(struct erofs_buf *buf, struct super_block *sb,
-			 erofs_off_t offset, bool need_kmap);
+			 erofs_off_t offset, bool need_kmap, bool meta_compr);
 int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *dev);
 int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		 u64 start, u64 len);

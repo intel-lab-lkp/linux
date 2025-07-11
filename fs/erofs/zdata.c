@@ -855,7 +855,7 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 		/* bind cache first when cached decompression is preferred */
 		z_erofs_bind_cache(fe);
 	} else {
-		ptr = erofs_read_metabuf(&map->buf, sb, map->m_pa, false);
+		ptr = erofs_read_metabuf(&map->buf, sb, map->m_pa, false, false);
 		if (IS_ERR(ptr)) {
 			ret = PTR_ERR(ptr);
 			erofs_err(sb, "failed to get inline data %d", ret);

@@ -27,8 +27,9 @@ static int erofs_fill_symlink(struct inode *inode, void *kaddr,
 static int erofs_read_inode(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
-	erofs_blk_t blkaddr = erofs_blknr(sb, erofs_iloc(inode));
-	unsigned int ofs = erofs_blkoff(sb, erofs_iloc(inode));
+	bool meta_compr = false;
+	erofs_blk_t blkaddr = erofs_blknr(sb, erofs_iloc(inode, &meta_compr));
+	unsigned int ofs = erofs_blkoff(sb, erofs_iloc(inode, &meta_compr));
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	erofs_blk_t addrmask = BIT_ULL(48) - 1;
@@ -39,7 +40,7 @@ static int erofs_read_inode(struct inode *inode)
 	void *ptr;
 	int err = 0;
 
-	ptr = erofs_read_metabuf(&buf, sb, erofs_pos(sb, blkaddr), true);
+	ptr = erofs_read_metabuf(&buf, sb, erofs_pos(sb, blkaddr), true, meta_compr);
 	if (IS_ERR(ptr)) {
 		err = PTR_ERR(ptr);
 		erofs_err(sb, "failed to get inode (nid: %llu) page, err %d",
@@ -78,7 +79,7 @@ static int erofs_read_inode(struct inode *inode)
 
 			memcpy(&copied, dic, gotten);
 			ptr = erofs_read_metabuf(&buf, sb,
-					erofs_pos(sb, blkaddr + 1), true);
+					erofs_pos(sb, blkaddr + 1), true, meta_compr);
 			if (IS_ERR(ptr)) {
 				err = PTR_ERR(ptr);
 				erofs_err(sb, "failed to get inode payload block (nid: %llu), err %d",

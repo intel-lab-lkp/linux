@@ -49,13 +49,16 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 	return buf->base + (offset & ~PAGE_MASK);
 }
 
-void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb)
+void erofs_init_metabuf(struct erofs_buf *buf,
+			struct super_block *sb, bool meta_compr)
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
 	buf->file = NULL;
 	buf->off = sbi->dif0.fsoff;
-	if (erofs_is_fileio_mode(sbi)) {
+	if (meta_compr)
+		buf->mapping = sbi->meta_inode->i_mapping;
+	else if (erofs_is_fileio_mode(sbi)) {
 		buf->file = sbi->dif0.file;	/* some fs like FUSE needs it */
 		buf->mapping = buf->file->f_mapping;
 	} else if (erofs_is_fscache_mode(sb))
@@ -65,9 +68,9 @@ void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb)
 }
 
 void *erofs_read_metabuf(struct erofs_buf *buf, struct super_block *sb,
-			 erofs_off_t offset, bool need_kmap)
+			 erofs_off_t offset, bool need_kmap, bool meta_compr)
 {
-	erofs_init_metabuf(buf, sb);
+	erofs_init_metabuf(buf, sb, meta_compr);
 	return erofs_bread(buf, offset, need_kmap);
 }
 
@@ -83,6 +86,7 @@ int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 	erofs_off_t pos;
 	u64 chunknr;
 	int err = 0;
+	bool meta_compr = false;
 
 	trace_erofs_map_blocks_enter(inode, map, 0);
 	map->m_deviceid = 0;
@@ -101,7 +105,7 @@ int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 			map->m_pa = erofs_pos(sb, vi->startblk) + map->m_la;
 			map->m_llen = pos - map->m_la;
 		} else {
-			map->m_pa = erofs_iloc(inode) + vi->inode_isize +
+			map->m_pa = erofs_iloc(inode, &meta_compr) + vi->inode_isize +
 				vi->xattr_isize + erofs_blkoff(sb, map->m_la);
 			map->m_llen = inode->i_size - map->m_la;
 			map->m_flags |= EROFS_MAP_META;
@@ -115,10 +119,10 @@ int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 		unit = EROFS_BLOCK_MAP_ENTRY_SIZE;	/* block map */
 
 	chunknr = map->m_la >> vi->chunkbits;
-	pos = ALIGN(erofs_iloc(inode) + vi->inode_isize +
+	pos = ALIGN(erofs_iloc(inode, &meta_compr) + vi->inode_isize +
 		    vi->xattr_isize, unit) + unit * chunknr;
 
-	idx = erofs_read_metabuf(&buf, sb, pos, true);
+	idx = erofs_read_metabuf(&buf, sb, pos, true, meta_compr);
 	if (IS_ERR(idx)) {
 		err = PTR_ERR(idx);
 		goto out;
@@ -299,7 +303,7 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 
 		iomap->type = IOMAP_INLINE;
-		ptr = erofs_read_metabuf(&buf, sb, mdev.m_pa, true);
+		ptr = erofs_read_metabuf(&buf, sb, mdev.m_pa, true, false);
 		if (IS_ERR(ptr))
 			return PTR_ERR(ptr);
 		iomap->inline_data = ptr;

@@ -66,13 +66,16 @@ TRACE_EVENT(erofs_fill_inode,
 		__field(erofs_nid_t,	nid	)
 		__field(erofs_blk_t,	blkaddr )
 		__field(unsigned int,	ofs	)
+		__field(bool,		meta_compr	)
 	),
 
 	TP_fast_assign(
 		__entry->dev		= inode->i_sb->s_dev;
 		__entry->nid		= EROFS_I(inode)->nid;
-		__entry->blkaddr	= erofs_blknr(inode->i_sb, erofs_iloc(inode));
-		__entry->ofs		= erofs_blkoff(inode->i_sb, erofs_iloc(inode));
+		__entry->blkaddr	=
+			erofs_blknr(inode->i_sb, erofs_iloc(inode, &__entry->meta_compr));
+		__entry->ofs		=
+			erofs_blkoff(inode->i_sb, erofs_iloc(inode, &__entry->meta_compr));
 	),
 
 	TP_printk("dev = (%d,%d), nid = %llu, blkaddr %llu ofs %u",
