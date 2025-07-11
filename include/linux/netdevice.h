@@ -5560,4 +5560,25 @@ extern struct net_device *blackhole_netdev;
 		atomic_long_add((VAL), &(DEV)->stats.__##FIELD)
 #define DEV_STATS_READ(DEV, FIELD) atomic_long_read(&(DEV)->stats.__##FIELD)
 
+static inline struct device *netdev_get_dma_dev(const struct net_device *dev)
+{
+	struct device *dma_dev = dev->dev.parent;
+
+	if (!dma_dev)
+		return NULL;
+
+	/* Common case: dma device is parent device of netdev. */
+	if (dma_dev->dma_mask)
+		return dma_dev;
+
+	/* SF netdevs have an auxdev device as parent, the dma device being the
+	 * grandparent.
+	 */
+	dma_dev = dma_dev->parent;
+	if (dma_dev && dma_dev->dma_mask)
+		return dma_dev;
+
+	return NULL;
+}
+
 #endif	/* _LINUX_NETDEVICE_H */

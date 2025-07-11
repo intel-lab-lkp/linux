@@ -586,7 +586,7 @@ int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 		goto err;
 	}
 
-	ifq->dev = ifq->netdev->dev.parent;
+	ifq->dev = netdev_get_dma_dev(ifq->netdev);
 	if (!ifq->dev) {
 		ret = -EOPNOTSUPP;
 		goto err;
