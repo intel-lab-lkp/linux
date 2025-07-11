@@ -1579,13 +1579,18 @@ int sta_info_destroy_addr(struct ieee80211_sub_if_data *sdata, const u8 *addr)
 }
 
 int sta_info_destroy_addr_bss(struct ieee80211_sub_if_data *sdata,
-			      const u8 *addr)
+			      const u8 *addr, int link_id)
 {
 	struct sta_info *sta;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
 	sta = sta_info_get_bss(sdata, addr);
+
+	if (sta && link_id >= 0 && sta->sta.valid_links &&
+	    !(sta->sta.valid_links & BIT(link_id)))
+		return -EINVAL;
+
 	return __sta_info_destroy(sta);
 }
 

@@ -2217,7 +2217,8 @@ static int ieee80211_del_station(struct wiphy *wiphy, struct net_device *dev,
 	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 
 	if (params->mac)
-		return sta_info_destroy_addr_bss(sdata, params->mac);
+		return sta_info_destroy_addr_bss(sdata, params->mac,
+						 params->link_id);
 
 	sta_info_flush(sdata, params->link_id);
 	return 0;
