@@ -154,12 +154,16 @@ fail:
 static void perf_trace_event_unreg(struct perf_event *p_event)
 {
 	struct trace_event_call *tp_event = p_event->tp_event;
-	int i;
+	int i, ret;
 
 	if (--tp_event->perf_refcount > 0)
 		return;
 
-	tp_event->class->reg(tp_event, TRACE_REG_PERF_UNREGISTER, NULL);
+	ret = tp_event->class->reg(tp_event, TRACE_REG_PERF_UNREGISTER, NULL);
+	if (ret) {
+		++tp_event->perf_refcount;
+		return;
+	}
 
 	/*
 	 * Ensure our callback won't be called anymore. The buffers

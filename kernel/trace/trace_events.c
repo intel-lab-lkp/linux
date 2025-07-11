@@ -530,10 +530,9 @@ int trace_event_reg(struct trace_event_call *call,
 						 call->class->perf_probe,
 						 call);
 	case TRACE_REG_PERF_UNREGISTER:
-		tracepoint_probe_unregister(call->tp,
+		return tracepoint_probe_unregister(call->tp,
 					    call->class->perf_probe,
 					    call);
-		return 0;
 	case TRACE_REG_PERF_OPEN:
 	case TRACE_REG_PERF_CLOSE:
 	case TRACE_REG_PERF_ADD:
