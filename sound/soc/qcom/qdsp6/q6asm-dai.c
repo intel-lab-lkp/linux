@@ -59,9 +59,9 @@ struct q6asm_dai_rtd {
 	unsigned int pcm_count;
 	unsigned int pcm_irq_pos;       /* IRQ position */
 	unsigned int periods;
-	unsigned int bytes_sent;
-	unsigned int bytes_received;
-	unsigned int copied_total;
+	uint64_t bytes_sent;
+	uint64_t bytes_received;
+	uint64_t copied_total;
 	uint16_t bits_per_sample;
 	uint16_t source; /* Encoding source bit mask */
 	struct audio_client *audio_client;
@@ -1024,9 +1024,27 @@ static int q6asm_dai_compr_trigger(struct snd_soc_component *component,
 	return ret;
 }
 
-static int q6asm_dai_compr_pointer(struct snd_soc_component *component,
-				   struct snd_compr_stream *stream,
-				   struct snd_compr_tstamp *tstamp)
+static int q6asm_dai_compr_pointer32(struct snd_soc_component *component,
+				     struct snd_compr_stream *stream,
+				     struct snd_compr_tstamp *tstamp)
+{
+	struct snd_compr_runtime *runtime = stream->runtime;
+	struct q6asm_dai_rtd *prtd = runtime->private_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&prtd->lock, flags);
+
+	tstamp->copied_total = (u32) prtd->copied_total;
+	tstamp->byte_offset = prtd->copied_total % prtd->pcm_size;
+
+	spin_unlock_irqrestore(&prtd->lock, flags);
+
+	return 0;
+}
+
+static int q6asm_dai_compr_pointer64(struct snd_soc_component *component,
+				     struct snd_compr_stream *stream,
+				     struct snd_compr_tstamp64 *tstamp)
 {
 	struct snd_compr_runtime *runtime = stream->runtime;
 	struct q6asm_dai_rtd *prtd = runtime->private_data;
@@ -1050,11 +1068,12 @@ static int q6asm_compr_copy(struct snd_soc_component *component,
 	struct q6asm_dai_rtd *prtd = runtime->private_data;
 	unsigned long flags;
 	u32 wflags = 0;
-	int avail, bytes_in_flight = 0;
+	u64 avail = 0;
+	u64 bytes_in_flight = 0;
 	void *dstn;
 	size_t copy;
 	u32 app_pointer;
-	u32 bytes_received;
+	u64 bytes_received;
 
 	bytes_received = prtd->bytes_received;
 
@@ -1065,8 +1084,7 @@ static int q6asm_compr_copy(struct snd_soc_component *component,
 	if (prtd->next_track)
 		bytes_received = ALIGN(prtd->bytes_received, prtd->pcm_count);
 
-	app_pointer = bytes_received/prtd->pcm_size;
-	app_pointer = bytes_received -  (app_pointer * prtd->pcm_size);
+	app_pointer = bytes_received % prtd->pcm_size;
 	dstn = prtd->dma_buffer.area + app_pointer;
 
 	if (count < prtd->pcm_size - app_pointer) {
@@ -1164,7 +1182,8 @@ static const struct snd_compress_ops q6asm_dai_compress_ops = {
 	.free		= q6asm_dai_compr_free,
 	.set_params	= q6asm_dai_compr_set_params,
 	.set_metadata	= q6asm_dai_compr_set_metadata,
-	.pointer	= q6asm_dai_compr_pointer,
+	.pointer	= q6asm_dai_compr_pointer32,
+	.pointer64	= q6asm_dai_compr_pointer64,
 	.trigger	= q6asm_dai_compr_trigger,
 	.get_caps	= q6asm_dai_compr_get_caps,
 	.get_codec_caps	= q6asm_dai_compr_get_codec_caps,
