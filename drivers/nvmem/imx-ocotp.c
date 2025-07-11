@@ -16,6 +16,7 @@
 
 #include <linux/clk.h>
 #include <linux/device.h>
+#include <linux/if_ether.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>
@@ -228,8 +229,8 @@ static int imx_ocotp_cell_pp(void *context, const char *id, int index,
 
 	/* Deal with some post processing of nvmem cell data */
 	if (id && !strcmp(id, "mac-address"))
-		for (i = 0; i < bytes / 2; i++)
-			swap(buf[i], buf[bytes - i - 1]);
+		for (i = 0; i < ETH_ALEN / 2; i++)
+			swap(buf[i], buf[ETH_ALEN - i - 1]);
 
 	return 0;
 }
