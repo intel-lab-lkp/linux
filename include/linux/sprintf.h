@@ -4,6 +4,10 @@
 
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>
+#include <linux/array_size.h>
+
+#define sprintf_array(a, fmt, ...)  sprintf_trunc(a, ARRAY_SIZE(a), fmt, ##__VA_ARGS__)
+#define vsprintf_array(a, fmt, ap)  vsprintf_trunc(a, ARRAY_SIZE(a), fmt, ap)
 
 int num_to_str(char *buf, int size, unsigned long long num, unsigned int width);
 
