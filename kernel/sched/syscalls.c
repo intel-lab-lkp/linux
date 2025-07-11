@@ -974,10 +974,176 @@ SYSCALL_DEFINE2(sched_setparam, pid_t, pid, struct sched_param __user *, param)
 }
 
 /**
- * sys_sched_setattr - same as above, but with extended sched_attr
+ * sys_sched_setattr - set/change scheduling policy and attributes
  * @pid: the pid in question.
  * @uattr: structure containing the extended parameters.
  * @flags: for future extension.
+ *
+ * long-desc: Sets the scheduling policy and attributes for a process,
+ *   supporting multiple scheduling classes including real-time,
+ *   deadline, and normal policies. Performs capability checks,
+ *   validates parameters, enforces resource limits, and ensures
+ *   bandwidth constraints for deadline tasks.
+ * context-flags: KAPI_CTX_PROCESS | KAPI_CTX_SLEEPABLE
+ * param-count: 3
+ * param-type: pid, KAPI_TYPE_INT
+ * param-flags: pid, KAPI_PARAM_IN
+ * param-constraint-type: pid, KAPI_CONSTRAINT_RANGE
+ * param-range: pid, 0, INT_MAX
+ * param-constraint: pid, Must be >= 0, where 0 means current process
+ * param-type: uattr, KAPI_TYPE_USER_PTR
+ * param-flags: uattr, KAPI_PARAM_IN | KAPI_PARAM_USER
+ * param-constraint-type: uattr, KAPI_CONSTRAINT_CUSTOM
+ * param-constraint: uattr, Valid user pointer to struct sched_attr
+ * struct-type: uattr, struct sched_attr
+ * struct-field: size, __u32, Structure size for version compatibility
+ * struct-field-range: size, 48, 512
+ * struct-field-validate: size, uattr->size >= SCHED_ATTR_SIZE_VER0
+ * struct-field: sched_policy, __u32, Scheduling policy selector
+ * struct-field-enum: sched_policy, SCHED_NORMAL(0), SCHED_FIFO(1), SCHED_RR(2), SCHED_BATCH(3), SCHED_IDLE(5), SCHED_DEADLINE(6), SCHED_EXT(7)
+ * struct-field: sched_flags, __u64, Policy modifier flags
+ * struct-field-mask: sched_flags, SCHED_FLAG_ALL
+ * struct-field: sched_nice, __s32, Nice value for CFS policies
+ * struct-field-range: sched_nice, -20, 19
+ * struct-field-policy: sched_nice, SCHED_NORMAL, SCHED_BATCH, SCHED_IDLE
+ * struct-field: sched_priority, __u32, Priority for RT policies
+ * struct-field-range: sched_priority, 1, 99
+ * struct-field-policy: sched_priority, SCHED_FIFO, SCHED_RR
+ * struct-field: sched_runtime, __u64, Runtime budget in nanoseconds
+ * struct-field-policy: sched_runtime, SCHED_DEADLINE
+ * struct-field: sched_deadline, __u64, Deadline in nanoseconds
+ * struct-field-policy: sched_deadline, SCHED_DEADLINE
+ * struct-field: sched_period, __u64, Period in nanoseconds (0 = use deadline)
+ * struct-field-policy: sched_period, SCHED_DEADLINE
+ * struct-field: sched_util_min, __u32, Minimum utilization hint (v1+)
+ * struct-field-range: sched_util_min, 0, 1024
+ * struct-field-version: sched_util_min, 1
+ * struct-field-flag: sched_util_min, SCHED_FLAG_UTIL_CLAMP_MIN
+ * struct-field: sched_util_max, __u32, Maximum utilization hint (v1+)
+ * struct-field-range: sched_util_max, 0, 1024
+ * struct-field-version: sched_util_max, 1
+ * struct-field-flag: sched_util_max, SCHED_FLAG_UTIL_CLAMP_MAX
+ * param-type: flags, KAPI_TYPE_UINT
+ * param-flags: flags, KAPI_PARAM_IN
+ * param-range: flags, 0, 0
+ * param-constraint: flags, Must be 0 (reserved for future use)
+ * validation-group: RT Policies
+ * validation-policy: SCHED_FIFO, SCHED_RR
+ * validation-rule: sched_priority must be in [1,99]
+ * validation-rule: sched_nice must be 0
+ * validation-rule: No deadline parameters
+ * validation-group: CFS Policies
+ * validation-policy: SCHED_NORMAL, SCHED_BATCH, SCHED_IDLE
+ * validation-rule: sched_priority must be 0
+ * validation-rule: sched_nice must be in [-20,19]
+ * validation-rule: No deadline parameters
+ * validation-group: Deadline Policy
+ * validation-policy: SCHED_DEADLINE
+ * validation-rule: sched_runtime > 0
+ * validation-rule: sched_deadline >= sched_runtime
+ * validation-rule: sched_period == 0 || sched_period >= sched_deadline
+ * validation-rule: sched_priority must be 0
+ * validation-rule: sched_nice must be 0
+ * validation-group: Utilization Clamping
+ * validation-flag: SCHED_FLAG_UTIL_CLAMP_MIN, SCHED_FLAG_UTIL_CLAMP_MAX
+ * validation-rule: Requires struct version >= 1 (size >= 56)
+ * validation-rule: util values must be in [0,1024]
+ * validation-rule: util_min <= util_max
+ * return-type: KAPI_TYPE_INT
+ * return-check-type: KAPI_RETURN_ERROR_CHECK
+ * return-success: 0
+ * error-code: -EINVAL, EINVAL, Invalid parameters,
+ *   Returned when uattr is NULL, pid < 0, flags != 0,
+ *   attr.size < SCHED_ATTR_SIZE_VER0, invalid scheduling policy,
+ *   invalid priority for policy, invalid sched_flags, or malformed
+ *   sched_attr structure (e.g., DL runtime > deadline)
+ * error-code: -ESRCH, ESRCH, Process not found,
+ *   Returned when the specified pid does not exist
+ * error-code: -EPERM, EPERM, Insufficient privileges,
+ *   Returned when lacking CAP_SYS_NICE for privileged operations,
+ *   trying to change another user's process without CAP_SYS_NICE,
+ *   or resetting SCHED_RESET_ON_FORK flag without privileges
+ * error-code: -E2BIG, E2BIG, Structure size mismatch,
+ *   Returned when sched_attr size is larger than kernel expects
+ * error-code: -EFAULT, EFAULT, Bad user pointer,
+ *   Returned when copying from user space fails or uattr is not
+ *   a valid readable user pointer
+ * error-code: -EBUSY, EBUSY, Bandwidth exceeded,
+ *   Returned when SCHED_DEADLINE bandwidth would be exceeded or
+ *   deadline admission test fails
+ * error-code: -EAGAIN, EAGAIN, Transient failure,
+ *   Returned when unable to change cpus_allowed due to transient
+ *   cpuset or CPU hotplug conditions
+ * error-code: -ENOMEM, ENOMEM, Memory allocation failed,
+ *   Returned when unable to allocate memory for CPU masks
+ * error-code: -EOPNOTSUPP, EOPNOTSUPP, Feature not supported,
+ *   Returned when utilization clamping is requested but
+ *   CONFIG_UCLAMP_TASK is not enabled
+ * since-version: 3.14
+ * lock: rq->lock, KAPI_LOCK_SPINLOCK
+ * lock-acquired: true
+ * lock-released: true
+ * lock-desc: Process runqueue lock for scheduler state changes
+ * lock: p->pi_lock, KAPI_LOCK_SPINLOCK
+ * lock-acquired: true
+ * lock-released: true
+ * lock-desc: Priority inheritance lock for PI chain adjustments
+ * lock: cpuset_mutex, KAPI_LOCK_MUTEX
+ * lock-acquired: true
+ * lock-released: true
+ * lock-desc: Cpuset mutex for SCHED_DEADLINE bandwidth checks
+ * signal: SIGXCPU
+ * signal-direction: KAPI_SIGNAL_SEND
+ * signal-action: KAPI_SIGNAL_ACTION_DEFAULT
+ * signal-condition: SCHED_FLAG_DL_OVERRUN is set and deadline is missed
+ * signal-desc: Sent to task when it exceeds its SCHED_DEADLINE runtime.
+ *   The signal is sent asynchronously from the scheduler tick or
+ *   deadline timer. Unlike other scheduling policies, SCHED_DEADLINE
+ *   can generate SIGXCPU for runtime overruns rather than just
+ *   CPU time limit violations.
+ * signal-timing: KAPI_SIGNAL_TIME_DURING
+ * signal-priority: 0
+ * signal-interruptible: no
+ * signal-state-req: KAPI_SIGNAL_STATE_RUNNING
+ * examples: sched_setattr(0, &attr, 0);  // Set attributes for current task
+ *   sched_setattr(pid, &attr, 0);  // Set attributes for specific task
+ * notes: The sched_attr structure supports forward/backward compatibility
+ *   through its size field. Older kernels ignore newer fields. The syscall
+ *   validates all parameters based on the scheduling policy. For SCHED_DEADLINE,
+ *   it performs CBS (Constant Bandwidth Server) admission control. Priority
+ *   changes may trigger immediate reschedule. RT policies require sched_priority
+ *   in range [1,99]. Normal policies use nice values [-20,19] mapped to
+ *   static_prio. Changes are atomic - either all succeed or none are applied.
+ * side-effect: KAPI_EFFECT_MODIFY_STATE | KAPI_EFFECT_PROCESS_STATE, task scheduling attributes, Updates policy/priority/deadline parameters atomically, reversible=yes
+ * side-effect: KAPI_EFFECT_MODIFY_STATE | KAPI_EFFECT_SCHEDULE, runqueue, May requeue task with new priority and trigger reschedule, condition=Task is runnable
+ * side-effect: KAPI_EFFECT_MODIFY_STATE, deadline bandwidth, Allocates CBS bandwidth for SCHED_DEADLINE tasks, condition=Policy is SCHED_DEADLINE, reversible=yes
+ * side-effect: KAPI_EFFECT_MODIFY_STATE, timer slack, Sets timer slack to 0 for RT/DL policies, condition=RT or DEADLINE policy
+ * side-effect: KAPI_EFFECT_MODIFY_STATE, PI chain, Updates priority inheritance chain if task has PI waiters, condition=Task has PI waiters
+ * side-effect: KAPI_EFFECT_MODIFY_STATE | KAPI_EFFECT_SCHEDULE, CPU, May migrate task to different CPU based on affinity/bandwidth, condition=SCHED_DEADLINE or cpuset changes
+ * state-trans: task->policy, any policy, new policy, Task scheduling policy changes per sched_attr
+ * state-trans: task->rt_priority, any, 0-99 or 0, RT priority updated for RT policies, 0 for others
+ * state-trans: task->normal_prio, any, recalculated, Normal priority recalculated based on policy/nice
+ * state-trans: task->sched_reset_on_fork, 0/1, 0/1, Reset-on-fork flag updated per SCHED_FLAG_RESET_ON_FORK
+ * state-trans: task->dl, inactive/active, active/inactive, Deadline entity activated for SCHED_DEADLINE
+ * capability: CAP_SYS_NICE, KAPI_CAP_BYPASS_CHECK, CAP_SYS_NICE capability
+ * capability-allows: Set RT/DL policies, increase priority, nice < 0, change other users' tasks, remove SCHED_FLAG_RESET_ON_FORK
+ * capability-without: Can only set SCHED_NORMAL/BATCH/IDLE, decrease priority, nice >= 0, modify own tasks
+ * capability-condition: Checked when setting RT/DL policy, decreasing nice, or modifying other user's tasks
+ * capability-priority: 0
+ * constraint: Valid Scheduling Policy, The sched_policy field must be one of: SCHED_NORMAL (0), SCHED_FIFO (1), SCHED_RR (2), SCHED_BATCH (3), SCHED_IDLE (5), SCHED_DEADLINE (6), or SCHED_EXT (7) if configured. Invalid policies result in -EINVAL.
+ * constraint-expr: Valid Scheduling Policy, uattr->sched_policy >= 0 && (uattr->sched_policy <= SCHED_DEADLINE || (uattr->sched_policy == SCHED_EXT && IS_ENABLED(CONFIG_SCHED_CLASS_EXT)))
+ * constraint: RT Priority Range, For SCHED_FIFO and SCHED_RR policies, sched_priority must be in range [1, 99] where 1 is lowest and 99 is highest RT priority. For other policies, sched_priority must be 0.
+ * constraint-expr: RT Priority Range, rt_policy(uattr->sched_policy) ? (uattr->sched_priority >= 1 && uattr->sched_priority <= 99) : (uattr->sched_priority == 0)
+ * constraint: Nice Value Range, For SCHED_NORMAL, SCHED_BATCH, and SCHED_IDLE policies, the nice value must be in range [-20, 19] where -20 is highest priority (least nice) and 19 is lowest priority (most nice).
+ * constraint-expr: Nice Value Range, fair_policy(uattr->sched_policy) ? (uattr->sched_nice >= MIN_NICE && uattr->sched_nice <= MAX_NICE) : 1
+ * constraint: SCHED_DEADLINE CBS Rules, For SCHED_DEADLINE, must satisfy: sched_runtime > 0, sched_deadline >= sched_runtime, sched_period >= sched_deadline. If period is 0, it defaults to deadline.
+ * constraint-expr: SCHED_DEADLINE CBS Rules, dl_policy(uattr->sched_policy) ? (uattr->sched_runtime > 0 && uattr->sched_runtime <= uattr->sched_deadline && (uattr->sched_period == 0 || uattr->sched_period >= uattr->sched_deadline)) : 1
+ * constraint: Utilization Clamping Range, If sched_flags includes SCHED_FLAG_UTIL_CLAMP_MIN/MAX, the util_min and util_max values must be in range [0, 1024] where 1024 represents 100% utilization.
+ * constraint-expr: Utilization Clamping Range, (uattr->sched_flags & SCHED_FLAG_UTIL_CLAMP) ? (uattr->sched_util_min >= 0 && uattr->sched_util_min <= SCHED_CAPACITY_SCALE && uattr->sched_util_max >= 0 && uattr->sched_util_max <= SCHED_CAPACITY_SCALE && uattr->sched_util_min <= uattr->sched_util_max) : 1
+ * constraint: SCHED_DEADLINE Bandwidth, The sum of runtime/period ratios for all SCHED_DEADLINE tasks on the system must not exceed the available CPU capacity. This global bandwidth check prevents system overload.
+ * constraint: Structure Size Compatibility, The attr.size field must be at least SCHED_ATTR_SIZE_VER0 (48 bytes) and no larger than the kernel's known structure size to ensure forward/backward compatibility.
+ *
+ * Context: Process context. May sleep. Takes various scheduler locks.
  */
 SYSCALL_DEFINE3(sched_setattr, pid_t, pid, struct sched_attr __user *, uattr,
 			       unsigned int, flags)
