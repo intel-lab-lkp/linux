@@ -1045,6 +1045,7 @@ static void fanotify_free_group_priv(struct fsnotify_group *group)
 {
 	put_user_ns(group->user_ns);
 	kfree(group->fanotify_data.merge_hash);
+	ida_destroy(&group->response_ida);
 	if (group->fanotify_data.ucounts)
 		dec_ucount(group->fanotify_data.ucounts,
 			   UCOUNT_FANOTIFY_GROUPS);
@@ -1106,6 +1107,9 @@ static void fanotify_free_event(struct fsnotify_group *group,
 
 	event = FANOTIFY_E(fsn_event);
 	put_pid(event->pid);
+	if (fanotify_is_perm_event(event->mask) &&
+	    FAN_GROUP_FLAG(group, FAN_REPORT_RESPONSE_ID))
+		ida_free(&group->response_ida, -FANOTIFY_PERM(event)->id);
 	switch (event->type) {
 	case FANOTIFY_EVENT_TYPE_PATH:
 		fanotify_free_path_event(event);

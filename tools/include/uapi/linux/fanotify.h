@@ -67,6 +67,7 @@
 #define FAN_REPORT_TARGET_FID	0x00001000	/* Report dirent target id  */
 #define FAN_REPORT_FD_ERROR	0x00002000	/* event->fd can report error */
 #define FAN_REPORT_MNT		0x00004000	/* Report mount events */
+#define FAN_REPORT_RESPONSE_ID		0x00008000 /* event->fd is a response id */
 
 /* Convenience macro - FAN_REPORT_NAME requires FAN_REPORT_DIR_FID */
 #define FAN_REPORT_DFID_NAME	(FAN_REPORT_DIR_FID | FAN_REPORT_NAME)
@@ -141,7 +142,10 @@ struct fanotify_event_metadata {
 	__u8 reserved;
 	__u16 metadata_len;
 	__aligned_u64 mask;
-	__s32 fd;
+	union {
+		__s32 fd;
+		__s32 id; /* FAN_REPORT_RESPONSE_ID */
+	};
 	__s32 pid;
 };
 
@@ -225,7 +229,10 @@ struct fanotify_event_info_mnt {
 #define FAN_RESPONSE_INFO_AUDIT_RULE	1
 
 struct fanotify_response {
-	__s32 fd;
+	union {
+		__s32 fd;
+		__s32 id; /* FAN_REPORT_RESPONSE_ID */
+	};
 	__u32 response;
 };
 
