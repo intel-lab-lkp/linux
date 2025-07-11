@@ -504,7 +504,7 @@ phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
  * Create PMD level page table mapping for physical addresses. The virtual
  * and physical address have to be aligned at this level.
  */
-static void __meminit
+static int __meminit
 phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 	      unsigned long page_size_mask, pgprot_t prot, bool init)
 {
@@ -586,7 +586,7 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 	 * It is idempotent, so this is ok.
 	 */
 	add_paddr_range_mapped(paddr_first, paddr_last);
-	return;
+	return 0;
 }
 
 /*
@@ -594,12 +594,14 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
  * and physical address do not have to be aligned at this level. KASLR can
  * randomize virtual addresses up to this level.
  */
-static void __meminit
+static int __meminit
 phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 	      unsigned long page_size_mask, pgprot_t _prot, bool init)
 {
 	unsigned long pages = 0, paddr_next;
 	unsigned long vaddr = (unsigned long)__va(paddr);
+	int ret;
+
 	int i = pud_index(vaddr);
 
 	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
@@ -624,8 +626,10 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		if (!pud_none(*pud)) {
 			if (!pud_leaf(*pud)) {
 				pmd = pmd_offset(pud, 0);
-				phys_pmd_init(pmd, paddr, paddr_end,
-					      page_size_mask, prot, init);
+				ret = phys_pmd_init(pmd, paddr, paddr_end,
+						    page_size_mask, prot, init);
+				if (ret)
+					return ret;
 				continue;
 			}
 			/*
@@ -661,33 +665,39 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		}
 
 		pmd = alloc_low_page();
-		phys_pmd_init(pmd, paddr, paddr_end,
-			      page_size_mask, prot, init);
+		ret = phys_pmd_init(pmd, paddr, paddr_end,
+				    page_size_mask, prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
 		pud_populate_init(&init_mm, pud, pmd, init);
 		spin_unlock(&init_mm.page_table_lock);
+
+		/*
+		 * Bail only after updating pud to keep progress from pmd across
+		 * retries.
+		 */
+		if (ret)
+			return ret;
 	}
 
 	update_page_count(PG_LEVEL_1G, pages);
 
-	return;
+	return 0;
 }
 
-static void __meminit
+static int __meminit
 phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 	      unsigned long page_size_mask, pgprot_t prot, bool init)
 {
 	unsigned long vaddr, vaddr_end, vaddr_next, paddr_next;
+	int ret;
 
 	vaddr = (unsigned long)__va(paddr);
 	vaddr_end = (unsigned long)__va(paddr_end);
 
-	if (!pgtable_l5_enabled()) {
-		phys_pud_init((pud_t *) p4d_page, paddr, paddr_end,
-			      page_size_mask, prot, init);
-		return;
-	}
+	if (!pgtable_l5_enabled())
+		return phys_pud_init((pud_t *) p4d_page, paddr, paddr_end,
+				     page_size_mask, prot, init);
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
 		p4d_t *p4d = p4d_page + p4d_index(vaddr);
@@ -709,24 +719,33 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 
 		if (!p4d_none(*p4d)) {
 			pud = pud_offset(p4d, 0);
-			phys_pud_init(pud, paddr, __pa(vaddr_end),
-				      page_size_mask, prot, init);
+			ret = phys_pud_init(pud, paddr, __pa(vaddr_end),
+					    page_size_mask, prot, init);
+			if (ret)
+				return ret;
 			continue;
 		}
 
 		pud = alloc_low_page();
-		phys_pud_init(pud, paddr, __pa(vaddr_end),
-			      page_size_mask, prot, init);
+		ret = phys_pud_init(pud, paddr, __pa(vaddr_end),
+				    page_size_mask, prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
 		p4d_populate_init(&init_mm, p4d, pud, init);
 		spin_unlock(&init_mm.page_table_lock);
+
+		/*
+		 * Bail only after updating p4d to keep progress from pud across
+		 * retries.
+		 */
+		if (ret)
+			return ret;
 	}
 
-	return;
+	return 0;
 }
 
-static void __meminit
+static int __meminit
 __kernel_physical_mapping_init(unsigned long paddr_start,
 			       unsigned long paddr_end,
 			       unsigned long page_size_mask,
@@ -734,6 +753,7 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 {
 	bool pgd_changed = false;
 	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next;
+	int ret;
 
 	vaddr = (unsigned long)__va(paddr_start);
 	vaddr_end = (unsigned long)__va(paddr_end);
@@ -747,14 +767,16 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 
 		if (pgd_val(*pgd)) {
 			p4d = (p4d_t *)pgd_page_vaddr(*pgd);
-			phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
-				      page_size_mask, prot, init);
+			ret = phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
+					    page_size_mask, prot, init);
+			if (ret)
+				return ret;
 			continue;
 		}
 
 		p4d = alloc_low_page();
-		phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
-			      page_size_mask, prot, init);
+		ret = phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
+				    page_size_mask, prot, init);
 
 		spin_lock(&init_mm.page_table_lock);
 		if (pgtable_l5_enabled())
@@ -762,15 +784,22 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 		else
 			p4d_populate_init(&init_mm, p4d_offset(pgd, vaddr),
 					  (pud_t *) p4d, init);
-
 		spin_unlock(&init_mm.page_table_lock);
+
+		/*
+		 * Bail only after updating pgd/p4d to keep progress from p4d
+		 * across retries.
+		 */
+		if (ret)
+			return ret;
+
 		pgd_changed = true;
 	}
 
 	if (pgd_changed)
 		sync_global_pgds(vaddr_start, vaddr_end - 1);
 
-	return;
+	return 0;
 }
 
 
@@ -780,13 +809,13 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
  * The virtual and physical addresses have to be aligned on PMD level
  * down.
  */
-void __meminit
+int __meminit
 kernel_physical_mapping_init(unsigned long paddr_start,
 			     unsigned long paddr_end,
 			     unsigned long page_size_mask, pgprot_t prot)
 {
-	__kernel_physical_mapping_init(paddr_start, paddr_end,
-				       page_size_mask, prot, true);
+	return __kernel_physical_mapping_init(paddr_start, paddr_end,
+					      page_size_mask, prot, true);
 }
 
 /*
@@ -795,14 +824,14 @@ kernel_physical_mapping_init(unsigned long paddr_start,
  * when updating the mapping. The caller is responsible to flush the TLBs after
  * the function returns.
  */
-void __meminit
+int __meminit
 kernel_physical_mapping_change(unsigned long paddr_start,
 			       unsigned long paddr_end,
 			       unsigned long page_size_mask)
 {
-	__kernel_physical_mapping_init(paddr_start, paddr_end,
-				       page_size_mask, PAGE_KERNEL,
-				       false);
+	return __kernel_physical_mapping_init(paddr_start, paddr_end,
+					      page_size_mask, PAGE_KERNEL,
+					      false);
 }
 
 #ifndef CONFIG_NUMA
@@ -984,8 +1013,11 @@ int arch_add_memory(int nid, u64 start, u64 size,
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
+	int ret;
 
-	init_memory_mapping(start, start + size, params->pgprot);
+	ret = init_memory_mapping(start, start + size, params->pgprot);
+	if (ret)
+		return ret;
 
 	return add_pages(nid, start_pfn, nr_pages, params);
 }

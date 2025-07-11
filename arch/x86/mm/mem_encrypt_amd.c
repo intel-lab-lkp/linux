@@ -446,9 +446,11 @@ static int __init early_set_memory_enc_dec(unsigned long vaddr,
 		 * kernel_physical_mapping_change() does not flush the TLBs, so
 		 * a TLB flush is required after we exit from the for loop.
 		 */
-		kernel_physical_mapping_change(__pa(vaddr & pmask),
-					       __pa((vaddr_end & pmask) + psize),
-					       split_page_size_mask);
+		ret = kernel_physical_mapping_change(__pa(vaddr & pmask),
+						     __pa((vaddr_end & pmask) + psize),
+						     split_page_size_mask);
+		if (ret)
+			return ret;
 	}
 
 	ret = 0;

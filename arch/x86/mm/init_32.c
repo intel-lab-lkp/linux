@@ -246,7 +246,7 @@ static inline int is_x86_32_kernel_text(unsigned long addr)
  * of max_low_pfn pages, by creating page tables starting from address
  * PAGE_OFFSET:
  */
-void __init
+int __init
 kernel_physical_mapping_init(unsigned long start,
 			     unsigned long end,
 			     unsigned long page_size_mask,
@@ -385,7 +385,7 @@ repeat:
 	}
 
 	add_paddr_range_mapped(start, last_map_addr);
-	return;
+	return 0;
 }
 
 #ifdef CONFIG_HIGHMEM
