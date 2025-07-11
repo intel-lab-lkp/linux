@@ -1,0 +1,157 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2025 Analog Devices Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bindings/iio/adc/adi,ade9000.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices ADE9000 High Performance, Polyphase Energy Metering driver
+
+maintainers:
+  - Antoniu Miclaus <antoniu.miclaus@analog.com>
+
+description: |
+  The ADE9000 s a highly accurate, fully integrated, multiphase energy and power
+  quality monitoring device. Superior analog performance and a digital signal
+  processing (DSP) core enable accurate energy monitoring over a wide dynamic
+  range. An integrated high end reference ensures low drift over temperature
+  with a combined drift of less than ±25 ppm/°C maximum for the entire channel
+  including a programmable gain amplifier (PGA) and an analog-to- digital
+  converter (ADC).
+
+  https://www.analog.com/media/en/technical-documentation/data-sheets/ADE9000.pdf
+
+properties:
+  compatible:
+    enum:
+      - adi,ade9000
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  spi-max-frequency:
+    maximum: 20000000
+
+  interrupts:
+    maxItems: 2
+
+  reset-gpios:
+    description: |
+      Must be the device tree identifier of the RESET pin. As the line is
+      active low, it should be marked GPIO_ACTIVE_LOW.
+    maxItems: 1
+
+  interrupt-names:
+    items:
+      - const: irq0
+      - const: irq1
+
+  adi,wf-cap-en:
+    description: Enable fixed data rate for waveform buffer instead of resampled data
+    type: boolean
+
+  adi,wf-mode:
+    description: |
+      Waveform buffer filling and trigger mode.
+      0 - Stop when waveform buffer is full
+      1 - Continuous fill, stop only on enabled trigger events
+      2 - Continuous filling, center capture around enabled trigger events
+      3 - Streaming mode
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2, 3]
+
+  adi,wf-src:
+    description: |
+      Waveform buffer data source selection.
+      0 - Sinc4 output, at 16 kSPS
+      1 - Reserved
+      2 - Sinc4 + IIR LPF output, at 4 kSPS
+      3 - Current and voltage channel waveform samples, processed by the DSP at 4 kSPS
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 2, 3]
+
+  adi,wf-in-en:
+    description: Enable IN waveform samples readout from waveform buffer
+    type: boolean
+
+  adi,egy-time:
+    description: Energy accumulation time setting for energy registers
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - interrupts
+  - interrupt-names
+  - adi,wf-mode
+  - adi,wf-src
+
+additionalProperties: false
+
+patternProperties:
+  "^phase@[0-2]$":
+    type: object
+    description: |
+      Represents the external phases which are externally connected. Each phase
+      has a current, voltage and power component
+
+    properties:
+      reg:
+        description: |
+          The phase represented by a number
+          0 - Phase A
+          1 - Phase B
+          2 - Phase C
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2]
+
+    required:
+      - reg
+
+    additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        adc@0 {
+            compatible = "adi,ade9000";
+            reg = <0>;
+            spi-max-frequency = <7000000>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reset-gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
+            interrupts = <2 IRQ_TYPE_EDGE_FALLING>, <3 IRQ_TYPE_EDGE_FALLING>;
+            interrupt-names = "irq0", "irq1";
+            interrupt-parent = <&gpio>;
+
+            adi,wf-cap-en;
+            adi,wf-mode = <3>;
+            adi,wf-src = <3>;
+            adi,wf-in-en;
+
+            phase@0 {
+                reg = <0>;
+            };
+            phase@1 {
+                reg = <1>;
+            };
+            phase@2 {
+                reg = <2>;
+            };
+        };
+    };
+...
