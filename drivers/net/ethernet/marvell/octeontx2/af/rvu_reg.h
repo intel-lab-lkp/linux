@@ -509,6 +509,9 @@
 #define CPT_AF_EXE_EPCI_OUTBX_CNT(a)    (0x25000ull | (u64)(a) << 3)
 #define CPT_AF_EXEX_UCODE_BASE(a)       (0x26000ull | (u64)(a) << 3)
 #define CPT_AF_LFX_CTL(a)               (0x27000ull | (u64)(a) << 3)
+#define CPT_AF_LFX_CTL_HIGH_PRI		BIT_ULL(0)
+#define CPT_AF_LFX_CTL_CTX_ILEN		GENMASK_ULL(19, 17)
+#define CPT_AF_LFX_CTL_EGRP		GENMASK_ULL(55, 48)
 #define CPT_AF_LFX_CTL2(a)              (0x29000ull | (u64)(a) << 3)
 #define CPT_AF_CPTCLK_CNT               (0x2a000)
 #define CPT_AF_PF_FUNC                  (0x2b000)
@@ -562,7 +565,19 @@
 #define CPT_AF_LF_SSO_PF_FUNC_SHIFT 32
 
 #define CPT_LF_CTL                      0x10
+#define CPT_LF_CTL_ENQ_ENA		BIT_ULL(0)
 #define CPT_LF_INPROG                   0x40
+#define CPT_LF_INPROG_EXEC_ENABLE	BIT_ULL(16)
+#define CPT_LF_MISC_INT                 0xb0
+#define CPT_LF_MISC_INT_NQERR		BIT_ULL(1)
+#define CPT_LF_MISC_INT_IRDE		BIT_ULL(2)
+#define CPT_LF_MISC_INT_NWRP		BIT_ULL(3)
+#define CPT_LF_MISC_INT_HWERR		BIT_ULL(5)
+#define CPT_LF_MISC_INT_FAULT		BIT_ULL(6)
+#define CPT_LF_MISC_INT_MASK            0x6e
+#define CPT_LF_MISC_INT_ENA_W1S         0xd0
+#define CPT_LF_MISC_INT_ENA_W1C         0xe0
+#define CPT_LF_Q_BASE                   0xf0
 #define CPT_LF_Q_SIZE                   0x100
 #define CPT_LF_Q_INST_PTR               0x110
 #define CPT_LF_Q_GRP_PTR                0x120
