@@ -169,6 +169,20 @@ struct usb_authent_error_resp_hd {
 	__u8 errorData;
 } __packed;
 
+extern uint usb_auth_wait_userspace_timeout;
+extern uint usb_auth_wait_response_timeout;
+
+#define DEFAULT_USB_AUTHENT_WAIT_USERSPACE_TIMEOUT 30
+#define DEFAULT_USB_AUTHENT_WAIT_RESPONSE_TIMEOUT 300
+
+#ifdef CONFIG_SYSCTL
+extern int usb_register_sysctl(void);
+extern void usb_unregister_sysctl(void);
+#else
+# define usb_auth_init_sysctl() (0)
+# define usb_auth_exit_sysctl() do { } while (0)
+#endif
+
 #ifdef CONFIG_USB_AUTHENTICATION
 int usb_authenticate_device(struct usb_device *dev);
 #else

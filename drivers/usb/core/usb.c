@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 
 #include "hub.h"
+#include "authent.h"
 #include "authent_netlink.h"
 
 const char *usbcore_name = "usbcore";
@@ -1082,6 +1083,10 @@ static int __init usb_init(void)
 
 	usb_acpi_register();
 
+	retval = usb_register_sysctl();
+	if (retval)
+		goto sysctl_init_failed;
+
 #ifdef CONFIG_USB_AUTHENTICATION
 	retval = usb_auth_init_netlink();
 	if (retval)
@@ -1127,6 +1132,8 @@ major_init_failed:
 bus_notifier_failed:
 	bus_unregister(&usb_bus_type);
 bus_register_failed:
+	usb_unregister_sysctl();
+sysctl_init_failed:
 	usb_acpi_unregister();
 	usb_debugfs_cleanup();
 out:
@@ -1151,6 +1158,7 @@ static void __exit usb_exit(void)
 	class_unregister(&usbmisc_class);
 	bus_unregister_notifier(&usb_bus_type, &usb_bus_nb);
 	bus_unregister(&usb_bus_type);
+	usb_unregister_sysctl();
 	usb_acpi_unregister();
 	usb_debugfs_cleanup();
 	idr_destroy(&usb_bus_idr);

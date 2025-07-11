@@ -21,10 +21,14 @@
 #include <uapi/linux/usb/usb_auth_netlink.h>
 #include "authent.h"
 #include "authent_netlink.h"
+#include "authent.h"
 
 #define WAIT_USERSPACE_TIMEOUT 30
 #define WAIT_RESPONSE_TIMEOUT 300
 #define USBAUTH_MAX_RESP_SIZE 128
+
+uint usb_auth_wait_userspace_timeout = DEFAULT_USB_AUTHENT_WAIT_USERSPACE_TIMEOUT;
+uint usb_auth_wait_response_timeout = DEFAULT_USB_AUTHENT_WAIT_RESPONSE_TIMEOUT;
 
 /**
  * struct usb_auth_req - Define an outstanding request between the kernel and userspace
@@ -609,7 +613,8 @@ int usb_policy_engine_check_digest(const u32 route, const u8 *const digests,
 		return -EINVAL;
 	}
 
-	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0, HZ * WAIT_USERSPACE_TIMEOUT)) {
+	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0,
+				HZ * usb_auth_wait_userspace_timeout)) {
 		pr_err("%s: userspace not available\n", __func__);
 		return -ECOMM;
 	}
@@ -675,7 +680,7 @@ int usb_policy_engine_check_digest(const u32 route, const u8 *const digests,
 
 	if (!wait_event_timeout(usb_req_wq,
 				usb_auth_outstanding_reqs[index].done == 1,
-				HZ * WAIT_RESPONSE_TIMEOUT)) {
+				HZ * usb_auth_wait_response_timeout)) {
 		pr_err("%s: userspace response not available\n", __func__);
 		usb_auth_release_reqs_slot(index);
 		return -ECOMM;
@@ -740,7 +745,8 @@ int usb_policy_engine_check_cert_chain(const u32 route,
 		return -EINVAL;
 	}
 
-	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0, HZ * WAIT_USERSPACE_TIMEOUT)) {
+	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0,
+				HZ * usb_auth_wait_userspace_timeout)) {
 		pr_err("%s: userspace not available\n", __func__);
 		return -ECOMM;
 	}
@@ -814,7 +820,7 @@ int usb_policy_engine_check_cert_chain(const u32 route,
 
 	if (!wait_event_timeout(usb_req_wq,
 				usb_auth_outstanding_reqs[index].done == 1,
-				HZ * WAIT_RESPONSE_TIMEOUT)) {
+				HZ * usb_auth_wait_response_timeout)) {
 		pr_err("%s: userspace response not available\n", __func__);
 		usb_auth_release_reqs_slot(index);
 		return -ECOMM;
@@ -852,8 +858,8 @@ int usb_policy_engine_generate_challenge(const u32 id, u8 *nonce)
 	struct sk_buff *skb = NULL;
 	u32 index = 0;
 
-	/* Arbitrary 30s wait before giving up */
-	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0, HZ * WAIT_USERSPACE_TIMEOUT)) {
+	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0,
+				HZ * usb_auth_wait_userspace_timeout)) {
 		pr_err("%s: userspace not available\n", __func__);
 		return -ECOMM;
 	}
@@ -902,7 +908,7 @@ int usb_policy_engine_generate_challenge(const u32 id, u8 *nonce)
 
 	if (!wait_event_timeout(usb_req_wq,
 				usb_auth_outstanding_reqs[index].done == 1,
-				HZ * WAIT_RESPONSE_TIMEOUT)) {
+				HZ * usb_auth_wait_response_timeout)) {
 		pr_err("%s: userspace response not available\n", __func__);
 		usb_auth_release_reqs_slot(index);
 		return -ECOMM;
@@ -953,7 +959,8 @@ int usb_policy_engine_check_challenge(const u32 id,
 		return -EINVAL;
 	}
 
-	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0, HZ * WAIT_USERSPACE_TIMEOUT)) {
+	if (!wait_event_timeout(usb_req_wq, pol_eng_pid != 0,
+				HZ * usb_auth_wait_userspace_timeout)) {
 		pr_err("%s: userspace not available\n", __func__);
 		return -ECOMM;
 	}
@@ -1016,9 +1023,10 @@ int usb_policy_engine_check_challenge(const u32 id,
 		       __func__, ret);
 		return -ECOMM;
 	}
+
 	if (!wait_event_timeout(usb_req_wq,
 				usb_auth_outstanding_reqs[index].done == 1,
-				HZ * WAIT_RESPONSE_TIMEOUT)) {
+				HZ * usb_auth_wait_response_timeout)) {
 		pr_err("%s: userspace response not available\n", __func__);
 		usb_auth_release_reqs_slot(index);
 		return -ECOMM;
