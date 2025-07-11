@@ -2924,6 +2924,34 @@ int vscnprintf(char *buf, size_t size, const char *fmt, va_list args)
 EXPORT_SYMBOL(vscnprintf);
 
 /**
+ * vsprintf_trunc - va_list string truncate print formatted
+ * @buf: The buffer to place the result into
+ * @size: The size of the buffer, including the trailing null space
+ * @fmt: The format string to use
+ * @args: Arguments for the format string
+ *
+ * The return value is the length of the string.
+ * If the string is truncated, the function returns -E2BIG.
+ * If @size is invalid, the function returns -EOVERFLOW.
+ *
+ * See the vsnprintf() documentation for format string extensions over C99.
+ */
+int vsprintf_trunc(char *buf, size_t size, const char *fmt, va_list args)
+{
+	int len;
+
+	if (WARN_ON_ONCE(size == 0 || size > INT_MAX))
+		return -EOVERFLOW;
+
+	len = vsnprintf(buf, size, fmt, args);
+	if (unlikely(len >= size))
+		return -E2BIG;
+
+	return len;
+}
+EXPORT_SYMBOL(vsprintf_trunc);
+
+/**
  * snprintf - Format a string and place it in a buffer
  * @buf: The buffer to place the result into
  * @size: The size of the buffer, including the trailing null space
@@ -2973,6 +3001,31 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...)
 	return i;
 }
 EXPORT_SYMBOL(scnprintf);
+
+/**
+ * sprintf_trunc - string truncate print formatted
+ * @buf: The buffer to place the result into
+ * @size: The size of the buffer, including the trailing null space
+ * @fmt: The format string to use
+ * @...: Arguments for the format string
+ *
+ * The return value is the length of the string.
+ * If the string is truncated, the function returns -E2BIG.
+ * If @size is invalid, the function returns -EOVERFLOW.
+ */
+
+int sprintf_trunc(char *buf, size_t size, const char *fmt, ...)
+{
+	int len;
+	va_list args;
+
+	va_start(args, fmt);
+	len = vsprintf_trunc(buf, size, fmt, args);
+	va_end(args);
+
+	return len;
+}
+EXPORT_SYMBOL(sprintf_trunc);
 
 /**
  * vsprintf - Format a string and place it in a buffer
