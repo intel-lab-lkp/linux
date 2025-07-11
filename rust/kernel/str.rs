@@ -838,6 +838,56 @@ impl fmt::Write for Formatter<'_> {
     }
 }
 
+/// A mutable reference to a byte buffer where a string can be written into.
+///
+/// The buffer will be automatically null terminated after the last written character.
+///
+/// # Invariants
+///
+/// `buffer` is always null terminated.
+pub(crate) struct NullTerminatedFormatter<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> NullTerminatedFormatter<'a> {
+    /// Create a new [`Self`] instance.
+    pub(crate) fn new(buffer: &'a mut [u8]) -> Option<NullTerminatedFormatter<'a>> {
+        *(buffer.first_mut()?) = 0;
+
+        // INVARIANT: We null terminated the buffer above.
+        Some(Self { buffer })
+    }
+
+    #[expect(dead_code)]
+    pub(crate) fn from_array<const N: usize>(
+        buffer: &'a mut [crate::ffi::c_char; N],
+    ) -> Option<NullTerminatedFormatter<'a>> {
+        Self::new(buffer)
+    }
+}
+
+impl Write for NullTerminatedFormatter<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let bytes = s.as_bytes();
+        let len = bytes.len();
+
+        // We want space for a null terminator. Buffer length is always at least 1, so no overflow.
+        if len > self.buffer.len() - 1 {
+            return Err(fmt::Error);
+        }
+
+        let buffer = core::mem::take(&mut self.buffer);
+        // We break the null termination invariant for a short while.
+        buffer[..len].copy_from_slice(bytes);
+        self.buffer = &mut buffer[len..];
+
+        // INVARIANT: We null terminate the buffer.
+        self.buffer[0] = 0;
+
+        Ok(())
+    }
+}
+
 /// An owned string that is guaranteed to have exactly one `NUL` byte, which is at the end.
 ///
 /// Used for interoperability with kernel APIs that take C strings.
