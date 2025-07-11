@@ -325,8 +325,8 @@ static int sst_cdev_stream_partial_drain(struct device *dev,
 	return sst_drain_stream(ctx, str_id, true);
 }
 
-static int sst_cdev_tstamp(struct device *dev, unsigned int str_id,
-		struct snd_compr_tstamp *tstamp)
+static int sst_cdev_tstamp32(struct device *dev, unsigned int str_id,
+			     struct snd_compr_tstamp *tstamp)
 {
 	struct snd_sst_tstamp fw_tstamp = {0,};
 	struct stream_info *stream;
@@ -350,9 +350,41 @@ static int sst_cdev_tstamp(struct device *dev, unsigned int str_id,
 	tstamp->sampling_rate = fw_tstamp.sampling_frequency;
 
 	dev_dbg(dev, "PCM  = %u\n", tstamp->pcm_io_frames);
-	dev_dbg(dev, "Ptr Query on strid = %d  copied_total %d, decodec %d\n",
+	dev_dbg(dev, "Ptr Query on strid = %d  copied_total %u, decodec %u\n",
 		str_id, tstamp->copied_total, tstamp->pcm_frames);
-	dev_dbg(dev, "rendered %d\n", tstamp->pcm_io_frames);
+	dev_dbg(dev, "rendered %u\n", tstamp->pcm_io_frames);
+
+	return 0;
+}
+
+static int sst_cdev_tstamp64(struct device *dev, unsigned int str_id,
+			     struct snd_compr_tstamp64 *tstamp)
+{
+	struct snd_sst_tstamp fw_tstamp = {0,};
+	struct stream_info *stream;
+	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
+	void __iomem *addr;
+
+	addr = (void __iomem *)(ctx->mailbox + ctx->tstamp) +
+		(str_id * sizeof(fw_tstamp));
+
+	memcpy_fromio(&fw_tstamp, addr, sizeof(fw_tstamp));
+
+	stream = get_stream_info(ctx, str_id);
+	if (!stream)
+		return -EINVAL;
+	dev_dbg(dev, "rb_counter %llu in bytes\n", fw_tstamp.ring_buffer_counter);
+
+	tstamp->copied_total = fw_tstamp.ring_buffer_counter;
+	tstamp->pcm_frames = fw_tstamp.frames_decoded;
+	tstamp->pcm_io_frames = div_u64(fw_tstamp.hardware_counter,
+			(u64)stream->num_ch * SST_GET_BYTES_PER_SAMPLE(24));
+	tstamp->sampling_rate = fw_tstamp.sampling_frequency;
+
+	dev_dbg(dev, "PCM  = %llu\n", tstamp->pcm_io_frames);
+	dev_dbg(dev, "Ptr Query on strid = %d  copied_total %llu, decodec %llu\n",
+		str_id, tstamp->copied_total, tstamp->pcm_frames);
+	dev_dbg(dev, "rendered %llu\n", tstamp->pcm_io_frames);
 
 	return 0;
 }
@@ -650,7 +682,8 @@ static struct compress_sst_ops compr_ops = {
 	.stream_drop = sst_cdev_stream_drop,
 	.stream_drain = sst_cdev_stream_drain,
 	.stream_partial_drain = sst_cdev_stream_partial_drain,
-	.tstamp = sst_cdev_tstamp,
+	.tstamp = sst_cdev_tstamp32,
+	.tstamp64 = sst_cdev_tstamp64,
 	.ack = sst_cdev_ack,
 	.get_caps = sst_cdev_caps,
 	.get_codec_caps = sst_cdev_codec_caps,

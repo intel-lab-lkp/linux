@@ -247,9 +247,9 @@ static int uniphier_aio_compr_trigger(struct snd_soc_component *component,
 	return ret;
 }
 
-static int uniphier_aio_compr_pointer(struct snd_soc_component *component,
-				      struct snd_compr_stream *cstream,
-				      struct snd_compr_tstamp *tstamp)
+static int uniphier_aio_compr_pointer_internal(
+	struct snd_soc_component *component, struct snd_compr_stream *cstream,
+	struct snd_compr_tstamp *tstamp32, struct snd_compr_tstamp64 *tstamp64)
 {
 	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
 	struct snd_compr_runtime *runtime = cstream->runtime;
@@ -258,6 +258,7 @@ static int uniphier_aio_compr_pointer(struct snd_soc_component *component,
 	int bytes = runtime->fragment_size;
 	unsigned long flags;
 	u32 pos;
+	u64 copied_total;
 
 	spin_lock_irqsave(&sub->lock, flags);
 
@@ -266,16 +267,40 @@ static int uniphier_aio_compr_pointer(struct snd_soc_component *component,
 	if (sub->swm->dir == PORT_DIR_OUTPUT) {
 		pos = sub->rd_offs;
 		/* Size of AIO output format is double of IEC61937 */
-		tstamp->copied_total = sub->rd_total / 2;
+		copied_total = sub->rd_total / 2;
 	} else {
 		pos = sub->wr_offs;
-		tstamp->copied_total = sub->rd_total;
+		copied_total = sub->rd_total;
 	}
-	tstamp->byte_offset = pos;
+
+	if (tstamp32) {
+		tstamp32->copied_total = (u32)copied_total;
+		tstamp32->byte_offset = pos;
+	}
+	if (tstamp64) {
+		tstamp64->copied_total = copied_total;
+		tstamp64->byte_offset = pos;
+	}
 
 	spin_unlock_irqrestore(&sub->lock, flags);
 
 	return 0;
+}
+
+static int uniphier_aio_compr_pointer32(struct snd_soc_component *component,
+					struct snd_compr_stream *cstream,
+					struct snd_compr_tstamp *tstamp)
+{
+	return uniphier_aio_compr_pointer_internal(component, cstream, tstamp,
+						   NULL);
+}
+
+static int uniphier_aio_compr_pointer64(struct snd_soc_component *component,
+					struct snd_compr_stream *cstream,
+					struct snd_compr_tstamp64 *tstamp)
+{
+	return uniphier_aio_compr_pointer_internal(component, cstream, NULL,
+						   tstamp);
 }
 
 static int aio_compr_send_to_hw(struct uniphier_aio_sub *sub,
@@ -426,7 +451,8 @@ const struct snd_compress_ops uniphier_aio_compress_ops = {
 	.get_params     = uniphier_aio_compr_get_params,
 	.set_params     = uniphier_aio_compr_set_params,
 	.trigger        = uniphier_aio_compr_trigger,
-	.pointer        = uniphier_aio_compr_pointer,
+	.pointer        = uniphier_aio_compr_pointer32,
+	.pointer64      = uniphier_aio_compr_pointer64,
 	.copy           = uniphier_aio_compr_copy,
 	.get_caps       = uniphier_aio_compr_get_caps,
 	.get_codec_caps = uniphier_aio_compr_get_codec_caps,

@@ -173,7 +173,7 @@ struct wm_adsp_compr {
 	struct snd_compressed_buffer size;
 
 	u32 *raw_buf;
-	unsigned int copied_total;
+	u64 copied_total;
 
 	unsigned int sample_rate;
 
@@ -1858,16 +1858,15 @@ static int wm_adsp_buffer_reenable_irq(struct wm_adsp_compr_buf *buf)
 				    buf->irq_count);
 }
 
-int wm_adsp_compr_pointer(struct snd_soc_component *component,
-			  struct snd_compr_stream *stream,
-			  struct snd_compr_tstamp *tstamp)
+static int wm_adsp_compr_pointer_internal(struct snd_soc_component *component,
+					  struct snd_compr_stream *stream,
+					  struct snd_compr_tstamp *tstamp32,
+					  struct snd_compr_tstamp64 *tstamp64)
 {
 	struct wm_adsp_compr *compr = stream->runtime->private_data;
 	struct wm_adsp *dsp = compr->dsp;
 	struct wm_adsp_compr_buf *buf;
 	int ret = 0;
-
-	compr_dbg(compr, "Pointer request\n");
 
 	mutex_lock(&dsp->cs_dsp.pwr_lock);
 
@@ -1908,16 +1907,52 @@ int wm_adsp_compr_pointer(struct snd_soc_component *component,
 		}
 	}
 
-	tstamp->copied_total = compr->copied_total;
-	tstamp->copied_total += buf->avail * CS_DSP_DATA_WORD_SIZE;
-	tstamp->sampling_rate = compr->sample_rate;
+	if (tstamp32) {
+		tstamp32->copied_total = (u32)compr->copied_total;
+		tstamp32->copied_total += buf->avail * CS_DSP_DATA_WORD_SIZE;
+		tstamp32->sampling_rate = compr->sample_rate;
+	}
+	if (tstamp64) {
+		tstamp64->copied_total = compr->copied_total;
+		tstamp64->copied_total += buf->avail * CS_DSP_DATA_WORD_SIZE;
+		tstamp64->sampling_rate = compr->sample_rate;
+	}
 
 out:
 	mutex_unlock(&dsp->cs_dsp.pwr_lock);
 
 	return ret;
 }
+
+int wm_adsp_compr_pointer(struct snd_soc_component *component,
+			  struct snd_compr_stream *stream,
+			  struct snd_compr_tstamp *tstamp)
+{
+	struct wm_adsp_compr *compr = stream->runtime->private_data;
+	int ret = 0;
+
+	compr_dbg(compr, "Pointer request\n");
+
+	ret = wm_adsp_compr_pointer_internal(component, stream, tstamp, NULL);
+
+	return ret;
+}
 EXPORT_SYMBOL_GPL(wm_adsp_compr_pointer);
+
+int wm_adsp_compr_pointer64(struct snd_soc_component *component,
+			    struct snd_compr_stream *stream,
+			    struct snd_compr_tstamp64 *tstamp)
+{
+	struct wm_adsp_compr *compr = stream->runtime->private_data;
+	int ret = 0;
+
+	compr_dbg(compr, "Pointer64 request\n");
+
+	ret = wm_adsp_compr_pointer_internal(component, stream, NULL, tstamp);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(wm_adsp_compr_pointer64);
 
 static int wm_adsp_buffer_capture_block(struct wm_adsp_compr *compr, int target)
 {

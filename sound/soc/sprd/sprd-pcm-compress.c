@@ -85,9 +85,9 @@ struct sprd_compr_stream {
 	int info_size;
 
 	/* Data size copied to IRAM buffer */
-	int copied_total;
+	u64 copied_total;
 	/* Total received data size from userspace */
-	int received_total;
+	u64 received_total;
 	/* Stage 0 IRAM buffer received data size */
 	int received_stage0;
 	/* Stage 1 DDR buffer received data size */
@@ -511,9 +511,24 @@ static int sprd_platform_compr_trigger(struct snd_soc_component *component,
 	return ret;
 }
 
-static int sprd_platform_compr_pointer(struct snd_soc_component *component,
-				       struct snd_compr_stream *cstream,
-				       struct snd_compr_tstamp *tstamp)
+static int sprd_platform_compr_pointer32(struct snd_soc_component *component,
+					 struct snd_compr_stream *cstream,
+					 struct snd_compr_tstamp *tstamp)
+{
+	struct snd_compr_runtime *runtime = cstream->runtime;
+	struct sprd_compr_stream *stream = runtime->private_data;
+	struct sprd_compr_playinfo *info =
+		(struct sprd_compr_playinfo *)stream->info_area;
+
+	tstamp->copied_total = (u32)stream->copied_total;
+	tstamp->pcm_io_frames = (u32)info->current_data_offset;
+
+	return 0;
+}
+
+static int sprd_platform_compr_pointer64(struct snd_soc_component *component,
+					 struct snd_compr_stream *cstream,
+					 struct snd_compr_tstamp64 *tstamp)
 {
 	struct snd_compr_runtime *runtime = cstream->runtime;
 	struct sprd_compr_stream *stream = runtime->private_data;
@@ -660,7 +675,8 @@ const struct snd_compress_ops sprd_platform_compress_ops = {
 	.free = sprd_platform_compr_free,
 	.set_params = sprd_platform_compr_set_params,
 	.trigger = sprd_platform_compr_trigger,
-	.pointer = sprd_platform_compr_pointer,
+	.pointer = sprd_platform_compr_pointer32,
+	.pointer64 = sprd_platform_compr_pointer64,
 	.copy = sprd_platform_compr_copy,
 	.get_caps = sprd_platform_compr_get_caps,
 	.get_codec_caps = sprd_platform_compr_get_codec_caps,

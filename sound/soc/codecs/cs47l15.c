@@ -1342,6 +1342,7 @@ static const struct snd_compress_ops cs47l15_compress_ops = {
 	.get_caps = &wm_adsp_compr_get_caps,
 	.trigger = &wm_adsp_compr_trigger,
 	.pointer = &wm_adsp_compr_pointer,
+	.pointer64 = &wm_adsp_compr_pointer64,
 	.copy = &wm_adsp_compr_copy,
 };
 

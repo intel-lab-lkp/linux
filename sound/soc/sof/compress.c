@@ -359,24 +359,49 @@ static int sof_compr_copy(struct snd_soc_component *component,
 		return sof_compr_copy_capture(rtd, buf, count);
 }
 
-static int sof_compr_pointer(struct snd_soc_component *component,
-			     struct snd_compr_stream *cstream,
-			     struct snd_compr_tstamp *tstamp)
+static int sof_compr_pointer_internal(struct snd_soc_component *component,
+				      struct snd_compr_stream *cstream,
+				      struct snd_compr_tstamp *tstamp32,
+				      struct snd_compr_tstamp64 *tstamp64)
 {
 	struct snd_sof_pcm *spcm;
 	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
 	struct sof_compr_stream *sstream = cstream->runtime->private_data;
+	u64 pcm_io_frames;
 
 	spcm = snd_sof_find_spcm_dai(component, rtd);
 	if (!spcm)
 		return -EINVAL;
+	pcm_io_frames =
+		div_u64(spcm->stream[cstream->direction].posn.dai_posn,
+			sstream->channels * sstream->sample_container_bytes);
 
-	tstamp->sampling_rate = sstream->sampling_rate;
-	tstamp->copied_total = sstream->copied_total;
-	tstamp->pcm_io_frames = div_u64(spcm->stream[cstream->direction].posn.dai_posn,
-					sstream->channels * sstream->sample_container_bytes);
+	if (tstamp32) {
+		tstamp32->sampling_rate = sstream->sampling_rate;
+		tstamp32->copied_total = (u32)sstream->copied_total;
+		tstamp32->pcm_io_frames = (u32)pcm_io_frames;
+	}
+	if (tstamp64) {
+		tstamp64->sampling_rate = sstream->sampling_rate;
+		tstamp64->copied_total = sstream->copied_total;
+		tstamp64->pcm_io_frames = pcm_io_frames;
+	}
 
 	return 0;
+}
+
+static int sof_compr_pointer32(struct snd_soc_component *component,
+			     struct snd_compr_stream *cstream,
+			     struct snd_compr_tstamp *tstamp)
+{
+	return sof_compr_pointer_internal(component, cstream, tstamp, NULL);
+}
+
+static int sof_compr_pointer64(struct snd_soc_component *component,
+			     struct snd_compr_stream *cstream,
+			     struct snd_compr_tstamp64 *tstamp)
+{
+	return sof_compr_pointer_internal(component, cstream, NULL, tstamp);
 }
 
 struct snd_compress_ops sof_compressed_ops = {
@@ -385,7 +410,8 @@ struct snd_compress_ops sof_compressed_ops = {
 	.set_params	= sof_compr_set_params,
 	.get_params	= sof_compr_get_params,
 	.trigger	= sof_compr_trigger,
-	.pointer	= sof_compr_pointer,
+	.pointer	= sof_compr_pointer32,
+	.pointer64	= sof_compr_pointer64,
 	.copy		= sof_compr_copy,
 };
 EXPORT_SYMBOL(sof_compressed_ops);

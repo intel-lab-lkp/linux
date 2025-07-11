@@ -210,7 +210,21 @@ static int sst_platform_compr_pointer(struct snd_soc_component *component,
 	stream->compr_ops->tstamp(sst->dev, stream->id, tstamp);
 	tstamp->byte_offset = tstamp->copied_total %
 				 (u32)cstream->runtime->buffer_size;
-	pr_debug("calc bytes offset/copied bytes as %d\n", tstamp->byte_offset);
+	pr_debug("calc bytes offset/copied bytes as %u\n", tstamp->byte_offset);
+	return 0;
+}
+
+static int sst_platform_compr_pointer64(struct snd_soc_component *component,
+					struct snd_compr_stream *cstream,
+					struct snd_compr_tstamp64 *tstamp)
+{
+	struct sst_runtime_stream *stream;
+
+	stream = cstream->runtime->private_data;
+	stream->compr_ops->tstamp64(sst->dev, stream->id, tstamp);
+	tstamp->byte_offset =
+		tstamp->copied_total % cstream->runtime->buffer_size;
+	pr_debug("calc bytes offset/copied bytes as %u\n", tstamp->byte_offset);
 	return 0;
 }
 
@@ -265,6 +279,7 @@ const struct snd_compress_ops sst_platform_compress_ops = {
 	.set_metadata = sst_platform_compr_set_metadata,
 	.trigger = sst_platform_compr_trigger,
 	.pointer = sst_platform_compr_pointer,
+	.pointer64 = sst_platform_compr_pointer64,
 	.ack = sst_platform_compr_ack,
 	.get_caps = sst_platform_compr_get_caps,
 	.get_codec_caps = sst_platform_compr_get_codec_caps,
