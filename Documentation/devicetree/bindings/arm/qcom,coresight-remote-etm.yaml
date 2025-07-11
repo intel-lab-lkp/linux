@@ -20,6 +20,12 @@ properties:
   compatible:
     const: qcom,coresight-remote-etm
 
+  qcom,qmi-instance-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Each remote processor has a unique instance id to establish the
+      QMI connection.
+
   out-ports:
     $ref: /schemas/graph.yaml#/properties/ports
     additionalProperties: false
@@ -32,6 +38,7 @@ properties:
 required:
   - compatible
   - out-ports
+  - qcom,qmi-instance-id
 
 additionalProperties: false
 
@@ -39,6 +46,8 @@ examples:
   - |
     etm {
         compatible = "qcom,coresight-remote-etm";
+
+        qcom,qmi-instance-id = <2>;
 
         out-ports {
             port {
