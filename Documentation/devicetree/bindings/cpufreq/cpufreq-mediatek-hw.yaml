@@ -16,11 +16,14 @@ description:
 
 properties:
   compatible:
-    const: mediatek,cpufreq-hw
+    contains:
+      enum:
+        - mediatek,cpufreq-hw
+        - mediatek,mt8196-cpufreq-hw
 
   reg:
     minItems: 1
-    maxItems: 2
+    maxItems: 3
     description:
       Addresses and sizes for the memory of the HW bases in
       each frequency domain. Each entry corresponds to
@@ -39,6 +42,18 @@ required:
   - "#performance-domain-cells"
 
 additionalProperties: false
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,cpufreq-hw
+    then:
+      properties:
+        regs:
+          maxItems: 2
 
 examples:
   - |
@@ -65,6 +80,51 @@ examples:
             compatible = "mediatek,cpufreq-hw";
             reg = <0 0x0011bc10 0 0x120>, <0 0x0011bd30 0 0x120>;
 
+            #performance-domain-cells = <1>;
+        };
+    };
+  - |
+    cpus {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            mt8196_cpu0: cpu@0 {
+                device_type = "cpu";
+                compatible = "arm,cortex-a720";
+                enable-method = "psci";
+                performance-domains = <&mt8196_performance 0>;
+                reg = <0x000>;
+            };
+
+            /* ... */
+
+            mt8196_cpu6: cpu@600 {
+                device_type = "cpu";
+                compatible = "arm,cortex-x4";
+                enable-method = "psci";
+                performance-domains = <&mt8196_performance 1>;
+                reg = <0x600>;
+            };
+
+            mt8196_cpu7: cpu@700 {
+                device_type = "cpu";
+                compatible = "arm,cortex-x925";
+                enable-method = "psci";
+                performance-domains = <&mt8196_performance 2>;
+                reg = <0x700>;
+            };
+    };
+
+    /* ... */
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        mt8196_performance: performance-controller@c2c0f20 {
+            compatible = "mediatek,mt8196-cpufreq-hw";
+            reg = <0 0xc2c0f20 0 0x120>, <0 0xc2c1040 0 0x120>,
+                  <0 0xc2c1160 0 0x120>;
             #performance-domain-cells = <1>;
         };
     };
