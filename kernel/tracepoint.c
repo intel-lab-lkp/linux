@@ -232,7 +232,7 @@ func_add(struct tracepoint_func **funcs, struct tracepoint_func *tp_func,
 static void *func_remove(struct tracepoint_func **funcs,
 		struct tracepoint_func *tp_func)
 {
-	int nr_probes = 0, nr_del = 0, i;
+	int nr_probes = 0, nr_del = 0, nr_tp_stub_del = 0, i;
 	struct tracepoint_func *old, *new;
 
 	old = *funcs;
@@ -244,12 +244,19 @@ static void *func_remove(struct tracepoint_func **funcs,
 	/* (N -> M), (N > 1, M >= 0) probes */
 	if (tp_func->func) {
 		for (nr_probes = 0; old[nr_probes].func; nr_probes++) {
-			if ((old[nr_probes].func == tp_func->func &&
-			     old[nr_probes].data == tp_func->data) ||
-			    old[nr_probes].func == tp_stub_func)
+			if (old[nr_probes].func == tp_func->func &&
+			    old[nr_probes].data == tp_func->data)
 				nr_del++;
+			else if (old[nr_probes].func == tp_stub_func)
+				nr_tp_stub_del++;
 		}
 	}
+
+	/* If there is nothing to delete, do not allow */
+	if (!nr_del)
+		return ERR_PTR(-ENOENT);
+
+	nr_del += nr_tp_stub_del;
 
 	/*
 	 * If probe is NULL, then nr_probes = nr_del = 0, and then the
