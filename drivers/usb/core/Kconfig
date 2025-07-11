@@ -143,3 +143,29 @@ config USB_DEFAULT_AUTHORIZATION_MODE
 	  ACPI selecting value 2 is analogous to selecting value 0.
 
 	  If unsure, keep the default value.
+
+config USB_AUTHENTICATION
+	bool "Enable USB authentication function"
+	depends on USB
+	help
+		Enables the USB Authentication function. This activates the
+		hook points in the USB stack.
+
+config USB_AUTHENTICATION_ENFORCE
+	bool "Default authentication mode for USB devices"
+	depends on USB && USB_AUTHENTICATION
+	help
+	  Select the default USB device authentication mode. Can be overridden
+	  with usbcore.enforce_authentication command line or module parameter.
+
+	  This option allows you to choose whether USB devices that are
+	  connected to the system needs to be authenticated, or if they are
+	  locked down.
+
+	  With value 1 all connected USB devices with the exception of root hub
+	  require device authentication before they can be used.
+
+	  With value 0 (default) no device authentication is required to use
+	  connected USB devices.
+
+	  If unsure, keep the default value.

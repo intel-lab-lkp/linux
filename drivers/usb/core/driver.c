@@ -34,6 +34,14 @@
 
 #include "usb.h"
 
+#ifdef CONFIG_USB_AUTHENTICATION_ENFORCE
+static int enforce_authentication = CONFIG_USB_AUTHENTICATION_ENFORCE;
+module_param(enforce_authentication, int, S_IRUGO);
+MODULE_PARM_DESC(enforce_authentication,
+		"Default USB device authentication enforcement mode: 0 unauthenticated devices can be authorized, 1 enforces authentication for all devices");
+#else
+static int enforce_authentication = 0;
+#endif
 
 /*
  * Adds a new dynamic USBdevice ID to this driver,
@@ -331,14 +339,37 @@ static int usb_probe_interface(struct device *dev)
 	if (usb_device_is_owned(udev))
 		return error;
 
+	/* Simple security policy
+	 *
+	 * +----------+------------+-------------+
+	 * |          | authorized | !authorized |
+	 * +----------+------------+-------------+
+	 * | authent  |     OK     |     NOK     |
+	 * +----------+------------+-------------+
+	 * | !authent |    NOK     |     NOK     |
+	 * +----------+------------+-------------+
+	 *
+	 * with CONFIG_USB_DEFAULT_AUTHORIZATION_MODE=2
+	 *  - internal devices should be authorized and !authenticated => OK
+	 *  - external qemu dev-auth is !authorized and authenticated  => NOK at first
+	 *     but then authorization can be granted via sysfs.
+	 *  - external qemu non auth dev is !authorized and !authenticated => NOK and
+	 *     authorization can be granted via sysfs
+	 *
+	 */
 	if (udev->authorized == 0) {
 		dev_err(&intf->dev, "Device is not authorized for usage\n");
+		return error;
+	} else if (udev->authenticated == 0 && enforce_authentication == 1) {
+		dev_err(&intf->dev, "Device is not autenticated for usage\n");
 		return error;
 	} else if (intf->authorized == 0) {
 		dev_err(&intf->dev, "Interface %d is not authorized for usage\n",
 				intf->altsetting->desc.bInterfaceNumber);
 		return error;
 	}
+
+	dev_info(&intf->dev, "Device has been authorized for usage\n");
 
 	id = usb_match_dynamic_id(intf, driver);
 	if (!id)

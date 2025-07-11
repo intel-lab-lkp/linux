@@ -529,6 +529,7 @@ static ssize_t usb2_lpm_l1_timeout_show(struct device *dev,
 					char *buf)
 {
 	struct usb_device *udev = to_usb_device(dev);
+
 	return sysfs_emit(buf, "%d\n", udev->l1_params.timeout);
 }
 
@@ -552,6 +553,7 @@ static ssize_t usb2_lpm_besl_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
 	struct usb_device *udev = to_usb_device(dev);
+
 	return sysfs_emit(buf, "%d\n", udev->l1_params.besl);
 }
 
@@ -731,6 +733,15 @@ static ssize_t authorized_show(struct device *dev,
 	return sysfs_emit(buf, "%u\n", usb_dev->authorized);
 }
 
+/* show if the device is authenticated (1) or not (0) */
+static ssize_t authenticated_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct usb_device *usb_dev = to_usb_device(dev);
+
+	return sysfs_emit(buf, "%u\n", usb_dev->authenticated);
+}
+
 /*
  * Authorize a device to be used in the system
  *
@@ -754,6 +765,10 @@ static ssize_t authorized_store(struct device *dev,
 }
 static DEVICE_ATTR_IGNORE_LOCKDEP(authorized, S_IRUGO | S_IWUSR,
 				  authorized_show, authorized_store);
+
+
+static DEVICE_ATTR_IGNORE_LOCKDEP(authenticated, S_IRUGO,
+				  authenticated_show, NULL);
 
 /* "Safely remove a device" */
 static ssize_t remove_store(struct device *dev, struct device_attribute *attr,
@@ -805,6 +820,7 @@ static struct attribute *dev_attrs[] = {
 	&dev_attr_quirks.attr,
 	&dev_attr_avoid_reset_quirk.attr,
 	&dev_attr_authorized.attr,
+	&dev_attr_authenticated.attr,
 	&dev_attr_remove.attr,
 	&dev_attr_ltm_capable.attr,
 #ifdef CONFIG_OF

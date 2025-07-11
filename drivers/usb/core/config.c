@@ -13,7 +13,7 @@
 #include <linux/device.h>
 #include <asm/byteorder.h>
 #include "usb.h"
-
+#include "authent.h"
 
 #define USB_MAXALTSETTING		128	/* Hard limit */
 
@@ -824,7 +824,21 @@ static int usb_parse_configuration(struct usb_device *dev, int cfgidx,
 		kref_init(&intfc->ref);
 	}
 
-	/* FIXME: parse the BOS descriptor */
+	/* If device USB version is above 2.0, get BOS descriptor
+	 *
+	 * Requirement for bcdUSB >= 2.10 is defined in USB 3.2 §9.2.6.6
+	 * "Devices with a value of at least 0210H in the bcdUSB field of their
+	 * device descriptor shall support GetDescriptor (BOS Descriptor) requests."
+	 *
+	 * To discuss, BOS request could be also sent for bcdUSB >= 0x0201
+	 */
+
+	if (le16_to_cpu(dev->descriptor.bcdUSB) >= 0x0201) {
+		dev_notice(ddev, "bcdUSB >= 0x0201\n");
+		retval = usb_get_bos_descriptor(dev);
+		if (retval < 0)
+			dev_notice(ddev, "Device does not have a BOS descriptor\n");
+	}
 
 	/* Skip over any Class Specific or Vendor Specific descriptors;
 	 * find the first interface descriptor */
@@ -1121,6 +1135,10 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 		case USB_PTM_CAP_TYPE:
 			dev->bos->ptm_cap =
 				(struct usb_ptm_cap_descriptor *)buffer;
+			break;
+		case USB_AUTHENT_CAP_TYPE:
+			dev->bos->authent_cap =
+				(struct usb_authent_cap_descriptor *)buffer;
 			break;
 		default:
 			break;

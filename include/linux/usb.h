@@ -431,6 +431,8 @@ struct usb_host_bos {
 	struct usb_ssp_cap_descriptor	*ssp_cap;
 	struct usb_ss_container_id_descriptor	*ss_id;
 	struct usb_ptm_cap_descriptor	*ptm_cap;
+	/* Authentication capability */
+	struct usb_authent_cap_descriptor *authent_cap;
 };
 
 int __usb_get_extra_descriptor(char *buffer, unsigned size,

@@ -40,6 +40,7 @@
 #include "hub.h"
 #include "phy.h"
 #include "otg_productlist.h"
+#include "authent.h"
 
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define USB_VENDOR_SMSC				0x0424
@@ -2631,6 +2632,10 @@ int usb_new_device(struct usb_device *udev)
 	usb_disable_autosuspend(udev);
 
 	err = usb_enumerate_device(udev);	/* Read descriptors */
+	if (err < 0)
+		goto fail;
+
+	err = usb_authenticate_device(udev);
 	if (err < 0)
 		goto fail;
 	dev_dbg(&udev->dev, "udev %d, busnum %d, minor = %d\n",

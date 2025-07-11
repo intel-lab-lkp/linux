@@ -7,6 +7,7 @@ USB support
 
     acm
     authorization
+    authentication
     chipidea
     dwc3
     ehci
