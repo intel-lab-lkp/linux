@@ -5114,6 +5114,37 @@ drop:
 	dev_kfree_skb(skb);
 }
 
+static int ieee80211_rx_get_link_from_freq(struct ieee80211_rx_data *rx,
+					   struct sk_buff *skb,
+					   struct link_sta_info *link_sta)
+{
+	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
+	struct ieee80211_sta *sta = &link_sta->sta->sta;
+	struct ieee80211_link_data *link;
+	struct ieee80211_bss_conf *bss_conf;
+	struct ieee80211_chanctx_conf *conf;
+
+	if (!status->freq)
+		return link_sta->link_id;
+
+	for_each_link_data(rx->sdata, link) {
+		bss_conf = link->conf;
+		if (!bss_conf)
+			continue;
+		conf = rcu_dereference(bss_conf->chanctx_conf);
+		if (!conf || !conf->def.chan)
+			continue;
+
+		if (conf->def.chan->center_freq != status->freq)
+			continue;
+
+		if (ieee80211_rx_is_valid_sta_link_id(sta, link->link_id))
+			return link->link_id;
+	}
+
+	return -1;
+}
+
 static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 				       struct sk_buff *skb, bool consume)
 {
@@ -5131,7 +5162,15 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 	link_sta = link_sta_info_get_bss(rx->sdata, hdr->addr2);
 	if (link_sta) {
 		sta = link_sta->sta;
-		link_id = link_sta->link_id;
+
+		/* Use freq to get link id information on management frames to
+		 * allow for offchannel scan, roaming, etc.
+		 */
+		if (ieee80211_is_mgmt(hdr->frame_control))
+			link_id = ieee80211_rx_get_link_from_freq(rx, skb,
+								  link_sta);
+		else
+			link_id = link_sta->link_id;
 	} else {
 		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 
