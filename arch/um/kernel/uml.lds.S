@@ -74,6 +74,9 @@ SECTIONS
   init.data : { INIT_DATA }
   __init_end = .;
 
+  /* Kernel API specifications in dedicated section */
+  KAPI_SPECS_SECTION()
+
   .data    :
   {
     INIT_TASK_DATA(KERNEL_STACK_SIZE)

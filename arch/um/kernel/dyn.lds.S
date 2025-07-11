@@ -102,6 +102,9 @@ SECTIONS
   init.data : { INIT_DATA }
   __init_end = .;
 
+  /* Kernel API specifications in dedicated section */
+  KAPI_SPECS_SECTION()
+
   /* Ensure the __preinit_array_start label is properly aligned.  We
      could instead move the label definition inside the section, but
      the linker would then create the section even if it turns out to

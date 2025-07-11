@@ -87,6 +87,7 @@ struct xattr_args;
 #include <linux/bug.h>
 #include <linux/sem.h>
 #include <asm/siginfo.h>
+#include <linux/syscall_api_spec.h>
 #include <linux/unistd.h>
 #include <linux/quota.h>
 #include <linux/key.h>
@@ -132,6 +133,7 @@ struct xattr_args;
 #define __SC_TYPE(t, a)	t
 #define __SC_ARGS(t, a)	a
 #define __SC_TEST(t, a) (void)BUILD_BUG_ON_ZERO(!__TYPE_IS_LL(t) && sizeof(t) > sizeof(long))
+#define __SC_CAST_TO_S64(t, a)	(s64)(a)
 
 #ifdef CONFIG_FTRACE_SYSCALLS
 #define __SC_STR_ADECL(t, a)	#a
@@ -242,6 +244,41 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
  * done within __do_sys_*().
  */
 #ifndef __SYSCALL_DEFINEx
+#ifdef CONFIG_KAPI_RUNTIME_CHECKS
+#define __SYSCALL_DEFINEx(x, name, ...)					\
+	__diag_push();							\
+	__diag_ignore(GCC, 8, "-Wattribute-alias",			\
+		      "Type aliasing is used to sanitize syscall arguments");\
+	asmlinkage long sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))	\
+		__attribute__((alias(__stringify(__se_sys##name))));	\
+	ALLOW_ERROR_INJECTION(sys##name, ERRNO);			\
+	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
+	static inline long __do_kapi_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__)); \
+	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
+	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
+	{								\
+		long ret = __do_kapi_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
+		__MAP(x,__SC_TEST,__VA_ARGS__);				\
+		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
+		return ret;						\
+	}								\
+	__diag_pop();							\
+	static inline long __do_kapi_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))\
+	{								\
+		const struct kernel_api_spec *__spec = kapi_get_spec("sys_" #name); \
+		if (__spec) {						\
+			s64 __params[x] = { __MAP(x,__SC_CAST_TO_S64,__VA_ARGS__) }; \
+			int __ret = kapi_validate_syscall_params(__spec, __params, x); \
+			if (__ret) return __ret;			\
+		}							\
+		long ret = __do_sys##name(__MAP(x,__SC_ARGS,__VA_ARGS__));	\
+		if (__spec) {						\
+			kapi_validate_syscall_return(__spec, (s64)ret); \
+		}							\
+		return ret;						\
+	}								\
+	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
+#else /* !CONFIG_KAPI_RUNTIME_CHECKS */
 #define __SYSCALL_DEFINEx(x, name, ...)					\
 	__diag_push();							\
 	__diag_ignore(GCC, 8, "-Wattribute-alias",			\
@@ -260,6 +297,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	}								\
 	__diag_pop();							\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
+#endif /* CONFIG_KAPI_RUNTIME_CHECKS */
 #endif /* __SYSCALL_DEFINEx */
 
 /* For split 64-bit arguments on 32-bit architectures */

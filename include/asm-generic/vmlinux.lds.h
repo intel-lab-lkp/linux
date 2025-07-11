@@ -279,6 +279,26 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 #define TRACE_SYSCALLS()
 #endif
 
+#ifdef CONFIG_KAPI_SPEC
+#define KAPI_SPECS()				\
+	. = ALIGN(8);				\
+	__start_kapi_specs = .;			\
+	KEEP(*(.kapi_specs))			\
+	__stop_kapi_specs = .;
+
+/* For placing KAPI specs in a dedicated section */
+#define KAPI_SPECS_SECTION()			\
+	.kapi_specs : AT(ADDR(.kapi_specs) - LOAD_OFFSET) {	\
+		. = ALIGN(8);			\
+		__start_kapi_specs = .;		\
+		KEEP(*(.kapi_specs))		\
+		__stop_kapi_specs = .;		\
+	}
+#else
+#define KAPI_SPECS()
+#define KAPI_SPECS_SECTION()
+#endif
+
 #ifdef CONFIG_BPF_EVENTS
 #define BPF_RAW_TP() STRUCT_ALIGN();				\
 	BOUNDED_SECTION_BY(__bpf_raw_tp_map, __bpf_raw_tp)

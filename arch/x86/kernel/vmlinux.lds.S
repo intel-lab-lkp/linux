@@ -173,6 +173,9 @@ SECTIONS
 	RO_DATA(PAGE_SIZE)
 	X86_ALIGN_RODATA_END
 
+	/* Kernel API specifications in dedicated section */
+	KAPI_SPECS_SECTION()
+
 	/* Data */
 	.data : AT(ADDR(.data) - LOAD_OFFSET) {
 		/* Start of data section */

@@ -13049,6 +13049,15 @@ W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/radio-keene*
 
+KERNEL API SPECIFICATION FRAMEWORK (KAPI)
+M:	Sasha Levin <sashal@kernel.org>
+L:	linux-api@vger.kernel.org
+S:	Maintained
+F:	Documentation/admin-guide/kernel-api-spec.rst
+F:	include/linux/kernel_api_spec.h
+F:	kernel/api/
+F:	scripts/extract-kapi-spec.sh
+
 KERNEL AUTOMOUNTER
 M:	Ian Kent <raven@themaw.net>
 L:	autofs@vger.kernel.org
