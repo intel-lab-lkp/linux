@@ -664,6 +664,13 @@ static int mknod_wsl(unsigned int xid, struct inode *inode,
 	struct kvec reparse_iov, xattr_iov;
 	int rc;
 
+	/*
+	 * WSL special files store information into EAs. When EAs are not
+	 * supported on the server filesystem then fast fail.
+	 */
+	if (!(le32_to_cpu(tcon->fsAttrInfo.Attributes) & FILE_SUPPORTS_EXTENDED_ATTRIBUTES))
+		return -EOPNOTSUPP;
+
 	rc = wsl_set_reparse_buf(&buf, mode, symname, cifs_sb, &reparse_iov);
 	if (rc)
 		return rc;
