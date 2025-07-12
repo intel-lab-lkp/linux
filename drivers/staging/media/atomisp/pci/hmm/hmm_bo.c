@@ -373,7 +373,7 @@ int hmm_bo_device_init(struct hmm_bo_device *bdev,
 
 	__bo_insert_to_free_rbtree(&bdev->free_rbtree, bo);
 
-	bdev->flag = HMM_BO_DEVICE_INITED;
+	bdev->initialized = true;
 
 	return 0;
 }
@@ -385,9 +385,10 @@ struct hmm_buffer_object *hmm_bo_alloc(struct hmm_bo_device *bdev,
 	struct rb_root *root = &bdev->free_rbtree;
 
 	check_bodev_null_return(bdev, NULL);
-	var_equal_return(hmm_bo_device_inited(bdev), 0, NULL,
-			 "hmm_bo_device not inited yet.\n");
-
+	if (!bdev->initialized) {
+		dev_err(atomisp_dev, "hmm_bo_device is not initialized!\n");
+		return NULL;
+	}
 	if (pgnr == 0) {
 		dev_err(atomisp_dev, "0 size buffer is not allowed.\n");
 		return NULL;
@@ -522,13 +523,7 @@ void hmm_bo_device_exit(struct hmm_bo_device *bdev)
 	kmem_cache_destroy(bdev->bo_cache);
 
 	isp_mmu_exit(&bdev->mmu);
-}
-
-int hmm_bo_device_inited(struct hmm_bo_device *bdev)
-{
-	check_bodev_null_return(bdev, -EINVAL);
-
-	return bdev->flag == HMM_BO_DEVICE_INITED;
+	bdev->initialized = false;
 }
 
 int hmm_bo_allocated(struct hmm_buffer_object *bo)

@@ -58,8 +58,6 @@
 #define	ISP_VM_SIZE	(0x7FFFFFFF)	/* 2G address space */
 #define	ISP_PTR_NULL	NULL
 
-#define	HMM_BO_DEVICE_INITED	0x1
-
 enum hmm_bo_type {
 	HMM_BO_PRIVATE,
 	HMM_BO_VMALLOC,
@@ -86,7 +84,9 @@ struct hmm_bo_device {
 
 	/* list lock is used to protect the entire_bo_list */
 	spinlock_t	list_lock;
-	int flag;
+
+	/* boolean to indicate whether the bo device is inited or not*/
+	bool initialized;
 
 	/* linked list for entire buffer object */
 	struct list_head entire_bo_list;
@@ -141,11 +141,6 @@ int hmm_bo_device_init(struct hmm_bo_device *bdev,
  * clean up all hmm_bo_device related things.
  */
 void hmm_bo_device_exit(struct hmm_bo_device *bdev);
-
-/*
- * whether the bo device is inited or not.
- */
-int hmm_bo_device_inited(struct hmm_bo_device *bdev);
 
 /*
  * increase buffer object reference.
