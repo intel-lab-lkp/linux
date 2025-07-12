@@ -794,9 +794,7 @@ static void mld_del_delrec(struct inet6_dev *idev, struct ifmcaddr6 *im)
 			rcu_assign_pointer(pmc_prev->next, pmc->next);
 		else
 			rcu_assign_pointer(idev->mc_tomb, pmc->next);
-	}
 
-	if (pmc) {
 		im->idev = pmc->idev;
 		if (im->mca_sfmode == MCAST_INCLUDE) {
 			tomb = rcu_replace_pointer(im->mca_tomb,
