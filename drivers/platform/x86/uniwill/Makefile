@@ -4,4 +4,5 @@
 # Uniwill X86 Platform Specific Drivers
 #
 
+obj-$(CONFIG_UNIWILL_LAPTOP)	+= uniwill-laptop.o
 obj-$(CONFIG_UNIWILL_WMI)	+= uniwill-wmi.o

@@ -161,7 +161,8 @@ static int uniwill_wmi_probe(struct wmi_device *wdev, const void *context)
  * We cannot fully trust this GUID since Uniwill just copied the WMI GUID
  * from the Windows driver example, and others probably did the same.
  *
- * Because of this we cannot use this WMI GUID for autoloading.
+ * Because of this we cannot use this WMI GUID for autoloading. The uniwill-laptop
+ * driver will instead load this module as a dependency.
  */
 static const struct wmi_device_id uniwill_wmi_id_table[] = {
 	{ UNIWILL_EVENT_GUID, NULL },
