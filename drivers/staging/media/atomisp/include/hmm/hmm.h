@@ -33,7 +33,7 @@ int hmm_load(ia_css_ptr virt, void *data, unsigned int bytes);
 int hmm_store(ia_css_ptr virt, const void *data, unsigned int bytes);
 int hmm_set(ia_css_ptr virt, int c, unsigned int bytes);
 int hmm_flush(ia_css_ptr virt, unsigned int bytes);
-
+int hmm_get_mmu_base_addr(struct device *dev, unsigned int *mmu_base_addr);
 /*
  * get kernel memory physical address from ISP virtual address.
  */
@@ -64,7 +64,5 @@ void hmm_flush_vmap(ia_css_ptr virt);
  * do not pass any other address.
  */
 int hmm_mmap(struct vm_area_struct *vma, ia_css_ptr virt);
-
-extern struct hmm_bo_device bo_device;
 
 #endif

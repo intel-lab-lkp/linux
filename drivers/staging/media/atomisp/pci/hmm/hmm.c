@@ -24,7 +24,7 @@
 #include "mmu/isp_mmu.h"
 #include "mmu/sh_mmu_mrfld.h"
 
-struct hmm_bo_device bo_device;
+static struct hmm_bo_device bo_device;
 static ia_css_ptr dummy_ptr = mmgr_EXCEPTION;
 
 int hmm_init(void)
@@ -487,4 +487,16 @@ void hmm_vunmap(ia_css_ptr virt)
 	}
 
 	hmm_bo_vunmap(bo);
+}
+
+int hmm_get_mmu_base_addr(struct device *dev, unsigned int *mmu_base_addr)
+{
+	if (!sh_mmu_mrfld.get_pd_base) {
+		dev_err(dev, "get mmu base address failed.\n");
+		return -EINVAL;
+	}
+
+	*mmu_base_addr = sh_mmu_mrfld.get_pd_base(&bo_device.mmu,
+			 bo_device.mmu.base_address);
+	return 0;
 }

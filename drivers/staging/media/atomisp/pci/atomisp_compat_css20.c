@@ -157,18 +157,6 @@ void atomisp_load_uint32(hrt_address addr, uint32_t *data)
 	*data = atomisp_css2_hw_load_32(addr);
 }
 
-static int hmm_get_mmu_base_addr(struct device *dev, unsigned int *mmu_base_addr)
-{
-	if (!sh_mmu_mrfld.get_pd_base) {
-		dev_err(dev, "get mmu base address failed.\n");
-		return -EINVAL;
-	}
-
-	*mmu_base_addr = sh_mmu_mrfld.get_pd_base(&bo_device.mmu,
-			 bo_device.mmu.base_address);
-	return 0;
-}
-
 static void __dump_pipe_config(struct atomisp_sub_device *asd,
 			       struct atomisp_stream_env *stream_env,
 			       unsigned int pipe_id)
