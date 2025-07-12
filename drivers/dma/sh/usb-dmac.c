@@ -393,7 +393,7 @@ static int usb_dmac_alloc_chan_resources(struct dma_chan *chan)
 		uchan->descs_allocated++;
 	}
 
-	return pm_runtime_get_sync(chan->device->dev);
+	return pm_runtime_resume_and_get(chan->device->dev);
 }
 
 static void usb_dmac_free_chan_resources(struct dma_chan *chan)
