@@ -4207,6 +4207,36 @@ reset_complete:
 	return 0;
 }
 
+#define KUNPENG_OPERATION_WAIT_CNT	3000
+#define KUNPENG_RESET_WAIT_TIME		20
+
+/* Device-specific reset method for Kunpeng accelerator virtual functions */
+static int reset_kunpeng_acc_vf_dev(struct pci_dev *pdev, bool probe)
+{
+	u32 wait_cnt = 0;
+	u32 cmd;
+
+	if (probe)
+		return 0;
+
+	pcie_flr(pdev);
+
+	do {
+		pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
+		if (!PCI_POSSIBLE_ERROR(cmd))
+			break;
+
+		if (++wait_cnt > KUNPENG_OPERATION_WAIT_CNT) {
+			pci_warn(pdev, "wait for FLR ready timeout; giving up\n");
+			return -ENOTTY;
+		}
+
+		msleep(KUNPENG_RESET_WAIT_TIME);
+	} while (true);
+
+	return 0;
+}
+
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
 		 reset_intel_82599_sfp_virtfn },
@@ -4222,6 +4252,12 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_chelsio_generic_dev },
 	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HINIC_VF,
 		reset_hinic_vf_dev },
+	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HUAWEI_ZIP_VF,
+		reset_kunpeng_acc_vf_dev },
+	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HUAWEI_SEC_VF,
+		reset_kunpeng_acc_vf_dev },
+	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HUAWEI_HPRE_VF,
+		reset_kunpeng_acc_vf_dev },
 	{ 0 }
 };
 
