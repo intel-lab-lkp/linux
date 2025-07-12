@@ -796,8 +796,10 @@ static int apple_dart_of_xlate(struct device *dev,
 
 	if (!cfg) {
 		cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
-		if (!cfg)
+		if (!cfg)  {
+			put_device(&iommu_pdev->dev);
 			return -ENOMEM;
+		}
 		/* Will be ANDed with DART capabilities */
 		cfg->supports_bypass = true;
 	}
@@ -805,8 +807,10 @@ static int apple_dart_of_xlate(struct device *dev,
 
 	cfg_dart = cfg->stream_maps[0].dart;
 	if (cfg_dart) {
-		if (cfg_dart->pgsize != dart->pgsize)
+		if (cfg_dart->pgsize != dart->pgsize) {
+			put_device(&iommu_pdev->dev);
 			return -EINVAL;
+		}
 	}
 
 	cfg->supports_bypass &= dart->supports_bypass;
@@ -825,6 +829,8 @@ static int apple_dart_of_xlate(struct device *dev,
 		}
 	}
 
+
+	put_device(&iommu_pdev->dev);
 	return -EINVAL;
 }
 
