@@ -1133,9 +1133,7 @@ xfs_max_open_zones(
 	/*
 	 * Cap the max open limit to 1/4 of available space
 	 */
-	max_open = min(max_open, mp->m_sb.sb_rgcount / 4);
-
-	return max(XFS_MIN_OPEN_ZONES, max_open);
+	return clamp(max_open, XFS_MIN_OPEN_ZONES, mp->m_sb.sb_rgcount / 4);
 }
 
 /*
