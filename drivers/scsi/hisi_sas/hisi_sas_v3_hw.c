@@ -2849,7 +2849,7 @@ static void wait_cmds_complete_timeout_v3_hw(struct hisi_hba *hisi_hba,
 static ssize_t intr_conv_v3_hw_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n", hisi_sas_intr_conv);
+	return sysfs_emit(buf, "%u\n", hisi_sas_intr_conv);
 }
 static DEVICE_ATTR_RO(intr_conv_v3_hw);
 
@@ -2881,8 +2881,7 @@ static ssize_t intr_coal_ticks_v3_hw_show(struct device *dev,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct hisi_hba *hisi_hba = shost_priv(shost);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			 hisi_hba->intr_coal_ticks);
+	return sysfs_emit(buf, "%u\n", hisi_hba->intr_coal_ticks);
 }
 
 static ssize_t intr_coal_ticks_v3_hw_store(struct device *dev,
@@ -2920,8 +2919,7 @@ static ssize_t intr_coal_count_v3_hw_show(struct device *dev,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct hisi_hba *hisi_hba = shost_priv(shost);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			 hisi_hba->intr_coal_count);
+	return sysfs_emit(buf, "%u\n", hisi_hba->intr_coal_count);
 }
 
 static ssize_t intr_coal_count_v3_hw_store(struct device *dev,
@@ -2959,8 +2957,7 @@ static ssize_t iopoll_q_cnt_v3_hw_show(struct device *dev,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct hisi_hba *hisi_hba = shost_priv(shost);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			 hisi_hba->iopoll_q_cnt);
+	return sysfs_emit(buf, "%u\n", hisi_hba->iopoll_q_cnt);
 }
 static DEVICE_ATTR_RO(iopoll_q_cnt_v3_hw);
 
