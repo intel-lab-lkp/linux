@@ -3315,10 +3315,10 @@ static struct pneigh_entry *pneigh_get_first(struct seq_file *seq)
 
 	state->flags |= NEIGH_SEQ_IS_PNEIGH;
 	for (bucket = 0; bucket <= PNEIGH_HASHMASK; bucket++) {
-		pn = rcu_dereference_protected(tbl->phash_buckets[bucket], 1);
+		pn = rcu_dereference(tbl->phash_buckets[bucket]);
 
 		while (pn && !net_eq(pneigh_net(pn), net))
-			pn = rcu_dereference_protected(pn->next, 1);
+			pn = rcu_dereference(pn->next);
 		if (pn)
 			break;
 	}
@@ -3336,17 +3336,17 @@ static struct pneigh_entry *pneigh_get_next(struct seq_file *seq,
 	struct neigh_table *tbl = state->tbl;
 
 	do {
-		pn = rcu_dereference_protected(pn->next, 1);
+		pn = rcu_dereference(pn->next);
 	} while (pn && !net_eq(pneigh_net(pn), net));
 
 	while (!pn) {
 		if (++state->bucket > PNEIGH_HASHMASK)
 			break;
 
-		pn = rcu_dereference_protected(tbl->phash_buckets[state->bucket], 1);
+		pn = rcu_dereference(tbl->phash_buckets[state->bucket]);
 
 		while (pn && !net_eq(pneigh_net(pn), net))
-			pn = rcu_dereference_protected(pn->next, 1);
+			pn = rcu_dereference(pn->next);
 		if (pn)
 			break;
 	}
