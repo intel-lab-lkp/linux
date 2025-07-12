@@ -24,6 +24,7 @@
 #include <sound/tas2781.h>
 #include <sound/tas2781-comlib-i2c.h>
 #include <sound/tlv.h>
+#include <sound/tas2770-tlv.h>
 #include <sound/tas2781-tlv.h>
 
 #include "hda_local.h"
@@ -245,6 +246,12 @@ static int tas2781_force_fwload_put(struct snd_kcontrol *kcontrol,
 	return change;
 }
 
+static const struct snd_kcontrol_new tas2770_snd_controls[] = {
+	ACARD_SINGLE_RANGE_EXT_TLV("Speaker Analog Volume", TAS2770_AMP_LEVEL,
+		0, 0, 20, 0, tas2781_amp_getvol,
+		tas2781_amp_putvol, tas2770_amp_tlv),
+};
+
 static const struct snd_kcontrol_new tas2781_snd_controls[] = {
 	ACARD_SINGLE_RANGE_EXT_TLV("Speaker Analog Gain", TAS2781_AMP_LEVEL,
 		1, 0, 20, 0, tas2781_amp_getvol,
@@ -253,7 +260,7 @@ static const struct snd_kcontrol_new tas2781_snd_controls[] = {
 		tas2781_force_fwload_get, tas2781_force_fwload_put),
 };
 
-static const struct snd_kcontrol_new tas2781_prof_ctrl = {
+static const struct snd_kcontrol_new tas27xx_prof_ctrl = {
 	.name = "Speaker Profile Id",
 	.iface = SNDRV_CTL_ELEM_IFACE_CARD,
 	.info = tasdevice_info_profile,
@@ -393,25 +400,44 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	if (ret)
 		goto out;
 
-	tas_hda->prof_ctl = snd_ctl_new1(&tas2781_prof_ctrl, tas_priv);
+	tas_hda->prof_ctl = snd_ctl_new1(&tas27xx_prof_ctrl, tas_priv);
 	ret = snd_ctl_add(codec->card, tas_hda->prof_ctl);
 	if (ret) {
 		dev_err(tas_priv->dev,
 			"Failed to add KControl %s = %d\n",
-			tas2781_prof_ctrl.name, ret);
+			tas27xx_prof_ctrl.name, ret);
 		goto out;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(tas2781_snd_controls); i++) {
-		hda_priv->snd_ctls[i] = snd_ctl_new1(&tas2781_snd_controls[i],
-			tas_priv);
-		ret = snd_ctl_add(codec->card, hda_priv->snd_ctls[i]);
-		if (ret) {
-			dev_err(tas_priv->dev,
-				"Failed to add KControl %s = %d\n",
-				tas2781_snd_controls[i].name, ret);
-			goto out;
+	if (tas_priv->chip_id == TAS2770) {
+		for (i = 0; i < ARRAY_SIZE(tas2770_snd_controls); i++) {
+			hda_priv->snd_ctls[i] = snd_ctl_new1(
+				&tas2770_snd_controls[i], tas_priv);
+			ret = snd_ctl_add(codec->card, hda_priv->snd_ctls[i]);
+			if (ret) {
+				dev_err(tas_priv->dev,
+					"Failed to add KControl %s = %d\n",
+					tas2770_snd_controls[i].name, ret);
+				goto out;
+			}
 		}
+	} else if (tas_priv->chip_id == TAS2781) {
+		for (i = 0; i < ARRAY_SIZE(tas2781_snd_controls); i++) {
+			hda_priv->snd_ctls[i] = snd_ctl_new1(
+				&tas2781_snd_controls[i], tas_priv);
+			ret = snd_ctl_add(codec->card, hda_priv->snd_ctls[i]);
+			if (ret) {
+				dev_err(tas_priv->dev,
+					"Failed to add KControl %s = %d\n",
+					tas2781_snd_controls[i].name, ret);
+				goto out;
+			}
+		}
+	}
+	// No dsp supported in TAS2770.
+	if (tas_priv->chip_id == TAS2770) {
+		tas_hda->priv->playback_started = true;
+		goto out;
 	}
 
 	tasdevice_dsp_remove(tas_priv);
@@ -453,7 +479,6 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 			tas2781_dsp_prog_ctrl.name, ret);
 		goto out;
 	}
-
 	tas_hda->dsp_conf_ctl = snd_ctl_new1(&tas2781_dsp_conf_ctrl,
 		tas_priv);
 	ret = snd_ctl_add(codec->card, tas_hda->dsp_conf_ctl);
@@ -582,15 +607,21 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 
 	if (strstr(dev_name(&clt->dev), "TIAS2781")) {
 		device_name = "TIAS2781";
+		tas_hda->priv->chip_id = TAS2781;
 		hda_priv->save_calibration = tas2781_save_calibration;
 		tas_hda->priv->global_addr = TAS2781_GLOBAL_ADDR;
+	} else if (strstarts(dev_name(&clt->dev), "i2c-TXNW2770")) {
+		device_name = "TXNW2770";
+		tas_hda->priv->chip_id = TAS2770;
 	} else if (strstarts(dev_name(&clt->dev),
 			     "i2c-TXNW2781:00-tas2781-hda.0")) {
 		device_name = "TXNW2781";
+		tas_hda->priv->chip_id = TAS2781;
 		hda_priv->save_calibration = tas2781_save_calibration;
 		tas_hda->priv->global_addr = TAS2781_GLOBAL_ADDR;
 	} else if (strstr(dev_name(&clt->dev), "INT8866")) {
 		device_name = "INT8866";
+		tas_hda->priv->chip_id = TAS2563;
 		hda_priv->save_calibration = tas2563_save_calibration;
 		tas_hda->priv->global_addr = TAS2563_GLOBAL_ADDR;
 	} else {
@@ -727,6 +758,7 @@ static const struct i2c_device_id tas2781_hda_i2c_id[] = {
 static const struct acpi_device_id tas2781_acpi_hda_match[] = {
 	{"INT8866", 0 },
 	{"TIAS2781", 0 },
+	{"TXNW2770", 0 },
 	{"TXNW2781", 0 },
 	{}
 };
