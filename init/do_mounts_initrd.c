@@ -107,7 +107,7 @@ static void __init handle_initrd(char *root_device_name)
 
 	/* move initrd to rootfs' /old */
 	init_mount("..", ".", NULL, MS_MOVE, NULL);
-	/* switch root and cwd back to / of rootfs */
+	/* switch root and pwd back to / of rootfs */
 	init_chroot("..");
 
 	if (new_decode_dev(real_root_dev) == Root_RAM0) {
