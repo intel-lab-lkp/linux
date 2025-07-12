@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/msi.h>
@@ -626,6 +627,9 @@ static struct pci_bus *pci_alloc_bus(struct pci_bus *parent)
 static void pci_release_host_bridge_dev(struct device *dev)
 {
 	struct pci_host_bridge *bridge = to_pci_host_bridge(dev);
+
+	/* Clean up any pwrctrl children. */
+	device_for_each_child(dev, NULL, of_platform_device_destroy);
 
 	if (bridge->release_fn)
 		bridge->release_fn(bridge);
