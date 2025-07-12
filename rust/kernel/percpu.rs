@@ -2,6 +2,7 @@
 //! This module contains abstractions for creating and using per-CPU variables from Rust.
 //! See the define_per_cpu! macro and the DynamicPerCpu<T> type, as well as the PerCpu<T> trait.
 pub mod cpu_guard;
+pub mod numeric;
 
 use bindings::{alloc_percpu, free_percpu};
 
