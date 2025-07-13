@@ -25,6 +25,7 @@
 #include "fs.c"
 #include "io.c"
 #include "jump_label.c"
+#include "kref.c"
 #include "kunit.c"
 #include "mm.c"
 #include "mutex.c"
