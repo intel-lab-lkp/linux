@@ -3351,7 +3351,7 @@ u16 dev_pick_tx_zero(struct net_device *dev, struct sk_buff *skb,
 		     struct net_device *sb_dev);
 
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev);
-int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);
+int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id, bool validate);
 
 static inline int dev_queue_xmit(struct sk_buff *skb)
 {
@@ -3368,7 +3368,7 @@ static inline int dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
 {
 	int ret;
 
-	ret = __dev_direct_xmit(skb, queue_id);
+	ret = __dev_direct_xmit(skb, queue_id, true);
 	if (!dev_xmit_complete(ret))
 		kfree_skb(skb);
 	return ret;

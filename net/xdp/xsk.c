@@ -834,7 +834,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 			continue;
 		}
 
-		err = __dev_direct_xmit(skb, xs->queue_id);
+		err = __dev_direct_xmit(skb, xs->queue_id, false);
 		if  (err == NETDEV_TX_BUSY) {
 			/* Tell user-space to retry the send */
 			xskq_cons_cancel_n(xs->tx, xsk_get_num_desc(skb));

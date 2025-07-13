@@ -4741,7 +4741,7 @@ out:
 }
 EXPORT_SYMBOL(__dev_queue_xmit);
 
-int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
+int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id, bool validate)
 {
 	struct net_device *dev = skb->dev;
 	struct sk_buff *orig_skb = skb;
@@ -4753,9 +4753,11 @@ int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
 		     !netif_carrier_ok(dev)))
 		goto drop;
 
-	skb = validate_xmit_skb_list(skb, dev, &again);
-	if (skb != orig_skb)
-		goto drop;
+	if (validate) {
+		skb = validate_xmit_skb_list(skb, dev, &again);
+		if (skb != orig_skb)
+			goto drop;
+	}
 
 	skb_set_queue_mapping(skb, queue_id);
 	txq = skb_get_tx_queue(dev, skb);
