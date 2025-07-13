@@ -9,8 +9,8 @@ use crate::{
     device::{Bound, Device},
     error::code::*,
     error::Result,
+    sync::aref::ARef,
     transmute::{AsBytes, FromBytes},
-    types::ARef,
 };
 
 /// Possible attributes associated with a DMA mapping.

@@ -13,8 +13,7 @@ use crate::{
     ffi::c_void,
     prelude::*,
     revocable::{Revocable, RevocableGuard},
-    sync::{rcu, Arc, Completion},
-    types::ARef,
+    sync::{aref::ARef, rcu, Arc, Completion},
 };
 
 #[pin_data]
