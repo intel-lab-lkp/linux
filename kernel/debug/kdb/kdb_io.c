@@ -558,6 +558,25 @@ static int kdb_search_string(char *searched, char *searchfor)
 	return 0;
 }
 
+static struct nbcon_context *nbcon_acquire_ctxt(struct console *con,
+					struct nbcon_write_context *wctxt,
+					char *msg, int msg_len)
+{
+	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
+
+	ctxt->console		    = con;
+	ctxt->spinwait_max_us	    = 0;
+	ctxt->prio		    = NBCON_PRIO_EMERGENCY;
+	ctxt->allow_unsafe_takeover = false;
+	wctxt->outbuf		    = msg;
+	wctxt->len		    = msg_len;
+
+	if (!nbcon_context_try_acquire(ctxt))
+		return NULL;
+
+	return ctxt;
+}
+
 static void kdb_msg_write(const char *msg, int msg_len)
 {
 	struct console *c;
@@ -589,12 +608,26 @@ static void kdb_msg_write(const char *msg, int msg_len)
 	 */
 	cookie = console_srcu_read_lock();
 	for_each_console_srcu(c) {
-		if (!(console_srcu_read_flags(c) & CON_ENABLED))
+		struct nbcon_write_context wctxt = { };
+		struct nbcon_context *ctxt;
+		short flags = console_srcu_read_flags(c);
+
+		if (!console_is_usable(c, flags, true))
 			continue;
 		if (c == dbg_io_ops->cons)
 			continue;
-		if (!c->write)
-			continue;
+
+		/*
+		 * Do not continue if the console is NBCON and the context
+		 * can't be acquired.
+		 */
+		if (flags & CON_NBCON) {
+			ctxt = nbcon_acquire_ctxt(c, &wctxt, (char *)msg,
+						  msg_len);
+			if (!ctxt)
+				continue;
+		}
+
 		/*
 		 * Set oops_in_progress to encourage the console drivers to
 		 * disregard their internal spin locks: in the current calling
@@ -605,7 +638,12 @@ static void kdb_msg_write(const char *msg, int msg_len)
 		 * for this calling context.
 		 */
 		++oops_in_progress;
-		c->write(c, msg, msg_len);
+		if (flags & CON_NBCON) {
+			c->write_atomic(c, &wctxt);
+			nbcon_context_release(ctxt);
+		} else {
+			c->write(c, msg, msg_len);
+		}
 		--oops_in_progress;
 		touch_nmi_watchdog();
 	}
