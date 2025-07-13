@@ -1809,7 +1809,7 @@ static struct sk_buff *tcp_sacktag_bsearch(struct sock *sk, u32 seq)
 static struct sk_buff *tcp_sacktag_skip(struct sk_buff *skb, struct sock *sk,
 					u32 skip_to_seq)
 {
-	if (skb && after(TCP_SKB_CB(skb)->seq, skip_to_seq))
+	if (skb && !before(TCP_SKB_CB(skb)->seq, skip_to_seq))
 		return skb;
 
 	return tcp_sacktag_bsearch(sk, skip_to_seq);
@@ -1997,7 +1997,7 @@ tcp_sacktag_write_queue(struct sock *sk, const struct sk_buff *ack_skb,
 			continue;
 		}
 
-		if (!before(start_seq, tcp_highest_sack_seq(tp))) {
+		if (tcp_highest_sack_seq(tp) == start_seq) {
 			skb = tcp_highest_sack(sk);
 			if (!skb)
 				break;
