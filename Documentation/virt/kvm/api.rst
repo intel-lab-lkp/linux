@@ -2006,7 +2006,7 @@ frequency is KHz.
 
 If the KVM_CAP_VM_TSC_CONTROL capability is advertised, this can also
 be used as a vm ioctl to set the initial tsc frequency of subsequently
-created vCPUs.
+created vCPUs. The vm ioctl must be called before any vCPU is created.
 
 4.56 KVM_GET_TSC_KHZ
 --------------------
