@@ -419,12 +419,14 @@ struct cxl_switch_decoder {
 
 struct cxl_root_decoder;
 typedef u64 (*cxl_hpa_to_spa_fn)(struct cxl_root_decoder *cxlrd, u64 hpa);
+typedef u64 (*cxl_spa_to_hpa_fn)(struct cxl_root_decoder *cxlrd, u64 spa);
 
 /**
  * struct cxl_root_decoder - Static platform CXL address decoder
  * @res: host / parent resource for region allocations
  * @region_id: region id for next region provisioning event
  * @hpa_to_spa: translate CXL host-physical-address to Platform system-physical-address
+ * @spa_to_hpa: translate Platform system-physical-address to CXL host-physical-address
  * @platform_data: platform specific configuration data
  * @range_lock: sync region autodiscovery by address range
  * @qos_class: QoS performance class cookie
@@ -434,6 +436,7 @@ struct cxl_root_decoder {
 	struct resource *res;
 	atomic_t region_id;
 	cxl_hpa_to_spa_fn hpa_to_spa;
+	cxl_spa_to_hpa_fn spa_to_hpa;
 	void *platform_data;
 	struct mutex range_lock;
 	int qos_class;
