@@ -3203,3 +3203,21 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 
 	return 0;
 }
+
+/* Does the [start, end) range contain any unmapped memory? */
+bool range_contains_unmapped(struct mm_struct *mm,
+		unsigned long start, unsigned long end)
+{
+	struct vm_area_struct *vma;
+	unsigned long prev_end = start;
+	VMA_ITERATOR(vmi, current->mm, start);
+
+	for_each_vma_range(vmi, vma, end) {
+		if (vma->vm_start > prev_end)
+			return true;
+
+		prev_end = vma->vm_end;
+	}
+
+	return prev_end < end;
+}

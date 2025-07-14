@@ -598,4 +598,7 @@ int create_init_stack_vma(struct mm_struct *mm, struct vm_area_struct **vmap,
 int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift);
 #endif
 
+bool range_contains_unmapped(struct mm_struct *mm,
+		unsigned long start, unsigned long end);
+
 #endif	/* __MM_VMA_H */
