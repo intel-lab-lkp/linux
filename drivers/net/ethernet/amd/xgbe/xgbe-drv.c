@@ -1377,7 +1377,6 @@ static void xgbe_tx_tstamp(struct work_struct *work)
 						   struct xgbe_prv_data,
 						   tx_tstamp_work);
 	struct skb_shared_hwtstamps hwtstamps;
-	u64 nsec;
 	unsigned long flags;
 
 	spin_lock_irqsave(&pdata->tstamp_lock, flags);
@@ -1385,11 +1384,8 @@ static void xgbe_tx_tstamp(struct work_struct *work)
 		goto unlock;
 
 	if (pdata->tx_tstamp) {
-		nsec = timecounter_cyc2time(&pdata->tstamp_tc,
-					    pdata->tx_tstamp);
-
 		memset(&hwtstamps, 0, sizeof(hwtstamps));
-		hwtstamps.hwtstamp = ns_to_ktime(nsec);
+		hwtstamps.hwtstamp = ns_to_ktime(pdata->tx_tstamp);
 		skb_tstamp_tx(pdata->tx_tstamp_skb, &hwtstamps);
 	}
 
@@ -1775,6 +1771,9 @@ static int xgbe_open(struct net_device *netdev)
 	INIT_WORK(&pdata->restart_work, xgbe_restart);
 	INIT_WORK(&pdata->stopdev_work, xgbe_stopdev);
 	INIT_WORK(&pdata->tx_tstamp_work, xgbe_tx_tstamp);
+
+	/* Initialize PTP timestamping and clock. */
+	pdata->hw_if.init_ptp(pdata);
 
 	ret = xgbe_alloc_memory(pdata);
 	if (ret)
@@ -2546,12 +2545,8 @@ skip_data:
 
 		if (XGMAC_GET_BITS(packet->attributes,
 				   RX_PACKET_ATTRIBUTES, RX_TSTAMP)) {
-			u64 nsec;
-
-			nsec = timecounter_cyc2time(&pdata->tstamp_tc,
-						    packet->rx_tstamp);
 			hwtstamps = skb_hwtstamps(skb);
-			hwtstamps->hwtstamp = ns_to_ktime(nsec);
+			hwtstamps->hwtstamp = ns_to_ktime(packet->rx_tstamp);
 		}
 
 		if (XGMAC_GET_BITS(packet->attributes,
