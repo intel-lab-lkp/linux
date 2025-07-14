@@ -542,6 +542,7 @@
 	phy-mode = "rmii";
 	nvmem-cells = <&eeprom1_eui48>;
 	nvmem-cell-names = "mac-address";
+	cdns,refclk-ext;
 	status = "okay"; /* Conflict with pdmc0. */
 
 	ethernet-phy@0 {
