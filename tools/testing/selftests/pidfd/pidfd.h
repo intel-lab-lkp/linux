@@ -16,6 +16,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#undef SCHED_NORMAL
+#undef SCHED_FLAG_KEEP_ALL
+#undef SCHED_FLAG_UTIL_CLAMP
+
 #include "../kselftest.h"
 #include "../clone3/clone3_selftests.h"
 
