@@ -161,7 +161,7 @@ void kvm_vcpu_load_debug(struct kvm_vcpu *vcpu)
 	 *    context needs to be loaded on the CPU.
 	 */
 	if (vcpu->guest_debug || kvm_vcpu_os_lock_enabled(vcpu)) {
-		vcpu->arch.debug_owner = VCPU_DEBUG_HOST_OWNED;
+		vcpu->arch.debug_owner = VCPU_REGISTER_HOST_OWNED;
 		setup_external_mdscr(vcpu);
 
 		/*
@@ -183,9 +183,9 @@ void kvm_vcpu_load_debug(struct kvm_vcpu *vcpu)
 		mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
 
 		if (mdscr & (MDSCR_EL1_KDE | MDSCR_EL1_MDE))
-			vcpu->arch.debug_owner = VCPU_DEBUG_GUEST_OWNED;
+			vcpu->arch.debug_owner = VCPU_REGISTER_GUEST_OWNED;
 		else
-			vcpu->arch.debug_owner = VCPU_DEBUG_FREE;
+			vcpu->arch.debug_owner = VCPU_REGISTER_FREE;
 	}
 
 	kvm_arm_setup_mdcr_el2(vcpu);
@@ -222,7 +222,7 @@ void kvm_debug_set_guest_ownership(struct kvm_vcpu *vcpu)
 	if (kvm_host_owns_debug_regs(vcpu))
 		return;
 
-	vcpu->arch.debug_owner = VCPU_DEBUG_GUEST_OWNED;
+	vcpu->arch.debug_owner = VCPU_REGISTER_GUEST_OWNED;
 	kvm_arm_setup_mdcr_el2(vcpu);
 }
 

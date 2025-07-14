@@ -38,6 +38,7 @@ struct kvm_pmu {
 	int irq_num;
 	bool created;
 	bool irq_level;
+	enum vcpu_register_owner owner;
 };
 
 struct arm_pmu_entry {

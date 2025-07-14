@@ -91,12 +91,12 @@
 static struct kvm_guest_debug_arch *__vcpu_debug_regs(struct kvm_vcpu *vcpu)
 {
 	switch (vcpu->arch.debug_owner) {
-	case VCPU_DEBUG_FREE:
+	case VCPU_REGISTER_FREE:
 		WARN_ON_ONCE(1);
 		fallthrough;
-	case VCPU_DEBUG_GUEST_OWNED:
+	case VCPU_REGISTER_GUEST_OWNED:
 		return &vcpu->arch.vcpu_debug_state;
-	case VCPU_DEBUG_HOST_OWNED:
+	case VCPU_REGISTER_HOST_OWNED:
 		return &vcpu->arch.external_debug_state;
 	}
 

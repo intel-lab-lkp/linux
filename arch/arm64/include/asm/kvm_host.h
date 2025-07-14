@@ -846,11 +846,7 @@ struct kvm_vcpu_arch {
 	struct kvm_guest_debug_arch external_debug_state;
 	u64 external_mdscr_el1;
 
-	enum {
-		VCPU_DEBUG_FREE,
-		VCPU_DEBUG_HOST_OWNED,
-		VCPU_DEBUG_GUEST_OWNED,
-	} debug_owner;
+	enum vcpu_register_owner debug_owner;
 
 	/* VGIC state */
 	struct vgic_cpu vgic_cpu;
@@ -1467,11 +1463,11 @@ void kvm_debug_handle_oslar(struct kvm_vcpu *vcpu, u64 val);
 	(!!(__vcpu_sys_reg(vcpu, OSLSR_EL1) & OSLSR_EL1_OSLK))
 
 #define kvm_debug_regs_in_use(vcpu)		\
-	((vcpu)->arch.debug_owner != VCPU_DEBUG_FREE)
+	((vcpu)->arch.debug_owner != VCPU_REGISTER_FREE)
 #define kvm_host_owns_debug_regs(vcpu)		\
-	((vcpu)->arch.debug_owner == VCPU_DEBUG_HOST_OWNED)
+	((vcpu)->arch.debug_owner == VCPU_REGISTER_HOST_OWNED)
 #define kvm_guest_owns_debug_regs(vcpu)		\
-	((vcpu)->arch.debug_owner == VCPU_DEBUG_GUEST_OWNED)
+	((vcpu)->arch.debug_owner == VCPU_REGISTER_GUEST_OWNED)
 
 int kvm_arm_vcpu_arch_set_attr(struct kvm_vcpu *vcpu,
 			       struct kvm_device_attr *attr);

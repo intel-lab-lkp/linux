@@ -4,5 +4,10 @@
 
 #define KVM_ARCH_NR_OBJS_PER_MEMORY_CACHE 40
 
-#endif /* _ASM_ARM64_KVM_TYPES_H */
+enum vcpu_register_owner {
+	VCPU_REGISTER_FREE,
+	VCPU_REGISTER_HOST_OWNED,
+	VCPU_REGISTER_GUEST_OWNED,
+};
 
+#endif /* _ASM_ARM64_KVM_TYPES_H */
