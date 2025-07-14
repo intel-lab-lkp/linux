@@ -350,7 +350,8 @@ ia_css_binary_dvs_stat_grid_info(
 int
 ia_css_binary_3a_grid_info(const struct ia_css_binary *binary,
 			   struct ia_css_grid_info *info,
-			   struct ia_css_pipe *pipe) {
+			   struct ia_css_pipe *pipe)
+{
 	struct ia_css_3a_grid_info *s3a_info;
 	int err = 0;
 
@@ -441,7 +442,8 @@ supports_bds_factor(u32 supported_factors,
 
 static int
 binary_init_info(struct ia_css_binary_xinfo *info, unsigned int i,
-		 bool *binary_found) {
+		 bool *binary_found)
+{
 	const unsigned char *blob = sh_css_blob_info[i].blob;
 	unsigned int size = sh_css_blob_info[i].header.blob.size;
 
@@ -465,7 +467,8 @@ binary_init_info(struct ia_css_binary_xinfo *info, unsigned int i,
  * be selected if no other primary matches.
  */
 int
-ia_css_binary_init_infos(void) {
+ia_css_binary_init_infos(void)
+{
 	unsigned int i;
 	unsigned int num_of_isp_binaries = sh_css_num_binaries - NUM_OF_SPS - NUM_OF_BLS;
 
@@ -498,7 +501,8 @@ ia_css_binary_init_infos(void) {
 }
 
 int
-ia_css_binary_uninit(void) {
+ia_css_binary_uninit(void)
+{
 	unsigned int i;
 	struct ia_css_binary_xinfo *b;
 
@@ -637,7 +641,8 @@ ia_css_binary_fill_info(const struct ia_css_binary_xinfo *xinfo,
 			struct ia_css_binary *binary,
 			struct ia_css_resolution *dvs_env,
 			int stream_config_left_padding,
-			bool accelerator) {
+			bool accelerator)
+{
 	const struct ia_css_binary_info *info = &xinfo->sp;
 	unsigned int dvs_env_width = 0,
 	dvs_env_height = 0,
