@@ -64,11 +64,9 @@ TRACE_EVENT(fib6_table_lookup,
 			__entry->dport = 0;
 		}
 
-		if (res->nh && res->nh->fib_nh_dev) {
-			strscpy(__entry->name, res->nh->fib_nh_dev->name, IFNAMSIZ);
-		} else {
-			strcpy(__entry->name, "-");
-		}
+		strscpy(__entry->name, res->nh && res->nh->fib_nh_dev ?
+				       res->nh->fib_nh_dev->name : "-");
+
 		if (res->f6i == net->ipv6.fib6_null_entry) {
 			in6 = (struct in6_addr *)__entry->gw;
 			*in6 = in6addr_any;
