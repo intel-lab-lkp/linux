@@ -179,10 +179,14 @@ static void cgroup_do_freeze(struct cgroup *cgrp, bool freeze)
 	lockdep_assert_held(&cgroup_mutex);
 
 	spin_lock_irq(&css_set_lock);
-	if (freeze)
+	if (freeze) {
 		set_bit(CGRP_FREEZE, &cgrp->flags);
-	else
+		cgrp->freezer.freeze_time_start_ns = ktime_get_ns();
+	} else {
 		clear_bit(CGRP_FREEZE, &cgrp->flags);
+		cgrp->freezer.freeze_time_total_ns += (ktime_get_ns() -
+			cgrp->freezer.freeze_time_start_ns);
+	}
 	spin_unlock_irq(&css_set_lock);
 
 	if (freeze)

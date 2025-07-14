@@ -1027,6 +1027,14 @@ All cgroup core files are prefixed with "cgroup."
 	it's possible to delete a frozen (and empty) cgroup, as well as
 	create new sub-cgroups.
 
+  cgroup.freeze.stat
+	A read-only flat-keyed file which exists in non-root cgroups.
+	The following entry is defined:
+
+	  freeze_time_total_ns
+		Cumulative time that this cgroup has spent in the freezing
+		state, regardless of whether or not it reaches "frozen".
+
   cgroup.kill
 	A write-only single value file which exists in non-root cgroups.
 	The only allowed value is "1".

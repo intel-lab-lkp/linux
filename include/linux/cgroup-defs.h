@@ -433,6 +433,12 @@ struct cgroup_freezer_state {
 	 * frozen, SIGSTOPped, and PTRACEd.
 	 */
 	int nr_frozen_tasks;
+
+	/* Time when the cgroup was requested to freeze */
+	u64 freeze_time_start_ns;
+
+	/* Total duration the cgroup has spent freezing */
+	u64 freeze_time_total_ns;
 };
 
 struct cgroup {
