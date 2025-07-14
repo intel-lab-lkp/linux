@@ -365,7 +365,7 @@ struct BitHeader {
 
 impl BitHeader {
     fn new(data: &[u8]) -> Result<Self> {
-        if data.len() < 12 {
+        if data.len() < core::mem::size_of::<Self>() {
             return Err(EINVAL);
         }
 
