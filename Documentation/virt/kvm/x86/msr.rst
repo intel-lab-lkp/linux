@@ -296,6 +296,12 @@ data:
 		the amount of time in which this vCPU did not run, in
 		nanoseconds. Time during which the vcpu is idle, will not be
 		reported as steal time.
+		If the guest set the enable bit in MSR_KVM_SUSPEND_STEAL,
+		steal time includes the duration during which the host is
+		suspended. The case where the host suspends during a VM
+		migration might not be accounted if VCPUs aren't entered
+		post-resume. A workaround would be for the VMM to ensure that
+		the guest is entered with KVM_RUN after resuming from suspend.
 
 	preempted:
 		indicate the vCPU who owns this struct is running or
@@ -388,3 +394,11 @@ data:
         guest is communicating page encryption status to the host using the
         ``KVM_HC_MAP_GPA_RANGE`` hypercall, it can set bit 0 in this MSR to
         allow live migration of the guest.
+
+MSR_KVM_SUSPEND_STEAL:
+	0x4b564d09
+
+data:
+	This MSR is available if KVM_FEATURE_SUSPEND_STEAL is present in
+	CPUID. Bit 0 controls whether the host should include the duration it
+	has been suspended in steal time (1), or not (0).
