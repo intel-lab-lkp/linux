@@ -100,6 +100,31 @@ TRACE_EVENT(memcg_flush_stats,
 		__entry->force, __entry->needs_flush)
 );
 
+TRACE_EVENT(memcg_socket_under_pressure,
+
+	TP_PROTO(const struct mem_cgroup *memcg, unsigned long scanned,
+		unsigned long reclaimed),
+
+	TP_ARGS(memcg, scanned, reclaimed),
+
+	TP_STRUCT__entry(
+		__field(u64, id)
+		__field(unsigned long, scanned)
+		__field(unsigned long, reclaimed)
+	),
+
+	TP_fast_assign(
+		__entry->id = cgroup_id(memcg->css.cgroup);
+		__entry->scanned = scanned;
+		__entry->reclaimed = reclaimed;
+	),
+
+	TP_printk("memcg_id=%llu scanned=%lu reclaimed=%lu",
+		__entry->id,
+		__entry->scanned,
+		__entry->reclaimed)
+);
+
 #endif /* _TRACE_MEMCG_H */
 
 /* This part must be outside protection */

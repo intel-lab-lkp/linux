@@ -21,6 +21,8 @@
 #include <linux/printk.h>
 #include <linux/vmpressure.h>
 
+#include <trace/events/memcg.h>
+
 /*
  * The window size (vmpressure_win) is the number of scanned pages before
  * we try to analyze scanned/reclaimed ratio. So the window is used as a
@@ -317,6 +319,7 @@ void vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool tree,
 			 * pressure events can occur.
 			 */
 			WRITE_ONCE(memcg->socket_pressure, jiffies + HZ);
+			trace_memcg_socket_under_pressure(memcg, scanned, reclaimed);
 		}
 	}
 }
