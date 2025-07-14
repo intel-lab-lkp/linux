@@ -560,31 +560,19 @@ struct vm_area_struct *vma_iter_next_rewind(struct vma_iterator *vmi,
 }
 
 #ifdef CONFIG_64BIT
-
-static inline bool vma_is_sealed(struct vm_area_struct *vma)
-{
-	return (vma->vm_flags & VM_SEALED);
-}
-
-/*
- * check if a vma is sealed for modification.
- * return true, if modification is allowed.
- */
+/* Check if a vma is sealed for modification. */
 static inline bool can_modify_vma(struct vm_area_struct *vma)
 {
-	if (unlikely(vma_is_sealed(vma)))
+	if (unlikely(vma->vm_flags & VM_SEALED))
 		return false;
 
 	return true;
 }
-
 #else
-
 static inline bool can_modify_vma(struct vm_area_struct *vma)
 {
 	return true;
 }
-
 #endif
 
 #if defined(CONFIG_STACK_GROWSUP)
