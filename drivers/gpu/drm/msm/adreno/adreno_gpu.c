@@ -416,10 +416,7 @@ int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		*value = 0;
 		return 0;
 	case MSM_PARAM_FAULTS:
-		if (vm)
-			*value = gpu->global_faults + to_msm_vm(vm)->faults;
-		else
-			*value = gpu->global_faults;
+		*value = vm ? to_msm_vm(vm)->faults : 0;
 		return 0;
 	case MSM_PARAM_SUSPENDS:
 		*value = gpu->suspend_count;

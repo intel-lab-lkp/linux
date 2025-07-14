@@ -463,6 +463,7 @@ static void recover_worker(struct kthread_work *work)
 	struct drm_device *dev = gpu->dev;
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_gem_submit *submit;
+	struct msm_gem_vm *vm;
 	struct msm_ringbuffer *cur_ring = gpu->funcs->active_ring(gpu);
 	char *comm = NULL, *cmd = NULL;
 	int i;
@@ -482,20 +483,18 @@ static void recover_worker(struct kthread_work *work)
 
 	/* Increment the fault counts */
 	submit->queue->faults++;
-	if (submit->vm) {
-		struct msm_gem_vm *vm = to_msm_vm(submit->vm);
 
-		vm->faults++;
+	vm = to_msm_vm(submit->vm);
+	vm->faults++;
 
-		/*
-		 * If userspace has opted-in to VM_BIND (and therefore userspace
-		 * management of the VM), faults mark the VM as unusuable.  This
-		 * matches vulkan expectations (vulkan is the main target for
-		 * VM_BIND)
-		 */
-		if (!vm->managed)
-			msm_gem_vm_unusable(submit->vm);
-	}
+	/*
+	 * If userspace has opted-in to VM_BIND (and therefore userspace
+	 * management of the VM), faults mark the VM as unusable. This
+	 * matches vulkan expectations (vulkan is the main target for
+	 * VM_BIND)
+	 */
+	if (!vm->managed)
+		msm_gem_vm_unusable(submit->vm);
 
 	get_comm_cmdline(submit, &comm, &cmd);
 

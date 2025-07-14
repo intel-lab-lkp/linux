@@ -226,12 +226,6 @@ struct msm_gpu {
 	/* does gpu need hw_init? */
 	bool needs_hw_init;
 
-	/**
-	 * global_faults: number of GPU hangs not attributed to a particular
-	 * address space
-	 */
-	int global_faults;
-
 	void __iomem *mmio;
 	int irq;
 
