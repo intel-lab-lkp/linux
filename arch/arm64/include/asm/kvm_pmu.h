@@ -110,6 +110,8 @@ u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
 void kvm_pmu_put(struct kvm_vcpu *vcpu);
 
+void kvm_vcpu_pmu_partition_enable(struct kvm_vcpu *vcpu, bool enable);
+
 #if !defined(__KVM_NVHE_HYPERVISOR__)
 bool kvm_vcpu_pmu_is_partitioned(struct kvm_vcpu *vcpu);
 bool kvm_vcpu_pmu_use_fgt(struct kvm_vcpu *vcpu);
@@ -296,17 +298,17 @@ static inline bool kvm_pmu_counter_is_hyp(struct kvm_vcpu *vcpu, unsigned int id
 
 static inline void kvm_pmu_nested_transition(struct kvm_vcpu *vcpu) {}
 
-static inline bool kvm_pmu_is_partitioned(struct arm_pmu *pmu)
+static inline bool kvm_pmu_is_partitioned(void *)
 {
 	return false;
 }
 
-static inline u64 kvm_pmu_host_counter_mask(struct arm_pmu *pmu)
+static inline u64 kvm_pmu_host_counter_mask(void *)
 {
 	return ~0;
 }
 
-static inline u64 kvm_pmu_guest_counter_mask(struct arm_pmu *pmu)
+static inline u64 kvm_pmu_guest_counter_mask(void *)
 {
 	return ~0;
 }
@@ -314,6 +316,8 @@ static inline u64 kvm_pmu_guest_counter_mask(struct arm_pmu *pmu)
 static inline void kvm_pmu_host_counters_enable(void) {}
 static inline void kvm_pmu_host_counters_disable(void) {}
 static inline void kvm_pmu_handle_guest_irq(u64 govf) {}
+
+static inline void kvm_vcpu_pmu_partition_enable(struct kvm_vcpu *vcpu, bool enable) {}
 
 #endif
 

@@ -57,6 +57,23 @@ bool kvm_vcpu_pmu_is_partitioned(struct kvm_vcpu *vcpu)
 }
 
 /**
+ * kvm_vcpu_pmu_partition_enable() - Enable/disable partition flag
+ * @vcpu: Pointer to vcpu
+ * @enable: Whether to enable or disable
+ *
+ * If we want to enable the partition, the guest is free to grab
+ * hardware by accessing PMU registers. Otherwise, the host maintains
+ * control.
+ */
+void kvm_vcpu_pmu_partition_enable(struct kvm_vcpu *vcpu, bool enable)
+{
+	if (enable)
+		vcpu->arch.pmu.owner = VCPU_REGISTER_FREE;
+	else
+		vcpu->arch.pmu.owner = VCPU_REGISTER_HOST_OWNED;
+}
+
+/**
  * kvm_vcpu_pmu_use_fgt() - Determine if we can use FGT
  * @vcpu: Pointer to struct kvm_vcpu
  *
