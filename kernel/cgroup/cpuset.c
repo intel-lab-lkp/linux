@@ -3121,7 +3121,7 @@ static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 	if (cs != &top_cpuset)
 		guarantee_active_cpus(task, cpus_attach);
 	else
-		cpumask_andnot(cpus_attach, task_cpu_possible_mask(task),
+		cpumask_andnot(cpus_attach, cpu_active_mask,
 			       subpartitions_cpus);
 	/*
 	 * can_attach beforehand should guarantee that this doesn't
