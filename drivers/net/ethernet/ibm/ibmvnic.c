@@ -2314,9 +2314,17 @@ static void ibmvnic_tx_scrq_clean_buffer(struct ibmvnic_adapter *adapter,
 		tx_buff = &tx_pool->tx_buff[index];
 		adapter->netdev->stats.tx_packets--;
 		adapter->netdev->stats.tx_bytes -= tx_buff->skb->len;
-		adapter->tx_stats_buffers[queue_num].batched_packets--;
-		adapter->tx_stats_buffers[queue_num].bytes -=
-						tx_buff->skb->len;
+		atomic64_dec(&adapter->tx_stats_buffers[queue_num].batched_packets);
+		if (atomic64_sub_return(tx_buff->skb->len,
+					&adapter->tx_stats_buffers[queue_num].bytes) < 0) {
+			atomic64_set(&adapter->tx_stats_buffers[queue_num].bytes, 0);
+			netdev_warn(adapter->netdev,
+				    "TX stats underflow on queue %u: bytes (%lld) < skb->len (%u),\n"
+				    "clamping to 0\n",
+				    queue_num,
+				    atomic64_read(&adapter->tx_stats_buffers[queue_num].bytes),
+				    tx_buff->skb->len);
+		}
 		dev_kfree_skb_any(tx_buff->skb);
 		tx_buff->skb = NULL;
 		adapter->netdev->stats.tx_dropped++;
@@ -2652,10 +2660,10 @@ out:
 	netdev->stats.tx_packets += tx_bpackets + tx_dpackets;
 	adapter->tx_send_failed += tx_send_failed;
 	adapter->tx_map_failed += tx_map_failed;
-	adapter->tx_stats_buffers[queue_num].batched_packets += tx_bpackets;
-	adapter->tx_stats_buffers[queue_num].direct_packets += tx_dpackets;
-	adapter->tx_stats_buffers[queue_num].bytes += tx_bytes;
-	adapter->tx_stats_buffers[queue_num].dropped_packets += tx_dropped;
+	atomic64_add(tx_bpackets, &adapter->tx_stats_buffers[queue_num].batched_packets);
+	atomic64_add(tx_dpackets, &adapter->tx_stats_buffers[queue_num].direct_packets);
+	atomic64_add(tx_bytes, &adapter->tx_stats_buffers[queue_num].bytes);
+	atomic64_add(tx_dropped, &adapter->tx_stats_buffers[queue_num].dropped_packets);
 
 	return ret;
 }
@@ -3569,8 +3577,8 @@ restart_poll:
 		napi_gro_receive(napi, skb); /* send it up */
 		netdev->stats.rx_packets++;
 		netdev->stats.rx_bytes += length;
-		adapter->rx_stats_buffers[scrq_num].packets++;
-		adapter->rx_stats_buffers[scrq_num].bytes += length;
+		atomic64_inc(&adapter->rx_stats_buffers[scrq_num].packets);
+		atomic64_add(length, &adapter->rx_stats_buffers[scrq_num].bytes);
 		frames_processed++;
 	}
 
@@ -3874,22 +3882,22 @@ static void ibmvnic_get_ethtool_stats(struct net_device *dev,
 				      (adapter, ibmvnic_stats[i].offset));
 
 	for (j = 0; j < adapter->req_tx_queues; j++) {
-		data[i] = adapter->tx_stats_buffers[j].batched_packets;
+		data[i] = atomic64_read(&adapter->tx_stats_buffers[j].batched_packets);
 		i++;
-		data[i] = adapter->tx_stats_buffers[j].direct_packets;
+		data[i] = atomic64_read(&adapter->tx_stats_buffers[j].direct_packets);
 		i++;
-		data[i] = adapter->tx_stats_buffers[j].bytes;
+		data[i] = atomic64_read(&adapter->tx_stats_buffers[j].bytes);
 		i++;
-		data[i] = adapter->tx_stats_buffers[j].dropped_packets;
+		data[i] = atomic64_read(&adapter->tx_stats_buffers[j].dropped_packets);
 		i++;
 	}
 
 	for (j = 0; j < adapter->req_rx_queues; j++) {
-		data[i] = adapter->rx_stats_buffers[j].packets;
+		data[i] = atomic64_read(&adapter->rx_stats_buffers[j].packets);
 		i++;
-		data[i] = adapter->rx_stats_buffers[j].bytes;
+		data[i] = atomic64_read(&adapter->rx_stats_buffers[j].bytes);
 		i++;
-		data[i] = adapter->rx_stats_buffers[j].interrupts;
+		data[i] = atomic64_read(&adapter->rx_stats_buffers[j].interrupts);
 		i++;
 	}
 }
@@ -4307,7 +4315,7 @@ static irqreturn_t ibmvnic_interrupt_rx(int irq, void *instance)
 	if (unlikely(adapter->state != VNIC_OPEN))
 		return IRQ_NONE;
 
-	adapter->rx_stats_buffers[scrq->scrq_num].interrupts++;
+	atomic64_inc(&adapter->rx_stats_buffers[scrq->scrq_num].interrupts);
 
 	if (napi_schedule_prep(&adapter->napi[scrq->scrq_num])) {
 		disable_scrq_irq(adapter, scrq);
