@@ -72,3 +72,4 @@ int hid_haptic_input_mapping(struct hid_device *hdev,
 int hid_haptic_input_configured(struct hid_device *hdev,
 				struct hid_haptic_device *haptic,
 				struct hid_input *hi);
+int hid_haptic_init(struct hid_device *hdev, struct hid_haptic_device **haptic_ptr);
