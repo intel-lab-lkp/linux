@@ -23,6 +23,7 @@
 #include <linux/pm_qos.h>
 #include <linux/ratelimit.h>
 #include <linux/unaligned.h>
+#include <linux/anon_inodes.h>
 
 #include "nvme.h"
 #include "fabrics.h"
@@ -1227,6 +1228,96 @@ u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
 	return effects;
 }
 EXPORT_SYMBOL_NS_GPL(nvme_passthru_start, "NVME_TARGET_PASSTHRU");
+
+/* Returns true if curr_entry forwarded by 1 */
+static bool nvme_cdq_next(struct cdq_nvme_queue *cdq)
+{
+	void *curr_entry = cdq->entries + (cdq->curr_entry * cdq->entry_nbyte);
+	u8 phase_bit = (*(u8 *)(curr_entry + cdq->cdqp_offset) & cdq->cdqp_mask);
+	/* if different, then its new! */
+	if (phase_bit != cdq->curr_cdqp) {
+		cdq->curr_entry = (cdq->curr_entry + 1) % cdq->entry_nr;
+		if (unlikely(cdq->curr_entry == 0))
+			cdq->curr_cdqp = ~cdq->curr_cdqp & 0x1;
+		return true;
+	}
+	return false;
+}
+
+static int nvme_cdq_send_feature_id(struct cdq_nvme_queue *cdq)
+{
+	struct nvme_command c = { };
+
+	c.features.opcode = nvme_admin_set_features;
+	c.features.fid = cpu_to_le32(NVME_FEAT_CDQ);
+	c.features.dword11 = cdq->cdq_id;
+	c.features.dword12 = cpu_to_le32(cdq->curr_entry);
+
+	return nvme_submit_sync_cmd(cdq->ctrl->admin_q, &c, NULL, 0);
+}
+
+/*
+ * Traverse the CDQ until max entries are reached or until the entry phase
+ * bit is the same as the current phase bit.
+ *
+ * cdq : Controller Data Queue
+ * count_nbyte : Count bytes to "traverse" before sending feature id
+ * priv_data : argument for consume
+ */
+static size_t nvme_cdq_traverse(struct cdq_nvme_queue *cdq, size_t count_nbyte,
+				 void *priv_data)
+{
+	int ret;
+	char __user *to_buf = priv_data;
+	size_t tx_nbyte, target_nbyte = 0;
+	size_t orig_tail_nbyte = (cdq->entry_nr - cdq->curr_entry) * cdq->entry_nbyte;
+	void *from_buf = cdq->entries + (cdq->curr_entry * cdq->entry_nbyte);
+
+	while (target_nbyte < count_nbyte && nvme_cdq_next(cdq))
+		target_nbyte += cdq->entry_nbyte;
+	tx_nbyte = min(orig_tail_nbyte, target_nbyte);
+
+	if (copy_to_user(to_buf, from_buf, tx_nbyte))
+		return -EFAULT;
+
+	if (tx_nbyte < target_nbyte) {
+		/* Copy the entries that have been wrapped around */
+		from_buf = cdq->entries;
+		to_buf += tx_nbyte;
+		if (copy_to_user(to_buf, from_buf, target_nbyte - tx_nbyte))
+			return -EFAULT;
+	}
+
+	ret = nvme_cdq_send_feature_id(cdq);
+	if (ret < 0)
+		return ret;
+
+	return tx_nbyte;
+}
+
+static ssize_t nvme_cdq_fops_read(struct file *filep, char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct cdq_nvme_queue *cdq = filep->private_data;
+	size_t nbytes = round_down(count, cdq->entry_nbyte);
+
+	if (*ppos)
+		return -ESPIPE;
+
+	if (count < cdq->entry_nbyte)
+		return -EINVAL;
+
+	if (nbytes > (cdq->entry_nr * cdq->entry_nbyte))
+		return -EINVAL;
+
+	return nvme_cdq_traverse(cdq, nbytes, buf);
+}
+
+static const struct file_operations cdq_fops = {
+	.owner		= THIS_MODULE,
+	.open		= nonseekable_open,
+	.read		= nvme_cdq_fops_read,
+};
 
 void nvme_passthru_end(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u32 effects,
 		       struct nvme_command *cmd, int status)
