@@ -123,7 +123,7 @@ static void inet_bind2_bucket_init(struct inet_bind2_bucket *tb2,
 #endif
 	INIT_HLIST_HEAD(&tb2->owners);
 	hlist_add_head(&tb2->node, &head->chain);
-	hlist_add_head(&tb2->bhash_node, &tb->bhash2);
+	hlist_add_head_rcu(&tb2->bhash_node, &tb->bhash2);
 }
 
 struct inet_bind2_bucket *inet_bind2_bucket_create(struct kmem_cache *cachep,
@@ -141,12 +141,12 @@ struct inet_bind2_bucket *inet_bind2_bucket_create(struct kmem_cache *cachep,
 }
 
 /* Caller must hold hashbucket lock for this tb with local BH disabled */
-void inet_bind2_bucket_destroy(struct kmem_cache *cachep, struct inet_bind2_bucket *tb)
+void inet_bind2_bucket_destroy(struct inet_bind2_bucket *tb)
 {
 	if (hlist_empty(&tb->owners)) {
 		__hlist_del(&tb->node);
-		__hlist_del(&tb->bhash_node);
-		kmem_cache_free(cachep, tb);
+		hlist_del_rcu(&tb->bhash_node);
+		kfree_rcu(tb, rcu);
 	}
 }
 
@@ -198,7 +198,7 @@ static void __inet_put_port(struct sock *sk)
 
 		__sk_del_bind_node(sk);
 		inet_csk(sk)->icsk_bind2_hash = NULL;
-		inet_bind2_bucket_destroy(hashinfo->bind2_bucket_cachep, tb2);
+		inet_bind2_bucket_destroy(tb2);
 	}
 	spin_unlock(&head2->lock);
 
@@ -951,7 +951,7 @@ static int __inet_bhash2_update_saddr(struct sock *sk, void *saddr, int family, 
 
 	spin_lock(&head2->lock);
 	__sk_del_bind_node(sk);
-	inet_bind2_bucket_destroy(hinfo->bind2_bucket_cachep, inet_csk(sk)->icsk_bind2_hash);
+	inet_bind2_bucket_destroy(inet_csk(sk)->icsk_bind2_hash);
 	spin_unlock(&head2->lock);
 
 	if (reset)
@@ -1154,7 +1154,7 @@ ok:
 		inet_ehash_nolisten(sk, (struct sock *)tw, NULL);
 	}
 	if (tw)
-		inet_twsk_bind_unhash(tw, hinfo);
+		inet_twsk_bind_unhash(tw);
 
 	spin_unlock(&head2->lock);
 	spin_unlock(&head->lock);
@@ -1179,7 +1179,7 @@ error:
 		inet_sk(sk)->inet_num = 0;
 
 		if (tw)
-			inet_twsk_bind_unhash(tw, hinfo);
+			inet_twsk_bind_unhash(tw);
 	}
 
 	spin_unlock(&head2->lock);

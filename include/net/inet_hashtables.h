@@ -108,6 +108,7 @@ struct inet_bind2_bucket {
 	struct hlist_node	bhash_node;
 	/* List of sockets hashed to this bucket */
 	struct hlist_head	owners;
+	struct rcu_head         rcu;
 };
 
 static inline struct net *ib_net(const struct inet_bind_bucket *ib)
@@ -228,8 +229,7 @@ inet_bind2_bucket_create(struct kmem_cache *cachep, struct net *net,
 			 struct inet_bind_bucket *tb,
 			 const struct sock *sk);
 
-void inet_bind2_bucket_destroy(struct kmem_cache *cachep,
-			       struct inet_bind2_bucket *tb);
+void inet_bind2_bucket_destroy(struct inet_bind2_bucket *tb);
 
 struct inet_bind2_bucket *
 inet_bind2_bucket_find(const struct inet_bind_hashbucket *head,

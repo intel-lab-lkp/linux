@@ -20,14 +20,12 @@
 /**
  *	inet_twsk_bind_unhash - unhash a timewait socket from bind hash
  *	@tw: timewait socket
- *	@hashinfo: hashinfo pointer
  *
  *	unhash a timewait socket from bind hash, if hashed.
  *	bind hash lock must be held by caller.
  *	Returns 1 if caller should call inet_twsk_put() after lock release.
  */
-void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
-			  struct inet_hashinfo *hashinfo)
+void inet_twsk_bind_unhash(struct inet_timewait_sock *tw)
 {
 	struct inet_bind2_bucket *tb2 = tw->tw_tb2;
 	struct inet_bind_bucket *tb = tw->tw_tb;
@@ -38,7 +36,7 @@ void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
 	__sk_del_bind_node((struct sock *)tw);
 	tw->tw_tb = NULL;
 	tw->tw_tb2 = NULL;
-	inet_bind2_bucket_destroy(hashinfo->bind2_bucket_cachep, tb2);
+	inet_bind2_bucket_destroy(tb2);
 	inet_bind_bucket_destroy(tb);
 
 	__sock_put((struct sock *)tw);
@@ -63,7 +61,7 @@ static void inet_twsk_kill(struct inet_timewait_sock *tw)
 
 	spin_lock(&bhead->lock);
 	spin_lock(&bhead2->lock);
-	inet_twsk_bind_unhash(tw, hashinfo);
+	inet_twsk_bind_unhash(tw);
 	spin_unlock(&bhead2->lock);
 	spin_unlock(&bhead->lock);
 
