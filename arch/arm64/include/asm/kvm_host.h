@@ -302,6 +302,12 @@ struct kvm_arch {
 	u64 fgu[__NR_FGT_GROUP_IDS__];
 
 	/*
+	 * Additional FGTs to enable for the guests, eg. for emulated
+	 * registers,
+	 */
+	u64 fgt[__NR_FGT_GROUP_IDS__];
+
+	/*
 	 * Stage 2 paging state for VMs with nested S2 using a virtual
 	 * VMID.
 	 */
