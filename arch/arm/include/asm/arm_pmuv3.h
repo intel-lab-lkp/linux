@@ -221,12 +221,21 @@ static inline bool kvm_pmu_counter_deferred(struct perf_event_attr *attr)
 	return false;
 }
 
+static inline bool kvm_pmu_partition_supported(void)
+{
+	return false;
+}
 static inline bool kvm_set_pmuserenr(u64 val)
 {
 	return false;
 }
 
 static inline void kvm_vcpu_pmu_resync_el0(void) {}
+
+static inline bool has_vhe(void)
+{
+	return false;
+}
 
 /* PMU Version in DFR Register */
 #define ARMV8_PMU_DFR_VER_NI        0
@@ -240,6 +249,11 @@ static inline bool pmuv3_implemented(int pmuver)
 {
 	return !(pmuver == ARMV8_PMU_DFR_VER_IMP_DEF ||
 		 pmuver == ARMV8_PMU_DFR_VER_NI);
+}
+
+static inline bool is_pmuv3p1(int pmuver)
+{
+	return pmuver >= ARMV8_PMU_DFR_VER_V3P1;
 }
 
 static inline bool is_pmuv3p4(int pmuver)
