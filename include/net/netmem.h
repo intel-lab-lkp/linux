@@ -267,6 +267,17 @@ static inline struct net_iov *__netmem_clear_lsb(netmem_ref netmem)
 	return (struct net_iov *)((__force unsigned long)netmem & ~NET_IOV);
 }
 
+static inline struct netmem_desc *pp_page_to_nmdesc(struct page *page)
+{
+	DEBUG_NET_WARN_ON_ONCE(!page_pool_page_is_pp(page));
+
+	/* XXX: How to extract netmem_desc from page must be changed,
+	 * once netmem_desc no longer overlays on page and will be
+	 * allocated through slab.
+	 */
+	return (struct netmem_desc *)page;
+}
+
 /**
  * __netmem_get_pp - unsafely get pointer to the &page_pool backing @netmem
  * @netmem: netmem reference to get the pointer from
@@ -280,7 +291,7 @@ static inline struct net_iov *__netmem_clear_lsb(netmem_ref netmem)
  */
 static inline struct page_pool *__netmem_get_pp(netmem_ref netmem)
 {
-	return __netmem_to_page(netmem)->pp;
+	return pp_page_to_nmdesc(__netmem_to_page(netmem))->pp;
 }
 
 static inline struct page_pool *netmem_get_pp(netmem_ref netmem)
