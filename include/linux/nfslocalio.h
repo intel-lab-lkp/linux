@@ -60,9 +60,9 @@ struct nfsd_localio_operations {
 						struct rpc_clnt *,
 						const struct cred *,
 						const struct nfs_fh *,
-						struct nfsd_file __rcu **pnf,
+						struct nfsd_file __rcu **,
 						const fmode_t);
-	struct net *(*nfsd_file_put_local)(struct nfsd_file __rcu **);
+	struct net *(*nfsd_file_put_local)(struct nfsd_file *);
 	struct nfsd_file *(*nfsd_file_get_local)(struct nfsd_file *);
 	struct file *(*nfsd_file_file)(struct nfsd_file *);
 } ____cacheline_aligned;
@@ -88,19 +88,16 @@ static inline void nfs_to_nfsd_net_put(struct net *net)
 	rcu_read_unlock();
 }
 
-static inline void nfs_to_nfsd_file_put_local(struct nfsd_file __rcu **localio)
+static inline void nfs_to_nfsd_file_put_local(struct nfsd_file *localio)
 {
 	/*
-	 * Either *localio must be guaranteed to be non-NULL, or caller
-	 * must prevent nfsd shutdown from completing as nfs_close_local_fh()
-	 * does by blocking the nfs_uuid from being finally put.
+	 * Must not hold RCU otherwise nfsd_file_put() can easily trigger:
+	 * "Voluntary context switch within RCU read-side critical section!"
+	 * by scheduling deep in underlying filesystem (e.g. XFS).
 	 */
-	struct net *net;
+	struct net *net = nfs_to->nfsd_file_put_local(localio);
 
-	net = nfs_to->nfsd_file_put_local(localio);
-
-	if (net)
-		nfs_to_nfsd_net_put(net);
+	nfs_to_nfsd_net_put(net);
 }
 
 #else   /* CONFIG_NFS_LOCALIO */
