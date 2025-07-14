@@ -310,9 +310,11 @@ void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect)
  * Buffers may span multiple packets, and even URBs, therefore the active buffer
  * remains on the queue until the EOF marker.
  */
-static struct uvc_buffer *
+struct uvc_buffer *
 __uvc_queue_get_current_buffer(struct uvc_video_queue *queue)
 {
+	lockdep_assert_held(&queue->irqlock);
+
 	if (list_empty(&queue->irqqueue))
 		return NULL;
 

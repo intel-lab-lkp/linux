@@ -479,8 +479,7 @@ struct uvc_streaming {
 	unsigned int frozen : 1;
 	struct uvc_video_queue queue;
 	struct workqueue_struct *async_wq;
-	void (*decode)(struct uvc_urb *uvc_urb, struct uvc_buffer *buf,
-		       struct uvc_buffer *meta_buf);
+	void (*decode)(struct uvc_urb *uvc_urb, struct uvc_buffer *buf);
 
 	struct {
 		struct video_device vdev;
@@ -694,6 +693,8 @@ int uvc_queue_init(struct uvc_video_queue *queue, enum v4l2_buf_type type);
 void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect);
 struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 					 struct uvc_buffer *buf);
+struct uvc_buffer *
+__uvc_queue_get_current_buffer(struct uvc_video_queue *queue);
 struct uvc_buffer *uvc_queue_get_current_buffer(struct uvc_video_queue *queue);
 void uvc_queue_buffer_release(struct uvc_buffer *buf);
 static inline int uvc_queue_streaming(struct uvc_video_queue *queue)
@@ -802,8 +803,7 @@ u16 uvc_endpoint_max_bpi(struct usb_device *dev, struct usb_host_endpoint *ep);
 
 /* Quirks support */
 void uvc_video_decode_isight(struct uvc_urb *uvc_urb,
-			     struct uvc_buffer *buf,
-			     struct uvc_buffer *meta_buf);
+			     struct uvc_buffer *buf);
 
 /* debugfs and statistics */
 void uvc_debugfs_init(void);

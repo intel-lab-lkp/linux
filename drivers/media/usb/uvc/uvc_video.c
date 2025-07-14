@@ -1428,9 +1428,11 @@ static int uvc_video_encode_data(struct uvc_streaming *stream,
  * previous header.
  */
 static void uvc_video_decode_meta(struct uvc_streaming *stream,
-				  struct uvc_buffer *meta_buf,
 				  const u8 *mem, unsigned int length)
 {
+	struct vb2_queue *vb2_qmeta = stream->meta.vdev.queue;
+	struct uvc_video_queue *qmeta = &stream->meta.queue;
+	struct uvc_buffer *meta_buf;
 	struct uvc_meta_buf *meta;
 	size_t len_std = 2;
 	bool has_pts, has_scr;
@@ -1439,7 +1441,13 @@ static void uvc_video_decode_meta(struct uvc_streaming *stream,
 	ktime_t time;
 	const u8 *scr;
 
-	if (!meta_buf || length == 2)
+	if (!vb2_qmeta || length <= 2)
+		return;
+
+	guard(spinlock_irqsave)(&qmeta->irqlock);
+
+	meta_buf = __uvc_queue_get_current_buffer(qmeta);
+	if (!meta_buf)
 		return;
 
 	has_pts = mem[1] & UVC_STREAM_PTS;
@@ -1512,30 +1520,48 @@ static void uvc_video_validate_buffer(const struct uvc_streaming *stream,
  * Completion handler for video URBs.
  */
 
-static void uvc_video_next_buffers(struct uvc_streaming *stream,
-		struct uvc_buffer **video_buf, struct uvc_buffer **meta_buf)
+static void uvc_video_next_meta(struct uvc_streaming *stream,
+				struct uvc_buffer *video_buf)
 {
-	uvc_video_validate_buffer(stream, *video_buf);
+	struct vb2_queue *vb2_qmeta = stream->meta.vdev.queue;
+	struct uvc_video_queue *qmeta = &stream->meta.queue;
+	struct uvc_buffer *meta_buf;
+	struct vb2_v4l2_buffer *vb2_meta;
+	const struct vb2_v4l2_buffer *vb2_video;
 
-	if (*meta_buf) {
-		struct vb2_v4l2_buffer *vb2_meta = &(*meta_buf)->buf;
-		const struct vb2_v4l2_buffer *vb2_video = &(*video_buf)->buf;
+	if (!vb2_qmeta)
+		return;
 
-		vb2_meta->sequence = vb2_video->sequence;
-		vb2_meta->field = vb2_video->field;
-		vb2_meta->vb2_buf.timestamp = vb2_video->vb2_buf.timestamp;
+	guard(spinlock_irqsave)(&qmeta->irqlock);
 
-		(*meta_buf)->state = UVC_BUF_STATE_READY;
-		if (!(*meta_buf)->error)
-			(*meta_buf)->error = (*video_buf)->error;
-		*meta_buf = uvc_queue_next_buffer(&stream->meta.queue,
-						  *meta_buf);
-	}
-	*video_buf = uvc_queue_next_buffer(&stream->queue, *video_buf);
+	meta_buf = __uvc_queue_get_current_buffer(qmeta);
+	if (!meta_buf)
+		return;
+	list_del(&meta_buf->queue);
+
+	vb2_meta = &meta_buf->buf;
+	vb2_video = &video_buf->buf;
+
+	vb2_meta->sequence = vb2_video->sequence;
+	vb2_meta->field = vb2_video->field;
+	vb2_meta->vb2_buf.timestamp = vb2_video->vb2_buf.timestamp;
+	meta_buf->state = UVC_BUF_STATE_READY;
+	if (!meta_buf->error)
+		meta_buf->error = video_buf->error;
+
+	uvc_queue_buffer_release(meta_buf);
+}
+
+static struct uvc_buffer *uvc_video_next_buffer(struct uvc_streaming *stream,
+						struct uvc_buffer *video_buf)
+{
+	uvc_video_validate_buffer(stream, video_buf);
+	uvc_video_next_meta(stream, video_buf);
+	return uvc_queue_next_buffer(&stream->queue, video_buf);
 }
 
 static void uvc_video_decode_isoc(struct uvc_urb *uvc_urb,
-			struct uvc_buffer *buf, struct uvc_buffer *meta_buf)
+				  struct uvc_buffer *buf)
 {
 	struct urb *urb = uvc_urb->urb;
 	struct uvc_streaming *stream = uvc_urb->stream;
@@ -1559,13 +1585,13 @@ static void uvc_video_decode_isoc(struct uvc_urb *uvc_urb,
 			ret = uvc_video_decode_start(stream, buf, mem,
 				urb->iso_frame_desc[i].actual_length);
 			if (ret == -EAGAIN)
-				uvc_video_next_buffers(stream, &buf, &meta_buf);
+				buf = uvc_video_next_buffer(stream, buf);
 		} while (ret == -EAGAIN);
 
 		if (ret < 0)
 			continue;
 
-		uvc_video_decode_meta(stream, meta_buf, mem, ret);
+		uvc_video_decode_meta(stream, mem, ret);
 
 		/* Decode the payload data. */
 		uvc_video_decode_data(uvc_urb, buf, mem + ret,
@@ -1576,12 +1602,12 @@ static void uvc_video_decode_isoc(struct uvc_urb *uvc_urb,
 			urb->iso_frame_desc[i].actual_length);
 
 		if (buf->state == UVC_BUF_STATE_READY)
-			uvc_video_next_buffers(stream, &buf, &meta_buf);
+			buf = uvc_video_next_buffer(stream, buf);
 	}
 }
 
 static void uvc_video_decode_bulk(struct uvc_urb *uvc_urb,
-			struct uvc_buffer *buf, struct uvc_buffer *meta_buf)
+				  struct uvc_buffer *buf)
 {
 	struct urb *urb = uvc_urb->urb;
 	struct uvc_streaming *stream = uvc_urb->stream;
@@ -1607,7 +1633,7 @@ static void uvc_video_decode_bulk(struct uvc_urb *uvc_urb,
 		do {
 			ret = uvc_video_decode_start(stream, buf, mem, len);
 			if (ret == -EAGAIN)
-				uvc_video_next_buffers(stream, &buf, &meta_buf);
+				buf = uvc_video_next_buffer(stream, buf);
 		} while (ret == -EAGAIN);
 
 		/* If an error occurred skip the rest of the payload. */
@@ -1617,7 +1643,7 @@ static void uvc_video_decode_bulk(struct uvc_urb *uvc_urb,
 			memcpy(stream->bulk.header, mem, ret);
 			stream->bulk.header_size = ret;
 
-			uvc_video_decode_meta(stream, meta_buf, mem, ret);
+			uvc_video_decode_meta(stream, mem, ret);
 
 			mem += ret;
 			len -= ret;
@@ -1644,7 +1670,7 @@ static void uvc_video_decode_bulk(struct uvc_urb *uvc_urb,
 			uvc_video_decode_end(stream, buf, stream->bulk.header,
 				stream->bulk.payload_size);
 			if (buf->state == UVC_BUF_STATE_READY)
-				uvc_video_next_buffers(stream, &buf, &meta_buf);
+				buf = uvc_video_next_buffer(stream, buf);
 		}
 
 		stream->bulk.header_size = 0;
@@ -1654,7 +1680,7 @@ static void uvc_video_decode_bulk(struct uvc_urb *uvc_urb,
 }
 
 static void uvc_video_encode_bulk(struct uvc_urb *uvc_urb,
-	struct uvc_buffer *buf, struct uvc_buffer *meta_buf)
+				  struct uvc_buffer *buf)
 {
 	struct urb *urb = uvc_urb->urb;
 	struct uvc_streaming *stream = uvc_urb->stream;
@@ -1707,8 +1733,6 @@ static void uvc_video_complete(struct urb *urb)
 	struct uvc_video_queue *qmeta = &stream->meta.queue;
 	struct vb2_queue *vb2_qmeta = stream->meta.vdev.queue;
 	struct uvc_buffer *buf = NULL;
-	struct uvc_buffer *buf_meta = NULL;
-	unsigned long flags;
 	int ret;
 
 	switch (urb->status) {
@@ -1734,14 +1758,6 @@ static void uvc_video_complete(struct urb *urb)
 
 	buf = uvc_queue_get_current_buffer(queue);
 
-	if (vb2_qmeta) {
-		spin_lock_irqsave(&qmeta->irqlock, flags);
-		if (!list_empty(&qmeta->irqqueue))
-			buf_meta = list_first_entry(&qmeta->irqqueue,
-						    struct uvc_buffer, queue);
-		spin_unlock_irqrestore(&qmeta->irqlock, flags);
-	}
-
 	/* Re-initialise the URB async work. */
 	uvc_urb->async_operations = 0;
 
@@ -1755,7 +1771,7 @@ static void uvc_video_complete(struct urb *urb)
 	 * Process the URB headers, and optionally queue expensive memcpy tasks
 	 * to be deferred to a work queue.
 	 */
-	stream->decode(uvc_urb, buf, buf_meta);
+	stream->decode(uvc_urb, buf);
 
 	/* If no async work is needed, resubmit the URB immediately. */
 	if (!uvc_urb->async_operations) {
