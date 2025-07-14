@@ -75,6 +75,8 @@ void ghes_unregister_vendor_record_notifier(struct notifier_block *nb);
 struct list_head *ghes_get_devices(void);
 
 void ghes_estatus_pool_region_free(unsigned long addr, u32 size);
+
+extern unsigned int ghes_recovered_erors;
 #else
 static inline struct list_head *ghes_get_devices(void) { return NULL; }
 

@@ -14,6 +14,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
+#include <acpi/ghes.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -223,6 +224,9 @@ static int __init crash_save_vmcoreinfo_init(void)
 	VMCOREINFO_SYMBOL(kallsyms_offsets);
 	VMCOREINFO_SYMBOL(kallsyms_relative_base);
 #endif /* CONFIG_KALLSYMS */
+#ifdef CONFIG_ACPI_APEI_GHES
+	VMCOREINFO_NUMBER(ghes_recovered_erors);
+#endif
 
 	arch_crash_save_vmcoreinfo();
 	update_vmcoreinfo_note();
