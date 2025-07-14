@@ -1319,6 +1319,122 @@ static const struct file_operations cdq_fops = {
 	.read		= nvme_cdq_fops_read,
 };
 
+static int nvme_cdq_fd(struct cdq_nvme_queue *cdq, int *fdno)
+{
+	int ret = 0;
+	struct file *filep;
+
+	*fdno = -1;
+
+	if (cdq->filep)
+		return -EINVAL;
+
+	filep = anon_inode_getfile("[cdq-readfd]", &cdq_fops, cdq, O_RDWR);
+	if (IS_ERR(filep)) {
+		ret = PTR_ERR(filep);
+		goto out;
+	}
+
+	*fdno = get_unused_fd_flags(O_CLOEXEC | O_RDONLY | O_DIRECT);
+	if (*fdno < 0) {
+		ret = *fdno;
+		goto out_fput;
+	}
+
+	fd_install(*fdno, filep);
+	cdq->filep = filep;
+
+	return 0;
+
+out_fput:
+	put_unused_fd(*fdno);
+	fput(filep);
+out:
+	return ret;
+}
+
+static int nvme_cdq_alloc(struct nvme_ctrl *ctrl, struct cdq_nvme_queue **cdq,
+			  u32 entry_nr, u32 entry_nbyte)
+{
+	struct cdq_nvme_queue *ret_cdq = kzalloc(sizeof(*ret_cdq), GFP_KERNEL);
+
+	if (!ret_cdq)
+		return -ENOMEM;
+
+	ret_cdq->entries = dma_alloc_coherent(ctrl->dev,
+					      entry_nr * entry_nbyte,
+					      &ret_cdq->entries_dma_addr,
+					      GFP_KERNEL);
+	if (!ret_cdq->entries) {
+		kfree(ret_cdq);
+		return -ENOMEM;
+	}
+
+	*cdq = ret_cdq;
+
+	return 0;
+}
+
+static void nvme_cdq_free(struct nvme_ctrl *ctrl, struct cdq_nvme_queue *cdq)
+{
+	dma_free_coherent(ctrl->dev, cdq->entry_nr * cdq->entry_nbyte,
+			  cdq->entries, cdq->entries_dma_addr);
+	kfree(cdq);
+}
+
+
+int nvme_cdq_create(struct nvme_ctrl *ctrl, struct nvme_command *c,
+		    const u32 entry_nr, const u32 entry_nbyte,
+		    uint cdqp_offset, uint cdqp_mask,
+		    u16 *cdq_id, int *cdq_fd)
+{
+	int ret, fdno;
+	struct cdq_nvme_queue *cdq, *xa_ret;
+	union nvme_result result = { };
+
+	ret = nvme_cdq_alloc(ctrl, &cdq, entry_nr, entry_nbyte);
+	if (ret)
+		return ret;
+	c->cdq.prp1 = cdq->entries_dma_addr;
+
+	ret = __nvme_submit_sync_cmd(ctrl->admin_q, c, &result, NULL, 0, NVME_QID_ANY, 0);
+	if (ret)
+		goto err_cdq_free;
+
+	cdq->cdq_id = le16_to_cpu(result.u16);
+	cdq->entry_nbyte = entry_nbyte;
+	cdq->entry_nr = entry_nr;
+	cdq->ctrl = ctrl;
+	cdq->cdqp_offset = cdqp_offset;
+	cdq->cdqp_mask = cdqp_mask;
+
+	xa_ret = xa_store(&ctrl->cdqs, cdq->cdq_id, cdq, GFP_KERNEL);
+	if (xa_is_err(xa_ret)) {
+		ret = xa_err(xa_ret);
+		goto err_cdq_free;
+	}
+
+	ret = nvme_cdq_fd(cdq, &fdno);
+	if (ret)
+		goto err_cdq_erase;
+
+	*cdq_id = cdq->cdq_id;
+	*cdq_fd = fdno;
+
+	return 0;
+
+err_cdq_erase:
+	xa_erase(&ctrl->cdqs, cdq->cdq_id);
+
+err_cdq_free:
+	cdq_id = NULL;
+	cdq_fd = NULL;
+	nvme_cdq_free(ctrl, cdq);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nvme_cdq_create);
+
 void nvme_passthru_end(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u32 effects,
 		       struct nvme_command *cmd, int status)
 {
