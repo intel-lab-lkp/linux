@@ -1313,10 +1313,18 @@ static ssize_t nvme_cdq_fops_read(struct file *filep, char __user *buf,
 	return nvme_cdq_traverse(cdq, nbytes, buf);
 }
 
+static int nvme_cdq_fops_release(struct inode *inode, struct file *filep)
+{
+	struct cdq_nvme_queue *cdq = filep->private_data;
+
+	return nvme_cdq_delete(cdq->ctrl, cdq->cdq_id);
+}
+
 static const struct file_operations cdq_fops = {
 	.owner		= THIS_MODULE,
 	.open		= nonseekable_open,
 	.read		= nvme_cdq_fops_read,
+	.release	= nvme_cdq_fops_release,
 };
 
 static int nvme_cdq_fd(struct cdq_nvme_queue *cdq, int *fdno)
