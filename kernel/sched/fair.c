@@ -3980,6 +3980,7 @@ static void update_cfs_group(struct sched_entity *se)
 {
 	struct cfs_rq *gcfs_rq = group_cfs_rq(se);
 	long shares;
+	u64 now;
 
 	/*
 	 * When a group becomes empty, preserve its weight. This matters for
@@ -3989,6 +3990,14 @@ static void update_cfs_group(struct sched_entity *se)
 		return;
 
 	if (throttled_hierarchy(gcfs_rq))
+		return;
+
+	/*
+	 * For migration heavy workloads, access to tg->load_avg can be
+	 * unbound. Limit the update rate to at most once per ms.
+	 */
+	now = sched_clock_cpu(cpu_of(rq_of(gcfs_rq)));
+	if (now - gcfs_rq->last_update_tg_load_avg < NSEC_PER_MSEC)
 		return;
 
 #ifndef CONFIG_SMP
