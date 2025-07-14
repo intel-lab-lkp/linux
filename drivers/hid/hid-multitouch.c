@@ -1503,18 +1503,25 @@ static const __u8 *mt_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 	if (hdev->vendor == I2C_VENDOR_ID_GOODIX &&
 	    (hdev->product == I2C_DEVICE_ID_GOODIX_01E8 ||
 	     hdev->product == I2C_DEVICE_ID_GOODIX_01E9)) {
-		if (rdesc[607] == 0x15) {
-			rdesc[607] = 0x25;
-			dev_info(
-				&hdev->dev,
-				"GT7868Q report descriptor fixup is applied.\n");
+		if (*size >= 608) {
+			if (rdesc[607] == 0x15) {
+				rdesc[607] = 0x25;
+				dev_info(
+					&hdev->dev,
+					"GT7868Q report descriptor fixup is applied.\n");
+			} else {
+				dev_info(
+					&hdev->dev,
+					"The byte is not expected for fixing the report descriptor. \
+					It's possible that the touchpad firmware is not suitable for applying the fix. \
+					got: %x\n",
+					rdesc[607]);
+			}
 		} else {
 			dev_info(
 				&hdev->dev,
-				"The byte is not expected for fixing the report descriptor. \
-It's possible that the touchpad firmware is not suitable for applying the fix. \
-got: %x\n",
-				rdesc[607]);
+				"GT7868Q fixup: report descriptor only %u bytes, skipping\n",
+				*size);
 		}
 	}
 
