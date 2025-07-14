@@ -400,11 +400,12 @@ struct airoha_npu *airoha_npu_get(struct device *dev, dma_addr_t *stats_addr)
 	if (!np)
 		return ERR_PTR(-ENODEV);
 
+	const char *np_name = np->name;
 	pdev = of_find_device_by_node(np);
 	of_node_put(np);
 
 	if (!pdev) {
-		dev_err(dev, "cannot find device node %s\n", np->name);
+		dev_err(dev, "cannot find device node %s\n", np_name);
 		return ERR_PTR(-ENODEV);
 	}
 
