@@ -843,6 +843,8 @@ int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 	u64 esr = events->exception.serror_esr;
 	int ret = 0;
 
+	vcpu_clear_flag(vcpu, EXCEPT_MASK);
+
 	if (ext_dabt_pending)
 		ret = kvm_inject_sea_dabt(vcpu, kvm_vcpu_get_hfar(vcpu));
 
