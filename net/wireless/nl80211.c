@@ -9439,7 +9439,6 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	request = kzalloc(size, GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
-	request->n_channels = n_channels;
 
 	if (n_ssids)
 		request->ssids = (void *)request + ssids_offset;
