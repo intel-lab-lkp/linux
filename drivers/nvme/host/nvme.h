@@ -1211,6 +1211,7 @@ int nvme_cdq_create(struct nvme_ctrl *ctrl, struct nvme_command *c,
 		    const u32 entry_nr, const u32 entry_nbyte,
 		    uint cdqp_offset, uint cdqp_mask,
 		    u16 *cdq_id, int *cdq_fd);
+int nvme_cdq_delete(struct nvme_ctrl *ctrl, const u16 cdq_id);
 struct nvme_ctrl *nvme_ctrl_from_file(struct file *file);
 struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid);
 bool nvme_get_ns(struct nvme_ns *ns);
