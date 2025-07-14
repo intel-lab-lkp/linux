@@ -496,6 +496,7 @@ static int kvm_arm_pmu_v3_init(struct kvm_vcpu *vcpu)
 	init_irq_work(&vcpu->arch.pmu.overflow_work,
 		      kvm_pmu_perf_overflow_notify_vcpu);
 
+	vcpu->arch.pmu.owner = VCPU_REGISTER_HOST_OWNED;
 	vcpu->arch.pmu.created = true;
 	return 0;
 }
@@ -905,4 +906,27 @@ bool check_pmu_access_disabled(struct kvm_vcpu *vcpu, u64 flags)
 bool pmu_access_el0_disabled(struct kvm_vcpu *vcpu)
 {
 	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_EN);
+}
+
+bool kvm_pmu_regs_free(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.pmu.owner == VCPU_REGISTER_FREE;
+}
+
+bool kvm_pmu_regs_host_owned(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.pmu.owner == VCPU_REGISTER_HOST_OWNED;
+}
+
+bool kvm_pmu_regs_guest_owned(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.pmu.owner == VCPU_REGISTER_GUEST_OWNED;
+}
+
+void kvm_pmu_regs_set_guest_owned(struct kvm_vcpu *vcpu)
+{
+	if (kvm_pmu_regs_free(vcpu)) {
+		vcpu->arch.pmu.owner = VCPU_REGISTER_GUEST_OWNED;
+		kvm_arm_setup_mdcr_el2(vcpu);
+	}
 }

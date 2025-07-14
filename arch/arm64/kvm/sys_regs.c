@@ -860,6 +860,8 @@ static bool access_pmcr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 {
 	u64 val;
 
+	kvm_pmu_regs_set_guest_owned(vcpu);
+
 	if (pmu_access_el0_disabled(vcpu))
 		return false;
 
@@ -887,6 +889,8 @@ static bool access_pmcr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 static bool access_pmselr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			  const struct sys_reg_desc *r)
 {
+	kvm_pmu_regs_set_guest_owned(vcpu);
+
 	if (pmu_access_event_counter_el0_disabled(vcpu))
 		return false;
 
@@ -904,6 +908,8 @@ static bool access_pmceid(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			  const struct sys_reg_desc *r)
 {
 	u64 pmceid, mask, shift;
+
+	kvm_pmu_regs_set_guest_owned(vcpu);
 
 	BUG_ON(p->is_write);
 
@@ -972,6 +978,8 @@ static bool access_pmu_evcntr(struct kvm_vcpu *vcpu,
 			      const struct sys_reg_desc *r)
 {
 	u64 idx = ~0UL;
+
+	kvm_pmu_regs_set_guest_owned(vcpu);
 
 	if (r->CRn == 9 && r->CRm == 13) {
 		if (r->Op2 == 2) {
@@ -1049,6 +1057,8 @@ static bool access_pmu_evtyper(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 {
 	u64 idx, reg, pmselr;
 
+	kvm_pmu_regs_set_guest_owned(vcpu);
+
 	if (pmu_access_el0_disabled(vcpu))
 		return false;
 
@@ -1110,6 +1120,8 @@ static bool access_pmcnten(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 {
 	u64 val, mask;
 
+	kvm_pmu_regs_set_guest_owned(vcpu);
+
 	if (pmu_access_el0_disabled(vcpu))
 		return false;
 
@@ -1134,7 +1146,10 @@ static bool access_pmcnten(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 static bool access_pminten(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			   const struct sys_reg_desc *r)
 {
-	u64 mask = kvm_pmu_accessible_counter_mask(vcpu);
+	u64 mask;
+
+	kvm_pmu_regs_set_guest_owned(vcpu);
+	mask = kvm_pmu_accessible_counter_mask(vcpu);
 
 	if (check_pmu_access_disabled(vcpu, 0))
 		return false;
@@ -1171,7 +1186,10 @@ static void writethrough_pmovs(struct kvm_vcpu *vcpu, struct sys_reg_params *p, 
 static bool access_pmovs(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			 const struct sys_reg_desc *r)
 {
-	u64 mask = kvm_pmu_accessible_counter_mask(vcpu);
+	u64 mask;
+
+	kvm_pmu_regs_set_guest_owned(vcpu);
+	mask = kvm_pmu_accessible_counter_mask(vcpu);
 
 	if (pmu_access_el0_disabled(vcpu))
 		return false;
@@ -1211,6 +1229,8 @@ static bool access_pmswinc(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 static bool access_pmuserenr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			     const struct sys_reg_desc *r)
 {
+	kvm_pmu_regs_set_guest_owned(vcpu);
+
 	if (p->is_write) {
 		if (!vcpu_mode_priv(vcpu))
 			return undef_access(vcpu, p, r);

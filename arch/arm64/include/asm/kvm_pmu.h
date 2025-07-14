@@ -97,6 +97,11 @@ u64 kvm_pmu_guest_counter_mask(struct arm_pmu *pmu);
 void kvm_pmu_host_counters_enable(void);
 void kvm_pmu_host_counters_disable(void);
 
+bool kvm_pmu_regs_free(struct kvm_vcpu *vcpu);
+bool kvm_pmu_regs_host_owned(struct kvm_vcpu *vcpu);
+bool kvm_pmu_regs_guest_owned(struct kvm_vcpu *vcpu);
+void kvm_pmu_regs_set_guest_owned(struct kvm_vcpu *vcpu);
+
 u8 kvm_pmu_guest_num_counters(struct kvm_vcpu *vcpu);
 u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
@@ -168,6 +173,19 @@ static inline u8 kvm_pmu_guest_num_counters(struct kvm_vcpu *vcpu)
 {
 	return 0;
 }
+static inline bool kvm_pmu_regs_free(struct kvm_vcpu *vcpu)
+{
+	return false;
+}
+static inline bool kvm_pmu_regs_host_owned(struct kvm_vcpu *vcpu)
+{
+	return true;
+}
+static inline bool kvm_pmu_regs_guest_owned(struct kvm_vcpu *vcpu)
+{
+	return false;
+}
+static inline void kvm_pmu_regs_set_guest_owned(struct kvm_vcpu *vcpu) {}
 static inline u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu)
 {
 	return 0;
