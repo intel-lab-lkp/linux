@@ -92,6 +92,15 @@ config HID_GENERIC
 
 	If unsure, say Y.
 
+config HID_HAPTIC
+	bool "Haptic touchpad support"
+	default n
+	help
+	Support for touchpads with force sensors and haptic actuators instead of a
+	traditional button.
+
+	If unsure, say N.
+
 menu "Special HID drivers"
 
 config HID_A4TECH
