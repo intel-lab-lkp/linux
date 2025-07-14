@@ -748,6 +748,18 @@ static int gs_usb_set_data_bittiming(struct net_device *netdev)
 				    GFP_KERNEL);
 }
 
+static int gs_usb_do_set_mode(struct net_device *netdev, enum can_mode mode)
+{
+	switch (mode) {
+	case CAN_MODE_START:
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static void gs_usb_xmit_callback(struct urb *urb)
 {
 	struct gs_tx_context *txc = urb->context;
@@ -1278,6 +1290,7 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	dev->can.clock.freq = le32_to_cpu(bt_const.fclk_can);
 	dev->can.bittiming_const = &dev->bt_const;
 	dev->can.do_set_bittiming = gs_usb_set_bittiming;
+	dev->can.do_set_mode = gs_usb_do_set_mode;
 
 	dev->can.ctrlmode_supported = CAN_CTRLMODE_CC_LEN8_DLC;
 
