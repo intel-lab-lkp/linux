@@ -39,8 +39,6 @@
 #include "phylib-internal.h"
 #include "phy-caps.h"
 
-#define PHY_STATE_TIME	HZ
-
 #define PHY_STATE_STR(_state)			\
 	case PHY_##_state:			\
 		return __stringify(_state);	\
@@ -1575,16 +1573,31 @@ static enum phy_state_work _phy_state_machine(struct phy_device *phydev)
 	phy_process_state_change(phydev, old_state);
 
 	/* Only re-schedule a PHY state machine change if we are polling the
-	 * PHY, if PHY_MAC_INTERRUPT is set, then we will be moving
-	 * between states from phy_mac_interrupt().
+	 * PHY. If PHY_MAC_INTERRUPT is set or get_next_update_time() returns
+	 * PHY_STATE_IRQ, then we rely on interrupts for state changes.
 	 *
 	 * In state PHY_HALTED the PHY gets suspended, so rescheduling the
 	 * state machine would be pointless and possibly error prone when
 	 * called from phy_disconnect() synchronously.
 	 */
-	if (phy_polling_mode(phydev) && phy_is_started(phydev))
-		phy_queue_state_machine(phydev,
-					phy_get_next_update_time(phydev));
+	if (phy_polling_mode(phydev) && phy_is_started(phydev)) {
+		unsigned int next_time = phy_get_next_update_time(phydev);
+
+		if (next_time == PHY_STATE_IRQ) {
+			/* A driver requesting IRQ mode while also needing
+			 * polling for stats has a conflicting configuration.
+			 * Warn about this buggy driver and fall back to
+			 * polling to ensure stats are updated.
+			 */
+			if (phydev->drv->update_stats) {
+				WARN_ONCE(1, "phy: %s: driver requested IRQ mode but needs polling for stats\n",
+					  phydev_name(phydev));
+				phy_queue_state_machine(phydev, PHY_STATE_TIME);
+			}
+		} else {
+			phy_queue_state_machine(phydev, next_time);
+		}
+	}
 
 	return state_work;
 }
