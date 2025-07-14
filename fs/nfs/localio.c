@@ -49,6 +49,11 @@ struct nfs_local_fsync_ctx {
 static bool localio_enabled __read_mostly = true;
 module_param(localio_enabled, bool, 0644);
 
+static bool localio_async_probe __read_mostly = true;
+module_param(localio_async_probe, bool, 0644);
+MODULE_PARM_DESC(localio_async_probe,
+		 "Probe for LOCALIO support asynchronously.");
+
 static bool localio_O_DIRECT_semantics __read_mostly = false;
 module_param(localio_O_DIRECT_semantics, bool, 0644);
 MODULE_PARM_DESC(localio_O_DIRECT_semantics,
@@ -203,7 +208,10 @@ void nfs_local_probe_async_work(struct work_struct *work)
 
 void nfs_local_probe_async(struct nfs_client *clp)
 {
-	queue_work(nfsiod_workqueue, &clp->cl_local_probe_work);
+	if (likely(localio_async_probe))
+		queue_work(nfsiod_workqueue, &clp->cl_local_probe_work);
+	else
+		nfs_local_probe(clp);
 }
 EXPORT_SYMBOL_GPL(nfs_local_probe_async);
 
