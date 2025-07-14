@@ -39,6 +39,9 @@
 /* interval between phylib state machine runs in ms */
 #define PHY_STATE_MACH_MS		1000
 
+/* max retry window for missed link-up */
+#define SMSC_IRQ_MAX_POLLING_TIME	secs_to_jiffies(30)
+
 struct smsc_hw_stat {
 	const char *string;
 	u8 reg;
@@ -54,6 +57,7 @@ struct smsc_phy_priv {
 	unsigned int edpd_mode_set_by_user:1;
 	unsigned int edpd_max_wait_ms;
 	bool wol_arp;
+	unsigned long last_irq;
 };
 
 static int smsc_phy_ack_interrupt(struct phy_device *phydev)
@@ -100,6 +104,7 @@ static int smsc_phy_config_edpd(struct phy_device *phydev)
 
 irqreturn_t smsc_phy_handle_interrupt(struct phy_device *phydev)
 {
+	struct smsc_phy_priv *priv = phydev->priv;
 	int irq_status;
 
 	irq_status = phy_read(phydev, MII_LAN83C185_ISF);
@@ -112,6 +117,8 @@ irqreturn_t smsc_phy_handle_interrupt(struct phy_device *phydev)
 
 	if (!(irq_status & MII_LAN83C185_ISF_INT_PHYLIB_EVENTS))
 		return IRQ_NONE;
+
+	WRITE_ONCE(priv->last_irq, jiffies);
 
 	phy_trigger_machine(phydev);
 
@@ -684,6 +691,38 @@ int smsc_phy_probe(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(smsc_phy_probe);
 
+static unsigned int smsc_phy_get_next_update(struct phy_device *phydev)
+{
+	struct smsc_phy_priv *priv = phydev->priv;
+
+	/* If interrupts are disabled, fall back to default polling */
+	if (phydev->irq == PHY_POLL)
+		return PHY_STATE_TIME;
+
+	/*
+	 * LAN8700 may miss the final link-up IRQ when forced to 10 Mbps
+	 * (half/full duplex) and connected to an autonegotiating partner.
+	 *
+	 * To recover, poll at 1 Hz for up to 30 seconds after the last
+	 * interrupt - but only in this specific configuration and while
+	 * the link is still down.
+	 *
+	 * This keeps link-up latency low in common cases while reliably
+	 * detecting rare transitions. Outside of this mode, rely on IRQs.
+	 */
+	if (phydev->autoneg == AUTONEG_DISABLE && phydev->speed == SPEED_10 &&
+	    !phydev->link) {
+		unsigned long last_irq = READ_ONCE(priv->last_irq);
+
+		if (!time_is_before_jiffies(last_irq +
+					    SMSC_IRQ_MAX_POLLING_TIME))
+			return PHY_STATE_TIME;
+	}
+
+	/* switching to IRQ without polling */
+	return PHY_STATE_IRQ;
+}
+
 static struct phy_driver smsc_phy_driver[] = {
 {
 	.phy_id		= 0x0007c0a0, /* OUI=0x00800f, Model#=0x0a */
@@ -749,6 +788,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	/* IRQ related */
 	.config_intr	= smsc_phy_config_intr,
 	.handle_interrupt = smsc_phy_handle_interrupt,
+	.get_next_update_time = smsc_phy_get_next_update,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
