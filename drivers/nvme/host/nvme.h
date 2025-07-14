@@ -411,6 +411,7 @@ struct nvme_ctrl {
 	enum nvme_ctrl_type cntrltype;
 	enum nvme_dctype dctype;
 	u16 awupf; /* 0's based value. */
+	struct xarray cdqs; /* Controller Data Queue */
 };
 
 static inline enum nvme_ctrl_state nvme_ctrl_state(struct nvme_ctrl *ctrl)
@@ -552,6 +553,20 @@ static inline bool nvme_ns_has_pi(struct nvme_ns_head *head)
 {
 	return head->pi_type && head->ms == head->pi_size;
 }
+
+struct cdq_nvme_queue {
+	struct nvme_ctrl *ctrl;
+	void *entries;
+	u32 entry_nbyte;
+	u32 entry_nr;
+	u32 curr_entry;
+	u8 curr_cdqp;
+	uint cdqp_offset;
+	uint cdqp_mask;
+	dma_addr_t entries_dma_addr;
+	u16 cdq_id;
+	struct file *filep;
+};
 
 struct nvme_ctrl_ops {
 	const char *name;
