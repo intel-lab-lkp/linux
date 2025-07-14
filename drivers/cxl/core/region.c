@@ -3234,6 +3234,9 @@ cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
 	struct device *cxld_dev = device_find_child(&port->dev, hpa,
 						    match_decoder_by_range);
 
+	/* Drop the refcnt bumped implicitly by device_find_child */
+	put_device(cxld_dev);
+
 	return cxld_dev ? to_cxl_decoder(cxld_dev) : NULL;
 }
 
