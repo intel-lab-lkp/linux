@@ -701,8 +701,32 @@ static int bond_fill_info(struct sk_buff *skb,
 
 	targets_added = 0;
 	for (i = 0; i < BOND_MAX_ARP_TARGETS; i++) {
-		if (bond->params.arp_targets[i].target_ip) {
-			if (nla_put_be32(skb, i, bond->params.arp_targets[i].target_ip))
+		struct bond_arp_target *target = &bond->params.arp_targets[i];
+		struct Data {
+			__u32 addr;
+			struct bond_vlan_tag vlans[BOND_MAX_VLAN_TAGS + 1];
+		} data;
+		int size = 0;
+
+		if (target->target_ip) {
+			data.addr = target->target_ip;
+			size = sizeof(target->target_ip);
+		}
+
+		for (int level = 0; target->flags & BOND_TARGET_USERTAGS && target->tags; level++) {
+			if (level > BOND_MAX_VLAN_TAGS)
+				goto nla_put_failure;
+
+			memcpy(&data.vlans[level], &target->tags[level],
+			       sizeof(struct bond_vlan_tag));
+			size = size + sizeof(struct bond_vlan_tag);
+
+			if (target->tags[level].vlan_proto == BOND_VLAN_PROTO_NONE)
+				break;
+		}
+
+		if (size) {
+			if (nla_put(skb, i, size, &data))
 				goto nla_put_failure;
 			targets_added = 1;
 		}
