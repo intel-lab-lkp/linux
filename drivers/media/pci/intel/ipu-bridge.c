@@ -198,6 +198,7 @@ static int ipu_bridge_check_ivsc_dev(struct ipu_sensor *sensor,
 
 		sensor->csi_dev = csi_dev;
 		sensor->ivsc_adev = adev;
+		put_device(csi_dev);
 	}
 
 	return 0;
