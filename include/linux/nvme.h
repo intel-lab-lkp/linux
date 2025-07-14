@@ -1240,6 +1240,7 @@ enum nvme_admin_opcode {
 	nvme_admin_virtual_mgmt		= 0x1c,
 	nvme_admin_nvme_mi_send		= 0x1d,
 	nvme_admin_nvme_mi_recv		= 0x1e,
+	nvme_admin_cdq			= 0x45,
 	nvme_admin_dbbuf		= 0x7C,
 	nvme_admin_format_nvm		= 0x80,
 	nvme_admin_security_send	= 0x81,
@@ -1309,6 +1310,7 @@ enum {
 	NVME_FEAT_PLM_WINDOW	= 0x14,
 	NVME_FEAT_HOST_BEHAVIOR	= 0x16,
 	NVME_FEAT_SANITIZE	= 0x17,
+	NVME_FEAT_CDQ		= 0x21,
 	NVME_FEAT_SW_PROGRESS	= 0x80,
 	NVME_FEAT_HOST_ID	= 0x81,
 	NVME_FEAT_RESV_MASK	= 0x82,
@@ -1512,6 +1514,33 @@ struct nvme_directive_cmd {
 	__u16			rsvd15;
 
 	__u32			rsvd16[3];
+};
+
+struct nvme_cdq {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u32			rsvd1[5];
+	__le64			prp1;
+	__u32			rsvd8[2];
+#define NVME_CDQ_SEL_CREATE_CDQ	0x0
+#define NVME_CDQ_SEL_DELETE_CDQ	0x1
+	__u8			sel;
+	__u8			rsvd10;
+	__le16			mos;
+	union {
+		struct {
+#define NVME_CDQ_CFG_PC_CONT	(1 << 0)
+			__le16	cdq_flags;
+			__le16	cqs;
+		} create;
+		struct {
+			__le16	cdqid;
+			__le16	rsvd;
+		} delete;
+	};
+	__le32			cdqsize;
+	__u32			rsvd13[2];
 };
 
 /*
@@ -1923,6 +1952,7 @@ struct nvme_command {
 		struct nvmf_auth_receive_command auth_receive;
 		struct nvme_dbbuf dbbuf;
 		struct nvme_directive_cmd directive;
+		struct nvme_cdq cdq;
 	};
 };
 
