@@ -44,6 +44,30 @@ static ssize_t iio_hwmon_read_label(struct device *dev,
 	return iio_read_channel_label(chan, buf);
 }
 
+/**
+ * iio_hwmon_scale() - Look up the scaling factor for a channel
+ * @chan: Channel to get the scale of
+ *
+ * Determine the scale to use with @chan in the case where IIO and HWMON use
+ * different units.
+ *
+ * Return: scale of @chan
+ */
+static int iio_hwmon_scale(struct iio_channel *chan)
+{
+	enum iio_chan_type type;
+	int ret;
+
+	ret = iio_get_channel_type(chan, &type);
+	if (ret < 0)
+		return ret;
+
+	/* mili-Watts to micro-Watts conversion */
+	if (type == IIO_POWER)
+		return 1000;
+	return 1;
+}
+
 /*
  * Assumes that IIO and hwmon operate in the same base units.
  * This is supposed to be true, but needs verification for
@@ -53,22 +77,16 @@ static ssize_t iio_hwmon_read_val(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
 {
-	int result;
-	int ret;
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
 	struct iio_hwmon_state *state = dev_get_drvdata(dev);
 	struct iio_channel *chan = &state->channels[sattr->index];
-	enum iio_chan_type type;
+	int ret, result, scale;
 
-	ret = iio_get_channel_type(chan, &type);
-	if (ret < 0)
-		return ret;
+	scale = iio_hwmon_scale(chan);
+	if (scale < 0)
+		return scale;
 
-	if (type == IIO_POWER)
-		/* mili-Watts to micro-Watts conversion */
-		ret = iio_read_channel_processed_scale(chan, &result, 1000);
-	else
-		ret = iio_read_channel_processed(chan, &result);
+	ret = iio_read_channel_processed_scale(chan, &result, scale);
 	if (ret < 0)
 		return ret;
 
