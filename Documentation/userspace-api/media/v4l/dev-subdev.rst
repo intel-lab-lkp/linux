@@ -600,11 +600,15 @@ depending on the hardware. In all cases, however, only routes that have the
 ``V4L2_SUBDEV_ROUTE_FL_ACTIVE`` flag set are active.
 
 Devices generating the streams may allow enabling and disabling some of the
-routes or have a fixed routing configuration. If the routes can be disabled, not
-declaring the routes (or declaring them without ``V4L2_SUBDEV_ROUTE_FL_ACTIVE``
-flag set) in ``VIDIOC_SUBDEV_S_ROUTING`` will disable the routes.
-``VIDIOC_SUBDEV_S_ROUTING`` will still return such routes back to the user in
-the routes array, with the ``V4L2_SUBDEV_ROUTE_FL_ACTIVE`` flag unset.
+routes or have a fixed routing configuration. Routes that are bound to hardware
+resources and are always present are marked with ``V4L2_SUBDEV_ROUTE_FL_STATIC``
+flag. Static routes that cannot be disabled are marked with
+``V4L2_SUBDEV_ROUTE_FL_IMMUTABLE`` route flag. Static routes can be disabled by
+not declaring the routes (or declaring them without
+``V4L2_SUBDEV_ROUTE_FL_ACTIVE`` flag set) in
+``VIDIOC_SUBDEV_S_ROUTING``. ``VIDIOC_SUBDEV_S_ROUTING`` will still return such
+routes back to the user in the routes array, with the
+``V4L2_SUBDEV_ROUTE_FL_ACTIVE`` flag unset.
 
 Devices transporting the streams almost always have more configurability with
 respect to routing. Typically any route between the sub-device's sink and source
