@@ -953,6 +953,15 @@ config REGULATOR_MT6370
 	  This driver supports the control for DisplayBias voltages and one
 	  general purpose LDO which is commonly used to drive the vibrator.
 
+config REGULATOR_MT6373
+	tristate "MT6373 SPMI PMIC regulator driver"
+	depends on SPMI || COMPILE_TEST
+	help
+          Say Y here to enable support for buck and LDO regulators found in
+          the MediaTek MT6373 SPMI PMIC and its variants.
+	  This driver supports the control of different power rails of device
+	  through regulator interface.
+
 config REGULATOR_MT6380
 	tristate "MediaTek MT6380 PMIC"
 	depends on MTK_PMIC_WRAP
