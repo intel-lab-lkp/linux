@@ -18,6 +18,7 @@
 #include <linux/pm_runtime.h>
 
 #include <linux/mei.h>
+#include <linux/mei_me.h>
 
 #include "mei_dev.h"
 #include "client.h"
@@ -132,6 +133,22 @@ static const struct pci_device_id mei_me_pci_tbl[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, mei_me_pci_tbl);
+
+/**
+ * mei_me_device_present - check if an ME device is present on the system
+ *
+ * Other drivers (e.g., i915, xe) interface with the ME device for some of their
+ * features (e.g., PXP, HDCP). However, the ME device can be hidden by
+ * BIOS/coreboot, so this function offers a way for those drivers to check if
+ * the device is available before attempting to interface with it.
+ *
+ * Return: true if an ME device is available, false otherwise
+ */
+bool mei_me_device_present(void)
+{
+	return pci_dev_present(mei_me_pci_tbl);
+}
+EXPORT_SYMBOL(mei_me_device_present);
 
 #ifdef CONFIG_PM
 static inline void mei_me_set_pm_domain(struct mei_device *dev);
