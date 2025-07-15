@@ -2525,33 +2525,25 @@ static int register_region(struct cxl_region *cxlr, int id)
 }
 
 /**
- * devm_cxl_add_region - Adds a region to a decoder
- * @cxlrd: root decoder
- * @id: memregion id to create, or memregion_free() on failure
- * @mode: mode for the endpoint decoders of this region
- * @type: select whether this is an expander or accelerator (type-2 or type-3)
+ * devm_cxl_add_region - Adds a region to the CXL hierarchy.
+ * @cxlr: region to be added
+ * @id: memregion id to create must match current @port_id of the
+ *      region's @cxlrd
  *
  * This is the second step of region initialization. Regions exist within an
  * address space which is mapped by a @cxlrd.
  *
- * Return: 0 if the region was added to the @cxlrd, else returns negative error
- * code. The region will be named "regionZ" where Z is the unique region number.
+ * Return: Pointer to the region if the region could be registered
+ * (for use in a tail call). The region will be named "regionZ" where
+ * Z is the unique region number. On errors, devm_cxl_add_region()
+ * returns an encoded negative error code and releases or unregisters
+ * @cxlr.
  */
-static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
-					      int id,
-					      enum cxl_partition_mode mode,
-					      enum cxl_decoder_type type)
+static struct cxl_region *devm_cxl_add_region(struct cxl_region *cxlr, int id)
 {
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
-	struct cxl_region *cxlr;
 	int rc;
-
-	cxlr = cxl_region_alloc(cxlrd);
-	if (IS_ERR(cxlr))
-		return cxlr;
-
-	cxlr->mode = mode;
-	cxlr->type = type;
 
 	rc = register_region(cxlr, id);
 	if (rc) {
@@ -2589,6 +2581,8 @@ static ssize_t create_ram_region_show(struct device *dev,
 static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 					  enum cxl_partition_mode mode, int id)
 {
+	struct cxl_region *cxlr;
+
 	switch (mode) {
 	case CXL_PARTMODE_RAM:
 	case CXL_PARTMODE_PMEM:
@@ -2598,7 +2592,14 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(-EINVAL);
 	}
 
-	return devm_cxl_add_region(cxlrd, id, mode, CXL_DECODER_HOSTONLYMEM);
+	cxlr = cxl_region_alloc(cxlrd);
+	if (IS_ERR(cxlr))
+		return cxlr;
+
+	cxlr->mode = mode;
+	cxlr->type = CXL_DECODER_HOSTONLYMEM;
+
+	return devm_cxl_add_region(cxlr, id);
 }
 
 static ssize_t create_region_store(struct device *dev, const char *buf,
