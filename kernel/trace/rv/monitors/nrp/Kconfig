@@ -3,7 +3,7 @@
 config RV_MON_NRP
 	depends on RV
 	depends on RV_MON_SCHED
-	default y if !ARCH_ARM64
+	default y if !ARM64
 	select DA_MON_EVENTS_ID
 	bool "nrp monitor"
 	help
