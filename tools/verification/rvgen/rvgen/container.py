@@ -20,3 +20,16 @@ class Container(generator.RVGenerator):
         main_h = self.main_h
         main_h = main_h.replace("%%MODEL_NAME%%", self.name)
         return main_h
+
+    def fill_kconfig_tooltip(self):
+        """Override to produce a marker for this container in the Kconfig"""
+        container_marker = f"# Add new {self.name} monitors here\n"
+        if self.auto_patch:
+            self._patch_file("Kconfig",
+                            "# Add new monitors here", "")
+        result = super().fill_kconfig_tooltip()
+        if self.auto_patch:
+            self._patch_file("Kconfig",
+                            "# Add new monitors here", container_marker)
+            return result
+        return result + container_marker
