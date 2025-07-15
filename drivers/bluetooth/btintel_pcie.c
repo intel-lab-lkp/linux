@@ -1988,12 +1988,6 @@ static int btintel_pcie_send_frame(struct hci_dev *hdev,
 				btintel_pcie_inject_cmd_complete(hdev, opcode);
 		}
 
-		/* Firmware raises alive interrupt on HCI_OP_RESET or
-		 * BTINTEL_HCI_OP_RESET
-		 */
-		if (opcode == HCI_OP_RESET || opcode == BTINTEL_HCI_OP_RESET)
-			data->gp0_received = false;
-
 		hdev->stat.cmd_tx++;
 		break;
 	case HCI_ACLDATA_PKT:
@@ -2014,6 +2008,21 @@ static int btintel_pcie_send_frame(struct hci_dev *hdev,
 	memcpy(skb_push(skb, BTINTEL_PCIE_HCI_TYPE_LEN), &type,
 	       BTINTEL_PCIE_HCI_TYPE_LEN);
 
+	if (type == BTINTEL_PCIE_HCI_CMD_PKT &&
+	    (opcode == HCI_OP_RESET || opcode == BTINTEL_HCI_OP_RESET)) {
+		/* Firmware raises alive interrupt on HCI_OP_RESET or
+		 * BTINTEL_HCI_OP_RESET
+		 */
+		data->gp0_received = false;
+		old_ctxt = data->alive_intr_ctxt;
+		data->alive_intr_ctxt =
+			(opcode == 0xfc01 ? BTINTEL_PCIE_INTEL_HCI_RESET1 :
+					BTINTEL_PCIE_HCI_RESET);
+		bt_dev_dbg(data->hdev, "sending cmd: 0x%4.4x alive context changed: %s -> %s",
+				opcode, btintel_pcie_alivectxt_state2str(old_ctxt),
+				btintel_pcie_alivectxt_state2str(data->alive_intr_ctxt));
+	}
+
 	ret = btintel_pcie_send_sync(data, skb);
 	if (ret) {
 		hdev->stat.err_tx++;
@@ -2023,13 +2032,6 @@ static int btintel_pcie_send_frame(struct hci_dev *hdev,
 
 	if (type == BTINTEL_PCIE_HCI_CMD_PKT &&
 	    (opcode == HCI_OP_RESET || opcode == BTINTEL_HCI_OP_RESET)) {
-		old_ctxt = data->alive_intr_ctxt;
-		data->alive_intr_ctxt =
-			(opcode == BTINTEL_HCI_OP_RESET ? BTINTEL_PCIE_INTEL_HCI_RESET1 :
-				BTINTEL_PCIE_HCI_RESET);
-		bt_dev_dbg(data->hdev, "sent cmd: 0x%4.4x alive context changed: %s  ->  %s",
-			   opcode, btintel_pcie_alivectxt_state2str(old_ctxt),
-			   btintel_pcie_alivectxt_state2str(data->alive_intr_ctxt));
 		ret = wait_event_timeout(data->gp0_wait_q,
 					 data->gp0_received,
 					 msecs_to_jiffies(BTINTEL_DEFAULT_INTR_TIMEOUT_MS));
