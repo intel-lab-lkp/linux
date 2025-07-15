@@ -26,4 +26,5 @@ Linux Kernel中的文件系统
    virtiofs
    debugfs
    tmpfs
+   ubifs
 
