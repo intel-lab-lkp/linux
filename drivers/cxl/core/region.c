@@ -653,6 +653,11 @@ static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 		return PTR_ERR(res);
 	}
 
+	cxlr->hpa_range = (struct range) {
+		.start = res->start,
+		.end = res->end,
+	};
+
 	p->res = res;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
 
@@ -689,8 +694,14 @@ static int free_hpa(struct cxl_region *cxlr)
 	if (p->state >= CXL_CONFIG_ACTIVE)
 		return -EBUSY;
 
+	cxlr->hpa_range = (struct range) {
+		.start = 0,
+		.end = -1,
+	};
+
 	cxl_region_iomem_release(cxlr);
 	p->state = CXL_CONFIG_IDLE;
+
 	return 0;
 }
 
@@ -2496,6 +2507,11 @@ static void unregister_region(void *_cxlr)
 	for (i = 0; i < p->interleave_ways; i++)
 		detach_target(cxlr, i);
 
+	cxlr->hpa_range = (struct range) {
+		.start = 0,
+		.end = -1,
+	};
+
 	cxl_region_iomem_release(cxlr);
 	put_device(&cxlr->dev);
 }
@@ -3354,6 +3370,7 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	int part = READ_ONCE(cxled->part);
 	enum cxl_partition_mode mode = cxlds->part[part].mode;
+	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region *cxlr;
 	struct cxl_region_params *p;
 
@@ -3381,6 +3398,7 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	cxlr->mode = mode;
 	cxlr->type = CXL_DECODER_HOSTONLYMEM;
 	set_bit(CXL_REGION_F_AUTO, &cxlr->flags);
+	cxlr->hpa_range = *hpa;
 
 	p = &cxlr->params;
 	p->interleave_ways = cxled->cxld.interleave_ways;
