@@ -2449,16 +2449,14 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
 
 static struct lock_class_key cxl_region_key;
 
-static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int id)
+static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd)
 {
 	struct cxl_region *cxlr;
 	struct device *dev;
 
 	cxlr = kzalloc(sizeof(*cxlr), GFP_KERNEL);
-	if (!cxlr) {
-		memregion_free(id);
+	if (!cxlr)
 		return ERR_PTR(-ENOMEM);
-	}
 
 	dev = &cxlr->dev;
 	device_initialize(dev);
@@ -2474,7 +2472,6 @@ static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int i
 	device_set_pm_not_required(dev);
 	dev->bus = &cxl_bus_type;
 	dev->type = &cxl_region_type;
-	cxlr->id = id;
 
 	return cxlr;
 }
@@ -2522,13 +2519,18 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	struct device *dev;
 	int rc;
 
-	cxlr = cxl_region_alloc(cxlrd, id);
-	if (IS_ERR(cxlr))
+	cxlr = cxl_region_alloc(cxlrd);
+	if (IS_ERR(cxlr)) {
+		memregion_free(id);
 		return cxlr;
+	}
+
 	cxlr->mode = mode;
 	cxlr->type = type;
 
 	dev = &cxlr->dev;
+	cxlr->id = id;
+
 	rc = dev_set_name(dev, "region%d", id);
 	if (rc)
 		goto err;
