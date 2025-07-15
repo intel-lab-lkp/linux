@@ -73,9 +73,11 @@ enum atomisp_input_format {
 	/* CSI2-MIPI specific format: YUV data.
 	 */
 	ATOMISP_INPUT_FORMAT_YUV420_8_SHIFT,  /* YUV420 8-bit (Chroma Shifted
-						 Pixel Sampling) */
+					       * Pixel Sampling)
+					       */
 	ATOMISP_INPUT_FORMAT_YUV420_10_SHIFT, /* YUV420 8-bit (Chroma Shifted
-						 Pixel Sampling) */
+					       * Pixel Sampling)
+					       */
 
 	/* CSI2-MIPI specific format: Generic long packet data
 	 */
@@ -119,10 +121,12 @@ struct atomisp_input_stream_info {
 	enum atomisp_input_stream_id stream;
 	u8 enable;
 	/* Sensor driver fills ch_id with the id
-	   of the virtual channel. */
+	 * of the virtual channel.
+	 */
 	u8 ch_id;
 	/* Tells how many streams in this virtual channel. If 0 ignore rest
-	 * and the input format will be from mipi_info */
+	 * and the input format will be from mipi_info
+	 */
 	u8 isys_configs;
 	/*
 	 * if more isys_configs is more than 0, sensor needs to configure the
