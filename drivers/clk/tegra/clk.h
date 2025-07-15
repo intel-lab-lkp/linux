@@ -87,6 +87,7 @@ struct tegra_clk_sync_source {
 
 extern const struct clk_ops tegra_clk_sync_source_ops;
 extern int *periph_clk_enb_refcnt;
+extern bool div1_5_not_allowed;
 
 struct clk *tegra_clk_register_sync_source(const char *name,
 					   unsigned long max_rate);
@@ -801,13 +802,17 @@ struct clk *tegra_clk_register_sdmmc_mux_div(const char *name,
  * @parent_id:	parent clock id as mentioned in device tree bindings
  * @rate:	rate to set
  * @state:	enable/disable
+ * @flags:	clock initialization flags
  */
 struct tegra_clk_init_table {
 	unsigned int	clk_id;
 	unsigned int	parent_id;
 	unsigned long	rate;
 	int		state;
+	u32		flags;
 };
+
+#define TEGRA_TABLE_RATE_CHANGE_OVERCLOCK	BIT(0)
 
 /**
  * struct clk_duplicate - duplicate clocks
@@ -831,6 +836,7 @@ struct tegra_clk_duplicate {
 struct tegra_clk {
 	int			dt_id;
 	bool			present;
+	bool			use_integer_div;
 };
 
 struct tegra_devclk {
