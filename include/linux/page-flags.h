@@ -706,12 +706,15 @@ PAGEFLAG_FALSE(VmemmapSelfHosted, vmemmap_self_hosted)
  * address_space which maps the folio from disk; whereas "folio_mapped"
  * refers to user virtual address space into which the folio is mapped.
  *
- * For slab pages, since slab reuses the bits in struct page to store its
- * internal states, the folio->mapping does not exist as such, nor do
- * these flags below.  So in order to avoid testing non-existent bits,
- * please make sure that folio_test_slab(folio) actually evaluates to
- * false before calling the following functions (e.g., folio_test_anon).
- * See mm/slab.h.
+ * For certain typed pages like slabs, since they reuse bits in struct page
+ * to store internal states, folio->mapping does not point to a valid
+ * mapping, nor do these flags exist. To avoid testing non-existent bits,
+ * make sure !page_has_type(&folio->page) || folio_test_hugetlb(folio)
+ * actually evaluates to true before calling the following functions
+ * (e.g., folio_test_anon).
+ *
+ * This check can be skipped if the folio is mapped to userspace, since
+ * typed pages except hugetlb cannot be mapped to userspace at all.
  */
 #define FOLIO_MAPPING_ANON	0x1
 #define FOLIO_MAPPING_ANON_KSM	0x2
