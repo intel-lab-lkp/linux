@@ -3362,7 +3362,10 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	case CXL_PARTMODE_PMEM:
 		break;
 	default:
-		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %d\n", mode);
+		dev_err(cxlmd->dev.parent,
+			"%s:%s: %s unsupported mode %d\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			__func__, mode);
 		return ERR_PTR(-EINVAL);
 	}
 
