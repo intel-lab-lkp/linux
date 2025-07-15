@@ -1,3 +1,7 @@
+.. SPDX-License-Identifier: GPL-2.0
+
+.. _kernel_hacking_seqlock:
+
 ======================================
 Sequence counters and sequential locks
 ======================================
