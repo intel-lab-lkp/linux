@@ -2,6 +2,7 @@
 /*
  * Copyright(c) 2020 Intel Corporation.
  */
+#include <linux/mei_me.h>
 #include <linux/workqueue.h>
 
 #include "gem/i915_gem_context.h"
@@ -201,6 +202,10 @@ int intel_pxp_init(struct drm_i915_private *i915)
 
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return -ENOTCONN;
+
+	/* iGPUs require CSME to be available to use PXP */
+	if (!IS_DGFX(i915) && !mei_me_device_present())
+		return -ENODEV;
 
 	/*
 	 * NOTE: Get the ctrl_gt before checking intel_pxp_is_supported since
