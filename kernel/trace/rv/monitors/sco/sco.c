@@ -19,7 +19,8 @@
 static struct rv_monitor rv_sco;
 DECLARE_DA_MON_PER_CPU(sco, unsigned char);
 
-static void handle_sched_set_state(void *data, struct task_struct *tsk, int state)
+static void handle_sched_set_state(void *data, struct task_struct *tsk,
+				   int state, bool from_signal)
 {
 	da_handle_start_event_sco(sched_set_state_sco);
 }

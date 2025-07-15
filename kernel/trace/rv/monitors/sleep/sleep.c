@@ -82,7 +82,8 @@ static void ltl_atoms_init(struct task_struct *task, struct ltl_monitor *mon, bo
 
 }
 
-static void handle_sched_set_state(void *data, struct task_struct *task, int state)
+static void handle_sched_set_state(void *data, struct task_struct *task,
+				   int state, bool from_signal)
 {
 	if (state & TASK_INTERRUPTIBLE)
 		ltl_atom_pulse(task, LTL_SLEEP, true);
