@@ -254,6 +254,7 @@ additionalProperties:
         - WDTRST2
         - WDTRST3
         - WDTRST4
+        - PCIERC1
 
     groups:
       enum:
@@ -497,6 +498,7 @@ additionalProperties:
         - WDTRST2
         - WDTRST3
         - WDTRST4
+        - PCIERC1
 
     pins: true
     bias-disable: true
