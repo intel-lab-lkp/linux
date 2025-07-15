@@ -89,21 +89,23 @@ Monitor snroc
 
 The set non runnable on its own context (snroc) monitor ensures changes in a
 task state happens only in the respective task's context. This is a per-task
-monitor::
+monitor. A task is in its own context after switching in and leaves the context
+when switched out, a vain switch maintains the context::
 
-                        |
-                        |
-                        v
-                      +------------------+
-                      |  other_context   | <+
-                      +------------------+  |
-                        |                   |
-                        | sched_switch_in   | sched_switch_out
-                        v                   |
-    sched_set_state                         |
-  +------------------                       |
-  |                       own_context       |
-  +----------------->                      -+
+                          |
+                          |
+                          v
+                        +------------------+
+                        |  other_context   | <+
+                        +------------------+  |
+                          |                   |
+                          | sched_switch_in   | sched_switch_out
+                          v                   |
+    sched_set_state                           |
+    sched_switch_vain                         |
+  +--------------------     own_context       |
+  |                                           |
+  +------------------->                      -+
 
 Monitor scpd
 ~~~~~~~~~~~~

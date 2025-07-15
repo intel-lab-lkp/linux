@@ -34,6 +34,13 @@ static void handle_sched_switch(void *data, bool preempt,
 	da_handle_event_snroc(next, sched_switch_in_snroc);
 }
 
+static void handle_sched_switch_vain(void *data, bool preempt,
+				     struct task_struct *tsk,
+				     unsigned int tsk_state)
+{
+	da_handle_event_snroc(tsk, sched_switch_vain_snroc);
+}
+
 static int enable_snroc(void)
 {
 	int retval;
@@ -44,6 +51,7 @@ static int enable_snroc(void)
 
 	rv_attach_trace_probe("snroc", sched_set_state_tp, handle_sched_set_state);
 	rv_attach_trace_probe("snroc", sched_switch, handle_sched_switch);
+	rv_attach_trace_probe("snroc", sched_switch_vain_tp, handle_sched_switch_vain);
 
 	return 0;
 }
@@ -54,6 +62,7 @@ static void disable_snroc(void)
 
 	rv_detach_trace_probe("snroc", sched_set_state_tp, handle_sched_set_state);
 	rv_detach_trace_probe("snroc", sched_switch, handle_sched_switch);
+	rv_detach_trace_probe("snroc", sched_switch_vain_tp, handle_sched_switch_vain);
 
 	da_monitor_destroy_snroc();
 }
