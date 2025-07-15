@@ -305,7 +305,6 @@ static inline void hmem_register_resource(int target_nid, struct resource *r)
 }
 #endif
 
-typedef int (*walk_hmem_fn)(struct device *dev, int target_nid,
-			    const struct resource *res);
-int walk_hmem_resources(struct device *dev, walk_hmem_fn fn);
+typedef int (*walk_hmem_fn)(int target_nid, const struct resource *res);
+int walk_hmem_resources(walk_hmem_fn fn);
 #endif
