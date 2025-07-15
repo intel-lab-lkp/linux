@@ -1092,7 +1092,7 @@ static int cxacru_find_firmware(struct cxacru_data *instance,
 static int cxacru_heavy_init(struct usbatm_data *usbatm_instance,
 			     struct usb_interface *usb_intf)
 {
-	const struct firmware *fw, *bp;
+	const struct firmware *fw, *bp = NULL;
 	struct cxacru_data *instance = usbatm_instance->driver_data;
 	int ret = cxacru_find_firmware(instance, "fw", &fw);
 
