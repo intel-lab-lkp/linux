@@ -49,6 +49,7 @@ properties:
               - mediatek,mt2712-spi
               - mediatek,mt6589-spi
               - mediatek,mt6765-spi
+              - mediatek,mt6789-spi
               - mediatek,mt6893-spi
               - mediatek,mt6991-spi
               - mediatek,mt7622-spi
