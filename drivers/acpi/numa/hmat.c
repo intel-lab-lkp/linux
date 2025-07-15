@@ -901,6 +901,10 @@ static void hmat_register_target_devices(struct memory_target *target)
 	if (!IS_ENABLED(CONFIG_DEV_DAX_HMEM))
 		return;
 
+	/* Allow CXL to manage the dax devices if enabled */
+	if (IS_ENABLED(CONFIG_CXL_ACPI))
+		return;
+
 	for (res = target->memregions.child; res; res = res->sibling) {
 		int target_nid = pxm_to_node(target->memory_pxm);
 

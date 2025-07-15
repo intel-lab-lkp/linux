@@ -128,6 +128,12 @@ out_put:
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {
 	dax_hmem_pdev = pdev;
+
+	if (IS_ENABLED(CONFIG_CXL_ACPI)) {
+		hmem_register_fallback_handler(hmem_register_device);
+		return 0;
+	}
+
 	return walk_hmem_resources(hmem_register_device);
 }
 

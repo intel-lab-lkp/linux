@@ -10,6 +10,7 @@
 #include <linux/sort.h>
 #include <linux/idr.h>
 #include <linux/memory-tiers.h>
+#include <linux/dax.h>
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
@@ -3603,10 +3604,20 @@ static int cxl_region_softreserv_update_cb(struct device *dev, void *data)
 	return 0;
 }
 
+static int cxl_softreserv_mem_register(struct resource *res, void *unused)
+{
+	hmem_fallback_register_device(phys_to_target_node(res->start), res);
+	return 0;
+}
+
 void cxl_region_softreserv_update(void)
 {
 	bus_for_each_dev(&cxl_bus_type, NULL, NULL,
 			 cxl_region_softreserv_update_cb);
+
+	/* Now register any remaining SOFT RESERVES with DAX */
+	walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED, IORESOURCE_MEM,
+			    0, -1, NULL, cxl_softreserv_mem_register);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_region_softreserv_update, "CXL");
 

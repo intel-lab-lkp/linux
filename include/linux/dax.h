@@ -307,4 +307,6 @@ static inline void hmem_register_resource(int target_nid, struct resource *r)
 
 typedef int (*walk_hmem_fn)(int target_nid, const struct resource *res);
 int walk_hmem_resources(walk_hmem_fn fn);
+void hmem_register_fallback_handler(walk_hmem_fn hmem_fn);
+void hmem_fallback_register_device(int target_nid, const struct resource *res);
 #endif
