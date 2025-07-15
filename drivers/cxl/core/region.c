@@ -2504,18 +2504,34 @@ static int register_region(struct cxl_region *cxlr, int id)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	struct device *dev = &cxlr->dev;
-	int rc;
+	int old, match, rc;
 
 	rc = memregion_alloc(GFP_KERNEL);
 	if (rc < 0)
 		return rc;
 
-	if (atomic_cmpxchg(&cxlrd->region_id, id, rc) != id) {
+	if (id < 0)
+		match = atomic_read(&cxlrd->region_id);
+	else
+		match = id;
+
+	for (; match >= 0;) {
+		old = atomic_cmpxchg(&cxlrd->region_id, match, rc);
+		if (old == match)
+			break;
+		if (id >= 0)
+			break;
+		match = old;
+	}
+
+	if (match < 0 || match != old) {
 		memregion_free(rc);
+		if (match < 0)
+			return -ENXIO;
 		return -EBUSY;
 	}
 
-	cxlr->id = id;
+	cxlr->id = old;
 
 	rc = dev_set_name(dev, "region%d", cxlr->id);
 	if (rc)
@@ -2528,7 +2544,8 @@ static int register_region(struct cxl_region *cxlr, int id)
  * devm_cxl_add_region - Adds a region to the CXL hierarchy.
  * @cxlr: region to be added
  * @id: memregion id to create must match current @port_id of the
- *      region's @cxlrd
+ *      region's @cxlrd. A negative value indicates that an available
+ *      memregion id should be assigned to the region.
  *
  * This is the second step of region initialization. Regions exist within an
  * address space which is mapped by a @cxlrd.
@@ -3412,11 +3429,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	int rc, part = READ_ONCE(cxled->part);
 	struct cxl_region *cxlr;
 
-	do {
-		cxlr = __create_region(cxlrd, cxlds->part[part].mode,
-				       atomic_read(&cxlrd->region_id));
-	} while (IS_ERR(cxlr) && PTR_ERR(cxlr) == -EBUSY);
-
+	cxlr = __create_region(cxlrd, cxlds->part[part].mode, -1);
 	if (IS_ERR(cxlr)) {
 		dev_err(cxlmd->dev.parent,
 			"%s:%s: %s failed assign region: %ld\n",
