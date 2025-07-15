@@ -33,6 +33,8 @@
 /* Register for RK3588 */
 #define PHP_GRF_PCIESEL_CON			0x100
 #define RK3588_PCIE3PHY_GRF_CMN_CON0		0x0
+#define RK3588_PCIE3PHY_GRF_PHY0_CONTROL6	0x118
+#define RK3588_PCIE3PHY_GRF_PHY1_CONTROL6	0x218
 #define RK3588_PCIE3PHY_GRF_PHY0_STATUS1	0x904
 #define RK3588_PCIE3PHY_GRF_PHY1_STATUS1	0xa04
 #define RK3588_PCIE3PHY_GRF_PHY0_LN0_CON1	0x1004
@@ -44,6 +46,8 @@
 #define RK3588_BIFURCATION_LANE_0_1		BIT(0)
 #define RK3588_BIFURCATION_LANE_2_3		BIT(1)
 #define RK3588_LANE_AGGREGATION		BIT(2)
+#define RK3588_PHY_REF_USE_PAD_EN		((BIT(2) << 16 | BIT(2)))
+#define RK3588_PHY_REF_USE_PAD_DIS		((BIT(2) << 16))
 #define RK3588_RX_CMN_REFCLK_MODE_EN		((BIT(7) << 16) |  BIT(7))
 #define RK3588_RX_CMN_REFCLK_MODE_DIS		(BIT(7) << 16)
 #define RK3588_PCIE1LN_SEL_EN			(GENMASK(1, 0) << 16)
@@ -67,6 +71,7 @@ struct rockchip_p3phy_priv {
 	int num_lanes;
 	u32 lanes[4];
 	u32 rx_cmn_refclk_mode[4];
+	u32 phy_ref_use_pad[2];
 };
 
 struct rockchip_p3phy_ops {
@@ -156,6 +161,14 @@ static int rockchip_p3phy_rk3588_init(struct rockchip_p3phy_priv *priv)
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY1_LN1_CON1,
 		     priv->rx_cmn_refclk_mode[3] ? RK3588_RX_CMN_REFCLK_MODE_EN :
 		     RK3588_RX_CMN_REFCLK_MODE_DIS);
+
+	/* Select PHY reference clock, external pad or internal clock */
+	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY0_CONTROL6,
+		     priv->phy_ref_use_pad[0] ? RK3588_PHY_REF_USE_PAD_EN :
+		     RK3588_PHY_REF_USE_PAD_DIS);
+	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY1_CONTROL6,
+		     priv->phy_ref_use_pad[1] ? RK3588_PHY_REF_USE_PAD_EN :
+		     RK3588_PHY_REF_USE_PAD_DIS);
 
 	/* Deassert PCIe PMA output clamp mode */
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_CMN_CON0, BIT(8) | BIT(24));
@@ -308,6 +321,25 @@ static int rockchip_p3phy_probe(struct platform_device *pdev)
 			priv->rx_cmn_refclk_mode[i] = 1;
 	} else if (ret < 0) {
 		dev_err(dev, "failed to read rockchip,rx-common-refclk-mode property %d\n",
+			ret);
+		return ret;
+	}
+
+	ret = of_property_read_variable_u32_array(dev->of_node,
+						  "rockchip,phy-ref-use-pad",
+						  priv->phy_ref_use_pad, 1,
+						  ARRAY_SIZE(priv->phy_ref_use_pad));
+
+	/*
+	 * if no rockhip,phy-use-internal-clk, assume PHY uses pad for the
+	 * reference clock in order to be DT backwards compatible. (Since HW
+	 * reset val is enabled.)
+	 */
+	if (ret == -EINVAL) {
+		for (int i = 0; i < ARRAY_SIZE(priv->phy_ref_use_pad); i++)
+			priv->phy_ref_use_pad[i] = 1;
+	} else if (ret < 0) {
+		dev_err(dev, "failed to read rockchip,phy-ref-use-pad property %d\n",
 			ret);
 		return ret;
 	}
