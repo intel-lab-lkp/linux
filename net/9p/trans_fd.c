@@ -727,9 +727,9 @@ static int p9_fd_cancelled(struct p9_client *client, struct p9_req_t *req)
 
 	spin_lock(&m->req_lock);
 	/* Ignore cancelled request if message has been received
-	 * before lock.
-	 */
-	if (req->status == REQ_STATUS_RCVD) {
+	* or cancelled with error before lock.
+	*/
+	if (req->status == REQ_STATUS_RCVD || req->status == REQ_STATUS_ERROR) {
 		spin_unlock(&m->req_lock);
 		return 0;
 	}
