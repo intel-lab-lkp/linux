@@ -5202,7 +5202,7 @@ static bool ext4_should_enable_large_folio(struct inode *inode)
  * where the PAGE_SIZE exceeds 4KB.
  */
 #define EXT4_MAX_PAGECACHE_ORDER(i)		\
-		min(MAX_PAGECACHE_ORDER, (11 + (i)->i_blkbits - PAGE_SHIFT))
+		umin(MAX_PAGECACHE_ORDER, (11 + (i)->i_blkbits - PAGE_SHIFT))
 void ext4_set_inode_mapping_order(struct inode *inode)
 {
 	if (!ext4_should_enable_large_folio(inode))
