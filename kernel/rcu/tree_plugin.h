@@ -633,7 +633,12 @@ static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
 	local_irq_save(flags);
 
 	/*
-	 * Requeue the IRQ work on next unlock in following situation:
+	 * If the IRQ work handler happens to run in the middle of RCU read-side
+	 * critical section, it could be ineffective in getting the scheduler's
+	 * attention to report a deferred quiescent state (the whole point of the
+	 * IRQ work). For this reason, requeue the IRQ work.
+	 *
+	 * Basically, we want to avoid following situation:
 	 * 1. rcu_read_unlock() queues IRQ work (state -> DEFER_QS_PENDING)
 	 * 2. CPU enters new rcu_read_lock()
 	 * 3. IRQ work runs but cannot report QS due to rcu_preempt_depth() > 0

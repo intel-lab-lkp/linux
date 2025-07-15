@@ -175,10 +175,12 @@ struct rcu_snap_record {
 };
 
 /*
- * The IRQ work (deferred_qs_iw) is used by RCU to get scheduler's attention.
- * It can be in one of the following states:
- * - DEFER_QS_IDLE: An IRQ work was never scheduled.
- * - DEFER_QS_PENDING: An IRQ work was scheduler but never run.
+ * An IRQ work (deferred_qs_iw) is used by RCU to get the scheduler's attention.
+ * to report quiescent states at the soonest possible time.
+ * The request can be in one of the following states:
+ * - DEFER_QS_IDLE: An IRQ work is yet to be scheduled.
+ * - DEFER_QS_PENDING: An IRQ work was scheduled but either not yet run, or it
+ *                     ran and we still haven't reported a quiescent state.
  */
 #define DEFER_QS_IDLE		0
 #define DEFER_QS_PENDING	1
