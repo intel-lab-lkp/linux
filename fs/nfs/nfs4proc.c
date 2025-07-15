@@ -7306,14 +7306,18 @@ static int nfs4_proc_unlck(struct nfs4_state *state, int cmd, struct file_lock *
 	status = -ENOMEM;
 	if (IS_ERR(seqid))
 		goto out;
+	down_read(&nfsi->rwsem);
 	task = nfs4_do_unlck(request,
 			     nfs_file_open_context(request->c.flc_file),
 			     lsp, seqid);
 	status = PTR_ERR(task);
-	if (IS_ERR(task))
+	if (IS_ERR(task)) {
+		up_read(&nfsi->rwsem);
 		goto out;
+	}
 	status = rpc_wait_for_completion_task(task);
 	rpc_put_task(task);
+	up_read(&nfsi->rwsem);
 out:
 	request->c.flc_flags = saved_flags;
 	trace_nfs4_unlock(request, state, F_SETLK, status);
@@ -7654,7 +7658,9 @@ static int _nfs4_proc_setlk(struct nfs4_state *state, int cmd, struct file_lock 
 	}
 	up_read(&nfsi->rwsem);
 	mutex_unlock(&sp->so_delegreturn_mutex);
+	down_read(&nfsi->rwsem);
 	status = _nfs4_do_setlk(state, cmd, request, NFS_LOCK_NEW);
+	up_read(&nfsi->rwsem);
 out:
 	request->c.flc_flags = flags;
 	return status;
