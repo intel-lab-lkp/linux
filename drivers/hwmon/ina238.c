@@ -507,6 +507,27 @@ static ssize_t energy1_input_show(struct device *dev,
 	return sysfs_emit(buf, "%llu\n", energy);
 }
 
+static int ina238_read_string(struct device *dev, enum hwmon_sensor_types type,
+			       u32 attr, int channel, const char **str)
+{
+	switch (type) {
+	case hwmon_in:
+		switch (channel) {
+		case 0:
+			*str = "Shunt Voltage";
+			return 0;
+		case 1:
+			*str = "Bus Voltage";
+			return 0;
+		default:
+			break;
+		}
+	default:
+		break;
+	}
+	return -EOPNOTSUPP;
+}
+
 static int ina238_read(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel, long *val)
 {
@@ -565,6 +586,7 @@ static umode_t ina238_is_visible(const void *drvdata,
 		case hwmon_in_input:
 		case hwmon_in_max_alarm:
 		case hwmon_in_min_alarm:
+		case hwmon_in_label:
 			return 0444;
 		case hwmon_in_max:
 		case hwmon_in_min:
@@ -615,9 +637,9 @@ static umode_t ina238_is_visible(const void *drvdata,
 static const struct hwmon_channel_info * const ina238_info[] = {
 	HWMON_CHANNEL_INFO(in,
 			   /* 0: shunt voltage */
-			   INA238_HWMON_IN_CONFIG,
+			   INA238_HWMON_IN_CONFIG | HWMON_I_LABEL,
 			   /* 1: bus voltage */
-			   INA238_HWMON_IN_CONFIG),
+			   INA238_HWMON_IN_CONFIG | HWMON_I_LABEL),
 	HWMON_CHANNEL_INFO(curr,
 			   /* 0: current through shunt */
 			   HWMON_C_INPUT),
@@ -633,6 +655,7 @@ static const struct hwmon_channel_info * const ina238_info[] = {
 
 static const struct hwmon_ops ina238_hwmon_ops = {
 	.is_visible = ina238_is_visible,
+	.read_string = ina238_read_string,
 	.read = ina238_read,
 	.write = ina238_write,
 };
