@@ -3396,7 +3396,7 @@ static int __construct_region(struct cxl_region *cxlr,
 		dev_name(&cxlr->dev), p->res, p->interleave_ways,
 		p->interleave_granularity);
 
-	/* ...to match put_device() in cxl_add_to_region() */
+	/* Pair with cxl_find_region_by_range() in cxl_endpoint_get_region(). */
 	get_device(&cxlr->dev);
 
 	return 0;
@@ -3434,13 +3434,12 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	return cxlr;
 }
 
-int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
+static struct cxl_region *
+cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct range *hpa = &cxled->cxld.hpa_range;
-	struct cxl_region_params *p;
-	bool attach = false;
-	int rc;
+	struct cxl_region *cxlr;
 
 	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
 		cxl_find_root_decoder(cxled);
@@ -3450,23 +3449,31 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 			"%s:%s no CXL window for range %#llx:%#llx\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			hpa->start, hpa->end);
-		return -ENXIO;
+		return ERR_PTR(-ENXIO);
 	}
 
 	/*
 	 * Ensure that if multiple threads race to construct_region() for @hpa
 	 * one does the construction and the others add to that.
 	 */
-	mutex_lock(&cxlrd->range_lock);
-	struct cxl_region *cxlr __free(put_cxl_region) =
-		cxl_find_region_by_range(cxlrd, hpa);
-	if (!cxlr)
-		cxlr = construct_region(cxlrd, cxled);
-	mutex_unlock(&cxlrd->range_lock);
+	guard(mutex)(&cxlrd->range_lock);
 
-	rc = PTR_ERR_OR_ZERO(cxlr);
-	if (rc)
-		return rc;
+	cxlr = cxl_find_region_by_range(cxlrd, hpa);
+	if (!cxlr)
+		return construct_region(cxlrd, cxled);
+
+	return cxlr;
+}
+
+int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_region *cxlr;
+	struct cxl_region_params *p;
+	bool attach = false;
+
+	cxlr = cxl_endpoint_get_region(cxled);
+	if (IS_ERR(cxlr))
+		return PTR_ERR(cxlr);
 
 	attach_target(cxlr, cxled, -1, TASK_UNINTERRUPTIBLE);
 
@@ -3486,7 +3493,7 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 				p->res);
 	}
 
-	return rc;
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
 
