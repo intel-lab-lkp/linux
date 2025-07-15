@@ -823,6 +823,20 @@ static int pair_cxl_resource(struct device *dev, void *data)
 	return 0;
 }
 
+static void cxl_softreserv_mem_work_fn(struct work_struct *work)
+{
+	if (!wait_event_timeout(cxl_wait_queue, cxl_mem_active(), 30 * HZ))
+		pr_debug("Timeout waiting for cxl_mem probing");
+
+	wait_for_device_probe();
+}
+static DECLARE_WORK(cxl_sr_work, cxl_softreserv_mem_work_fn);
+
+static void cxl_softreserv_mem_update(void)
+{
+	schedule_work(&cxl_sr_work);
+}
+
 static int cxl_acpi_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -903,6 +917,9 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	cxl_bus_rescan();
 
 out:
+	/* Update SOFT RESERVE resources that intersect with CXL regions */
+	cxl_softreserv_mem_update();
+
 	return rc;
 }
 
@@ -934,6 +951,7 @@ static int __init cxl_acpi_init(void)
 
 static void __exit cxl_acpi_exit(void)
 {
+	cancel_work_sync(&cxl_sr_work);
 	platform_driver_unregister(&cxl_acpi_driver);
 	cxl_bus_drain();
 }
