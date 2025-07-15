@@ -15,6 +15,7 @@ enum states_sco {
 
 enum events_sco {
 	sched_set_state_sco = 0,
+	sched_set_state_runnable_signal_sco,
 	schedule_entry_sco,
 	schedule_exit_sco,
 	event_max_sco
@@ -35,17 +36,20 @@ static const struct automaton_sco automaton_sco = {
 	},
 	.event_names = {
 		"sched_set_state",
+		"sched_set_state_runnable_signal",
 		"schedule_entry",
 		"schedule_exit"
 	},
 	.function = {
 		{
 			thread_context_sco,
+			INVALID_STATE,
 			scheduling_context_sco,
 			INVALID_STATE
 		},
 		{
 			INVALID_STATE,
+			scheduling_context_sco,
 			INVALID_STATE,
 			thread_context_sco
 		},

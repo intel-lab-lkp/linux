@@ -22,7 +22,10 @@ DECLARE_DA_MON_PER_CPU(sco, unsigned char);
 static void handle_sched_set_state(void *data, struct task_struct *tsk,
 				   int state, bool from_signal)
 {
-	da_handle_start_event_sco(sched_set_state_sco);
+	if (from_signal)
+		da_handle_event_sco(sched_set_state_runnable_signal_sco);
+	else
+		da_handle_start_event_sco(sched_set_state_sco);
 }
 
 static void handle_schedule_entry(void *data, bool preempt, unsigned long ip)
