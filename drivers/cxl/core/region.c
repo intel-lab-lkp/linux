@@ -3364,8 +3364,7 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 }
 
 /* Establish a region for the endpoint decoder */
-static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
-					struct cxl_endpoint_decoder *cxled)
+static struct cxl_region *create_region(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
@@ -3374,6 +3373,17 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region *cxlr;
 	struct cxl_region_params *p;
+
+	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
+		cxl_find_root_decoder(cxled);
+
+	if (!cxlrd) {
+		dev_err(cxlmd->dev.parent,
+			"%s:%s no CXL window for range %#llx:%#llx\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			hpa->start, hpa->end);
+		return ERR_PTR(-ENXIO);
+	}
 
 	switch (mode) {
 	case CXL_PARTMODE_RAM:
@@ -3485,22 +3495,9 @@ static struct cxl_region *construct_region(struct cxl_region *__cxlr)
 static struct cxl_region *
 cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 {
-	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region *cxlr, *new;
 
-	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
-		cxl_find_root_decoder(cxled);
-
-	if (!cxlrd) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s no CXL window for range %#llx:%#llx\n",
-			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			hpa->start, hpa->end);
-		return ERR_PTR(-ENXIO);
-	}
-
-	new = create_region(cxlrd, cxled);
+	new = create_region(cxled);
 	if (IS_ERR(new))
 		return new;
 
