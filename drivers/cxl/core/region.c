@@ -3493,10 +3493,42 @@ static struct cxl_region *construct_region(struct cxl_region *__cxlr)
 	return no_free_ptr(cxlr);
 }
 
+static int cxl_region_check(struct device *dev,
+			    struct cxl_region *cxlr,
+			    struct cxl_region *new)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	struct cxl_region_params *np = &new->params;
+
+	if (cxlr->mode != new->mode) {
+		dev_dbg(dev, "%s: region mode mismatch: %d vs %d\n",
+			dev_name(&cxlr->dev), cxlr->mode, new->mode);
+		return -EINVAL;
+	}
+
+	if (cxlr->type != new->type) {
+		dev_dbg(dev, "%s: region type mismatch: %d vs %d\n",
+			dev_name(&cxlr->dev), cxlr->type, new->type);
+		return -ENXIO;
+	}
+
+	if (p->interleave_ways != np->interleave_ways ||
+	    p->interleave_granularity != np->interleave_granularity) {
+		dev_dbg(dev, "%s: interleaving config mismatch: %dx%d vs %dx%d\n",
+			dev_name(&cxlr->dev),
+			p->interleave_ways, p->interleave_granularity,
+			np->interleave_ways, np->interleave_granularity);
+		return -ENXIO;
+	}
+
+	return 0;
+}
+
 static struct cxl_region *
 cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_region *cxlr, *new;
+	int rc;
 
 	new = create_region(cxled);
 	if (IS_ERR(new))
@@ -3513,7 +3545,14 @@ cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 	if (!cxlr)
 		return construct_region(new);
 
+	rc = cxl_region_check(&cxled->cxld.dev, cxlr, new);
+
 	put_device(&new->dev);
+
+	if (rc) {
+		put_device(&cxlr->dev);
+		return ERR_PTR(rc);
+	}
 
 	return cxlr;
 }
