@@ -507,4 +507,34 @@ int iio_write_event_processed_scale(struct iio_channel *chan,
 				    enum iio_event_info info, int processed,
 				    unsigned int scale);
 
+struct notifier_block;
+enum iio_notifier_val {
+	/** IIO_NOTIFY_EVENT: v is a pointer to &struct iio_event_data */
+	IIO_NOTIFY_EVENT,
+};
+
+/**
+ * iio_event_register() - Register a notifier for events
+ * @indio_dev: Device to be notified of events on
+ * @block: Notifier block to register
+ *
+ * Register a notifier for events on @indio_dev. @v will be a member of &enum
+ * iio_notifier_val. Notifiers will be called in atomic context. @indio_dev
+ * must stay valid until you call iio_event_unregister().
+ *
+ * Return: 0 on success, or -EEXIST if @block has already been registered
+ */
+int iio_event_register(struct iio_dev *indio_dev,
+		       struct notifier_block *block);
+
+/**
+ * iio_event_unregister() - Remove a previously-added notifier
+ * @indio_dev: Device to be notified of events on
+ * @block: Notifier previously-registered with iio_event_register()
+ *
+ * Remove a previously-added notifier.
+ */
+void iio_event_unregister(struct iio_dev *indio_dev,
+			  struct notifier_block *block);
+
 #endif

@@ -12,11 +12,13 @@
 #include <linux/kernel.h>
 #include <linux/kfifo.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
+#include <linux/iio/consumer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/iio-opaque.h>
 #include "iio_core.h"
@@ -26,6 +28,7 @@
 /**
  * struct iio_event_interface - chrdev interface for an event line
  * @wait:		wait queue to allow blocking reads of events
+ * @notifier:		notifier head for in-kernel event listeners
  * @det_events:		list of detected events
  * @dev_attr_list:	list of event interface sysfs attribute
  * @flags:		file operations related flags including busy flag.
@@ -35,6 +38,7 @@
  */
 struct iio_event_interface {
 	wait_queue_head_t	wait;
+	struct atomic_notifier_head notifier;
 	DECLARE_KFIFO(det_events, struct iio_event_data, 16);
 
 	struct list_head	dev_attr_list;
@@ -67,18 +71,19 @@ int iio_push_event(struct iio_dev *indio_dev, u64 ev_code, s64 timestamp)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 	struct iio_event_interface *ev_int = iio_dev_opaque->event_interface;
-	struct iio_event_data ev;
+	struct iio_event_data ev = {
+		.id = ev_code,
+		.timestamp = timestamp,
+	};
 	int copied;
 
 	if (!ev_int)
 		return 0;
 
+	atomic_notifier_call_chain(&ev_int->notifier, IIO_NOTIFY_EVENT, &ev);
+
 	/* Does anyone care? */
 	if (iio_event_enabled(ev_int)) {
-
-		ev.id = ev_code;
-		ev.timestamp = timestamp;
-
 		copied = kfifo_put(&ev_int->det_events, ev);
 		if (copied != 0)
 			wake_up_poll(&ev_int->wait, EPOLLIN);
@@ -222,6 +227,25 @@ unlock:
 	mutex_unlock(&iio_dev_opaque->mlock);
 	return fd;
 }
+
+int iio_event_register(struct iio_dev *indio_dev, struct notifier_block *block)
+{
+	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
+	struct iio_event_interface *ev_int = iio_dev_opaque->event_interface;
+
+	return atomic_notifier_chain_register(&ev_int->notifier, block);
+}
+EXPORT_SYMBOL_GPL(iio_event_register);
+
+void iio_event_unregister(struct iio_dev *indio_dev,
+			  struct notifier_block *block)
+{
+	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
+	struct iio_event_interface *ev_int = iio_dev_opaque->event_interface;
+
+	WARN_ON(atomic_notifier_chain_unregister(&ev_int->notifier, block));
+}
+EXPORT_SYMBOL_GPL(iio_event_unregister);
 
 static const char * const iio_ev_type_text[] = {
 	[IIO_EV_TYPE_THRESH] = "thresh",
