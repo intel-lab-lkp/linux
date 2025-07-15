@@ -16,13 +16,21 @@ static struct resource hmem_active = {
 	.flags = IORESOURCE_MEM,
 };
 
+static struct resource hmem_deferred_active = {
+	.name = "Deferred HMEM devices",
+	.start = 0,
+	.end = -1,
+	.flags = IORESOURCE_MEM,
+};
+static struct resource *hmem_resource_root = &hmem_active;
+
 int walk_hmem_resources(walk_hmem_fn fn)
 {
 	struct resource *res;
 	int rc = 0;
 
 	mutex_lock(&hmem_resource_lock);
-	for (res = hmem_active.child; res; res = res->sibling) {
+	for (res = hmem_resource_root->child; res; res = res->sibling) {
 		rc = fn((int) res->desc, res);
 		if (rc)
 			break;
@@ -36,8 +44,8 @@ static void __hmem_register_resource(int target_nid, struct resource *res)
 {
 	struct resource *new;
 
-	new = __request_region(&hmem_active, res->start, resource_size(res), "",
-			       0);
+	new = __request_region(hmem_resource_root, res->start,
+			       resource_size(res), "", 0);
 	if (!new) {
 		pr_debug("hmem range %pr already active\n", res);
 		return;
@@ -72,7 +80,8 @@ static __init int hmem_init(void)
 		walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED,
 				    IORESOURCE_MEM, 0, -1, NULL,
 				    hmem_register_one);
-	}
+	} else
+		hmem_resource_root = &hmem_deferred_active;
 
 	pdev = platform_device_alloc("hmem_platform", 0);
 	if (!pdev) {

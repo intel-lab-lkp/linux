@@ -23,5 +23,7 @@ void hmem_fallback_register_device(int target_nid, const struct resource *res)
 
 	if (hmem_fn)
 		hmem_fn(target_nid, res);
+	else
+		hmem_register_resource(target_nid, (struct resource *)res);
 }
 EXPORT_SYMBOL_GPL(hmem_fallback_register_device);
