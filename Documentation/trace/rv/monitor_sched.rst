@@ -198,6 +198,174 @@ real task switch occurs::
   +-------------- |                    | <-------------+
                   +--------------------+
 
+Monitor nrp
+-----------
+
+The need resched preempts (nrp) monitor ensures preemption requires need
+resched. Only kernel preemptions are considered, since preemptions while
+returning to userspace, for this monitor, are indistinguishable from
+``sched_switch_yield`` (described in the sssw monitor).
+A preemption is any of the following types of ``sched_switch``:
+
+* ``sched_switch_preempt``:
+  a task is ``preempted``, this can happen after the need for ``rescheduling``
+  has been set. This is not valid for the *lazy* variant of the flag, which
+  causes only userspace preemptions.
+* ``sched_switch_vain_preempt``:
+  a task goes through the scheduler from a preemption context but it is picked
+  as the next task to run, hence no real task switch occurs. Since the
+  scheduler runs, this clears the need to reschedule.
+
+In theory, a preemption can only occur after the ``need_resched`` flag is set. In
+practice, however, it is possible to see a preemption where the flag is not
+set. This can happen in one specific condition::
+
+  need_resched
+                   preempt_schedule()
+                                           preempt_schedule_irq()
+                                                   __schedule()
+  !need_resched
+                           __schedule()
+
+In the situation above, standard preemption starts (e.g. from preempt_enable
+when the flag is set), an interrupt occurs before scheduling and, on its exit
+path, it schedules, which clears the ``need_resched`` flag.
+When the preempted task runs again, the standard preemption started earlier
+resumes, although the flag is no longer set. The monitor considers this a
+``nested_preemption``, this allows another preemption without re-setting the
+flag. This condition relaxes the monitor constraints and may catch false
+negatives (i.e. no real ``nested_preemptions``) but makes the monitor more
+robust and able to validate other scenarios.
+For simplicity, the monitor starts in ``preempt_irq``, although no interrupt
+occurred, as the situation above is tricky to pinpoint.
+
+This monitor ignores when the task is switched in, as this complicates things
+when different types of ``sched_switch`` occur (e.g. sleeping or yielding, here
+marked as ``sched_switch_other`` or ``sched_switch_vain``). The snroc monitor
+ensures a task is switched in before it can be switched out again.
+For this reason, the ``any_thread_running`` state does not imply that the
+monitored task is not running, simply it is not set for rescheduling::
+
+    sched_switch_other
+    sched_switch_vain
+    irq_entry                 #===========================================#
+  +-------------------------- H                                           H
+  |                           H                                           H
+  +-------------------------> H             any_thread_running            H
+                              H                                           H
+  +-------------------------> H                                           H
+  |                           #===========================================#
+  |                             |                       ^
+  | sched_switch_preempt        |                       | sched_switch_preempt
+  | sched_switch_vain_preempt   |                      sched_switch_vain_preempt
+  | sched_switch_other          | sched_need_resched    | sched_switch_other
+  | sched_switch_vain           |                       | sched_switch_vain
+  |                             v                       |
+  |                           +----------------------+  |
+  |                      +--- |                      |  |
+  |   sched_need_resched |    |     rescheduling     | -+
+  |                      +--> |                      |
+  |                           +----------------------+
+  |                             |
+  |                             | irq_exit
+  |                             v
+  |                           +----------------------+
+  |                           |                      | ---+
+  |                      ---> |                      |    | sched_need_resched
+  |                           |      preempt_irq     |    | irq_exit
+  |                           |                      | <--+
+  |                           |                      | <--+
+  |                           +----------------------+    |
+  |                             |                         |
+  |                             | sched_switch_preempt    |
+  |                            sched_switch_vain_preempt  |
+  |                             | sched_switch_other      | sched_need_resched
+  |                             | sched_switch_vain       |
+  |                             v                         |
+  |                           +-----------------------+   |
+  +-------------------------- |    nested_preempt     | --+
+                              +-----------------------+
+                                ^ irq_entry         |
+                                +-------------------+
+
+Due to how the ``need_resched`` flag on the preemption count works on arm64,
+this monitor is unstable on that architecture, as it often records preemptions
+when the flag is not set, even in presence of the workaround above.
+For the time being, the monitor is disabled by default on arm64.
+
+Monitor sssw
+------------
+
+The set state sleep and wakeup (sssw) monitor ensures ``sched_set_state`` to
+sleepable leads to sleeping and sleeping tasks require wakeup.
+It includes the following types of ``sched_switch``:
+
+* ``switch_suspend``:
+  a task puts itself to sleep, this can happen only after explicitly setting
+  the task to ``sleepable``. After a task is suspended, it needs to be woken up
+  (``waking`` state) before being switched in again.
+  Setting the task's state to ``sleepable`` can be reverted before switching if it
+  is woken up or set to ``runnable``.
+* ``switch_blocked``:
+  a special case of a ``switch_suspend`` where the task is waiting on a
+  sleeping RT lock (``PREEMPT_RT`` only), it is common to see wakeup and set
+  state events racing with each other and this leads the model to perceive this
+  type of switch when the task is not set to sleepable. This is a limitation of
+  the model in SMP system and workarounds may slow down the system.
+* ``switch_yield``:
+  a task explicitly calls the scheduler, this looks like a preemption as the
+  task is still runnable but the ``need_resched`` flag is not set. It can
+  happen after a ``yield`` system call or from the idle task. By definition,
+  a task cannot yield while ``sleepable`` as that would be a suspension.
+* ``switch_vain``:
+  a task explicitly calls the scheduler but it is picked as the next task to run,
+  hence no real task switch occurs. This can occur as a yield, which is not
+  valid when the task is sleepable. A special case of a yield is when a task in
+  ``TASK_INTERRUPTIBLE`` calls the scheduler while a signal is pending. The
+  task doesn't go through the usual blocking/waking and is set back to
+  runnable, the resulting switch looks like a yield.
+
+As for the nrp monitor, this monitor doesn't include a running state,
+``sleepable`` and ``runnable`` are only referring to the task's desired
+state, which could be scheduled out (e.g. due to preemption). However, it does
+include the event ``sched_switch_in`` to represent when a task is allowed to
+become running. This can be triggered also by preemption, but cannot occur
+after the task got to ``sleeping`` until a ``wakeup``::
+
+  sched_set_state_runnable
+  sched_wakeup
+  sched_switch_vain_preempt     |
+  sched_switch_preempt          |
+  sched_switch_yield            v
+  sched_switch_vain        #=============================================#
+       +-----------------> H                                             H
+       |                   H                                             H
+       +------------------ H                  runnable                   H
+                           H                                             H
+       +-----------------> H                                             H
+       |                   #=============================================#
+  sched_set_state_runnable   |                          |            ^
+  sched_wakeup               |               sched_switch_blocking   |
+       |          sched_set_state_sleepable             |            |
+       |                     v                          |            |
+       |                   +------------------------+   |       sched_wakeup
+       +------------------ |                        |   |            |
+                           |                        |   |            |
+       +-----------------> |        sleepable       |   |            |
+       |                   |                        |   |            |
+       +------------------ |                        |   |            |
+  sched_switch_in          +------------------------+   |            |
+  sched_switch_preempt                  |               |            |
+  sched_switch_vain_preempt    sched_switch_suspend     |            |
+  sched_set_state_sleepable    sched_switch_blocking    |            |
+                                        |               |            |
+                                        v               |            |
+                           +------------------------+   |            |
+                           |         sleeping       | <-+            |
+                           +------------------------+                |
+                                        |                            |
+                                        +----------------------------+
+
 References
 ----------
 
