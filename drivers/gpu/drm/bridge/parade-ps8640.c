@@ -198,7 +198,6 @@ static int ps8640_wait_hpd_asserted(struct drm_dp_aux *aux, unsigned long wait_u
 	 */
 	pm_runtime_get_sync(dev);
 	ret = _ps8640_wait_hpd_asserted(ps_bridge, wait_us);
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return ret;
@@ -353,7 +352,6 @@ static ssize_t ps8640_aux_transfer(struct drm_dp_aux *aux,
 		goto exit;
 	}
 	ret = ps8640_aux_transfer_msg(aux, msg);
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 exit:

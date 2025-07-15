@@ -236,7 +236,6 @@ static int atana33xc20_get_modes(struct drm_panel *panel,
 
 	num = drm_edid_connector_add_modes(connector);
 
-	pm_runtime_mark_last_busy(panel->dev);
 	pm_runtime_put_autosuspend(panel->dev);
 
 	return num;
@@ -306,7 +305,6 @@ static int atana33xc20_probe(struct dp_aux_ep_device *aux_ep)
 
 	pm_runtime_get_sync(dev);
 	ret = drm_panel_dp_aux_backlight(&panel->base, aux_ep->aux);
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	/*

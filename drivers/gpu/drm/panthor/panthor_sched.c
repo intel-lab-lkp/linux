@@ -2446,7 +2446,6 @@ out_cleanup_ctx:
 
 out_unlock:
 	mutex_unlock(&sched->lock);
-	pm_runtime_mark_last_busy(ptdev->base.dev);
 	pm_runtime_put_autosuspend(ptdev->base.dev);
 
 out_dev_exit:
@@ -3203,7 +3202,6 @@ queue_run_job(struct drm_sched_job *sched_job)
 
 out_unlock:
 	mutex_unlock(&sched->lock);
-	pm_runtime_mark_last_busy(ptdev->base.dev);
 	pm_runtime_put_autosuspend(ptdev->base.dev);
 
 	return done_fence;

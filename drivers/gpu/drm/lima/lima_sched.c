@@ -197,7 +197,6 @@ static void lima_pm_idle(struct lima_device *ldev)
 	lima_devfreq_record_idle(&ldev->devfreq);
 
 	/* GPU can do auto runtime suspend */
-	pm_runtime_mark_last_busy(ldev->dev);
 	pm_runtime_put_autosuspend(ldev->dev);
 }
 

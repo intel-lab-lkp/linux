@@ -581,7 +581,6 @@ static ssize_t ti_sn_aux_transfer(struct drm_dp_aux *aux,
 
 exit:
 	mutex_unlock(&pdata->comms_mutex);
-	pm_runtime_mark_last_busy(pdata->dev);
 	pm_runtime_put_autosuspend(pdata->dev);
 
 	if (ret)

@@ -613,7 +613,6 @@ static int panel_edp_get_modes(struct drm_panel *panel,
 			}
 		}
 
-		pm_runtime_mark_last_busy(panel->dev);
 		pm_runtime_put_autosuspend(panel->dev);
 	}
 
@@ -825,7 +824,6 @@ static int generic_edp_panel_probe(struct device *dev, struct panel_edp *panel)
 	}
 
 exit:
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
@@ -917,7 +915,6 @@ static int panel_edp_probe(struct device *dev, const struct panel_desc *desc,
 	if (!panel->base.backlight && panel->aux) {
 		pm_runtime_get_sync(dev);
 		err = drm_panel_dp_aux_backlight(&panel->base, panel->aux);
-		pm_runtime_mark_last_busy(dev);
 		pm_runtime_put_autosuspend(dev);
 
 		/*

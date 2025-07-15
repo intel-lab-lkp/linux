@@ -881,7 +881,6 @@ static void g2d_runqueue_worker(struct work_struct *work)
 	g2d->runqueue_node = NULL;
 
 	if (runqueue_node) {
-		pm_runtime_mark_last_busy(g2d->dev);
 		pm_runtime_put_autosuspend(g2d->dev);
 
 		complete(&runqueue_node->complete);
@@ -1009,7 +1008,6 @@ static void g2d_wait_finish(struct g2d_data *g2d, struct drm_file *file)
 	 * the IRQ which triggers the PM runtime put().
 	 * So do this manually here.
 	 */
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	complete(&runqueue_node->complete);

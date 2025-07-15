@@ -152,10 +152,8 @@ vc4_v3d_pm_put(struct vc4_dev *vc4)
 		return;
 
 	mutex_lock(&vc4->power_lock);
-	if (--vc4->power_refcount == 0) {
-		pm_runtime_mark_last_busy(&vc4->v3d->pdev->dev);
+	if (--vc4->power_refcount == 0)
 		pm_runtime_put_autosuspend(&vc4->v3d->pdev->dev);
-	}
 	mutex_unlock(&vc4->power_lock);
 }
 

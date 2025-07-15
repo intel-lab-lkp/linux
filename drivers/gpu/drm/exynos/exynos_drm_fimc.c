@@ -967,7 +967,6 @@ static irqreturn_t fimc_irq_handler(int irq, void *dev_id)
 		struct exynos_drm_ipp_task *task = ctx->task;
 
 		ctx->task = NULL;
-		pm_runtime_mark_last_busy(ctx->dev);
 		pm_runtime_put_autosuspend(ctx->dev);
 		exynos_drm_ipp_task_done(task, 0);
 	}
@@ -1119,7 +1118,6 @@ static void fimc_abort(struct exynos_drm_ipp *ipp,
 		struct exynos_drm_ipp_task *task = ctx->task;
 
 		ctx->task = NULL;
-		pm_runtime_mark_last_busy(ctx->dev);
 		pm_runtime_put_autosuspend(ctx->dev);
 		exynos_drm_ipp_task_done(task, -EIO);
 	}

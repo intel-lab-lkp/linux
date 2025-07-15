@@ -826,7 +826,7 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	ret = etnaviv_gpu_reset_deassert(gpu);
 	if (ret) {
 		dev_err(gpu->dev, "GPU reset deassert failed\n");
-		goto fail;
+		goto pm_put;
 	}
 
 	etnaviv_hw_identify(gpu);
@@ -834,7 +834,7 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	if (gpu->identity.model == 0) {
 		dev_err(gpu->dev, "Unknown GPU model\n");
 		ret = -ENXIO;
-		goto fail;
+		goto pm_put;
 	}
 
 	if (gpu->identity.nn_core_count > 0)
@@ -846,7 +846,7 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	    gpu->identity.features & chipFeatures_FE20) {
 		dev_info(gpu->dev, "Ignoring GPU with VG and FE2.0\n");
 		ret = -ENXIO;
-		goto fail;
+		goto pm_put;
 	}
 
 	/*
@@ -862,18 +862,18 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	ret = etnaviv_hw_reset(gpu);
 	if (ret) {
 		dev_err(gpu->dev, "GPU reset failed\n");
-		goto fail;
+		goto pm_put;
 	}
 
 	ret = etnaviv_iommu_global_init(gpu);
 	if (ret)
-		goto fail;
+		goto pm_put;
 
 	/* Create buffer: */
 	ret = etnaviv_cmdbuf_init(priv->cmdbuf_suballoc, &gpu->buffer, SZ_4K);
 	if (ret) {
 		dev_err(gpu->dev, "could not create command buffer\n");
-		goto fail;
+		goto pm_put;
 	}
 
 	/*
@@ -916,13 +916,10 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 	etnaviv_gpu_hw_init(gpu);
 	mutex_unlock(&gpu->lock);
 
-	pm_runtime_mark_last_busy(gpu->dev);
 	pm_runtime_put_autosuspend(gpu->dev);
 
 	return 0;
 
-fail:
-	pm_runtime_mark_last_busy(gpu->dev);
 pm_put:
 	pm_runtime_put_autosuspend(gpu->dev);
 
@@ -1109,7 +1106,6 @@ int etnaviv_gpu_debugfs(struct etnaviv_gpu *gpu, struct seq_file *m)
 
 	ret = 0;
 
-	pm_runtime_mark_last_busy(gpu->dev);
 pm_put:
 	pm_runtime_put_autosuspend(gpu->dev);
 
@@ -1509,7 +1505,6 @@ void etnaviv_gpu_recover_hang(struct etnaviv_gem_submit *submit)
 	etnaviv_gpu_hw_init(gpu);
 
 	mutex_unlock(&gpu->lock);
-	pm_runtime_mark_last_busy(gpu->dev);
 pm_put:
 	pm_runtime_put_autosuspend(gpu->dev);
 }

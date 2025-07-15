@@ -107,7 +107,6 @@ static irqreturn_t rotator_irq_handler(int irq, void *arg)
 		struct exynos_drm_ipp_task *task = rot->task;
 
 		rot->task = NULL;
-		pm_runtime_mark_last_busy(rot->dev);
 		pm_runtime_put_autosuspend(rot->dev);
 		exynos_drm_ipp_task_done(task,
 			irq_status == ROT_IRQ_STATUS_COMPLETE ? 0 : -EINVAL);
