@@ -2326,6 +2326,9 @@ static void cxl_region_release(struct device *dev)
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	int id = atomic_read(&cxlrd->region_id);
 
+	if (cxlr->id < 0)
+		goto out;
+
 	/*
 	 * Try to reuse the recently idled id rather than the cached
 	 * next id to prevent the region id space from increasing
@@ -2468,6 +2471,7 @@ static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd)
 	 */
 	get_device(dev->parent);
 	cxlr->cxlrd = cxlrd;
+	cxlr->id = -1;
 
 	device_set_pm_not_required(dev);
 	dev->bus = &cxl_bus_type;
@@ -2496,6 +2500,30 @@ static void unregister_region(void *_cxlr)
 	put_device(&cxlr->dev);
 }
 
+static int register_region(struct cxl_region *cxlr, int id)
+{
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	struct device *dev = &cxlr->dev;
+	int rc;
+
+	rc = memregion_alloc(GFP_KERNEL);
+	if (rc < 0)
+		return rc;
+
+	if (atomic_cmpxchg(&cxlrd->region_id, id, rc) != id) {
+		memregion_free(rc);
+		return -EBUSY;
+	}
+
+	cxlr->id = id;
+
+	rc = dev_set_name(dev, "region%d", cxlr->id);
+	if (rc)
+		return rc;
+
+	return device_add(dev);
+}
+
 /**
  * devm_cxl_add_region - Adds a region to a decoder
  * @cxlrd: root decoder
@@ -2516,40 +2544,29 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 {
 	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
 	struct cxl_region *cxlr;
-	struct device *dev;
 	int rc;
 
 	cxlr = cxl_region_alloc(cxlrd);
-	if (IS_ERR(cxlr)) {
-		memregion_free(id);
+	if (IS_ERR(cxlr))
 		return cxlr;
-	}
 
 	cxlr->mode = mode;
 	cxlr->type = type;
 
-	dev = &cxlr->dev;
-	cxlr->id = id;
-
-	rc = dev_set_name(dev, "region%d", id);
-	if (rc)
-		goto err;
-
-	rc = device_add(dev);
-	if (rc)
-		goto err;
+	rc = register_region(cxlr, id);
+	if (rc) {
+		put_device(&cxlr->dev);
+		return ERR_PTR(rc);
+	}
 
 	rc = devm_add_action_or_reset(port->uport_dev, unregister_region, cxlr);
 	if (rc)
 		return ERR_PTR(rc);
 
 	dev_dbg(port->uport_dev, "%s: created %s\n",
-		dev_name(&cxlrd->cxlsd.cxld.dev), dev_name(dev));
-	return cxlr;
+		dev_name(cxlr->dev.parent), dev_name(&cxlr->dev));
 
-err:
-	put_device(dev);
-	return ERR_PTR(rc);
+	return cxlr;
 }
 
 static ssize_t __create_region_show(struct cxl_root_decoder *cxlrd, char *buf)
@@ -2572,8 +2589,6 @@ static ssize_t create_ram_region_show(struct device *dev,
 static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 					  enum cxl_partition_mode mode, int id)
 {
-	int rc;
-
 	switch (mode) {
 	case CXL_PARTMODE_RAM:
 	case CXL_PARTMODE_PMEM:
@@ -2581,15 +2596,6 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 	default:
 		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %d\n", mode);
 		return ERR_PTR(-EINVAL);
-	}
-
-	rc = memregion_alloc(GFP_KERNEL);
-	if (rc < 0)
-		return ERR_PTR(rc);
-
-	if (atomic_cmpxchg(&cxlrd->region_id, id, rc) != id) {
-		memregion_free(rc);
-		return ERR_PTR(-EBUSY);
 	}
 
 	return devm_cxl_add_region(cxlrd, id, mode, CXL_DECODER_HOSTONLYMEM);
