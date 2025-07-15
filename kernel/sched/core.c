@@ -3140,10 +3140,15 @@ int __set_cpus_allowed_ptr(struct task_struct *p, struct affinity_context *ctx)
 	/*
 	 * Masking should be skipped if SCA_USER or any of the SCA_MIGRATE_*
 	 * flags are set.
+	 *
+	 * Even though the given new_mask must have at least one online CPU,
+	 * masking with user_cpus_ptr may strip out all online CPUs causing
+	 * failure. So offline CPUs have to be masked out too.
 	 */
 	if (p->user_cpus_ptr &&
 	    !(ctx->flags & (SCA_USER | SCA_MIGRATE_ENABLE | SCA_MIGRATE_DISABLE)) &&
-	    cpumask_and(rq->scratch_mask, ctx->new_mask, p->user_cpus_ptr))
+	    cpumask_and(rq->scratch_mask, ctx->new_mask, p->user_cpus_ptr) &&
+	    cpumask_and(rq->scratch_mask, rq->scratch_mask, cpu_active_mask))
 		ctx->new_mask = rq->scratch_mask;
 
 	return __set_cpus_allowed_ptr_locked(p, ctx, rq, &rf);
