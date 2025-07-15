@@ -245,11 +245,29 @@ static int pwec_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int pwec_suspend(struct platform_device *pdev, pm_message_t message)
+{
+	if (watchdog_active(&ec_wdt_dev))
+		return pwec_wdt_stop(&ec_wdt_dev);
+
+	return 0;
+}
+
+static int pwec_resume(struct platform_device *pdev)
+{
+	if (watchdog_active(&ec_wdt_dev))
+		return pwec_wdt_start(&ec_wdt_dev);
+
+	return 0;
+}
+
 static struct platform_driver pwec_driver = {
 	.driver = {
 		.name = "portwell-ec",
 	},
 	.probe = pwec_probe,
+	.suspend = pm_ptr(pwec_suspend),
+	.resume = pm_ptr(pwec_resume),
 };
 
 static struct platform_device *pwec_dev;
