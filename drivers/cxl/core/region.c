@@ -3367,8 +3367,13 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	}
 
 	cxlr = cxl_region_alloc(cxlrd);
-	if (IS_ERR(cxlr))
+	if (IS_ERR(cxlr)) {
+		dev_err(cxlmd->dev.parent,
+			"%s:%s: %s failed to allocate region: %ld\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			__func__, PTR_ERR(cxlr));
 		return cxlr;
+	}
 
 	cxlr->mode = mode;
 	cxlr->type = CXL_DECODER_HOSTONLYMEM;
@@ -3378,7 +3383,7 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	p->interleave_ways = cxled->cxld.interleave_ways;
 	p->interleave_granularity = cxled->cxld.interleave_granularity;
 
-	return devm_cxl_add_region(cxlr, -1);
+	return cxlr;
 }
 
 /* Establish an empty region covering the given HPA range */
@@ -3394,9 +3399,13 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_region *cxlr __free(early_region_unregister) =
 		create_region(cxlrd, cxled);
 
+	if (IS_ERR(cxlr))
+		return cxlr;
+
+	cxlr = devm_cxl_add_region(cxlr, -1);
 	if (IS_ERR(cxlr)) {
 		dev_err(cxlmd->dev.parent,
-			"%s:%s: %s failed assign region: %ld\n",
+			"%s:%s: %s failed to add region: %ld\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			__func__, PTR_ERR(cxlr));
 		return cxlr;
