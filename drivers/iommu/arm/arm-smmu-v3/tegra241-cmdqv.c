@@ -1218,7 +1218,7 @@ static void tegra241_vintf_destroy_vsid(struct iommufd_vdevice *vdev)
 
 static int tegra241_vintf_init_vsid(struct iommufd_vdevice *vdev)
 {
-	struct arm_smmu_master *master = dev_iommu_priv_get(vdev->dev);
+	struct arm_smmu_master *master = dev_iommu_priv_get(vdev->idev->dev);
 	struct tegra241_vintf *vintf = viommu_to_vintf(vdev->viommu);
 	struct tegra241_vintf_sid *vsid = vdev_to_vsid(vdev);
 	struct arm_smmu_stream *stream = &master->streams[0];
