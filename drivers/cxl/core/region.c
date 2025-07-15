@@ -3348,9 +3348,14 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 }
 
 static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
-					enum cxl_partition_mode mode, int id)
+					struct cxl_endpoint_decoder *cxled)
 {
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	int part = READ_ONCE(cxled->part);
+	enum cxl_partition_mode mode = cxlds->part[part].mode;
 	struct cxl_region *cxlr;
+	struct cxl_region_params *p;
 
 	switch (mode) {
 	case CXL_PARTMODE_RAM:
@@ -3367,8 +3372,13 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 
 	cxlr->mode = mode;
 	cxlr->type = CXL_DECODER_HOSTONLYMEM;
+	set_bit(CXL_REGION_F_AUTO, &cxlr->flags);
 
-	return devm_cxl_add_region(cxlr, id);
+	p = &cxlr->params;
+	p->interleave_ways = cxled->cxld.interleave_ways;
+	p->interleave_granularity = cxled->cxld.interleave_granularity;
+
+	return devm_cxl_add_region(cxlr, -1);
 }
 
 /* Establish an empty region covering the given HPA range */
@@ -3376,15 +3386,13 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	int part = READ_ONCE(cxled->part);
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	struct resource *res;
 	int rc;
 
 	struct cxl_region *cxlr __free(early_region_unregister) =
-		create_region(cxlrd, cxlds->part[part].mode, -1);
+		create_region(cxlrd, cxled);
 
 	if (IS_ERR(cxlr)) {
 		dev_err(cxlmd->dev.parent,
@@ -3404,8 +3412,6 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 			__func__);
 		return ERR_PTR(-EBUSY);
 	}
-
-	set_bit(CXL_REGION_F_AUTO, &cxlr->flags);
 
 	res = kmalloc(sizeof(*res), GFP_KERNEL);
 	if (!res)
@@ -3438,8 +3444,6 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	}
 
 	p->res = res;
-	p->interleave_ways = cxled->cxld.interleave_ways;
-	p->interleave_granularity = cxled->cxld.interleave_granularity;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
 
 	rc = sysfs_update_group(&cxlr->dev.kobj, get_cxl_region_target_group());
