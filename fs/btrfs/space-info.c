@@ -306,6 +306,12 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 
 		if (ret)
 			return ret;
+	} else {
+		if ((flags & BTRFS_BLOCK_GROUP_DATA) &&
+		    !(flags & BTRFS_BLOCK_GROUP_METADATA)) {
+			space_info->dynamic_reclaim = 1;
+			space_info->periodic_reclaim = 1;
+		}
 	}
 
 	ret = btrfs_sysfs_add_space_info_type(info, space_info);
