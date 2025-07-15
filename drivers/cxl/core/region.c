@@ -3312,9 +3312,10 @@ static int match_region_by_range(struct device *dev, const void *data)
 	return 0;
 }
 
-static struct cxl_region *
-cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
+static struct cxl_region *cxl_region_find_duplicate(struct cxl_region *cxlr)
 {
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	struct range *hpa = &cxlr->hpa_range;
 	struct device *region_dev;
 
 	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, hpa,
@@ -3486,7 +3487,7 @@ static struct cxl_region *construct_region(struct cxl_region *__cxlr)
 		dev_name(&cxlr->dev), __func__, p->res, p->interleave_ways,
 		p->interleave_granularity);
 
-	/* Pair with cxl_find_region_by_range() in cxl_endpoint_get_region(). */
+	/* Pair with cxl_region_find_duplicate() in cxl_endpoint_get_region(). */
 	get_device(&cxlr->dev);
 
 	return no_free_ptr(cxlr);
@@ -3502,12 +3503,13 @@ cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 		return new;
 
 	/*
-	 * Ensure that if multiple threads race to construct_region() for @hpa
-	 * one does the construction and the others add to that.
+	 * Ensure that if multiple threads race to construct_region()
+	 * for the hpa range one does the construction and the others
+	 * add to that.
 	 */
 	guard(mutex)(&new->cxlrd->range_lock);
 
-	cxlr = cxl_find_region_by_range(new->cxlrd, &new->hpa_range);
+	cxlr = cxl_region_find_duplicate(new);
 	if (!cxlr)
 		return construct_region(new);
 
