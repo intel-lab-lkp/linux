@@ -52,6 +52,19 @@ config PCIE_APPLE
 
 	  If unsure, say Y if you have an Apple Silicon system.
 
+config PCIE_ASPEED
+	bool "ASPEED PCIe controller"
+	depends on ARCH_ASPEED || COMPILE_TEST
+	depends on OF
+	select PCI_MSI_ARCH_FALLBACKS
+	help
+	  Enable this option to add support for the PCIe controller
+	  found on ASPEED SoCs.
+	  This driver provides initialization and management for PCIe
+	  Root Complex functionality, including interrupt and MSI support.
+	  Select Y if your platform uses an ASPEED SoC and requires PCIe
+	  connectivity.
+
 config PCI_VERSATILE
 	bool "ARM Versatile PB PCI controller"
 	depends on ARCH_VERSATILE || COMPILE_TEST
