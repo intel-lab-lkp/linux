@@ -614,6 +614,12 @@ and user-created routes are fully replaced when ``VIDIOC_SUBDEV_S_ROUTING`` is
 called on the sub-device. Such newly created routes have the device's default
 configuration for format and selection rectangles.
 
+A sub-device may only have either static routes (routes that have
+``V4L2_SUBDEV_ROUTE_FL_STATIC`` flag set) or routes that are all user-created or
+user-removable (routes that do not have ``V4L2_SUBDEV_ROUTE_FL_STATIC``
+flag). Mixing static and non-static routes is not allowed in the same
+sub-device. This is subject to change in the future.
+
 Configuring streams
 -------------------
 
