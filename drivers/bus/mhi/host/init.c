@@ -467,6 +467,24 @@ error_alloc_chan_ctxt:
 	return ret;
 }
 
+static void mhi_reset_dev_rings(struct mhi_controller *mhi_cntrl)
+{
+	struct mhi_event *mhi_event = mhi_cntrl->mhi_event;
+	struct mhi_cmd *mhi_cmd = mhi_cntrl->mhi_cmd;
+	struct mhi_ring *ring;
+	int i;
+
+	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
+		ring = &mhi_event->ring;
+		ring->rp = ring->wp = ring->base;
+	}
+
+	for (i = 0; i < NR_OF_CMD_RINGS; i++, mhi_cmd++) {
+		ring = &mhi_cmd->ring;
+		ring->rp = ring->wp = ring->base;
+	}
+}
+
 int mhi_init_mmio(struct mhi_controller *mhi_cntrl)
 {
 	u32 val;
@@ -1126,9 +1144,13 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 
 	mutex_lock(&mhi_cntrl->pm_mutex);
 
-	ret = mhi_init_dev_ctxt(mhi_cntrl);
-	if (ret)
-		goto error_dev_ctxt;
+	if (!mhi_cntrl->mhi_ctxt) {
+		ret = mhi_init_dev_ctxt(mhi_cntrl);
+		if (ret)
+			goto error_dev_ctxt;
+	} else {
+		mhi_reset_dev_rings(mhi_cntrl);
+	}
 
 	ret = mhi_read_reg(mhi_cntrl, mhi_cntrl->regs, BHIOFF, &bhi_off);
 	if (ret) {
@@ -1205,8 +1227,6 @@ void mhi_deinit_dev_ctxt(struct mhi_controller *mhi_cntrl)
 {
 	mhi_cntrl->bhi = NULL;
 	mhi_cntrl->bhie = NULL;
-
-	__mhi_deinit_dev_ctxt(mhi_cntrl);
 }
 
 void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
@@ -1232,6 +1252,7 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 	}
 
 	mhi_deinit_dev_ctxt(mhi_cntrl);
+	__mhi_deinit_dev_ctxt(mhi_cntrl);
 }
 EXPORT_SYMBOL_GPL(mhi_unprepare_after_power_down);
 
