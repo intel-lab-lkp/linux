@@ -9,6 +9,7 @@
 #include <linux/blk-integrity.h>
 #include <linux/part_stat.h>
 #include <linux/blk-cgroup.h>
+#include <linux/blk-crypto.h>
 
 #include <trace/events/block.h>
 
@@ -124,10 +125,12 @@ static struct bio *bio_submit_split(struct bio *bio, int split_sectors)
 		trace_block_split(split, bio->bi_iter.bi_sector);
 		WARN_ON_ONCE(bio_zone_write_plugging(bio));
 		submit_bio_noacct(bio);
-		return split;
+
+		bio = split;
 	}
 
-	return bio;
+	return blk_crypto_bio_prep(bio);
+
 error:
 	bio->bi_status = errno_to_blk_status(split_sectors);
 	bio_endio(bio);
@@ -210,6 +213,8 @@ static inline unsigned get_max_io_size(struct bio *bio,
 		max_sectors = lim->atomic_write_max_sectors;
 	else
 		max_sectors = lim->max_sectors;
+
+	max_sectors = min(max_sectors, blk_crypto_max_io_size(bio));
 
 	if (boundary_sectors) {
 		max_sectors = min(max_sectors,

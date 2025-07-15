@@ -214,7 +214,7 @@ blk_crypto_fallback_alloc_cipher_req(struct blk_crypto_keyslot *slot,
  * the bio size supported by the encryption fallback code. This function
  * calculates the upper limit for the bio size.
  */
-static unsigned int blk_crypto_max_io_size(struct bio *bio)
+unsigned int blk_crypto_max_io_size(struct bio *bio)
 {
 	unsigned int i = 0;
 	unsigned int num_bytes = 0;
@@ -227,28 +227,6 @@ static unsigned int blk_crypto_max_io_size(struct bio *bio)
 			break;
 	}
 	return num_bytes >> SECTOR_SHIFT;
-}
-
-static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
-{
-	struct bio *bio = *bio_ptr;
-	unsigned int num_sectors = blk_crypto_max_io_size(bio);
-
-	if (num_sectors < bio_sectors(bio)) {
-		struct bio *split_bio;
-
-		split_bio = bio_split(bio, num_sectors, GFP_NOIO,
-				      &crypto_bio_split);
-		if (IS_ERR(split_bio)) {
-			bio->bi_status = BLK_STS_RESOURCE;
-			return false;
-		}
-		bio_chain(split_bio, bio);
-		submit_bio_noacct(bio);
-		*bio_ptr = split_bio;
-	}
-
-	return true;
 }
 
 union blk_crypto_iv {
@@ -268,8 +246,8 @@ static void blk_crypto_dun_to_iv(const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 /*
  * The crypto API fallback's encryption routine.
  * Allocate a bounce bio for encryption, encrypt the input bio using crypto API,
- * and return the bounce bio. May split input bio if it's too large. Returns the
- * bounce bio on success. Returns %NULL and sets bio->bi_status on error.
+ * and return the bounce bio. Returns the bounce bio on success. Returns %NULL
+ * and sets bio->bi_status on error.
  */
 static struct bio *blk_crypto_fallback_encrypt_bio(struct bio *src_bio)
 {
@@ -285,9 +263,12 @@ static struct bio *blk_crypto_fallback_encrypt_bio(struct bio *src_bio)
 	unsigned int i, j;
 	blk_status_t blk_st;
 
-	/* Split the bio if it's too big for single page bvec */
-	if (!blk_crypto_fallback_split_bio_if_needed(&src_bio))
+	/* Verify that bio splitting has occurred. */
+	if (WARN_ON_ONCE(bio_sectors(src_bio) >
+			 blk_crypto_max_io_size(src_bio))) {
+		src_bio->bi_status = BLK_STS_IOERR;
 		return NULL;
+	}
 
 	bc = src_bio->bi_crypt_context;
 	data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
@@ -481,10 +462,8 @@ static void blk_crypto_fallback_decrypt_endio(struct bio *bio)
  *
  * @bio: bio to prepare
  *
- * If bio is doing a WRITE operation, this splits the bio into two parts if it's
- * too big (see blk_crypto_fallback_split_bio_if_needed()). It then allocates a
- * bounce bio for the first part, encrypts it, and updates bio_ptr to point to
- * the bounce bio.
+ * For WRITE operations, a bounce bio is allocated, encrypted, and *bio_ptr is
+ * updated to point to the bounce bio.
  *
  * For a READ operation, we mark the bio for decryption by using bi_private and
  * bi_end_io.
