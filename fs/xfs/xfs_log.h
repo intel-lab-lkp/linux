@@ -9,18 +9,6 @@
 struct xlog_format_buf;
 struct xfs_cil_ctx;
 
-struct xfs_log_vec {
-	struct list_head	lv_list;	/* CIL lv chain ptrs */
-	uint32_t		lv_order_id;	/* chain ordering info */
-	int			lv_niovecs;	/* number of iovecs in lv */
-	struct xfs_log_iovec	*lv_iovecp;	/* iovec array */
-	struct xfs_log_item	*lv_item;	/* owner */
-	char			*lv_buf;	/* formatted buffer */
-	int			lv_bytes;	/* accounted space in buffer */
-	int			lv_buf_used;	/* buffer space used so far */
-	int			lv_alloc_size;	/* size of allocated lv */
-};
-
 #define XFS_LOG_VEC_ORDERED	(-1)
 
 /*
