@@ -227,7 +227,7 @@ typedef struct port {
 	rx_states_t sm_rx_state;	/* state machine rx state */
 	u16 sm_rx_timer_counter;	/* state machine rx timer counter */
 	periodic_states_t sm_periodic_state;	/* state machine periodic state */
-	u16 sm_periodic_timer_counter;	/* state machine periodic timer counter */
+	unsigned long sm_periodic_next_jiffies;	/* state machine periodic next expected sent */
 	mux_states_t sm_mux_state;	/* state machine mux state */
 	u16 sm_mux_timer_counter;	/* state machine mux timer counter */
 	tx_states_t sm_tx_state;	/* state machine tx state */

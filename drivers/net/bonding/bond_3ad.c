@@ -1433,44 +1433,24 @@ static void ad_periodic_machine(struct port *port, struct bond_params *bond_para
 	    (!(port->actor_oper_port_state & LACP_STATE_LACP_ACTIVITY) && !(port->partner_oper.port_state & LACP_STATE_LACP_ACTIVITY)) ||
 	    !bond_params->lacp_active) {
 		port->sm_periodic_state = AD_NO_PERIODIC;
-	}
-	/* check if state machine should change state */
-	else if (port->sm_periodic_timer_counter) {
-		/* check if periodic state machine expired */
-		if (!(--port->sm_periodic_timer_counter)) {
-			/* if expired then do tx */
-			port->sm_periodic_state = AD_PERIODIC_TX;
-		} else {
-			/* If not expired, check if there is some new timeout
-			 * parameter from the partner state
-			 */
-			switch (port->sm_periodic_state) {
-			case AD_FAST_PERIODIC:
-				if (!(port->partner_oper.port_state
-				      & LACP_STATE_LACP_TIMEOUT))
-					port->sm_periodic_state = AD_SLOW_PERIODIC;
-				break;
-			case AD_SLOW_PERIODIC:
-				if ((port->partner_oper.port_state & LACP_STATE_LACP_TIMEOUT)) {
-					port->sm_periodic_timer_counter = 0;
-					port->sm_periodic_state = AD_PERIODIC_TX;
-				}
-				break;
-			default:
-				break;
-			}
-		}
+	} else if (port->sm_periodic_state == AD_NO_PERIODIC)
+		port->sm_periodic_state = AD_FAST_PERIODIC;
+	/* check if periodic state machine expired */
+	else if (time_after_eq(jiffies, port->sm_periodic_next_jiffies)) {
+		/* if expired then do tx */
+		port->sm_periodic_state = AD_PERIODIC_TX;
 	} else {
+		/* If not expired, check if there is some new timeout
+		 * parameter from the partner state
+		 */
 		switch (port->sm_periodic_state) {
-		case AD_NO_PERIODIC:
-			port->sm_periodic_state = AD_FAST_PERIODIC;
-			break;
-		case AD_PERIODIC_TX:
-			if (!(port->partner_oper.port_state &
-			    LACP_STATE_LACP_TIMEOUT))
+		case AD_FAST_PERIODIC:
+			if (!(port->partner_oper.port_state & LACP_STATE_LACP_TIMEOUT))
 				port->sm_periodic_state = AD_SLOW_PERIODIC;
-			else
-				port->sm_periodic_state = AD_FAST_PERIODIC;
+			break;
+		case AD_SLOW_PERIODIC:
+			if ((port->partner_oper.port_state & LACP_STATE_LACP_TIMEOUT))
+				port->sm_periodic_state = AD_PERIODIC_TX;
 			break;
 		default:
 			break;
@@ -1483,21 +1463,24 @@ static void ad_periodic_machine(struct port *port, struct bond_params *bond_para
 			  "Periodic Machine: Port=%d, Last State=%d, Curr State=%d\n",
 			  port->actor_port_number, last_state,
 			  port->sm_periodic_state);
+
 		switch (port->sm_periodic_state) {
-		case AD_NO_PERIODIC:
-			port->sm_periodic_timer_counter = 0;
-			break;
-		case AD_FAST_PERIODIC:
-			/* decrement 1 tick we lost in the PERIODIC_TX cycle */
-			port->sm_periodic_timer_counter = __ad_timer_to_ticks(AD_PERIODIC_TIMER, (u16)(AD_FAST_PERIODIC_TIME))-1;
-			break;
-		case AD_SLOW_PERIODIC:
-			/* decrement 1 tick we lost in the PERIODIC_TX cycle */
-			port->sm_periodic_timer_counter = __ad_timer_to_ticks(AD_PERIODIC_TIMER, (u16)(AD_SLOW_PERIODIC_TIME))-1;
-			break;
 		case AD_PERIODIC_TX:
 			port->ntt = true;
-			break;
+			if (!(port->partner_oper.port_state &
+						LACP_STATE_LACP_TIMEOUT))
+				port->sm_periodic_state = AD_SLOW_PERIODIC;
+			else
+				port->sm_periodic_state = AD_FAST_PERIODIC;
+		fallthrough;
+		case AD_SLOW_PERIODIC:
+		case AD_FAST_PERIODIC:
+			if (port->sm_periodic_state == AD_SLOW_PERIODIC)
+				port->sm_periodic_next_jiffies = jiffies
+					+ HZ * AD_SLOW_PERIODIC_TIME;
+			else /* AD_FAST_PERIODIC */
+				port->sm_periodic_next_jiffies = jiffies
+					+ HZ * AD_FAST_PERIODIC_TIME;
 		default:
 			break;
 		}
@@ -1999,7 +1982,7 @@ static void ad_initialize_port(struct port *port, int lacp_fast)
 		port->sm_rx_state = 0;
 		port->sm_rx_timer_counter = 0;
 		port->sm_periodic_state = 0;
-		port->sm_periodic_timer_counter = 0;
+		port->sm_periodic_next_jiffies = 0;
 		port->sm_mux_state = 0;
 		port->sm_mux_timer_counter = 0;
 		port->sm_tx_state = 0;
