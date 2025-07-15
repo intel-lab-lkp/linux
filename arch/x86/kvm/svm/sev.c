@@ -29,6 +29,7 @@
 #include <asm/msr.h>
 #include <asm/sev.h>
 
+#include "mmu/mmu_internal.h"
 #include "mmu.h"
 #include "x86.h"
 #include "svm.h"
@@ -4906,7 +4907,7 @@ next_pfn:
 	}
 }
 
-int sev_private_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn)
+int sev_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fault)
 {
 	int level, rc;
 	bool assigned;
@@ -4914,7 +4915,10 @@ int sev_private_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn)
 	if (!sev_snp_guest(kvm))
 		return 0;
 
-	rc = snp_lookup_rmpentry(pfn, &assigned, &level);
+	if (!fault->is_private)
+		return 0;
+
+	rc = snp_lookup_rmpentry(fault->pfn, &assigned, &level);
 	if (rc || !assigned)
 		return PG_LEVEL_4K;
 
