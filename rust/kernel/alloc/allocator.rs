@@ -59,17 +59,25 @@ fn aligned_size(new_layout: Layout) -> usize {
 /// One of the following: `krealloc`, `vrealloc`, `kvrealloc`.
 struct ReallocFunc(
     unsafe extern "C" fn(*const crate::ffi::c_void, usize, u32) -> *mut crate::ffi::c_void,
+    Option<
+        unsafe extern "C" fn(
+            *const crate::ffi::c_void,
+            usize,
+            usize,
+            u32,
+        ) -> *mut crate::ffi::c_void,
+    >,
 );
 
 impl ReallocFunc {
     // INVARIANT: `krealloc` satisfies the type invariants.
-    const KREALLOC: Self = Self(bindings::krealloc);
+    const KREALLOC: Self = Self(bindings::krealloc, None);
 
     // INVARIANT: `vrealloc` satisfies the type invariants.
-    const VREALLOC: Self = Self(bindings::vrealloc);
+    const VREALLOC: Self = Self(bindings::vrealloc, Some(bindings::vrealloc_align));
 
     // INVARIANT: `kvrealloc` satisfies the type invariants.
-    const KVREALLOC: Self = Self(bindings::kvrealloc);
+    const KVREALLOC: Self = Self(bindings::kvrealloc, None);
 
     /// # Safety
     ///
@@ -108,9 +116,15 @@ impl ReallocFunc {
         // GUARANTEE:
         // - `self.0` is one of `krealloc`, `vrealloc`, `kvrealloc`.
         // - Those functions provide the guarantees of this function.
-        let raw_ptr = unsafe {
-            // If `size == 0` and `ptr != NULL` the memory behind the pointer is freed.
-            self.0(ptr.cast(), size, flags.0).cast()
+        // If `size == 0` and `ptr != NULL` the memory behind the pointer is freed.
+        let raw_ptr = if let Some(f) = self.1 {
+            if layout.align() > bindings::PAGE_SIZE {
+                unsafe { f(ptr.cast(), size, layout.align(), flags.0).cast() }
+            } else {
+                unsafe { self.0(ptr.cast(), size, flags.0).cast() }
+            }
+        } else {
+            unsafe { self.0(ptr.cast(), size, flags.0).cast() }
         };
 
         let ptr = if size == 0 {
@@ -152,12 +166,6 @@ unsafe impl Allocator for Vmalloc {
         old_layout: Layout,
         flags: Flags,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        // TODO: Support alignments larger than PAGE_SIZE.
-        if layout.align() > bindings::PAGE_SIZE {
-            pr_warn!("Vmalloc does not support alignments larger than PAGE_SIZE yet.\n");
-            return Err(AllocError);
-        }
-
         // SAFETY: If not `None`, `ptr` is guaranteed to point to valid memory, which was previously
         // allocated with this `Allocator`.
         unsafe { ReallocFunc::VREALLOC.call(ptr, layout, old_layout, flags) }
