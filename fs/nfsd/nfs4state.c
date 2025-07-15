@@ -5690,7 +5690,7 @@ nfsd4_truncate(struct svc_rqst *rqstp, struct svc_fh *fh,
 		struct nfsd4_open *open)
 {
 	struct iattr iattr = {
-		.ia_valid = ATTR_SIZE,
+		.ia_valid = ATTR_SIZE | ATTR_CTIME,
 		.ia_size = 0,
 	};
 	struct nfsd_attrs attrs = {

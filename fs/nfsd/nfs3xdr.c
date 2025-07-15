@@ -289,6 +289,9 @@ svcxdr_decode_sattr3(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		return false;
 	}
 
+	if (iap->ia_valid)
+		iap->ia_valid |= ATTR_CTIME;
+
 	return true;
 }
 

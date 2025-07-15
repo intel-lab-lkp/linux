@@ -409,7 +409,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		if (xdr_stream_decode_u64(argp->xdr, &size) < 0)
 			return nfserr_bad_xdr;
 		iattr->ia_size = size;
-		iattr->ia_valid |= ATTR_SIZE;
+		iattr->ia_valid |= ATTR_SIZE | ATTR_CTIME;
 	}
 	if (bmval[0] & FATTR4_WORD0_ACL) {
 		status = nfsd4_decode_acl(argp, acl);
@@ -424,7 +424,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			return nfserr_bad_xdr;
 		iattr->ia_mode = mode;
 		iattr->ia_mode &= (S_IFMT | S_IALLUGO);
-		iattr->ia_valid |= ATTR_MODE;
+		iattr->ia_valid |= ATTR_MODE | ATTR_CTIME;
 	}
 	if (bmval[1] & FATTR4_WORD1_OWNER) {
 		u32 length;
@@ -438,7 +438,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 					      &iattr->ia_uid);
 		if (status)
 			return status;
-		iattr->ia_valid |= ATTR_UID;
+		iattr->ia_valid |= ATTR_UID | ATTR_CTIME;
 	}
 	if (bmval[1] & FATTR4_WORD1_OWNER_GROUP) {
 		u32 length;
@@ -452,7 +452,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 					      &iattr->ia_gid);
 		if (status)
 			return status;
-		iattr->ia_valid |= ATTR_GID;
+		iattr->ia_valid |= ATTR_GID | ATTR_CTIME;
 	}
 	if (bmval[1] & FATTR4_WORD1_TIME_ACCESS_SET) {
 		u32 set_it;
@@ -464,10 +464,10 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			status = nfsd4_decode_nfstime4(argp, &iattr->ia_atime);
 			if (status)
 				return status;
-			iattr->ia_valid |= (ATTR_ATIME | ATTR_ATIME_SET);
+			iattr->ia_valid |= ATTR_ATIME | ATTR_ATIME_SET | ATTR_CTIME;
 			break;
 		case NFS4_SET_TO_SERVER_TIME:
-			iattr->ia_valid |= ATTR_ATIME;
+			iattr->ia_valid |= ATTR_ATIME | ATTR_CTIME;
 			break;
 		default:
 			return nfserr_bad_xdr;
@@ -492,10 +492,10 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			status = nfsd4_decode_nfstime4(argp, &iattr->ia_mtime);
 			if (status)
 				return status;
-			iattr->ia_valid |= (ATTR_MTIME | ATTR_MTIME_SET);
+			iattr->ia_valid |= ATTR_MTIME | ATTR_MTIME_SET | ATTR_CTIME;
 			break;
 		case NFS4_SET_TO_SERVER_TIME:
-			iattr->ia_valid |= ATTR_MTIME;
+			iattr->ia_valid |= ATTR_MTIME | ATTR_CTIME;
 			break;
 		default:
 			return nfserr_bad_xdr;
@@ -519,7 +519,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		if (xdr_stream_decode_u32(argp->xdr, &mask) < 0)
 			return nfserr_bad_xdr;
 		*umask = mask & S_IRWXUGO;
-		iattr->ia_valid |= ATTR_MODE;
+		iattr->ia_valid |= ATTR_MODE | ATTR_CTIME;
 	}
 	if (bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) {
 		fattr4_time_deleg_access access;

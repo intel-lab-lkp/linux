@@ -196,6 +196,9 @@ svcxdr_decode_sattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 			iap->ia_valid &= ~(ATTR_ATIME_SET|ATTR_MTIME_SET);
 	}
 
+	if (iap->ia_valid)
+		iap->ia_valid |= ATTR_CTIME;
+
 	return true;
 }
 
