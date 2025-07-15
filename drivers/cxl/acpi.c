@@ -825,7 +825,7 @@ static int pair_cxl_resource(struct device *dev, void *data)
 
 static int cxl_acpi_probe(struct platform_device *pdev)
 {
-	int rc;
+	int rc = 0;
 	struct resource *cxl_res;
 	struct cxl_root *cxl_root;
 	struct cxl_port *root_port;
@@ -837,7 +837,7 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	rc = devm_add_action_or_reset(&pdev->dev, cxl_acpi_lock_reset_class,
 				      &pdev->dev);
 	if (rc)
-		return rc;
+		goto out;
 
 	cxl_res = devm_kzalloc(host, sizeof(*cxl_res), GFP_KERNEL);
 	if (!cxl_res)
@@ -848,18 +848,20 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	cxl_res->flags = IORESOURCE_MEM;
 
 	cxl_root = devm_cxl_add_root(host, &acpi_root_ops);
-	if (IS_ERR(cxl_root))
-		return PTR_ERR(cxl_root);
+	if (IS_ERR(cxl_root)) {
+		rc = PTR_ERR(cxl_root);
+		goto out;
+	}
 	root_port = &cxl_root->port;
 
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
 			      add_host_bridge_dport);
 	if (rc < 0)
-		return rc;
+		goto out;
 
 	rc = devm_add_action_or_reset(host, remove_cxl_resources, cxl_res);
 	if (rc)
-		return rc;
+		goto out;
 
 	ctx = (struct cxl_cfmws_context) {
 		.dev = host,
@@ -867,12 +869,14 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 		.cxl_res = cxl_res,
 	};
 	rc = acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, cxl_parse_cfmws, &ctx);
-	if (rc < 0)
-		return -ENXIO;
+	if (rc < 0) {
+		rc = -ENXIO;
+		goto out;
+	}
 
 	rc = add_cxl_resources(cxl_res);
 	if (rc)
-		return rc;
+		goto out;
 
 	/*
 	 * Populate the root decoders with their related iomem resource,
@@ -887,17 +891,19 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
 			      add_host_bridge_uport);
 	if (rc < 0)
-		return rc;
+		goto out;
 
 	if (IS_ENABLED(CONFIG_CXL_PMEM))
 		rc = device_for_each_child(&root_port->dev, root_port,
 					   add_root_nvdimm_bridge);
 	if (rc < 0)
-		return rc;
+		goto out;
 
 	/* In case PCI is scanned before ACPI re-trigger memdev attach */
 	cxl_bus_rescan();
-	return 0;
+
+out:
+	return rc;
 }
 
 static const struct acpi_device_id cxl_acpi_ids[] = {
