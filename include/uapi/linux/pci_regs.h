@@ -1230,4 +1230,36 @@
 #define PCI_DVSEC_CXL_PORT_CTL				0x0c
 #define PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR		0x00000001
 
+/* Fmt[2:0] encoding for TLP Header */
+#define PCI_TLP_FMT_3DW_NO_DATA		0x0  // 3DW header, no data
+#define PCI_TLP_FMT_4DW_NO_DATA		0x1  // 4DW header, no data
+#define PCI_TLP_FMT_3DW_DATA		0x2  // 3DW header, with data
+#define PCI_TLP_FMT_4DW_DATA		0x3  // 4DW header, with data
+#define PCI_TLP_FMT_PREFIX		0x4  // Prefix header
+
+/* Type[4:0] encoding for TLP Header */
+#define PCI_TLP_TYPE_MEM_RD		0x00 // Memory Read Request
+#define PCI_TLP_TYPE_MEM_RDLK		0x01 // Memory Read Lock Request
+#define PCI_TLP_TYPE_MEM_WR		0x00 // Memory Write Request (Fmt must be with data)
+#define PCI_TLP_TYPE_IO_RD		0x02 // IO Read Request
+#define PCI_TLP_TYPE_IO_WR		0x02 // IO Write Request (Fmt must be with data)
+#define PCI_TLP_TYPE_CFG0_RD		0x04 // Config Type 0 Read Request
+#define PCI_TLP_TYPE_CFG0_WR		0x04 // Config Type 0 Write Request (Fmt must be with data)
+#define PCI_TLP_TYPE_CFG1_RD		0x05 // Config Type 1 Read Request
+#define PCI_TLP_TYPE_CFG1_WR		0x05 // Config Type 1 Write Request (Fmt must be with data)
+#define PCI_TLP_TYPE_MSG		0x10 // Message Request (see routing field)
+#define PCI_TLP_TYPE_MSGD		0x11 // Message Request with Data (see routing field)
+#define PCI_TLP_TYPE_CPL		0x0A // Completion without Data
+#define PCI_TLP_TYPE_CPLD		0x0A // Completion with Data (Fmt must be with data)
+#define PCI_TLP_TYPE_CPLLCK		0x0B // Completion Locked
+#define PCI_TLP_TYPE_CPLDLCK		0x0B // Completion with Data Locked (Fmt must be with data)
+#define PCI_TLP_TYPE_FETCH_ADD		0x0C // Fetch and Add AtomicOp Request
+#define PCI_TLP_TYPE_SWAP		0x0D // Unconditional Swap AtomicOp Request
+#define PCI_TLP_TYPE_CMP_SWAP		0x0E // Compare and Swap AtomicOp Request
+#define PCI_TLP_TYPE_LOCAL_PREFIX	0x00 // Local TLP Prefix (Fmt = 0x4)
+#define PCI_TLP_TYPE_E2E_PREFIX		0x10 // End-to-End TLP Prefix (Fmt = 0x4)
+
+/* Macro to combine Fmt and Type into the 8-bit field */
+#define PCIE_TLP_FMT_TYPE(fmt, type)   (((fmt) << 5) | ((type) & 0x1F))
+
 #endif /* LINUX_PCI_REGS_H */
