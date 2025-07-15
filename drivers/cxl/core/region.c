@@ -2609,15 +2609,6 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 {
 	struct cxl_region *cxlr;
 
-	switch (mode) {
-	case CXL_PARTMODE_RAM:
-	case CXL_PARTMODE_PMEM:
-		break;
-	default:
-		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %d\n", mode);
-		return ERR_PTR(-EINVAL);
-	}
-
 	cxlr = cxl_region_alloc(cxlrd);
 	if (IS_ERR(cxlr))
 		return cxlr;
@@ -3356,6 +3347,30 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 	return 0;
 }
 
+static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
+					enum cxl_partition_mode mode, int id)
+{
+	struct cxl_region *cxlr;
+
+	switch (mode) {
+	case CXL_PARTMODE_RAM:
+	case CXL_PARTMODE_PMEM:
+		break;
+	default:
+		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %d\n", mode);
+		return ERR_PTR(-EINVAL);
+	}
+
+	cxlr = cxl_region_alloc(cxlrd);
+	if (IS_ERR(cxlr))
+		return cxlr;
+
+	cxlr->mode = mode;
+	cxlr->type = CXL_DECODER_HOSTONLYMEM;
+
+	return devm_cxl_add_region(cxlr, id);
+}
+
 /* Establish an empty region covering the given HPA range */
 static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
@@ -3369,7 +3384,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	int rc;
 
 	struct cxl_region *cxlr __free(early_region_unregister) =
-		__create_region(cxlrd, cxlds->part[part].mode, -1);
+		create_region(cxlrd, cxlds->part[part].mode, -1);
 
 	if (IS_ERR(cxlr)) {
 		dev_err(cxlmd->dev.parent,
