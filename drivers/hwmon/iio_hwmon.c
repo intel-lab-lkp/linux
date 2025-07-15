@@ -24,13 +24,15 @@
  * @attr_group:		the group of attributes
  * @groups:		null terminated array of attribute groups
  * @attrs:		null terminated array of attribute pointers.
+ * @num_attrs:          length of @attrs
  */
 struct iio_hwmon_state {
 	struct iio_channel *channels;
-	int num_channels;
 	struct attribute_group attr_group;
 	const struct attribute_group *groups[2];
 	struct attribute **attrs;
+	size_t num_attrs;
+	int num_channels;
 };
 
 static ssize_t iio_hwmon_read_label(struct device *dev,
@@ -93,12 +95,39 @@ static ssize_t iio_hwmon_read_val(struct device *dev,
 	return sprintf(buf, "%d\n", result);
 }
 
+static int add_device_attr(struct device *dev, struct iio_hwmon_state *st,
+			   ssize_t (*show)(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf),
+			   int i, const char *fmt, ...)
+{
+	struct sensor_device_attribute *a;
+	va_list ap;
+
+	a = devm_kzalloc(dev, sizeof(*a), GFP_KERNEL);
+	if (!a)
+		return -ENOMEM;
+
+	sysfs_attr_init(&a->dev_attr.attr);
+	va_start(ap, fmt);
+	a->dev_attr.attr.name = devm_kvasprintf(dev, GFP_KERNEL, fmt, ap);
+	va_end(ap);
+	if (!a->dev_attr.attr.name)
+		return -ENOMEM;
+
+	a->dev_attr.show = show;
+	a->dev_attr.attr.mode = 0444;
+	a->index = i;
+
+	st->attrs[st->num_attrs++] = &a->dev_attr.attr;
+	return 0;
+}
+
 static int iio_hwmon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct iio_hwmon_state *st;
-	struct sensor_device_attribute *a;
-	int ret, i, attr = 0;
+	int ret, i;
 	int in_i = 1, temp_i = 1, curr_i = 1, humidity_i = 1, power_i = 1;
 	enum iio_chan_type type;
 	struct iio_channel *channels;
@@ -136,11 +165,6 @@ static int iio_hwmon_probe(struct platform_device *pdev)
 		const char *prefix;
 		int n;
 
-		a = devm_kzalloc(dev, sizeof(*a), GFP_KERNEL);
-		if (a == NULL)
-			return -ENOMEM;
-
-		sysfs_attr_init(&a->dev_attr.attr);
 		ret = iio_get_channel_type(&st->channels[i], &type);
 		if (ret < 0)
 			return ret;
@@ -170,36 +194,18 @@ static int iio_hwmon_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 
-		a->dev_attr.attr.name = devm_kasprintf(dev, GFP_KERNEL,
-						       "%s%d_input",
-						       prefix, n);
-		if (a->dev_attr.attr.name == NULL)
-			return -ENOMEM;
-
-		a->dev_attr.show = iio_hwmon_read_val;
-		a->dev_attr.attr.mode = 0444;
-		a->index = i;
-		st->attrs[attr++] = &a->dev_attr.attr;
+		ret = add_device_attr(dev, st, iio_hwmon_read_val, i,
+				      "%s%d_input", prefix, n);
+		if (ret)
+			return ret;
 
 		/* Let's see if we have a label... */
-		if (iio_read_channel_label(&st->channels[i], buf) < 0)
-			continue;
-
-		a = devm_kzalloc(dev, sizeof(*a), GFP_KERNEL);
-		if (a == NULL)
-			return -ENOMEM;
-
-		sysfs_attr_init(&a->dev_attr.attr);
-		a->dev_attr.attr.name = devm_kasprintf(dev, GFP_KERNEL,
-						       "%s%d_label",
-						       prefix, n);
-		if (!a->dev_attr.attr.name)
-			return -ENOMEM;
-
-		a->dev_attr.show = iio_hwmon_read_label;
-		a->dev_attr.attr.mode = 0444;
-		a->index = i;
-		st->attrs[attr++] = &a->dev_attr.attr;
+		if (iio_read_channel_label(&st->channels[i], buf) >= 0) {
+			ret = add_device_attr(dev, st, iio_hwmon_read_label,
+					      i, "%s%d_label", prefix, n);
+			if (ret)
+				return ret;
+		}
 	}
 
 	devm_free_pages(dev, (unsigned long)buf);
