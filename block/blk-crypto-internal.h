@@ -165,12 +165,12 @@ static inline void bio_crypt_do_front_merge(struct request *rq,
 #endif
 }
 
-bool __blk_crypto_bio_prep(struct bio **bio_ptr);
-static inline bool blk_crypto_bio_prep(struct bio **bio_ptr)
+struct bio *__blk_crypto_bio_prep(struct bio *bio);
+static inline struct bio *blk_crypto_bio_prep(struct bio *bio)
 {
-	if (bio_has_crypt_ctx(*bio_ptr))
-		return __blk_crypto_bio_prep(bio_ptr);
-	return true;
+	if (bio_has_crypt_ctx(bio))
+		return __blk_crypto_bio_prep(bio);
+	return bio;
 }
 
 blk_status_t __blk_crypto_rq_get_keyslot(struct request *rq);

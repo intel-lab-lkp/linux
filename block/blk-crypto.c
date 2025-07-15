@@ -261,7 +261,7 @@ void __blk_crypto_free_request(struct request *rq)
 /**
  * __blk_crypto_bio_prep - Prepare bio for inline encryption
  *
- * @bio_ptr: pointer to original bio pointer
+ * @bio: bio to be encrypted
  *
  * If the bio crypt context provided for the bio is supported by the underlying
  * device's inline encryption hardware, do nothing.
@@ -271,18 +271,16 @@ void __blk_crypto_free_request(struct request *rq)
  * blk-crypto may choose to split the bio into 2 - the first one that will
  * continue to be processed and the second one that will be resubmitted via
  * submit_bio_noacct. A bounce bio will be allocated to encrypt the contents
- * of the aforementioned "first one", and *bio_ptr will be updated to this
- * bounce bio.
+ * of the aforementioned "first one". The pointer to this bio will be returned.
  *
  * Caller must ensure bio has bio_crypt_ctx.
  *
- * Return: true on success; false on error (and bio->bi_status will be set
- *	   appropriately, and bio_endio() will have been called so bio
- *	   submission should abort).
+ * Return: encrypted bio on success or %NULL on error. Additionally, if an error
+ *	   occurred, bio->bi_status will be set and bio_endio() will have been
+ *	   called.
  */
-bool __blk_crypto_bio_prep(struct bio **bio_ptr)
+struct bio *__blk_crypto_bio_prep(struct bio *bio)
 {
-	struct bio *bio = *bio_ptr;
 	const struct blk_crypto_key *bc_key = bio->bi_crypt_context->bc_key;
 
 	/* Error if bio has no data. */
@@ -302,12 +300,12 @@ bool __blk_crypto_bio_prep(struct bio **bio_ptr)
 	 */
 	if (blk_crypto_config_supported_natively(bio->bi_bdev,
 						 &bc_key->crypto_cfg))
-		return true;
-	if (blk_crypto_fallback_bio_prep(bio_ptr))
-		return true;
+		return bio;
+	if (blk_crypto_fallback_bio_prep(&bio))
+		return bio;
 fail:
-	bio_endio(*bio_ptr);
-	return false;
+	bio_endio(bio);
+	return NULL;
 }
 
 int __blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
