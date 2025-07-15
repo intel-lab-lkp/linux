@@ -1221,6 +1221,11 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 		mhi_cntrl->rddm_image = NULL;
 	}
 
+	if (mhi_cntrl->bhi_image) {
+		mhi_free_bhi_buffer(mhi_cntrl, mhi_cntrl->bhi_image);
+		mhi_cntrl->bhi_image = NULL;
+	}
+
 	mhi_deinit_dev_ctxt(mhi_cntrl);
 }
 EXPORT_SYMBOL_GPL(mhi_unprepare_after_power_down);
