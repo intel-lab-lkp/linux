@@ -223,6 +223,26 @@ queue_detection_work(struct intel_display *display, struct work_struct *work)
 	return queue_work(display->wq.unordered, work);
 }
 
+void intel_hpd_ignore_dig_port_work(struct intel_display *display, bool value)
+{
+	if (!HAS_DISPLAY(display))
+		return;
+
+	spin_lock_irq(&display->irq.lock);
+	display->hotplug.ignore_dig_port = value;
+	spin_unlock_irq(&display->irq.lock);
+}
+
+bool intel_hpd_can_queue_dig_port(struct intel_display *display)
+{
+	if (!HAS_DISPLAY(display))
+		return FALSE;
+
+	lockdep_assert_held(&display->irq.lock);
+
+	return !display->hotplug.ignore_dig_port;
+}
+
 static void
 intel_hpd_irq_storm_switch_to_polling(struct intel_display *display)
 {
@@ -691,7 +711,7 @@ void intel_hpd_irq_handler(struct intel_display *display,
 	 * queue for otherwise the flush_work in the pageflip code will
 	 * deadlock.
 	 */
-	if (queue_dig)
+	if (queue_dig && intel_hpd_can_queue_dig_port(display))
 		queue_work(display->hotplug.dp_wq, &display->hotplug.dig_port_work);
 	if (queue_hp)
 		queue_delayed_detection_work(display,

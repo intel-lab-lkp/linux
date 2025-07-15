@@ -34,5 +34,7 @@ void intel_hpd_debugfs_register(struct intel_display *display);
 void intel_hpd_enable_detection_work(struct intel_display *display);
 void intel_hpd_disable_detection_work(struct intel_display *display);
 bool intel_hpd_schedule_detection(struct intel_display *display);
+void intel_hpd_ignore_dig_port_work(struct intel_display *display, bool value);
+bool intel_hpd_can_queue_dig_port(struct intel_display *display);
 
 #endif /* __INTEL_HOTPLUG_H__ */

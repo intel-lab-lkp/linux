@@ -342,6 +342,8 @@ void xe_display_pm_suspend(struct xe_device *xe)
 
 	intel_hpd_cancel_work(display);
 
+	intel_hpd_ignore_dig_port_work(display, 1);
+
 	if (has_display(xe)) {
 		intel_display_driver_suspend_access(display);
 		intel_encoder_suspend_all(display);
@@ -468,6 +470,8 @@ void xe_display_pm_resume(struct xe_device *xe)
 
 	if (has_display(xe))
 		intel_display_driver_resume_access(display);
+
+	intel_hpd_ignore_dig_port_work(display, 0);
 
 	intel_hpd_init(display);
 
