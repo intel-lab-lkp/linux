@@ -3250,22 +3250,14 @@ cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
 static struct cxl_root_decoder *
 cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 {
-	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_port *port = cxled_to_port(cxled);
 	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
-	struct cxl_decoder *root, *cxld = &cxled->cxld;
-	struct range *hpa = &cxld->hpa_range;
+	struct range *hpa = &cxled->cxld.hpa_range;
+	struct cxl_decoder *root;
 
 	root = cxl_port_find_switch_decoder(&cxl_root->port, hpa);
-	if (!root) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s no CXL window for range %#llx:%#llx\n",
-			dev_name(&cxlmd->dev), dev_name(&cxld->dev),
-			cxld->hpa_range.start, cxld->hpa_range.end);
-		return NULL;
-	}
 
-	return to_cxl_root_decoder(&root->dev);
+	return root ? to_cxl_root_decoder(&root->dev) : NULL;
 }
 
 static int match_region_by_range(struct device *dev, const void *data)
@@ -3444,6 +3436,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 {
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	bool attach = false;
@@ -3451,8 +3444,14 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 
 	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
 		cxl_find_root_decoder(cxled);
-	if (!cxlrd)
+
+	if (!cxlrd) {
+		dev_err(cxlmd->dev.parent,
+			"%s:%s no CXL window for range %#llx:%#llx\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			hpa->start, hpa->end);
 		return -ENXIO;
+	}
 
 	/*
 	 * Ensure that if multiple threads race to construct_region() for @hpa
