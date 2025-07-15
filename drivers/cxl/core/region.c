@@ -3363,6 +3363,7 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 	return 0;
 }
 
+/* Establish a region for the endpoint decoder */
 static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 					struct cxl_endpoint_decoder *cxled)
 {
@@ -3407,23 +3408,17 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 	return cxlr;
 }
 
-/* Establish an empty region covering the given HPA range */
-static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
-					   struct cxl_endpoint_decoder *cxled)
+static struct cxl_region *construct_region(struct cxl_region *__cxlr)
 {
-	struct device *cxlrd_dev = &cxlrd->cxlsd.cxld.dev;
-	struct range *hpa = &cxled->cxld.hpa_range;
+	struct device *cxlrd_dev = &__cxlr->cxlrd->cxlsd.cxld.dev;
 	struct cxl_region_params *p;
+	struct range *hpa;
 	struct resource *res;
 	int rc;
 
 	struct cxl_region *cxlr __free(early_region_unregister) =
-		create_region(cxlrd, cxled);
+		devm_cxl_add_region(__cxlr, -1);
 
-	if (IS_ERR(cxlr))
-		return cxlr;
-
-	cxlr = devm_cxl_add_region(cxlr, -1);
 	if (IS_ERR(cxlr)) {
 		dev_err(cxlrd_dev->parent,
 			"%s: %s failed to add region: %ld\n",
@@ -3444,6 +3439,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	if (!res)
 		return ERR_PTR(-ENOMEM);
 
+	hpa = &cxlr->hpa_range;
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
 
@@ -3459,7 +3455,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 			dev_name(&cxlr->dev), __func__, rc);
 	}
 
-	rc = insert_resource(cxlrd->res, res);
+	rc = insert_resource(cxlr->cxlrd->res, res);
 	if (rc) {
 		/*
 		 * Platform-firmware may not have split resources like "System
@@ -3491,7 +3487,7 @@ cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct range *hpa = &cxled->cxld.hpa_range;
-	struct cxl_region *cxlr;
+	struct cxl_region *cxlr, *new;
 
 	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
 		cxl_find_root_decoder(cxled);
@@ -3504,15 +3500,21 @@ cxl_endpoint_get_region(struct cxl_endpoint_decoder *cxled)
 		return ERR_PTR(-ENXIO);
 	}
 
+	new = create_region(cxlrd, cxled);
+	if (IS_ERR(new))
+		return new;
+
 	/*
 	 * Ensure that if multiple threads race to construct_region() for @hpa
 	 * one does the construction and the others add to that.
 	 */
-	guard(mutex)(&cxlrd->range_lock);
+	guard(mutex)(&new->cxlrd->range_lock);
 
-	cxlr = cxl_find_region_by_range(cxlrd, hpa);
+	cxlr = cxl_find_region_by_range(new->cxlrd, &new->hpa_range);
 	if (!cxlr)
-		return construct_region(cxlrd, cxled);
+		return construct_region(new);
+
+	put_device(&new->dev);
 
 	return cxlr;
 }
