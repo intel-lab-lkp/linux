@@ -19,6 +19,7 @@
 #include <linux/notifier.h>
 #include <linux/printk.h>
 #include <linux/namei.h>
+#include <linux/kmemleak.h>
 
 #include "internal.h"
 #include "../internal.h"
@@ -498,6 +499,7 @@ static int efivarfs_init_fs_context(struct fs_context *fc)
 	if (!sfi)
 		return -ENOMEM;
 
+	kmemleak_ignore(sfi);
 	sfi->mount_opts.uid = GLOBAL_ROOT_UID;
 	sfi->mount_opts.gid = GLOBAL_ROOT_GID;
 
