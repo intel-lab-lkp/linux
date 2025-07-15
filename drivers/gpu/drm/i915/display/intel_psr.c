@@ -4282,5 +4282,7 @@ bool intel_psr_needs_alpm_aux_less(struct intel_dp *intel_dp,
 
 bool intel_psr_use_trans_push(const struct intel_crtc_state *crtc_state)
 {
-	return false;
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return DISPLAY_VER(display) >= 20 || crtc_state->has_psr;
 }
