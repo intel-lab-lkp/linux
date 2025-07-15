@@ -460,6 +460,7 @@ static u16 nvmet_passthru_get_set_features(struct nvmet_req *req)
 	case NVME_FEAT_PLM_WINDOW:
 	case NVME_FEAT_HOST_BEHAVIOR:
 	case NVME_FEAT_SANITIZE:
+	case NVME_FEAT_FDP:
 	case NVME_FEAT_VENDOR_START ... NVME_FEAT_VENDOR_END:
 		return nvmet_setup_passthru_command(req);
 
