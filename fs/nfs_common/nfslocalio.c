@@ -199,8 +199,8 @@ static bool nfs_uuid_put(nfs_uuid_t *nfs_uuid)
 		/* Now we can allow racing nfs_close_local_fh() to
 		 * skip the locking.
 		 */
-		RCU_INIT_POINTER(nfl->nfs_uuid, NULL);
-		wake_up_var_locked(&nfl->nfs_uuid, &nfs_uuid->lock);
+		rcu_assign_pointer(nfl->nfs_uuid, NULL);
+		wake_up_var(nfl);
 	}
 
 	/* Remove client from nn->local_clients */
@@ -321,8 +321,7 @@ void nfs_close_local_fh(struct nfs_file_localio *nfl)
 		 */
 		spin_unlock(&nfs_uuid->lock);
 		rcu_read_unlock();
-		wait_var_event(&nfl->nfs_uuid,
-			       rcu_access_pointer(nfl->nfs_uuid) == NULL);
+		wait_var_event(nfl, rcu_access_pointer(nfl->nfs_uuid) == NULL);
 		return;
 	}
 	/* tell nfs_uuid_put() to wait for us */
