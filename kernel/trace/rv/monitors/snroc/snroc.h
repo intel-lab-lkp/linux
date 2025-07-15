@@ -39,8 +39,16 @@ static const struct automaton_snroc automaton_snroc = {
 		"sched_switch_out"
 	},
 	.function = {
-		{      INVALID_STATE,  own_context_snroc,       INVALID_STATE },
-		{  own_context_snroc,      INVALID_STATE, other_context_snroc },
+		{
+			INVALID_STATE,
+			own_context_snroc,
+			INVALID_STATE
+		},
+		{
+			own_context_snroc,
+			INVALID_STATE,
+			other_context_snroc
+		},
 	},
 	.initial_state = other_context_snroc,
 	.final_states = { 1, 0 },
