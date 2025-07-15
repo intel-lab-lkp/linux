@@ -4081,9 +4081,11 @@ void *vzalloc_node_noprof(unsigned long size, int node)
 EXPORT_SYMBOL(vzalloc_node_noprof);
 
 /**
- * vrealloc - reallocate virtually contiguous memory; contents remain unchanged
+ * vrealloc_align - reallocate virtually contiguous memory;
+ *                  contents remain unchanged
  * @p: object to reallocate memory for
  * @size: the size to reallocate
+ * @align: requested alignment
  * @flags: the flags for the page level allocator
  *
  * If @p is %NULL, vrealloc() behaves exactly like vmalloc(). If @size is 0 and
@@ -4103,7 +4105,8 @@ EXPORT_SYMBOL(vzalloc_node_noprof);
  * Return: pointer to the allocated memory; %NULL if @size is zero or in case of
  *         failure
  */
-void *vrealloc_noprof(const void *p, size_t size, gfp_t flags)
+void *vrealloc_align_noprof(const void *p, size_t size, size_t align,
+			    gfp_t flags)
 {
 	struct vm_struct *vm = NULL;
 	size_t alloced_size = 0;
@@ -4116,49 +4119,65 @@ void *vrealloc_noprof(const void *p, size_t size, gfp_t flags)
 	}
 
 	if (p) {
+		if (!is_power_of_2(align)) {
+			WARN(1, "Trying to vrealloc_align() align is not power of 2 (%ld)\n",
+			     align);
+			return NULL;
+		}
+
 		vm = find_vm_area(p);
 		if (unlikely(!vm)) {
-			WARN(1, "Trying to vrealloc() nonexistent vm area (%p)\n", p);
+			WARN(1, "Trying to vrealloc_align() nonexistent vm area (%p)\n", p);
 			return NULL;
 		}
 
 		alloced_size = get_vm_area_size(vm);
 		old_size = vm->requested_size;
 		if (WARN(alloced_size < old_size,
-			 "vrealloc() has mismatched area vs requested sizes (%p)\n", p))
+			 "vrealloc_align() has mismatched area vs requested sizes (%p)\n", p))
 			return NULL;
 	}
 
-	/*
-	 * TODO: Shrink the vm_area, i.e. unmap and free unused pages. What
-	 * would be a good heuristic for when to shrink the vm_area?
-	 */
-	if (size <= old_size) {
-		/* Zero out "freed" memory, potentially for future realloc. */
-		if (want_init_on_free() || want_init_on_alloc(flags))
-			memset((void *)p + size, 0, old_size - size);
-		vm->requested_size = size;
-		kasan_poison_vmalloc(p + size, old_size - size);
-		return (void *)p;
-	}
-
-	/*
-	 * We already have the bytes available in the allocation; use them.
-	 */
-	if (size <= alloced_size) {
-		kasan_unpoison_vmalloc(p + old_size, size - old_size,
-				       KASAN_VMALLOC_PROT_NORMAL);
+	if (IS_ALIGNED((unsigned long)p, align)) {
 		/*
-		 * No need to zero memory here, as unused memory will have
-		 * already been zeroed at initial allocation time or during
-		 * realloc shrink time.
+		 * TODO: Shrink the vm_area, i.e. unmap and free unused pages. What
+		 * would be a good heuristic for when to shrink the vm_area?
 		 */
-		vm->requested_size = size;
-		return (void *)p;
+		if (size <= old_size) {
+			/* Zero out "freed" memory, potentially for future realloc. */
+			if (want_init_on_free() || want_init_on_alloc(flags))
+				memset((void *)p + size, 0, old_size - size);
+			vm->requested_size = size;
+			kasan_poison_vmalloc(p + size, old_size - size);
+			return (void *)p;
+		}
+
+		/*
+		 * We already have the bytes available in the allocation; use them.
+		 */
+		if (size <= alloced_size) {
+			kasan_unpoison_vmalloc(p + old_size, size - old_size,
+					KASAN_VMALLOC_PROT_NORMAL);
+			/*
+			 * No need to zero memory here, as unused memory will have
+			 * already been zeroed at initial allocation time or during
+			 * realloc shrink time.
+			 */
+			vm->requested_size = size;
+			return (void *)p;
+		}
+	} else {
+		/*
+		 * p is not aligned with align.
+		 * Allocate a new address to handle it.
+		 */
+		if (size < old_size)
+			old_size = size;
 	}
 
 	/* TODO: Grow the vm_area, i.e. allocate and map additional pages. */
-	n = __vmalloc_noprof(size, flags);
+	n = __vmalloc_node_noprof(size, align, flags, NUMA_NO_NODE,
+				  __builtin_return_address(0));
 	if (!n)
 		return NULL;
 
@@ -4168,6 +4187,11 @@ void *vrealloc_noprof(const void *p, size_t size, gfp_t flags)
 	}
 
 	return n;
+}
+
+void *vrealloc_noprof(const void *p, size_t size, gfp_t flags)
+{
+	return vrealloc_align_noprof(p, size, 1, flags);
 }
 
 #if defined(CONFIG_64BIT) && defined(CONFIG_ZONE_DMA32)

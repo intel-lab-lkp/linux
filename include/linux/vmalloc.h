@@ -201,6 +201,11 @@ void * __must_check vrealloc_noprof(const void *p, size_t size, gfp_t flags)
 		__realloc_size(2);
 #define vrealloc(...)		alloc_hooks(vrealloc_noprof(__VA_ARGS__))
 
+void * __must_check vrealloc_align_noprof(const void *p, size_t size,
+					  size_t align, gfp_t flags)
+		__realloc_size(2);
+#define vrealloc_align(...)	alloc_hooks(vrealloc_align_noprof(__VA_ARGS__))
+
 extern void vfree(const void *addr);
 extern void vfree_atomic(const void *addr);
 
