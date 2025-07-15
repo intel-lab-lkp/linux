@@ -3114,6 +3114,10 @@ static void cpuset_cancel_attach(struct cgroup_taskset *tset)
 static cpumask_var_t cpus_attach;
 static nodemask_t cpuset_attach_nodemask_to;
 
+/*
+ * Note that tasks in the top cpuset won't get update to their cpumasks when
+ * a hotplug event happens. So we include offline CPUs as well.
+ */
 static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 {
 	lockdep_assert_held(&cpuset_mutex);
@@ -3127,7 +3131,16 @@ static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 	 * can_attach beforehand should guarantee that this doesn't
 	 * fail.  TODO: have a better way to handle failure here
 	 */
-	WARN_ON_ONCE(set_cpus_allowed_ptr(task, cpus_attach));
+	if (unlikely(set_cpus_allowed_ptr(task, cpus_attach))) {
+		/*
+		 * Since offline CPUs are included for top_cpuset,
+		 * set_cpus_allowed_ptr() can fail if user_cpus_ptr contains
+		 * only offline CPUs. Take out the offline CPUs and retry.
+		 */
+		if (cs == &top_cpuset)
+			cpumask_and(cpus_attach, cpus_attach, cpu_active_mask);
+		WARN_ON_ONCE(set_cpus_allowed_ptr(task, cpus_attach));
+	}
 
 	cpuset_change_task_nodemask(task, &cpuset_attach_nodemask_to);
 	cpuset1_update_task_spread_flags(cs, task);
