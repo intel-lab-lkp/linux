@@ -384,6 +384,7 @@ static void rvu_rep_get_stats64(struct net_device *dev,
 	if (!(rep->flags & RVU_REP_VF_INITIALIZED))
 		return;
 
+	netdev_stats_to_stats64(stats, &dev->stats);
 	stats->rx_packets = rep->stats.rx_frames;
 	stats->rx_bytes = rep->stats.rx_bytes;
 	stats->rx_dropped = rep->stats.rx_drops;
@@ -391,7 +392,7 @@ static void rvu_rep_get_stats64(struct net_device *dev,
 
 	stats->tx_packets = rep->stats.tx_frames;
 	stats->tx_bytes = rep->stats.tx_bytes;
-	stats->tx_dropped = rep->stats.tx_drops;
+	stats->tx_dropped += rep->stats.tx_drops;
 
 	schedule_delayed_work(&rep->stats_wrk, msecs_to_jiffies(100));
 }
@@ -418,6 +419,14 @@ static netdev_tx_t rvu_rep_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct otx2_nic *pf = rep->mdev;
 	struct otx2_snd_queue *sq;
 	struct netdev_queue *txq;
+
+	/* Check for minimum and maximum packet length */
+	if (skb->len <= ETH_HLEN ||
+	    (!skb_shinfo(skb)->gso_size && skb->len > pf->tx_max_pktlen)) {
+		dev->stats.tx_dropped++;
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
 
 	sq = &pf->qset.sq[rep->rep_id];
 	txq = netdev_get_tx_queue(dev, 0);
