@@ -51,6 +51,40 @@ EXPORT_SYMBOL(iomem_resource);
 static DEFINE_RWLOCK(resource_lock);
 
 /*
+ * normalize_resource
+ *
+ * The walk_iomem_res_desc() returns a copy of a resource, not a reference
+ * to the actual resource in the iomem_resource tree. As a result,
+ * __release_resource() which relies on pointer equality will fail.
+ *
+ * This helper walks the children of the resource's parent to find and
+ * return the original resource pointer that matches the given resource's
+ * start and end addresses.
+ *
+ * Return: Pointer to the matching original resource in iomem_resource, or
+ *         NULL if not found or invalid input.
+ */
+struct resource *normalize_resource(struct resource *res)
+{
+	if (!res || !res->parent)
+		return NULL;
+
+	read_lock(&resource_lock);
+	for (struct resource *res_iter = res->parent->child; res_iter != NULL;
+	     res_iter = res_iter->sibling) {
+		if ((res_iter->start == res->start) &&
+		    (res_iter->end == res->end)) {
+			read_unlock(&resource_lock);
+			return res_iter;
+		}
+	}
+
+	read_unlock(&resource_lock);
+	return NULL;
+}
+EXPORT_SYMBOL_NS_GPL(normalize_resource, "CXL");
+
+/*
  * Return the next node of @p in pre-order tree traversal.  If
  * @skip_children is true, skip the descendant nodes of @p in
  * traversal.  If @p is a descendant of @subtree_root, only traverse

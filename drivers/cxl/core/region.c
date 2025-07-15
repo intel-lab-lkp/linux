@@ -3486,6 +3486,130 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
 
+static int add_soft_reserved(resource_size_t start, resource_size_t len,
+			     unsigned long flags)
+{
+	struct resource *res = kzalloc(sizeof(*res), GFP_KERNEL);
+	int rc;
+
+	if (!res)
+		return -ENOMEM;
+
+	*res = DEFINE_RES_NAMED_DESC(start, len, "Soft Reserved",
+				     flags | IORESOURCE_MEM,
+				     IORES_DESC_SOFT_RESERVED);
+
+	rc = insert_resource(&iomem_resource, res);
+	if (rc) {
+		kfree(res);
+		return rc;
+	}
+
+	return 0;
+}
+
+static void remove_soft_reserved(struct cxl_region *cxlr, struct resource *soft,
+				 resource_size_t start, resource_size_t end)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	resource_size_t new_start, new_end;
+	int rc;
+
+	guard(mutex)(&cxlrd->range_lock);
+
+	if (soft->start == start && soft->end == end) {
+		/*
+		 * Exact alignment at both start and end. The entire region is
+		 * removed below.
+		 */
+
+	} else if (soft->start == start || soft->end == end) {
+		/* Aligns at either resource start or end */
+		if (soft->start == start) {
+			new_start = end + 1;
+			new_end = soft->end;
+		} else {
+			new_start = soft->start;
+			new_end = start - 1;
+		}
+
+		/*
+		 * Reuse original flags as the trimmed portion retains the same
+		 * memory type and access characteristics.
+		 */
+		rc = add_soft_reserved(new_start, new_end - new_start + 1,
+				       soft->flags);
+		if (rc)
+			dev_warn(&cxlr->dev,
+				 "cannot add new soft reserved resource at %pa\n",
+				 &new_start);
+
+	} else {
+		/* No alignment - Split into two new soft reserved regions */
+		new_start = soft->start;
+		new_end = soft->end;
+
+		rc = add_soft_reserved(new_start, start - new_start,
+				       soft->flags);
+		if (rc)
+			dev_warn(&cxlr->dev,
+				 "cannot add new soft reserved resource at %pa\n",
+				 &new_start);
+
+		rc = add_soft_reserved(end + 1, new_end - end, soft->flags);
+		if (rc)
+			dev_warn(&cxlr->dev,
+				 "cannot add new soft reserved resource at %pa + 1\n",
+				 &end);
+	}
+
+	rc = remove_resource(soft);
+	if (rc)
+		dev_warn(&cxlr->dev, "cannot remove soft reserved resource %pr\n",
+			 soft);
+}
+
+static int __cxl_region_softreserv_update(struct resource *soft,
+					  void *_cxlr)
+{
+	struct cxl_region *cxlr = _cxlr;
+	struct resource *res = cxlr->params.res;
+
+	/* Skip non-intersecting soft-reserved regions */
+	if (soft->end < res->start || soft->start > res->end)
+		return 0;
+
+	soft = normalize_resource(soft);
+	if (!soft)
+		return -EINVAL;
+
+	remove_soft_reserved(cxlr, soft, res->start, res->end);
+
+	return 0;
+}
+
+static int cxl_region_softreserv_update_cb(struct device *dev, void *data)
+{
+	struct cxl_region *cxlr;
+
+	if (!is_cxl_region(dev))
+		return 0;
+
+	cxlr = to_cxl_region(dev);
+
+	walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED, IORESOURCE_MEM, 0, -1,
+			    cxlr, __cxl_region_softreserv_update);
+
+	return 0;
+}
+
+void cxl_region_softreserv_update(void)
+{
+	bus_for_each_dev(&cxl_bus_type, NULL, NULL,
+			 cxl_region_softreserv_update_cb);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_region_softreserv_update, "CXL");
+
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa)
 {
 	struct cxl_region_ref *iter;

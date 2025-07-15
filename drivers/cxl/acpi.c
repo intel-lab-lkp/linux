@@ -829,6 +829,8 @@ static void cxl_softreserv_mem_work_fn(struct work_struct *work)
 		pr_debug("Timeout waiting for cxl_mem probing");
 
 	wait_for_device_probe();
+
+	cxl_region_softreserv_update();
 }
 static DECLARE_WORK(cxl_sr_work, cxl_softreserv_mem_work_fn);
 
