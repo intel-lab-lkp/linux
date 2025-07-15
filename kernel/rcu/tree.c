@@ -1885,6 +1885,10 @@ static noinline_for_stack bool rcu_gp_init(void)
 	/* Exclude CPU hotplug operations. */
 	rcu_for_each_leaf_node(rnp) {
 		local_irq_disable();
+		/*
+		 * Serialize with CPU offline. See Requirements.rst > Hotplug CPU >
+		 * Concurrent Quiescent State Reporting for Offline CPUs.
+		 */
 		arch_spin_lock(&rcu_state.ofl_lock);
 		raw_spin_lock_rcu_node(rnp);
 		if (rnp->qsmaskinit == rnp->qsmaskinitnext &&
@@ -1959,7 +1963,12 @@ static noinline_for_stack bool rcu_gp_init(void)
 		trace_rcu_grace_period_init(rcu_state.name, rnp->gp_seq,
 					    rnp->level, rnp->grplo,
 					    rnp->grphi, rnp->qsmask);
-		/* Quiescent states for tasks on any now-offline CPUs. */
+		/*
+		 * Quiescent states for tasks on any now-offline CPUs. Since we
+		 * released the ofl and rnp lock before this loop, CPUs might
+		 * have gone offline and we have to report QS on their behalf.
+		 * See Requirements.rst > Hotplug CPU > Concurrent QS Reporting.
+		 */
 		mask = rnp->qsmask & ~rnp->qsmaskinitnext;
 		rnp->rcu_gp_init_mask = mask;
 		if ((mask || rnp->wait_blkd_tasks) && rcu_is_leaf_node(rnp))
@@ -4390,6 +4399,13 @@ void rcutree_report_cpu_dead(void)
 
 	/* Remove outgoing CPU from mask in the leaf rcu_node structure. */
 	mask = rdp->grpmask;
+
+	/*
+	 * Hold the ofl_lock and rnp lock to avoid races between CPU going
+	 * offline and doing a QS report (as below), versus rcu_gp_init().
+	 * See Requirements.rst > Hotplug CPU > Concurrent QS Reporting section
+	 * for more details.
+	 */
 	arch_spin_lock(&rcu_state.ofl_lock);
 	raw_spin_lock_irqsave_rcu_node(rnp, flags); /* Enforce GP memory-order guarantee. */
 	rdp->rcu_ofl_gp_seq = READ_ONCE(rcu_state.gp_seq);
@@ -4400,6 +4416,7 @@ void rcutree_report_cpu_dead(void)
 		rcu_report_qs_rnp(mask, rnp, rnp->gp_seq, flags);
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 	}
+	/* Clear from ->qsmaskinitnext to mark offline. */
 	WRITE_ONCE(rnp->qsmaskinitnext, rnp->qsmaskinitnext & ~mask);
 	raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 	arch_spin_unlock(&rcu_state.ofl_lock);
