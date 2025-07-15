@@ -48,6 +48,7 @@ static inline void *get_q_element(const struct hinic3_queue_pages *qpages,
 		*remaining_in_page = elem_per_pg - elem_idx;
 	ofs = elem_idx << qpages->elem_size_shift;
 	page = qpages->pages + page_idx;
+
 	return (char *)page->align_vaddr + ofs;
 }
 

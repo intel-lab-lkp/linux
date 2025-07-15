@@ -38,6 +38,26 @@ enum mbox_msg_direction_type {
 	MBOX_MSG_RESP = 1,
 };
 
+/* Indicates if mbox message expects a response (ack) or not */
+enum mbox_msg_ack_type {
+	MBOX_MSG_ACK    = 0,
+	MBOX_MSG_NO_ACK = 1,
+};
+
+enum mbox_msg_data_type {
+	MBOX_MSG_DATA_INLINE = 0,
+	MBOX_MSG_DATA_DMA    = 1,
+};
+
+enum mbox_msg_src_type {
+	MBOX_MSG_FROM_MBOX = 1,
+};
+
+enum mbox_msg_aeq_type {
+	MBOX_MSG_AEQ_FOR_EVENT = 0,
+	MBOX_MSG_AEQ_FOR_MBOX  = 1,
+};
+
 #define HINIC3_MBOX_WQ_NAME  "hinic3_mbox"
 
 struct mbox_msg_info {
@@ -114,5 +134,7 @@ void hinic3_free_mbox(struct hinic3_hwdev *hwdev);
 
 int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev, u8 mod, u16 cmd,
 			     const struct mgmt_msg_params *msg_params);
+int hinic3_send_mbox_to_mgmt_no_ack(struct hinic3_hwdev *hwdev, u8 mod, u16 cmd,
+				    const struct mgmt_msg_params *msg_params);
 
 #endif
