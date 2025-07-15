@@ -172,6 +172,35 @@ void kvm_inject_dabt(struct kvm_vcpu *vcpu, unsigned long addr)
 }
 
 /**
+ * kvm_inject_dabt_excl_atomic - inject a data abort for unsupported exclusive
+ *				 or atomic access
+ * @vcpu: The VCPU to receive the data abort
+ * @addr: The address to report in the DFAR
+ *
+ * It is assumed that this code is called from the VCPU thread and that the
+ * VCPU therefore is not currently executing guest code.
+ */
+void kvm_inject_dabt_excl_atomic(struct kvm_vcpu *vcpu, unsigned long addr)
+{
+	u64 esr = 0;
+
+	/* Reuse the general DABT injection routine and modify the DFSC */
+	kvm_inject_dabt(vcpu, addr);
+
+	if (match_target_el(vcpu, unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC))) {
+		esr = vcpu_read_sys_reg(vcpu, ESR_EL1);
+		esr &= ~ESR_ELx_FSC;
+		esr |= ESR_ELx_FSC_EXCL_ATOMIC;
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
+	} else {
+		esr = vcpu_read_sys_reg(vcpu, ESR_EL2);
+		esr &= ~ESR_ELx_FSC;
+		esr |= ESR_ELx_FSC_EXCL_ATOMIC;
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL2);
+	}
+}
+
+/**
  * kvm_inject_pabt - inject a prefetch abort into the guest
  * @vcpu: The VCPU to receive the prefetch abort
  * @addr: The address to report in the DFAR
