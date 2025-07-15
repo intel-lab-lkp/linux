@@ -7,10 +7,11 @@ from lib.py import bkg, cmd, rand_port, NetNSEnter
 
 def test_napi_id(cfg) -> None:
     port = rand_port()
-    listen_cmd = f"{cfg.test_dir}/napi_id_helper {cfg.addr_v['4']} {port}"
+    listen_addr = cfg.addr_v['6'] if cfg.addr_v["6"] else cfg.addr_v["4"]
+    listen_cmd = f"{cfg.test_dir}/napi_id_helper {listen_addr} {port}"
 
     with bkg(listen_cmd, ksft_wait=3) as server:
-        cmd(f"echo a | socat - TCP:{cfg.addr_v['4']}:{port}", host=cfg.remote, shell=True)
+        cmd(f"echo a | socat - TCP:{cfg.baddr}:{port}", host=cfg.remote, shell=True)
 
     ksft_eq(0, server.ret)
 
