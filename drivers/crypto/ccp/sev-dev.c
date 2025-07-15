@@ -28,6 +28,7 @@
 #include <linux/fs_struct.h>
 #include <linux/psp.h>
 #include <linux/amd-iommu.h>
+#include <linux/crash_dump.h>
 
 #include <asm/smp.h>
 #include <asm/cacheflush.h>
@@ -1113,6 +1114,13 @@ static int __sev_snp_init_locked(int *error)
 
 	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
 		return -ENODEV;
+
+	/*
+	 * Skip SNP INIT for kdump boot as SNP is already initialized if
+	 * SNP is enabled.
+	 */
+	if (is_kdump_kernel())
+		return 0;
 
 	sev = psp->sev_data;
 
