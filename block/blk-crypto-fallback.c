@@ -268,13 +268,12 @@ static void blk_crypto_dun_to_iv(const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 /*
  * The crypto API fallback's encryption routine.
  * Allocate a bounce bio for encryption, encrypt the input bio using crypto API,
- * and replace *bio_ptr with the bounce bio. May split input bio if it's too
- * large. Returns true on success. Returns false and sets bio->bi_status on
- * error.
+ * and return the bounce bio. May split input bio if it's too large. Returns the
+ * bounce bio on success. Returns %NULL and sets bio->bi_status on error.
  */
-static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
+static struct bio *blk_crypto_fallback_encrypt_bio(struct bio *src_bio)
 {
-	struct bio *src_bio, *enc_bio;
+	struct bio *enc_bio, *ret = NULL;
 	struct bio_crypt_ctx *bc;
 	struct blk_crypto_keyslot *slot;
 	int data_unit_size;
@@ -284,14 +283,12 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 	struct scatterlist src, dst;
 	union blk_crypto_iv iv;
 	unsigned int i, j;
-	bool ret = false;
 	blk_status_t blk_st;
 
 	/* Split the bio if it's too big for single page bvec */
-	if (!blk_crypto_fallback_split_bio_if_needed(bio_ptr))
-		return false;
+	if (!blk_crypto_fallback_split_bio_if_needed(&src_bio))
+		return NULL;
 
-	src_bio = *bio_ptr;
 	bc = src_bio->bi_crypt_context;
 	data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
 
@@ -299,7 +296,7 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 	enc_bio = blk_crypto_fallback_clone_bio(src_bio);
 	if (!enc_bio) {
 		src_bio->bi_status = BLK_STS_RESOURCE;
-		return false;
+		return NULL;
 	}
 
 	/*
@@ -362,9 +359,7 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 
 	enc_bio->bi_private = src_bio;
 	enc_bio->bi_end_io = blk_crypto_fallback_encrypt_endio;
-	*bio_ptr = enc_bio;
-	ret = true;
-
+	ret = enc_bio;
 	enc_bio = NULL;
 	goto out_free_ciph_req;
 
@@ -520,7 +515,7 @@ struct bio *blk_crypto_fallback_bio_prep(struct bio *bio)
 	}
 
 	if (bio_data_dir(bio) == WRITE)
-		return blk_crypto_fallback_encrypt_bio(&bio) ? bio : NULL;
+		return blk_crypto_fallback_encrypt_bio(bio);
 
 	/*
 	 * bio READ case: Set up a f_ctx in the bio's bi_private and set the
