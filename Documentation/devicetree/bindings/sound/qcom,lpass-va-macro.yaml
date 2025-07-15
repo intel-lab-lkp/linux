@@ -76,12 +76,29 @@ allOf:
           contains:
             const: qcom,sc7280-lpass-va-macro
     then:
-      properties:
-        clocks:
-          maxItems: 1
-        clock-names:
-          items:
-            - const: mclk
+      if:
+        required:
+          - power-domains
+      then:
+        properties:
+          clocks:
+            minItems: 1
+            maxItems: 1
+          clock-names:
+            oneOf:
+              - items:  # for ADSP based platforms
+                  - const: mclk
+      else:
+        properties:
+          clocks:
+            minItems: 1
+            maxItems: 3
+          clock-names:
+            oneOf:
+              - items:  # for ADSP bypass based platforms
+                  - const: mclk
+                  - const: macro
+                  - const: dcodec
 
   - if:
       properties:
