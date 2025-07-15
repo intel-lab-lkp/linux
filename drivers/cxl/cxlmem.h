@@ -883,17 +883,8 @@ static inline void devm_cxl_memdev_edac_release(struct cxl_memdev *cxlmd)
 { return; }
 #endif
 
-#ifdef CONFIG_CXL_SUSPEND
 void cxl_mem_active_inc(void);
 void cxl_mem_active_dec(void);
-#else
-static inline void cxl_mem_active_inc(void)
-{
-}
-static inline void cxl_mem_active_dec(void)
-{
-}
-#endif
 
 int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd);
 
