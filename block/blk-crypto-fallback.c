@@ -484,7 +484,7 @@ static void blk_crypto_fallback_decrypt_endio(struct bio *bio)
 /**
  * blk_crypto_fallback_bio_prep - Prepare a bio to use fallback en/decryption
  *
- * @bio_ptr: pointer to the bio to prepare
+ * @bio: bio to prepare
  *
  * If bio is doing a WRITE operation, this splits the bio into two parts if it's
  * too big (see blk_crypto_fallback_split_bio_if_needed()). It then allocates a
@@ -499,28 +499,28 @@ static void blk_crypto_fallback_decrypt_endio(struct bio *bio)
  * of the stack except for blk-integrity (blk-integrity and blk-crypto are not
  * currently supported together).
  *
- * Return: true on success. Sets bio->bi_status and returns false on error.
+ * Return: a bio pointer on success; %NULL upon failure. Sets bio->bi_status on
+ * error.
  */
-bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr)
+struct bio *blk_crypto_fallback_bio_prep(struct bio *bio)
 {
-	struct bio *bio = *bio_ptr;
 	struct bio_crypt_ctx *bc = bio->bi_crypt_context;
 	struct bio_fallback_crypt_ctx *f_ctx;
 
 	if (WARN_ON_ONCE(!tfms_inited[bc->bc_key->crypto_cfg.crypto_mode])) {
 		/* User didn't call blk_crypto_start_using_key() first */
 		bio->bi_status = BLK_STS_IOERR;
-		return false;
+		return NULL;
 	}
 
 	if (!__blk_crypto_cfg_supported(blk_crypto_fallback_profile,
 					&bc->bc_key->crypto_cfg)) {
 		bio->bi_status = BLK_STS_NOTSUPP;
-		return false;
+		return NULL;
 	}
 
 	if (bio_data_dir(bio) == WRITE)
-		return blk_crypto_fallback_encrypt_bio(bio_ptr);
+		return blk_crypto_fallback_encrypt_bio(&bio) ? bio : NULL;
 
 	/*
 	 * bio READ case: Set up a f_ctx in the bio's bi_private and set the
@@ -535,7 +535,7 @@ bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr)
 	bio->bi_end_io = blk_crypto_fallback_decrypt_endio;
 	bio_crypt_free_ctx(bio);
 
-	return true;
+	return bio;
 }
 
 int blk_crypto_fallback_evict_key(const struct blk_crypto_key *key)

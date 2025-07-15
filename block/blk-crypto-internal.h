@@ -219,7 +219,7 @@ static inline int blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
 
 int blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num);
 
-bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr);
+struct bio *blk_crypto_fallback_bio_prep(struct bio *bio);
 
 int blk_crypto_fallback_evict_key(const struct blk_crypto_key *key);
 
@@ -232,11 +232,11 @@ blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num)
 	return -ENOPKG;
 }
 
-static inline bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr)
+static inline struct bio *blk_crypto_fallback_bio_prep(struct bio *bio)
 {
 	pr_warn_once("crypto API fallback disabled; failing request.\n");
-	(*bio_ptr)->bi_status = BLK_STS_NOTSUPP;
-	return false;
+	bio->bi_status = BLK_STS_NOTSUPP;
+	return NULL;
 }
 
 static inline int

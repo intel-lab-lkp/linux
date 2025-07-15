@@ -281,6 +281,7 @@ void __blk_crypto_free_request(struct request *rq)
  */
 struct bio *__blk_crypto_bio_prep(struct bio *bio)
 {
+	struct bio *new_bio;
 	const struct blk_crypto_key *bc_key = bio->bi_crypt_context->bc_key;
 
 	/* Error if bio has no data. */
@@ -301,8 +302,9 @@ struct bio *__blk_crypto_bio_prep(struct bio *bio)
 	if (blk_crypto_config_supported_natively(bio->bi_bdev,
 						 &bc_key->crypto_cfg))
 		return bio;
-	if (blk_crypto_fallback_bio_prep(&bio))
-		return bio;
+	new_bio = blk_crypto_fallback_bio_prep(bio);
+	if (new_bio)
+		return new_bio;
 fail:
 	bio_endio(bio);
 	return NULL;
