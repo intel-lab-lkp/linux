@@ -3393,7 +3393,7 @@ static struct cxl_region *create_region(struct cxl_root_decoder *cxlrd,
 static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
 {
-	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct device *cxlrd_dev = &cxlrd->cxlsd.cxld.dev;
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	struct resource *res;
@@ -3407,10 +3407,9 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	cxlr = devm_cxl_add_region(cxlr, -1);
 	if (IS_ERR(cxlr)) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s: %s failed to add region: %ld\n",
-			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			__func__, PTR_ERR(cxlr));
+		dev_err(cxlrd_dev->parent,
+			"%s: %s failed to add region: %ld\n",
+			dev_name(cxlrd_dev), __func__, PTR_ERR(cxlr));
 		return cxlr;
 	}
 
@@ -3418,10 +3417,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	p = &cxlr->params;
 	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s: %s autodiscovery interrupted\n",
-			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			__func__);
+		dev_err(cxlr->dev.parent, "%s: %s autodiscovery interrupted\n",
+			dev_name(&cxlr->dev), __func__);
 		return ERR_PTR(-EBUSY);
 	}
 
@@ -3439,8 +3436,9 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 		 * prevent the region from functioning. Only causes cxl list showing
 		 * incorrect region size.
 		 */
-		dev_warn(cxlmd->dev.parent,
-			 "Extended linear cache calculation failed rc:%d\n", rc);
+		dev_warn(cxlr->dev.parent,
+			"%s: %s Extended linear cache calculation failed rc:%d\n",
+			dev_name(&cxlr->dev), __func__, rc);
 	}
 
 	rc = insert_resource(cxlrd->res, res);
@@ -3449,10 +3447,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 		 * Platform-firmware may not have split resources like "System
 		 * RAM" on CXL window boundaries see cxl_region_iomem_release()
 		 */
-		dev_warn(cxlmd->dev.parent,
-			 "%s:%s: %s %s cannot insert resource\n",
-			 dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			 __func__, dev_name(&cxlr->dev));
+		dev_warn(cxlr->dev.parent, "%s: %s cannot insert resource\n",
+			dev_name(&cxlr->dev), __func__);
 	}
 
 	p->res = res;
@@ -3462,9 +3458,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	if (rc)
 		return ERR_PTR(rc);
 
-	dev_dbg(cxlmd->dev.parent, "%s:%s: %s %s res: %pr iw: %d ig: %d\n",
-		dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev), __func__,
-		dev_name(&cxlr->dev), p->res, p->interleave_ways,
+	dev_dbg(cxlr->dev.parent, "%s: %s res: %pr iw: %d ig: %d\n",
+		dev_name(&cxlr->dev), __func__, p->res, p->interleave_ways,
 		p->interleave_granularity);
 
 	/* Pair with cxl_find_region_by_range() in cxl_endpoint_get_region(). */
