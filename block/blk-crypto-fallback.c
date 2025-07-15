@@ -81,7 +81,6 @@ static struct blk_crypto_fallback_keyslot {
 static struct blk_crypto_profile *blk_crypto_fallback_profile;
 static struct workqueue_struct *blk_crypto_wq;
 static mempool_t *blk_crypto_bounce_page_pool;
-static struct bio_set crypto_bio_split;
 
 /*
  * This is the key we set when evicting a keyslot. This *should* be the all 0's
@@ -528,16 +527,12 @@ static int blk_crypto_fallback_init(void)
 
 	get_random_bytes(blank_key, sizeof(blank_key));
 
-	err = bioset_init(&crypto_bio_split, 64, 0, 0);
-	if (err)
-		goto out;
-
 	/* Dynamic allocation is needed because of lockdep_register_key(). */
 	blk_crypto_fallback_profile =
 		kzalloc(sizeof(*blk_crypto_fallback_profile), GFP_KERNEL);
 	if (!blk_crypto_fallback_profile) {
 		err = -ENOMEM;
-		goto fail_free_bioset;
+		goto out;
 	}
 
 	err = blk_crypto_profile_init(blk_crypto_fallback_profile,
@@ -597,8 +592,6 @@ fail_destroy_profile:
 	blk_crypto_profile_destroy(blk_crypto_fallback_profile);
 fail_free_profile:
 	kfree(blk_crypto_fallback_profile);
-fail_free_bioset:
-	bioset_exit(&crypto_bio_split);
 out:
 	return err;
 }
