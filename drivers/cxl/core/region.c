@@ -2365,56 +2365,6 @@ static struct cxl_region *to_cxl_region(struct device *dev)
 	return container_of(dev, struct cxl_region, dev);
 }
 
-static void unregister_region(void *_cxlr)
-{
-	struct cxl_region *cxlr = _cxlr;
-	struct cxl_region_params *p = &cxlr->params;
-	int i;
-
-	device_del(&cxlr->dev);
-
-	/*
-	 * Now that region sysfs is shutdown, the parameter block is now
-	 * read-only, so no need to hold the region rwsem to access the
-	 * region parameters.
-	 */
-	for (i = 0; i < p->interleave_ways; i++)
-		detach_target(cxlr, i);
-
-	cxl_region_iomem_release(cxlr);
-	put_device(&cxlr->dev);
-}
-
-static struct lock_class_key cxl_region_key;
-
-static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int id)
-{
-	struct cxl_region *cxlr;
-	struct device *dev;
-
-	cxlr = kzalloc(sizeof(*cxlr), GFP_KERNEL);
-	if (!cxlr) {
-		memregion_free(id);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	dev = &cxlr->dev;
-	device_initialize(dev);
-	lockdep_set_class(&dev->mutex, &cxl_region_key);
-	dev->parent = &cxlrd->cxlsd.cxld.dev;
-	/*
-	 * Keep root decoder pinned through cxl_region_release to fixup
-	 * region id allocations
-	 */
-	get_device(dev->parent);
-	device_set_pm_not_required(dev);
-	dev->bus = &cxl_bus_type;
-	dev->type = &cxl_region_type;
-	cxlr->id = id;
-
-	return cxlr;
-}
-
 static bool cxl_region_update_coordinates(struct cxl_region *cxlr, int nid)
 {
 	int cset = 0;
@@ -2496,6 +2446,56 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
 		return NOTIFY_OK;
 
 	return NOTIFY_STOP;
+}
+
+static struct lock_class_key cxl_region_key;
+
+static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int id)
+{
+	struct cxl_region *cxlr;
+	struct device *dev;
+
+	cxlr = kzalloc(sizeof(*cxlr), GFP_KERNEL);
+	if (!cxlr) {
+		memregion_free(id);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	dev = &cxlr->dev;
+	device_initialize(dev);
+	lockdep_set_class(&dev->mutex, &cxl_region_key);
+	dev->parent = &cxlrd->cxlsd.cxld.dev;
+	/*
+	 * Keep root decoder pinned through cxl_region_release to fixup
+	 * region id allocations
+	 */
+	get_device(dev->parent);
+	device_set_pm_not_required(dev);
+	dev->bus = &cxl_bus_type;
+	dev->type = &cxl_region_type;
+	cxlr->id = id;
+
+	return cxlr;
+}
+
+static void unregister_region(void *_cxlr)
+{
+	struct cxl_region *cxlr = _cxlr;
+	struct cxl_region_params *p = &cxlr->params;
+	int i;
+
+	device_del(&cxlr->dev);
+
+	/*
+	 * Now that region sysfs is shutdown, the parameter block is now
+	 * read-only, so no need to hold the region rwsem to access the
+	 * region parameters.
+	 */
+	for (i = 0; i < p->interleave_ways; i++)
+		detach_target(cxlr, i);
+
+	cxl_region_iomem_release(cxlr);
+	put_device(&cxlr->dev);
 }
 
 /**
@@ -3277,6 +3277,19 @@ static int match_region_by_range(struct device *dev, const void *data)
 	return 0;
 }
 
+static struct cxl_region *
+cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
+{
+	struct device *region_dev;
+
+	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, hpa,
+				       match_region_by_range);
+	if (!region_dev)
+		return NULL;
+
+	return to_cxl_region(region_dev);
+}
+
 static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 					    struct resource *res)
 {
@@ -3417,19 +3430,6 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	}
 
 	return cxlr;
-}
-
-static struct cxl_region *
-cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
-{
-	struct device *region_dev;
-
-	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, hpa,
-				       match_region_by_range);
-	if (!region_dev)
-		return NULL;
-
-	return to_cxl_region(region_dev);
 }
 
 int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
