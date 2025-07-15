@@ -7446,7 +7446,7 @@ static void cfg80211_sta_set_mld_sinfo(struct station_info *sinfo)
 static int nl80211_dump_station(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
-	struct station_info sinfo;
+	struct station_info sinfo = {};
 	struct cfg80211_registered_device *rdev;
 	struct wireless_dev *wdev;
 	u8 mac_addr[ETH_ALEN];
@@ -7477,7 +7477,7 @@ static int nl80211_dump_station(struct sk_buff *skb,
 				kzalloc(sizeof(*sinfo.links[0]), GFP_KERNEL);
 			if (!sinfo.links[i]) {
 				err = -ENOMEM;
-				goto out_err;
+				goto out_sinfo_release;
 			}
 		}
 
@@ -7486,7 +7486,7 @@ static int nl80211_dump_station(struct sk_buff *skb,
 		if (err == -ENOENT)
 			break;
 		if (err)
-			goto out_err;
+			goto out_sinfo_release;
 
 		if (sinfo.valid_links)
 			cfg80211_sta_set_mld_sinfo(&sinfo);
@@ -7504,8 +7504,9 @@ static int nl80211_dump_station(struct sk_buff *skb,
  out:
 	cb->args[2] = sta_idx;
 	err = skb->len;
- out_err:
+ out_sinfo_release:
 	cfg80211_sinfo_release_content(&sinfo);
+ out_err:
 	wiphy_unlock(&rdev->wiphy);
 
 	return err;
