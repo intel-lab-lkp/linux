@@ -1221,6 +1221,11 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 		mhi_cntrl->rddm_image = NULL;
 	}
 
+	if (mhi_cntrl->bhie_image) {
+		mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->bhie_image);
+		mhi_cntrl->bhie_image = NULL;
+	}
+
 	if (mhi_cntrl->bhi_image) {
 		mhi_free_bhi_buffer(mhi_cntrl, mhi_cntrl->bhi_image);
 		mhi_cntrl->bhi_image = NULL;

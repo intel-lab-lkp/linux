@@ -478,17 +478,22 @@ static int mhi_load_image_bhi(struct mhi_controller *mhi_cntrl, const u8 *fw_dat
 
 static int mhi_load_image_bhie(struct mhi_controller *mhi_cntrl, const u8 *fw_data, size_t size)
 {
-	struct image_info *image;
+	struct image_info **image = &mhi_cntrl->bhie_image;
 	int ret;
 
-	ret = mhi_alloc_bhie_table(mhi_cntrl, &image, size);
-	if (ret)
-		return ret;
+	if (!(*image)) {
+		ret = mhi_alloc_bhie_table(mhi_cntrl, image, size);
+		if (ret)
+			return ret;
 
-	mhi_firmware_copy_bhie(mhi_cntrl, fw_data, size, image);
+		mhi_firmware_copy_bhie(mhi_cntrl, fw_data, size, *image);
+	}
 
-	ret = mhi_fw_load_bhie(mhi_cntrl, &image->mhi_buf[image->entries - 1]);
-	mhi_free_bhie_table(mhi_cntrl, image);
+	ret = mhi_fw_load_bhie(mhi_cntrl, &(*image)->mhi_buf[(*image)->entries - 1]);
+	if (ret) {
+		mhi_free_bhie_table(mhi_cntrl, *image);
+		*image = NULL;
+	}
 
 	return ret;
 }
