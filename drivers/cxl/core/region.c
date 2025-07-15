@@ -3356,18 +3356,31 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 	return 0;
 }
 
-static struct cxl_region *__construct_region(struct cxl_region *__cxlr,
-					     struct cxl_endpoint_decoder *cxled)
+/* Establish an empty region covering the given HPA range */
+static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
+					   struct cxl_endpoint_decoder *cxled)
 {
-	struct cxl_region *cxlr __free(early_region_unregister) = __cxlr;
-	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	int part = READ_ONCE(cxled->part);
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	struct resource *res;
 	int rc;
 
+	struct cxl_region *cxlr __free(early_region_unregister) =
+		__create_region(cxlrd, cxlds->part[part].mode, -1);
+
+	if (IS_ERR(cxlr)) {
+		dev_err(cxlmd->dev.parent,
+			"%s:%s: %s failed assign region: %ld\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			__func__, PTR_ERR(cxlr));
+		return cxlr;
+	}
+
 	guard(rwsem_write)(&cxl_region_rwsem);
+
 	p = &cxlr->params;
 	if (p->state >= CXL_CONFIG_INTERLEAVE_ACTIVE) {
 		dev_err(cxlmd->dev.parent,
@@ -3427,27 +3440,6 @@ static struct cxl_region *__construct_region(struct cxl_region *__cxlr,
 	get_device(&cxlr->dev);
 
 	return no_free_ptr(cxlr);
-}
-
-/* Establish an empty region covering the given HPA range */
-static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
-					   struct cxl_endpoint_decoder *cxled)
-{
-	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	int part = READ_ONCE(cxled->part);
-	struct cxl_region *cxlr;
-
-	cxlr = __create_region(cxlrd, cxlds->part[part].mode, -1);
-	if (IS_ERR(cxlr)) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s: %s failed assign region: %ld\n",
-			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			__func__, PTR_ERR(cxlr));
-		return cxlr;
-	}
-
-	return __construct_region(cxlr, cxled);
 }
 
 static struct cxl_region *
