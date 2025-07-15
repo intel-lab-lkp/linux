@@ -2540,6 +2540,15 @@ static int register_region(struct cxl_region *cxlr, int id)
 	return device_add(dev);
 }
 
+static void early_region_unregister(struct cxl_region *cxlr)
+{
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
+
+	devm_release_action(port->uport_dev, unregister_region, cxlr);
+}
+DEFINE_FREE(early_region_unregister, struct cxl_region *, if (!IS_ERR_OR_NULL(_T)) early_region_unregister(_T))
+
 /**
  * devm_cxl_add_region - Adds a region to the CXL hierarchy.
  * @cxlr: region to be added
@@ -3347,9 +3356,10 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 	return 0;
 }
 
-static int __construct_region(struct cxl_region *cxlr,
-			      struct cxl_endpoint_decoder *cxled)
+static struct cxl_region *__construct_region(struct cxl_region *__cxlr,
+					     struct cxl_endpoint_decoder *cxled)
 {
+	struct cxl_region *cxlr __free(early_region_unregister) = __cxlr;
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct range *hpa = &cxled->cxld.hpa_range;
@@ -3364,14 +3374,14 @@ static int __construct_region(struct cxl_region *cxlr,
 			"%s:%s: %s autodiscovery interrupted\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			__func__);
-		return -EBUSY;
+		return ERR_PTR(-EBUSY);
 	}
 
 	set_bit(CXL_REGION_F_AUTO, &cxlr->flags);
 
 	res = kmalloc(sizeof(*res), GFP_KERNEL);
 	if (!res)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
@@ -3406,7 +3416,7 @@ static int __construct_region(struct cxl_region *cxlr,
 
 	rc = sysfs_update_group(&cxlr->dev.kobj, get_cxl_region_target_group());
 	if (rc)
-		return rc;
+		return ERR_PTR(rc);
 
 	dev_dbg(cxlmd->dev.parent, "%s:%s: %s %s res: %pr iw: %d ig: %d\n",
 		dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev), __func__,
@@ -3416,7 +3426,7 @@ static int __construct_region(struct cxl_region *cxlr,
 	/* Pair with cxl_find_region_by_range() in cxl_endpoint_get_region(). */
 	get_device(&cxlr->dev);
 
-	return 0;
+	return no_free_ptr(cxlr);
 }
 
 /* Establish an empty region covering the given HPA range */
@@ -3424,9 +3434,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_port *port = cxlrd_to_port(cxlrd);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	int rc, part = READ_ONCE(cxled->part);
+	int part = READ_ONCE(cxled->part);
 	struct cxl_region *cxlr;
 
 	cxlr = __create_region(cxlrd, cxlds->part[part].mode, -1);
@@ -3438,13 +3447,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 		return cxlr;
 	}
 
-	rc = __construct_region(cxlr, cxled);
-	if (rc) {
-		devm_release_action(port->uport_dev, unregister_region, cxlr);
-		return ERR_PTR(rc);
-	}
-
-	return cxlr;
+	return __construct_region(cxlr, cxled);
 }
 
 static struct cxl_region *
