@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt6789-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Functional Clock Controller for MT6789
+
+maintainers:
+  - Arseniy Velikanov <me@adomerle.pw>
+
+description:
+  The Mediatek functional clock controller provides various clocks on MT6789.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - mediatek,mt6789-afe
+          - mediatek,mt6789-camsys
+          - mediatek,mt6789-camsys-rawa
+          - mediatek,mt6789-camsys-rawb
+          - mediatek,mt6789-imgsys
+          - mediatek,mt6789-imp-iic-wrap-c
+          - mediatek,mt6789-imp-iic-wrap-en
+          - mediatek,mt6789-imp-iic-wrap-w
+          - mediatek,mt6789-ipesys
+          - mediatek,mt6789-mdpsys
+          - mediatek,mt6789-mfgcfg
+          - mediatek,mt6789-vdecsys
+          - mediatek,mt6789-vencsys
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    afe: clock-controller@11210000 {
+        compatible = "mediatek,mt6789-afe";
+        reg = <0x11210000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    imp_iic_wrap_c: clock-controller@1101b000 {
+        compatible = "mediatek,mt6789-imp-iic-wrap-c";
+        reg = <0x1101b000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    imp_iic_wrap_w: clock-controller@11e02000 {
+        compatible = "mediatek,mt6789-imp-iic-wrap-w";
+        reg = <0x11e02000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    imp_iic_wrap_en: clock-controller@11eb4000 {
+        compatible = "mediatek,mt6789-imp-iic-wrap-en";
+        reg = <0x11eb4000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    imp_iic_wrap_n: clock-controller@11f01000 {
+        compatible = "mediatek,mt6789-imp-iic-wrap-n";
+        reg = <0x11f01000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    mfgcfg: clock-controller@13fbf000 {
+        compatible = "mediatek,mt6789-mfgcfg";
+        reg = <0x13fbf000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    imgsys: clock-controller@15020000 {
+        compatible = "mediatek,mt6789-imgsys";
+        reg = <0x15020000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    vdecsys: clock-controller@1602f000 {
+        compatible = "mediatek,mt6789-vdecsys";
+        reg = <0x1602f000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    vencsys: clock-controller@17000000 {
+        compatible = "mediatek,mt6789-vencsys";
+        reg = <0x17000000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    camsys: clock-controller@1a000000 {
+        compatible = "mediatek,mt6789-camsys";
+        reg = <0x1a000000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    camsys_raw_a: clock-controller@1a04f000 {
+        compatible = "mediatek,mt6789-camsys-rawa";
+        reg = <0x1a04f000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    camsys_raw_b: clock-controller@1a06f000 {
+        compatible = "mediatek,mt6789-camsys-rawb";
+        reg = <0x1a06f000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    ipesys: clock-controller@1b000000 {
+        compatible = "mediatek,mt6789-ipesys";
+        reg = <0x1b000000 0x1000>;
+        #clock-cells = <1>;
+    };
+
+  - |
+    mdpsys: clock-controller@1f000000 {
+        compatible = "mediatek,mt6789-mdpsys";
+        reg = <0x1f000000 0x1000>;
+        #clock-cells = <1>;
+    };
