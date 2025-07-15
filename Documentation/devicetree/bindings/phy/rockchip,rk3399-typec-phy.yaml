@@ -43,6 +43,20 @@ properties:
     description:
       Phandle to the syscon managing the "general register files" (GRF).
 
+  orientation-switch:
+    description: Flag the port as possible handler of orientation switching
+    type: boolean
+
+  mode-switch:
+    description: Flag the port as possible handler of altmode switching
+    type: boolean
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      A port node to link the PHY to a TypeC controller for the purpose of
+      handling orientation switching.
+
   dp-port:
     type: object
     additionalProperties: false
