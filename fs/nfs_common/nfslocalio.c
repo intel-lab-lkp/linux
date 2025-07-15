@@ -177,12 +177,13 @@ static bool nfs_uuid_put(nfs_uuid_t *nfs_uuid)
 			/* nfs_close_local_fh() is doing the
 			 * close and we must wait. until it unlinks
 			 */
-			wait_var_event_spinlock(nfl,
-						list_first_entry_or_null(
-							&nfs_uuid->files,
-							struct nfs_file_localio,
-							list) != nfl,
-						&nfs_uuid->lock);
+			wait_var_event_spinlock(
+				nfs_uuid,
+				list_first_entry_or_null(
+					&nfs_uuid->files,
+					struct nfs_file_localio, list) != nfl ||
+					rcu_access_pointer(nfl->nfs_uuid),
+				&nfs_uuid->lock);
 			continue;
 		}
 
@@ -338,7 +339,7 @@ void nfs_close_local_fh(struct nfs_file_localio *nfl)
 	 */
 	spin_lock(&nfs_uuid->lock);
 	list_del_init(&nfl->list);
-	wake_up_var_locked(&nfl->nfs_uuid, &nfs_uuid->lock);
+	wake_up_var_locked(nfs_uuid, &nfs_uuid->lock);
 	spin_unlock(&nfs_uuid->lock);
 }
 EXPORT_SYMBOL_GPL(nfs_close_local_fh);
