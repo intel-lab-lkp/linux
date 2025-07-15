@@ -426,6 +426,67 @@ check_suspended:
 }
 EXPORT_SYMBOL(md_handle_request);
 
+static struct bio *bio_split_by_io_opt(struct bio *bio)
+{
+	sector_t io_opt_sectors, sectors, n;
+	struct queue_limits lim;
+	struct mddev *mddev;
+	struct bio *split;
+	int level;
+
+	mddev = bio->bi_bdev->bd_disk->private_data;
+	level = mddev->level;
+	if (level == 1 || level == 10 || level == 0 || level == LEVEL_LINEAR)
+		return bio_split_to_limits(bio);
+
+	lim = mddev->gendisk->queue->limits;
+	io_opt_sectors = min3(bio_sectors(bio), lim.io_opt >> SECTOR_SHIFT,
+			      lim.max_hw_sectors);
+
+	/* No need to split */
+	if (bio_sectors(bio) == io_opt_sectors)
+		return bio;
+
+	n = bio->bi_iter.bi_sector;
+	sectors = do_div(n, io_opt_sectors);
+	/* Aligned to io_opt size and no need to split for radi456 */
+	if (!sectors && (bio_sectors(bio) <=  lim.max_hw_sectors))
+		return bio;
+
+	if (sectors) {
+		/**
+		 * Not aligned to io_opt, split
+		 * non-aligned head part.
+		 */
+		sectors = io_opt_sectors - sectors;
+	} else {
+		/**
+		 * Aligned to io_opt, split to the largest multiple
+		 * of io_opt within max_hw_sectors, to make full
+		 * stripe write/read for underlying raid456 levels.
+		 */
+		n = lim.max_hw_sectors;
+		do_div(n, io_opt_sectors);
+		sectors = n * io_opt_sectors;
+	}
+
+	/* Almost won't happen */
+	if (unlikely(sectors >= bio_sectors(bio))) {
+		pr_warn("%s raid level %d: sectors %llu >= bio_sectors %u, not split\n",
+			__func__, level, sectors, bio_sectors(bio));
+		return bio;
+	}
+
+	split = bio_split(bio, sectors, GFP_NOIO,
+			  &bio->bi_bdev->bd_disk->bio_split);
+	if (!split)
+		return bio;
+	split->bi_opf |= REQ_NOMERGE;
+	bio_chain(split, bio);
+	submit_bio_noacct(bio);
+	return split;
+}
+
 static void md_submit_bio(struct bio *bio)
 {
 	const int rw = bio_data_dir(bio);
@@ -441,7 +502,7 @@ static void md_submit_bio(struct bio *bio)
 		return;
 	}
 
-	bio = bio_split_to_limits(bio);
+	bio = bio_split_by_io_opt(bio);
 	if (!bio)
 		return;
 
