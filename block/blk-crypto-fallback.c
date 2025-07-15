@@ -213,15 +213,16 @@ static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
 {
 	struct bio *bio = *bio_ptr;
 	unsigned int i = 0;
-	unsigned int num_sectors = 0;
+	unsigned int num_bytes = 0, num_sectors;
 	struct bio_vec bv;
 	struct bvec_iter iter;
 
 	bio_for_each_segment(bv, bio, iter) {
-		num_sectors += bv.bv_len >> SECTOR_SHIFT;
+		num_bytes += bv.bv_len;
 		if (++i == BIO_MAX_VECS)
 			break;
 	}
+	num_sectors = num_bytes >> SECTOR_SHIFT;
 	if (num_sectors < bio_sectors(bio)) {
 		struct bio *split_bio;
 
