@@ -451,4 +451,60 @@ ssize_t iio_write_channel_ext_info(struct iio_channel *chan, const char *attr,
  */
 ssize_t iio_read_channel_label(struct iio_channel *chan, char *buf);
 
+/**
+ * iio_event_mode() - get file mode for an event property
+ * @chan: Channel being queried
+ * @type: Event type (theshold, rate-of-change, etc.)
+ * @dir: Event direction (rising, falling, etc.)
+ * @info: Event property (enable, value, etc.)
+ *
+ * Determine an appropriate mode for sysfs files derived from this event.
+ *
+ * Return:
+ *   - `0000` if the event is unsupported or otherwise unavailable
+ *   - `0444` if the event is read-only
+ *   - `0200` if the event is write-only
+ *   - `0644` if the event is read-write
+ */
+umode_t iio_event_mode(struct iio_channel *chan, enum iio_event_type type,
+		       enum iio_event_direction dir, enum iio_event_info info);
+
+/**
+ * iio_read_event_processed_scale() - Read an event property
+ * @chan: Channel being queried
+ * @type: Event type (theshold, rate-of-change, etc.)
+ * @dir: Event direction (rising, falling, etc.)
+ * @info: Event property (enable, value, etc.)
+ * @val: Processed property value
+ * @scale: Factor to scale @val by
+ *
+ * Read a processed (scaled and offset) event property of a given channel.
+ *
+ * Return: 0 on success, or negative error on failure
+ */
+int iio_read_event_processed_scale(struct iio_channel *chan,
+				   enum iio_event_type type,
+				   enum iio_event_direction dir,
+				   enum iio_event_info info, int *val,
+				   unsigned int scale);
+
+/**
+ * iio_write_event_processed_scale() - Read an event property
+ * @chan: Channel being queried
+ * @type: Event type (theshold, rate-of-change, etc.)
+ * @dir: Event direction (rising, falling, etc.)
+ * @info: Event property (enable, value, etc.)
+ * @processed: Processed property value
+ * @scale: Factor to scale @processed by
+ *
+ * Write a processed (scaled and offset) event property of a given channel.
+ *
+ * Return: 0 on success, or negative error on failure
+ */
+int iio_write_event_processed_scale(struct iio_channel *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir,
+				    enum iio_event_info info, int processed,
+				    unsigned int scale);
+
 #endif

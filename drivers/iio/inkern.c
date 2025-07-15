@@ -1028,3 +1028,201 @@ ssize_t iio_read_channel_label(struct iio_channel *chan, char *buf)
 	return do_iio_read_channel_label(chan->indio_dev, chan->channel, buf);
 }
 EXPORT_SYMBOL_GPL(iio_read_channel_label);
+
+static bool iio_event_exists(struct iio_channel *channel,
+			     enum iio_event_type type,
+			     enum iio_event_direction dir,
+			     enum iio_event_info info)
+{
+	struct iio_chan_spec const *chan = channel->channel;
+	int i;
+
+	if (!channel->indio_dev->info)
+		return false;
+
+	for (i = 0; i < chan->num_event_specs; i++) {
+		if (chan->event_spec[i].type != type)
+			continue;
+		if (chan->event_spec[i].dir != dir)
+			continue;
+		if (chan->event_spec[i].mask_separate & BIT(info))
+			return true;
+	}
+
+	return false;
+}
+
+umode_t iio_event_mode(struct iio_channel *chan, enum iio_event_type type,
+		       enum iio_event_direction dir, enum iio_event_info info)
+{
+	struct iio_dev *indio_dev = chan->indio_dev;
+	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
+	umode_t mode = 0;
+
+	guard(mutex)(&iio_dev_opaque->info_exist_lock);
+	if (!iio_event_exists(chan, type, dir, info))
+		return 0;
+
+	if (info == IIO_EV_INFO_ENABLE) {
+		if (indio_dev->info->read_event_config)
+			mode |= 0444;
+
+		if (indio_dev->info->write_event_config)
+			mode |= 0200;
+	} else {
+		if (indio_dev->info->read_event_value)
+			mode |= 0444;
+
+		if (indio_dev->info->write_event_value)
+			mode |= 0200;
+	}
+
+	return mode;
+}
+EXPORT_SYMBOL_GPL(iio_event_mode);
+
+int iio_read_event_processed_scale(struct iio_channel *chan,
+				   enum iio_event_type type,
+				   enum iio_event_direction dir,
+				   enum iio_event_info info, int *val,
+				   unsigned int scale)
+{
+	struct iio_dev *indio_dev = chan->indio_dev;
+	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
+	int ret, raw;
+
+	guard(mutex)(&iio_dev_opaque->info_exist_lock);
+	if (!iio_event_exists(chan, type, dir, info))
+		return -ENODEV;
+
+	if (info == IIO_EV_INFO_ENABLE) {
+		if (!indio_dev->info->read_event_config)
+			return -EINVAL;
+
+		raw = indio_dev->info->read_event_config(indio_dev,
+							 chan->channel, type,
+							 dir);
+		if (raw < 0)
+			return raw;
+
+		*val = raw;
+		return 0;
+	}
+
+	if (!indio_dev->info->read_event_value)
+		return -EINVAL;
+
+	ret = indio_dev->info->read_event_value(indio_dev, chan->channel, type,
+						dir, info, &raw, NULL);
+	if (ret < 0)
+		return ret;
+
+	return iio_convert_raw_to_processed_unlocked(chan, raw, val, scale);
+}
+EXPORT_SYMBOL_GPL(iio_read_event_processed_scale);
+
+static int iio_convert_processed_to_raw_unlocked(struct iio_channel *chan,
+						 int processed, int *raw,
+						 unsigned int scale)
+{
+	int scale_type, scale_val, scale_val2;
+	int offset_type, offset_val, offset_val2;
+	s64 r, scale64, raw64;
+
+	scale_type = iio_channel_read(chan, &scale_val, &scale_val2,
+				      IIO_CHAN_INFO_SCALE);
+	if (scale_type < 0) {
+		raw64 = processed / scale;
+	} else {
+		switch (scale_type) {
+		case IIO_VAL_INT:
+			scale64 = (s64)scale_val * scale;
+			if (scale64 <= INT_MAX && scale64 >= INT_MIN)
+				raw64 = processed / (int)scale64;
+			else
+				raw64 = 0;
+			break;
+		case IIO_VAL_INT_PLUS_MICRO:
+			scale64 = scale_val * scale * 1000000LL + scale_val2;
+			raw64 = div64_s64_rem(processed, scale64, &r);
+			raw64 = raw64 * 1000000 +
+				div64_s64(r * 1000000, scale64);
+			break;
+		case IIO_VAL_INT_PLUS_NANO:
+			scale64 = scale_val * scale * 1000000000LL + scale_val2;
+			raw64 = div64_s64_rem(processed, scale64, &r);
+			raw64 = raw64 * 1000000000 +
+				div64_s64(r * 1000000000, scale64);
+			break;
+		case IIO_VAL_FRACTIONAL:
+			raw64 = div64_s64((s64)processed * scale_val2,
+					  (s64)scale_val * scale);
+			break;
+		case IIO_VAL_FRACTIONAL_LOG2:
+			raw64 = div64_s64((s64)processed << scale_val2,
+					  (s64)scale_val * scale);
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	offset_type = iio_channel_read(chan, &offset_val, &offset_val2,
+				       IIO_CHAN_INFO_OFFSET);
+	if (offset_type >= 0) {
+		switch (offset_type) {
+		case IIO_VAL_INT:
+		case IIO_VAL_INT_PLUS_MICRO:
+		case IIO_VAL_INT_PLUS_NANO:
+			raw64 -= offset_val;
+			break;
+		case IIO_VAL_FRACTIONAL:
+			raw64 -= offset_val / offset_val2;
+			break;
+		case IIO_VAL_FRACTIONAL_LOG2:
+			raw64 -= offset_val >> offset_val2;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	*raw = clamp(raw64, (s64)INT_MIN, (s64)INT_MAX);
+	return 0;
+}
+
+int iio_write_event_processed_scale(struct iio_channel *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir,
+				    enum iio_event_info info, int processed,
+				    unsigned int scale)
+{
+	struct iio_dev *indio_dev = chan->indio_dev;
+	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(chan->indio_dev);
+	int ret, raw;
+
+	guard(mutex)(&iio_dev_opaque->info_exist_lock);
+	if (!iio_event_exists(chan, type, dir, info))
+		return -ENODEV;
+
+	if (info == IIO_EV_INFO_ENABLE) {
+		if (!indio_dev->info->write_event_config)
+			return -EINVAL;
+
+		return indio_dev->info->write_event_config(indio_dev,
+							   chan->channel, type,
+							   dir, processed);
+	}
+
+	if (!indio_dev->info->write_event_value)
+		return -EINVAL;
+
+	ret = iio_convert_processed_to_raw_unlocked(chan, processed, &raw,
+						    scale);
+	if (ret < 0)
+		return ret;
+
+	return indio_dev->info->write_event_value(indio_dev, chan->channel,
+						  type, dir, info, raw, 0);
+}
+EXPORT_SYMBOL_GPL(iio_write_event_processed_scale);
