@@ -3210,6 +3210,9 @@ static int spi_nor_get_device(struct mtd_info *mtd)
 	else
 		dev = nor->dev;
 
+	if (!dev && !dev->driver && !dev->driver->owner)
+		return -EINVAL;
+	
 	if (!try_module_get(dev->driver->owner))
 		return -ENODEV;
 
@@ -3227,7 +3230,8 @@ static void spi_nor_put_device(struct mtd_info *mtd)
 	else
 		dev = nor->dev;
 
-	module_put(dev->driver->owner);
+	if (dev && dev->driver && dev->driver->owner)
+		module_put(dev->driver->owner);
 }
 
 static void spi_nor_restore(struct spi_nor *nor)
