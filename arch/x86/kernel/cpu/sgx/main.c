@@ -921,6 +921,9 @@ EXPORT_SYMBOL_GPL(sgx_set_attribute);
 /* Counter to count the active SGX users */
 static int sgx_usage_count;
 
+/* Mutex to ensure no concurrent EPC accesses during EUPDATESVN */
+static DEFINE_MUTEX(sgx_svn_lock);
+
 /**
  * sgx_update_svn() - Attempt to call ENCLS[EUPDATESVN].
  * This instruction attempts to update CPUSVN to the
@@ -937,7 +940,7 @@ static int sgx_usage_count;
  *  entropy in RNG.
  * -EIO: Unexpected error, retries are not advisable.
  */
-static int __maybe_unused sgx_update_svn(void)
+static int sgx_update_svn(void)
 {
 	int ret;
 
@@ -983,7 +986,11 @@ static int __maybe_unused sgx_update_svn(void)
 
 int sgx_inc_usage_count(void)
 {
-	sgx_usage_count++;
+	guard(mutex)(&sgx_svn_lock);
+
+	if (sgx_usage_count++ == 0)
+		return sgx_update_svn();
+
 	return 0;
 }
 
