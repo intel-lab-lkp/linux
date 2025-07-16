@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/io.h>
+#include <linux/mfd/syscon.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/b53.h>
 
@@ -28,6 +29,7 @@
 
 struct b53_mmap_priv {
 	void __iomem *regs;
+	struct regmap *gpio_ctrl;
 };
 
 static int b53_mmap_read8(struct b53_device *dev, u8 page, u8 reg, u8 *val)
@@ -312,6 +314,8 @@ static int b53_mmap_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->regs = pdata->regs;
+
+	priv->gpio_ctrl = syscon_regmap_lookup_by_phandle(np, "brcm,gpio-ctrl");
 
 	dev = b53_switch_alloc(&pdev->dev, &b53_mmap_ops, priv);
 	if (!dev)
