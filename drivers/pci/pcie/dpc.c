@@ -164,6 +164,13 @@ pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 	 */
 	if (!pcie_wait_for_link(pdev, false))
 		pci_info(pdev, "Data Link Layer Link Active not cleared in 1000 msec\n");
+	/*
+	 * Some RP's observed setting LBMS when DPC triggers & we should also not
+	 * consider an LBMS assertion from an indeterminable amount of time in the past.
+	 * Provide a "fresh start" when waiting for secondary bus & thereby prevent
+	 * pcie_failed_link_retrain from degrading a healthy link.
+	 */
+	pcie_reset_lbms(pdev);
 
 	if (pdev->dpc_rp_extensions && dpc_wait_rp_inactive(pdev)) {
 		clear_bit(PCI_DPC_RECOVERED, &pdev->priv_flags);
@@ -330,6 +337,9 @@ static void dpc_handle_surprise_removal(struct pci_dev *pdev)
 		pci_info(pdev, "Data Link Layer Link Active not cleared in 1000 msec\n");
 		goto out;
 	}
+	/*
+	 * pciehp will pcie_reset_lbms() in remove_board().
+	 */
 
 	if (pdev->dpc_rp_extensions && dpc_wait_rp_inactive(pdev))
 		goto out;
