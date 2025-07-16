@@ -252,4 +252,15 @@ config PTP_S390
 	  driver provides the raw clock value without the delta to
 	  userspace. That way userspace programs like chrony could steer
 	  the kernel clock.
+
+config PTP_1588_CLOCK_NETC
+	bool "NXP NETC Timer PTP Driver"
+	depends on PTP_1588_CLOCK=y
+	depends on PCI_MSI
+	help
+	  This driver adds support for using the NXP NETC Timer as a PTP
+	  clock. This clock is used by ENETC MAC or NETC Switch for PTP
+	  synchronization. It also supports periodic output signal (e.g.
+	  PPS) and external trigger timestamping.
+
 endmenu
