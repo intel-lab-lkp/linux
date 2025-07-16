@@ -273,7 +273,7 @@ struct qmi_wlanfw_phy_cap_resp_msg_v01 {
 	u8 num_phy_valid;
 	u8 num_phy;
 	u8 board_id_valid;
-	u32 board_id;
+	__le32 board_id;
 	u8 single_chip_mlo_support_valid;
 	u8 single_chip_mlo_support;
 };
