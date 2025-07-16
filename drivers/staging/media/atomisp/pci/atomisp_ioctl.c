@@ -416,8 +416,15 @@ static int atomisp_s_fmt_cap(struct file *file, void *fh,
 			     struct v4l2_format *f)
 {
 	struct video_device *vdev = video_devdata(file);
+	struct atomisp_device *isp = video_get_drvdata(vdev);
 
-	return atomisp_set_fmt(vdev, f);
+	int ret;
+
+	mutex_lock(&isp->mutex);
+	ret = atomisp_set_fmt(vdev, f);
+	mutex_unlock(&isp->mutex);
+
+	return ret;
 }
 
 /*
