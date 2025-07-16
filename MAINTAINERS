@@ -3281,6 +3281,7 @@ ARM/SPREADTRUM SoC SUPPORT
 M:	Orson Zhai <orsonzhai@gmail.com>
 M:	Baolin Wang <baolin.wang7@gmail.com>
 R:	Chunyan Zhang <zhang.lyra@gmail.com>
+R:	Cixi Geng <cixi.geng@linux.dev>
 S:	Maintained
 F:	arch/arm64/boot/dts/sprd
 N:	sprd
