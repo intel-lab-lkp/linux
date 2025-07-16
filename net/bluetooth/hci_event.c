@@ -6237,10 +6237,14 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 	hci_dev_unlock(hdev);
 }
 
+#define LE_EXT_ADV_DATA_STATUS_MASK GENMASK(6, 5)
+
 static u8 ext_evt_type_to_legacy(struct hci_dev *hdev, u16 evt_type)
 {
-	if (evt_type & LE_EXT_ADV_LEGACY_PDU) {
-		switch (evt_type) {
+	u16 pdu_type = evt_type & ~LE_EXT_ADV_DATA_STATUS_MASK;
+
+	if (pdu_type & LE_EXT_ADV_LEGACY_PDU) {
+		switch (pdu_type) {
 		case LE_LEGACY_ADV_IND:
 			return LE_ADV_IND;
 		case LE_LEGACY_ADV_DIRECT_IND:
@@ -6257,21 +6261,21 @@ static u8 ext_evt_type_to_legacy(struct hci_dev *hdev, u16 evt_type)
 		goto invalid;
 	}
 
-	if (evt_type & LE_EXT_ADV_CONN_IND) {
-		if (evt_type & LE_EXT_ADV_DIRECT_IND)
+	if (pdu_type & LE_EXT_ADV_CONN_IND) {
+		if (pdu_type & LE_EXT_ADV_DIRECT_IND)
 			return LE_ADV_DIRECT_IND;
 
 		return LE_ADV_IND;
 	}
 
-	if (evt_type & LE_EXT_ADV_SCAN_RSP)
+	if (pdu_type & LE_EXT_ADV_SCAN_RSP)
 		return LE_ADV_SCAN_RSP;
 
-	if (evt_type & LE_EXT_ADV_SCAN_IND)
+	if (pdu_type & LE_EXT_ADV_SCAN_IND)
 		return LE_ADV_SCAN_IND;
 
-	if (evt_type == LE_EXT_ADV_NON_CONN_IND ||
-	    evt_type & LE_EXT_ADV_DIRECT_IND)
+	if (pdu_type == LE_EXT_ADV_NON_CONN_IND ||
+	    pdu_type & LE_EXT_ADV_DIRECT_IND)
 		return LE_ADV_NONCONN_IND;
 
 invalid:
