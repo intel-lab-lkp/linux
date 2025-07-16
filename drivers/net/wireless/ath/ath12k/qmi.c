@@ -2392,11 +2392,11 @@ int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 			   ab->qmi.mem_seg_count);
 	} else {
 		delayed = false;
-		req->mem_seg_len = ab->qmi.mem_seg_count;
-		for (i = 0; i < req->mem_seg_len ; i++) {
-			req->mem_seg[i].addr = ab->qmi.target_mem[i].paddr;
-			req->mem_seg[i].size = ab->qmi.target_mem[i].size;
-			req->mem_seg[i].type = ab->qmi.target_mem[i].type;
+		req->mem_seg_len = cpu_to_le32(ab->qmi.mem_seg_count);
+		for (i = 0; i < ab->qmi.mem_seg_count; i++) {
+			req->mem_seg[i].addr = cpu_to_le64(ab->qmi.target_mem[i].paddr);
+			req->mem_seg[i].size = cpu_to_le32(ab->qmi.target_mem[i].size);
+			req->mem_seg[i].type = cpu_to_le32(ab->qmi.target_mem[i].type);
 			ath12k_dbg(ab, ATH12K_DBG_QMI,
 				   "qmi req mem_seg[%d] %pad %u %u\n", i,
 				   &ab->qmi.target_mem[i].paddr,

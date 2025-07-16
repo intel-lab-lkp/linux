@@ -356,14 +356,14 @@ struct qmi_wlanfw_request_mem_ind_msg_v01 {
 };
 
 struct qmi_wlanfw_mem_seg_resp_s_v01 {
-	u64 addr;
-	u32 size;
-	enum qmi_wlanfw_mem_type_enum_v01 type;
+	__le64 addr;
+	__le32 size;
+	__le32 type;
 	u8 restore;
 };
 
 struct qmi_wlanfw_respond_mem_req_msg_v01 {
-	u32 mem_seg_len;
+	__le32 mem_seg_len;
 	struct qmi_wlanfw_mem_seg_resp_s_v01 mem_seg[ATH12K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01];
 };
 
