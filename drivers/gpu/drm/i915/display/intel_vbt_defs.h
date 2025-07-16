@@ -437,6 +437,20 @@ enum vbt_gmbus_ddi {
 #define BDB_230_VBT_DP_MAX_LINK_RATE_UHBR13P5	6
 #define BDB_230_VBT_DP_MAX_LINK_RATE_UHBR20	7
 
+/* EDP link rate 262+ */
+#define BDB_263_VBT_EDP_LINK_RATE_1_62		BIT(0)
+#define BDB_263_VBT_EDP_LINK_RATE_2_16		BIT(1)
+#define BDB_263_VBT_EDP_LINK_RATE_2_43		BIT(2)
+#define BDB_263_VBT_EDP_LINK_RATE_2_7		BIT(3)
+#define BDB_263_VBT_EDP_LINK_RATE_3_24		BIT(4)
+#define BDB_263_VBT_EDP_LINK_RATE_4_32		BIT(5)
+#define BDB_263_VBT_EDP_LINK_RATE_5_4		BIT(6)
+#define BDB_263_VBT_EDP_LINK_RATE_6_75		BIT(7)
+#define BDB_263_VBT_EDP_LINK_RATE_8_1		BIT(8)
+#define BDB_263_VBT_EDP_LINK_RATE_10		BIT(9)
+#define BDB_263_VBT_EDP_LINK_RATE_13_5		BIT(10)
+#define BDB_263_VBT_EDP_LINK_RATE_20		BIT(11)
+
 /*
  * The child device config, aka the display device data structure, provides a
  * description of a port and its configuration on the platform.
@@ -547,6 +561,8 @@ struct child_device_config {
 	u8 dp_max_link_rate:3;					/* 216+ */
 	u8 dp_max_link_rate_reserved:5;				/* 216+ */
 	u8 efp_index;						/* 256+ */
+	u32 edp_data_override:5;				/* 263+ */
+	u32 edp_data_override_reserved:17;			/* 263+ */
 } __packed;
 
 struct bdb_general_definitions {
