@@ -191,3 +191,9 @@ Flash Control IDs
     Duration the flash should be on when the flash LED is in flash mode
     (V4L2_FLASH_LED_MODE_FLASH). The unit should be microseconds (µs)
     if possible.
+
+``V4L2_CID_FLASH_HW_STROBE_SIGNAL (boolean)``
+    Enable or disable the output of a hardware strobe signal. This is typically
+    set on a sensor that provides a hardware strobe output which is connected
+    to a flash device/LEDs. The flash device should then be configured to use
+    an external strobe source (V4L2_FLASH_STROBE_SOURCE_EXTERNAL).
