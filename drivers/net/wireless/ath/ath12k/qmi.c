@@ -2850,20 +2850,20 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	}
 
 	if (resp.chip_info_valid) {
-		ab->qmi.target.chip_id = resp.chip_info.chip_id;
-		ab->qmi.target.chip_family = resp.chip_info.chip_family;
+		ab->qmi.target.chip_id = le32_to_cpu(resp.chip_info.chip_id);
+		ab->qmi.target.chip_family = le32_to_cpu(resp.chip_info.chip_family);
 	}
 
 	if (resp.board_info_valid)
-		ab->qmi.target.board_id = resp.board_info.board_id;
+		ab->qmi.target.board_id = le32_to_cpu(resp.board_info.board_id);
 	else
 		ab->qmi.target.board_id = board_id;
 
 	if (resp.soc_info_valid)
-		ab->qmi.target.soc_id = resp.soc_info.soc_id;
+		ab->qmi.target.soc_id = le32_to_cpu(resp.soc_info.soc_id);
 
 	if (resp.fw_version_info_valid) {
-		ab->qmi.target.fw_version = resp.fw_version_info.fw_version;
+		ab->qmi.target.fw_version = le32_to_cpu(resp.fw_version_info.fw_version);
 		strscpy(ab->qmi.target.fw_build_timestamp,
 			resp.fw_version_info.fw_build_timestamp,
 			sizeof(ab->qmi.target.fw_build_timestamp));
@@ -2876,9 +2876,9 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	if (resp.dev_mem_info_valid) {
 		for (i = 0; i < ATH12K_QMI_WLFW_MAX_DEV_MEM_NUM_V01; i++) {
 			ab->qmi.dev_mem[i].start =
-				resp.dev_mem[i].start;
+				le64_to_cpu(resp.dev_mem[i].start);
 			ab->qmi.dev_mem[i].size =
-				resp.dev_mem[i].size;
+				le64_to_cpu(resp.dev_mem[i].size);
 			ath12k_dbg(ab, ATH12K_DBG_QMI,
 				   "devmem [%d] start 0x%llx size %llu\n", i,
 				   ab->qmi.dev_mem[i].start,
@@ -2887,7 +2887,7 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	}
 
 	if (resp.eeprom_caldata_read_timeout_valid) {
-		ab->qmi.target.eeprom_caldata = resp.eeprom_caldata_read_timeout;
+		ab->qmi.target.eeprom_caldata = le32_to_cpu(resp.eeprom_caldata_read_timeout);
 		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi cal data supported from eeprom\n");
 	}
 

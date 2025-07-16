@@ -421,26 +421,26 @@ struct qmi_wlanfw_memory_region_info_s_v01 {
 };
 
 struct qmi_wlanfw_rf_chip_info_s_v01 {
-	u32 chip_id;
-	u32 chip_family;
+	__le32 chip_id;
+	__le32 chip_family;
 };
 
 struct qmi_wlanfw_rf_board_info_s_v01 {
-	u32 board_id;
+	__le32 board_id;
 };
 
 struct qmi_wlanfw_soc_info_s_v01 {
-	u32 soc_id;
+	__le32 soc_id;
 };
 
 struct qmi_wlanfw_fw_version_info_s_v01 {
-	u32 fw_version;
+	__le32 fw_version;
 	char fw_build_timestamp[ATH12K_QMI_WLANFW_MAX_TIMESTAMP_LEN_V01 + 1];
 };
 
 struct qmi_wlanfw_dev_mem_info_s_v01 {
-	u64 start;
-	u64 size;
+	__le64 start;
+	__le64 size;
 };
 
 enum qmi_wlanfw_cal_temp_id_enum_v01 {
@@ -475,17 +475,17 @@ struct qmi_wlanfw_cap_resp_msg_v01 {
 	u8 num_macs_valid;
 	u8 num_macs;
 	u8 voltage_mv_valid;
-	u32 voltage_mv;
+	__le32 voltage_mv;
 	u8 time_freq_hz_valid;
-	u32 time_freq_hz;
+	__le32 time_freq_hz;
 	u8 otp_version_valid;
-	u32 otp_version;
+	__le32 otp_version;
 	u8 eeprom_caldata_read_timeout_valid;
-	u32 eeprom_caldata_read_timeout;
+	__le32 eeprom_caldata_read_timeout;
 	u8 fw_caps_valid;
-	u64 fw_caps;
+	__le64 fw_caps;
 	u8 rd_card_chain_cap_valid;
-	enum qmi_wlanfw_rd_card_chain_cap_v01 rd_card_chain_cap;
+	__le32 rd_card_chain_cap;
 	u8 dev_mem_info_valid;
 	struct qmi_wlanfw_dev_mem_info_s_v01 dev_mem[ATH12K_QMI_WLFW_MAX_DEV_MEM_NUM_V01];
 };
