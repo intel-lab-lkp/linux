@@ -44,6 +44,13 @@ properties:
     unevaluatedProperties: false
     description: Optional child node for ENETC instance, otherwise use NETC EMDIO.
 
+  nxp,netc-timer:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Specifies a reference to a node representing a NETC Timer device,
+      which provides time synchronization as required for IEEE 1588 and
+      IEEE 802.1AS-2020.
+
 required:
   - compatible
   - reg
@@ -62,6 +69,7 @@ allOf:
       properties:
         clocks: false
         clock-names: false
+        nxp,netc-timer: false
 
 unevaluatedProperties: false
 
@@ -85,4 +93,19 @@ examples:
                 };
             };
         };
+    };
+  - |
+    pcie {
+      #address-cells = <3>;
+      #size-cells = <2>;
+
+      ethernet@0,0 {
+          compatible = "pci1131,e101";
+          reg = <0x000000 0 0 0 0>;
+          clocks = <&scmi_clk 102>;
+          clock-names = "ref";
+          nxp,netc-timer = <&netc_timer>;
+          phy-handle = <&ethphy0>;
+          phy-mode = "rgmii-id";
+      };
     };
