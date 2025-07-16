@@ -552,7 +552,7 @@ struct qmi_wlanfw_m3_info_resp_msg_v01 {
 #define QMI_WLANFW_MAX_NUM_SHADOW_REG_V3_V01		60
 
 struct qmi_wlanfw_wlan_mode_req_msg_v01 {
-	u32 mode;
+	__le32 mode;
 	u8 hw_debug_valid;
 	u8 hw_debug;
 };

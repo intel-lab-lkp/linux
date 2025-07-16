@@ -3242,7 +3242,7 @@ static int ath12k_qmi_wlanfw_mode_send(struct ath12k_base *ab,
 	struct qmi_txn txn;
 	int ret = 0;
 
-	req.mode = mode;
+	req.mode = cpu_to_le32(mode);
 	req.hw_debug_valid = 1;
 	req.hw_debug = 0;
 
