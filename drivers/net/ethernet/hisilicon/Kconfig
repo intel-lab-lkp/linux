@@ -157,4 +157,12 @@ config HIBMCGE
 
 	  If you are unsure, say N.
 
+config HIBMCGE_LEDS
+	def_bool LEDS_TRIGGER_NETDEV
+	depends on HIBMCGE && LEDS_CLASS
+	depends on LEDS_CLASS=y || HIBMCGE=m
+	help
+	  Optional support for controlling the NIC LED's with the netdev
+	  LED trigger.
+
 endif # NET_VENDOR_HISILICON

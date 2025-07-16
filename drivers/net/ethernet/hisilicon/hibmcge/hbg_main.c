@@ -12,6 +12,7 @@
 #include "hbg_ethtool.h"
 #include "hbg_hw.h"
 #include "hbg_irq.h"
+#include "hbg_led.h"
 #include "hbg_mdio.h"
 #include "hbg_txrx.h"
 #include "hbg_debugfs.h"
@@ -382,6 +383,12 @@ static int hbg_init(struct hbg_priv *priv)
 	ret = hbg_mdio_init(priv);
 	if (ret)
 		return ret;
+
+	if (IS_ENABLED(CONFIG_HIBMCGE_LEDS)) {
+		ret = hbg_leds_init(priv);
+		if (ret)
+			return ret;
+	}
 
 	ret = hbg_mac_filter_init(priv);
 	if (ret)
