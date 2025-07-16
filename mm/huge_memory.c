@@ -3813,7 +3813,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 
 			/* Some pages can be beyond EOF: drop them from cache */
 			if (new_folio->index >= end) {
-				if (shmem_mapping(mapping))
+				if (mapping && shmem_mapping(mapping))
 					nr_shmem_dropped += folio_nr_pages(new_folio);
 				else if (folio_test_clear_dirty(new_folio))
 					folio_account_cleaned(
