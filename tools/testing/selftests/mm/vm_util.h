@@ -122,6 +122,13 @@ static inline void log_test_result(int result)
 void *sys_mremap(void *old_address, unsigned long old_size,
 		 unsigned long new_size, int flags, void *new_address);
 
+long ksm_get_self_zero_pages();
+long ksm_get_self_merging_pages();
+long ksm_get_full_scans();
+int ksm_use_zero_pages();
+int ksm_start_and_merge();
+int ksm_stop_and_unmerge();
+
 /*
  * On ppc64 this will only work with radix 2M hugepage size
  */
