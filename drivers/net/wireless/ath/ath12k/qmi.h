@@ -296,7 +296,7 @@ struct qmi_wlanfw_ind_register_req_msg_v01 {
 	u8 pin_connect_result_enable_valid;
 	u8 pin_connect_result_enable;
 	u8 client_id_valid;
-	u32 client_id;
+	__le32 client_id;
 	u8 request_mem_enable_valid;
 	u8 request_mem_enable;
 	u8 fw_mem_ready_enable_valid;
@@ -304,7 +304,7 @@ struct qmi_wlanfw_ind_register_req_msg_v01 {
 	u8 fw_init_done_enable_valid;
 	u8 fw_init_done_enable;
 	u8 rejuvenate_enable_valid;
-	u32 rejuvenate_enable;
+	__le32 rejuvenate_enable;
 	u8 xo_cal_enable_valid;
 	u8 xo_cal_enable;
 	u8 cal_done_enable_valid;
@@ -314,7 +314,7 @@ struct qmi_wlanfw_ind_register_req_msg_v01 {
 struct qmi_wlanfw_ind_register_resp_msg_v01 {
 	struct qmi_response_type_v01 resp;
 	u8 fw_status_valid;
-	u64 fw_status;
+	__le64 fw_status;
 };
 
 #define QMI_WLANFW_REQUEST_MEM_IND_MSG_V01_MAX_LEN	1824

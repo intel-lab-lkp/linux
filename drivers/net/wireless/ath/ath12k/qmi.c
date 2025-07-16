@@ -2315,7 +2315,7 @@ static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
 	}
 
 	req->client_id_valid = 1;
-	req->client_id = QMI_WLANFW_CLIENT_ID;
+	req->client_id = cpu_to_le32(QMI_WLANFW_CLIENT_ID);
 	req->fw_ready_enable_valid = 1;
 	req->fw_ready_enable = 1;
 	req->request_mem_enable_valid = 1;
