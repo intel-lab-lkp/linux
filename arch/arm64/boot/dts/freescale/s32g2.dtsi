@@ -424,8 +424,8 @@
 		};
 
 		usbmisc: usbmisc@44064200 {
-			#index-cells = <1>;
 			compatible = "nxp,s32g2-usbmisc";
+			#index-cells = <1>;
 			reg = <0x44064200 0x200>;
 		};
 
