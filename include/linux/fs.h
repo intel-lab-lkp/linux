@@ -954,39 +954,10 @@ void filemap_invalidate_lock_two(struct address_space *mapping1,
 void filemap_invalidate_unlock_two(struct address_space *mapping1,
 				   struct address_space *mapping2);
 
-
-/*
- * NOTE: in a 32bit arch with a preemptable kernel and
- * an UP compile the i_size_read/write must be atomic
- * with respect to the local cpu (unlike with preempt disabled),
- * but they don't need to be atomic with respect to other cpus like in
- * true SMP (so they need either to either locally disable irq around
- * the read or for example on x86 they can be still implemented as a
- * cmpxchg8b without the need of the lock prefix). For SMP compiles
- * and 64bit archs it makes no difference if preempt is enabled or not.
- */
 static inline loff_t i_size_read(const struct inode *inode)
 {
-#if BITS_PER_LONG==32 && defined(CONFIG_SMP)
-	loff_t i_size;
-	unsigned int seq;
-
-	do {
-		seq = read_seqcount_begin(&inode->i_size_seqcount);
-		i_size = inode->i_size;
-	} while (read_seqcount_retry(&inode->i_size_seqcount, seq));
-	return i_size;
-#elif BITS_PER_LONG==32 && defined(CONFIG_PREEMPTION)
-	loff_t i_size;
-
-	preempt_disable();
-	i_size = inode->i_size;
-	preempt_enable();
-	return i_size;
-#else
 	/* Pairs with smp_store_release() in i_size_write() */
 	return smp_load_acquire(&inode->i_size);
-#endif
 }
 
 /*
@@ -996,24 +967,12 @@ static inline loff_t i_size_read(const struct inode *inode)
  */
 static inline void i_size_write(struct inode *inode, loff_t i_size)
 {
-#if BITS_PER_LONG==32 && defined(CONFIG_SMP)
-	preempt_disable();
-	write_seqcount_begin(&inode->i_size_seqcount);
-	inode->i_size = i_size;
-	write_seqcount_end(&inode->i_size_seqcount);
-	preempt_enable();
-#elif BITS_PER_LONG==32 && defined(CONFIG_PREEMPTION)
-	preempt_disable();
-	inode->i_size = i_size;
-	preempt_enable();
-#else
 	/*
 	 * Pairs with smp_load_acquire() in i_size_read() to ensure
 	 * changes related to inode size (such as page contents) are
 	 * visible before we see the changed inode size.
 	 */
 	smp_store_release(&inode->i_size, i_size);
-#endif
 }
 
 static inline unsigned iminor(const struct inode *inode)
