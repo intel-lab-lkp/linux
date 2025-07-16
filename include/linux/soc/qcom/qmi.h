@@ -98,8 +98,8 @@ struct qmi_elem_info {
  * @error:	error value, when @result is QMI_RESULT_FAILURE_V01
  */
 struct qmi_response_type_v01 {
-	u16 result;
-	u16 error;
+	__le16 result;
+	__le16 error;
 };
 
 extern const struct qmi_elem_info qmi_response_type_v01_ei[];

@@ -2227,9 +2227,10 @@ int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 	if (ret < 0)
 		goto out;
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "Host capability request failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2264,7 +2265,7 @@ static void ath12k_qmi_phy_cap_send(struct ath12k_base *ab)
 	if (ret < 0)
 		goto out;
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ret = -EOPNOTSUPP;
 		goto out;
 	}
@@ -2352,9 +2353,10 @@ static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp->resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "FW Ind register request failed, result: %d, err: %d\n",
-			    resp->resp.result, resp->resp.error);
+			    le16_to_cpu(resp->resp.result),
+			    le16_to_cpu(resp->resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2427,15 +2429,16 @@ int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		/* the error response is expected when
 		 * target_mem_delayed is true.
 		 */
-		if (delayed && resp.resp.error == 0)
+		if (delayed && le16_to_cpu(resp.resp.error) == 0)
 			goto out;
 
 		ath12k_warn(ab, "Respond mem req failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2842,9 +2845,10 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "qmi targetcap req failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2981,9 +2985,10 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 		if (ret < 0)
 			goto out;
 
-		if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 			ath12k_warn(ab, "qmi BDF download failed, result: %d, err: %d\n",
-				    resp.resp.result, resp.resp.error);
+				    le16_to_cpu(resp.resp.result),
+				    le16_to_cpu(resp.resp.error));
 			ret = -EINVAL;
 			goto out;
 		}
@@ -3224,9 +3229,10 @@ int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "qmi M3 info request failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -3273,9 +3279,10 @@ static int ath12k_qmi_wlanfw_mode_send(struct ath12k_base *ab,
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "Mode request failed, mode: %d, result: %d err: %d\n",
-			    mode, resp.resp.result, resp.resp.error);
+			    mode, le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -3360,9 +3367,10 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "qmi wlan config request failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -3404,9 +3412,10 @@ static int ath12k_qmi_wlanfw_wlan_ini_send(struct ath12k_base *ab)
 		goto out;
 	}
 
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+	if (le16_to_cpu(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		ath12k_warn(ab, "QMI wlan ini response failure: %d %d\n",
-			    resp.resp.result, resp.resp.error);
+			    le16_to_cpu(resp.resp.result),
+			    le16_to_cpu(resp.resp.error));
 		ret = -EINVAL;
 		goto out;
 	}
