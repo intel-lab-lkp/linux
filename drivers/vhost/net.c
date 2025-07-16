@@ -95,7 +95,7 @@ struct vhost_net_ubuf_ref {
 	 * >1: outstanding ubufs
 	 */
 	atomic_t refcount;
-	wait_queue_head_t wait;
+	struct completion wait;
 	struct vhost_virtqueue *vq;
 };
 
@@ -241,7 +241,7 @@ vhost_net_ubuf_alloc(struct vhost_virtqueue *vq, bool zcopy)
 	if (!ubufs)
 		return ERR_PTR(-ENOMEM);
 	atomic_set(&ubufs->refcount, 1);
-	init_waitqueue_head(&ubufs->wait);
+	init_completion(&ubufs->wait);
 	ubufs->vq = vq;
 	return ubufs;
 }
@@ -250,14 +250,15 @@ static int vhost_net_ubuf_put(struct vhost_net_ubuf_ref *ubufs)
 {
 	int r = atomic_sub_return(1, &ubufs->refcount);
 	if (unlikely(!r))
-		wake_up(&ubufs->wait);
+		complete_all(&ubufs->wait);
 	return r;
 }
 
 static void vhost_net_ubuf_put_and_wait(struct vhost_net_ubuf_ref *ubufs)
 {
 	vhost_net_ubuf_put(ubufs);
-	wait_event(ubufs->wait, !atomic_read(&ubufs->refcount));
+	wait_for_completion(&ubufs->wait);
+	reinit_completion(&ubufs->wait);
 }
 
 static void vhost_net_ubuf_put_wait_and_free(struct vhost_net_ubuf_ref *ubufs)
