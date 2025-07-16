@@ -1901,6 +1901,20 @@ The following nested keys are defined.
       other negative priorities to restore the same ordering as the global
       swap configuration.
 
+  memory.swap.priority.effective
+        A read-only file showing the effective swap priority ordering
+        actually applied to this cgroup, after resolving inheritance
+        from ancestors. The effective swap priority for a cgroup is
+        also influenced by its position within the cgroup hierarchy. If any
+        ancestor cgroup has set a swap priority configuration, it is
+        propagated and inherited by all descendants. In that case, the
+        child’s own configuration is ignored and the topmost configured
+        ancestor determines the effective priority ordering.
+
+        If there is no configuration in the current cgroup and its
+        ancestors, this file shows the global swap device priority from
+        `swapon`, in the form of id and priority pairs.
+
   memory.zswap.current
 	A read-only single value file which exists on non-root
 	cgroups.

@@ -3806,6 +3806,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 	if (parent) {
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+		memcg->swap_priority = inherit_swap_cgroup_priority(parent);
+#endif
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
 #ifdef CONFIG_MEMCG_V1
@@ -5480,6 +5483,12 @@ static int swap_cgroup_priority_show(struct seq_file *m, void *v)
 	show_swap_cgroup_priority(m);
 	return 0;
 }
+
+static int swap_cgroup_priority_effective_show(struct seq_file *m, void *v)
+{
+	show_swap_cgroup_priority_effective(m);
+	return 0;
+}
 #endif
 
 static struct cftype swap_files[] = {
@@ -5520,6 +5529,11 @@ static struct cftype swap_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = swap_cgroup_priority_show,
 		.write = swap_cgroup_priority_write,
+	},
+	{
+		.name = "swap.priority.effective",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = swap_cgroup_priority_effective_show,
 	},
 #endif
 	{ }	/* terminate */

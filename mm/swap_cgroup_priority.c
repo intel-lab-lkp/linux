@@ -21,6 +21,7 @@
 #include "swap_cgroup_priority.h"
 #include "memcontrol-v1.h"
 
+static DEFINE_MUTEX(swap_cgroup_priority_inherit_lck);
 static LIST_HEAD(swap_cgroup_priority_list);
 
 /*
@@ -31,6 +32,16 @@ static LIST_HEAD(swap_cgroup_priority_list);
  * tracks priority differences from global swap. If zero, and its default_prio
  * follows global swap priority(SWAP_PRIORITY_GLOBAL), the object is destroyed.
  *
+ * Child cgroups hold direct pointers to this object for fast access.
+ * No reference counting is needed, as the owner's teardown or zero
+ * distance directly implies this object's destruction.
+ *
+ * A child cgroup that has its own effective swap_cgroup_priority uses
+ * the 'effective' field to point to the top-most cgroup's relevant
+ * swap_cgroup_priority object that it should inherit. Changes in the
+ * parent cgroup's swap priority are appropriately propagated downwards.
+ *
+ * effective - Actual effective swap cgroup priority.
  * pnode - Array of pointers to swap device priority nodes.
  * owner - The owning memory cgroup.
  * rcu - RCU free callback.
@@ -41,6 +52,7 @@ static LIST_HEAD(swap_cgroup_priority_list);
  * plist - Priority list head.
  */
 struct swap_cgroup_priority {
+	struct swap_cgroup_priority *effective;
 	struct swap_cgroup_priority_pnode *pnode[MAX_SWAPFILES];
 	struct mem_cgroup *owner;
 
@@ -106,13 +118,38 @@ void get_swapdev_id(struct swap_info_struct *si)
 	si->id = atomic64_inc_return(&swapdev_id_counter);
 }
 
-static struct swap_cgroup_priority *get_swap_cgroup_priority(
+static struct swap_cgroup_priority *get_effective_swap_cgroup_priority(
 	struct mem_cgroup *memcg)
 {
+	struct swap_cgroup_priority *swap_priority;
 	if (!memcg)
 		return NULL;
 
-	return rcu_dereference(memcg->swap_priority);
+	swap_priority = memcg->swap_priority;
+	if (!swap_priority)
+		return NULL;
+
+	return swap_priority->effective;
+}
+
+static bool validate_effective_swap_cgroup_priority(
+	struct mem_cgroup *memcg,
+	struct swap_cgroup_priority **swap_priority)
+{
+	struct swap_cgroup_priority *target = memcg->swap_priority;
+
+	if (!target) {
+		*swap_priority = NULL;
+		return false;
+	}
+
+	target = target->effective;
+	if (target != *swap_priority) {
+		*swap_priority = target;
+		return false;
+	}
+
+	return true;
 }
 
 static struct swap_cgroup_priority_pnode *alloc_swap_cgroup_priority_pnode(
@@ -182,10 +219,13 @@ void show_swap_cgroup_priority(struct seq_file *m)
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 	struct swap_cgroup_priority *swap_priority;
 
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
 	spin_lock(&swap_lock);
+
 	swap_priority = memcg->swap_priority;
 	if (!swap_priority || swap_priority->owner != memcg) {
 		spin_unlock(&swap_lock);
+		mutex_unlock(&swap_cgroup_priority_inherit_lck);
 		return;
 	}
 
@@ -217,6 +257,47 @@ void show_swap_cgroup_priority(struct seq_file *m)
 	}
 
 	spin_unlock(&swap_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
+}
+
+void show_swap_cgroup_priority_effective(struct seq_file *m)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+	struct swap_cgroup_priority *swap_priority;
+
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
+	spin_lock(&swap_lock);
+
+	swap_priority = get_effective_swap_cgroup_priority(memcg);
+	if (swap_priority && swap_priority->default_prio != SWAP_PRIORITY_GLOBAL)
+		seq_printf(m,  "default disabled\n");
+
+	for (int i = 0; i < nr_swapfiles; i++) {
+		struct swap_info_struct *si = swap_info[i];
+		struct swap_cgroup_priority_pnode *pnode;
+		signed short prio;
+
+		if (!(si->flags & SWP_USED) || !(si->flags & SWP_WRITEOK))
+			continue;
+
+		seq_printf(m,  "%lld", si->id);
+		if (!swap_priority) {
+			seq_printf(m, " %d\n", si->prio);
+			continue;
+		}
+
+		pnode = swap_priority->pnode[i];
+		if (WARN_ON(!pnode))
+			continue;
+
+		prio = pnode->prio;
+		if (prio != SWAP_PRIORITY_DISABLE)
+			seq_printf(m,  " %d\n", prio);
+		else
+			seq_printf(m,  " disabled\n");
+	}
+	spin_unlock(&swap_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 }
 
 static void __delete_swap_cgroup_priority(struct mem_cgroup *memcg);
@@ -224,6 +305,7 @@ void purge_swap_cgroup_priority(void)
 {
 	struct swap_cgroup_priority *swap_priority, *tmp;
 
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
 	spin_lock(&swap_avail_lock);
 	list_for_each_entry_safe(swap_priority, tmp, &swap_cgroup_priority_list,
 				 link) {
@@ -232,6 +314,7 @@ void purge_swap_cgroup_priority(void)
 			__delete_swap_cgroup_priority(swap_priority->owner);
 	}
 	spin_unlock(&swap_avail_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 }
 
 bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
@@ -250,7 +333,7 @@ bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
 	spin_lock(&swap_avail_lock);
 	node = numa_node_id();
 
-	swap_priority = get_swap_cgroup_priority(memcg);
+	swap_priority = get_effective_swap_cgroup_priority(memcg);
 swap_priority_check:
 	if (!swap_priority) {
 		spin_unlock(&swap_avail_lock);
@@ -282,7 +365,8 @@ start_over:
 		 * If 'swap_cgroup_priority' changes while we're holding a lock,
 		 * we must verify its state to ensure memory validness.
 		 */
-		if (memcg->swap_priority != swap_priority)
+		if (!validate_effective_swap_cgroup_priority(memcg,
+							     &swap_priority))
 			goto swap_priority_check;
 
 		if (plist_node_empty(&next->avail_lists[node]))
@@ -350,7 +434,7 @@ void deactivate_swap_cgroup_priority(struct swap_info_struct *swp,
 	struct swap_cgroup_priority *swap_priority, *tmp;
 	int nid, i;
 
-	list_for_each_entry_safe(swap_priority, tmp, &swap_cgroup_priority_list,
+	list_for_each_entry_safe(swap_priority, tmp, &swap_cgroup_priority_list, 
 				 link) {
 		struct swap_cgroup_priority_pnode *pnode =
 			swap_priority->pnode[swp->type];
@@ -603,17 +687,57 @@ out:
 	return 0;
 }
 
+/*
+ * If this is the top-level swap_cgroup_priority, propagation is needed.
+ * We traverse the 'mem_cgroup_tree' using 'for_each_mem_cgroup_tree'.
+ * Due to its pre-order traversal, after propagating changes in the parent,
+ * subsequent child nodes can correctly retrieve the parent's effective
+ * swap_cgroup_priority, ensuring proper propagation.
+ */
+static void propagate_swap_cgroup_priority(
+	struct mem_cgroup *memcg,
+	struct swap_cgroup_priority *swap_priority)
+{
+	struct mem_cgroup *iter;
+
+	iter = parent_mem_cgroup(memcg);
+	while (iter) {
+		if (iter->swap_priority)
+			return;
+		iter = parent_mem_cgroup(iter);
+	}
+
+	for_each_mem_cgroup_tree(iter, memcg) {
+		if (iter == memcg)
+			continue;
+
+		if (iter->swap_priority &&
+			iter->swap_priority->owner == iter) {
+			rcu_assign_pointer(iter->swap_priority->effective,
+					   swap_priority ?
+					   swap_priority : iter->swap_priority);
+		} else {
+			struct swap_cgroup_priority *effective =
+				get_effective_swap_cgroup_priority(
+					parent_mem_cgroup(iter));
+			iter->swap_priority = effective;
+		}
+	}
+
+	return;
+}
+
 int prepare_swap_cgroup_priority(int type)
 {
 	struct swap_cgroup_priority *swap_priority;
 	int err = 0;
 
-	spin_lock(&swap_avail_lock);
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
 	list_for_each_entry_rcu(swap_priority,
 				&swap_cgroup_priority_list, link) {
 		if (!swap_priority->pnode[type]) {
 			swap_priority->pnode[type] =
-				alloc_swap_cgroup_priority_pnode(GFP_ATOMIC);
+				alloc_swap_cgroup_priority_pnode(GFP_KERNEL);
 
 			if (!swap_priority->pnode[type]) {
 				err = -ENOMEM;
@@ -622,9 +746,21 @@ int prepare_swap_cgroup_priority(int type)
 		}
 
 	}
-	spin_unlock(&swap_avail_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 
 	return err;
+}
+
+struct swap_cgroup_priority *inherit_swap_cgroup_priority(
+	struct mem_cgroup *parent)
+{
+	struct swap_cgroup_priority *swap_priority;
+
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
+	swap_priority = get_effective_swap_cgroup_priority(parent);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
+
+	return swap_priority;
 }
 
 int apply_swap_cgroup_priority(struct mem_cgroup *memcg, u64 id, int prio)
@@ -634,22 +770,24 @@ int apply_swap_cgroup_priority(struct mem_cgroup *memcg, u64 id, int prio)
 	bool new = false;
 	int err = 0;
 
-	rcu_read_lock();
-	swap_priority = rcu_dereference(memcg->swap_priority);
-	if (swap_priority && swap_priority->owner == memcg) {
-		rcu_read_unlock();
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
+	swap_priority = memcg->swap_priority;
+	if (swap_priority && swap_priority->owner == memcg)
 		goto prio_set;
-	}
-	rcu_read_unlock();
+
 	new = true;
 
 	/* No need to define "global swap priority" for a new cgroup. */
-	if (new && prio == SWAP_PRIORITY_GLOBAL)
+	if (new && prio == SWAP_PRIORITY_GLOBAL) {
+		mutex_unlock(&swap_cgroup_priority_inherit_lck);
 		return 0;
+	}
 
 	swap_priority = alloc_swap_cgroup_priority();
-	if (!swap_priority)
+	if (!swap_priority) {
+		mutex_unlock(&swap_cgroup_priority_inherit_lck);
 		return -ENOMEM;
+	}
 
 	/* Just initialize. may changed on __apply_swap_cgroup_priority */
 	swap_priority->default_prio = SWAP_PRIORITY_GLOBAL;
@@ -661,23 +799,17 @@ prio_set:
 	spin_lock(&swap_lock);
 	spin_lock(&swap_avail_lock);
 
-	/* Simultaneous calls to the same interface.*/
-	if (new && memcg->swap_priority &&
-	    memcg->swap_priority->owner == memcg) {
-		new = false;
-		free_swap_cgroup_priority(swap_priority);
-		swap_priority = memcg->swap_priority;
-	}
-
 	err = __apply_swap_cgroup_priority(swap_priority, id, prio, new);
 	if (err) {
 		/*
 		 * The difference with the global swap priority is now zero.
-		 * Remove the swap priority.
+		 * Remove the swap priority, and propagate if needed.
 		 */
 		if (err == 1) {
 			err = 0;
 			__delete_swap_cgroup_priority(memcg);
+			if (swap_priority != swap_priority->effective)
+				memcg->swap_priority = swap_priority->effective;
 		}
 
 		goto error_locked;
@@ -686,7 +818,19 @@ prio_set:
 	if (new) {
 		swap_priority->owner = memcg;
 		list_add_rcu(&swap_priority->link, &swap_cgroup_priority_list);
-		memcg->swap_priority = swap_priority;
+	        /* If there was an inherited swap priority, update effective. */
+		if (memcg->swap_priority) {
+			swap_priority->effective = memcg->swap_priority;
+			memcg->swap_priority = swap_priority;
+		} else {
+			swap_priority->effective = swap_priority;
+			memcg->swap_priority = swap_priority;
+	                /*
+			 * Might be a top-level parent memcg,
+			 * so propagate effective priority.
+			 */
+			propagate_swap_cgroup_priority(memcg, swap_priority);
+		}
 
 		for (int i = 0; i < nr_swapfiles; i++) {
 			if (!swap_priority->pnode[i]->swap) {
@@ -699,12 +843,13 @@ prio_set:
 
 	spin_unlock(&swap_avail_lock);
 	spin_unlock(&swap_lock);
-
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 	return 0;
 
 error_locked:
 	spin_unlock(&swap_avail_lock);
 	spin_unlock(&swap_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 
 	if (!new)
 		return err;
@@ -717,6 +862,7 @@ static void __delete_swap_cgroup_priority(struct mem_cgroup *memcg)
 {
 	struct swap_cgroup_priority *swap_priority = memcg->swap_priority;
 
+	lockdep_assert_held(&swap_cgroup_priority_inherit_lck);
 	lockdep_assert_held(&swap_avail_lock);
 
 	if (!swap_priority)
@@ -727,13 +873,16 @@ static void __delete_swap_cgroup_priority(struct mem_cgroup *memcg)
 		return;
 
 	rcu_assign_pointer(memcg->swap_priority, NULL);
+	propagate_swap_cgroup_priority(memcg, NULL);
 	list_del_rcu(&swap_priority->link);
 	call_rcu(&swap_priority->rcu, rcu_free_swap_cgroup_priority);
 }
 
 void delete_swap_cgroup_priority(struct mem_cgroup *memcg)
 {
+	mutex_lock(&swap_cgroup_priority_inherit_lck);
 	spin_lock(&swap_avail_lock);
 	__delete_swap_cgroup_priority(memcg);
 	spin_unlock(&swap_avail_lock);
+	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 }
