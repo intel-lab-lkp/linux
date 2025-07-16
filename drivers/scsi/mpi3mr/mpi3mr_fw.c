@@ -1624,6 +1624,47 @@ static inline void mpi3mr_set_diagsave(struct mpi3mr_ioc *mrioc)
 }
 
 /**
+ * mpi3mr_fault_uevent_emit - Emit a uevent for a controller diagnostic fault
+ * @mrioc: Pointer to the mpi3mr_ioc structure for the controller instance
+ * @reset_type: The type of reset that has occurred
+ * @reset_reason: The specific reason code for the reset
+ *
+ * This function is invoked when the controller undergoes a reset. It specifically
+ * filters for MPI3_SYSIF_HOST_DIAG_RESET_ACTION_DIAG_FAULT) and ignores other
+ * reset types, such as soft resets.
+ */
+static void mpi3mr_fault_uevent_emit(struct mpi3mr_ioc *mrioc, u16 reset_type,
+	u16 reset_reason)
+{
+	struct kobj_uevent_env *env;
+
+	if (reset_type != MPI3_SYSIF_HOST_DIAG_RESET_ACTION_DIAG_FAULT)
+		return;
+
+	ioc_info(mrioc, "emitting fault exception uevent");
+
+	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
+	if (!env)
+		return;
+
+	if (add_uevent_var(env, "DRIVER=%s", mrioc->driver_name))
+		goto exit;
+	if (add_uevent_var(env, "HBA_NUM=%u", mrioc->id))
+		goto exit;
+	if (add_uevent_var(env, "EVENT_TYPE=FATAL_ERROR"))
+		goto exit;
+	if (add_uevent_var(env, "RESET_TYPE=%s", mpi3mr_reset_type_name(reset_type)))
+		goto exit;
+	if (add_uevent_var(env, "RESET_REASON=%s", mpi3mr_reset_rc_name(reset_reason)))
+		goto exit;
+
+	kobject_uevent_env(&mrioc->shost->shost_gendev.kobj, KOBJ_CHANGE, env->envp);
+
+exit:
+	kfree(env);
+}
+
+/**
  * mpi3mr_issue_reset - Issue reset to the controller
  * @mrioc: Adapter reference
  * @reset_type: Reset type
@@ -1741,6 +1782,7 @@ static int mpi3mr_issue_reset(struct mpi3mr_ioc *mrioc, u16 reset_type,
 	    ioc_config);
 	if (retval)
 		mrioc->unrecoverable = 1;
+	mpi3mr_fault_uevent_emit(mrioc, reset_type, reset_reason);
 	return retval;
 }
 
