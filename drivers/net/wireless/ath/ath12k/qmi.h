@@ -164,8 +164,8 @@ struct ath12k_qmi {
 #define QMI_WLANFW_MAX_HOST_DDR_RANGE_SIZE_V01		3
 
 struct qmi_wlanfw_host_ddr_range {
-	u64 start;
-	u64 size;
+	__le64 start;
+	__le64 size;
 };
 
 enum ath12k_qmi_target_mem {
@@ -205,12 +205,12 @@ enum ath12k_qmi_cnss_feature {
 
 struct qmi_wlanfw_host_cap_req_msg_v01 {
 	u8 num_clients_valid;
-	u32 num_clients;
+	__le32 num_clients;
 	u8 wake_msi_valid;
-	u32 wake_msi;
+	__le32 wake_msi;
 	u8 gpios_valid;
-	u32 gpios_len;
-	u32 gpios[QMI_WLFW_MAX_NUM_GPIO_V01];
+	__le32 gpios_len;
+	__le32 gpios[QMI_WLFW_MAX_NUM_GPIO_V01];
 	u8 nm_modem_valid;
 	u8 nm_modem;
 	u8 bdf_support_valid;
@@ -228,31 +228,31 @@ struct qmi_wlanfw_host_cap_req_msg_v01 {
 	u8 cal_done_valid;
 	u8 cal_done;
 	u8 mem_bucket_valid;
-	u32 mem_bucket;
+	__le32 mem_bucket;
 	u8 mem_cfg_mode_valid;
 	u8 mem_cfg_mode;
 	u8 cal_duration_valid;
-	u16 cal_duraiton;
+	__le16 cal_duraiton;
 	u8 platform_name_valid;
 	char platform_name[QMI_WLANFW_MAX_PLATFORM_NAME_LEN_V01 + 1];
 	u8 ddr_range_valid;
 	struct qmi_wlanfw_host_ddr_range ddr_range[QMI_WLANFW_MAX_HOST_DDR_RANGE_SIZE_V01];
 	u8 host_build_type_valid;
-	enum qmi_wlanfw_host_build_type host_build_type;
+	__le32 host_build_type;
 	u8 mlo_capable_valid;
 	u8 mlo_capable;
 	u8 mlo_chip_id_valid;
-	u16 mlo_chip_id;
+	__le16 mlo_chip_id;
 	u8 mlo_group_id_valid;
 	u8 mlo_group_id;
 	u8 max_mlo_peer_valid;
-	u16 max_mlo_peer;
+	__le16 max_mlo_peer;
 	u8 mlo_num_chips_valid;
 	u8 mlo_num_chips;
 	u8 mlo_chip_info_valid;
 	struct wlfw_host_mlo_chip_info_s_v01 mlo_chip_info[QMI_WLFW_MAX_NUM_MLO_CHIPS_V01];
 	u8 feature_list_valid;
-	u64 feature_list;
+	__le64 feature_list;
 
 };
 

@@ -2073,14 +2073,14 @@ static int ath12k_host_cap_parse_mlo(struct ath12k_base *ab,
 	req->mlo_capable_valid = 1;
 	req->mlo_capable = 1;
 	req->mlo_chip_id_valid = 1;
-	req->mlo_chip_id = ab->device_id;
+	req->mlo_chip_id = cpu_to_le16(ab->device_id);
 	req->mlo_group_id_valid = 1;
 	req->mlo_group_id = ag->id;
 	req->max_mlo_peer_valid = 1;
 	/* Max peer number generally won't change for the same device
 	 * but needs to be synced with host driver.
 	 */
-	req->max_mlo_peer = ab->hw_params->max_mlo_peer;
+	req->max_mlo_peer = cpu_to_le16(ab->hw_params->max_mlo_peer);
 	req->mlo_num_chips_valid = 1;
 	req->mlo_num_chips = ag->num_devices;
 
@@ -2164,7 +2164,7 @@ int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 	int ret = 0;
 
 	req.num_clients_valid = 1;
-	req.num_clients = 1;
+	req.num_clients = cpu_to_le32(1);
 	req.mem_cfg_mode = ab->qmi.target_mem_mode;
 	req.mem_cfg_mode_valid = 1;
 	req.bdf_support_valid = 1;
@@ -2182,7 +2182,8 @@ int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 
 	if (ab->hw_params->qmi_cnss_feature_bitmap) {
 		req.feature_list_valid = 1;
-		req.feature_list = ab->hw_params->qmi_cnss_feature_bitmap;
+		req.feature_list =
+			cpu_to_le64(ab->hw_params->qmi_cnss_feature_bitmap);
 	}
 
 	/* BRINGUP: here we are piggybacking a lot of stuff using
