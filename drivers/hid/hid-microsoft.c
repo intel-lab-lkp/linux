@@ -385,22 +385,26 @@ static int ms_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	ret = hid_parse(hdev);
 	if (ret) {
 		hid_err(hdev, "parse failed\n");
-		goto err_free;
+		return ret;
 	}
 
 	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT | ((quirks & MS_HIDINPUT) ?
 				HID_CONNECT_HIDINPUT_FORCE : 0));
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
-		goto err_free;
+		return ret;
 	}
 
 	ret = ms_init_ff(hdev);
-	if (ret)
+	if (ret) {
 		hid_err(hdev, "could not initialize ff, continuing anyway");
+		goto err_hw_stop;
+	}
 
 	return 0;
-err_free:
+
+err_hw_stop:
+	hid_hw_stop(hdev);
 	return ret;
 }
 
