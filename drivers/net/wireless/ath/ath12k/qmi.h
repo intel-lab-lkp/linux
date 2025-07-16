@@ -327,8 +327,8 @@ struct qmi_wlanfw_ind_register_resp_msg_v01 {
 #define QMI_WLANFW_MAX_STR_LEN_V01                      16
 
 struct qmi_wlanfw_mem_cfg_s_v01 {
-	u64 offset;
-	u32 size;
+	__le64 offset;
+	__le32 size;
 	u8 secure_flag;
 };
 
@@ -344,14 +344,14 @@ enum qmi_wlanfw_mem_type_enum_v01 {
 };
 
 struct qmi_wlanfw_mem_seg_s_v01 {
-	u32 size;
-	enum qmi_wlanfw_mem_type_enum_v01 type;
-	u32 mem_cfg_len;
+	__le32 size;
+	__le32 type;
+	__le32 mem_cfg_len;
 	struct qmi_wlanfw_mem_cfg_s_v01 mem_cfg[QMI_WLANFW_MAX_NUM_MEM_CFG_V01];
 };
 
 struct qmi_wlanfw_request_mem_ind_msg_v01 {
-	u32 mem_seg_len;
+	__le32 mem_seg_len;
 	struct qmi_wlanfw_mem_seg_s_v01 mem_seg[ATH12K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01];
 };
 

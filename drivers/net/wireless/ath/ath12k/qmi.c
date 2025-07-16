@@ -3637,18 +3637,19 @@ static void ath12k_qmi_msg_mem_request_cb(struct qmi_handle *qmi_hdl,
 
 	ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi firmware request memory request\n");
 
-	if (msg->mem_seg_len == 0 ||
-	    msg->mem_seg_len > ATH12K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01)
+	if (le32_to_cpu(msg->mem_seg_len) == 0 ||
+	    le32_to_cpu(msg->mem_seg_len) > ATH12K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01)
 		ath12k_warn(ab, "Invalid memory segment length: %u\n",
-			    msg->mem_seg_len);
+			    le32_to_cpu(msg->mem_seg_len));
 
-	ab->qmi.mem_seg_count = msg->mem_seg_len;
+	ab->qmi.mem_seg_count = le32_to_cpu(msg->mem_seg_len);
 
 	for (i = 0; i < qmi->mem_seg_count ; i++) {
-		ab->qmi.target_mem[i].type = msg->mem_seg[i].type;
-		ab->qmi.target_mem[i].size = msg->mem_seg[i].size;
+		ab->qmi.target_mem[i].type = le32_to_cpu(msg->mem_seg[i].type);
+		ab->qmi.target_mem[i].size = le32_to_cpu(msg->mem_seg[i].size);
 		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi mem seg type %d size %d\n",
-			   msg->mem_seg[i].type, msg->mem_seg[i].size);
+			   le32_to_cpu(msg->mem_seg[i].type),
+			   le32_to_cpu(msg->mem_seg[i].size));
 	}
 
 	if (test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags)) {
