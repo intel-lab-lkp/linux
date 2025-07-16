@@ -51,7 +51,15 @@ static int try_to_freeze_tasks(bool user_only)
 		todo = 0;
 		read_lock(&tasklist_lock);
 		for_each_process_thread(g, p) {
-			if (p == current || !freeze_task(p))
+			/*
+			 * Zombie and dead tasks are not running anymore and cannot enter
+			 * the __refrigerator(). Skipping them avoids unnecessary freeze attempts.
+			 *
+			 * TODO: Consider using PF_NOFREEZE instead, which may provide
+			 * a more generic exclusion mechanism for other non-freezable tasks.
+			 * However, for now, exit_state is sufficient to skip user processes.
+			 */
+			if (p == current || p->exit_state || !freeze_task(p))
 				continue;
 
 			todo++;
