@@ -825,8 +825,8 @@ static int uaudio_sideband_notifier(struct usb_interface *intf,
 		}
 	}
 
-	mutex_unlock(&qdev_mutex);
 	mutex_unlock(&chip->mutex);
+	mutex_unlock(&qdev_mutex);
 
 	return 0;
 }
