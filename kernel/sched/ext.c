@@ -1258,7 +1258,14 @@ static inline void update_locked_rq(struct rq *rq)
 	 */
 	if (rq)
 		lockdep_assert_rq_held(rq);
+	/*
+	 * __this_cpu_write() emits a warning when used with preemption enabled.
+	 * While there's no functional issue if the callback runs on another
+	 * CPU, we disable preemption here solely to suppress that warning.
+	 */
+	preempt_disable();
 	__this_cpu_write(locked_rq, rq);
+	preempt_enable();
 }
 
 /*
