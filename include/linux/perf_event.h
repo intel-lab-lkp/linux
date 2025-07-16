@@ -1224,7 +1224,6 @@ extern void perf_event_free_task(struct task_struct *task);
 extern void perf_event_delayed_put(struct task_struct *task);
 extern struct file *perf_event_get(unsigned int fd);
 extern const struct perf_event *perf_get_event(struct file *file);
-extern const struct perf_event_attr *perf_event_attrs(struct perf_event *event);
 extern void perf_event_print_debug(void);
 extern void perf_pmu_disable(struct pmu *pmu);
 extern void perf_pmu_enable(struct pmu *pmu);
@@ -1235,7 +1234,6 @@ extern int perf_event_task_enable(void);
 
 extern void perf_pmu_resched(struct pmu *pmu);
 
-extern int perf_event_refresh(struct perf_event *event, int refresh);
 extern void perf_event_update_userpage(struct perf_event *event);
 extern int perf_event_release_kernel(struct perf_event *event);
 
@@ -1945,10 +1943,6 @@ static inline const struct perf_event *perf_get_event(struct file *file)
 {
 	return ERR_PTR(-EINVAL);
 }
-static inline const struct perf_event_attr *perf_event_attrs(struct perf_event *event)
-{
-	return ERR_PTR(-EINVAL);
-}
 static inline int perf_event_read_local(struct perf_event *event, u64 *value,
 					u64 *enabled, u64 *running)
 {
@@ -1957,10 +1951,6 @@ static inline int perf_event_read_local(struct perf_event *event, u64 *value,
 static inline void perf_event_print_debug(void)				{ }
 static inline int perf_event_task_disable(void)				{ return -EINVAL; }
 static inline int perf_event_task_enable(void)				{ return -EINVAL; }
-static inline int perf_event_refresh(struct perf_event *event, int refresh)
-{
-	return -EINVAL;
-}
 
 static inline void
 perf_sw_event(u32 event_id, u64 nr, struct pt_regs *regs, u64 addr)	{ }
