@@ -3291,7 +3291,7 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 	struct ce_pipe_config *ce_cfg;
 	struct service_to_pipe *svc_cfg;
 	struct qmi_txn txn;
-	int ret = 0, pipe_num;
+	int ret = 0, pipe_num, sr, len;
 
 	ce_cfg	= (struct ce_pipe_config *)ab->qmi.ce_cfg.tgt_ce;
 	svc_cfg	= (struct service_to_pipe *)ab->qmi.ce_cfg.svc_to_ce_map;
@@ -3306,8 +3306,8 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 
 	req->tgt_cfg_valid = 1;
 	/* This is number of CE configs */
-	req->tgt_cfg_len = ab->qmi.ce_cfg.tgt_ce_len;
-	for (pipe_num = 0; pipe_num < req->tgt_cfg_len ; pipe_num++) {
+	req->tgt_cfg_len = cpu_to_le32(ab->qmi.ce_cfg.tgt_ce_len);
+	for (pipe_num = 0; pipe_num < ab->qmi.ce_cfg.tgt_ce_len; pipe_num++) {
 		req->tgt_cfg[pipe_num].pipe_num = ce_cfg[pipe_num].pipenum;
 		req->tgt_cfg[pipe_num].pipe_dir = ce_cfg[pipe_num].pipedir;
 		req->tgt_cfg[pipe_num].nentries = ce_cfg[pipe_num].nentries;
@@ -3317,8 +3317,8 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 
 	req->svc_cfg_valid = 1;
 	/* This is number of Service/CE configs */
-	req->svc_cfg_len = ab->qmi.ce_cfg.svc_to_ce_map_len;
-	for (pipe_num = 0; pipe_num < req->svc_cfg_len; pipe_num++) {
+	req->svc_cfg_len = cpu_to_le32(ab->qmi.ce_cfg.svc_to_ce_map_len);
+	for (pipe_num = 0; pipe_num < ab->qmi.ce_cfg.svc_to_ce_map_len; pipe_num++) {
 		req->svc_cfg[pipe_num].service_id = svc_cfg[pipe_num].service_id;
 		req->svc_cfg[pipe_num].pipe_dir = svc_cfg[pipe_num].pipedir;
 		req->svc_cfg[pipe_num].pipe_num = svc_cfg[pipe_num].pipenum;
@@ -3327,11 +3327,13 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 	/* set shadow v3 configuration */
 	if (ab->hw_params->supports_shadow_regs) {
 		req->shadow_reg_v3_valid = 1;
-		req->shadow_reg_v3_len = min_t(u32,
-					       ab->qmi.ce_cfg.shadow_reg_v3_len,
-					       QMI_WLANFW_MAX_NUM_SHADOW_REG_V3_V01);
-		memcpy(&req->shadow_reg_v3, ab->qmi.ce_cfg.shadow_reg_v3,
-		       sizeof(u32) * req->shadow_reg_v3_len);
+		len = min_t(u32,
+			    ab->qmi.ce_cfg.shadow_reg_v3_len,
+			    QMI_WLANFW_MAX_NUM_SHADOW_REG_V3_V01);
+		req->shadow_reg_v3_len = cpu_to_le32(len);
+
+		for (sr = 0; sr < len; sr++)
+			req->shadow_reg_v3[sr].addr = cpu_to_le32(ab->qmi.ce_cfg.shadow_reg_v3[sr]);
 	} else {
 		req->shadow_reg_v3_valid = 0;
 	}

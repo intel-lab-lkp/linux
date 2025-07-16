@@ -406,12 +406,12 @@ struct qmi_wlanfw_ce_svc_pipe_cfg_s_v01 {
 };
 
 struct qmi_wlanfw_shadow_reg_cfg_s_v01 {
-	u16 id;
-	u16 offset;
+	__le16 id;
+	__le16 offset;
 };
 
 struct qmi_wlanfw_shadow_reg_v3_cfg_s_v01 {
-	u32 addr;
+	__le32 addr;
 };
 
 struct qmi_wlanfw_memory_region_info_s_v01 {
@@ -565,19 +565,19 @@ struct qmi_wlanfw_wlan_cfg_req_msg_v01 {
 	u8 host_version_valid;
 	char host_version[QMI_WLANFW_MAX_STR_LEN_V01 + 1];
 	u8  tgt_cfg_valid;
-	u32  tgt_cfg_len;
+	__le32 tgt_cfg_len;
 	struct qmi_wlanfw_ce_tgt_pipe_cfg_s_v01
 			tgt_cfg[QMI_WLANFW_MAX_NUM_CE_V01];
 	u8  svc_cfg_valid;
-	u32 svc_cfg_len;
+	__le32 svc_cfg_len;
 	struct qmi_wlanfw_ce_svc_pipe_cfg_s_v01
 			svc_cfg[QMI_WLANFW_MAX_NUM_SVC_V01];
 	u8 shadow_reg_valid;
-	u32 shadow_reg_len;
+	__le32 shadow_reg_len;
 	struct qmi_wlanfw_shadow_reg_cfg_s_v01
 		shadow_reg[QMI_WLANFW_MAX_NUM_SHADOW_REG_V01];
 	u8 shadow_reg_v3_valid;
-	u32 shadow_reg_v3_len;
+	__le32 shadow_reg_v3_len;
 	struct qmi_wlanfw_shadow_reg_v3_cfg_s_v01
 		shadow_reg_v3[QMI_WLANFW_MAX_NUM_SHADOW_REG_V3_V01];
 };
