@@ -504,13 +504,13 @@ struct qmi_wlanfw_cap_req_msg_v01 {
 struct qmi_wlanfw_bdf_download_req_msg_v01 {
 	u8 valid;
 	u8 file_id_valid;
-	enum qmi_wlanfw_cal_temp_id_enum_v01 file_id;
+	__le32 file_id;
 	u8 total_size_valid;
-	u32 total_size;
+	__le32 total_size;
 	u8 seg_id_valid;
-	u32 seg_id;
+	__le32 seg_id;
 	u8 data_valid;
-	u32 data_len;
+	__le32 data_len;
 	u8 data[QMI_WLANFW_MAX_DATA_SIZE_V01];
 	u8 end_valid;
 	u8 end;

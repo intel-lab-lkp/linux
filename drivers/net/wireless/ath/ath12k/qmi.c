@@ -2934,9 +2934,9 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 	while (remaining) {
 		req->valid = 1;
 		req->file_id_valid = 1;
-		req->file_id = ab->qmi.target.board_id;
+		req->file_id = cpu_to_le32(ab->qmi.target.board_id);
 		req->total_size_valid = 1;
-		req->total_size = remaining;
+		req->total_size = cpu_to_le32(remaining);
 		req->seg_id_valid = 1;
 		req->data_valid = 1;
 		req->bdf_type = type;
@@ -2945,18 +2945,18 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 		req->end = 0;
 
 		if (remaining > QMI_WLANFW_MAX_DATA_SIZE_V01) {
-			req->data_len = QMI_WLANFW_MAX_DATA_SIZE_V01;
+			req->data_len = cpu_to_le32(QMI_WLANFW_MAX_DATA_SIZE_V01);
 		} else {
-			req->data_len = remaining;
+			req->data_len = cpu_to_le32(remaining);
 			req->end = 1;
 		}
 
 		if (type == ATH12K_QMI_FILE_TYPE_EEPROM) {
 			req->data_valid = 0;
 			req->end = 1;
-			req->data_len = ATH12K_QMI_MAX_BDF_FILE_NAME_SIZE;
+			req->data_len = cpu_to_le32(ATH12K_QMI_MAX_BDF_FILE_NAME_SIZE);
 		} else {
-			memcpy(req->data, temp, req->data_len);
+			memcpy(req->data, temp, le32_to_cpu(req->data_len));
 		}
 
 		ret = qmi_txn_init(&ab->qmi.handle, &txn,
@@ -2991,9 +2991,9 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 		if (type == ATH12K_QMI_FILE_TYPE_EEPROM) {
 			remaining = 0;
 		} else {
-			remaining -= req->data_len;
-			temp += req->data_len;
-			req->seg_id++;
+			remaining -= le32_to_cpu(req->data_len);
+			temp += le32_to_cpu(req->data_len);
+			req->seg_id += cpu_to_le32(1);
 			ath12k_dbg(ab, ATH12K_DBG_QMI,
 				   "qmi bdf download request remaining %i\n",
 				   remaining);
