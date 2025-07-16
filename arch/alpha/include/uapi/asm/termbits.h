@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-#ifndef _ALPHA_TERMBITS_H
-#define _ALPHA_TERMBITS_H
+#ifndef _UAPI_ALPHA_TERMBITS_H
+#define _UAPI_ALPHA_TERMBITS_H
 
 #include <asm-generic/termbits-common.h>
 
@@ -27,19 +27,6 @@ struct termios {
 /* Alpha has identical termios and termios2 */
 
 struct termios2 {
-	tcflag_t c_iflag;		/* input mode flags */
-	tcflag_t c_oflag;		/* output mode flags */
-	tcflag_t c_cflag;		/* control mode flags */
-	tcflag_t c_lflag;		/* local mode flags */
-	cc_t c_cc[NCCS];		/* control characters */
-	cc_t c_line;			/* line discipline (== c_cc[19]) */
-	speed_t c_ispeed;		/* input speed */
-	speed_t c_ospeed;		/* output speed */
-};
-
-/* Alpha has matching termios and ktermios */
-
-struct ktermios {
 	tcflag_t c_iflag;		/* input mode flags */
 	tcflag_t c_oflag;		/* output mode flags */
 	tcflag_t c_cflag;		/* control mode flags */
