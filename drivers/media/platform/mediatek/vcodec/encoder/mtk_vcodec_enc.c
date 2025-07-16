@@ -865,7 +865,7 @@ static void vb2ops_venc_buf_queue(struct vb2_buffer *vb)
 static int vb2ops_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct mtk_vcodec_enc_ctx *ctx = vb2_get_drv_priv(q);
-	struct venc_enc_param param;
+	struct venc_enc_param param = { 0 };
 	int ret;
 	int i;
 
@@ -1036,6 +1036,7 @@ static int mtk_venc_encode_header(void *priv)
 			  ctx->id, dst_buf->vb2_buf.index, bs_buf.va,
 			  (u64)bs_buf.dma_addr, bs_buf.size);
 
+	memset(&enc_result, 0, sizeof(enc_result));
 	ret = venc_if_encode(ctx,
 			VENC_START_OPT_ENCODE_SEQUENCE_HEADER,
 			NULL, &bs_buf, &enc_result);
@@ -1185,6 +1186,7 @@ static void mtk_venc_worker(struct work_struct *work)
 			  (u64)frm_buf.fb_addr[1].dma_addr, frm_buf.fb_addr[1].size,
 			  (u64)frm_buf.fb_addr[2].dma_addr, frm_buf.fb_addr[2].size);
 
+	memset(&enc_result, 0, sizeof(enc_result));
 	ret = venc_if_encode(ctx, VENC_START_OPT_ENCODE_FRAME,
 			     &frm_buf, &bs_buf, &enc_result);
 
