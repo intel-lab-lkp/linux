@@ -598,6 +598,11 @@ ext_tree_encode_commit(struct pnfs_block_layout *bl, __be32 *p,
 		if (ext_tree_layoutupdate_size(bl, *count) > buffer_size) {
 			(*count)--;
 			ret = -ENOSPC;
+			/* bail out right away if no extent was encoded */
+			if (!*count) {
+				spin_unlock(&bl->bl_ext_lock);
+				return ret;
+			}
 			break;
 		}
 
