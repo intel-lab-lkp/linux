@@ -1029,6 +1029,7 @@ static void del_from_avail_list(struct swap_info_struct *si, bool swapoff)
 	for_each_node(nid)
 		plist_del(&si->avail_lists[nid], &swap_avail_heads[nid]);
 
+	deactivate_swap_cgroup_priority(si, swapoff);
 skip:
 	spin_unlock(&swap_avail_lock);
 }
@@ -1072,6 +1073,7 @@ static void add_to_avail_list(struct swap_info_struct *si, bool swapon)
 	for_each_node(nid)
 		plist_add(&si->avail_lists[nid], &swap_avail_heads[nid]);
 
+	activate_swap_cgroup_priority(si, swapon);
 skip:
 	spin_unlock(&swap_avail_lock);
 }
@@ -1292,8 +1294,10 @@ int folio_alloc_swap(struct folio *folio, gfp_t gfp)
 	}
 
 	local_lock(&percpu_swap_cluster.lock);
-	if (!swap_alloc_fast(&entry, order))
-		swap_alloc_slow(&entry, order);
+	if (!swap_alloc_cgroup_priority(folio_memcg(folio), &entry, order)) {
+		if (!swap_alloc_fast(&entry, order))
+			swap_alloc_slow(&entry, order);
+	}
 	local_unlock(&percpu_swap_cluster.lock);
 
 	/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
@@ -2778,6 +2782,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	if (!p->bdev || !bdev_nonrot(p->bdev))
 		atomic_dec(&nr_rotate_swap);
 
+	purge_swap_cgroup_priority();
 	mutex_lock(&swapon_mutex);
 	spin_lock(&swap_lock);
 	spin_lock(&p->lock);
@@ -2895,6 +2900,8 @@ static void swap_stop(struct seq_file *swap, void *v)
 	mutex_unlock(&swapon_mutex);
 }
 
+
+#ifndef CONFIG_SWAP_CGROUP_PRIORITY
 static int swap_show(struct seq_file *swap, void *v)
 {
 	struct swap_info_struct *si = v;
@@ -2921,6 +2928,34 @@ static int swap_show(struct seq_file *swap, void *v)
 			si->prio);
 	return 0;
 }
+#else
+static int swap_show(struct seq_file *swap, void *v)
+{
+	struct swap_info_struct *si = v;
+	struct file *file;
+	int len;
+	unsigned long bytes, inuse;
+
+	if (si == SEQ_START_TOKEN) {
+		seq_puts(swap, "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\t\tId\n");
+		return 0;
+	}
+
+	bytes = K(si->pages);
+	inuse = K(swap_usage_in_pages(si));
+
+	file = si->swap_file;
+	len = seq_file_path(swap, file, " \t\n\\");
+	seq_printf(swap, "%*s%s\t%lu\t%s%lu\t%s%d\t\t\t%llu\n",
+			len < 40 ? 40 - len : 1, " ",
+			S_ISBLK(file_inode(file)->i_mode) ?
+				"partition" : "file\t",
+			bytes, bytes < 10000000 ? "\t" : "",
+			inuse, inuse < 10000000 ? "\t" : "",
+			si->prio, si->id);
+	return 0;
+}
+#endif
 
 static const struct seq_operations swaps_op = {
 	.start =	swap_start,
@@ -3462,6 +3497,13 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		inode->i_flags &= ~S_SWAPFILE;
 		goto free_swap_zswap;
 	}
+
+	error = prepare_swap_cgroup_priority(si->type);
+	if (error) {
+		inode->i_flags &= ~S_SWAPFILE;
+		goto free_swap_zswap;
+	}
+	get_swapdev_id(si);
 
 	mutex_lock(&swapon_mutex);
 	prio = -1;

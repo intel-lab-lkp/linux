@@ -243,9 +243,9 @@ bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
 	unsigned long offset;
 	int node;
 
-	/* TODO
-	 * Per-cpu swapdev cache can't be used directly as cgroup-specific
-	 * priorities may select different devices.
+	/*
+	 * TODO: Per-cpu swap cluster cache can't be used directly
+	 * as cgroup-specific priorities may select different devices.
 	 */
 	spin_lock(&swap_avail_lock);
 	node = numa_node_id();
