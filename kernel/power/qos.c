@@ -209,6 +209,120 @@ bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 	return prev_value != curr_value;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static struct pm_qos_constraints system_wakeup_latency_constraints = {
+	.list = PLIST_HEAD_INIT(system_wakeup_latency_constraints.list),
+	.target_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
+	.default_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
+	.no_constraint_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
+	.type = PM_QOS_MIN,
+};
+
+/**
+ * system_wakeup_latency_qos_limit - Current system wakeup latency QoS limit.
+ *
+ * Returns the current system wakeup latency QoS limit that may have been
+ * requested by user-space.
+ */
+s32 system_wakeup_latency_qos_limit(void)
+{
+	return pm_qos_read_value(&system_wakeup_latency_constraints);
+}
+
+static int system_wakeup_latency_qos_open(struct inode *inode,
+					  struct file *filp)
+{
+	struct pm_qos_request *req;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	req->qos = &system_wakeup_latency_constraints;
+	pm_qos_update_target(req->qos, &req->node, PM_QOS_ADD_REQ,
+			     PM_QOS_RESUME_LATENCY_NO_CONSTRAINT);
+	filp->private_data = req;
+
+	return 0;
+}
+
+static int system_wakeup_latency_qos_release(struct inode *inode,
+					     struct file *filp)
+{
+	struct pm_qos_request *req = filp->private_data;
+
+	filp->private_data = NULL;
+	pm_qos_update_target(req->qos, &req->node, PM_QOS_REMOVE_REQ,
+			     PM_QOS_RESUME_LATENCY_NO_CONSTRAINT);
+	kfree(req);
+
+	return 0;
+}
+
+static ssize_t system_wakeup_latency_qos_read(struct file *filp,
+					      char __user *buf,
+					      size_t count,
+					      loff_t *f_pos)
+{
+	s32 value = pm_qos_read_value(&system_wakeup_latency_constraints);
+
+	return simple_read_from_buffer(buf, count, f_pos, &value, sizeof(s32));
+}
+
+static ssize_t system_wakeup_latency_qos_write(struct file *filp,
+					       const char __user *buf,
+					       size_t count, loff_t *f_pos)
+{
+	struct pm_qos_request *req = filp->private_data;
+	s32 value;
+
+	if (count == sizeof(s32)) {
+		if (copy_from_user(&value, buf, sizeof(s32)))
+			return -EFAULT;
+	} else {
+		int ret;
+
+		ret = kstrtos32_from_user(buf, count, 16, &value);
+		if (ret)
+			return ret;
+	}
+
+	if (value < 0)
+		return -EINVAL;
+
+	pm_qos_update_target(req->qos, &req->node, PM_QOS_UPDATE_REQ, value);
+
+	return count;
+}
+
+static const struct file_operations system_wakeup_latency_qos_fops = {
+	.open = system_wakeup_latency_qos_open,
+	.release = system_wakeup_latency_qos_release,
+	.read = system_wakeup_latency_qos_read,
+	.write = system_wakeup_latency_qos_write,
+	.llseek = noop_llseek,
+};
+
+static struct miscdevice system_wakeup_latency_qos_miscdev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "system_wakeup_latency",
+	.fops = &system_wakeup_latency_qos_fops,
+};
+
+static int __init system_wakeup_latency_qos_init(void)
+{
+	int ret;
+
+	ret = misc_register(&system_wakeup_latency_qos_miscdev);
+	if (ret < 0)
+		pr_err("%s: %s setup failed\n", __func__,
+		       system_wakeup_latency_qos_miscdev.name);
+
+	return ret;
+}
+late_initcall(system_wakeup_latency_qos_init);
+#endif /* CONFIG_PM_SLEEP */
+
 #ifdef CONFIG_CPU_IDLE
 /* Definitions related to the CPU latency QoS. */
 

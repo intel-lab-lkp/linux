@@ -143,6 +143,15 @@ bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 			 struct pm_qos_flags_request *req,
 			 enum pm_qos_req_action action, s32 val);
 
+#ifdef CONFIG_PM_SLEEP
+s32 system_wakeup_latency_qos_limit(void);
+#else
+static inline s32 system_wakeup_latency_qos_limit(void)
+{
+	return PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
+}
+#endif
+
 #ifdef CONFIG_CPU_IDLE
 s32 cpu_latency_qos_limit(void);
 bool cpu_latency_qos_request_active(struct pm_qos_request *req);
