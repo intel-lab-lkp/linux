@@ -1529,80 +1529,89 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	struct drm_i915_gem_relocation_entry __user *urelocs =
 		u64_to_user_ptr(entry->relocs_ptr);
 	unsigned long remain = entry->relocation_count;
+	int ret = 0;
 
-	if (unlikely(remain > N_RELOC(INT_MAX)))
-		return -EINVAL;
+	if (unlikely(remain > N_RELOC(INT_MAX))) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	/*
 	 * We must check that the entire relocation array is safe
 	 * to read. However, if the array is not writable the user loses
 	 * the updated relocation values.
 	 */
-	if (unlikely(!access_ok(urelocs, remain * sizeof(*urelocs))))
-		return -EFAULT;
+	if (unlikely(!access_ok(urelocs, remain * sizeof(*urelocs)))) {
+		ret = -EFAULT;
+		goto out;
+	}
 
-	do {
-		struct drm_i915_gem_relocation_entry *r = stack;
+	while (remain > 0) {
 		unsigned int count =
 			min_t(unsigned long, remain, ARRAY_SIZE(stack));
 		unsigned int copied;
-
 		/*
 		 * This is the fast path and we cannot handle a pagefault
-		 * whilst holding the struct mutex lest the user pass in the
-		 * relocations contained within a mmaped bo. For in such a case
-		 * we, the page fault handler would call i915_gem_fault() and
-		 * we would try to acquire the struct mutex again. Obviously
-		 * this is bad and so lockdep complains vehemently.
+		 * whilst holding the struct mutex lest the user pass in
+		 * the relocations contained within a mmaped bo. For in
+		 * such a case we, the page fault handler would call
+		 * i915_gem_fault() and we would try to acquire the
+		 * struct mutex again. Obviously this is bad and so
+		 * lockdep complains vehemently.
 		 */
 		pagefault_disable();
-		copied = __copy_from_user_inatomic(r, urelocs, count * sizeof(r[0]));
+		copied = __copy_from_user_inatomic(stack, urelocs,
+						   count * sizeof(stack[0]));
 		pagefault_enable();
+
 		if (unlikely(copied)) {
-			remain = -EFAULT;
+			ret = -EFAULT;
 			goto out;
 		}
 
-		remain -= count;
-		do {
+		for (unsigned int i = 0; i < count; ++i) {
+			struct drm_i915_gem_relocation_entry *r =
+				&stack[i];
 			u64 offset = eb_relocate_entry(eb, ev, r);
 
-			if (likely(offset == 0)) {
-			} else if ((s64)offset < 0) {
-				remain = (int)offset;
+			if (likely(offset == 0))
+				continue;
+			if (unlikely((s64)offset < 0)) {
+				ret = (int)offset;
 				goto out;
-			} else {
-				/*
-				 * Note that reporting an error now
-				 * leaves everything in an inconsistent
-				 * state as we have *already* changed
-				 * the relocation value inside the
-				 * object. As we have not changed the
-				 * reloc.presumed_offset or will not
-				 * change the execobject.offset, on the
-				 * call we may not rewrite the value
-				 * inside the object, leaving it
-				 * dangling and causing a GPU hang. Unless
-				 * userspace dynamically rebuilds the
-				 * relocations on each execbuf rather than
-				 * presume a static tree.
-				 *
-				 * We did previously check if the relocations
-				 * were writable (access_ok), an error now
-				 * would be a strange race with mprotect,
-				 * having already demonstrated that we
-				 * can read from this userspace address.
-				 */
-				offset = gen8_canonical_addr(offset & ~UPDATE);
-				__put_user(offset,
-					   &urelocs[r - stack].presumed_offset);
 			}
-		} while (r++, --count);
-		urelocs += ARRAY_SIZE(stack);
-	} while (remain);
+			/*
+			 * Note that reporting an error now
+			 * leaves everything in an inconsistent
+			 * state as we have *already* changed
+			 * the relocation value inside the
+			 * object. As we have not changed the
+			 * reloc.presumed_offset or will not
+			 * change the execobject.offset, on the
+			 * call we may not rewrite the value
+			 * inside the object, leaving it
+			 * dangling and causing a GPU hang. Unless
+			 * userspace dynamically rebuilds the
+			 * relocations on each execbuf rather than
+			 * presume a static tree.
+			 *
+			 * We did previously check if the relocations
+			 * were writable (access_ok), an error now
+			 * would be a strange race with mprotect,
+			 * having already demonstrated that we
+			 * can read from this userspace address.
+			 */
+			offset = gen8_canonical_addr(offset &  ~UPDATE);
+			__put_user(offset, &urelocs[i].presumed_offset);
+		}
+
+		remain -= count;
+		urelocs += count;
+	}
+
 out:
 	reloc_cache_reset(&eb->reloc_cache, eb);
-	return remain;
+	return ret;
 }
 
 static int
