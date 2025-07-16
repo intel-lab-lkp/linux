@@ -16,6 +16,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/clk/clk-conf.h>
 #include <linux/compiler_attributes.h>
 #include <linux/compiler_types.h>
 #include <linux/dma-mapping.h>
@@ -638,6 +639,14 @@ pvr_device_init(struct pvr_device *pvr_dev)
 
 	/* Explicitly power the GPU so we can access control registers before the FW is booted. */
 	err = pm_runtime_resume_and_get(dev);
+	if (err)
+		return err;
+
+	/* Set any 'assigned-clocks' properties again. This is a workaround for
+	 * the clock handling on k3 platforms. There, one cannot set the clock
+	 * frequency until there is at least one (enabled) user if it.
+	 */
+	err = of_clk_set_defaults(drm_dev->dev->of_node, true);
 	if (err)
 		return err;
 
