@@ -69,6 +69,8 @@
 #include <net/ip.h>
 #include "slab.h"
 #include "memcontrol-v1.h"
+#include "swap.h"
+#include "swap_cgroup_priority.h"
 
 #include <linux/uaccess.h>
 
@@ -3700,6 +3702,9 @@ static void mem_cgroup_free(struct mem_cgroup *memcg)
 {
 	lru_gen_exit_memcg(memcg);
 	memcg_wb_domain_exit(memcg);
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	delete_swap_cgroup_priority(memcg);
+#endif
 	__mem_cgroup_free(memcg);
 }
 
@@ -3793,6 +3798,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 
 	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
 	memcg1_soft_limit_reset(memcg);
+
 #ifdef CONFIG_ZSWAP
 	memcg->zswap_max = PAGE_COUNTER_MAX;
 	WRITE_ONCE(memcg->zswap_writeback, true);
@@ -3800,7 +3806,6 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 	if (parent) {
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
-
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
 #ifdef CONFIG_MEMCG_V1
@@ -5401,6 +5406,82 @@ static int swap_events_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+static ssize_t swap_cgroup_priority_write(struct kernfs_open_file *of,
+					  char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	u64 id;
+	int prio;
+	int ret;
+	char first_token[32];
+	char second_token[32];
+	char dummy[2];
+	char *stripped_buf;
+	int num_parsed;
+
+	stripped_buf = strstrip(buf);
+	num_parsed = sscanf(stripped_buf, "%31s %31s %1s", first_token,
+			    second_token, dummy);
+	if (num_parsed == 2) {
+		if (strcmp(first_token, "default") == 0) {
+			if (strcmp(second_token, "none") == 0)
+				ret = apply_swap_cgroup_priority(
+					memcg, DEFAULT_ID, SWAP_PRIORITY_GLOBAL);
+			else if (strcmp(second_token, "disabled") == 0)
+				ret = apply_swap_cgroup_priority(
+					memcg, DEFAULT_ID, SWAP_PRIORITY_DISABLE);
+			else
+				ret = -EINVAL;
+		} else {
+			ret = kstrtoull(first_token, 10, &id);
+			if (ret)
+				return -EINVAL;
+
+			if (strcmp(second_token, "none") == 0) {
+				ret = apply_swap_cgroup_priority(
+					memcg, id, SWAP_PRIORITY_GLOBAL);
+			} else if (strcmp(second_token, "disabled") == 0) {
+				ret = apply_swap_cgroup_priority(
+					memcg, id, SWAP_PRIORITY_DISABLE);
+			} else {
+				ret = kstrtoint(second_token, 10, &prio);
+				if (ret)
+					return -EINVAL;
+				if (prio == -1)
+					return -EINVAL;
+				else if (prio > SHRT_MAX || prio < SHRT_MIN)
+					return -EINVAL;
+				ret = apply_swap_cgroup_priority(memcg, id,
+								 prio);
+			}
+		}
+	} else if (num_parsed == 1) {
+		if (strcmp(first_token, "none") == 0)
+			ret = apply_swap_cgroup_priority(
+				memcg, id, SWAP_PRIORITY_GLOBAL);
+		else if (strcmp(first_token, "disabled") == 0)
+			ret = apply_swap_cgroup_priority(
+				memcg, id, SWAP_PRIORITY_DISABLE);
+		else
+			ret = -EINVAL;
+	} else {
+		return -EINVAL;
+	}
+
+	if (ret)
+		return ret;
+
+	return nbytes;
+}
+
+static int swap_cgroup_priority_show(struct seq_file *m, void *v)
+{
+	show_swap_cgroup_priority(m);
+	return 0;
+}
+#endif
+
 static struct cftype swap_files[] = {
 	{
 		.name = "swap.current",
@@ -5433,6 +5514,14 @@ static struct cftype swap_files[] = {
 		.file_offset = offsetof(struct mem_cgroup, swap_events_file),
 		.seq_show = swap_events_show,
 	},
+#ifdef CONFIG_SWAP_CGROUP_PRIORITY
+	{
+		.name = "swap.priority",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = swap_cgroup_priority_show,
+		.write = swap_cgroup_priority_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 

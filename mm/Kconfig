@@ -190,6 +190,20 @@ config ZSMALLOC_CHAIN_SIZE
 
 	  For more information, see zsmalloc documentation.
 
+config SWAP_CGROUP_PRIORITY
+	bool "Per cgroup swap priority (EXPERIMENTAL)"
+	depends on SWAP && CGROUPS
+	default n
+	help
+          Enable per-cgroup swap device priority control.
+
+          This option allows configuring swap device priorities on a
+          per-cgroup basis, and makes it possible to exclude specific swap
+          devices from use by a cgroup.
+
+          If no configuration is set for a cgroup, it falls back to the
+          system-wide swap device priorities defined at swapon time.
+
 menu "Slab allocator options"
 
 config SLUB

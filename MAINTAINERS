@@ -6169,6 +6169,8 @@ F:	mm/memcontrol.c
 F:	mm/memcontrol-v1.c
 F:	mm/memcontrol-v1.h
 F:	mm/swap_cgroup.c
+F:	mm/swap_cgroup_priority.c
+F:	mm/swap_cgroup_priority.h
 F:	samples/cgroup/*
 F:	tools/testing/selftests/cgroup/memcg_protection.m
 F:	tools/testing/selftests/cgroup/test_hugetlb_memcg.c

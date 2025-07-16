@@ -48,6 +48,7 @@
 #include <linux/swap_cgroup.h>
 #include "internal.h"
 #include "swap.h"
+#include "swap_cgroup_priority.h"
 
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
@@ -62,8 +63,8 @@ static struct swap_cluster_info *lock_cluster(struct swap_info_struct *si,
 					      unsigned long offset);
 static inline void unlock_cluster(struct swap_cluster_info *ci);
 
-static DEFINE_SPINLOCK(swap_lock);
-static unsigned int nr_swapfiles;
+DEFINE_SPINLOCK(swap_lock);
+unsigned int nr_swapfiles;
 atomic_long_t nr_swap_pages;
 /*
  * Some modules use swappable objects and may try to swap them out under
@@ -73,7 +74,7 @@ atomic_long_t nr_swap_pages;
 EXPORT_SYMBOL_GPL(nr_swap_pages);
 /* protected with swap_lock. reading in vm_swap_full() doesn't need lock */
 long total_swap_pages;
-static int least_priority = -1;
+int least_priority = -1;
 unsigned long swapfile_maximum_size;
 #ifdef CONFIG_MIGRATION
 bool swap_migration_ad_supported;
@@ -103,9 +104,9 @@ static PLIST_HEAD(swap_active_head);
  * before any swap_info_struct->lock.
  */
 static struct plist_head *swap_avail_heads;
-static DEFINE_SPINLOCK(swap_avail_lock);
+DEFINE_SPINLOCK(swap_avail_lock);
 
-static struct swap_info_struct *swap_info[MAX_SWAPFILES];
+struct swap_info_struct *swap_info[MAX_SWAPFILES];
 
 static DEFINE_MUTEX(swapon_mutex);
 
@@ -878,7 +879,7 @@ static void swap_reclaim_work(struct work_struct *work)
  * Try to allocate swap entries with specified order and try set a new
  * cluster for current CPU too.
  */
-static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
+unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
 					      unsigned char usage)
 {
 	struct swap_cluster_info *ci;
@@ -1156,7 +1157,7 @@ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
 	swap_usage_sub(si, nr_entries);
 }
 
-static bool get_swap_device_info(struct swap_info_struct *si)
+bool get_swap_device_info(struct swap_info_struct *si)
 {
 	if (!percpu_ref_tryget_live(&si->users))
 		return false;
@@ -2536,7 +2537,7 @@ static int setup_swap_extents(struct swap_info_struct *sis, sector_t *span)
 	return generic_swapfile_activate(sis, swap_file, span);
 }
 
-static int swap_node(struct swap_info_struct *si)
+int swap_node(struct swap_info_struct *si)
 {
 	struct block_device *bdev;
 

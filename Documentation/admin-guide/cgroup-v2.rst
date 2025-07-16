@@ -1839,6 +1839,68 @@ The following nested keys are defined.
 	higher than the limit for an extended period of time.  This
 	reduces the impact on the workload and memory management.
 
+  memory.swap.priority
+    A read-write flat-keyed file which exists on non-root cgroups.
+    This interface allows you to set per-swap-device priorities for the current
+    cgroup and to define how they differ from the global swap system.
+
+    To assign priorities or define specific behaviors for swap devices
+    in the current cgroup, write one or more lines in the following
+    formats:
+
+     - <swap_device_id> <priority>
+     - <swap_device_id> disabled
+     - <swap_device_id> none
+     - default none
+     - default disabled
+
+    Each <swap_device_id> refers to a unique swap device registered
+    in the system. You can check the ID, device path, and current
+    priority of active swap devices through the `/proc/swaps` file.
+    This provides a clear mapping between swap devices and the IDs
+    used in this interface.
+
+    The 'default' keyword sets the fallback priority behavior rule for
+    this cgroup. If no specific entry matches a swap device, this default
+    applies.
+
+    * 'default none': This is the default if no configuration
+      is explicitly written. Swap devices follow the system-wide
+      swap priorities.
+
+    * 'default disabled': All swap devices are excluded from this cgroup’s
+      swap priority list and will not be used by this cgroup.
+
+    The priority semantics are consistent with the global swap system:
+
+      - Higher numerical values indicate higher preference.
+      - See Documentation/admin-guide/mm/swap_numa.rst for details on
+        swap NUMA autobinding and negative priority rules.
+
+    The handling of negative priorities in this cgroup interface
+    has specific behaviors for assignment and restoration:
+
+    * Negative Priority Assignment
+      This interface allows you to explicitly override priorities with negative
+      values. When you do so, the total number of negative slots and their order
+      may shift depending on how the new value compares to existing ones:
+
+      - If you override an existing priority (whether originally positive or negative)
+        with a smaller (more negative) number, it may push other negative priorities
+        upward (toward zero).
+
+      - If you override an existing negative priority with a larger
+        (less negative) number, it may push other negative priorities
+        downward (more negative).
+
+    * Negative Priority Restoration with 'none'
+      When restoring a device’s priority to its global value using 'none',
+      if the original priority was negative, it might not revert to the exact
+      same global negative value if the total number of negative priorities
+      in the cgroup has decreased. In such cases, you may need to adjust
+      other negative priorities to restore the same ordering as the global
+      swap configuration.
+
   memory.zswap.current
 	A read-only single value file which exists on non-root
 	cgroups.
