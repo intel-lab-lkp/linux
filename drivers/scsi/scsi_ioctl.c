@@ -894,7 +894,7 @@ int scsi_ioctl(struct scsi_device *sdev, bool open_for_write, int cmd,
 	case SCSI_IOCTL_START_UNIT:
 	case SCSI_IOCTL_STOP_UNIT:
 		printk(KERN_WARNING "program %s is using a deprecated SCSI "
-		       "ioctl, please convert it to SG_IO\n", current->comm);
+		       "ioctl, please convert it to SG_IO\n", current->comm_str);
 		break;
 	default:
 		break;

@@ -406,7 +406,7 @@ static int dump_task(struct task_struct *p, void *arg)
 		get_mm_counter(task->mm, MM_ANONPAGES), get_mm_counter(task->mm, MM_FILEPAGES),
 		get_mm_counter(task->mm, MM_SHMEMPAGES), mm_pgtables_bytes(task->mm),
 		get_mm_counter(task->mm, MM_SWAPENTS),
-		task->signal->oom_score_adj, task->comm);
+		task->signal->oom_score_adj, task->comm_str);
 	task_unlock(task);
 
 	return 0;
@@ -452,14 +452,14 @@ static void dump_oom_victim(struct oom_control *oc, struct task_struct *victim)
 			nodemask_pr_args(oc->nodemask));
 	cpuset_print_current_mems_allowed();
 	mem_cgroup_print_oom_context(oc->memcg, victim);
-	pr_cont(",task=%s,pid=%d,uid=%d\n", victim->comm, victim->pid,
+	pr_cont(",task=%s,pid=%d,uid=%d\n", victim->comm_str, victim->pid,
 		from_kuid(&init_user_ns, task_uid(victim)));
 }
 
 static void dump_header(struct oom_control *oc)
 {
 	pr_warn("%s invoked oom-killer: gfp_mask=%#x(%pGg), order=%d, oom_score_adj=%hd\n",
-		current->comm, oc->gfp_mask, &oc->gfp_mask, oc->order,
+		current->comm_str, oc->gfp_mask, &oc->gfp_mask, oc->order,
 			current->signal->oom_score_adj);
 	if (!IS_ENABLED(CONFIG_COMPACTION) && oc->order)
 		pr_warn("COMPACTION is disabled!!!\n");
@@ -596,7 +596,7 @@ static bool oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 		goto out_finish;
 
 	pr_info("oom_reaper: reaped process %d (%s), now anon-rss:%lukB, file-rss:%lukB, shmem-rss:%lukB\n",
-			task_pid_nr(tsk), tsk->comm,
+			task_pid_nr(tsk), tsk->comm_str,
 			K(get_mm_counter(mm, MM_ANONPAGES)),
 			K(get_mm_counter(mm, MM_FILEPAGES)),
 			K(get_mm_counter(mm, MM_SHMEMPAGES)));
@@ -623,7 +623,7 @@ static void oom_reap_task(struct task_struct *tsk)
 		goto done;
 
 	pr_info("oom_reaper: unable to reap pid:%d (%s)\n",
-		task_pid_nr(tsk), tsk->comm);
+		task_pid_nr(tsk), tsk->comm_str);
 	sched_show_task(tsk);
 	debug_show_all_locks();
 
@@ -927,7 +927,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	p = find_lock_task_mm(victim);
 	if (!p) {
 		pr_info("%s: OOM victim %d (%s) is already exiting. Skip killing the task\n",
-			message, task_pid_nr(victim), victim->comm);
+			message, task_pid_nr(victim), victim->comm_str);
 		put_task_struct(victim);
 		return;
 	} else if (victim != p) {
@@ -952,7 +952,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	do_send_sig_info(SIGKILL, SEND_SIG_PRIV, victim, PIDTYPE_TGID);
 	mark_oom_victim(victim);
 	pr_err("%s: Killed process %d (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB, shmem-rss:%lukB, UID:%u pgtables:%lukB oom_score_adj:%hd\n",
-		message, task_pid_nr(victim), victim->comm, K(mm->total_vm),
+		message, task_pid_nr(victim), victim->comm_str, K(mm->total_vm),
 		K(get_mm_counter(mm, MM_ANONPAGES)),
 		K(get_mm_counter(mm, MM_FILEPAGES)),
 		K(get_mm_counter(mm, MM_SHMEMPAGES)),
@@ -979,8 +979,8 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 			can_oom_reap = false;
 			set_bit(MMF_OOM_SKIP, &mm->flags);
 			pr_info("oom killer %d (%s) has mm pinned by %d (%s)\n",
-					task_pid_nr(victim), victim->comm,
-					task_pid_nr(p), p->comm);
+					task_pid_nr(victim), victim->comm_str,
+					task_pid_nr(p), p->comm_str);
 			continue;
 		}
 		/*

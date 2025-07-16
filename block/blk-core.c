@@ -562,7 +562,7 @@ static inline int bio_check_eod(struct bio *bio)
 	     bio->bi_iter.bi_sector > maxsector - nr_sectors)) {
 		pr_info_ratelimited("%s: attempt to access beyond end of device\n"
 				    "%pg: rw=%d, sector=%llu, nr_sectors = %u limit=%llu\n",
-				    current->comm, bio->bi_bdev, bio->bi_opf,
+				    current->comm_str, bio->bi_bdev, bio->bi_opf,
 				    bio->bi_iter.bi_sector, nr_sectors, maxsector);
 		return -EIO;
 	}

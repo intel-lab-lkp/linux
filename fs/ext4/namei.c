@@ -147,7 +147,7 @@ static struct buffer_head *__ext4_read_dirblock(struct inode *inode,
 			       "inode #%lu: lblock %lu: comm %s: "
 			       "error %ld reading directory block",
 			       inode->i_ino, (unsigned long)block,
-			       current->comm, PTR_ERR(bh));
+			       current->comm_str, PTR_ERR(bh));
 
 		return bh;
 	}

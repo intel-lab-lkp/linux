@@ -363,7 +363,7 @@ SYSCALL_DEFINE3(setitimer, int, which, struct __kernel_old_itimerval __user *, v
 		memset(&set_buffer, 0, sizeof(set_buffer));
 		printk_once(KERN_WARNING "%s calls setitimer() with new_value NULL pointer."
 			    " Misfeature support will be removed\n",
-			    current->comm);
+			    current->comm_str);
 	}
 
 	error = do_setitimer(which, &set_buffer, ovalue ? &get_buffer : NULL);
@@ -410,7 +410,7 @@ COMPAT_SYSCALL_DEFINE3(setitimer, int, which,
 		memset(&set_buffer, 0, sizeof(set_buffer));
 		printk_once(KERN_WARNING "%s calls setitimer() with new_value NULL pointer."
 			    " Misfeature support will be removed\n",
-			    current->comm);
+			    current->comm_str);
 	}
 
 	error = do_setitimer(which, &set_buffer, ovalue ? &get_buffer : NULL);

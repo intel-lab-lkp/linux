@@ -812,7 +812,7 @@ void __ext4_error(struct super_block *sb, const char *function,
 		vaf.va = &args;
 		printk(KERN_CRIT
 		       "EXT4-fs error (device %s): %s:%d: comm %s: %pV\n",
-		       sb->s_id, function, line, current->comm, &vaf);
+		       sb->s_id, function, line, current->comm_str, &vaf);
 		va_end(args);
 	}
 	fsnotify_sb_error(sb, NULL, error ? error : EFSCORRUPTED);
@@ -839,12 +839,12 @@ void __ext4_error_inode(struct inode *inode, const char *function,
 			printk(KERN_CRIT "EXT4-fs error (device %s): %s:%d: "
 			       "inode #%lu: block %llu: comm %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
-			       block, current->comm, &vaf);
+			       block, current->comm_str, &vaf);
 		else
 			printk(KERN_CRIT "EXT4-fs error (device %s): %s:%d: "
 			       "inode #%lu: comm %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
-			       current->comm, &vaf);
+			       current->comm_str, &vaf);
 		va_end(args);
 	}
 	fsnotify_sb_error(inode->i_sb, inode, error ? error : EFSCORRUPTED);
@@ -878,13 +878,13 @@ void __ext4_error_file(struct file *file, const char *function,
 			       "EXT4-fs error (device %s): %s:%d: inode #%lu: "
 			       "block %llu: comm %s: path %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
-			       block, current->comm, path, &vaf);
+			       block, current->comm_str, path, &vaf);
 		else
 			printk(KERN_CRIT
 			       "EXT4-fs error (device %s): %s:%d: inode #%lu: "
 			       "comm %s: path %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
-			       current->comm, path, &vaf);
+			       current->comm_str, path, &vaf);
 		va_end(args);
 	}
 	fsnotify_sb_error(inode->i_sb, inode, EFSCORRUPTED);
@@ -1022,7 +1022,7 @@ void __ext4_warning_inode(const struct inode *inode, const char *function,
 	vaf.va = &args;
 	printk(KERN_WARNING "EXT4-fs warning (device %s): %s:%d: "
 	       "inode #%lu: comm %s: %pV\n", inode->i_sb->s_id,
-	       function, line, inode->i_ino, current->comm, &vaf);
+	       function, line, inode->i_ino, current->comm_str, &vaf);
 	va_end(args);
 }
 

@@ -570,7 +570,7 @@ static int iomap_dio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 		 * DELALLOC block that the page-mkwrite allocated.
 		 */
 		pr_warn_ratelimited("Direct I/O collision with buffered writes! File: %pD4 Comm: %.20s\n",
-				    dio->iocb->ki_filp, current->comm);
+				    dio->iocb->ki_filp, current->comm_str);
 		return -EIO;
 	default:
 		WARN_ON_ONCE(1);

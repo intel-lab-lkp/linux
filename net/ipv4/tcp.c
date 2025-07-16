@@ -2761,7 +2761,7 @@ static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
 		if ((flags & MSG_PEEK) &&
 		    (peek_seq - peek_offset - copied - urg_hole != tp->copied_seq)) {
 			net_dbg_ratelimited("TCP(%s:%d): Application bug, race in MSG_PEEK\n",
-					    current->comm,
+					    current->comm_str,
 					    task_pid_nr(current));
 			peek_seq = tp->copied_seq + peek_offset;
 		}

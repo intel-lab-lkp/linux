@@ -1101,7 +1101,7 @@ int cgroup1_reconfigure(struct fs_context *fc)
 
 	if (ctx->subsys_mask != root->subsys_mask || ctx->release_agent)
 		pr_warn("option changes via remount are deprecated (pid=%d comm=%s)\n",
-			task_tgid_nr(current), current->comm);
+			task_tgid_nr(current), current->comm_str);
 
 	added_mask = ctx->subsys_mask & ~root->subsys_mask;
 	removed_mask = root->subsys_mask & ~ctx->subsys_mask;

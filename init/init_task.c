@@ -121,7 +121,7 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.group_leader	= &init_task,
 	RCU_POINTER_INITIALIZER(real_cred, &init_cred),
 	RCU_POINTER_INITIALIZER(cred, &init_cred),
-	.comm		= INIT_TASK_COMM,
+	.comm_str	= INIT_TASK_COMM,
 	.thread		= INIT_THREAD,
 	.fs		= &init_fs,
 	.files		= &init_files,

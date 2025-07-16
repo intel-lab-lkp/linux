@@ -257,7 +257,7 @@ static inline void print_dropped_signal(int sig)
 		return;
 
 	pr_info("%s/%d: reached RLIMIT_SIGPENDING, dropped signal %d\n",
-				current->comm, current->pid, sig);
+				current->comm_str, current->pid, sig);
 }
 
 /**
@@ -1224,11 +1224,11 @@ static void print_fatal_signal(int signr)
 	exe_file = get_task_exe_file(current);
 	if (exe_file) {
 		pr_info("%pD: %s: potentially unexpected fatal signal %d.\n",
-			exe_file, current->comm, signr);
+			exe_file, current->comm_str, signr);
 		fput(exe_file);
 	} else {
 		pr_info("%s: potentially unexpected fatal signal %d.\n",
-			current->comm, signr);
+			current->comm_str, signr);
 	}
 
 #if defined(__i386__) && !defined(__arch_um__)

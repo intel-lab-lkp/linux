@@ -329,7 +329,7 @@ static int start_this_handle(journal_t *journal, handle_t *handle,
 	    rsv_blocks + blocks > jbd2_max_user_trans_buffers(journal)) {
 		printk(KERN_ERR "JBD2: %s wants too many credits "
 		       "credits:%d rsv_credits:%d max:%d\n",
-		       current->comm, blocks, rsv_blocks,
+		       current->comm_str, blocks, rsv_blocks,
 		       jbd2_max_user_trans_buffers(journal));
 		WARN_ON(1);
 		return -ENOSPC;

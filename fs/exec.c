@@ -1082,11 +1082,11 @@ static int unshare_sighand(struct task_struct *me)
  */
 void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 {
-	size_t len = min(strlen(buf), sizeof(tsk->comm) - 1);
+	size_t len = min(strlen(buf), sizeof(tsk->comm_str) - 1);
 
 	trace_task_rename(tsk, buf);
-	memcpy(tsk->comm, buf, len);
-	memset(&tsk->comm[len], 0, sizeof(tsk->comm) - len);
+	memcpy(tsk->comm_str, buf, len);
+	memset(&tsk->comm_str[len], 0, sizeof(tsk->comm_str) - len);
 	perf_event_comm(tsk, exec);
 }
 
@@ -1854,7 +1854,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		bprm->argc = 1;
 
 		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
-			     current->comm, bprm->filename);
+			     current->comm_str, bprm->filename);
 	}
 
 	retval = bprm_execve(bprm);

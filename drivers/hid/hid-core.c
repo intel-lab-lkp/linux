@@ -1405,7 +1405,7 @@ u32 hid_field_extract(const struct hid_device *hid, u8 *report,
 {
 	if (n > 32) {
 		hid_warn_once(hid, "%s() called with n (%d) > 32! (%s)\n",
-			      __func__, n, current->comm);
+			      __func__, n, current->comm_str);
 		n = 32;
 	}
 
@@ -1451,7 +1451,7 @@ static void implement(const struct hid_device *hid, u8 *report,
 {
 	if (unlikely(n > 32)) {
 		hid_warn(hid, "%s() called with n (%d) > 32! (%s)\n",
-			 __func__, n, current->comm);
+			 __func__, n, current->comm_str);
 		n = 32;
 	} else if (n < 32) {
 		u32 m = (1U << n) - 1;
@@ -1459,7 +1459,7 @@ static void implement(const struct hid_device *hid, u8 *report,
 		if (unlikely(value > m)) {
 			hid_warn(hid,
 				 "%s() called with too large value %d (n: %d)! (%s)\n",
-				 __func__, value, n, current->comm);
+				 __func__, value, n, current->comm_str);
 			value &= m;
 		}
 	}

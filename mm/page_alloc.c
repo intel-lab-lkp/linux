@@ -643,7 +643,7 @@ static void bad_page(struct page *page, const char *reason)
 		resume = jiffies + 60 * HZ;
 
 	pr_alert("BUG: Bad page state in process %s  pfn:%05lx\n",
-		current->comm, page_to_pfn(page));
+		current->comm_str, page_to_pfn(page));
 	dump_page(page, reason);
 
 	print_modules();
@@ -3923,7 +3923,7 @@ void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 	vaf.fmt = fmt;
 	vaf.va = &args;
 	pr_warn("%s: %pV, mode:%#x(%pGg), nodemask=%*pbl",
-			current->comm, &vaf, gfp_mask, &gfp_mask,
+			current->comm_str, &vaf, gfp_mask, &gfp_mask,
 			nodemask_pr_args(nodemask));
 	va_end(args);
 

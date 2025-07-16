@@ -274,7 +274,7 @@ void audit_log_lsm_data(struct audit_buffer *ab,
 		if (tsk) {
 			pid_t pid = task_tgid_nr(tsk);
 			if (pid) {
-				char tskcomm[sizeof(tsk->comm)];
+				char tskcomm[TASK_COMM_LEN];
 				audit_log_format(ab, " opid=%d ocomm=", pid);
 				audit_log_untrustedstring(ab,
 				    get_task_comm(tskcomm, tsk));
@@ -414,7 +414,7 @@ void audit_log_lsm_data(struct audit_buffer *ab,
 static void dump_common_audit_data(struct audit_buffer *ab,
 				   const struct common_audit_data *a)
 {
-	char comm[sizeof(current->comm)];
+	char comm[TASK_COMM_LEN];
 
 	audit_log_format(ab, " pid=%d comm=", task_tgid_nr(current));
 	audit_log_untrustedstring(ab, get_task_comm(comm, current));

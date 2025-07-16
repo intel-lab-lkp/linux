@@ -777,7 +777,7 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 
 	/* Ratelimit when not explicitly enabled. */
 	if (!(devkmsg_log & DEVKMSG_LOG_MASK_ON)) {
-		if (!___ratelimit(&user->rs, current->comm))
+		if (!___ratelimit(&user->rs, current->comm_str))
 			return ret;
 	}
 

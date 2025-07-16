@@ -200,7 +200,7 @@ static int cn_print_exe_file(struct core_name *cn, bool name_only)
 
 	exe_file = get_mm_exe_file(current->mm);
 	if (!exe_file)
-		return cn_esc_printf(cn, "%s (path unknown)", current->comm);
+		return cn_esc_printf(cn, "%s (path unknown)", current->comm_str);
 
 	pathbuf = kmalloc(PATH_MAX, GFP_KERNEL);
 	if (!pathbuf) {
@@ -417,7 +417,7 @@ static bool coredump_parse(struct core_name *cn, struct coredump_params *cprm,
 				break;
 			/* executable, could be changed by prctl PR_SET_NAME etc */
 			case 'e':
-				err = cn_esc_printf(cn, "%s", current->comm);
+				err = cn_esc_printf(cn, "%s", current->comm_str);
 				break;
 			/* file name of executable */
 			case 'f':

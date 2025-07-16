@@ -39,7 +39,7 @@ __setup("no_file_caps", file_caps_disable);
 static void warn_legacy_capability_use(void)
 {
 	pr_info_once("warning: `%s' uses 32-bit capabilities (legacy support in use)\n",
-		     current->comm);
+		     current->comm_str);
 }
 
 /*
@@ -61,7 +61,7 @@ static void warn_legacy_capability_use(void)
 static void warn_deprecated_v2(void)
 {
 	pr_info_once("warning: `%s' uses deprecated v2 capabilities in a way that may be insecure\n",
-		     current->comm);
+		     current->comm_str);
 }
 
 /*

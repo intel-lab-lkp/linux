@@ -1537,7 +1537,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 */
 	if (family == PF_INET && type == SOCK_PACKET) {
 		pr_info_once("%s uses obsolete (PF_INET,SOCK_PACKET)\n",
-			     current->comm);
+			     current->comm_str);
 		family = PF_PACKET;
 	}
 

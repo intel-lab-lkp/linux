@@ -778,7 +778,7 @@ static int vfio_pin_page_external(struct vfio_dma *dma, unsigned long vaddr,
 			if (ret == -ENOMEM)
 				pr_warn("%s: Task %s (%d) RLIMIT_MEMLOCK "
 					"(%ld) exceeded\n", __func__,
-					dma->task->comm, task_pid_nr(dma->task),
+					dma->task->comm_str, task_pid_nr(dma->task),
 					task_rlimit(dma->task, RLIMIT_MEMLOCK));
 		}
 	}

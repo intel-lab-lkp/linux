@@ -1540,7 +1540,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 
 		if (user_shm_lock(size, ucounts)) {
 			pr_warn_once("%s (%d): Using mlock ulimits for SHM_HUGETLB is obsolete\n",
-				current->comm, current->pid);
+				current->comm_str, current->pid);
 			user_shm_unlock(size, ucounts);
 		}
 		return ERR_PTR(-EPERM);

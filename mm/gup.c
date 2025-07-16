@@ -1308,7 +1308,7 @@ static struct vm_area_struct *gup_vma_lookup(struct mm_struct *mm,
 
 	/* Let people know things may have changed. */
 	pr_warn("GUP no longer grows the stack in %s (%d): %lx-%lx (%lx)\n",
-		current->comm, task_pid_nr(current),
+		current->comm_str, task_pid_nr(current),
 		vma->vm_start, vma->vm_end, addr);
 	dump_stack();
 	return NULL;

@@ -386,7 +386,7 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	if ((type & MAP_FIXED_NOREPLACE) &&
 	    PTR_ERR((void *)map_addr) == -EEXIST)
 		pr_info("%d (%s): Uhuuh, elf segment at %px requested but the memory is mapped already\n",
-			task_pid_nr(current), current->comm, (void *)addr);
+			task_pid_nr(current), current->comm_str, (void *)addr);
 
 	return(map_addr);
 }

@@ -1285,7 +1285,7 @@ static inline void bpf_jit_dump(unsigned int flen, unsigned int proglen,
 				u32 pass, void *image)
 {
 	pr_err("flen=%u proglen=%u pass=%u image=%pK from=%s pid=%d\n", flen,
-	       proglen, pass, image, current->comm, task_pid_nr(current));
+	       proglen, pass, image, current->comm_str, task_pid_nr(current));
 
 	if (image)
 		print_hex_dump(KERN_ERR, "JIT code: ", DUMP_PREFIX_OFFSET,

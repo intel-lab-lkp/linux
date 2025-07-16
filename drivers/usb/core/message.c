@@ -67,7 +67,7 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 
 		dev_dbg(&urb->dev->dev,
 			"%s timed out on ep%d%s len=%u/%u\n",
-			current->comm,
+			current->comm_str,
 			usb_endpoint_num(&urb->ep->desc),
 			usb_urb_dir_in(urb) ? "in" : "out",
 			urb->actual_length,

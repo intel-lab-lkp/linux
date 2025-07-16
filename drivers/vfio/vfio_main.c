@@ -418,7 +418,7 @@ void vfio_unregister_group_dev(struct vfio_device *device)
 					 "Device is currently in use, task"
 					 " \"%s\" (%d) "
 					 "blocked until device is released",
-					 current->comm, task_pid_nr(current));
+					 current->comm_str, task_pid_nr(current));
 			}
 		}
 	}

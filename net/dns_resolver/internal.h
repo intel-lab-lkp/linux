@@ -44,7 +44,7 @@ extern unsigned int dns_resolver_debug;
 do {							\
 	if (unlikely(dns_resolver_debug))		\
 		printk(KERN_DEBUG "[%-6.6s] "FMT"\n",	\
-		       current->comm, ##__VA_ARGS__);	\
+		       current->comm_str, ##__VA_ARGS__);	\
 } while (0)
 
 #define kenter(FMT, ...) kdebug("==> %s("FMT")", __func__, ##__VA_ARGS__)

@@ -70,7 +70,7 @@ static int drop_caches_sysctl_handler(const struct ctl_table *table, int write,
 		}
 		if (!stfu) {
 			pr_info("%s (%d): drop_caches: %d\n",
-				current->comm, task_pid_nr(current),
+				current->comm_str, task_pid_nr(current),
 				sysctl_drop_caches);
 		}
 		stfu |= sysctl_drop_caches & 4;

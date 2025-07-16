@@ -891,7 +891,7 @@ static int kvm_init_ipa_range(struct kvm_s2_mmu *mmu, unsigned long type)
 		phys_shift = KVM_PHYS_SHIFT;
 		if (phys_shift > kvm_ipa_limit) {
 			pr_warn_once("%s using unsupported default IPA limit, upgrade your VMM\n",
-				     current->comm);
+				     current->comm_str);
 			return -EINVAL;
 		}
 	}

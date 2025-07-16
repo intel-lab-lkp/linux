@@ -138,11 +138,11 @@ static void debug_show_blocker(struct task_struct *task)
 		switch (blocker_type) {
 		case BLOCKER_TYPE_MUTEX:
 			pr_err("INFO: task %s:%d is blocked on a mutex, but the owner is not found.\n",
-			       task->comm, task->pid);
+			       task->comm_str, task->pid);
 			break;
 		case BLOCKER_TYPE_SEM:
 			pr_err("INFO: task %s:%d is blocked on a semaphore, but the last holder is not found.\n",
-			       task->comm, task->pid);
+			       task->comm_str, task->pid);
 			break;
 		case BLOCKER_TYPE_RWSEM_READER:
 		case BLOCKER_TYPE_RWSEM_WRITER:
@@ -161,11 +161,11 @@ static void debug_show_blocker(struct task_struct *task)
 		switch (blocker_type) {
 		case BLOCKER_TYPE_MUTEX:
 			pr_err("INFO: task %s:%d is blocked on a mutex likely owned by task %s:%d.\n",
-			       task->comm, task->pid, t->comm, t->pid);
+			       task->comm_str, task->pid, t->comm_str, t->pid);
 			break;
 		case BLOCKER_TYPE_SEM:
 			pr_err("INFO: task %s:%d blocked on a semaphore likely last held by task %s:%d\n",
-			       task->comm, task->pid, t->comm, t->pid);
+			       task->comm_str, task->pid, t->comm_str, t->pid);
 			break;
 		case BLOCKER_TYPE_RWSEM_READER:
 		case BLOCKER_TYPE_RWSEM_WRITER:
@@ -233,7 +233,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 		if (sysctl_hung_task_warnings > 0)
 			sysctl_hung_task_warnings--;
 		pr_err("INFO: task %s:%d blocked for more than %ld seconds.\n",
-		       t->comm, t->pid, (jiffies - t->last_switch_time) / HZ);
+		       t->comm_str, t->pid, (jiffies - t->last_switch_time) / HZ);
 		pr_err("      %s %s %.*s\n",
 			print_tainted(), init_utsname()->release,
 			(int)strcspn(init_utsname()->version, " "),

@@ -1017,7 +1017,7 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 			if (uport->flags & UPF_SPD_MASK) {
 				dev_notice_ratelimited(uport->dev,
 				       "%s sets custom speed on %s. This is deprecated.\n",
-				      current->comm,
+				      current->comm_str,
 				      tty_name(port->tty));
 			}
 			uart_change_line_settings(tty, state, NULL);

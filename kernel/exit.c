@@ -850,7 +850,7 @@ static void check_stack_usage(void)
 	spin_lock(&low_water_lock);
 	if (free < lowest_to_date) {
 		pr_info("%s (%d) used greatest stack depth: %lu bytes left\n",
-			current->comm, task_pid_nr(current), free);
+			current->comm_str, task_pid_nr(current), free);
 		lowest_to_date = free;
 	}
 	spin_unlock(&low_water_lock);
@@ -1023,12 +1023,12 @@ void __noreturn make_task_dead(int signr)
 
 	if (unlikely(irqs_disabled())) {
 		pr_info("note: %s[%d] exited with irqs disabled\n",
-			current->comm, task_pid_nr(current));
+			current->comm_str, task_pid_nr(current));
 		local_irq_enable();
 	}
 	if (unlikely(in_atomic())) {
 		pr_info("note: %s[%d] exited with preempt_count %d\n",
-			current->comm, task_pid_nr(current),
+			current->comm_str, task_pid_nr(current),
 			preempt_count());
 		preempt_count_set(PREEMPT_ENABLED);
 	}

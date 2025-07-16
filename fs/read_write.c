@@ -499,7 +499,7 @@ static int warn_unsupported(struct file *file, const char *op)
 {
 	pr_warn_ratelimited(
 		"kernel %s not supported for file %pD4 (pid: %d comm: %.20s)\n",
-		op, file, current->pid, current->comm);
+		op, file, current->pid, current->comm_str);
 	return -EINVAL;
 }
 

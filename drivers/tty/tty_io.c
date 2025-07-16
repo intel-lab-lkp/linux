@@ -2618,7 +2618,7 @@ static int tty_set_serial(struct tty_struct *tty, struct serial_struct *ss)
 
 	if (flags)
 		pr_warn_ratelimited("%s: '%s' is using deprecated serial flags (with no effect): %.8x\n",
-				__func__, current->comm, flags);
+				__func__, current->comm_str, flags);
 
 	if (!tty->ops->set_serial)
 		return -ENOTTY;
@@ -3030,7 +3030,7 @@ void __do_SAK(struct tty_struct *tty)
 	/* Kill the entire session */
 	do_each_pid_task(session, PIDTYPE_SID, p) {
 		tty_notice(tty, "SAK: killed process %d (%s): by session\n",
-			   task_pid_nr(p), p->comm);
+			   task_pid_nr(p), p->comm_str);
 		group_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_SID);
 	} while_each_pid_task(session, PIDTYPE_SID, p);
 
@@ -3038,7 +3038,7 @@ void __do_SAK(struct tty_struct *tty)
 	for_each_process_thread(g, p) {
 		if (p->signal->tty == tty) {
 			tty_notice(tty, "SAK: killed process %d (%s): by controlling tty\n",
-				   task_pid_nr(p), p->comm);
+				   task_pid_nr(p), p->comm_str);
 			group_send_sig_info(SIGKILL, SEND_SIG_PRIV, p,
 					PIDTYPE_SID);
 			continue;
@@ -3047,7 +3047,7 @@ void __do_SAK(struct tty_struct *tty)
 		i = iterate_fd(p->files, 0, this_tty, tty);
 		if (i != 0) {
 			tty_notice(tty, "SAK: killed process %d (%s): by fd#%d\n",
-				   task_pid_nr(p), p->comm, i - 1);
+				   task_pid_nr(p), p->comm_str, i - 1);
 			group_send_sig_info(SIGKILL, SEND_SIG_PRIV, p,
 					PIDTYPE_SID);
 		}

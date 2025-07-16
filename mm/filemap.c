@@ -154,7 +154,7 @@ static void filemap_unaccount_folio(struct address_space *mapping,
 	VM_BUG_ON_FOLIO(folio_mapped(folio), folio);
 	if (!IS_ENABLED(CONFIG_DEBUG_VM) && unlikely(folio_mapped(folio))) {
 		pr_alert("BUG: Bad page cache in process %s  pfn:%05lx\n",
-			 current->comm, folio_pfn(folio));
+			 current->comm_str, folio_pfn(folio));
 		dump_page(&folio->page, "still mapped when deleted");
 		dump_stack();
 		add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
@@ -4084,7 +4084,7 @@ static void dio_warn_stale_pagecache(struct file *filp)
 			path = "(unknown)";
 		pr_crit("Page cache invalidation failure on direct I/O.  Possible data corruption due to collision with buffered I/O!\n");
 		pr_crit("File: %s PID: %d Comm: %.20s\n", path, current->pid,
-			current->comm);
+			current->comm_str);
 	}
 }
 

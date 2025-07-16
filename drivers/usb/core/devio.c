@@ -849,7 +849,7 @@ static int checkintf(struct usb_dev_state *ps, unsigned int ifnum)
 	/* if not yet claimed, claim it for the driver */
 	dev_warn(&ps->dev->dev, "usbfs: process %d (%s) did not claim "
 		 "interface %u before use\n", task_pid_nr(current),
-		 current->comm, ifnum);
+		 current->comm_str, ifnum);
 	return claimintf(ps, ifnum);
 }
 
@@ -924,7 +924,7 @@ static int check_ctrlrecip(struct usb_dev_state *ps, unsigned int requesttype,
 				dev_info(&ps->dev->dev,
 					"%s: process %i (%s) requesting ep %02x but needs %02x\n",
 					__func__, task_pid_nr(current),
-					current->comm, index, index ^ 0x80);
+					current->comm_str, index, index ^ 0x80);
 		}
 		if (ret >= 0)
 			ret = checkintf(ps, ret);
@@ -1078,7 +1078,7 @@ static int usbdev_open(struct inode *inode, struct file *file)
 	file->private_data = ps;
 	usb_unlock_device(dev);
 	snoop(&dev->dev, "opened by process %d: %s\n", task_pid_nr(current),
-			current->comm);
+			current->comm_str);
 	return ret;
 
  out_unlock_device:
@@ -1257,7 +1257,7 @@ static int do_proc_control(struct usb_dev_state *ps,
 	if (i < 0 && i != -EPIPE) {
 		dev_printk(KERN_DEBUG, &dev->dev, "usbfs: USBDEVFS_CONTROL "
 			   "failed cmd %s rqt %u rq %u len %u ret %d\n",
-			   current->comm, ctrl->bRequestType, ctrl->bRequest,
+			   current->comm_str, ctrl->bRequestType, ctrl->bRequest,
 			   ctrl->wLength, i);
 	}
 	ret = (i < 0 ? i : actlen);
@@ -1389,7 +1389,7 @@ static void check_reset_of_active_ep(struct usb_device *udev,
 	ep = eps[epnum & 0x0f];
 	if (ep && !list_empty(&ep->urb_list))
 		dev_warn(&udev->dev, "Process %d (%s) called USBDEVFS_%s for active endpoint 0x%02x\n",
-				task_pid_nr(current), current->comm,
+				task_pid_nr(current), current->comm_str,
 				ioctl_name, epnum);
 }
 
@@ -1517,7 +1517,7 @@ static int proc_resetdevice(struct usb_dev_state *ps)
 					!test_bit(number, &ps->ifclaimed)) {
 				dev_warn(&ps->dev->dev,
 					"usbfs: interface %d claimed by %s while '%s' resets device\n",
-					number,	interface->dev.driver->name, current->comm);
+					number,	interface->dev.driver->name, current->comm_str);
 				return -EACCES;
 			}
 		}
@@ -1571,7 +1571,7 @@ static int proc_setconfig(struct usb_dev_state *ps, void __user *arg)
 						->desc.bInterfaceNumber,
 					actconfig->interface[i]
 						->dev.driver->name,
-					current->comm, u);
+					current->comm_str, u);
 				status = -EBUSY;
 				break;
 			}
@@ -2428,7 +2428,7 @@ static int proc_claim_port(struct usb_dev_state *ps, void __user *arg)
 	rc = usb_hub_claim_port(ps->dev, portnum, ps);
 	if (rc == 0)
 		snoop(&ps->dev->dev, "port %d claimed by process %d: %s\n",
-			portnum, task_pid_nr(current), current->comm);
+			portnum, task_pid_nr(current), current->comm_str);
 	return rc;
 }
 

@@ -1922,6 +1922,7 @@ __latent_entropy struct task_struct *copy_process(
 	struct file *pidfile = NULL;
 	const u64 clone_flags = args->flags;
 	struct nsproxy *nsp = current->nsproxy;
+	unsigned char comm[TASK_COMM_EXT_LEN];
 
 	/*
 	 * Don't allow sharing the root directory with processes in a different
@@ -2013,8 +2014,12 @@ __latent_entropy struct task_struct *copy_process(
 	if (args->io_thread)
 		p->flags |= PF_IO_WORKER;
 
-	if (args->name)
-		strscpy_pad(p->comm, args->name, sizeof(p->comm));
+	if (args->name) {
+		memcpy(comm, args->name, sizeof(p->comm_str) - 1);
+		comm[sizeof(p->comm_str) - 1] = '\0';
+
+		set_task_comm(p, comm);
+	}
 
 	p->set_child_tid = (clone_flags & CLONE_CHILD_SETTID) ? args->child_tid : NULL;
 	/*

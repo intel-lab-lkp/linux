@@ -851,7 +851,7 @@ static bool check_rlimit(u64 time, u64 limit, int signo, bool rt, bool hard)
 	if (print_fatal_signals) {
 		pr_info("%s Watchdog Timeout (%s): %s[%d]\n",
 			rt ? "RT" : "CPU", hard ? "hard" : "soft",
-			current->comm, task_pid_nr(current));
+			current->comm_str, task_pid_nr(current));
 	}
 	send_signal_locked(signo, SEND_SIG_PRIV, current, PIDTYPE_TGID);
 	return true;

@@ -3278,7 +3278,7 @@ static int proc_dointvec_minmax_warn_RT_change(const struct ctl_table *table,
 		return ret;
 	if (old != *(int *)table->data)
 		pr_warn_once("sysctl attribute %s changed by %s[%d]\n",
-			     table->procname, current->comm,
+			     table->procname, current->comm_str,
 			     task_pid_nr(current));
 	return ret;
 }

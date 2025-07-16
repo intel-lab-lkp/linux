@@ -3240,7 +3240,7 @@ void force_compatible_cpus_allowed_ptr(struct task_struct *p)
 out_set_mask:
 	if (printk_ratelimit()) {
 		printk_deferred("Overriding affinity for process %d (%s) to CPUs %*pbl\n",
-				task_pid_nr(p), p->comm,
+				task_pid_nr(p), p->comm_str,
 				cpumask_pr_args(override_mask));
 	}
 
@@ -3545,7 +3545,7 @@ out:
 		 */
 		if (p->mm && printk_ratelimit()) {
 			printk_deferred("process %d (%s) no longer affine to cpu%d\n",
-					task_pid_nr(p), p->comm, cpu);
+					task_pid_nr(p), p->comm_str, cpu);
 		}
 	}
 
@@ -5156,7 +5156,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	 */
 	if (WARN_ONCE(preempt_count() != 2*PREEMPT_DISABLE_OFFSET,
 		      "corrupted preempt_count: %s/%d/0x%x\n",
-		      current->comm, current->pid, preempt_count()))
+		      current->comm_str, current->pid, preempt_count()))
 		preempt_count_set(FORK_PREEMPT_COUNT);
 
 	rq->prev_mm = NULL;
@@ -5849,7 +5849,7 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		return;
 
 	printk(KERN_ERR "BUG: scheduling while atomic: %s/%d/0x%08x\n",
-		prev->comm, prev->pid, preempt_count());
+		prev->comm_str, prev->pid, preempt_count());
 
 	debug_show_held_locks(prev);
 	print_modules();
@@ -5881,7 +5881,7 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	if (!preempt && READ_ONCE(prev->__state) && prev->non_block_count) {
 		printk(KERN_ERR "BUG: scheduling in a non-blocking section: %s/%d/%i\n",
-			prev->comm, prev->pid, prev->non_block_count);
+			prev->comm_str, prev->pid, prev->non_block_count);
 		dump_stack();
 		add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 	}
@@ -7645,7 +7645,7 @@ void sched_show_task(struct task_struct *p)
 	if (!try_get_task_stack(p))
 		return;
 
-	pr_info("task:%-15.15s state:%c", p->comm, task_state_to_char(p));
+	pr_info("task:%-15.15s state:%c", p->comm_str, task_state_to_char(p));
 
 	if (task_is_running(p))
 		pr_cont("  running task    ");
@@ -7786,7 +7786,7 @@ void __init init_idle(struct task_struct *idle, int cpu)
 	idle->sched_class = &idle_sched_class;
 	ftrace_graph_init_idle_task(idle, cpu);
 	vtime_init_idle(idle, cpu);
-	sprintf(idle->comm, "%s/%d", INIT_TASK_COMM, cpu);
+	sprintf(idle->comm_str, "%s/%d", INIT_TASK_COMM, cpu);
 }
 
 int cpuset_cpumask_can_shrink(const struct cpumask *cur,
@@ -8322,7 +8322,7 @@ static void dump_rq_tasks(struct rq *rq, const char *loglvl)
 		if (!task_on_rq_queued(p))
 			continue;
 
-		printk("%s\tpid: %d, name: %s\n", loglvl, p->pid, p->comm);
+		printk("%s\tpid: %d, name: %s\n", loglvl, p->pid, p->comm_str);
 	}
 }
 
@@ -8665,7 +8665,7 @@ void __might_resched(const char *file, int line, unsigned int offsets)
 	       file, line);
 	pr_err("in_atomic(): %d, irqs_disabled(): %d, non_block: %d, pid: %d, name: %s\n",
 	       in_atomic(), irqs_disabled(), current->non_block_count,
-	       current->pid, current->comm);
+	       current->pid, current->comm_str);
 	pr_err("preempt_count: %x, expected: %x\n", preempt_count(),
 	       offsets & MIGHT_RESCHED_PREEMPT_MASK);
 
@@ -8709,7 +8709,7 @@ void __cant_sleep(const char *file, int line, int preempt_offset)
 	printk(KERN_ERR "BUG: assuming atomic context at %s:%d\n", file, line);
 	printk(KERN_ERR "in_atomic(): %d, irqs_disabled(): %d, pid: %d, name: %s\n",
 			in_atomic(), irqs_disabled(),
-			current->pid, current->comm);
+			current->pid, current->comm_str);
 
 	debug_show_held_locks(current);
 	dump_stack();
@@ -8741,7 +8741,7 @@ void __cant_migrate(const char *file, int line)
 	pr_err("BUG: assuming non migratable context at %s:%d\n", file, line);
 	pr_err("in_atomic(): %d, irqs_disabled(): %d, migration_disabled() %u pid: %d, name: %s\n",
 	       in_atomic(), irqs_disabled(), is_migration_disabled(current),
-	       current->pid, current->comm);
+	       current->pid, current->comm_str);
 
 	debug_show_held_locks(current);
 	dump_stack();

@@ -151,7 +151,7 @@ static long bsg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return bsg_sg_io(bd, file->f_mode & FMODE_WRITE, uarg);
 	case SCSI_IOCTL_SEND_COMMAND:
 		pr_warn_ratelimited("%s: calling unsupported SCSI_IOCTL_SEND_COMMAND\n",
-				current->comm);
+				current->comm_str);
 		return -EINVAL;
 	default:
 		return -ENOTTY;

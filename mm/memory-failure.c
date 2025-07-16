@@ -354,7 +354,7 @@ static int kill_proc(struct to_kill *tk, unsigned long pfn, int flags)
 	int ret = 0;
 
 	pr_err("%#lx: Sending SIGBUS to %s:%d due to hardware memory corruption\n",
-			pfn, t->comm, task_pid_nr(t));
+			pfn, t->comm_str, task_pid_nr(t));
 
 	if ((flags & MF_ACTION_REQUIRED) && (t == current))
 		ret = force_sig_mceerr(BUS_MCEERR_AR,
@@ -370,7 +370,7 @@ static int kill_proc(struct to_kill *tk, unsigned long pfn, int flags)
 				      addr_lsb, t);
 	if (ret < 0)
 		pr_info("Error sending signal to %s:%d: %d\n",
-			t->comm, task_pid_nr(t), ret);
+			t->comm_str, task_pid_nr(t), ret);
 	return ret;
 }
 
@@ -475,7 +475,7 @@ static void __add_to_kill(struct task_struct *tsk, const struct page *p,
 	 */
 	if (tk->addr == -EFAULT) {
 		pr_info("Unable to find user space address %lx in %s\n",
-			page_to_pfn(p), tsk->comm);
+			page_to_pfn(p), tsk->comm_str);
 	} else if (tk->size_shift == 0) {
 		kfree(tk);
 		return;
@@ -532,7 +532,7 @@ static void kill_procs(struct list_head *to_kill, int forcekill,
 		if (forcekill) {
 			if (tk->addr == -EFAULT) {
 				pr_err("%#lx: forcibly killing %s:%d because of failure to unmap corrupted page\n",
-				       pfn, tk->tsk->comm, task_pid_nr(tk->tsk));
+				       pfn, tk->tsk->comm_str, task_pid_nr(tk->tsk));
 				do_send_sig_info(SIGKILL, SEND_SIG_PRIV,
 						 tk->tsk, PIDTYPE_PID);
 			}
@@ -545,7 +545,7 @@ static void kill_procs(struct list_head *to_kill, int forcekill,
 			 */
 			else if (kill_proc(tk, pfn, flags) < 0)
 				pr_err("%#lx: Cannot send advisory machine check signal to %s:%d\n",
-				       pfn, tk->tsk->comm, task_pid_nr(tk->tsk));
+				       pfn, tk->tsk->comm_str, task_pid_nr(tk->tsk));
 		}
 		list_del(&tk->nd);
 		put_task_struct(tk->tsk);

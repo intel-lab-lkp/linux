@@ -965,7 +965,7 @@ int __vm_enough_memory(struct mm_struct *mm, long pages, int cap_sys_admin)
 error:
 	bytes_failed = pages << PAGE_SHIFT;
 	pr_warn_ratelimited("%s: pid: %d, comm: %s, bytes: %lu not enough memory for the allocation\n",
-			    __func__, current->pid, current->comm, bytes_failed);
+			    __func__, current->pid, current->comm_str, bytes_failed);
 	vm_unacct_memory(pages);
 
 	return -ENOMEM;

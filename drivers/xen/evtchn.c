@@ -646,7 +646,7 @@ static int evtchn_open(struct inode *inode, struct file *filp)
 	if (u == NULL)
 		return -ENOMEM;
 
-	u->name = kasprintf(GFP_KERNEL, "evtchn:%s", current->comm);
+	u->name = kasprintf(GFP_KERNEL, "evtchn:%s", current->comm_str);
 	if (u->name == NULL) {
 		kfree(u);
 		return -ENOMEM;

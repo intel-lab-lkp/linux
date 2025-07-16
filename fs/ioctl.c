@@ -79,7 +79,7 @@ static int ioctl_fibmap(struct file *filp, int __user *p)
 	if (block > INT_MAX) {
 		error = -ERANGE;
 		pr_warn_ratelimited("[%s/%d] FS: %s File: %pD4 would truncate fibmap result\n",
-				    current->comm, task_pid_nr(current),
+				    current->comm_str, task_pid_nr(current),
 				    sb->s_id, filp);
 	}
 

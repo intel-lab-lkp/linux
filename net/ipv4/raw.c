@@ -520,7 +520,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			goto out;
 		if (usin->sin_family != AF_INET) {
 			pr_info_once("%s: %s forgot to set AF_INET. Fix it!\n",
-				     __func__, current->comm);
+				     __func__, current->comm_str);
 			err = -EAFNOSUPPORT;
 			if (usin->sin_family)
 				goto out;

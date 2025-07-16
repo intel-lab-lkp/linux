@@ -951,13 +951,13 @@ static void tmio_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		if (IS_ERR(host->mrq)) {
 			dev_dbg(dev,
 				"%s.%d: concurrent .set_ios(), clk %u, mode %u\n",
-				current->comm, task_pid_nr(current),
+				current->comm_str, task_pid_nr(current),
 				ios->clock, ios->power_mode);
 			host->mrq = ERR_PTR(-EINTR);
 		} else {
 			dev_dbg(dev,
 				"%s.%d: CMD%u active since %lu, now %lu!\n",
-				current->comm, task_pid_nr(current),
+				current->comm_str, task_pid_nr(current),
 				host->mrq->cmd->opcode, host->last_req_ts,
 				jiffies);
 		}
@@ -1000,7 +1000,7 @@ static void tmio_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	if (PTR_ERR(host->mrq) == -EINTR)
 		dev_dbg(&host->pdev->dev,
 			"%s.%d: IOS interrupted: clk %u, mode %u",
-			current->comm, task_pid_nr(current),
+			current->comm_str, task_pid_nr(current),
 			ios->clock, ios->power_mode);
 
 	/* Ready for new mrqs */

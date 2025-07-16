@@ -537,7 +537,7 @@ static int call_filldir(struct file *file, struct dir_context *ctx,
 	if (!fname) {
 		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%lu: comm %s: "
 			 "called with null fname?!?", __func__, __LINE__,
-			 inode->i_ino, current->comm);
+			 inode->i_ino, current->comm_str);
 		return 0;
 	}
 	ctx->pos = hash2pos(file, fname->hash, fname->minor_hash);

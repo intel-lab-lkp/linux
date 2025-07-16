@@ -3252,7 +3252,7 @@ __acquires(&pool->lock)
 		     rcu_preempt_depth() != rcu_start_depth)) {
 		pr_err("BUG: workqueue leaked atomic, lock or RCU: %s[%d]\n"
 		       "     preempt=0x%08x lock=%d->%d RCU=%d->%d workfn=%ps\n",
-		       current->comm, task_pid_nr(current), preempt_count(),
+		       current->comm_str, task_pid_nr(current), preempt_count(),
 		       lockdep_start_depth, lockdep_depth(current),
 		       rcu_start_depth, rcu_preempt_depth(),
 		       worker->current_func);
@@ -3716,7 +3716,7 @@ static void check_flush_dependency(struct workqueue_struct *target_wq,
 
 	WARN_ONCE(current->flags & PF_MEMALLOC,
 		  "workqueue: PF_MEMALLOC task %d(%s) is flushing !WQ_MEM_RECLAIM %s:%ps",
-		  current->pid, current->comm, target_wq->name, target_func);
+		  current->pid, current->comm_str, target_wq->name, target_func);
 	WARN_ONCE(worker && ((worker->current_pwq->wq->flags &
 			      (WQ_MEM_RECLAIM | __WQ_LEGACY)) == WQ_MEM_RECLAIM),
 		  "workqueue: WQ_MEM_RECLAIM %s:%ps is flushing !WQ_MEM_RECLAIM %s:%ps",
@@ -6486,7 +6486,7 @@ void wq_worker_comm(char *buf, size_t size, struct task_struct *task)
 			raw_spin_unlock_irq(&pool->lock);
 		}
 	} else {
-		strscpy(buf, task->comm, size);
+		strscpy(buf, task->comm_str, size);
 	}
 
 	mutex_unlock(&wq_pool_attach_mutex);

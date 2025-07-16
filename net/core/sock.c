@@ -443,7 +443,7 @@ static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
 		if (warned < 10 && net_ratelimit()) {
 			warned++;
 			pr_info("%s: `%s' (pid %d) tries to set negative timeout\n",
-				__func__, current->comm, task_pid_nr(current));
+				__func__, current->comm_str, task_pid_nr(current));
 		}
 		return 0;
 	}

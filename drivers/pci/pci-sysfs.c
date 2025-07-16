@@ -786,7 +786,7 @@ static ssize_t pci_write_config(struct file *filp, struct kobject *kobj,
 	if (resource_is_exclusive(&dev->driver_exclusive_resource, off,
 				  count)) {
 		pci_warn_once(dev, "%s: Unexpected write to kernel-exclusive config offset %llx",
-			      current->comm, off);
+			      current->comm_str, off);
 		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 	}
 

@@ -280,7 +280,7 @@ static struct file *vfio_device_open_file(struct vfio_device *device)
 
 	if (device->group->type == VFIO_NO_IOMMU)
 		dev_warn(device->dev, "vfio-noiommu device opened by user "
-			 "(%s:%d)\n", current->comm, task_pid_nr(current));
+			 "(%s:%d)\n", current->comm_str, task_pid_nr(current));
 	/*
 	 * On success the ref of device is moved to the file and
 	 * put in vfio_device_fops_release()

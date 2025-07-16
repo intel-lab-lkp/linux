@@ -64,7 +64,7 @@ bool __refrigerator(bool check_kthr_stop)
 	unsigned int state = get_current_state();
 	bool was_frozen = false;
 
-	pr_debug("%s entered refrigerator\n", current->comm);
+	pr_debug("%s entered refrigerator\n", current->comm_str);
 
 	WARN_ON_ONCE(state && !(state & TASK_NORMAL));
 
@@ -89,7 +89,7 @@ bool __refrigerator(bool check_kthr_stop)
 	}
 	__set_current_state(TASK_RUNNING);
 
-	pr_debug("%s left refrigerator\n", current->comm);
+	pr_debug("%s left refrigerator\n", current->comm_str);
 
 	return was_frozen;
 }

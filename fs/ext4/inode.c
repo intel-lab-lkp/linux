@@ -5144,7 +5144,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 			return ERR_PTR(-ESTALE);
 		__ext4_error(sb, function, line, false, EFSCORRUPTED, 0,
 			     "inode #%lu: comm %s: iget: illegal inode #",
-			     ino, current->comm);
+			     ino, current->comm_str);
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 

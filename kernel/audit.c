@@ -1600,7 +1600,7 @@ static void audit_log_multicast(int group, const char *op, int err)
 {
 	const struct cred *cred;
 	struct tty_struct *tty;
-	char comm[sizeof(current->comm)];
+	char comm[sizeof(current->comm_str)];
 	struct audit_buffer *ab;
 
 	if (!audit_enabled)
@@ -2243,7 +2243,7 @@ void audit_put_tty(struct tty_struct *tty)
 void audit_log_task_info(struct audit_buffer *ab)
 {
 	const struct cred *cred;
-	char comm[sizeof(current->comm)];
+	char comm[sizeof(current->comm_str)];
 	struct tty_struct *tty;
 
 	if (!ab)

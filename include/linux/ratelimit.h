@@ -58,7 +58,7 @@ static inline void ratelimit_state_exit(struct ratelimit_state *rs)
 
 	m = ratelimit_state_reset_miss(rs);
 	if (m)
-		pr_warn("%s: %d output lines suppressed due to ratelimiting\n", current->comm, m);
+		pr_warn("%s: %d output lines suppressed due to ratelimiting\n", current->comm_str, m);
 }
 
 static inline void

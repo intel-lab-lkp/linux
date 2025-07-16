@@ -1144,7 +1144,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 		 * /proc/pid/oom_score_adj instead.
 		 */
 		pr_warn_once("%s (%d): /proc/%d/oom_adj is deprecated, please use /proc/%d/oom_score_adj instead.\n",
-			  current->comm, task_pid_nr(current), task_pid_nr(task),
+			  current->comm_str, task_pid_nr(current), task_pid_nr(task),
 			  task_pid_nr(task));
 	} else {
 		if ((short)oom_adj < task->signal->oom_score_adj_min &&

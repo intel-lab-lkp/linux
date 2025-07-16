@@ -540,7 +540,7 @@ static void print_bad_pte(struct vm_area_struct *vma, unsigned long addr,
 	index = linear_page_index(vma, addr);
 
 	pr_alert("BUG: Bad page map in process %s  pte:%08llx pmd:%08llx\n",
-		 current->comm,
+		 current->comm_str,
 		 (long long)pte_val(pte), (long long)pmd_val(*pmd));
 	if (page)
 		dump_page(page, "bad pte");

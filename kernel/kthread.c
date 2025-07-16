@@ -108,7 +108,7 @@ void get_kthread_comm(char *buf, size_t buf_size, struct task_struct *tsk)
 	struct kthread *kthread = to_kthread(tsk);
 
 	if (!kthread || !kthread->full_name) {
-		strscpy(buf, tsk->comm, buf_size);
+		strscpy(buf, tsk->comm_str, buf_size);
 		return;
 	}
 

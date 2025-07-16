@@ -1163,7 +1163,7 @@ gnttab_retry_eagain_gop(unsigned int cmd, void *gop, int16_t *status,
 	} while ((*status == GNTST_eagain) && (delay < MAX_DELAY));
 
 	if (delay >= MAX_DELAY) {
-		pr_err("%s: %s eagain grant\n", func, current->comm);
+		pr_err("%s: %s eagain grant\n", func, current->comm_str);
 		*status = GNTST_bad_page;
 	}
 }
