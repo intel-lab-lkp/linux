@@ -529,8 +529,8 @@ struct qmi_wlanfw_bdf_download_resp_msg_v01 {
 #define QMI_WLANFW_M3_INFO_REQ_V01		0x003C
 
 struct qmi_wlanfw_m3_info_req_msg_v01 {
-	u64 addr;
-	u32 size;
+	__le64 addr;
+	__le32 size;
 };
 
 struct qmi_wlanfw_m3_info_resp_msg_v01 {

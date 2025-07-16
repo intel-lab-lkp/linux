@@ -3198,8 +3198,8 @@ int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
 			ath12k_err(ab, "failed to load m3 firmware: %d", ret);
 			return ret;
 		}
-		req.addr = m3_mem->paddr;
-		req.size = m3_mem->size;
+		req.addr = cpu_to_le64(m3_mem->paddr);
+		req.size = cpu_to_le32(m3_mem->size);
 	}
 
 	ret = qmi_txn_init(&ab->qmi.handle, &txn,
