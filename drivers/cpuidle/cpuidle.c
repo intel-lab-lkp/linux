@@ -190,14 +190,15 @@ static noinstr void enter_s2idle_proper(struct cpuidle_driver *drv,
  */
 int cpuidle_enter_s2idle(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
+	u64 constraint_ns = system_wakeup_latency_qos_limit() * NSEC_PER_USEC;
 	int index;
 
 	/*
-	 * Find the deepest state with ->enter_s2idle present, which guarantees
-	 * that interrupts won't be enabled when it exits and allows the tick to
-	 * be frozen safely.
+	 * Find the deepest state with ->enter_s2idle present that meets the
+	 * system-wakeup QoS limit, which guarantees that interrupts won't be
+	 * enabled when it exits and allows the tick to be frozen safely.
 	 */
-	index = find_deepest_state(drv, dev, U64_MAX, 0, true);
+	index = find_deepest_state(drv, dev, constraint_ns, 0, true);
 	if (index > 0) {
 		enter_s2idle_proper(drv, dev, index);
 		local_irq_enable();
