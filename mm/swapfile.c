@@ -817,12 +817,15 @@ static unsigned int alloc_swap_scan_cluster(struct swap_info_struct *si,
 out:
 	relocate_cluster(si, ci);
 	unlock_cluster(ci);
+
 	if (si->flags & SWP_SOLIDSTATE) {
 		this_cpu_write(percpu_swap_cluster.offset[order], next);
 		this_cpu_write(percpu_swap_cluster.si[order], si);
+		write_percpu_swap_cluster_next(si, order, next);
 	} else {
 		si->global_cluster->next[order] = next;
 	}
+
 	return found;
 }
 
@@ -892,26 +895,29 @@ unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
 	if (order && !(si->flags & SWP_BLKDEV))
 		return 0;
 
-	if (!(si->flags & SWP_SOLIDSTATE)) {
+	if (si->flags & SWP_SOLIDSTATE) {
+		offset = read_percpu_swap_cluster_next(si, order);
+	} else {
 		/* Serialize HDD SWAP allocation for each device. */
 		spin_lock(&si->global_cluster_lock);
 		offset = si->global_cluster->next[order];
-		if (offset == SWAP_ENTRY_INVALID)
-			goto new_cluster;
-
-		ci = lock_cluster(si, offset);
-		/* Cluster could have been used by another order */
-		if (cluster_is_usable(ci, order)) {
-			if (cluster_is_empty(ci))
-				offset = cluster_offset(si, ci);
-			found = alloc_swap_scan_cluster(si, ci, offset,
-							order, usage);
-		} else {
-			unlock_cluster(ci);
-		}
-		if (found)
-			goto done;
 	}
+
+	if (offset == SWAP_ENTRY_INVALID)
+		goto new_cluster;
+
+	ci = lock_cluster(si, offset);
+	/* Cluster could have been used by another order */
+	if (cluster_is_usable(ci, order)) {
+		if (cluster_is_empty(ci))
+			offset = cluster_offset(si, ci);
+		found = alloc_swap_scan_cluster(si, ci, offset,
+						order, usage);
+	} else {
+		unlock_cluster(ci);
+	}
+	if (found)
+		goto done;
 
 new_cluster:
 	ci = isolate_lock_cluster(si, &si->free_clusters);
@@ -991,6 +997,7 @@ new_cluster:
 done:
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_unlock(&si->global_cluster_lock);
+
 	return found;
 }
 
@@ -2674,6 +2681,8 @@ static void flush_percpu_swap_cluster(struct swap_info_struct *si)
 		for (i = 0; i < SWAP_NR_ORDERS; i++)
 			cmpxchg(&pcp_si[i], si, NULL);
 	}
+
+	flush_swap_cgroup_priority_percpu_swapdev(si);
 }
 
 
@@ -2802,6 +2811,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	arch_swap_invalidate_area(p->type);
 	zswap_swapoff(p->type);
 	mutex_unlock(&swapon_mutex);
+	free_percpu_swap_cluster(p);
 	kfree(p->global_cluster);
 	p->global_cluster = NULL;
 	vfree(swap_map);
@@ -2899,7 +2909,6 @@ static void swap_stop(struct seq_file *swap, void *v)
 {
 	mutex_unlock(&swapon_mutex);
 }
-
 
 #ifndef CONFIG_SWAP_CGROUP_PRIORITY
 static int swap_show(struct seq_file *swap, void *v)
@@ -3239,7 +3248,10 @@ static struct swap_cluster_info *setup_clusters(struct swap_info_struct *si,
 	for (i = 0; i < nr_clusters; i++)
 		spin_lock_init(&cluster_info[i].lock);
 
-	if (!(si->flags & SWP_SOLIDSTATE)) {
+	if (si->flags & SWP_SOLIDSTATE) {
+		if (!alloc_percpu_swap_cluster(si))
+			goto err_free;
+	} else {
 		si->global_cluster = kmalloc(sizeof(*si->global_cluster),
 				     GFP_KERNEL);
 		if (!si->global_cluster)
@@ -3532,6 +3544,7 @@ free_swap_address_space:
 bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
+	free_percpu_swap_cluster(si);
 	kfree(si->global_cluster);
 	si->global_cluster = NULL;
 	inode = NULL;

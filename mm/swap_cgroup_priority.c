@@ -21,6 +21,17 @@
 #include "swap_cgroup_priority.h"
 #include "memcontrol-v1.h"
 
+/*
+ * We do maintain a cache on a per-cgroup-per-swap-device basis.
+ * However, the underlying cluster cache itself is managed
+ * per-swap-device. This design prevents each individual
+ * swap_cgroup_priority entry from caching its own cluster data,
+ * even as the number of such entries increases.
+ */
+struct percpu_swap_device {
+	struct swap_info_struct *si[SWAP_NR_ORDERS];
+};
+
 static DEFINE_MUTEX(swap_cgroup_priority_inherit_lck);
 static LIST_HEAD(swap_cgroup_priority_list);
 
@@ -49,6 +60,7 @@ static LIST_HEAD(swap_cgroup_priority_list);
  * least_priority - Current lowest priority.
  * distance - Priority differences from global swap priority.
  * default_prio - Default priority for this cgroup.
+ * pcpu_swapdev - Per-CPU swap device.
  * plist - Priority list head.
  */
 struct swap_cgroup_priority {
@@ -64,6 +76,7 @@ struct swap_cgroup_priority {
 	int least_priority;
 	s8 distance;
 	int default_prio;
+	struct percpu_swap_device __percpu *pcpu_swapdev;
 	struct plist_head plist[];
 };
 
@@ -132,6 +145,21 @@ static struct swap_cgroup_priority *get_effective_swap_cgroup_priority(
 	return swap_priority->effective;
 }
 
+static struct swap_cgroup_priority *get_effective_swap_cgroup_priority_rcu(
+	struct mem_cgroup *memcg)
+{
+	struct swap_cgroup_priority *swap_priority;
+
+	if (!memcg)
+		return NULL;
+
+	swap_priority = rcu_dereference(memcg->swap_priority);
+	if (!swap_priority)
+		return NULL;
+
+	return rcu_dereference(swap_priority->effective);
+}
+
 static bool validate_effective_swap_cgroup_priority(
 	struct mem_cgroup *memcg,
 	struct swap_cgroup_priority **swap_priority)
@@ -172,6 +200,9 @@ static void free_swap_cgroup_priority_pnode(
 static void free_swap_cgroup_priority(
 	struct swap_cgroup_priority *swap_priority)
 {
+	if (swap_priority->pcpu_swapdev)
+		free_percpu(swap_priority->pcpu_swapdev);
+
 	for (int i = 0; i < MAX_SWAPFILES; i++)
 		free_swap_cgroup_priority_pnode(swap_priority->pnode[i]);
 
@@ -186,6 +217,12 @@ static struct swap_cgroup_priority *alloc_swap_cgroup_priority(void)
 				 GFP_KERNEL);
 	if (!swap_priority)
 		return NULL;
+
+	swap_priority->pcpu_swapdev = alloc_percpu(struct percpu_swap_device);
+	if (!swap_priority->pcpu_swapdev) {
+		kvfree(swap_priority);
+		return NULL;
+	}
 
 	/*
 	 * Pre-allocates pnode array up to nr_swapfiles at init.
@@ -326,10 +363,34 @@ bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
 	unsigned long offset;
 	int node;
 
-	/*
-	 * TODO: Per-cpu swap cluster cache can't be used directly
-	 * as cgroup-specific priorities may select different devices.
-	 */
+	rcu_read_lock();
+	if (!(swap_priority = get_effective_swap_cgroup_priority_rcu(memcg))) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	/* Fast path */
+	si = this_cpu_read(swap_priority->pcpu_swapdev->si[order]);
+	if (si && get_swap_device_info(si)) {
+		offset = cluster_alloc_swap_entry(si, order, SWAP_HAS_CACHE);
+		if (offset) {
+			*entry = swp_entry(si->type, offset);
+			/*
+			 * Protected by 'percpu_swap_cluster' local_lock;
+			 * CPU migration is disabled during this operation.
+			 */
+			this_cpu_write(swap_priority->pcpu_swapdev->si[order],
+				       si);
+			put_swap_device(si);
+			rcu_read_unlock();
+
+			return true;
+		}
+		put_swap_device(si);
+	}
+	rcu_read_unlock();
+
+	/* Slow path */
 	spin_lock(&swap_avail_lock);
 	node = numa_node_id();
 
@@ -350,6 +411,14 @@ start_over:
 		if (get_swap_device_info(si)) {
 			offset = cluster_alloc_swap_entry(si, order,
 							  SWAP_HAS_CACHE);
+			/*
+			 * Protected by 'percpu_swap_cluster' local_lock;
+			 * CPU migration is disabled during this operation.
+			 */
+			if (memcg->swap_priority == swap_priority)
+				this_cpu_write(
+					swap_priority->pcpu_swapdev->si[order],
+					si);
 			put_swap_device(si);
 			if (offset) {
 				*entry = swp_entry(si->type, offset);
@@ -687,6 +756,21 @@ out:
 	return 0;
 }
 
+static int init_swap_cgroup_priority_pcpu_swapdev_cache(
+	struct swap_cgroup_priority *swap_priority)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct percpu_swap_device *pcp_swap_dev =
+			per_cpu_ptr(swap_priority->pcpu_swapdev, cpu);
+		for (int i = 0; i < SWAP_NR_ORDERS; i++)
+			pcp_swap_dev->si[i] = NULL;
+	}
+
+	return 0;
+}
+
 /*
  * If this is the top-level swap_cgroup_priority, propagation is needed.
  * We traverse the 'mem_cgroup_tree' using 'for_each_mem_cgroup_tree'.
@@ -795,6 +879,8 @@ int apply_swap_cgroup_priority(struct mem_cgroup *memcg, u64 id, int prio)
 	for_each_node(nid)
 		plist_head_init(&swap_priority->plist[nid]);
 
+	init_swap_cgroup_priority_pcpu_swapdev_cache(swap_priority);
+
 prio_set:
 	spin_lock(&swap_lock);
 	spin_lock(&swap_avail_lock);
@@ -843,6 +929,23 @@ prio_set:
 
 	spin_unlock(&swap_avail_lock);
 	spin_unlock(&swap_lock);
+	/*
+	 * XXX: We cannot fully synchronize with swap_alloc_cgroup_priority
+	 * when updating the next si.
+	 * Still, we ensure that flush operations inside swap_priority
+	 * are performed as reliably as possible.
+	 */
+	if (id != DEFAULT_ID &&
+	    swap_priority == swap_priority->effective && !new) {
+		int cpu;
+		struct swap_info_struct **pcp_si;
+		for_each_possible_cpu(cpu) {
+			pcp_si = per_cpu_ptr(
+				swap_priority->pcpu_swapdev->si, cpu);
+			for (int i = 0; i < SWAP_NR_ORDERS; i++)
+				pcp_si[i] = NULL;
+		}
+	}
 	mutex_unlock(&swap_cgroup_priority_inherit_lck);
 	return 0;
 
@@ -885,4 +988,49 @@ void delete_swap_cgroup_priority(struct mem_cgroup *memcg)
 	__delete_swap_cgroup_priority(memcg);
 	spin_unlock(&swap_avail_lock);
 	mutex_unlock(&swap_cgroup_priority_inherit_lck);
+}
+
+void flush_swap_cgroup_priority_percpu_swapdev(struct swap_info_struct *si)
+{
+	int cpu, i;
+	struct swap_info_struct **pcp_si;
+	struct swap_cgroup_priority *swap_priority;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(swap_priority,
+				&swap_cgroup_priority_list, link) {
+		for_each_possible_cpu(cpu) {
+			pcp_si = per_cpu_ptr(
+					swap_priority->pcpu_swapdev->si, cpu);
+
+			for (i = 0; i < SWAP_NR_ORDERS; i++)
+				cmpxchg(&pcp_si[i], si, NULL);
+		}
+	}
+	rcu_read_unlock();
+}
+
+bool alloc_percpu_swap_cluster(struct swap_info_struct *si)
+{
+	si->percpu_cluster = alloc_percpu(struct percpu_cluster);
+	if (!si->percpu_cluster)
+		return false;
+
+	int cpu;
+	int i;
+	for_each_possible_cpu(cpu) {
+		struct percpu_cluster *cluster;
+
+		cluster = per_cpu_ptr(si->percpu_cluster, cpu);
+		for (i = 0; i < SWAP_NR_ORDERS; i++)
+			cluster->next[i] = SWAP_ENTRY_INVALID;
+	}
+
+	return true;
+}
+
+void free_percpu_swap_cluster(struct swap_info_struct *si)
+{
+	free_percpu(si->percpu_cluster);
+	si->percpu_cluster = NULL;
 }

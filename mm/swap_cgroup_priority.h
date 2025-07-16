@@ -47,6 +47,22 @@ struct swap_cgroup_priority *inherit_swap_cgroup_priority(
 bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg, swp_entry_t *entry,
 				int order);
 void delete_swap_cgroup_priority(struct mem_cgroup *memcg);
+void flush_swap_cgroup_priority_percpu_swapdev(struct swap_info_struct *si);
+
+bool alloc_percpu_swap_cluster(struct swap_info_struct *si);
+void free_percpu_swap_cluster(struct swap_info_struct *si);
+static inline void write_percpu_swap_cluster_next(struct swap_info_struct *si,
+						  int order,
+						  unsigned int next)
+{
+	this_cpu_write(si->percpu_cluster->next[order], next);
+}
+
+static inline unsigned int read_percpu_swap_cluster_next(
+	struct swap_info_struct *si, int order)
+{
+        return __this_cpu_read(si->percpu_cluster->next[order]);
+}
 #else
 int swap_node(struct swap_info_struct *si);
 unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si, int order,
@@ -84,6 +100,29 @@ static inline bool swap_alloc_cgroup_priority(struct mem_cgroup *memcg,
 }
 static inline void delete_swap_cgroup_priority(struct mem_cgroup *memcg)
 {
+}
+static inline void flush_swap_cgroup_priority_percpu_swapdev(
+	struct swap_info_struct *si)
+{
+}
+static inline bool alloc_percpu_swap_cluster(struct swap_info_struct *si)
+{
+	return true;
+}
+static inline void free_percpu_swap_cluster(struct swap_info_struct *si)
+{
+}
+static inline void write_percpu_swap_cluster_next(struct swap_info_struct *si,
+						  int order,
+						  unsigned int next)
+{
+	return;
+}
+
+static inline unsigned int read_percpu_swap_cluster_next(
+	struct swap_info_struct *si, int order)
+{
+	return SWAP_ENTRY_INVALID;
 }
 #endif
 #endif
