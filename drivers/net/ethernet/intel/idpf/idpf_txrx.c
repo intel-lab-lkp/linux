@@ -4373,7 +4373,7 @@ static void idpf_vport_intr_napi_add_all(struct idpf_vport *vport,
 					 struct idpf_q_vec_rsrc *rsrc)
 {
 	int (*napi_poll)(struct napi_struct *napi, int budget);
-	int irq_num;
+	int i, irq_num;
 	u16 qv_idx;
 
 	if (idpf_is_queue_model_split(rsrc->txq_model))
@@ -4390,6 +4390,20 @@ static void idpf_vport_intr_napi_add_all(struct idpf_vport *vport,
 		netif_napi_add_config(vport->netdev, &q_vector->napi,
 				      napi_poll, v_idx);
 		netif_napi_set_irq(&q_vector->napi, irq_num);
+
+		for (i = 0; i < q_vector->num_rxq; ++i) {
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->rx[i]->idx,
+					     NETDEV_QUEUE_TYPE_RX,
+					     &q_vector->napi);
+		}
+
+		for (i = 0; i < q_vector->num_txq; ++i) {
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->tx[i]->idx,
+					     NETDEV_QUEUE_TYPE_TX,
+					     &q_vector->napi);
+		}
 	}
 }
 
