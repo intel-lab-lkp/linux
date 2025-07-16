@@ -254,6 +254,8 @@ static int init_status (struct usbnet *dev, struct usb_interface *intf)
 				"status ep%din, %d bytes period %d\n",
 				usb_pipeendpoint(pipe), maxp, period);
 		}
+	} else {
+		return -ENOMEM;
 	}
 	return 0;
 }
