@@ -100,8 +100,8 @@ description: |
         sm8550
         sm8650
         sm8750
-        x1e78100
-        x1e80100
+        x1e78100 # hamoa
+        x1e80100 # hamoa
         x1p42100
 
   There are many devices in the list below that run the standard ChromeOS
@@ -1161,6 +1161,11 @@ properties:
               - asus,zenbook-a14-ux3407qa
               - qcom,x1p42100-crd
           - const: qcom,x1p42100
+
+      - items:
+          - enum:
+              - qcom,hamoa-iot-evk
+          - const: qcom,x1e80100
 
   # Board compatibles go above
 
