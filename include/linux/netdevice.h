@@ -3363,16 +3363,6 @@ static inline int dev_queue_xmit_accel(struct sk_buff *skb,
 	return __dev_queue_xmit(skb, sb_dev);
 }
 
-static inline int dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
-{
-	int ret;
-
-	ret = __dev_direct_xmit(skb, queue_id);
-	if (!dev_xmit_complete(ret))
-		kfree_skb(skb);
-	return ret;
-}
-
 int register_netdevice(struct net_device *dev);
 void unregister_netdevice_queue(struct net_device *dev, struct list_head *head);
 void unregister_netdevice_many(struct list_head *head);
@@ -4300,6 +4290,26 @@ static __always_inline int ____dev_forward_skb(struct net_device *dev,
 	skb_scrub_packet(skb, !net_eq(dev_net(dev), dev_net(skb->dev)));
 	skb->priority = 0;
 	return 0;
+}
+
+static inline int dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
+{
+	struct net_device *dev = skb->dev;
+	struct sk_buff *orig_skb = skb;
+	bool again = false;
+	int ret;
+
+	skb = validate_xmit_skb_list(skb, dev, &again);
+	if (skb != orig_skb) {
+		dev_core_stats_tx_dropped_inc(dev);
+		kfree_skb_list(skb);
+		return NET_XMIT_DROP;
+	}
+
+	ret = __dev_direct_xmit(skb, queue_id);
+	if (!dev_xmit_complete(ret))
+		kfree_skb(skb);
+	return ret;
 }
 
 bool dev_nit_active_rcu(const struct net_device *dev);
