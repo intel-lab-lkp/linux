@@ -51,6 +51,8 @@ struct proxy_dev {
 #define VTPM_PROXY_FLAGS_ALL  (VTPM_PROXY_FLAG_TPM2)
 
 static struct workqueue_struct *workqueue;
+static char *supplicant;
+module_param(supplicant, charp, 0);
 
 static void vtpm_proxy_delete_device(struct proxy_dev *proxy_dev);
 
@@ -675,6 +677,55 @@ static const struct file_operations vtpmx_fops = {
 	.compat_ioctl = compat_ptr_ioctl,
 	.llseek = noop_llseek,
 };
+
+static int vtpmx_supplicant_setup(struct subprocess_info *info, struct cred *new)
+{
+	struct vtpm_proxy_new_dev dev = { .flags = VTPM_PROXY_FLAG_TPM2 };
+	struct file *file = vtpm_proxy_create_device(&dev);
+
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	fd_install(dev.fd, file);
+	return 0;
+}
+
+static void vtpmx_supplicant_cleanup(struct subprocess_info *info)
+{
+}
+
+static int vtpmx_supplicant_init(void)
+{
+	static const char * const argv[] = { supplicant, NULL };
+	struct subprocess_info *info;
+	int ret;
+
+	if (!supplicant)
+		return 0;
+
+	info = call_usermodehelper_setup(argv[0], (char **)argv, NULL,
+					 GFP_KERNEL, vtpmx_supplicant_setup,
+					 vtpmx_supplicant_cleanup, NULL);
+	if (!info)
+		return -ENOMEM;
+
+	ret = call_usermodehelper_exec(info, UMH_KILLABLE | UMH_NO_WAIT);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int vtpmx_init(void)
+{
+	int ret;
+
+	ret = vtpmx_supplicant_init();
+	if (ret)
+		return ret;
+
+	return misc_register(&vtpmx_miscdev);
+}
 
 static struct miscdevice vtpmx_miscdev = {
 	.minor = MISC_DYNAMIC_MINOR,

@@ -7230,6 +7230,20 @@
 			defined by Trusted Computing Group (TCG) see
 			https://trustedcomputinggroup.org/resource/pc-client-platform-tpm-profile-ptp-specification/
 
+	tpm_vtpm_proxy.supplicant= [TPM]
+			When defined, this field must contain a legit path to a
+			program emulating a TPM chip, which will be started
+			during the driver initialization, thus providing a
+			mechanism for the user space have an emulated TPM from
+			the get go. Kernel prepares the process with a file
+			pre-opened file descriptor in the index 3 for
+			/dev/vtpmx.
+
+			An emulator can optionally provide support for
+			localities by reacting to the vendor command defined
+			by the driver: 0x20001000. Its payload is a single
+			byte containing the new locality.
+
 	tp_printk	[FTRACE]
 			Have the tracepoints sent to printk as well as the
 			tracing ring buffer. This is useful for early boot up
