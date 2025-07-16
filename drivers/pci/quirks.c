@@ -36,6 +36,8 @@
 #include <linux/switchtec.h>
 #include "pci.h"
 
+#ifndef CONFIG_PCI_NOSPEED_QUIRK
+
 static bool pcie_lbms_seen(struct pci_dev *dev, u16 lnksta)
 {
 	if (test_bit(PCI_LINK_LBMS_SEEN, &dev->priv_flags))
@@ -141,6 +143,7 @@ int pcie_failed_link_retrain(struct pci_dev *dev)
 
 	return ret;
 }
+#endif
 
 static ktime_t fixup_debug_start(struct pci_dev *dev,
 				 void (*fn)(struct pci_dev *dev))

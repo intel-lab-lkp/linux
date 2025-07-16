@@ -68,6 +68,15 @@ config PCI_QUIRKS
 	  Disable this only if your target machine is unaffected by PCI
 	  quirks.
 
+config PCI_NOSPEED_QUIRK
+	default n
+	bool "Remove forced Gen1 link speed Gen1 quirk" if EXPERT
+	help
+	  This disables a workaround that will guide the PCIe link to
+	  2.5GT/s speed if it thinks the link has failed to train. Enable
+	  this if you think this workaround is forcing the link to 2.5GT/s
+	  when it should not.
+
 config PCI_DEBUG
 	bool "PCI Debugging"
 	depends on DEBUG_KERNEL
