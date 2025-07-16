@@ -25,6 +25,9 @@ struct vmpressure {
 	struct mutex events_lock;
 
 	struct work_struct work;
+#if BITS_PER_LONG == 32
+	struct delayed_work delayed_work;
+#endif
 };
 
 struct mem_cgroup;
