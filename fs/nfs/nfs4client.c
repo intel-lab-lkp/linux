@@ -802,6 +802,7 @@ static void nfs4_destroy_server(struct nfs_server *server)
 	unset_pnfs_layoutdriver(server);
 	nfs4_purge_state_owners(server, &freeme);
 	nfs4_free_state_owners(&freeme);
+	kfree(server->delegation_hash_table);
 }
 
 /*
@@ -1096,9 +1097,14 @@ static int nfs4_server_common_setup(struct nfs_server *server,
 {
 	int error;
 
+	error = nfs4_delegation_hash_alloc(server);
+	if (error)
+		return error;
+
 	/* data servers support only a subset of NFSv4.1 */
+	error = -EPROTONOSUPPORT;
 	if (is_ds_only_client(server->nfs_client))
-		return -EPROTONOSUPPORT;
+		goto out;
 
 	/* We must ensure the session is initialised first */
 	error = nfs4_init_session(server->nfs_client);
@@ -1130,7 +1136,9 @@ static int nfs4_server_common_setup(struct nfs_server *server,
 	nfs_server_insert_lists(server);
 	server->mount_time = jiffies;
 	server->destroy = nfs4_destroy_server;
+	return 0;
 out:
+	kfree(server->delegation_hash_table);
 	return error;
 }
 

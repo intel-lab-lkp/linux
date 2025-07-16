@@ -1158,6 +1158,12 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 
 	server->fsid = fattr->fsid;
 
+	if (IS_ENABLED(CONFIG_NFS_V4) && server->delegation_hash_table) {
+		error = nfs4_delegation_hash_alloc(server);
+		if (error)
+			goto out_free_server;
+	}
+
 	nfs_sysfs_add_server(server);
 
 	nfs_sysfs_link_rpc_client(server,
@@ -1167,25 +1173,27 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 			source->client->cl_timeout,
 			flavor);
 	if (error < 0)
-		goto out_free_server;
+		goto out_free_delegation_hash;
 
 	/* probe the filesystem info for this server filesystem */
 	error = nfs_probe_server(server, fh);
 	if (error < 0)
-		goto out_free_server;
+		goto out_free_delegation_hash;
 
 	if (server->namelen == 0 || server->namelen > NFS4_MAXNAMLEN)
 		server->namelen = NFS4_MAXNAMLEN;
 
 	error = nfs_start_lockd(server);
 	if (error < 0)
-		goto out_free_server;
+		goto out_free_delegation_hash;
 
 	nfs_server_insert_lists(server);
 	server->mount_time = jiffies;
 
 	return server;
 
+out_free_delegation_hash:
+	kfree(server->delegation_hash_table);
 out_free_server:
 	nfs_free_server(server);
 	return ERR_PTR(error);
