@@ -81,7 +81,7 @@ static long get_my_ksm_zero_pages(void)
 	ssize_t read_size;
 	unsigned long my_ksm_zero_pages;
 
-	if (!proc_self_ksm_stat_fd)
+	if (proc_self_ksm_stat_fd < 0)
 		return 0;
 
 	read_size = pread(proc_self_ksm_stat_fd, buf, sizeof(buf) - 1, 0);
