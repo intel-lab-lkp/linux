@@ -105,6 +105,16 @@ config SAMPLE_RUST_DRIVER_AUXILIARY
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_ALLOC
+	tristate "Alloc Test Driver"
+	help
+	  This option builds the Rust alloc Test driver sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_alloc.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_HOSTPROGS
 	bool "Host programs"
 	help
