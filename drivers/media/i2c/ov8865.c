@@ -1746,7 +1746,13 @@ static int ov8865_mode_binning_configure(struct ov8865_sensor *sensor,
 	if (ret)
 		return ret;
 
-	value = OV8865_FORMAT2_HSYNC_EN;
+	ret = ov8865_read(sensor, OV8865_FORMAT2_REG, &value);
+	if (ret)
+		return ret;
+
+	value &= OV8865_FORMAT2_FLIP_HORZ_ISP_EN |
+		  OV8865_FORMAT2_FLIP_HORZ_SENSOR_EN;
+	value |= OV8865_FORMAT2_HSYNC_EN;
 
 	if (mode->binning_x)
 		value |= OV8865_FORMAT2_FST_HBIN_EN;
