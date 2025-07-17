@@ -746,12 +746,23 @@ void media_device_init(struct media_device *mdev)
 		media_set_bus_info(mdev->bus_info, sizeof(mdev->bus_info),
 				   mdev->dev);
 
+	mdev->default_context = NULL;
+	if (mdev->ops &&
+	    mdev->ops->alloc_context && mdev->ops->destroy_context) {
+		if (mdev->ops->alloc_context(mdev, &mdev->default_context)) {
+			dev_err(mdev->dev,
+				"Failed to initialize media device default context\n");
+			return;
+		}
+	}
+
 	dev_dbg(mdev->dev, "Media device initialized\n");
 }
 EXPORT_SYMBOL_GPL(media_device_init);
 
 void media_device_cleanup(struct media_device *mdev)
 {
+	media_device_context_put(mdev->default_context);
 	ida_destroy(&mdev->entity_internal_idx);
 	mdev->entity_internal_idx_max = 0;
 	media_graph_walk_cleanup(&mdev->pm_count_walk);

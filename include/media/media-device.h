@@ -184,6 +184,9 @@ struct media_device_ops {
  * @fh_list:	List of file handles in the media device
  *		(struct media_device_fh.mdev_list).
  * @fh_list_lock: Serialise access to fh_list list.
+ * @default_context: The default video device context. Used by drivers that
+ *		     support multi-context operation when operated by a
+ *		     non-context aware userspace.
  *
  * This structure represents an abstract high-level media device. It allows easy
  * access to entities and provides basic media device-level support. The
@@ -260,6 +263,8 @@ struct media_device {
 
 	struct list_head fh_list;
 	spinlock_t fh_list_lock;
+
+	struct media_device_context *default_context;
 };
 
 /* We don't need to include usb.h here */

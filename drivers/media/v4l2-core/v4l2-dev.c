@@ -31,6 +31,8 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
 
+#include <media/media-device.h>
+
 #define VIDEO_NUM_DEVICES	256
 #define VIDEO_NAME              "video4linux"
 
@@ -220,8 +222,13 @@ static void v4l2_device_release(struct device *cd)
 	if (v4l2_dev->release == NULL)
 		v4l2_dev = NULL;
 
-	/* Release video_device and perform other
-	   cleanups as needed. */
+	/* Release default context. */
+#ifdef CONFIG_MEDIA_CONTROLLER
+	video_device_context_put(vdev->default_context);
+#endif
+	vdev->default_context = NULL;
+
+	/* Release video_device and perform other cleanups as needed. */
 	vdev->release(vdev);
 
 	/* Decrease v4l2_device refcount */
@@ -1086,7 +1093,36 @@ int __video_register_device(struct video_device *vdev,
 	/* Part 5: Register the entity. */
 	ret = video_register_media_controller(vdev);
 
-	/* Part 6: Activate this minor. The char device can now be used. */
+	/*
+	 * Part 6: Complete the video device registration by initializing the
+	 * default context. The defaul context serves for context-aware driver
+	 * to operate with a non-context-aware userspace that never creates
+	 * new contexts. If the video device driver is not context aware, it
+	 * will never implement 'context_ops' and will never use the default
+	 * context.
+	 */
+	vdev->default_context = NULL;
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (vdev->entity.ops && vdev->entity.ops->alloc_context &&
+	    vdev->entity.ops->destroy_context) {
+		ret = vdev->entity.ops->alloc_context(&vdev->entity,
+					(struct media_entity_context **)
+					&vdev->default_context);
+		if (ret) {
+			pr_err("%s: default context alloc failed\n", __func__);
+			goto cleanup;
+		}
+
+		ret = media_device_bind_context(vdev->v4l2_dev->mdev->default_context,
+						&vdev->default_context->base);
+		if (ret) {
+			pr_err("%s: default context bind failed\n", __func__);
+			goto cleanup;
+		}
+	}
+#endif
+
+	/* Part 7: Activate this minor. The char device can now be used. */
 	set_bit(V4L2_FL_REGISTERED, &vdev->flags);
 	mutex_unlock(&videodev_lock);
 
@@ -1094,6 +1130,10 @@ int __video_register_device(struct video_device *vdev,
 
 cleanup:
 	mutex_lock(&videodev_lock);
+#ifdef CONFIG_MEDIA_CONTROLLER
+	video_device_context_put(vdev->default_context);
+#endif
+	vdev->default_context = NULL;
 	if (vdev->cdev)
 		cdev_del(vdev->cdev);
 	video_devices[vdev->minor] = NULL;
