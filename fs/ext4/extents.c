@@ -2822,6 +2822,7 @@ int ext4_ext_remove_space(struct inode *inode, ext4_lblk_t start,
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	int depth = ext_depth(inode);
 	struct ext4_ext_path *path = NULL;
+	struct ext4_extent_idx *ix = NULL;
 	struct partial_cluster partial;
 	handle_t *handle;
 	int i = 0, err = 0;
@@ -3060,6 +3061,10 @@ again:
 		 */
 		err = ext4_ext_get_access(handle, inode, path);
 		if (err == 0) {
+			ix = EXT_FIRST_INDEX(path->p_hdr);
+			if (ix && ext_inode_hdr(inode)->eh_depth > 0) {
+				ext4_ext_store_pblock(ix, 0);
+			}
 			ext_inode_hdr(inode)->eh_depth = 0;
 			ext_inode_hdr(inode)->eh_max =
 				cpu_to_le16(ext4_ext_space_root(inode, 0));
