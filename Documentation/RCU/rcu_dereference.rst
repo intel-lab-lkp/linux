@@ -192,7 +192,7 @@ readers working properly:
 		so that a control dependency preserves the needed ordering.
 		That said, it is easy to get control dependencies wrong.
 		Please see the "CONTROL DEPENDENCIES" section of
-		Documentation/memory-barriers.txt for more details.
+		Documentation/core-api/memory-barriers.rst for more details.
 
 	-	The pointers are not equal *and* the compiler does
 		not have enough information to deduce the value of the

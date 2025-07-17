@@ -19,7 +19,8 @@ these memory ordering guarantees.
 The terms used through this document try to follow the formal LKMM defined in
 tools/memory-model/Documentation/explanation.txt.
 
-memory-barriers.txt and atomic_t.txt provide more background to the
+Documentation/core-api/memory-barriers.rst and
+Documentation/core-api/atomic_t.rst provide more background to the
 memory ordering in general and for atomic operations specifically.
 
 Relevant types of memory ordering
@@ -28,7 +29,7 @@ Relevant types of memory ordering
 .. note:: The following section only covers some of the memory
    ordering types that are relevant for the atomics and reference
    counters and used through this document. For a much broader picture
-   please consult memory-barriers.txt document.
+   please consult Documentation/core-api/memory-barriers.rst.
 
 In the absence of any memory ordering guarantees (i.e. fully unordered)
 atomics & refcounters only provide atomicity and

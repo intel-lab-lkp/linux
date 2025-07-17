@@ -186,8 +186,8 @@ writeq_relaxed(), writel_relaxed(), writew_relaxed(), writeb_relaxed()
   comment that explains why the usage in a specific location is safe without
   the extra barriers.
 
-  See memory-barriers.txt for a more detailed discussion on the precise ordering
-  guarantees of the non-relaxed and relaxed versions.
+  See Documentation/core-api/memory-barriers.rst for a more detailed discussion
+  on the precise ordering guarantees of the non-relaxed and relaxed versions.
 
 ioread64(), ioread32(), ioread16(), ioread8(),
 iowrite64(), iowrite32(), iowrite16(), iowrite8()

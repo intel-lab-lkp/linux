@@ -21,9 +21,8 @@ there is only one thread-of-control within the region(s) protected by that
 lock. This works well even under UP also, so the code does _not_ need to
 worry about UP vs SMP issues: the spinlocks work correctly under both.
 
-   NOTE! Implications of spin_locks for memory are further described in:
-
-     Documentation/memory-barriers.txt
+   NOTE! Implications of spin_locks for memory are further described in
+   Documentation/core-api/memory-barriers.rst.
 
        (5) ACQUIRE operations.
 

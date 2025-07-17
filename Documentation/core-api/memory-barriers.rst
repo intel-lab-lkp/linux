@@ -481,11 +481,12 @@ And a couple of implicit varieties:
      This means that ACQUIRE acts as a minimal "acquire" operation and
      RELEASE acts as a minimal "release" operation.
 
-A subset of the atomic operations described in atomic_t.txt have ACQUIRE and
-RELEASE variants in addition to fully-ordered and relaxed (no barrier
-semantics) definitions.  For compound atomics performing both a load and a
-store, ACQUIRE semantics apply only to the load and RELEASE semantics apply
-only to the store portion of the operation.
+A subset of the atomic operations described in
+Documentation/core-api/atomic_t.rst have ACQUIRE and RELEASE variants in
+addition to fully-ordered and relaxed (no barrier semantics) definitions.
+For compound atomics performing both a load and a store, ACQUIRE semantics
+apply only to the load and RELEASE semantics apply only to the store portion
+of the operation.
 
 Memory barriers are only required where there's a possibility of interaction
 between two CPUs or between a CPU and a device.  If it can be guaranteed that
@@ -1972,7 +1973,8 @@ There are some more advanced barrier functions:
    This makes sure that the death mark on the object is perceived to be set
    *before* the reference counter is decremented.
 
-   See Documentation/atomic_{t,bitops}.txt for more information.
+   See Documentation/core-api/atomic_t.rst and
+   Documentation/core-api/atomic_bitops.rst for more information.
 
 
  * dma_wmb();
@@ -2549,7 +2551,7 @@ operations are noted specially as some of them imply full memory barriers and
 some don't, but they're very heavily relied on as a group throughout the
 kernel.
 
-See Documentation/atomic_t.txt for more information.
+See Documentation/core-api/atomic_t.rst for more information.
 
 
 Accessing Devices

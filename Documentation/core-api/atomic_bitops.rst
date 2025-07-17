@@ -41,7 +41,8 @@ Semantics
 * Non-atomic ops:
 
   In particular __clear_bit_unlock() suffers the same issue as atomic_set(),
-  which is why the generic version maps to clear_bit_unlock(), see atomic_t.txt.
+  which is why the generic version maps to clear_bit_unlock(), see
+  Documentation/core-api/atomic_t.rst.
 
 
 * RMW ops:
@@ -64,5 +65,6 @@ clear_bit_unlock() which has RELEASE semantics and test_bit_acquire which has
 ACQUIRE semantics.
 
 Since a platform only has a single means of achieving atomic operations
-the same barriers as for atomic_t are used, see atomic_t.txt.
+the same barriers as for atomic_t are used, see
+Documentation/core-api/atomic_t.rst.
 

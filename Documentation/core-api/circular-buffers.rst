@@ -233,5 +233,5 @@ against previous accesses.
 Further reading
 ===============
 
-See also Documentation/memory-barriers.txt for a description of Linux's memory
-barrier facilities.
+See also Documentation/core-api/memory-barriers.rst for a description of
+Linux's memory barrier facilities.

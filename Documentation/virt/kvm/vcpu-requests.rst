@@ -289,6 +289,6 @@ architectures a function where requests may be checked if necessary.
 References
 ==========
 
-.. [atomic-ops] Documentation/atomic_bitops.txt and Documentation/atomic_t.txt
-.. [memory-barriers] Documentation/memory-barriers.txt
+.. [atomic-ops] Documentation/core-api/atomic_bitops.rst and Documentation/core-api/atomic_t.rst
+.. [memory-barriers] Documentation/core-api/memory-barriers.rst
 .. [lwn-mb] https://lwn.net/Articles/573436/
