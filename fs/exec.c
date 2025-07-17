@@ -68,6 +68,7 @@
 #include <linux/user_events.h>
 #include <linux/rseq.h>
 #include <linux/ksm.h>
+#include <linux/export.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1919,6 +1920,7 @@ out_ret:
 	putname(filename);
 	return retval;
 }
+EXPORT_SYMBOL_GPL_FOR_MODULES(kernel_execve, "kunit-uapi");
 
 static int do_execve(struct filename *filename,
 	const char __user *const __user *__argv,

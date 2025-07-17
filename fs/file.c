@@ -1317,6 +1317,7 @@ out_unlock:
 	spin_unlock(&files->file_lock);
 	return err;
 }
+EXPORT_SYMBOL_GPL_FOR_MODULES(replace_fd, "kunit-uapi");
 
 /**
  * receive_fd() - Install received file into file descriptor table

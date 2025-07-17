@@ -105,6 +105,7 @@
 #include <uapi/linux/pidfd.h>
 #include <linux/pidfs.h>
 #include <linux/tick.h>
+#include <linux/export.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -2676,6 +2677,7 @@ pid_t user_mode_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 	return kernel_clone(&args);
 }
+EXPORT_SYMBOL_GPL_FOR_MODULES(user_mode_thread, "kunit-uapi");
 
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)

@@ -27,6 +27,7 @@
 #include <linux/watch_queue.h>
 #include <linux/sysctl.h>
 #include <linux/sort.h>
+#include <linux/export.h>
 
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
@@ -971,6 +972,7 @@ int create_pipe_files(struct file **res, int flags)
 	file_set_fsnotify_mode(res[1], FMODE_NONOTIFY_PERM);
 	return 0;
 }
+EXPORT_SYMBOL_GPL_FOR_MODULES(create_pipe_files, "kunit-uapi");
 
 static int __do_pipe_flags(int *fd, struct file **files, int flags)
 {

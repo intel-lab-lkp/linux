@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/fs_parser.h>
+#include <linux/export.h>
 
 /*
  * Handling of filesystem drivers list.
@@ -45,6 +46,7 @@ void put_filesystem(struct file_system_type *fs)
 {
 	module_put(fs->owner);
 }
+EXPORT_SYMBOL_GPL_FOR_MODULES(put_filesystem, "kunit-uapi");
 
 static struct file_system_type **find_filesystem(const char *name, unsigned len)
 {
