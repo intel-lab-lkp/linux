@@ -4358,6 +4358,7 @@ fec_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	SET_NETDEV_DEV(ndev, &pdev->dev);
+	ndev->dev.of_node = pdev->dev.of_node;
 
 	/* setup board info structure */
 	fep = netdev_priv(ndev);
