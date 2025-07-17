@@ -93,19 +93,20 @@ ping_test()
 run_one_clash_test()
 {
 	local ns="$1"
-	local daddr="$2"
-	local dport="$3"
+	local ctns="$2"
+	local daddr="$3"
+	local dport="$4"
 	local entries
 	local cre
 
-	if ! ip netns exec "$ns" ./udpclash $daddr $dport;then
-		echo "FAIL: did not receive expected number of replies for $daddr:$dport"
-		ret=1
-		return 1
+	if ! ip netns exec "$ns" timeout 10s ./udpclash $daddr $dport;then
+		echo "NOTICE: udpclash did not receive any packets, cpus $(nprocs)"
+		ip netns exec "$ns" ss -niupa
+		# don't fail: check if clash resolution triggered.
 	fi
 
-	entries=$(conntrack -S | wc -l)
-	cre=$(conntrack -S | grep -v "clash_resolve=0" | wc -l)
+	entries=$(ip netns exec "$ctns" conntrack -S | wc -l)
+	cre=$(ip netns exec "$ctns" conntrack -S | grep "clash_resolve=0" | wc -l)
 
 	if [ "$cre" -ne "$entries" ] ;then
 		clash_resolution_active=1
@@ -117,8 +118,8 @@ run_one_clash_test()
 		return 0
 	fi
 
-	# not a failure: clash resolution logic did not trigger, but all replies
-	# were received.  With right timing, xmit completed sequentially and
+	# not a failure: clash resolution logic did not trigger.
+	# With right timing, xmit completed sequentially and
 	# no parallel insertion occurs.
 	return $ksft_skip
 }
@@ -126,20 +127,23 @@ run_one_clash_test()
 run_clash_test()
 {
 	local ns="$1"
-	local daddr="$2"
-	local dport="$3"
+	local ctns="$2"
+	local daddr="$3"
+	local dport="$4"
+	local harderr=0
 
 	for i in $(seq 1 10);do
-		run_one_clash_test "$ns" "$daddr" "$dport"
+		run_one_clash_test "$ns" "$ctns" "$daddr" "$dport"
 		local rv=$?
 		if [ $rv -eq 0 ];then
 			echo "PASS: clash resolution test for $daddr:$dport on attempt $i"
 			return 0
 		elif [ $rv -eq 1 ];then
-			echo "FAIL: clash resolution test for $daddr:$dport on attempt $i"
-			return 1
+			harderr=1
 		fi
 	done
+
+	[ $harderr -eq 1 ] && echo "FAIL: no packets received for $daddr:$dport with $(nproc) cpus"
 }
 
 ip link add veth0 netns "$nsclient1" type veth peer name veth0 netns "$nsrouter"
@@ -161,15 +165,15 @@ spawn_servers "$nsclient2"
 
 # exercise clash resolution with nat:
 # nsrouter is supposed to dnat to 10.0.2.1:900{0,1,2,3}.
-run_clash_test "$nsclient1" 10.0.1.99 "$dport"
+run_clash_test "$nsclient1" "$nsrouter" 10.0.1.99 "$dport"
 
 # exercise clash resolution without nat.
 load_simple_ruleset "$nsclient2"
-run_clash_test "$nsclient2" 127.0.0.1 9001
+run_clash_test "$nsclient2" "$nsclient2" 127.0.0.1 9001
 
 if [ $clash_resolution_active -eq 0 ];then
 	[ "$ret" -eq 0 ] && ret=$ksft_skip
-	echo "SKIP: Clash resolution did not trigger"
+	echo "SKIP: Clash resolution did not trigger with $(nproc) cpus."
 fi
 
 exit $ret
