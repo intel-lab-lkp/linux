@@ -585,7 +585,7 @@ static int
 ext_tree_encode_commit(struct pnfs_block_layout *bl, __be32 *p,
 		size_t buffer_size, size_t *count, __u64 *lastbyte)
 {
-	struct pnfs_block_extent *be, *be_prev;
+	struct pnfs_block_extent *be, *be_prev = NULL;
 	int ret = 0;
 
 	spin_lock(&bl->bl_ext_lock);
@@ -611,10 +611,13 @@ ext_tree_encode_commit(struct pnfs_block_layout *bl, __be32 *p,
 	if (!ret) {
 		*lastbyte = (bl->bl_lwb != 0) ? bl->bl_lwb - 1 : U64_MAX;
 		bl->bl_lwb = 0;
-	} else {
+	} else if (be_prev) {
 		*lastbyte = be_prev->be_f_offset + be_prev->be_length;
 		*lastbyte <<= SECTOR_SHIFT;
 		*lastbyte -= 1;
+	} else {
+		/* Buffer too small even for one extent, count is zero */
+		*lastbyte = U64_MAX;
 	}
 	spin_unlock(&bl->bl_ext_lock);
 
