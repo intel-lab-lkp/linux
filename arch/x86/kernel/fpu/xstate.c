@@ -1859,8 +1859,13 @@ long fpu_xstate_prctl(int option, unsigned long arg2)
  */
 static void avx512_status(struct seq_file *m, struct task_struct *task)
 {
-	unsigned long timestamp = READ_ONCE(x86_task_fpu(task)->avx512_timestamp);
+	unsigned long timestamp = 0;
 	long delta;
+
+#ifdef CONFIG_X86_DEBUG_FPU
+	if (!(task->flags & PF_KTHREAD))
+#endif
+		timestamp = READ_ONCE(x86_task_fpu(task)->avx512_timestamp);
 
 	if (!timestamp) {
 		/*
