@@ -730,7 +730,7 @@ static void vmd_copy_host_bridge_flags(struct pci_host_bridge *root_bridge,
 }
 
 /*
- * Enable ASPM and LTR settings on devices that aren't configured by BIOS.
+ * Enable LTR settings on devices that aren't configured by BIOS.
  */
 static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 {
@@ -770,7 +770,6 @@ out_state_change:
 	 * PCIe r6.0, sec 5.5.4.
 	 */
 	pci_set_power_state_locked(pdev, PCI_D0);
-	pci_enable_link_state_locked(pdev, PCIE_LINK_STATE_ALL);
 	return 0;
 }
 
@@ -910,6 +909,10 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 		vmd_remove_irq_domain(vmd);
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_PCIEASPM
+	vmd->bus->aspm_bus_link_state = PCIE_LINK_STATE_ALL;
+#endif
 
 	vmd_copy_host_bridge_flags(pci_find_host_bridge(vmd->dev->bus),
 				   to_pci_host_bridge(vmd->bus->bridge));
