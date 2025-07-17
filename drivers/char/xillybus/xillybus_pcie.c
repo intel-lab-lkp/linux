@@ -32,6 +32,11 @@ static const struct pci_device_id xillyids[] = {
 	{ /* End: all zeroes */ }
 };
 
+static void xilly_pci_free_irq_vectors(void *data)
+{
+	pci_free_irq_vectors(data);
+}
+
 static int xilly_probe(struct pci_dev *pdev,
 		       const struct pci_device_id *ent)
 {
@@ -76,11 +81,21 @@ static int xilly_probe(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	/* Set up a single MSI interrupt */
-	if (pci_enable_msi(pdev)) {
+	rc = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
+	if (rc < 0) {
 		dev_err(endpoint->dev,
 			"Failed to enable MSI interrupts. Aborting.\n");
 		return -ENODEV;
 	}
+	
+	rc = devm_add_action(&pdev->dev, xilly_pci_free_irq_vectors, pdev);
+       	if (rc) {
+		dev_err(endpoint->dev,
+			"Failed to add devm action. Aborting.\n");
+		pci_free_irq_vectors(pdev);
+		return -ENODEV;
+	}
+
 	rc = devm_request_irq(&pdev->dev, pdev->irq, xillybus_isr, 0,
 			      xillyname, endpoint);
 	if (rc) {
