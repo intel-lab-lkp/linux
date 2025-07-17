@@ -474,11 +474,6 @@ static inline bool xfs_has_nonzoned(const struct xfs_mount *mp)
 	return !xfs_has_zoned(mp);
 }
 
-static inline bool xfs_can_sw_atomic_write(struct xfs_mount *mp)
-{
-	return xfs_has_reflink(mp);
-}
-
 /*
  * Some features are always on for v5 file systems, allow the compiler to
  * eliminiate dead code when building without v4 support.
@@ -533,6 +528,14 @@ __XFS_HAS_FEAT(dax_always, DAX_ALWAYS)
 __XFS_HAS_FEAT(dax_never, DAX_NEVER)
 __XFS_HAS_FEAT(norecovery, NORECOVERY)
 __XFS_HAS_FEAT(nouuid, NOUUID)
+
+static inline bool xfs_can_sw_atomic_write(struct xfs_mount *mp)
+{
+	if (xfs_has_dax_always(mp))
+		return false;
+
+	return xfs_has_reflink(mp);
+}
 
 /*
  * Operational mount state flags

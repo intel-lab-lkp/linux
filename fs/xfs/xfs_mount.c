@@ -745,6 +745,12 @@ xfs_set_max_atomic_write_opt(
 
 	ASSERT(max_write <= U32_MAX);
 
+	if (xfs_has_dax_always(mp)) {
+		xfs_warn(mp,
+ "atomic writes not supported for DAX");
+		return -EINVAL;
+	}
+
 	/* generic_atomic_write_valid enforces power of two length */
 	if (!is_power_of_2(new_max_bytes)) {
 		xfs_warn(mp,
