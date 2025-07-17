@@ -85,6 +85,17 @@ struct elevator_type
 	struct list_head list;
 };
 
+/* Holding context data for changing elevator */
+struct elv_change_ctx {
+	const char *name;
+	bool no_uevent;
+
+	/* for unregistering old elevator */
+	struct elevator_queue *old;
+	/* for registering new elevator */
+	struct elevator_queue *new;
+};
+
 static inline bool elevator_tryget(struct elevator_type *e)
 {
 	return try_module_get(e->elevator_owner);

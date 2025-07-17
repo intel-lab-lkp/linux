@@ -4966,6 +4966,63 @@ int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 	return ret;
 }
 
+/*
+ * Switch back to the elevator name stored in the xarray.
+ */
+static void blk_mq_elv_switch_back(struct request_queue *q,
+		struct xarray *elv_tbl)
+{
+	struct elv_change_ctx ctx = {};
+	int ret = -ENODEV;
+	char *elevator_name = xa_load(elv_tbl, q->id);
+
+	WARN_ON_ONCE(q->mq_freeze_depth == 0);
+
+	mutex_lock(&q->elevator_lock);
+	if (elevator_name && !blk_queue_dying(q) && blk_queue_registered(q)) {
+		ctx.name = elevator_name;
+
+		/* force to reattach elevator after nr_hw_queue is updated */
+		ret = elevator_switch(q, &ctx);
+	}
+	mutex_unlock(&q->elevator_lock);
+	blk_mq_unfreeze_queue_nomemrestore(q);
+	if (!ret)
+		WARN_ON_ONCE(elevator_change_done(q, &ctx));
+}
+
+/*
+ * Stores elevator name in xarray and set current elevator to none. It uses
+ * q->id as an index to store the elevator name into the xarray.
+ */
+static int blk_mq_elv_switch_none(struct request_queue *q,
+		struct xarray *elv_tbl)
+{
+	int ret = 0;
+
+	lockdep_assert_held_write(&q->tag_set->update_nr_hwq_lock);
+
+	/*
+	 * Accessing q->elevator without holding q->elevator_lock is safe here
+	 * because we're called from nr_hw_queue update which is protected by
+	 * set->update_nr_hwq_lock in the writer context. So, scheduler update/
+	 * switch code (which acquires the same lock in the reader context)
+	 * can't run concurrently.
+	 */
+	if (q->elevator) {
+		char *elevator_name = (char *)q->elevator->type->elevator_name;
+
+		ret = xa_insert(elv_tbl, q->id, elevator_name, GFP_KERNEL);
+		if (ret) {
+			WARN_ON_ONCE(1);
+			goto out;
+		}
+		elevator_set_none(q);
+	}
+out:
+	return ret;
+}
+
 static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 							int nr_hw_queues)
 {
@@ -4973,6 +5030,7 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	int prev_nr_hw_queues = set->nr_hw_queues;
 	unsigned int memflags;
 	int i;
+	struct xarray elv_tbl;
 
 	lockdep_assert_held(&set->tag_list_lock);
 
@@ -4984,6 +5042,9 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 		return;
 
 	memflags = memalloc_noio_save();
+
+	xa_init(&elv_tbl);
+
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		blk_mq_debugfs_unregister_hctxs(q);
 		blk_mq_sysfs_unregister_hctxs(q);
@@ -4992,11 +5053,17 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
 		blk_mq_freeze_queue_nomemsave(q);
 
-	if (blk_mq_realloc_tag_set_tags(set, nr_hw_queues) < 0) {
-		list_for_each_entry(q, &set->tag_list, tag_set_list)
-			blk_mq_unfreeze_queue_nomemrestore(q);
-		goto reregister;
-	}
+	/*
+	 * Switch IO scheduler to 'none', cleaning up the data associated
+	 * with the previous scheduler. We will switch back once we are done
+	 * updating the new sw to hw queue mappings.
+	 */
+	list_for_each_entry(q, &set->tag_list, tag_set_list)
+		if (blk_mq_elv_switch_none(q, &elv_tbl))
+			goto switch_back;
+
+	if (blk_mq_realloc_tag_set_tags(set, nr_hw_queues) < 0)
+		goto switch_back;
 
 fallback:
 	blk_mq_update_queue_map(set);
@@ -5016,12 +5083,11 @@ fallback:
 		}
 		blk_mq_map_swqueue(q);
 	}
-
-	/* elv_update_nr_hw_queues() unfreeze queue for us */
+switch_back:
+	/* blk_mq_elv_switch_back() unfreezes queue for us */
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
-		elv_update_nr_hw_queues(q);
+		blk_mq_elv_switch_back(q, &elv_tbl);
 
-reregister:
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		blk_mq_sysfs_register_hctxs(q);
 		blk_mq_debugfs_register_hctxs(q);
@@ -5029,6 +5095,9 @@ reregister:
 		blk_mq_remove_hw_queues_cpuhp(q);
 		blk_mq_add_hw_queues_cpuhp(q);
 	}
+
+	xa_destroy(&elv_tbl);
+
 	memalloc_noio_restore(memflags);
 
 	/* Free the excess tags when nr_hw_queues shrink. */

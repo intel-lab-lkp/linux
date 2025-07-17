@@ -45,17 +45,6 @@
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
 
-/* Holding context data for changing elevator */
-struct elv_change_ctx {
-	const char *name;
-	bool no_uevent;
-
-	/* for unregistering old elevator */
-	struct elevator_queue *old;
-	/* for registering new elevator */
-	struct elevator_queue *new;
-};
-
 static DEFINE_SPINLOCK(elv_list_lock);
 static LIST_HEAD(elv_list);
 
@@ -570,7 +559,7 @@ EXPORT_SYMBOL_GPL(elv_unregister);
  * If switching fails, we are most likely running out of memory and not able
  * to restore the old io scheduler, so leaving the io scheduler being none.
  */
-static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
+int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
 {
 	struct elevator_type *new_e = NULL;
 	int ret = 0;
@@ -631,8 +620,7 @@ static void elv_exit_and_release(struct request_queue *q)
 		kobject_put(&e->kobj);
 }
 
-static int elevator_change_done(struct request_queue *q,
-				struct elv_change_ctx *ctx)
+int elevator_change_done(struct request_queue *q, struct elv_change_ctx *ctx)
 {
 	int ret = 0;
 
@@ -683,30 +671,6 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 		ret = elevator_change_done(q, ctx);
 
 	return ret;
-}
-
-/*
- * The I/O scheduler depends on the number of hardware queues, this forces a
- * reattachment when nr_hw_queues changes.
- */
-void elv_update_nr_hw_queues(struct request_queue *q)
-{
-	struct elv_change_ctx ctx = {};
-	int ret = -ENODEV;
-
-	WARN_ON_ONCE(q->mq_freeze_depth == 0);
-
-	mutex_lock(&q->elevator_lock);
-	if (q->elevator && !blk_queue_dying(q) && blk_queue_registered(q)) {
-		ctx.name = q->elevator->type->elevator_name;
-
-		/* force to reattach elevator after nr_hw_queue is updated */
-		ret = elevator_switch(q, &ctx);
-	}
-	mutex_unlock(&q->elevator_lock);
-	blk_mq_unfreeze_queue_nomemrestore(q);
-	if (!ret)
-		WARN_ON_ONCE(elevator_change_done(q, &ctx));
 }
 
 /*
