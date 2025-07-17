@@ -119,16 +119,20 @@ struct media_pipeline {
  * @list:		Entry in the media_pad pads list
  * @pipe:		The media_pipeline that the pad is part of
  * @pad:		The media pad
+ * @context:		Reference to a video device or subdevice context
  *
  * This structure associate a pad with a media pipeline. Instances of
  * media_pipeline_pad are created by media_pipeline_start() when it builds the
  * pipeline, and stored in the &media_pad.pads list. media_pipeline_stop()
- * removes the entries from the list and deletes them.
+ * removes the entries from the list and deletes them. The context field is
+ * populated only if a valid context has been associated with the pad.
  */
+struct media_entity_context;
 struct media_pipeline_pad {
 	struct list_head list;
 	struct media_pipeline *pipe;
 	struct media_pad *pad;
+	struct media_entity_context *context;
 };
 
 /**
@@ -1213,6 +1217,39 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 					struct media_pipeline *pipe);
 
 /**
+ * media_pipeline_start_context - Mark a pipeline as streaming
+ * @origin: Starting pad
+ * @pipe: Media pipeline to be assigned to all pads in the pipeline.
+ * @context: The media device context the pipeline belongs to
+ *
+ * Mark all pads connected to a given pad through enabled links, either
+ * directly or indirectly, as streaming. The given pipeline object is assigned
+ * to every pad in the pipeline and stored in the media_pad pipe field.
+ *
+ * Calls to this function can be nested, in which case the same number of
+ * media_pipeline_stop() calls will be required to stop streaming. The
+ * pipeline pointer must be identical for all nested calls to
+ * media_pipeline_start().
+ */
+__must_check int
+media_pipeline_start_context(struct media_pad *origin,
+			     struct media_pipeline *pipe,
+			     struct media_device_context *context);
+
+/**
+ * __media_pipeline_start_context - Mark a pipeline as streaming
+ * @origin: Starting pad
+ * @pipe: Media pipeline to be assigned to all pads in the pipeline.
+ * @context: The media device context the pipeline belongs to
+ *
+ * ..note:: This is the non-locking version of media_pipeline_start_context()
+ */
+__must_check int
+__media_pipeline_start_context(struct media_pad *origin,
+			       struct media_pipeline *pipe,
+			       struct media_device_context *context);
+
+/**
  * media_pipeline_stop - Mark a pipeline as not streaming
  * @pad: Starting pad
  *
@@ -1317,6 +1354,23 @@ __media_pipeline_entity_iter_next(struct media_pipeline *pipe,
  * media_pipeline_stop().
  */
 __must_check int media_pipeline_alloc_start(struct media_pad *pad);
+
+/**
+ * media_pipeline_alloc_start_context - Mark a pipeline as streaming
+ * @pad: Starting pad
+ * @context: The media device context the pipeline belongs to
+ *
+ * media_pipeline_alloc_start_context() is similar to
+ * media_pipeline_start_context() but instead of working on a given pipeline the
+ * function will use an existing pipeline if the pad is already part of a
+ * pipeline, or allocate a new pipeline.
+ *
+ * Calls to media_pipeline_alloc_start_context() must be matched with
+ * media_pipeline_stop().
+ */
+__must_check int
+media_pipeline_alloc_start_context(struct media_pad *pad,
+				   struct media_device_context *context);
 
 /**
  * media_devnode_create() - creates and initializes a device node interface

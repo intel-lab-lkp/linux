@@ -1221,6 +1221,36 @@ __must_check int __video_device_pipeline_start(struct video_device *vdev,
 }
 EXPORT_SYMBOL_GPL(__video_device_pipeline_start);
 
+__must_check int
+video_device_context_pipeline_start(struct video_device_context *context,
+				    struct media_pipeline *pipe)
+{
+	struct video_device *vdev = context->vdev;
+	struct media_entity *entity = &vdev->entity;
+
+	if (entity->num_pads != 1)
+		return -ENODEV;
+
+	return media_pipeline_start_context(&entity->pads[0], pipe,
+					    context->base.mdev_context);
+}
+EXPORT_SYMBOL(video_device_context_pipeline_start);
+
+__must_check int
+__video_device_context_pipeline_start(struct video_device_context *context,
+				      struct media_pipeline *pipe)
+{
+	struct video_device *vdev = context->vdev;
+	struct media_entity *entity = &vdev->entity;
+
+	if (entity->num_pads != 1)
+		return -ENODEV;
+
+	return __media_pipeline_start_context(&entity->pads[0], pipe,
+					      context->base.mdev_context);
+}
+EXPORT_SYMBOL(__video_device_context_pipeline_start);
+
 void video_device_pipeline_stop(struct video_device *vdev)
 {
 	struct media_entity *entity = &vdev->entity;
@@ -1253,6 +1283,20 @@ __must_check int video_device_pipeline_alloc_start(struct video_device *vdev)
 	return media_pipeline_alloc_start(&entity->pads[0]);
 }
 EXPORT_SYMBOL_GPL(video_device_pipeline_alloc_start);
+
+__must_check int
+video_device_context_pipeline_alloc_start(struct video_device_context *context)
+{
+	struct video_device *vdev = context->vdev;
+	struct media_entity *entity = &vdev->entity;
+
+	if (entity->num_pads != 1)
+		return -ENODEV;
+
+	return media_pipeline_alloc_start_context(&entity->pads[0],
+						  context->base.mdev_context);
+}
+EXPORT_SYMBOL_GPL(video_device_context_pipeline_alloc_start);
 
 struct media_pipeline *video_device_pipeline(struct video_device *vdev)
 {

@@ -768,8 +768,50 @@ done:
 	return ret;
 }
 
-__must_check int __media_pipeline_start(struct media_pad *origin,
-					struct media_pipeline *pipe)
+static int
+media_pipeline_validate_context(struct media_device_context *mdev_context,
+				struct media_entity *entity,
+				struct media_pipeline_pad *ppad)
+{
+	struct media_entity_context *context;
+
+	if (!mdev_context)
+		return 0;
+
+	/*
+	 * It's not mandatory for all entities in the pipeline to support
+	 * contexts.
+	 */
+	if (!entity->ops || !entity->ops->alloc_context ||
+	    !entity->ops->destroy_context)
+		return 0;
+
+	/*
+	 * But if they do they should be bound to the same media device context
+	 * as all other entities.
+	 *
+	 * media_device_get_entity_context increases the ref-counting of the
+	 * context. Store a reference in the ppad for later decreasing the
+	 * reference count when the pipeline is stopped.
+	 *
+	 * Fail validation if no context is associated with this media context
+	 * and be loud about that as userspace should be informed it has to
+	 * bind all entities of the pipeline in the same context.
+	 */
+	context = media_device_get_entity_context(mdev_context, entity);
+	if (WARN_ON(IS_ERR(context)))
+		return -EPIPE;
+
+	media_entity_context_get(context);
+	ppad->context = context;
+
+	return 0;
+}
+
+__must_check int
+__media_pipeline_start_context(struct media_pad *origin,
+			       struct media_pipeline *pipe,
+			       struct media_device_context *mdev_context)
 {
 	struct media_device *mdev = origin->graph_obj.mdev;
 	struct media_pipeline_pad *err_ppad;
@@ -829,7 +871,15 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 		}
 
 		/*
-		 * 2. Validate all active links whose sink is the current pad.
+		 * 2. If we have a media context, ensure the entity has a device
+		 * context associated with it.
+		 */
+		ret = media_pipeline_validate_context(mdev_context, entity, ppad);
+		if (ret)
+			goto error;
+
+		/*
+		 * 3. Validate all active links whose sink is the current pad.
 		 * Validation of the source pads is performed in the context of
 		 * the connected sink pad to avoid duplicating checks.
 		 */
@@ -875,7 +925,7 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 		}
 
 		/*
-		 * 3. If the pad has the MEDIA_PAD_FL_MUST_CONNECT flag set,
+		 * 4. If the pad has the MEDIA_PAD_FL_MUST_CONNECT flag set,
 		 * ensure that it has either no link or an enabled link.
 		 */
 		if ((pad->flags & MEDIA_PAD_FL_MUST_CONNECT) &&
@@ -905,6 +955,9 @@ error:
 		if (err_ppad == ppad)
 			break;
 
+		if (err_ppad->context)
+			media_entity_context_put(err_ppad->context);
+
 		err_ppad->pad->pipe = NULL;
 	}
 
@@ -912,18 +965,34 @@ error:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(__media_pipeline_start_context);
+
+__must_check int __media_pipeline_start(struct media_pad *origin,
+					struct media_pipeline *pipe)
+{
+	return __media_pipeline_start_context(origin, pipe, NULL);
+}
 EXPORT_SYMBOL_GPL(__media_pipeline_start);
 
-__must_check int media_pipeline_start(struct media_pad *origin,
-				      struct media_pipeline *pipe)
+__must_check int
+media_pipeline_start_context(struct media_pad *origin,
+			     struct media_pipeline *pipe,
+			     struct media_device_context *context)
 {
 	struct media_device *mdev = origin->graph_obj.mdev;
 	int ret;
 
 	mutex_lock(&mdev->graph_mutex);
-	ret = __media_pipeline_start(origin, pipe);
+	ret = __media_pipeline_start_context(origin, pipe, context);
 	mutex_unlock(&mdev->graph_mutex);
 	return ret;
+}
+EXPORT_SYMBOL_GPL(media_pipeline_start_context);
+
+__must_check int media_pipeline_start(struct media_pad *origin,
+				      struct media_pipeline *pipe)
+{
+	return media_pipeline_start_context(origin, pipe, NULL);
 }
 EXPORT_SYMBOL_GPL(media_pipeline_start);
 
@@ -942,8 +1011,11 @@ void __media_pipeline_stop(struct media_pad *pad)
 	if (--pipe->start_count)
 		return;
 
-	list_for_each_entry(ppad, &pipe->pads, list)
+	list_for_each_entry(ppad, &pipe->pads, list) {
+		if (ppad->context)
+			media_entity_context_put(ppad->context);
 		ppad->pad->pipe = NULL;
+	}
 
 	media_pipeline_cleanup(pipe);
 
@@ -962,14 +1034,13 @@ void media_pipeline_stop(struct media_pad *pad)
 }
 EXPORT_SYMBOL_GPL(media_pipeline_stop);
 
-__must_check int media_pipeline_alloc_start(struct media_pad *pad)
+static struct media_pipeline *
+media_pipeline_alloc(struct media_pad *pad)
 {
 	struct media_device *mdev = pad->graph_obj.mdev;
-	struct media_pipeline *new_pipe = NULL;
 	struct media_pipeline *pipe;
-	int ret;
 
-	mutex_lock(&mdev->graph_mutex);
+	lockdep_assert_held(&mdev->graph_mutex);
 
 	/*
 	 * Is the pad already part of a pipeline? If not, we need to allocate
@@ -977,19 +1048,33 @@ __must_check int media_pipeline_alloc_start(struct media_pad *pad)
 	 */
 	pipe = media_pad_pipeline(pad);
 	if (!pipe) {
-		new_pipe = kzalloc(sizeof(*new_pipe), GFP_KERNEL);
-		if (!new_pipe) {
-			ret = -ENOMEM;
-			goto out;
-		}
+		pipe = kzalloc(sizeof(*pipe), GFP_KERNEL);
+		if (!pipe)
+			return ERR_PTR(-ENOMEM);
 
-		pipe = new_pipe;
 		pipe->allocated = true;
+	}
+
+	return pipe;
+}
+
+__must_check int media_pipeline_alloc_start(struct media_pad *pad)
+{
+	struct media_device *mdev = pad->graph_obj.mdev;
+	struct media_pipeline *pipe;
+	int ret;
+
+	mutex_lock(&mdev->graph_mutex);
+
+	pipe = media_pipeline_alloc(pad);
+	if (IS_ERR(pipe)) {
+		ret = PTR_ERR(pipe);
+		goto out;
 	}
 
 	ret = __media_pipeline_start(pad, pipe);
 	if (ret)
-		kfree(new_pipe);
+		kfree(pipe);
 
 out:
 	mutex_unlock(&mdev->graph_mutex);
@@ -997,6 +1082,33 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(media_pipeline_alloc_start);
+
+__must_check
+int media_pipeline_alloc_start_context(struct media_pad *pad,
+				       struct media_device_context *mdev_context)
+{
+	struct media_device *mdev = pad->graph_obj.mdev;
+	struct media_pipeline *pipe;
+	int ret;
+
+	mutex_lock(&mdev->graph_mutex);
+
+	pipe = media_pipeline_alloc(pad);
+	if (IS_ERR(pipe)) {
+		ret = PTR_ERR(pipe);
+		goto out;
+	}
+
+	ret = __media_pipeline_start_context(pad, pipe, mdev_context);
+	if (ret)
+		kfree(pipe);
+
+out:
+	mutex_unlock(&mdev->graph_mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(media_pipeline_alloc_start_context);
 
 struct media_pad *
 __media_pipeline_pad_iter_next(struct media_pipeline *pipe,
