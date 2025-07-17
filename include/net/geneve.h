@@ -62,6 +62,12 @@ struct genevehdr {
 	u8 options[];
 };
 
+union geneve_addr {
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+	struct sockaddr sa;
+};
+
 static inline bool netif_is_geneve(const struct net_device *dev)
 {
 	return dev->rtnl_link_ops &&
