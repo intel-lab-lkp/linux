@@ -1,8 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-# Kselftest frmework requirement - SKIP code is 4.
-ksft_skip=4
+source _common.sh
 
 ensure_write_succ()
 {
@@ -362,15 +361,6 @@ test_damon_sysfs()
 	fi
 
 	test_kdamonds "$damon_sysfs/kdamonds"
-}
-
-check_dependencies()
-{
-	if [ $EUID -ne 0 ]
-	then
-		echo "Run as root"
-		exit $ksft_skip
-	fi
 }
 
 check_dependencies
