@@ -1989,6 +1989,7 @@ sub ctx_locate_comment {
 	for (my $linenr = $first_line; $linenr < $end_line; $linenr++) {
 		my $line = $rawlines[$linenr - 1];
 		#warn "           $line\n";
+		next if ($line =~ /^-/); # ignore lines removed by patch
 		if ($linenr == $first_line and $line =~ m@^.\s*\*@) {
 			$in_comment = 1;
 		}
