@@ -157,7 +157,7 @@ nfsd4_block_decode_layoutupdate(struct xdr_stream *xdr, struct iomap **iomapp,
 
 		ret = xdr_stream_decode_opaque_fixed(xdr,
 				&bex.vol_id, sizeof(bex.vol_id));
-		if (ret < sizeof(bex.vol_id)) {
+		if (ret) {
 			nfserr = nfserr_bad_xdr;
 			goto fail;
 		}
