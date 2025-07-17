@@ -256,10 +256,11 @@ enum pci_irq_reroute_variant {
 
 typedef unsigned short __bitwise pci_bus_flags_t;
 enum pci_bus_flags {
-	PCI_BUS_FLAGS_NO_MSI	= (__force pci_bus_flags_t) 1,
-	PCI_BUS_FLAGS_NO_MMRBC	= (__force pci_bus_flags_t) 2,
-	PCI_BUS_FLAGS_NO_AERSID	= (__force pci_bus_flags_t) 4,
-	PCI_BUS_FLAGS_NO_EXTCFG	= (__force pci_bus_flags_t) 8,
+	PCI_BUS_FLAGS_NO_MSI		= (__force pci_bus_flags_t) 1,
+	PCI_BUS_FLAGS_NO_MMRBC		= (__force pci_bus_flags_t) 2,
+	PCI_BUS_FLAGS_NO_AERSID		= (__force pci_bus_flags_t) 4,
+	PCI_BUS_FLAGS_NO_EXTCFG		= (__force pci_bus_flags_t) 8,
+	PCI_BUS_FLAGS_NO_ASPM_DEFAULT	= (__force pci_bus_flags_t) 16,
 };
 
 /* Values from Link Status register, PCIe r3.1, sec 7.8.8 */
@@ -665,6 +666,9 @@ struct pci_bus {
 	void		*sysdata;	/* Hook for sys-specific extension */
 	struct proc_dir_entry *procdir;	/* Directory entry in /proc/bus/pci */
 
+#ifdef CONFIG_PCIEASPM
+	unsigned int	aspm_bus_link_state;	/* Bus owner provided link state */
+#endif
 	unsigned char	number;		/* Bus number */
 	unsigned char	primary;	/* Number of primary bridge */
 	unsigned char	max_bus_speed;	/* enum pci_bus_speed */
