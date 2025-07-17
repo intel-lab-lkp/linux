@@ -29,16 +29,17 @@
 
 #define	V4L2_DEVICE_NOTIFY_EVENT		_IOW('v', 2, struct v4l2_event)
 
-struct v4l2_device;
+struct led_classdev;
+struct media_device_context;
+struct tuner_setup;
 struct v4l2_ctrl_handler;
+struct v4l2_device;
 struct v4l2_event;
 struct v4l2_event_subscription;
 struct v4l2_fh;
+struct v4l2_mbus_frame_desc;
 struct v4l2_subdev;
 struct v4l2_subdev_fh;
-struct tuner_setup;
-struct v4l2_mbus_frame_desc;
-struct led_classdev;
 
 /**
  * struct v4l2_decode_vbi_line - used to decode_vbi_line
@@ -1968,64 +1969,75 @@ static inline void v4l2_subdev_unlock_states(struct v4l2_subdev_state *state1,
 		mutex_unlock(state2->lock);
 }
 
-/**
- * v4l2_subdev_get_unlocked_active_state() - Checks that the active subdev state
- *					     is unlocked and returns it
- * @sd: The subdevice
- *
- * Returns the active state for the subdevice, or NULL if the subdev does not
- * support active state. If the state is not NULL, calls
- * lockdep_assert_not_held() to issue a warning if the state is locked.
- *
- * This function is to be used e.g. when getting the active state for the sole
- * purpose of passing it forward, without accessing the state fields.
- */
-static inline struct v4l2_subdev_state *
-v4l2_subdev_get_unlocked_active_state(struct v4l2_subdev *sd)
-{
-	if (sd->active_state)
-		lockdep_assert_not_held(sd->active_state->lock);
-	return sd->active_state;
-}
+struct v4l2_subdev_state *
+v4l2_subdev_get_unlocked_active_state_from_sd(struct v4l2_subdev *sd);
+struct v4l2_subdev_state *
+v4l2_subdev_get_locked_active_state_from_sd(struct v4l2_subdev *sd);
+struct v4l2_subdev_state *
+v4l2_subdev_lock_and_get_active_state_from_sd(struct v4l2_subdev *sd);
+
+struct v4l2_subdev_state *
+v4l2_subdev_get_unlocked_active_state_from_ctx(struct v4l2_subdev_context *ctx);
+struct v4l2_subdev_state *
+v4l2_subdev_get_locked_active_state_from_ctx(struct v4l2_subdev_context *ctx);
+struct v4l2_subdev_state *
+v4l2_subdev_lock_and_get_active_state_from_ctx(struct v4l2_subdev_context *ctx);
 
 /**
- * v4l2_subdev_get_locked_active_state() - Checks that the active subdev state
- *					   is locked and returns it
+ * v4l2_subdev_get_unlocked_active_state() - Checks that the subdev state is
+ *					     unlocked and returns it
+ * @sdctx: The subdevice, or the subdevice context
  *
- * @sd: The subdevice
+ * Returns the subdevice state, or NULL if it is not valid. If the state is
+ * not NULL, calls lockdep_assert_not_held() to issue a warning if the state
+ * is locked.
  *
- * Returns the active state for the subdevice, or NULL if the subdev does not
- * support active state. If the state is not NULL, calls lockdep_assert_held()
- * to issue a warning if the state is not locked.
+ * This function is to be used e.g. when getting the state for the sole purpose
+ * of passing it forward, without accessing the state fields.
+ */
+#define v4l2_subdev_get_unlocked_active_state(sdctx)				\
+	_Generic((sdctx),							\
+		struct v4l2_subdev *: 						\
+			v4l2_subdev_get_unlocked_active_state_from_sd,		\
+		struct v4l2_subdev_context *:					\
+			v4l2_subdev_get_unlocked_active_state_from_ctx)		\
+	(sdctx)
+
+/**
+ * v4l2_subdev_get_locked_active_state() - Checks that the subdev state is
+ *					   locked and returns it
+ * @sdctx: The subdevice, or the subdevice context
  *
- * This function is to be used when the caller knows that the active state is
+ * Returns the subdevice state, or NULL is not valid. If the state is not NULL,
+ * calls lockdep_assert_held() to issue a warning if the state is not locked.
+ *
+ * This function is to be used when the caller knows that the context state is
  * already locked.
  */
-static inline struct v4l2_subdev_state *
-v4l2_subdev_get_locked_active_state(struct v4l2_subdev *sd)
-{
-	if (sd->active_state)
-		lockdep_assert_held(sd->active_state->lock);
-	return sd->active_state;
-}
+#define v4l2_subdev_get_locked_active_state(sdctx)				\
+	_Generic((sdctx),							\
+		struct v4l2_subdev *:						\
+			v4l2_subdev_get_locked_active_state_from_sd,		\
+		struct v4l2_subdev_context *:					\
+			v4l2_subdev_get_locked_active_state_from_ctx)		\
+	(sdctx)
 
 /**
- * v4l2_subdev_lock_and_get_active_state() - Locks and returns the active subdev
- *					     state for the subdevice
- * @sd: The subdevice
+ * v4l2_subdev_lock_and_get_active_state_from_ctx() - Locks and returns the
+ *						      subdevice state
+ * @sdctx: The subdevice, or the subdevice context
  *
- * Returns the locked active state for the subdevice, or NULL if the subdev
- * does not support active state.
+ * Returns the locked subdevice state, or NULL if it is not valid.
  *
  * The state must be unlocked with v4l2_subdev_unlock_state() after use.
  */
-static inline struct v4l2_subdev_state *
-v4l2_subdev_lock_and_get_active_state(struct v4l2_subdev *sd)
-{
-	if (sd->active_state)
-		v4l2_subdev_lock_state(sd->active_state);
-	return sd->active_state;
-}
+#define v4l2_subdev_lock_and_get_active_state(sdctx)				\
+	_Generic((sdctx),							\
+		struct v4l2_subdev *:						\
+			v4l2_subdev_lock_and_get_active_state_from_sd,		\
+		struct v4l2_subdev_context *:					\
+			v4l2_subdev_get_locked_active_state_from_ctx)		\
+	(sdctx)
 
 /**
  * v4l2_subdev_init - initializes the sub-device struct

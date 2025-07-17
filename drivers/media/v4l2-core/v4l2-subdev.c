@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <linux/videodev2.h>
 
+#include <media/media-device.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
@@ -188,6 +189,106 @@ static inline int check_pad(struct v4l2_subdev *sd, u32 pad)
 		return -EINVAL;
 	return 0;
 }
+
+/* subdev state accessor helpers */
+
+/*
+ * Access the state from the subdevice.
+ *
+ * If the driver is context-aware use the state stored in the default context
+ * otherwise use the active state stored in the subdevice.
+ */
+
+struct v4l2_subdev_state *
+v4l2_subdev_get_unlocked_active_state_from_sd(struct v4l2_subdev *sd)
+{
+	if (!sd)
+		return NULL;
+
+	if (sd->default_context) {
+		lockdep_assert_not_held(sd->default_context->state->lock);
+
+		return sd->default_context->state;
+	}
+
+	if (sd->active_state)
+		lockdep_assert_not_held(sd->active_state->lock);
+	return sd->active_state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_unlocked_active_state_from_sd);
+
+struct v4l2_subdev_state *
+v4l2_subdev_get_locked_active_state_from_sd(struct v4l2_subdev *sd)
+{
+	if (!sd)
+		return NULL;
+
+	if (sd->default_context) {
+		lockdep_assert_held(sd->default_context->state->lock);
+
+		return sd->default_context->state;
+	}
+
+	if (sd->active_state)
+		lockdep_assert_held(sd->active_state->lock);
+	return sd->active_state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_locked_active_state_from_sd);
+
+struct v4l2_subdev_state *
+v4l2_subdev_lock_and_get_active_state_from_sd(struct v4l2_subdev *sd)
+{
+	if (!sd)
+		return NULL;
+
+	if (sd->default_context) {
+		v4l2_subdev_lock_state(sd->default_context->state);
+
+		return sd->default_context->state;
+	}
+
+	if (sd->active_state)
+		v4l2_subdev_lock_state(sd->active_state);
+	return sd->active_state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_lock_and_get_active_state_from_sd);
+
+/* Access the subdevice state from a subdvice context. */
+struct v4l2_subdev_state *
+v4l2_subdev_get_unlocked_active_state_from_ctx(struct v4l2_subdev_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	if (ctx->state)
+		lockdep_assert_not_held(ctx->state->lock);
+	return ctx->state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_unlocked_active_state_from_ctx);
+
+struct v4l2_subdev_state *
+v4l2_subdev_get_locked_active_state_from_ctx(struct v4l2_subdev_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	if (ctx->state)
+		lockdep_assert_held(ctx->state->lock);
+	return ctx->state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_locked_active_state_from_ctx);
+
+struct v4l2_subdev_state *
+v4l2_subdev_lock_and_get_active_state_from_ctx(struct v4l2_subdev_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	if (ctx->state)
+		v4l2_subdev_lock_state(ctx->state);
+	return ctx->state;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_lock_and_get_active_state_from_ctx);
 
 static int check_state(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 		       u32 which, u32 pad, u32 stream)
