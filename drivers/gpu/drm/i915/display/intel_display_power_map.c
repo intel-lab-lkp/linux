@@ -1748,6 +1748,16 @@ static void init_power_well_domains(const struct i915_power_well_instance *inst,
 		for_each_power_well_instance_in_desc_list((_descs)->list, (_descs)->count, \
 							  (_desc), (_inst))
 
+static bool
+is_power_well_available(struct intel_display *display, const struct i915_power_well_desc *desc)
+{
+	if (desc->irq_pipe_mask &&
+	    !(desc->irq_pipe_mask & DISPLAY_RUNTIME_INFO(display)->pipe_mask))
+		return false;
+
+	return true;
+}
+
 static int
 __set_power_wells(struct i915_power_domains *power_domains,
 		  const struct i915_power_well_desc_list *power_well_descs,
@@ -1763,8 +1773,10 @@ __set_power_wells(struct i915_power_domains *power_domains,
 	int power_well_count = 0;
 	int plt_idx = 0;
 
-	for_each_power_well_instance(power_well_descs, power_well_descs_sz, desc_list, desc, inst)
-		power_well_count++;
+	for_each_power_well_instance(power_well_descs, power_well_descs_sz, desc_list, desc, inst) {
+		if (is_power_well_available(display, desc))
+			power_well_count++;
+	}
 
 	power_domains->power_well_count = power_well_count;
 	power_domains->power_wells =
@@ -1777,6 +1789,9 @@ __set_power_wells(struct i915_power_domains *power_domains,
 	for_each_power_well_instance(power_well_descs, power_well_descs_sz, desc_list, desc, inst) {
 		struct i915_power_well *pw = &power_domains->power_wells[plt_idx];
 		enum i915_power_well_id id = inst->id;
+
+		if (!is_power_well_available(display, desc))
+			continue;
 
 		pw->desc = desc;
 		drm_WARN_ON(display->drm,
