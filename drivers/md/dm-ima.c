@@ -170,6 +170,10 @@ void dm_ima_reset_data(struct mapped_device *md)
 {
 	memset(&(md->ima), 0, sizeof(md->ima));
 	md->ima.dm_version_str_len = strlen(DM_IMA_VERSION_STR);
+	spin_lock_init(&md->ima.active_table.device_metadata_lock);
+	spin_lock_init(&md->ima.inactive_table.device_metadata_lock);
+	spin_lock_init(&md->ima.active_table.hash_lock);
+	spin_lock_init(&md->ima.inactive_table.hash_lock);
 }
 
 /*
@@ -337,19 +341,24 @@ void dm_ima_measure_on_table_load(struct dm_table *table, unsigned int status_fl
 	for (i = 0; i < digest_size; i++)
 		snprintf((digest_buf + hash_alg_prefix_len + (i*2)), 3, "%02x", digest[i]);
 
+	spin_lock(&table->md->ima.inactive_table.hash_lock);
 	if (table->md->ima.active_table.hash != table->md->ima.inactive_table.hash)
 		kfree(table->md->ima.inactive_table.hash);
 
 	table->md->ima.inactive_table.hash = digest_buf;
 	table->md->ima.inactive_table.hash_len = strlen(digest_buf);
+	spin_unlock(&table->md->ima.inactive_table.hash_lock);
+
 	table->md->ima.inactive_table.num_targets = num_targets;
 
+	spin_lock(&table->md->ima.inactive_table.device_metadata_lock);
 	if (table->md->ima.active_table.device_metadata !=
 	    table->md->ima.inactive_table.device_metadata)
 		kfree(table->md->ima.inactive_table.device_metadata);
 
 	table->md->ima.inactive_table.device_metadata = device_data_buf;
 	table->md->ima.inactive_table.device_metadata_len = device_data_buf_len;
+	spin_unlock(&table->md->ima.inactive_table.device_metadata_lock);
 
 	goto exit;
 error:
@@ -389,18 +398,22 @@ void dm_ima_measure_on_device_resume(struct mapped_device *md, bool swap)
 	l += md->ima.dm_version_str_len;
 
 	if (swap) {
+		spin_lock(&md->ima.active_table.hash_lock);
 		if (md->ima.active_table.hash != md->ima.inactive_table.hash)
 			kfree(md->ima.active_table.hash);
 
 		md->ima.active_table.hash = NULL;
 		md->ima.active_table.hash_len = 0;
+		spin_unlock(&md->ima.active_table.hash_lock);
 
+		spin_lock(&md->ima.active_table.device_metadata_lock);
 		if (md->ima.active_table.device_metadata !=
 		    md->ima.inactive_table.device_metadata)
 			kfree(md->ima.active_table.device_metadata);
 
 		md->ima.active_table.device_metadata = NULL;
 		md->ima.active_table.device_metadata_len = 0;
+		spin_unlock(&md->ima.active_table.device_metadata_lock);
 		md->ima.active_table.num_targets = 0;
 
 		if (md->ima.inactive_table.hash) {
@@ -430,6 +443,7 @@ void dm_ima_measure_on_device_resume(struct mapped_device *md, bool swap)
 		nodata = false;
 	}
 
+	spin_lock(&md->ima.active_table.hash_lock);
 	if (md->ima.active_table.hash) {
 		memcpy(device_table_data + l, active, active_len);
 		l += active_len;
@@ -443,6 +457,7 @@ void dm_ima_measure_on_device_resume(struct mapped_device *md, bool swap)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.active_table.hash_lock);
 
 	if (nodata) {
 		r = dm_ima_alloc_and_copy_name_uuid(md, &dev_name, &dev_uuid, noio);
@@ -502,6 +517,7 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 	memcpy(device_table_data + l, DM_IMA_VERSION_STR, md->ima.dm_version_str_len);
 	l += md->ima.dm_version_str_len;
 
+	spin_lock(&md->ima.active_table.device_metadata_lock);
 	if (md->ima.active_table.device_metadata) {
 		memcpy(device_table_data + l, device_active_str, device_active_len);
 		l += device_active_len;
@@ -512,7 +528,9 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.active_table.device_metadata_lock);
 
+	spin_lock(&md->ima.inactive_table.device_metadata_lock);
 	if (md->ima.inactive_table.device_metadata) {
 		memcpy(device_table_data + l, device_inactive_str, device_inactive_len);
 		l += device_inactive_len;
@@ -523,7 +541,9 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.inactive_table.device_metadata_lock);
 
+	spin_lock(&md->ima.active_table.hash_lock);
 	if (md->ima.active_table.hash) {
 		memcpy(device_table_data + l, active_table_str, active_table_len);
 		l += active_table_len;
@@ -537,7 +557,9 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.active_table.hash_lock);
 
+	spin_lock(&md->ima.inactive_table.hash_lock);
 	if (md->ima.inactive_table.hash) {
 		memcpy(device_table_data + l, inactive_table_str, inactive_table_len);
 		l += inactive_table_len;
@@ -551,6 +573,7 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.inactive_table.hash_lock);
 	/*
 	 * In case both active and inactive tables, and corresponding
 	 * device metadata is cleared/missing - record the name and uuid
@@ -580,16 +603,30 @@ error:
 	kfree(device_table_data);
 	kfree(capacity_str);
 exit:
+	spin_lock(&md->ima.active_table.device_metadata_lock);
+	spin_lock(&md->ima.inactive_table.device_metadata_lock);
 	kfree(md->ima.active_table.device_metadata);
 
 	if (md->ima.active_table.device_metadata !=
 	    md->ima.inactive_table.device_metadata)
 		kfree(md->ima.inactive_table.device_metadata);
 
+	md->ima.active_table.device_metadata = NULL;
+	md->ima.inactive_table.device_metadata = NULL;
+	spin_unlock(&md->ima.inactive_table.device_metadata_lock);
+	spin_unlock(&md->ima.active_table.device_metadata_lock);
+
+	spin_lock(&md->ima.active_table.hash_lock);
+	spin_lock(&md->ima.inactive_table.hash_lock);
 	kfree(md->ima.active_table.hash);
 
 	if (md->ima.active_table.hash != md->ima.inactive_table.hash)
 		kfree(md->ima.inactive_table.hash);
+
+	md->ima.active_table.hash = NULL;
+	md->ima.inactive_table.hash = NULL;
+	spin_unlock(&md->ima.inactive_table.hash_lock);
+	spin_unlock(&md->ima.active_table.hash_lock);
 
 	dm_ima_reset_data(md);
 
@@ -621,6 +658,8 @@ void dm_ima_measure_on_table_clear(struct mapped_device *md, bool new_map)
 	memcpy(device_table_data + l, DM_IMA_VERSION_STR, md->ima.dm_version_str_len);
 	l += md->ima.dm_version_str_len;
 
+	spin_lock(&md->ima.inactive_table.hash_lock);
+	spin_lock(&md->ima.inactive_table.device_metadata_lock);
 	if (md->ima.inactive_table.device_metadata_len &&
 	    md->ima.inactive_table.hash_len) {
 		memcpy(device_table_data + l, md->ima.inactive_table.device_metadata,
@@ -640,6 +679,8 @@ void dm_ima_measure_on_table_clear(struct mapped_device *md, bool new_map)
 
 		nodata = false;
 	}
+	spin_unlock(&md->ima.inactive_table.device_metadata_lock);
+	spin_unlock(&md->ima.inactive_table.hash_lock);
 
 	if (nodata) {
 		if (dm_ima_alloc_and_copy_name_uuid(md, &dev_name, &dev_uuid, noio))
@@ -657,19 +698,23 @@ void dm_ima_measure_on_table_clear(struct mapped_device *md, bool new_map)
 	dm_ima_measure_data("dm_table_clear", device_table_data, l, noio);
 
 	if (new_map) {
+		spin_lock(&md->ima.inactive_table.hash_lock);
 		if (md->ima.inactive_table.hash &&
 		    md->ima.inactive_table.hash != md->ima.active_table.hash)
 			kfree(md->ima.inactive_table.hash);
 
 		md->ima.inactive_table.hash = NULL;
 		md->ima.inactive_table.hash_len = 0;
+		spin_unlock(&md->ima.inactive_table.hash_lock);
 
+		spin_lock(&md->ima.inactive_table.device_metadata_lock);
 		if (md->ima.inactive_table.device_metadata &&
 		    md->ima.inactive_table.device_metadata != md->ima.active_table.device_metadata)
 			kfree(md->ima.inactive_table.device_metadata);
 
 		md->ima.inactive_table.device_metadata = NULL;
 		md->ima.inactive_table.device_metadata_len = 0;
+		spin_unlock(&md->ima.inactive_table.device_metadata_lock);
 		md->ima.inactive_table.num_targets = 0;
 
 		if (md->ima.active_table.hash) {

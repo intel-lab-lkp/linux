@@ -35,6 +35,7 @@ struct dm_ima_device_table_metadata {
 	 * pairs delimited by a semicolon at the end of the list.
 	 */
 	char *device_metadata;
+	spinlock_t device_metadata_lock;
 	unsigned int device_metadata_len;
 	unsigned int num_targets;
 
@@ -43,6 +44,7 @@ struct dm_ima_device_table_metadata {
 	 * attributes' key-value pairs from the active/inactive tables.
 	 */
 	char *hash;
+	spinlock_t hash_lock;
 	unsigned int hash_len;
 };
 
