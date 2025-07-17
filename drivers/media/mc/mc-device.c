@@ -12,7 +12,9 @@
 #include <linux/export.h>
 #include <linux/idr.h>
 #include <linux/ioctl.h>
+#include <linux/kref.h>
 #include <linux/media.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/pci.h>
@@ -49,10 +51,30 @@ static int media_device_open(struct media_devnode *devnode, struct file *filp)
 {
 	struct media_device *mdev = devnode->media_dev;
 	struct media_device_fh *fh;
+	int ret;
 
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
 	if (!fh)
 		return -ENOMEM;
+
+	if (mdev->ops && mdev->ops->alloc_context) {
+		if (WARN_ON(!mdev->ops->destroy_context)) {
+			kfree(fh);
+			return -EINVAL;
+		}
+
+		ret = mdev->ops->alloc_context(mdev, &fh->context);
+		if (ret) {
+			kfree(fh);
+			return ret;
+		}
+
+		/*
+		 * Make sure the driver implementing alloc_context has
+		 * called media_device_init_context()
+		 */
+		WARN_ON(!fh->context->initialized);
+	}
 
 	filp->private_data = &fh->fh;
 
@@ -72,6 +94,8 @@ static int media_device_close(struct file *filp)
 	spin_lock_irq(&mdev->fh_list_lock);
 	list_del(&fh->mdev_list);
 	spin_unlock_irq(&mdev->fh_list_lock);
+
+	media_device_context_put(fh->context);
 
 	kfree(fh);
 
@@ -859,6 +883,150 @@ void media_device_unregister(struct media_device *mdev)
 	mdev->devnode = NULL;
 }
 EXPORT_SYMBOL_GPL(media_device_unregister);
+
+/* -----------------------------------------------------------------------------
+ * Context handling
+ */
+
+static void media_device_release_context(struct kref *refcount)
+{
+	struct media_device_context *context =
+		container_of(refcount, struct media_device_context, refcount);
+
+	/*
+	 * All the associated entity contexts should have been released if we
+	 * get here.
+	 */
+	WARN_ON(!list_empty(&context->contexts));
+
+	context->mdev->ops->destroy_context(context);
+}
+
+struct media_device_context *
+media_device_context_get(struct media_device_context *ctx)
+{
+	if (!ctx)
+		return ERR_PTR(-EINVAL);
+
+	kref_get(&ctx->refcount);
+
+	return ctx;
+}
+EXPORT_SYMBOL_GPL(media_device_context_get);
+
+void media_device_context_put(struct media_device_context *ctx)
+{
+	if (!ctx)
+		return;
+
+	kref_put(&ctx->refcount, media_device_release_context);
+}
+EXPORT_SYMBOL_GPL(media_device_context_put);
+
+struct media_device_context *media_device_context_get_from_fd(unsigned int fd)
+{
+	struct media_device_context *ctx;
+	struct file *filp = fget(fd);
+	struct media_device_fh *fh;
+
+	if (!filp)
+		return NULL;
+
+	fh = media_device_fh(filp);
+	ctx = media_device_context_get(fh->context);
+	fput(filp);
+
+	return ctx;
+}
+EXPORT_SYMBOL_GPL(media_device_context_get_from_fd);
+
+int media_device_init_context(struct media_device *mdev,
+			      struct media_device_context *ctx)
+{
+	ctx->mdev = mdev;
+	INIT_LIST_HEAD(&ctx->contexts);
+	mutex_init(&ctx->lock);
+	kref_init(&ctx->refcount);
+
+	ctx->initialized = true;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(media_device_init_context);
+
+void media_device_cleanup_context(struct media_device_context *ctx)
+{
+	mutex_destroy(&ctx->lock);
+	list_del_init(&ctx->contexts);
+}
+EXPORT_SYMBOL_GPL(media_device_cleanup_context);
+
+int media_device_bind_context(struct media_device_context *mdev_context,
+			      struct media_entity_context *context)
+{
+	struct media_entity_context *entry;
+
+	if (WARN_ON(!mdev_context || !context))
+		return -EINVAL;
+
+	guard(mutex)(&mdev_context->lock);
+
+	/* Make sure the entity has not been bound already. */
+	list_for_each_entry(entry, &mdev_context->contexts, list) {
+		if (entry == context)
+			return -EINVAL;
+	}
+
+	list_add_tail(&context->list, &mdev_context->contexts);
+	context->mdev_context = media_device_context_get(mdev_context);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(media_device_bind_context);
+
+int media_device_unbind_context(struct media_entity_context *context)
+{
+	struct media_device_context *mdev_context = context->mdev_context;
+	struct media_entity_context *entry;
+	struct media_entity_context *tmp;
+
+	if (WARN_ON(!mdev_context || !context))
+		return -EINVAL;
+
+	guard(mutex)(&mdev_context->lock);
+	list_for_each_entry_safe(entry, tmp, &mdev_context->contexts, list) {
+		if (entry != context)
+			continue;
+
+		list_del(&entry->list);
+		media_device_context_put(mdev_context);
+		entry->mdev_context = NULL;
+
+		return 0;
+	}
+
+	WARN(true, "Media entity context is not bound to any media context\n");
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(media_device_unbind_context);
+
+struct media_entity_context *
+media_device_get_entity_context(struct media_device_context *mdev_context,
+				struct media_entity *entity)
+{
+	struct media_entity_context *entry;
+
+	guard(mutex)(&mdev_context->lock);
+
+	list_for_each_entry(entry, &mdev_context->contexts, list) {
+		if (entry->entity == entity)
+			return media_entity_context_get(entry);
+	}
+
+	return ERR_PTR(-EINVAL);
+}
+EXPORT_SYMBOL(media_device_get_entity_context);
 
 #if IS_ENABLED(CONFIG_PCI)
 void media_device_pci_init(struct media_device *mdev,

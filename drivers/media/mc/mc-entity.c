@@ -1717,5 +1717,6 @@ EXPORT_SYMBOL_GPL(media_entity_init_context);
 
 void media_entity_cleanup_context(struct media_entity_context *ctx)
 {
+	media_device_unbind_context(ctx);
 }
 EXPORT_SYMBOL_GPL(media_entity_cleanup_context);
