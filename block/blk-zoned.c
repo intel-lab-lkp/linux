@@ -1283,47 +1283,47 @@ static void blk_zone_wplug_bio_work(struct work_struct *work)
 	struct blk_zone_wplug *zwplug =
 		container_of(work, struct blk_zone_wplug, bio_work);
 	struct block_device *bdev;
-	unsigned long flags;
 	struct bio *bio;
 
-	/*
-	 * Submit the next plugged BIO. If we do not have any, clear
-	 * the plugged flag.
-	 */
-	spin_lock_irqsave(&zwplug->lock, flags);
-
+	do {
 again:
-	bio = bio_list_pop(&zwplug->bio_list);
-	if (!bio) {
-		zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
-		spin_unlock_irqrestore(&zwplug->lock, flags);
-		goto put_zwplug;
-	}
+		/*
+		 * Submit the next plugged BIO. If we do not have any, clear
+		 * the plugged flag.
+		 */
+		scoped_guard(spinlock_irqsave, &zwplug->lock) {
+			bio = bio_list_pop(&zwplug->bio_list);
+			if (!bio) {
+				zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
+				goto put_zwplug;
+			}
 
-	trace_blk_zone_wplug_bio(zwplug->disk->queue, zwplug->zone_no,
-				 bio->bi_iter.bi_sector, bio_sectors(bio));
+			trace_blk_zone_wplug_bio(zwplug->disk->queue,
+						 zwplug->zone_no,
+						 bio->bi_iter.bi_sector,
+						 bio_sectors(bio));
 
-	if (!blk_zone_wplug_prepare_bio(zwplug, bio)) {
-		blk_zone_wplug_bio_io_error(zwplug, bio);
-		goto again;
-	}
+			if (!blk_zone_wplug_prepare_bio(zwplug, bio)) {
+				blk_zone_wplug_bio_io_error(zwplug, bio);
+				goto again;
+			}
+		}
 
-	spin_unlock_irqrestore(&zwplug->lock, flags);
+		bdev = bio->bi_bdev;
 
-	bdev = bio->bi_bdev;
-
-	/*
-	 * blk-mq devices will reuse the extra reference on the request queue
-	 * usage counter we took when the BIO was plugged, but the submission
-	 * path for BIO-based devices will not do that. So drop this extra
-	 * reference here.
-	 */
-	if (bdev_test_flag(bdev, BD_HAS_SUBMIT_BIO)) {
-		bdev->bd_disk->fops->submit_bio(bio);
-		blk_queue_exit(bdev->bd_disk->queue);
-	} else {
-		blk_mq_submit_bio(bio);
-	}
+		/*
+		 * blk-mq devices will reuse the extra reference on the request
+		 * queue usage counter we took when the BIO was plugged, but the
+		 * submission path for BIO-based devices will not do that. So
+		 * drop this extra reference here.
+		 */
+		if (bdev_test_flag(bdev, BD_HAS_SUBMIT_BIO)) {
+			bdev->bd_disk->fops->submit_bio(bio);
+			blk_queue_exit(bdev->bd_disk->queue);
+		} else {
+			blk_mq_submit_bio(bio);
+		}
+	} while (0);
 
 put_zwplug:
 	/* Drop the reference we took in disk_zone_wplug_schedule_bio_work(). */
