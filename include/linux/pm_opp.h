@@ -170,6 +170,8 @@ int dev_pm_opp_add_dynamic(struct device *dev, struct dev_pm_opp_data *opp);
 void dev_pm_opp_remove(struct device *dev, unsigned long freq);
 void dev_pm_opp_remove_all_dynamic(struct device *dev);
 
+int dev_pm_opp_set_bw_factor(struct device *dev, u8 bw_factor);
+
 int dev_pm_opp_adjust_voltage(struct device *dev, unsigned long freq,
 			      unsigned long u_volt, unsigned long u_volt_min,
 			      unsigned long u_volt_max);
@@ -369,6 +371,11 @@ static inline void dev_pm_opp_remove(struct device *dev, unsigned long freq)
 
 static inline void dev_pm_opp_remove_all_dynamic(struct device *dev)
 {
+}
+
+static inline int dev_pm_opp_set_bw_factor(struct device *dev, u8 bw_factor)
+{
+	return 0;
 }
 
 static inline int

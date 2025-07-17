@@ -1060,8 +1060,8 @@ static int _set_opp_bw(const struct opp_table *opp_table,
 			avg = 0;
 			peak = 0;
 		} else {
-			avg = opp->bandwidth[i].avg;
-			peak = opp->bandwidth[i].peak;
+			avg = opp->bandwidth[i].avg * opp_table->bw_factor;
+			peak = opp->bandwidth[i].peak * opp_table->bw_factor;
 		}
 		ret = icc_set_bw(opp_table->paths[i], avg, peak);
 		if (ret) {
@@ -1461,6 +1461,7 @@ static struct opp_table *_allocate_opp_table(struct device *dev, int index)
 			 __func__, ret);
 	}
 
+	opp_table->bw_factor = 1;
 	BLOCKING_INIT_NOTIFIER_HEAD(&opp_table->head);
 	INIT_LIST_HEAD(&opp_table->opp_list);
 	kref_init(&opp_table->kref);
@@ -2814,6 +2815,38 @@ static int _opp_set_availability(struct device *dev, unsigned long freq,
 
 	return 0;
 }
+
+/**
+ * dev_pm_opp_set_bw_factor() - helper to change the bw factor
+ * @dev:		device for which we do this operation
+ * @bw_factor:		bw factor which multiples the supplied bw
+ *
+ * Return: -EINVAL for bad pointers, -ENOMEM if no memory available for the
+ * copy operation, returns 0 if no modifcation was done OR modification was
+ * successful.
+ */
+int dev_pm_opp_set_bw_factor(struct device *dev, u8 bw_factor)
+{
+	struct opp_table *opp_table __free(put_opp_table);
+	int r;
+
+	/* Find the opp_table */
+	opp_table = _find_opp_table(dev);
+	if (IS_ERR(opp_table)) {
+		r = PTR_ERR(opp_table);
+		dev_warn(dev, "%s: Device OPP not found (%d)\n", __func__, r);
+		return r;
+	}
+
+	if (opp_table->bw_factor == bw_factor)
+		return 0;
+
+	scoped_guard(mutex, &opp_table->lock)
+		opp_table->bw_factor = bw_factor;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_set_bw_factor);
 
 /**
  * dev_pm_opp_adjust_voltage() - helper to change the voltage of an OPP

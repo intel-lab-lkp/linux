@@ -192,6 +192,7 @@ enum opp_table_access {
  * property).
  * @paths: Interconnect path handles
  * @path_count: Number of interconnect paths
+ * @bw_factor: Multiplier to the supplied bw
  * @enabled: Set to true if the device's resources are enabled/configured.
  * @is_genpd: Marks if the OPP table belongs to a genpd.
  * @dentry:	debugfs dentry pointer of the real device directory (not links).
@@ -240,6 +241,7 @@ struct opp_table {
 	int regulator_count;
 	struct icc_path **paths;
 	unsigned int path_count;
+	u8 bw_factor;
 	bool enabled;
 	bool is_genpd;
 
