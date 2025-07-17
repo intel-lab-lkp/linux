@@ -223,6 +223,28 @@ queue_detection_work(struct intel_display *display, struct work_struct *work)
 	return queue_work(display->wq.unordered, work);
 }
 
+void intel_hpd_unblock_all_encoders(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	if (!HAS_DISPLAY(display))
+		return;
+
+	for_each_intel_encoder(display->drm, encoder)
+		intel_hpd_unblock(encoder);
+}
+
+void intel_hpd_block_all_encoders(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	if (!HAS_DISPLAY(display))
+		return;
+
+	for_each_intel_encoder(display->drm, encoder)
+		intel_hpd_block(encoder);
+}
+
 static void
 intel_hpd_irq_storm_switch_to_polling(struct intel_display *display)
 {
@@ -970,8 +992,6 @@ void intel_hpd_cancel_work(struct intel_display *display)
 		return;
 
 	spin_lock_irq(&display->irq.lock);
-
-	drm_WARN_ON(display->drm, get_blocked_hpd_pin_mask(display));
 
 	display->hotplug.long_hpd_pin_mask = 0;
 	display->hotplug.short_hpd_pin_mask = 0;

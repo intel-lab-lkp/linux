@@ -340,6 +340,8 @@ void xe_display_pm_suspend(struct xe_device *xe)
 
 	xe_display_flush_cleanup_work(xe);
 
+	intel_hpd_block_all_encoders(display);
+
 	intel_hpd_cancel_work(display);
 
 	if (has_display(xe)) {
@@ -470,6 +472,8 @@ void xe_display_pm_resume(struct xe_device *xe)
 		intel_display_driver_resume_access(display);
 
 	intel_hpd_init(display);
+
+	intel_hpd_unblock_all_encoders(display);
 
 	if (has_display(xe)) {
 		intel_display_driver_resume(display);
