@@ -1577,6 +1577,45 @@ bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_has_pad_interdep);
 
+struct v4l2_subdev_context *
+v4l2_subdev_context_get(struct media_device_context *mdev_context,
+			struct v4l2_subdev *sd)
+{
+	struct media_entity *entity = &sd->entity;
+	struct media_entity_context *ctx =
+		 media_device_get_entity_context(mdev_context, entity);
+
+	if (!ctx)
+		return NULL;
+
+	return container_of(ctx, struct v4l2_subdev_context, base);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_context_get);
+
+void v4l2_subdev_context_put(struct v4l2_subdev_context *ctx)
+{
+	if (!ctx)
+		return;
+
+	media_entity_context_put(&ctx->base);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_context_put);
+
+int v4l2_subdev_init_context(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_context *context)
+{
+	media_entity_init_context(&sd->entity, &context->base);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_init_context);
+
+void v4l2_subdev_cleanup_context(struct v4l2_subdev_context *context)
+{
+	media_entity_cleanup_context(&context->base);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_cleanup_context);
+
 struct v4l2_subdev_state *
 __v4l2_subdev_state_alloc(struct v4l2_subdev *sd, const char *lock_name,
 			  struct lock_class_key *lock_key)
