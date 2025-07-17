@@ -139,6 +139,10 @@ static inline void ntrig_set_mode(struct hid_device *hdev, const int mode)
 
 static void ntrig_report_version(struct hid_device *hdev)
 {
+
+	if (!hdev->dev.parent->parent)
+		return;
+
 	int ret;
 	char buf[20];
 	struct usb_device *usb_dev = hid_to_usb_dev(hdev);
