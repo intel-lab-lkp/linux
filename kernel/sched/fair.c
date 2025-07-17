@@ -10319,7 +10319,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 	sgs->group_capacity = group->sgc->capacity;
 
-	sgs->group_weight = group->group_weight;
+	sgs->group_weight = cpumask_weight_and(sched_group_span(group), env->cpus);
 
 	/* Check if dst CPU is idle and preferred to this group */
 	if (!local_group && env->idle && sgs->sum_h_nr_running &&
