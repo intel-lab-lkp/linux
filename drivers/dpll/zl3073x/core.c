@@ -9,6 +9,8 @@
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/netlink.h>
+#include <linux/property.h>
+#include <linux/random.h>
 #include <linux/regmap.h>
 #include <linux/sprintf.h>
 #include <linux/string_choices.h>
@@ -933,6 +935,29 @@ zl3073x_dev_phase_meas_setup(struct zl3073x_dev *zldev, int num_channels)
 }
 
 /**
+ * zl3073x_dev_clock_id_init - initialize clock ID
+ * @zldev: pointer to zl3073x device
+ *
+ * Initializes clock ID using device property if it is provided or
+ * generates random one.
+ */
+static void
+zl3073x_dev_clock_id_init(struct zl3073x_dev *zldev)
+{
+	u64 clock_id;
+	int rc;
+
+	/* Try to read clock ID from device property */
+	rc = device_property_read_u64(zldev->dev, "clock-id", &clock_id);
+
+	/* Generate random id if the property does not exist or value is zero */
+	if (rc || !clock_id)
+		clock_id = get_random_u64();
+
+	zldev->clock_id = clock_id;
+}
+
+/**
  * zl3073x_dev_probe - initialize zl3073x device
  * @zldev: pointer to zl3073x device
  * @chip_info: chip info based on compatible
@@ -985,11 +1010,8 @@ int zl3073x_dev_probe(struct zl3073x_dev *zldev,
 		FIELD_GET(GENMASK(15, 8), cfg_ver),
 		FIELD_GET(GENMASK(7, 0), cfg_ver));
 
-	/* Generate random clock ID as the device has not such property that
-	 * could be used for this purpose. A user can later change this value
-	 * using devlink.
-	 */
-	zldev->clock_id = get_random_u64();
+	/* Initialize clock ID */
+	zl3073x_dev_clock_id_init(zldev);
 
 	/* Initialize mutex for operations where multiple reads, writes
 	 * and/or polls are required to be done atomically.
