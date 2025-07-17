@@ -4743,6 +4743,12 @@ int ice_init_dev(struct ice_pf *pf)
 	struct ice_hw *hw = &pf->hw;
 	int err;
 
+	err = ice_init_hw(hw);
+	if (err) {
+		dev_err(dev, "ice_init_hw failed: %d\n", err);
+		return err;
+	}
+
 	ice_init_feature_support(pf);
 
 	err = ice_init_ddp_config(hw, pf);
@@ -4763,7 +4769,7 @@ int ice_init_dev(struct ice_pf *pf)
 	err = ice_init_pf(pf);
 	if (err) {
 		dev_err(dev, "ice_init_pf failed: %d\n", err);
-		return err;
+		goto unroll_hw_init;
 	}
 
 	pf->hw.udp_tunnel_nic.set_port = ice_udp_tunnel_set_port;
@@ -4806,6 +4812,8 @@ unroll_irq_scheme_init:
 	ice_clear_interrupt_scheme(pf);
 unroll_pf_init:
 	ice_deinit_pf(pf);
+unroll_hw_init:
+	ice_deinit_hw(hw);
 	return err;
 }
 
@@ -5333,17 +5341,9 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 	if (ice_is_recovery_mode(hw))
 		return ice_probe_recovery_mode(pf);
 
-	err = ice_init_hw(hw);
-	if (err) {
-		dev_err(dev, "ice_init_hw failed: %d\n", err);
-		return err;
-	}
-
 	adapter = ice_adapter_get(pdev);
-	if (IS_ERR(adapter)) {
-		err = PTR_ERR(adapter);
-		goto unroll_hw_init;
-	}
+	if (IS_ERR(adapter))
+		return PTR_ERR(adapter);
 	pf->adapter = adapter;
 
 	err = ice_init(pf);
@@ -5369,8 +5369,6 @@ unroll_init:
 	ice_deinit(pf);
 unroll_adapter:
 	ice_adapter_put(pdev);
-unroll_hw_init:
-	ice_deinit_hw(hw);
 	return err;
 }
 
