@@ -849,6 +849,10 @@ attribute-sets:
         name: region-direct
         type: flag
       -
+        name: health-reporter-graceful-period-delay
+        type: u64
+
+      -
         name: rate-tc-bws
         type: nest
         multi-attr: true
@@ -1228,6 +1232,8 @@ attribute-sets:
         name: health-reporter-dump-ts-ns
       -
         name: health-reporter-auto-dump
+      -
+        name: health-reporter-graceful-period-delay
 
   -
     name: dl-attr-stats
@@ -1965,6 +1971,7 @@ operations:
             - health-reporter-graceful-period
             - health-reporter-auto-recover
             - health-reporter-auto-dump
+            - health-reporter-graceful-period-delay
 
     -
       name: health-reporter-recover
