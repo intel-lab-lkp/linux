@@ -149,14 +149,10 @@ pstate_check_t * const aarch32_opcode_cond_checks[16] = {
 
 int show_unhandled_signals = 0;
 
-static void dump_kernel_instr(const char *lvl, struct pt_regs *regs)
+void dump_instr(unsigned long addr)
 {
-	unsigned long addr = instruction_pointer(regs);
 	char str[sizeof("00000000 ") * 5 + 2 + 1], *p = str;
 	int i;
-
-	if (user_mode(regs))
-		return;
 
 	for (i = -4; i < 1; i++) {
 		unsigned int val, bad;
@@ -169,7 +165,17 @@ static void dump_kernel_instr(const char *lvl, struct pt_regs *regs)
 			p += sprintf(p, i == 0 ? "(????????) " : "???????? ");
 	}
 
-	printk("%sCode: %s\n", lvl, str);
+	printk(KERN_EMERG "Code: %s\n", str);
+}
+
+static void dump_kernel_instr(struct pt_regs *regs)
+{
+	unsigned long addr = instruction_pointer(regs);
+
+	if (user_mode(regs))
+		return;
+
+	dump_instr(addr);
 }
 
 #define S_SMP " SMP"
@@ -190,7 +196,7 @@ static int __die(const char *str, long err, struct pt_regs *regs)
 	print_modules();
 	show_regs(regs);
 
-	dump_kernel_instr(KERN_EMERG, regs);
+	dump_kernel_instr(regs);
 
 	return ret;
 }

@@ -30,6 +30,7 @@ void arm64_force_sig_mceerr(int code, unsigned long far, short lsb, const char *
 void arm64_force_sig_ptrace_errno_trap(int errno, unsigned long far, const char *str);
 
 int early_brk64(unsigned long addr, unsigned long esr, struct pt_regs *regs);
+void dump_instr(unsigned long addr);
 
 /*
  * Move regs->pc to next instruction and do necessary setup before it
