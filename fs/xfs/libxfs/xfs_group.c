@@ -147,7 +147,8 @@ xfs_group_rele(
 	struct xfs_group	*xg)
 {
 	trace_xfs_group_rele(xg, _RET_IP_);
-	atomic_dec(&xg->xg_active_ref);
+	if (atomic_dec_and_test(&xg->xg_active_ref))
+		wake_up(&xg->xg_active_wq);
 }
 
 void
@@ -202,6 +203,7 @@ xfs_group_insert(
 	xfs_defer_drain_init(&xg->xg_intents_drain);
 
 	/* Active ref owned by mount indicates group is online. */
+	init_waitqueue_head(&xg->xg_active_wq);
 	atomic_set(&xg->xg_active_ref, 1);
 
 	error = xa_insert(&mp->m_groups[type].xa, index, xg, GFP_KERNEL);
