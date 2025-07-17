@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/cleanup.h>
 
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
@@ -416,8 +417,15 @@ static int atomisp_s_fmt_cap(struct file *file, void *fh,
 			     struct v4l2_format *f)
 {
 	struct video_device *vdev = video_devdata(file);
+	struct atomisp_device *isp = video_get_drvdata(vdev);
 
-	return atomisp_set_fmt(vdev, f);
+	int ret;
+
+	scoped_guard(mutex, &isp->mutex)
+	{
+		ret = atomisp_set_fmt(vdev, f);
+	}
+	return ret;
 }
 
 /*
