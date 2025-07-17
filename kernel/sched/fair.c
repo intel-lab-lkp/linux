@@ -10614,7 +10614,9 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 
 	sgs->group_capacity = group->sgc->capacity;
 
-	sgs->group_weight = group->group_weight;
+	/* Only count group_weight if p can run on these cpus */
+	sgs->group_weight = cpumask_weight_and(sched_group_span(group),
+				p->cpus_ptr);
 
 	sgs->group_type = group_classify(sd->imbalance_pct, group, sgs);
 
