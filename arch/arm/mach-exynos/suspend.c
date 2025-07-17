@@ -53,8 +53,8 @@ struct exynos_pm_data {
 
 	void (*pm_prepare)(void);
 	void (*pm_resume_prepare)(void);
-	void (*pm_resume)(void);
-	int (*pm_suspend)(void);
+	void (*pm_resume)(struct syscore_ops *ops);
+	int (*pm_suspend)(struct syscore_ops *ops);
 	int (*cpu_suspend)(unsigned long);
 };
 
@@ -376,7 +376,7 @@ static void exynos5420_pm_prepare(void)
 }
 
 
-static int exynos_pm_suspend(void)
+static int exynos_pm_suspend(struct syscore_ops *ops)
 {
 	exynos_pm_central_suspend();
 
@@ -390,7 +390,7 @@ static int exynos_pm_suspend(void)
 	return 0;
 }
 
-static int exynos5420_pm_suspend(void)
+static int exynos5420_pm_suspend(struct syscore_ops *ops)
 {
 	u32 this_cluster;
 
@@ -408,7 +408,7 @@ static int exynos5420_pm_suspend(void)
 	return 0;
 }
 
-static void exynos_pm_resume(void)
+static void exynos_pm_resume(struct syscore_ops *ops)
 {
 	u32 cpuid = read_cpuid_part();
 
@@ -429,7 +429,7 @@ early_wakeup:
 	exynos_set_delayed_reset_assertion(true);
 }
 
-static void exynos3250_pm_resume(void)
+static void exynos3250_pm_resume(struct syscore_ops *ops)
 {
 	u32 cpuid = read_cpuid_part();
 
@@ -473,7 +473,7 @@ static void exynos5420_prepare_pm_resume(void)
 	}
 }
 
-static void exynos5420_pm_resume(void)
+static void exynos5420_pm_resume(struct syscore_ops *ops)
 {
 	unsigned long tmp;
 

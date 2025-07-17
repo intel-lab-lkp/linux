@@ -36,7 +36,7 @@ static unsigned long reg_save[][2] = {
 	{ASS_CLK_GATE, 0},
 };
 
-static int s5pv210_audss_clk_suspend(void)
+static int s5pv210_audss_clk_suspend(struct syscore_ops *ops)
 {
 	int i;
 
@@ -46,7 +46,7 @@ static int s5pv210_audss_clk_suspend(void)
 	return 0;
 }
 
-static void s5pv210_audss_clk_resume(void)
+static void s5pv210_audss_clk_resume(struct syscore_ops *ops)
 {
 	int i;
 

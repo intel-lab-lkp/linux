@@ -726,7 +726,7 @@ static inline void crash_register_spus(struct list_head *list)
 }
 #endif
 
-static void spu_shutdown(void)
+static void spu_shutdown(struct syscore_ops *ops)
 {
 	struct spu *spu;
 

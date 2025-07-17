@@ -215,10 +215,11 @@ void rearm_wake_irq(unsigned int irq)
 
 /**
  * irq_pm_syscore_resume - enable interrupt lines early
+ * @ops: syscore context
  *
  * Enable all interrupt lines with %IRQF_EARLY_RESUME set.
  */
-static void irq_pm_syscore_resume(void)
+static void irq_pm_syscore_resume(struct syscore_ops *ops)
 {
 	resume_irqs(true);
 }
