@@ -112,6 +112,11 @@ static inline xfs_agnumber_t pag_agno(const struct xfs_perag *pag)
 	return pag->pag_group.xg_gno;
 }
 
+static inline bool xfs_ag_is_active(struct xfs_perag *pag)
+{
+	return atomic_read(&pag_group(pag)->xg_active_ref) > 0;
+}
+
 /*
  * Per-AG operational state. These are atomic flag bits.
  */
@@ -140,6 +145,7 @@ void xfs_free_perag_range(struct xfs_mount *mp, xfs_agnumber_t first_agno,
 		xfs_agnumber_t end_agno);
 int xfs_initialize_perag_data(struct xfs_mount *mp, xfs_agnumber_t agno);
 int xfs_update_last_ag_size(struct xfs_mount *mp, xfs_agnumber_t prev_agcount);
+bool xfs_ag_is_empty(struct xfs_perag *pag);
 
 /* Passive AG references */
 static inline struct xfs_perag *
@@ -263,6 +269,9 @@ xfs_ag_contains_log(struct xfs_mount *mp, xfs_agnumber_t agno)
 	       agno == XFS_FSB_TO_AGNO(mp, mp->m_sb.sb_logstart);
 }
 
+void xfs_activate_ag(struct xfs_perag *pag);
+void xfs_deactivate_ag(struct xfs_perag *pag);
+
 static inline struct xfs_perag *
 xfs_perag_next_wrap(
 	struct xfs_perag	*pag,
@@ -331,6 +340,7 @@ struct aghdr_init_data {
 int xfs_ag_init_headers(struct xfs_mount *mp, struct aghdr_init_data *id);
 int xfs_ag_shrink_space(struct xfs_perag *pag, struct xfs_trans **tpp,
 			xfs_extlen_t delta);
+void xfs_shrinkfs_remove_ag(struct xfs_mount *mp, xfs_agnumber_t agno);
 void
 xfs_growfs_get_delta(struct xfs_mount *mp, xfs_rfsblock_t nb,
 	int64_t *deltap, xfs_agnumber_t *nagcountp);

@@ -84,6 +84,219 @@ xfs_resizefs_init_new_ags(
 }
 
 /*
+ * Get new active references for all the AGs. This might be called when
+ * shrinkage process encounters a failure at an intermediate stage after the
+ * active references of all the target AGs have become 0.
+ */
+static void
+xfs_shrinkfs_reactivate_ags(struct xfs_mount *mp, xfs_agnumber_t oagcount,
+	xfs_agnumber_t nagcount)
+{
+	struct xfs_perag *pag = NULL;
+
+	if (nagcount >= oagcount)
+		return;
+	for (xfs_agnumber_t agno = oagcount - 1; agno > nagcount - 1; agno--) {
+		pag = xfs_perag_get(mp, agno);
+		xfs_activate_ag(pag);
+		xfs_perag_put(pag);
+	}
+}
+
+/*
+ * The function deactivates or puts the AGs to an offline mode. AG deactivation
+ * or AG offlining means that no new operation can be started on that AG. The AG
+ * still exists, however no new high level operation (like extent allocation)
+ * can be started. In terms of implementation, an AG is taken offline or is
+ * deactivated when xg_active_ref of the struct xfs_perag is 0 i.e, the number
+ * of active references becomes 0.
+ * Since active references act as a form of barrier, so once the active
+ * reference of an AG is 0, no new entity can get an active reference and in
+ * this way we ensure that once an AG is offline (i.e, active reference count is
+ * 0), no one will be able to start a new operation in it unless the active
+ * reference count is explicitly set to 1 i.e, the AG is made online/activated.
+ */
+static int
+xfs_shrinkfs_deactivate_ags(struct xfs_mount *mp, xfs_agnumber_t oagcount,
+	xfs_agnumber_t nagcount)
+{
+	int error = 0;
+	struct xfs_perag *pag = NULL;
+
+	if (oagcount <= nagcount)
+		return 0;
+	/*
+	 * If we are removing 1 or more entire AGs, we only need to take those
+	 * AGs offline which we are planning to remove completely. The new tail
+	 * AG which will be partially shrunk need not be taken offline - since
+	 * we will be doing an online operation on them, just like any other
+	 * high level operation. For complete AG removal, we need to take them
+	 * offline since we cannot start any new operation on them as they will
+	 * be removed eventually.
+	 *
+	 * However, if the number of blocks that we are trying to remove is
+	 * an exact multiple of the AG size (in blocks), then the new tail AG
+	 * will not be shrunk at all.
+	 */
+	for (xfs_agnumber_t agno = oagcount - 1; agno > nagcount - 1; agno--) {
+		pag = xfs_perag_get(mp, agno);
+		xfs_deactivate_ag(pag);
+		xfs_perag_put(pag);
+	}
+	/*
+	 * Now that we have deactivated/offlined the AGs, we need to make sure
+	 * that all the pending operations are completed and the in-core and
+	 * the on disk contents are completely in synch.
+	 */
+
+	/*
+	 * Wait for all the busy extents to get resolved along with pending trim
+	 * ops for all the offlined AGs.
+	 */
+	xfs_extent_busy_wait_range(mp, nagcount, oagcount - 1);
+	flush_workqueue(xfs_discard_wq);
+	/*
+	 * We should wait for the log to be empty and all the pending I/Os to
+	 * be completed so that the AGs are compeletly stabilized before we
+	 * start tearing them down. xfs_log_quiesce() call here ensures that
+	 * none of the future logged transactions will refer to these AGs
+	 * during log recovery in case if sudden shutdown/crash happens while
+	 * we are trying to remove these AGs.
+	 */
+	error = xfs_log_quiesce(mp);
+	if (error)
+		xfs_shrinkfs_reactivate_ags(mp, oagcount, nagcount);
+	/*
+	 * Reactivate the log work queue which was deactivated in
+	 * xfs_log_quiesce
+	 */
+	xfs_log_work_queue(mp);
+	return error;
+}
+
+/*
+ * This function does 3 things:
+ * 1. Deactivate the AGs i.e, wait for all the active references to come to 0.
+ * 2. Checks whether all the AGs that shrink process needs to remove are empty.
+ *    If at least one of the target AGs is non-empty, shrink fails and
+ *    xfs_shrinkfs_reactivate_ags() is called.
+ * 3. Calculates the total number of fdblocks (free data blocks) that will be
+ *    removed and stores in id->nfree.
+ * Please look into the individual functions for more details and the definition
+ * of the terminologies.
+ */
+static int
+xfs_shrinkfs_prepare_ags(struct xfs_mount *mp, xfs_agnumber_t oagcount,
+	xfs_agnumber_t nagcount, struct aghdr_init_data	*id)
+{
+	ASSERT(nagcount < oagcount);
+	struct xfs_perag *pag = NULL;
+	xfs_agnumber_t agno;
+	int error = 0;
+	/*
+	 * Deactivating/offlining the AGs i.e waiting for the active references
+	 * to come down to 0.
+	 */
+	error = xfs_shrinkfs_deactivate_ags(mp, oagcount, nagcount);
+	if (error)
+		return error;
+	/*
+	 * At this point the AGs have been deactivated/offlined and the in-core
+	 * and the on-disk are synch. So now we need to check whether all the
+	 * AGs that we are trying to remove/delete are empty. Since we are not
+	 * supporting partial shrink success (i.e, the entire requested size
+	 * will be removed or none), we will bail out with a failure code even
+	 * if 1 AG is non-empty.
+	 */
+	for (agno = oagcount - 1; agno > nagcount - 1; agno--) {
+		pag = xfs_perag_get(mp, agno);
+		if (!xfs_ag_is_empty(pag)) {
+			/* Error out even if one AG is non-empty */
+			error = -ENOTEMPTY;
+			xfs_perag_put(pag);
+			xfs_shrinkfs_reactivate_ags(mp, oagcount, nagcount);
+			return error;
+		}
+		/*
+		 * Since these are removed, these free blocks should also be
+		 * subtracted from the total list of free blocks.
+		 */
+		id->nfree += (pag->pagf_freeblks + pag->pagf_flcount);
+		xfs_perag_put(pag);
+
+	}
+	return 0;
+}
+
+/*
+ * This function does the job of fully removing the blocks and empty AGs (
+ * depending of the values of oagcount and nagcount). By removal it means,
+ * removal of all the perag data structures, other data structures associated
+ * with it and all the perag cached buffers (when AGs are removed). Once this
+ * function succeeds, the AGs/blocks will no longer exist.
+ * The overall steps are as follows (details are in the function):
+ * - calculate the number of blocks that will be removed from the new tail AG
+ *   i.e, the AG that will be shrunk partially.
+ * - call xfs_shrinkfs_remove_ag() that removes the perag cached buffers,
+ *   then frees the perag reservation, other associated datastructures and
+ *   finally the in-memory perag group instance.
+ */
+static int
+xfs_shrinkfs_remove_ags(struct xfs_mount *mp, struct xfs_trans **tp,
+	xfs_agnumber_t oagcount, xfs_agnumber_t nagcount,
+	int64_t delta_rem, xfs_agnumber_t *nagmax)
+{
+	xfs_agnumber_t agno;
+	int error = 0;
+	struct xfs_perag *cur_pag = NULL;
+
+	/*
+	 * This loop is calculating the number of blocks that needs to be
+	 * removed from the new tail AG. If delta_rem is 0 after the loop exits,
+	 * then it means that the number of blocks we want to remove is a
+	 * multiple of AG size (in blocks).
+	 */
+	for (agno = oagcount - 1; agno > nagcount - 1; agno--) {
+		cur_pag = xfs_perag_get(mp, agno);
+		delta_rem -= xfs_ag_block_count(mp, agno);
+		xfs_perag_put(cur_pag);
+	}
+	/*
+	 * We are first removing blocks from the AG that will form the new tail
+	 * AG. The reason is that, if we encounter an error here, we can simply
+	 * reactivate the AGs (by calling xfs_shrinkfs_reactivate_ags()).
+	 * Removal of complete empty AGs always succeed anyway. However if we
+	 * remove the empty AGs first (which will succeed) and then the new
+	 * last AG shrink fails, then we will again have to re-initialize the
+	 * removed AGs. Hence the former approach seems more efficient to me.
+	 */
+	if (delta_rem) {
+		/*
+		 * Remove delta_rem blocks from the AG that will form the new
+		 * tail AG after the AGs are removed. If the number of blocks to
+		 * be removed is a multiple of AG size, then nothing is done
+		 * here.
+		 */
+		cur_pag = xfs_perag_get(mp, nagcount - 1);
+		error = xfs_ag_shrink_space(cur_pag, tp, delta_rem);
+		xfs_perag_put(cur_pag);
+		if (error) {
+			xfs_shrinkfs_reactivate_ags(mp, oagcount, nagcount);
+			return error;
+		}
+	}
+	/*
+	 * Now, in this final step we remove the perag instance and the
+	 * associated datastructures and cached buffers. This fully removes the
+	 * AG.
+	 */
+	for (agno = oagcount - 1; agno > nagcount - 1; agno--)
+		xfs_shrinkfs_remove_ag(mp, agno);
+	*nagmax = xfs_set_inode_alloc(mp, nagcount);
+	return error;
+}
+
+/*
  * growfs operations
  */
 static int
@@ -101,7 +314,6 @@ xfs_growfs_data_private(
 	bool			lastag_extended = false;
 	struct xfs_trans	*tp;
 	struct aghdr_init_data	id = {};
-	struct xfs_perag	*last_pag;
 
 	error = xfs_sb_validate_fsb_count(&mp->m_sb, nb);
 	if (error)
@@ -122,7 +334,6 @@ xfs_growfs_data_private(
 	if (error)
 		return error;
 	xfs_growfs_get_delta(mp, nb, &delta, &nagcount);
-
 	/*
 	 * Reject filesystems with a single AG because they are not
 	 * supported, and reject a shrink operation that would cause a
@@ -135,9 +346,11 @@ xfs_growfs_data_private(
 	if (delta == 0)
 		return 0;
 
-	/* TODO: shrinking the entire AGs hasn't yet completed */
-	if (nagcount < oagcount)
-		return -EINVAL;
+	if (nagcount < oagcount) {
+		error = xfs_shrinkfs_prepare_ags(mp, oagcount, nagcount, &id);
+		if (error)
+			return error;
+	}
 
 	/* allocate the new per-ag structures */
 	error = xfs_initialize_perag(mp, oagcount, nagcount, nb, &nagimax);
@@ -154,15 +367,16 @@ xfs_growfs_data_private(
 	if (error)
 		goto out_free_unused_perag;
 
-	last_pag = xfs_perag_get(mp, oagcount - 1);
 	if (delta > 0) {
+		struct xfs_perag *last_pag = xfs_perag_get(mp, oagcount - 1);
 		error = xfs_resizefs_init_new_ags(tp, &id, oagcount, nagcount,
 				delta, last_pag, &lastag_extended);
+		xfs_perag_put(last_pag);
 	} else {
 		xfs_warn_experimental(mp, XFS_EXPERIMENTAL_SHRINK);
-		error = xfs_ag_shrink_space(last_pag, &tp, -delta);
+		error = xfs_shrinkfs_remove_ags(mp, &tp, oagcount, nagcount,
+				-delta, &nagimax);
 	}
-	xfs_perag_put(last_pag);
 	if (error)
 		goto out_trans_cancel;
 
@@ -171,12 +385,14 @@ xfs_growfs_data_private(
 	 * seen by the rest of the world until the transaction commit applies
 	 * them atomically to the superblock.
 	 */
-	if (nagcount > oagcount)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_AGCOUNT, nagcount - oagcount);
+	if (nagcount != oagcount)
+		xfs_trans_mod_sb(tp, XFS_TRANS_SB_AGCOUNT,
+			(int64_t)nagcount - (int64_t)oagcount);
 	if (delta)
 		xfs_trans_mod_sb(tp, XFS_TRANS_SB_DBLOCKS, delta);
 	if (id.nfree)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, id.nfree);
+		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS,
+			delta > 0 ? id.nfree : (int64_t)-id.nfree);
 
 	/*
 	 * Sync sb counters now to reflect the updated values. This is
@@ -190,10 +406,11 @@ xfs_growfs_data_private(
 	error = xfs_trans_commit(tp);
 	if (error)
 		return error;
-
 	/* New allocation groups fully initialized, so update mount struct */
 	if (nagimax)
 		mp->m_maxagi = nagimax;
+	if (nagcount < oagcount)
+		mp->m_ag_prealloc_blocks = xfs_prealloc_blocks(mp);
 	xfs_set_low_space_thresholds(mp);
 	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
 
