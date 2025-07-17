@@ -3322,8 +3322,11 @@ int tdx_vcpu_ioctl(struct kvm_vcpu *vcpu, void __user *argp)
 	return ret;
 }
 
-int tdx_gmem_private_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn)
+int tdx_gmem_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fault)
 {
+	if (!fault->is_private)
+		return 0;
+
 	return PG_LEVEL_4K;
 }
 
