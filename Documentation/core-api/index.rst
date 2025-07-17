@@ -49,7 +49,7 @@ Library functionality that is used throughout the kernel.
    timekeeping
    errseq
    wrappers/atomic_t
-   wrappers/atomic_bitops
+   atomic_bitops
    floating-point
    union_find
    min_heap

@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0
+
 =============
 Atomic bitops
 =============
@@ -11,53 +13,50 @@ API
 
 The single bit operations are:
 
-Non-RMW ops:
+* Non-RMW ops:
 
-  test_bit()
+  * test_bit()
 
-RMW atomic operations without return value:
+* RMW atomic operations without return value:
 
-  {set,clear,change}_bit()
-  clear_bit_unlock()
+  * {set,clear,change}_bit()
+  * clear_bit_unlock()
 
-RMW atomic operations with return value:
+* RMW atomic operations with return value:
 
-  test_and_{set,clear,change}_bit()
-  test_and_set_bit_lock()
+  * test_and_{set,clear,change}_bit()
+  * test_and_set_bit_lock()
 
-Barriers:
+* Barriers:
 
-  smp_mb__{before,after}_atomic()
+  * smp_mb__{before,after}_atomic()
 
 
 All RMW atomic operations have a '__' prefixed variant which is non-atomic.
 
 
-SEMANTICS
+Semantics
 ---------
 
-Non-atomic ops:
+* Non-atomic ops:
 
-In particular __clear_bit_unlock() suffers the same issue as atomic_set(),
-which is why the generic version maps to clear_bit_unlock(), see atomic_t.txt.
-
-
-RMW ops:
-
-The test_and_{}_bit() operations return the original value of the bit.
+  In particular __clear_bit_unlock() suffers the same issue as atomic_set(),
+  which is why the generic version maps to clear_bit_unlock(), see atomic_t.txt.
 
 
-ORDERING
+* RMW ops:
+
+  The test_and_{}_bit() operations return the original value of the bit.
+
+
+Ordering
 --------
 
 Like with atomic_t, the rule of thumb is:
 
  - non-RMW operations are unordered;
-
  - RMW operations that have no return value are unordered;
-
  - RMW operations that have a return value are fully ordered.
-
  - RMW operations that are conditional are fully ordered.
 
 Except for a successful test_and_set_bit_lock() which has ACQUIRE semantics,
