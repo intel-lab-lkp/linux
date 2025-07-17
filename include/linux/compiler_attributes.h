@@ -165,6 +165,17 @@
 #define __gnu_inline                    __attribute__((__gnu_inline__))
 
 /*
+ * Optional: not supported by gcc
+ *
+ * clang: https://clang.llvm.org/docs/AttributeReference.html#kcfi-salt
+ */
+#if __has_attribute(__kcfi_salt__)
+# define __kcfi_salt(STR)		__attribute__((__kcfi_salt__(STR)))
+#else
+# define __kcfi_salt(STR)
+#endif
+
+/*
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-malloc-function-attribute
  * clang: https://clang.llvm.org/docs/AttributeReference.html#malloc
  */

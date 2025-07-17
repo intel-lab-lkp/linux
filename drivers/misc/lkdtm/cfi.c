@@ -21,6 +21,13 @@ static noinline int lkdtm_increment_int(int *counter)
 	return *counter;
 }
 
+/* Function matching prototype of lkdtm_increment_int but separate salt. */
+static noinline __kcfi_salt("separate prototype hash")
+void lkdtm_increment_void_again(int *counter)
+{
+	(*counter)++;
+}
+
 /* Don't allow the compiler to inline the calls. */
 static noinline void lkdtm_indirect_call(void (*func)(int *))
 {
@@ -43,6 +50,25 @@ static void lkdtm_CFI_FORWARD_PROTO(void)
 	lkdtm_indirect_call((void *)lkdtm_increment_int);
 
 	pr_err("FAIL: survived mismatched prototype function call!\n");
+	pr_expected_config(CONFIG_CFI_CLANG);
+}
+
+/*
+ * This tries to call an indirect function with a mismatched hash salt.
+ */
+static void lkdtm_CFI_FORWARD_SALT(void)
+{
+	/*
+	 * Matches lkdtm_increment_void()'s and lkdtm_increment_void_again()'s
+	 * prototypes, but they have different hash salts.
+	 */
+	pr_info("Calling matched prototype ...\n");
+	lkdtm_indirect_call(lkdtm_increment_void);
+
+	pr_info("Calling mismatched hash salt ...\n");
+	lkdtm_indirect_call(lkdtm_increment_void_again);
+
+	pr_err("FAIL: survived mismatched salt function call!\n");
 	pr_expected_config(CONFIG_CFI_CLANG);
 }
 
@@ -193,6 +219,7 @@ check_redirected:
 
 static struct crashtype crashtypes[] = {
 	CRASHTYPE(CFI_FORWARD_PROTO),
+	CRASHTYPE(CFI_FORWARD_SALT),
 	CRASHTYPE(CFI_BACKWARD),
 };
 
