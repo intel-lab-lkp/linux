@@ -13544,6 +13544,7 @@ KUNIT UAPI TESTING FRAMEWORK (in addition to KERNEL UNIT TESTING FRAMEWORK)
 M:	Thomas Weißschuh <thomas.weissschuh@linutronix.de>
 S:	Maintained
 F:	include/kunit/uapi.h
+F:	lib/kunit/kunit-example-uapi.c
 F:	lib/kunit/kunit-uapi.c
 
 KVM PARAVIRT (KVM/paravirt)
