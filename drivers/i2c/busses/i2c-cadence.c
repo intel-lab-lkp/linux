@@ -1230,7 +1230,7 @@ static int cdns_unreg_slave(struct i2c_client *slave)
 }
 #endif
 
-static const struct i2c_algorithm cdns_i2c_algo = {
+static struct i2c_algorithm cdns_i2c_algo = {
 	.xfer = cdns_i2c_master_xfer,
 	.xfer_atomic = cdns_i2c_master_xfer_atomic,
 	.functionality = cdns_i2c_func,
@@ -1510,6 +1510,9 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 		const struct cdns_platform_data *data = match->data;
 		id->quirks = data->quirks;
 	}
+
+	if (id->quirks & CDNS_I2C_BROKEN_HOLD_BIT)
+		cdns_i2c_algo.master_xfer_atomic = NULL;
 
 	id->rinfo.pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(id->rinfo.pinctrl)) {
