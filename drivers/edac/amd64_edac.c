@@ -2724,6 +2724,22 @@ static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 	switch (err->err_code) {
 	case DECODE_OK:
 		string = "";
+		if (err->dram_addr) {
+			char s[100];
+
+			memset(s, 0, 100);
+			sprintf(s, "Cs: 0x%x Bank Grp: 0x%x Bank Addr: 0x%x"
+					   " Row: 0x%x Column: 0x%x"
+					   " RankMul: 0x%x SubChannel: 0x%x",
+					   err->dram_addr->chip_select,
+					   err->dram_addr->bank_group,
+					   err->dram_addr->bank_addr,
+					   err->dram_addr->row_addr,
+					   err->dram_addr->col_addr,
+					   err->dram_addr->rank_mul,
+					   err->dram_addr->sub_ch);
+			string = s;
+		}
 		break;
 	case ERR_NODE:
 		string = "Failed to map error addr to a node";
@@ -2808,11 +2824,13 @@ static void umc_get_err_info(struct mce *m, struct err_info *err)
 static void decode_umc_error(int node_id, struct mce *m)
 {
 	u8 ecc_type = (m->status >> 45) & 0x3;
+	struct dram_addr dram_addr;
 	struct mem_ctl_info *mci;
 	unsigned long sys_addr;
 	struct amd64_pvt *pvt;
 	struct atl_err a_err;
 	struct err_info err;
+	int ret;
 
 	node_id = fixup_node_id(node_id, m);
 
@@ -2822,6 +2840,7 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	pvt = mci->pvt_info;
 
+	memset(&dram_addr, 0, sizeof(dram_addr));
 	memset(&err, 0, sizeof(err));
 
 	if (m->status & MCI_STATUS_DEFERRED)
@@ -2852,6 +2871,10 @@ static void decode_umc_error(int node_id, struct mce *m)
 		err.err_code = ERR_NORM_ADDR;
 		goto log_error;
 	}
+
+	ret = amd_convert_umc_mca_addr_to_dram_addr(&a_err, &dram_addr);
+	if (!ret)
+		err.dram_addr = &dram_addr;
 
 	error_address_to_page_and_offset(sys_addr, &err);
 
