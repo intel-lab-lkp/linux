@@ -884,6 +884,8 @@ __media_pipeline_start_context(struct media_pad *origin,
 		 * the connected sink pad to avoid duplicating checks.
 		 */
 		for_each_media_entity_data_link(entity, link) {
+			const struct media_entity_operations *ops;
+
 			/* Skip links unrelated to the current pad. */
 			if (link->sink != pad && link->source != pad)
 				continue;
@@ -902,13 +904,23 @@ __media_pipeline_start_context(struct media_pad *origin,
 			if (link->sink != pad)
 				continue;
 
-			if (!entity->ops || !entity->ops->link_validate)
+			ops = entity->ops;
+			if (!ops || (!ops->link_validate &&
+				     !ops->link_validate_context))
 				continue;
 
-			ret = entity->ops->link_validate(link);
+			if (mdev_context && ops->link_validate_context)
+				ret = ops->link_validate_context(link,
+								 mdev_context);
+			else
+				ret = entity->ops->link_validate(link);
+
 			if (ret) {
 				dev_dbg(mdev->dev,
-					"Link '%s':%u -> '%s':%u failed validation: %d\n",
+					"%sink '%s':%u -> '%s':%u failed validation: %d\n",
+					(mdev_context &&
+					 ops->link_validate_context) ?
+					"Context l" : "L",
 					link->source->entity->name,
 					link->source->index,
 					link->sink->entity->name,
@@ -917,7 +929,10 @@ __media_pipeline_start_context(struct media_pad *origin,
 			}
 
 			dev_dbg(mdev->dev,
-				"Link '%s':%u -> '%s':%u is valid\n",
+				"%sink '%s':%u -> '%s':%u is valid\n",
+				(mdev_context &&
+				 ops->link_validate_context) ?
+				"Context l" : "L",
 				link->source->entity->name,
 				link->source->index,
 				link->sink->entity->name,
