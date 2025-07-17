@@ -1133,7 +1133,7 @@ static int hcd_name_to_id(const char *name)
 	int ret;
 
 	c = strchr(name, '.');
-	if (c == NULL)
+	if (!c)
 		return 0;
 
 	ret = kstrtol(c + 1, 10, &val);
@@ -1523,7 +1523,7 @@ static int __init vhci_hcd_init(void)
 		vhci_num_controllers = 1;
 
 	vhcis = kcalloc(vhci_num_controllers, sizeof(struct vhci), GFP_KERNEL);
-	if (vhcis == NULL)
+	if (!vhcis)
 		return -ENOMEM;
 
 	ret = platform_driver_register(&vhci_driver);
