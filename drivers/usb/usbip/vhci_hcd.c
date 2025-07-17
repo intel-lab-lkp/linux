@@ -879,7 +879,8 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	priv = urb->hcpriv;
 	if (!priv) {
 		/* URB was never linked! or will be soon given back by
-		 * vhci_rx. */
+		 * vhci_rx.
+		 */
 		spin_unlock_irqrestore(&vhci->lock, flags);
 		return -EIDRM;
 	}
@@ -936,7 +937,8 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 		unlink->unlink_seqnum = priv->seqnum;
 
 		/* send cmd_unlink and try to cancel the pending URB in the
-		 * peer */
+		 * peer
+		 */
 		list_add_tail(&unlink->list, &vdev->unlink_tx);
 		wake_up(&vdev->waitq_tx);
 
