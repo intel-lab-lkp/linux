@@ -333,6 +333,7 @@ struct vxlan_dev {
 #define VXLAN_F_MDB			0x40000
 #define VXLAN_F_LOCALBYPASS		0x80000
 #define VXLAN_F_MC_ROUTE		0x100000
+#define VXLAN_F_LOCALBIND		0x200000
 
 /* Flags that are used in the receive path. These flags must match in
  * order for a socket to be shareable
