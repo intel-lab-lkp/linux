@@ -34,7 +34,8 @@ struct udp_port_cfg {
 	unsigned int		use_udp_checksums:1,
 				use_udp6_tx_checksums:1,
 				use_udp6_rx_checksums:1,
-				ipv6_v6only:1;
+				ipv6_v6only:1,
+				freebind:1;
 };
 
 int udp_sock_create4(struct net *net, struct udp_port_cfg *cfg,
