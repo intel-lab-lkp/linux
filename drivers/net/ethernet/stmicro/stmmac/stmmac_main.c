@@ -7487,6 +7487,7 @@ int stmmac_dvr_probe(struct device *device,
 		return -ENOMEM;
 
 	SET_NETDEV_DEV(ndev, device);
+	ndev->dev.of_node = device->of_node;
 
 	priv = netdev_priv(ndev);
 	priv->device = device;
