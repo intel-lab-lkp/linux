@@ -2339,8 +2339,6 @@ static void btintel_pcie_remove(struct pci_dev *pdev)
 	btintel_pcie_free(data);
 
 	pci_clear_master(pdev);
-
-	pci_set_drvdata(pdev, NULL);
 }
 
 #ifdef CONFIG_DEV_COREDUMP
