@@ -13546,6 +13546,7 @@ S:	Maintained
 F:	include/kunit/uapi.h
 F:	lib/kunit/kunit-example-uapi.c
 F:	lib/kunit/kunit-uapi.c
+F:	lib/kunit/uapi-preinit.c
 
 KVM PARAVIRT (KVM/paravirt)
 M:	Paolo Bonzini <pbonzini@redhat.com>
