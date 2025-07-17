@@ -1172,8 +1172,6 @@ static int vhci_start(struct usb_hcd *hcd)
 	int id, rhport;
 	int err;
 
-	usbip_dbg_vhci_hc("enter %s\n", __func__);
-
 	if (usb_hcd_is_primary_hcd(hcd))
 		spin_lock_init(&vhci_hcd->vhci->lock);
 
@@ -1259,8 +1257,6 @@ static int vhci_bus_suspend(struct usb_hcd *hcd)
 	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
 	unsigned long flags;
 
-	dev_dbg(&hcd->self.root_hub->dev, "%s\n", __func__);
-
 	spin_lock_irqsave(&vhci->lock, flags);
 	hcd->state = HC_STATE_SUSPENDED;
 	spin_unlock_irqrestore(&vhci->lock, flags);
@@ -1273,8 +1269,6 @@ static int vhci_bus_resume(struct usb_hcd *hcd)
 	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
 	int rc = 0;
 	unsigned long flags;
-
-	dev_dbg(&hcd->self.root_hub->dev, "%s\n", __func__);
 
 	spin_lock_irqsave(&vhci->lock, flags);
 
@@ -1427,8 +1421,6 @@ static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
 	int ret = 0;
 	unsigned long flags;
 
-	dev_dbg(&pdev->dev, "%s\n", __func__);
-
 	hcd = platform_get_drvdata(pdev);
 	if (!hcd)
 		return 0;
@@ -1465,8 +1457,6 @@ static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
 static int vhci_hcd_resume(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd;
-
-	dev_dbg(&pdev->dev, "%s\n", __func__);
 
 	hcd = platform_get_drvdata(pdev);
 	if (!hcd)
