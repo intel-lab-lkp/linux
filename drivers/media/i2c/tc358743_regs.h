@@ -720,25 +720,24 @@
 #define ERR_PK_LIMIT                          0x870D
 #define NO_PKT_LIMIT2                         0x870E
 #define PK_AVI_0HEAD                          0x8710
-#define PK_AVI_1HEAD                          0x8711
-#define PK_AVI_2HEAD                          0x8712
 #define PK_AVI_0BYTE                          0x8713
-#define PK_AVI_1BYTE                          0x8714
-#define PK_AVI_2BYTE                          0x8715
-#define PK_AVI_3BYTE                          0x8716
-#define PK_AVI_4BYTE                          0x8717
-#define PK_AVI_5BYTE                          0x8718
-#define PK_AVI_6BYTE                          0x8719
-#define PK_AVI_7BYTE                          0x871A
-#define PK_AVI_8BYTE                          0x871B
-#define PK_AVI_9BYTE                          0x871C
-#define PK_AVI_10BYTE                         0x871D
-#define PK_AVI_11BYTE                         0x871E
-#define PK_AVI_12BYTE                         0x871F
-#define PK_AVI_13BYTE                         0x8720
-#define PK_AVI_14BYTE                         0x8721
-#define PK_AVI_15BYTE                         0x8722
 #define PK_AVI_16BYTE                         0x8723
+#define PK_AVI_LEN			      (PK_AVI_16BYTE - PK_AVI_0HEAD + 1)
+
+#define PK_AUD_0HEAD			      0x8730
+#define PK_AUD_0BYTE			      0x8733
+#define PK_AUD_10BYTE			      0x873d
+#define PK_AUD_LEN			      (PK_AUD_10BYTE - PK_AUD_0HEAD + 1)
+
+#define PK_SPD_0HEAD			      0x8750
+#define PK_SPD_0BYTE			      0x8753
+#define PK_SPD_27BYTE			      0x876e
+#define PK_SPD_LEN			      (PK_SPD_27BYTE - PK_SPD_0HEAD + 1)
+
+#define PK_VS_0HEAD			      0x8770
+#define PK_VS_0BYTE			      0x8773
+#define PK_VS_27BYTE			      0x878e
+#define PK_VS_LEN			      (PK_VS_27BYTE - PK_VS_0HEAD + 1)
 
 #define BKSV                                  0x8800
 
