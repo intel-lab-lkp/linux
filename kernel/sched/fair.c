@@ -7135,7 +7135,8 @@ static unsigned long cpu_load_without(struct rq *rq, struct task_struct *p)
 	unsigned int load;
 
 	/* Task has no contribution or is new */
-	if (cpu_of(rq) != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
+	if (!p || cpu_of(rq) != task_cpu(p) ||
+	    !READ_ONCE(p->se.avg.last_update_time))
 		return cpu_load(rq);
 
 	cfs_rq = &rq->cfs;
@@ -7158,7 +7159,8 @@ static unsigned long cpu_runnable_without(struct rq *rq, struct task_struct *p)
 	unsigned int runnable;
 
 	/* Task has no contribution or is new */
-	if (cpu_of(rq) != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
+	if (!p || cpu_of(rq) != task_cpu(p) ||
+	    !READ_ONCE(p->se.avg.last_update_time))
 		return cpu_runnable(rq);
 
 	cfs_rq = &rq->cfs;
@@ -7168,6 +7170,51 @@ static unsigned long cpu_runnable_without(struct rq *rq, struct task_struct *p)
 	lsub_positive(&runnable, p->se.avg.runnable_avg);
 
 	return runnable;
+}
+
+/*
+ * task_running_on_cpu - return 1 if @p is running on @cpu.
+ */
+
+static unsigned int task_running_on_cpu(int cpu, struct task_struct *p)
+{
+	/* Task has no contribution or is new */
+	if (!p || cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
+		return 0;
+
+	if (task_on_rq_queued(p))
+		return 1;
+
+	return 0;
+}
+
+/**
+ * idle_cpu_without - would a given CPU be idle without p ?
+ * @cpu: the processor on which idleness is tested.
+ * @p: task which should be ignored.
+ *
+ * Return: 1 if the CPU would be idle. 0 otherwise.
+ */
+static int idle_cpu_without(int cpu, struct task_struct *p)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if (!p)
+		return idle_cpu(cpu);
+
+	if (rq->curr != rq->idle && rq->curr != p)
+		return 0;
+
+	/*
+	 * rq->nr_running can't be used but an updated version without the
+	 * impact of p on cpu must be used instead. The updated nr_running
+	 * be computed and tested before calling idle_cpu_without().
+	 */
+
+	if (rq->ttwu_pending)
+		return 0;
+
+	return 1;
 }
 
 static unsigned long capacity_of(int cpu)
@@ -7984,7 +8031,7 @@ unsigned long cpu_util_cfs_boost(int cpu)
 static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 {
 	/* Task has no contribution or is new */
-	if (cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
+	if (!p || cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
 		p = NULL;
 
 	return cpu_util(cpu, p, -1, 0);
@@ -10522,48 +10569,6 @@ static inline enum fbq_type fbq_classify_rq(struct rq *rq)
 
 
 struct sg_lb_stats;
-
-/*
- * task_running_on_cpu - return 1 if @p is running on @cpu.
- */
-
-static unsigned int task_running_on_cpu(int cpu, struct task_struct *p)
-{
-	/* Task has no contribution or is new */
-	if (cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
-		return 0;
-
-	if (task_on_rq_queued(p))
-		return 1;
-
-	return 0;
-}
-
-/**
- * idle_cpu_without - would a given CPU be idle without p ?
- * @cpu: the processor on which idleness is tested.
- * @p: task which should be ignored.
- *
- * Return: 1 if the CPU would be idle. 0 otherwise.
- */
-static int idle_cpu_without(int cpu, struct task_struct *p)
-{
-	struct rq *rq = cpu_rq(cpu);
-
-	if (rq->curr != rq->idle && rq->curr != p)
-		return 0;
-
-	/*
-	 * rq->nr_running can't be used but an updated version without the
-	 * impact of p on cpu must be used instead. The updated nr_running
-	 * be computed and tested before calling idle_cpu_without().
-	 */
-
-	if (rq->ttwu_pending)
-		return 0;
-
-	return 1;
-}
 
 /*
  * update_sg_wakeup_stats - Update sched_group's statistics for wakeup.
