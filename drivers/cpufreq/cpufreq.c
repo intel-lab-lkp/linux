@@ -1196,7 +1196,7 @@ void refresh_frequency_limits(struct cpufreq_policy *policy)
 }
 EXPORT_SYMBOL(refresh_frequency_limits);
 
-static void handle_update(struct work_struct *work)
+static void handle_update(struct kthread_work *work)
 {
 	struct cpufreq_policy *policy =
 		container_of(work, struct cpufreq_policy, update);
@@ -1213,7 +1213,7 @@ static int cpufreq_notifier_min(struct notifier_block *nb, unsigned long freq,
 {
 	struct cpufreq_policy *policy = container_of(nb, struct cpufreq_policy, nb_min);
 
-	schedule_work(&policy->update);
+	kthread_queue_work(policy->worker, &policy->update);
 	return 0;
 }
 
@@ -1222,7 +1222,7 @@ static int cpufreq_notifier_max(struct notifier_block *nb, unsigned long freq,
 {
 	struct cpufreq_policy *policy = container_of(nb, struct cpufreq_policy, nb_max);
 
-	schedule_work(&policy->update);
+	kthread_queue_work(policy->worker, &policy->update);
 	return 0;
 }
 
@@ -1305,14 +1305,23 @@ static struct cpufreq_policy *cpufreq_policy_alloc(unsigned int cpu)
 		goto err_min_qos_notifier;
 	}
 
+	policy->worker = kthread_create_worker_on_cpu(cpu, 0, "policy_worker%d", cpu);
+	if (IS_ERR(policy->worker)) {
+		dev_err(dev, "Failed to create policy_worker%d\n", cpu);
+		goto err_max_qos_notifier;
+	}
+
 	INIT_LIST_HEAD(&policy->policy_list);
 	init_rwsem(&policy->rwsem);
 	spin_lock_init(&policy->transition_lock);
 	init_waitqueue_head(&policy->transition_wait);
-	INIT_WORK(&policy->update, handle_update);
+	kthread_init_work(&policy->update, handle_update);
 
 	return policy;
 
+err_max_qos_notifier:
+	freq_qos_remove_notifier(&policy->constraints, FREQ_QOS_MAX,
+				 &policy->nb_max);
 err_min_qos_notifier:
 	freq_qos_remove_notifier(&policy->constraints, FREQ_QOS_MIN,
 				 &policy->nb_min);
@@ -1356,7 +1365,9 @@ static void cpufreq_policy_free(struct cpufreq_policy *policy)
 				 &policy->nb_min);
 
 	/* Cancel any pending policy->update work before freeing the policy. */
-	cancel_work_sync(&policy->update);
+	kthread_cancel_work_sync(&policy->update);
+	if (policy->worker)
+		kthread_destroy_worker(policy->worker);
 
 	if (policy->max_freq_req) {
 		/*
@@ -1827,7 +1838,7 @@ static unsigned int cpufreq_verify_current_freq(struct cpufreq_policy *policy, b
 
 		cpufreq_out_of_sync(policy, new_freq);
 		if (update)
-			schedule_work(&policy->update);
+			kthread_queue_work(policy->worker, &policy->update);
 	}
 
 	return new_freq;

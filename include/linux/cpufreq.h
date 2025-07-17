@@ -20,6 +20,7 @@
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
 #include <linux/minmax.h>
+#include <linux/kthread.h>
 
 /*********************************************************************
  *                        CPUFREQ INTERFACE                          *
@@ -77,8 +78,9 @@ struct cpufreq_policy {
 	void			*governor_data;
 	char			last_governor[CPUFREQ_NAME_LEN]; /* last governor used */
 
-	struct work_struct	update; /* if update_policy() needs to be
+	struct kthread_work	update; /* if update_policy() needs to be
 					 * called, but you're in IRQ context */
+	struct kthread_worker *worker;
 
 	struct freq_constraints	constraints;
 	struct freq_qos_request	*min_freq_req;
