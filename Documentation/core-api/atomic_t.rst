@@ -1,63 +1,66 @@
+.. SPDX-License-Identifier: GPL-2.0
 
-On atomic types (atomic_t atomic64_t and atomic_long_t).
+============
+Atomic types
+============
 
 The atomic type provides an interface to the architecture's means of atomic
 RMW operations between CPUs (atomic operations on MMIO are not supported and
 can lead to fatal traps on some platforms).
 
 API
----
+===
 
-The 'full' API consists of (atomic64_ and atomic_long_ prefixes omitted for
+The 'full' API consists of (atomic64\_ and atomic_long\_ prefixes omitted for
 brevity):
 
-Non-RMW ops:
+* Non-RMW ops:
 
-  atomic_read(), atomic_set()
-  atomic_read_acquire(), atomic_set_release()
-
-
-RMW atomic operations:
-
-Arithmetic:
-
-  atomic_{add,sub,inc,dec}()
-  atomic_{add,sub,inc,dec}_return{,_relaxed,_acquire,_release}()
-  atomic_fetch_{add,sub,inc,dec}{,_relaxed,_acquire,_release}()
+  * atomic_read(), atomic_set()
+  * atomic_read_acquire(), atomic_set_release()
 
 
-Bitwise:
+* RMW atomic operations:
 
-  atomic_{and,or,xor,andnot}()
-  atomic_fetch_{and,or,xor,andnot}{,_relaxed,_acquire,_release}()
+  * Arithmetic:
 
-
-Swap:
-
-  atomic_xchg{,_relaxed,_acquire,_release}()
-  atomic_cmpxchg{,_relaxed,_acquire,_release}()
-  atomic_try_cmpxchg{,_relaxed,_acquire,_release}()
+    * atomic_{add,sub,inc,dec}()
+    * atomic_{add,sub,inc,dec}_return{,_relaxed,_acquire,_release}()
+    * atomic_fetch_{add,sub,inc,dec}{,_relaxed,_acquire,_release}()
 
 
-Reference count (but please see refcount_t):
+  * Bitwise:
 
-  atomic_add_unless(), atomic_inc_not_zero()
-  atomic_sub_and_test(), atomic_dec_and_test()
-
-
-Misc:
-
-  atomic_inc_and_test(), atomic_add_negative()
-  atomic_dec_unless_positive(), atomic_inc_unless_negative()
+    * atomic_{and,or,xor,andnot}()
+    * atomic_fetch_{and,or,xor,andnot}{,_relaxed,_acquire,_release}()
 
 
-Barriers:
+  * Swap:
 
-  smp_mb__{before,after}_atomic()
+    * atomic_xchg{,_relaxed,_acquire,_release}()
+    * atomic_cmpxchg{,_relaxed,_acquire,_release}()
+    * atomic_try_cmpxchg{,_relaxed,_acquire,_release}()
 
 
-TYPES (signed vs unsigned)
------
+  * Reference count (but please see refcount_t):
+
+    * atomic_add_unless(), atomic_inc_not_zero()
+    * atomic_sub_and_test(), atomic_dec_and_test()
+
+
+  * Misc:
+
+    * atomic_inc_and_test(), atomic_add_negative()
+    * atomic_dec_unless_positive(), atomic_inc_unless_negative()
+
+
+* Barriers:
+
+  * smp_mb__{before,after}_atomic()
+
+
+Types (signed vs unsigned)
+==========================
 
 While atomic_t, atomic_long_t and atomic64_t use int, long and s64
 respectively (for hysterical raisins), the kernel uses -fno-strict-overflow
@@ -74,10 +77,11 @@ With this we also conform to the C/C++ _Atomic behaviour and things like
 P1236R1.
 
 
-SEMANTICS
----------
+Semantics
+=========
 
-Non-RMW ops:
+Non-RMW ops
+-----------
 
 The non-RMW ops are (typically) regular LOADs and STOREs and are canonically
 implemented using READ_ONCE(), WRITE_ONCE(), smp_load_acquire() and
@@ -86,7 +90,7 @@ the Non-RMW operations of atomic_t, you do not in fact need atomic_t at all
 and are doing it wrong.
 
 A note for the implementation of atomic_set{}() is that it must not break the
-atomicity of the RMW ops. That is:
+atomicity of the RMW ops. That is::
 
   C Atomic-RMW-ops-are-atomic-WRT-atomic_set
 
@@ -109,14 +113,14 @@ atomicity of the RMW ops. That is:
 
 In this case we would expect the atomic_set() from CPU1 to either happen
 before the atomic_add_unless(), in which case that latter one would no-op, or
-_after_ in which case we'd overwrite its result. In no case is "2" a valid
+**after** in which case we'd overwrite its result. In no case is "2" a valid
 outcome.
 
 This is typically true on 'normal' platforms, where a regular competing STORE
 will invalidate a LL/SC or fail a CMPXCHG.
 
 The obvious case where this is not so is when we need to implement atomic ops
-with a lock:
+with a lock::
 
   CPU0						CPU1
 
@@ -131,7 +135,8 @@ with a lock:
 the typical solution is to then implement atomic_set{}() with atomic_xchg().
 
 
-RMW ops:
+RMW ops
+-------
 
 These come in various forms:
 
@@ -148,7 +153,7 @@ These come in various forms:
  - swap operations: xchg(), cmpxchg() and try_cmpxchg()
 
  - misc; the special purpose operations that are commonly used and would,
-   given the interface, normally be implemented using (try_)cmpxchg loops but
+   given the interface, normally be implemented using (try\_)cmpxchg loops but
    are time critical and can, (typically) on LL/SC architectures, be more
    efficiently implemented.
 
@@ -157,25 +162,27 @@ atomic variable) can be fully ordered and no intermediate state is lost or
 visible.
 
 
-ORDERING  (go read memory-barriers.txt first)
---------
+Ordering
+========
+
+.. note::
+   Go read Documentation/core-api/memory-barriers.rst first if you
+   don't have yet grasped intricacies of operations involving
+   memory barriers.
 
 The rule of thumb:
 
  - non-RMW operations are unordered;
-
  - RMW operations that have no return value are unordered;
-
  - RMW operations that have a return value are fully ordered;
-
  - RMW operations that are conditional are unordered on FAILURE,
    otherwise the above rules apply.
 
 Except of course when a successful operation has an explicit ordering like:
 
- {}_relaxed: unordered
- {}_acquire: the R of the RMW (or atomic_read) is an ACQUIRE
- {}_release: the W of the RMW (or atomic_set)  is a  RELEASE
+ - {}_relaxed: unordered
+ - {}_acquire: the R of the RMW (or atomic_read) is an ACQUIRE
+ - {}_release: the W of the RMW (or atomic_set)  is a  RELEASE
 
 Where 'unordered' is against other memory locations. Address dependencies are
 not defeated.  Conditional operations are still unordered on FAILURE.
@@ -185,7 +192,7 @@ subsequent. Therefore a fully ordered primitive is like having an smp_mb()
 before and an smp_mb() after the primitive.
 
 
-The barriers:
+The barriers::
 
   smp_mb__{before,after}_atomic()
 
@@ -202,14 +209,15 @@ These helper barriers exist because architectures have varying implicit
 ordering on their SMP atomic primitives. For example our TSO architectures
 provide full ordered atomics and these barriers are no-ops.
 
-NOTE: when the atomic RmW ops are fully ordered, they should also imply a
-compiler barrier.
+.. note::
+   When the atomic RmW ops are fully ordered, they should also imply a
+   compiler barrier.
 
-Thus:
+Thus::
 
   atomic_fetch_add();
 
-is equivalent to:
+is equivalent to::
 
   smp_mb__before_atomic();
   atomic_fetch_add_relaxed();
@@ -217,7 +225,7 @@ is equivalent to:
 
 However the atomic_fetch_add() might be implemented more efficiently.
 
-Further, while something like:
+Further, while something like::
 
   smp_mb__before_atomic();
   atomic_dec(&X);
@@ -225,13 +233,13 @@ Further, while something like:
 is a 'typical' RELEASE pattern, the barrier is strictly stronger than
 a RELEASE because it orders preceding instructions against both the read
 and write parts of the atomic_dec(), and against all following instructions
-as well. Similarly, something like:
+as well. Similarly, something like::
 
   atomic_inc(&X);
   smp_mb__after_atomic();
 
 is an ACQUIRE pattern (though very much not typical), but again the barrier is
-strictly stronger than ACQUIRE. As illustrated:
+strictly stronger than ACQUIRE. As illustrated::
 
   C Atomic-RMW+mb__after_atomic-is-stronger-than-acquire
 
@@ -258,7 +266,7 @@ strictly stronger than ACQUIRE. As illustrated:
 This should not happen; but a hypothetical atomic_inc_acquire() --
 (void)atomic_fetch_inc_acquire() for instance -- would allow the outcome,
 because it would not order the W part of the RMW against the following
-WRITE_ONCE.  Thus:
+WRITE_ONCE.  Thus::
 
   P0			P1
 
@@ -273,33 +281,41 @@ WRITE_ONCE.  Thus:
 is allowed.
 
 
-CMPXCHG vs TRY_CMPXCHG
-----------------------
+cmpxchg vs try_cmpxchg
+======================
 
-  int atomic_cmpxchg(atomic_t *ptr, int old, int new);
-  bool atomic_try_cmpxchg(atomic_t *ptr, int *oldp, int new);
+.. code-block:: c
+
+   int atomic_cmpxchg(atomic_t *ptr, int old, int new);
+   bool atomic_try_cmpxchg(atomic_t *ptr, int *oldp, int new);
 
 Both provide the same functionality, but try_cmpxchg() can lead to more
 compact code. The functions relate like:
 
-  bool atomic_try_cmpxchg(atomic_t *ptr, int *oldp, int new)
-  {
-    int ret, old = *oldp;
-    ret = atomic_cmpxchg(ptr, old, new);
-    if (ret != old)
-      *oldp = ret;
-    return ret == old;
-  }
+.. code-block:: c
+
+   bool atomic_try_cmpxchg(atomic_t *ptr, int *oldp, int new)
+   {
+     int ret, old = *oldp;
+     ret = atomic_cmpxchg(ptr, old, new);
+     if (ret != old)
+       *oldp = ret;
+     return ret == old;
+   }
 
 and:
 
-  int atomic_cmpxchg(atomic_t *ptr, int old, int new)
-  {
-    (void)atomic_try_cmpxchg(ptr, &old, new);
-    return old;
-  }
+.. code-block:: c
+
+   int atomic_cmpxchg(atomic_t *ptr, int old, int new)
+   {
+     (void)atomic_try_cmpxchg(ptr, &old, new);
+     return old;
+   }
 
 Usage:
+
+.. code-block:: c
 
   old = atomic_read(&v);			old = atomic_read(&v);
   for (;;) {					do {
@@ -310,12 +326,13 @@ Usage:
     old = tmp;
   }
 
-NB. try_cmpxchg() also generates better code on some platforms (notably x86)
-where the function more closely matches the hardware instruction.
+.. note::
+   try_cmpxchg() also generates better code on some platforms (notably x86)
+   where the function more closely matches the hardware instruction.
 
 
-FORWARD PROGRESS
-----------------
+Forward Progress
+================
 
 In general strong forward progress is expected of all unconditional atomic
 operations -- those in the Arithmetic and Bitwise classes and xchg(). However
@@ -328,30 +345,34 @@ while an LL/SC architecture 'can/should/must' provide forward progress
 guarantees between competing LL/SC sections, such a guarantee does not
 transfer to cmpxchg() implemented using LL/SC. Consider:
 
-  old = atomic_read(&v);
-  do {
-    new = func(old);
-  } while (!atomic_try_cmpxchg(&v, &old, new));
+.. code-block:: c
+
+   old = atomic_read(&v);
+   do {
+     new = func(old);
+   } while (!atomic_try_cmpxchg(&v, &old, new));
 
 which on LL/SC becomes something like:
 
-  old = atomic_read(&v);
-  do {
-    new = func(old);
-  } while (!({
-    volatile asm ("1: LL  %[oldval], %[v]\n"
-                  "   CMP %[oldval], %[old]\n"
-                  "   BNE 2f\n"
-                  "   SC  %[new], %[v]\n"
-                  "   BNE 1b\n"
-                  "2:\n"
-                  : [oldval] "=&r" (oldval), [v] "m" (v)
-		  : [old] "r" (old), [new] "r" (new)
-                  : "memory");
-    success = (oldval == old);
-    if (!success)
-      old = oldval;
-    success; }));
+.. code-block:: c
+
+   old = atomic_read(&v);
+   do {
+     new = func(old);
+   } while (!({
+     volatile asm ("1: LL  %[oldval], %[v]\n"
+                   "   CMP %[oldval], %[old]\n"
+                   "   BNE 2f\n"
+                   "   SC  %[new], %[v]\n"
+                   "   BNE 1b\n"
+                   "2:\n"
+                   : [oldval] "=&r" (oldval), [v] "m" (v)
+                   : [old] "r" (old), [new] "r" (new)
+                   : "memory");
+     success = (oldval == old);
+     if (!success)
+       old = oldval;
+     success; }));
 
 However, even the forward branch from the failed compare can cause the LL/SC
 to fail on some architectures, let alone whatever the compiler makes of the C

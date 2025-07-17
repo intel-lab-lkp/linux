@@ -48,7 +48,7 @@ Library functionality that is used throughout the kernel.
    this_cpu_ops
    timekeeping
    errseq
-   wrappers/atomic_t
+   atomic_t
    atomic_bitops
    floating-point
    union_find
