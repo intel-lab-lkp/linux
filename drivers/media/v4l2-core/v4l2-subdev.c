@@ -1460,6 +1460,71 @@ int v4l2_subdev_get_fwnode_pad_1_to_1(struct media_entity *entity,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_fwnode_pad_1_to_1);
 
+/*
+ * Retrieve the subdevice state from the media device context or,
+ * if there is no context, use the active state from the subdevice.
+ *
+ * These three functions wraps the usual subdev state helpers:
+ *
+ * - get_unlocked
+ * - get_locked
+ * - lock_and_get
+ */
+
+static struct v4l2_subdev_state *
+v4l2_subdev_get_unlocked_state_from_mdev_ctx(struct v4l2_subdev *sd,
+					     struct media_device_context *mdev_ctx)
+{
+	struct v4l2_subdev_context *ctx = NULL;
+
+	if (mdev_ctx) {
+		ctx =  v4l2_subdev_context_get(mdev_ctx, sd);
+		if (WARN_ON(!ctx))
+			return NULL;
+	}
+
+	if (ctx)
+		return v4l2_subdev_get_unlocked_active_state(ctx);
+
+	return v4l2_subdev_get_unlocked_active_state(sd);
+}
+
+static struct v4l2_subdev_state *
+v4l2_subdev_get_locked_state_from_mdev_ctx(struct v4l2_subdev *sd,
+					   struct media_device_context *mdev_ctx)
+{
+	struct v4l2_subdev_context *ctx = NULL;
+
+	if (mdev_ctx) {
+		ctx =  v4l2_subdev_context_get(mdev_ctx, sd);
+		if (WARN_ON(!ctx))
+			return NULL;
+	}
+
+	if (ctx)
+		return v4l2_subdev_get_locked_active_state(ctx);
+
+	return v4l2_subdev_get_locked_active_state(sd);
+}
+
+static struct v4l2_subdev_state *
+v4l2_subdev_lock_and_get_state_from_mdev_ctx(struct v4l2_subdev *sd,
+					     struct media_device_context *mdev_ctx)
+{
+	struct v4l2_subdev_context *ctx = NULL;
+
+	if (mdev_ctx) {
+		ctx =  v4l2_subdev_context_get(mdev_ctx, sd);
+		if (WARN_ON(!ctx))
+			return NULL;
+	}
+
+	if (ctx)
+		return v4l2_subdev_lock_and_get_active_state(ctx);
+
+	return v4l2_subdev_lock_and_get_active_state(sd);
+}
+
 int v4l2_subdev_link_validate_default(struct v4l2_subdev *sd,
 				      struct media_link *link,
 				      struct v4l2_subdev_format *source_fmt,
@@ -1518,8 +1583,9 @@ int v4l2_subdev_link_validate_default(struct v4l2_subdev *sd,
 EXPORT_SYMBOL_GPL(v4l2_subdev_link_validate_default);
 
 static int
-v4l2_subdev_link_validate_get_format(struct media_pad *pad, u32 stream,
-				     struct v4l2_subdev_format *fmt,
+v4l2_subdev_link_validate_get_format(struct media_pad *pad,
+				     struct media_device_context *mdev_context,
+				     u32 stream, struct v4l2_subdev_format *fmt,
 				     bool states_locked)
 {
 	struct v4l2_subdev_state *state;
@@ -1533,9 +1599,11 @@ v4l2_subdev_link_validate_get_format(struct media_pad *pad, u32 stream,
 	fmt->stream = stream;
 
 	if (states_locked)
-		state = v4l2_subdev_get_locked_active_state(sd);
+		state = v4l2_subdev_get_locked_state_from_mdev_ctx(sd,
+								mdev_context);
 	else
-		state = v4l2_subdev_lock_and_get_active_state(sd);
+		state = v4l2_subdev_lock_and_get_state_from_mdev_ctx(sd,
+								mdev_context);
 
 	ret = v4l2_subdev_call(sd, pad, get_fmt, state, fmt);
 
@@ -1548,6 +1616,7 @@ v4l2_subdev_link_validate_get_format(struct media_pad *pad, u32 stream,
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 
 static void __v4l2_link_validate_get_streams(struct media_pad *pad,
+					     struct media_device_context *mdev_context,
 					     u64 *streams_mask,
 					     bool states_locked)
 {
@@ -1560,10 +1629,11 @@ static void __v4l2_link_validate_get_streams(struct media_pad *pad,
 	*streams_mask = 0;
 
 	if (states_locked)
-		state = v4l2_subdev_get_locked_active_state(subdev);
+		state = v4l2_subdev_get_locked_state_from_mdev_ctx(subdev,
+								mdev_context);
 	else
-		state = v4l2_subdev_lock_and_get_active_state(subdev);
-
+		state = v4l2_subdev_lock_and_get_state_from_mdev_ctx(subdev,
+								mdev_context);
 	if (WARN_ON(!state))
 		return;
 
@@ -1592,6 +1662,7 @@ static void __v4l2_link_validate_get_streams(struct media_pad *pad,
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
 static void v4l2_link_validate_get_streams(struct media_pad *pad,
+					   struct media_device_context *mdev_context,
 					   u64 *streams_mask,
 					   bool states_locked)
 {
@@ -1604,14 +1675,17 @@ static void v4l2_link_validate_get_streams(struct media_pad *pad,
 	}
 
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
-	__v4l2_link_validate_get_streams(pad, streams_mask, states_locked);
+	__v4l2_link_validate_get_streams(pad, mdev_context, streams_mask,
+					 states_locked);
 #else
 	/* This shouldn't happen */
 	*streams_mask = 0;
 #endif
 }
 
-static int v4l2_subdev_link_validate_locked(struct media_link *link, bool states_locked)
+static int v4l2_subdev_link_validate_locked(struct media_link *link,
+					    struct media_device_context *mdev_context,
+					    bool states_locked)
 {
 	struct v4l2_subdev *sink_subdev =
 		media_entity_to_v4l2_subdev(link->sink->entity);
@@ -1626,8 +1700,10 @@ static int v4l2_subdev_link_validate_locked(struct media_link *link, bool states
 		link->source->entity->name, link->source->index,
 		link->sink->entity->name, link->sink->index);
 
-	v4l2_link_validate_get_streams(link->source, &source_streams_mask, states_locked);
-	v4l2_link_validate_get_streams(link->sink, &sink_streams_mask, states_locked);
+	v4l2_link_validate_get_streams(link->source, mdev_context,
+				       &source_streams_mask, states_locked);
+	v4l2_link_validate_get_streams(link->sink, mdev_context,
+				       &sink_streams_mask, states_locked);
 
 	/*
 	 * It is ok to have more source streams than sink streams as extra
@@ -1654,7 +1730,8 @@ static int v4l2_subdev_link_validate_locked(struct media_link *link, bool states
 			link->source->entity->name, link->source->index, stream,
 			link->sink->entity->name, link->sink->index, stream);
 
-		ret = v4l2_subdev_link_validate_get_format(link->source, stream,
+		ret = v4l2_subdev_link_validate_get_format(link->source,
+							   mdev_context, stream,
 							   &source_fmt, states_locked);
 		if (ret < 0) {
 			dev_dbg(dev,
@@ -1664,7 +1741,8 @@ static int v4l2_subdev_link_validate_locked(struct media_link *link, bool states
 			continue;
 		}
 
-		ret = v4l2_subdev_link_validate_get_format(link->sink, stream,
+		ret = v4l2_subdev_link_validate_get_format(link->sink,
+							   mdev_context, stream,
 							   &sink_fmt, states_locked);
 		if (ret < 0) {
 			dev_dbg(dev,
@@ -1693,7 +1771,8 @@ static int v4l2_subdev_link_validate_locked(struct media_link *link, bool states
 	return 0;
 }
 
-int v4l2_subdev_link_validate(struct media_link *link)
+int __v4l2_subdev_link_validate(struct media_link *link,
+				struct media_device_context *mdev_context)
 {
 	struct v4l2_subdev *source_sd, *sink_sd;
 	struct v4l2_subdev_state *source_state, *sink_state;
@@ -1716,28 +1795,35 @@ int v4l2_subdev_link_validate(struct media_link *link)
 	if (is_media_entity_v4l2_video_device(link->source->entity)) {
 		struct media_entity *source = link->source->entity;
 
-		if (!source->ops || !source->ops->link_validate) {
+		if (!source->ops ||
+		    (mdev_context && !source->ops->link_validate_context) ||
+		    (!mdev_context && !source->ops->link_validate)) {
 			/*
-			 * Many existing drivers do not implement the required
-			 * .link_validate() operation for their video devices.
-			 * Print a warning to get the drivers fixed, and return
-			 * 0 to avoid breaking userspace. This should
-			 * eventually be turned into a WARN_ON() when all
-			 * drivers will have been fixed.
+			 * Many existing drivers do not implement the correct
+			 * .link_validate() or .link_validate_context()
+			 * operations for their video devices. Print a warning
+			 * to get the drivers fixed, and return 0 to avoid
+			 * breaking userspace. This should eventually be turned
+			 * into a WARN_ON() when all drivers will have been
+			 * fixed.
 			 */
-			pr_warn_once("video device '%s' does not implement .link_validate(), driver bug!\n",
+			pr_warn_once("video device '%s' does not implement the correct .link_validate operation: driver bug!\n",
 				     source->name);
 			return 0;
 		}
 
 		/*
 		 * Avoid infinite loops in case a video device incorrectly uses
-		 * this helper function as its .link_validate() handler.
+		 * this helper function as its .link_validate[_context]()
+		 * handler.
 		 */
-		if (WARN_ON(source->ops->link_validate == v4l2_subdev_link_validate))
+		if (WARN_ON(source->ops->link_validate == v4l2_subdev_link_validate ||
+			    source->ops->link_validate_context == v4l2_subdev_link_validate_context))
 			return -EINVAL;
 
-		return source->ops->link_validate(link);
+		return (mdev_context && source->ops->link_validate_context) ?
+		       source->ops->link_validate_context(link, mdev_context) :
+		       source->ops->link_validate(link);
 	}
 
 	/*
@@ -1750,22 +1836,24 @@ int v4l2_subdev_link_validate(struct media_link *link)
 	sink_sd = media_entity_to_v4l2_subdev(link->sink->entity);
 	source_sd = media_entity_to_v4l2_subdev(link->source->entity);
 
-	sink_state = v4l2_subdev_get_unlocked_active_state(sink_sd);
-	source_state = v4l2_subdev_get_unlocked_active_state(source_sd);
-
+	sink_state = v4l2_subdev_get_unlocked_state_from_mdev_ctx(sink_sd,
+								  mdev_context);
+	source_state = v4l2_subdev_get_unlocked_state_from_mdev_ctx(source_sd,
+								    mdev_context);
 	states_locked = sink_state && source_state;
 
 	if (states_locked)
 		v4l2_subdev_lock_states(sink_state, source_state);
 
-	ret = v4l2_subdev_link_validate_locked(link, states_locked);
+	ret = v4l2_subdev_link_validate_locked(link, mdev_context, states_locked);
 
 	if (states_locked)
 		v4l2_subdev_unlock_states(sink_state, source_state);
 
 	return ret;
+
 }
-EXPORT_SYMBOL_GPL(v4l2_subdev_link_validate);
+EXPORT_SYMBOL_GPL(__v4l2_subdev_link_validate);
 
 bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
 				  unsigned int pad0, unsigned int pad1)

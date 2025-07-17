@@ -1223,6 +1223,7 @@ struct v4l2_subdev {
  * @vfh: pointer to &struct v4l2_fh
  * @state: pointer to &struct v4l2_subdev_state
  * @owner: module pointer to the owner of this file handle
+ * @context: pointer to subdevice context associated with the file handle
  * @client_caps: bitmask of ``V4L2_SUBDEV_CLIENT_CAP_*``
  */
 struct v4l2_subdev_fh {
@@ -1351,6 +1352,9 @@ int v4l2_subdev_link_validate_default(struct v4l2_subdev *sd,
 				      struct v4l2_subdev_format *source_fmt,
 				      struct v4l2_subdev_format *sink_fmt);
 
+int __v4l2_subdev_link_validate(struct media_link *link,
+				struct media_device_context *mdev_context);
+
 /**
  * v4l2_subdev_link_validate - validates a media link
  *
@@ -1368,7 +1372,35 @@ int v4l2_subdev_link_validate_default(struct v4l2_subdev *sd,
  * the video devices also implement their &media_entity_ops.link_validate
  * operation.
  */
-int v4l2_subdev_link_validate(struct media_link *link);
+static inline int v4l2_subdev_link_validate(struct media_link *link)
+{
+	return __v4l2_subdev_link_validate(link, NULL);
+}
+
+/**
+ * v4l2_subdev_link_validate_context - validates a media link in a media context
+ *
+ * @link: pointer to &struct media_link
+ * @mdev_context: the media device context
+ *
+ * This function calls the subdev's link_validate_context ops to validate
+ * if a media link is valid for streaming in a media device context. It also
+ * internally calls v4l2_subdev_link_validate_default() to ensure that width,
+ * height and the media bus pixel code are equal on both source and sink of the
+ * link.
+ *
+ * The function can be used as a drop-in &media_entity_ops.link_validate_context
+ * implementation for v4l2_subdev instances. It supports all links between
+ * subdevs, as well as links between subdevs and video devices, provided that
+ * the video devices also implement their
+ * &media_entity_ops.link_validate_context operation.
+ */
+static inline int
+v4l2_subdev_link_validate_context(struct media_link *link,
+				  struct media_device_context *mdev_context)
+{
+	return __v4l2_subdev_link_validate(link, mdev_context);
+}
 
 /**
  * v4l2_subdev_has_pad_interdep - MC has_pad_interdep implementation for subdevs
