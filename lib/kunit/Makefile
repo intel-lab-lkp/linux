@@ -31,6 +31,15 @@ endif
 obj-$(if $(CONFIG_KUNIT),y) +=		hooks.o
 
 obj-$(CONFIG_KUNIT_TEST) +=		kunit-test.o
+
+userprogs +=				kunit-test-uapi
+kunit-test-uapi-userccflags :=		-static $(NOLIBC_USERCFLAGS)
+
+ifdef CONFIG_KUNIT_UAPI
+CFLAGS_kunit-test.o :=			-Wa,-I$(obj)
+$(obj)/kunit-test.o: $(obj)/kunit-test-uapi
+endif
+
 obj-$(CONFIG_KUNIT_TEST) +=		platform-test.o
 
 # string-stream-test compiles built-in only.

@@ -8,6 +8,7 @@
 #include "linux/gfp_types.h"
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
+#include <kunit/uapi.h>
 
 #include <linux/device.h>
 #include <kunit/device.h>
@@ -868,10 +869,30 @@ static struct kunit_suite kunit_current_test_suite = {
 	.test_cases = kunit_current_test_cases,
 };
 
+static void kunit_uapi_test(struct kunit *test)
+{
+	KUNIT_UAPI_EMBED_BLOB(kunit_test_uapi, "kunit-test-uapi");
+
+	if (IS_ENABLED(CONFIG_KUNIT_UAPI))
+		kunit_uapi_run_kselftest(test, &kunit_test_uapi);
+	else
+		kunit_skip(test, "CONFIG_KUNIT_UAPI is not enabled");
+}
+
+static struct kunit_case kunit_uapi_test_cases[] = {
+	KUNIT_CASE(kunit_uapi_test),
+	{}
+};
+
+static struct kunit_suite kunit_uapi_test_suite = {
+	.name = "kunit_uapi",
+	.test_cases = kunit_uapi_test_cases,
+};
+
 kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
 		  &kunit_log_test_suite, &kunit_status_test_suite,
 		  &kunit_current_test_suite, &kunit_device_test_suite,
-		  &kunit_fault_test_suite);
+		  &kunit_fault_test_suite, &kunit_uapi_test_suite);
 
 MODULE_DESCRIPTION("KUnit test for core test infrastructure");
 MODULE_LICENSE("GPL v2");
