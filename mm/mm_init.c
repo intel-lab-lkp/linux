@@ -405,7 +405,7 @@ static void __init find_zone_movable_pfns_for_nodes(void)
 		}
 
 		for_each_mem_region(r) {
-			if (memblock_is_mirror(r))
+			if (memblock_is_mirror(r) || memblock_is_nomap(r))
 				continue;
 
 			nid = memblock_get_region_node(r);
