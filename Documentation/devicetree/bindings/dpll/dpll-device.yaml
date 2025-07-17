@@ -27,6 +27,11 @@ properties:
   "#size-cells":
     const: 0
 
+  clock-id:
+    description: Specifies ID of the clock that the DPLL device drives
+    $ref: /schemas/types.yaml#/definitions/uint64
+    minimum: 1
+
   dpll-types:
     description: List of DPLL channel types, one per DPLL instance.
     $ref: /schemas/types.yaml#/definitions/non-unique-string-array
