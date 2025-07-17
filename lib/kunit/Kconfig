@@ -93,4 +93,18 @@ config KUNIT_AUTORUN_ENABLED
 	  In most cases this should be left as Y. Only if additional opt-in
 	  behavior is needed should this be set to N.
 
+config KUNIT_UAPI
+	tristate "KUnit UAPI testing framework"
+	depends on KUNIT
+	depends on CC_CAN_LINK_STATIC || ARCH_HAS_NOLIBC
+	depends on !LTO_CLANG # https://github.com/llvm/llvm-project/issues/112920
+	select HEADERS_INSTALL
+	default KUNIT
+	help
+	  Enables support for building and running userspace selftests as part of kunit.
+	  These tests should be statically linked and use kselftest.h or kselftest_harness.h
+	  for status reporting.
+
+	  In most cases this should be left as Y.
+
 endif # KUNIT
