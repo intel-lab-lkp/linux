@@ -10421,83 +10421,20 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 				      bool *sg_overloaded,
 				      bool *sg_overutilized)
 {
-	int i, nr_running, local_group, sd_flags = env->sd->flags;
-	bool balancing_at_rd = !env->sd->parent;
+	struct sg_lb_stat_env stat_env = {
+		.find_src_sg		= true,
+		.cpus			= env->cpus,
+		.sd			= env->sd,
+		.p			= NULL,
+		.sg_overutilized	= sg_overutilized,
+		.sg_overloaded		= sg_overloaded,
+		.local_group		= group == sds->local,
+		.lb_env			= env,
+	};
 
 	memset(sgs, 0, sizeof(*sgs));
 
-	local_group = group == sds->local;
-
-	for_each_cpu_and(i, sched_group_span(group), env->cpus) {
-		struct rq *rq = cpu_rq(i);
-		unsigned long load = cpu_load(rq);
-
-		sgs->group_load += load;
-		sgs->group_util += cpu_util_cfs(i);
-		sgs->group_runnable += cpu_runnable(rq);
-		sgs->sum_h_nr_running += rq->cfs.h_nr_runnable;
-
-		nr_running = rq->nr_running;
-		sgs->sum_nr_running += nr_running;
-
-		if (cpu_overutilized(i))
-			*sg_overutilized = 1;
-
-		/*
-		 * No need to call idle_cpu() if nr_running is not 0
-		 */
-		if (!nr_running && idle_cpu(i)) {
-			sgs->idle_cpus++;
-			/* Idle cpu can't have misfit task */
-			continue;
-		}
-
-		/* Overload indicator is only updated at root domain */
-		if (balancing_at_rd && nr_running > 1)
-			*sg_overloaded = 1;
-
-#ifdef CONFIG_NUMA_BALANCING
-		/* Only fbq_classify_group() uses this to classify NUMA groups */
-		if (sd_flags & SD_NUMA) {
-			sgs->nr_numa_running += rq->nr_numa_running;
-			sgs->nr_preferred_running += rq->nr_preferred_running;
-		}
-#endif
-		if (local_group)
-			continue;
-
-		if (sd_flags & SD_ASYM_CPUCAPACITY) {
-			/* Check for a misfit task on the cpu */
-			if (sgs->group_misfit_task_load < rq->misfit_task_load) {
-				sgs->group_misfit_task_load = rq->misfit_task_load;
-				*sg_overloaded = 1;
-			}
-		} else if (env->idle && sched_reduced_capacity(rq, env->sd)) {
-			/* Check for a task running on a CPU with reduced capacity */
-			if (sgs->group_misfit_task_load < load)
-				sgs->group_misfit_task_load = load;
-		}
-	}
-
-	sgs->group_capacity = group->sgc->capacity;
-
-	sgs->group_weight = cpumask_weight_and(sched_group_span(group), env->cpus);
-
-	/* Check if dst CPU is idle and preferred to this group */
-	if (!local_group && env->idle && sgs->sum_h_nr_running &&
-	    sched_group_asym(env, sgs, group))
-		sgs->group_asym_packing = 1;
-
-	/* Check for loaded SMT group to be balanced to dst CPU */
-	if (!local_group && smt_balance(env, sgs, group))
-		sgs->group_smt_balance = 1;
-
-	sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs);
-
-	/* Computing avg_load makes sense only when group is overloaded */
-	if (sgs->group_type == group_overloaded)
-		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
-				sgs->group_capacity;
+	update_sg_stats(sgs, group, &stat_env);
 }
 
 /**
@@ -10697,7 +10634,12 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 					  struct sg_lb_stats *sgs,
 					  struct task_struct *p)
 {
-	int i, nr_running;
+	struct sg_lb_stat_env stat_env = {
+		.find_src_sg	= false,
+		.cpus		= (struct cpumask *)p->cpus_ptr,
+		.sd		= sd,
+		.p		= p,
+	};
 
 	memset(sgs, 0, sizeof(*sgs));
 
@@ -10705,49 +10647,7 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 	if (sd->flags & SD_ASYM_CPUCAPACITY)
 		sgs->group_misfit_task_load = 1;
 
-	for_each_cpu_and(i, sched_group_span(group), p->cpus_ptr) {
-		struct rq *rq = cpu_rq(i);
-		unsigned int local;
-
-		sgs->group_load += cpu_load_without(rq, p);
-		sgs->group_util += cpu_util_without(i, p);
-		sgs->group_runnable += cpu_runnable_without(rq, p);
-		local = task_running_on_cpu(i, p);
-		sgs->sum_h_nr_running += rq->cfs.h_nr_runnable - local;
-
-		nr_running = rq->nr_running - local;
-		sgs->sum_nr_running += nr_running;
-
-		/*
-		 * No need to call idle_cpu_without() if nr_running is not 0
-		 */
-		if (!nr_running && idle_cpu_without(i, p))
-			sgs->idle_cpus++;
-
-		/* Check if task fits in the CPU */
-		if (sd->flags & SD_ASYM_CPUCAPACITY &&
-		    sgs->group_misfit_task_load &&
-		    task_fits_cpu(p, i))
-			sgs->group_misfit_task_load = 0;
-
-	}
-
-	sgs->group_capacity = group->sgc->capacity;
-
-	/* Only count group_weight if p can run on these cpus */
-	sgs->group_weight = cpumask_weight_and(sched_group_span(group),
-				p->cpus_ptr);
-
-	sgs->group_type = group_classify(sd->imbalance_pct, group, sgs);
-
-	/*
-	 * Computing avg_load makes sense only when group is fully busy or
-	 * overloaded
-	 */
-	if (sgs->group_type == group_fully_busy ||
-		sgs->group_type == group_overloaded)
-		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
-				sgs->group_capacity;
+	update_sg_stats(sgs, group, &stat_env);
 }
 
 static bool update_pick_idlest(struct sched_group *idlest,
