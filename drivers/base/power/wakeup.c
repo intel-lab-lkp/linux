@@ -1008,6 +1008,8 @@ bool pm_save_wakeup_count(unsigned int count)
 	if (cnt == count && inpr == 0) {
 		saved_count = count;
 		events_check_enabled = true;
+	} else if (cnt == UINT_MAX) {
+		pm_system_wakeup();
 	}
 	raw_spin_unlock_irqrestore(&events_lock, flags);
 	return events_check_enabled;
