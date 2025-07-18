@@ -362,6 +362,10 @@ int ib_umem_odp_map_dma_and_lock(struct ib_umem_odp *umem_odp, u64 user_virt,
 			range.default_flags |= HMM_PFN_REQ_WRITE;
 	}
 
+	if (access_mask & HMM_PFN_ALLOW_P2P)
+		range.default_flags |= HMM_PFN_ALLOW_P2P;
+
+	range.pfn_flags_mask = HMM_PFN_ALLOW_P2P;
 	range.hmm_pfns = &(umem_odp->map.pfn_list[pfn_start_idx]);
 	timeout = jiffies + msecs_to_jiffies(HMM_RANGE_DEFAULT_TIMEOUT);
 
