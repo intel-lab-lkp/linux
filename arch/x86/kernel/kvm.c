@@ -557,6 +557,11 @@ static void __send_ipi_mask(const struct cpumask *mask, int vector)
 	local_irq_restore(flags);
 }
 
+static void kvm_send_ipi(int cpu, int vector)
+{
+	__send_ipi_mask(cpumask_of(cpu), vector);
+}
+
 static void kvm_send_ipi_mask(const struct cpumask *mask, int vector)
 {
 	__send_ipi_mask(mask, vector);
@@ -628,6 +633,7 @@ late_initcall(setup_efi_kvm_sev_migration);
  */
 static __init void kvm_setup_pv_ipi(void)
 {
+	apic_update_callback(send_IPI, kvm_send_ipi);
 	apic_update_callback(send_IPI_mask, kvm_send_ipi_mask);
 	apic_update_callback(send_IPI_mask_allbutself, kvm_send_ipi_mask_allbutself);
 	pr_info("setup PV IPIs\n");
