@@ -451,8 +451,7 @@ panfrost:mt8183:
     - .mt8183
     - .panfrost-gpu
 
-# drm-mtk doesn't even probe yet in mainline for mt8192
-.mediatek:mt8192:
+.mt8192:
   extends:
     - .mediatek-device
   parallel: 3
@@ -460,6 +459,16 @@ panfrost:mt8183:
     DEVICE_TYPE: mt8192-asurada-spherion-r0
     GPU_VERSION: mt8192
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8192-asurada-spherion-r0
+
+mediatek:mt8192:
+  extends:
+    - .mt8192
+    - .mediatek-display
+
+panfrost:mt8192:
+  extends:
+    - .mt8192
+    - .panfrost-gpu
 
 .meson-device:
   extends:
