@@ -423,8 +423,10 @@ static void *cgroup_pidlist_start(struct seq_file *s, loff_t *pos)
 	 */
 	if (!ctx->procs1.pidlist) {
 		ret = pidlist_array_load(cgrp, type, &ctx->procs1.pidlist);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&cgrp->pidlist_mutex);
 			return ERR_PTR(ret);
+		}
 	}
 	l = ctx->procs1.pidlist;
 
@@ -443,11 +445,14 @@ static void *cgroup_pidlist_start(struct seq_file *s, loff_t *pos)
 		}
 	}
 	/* If we're off the end of the array, we're done */
-	if (index >= l->length)
+	if (index >= l->length) {
+		mutex_unlock(&cgrp->pidlist_mutex);
 		return NULL;
+	}
 	/* Update the abstract position to be the actual pid that we found */
 	iter = l->list + index;
 	*pos = *iter;
+	mutex_unlock(&cgrp->pidlist_mutex);
 	return iter;
 }
 
