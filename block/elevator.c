@@ -689,7 +689,7 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
  * The I/O scheduler depends on the number of hardware queues, this forces a
  * reattachment when nr_hw_queues changes.
  */
-void elv_update_nr_hw_queues(struct request_queue *q)
+void elv_update_nr_hw_queues(struct request_queue *q, struct elevator_type *e)
 {
 	struct elv_change_ctx ctx = {};
 	int ret = -ENODEV;
@@ -697,8 +697,8 @@ void elv_update_nr_hw_queues(struct request_queue *q)
 	WARN_ON_ONCE(q->mq_freeze_depth == 0);
 
 	mutex_lock(&q->elevator_lock);
-	if (q->elevator && !blk_queue_dying(q) && blk_queue_registered(q)) {
-		ctx.name = q->elevator->type->elevator_name;
+	if (e && !blk_queue_dying(q) && blk_queue_registered(q)) {
+		ctx.name = e->elevator_name;
 
 		/* force to reattach elevator after nr_hw_queue is updated */
 		ret = elevator_switch(q, &ctx);
