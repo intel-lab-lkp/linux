@@ -5275,6 +5275,9 @@ void netdev_change_features(struct net_device *dev);
 void netif_stacked_transfer_operstate(const struct net_device *rootdev,
 					struct net_device *dev);
 
+void netif_stacked_transfer_tso_max_size(const struct net_device *rootdev,
+					 struct net_device *dev);
+
 netdev_features_t passthru_features_check(struct sk_buff *skb,
 					  struct net_device *dev,
 					  netdev_features_t features);
@@ -5326,6 +5329,7 @@ static inline bool netif_needs_gso(struct sk_buff *skb,
 }
 
 void netif_set_tso_max_size(struct net_device *dev, unsigned int size);
+
 void netif_set_tso_max_segs(struct net_device *dev, unsigned int segs);
 void netif_inherit_tso_max(struct net_device *to,
 			   const struct net_device *from);
