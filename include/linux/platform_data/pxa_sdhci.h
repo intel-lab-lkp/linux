@@ -35,6 +35,9 @@
  * @quirks: quirks of platfrom
  * @quirks2: quirks2 of platfrom
  * @pm_caps: pm_caps of platfrom
+ * @pinctrl: pinctrl handle
+ * @pins_default: default pinctrl state
+ * @pins_uhs: pinctrl state for fast (>100 MHz) bus clocks
  */
 struct sdhci_pxa_platdata {
 	unsigned int	flags;
@@ -47,5 +50,9 @@ struct sdhci_pxa_platdata {
 	unsigned int	quirks;
 	unsigned int	quirks2;
 	unsigned int	pm_caps;
+
+	struct pinctrl	     *pinctrl;
+	struct pinctrl_state *pins_default;
+	struct pinctrl_state *pins_uhs;
 };
 #endif /* _PXA_SDHCI_H_ */
