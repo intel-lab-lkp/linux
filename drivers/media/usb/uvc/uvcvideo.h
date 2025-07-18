@@ -39,9 +39,6 @@
 	(UVC_ENTITY_IS_TERM(entity) && \
 	((entity)->type & 0x8000) == UVC_TERM_OUTPUT)
 
-#define UVC_EXT_GPIO_UNIT		0x7ffe
-#define UVC_EXT_GPIO_UNIT_ID		0x100
-
 /* ------------------------------------------------------------------------
  * Driver specific constants.
  */
@@ -189,8 +186,7 @@ struct uvc_entity {
 
 	/*
 	 * Entities exposed by the UVC device use IDs 0-255, extra entities
-	 * implemented by the driver (such as the GPIO entity) use IDs 256 and
-	 * up.
+	 * implemented by the driver use IDs 256 and up.
 	 */
 	u16 id;
 	u16 type;
@@ -239,13 +235,6 @@ struct uvc_entity {
 			u8  *bmControls;
 			u8  *bmControlsType;
 		} extension;
-
-		struct uvc_gpio {
-			int irq;
-			bool initialized;
-			bool gpio_ready;
-			struct gpio_desc *gpio_privacy;
-		} gpio;
 	};
 
 	u8 bNrInPins;
@@ -628,7 +617,12 @@ struct uvc_device {
 		const void *data;
 	} async_ctrl;
 
-	struct uvc_gpio gpio_unit;
+	struct uvc_gpio {
+		int irq;
+		bool initialized;
+		bool gpio_ready;
+		struct gpio_desc *gpio_privacy;
+	} gpio_unit;
 };
 
 struct uvc_fh {
