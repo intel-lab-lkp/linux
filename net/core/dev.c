@@ -12577,19 +12577,11 @@ static struct pernet_operations __net_initdata netdev_net_ops = {
 	.exit = netdev_exit,
 };
 
-static void __net_exit default_device_exit_net(struct net *net)
+static inline struct net_device *first_migratable_netdev(struct net *net)
 {
-	struct netdev_name_node *name_node, *tmp;
 	struct net_device *dev, *aux;
-	/*
-	 * Push all migratable network devices back to the
-	 * initial network namespace
-	 */
-	ASSERT_RTNL();
-	for_each_netdev_safe(net, dev, aux) {
-		int err;
-		char fb_name[IFNAMSIZ];
 
+	for_each_netdev_safe(net, dev, aux) {
 		/* Ignore unmoveable devices (i.e. loopback) */
 		if (dev->netns_immutable)
 			continue;
@@ -12597,6 +12589,25 @@ static void __net_exit default_device_exit_net(struct net *net)
 		/* Leave virtual devices for the generic cleanup */
 		if (dev->rtnl_link_ops && !dev->rtnl_link_ops->netns_refund)
 			continue;
+
+		return dev;
+	}
+
+	return NULL;
+}
+
+static void __net_exit default_device_exit_net(struct net *net)
+{
+	struct netdev_name_node *name_node, *tmp;
+	struct net_device *dev;
+	/*
+	 * Push all migratable network devices back to the
+	 * initial network namespace
+	 */
+	ASSERT_RTNL();
+	while ((dev = first_migratable_netdev(net)) != NULL) {
+		int err;
+		char fb_name[IFNAMSIZ];
 
 		/* Push remaining network devices to init_net */
 		snprintf(fb_name, IFNAMSIZ, "dev%d", dev->ifindex);
