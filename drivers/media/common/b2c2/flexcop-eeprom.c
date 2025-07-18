@@ -90,7 +90,7 @@ static char eeprom_set_mac_addr(struct adapter *adapter, char type, u8 *mac)
 static int flexcop_eeprom_read(struct flexcop_device *fc,
 		u16 addr, u8 *buf, u16 len)
 {
-	return fc->i2c_request(fc,FC_READ,FC_I2C_PORT_EEPROM,0x50,addr,buf,len);
+	return fc->i2c_request(fc, FC_READ, FC_I2C_PORT_EEPROM, 0x50, addr, buf, len);
 }
 
 #endif
@@ -107,7 +107,7 @@ static u8 calc_lrc(u8 *buf, int len)
 static int flexcop_eeprom_request(struct flexcop_device *fc,
 	flexcop_access_op_t op, u16 addr, u8 *buf, u16 len, int retries)
 {
-	int i,ret = 0;
+	int i, ret = 0;
 	u8 chipaddr =  0x50 | ((addr >> 8) & 3);
 	for (i = 0; i < retries; i++) {
 		ret = fc->i2c_request(&fc->fc_i2c_adap[1], op, chipaddr,
@@ -135,13 +135,15 @@ int flexcop_eeprom_check_mac_addr(struct flexcop_device *fc, int extended)
 	u8 buf[8];
 	int ret = 0;
 
-	if ((ret = flexcop_eeprom_lrc_read(fc,0x3f8,buf,8,4)) == 0) {
+	ret = flexcop_eeprom_lrc_read(fc, 0x3f8, buf, 8, 4);
+
+	if (ret == 0) {
 		if (extended != 0) {
 			err("TODO: extended (EUI64) MAC addresses aren't completely supported yet");
-			ret = -EINVAL;
-		} else
-			memcpy(fc->dvb_adapter.proposed_mac,buf,6);
-	}
-	return ret;
+			ret = ret = -EINVAL;
+		} else {
+			memcpy(fc->dvb_adapter.proposed_mac, buf, 6);
+		}
+		return ret;
 }
 EXPORT_SYMBOL(flexcop_eeprom_check_mac_addr);
