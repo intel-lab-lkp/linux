@@ -7,7 +7,8 @@
 
 .lava-test:
   extends:
-    - .container+build-rules
+    #- .container-rules
+    #- .build-rules
     - .allow_failure_lockdep
   timeout: "1h30m"
   rules:
@@ -33,8 +34,8 @@
     - testing:arm32
   needs:
     - alpine/x86_64_lava_ssh_client
+    - alpine/x86_64_lava-trigger
     - debian/arm32_test-gl
-    - python-artifacts
     - testing:arm32
     - igt:arm32
 
@@ -49,8 +50,8 @@
     - testing:arm64
   needs:
     - alpine/x86_64_lava_ssh_client
+    - alpine/x86_64_lava-trigger
     - debian/arm64_test-gl
-    - python-artifacts
     - testing:arm64
     - igt:arm64
 
@@ -65,8 +66,8 @@
     - testing:x86_64
   needs:
     - alpine/x86_64_lava_ssh_client
+    - alpine/x86_64_lava-trigger
     - debian/x86_64_test-gl
-    - python-artifacts
     - testing:x86_64
     - igt:x86_64
 
@@ -110,6 +111,7 @@
     - !reference [default, before_script]
     - rm -rf install
     - tar -xf artifacts/install.tar
+    - mkdir -p /kernel
   script:
     - ln -sf $CI_PROJECT_DIR/install /install
     - mv install/bzImage /kernel/bzImage
@@ -127,6 +129,7 @@
     DRIVER_NAME: msm
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
+    LAVA_FIRMWARE: qcom-lava
 
 msm:sc7180-trogdor-lazor-limozeen:
   extends:
@@ -196,11 +199,13 @@ msm:sm8350-hdk:
     KERNEL_IMAGE_NAME: "Image.gz"
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-sm8350-hdk
+    LAVA_FIRMWARE: qcom-lava
 
 .rockchip-device:
   variables:
     DTB: ${DEVICE_TYPE}
     BOOT_METHOD: depthcharge
+    LAVA_FIRMWARE: arm-lava
 
 .rockchip-display:
   stage: rockchip
@@ -257,6 +262,7 @@ panfrost:rk3399:
     DTB: ""
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
+    LAVA_FIRMWARE: i915
 
 i915:apl:
   extends:
@@ -339,6 +345,7 @@ i915:jsl:
     DTB: ""
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
+    LAVA_FIRMWARE: amdgpu-lava
 
 amdgpu:stoney:
   extends:
@@ -357,6 +364,7 @@ amdgpu:stoney:
     DTB: ${DEVICE_TYPE}
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
+    LAVA_FIRMWARE: arm-lava
 
 .mediatek-display:
   stage: mediatek

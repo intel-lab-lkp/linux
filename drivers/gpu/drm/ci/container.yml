@@ -15,16 +15,20 @@ debian/arm64_build:
   variables:
     EXTRA_LOCAL_PACKAGES: "libcairo-dev libdw-dev libjson-c-dev libproc2-dev libkmod2 libkmod-dev libpciaccess-dev libudev-dev libunwind-dev python3-docutils libssl-dev crossbuild-essential-armhf libkmod-dev:armhf libproc2-dev:armhf libunwind-dev:armhf libdw-dev:armhf libpixman-1-dev:armhf libcairo-dev:armhf libudev-dev:armhf libjson-c-dev:armhf"
 
-.kernel+rootfs:
-  variables:
-    EXTRA_LOCAL_PACKAGES: "jq libasound2 libcairo2 libdw1 libglib2.0-0 libjson-c5"
-
 # Disable container jobs that we won't use
+alpine/x86_64_build:
+  rules:
+    - when: never
+
 debian/arm64_test-vk:
   rules:
     - when: never
 
 debian/baremetal_arm32_test-gl:
+  rules:
+    - when: never
+
+debian/baremetal_arm64_test-gl:
   rules:
     - when: never
 
