@@ -309,6 +309,13 @@
 	};
 
 	clocks {
+		clk_dummy: clock-dummy {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <0>;
+			clock-output-names = "clk_dummy";
+		};
+
 		vctcxo_1m: clock-1m {
 			compatible = "fixed-clock";
 			clock-frequency = <1000000>;
@@ -556,8 +563,9 @@
 		sec_uart1: serial@f0612000 {
 			compatible = "spacemit,k1-uart", "intel,xscale-uart";
 			reg = <0x0 0xf0612000 0x0 0x100>;
+			clocks = <&clk_dummy>, <&clk_dummy>;
+			clock-names = "core", "bus";
 			interrupts = <43>;
-			clock-frequency = <14857000>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "reserved"; /* for TEE usage */
