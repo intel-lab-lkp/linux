@@ -5404,6 +5404,42 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	return finish_task_switch(prev);
 }
 
+#ifdef CONFIG_RT_IPC
+void rt_ipc_context_switch(struct task_struct *next)
+{
+	struct task_struct *prev;
+	unsigned long flags;
+	struct rq *rq;
+	int cpu;
+
+	cpu = smp_processor_id();
+	rq = cpu_rq(cpu);
+	prev = rq->curr;
+
+	raw_spin_rq_lock_irqsave(rq, flags);
+
+	membarrier_switch_mm(rq, prev->active_mm, next->mm);
+	/*
+	 * sys_membarrier() requires an smp_mb() between setting
+	 * rq->curr / membarrier_switch_mm() and returning to userspace.
+	 *
+	 * The below provides this either through switch_mm(), or in
+	 * case 'prev->active_mm == next->mm' through
+	 * finish_task_switch()'s mmdrop().
+	 */
+	switch_mm_irqs_off(prev->active_mm, next->mm, next);
+	lru_gen_use_mm(next->mm);
+
+	/* switch_mm_cid() requires the memory barriers above. */
+	// switch_mm_cid(rq, prev, next);
+
+	__switch_to(prev, next);
+	barrier();
+
+	raw_spin_rq_unlock_irqrestore(rq, flags);
+}
+#endif
+
 /*
  * nr_running and nr_context_switches:
  *

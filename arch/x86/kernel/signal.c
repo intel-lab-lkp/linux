@@ -94,8 +94,8 @@ void __user *
 get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
 	     void __user **fpstate)
 {
-	struct k_sigaction *ka = &ksig->ka;
-	int ia32_frame = is_ia32_frame(ksig);
+	struct k_sigaction *ka;
+	int ia32_frame = ksig ? is_ia32_frame(ksig) : 0;
 	/* Default to using normal stack */
 	bool nested_altstack = on_sig_stack(regs->sp);
 	bool entering_altstack = false;
@@ -108,25 +108,28 @@ get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
 	if (!ia32_frame)
 		sp -= 128;
 
-	/* This is the X/Open sanctioned signal stack switching.  */
-	if (ka->sa.sa_flags & SA_ONSTACK) {
-		/*
-		 * This checks nested_altstack via sas_ss_flags(). Sensible
-		 * programs use SS_AUTODISARM, which disables that check, and
-		 * programs that don't use SS_AUTODISARM get compatible.
-		 */
-		if (sas_ss_flags(sp) == 0) {
-			sp = current->sas_ss_sp + current->sas_ss_size;
+	if (ksig) {
+		 ka = &ksig->ka;
+		/* This is the X/Open sanctioned signal stack switching.  */
+		if (ka->sa.sa_flags & SA_ONSTACK) {
+			/*
+			* This checks nested_altstack via sas_ss_flags(). Sensible
+			* programs use SS_AUTODISARM, which disables that check, and
+			* programs that don't use SS_AUTODISARM get compatible.
+			*/
+			if (sas_ss_flags(sp) == 0) {
+				sp = current->sas_ss_sp + current->sas_ss_size;
+				entering_altstack = true;
+			}
+		} else if (ia32_frame &&
+			!nested_altstack &&
+			regs->ss != __USER_DS &&
+			!(ka->sa.sa_flags & SA_RESTORER) &&
+			ka->sa.sa_restorer) {
+			/* This is the legacy signal stack switching. */
+			sp = (unsigned long) ka->sa.sa_restorer;
 			entering_altstack = true;
 		}
-	} else if (ia32_frame &&
-		   !nested_altstack &&
-		   regs->ss != __USER_DS &&
-		   !(ka->sa.sa_flags & SA_RESTORER) &&
-		   ka->sa.sa_restorer) {
-		/* This is the legacy signal stack switching. */
-		sp = (unsigned long) ka->sa.sa_restorer;
-		entering_altstack = true;
 	}
 
 	sp = fpu__alloc_mathframe(sp, ia32_frame, &buf_fx, &math_size);

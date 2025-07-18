@@ -391,6 +391,9 @@
 465	common	listxattrat		sys_listxattrat
 466	common	removexattrat		sys_removexattrat
 467	common	open_tree_attr		sys_open_tree_attr
+468	common	rt_ipc_register		sys_rt_ipc_register
+469	common	rt_ipc_invoke		sys_rt_ipc_invoke
+470	common	rt_ipc_return		sys_rt_ipc_return
 
 #
 # Due to a historical design error, certain syscalls are numbered differently

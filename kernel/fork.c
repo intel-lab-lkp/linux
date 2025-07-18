@@ -122,6 +122,8 @@
 
 #include <kunit/visibility.h>
 
+#include <linux/rt_ipc.h>
+
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -2418,7 +2420,10 @@ __latent_entropy struct task_struct *copy_process(
 	user_events_fork(p, clone_flags);
 
 	copy_oom_score_adj(clone_flags, p);
-
+#ifdef CONFIG_RT_IPC
+	INIT_LIST_HEAD(&p->rt_ipc_activation_in_use);
+	INIT_LIST_HEAD(&p->rt_ipc_activation_free);
+#endif
 	return p;
 
 bad_fork_core_free:

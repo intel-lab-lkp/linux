@@ -47,6 +47,7 @@
 #include <linux/uidgid_types.h>
 #include <linux/tracepoint-defs.h>
 #include <asm/kmap_size.h>
+#include <linux/rt_ipc.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -1629,7 +1630,11 @@ struct task_struct {
 #ifdef CONFIG_RETHOOK
 	struct llist_head               rethooks;
 #endif
-
+#ifdef CONFIG_RT_IPC
+	struct list_head rt_ipc_activation_free;
+	struct list_head rt_ipc_activation_in_use;
+	spinlock_t rt_ipc_lock;
+#endif
 #ifdef CONFIG_ARCH_HAS_PARANOID_L1D_FLUSH
 	/*
 	 * If L1D flush is supported on mm context switch

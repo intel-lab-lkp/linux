@@ -143,6 +143,10 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.timer_slack_ns = 50000, /* 50 usec default slack */
 	.thread_pid	= &init_struct_pid,
 	.thread_node	= LIST_HEAD_INIT(init_signals.thread_head),
+#ifdef CONFIG_RT_IPC
+	.rt_ipc_activation_in_use = LIST_HEAD_INIT(init_task.rt_ipc_activation_in_use),
+	.rt_ipc_activation_free = LIST_HEAD_INIT(init_task.rt_ipc_activation_free),
+#endif
 #ifdef CONFIG_AUDIT
 	.loginuid	= INVALID_UID,
 	.sessionid	= AUDIT_SID_UNSET,
