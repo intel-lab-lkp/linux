@@ -3307,6 +3307,24 @@ void netif_set_tso_max_size(struct net_device *dev, unsigned int size)
 EXPORT_SYMBOL(netif_set_tso_max_size);
 
 /**
+ *	netif_stacked_transfer_tso_max_size - transfer tso max size
+ *	@rootdev: the root or lower level device to transfer tso max size from
+ *	@dev: the device to transfer operstate to
+ *
+ *	Transfer tso max size from root to device. This is normally
+ *	called when a stacking relationship exists between the root
+ *	device and the device(a leaf device).
+ */
+void netif_stacked_transfer_tso_max_size(const struct net_device *rootdev,
+					 struct net_device *dev)
+{
+	dev->tso_max_size = rootdev->tso_max_size;
+	netif_set_gso_max_size(dev, READ_ONCE(rootdev->gso_max_size));
+	netif_set_gso_ipv4_max_size(dev, READ_ONCE(rootdev->gso_ipv4_max_size));
+}
+EXPORT_SYMBOL(netif_stacked_transfer_tso_max_size);
+
+/**
  * netif_set_tso_max_segs() - set the max number of segs supported for TSO
  * @dev:	netdev to update
  * @segs:	max number of TCP segments

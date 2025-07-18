@@ -2443,7 +2443,7 @@ static int netvsc_vf_changed(struct net_device *vf_netdev, unsigned long event)
 		 * switched over to the VF
 		 */
 		if (vf_is_up)
-			netif_set_tso_max_size(ndev, vf_netdev->tso_max_size);
+			netif_stacked_transfer_tso_max_size(vf_netdev, ndev);
 		else
 			netif_set_tso_max_size(ndev, netvsc_dev->netvsc_gso_max_size);
 	}
