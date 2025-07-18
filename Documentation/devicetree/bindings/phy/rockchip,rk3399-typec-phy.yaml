@@ -51,6 +51,10 @@ properties:
       '#phy-cells':
         const: 0
 
+      mode-switch:
+        description: Flag the port as possible handler of altmode switching
+        type: boolean
+
       port:
         $ref: /schemas/graph.yaml#/properties/port
         description: Connection to USB Type-C connector
