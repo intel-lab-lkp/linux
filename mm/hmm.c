@@ -232,6 +232,49 @@ static inline unsigned long pte_to_hmm_pfn_flags(struct hmm_range *range,
 	return pte_write(pte) ? (HMM_PFN_VALID | HMM_PFN_WRITE) : HMM_PFN_VALID;
 }
 
+static bool hmm_handle_device_private(struct hmm_range *range,
+				      unsigned long pfn_req_flags,
+				      swp_entry_t entry,
+				      unsigned long *hmm_pfn)
+{
+	struct page *page = pfn_swap_entry_to_page(entry);
+	struct dev_pagemap *pgmap = page_pgmap(page);
+	int ret;
+
+	pfn_req_flags &= range->pfn_flags_mask;
+	pfn_req_flags |= range->default_flags;
+
+	/*
+	 * Don't fault in device private pages owned by the caller,
+	 * just report the PFN.
+	 */
+	if (pgmap->owner == range->dev_private_owner) {
+		*hmm_pfn = swp_offset_pfn(entry);
+		goto found;
+	}
+
+	/*
+	 * P2P for supported pages, and according to caller request
+	 * translate the private page to the match P2P page if it fails
+	 * continue with the regular flow
+	 */
+	if (pfn_req_flags & HMM_PFN_ALLOW_P2P &&
+	    pgmap->ops->get_dma_pfn_for_device) {
+		ret = pgmap->ops->get_dma_pfn_for_device(page, hmm_pfn);
+		if (!ret)
+			goto found;
+
+	}
+
+	return false;
+
+found:
+	*hmm_pfn |= HMM_PFN_VALID;
+	if (is_writable_device_private_entry(entry))
+		*hmm_pfn |= HMM_PFN_WRITE;
+	return true;
+}
+
 static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 			      unsigned long end, pmd_t *pmdp, pte_t *ptep,
 			      unsigned long *hmm_pfn)
@@ -255,19 +298,9 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 	if (!pte_present(pte)) {
 		swp_entry_t entry = pte_to_swp_entry(pte);
 
-		/*
-		 * Don't fault in device private pages owned by the caller,
-		 * just report the PFN.
-		 */
 		if (is_device_private_entry(entry) &&
-		    page_pgmap(pfn_swap_entry_to_page(entry))->owner ==
-		    range->dev_private_owner) {
-			cpu_flags = HMM_PFN_VALID;
-			if (is_writable_device_private_entry(entry))
-				cpu_flags |= HMM_PFN_WRITE;
-			new_pfn_flags = swp_offset_pfn(entry) | cpu_flags;
-			goto out;
-		}
+		    hmm_handle_device_private(range, pfn_req_flags, entry, hmm_pfn))
+			return 0;
 
 		required_fault =
 			hmm_pte_need_fault(hmm_vma_walk, pfn_req_flags, 0);

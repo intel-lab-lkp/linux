@@ -90,6 +90,14 @@ struct dev_pagemap_ops {
 	vm_fault_t (*migrate_to_ram)(struct vm_fault *vmf);
 
 	/*
+	 * Used for private (un-addressable) device memory only. Return a
+	 * corresponding PFN for a page that can be mapped to device
+	 * (e.g using dma_map_page)
+	 */
+	int (*get_dma_pfn_for_device)(struct page *private_page,
+				      unsigned long *dma_pfn);
+
+	/*
 	 * Handle the memory failure happens on a range of pfns.  Notify the
 	 * processes who are using these pfns, and try to recover the data on
 	 * them if necessary.  The mf_flags is finally passed to the recover

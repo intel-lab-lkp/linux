@@ -27,6 +27,7 @@ struct mmu_interval_notifier;
  * HMM_PFN_P2PDMA_BUS - Bus mapped P2P transfer
  * HMM_PFN_DMA_MAPPED - Flag preserved on input-to-output transformation
  *                      to mark that page is already DMA mapped
+ * HMM_PFN_ALLOW_P2P - Allow returning PCI P2PDMA page
  *
  * On input:
  * 0                 - Return the current state of the page, do not fault it.
@@ -47,6 +48,7 @@ enum hmm_pfn_flags {
 	HMM_PFN_DMA_MAPPED = 1UL << (BITS_PER_LONG - 4),
 	HMM_PFN_P2PDMA     = 1UL << (BITS_PER_LONG - 5),
 	HMM_PFN_P2PDMA_BUS = 1UL << (BITS_PER_LONG - 6),
+	HMM_PFN_ALLOW_P2P = 1UL << (BITS_PER_LONG - 7),
 
 	HMM_PFN_ORDER_SHIFT = (BITS_PER_LONG - 11),
 
