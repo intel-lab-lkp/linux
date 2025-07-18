@@ -303,6 +303,74 @@ config COMMON_CLK_MT6779_AUDSYS
 	help
 	  This driver supports Mediatek MT6779 audsys clocks.
 
+config COMMON_CLK_MT6789
+	tristate "Clock driver for MediaTek MT6789"
+	depends on (ARCH_MEDIATEK && ARM64) || COMPILE_TEST
+	select COMMON_CLK_MEDIATEK
+	default ARCH_MEDIATEK && ARM64
+	help
+	  This driver supports MediaTek MT6789 basic clocks.
+
+config COMMON_CLK_MT6789_IMP_IIC_WRAP
+	tristate "Clock driver for Mediatek MT6789 imp_iic_wrap clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 imp_iic_wrap clocks.
+
+config COMMON_CLK_MT6789_MCUSYS
+	tristate "Clock driver for Mediatek MT6789 mcusys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 mcusys clocks.
+
+config COMMON_CLK_MT6789_MDPSYS
+	tristate "Clock driver for Mediatek MT6789 mdpsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 mdpsys clocks.
+
+config COMMON_CLK_MT6789_MFGCFG
+	tristate "Clock driver for Mediatek MT6789 mfgcfg clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 mfgcfg clocks.
+
+config COMMON_CLK_MT6789_MMSYS
+	tristate "Clock driver for Mediatek MT6789 mmsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 mmsys clocks.
+
+config COMMON_CLK_MT6789_VDECSYS
+	tristate "Clock driver for Mediatek MT6789 vdecsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 vdecsys clocks.
+
+config COMMON_CLK_MT6789_VENCSYS
+	tristate "Clock driver for Mediatek MT6789 vencsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 vencsys clocks.
+
+config COMMON_CLK_MT6789_IMGSYS
+	tristate "Clock driver for Mediatek MT6789 imgsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 imgsys clocks.
+
+config COMMON_CLK_MT6789_AUDIOSYS
+	tristate "Clock driver for Mediatek MT6789 audiosys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 audiosys clocks.
+
+config COMMON_CLK_MT6789_CAMSYS
+	tristate "Clock driver for Mediatek MT6789 camsys clocks"
+	depends on COMMON_CLK_MT6789
+	help
+	  This driver supports Mediatek MT6789 camsys clocks.
+
 config COMMON_CLK_MT6795
 	tristate "Clock driver for MediaTek MT6795"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
