@@ -1,3 +1,5 @@
+drm_virtgpu@drm-virtgpu-context-init,Fail
+drm_virtgpu@drm-virtgpu-get-caps,Fail
 kms_cursor_crc@cursor-rapid-movement-256x85,Fail
 kms_cursor_crc@cursor-rapid-movement-32x10,Fail
 kms_cursor_crc@cursor-rapid-movement-64x64,Fail
@@ -16,6 +18,7 @@ kms_flip@flip-vs-panning-vs-hang,Fail
 kms_flip@flip-vs-suspend,Fail
 kms_flip@flip-vs-suspend-interruptible,Fail
 kms_lease@lease-uevent,Fail
+kms_plane@pixel-format,Timeout
 kms_writeback@writeback-check-output,Fail
 kms_writeback@writeback-check-output-XRGB2101010,Fail
 kms_writeback@writeback-fb-id,Fail

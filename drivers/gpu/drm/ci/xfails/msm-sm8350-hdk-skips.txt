@@ -210,3 +210,76 @@ msm/msm_mapping@ring
 # [  229.752499] CPU features: 0x18,00000017,00200928,4200720b
 # [  229.758095] Memory Limit: none
 # [  229.761291] ---[ end Kernel panic - not syncing: softlockup: hung tasks ]---
+
+msm/msm_recovery@gpu-fault
+# DEBUG - Begin test msm/msm_recovery@gpu-fault
+# [  153.288652] [IGT] msm_recovery: executing
+# [  153.295317] [IGT] msm_recovery: starting subtest gpu-fault
+# [  153.317588] adreno 3d00000.gpu: CP | opcode error | possible opcode=0xDEADDEAD
+# [  153.367412] adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 814 status 00800005 rb 016b/0215 ib1 000000010000B000/0000 ib2 0000000000000000/0000
+# [  153.383449] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 6.6.0.1: hangcheck recover!
+# [  153.393296] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 6.6.0.1: offending task: msm_recovery (/igt/libexec/igt-gpu-tools/msm/msm_recovery --run-subtest gpu-fault)
+# [  153.436085] revision: 660 (6.6.0.1)
+# [  153.439702] rb 0: fence:    2063/2068
+# [  153.443659] rptr:     360
+# [  153.446389] rb wptr:  533
+# [  153.449103] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG0: 0
+# [  153.455746] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG1: 0
+# [  153.462387] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG2: 2062
+# [  153.469293] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG3: 0
+# [  153.475680] adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 814 status 00800005 rb 016b/0215 ib1 000000010000B000/0000 ib2 0000000000000000/0000
+# [  153.475919] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG4: 0
+# [  153.475925] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG5: 0
+# [  153.475928] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG6: 0
+# [  153.475930] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG7: 1
+# [  153.529587] platform 3d6a000.gmu: [drm:a6xx_gmu_set_oob] *ERROR* Timeout waiting for GMU OOB set GPU_SET: 0x0
+# [  153.539837] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 6.6.0.1: hangcheck recover!
+# [  153.549597] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 6.6.0.1: offending task: msm_recovery (/igt/libexec/igt-gpu-tools/msm/msm_recovery --run-subtest gpu-fault)
+# [  153.566489] revision: 660 (6.6.0.1)
+# [  153.570099] rb 0: fence:    2064/2068
+# [  153.573878] rptr:     0
+# [  153.576411] rb wptr:  688
+# [  153.579134] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG0: 0
+# [  153.585775] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG1: 0
+# [  153.592410] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG2: 0
+# [  153.597308] [IGT] msm_recovery: finished subtest gpu-fault, FAIL
+# [  153.599039] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG3: 0
+# [  153.611856] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG4: 0
+# [  153.618498] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG5: 0
+# [  153.625132] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG6: 0
+# [  153.631766] adreno 3d00000.gpu: [drm:a6xx_recover] CP_SCRATCH_REG7: 0
+# [  153.639162] *** gpu fault: ttbr0=00000001042fc000 iova=0000000000000000 dir=READ type=TRANSLATION source=CP (0,0,0,0)
+# [  153.648502] platform 3d6a000.gmu: [drm:a6xx_gmu_set_oob] *ERROR* Timeout waiting for GMU OOB set GPU_SET: 0x0
+# [  153.650144] *** gpu fault: ttbr0=00000001042fc000 iova=0000000000000020 dir=READ type=TRANSLATION source=CP (0,0,0,0)
+# [  153.650241] adreno 3d00000.gpu: CP illegal instruction error
+# [  153.671006] platform 3d6a000.gmu: [drm:a6xx_rpmh_start] *ERROR* Unable to power on the GPU RSC
+# [  153.687278] platform 3d6a000.gmu: [drm:a6xx_gmu_set_oob] *ERROR* Timeout waiting for GMU OOB set GPU_SET: 0x0
+# [  363.495437] INFO: task msm_recovery:876 blocked for more than 120 seconds.
+# [  363.503070]       Not tainted 6.16.0-rc2-g0594d0b01a7c #1
+# [  363.508838] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+# [  363.517142] task:msm_recovery    state:D stack:0     pid:876   tgid:876   ppid:274    task_flags:0x400100 flags:0x00000009
+# [  363.528876] Call trace:
+# [  363.531554]  __switch_to+0xf8/0x1a8 (T)
+# [  363.535703]  __schedule+0x418/0xee0
+# [  363.539486]  schedule+0x4c/0x164
+# [  363.542986]  schedule_timeout+0x11c/0x128
+# [  363.547281]  dma_fence_default_wait+0x13c/0x234
+# [  363.552123]  dma_fence_wait_timeout+0x160/0x45c
+# [  363.556947]  dma_resv_wait_timeout+0x70/0x11c
+# [  363.561582]  msm_gem_close+0xac/0xe4
+# [  363.565405]  drm_gem_handle_delete+0x74/0xe8
+# [  363.569951]  drm_gem_close_ioctl+0x38/0x44
+# [  363.574297]  drm_ioctl_kernel+0xc4/0x134
+# [  363.578442]  drm_ioctl+0x224/0x4f0
+# [  363.582050]  __arm64_sys_ioctl+0xac/0x104
+# [  363.586292]  invoke_syscall+0x48/0x110
+# [  363.590254]  el0_svc_common.constprop.0+0x40/0xe0
+# [  363.595197]  do_el0_svc+0x1c/0x28
+# [  363.598705]  el0_svc+0x4c/0x158
+# [  363.602035]  el0t_64_sync_handler+0x10c/0x138
+# [  363.606601]  el0t_64_sync+0x198/0x19c
+# [  363.610465] Showing all locks held in the system:
+# [  363.620406]  #0: ffff0000840200a0 (&tty->ldisc_sem){++++}-{0:0}, at: ldsem_down_read+0x18/0x24
+# [  363.629412]  #1: ffff800080d7c2f0 (&ldata->atomic_read_lock){+.+.}-{4:4}, at: n_tty_read+0x15c/0x57c
+# [  363.643169]  #0: ffffbd9c0475d920 (rcu_read_lock){....}-{1:3}, at: debug_show_all_locks+0x18/0x1c0
+# [  363.654158] =============================================

@@ -1,3 +1,4 @@
+core_setmaster@master-drop-set-user,Fail
 kms_3d,Fail
 kms_bw@connected-linear-tiling-1-displays-1920x1080p,Fail
 kms_bw@connected-linear-tiling-1-displays-2560x1440p,Fail
@@ -24,9 +25,9 @@ kms_cursor_legacy@flip-vs-cursor-varying-size,Fail
 kms_flip@basic-plain-flip,Fail
 kms_flip@dpms-off-confusion,Fail
 kms_flip@dpms-off-confusion-interruptible,Fail
-kms_flip@flip-vs-absolute-wf_vblank,Fail
-kms_flip@flip-vs-absolute-wf_vblank-interruptible,Fail
 kms_flip@flip-vs-blocking-wf-vblank,Fail
+kms_flip@flip-vs-dpms-on-nop,Fail
+kms_flip@flip-vs-dpms-on-nop-interruptible,Fail
 kms_flip@flip-vs-expired-vblank,Fail
 kms_flip@flip-vs-expired-vblank-interruptible,Fail
 kms_flip@flip-vs-modeset-vs-hang,Fail
