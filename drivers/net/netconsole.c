@@ -360,6 +360,26 @@ static void trim_newline(char *s, size_t maxlen)
 		s[len - 1] = '\0';
 }
 
+static int netpoll_parse_ip_addr(const char *str, union inet_addr *addr)
+{
+	const char *end;
+
+	if (!strchr(str, ':') &&
+	    in4_pton(str, -1, (void *)addr, -1, &end) > 0) {
+		if (!*end)
+			return 0;
+	}
+	if (in6_pton(str, -1, addr->in6.s6_addr, -1, &end) > 0) {
+#if IS_ENABLED(CONFIG_IPV6)
+		if (!*end)
+			return 1;
+#else
+		return -1;
+#endif
+	}
+	return -1;
+}
+
 /*
  * Attribute operations for netconsole_target.
  */
@@ -1740,26 +1760,6 @@ static void write_msg(struct console *con, const char *msg, unsigned int len)
 		}
 	}
 	spin_unlock_irqrestore(&target_list_lock, flags);
-}
-
-static int netpoll_parse_ip_addr(const char *str, union inet_addr *addr)
-{
-	const char *end;
-
-	if (!strchr(str, ':') &&
-	    in4_pton(str, -1, (void *)addr, -1, &end) > 0) {
-		if (!*end)
-			return 0;
-	}
-	if (in6_pton(str, -1, addr->in6.s6_addr, -1, &end) > 0) {
-#if IS_ENABLED(CONFIG_IPV6)
-		if (!*end)
-			return 1;
-#else
-		return -1;
-#endif
-	}
-	return -1;
 }
 
 static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
