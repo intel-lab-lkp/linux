@@ -124,6 +124,19 @@ static struct ccu_mix _name = {							\
 	}									\
 }
 
+#define CCU_SSPA_MUX_GATE_DEFINE(_name, _parents, _reg_ctrl,			\
+				     _shift, _width, _mask_gate, _flags)	\
+static struct ccu_mix _name = {							\
+	.gate	= CCU_GATE_INIT(_mask_gate),					\
+	.mux	= CCU_MUX_INIT(_shift, _width),					\
+	.common = {								\
+		.reg_ctrl	= _reg_ctrl,					\
+		CCU_MIX_INITHW_PARENTS(_name, _parents,				\
+				       spacemit_ccu_sspa_mux_gate_ops,		\
+				       _flags),					\
+	}									\
+}
+
 #define CCU_DIV_GATE_DEFINE(_name, _parent, _reg_ctrl, _shift, _width,		\
 			    _mask_gate,	_flags)					\
 static struct ccu_mix _name = {							\
@@ -213,6 +226,7 @@ extern const struct clk_ops spacemit_ccu_div_ops;
 extern const struct clk_ops spacemit_ccu_factor_gate_ops;
 extern const struct clk_ops spacemit_ccu_div_gate_ops;
 extern const struct clk_ops spacemit_ccu_mux_gate_ops;
+extern const struct clk_ops spacemit_ccu_sspa_mux_gate_ops;
 extern const struct clk_ops spacemit_ccu_mux_div_ops;
 extern const struct clk_ops spacemit_ccu_mux_div_gate_ops;
 #endif /* _CCU_DIV_H_ */

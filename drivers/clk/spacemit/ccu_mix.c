@@ -191,6 +191,25 @@ static int ccu_mux_set_parent(struct clk_hw *hw, u8 index)
 	return ccu_mix_trigger_fc(hw);
 }
 
+static int ccu_mux_set_sspa_parent(struct clk_hw *hw, u8 index)
+{
+	struct ccu_mix *mix = hw_to_ccu_mix(hw);
+	struct ccu_mux_config *mux = &mix->mux;
+	u32 mask, val;
+
+	mask = GENMASK(mux->width + mux->shift - 1, mux->shift);
+	val = index << mux->shift;
+
+	if (index == 7) {
+		mask |= BIT(3);
+		val |= BIT(3);
+	}
+
+	ccu_update(&mix->common, ctrl, mask, val);
+
+	return ccu_mix_trigger_fc(hw);
+}
+
 const struct clk_ops spacemit_ccu_gate_ops = {
 	.disable	= ccu_gate_disable,
 	.enable		= ccu_gate_enable,
@@ -233,6 +252,16 @@ const struct clk_ops spacemit_ccu_mux_gate_ops = {
 	.determine_rate = ccu_mix_determine_rate,
 	.get_parent	= ccu_mux_get_parent,
 	.set_parent	= ccu_mux_set_parent,
+};
+
+const struct clk_ops spacemit_ccu_sspa_mux_gate_ops = {
+	.disable	= ccu_gate_disable,
+	.enable		= ccu_gate_enable,
+	.is_enabled	= ccu_gate_is_enabled,
+
+	.determine_rate = ccu_mix_determine_rate,
+	.get_parent	= ccu_mux_get_parent,
+	.set_parent	= ccu_mux_set_sspa_parent,
 };
 
 const struct clk_ops spacemit_ccu_div_gate_ops = {
