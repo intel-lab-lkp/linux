@@ -746,9 +746,12 @@ static bool has_pid_permissions(struct proc_fs_info *fs_info,
 				 struct task_struct *task,
 				 enum proc_hidepid hide_pid_min)
 {
+	const struct cred *cred = current_cred(), *tcred;
+	kuid_t caller_uid;
+	kgid_t caller_gid;
 	/*
-	 * If 'hidpid' mount option is set force a ptrace check,
-	 * we indicate that we are using a filesystem syscall
+	 * If 'hidepid=ptraceable' mount option is set, force a ptrace check.
+	 * We indicate that we are using a filesystem syscall
 	 * by passing PTRACE_MODE_READ_FSCREDS
 	 */
 	if (fs_info->hide_pid == HIDEPID_NOT_PTRACEABLE)
@@ -758,7 +761,25 @@ static bool has_pid_permissions(struct proc_fs_info *fs_info,
 		return true;
 	if (in_group_p(fs_info->pid_gid))
 		return true;
-	return ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+
+	task_lock(task);
+	rcu_read_lock();
+	caller_uid = cred->fsuid;
+	caller_gid = cred->fsgid;
+	tcred = __task_cred(task);
+	if (uid_eq(caller_uid, tcred->euid) &&
+	    uid_eq(caller_uid, tcred->suid) &&
+	    uid_eq(caller_uid, tcred->uid)  &&
+	    gid_eq(caller_gid, tcred->egid) &&
+	    gid_eq(caller_gid, tcred->sgid) &&
+	    gid_eq(caller_gid, tcred->gid)) {
+		rcu_read_unlock();
+		task_unlock(task);
+		return true;
+	}
+	rcu_read_unlock();
+	task_unlock(task);
+	return false;
 }
 
 
