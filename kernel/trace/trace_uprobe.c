@@ -537,6 +537,7 @@ static int register_trace_uprobe(struct trace_uprobe *tu)
  */
 static int __trace_uprobe_create(int argc, const char **argv)
 {
+	struct traceprobe_parse_context *ctx __free(traceprobe_parse_context) = NULL;
 	struct trace_uprobe *tu;
 	const char *event = NULL, *group = UPROBE_EVENT_SYSTEM;
 	char *arg, *filename, *rctr, *rctr_end, *tmp;
@@ -693,15 +694,17 @@ static int __trace_uprobe_create(int argc, const char **argv)
 	tu->path = path;
 	tu->filename = filename;
 
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx) {
+		ret = -ENOMEM;
+		goto error;
+	}
+	ctx->flags = (is_return ? TPARG_FL_RETURN : 0) | TPARG_FL_USER;
+
 	/* parse arguments */
 	for (i = 0; i < argc; i++) {
-		struct traceprobe_parse_context ctx = {
-			.flags = (is_return ? TPARG_FL_RETURN : 0) | TPARG_FL_USER,
-		};
-
 		trace_probe_log_set_index(i + 2);
-		ret = traceprobe_parse_probe_arg(&tu->tp, i, argv[i], &ctx);
-		traceprobe_finish_parse(&ctx);
+		ret = traceprobe_parse_probe_arg(&tu->tp, i, argv[i], ctx);
 		if (ret)
 			goto error;
 	}

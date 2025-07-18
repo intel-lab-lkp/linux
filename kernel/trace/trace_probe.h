@@ -10,6 +10,7 @@
  * Author:     Srikar Dronamraju
  */
 
+#include <linux/cleanup.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
@@ -438,6 +439,14 @@ extern void traceprobe_free_probe_arg(struct probe_arg *arg);
  * this MUST be called for clean up the context and return a resource.
  */
 void traceprobe_finish_parse(struct traceprobe_parse_context *ctx);
+static inline void traceprobe_free_parse_ctx(struct traceprobe_parse_context *ctx)
+{
+	traceprobe_finish_parse(ctx);
+	kfree(ctx);
+}
+
+DEFINE_FREE(traceprobe_parse_context, struct traceprobe_parse_context *,
+		if (!IS_ERR_OR_NULL(_T)) traceprobe_free_parse_ctx(_T))
 
 extern int traceprobe_split_symbol_offset(char *symbol, long *offset);
 int traceprobe_parse_event_name(const char **pevent, const char **pgroup,
