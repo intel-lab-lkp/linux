@@ -239,7 +239,9 @@ if:
       contains:
         const: spacemit,k1-uart
 then:
-  required: [clock-names]
+  required:
+    - clocks
+    - clock-names
   properties:
     clocks:
       minItems: 2
