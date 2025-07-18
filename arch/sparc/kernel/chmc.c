@@ -4,6 +4,7 @@
  * Copyright (C) 2001, 2007, 2008 David S. Miller (davem@davemloft.net)
  */
 
+#include <linux/cleanup.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -397,14 +398,14 @@ static void jbusmc_construct_dimm_groups(struct jbusmc *p,
 static int jbusmc_probe(struct platform_device *op)
 {
 	const struct linux_prom64_registers *mem_regs;
-	struct device_node *mem_node;
+	struct device_node *mem_node __free(device_node) =
+			of_find_node_by_path("/memory");
 	int err, len, num_mem_regs;
 	struct jbusmc *p;
 	const u32 *prop;
 	const void *ml;
 
 	err = -ENODEV;
-	mem_node = of_find_node_by_path("/memory");
 	if (!mem_node) {
 		printk(KERN_ERR PFX "Cannot find /memory node.\n");
 		goto out;
