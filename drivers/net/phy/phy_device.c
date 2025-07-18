@@ -1846,7 +1846,7 @@ int __phy_resume(struct phy_device *phydev)
 
 	lockdep_assert_held(&phydev->lock);
 
-	if (!phydrv || !phydrv->resume)
+	if (!phydrv || !phydrv->resume && phydev->suspended)
 		return 0;
 
 	ret = phydrv->resume(phydev);
