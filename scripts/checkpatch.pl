@@ -2669,6 +2669,7 @@ sub process {
 	my $commit_log_has_diff = 0;
 	my $reported_maintainer_file = 0;
 	my $non_utf8_charset = 0;
+	my $patch_version = 0;		#Patch version from Subject line
 
 	my $last_git_commit_id_linenr = -1;
 
@@ -3265,6 +3266,11 @@ sub process {
 			     "A patch subject line should describe the change not the tool that found it\n" . $herecurr);
 		}
 
+# Check patch version from Subject line
+		if ($line =~ /^Subject:\s*\[PATCH\s+v(\d+)(?:\s+\d+\/\d+)?\]/i) {
+			$patch_version = $1;
+		}
+
 # Check for Gerrit Change-Ids not in any patch context
 		if ($realfile eq '' && !$has_patch_separator && $line =~ /^\s*change-id:/i) {
 			if (ERROR("GERRIT_CHANGE_ID",
@@ -3483,6 +3489,14 @@ sub process {
 		    $rawline =~ /$NON_ASCII_UTF8/) {
 			WARN("UTF8_BEFORE_PATCH",
 			    "8-bit UTF-8 used in possible commit log\n" . $herecurr);
+		}
+
+# Warn if version changelog is in commit message instead of after ---
+		if ($in_commit_log && $patch_version > 1 && !$has_patch_separator &&
+		    ($line =~ /^\s*v\d+\s*:/ ||
+		     $line =~ /^\s*changes\s+(?:in|since)\s+v\d+/i)) {
+			WARN("VERSION_CHANGELOG_PLACEMENT",
+			     "Version changelog should be after the --- separator, not in commit message\n" . $herecurr);
 		}
 
 # Check for absolute kernel paths in commit message
