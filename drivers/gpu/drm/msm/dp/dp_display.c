@@ -463,17 +463,24 @@ static void msm_dp_display_host_phy_exit(struct msm_dp_display_private *dp)
 	}
 }
 
-static void msm_dp_display_host_init(struct msm_dp_display_private *dp)
+static int msm_dp_display_host_init(struct msm_dp_display_private *dp)
 {
+	int rc;
+
 	drm_dbg_dp(dp->drm_dev, "type=%d core_init=%d phy_init=%d\n",
 		dp->msm_dp_display.connector_type, dp->core_initialized,
 		dp->phy_initialized);
 
-	msm_dp_ctrl_core_clk_enable(dp->ctrl);
+	rc = msm_dp_ctrl_core_clk_enable(dp->ctrl);
+	if (rc)
+		return rc;
+
 	msm_dp_ctrl_reset(dp->ctrl);
 	msm_dp_ctrl_enable_irq(dp->ctrl);
 	msm_dp_aux_init(dp->aux);
 	dp->core_initialized = true;
+
+	return 0;
 }
 
 static void msm_dp_display_host_deinit(struct msm_dp_display_private *dp)
@@ -1453,6 +1460,7 @@ static int msm_dp_pm_runtime_suspend(struct device *dev)
 static int msm_dp_pm_runtime_resume(struct device *dev)
 {
 	struct msm_dp_display_private *dp = dev_get_dp_display_private(dev);
+	int rc;
 
 	/*
 	 * for eDP, host cotroller, HPD block and PHY are enabled here
@@ -1462,14 +1470,14 @@ static int msm_dp_pm_runtime_resume(struct device *dev)
 	 * HPD block is enabled at msm_dp_bridge_hpd_enable()
 	 * PHY will be enabled at plugin handler later
 	 */
-	msm_dp_display_host_init(dp);
+	rc = msm_dp_display_host_init(dp);
 	if (dp->msm_dp_display.is_edp) {
 		msm_dp_aux_hpd_enable(dp->aux);
 		msm_dp_display_host_phy_init(dp);
 	}
 
 	enable_irq(dp->irq);
-	return 0;
+	return rc;
 }
 
 static const struct dev_pm_ops msm_dp_pm_ops = {
