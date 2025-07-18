@@ -230,14 +230,14 @@ int main(int argc, char **argv)
 	unsigned long module_size, sig_size;
 	unsigned int use_signed_attrs;
 	const EVP_MD *digest_algo;
-	EVP_PKEY *private_key;
+	EVP_PKEY *private_key = NULL;
 #ifndef USE_PKCS7
 	CMS_ContentInfo *cms = NULL;
 	unsigned int use_keyid = 0;
 #else
 	PKCS7 *pkcs7 = NULL;
 #endif
-	X509 *x509;
+	X509 *x509 = NULL;
 	BIO *bd, *bm;
 	int opt, n;
 	OpenSSL_add_all_algorithms();
@@ -351,6 +351,7 @@ int main(int argc, char **argv)
 			ERR(i2d_PKCS7_bio(b, pkcs7) != 1,
 			    "%s", sig_file_name);
 #endif
+			free(sig_file_name);
 			BIO_free(b);
 		}
 
@@ -377,10 +378,14 @@ int main(int argc, char **argv)
 	module_size = BIO_number_written(bd);
 
 	if (!raw_sig) {
+		EVP_PKEY_free(private_key);
+		X509_free(x509);
 #ifndef USE_PKCS7
 		ERR(i2d_CMS_bio_stream(bd, cms, NULL, 0) != 1, "%s", dest_name);
+		CMS_ContentInfo_free(cms);
 #else
 		ERR(i2d_PKCS7_bio(bd, pkcs7) != 1, "%s", dest_name);
+		PKCS7_free(pkcs7);
 #endif
 	} else {
 		BIO *b;
@@ -406,5 +411,6 @@ int main(int argc, char **argv)
 	if (replace_orig)
 		ERR(rename(dest_name, module_name) < 0, "%s", dest_name);
 
+	free(dest_name);
 	return 0;
 }
