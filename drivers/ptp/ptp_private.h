@@ -124,10 +124,16 @@ static inline bool ptp_vclock_in_use(struct ptp_clock *ptp)
 /* Check if ptp clock shall be free running */
 static inline bool ptp_clock_freerun(struct ptp_clock *ptp)
 {
-	if (ptp->has_cycles)
-		return false;
+	bool ret = false;
 
-	return ptp_vclock_in_use(ptp);
+	if (ptp->has_cycles)
+		return ret;
+
+	up_read(&ptp->clock.rwsem);
+	ret = ptp_vclock_in_use(ptp);
+	down_read(&ptp->clock.rwsem);
+
+	return ret;
 }
 
 extern const struct class ptp_class;
