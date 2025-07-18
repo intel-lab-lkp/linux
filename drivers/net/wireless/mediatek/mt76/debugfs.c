@@ -34,7 +34,7 @@ mt76_napi_threaded_set(void *data, u64 val)
 		return -EOPNOTSUPP;
 
 	if (dev->napi_dev->threaded != val)
-		return dev_set_threaded(dev->napi_dev, val);
+		return dev_set_threaded_hint(dev->napi_dev);
 
 	return 0;
 }
