@@ -893,6 +893,7 @@ impl TryFrom<BiosImageBase> for PciAtBiosImage {
 ///
 /// See the [`PmuLookupTable`] description for more information.
 #[expect(dead_code)]
+#[repr(C, packed)]
 struct PmuLookupTableEntry {
     application_id: u8,
     target_id: u8,
@@ -901,7 +902,7 @@ struct PmuLookupTableEntry {
 
 impl PmuLookupTableEntry {
     fn new(data: &[u8]) -> Result<Self> {
-        if data.len() < 6 {
+        if data.len() < core::mem::size_of::<Self>() {
             return Err(EINVAL);
         }
 
