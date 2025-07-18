@@ -1530,6 +1530,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	struct drm_i915_gem_relocation_entry __user *urelocs =
 		u64_to_user_ptr(entry->relocs_ptr);
 	unsigned long remain = entry->relocation_count;
+	int ret = 0;
 
 	if (unlikely(remain > N_RELOC(INT_MAX)))
 		return -EINVAL;
@@ -1560,7 +1561,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 		copied = __copy_from_user_inatomic(r, urelocs, count * sizeof(r[0]));
 		pagefault_enable();
 		if (unlikely(copied)) {
-			remain = -EFAULT;
+			ret = -EFAULT;
 			goto out;
 		}
 
@@ -1572,7 +1573,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 				continue;
 
 			if ((s64)offset < 0) {
-				remain = (int)offset;
+				ret = offset;
 				goto out;
 			}
 			/*
@@ -1603,7 +1604,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	} while (remain);
 out:
 	reloc_cache_reset(&eb->reloc_cache, eb);
-	return remain;
+	return ret;
 }
 
 static int
