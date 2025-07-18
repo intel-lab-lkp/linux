@@ -1615,7 +1615,7 @@ static int fpstate_realloc(u64 xfeatures, unsigned int ksize,
 	fpregs_unlock();
 
 	/* Only free valloc'ed state */
-	if (curfps && curfps->is_valloc)
+	if (curfps->is_valloc)
 		vfree(curfps);
 
 	return 0;
