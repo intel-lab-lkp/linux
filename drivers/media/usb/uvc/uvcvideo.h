@@ -628,7 +628,7 @@ struct uvc_device {
 		const void *data;
 	} async_ctrl;
 
-	struct uvc_entity *gpio_unit;
+	struct uvc_gpio gpio_unit;
 };
 
 struct uvc_fh {

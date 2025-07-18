@@ -44,7 +44,7 @@ static int uvc_input_init(struct uvc_device *dev)
 	struct input_dev *input;
 	int ret;
 
-	if (!uvc_input_has_button(dev) && !dev->gpio_unit)
+	if (!uvc_input_has_button(dev) && !dev->gpio_unit.gpio_privacy)
 		return 0;
 
 	input = input_allocate_device();
@@ -64,7 +64,7 @@ static int uvc_input_init(struct uvc_device *dev)
 		__set_bit(KEY_CAMERA, input->keybit);
 	}
 
-	if (dev->gpio_unit) {
+	if (dev->gpio_unit.gpio_privacy) {
 		__set_bit(EV_SW, input->evbit);
 		__set_bit(SW_CAMERA_LENS_COVER, input->swbit);
 	}

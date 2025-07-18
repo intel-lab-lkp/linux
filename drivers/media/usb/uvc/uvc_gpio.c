@@ -14,7 +14,7 @@
 static irqreturn_t uvc_gpio_irq(int irq, void *data)
 {
 	struct uvc_device *dev = data;
-	struct uvc_gpio *uvc_gpio = &dev->gpio_unit->gpio;
+	struct uvc_gpio *uvc_gpio = &dev->gpio_unit;
 	int new_val;
 
 	if (!uvc_gpio->gpio_ready)
@@ -51,7 +51,6 @@ static const struct dmi_system_id privacy_valid_during_streamon[] = {
 int uvc_gpio_parse(struct uvc_device *dev)
 {
 	struct gpio_desc *gpio_privacy;
-	struct uvc_entity *unit;
 	int irq;
 
 	gpio_privacy = devm_gpiod_get_optional(&dev->intf->dev, "privacy",
@@ -69,10 +68,6 @@ int uvc_gpio_parse(struct uvc_device *dev)
 		return dev_err_probe(&dev->intf->dev, irq,
 				     "No IRQ for privacy GPIO\n");
 
-	unit = uvc_alloc_entity(UVC_EXT_GPIO_UNIT, UVC_EXT_GPIO_UNIT_ID, 0, 1);
-	if (!unit)
-		return -ENOMEM;
-
 	/*
 	 * Note: This quirk will not match external UVC cameras,
 	 * as they will not have the corresponding ACPI GPIO entity.
@@ -80,38 +75,33 @@ int uvc_gpio_parse(struct uvc_device *dev)
 	if (dmi_check_system(privacy_valid_during_streamon))
 		dev->quirks |= UVC_QUIRK_PRIVACY_DURING_STREAM;
 	else
-		unit->gpio.gpio_ready = true;
+		dev->gpio_unit.gpio_ready = true;
 
-	unit->gpio.gpio_privacy = gpio_privacy;
-	unit->gpio.irq = irq;
-	strscpy(unit->name, "GPIO", sizeof(unit->name));
-	list_add_tail(&unit->list, &dev->entities);
-
-	dev->gpio_unit = unit;
+	dev->gpio_unit.gpio_privacy = gpio_privacy;
+	dev->gpio_unit.irq = irq;
 
 	return 0;
 }
 
 void uvc_gpio_quirk(struct uvc_device *dev, bool stream_on)
 {
-	if (!dev->gpio_unit || !(dev->quirks & UVC_QUIRK_PRIVACY_DURING_STREAM))
+	if (!(dev->quirks & UVC_QUIRK_PRIVACY_DURING_STREAM))
 		return;
 
-	dev->gpio_unit->gpio.gpio_ready = stream_on;
+	dev->gpio_unit.gpio_ready = stream_on;
 	if (stream_on)
 		uvc_gpio_irq(0, dev);
 }
 
 int uvc_gpio_init(struct uvc_device *dev)
 {
-	struct uvc_entity *unit = dev->gpio_unit;
 	int init_val;
 	int ret;
 
-	if (!unit || unit->gpio.irq < 0)
+	if (!dev->gpio_unit.gpio_privacy)
 		return 0;
 
-	ret = request_threaded_irq(unit->gpio.irq, NULL, uvc_gpio_irq,
+	ret = request_threaded_irq(dev->gpio_unit.irq, NULL, uvc_gpio_irq,
 				   IRQF_ONESHOT | IRQF_TRIGGER_FALLING |
 				   IRQF_TRIGGER_RISING,
 				   "uvc_privacy_gpio", dev);
@@ -122,11 +112,12 @@ int uvc_gpio_init(struct uvc_device *dev)
 		uvc_gpio_quirk(dev, false);
 		init_val = false;
 	} else {
-		unit->gpio.gpio_ready = true;
+		dev->gpio_unit.gpio_ready = true;
 
-		init_val = gpiod_get_value_cansleep(unit->gpio.gpio_privacy);
+		init_val =
+			gpiod_get_value_cansleep(dev->gpio_unit.gpio_privacy);
 		if (init_val < 0) {
-			free_irq(unit->gpio.irq, dev);
+			free_irq(dev->gpio_unit.irq, dev);
 			return init_val;
 		}
 	}
@@ -134,15 +125,15 @@ int uvc_gpio_init(struct uvc_device *dev)
 	input_report_switch(dev->input, SW_CAMERA_LENS_COVER, init_val);
 	input_sync(dev->input);
 
-	unit->gpio.initialized = true;
+	dev->gpio_unit.initialized = true;
 
 	return 0;
 }
 
 void uvc_gpio_deinit(struct uvc_device *dev)
 {
-	if (!dev->gpio_unit || !dev->gpio_unit->gpio.initialized)
+	if (!dev->gpio_unit.initialized)
 		return;
 
-	free_irq(dev->gpio_unit->gpio.irq, dev);
+	free_irq(dev->gpio_unit.irq, dev);
 }
