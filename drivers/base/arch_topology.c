@@ -481,12 +481,13 @@ static int __init get_cpu_for_node(struct device_node *node)
 		return -1;
 
 	cpu = of_cpu_node_to_id(cpu_node);
-	if (cpu >= 0)
-		topology_parse_cpu_capacity(cpu_node, cpu);
-	else
-		pr_info("CPU node for %pOF exist but the possible cpu range is :%*pbl\n",
-			cpu_node, cpumask_pr_args(cpu_possible_mask));
+	if (cpu < 0) {
+		pr_info("CPU node exist but the possible cpu range is :%*pbl\n",
+			cpumask_pr_args(cpu_possible_mask));
+		return cpu;
+	}
 
+	topology_parse_cpu_capacity(cpu_node, cpu);
 	return cpu;
 }
 
