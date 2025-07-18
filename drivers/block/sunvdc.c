@@ -950,6 +950,7 @@ static bool vdc_port_mpgroup_check(struct vio_dev *vdev)
 {
 	struct vdc_check_port_data port_data;
 	struct device *dev;
+	bool found = false;
 
 	port_data.dev_no = vdev->dev_no;
 	port_data.type = (char *)&vdev->type;
@@ -957,10 +958,12 @@ static bool vdc_port_mpgroup_check(struct vio_dev *vdev)
 	dev = device_find_child(vdev->dev.parent, &port_data,
 				vdc_device_probed);
 
-	if (dev)
-		return true;
+	if (dev) {
+		found = true;
+		put_device(dev);
+	}
 
-	return false;
+	return found;
 }
 
 static int vdc_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
