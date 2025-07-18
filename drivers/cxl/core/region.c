@@ -2688,7 +2688,6 @@ static ssize_t delete_region_store(struct device *dev,
 		return PTR_ERR(cxlr);
 
 	devm_release_action(port->uport_dev, unregister_region, cxlr);
-	put_device(&cxlr->dev);
 
 	return len;
 }
