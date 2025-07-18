@@ -346,6 +346,7 @@ impl PcirStruct {
 /// [`FwSecBiosImage`].
 #[derive(Debug, Clone, Copy)]
 #[expect(dead_code)]
+#[repr(C)]
 struct BitHeader {
     /// 0h: BIT Header Identifier (BMP=0x7FFF/BIT=0xB8FF)
     id: u16,
@@ -365,7 +366,7 @@ struct BitHeader {
 
 impl BitHeader {
     fn new(data: &[u8]) -> Result<Self> {
-        if data.len() < 12 {
+        if data.len() < core::mem::size_of::<Self>() {
             return Err(EINVAL);
         }
 
