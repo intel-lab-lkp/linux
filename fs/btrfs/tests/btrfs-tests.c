@@ -169,13 +169,8 @@ void btrfs_free_dummy_fs_info(struct btrfs_fs_info *fs_info)
 
 	test_mnt->mnt_sb->s_fs_info = NULL;
 
-	xa_lock_irq(&fs_info->buffer_tree);
-	xa_for_each(&fs_info->buffer_tree, index, eb) {
-		xa_unlock_irq(&fs_info->buffer_tree);
+	xa_for_each(&fs_info->buffer_tree, index, eb)
 		free_extent_buffer(eb);
-		xa_lock_irq(&fs_info->buffer_tree);
-	}
-	xa_unlock_irq(&fs_info->buffer_tree);
 
 	btrfs_mapping_tree_free(fs_info);
 	list_for_each_entry_safe(dev, tmp, &fs_info->fs_devices->devices,
