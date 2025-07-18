@@ -1876,7 +1876,7 @@ static int ep_schedule_timeout(ktime_t *to)
 static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 		   int maxevents, struct timespec64 *timeout)
 {
-	int res, eavail, timed_out = 0;
+	int res, eavail = 1, timed_out = 0;
 	u64 slack = 0;
 	wait_queue_entry_t wait;
 	ktime_t expires, *to = NULL;
@@ -1892,16 +1892,6 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 		 */
 		timed_out = 1;
 	}
-
-	/*
-	 * This call is racy: We may or may not see events that are being added
-	 * to the ready list under the lock (e.g., in IRQ callbacks). For cases
-	 * with a non-zero timeout, this thread will check the ready list under
-	 * lock and will add to the wait queue.  For cases with a zero
-	 * timeout, the user by definition should not care and will have to
-	 * recheck again.
-	 */
-	eavail = ep_events_available(ep);
 
 	while (1) {
 		if (eavail) {
@@ -2340,9 +2330,7 @@ int epoll_sendevents(struct file *file, struct epoll_event __user *events,
 	 * Racy call, but that's ok - it should get retried based on
 	 * poll readiness anyway.
 	 */
-	if (ep_events_available(ep))
-		return ep_try_send_events(ep, events, maxevents);
-	return 0;
+	return ep_try_send_events(ep, events, maxevents);
 }
 
 /*
