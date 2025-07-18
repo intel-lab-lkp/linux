@@ -217,8 +217,13 @@ static int minix_rename(struct mnt_idmap *idmap,
 		if (err)
 			goto out_dir;
 		inode_set_ctime_current(new_inode);
-		if (dir_de)
+		if (dir_de) {
 			drop_nlink(new_inode);
+			if (new_inode->i_nlink == 0) {
+				err = -ESTALE;
+				goto out_dir;
+			}
+		}
 		inode_dec_link_count(new_inode);
 	} else {
 		err = minix_add_link(new_dentry, old_inode);
