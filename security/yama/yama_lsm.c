@@ -352,7 +352,7 @@ static int yama_ptrace_access_check(struct task_struct *child,
 	int rc = 0;
 
 	/* require ptrace target be a child of ptracer on attach */
-	if (mode & PTRACE_MODE_ATTACH) {
+	if (mode & (PTRACE_MODE_ATTACH | PTRACE_MODE_READ_FSCREDS)) {
 		switch (ptrace_scope) {
 		case YAMA_SCOPE_DISABLED:
 			/* No additional restrictions. */
@@ -380,7 +380,7 @@ static int yama_ptrace_access_check(struct task_struct *child,
 		}
 	}
 
-	if (rc && (mode & PTRACE_MODE_NOAUDIT) == 0)
+	if (rc && (mode & PTRACE_MODE_NOAUDIT) == 0 && (mode & PTRACE_MODE_ATTACH))
 		report_access("attach", child, current);
 
 	return rc;
