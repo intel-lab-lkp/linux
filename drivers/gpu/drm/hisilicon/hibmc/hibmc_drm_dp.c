@@ -58,9 +58,12 @@ static int hibmc_dp_detect(struct drm_connector *connector,
 {
 	struct hibmc_drm_private *priv = to_hibmc_drm_private(connector->dev);
 
-	if (!hibmc_dp_detect_link(&priv->dp))
+	if (!hibmc_dp_detect_link(&priv->dp)) {
+		priv->is_connected |= BIT(0);
 		return connector_status_connected;
+	}
 
+	priv->is_connected &= ~BIT(0);
 	return connector_status_disconnected;
 }
 
