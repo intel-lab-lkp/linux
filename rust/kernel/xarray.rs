@@ -118,6 +118,7 @@ impl<T: ForeignOwnable> XArray<T> {
     }
 
     /// Attempts to lock the [`XArray`] for exclusive access.
+    #[must_use = "the lock unlocks immediately when the guard is unused"]
     pub fn try_lock(&self) -> Option<Guard<'_, T>> {
         // SAFETY: `self.xa` is always valid by the type invariant.
         if (unsafe { bindings::xa_trylock(self.xa.get()) } != 0) {

@@ -84,6 +84,7 @@ impl<B: GlobalLockBackend> GlobalLock<B> {
     }
 
     /// Try to lock this global lock.
+    #[must_use = "the lock unlocks immediately when the guard is unused"]
     pub fn try_lock(&'static self) -> Option<GlobalGuard<B>> {
         Some(GlobalGuard {
             inner: self.inner.try_lock()?,
