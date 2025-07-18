@@ -4134,8 +4134,10 @@ static int cgroup_file_open(struct kernfs_open_file *of)
 	get_cgroup_ns(ctx->ns);
 	of->priv = ctx;
 
-	if (!cft->open)
+	if (!cft->open) {
+		get_cgroup_ns(ctx->ns);
 		return 0;
+	}
 
 	ret = cft->open(of);
 	if (ret) {
