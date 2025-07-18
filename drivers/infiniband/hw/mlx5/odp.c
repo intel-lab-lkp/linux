@@ -715,6 +715,10 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 	if (odp->umem.writable && !downgrade)
 		access_mask |= HMM_PFN_WRITE;
 
+	/*
+	 * try fault with HMM_PFN_ALLOW_P2P flag
+	 */
+	access_mask |= HMM_PFN_ALLOW_P2P;
 	np = ib_umem_odp_map_dma_and_lock(odp, user_va, bcnt, access_mask, fault);
 	if (np < 0)
 		return np;
@@ -724,6 +728,18 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 	 * ib_umem_odp_map_dma_and_lock already checks this.
 	 */
 	ret = mlx5r_umr_update_xlt(mr, start_idx, np, page_shift, xlt_flags);
+	if (ret == -EFAULT) {
+		/*
+		 * Indicate P2P Mapping Error, retry with no HMM_PFN_ALLOW_P2P
+		 */
+		mutex_unlock(&odp->umem_mutex);
+		access_mask &= ~(HMM_PFN_ALLOW_P2P);
+		np = ib_umem_odp_map_dma_and_lock(odp, user_va, bcnt, access_mask, fault);
+		if (np < 0)
+			return np;
+		ret = mlx5r_umr_update_xlt(mr, start_idx, np, page_shift, xlt_flags);
+	}
+
 	mutex_unlock(&odp->umem_mutex);
 
 	if (ret < 0) {
