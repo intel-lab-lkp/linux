@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: sprd,sharkl3-dsi-host
+    enum:
+      - sprd,sharkl3-dsi-host
+      - sprd,ums9230-dsi-host
 
   reg:
     maxItems: 1
@@ -23,8 +25,11 @@ properties:
     minItems: 1
 
   clock-names:
-    items:
-      - const: clk_src_96m
+    oneOf:
+      - items:
+          - const: clk_src_96m
+      - items:
+          - const: enable
 
   power-domains:
     maxItems: 1

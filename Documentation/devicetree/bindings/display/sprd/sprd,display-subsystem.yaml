@@ -43,6 +43,17 @@ properties:
   compatible:
     const: sprd,display-subsystem
 
+  iommus:
+    maxItems: 1
+
+  memory-region:
+    maxItems: 1
+    description:
+      A phandle to the framebuffer region configured by the bootloader. This
+      can be used together with an iommu-addresses property on the reserved
+      memory region to create an initial passthrough mapping for the boot
+      splash framebuffer.
+
   ports:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     items:

@@ -16,7 +16,12 @@ description: |
 
 properties:
   compatible:
-    const: sprd,sharkl3-dpu
+    oneOf:
+      - items:
+          - enum:
+              - sprd,ums9230-dpu
+          - const: sprd,sharkl3-dpu
+      - const: sprd,sharkl3-dpu
 
   reg:
     maxItems: 1
@@ -25,12 +30,15 @@ properties:
     maxItems: 1
 
   clocks:
-    minItems: 2
+    minItems: 1
 
   clock-names:
-    items:
-      - const: clk_src_128m
-      - const: clk_src_384m
+    oneOf:
+      - items:
+        - const: clk_src_128m
+        - const: clk_src_384m
+      - items:
+        - const: enable
 
   power-domains:
     maxItems: 1
