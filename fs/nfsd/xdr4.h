@@ -595,8 +595,37 @@ struct nfsd4_reclaim_complete {
 struct nfsd4_deviceid {
 	u64			fsid_idx;
 	u32			generation;
-	u32			pad;
 };
+
+static inline __be32 *
+nfsd4_encode_deviceid(__be32 *p, const struct nfsd4_deviceid *devid)
+{
+	p = xdr_encode_hyper(p, devid->fsid_idx);
+	*p++ = cpu_to_be32(devid->generation);
+	*p++ = cpu_to_be32(0); /* pad field is currently unused */
+	return p;
+}
+
+static inline __be32 *
+nfsd4_decode_deviceid(__be32 *p, struct nfsd4_deviceid *devid)
+{
+	p = xdr_decode_hyper(p, &devid->fsid_idx);
+	devid->generation = be32_to_cpup(p++);
+	p++; /* pad field is currently unused */
+	return p;
+}
+
+static inline __be32
+nfsd4_stream_decode_deviceid(struct xdr_stream *xdr,
+			     struct nfsd4_deviceid *devid)
+{
+	__be32 *p = xdr_inline_decode(xdr, NFS4_DEVICEID4_SIZE);
+
+	if (unlikely(!p))
+		return nfserr_bad_xdr;
+	nfsd4_decode_deviceid(p, devid);
+	return nfs_ok;
+}
 
 struct nfsd4_layout_seg {
 	u32			iomode;
