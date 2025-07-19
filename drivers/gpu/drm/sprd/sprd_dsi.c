@@ -11,8 +11,10 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_simple_kms_helper.h>
 
 #include "sprd_drm.h"
 #include "sprd_dpu.h"
@@ -778,19 +780,53 @@ static void sprd_dphy_fini(struct dsi_context *ctx)
 	dsi_reg_up(ctx, PHY_INTERFACE_CTRL, RF_PHY_RESET_N, RF_PHY_RESET_N);
 }
 
-static void sprd_dsi_encoder_mode_set(struct drm_encoder *encoder,
-				      struct drm_display_mode *mode,
-				 struct drm_display_mode *adj_mode)
+static int sprd_dsi_encoder_init(struct sprd_dsi *dsi,
+				 struct device *dev)
 {
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
+	struct drm_encoder *encoder = &dsi->encoder;
+	u32 crtc_mask;
+	int ret;
+
+	crtc_mask = drm_of_find_possible_crtcs(dsi->drm, dev->of_node);
+	if (!crtc_mask) {
+		drm_err(dsi->drm, "failed to find crtc mask\n");
+		return -EINVAL;
+	}
+
+	drm_dbg(dsi->drm, "find possible crtcs: 0x%08x\n", crtc_mask);
+
+	encoder->possible_crtcs = crtc_mask;
+	ret = drm_simple_encoder_init(dsi->drm, encoder, DRM_MODE_ENCODER_DSI);
+	if (ret) {
+		drm_err(dsi->drm, "failed to init dsi encoder\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int sprd_dsi_bridge_attach(struct drm_bridge *bridge,
+				  struct drm_encoder *encoder,
+				  enum drm_bridge_attach_flags flags)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+
+	return drm_bridge_attach(&dsi->encoder, dsi->panel_bridge,
+				 bridge, flags);
+}
+
+static void sprd_dsi_bridge_mode_set(struct drm_bridge *bridge,
+				     const struct drm_display_mode *mode,
+				     const struct drm_display_mode *adj_mode)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 
 	drm_display_mode_to_videomode(adj_mode, &dsi->ctx.vm);
 }
 
-static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
+static void sprd_dsi_bridge_pre_enable(struct drm_bridge *bridge)
 {
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
-	struct sprd_dpu *dpu = to_sprd_crtc(encoder->crtc);
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
 
 	if (ctx->enabled) {
@@ -819,15 +855,15 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 		dphy_wait_pll_locked(ctx);
 	}
 
-	sprd_dpu_run(dpu);
+	/* DSI commands cannot be issued unless the DPU is running. */
+	sprd_dpu_run(to_sprd_crtc(dsi->encoder.crtc));
 
 	ctx->enabled = true;
 }
 
-static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
+static void sprd_dsi_bridge_post_disable(struct drm_bridge *bridge)
 {
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
-	struct sprd_dpu *dpu = to_sprd_crtc(encoder->crtc);
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
 
 	if (!ctx->enabled) {
@@ -835,50 +871,20 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 		return;
 	}
 
-	sprd_dpu_stop(dpu);
+	sprd_dpu_stop(to_sprd_crtc(dsi->encoder.crtc));
+
 	sprd_dphy_fini(ctx);
 	sprd_dsi_fini(ctx);
 
 	ctx->enabled = false;
 }
 
-static const struct drm_encoder_helper_funcs sprd_encoder_helper_funcs = {
-	.mode_set	= sprd_dsi_encoder_mode_set,
-	.enable		= sprd_dsi_encoder_enable,
-	.disable	= sprd_dsi_encoder_disable
+static const struct drm_bridge_funcs sprd_dsi_bridge_funcs = {
+	.attach		= sprd_dsi_bridge_attach,
+	.mode_set	= sprd_dsi_bridge_mode_set,
+	.pre_enable	= sprd_dsi_bridge_pre_enable,
+	.post_disable	= sprd_dsi_bridge_post_disable,
 };
-
-static const struct drm_encoder_funcs sprd_encoder_funcs = {
-	.destroy = drm_encoder_cleanup,
-};
-
-static int sprd_dsi_encoder_init(struct sprd_dsi *dsi,
-				 struct device *dev)
-{
-	struct drm_encoder *encoder = &dsi->encoder;
-	u32 crtc_mask;
-	int ret;
-
-	crtc_mask = drm_of_find_possible_crtcs(dsi->drm, dev->of_node);
-	if (!crtc_mask) {
-		drm_err(dsi->drm, "failed to find crtc mask\n");
-		return -EINVAL;
-	}
-
-	drm_dbg(dsi->drm, "find possible crtcs: 0x%08x\n", crtc_mask);
-
-	encoder->possible_crtcs = crtc_mask;
-	ret = drm_encoder_init(dsi->drm, encoder, &sprd_encoder_funcs,
-			       DRM_MODE_ENCODER_DSI, NULL);
-	if (ret) {
-		drm_err(dsi->drm, "failed to init dsi encoder\n");
-		return ret;
-	}
-
-	drm_encoder_helper_add(encoder, &sprd_encoder_helper_funcs);
-
-	return 0;
-}
 
 static int sprd_dsi_bridge_init(struct sprd_dsi *dsi,
 				struct device *dev)
@@ -889,11 +895,35 @@ static int sprd_dsi_bridge_init(struct sprd_dsi *dsi,
 	if (IS_ERR(dsi->panel_bridge))
 		return PTR_ERR(dsi->panel_bridge);
 
-	ret = drm_bridge_attach(&dsi->encoder, dsi->panel_bridge, NULL, 0);
+	dsi->bridge.funcs = &sprd_dsi_bridge_funcs;
+	dsi->bridge.of_node = dev->of_node;
+	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
+
+	drm_bridge_add(&dsi->bridge);
+
+	ret = drm_bridge_attach(&dsi->encoder, &dsi->bridge, NULL,
+				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
-		return ret;
+		goto err_cleanup;
+
+	dsi->connector = drm_bridge_connector_init(dsi->drm, &dsi->encoder);
+	if (IS_ERR(dsi->connector)) {
+		drm_err(dsi->drm, "Unable to create bridge connector\n");
+		ret = PTR_ERR(dsi->connector);
+		goto err_cleanup;
+	}
+
+	ret = drm_connector_attach_encoder(dsi->connector, &dsi->encoder);
+	if (ret < 0)
+		goto err_cleanup;
 
 	return 0;
+
+err_cleanup:
+	drm_bridge_remove(&dsi->bridge);
+	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
+
+	return ret;
 }
 
 static int sprd_dsi_context_init(struct sprd_dsi *dsi,
@@ -940,13 +970,21 @@ static int sprd_dsi_bind(struct device *dev, struct device *master, void *data)
 
 	ret = sprd_dsi_bridge_init(dsi, dev);
 	if (ret)
-		return ret;
+		goto err_cleanup_encoder;
 
 	ret = sprd_dsi_context_init(dsi, dev);
 	if (ret)
-		return ret;
+		goto err_cleanup_bridge;
 
 	return 0;
+
+err_cleanup_encoder:
+	drm_encoder_cleanup(&dsi->encoder);
+err_cleanup_bridge:
+	drm_bridge_remove(&dsi->bridge);
+	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
+
+	return ret;
 }
 
 static void sprd_dsi_unbind(struct device *dev,
@@ -954,6 +992,7 @@ static void sprd_dsi_unbind(struct device *dev,
 {
 	struct sprd_dsi *dsi = dev_get_drvdata(dev);
 
+	drm_bridge_remove(&dsi->bridge);
 	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
 
 	drm_encoder_cleanup(&dsi->encoder);

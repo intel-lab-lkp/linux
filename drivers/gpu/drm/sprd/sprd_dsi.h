@@ -18,6 +18,8 @@
 #include <drm/drm_print.h>
 #include <drm/drm_panel.h>
 
+#define bridge_to_dsi(bridge) \
+	container_of(bridge, struct sprd_dsi, bridge)
 #define encoder_to_dsi(encoder) \
 	container_of(encoder, struct sprd_dsi, encoder)
 
@@ -116,7 +118,9 @@ struct sprd_dsi {
 	struct mipi_dsi_host host;
 	struct mipi_dsi_device *slave;
 	struct drm_encoder encoder;
+	struct drm_bridge bridge;
 	struct drm_bridge *panel_bridge;
+	struct drm_connector *connector;
 	struct dsi_context ctx;
 };
 
