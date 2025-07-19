@@ -76,7 +76,8 @@ static int xilly_probe(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	/* Set up a single MSI interrupt */
-	if (pci_enable_msi(pdev)) {
+	rc = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
+	if (rc < 0) {
 		dev_err(endpoint->dev,
 			"Failed to enable MSI interrupts. Aborting.\n");
 		return -ENODEV;
