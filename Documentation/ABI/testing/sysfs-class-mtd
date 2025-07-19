@@ -240,3 +240,17 @@ Contact:	linux-mtd@lists.infradead.org
 Description:
 		Number of bytes available for a client to place data into
 		the out of band area.
+
+What:		/sys/class/mtd/mtdX/ooblayout_ecc
+What:		/sys/class/mtd/mtdX/ooblayout_free
+Date:		July 2025
+KernelVersion:	6.17
+Contact:	linux-mtd@lists.infradead.org
+Description:
+		Newline separated list of the regions in the out of band area.
+
+		Each line contains three decimal numbers separated by spaces.
+		The first number indicates the index of the region. The second
+		number describes the starting offset within the out of band
+		area. The last number specifies the amount of bytes available
+		in the region.

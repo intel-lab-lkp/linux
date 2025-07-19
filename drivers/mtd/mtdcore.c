@@ -254,6 +254,44 @@ static ssize_t mtd_oobavail_show(struct device *dev,
 }
 MTD_DEVICE_ATTR_RO(oobavail);
 
+static ssize_t mtd_ooblayout_show(struct device *dev,
+				  struct device_attribute *attr, char *buf,
+				  int (*iter)(struct mtd_info *, int section,
+					      struct mtd_oob_region *region))
+{
+	struct mtd_info *mtd = dev_get_drvdata(dev);
+	ssize_t size = 0;
+	int section;
+
+	for (section = 0;; section++) {
+		struct mtd_oob_region region;
+		int err;
+
+		err = iter(mtd, section, &region);
+		if (err)
+			break;
+
+		size += sysfs_emit_at(buf, size, "%-3d %4u %4u\n", section,
+				      region.offset, region.length);
+	}
+
+	return size;
+}
+
+static ssize_t mtd_ooblayout_ecc_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	return mtd_ooblayout_show(dev, attr, buf, mtd_ooblayout_ecc);
+}
+MTD_DEVICE_ATTR_RO(ooblayout_ecc);
+
+static ssize_t mtd_ooblayout_free_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	return mtd_ooblayout_show(dev, attr, buf, mtd_ooblayout_free);
+}
+MTD_DEVICE_ATTR_RO(ooblayout_free);
+
 static ssize_t mtd_numeraseregions_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -366,6 +404,8 @@ static struct attribute *mtd_attrs[] = {
 	&dev_attr_subpagesize.attr,
 	&dev_attr_oobsize.attr,
 	&dev_attr_oobavail.attr,
+	&dev_attr_ooblayout_ecc.attr,
+	&dev_attr_ooblayout_free.attr,
 	&dev_attr_numeraseregions.attr,
 	&dev_attr_name.attr,
 	&dev_attr_ecc_strength.attr,
