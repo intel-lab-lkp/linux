@@ -171,4 +171,8 @@ static inline void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
 	}
 }
 
+bool domain_is_scoped(const struct landlock_ruleset *const client,
+		      const struct landlock_ruleset *const server,
+		      access_mask_t scope);
+
 #endif /* _SECURITY_LANDLOCK_DOMAIN_H */

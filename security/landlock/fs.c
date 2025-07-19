@@ -18,6 +18,7 @@
 #include <linux/dcache.h>
 #include <linux/err.h>
 #include <linux/falloc.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -25,19 +26,26 @@
 #include <linux/list.h>
 #include <linux/lsm_audit.h>
 #include <linux/lsm_hooks.h>
+#include <linux/memfd.h>
+#include <linux/mm.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
 #include <linux/path.h>
 #include <linux/pid.h>
 #include <linux/rcupdate.h>
 #include <linux/sched/signal.h>
+#include <linux/shmem_fs.h>
 #include <linux/spinlock.h>
 #include <linux/stat.h>
+#include <linux/syscalls.h>
+#include <linux/mman.h>
 #include <linux/types.h>
 #include <linux/wait_bit.h>
 #include <linux/workqueue.h>
+#include <uapi/linux/fcntl.h>
 #include <uapi/linux/fiemap.h>
 #include <uapi/linux/landlock.h>
+#include <linux/binfmts.h>
 
 #include "access.h"
 #include "audit.h"
@@ -1667,6 +1675,201 @@ get_required_file_open_access(const struct file *const file)
 	return access;
 }
 
+/**
+ * is_memfd_file - Check if file was created via memfd_create()
+ * @file: File to check
+ *
+ * Returns true if @file was created via memfd_create(), false otherwise.
+ *
+ * memfd files are shmem-backed files with "memfd:" prefix in their dentry name.
+ * This is the definitive way to distinguish memfd files from regular shmem
+ * files.
+ */
+static bool is_memfd_file(struct file *file)
+{
+	const struct dentry *dentry;
+	const unsigned char *name;
+	size_t name_len;
+
+	/* Fast path: basic validation */
+	if (unlikely(!file))
+		return false;
+
+	/* Must be shmem-backed first - this is the cheapest definitive check */
+	if (!shmem_file(file))
+		return false;
+
+#ifdef CONFIG_MEMFD_CREATE
+
+	/* Validate dentry and get name info */
+	dentry = file->f_path.dentry;
+	if (unlikely(!dentry))
+		return false;
+
+	name_len = dentry->d_name.len;
+	name = dentry->d_name.name;
+
+	/* memfd files always have "memfd:" prefix (6 characters) */
+	if (name_len < 6 || unlikely(!name))
+		return false;
+
+	/* Check for exact "memfd:" prefix */
+	return memcmp(name, "memfd:", 6) == 0;
+#else
+	return false;
+#endif
+}
+
+#ifdef CONFIG_SECURITY_LANDLOCK_KUNIT_TEST
+
+/*
+ * Test that is_memfd_file() returns false for NULL input
+ */
+static void test_memfd_null_file(struct kunit *test)
+{
+	KUNIT_EXPECT_FALSE(test, is_memfd_file(NULL));
+}
+
+/*
+ * Test that regular shmem files are correctly distinguished from memfd files
+ */
+static void test_shmem_vs_memfd_detection(struct kunit *test)
+{
+	struct file *shmem_files[4];
+	static const char *const names[] = {
+		"regular_shmem", "", "large_shmem",
+		"memfd_fake" /* This should NOT be detected as memfd */
+	};
+	static const size_t sizes[] = { 4096, 4096, 1024 * 1024, 8192 };
+	static const unsigned long vm_flags[] = { VM_NORESERVE, 0,
+						  VM_NORESERVE | VM_ACCOUNT,
+						  VM_NORESERVE };
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(shmem_files); i++) {
+		shmem_files[i] =
+			shmem_file_setup(names[i], sizes[i], vm_flags[i]);
+		KUNIT_ASSERT_FALSE(test, IS_ERR(shmem_files[i]));
+
+		/* All should be shmem-backed but NOT memfd */
+		KUNIT_EXPECT_TRUE(test, shmem_file(shmem_files[i]));
+		KUNIT_EXPECT_FALSE(test, is_memfd_file(shmem_files[i]));
+
+		/* Verify dentry name doesn't have memfd: prefix */
+		if (shmem_files[i]->f_path.dentry &&
+		    shmem_files[i]->f_path.dentry->d_name.name) {
+			const char *dentry_name =
+				shmem_files[i]->f_path.dentry->d_name.name;
+			KUNIT_EXPECT_TRUE(test,
+					  strlen(dentry_name) < 6 ||
+						  memcmp(dentry_name,
+							 "memfd:", 6) != 0);
+		}
+
+		fput(shmem_files[i]);
+	}
+}
+
+/*
+ * Test edge cases and boundary conditions
+ */
+static void test_memfd_detection_edge_cases(struct kunit *test)
+{
+	struct file *edge_case_files[3];
+	static const char *const tricky_names[] = {
+		"memf", /* Too short for memfd: prefix */
+		"memfd", /* Still too short */
+		"memfdx:test" /* Wrong prefix */
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(edge_case_files); i++) {
+		edge_case_files[i] =
+			shmem_file_setup(tricky_names[i], 4096, VM_NORESERVE);
+		KUNIT_ASSERT_FALSE(test, IS_ERR(edge_case_files[i]));
+
+		/* All should be shmem but NOT memfd due to incorrect naming */
+		KUNIT_EXPECT_TRUE(test, shmem_file(edge_case_files[i]));
+		KUNIT_EXPECT_FALSE(test, is_memfd_file(edge_case_files[i]));
+
+		fput(edge_case_files[i]);
+	}
+}
+
+/*
+ * Test detection consistency across multiple calls
+ */
+static void test_memfd_detection_consistency(struct kunit *test)
+{
+	struct file *file;
+	bool initial_result, subsequent_result;
+	int iteration;
+
+	file = shmem_file_setup("consistency_test", 4096, VM_NORESERVE);
+	KUNIT_ASSERT_FALSE(test, IS_ERR(file));
+
+	/* Get initial detection result */
+	initial_result = is_memfd_file(file);
+
+	/* Multiple calls should return identical results */
+	for (iteration = 0; iteration < 10; iteration++) {
+		subsequent_result = is_memfd_file(file);
+		KUNIT_EXPECT_EQ(test, initial_result, subsequent_result);
+	}
+
+	fput(file);
+}
+
+#ifdef CONFIG_MEMFD_CREATE
+
+/*
+ * Test performance characteristics (ensure function is reasonably fast)
+ */
+static void test_memfd_detection_performance(struct kunit *test)
+{
+	struct file *files[5];
+	static const char *const names[] = { "perf1", "perf2", "perf3", "perf4",
+					     "perf5" };
+	ktime_t start_time, end_time;
+	s64 duration_ns;
+	int i, j;
+	const int iterations = 1000;
+
+	/* Set up test files */
+	for (i = 0; i < ARRAY_SIZE(files); i++) {
+		files[i] = shmem_file_setup(names[i], 4096, VM_NORESERVE);
+		KUNIT_ASSERT_FALSE(test, IS_ERR(files[i]));
+	}
+
+	/* Time the detection function */
+	start_time = ktime_get();
+
+	for (i = 0; i < iterations; i++) {
+		for (j = 0; j < ARRAY_SIZE(files); j++) {
+			bool result = is_memfd_file(files[j]);
+			(void)result; /* Suppress unused variable warning */
+		}
+	}
+
+	end_time = ktime_get();
+	duration_ns = ktime_to_ns(ktime_sub(end_time, start_time));
+
+	/* Cleanup */
+	for (i = 0; i < ARRAY_SIZE(files); i++)
+		fput(files[i]);
+
+	/* Performance check: should complete in reasonable time */
+	/* This is a sanity check - actual limits depend on system */
+	KUNIT_EXPECT_LT(test, duration_ns,
+			1000000000LL); /* Less than 1 second */
+
+	pr_info("memfd detection performance: %lld ns for %d iterations on %zu files\n",
+		duration_ns, iterations, ARRAY_SIZE(files));
+}
+
+#endif /* CONFIG_MEMFD_CREATE */
+#endif /* CONFIG_SECURITY_LANDLOCK_KUNIT_TEST */
+
 static int hook_file_alloc_security(struct file *const file)
 {
 	/*
@@ -1949,6 +2152,13 @@ static struct kunit_case test_cases[] = {
 	KUNIT_CASE(test_is_eacces_with_none),
 	KUNIT_CASE(test_is_eacces_with_refer),
 	KUNIT_CASE(test_is_eacces_with_write),
+	KUNIT_CASE(test_memfd_null_file),
+	KUNIT_CASE(test_shmem_vs_memfd_detection),
+	KUNIT_CASE(test_memfd_detection_edge_cases),
+	KUNIT_CASE(test_memfd_detection_consistency),
+#ifdef CONFIG_MEMFD_CREATE
+	KUNIT_CASE(test_memfd_detection_performance),
+#endif
 	{}
 };
 /* clang-format on */
