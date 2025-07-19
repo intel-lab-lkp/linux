@@ -177,7 +177,7 @@ void fill_window(WINDOW *win, const char *text)
 		const char *line = get_line(text, i);
 		int len = get_line_length(line);
 		strncpy(tmp, line, min(len, x));
-		tmp[sizeof(tmp) - 1] = '\0';
+		tmp[len] = '\0';
 		mvwprintw(win, i, 0, "%s", tmp);
 	}
 }
