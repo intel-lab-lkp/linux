@@ -43,25 +43,11 @@ static void hook_cred_free(struct cred *const cred)
 		landlock_put_ruleset_deferred(dom);
 }
 
-#ifdef CONFIG_AUDIT
-
-static int hook_bprm_creds_for_exec(struct linux_binprm *const bprm)
-{
-	/* Resets for each execution. */
-	landlock_cred(bprm->cred)->domain_exec = 0;
-	return 0;
-}
-
-#endif /* CONFIG_AUDIT */
-
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(cred_prepare, hook_cred_prepare),
 	LSM_HOOK_INIT(cred_transfer, hook_cred_transfer),
 	LSM_HOOK_INIT(cred_free, hook_cred_free),
 
-#ifdef CONFIG_AUDIT
-	LSM_HOOK_INIT(bprm_creds_for_exec, hook_bprm_creds_for_exec),
-#endif /* CONFIG_AUDIT */
 };
 
 __init void landlock_add_cred_hooks(void)

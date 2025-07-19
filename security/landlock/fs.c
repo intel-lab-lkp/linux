@@ -1880,7 +1880,24 @@ static int hook_file_alloc_security(struct file *const file)
 	 * without going through the file_open hook, for example when using
 	 * memfd_create(2).
 	 */
-	landlock_file(file)->allowed_access = LANDLOCK_MASK_ACCESS_FS;
+	access_mask_t allowed_access = LANDLOCK_MASK_ACCESS_FS;
+	const struct landlock_cred_security *subject;
+	size_t layer;
+	static const struct access_masks memfd_scope = {
+		.scope = LANDLOCK_SCOPE_MEMFD_EXEC,
+	};
+
+	/* allow everything by default */
+	landlock_file(file)->allowed_access = allowed_access;
+
+	subject = landlock_get_applicable_subject(current_cred(), memfd_scope,
+						  &layer);
+	if (subject && is_memfd_file(file)) {
+		/* Creator domain restricts memfd execution */
+		allowed_access &= ~LANDLOCK_ACCESS_FS_EXECUTE;
+		landlock_file(file)->allowed_access = allowed_access;
+		/* Store creator and audit... */
+	}
 	return 0;
 }
 
@@ -2107,6 +2124,178 @@ static void hook_file_free_security(struct file *file)
 	landlock_put_ruleset_deferred(landlock_file(file)->fown_subject.domain);
 }
 
+static bool
+check_memfd_execute_access(const struct file *file,
+			   const struct landlock_cred_security **subject,
+			   size_t *layer_plus_one)
+{
+	const struct landlock_ruleset *executor_domain, *creator_domain;
+	const struct landlock_cred_security *creator_subject;
+	static const struct access_masks memfd_scope = {
+		.scope = LANDLOCK_SCOPE_MEMFD_EXEC,
+	};
+	size_t creator_layer_plus_one = 0;
+	bool executor_scoped, creator_scoped, is_scoped;
+
+	*subject = NULL;
+	*layer_plus_one = 0;
+
+	/* Check scoping status for both executor and creator */
+	*subject = landlock_get_applicable_subject(current_cred(), memfd_scope,
+						   layer_plus_one);
+	creator_subject = landlock_get_applicable_subject(
+		file->f_cred, memfd_scope, &creator_layer_plus_one);
+
+	executor_scoped = (*subject != NULL);
+	creator_scoped = (creator_subject != NULL);
+
+	if (!creator_scoped)
+		return true; /* No scoping enabled, allow execution */
+
+	/* Get domains for comparison */
+	executor_domain = executor_scoped ? (*subject)->domain : NULL;
+	creator_domain = creator_scoped ? creator_subject->domain :
+					  landlock_cred(file->f_cred)->domain;
+
+	pr_info("MEMFD_DEBUG: executor_domain=%p, creator_domain=%p\n",
+		executor_domain, creator_domain);
+
+	/*
+	 * Same-domain: deny to prevent read-to-execute bypass
+	 * This prevents processes from bypassing execute restrictions
+	 * by creating memfd in the same domain
+	 */
+	if (executor_domain == creator_domain)
+		return false;
+
+	/*
+	 * Cross-domain: use domain hierarchy checks to see if executor is
+	 * scoped from creator domain_is_scoped() returns true when access
+	 * should be DENIED
+	 */
+	if (executor_scoped || creator_scoped) {
+		is_scoped = domain_is_scoped(executor_domain, creator_domain,
+					     LANDLOCK_SCOPE_MEMFD_EXEC);
+		pr_info("MEMFD_DEBUG: Cross-domain: is_scoped=%d, returning=%d\n",
+			is_scoped, !is_scoped);
+		/* Return true (allow) when NOT scoped, false (deny) when scoped */
+		return !is_scoped;
+	}
+
+	return true;
+}
+
+static int hook_mmap_file(struct file *file, unsigned long reqprot,
+			  unsigned long prot, unsigned long flags)
+{
+	const struct landlock_cred_security *subject;
+	size_t layer_plus_one;
+
+	/* Only check executable mappings */
+	if (!(prot & PROT_EXEC))
+		return 0;
+
+	/* Only restrict memfd files */
+	if (!is_memfd_file(file))
+		return 0;
+
+	/* Check if memfd execution is allowed */
+	if (check_memfd_execute_access(file, &subject, &layer_plus_one))
+		return 0;
+
+	/* Log denial for audit */
+	if (subject) {
+		landlock_log_denial(subject, &(struct landlock_request) {
+			.type = LANDLOCK_REQUEST_SCOPE_MEMFD_EXEC,
+			.audit = {
+				.type = LSM_AUDIT_DATA_ANONINODE,
+				.u.file = file,
+			},
+			.layer_plus_one = layer_plus_one,
+		});
+	}
+
+	return -EACCES;
+}
+
+static int hook_file_mprotect(struct vm_area_struct *vma, unsigned long reqprot,
+			      unsigned long prot)
+{
+	const struct landlock_cred_security *subject;
+	size_t layer_plus_one;
+
+	/* Only check when adding execute permission */
+	if (!(prot & PROT_EXEC))
+		return 0;
+
+	/* Must have a file backing the VMA */
+	if (!vma || !vma->vm_file)
+		return 0;
+
+	/* Only restrict memfd files */
+	if (!is_memfd_file(vma->vm_file))
+		return 0;
+
+	/* Check if memfd execution is allowed */
+	if (check_memfd_execute_access(vma->vm_file, &subject, &layer_plus_one))
+		return 0;
+
+	/* Log denial for audit */
+	if (subject) {
+		landlock_log_denial(subject, &(struct landlock_request) {
+			.type = LANDLOCK_REQUEST_SCOPE_MEMFD_EXEC,
+			.audit = {
+				.type = LSM_AUDIT_DATA_ANONINODE,
+				.u.file = vma->vm_file,
+			},
+			.layer_plus_one = layer_plus_one,
+		});
+	}
+
+	return -EACCES;
+}
+
+static int hook_bprm_creds_for_exec(struct linux_binprm *bprm)
+{
+#ifdef CONFIG_AUDIT
+	/* Resets for each execution. */
+	landlock_cred(bprm->cred)->domain_exec = 0;
+#endif /* CONFIG_AUDIT */
+
+	const struct landlock_cred_security *subject;
+	size_t layer_plus_one;
+	struct file *file;
+
+	if (!bprm)
+		return 0;
+
+	file = bprm->file;
+	if (!file)
+		return 0;
+
+	/* Only restrict memfd files */
+	if (!is_memfd_file(file))
+		return 0;
+
+	/* Check if memfd execution is allowed */
+	if (check_memfd_execute_access(file, &subject, &layer_plus_one))
+		return 0;
+
+	/* Log denial for audit */
+	if (subject) {
+		landlock_log_denial(subject, &(struct landlock_request) {
+			.type = LANDLOCK_REQUEST_SCOPE_MEMFD_EXEC,
+			.audit = {
+				.type = LSM_AUDIT_DATA_ANONINODE,
+				.u.file = file,
+			},
+			.layer_plus_one = layer_plus_one,
+		});
+	}
+
+	return -EACCES; /* maybe we should return EPERM? */
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_free_security_rcu, hook_inode_free_security_rcu),
 
@@ -2133,6 +2322,10 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(file_ioctl_compat, hook_file_ioctl_compat),
 	LSM_HOOK_INIT(file_set_fowner, hook_file_set_fowner),
 	LSM_HOOK_INIT(file_free_security, hook_file_free_security),
+
+	LSM_HOOK_INIT(mmap_file, hook_mmap_file),
+	LSM_HOOK_INIT(file_mprotect, hook_file_mprotect),
+	LSM_HOOK_INIT(bprm_creds_for_exec, hook_bprm_creds_for_exec),
 };
 
 __init void landlock_add_fs_hooks(void)
