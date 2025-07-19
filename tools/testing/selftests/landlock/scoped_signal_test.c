@@ -559,4 +559,241 @@ TEST_F(fown, sigurg_socket)
 		_metadata->exit_code = KSFT_FAIL;
 }
 
+FIXTURE(cross_domain_scope)
+{
+	int coordinator_to_resource_pipe[2]; /* coordinator -> resource sync */
+	int coordinator_to_accessor_pipe[2]; /* coordinator -> accessor sync */
+	int result_pipe[2]; /* accessor -> coordinator result */
+	pid_t resource_pid; /* Domain X process */
+	pid_t accessor_pid; /* Domain Y process */
+};
+
+/* Include the cross-domain variants */
+#include "scoped_cross_domain_variants.h"
+
+FIXTURE_SETUP(cross_domain_scope)
+{
+	drop_caps(_metadata);
+	/* Create communication channels */
+	ASSERT_EQ(0, pipe2(self->coordinator_to_resource_pipe, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(self->coordinator_to_accessor_pipe, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(self->result_pipe, O_CLOEXEC));
+
+	signal_received = 0; /* Reset for each test */
+	self->resource_pid = -1;
+	self->accessor_pid = -1;
+}
+
+FIXTURE_TEARDOWN(cross_domain_scope)
+{
+	close(self->coordinator_to_resource_pipe[0]);
+	close(self->coordinator_to_resource_pipe[1]);
+	close(self->coordinator_to_accessor_pipe[0]);
+	close(self->coordinator_to_accessor_pipe[1]);
+	close(self->result_pipe[0]);
+	close(self->result_pipe[1]);
+}
+
+static void cross_domain_signal_handler(int sig)
+{
+	if (sig == SIGUSR1 || sig == SIGURG)
+		signal_received = 1;
+	else if (sig == SIGALRM)
+		signal_received = 2; /* Alarm timeout */
+}
+
+/*
+ * Maybe this should go into common.h or scoped_common.h so that
+ * we can perhaps test interactions b/w different types of sanboxes
+ */
+static void create_independent_domain(struct __test_metadata *_metadata,
+				      enum sandbox_type domain_type,
+				      const char *process_role)
+{
+	if (domain_type == SCOPE_SANDBOX) {
+		/*
+		 * This is the critical call - first landlock_restrict_self()
+		 * ensures domain->parent == NULL, creating true peer domains
+		 */
+		create_scoped_domain(_metadata, LANDLOCK_SCOPE_SIGNAL);
+	}
+}
+
+TEST_F(cross_domain_scope, cross_domain_signal)
+{
+	enum sandbox_type resource_domain = variant->resource_domain;
+	enum sandbox_type accessor_domain = variant->accessor_domain;
+
+	TH_LOG("Resource domain: %s",
+	       resource_domain == NO_SANDBOX ? "unrestricted" : "scoped");
+	TH_LOG("Accessor domain: %s",
+	       accessor_domain == NO_SANDBOX ? "unrestricted" : "scoped");
+	/*
+	 * Fork tree:
+	 * coordinator (no domain)
+	 * ├── resource_proc (Domain X)
+	 * └── accessor_proc (Domain Y)
+	 */
+
+	/* === RESOURCE PROCESS (Domain X) === */
+	self->resource_pid = fork();
+	ASSERT_GE(self->resource_pid, 0);
+
+	if (self->resource_pid == 0) {
+		/* Close unused pipe ends */
+
+		/* Don't write to coordinator */
+		close(self->coordinator_to_resource_pipe[1]);
+		/* Don't read accessor pipe */
+		close(self->coordinator_to_accessor_pipe[0]);
+		/* Don't write accessor pipe */
+		close(self->coordinator_to_accessor_pipe[1]);
+		close(self->result_pipe[0]); /* Don't read results */
+		close(self->result_pipe[1]); /* Don't write results */
+
+		/* Create independent domain */
+		create_independent_domain(_metadata, resource_domain,
+					  "RESOURCE");
+
+		/* Install signal handler */
+		struct sigaction sa = {
+			.sa_handler = cross_domain_signal_handler,
+			.sa_flags = SA_RESTART
+		};
+
+		sigemptyset(&sa.sa_mask);
+		ASSERT_EQ(0, sigaction(SIGUSR1, &sa, NULL));
+		ASSERT_EQ(0, sigaction(SIGALRM, &sa, NULL));
+
+		/* Wait for coordinator signal to start */
+		char sync_byte;
+		ssize_t ret = read(self->coordinator_to_resource_pipe[0],
+				   &sync_byte, 1);
+		ASSERT_EQ(1, ret);
+		close(self->coordinator_to_resource_pipe[0]);
+
+		/* Set timeout and wait for signal */
+		alarm(3);
+		pause();
+
+		/*
+		 * Exit based on what signal was received
+		 * 0=success, 1=timeout/failure
+		 */
+		_exit(signal_received == 1 ? 0 : 1);
+	}
+
+	/* === ACCESSOR PROCESS (Domain Y) === */
+	self->accessor_pid = fork();
+	ASSERT_GE(self->accessor_pid, 0);
+
+	if (self->accessor_pid == 0) {
+		/* Close unused pipe ends */
+
+		/* Don't read resource pipe */
+		close(self->coordinator_to_resource_pipe[0]);
+		/* Don't write resource pipe */
+		close(self->coordinator_to_resource_pipe[1]);
+		/* Don't write to coordinator */
+		close(self->coordinator_to_accessor_pipe[1]);
+		close(self->result_pipe[0]); /* Don't read results */
+
+		create_independent_domain(_metadata, accessor_domain,
+					  "ACCESSOR");
+
+		/* Wait for coordinator to signal start */
+		char sync_byte;
+		ssize_t ret = read(self->coordinator_to_accessor_pipe[0],
+				   &sync_byte, 1);
+		ASSERT_EQ(1, ret);
+		close(self->coordinator_to_accessor_pipe[0]);
+
+		/* 200ms delay to ensure resource is in pause() */
+		usleep(200000);
+
+		/* Attempt cross-domain signal - this is the core test */
+		int kill_result = kill(self->resource_pid, SIGUSR1);
+		int kill_errno = errno;
+
+		/* Send results back to coordinator */
+		struct {
+			int result;
+			int error;
+		} test_result = { kill_result, kill_errno };
+
+		ret = write(self->result_pipe[1], &test_result,
+			    sizeof(test_result));
+		ASSERT_EQ(sizeof(test_result), ret);
+		close(self->result_pipe[1]);
+
+		_exit(0);
+	}
+
+	/* === COORDINATOR PROCESS (No domain) === */
+
+	/* Close unused pipe ends */
+	close(self->coordinator_to_resource_pipe[0]); /* Don't read from resource */
+	close(self->coordinator_to_accessor_pipe[0]); /* Don't read from accessor */
+	close(self->result_pipe[1]); /* Don't write results */
+
+	/* Give processes time to set up domains */
+	usleep(100000); /* 100ms */
+
+	/* Signal both processes to start the test */
+	char go_signal = '1';
+
+	ASSERT_EQ(1,
+		  write(self->coordinator_to_resource_pipe[1], &go_signal, 1));
+
+	ASSERT_EQ(1,
+		  write(self->coordinator_to_accessor_pipe[1], &go_signal, 1));
+
+	close(self->coordinator_to_resource_pipe[1]);
+	close(self->coordinator_to_accessor_pipe[1]);
+
+	/* Collect accessor results */
+	struct {
+		int result;
+		int error;
+	} test_result;
+
+	ssize_t ret =
+		read(self->result_pipe[0], &test_result, sizeof(test_result));
+	ASSERT_EQ(sizeof(test_result), ret);
+	close(self->result_pipe[0]);
+
+	/* Wait for both processes to complete */
+	int accessor_status, resource_status;
+
+	/* Accessor should always exit cleanly */
+	ASSERT_EQ(self->accessor_pid,
+		  waitpid(self->accessor_pid, &accessor_status, 0));
+
+	ASSERT_EQ(self->resource_pid,
+		  waitpid(self->resource_pid, &resource_status, 0));
+
+	EXPECT_EQ(0, WEXITSTATUS(accessor_status));
+	/* Determine expected behavior based on your table */
+	bool should_succeed = (accessor_domain == NO_SANDBOX);
+
+	if (should_succeed) {
+		/* Signal should succeed across domains */
+		EXPECT_EQ(0, test_result.result); /* kill() succeeds */
+		/* resource receives signal */
+		EXPECT_EQ(0, WEXITSTATUS(resource_status));
+	} else {
+		/* Signal should be blocked by cross-domain isolation */
+		EXPECT_EQ(-1, test_result.result); /* kill() fails */
+		EXPECT_EQ(EPERM, test_result.error); /* with EPERM */
+		/* resource times out */
+		EXPECT_NE(0, WEXITSTATUS(resource_status));
+	}
+}
+
+/* Test for socket-based signals (SIGURG) across independent domains */
+TEST_F(cross_domain_scope, DISABLED_file_signal_cross_domain)
+{
+	SKIP(return, "Skip for now");
+}
+
 TEST_HARNESS_MAIN
