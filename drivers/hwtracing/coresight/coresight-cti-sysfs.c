@@ -91,9 +91,9 @@ static ssize_t enable_show(struct device *dev,
 	raw_spin_unlock(&drvdata->spinlock);
 
 	if (powered)
-		return sprintf(buf, "%d\n", enabled);
+		return sysfs_emit(buf, "%d\n", enabled);
 	else
-		return sprintf(buf, "%d\n", !!enable_req);
+		return sysfs_emit(buf, "%d\n", !!enable_req);
 }
 
 static ssize_t enable_store(struct device *dev,
@@ -138,7 +138,7 @@ static ssize_t powered_show(struct device *dev,
 	powered = drvdata->config.hw_powered;
 	raw_spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%d\n", powered);
+	return sysfs_emit(buf, "%d\n", powered);
 }
 static DEVICE_ATTR_RO(powered);
 
@@ -147,7 +147,7 @@ static ssize_t ctmid_show(struct device *dev,
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	return sprintf(buf, "%d\n", drvdata->ctidev.ctm_id);
+	return sysfs_emit(buf, "%d\n", drvdata->ctidev.ctm_id);
 }
 static DEVICE_ATTR_RO(ctmid);
 
@@ -157,7 +157,7 @@ static ssize_t nr_trigger_cons_show(struct device *dev,
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	return sprintf(buf, "%d\n", drvdata->ctidev.nr_trig_con);
+	return sysfs_emit(buf, "%d\n", drvdata->ctidev.nr_trig_con);
 }
 static DEVICE_ATTR_RO(nr_trigger_cons);
 
@@ -334,7 +334,7 @@ static ssize_t inout_sel_show(struct device *dev,
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = (u32)drvdata->config.ctiinout_sel;
-	return sprintf(buf, "%d\n", val);
+	return sysfs_emit(buf, "%d\n", val);
 }
 
 static ssize_t inout_sel_store(struct device *dev,
@@ -368,7 +368,7 @@ static ssize_t inen_show(struct device *dev,
 	index = drvdata->config.ctiinout_sel;
 	val = drvdata->config.ctiinen[index];
 	raw_spin_unlock(&drvdata->spinlock);
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t inen_store(struct device *dev,
@@ -407,7 +407,7 @@ static ssize_t outen_show(struct device *dev,
 	index = drvdata->config.ctiinout_sel;
 	val = drvdata->config.ctiouten[index];
 	raw_spin_unlock(&drvdata->spinlock);
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t outen_store(struct device *dev,
@@ -609,7 +609,7 @@ static ssize_t chan_gate_enable_show(struct device *dev,
 	int size = 0;
 
 	if (cfg->ctigate == 0)
-		size = sprintf(buf, "\n");
+		size = sysfs_emit(buf, "\n");
 	else
 		size = bitmap_print_to_pagebuf(true, buf, &ctigate_bitmask,
 					       cfg->nr_ctm_channels);
@@ -684,7 +684,7 @@ static ssize_t trig_filter_enable_show(struct device *dev,
 	raw_spin_lock(&drvdata->spinlock);
 	val = drvdata->config.trig_filter_enable;
 	raw_spin_unlock(&drvdata->spinlock);
-	return sprintf(buf, "%d\n", val);
+	return sysfs_emit(buf, "%d\n", val);
 }
 
 static ssize_t trig_filter_enable_store(struct device *dev,
@@ -785,7 +785,7 @@ static ssize_t chan_xtrigs_sel_show(struct device *dev,
 	val = drvdata->config.xtrig_rchan_sel;
 	raw_spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%ld\n", val);
+	return sysfs_emit(buf, "%ld\n", val);
 }
 static DEVICE_ATTR_RW(chan_xtrigs_sel);
 
@@ -801,10 +801,10 @@ static ssize_t chan_xtrigs_in_show(struct device *dev,
 
 	for (reg_idx = 0; reg_idx < nr_trig_max; reg_idx++) {
 		if (chan_mask & cfg->ctiinen[reg_idx])
-			used += sprintf(buf + used, "%d ", reg_idx);
+			used += sysfs_emit_at(buf, used, "%d ", reg_idx);
 	}
 
-	used += sprintf(buf + used, "\n");
+	used += sysfs_emit_at(buf, used, "\n");
 	return used;
 }
 static DEVICE_ATTR_RO(chan_xtrigs_in);
@@ -821,10 +821,10 @@ static ssize_t chan_xtrigs_out_show(struct device *dev,
 
 	for (reg_idx = 0; reg_idx < nr_trig_max; reg_idx++) {
 		if (chan_mask & cfg->ctiouten[reg_idx])
-			used += sprintf(buf + used, "%d ", reg_idx);
+			used += sysfs_emit_at(buf, used, "%d ", reg_idx);
 	}
 
-	used += sprintf(buf + used, "\n");
+	used += sysfs_emit_at(buf, used, "\n");
 	return used;
 }
 static DEVICE_ATTR_RO(chan_xtrigs_out);
@@ -914,7 +914,7 @@ static ssize_t con_name_show(struct device *dev,
 		container_of(attr, struct dev_ext_attribute, attr);
 	struct cti_trig_con *con = (struct cti_trig_con *)ext_attr->var;
 
-	return sprintf(buf, "%s\n", con->con_dev_name);
+	return sysfs_emit(buf, "%s\n", con->con_dev_name);
 }
 
 static ssize_t trigin_sig_show(struct device *dev,
@@ -969,9 +969,9 @@ static ssize_t trigin_type_show(struct device *dev,
 
 	for (sig_idx = 0; sig_idx < con->con_in->nr_sigs; sig_idx++) {
 		name = cti_sig_type_name(con, sig_idx, true);
-		used += sprintf(buf + used, "%s ", name);
+		used += sysfs_emit_at(buf, used, "%s ", name);
 	}
-	used += sprintf(buf + used, "\n");
+	used += sysfs_emit_at(buf, used, "\n");
 	return used;
 }
 
@@ -987,9 +987,9 @@ static ssize_t trigout_type_show(struct device *dev,
 
 	for (sig_idx = 0; sig_idx < con->con_out->nr_sigs; sig_idx++) {
 		name = cti_sig_type_name(con, sig_idx, false);
-		used += sprintf(buf + used, "%s ", name);
+		used += sysfs_emit_at(buf, used, "%s ", name);
 	}
-	used += sprintf(buf + used, "\n");
+	used += sysfs_emit_at(buf, used, "\n");
 	return used;
 }
 
