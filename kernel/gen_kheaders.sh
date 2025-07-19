@@ -66,13 +66,13 @@ if [ "$building_out_of_srctree" ]; then
 		cd $srctree
 		for f in $dir_list
 			do find "$f" -name "*.h";
-		done | tar -c -f - -T - | tar -xf - -C "${tmpdir}"
+		done | ${TAR:-tar} -c -f - -T - | ${TAR:-tar} -xf - -C "${tmpdir}"
 	)
 fi
 
 for f in $dir_list;
 	do find "$f" -name "*.h";
-done | tar -c -f - -T - | tar -xf - -C "${tmpdir}"
+done | ${TAR:-tar} -c -f - -T - | ${TAR:-tar} -xf - -C "${tmpdir}"
 
 # Always exclude include/generated/utsversion.h
 # Otherwise, the contents of the tarball may vary depending on the build steps.
@@ -88,7 +88,7 @@ xargs -0 -P8 -n1 \
 rm -f "${tmpdir}.contents.txt"
 
 # Create archive and try to normalize metadata for reproducibility.
-tar "${KBUILD_BUILD_TIMESTAMP:+--mtime=$KBUILD_BUILD_TIMESTAMP}" \
+${TAR:-tar} "${KBUILD_BUILD_TIMESTAMP:+--mtime=$KBUILD_BUILD_TIMESTAMP}" \
     --owner=0 --group=0 --sort=name --numeric-owner --mode=u=rw,go=r,a+X \
     -I $XZ -cf $tarfile -C "${tmpdir}/" . > /dev/null
 
