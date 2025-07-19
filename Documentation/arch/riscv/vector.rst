@@ -137,4 +137,19 @@ processes in form of sysctl knob:
 As indicated by version 1.0 of the V extension [1], vector registers are
 clobbered by system calls.
 
+Clobbering the vector registers can significantly increase system call latency
+for some implementations. To mitigate the performance impact, a policy mechanism
+is provided to the administrators, distro maintainers, and developers to control
+the vstate discard in the form of a sysctl knob:
+
+* /proc/sys/abi/riscv_v_vstate_discard
+
+    Valid values are:
+
+    * 0: Do not discard vector state during syscall
+    * 1: Discard vector state during syscall
+
+    Reading this file returns the current discard behavior. The initial state is
+    controlled by CONFIG_RISCV_ISA_V_VSTATE_DISCARD.
+
 1: https://github.com/riscv/riscv-v-spec/blob/master/calling-convention.adoc

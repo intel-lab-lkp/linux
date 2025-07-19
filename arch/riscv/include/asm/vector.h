@@ -40,6 +40,7 @@
 	_res;								\
 })
 
+extern bool riscv_v_vstate_discard_ctl;
 extern unsigned long riscv_v_vsize;
 int riscv_v_setup_vsize(void);
 bool insn_is_vector(u32 insn_buf);
@@ -269,6 +270,9 @@ static inline void __riscv_v_vstate_restore(struct __riscv_v_ext_state *restore_
 static inline void __riscv_v_vstate_discard(void)
 {
 	unsigned long vl, vtype_inval = 1UL << (BITS_PER_LONG - 1);
+
+	if (READ_ONCE(riscv_v_vstate_discard_ctl) == 0)
+		return;
 
 	riscv_v_enable();
 	if (has_xtheadvector())
