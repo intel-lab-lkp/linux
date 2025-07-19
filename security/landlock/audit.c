@@ -78,6 +78,10 @@ get_blocker(const enum landlock_request_type type,
 	case LANDLOCK_REQUEST_SCOPE_SIGNAL:
 		WARN_ON_ONCE(access_bit != -1);
 		return "scope.signal";
+
+	case LANDLOCK_REQUEST_SCOPE_MEMFD_EXEC:
+		WARN_ON_ONCE(access_bit != -1);
+		return "scope.memfd_exec";
 	}
 
 	WARN_ON_ONCE(1);
