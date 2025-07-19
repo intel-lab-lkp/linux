@@ -286,6 +286,10 @@ static struct sk_buff *fq_codel_dequeue(struct Qdisc *sch)
 	struct fq_codel_flow *flow;
 	struct list_head *head;
 
+	/* reset these here, as change needs them for proper accounting*/
+	q->cstats.drop_count = 0;
+	q->cstats.drop_len = 0;
+
 begin:
 	head = &q->new_flows;
 	if (list_empty(head)) {
@@ -319,8 +323,6 @@ begin:
 	if (q->cstats.drop_count) {
 		qdisc_tree_reduce_backlog(sch, q->cstats.drop_count,
 					  q->cstats.drop_len);
-		q->cstats.drop_count = 0;
-		q->cstats.drop_len = 0;
 	}
 	return skb;
 }
@@ -366,8 +368,10 @@ static const struct nla_policy fq_codel_policy[TCA_FQ_CODEL_MAX + 1] = {
 static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 			   struct netlink_ext_ack *extack)
 {
+	unsigned int dropped_qlen = 0, dropped_backlog = 0;
 	struct fq_codel_sched_data *q = qdisc_priv(sch);
 	struct nlattr *tb[TCA_FQ_CODEL_MAX + 1];
+	unsigned int prev_qlen, prev_backlog;
 	u32 quantum = 0;
 	int err;
 
@@ -439,17 +443,21 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 		WRITE_ONCE(q->memory_limit,
 			   min(1U << 31, nla_get_u32(tb[TCA_FQ_CODEL_MEMORY_LIMIT])));
 
+	prev_qlen = sch->q.qlen;
+	prev_backlog = sch->qstats.backlog;
 	while (sch->q.qlen > sch->limit ||
 	       q->memory_usage > q->memory_limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, false);
 
-		q->cstats.drop_len += qdisc_pkt_len(skb);
+		if (q->cstats.drop_count) {
+			dropped_qlen += q->cstats.drop_count;
+			dropped_backlog += q->cstats.drop_len;
+		}
+
 		rtnl_kfree_skbs(skb, skb);
-		q->cstats.drop_count++;
 	}
-	qdisc_tree_reduce_backlog(sch, q->cstats.drop_count, q->cstats.drop_len);
-	q->cstats.drop_count = 0;
-	q->cstats.drop_len = 0;
+	qdisc_tree_reduce_backlog(sch, prev_qlen - dropped_qlen - sch->q.qlen,
+				  prev_backlog - dropped_backlog - sch->qstats.backlog);
 
 	sch_tree_unlock(sch);
 	return 0;
