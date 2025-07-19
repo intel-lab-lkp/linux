@@ -10,6 +10,7 @@
 #include <linux/bcma/bcma.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <linux/serdev.h>
 
 static void bcma_host_pci_switch_core(struct bcma_device *core)
 {
@@ -161,22 +162,23 @@ static int bcma_host_pci_probe(struct pci_dev *dev,
 			       const struct pci_device_id *id)
 {
 	struct bcma_bus *bus;
-	int err = -ENOMEM;
+	int err;
 	u32 val;
 
 	/* Alloc */
-	bus = kzalloc(sizeof(*bus), GFP_KERNEL);
+	bus = devm_kzalloc(&dev->dev, sizeof(*bus), GFP_KERNEL);
 	if (!bus)
-		goto out;
+		return -ENOMEM;
 
 	/* Basic PCI configuration */
-	err = pci_enable_device(dev);
+	err = pcim_enable_device(dev);
 	if (err)
-		goto err_kfree_bus;
+		return err;
 
-	err = pci_request_regions(dev, "bcma-pci-bridge");
+	err = pcim_request_all_regions(dev, "bcma-pci-bridge");
 	if (err)
-		goto err_pci_disable;
+		return err;
+
 	pci_set_master(dev);
 
 	/* Disable the RETRY_TIMEOUT register (0x41) to keep
@@ -188,17 +190,16 @@ static int bcma_host_pci_probe(struct pci_dev *dev,
 	/* SSB needed additional powering up, do we have any AMBA PCI cards? */
 	if (!pci_is_pcie(dev)) {
 		bcma_err(bus, "PCI card detected, they are not supported.\n");
-		err = -ENXIO;
-		goto err_pci_release_regions;
+		return -ENXIO;
 	}
 
 	bus->dev = &dev->dev;
 
 	/* Map MMIO */
 	err = -ENOMEM;
-	bus->mmio = pci_iomap(dev, 0, ~0UL);
+	bus->mmio = pcim_iomap(dev, 0, ~0UL);
 	if (!bus->mmio)
-		goto err_pci_release_regions;
+		return err;
 
 	/* Host specific */
 	bus->host_pci = dev;
@@ -214,7 +215,7 @@ static int bcma_host_pci_probe(struct pci_dev *dev,
 	/* Scan bus to find out generation of PCIe core */
 	err = bcma_bus_scan(bus);
 	if (err)
-		goto err_pci_unmap_mmio;
+		return err;
 
 	if (bcma_find_core(bus, BCMA_CORE_PCIE2))
 		bus->host_is_pcie2 = true;
@@ -226,19 +227,11 @@ static int bcma_host_pci_probe(struct pci_dev *dev,
 
 	pci_set_drvdata(dev, bus);
 
-out:
 	return err;
 
 err_unregister_cores:
 	bcma_unregister_cores(bus);
-err_pci_unmap_mmio:
-	pci_iounmap(dev, bus->mmio);
-err_pci_release_regions:
-	pci_release_regions(dev);
-err_pci_disable:
-	pci_disable_device(dev);
-err_kfree_bus:
-	kfree(bus);
+
 	return err;
 }
 
@@ -247,10 +240,6 @@ static void bcma_host_pci_remove(struct pci_dev *dev)
 	struct bcma_bus *bus = pci_get_drvdata(dev);
 
 	bcma_bus_unregister(bus);
-	pci_iounmap(dev, bus->mmio);
-	pci_release_regions(dev);
-	pci_disable_device(dev);
-	kfree(bus);
 }
 
 #ifdef CONFIG_PM_SLEEP
