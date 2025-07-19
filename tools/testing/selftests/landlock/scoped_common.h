@@ -9,6 +9,13 @@
 
 #include <sys/types.h>
 
+enum sandbox_type {
+	NO_SANDBOX,
+	SCOPE_SANDBOX,
+	/* Any other type of sandboxing domain */
+	OTHER_SANDBOX,
+};
+
 static void create_scoped_domain(struct __test_metadata *const _metadata,
 				 const __u16 scope)
 {

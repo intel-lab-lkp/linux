@@ -5,13 +5,6 @@
  * Copyright © 2024 Tahera Fahimi <fahimitahera@gmail.com>
  */
 
-enum sandbox_type {
-	NO_SANDBOX,
-	SCOPE_SANDBOX,
-	/* Any other type of sandboxing domain */
-	OTHER_SANDBOX,
-};
-
 /* clang-format on */
 FIXTURE_VARIANT(scoped_vs_unscoped)
 {
