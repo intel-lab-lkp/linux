@@ -53,14 +53,12 @@ int comedi_pci_enable(struct comedi_device *dev)
 	if (!pcidev)
 		return -ENODEV;
 
-	rc = pci_enable_device(pcidev);
+	rc = pcim_enable_device(pcidev);
 	if (rc < 0)
 		return rc;
 
-	rc = pci_request_regions(pcidev, dev->board_name);
-	if (rc < 0)
-		pci_disable_device(pcidev);
-	else
+	rc = pcim_request_all_regions(pcidev, dev->board_name);
+	if (!rc)
 		dev->ioenabled = true;
 
 	return rc;
@@ -78,12 +76,6 @@ EXPORT_SYMBOL_GPL(comedi_pci_enable);
  */
 void comedi_pci_disable(struct comedi_device *dev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
-
-	if (pcidev && dev->ioenabled) {
-		pci_release_regions(pcidev);
-		pci_disable_device(pcidev);
-	}
 	dev->ioenabled = false;
 }
 EXPORT_SYMBOL_GPL(comedi_pci_disable);
