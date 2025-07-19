@@ -145,6 +145,7 @@ struct mapped_device {
 #endif
 
 #ifdef CONFIG_IMA
+	struct mutex ima_lock;
 	struct dm_ima_measurements ima;
 #endif
 };

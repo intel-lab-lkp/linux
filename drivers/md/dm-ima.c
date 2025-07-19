@@ -164,12 +164,29 @@ static int dm_ima_alloc_and_copy_capacity_str(struct mapped_device *md, char **c
 }
 
 /*
- * Initialize/reset the dm ima related data structure variables.
+ * Reset the dm ima related data structure variables.
  */
 void dm_ima_reset_data(struct mapped_device *md)
 {
 	memset(&(md->ima), 0, sizeof(md->ima));
 	md->ima.dm_version_str_len = strlen(DM_IMA_VERSION_STR);
+}
+
+/*
+ * Initialize the dm ima.
+ */
+void dm_ima_init(struct mapped_device *md)
+{
+	dm_ima_reset_data(md);
+	mutex_init(&md->ima_lock);
+}
+
+/*
+ * Destroy the dm ima related data structure.
+ */
+void dm_ima_destroy(struct mapped_device *md)
+{
+	mutex_destroy(&md->ima_lock);
 }
 
 /*
@@ -195,9 +212,10 @@ void dm_ima_measure_on_table_load(struct dm_table *table, unsigned int status_fl
 	const size_t hash_alg_prefix_len = strlen(DM_IMA_TABLE_HASH_ALG) + 1;
 	char table_load_event_name[] = "dm_table_load";
 
+	mutex_lock(&table->md->ima_lock);
 	ima_buf = dm_ima_alloc(DM_IMA_MEASUREMENT_BUF_LEN, GFP_KERNEL, noio);
 	if (!ima_buf)
-		return;
+		goto error;
 
 	target_metadata_buf = dm_ima_alloc(DM_IMA_TARGET_METADATA_BUF_LEN, GFP_KERNEL, noio);
 	if (!target_metadata_buf)
@@ -361,6 +379,7 @@ exit:
 	kfree(ima_buf);
 	kfree(target_metadata_buf);
 	kfree(target_data_buf);
+	mutex_unlock(&table->md->ima_lock);
 }
 
 /*
@@ -376,9 +395,10 @@ void dm_ima_measure_on_device_resume(struct mapped_device *md, bool swap)
 	bool nodata = true;
 	int r;
 
+	mutex_lock(&md->ima_lock);
 	device_table_data = dm_ima_alloc(DM_IMA_DEVICE_BUF_LEN, GFP_KERNEL, noio);
 	if (!device_table_data)
-		return;
+		goto error;
 
 	r = dm_ima_alloc_and_copy_capacity_str(md, &capacity_str, noio);
 	if (r)
@@ -466,6 +486,7 @@ void dm_ima_measure_on_device_resume(struct mapped_device *md, bool swap)
 error:
 	kfree(capacity_str);
 	kfree(device_table_data);
+	mutex_unlock(&md->ima_lock);
 }
 
 /*
@@ -490,6 +511,7 @@ void dm_ima_measure_on_device_remove(struct mapped_device *md, bool remove_all)
 	bool nodata = true;
 	int r;
 
+	mutex_lock(&md->ima_lock);
 	device_table_data = dm_ima_alloc(DM_IMA_DEVICE_BUF_LEN*2, GFP_KERNEL, noio);
 	if (!device_table_data)
 		goto exit;
@@ -597,6 +619,7 @@ exit:
 
 	kfree(dev_name);
 	kfree(dev_uuid);
+	mutex_unlock(&md->ima_lock);
 }
 
 /*
@@ -612,9 +635,10 @@ void dm_ima_measure_on_table_clear(struct mapped_device *md, bool new_map)
 	bool nodata = true;
 	int r;
 
+	mutex_lock(&md->ima_lock);
 	device_table_data = dm_ima_alloc(DM_IMA_DEVICE_BUF_LEN, GFP_KERNEL, noio);
 	if (!device_table_data)
-		return;
+		goto error;
 
 	r = dm_ima_alloc_and_copy_capacity_str(md, &capacity_str, noio);
 	if (r)
@@ -696,6 +720,8 @@ error2:
 	kfree(capacity_str);
 error1:
 	kfree(device_table_data);
+error:
+	mutex_unlock(&md->ima_lock);
 }
 
 /*
@@ -708,9 +734,10 @@ void dm_ima_measure_on_device_rename(struct mapped_device *md)
 	bool noio = true;
 	int r;
 
+	mutex_lock(&md->ima_lock);
 	if (dm_ima_alloc_and_copy_device_data(md, &new_device_data,
 					      md->ima.active_table.num_targets, noio))
-		return;
+		goto error;
 
 	if (dm_ima_alloc_and_copy_name_uuid(md, &new_dev_name, &new_dev_uuid, noio))
 		goto error;
@@ -745,4 +772,5 @@ exit:
 	kfree(old_device_data);
 	kfree(new_dev_name);
 	kfree(new_dev_uuid);
+	mutex_unlock(&md->ima_lock);
 }

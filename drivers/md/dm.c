@@ -2371,6 +2371,7 @@ static void free_dev(struct mapped_device *md)
 	unlock_fs(md);
 
 	cleanup_mapped_device(md);
+	dm_ima_destroy(md);
 
 	WARN_ON_ONCE(!list_empty(&md->table_devices));
 	dm_stats_cleanup(&md->stats);
@@ -2506,7 +2507,7 @@ int dm_create(int minor, struct mapped_device **result)
 	if (!md)
 		return -ENXIO;
 
-	dm_ima_reset_data(md);
+	dm_ima_init(md);
 
 	*result = md;
 	return 0;
