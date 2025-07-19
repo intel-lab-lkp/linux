@@ -16,6 +16,10 @@
 
 #include "ksz_common.h"
 
+#define KSZ8463_SPI_ADDR_SHIFT			13
+#define KSZ8463_SPI_ADDR_ALIGN			1
+#define KSZ8463_SPI_TURNAROUND_SHIFT		2
+
 #define KSZ8795_SPI_ADDR_SHIFT			12
 #define KSZ8795_SPI_ADDR_ALIGN			3
 #define KSZ8795_SPI_TURNAROUND_SHIFT		1
@@ -27,6 +31,9 @@
 #define KSZ9477_SPI_ADDR_SHIFT			24
 #define KSZ9477_SPI_ADDR_ALIGN			3
 #define KSZ9477_SPI_TURNAROUND_SHIFT		5
+
+KSZ8463_REGMAP_TABLE(ksz8463, 16, KSZ8463_SPI_ADDR_SHIFT,
+		     KSZ8463_SPI_TURNAROUND_SHIFT, KSZ8463_SPI_ADDR_ALIGN);
 
 KSZ_REGMAP_TABLE(ksz8795, 16, KSZ8795_SPI_ADDR_SHIFT,
 		 KSZ8795_SPI_TURNAROUND_SHIFT, KSZ8795_SPI_ADDR_ALIGN);
@@ -58,6 +65,8 @@ static int ksz_spi_probe(struct spi_device *spi)
 	dev->chip_id = chip->chip_id;
 	if (chip->chip_id == KSZ88X3_CHIP_ID)
 		regmap_config = ksz8863_regmap_config;
+	else if (chip->chip_id == KSZ8463_CHIP_ID)
+		regmap_config = ksz8463_regmap_config;
 	else if (chip->chip_id == KSZ8795_CHIP_ID ||
 		 chip->chip_id == KSZ8794_CHIP_ID ||
 		 chip->chip_id == KSZ8765_CHIP_ID)
@@ -125,6 +134,10 @@ static void ksz_spi_shutdown(struct spi_device *spi)
 }
 
 static const struct of_device_id ksz_dt_ids[] = {
+	{
+		.compatible = "microchip,ksz8463",
+		.data = &ksz_switch_chips[KSZ8463]
+	},
 	{
 		.compatible = "microchip,ksz8765",
 		.data = &ksz_switch_chips[KSZ8765]
@@ -214,6 +227,7 @@ static const struct of_device_id ksz_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ksz_dt_ids);
 
 static const struct spi_device_id ksz_spi_ids[] = {
+	{ "ksz8463" },
 	{ "ksz8765" },
 	{ "ksz8794" },
 	{ "ksz8795" },

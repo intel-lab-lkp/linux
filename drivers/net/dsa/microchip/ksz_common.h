@@ -222,6 +222,7 @@ struct ksz_device {
 
 /* List of supported models */
 enum ksz_model {
+	KSZ8463,
 	KSZ8563,
 	KSZ8567,
 	KSZ8795,
@@ -761,6 +762,7 @@ static inline bool ksz_is_sgmii_port(struct ksz_device *dev, int port)
 #define REG_CHIP_ID0			0x00
 
 #define SW_FAMILY_ID_M			GENMASK(15, 8)
+#define KSZ84_FAMILY_ID			0x84
 #define KSZ87_FAMILY_ID			0x87
 #define KSZ88_FAMILY_ID			0x88
 #define KSZ8895_FAMILY_ID		0x95
@@ -906,6 +908,9 @@ static inline bool ksz_is_sgmii_port(struct ksz_device *dev, int port)
 #define KSZ_SPI_OP_RD		3
 #define KSZ_SPI_OP_WR		2
 
+#define KSZ8463_SPI_OP_RD	0
+#define KSZ8463_SPI_OP_WR	1
+
 #define swabnot_used(x)		0
 
 #define KSZ_SPI_OP_FLAG_MASK(opcode, swp, regbits, regpad)		\
@@ -937,6 +942,34 @@ static inline bool ksz_is_sgmii_port(struct ksz_device *dev, int port)
 		[KSZ_REGMAP_8] = KSZ_REGMAP_ENTRY(8, swp, (regbits), (regpad), (regalign)), \
 		[KSZ_REGMAP_16] = KSZ_REGMAP_ENTRY(16, swp, (regbits), (regpad), (regalign)), \
 		[KSZ_REGMAP_32] = KSZ_REGMAP_ENTRY(32, swp, (regbits), (regpad), (regalign)), \
+	}
+
+#define KSZ8463_REGMAP_ENTRY(width, swp, regbits, regpad, regalign)	\
+	{								\
+		.name = #width,						\
+		.val_bits = (width),					\
+		.reg_stride = 1,					\
+		.reg_bits = (regbits) + (regalign),			\
+		.pad_bits = (regpad),					\
+		.max_register = BIT(regbits) - 1,			\
+		.cache_type = REGCACHE_NONE,				\
+		.read_flag_mask =					\
+			KSZ_SPI_OP_FLAG_MASK(KSZ8463_SPI_OP_RD, swp,	\
+					     regbits, regpad),		\
+		.write_flag_mask =					\
+			KSZ_SPI_OP_FLAG_MASK(KSZ8463_SPI_OP_WR, swp,	\
+					     regbits, regpad),		\
+		.lock = ksz_regmap_lock,				\
+		.unlock = ksz_regmap_unlock,				\
+		.reg_format_endian = REGMAP_ENDIAN_BIG,			\
+		.val_format_endian = REGMAP_ENDIAN_LITTLE		\
+	}
+
+#define KSZ8463_REGMAP_TABLE(ksz, swp, regbits, regpad, regalign)	\
+	static const struct regmap_config ksz##_regmap_config[] = {	\
+		[KSZ_REGMAP_8] = KSZ8463_REGMAP_ENTRY(8, swp, (regbits), (regpad), (regalign)), \
+		[KSZ_REGMAP_16] = KSZ8463_REGMAP_ENTRY(16, swp, (regbits), (regpad), (regalign)), \
+		[KSZ_REGMAP_32] = KSZ8463_REGMAP_ENTRY(32, swp, (regbits), (regpad), (regalign)), \
 	}
 
 #endif
