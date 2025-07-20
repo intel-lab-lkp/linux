@@ -1302,6 +1302,11 @@ static int check_insn_device_config_length(struct comedi_insn *insn,
 static int get_valid_routes(struct comedi_device *dev, unsigned int *data)
 {
 	lockdep_assert_held(&dev->mutex);
+	if (!dev->get_valid_routes) {
+		dev_warn(dev->class_dev ?: dev->hw_dev,
+				"get_valid_routes() not implemented\n");
+		return -EINVAL;
+	}
 	data[1] = dev->get_valid_routes(dev, data[1], data + 2);
 	return 0;
 }
