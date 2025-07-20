@@ -2034,10 +2034,11 @@ static void panthor_vma_init(struct panthor_vma *vma, u32 flags)
 	vma->flags = flags;
 }
 
-#define PANTHOR_VM_MAP_FLAGS \
+#define PANTHOR_VM_MAP_FLAGS                   \
 	(DRM_PANTHOR_VM_BIND_OP_MAP_READONLY | \
-	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC | \
-	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED)
+	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC |   \
+	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED | \
+	 DRM_PANTHOR_VM_BIND_OP_MAP_DUMPABLE)
 
 static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 {

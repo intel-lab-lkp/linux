@@ -5,6 +5,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_managed.h>
 #include <generated/utsrelease.h>
+#include <linux/ascii85.h>
 #include <linux/devcoredump.h>
 #include <linux/err.h>
 #include <linux/pm_runtime.h>
@@ -99,6 +100,26 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 	}
 }
 
+static void print_bo(struct drm_printer *p, struct panthor_gem_object *bo,
+		     u64 offset, u64 size)
+{
+	struct iosys_map map;
+	const u32 *vals;
+	u64 count;
+	char buf[ASCII85_BUFSZ];
+
+	if (drm_gem_vmap(&bo->base.base, &map))
+		return;
+
+	/* offset and size are aligned to panthor_vm_page_size, which is SZ_4K */
+	vals = map.vaddr + offset;
+	count = size / sizeof(u32);
+	for (u64 i = 0; i < count; i++)
+		drm_puts(p, ascii85_encode(vals[i], buf));
+
+	drm_gem_vunmap(&bo->base.base, &map);
+}
+
 static void print_vma(struct drm_printer *p,
 		      const struct panthor_coredump_vma_state *vma, u32 vma_id,
 		      size_t *max_dyn_size)
@@ -128,6 +149,21 @@ static void print_vma(struct drm_printer *p,
 				drm_printf(p, "      %.32s\n", bo->label.str);
 			}
 		}
+	}
+
+	if (vma->flags & DRM_PANTHOR_VM_BIND_OP_MAP_DUMPABLE) {
+		drm_puts(p, "    data: |\n");
+		drm_puts(p, "      ");
+
+		/* bo data is dynamic */
+		if (max_dyn_size) {
+			*max_dyn_size +=
+				vma->size / sizeof(u32) * (ASCII85_BUFSZ - 1);
+		} else {
+			print_bo(p, bo, vma->bo_offset, vma->size);
+		}
+
+		drm_puts(p, "\n");
 	}
 }
 

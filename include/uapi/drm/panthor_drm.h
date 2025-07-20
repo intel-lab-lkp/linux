@@ -497,6 +497,13 @@ enum drm_panthor_vm_bind_op_flags {
 	DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED = 1 << 2,
 
 	/**
+	 * @DRM_PANTHOR_VM_BIND_OP_MAP_DUMPABLE: Dump the VMA for devcoredump.
+	 *
+	 * Only valid with DRM_PANTHOR_VM_BIND_OP_TYPE_MAP.
+	 */
+	DRM_PANTHOR_VM_BIND_OP_MAP_DUMPABLE = 1 << 3,
+
+	/**
 	 * @DRM_PANTHOR_VM_BIND_OP_TYPE_MASK: Mask used to determine the type of operation.
 	 */
 	DRM_PANTHOR_VM_BIND_OP_TYPE_MASK = (int)(0xfu << 28),
