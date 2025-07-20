@@ -14,6 +14,7 @@
 #include "panthor_coredump.h"
 #include "panthor_device.h"
 #include "panthor_fw.h"
+#include "panthor_mmu.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
 
@@ -26,6 +27,7 @@ enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_GLB = BIT(2),
 	PANTHOR_COREDUMP_CSG = BIT(3),
 	PANTHOR_COREDUMP_CS = BIT(4),
+	PANTHOR_COREDUMP_AS = BIT(5),
 };
 
 /**
@@ -57,6 +59,7 @@ struct panthor_coredump {
 	struct panthor_coredump_glb_state glb;
 	struct panthor_coredump_csg_state csg;
 	struct panthor_coredump_cs_state cs[MAX_CS_PER_CSG];
+	struct panthor_coredump_as_state as;
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -87,6 +90,15 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 	default:
 		return "UNKNOWN";
 	}
+}
+
+static void print_as(struct drm_printer *p,
+		     const struct panthor_coredump_as_state *as, u32 as_id)
+{
+	drm_printf(p, "as%d:\n", as_id);
+	drm_printf(p, "  FAULTSTATUS: 0x%x\n", as->faultstatus);
+	drm_printf(p, "  FAULTADDRESS: 0x%llx\n", as->faultaddress);
+	drm_printf(p, "  FAULTEXTRA: 0x%llx\n", as->faultextra);
 }
 
 static void print_cs(struct drm_printer *p,
@@ -259,6 +271,12 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 		for (u32 i = 0; i < cd->group.queue_count; i++)
 			print_cs(p, &cd->cs[i], i);
 	}
+
+	if (cd->mask & PANTHOR_COREDUMP_AS) {
+		const u32 as_id = cd->csg.config & 0xf;
+
+		print_as(p, &cd->as, as_id);
+	}
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -283,6 +301,14 @@ static void process_cd(struct panthor_device *ptdev,
 
 	p = drm_coredump_printer(&iter);
 	print_cd(&p, cd);
+}
+
+static void capture_as(struct panthor_device *ptdev,
+		       struct panthor_coredump_as_state *as, u32 as_id)
+{
+	as->faultstatus = gpu_read(ptdev, AS_FAULTSTATUS(as_id));
+	as->faultaddress = gpu_read64(ptdev, AS_FAULTADDRESS(as_id));
+	as->faultextra = gpu_read64(ptdev, AS_FAULTEXTRA(as_id));
 }
 
 static void capture_cs(struct panthor_device *ptdev,
@@ -374,6 +400,8 @@ static void capture_gpu(struct panthor_device *ptdev,
 static void capture_cd(struct panthor_device *ptdev,
 		       struct panthor_coredump *cd, struct panthor_group *group)
 {
+	struct panthor_vm *vm;
+
 	drm_info(&ptdev->base, "capturing coredump states\n");
 
 	if (group) {
@@ -401,6 +429,11 @@ static void capture_cd(struct panthor_device *ptdev,
 	for (u32 i = 0; i < cd->group.queue_count; i++)
 		capture_cs(ptdev, &cd->cs[i], cd->group.csg_id, i, group);
 	cd->mask |= PANTHOR_COREDUMP_CS;
+
+	vm = panthor_group_vm(group);
+
+	capture_as(ptdev, &cd->as, panthor_vm_as(vm));
+	cd->mask |= PANTHOR_COREDUMP_AS;
 }
 
 static void panthor_coredump_free(void *data)

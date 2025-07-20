@@ -124,6 +124,17 @@ struct panthor_coredump_cs_state {
 	u32 active;
 };
 
+/**
+ * struct panthor_coredump_as_state - Coredump AS state
+ *
+ * Interesting MMU_AS_CONTROL regs.
+ */
+struct panthor_coredump_as_state {
+	u32 faultstatus;
+	u64 faultaddress;
+	u64 faultextra;
+};
+
 #ifdef CONFIG_DEV_COREDUMP
 
 struct panthor_coredump *

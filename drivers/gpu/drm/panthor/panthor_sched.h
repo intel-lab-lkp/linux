@@ -38,6 +38,8 @@ void panthor_group_get_ringbuf_iface(
 	const struct panthor_fw_ringbuf_input_iface **input_iface,
 	const struct panthor_fw_ringbuf_output_iface **output_iface);
 
+struct panthor_vm *panthor_group_vm(struct panthor_group *group);
+
 struct drm_sched_job *
 panthor_job_create(struct panthor_file *pfile,
 		   u16 group_handle,

@@ -3726,6 +3726,11 @@ void panthor_group_get_ringbuf_iface(
 	*output_iface = queue->iface.output;
 }
 
+struct panthor_vm *panthor_group_vm(struct panthor_group *group)
+{
+	return group->vm;
+}
+
 int panthor_group_pool_create(struct panthor_file *pfile)
 {
 	struct panthor_group_pool *gpool;
