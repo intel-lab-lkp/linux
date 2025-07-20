@@ -14,8 +14,10 @@ struct drm_panthor_group_create;
 struct drm_panthor_queue_create;
 struct drm_panthor_group_get_state;
 struct drm_panthor_queue_submit;
+struct panthor_coredump_group_state;
 struct panthor_device;
 struct panthor_file;
+struct panthor_group;
 struct panthor_group_pool;
 struct panthor_job;
 
@@ -25,6 +27,9 @@ int panthor_group_create(struct panthor_file *pfile,
 int panthor_group_destroy(struct panthor_file *pfile, u32 group_handle);
 int panthor_group_get_state(struct panthor_file *pfile,
 			    struct drm_panthor_group_get_state *get_state);
+
+void panthor_group_capture_coredump(const struct panthor_group *group,
+				    struct panthor_coredump_group_state *state);
 
 struct drm_sched_job *
 panthor_job_create(struct panthor_file *pfile,

@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 
+#include "panthor_coredump.h"
 #include "panthor_devfreq.h"
 #include "panthor_device.h"
 #include "panthor_fw.h"
@@ -1031,6 +1032,10 @@ group_unbind_locked(struct panthor_group *group)
 	return 0;
 }
 
+static void panthor_sched_coredump_locked(struct panthor_device *ptdev,
+					  enum panthor_coredump_reason reason,
+					  struct panthor_group *group);
+
 /**
  * cs_slot_prog_locked() - Program a queue slot
  * @ptdev: Device.
@@ -1249,6 +1254,10 @@ csg_slot_sync_state_locked(struct panthor_device *ptdev, u32 csg_id)
 		drm_err(&ptdev->base, "Invalid state on CSG %d (state=%d)",
 			csg_id, csg_state);
 		new_state = PANTHOR_CS_GROUP_UNKNOWN_STATE;
+
+		panthor_sched_coredump_locked(
+			ptdev, PANTHOR_COREDUMP_REASON_CSG_UNKNOWN_STATE,
+			group);
 		break;
 	}
 
@@ -1378,6 +1387,9 @@ cs_slot_process_fatal_event_locked(struct panthor_device *ptdev,
 		 panthor_exception_name(ptdev, CS_EXCEPTION_TYPE(fatal)),
 		 (unsigned int)CS_EXCEPTION_DATA(fatal),
 		 info);
+
+	panthor_sched_coredump_locked(ptdev, PANTHOR_COREDUMP_REASON_CS_FATAL,
+				      group);
 }
 
 static void
@@ -1426,6 +1438,9 @@ cs_slot_process_fault_event_locked(struct panthor_device *ptdev,
 		 panthor_exception_name(ptdev, CS_EXCEPTION_TYPE(fault)),
 		 (unsigned int)CS_EXCEPTION_DATA(fault),
 		 info);
+
+	panthor_sched_coredump_locked(ptdev, PANTHOR_COREDUMP_REASON_CS_FAULT,
+				      group);
 }
 
 static int group_process_tiler_oom(struct panthor_group *group, u32 cs_id)
@@ -1480,6 +1495,10 @@ static int group_process_tiler_oom(struct panthor_group *group, u32 cs_id)
 		drm_warn(&ptdev->base, "Failed to extend the tiler heap\n");
 		group->fatal_queues |= BIT(cs_id);
 		sched_queue_delayed_work(sched, tick, 0);
+
+		panthor_sched_coredump_locked(
+			ptdev, PANTHOR_COREDUMP_REASON_CS_TILER_OOM, group);
+
 		goto out_put_heap_pool;
 	}
 
@@ -1639,6 +1658,9 @@ csg_slot_process_progress_timer_event_locked(struct panthor_device *ptdev, u32 c
 		group->timedout = true;
 
 	sched_queue_delayed_work(sched, tick, 0);
+
+	panthor_sched_coredump_locked(
+		ptdev, PANTHOR_COREDUMP_REASON_CSG_PROGRESS_TIMEOUT, group);
 }
 
 static void sched_process_csg_irq_locked(struct panthor_device *ptdev, u32 csg_id)
@@ -1858,8 +1880,16 @@ static int csgs_upd_ctx_apply_locked(struct panthor_device *ptdev,
 
 		if (ret && acked != req_mask &&
 		    ((csg_iface->input->req ^ csg_iface->output->ack) & req_mask) != 0) {
+			struct panthor_csg_slot *csg_slot =
+				&sched->csg_slots[csg_id];
+			struct panthor_group *group = csg_slot->group;
+
 			drm_err(&ptdev->base, "CSG %d update request timedout", csg_id);
 			ctx->timedout_mask |= BIT(csg_id);
+
+			panthor_sched_coredump_locked(
+				ptdev, PANTHOR_COREDUMP_REASON_CSG_REQ_TIMEOUT,
+				group);
 		}
 	}
 
@@ -2027,6 +2057,10 @@ tick_ctx_init(struct panthor_scheduler *sched,
 		 * CSG IRQs, so we can flag the faulty queue.
 		 */
 		if (panthor_vm_has_unhandled_faults(group->vm)) {
+			panthor_sched_coredump_locked(
+				ptdev, PANTHOR_COREDUMP_REASON_MMU_FAULT,
+				group);
+
 			sched_process_csg_irq_locked(ptdev, i);
 
 			/* No fatal fault reported, flag all queues as faulty. */
@@ -3237,6 +3271,10 @@ queue_timedout_job(struct drm_sched_job *sched_job)
 
 		group_queue_work(group, term);
 	}
+
+	panthor_sched_coredump_locked(
+		ptdev, PANTHOR_COREDUMP_REASON_JOB_TIMEOUT, group);
+
 	mutex_unlock(&sched->lock);
 
 	queue_start(queue);
@@ -3625,6 +3663,37 @@ int panthor_group_get_state(struct panthor_file *pfile,
 
 	group_put(group);
 	return 0;
+}
+
+static void panthor_sched_coredump_locked(struct panthor_device *ptdev,
+					  enum panthor_coredump_reason reason,
+					  struct panthor_group *group)
+{
+	struct panthor_coredump *cd;
+
+	lockdep_assert_held(&ptdev->scheduler->lock);
+
+	/* GFP_NOWAIT because this may be called from fence signaling path */
+	cd = panthor_coredump_alloc(ptdev, reason, GFP_NOWAIT);
+	if (!cd)
+		return;
+
+	panthor_coredump_capture(cd, group);
+}
+
+void panthor_group_capture_coredump(const struct panthor_group *group,
+				    struct panthor_coredump_group_state *state)
+{
+	const struct panthor_device *ptdev = group->ptdev;
+
+	/* this is called from panthor_coredump_capture */
+	lockdep_assert_held(&ptdev->scheduler->lock);
+
+	state->priority = group->priority;
+	state->queue_count = group->queue_count;
+	/* TODO state->pid and state->comm */
+	state->destroyed = group->destroyed;
+	state->csg_id = group->csg_id;
 }
 
 int panthor_group_pool_create(struct panthor_file *pfile)

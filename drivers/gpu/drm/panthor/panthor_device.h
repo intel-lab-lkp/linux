@@ -197,6 +197,12 @@ struct panthor_device {
 		atomic_t recovery_needed;
 	} pm;
 
+	/** @coredump: Coredump-related data. */
+	struct {
+		/** @pending: True if there is a pending coredump. */
+		atomic_t pending;
+	} coredump;
+
 	/** @profile_mask: User-set profiling flags for job accounting. */
 	u32 profile_mask;
 
