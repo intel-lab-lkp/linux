@@ -172,8 +172,10 @@ void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
 
 	entity->oldest_job_waiting = ts;
 
-	rb_add_cached(&entity->rb_tree_node, &rq->rb_tree_root,
-		      drm_sched_entity_compare_before);
+	if (!entity->stopped) {
+		rb_add_cached(&entity->rb_tree_node, &rq->rb_tree_root,
+			      drm_sched_entity_compare_before);
+	}
 }
 
 /**
