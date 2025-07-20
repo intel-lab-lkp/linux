@@ -2430,7 +2430,7 @@ static const struct drm_gpuvm_ops lock_ops = {
  * remapped, and locks+prepares (drm_exec_prepare_object()) objects that
  * will be newly mapped.
  *
- * The expected usage is:
+ * The expected usage is::
  *
  *    vm_bind {
  *        struct drm_exec exec;
@@ -2464,14 +2464,14 @@ static const struct drm_gpuvm_ops lock_ops = {
  * op, because the later altered step will involve the same GEM object(s)
  * already seen in the earlier locking step.  For example:
  *
- * 1) An earlier driver DRIVER_OP_UNMAP op removes the need for a
- *    DRM_GPUVA_OP_REMAP/UNMAP step.  This is safe because we've already
- *    locked the GEM object in the earlier DRIVER_OP_UNMAP op.
+ * * An earlier driver DRIVER_OP_UNMAP op removes the need for a
+ *   DRM_GPUVA_OP_REMAP/UNMAP step.  This is safe because we've already
+ *   locked the GEM object in the earlier DRIVER_OP_UNMAP op.
  *
- * 2) An earlier DRIVER_OP_MAP op overlaps with a later DRIVER_OP_MAP/UNMAP
- *    op, introducing a DRM_GPUVA_OP_REMAP/UNMAP that wouldn't have been
- *    required without the earlier DRIVER_OP_MAP.  This is safe because we've
- *    already locked the GEM object in the earlier DRIVER_OP_MAP step.
+ * * An earlier DRIVER_OP_MAP op overlaps with a later DRIVER_OP_MAP/UNMAP
+ *   op, introducing a DRM_GPUVA_OP_REMAP/UNMAP that wouldn't have been
+ *   required without the earlier DRIVER_OP_MAP.  This is safe because we've
+ *   already locked the GEM object in the earlier DRIVER_OP_MAP step.
  *
  * Returns: 0 on success or a negative error codec
  */
