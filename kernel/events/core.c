@@ -14058,6 +14058,17 @@ static void perf_event_exit_task_context(struct task_struct *task, bool exit)
 	mutex_lock(&ctx->mutex);
 
 	/*
+	 * Report the task dead after unscheduling the events so that we
+	 * won't get any samples after PERF_RECORD_EXIT. We can however still
+	 * get a few PERF_RECORD_READ events.
+	 */
+	if (exit)
+		perf_event_task(task, ctx, 0);
+
+	list_for_each_entry_safe(child_event, next, &ctx->event_list, event_entry)
+		perf_event_exit_event(child_event, ctx, false);
+
+	/*
 	 * In a single ctx::lock section, de-schedule the events and detach the
 	 * context from the task such that we cannot ever get it scheduled back
 	 * in.
@@ -14080,17 +14091,6 @@ static void perf_event_exit_task_context(struct task_struct *task, bool exit)
 
 	if (clone_ctx)
 		put_ctx(clone_ctx);
-
-	/*
-	 * Report the task dead after unscheduling the events so that we
-	 * won't get any samples after PERF_RECORD_EXIT. We can however still
-	 * get a few PERF_RECORD_READ events.
-	 */
-	if (exit)
-		perf_event_task(task, ctx, 0);
-
-	list_for_each_entry_safe(child_event, next, &ctx->event_list, event_entry)
-		perf_event_exit_event(child_event, ctx, false);
 
 	mutex_unlock(&ctx->mutex);
 
