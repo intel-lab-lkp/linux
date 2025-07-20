@@ -161,7 +161,7 @@ The producer will look something like this::
 
 	if (CIRC_SPACE(head, tail, buffer->size) >= 1) {
 		/* insert one item into the buffer */
-		struct item *item = buffer[head];
+		struct item *item = buffer->vals[head];
 
 		produce_item(item);
 
@@ -203,7 +203,7 @@ The consumer will look something like this::
 	if (CIRC_CNT(head, tail, buffer->size) >= 1) {
 
 		/* extract one item from the buffer */
-		struct item *item = buffer[tail];
+		struct item *item = buffer->vals[tail];
 
 		consume_item(item);
 
