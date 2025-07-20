@@ -298,8 +298,8 @@ static inline void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 
 /*
  * Architectures can set this mask to a combination of PGTBL_P?D_MODIFIED values
- * and let generic vmalloc and ioremap code know when arch_sync_kernel_mappings()
- * needs to be called.
+ * and let generic vmalloc, ioremap and page table update code know when
+ * arch_sync_kernel_mappings() needs to be called.
  */
 #ifndef ARCH_PAGE_TABLE_SYNC_MASK
 #define ARCH_PAGE_TABLE_SYNC_MASK 0
@@ -311,6 +311,20 @@ static inline void pgd_free(struct mm_struct *mm, pgd_t *pgd)
  * is 0.
  */
 void arch_sync_kernel_mappings(unsigned long start, unsigned long end);
+
+#define pgd_populate_kernel(addr, pgd, p4d)			\
+do {								\
+	pgd_populate(&init_mm, pgd, p4d);			\
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_PGD_MODIFIED)	\
+		arch_sync_kernel_mappings(addr, addr);		\
+} while (0)
+
+#define p4d_populate_kernel(addr, p4d, pud)			\
+do {								\
+	p4d_populate(&init_mm, p4d, pud);			\
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_P4D_MODIFIED)	\
+		arch_sync_kernel_mappings(addr, addr);		\
+} while (0)
 
 #endif /* CONFIG_MMU */
 
