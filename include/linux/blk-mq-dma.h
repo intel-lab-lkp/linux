@@ -14,6 +14,7 @@ struct blk_dma_iter {
 	blk_status_t			status;
 
 	/* Internal to blk_rq_dma_map_iter_* */
+	struct bio_vec			*bvec;
 	struct bvec_iter		iter;
 	struct bio			*bio;
 	struct pci_p2pdma_map_state	p2pdma;

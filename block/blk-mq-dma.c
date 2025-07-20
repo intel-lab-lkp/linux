@@ -16,23 +16,17 @@ static bool blk_map_iter_next(struct request *req, struct blk_dma_iter *iter,
 	unsigned int max_size;
 	struct bio_vec bv;
 
-	if (req->rq_flags & RQF_SPECIAL_PAYLOAD) {
-		if (!iter->bio)
-			return false;
-		vec->paddr = bvec_phys(&req->special_vec);
-		vec->len = req->special_vec.bv_len;
-		iter->bio = NULL;
-		return true;
-	}
-
 	if (!iter->iter.bi_size)
 		return false;
 
-	bv = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
+	bv = mp_bvec_iter_bvec(iter->bvec, iter->iter);
 	vec->paddr = bvec_phys(&bv);
 	max_size = get_max_segment_size(&req->q->limits, vec->paddr, UINT_MAX);
 	bv.bv_len = min(bv.bv_len, max_size);
-	bio_advance_iter_single(iter->bio, &iter->iter, bv.bv_len);
+	bvec_iter_advance_single(iter->bvec, &iter->iter, bv.bv_len);
+
+	if (req->rq_flags & RQF_SPECIAL_PAYLOAD)
+		return true;
 
 	/*
 	 * If we are entirely done with this bi_io_vec entry, check if the next
@@ -47,15 +41,16 @@ static bool blk_map_iter_next(struct request *req, struct blk_dma_iter *iter,
 				break;
 			iter->bio = iter->bio->bi_next;
 			iter->iter = iter->bio->bi_iter;
+			iter->bvec = iter->bio->bi_io_vec;
 		}
 
-		next = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
+		next = mp_bvec_iter_bvec(iter->bvec, iter->iter);
 		if (bv.bv_len + next.bv_len > max_size ||
 		    !biovec_phys_mergeable(req->q, &bv, &next))
 			break;
 
 		bv.bv_len += next.bv_len;
-		bio_advance_iter_single(iter->bio, &iter->iter, next.bv_len);
+		bvec_iter_advance_single(iter->bvec, &iter->iter, next.bv_len);
 	}
 
 	vec->len = bv.bv_len;
@@ -158,6 +153,11 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 	memset(&iter->p2pdma, 0, sizeof(iter->p2pdma));
 	iter->status = BLK_STS_OK;
 
+	if (req->rq_flags & RQF_SPECIAL_PAYLOAD)
+		iter->bvec = &req->special_vec;
+	else
+		iter->bvec = req->bio->bi_io_vec;
+
 	/*
 	 * Grab the first segment ASAP because we'll need it to check for P2P
 	 * transfers.
@@ -253,8 +253,10 @@ int __blk_rq_map_sg(struct request *rq, struct scatterlist *sglist,
 	int nsegs = 0;
 
 	/* the internal flush request may not have bio attached */
-	if (iter.bio)
+	if (iter.bio) {
 		iter.iter = iter.bio->bi_iter;
+		iter.bvec = iter.bio->bi_io_vec;
+	}
 
 	while (blk_map_iter_next(rq, &iter, &vec)) {
 		*last_sg = blk_next_sg(last_sg, sglist);
