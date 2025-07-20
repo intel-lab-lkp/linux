@@ -42,6 +42,7 @@
 #include <linux/sched/mm.h>
 #include <asm/tlbflush.h>
 #include <asm/shmparam.h>
+#include <asm/pgalloc.h>
 #include <linux/page_owner.h>
 
 #define CREATE_TRACE_POINTS
