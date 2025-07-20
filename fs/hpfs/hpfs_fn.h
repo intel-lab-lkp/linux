@@ -152,6 +152,11 @@ static inline struct extended_attribute *next_ea(struct extended_attribute *ea)
 	return (struct extended_attribute *)((char *)ea + 5 + ea->namelen + ea_valuelen(ea));
 }
 
+static inline bool ea_valid_addr(struct fnode *fnode, struct extended_attribute *ea)
+{
+	return ((char *)ea >= (char *)&fnode->ea) && ((char *)ea < (char *)&fnode->ea + sizeof(fnode->ea));
+}
+
 static inline secno ea_sec(struct extended_attribute *ea)
 {
 	return le32_to_cpu(get_unaligned((__le32 *)((char *)ea + 9 + ea->namelen)));

@@ -202,7 +202,7 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 			}
 			ea = fnode_ea(fnode);
 			ea_end = fnode_end_ea(fnode);
-			while (ea != ea_end) {
+			while (ea != ea_end && ea_valid_addr(fnode, ea)) {
 				if (ea > ea_end) {
 					hpfs_error(s, "bad EA in fnode %08lx",
 						(unsigned long)ino);
