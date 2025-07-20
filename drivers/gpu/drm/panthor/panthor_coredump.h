@@ -69,6 +69,29 @@ struct panthor_coredump_glb_state {
 	u32 ack;
 };
 
+/**
+ * struct panthor_coredump_csg_state - Coredump CSG state
+ *
+ * Interesting panthor_fw_csg_iface fields.
+ */
+struct panthor_coredump_csg_state {
+	u32 features;
+	u32 stream_num;
+
+	u32 req;
+	u64 allow_compute;
+	u64 allow_fragment;
+	u32 allow_other;
+	u32 ep_req;
+	u32 config;
+
+	u32 ack;
+	u32 status_ep_current;
+	u32 status_ep_req;
+	u32 status_state;
+	u32 resource_dep;
+};
+
 #ifdef CONFIG_DEV_COREDUMP
 
 struct panthor_coredump *

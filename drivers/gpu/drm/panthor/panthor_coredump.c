@@ -24,6 +24,7 @@ enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_GROUP = BIT(0),
 	PANTHOR_COREDUMP_GPU = BIT(1),
 	PANTHOR_COREDUMP_GLB = BIT(2),
+	PANTHOR_COREDUMP_CSG = BIT(3),
 };
 
 /**
@@ -53,6 +54,7 @@ struct panthor_coredump {
 	struct panthor_coredump_group_state group;
 	struct panthor_coredump_gpu_state gpu;
 	struct panthor_coredump_glb_state glb;
+	struct panthor_coredump_csg_state csg;
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -83,6 +85,28 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 	default:
 		return "UNKNOWN";
 	}
+}
+
+static void print_csg(struct drm_printer *p,
+		      const struct panthor_coredump_csg_state *csg, u32 csg_id)
+{
+	drm_printf(p, "csg%d:\n", csg_id);
+	drm_printf(p, "  GROUP_FEATURES: 0x%x\n", csg->features);
+	drm_printf(p, "  GROUP_STREAM_NUM: 0x%x\n", csg->stream_num);
+
+	drm_printf(p, "  CSG_REQ: 0x%x\n", csg->req);
+	drm_printf(p, "  CSG_ALLOW_COMPUTE: 0x%llx\n", csg->allow_compute);
+	drm_printf(p, "  CSG_ALLOW_FRAGMENT: 0x%llx\n", csg->allow_fragment);
+	drm_printf(p, "  CSG_ALLOW_OTHER: 0x%x\n", csg->allow_other);
+	drm_printf(p, "  CSG_EP_REQ: 0x%x\n", csg->ep_req);
+	drm_printf(p, "  CSG_CONFIG: 0x%x\n", csg->config);
+
+	drm_printf(p, "  CSG_ACK: 0x%x\n", csg->ack);
+	drm_printf(p, "  CSG_STATUS_EP_CURRENT: 0x%x\n",
+		   csg->status_ep_current);
+	drm_printf(p, "  CSG_STATUS_EP_REQ: 0x%x\n", csg->status_ep_req);
+	drm_printf(p, "  CSG_STATUS_STATE: 0x%x\n", csg->status_state);
+	drm_printf(p, "  CSG_RESOURCE_DEP: 0x%x\n", csg->resource_dep);
 }
 
 static void print_glb(struct drm_printer *p,
@@ -193,6 +217,10 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 
 	if (cd->mask & PANTHOR_COREDUMP_GLB)
 		print_glb(p, &cd->glb);
+
+	if (cd->mask & PANTHOR_COREDUMP_CSG) {
+		print_csg(p, &cd->csg, cd->group.csg_id);
+	}
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -217,6 +245,29 @@ static void process_cd(struct panthor_device *ptdev,
 
 	p = drm_coredump_printer(&iter);
 	print_cd(&p, cd);
+}
+
+static void capture_csg(struct panthor_device *ptdev,
+			struct panthor_coredump_csg_state *csg, u32 csg_id)
+{
+	const struct panthor_fw_csg_iface *csg_iface =
+		panthor_fw_get_csg_iface(ptdev, csg_id);
+
+	csg->features = csg_iface->control->features;
+	csg->stream_num = csg_iface->control->stream_num;
+
+	csg->req = csg_iface->input->req;
+	csg->allow_compute = csg_iface->input->allow_compute;
+	csg->allow_fragment = csg_iface->input->allow_fragment;
+	csg->allow_other = csg_iface->input->allow_other;
+	csg->ep_req = csg_iface->input->endpoint_req;
+	csg->config = csg_iface->input->config;
+
+	csg->ack = csg_iface->output->ack;
+	csg->status_ep_current = csg_iface->output->status_endpoint_current;
+	csg->status_ep_req = csg_iface->output->status_endpoint_req;
+	csg->status_state = csg_iface->output->status_state;
+	csg->resource_dep = csg_iface->output->resource_dep;
 }
 
 static void capture_glb(struct panthor_device *ptdev,
@@ -264,6 +315,13 @@ static void capture_cd(struct panthor_device *ptdev,
 
 	capture_glb(ptdev, &cd->glb);
 	cd->mask |= PANTHOR_COREDUMP_GLB;
+
+	/* remaining states require an active group */
+	if (!group || cd->group.csg_id < 0)
+		return;
+
+	capture_csg(ptdev, &cd->csg, cd->group.csg_id);
+	cd->mask |= PANTHOR_COREDUMP_CSG;
 }
 
 static void panthor_coredump_free(void *data)

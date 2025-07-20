@@ -3681,6 +3681,19 @@ static void panthor_sched_coredump_locked(struct panthor_device *ptdev,
 
 	pm_active = pm_runtime_get_if_active(ptdev->base.dev);
 
+	/* force a CSG_STATUS_UPDATE */
+	if (pm_active && group && group->csg_id >= 0) {
+		struct panthor_fw_csg_iface *csg_iface;
+		u32 acked;
+
+		csg_iface = panthor_fw_get_csg_iface(ptdev, group->csg_id);
+
+		panthor_fw_toggle_reqs(csg_iface, req, ack, CSG_STATUS_UPDATE);
+		panthor_fw_ring_csg_doorbells(ptdev, BIT(group->csg_id));
+		panthor_fw_csg_wait_acks(ptdev, group->csg_id,
+					 CSG_STATUS_UPDATE, &acked, 100);
+	}
+
 	panthor_coredump_capture(cd, group);
 
 	if (pm_active == 1)
