@@ -424,7 +424,9 @@ static void ixgbe_xmit_pkt(struct ixgbe_ring *xdp_ring, struct xdp_desc *desc,
 	cmd_type = IXGBE_ADVTXD_DTYP_DATA |
 		   IXGBE_ADVTXD_DCMD_DEXT |
 		   IXGBE_ADVTXD_DCMD_IFCS;
-	cmd_type |= desc[i].len | IXGBE_TXD_CMD_EOP;
+	cmd_type |= desc[i].len;
+	if (xsk_is_eop_desc(&desc[i]))
+		cmd_type |= IXGBE_TXD_CMD_EOP;
 	tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
 	tx_desc->read.olinfo_status =
 		cpu_to_le32(desc[i].len << IXGBE_ADVTXD_PAYLEN_SHIFT);

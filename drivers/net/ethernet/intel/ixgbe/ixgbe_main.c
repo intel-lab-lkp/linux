@@ -52,6 +52,8 @@
 #include "ixgbe_txrx_common.h"
 #include "devlink/devlink.h"
 
+#define IXGBE_MAX_BUFFER_TXD 4
+
 char ixgbe_driver_name[] = "ixgbe";
 static const char ixgbe_driver_string[] =
 			      "Intel(R) 10 Gigabit PCI Express Network Driver";
@@ -11804,6 +11806,8 @@ skip_sriov:
 
 	netdev->xdp_features = NETDEV_XDP_ACT_BASIC | NETDEV_XDP_ACT_REDIRECT |
 			       NETDEV_XDP_ACT_XSK_ZEROCOPY;
+
+	netdev->xdp_zc_max_segs = IXGBE_MAX_BUFFER_TXD;
 
 	/* MTU range: 68 - 9710 */
 	netdev->min_mtu = ETH_MIN_MTU;
