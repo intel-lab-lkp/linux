@@ -343,6 +343,10 @@ static const struct flash_info winbond_nor_parts[] = {
 		.id = SNOR_ID(0xef, 0x80, 0x20),
 		.name = "w25q512nwm",
 		.otp = SNOR_OTP(256, 3, 0x1000, 0x1000),
+	}, {
+		.id = SNOR_ID(0xef, 0x8a, 0x1a),
+		.name = "w77q51nw",
+		.otp = SNOR_OTP(256, 3, 0x1000, 0x1000),
 	},
 };
 
