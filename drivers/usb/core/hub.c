@@ -2334,16 +2334,6 @@ void usb_disconnect(struct usb_device **pdev)
 
 	usb_lock_device(udev);
 
-	hub_disconnect_children(udev);
-
-	/* deallocate hcd/hardware state ... nuking all pending urbs and
-	 * cleaning up all state associated with the current configuration
-	 * so that the hardware is now fully quiesced.
-	 */
-	dev_dbg(&udev->dev, "unregistering device\n");
-	usb_disable_device(udev, 0);
-	usb_hcd_synchronize_unlinks(udev);
-
 	if (udev->parent) {
 		port1 = udev->portnum;
 		hub = usb_hub_to_struct_hub(udev->parent);
@@ -2361,6 +2351,16 @@ void usb_disconnect(struct usb_device **pdev)
 
 		typec_deattach(port_dev->connector, &udev->dev);
 	}
+
+	hub_disconnect_children(udev);
+
+	/* deallocate hcd/hardware state ... nuking all pending urbs and
+	 * cleaning up all state associated with the current configuration
+	 * so that the hardware is now fully quiesced.
+	 */
+	dev_dbg(&udev->dev, "unregistering device\n");
+	usb_disable_device(udev, 0);
+	usb_hcd_synchronize_unlinks(udev);
 
 	usb_remove_ep_devs(&udev->ep0);
 	usb_unlock_device(udev);
