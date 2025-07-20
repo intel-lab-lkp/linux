@@ -172,9 +172,7 @@ struct nvme_dev {
 	u32 last_ps;
 	bool hmb;
 	struct sg_table *hmb_sgt;
-
 	mempool_t *dmavec_mempool;
-	mempool_t *iod_meta_mempool;
 
 	/* shadow doorbell buffer support: */
 	__le32 *dbbuf_dbs;
@@ -264,6 +262,9 @@ enum nvme_iod_flags {
 
 	/* DMA mapped with PCI_P2PDMA_MAP_BUS_ADDR */
 	IOD_P2P_BUS_ADDR	= 1U << 3,
+
+	/* Metadata DMA mapped with PCI_P2PDMA_MAP_BUS_ADDR */
+	IOD_META_P2P_BUS_ADDR	= 1U << 4,
 };
 
 struct nvme_dma_vec {
@@ -279,15 +280,17 @@ struct nvme_iod {
 	struct nvme_command cmd;
 	u8 flags;
 	u8 nr_descriptors;
+	u8 nr_meta_descriptors;
 
 	unsigned int total_len;
+	unsigned int meta_total_len;
 	struct dma_iova_state dma_state;
+	struct dma_iova_state meta_dma_state;
 	void *descriptors[NVME_MAX_NR_DESCRIPTORS];
 	struct nvme_dma_vec *dma_vecs;
 	unsigned int nr_dma_vecs;
 
 	dma_addr_t meta_dma;
-	struct sg_table meta_sgt;
 	struct nvme_sgl_desc *meta_descriptor;
 };
 
@@ -642,6 +645,11 @@ static inline struct dma_pool *nvme_dma_pool(struct nvme_queue *nvmeq,
 	if (iod->flags & IOD_SMALL_DESCRIPTOR)
 		return nvmeq->descriptor_pools.small;
 	return nvmeq->descriptor_pools.large;
+}
+
+static inline bool nvme_pci_cmd_use_meta_sgl(struct nvme_command *cmd)
+{
+	return (cmd->common.flags & NVME_CMD_SGL_ALL) == NVME_CMD_SGL_METASEG;
 }
 
 static inline bool nvme_pci_cmd_use_sgl(struct nvme_command *cmd)
@@ -1014,70 +1022,53 @@ static blk_status_t nvme_map_data(struct request *req)
 	return nvme_pci_setup_data_prp(req, &iter);
 }
 
-static void nvme_pci_sgl_set_data_sg(struct nvme_sgl_desc *sge,
-		struct scatterlist *sg)
-{
-	sge->addr = cpu_to_le64(sg_dma_address(sg));
-	sge->length = cpu_to_le32(sg_dma_len(sg));
-	sge->type = NVME_SGL_FMT_DATA_DESC << 4;
-}
-
 static blk_status_t nvme_pci_setup_meta_sgls(struct request *req)
 {
 	struct nvme_queue *nvmeq = req->mq_hctx->driver_data;
-	struct nvme_dev *dev = nvmeq->dev;
+	unsigned int entries = req->nr_integrity_segments;
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
+	struct nvme_dev *dev = nvmeq->dev;
 	struct nvme_sgl_desc *sg_list;
-	struct scatterlist *sgl, *sg;
-	unsigned int entries;
+	struct blk_dma_iter iter;
 	dma_addr_t sgl_dma;
-	int rc, i;
+	int i = 0;
 
-	iod->meta_sgt.sgl = mempool_alloc(dev->iod_meta_mempool, GFP_ATOMIC);
-	if (!iod->meta_sgt.sgl)
-		return BLK_STS_RESOURCE;
+	if (!blk_rq_integrity_dma_map_iter_start(req, dev->dev,
+						&iod->meta_dma_state, &iter))
+		return iter.status;
 
-	sg_init_table(iod->meta_sgt.sgl, req->nr_integrity_segments);
-	iod->meta_sgt.orig_nents = blk_rq_map_integrity_sg(req,
-							   iod->meta_sgt.sgl);
-	if (!iod->meta_sgt.orig_nents)
-		goto out_free_sg;
-
-	rc = dma_map_sgtable(dev->dev, &iod->meta_sgt, rq_dma_dir(req),
-			     DMA_ATTR_NO_WARN);
-	if (rc)
-		goto out_free_sg;
+	if (iter.p2pdma.map == PCI_P2PDMA_MAP_BUS_ADDR)
+		iod->flags |= IOD_META_P2P_BUS_ADDR;
+	else if (blk_rq_dma_map_coalesce(&iod->meta_dma_state))
+		entries = 1;
 
 	sg_list = dma_pool_alloc(nvmeq->descriptor_pools.small, GFP_ATOMIC,
 			&sgl_dma);
 	if (!sg_list)
-		goto out_unmap_sg;
+		return BLK_STS_RESOURCE;
 
-	entries = iod->meta_sgt.nents;
 	iod->meta_descriptor = sg_list;
 	iod->meta_dma = sgl_dma;
 
 	iod->cmd.common.flags = NVME_CMD_SGL_METASEG;
 	iod->cmd.common.metadata = cpu_to_le64(sgl_dma);
 
-	sgl = iod->meta_sgt.sgl;
 	if (entries == 1) {
-		nvme_pci_sgl_set_data_sg(sg_list, sgl);
+		iod->meta_total_len = iter.len;
+		nvme_pci_sgl_set_data(sg_list, &iter);
+		iod->nr_meta_descriptors = 0;
 		return BLK_STS_OK;
 	}
 
 	sgl_dma += sizeof(*sg_list);
-	nvme_pci_sgl_set_seg(sg_list, sgl_dma, entries);
-	for_each_sg(sgl, sg, entries, i)
-		nvme_pci_sgl_set_data_sg(&sg_list[i + 1], sg);
+	do {
+		nvme_pci_sgl_set_data(&sg_list[++i], &iter);
+		iod->meta_total_len += iter.len;
+	} while (blk_rq_integrity_dma_map_iter_next(req, dev->dev, &iter));
 
-	return BLK_STS_OK;
-
-out_unmap_sg:
-	dma_unmap_sgtable(dev->dev, &iod->meta_sgt, rq_dma_dir(req), 0);
-out_free_sg:
-	mempool_free(iod->meta_sgt.sgl, dev->iod_meta_mempool);
-	return BLK_STS_RESOURCE;
+	nvme_pci_sgl_set_seg(sg_list, sgl_dma, i);
+	iod->nr_meta_descriptors = i;
+	return iter.status;
 }
 
 static blk_status_t nvme_pci_setup_meta_mptr(struct request *req)
@@ -1090,6 +1081,7 @@ static blk_status_t nvme_pci_setup_meta_mptr(struct request *req)
 	if (dma_mapping_error(nvmeq->dev->dev, iod->meta_dma))
 		return BLK_STS_IOERR;
 	iod->cmd.common.metadata = cpu_to_le64(iod->meta_dma);
+	iod->nr_meta_descriptors = 0;
 	return BLK_STS_OK;
 }
 
@@ -1111,7 +1103,6 @@ static blk_status_t nvme_prep_rq(struct request *req)
 	iod->flags = 0;
 	iod->nr_descriptors = 0;
 	iod->total_len = 0;
-	iod->meta_sgt.nents = 0;
 
 	ret = nvme_setup_cmd(req->q->queuedata, req);
 	if (ret)
@@ -1222,23 +1213,43 @@ static void nvme_queue_rqs(struct rq_list *rqlist)
 	*rqlist = requeue_list;
 }
 
-static __always_inline void nvme_unmap_metadata(struct request *req)
+static void nvme_free_meta_sgls(struct nvme_iod *iod, struct device *dma_dev,
+				enum dma_data_direction dir)
 {
-	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
-	struct nvme_queue *nvmeq = req->mq_hctx->driver_data;
-	struct nvme_dev *dev = nvmeq->dev;
+	struct nvme_sgl_desc *sg_list = iod->meta_descriptor;
+	int i;
 
-	if (!iod->meta_sgt.nents) {
-		dma_unmap_page(dev->dev, iod->meta_dma,
-			       rq_integrity_vec(req).bv_len,
-			       rq_dma_dir(req));
+	if (!iod->nr_meta_descriptors) {
+		dma_unmap_page(dma_dev, le64_to_cpu(sg_list->addr),
+				le32_to_cpu(sg_list->length), dir);
 		return;
 	}
 
+	for (i = 1; i <= iod->nr_meta_descriptors; i++)
+		dma_unmap_page(dma_dev, le64_to_cpu(sg_list[i].addr),
+				le32_to_cpu(sg_list[i].length), dir);
+}
+
+static __always_inline void nvme_unmap_metadata(struct request *req)
+{
+	struct nvme_queue *nvmeq = req->mq_hctx->driver_data;
+	enum dma_data_direction dir = rq_dma_dir(req);
+	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
+	struct device *dma_dev = nvmeq->dev->dev;
+
+	if (!nvme_pci_cmd_use_meta_sgl(&iod->cmd)) {
+		dma_unmap_page(dma_dev, iod->meta_dma,
+			       rq_integrity_vec(req).bv_len, dir);
+		return;
+	}
+
+	if (!blk_rq_dma_unmap(req, dma_dev, &iod->meta_dma_state,
+				iod->meta_total_len,
+				iod->flags & IOD_META_P2P_BUS_ADDR))
+		nvme_free_meta_sgls(iod, dma_dev, dir);
+
 	dma_pool_free(nvmeq->descriptor_pools.small, iod->meta_descriptor,
 			iod->meta_dma);
-	dma_unmap_sgtable(dev->dev, &iod->meta_sgt, rq_dma_dir(req), 0);
-	mempool_free(iod->meta_sgt.sgl, dev->iod_meta_mempool);
 }
 
 static __always_inline void nvme_pci_unmap_rq(struct request *req)
@@ -3026,7 +3037,6 @@ static int nvme_disable_prepare_reset(struct nvme_dev *dev, bool shutdown)
 
 static int nvme_pci_alloc_iod_mempool(struct nvme_dev *dev)
 {
-	size_t meta_size = sizeof(struct scatterlist) * (NVME_MAX_META_SEGS + 1);
 	size_t alloc_size = sizeof(struct nvme_dma_vec) * NVME_MAX_SEGS;
 
 	dev->dmavec_mempool = mempool_create_node(1,
@@ -3035,17 +3045,7 @@ static int nvme_pci_alloc_iod_mempool(struct nvme_dev *dev)
 			dev_to_node(dev->dev));
 	if (!dev->dmavec_mempool)
 		return -ENOMEM;
-
-	dev->iod_meta_mempool = mempool_create_node(1,
-			mempool_kmalloc, mempool_kfree,
-			(void *)meta_size, GFP_KERNEL,
-			dev_to_node(dev->dev));
-	if (!dev->iod_meta_mempool)
-		goto free;
 	return 0;
-free:
-	mempool_destroy(dev->dmavec_mempool);
-	return -ENOMEM;
 }
 
 static void nvme_free_tagset(struct nvme_dev *dev)
@@ -3495,7 +3495,6 @@ out_disable:
 	nvme_free_queues(dev, 0);
 out_release_iod_mempool:
 	mempool_destroy(dev->dmavec_mempool);
-	mempool_destroy(dev->iod_meta_mempool);
 out_dev_unmap:
 	nvme_dev_unmap(dev);
 out_uninit_ctrl:
@@ -3559,7 +3558,6 @@ static void nvme_remove(struct pci_dev *pdev)
 	nvme_dbbuf_dma_free(dev);
 	nvme_free_queues(dev, 0);
 	mempool_destroy(dev->dmavec_mempool);
-	mempool_destroy(dev->iod_meta_mempool);
 	nvme_release_descriptor_pools(dev);
 	nvme_dev_unmap(dev);
 	nvme_uninit_ctrl(&dev->ctrl);
