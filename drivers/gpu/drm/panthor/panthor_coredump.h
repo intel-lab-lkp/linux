@@ -92,6 +92,38 @@ struct panthor_coredump_csg_state {
 	u32 resource_dep;
 };
 
+/**
+ * struct panthor_coredump_cs_state - Coredump CS state
+ *
+ * Interesting panthor_fw_cs_iface, panthor_fw_ringbuf_input_iface, and
+ * panthor_fw_ringbuf_output_iface fields.
+ */
+struct panthor_coredump_cs_state {
+	u32 features;
+
+	u32 req;
+	u32 config;
+	u64 base;
+	u32 size;
+
+	u32 ack;
+	u64 status_cmd_ptr;
+	u32 status_wait;
+	u32 status_req_resource;
+	u32 status_scoreboards;
+	u32 status_blocked_reason;
+	u32 fault;
+	u32 fatal;
+	u64 fault_info;
+	u64 fatal_info;
+
+	u64 insert;
+	u64 extract_init;
+
+	u64 extract;
+	u32 active;
+};
+
 #ifdef CONFIG_DEV_COREDUMP
 
 struct panthor_coredump *

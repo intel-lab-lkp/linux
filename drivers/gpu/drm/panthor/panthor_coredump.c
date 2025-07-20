@@ -25,6 +25,7 @@ enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_GPU = BIT(1),
 	PANTHOR_COREDUMP_GLB = BIT(2),
 	PANTHOR_COREDUMP_CSG = BIT(3),
+	PANTHOR_COREDUMP_CS = BIT(4),
 };
 
 /**
@@ -55,6 +56,7 @@ struct panthor_coredump {
 	struct panthor_coredump_gpu_state gpu;
 	struct panthor_coredump_glb_state glb;
 	struct panthor_coredump_csg_state csg;
+	struct panthor_coredump_cs_state cs[MAX_CS_PER_CSG];
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -85,6 +87,37 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 	default:
 		return "UNKNOWN";
 	}
+}
+
+static void print_cs(struct drm_printer *p,
+		     const struct panthor_coredump_cs_state *cs, u32 cs_id)
+{
+	drm_printf(p, "cs%d:\n", cs_id);
+	drm_printf(p, "  STREAM_FEATURES: 0x%x\n", cs->features);
+
+	drm_printf(p, "  CS_REQ: 0x%x\n", cs->req);
+	drm_printf(p, "  CS_CONFIG: 0x%x\n", cs->config);
+	drm_printf(p, "  CS_BASE: 0x%llx\n", cs->base);
+	drm_printf(p, "  CS_SIZE: 0x%x\n", cs->size);
+
+	drm_printf(p, "  CS_ACK: 0x%x\n", cs->ack);
+	drm_printf(p, "  CS_STATUS_CMD_PTR: 0x%llx\n", cs->status_cmd_ptr);
+	drm_printf(p, "  CS_STATUS_WAIT: 0x%x\n", cs->status_wait);
+	drm_printf(p, "  CS_STATUS_REQ_RESOURCE: 0x%x\n",
+		   cs->status_req_resource);
+	drm_printf(p, "  CS_STATUS_SCOREBOARDS: 0x%x\n",
+		   cs->status_scoreboards);
+	drm_printf(p, "  CS_STATUS_BLOCKED_REASON: 0x%x\n",
+		   cs->status_blocked_reason);
+	drm_printf(p, "  CS_FAULT: 0x%x\n", cs->fault);
+	drm_printf(p, "  CS_FATAL: 0x%x\n", cs->fatal);
+	drm_printf(p, "  CS_FAULT_INFO: 0x%llx\n", cs->fault_info);
+	drm_printf(p, "  CS_FATAL_INFO: 0x%llx\n", cs->fatal_info);
+
+	drm_printf(p, "  CS_INSERT: 0x%llx\n", cs->insert);
+	drm_printf(p, "  CS_EXTRACT_INIT: 0x%llx\n", cs->extract_init);
+	drm_printf(p, "  CS_EXTRACT: 0x%llx\n", cs->extract);
+	drm_printf(p, "  CS_ACTIVE: 0x%x\n", cs->active);
 }
 
 static void print_csg(struct drm_printer *p,
@@ -221,6 +254,11 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 	if (cd->mask & PANTHOR_COREDUMP_CSG) {
 		print_csg(p, &cd->csg, cd->group.csg_id);
 	}
+
+	if (cd->mask & PANTHOR_COREDUMP_CS) {
+		for (u32 i = 0; i < cd->group.queue_count; i++)
+			print_cs(p, &cd->cs[i], i);
+	}
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -245,6 +283,43 @@ static void process_cd(struct panthor_device *ptdev,
 
 	p = drm_coredump_printer(&iter);
 	print_cd(&p, cd);
+}
+
+static void capture_cs(struct panthor_device *ptdev,
+		       struct panthor_coredump_cs_state *cs, u32 csg_id,
+		       u32 cs_id, const struct panthor_group *group)
+{
+	const struct panthor_fw_cs_iface *cs_iface =
+		panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
+	const struct panthor_fw_ringbuf_input_iface *input_iface;
+	const struct panthor_fw_ringbuf_output_iface *output_iface;
+
+	cs->features = cs_iface->control->features;
+
+	cs->req = cs_iface->input->req;
+	cs->config = cs_iface->input->config;
+	cs->base = cs_iface->input->ringbuf_base;
+	cs->size = cs_iface->input->ringbuf_size;
+
+	cs->ack = cs_iface->output->ack;
+	cs->status_cmd_ptr = cs_iface->output->status_cmd_ptr;
+	cs->status_wait = cs_iface->output->status_wait;
+	cs->status_req_resource = cs_iface->output->status_req_resource;
+	cs->status_scoreboards = cs_iface->output->status_scoreboards;
+	cs->status_blocked_reason = cs_iface->output->status_blocked_reason;
+	cs->fault = cs_iface->output->fault;
+	cs->fatal = cs_iface->output->fatal;
+	cs->fault_info = cs_iface->output->fault_info;
+	cs->fatal_info = cs_iface->output->fatal_info;
+
+	panthor_group_get_ringbuf_iface(group, cs_id, &input_iface,
+					&output_iface);
+
+	cs->insert = input_iface->insert;
+	cs->extract_init = input_iface->extract;
+
+	cs->extract = output_iface->extract;
+	cs->active = output_iface->active;
 }
 
 static void capture_csg(struct panthor_device *ptdev,
@@ -322,6 +397,10 @@ static void capture_cd(struct panthor_device *ptdev,
 
 	capture_csg(ptdev, &cd->csg, cd->group.csg_id);
 	cd->mask |= PANTHOR_COREDUMP_CSG;
+
+	for (u32 i = 0; i < cd->group.queue_count; i++)
+		capture_cs(ptdev, &cd->cs[i], cd->group.csg_id, i, group);
+	cd->mask |= PANTHOR_COREDUMP_CS;
 }
 
 static void panthor_coredump_free(void *data)

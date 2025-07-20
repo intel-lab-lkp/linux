@@ -17,6 +17,8 @@ struct drm_panthor_queue_submit;
 struct panthor_coredump_group_state;
 struct panthor_device;
 struct panthor_file;
+struct panthor_fw_ringbuf_input_iface;
+struct panthor_fw_ringbuf_output_iface;
 struct panthor_group;
 struct panthor_group_pool;
 struct panthor_job;
@@ -30,6 +32,11 @@ int panthor_group_get_state(struct panthor_file *pfile,
 
 void panthor_group_capture_coredump(const struct panthor_group *group,
 				    struct panthor_coredump_group_state *state);
+
+void panthor_group_get_ringbuf_iface(
+	const struct panthor_group *group, u32 cs_id,
+	const struct panthor_fw_ringbuf_input_iface **input_iface,
+	const struct panthor_fw_ringbuf_output_iface **output_iface);
 
 struct drm_sched_job *
 panthor_job_create(struct panthor_file *pfile,

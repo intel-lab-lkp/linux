@@ -3715,6 +3715,17 @@ void panthor_group_capture_coredump(const struct panthor_group *group,
 	state->csg_id = group->csg_id;
 }
 
+void panthor_group_get_ringbuf_iface(
+	const struct panthor_group *group, u32 cs_id,
+	const struct panthor_fw_ringbuf_input_iface **input_iface,
+	const struct panthor_fw_ringbuf_output_iface **output_iface)
+{
+	const struct panthor_queue *queue = group->queues[cs_id];
+
+	*input_iface = queue->iface.input;
+	*output_iface = queue->iface.output;
+}
+
 int panthor_group_pool_create(struct panthor_file *pfile)
 {
 	struct panthor_group_pool *gpool;
