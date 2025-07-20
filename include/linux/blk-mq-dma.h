@@ -18,6 +18,7 @@ struct blk_dma_iter {
 	struct bvec_iter		iter;
 	struct bio			*bio;
 	struct pci_p2pdma_map_state	p2pdma;
+	bool				integrity;
 };
 
 bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
