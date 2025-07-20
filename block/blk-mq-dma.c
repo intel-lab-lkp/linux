@@ -10,7 +10,7 @@ struct phys_vec {
 	u32		len;
 };
 
-static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
+static bool blk_map_iter_next(struct request *req, struct blk_dma_iter *iter,
 			      struct phys_vec *vec)
 {
 	unsigned int max_size;
@@ -114,7 +114,7 @@ static bool blk_rq_dma_map_iova(struct request *req, struct device *dma_dev,
 		if (error)
 			break;
 		mapped += vec->len;
-	} while (blk_map_iter_next(req, &iter->iter, vec));
+	} while (blk_map_iter_next(req, iter, vec));
 
 	error = dma_iova_sync(dma_dev, state, 0, mapped);
 	if (error) {
@@ -153,8 +153,8 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 	unsigned int total_len = blk_rq_payload_bytes(req);
 	struct phys_vec vec;
 
-	iter->iter.bio = req->bio;
-	iter->iter.iter = req->bio->bi_iter;
+	iter->bio = req->bio;
+	iter->iter = req->bio->bi_iter;
 	memset(&iter->p2pdma, 0, sizeof(iter->p2pdma));
 	iter->status = BLK_STS_OK;
 
@@ -162,7 +162,7 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 	 * Grab the first segment ASAP because we'll need it to check for P2P
 	 * transfers.
 	 */
-	if (!blk_map_iter_next(req, &iter->iter, &vec))
+	if (!blk_map_iter_next(req, iter, &vec))
 		return false;
 
 	if (IS_ENABLED(CONFIG_PCI_P2PDMA) && (req->cmd_flags & REQ_P2PDMA)) {
@@ -213,7 +213,7 @@ bool blk_rq_dma_map_iter_next(struct request *req, struct device *dma_dev,
 {
 	struct phys_vec vec;
 
-	if (!blk_map_iter_next(req, &iter->iter, &vec))
+	if (!blk_map_iter_next(req, iter, &vec))
 		return false;
 
 	if (iter->p2pdma.map == PCI_P2PDMA_MAP_BUS_ADDR)
@@ -246,7 +246,7 @@ blk_next_sg(struct scatterlist **sg, struct scatterlist *sglist)
 int __blk_rq_map_sg(struct request *rq, struct scatterlist *sglist,
 		    struct scatterlist **last_sg)
 {
-	struct req_iterator iter = {
+	struct blk_dma_iter iter = {
 		.bio	= rq->bio,
 	};
 	struct phys_vec vec;
