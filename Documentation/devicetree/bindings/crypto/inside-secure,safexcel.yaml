@@ -26,16 +26,23 @@ properties:
     maxItems: 1
 
   interrupts:
+    minItems: 4
     maxItems: 6
 
   interrupt-names:
-    items:
-      - const: ring0
-      - const: ring1
-      - const: ring2
-      - const: ring3
-      - const: eip
-      - const: mem
+    oneOf:
+      - items:
+          - const: ring0
+          - const: ring1
+          - const: ring2
+          - const: ring3
+          - const: eip
+          - const: mem
+      - items:
+          - const: ring0
+          - const: ring1
+          - const: ring2
+          - const: ring3
 
   clocks:
     minItems: 1
