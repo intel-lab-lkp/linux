@@ -199,6 +199,7 @@ static int klp_resolve_symbols(Elf_Shdr *sechdrs, const char *strtab,
 	unsigned long sympos, addr;
 	bool sym_vmlinux;
 	bool sec_vmlinux = !strcmp(sec_objname, "vmlinux");
+	bool reload = false;
 
 	/*
 	 * Since the field widths for sym_objname and sym_name in the sscanf()
@@ -227,12 +228,32 @@ static int klp_resolve_symbols(Elf_Shdr *sechdrs, const char *strtab,
 			     ".klp.sym.%55[^.].%511[^,],%lu",
 			     sym_objname, sym_name, &sympos);
 		if (cnt != 3) {
-			pr_err("symbol %s has an incorrectly formatted name\n",
-			       strtab + sym->st_name);
-			return -EINVAL;
+			if (strchr(strtab + sym->st_name, '-')) {
+				memset(sym_objname, 0, strlen(sym_objname));
+				memset(sym_name, 0, strlen(sym_name));
+				cnt = sscanf(strtab + sym->st_name,
+					     ".klp.sym.%55[^-]-%511[^,],%lu",
+					     sym_objname, sym_name, &sympos);
+				if (cnt != 3) {
+					pr_err("symbol %s has an incorrectly formatted name, " \
+						"cnt=%d, sym_objname:%s, sym_name:%s\n",
+						strtab + sym->st_name, cnt, sym_objname, sym_name);
+					return -EINVAL;
+				}
+				reload = true;
+				sympos = 1;
+			} else {
+
+				pr_err("symbol %s has an incorrectly formatted name\n",
+					strtab + sym->st_name);
+				return -EINVAL;
+			}
 		}
 
-		sym_vmlinux = !strcmp(sym_objname, "vmlinux");
+		if (!reload)
+			sym_vmlinux = !strcmp(sym_objname, "vmlinux");
+		else
+			sym_vmlinux = sec_vmlinux;
 
 		/*
 		 * Prevent module-specific KLP rela sections from referencing
