@@ -129,7 +129,9 @@ static int ism_cmd(struct ism_dev *ism, void *cmd)
 {
 	struct ism_req_hdr *req = cmd;
 	struct ism_resp_hdr *resp = cmd;
+	unsigned long flags;
 
+	spin_lock_irqsave(&ism->cmd_lock, flags);
 	__ism_write_cmd(ism, req + 1, sizeof(*req), req->len - sizeof(*req));
 	__ism_write_cmd(ism, req, 0, sizeof(*req));
 
@@ -143,6 +145,7 @@ static int ism_cmd(struct ism_dev *ism, void *cmd)
 	}
 	__ism_read_cmd(ism, resp + 1, sizeof(*resp), resp->len - sizeof(*resp));
 out:
+	spin_unlock_irqrestore(&ism->cmd_lock, flags);
 	return resp->ret;
 }
 
@@ -606,6 +609,7 @@ static int ism_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return -ENOMEM;
 
 	spin_lock_init(&ism->lock);
+	spin_lock_init(&ism->cmd_lock);
 	dev_set_drvdata(&pdev->dev, ism);
 	ism->pdev = pdev;
 	ism->dev.parent = &pdev->dev;
