@@ -249,7 +249,11 @@ static unsigned int mon_copy_to_buff(const struct mon_reader_bin *this,
 		 * Copy data and advance pointers.
 		 */
 		buf = this->b_vec[off / CHUNK_SIZE].ptr + off % CHUNK_SIZE;
-		memcpy(buf, from, step_len);
+
+		if (copy_from_kernel_nofault(buf, from, step_len)) {
+			pr_warn("Failed to copy URB transfer buffer content into mon bin.");
+			return -EFAULT;
+		}
 		if ((off += step_len) >= this->b_size) off = 0;
 		from += step_len;
 		length -= step_len;
@@ -413,11 +417,13 @@ static unsigned int mon_bin_get_data(const struct mon_reader_bin *rp,
 
 	*flag = 0;
 	if (urb->num_sgs == 0) {
-		if (urb->transfer_buffer == NULL) {
+		if (
+			urb->transfer_buffer == NULL ||
+			mon_copy_to_buff(rp, offset, urb->transfer_buffer, length) < 0
+		) {
 			*flag = 'Z';
 			return length;
 		}
-		mon_copy_to_buff(rp, offset, urb->transfer_buffer, length);
 		length = 0;
 
 	} else {
@@ -434,6 +440,10 @@ static unsigned int mon_bin_get_data(const struct mon_reader_bin *rp,
 			this_len = min_t(unsigned int, sg->length, length);
 			offset = mon_copy_to_buff(rp, offset, sg_virt(sg),
 					this_len);
+			if (offset < 0) {
+				*flag = 'Z';
+				return length;
+			}
 			length -= this_len;
 		}
 		if (i == 0)
