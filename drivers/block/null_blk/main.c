@@ -1854,13 +1854,14 @@ static int null_init_global_tag_set(void)
 
 static int null_setup_tagset(struct nullb *nullb)
 {
+	nullb->tag_set->driver_data = nullb;
+
 	if (nullb->dev->shared_tags) {
 		nullb->tag_set = &tag_set;
 		return null_init_global_tag_set();
 	}
 
 	nullb->tag_set = &nullb->__tag_set;
-	nullb->tag_set->driver_data = nullb;
 	nullb->tag_set->nr_hw_queues = nullb->dev->submit_queues;
 	nullb->tag_set->queue_depth = nullb->dev->hw_queue_depth;
 	nullb->tag_set->numa_node = nullb->dev->home_node;
