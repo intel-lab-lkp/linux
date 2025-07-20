@@ -10,6 +10,7 @@
 struct drm_exec;
 struct drm_sched_job;
 struct drm_memory_stats;
+struct panthor_coredump_vma_state;
 struct panthor_gem_object;
 struct panthor_heap_pool;
 struct panthor_vm;
@@ -95,6 +96,9 @@ void panthor_vm_update_resvs(struct panthor_vm *vm, struct drm_exec *exec,
 			     struct dma_fence *fence,
 			     enum dma_resv_usage private_usage,
 			     enum dma_resv_usage extobj_usage);
+
+struct panthor_coredump_vma_state *
+panthor_vm_capture_coredump(struct panthor_vm *vm, u32 *vma_count, gfp_t gfp);
 
 int panthor_mmu_pt_cache_init(void);
 void panthor_mmu_pt_cache_fini(void);

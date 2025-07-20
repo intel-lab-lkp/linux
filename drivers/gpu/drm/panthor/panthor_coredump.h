@@ -10,6 +10,7 @@
 
 struct panthor_coredump;
 struct panthor_device;
+struct panthor_gem_object;
 struct panthor_group;
 
 /**
@@ -133,6 +134,20 @@ struct panthor_coredump_as_state {
 	u32 faultstatus;
 	u64 faultaddress;
 	u64 faultextra;
+};
+
+/**
+ * struct panthor_coredump_vma_state - Coredump VMA state
+ *
+ * Interesting panthor_vma fields.
+ */
+struct panthor_coredump_vma_state {
+	u32 flags;
+	u64 iova;
+	u64 size;
+
+	struct panthor_gem_object *bo;
+	u64 bo_offset;
 };
 
 #ifdef CONFIG_DEV_COREDUMP

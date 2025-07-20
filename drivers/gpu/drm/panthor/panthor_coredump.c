@@ -14,6 +14,7 @@
 #include "panthor_coredump.h"
 #include "panthor_device.h"
 #include "panthor_fw.h"
+#include "panthor_gem.h"
 #include "panthor_mmu.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
@@ -28,6 +29,7 @@ enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_CSG = BIT(3),
 	PANTHOR_COREDUMP_CS = BIT(4),
 	PANTHOR_COREDUMP_AS = BIT(5),
+	PANTHOR_COREDUMP_VMA = BIT(6),
 };
 
 /**
@@ -45,6 +47,9 @@ struct panthor_coredump {
 	/** @ptdev: Device. */
 	struct panthor_device *ptdev;
 
+	/** @gfp: Allocation flags for panthor_coredump_capture. */
+	gfp_t gfp;
+
 	/** @work: Bottom half of panthor_coredump_capture. */
 	struct work_struct work;
 
@@ -60,6 +65,8 @@ struct panthor_coredump {
 	struct panthor_coredump_csg_state csg;
 	struct panthor_coredump_cs_state cs[MAX_CS_PER_CSG];
 	struct panthor_coredump_as_state as;
+	struct panthor_coredump_vma_state *vma;
+	u32 vma_count;
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -89,6 +96,38 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 		return "JOB_TIMEOUT";
 	default:
 		return "UNKNOWN";
+	}
+}
+
+static void print_vma(struct drm_printer *p,
+		      const struct panthor_coredump_vma_state *vma, u32 vma_id,
+		      size_t *max_dyn_size)
+{
+	struct panthor_gem_object *bo = vma->bo;
+
+	if (!vma_id)
+		drm_puts(p, "vma:\n");
+
+	drm_printf(p, "  - flags: 0x%x\n", vma->flags);
+	drm_printf(p, "    iova: 0x%llx\n", vma->iova);
+	drm_printf(p, "    size: 0x%llx\n", vma->size);
+
+	if (!bo)
+		return;
+
+	/* bo->label is dynamic */
+	if (max_dyn_size) {
+		drm_puts(p, "    label: |\n");
+		drm_puts(p, "      \n");
+		*max_dyn_size += 32;
+	} else {
+		scoped_guard(mutex, &bo->label.lock)
+		{
+			if (bo->label.str) {
+				drm_puts(p, "    label: |\n");
+				drm_printf(p, "      %.32s\n", bo->label.str);
+			}
+		}
 	}
 }
 
@@ -247,7 +286,8 @@ static void print_header(struct drm_printer *p,
 	drm_printf(p, "  timestamp: %lld\n", ktime_to_ns(header->timestamp));
 }
 
-static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
+static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd,
+		     size_t *max_dyn_size)
 {
 	/* in YAML format */
 	drm_puts(p, "---\n");
@@ -277,6 +317,11 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 
 		print_as(p, &cd->as, as_id);
 	}
+
+	if (cd->mask & PANTHOR_COREDUMP_VMA) {
+		for (u32 i = 0; i < cd->vma_count; i++)
+			print_vma(p, &cd->vma[i], i, max_dyn_size);
+	}
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -286,10 +331,13 @@ static void process_cd(struct panthor_device *ptdev,
 		.remain = SSIZE_MAX,
 	};
 	struct drm_printer p = drm_coredump_printer(&iter);
+	size_t max_dyn_size = 0;
 
-	print_cd(&p, cd);
+	print_cd(&p, cd, &max_dyn_size);
+	if (max_dyn_size > iter.remain)
+		return;
 
-	iter.remain = SSIZE_MAX - iter.remain;
+	iter.remain = SSIZE_MAX - iter.remain + max_dyn_size;
 	iter.data = kvmalloc(iter.remain, GFP_USER);
 	if (!iter.data)
 		return;
@@ -297,10 +345,25 @@ static void process_cd(struct panthor_device *ptdev,
 	cd->data = iter.data;
 	cd->size = iter.remain;
 
-	drm_info(&ptdev->base, "generating coredump of size %zu\n", cd->size);
+	drm_info(&ptdev->base, "generating coredump of estimated size %zu\n",
+		 cd->size);
 
 	p = drm_coredump_printer(&iter);
-	print_cd(&p, cd);
+	print_cd(&p, cd, NULL);
+
+	cd->size -= iter.remain;
+
+	/* free vma now */
+	if (cd->mask & PANTHOR_COREDUMP_VMA) {
+		for (u32 i = 0; i < cd->vma_count; i++) {
+			struct panthor_coredump_vma_state *vma = &cd->vma[i];
+
+			drm_gem_object_put(&vma->bo->base.base);
+		}
+		kfree(cd->vma);
+
+		cd->mask &= ~PANTHOR_COREDUMP_VMA;
+	}
 }
 
 static void capture_as(struct panthor_device *ptdev,
@@ -434,6 +497,10 @@ static void capture_cd(struct panthor_device *ptdev,
 
 	capture_as(ptdev, &cd->as, panthor_vm_as(vm));
 	cd->mask |= PANTHOR_COREDUMP_AS;
+
+	cd->vma = panthor_vm_capture_coredump(vm, &cd->vma_count, cd->gfp);
+	if (cd->vma_count)
+		cd->mask |= PANTHOR_COREDUMP_VMA;
 }
 
 static void panthor_coredump_free(void *data)
@@ -504,6 +571,7 @@ panthor_coredump_alloc(struct panthor_device *ptdev,
 	}
 
 	cd->ptdev = ptdev;
+	cd->gfp = gfp;
 	INIT_WORK(&cd->work, panthor_coredump_process_work);
 
 	cd->header.reason = reason;

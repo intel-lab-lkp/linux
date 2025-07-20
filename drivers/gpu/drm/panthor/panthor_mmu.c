@@ -27,6 +27,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/sizes.h>
 
+#include "panthor_coredump.h"
 #include "panthor_device.h"
 #include "panthor_gem.h"
 #include "panthor_heap.h"
@@ -2681,6 +2682,48 @@ int panthor_vm_prepare_mapped_bos_resvs(struct drm_exec *exec, struct panthor_vm
 		return ret;
 
 	return drm_gpuvm_prepare_objects(&vm->base, exec, slot_count);
+}
+
+struct panthor_coredump_vma_state *
+panthor_vm_capture_coredump(struct panthor_vm *vm, u32 *vma_count, gfp_t gfp)
+{
+	struct drm_gpuva *gpuva;
+	u32 count;
+
+	guard(mutex)(&vm->op_lock);
+
+	count = 0;
+	drm_gpuvm_for_each_va(gpuva, &vm->base)
+		count++;
+
+	struct panthor_coredump_vma_state *states =
+		kcalloc(count, sizeof(*states), gfp);
+	if (!states) {
+		*vma_count = 0;
+		return NULL;
+	}
+
+	count = 0;
+	drm_gpuvm_for_each_va(gpuva, &vm->base) {
+		const struct panthor_vma *vma =
+			container_of(gpuva, struct panthor_vma, base);
+		struct panthor_coredump_vma_state *state = &states[count];
+
+		state->flags = vma->flags;
+		state->iova = vma->base.va.addr;
+		state->size = vma->base.va.range;
+		if (vma->base.gem.obj) {
+			state->bo = to_panthor_bo(vma->base.gem.obj);
+			state->bo_offset = vma->base.gem.offset;
+			drm_gem_object_get(&state->bo->base.base);
+		}
+
+		count++;
+	}
+
+	*vma_count = count;
+
+	return states;
 }
 
 /**
