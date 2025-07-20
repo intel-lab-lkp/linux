@@ -56,6 +56,19 @@ struct panthor_coredump_gpu_state {
 	u32 mcu_features;
 };
 
+/**
+ * struct panthor_coredump_glb_state - Coredump GLB state
+ *
+ * Interesting panthor_fw_global_iface fields.
+ */
+struct panthor_coredump_glb_state {
+	u32 version;
+	u32 features;
+	u32 group_num;
+	u32 req;
+	u32 ack;
+};
+
 #ifdef CONFIG_DEV_COREDUMP
 
 struct panthor_coredump *

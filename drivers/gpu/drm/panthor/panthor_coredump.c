@@ -13,6 +13,7 @@
 
 #include "panthor_coredump.h"
 #include "panthor_device.h"
+#include "panthor_fw.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
 
@@ -22,6 +23,7 @@
 enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_GROUP = BIT(0),
 	PANTHOR_COREDUMP_GPU = BIT(1),
+	PANTHOR_COREDUMP_GLB = BIT(2),
 };
 
 /**
@@ -50,6 +52,7 @@ struct panthor_coredump {
 
 	struct panthor_coredump_group_state group;
 	struct panthor_coredump_gpu_state gpu;
+	struct panthor_coredump_glb_state glb;
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -80,6 +83,17 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 	default:
 		return "UNKNOWN";
 	}
+}
+
+static void print_glb(struct drm_printer *p,
+		      const struct panthor_coredump_glb_state *glb)
+{
+	drm_puts(p, "glb:\n");
+	drm_printf(p, "  GLB_VERSION: 0x%x\n", glb->version);
+	drm_printf(p, "  GLB_FEATURES: 0x%x\n", glb->features);
+	drm_printf(p, "  GLB_GROUP_NUM: 0x%x\n", glb->group_num);
+	drm_printf(p, "  GLB_REQ: 0x%x\n", glb->req);
+	drm_printf(p, "  GLB_ACK: 0x%x\n", glb->ack);
 }
 
 static void print_gpu(struct drm_printer *p,
@@ -176,6 +190,9 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 	/* many gpu states are static and are captured in drm_panthor_gpu_info */
 	print_gpu(p, cd->mask & PANTHOR_COREDUMP_GPU ? &cd->gpu : NULL,
 		  &cd->ptdev->gpu_info);
+
+	if (cd->mask & PANTHOR_COREDUMP_GLB)
+		print_glb(p, &cd->glb);
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -200,6 +217,19 @@ static void process_cd(struct panthor_device *ptdev,
 
 	p = drm_coredump_printer(&iter);
 	print_cd(&p, cd);
+}
+
+static void capture_glb(struct panthor_device *ptdev,
+			struct panthor_coredump_glb_state *glb)
+{
+	const struct panthor_fw_global_iface *glb_iface =
+		panthor_fw_get_glb_iface(ptdev);
+
+	glb->version = glb_iface->control->version;
+	glb->features = glb_iface->control->features;
+	glb->group_num = glb_iface->control->group_num;
+	glb->req = glb_iface->input->req;
+	glb->ack = glb_iface->output->ack;
 }
 
 static void capture_gpu(struct panthor_device *ptdev,
@@ -231,6 +261,9 @@ static void capture_cd(struct panthor_device *ptdev,
 
 	capture_gpu(ptdev, &cd->gpu);
 	cd->mask |= PANTHOR_COREDUMP_GPU;
+
+	capture_glb(ptdev, &cd->glb);
+	cd->mask |= PANTHOR_COREDUMP_GLB;
 }
 
 static void panthor_coredump_free(void *data)
