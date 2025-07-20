@@ -3670,6 +3670,7 @@ static void panthor_sched_coredump_locked(struct panthor_device *ptdev,
 					  struct panthor_group *group)
 {
 	struct panthor_coredump *cd;
+	int pm_active;
 
 	lockdep_assert_held(&ptdev->scheduler->lock);
 
@@ -3678,7 +3679,12 @@ static void panthor_sched_coredump_locked(struct panthor_device *ptdev,
 	if (!cd)
 		return;
 
+	pm_active = pm_runtime_get_if_active(ptdev->base.dev);
+
 	panthor_coredump_capture(cd, group);
+
+	if (pm_active == 1)
+		pm_runtime_put(ptdev->base.dev);
 }
 
 void panthor_group_capture_coredump(const struct panthor_group *group,

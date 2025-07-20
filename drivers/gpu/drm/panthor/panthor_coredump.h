@@ -40,6 +40,22 @@ struct panthor_coredump_group_state {
 	int csg_id;
 };
 
+/**
+ * struct panthor_coredump_gpu_state - Coredump GPU state
+ *
+ * Interesting GPU_CONTROL regs.
+ */
+struct panthor_coredump_gpu_state {
+	u32 gpu_status;
+	u32 gpu_faultstatus;
+	u64 gpu_faultaddress;
+	u32 l2_config;
+	u32 doorbell_features;
+	u32 amba_enable;
+	u32 mcu_status;
+	u32 mcu_features;
+};
+
 #ifdef CONFIG_DEV_COREDUMP
 
 struct panthor_coredump *

@@ -7,11 +7,13 @@
 #include <generated/utsrelease.h>
 #include <linux/devcoredump.h>
 #include <linux/err.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
 
 #include "panthor_coredump.h"
 #include "panthor_device.h"
+#include "panthor_regs.h"
 #include "panthor_sched.h"
 
 /**
@@ -19,6 +21,7 @@
  */
 enum panthor_coredump_mask {
 	PANTHOR_COREDUMP_GROUP = BIT(0),
+	PANTHOR_COREDUMP_GPU = BIT(1),
 };
 
 /**
@@ -46,6 +49,7 @@ struct panthor_coredump {
 	u32 mask;
 
 	struct panthor_coredump_group_state group;
+	struct panthor_coredump_gpu_state gpu;
 
 	/* @data: Serialized coredump data. */
 	void *data;
@@ -75,6 +79,63 @@ static const char *reason_str(enum panthor_coredump_reason reason)
 		return "JOB_TIMEOUT";
 	default:
 		return "UNKNOWN";
+	}
+}
+
+static void print_gpu(struct drm_printer *p,
+		      const struct panthor_coredump_gpu_state *gpu,
+		      const struct drm_panthor_gpu_info *info)
+{
+	drm_puts(p, "gpu:\n");
+	drm_printf(p, "  GPU_ID: 0x%x\n", info->gpu_id);
+	drm_printf(p, "  L2_FEATURES: 0x%x\n", info->l2_features);
+	drm_printf(p, "  CORE_FEATURES: 0x%x\n", info->core_features);
+	drm_printf(p, "  TILER_FEATURES: 0x%x\n", info->tiler_features);
+	drm_printf(p, "  MEM_FEATURES: 0x%x\n", info->mem_features);
+	drm_printf(p, "  MMU_FEATURES: 0x%x\n", info->mmu_features);
+	drm_printf(p, "  AS_PRESENT: 0x%x\n", info->as_present);
+	drm_printf(p, "  CSF_ID: 0x%x\n", info->csf_id);
+	drm_printf(p, "  MMU_FEATURES: 0x%x\n", info->mmu_features);
+
+	if (gpu) {
+		drm_printf(p, "  GPU_STATUS: 0x%x\n", gpu->gpu_status);
+		drm_printf(p, "  GPU_FAULTSTATUS: 0x%x\n",
+			   gpu->gpu_faultstatus);
+		drm_printf(p, "  GPU_FAULTADDRESS: 0x%llx\n",
+			   gpu->gpu_faultaddress);
+		drm_printf(p, "  L2_CONFIG: 0x%x\n", gpu->l2_config);
+	}
+
+	drm_printf(p, "  THREAD_MAX_THREADS: 0x%x\n", info->max_threads);
+	drm_printf(p, "  THREAD_MAX_WORKGROUP_SIZE: 0x%x\n",
+		   info->thread_max_workgroup_size);
+	drm_printf(p, "  THREAD_MAX_BARRIER_SIZE: 0x%x\n",
+		   info->thread_max_barrier_size);
+	drm_printf(p, "  THREAD_FEATURES: 0x%x\n", info->thread_features);
+	drm_printf(p, "  TEXTURE_FEATURES_0: 0x%x\n",
+		   info->texture_features[0]);
+	drm_printf(p, "  TEXTURE_FEATURES_1: 0x%x\n",
+		   info->texture_features[1]);
+	drm_printf(p, "  TEXTURE_FEATURES_2: 0x%x\n",
+		   info->texture_features[2]);
+	drm_printf(p, "  TEXTURE_FEATURES_3: 0x%x\n",
+		   info->texture_features[3]);
+
+	if (gpu) {
+		drm_printf(p, "  DOORBELL_FEATURES: 0x%x\n",
+			   gpu->doorbell_features);
+	}
+
+	drm_printf(p, "  SHADER_PRESENT: 0x%llx\n", info->shader_present);
+	drm_printf(p, "  TILER_PRESENT: 0x%llx\n", info->tiler_present);
+	drm_printf(p, "  L2_PRESENT: 0x%llx\n", info->l2_present);
+	drm_printf(p, "  REVIDR: 0x%x\n", info->gpu_rev);
+	drm_printf(p, "  AMBA_FEATURES: 0x%x\n", info->coherency_features);
+
+	if (gpu) {
+		drm_printf(p, "  AMBA_ENABLE: 0x%x\n", gpu->amba_enable);
+		drm_printf(p, "  MCU_STATUS: 0x%x\n", gpu->mcu_status);
+		drm_printf(p, "  MCU_FEATURES: 0x%x\n", gpu->mcu_features);
 	}
 }
 
@@ -111,6 +172,10 @@ static void print_cd(struct drm_printer *p, const struct panthor_coredump *cd)
 
 	if (cd->mask & PANTHOR_COREDUMP_GROUP)
 		print_group(p, &cd->group);
+
+	/* many gpu states are static and are captured in drm_panthor_gpu_info */
+	print_gpu(p, cd->mask & PANTHOR_COREDUMP_GPU ? &cd->gpu : NULL,
+		  &cd->ptdev->gpu_info);
 }
 
 static void process_cd(struct panthor_device *ptdev,
@@ -137,6 +202,19 @@ static void process_cd(struct panthor_device *ptdev,
 	print_cd(&p, cd);
 }
 
+static void capture_gpu(struct panthor_device *ptdev,
+			struct panthor_coredump_gpu_state *gpu)
+{
+	gpu->gpu_status = gpu_read(ptdev, GPU_STATUS);
+	gpu->gpu_faultstatus = gpu_read(ptdev, GPU_FAULT_STATUS);
+	gpu->gpu_faultaddress = gpu_read64(ptdev, GPU_FAULT_ADDR);
+	gpu->l2_config = gpu_read(ptdev, GPU_L2_CONFIG);
+	gpu->doorbell_features = gpu_read(ptdev, GPU_DOORBELL_FEATURES);
+	gpu->amba_enable = gpu_read(ptdev, GPU_COHERENCY_PROTOCOL);
+	gpu->mcu_status = gpu_read(ptdev, MCU_STATUS);
+	gpu->mcu_features = gpu_read(ptdev, MCU_FEATURES);
+}
+
 static void capture_cd(struct panthor_device *ptdev,
 		       struct panthor_coredump *cd, struct panthor_group *group)
 {
@@ -146,6 +224,13 @@ static void capture_cd(struct panthor_device *ptdev,
 		panthor_group_capture_coredump(group, &cd->group);
 		cd->mask |= PANTHOR_COREDUMP_GROUP;
 	}
+
+	/* remaining states require the device to be powered on */
+	if (!pm_runtime_active(ptdev->base.dev))
+		return;
+
+	capture_gpu(ptdev, &cd->gpu);
+	cd->mask |= PANTHOR_COREDUMP_GPU;
 }
 
 static void panthor_coredump_free(void *data)

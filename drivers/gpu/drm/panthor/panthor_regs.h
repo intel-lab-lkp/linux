@@ -65,6 +65,8 @@
 #define GPU_FAULT_STATUS				0x3C
 #define GPU_FAULT_ADDR					0x40
 
+#define GPU_L2_CONFIG					0x48
+
 #define GPU_PWR_KEY					0x50
 #define  GPU_PWR_KEY_UNLOCK				0x2968A819
 #define GPU_PWR_OVERRIDE0				0x54
@@ -80,6 +82,8 @@
 #define GPU_THREAD_FEATURES				0xAC
 
 #define GPU_TEXTURE_FEATURES(n)				(0xB0 + ((n) * 4))
+
+#define GPU_DOORBELL_FEATURES				0xC0
 
 #define GPU_SHADER_PRESENT				0x100
 #define GPU_TILER_PRESENT				0x110
@@ -125,6 +129,8 @@
 #define MCU_STATUS_ENABLED				1
 #define MCU_STATUS_HALT					2
 #define MCU_STATUS_FATAL				3
+
+#define MCU_FEATURES					0x708
 
 /* Job Control regs */
 #define JOB_INT_RAWSTAT					0x1000
