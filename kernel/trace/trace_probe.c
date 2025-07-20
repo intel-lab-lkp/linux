@@ -247,7 +247,22 @@ int traceprobe_split_symbol_offset(char *symbol, long *offset)
 	return 0;
 }
 
-/* @buf must has MAX_EVENT_NAME_LEN size */
+/**
+ * traceprobe_parse_event_name - Parse a string into group and event names
+ * @pevent: A pointer to the string to be parsed. On return, this is updated
+ *          to point to the event name part of the string.
+ * @pgroup: A pointer to the group name. This is updated to point to the parsed
+ *          group name, which is stored in @buf.
+ * @buf:    A buffer to store the parsed group name.
+ * @offset: The offset of the string in the original user command, for logging.
+ *
+ * Description: This parses a string with the format `[GROUP/][EVENT]` or
+ *          `[GROUP.][EVENT]` (either GROUP or EVENT or both must be specified).
+ *          The parsed group name is stored in @buf.
+ *          The caller must ensure @buf is at least MAX_EVENT_NAME_LEN bytes.
+ *
+ * Return: 0 on success, or -EINVAL on failure.
+ */
 int traceprobe_parse_event_name(const char **pevent, const char **pgroup,
 				char *buf, int offset)
 {
