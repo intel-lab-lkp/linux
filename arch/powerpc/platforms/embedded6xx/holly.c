@@ -178,6 +178,7 @@ static void __init holly_init_IRQ(void)
 	cascade_node = of_find_node_by_type(NULL, "pic-router");
 	if (cascade_node == NULL) {
 		printk(KERN_ERR "%s: No tsi108 pci cascade node found !\n", __func__);
+		of_node_put(tsi_pci);
 		return;
 	}
 
