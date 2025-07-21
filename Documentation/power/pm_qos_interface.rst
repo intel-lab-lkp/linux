@@ -17,6 +17,13 @@ The latency unit used in the PM QoS framework is the microsecond (usec).
 1. PM QoS framework
 ===================
 
+For CPU latency QoS, there are two types of interfaces: one is the global CPU
+latency QoS interface, and the other is the CPU affinity latency QoS, where the
+CPU is determined by the CPU affinity mask, which can apply to part or all of
+the CPUs.
+
+1) Global CPU latency QoS interface:
+
 A global list of CPU latency QoS requests is maintained along with an aggregated
 (effective) target value.  The aggregated target value is updated with changes
 to the request list or elements of the list.  For CPU latency QoS, the
@@ -76,6 +83,56 @@ cpu_latency_qos_update_request() call.
 To remove the user mode request for a target value simply close the device
 node.
 
+2) CPU affinity latency QoS interface:
+
+The Global CPU latency QoS interface can easily limit the latency for all CPUs.
+If we want to limit the CPU latency for partial CPUs specified by a CPU
+affinity mask, we can use the CPU affinity latency QoS interface. Currently,
+this is only supported for kernel users. This will only prevent the CPUs
+specified by the mask from entering C states. Typically, some threads or
+drivers know which specific CPUs they are interested in. For example, drivers
+with IRQ affinity only want interrupts to wake up and be handled on specific
+CPUs. Similarly, kernel thread bound to specific CPUs through affinity only
+care about the latency of those particular CPUs.
+
+It allows flexible and precise latency QoS settings for specific CPUs. This can
+help save power, especially on heterogeneous platforms with big and little cores,
+as well as power-conscious embedded systems. For example:
+
+                         driver A       rt kthread B      module C
+    CPU IDs (mask):        0-3              2-5              6-7
+    target latency(us):    20               30               100
+                            |                |                |
+                            v                v                v
+                            +---------------------------------+
+                            |        PM  QoS  Framework       |
+                            +---------------------------------+
+                            |                |                |
+                            v                v                v
+    CPU IDs (mask):        0-3            2-3,4-5            6-7
+    runtime latency(us):   20              20,30             100
+
+The usage of kernel space is:
+
+int cpu_affinity_latency_qos_add(handle, affinity_mask, latency_value);
+  Will insert an element into the CPUs specified by the affinity_mask latency
+  QoS list with the target value. Upon change to this list the new target is
+  recomputed. Clients of PM QoS need to save the returned handle for future use
+  in other PM QoS API functions.
+
+int cpu_affinity_latency_qos_remove(handle);
+  Will remove the element. After removal it will update the aggregate target
+  and call the notification tree if the target was changed as a result of
+  removing the request.
+
+bool cpu_affinity_latency_qos_active(handle);
+  Returns true if the request is still active, i.e. it has not been removed from
+  the CPU latency QoS list.
+
+Note:
+a) The CPU affinity latency QoS interface uses a mutex, which might sleep.
+b) Use dev_pm_qos_raw_resume_latency(device) to read the CPU latency set by the
+   above interface, by passing the CPU device.
 
 2. PM QoS per-device latency and flags framework
 ================================================
