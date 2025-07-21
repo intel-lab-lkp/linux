@@ -2267,7 +2267,7 @@ static int st_lsm6dsx_init_hw_timer(struct st_lsm6dsx_hw *hw)
 	return 0;
 }
 
-static int st_lsm6dsx_reset_device(struct st_lsm6dsx_hw *hw)
+int st_lsm6dsx_reset_device(struct st_lsm6dsx_hw *hw)
 {
 	const struct st_lsm6dsx_reg *reg;
 	int err;
@@ -2302,6 +2302,7 @@ static int st_lsm6dsx_reset_device(struct st_lsm6dsx_hw *hw)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS(st_lsm6dsx_reset_device, "IIO_LSM6DSX");
 
 static int st_lsm6dsx_init_device(struct st_lsm6dsx_hw *hw)
 {

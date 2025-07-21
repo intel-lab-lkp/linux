@@ -466,6 +466,7 @@ extern const struct dev_pm_ops st_lsm6dsx_pm_ops;
 
 int st_lsm6dsx_probe(struct device *dev, int irq, int hw_id,
 		     struct regmap *regmap);
+int st_lsm6dsx_reset_device(struct st_lsm6dsx_hw *hw);
 int st_lsm6dsx_sensor_set_enable(struct st_lsm6dsx_sensor *sensor,
 				 bool enable);
 int st_lsm6dsx_fifo_setup(struct st_lsm6dsx_hw *hw);

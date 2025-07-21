@@ -41,10 +41,24 @@ static int st_lsm6dsx_i3c_probe(struct i3c_device *i3cdev)
 	return st_lsm6dsx_probe(dev, 0, (uintptr_t)id->data, regmap);
 }
 
+static void st_lsm6dsx_i3c_shutdown(struct device *dev)
+{
+	struct st_lsm6dsx_hw *hw = dev_get_drvdata(dev);
+
+	/*
+	 * Perform device reset to ensure the sensor is in a known
+	 * good state for subsequent re-initialization or power cycles.
+	 * This addresses issues where the sensor might not enumerate
+	 * correctly after a warm reboot (e.g., kexec).
+	 */
+	st_lsm6dsx_reset_device(hw);
+}
+
 static struct i3c_driver st_lsm6dsx_driver = {
 	.driver = {
 		.name = "st_lsm6dsx_i3c",
 		.pm = pm_sleep_ptr(&st_lsm6dsx_pm_ops),
+		.shutdown = st_lsm6dsx_i3c_shutdown,
 	},
 	.probe = st_lsm6dsx_i3c_probe,
 	.id_table = st_lsm6dsx_i3c_ids,
