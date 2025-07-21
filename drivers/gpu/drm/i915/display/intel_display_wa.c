@@ -5,11 +5,13 @@
 
 #include <drm/drm_print.h>
 
+#include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_de.h"
 #include "intel_display_core.h"
 #include "intel_display_regs.h"
 #include "intel_display_wa.h"
+#include "intel_step.h"
 
 static void gen11_display_wa_apply(struct intel_display *display)
 {
@@ -52,6 +54,20 @@ static bool intel_display_needs_wa_16025573575(struct intel_display *display)
 	return DISPLAY_VERx100(display) == 3000 || DISPLAY_VERx100(display) == 3002;
 }
 
+/*
+ * Wa_14021768792:
+ * Fixes: Limitation of Link M/N ratio > 10 for specific Xe2HPD platforms.
+ * Workaround: Use HDMI_EMP_DATA, CHICKEN_BITs and extended bits in LINK_N registers to support
+ * LINK M/N ratios from > 10 but < 15.
+ */
+static bool intel_display_needs_wa_14021768792(struct intel_display *display)
+{
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	return (DISPLAY_VER(display) == 14 && IS_DGFX(i915) &&
+		IS_DISPLAY_STEP(display, STEP_C0, STEP_FOREVER));
+}
+
 bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa, const char *name)
 {
 	switch (wa) {
@@ -59,6 +75,8 @@ bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa,
 		return intel_display_needs_wa_16023588340(display);
 	case INTEL_DISPLAY_WA_16025573575:
 		return intel_display_needs_wa_16025573575(display);
+	case INTEL_DISPLAY_WA_14021768792:
+		return intel_display_needs_wa_14021768792(display);
 	default:
 		drm_WARN(display->drm, 1, "Missing Wa number: %s\n", name);
 		break;
