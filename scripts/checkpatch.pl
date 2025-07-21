@@ -3318,6 +3318,16 @@ sub process {
 		      $commit_log_possible_stack_dump)) {
 			WARN("COMMIT_LOG_LONG_LINE",
 			     "Prefer a maximum 75 chars per line (possible unwrapped commit description?)\n" . $herecurr);
+
+# Suggest including test information for non-trivial changes
+		if ($in_commit_log && !$non_utf8_charset &&
+		    $line !~ /test|verify|tried|ran|checked|confirmed/i &&
+		    $commit_log_lines > 3) {
+			if ($commit_log_long_line eq "" && $commit_log_has_diff) {
+				CHECK("NO_TEST_INFO",
+				      "Consider mentioning how this change was tested\n" . $herecurr);
+			}
+		}
 			$commit_log_long_line = 1;
 		}
 
