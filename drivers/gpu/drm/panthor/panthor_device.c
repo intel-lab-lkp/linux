@@ -34,7 +34,7 @@ static int panthor_gpu_coherency_init(struct panthor_device *ptdev)
 	 * ACE protocol has never been supported for command stream frontend GPUs.
 	 */
 	if ((gpu_read(ptdev, GPU_COHERENCY_FEATURES) &
-		      GPU_COHERENCY_PROT_BIT(ACE_LITE)))
+	     GPU_COHERENCY_FEATURE_ACE_LITE))
 		return 0;
 
 	drm_err(&ptdev->base, "Coherency not supported by the device");
