@@ -1413,7 +1413,7 @@ intel_dp_get_max_m_n_ratio(void)
 	return 10;
 }
 
-static bool
+bool
 intel_dp_can_support_m_n(int pixel_clock,
 			 int link_rate)
 {

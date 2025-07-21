@@ -202,10 +202,10 @@ static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
 	return max(overhead, intel_dp_bw_fec_overhead(crtc_state->fec_enable));
 }
 
-static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
-				     int overhead,
-				     int bpp_x16,
-				     struct intel_link_m_n *m_n)
+static int intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
+				    int overhead,
+				    int bpp_x16,
+				    struct intel_link_m_n *m_n)
 {
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
@@ -218,6 +218,8 @@ static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 			       m_n);
 
 	m_n->tu = DIV_ROUND_UP_ULL(mul_u32_u32(m_n->data_m, 64), m_n->data_n);
+
+	return 0;
 }
 
 static int intel_dp_mst_calc_pbn(int pixel_clock, int bpp_x16, int bw_overhead)
@@ -445,6 +447,11 @@ static int mst_stream_compute_link_config(struct intel_dp *intel_dp,
 {
 	crtc_state->lane_count = limits->max_lane_count;
 	crtc_state->port_clock = limits->max_rate;
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+
+	if (!intel_dp_can_support_m_n(adjusted_mode->clock, crtc_state->port_clock))
+		return -EINVAL;
 
 	/*
 	 * FIXME: allocate the BW according to link_bpp, which in the case of
@@ -1547,6 +1554,11 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	}
 
 	if (mode_rate > max_rate && !dsc) {
+		*status = MODE_CLOCK_HIGH;
+		return 0;
+	}
+
+	if (!intel_dp_can_support_m_n(mode->clock, max_rate)) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
