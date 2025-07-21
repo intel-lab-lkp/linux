@@ -2466,7 +2466,8 @@ static void btrfs_zone_finish_endio_workfn(struct work_struct *work)
 
 	wait_on_extent_buffer_writeback(bg->last_eb);
 	free_extent_buffer(bg->last_eb);
-	btrfs_zone_finish_endio(bg->fs_info, bg->start, bg->length);
+	bg->last_eb = NULL;
+	do_zone_finish(bg, true);
 	btrfs_put_block_group(bg);
 }
 
