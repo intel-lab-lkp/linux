@@ -98,6 +98,7 @@ struct ltr390_data {
 	enum ltr390_mode mode;
 	int gain;
 	int int_time_us;
+	bool data_fresh_check_en;
 };
 
 static const struct regmap_config ltr390_regmap_config = {
@@ -199,10 +200,40 @@ static ssize_t data_fresh_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", !!(status & LTR390_DATA_STATUS_MASK));
 }
 
+static ssize_t data_fresh_check_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ltr390_data *data = iio_priv(dev_to_iio_dev(dev));
+
+	guard(mutex)(&data->lock);
+
+	return sysfs_emit(buf, "%d\n", data->data_fresh_check_en);
+}
+
+static ssize_t data_fresh_check_enable_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t len)
+{
+	int ret;
+	bool data_fresh_check_en;
+	struct ltr390_data *data = iio_priv(dev_to_iio_dev(dev));
+
+	ret = kstrtobool(buf, &data_fresh_check_en);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&data->lock);
+
+	data->data_fresh_check_en = data_fresh_check_en;
+	return len;
+}
+
 static IIO_DEVICE_ATTR_RO(data_fresh, 0);
+static IIO_DEVICE_ATTR_RW(data_fresh_check_enable, 0);
 
 static struct attribute *ltr390_attributes[] = {
 	&iio_dev_attr_data_fresh.dev_attr.attr,
+	&iio_dev_attr_data_fresh_check_enable.dev_attr.attr,
 	NULL
 };
 
@@ -214,7 +245,7 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 			   struct iio_chan_spec const *chan, int *val,
 			   int *val2, long mask)
 {
-	int ret;
+	int ret, status;
 	struct ltr390_data *data = iio_priv(iio_device);
 
 	guard(mutex)(&data->lock);
@@ -226,6 +257,16 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 			if (ret < 0)
 				return ret;
 
+			if (data->data_fresh_check_en) {
+				ret = ltr390_register_read(data, LTR390_MAIN_STATUS);
+				if (ret < 0)
+					return ret;
+
+				status = ret;
+				if (!(status & LTR390_DATA_STATUS_MASK))
+					return -EAGAIN;
+			}
+
 			ret = ltr390_register_read(data, LTR390_UVS_DATA);
 			if (ret < 0)
 				return ret;
@@ -235,6 +276,16 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 			ret = ltr390_set_mode(data, LTR390_SET_ALS_MODE);
 			if (ret < 0)
 				return ret;
+
+			if (data->data_fresh_check_en) {
+				ret = ltr390_register_read(data, LTR390_MAIN_STATUS);
+				if (ret < 0)
+					return ret;
+
+				status = ret;
+				if (!(status & LTR390_DATA_STATUS_MASK))
+					return -EAGAIN;
+			}
 
 			ret = ltr390_register_read(data, LTR390_ALS_DATA);
 			if (ret < 0)
@@ -687,6 +738,8 @@ static int ltr390_probe(struct i2c_client *client)
 	data->gain = 3;
 	/* default mode for ltr390 is ALS mode */
 	data->mode = LTR390_SET_ALS_MODE;
+	/* default value for data_fresh_check_en is 1 */
+	data->data_fresh_check_en = 1;
 
 	mutex_init(&data->lock);
 

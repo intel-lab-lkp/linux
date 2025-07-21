@@ -2400,3 +2400,15 @@ Description:
 
 		Provides userspace visibility into data_freshness status which
 		can be used for debugging and informational use.
+
+What:		/sys/.../iio:deviceX/data_fresh_check_enable
+KernelVersion:	6.16
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-write boolean attribute controlling whether the driver
+		checks the data freshness status bit before reading sensor data.
+
+		0 - Freshness check disabled
+		1 - Enable check; driver will skip reading stale data (default)
+
+		This flag affects the behavior of data reads.
