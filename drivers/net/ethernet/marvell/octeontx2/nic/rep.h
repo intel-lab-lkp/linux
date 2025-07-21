@@ -27,6 +27,7 @@ struct rep_stats {
 	u64 tx_bytes;
 	u64 tx_frames;
 	u64 tx_drops;
+	u64 tx_discards;
 };
 
 struct rep_dev {
