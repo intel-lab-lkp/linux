@@ -2398,6 +2398,10 @@ pidns= specifies a pid namespace (either as a string path to something like
 will be used by the procfs instance when translating pids. By default, procfs
 will use the calling process's active pid namespace.
 
+Processes can check which pid namespace is used by a procfs instance by using
+the `PROCFS_GET_PID_NAMESPACE` ioctl() on the root directory of the procfs
+instance.
+
 Chapter 5: Filesystem behavior
 ==============================
 

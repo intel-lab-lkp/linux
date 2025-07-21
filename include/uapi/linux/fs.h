@@ -437,6 +437,9 @@ typedef int __bitwise __kernel_rwf_t;
 
 #define PROCFS_IOCTL_MAGIC 'f'
 
+/* procfs root ioctls */
+#define PROCFS_GET_PID_NAMESPACE	_IO(PROCFS_IOCTL_MAGIC, 1)
+
 /* Pagemap ioctl */
 #define PAGEMAP_SCAN	_IOWR(PROCFS_IOCTL_MAGIC, 16, struct pm_scan_arg)
 
