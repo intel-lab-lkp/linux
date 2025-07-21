@@ -3012,10 +3012,19 @@ void intel_dp_check_m_n_ratio(struct intel_crtc_state *crtc_state,
 
 	m_n_ratio = DIV_ROUND_UP(m_n->link_m, m_n->link_n);
 
-	if (m_n_ratio > intel_dp_get_max_m_n_ratio())
+	if (m_n_ratio > intel_dp_get_max_m_n_ratio()) {
+		struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+		enum pipe pipe = crtc->pipe;
+
+		if (intel_display_can_bypass_m_n_limit(display, m_n_ratio, pipe)) {
+			m_n->bypass_m_n_ratio_limit = true;
+			drm_dbg_kms(display->drm, "Bypassing Link_m/Link_n ratio limit\n");
+			return;
+		}
 		drm_WARN(display->drm, 1,
 			 "Link M/N ratio (%d) exceeds max allowed (%d)\n",
 			 m_n_ratio, intel_dp_get_max_m_n_ratio());
+	}
 }
 
 static void
