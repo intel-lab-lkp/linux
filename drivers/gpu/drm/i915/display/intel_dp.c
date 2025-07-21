@@ -1407,6 +1407,28 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
+static int
+intel_dp_get_max_m_n_ratio(void)
+{
+	return 10;
+}
+
+static bool
+intel_dp_can_support_m_n(int pixel_clock,
+			 int link_rate)
+{
+	int max_m_n_ratio = intel_dp_get_max_m_n_ratio();
+	u32 link_m, link_n;
+	int m_n_ratio;
+
+	intel_display_get_link_m_n(&link_m, &link_n,
+				   pixel_clock, link_rate);
+
+	m_n_ratio = DIV_ROUND_UP(link_m, link_n);
+
+	return m_n_ratio <= max_m_n_ratio;
+}
+
 static enum drm_mode_status
 intel_dp_mode_valid(struct drm_connector *_connector,
 		    const struct drm_display_mode *mode)
@@ -1517,6 +1539,9 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	status = intel_dp_mode_valid_downstream(connector, mode, target_clock);
 	if (status != MODE_OK)
 		return status;
+
+	if (!intel_dp_can_support_m_n(target_clock, max_rate))
+		return MODE_CLOCK_HIGH;
 
 	return intel_mode_valid_max_plane_size(display, mode, num_joined_pipes);
 }
@@ -1789,13 +1814,15 @@ intel_dp_compute_link_config_wide(struct intel_dp *intel_dp,
 			    link_rate > limits->max_rate)
 				continue;
 
+			if (!intel_dp_can_support_m_n(clock, link_rate))
+				continue;
+
 			for (lane_count = limits->min_lane_count;
 			     lane_count <= limits->max_lane_count;
 			     lane_count <<= 1) {
 				link_avail = intel_dp_max_link_data_rate(intel_dp,
 									 link_rate,
 									 lane_count);
-
 
 				if (mode_rate <= link_avail) {
 					pipe_config->lane_count = lane_count;
@@ -1981,6 +2008,10 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 	for (i = 0; i < intel_dp->num_common_rates; i++) {
 		link_rate = intel_dp_common_rate(intel_dp, i);
 		if (link_rate < limits->min_rate || link_rate > limits->max_rate)
+			continue;
+
+		if (!intel_dp_can_support_m_n(adjusted_mode->clock,
+					      link_rate))
 			continue;
 
 		for (lane_count = limits->min_lane_count;

@@ -559,5 +559,8 @@ bool assert_port_valid(struct intel_display *display, enum port port);
 
 bool intel_scanout_needs_vtd_wa(struct intel_display *display);
 int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
+void intel_display_get_link_m_n(u32 *link_m, u32 *link_n,
+				u32 pixel_clock,
+				u32 link_clock);
 
 #endif
