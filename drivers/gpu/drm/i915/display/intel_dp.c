@@ -1414,10 +1414,13 @@ intel_dp_get_max_m_n_ratio(void)
 }
 
 bool
-intel_dp_can_support_m_n(int pixel_clock,
-			 int link_rate)
+intel_dp_can_support_m_n(struct intel_display *display,
+			 struct intel_crtc_state *crtc_state,
+			 int pixel_clock, int link_rate)
 {
+	struct intel_crtc *crtc;
 	int max_m_n_ratio = intel_dp_get_max_m_n_ratio();
+	enum pipe pipe;
 	u32 link_m, link_n;
 	int m_n_ratio;
 
@@ -1426,7 +1429,20 @@ intel_dp_can_support_m_n(int pixel_clock,
 
 	m_n_ratio = DIV_ROUND_UP(link_m, link_n);
 
-	return m_n_ratio <= max_m_n_ratio;
+	if (m_n_ratio <= max_m_n_ratio)
+		return true;
+
+	if (crtc_state) {
+		crtc = to_intel_crtc(crtc_state->uapi.crtc);
+		pipe = crtc->pipe;
+	} else {
+		pipe = PIPE_A;
+	}
+
+	if (intel_display_can_bypass_m_n_limit(display, m_n_ratio, pipe))
+		return true;
+
+	return false;
 }
 
 static enum drm_mode_status
@@ -1540,7 +1556,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	if (status != MODE_OK)
 		return status;
 
-	if (!intel_dp_can_support_m_n(target_clock, max_rate))
+	if (!intel_dp_can_support_m_n(display, NULL, target_clock, max_rate))
 		return MODE_CLOCK_HIGH;
 
 	return intel_mode_valid_max_plane_size(display, mode, num_joined_pipes);
@@ -1798,6 +1814,7 @@ intel_dp_compute_link_config_wide(struct intel_dp *intel_dp,
 				  const struct drm_connector_state *conn_state,
 				  const struct link_config_limits *limits)
 {
+	struct intel_display *display = to_intel_display(pipe_config);
 	int bpp, i, lane_count, clock = intel_dp_mode_clock(pipe_config, conn_state);
 	int mode_rate, link_rate, link_avail;
 
@@ -1814,7 +1831,7 @@ intel_dp_compute_link_config_wide(struct intel_dp *intel_dp,
 			    link_rate > limits->max_rate)
 				continue;
 
-			if (!intel_dp_can_support_m_n(clock, link_rate))
+			if (!intel_dp_can_support_m_n(display, pipe_config, clock, link_rate))
 				continue;
 
 			for (lane_count = limits->min_lane_count;
@@ -2001,6 +2018,7 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 				   int dsc_bpp_x16,
 				   int timeslots)
 {
+	struct intel_display *display = to_intel_display(pipe_config);
 	const struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	int link_rate, lane_count;
 	int i;
@@ -2010,7 +2028,8 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 		if (link_rate < limits->min_rate || link_rate > limits->max_rate)
 			continue;
 
-		if (!intel_dp_can_support_m_n(adjusted_mode->clock,
+		if (!intel_dp_can_support_m_n(display, pipe_config,
+					      adjusted_mode->clock,
 					      link_rate))
 			continue;
 
