@@ -141,10 +141,15 @@ struct rtc_param {
 #define RTC_PARAM_CORRECTION		1
 #define RTC_PARAM_BACKUP_SWITCH_MODE	2
 
+/* Backup switch mode */
 #define RTC_BSM_DISABLED	0
-#define RTC_BSM_DIRECT		1
-#define RTC_BSM_LEVEL		2
-#define RTC_BSM_STANDBY		3
+#define RTC_BSM_DIRECT		1 /* Switch if Vbackup > Vdd */
+#define RTC_BSM_LEVEL		2 /* Switch based on a threshold, usually with an hysteresis */
+#define RTC_BSM_STANDBY		3 /*
+				   * Switch if Vdd > Vbackup.
+				   * Useful to ensure the RTC doesn't draw any
+				   * power until the device is first powered on.
+				   */
 
 #define RTC_MAX_FREQ	8192
 
