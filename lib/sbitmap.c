@@ -119,6 +119,7 @@ int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
 
 	if (depth == 0) {
 		sb->map = NULL;
+		sb->alloc_hint = NULL;
 		return 0;
 	}
 
