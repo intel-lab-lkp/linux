@@ -1731,6 +1731,9 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 		clock *= 2;
 	}
 
+	if (vcstate->output_bpc > 8)
+		clock = DIV_ROUND_CLOSEST(clock * vcstate->output_bpc, 8);
+
 	vop2_vp_write(vp, RK3568_VP_MIPI_CTRL, 0);
 
 	/*
