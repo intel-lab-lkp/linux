@@ -812,3 +812,9 @@ void sdio_retune_release(struct sdio_func *func)
 	mmc_retune_release(func->card->host);
 }
 EXPORT_SYMBOL_GPL(sdio_retune_release);
+
+int sdio_reinit_card(struct mmc_host *host)
+{
+	return mmc_sdio_reinit_card(host);
+}
+EXPORT_SYMBOL_GPL(sdio_reinit_card);

@@ -911,7 +911,7 @@ remove:
 	return err;
 }
 
-static int mmc_sdio_reinit_card(struct mmc_host *host)
+int mmc_sdio_reinit_card(struct mmc_host *host)
 {
 	int ret;
 

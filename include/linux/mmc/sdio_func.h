@@ -12,6 +12,7 @@
 #include <linux/mod_devicetable.h>
 
 #include <linux/mmc/pm.h>
+#include <linux/mmc/host.h>
 
 struct mmc_card;
 struct sdio_func;
@@ -132,6 +133,7 @@ extern void sdio_release_host(struct sdio_func *func);
 
 extern int sdio_enable_func(struct sdio_func *func);
 extern int sdio_disable_func(struct sdio_func *func);
+extern int sdio_reinit_card(struct mmc_host *host);
 
 extern int sdio_set_block_size(struct sdio_func *func, unsigned blksz);
 
