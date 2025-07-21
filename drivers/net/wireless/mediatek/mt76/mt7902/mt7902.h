@@ -107,8 +107,8 @@ struct mt7902_sdio_intr {
 enum mt7902_txq_id {
 	MT7902_TXQ_BAND0,
 	MT7902_TXQ_BAND1,
-	MT7902_TXQ_FWDL = 16,
-	MT7902_TXQ_MCU_WM,
+	MT7902_TXQ_MCU_WM = 15,
+	MT7902_TXQ_FWDL,
 };
 
 enum mt7902_rxq_id {
@@ -188,6 +188,8 @@ u32 mt7902_reg_map(struct mt792x_dev *dev, u32 addr);
 int __mt7902_start(struct mt792x_phy *phy);
 int mt7902_register_device(struct mt792x_dev *dev);
 void mt7902_unregister_device(struct mt792x_dev *dev);
+int mt7902_firmware_state(struct mt792x_dev *dev, bool wa);
+int mt7902_load_firmware(struct mt792x_dev *dev);
 int mt7902_run_firmware(struct mt792x_dev *dev);
 int mt7902_set_channel(struct mt76_phy *mphy);
 int mt7902_mcu_set_bss_pm(struct mt792x_dev *dev, struct ieee80211_vif *vif,
