@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/pid.h>
+#include <linux/pm_qos.h>
 #include <linux/resctrl_types.h>
 
 #ifdef CONFIG_ARCH_HAS_CPU_RESCTRL
@@ -108,7 +109,7 @@ struct pseudo_lock_region {
 	void			*kmem;
 	unsigned int		minor;
 	struct dentry		*debugfs_dir;
-	struct list_head	pm_reqs;
+	struct cpu_affinity_qos_req	pm_reqs;
 };
 
 /**

@@ -108,25 +108,9 @@ static struct rdtgroup *region_find_by_minor(unsigned int minor)
 	return rdtgrp_match;
 }
 
-/**
- * struct pseudo_lock_pm_req - A power management QoS request list entry
- * @list:	Entry within the @pm_reqs list for a pseudo-locked region
- * @req:	PM QoS request
- */
-struct pseudo_lock_pm_req {
-	struct list_head list;
-	struct dev_pm_qos_request req;
-};
-
 static void pseudo_lock_cstates_relax(struct pseudo_lock_region *plr)
 {
-	struct pseudo_lock_pm_req *pm_req, *next;
-
-	list_for_each_entry_safe(pm_req, next, &plr->pm_reqs, list) {
-		dev_pm_qos_remove_request(&pm_req->req);
-		list_del(&pm_req->list);
-		kfree(pm_req);
-	}
+	cpu_affinity_latency_qos_remove(&plr->pm_reqs);
 }
 
 /**
@@ -149,36 +133,8 @@ static void pseudo_lock_cstates_relax(struct pseudo_lock_region *plr)
  */
 static int pseudo_lock_cstates_constrain(struct pseudo_lock_region *plr)
 {
-	struct pseudo_lock_pm_req *pm_req;
-	int cpu;
-	int ret;
-
-	for_each_cpu(cpu, &plr->d->hdr.cpu_mask) {
-		pm_req = kzalloc(sizeof(*pm_req), GFP_KERNEL);
-		if (!pm_req) {
-			rdt_last_cmd_puts("Failure to allocate memory for PM QoS\n");
-			ret = -ENOMEM;
-			goto out_err;
-		}
-		ret = dev_pm_qos_add_request(get_cpu_device(cpu),
-					     &pm_req->req,
-					     DEV_PM_QOS_RESUME_LATENCY,
-					     30);
-		if (ret < 0) {
-			rdt_last_cmd_printf("Failed to add latency req CPU%d\n",
-					    cpu);
-			kfree(pm_req);
-			ret = -1;
-			goto out_err;
-		}
-		list_add(&pm_req->list, &plr->pm_reqs);
-	}
-
-	return 0;
-
-out_err:
-	pseudo_lock_cstates_relax(plr);
-	return ret;
+	return cpu_affinity_latency_qos_add(&plr->pm_reqs, &plr->d->hdr.cpu_mask,
+					    30);
 }
 
 /**
@@ -275,7 +231,6 @@ static int pseudo_lock_init(struct rdtgroup *rdtgrp)
 		return -ENOMEM;
 
 	init_waitqueue_head(&plr->lock_thread_wq);
-	INIT_LIST_HEAD(&plr->pm_reqs);
 	rdtgrp->plr = plr;
 	return 0;
 }
