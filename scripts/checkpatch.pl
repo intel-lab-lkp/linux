@@ -3265,6 +3265,26 @@ sub process {
 			     "A patch subject line should describe the change not the tool that found it\n" . $herecurr);
 		}
 
+
+# Check for novice phrases in commit message
+		if ($in_commit_log && !$non_utf8_charset) {
+			my @novice_phrases = (
+				qr/please\s+(apply|merge|consider|review)/i,
+				qr/hope\s+this\s+helps/i,
+				qr/my\s+first\s+(patch|contribution)/i,
+				qr/(newbie|beginner)\s+here/i,
+				qr/not\s+sure\s+if\s+(this\s+is\s+)?correct/i,
+				qr/sorry\s+(if|for)/i,
+			);
+
+			foreach my $phrase (@novice_phrases) {
+				if ($line =~ /$phrase/) {
+					WARN("COMMIT_MESSAGE_NOVICE",
+					     "Avoid apologetic or uncertain language - be direct and professional\n" . $herecurr);
+					last;
+				}
+			}
+		}
 # Check for Gerrit Change-Ids not in any patch context
 		if ($realfile eq '' && !$has_patch_separator && $line =~ /^\s*change-id:/i) {
 			if (ERROR("GERRIT_CHANGE_ID",
