@@ -272,7 +272,7 @@ void cpu_latency_qos_add_request(struct pm_qos_request *req, s32 value)
 		return;
 
 	if (cpu_latency_qos_request_active(req)) {
-		WARN(1, KERN_ERR "%s called for already added request\n", __func__);
+		WARN(1, "%s called for already added request\n", __func__);
 		return;
 	}
 
@@ -298,7 +298,7 @@ void cpu_latency_qos_update_request(struct pm_qos_request *req, s32 new_value)
 		return;
 
 	if (!cpu_latency_qos_request_active(req)) {
-		WARN(1, KERN_ERR "%s called for unknown object\n", __func__);
+		WARN(1, "%s called for unknown object\n", __func__);
 		return;
 	}
 
@@ -324,7 +324,7 @@ void cpu_latency_qos_remove_request(struct pm_qos_request *req)
 		return;
 
 	if (!cpu_latency_qos_request_active(req)) {
-		WARN(1, KERN_ERR "%s called for unknown object\n", __func__);
+		WARN(1, "%s called for unknown object\n", __func__);
 		return;
 	}
 
