@@ -310,6 +310,12 @@ enum ice_dynamic_itr {
 #define ICE_TX_LEGACY	1
 
 /* descriptor ring, associated with a VSI */
+struct ice_tstamp_ring {
+	struct ice_tx_ring *tx_ring;	/* Backreference to associated Tx ring */
+	dma_addr_t dma;			/* physical address of ring */
+	struct rcu_head rcu;            /* to avoid race on free */
+} ____cacheline_internodealigned_in_smp;
+
 struct ice_rx_ring {
 	/* CL1 - 1st cacheline starts here */
 	void *desc;			/* Descriptor ring memory */
@@ -387,11 +393,22 @@ struct ice_tx_ring {
 	struct xsk_buff_pool *xsk_pool;
 	u16 next_to_use;
 	u16 next_to_clean;
+	u16 tstamp_next_to_use;		/* Time stamp ring next to use */
+	u16 tstamp_count;		/* Time stamp ring descriptors count */
+	u8 __iomem *tstamp_tail;	/* Time stamp ring tail pointer */
+	void *tstamp_desc;		/* Time stamp descriptor ring memory */
 	u16 q_handle;			/* Queue handle per TC */
 	u16 reg_idx;			/* HW register index of the ring */
 	u16 count;			/* Number of descriptors */
 	u16 q_index;			/* Queue number of ring */
 	u16 xdp_tx_active;
+	u16 quanta_prof_id;
+	u8 dcb_tc;			/* Traffic class of ring */
+#define ICE_TX_FLAGS_RING_XDP		BIT(0)
+#define ICE_TX_FLAGS_RING_VLAN_L2TAG1	BIT(1)
+#define ICE_TX_FLAGS_RING_VLAN_L2TAG2	BIT(2)
+#define ICE_TX_FLAGS_TXTIME		BIT(3)
+	u8 flags;
 	/* stats structs */
 	struct ice_ring_stats *ring_stats;
 	/* CL3 - 3rd cacheline starts here */
@@ -401,13 +418,7 @@ struct ice_tx_ring {
 	struct ice_ptp_tx *tx_tstamps;
 	spinlock_t tx_lock;
 	u32 txq_teid;			/* Added Tx queue TEID */
-	/* CL4 - 4th cacheline starts here */
-#define ICE_TX_FLAGS_RING_XDP		BIT(0)
-#define ICE_TX_FLAGS_RING_VLAN_L2TAG1	BIT(1)
-#define ICE_TX_FLAGS_RING_VLAN_L2TAG2	BIT(2)
-	u8 flags;
-	u8 dcb_tc;			/* Traffic class of ring */
-	u16 quanta_prof_id;
+	struct ice_tstamp_ring *tstamp_ring;
 } ____cacheline_internodealigned_in_smp;
 
 static inline bool ice_ring_uses_build_skb(struct ice_rx_ring *ring)
@@ -500,6 +511,7 @@ void ice_clean_tx_ring(struct ice_tx_ring *tx_ring);
 void ice_clean_rx_ring(struct ice_rx_ring *rx_ring);
 int ice_setup_tx_ring(struct ice_tx_ring *tx_ring);
 int ice_setup_rx_ring(struct ice_rx_ring *rx_ring);
+int ice_alloc_setup_tstamp_ring(struct ice_tx_ring *tx_ring);
 void ice_free_tx_ring(struct ice_tx_ring *tx_ring);
 void ice_free_rx_ring(struct ice_rx_ring *rx_ring);
 int ice_napi_poll(struct napi_struct *napi, int budget);
