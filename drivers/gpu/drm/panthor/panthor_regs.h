@@ -70,6 +70,10 @@
 #define GPU_PWR_OVERRIDE0				0x54
 #define GPU_PWR_OVERRIDE1				0x58
 
+#define GPU_FEATURES					0x60
+#define   GPU_FEATURES_RAY_INTERSECTION			BIT(2)
+#define GPU_PRFCNT_FEATURES				0x68
+
 #define GPU_TIMESTAMP_OFFSET				0x88
 #define GPU_CYCLE_COUNT					0x90
 #define GPU_TIMESTAMP					0x98
@@ -80,6 +84,8 @@
 #define GPU_THREAD_FEATURES				0xAC
 
 #define GPU_TEXTURE_FEATURES(n)				(0xB0 + ((n) * 4))
+
+#define GPU_DOORBELL_FEATURES				0xC0
 
 #define GPU_SHADER_PRESENT				0x100
 #define GPU_TILER_PRESENT				0x110
@@ -107,6 +113,8 @@
 
 #define GPU_REVID					0x280
 
+#define GPU_ASN_HASH(n)				(0x2C0 + ((n) * 4))
+
 #define GPU_COHERENCY_FEATURES				0x300
 #define GPU_COHERENCY_PROT_BIT(name)			BIT(GPU_COHERENCY_  ## name)
 
@@ -114,6 +122,9 @@
 #define   GPU_COHERENCY_ACE_LITE			0
 #define   GPU_COHERENCY_ACE				1
 #define   GPU_COHERENCY_NONE				31
+
+#define GPU_SYSC_PBHA_OVERRIDE(n)			(0x320 + ((n) * 4))
+#define GPU_SYSC_ALLOC(n)				(0x340 + ((n) * 4))
 
 #define MCU_CONTROL					0x700
 #define MCU_CONTROL_ENABLE				1
