@@ -2686,8 +2686,22 @@ static inline int _base_scsi_dma_map(struct scsi_cmnd *cmd)
 	 * (e.g. AMD hosts). Avoid such issue by making the report zones buffer
 	 * mapping bi-directional.
 	 */
-	if (cmd->cmnd[0] == ZBC_IN && cmd->cmnd[1] == ZI_REPORT_ZONES)
-		cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+
+		switch (cmd->cmnd[0]) {
+		case SECURITY_PROTOCOL_IN:
+			cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		case ZBC_IN:
+			if  (cmd->cmnd[1] == ZI_REPORT_ZONES)
+				cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		case SERVICE_ACTION_IN_16:
+			if (cmd->cmnd[1] == 0x17)
+				cmd->sc_data_direction = DMA_BIDIRECTIONAL;
+			break;
+		default:
+			break;
+	}
 
 	return scsi_dma_map(cmd);
 }
