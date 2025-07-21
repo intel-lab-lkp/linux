@@ -447,12 +447,14 @@ static int mst_stream_compute_link_config(struct intel_dp *intel_dp,
 					  struct drm_connector_state *conn_state,
 					  const struct link_config_limits *limits)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	crtc_state->lane_count = limits->max_lane_count;
 	crtc_state->port_clock = limits->max_rate;
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 
-	if (!intel_dp_can_support_m_n(adjusted_mode->clock, crtc_state->port_clock))
+	if (!intel_dp_can_support_m_n(display, crtc_state, adjusted_mode->clock,
+				      crtc_state->port_clock))
 		return -EINVAL;
 
 	/*
@@ -1560,7 +1562,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		return 0;
 	}
 
-	if (!intel_dp_can_support_m_n(mode->clock, max_rate)) {
+	if (!intel_dp_can_support_m_n(display, NULL, mode->clock, max_rate)) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
