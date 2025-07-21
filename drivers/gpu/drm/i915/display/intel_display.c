@@ -2506,7 +2506,6 @@ static void compute_m_n(u32 *ret_m, u32 *ret_n,
 	intel_reduce_m_n_ratio(ret_m, ret_n);
 }
 
-static
 void intel_display_get_link_m_n(u32 *link_m, u32 *link_n,
 				u32 pixel_clock,
 				u32 link_clock)
