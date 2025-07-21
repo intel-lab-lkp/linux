@@ -303,6 +303,9 @@ int wx_get_coalesce(struct net_device *netdev,
 	else
 		ec->rx_coalesce_usecs = wx->rx_itr_setting >> 2;
 
+	if (wx->rx_itr_setting == 1)
+		ec->use_adaptive_rx_coalesce = 1;
+
 	/* if in mixed tx/rx queues per vector mode, report only rx settings */
 	if (wx->q_vector[0]->tx.count && wx->q_vector[0]->rx.count)
 		return 0;
@@ -363,10 +366,15 @@ int wx_set_coalesce(struct net_device *netdev,
 	    (ec->tx_coalesce_usecs > (max_eitr >> 2)))
 		return -EINVAL;
 
+	if (ec->use_adaptive_rx_coalesce) {
+		wx->rx_itr_setting = 1;
+		return 0;
+	}
+
 	if (ec->rx_coalesce_usecs > 1)
 		wx->rx_itr_setting = ec->rx_coalesce_usecs << 2;
 	else
-		wx->rx_itr_setting = ec->rx_coalesce_usecs;
+		wx->rx_itr_setting = rx_itr_param;
 
 	if (wx->rx_itr_setting != 1)
 		rx_itr_param = wx->rx_itr_setting;

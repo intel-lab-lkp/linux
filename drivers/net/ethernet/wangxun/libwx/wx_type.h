@@ -416,6 +416,14 @@ enum WX_MSCA_CMD_value {
 #define WX_AML_MAX_EITR              0x00000FFFU
 #define WX_EM_MAX_EITR               0x00007FFCU
 
+#define WX_ITR_ADAPTIVE_MIN_INC      2
+#define WX_ITR_ADAPTIVE_MIN_USECS    10
+#define WX_ITR_ADAPTIVE_MAX_USECS    84
+#define WX_ITR_ADAPTIVE_LATENCY      0x80
+#define WX_ITR_ADAPTIVE_BULK         0x00
+#define WX_ITR_ADAPTIVE_MASK_USECS   (WX_ITR_ADAPTIVE_LATENCY - \
+				      WX_ITR_ADAPTIVE_MIN_INC)
+
 /* transmit DMA Registers */
 #define WX_PX_TR_BAL(_i)             (0x03000 + ((_i) * 0x40))
 #define WX_PX_TR_BAH(_i)             (0x03004 + ((_i) * 0x40))
@@ -1030,6 +1038,7 @@ struct wx_rx_queue_stats {
 
 struct wx_ring_container {
 	struct wx_ring *ring;           /* pointer to linked list of rings */
+	unsigned long next_update;      /* jiffies value of last update */
 	unsigned int total_bytes;       /* total bytes processed this int */
 	unsigned int total_packets;     /* total packets processed this int */
 	u8 count;                       /* total number of rings in vector */
