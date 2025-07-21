@@ -8521,7 +8521,7 @@ static void ieee80211_sta_bcn_mon_timer(struct timer_list *t)
 static unsigned long
 ieee80211_latest_active_link_conn_timeout(struct ieee80211_sub_if_data *sdata)
 {
-	unsigned long latest_timeout;
+	unsigned long latest_timeout = 0;
 	unsigned int link_id;
 	struct sta_info *sta;
 
