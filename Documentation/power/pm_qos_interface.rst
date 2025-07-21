@@ -55,9 +55,9 @@ void cpu_latency_qos_remove_request(handle):
 int cpu_latency_qos_limit():
   Returns the aggregated value for the CPU latency QoS.
 
-int cpu_latency_qos_request_active(handle):
-  Returns if the request is still active, i.e. it has not been removed from the
-  CPU latency QoS list.
+bool cpu_latency_qos_request_active(handle):
+  Returns true if the request is still active, i.e. it has not been removed from
+  the CPU latency QoS list.
 
 
 From user space:
