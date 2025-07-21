@@ -21,7 +21,7 @@ static const struct ccu_pll_rate_tbl *ccu_pll_lookup_best_rate(struct ccu_pll *p
 							       unsigned long rate)
 {
 	struct ccu_pll_config *config = &pll->config;
-	const struct ccu_pll_rate_tbl *best_entry;
+	const struct ccu_pll_rate_tbl *best_entry = NULL;
 	unsigned long best_delta = ULONG_MAX;
 	int i;
 
@@ -107,6 +107,10 @@ static int ccu_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	const struct ccu_pll_rate_tbl *entry;
 
 	entry = ccu_pll_lookup_best_rate(pll, rate);
+
+	if (!entry)
+		return -EINVAL;
+
 	ccu_pll_update_param(pll, entry);
 
 	return 0;
@@ -129,8 +133,11 @@ static long ccu_pll_round_rate(struct clk_hw *hw, unsigned long rate,
 			       unsigned long *prate)
 {
 	struct ccu_pll *pll = hw_to_ccu_pll(hw);
+	const struct ccu_pll_rate_tbl *entry;
 
-	return ccu_pll_lookup_best_rate(pll, rate)->rate;
+	entry = ccu_pll_lookup_best_rate(pll, rate);
+
+	return entry ? entry->rate : 0;
 }
 
 static int ccu_pll_init(struct clk_hw *hw)
