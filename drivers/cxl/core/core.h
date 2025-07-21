@@ -136,4 +136,13 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 		    u16 *return_code);
 #endif
 
+#ifdef CONFIG_PCIEAER_CXL
+void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds);
+#else
+static inline void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds) {}
+#endif
+
+void __cxl_handle_cor_ras(struct cxl_dev_state *cxlds, void __iomem *ras_base);
+bool __cxl_handle_ras(struct cxl_dev_state *cxlds, void __iomem *ras_base);
+
 #endif /* __CXL_CORE_H__ */
