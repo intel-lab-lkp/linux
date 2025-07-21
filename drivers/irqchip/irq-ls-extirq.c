@@ -164,6 +164,7 @@ ls_extirq_parse_map(struct ls_extirq_data *priv, struct device_node *node)
 		for (j = 0; j < intsize; ++j)
 			priv->map[hwirq].param[j] = be32_to_cpup(map++);
 		mapsize -= intsize;
+		of_node_put(ipar);
 	}
 	return 0;
 }
