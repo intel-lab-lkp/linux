@@ -79,20 +79,27 @@ static inline u64 mul_u32_u32(u32 a, u32 b)
 
 #else
 # include <asm-generic/div64.h>
+# include <asm/asm.h>
+# include <asm/bug.h>
 
 /*
- * Will generate an #DE when the result doesn't fit u64, could fix with an
- * __ex_table[] entry when it becomes an issue.
+ * Returns ULONG_MAX when the result doesn't fit u64.
  */
 static inline u64 mul_u64_u64_div_u64(u64 a, u64 mul, u64 div)
 {
+	int ok = 0;
 	u64 q;
 
-	asm ("mulq %2; divq %3" : "=a" (q)
-				: "a" (a), "rm" (mul), "rm" (div)
-				: "rdx");
+	asm ("mulq %3; 1: divq %4; movl $1,%1; 2:\n"
+		_ASM_EXTABLE(1b, 2b)
+		: "=a" (q), "+r" (ok)
+		: "a" (a), "rm" (mul), "rm" (div)
+		: "rdx");
 
-	return q;
+	if (ok)
+		return q;
+	WARN_ON_ONCE(!div);
+	return ~(u64)0;
 }
 #define mul_u64_u64_div_u64 mul_u64_u64_div_u64
 
