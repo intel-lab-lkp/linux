@@ -9,7 +9,7 @@
 
 struct cpupri_vec {
 	atomic_t		count;
-	cpumask_var_t		mask;
+	cpumask_var_t		mask	____cacheline_aligned;
 };
 
 struct cpupri {
