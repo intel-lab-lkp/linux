@@ -968,33 +968,9 @@ struct root_domain {
 	cpumask_var_t		span;
 	cpumask_var_t		online;
 
-	/*
-	 * Indicate pullable load on at least one CPU, e.g:
-	 * - More than one runnable task
-	 * - Running task is misfit
-	 */
-	bool			overloaded;
-
-	/* Indicate one or more CPUs over-utilized (tipping point) */
-	bool			overutilized;
-
-	/*
-	 * The bit corresponding to a CPU gets set here if such CPU has more
-	 * than one runnable -deadline task (as it is below for RT tasks).
-	 */
-	cpumask_var_t		dlo_mask;
 	atomic_t		dlo_count;
 	struct dl_bw		dl_bw;
 	struct cpudl		cpudl;
-
-	/*
-	 * Indicate whether a root_domain's dl_bw has been checked or
-	 * updated. It's monotonously increasing value.
-	 *
-	 * Also, some corner cases, like 'wrap around' is dangerous, but given
-	 * that u64 is 'big enough'. So that shouldn't be a concern.
-	 */
-	u64 visit_cookie;
 
 #ifdef HAVE_RT_PUSH_IPI
 	/*
@@ -1009,18 +985,44 @@ struct root_domain {
 	atomic_t		rto_loop_next;
 	atomic_t		rto_loop_start;
 #endif
+
 	/*
-	 * The "RT overload" flag: it gets set if a CPU has more than
-	 * one runnable RT task.
+	 * The bit corresponding to a CPU gets set here if such CPU has more
+	 * than one runnable -deadline task (as it is below for RT tasks).
 	 */
-	cpumask_var_t		rto_mask;
-	struct cpupri		cpupri;
+	cpumask_var_t		dlo_mask;
+
+	/*
+	 * Indicate whether a root_domain's dl_bw has been checked or
+	 * updated. It's monotonously increasing value.
+	 *
+	 * Also, some corner cases, like 'wrap around' is dangerous, but given
+	 * that u64 is 'big enough'. So that shouldn't be a concern.
+	 */
+	u64 visit_cookie;
+	struct cpupri		cpupri	____cacheline_aligned;
 
 	/*
 	 * NULL-terminated list of performance domains intersecting with the
 	 * CPUs of the rd. Protected by RCU.
 	 */
-	struct perf_domain __rcu *pd;
+	struct perf_domain __rcu *pd	____cacheline_aligned;
+
+	/*
+	 * The "RT overload" flag: it gets set if a CPU has more than
+	 * one runnable RT task.
+	 */
+	cpumask_var_t		rto_mask;
+
+	/*
+	 * Indicate pullable load on at least one CPU, e.g:
+	 * - More than one runnable task
+	 * - Running task is misfit
+	 */
+	bool			overloaded	____cacheline_aligned;
+
+	/* Indicate one or more CPUs over-utilized (tipping point) */
+	bool			overutilized;
 };
 
 extern void init_defrootdomain(void);
