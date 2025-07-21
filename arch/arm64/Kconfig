@@ -2237,6 +2237,15 @@ config ARM64_GCS
 
 endmenu # "v9.4 architectural features"
 
+config AS_HAS_LSUI
+	def_bool $(as-instr,.arch_extension lsui)
+	help
+	 Unprivileged Load Store is an extension to introduce unprivileged
+	 variants of load and store instructions so that clearing PSTATE.PAN
+	 is never required in privileged mode.
+	 This feature is available with clang version 20 and later and not yet
+	 supported by gcc.
+
 config ARM64_SVE
 	bool "ARM Scalable Vector Extension support"
 	default y
