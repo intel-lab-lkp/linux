@@ -37,6 +37,7 @@ properties:
               - mediatek,mt8188-efuse
               - mediatek,mt8192-efuse
               - mediatek,mt8195-efuse
+              - mediatek,mt8196-efuse
               - mediatek,mt8516-efuse
           - const: mediatek,efuse
       - const: mediatek,mt8173-efuse
