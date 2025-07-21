@@ -87,6 +87,8 @@
 
 #define GPU_DOORBELL_FEATURES				0xC0
 
+#define GPU_COMMAND_ARG(n)				(0xD0 + ((n) * 8))
+
 #define GPU_SHADER_PRESENT				0x100
 #define GPU_TILER_PRESENT				0x110
 #define GPU_L2_PRESENT					0x120
@@ -96,6 +98,8 @@
 #define L2_READY					0x160
 
 #define SHADER_PWRON					0x180
+#define SHADER_PWRFEATURES				0x188
+#define   SHADER_PWRFEATURES_RAY_TRACING_UNIT		BIT(0)
 #define TILER_PWRON					0x190
 #define L2_PWRON					0x1A0
 
@@ -116,12 +120,15 @@
 #define GPU_ASN_HASH(n)				(0x2C0 + ((n) * 4))
 
 #define GPU_COHERENCY_FEATURES				0x300
-#define GPU_COHERENCY_PROT_BIT(name)			BIT(GPU_COHERENCY_  ## name)
+#define   GPU_COHERENCY_FEATURE_ACE_LITE		BIT(0)
+#define   GPU_COHERENCY_FEATURE_ACE			BIT(1)
+#define   GPU_COHERENCY_FEATURE_SHAREABLE_CACHE_SUPPORT	BIT(5)
 
 #define GPU_COHERENCY_PROTOCOL				0x304
 #define   GPU_COHERENCY_ACE_LITE			0
 #define   GPU_COHERENCY_ACE				1
 #define   GPU_COHERENCY_NONE				31
+#define   GPU_COHERENCY_SHAREABLE_CACHE_SUPPORT		BIT(5)
 
 #define GPU_SYSC_PBHA_OVERRIDE(n)			(0x320 + ((n) * 4))
 #define GPU_SYSC_ALLOC(n)				(0x340 + ((n) * 4))
@@ -136,6 +143,8 @@
 #define MCU_STATUS_ENABLED				1
 #define MCU_STATUS_HALT					2
 #define MCU_STATUS_FATAL				3
+
+#define MCU_FEATURES					0x708
 
 /* Job Control regs */
 #define JOB_INT_RAWSTAT					0x1000
