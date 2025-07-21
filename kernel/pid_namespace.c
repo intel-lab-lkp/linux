@@ -390,6 +390,19 @@ static void pidns_put(struct ns_common *ns)
 	put_pid_ns(to_pid_ns(ns));
 }
 
+bool pidns_is_ancestor(struct pid_namespace *child,
+		       struct pid_namespace *ancestor)
+{
+	struct pid_namespace *ns;
+
+	if (child->level < ancestor->level)
+		return false;
+	for (ns = child; ns->level > ancestor->level; ns = ns->parent)
+		;
+	return ns == ancestor;
+}
+EXPORT_SYMBOL_GPL(pidns_is_ancestor);
+
 static int pidns_install(struct nsset *nsset, struct ns_common *ns)
 {
 	struct nsproxy *nsproxy = nsset->nsproxy;
@@ -408,13 +421,7 @@ static int pidns_install(struct nsset *nsset, struct ns_common *ns)
 	 * this maintains the property that processes and their
 	 * children can not escape their current pid namespace.
 	 */
-	if (new->level < active->level)
-		return -EINVAL;
-
-	ancestor = new;
-	while (ancestor->level > active->level)
-		ancestor = ancestor->parent;
-	if (ancestor != active)
+	if (!pidns_is_ancestor(new, active))
 		return -EINVAL;
 
 	put_pid_ns(nsproxy->pid_ns_for_children);
