@@ -149,7 +149,7 @@ static const struct seq_operations monitor_reactors_seq_ops = {
 
 static void monitor_swap_reactors_single(struct rv_monitor *mon,
 					 struct rv_reactor *reactor,
-					 bool reacting, bool nested)
+					 bool nested)
 {
 	bool monitor_enabled;
 
@@ -162,7 +162,6 @@ static void monitor_swap_reactors_single(struct rv_monitor *mon,
 		rv_disable_monitor(mon);
 
 	mon->reactor = reactor;
-	mon->reacting = reacting;
 	mon->react = reactor ? reactor->react : NULL;
 
 	/* enable only once if iterating through a container */
@@ -170,8 +169,7 @@ static void monitor_swap_reactors_single(struct rv_monitor *mon,
 		rv_enable_monitor(mon);
 }
 
-static void monitor_swap_reactors(struct rv_monitor *mon,
-				  struct rv_reactor *reactor, bool reacting)
+static void monitor_swap_reactors(struct rv_monitor *mon, struct rv_reactor *reactor)
 {
 	struct rv_monitor *p = mon;
 
@@ -179,7 +177,7 @@ static void monitor_swap_reactors(struct rv_monitor *mon,
 		list_for_each_entry_continue(p, &rv_monitors_list, list) {
 			if (p->parent != mon)
 				break;
-			monitor_swap_reactors_single(p, reactor, reacting, true);
+			monitor_swap_reactors_single(p, reactor, true);
 		}
 	/*
 	 * This call enables and disables the monitor if they were active.
@@ -187,7 +185,7 @@ static void monitor_swap_reactors(struct rv_monitor *mon,
 	 * All nested monitors are enabled also if they were off, we may refine
 	 * this logic in the future.
 	 */
-	monitor_swap_reactors_single(mon, reactor, reacting, false);
+	monitor_swap_reactors_single(mon, reactor, false);
 }
 
 static ssize_t
@@ -221,7 +219,7 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 
 	len = strlen(ptr);
 	if (!len) {
-		monitor_swap_reactors(mon, NULL, false);
+		monitor_swap_reactors(mon, NULL);
 		return count;
 	}
 
@@ -233,7 +231,7 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 		if (strcmp(ptr, reactor->name) != 0)
 			continue;
 
-		monitor_swap_reactors(mon, reactor, true);
+		monitor_swap_reactors(mon, reactor);
 
 		retval = count;
 		break;
