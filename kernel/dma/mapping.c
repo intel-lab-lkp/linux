@@ -173,8 +173,12 @@ dma_addr_t dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 		size_t offset = offset_in_page(phys);
 		bool is_pfn_valid = true;
 
-		if (IS_ENABLED(CONFIG_DMA_API_DEBUG))
+		if (IS_ENABLED(CONFIG_DMA_API_DEBUG)) {
 			is_pfn_valid = pfn_valid(PHYS_PFN(phys));
+
+			/* We shouldn't have both functions */
+			WARN_ON_ONCE(ops->map_page && ops->map_phys);
+		}
 
 		if (unlikely(!is_pfn_valid))
 			return DMA_MAPPING_ERROR;
@@ -183,7 +187,13 @@ dma_addr_t dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 		 * All platforms which implement .map_page() don't support
 		 * non-struct page backed addresses.
 		 */
-		addr = ops->map_page(dev, page, offset, size, dir, attrs);
+		if (ops->map_phys)
+			addr = ops->map_phys(dev, phys, size, dir, attrs);
+		else if (ops->map_page)
+			addr = ops->map_page(dev, page, offset, size, dir,
+					     attrs);
+		else
+			addr = DMA_MAPPING_ERROR;
 	}
 
 	kmsan_handle_dma(phys, size, dir);
@@ -213,8 +223,16 @@ void dma_unmap_phys(struct device *dev, dma_addr_t addr, size_t size,
 		dma_direct_unmap_phys(dev, addr, size, dir, attrs);
 	else if (use_dma_iommu(dev))
 		iommu_dma_unmap_phys(dev, addr, size, dir, attrs);
-	else
-		ops->unmap_page(dev, addr, size, dir, attrs);
+	else {
+		if (IS_ENABLED(CONFIG_DMA_API_DEBUG))
+			/* We shouldn't have both functions */
+			WARN_ON_ONCE(ops->unmap_page && ops->unmap_phys);
+
+		if (ops->unmap_phys)
+			ops->unmap_phys(dev, addr, size, dir, attrs);
+		else if (ops->unmap_page)
+			ops->unmap_page(dev, addr, size, dir, attrs);
+	}
 	trace_dma_unmap_phys(dev, addr, size, dir, attrs);
 	debug_dma_unmap_phys(dev, addr, size, dir);
 }
