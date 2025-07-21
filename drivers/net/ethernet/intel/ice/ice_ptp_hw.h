@@ -210,6 +210,8 @@ enum ice_phy_rclk_pins {
 #define ICE_E82X_RCLK_PINS_NUM		(ICE_RCLKA_PIN + 1)
 #define E810T_CGU_INPUT_C827(_phy, _pin) ((_phy) * ICE_E810_RCLK_PINS_NUM + \
 					  (_pin) + ZL_REF1P)
+#define ICE_E825_1588_BASE_IDX		0
+#define ICE_DPLL_PARENT_PIN_NUM_E825	2
 
 enum ice_zl_cgu_in_pins {
 	ZL_REF0P = 0,
