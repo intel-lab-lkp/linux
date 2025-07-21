@@ -335,6 +335,166 @@ void cpu_latency_qos_remove_request(struct pm_qos_request *req)
 }
 EXPORT_SYMBOL_GPL(cpu_latency_qos_remove_request);
 
+#ifdef CONFIG_PM
+
+/**
+ * wakeup_qos_affinity_idle_cpu - break one specific cpu out of idle.
+ * @cpu: the CPU to be woken up from idle.
+ */
+void wakeup_qos_affinity_idle_cpu(int cpu)
+{
+	preempt_disable();
+	if (cpu != smp_processor_id() && cpu_online(cpu))
+		wake_up_if_idle(cpu);
+	preempt_enable();
+}
+
+/**
+ * cpu_affinity_latency_qos_add - Add new CPU affinity latency QoS request.
+ * @pm_req: Pointer to a preallocated handle.
+ * @affinity_mask: Mask to determine which CPUs need latency QoS.
+ * @latency_value: New requested constraint value.
+ *
+ * Use @latency_value to initialize the request handle pointed to by @pm_req,
+ * insert it as a new entry to the CPU latency QoS list and recompute the
+ * effective QoS constraint for that list, @affinity_mask determine which CPUs
+ * need the latency QoS.
+ *
+ * Callers need to save the handle for later use in updates and removal of the
+ * QoS request represented by it.
+ *
+ * Returns 0 or a positive value on success, or a negative error code on failure.
+ */
+int cpu_affinity_latency_qos_add(struct cpu_affinity_qos_req *pm_req,
+				  const cpumask_t *affinity_mask,
+				  s32 latency_value)
+{
+	int cpu;
+	cpumask_t actual_mask;
+	struct cpu_affinity_qos_req *cpu_pm_req;
+	int ret = 0;
+
+	if (!pm_req) {
+		pr_err("%s: invalid PM Qos request\n", __func__);
+		return -EINVAL;
+	}
+
+	if (cpu_affinity_latency_qos_active(pm_req)) {
+		WARN(1, "%s called for already added request\n", __func__);
+		return -EBUSY;
+	}
+
+	INIT_LIST_HEAD(&pm_req->list);
+
+	if (!affinity_mask || cpumask_empty(affinity_mask) ||
+	    latency_value < 0) {
+		pr_err("%s: invalid PM Qos request value\n", __func__);
+		return -EINVAL;
+	}
+
+	for_each_cpu(cpu, affinity_mask) {
+		cpu_pm_req = kzalloc(sizeof(struct cpu_affinity_qos_req),
+				     GFP_KERNEL);
+		if (!cpu_pm_req) {
+			ret = -ENOMEM;
+			goto out_err;
+		}
+		ret = dev_pm_qos_add_request(get_cpu_device(cpu),
+					     &cpu_pm_req->req,
+					     DEV_PM_QOS_RESUME_LATENCY,
+					     latency_value);
+		if (ret < 0) {
+			pr_err("failed to add latency req for cpu%d", cpu);
+			kfree(cpu_pm_req);
+			goto out_err;
+		} else if (ret > 0) {
+			wakeup_qos_affinity_idle_cpu(cpu);
+		}
+
+		cpumask_set_cpu(cpu, &actual_mask);
+		list_add(&cpu_pm_req->list, &pm_req->list);
+	}
+
+	pr_info("PM Qos latency: %d added on cpus %*pb\n", latency_value,
+		cpumask_pr_args(&actual_mask));
+	pm_req->req_ptr = pm_req;
+	return ret;
+
+out_err:
+	cpu_affinity_latency_qos_release(pm_req);
+	pr_err("failed to add PM QoS latency req, removed all added requests\n");
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cpu_affinity_latency_qos_add);
+
+
+/**
+ * cpu_affinity_latency_qos_remove - Remove an existing CPU affinity latency QoS.
+ * @pm_req: Handle to the QoS request to be removed.
+ *
+ * Remove the CPU latency QoS request represented by @pm_req from the CPU latency
+ * QoS list. This handle must have been previously initialized and added via
+ * cpu_affinity_latency_qos_add().
+ */
+int cpu_affinity_latency_qos_remove(struct cpu_affinity_qos_req *pm_req)
+{
+	if (!pm_req) {
+		pr_err("%s: invalid PM Qos request value\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!cpu_affinity_latency_qos_active(pm_req)) {
+		WARN(1, "%s called for unknown object\n", __func__);
+		return -EINVAL;
+	}
+
+	return cpu_affinity_latency_qos_release(pm_req);
+}
+EXPORT_SYMBOL_GPL(cpu_affinity_latency_qos_remove);
+
+/**
+ * cpu_affinity_latency_qos_release - Release pm_reqs latency QoS resource.
+ * @pm_req: QoS request to be released.
+ *
+ * Release pm_reqs managed CPU affinity latency QoS resource.
+ *
+ * Returns a negative value indicates failure.
+ */
+int cpu_affinity_latency_qos_release(struct cpu_affinity_qos_req *pm_req)
+{
+	int ret = 0;
+	struct cpu_affinity_qos_req *cpu_pm_req, *next;
+
+	list_for_each_entry_safe(cpu_pm_req, next, &pm_req->list, list) {
+		ret = dev_pm_qos_remove_request(&cpu_pm_req->req);
+		if (ret < 0)
+			pr_err("failed to remove qos request for %s\n",
+			       dev_name(cpu_pm_req->req.dev));
+		list_del(&cpu_pm_req->list);
+		kfree(cpu_pm_req);
+		cpu_pm_req = NULL;
+	}
+
+	memset(pm_req, 0, sizeof(*pm_req));
+	return ret;
+}
+
+/**
+ * cpu_affinity_latency_qos_active - Check if a CPU affinity latency QoS
+ * request is active.
+ * @pm_req: Handle to the QoS request.
+ *
+ * Return: 'true' if @pm_req has been added to the CPU latency QoS list,
+ * 'false' otherwise.
+ */
+bool cpu_affinity_latency_qos_active(struct cpu_affinity_qos_req *pm_req)
+{
+	return pm_req->req_ptr == pm_req;
+}
+EXPORT_SYMBOL_GPL(cpu_affinity_latency_qos_active);
+
+#endif /* CONFIG_PM */
+
 /* User space interface to the CPU latency QoS via misc device. */
 
 static int cpu_latency_qos_open(struct inode *inode, struct file *filp)

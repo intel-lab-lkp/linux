@@ -131,6 +131,15 @@ enum pm_qos_req_action {
 	PM_QOS_REMOVE_REQ	/* Remove an existing request */
 };
 
+/* cpu affinity pm latency qos request handle */
+struct cpu_affinity_qos_req {
+	struct list_head list;
+	union {
+		struct dev_pm_qos_request req;
+		void *req_ptr;
+	};
+};
+
 static inline int dev_pm_qos_request_active(struct dev_pm_qos_request *req)
 {
 	return req->dev != NULL;
@@ -208,6 +217,13 @@ static inline s32 dev_pm_qos_raw_resume_latency(struct device *dev)
 		PM_QOS_RESUME_LATENCY_NO_CONSTRAINT :
 		pm_qos_read_value(&dev->power.qos->resume_latency);
 }
+
+int cpu_affinity_latency_qos_add(struct cpu_affinity_qos_req *pm_req,
+				  const cpumask_t *affinity_mask, s32 latency_value);
+int cpu_affinity_latency_qos_remove(struct cpu_affinity_qos_req *pm_req);
+int cpu_affinity_latency_qos_release(struct cpu_affinity_qos_req *pm_req);
+bool cpu_affinity_latency_qos_active(struct cpu_affinity_qos_req *pm_req);
+void wakeup_qos_affinity_idle_cpu(int cpu);
 #else
 static inline enum pm_qos_flags_status __dev_pm_qos_flags(struct device *dev,
 							  s32 mask)
@@ -289,6 +305,30 @@ static inline s32 dev_pm_qos_raw_resume_latency(struct device *dev)
 {
 	return PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
 }
+
+static inline int cpu_affinity_latency_qos_add(struct cpu_affinity_qos_req *pm_req,
+						const cpumask_t *affinity_mask,
+						s32 latency_value)
+{
+	return 0;
+}
+
+static inline int cpu_affinity_latency_qos_remove(
+		   struct cpu_affinity_qos_req *pm_req)
+{
+	return 0;
+}
+static inline int cpu_affinity_latency_qos_release(
+		   struct cpu_affinity_qos_req *pm_req)
+{
+	return 0;
+}
+static inline bool cpu_affinity_latency_qos_active(
+		    struct cpu_affinity_qos_req *pm_req)
+{
+	return false;
+}
+static inline void wakeup_qos_affinity_idle_cpu(int cpu) {}
 #endif
 
 static inline int freq_qos_request_active(struct freq_qos_request *req)
