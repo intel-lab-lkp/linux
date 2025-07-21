@@ -2386,3 +2386,17 @@ Description:
 		Value representing the user's attention to the system expressed
 		in units as percentage. This usually means if the user is
 		looking at the screen or not.
+
+What:		/sys/.../iio:deviceX/data_fresh
+KernelVersion:	6.16
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-only attribute indicating whether the sensor data currently
+		available in the device is freshly measured or stale.
+
+		Returns:
+			1 - Data is freshly measured
+			0 - Data is stale (previously read or not yet updated)
+
+		Provides userspace visibility into data_freshness status which
+		can be used for debugging and informational use.

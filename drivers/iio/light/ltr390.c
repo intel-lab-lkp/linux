@@ -30,6 +30,7 @@
 
 #include <linux/iio/iio.h>
 #include <linux/iio/events.h>
+#include <linux/iio/sysfs.h>
 
 #include <linux/unaligned.h>
 
@@ -61,6 +62,7 @@
 
 #define LTR390_FRACTIONAL_PRECISION 100
 
+#define LTR390_DATA_STATUS_MASK		BIT(3)
 /*
  * At 20-bit resolution (integration time: 400ms) and 18x gain, 2300 counts of
  * the sensor are equal to 1 UV Index [Datasheet Page#8].
@@ -177,6 +179,36 @@ static int ltr390_get_samp_freq_or_period(struct ltr390_data *data,
 
 	return ltr390_samp_freq_table[value][option];
 }
+
+/*
+ * Indicates whether the most recent sensor data read from the device
+ * was freshly measured (1) or stale/old (0). This is based on ltr390's
+ * internal data status bit.
+ */
+static ssize_t data_fresh_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret, status;
+	struct ltr390_data *data = iio_priv(dev_to_iio_dev(dev));
+
+	ret = ltr390_register_read(data, LTR390_MAIN_STATUS);
+	if (ret < 0)
+		return ret;
+
+	status = ret;
+	return sysfs_emit(buf, "%d\n", !!(status & LTR390_DATA_STATUS_MASK));
+}
+
+static IIO_DEVICE_ATTR_RO(data_fresh, 0);
+
+static struct attribute *ltr390_attributes[] = {
+	&iio_dev_attr_data_fresh.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group ltr390_attribute_group = {
+	.attrs = ltr390_attributes,
+};
 
 static int ltr390_read_raw(struct iio_dev *iio_device,
 			   struct iio_chan_spec const *chan, int *val,
@@ -594,6 +626,7 @@ static const struct iio_info ltr390_info = {
 	.read_event_config = ltr390_read_event_config,
 	.write_event_value = ltr390_write_event_value,
 	.write_event_config = ltr390_write_event_config,
+	.attrs = &ltr390_attribute_group,
 };
 
 static irqreturn_t ltr390_interrupt_handler(int irq, void *private)
