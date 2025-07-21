@@ -1660,12 +1660,12 @@ static int cpufreq_add_dev(struct device *dev, struct subsys_interface *sif)
 		ret = cpufreq_online(cpu);
 		if (ret)
 			return ret;
-	}
 
-	/* Create sysfs link on CPU registration */
-	policy = per_cpu(cpufreq_cpu_data, cpu);
-	if (policy)
-		add_cpu_dev_symlink(policy, cpu, dev);
+		/* Create sysfs link on CPU registration */
+		policy = per_cpu(cpufreq_cpu_data, cpu);
+		if (policy)
+			add_cpu_dev_symlink(policy, cpu, dev);
+	}
 
 	return 0;
 }
