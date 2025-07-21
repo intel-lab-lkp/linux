@@ -70,17 +70,6 @@
  */
 static LIST_HEAD(rv_reactors_list);
 
-static struct rv_reactor *get_reactor_rdef_by_name(char *name)
-{
-	struct rv_reactor *r;
-
-	list_for_each_entry(r, &rv_reactors_list, list) {
-		if (strcmp(name, r->name) == 0)
-			return r;
-	}
-	return NULL;
-}
-
 /*
  * Available reactors seq functions.
  */
@@ -174,7 +163,7 @@ static void monitor_swap_reactors_single(struct rv_monitor *mon,
 
 	mon->reactor = reactor;
 	mon->reacting = reacting;
-	mon->react = reactor->react;
+	mon->react = reactor ? reactor->react : NULL;
 
 	/* enable only once if iterating through a container */
 	if (monitor_enabled && !nested)
@@ -210,9 +199,14 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 	struct rv_reactor *reactor;
 	struct seq_file *seq_f;
 	int retval = -EINVAL;
-	bool enable;
 	char *ptr;
 	int len;
+
+	/*
+	 * See monitor_reactors_open()
+	 */
+	seq_f = file->private_data;
+	mon = seq_f->private;
 
 	if (count < 1 || count > MAX_RV_REACTOR_NAME_SIZE + 1)
 		return -EINVAL;
@@ -226,14 +220,10 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 	ptr = strim(buff);
 
 	len = strlen(ptr);
-	if (!len)
+	if (!len) {
+		monitor_swap_reactors(mon, NULL, false);
 		return count;
-
-	/*
-	 * See monitor_reactors_open()
-	 */
-	seq_f = file->private_data;
-	mon = seq_f->private;
+	}
 
 	mutex_lock(&rv_interface_lock);
 
@@ -243,12 +233,7 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 		if (strcmp(ptr, reactor->name) != 0)
 			continue;
 
-		if (strcmp(reactor->name, "nop"))
-			enable = false;
-		else
-			enable = true;
-
-		monitor_swap_reactors(mon, reactor, enable);
+		monitor_swap_reactors(mon, reactor, true);
 
 		retval = count;
 		break;
@@ -435,32 +420,12 @@ int reactor_populate_monitor(struct rv_monitor *mon)
 	if (!tmp)
 		return -ENOMEM;
 
-	/*
-	 * Configure as the rv_nop reactor.
-	 */
-	mon->reactor = get_reactor_rdef_by_name("nop");
-	mon->reacting = false;
-
 	return 0;
 }
-
-/*
- * Nop reactor register
- */
-__printf(1, 2) static void rv_nop_reaction(const char *msg, ...)
-{
-}
-
-static struct rv_reactor rv_nop = {
-	.name = "nop",
-	.description = "no-operation reactor: do nothing.",
-	.react = rv_nop_reaction
-};
 
 int init_rv_reactors(struct dentry *root_dir)
 {
 	struct dentry *available, *reacting;
-	int retval;
 
 	available = rv_create_file("available_reactors", RV_MODE_READ, root_dir, NULL,
 				   &available_reactors_ops);
@@ -471,16 +436,10 @@ int init_rv_reactors(struct dentry *root_dir)
 	if (!reacting)
 		goto rm_available;
 
-	retval = __rv_register_reactor(&rv_nop);
-	if (retval)
-		goto rm_reacting;
-
 	turn_reacting_on();
 
 	return 0;
 
-rm_reacting:
-	rv_remove(reacting);
 rm_available:
 	rv_remove(available);
 out_err:
