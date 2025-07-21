@@ -42,8 +42,10 @@ int check_version(const struct load_info *info,
 	}
 
 	/* No versions at all?  modprobe --force does this. */
-	if (versindex == 0)
+	if (versindex == 0) {
+		pr_debug("No version info for module %s\n", info->name);
 		return try_to_force_load(mod, symname) == 0;
+	}
 
 	versions = (void *)sechdrs[versindex].sh_addr;
 	num_versions = sechdrs[versindex].sh_size
