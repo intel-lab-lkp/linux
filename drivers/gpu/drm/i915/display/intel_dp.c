@@ -3001,6 +3001,23 @@ static bool can_enable_drrs(struct intel_connector *connector,
 		intel_panel_drrs_type(connector) == DRRS_TYPE_SEAMLESS;
 }
 
+void intel_dp_check_m_n_ratio(struct intel_crtc_state *crtc_state,
+			      struct intel_link_m_n *m_n)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	int m_n_ratio;
+
+	if (!m_n || !m_n->link_n)
+		return;
+
+	m_n_ratio = DIV_ROUND_UP(m_n->link_m, m_n->link_n);
+
+	if (m_n_ratio > intel_dp_get_max_m_n_ratio())
+		drm_WARN(display->drm, 1,
+			 "Link M/N ratio (%d) exceeds max allowed (%d)\n",
+			 m_n_ratio, intel_dp_get_max_m_n_ratio());
+}
+
 static void
 intel_dp_drrs_compute_config(struct intel_connector *connector,
 			     struct intel_crtc_state *pipe_config,
@@ -3038,6 +3055,8 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 			       pipe_config->port_clock,
 			       intel_dp_bw_fec_overhead(pipe_config->fec_enable),
 			       &pipe_config->dp_m2_n2);
+
+	intel_dp_check_m_n_ratio(pipe_config, &pipe_config->dp_m2_n2);
 
 	/* FIXME: abstract this better */
 	if (pipe_config->splitter.enable)
@@ -3316,6 +3335,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 				       pipe_config->port_clock,
 				       intel_dp_bw_fec_overhead(pipe_config->fec_enable),
 				       &pipe_config->dp_m_n);
+
+		intel_dp_check_m_n_ratio(pipe_config, &pipe_config->dp_m_n);
 	}
 
 	ret = intel_dp_compute_min_hblank(pipe_config, conn_state);

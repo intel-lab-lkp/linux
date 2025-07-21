@@ -349,6 +349,8 @@ int ilk_fdi_compute_config(struct intel_crtc *crtc,
 			       intel_dp_bw_fec_overhead(false),
 			       &pipe_config->fdi_m_n);
 
+	intel_dp_check_m_n_ratio(pipe_config, &pipe_config->dp_m_n);
+
 	return 0;
 }
 
