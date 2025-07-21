@@ -7244,7 +7244,8 @@ static void napi_restore_config(struct napi_struct *n)
 		n->config->napi_id = n->napi_id;
 	}
 
-	WARN_ON_ONCE(napi_set_threaded(n, n->config->threaded));
+	if (n->config->threaded)
+		WARN_ON_ONCE(napi_set_threaded(n, n->config->threaded));
 }
 
 static void napi_save_config(struct napi_struct *n)
