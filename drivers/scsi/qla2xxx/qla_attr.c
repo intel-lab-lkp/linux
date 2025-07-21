@@ -10,6 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/string_choices.h>
 
 static int qla24xx_vport_disable(struct fc_vport *, bool);
 
@@ -1722,7 +1723,7 @@ qla2x00_allow_cna_fw_dump_show(struct device *dev,
 		return scnprintf(buf, PAGE_SIZE, "\n");
 	else
 		return scnprintf(buf, PAGE_SIZE, "%s\n",
-		    vha->hw->allow_cna_fw_dump ? "true" : "false");
+		    str_true_false(vha->hw->allow_cna_fw_dump));
 }
 
 static ssize_t
