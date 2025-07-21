@@ -1,5 +1,10 @@
 menu "SoC selection"
 
+config ARCH_ANLOGIC
+	bool "Anlogic SoCs"
+	help
+		This enables support for Anlogic SoC platform hardware.
+
 config ARCH_MICROCHIP_POLARFIRE
 	def_bool ARCH_MICROCHIP
 
