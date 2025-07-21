@@ -31,6 +31,13 @@ u32 *vmcoreinfo_note;
 /* trusted vmcoreinfo, e.g. we can make a copy in the crash memory */
 static unsigned char *vmcoreinfo_data_safecopy;
 
+struct hwerror_tracking_info {
+	int __data_racy count;
+	time64_t __data_racy timestamp;
+};
+
+static struct hwerror_tracking_info hwerror_tracking[HWE_RECOV_MAX];
+
 Elf_Word *append_elf_note(Elf_Word *buf, char *name, unsigned int type,
 			  void *data, size_t data_len)
 {
@@ -117,6 +124,17 @@ phys_addr_t __weak paddr_vmcoreinfo_note(void)
 	return __pa(vmcoreinfo_note);
 }
 EXPORT_SYMBOL(paddr_vmcoreinfo_note);
+
+void hwerror_tracking_log(enum hwerror_tracking_source src)
+{
+	if (src < 0 || src >= HWE_RECOV_MAX)
+		return;
+
+	/* No need to atomics/locks given the precision is not important */
+	hwerror_tracking[src].count++;
+	hwerror_tracking[src].timestamp = ktime_get_real_seconds();
+}
+EXPORT_SYMBOL_GPL(hwerror_tracking_log);
 
 static int __init crash_save_vmcoreinfo_init(void)
 {

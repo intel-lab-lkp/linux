@@ -77,4 +77,18 @@ extern u32 *vmcoreinfo_note;
 Elf_Word *append_elf_note(Elf_Word *buf, char *name, unsigned int type,
 			  void *data, size_t data_len);
 void final_note(Elf_Word *buf);
+
+enum hwerror_tracking_source {
+	HWE_RECOV_AER,
+	HWE_RECOV_MCE,
+	HWE_RECOV_GHES,
+	HWE_RECOV_MAX,
+};
+
+#ifdef CONFIG_VMCORE_INFO
+void hwerror_tracking_log(enum hwerror_tracking_source src);
+#else
+void hwerror_tracking_log(enum hwerror_tracking_source src) {};
+#endif
+
 #endif /* LINUX_VMCORE_INFO_H */
