@@ -767,7 +767,7 @@ static int create_return_sites_sections(struct objtool_file *file)
 
 	idx = 0;
 	list_for_each_entry(insn, &file->return_thunk_list, call_node)
-		idx++;
+tools/objtool/.check.c.swp		idx++;
 
 	if (!idx)
 		return 0;
@@ -3944,7 +3944,7 @@ static int validate_unret(struct objtool_file *file, struct instruction *insn)
 			return 0;
 
 		if (!next) {
-			WARN_INSN(insn, "teh end!");
+			WARN_INSN(insn, "the end!");
 			return 1;
 		}
 		insn = next;
