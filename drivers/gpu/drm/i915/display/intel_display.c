@@ -3406,7 +3406,6 @@ void bmg_bypass_m_n_limit_read(struct intel_crtc *crtc,
 		m_n->bypass_m_n_ratio_limit = true;
 }
 
-static
 bool intel_display_can_bypass_m_n_limit(struct intel_display *display,
 					int m_n_ratio,
 					enum pipe pipe)
