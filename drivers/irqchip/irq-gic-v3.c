@@ -1821,12 +1821,16 @@ static int partition_domain_translate(struct irq_domain *d,
 		return -EINVAL;
 
 	ret = gic_irq_domain_translate(d, fwspec, &ppi_intid, type);
-	if (WARN_ON_ONCE(ret))
+	if (WARN_ON_ONCE(ret)) {
+		of_node_put(np);
 		return 0;
+	}
 
 	ppi_idx = __gic_get_ppi_index(ppi_intid);
 	ret = partition_translate_id(gic_data.ppi_descs[ppi_idx],
 				     of_fwnode_handle(np));
+	of_node_put(np);
+
 	if (ret < 0)
 		return ret;
 
