@@ -412,7 +412,7 @@ static int jbusmc_probe(struct platform_device *op)
 	mem_regs = of_get_property(mem_node, "reg", &len);
 	if (!mem_regs) {
 		printk(KERN_ERR PFX "Cannot get reg property of /memory node.\n");
-		goto out;
+		goto out_put;
 	}
 	num_mem_regs = len / sizeof(*mem_regs);
 
@@ -420,7 +420,7 @@ static int jbusmc_probe(struct platform_device *op)
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p) {
 		printk(KERN_ERR PFX "Cannot allocate struct jbusmc.\n");
-		goto out;
+		goto out_put;
 	}
 
 	INIT_LIST_HEAD(&p->list);
@@ -473,6 +473,10 @@ static int jbusmc_probe(struct platform_device *op)
 
 	err = 0;
 
+out_put:
+	of_node_put(mem_node);
+	goto out;
+
 out:
 	return err;
 
@@ -481,7 +485,7 @@ out_iounmap:
 
 out_free:
 	kfree(p);
-	goto out;
+	goto out_put;
 }
 
 /* Does BANK decode PHYS_ADDR? */
