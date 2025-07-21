@@ -359,6 +359,12 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 	else if (mbm_offset > MBM_CNTR_WIDTH_OFFSET_MAX)
 		pr_warn("Ignoring impossible MBM counter offset\n");
 
+	if (r->num_rmid < 1) {
+		pr_warn("Invalid num_rmid %d, cach_max_rmid was %d\n",
+			r->num_rmid, boot_cpu_data.x86_cache_max_rmid);
+		r->num_rmid = 1;
+	}
+
 	/*
 	 * A reasonable upper limit on the max threshold is the number
 	 * of lines tagged per RMID if all RMIDs have the same number of
