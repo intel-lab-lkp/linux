@@ -1856,6 +1856,7 @@ static int null_setup_tagset(struct nullb *nullb)
 {
 	if (nullb->dev->shared_tags) {
 		nullb->tag_set = &tag_set;
+		nullb->tag_set->driver_data = nullb;
 		return null_init_global_tag_set();
 	}
 
