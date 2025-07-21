@@ -58,8 +58,7 @@ DEFINE_PER_CPU(struct fpu *, fpu_fpregs_owner_ctx);
 #ifdef CONFIG_X86_DEBUG_FPU
 struct fpu *x86_task_fpu(struct task_struct *task)
 {
-	if (WARN_ON_ONCE(task->flags & PF_KTHREAD))
-		return NULL;
+	WARN_ON_ONCE(task->flags & (PF_KTHREAD | PF_USER_WORKER));
 
 	return (void *)task + sizeof(*task);
 }
