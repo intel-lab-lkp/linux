@@ -176,6 +176,30 @@ DECLARE_EVENT_CLASS(error_ltl_monitor_id,
 #include <monitors/sleep/sleep_trace.h>
 // Add new monitors based on CONFIG_LTL_MON_EVENTS_ID here
 #endif /* CONFIG_LTL_MON_EVENTS_ID */
+
+#ifdef CONFIG_RV_MON_MAINTENANCE_EVENTS
+/* Tracepoint useful for monitors development, currenly only used in DA */
+TRACE_EVENT(rv_retries_error,
+
+	TP_PROTO(char *name, int id),
+
+	TP_ARGS(name, id),
+
+	TP_STRUCT__entry(
+		__string(	name,	name	)
+		__field(	int,	id	)
+	),
+
+	TP_fast_assign(
+		__assign_str(name);
+		__entry->id = id;
+	),
+
+	TP_printk(__stringify(MAX_DA_RETRY_RACING_EVENTS)
+		" retries reached, resetting monitor %s-%d",
+		__get_str(name), __entry->id)
+);
+#endif /* CONFIG_RV_MON_MAINTENANCE_EVENTS */
 #endif /* _TRACE_RV_H */
 
 /* This part must be outside protection */
