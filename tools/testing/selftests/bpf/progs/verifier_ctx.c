@@ -218,4 +218,31 @@ __naked void null_check_8_null_bind(void)
 	: __clobber_all);
 }
 
+SEC("tc")
+__description("invalid narrow skb->sk load")
+__failure __msg("invalid bpf_context access")
+__naked void invalid_narrow_skb_sk_load(void)
+{
+	asm volatile ("				\
+	r0 = *(u8 *)(r1 + %[__sk_buff_sk]);	\
+	exit;					\
+"	:
+	: __imm_const(__sk_buff_sk, offsetof(struct __sk_buff, sk) + 1)
+	: __clobber_all);
+}
+
+SEC("sockops")
+__description("invalid narrow skops->sk_data load")
+__failure __msg("invalid bpf_context access")
+__naked void invalid_narrow_skops_sk_data_load(void)
+{
+	asm volatile ("				\
+	r1 = *(u32 *)(r1 + %[sk_data]);		\
+	r0 = 0;					\
+	exit;					\
+"	:
+	: __imm_const(sk_data, offsetof(struct bpf_sock_ops, skb_data) + 4)
+	: __clobber_all);
+}
+
 char _license[] SEC("license") = "GPL";
