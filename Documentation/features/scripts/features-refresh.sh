@@ -1,4 +1,4 @@
-#
+#!/bin/sh
 # Small script that refreshes the kernel feature support status in place.
 #
 
