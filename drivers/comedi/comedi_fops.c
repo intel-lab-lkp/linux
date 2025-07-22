@@ -782,24 +782,33 @@ void comedi_device_cancel_all(struct comedi_device *dev)
 	}
 }
 
-static int is_device_busy(struct comedi_device *dev)
+static int start_detach(struct comedi_device *dev)
 {
 	struct comedi_subdevice *s;
-	int i;
+	int i, is_busy = 0;
 
 	lockdep_assert_held(&dev->mutex);
+	lockdep_assert_held(&dev->attach_lock);
 	if (!dev->attached)
 		return 0;
 
 	for (i = 0; i < dev->n_subdevices; i++) {
 		s = &dev->subdevices[i];
-		if (s->busy)
-			return 1;
-		if (s->async && comedi_buf_is_mmapped(s))
-			return 1;
+		if (s->busy) {
+			is_busy = 1;
+			break;
+		}
+		if (!s->async)
+			continue;
+		if (comedi_buf_is_mmapped(s) ||
+		    wq_has_sleeper(&s->async->wait_head)) {
+			is_busy = 1;
+			break;
+		}
 	}
-
-	return 0;
+	if (!is_busy)
+		dev->detaching = 1;
+	return is_busy;
 }
 
 /*
@@ -825,8 +834,13 @@ static int do_devconfig_ioctl(struct comedi_device *dev,
 		return -EPERM;
 
 	if (!arg) {
-		if (is_device_busy(dev))
+		/* prevent new polls */
+		down_write(&dev->attach_lock);
+		if (start_detach(dev)) {
+			up_write(&dev->attach_lock);
 			return -EBUSY;
+		}
+		up_write(&dev->attach_lock);
 		if (dev->attached) {
 			struct module *driver_module = dev->driver->module;
 
@@ -2456,7 +2470,7 @@ static __poll_t comedi_poll(struct file *file, poll_table *wait)
 
 	down_read(&dev->attach_lock);
 
-	if (!dev->attached) {
+	if (!dev->attached || dev->detaching) {
 		dev_dbg(dev->class_dev, "no driver attached\n");
 		goto done;
 	}
