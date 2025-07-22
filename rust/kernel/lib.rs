@@ -89,6 +89,7 @@ pub mod firmware;
 pub mod fmt;
 pub mod fs;
 pub mod init;
+pub mod icc;
 pub mod io;
 pub mod ioctl;
 pub mod jump_label;
