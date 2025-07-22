@@ -74,91 +74,100 @@ dispatch:
 
 #define BLK_MQ_BUDGET_DELAY	3		/* ms units */
 
-/*
- * Only SCSI implements .get_budget and .put_budget, and SCSI restarts
- * its queue by itself in its completion handler, so we don't need to
- * restart queue if .get_budget() fails to get the budget.
- *
- * Returns -EAGAIN if hctx->dispatch was found non-empty and run_work has to
- * be run again.  This is necessary to avoid starving flushes.
- */
-static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
+struct sched_dispatch_ctx {
+	struct blk_mq_hw_ctx *hctx;
+	struct elevator_queue *e;
+	struct request_queue *q;
+
+	struct list_head rq_list;
+	int count;
+
+	bool multi_hctxs;
+	bool run_queue;
+	bool busy;
+};
+
+static bool elevator_can_dispatch(struct sched_dispatch_ctx *ctx)
 {
-	struct request_queue *q = hctx->queue;
-	struct elevator_queue *e = q->elevator;
-	bool multi_hctxs = false, run_queue = false;
-	bool dispatched = false, busy = false;
-	unsigned int max_dispatch;
-	LIST_HEAD(rq_list);
-	int count = 0;
+	if (ctx->e->type->ops.has_work &&
+	    !ctx->e->type->ops.has_work(ctx->hctx))
+		return false;
 
-	if (hctx->dispatch_busy)
-		max_dispatch = 1;
-	else
-		max_dispatch = hctx->queue->nr_requests;
+	if (!list_empty_careful(&ctx->hctx->dispatch)) {
+		ctx->busy = true;
+		return false;
+	}
 
-	do {
-		bool sq_sched = blk_queue_sq_sched(q);
-		struct request *rq;
-		int budget_token;
+	return true;
+}
 
-		if (e->type->ops.has_work && !e->type->ops.has_work(hctx))
-			break;
+static bool elevator_dispatch_one_request(struct sched_dispatch_ctx *ctx)
+{
+	bool sq_sched = blk_queue_sq_sched(ctx->q);
+	struct request *rq;
+	int budget_token;
 
-		if (!list_empty_careful(&hctx->dispatch)) {
-			busy = true;
-			break;
-		}
+	if (!elevator_can_dispatch(ctx))
+		return false;
 
-		budget_token = blk_mq_get_dispatch_budget(q);
-		if (budget_token < 0)
-			break;
+	budget_token = blk_mq_get_dispatch_budget(ctx->q);
+	if (budget_token < 0)
+		return false;
 
-		if (sq_sched)
-			spin_lock_irq(&e->lock);
-		rq = e->type->ops.dispatch_request(hctx);
-		if (sq_sched)
-			spin_unlock_irq(&e->lock);
+	if (sq_sched)
+		spin_lock_irq(&ctx->e->lock);
+	rq = ctx->e->type->ops.dispatch_request(ctx->hctx);
+	if (sq_sched)
+		spin_unlock_irq(&ctx->e->lock);
 
-		if (!rq) {
-			blk_mq_put_dispatch_budget(q, budget_token);
-			/*
-			 * We're releasing without dispatching. Holding the
-			 * budget could have blocked any "hctx"s with the
-			 * same queue and if we didn't dispatch then there's
-			 * no guarantee anyone will kick the queue.  Kick it
-			 * ourselves.
-			 */
-			run_queue = true;
-			break;
-		}
-
-		blk_mq_set_rq_budget_token(rq, budget_token);
-
+	if (!rq) {
+		blk_mq_put_dispatch_budget(ctx->q, budget_token);
 		/*
-		 * Now this rq owns the budget which has to be released
-		 * if this rq won't be queued to driver via .queue_rq()
-		 * in blk_mq_dispatch_rq_list().
+		 * We're releasing without dispatching. Holding the
+		 * budget could have blocked any "hctx"s with the
+		 * same queue and if we didn't dispatch then there's
+		 * no guarantee anyone will kick the queue.  Kick it
+		 * ourselves.
 		 */
-		list_add_tail(&rq->queuelist, &rq_list);
-		count++;
-		if (rq->mq_hctx != hctx)
-			multi_hctxs = true;
+		ctx->run_queue = true;
+		return false;
+	}
 
-		/*
-		 * If we cannot get tag for the request, stop dequeueing
-		 * requests from the IO scheduler. We are unlikely to be able
-		 * to submit them anyway and it creates false impression for
-		 * scheduling heuristics that the device can take more IO.
-		 */
-		if (!blk_mq_get_driver_tag(rq))
-			break;
-	} while (count < max_dispatch);
+	blk_mq_set_rq_budget_token(rq, budget_token);
 
-	if (!count) {
-		if (run_queue)
-			blk_mq_delay_run_hw_queues(q, BLK_MQ_BUDGET_DELAY);
-	} else if (multi_hctxs) {
+	/*
+	 * Now this rq owns the budget which has to be released
+	 * if this rq won't be queued to driver via .queue_rq()
+	 * in blk_mq_dispatch_rq_list().
+	 */
+	list_add_tail(&rq->queuelist, &ctx->rq_list);
+	ctx->count++;
+	if (rq->mq_hctx != ctx->hctx)
+		ctx->multi_hctxs = true;
+
+	/*
+	 * If we cannot get tag for the request, stop dequeueing
+	 * requests from the IO scheduler. We are unlikely to be able
+	 * to submit them anyway and it creates false impression for
+	 * scheduling heuristics that the device can take more IO.
+	 */
+	return blk_mq_get_driver_tag(rq);
+}
+
+/*
+ * Returns -EAGAIN if hctx->dispatch was found non-empty and run_work has to
+ * be run again. This is necessary to avoid starving flushes.
+ * Return 0 if no request is dispatched.
+ * Return 1 if at least one request is dispatched.
+ */
+static int elevator_finish_dispatch(struct sched_dispatch_ctx *ctx)
+{
+	bool dispatched = false;
+
+	if (!ctx->count) {
+		if (ctx->run_queue)
+			blk_mq_delay_run_hw_queues(ctx->q, BLK_MQ_BUDGET_DELAY);
+	} else if (ctx->multi_hctxs) {
 		/*
 		 * Requests from different hctx may be dequeued from some
 		 * schedulers, such as bfq and deadline.
@@ -166,17 +175,50 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 		 * Sort the requests in the list according to their hctx,
 		 * dispatch batching requests from same hctx at a time.
 		 */
-		list_sort(NULL, &rq_list, sched_rq_cmp);
+		list_sort(NULL, &ctx->rq_list, sched_rq_cmp);
 		do {
-			dispatched |= blk_mq_dispatch_hctx_list(&rq_list);
-		} while (!list_empty(&rq_list));
+			dispatched |= blk_mq_dispatch_hctx_list(&ctx->rq_list);
+		} while (!list_empty(&ctx->rq_list));
 	} else {
-		dispatched = blk_mq_dispatch_rq_list(hctx, &rq_list, false);
+		dispatched = blk_mq_dispatch_rq_list(ctx->hctx, &ctx->rq_list,
+						     false);
 	}
 
-	if (busy)
+	if (ctx->busy)
 		return -EAGAIN;
+
 	return !!dispatched;
+}
+
+/*
+ * Only SCSI implements .get_budget and .put_budget, and SCSI restarts
+ * its queue by itself in its completion handler, so we don't need to
+ * restart queue if .get_budget() fails to get the budget.
+ *
+ * See elevator_finish_dispatch() for return values.
+ */
+static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
+{
+	unsigned int max_dispatch;
+	struct sched_dispatch_ctx ctx = {
+		.hctx	= hctx,
+		.q	= hctx->queue,
+		.e	= hctx->queue->elevator,
+	};
+
+	INIT_LIST_HEAD(&ctx.rq_list);
+
+	if (hctx->dispatch_busy)
+		max_dispatch = 1;
+	else
+		max_dispatch = hctx->queue->nr_requests;
+
+	do {
+		if (!elevator_dispatch_one_request(&ctx))
+			break;
+	} while (ctx.count < max_dispatch);
+
+	return elevator_finish_dispatch(&ctx);
 }
 
 static int blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
