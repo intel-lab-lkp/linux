@@ -4647,6 +4647,15 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+static int memory_socket_pressure_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%lu\n", READ_ONCE(memcg->socket_pressure));
+
+	return 0;
+}
+
 static struct cftype memory_files[] = {
 	{
 		.name = "current",
@@ -4717,6 +4726,11 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	{
+		.name = "net.socket_pressure",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_socket_pressure_show,
 	},
 	{ }	/* terminate */
 };
