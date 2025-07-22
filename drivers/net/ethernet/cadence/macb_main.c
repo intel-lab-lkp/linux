@@ -36,6 +36,7 @@
 #include <linux/reset.h>
 #include <linux/firmware/xlnx-zynqmp.h>
 #include <linux/inetdevice.h>
+#include <net/pkt_sched.h>
 #include "macb.h"
 
 /* This structure is only used for MACB on SiFive FU540 devices */
@@ -4082,6 +4083,160 @@ static void macb_restore_features(struct macb *bp)
 		gem_prog_cmp_regs(bp, &item->fs);
 
 	macb_set_rxflow_feature(bp, features);
+}
+
+static int macb_taprio_setup_replace(struct net_device *ndev,
+				     struct tc_taprio_qopt_offload *conf)
+{
+	u64 total_on_time = 0, start_time_sec = 0, start_time = conf->base_time;
+	struct queue_enst_configs  *enst_queue;
+	u32 configured_queues = 0, speed = 0;
+	struct tc_taprio_sched_entry *entry;
+	struct macb *bp = netdev_priv(ndev);
+	struct ethtool_link_ksettings kset;
+	struct macb_queue *queue;
+	unsigned long flags;
+	int err = 0, i;
+
+	/* Validate queue configuration */
+	if (bp->num_queues < 1 || bp->num_queues > MACB_MAX_QUEUES) {
+		netdev_err(ndev, "Invalid number of queues: %d\n", bp->num_queues);
+		return -EINVAL;
+	}
+
+	if (conf->num_entries > bp->num_queues) {
+		netdev_err(ndev, "Too many TAPRIO entries: %lu > %d queues\n",
+			   conf->num_entries, bp->num_queues);
+		return -EINVAL;
+	}
+
+	if (start_time < 0) {
+		netdev_err(ndev, "Invalid base_time: must be 0 or positive, got %lld\n",
+			   conf->base_time);
+		return -ERANGE;
+	}
+
+	/* Get the current link speed */
+	err = phylink_ethtool_ksettings_get(bp->phylink, &kset);
+	if (unlikely(err)) {
+		netdev_err(ndev, "Failed to get link settings: %d\n", err);
+		return err;
+	}
+
+	speed = kset.base.speed;
+	if (unlikely(speed <= 0)) {
+		netdev_err(ndev, "Invalid speed: %d\n", speed);
+		return -EINVAL;
+	}
+
+	enst_queue = kcalloc(conf->num_entries, sizeof(*enst_queue), GFP_KERNEL);
+	if (!enst_queue)
+		return -ENOMEM;
+
+	/* Pre-validate all entries before making any hardware changes */
+	for (i = 0; i < conf->num_entries; i++) {
+		entry = &conf->entries[i];
+
+		if (entry->command != TC_TAPRIO_CMD_SET_GATES) {
+			netdev_err(ndev, "Entry %d: unsupported command %d\n",
+				   i, entry->command);
+			err = -EOPNOTSUPP;
+			goto cleanup;
+		}
+
+		/* Validate gate_mask: must be nonzero, single queue, and within range */
+		if (!is_power_of_2(entry->gate_mask)) {
+			netdev_err(ndev, "Entry %d: gate_mask 0x%x is not a power of 2 (only one queue per entry allowed)\n",
+				   i, entry->gate_mask);
+			err = -EINVAL;
+			goto cleanup;
+		}
+
+		/* gate_mask must not select queues outside the valid queue_mask */
+		if (entry->gate_mask & ~bp->queue_mask) {
+			netdev_err(ndev, "Entry %d: gate_mask 0x%x exceeds queue range (max_queues=%d)\n",
+				   i, entry->gate_mask, bp->num_queues);
+			err = -EINVAL;
+			goto cleanup;
+		}
+
+		/* Check for start time limits */
+		start_time_sec = div_u64(start_time, NSEC_PER_SEC);
+		if (start_time_sec > ENST_MAX_START_TIME_SEC) {
+			netdev_err(ndev, "Entry %d: Start time %llu s exceeds hardware limit\n",
+				   i, start_time_sec);
+			err = -ERANGE;
+			goto cleanup;
+		}
+
+		/* Check for on time limit*/
+		if (entry->interval > ENST_MAX_HW_INTERVAL(speed)) {
+			netdev_err(ndev, "Entry %d: interval %u ns exceeds hardware limit %lu ns\n",
+				   i, entry->interval, ENST_MAX_HW_INTERVAL(speed));
+			err = -ERANGE;
+			goto cleanup;
+		}
+
+		/* Check for off time limit*/
+		if ((conf->cycle_time - entry->interval) > ENST_MAX_HW_INTERVAL(speed)) {
+			netdev_err(ndev, "Entry %d: off_time %llu ns exceeds hardware limit %lu ns\n",
+				   i, conf->cycle_time - entry->interval,
+				   ENST_MAX_HW_INTERVAL(speed));
+			err = -ERANGE;
+			goto cleanup;
+		}
+
+		enst_queue[i].queue_id = order_base_2(entry->gate_mask);
+		enst_queue[i].start_time_mask =
+			(start_time_sec << GEM_START_TIME_SEC_OFFSET) |
+				  (start_time % NSEC_PER_SEC);
+		enst_queue[i].on_time_bytes =
+			ENST_NS_TO_HW_UNITS(entry->interval, speed);
+		enst_queue[i].off_time_bytes =
+			ENST_NS_TO_HW_UNITS(conf->cycle_time - entry->interval, speed);
+
+		configured_queues |= entry->gate_mask;
+		total_on_time += entry->interval;
+		start_time += entry->interval;
+	}
+
+	/* Check total interval doesn't exceed cycle time */
+	if (total_on_time > conf->cycle_time) {
+		netdev_err(ndev, "Total ON %llu ns exceeds cycle time %llu ns\n",
+			   total_on_time, conf->cycle_time);
+		err = -EINVAL;
+		goto cleanup;
+	}
+
+	netdev_dbg(ndev, "TAPRIO setup: %lu entries, base_time=%lld ns, cycle_time=%llu ns\n",
+		   conf->num_entries, conf->base_time, conf->cycle_time);
+
+	/* All validations passed - proceed with hardware configuration */
+	spin_lock_irqsave(&bp->lock, flags);
+
+	/* Disable ENST queues if running before configuring */
+	if (gem_readl(bp, ENST_CONTROL))
+		gem_writel(bp, ENST_CONTROL,
+			   GENMASK(bp->num_queues - 1, 0) << GEM_ENST_DISABLE_QUEUE_OFFSET);
+
+	for (i = 0; i < conf->num_entries; i++) {
+		queue = &bp->queues[enst_queue[i].queue_id];
+		/* Configure queue timing registers */
+		queue_writel(queue, ENST_START_TIME, enst_queue[i].start_time_mask);
+		queue_writel(queue, ENST_ON_TIME, enst_queue[i].on_time_bytes);
+		queue_writel(queue, ENST_OFF_TIME, enst_queue[i].off_time_bytes);
+	}
+
+	/* Enable ENST for all configured queues in one write */
+	gem_writel(bp, ENST_CONTROL, configured_queues);
+	spin_unlock_irqrestore(&bp->lock, flags);
+
+	netdev_info(ndev, "TAPRIO configuration completed successfully: %lu entries, %d queues configured\n",
+		    conf->num_entries, hweight32(configured_queues));
+
+cleanup:
+	kfree(enst_queue);
+	return err;
 }
 
 static const struct net_device_ops macb_netdev_ops = {
