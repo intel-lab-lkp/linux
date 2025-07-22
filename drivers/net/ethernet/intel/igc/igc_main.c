@@ -7150,6 +7150,7 @@ static int igc_probe(struct pci_dev *pdev,
 	adapter->msg_enable = netif_msg_init(debug, DEFAULT_MSG_ENABLE);
 
 	/* Disable ASPM L1.2 on I226 devices to avoid packet loss */
+	hw->device_id = pdev->device;
 	if (igc_is_device_id_i226(hw))
 		pci_disable_link_state(pdev, PCIE_LINK_STATE_L1_2);
 
@@ -7177,7 +7178,6 @@ static int igc_probe(struct pci_dev *pdev,
 
 	/* PCI config space info */
 	hw->vendor_id = pdev->vendor;
-	hw->device_id = pdev->device;
 	hw->revision_id = pdev->revision;
 	hw->subsystem_vendor_id = pdev->subsystem_vendor;
 	hw->subsystem_device_id = pdev->subsystem_device;
