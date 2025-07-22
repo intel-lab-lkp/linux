@@ -7,11 +7,11 @@
 
 #include "lemans-auto.dtsi"
 
-#include "sa8775p-pmics.dtsi"
+#include "lemans-pmics.dtsi"
 #include "lemans-ride-common.dtsi"
 #include "lemans-ride-ethernet-aqr115c.dtsi"
 
 / {
-	model = "Qualcomm SA8775P Ride Rev3";
-	compatible = "qcom,sa8775p-ride-r3", "qcom,sa8775p";
+	model = "Qualcomm Technologies, Inc. Lemans-auto Ride Rev3";
+	compatible = "qcom,lemans-auto-ride-r3", "qcom,sa8775p";
 };
