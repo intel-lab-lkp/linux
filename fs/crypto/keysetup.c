@@ -639,14 +639,14 @@ fscrypt_setup_encryption_info(struct inode *inode,
 		goto out;
 
 	/*
-	 * For existing inodes, multiple tasks may race to set ->i_crypt_info.
+	 * For existing inodes, multiple tasks may race to set ->i_fscrypt_info.
 	 * So use cmpxchg_release().  This pairs with the smp_load_acquire() in
-	 * fscrypt_get_inode_info().  I.e., here we publish ->i_crypt_info with
+	 * fscrypt_get_inode_info().  I.e., here we publish ->i_fscrypt_info with
 	 * a RELEASE barrier so that other tasks can ACQUIRE it.
 	 */
 	if (fscrypt_set_inode_info(inode, crypt_info)) {
 		/*
-		 * We won the race and set ->i_crypt_info to our crypt_info.
+		 * We won the race and set ->i_fscrypt_info to our crypt_info.
 		 * Now link it into the master key's inode list.
 		 */
 		if (mk) {
@@ -678,12 +678,12 @@ out:
  *		       %false unless the operation being performed is needed in
  *		       order for files (or directories) to be deleted.
  *
- * Set up ->i_crypt_info, if it hasn't already been done.
+ * Set up ->i_fscrypt_info, if it hasn't already been done.
  *
- * Note: unless ->i_crypt_info is already set, this isn't %GFP_NOFS-safe.  So
+ * Note: unless ->i_fscrypt_info is already set, this isn't %GFP_NOFS-safe.  So
  * generally this shouldn't be called from within a filesystem transaction.
  *
- * Return: 0 if ->i_crypt_info was set or was already set, *or* if the
+ * Return: 0 if ->i_fscrypt_info was set or was already set, *or* if the
  *	   encryption key is unavailable.  (Use fscrypt_has_encryption_key() to
  *	   distinguish these cases.)  Also can return another -errno code.
  */
@@ -738,9 +738,9 @@ int fscrypt_get_encryption_info(struct inode *inode, bool allow_unsupported)
  *	   ->i_ino doesn't need to be set yet.
  * @encrypt_ret: (output) set to %true if the new inode will be encrypted
  *
- * If the directory is encrypted, set up its ->i_crypt_info in preparation for
+ * If the directory is encrypted, set up its ->i_fscrypt_info in preparation for
  * encrypting the name of the new file.  Also, if the new inode will be
- * encrypted, set up its ->i_crypt_info and set *encrypt_ret=true.
+ * encrypted, set up its ->i_fscrypt_info and set *encrypt_ret=true.
  *
  * This isn't %GFP_NOFS-safe, and therefore it should be called before starting
  * any filesystem transaction to create the inode.  For this reason, ->i_ino
@@ -799,12 +799,11 @@ void fscrypt_put_encryption_info(struct inode *inode)
 {
 	struct fscrypt_inode_info **crypt_info;
 
-	if (inode->i_op->i_fscrypt)
+	if (inode->i_op->i_fscrypt) {
 		crypt_info = fscrypt_addr(inode);
-	else
-		crypt_info = &inode->i_crypt_info;
-	put_crypt_info(*crypt_info);
-	*crypt_info = NULL;
+		put_crypt_info(*crypt_info);
+		*crypt_info = NULL;
+	}
 }
 EXPORT_SYMBOL(fscrypt_put_encryption_info);
 
