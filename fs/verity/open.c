@@ -250,24 +250,18 @@ fail:
 
 void fsverity_set_info(struct inode *inode, struct fsverity_info *vi)
 {
-	void *p;
-
 	/*
-	 * Multiple tasks may race to set ->i_verity_info, so use
+	 * Multiple tasks may race to set ->i_fsverity_info, so use
 	 * cmpxchg_release().  This pairs with the smp_load_acquire() in
-	 * fsverity_get_info().  I.e., here we publish ->i_verity_info with a
+	 * fsverity_get_info().  I.e., here we publish ->i_fsverity_info with a
 	 * RELEASE barrier so that other tasks can ACQUIRE it.
 	 */
 
-	if (inode->i_op->i_fsverity)
-		p = cmpxchg_release(fsverity_addr(inode), NULL, vi);
-	else
-		p = cmpxchg_release(&inode->i_verity_info, NULL, vi);
-	if (p != NULL) {
+	if (cmpxchg_release(fsverity_addr(inode), NULL, vi) != NULL) {
 		/* Lost the race, so free the fsverity_info we allocated. */
 		fsverity_free_info(vi);
 		/*
-		 * Afterwards, the caller may access ->i_verity_info directly,
+		 * Afterwards, the caller may access ->i_fsverity_info directly,
 		 * so make sure to ACQUIRE the winning fsverity_info.
 		 */
 		(void)fsverity_get_info(inode);
@@ -364,7 +358,7 @@ int fsverity_get_descriptor(struct inode *inode,
 	return 0;
 }
 
-/* Ensure the inode has an ->i_verity_info */
+/* Ensure the inode has an ->i_fsverity_info */
 static int ensure_verity_info(struct inode *inode)
 {
 	struct fsverity_info *vi = fsverity_get_info(inode);
@@ -412,8 +406,6 @@ void __fsverity_cleanup_inode(struct inode *inode)
 	struct fsverity_info **vi;
 
 	vi = fsverity_addr(inode);
-	if (!*vi)
-		vi = &inode->i_verity_info;
 	fsverity_free_info(*vi);
 	*vi = NULL;
 }
