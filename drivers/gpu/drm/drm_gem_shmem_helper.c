@@ -353,8 +353,6 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 	} else {
 		pgprot_t prot = PAGE_KERNEL;
 
-		dma_resv_assert_held(shmem->base.resv);
-
 		if (refcount_inc_not_zero(&shmem->vmap_use_count)) {
 			iosys_map_set_vaddr(map, shmem->vaddr);
 			return 0;
@@ -411,8 +409,6 @@ void drm_gem_shmem_vunmap_locked(struct drm_gem_shmem_object *shmem,
 	if (drm_gem_is_imported(obj)) {
 		dma_buf_vunmap(obj->dma_buf, map);
 	} else {
-		dma_resv_assert_held(shmem->base.resv);
-
 		if (refcount_dec_and_test(&shmem->vmap_use_count)) {
 			vunmap(shmem->vaddr);
 			shmem->vaddr = NULL;
