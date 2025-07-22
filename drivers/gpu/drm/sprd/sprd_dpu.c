@@ -841,11 +841,26 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 	if (ret)
 		return ret;
 
+	if (device_iommu_mapped(dev)) {
+		ret = sprd_drm_iommu_attach(drm, dev);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
+}
+
+static void sprd_dpu_unbind(struct device *dev,
+			    struct device *master, void *data)
+{
+	struct drm_device *drm = data;
+
+	sprd_drm_iommu_detach(drm, dev);
 }
 
 static const struct component_ops dpu_component_ops = {
 	.bind = sprd_dpu_bind,
+	.unbind = sprd_dpu_unbind,
 };
 
 static const struct of_device_id dpu_match_table[] = {
