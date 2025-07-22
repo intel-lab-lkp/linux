@@ -111,6 +111,16 @@ properties:
     description:
       GPIO connected to the RESET pin of the UFS memory device.
 
+  limit-hs-gear:
+    maxItems: 1
+    description:
+      Limit max phy hs gear
+
+  limit-rate:
+    maxItems: 1
+    description:
+      Limit max phy hs rate
+
 required:
   - compatible
   - reg
