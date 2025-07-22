@@ -3258,6 +3258,11 @@ void intel_lnl_mac_transmit_lfps(struct intel_encoder *encoder,
 		if (!(owned_lane_mask & lane_mask))
 			continue;
 
+		if (intel_encoder_is_c10phy(encoder))
+			intel_cx0_rmw(encoder, lane_mask, PHY_C10_VDR_CONTROL(1),
+				      0, C10_VDR_CTRL_MSGBUS_ACCESS,
+				      MB_WRITE_COMMITTED);
+
 		intel_cx0_rmw(encoder, lane_mask, PHY_CMN1_CONTROL(tx, 0),
 			      CONTROL0_MAC_TRANSMIT_LFPS,
 			      CONTROL0_MAC_TRANSMIT_LFPS, MB_WRITE_COMMITTED);
