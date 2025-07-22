@@ -714,4 +714,12 @@ static inline int split_folio_to_order(struct folio *folio, int new_order)
 	return split_folio_to_list_to_order(folio, NULL, new_order);
 }
 
+static inline struct folio *largest_zero_folio(void)
+{
+       struct folio *folio = get_static_huge_zero_folio();
+
+       if (folio)
+               return folio;
+       return page_folio(ZERO_PAGE(0));
+}
 #endif /* _LINUX_HUGE_MM_H */
