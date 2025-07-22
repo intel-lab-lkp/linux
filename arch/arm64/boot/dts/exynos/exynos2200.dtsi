@@ -336,6 +336,19 @@
 			reg = <0x0 0x10730000 0x0 0x1000>;
 		};
 
+		serial_1: serial@10840000 {
+			compatible = "samsung,exynos2200-uart", "google,gs101-uart";
+			reg = <0x0 0x10840000 0x0 0x100>;
+			clocks = <&cmu_peric1 CLK_MOUT_PERIC1_NOC_USER>,
+				 <&cmu_peric1 CLK_DOUT_PERIC1_UART_BT>;
+			clock-names = "uart", "clk_uart_baud0";
+			interrupts = <GIC_SPI 674 IRQ_TYPE_LEVEL_HIGH 0>;
+			pinctrl-0 = <&uart1_bus>;
+			pinctrl-names = "default";
+			samsung,uart-fifosize = <256>;
+			status = "disabled";
+		};
+
 		cmu_hsi0: clock-controller@10a00000 {
 			compatible = "samsung,exynos2200-cmu-hsi0";
 			reg = <0x0 0x10a00000 0x0 0x8000>;
@@ -456,6 +469,19 @@
 		pinctrl_peric2: pinctrl@11c30000 {
 			compatible = "samsung,exynos2200-pinctrl";
 			reg = <0x0 0x11c30000 0x0 0x1000>;
+		};
+
+		serial_0: serial@11c40000 {
+			compatible = "samsung,exynos2200-uart", "google,gs101-uart";
+			reg = <0x0 0x11c40000 0x0 0x100>;
+			clocks = <&cmu_peric2 CLK_MOUT_PERIC2_NOC_USER>,
+				 <&cmu_peric2 CLK_DOUT_PERIC2_UART_DBG>;
+			clock-names = "uart", "clk_uart_baud0";
+			interrupts = <GIC_SPI 687 IRQ_TYPE_LEVEL_HIGH 0>;
+			pinctrl-0 = <&uart0_bus_single>;
+			pinctrl-names = "default";
+			samsung,uart-fifosize = <256>;
+			status = "disabled";
 		};
 
 		cmu_cmgp: clock-controller@14e00000 {
