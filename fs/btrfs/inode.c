@@ -7873,7 +7873,9 @@ struct inode *btrfs_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ei->delalloc_inodes);
 	INIT_LIST_HEAD(&ei->delayed_iput);
 	init_rwsem(&ei->i_mmap_lock);
-
+#ifdef CONFIG_FS_VERITY
+	ei->i_fsverity_info = NULL;
+#endif
 	return inode;
 }
 
@@ -10410,6 +10412,10 @@ struct btrfs_inode *btrfs_find_first_inode(struct btrfs_root *root, u64 min_ino)
 }
 
 static const struct inode_operations btrfs_dir_inode_operations = {
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct btrfs_inode, i_fsverity_info) -
+			  offsetof(struct btrfs_inode, vfs_inode),
+#endif
 	.getattr	= btrfs_getattr,
 	.lookup		= btrfs_lookup,
 	.create		= btrfs_create,
@@ -10471,6 +10477,10 @@ static const struct address_space_operations btrfs_aops = {
 };
 
 static const struct inode_operations btrfs_file_inode_operations = {
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct btrfs_inode, i_fsverity_info) -
+			  offsetof(struct btrfs_inode, vfs_inode),
+#endif
 	.getattr	= btrfs_getattr,
 	.setattr	= btrfs_setattr,
 	.listxattr      = btrfs_listxattr,
@@ -10483,6 +10493,10 @@ static const struct inode_operations btrfs_file_inode_operations = {
 	.fileattr_set	= btrfs_fileattr_set,
 };
 static const struct inode_operations btrfs_special_inode_operations = {
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct btrfs_inode, i_fsverity_info) -
+			  offsetof(struct btrfs_inode, vfs_inode),
+#endif
 	.getattr	= btrfs_getattr,
 	.setattr	= btrfs_setattr,
 	.permission	= btrfs_permission,
@@ -10492,6 +10506,10 @@ static const struct inode_operations btrfs_special_inode_operations = {
 	.update_time	= btrfs_update_time,
 };
 static const struct inode_operations btrfs_symlink_inode_operations = {
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct btrfs_inode, i_fsverity_info) -
+			  offsetof(struct btrfs_inode, vfs_inode),
+#endif
 	.get_link	= page_get_link,
 	.getattr	= btrfs_getattr,
 	.setattr	= btrfs_setattr,
