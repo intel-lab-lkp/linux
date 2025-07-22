@@ -437,11 +437,10 @@ __bpf_kfunc void css_rstat_flush(struct cgroup_subsys_state *css)
 	}
 }
 
-int css_rstat_init(struct cgroup_subsys_state *css)
+static int __css_rstat_init(struct cgroup_subsys_state *css, bool is_self)
 {
 	struct cgroup *cgrp = css->cgroup;
 	int cpu;
-	bool is_self = css_is_self(css);
 
 	if (is_self) {
 		/* the root cgrp has rstat_base_cpu preallocated */
@@ -481,7 +480,7 @@ int css_rstat_init(struct cgroup_subsys_state *css)
 	return 0;
 }
 
-void css_rstat_exit(struct cgroup_subsys_state *css)
+static void __css_rstat_exit(struct cgroup_subsys_state *css, bool is_self)
 {
 	int cpu;
 
@@ -499,7 +498,7 @@ void css_rstat_exit(struct cgroup_subsys_state *css)
 			return;
 	}
 
-	if (css_is_self(css)) {
+	if (is_self) {
 		struct cgroup *cgrp = css->cgroup;
 
 		free_percpu(cgrp->rstat_base_cpu);
@@ -508,6 +507,26 @@ void css_rstat_exit(struct cgroup_subsys_state *css)
 
 	free_percpu(css->rstat_cpu);
 	css->rstat_cpu = NULL;
+}
+
+int css_rstat_init(struct cgroup_subsys_state *css)
+{
+	return __css_rstat_init(css, false);
+}
+
+void css_rstat_exit(struct cgroup_subsys_state *css)
+{
+	return __css_rstat_exit(css, false);
+}
+
+int cgroup_rstat_base_init(struct cgroup *cgrp)
+{
+	return __css_rstat_init(&cgrp->self, true);
+}
+
+void cgroup_rstat_base_exit(struct cgroup *cgrp)
+{
+	__css_rstat_exit(&cgrp->self, true);
 }
 
 /**

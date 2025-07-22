@@ -270,6 +270,8 @@ int cgroup_task_count(const struct cgroup *cgrp);
 /*
  * rstat.c
  */
+int cgroup_rstat_base_init(struct cgroup *cgrp);
+void cgroup_rstat_base_exit(struct cgroup *cgrp);
 int css_rstat_init(struct cgroup_subsys_state *css);
 void css_rstat_exit(struct cgroup_subsys_state *css);
 int ss_rstat_init(struct cgroup_subsys *ss);

@@ -2149,7 +2149,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	if (ret)
 		goto destroy_root;
 
-	ret = css_rstat_init(&root_cgrp->self);
+	ret = cgroup_rstat_base_init(root_cgrp);
 	if (ret)
 		goto destroy_root;
 
@@ -2190,7 +2190,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	goto out;
 
 exit_stats:
-	css_rstat_exit(&root_cgrp->self);
+	cgroup_rstat_base_exit(root_cgrp);
 destroy_root:
 	kernfs_destroy_root(root->kf_root);
 	root->kf_root = NULL;
@@ -5446,13 +5446,13 @@ static void css_free_rwork_fn(struct work_struct *work)
 	struct cgroup *cgrp = css->cgroup;
 
 	percpu_ref_exit(&css->refcnt);
-	css_rstat_exit(css);
 
 	if (!css_is_self(css)) {
 		/* css free path */
 		struct cgroup_subsys_state *parent = css->parent;
 		int id = css->id;
 
+		css_rstat_exit(css);
 		ss->css_free(css);
 		cgroup_idr_remove(&ss->css_idr, id);
 		cgroup_put(cgrp);
@@ -5477,6 +5477,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 			cgroup_put(cgroup_parent(cgrp));
 			kernfs_put(cgrp->kn);
 			psi_cgroup_free(cgrp);
+			cgroup_rstat_base_exit(cgrp);
 			kfree(cgrp);
 		} else {
 			/*
@@ -5742,7 +5743,7 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 	 * Now that init_cgroup_housekeeping() has been called and cgrp->self
 	 * is setup, it is safe to perform rstat initialization on it.
 	 */
-	ret = css_rstat_init(&cgrp->self);
+	ret = cgroup_rstat_base_init(cgrp);
 	if (ret)
 		goto out_kernfs_remove;
 
@@ -5818,7 +5819,7 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 out_psi_free:
 	psi_cgroup_free(cgrp);
 out_stat_exit:
-	css_rstat_exit(&cgrp->self);
+	cgroup_rstat_base_exit(cgrp);
 out_kernfs_remove:
 	kernfs_remove(cgrp->kn);
 out_cancel_ref:
