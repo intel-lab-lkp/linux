@@ -23,13 +23,12 @@
 
 static int dphy_calc_pll_param(struct dphy_pll *pll)
 {
-	const u32 khz = 1000;
 	const u32 mhz = 1000000;
 	const unsigned long long factor = 100;
 	unsigned long long tmp;
 	int i;
 
-	pll->potential_fvco = pll->freq / khz;
+	pll->potential_fvco = pll->freq / mhz;
 
 	for (i = 0; i < 4; ++i) {
 		if (pll->potential_fvco >= pll->platform->band_low &&
@@ -89,7 +88,7 @@ static void dphy_set_pll_reg(struct dphy_pll *pll, struct regmap *regmap)
 	reg_val[3] = pll->vco_band | (pll->sdm_en << 1) | (pll->refin << 2);
 	reg_val[4] = pll->kint >> 12;
 	reg_val[5] = pll->kint >> 4;
-	reg_val[6] = pll->out_sel | ((pll->kint << 4) & 0xf);
+	reg_val[6] = pll->out_sel | ((pll->kint & 0xf) << 4);
 	reg_val[7] = 1 << 4;
 	reg_val[8] = pll->det_delay;
 
@@ -218,7 +217,7 @@ void dphy_timing_config(struct dsi_context *ctx)
 	u32 tmp = 0;
 
 	/* t_ui: 1 ui, byteck: 8 ui, half byteck: 4 ui */
-	t_ui = 1000 * scale / (pll->freq / 1000);
+	t_ui = 1000 * scale / (pll->freq / 1000000);
 	t_byteck = t_ui << 3;
 	t_half_byteck = t_ui << 2;
 	constant = t_ui << 1;
