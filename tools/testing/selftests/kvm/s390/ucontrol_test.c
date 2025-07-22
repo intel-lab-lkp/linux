@@ -8,6 +8,16 @@
  *  Christoph Schlameuss <schlameuss@linux.ibm.com>
  */
 #include "debug_print.h"
+
+/*
+ * header debug_print.h leaves macro is_signed_type()
+ * behind which is defined in "linux/overflow.h"
+ * header "kselftest_harness.h" re-defines it.
+ */
+#ifdef is_signed_type
+#undef is_signed_type
+#endif
+
 #include "kselftest_harness.h"
 #include "kvm_util.h"
 #include "processor.h"
