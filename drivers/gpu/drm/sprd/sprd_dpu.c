@@ -55,14 +55,6 @@
 #define REG_DPI_H_TIMING	0x1F4
 #define REG_DPI_V_TIMING	0x1F8
 
-/* MMU control registers */
-#define REG_MMU_EN			0x800
-#define REG_MMU_VPN_RANGE		0x80C
-#define REG_MMU_PPN1			0x83C
-#define REG_MMU_RANGE1			0x840
-#define REG_MMU_PPN2			0x844
-#define REG_MMU_RANGE2			0x848
-
 /* Global control bits */
 #define BIT_DPU_RUN			BIT(0)
 #define BIT_DPU_STOP			BIT(1)
@@ -410,12 +402,6 @@ static void sprd_dpu_init(struct sprd_dpu *dpu)
 	u32 dpu_version = readl(ctx->base + REG_DPU_VERSION);
 
 	writel(0x00, ctx->base + REG_BG_COLOR);
-	writel(0x00, ctx->base + REG_MMU_EN);
-	writel(0x00, ctx->base + REG_MMU_PPN1);
-	writel(0xffff, ctx->base + REG_MMU_RANGE1);
-	writel(0x00, ctx->base + REG_MMU_PPN2);
-	writel(0xffff, ctx->base + REG_MMU_RANGE2);
-	writel(0x1ffff, ctx->base + REG_MMU_VPN_RANGE);
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		/* use dpi as interface */
