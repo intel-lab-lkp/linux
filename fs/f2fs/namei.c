@@ -1338,6 +1338,10 @@ const struct inode_operations f2fs_encrypted_symlink_inode_operations = {
 	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
 			  offsetof(struct f2fs_inode_info, vfs_inode),
 #endif
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct f2fs_inode_info, i_fsverity_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.get_link	= f2fs_encrypted_get_link,
 	.getattr	= f2fs_encrypted_symlink_getattr,
 	.setattr	= f2fs_setattr,
@@ -1347,6 +1351,10 @@ const struct inode_operations f2fs_encrypted_symlink_inode_operations = {
 const struct inode_operations f2fs_dir_inode_operations = {
 #ifdef CONFIG_FS_ENCRYPTION
 	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct f2fs_inode_info, i_fsverity_info) -
 			  offsetof(struct f2fs_inode_info, vfs_inode),
 #endif
 	.create		= f2fs_create,
@@ -1374,6 +1382,10 @@ const struct inode_operations f2fs_symlink_inode_operations = {
 	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
 			  offsetof(struct f2fs_inode_info, vfs_inode),
 #endif
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct f2fs_inode_info, i_fsverity_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.get_link	= f2fs_get_link,
 	.getattr	= f2fs_getattr,
 	.setattr	= f2fs_setattr,
@@ -1383,6 +1395,10 @@ const struct inode_operations f2fs_symlink_inode_operations = {
 const struct inode_operations f2fs_special_inode_operations = {
 #ifdef CONFIG_FS_ENCRYPTION
 	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct f2fs_inode_info, i_fsverity_info) -
 			  offsetof(struct f2fs_inode_info, vfs_inode),
 #endif
 	.getattr	= f2fs_getattr,
