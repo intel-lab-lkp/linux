@@ -153,6 +153,9 @@ struct fuse_ring {
 
 	atomic_t queue_refs;
 
+	/* static queue mapping */
+	int *queue_mapping;
+
 	bool ready;
 };
 
