@@ -590,15 +590,28 @@ static void it6263_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector *connector;
 	bool is_stable = false;
 	struct drm_crtc *crtc;
+	struct drm_connector_state *conn_state;
 	unsigned int val;
 	bool pclk_high;
 	int i, ret;
 
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
-	crtc = drm_atomic_get_new_connector_state(state, connector)->crtc;
+	if (WARN_ON(!connector))
+		return;
+
+	conn_state = drm_atomic_get_new_connector_state(state, connector);
+	if (WARN_ON(!conn_state))
+		return;
+
+	crtc = conn_state->crtc;
 	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+	if (WARN_ON(!crtc_state))
+		return;
+
 	mode = &crtc_state->adjusted_mode;
+	if (WARN_ON(!mode))
+		return;
 
 	regmap_write(regmap, HDMI_REG_HDMI_MODE, TX_HDMI_MODE);
 
