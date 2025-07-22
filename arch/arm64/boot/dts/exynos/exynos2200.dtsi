@@ -328,7 +328,7 @@
 
 		syscon_peric1: syscon@10720000 {
 			compatible = "samsung,exynos2200-peric1-sysreg", "syscon";
-			reg = <0x0 0x10720000 0x0 0x2000>;
+			reg = <0x0 0x10720000 0x0 0x3000>;
 		};
 
 		pinctrl_peric1: pinctrl@10730000 {
@@ -471,7 +471,7 @@
 
 		syscon_cmgp: syscon@14e20000 {
 			compatible = "samsung,exynos2200-cmgp-sysreg", "syscon";
-			reg = <0x0 0x14e20000 0x0 0x2000>;
+			reg = <0x0 0x14e20000 0x0 0x3000>;
 		};
 
 		pinctrl_cmgp: pinctrl@14e30000 {
