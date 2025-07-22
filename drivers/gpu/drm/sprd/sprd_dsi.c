@@ -828,6 +828,8 @@ static void sprd_dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
 
+	clk_prepare_enable(ctx->clk);
+
 	if (ctx->enabled) {
 		drm_warn(dsi->drm, "dsi is initialized\n");
 		return;
@@ -874,6 +876,8 @@ static void sprd_dsi_bridge_post_disable(struct drm_bridge *bridge)
 
 	sprd_dphy_fini(ctx);
 	sprd_dsi_fini(ctx);
+
+	clk_disable_unprepare(ctx->clk);
 
 	ctx->enabled = false;
 }
@@ -1097,6 +1101,11 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 	dsi->ctx.pll.platform = of_device_get_match_data(dev);
 	if (!dsi->ctx.pll.platform)
 		return -EINVAL;
+
+	dsi->ctx.clk = devm_clk_get_optional(dev, "pclk");
+	if (IS_ERR(dsi->ctx.clk))
+		return dev_err_probe(dev, PTR_ERR(dsi->ctx.clk),
+				     "failed to get pclk\n");
 
 	return mipi_dsi_host_register(&dsi->host);
 }
