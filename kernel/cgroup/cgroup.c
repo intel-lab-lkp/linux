@@ -5568,21 +5568,25 @@ static void css_release(struct percpu_ref *ref)
 	queue_work(cgroup_destroy_wq, &css->destroy_work);
 }
 
-static void init_and_link_css(struct cgroup_subsys_state *css,
+static void init_css(struct cgroup_subsys_state *css)
+{
+	memset(css, 0, sizeof(*css));
+	css->id = -1;
+	INIT_LIST_HEAD(&css->sibling);
+	INIT_LIST_HEAD(&css->children);
+	css->serial_nr = css_serial_nr_next++;
+	atomic_set(&css->online_cnt, 0);
+}
+
+static void link_css(struct cgroup_subsys_state *css,
 			      struct cgroup_subsys *ss, struct cgroup *cgrp)
 {
 	lockdep_assert_held(&cgroup_mutex);
 
 	cgroup_get_live(cgrp);
 
-	memset(css, 0, sizeof(*css));
 	css->cgroup = cgrp;
 	css->ss = ss;
-	css->id = -1;
-	INIT_LIST_HEAD(&css->sibling);
-	INIT_LIST_HEAD(&css->children);
-	css->serial_nr = css_serial_nr_next++;
-	atomic_set(&css->online_cnt, 0);
 
 	if (cgroup_parent(cgrp)) {
 		css->parent = cgroup_css(cgroup_parent(cgrp), ss);
@@ -5670,7 +5674,8 @@ static struct cgroup_subsys_state *css_create(struct cgroup *cgrp,
 	if (IS_ERR(css))
 		return css;
 
-	init_and_link_css(css, ss, cgrp);
+	init_css(css);
+	link_css(css, ss, cgrp);
 
 	err = percpu_ref_init(&css->refcnt, css_release, 0, GFP_KERNEL);
 	if (err)
@@ -6130,7 +6135,8 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 	css = ss->css_alloc(NULL);
 	/* We don't handle early failures gracefully */
 	BUG_ON(IS_ERR(css));
-	init_and_link_css(css, ss, &cgrp_dfl_root.cgrp);
+	init_css(css);
+	link_css(css, ss, &cgrp_dfl_root.cgrp);
 
 	/*
 	 * Root csses are never destroyed and we can't initialize
