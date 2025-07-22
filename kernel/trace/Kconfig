@@ -1063,6 +1063,17 @@ config TRACEPOINT_WARN_ON_UNUSED
 	  A warning will be triggered if a tracepoint is found and
 	  not used at bootup.
 
+config TRACEPOINT_WARN_ON_UNUSED_BUILD
+	bool "Warn on build if a tracepoint is defined but not used"
+	depends on TRACEPOINTS
+	select TRACEPOINT_VERIFY_USED
+	help
+	  This option checks if every builtin defined tracepoint is
+	  used in the code. If a tracepoint is defined but not used,
+	  it will waste memory as its metadata is still created.
+	  This will cause a warning at build time if the architecture
+	  supports it.
+
 config FTRACE_SELFTEST
 	bool
 
