@@ -184,6 +184,13 @@
 #define GEM_DCFG8		0x029C /* Design Config 8 */
 #define GEM_DCFG10		0x02A4 /* Design Config 10 */
 #define GEM_DCFG12		0x02AC /* Design Config 12 */
+#define GEM_ENST_START_TIME_Q0	0x0800 /* ENST Q0 start time */
+#define GEM_ENST_START_TIME_Q1	0x0804 /* ENST Q1 start time */
+#define GEM_ENST_ON_TIME_Q0	0x0820 /* ENST Q0 on time */
+#define GEM_ENST_ON_TIME_Q1	0x0824 /* ENST Q1 on time */
+#define GEM_ENST_OFF_TIME_Q0	0x0840 /* ENST Q0 off time */
+#define GEM_ENST_OFF_TIME_Q1	0x0844 /* ENST Q1 off time */
+#define GEM_ENST_CONTROL	0x0880 /* ENST control register */
 #define GEM_USX_CONTROL		0x0A80 /* High speed PCS control register */
 #define GEM_USX_STATUS		0x0A88 /* High speed PCS status register */
 
@@ -220,6 +227,15 @@
 #define GEM_IER(hw_q)		(0x0600 + ((hw_q) << 2))
 #define GEM_IDR(hw_q)		(0x0620 + ((hw_q) << 2))
 #define GEM_IMR(hw_q)		(0x0640 + ((hw_q) << 2))
+
+#define GEM_ENST_START_TIME(hw_q)	(0x0800 + ((hw_q) << 2))
+#define GEM_ENST_ON_TIME(hw_q)		(0x0820 + ((hw_q) << 2))
+#define GEM_ENST_OFF_TIME(hw_q)		(0x0840 + ((hw_q) << 2))
+
+/*  Bitfields in ENST_CONTROL. */
+#define GEM_ENST_DISABLE_QUEUE(hw_q)	BIT((hw_q) + 16) /* q0 disable is 16'b */
+#define GEM_ENST_DISABLE_QUEUE_OFFSET	16
+#define GEM_ENST_ENABLE_QUEUE(hw_q)		BIT(hw_q) /* q0 enable is 0'b */
 
 /* Bitfields in NCR */
 #define MACB_LB_OFFSET		0 /* reserved */
@@ -553,6 +569,33 @@
 /* Bitfields in DCFG12. */
 #define GEM_HIGH_SPEED_OFFSET			26
 #define GEM_HIGH_SPEED_SIZE			1
+
+/* Bitfields in ENST_START_TIME_Q0, Q1. */
+#define GEM_START_TIME_SEC_OFFSET		30
+#define GEM_START_TIME_SEC_SIZE			2
+#define GEM_START_TIME_NSEC_OFFSET		0
+#define GEM_START_TIME_NSEC_SIZE		30
+
+/* Bitfields in ENST_ON_TIME_Q0, Q1. */
+#define GEM_ON_TIME_OFFSET			0
+#define GEM_ON_TIME_SIZE			17
+
+/* Bitfields in ENST_OFF_TIME_Q0, Q1. */
+#define GEM_OFF_TIME_OFFSET			0
+#define GEM_OFF_TIME_SIZE			17
+
+/* Hardware ENST timing registers granularity */
+#define ENST_TIME_GRANULARITY_NS 8
+
+/* Bitfields in ENST_CONTROL. */
+#define GEM_DISABLE_Q1_OFFSET			17
+#define GEM_DISABLE_Q1_SIZE			1
+#define GEM_DISABLE_Q0_OFFSET			16
+#define GEM_DISABLE_Q0_SIZE			1
+#define GEM_ENABLE_Q1_OFFSET			1
+#define GEM_ENABLE_Q1_SIZE			1
+#define GEM_ENABLE_Q0_OFFSET			0
+#define GEM_ENABLE_Q0_SIZE			1
 
 /* Bitfields in USX_CONTROL. */
 #define GEM_USX_CTRL_SPEED_OFFSET		14
