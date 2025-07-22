@@ -4239,6 +4239,34 @@ cleanup:
 	return err;
 }
 
+static void macb_taprio_destroy(struct net_device *ndev)
+{
+	struct macb *bp = netdev_priv(ndev);
+	struct macb_queue *queue;
+	unsigned long flags;
+	u32 enst_disable_mask;
+	u8 i;
+
+	netdev_reset_tc(ndev);
+	enst_disable_mask = GENMASK(bp->num_queues - 1, 0) << GEM_ENST_DISABLE_QUEUE_OFFSET;
+	netdev_dbg(ndev, "TAPRIO destroy: disabling all gates\n");
+
+	spin_lock_irqsave(&bp->lock, flags);
+
+	/* Single disable command for all queues */
+	gem_writel(bp, ENST_CONTROL, enst_disable_mask);
+
+	/* Clear all queue ENST registers in batch */
+	for (i = 0; i < bp->num_queues; i++) {
+		queue = &bp->queues[i];
+		queue_writel(queue, ENST_START_TIME, 0);
+		queue_writel(queue, ENST_ON_TIME, 0);
+		queue_writel(queue, ENST_OFF_TIME, 0);
+	}
+
+	spin_unlock_irqrestore(&bp->lock, flags);
+}
+
 static const struct net_device_ops macb_netdev_ops = {
 	.ndo_open		= macb_open,
 	.ndo_stop		= macb_close,
