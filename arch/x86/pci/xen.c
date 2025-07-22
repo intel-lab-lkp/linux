@@ -10,25 +10,26 @@
  *           Konrad Rzeszutek Wilk <konrad.wilk@oracle.com>
  *           Stefano Stabellini <stefano.stabellini@eu.citrix.com>
  */
+
+#include <linux/acpi.h>
 #include <linux/export.h>
 #include <linux/init.h>
-#include <linux/pci.h>
-#include <linux/acpi.h>
-
 #include <linux/io.h>
+#include <linux/pci.h>
+
+#include <xen/events.h>
+#include <xen/features.h>
+#include <xen/pci.h>
+
+#include <asm/acpi.h>
+#include <asm/apic.h>
+#include <asm/i8259.h>
 #include <asm/io_apic.h>
 #include <asm/pci_x86.h>
 
-#include <asm/xen/hypervisor.h>
-
-#include <xen/features.h>
-#include <xen/events.h>
-#include <xen/pci.h>
-#include <asm/xen/pci.h>
 #include <asm/xen/cpuid.h>
-#include <asm/apic.h>
-#include <asm/acpi.h>
-#include <asm/i8259.h>
+#include <asm/xen/hypervisor.h>
+#include <asm/xen/pci.h>
 
 static int xen_pcifront_enable_irq(struct pci_dev *dev)
 {
@@ -583,4 +584,3 @@ int __init pci_xen_initial_domain(void)
 	return 0;
 }
 #endif
-

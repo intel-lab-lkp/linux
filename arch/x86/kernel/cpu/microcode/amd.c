@@ -21,23 +21,23 @@
  */
 #define pr_fmt(fmt) "microcode: " fmt
 
+#include <linux/bsearch.h>
 #include <linux/earlycpio.h>
 #include <linux/firmware.h>
-#include <linux/bsearch.h>
-#include <linux/uaccess.h>
-#include <linux/vmalloc.h>
 #include <linux/initrd.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
+#include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 
 #include <crypto/sha2.h>
 
-#include <asm/microcode.h>
-#include <asm/processor.h>
 #include <asm/cmdline.h>
-#include <asm/setup.h>
 #include <asm/cpu.h>
+#include <asm/microcode.h>
 #include <asm/msr.h>
+#include <asm/processor.h>
+#include <asm/setup.h>
 #include <asm/tlb.h>
 
 #include "internal.h"

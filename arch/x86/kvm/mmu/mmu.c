@@ -16,46 +16,46 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include "irq.h"
-#include "ioapic.h"
-#include "mmu.h"
-#include "mmu_internal.h"
-#include "tdp_mmu.h"
-#include "x86.h"
-#include "kvm_cache_regs.h"
-#include "smm.h"
-#include "kvm_emulate.h"
-#include "page_track.h"
-#include "cpuid.h"
-#include "spte.h"
-
-#include <linux/kvm_host.h>
-#include <linux/types.h>
-#include <linux/string.h>
-#include <linux/mm.h>
-#include <linux/highmem.h>
-#include <linux/moduleparam.h>
-#include <linux/export.h>
-#include <linux/swap.h>
-#include <linux/hugetlb.h>
 #include <linux/compiler.h>
-#include <linux/srcu.h>
-#include <linux/slab.h>
-#include <linux/sched/signal.h>
-#include <linux/uaccess.h>
+#include <linux/export.h>
 #include <linux/hash.h>
+#include <linux/highmem.h>
+#include <linux/hugetlb.h>
 #include <linux/kern_levels.h>
 #include <linux/kstrtox.h>
 #include <linux/kthread.h>
+#include <linux/kvm_host.h>
+#include <linux/mm.h>
+#include <linux/moduleparam.h>
+#include <linux/sched/signal.h>
+#include <linux/slab.h>
+#include <linux/srcu.h>
+#include <linux/string.h>
+#include <linux/swap.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
 #include <linux/wordpart.h>
 
-#include <asm/page.h>
-#include <asm/memtype.h>
 #include <asm/cmpxchg.h>
 #include <asm/io.h>
+#include <asm/memtype.h>
+#include <asm/page.h>
 #include <asm/set_memory.h>
 #include <asm/spec-ctrl.h>
 #include <asm/vmx.h>
+
+#include "cpuid.h"
+#include "ioapic.h"
+#include "irq.h"
+#include "kvm_cache_regs.h"
+#include "kvm_emulate.h"
+#include "mmu.h"
+#include "mmu_internal.h"
+#include "page_track.h"
+#include "smm.h"
+#include "spte.h"
+#include "tdp_mmu.h"
+#include "x86.h"
 
 #include "trace.h"
 

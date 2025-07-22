@@ -11,21 +11,22 @@
  *		      H Peter Anvin" <hpa@zytor.com>
  */
 #define pr_fmt(fmt) "microcode: " fmt
+
+#include <linux/cpu.h>
 #include <linux/earlycpio.h>
 #include <linux/firmware.h>
-#include <linux/uaccess.h>
 #include <linux/initrd.h>
 #include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/cpu.h>
-#include <linux/uio.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/uio.h>
 
 #include <asm/cpu_device_id.h>
-#include <asm/processor.h>
-#include <asm/tlbflush.h>
-#include <asm/setup.h>
 #include <asm/msr.h>
+#include <asm/processor.h>
+#include <asm/setup.h>
+#include <asm/tlbflush.h>
 
 #include "internal.h"
 

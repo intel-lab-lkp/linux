@@ -8,33 +8,34 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/kvm_types.h>
-#include <linux/kvm_host.h>
-#include <linux/kernel.h>
 #include <linux/highmem.h>
-#include <linux/psp.h>
-#include <linux/psp-sev.h>
-#include <linux/pagemap.h>
-#include <linux/swap.h>
+#include <linux/kernel.h>
+#include <linux/kvm_host.h>
+#include <linux/kvm_types.h>
 #include <linux/misc_cgroup.h>
+#include <linux/pagemap.h>
 #include <linux/processor.h>
+#include <linux/psp-sev.h>
+#include <linux/psp.h>
+#include <linux/swap.h>
 #include <linux/trace_events.h>
+
 #include <uapi/linux/sev-guest.h>
 
-#include <asm/pkru.h>
-#include <asm/trapnr.h>
+#include <asm/debugreg.h>
 #include <asm/fpu/xcr.h>
 #include <asm/fpu/xstate.h>
-#include <asm/debugreg.h>
 #include <asm/msr.h>
+#include <asm/pkru.h>
 #include <asm/sev.h>
+#include <asm/trapnr.h>
 
+#include "cpuid.h"
 #include "mmu.h"
-#include "x86.h"
 #include "svm.h"
 #include "svm_ops.h"
-#include "cpuid.h"
 #include "trace.h"
+#include "x86.h"
 
 #define GHCB_VERSION_MAX	2ULL
 #define GHCB_VERSION_DEFAULT	2ULL

@@ -6,33 +6,35 @@
  * Author : K. Y. Srinivasan <ksrinivasan@novell.com>
  */
 
-#include <linux/types.h>
-#include <linux/time.h>
 #include <linux/clocksource.h>
-#include <linux/init.h>
+#include <linux/efi.h>
 #include <linux/export.h>
 #include <linux/hardirq.h>
-#include <linux/efi.h>
+#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kexec.h>
 #include <linux/random.h>
-#include <asm/processor.h>
-#include <asm/hypervisor.h>
+#include <linux/time.h>
+#include <linux/types.h>
+
+#include <clocksource/hyperv_timer.h>
 #include <hyperv/hvhdk.h>
-#include <asm/mshyperv.h>
+
+#include <asm/apic.h>
 #include <asm/desc.h>
+#include <asm/hypervisor.h>
+#include <asm/i8259.h>
 #include <asm/idtentry.h>
 #include <asm/irq_regs.h>
-#include <asm/i8259.h>
-#include <asm/apic.h>
-#include <asm/timer.h>
-#include <asm/reboot.h>
-#include <asm/nmi.h>
-#include <clocksource/hyperv_timer.h>
+#include <asm/mshyperv.h>
 #include <asm/msr.h>
+#include <asm/nmi.h>
 #include <asm/numa.h>
+#include <asm/processor.h>
+#include <asm/reboot.h>
 #include <asm/svm.h>
+#include <asm/timer.h>
 
 /* Is Linux running on nested Microsoft Hypervisor */
 bool hv_nested;

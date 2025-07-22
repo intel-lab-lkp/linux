@@ -5,16 +5,16 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/export.h>
+#include <linux/init.h>
+#include <linux/nmi.h>
+#include <linux/slab.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
-#include <linux/init.h>
-#include <linux/slab.h>
-#include <linux/export.h>
-#include <linux/nmi.h>
 
+#include <asm/apic.h>
 #include <asm/cpufeature.h>
 #include <asm/hardirq.h>
-#include <asm/apic.h>
 #include <asm/msr.h>
 
 #include "../perf_event.h"
@@ -616,4 +616,3 @@ __init int zhaoxin_pmu_init(void)
 
 	return 0;
 }
-

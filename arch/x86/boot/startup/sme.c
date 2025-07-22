@@ -34,15 +34,15 @@
  */
 #define USE_EARLY_PGTABLE_L5
 
-#include <linux/kernel.h>
-#include <linux/mm.h>
-#include <linux/mem_encrypt.h>
 #include <linux/cc_platform.h>
+#include <linux/kernel.h>
+#include <linux/mem_encrypt.h>
+#include <linux/mm.h>
 
-#include <asm/init.h>
-#include <asm/setup.h>
-#include <asm/sections.h>
 #include <asm/coco.h>
+#include <asm/init.h>
+#include <asm/sections.h>
+#include <asm/setup.h>
 #include <asm/sev.h>
 
 #define PGD_FLAGS		_KERNPG_TABLE_NOENC

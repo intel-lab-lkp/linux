@@ -8,22 +8,23 @@
  *  Jan Kiszka <jan.kiszka@siemens.com>
  */
 
+#include <linux/acpi.h>
 #include <linux/acpi_pmtmr.h>
 #include <linux/kernel.h>
 #include <linux/reboot.h>
 #include <linux/serial_8250.h>
-#include <linux/acpi.h>
-#include <asm/apic.h>
-#include <asm/io_apic.h>
+
 #include <asm/acpi.h>
+#include <asm/apic.h>
 #include <asm/cpu.h>
 #include <asm/hypervisor.h>
 #include <asm/i8259.h>
+#include <asm/io_apic.h>
 #include <asm/irqdomain.h>
+#include <asm/jailhouse_para.h>
 #include <asm/pci_x86.h>
 #include <asm/reboot.h>
 #include <asm/setup.h>
-#include <asm/jailhouse_para.h>
 
 static struct jailhouse_setup_data setup_data;
 #define SETUP_DATA_V1_LEN	(sizeof(setup_data.hdr) + sizeof(setup_data.v1))

@@ -10,17 +10,19 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/types.h>
 #include <linux/kvm_host.h>
 #include <linux/perf_event.h>
+#include <linux/types.h>
+
 #include <asm/msr.h>
 #include <asm/perf_event.h>
-#include "x86.h"
+
 #include "cpuid.h"
 #include "lapic.h"
 #include "nested.h"
 #include "pmu.h"
 #include "tdx.h"
+#include "x86.h"
 
 /*
  * Perf's "BASE" is wildly misleading, architectural PMUs use bits 31:16 of ECX

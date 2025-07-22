@@ -6,34 +6,34 @@
     2007 - x86_64 support added by Glauber de Oliveira Costa, Red Hat Inc
 */
 
-#include <linux/errno.h>
-#include <linux/init.h>
-#include <linux/export.h>
-#include <linux/efi.h>
 #include <linux/bcd.h>
+#include <linux/efi.h>
+#include <linux/errno.h>
+#include <linux/export.h>
 #include <linux/highmem.h>
+#include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/pgtable.h>
 #include <linux/static_call.h>
 
-#include <asm/bug.h>
-#include <asm/paravirt.h>
-#include <asm/debugreg.h>
-#include <asm/desc.h>
-#include <asm/setup.h>
-#include <asm/time.h>
-#include <asm/pgalloc.h>
-#include <asm/irq.h>
-#include <asm/delay.h>
-#include <asm/fixmap.h>
 #include <asm/apic.h>
-#include <asm/tlbflush.h>
-#include <asm/timer.h>
-#include <asm/special_insns.h>
-#include <asm/tlb.h>
-#include <asm/io_bitmap.h>
+#include <asm/bug.h>
+#include <asm/debugreg.h>
+#include <asm/delay.h>
+#include <asm/desc.h>
+#include <asm/fixmap.h>
 #include <asm/gsseg.h>
+#include <asm/io_bitmap.h>
+#include <asm/irq.h>
 #include <asm/msr.h>
+#include <asm/paravirt.h>
+#include <asm/pgalloc.h>
+#include <asm/setup.h>
+#include <asm/special_insns.h>
+#include <asm/time.h>
+#include <asm/timer.h>
+#include <asm/tlb.h>
+#include <asm/tlbflush.h>
 
 /* stub always returning 0. */
 DEFINE_ASM_FUNC(paravirt_ret0, "xor %eax,%eax", .entry.text);

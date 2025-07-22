@@ -6,22 +6,22 @@
 #include <linux/memblock.h>
 #include <linux/virtio_anchor.h>
 
-#include <xen/features.h>
 #include <xen/events.h>
+#include <xen/features.h>
 #include <xen/hvm.h>
 #include <xen/interface/hvm/hvm_op.h>
 #include <xen/interface/memory.h>
 
 #include <asm/apic.h>
 #include <asm/cpu.h>
-#include <asm/smp.h>
+#include <asm/e820/api.h>
+#include <asm/early_ioremap.h>
+#include <asm/hypervisor.h>
+#include <asm/idtentry.h>
 #include <asm/io_apic.h>
 #include <asm/reboot.h>
 #include <asm/setup.h>
-#include <asm/idtentry.h>
-#include <asm/hypervisor.h>
-#include <asm/e820/api.h>
-#include <asm/early_ioremap.h>
+#include <asm/smp.h>
 
 #include <asm/xen/cpuid.h>
 #include <asm/xen/hypervisor.h>

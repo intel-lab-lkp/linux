@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/types.h>
-#include <linux/interrupt.h>
 
-#include <asm/msr.h>
-#include <asm/xen/hypercall.h>
-#include <xen/xen.h>
-#include <xen/page.h>
+#include <linux/interrupt.h>
+#include <linux/types.h>
+
 #include <xen/interface/xen.h>
 #include <xen/interface/vcpu.h>
 #include <xen/interface/xenpmu.h>
+#include <xen/page.h>
+#include <xen/xen.h>
+
+#include <asm/msr.h>
+#include <asm/xen/hypercall.h>
 
 #include "xen-ops.h"
 

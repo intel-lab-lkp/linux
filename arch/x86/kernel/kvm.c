@@ -9,42 +9,43 @@
 
 #define pr_fmt(fmt) "kvm-guest: " fmt
 
+#include <linux/cc_platform.h>
 #include <linux/context_tracking.h>
+#include <linux/cpu.h>
+#include <linux/efi.h>
+#include <linux/hardirq.h>
+#include <linux/hash.h>
+#include <linux/highmem.h>
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/kernel.h>
+#include <linux/kprobes.h>
 #include <linux/kvm_para.h>
-#include <linux/cpu.h>
 #include <linux/mm.h>
-#include <linux/highmem.h>
-#include <linux/hardirq.h>
+#include <linux/nmi.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
-#include <linux/hash.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/kprobes.h>
-#include <linux/nmi.h>
 #include <linux/swait.h>
 #include <linux/syscore_ops.h>
-#include <linux/cc_platform.h>
-#include <linux/efi.h>
-#include <asm/timer.h>
-#include <asm/cpu.h>
-#include <asm/traps.h>
-#include <asm/desc.h>
-#include <asm/tlbflush.h>
+
 #include <asm/apic.h>
 #include <asm/apicdef.h>
-#include <asm/hypervisor.h>
-#include <asm/mtrr.h>
-#include <asm/tlb.h>
+#include <asm/cpu.h>
 #include <asm/cpuidle_haltpoll.h>
+#include <asm/desc.h>
+#include <asm/e820/api.h>
+#include <asm/hypervisor.h>
 #include <asm/msr.h>
+#include <asm/mtrr.h>
 #include <asm/ptrace.h>
 #include <asm/reboot.h>
 #include <asm/svm.h>
-#include <asm/e820/api.h>
+#include <asm/timer.h>
+#include <asm/tlb.h>
+#include <asm/tlbflush.h>
+#include <asm/traps.h>
 
 DEFINE_STATIC_KEY_FALSE_RO(kvm_async_pf_enabled);
 

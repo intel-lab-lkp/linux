@@ -8,24 +8,26 @@
  *
  * Jeremy Fitzhardinge <jeremy@xensource.com>, XenSource Inc, 2007
  */
-#include <linux/kernel.h>
-#include <linux/interrupt.h>
-#include <linux/clocksource.h>
-#include <linux/clockchips.h>
-#include <linux/gfp.h>
-#include <linux/slab.h>
-#include <linux/pvclock_gtod.h>
-#include <linux/timekeeper_internal.h>
 
-#include <asm/pvclock.h>
-#include <asm/xen/hypervisor.h>
-#include <asm/xen/hypercall.h>
-#include <asm/xen/cpuid.h>
+#include <linux/clockchips.h>
+#include <linux/clocksource.h>
+#include <linux/gfp.h>
+#include <linux/interrupt.h>
+#include <linux/kernel.h>
+#include <linux/pvclock_gtod.h>
+#include <linux/slab.h>
+#include <linux/timekeeper_internal.h>
 
 #include <xen/events.h>
 #include <xen/features.h>
-#include <xen/interface/xen.h>
 #include <xen/interface/vcpu.h>
+#include <xen/interface/xen.h>
+
+#include <asm/pvclock.h>
+
+#include <asm/xen/cpuid.h>
+#include <asm/xen/hypercall.h>
+#include <asm/xen/hypervisor.h>
 
 #include "xen-ops.h"
 

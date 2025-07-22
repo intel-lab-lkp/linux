@@ -14,21 +14,21 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/entry-kvm.h>
 #include <linux/highmem.h>
 #include <linux/hrtimer.h>
 #include <linux/kernel.h>
 #include <linux/kvm_host.h>
+#include <linux/mm.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/mod_devicetable.h>
-#include <linux/mm.h>
 #include <linux/objtool.h>
 #include <linux/sched.h>
 #include <linux/sched/smt.h>
 #include <linux/slab.h>
 #include <linux/tboot.h>
 #include <linux/trace_events.h>
-#include <linux/entry-kvm.h>
 
 #include <asm/apic.h>
 #include <asm/asm.h>
@@ -42,12 +42,12 @@
 #include <asm/idtentry.h>
 #include <asm/io.h>
 #include <asm/irq_remapping.h>
-#include <asm/reboot.h>
-#include <asm/perf_event.h>
 #include <asm/mmu_context.h>
 #include <asm/mshyperv.h>
 #include <asm/msr.h>
 #include <asm/mwait.h>
+#include <asm/perf_event.h>
+#include <asm/reboot.h>
 #include <asm/spec-ctrl.h>
 #include <asm/vmx.h>
 
@@ -57,23 +57,23 @@
 #include "common.h"
 #include "cpuid.h"
 #include "hyperv.h"
-#include "kvm_onhyperv.h"
 #include "irq.h"
 #include "kvm_cache_regs.h"
+#include "kvm_onhyperv.h"
 #include "lapic.h"
 #include "mmu.h"
 #include "nested.h"
 #include "pmu.h"
+#include "posted_intr.h"
 #include "sgx.h"
+#include "smm.h"
 #include "trace.h"
 #include "vmcs.h"
 #include "vmcs12.h"
 #include "vmx.h"
+#include "vmx_onhyperv.h"
 #include "x86.h"
 #include "x86_ops.h"
-#include "smm.h"
-#include "vmx_onhyperv.h"
-#include "posted_intr.h"
 
 MODULE_AUTHOR("Qumranet");
 MODULE_DESCRIPTION("KVM support for VMX (Intel VT-x) extensions");

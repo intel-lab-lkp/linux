@@ -18,26 +18,27 @@
  * Mostly rewritten by Thomas Gleixner <tglx@linutronix.de> and
  *		       Andy Lutomirsky <luto@amacapital.net>
  */
-#include <linux/kernel.h>
+
+#include <linux/bug.h>
+#include <linux/cpu.h>
 #include <linux/errno.h>
+#include <linux/init.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/types.h>
-#include <linux/bug.h>
-#include <linux/init.h>
-#include <linux/spinlock.h>
-#include <linux/mm.h>
 #include <linux/uaccess.h>
-#include <linux/cpu.h>
 
-#include <asm/cpufeature.h>
-#include <asm/hypervisor.h>
-#include <asm/vsyscall.h>
 #include <asm/cmdline.h>
-#include <asm/pti.h>
-#include <asm/tlbflush.h>
+#include <asm/cpufeature.h>
 #include <asm/desc.h>
+#include <asm/hypervisor.h>
+#include <asm/pti.h>
 #include <asm/sections.h>
 #include <asm/set_memory.h>
+#include <asm/tlbflush.h>
+#include <asm/vsyscall.h>
 
 #undef pr_fmt
 #define pr_fmt(fmt)     "Kernel/User page tables isolation: " fmt

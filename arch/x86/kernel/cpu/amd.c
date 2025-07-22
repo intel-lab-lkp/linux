@@ -1,32 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0-only
-#include <linux/export.h>
+
 #include <linux/bitops.h>
 #include <linux/elf.h>
-#include <linux/mm.h>
-
+#include <linux/export.h>
 #include <linux/io.h>
+#include <linux/mm.h>
+#include <linux/platform_data/x86/amd-fch.h>
+#include <linux/random.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
-#include <linux/random.h>
 #include <linux/topology.h>
-#include <linux/platform_data/x86/amd-fch.h>
-#include <asm/processor.h>
+
 #include <asm/apic.h>
 #include <asm/cacheinfo.h>
 #include <asm/cpu.h>
 #include <asm/cpu_device_id.h>
-#include <asm/spec-ctrl.h>
-#include <asm/smp.h>
+#include <asm/debugreg.h>
+#include <asm/delay.h>
+#include <asm/msr.h>
 #include <asm/numa.h>
 #include <asm/pci-direct.h>
-#include <asm/delay.h>
-#include <asm/debugreg.h>
+#include <asm/processor.h>
 #include <asm/resctrl.h>
-#include <asm/msr.h>
 #include <asm/sev.h>
+#include <asm/smp.h>
+#include <asm/spec-ctrl.h>
 
 #ifdef CONFIG_X86_64
-# include <asm/mmconfig.h>
+#include <asm/mmconfig.h>
 #endif
 
 #include "cpu.h"
