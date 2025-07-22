@@ -220,6 +220,20 @@ static inline u16 ieee80211_sn_sub(u16 sn1, u16 sn2)
 #define IEEE80211_MAX_AID_S1G		8191
 #define IEEE80211_MAX_TIM_LEN		251
 #define IEEE80211_MAX_MESH_PEERINGS	63
+
+/*
+ * An S1G PPDU TIM PVB uses the notion of pages. Each page can reference
+ * 2048 AIDs, however since mac80211 does not support page slicing we
+ * are reusing the existing TIM bitmap, which supports up to 2008 AIDs.
+ * As the TIM element has a maximum length of 255 bytes, and each encoded
+ * block has a maximum length of 10 bytes at most we can support 25 blocks,
+ * as 1 + 1 + 1 + 25 * 10 = 253 bytes, leaving our maximum AID count for
+ * an S1G PPDU at 25 * 64 = 1600. If page slicing is introduced in the
+ * future, this will need to be modified.
+ */
+#define IEEE80211_MAX_AID_S1G_NO_PS	1600
+#define IEEE80211_MAX_S1G_TIM_BLOCKS	25
+
 /* Maximum size for the MA-UNITDATA primitive, 802.11 standard section
    6.2.1.1.2.
 

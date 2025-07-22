@@ -4882,15 +4882,139 @@ void ieee80211_tx_pending(struct tasklet_struct *t)
 
 /* functions for drivers to get certain frames */
 
+static void ieee80211_beacon_add_tim_pvb(struct ps_data *ps,
+					 struct sk_buff *skb, u8 aid0, u8 *tim)
+{
+	int i, n1 = 0, n2;
+
+	/*
+	 * Find largest even number N1 so that bits numbered 1 through
+	 * (N1 x 8) - 1 in the bitmap are 0 and number N2 so that bits
+	 * (N2 + 1) x 8 through 2007 are 0.
+	 */
+	for (i = 0; i < IEEE80211_MAX_TIM_LEN; i++) {
+		if (ps->tim[i]) {
+			n1 = i & 0xfe;
+			break;
+		}
+	}
+	n2 = n1;
+	for (i = IEEE80211_MAX_TIM_LEN - 1; i >= n1; i--) {
+		if (ps->tim[i]) {
+			n2 = i;
+			break;
+		}
+	}
+
+	/* Bitmap control */
+	skb_put_u8(skb, n1 | aid0);
+	/* Part Virt Bitmap */
+	skb_put_data(skb, ps->tim + n1, n2 - n1 + 1);
+
+	tim[1] = n2 - n1 + 4;
+}
+
+/*
+ * Unlike the non-S1G TIM, which encodes the contiguous range n_first‥n_last,
+ * an S1G TIM transmits the bitmap as a sequence of encoded blocks. Each
+ * encoded block contains the following:
+ *  - one block-control byte,
+ *  - one block-bitmap byte,
+ *  - zero to eight sub-block bytes (one per set bit in the bitmap).
+ *
+ * Each encoded block covers 64 AIDs (8 * 8). mac80211 does not implement
+ * page slicing, so we treat the whole PVB as belonging to a single page
+ * (bitmap-control: page-slice 31, page-index 0) and support at most
+ * 1600 AIDs (25 blocks * 64). We do this to reuse the existing bitmap
+ * and allow for the worst case scenario where every single AID is set to
+ * fit within the TIM maximum length of 255. If page slicing is to be added
+ * a separate bitmap will need to be added to allow up to 8192 AIDs.
+ *
+ * Only encoding-mode 0 (block bitmap, non-inverse) is generated or
+ * recognised; other encoding modes are not supported.
+ */
+static void ieee80211_s1g_beacon_add_tim_pvb(struct ps_data *ps,
+					     struct sk_buff *skb, u8 aid0,
+					     u8 *tim)
+{
+	int blk;
+
+	/*
+	 * Emit a bitmap control block with a page slice number of 31 and a
+	 * page index of 0 which indicates as per IEEE80211-2024 9.4.2.5.1
+	 * that the entire page (2048 bits) indicated by the page index
+	 * is encoded in the partial virtual bitmap.
+	 */
+	skb_put_u8(skb, aid0 | (31 << 1));
+	tim[1]++;
+
+	/* Emit an encoded block for each non-zero sub-block */
+	for (blk = 0; blk < IEEE80211_MAX_S1G_TIM_BLOCKS; blk++) {
+		u8 blk_bmap = 0;
+		int sblk, subcnt = 0;
+
+		for (sblk = 0; sblk < 8; sblk++) {
+			int idx = blk * 8 + sblk;
+
+			if (idx >= IEEE80211_MAX_AID_S1G_NO_PS)
+				break;
+
+			/*
+			 * If the current subblock is non-zero, increase the
+			 * number of subblocks to emit for the current block.
+			 */
+			if (ps->tim[idx]) {
+				blk_bmap |= BIT(sblk);
+				subcnt++;
+			}
+		}
+
+		/* If the current block contains no non-zero sublocks */
+		if (!blk_bmap)
+			continue;
+
+		/*
+		 * Emit a block control byte for the current encoded block
+		 * with an encoding mode of block bitmap (0x0), not inverse
+		 * (0x0) and the current block offset (5 bits)
+		 */
+		skb_put_u8(skb, blk << 3);
+
+		/*
+		 * Emit the block bitmap for the current encoded block which
+		 * contains the present subblocks.
+		 */
+		skb_put_u8(skb, blk_bmap);
+
+		/* Emit the present subblocks */
+		for (sblk = 0; sblk < 8; sblk++) {
+			int idx = blk * 8 + sblk;
+
+			if (!(blk_bmap & BIT(sblk)))
+				continue;
+
+			skb_put_u8(skb, ps->tim[idx]);
+		}
+
+		/*
+		 * Increase the tim length by the current encoded block
+		 * length by block control + block bitmap + n_subblocks where
+		 * n_subblocks represents the number of subblock bytes to emit
+		 * for the current block.
+		 */
+		tim[1] += 1 + 1 + subcnt;
+	}
+}
+
 static void __ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
 				       struct ieee80211_link_data *link,
 				       struct ps_data *ps, struct sk_buff *skb,
 				       bool is_template)
 {
 	u8 *pos, *tim;
-	int aid0 = 0;
-	int i, have_bits = 0, n1, n2;
+	int aid0 = 0, have_bits = 0;
 	struct ieee80211_bss_conf *link_conf = link->conf;
+	bool s1g = ieee80211_get_link_sband(link)->band == NL80211_BAND_S1GHZ;
 
 	/* Generate bitmap for TIM only if there are any STAs in power save
 	 * mode. */
@@ -4906,9 +5030,10 @@ static void __ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
 			ps->dtim_count--;
 	}
 
-	tim = pos = skb_put(skb, 5);
+	pos = skb_put(skb, 4);
+	tim = pos;
 	*pos++ = WLAN_EID_TIM;
-	*pos++ = 3;
+	*pos++ = 2;
 	*pos++ = ps->dtim_count;
 	*pos++ = link_conf->dtim_period;
 
@@ -4918,34 +5043,20 @@ static void __ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
 	ps->dtim_bc_mc = aid0 == 1;
 
 	if (have_bits) {
-		/* Find largest even number N1 so that bits numbered 1 through
-		 * (N1 x 8) - 1 in the bitmap are 0 and number N2 so that bits
-		 * (N2 + 1) x 8 through 2007 are 0. */
-		n1 = 0;
-		for (i = 0; i < IEEE80211_MAX_TIM_LEN; i++) {
-			if (ps->tim[i]) {
-				n1 = i & 0xfe;
-				break;
-			}
-		}
-		n2 = n1;
-		for (i = IEEE80211_MAX_TIM_LEN - 1; i >= n1; i--) {
-			if (ps->tim[i]) {
-				n2 = i;
-				break;
-			}
-		}
-
-		/* Bitmap control */
-		*pos++ = n1 | aid0;
-		/* Part Virt Bitmap */
-		skb_put_data(skb, ps->tim + n1, n2 - n1 + 1);
-
-		tim[1] = n2 - n1 + 4;
+		if (s1g)
+			ieee80211_s1g_beacon_add_tim_pvb(ps, skb, aid0, tim);
+		else
+			ieee80211_beacon_add_tim_pvb(ps, skb, aid0, tim);
 	} else {
-		*pos++ = aid0; /* Bitmap control */
-
-		if (ieee80211_get_link_sband(link)->band != NL80211_BAND_S1GHZ) {
+		/*
+		 * If there is no buffered unicast traffic for an S1G
+		 * interface, we can exclude the bitmap control. This is in
+		 * contrast to other phy types as they do include the bitmap
+		 * control and pvb even when there is no buffered traffic.
+		 */
+		if (!s1g) {
+			/* Bitmap control */
+			skb_put_u8(skb, aid0);
 			tim[1] = 4;
 			/* Part Virt Bitmap */
 			skb_put_u8(skb, 0);
