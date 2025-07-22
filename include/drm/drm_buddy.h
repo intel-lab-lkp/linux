@@ -10,6 +10,7 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/rbtree.h>
 
 #include <drm/drm_print.h>
 
@@ -21,6 +22,41 @@
 	(void)(&start__ == &max__); \
 	start__ >= max__ || size__ > max__ - start__; \
 })
+
+/*
+ * for_each_rb_entry() - iterate over an RB tree in order
+ * @pos:	the struct type * to use as a loop cursor
+ * @root:	pointer to struct rb_root to iterate
+ * @member:	name of the rb_node field within the struct
+ */
+#define for_each_rb_entry(pos, root, member) \
+	for (pos = rb_entry_safe(rb_first(root), typeof(*pos), member); \
+	     pos; \
+	     pos = rb_entry_safe(rb_next(&(pos)->member), typeof(*pos), member))
+
+/*
+ * for_each_rb_entry_reverse() - iterate over an RB tree in reverse order
+ * @pos:	the struct type * to use as a loop cursor
+ * @root:	pointer to struct rb_root to iterate
+ * @member:	name of the rb_node field within the struct
+ */
+#define for_each_rb_entry_reverse(pos, root, member) \
+	for (pos = rb_entry_safe(rb_last(root), typeof(*pos), member); \
+	     pos; \
+	     pos = rb_entry_safe(rb_prev(&(pos)->member), typeof(*pos), member))
+
+/**
+ * for_each_rb_entry_reverse_safe() - safely iterate over an RB tree in reverse order
+ * @pos:	the struct type * to use as a loop cursor.
+ * @n:		another struct type * to use as temporary storage.
+ * @root:	pointer to struct rb_root to iterate.
+ * @member:	name of the rb_node field within the struct.
+ */
+#define for_each_rb_entry_reverse_safe(pos, n, root, member) \
+	for (pos = rb_entry_safe(rb_last(root), typeof(*pos), member), \
+	     n = pos ? rb_entry_safe(rb_prev(&(pos)->member), typeof(*pos), member) : NULL; \
+	     pos; \
+	     pos = n, n = pos ? rb_entry_safe(rb_prev(&(pos)->member), typeof(*pos), member) : NULL)
 
 #define DRM_BUDDY_RANGE_ALLOCATION		BIT(0)
 #define DRM_BUDDY_TOPDOWN_ALLOCATION		BIT(1)
@@ -53,6 +89,7 @@ struct drm_buddy_block {
 	 * a list, if so desired. As soon as the block is freed with
 	 * drm_buddy_free* ownership is given back to the mm.
 	 */
+	struct rb_node rb;
 	struct list_head link;
 	struct list_head tmp_link;
 };
@@ -68,7 +105,7 @@ struct drm_buddy_block {
  */
 struct drm_buddy {
 	/* Maintain a free list for each order. */
-	struct list_head *free_list;
+	struct rb_root *free_tree;
 
 	/*
 	 * Maintain explicit binary tree(s) to track the allocation of the
