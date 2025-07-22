@@ -57,10 +57,10 @@ properties:
   ranges: true
 
   "#address-cells":
-    const: 1
+    enum: [1, 2]
 
   "#size-cells":
-    const: 1
+    enum: [1, 2]
 
   samsung,sysreg:
     $ref: /schemas/types.yaml#/definitions/phandle-array
