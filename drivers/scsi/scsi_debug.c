@@ -3943,7 +3943,7 @@ static int check_zbc_access_params(struct scsi_cmnd *scp,
 	/* Handle implicit open of closed and empty zones */
 	if (zsp->z_cond == ZC1_EMPTY || zsp->z_cond == ZC4_CLOSED) {
 		if (devip->max_open &&
-		    devip->nr_exp_open >= devip->max_open) {
+		    devip->nr_imp_open + devip->nr_exp_open >= devip->max_open) {
 			mk_sense_buffer(scp, DATA_PROTECT,
 					INSUFF_RES_ASC,
 					INSUFF_ZONE_ASCQ);
@@ -6101,7 +6101,7 @@ static int resp_open_zone(struct scsi_cmnd *scp, struct sdebug_dev_info *devip)
 	if (all) {
 		/* Check if all closed zones can be open */
 		if (devip->max_open &&
-		    devip->nr_exp_open + devip->nr_closed > devip->max_open) {
+		    devip->nr_imp_open + devip->nr_exp_open + devip->nr_closed > devip->max_open) {
 			mk_sense_buffer(scp, DATA_PROTECT, INSUFF_RES_ASC,
 					INSUFF_ZONE_ASCQ);
 			res = check_condition_result;
@@ -6136,7 +6136,7 @@ static int resp_open_zone(struct scsi_cmnd *scp, struct sdebug_dev_info *devip)
 	if (zc == ZC3_EXPLICIT_OPEN || zc == ZC5_FULL)
 		goto fini;
 
-	if (devip->max_open && devip->nr_exp_open >= devip->max_open) {
+	if (devip->max_open && devip->nr_imp_open + devip->nr_exp_open >= devip->max_open) {
 		mk_sense_buffer(scp, DATA_PROTECT, INSUFF_RES_ASC,
 				INSUFF_ZONE_ASCQ);
 		res = check_condition_result;
