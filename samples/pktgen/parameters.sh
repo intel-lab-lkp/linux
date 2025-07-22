@@ -1,4 +1,4 @@
-#
+#!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 # Common parameter parsing for pktgen scripts
 #
