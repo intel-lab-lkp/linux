@@ -24,7 +24,7 @@ enum ice_dpll_pin_sw {
  * @pin: dpll pin structure
  * @pf: pointer to pf, which has registered the dpll_pin
  * @idx: ice pin private idx
- * @num_parents: hols number of parent pins
+ * @num_parents: hold number of parent pins
  * @parent_idx: hold indexes of parent pins
  * @flags: pin flags returned from HW
  * @state: state of a pin
@@ -101,11 +101,13 @@ struct ice_dpll {
  * @pps: pointer to PPS dpll dev
  * @inputs: input pins pointer
  * @outputs: output pins pointer
+ * @pin_1588: pin controlling clock 1588 pointer
  * @rclk: recovered pins pointer
  * @num_inputs: number of input pins available on dpll
  * @num_outputs: number of output pins available on dpll
  * @cgu_state_acq_err_num: number of errors returned during periodic work
  * @base_rclk_idx: idx of first pin used for clock revocery pins
+ * @base_1588_idx: idx of first pin used for 1588 clock control pin
  * @clock_id: clock_id of dplls
  * @input_phase_adj_max: max phase adjust value for an input pins
  * @output_phase_adj_max: max phase adjust value for an output pins
@@ -119,6 +121,7 @@ struct ice_dplls {
 	struct ice_dpll pps;
 	struct ice_dpll_pin *inputs;
 	struct ice_dpll_pin *outputs;
+	struct ice_dpll_pin pin_1588;
 	struct ice_dpll_pin sma[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin ufl[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin rclk;
@@ -126,6 +129,7 @@ struct ice_dplls {
 	u8 num_outputs;
 	u8 sma_data;
 	u8 base_rclk_idx;
+	u8 base_1588_idx;
 	int cgu_state_acq_err_num;
 	u64 clock_id;
 	s32 input_phase_adj_max;
@@ -143,3 +147,23 @@ static inline void ice_dpll_deinit(struct ice_pf *pf) { }
 #endif
 
 #endif
+
+#define ICE_CGU_R10				0x28
+#define ICE_CGU_R10_SYNCE_CLKO_SEL		GENMASK(8, 5)
+#define ICE_CGU_R10_SYNCE_CLKODIV_M1		GENMASK(13, 9)
+#define ICE_CGU_R10_SYNCE_CLKODIV_LOAD		BIT(14)
+#define ICE_CGU_R10_SYNCE_DCK_RST		BIT(15)
+#define ICE_CGU_R10_SYNCE_ETHCLKO_SEL		GENMASK(18, 16)
+#define ICE_CGU_R10_SYNCE_ETHDIV_M1		GENMASK(23, 19)
+#define ICE_CGU_R10_SYNCE_ETHDIV_LOAD		BIT(24)
+#define ICE_CGU_R10_SYNCE_DCK2_RST		BIT(25)
+#define ICE_CGU_R10_SYNCE_S_REF_CLK		GENMASK(31, 27)
+
+#define ICE_CGU_R11				0x2C
+#define ICE_CGU_R11_SYNCE_S_BYP_CLK		GENMASK(6, 1)
+
+#define ICE_CGU_BYPASS_MUX_OFFSET_E825C		3
+
+#define SET_PIN_STATE(_pin, _id, _condition) \
+	((_pin)->state[_id] = (_condition) ? DPLL_PIN_STATE_CONNECTED : \
+			       DPLL_PIN_STATE_DISCONNECTED)
