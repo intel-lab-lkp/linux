@@ -1414,6 +1414,9 @@ struct kvm_arch {
 	u64 cur_tsc_offset;
 	u64 cur_tsc_generation;
 	int nr_vcpus_matched_tsc;
+#ifdef CONFIG_X86_64
+	bool host_was_suspended;
+#endif
 
 	u32 default_tsc_khz;
 	bool user_set_tsc;

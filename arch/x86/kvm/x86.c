@@ -2779,7 +2779,7 @@ static inline void adjust_tsc_offset_guest(struct kvm_vcpu *vcpu,
 	kvm_vcpu_write_tsc_offset(vcpu, tsc_offset + adjustment);
 }
 
-static inline void adjust_tsc_offset_host(struct kvm_vcpu *vcpu, s64 adjustment)
+static inline void __adjust_tsc_offset_host(struct kvm_vcpu *vcpu, s64 adjustment)
 {
 	if (vcpu->arch.l1_tsc_scaling_ratio != kvm_caps.default_tsc_scaling_ratio)
 		WARN_ON(adjustment < 0);
@@ -4994,6 +4994,52 @@ static bool need_emulate_wbinvd(struct kvm_vcpu *vcpu)
 }
 
 static DEFINE_PER_CPU(struct kvm_vcpu *, last_vcpu);
+
+#ifdef CONFIG_X86_64
+static void kvm_set_host_was_suspended(struct kvm *kvm)
+{
+	kvm->arch.host_was_suspended = true;
+}
+
+static void adjust_tsc_offset_host(struct kvm_vcpu *vcpu, u64 adj)
+{
+	unsigned long flags;
+	struct kvm *kvm;
+	bool advance;
+	u64 kernel_ns, l1_tsc, offset, tsc_now;
+
+	kvm = vcpu->kvm;
+	advance = kvm_get_time_and_clockread(&kernel_ns, &tsc_now);
+	raw_spin_lock_irqsave(&kvm->arch.tsc_write_lock, flags);
+	/*
+	 * Advance the guest's TSC to current time instead of only preventing
+	 * it from going backwards, while making sure all the vCPUs use the
+	 * same offset.
+	 */
+	if (kvm->arch.host_was_suspended && advance) {
+		l1_tsc = nsec_to_cycles(vcpu,
+					kvm->arch.kvmclock_offset + kernel_ns);
+		offset = kvm_compute_l1_tsc_offset(vcpu, l1_tsc);
+		kvm->arch.cur_tsc_offset = offset;
+		kvm_vcpu_write_tsc_offset(vcpu, offset);
+	} else if (advance) {
+		kvm_vcpu_write_tsc_offset(vcpu, kvm->arch.cur_tsc_offset);
+	} else {
+		__adjust_tsc_offset_host(vcpu, adj);
+	}
+	kvm->arch.host_was_suspended = false;
+	raw_spin_unlock_irqrestore(&kvm->arch.tsc_write_lock, flags);
+}
+#else
+static void kvm_set_host_was_suspended(struct kvm *kvm)
+{
+}
+
+static void adjust_tsc_offset_host(struct kvm_vcpu *vcpu, u64 adj)
+{
+	__adjust_tsc_offset_host(vcpu, adj);
+}
+#endif /* CONFIG_X86_64 */
 
 void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
@@ -12729,6 +12775,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 				kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
 			}
 
+			kvm_set_host_was_suspended(kvm);
 			/*
 			 * We have to disable TSC offset matching.. if you were
 			 * booting a VM while issuing an S4 host suspend....
