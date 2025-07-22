@@ -1,3 +1,4 @@
+#!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 
 export RE_NUMBER="[0-9\.]+"
