@@ -2214,6 +2214,7 @@ int wrap_directory_iterator(struct file *, struct dir_context *,
 
 struct inode_operations {
 	ptrdiff_t i_fscrypt;
+	ptrdiff_t i_fsverity;
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
 	int (*permission) (struct mnt_idmap *, struct inode *, int);
