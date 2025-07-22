@@ -4267,6 +4267,38 @@ static void macb_taprio_destroy(struct net_device *ndev)
 	spin_unlock_irqrestore(&bp->lock, flags);
 }
 
+static int macb_setup_taprio(struct net_device *ndev,
+			     struct tc_taprio_qopt_offload *taprio)
+{
+	int err = 0;
+
+	switch (taprio->cmd) {
+	case TAPRIO_CMD_REPLACE:
+		err = macb_taprio_setup_replace(ndev, taprio);
+		break;
+	case TAPRIO_CMD_DESTROY:
+		macb_taprio_destroy(ndev);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+	}
+
+	return err;
+}
+
+static int macb_setup_tc(struct net_device *dev, enum tc_setup_type type, void *type_data)
+{
+	if (!dev || !type_data)
+		return -EINVAL;
+
+	switch (type) {
+	case TC_SETUP_QDISC_TAPRIO:
+		return macb_setup_taprio(dev, type_data);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static const struct net_device_ops macb_netdev_ops = {
 	.ndo_open		= macb_open,
 	.ndo_stop		= macb_close,
@@ -4284,6 +4316,7 @@ static const struct net_device_ops macb_netdev_ops = {
 	.ndo_features_check	= macb_features_check,
 	.ndo_hwtstamp_set	= macb_hwtstamp_set,
 	.ndo_hwtstamp_get	= macb_hwtstamp_get,
+	.ndo_setup_tc		= macb_setup_tc,
 };
 
 /* Configure peripheral capabilities according to device tree
