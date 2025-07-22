@@ -2304,14 +2304,6 @@ static int ov8865_state_configure(struct ov8865_sensor *sensor,
 	if (sensor->state.streaming)
 		return -EBUSY;
 
-	/* State will be configured at first power on otherwise. */
-	if (pm_runtime_enabled(sensor->dev) &&
-	    !pm_runtime_suspended(sensor->dev)) {
-		ret = ov8865_mode_configure(sensor, mode, mbus_code);
-		if (ret)
-			return ret;
-	}
-
 	ret = ov8865_state_mipi_configure(sensor, mode, mbus_code);
 	if (ret)
 		return ret;
@@ -2384,6 +2376,13 @@ static int ov8865_sensor_init(struct ov8865_sensor *sensor)
 	}
 
 	/* Configure current mode. */
+	ret = ov8865_mode_configure(sensor, sensor->state.mode,
+				     sensor->state.mbus_code);
+	if (ret) {
+		dev_err(sensor->dev, "failed to configure mode\n");
+		return ret;
+	}
+
 	ret = ov8865_state_configure(sensor, sensor->state.mode,
 				     sensor->state.mbus_code);
 	if (ret) {
