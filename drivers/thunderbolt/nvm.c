@@ -191,7 +191,7 @@ static const struct tb_nvm_vendor_ops asmedia_switch_nvm_ops = {
 
 /* Router vendor NVM support table */
 static const struct tb_nvm_vendor switch_nvm_vendors[] = {
-	{ 0x174c, &asmedia_switch_nvm_ops },
+	{ PCI_VENDOR_ID_ASMEDIA_USB4, &asmedia_switch_nvm_ops },
 	{ PCI_VENDOR_ID_INTEL, &intel_switch_nvm_ops },
 	{ 0x8087, &intel_switch_nvm_ops },
 };

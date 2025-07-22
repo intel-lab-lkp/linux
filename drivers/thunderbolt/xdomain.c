@@ -674,6 +674,9 @@ static void update_property_block(struct tb_xdomain *xd)
 		case PCI_VENDOR_ID_AMD:
 			tb_property_add_text(dir, "vendorid", "AMD");
 			break;
+		case PCI_VENDOR_ID_ASMEDIA_USB4:
+			tb_property_add_text(dir, "vendorid", "ASMedia");
+			break;
 		default:
 			tb_property_add_text(dir, "vendorid", "Unknown Vendor");
 			break;
