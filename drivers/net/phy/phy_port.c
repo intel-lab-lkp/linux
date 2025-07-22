@@ -132,6 +132,26 @@ void phy_port_update_supported(struct phy_port *port)
 EXPORT_SYMBOL_GPL(phy_port_update_supported);
 
 /**
+ * phy_port_filter_supported() - Make sure that port->supported match port->mediums
+ * @port: The port to filter
+ *
+ * After updating a port's mediums to a more restricted subset, this helper will
+ * make sure that port->supported only contains linkmodes that are compatible
+ * with port->mediums.
+ */
+void phy_port_filter_supported(struct phy_port *port)
+{
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported) = { 0 };
+	int i;
+
+	for_each_set_bit(i, &port->mediums, __ETHTOOL_LINK_MEDIUM_LAST)
+		phy_caps_medium_get_supported(supported, i, port->lanes);
+
+	linkmode_and(port->supported, port->supported, supported);
+}
+EXPORT_SYMBOL_GPL(phy_port_filter_supported);
+
+/**
  * phy_port_get_type() - get the PORT_* attribut for that port.
  * @port: The port we want the information from
  *
