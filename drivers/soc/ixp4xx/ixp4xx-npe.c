@@ -466,7 +466,7 @@ int npe_recv_message(struct npe *npe, void *msg, const char *what)
 		}
 	}
 
-	switch(cnt) {
+	switch (cnt) {
 	case 1:
 		debug_msg(npe, "Received [%08X]\n", recv[0]);
 		break;
@@ -491,9 +491,12 @@ int npe_send_recv_message(struct npe *npe, void *msg, const char *what)
 	int result;
 	u32 *send = msg, recv[2];
 
-	if ((result = npe_send_message(npe, msg, what)) != 0)
+	result = npe_send_message(npe, msg, what);
+	if (result != 0)
 		return result;
-	if ((result = npe_recv_message(npe, recv, what)) != 0)
+
+	result = npe_recv_message(npe, recv, what);
+	if (result != 0)
 		return result;
 
 	if ((recv[0] != send[0]) || (recv[1] != send[1])) {
@@ -533,7 +536,8 @@ int npe_load_firmware(struct npe *npe, const char *name, struct device *dev)
 	int i, j, err, data_size, instr_size, blocks, table_end;
 	u32 cmd;
 
-	if ((err = request_firmware(&fw_entry, name, dev)) != 0)
+	err = request_firmware(&fw_entry, name, dev);
+	if (err != 0)
 		return err;
 
 	err = -EINVAL;
@@ -541,7 +545,7 @@ int npe_load_firmware(struct npe *npe, const char *name, struct device *dev)
 		print_npe(KERN_ERR, npe, "incomplete firmware file\n");
 		goto err;
 	}
-	image = (struct dl_image*)fw_entry->data;
+	image = (struct dl_image *)fw_entry->data;
 
 #if DEBUG_FW
 	print_npe(KERN_DEBUG, npe, "firmware: %08X %08X %08X (0x%X bytes)\n",
@@ -624,7 +628,7 @@ int npe_load_firmware(struct npe *npe, const char *name, struct device *dev)
 			goto err;
 		}
 
-		cb = (struct dl_codeblock*)&image->data[blk->offset];
+		cb = (struct dl_codeblock *)&image->data[blk->offset];
 		if (blk->type == FW_BLOCK_TYPE_INSTR) {
 			if (cb->npe_addr + cb->size > instr_size)
 				goto too_big;
@@ -741,15 +745,14 @@ static void ixp4xx_npe_remove(struct platform_device *pdev)
 	int i;
 
 	for (i = 0; i < NPE_COUNT; i++)
-		if (npe_tab[i].regs) {
+		if (npe_tab[i].regs)
 			npe_reset(&npe_tab[i]);
-		}
 }
 
 static const struct of_device_id ixp4xx_npe_of_match[] = {
 	{
 		.compatible = "intel,ixp4xx-network-processing-engine",
-        },
+	},
 	{},
 };
 
