@@ -16,12 +16,14 @@ $ref: thermal-sensor.yaml#
 properties:
   compatible:
     oneOf:
+      - enum:
+          - amlogic,a1-cpu-thermal
+          - amlogic,c3-cpu-thermal
       - items:
           - enum:
               - amlogic,g12a-cpu-thermal
               - amlogic,g12a-ddr-thermal
           - const: amlogic,g12a-thermal
-      - const: amlogic,a1-cpu-thermal
 
   reg:
     maxItems: 1
