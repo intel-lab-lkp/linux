@@ -29,6 +29,8 @@
 #include "phy-qcom-qmp-pcs-misc-v3.h"
 
 #define PHY_INIT_COMPLETE_TIMEOUT		10000
+#define SW_PORTSELECT_VAL			BIT(0)
+#define SW_PORTSELECT_MUX			BIT(1)
 
 /* set of registers with offsets different per-PHY */
 enum qphy_reg_layout {
@@ -284,7 +286,7 @@ static const struct qmp_phy_init_tbl qcm2290_usb3_pcs_tbl[] = {
 	QMP_PHY_INIT_CFG(QPHY_V3_PCS_RX_SIGDET_LVL, 0x88),
 };
 
-struct qmp_usbc_offsets {
+struct qmp_usbc_usb_offsets {
 	u16 serdes;
 	u16 pcs;
 	u16 pcs_misc;
@@ -295,9 +297,8 @@ struct qmp_usbc_offsets {
 	u16 rx2;
 };
 
-/* struct qmp_phy_cfg - per-PHY initialization config */
-struct qmp_phy_cfg {
-	const struct qmp_usbc_offsets *offsets;
+struct qmp_phy_usb_cfg {
+	const struct qmp_usbc_usb_offsets *offsets;
 
 	/* Init sequence for PHY blocks - serdes, tx, rx, pcs */
 	const struct qmp_phy_init_tbl *serdes_tbl;
@@ -317,11 +318,7 @@ struct qmp_phy_cfg {
 	const unsigned int *regs;
 };
 
-struct qmp_usbc {
-	struct device *dev;
-
-	const struct qmp_phy_cfg *cfg;
-
+struct qmp_phy_usb_layout {
 	void __iomem *serdes;
 	void __iomem *pcs;
 	void __iomem *pcs_misc;
@@ -329,11 +326,14 @@ struct qmp_usbc {
 	void __iomem *rx;
 	void __iomem *tx2;
 	void __iomem *rx2;
-
-	struct regmap *tcsr_map;
-	u32 vls_clamp_reg;
-
+	enum phy_mode mode;
 	struct clk *pipe_clk;
+	struct clk_fixed_rate pipe_clk_fixed;
+};
+
+struct qmp_usbc {
+	struct device *dev;
+	int type;
 	struct clk_bulk_data *clks;
 	int num_clks;
 	int num_resets;
@@ -341,16 +341,16 @@ struct qmp_usbc {
 	struct regulator_bulk_data *vregs;
 
 	struct mutex phy_mutex;
-
-	enum phy_mode mode;
-	unsigned int usb_init_count;
-
 	struct phy *phy;
+	enum typec_orientation orientation;
+	unsigned int init_count;
+	const void *cfg;
+	void *layout;
 
-	struct clk_fixed_rate pipe_clk_fixed;
+	struct regmap *tcsr_map;
+	u32 vls_clamp_reg;
 
 	struct typec_switch_dev *sw;
-	enum typec_orientation orientation;
 };
 
 static inline void qphy_setbits(void __iomem *base, u32 offset, u32 val)
@@ -392,11 +392,11 @@ static const char * const usb3phy_reset_l[] = {
 };
 
 /* list of regulators */
-static const char * const qmp_phy_vreg_l[] = {
+static const char * const qmp_phy_usb_vreg_l[] = {
 	"vdda-phy", "vdda-pll",
 };
 
-static const struct qmp_usbc_offsets qmp_usbc_offsets_v3_qcm2290 = {
+static const struct qmp_usbc_usb_offsets qmp_usbc_usb_offsets_v3_qcm2290 = {
 	.serdes		= 0x0,
 	.pcs		= 0xc00,
 	.pcs_misc	= 0xa00,
@@ -406,8 +406,8 @@ static const struct qmp_usbc_offsets qmp_usbc_offsets_v3_qcm2290 = {
 	.rx2		= 0x800,
 };
 
-static const struct qmp_phy_cfg msm8998_usb3phy_cfg = {
-	.offsets		= &qmp_usbc_offsets_v3_qcm2290,
+static const struct qmp_phy_usb_cfg msm8998_usb3phy_cfg = {
+	.offsets		= &qmp_usbc_usb_offsets_v3_qcm2290,
 
 	.serdes_tbl             = msm8998_usb3_serdes_tbl,
 	.serdes_tbl_num         = ARRAY_SIZE(msm8998_usb3_serdes_tbl),
@@ -417,13 +417,13 @@ static const struct qmp_phy_cfg msm8998_usb3phy_cfg = {
 	.rx_tbl_num             = ARRAY_SIZE(msm8998_usb3_rx_tbl),
 	.pcs_tbl                = msm8998_usb3_pcs_tbl,
 	.pcs_tbl_num            = ARRAY_SIZE(msm8998_usb3_pcs_tbl),
-	.vreg_list              = qmp_phy_vreg_l,
-	.num_vregs              = ARRAY_SIZE(qmp_phy_vreg_l),
+	.vreg_list              = qmp_phy_usb_vreg_l,
+	.num_vregs              = ARRAY_SIZE(qmp_phy_usb_vreg_l),
 	.regs                   = qmp_v3_usb3phy_regs_layout,
 };
 
-static const struct qmp_phy_cfg qcm2290_usb3phy_cfg = {
-	.offsets		= &qmp_usbc_offsets_v3_qcm2290,
+static const struct qmp_phy_usb_cfg qcm2290_usb3phy_cfg = {
+	.offsets		= &qmp_usbc_usb_offsets_v3_qcm2290,
 
 	.serdes_tbl		= qcm2290_usb3_serdes_tbl,
 	.serdes_tbl_num		= ARRAY_SIZE(qcm2290_usb3_serdes_tbl),
@@ -433,13 +433,13 @@ static const struct qmp_phy_cfg qcm2290_usb3phy_cfg = {
 	.rx_tbl_num		= ARRAY_SIZE(qcm2290_usb3_rx_tbl),
 	.pcs_tbl		= qcm2290_usb3_pcs_tbl,
 	.pcs_tbl_num		= ARRAY_SIZE(qcm2290_usb3_pcs_tbl),
-	.vreg_list		= qmp_phy_vreg_l,
-	.num_vregs		= ARRAY_SIZE(qmp_phy_vreg_l),
+	.vreg_list		= qmp_phy_usb_vreg_l,
+	.num_vregs		= ARRAY_SIZE(qmp_phy_usb_vreg_l),
 	.regs			= qmp_v3_usb3phy_regs_layout_qcm2290,
 };
 
-static const struct qmp_phy_cfg sdm660_usb3phy_cfg = {
-	.offsets		= &qmp_usbc_offsets_v3_qcm2290,
+static const struct qmp_phy_usb_cfg sdm660_usb3phy_cfg = {
+	.offsets		= &qmp_usbc_usb_offsets_v3_qcm2290,
 
 	.serdes_tbl		= qcm2290_usb3_serdes_tbl,
 	.serdes_tbl_num		= ARRAY_SIZE(qcm2290_usb3_serdes_tbl),
@@ -449,18 +449,26 @@ static const struct qmp_phy_cfg sdm660_usb3phy_cfg = {
 	.rx_tbl_num		= ARRAY_SIZE(sdm660_usb3_rx_tbl),
 	.pcs_tbl		= qcm2290_usb3_pcs_tbl,
 	.pcs_tbl_num		= ARRAY_SIZE(qcm2290_usb3_pcs_tbl),
-	.vreg_list		= qmp_phy_vreg_l,
-	.num_vregs		= ARRAY_SIZE(qmp_phy_vreg_l),
+	.vreg_list		= qmp_phy_usb_vreg_l,
+	.num_vregs		= ARRAY_SIZE(qmp_phy_usb_vreg_l),
 	.regs			= qmp_v3_usb3phy_regs_layout_qcm2290,
 };
 
-static int qmp_usbc_init(struct phy *phy)
+#define to_usb_cfg(x) ((struct qmp_phy_usb_cfg *)((x)->cfg))
+#define to_usb_layout(x) ((struct qmp_phy_usb_layout *)((x)->layout))
+
+static int qmp_usbc_generic_init(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
-	void __iomem *pcs = qmp->pcs;
-	u32 val = 0;
+	struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
+	int num_vregs;
+	unsigned int reg_pwr_dn;
+	u32 val;
 	int ret;
+
+	num_vregs = cfg->num_vregs;
+	reg_pwr_dn = cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL];
 
 	ret = regulator_bulk_enable(cfg->num_vregs, qmp->vregs);
 	if (ret) {
@@ -484,30 +492,28 @@ static int qmp_usbc_init(struct phy *phy)
 	if (ret)
 		goto err_assert_reset;
 
-	qphy_setbits(pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL], SW_PWRDN);
-
-#define SW_PORTSELECT_VAL			BIT(0)
-#define SW_PORTSELECT_MUX			BIT(1)
 	/* Use software based port select and switch on typec orientation */
 	val = SW_PORTSELECT_MUX;
 	if (qmp->orientation == TYPEC_ORIENTATION_REVERSE)
 		val |= SW_PORTSELECT_VAL;
-	writel(val, qmp->pcs_misc);
+
+	qphy_setbits(layout->pcs, reg_pwr_dn, SW_PWRDN);
+	writel(val, layout->pcs_misc);
 
 	return 0;
 
 err_assert_reset:
 	reset_control_bulk_assert(qmp->num_resets, qmp->resets);
 err_disable_regulators:
-	regulator_bulk_disable(cfg->num_vregs, qmp->vregs);
+	regulator_bulk_disable(num_vregs, qmp->vregs);
 
 	return ret;
 }
 
-static int qmp_usbc_exit(struct phy *phy)
+static int qmp_usbc_generic_exit(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
+	struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
 
 	reset_control_bulk_assert(qmp->num_resets, qmp->resets);
 
@@ -518,39 +524,40 @@ static int qmp_usbc_exit(struct phy *phy)
 	return 0;
 }
 
-static int qmp_usbc_power_on(struct phy *phy)
+static int qmp_usbc_usb_power_on(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
+	const struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 	void __iomem *status;
 	unsigned int val;
 	int ret;
 
-	qmp_configure(qmp->dev, qmp->serdes, cfg->serdes_tbl,
+	qmp_configure(qmp->dev, layout->serdes, cfg->serdes_tbl,
 		      cfg->serdes_tbl_num);
 
-	ret = clk_prepare_enable(qmp->pipe_clk);
+	ret = clk_prepare_enable(layout->pipe_clk);
 	if (ret) {
 		dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
 		return ret;
 	}
 
 	/* Tx, Rx, and PCS configurations */
-	qmp_configure_lane(qmp->dev, qmp->tx, cfg->tx_tbl, cfg->tx_tbl_num, 1);
-	qmp_configure_lane(qmp->dev, qmp->rx, cfg->rx_tbl, cfg->rx_tbl_num, 1);
+	qmp_configure_lane(qmp->dev, layout->tx, cfg->tx_tbl, cfg->tx_tbl_num, 1);
+	qmp_configure_lane(qmp->dev, layout->rx, cfg->rx_tbl, cfg->rx_tbl_num, 1);
 
-	qmp_configure_lane(qmp->dev, qmp->tx2, cfg->tx_tbl, cfg->tx_tbl_num, 2);
-	qmp_configure_lane(qmp->dev, qmp->rx2, cfg->rx_tbl, cfg->rx_tbl_num, 2);
+	qmp_configure_lane(qmp->dev, layout->tx2, cfg->tx_tbl, cfg->tx_tbl_num, 2);
+	qmp_configure_lane(qmp->dev, layout->rx2, cfg->rx_tbl, cfg->rx_tbl_num, 2);
 
-	qmp_configure(qmp->dev, qmp->pcs, cfg->pcs_tbl, cfg->pcs_tbl_num);
+	qmp_configure(qmp->dev, layout->pcs, cfg->pcs_tbl, cfg->pcs_tbl_num);
 
 	/* Pull PHY out of reset state */
-	qphy_clrbits(qmp->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
+	qphy_clrbits(layout->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
 
 	/* start SerDes and Phy-Coding-Sublayer */
-	qphy_setbits(qmp->pcs, cfg->regs[QPHY_START_CTRL], SERDES_START | PCS_START);
+	qphy_setbits(layout->pcs, cfg->regs[QPHY_START_CTRL], SERDES_START | PCS_START);
 
-	status = qmp->pcs + cfg->regs[QPHY_PCS_STATUS];
+	status = layout->pcs + cfg->regs[QPHY_PCS_STATUS];
 	ret = readl_poll_timeout(status, val, !(val & PHYSTATUS), 200,
 				 PHY_INIT_COMPLETE_TIMEOUT);
 	if (ret) {
@@ -561,92 +568,95 @@ static int qmp_usbc_power_on(struct phy *phy)
 	return 0;
 
 err_disable_pipe_clk:
-	clk_disable_unprepare(qmp->pipe_clk);
+	clk_disable_unprepare(layout->pipe_clk);
 
 	return ret;
 }
 
-static int qmp_usbc_power_off(struct phy *phy)
+static int qmp_usbc_usb_power_off(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
+	const struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 
-	clk_disable_unprepare(qmp->pipe_clk);
+	clk_disable_unprepare(layout->pipe_clk);
 
 	/* PHY reset */
-	qphy_setbits(qmp->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
+	qphy_setbits(layout->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
 
 	/* stop SerDes and Phy-Coding-Sublayer */
-	qphy_clrbits(qmp->pcs, cfg->regs[QPHY_START_CTRL],
-			SERDES_START | PCS_START);
+	qphy_clrbits(layout->pcs, cfg->regs[QPHY_START_CTRL],
+		     SERDES_START | PCS_START);
 
 	/* Put PHY into POWER DOWN state: active low */
-	qphy_clrbits(qmp->pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL],
-			SW_PWRDN);
+	qphy_clrbits(layout->pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL],
+		     SW_PWRDN);
 
 	return 0;
 }
 
-static int qmp_usbc_enable(struct phy *phy)
+static int qmp_usbc_usb_enable(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
 	int ret;
 
 	mutex_lock(&qmp->phy_mutex);
 
-	ret = qmp_usbc_init(phy);
+	ret = qmp_usbc_generic_init(phy);
 	if (ret)
 		goto out_unlock;
 
-	ret = qmp_usbc_power_on(phy);
+	ret = qmp_usbc_usb_power_on(phy);
 	if (ret) {
-		qmp_usbc_exit(phy);
+		qmp_usbc_generic_exit(phy);
 		goto out_unlock;
 	}
 
-	qmp->usb_init_count++;
+	qmp->init_count++;
 out_unlock:
 	mutex_unlock(&qmp->phy_mutex);
 
 	return ret;
 }
 
-static int qmp_usbc_disable(struct phy *phy)
+static int qmp_usbc_usb_disable(struct phy *phy)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
 	int ret;
 
-	qmp->usb_init_count--;
-	ret = qmp_usbc_power_off(phy);
+	qmp->init_count--;
+	ret = qmp_usbc_usb_power_off(phy);
 	if (ret)
 		return ret;
-	return qmp_usbc_exit(phy);
+	return qmp_usbc_generic_exit(phy);
 }
 
-static int qmp_usbc_set_mode(struct phy *phy, enum phy_mode mode, int submode)
+static int qmp_usbc_usb_set_mode(struct phy *phy, enum phy_mode mode, int submode)
 {
 	struct qmp_usbc *qmp = phy_get_drvdata(phy);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 
-	qmp->mode = mode;
+	layout->mode = mode;
 
 	return 0;
 }
 
-static const struct phy_ops qmp_usbc_phy_ops = {
-	.init		= qmp_usbc_enable,
-	.exit		= qmp_usbc_disable,
-	.set_mode	= qmp_usbc_set_mode,
+static const struct phy_ops qmp_usbc_usb_phy_ops = {
+	.init		= qmp_usbc_usb_enable,
+	.exit		= qmp_usbc_usb_disable,
+	.set_mode	= qmp_usbc_usb_set_mode,
 	.owner		= THIS_MODULE,
 };
 
 static void qmp_usbc_enable_autonomous_mode(struct qmp_usbc *qmp)
 {
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
-	void __iomem *pcs = qmp->pcs;
+	const struct qmp_phy_usb_cfg *cfg = qmp->cfg;
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
+	void __iomem *pcs = layout->pcs;
 	u32 intr_mask;
 
-	if (qmp->mode == PHY_MODE_USB_HOST_SS ||
-	    qmp->mode == PHY_MODE_USB_DEVICE_SS)
+	if (layout->mode == PHY_MODE_USB_HOST_SS ||
+	    layout->mode == PHY_MODE_USB_DEVICE_SS)
 		intr_mask = ARCVR_DTCT_EN | ALFPS_DTCT_EN;
 	else
 		intr_mask = ARCVR_DTCT_EN | ARCVR_DTCT_EVENT_SEL;
@@ -669,8 +679,9 @@ static void qmp_usbc_enable_autonomous_mode(struct qmp_usbc *qmp)
 
 static void qmp_usbc_disable_autonomous_mode(struct qmp_usbc *qmp)
 {
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
-	void __iomem *pcs = qmp->pcs;
+	const struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
+	void __iomem *pcs = layout->pcs;
 
 	/* Disable i/o clamp_n on resume for normal mode */
 	if (qmp->tcsr_map && qmp->vls_clamp_reg)
@@ -687,8 +698,9 @@ static void qmp_usbc_disable_autonomous_mode(struct qmp_usbc *qmp)
 static int __maybe_unused qmp_usbc_runtime_suspend(struct device *dev)
 {
 	struct qmp_usbc *qmp = dev_get_drvdata(dev);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 
-	dev_vdbg(dev, "Suspending QMP phy, mode:%d\n", qmp->mode);
+	dev_vdbg(dev, "Suspending QMP phy, mode:%d\n", layout->mode);
 
 	if (!qmp->phy->init_count) {
 		dev_vdbg(dev, "PHY not initialized, bailing out\n");
@@ -697,7 +709,7 @@ static int __maybe_unused qmp_usbc_runtime_suspend(struct device *dev)
 
 	qmp_usbc_enable_autonomous_mode(qmp);
 
-	clk_disable_unprepare(qmp->pipe_clk);
+	clk_disable_unprepare(layout->pipe_clk);
 	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
 
 	return 0;
@@ -706,9 +718,10 @@ static int __maybe_unused qmp_usbc_runtime_suspend(struct device *dev)
 static int __maybe_unused qmp_usbc_runtime_resume(struct device *dev)
 {
 	struct qmp_usbc *qmp = dev_get_drvdata(dev);
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 	int ret = 0;
 
-	dev_vdbg(dev, "Resuming QMP phy, mode:%d\n", qmp->mode);
+	dev_vdbg(dev, "Resuming QMP phy, mode:%d\n", layout->mode);
 
 	if (!qmp->phy->init_count) {
 		dev_vdbg(dev, "PHY not initialized, bailing out\n");
@@ -719,7 +732,7 @@ static int __maybe_unused qmp_usbc_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = clk_prepare_enable(qmp->pipe_clk);
+	ret = clk_prepare_enable(layout->pipe_clk);
 	if (ret) {
 		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
 		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
@@ -738,10 +751,11 @@ static const struct dev_pm_ops qmp_usbc_pm_ops = {
 
 static int qmp_usbc_vreg_init(struct qmp_usbc *qmp)
 {
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
+	struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
 	struct device *dev = qmp->dev;
-	int num = cfg->num_vregs;
 	int i;
+
+	int num = cfg->num_vregs;
 
 	qmp->vregs = devm_kcalloc(dev, num, sizeof(*qmp->vregs), GFP_KERNEL);
 	if (!qmp->vregs)
@@ -821,7 +835,9 @@ static void phy_clk_release_provider(void *res)
  */
 static int phy_pipe_clk_register(struct qmp_usbc *qmp, struct device_node *np)
 {
-	struct clk_fixed_rate *fixed = &qmp->pipe_clk_fixed;
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
+
+	struct clk_fixed_rate *fixed = &layout->pipe_clk_fixed;
 	struct clk_init_data init = { };
 	int ret;
 
@@ -864,12 +880,12 @@ static int qmp_usbc_typec_switch_set(struct typec_switch_dev *sw,
 	mutex_lock(&qmp->phy_mutex);
 	qmp->orientation = orientation;
 
-	if (qmp->usb_init_count) {
-		qmp_usbc_power_off(qmp->phy);
-		qmp_usbc_exit(qmp->phy);
+	if (qmp->init_count) {
+		qmp_usbc_usb_power_off(qmp->phy);
+		qmp_usbc_generic_exit(qmp->phy);
 
-		qmp_usbc_init(qmp->phy);
-		qmp_usbc_power_on(qmp->phy);
+		qmp_usbc_generic_init(qmp->phy);
+		qmp_usbc_usb_power_on(qmp->phy);
 	}
 
 	mutex_unlock(&qmp->phy_mutex);
@@ -907,15 +923,16 @@ static int qmp_usbc_typec_switch_register(struct qmp_usbc *qmp)
 }
 #endif
 
-static int qmp_usbc_parse_dt_legacy(struct qmp_usbc *qmp, struct device_node *np)
+static int qmp_usbc_parse_usb_dt_legacy(struct qmp_usbc *qmp, struct device_node *np)
 {
 	struct platform_device *pdev = to_platform_device(qmp->dev);
 	struct device *dev = qmp->dev;
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 	int ret;
 
-	qmp->serdes = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(qmp->serdes))
-		return PTR_ERR(qmp->serdes);
+	layout->serdes = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(layout->serdes))
+		return PTR_ERR(layout->serdes);
 
 	/*
 	 * Get memory resources for the PHY:
@@ -923,35 +940,35 @@ static int qmp_usbc_parse_dt_legacy(struct qmp_usbc *qmp, struct device_node *np
 	 * For dual lane PHYs: tx2 -> 3, rx2 -> 4, pcs_misc (optional) -> 5
 	 * For single lane PHYs: pcs_misc (optional) -> 3.
 	 */
-	qmp->tx = devm_of_iomap(dev, np, 0, NULL);
-	if (IS_ERR(qmp->tx))
-		return PTR_ERR(qmp->tx);
+	layout->tx = devm_of_iomap(dev, np, 0, NULL);
+	if (IS_ERR(layout->tx))
+		return PTR_ERR(layout->tx);
 
-	qmp->rx = devm_of_iomap(dev, np, 1, NULL);
-	if (IS_ERR(qmp->rx))
-		return PTR_ERR(qmp->rx);
+	layout->rx = devm_of_iomap(dev, np, 1, NULL);
+	if (IS_ERR(layout->rx))
+		return PTR_ERR(layout->rx);
 
-	qmp->pcs = devm_of_iomap(dev, np, 2, NULL);
-	if (IS_ERR(qmp->pcs))
-		return PTR_ERR(qmp->pcs);
+	layout->pcs = devm_of_iomap(dev, np, 2, NULL);
+	if (IS_ERR(layout->pcs))
+		return PTR_ERR(layout->pcs);
 
-	qmp->tx2 = devm_of_iomap(dev, np, 3, NULL);
-	if (IS_ERR(qmp->tx2))
-		return PTR_ERR(qmp->tx2);
+	layout->tx2 = devm_of_iomap(dev, np, 3, NULL);
+	if (IS_ERR(layout->tx2))
+		return PTR_ERR(layout->tx2);
 
-	qmp->rx2 = devm_of_iomap(dev, np, 4, NULL);
-	if (IS_ERR(qmp->rx2))
-		return PTR_ERR(qmp->rx2);
+	layout->rx2 = devm_of_iomap(dev, np, 4, NULL);
+	if (IS_ERR(layout->rx2))
+		return PTR_ERR(layout->rx2);
 
-	qmp->pcs_misc = devm_of_iomap(dev, np, 5, NULL);
-	if (IS_ERR(qmp->pcs_misc)) {
+	layout->pcs_misc = devm_of_iomap(dev, np, 5, NULL);
+	if (IS_ERR(layout->pcs_misc)) {
 		dev_vdbg(dev, "PHY pcs_misc-reg not used\n");
-		qmp->pcs_misc = NULL;
+		layout->pcs_misc = NULL;
 	}
 
-	qmp->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+	layout->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
+	if (IS_ERR(layout->pipe_clk)) {
+		return dev_err_probe(dev, PTR_ERR(layout->pipe_clk),
 				     "failed to get pipe clock\n");
 	}
 
@@ -969,11 +986,12 @@ static int qmp_usbc_parse_dt_legacy(struct qmp_usbc *qmp, struct device_node *np
 	return 0;
 }
 
-static int qmp_usbc_parse_dt(struct qmp_usbc *qmp)
+static int qmp_usbc_parse_usb_dt(struct qmp_usbc *qmp)
 {
 	struct platform_device *pdev = to_platform_device(qmp->dev);
-	const struct qmp_phy_cfg *cfg = qmp->cfg;
-	const struct qmp_usbc_offsets *offs = cfg->offsets;
+	const struct qmp_phy_usb_cfg *cfg = to_usb_cfg(qmp);
+	const struct qmp_usbc_usb_offsets *offs = cfg->offsets;
+	struct qmp_phy_usb_layout *layout = to_usb_layout(qmp);
 	struct device *dev = qmp->dev;
 	void __iomem *base;
 	int ret;
@@ -985,28 +1003,28 @@ static int qmp_usbc_parse_dt(struct qmp_usbc *qmp)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	qmp->serdes = base + offs->serdes;
-	qmp->pcs = base + offs->pcs;
+	layout->serdes = base + offs->serdes;
+	layout->pcs = base + offs->pcs;
 	if (offs->pcs_misc)
-		qmp->pcs_misc = base + offs->pcs_misc;
-	qmp->tx = base + offs->tx;
-	qmp->rx = base + offs->rx;
+		layout->pcs_misc = base + offs->pcs_misc;
+	layout->tx = base + offs->tx;
+	layout->rx = base + offs->rx;
 
-	qmp->tx2 = base + offs->tx2;
-	qmp->rx2 = base + offs->rx2;
+	layout->tx2 = base + offs->tx2;
+	layout->rx2 = base + offs->rx2;
 
 	ret = qmp_usbc_clk_init(qmp);
 	if (ret)
 		return ret;
 
-	qmp->pipe_clk = devm_clk_get(dev, "pipe");
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+	layout->pipe_clk = devm_clk_get(dev, "pipe");
+	if (IS_ERR(layout->pipe_clk)) {
+		return dev_err_probe(dev, PTR_ERR(layout->pipe_clk),
 				     "failed to get pipe clock\n");
 	}
 
 	ret = qmp_usbc_reset_init(qmp, usb3phy_reset_l,
-				 ARRAY_SIZE(usb3phy_reset_l));
+				  ARRAY_SIZE(usb3phy_reset_l));
 	if (ret)
 		return ret;
 
@@ -1064,6 +1082,10 @@ static int qmp_usbc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	qmp->layout = devm_kzalloc(dev, sizeof(struct qmp_phy_usb_layout), GFP_KERNEL);
+	if (!qmp->layout)
+		return -ENOMEM;
+
 	ret = qmp_usbc_typec_switch_register(qmp);
 	if (ret)
 		return ret;
@@ -1075,10 +1097,10 @@ static int qmp_usbc_probe(struct platform_device *pdev)
 	/* Check for legacy binding with child node. */
 	np = of_get_child_by_name(dev->of_node, "phy");
 	if (np) {
-		ret = qmp_usbc_parse_dt_legacy(qmp, np);
+		ret = qmp_usbc_parse_usb_dt_legacy(qmp, np);
 	} else {
 		np = of_node_get(dev->of_node);
-		ret = qmp_usbc_parse_dt(qmp);
+		ret = qmp_usbc_parse_usb_dt(qmp);
 	}
 	if (ret)
 		goto err_node_put;
@@ -1097,7 +1119,7 @@ static int qmp_usbc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_node_put;
 
-	qmp->phy = devm_phy_create(dev, np, &qmp_usbc_phy_ops);
+	qmp->phy = devm_phy_create(dev, np, &qmp_usbc_usb_phy_ops);
 	if (IS_ERR(qmp->phy)) {
 		ret = PTR_ERR(qmp->phy);
 		dev_err(dev, "failed to create PHY: %d\n", ret);
