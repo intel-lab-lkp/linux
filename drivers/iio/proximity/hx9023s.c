@@ -251,7 +251,7 @@ static const struct iio_event_spec hx9023s_events[] = {
 		.sign = 's',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
-		.endianness = IIO_BE,				\
+		.endianness = IIO_LE,				\
 	},							\
 }
 
