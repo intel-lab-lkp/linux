@@ -36,6 +36,12 @@
 
 static const struct inode_operations ceph_symlink_iops;
 static const struct inode_operations ceph_encrypted_symlink_iops;
+static const struct inode_operations ceph_encrypted_nop_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
+};
 
 static void ceph_inode_work(struct work_struct *work);
 
@@ -49,6 +55,7 @@ static int ceph_set_ino_cb(struct inode *inode, void *data)
 
 	ci->i_vino = *(struct ceph_vino *)data;
 	inode->i_ino = ceph_vino_to_ino_t(ci->i_vino);
+	inode->i_op = &ceph_encrypted_nop_iops;
 	inode_set_iversion_raw(inode, 0);
 	percpu_counter_inc(&mdsc->metric.total_inodes);
 
@@ -88,6 +95,8 @@ struct inode *ceph_new_inode(struct inode *dir, struct dentry *dentry,
 
 	inode->i_state = 0;
 	inode->i_mode = *mode;
+
+	inode->i_op = &ceph_encrypted_nop_iops;
 
 	err = ceph_security_init_secctx(dentry, *mode, as_ctx);
 	if (err < 0)
@@ -232,6 +241,10 @@ err:
 }
 
 const struct inode_operations ceph_file_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
 	.permission = ceph_permission,
 	.setattr = ceph_setattr,
 	.getattr = ceph_getattr,
@@ -2314,6 +2327,10 @@ static int ceph_encrypted_symlink_getattr(struct mnt_idmap *idmap,
  * symlinks
  */
 static const struct inode_operations ceph_symlink_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
 	.get_link = simple_get_link,
 	.setattr = ceph_setattr,
 	.getattr = ceph_getattr,
@@ -2321,6 +2338,10 @@ static const struct inode_operations ceph_symlink_iops = {
 };
 
 static const struct inode_operations ceph_encrypted_symlink_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
 	.get_link = ceph_encrypted_get_link,
 	.setattr = ceph_setattr,
 	.getattr = ceph_encrypted_symlink_getattr,

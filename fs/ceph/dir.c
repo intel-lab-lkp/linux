@@ -2229,6 +2229,10 @@ const struct file_operations ceph_snapdir_fops = {
 };
 
 const struct inode_operations ceph_dir_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
 	.lookup = ceph_lookup,
 	.permission = ceph_permission,
 	.getattr = ceph_getattr,
@@ -2248,6 +2252,10 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 const struct inode_operations ceph_snapdir_iops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct ceph_inode_info, netfs.i_fscrypt_info) -
+		     offsetof(struct ceph_inode_info, netfs.inode),
+#endif
 	.lookup = ceph_lookup,
 	.permission = ceph_permission,
 	.getattr = ceph_getattr,

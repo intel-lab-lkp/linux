@@ -57,6 +57,9 @@ typedef void (*netfs_io_terminated_t)(void *priv, ssize_t transferred_or_error);
  */
 struct netfs_inode {
 	struct inode		inode;		/* The VFS inode */
+#ifdef CONFIG_FS_ENCRYPTION
+	struct fscrypt_inode_info *i_fscrypt_info;
+#endif
 	const struct netfs_request_ops *ops;
 #if IS_ENABLED(CONFIG_FSCACHE)
 	struct fscache_cookie	*cache;
@@ -503,6 +506,9 @@ static inline void netfs_inode_init(struct netfs_inode *ctx,
 		ctx->zero_point = ctx->remote_i_size;
 		mapping_set_release_always(ctx->inode.i_mapping);
 	}
+#ifdef CONFIG_FS_ENCRYPTION
+	ctx->i_fscrypt_info = NULL;
+#endif
 }
 
 /**
