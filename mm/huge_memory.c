@@ -75,6 +75,8 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 static bool split_underused_thp = true;
 
 static atomic_t huge_zero_refcount;
+static atomic_t huge_zero_static_fail_count __read_mostly;
+atomic_t huge_zero_folio_is_static __read_mostly;
 struct folio *huge_zero_folio __read_mostly;
 unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
@@ -265,6 +267,32 @@ void mm_put_huge_zero_folio(struct mm_struct *mm)
 	if (test_bit(MMF_HUGE_ZERO_PAGE, &mm->flags))
 		put_huge_zero_page();
 }
+
+#ifdef CONFIG_STATIC_HUGE_ZERO_FOLIO
+struct folio *__get_static_huge_zero_folio(void)
+{
+       /*
+        * If we failed to allocate a huge zero folio multiple times,
+        * just refrain from trying.
+        */
+       if (atomic_read(&huge_zero_static_fail_count) > 2)
+               return NULL;
+
+       /*
+        * Our raised reference will prevent the shrinker from ever having
+        * success.
+        */
+       if (!get_huge_zero_page()) {
+              atomic_inc(&huge_zero_static_fail_count);
+               return NULL;
+       }
+
+       if (atomic_cmpxchg(&huge_zero_folio_is_static, 0, 1) != 0)
+               put_huge_zero_page();
+
+       return huge_zero_folio;
+}
+#endif /* CONFIG_STATIC_HUGE_ZERO_FOLIO */
 
 static unsigned long shrink_huge_zero_folio_count(struct shrinker *shrink,
 						  struct shrink_control *sc)
