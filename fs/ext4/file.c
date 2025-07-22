@@ -985,6 +985,10 @@ const struct inode_operations ext4_file_inode_operations = {
 	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
 			  offsetof(struct ext4_inode_info, vfs_inode),
 #endif
+#ifdef CONFIG_FS_VERITY
+	.i_fsverity	= offsetof(struct ext4_inode_info, i_fsverity_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_file_getattr,
 	.listxattr	= ext4_listxattr,

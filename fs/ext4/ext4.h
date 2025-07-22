@@ -1201,6 +1201,10 @@ struct ext4_inode_info {
 #ifdef CONFIG_FS_ENCRYPTION
 	struct fscrypt_inode_info	*i_fscrypt_info;
 #endif
+
+#ifdef CONFIG_FS_VERITY
+	struct fsverity_info	*i_fsverity_info;
+#endif
 };
 
 /*
