@@ -1136,8 +1136,8 @@ static void kvm_enable_host_haltpoll(void *i)
 void arch_haltpoll_enable(unsigned int cpu)
 {
 	if (!kvm_para_has_feature(KVM_FEATURE_POLL_CONTROL)) {
-		pr_err_once("host does not support poll control\n");
-		pr_err_once("host upgrade recommended\n");
+		pr_debug_once("host does not support poll control\n");
+		pr_debug_once("host upgrade recommended\n");
 		return;
 	}
 
