@@ -795,7 +795,7 @@ struct bfq_data {
 	/* fallback dummy bfqq for extreme OOM conditions */
 	struct bfq_queue oom_bfqq;
 
-	spinlock_t lock;
+	spinlock_t *lock;
 
 	/*
 	 * bic associated with the task issuing current bio for
