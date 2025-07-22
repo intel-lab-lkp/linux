@@ -1783,6 +1783,16 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 	if (!pgtable_l5_enabled())
 		setup_clear_cpu_cap(X86_FEATURE_LA57);
 
+	/*
+	 * If a feature is disabled during compile time clear its feature
+	 * bit to prevent it from showing up in the x86_capability bitmask.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_LAM))
+		setup_clear_cpu_cap(X86_FEATURE_LAM);
+
+	if (!cpu_feature_enabled(X86_FEATURE_FRED))
+		setup_clear_cpu_cap(X86_FEATURE_FRED);
+
 	detect_nopl();
 }
 
