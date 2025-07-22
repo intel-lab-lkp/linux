@@ -629,7 +629,7 @@ following:
   - tracing synthetic events from in-kernel code
   - the low-level "dynevent_cmd" API
 
-7.1 Dyamically creating synthetic event definitions
+7.1 Dynamically creating synthetic event definitions
 ---------------------------------------------------
 
 There are a couple ways to create a new synthetic event from a kernel

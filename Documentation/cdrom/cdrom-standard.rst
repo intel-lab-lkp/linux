@@ -89,7 +89,7 @@ CD-ROM devices behave **exactly** the same (insofar as the underlying
 hardware will allow).
 
 The goal of the Uniform CD-ROM Driver is **not** to alienate driver developers
-whohave not yet taken steps to support this effort. The goal of Uniform CD-ROM
+who have not yet taken steps to support this effort. The goal of Uniform CD-ROM
 Driver is simply to give people writing application programs for CD-ROM drives
 **one** Linux CD-ROM interface with consistent behavior for all
 CD-ROM devices. In addition, this also provides a consistent interface
