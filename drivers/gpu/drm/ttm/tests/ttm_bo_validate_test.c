@@ -538,7 +538,7 @@ static void ttm_bo_validate_no_placement_signaled(struct kunit *test)
 
 	if (params->with_ttm) {
 		old_tt = priv->ttm_dev->funcs->ttm_tt_create(bo, 0);
-		ttm_pool_alloc(&priv->ttm_dev->pool, old_tt, &ctx);
+		ttm_pool_alloc(&priv->ttm_dev->pool, old_tt, false, &ctx);
 		bo->ttm = old_tt;
 	}
 
