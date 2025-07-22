@@ -583,6 +583,7 @@ struct inode *f2fs_iget(struct super_block *sb, unsigned long ino)
 		return inode;
 	}
 
+	inode->i_op = &f2fs_encrypted_nop_inode_operations;
 	if (is_meta_ino(sbi, ino))
 		goto make_now;
 

@@ -1453,6 +1453,9 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 
 	/* Will be used by directory only */
 	fi->i_dir_level = F2FS_SB(sb)->dir_level;
+#ifdef CONFIG_FS_ENCRYPTION
+	fi->i_fscrypt_info = NULL;
+#endif
 
 	return &fi->vfs_inode;
 }

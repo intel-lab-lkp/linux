@@ -905,6 +905,9 @@ struct f2fs_inode_info {
 
 	unsigned int atomic_write_cnt;
 	loff_t original_i_size;		/* original i_size before atomic write */
+#ifdef CONFIG_FS_ENCRYPTION
+	struct fscrypt_inode_info *i_fscrypt_info; /* filesystem encryption info */
+#endif
 };
 
 static inline void get_read_extent_info(struct extent_info *ext,
@@ -4297,6 +4300,7 @@ extern const struct inode_operations f2fs_dir_inode_operations;
 extern const struct inode_operations f2fs_symlink_inode_operations;
 extern const struct inode_operations f2fs_encrypted_symlink_inode_operations;
 extern const struct inode_operations f2fs_special_inode_operations;
+extern const struct inode_operations f2fs_encrypted_nop_inode_operations;
 extern struct kmem_cache *f2fs_inode_entry_slab;
 
 /*

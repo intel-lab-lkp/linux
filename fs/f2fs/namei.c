@@ -216,6 +216,13 @@ static void set_file_temperature(struct f2fs_sb_info *sbi, struct inode *inode,
 		file_set_hot(inode);
 }
 
+const struct inode_operations f2fs_encrypted_nop_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt = offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+		     offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
+};
+
 static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 						struct inode *dir, umode_t mode,
 						const char *name)
@@ -248,6 +255,8 @@ static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 	simple_inode_init_ts(inode);
 	fi->i_crtime = inode_get_mtime(inode);
 	inode->i_generation = get_random_u32();
+
+	inode->i_op = &f2fs_encrypted_nop_inode_operations;
 
 	if (S_ISDIR(inode->i_mode))
 		fi->i_current_depth = 1;
@@ -1325,6 +1334,10 @@ static int f2fs_encrypted_symlink_getattr(struct mnt_idmap *idmap,
 }
 
 const struct inode_operations f2fs_encrypted_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.get_link	= f2fs_encrypted_get_link,
 	.getattr	= f2fs_encrypted_symlink_getattr,
 	.setattr	= f2fs_setattr,
@@ -1332,6 +1345,10 @@ const struct inode_operations f2fs_encrypted_symlink_inode_operations = {
 };
 
 const struct inode_operations f2fs_dir_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.create		= f2fs_create,
 	.lookup		= f2fs_lookup,
 	.link		= f2fs_link,
@@ -1353,6 +1370,10 @@ const struct inode_operations f2fs_dir_inode_operations = {
 };
 
 const struct inode_operations f2fs_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.get_link	= f2fs_get_link,
 	.getattr	= f2fs_getattr,
 	.setattr	= f2fs_setattr,
@@ -1360,6 +1381,10 @@ const struct inode_operations f2fs_symlink_inode_operations = {
 };
 
 const struct inode_operations f2fs_special_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct f2fs_inode_info, i_fscrypt_info) -
+			  offsetof(struct f2fs_inode_info, vfs_inode),
+#endif
 	.getattr	= f2fs_getattr,
 	.setattr	= f2fs_setattr,
 	.get_inode_acl	= f2fs_get_acl,
