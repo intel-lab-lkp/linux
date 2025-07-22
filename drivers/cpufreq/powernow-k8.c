@@ -26,22 +26,22 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/kernel.h>
-#include <linux/smp.h>
-#include <linux/module.h>
-#include <linux/init.h>
+#include <linux/acpi.h>
 #include <linux/cpufreq.h>
-#include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/cpumask.h>
-#include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/init.h>
+#include <linux/io.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/smp.h>
+#include <linux/string.h>
 
 #include <asm/msr.h>
 #include <asm/cpu_device_id.h>
 
-#include <linux/acpi.h>
-#include <linux/mutex.h>
 #include <acpi/processor.h>
 
 #define VERSION "version 2.20.00"

@@ -46,8 +46,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/cper.h>
-#include <linux/ras.h>
 #include <linux/cpu.h>
+#include <linux/ras.h>
 
 #include <acpi/apei.h>
 

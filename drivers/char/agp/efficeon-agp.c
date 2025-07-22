@@ -20,13 +20,14 @@
  *   - tested with c3/c4 enabled (with the mobility m9 card)
  */
 
-#include <linux/module.h>
-#include <linux/pci.h>
-#include <linux/init.h>
 #include <linux/agp_backend.h>
 #include <linux/gfp.h>
-#include <linux/page-flags.h>
+#include <linux/init.h>
 #include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/page-flags.h>
+#include <linux/pci.h>
+
 #include "agp.h"
 #include "intel-agp.h"
 

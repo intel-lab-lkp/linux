@@ -34,18 +34,18 @@
 #define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
 
 #include <linux/bitmap.h>
-#include <linux/memblock.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/hardirq.h>
-#include <linux/workqueue.h>
-#include <linux/ratelimit.h>
+#include <linux/io.h>
+#include <linux/memblock.h>
+#include <linux/mm.h>
 #include <linux/moduleparam.h>
+#include <linux/ratelimit.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/vmalloc.h>
+#include <linux/workqueue.h>
 #ifdef CONFIG_XEN_GRANT_DMA_ALLOC
 #include <linux/dma-mapping.h>
 #endif

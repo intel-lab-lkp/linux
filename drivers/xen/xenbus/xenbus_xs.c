@@ -33,22 +33,24 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/unistd.h>
-#include <linux/errno.h>
-#include <linux/types.h>
-#include <linux/uio.h>
-#include <linux/kernel.h>
-#include <linux/string.h>
 #include <linux/err.h>
-#include <linux/slab.h>
+#include <linux/errno.h>
 #include <linux/fcntl.h>
+#include <linux/kernel.h>
 #include <linux/kthread.h>
+#include <linux/mutex.h>
 #include <linux/reboot.h>
 #include <linux/rwsem.h>
-#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/types.h>
+#include <linux/uio.h>
+#include <linux/unistd.h>
+
 #include <asm/xen/hypervisor.h>
-#include <xen/xenbus.h>
+
 #include <xen/xen.h>
+#include <xen/xenbus.h>
 #include "xenbus.h"
 
 /*

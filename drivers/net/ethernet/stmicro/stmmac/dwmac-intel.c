@@ -3,9 +3,10 @@
  */
 
 #include <linux/clk-provider.h>
-#include <linux/pci.h>
 #include <linux/dmi.h>
+#include <linux/pci.h>
 #include <linux/platform_data/x86/intel_pmc_ipc.h>
+
 #include "dwmac-intel.h"
 #include "dwmac4.h"
 #include "stmmac.h"

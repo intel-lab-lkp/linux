@@ -24,40 +24,42 @@
 
 #define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
 
-#include <linux/linkage.h>
+#include <linux/atomic.h>
+#include <linux/cpuhotplug.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/moduleparam.h>
-#include <linux/string.h>
-#include <linux/memblock.h>
-#include <linux/slab.h>
 #include <linux/irqnr.h>
+#include <linux/ktime.h>
+#include <linux/linkage.h>
+#include <linux/memblock.h>
+#include <linux/moduleparam.h>
 #include <linux/pci.h>
 #include <linux/rcupdate.h>
+#include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/cpuhotplug.h>
-#include <linux/atomic.h>
-#include <linux/ktime.h>
+#include <linux/string.h>
 
 #ifdef CONFIG_X86
 #include <asm/desc.h>
-#include <asm/ptrace.h>
-#include <asm/idtentry.h>
-#include <asm/irq.h>
-#include <asm/io_apic.h>
 #include <asm/i8259.h>
+#include <asm/idtentry.h>
+#include <asm/io_apic.h>
+#include <asm/irq.h>
+#include <asm/ptrace.h>
 #include <asm/xen/cpuid.h>
 #include <asm/xen/pci.h>
 #endif
+
+#include <asm/hw_irq.h>
 #include <asm/sync_bitops.h>
 #include <asm/xen/hypercall.h>
 #include <asm/xen/hypervisor.h>
-#include <xen/page.h>
 
 #include <xen/xen.h>
 #include <xen/hvm.h>
 #include <xen/xen-ops.h>
 #include <xen/events.h>
+#include <xen/page.h>
 #include <xen/interface/xen.h>
 #include <xen/interface/event_channel.h>
 #include <xen/interface/hvm/hvm_op.h>
@@ -66,7 +68,6 @@
 #include <xen/interface/sched.h>
 #include <xen/interface/vcpu.h>
 #include <xen/xenbus.h>
-#include <asm/hw_irq.h>
 
 #include "events_internal.h"
 
