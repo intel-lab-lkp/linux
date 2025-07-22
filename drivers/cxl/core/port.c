@@ -450,6 +450,7 @@ static void cxl_root_decoder_release(struct device *dev)
 	if (atomic_read(&cxlrd->region_id) >= 0)
 		memregion_free(atomic_read(&cxlrd->region_id));
 	__cxl_decoder_release(&cxlrd->cxlsd.cxld);
+	kfree(cxlrd->ops);
 	kfree(cxlrd);
 }
 
@@ -1833,6 +1834,7 @@ struct cxl_root_decoder *cxl_root_decoder_alloc(struct cxl_port *port,
 
 	atomic_set(&cxlrd->region_id, rc);
 	cxlrd->qos_class = CXL_QOS_CLASS_INVALID;
+
 	return cxlrd;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_root_decoder_alloc, "CXL");
