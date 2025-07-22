@@ -18,9 +18,11 @@
  * VMALLOC range.
  *
  * VMALLOC_START: beginning of the kernel vmalloc space
+ * VMALLOC_EARLY_START: early vm area before vmalloc_init()
  * VMALLOC_END: extends to the available space below vmemmap
  */
 #define VMALLOC_START		(MODULES_END)
+#define VMALLOC_EARLY_START	(MODULES_END)
 #if VA_BITS == VA_BITS_MIN
 #define VMALLOC_END		(VMEMMAP_START - SZ_8M)
 #else
