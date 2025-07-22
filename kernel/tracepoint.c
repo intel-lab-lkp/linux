@@ -677,9 +677,35 @@ static struct notifier_block tracepoint_module_nb = {
 	.priority = 0,
 };
 
+#ifdef CONFIG_TRACEPOINT_WARN_ON_UNUSED
+extern void * __start___tracepoint_check[];
+extern void * __stop___tracepoint_check[];
+
+#define VERIFIED_TRACEPOINT	((void *)1)
+
+static void check_tracepoint(struct tracepoint *tp, void *priv)
+{
+	if (WARN_ONCE(tp->funcs != VERIFIED_TRACEPOINT, "Unused tracepoints found"))
+		pr_warn("Tracepoint %s unused\n", tp->name);
+
+	tp->funcs = NULL;
+}
+#endif
+
 static __init int init_tracepoints(void)
 {
 	int ret;
+
+#ifdef CONFIG_TRACEPOINT_WARN_ON_UNUSED
+	for (void **ptr = __start___tracepoint_check;
+	     ptr < __stop___tracepoint_check; ptr++) {
+		struct tracepoint *tp = *ptr;
+
+		tp->funcs = VERIFIED_TRACEPOINT;
+	}
+
+	for_each_kernel_tracepoint(check_tracepoint, NULL);
+#endif
 
 	ret = register_module_notifier(&tracepoint_module_nb);
 	if (ret)

@@ -708,6 +708,7 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 	MCOUNT_REC()							\
 	*(.init.rodata .init.rodata.*)					\
 	FTRACE_EVENTS()							\
+	BOUNDED_SECTION_BY(__tracepoint_check, ___tracepoint_check)	\
 	TRACE_SYSCALLS()						\
 	KPROBE_BLACKLIST()						\
 	ERROR_INJECT_WHITELIST()					\
