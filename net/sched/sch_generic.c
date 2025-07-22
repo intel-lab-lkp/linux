@@ -1445,7 +1445,7 @@ void mq_change_real_num_tx(struct Qdisc *sch, unsigned int new_real_tx)
 }
 EXPORT_SYMBOL(mq_change_real_num_tx);
 
-int dev_qdisc_change_tx_queue_len(struct net_device *dev)
+int dev_qdisc_change_tx_queue_len(struct net_device *dev, unsigned int old_len)
 {
 	bool up = dev->flags & IFF_UP;
 	unsigned int i;
@@ -1456,10 +1456,16 @@ int dev_qdisc_change_tx_queue_len(struct net_device *dev)
 
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		ret = qdisc_change_tx_queue_len(dev, &dev->_tx[i]);
-
-		/* TODO: revert changes on a partial failure */
 		if (ret)
 			break;
+	}
+
+	if (ret) {
+		dev->tx_queue_len = old_len;
+		while (i >= 0) {
+			qdisc_change_tx_queue_len(dev, &dev->_tx[i]);
+			i--;
+		}
 	}
 
 	if (up)
