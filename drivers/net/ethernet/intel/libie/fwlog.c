@@ -3,11 +3,10 @@
 
 #include <linux/debugfs.h>
 #include <linux/fs.h>
+#include <linux/net/intel/libie/fwlog.h>
+#include <linux/pci.h>
 #include <linux/random.h>
 #include <linux/vmalloc.h>
-#include "ice.h"
-#include "ice_common.h"
-#include "ice_fwlog.h"
 
 /* create a define that has an extra module that doesn't really exist. this
  * is so we can add a module 'all' to easily enable/disable all the modules
@@ -1038,6 +1037,7 @@ int libie_fwlog_init(struct libie_fwlog *fwlog, struct libie_fwlog_api *api)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(libie_fwlog_init, "LIBIE_FWLOG");
 
 /**
  * libie_fwlog_deinit - unroll FW logging configuration
@@ -1072,6 +1072,7 @@ void libie_fwlog_deinit(struct libie_fwlog *fwlog)
 		kfree(fwlog->ring.rings);
 	}
 }
+EXPORT_SYMBOL_NS_GPL(libie_fwlog_deinit, "LIBIE_FWLOG");
 
 /**
  * libie_get_fwlog_data - copy the FW log data from ARQ event
@@ -1096,6 +1097,7 @@ void libie_get_fwlog_data(struct libie_fwlog *fwlog, u8 *buf, u16 len)
 		libie_fwlog_ring_increment(&fwlog->ring.head, fwlog->ring.size);
 	}
 }
+EXPORT_SYMBOL_NS_GPL(libie_get_fwlog_data, "LIBIE_FWLOG");
 
 void libie_fwlog_reregister(struct libie_fwlog *fwlog)
 {
@@ -1105,3 +1107,7 @@ void libie_fwlog_reregister(struct libie_fwlog *fwlog)
 	if (libie_fwlog_register(fwlog))
 		fwlog->cfg.options &= ~LIBIE_FWLOG_OPTION_IS_REGISTERED;
 }
+EXPORT_SYMBOL_NS_GPL(libie_fwlog_reregister, "LIBIE_FWLOG");
+
+MODULE_DESCRIPTION("Intel(R) Ethernet common library");
+MODULE_LICENSE("GPL");
