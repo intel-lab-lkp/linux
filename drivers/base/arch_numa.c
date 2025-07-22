@@ -17,6 +17,8 @@
 #include <asm/sections.h>
 
 static int cpu_to_node_map[NR_CPUS] = { [0 ... NR_CPUS-1] = NUMA_NO_NODE };
+static int cpu_to_norm_node_map[NR_CPUS] = { [0 ... NR_CPUS-1] = NUMA_NO_NODE };
+static bool need_norm;
 
 bool numa_off;
 
@@ -149,9 +151,40 @@ int early_cpu_to_node(int cpu)
 	return cpu_to_node_map[cpu];
 }
 
+int __init early_cpu_to_norm_node(int cpu)
+{
+	return cpu_to_norm_node_map[cpu];
+}
+
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
-	return node_distance(early_cpu_to_node(from), early_cpu_to_node(to));
+	int distance = node_distance(early_cpu_to_node(from), early_cpu_to_node(to));
+
+	if (distance > LOCAL_DISTANCE && distance < REMOTE_DISTANCE && !need_norm)
+		need_norm = true;
+
+	return distance;
+}
+
+static int __init pcpu_cpu_norm_distance(unsigned int from, unsigned int to)
+{
+	int distance = pcpu_cpu_distance(from, to);
+
+	if (distance >= REMOTE_DISTANCE)
+		return REMOTE_DISTANCE;
+
+	/*
+	 * If the distance is in the range [LOCAL_DISTANCE, REMOTE_DISTANCE),
+	 * normalize the node map, choose the first local numa node id as its
+	 * normalized node id.
+	 */
+	if (cpu_to_norm_node_map[from] == NUMA_NO_NODE)
+		cpu_to_norm_node_map[from] = cpu_to_node_map[from];
+
+	if (cpu_to_norm_node_map[to] == NUMA_NO_NODE)
+		cpu_to_norm_node_map[to] = cpu_to_norm_node_map[from];
+
+	return LOCAL_DISTANCE;
 }
 
 void __init setup_per_cpu_areas(void)
@@ -169,6 +202,18 @@ void __init setup_per_cpu_areas(void)
 					    PERCPU_DYNAMIC_RESERVE, PAGE_SIZE,
 					    pcpu_cpu_distance,
 					    early_cpu_to_node);
+
+		if (rc < 0 && need_norm) {
+			/* Try the normalized node distance again */
+			pr_info("PERCPU: %s allocator, trying the normalization mode\n",
+				   pcpu_fc_names[pcpu_chosen_fc]);
+
+			rc = pcpu_embed_first_chunk(PERCPU_MODULE_RESERVE,
+						    PERCPU_DYNAMIC_RESERVE, PAGE_SIZE,
+						    pcpu_cpu_norm_distance,
+						    early_cpu_to_norm_node);
+		}
+
 #ifdef CONFIG_NEED_PER_CPU_PAGE_FIRST_CHUNK
 		if (rc < 0)
 			pr_warn("PERCPU: %s allocator failed (%d), falling back to page size\n",
