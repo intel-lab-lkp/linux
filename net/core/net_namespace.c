@@ -434,6 +434,9 @@ static __net_init int setup_net(struct net *net)
 	LIST_HEAD(net_exit_list);
 	int error = 0;
 
+	init_llist_node(&net->defer_free_list);
+	init_llist_node(&net->cleanup_list);
+
 	preempt_disable();
 	net->net_cookie = gen_cookie_next(&net_cookie);
 	preempt_enable();
