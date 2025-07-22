@@ -2788,13 +2788,21 @@ static void netvsc_event_set_vf_ns(struct net_device *ndev)
 {
 	struct net_device_context *ndev_ctx = netdev_priv(ndev);
 	struct net_device *vf_netdev;
+	struct net *vfnet;
 	int ret;
 
 	vf_netdev = rtnl_dereference(ndev_ctx->vf_netdev);
 	if (!vf_netdev)
 		return;
 
-	if (!net_eq(dev_net(ndev), dev_net(vf_netdev))) {
+	vfnet = dev_net(vf_netdev);
+	/* Do not move it now if its net is being cleaned up,
+	 * net_cleanup_work will move it.
+	 */
+	if (llist_on_list(&vfnet->cleanup_list))
+		return;
+
+	if (!net_eq(dev_net(ndev), vfnet)) {
 		ret = dev_change_net_namespace(vf_netdev, dev_net(ndev),
 					       "eth%d");
 		if (ret)
