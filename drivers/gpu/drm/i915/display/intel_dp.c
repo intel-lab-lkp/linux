@@ -4281,12 +4281,13 @@ static void
 intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 
 	intel_dp->num_sink_rates = 0;
 
 	if (intel_dp->edp_dpcd[0] >= DP_EDP_14) {
 		__le16 sink_rates[DP_MAX_SUPPORTED_RATES];
-		int i;
+		int i, j = 0;
 
 		drm_dp_dpcd_read(&intel_dp->aux, DP_SUPPORTED_LINK_RATES,
 				 sink_rates, sizeof(sink_rates));
@@ -4314,9 +4315,13 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 			    intel_has_quirk(display, QUIRK_EDP_LIMIT_RATE_HBR2))
 				break;
 
-			intel_dp->sink_rates[i] = rate;
+			if (intel_bios_edp_data_override(encoder->devdata, rate))
+				continue;
+
+			intel_dp->sink_rates[j] = rate;
+			j++;
 		}
-		intel_dp->num_sink_rates = i;
+		intel_dp->num_sink_rates = j;
 	}
 
 	/*
