@@ -7029,7 +7029,12 @@ int netif_set_threaded(struct net_device *dev, bool threaded)
 
 	return err;
 }
-EXPORT_SYMBOL(netif_set_threaded);
+
+int netif_set_threaded_hint(struct net_device *dev)
+{
+	return netif_set_threaded(dev, true);
+}
+EXPORT_SYMBOL(netif_set_threaded_hint);
 
 /**
  * netif_queue_set_napi - Associate queue with the napi
