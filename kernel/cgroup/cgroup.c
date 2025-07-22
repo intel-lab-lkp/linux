@@ -5675,6 +5675,15 @@ static struct cgroup_subsys_state *css_create(struct cgroup *cgrp,
 		return css;
 
 	init_css(css);
+
+	if (ss->css_rstat_flush) {
+		err = css_rstat_init(css);
+		if (err) {
+			ss->css_free(css);
+			goto err_out;
+		}
+	}
+
 	link_css(css, ss, cgrp);
 
 	err = percpu_ref_init(&css->refcnt, css_release, 0, GFP_KERNEL);
@@ -5685,12 +5694,6 @@ static struct cgroup_subsys_state *css_create(struct cgroup *cgrp,
 	if (err < 0)
 		goto err_free_css;
 	css->id = err;
-
-	if (ss->css_rstat_flush) {
-		err = css_rstat_init(css);
-		if (err)
-			goto err_free_css;
-	}
 
 	/* @css is ready to be brought online now, make it visible */
 	list_add_tail_rcu(&css->sibling, &parent_css->children);
@@ -5707,6 +5710,7 @@ err_list_del:
 err_free_css:
 	INIT_RCU_WORK(&css->destroy_rwork, css_free_rwork_fn);
 	queue_rcu_work(cgroup_destroy_wq, &css->destroy_rwork);
+err_out:
 	return ERR_PTR(err);
 }
 
