@@ -234,6 +234,9 @@ static inline u16 ieee80211_sn_sub(u16 sn1, u16 sn2)
 #define IEEE80211_MAX_AID_S1G_NO_PS	1600
 #define IEEE80211_MAX_S1G_TIM_BLOCKS	25
 
+/* IEEE80211-2024 Block Control Encoding */
+#define IEEE80211_S1G_TIM_ENC_MODE_BLOCK	0x00
+
 /* Maximum size for the MA-UNITDATA primitive, 802.11 standard section
    6.2.1.1.2.
 
@@ -4771,15 +4774,8 @@ static inline unsigned long ieee80211_tu_to_usec(unsigned long tu)
 	return 1024 * tu;
 }
 
-/**
- * ieee80211_check_tim - check if AID bit is set in TIM
- * @tim: the TIM IE
- * @tim_len: length of the TIM IE
- * @aid: the AID to look for
- * Return: whether or not traffic is indicated in the TIM for the given AID
- */
-static inline bool ieee80211_check_tim(const struct ieee80211_tim_ie *tim,
-				       u8 tim_len, u16 aid)
+static inline bool __ieee80211_check_tim(const struct ieee80211_tim_ie *tim,
+					 u8 tim_len, u16 aid)
 {
 	u8 mask;
 	u8 index, indexn1, indexn2;
@@ -4800,6 +4796,88 @@ static inline bool ieee80211_check_tim(const struct ieee80211_tim_ie *tim,
 	index -= indexn1;
 
 	return !!(tim->virtual_map[index] & mask);
+}
+
+/* See ieee80211_s1g_beacon_add_tim_pvb for implementation documentation. */
+static inline bool ieee80211_s1g_check_tim(const struct ieee80211_tim_ie *tim,
+					   u8 tim_len, u16 aid)
+{
+	u8 bit_idx = aid & 0x7;
+	u8 sub_idx = (aid >> 3) & 0x7;
+	u8 blk_idx_target = (aid >> 6) & 0x1f;
+	u8 blk_bmap = 0;
+	const u8 *ptr = tim->virtual_map;
+	const u8 *end = (const u8 *)tim + tim_len + 2;
+
+	/*
+	 * When an S1G AP has no buffered unicast traffic, bitmap control and
+	 * PVB are not present.
+	 */
+	if (tim_len < 3)
+		return false;
+
+	/*
+	 * Enumerate each encoded block, for which we need at least block
+	 * control and block bitmap.
+	 */
+	while (ptr + 2 <= end) {
+		u8 blk_ctrl = *ptr++;
+		u8 enc_mode = blk_ctrl & 0x3;
+		u8 blk_idx = blk_ctrl >> 3;
+
+		/* If we are past our target block index, exit */
+		if (blk_idx > blk_idx_target)
+			break;
+
+		/* mac80211 only supports block bitmap encoding */
+		if (enc_mode != IEEE80211_S1G_TIM_ENC_MODE_BLOCK)
+			break;
+
+		/*
+		 * If our target block doesn't exist within the block
+		 * that the current encoded block represents, move to the
+		 * next encoded block.
+		 */
+		blk_bmap = *ptr++;
+		if (blk_idx < blk_idx_target) {
+			ptr += hweight8(blk_bmap);
+			continue;
+		}
+
+		/* Ensure our subblock is present */
+		if (!(blk_bmap & BIT(sub_idx)))
+			break;
+
+		/*
+		 * Count the number of subblocks that appear before our target
+		 * subblock, increment ptr by number of set subblocks.
+		 */
+		if (sub_idx)
+			ptr += hweight8(blk_bmap & GENMASK(sub_idx - 1, 0));
+
+		if (ptr >= end)
+			break;
+
+		/* Check our AID is present in the subblock */
+		return *ptr & BIT(bit_idx);
+	}
+
+	return false;
+}
+
+/**
+ * ieee80211_check_tim - check if AID bit is set in TIM
+ * @tim: the TIM IE
+ * @tim_len: length of the TIM IE
+ * @aid: the AID to look for
+ * @s1g: whether the TIM is from an S1G PPDU
+ * Return: whether or not traffic is indicated in the TIM for the given AID
+ */
+static inline bool ieee80211_check_tim(const struct ieee80211_tim_ie *tim,
+				       u8 tim_len, u16 aid, bool s1g)
+{
+	return s1g ? ieee80211_s1g_check_tim(tim, tim_len, aid) :
+		     __ieee80211_check_tim(tim, tim_len, aid);
 }
 
 /**
