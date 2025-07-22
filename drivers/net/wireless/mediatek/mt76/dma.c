@@ -162,6 +162,11 @@ mt76_dma_sync_idx(struct mt76_dev *dev, struct mt76_queue *q)
 		Q_WRITE(q, ring_size, MT_DMA_RRO_EN | q->ndesc);
 	else
 		Q_WRITE(q, ring_size, q->ndesc);
+
+	if (mt76_queue_is_npu_tx(q)) {
+		writel(q->desc_dma, &q->regs->desc_base);
+		writel(q->ndesc, &q->regs->ring_size);
+	}
 	q->head = Q_READ(q, dma_idx);
 	q->tail = q->head;
 }
@@ -172,7 +177,7 @@ void __mt76_dma_queue_reset(struct mt76_dev *dev, struct mt76_queue *q,
 	if (!q || !q->ndesc)
 		return;
 
-	if (!mt76_queue_is_wed_rro_ind(q)) {
+	if (!mt76_queue_is_wed_rro_ind(q) && !mt76_queue_is_npu(q)) {
 		int i;
 
 		/* clear descriptors */
@@ -364,6 +369,7 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 
 	while (q->queued > 0 && q->tail != last) {
 		mt76_dma_tx_cleanup_idx(dev, q, q->tail, &entry);
+		mt76_npu_txdesc_cleanup(q, q->tail);
 		mt76_queue_tx_complete(dev, q, &entry);
 
 		if (entry.txwi) {
@@ -522,6 +528,10 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 	if (test_bit(MT76_RESET, &phy->state))
 		goto free_skb;
 
+	/* FIXME: Take into account unlinear skbs */
+	if (mt76_npu_device_active(dev) && skb_linearize(skb))
+		goto free_skb;
+
 	t = mt76_get_txwi(dev);
 	if (!t)
 		goto free_skb;
@@ -568,6 +578,9 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 				   DMA_TO_DEVICE);
 	if (ret < 0)
 		goto unmap;
+
+	if (mt76_queue_is_npu_tx(q))
+		return mt76_npu_dma_add_buf(phy, q, skb, &tx_info.buf[1], txwi);
 
 	return mt76_dma_add_buf(dev, q, tx_info.buf, tx_info.nbuf,
 				tx_info.info, tx_info.skb, t);
@@ -671,8 +684,15 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	q->hw_idx = idx;
 	q->dev = dev;
 
-	size = mt76_queue_is_wed_rro_ind(q) ? sizeof(struct mt76_wed_rro_desc)
-					    : sizeof(struct mt76_desc);
+	if (mt76_queue_is_wed_rro_ind(q))
+		size = sizeof(struct mt76_wed_rro_desc);
+	else if (mt76_queue_is_npu_tx(q))
+		size = sizeof(struct airoha_npu_tx_dma_desc);
+	else if (mt76_queue_is_npu_rx(q))
+		size = sizeof(struct airoha_npu_rx_dma_desc);
+	else
+		size = sizeof(struct mt76_desc);
+
 	q->desc = dmam_alloc_coherent(dev->dma_dev, q->ndesc * size,
 				      &q->desc_dma, GFP_KERNEL);
 	if (!q->desc)
@@ -700,6 +720,7 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	if (ret)
 		return ret;
 
+	mt76_npu_queue_setup(dev, q);
 	ret = mt76_wed_dma_setup(dev, q, false);
 	if (ret)
 		return ret;
@@ -723,6 +744,11 @@ mt76_dma_rx_cleanup(struct mt76_dev *dev, struct mt76_queue *q)
 
 	if (!q->ndesc)
 		return;
+
+	if (mt76_queue_is_npu(q)) {
+		mt76_npu_queue_cleanup(dev, q);
+		return;
+	}
 
 	do {
 		spin_lock_bh(&q->lock);
@@ -753,7 +779,7 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 	if (!q->ndesc)
 		return;
 
-	if (!mt76_queue_is_wed_rro_ind(q)) {
+	if (!mt76_queue_is_wed_rro_ind(q) && !mt76_queue_is_npu(q)) {
 		int i;
 
 		for (i = 0; i < q->ndesc; i++)
@@ -773,7 +799,10 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 		return;
 
 	mt76_dma_sync_idx(dev, q);
-	mt76_dma_rx_fill_buf(dev, q, false);
+	if (mt76_queue_is_npu(q))
+		mt76_npu_fill_rx_queue(dev, q);
+	else
+		mt76_dma_rx_fill(dev, q, false);
 }
 
 static void
