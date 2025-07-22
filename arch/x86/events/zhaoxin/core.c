@@ -14,6 +14,7 @@
 
 #include <asm/apic.h>
 #include <asm/cpufeature.h>
+#include <asm/cpuid/api.h>
 #include <asm/hardirq.h>
 #include <asm/msr.h>
 

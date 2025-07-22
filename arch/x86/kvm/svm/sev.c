@@ -22,6 +22,7 @@
 
 #include <uapi/linux/sev-guest.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/debugreg.h>
 #include <asm/fpu/xcr.h>
 #include <asm/fpu/xstate.h>

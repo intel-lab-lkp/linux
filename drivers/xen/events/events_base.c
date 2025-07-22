@@ -40,6 +40,7 @@
 #include <linux/string.h>
 
 #ifdef CONFIG_X86
+#include <asm/cpuid/api.h>
 #include <asm/desc.h>
 #include <asm/i8259.h>
 #include <asm/idtentry.h>

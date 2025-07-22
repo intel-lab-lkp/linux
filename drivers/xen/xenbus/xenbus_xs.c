@@ -48,6 +48,9 @@
 #include <linux/unistd.h>
 
 #include <asm/xen/hypervisor.h>
+#ifdef CONFIG_X86
+#include <asm/cpuid/api.h>
+#endif
 
 #include <xen/xen.h>
 #include <xen/xenbus.h>

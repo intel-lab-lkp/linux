@@ -31,6 +31,7 @@
 #include <linux/static_call.h>
 
 #include <asm/apic.h>
+#include <asm/cpuid/api.h>
 #include <asm/div64.h>
 #include <asm/hypervisor.h>
 #include <asm/svm.h>

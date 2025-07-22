@@ -10,6 +10,7 @@
 #include <linux/kexec.h>
 
 #include <asm/coco.h>
+#include <asm/cpuid/api.h>
 #include <asm/ia32.h>
 #include <asm/insn.h>
 #include <asm/insn-eval.h>

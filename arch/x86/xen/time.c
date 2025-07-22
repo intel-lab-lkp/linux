@@ -23,6 +23,7 @@
 #include <xen/interface/vcpu.h>
 #include <xen/interface/xen.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/pvclock.h>
 
 #include <asm/xen/cpuid.h>

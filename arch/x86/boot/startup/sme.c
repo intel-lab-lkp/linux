@@ -40,6 +40,7 @@
 #include <linux/mm.h>
 
 #include <asm/coco.h>
+#include <asm/cpuid/api.h>
 #include <asm/init.h>
 #include <asm/sections.h>
 #include <asm/setup.h>

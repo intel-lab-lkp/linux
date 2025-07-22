@@ -37,6 +37,7 @@
 #include <linux/wordpart.h>
 
 #include <asm/cmpxchg.h>
+#include <asm/cpuid/api.h>
 #include <asm/io.h>
 #include <asm/memtype.h>
 #include <asm/page.h>

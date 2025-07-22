@@ -33,6 +33,7 @@
 #include <asm/apic.h>
 #include <asm/apicdef.h>
 #include <asm/cpu.h>
+#include <asm/cpuid/api.h>
 #include <asm/cpuidle_haltpoll.h>
 #include <asm/desc.h>
 #include <asm/e820/api.h>

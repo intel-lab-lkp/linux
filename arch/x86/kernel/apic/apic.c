@@ -45,6 +45,7 @@
 #include <asm/barrier.h>
 #include <asm/cpu.h>
 #include <asm/cpu_device_id.h>
+#include <asm/cpuid/api.h>
 #include <asm/desc.h>
 #include <asm/hpet.h>
 #include <asm/hypervisor.h>

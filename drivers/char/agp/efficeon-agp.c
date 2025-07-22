@@ -28,6 +28,8 @@
 #include <linux/page-flags.h>
 #include <linux/pci.h>
 
+#include <asm/cpuid/api.h>
+
 #include "agp.h"
 #include "intel-agp.h"
 

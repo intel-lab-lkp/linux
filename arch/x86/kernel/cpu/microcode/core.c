@@ -35,6 +35,7 @@
 #include <asm/apic.h>
 #include <asm/cmdline.h>
 #include <asm/cpu_device_id.h>
+#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/perf_event.h>
 #include <asm/processor.h>

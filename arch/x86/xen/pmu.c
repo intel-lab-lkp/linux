@@ -9,6 +9,7 @@
 #include <xen/page.h>
 #include <xen/xen.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/xen/hypercall.h>
 
