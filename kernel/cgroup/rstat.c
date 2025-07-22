@@ -437,29 +437,15 @@ __bpf_kfunc void css_rstat_flush(struct cgroup_subsys_state *css)
 	}
 }
 
-static int __css_rstat_init(struct cgroup_subsys_state *css, bool is_self)
+int css_rstat_init(struct cgroup_subsys_state *css)
 {
-	struct cgroup *cgrp = css->cgroup;
 	int cpu;
-
-	if (is_self) {
-		/* the root cgrp has rstat_base_cpu preallocated */
-		if (!cgrp->rstat_base_cpu) {
-			cgrp->rstat_base_cpu = alloc_percpu(struct cgroup_rstat_base_cpu);
-			if (!cgrp->rstat_base_cpu)
-				return -ENOMEM;
-		}
-	}
 
 	/* the root cgrp's self css has rstat_cpu preallocated */
 	if (!css->rstat_cpu) {
 		css->rstat_cpu = alloc_percpu(struct css_rstat_cpu);
-		if (!css->rstat_cpu) {
-			if (is_self)
-				free_percpu(cgrp->rstat_base_cpu);
-
+		if (!css->rstat_cpu)
 			return -ENOMEM;
-		}
 	}
 
 	/* ->updated_children list is self terminated */
@@ -467,19 +453,12 @@ static int __css_rstat_init(struct cgroup_subsys_state *css, bool is_self)
 		struct css_rstat_cpu *rstatc = css_rstat_cpu(css, cpu);
 
 		rstatc->updated_children = css;
-
-		if (is_self) {
-			struct cgroup_rstat_base_cpu *rstatbc;
-
-			rstatbc = cgroup_rstat_base_cpu(cgrp, cpu);
-			u64_stats_init(&rstatbc->bsync);
-		}
 	}
 
 	return 0;
 }
 
-static void __css_rstat_exit(struct cgroup_subsys_state *css, bool is_self)
+void css_rstat_exit(struct cgroup_subsys_state *css)
 {
 	int cpu;
 
@@ -494,35 +473,44 @@ static void __css_rstat_exit(struct cgroup_subsys_state *css, bool is_self)
 			return;
 	}
 
-	if (is_self) {
-		struct cgroup *cgrp = css->cgroup;
-
-		free_percpu(cgrp->rstat_base_cpu);
-		cgrp->rstat_base_cpu = NULL;
-	}
-
 	free_percpu(css->rstat_cpu);
 	css->rstat_cpu = NULL;
 }
 
-int css_rstat_init(struct cgroup_subsys_state *css)
-{
-	return __css_rstat_init(css, false);
-}
-
-void css_rstat_exit(struct cgroup_subsys_state *css)
-{
-	return __css_rstat_exit(css, false);
-}
-
 int cgroup_rstat_base_init(struct cgroup *cgrp)
 {
-	return __css_rstat_init(&cgrp->self, true);
+	int ret, cpu;
+
+	/* the root cgrp has rstat_base_cpu preallocated */
+	if (!cgrp->rstat_base_cpu) {
+		cgrp->rstat_base_cpu = alloc_percpu(struct cgroup_rstat_base_cpu);
+		if (!cgrp->rstat_base_cpu)
+			return -ENOMEM;
+	}
+
+	ret = css_rstat_init(&cgrp->self);
+	if (ret) {
+		free_percpu(cgrp->rstat_base_cpu);
+		return ret;
+	}
+
+	/* ->updated_children list is self terminated */
+	for_each_possible_cpu(cpu) {
+		struct cgroup_rstat_base_cpu *rstatbc;
+
+		rstatbc = cgroup_rstat_base_cpu(cgrp, cpu);
+		u64_stats_init(&rstatbc->bsync);
+	}
+
+	return ret;
 }
 
 void cgroup_rstat_base_exit(struct cgroup *cgrp)
 {
-	__css_rstat_exit(&cgrp->self, true);
+	css_rstat_exit(&cgrp->self);
+
+	free_percpu(cgrp->rstat_base_cpu);
+	cgrp->rstat_base_cpu = NULL;
 }
 
 /**
