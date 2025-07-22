@@ -250,13 +250,20 @@ fail:
 
 void fsverity_set_info(struct inode *inode, struct fsverity_info *vi)
 {
+	void *p;
+
 	/*
 	 * Multiple tasks may race to set ->i_verity_info, so use
 	 * cmpxchg_release().  This pairs with the smp_load_acquire() in
 	 * fsverity_get_info().  I.e., here we publish ->i_verity_info with a
 	 * RELEASE barrier so that other tasks can ACQUIRE it.
 	 */
-	if (cmpxchg_release(&inode->i_verity_info, NULL, vi) != NULL) {
+
+	if (inode->i_op->i_fsverity)
+		p = cmpxchg_release(fsverity_addr(inode), NULL, vi);
+	else
+		p = cmpxchg_release(&inode->i_verity_info, NULL, vi);
+	if (p != NULL) {
 		/* Lost the race, so free the fsverity_info we allocated. */
 		fsverity_free_info(vi);
 		/*
@@ -402,8 +409,13 @@ EXPORT_SYMBOL_GPL(__fsverity_prepare_setattr);
 
 void __fsverity_cleanup_inode(struct inode *inode)
 {
-	fsverity_free_info(inode->i_verity_info);
-	inode->i_verity_info = NULL;
+	struct fsverity_info **vi;
+
+	vi = fsverity_addr(inode);
+	if (!*vi)
+		vi = &inode->i_verity_info;
+	fsverity_free_info(*vi);
+	*vi = NULL;
 }
 EXPORT_SYMBOL_GPL(__fsverity_cleanup_inode);
 
