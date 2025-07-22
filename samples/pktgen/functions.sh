@@ -1,4 +1,4 @@
-#
+#!/bin/sh
 # Common functions used by pktgen scripts
 #  - Depending on bash 3 (or higher) syntax
 #
