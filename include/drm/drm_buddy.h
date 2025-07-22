@@ -14,6 +14,11 @@
 
 #include <drm/drm_print.h>
 
+enum free_tree {
+	CLEAR_TREE = 0,
+	DIRTY_TREE,
+};
+
 #define range_overflows(start, size, max) ({ \
 	typeof(start) start__ = (start); \
 	typeof(size) size__ = (size); \
@@ -22,6 +27,9 @@
 	(void)(&start__ == &max__); \
 	start__ >= max__ || size__ > max__ - start__; \
 })
+
+#define for_each_free_tree() \
+	for (enum free_tree tree = CLEAR_TREE; tree <= DIRTY_TREE; tree++)
 
 /*
  * for_each_rb_entry() - iterate over an RB tree in order
@@ -89,9 +97,11 @@ struct drm_buddy_block {
 	 * a list, if so desired. As soon as the block is freed with
 	 * drm_buddy_free* ownership is given back to the mm.
 	 */
-	struct rb_node rb;
 	struct list_head link;
 	struct list_head tmp_link;
+
+	enum free_tree tree;
+	struct rb_node rb;
 };
 
 /* Order-zero must be at least SZ_4K */
@@ -105,7 +115,8 @@ struct drm_buddy_block {
  */
 struct drm_buddy {
 	/* Maintain a free list for each order. */
-	struct rb_root *free_tree;
+	struct rb_root *clear_tree;
+	struct rb_root *dirty_tree;
 
 	/*
 	 * Maintain explicit binary tree(s) to track the allocation of the
