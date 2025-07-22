@@ -23,7 +23,7 @@
  * - Ported to 2.5.7-pre1 and 2.5.7-dj2
  * - Applied patch to avoid fault in alternate header handling
  * - cleaned up find_valid_gpt
- * - On-disk structure and copy in memory is *always* LE now - 
+ * - On-disk structure and copy in memory is *always* LE now -
  *   swab fields as needed
  * - remove print_gpt_header()
  * - only use first max_p partition entries, to keep the kernel minor number
@@ -40,7 +40,7 @@
  * - moved le_efi_guid_to_cpus() back into this file.  GPT is the only
  *   thing that keeps EFI GUIDs on disk.
  * - Changed gpt structure names and members to be simpler and more Linux-like.
- * 
+ *
  * Wed Oct 17 2001 Matt Domsch <Matt_Domsch@dell.com>
  * - Removed CONFIG_DEVFS_VOLUMES_UUID code entirely per Martin Wilck
  *
@@ -65,7 +65,7 @@
  *
  * Wed Jun  6 2001 Martin Wilck <Martin.Wilck@Fujitsu-Siemens.com>
  * - added devfs volume UUID support (/dev/volumes/uuids) for
- *   mounting file systems by the partition GUID. 
+ *   mounting file systems by the partition GUID.
  *
  * Tue Dec  5 2000 Matt Domsch <Matt_Domsch@dell.com>
  * - Moved crc32() to linux/lib, added efi_crc32().
@@ -110,7 +110,7 @@ __setup("gpt", force_gpt_fn);
  * @len: length of buf
  *
  * Description: Returns EFI-style CRC32 value for @buf
- * 
+ *
  * This function uses the little endian Ethernet polynomial
  * but seeds the function with ~0, and xor's with ~0 at the end.
  * Note, the EFI Specification, v1.02, has a reference to
@@ -125,7 +125,7 @@ efi_crc32(const void *buf, unsigned long len)
 /**
  * last_lba(): return number of last logical block of device
  * @disk: block device
- * 
+ *
  * Description: Returns last LBA value on success, 0 on error.
  * This is stored (by sd and ide-geometry) in
  *  the part[0] entry for this disk, and is the number of
@@ -240,12 +240,13 @@ static size_t read_lba(struct parsed_partitions *state,
 		(queue_logical_block_size(state->disk->queue) / 512);
 
 	if (!buffer || lba > last_lba(state->disk))
-                return 0;
+		return 0;
 
 	while (count) {
 		int copied = 512;
 		Sector sect;
 		unsigned char *data = read_part_sector(state, n++, &sect);
+
 		if (!data)
 			break;
 		if (copied > count)
@@ -253,7 +254,7 @@ static size_t read_lba(struct parsed_partitions *state,
 		memcpy(buffer, data, copied);
 		put_dev_sector(sect);
 		buffer += copied;
-		totalreadcount +=copied;
+		totalreadcount += copied;
 		count -= copied;
 	}
 	return totalreadcount;
@@ -263,7 +264,7 @@ static size_t read_lba(struct parsed_partitions *state,
  * alloc_read_gpt_entries(): reads partition entries from disk
  * @state: disk parsed partitions
  * @gpt: GPT header
- * 
+ *
  * Description: Returns ptes on success,  NULL on error.
  * Allocates space for PTEs based on information found in @gpt.
  * Notes: remember to free pte when you're done!
@@ -278,7 +279,7 @@ static gpt_entry *alloc_read_gpt_entries(struct parsed_partitions *state,
 		return NULL;
 
 	count = (size_t)le32_to_cpu(gpt->num_partition_entries) *
-                le32_to_cpu(gpt->sizeof_partition_entry);
+		le32_to_cpu(gpt->sizeof_partition_entry);
 	if (!count)
 		return NULL;
 	pte = kmalloc(count, GFP_KERNEL);
@@ -288,7 +289,7 @@ static gpt_entry *alloc_read_gpt_entries(struct parsed_partitions *state,
 	if (read_lba(state, le64_to_cpu(gpt->partition_entry_lba),
 			(u8 *) pte, count) < count) {
 		kfree(pte);
-                pte=NULL;
+		pte = NULL;
 		return NULL;
 	}
 	return pte;
@@ -298,7 +299,7 @@ static gpt_entry *alloc_read_gpt_entries(struct parsed_partitions *state,
  * alloc_read_gpt_header(): Allocates GPT header, reads into it from disk
  * @state: disk parsed partitions
  * @lba: the Logical Block Address of the partition table
- * 
+ *
  * Description: returns GPT header on success, NULL on error.   Allocates
  * and fills a GPT header starting at @ from @state->disk.
  * Note: remember to free gpt when finished with it.
@@ -307,7 +308,7 @@ static gpt_header *alloc_read_gpt_header(struct parsed_partitions *state,
 					 u64 lba)
 {
 	gpt_header *gpt;
-	unsigned ssz = queue_logical_block_size(state->disk->queue);
+	unsigned int ssz = queue_logical_block_size(state->disk->queue);
 
 	gpt = kmalloc(ssz, GFP_KERNEL);
 	if (!gpt)
@@ -315,7 +316,7 @@ static gpt_header *alloc_read_gpt_header(struct parsed_partitions *state,
 
 	if (read_lba(state, lba, (u8 *) gpt, ssz) < ssz) {
 		kfree(gpt);
-                gpt=NULL;
+		gpt = NULL;
 		return NULL;
 	}
 
@@ -340,7 +341,8 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 
 	if (!ptes)
 		return 0;
-	if (!(*gpt = alloc_read_gpt_header(state, lba)))
+	*gpt = alloc_read_gpt_header(state, lba);
+	if (!*gpt)
 		return 0;
 
 	/* Check the GUID Partition Table signature */
@@ -427,7 +429,8 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 		goto fail;
 	}
 
-	if (!(*ptes = alloc_read_gpt_entries(state, *gpt)))
+	*ptes = alloc_read_gpt_entries(state, *gpt);
+	if (!*ptes)
 		goto fail;
 
 	/* Check the GUID Partition Entry Array CRC */
@@ -475,69 +478,74 @@ is_pte_valid(const gpt_entry *pte, const u64 lastlba)
  *
  * Description: Returns nothing.  Sanity checks pgpt and agpt fields
  * and prints warnings on discrepancies.
- * 
+ *
  */
 static void
 compare_gpts(gpt_header *pgpt, gpt_header *agpt, u64 lastlba)
 {
 	int error_found = 0;
+
 	if (!pgpt || !agpt)
 		return;
+
 	if (le64_to_cpu(pgpt->my_lba) != le64_to_cpu(agpt->alternate_lba)) {
 		pr_warn("GPT:Primary header LBA != Alt. header alternate_lba\n");
 		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->my_lba),
-                       (unsigned long long)le64_to_cpu(agpt->alternate_lba));
+			(unsigned long long)le64_to_cpu(pgpt->my_lba),
+			(unsigned long long)le64_to_cpu(agpt->alternate_lba));
 		error_found++;
 	}
 	if (le64_to_cpu(pgpt->alternate_lba) != le64_to_cpu(agpt->my_lba)) {
 		pr_warn("GPT:Primary header alternate_lba != Alt. header my_lba\n");
 		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->alternate_lba),
-                       (unsigned long long)le64_to_cpu(agpt->my_lba));
+			(unsigned long long)le64_to_cpu(pgpt->alternate_lba),
+			(unsigned long long)le64_to_cpu(agpt->my_lba));
 		error_found++;
 	}
+
 	if (le64_to_cpu(pgpt->first_usable_lba) !=
-            le64_to_cpu(agpt->first_usable_lba)) {
+		le64_to_cpu(agpt->first_usable_lba)) {
 		pr_warn("GPT:first_usable_lbas don't match.\n");
 		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->first_usable_lba),
-                       (unsigned long long)le64_to_cpu(agpt->first_usable_lba));
+			(unsigned long long)le64_to_cpu(pgpt->first_usable_lba),
+			(unsigned long long)le64_to_cpu(agpt->first_usable_lba));
 		error_found++;
 	}
+
 	if (le64_to_cpu(pgpt->last_usable_lba) !=
-            le64_to_cpu(agpt->last_usable_lba)) {
+		le64_to_cpu(agpt->last_usable_lba)) {
 		pr_warn("GPT:last_usable_lbas don't match.\n");
 		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->last_usable_lba),
-                       (unsigned long long)le64_to_cpu(agpt->last_usable_lba));
+		(unsigned long long)le64_to_cpu(pgpt->last_usable_lba),
+		(unsigned long long)le64_to_cpu(agpt->last_usable_lba));
 		error_found++;
 	}
 	if (efi_guidcmp(pgpt->disk_guid, agpt->disk_guid)) {
 		pr_warn("GPT:disk_guids don't match.\n");
 		error_found++;
 	}
-	if (le32_to_cpu(pgpt->num_partition_entries) !=
-            le32_to_cpu(agpt->num_partition_entries)) {
+	if (le32_to_cpu(pgpt->num_partition_entries)
+			!= le32_to_cpu(agpt->num_partition_entries)) {
 		pr_warn("GPT:num_partition_entries don't match: "
-		       "0x%x != 0x%x\n",
-		       le32_to_cpu(pgpt->num_partition_entries),
-		       le32_to_cpu(agpt->num_partition_entries));
+		"0x%x != 0x%x\n",
+		le32_to_cpu(pgpt->num_partition_entries),
+		le32_to_cpu(agpt->num_partition_entries));
 		error_found++;
 	}
+
 	if (le32_to_cpu(pgpt->sizeof_partition_entry) !=
-            le32_to_cpu(agpt->sizeof_partition_entry)) {
-		pr_warn("GPT:sizeof_partition_entry values don't match: "
+			le32_to_cpu(agpt->sizeof_partition_entry)) {
+			pr_warn("GPT:sizeof_partition_entry values don't match: "
 		       "0x%x != 0x%x\n",
-                       le32_to_cpu(pgpt->sizeof_partition_entry),
+		       le32_to_cpu(pgpt->sizeof_partition_entry),
 		       le32_to_cpu(agpt->sizeof_partition_entry));
 		error_found++;
 	}
 	if (le32_to_cpu(pgpt->partition_entry_array_crc32) !=
-            le32_to_cpu(agpt->partition_entry_array_crc32)) {
+			le32_to_cpu(agpt->partition_entry_array_crc32)) {
 		pr_warn("GPT:partition_entry_array_crc32 values don't match: "
 		       "0x%x != 0x%x\n",
-                       le32_to_cpu(pgpt->partition_entry_array_crc32),
+		       le32_to_cpu(pgpt->partition_entry_array_crc32),
 		       le32_to_cpu(agpt->partition_entry_array_crc32));
 		error_found++;
 	}
@@ -559,7 +567,6 @@ compare_gpts(gpt_header *pgpt, gpt_header *agpt, u64 lastlba)
 
 	if (error_found)
 		pr_warn("GPT: Use GNU Parted to correct GPT errors.\n");
-	return;
 }
 
 /**
@@ -594,8 +601,8 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
 		return 0;
 
 	lastlba = last_lba(state->disk);
-        if (!force_gpt) {
-		/* This will be added to the EFI Spec. per Intel after v1.02. */
+	if (!force_gpt) {
+	/* This will be added to the EFI Spec. per Intel after v1.02. */
 		legacymbr = kzalloc(sizeof(*legacymbr), GFP_KERNEL);
 		if (!legacymbr)
 			goto fail;
@@ -614,12 +621,13 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
 
 	good_pgpt = is_gpt_valid(state, GPT_PRIMARY_PARTITION_TABLE_LBA,
 				 &pgpt, &pptes);
-        if (good_pgpt)
+	if (good_pgpt)
 		good_agpt = is_gpt_valid(state,
-					 le64_to_cpu(pgpt->alternate_lba),
-					 &agpt, &aptes);
-        if (!good_agpt && force_gpt)
-                good_agpt = is_gpt_valid(state, lastlba, &agpt, &aptes);
+					le64_to_cpu(pgpt->alternate_lba),
+					&agpt, &aptes);
+
+	if (!good_agpt && force_gpt)
+		good_agpt = is_gpt_valid(state, lastlba, &agpt, &aptes);
 
 	if (!good_agpt && force_gpt && fops->alternative_gpt_sector) {
 		sector_t agpt_sector;
@@ -631,39 +639,38 @@ static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
 						 &agpt, &aptes);
 	}
 
-        /* The obviously unsuccessful case */
-        if (!good_pgpt && !good_agpt)
-                goto fail;
+	/* The obviously unsuccessful case */
+	if (!good_pgpt && !good_agpt)
+		goto fail;
 
-        compare_gpts(pgpt, agpt, lastlba);
+	compare_gpts(pgpt, agpt, lastlba);
 
-        /* The good cases */
-        if (good_pgpt) {
-                *gpt  = pgpt;
-                *ptes = pptes;
-                kfree(agpt);
-                kfree(aptes);
+	/* The good cases */
+	if (good_pgpt) {
+		*gpt  = pgpt;
+		*ptes = pptes;
+		kfree(agpt);
+		kfree(aptes);
 		if (!good_agpt)
-                        pr_warn("Alternate GPT is invalid, using primary GPT.\n");
-                return 1;
-        }
-        else if (good_agpt) {
-                *gpt  = agpt;
-                *ptes = aptes;
-                kfree(pgpt);
-                kfree(pptes);
+			pr_warn("Alternate GPT is invalid, using primary GPT.\n");
+		return 1;
+	} else if (good_agpt) {
+		*gpt  = agpt;
+		*ptes = aptes;
+		kfree(pgpt);
+		kfree(pptes);
 		pr_warn("Primary GPT is invalid, using alternate GPT.\n");
-                return 1;
-        }
+		return 1;
+	}
 
  fail:
-        kfree(pgpt);
-        kfree(agpt);
-        kfree(pptes);
-        kfree(aptes);
-        *gpt = NULL;
-        *ptes = NULL;
-        return 0;
+	kfree(pgpt);
+	kfree(agpt);
+	kfree(pptes);
+	kfree(aptes);
+	*gpt = NULL;
+	*ptes = NULL;
+	return 0;
 }
 
 /**
@@ -715,7 +722,7 @@ int efi_partition(struct parsed_partitions *state)
 	gpt_header *gpt = NULL;
 	gpt_entry *ptes = NULL;
 	u32 i;
-	unsigned ssz = queue_logical_block_size(state->disk->queue) / 512;
+	unsigned int ssz = queue_logical_block_size(state->disk->queue) / 512;
 
 	if (!find_valid_gpt(state, &gpt, &ptes) || !gpt || !ptes) {
 		kfree(gpt);
@@ -727,7 +734,7 @@ int efi_partition(struct parsed_partitions *state)
 
 	for (i = 0; i < le32_to_cpu(gpt->num_partition_entries) && i < state->limit-1; i++) {
 		struct partition_meta_info *info;
-		unsigned label_max;
+		unsigned int label_max;
 		u64 start = le64_to_cpu(ptes[i].starting_lba);
 		u64 size = le64_to_cpu(ptes[i].ending_lba) -
 			   le64_to_cpu(ptes[i].starting_lba) + 1ULL;
