@@ -653,6 +653,8 @@ static void update_property_block(struct tb_xdomain *xd)
 	 */
 	if (!xd->local_property_block ||
 	    xd->local_property_block_gen < xdomain_property_block_gen) {
+		struct tb_switch *sw = tb_xdomain_parent(xd);
+		struct pci_dev *pdev = sw->tb->nhi->pdev;
 		struct tb_property_dir *dir;
 		int ret, block_len;
 		u32 *block;
@@ -664,7 +666,21 @@ static void update_property_block(struct tb_xdomain *xd)
 		}
 
 		/* Fill in non-static properties now */
+		tb_property_add_immediate(dir, "vendorid", pdev->vendor);
+		switch (pdev->vendor) {
+		case PCI_VENDOR_ID_INTEL:
+			tb_property_add_text(dir, "vendorid", "Intel Corp.");
+			break;
+		case PCI_VENDOR_ID_AMD:
+			tb_property_add_text(dir, "vendorid", "AMD");
+			break;
+		default:
+			tb_property_add_text(dir, "vendorid", "Unknown Vendor");
+			break;
+		}
+		tb_property_add_immediate(dir, "deviceid", sw->config.device_id);
 		tb_property_add_text(dir, "deviceid", utsname()->nodename);
+		tb_property_add_immediate(dir, "devicerv", sw->config.revision);
 		tb_property_add_immediate(dir, "maxhopid", xd->local_max_hopid);
 
 		ret = tb_property_format_dir(dir, NULL, 0);
@@ -2555,18 +2571,9 @@ int tb_xdomain_init(void)
 		return -ENOMEM;
 
 	/*
-	 * Initialize standard set of properties without any service
-	 * directories. Those will be added by service drivers
-	 * themselves when they are loaded.
-	 *
-	 * Rest of the properties are filled dynamically based on these
-	 * when the P2P connection is made.
+	 * All the properties are filled dynamically when the
+	 * P2P connection is made.
 	 */
-	tb_property_add_immediate(xdomain_property_dir, "vendorid",
-				  PCI_VENDOR_ID_INTEL);
-	tb_property_add_text(xdomain_property_dir, "vendorid", "Intel Corp.");
-	tb_property_add_immediate(xdomain_property_dir, "deviceid", 0x1);
-	tb_property_add_immediate(xdomain_property_dir, "devicerv", 0x80000100);
 
 	xdomain_property_block_gen = get_random_u32();
 	return 0;
