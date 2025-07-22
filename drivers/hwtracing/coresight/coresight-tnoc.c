@@ -140,7 +140,7 @@ static ssize_t traceid_show(struct device *dev,
 	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->atid;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(traceid);
 

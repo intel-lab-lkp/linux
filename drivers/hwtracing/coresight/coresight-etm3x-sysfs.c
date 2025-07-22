@@ -17,7 +17,7 @@ static ssize_t nr_addr_cmp_show(struct device *dev,
 	struct etm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->nr_addr_cmp;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_addr_cmp);
 
@@ -27,7 +27,7 @@ static ssize_t nr_cntr_show(struct device *dev,
 	struct etm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->nr_cntr;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_cntr);
 
@@ -38,7 +38,7 @@ static ssize_t nr_ctxid_cmp_show(struct device *dev,
 	struct etm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->nr_ctxid_cmp;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_ctxid_cmp);
 
@@ -58,7 +58,7 @@ static ssize_t etmsr_show(struct device *dev,
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 	pm_runtime_put(dev->parent);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(etmsr);
 
@@ -101,7 +101,7 @@ static ssize_t mode_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->mode;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t mode_store(struct device *dev,
@@ -186,7 +186,7 @@ static ssize_t trigger_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->trigger_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t trigger_event_store(struct device *dev,
@@ -216,7 +216,7 @@ static ssize_t enable_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->enable_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t enable_event_store(struct device *dev,
@@ -246,7 +246,7 @@ static ssize_t fifofull_level_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->fifofull_level;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t fifofull_level_store(struct device *dev,
@@ -276,7 +276,7 @@ static ssize_t addr_idx_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->addr_idx;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t addr_idx_store(struct device *dev,
@@ -326,7 +326,7 @@ static ssize_t addr_single_show(struct device *dev,
 	val = config->addr_val[idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t addr_single_store(struct device *dev,
@@ -385,7 +385,7 @@ static ssize_t addr_range_show(struct device *dev,
 	val2 = config->addr_val[idx + 1];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx %#lx\n", val1, val2);
+	return sysfs_emit(buf, "%#lx %#lx\n", val1, val2);
 }
 
 static ssize_t addr_range_store(struct device *dev,
@@ -447,7 +447,7 @@ static ssize_t addr_start_show(struct device *dev,
 	val = config->addr_val[idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t addr_start_store(struct device *dev,
@@ -501,7 +501,7 @@ static ssize_t addr_stop_show(struct device *dev,
 	val = config->addr_val[idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t addr_stop_store(struct device *dev,
@@ -547,7 +547,7 @@ static ssize_t addr_acctype_show(struct device *dev,
 	val = config->addr_acctype[config->addr_idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t addr_acctype_store(struct device *dev,
@@ -579,7 +579,7 @@ static ssize_t cntr_idx_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->cntr_idx;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t cntr_idx_store(struct device *dev,
@@ -620,7 +620,7 @@ static ssize_t cntr_rld_val_show(struct device *dev,
 	val = config->cntr_rld_val[config->cntr_idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t cntr_rld_val_store(struct device *dev,
@@ -655,7 +655,7 @@ static ssize_t cntr_event_show(struct device *dev,
 	val = config->cntr_event[config->cntr_idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t cntr_event_store(struct device *dev,
@@ -690,7 +690,7 @@ static ssize_t cntr_rld_event_show(struct device *dev,
 	val = config->cntr_rld_event[config->cntr_idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t cntr_rld_event_store(struct device *dev,
@@ -725,7 +725,7 @@ static ssize_t cntr_val_show(struct device *dev,
 	if (!coresight_get_mode(drvdata->csdev)) {
 		spin_lock(&drvdata->spinlock);
 		for (i = 0; i < drvdata->nr_cntr; i++)
-			ret += sprintf(buf, "counter %d: %x\n",
+			ret += sysfs_emit_at(buf, ret, "counter %d: %x\n",
 				       i, config->cntr_val[i]);
 		spin_unlock(&drvdata->spinlock);
 		return ret;
@@ -733,7 +733,7 @@ static ssize_t cntr_val_show(struct device *dev,
 
 	for (i = 0; i < drvdata->nr_cntr; i++) {
 		val = etm_readl(drvdata, ETMCNTVRn(i));
-		ret += sprintf(buf, "counter %d: %x\n", i, val);
+		ret += sysfs_emit_at(buf, ret, "counter %d: %x\n", i, val);
 	}
 
 	return ret;
@@ -768,7 +768,7 @@ static ssize_t seq_12_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_12_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_12_event_store(struct device *dev,
@@ -797,7 +797,7 @@ static ssize_t seq_21_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_21_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_21_event_store(struct device *dev,
@@ -826,7 +826,7 @@ static ssize_t seq_23_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_23_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_23_event_store(struct device *dev,
@@ -855,7 +855,7 @@ static ssize_t seq_31_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_31_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_31_event_store(struct device *dev,
@@ -884,7 +884,7 @@ static ssize_t seq_32_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_32_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_32_event_store(struct device *dev,
@@ -913,7 +913,7 @@ static ssize_t seq_13_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->seq_13_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_13_event_store(struct device *dev,
@@ -956,7 +956,7 @@ static ssize_t seq_curr_state_show(struct device *dev,
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 	pm_runtime_put(dev->parent);
 out:
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t seq_curr_state_store(struct device *dev,
@@ -989,7 +989,7 @@ static ssize_t ctxid_idx_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->ctxid_idx;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t ctxid_idx_store(struct device *dev,
@@ -1038,7 +1038,7 @@ static ssize_t ctxid_pid_show(struct device *dev,
 	val = config->ctxid_pid[config->ctxid_idx];
 	spin_unlock(&drvdata->spinlock);
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t ctxid_pid_store(struct device *dev,
@@ -1089,7 +1089,7 @@ static ssize_t ctxid_mask_show(struct device *dev,
 		return -EINVAL;
 
 	val = config->ctxid_mask;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t ctxid_mask_store(struct device *dev,
@@ -1125,7 +1125,7 @@ static ssize_t sync_freq_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->sync_freq;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t sync_freq_store(struct device *dev,
@@ -1154,7 +1154,7 @@ static ssize_t timestamp_event_show(struct device *dev,
 	struct etm_config *config = &drvdata->config;
 
 	val = config->timestamp_event;
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t timestamp_event_store(struct device *dev,
@@ -1182,7 +1182,7 @@ static ssize_t cpu_show(struct device *dev,
 	struct etm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->cpu;
-	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+	return sysfs_emit(buf, "%d\n", val);
 
 }
 static DEVICE_ATTR_RO(cpu);

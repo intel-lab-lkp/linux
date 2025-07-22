@@ -1204,7 +1204,7 @@ static ssize_t align_show(struct device *dev, struct device_attribute *attr, cha
 {
 	struct trbe_cpudata *cpudata = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%llx\n", cpudata->trbe_hw_align);
+	return sysfs_emit(buf, "%llx\n", cpudata->trbe_hw_align);
 }
 static DEVICE_ATTR_RO(align);
 
@@ -1212,7 +1212,7 @@ static ssize_t flag_show(struct device *dev, struct device_attribute *attr, char
 {
 	struct trbe_cpudata *cpudata = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%d\n", cpudata->trbe_flag);
+	return sysfs_emit(buf, "%d\n", cpudata->trbe_flag);
 }
 static DEVICE_ATTR_RO(flag);
 
