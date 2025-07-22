@@ -100,6 +100,13 @@ static int validate_inode(struct ubifs_info *c, const struct inode *inode)
 	return err;
 }
 
+static const struct inode_operations ubifs_encrypted_nop_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ubifs_inode, i_fscrypt_info) -
+			  offsetof(struct ubifs_inode, vfs_inode),
+#endif
+};
+
 struct inode *ubifs_iget(struct super_block *sb, unsigned long inum)
 {
 	int err;
@@ -118,6 +125,7 @@ struct inode *ubifs_iget(struct super_block *sb, unsigned long inum)
 		return inode;
 	ui = ubifs_inode(inode);
 
+	inode->i_op = &ubifs_encrypted_nop_inode_operations;
 	ino = kmalloc(UBIFS_MAX_INO_NODE_SZ, GFP_NOFS);
 	if (!ino) {
 		err = -ENOMEM;

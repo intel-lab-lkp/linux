@@ -1632,6 +1632,10 @@ const struct address_space_operations ubifs_file_address_operations = {
 };
 
 const struct inode_operations ubifs_file_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ubifs_inode, i_fscrypt_info) -
+			  offsetof(struct ubifs_inode, vfs_inode),
+#endif
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_getattr,
 	.listxattr   = ubifs_listxattr,
@@ -1641,6 +1645,10 @@ const struct inode_operations ubifs_file_inode_operations = {
 };
 
 const struct inode_operations ubifs_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ubifs_inode, i_fscrypt_info) -
+			  offsetof(struct ubifs_inode, vfs_inode),
+#endif
 	.get_link    = ubifs_get_link,
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_symlink_getattr,

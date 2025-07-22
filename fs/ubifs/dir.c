@@ -104,14 +104,6 @@ struct inode *ubifs_new_inode(struct ubifs_info *c, struct inode *dir,
 	simple_inode_init_ts(inode);
 	inode->i_mapping->nrpages = 0;
 
-	if (!is_xattr) {
-		err = fscrypt_prepare_new_inode(dir, inode, &encrypted);
-		if (err) {
-			ubifs_err(c, "fscrypt_prepare_new_inode failed: %i", err);
-			goto out_iput;
-		}
-	}
-
 	switch (mode & S_IFMT) {
 	case S_IFREG:
 		inode->i_mapping->a_ops = &ubifs_file_address_operations;
@@ -134,6 +126,14 @@ struct inode *ubifs_new_inode(struct ubifs_info *c, struct inode *dir,
 		break;
 	default:
 		BUG();
+	}
+
+	if (!is_xattr) {
+		err = fscrypt_prepare_new_inode(dir, inode, &encrypted);
+		if (err) {
+			ubifs_err(c, "fscrypt_prepare_new_inode failed: %i", err);
+			goto out_iput;
+		}
 	}
 
 	ui->flags = inherit_flags(dir, mode);
@@ -1740,22 +1740,26 @@ static loff_t ubifs_dir_llseek(struct file *file, loff_t offset, int whence)
 }
 
 const struct inode_operations ubifs_dir_inode_operations = {
-	.lookup      = ubifs_lookup,
-	.create      = ubifs_create,
-	.link        = ubifs_link,
-	.symlink     = ubifs_symlink,
-	.unlink      = ubifs_unlink,
-	.mkdir       = ubifs_mkdir,
-	.rmdir       = ubifs_rmdir,
-	.mknod       = ubifs_mknod,
-	.rename      = ubifs_rename,
-	.setattr     = ubifs_setattr,
-	.getattr     = ubifs_getattr,
-	.listxattr   = ubifs_listxattr,
-	.update_time = ubifs_update_time,
-	.tmpfile     = ubifs_tmpfile,
-	.fileattr_get = ubifs_fileattr_get,
-	.fileattr_set = ubifs_fileattr_set,
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ubifs_inode, i_fscrypt_info) -
+			  offsetof(struct ubifs_inode, vfs_inode),
+#endif
+	.lookup		= ubifs_lookup,
+	.create      	= ubifs_create,
+	.link        	= ubifs_link,
+	.symlink     	= ubifs_symlink,
+	.unlink      	= ubifs_unlink,
+	.mkdir       	= ubifs_mkdir,
+	.rmdir       	= ubifs_rmdir,
+	.mknod       	= ubifs_mknod,
+	.rename      	= ubifs_rename,
+	.setattr     	= ubifs_setattr,
+	.getattr     	= ubifs_getattr,
+	.listxattr   	= ubifs_listxattr,
+	.update_time 	= ubifs_update_time,
+	.tmpfile     	= ubifs_tmpfile,
+	.fileattr_get	= ubifs_fileattr_get,
+	.fileattr_set 	= ubifs_fileattr_set,
 };
 
 const struct file_operations ubifs_dir_operations = {
