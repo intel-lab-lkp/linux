@@ -46,12 +46,22 @@ properties:
         const: 0
 
       port@0:
-        type: object
-        description:
-          A port node with endpoint definitions as defined in
-          Documentation/devicetree/bindings/media/video-interfaces.txt.
-          That port should be the input endpoint, usually coming from
-          the associated DPU.
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
+        properties:
+          endpoint:
+            $ref: /schemas/media/video-interfaces.yaml#
+            unevaluatedProperties: false
+            description: The input endpoint, usually connected to the DPU
+
+      port@1:
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
+        properties:
+          endpoint:
+            $ref: /schemas/media/video-interfaces.yaml#
+            unevaluatedProperties: false
+            description: The output endpoint, usually connected to the panel
 
     required:
       - "#address-cells"
@@ -59,6 +69,9 @@ properties:
       - port@0
 
     additionalProperties: false
+
+allOf:
+  - $ref: /schemas/display/dsi-controller.yaml#
 
 required:
   - compatible
@@ -68,7 +81,7 @@ required:
   - clock-names
   - ports
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
