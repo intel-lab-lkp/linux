@@ -314,7 +314,7 @@ int __copy_io(unsigned long clone_flags, struct task_struct *tsk)
  * Look up io_cq associated with @ioc - @q pair from @ioc.  Must be called
  * with @q->queue_lock held.
  */
-struct io_cq *ioc_lookup_icq(struct request_queue *q)
+static struct io_cq *ioc_lookup_icq(struct request_queue *q)
 {
 	struct io_context *ioc = current->io_context;
 	struct io_cq *icq;
@@ -341,7 +341,40 @@ out:
 	rcu_read_unlock();
 	return icq;
 }
-EXPORT_SYMBOL(ioc_lookup_icq);
+
+/**
+ * ioc_lookup_icq_rcu - lookup io_cq from ioc in io path
+ * @q: the associated request_queue
+ *
+ * Look up io_cq associated with @ioc - @q pair from @ioc.  Must be called
+ * from io path, either return NULL if current issue io to @q for the first
+ * time, or return a valid icq.
+ */
+struct io_cq *ioc_lookup_icq_rcu(struct request_queue *q)
+{
+	struct io_context *ioc = current->io_context;
+	struct io_cq *icq;
+
+	WARN_ON_ONCE(percpu_ref_is_zero(&q->q_usage_counter));
+
+	if (!ioc)
+		return NULL;
+
+	icq = rcu_dereference(ioc->icq_hint);
+	if (icq && icq->q == q)
+		return icq;
+
+	icq = radix_tree_lookup(&ioc->icq_tree, q->id);
+	if (!icq)
+		return NULL;
+
+	if (WARN_ON_ONCE(icq->q != q))
+		return NULL;
+
+	rcu_assign_pointer(ioc->icq_hint, icq);
+	return icq;
+}
+EXPORT_SYMBOL(ioc_lookup_icq_rcu);
 
 /**
  * ioc_create_icq - create and link io_cq
@@ -420,9 +453,9 @@ struct io_cq *ioc_find_get_icq(struct request_queue *q)
 	} else {
 		get_io_context(ioc);
 
-		spin_lock_irq(&q->queue_lock);
-		icq = ioc_lookup_icq(q);
-		spin_unlock_irq(&q->queue_lock);
+		rcu_read_lock();
+		icq = ioc_lookup_icq_rcu(q);
+		rcu_read_unlock();
 	}
 
 	if (!icq) {
