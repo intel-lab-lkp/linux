@@ -4305,6 +4305,9 @@ static int macb_init(struct platform_device *pdev)
 			queue->TBQP = GEM_TBQP(hw_q - 1);
 			queue->RBQP = GEM_RBQP(hw_q - 1);
 			queue->RBQS = GEM_RBQS(hw_q - 1);
+			queue->ENST_START_TIME = GEM_ENST_START_TIME(hw_q);
+			queue->ENST_ON_TIME = GEM_ENST_ON_TIME(hw_q);
+			queue->ENST_OFF_TIME = GEM_ENST_OFF_TIME(hw_q);
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 			if (bp->hw_dma_cap & HW_DMA_CAP_64B) {
 				queue->TBQPH = GEM_TBQPH(hw_q - 1);
@@ -4319,6 +4322,9 @@ static int macb_init(struct platform_device *pdev)
 			queue->IMR  = MACB_IMR;
 			queue->TBQP = MACB_TBQP;
 			queue->RBQP = MACB_RBQP;
+			queue->ENST_START_TIME = GEM_ENST_START_TIME(0);
+			queue->ENST_ON_TIME = GEM_ENST_ON_TIME(0);
+			queue->ENST_OFF_TIME = GEM_ENST_OFF_TIME(0);
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 			if (bp->hw_dma_cap & HW_DMA_CAP_64B) {
 				queue->TBQPH = MACB_TBQPH;

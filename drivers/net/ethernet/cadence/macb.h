@@ -857,6 +857,16 @@
 
 #define MACB_READ_NSR(bp)	macb_readl(bp, NSR)
 
+/* ENST macros*/
+#define ENST_NS_TO_HW_UNITS(ns, speed_mbps) \
+		DIV_ROUND_UP((ns) * (speed_mbps), (ENST_TIME_GRANULARITY_NS * 1000))
+
+#define ENST_MAX_HW_INTERVAL(speed_mbps) \
+		DIV_ROUND_UP(GENMASK(GEM_ON_TIME_SIZE - 1, 0) * ENST_TIME_GRANULARITY_NS * 1000,\
+		(speed_mbps))
+
+#define ENST_MAX_START_TIME_SEC GENMASK(GEM_START_TIME_SEC_SIZE - 1, 0)
+
 /* struct macb_dma_desc - Hardware DMA descriptor
  * @addr: DMA address of data buffer
  * @ctrl: Control and status bits
@@ -1262,6 +1272,11 @@ struct macb_queue {
 	unsigned int		RBQP;
 	unsigned int		RBQPH;
 
+	/* ENST register offsets for this queue */
+	unsigned int		ENST_START_TIME;
+	unsigned int		ENST_ON_TIME;
+	unsigned int		ENST_OFF_TIME;
+
 	/* Lock to protect tx_head and tx_tail */
 	spinlock_t		tx_ptr_lock;
 	unsigned int		tx_head, tx_tail;
@@ -1448,6 +1463,23 @@ static inline bool gem_has_ptp(struct macb *bp)
 struct macb_platform_data {
 	struct clk	*pclk;
 	struct clk	*hclk;
+};
+
+/**
+ * struct queue_enst_configs - Configuration for Enhanced Scheduled Traffic (ENST) queue
+ * @queue_id:         Identifier for the queue
+ * @start_time_mask:  Bitmask representing the start time for the queue
+ * @on_time_bytes:    "on" time nsec expressed in bytes
+ * @off_time_bytes:   "off" time nsec expressed in bytes
+ *
+ * This structure holds the configuration parameters for an ENST queue,
+ * used to control time-based transmission scheduling in the MACB driver.
+ */
+struct queue_enst_configs {
+	u8 queue_id;
+	u32 start_time_mask;
+	u32 on_time_bytes;
+	u32 off_time_bytes;
 };
 
 #endif /* _MACB_H */
