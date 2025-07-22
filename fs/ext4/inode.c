@@ -5163,6 +5163,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		return inode;
 	}
 
+	inode->i_op = &ext4_encrypted_nop_operations;
 	ei = EXT4_I(inode);
 	iloc.bh = NULL;
 

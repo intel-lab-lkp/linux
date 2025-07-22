@@ -4206,7 +4206,18 @@ static int ext4_rename2(struct mnt_idmap *idmap,
 /*
  * directories can handle most operations...
  */
+const struct inode_operations ext4_encrypted_nop_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
+};
+
 const struct inode_operations ext4_dir_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.create		= ext4_create,
 	.lookup		= ext4_lookup,
 	.link		= ext4_link,
@@ -4228,6 +4239,10 @@ const struct inode_operations ext4_dir_inode_operations = {
 };
 
 const struct inode_operations ext4_special_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_getattr,
 	.listxattr	= ext4_listxattr,

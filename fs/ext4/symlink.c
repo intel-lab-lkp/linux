@@ -115,6 +115,10 @@ static const char *ext4_get_link(struct dentry *dentry, struct inode *inode,
 }
 
 const struct inode_operations ext4_encrypted_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.get_link	= ext4_encrypted_get_link,
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_encrypted_symlink_getattr,
@@ -122,6 +126,10 @@ const struct inode_operations ext4_encrypted_symlink_inode_operations = {
 };
 
 const struct inode_operations ext4_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.get_link	= ext4_get_link,
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_getattr,
@@ -129,6 +137,10 @@ const struct inode_operations ext4_symlink_inode_operations = {
 };
 
 const struct inode_operations ext4_fast_symlink_inode_operations = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.i_fscrypt	= offsetof(struct ext4_inode_info, i_fscrypt_info) -
+			  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.get_link	= simple_get_link,
 	.setattr	= ext4_setattr,
 	.getattr	= ext4_getattr,

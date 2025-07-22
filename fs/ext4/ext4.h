@@ -1197,6 +1197,10 @@ struct ext4_inode_info {
 	__u32 i_csum_seed;
 
 	kprojid_t i_projid;
+
+#ifdef CONFIG_FS_ENCRYPTION
+	struct fscrypt_inode_info	*i_fscrypt_info;
+#endif
 };
 
 /*
@@ -3604,6 +3608,7 @@ int ext4_enable_quotas(struct super_block *sb);
 extern const struct file_operations ext4_dir_operations;
 
 /* file.c */
+extern const struct inode_operations ext4_encrypted_nop_operations;
 extern const struct inode_operations ext4_file_inode_operations;
 extern const struct file_operations ext4_file_operations;
 extern loff_t ext4_llseek(struct file *file, loff_t offset, int origin);

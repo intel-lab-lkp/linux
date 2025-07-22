@@ -979,6 +979,8 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 	} else
 		inode_init_owner(idmap, inode, dir, mode);
 
+	inode->i_op = &ext4_encrypted_nop_operations;
+
 	if (ext4_has_feature_project(sb) &&
 	    ext4_test_inode_flag(dir, EXT4_INODE_PROJINHERIT))
 		ei->i_projid = EXT4_I(dir)->i_projid;
