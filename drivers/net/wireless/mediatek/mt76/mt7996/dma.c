@@ -23,6 +23,9 @@ int mt7996_init_tx_queues(struct mt7996_phy *phy, int idx, int n_desc,
 			flags = MT_WED_Q_TX(idx);
 	}
 
+	if (mt76_npu_device_active(&dev->mt76))
+		flags = MT_NPU_Q_TX(phy->mt76->band_idx);
+
 	return mt76_connac_init_tx_queues(phy->mt76, idx, n_desc,
 					  ring_base, wed, flags);
 }
@@ -302,7 +305,7 @@ void mt7996_dma_start(struct mt7996_dev *dev, bool reset, bool wed_reset)
 		mtk_wed_device_start(wed, wed_irq_mask);
 	}
 
-	if (!mt7996_has_wa(dev))
+	if (!mt7996_has_wa(dev) || mt76_npu_device_active(&dev->mt76))
 		irq_mask &= ~(MT_INT_RX(MT_RXQ_MAIN_WA) |
 			      MT_INT_RX(MT_RXQ_BAND1_WA));
 	irq_mask = reset ? MT_INT_MCU_CMD : irq_mask;
@@ -704,6 +707,10 @@ int mt7996_dma_init(struct mt7996_dev *dev)
 				return ret;
 		}
 	}
+
+	ret = mt7996_npu_rx_queues_init(dev);
+	if (ret)
+		return ret;
 
 	ret = mt76_init_queues(dev, mt76_dma_rx_poll);
 	if (ret < 0)
