@@ -143,12 +143,6 @@ struct hx9023s_data {
 	unsigned long chan_in_use;
 	unsigned int prox_state_reg;
 	bool trigger_enabled;
-
-	struct {
-		__le16 channels[HX9023S_CH_NUM];
-		aligned_s64 ts;
-	} buffer;
-
 	/*
 	 * Serialize access to registers below:
 	 * HX9023S_PROX_INT_LOW_CFG,
@@ -928,6 +922,7 @@ static const struct iio_trigger_ops hx9023s_trigger_ops = {
 
 static irqreturn_t hx9023s_trigger_handler(int irq, void *private)
 {
+	IIO_DECLARE_BUFFER_WITH_TS(__le16, channels, HX9023S_CH_NUM);
 	struct iio_poll_func *pf = private;
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct hx9023s_data *data = iio_priv(indio_dev);
@@ -950,11 +945,11 @@ static irqreturn_t hx9023s_trigger_handler(int irq, void *private)
 
 	iio_for_each_active_channel(indio_dev, bit) {
 		index = indio_dev->channels[bit].channel;
-		data->buffer.channels[i++] = cpu_to_le16(data->ch_data[index].diff);
+		channels[i++] = cpu_to_le16(data->ch_data[index].diff);
 	}
 
-	iio_push_to_buffers_with_ts(indio_dev, &data->buffer,
-				    sizeof(data->buffer), pf->timestamp);
+	iio_push_to_buffers_with_ts(indio_dev, channels, sizeof(channels),
+				    pf->timestamp);
 
 out:
 	iio_trigger_notify_done(indio_dev->trig);
