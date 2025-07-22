@@ -736,6 +736,9 @@ static inline pte_t get_and_clear_full_ptes(struct mm_struct *mm,
 }
 #endif
 
+#define get_and_clear_ptes(_mm, _addr, _ptep, _nr) \
+	get_and_clear_full_ptes(_mm, _addr, _ptep, _nr, 0)
+
 #ifndef clear_full_ptes
 /**
  * clear_full_ptes - Clear present PTEs that map consecutive pages of the same
@@ -767,6 +770,9 @@ static inline void clear_full_ptes(struct mm_struct *mm, unsigned long addr,
 	}
 }
 #endif
+
+#define clear_ptes(_mm, _addr, _ptep, _nr) \
+	clear_full_ptes(_mm, _addr, _ptep, _nr, 0)
 
 /*
  * If two threads concurrently fault at the same page, the thread that
