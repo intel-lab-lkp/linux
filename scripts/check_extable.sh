@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 # (c) 2015, Quentin Casasnovas <quentin.casasnovas@oracle.com>
 
