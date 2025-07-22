@@ -27,7 +27,7 @@
 #include <linux/if.h>
 #include <linux/compiler.h>
 
-/* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
+/* This IPv4-only structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
 struct rtentry {
 	unsigned long	rt_pad1;
 	struct sockaddr	rt_dst;		/* target address		*/

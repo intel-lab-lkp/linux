@@ -113,7 +113,7 @@
 #define	ARPOP_NAK	10		/* (ATM)ARP NAK			*/
 
 
-/* ARP ioctl request. */
+/* ARP ioctl request; IPv4-only protocol. */
 struct arpreq {
 	struct sockaddr	arp_pa;		/* protocol address		 */
 	struct sockaddr	arp_ha;		/* hardware address		 */
@@ -122,6 +122,7 @@ struct arpreq {
 	char		arp_dev[IFNAMSIZ];
 };
 
+/* Legacy ARP ioctl request; IPv4-only protocol. */
 struct arpreq_old {
 	struct sockaddr	arp_pa;		/* protocol address		 */
 	struct sockaddr	arp_ha;		/* hardware address		 */
