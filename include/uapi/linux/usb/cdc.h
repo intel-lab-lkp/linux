@@ -316,7 +316,7 @@ struct usb_cdc_notification {
 #define USB_CDC_SERIAL_STATE_OVERRUN		(1 << 6)
 
 struct usb_cdc_speed_change {
-	__le32	DLBitRRate;	/* contains the downlink bit rate (IN pipe) */
+	__le32	DLBitRate;	/* contains the downlink bit rate (IN pipe) */
 	__le32	ULBitRate;	/* contains the uplink bit rate (OUT pipe) */
 } __attribute__ ((packed));
 

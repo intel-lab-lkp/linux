@@ -1847,7 +1847,7 @@ cdc_ncm_speed_change(struct usbnet *dev,
 		     struct usb_cdc_speed_change *data)
 {
 	/* RTL8156 shipped before 2021 sends notification about every 32ms. */
-	dev->rx_speed = le32_to_cpu(data->DLBitRRate);
+	dev->rx_speed = le32_to_cpu(data->DLBitRate);
 	dev->tx_speed = le32_to_cpu(data->ULBitRate);
 }
 
