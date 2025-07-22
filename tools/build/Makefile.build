@@ -70,11 +70,13 @@ quiet_cmd_gen = GEN     $@
 # If there's nothing to link, create empty $@ object.
 quiet_cmd_ld_multi = LD      $@
       cmd_ld_multi = $(if $(strip $(obj-y)),\
-                     $(LD) -r -o $@  $(filter $(obj-y),$^),rm -f $@; $(AR) rcs $@)
+                     $(LD) -r -o $@ @$@.in,rm -f $@; $(AR) rcs $@)
 
 quiet_cmd_host_ld_multi = HOSTLD  $@
       cmd_host_ld_multi = $(if $(strip $(obj-y)),\
-                          $(HOSTLD) -r -o $@  $(filter $(obj-y),$^),rm -f $@; $(HOSTAR) rcs $@)
+                          $(HOSTLD) -r -o $@ @$@.in,rm -f $@; $(HOSTAR) rcs $@)
+
+output_ld_multi_dotin = $(if $(quiet),,@printf "# %s:\n# " $@.in >> $(dot-target).cmd;cat $@.in >> $(dot-target).cmd)
 
 ifneq ($(filter $(obj),$(hostprogs)),)
   host = host_
@@ -145,7 +147,10 @@ $(sort $(subdir-obj-y)): $(subdir-y) ;
 
 $(in-target): $(obj-y) $(test-y) FORCE
 	$(call rule_mkdir)
+	$(file >$@.in,$(filter $(obj-y),$^))
 	$(call if_changed,$(host)ld_multi)
+	$(if $(strip $(any-prereq) $(arg-check)), $(output_ld_multi_dotin))
+	@rm $@.in
 
 __build: $(in-target)
 	@:
