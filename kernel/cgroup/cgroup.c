@@ -5452,7 +5452,9 @@ static void css_free_rwork_fn(struct work_struct *work)
 		struct cgroup_subsys_state *parent = css->parent;
 		int id = css->id;
 
-		css_rstat_exit(css);
+		if (ss->css_rstat_flush)
+			css_rstat_exit(css);
+
 		ss->css_free(css);
 		cgroup_idr_remove(&ss->css_idr, id);
 		cgroup_put(cgrp);
@@ -5679,9 +5681,11 @@ static struct cgroup_subsys_state *css_create(struct cgroup *cgrp,
 		goto err_free_css;
 	css->id = err;
 
-	err = css_rstat_init(css);
-	if (err)
-		goto err_free_css;
+	if (ss->css_rstat_flush) {
+		err = css_rstat_init(css);
+		if (err)
+			goto err_free_css;
+	}
 
 	/* @css is ready to be brought online now, make it visible */
 	list_add_tail_rcu(&css->sibling, &parent_css->children);
@@ -6141,8 +6145,10 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 		css->id = cgroup_idr_alloc(&ss->css_idr, css, 1, 2, GFP_KERNEL);
 		BUG_ON(css->id < 0);
 
-		BUG_ON(ss_rstat_init(ss));
-		BUG_ON(css_rstat_init(css));
+		if (ss->css_rstat_flush) {
+			BUG_ON(ss_rstat_init(ss));
+			BUG_ON(css_rstat_init(css));
+		}
 	}
 
 	/* Update the init_css_set to contain a subsys

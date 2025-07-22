@@ -449,8 +449,7 @@ static int __css_rstat_init(struct cgroup_subsys_state *css, bool is_self)
 			if (!cgrp->rstat_base_cpu)
 				return -ENOMEM;
 		}
-	} else if (css->ss->css_rstat_flush == NULL)
-		return 0;
+	}
 
 	/* the root cgrp's self css has rstat_cpu preallocated */
 	if (!css->rstat_cpu) {
@@ -483,9 +482,6 @@ static int __css_rstat_init(struct cgroup_subsys_state *css, bool is_self)
 static void __css_rstat_exit(struct cgroup_subsys_state *css, bool is_self)
 {
 	int cpu;
-
-	if (!css_uses_rstat(css))
-		return;
 
 	css_rstat_flush(css);
 
