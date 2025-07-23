@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/qcom,sm8750-gxcc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Graphics Clock & Reset Controller on SM8750
+
+maintainers:
+  - Konrad Dybcio <konradybcio@kernel.org>
+
+description: |
+  Qualcomm graphics clock control module provides the clocks, resets and power
+  domains on Qualcomm SoCs.
+
+  See also:
+    include/dt-bindings/reset/qcom,sm8750-gpucc.h
+
+properties:
+  compatible:
+    enum:
+      - qcom,sm8750-gxcc
+
+  reg:
+    maxItems: 1
+
+  power-domains:
+    items:
+      - description: GFX voltage rail
+      - description: MX_COLLAPSIBLE voltage rail
+      - description: GPU_CC_CX GDSC
+
+  '#power-domain-cells':
+    const: 1
+
+required:
+  - compatible
+  - power-domains
+  - '#power-domain-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/qcom,sm8750-gpucc.h>
+    #include <dt-bindings/power/qcom,rpmhpd.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clock-controller@3d64000 {
+            compatible = "qcom,sm8750-gxcc";
+            reg = <0x0 0x03d64000 0x0 0x6000>;
+            power-domains = <&rpmhpd RPMHPD_GFX>,
+                            <&rpmhpd RPMHPD_MXC>,
+                            <&gpucc GPU_CC_CX_GDSC>;
+            #power-domain-cells = <1>;
+        };
+    };
+...
