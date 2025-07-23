@@ -343,4 +343,22 @@ v4l2_async_register_subdev_sensor(struct v4l2_subdev *sd);
  * @sd: pointer to &struct v4l2_subdev
  */
 void v4l2_async_unregister_subdev(struct v4l2_subdev *sd);
+
+/**
+ * devm_v4l2_async_register_subdev_sensor - Managed registration of V4L2 sensor sub-device
+ *
+ * @dev:        Device that manages the lifecycle of the V4L2 sub-device.
+ * @sd:         V4L2 sub-device to be registered as a sensor.
+ *
+ * This function registers a V4L2 sub-device using the asynchronous sub-device
+ * framework and registers a managed cleanup action to be performed automatically
+ * when the device is detached or the driver is unloaded.
+ *
+ * This is a managed version of v4l2_async_register_subdev_sensor(), and simplifies
+ * resource management using devres.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int devm_v4l2_async_register_subdev_sensor(struct device *dev,
+					   struct v4l2_subdev *sd);
 #endif

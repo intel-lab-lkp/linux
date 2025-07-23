@@ -7,6 +7,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/device/devres.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/list.h>
@@ -893,6 +894,24 @@ void v4l2_async_unregister_subdev(struct v4l2_subdev *sd)
 	mutex_unlock(&list_lock);
 }
 EXPORT_SYMBOL(v4l2_async_unregister_subdev);
+
+static void devm_v4l2_async_unregister_subdev(void *data)
+{
+	v4l2_async_unregister_subdev(data);
+}
+
+int devm_v4l2_async_register_subdev_sensor(struct device *dev,
+					   struct v4l2_subdev *sd)
+{
+	int err;
+
+	err = v4l2_async_register_subdev_sensor(sd);
+	if (err)
+		return err;
+
+	return devm_add_action_or_reset(dev, devm_v4l2_async_unregister_subdev, sd);
+};
+EXPORT_SYMBOL(devm_v4l2_async_register_subdev_sensor);
 
 static void print_waiting_match(struct seq_file *s,
 				struct v4l2_async_match_desc *match)
