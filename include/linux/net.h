@@ -26,6 +26,8 @@
 
 #include <uapi/linux/net.h>
 
+#define sockaddr_unspec __kernel_sockaddr_unspec
+
 struct poll_table_struct;
 struct pipe_inode_info;
 struct inode;
