@@ -1398,7 +1398,7 @@ static int fcoe_rcv(struct sk_buff *skb, struct net_device *netdev,
 	/*
 	 * We now have a valid CPU that we're targeting for
 	 * this skb. We also have this receive thread locked,
-	 * so we're free to queue skbs into it's queue.
+	 * so we're free to queue skbs into its queue.
 	 */
 
 	/*

@@ -2173,7 +2173,7 @@ void iscsi_remove_session(struct iscsi_cls_session *session)
 
 	scsi_target_unblock(&session->dev, SDEV_TRANSPORT_OFFLINE);
 	/*
-	 * qla4xxx can perform it's own scans when it runs in kernel only
+	 * qla4xxx can perform its own scans when it runs in kernel only
 	 * mode. Make sure to flush those scans.
 	 */
 	flush_work(&session->scan_work);

@@ -568,7 +568,7 @@ qla2x00_marker(struct scsi_qla_host *vha, struct qla_qpair *qpair,
  *
  * Issue marker
  * Caller CAN have hardware lock held as specified by ha_locked parameter.
- * Might release it, then reaquire.
+ * Might release it, then reacquire.
  */
 int qla2x00_issue_marker(scsi_qla_host_t *vha, int ha_locked)
 {

@@ -1384,8 +1384,8 @@ typedef struct SASProtocolTimerConfig SASProtocolTimerConfig_t;
 					interrupt vector */
 /* bit definition for ODCR register */
 #define ODCR_CLEAR_ALL			0xFFFFFFFF /* mask all
-					interrupt vector*/
-/* MSIX Interupts */
+					interrupt vector */
+/* MSI-X Interrupts */
 #define MSIX_TABLE_OFFSET		0x2000
 #define MSIX_TABLE_ELEMENT_SIZE		0x10
 #define MSIX_INTERRUPT_CONTROL_OFFSET	0xC

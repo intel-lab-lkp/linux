@@ -5052,7 +5052,7 @@ static void sym_alloc_lcb_tags (struct sym_hcb *np, u_char tn, u_char ln)
 	int i;
 
 	/*
-	 *  Allocate the task table and and the tag allocation 
+	 *  Allocate the task table and the tag allocation
 	 *  circular buffer. We want both or none.
 	 */
 	lp->itlq_tbl = sym_calloc_dma(SYM_CONF_MAX_TASK*4, "ITLQ_TBL");

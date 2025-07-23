@@ -502,7 +502,7 @@ mimd_to_kioc(mimd_t __user *umimd, mraid_mmadp_t *adp, uioc_t *kioc)
  * First we search for a pool with smallest buffer that is >= @xferlen. If
  * that pool has no free buffer, we will try for the next bigger size. If none
  * is available, we will try to allocate the smallest buffer that is >=
- * @xferlen and attach it the pool.
+ * @xferlen and attach it to the pool.
  */
 static int
 mraid_mm_attach_buf(mraid_mmadp_t *adp, uioc_t *kioc, int xferlen)

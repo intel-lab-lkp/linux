@@ -497,14 +497,14 @@ struct mr_data_fx00 {
 /*
  * SoC Junction Temperature is stored in
  * bits 9:1 of SoC Junction Temperature Register
- * in a firmware specific format format.
+ * in a firmware specific format.
  * To get the temperature in Celsius degrees
- * the value from this bitfiled should be converted
+ * the value from this bitfield should be converted
  * using this formula:
  * Temperature (degrees C) = ((3,153,000 - (10,000 * X)) / 13,825)
  * where X is the bit field value
  * this macro reads the register, extracts the bitfield value,
- * performs the calcualtions and returns temperature in Celsius
+ * performs the calculations and returns temperature in Celsius
  */
 #define QLAFX00_GET_TEMPERATURE(ha) ((3153000 - (10000 * \
 	((QLAFX00_RD_REG(ha, QLAFX00_SOC_TEMP_REG) & 0x3FE) >> 1))) / 13825)
@@ -520,7 +520,7 @@ struct mr_data_fx00 {
 
 #define QLAFX00_CRITEMP_THRSHLD		80	/* Celsius degrees */
 
-/* Max conncurrent IOs that can be queued */
+/* Max concurrent IOs that can be queued */
 #define QLAFX00_MAX_CANQUEUE		1024
 
 /* IOCTL IOCB abort success */

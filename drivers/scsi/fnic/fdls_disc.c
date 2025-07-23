@@ -1548,7 +1548,7 @@ err_out:
  * @iport: Handle to fnic iport
  *
  * This function does not change or check the fabric state.
- * It the caller's responsibility to set the appropriate iport fabric
+ * It's the caller's responsibility to set the appropriate iport fabric
  * state when this is called. Normally it is FDLS_STATE_FABRIC_LOGO.
  * Currently this assumes to be called with fnic lock held.
  */
@@ -1604,7 +1604,7 @@ void fdls_send_fabric_logo(struct fnic_iport_s *iport)
  * @tport: Handle to remote port
  *
  * This function does not change or check the fabric/tport state.
- * It the caller's responsibility to set the appropriate tport/fabric
+ * It's the caller's responsibility to set the appropriate tport/fabric
  * state when this is called. Normally that is fdls_tgt_state_plogo.
  * This could be used to send plogo to nameserver process
  * also not just target processes

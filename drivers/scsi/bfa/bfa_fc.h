@@ -462,7 +462,7 @@ struct fc_rsi_s {
 };
 
 /*
- * structure for PRLI paramater pages, both request & response
+ * structure for PRLI parameter pages, both request & response
  * see FC-PH-X table 113 & 115 for explanation also FCP table 8
  */
 struct fc_prli_params_s {

@@ -2554,14 +2554,14 @@ megasas_set_pd_lba(struct MPI2_RAID_SCSI_IO_REQUEST *io_request, u8 cdb_len,
 }
 
 /**
- * megasas_stream_detect -	stream detection on read and and write IOs
+ * megasas_stream_detect -	stream detection on read and write IOs
  * @instance:		Adapter soft state
  * @cmd:		    Command to be prepared
  * @io_info:		IO Request info
  *
  */
 
-/** stream detection on read and and write IOs */
+/** stream detection on read and write IOs */
 static void megasas_stream_detect(struct megasas_instance *instance,
 				  struct megasas_cmd_fusion *cmd,
 				  struct IO_REQUEST_INFO *io_info)

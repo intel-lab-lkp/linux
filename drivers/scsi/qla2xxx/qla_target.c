@@ -160,7 +160,7 @@ void qlt_do_generation_tick(struct scsi_qla_host *vha, int *dest)
 	wmb();
 }
 
-/* Might release hw lock, then reaquire!! */
+/* Might release hw lock, then reacquire!! */
 static inline int qlt_issue_marker(struct scsi_qla_host *vha, int vha_locked)
 {
 	/* Send marker if required */
@@ -1422,7 +1422,7 @@ static struct fc_port *qlt_create_sess(
 		kref_init(&fcport->sess_kref);
 		/*
 		 * Take an extra reference to ->sess_kref here to handle
-		 * fc_port access across ->tgt.sess_lock reaquire.
+		 * fc_port access across ->tgt.sess_lock reacquire.
 		 */
 		if (!kref_get_unless_zero(&sess->sess_kref)) {
 			ql_dbg(ql_dbg_disc, vha, 0x20f7,
@@ -1654,7 +1654,7 @@ static int qlt_sched_sess_work(struct qla_tgt *tgt, int type,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_send_notify_ack(struct qla_qpair *qpair,
 	struct imm_ntfy_from_isp *ntfy,
@@ -1807,7 +1807,7 @@ static int qlt_build_abts_resp_iocb(struct qla_tgt_mgmt_cmd *mcmd)
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_24xx_send_abts_resp(struct qla_qpair *qpair,
 	struct abts_recv_from_24xx *abts, uint32_t status,
@@ -1880,7 +1880,7 @@ static void qlt_24xx_send_abts_resp(struct qla_qpair *qpair,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_24xx_retry_term_exchange(struct scsi_qla_host *vha,
     struct qla_qpair *qpair, response_t *pkt, struct qla_tgt_mgmt_cmd *mcmd)
@@ -2120,7 +2120,7 @@ static int __qlt_24xx_handle_abts(struct scsi_qla_host *vha,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_24xx_handle_abts(struct scsi_qla_host *vha,
 	struct abts_recv_from_24xx *abts)
@@ -2191,7 +2191,7 @@ static void qlt_24xx_handle_abts(struct scsi_qla_host *vha,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_24xx_send_task_mgmt_ctio(struct qla_qpair *qpair,
 	struct qla_tgt_mgmt_cmd *mcmd, uint32_t resp_code)
@@ -2495,7 +2495,7 @@ static int qlt_check_reserve_free_req(struct qla_qpair *qpair,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static inline void *qlt_get_req_pkt(struct req_que *req)
 {
@@ -3549,7 +3549,7 @@ out:
 	}
 }
 
-/* If hardware_lock held on entry, might drop it, then reaquire */
+/* If hardware_lock held on entry, might drop it, then reacquire */
 /* This function sends the appropriate CTIO to ISP 2xxx or 24xx */
 static int __qlt_send_term_imm_notif(struct scsi_qla_host *vha,
 	struct imm_ntfy_from_isp *ntfy)
@@ -3611,7 +3611,7 @@ static void qlt_send_term_imm_notif(struct scsi_qla_host *vha,
 }
 
 /*
- * If hardware_lock held on entry, might drop it, then reaquire
+ * If hardware_lock held on entry, might drop it, then reacquire
  * This function sends the appropriate CTIO to ISP 2xxx or 24xx
  */
 static int __qlt_send_term_exchange(struct qla_qpair *qpair,
@@ -3824,7 +3824,7 @@ void qlt_free_cmd(struct qla_tgt_cmd *cmd)
 EXPORT_SYMBOL(qlt_free_cmd);
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static int qlt_term_ctio_exchange(struct qla_qpair *qpair, void *ctio,
 	struct qla_tgt_cmd *cmd, uint32_t status)
@@ -3910,7 +3910,7 @@ static void *qlt_ctio_to_cmd(struct scsi_qla_host *vha,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static void qlt_do_ctio_completion(struct scsi_qla_host *vha,
     struct rsp_que *rsp, uint32_t handle, uint32_t status, void *ctio)
@@ -4900,7 +4900,7 @@ out:
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 static int qlt_24xx_handle_els(struct scsi_qla_host *vha,
 	struct imm_ntfy_from_isp *iocb)
@@ -5338,7 +5338,7 @@ static void qlt_handle_imm_notify(struct scsi_qla_host *vha,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  * This function sends busy to ISP 2xxx or 24xx.
  */
 static int __qlt_send_busy(struct qla_qpair *qpair,
@@ -5890,7 +5890,7 @@ static void qlt_response_pkt(struct scsi_qla_host *vha,
 }
 
 /*
- * ha->hardware_lock supposed to be held on entry. Might drop it, then reaquire
+ * ha->hardware_lock supposed to be held on entry. Might drop it, then reacquire
  */
 void qlt_async_event(uint16_t code, struct scsi_qla_host *vha,
 	uint16_t *mailbox)

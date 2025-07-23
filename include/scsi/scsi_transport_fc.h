@@ -194,7 +194,7 @@ struct fc_vport_identifiers {
  * ports share the physical link with the Physical port. Each virtual
  * ports has a unique presence on the SAN, and may be instantiated via
  * NPIV, Virtual Fabrics, or via additional ALPAs. As the vport is a
- * unique presence, each vport has it's own view of the fabric,
+ * unique presence, each vport has its own view of the fabric,
  * authentication privilege, and priorities.
  *
  * A virtual port may support 1 or more FC4 roles. Typically it is a

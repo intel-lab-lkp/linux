@@ -692,7 +692,7 @@ qla2xxx_get_flt_info(scsi_qla_host_t *vha, uint32_t flt_addr)
 	uint32_t start;
 
 	/* Assign FCP prio region since older adapters may not have FLT, or
-	   FCP prio region in it's FLT.
+	   FCP prio region in its FLT.
 	 */
 	ha->flt_region_fcp_prio = (ha->port_no == 0) ?
 	    fcp_prio_cfg0[def] : fcp_prio_cfg1[def];

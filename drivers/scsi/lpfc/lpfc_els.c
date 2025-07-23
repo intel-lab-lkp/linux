@@ -3066,8 +3066,8 @@ out:
 
 	/* Cleanup path for failed REG_RPI handling. If REG_RPI fails, the
 	 * driver sends a LOGO to the rport to cleanup.  For fabric and
-	 * initiator ports cleanup the node as long as it the node is not
-	 * register with the transport.
+	 * initiator ports cleanup the node as long as the node is not
+	 * registered with the transport.
 	 */
 	if (!(ndlp->fc4_xpt_flags & (SCSI_XPT_REGD | NVME_XPT_REGD))) {
 		clear_bit(NLP_NPR_2B_DISC, &ndlp->nlp_flag);

@@ -3262,7 +3262,7 @@ sci_io_request_construct_smp(struct device *dev,
 	/*
 	 * 18h ~ 30h, protocol specific
 	 * since commandIU has been build by framework at this point, we just
-	 * copy the frist DWord from command IU to this location. */
+	 * copy the first DWord from command IU to this location. */
 	memcpy(&task_context->type.smp, &cmd, sizeof(u32));
 
 	/*

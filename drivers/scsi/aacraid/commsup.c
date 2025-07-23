@@ -2292,7 +2292,7 @@ out:
  *	aac_command_thread	-	command processing thread
  *	@data: Adapter to monitor
  *
- *	Waits on the commandready event in it's queue. When the event gets set
+ *	Waits on the commandready event in its queue. When the event gets set
  *	it will pull FIBs off it's queue. It will continue to pull FIBs off
  *	until the queue is empty. When the queue is empty it will wait for
  *	more FIBs.

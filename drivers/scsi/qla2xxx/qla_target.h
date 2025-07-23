@@ -793,7 +793,7 @@ struct qla_tgt {
 	struct qla_qpair_hint *qphints;
 	/*
 	 * To sync between IRQ handlers and qlt_target_release(). Needed,
-	 * because req_pkt() can drop/reaquire HW lock inside. Protected by
+	 * because req_pkt() can drop/reacquire HW lock inside. Protected by
 	 * HW lock.
 	 */
 	int atio_irq_cmd_count;

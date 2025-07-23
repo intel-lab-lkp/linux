@@ -236,7 +236,7 @@ struct mvs_device {
 	u16 reserved;
 };
 
-/* Generate  PHY tunning parameters */
+/* Generate  PHY tuning parameters */
 struct phy_tuning {
 	/* 1 bit,  transmitter emphasis enable	*/
 	u8	trans_emp_en:1;

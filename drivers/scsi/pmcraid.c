@@ -376,7 +376,7 @@ static struct pmcraid_cmd *pmcraid_get_free_cmd(
 	}
 	spin_unlock_irqrestore(&pinstance->free_pool_lock, lock_flags);
 
-	/* Initialize the command block before giving it the caller */
+	/* Initialize the command block before giving it to the caller */
 	if (cmd != NULL)
 		pmcraid_reinit_cmdblk(cmd);
 	return cmd;
@@ -5051,7 +5051,7 @@ static void pmcraid_init_res_table(struct pmcraid_cmd *cmd)
 			}
 		}
 
-		/* If this is new entry, initialize it and add it the queue */
+		/* If this is new entry, initialize and add it to the queue */
 		if (!found) {
 
 			if (list_empty(&pinstance->free_res_q)) {

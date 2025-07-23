@@ -1987,8 +1987,8 @@ bfa_fcs_rport_gidpn_response(void *fcsarg, struct bfa_fcxp_s *fcxp, void *cbarg,
 			/*
 			 * Device's PID has changed. We need to cleanup
 			 * and re-login. If there is another device with
-			 * the the newly discovered pid, send an scn notice
-			 * so that its new pid can be discovered.
+			 * the newly discovered PID, send an scn notice
+			 * so that its new PID can be discovered.
 			 */
 			list_for_each(qe, &rport->port->rport_q) {
 				twin = (struct bfa_fcs_rport_s *) qe;

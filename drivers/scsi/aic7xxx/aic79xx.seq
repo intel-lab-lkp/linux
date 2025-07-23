@@ -1036,7 +1036,7 @@ p_mesgin:
 
 /*
  * Pushed message loop to allow the kernel to
- * run it's own message state engine.  To avoid an
+ * run its own message state engine.  To avoid an
  * extra nop instruction after signaling the kernel,
  * we perform the phase_lock before checking to see
  * if we should exit the loop and skip the phase_lock

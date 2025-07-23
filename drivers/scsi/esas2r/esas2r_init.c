@@ -673,7 +673,7 @@ static int __maybe_unused esas2r_resume(struct device *dev)
 		goto error_exit;
 	}
 
-	/* Set up interupt mode */
+	/* Set up interrupt mode */
 	esas2r_setup_interrupts(a, a->intr_mode);
 
 	/*

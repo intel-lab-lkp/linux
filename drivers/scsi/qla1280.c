@@ -4259,7 +4259,7 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto error_release_region;
 	}
 
-	/* load the F/W, read paramaters, and init the H/W */
+	/* load the F/W, read parameters, and init the H/W */
 	if (qla1280_initialize_adapter(ha)) {
 		printk(KERN_INFO "qla1x160: Failed to initialize adapter\n");
 		goto error_free_irq;

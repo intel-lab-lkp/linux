@@ -2506,7 +2506,7 @@ megaraid_abort_handler(struct scsi_cmnd *scp)
  * @scp		: reference command
  *
  * Reset handler for the mailbox based controller. First try to find out if
- * the FW is still live, in which case the outstanding commands counter mut go
+ * the FW is still live, in which case the outstanding commands counter must go
  * down to 0. If that happens, also issue the reservation reset command to
  * relinquish (possible) reservations on the logical drives connected to this
  * host.
