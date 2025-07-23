@@ -411,7 +411,7 @@ out:
 	return error;
 }
 
-static int pptp_connect(struct socket *sock, struct sockaddr *uservaddr,
+static int pptp_connect(struct socket *sock, struct sockaddr_unspec *uservaddr,
 	int sockaddr_len, int flags)
 {
 	struct sock *sk = sock->sk;

@@ -632,7 +632,7 @@ static int nr_bind(struct socket *sock, struct sockaddr_unspec *uaddr, int addr_
 	return 0;
 }
 
-static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
+static int nr_connect(struct socket *sock, struct sockaddr_unspec *uaddr,
 	int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;

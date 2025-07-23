@@ -606,7 +606,7 @@ static int pppoe_release(struct socket *sock)
 	return 0;
 }
 
-static int pppoe_connect(struct socket *sock, struct sockaddr *uservaddr,
+static int pppoe_connect(struct socket *sock, struct sockaddr_unspec *uservaddr,
 		  int sockaddr_len, int flags)
 {
 	struct sock *sk = sock->sk;
