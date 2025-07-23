@@ -303,20 +303,20 @@ static void netconsole_print_banner(struct netpoll *np)
 static int netpoll_parse_ip_addr(const char *str, union inet_addr *addr)
 {
 	const char *end;
+	int len;
 
-	if (!strchr(str, ':') &&
-	    in4_pton(str, -1, (void *)addr, -1, &end) > 0) {
-		if (!*end)
-			return 0;
-	}
-	if (in6_pton(str, -1, addr->in6.s6_addr, -1, &end) > 0) {
-#if IS_ENABLED(CONFIG_IPV6)
-		if (!*end)
-			return 1;
-#else
+	len = strlen(str);
+	if (!len)
 		return -1;
-#endif
-	}
+
+	if (str[len - 1] == '\n')
+		len -= 1;
+
+	if (in4_pton(str, len, (void *)addr, -1, &end) > 0)
+		return 0;
+	if (IS_ENABLED(CONFIG_IPV6) &&
+	    in6_pton(str, len, addr->in6.s6_addr, -1, &end) > 0)
+		return 1;
 	return -1;
 }
 
