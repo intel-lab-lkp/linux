@@ -6,6 +6,7 @@
 /dts-v1/;
 
 #include "sm6115.dtsi"
+#include "sm6115-audio.dtsi"
 #include "pm6125.dtsi"
 
 / {

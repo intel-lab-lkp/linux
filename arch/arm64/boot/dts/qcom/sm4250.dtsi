@@ -4,6 +4,7 @@
  */
 
 #include "sm6115.dtsi"
+#include "sm6115-audio.dtsi"
 
 &cpu0 {
 	compatible = "qcom,kryo240";
