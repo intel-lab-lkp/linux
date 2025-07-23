@@ -280,9 +280,9 @@ int hw_sm750_crtc_set_mode(struct lynxfb_crtc *crtc,
 	/* set timing */
 	modparm.pixel_clock = ps_to_hz(var->pixclock);
 	modparm.vertical_sync_polarity =
-		(var->sync & FB_SYNC_HOR_HIGH_ACT) ? POS : NEG;
-	modparm.horizontal_sync_polarity =
 		(var->sync & FB_SYNC_VERT_HIGH_ACT) ? POS : NEG;
+	modparm.horizontal_sync_polarity =
+		(var->sync & FB_SYNC_HOR_HIGH_ACT) ? POS : NEG;
 	modparm.clock_phase_polarity =
 		(var->sync & FB_SYNC_COMP_HIGH_ACT) ? POS : NEG;
 	modparm.horizontal_display_end = var->xres;
