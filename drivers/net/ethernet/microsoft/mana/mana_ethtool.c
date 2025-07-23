@@ -396,12 +396,6 @@ static int mana_set_channels(struct net_device *ndev,
 	unsigned int old_count = apc->num_queues;
 	int err;
 
-	err = mana_pre_alloc_rxbufs(apc, ndev->mtu, new_count);
-	if (err) {
-		netdev_err(ndev, "Insufficient memory for new allocations");
-		return err;
-	}
-
 	err = mana_detach(ndev, false);
 	if (err) {
 		netdev_err(ndev, "mana_detach failed: %d\n", err);
@@ -416,7 +410,6 @@ static int mana_set_channels(struct net_device *ndev,
 	}
 
 out:
-	mana_pre_dealloc_rxbufs(apc);
 	return err;
 }
 
@@ -465,12 +458,7 @@ static int mana_set_ringparam(struct net_device *ndev,
 
 	/* pre-allocating new buffers to prevent failures in mana_attach() later */
 	apc->rx_queue_size = new_rx;
-	err = mana_pre_alloc_rxbufs(apc, ndev->mtu, apc->num_queues);
 	apc->rx_queue_size = old_rx;
-	if (err) {
-		netdev_err(ndev, "Insufficient memory for new allocations\n");
-		return err;
-	}
 
 	err = mana_detach(ndev, false);
 	if (err) {
@@ -488,7 +476,6 @@ static int mana_set_ringparam(struct net_device *ndev,
 		apc->rx_queue_size = old_rx;
 	}
 out:
-	mana_pre_dealloc_rxbufs(apc);
 	return err;
 }
 

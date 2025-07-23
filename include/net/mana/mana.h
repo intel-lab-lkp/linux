@@ -65,6 +65,8 @@ enum TRI_STATE {
 #define MANA_STATS_RX_COUNT 5
 #define MANA_STATS_TX_COUNT 11
 
+#define MANA_RX_FRAG_ALIGNMENT 64
+
 struct mana_stats_rx {
 	u64 packets;
 	u64 bytes;
@@ -328,6 +330,7 @@ struct mana_rxq {
 	u32 datasize;
 	u32 alloc_size;
 	u32 headroom;
+	u32 frag_count;
 
 	mana_handle_t rxobj;
 
@@ -503,14 +506,6 @@ struct mana_port_context {
 	/* This points to an array of num_queues of RQ pointers. */
 	struct mana_rxq **rxqs;
 
-	/* pre-allocated rx buffer array */
-	void **rxbufs_pre;
-	dma_addr_t *das_pre;
-	int rxbpre_total;
-	u32 rxbpre_datasize;
-	u32 rxbpre_alloc_size;
-	u32 rxbpre_headroom;
-
 	struct bpf_prog *bpf_prog;
 
 	/* Create num_queues EQs, SQs, SQ-CQs, RQs and RQ-CQs, respectively. */
@@ -574,8 +569,6 @@ int mana_query_link_cfg(struct mana_port_context *apc);
 int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
 		      int enable_clamping);
 void mana_query_phy_stats(struct mana_port_context *apc);
-int mana_pre_alloc_rxbufs(struct mana_port_context *apc, int mtu, int num_queues);
-void mana_pre_dealloc_rxbufs(struct mana_port_context *apc);
 
 extern const struct ethtool_ops mana_ethtool_ops;
 extern struct dentry *mana_debugfs_root;
