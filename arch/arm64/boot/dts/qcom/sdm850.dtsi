@@ -6,6 +6,7 @@
  */
 
 #include "sdm845.dtsi"
+#include "sdm845-audio.dtsi"
 
 &cpu4_opp_table {
 	cpu4_opp33: opp-2841600000 {

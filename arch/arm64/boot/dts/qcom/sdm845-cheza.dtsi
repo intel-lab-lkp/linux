@@ -8,6 +8,7 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sdm845.dtsi"
+#include "sdm845-audio.dtsi"
 
 /* PMICs depend on spmi_bus label and so must come after SoC */
 #include "pm8005.dtsi"
