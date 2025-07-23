@@ -9,6 +9,7 @@
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8750.dtsi"
+#include "sm8750-audio.dtsi"
 #include "pm8010.dtsi"
 #include "pm8550.dtsi"
 #define PMK8550VE_SID 8
