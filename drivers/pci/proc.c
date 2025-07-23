@@ -463,13 +463,10 @@ int pci_proc_detach_bus(struct pci_bus *bus)
 
 static int __init pci_proc_init(void)
 {
-	struct pci_dev *dev = NULL;
 	proc_bus_pci_dir = proc_mkdir("bus/pci", NULL);
 	proc_create_seq("devices", 0, proc_bus_pci_dir,
 		    &proc_bus_pci_devices_op);
 	proc_initialized = 1;
-	for_each_pci_dev(dev)
-		pci_proc_attach_device(dev);
 
 	return 0;
 }

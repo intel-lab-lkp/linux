@@ -1722,18 +1722,9 @@ void pci_remove_sysfs_dev_files(struct pci_dev *pdev)
 
 static int __init pci_sysfs_init(void)
 {
-	struct pci_dev *pdev = NULL;
 	struct pci_bus *pbus = NULL;
-	int retval;
 
 	sysfs_initialized = 1;
-	for_each_pci_dev(pdev) {
-		retval = pci_create_sysfs_dev_files(pdev);
-		if (retval) {
-			pci_dev_put(pdev);
-			return retval;
-		}
-	}
 
 	while ((pbus = pci_find_next_bus(pbus)))
 		pci_create_legacy_files(pbus);
