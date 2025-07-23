@@ -18,7 +18,7 @@ kconfig options:
   missing annotation
 
 Boot parameter:
-  sysctl.vm.mem_profiling={0|1|never}[,compressed]
+  sysctl.vm.mem_profiling={0|1|never}[,compressed][,noslub]
 
   When set to "never", memory allocation profiling overhead is minimized and it
   cannot be enabled at runtime (sysctl becomes read-only).
@@ -29,6 +29,11 @@ Boot parameter:
   and memory consumption, however it might fail depending on system configuration.
   If compression fails, a warning is issued and memory allocation profiling gets
   disabled.
+
+  The optional noslub parameter disables tracking of individual SLUB objects. This
+  approach, similar to how page owner tracking works, relies on slub_debug for SLUB
+  object insights instead. While this reduces memory overhead, it also limits the
+  ability to observe detailed SLUB allocation behavior.
 
 sysctl:
   /proc/sys/vm/mem_profiling

@@ -2094,7 +2094,7 @@ prepare_slab_obj_exts_hook(struct kmem_cache *s, gfp_t flags, void *p)
 	return slab_obj_exts(slab) + obj_to_index(s, slab, p);
 }
 
-/* Should be called only if mem_alloc_profiling_enabled() */
+/* Should be called only if slub_mem_alloc_profiling_enabled() */
 static noinline void
 __alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 {
@@ -2103,7 +2103,7 @@ __alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 	obj_exts = prepare_slab_obj_exts_hook(s, flags, object);
 	/*
 	 * Currently obj_exts is used only for allocation profiling.
-	 * If other users appear then mem_alloc_profiling_enabled()
+	 * If other users appear then slub_mem_alloc_profiling_enabled()
 	 * check should be added before alloc_tag_add().
 	 */
 	if (likely(obj_exts))
@@ -2113,11 +2113,11 @@ __alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 static inline void
 alloc_tagging_slab_alloc_hook(struct kmem_cache *s, void *object, gfp_t flags)
 {
-	if (mem_alloc_profiling_enabled())
+	if (slub_mem_alloc_profiling_enabled())
 		__alloc_tagging_slab_alloc_hook(s, object, flags);
 }
 
-/* Should be called only if mem_alloc_profiling_enabled() */
+/* Should be called only if slub_mem_alloc_profiling_enabled() */
 static noinline void
 __alloc_tagging_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p,
 			       int objects)
@@ -2144,7 +2144,7 @@ static inline void
 alloc_tagging_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p,
 			     int objects)
 {
-	if (mem_alloc_profiling_enabled())
+	if (slub_mem_alloc_profiling_enabled())
 		__alloc_tagging_slab_free_hook(s, slab, p, objects);
 }
 

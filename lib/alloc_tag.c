@@ -35,6 +35,8 @@ DEFINE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 EXPORT_SYMBOL(mem_alloc_profiling_key);
 
 DEFINE_STATIC_KEY_FALSE(mem_profiling_compressed);
+DEFINE_STATIC_KEY_TRUE(slub_mem_alloc_profiling_key);
+EXPORT_SYMBOL(slub_mem_alloc_profiling_key);
 
 struct alloc_tag_kernel_section kernel_tags = { NULL, 0 };
 unsigned long alloc_tag_ref_mask;
@@ -702,6 +704,7 @@ static inline void free_mod_tags_mem(void) {}
 static int __init setup_early_mem_profiling(char *str)
 {
 	bool compressed = false;
+	bool noslub = false;
 	bool enable;
 
 	if (!str || !str[0])
@@ -717,16 +720,19 @@ static int __init setup_early_mem_profiling(char *str)
 		if (kstrtobool(token, &enable))
 			return -EINVAL;
 
-		if (str) {
-
-			if (strcmp(str, "compressed"))
+		while ((token = strsep(&str, ",")) != NULL) {
+			if (strcmp(token, "compressed") == 0)
+				compressed = true;
+			else if (strcmp(token, "noslub") == 0)
+				noslub = true;
+			else
 				return -EINVAL;
-
-			compressed = true;
 		}
 		mem_profiling_support = true;
-		pr_info("Memory allocation profiling is enabled %s compression and is turned %s!\n",
-			compressed ? "with" : "without", enable ? "on" : "off");
+		pr_info("Memory allocation profiling is enabled %s compression, %s slub track and is turned %s!\n",
+			compressed ? "with" : "without",
+			noslub ? "without" : "with",
+			enable ? "on" : "off");
 	}
 
 	if (enable != mem_alloc_profiling_enabled()) {
@@ -740,6 +746,12 @@ static int __init setup_early_mem_profiling(char *str)
 			static_branch_enable(&mem_profiling_compressed);
 		else
 			static_branch_disable(&mem_profiling_compressed);
+	}
+	if (noslub == static_key_enabled(&slub_mem_alloc_profiling_key)) {
+		if (noslub)
+			static_branch_disable(&slub_mem_alloc_profiling_key);
+		else
+			static_branch_enable(&slub_mem_alloc_profiling_key);
 	}
 
 	return 0;
