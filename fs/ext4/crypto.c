@@ -227,6 +227,10 @@ static bool ext4_has_stable_inodes(struct super_block *sb)
 }
 
 const struct fscrypt_operations ext4_cryptops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.inode_info_offs	= offsetof(struct ext4_inode_info, i_crypt_info) -
+				  offsetof(struct ext4_inode_info, vfs_inode),
+#endif
 	.needs_bounce_pages	= 1,
 	.has_32bit_inodes	= 1,
 	.supports_subblock_data_units = 1,
