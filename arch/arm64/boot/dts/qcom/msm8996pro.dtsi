@@ -4,6 +4,7 @@
  */
 
 #include "msm8996.dtsi"
+#include "msm8996-audio.dtsi"
 
 / {
 	/delete-node/ opp-table-cluster0;

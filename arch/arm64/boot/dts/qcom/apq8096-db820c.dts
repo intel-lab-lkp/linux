@@ -6,6 +6,7 @@
 /dts-v1/;
 
 #include "msm8996.dtsi"
+#include "msm8996-audio.dtsi"
 #include "pm8994.dtsi"
 #include "pmi8994.dtsi"
 #include <dt-bindings/input/input.h>

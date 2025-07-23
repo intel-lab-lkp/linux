@@ -4,6 +4,7 @@
  */
 
 #include "msm8996.dtsi"
+#include "msm8996-audio.dtsi"
 
 / {
 	qcom,msm-id = <246 0x30000>;

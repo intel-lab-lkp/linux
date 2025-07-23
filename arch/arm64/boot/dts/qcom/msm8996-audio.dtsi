@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+#include <dt-bindings/clock/qcom,gcc-msm8996.h>
+#include "elite-audio.dtsi"
+
+&apr {
+	power-domains = <&gcc HLOS1_VOTE_LPASS_ADSP_GDSC>;
+};
+
+&q6asmdai{
+	iommus = <&lpass_q6_smmu 1>;
+};
