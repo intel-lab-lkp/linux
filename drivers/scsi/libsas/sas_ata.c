@@ -925,17 +925,6 @@ void sas_ata_schedule_reset(struct domain_device *dev)
 }
 EXPORT_SYMBOL_GPL(sas_ata_schedule_reset);
 
-void sas_ata_wait_eh(struct domain_device *dev)
-{
-	struct ata_port *ap;
-
-	if (!dev_is_sata(dev))
-		return;
-
-	ap = dev->sata_dev.ap;
-	ata_port_wait_eh(ap);
-}
-
 void sas_ata_device_link_abort(struct domain_device *device, bool force_reset)
 {
 	struct ata_port *ap = device->sata_dev.ap;

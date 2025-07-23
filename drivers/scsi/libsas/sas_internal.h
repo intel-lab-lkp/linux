@@ -222,4 +222,16 @@ static inline void sas_put_device(struct domain_device *dev)
 	kref_put(&dev->kref, sas_free_device);
 }
 
+#ifdef CONFIG_SCSI_SAS_ATA
+static inline void sas_ata_wait_eh(struct domain_device *dev)
+{
+	if (dev_is_sata(dev))
+		ata_port_wait_eh(dev->sata_dev.ap);
+}
+#else
+static inline void sas_ata_wait_eh(struct domain_device *dev)
+{
+}
+#endif
+
 #endif /* _SAS_INTERNAL_H_ */

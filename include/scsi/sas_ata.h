@@ -27,7 +27,6 @@ void sas_ata_task_abort(struct sas_task *task);
 void sas_ata_strategy_handler(struct Scsi_Host *shost);
 void sas_ata_eh(struct Scsi_Host *shost, struct list_head *work_q);
 void sas_ata_schedule_reset(struct domain_device *dev);
-void sas_ata_wait_eh(struct domain_device *dev);
 void sas_probe_sata(struct asd_sas_port *port);
 void sas_suspend_sata(struct asd_sas_port *port);
 void sas_resume_sata(struct asd_sas_port *port);
@@ -70,10 +69,6 @@ static inline void sas_ata_eh(struct Scsi_Host *shost, struct list_head *work_q)
 }
 
 static inline void sas_ata_schedule_reset(struct domain_device *dev)
-{
-}
-
-static inline void sas_ata_wait_eh(struct domain_device *dev)
 {
 }
 
