@@ -8,6 +8,7 @@
  *	    Sakari Ailus <sakari.ailus@iki.fi>
  */
 
+#include <linux/device/devres.h>
 #include <linux/export.h>
 #include <linux/ioctl.h>
 #include <linux/leds.h>
@@ -1709,6 +1710,23 @@ void v4l2_subdev_cleanup(struct v4l2_subdev *sd)
 	}
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_cleanup);
+
+static void devm_v4l2_subdev_cleanup(void *data)
+{
+	v4l2_subdev_cleanup(data);
+}
+
+int devm_v4l2_subdev_init_finalize(struct device *dev, struct v4l2_subdev *sd)
+{
+	int err;
+
+	err = v4l2_subdev_init_finalize(sd);
+	if (err)
+		return err;
+
+	return devm_add_action_or_reset(dev, devm_v4l2_subdev_cleanup, sd);
+}
+EXPORT_SYMBOL_GPL(devm_v4l2_subdev_init_finalize);
 
 struct v4l2_mbus_framefmt *
 __v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,

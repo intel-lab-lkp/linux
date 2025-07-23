@@ -1338,6 +1338,23 @@ int __v4l2_subdev_init_finalize(struct v4l2_subdev *sd, const char *name,
 				struct lock_class_key *key);
 
 /**
+ * devm_v4l2_subdev_init_finalize - Managed finalization of V4L2 sub-device initialization
+ *
+ * @dev:        Device that manages the lifecycle of the V4L2 sub-device.
+ * @sd:         Pointer to the initialized V4L2 sub-device.
+ *
+ * This function finalizes the initialization of a V4L2 sub-device and registers
+ * a managed cleanup action to be performed automatically when the device is
+ * detached or the driver is unloaded.
+ *
+ * This is a managed version of v4l2_subdev_init_finalize(), and simplifies
+ * resource management using devres.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int devm_v4l2_subdev_init_finalize(struct device *dev, struct v4l2_subdev *sd);
+
+/**
  * v4l2_subdev_cleanup() - Releases the resources allocated by the subdevice
  * @sd: The subdevice
  *
