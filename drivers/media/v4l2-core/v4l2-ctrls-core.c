@@ -5,6 +5,7 @@
  * Copyright (C) 2010-2021  Hans Verkuil <hverkuil-cisco@xs4all.nl>
  */
 
+#include <linux/device/devres.h>
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -1670,6 +1671,25 @@ int v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl)
 	return hdl->error;
 }
 EXPORT_SYMBOL(v4l2_ctrl_handler_free);
+
+static void devm_v4l2_ctrl_handler_free(void *data)
+{
+	v4l2_ctrl_handler_free(data);
+}
+
+int devm_v4l2_ctrl_handler_init(struct device *dev,
+				struct v4l2_ctrl_handler *hdl,
+				unsigned int nr_of_controls_hint)
+{
+	int err;
+
+	err = v4l2_ctrl_handler_init(hdl, nr_of_controls_hint);
+	if (err)
+		return err;
+
+	return devm_add_action_or_reset(dev, devm_v4l2_ctrl_handler_free, hdl);
+}
+EXPORT_SYMBOL(devm_v4l2_ctrl_handler_init);
 
 /* For backwards compatibility: V4L2_CID_PRIVATE_BASE should no longer
    be used except in G_CTRL, S_CTRL, QUERYCTRL and QUERYMENU when dealing

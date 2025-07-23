@@ -574,6 +574,25 @@ int v4l2_ctrl_handler_init_class(struct v4l2_ctrl_handler *hdl,
 #endif
 
 /**
+ * devm_v4l2_ctrl_handler_init - Managed initialization of V4L2 control handler
+ *
+ * @dev:                  Device that manages the lifecycle of the control handler.
+ * @hdl:                  Pointer to the V4L2 control handler to initialize.
+ * @nr_of_controls_hint: Estimated number of controls to be added.
+ *
+ * This function initializes a V4L2 control handler and registers a managed
+ * cleanup action to be performed automatically when the device is detached or
+ * the driver is unloaded.
+ *
+ * This is a managed version of v4l2_ctrl_handler_init(), and simplifies resource
+ * management using devres.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int devm_v4l2_ctrl_handler_init(struct device *dev,
+				struct v4l2_ctrl_handler *hdl,
+				unsigned int nr_of_controls_hint);
+/**
  * v4l2_ctrl_handler_free() - Free all controls owned by the handler and free
  * the control list.
  * @hdl:	The control handler.
