@@ -21,7 +21,6 @@ static inline int dev_is_sata(struct domain_device *dev)
 	       dev->dev_type == SAS_SATA_PM_PORT || dev->dev_type == SAS_SATA_PENDING;
 }
 
-int sas_get_ata_info(struct domain_device *dev, struct ex_phy *phy);
 int sas_ata_init(struct domain_device *dev);
 void sas_ata_task_abort(struct sas_task *task);
 void sas_ata_strategy_handler(struct Scsi_Host *shost);
@@ -82,11 +81,6 @@ static inline void sas_suspend_sata(struct asd_sas_port *port)
 
 static inline void sas_resume_sata(struct asd_sas_port *port)
 {
-}
-
-static inline int sas_get_ata_info(struct domain_device *dev, struct ex_phy *phy)
-{
-	return 0;
 }
 
 static inline void sas_ata_end_eh(struct ata_port *ap)
