@@ -594,4 +594,9 @@ struct ftrace_likely_data {
 #define __diag_ignore_all(option, comment)
 #endif
 
+/* Provide no-op for non-null static code analysis hint if unsupported */
+#ifndef ASSUME_NONNULL
+# define ASSUME_NONNULL(ptr) do { } while (0)
+#endif
+
 #endif /* __LINUX_COMPILER_TYPES_H */

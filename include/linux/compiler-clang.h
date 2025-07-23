@@ -136,3 +136,13 @@
  * rely on the auto-detected CONFIG_CC_HAS_TYPEOF_UNQUAL.
  */
 #define CC_HAS_TYPEOF_UNQUAL (__clang_major__ >= 19)
+
+/*
+ * Tell static code analysis tools that this pointer is
+ * invariably non-null
+ */
+#if defined(__clang_analyzer__) && __has_builtin(__builtin_assume)
+  #define ASSUME_NONNULL(ptr) do { __builtin_assume((ptr) != NULL); } while (0)
+#else
+  #define ASSUME_NONNULL(ptr) do { } while (0)
+#endif
