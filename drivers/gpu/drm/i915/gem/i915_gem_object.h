@@ -563,7 +563,7 @@ __i915_gem_object_get_dirty_page(struct drm_i915_gem_object *obj, pgoff_t n);
 
 /**
  * __i915_gem_object_get_dma_address_len - helper to get bus addresses of
- * targeted DMA mapped scatterlist from i915 GEM buffer object and it's length
+ * targeted DMA mapped scatterlist from i915 GEM buffer object and its length
  * @obj: i915 GEM buffer object
  * @n: page offset
  * @len: DMA mapped scatterlist's DMA bus addresses length to return

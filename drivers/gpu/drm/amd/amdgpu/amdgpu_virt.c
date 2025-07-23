@@ -103,7 +103,7 @@ int amdgpu_virt_request_full_gpu(struct amdgpu_device *adev, bool init)
  * @adev:	amdgpu device.
  * @init:	is driver init time.
  * When finishing driver init/fini, need to release full gpu access.
- * Return: Zero if release success, otherwise will returen error.
+ * Return: Zero if release success, otherwise will return error.
  */
 int amdgpu_virt_release_full_gpu(struct amdgpu_device *adev, bool init)
 {

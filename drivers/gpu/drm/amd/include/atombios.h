@@ -437,7 +437,7 @@ typedef struct _ATOM_ADJUST_MEMORY_CLOCK_FREQ
 
 typedef struct _COMPUTE_MEMORY_ENGINE_PLL_PARAMETERS
 {
-  ULONG   ulClock;        //When returen, it's the re-calculated clock based on given Fb_div Post_Div and ref_div
+  ULONG   ulClock;        //When return, it's the re-calculated clock based on given Fb_div Post_Div and ref_div
   UCHAR   ucAction;       //0:reserved //1:Memory //2:Engine
   UCHAR   ucReserved;     //may expand to return larger Fbdiv later
   UCHAR   ucFbDiv;        //return value
@@ -7270,7 +7270,7 @@ typedef struct _ENABLE_GRAPH_SURFACE_PS_ALLOCATION
 
 typedef struct _MEMORY_CLEAN_UP_PARAMETERS
 {
-  USHORT  usMemoryStart;                //in 8Kb boundry, offset from memory base address
+  USHORT  usMemoryStart;                //in 8Kb boundary, offset from memory base address
   USHORT  usMemorySize;                 //8Kb blocks aligned
 }MEMORY_CLEAN_UP_PARAMETERS;
 
@@ -7957,7 +7957,7 @@ typedef struct _ATOM_VRAM_MODULE_V8
   UCHAR   ucVREFI;                          // Not used.
   USHORT  usReserved;                       // Not used
   USHORT  usMemorySize;                     // Total memory size in unit of MB for CONFIG_MEMSIZE zeros
-  UCHAR   ucMcTunningSetId;                 // MC phy registers set per.
+  UCHAR   ucMcTuningSetId;                  // MC phy registers set per.
   UCHAR   ucRowNum;
 // Memory Module specific values
   USHORT  usEMRS2Value;                     // EMRS2/MR2 Value.

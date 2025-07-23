@@ -938,7 +938,7 @@ static int amdgpu_uvd_cs_pass2(struct amdgpu_uvd_cs_ctx *ctx)
 	cmd = amdgpu_ib_get_value(ctx->ib, ctx->idx) >> 1;
 	if (cmd < 0x4) {
 		if ((end - start) < ctx->buf_sizes[cmd]) {
-			DRM_ERROR("buffer (%d) to small (%d / %d)!\n", cmd,
+			DRM_ERROR("buffer (%d) too small (%d / %d)!\n", cmd,
 				  (unsigned int)(end - start),
 				  ctx->buf_sizes[cmd]);
 			return -EINVAL;
@@ -946,7 +946,7 @@ static int amdgpu_uvd_cs_pass2(struct amdgpu_uvd_cs_ctx *ctx)
 
 	} else if (cmd == 0x206) {
 		if ((end - start) < ctx->buf_sizes[4]) {
-			DRM_ERROR("buffer (%d) to small (%d / %d)!\n", cmd,
+			DRM_ERROR("buffer (%d) too small (%d / %d)!\n", cmd,
 					  (unsigned int)(end - start),
 					  ctx->buf_sizes[4]);
 			return -EINVAL;

@@ -746,7 +746,7 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		for SSBO, STATE_TYPE=0 appears to be addresses (four dwords each),
 		STATE_TYPE=1 sizes, STATE_TYPE=2 addresses again (two dwords each)
 
-		Compute has it's own dedicated SSBO state, it seems, but the rest
+		Compute has its own dedicated SSBO state, it seems, but the rest
 		of the stages share state
 		 -->
 		<value name="SB4_SSBO"   value="0xe"/>

@@ -171,7 +171,7 @@ static void drm_sched_fence_set_deadline_finished(struct dma_fence *f,
 	spin_unlock_irqrestore(&fence->lock, flags);
 
 	/*
-	 * smp_load_aquire() to ensure that if we are racing another
+	 * smp_load_acquire() to ensure that if we are racing another
 	 * thread calling drm_sched_fence_set_parent(), that we see
 	 * the parent set before it calls test_bit(HAS_DEADLINE_BIT)
 	 */

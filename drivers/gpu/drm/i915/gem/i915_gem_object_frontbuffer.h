@@ -75,7 +75,7 @@ i915_gem_object_get_frontbuffer(const struct drm_i915_gem_object *obj)
  * @front: The frontbuffer to set
  *
  * Set object's frontbuffer pointer. If frontbuffer is already set for the
- * object keep it and return it's pointer to the caller. Please note that RCU
+ * object keep it and return its pointer to the caller. Please note that RCU
  * mechanism is used to handle e.g. ongoing removal of frontbuffer pointer. This
  * function is protected by i915->display.fb_tracking.lock
  *

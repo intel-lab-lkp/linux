@@ -548,7 +548,7 @@ void msm_gem_unpin_locked(struct drm_gem_object *obj)
 /* Special unpin path for use in fence-signaling path, avoiding the need
  * to hold the obj lock by only depending on things that a protected by
  * the LRU lock.  In particular we know that that we already have backing
- * and and that the object's dma_resv has the fence for the current
+ * and that the object's dma_resv has the fence for the current
  * submit/job which will prevent us racing against page eviction.
  */
 void msm_gem_unpin_active(struct drm_gem_object *obj)

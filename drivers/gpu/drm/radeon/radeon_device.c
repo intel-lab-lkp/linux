@@ -197,7 +197,7 @@ static void radeon_device_handle_px_quirks(struct radeon_device *rdev)
  * @registers: pointer to the register array
  * @array_size: size of the register array
  *
- * Programs an array or registers with and and or masks.
+ * Programs an array or registers with AND and OR masks.
  * This is a helper for setting golden registers.
  */
 void radeon_program_register_sequence(struct radeon_device *rdev,
@@ -555,7 +555,7 @@ int radeon_wb_init(struct radeon_device *rdev)
  * cover the whole aperture even if VRAM size is inferior to aperture size
  * Novell bug 204882 + along with lots of ubuntu ones
  *
- * Note 3: when limiting vram it's safe to overwritte real_vram_size because
+ * Note 3: when limiting vram it's safe to overwrite real_vram_size because
  * we are not in case where real_vram_size is inferior to mc_vram_size (ie
  * not affected by bogus hw of Novell bug 204882 + along with lots of ubuntu
  * ones)

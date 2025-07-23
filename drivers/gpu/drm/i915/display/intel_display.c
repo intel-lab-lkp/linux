@@ -4713,7 +4713,7 @@ intel_modeset_pipe_config(struct intel_atomic_state *state,
 	}
 
 	/* Dithering seems to not pass-through bits correctly when it should, so
-	 * only enable it on 6bpc panels and when its not a compliance
+	 * only enable it on 6bpc panels and when it's not a compliance
 	 * test requesting 6bpc video pattern.
 	 */
 	crtc_state->dither = (crtc_state->pipe_bpp == 6*3) &&
@@ -6964,7 +6964,7 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 			intel_update_crtc(state, crtc);
 
 			/*
-			 * If this is an already active pipe, it's DDB changed,
+			 * If this is an already active pipe, its DDB changed,
 			 * and this isn't the last pipe that needs updating
 			 * then we need to wait for a vblank to pass for the
 			 * new ddb allocation to take effect.

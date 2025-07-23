@@ -221,7 +221,7 @@ struct mgag200_device_info {
 
 	/*
 	 * HW does not handle 'startadd' register correctly. Always set
-	 * it's value to 0.
+	 * its value to 0.
 	 */
 	bool bug_no_startadd:1;
 };

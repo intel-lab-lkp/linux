@@ -667,7 +667,7 @@ static int uvd_v7_0_resume(struct amdgpu_ip_block *ip_block)
  *
  * @adev: amdgpu_device pointer
  *
- * Let the UVD memory controller know it's offsets
+ * Let the UVD memory controller know its offsets
  */
 static void uvd_v7_0_mc_resume(struct amdgpu_device *adev)
 {
@@ -866,7 +866,7 @@ static int uvd_v7_0_sriov_start(struct amdgpu_device *adev)
 			MMSCH_V1_0_INSERT_DIRECT_RD_MOD_WT(SOC15_REG_OFFSET(UVD, i, mmUVD_CGC_CTRL),
 							   ~UVD_CGC_CTRL__DYN_CLOCK_MODE_MASK, 0);
 
-			/* disable interupt */
+			/* disable interrupt */
 			MMSCH_V1_0_INSERT_DIRECT_RD_MOD_WT(SOC15_REG_OFFSET(UVD, i, mmUVD_MASTINT_EN),
 							   ~UVD_MASTINT_EN__VCPU_EN_MASK, 0);
 
@@ -979,7 +979,7 @@ static int uvd_v7_0_start(struct amdgpu_device *adev)
 		WREG32_P(SOC15_REG_OFFSET(UVD, k, mmUVD_CGC_CTRL), 0,
 				~UVD_CGC_CTRL__DYN_CLOCK_MODE_MASK);
 
-		/* disable interupt */
+		/* disable interrupt */
 		WREG32_P(SOC15_REG_OFFSET(UVD, k, mmUVD_MASTINT_EN), 0,
 				~UVD_MASTINT_EN__VCPU_EN_MASK);
 

@@ -591,7 +591,7 @@ static void mipi_tx_fg_cfg(struct kmb_dsi *kmb_dsi, u8 frame_gen,
 	struct mipi_tx_frame_timing_cfg fg_t_cfg;
 
 	/* Calculate the total frame generator number of
-	 * lines based on it's active sections
+	 * lines based on its active sections
 	 */
 	for (i = 0; i < MIPI_TX_FRAME_GEN_SECTIONS; i++) {
 		if (fg_cfg->sections[i])

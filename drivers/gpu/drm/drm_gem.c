@@ -1501,7 +1501,7 @@ drm_gem_lru_scan(struct drm_gem_lru *lru,
 		/*
 		 * Note that this still needs to be trylock, since we can
 		 * hit shrinker in response to trying to get backing pages
-		 * for this obj (ie. while it's lock is already held)
+		 * for this obj (ie. while its lock is already held)
 		 */
 		if (!dma_resv_trylock(obj->resv)) {
 			*remaining += obj->size >> PAGE_SHIFT;

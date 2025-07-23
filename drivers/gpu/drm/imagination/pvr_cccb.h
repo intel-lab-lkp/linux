@@ -90,7 +90,7 @@ pvr_cccb_get_size_of_cmd_with_hdr(u32 cmd_size)
  * @size: Command sequence size.
  *
  * Returns:
- *  * true it the CCCB is big enough to contain a command sequence, or
+ *  * true if the CCCB is big enough to contain a command sequence, or
  *  * false otherwise.
  */
 static __always_inline bool

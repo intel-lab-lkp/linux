@@ -48,7 +48,7 @@
 // For DML-C changes that hasn't been propagated to VBA yet
 //#define __DML_VBA_ALLOW_DELTA__
 
-// Move these to ip paramaters/constant
+// Move these to ip parameters/constant
 
 // At which vstartup the DML start to try if the mode can be supported
 #define __DML_VBA_MIN_VSTARTUP__    9

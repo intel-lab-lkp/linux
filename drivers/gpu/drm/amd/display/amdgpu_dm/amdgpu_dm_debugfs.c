@@ -1231,7 +1231,7 @@ static ssize_t dp_dsc_passthrough_set(struct file *f, const char __user *buf,
  * Returns the HDCP capability of the Display (1.4 for now).
  *
  * NOTE* Not all HDMI displays report their HDCP caps even when they are capable.
- * Since its rare for a display to not be HDCP 1.4 capable, we set HDMI as always capable.
+ * Since it's rare for a display to not be HDCP 1.4 capable, we set HDMI as always capable.
  *
  * Example usage: cat /sys/kernel/debug/dri/0/DP-1/hdcp_sink_capability
  *		or cat /sys/kernel/debug/dri/0/HDMI-A-1/hdcp_sink_capability
@@ -1392,7 +1392,7 @@ static int dp_dsc_fec_support_show(struct seq_file *m, void *data)
 			/* aconnector sets dsc_aux during get_modes call
 			 * if MST connector has it means it can either
 			 * enable DSC on the sink device or on MST branch
-			 * its connected to.
+			 * it's connected to.
 			 */
 			if (aconnector->dsc_aux) {
 				is_fec_supported = true;
@@ -1419,7 +1419,7 @@ static int dp_dsc_fec_support_show(struct seq_file *m, void *data)
  * and enable, and dm connector state update.
  *
  * Retrigger HPD on an existing connector by echoing 1 into
- * its respectful "trigger_hotplug" debugfs entry:
+ * its respective "trigger_hotplug" debugfs entry:
  *
  *	echo 1 > /sys/kernel/debug/dri/0/DP-X/trigger_hotplug
  *

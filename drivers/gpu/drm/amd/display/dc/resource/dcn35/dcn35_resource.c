@@ -1896,8 +1896,8 @@ static bool dcn35_resource_construct(
 
 	/* max_disp_clock_khz_at_vmin is slightly lower than the STA value in order
 	 * to provide some margin.
-	 * It's expected for furture ASIC to have equal or higher value, in order to
-	 * have determinstic power improvement from generate to genration.
+	 * It's expected for future ASIC to have equal or higher value, in order to
+	 * have deterministic power improvement from generation to generation.
 	 * (i.e., we should not expect new ASIC generation with lower vmin rate)
 	 */
 	dc->caps.max_disp_clock_khz_at_vmin = 650000;

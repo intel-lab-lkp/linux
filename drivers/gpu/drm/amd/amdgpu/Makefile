@@ -288,7 +288,7 @@ amdgpu-y += amdgpu_cgs.o
 # GPU scheduler
 amdgpu-y += amdgpu_job.o
 
-# ACP componet
+# ACP component
 ifneq ($(CONFIG_DRM_AMD_ACP),)
 amdgpu-y += amdgpu_acp.o
 

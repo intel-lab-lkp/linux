@@ -7,7 +7,7 @@
  * This file implements HW context support. On gen5+ a HW context consists of an
  * opaque GPU object which is referenced at times of context saves and restores.
  * With RC6 enabled, the context is also referenced as the GPU enters and exists
- * from RC6 (GPU has it's own internal power context, except on gen5). Though
+ * from RC6 (GPU has its own internal power context, except on gen5). Though
  * something like a context does exist for the media ring, the code only
  * supports contexts for the render ring.
  *

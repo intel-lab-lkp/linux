@@ -403,7 +403,7 @@ static int vcn_v4_0_5_resume(struct amdgpu_ip_block *ip_block)
  *
  * @vinst: VCN instance
  *
- * Let the VCN memory controller know it's offsets
+ * Let the VCN memory controller know its offsets
  */
 static void vcn_v4_0_5_mc_resume(struct amdgpu_vcn_inst *vinst)
 {
@@ -465,7 +465,7 @@ static void vcn_v4_0_5_mc_resume(struct amdgpu_vcn_inst *vinst)
  * @vinst: VCN instance
  * @indirect: indirectly write sram
  *
- * Let the VCN memory controller know it's offsets with dpg mode
+ * Let the VCN memory controller know its offsets with dpg mode
  */
 static void vcn_v4_0_5_mc_resume_dpg_mode(struct amdgpu_vcn_inst *vinst,
 					  bool indirect)

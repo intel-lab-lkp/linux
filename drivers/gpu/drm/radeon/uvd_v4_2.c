@@ -33,7 +33,7 @@
  *
  * @rdev: radeon_device pointer
  *
- * Let the UVD memory controller know it's offsets
+ * Let the UVD memory controller know its offsets
  */
 int uvd_v4_2_resume(struct radeon_device *rdev)
 {

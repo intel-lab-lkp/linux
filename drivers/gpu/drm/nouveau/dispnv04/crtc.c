@@ -222,7 +222,7 @@ nv_crtc_dpms(struct drm_crtc *crtc, int mode)
 	}
 
 	NVVgaSeqReset(dev, nv_crtc->index, true);
-	/* Each head has it's own sequencer, so we can turn it off when we want */
+	/* Each head has its own sequencer, so we can turn it off when we want */
 	seq1 |= (NVReadVgaSeq(dev, nv_crtc->index, NV_VIO_SR_CLOCK_INDEX) & ~0x20);
 	NVWriteVgaSeq(dev, nv_crtc->index, NV_VIO_SR_CLOCK_INDEX, seq1);
 	crtc17 |= (NVReadVgaCrtc(dev, nv_crtc->index, NV_CIO_CR_MODE_INDEX) & ~0x80);

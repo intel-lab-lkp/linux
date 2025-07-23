@@ -101,7 +101,7 @@ struct gma_encoder {
 #define DDI_MASK	0x03
 	void *dev_priv; /* For sdvo_priv, lvds_priv, etc... */
 
-	/* FIXME: Either make SDVO and LVDS store it's i2c here or give CDV it's
+	/* FIXME: Either make SDVO and LVDS store its i2c here or give CDV its
 	   own set of output privates */
 	struct gma_i2c_chan *i2c_bus;
 };

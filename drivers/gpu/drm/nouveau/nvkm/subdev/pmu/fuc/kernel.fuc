@@ -254,7 +254,7 @@ ticks_from_ns:
 	imm32($r13, HW_TICKS_PER_US)
 	call(mulu32_32_64)
 
-	/* use an immeditate, it's ok because HW_TICKS_PER_US < 16 bits */
+	/* use an immediate, it's ok because HW_TICKS_PER_US < 16 bits */
 	div $r12 $r12 1000
 
 	/* check if there wasn't any overflow */

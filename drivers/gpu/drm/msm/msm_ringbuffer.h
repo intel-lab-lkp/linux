@@ -98,7 +98,7 @@ struct msm_ringbuffer {
 
 	/*
 	 * preempt_lock protects preemption and serializes wptr updates against
-	 * preemption.  Can be aquired from irq context.
+	 * preemption.  Can be acquired from irq context.
 	 */
 	spinlock_t preempt_lock;
 

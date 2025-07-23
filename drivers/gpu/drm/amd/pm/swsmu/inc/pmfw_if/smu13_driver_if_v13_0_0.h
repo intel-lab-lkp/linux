@@ -1618,7 +1618,7 @@ typedef struct {
 #define TABLE_WIFIBAND                12
 #define TABLE_COUNT                   13
 
-//IH Interupt ID
+//IH Interrupt ID
 #define IH_INTERRUPT_ID_TO_DRIVER                   0xFE
 #define IH_INTERRUPT_CONTEXT_ID_BACO                0x2
 #define IH_INTERRUPT_CONTEXT_ID_AC                  0x3

@@ -1002,7 +1002,7 @@ int kfd_topology_init(void)
 	 * topology_device_list
 	 */
 
-	/* Initialize the head for the both the lists */
+	/* Initialize the head for both lists */
 	INIT_LIST_HEAD(&topology_device_list);
 	INIT_LIST_HEAD(&temp_topology_device_list);
 	init_rwsem(&topology_lock);

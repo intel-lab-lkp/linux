@@ -431,7 +431,7 @@ ttm_object_device_init(const struct dma_buf_ops *ops)
 
 	/*
 	 * Our base is at VMWGFX_NUM_MOB + 1 because we want to create
-	 * a seperate namespace for GEM handles (which are
+	 * a separate namespace for GEM handles (which are
 	 * 1..VMWGFX_NUM_MOB) and the surface handles. Some ioctl's
 	 * can take either handle as an argument so we want to
 	 * easily be able to tell whether the handle refers to a

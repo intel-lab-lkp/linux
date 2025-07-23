@@ -1621,7 +1621,7 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  *
  *	Userspace first need to detect the HDR capabilities of sink by
  *	reading and parsing the EDID. Details of HDR metadata for HDMI
- *	are added in CTA 861.G spec. For DP , its defined in VESA DP
+ *	are added in CTA 861.G spec. For DP , it's defined in VESA DP
  *	Standard v1.4. It needs to then get the metadata information
  *	of the video/game/app content which are encoded in HDR (basically
  *	using HDR transfer functions). With this information it needs to

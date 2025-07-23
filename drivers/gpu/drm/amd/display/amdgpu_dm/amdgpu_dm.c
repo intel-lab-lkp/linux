@@ -5935,7 +5935,7 @@ static void fill_dc_dirty_rects(struct drm_plane *plane,
 	*dirty_regions_changed = false;
 
 	/*
-	 * Cursor plane has it's own dirty rect update interface. See
+	 * Cursor plane has its own dirty rect update interface. See
 	 * dcn10_dmub_update_cursor_data and dmub_cmd_update_cursor_info_data
 	 */
 	if (plane->type == DRM_PLANE_TYPE_CURSOR)
@@ -10537,17 +10537,17 @@ void dm_restore_drm_connector_state(struct drm_device *dev,
  * Grabs all modesetting locks to serialize against any blocking commits,
  * Waits for completion of all non blocking commits.
  */
-static int do_aquire_global_lock(struct drm_device *dev,
-				 struct drm_atomic_state *state)
+static int do_acquire_global_lock(struct drm_device *dev,
+				  struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc;
 	struct drm_crtc_commit *commit;
 	long ret;
 
 	/*
-	 * Adding all modeset locks to aquire_ctx will
-	 * ensure that when the framework release it the
-	 * extra locks we are locking here will get released to
+	 * Adding all modeset locks to acquire_ctx will
+	 * ensure that when the framework releases it, the
+	 * extra locks we are locking here will get released too
 	 */
 	ret = drm_modeset_lock_all_ctx(dev, state->acquire_ctx);
 	if (ret)
@@ -12107,9 +12107,9 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 			goto fail;
 		}
 
-		ret = do_aquire_global_lock(dev, state);
+		ret = do_acquire_global_lock(dev, state);
 		if (ret) {
-			drm_dbg_atomic(dev, "do_aquire_global_lock() failed\n");
+			drm_dbg_atomic(dev, "do_acquire_global_lock() failed\n");
 			goto fail;
 		}
 

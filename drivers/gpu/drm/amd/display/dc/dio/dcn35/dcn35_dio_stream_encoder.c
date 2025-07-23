@@ -332,7 +332,7 @@ static void enc35_stream_encoder_dp_unblank(
 
 	/* DIG_START is removed from the register spec */
 
-	/* switch DP encoder to CRTC data, but reset it the fifo first. It may happen
+	/* switch DP encoder to CRTC data, but reset the fifo first. It may happen
 	 * that it overflows during mode transition, and sometimes doesn't recover.
 	 */
 	REG_UPDATE(DP_STEER_FIFO, DP_STEER_FIFO_RESET, 1);

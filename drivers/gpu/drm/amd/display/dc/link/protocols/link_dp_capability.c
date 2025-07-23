@@ -250,7 +250,7 @@ static union dp_cable_id intersect_cable_id(
 }
 
 /*
- * Return PCON's post FRL link training supported BW if its non-zero, otherwise return max_supported_frl_bw.
+ * Return PCON's post FRL link training supported BW if it's non-zero, otherwise return max_supported_frl_bw.
  */
 static uint32_t intersect_frl_link_bw_support(
 	const uint32_t max_supported_frl_bw_in_kbps,
@@ -1142,7 +1142,7 @@ static void get_active_converter_info(
 		return;
 	}
 
-	/* DPCD 0x5 bit 0 = 1, it indicate it's branch device */
+	/* DPCD 0x5 bit 0 = 1, it indicate its branch device */
 	link->dpcd_caps.is_branch_dev = ds_port.fields.PORT_PRESENT;
 
 	switch (ds_port.fields.PORT_TYPE) {

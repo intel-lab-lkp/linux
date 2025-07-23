@@ -630,8 +630,8 @@ again:
 		void *objptr;
 		int surfid = i % qdev->rom->n_surfaces;
 
-		/* this avoids the case where the objects is in the
-		   idr but has been evicted half way - its makes
+		/* this avoids the case where the object is in the
+		   idr but has been evicted half way - it makes
 		   the idr lookup atomic with the eviction */
 		spin_lock(&qdev->surf_id_idr_lock);
 		objptr = idr_find(&qdev->surf_id_idr, surfid);

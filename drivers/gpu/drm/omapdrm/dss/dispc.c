@@ -1459,7 +1459,7 @@ void dispc_ovl_set_fifo_threshold(struct dispc_device *dispc,
 			FLD_VAL(low, lo_start, lo_end));
 
 	/*
-	 * configure the preload to the pipeline's high threhold, if HT it's too
+	 * configure the preload to the pipeline's high threshold, if HT it's too
 	 * large for the preload field, set the threshold to the maximum value
 	 * that can be held by the preload register
 	 */

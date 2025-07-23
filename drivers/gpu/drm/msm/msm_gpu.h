@@ -444,9 +444,9 @@ struct msm_file_private {
  * @sched_prio: [out] the gpu scheduler priority level which the userspace
  *              priority maps to
  *
- * With drm/scheduler providing it's own level of prioritization, our total
+ * With drm/scheduler providing its own level of prioritization, our total
  * number of available priority levels is (nr_rings * NR_SCHED_PRIORITIES).
- * Each ring is associated with it's own scheduler instance.  However, our
+ * Each ring is associated with its own scheduler instance.  However, our
  * UABI is that lower numerical values are higher priority.  So mapping the
  * single userspace priority level into ring_nr and sched_prio takes some
  * care.  The userspace provided priority (when a submitqueue is created)

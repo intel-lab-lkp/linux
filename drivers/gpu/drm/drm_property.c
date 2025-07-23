@@ -381,7 +381,7 @@ EXPORT_SYMBOL(drm_property_create_bool);
  *
  * This functions adds enumerations to a property.
  *
- * It's use is deprecated, drivers should use one of the more specific helpers
+ * Its use is deprecated, drivers should use one of the more specific helpers
  * to directly create the property with all enumerations already attached.
  *
  * Returns:

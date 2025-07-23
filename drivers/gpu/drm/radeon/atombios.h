@@ -407,7 +407,7 @@ typedef struct _ATOM_ADJUST_MEMORY_CLOCK_FREQ
 
 typedef struct _COMPUTE_MEMORY_ENGINE_PLL_PARAMETERS
 {
-  ULONG   ulClock;        //When returen, it's the re-calculated clock based on given Fb_div Post_Div and ref_div
+  ULONG   ulClock;        //When return, it's the re-calculated clock based on given Fb_div Post_Div and ref_div
   UCHAR   ucAction;       //0:reserved //1:Memory //2:Engine  
   UCHAR   ucReserved;     //may expand to return larger Fbdiv later
   UCHAR   ucFbDiv;        //return value

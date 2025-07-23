@@ -408,7 +408,7 @@ void i915_ttm_free_cached_io_rsgt(struct drm_i915_gem_object *obj)
  * i915_ttm_purge - Clear an object of its memory
  * @obj: The object
  *
- * This function is called to clear an object of it's memory when it is
+ * This function is called to clear an object of its memory when it is
  * marked as not needed anymore.
  *
  * Return: 0 on success, negative error code on failure.

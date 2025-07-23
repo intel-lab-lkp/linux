@@ -96,7 +96,7 @@ void dpu_rm_print_state(struct drm_printer *p,
 			const struct dpu_global_state *global_state);
 
 /**
- * dpu_rm_get_intf - Return a struct dpu_hw_intf instance given it's index.
+ * dpu_rm_get_intf - Return a struct dpu_hw_intf instance given its index.
  * @rm: DPU Resource Manager handle
  * @intf_idx: INTF's index
  */
@@ -106,7 +106,7 @@ static inline struct dpu_hw_intf *dpu_rm_get_intf(struct dpu_rm *rm, enum dpu_in
 }
 
 /**
- * dpu_rm_get_wb - Return a struct dpu_hw_wb instance given it's index.
+ * dpu_rm_get_wb - Return a struct dpu_hw_wb instance given its index.
  * @rm: DPU Resource Manager handle
  * @wb_idx: WB index
  */
@@ -116,7 +116,7 @@ static inline struct dpu_hw_wb *dpu_rm_get_wb(struct dpu_rm *rm, enum dpu_wb wb_
 }
 
 /**
- * dpu_rm_get_sspp - Return a struct dpu_hw_sspp instance given it's index.
+ * dpu_rm_get_sspp - Return a struct dpu_hw_sspp instance given its index.
  * @rm: DPU Resource Manager handle
  * @sspp_idx: SSPP index
  */

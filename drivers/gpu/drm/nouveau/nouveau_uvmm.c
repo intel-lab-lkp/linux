@@ -7,12 +7,12 @@
  * DRM GPU VA manager.
  *
  * The GEMs dma_resv lock protects the GEMs GPUVA list, hence link/unlink of a
- * mapping to it's backing GEM must be performed under this lock.
+ * mapping to its backing GEM must be performed under this lock.
  *
  * Actual map/unmap operations within the fence signalling critical path are
  * protected by installing DMA fences to the corresponding GEMs DMA
  * reservations, such that concurrent BO moves, which itself walk the GEMs GPUVA
- * list in order to map/unmap it's entries, can't occur concurrently.
+ * list in order to map/unmap its entries, can't occur concurrently.
  *
  * Accessing the DRM_GPUVA_INVALIDATED flag doesn't need any separate
  * protection, since there are no accesses other than from BO move callbacks

@@ -340,7 +340,7 @@ static bool need_preempt(const struct intel_engine_cs *engine,
 	 *
 	 * The highest priority request in the queue can not be either
 	 * ELSP[0] or ELSP[1] as, thanks again to PI, if it was the same
-	 * context, it's priority would not exceed ELSP[0] aka last_prio.
+	 * context, its priority would not exceed ELSP[0] aka last_prio.
 	 */
 	return max(virtual_prio(&engine->execlists),
 		   queue_prio(engine->sched_engine)) > last_prio;

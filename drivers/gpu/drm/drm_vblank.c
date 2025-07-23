@@ -390,7 +390,7 @@ u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
 	 * write seqlock in store_vblank(). Note that this is the only place
 	 * where we need an explicit barrier, since all other access goes
 	 * through drm_vblank_count_and_time(), which already has the required
-	 * read barrier curtesy of the read seqlock.
+	 * read barrier courtesy of the read seqlock.
 	 */
 	smp_rmb();
 

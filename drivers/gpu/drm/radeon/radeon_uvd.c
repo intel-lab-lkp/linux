@@ -593,7 +593,7 @@ static int radeon_uvd_cs_reloc(struct radeon_cs_parser *p,
 			return -EINVAL;
 		}
 		if ((end - start) < buf_sizes[cmd]) {
-			DRM_ERROR("buffer (%d) to small (%d / %d)!\n", cmd,
+			DRM_ERROR("buffer (%d) too small (%d / %d)!\n", cmd,
 				  (unsigned)(end - start), buf_sizes[cmd]);
 			return -EINVAL;
 		}

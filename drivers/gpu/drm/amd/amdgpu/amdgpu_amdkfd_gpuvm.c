@@ -927,7 +927,7 @@ static int kfd_mem_attach(struct amdgpu_device *adev, struct kgd_mem *mem,
 			ret = create_dmamap_sg_bo(adev, mem, &bo[i]);
 			if (ret)
 				goto unwind;
-		/* Enable acces to GTT and VRAM BOs of peer devices */
+		/* Enable access to GTT and VRAM BOs of peer devices */
 		} else if (mem->domain == AMDGPU_GEM_DOMAIN_GTT ||
 			   mem->domain == AMDGPU_GEM_DOMAIN_VRAM) {
 			attachment[i]->type = KFD_MEM_ATT_DMABUF;

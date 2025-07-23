@@ -1407,7 +1407,7 @@ err_scratch:
  * For GuC mode of submission read context id from the upper dword of the
  * EXECLIST_STATUS register. Note that we read this value only once and expect
  * that the value stays fixed for the entire OA use case. There are cases where
- * GuC KMD implementation may deregister a context to reuse it's context id, but
+ * GuC KMD implementation may deregister a context to reuse its context id, but
  * we prevent that from happening to the OA context by pinning it.
  */
 static int gen12_get_render_context_id(struct i915_perf_stream *stream)

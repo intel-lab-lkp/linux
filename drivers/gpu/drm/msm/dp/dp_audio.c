@@ -234,7 +234,7 @@ void msm_dp_audio_shutdown(struct drm_connector *connector,
 	 * to execute the shutdown and we can bail out early.
 	 * This also makes sure that we dont cause an unclocked
 	 * access when audio subsystem calls this without DP being
-	 * connected. is_connected cannot be used here as its set
+	 * connected. is_connected cannot be used here as it's set
 	 * to false earlier than this call
 	 */
 	if (!msm_dp_display->audio_enabled)

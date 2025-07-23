@@ -1119,7 +1119,7 @@ void intel_crt_init(struct intel_display *display)
 	drm_connector_helper_add(&connector->base, &intel_crt_connector_helper_funcs);
 
 	/*
-	 * TODO: find a proper way to discover whether we need to set the the
+	 * TODO: find a proper way to discover whether we need to set the
 	 * polarity and link reversal bits or not, instead of relying on the
 	 * BIOS.
 	 */

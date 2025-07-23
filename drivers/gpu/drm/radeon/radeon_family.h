@@ -27,7 +27,7 @@
  */
 
 /* this file defines the CHIP_  and family flags used in the pciids,
- * its is common between kms and non-kms because duplicating it and
+ * its common between kms and non-kms because duplicating it and
  * changing one place is fail.
  */
 #ifndef RADEON_FAMILY_H

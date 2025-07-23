@@ -640,7 +640,7 @@ struct atom_firmware_info_v3_5 {
   uint32_t pspbl_init_reserved[3];
   uint32_t spi_rom_size;                    // GPU spi rom size
   uint16_t support_dev_in_objinfo;
-  uint16_t disp_phy_tunning_size;
+  uint16_t disp_phy_tuning_size;
   uint32_t reserved[16];
 };
 /* 
@@ -3234,7 +3234,7 @@ struct atom_vram_module_v9 {
   uint8_t   channel_num;                   // Number of mem. channels supported in this module
   uint8_t   channel_width;                 // CHANNEL_16BIT/CHANNEL_32BIT/CHANNEL_64BIT
   uint8_t   density;                       // _8Mx32, _16Mx32, _16Mx16, _32Mx16
-  uint8_t   tunningset_id;                 // MC phy registers set per. 
+  uint8_t   tuningset_id;                  // MC phy registers set per.
   uint8_t   vender_rev_id;                 // [7:4] Revision, [3:0] Vendor code
   uint8_t   refreshrate;                   // [1:0]=RefreshFactor (00=8ms, 01=16ms, 10=32ms,11=64ms)
   uint8_t   hbm_ven_rev_id;		   // hbm_ven_rev_id
@@ -3266,7 +3266,7 @@ struct atom_vram_info_header_v2_3 {
 */
 struct atom_vram_module_v3_0 {
 	uint8_t density;
-	uint8_t tunningset_id;
+	uint8_t tuningset_id;
 	uint8_t ext_memory_id;
 	uint8_t dram_vendor_id;
 	uint16_t dram_info_offset;
@@ -3357,7 +3357,7 @@ struct atom_vram_module_v10 {
   uint8_t   channel_num;                   // Number of mem. channels supported in this module
   uint8_t   channel_width;                 // CHANNEL_16BIT/CHANNEL_32BIT/CHANNEL_64BIT
   uint8_t   density;                       // _8Mx32, _16Mx32, _16Mx16, _32Mx16
-  uint8_t   tunningset_id;                 // MC phy registers set per
+  uint8_t   tuningset_id;                  // MC phy registers set per
   uint8_t   vender_rev_id;                 // [7:4] Revision, [3:0] Vendor code
   uint8_t   refreshrate;                   // [1:0]=RefreshFactor (00=8ms, 01=16ms, 10=32ms,11=64ms)
   uint8_t   vram_flags;			   // bit0= bankgroup enable
@@ -3397,7 +3397,7 @@ struct atom_vram_module_v11 {
 	uint8_t   channel_num;                   // Number of mem. channels supported in this module
 	uint8_t   channel_width;                 // CHANNEL_16BIT/CHANNEL_32BIT/CHANNEL_64BIT
 	uint8_t   density;                       // _8Mx32, _16Mx32, _16Mx16, _32Mx16
-	uint8_t   tunningset_id;                 // MC phy registers set per.
+	uint8_t   tuningset_id;                  // MC phy registers set per.
 	uint16_t  reserved[4];                   // reserved
 	uint8_t   vender_rev_id;                 // [7:4] Revision, [3:0] Vendor code
 	uint8_t   refreshrate;			 // [1:0]=RefreshFactor (00=8ms, 01=16ms, 10=32ms,11=64ms)

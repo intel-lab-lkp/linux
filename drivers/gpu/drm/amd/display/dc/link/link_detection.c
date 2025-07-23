@@ -376,7 +376,7 @@ static void query_dp_dual_mode_adaptor(
 
 	/* Check signature */
 	for (i = 0; i < sizeof(dongle_signature->id); ++i) {
-		/* If its not the right signature,
+		/* If it's not the right signature,
 		 * skip mismatch in subversion byte.*/
 		if (dongle_signature->id[i] !=
 			dp_hdmi_dongle_signature_str[i] && i != 3) {
@@ -1328,8 +1328,8 @@ bool link_is_hdcp14(struct dc_link *link, enum signal_type signal)
 	case SIGNAL_TYPE_DVI_DUAL_LINK:
 	case SIGNAL_TYPE_HDMI_TYPE_A:
 	/* HDMI doesn't tell us its HDCP(1.4) capability, so assume to always be capable,
-	 * we can poll for bksv but some displays have an issue with this. Since its so rare
-	 * for a display to not be 1.4 capable, this assumtion is ok
+	 * we can poll for bksv but some displays have an issue with this. Since it's so rare
+	 * for a display to not be 1.4 capable, this assumption is ok
 	 */
 		ret = true;
 		break;

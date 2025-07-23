@@ -1499,7 +1499,7 @@ static bool dcn32_full_validate_bw_helper(struct dc *dc,
 			 * Adding phantom pipes won't change the validation result, so change the DML input param
 			 * for P-State support before adding phantom pipes and recalculating the DML result.
 			 * However, this case is only applicable for SubVP + DRR cases because the prefetch mode
-			 * will not allow for switch in VBLANK. The DRR display must have it's VBLANK stretched
+			 * will not allow for switch in VBLANK. The DRR display must have its VBLANK stretched
 			 * enough to support MCLK switching.
 			 */
 			if (*vlevel == context->bw_ctx.dml.soc.num_states &&
@@ -2323,7 +2323,7 @@ void dcn32_calculate_wm_and_dlg_fpu(struct dc *dc, struct dc_state *context,
 
 	/* need to find dummy latency index for subvp */
 	if (subvp_in_use) {
-		/* Override DRAMClockChangeSupport for SubVP + DRR case where the DRR cannot switch without stretching it's VBLANK */
+		/* Override DRAMClockChangeSupport for SubVP + DRR case where the DRR cannot switch without stretching its VBLANK */
 		if (!pstate_en) {
 			context->bw_ctx.dml.vba.DRAMClockChangeSupport[vlevel][maxMpcComb] = dm_dram_clock_change_vblank_w_mall_sub_vp;
 			context->bw_ctx.dml.soc.allow_for_pstate_or_stutter_in_vblank_final = dm_prefetch_support_fclk_and_stutter;

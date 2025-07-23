@@ -31,7 +31,7 @@ static void tidss_crtc_finish_page_flip(struct tidss_crtc *tcrtc)
 	/*
 	 * New settings are taken into use at VFP, and GO bit is cleared at
 	 * the same time. This happens before the vertical blank interrupt.
-	 * So there is a small change that the driver sets GO bit after VFP, but
+	 * So there is a small chance that the driver sets GO bit after VFP, but
 	 * before vblank, and we have to check for that case here.
 	 */
 	busy = dispc_vp_go_busy(tidss->dispc, tcrtc->hw_videoport);
@@ -176,7 +176,7 @@ static void tidss_crtc_atomic_flush(struct drm_crtc *crtc,
 
 	/*
 	 * Flush CRTC changes with go bit only if new modeset is not
-	 * coming, so CRTC is enabled trough out the commit.
+	 * coming, so CRTC is enabled throughout the commit.
 	 */
 	if (drm_atomic_crtc_needs_modeset(crtc->state))
 		return;
@@ -269,7 +269,7 @@ static void tidss_crtc_atomic_disable(struct drm_crtc *crtc,
 	 * If a layer is left enabled when the videoport is disabled, and the
 	 * vid pipeline that was used for the layer is taken into use on
 	 * another videoport, the DSS will report sync lost issues. Disable all
-	 * the layers here as a work-around.
+	 * the layers here as a workaround.
 	 */
 	for (u32 layer = 0; layer < tidss->feat->num_planes; layer++)
 		dispc_ovr_enable_layer(tidss->dispc, tcrtc->hw_videoport, layer,
@@ -435,9 +435,9 @@ struct tidss_crtc *tidss_crtc_create(struct tidss_device *tidss,
 	drm_crtc_helper_add(crtc, &tidss_crtc_helper_funcs);
 
 	/*
-	 * The dispc gamma functions adapt to what ever size we ask
+	 * The dispc gamma functions adapt to whatever size we ask
 	 * from it no matter what HW supports. X-server assumes 256
-	 * element gamma tables so lets use that.
+	 * element gamma tables so let's use that.
 	 */
 	if (tidss->feat->vp_feat.color.gamma_size)
 		gamma_lut_size = 256;

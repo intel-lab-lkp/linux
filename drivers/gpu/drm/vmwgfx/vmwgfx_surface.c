@@ -444,7 +444,7 @@ out_no_id:
  *                  vmw_surface.
  * @val_buf:        Pointer to a struct ttm_validate_buffer containing
  *                  information about the backup buffer.
- * @bind:           Boolean wether to DMA to the surface.
+ * @bind:           Boolean whether to DMA to the surface.
  *
  * Transfer backup data to or from a legacy surface as part of the
  * validation process.

@@ -286,7 +286,7 @@ void vmw_bo_dirty_release(struct vmw_bo *vbo)
  * @res: The resource
  *
  * This function will pick up all dirty ranges affecting the resource from
- * it's backup mob, and call vmw_resource_dirty_update() once for each
+ * its backup mob, and call vmw_resource_dirty_update() once for each
  * range. The transferred ranges will be cleared from the backing mob's
  * dirty tracking.
  */
@@ -368,7 +368,7 @@ void vmw_bo_dirty_clear(struct vmw_bo *vbo)
  * @res: The resource
  *
  * This function will clear all dirty ranges affecting the resource from
- * it's backup mob's dirty tracking.
+ * its backup mob's dirty tracking.
  */
 void vmw_bo_dirty_clear_res(struct vmw_resource *res)
 {

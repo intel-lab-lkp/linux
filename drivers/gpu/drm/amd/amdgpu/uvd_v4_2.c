@@ -368,7 +368,7 @@ static int uvd_v4_2_start(struct amdgpu_device *adev)
 		return r;
 	}
 
-	/* enable interupt */
+	/* enable interrupt */
 	WREG32_P(mmUVD_MASTINT_EN, 3<<1, ~(3 << 1));
 
 	WREG32_P(mmUVD_STATUS, 0, ~(1<<2));
@@ -569,7 +569,7 @@ static void uvd_v4_2_ring_insert_nop(struct amdgpu_ring *ring, uint32_t count)
  *
  * @adev: amdgpu_device pointer
  *
- * Let the UVD memory controller know it's offsets
+ * Let the UVD memory controller know its offsets
  */
 static void uvd_v4_2_mc_resume(struct amdgpu_device *adev)
 {

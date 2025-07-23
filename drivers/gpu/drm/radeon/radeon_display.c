@@ -940,7 +940,7 @@ static void avivo_get_fb_ref_div(unsigned nom, unsigned den, unsigned post_div,
 }
 
 /**
- * radeon_compute_pll_avivo - compute PLL paramaters
+ * radeon_compute_pll_avivo - compute PLL parameters
  *
  * @pll: information about the PLL
  * @freq: target frequency

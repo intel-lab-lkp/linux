@@ -496,7 +496,7 @@ nv50_crc_raster_type(enum nv50_crc_source source)
 }
 
 /* We handle mapping the memory for CRC notifiers ourselves, since each
- * notifier needs it's own handle
+ * notifier needs its own handle
  */
 static inline int
 nv50_crc_ctx_init(struct nv50_head *head, struct nvif_mmu *mmu,

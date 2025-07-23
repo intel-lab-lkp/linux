@@ -1574,7 +1574,7 @@ static ssize_t amdgpu_get_unique_id(struct device *dev,
  * DOC: thermal_throttling_logging
  *
  * Thermal throttling pulls down the clock frequency and thus the performance.
- * It's an useful mechanism to protect the chip from overheating. Since it
+ * It's a useful mechanism to protect the chip from overheating. Since it
  * impacts performance, the user controls whether it is enabled and if so,
  * the log frequency.
  *

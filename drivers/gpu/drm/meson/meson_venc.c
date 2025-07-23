@@ -49,7 +49,7 @@
  * The ENCP is designed for Progressive encoding but can also generate
  * 1080i interlaced pixels, and was initially designed to encode pixels for
  * VDAC to output RGB ou YUV analog outputs.
- * It's output is only used through the ENCP_DVI encoder for HDMI.
+ * Its output is only used through the ENCP_DVI encoder for HDMI.
  * The ENCL LVDS encoder is not implemented.
  *
  * The ENCI and ENCP encoders needs specially defined parameters for each

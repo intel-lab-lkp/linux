@@ -609,7 +609,7 @@ int intel_dp_hdcp2_config_stream_type(struct intel_connector *connector,
 	 * Errata for DP: As Stream type is used for encryption, Receiver
 	 * should be communicated with stream type for the decryption of the
 	 * content.
-	 * Repeater will be communicated with stream type as a part of it's
+	 * Repeater will be communicated with stream type as a part of its
 	 * auth later in time.
 	 */
 	stream_type_msg.msg_id = HDCP_2_2_ERRATA_DP_STREAM_TYPE;

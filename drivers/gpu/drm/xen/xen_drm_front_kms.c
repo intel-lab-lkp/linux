@@ -231,7 +231,7 @@ static int display_check(struct drm_simple_display_pipe *pipe,
 	 * DRM helpers assume that it doesn't handle vblanking and start
 	 * sending out fake VBLANK events automatically.
 	 *
-	 * As xen contains it's own logic for sending out VBLANK events
+	 * As xen contains its own logic for sending out VBLANK events
 	 * in send_pending_event(), disable no_vblank (i.e., the xen
 	 * driver has vblanking support).
 	 */

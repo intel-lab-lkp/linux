@@ -2089,7 +2089,7 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
  * @vm: the requested VM
  * @addr: the address
  *
- * Find a mapping by it's address.
+ * Find a mapping by its address.
  *
  * Returns:
  * The amdgpu_bo_va_mapping matching for addr or NULL

@@ -1372,10 +1372,10 @@ static void disable_dangling_plane(struct dc *dc, struct dc_state *context)
 				dc->hwss.interdependent_update_lock(dc, dc->current_state, false);
 				dc->hwss.post_unlock_program_front_end(dc, dangling_context);
 			}
-			/* We need to put the phantom OTG back into it's default (disabled) state or we
+			/* We need to put the phantom OTG back into its default (disabled) state or we
 			 * can get corruption when transition from one SubVP config to a different one.
 			 * The OTG is set to disable on falling edge of VUPDATE so the plane disable
-			 * will still get it's double buffer update.
+			 * will still get its double buffer update.
 			 */
 			if (is_phantom) {
 				if (tg->funcs->disable_phantom_crtc)

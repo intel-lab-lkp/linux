@@ -559,7 +559,7 @@ int radeon_vm_bo_set_addr(struct radeon_device *rdev,
 			return r;
 		}
 
-		/* aquire mutex again */
+		/* acquire mutex again */
 		mutex_lock(&vm->mutex);
 		if (vm->page_tables[pt_idx].bo) {
 			/* someone else allocated the pt in the meantime */

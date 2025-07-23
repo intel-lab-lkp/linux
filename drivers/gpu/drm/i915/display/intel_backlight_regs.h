@@ -35,9 +35,9 @@
 #define   BLM_TRANSCODER_EDP		(3 << 29)
 #define   BLM_PIPE(pipe)		((pipe) << 29)
 #define   BLM_POLARITY_I965		(1 << 28) /* gen4 only */
-#define   BLM_PHASE_IN_INTERUPT_STATUS	(1 << 26)
+#define   BLM_PHASE_IN_INTERRUPT_STATUS	(1 << 26)
 #define   BLM_PHASE_IN_ENABLE		(1 << 25)
-#define   BLM_PHASE_IN_INTERUPT_ENABL	(1 << 24)
+#define   BLM_PHASE_IN_INTERRUPT_ENABL	(1 << 24)
 #define   BLM_PHASE_IN_TIME_BASE_SHIFT	(16)
 #define   BLM_PHASE_IN_TIME_BASE_MASK	(0xff << 16)
 #define   BLM_PHASE_IN_COUNT_SHIFT	(8)

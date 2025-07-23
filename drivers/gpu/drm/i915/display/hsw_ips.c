@@ -42,7 +42,7 @@ static void hsw_ips_enable(const struct intel_crtc_state *crtc_state)
 			    snb_pcode_write(&i915->uncore, DISPLAY_IPS_CONTROL,
 					    val | IPS_PCODE_CONTROL));
 		/*
-		 * Quoting Art Runyan: "its not safe to expect any particular
+		 * Quoting Art Runyan: "it's not safe to expect any particular
 		 * value in IPS_CTL bit 31 after enabling IPS through the
 		 * mailbox." Moreover, the mailbox may return a bogus state,
 		 * so we need to just enable it and continue on.

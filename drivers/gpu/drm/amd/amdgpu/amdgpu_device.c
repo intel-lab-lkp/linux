@@ -2377,7 +2377,7 @@ int amdgpu_device_ip_wait_for_idle(struct amdgpu_device *adev,
  * @block_type: Type of hardware IP (SMU, GFX, UVD, etc.)
  *
  * Check if the hardware IP is enable or not.
- * Returns true if it the IP is enable, false if not.
+ * Returns true if the IP is enabled, false if not.
  */
 bool amdgpu_device_ip_is_valid(struct amdgpu_device *adev,
 			       enum amd_ip_block_type block_type)
@@ -2829,7 +2829,7 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 				}
 			}
 
-			/*get pf2vf msg info at it's earliest time*/
+			/*get pf2vf msg info at its earliest time*/
 			if (amdgpu_sriov_vf(adev))
 				amdgpu_virt_init_data_exchange(adev);
 
@@ -6239,7 +6239,7 @@ static void amdgpu_device_gpu_resume(struct amdgpu_device *adev,
 			amdgpu_amdkfd_post_reset(tmp_adev);
 
 		/* kfd_post_reset will do nothing if kfd device is not initialized,
-		 * need to bring up kfd here if it's not be initialized before
+		 * need to bring up kfd here if it's not been initialized before
 		 */
 		if (!adev->kfd.init_complete)
 			amdgpu_amdkfd_device_init(adev);
@@ -6896,7 +6896,7 @@ out:
  * amdgpu_pci_resume() - resume normal ops after PCI reset
  * @pdev: pointer to PCI device
  *
- * Called when the error recovery driver tells us that its
+ * Called when the error recovery driver tells us that it's
  * OK to resume normal operation.
  */
 void amdgpu_pci_resume(struct pci_dev *pdev)

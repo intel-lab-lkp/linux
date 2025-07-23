@@ -740,7 +740,7 @@ static void update_subvp_prefetch_end_to_mall_start(struct dc *dc,
 			(((uint64_t)phantom_timing1->pix_clk_100hz * 100) + dc->caps.subvp_prefetch_end_to_mall_start_us));
 
 	// Whichever SubVP PIPE has the smaller prefetch (including the prefetch end to mall start time)
-	// should increase it's prefetch time to match the other
+	// should increase its prefetch time to match the other
 	if (subvp0_prefetch_us > subvp1_prefetch_us) {
 		pipe_data = &cmd->fw_assisted_mclk_switch_v2.config_data.pipe_data[1];
 		prefetch_delta_us = subvp0_prefetch_us - subvp1_prefetch_us;
@@ -1105,9 +1105,9 @@ void dc_send_update_cursor_info_to_dmu(
 	 * 1st command can view as 2 parts, 1st is for PSR/Replay data, the other
 	 * is to store cursor position info.
 	 *
-	 * Command heaer type must be the same type if using  multi_cmd_pending.
+	 * Command header type must be the same type if using  multi_cmd_pending.
 	 * Besides, while process 2nd command in DMU, the sub type is useless.
-	 * So it's meanless to pass the sub type header with different type.
+	 * So it's meaningless to pass the sub type header with different type.
 	 */
 
 	{

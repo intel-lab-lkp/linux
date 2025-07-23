@@ -32,7 +32,7 @@
  * Starting with R600, the GPU has an asynchronous
  * DMA engine.  The programming model is very similar
  * to the 3D engine (ring buffer, IBs, etc.), but the
- * DMA controller has it's own packet format that is
+ * DMA controller has its own packet format that is
  * different form the PM4 format used by the 3D engine.
  * It supports copying data, writing embedded data,
  * solid fills, and a number of other things.  It also

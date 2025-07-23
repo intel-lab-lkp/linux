@@ -3895,7 +3895,7 @@ static int tegra_sor_probe(struct platform_device *pdev)
 	}
 
 	/*
-	 * The bootloader may have set up the SOR such that it's module clock
+	 * The bootloader may have set up the SOR such that its module clock
 	 * is sourced by one of the display PLLs. However, that doesn't work
 	 * without properly having set up other bits of the SOR.
 	 */

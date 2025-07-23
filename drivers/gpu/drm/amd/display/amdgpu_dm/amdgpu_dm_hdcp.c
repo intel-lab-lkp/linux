@@ -627,7 +627,7 @@ static void update_config(void *handle, struct cp_psp_stream_config *config)
  * +----------------------+
  * |   Why it works:      |
  * +----------------------+
- * PSP will only update its srm if its older than the one we are trying to load.
+ * PSP will only update its srm if it's older than the one we are trying to load.
  * Always do set first than get.
  *	-if we try to "1. SET" a older version PSP will reject it and we can "2. GET" the newer
  *	version and save it

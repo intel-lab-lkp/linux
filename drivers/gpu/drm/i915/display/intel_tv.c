@@ -1043,7 +1043,7 @@ intel_tv_mode_to_mode(struct drm_display_mode *mode,
 			tv_mode->vi_end_f2 + 1;
 	}
 
-	/* TV has it's own notion of sync and other mode flags, so clear them. */
+	/* TV has its own notion of sync and other mode flags, so clear them. */
 	mode->flags = 0;
 
 	snprintf(mode->name, sizeof(mode->name),

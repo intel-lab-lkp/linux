@@ -111,7 +111,7 @@ static bool mtk_gamma_lut_is_descending(struct drm_color_lut *lut, u32 lut_size)
  * - SoC HW support both 10/12bits LUT
  *   - New register layout
  *     - 12-bits LUT supported
- *     - 10-its LUT not supported
+ *     - 10-bits LUT not supported
  */
 void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 {

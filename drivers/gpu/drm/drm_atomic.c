@@ -1792,7 +1792,7 @@ static void drm_atomic_private_obj_print_state(struct drm_printer *p,
  * This functions prints the drm atomic state snapshot using the drm printer
  * which is passed to it. This snapshot can be used for debugging purposes.
  *
- * Note that this function looks into the new state objects and hence its not
+ * Note that this function looks into the new state objects and hence it's not
  * safe to be used after the call to drm_atomic_helper_commit_hw_done().
  */
 void drm_atomic_print_new_state(const struct drm_atomic_state *state,

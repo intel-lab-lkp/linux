@@ -86,7 +86,7 @@ static void cik_sdma_free_microcode(struct amdgpu_device *adev)
  * and 2 queues used for compute.
  *
  * The programming model is very similar to the CP
- * (ring buffer, IBs, etc.), but sDMA has it's own
+ * (ring buffer, IBs, etc.), but sDMA has its own
  * packet format that is different from the PM4 format
  * used by the CP. sDMA supports copying data, writing
  * embedded data, solid fills, and a number of other

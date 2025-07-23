@@ -664,9 +664,9 @@ static void check_guc_capture_size(struct intel_guc *guc)
 
 	/*
 	 * NOTE: min_size is much smaller than the capture region allocation (DG2: <80K vs 1MB)
-	 * Additionally, its based on space needed to fit all engines getting reset at once
+	 * Additionally, it's based on space needed to fit all engines getting reset at once
 	 * within the same G2H handler task slot. This is very unlikely. However, if GuC really
-	 * does run out of space for whatever reason, we will see an separate warning message
+	 * does run out of space for whatever reason, we will see a separate warning message
 	 * when processing the G2H event capture-notification, search for:
 	 * INTEL_GUC_STATE_CAPTURE_EVENT_STATUS_NOSPACE.
 	 */

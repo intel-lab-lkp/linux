@@ -653,7 +653,7 @@ unsigned long amdgpu_gem_timeout(uint64_t timeout_ns)
 	unsigned long timeout_jiffies;
 	ktime_t timeout;
 
-	/* clamp timeout if it's to large */
+	/* clamp timeout if it's too large */
 	if (((int64_t)timeout_ns) < 0)
 		return MAX_SCHEDULE_TIMEOUT;
 

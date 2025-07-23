@@ -599,7 +599,7 @@ static int uvd_v6_0_resume(struct amdgpu_ip_block *ip_block)
  *
  * @adev: amdgpu_device pointer
  *
- * Let the UVD memory controller know it's offsets
+ * Let the UVD memory controller know its offsets
  */
 static void uvd_v6_0_mc_resume(struct amdgpu_device *adev)
 {
@@ -738,7 +738,7 @@ static int uvd_v6_0_start(struct amdgpu_device *adev)
 
 	uvd_v6_0_mc_resume(adev);
 
-	/* disable interupt */
+	/* disable interrupt */
 	WREG32_FIELD(UVD_MASTINT_EN, VCPU_EN, 0);
 
 	/* stall UMC and register bus before resetting VCPU */

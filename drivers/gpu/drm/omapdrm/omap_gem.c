@@ -930,7 +930,7 @@ int omap_gem_tiled_stride(struct drm_gem_object *obj, u32 orient)
  * because we don't support swapping pages back out).  And 'remap'
  * might not be quite the right name, but I wanted to keep it working
  * similarly to omap_gem_pin().  Note though that mutex is not
- * aquired if !remap (because this can be called in atomic ctxt),
+ * acquired if !remap (because this can be called in atomic ctxt),
  * but probably omap_gem_unpin() should be changed to work in the
  * same way.  If !remap, a matching omap_gem_put_pages() call is not
  * required (and should not be made).

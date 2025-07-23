@@ -105,7 +105,7 @@ static void amdgpu_pll_get_fb_ref_div(struct amdgpu_device *adev, unsigned int n
 }
 
 /**
- * amdgpu_pll_compute - compute PLL paramaters
+ * amdgpu_pll_compute - compute PLL parameters
  *
  * @adev: amdgpu_device pointer
  * @pll: information about the PLL

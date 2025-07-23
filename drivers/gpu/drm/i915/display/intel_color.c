@@ -1758,7 +1758,7 @@ icl_program_gamma_multi_segment(const struct intel_crtc_state *crtc_state)
 	/*
 	 * Program Coarse segment (let's call it seg3)...
 	 *
-	 * Coarse segment starts from index 0 and it's step is 1/256 ie 0,
+	 * Coarse segment starts from index 0 and its step is 1/256 ie 0,
 	 * 1/256, 2/256 ... 256/256. As per the description of each entry in LUT
 	 * above, we need to pick every (8 * 128)th entry in LUT, and
 	 * program 256 of those.

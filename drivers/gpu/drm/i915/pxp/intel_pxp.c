@@ -159,7 +159,7 @@ static struct intel_gt *find_gt_for_required_teelink(struct drm_i915_private *i9
 {
 	/*
 	 * NOTE: Only certain platforms require PXP-tee-backend dependencies
-	 * for HuC authentication. For now, its limited to DG2.
+	 * for HuC authentication. For now, it's limited to DG2.
 	 */
 	if (IS_ENABLED(CONFIG_INTEL_MEI_PXP) && IS_ENABLED(CONFIG_INTEL_MEI_GSC) &&
 	    intel_huc_is_loaded_by_gsc(&to_gt(i915)->uc.huc) && intel_uc_uses_huc(&to_gt(i915)->uc))

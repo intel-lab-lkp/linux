@@ -2489,7 +2489,7 @@ drm_dp_mst_handle_conn_stat(struct drm_dp_mst_branch *mstb,
 			/*
 			 * We can't remove a connector from an already exposed
 			 * port, so just throw the port out and make sure we
-			 * reprobe the link address of it's parent MSTB
+			 * reprobe the link address of its parent MSTB
 			 */
 			drm_dp_mst_topology_unlink_port(mgr, port);
 			mstb->link_address_sent = false;
@@ -4535,7 +4535,7 @@ int drm_dp_atomic_release_time_slots(struct drm_atomic_state *state,
 	if (!old_conn_state->crtc)
 		return 0;
 
-	/* If the CRTC isn't disabled by this state, don't release it's payload */
+	/* If the CRTC isn't disabled by this state, don't release its payload */
 	new_conn_state = drm_atomic_get_new_connector_state(state, port->connector);
 	if (new_conn_state->crtc) {
 		struct drm_crtc_state *crtc_state =
@@ -4755,7 +4755,7 @@ EXPORT_SYMBOL(drm_dp_mst_update_slots);
  * drm_dp_check_act_status() - Polls for ACT handled status.
  * @mgr: manager to use
  *
- * Tries waiting for the MST hub to finish updating it's payload table by
+ * Tries waiting for the MST hub to finish updating its payload table by
  * polling for the ACT handled bit for up to 3 seconds (yes-some hubs really
  * take that long).
  *

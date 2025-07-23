@@ -2678,7 +2678,7 @@ EXPORT_SYMBOL(drm_dp_dsc_sink_bpp_incr);
  * drm_dp_dsc_sink_max_slice_count() - Get the max slice count
  * supported by the DSC sink.
  * @dsc_dpcd: DSC capabilities from DPCD
- * @is_edp: true if its eDP, false for DP
+ * @is_edp: true if it's eDP, false for DP
  *
  * Read the slice capabilities DPCD register from DSC sink to get
  * the maximum slice count supported. This is used to populate
@@ -2688,7 +2688,7 @@ EXPORT_SYMBOL(drm_dp_dsc_sink_bpp_incr);
  * infoframe using the helper function drm_dsc_pps_infoframe_pack()
  *
  * Returns:
- * Maximum slice count supported by DSC sink or 0 its invalid
+ * Maximum slice count supported by DSC sink or 0 if invalid
  */
 u8 drm_dp_dsc_sink_max_slice_count(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE],
 				   bool is_edp)
@@ -2746,7 +2746,7 @@ EXPORT_SYMBOL(drm_dp_dsc_sink_max_slice_count);
  * infoframe using the helper function drm_dsc_pps_infoframe_pack()
  *
  * Returns:
- * Line buffer depth supported by DSC panel or 0 its invalid
+ * Line buffer depth supported by DSC panel or 0 if invalid
  */
 u8 drm_dp_dsc_sink_line_buf_depth(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE])
 {
@@ -4239,7 +4239,7 @@ drm_edp_backlight_probe_state(struct drm_dp_aux *aux, struct drm_edp_backlight_i
  * @current_level: Where to store the probed brightness level, if any
  * @current_mode: Where to store the currently set backlight control mode
  *
- * Initializes a &drm_edp_backlight_info struct by probing @aux for it's backlight capabilities,
+ * Initializes a &drm_edp_backlight_info struct by probing @aux for its backlight capabilities,
  * along with also probing the current and maximum supported brightness levels.
  *
  * If @driver_pwm_freq_hz is non-zero, this will be used as the backlight frequency. Otherwise, the

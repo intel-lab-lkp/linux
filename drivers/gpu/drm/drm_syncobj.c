@@ -51,7 +51,7 @@
  *   - Wait for a given point to appear and/or be signaled
  *   - Import and export from/to a given point of a timeline
  *
- * At it's core, a syncobj is simply a wrapper around a pointer to a struct
+ * At its core, a syncobj is simply a wrapper around a pointer to a struct
  * &dma_fence which may be NULL.
  * When a syncobj is first created, its pointer is either NULL or a pointer
  * to an already signaled fence depending on whether the

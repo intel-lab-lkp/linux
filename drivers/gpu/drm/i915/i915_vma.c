@@ -457,7 +457,7 @@ i915_vma_resource_init_from_vma(struct i915_vma_resource *vma_res,
 }
 
 /**
- * i915_vma_bind - Sets up PTEs for an VMA in it's corresponding address space.
+ * i915_vma_bind - Sets up PTEs for an VMA in its corresponding address space.
  * @vma: VMA to map
  * @pat_index: PAT index to set in PTE
  * @flags: flags like global or local mapping

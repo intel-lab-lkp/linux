@@ -125,7 +125,7 @@ struct msm_drm_private {
 	 * lru:
 	 *
 	 * The various LRU's that a GEM object is in at various stages of
-	 * it's lifetime.  Objects start out in the unbacked LRU.  When
+	 * its lifetime.  Objects start out in the unbacked LRU.  When
 	 * pinned (for scannout or permanently mapped GPU buffers, like
 	 * ringbuffer, memptr, fw, etc) it moves to the pinned LRU.  When
 	 * unpinned, it moves into willneed or dontneed LRU depending on

@@ -1207,7 +1207,7 @@ static bool radeon_check_hpd_status_unchanged(struct drm_connector *connector)
  * If we got no DDC, we do load detection on the DAC encoder object.
  * If we got analog DDC or load detection passes on the DAC encoder
  * we have to check if this analog encoder is shared with anyone else (TV)
- * if its shared we have to set the other connector to disconnected.
+ * if it's shared we have to set the other connector to disconnected.
  */
 static enum drm_connector_status
 radeon_dvi_detect(struct drm_connector *connector, bool force)

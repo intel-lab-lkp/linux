@@ -371,7 +371,7 @@ static int vcn_v2_0_resume(struct amdgpu_ip_block *ip_block)
  *
  * @vinst: Pointer to the VCN instance structure
  *
- * Let the VCN memory controller know it's offsets
+ * Let the VCN memory controller know its offsets
  */
 static void vcn_v2_0_mc_resume(struct amdgpu_vcn_inst *vinst)
 {
@@ -873,7 +873,7 @@ static int vcn_v2_0_start_dpg_mode(struct amdgpu_vcn_inst *vinst, bool indirect)
 	WREG32_SOC15_DPG_MODE(0, SOC15_DPG_MODE_OFFSET(
 		UVD, 0, mmUVD_VCPU_CNTL), tmp, 0, indirect);
 
-	/* disable master interupt */
+	/* disable master interrupt */
 	WREG32_SOC15_DPG_MODE(0, SOC15_DPG_MODE_OFFSET(
 		UVD, 0, mmUVD_MASTINT_EN), 0, 0, indirect);
 

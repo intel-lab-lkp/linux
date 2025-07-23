@@ -106,7 +106,7 @@ static bool is_audio_format_supported(
 					max_channe_index = index;
 				}
 			} else {
-				/* format found, save it's index */
+				/* format found, save its index */
 				found = true;
 				max_channe_index = index;
 			}

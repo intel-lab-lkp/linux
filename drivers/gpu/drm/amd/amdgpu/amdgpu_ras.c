@@ -407,7 +407,7 @@ static void amdgpu_ras_instance_mask_check(struct amdgpu_device *adev,
  * head has four members, they are block, type, sub_block_index, name.
  * block: which IP will be under control.
  * type: what kind of error will be enabled/disabled/injected.
- * sub_block_index: some IPs have subcomponets. say, GFX, sDMA.
+ * sub_block_index: some IPs have subcomponents. say, GFX, sDMA.
  * name: the name of IP.
  *
  * inject has three more members than head, they are address, value and mask.
@@ -861,7 +861,7 @@ int amdgpu_ras_feature_enable_on_boot(struct amdgpu_device *adev,
 	if (con->flags & AMDGPU_RAS_FLAG_INIT_BY_VBIOS) {
 		if (enable) {
 			/* There is no harm to issue a ras TA cmd regardless of
-			 * the currecnt ras state.
+			 * the current ras state.
 			 * If current state == target state, it will do nothing
 			 * But sometimes it requests driver to reset and repost
 			 * with error code -EAGAIN.
@@ -1629,8 +1629,8 @@ static int amdgpu_ras_query_error_count_helper(struct amdgpu_device *adev,
 /**
  * amdgpu_ras_query_error_count -- Get error counts of all IPs or specific IP
  * @adev: pointer to AMD GPU device
- * @ce_count: pointer to an integer to be set to the count of correctible errors.
- * @ue_count: pointer to an integer to be set to the count of uncorrectible
+ * @ce_count: pointer to an integer to be set to the count of correctable errors.
+ * @ue_count: pointer to an integer to be set to the count of uncorrectable
  * errors.
  * @query_info: pointer to ras_query_if if the query request is only for
  * specific ip block; if info is NULL, then the qurey request is for
@@ -2284,7 +2284,7 @@ static void amdgpu_ras_interrupt_umc_handler(struct ras_manager *obj,
 	amdgpu_ras_set_fed(obj->adev, true);
 	ret = data->cb(obj->adev, &err_data, entry);
 	/* ue will trigger an interrupt, and in that case
-	 * we need do a reset to recovery the whole system.
+	 * we need to do a reset to recover the whole system.
 	 * But leave IP do that recovery, here we just dispatch
 	 * the error.
 	 */
@@ -2397,7 +2397,7 @@ int amdgpu_ras_interrupt_add_handler(struct amdgpu_device *adev,
 	struct amdgpu_ras_block_object *ras_obj;
 
 	if (!obj) {
-		/* in case we registe the IH before enable ras feature */
+		/* in case we register the IH before enable ras feature */
 		obj = amdgpu_ras_create_obj(adev, head);
 		if (!obj)
 			return -EINVAL;
@@ -4143,7 +4143,7 @@ int amdgpu_ras_block_late_init(struct amdgpu_device *adev,
 			return r;
 	}
 
-	/* check for errors on warm reset edc persisant supported ASIC */
+	/* check for errors on warm reset edc persistent supported ASIC */
 	amdgpu_persistent_edc_harvesting(adev, ras_block);
 
 	/* in resume phase, no need to create ras fs node */

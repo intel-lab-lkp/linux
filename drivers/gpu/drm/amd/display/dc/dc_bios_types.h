@@ -30,7 +30,7 @@
  * Interface file for VBIOS implementations.
  *
  * The default implementation is inside DC.
- * Display Manager (which instantiates DC) has the option to supply it's own
+ * Display Manager (which instantiates DC) has the option to supply its own
  * (external to DC) implementation of VBIOS, which will be called by DC, using
  * this interface.
  * (The intended use is Diagnostics, but other uses may appear.)

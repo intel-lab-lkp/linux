@@ -1301,7 +1301,7 @@ int etnaviv_gpu_wait_fence_interruptible(struct etnaviv_gpu *gpu,
 }
 
 /*
- * Wait for an object to become inactive.  This, on it's own, is not race
+ * Wait for an object to become inactive.  This, on its own, is not race
  * free: the object is moved by the scheduler off the active list, and
  * then the iova is put.  Moreover, the object could be re-submitted just
  * after we notice that it's become inactive.

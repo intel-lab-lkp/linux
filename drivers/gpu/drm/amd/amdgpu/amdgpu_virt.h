@@ -113,7 +113,7 @@ struct amdgpu_virt_fw_reserve {
 /*
  * Legacy GIM header
  *
- * Defination between PF and VF
+ * Definition between PF and VF
  * Structures forcibly aligned to 4 to keep the same style as PF.
  */
 #define AMDGIM_DATAEXCHANGE_OFFSET		(64 * 1024)

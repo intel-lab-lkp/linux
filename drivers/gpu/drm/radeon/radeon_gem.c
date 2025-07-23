@@ -599,7 +599,7 @@ out:
  * @rdev: radeon_device pointer
  * @bo_va: bo_va to update
  *
- * Update the bo_va directly after setting it's address. Errors are not
+ * Update the bo_va directly after setting its address. Errors are not
  * vital here, so they are not reported back to userspace.
  */
 static void radeon_gem_va_update_vm(struct radeon_device *rdev,

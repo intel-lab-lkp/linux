@@ -263,7 +263,7 @@ static bool lspcon_probe(struct intel_lspcon *lspcon)
 	expected_mode = lspcon_wake_native_aux_ch(lspcon) ?
 			DRM_LSPCON_MODE_PCON : DRM_LSPCON_MODE_LS;
 
-	/* Lets probe the adaptor and check its type */
+	/* Let's probe the adaptor and check its type */
 	for (retry = 0; retry < 6; retry++) {
 		if (retry)
 			usleep_range(500, 1000);
@@ -284,7 +284,7 @@ static bool lspcon_probe(struct intel_lspcon *lspcon)
 	lspcon->mode = lspcon_wait_mode(lspcon, expected_mode);
 
 	/*
-	 * In the SW state machine, lets Put LSPCON in PCON mode only.
+	 * In the SW state machine, let's Put LSPCON in PCON mode only.
 	 * In this way, it will work with both HDMI 1.4 sinks as well as HDMI
 	 * 2.0 sinks.
 	 */

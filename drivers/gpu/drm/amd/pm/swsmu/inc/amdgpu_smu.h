@@ -1180,7 +1180,7 @@ struct pptable_funcs {
 	u32 (*get_gfx_off_residency)(struct smu_context *smu, uint32_t *residency);
 
 	/**
-	 * @register_irq_handler: Register interupt request handlers.
+	 * @register_irq_handler: Register interrupt request handlers.
 	 */
 	int (*register_irq_handler)(struct smu_context *smu);
 

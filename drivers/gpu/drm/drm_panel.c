@@ -501,7 +501,7 @@ EXPORT_SYMBOL(drm_is_panel_follower);
  * @follower:     The panel follower descriptor for the follower.
  *
  * A panel follower is called right after preparing the panel and right before
- * unpreparing the panel. It's primary intention is to power on an associated
+ * unpreparing the panel. Its primary intention is to power on an associated
  * touchscreen, though it could be used for any similar devices. Multiple
  * devices are allowed the follow the same panel.
  *

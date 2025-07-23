@@ -704,7 +704,7 @@ static int drm_gem_vram_object_pin(struct drm_gem_object *gem)
 	/*
 	 * Fbdev console emulation is the use case of these PRIME
 	 * helpers. This may involve updating a hardware buffer from
-	 * a shadow FB. We pin the buffer to it's current location
+	 * a shadow FB. We pin the buffer to its current location
 	 * (either video RAM or system memory) to prevent it from
 	 * being relocated during the update operation. If you require
 	 * the buffer to be pinned to VRAM, implement a callback that

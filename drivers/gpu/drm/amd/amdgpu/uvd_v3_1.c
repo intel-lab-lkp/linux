@@ -235,7 +235,7 @@ static void uvd_v3_1_set_dcm(struct amdgpu_device *adev,
  *
  * @adev: amdgpu_device pointer
  *
- * Let the UVD memory controller know it's offsets
+ * Let the UVD memory controller know its offsets
  */
 static void uvd_v3_1_mc_resume(struct amdgpu_device *adev)
 {

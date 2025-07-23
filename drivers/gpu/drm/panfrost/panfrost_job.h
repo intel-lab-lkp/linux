@@ -30,7 +30,7 @@ struct panfrost_job {
 	struct drm_gem_object **bos;
 	u32 bo_count;
 
-	/* Fence to be signaled by drm-sched once its done with the job */
+	/* Fence to be signaled by drm-sched once it's done with the job */
 	struct dma_fence *render_done_fence;
 
 	struct panfrost_engine_usage *engine_usage;

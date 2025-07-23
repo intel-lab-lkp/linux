@@ -1124,7 +1124,7 @@ static void dsi_wait4video_eng_busy(struct msm_dsi_host *msm_host)
 
 	data = dsi_read(msm_host, REG_DSI_STATUS0);
 
-	/* if video mode engine is not busy, its because
+	/* if video mode engine is not busy, it's because
 	 * either timing engine was not turned on or the
 	 * DSI controller has finished transmitting the video
 	 * data already, so no need to wait in those cases
