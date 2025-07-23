@@ -74,6 +74,13 @@ struct netfs_inode {
 };
 
 /*
+ * struct inode must be the first member so we can easily calculate offsets for
+ * e.g., fscrypt or fsverity when embedded in filesystem specific inodes.
+ */
+static_assert(__same_type(((struct netfs_inode *)NULL)->inode, struct inode));
+static_assert(offsetof(struct netfs_inode, inode) == 0);
+
+/*
  * A netfs group - for instance a ceph snap.  This is marked on dirty pages and
  * pages marked with a group must be flushed before they can be written under
  * the domain of another group.

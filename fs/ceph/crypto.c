@@ -133,6 +133,10 @@ static const union fscrypt_policy *ceph_get_dummy_policy(struct super_block *sb)
 }
 
 static struct fscrypt_operations ceph_fscrypt_ops = {
+#ifdef CONFIG_FS_ENCRYPTION
+	.inode_info_offs	= offsetof(struct ceph_inode_info, i_crypt_info) -
+				  offsetof(struct ceph_inode_info, netfs),
+#endif
 	.needs_bounce_pages	= 1,
 	.get_context		= ceph_crypt_get_context,
 	.set_context		= ceph_crypt_set_context,
