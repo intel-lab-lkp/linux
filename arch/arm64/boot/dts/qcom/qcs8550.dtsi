@@ -4,6 +4,7 @@
  */
 
 #include "sm8550.dtsi"
+#include "sm8550-audio.dtsi"
 
 /delete-node/ &reserved_memory;
 
