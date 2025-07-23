@@ -445,9 +445,8 @@ int inet_bind_sk(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	int err;
 
 	/* If the socket has its own bind function then use it. (RAW) */
-	if (sk->sk_prot->bind) {
+	if (sk->sk_prot->bind)
 		return sk->sk_prot->bind(sk, uaddr, addr_len);
-	}
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
