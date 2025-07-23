@@ -718,6 +718,26 @@ int media_entity_pads_init(struct media_entity *entity, u16 num_pads,
 		      struct media_pad *pads);
 
 /**
+ * devm_media_entity_pads_init - Managed initialization of media entity pads
+ *
+ * @dev:        Device that manages the lifecycle of the media entity.
+ * @entity:     Entity where the pads belong.
+ * @num_pads:   Total number of sink and source pads.
+ * @pads:       Array of @num_pads pads.
+ *
+ * This function initializes the pads for the given media entity and registers
+ * a managed cleanup action to be performed automatically when the device is
+ * detached or the driver is unloaded.
+ *
+ * This is a managed version of media_entity_pads_init(), and simplifies resource
+ * management using devres.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int devm_media_entity_pads_init(struct device *dev, struct media_entity *entity,
+				u16 num_pads, struct media_pad *pads);
+
+/**
  * media_entity_cleanup() - free resources associated with an entity
  *
  * @entity:	entity where the pads belong

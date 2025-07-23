@@ -8,6 +8,7 @@
  *	     Sakari Ailus <sakari.ailus@iki.fi>
  */
 
+#include <linux/device/devres.h>
 #include <linux/bitmap.h>
 #include <linux/list.h>
 #include <linux/property.h>
@@ -234,6 +235,24 @@ int media_entity_pads_init(struct media_entity *entity, u16 num_pads,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(media_entity_pads_init);
+
+static void devm_media_entity_cleanup(void *data)
+{
+	media_entity_cleanup(data);
+}
+
+int devm_media_entity_pads_init(struct device *dev, struct media_entity *entity,
+				u16 num_pads, struct media_pad *pads)
+{
+	int err;
+
+	err = media_entity_pads_init(entity, num_pads, pads);
+	if (err)
+		return err;
+
+	return devm_add_action_or_reset(dev, devm_media_entity_cleanup, entity);
+}
+EXPORT_SYMBOL_GPL(devm_media_entity_pads_init);
 
 /* -----------------------------------------------------------------------------
  * Graph traversal
