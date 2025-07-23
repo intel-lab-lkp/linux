@@ -15,6 +15,7 @@
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 
 #include "sc8280xp.dtsi"
+#include "sc8280xp-audio.dtsi"
 #include "sc8280xp-pmics.dtsi"
 
 / {

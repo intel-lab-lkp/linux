@@ -5,6 +5,7 @@
  */
 
 #include "sc8280xp.dtsi"
+#include "sc8280xp-audio.dtsi"
 
 /delete-node/ &cpu0_opp_table;
 /delete-node/ &cpu4_opp_table;
