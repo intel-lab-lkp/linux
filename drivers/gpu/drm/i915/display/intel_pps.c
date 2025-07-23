@@ -22,6 +22,7 @@
 #include "intel_pps.h"
 #include "intel_pps_regs.h"
 #include "intel_quirks.h"
+#include <linux/iopoll.h>
 
 static void vlv_steal_power_sequencer(struct intel_display *display,
 				      enum pipe pipe);
@@ -600,14 +601,18 @@ void intel_pps_check_power_unlocked(struct intel_dp *intel_dp)
 #define IDLE_CYCLE_MASK		(PP_ON | PP_SEQUENCE_MASK | PP_CYCLE_DELAY_ACTIVE | PP_SEQUENCE_STATE_MASK)
 #define IDLE_CYCLE_VALUE	(0     | PP_SEQUENCE_NONE | 0                     | PP_SEQUENCE_STATE_OFF_IDLE)
 
+#define PANEL_MAXIMUM_ON_TIME_MS		(5000)
+
 static void intel_pps_verify_state(struct intel_dp *intel_dp);
 
 static void wait_panel_status(struct intel_dp *intel_dp,
-			      u32 mask, u32 value)
+			      u32 mask, u32 value, int poll_interval_ms)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	i915_reg_t pp_stat_reg, pp_ctrl_reg;
+	int ret;
+	u32 reg_val;
 
 	lockdep_assert_held(&display->pps.mutex);
 
@@ -624,14 +629,27 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 		    intel_de_read(display, pp_stat_reg),
 		    intel_de_read(display, pp_ctrl_reg));
 
-	if (intel_de_wait(display, pp_stat_reg, mask, value, 5000))
-		drm_err(display->drm,
-			"[ENCODER:%d:%s] %s panel status timeout: PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
-			dig_port->base.base.base.id, dig_port->base.base.name,
-			pps_name(intel_dp),
-			intel_de_read(display, pp_stat_reg),
-			intel_de_read(display, pp_ctrl_reg));
+	if (poll_interval_ms <= 0)
+		poll_interval_ms = 1; //if <0 is passed go with 1ms
 
+	ret = read_poll_timeout(intel_de_read, reg_val,
+				((reg_val & mask) == value),
+				(poll_interval_ms * 1000),  // poll intervell
+				(PANEL_MAXIMUM_ON_TIME_MS * 1000),  // total timeout (us)
+				true,
+				display, pp_stat_reg);
+
+	if (ret == 0)
+		goto panel_wait_complete;
+
+	drm_err(display->drm,
+		"dibin [ENCODER:%d:%s] %s panel status timeout: PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
+		dig_port->base.base.base.id, dig_port->base.base.name,
+		pps_name(intel_dp),
+		intel_de_read(display, pp_stat_reg),
+		intel_de_read(display, pp_ctrl_reg));
+
+panel_wait_complete:
 	drm_dbg_kms(display->drm, "Wait complete\n");
 }
 
@@ -644,7 +662,8 @@ static void wait_panel_on(struct intel_dp *intel_dp)
 		    "[ENCODER:%d:%s] %s wait for panel power on\n",
 		    dig_port->base.base.base.id, dig_port->base.base.name,
 		    pps_name(intel_dp));
-	wait_panel_status(intel_dp, IDLE_ON_MASK, IDLE_ON_VALUE);
+
+	wait_panel_status(intel_dp, IDLE_ON_MASK, IDLE_ON_VALUE, 20);
 }
 
 static void wait_panel_off(struct intel_dp *intel_dp)
@@ -656,7 +675,7 @@ static void wait_panel_off(struct intel_dp *intel_dp)
 		    "[ENCODER:%d:%s] %s wait for panel power off time\n",
 		    dig_port->base.base.base.id, dig_port->base.base.name,
 		    pps_name(intel_dp));
-	wait_panel_status(intel_dp, IDLE_OFF_MASK, IDLE_OFF_VALUE);
+	wait_panel_status(intel_dp, IDLE_OFF_MASK, IDLE_OFF_VALUE, 20);
 }
 
 static void wait_panel_power_cycle(struct intel_dp *intel_dp)
@@ -683,7 +702,7 @@ static void wait_panel_power_cycle(struct intel_dp *intel_dp)
 	if (remaining)
 		wait_remaining_ms_from_jiffies(jiffies, remaining);
 
-	wait_panel_status(intel_dp, IDLE_CYCLE_MASK, IDLE_CYCLE_VALUE);
+	wait_panel_status(intel_dp, IDLE_CYCLE_MASK, IDLE_CYCLE_VALUE, 1);
 }
 
 void intel_pps_wait_power_cycle(struct intel_dp *intel_dp)
