@@ -9,6 +9,7 @@
  */
 
 #include "msm8916.dtsi"
+#include "msm8916-audio.dtsi"
 #include "pm8916.dtsi"
 
 &camss {
