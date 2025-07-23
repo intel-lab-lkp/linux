@@ -1,0 +1,5 @@
+#include "audioreach-audio.dtsi"
+
+&q6apmdai{
+	iommus = <&apps_smmu 0x1801 0x0>;
+};
