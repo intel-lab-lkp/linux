@@ -1067,6 +1067,7 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 	}
 	case DRM_MODE_OBJECT_PLANE: {
 		struct drm_plane *plane = obj_to_plane(obj);
+		struct drm_plane_state *old_plane_state;
 		struct drm_plane_state *plane_state;
 		struct drm_mode_config *config = &plane->dev->mode_config;
 		const struct drm_plane_helper_funcs *plane_funcs = plane->helper_private;
@@ -1087,8 +1088,15 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 				ret = drm_atomic_check_prop_changes(ret, old_val, prop_value, prop);
 			}
 
+			old_plane_state = drm_atomic_get_old_plane_state(state, plane);
+			if (IS_ERR(old_plane_state)) {
+				ret = PTR_ERR(plane_state);
+				break;
+			}
+
 			/* ask the driver if this non-primary plane is supported */
-			if (plane->type != DRM_PLANE_TYPE_PRIMARY) {
+			if (plane->type != DRM_PLANE_TYPE_PRIMARY &&
+					(plane_state->visible || old_plane_state->visible)) {
 				ret = -EINVAL;
 
 				if (plane_funcs && plane_funcs->atomic_async_check)
