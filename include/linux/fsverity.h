@@ -136,7 +136,11 @@ static inline struct fsverity_info **fsverity_addr(const struct inode *inode)
 
 static inline struct fsverity_info *fsverity_get_info(const struct inode *inode)
 {
-	if (!inode->i_sb->s_vop)
+	/*
+	 * We're called from fsverity_active() which might be called on
+	 * inodes from filesystems that don't support fsverity at all.
+	 */
+	if (likely(!inode->i_sb->s_vop))
 		return NULL;
 
 	/*
@@ -145,9 +149,8 @@ static inline struct fsverity_info *fsverity_get_info(const struct inode *inode)
 	 * executing a RELEASE barrier.  We need to use smp_load_acquire() here
 	 * to safely ACQUIRE the memory the other task published.
 	 */
-	if (inode->i_sb->s_vop->inode_info_offs)
-		return smp_load_acquire(fsverity_addr(inode));
-	return smp_load_acquire(&inode->i_verity_info);
+	VFS_WARN_ON_ONCE(!inode->i_sb->s_vop->inode_info_offs);
+	return smp_load_acquire(fsverity_addr(inode));
 }
 
 /* enable.c */
