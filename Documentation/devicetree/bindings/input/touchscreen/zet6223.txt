@@ -10,11 +10,11 @@ Optional properties:
 - vio-supply		  : Specification for VIO supply (1.8V or 3.3V,
 			    depending on system interface needs).
 - vcc-supply		  : Specification for 3.3V VCC supply.
-- touchscreen-size-x	  : See touchscreen.txt
-- touchscreen-size-y	  : See touchscreen.txt
-- touchscreen-inverted-x  : See touchscreen.txt
-- touchscreen-inverted-y  : See touchscreen.txt
-- touchscreen-swapped-x-y : See touchscreen.txt
+- touchscreen-size-x	  : See touchscreen.yaml
+- touchscreen-size-y	  : See touchscreen.yaml
+- touchscreen-inverted-x  : See touchscreen.yaml
+- touchscreen-inverted-y  : See touchscreen.yaml
+- touchscreen-swapped-x-y : See touchscreen.yaml
 
 Example:
 

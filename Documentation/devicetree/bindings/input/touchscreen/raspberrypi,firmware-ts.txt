@@ -6,11 +6,11 @@ Required properties:
 
 Optional properties:
  - firmware: Reference to RPi's firmware device node
- - touchscreen-size-x: See touchscreen.txt
- - touchscreen-size-y: See touchscreen.txt
- - touchscreen-inverted-x: See touchscreen.txt
- - touchscreen-inverted-y: See touchscreen.txt
- - touchscreen-swapped-x-y: See touchscreen.txt
+ - touchscreen-size-x: See touchscreen.yaml
+ - touchscreen-size-y: See touchscreen.yaml
+ - touchscreen-inverted-x: See touchscreen.yaml
+ - touchscreen-inverted-y: See touchscreen.yaml
+ - touchscreen-swapped-x-y: See touchscreen.yaml
 
 Example:
 

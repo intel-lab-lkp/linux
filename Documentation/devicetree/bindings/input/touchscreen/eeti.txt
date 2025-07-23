@@ -10,7 +10,7 @@ Optional properties:
 		latched. This is necessary for platforms that lack
 		support for level-triggered IRQs.
 
-The following optional properties described in touchscreen.txt are
+The following optional properties described in touchscreen.yaml are
 also supported:
 
 - touchscreen-inverted-x

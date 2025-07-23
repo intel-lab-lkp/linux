@@ -17,7 +17,7 @@ Optional properties:
  - touchscreen-swapped-x-y : General touchscreen binding, see [1].
 
 [1] All general touchscreen properties are described in
-    Documentation/devicetree/bindings/input/touchscreen/touchscreen.txt.
+    Documentation/devicetree/bindings/input/touchscreen/touchscreen.yaml.
 
 Deprecated properties:
  - rohm,touch-max-x        : Maximum outward permitted limit in the X axis
