@@ -22,7 +22,7 @@
         Save the stack trace at the *IRQ* if a *Thread* latency is higher than the
         argument in us.
 
-**-t**, **--trace** \[*file*]
+**-t**, **--trace**=\[*file*]
 
         Save the stopped trace to [*file|timerlat_trace.txt*].
 
