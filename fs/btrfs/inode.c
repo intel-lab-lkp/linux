@@ -7873,6 +7873,9 @@ struct inode *btrfs_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ei->delalloc_inodes);
 	INIT_LIST_HEAD(&ei->delayed_iput);
 	init_rwsem(&ei->i_mmap_lock);
+#ifdef CONFIG_FS_VERITY
+	ei->i_verity_info = NULL;
+#endif
 
 	return inode;
 }

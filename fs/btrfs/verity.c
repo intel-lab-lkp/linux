@@ -802,6 +802,10 @@ static int btrfs_write_merkle_tree_block(struct inode *inode, const void *buf,
 }
 
 const struct fsverity_operations btrfs_verityops = {
+#ifdef CONFIG_FS_VERITY
+	.inode_info_offs	= offsetof(struct btrfs_inode, i_verity_info) -
+				  offsetof(struct btrfs_inode, vfs_inode),
+#endif
 	.begin_enable_verity     = btrfs_begin_enable_verity,
 	.end_enable_verity       = btrfs_end_enable_verity,
 	.get_verity_descriptor   = btrfs_get_verity_descriptor,
