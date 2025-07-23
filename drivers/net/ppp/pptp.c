@@ -378,7 +378,7 @@ drop:
 	return NET_RX_DROP;
 }
 
-static int pptp_bind(struct socket *sock, struct sockaddr *uservaddr,
+static int pptp_bind(struct socket *sock, struct sockaddr_unspec *uservaddr,
 	int sockaddr_len)
 {
 	struct sock *sk = sock->sk;

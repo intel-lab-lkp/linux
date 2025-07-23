@@ -3333,7 +3333,7 @@ out_unlock:
  *	Bind a packet socket to a device
  */
 
-static int packet_bind_spkt(struct socket *sock, struct sockaddr *uaddr,
+static int packet_bind_spkt(struct socket *sock, struct sockaddr_unspec *uaddr,
 			    int addr_len)
 {
 	struct sock *sk = sock->sk;
@@ -3354,7 +3354,7 @@ static int packet_bind_spkt(struct socket *sock, struct sockaddr *uaddr,
 	return packet_do_bind(sk, name, 0, 0);
 }
 
-static int packet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+static int packet_bind(struct socket *sock, struct sockaddr_unspec *uaddr, int addr_len)
 {
 	struct sockaddr_ll *sll = (struct sockaddr_ll *)uaddr;
 	struct sock *sk = sock->sk;

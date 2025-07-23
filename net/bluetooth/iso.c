@@ -924,7 +924,7 @@ static int iso_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
-static int iso_sock_bind_bc(struct socket *sock, struct sockaddr *addr,
+static int iso_sock_bind_bc(struct socket *sock, struct sockaddr_unspec *addr,
 			    int addr_len)
 {
 	struct sockaddr_iso *sa = (struct sockaddr_iso *)addr;
@@ -1002,7 +1002,7 @@ done:
 	return err;
 }
 
-static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
+static int iso_sock_bind(struct socket *sock, struct sockaddr_unspec *addr,
 			 int addr_len)
 {
 	struct sockaddr_iso *sa = (struct sockaddr_iso *)addr;
