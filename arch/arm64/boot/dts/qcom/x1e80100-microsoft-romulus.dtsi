@@ -11,6 +11,7 @@
 
 #include "x1e80100.dtsi"
 #include "x1e80100-pmics.dtsi"
+#include "x1e80100-audio.dtsi"
 
 / {
 	aliases {
