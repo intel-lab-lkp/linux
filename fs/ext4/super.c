@@ -1415,6 +1415,9 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 #ifdef CONFIG_FS_ENCRYPTION
 	ei->i_crypt_info = NULL;
 #endif
+#ifdef CONFIG_FS_VERITY
+	ei->i_verity_info = NULL;
+#endif
 	return &ei->vfs_inode;
 }
 
