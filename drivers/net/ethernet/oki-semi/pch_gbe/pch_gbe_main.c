@@ -2515,6 +2515,11 @@ static int pch_gbe_probe(struct pci_dev *pdev,
 		pci_get_domain_bus_and_slot(pci_domain_nr(adapter->pdev->bus),
 					    adapter->pdev->bus->number,
 					    PCI_DEVFN(12, 4));
+	if (!adapter->ptp_pdev) {
+		dev_err(&pdev->dev, "PTP device not found\n");
+		ret = -ENODEV;
+		goto err_free_netdev;
+	}
 
 	netdev->netdev_ops = &pch_gbe_netdev_ops;
 	netdev->watchdog_timeo = PCH_GBE_WATCHDOG_PERIOD;
