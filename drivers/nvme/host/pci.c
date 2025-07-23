@@ -2546,7 +2546,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 
 	/*
 	 * Free IRQ resources as soon as NVMEQ_ENABLED bit transitions
-	 * from set to unset. If there is a window to it is truely freed,
+	 * from set to unset. If there is a window to it is truly freed,
 	 * pci_free_irq_vectors() jumping into this window will crash.
 	 * And take lock to avoid racing with pci_free_irq_vectors() in
 	 * nvme_dev_disable() path.

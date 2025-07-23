@@ -302,7 +302,7 @@ static void apple_nvme_submit_cmd(struct apple_nvme_queue *q,
 
 	/*
 	 * This lock here doesn't make much sense at a first glace but
-	 * removing it will result in occasional missed completetion
+	 * removing it will result in occasional missed completion
 	 * interrupts even though the commands still appear on the CQ.
 	 * It's unclear why this happens but our best guess is that
 	 * there is a bug in the firmware triggered when a new command
