@@ -144,6 +144,24 @@ struct drbg_state {
 	struct drbg_string test_data;
 };
 
+/*
+ * Convert an integer into a byte representation of this integer.
+ * The byte representation is big-endian
+ *
+ * @val value to be converted
+ * @buf buffer holding the converted integer -- caller must ensure that
+ *      buffer size is at least 32 bit
+ */
+static inline void drbg_cpu_to_be32(__u32 val, unsigned char *buf)
+{
+        struct s {
+                __be32 conv;
+        };
+        struct s *conversion = (struct s *) buf;
+
+        conversion->conv = cpu_to_be32(val);
+}
+
 static inline __u8 drbg_statelen(struct drbg_state *drbg)
 {
 	if (drbg && drbg->core)
