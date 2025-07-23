@@ -5,6 +5,7 @@
  */
 
 #include "sc7280.dtsi"
+#include "sc7280-audio.dtsi"
 
 /* SM7325 uses Kryo 670 */
 &cpu0 { compatible = "qcom,kryo670"; };
