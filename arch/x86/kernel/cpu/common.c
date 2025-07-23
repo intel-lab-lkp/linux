@@ -1710,6 +1710,16 @@ static void __init cpu_parse_early_param(void)
 	}
 }
 
+static __init void init_cpu_cap(struct cpuinfo_x86 *c)
+{
+	int i;
+
+	for (i = 0; i < NCAPINTS; i++) {
+		cpu_caps_set[i] = REQUIRED_MASK(i);
+		cpu_caps_cleared[i] = DISABLED_MASK(i);
+	}
+}
+
 /*
  * Do minimum CPU detection early.
  * Fields really needed: vendor, cpuid_level, family, model, mask,
@@ -1782,6 +1792,8 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 	 */
 	if (!pgtable_l5_enabled())
 		setup_clear_cpu_cap(X86_FEATURE_LA57);
+
+	init_cpu_cap(c);
 
 	detect_nopl();
 }
