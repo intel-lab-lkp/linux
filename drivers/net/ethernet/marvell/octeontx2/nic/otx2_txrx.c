@@ -1534,6 +1534,9 @@ handle_xdp_verdict:
 		qidx += pfvf->hw.tx_queues;
 		cq->pool_ptrs++;
 		xdpf = xdp_convert_buff_to_frame(&xdp);
+		if (unlikely(!xdpf))
+			return false;
+
 		return otx2_xdp_sq_append_pkt(pfvf, xdpf,
 					      cqe->sg.seg_addr,
 					      cqe->sg.seg_size,
@@ -1558,7 +1561,10 @@ handle_xdp_verdict:
 		otx2_dma_unmap_page(pfvf, iova, pfvf->rbsize,
 				    DMA_FROM_DEVICE);
 		xdpf = xdp_convert_buff_to_frame(&xdp);
-		xdp_return_frame(xdpf);
+		if (likely(xdpf))
+			xdp_return_frame(xdpf);
+		else
+			put_page(page);
 		break;
 	default:
 		bpf_warn_invalid_xdp_action(pfvf->netdev, prog, act);
