@@ -9,6 +9,7 @@
  */
 
 #include "msm8939.dtsi"
+#include "msm8939-audio.dtsi"
 #include "pm8916.dtsi"
 
 &mdss_dsi0 {

@@ -8,6 +8,7 @@
 /dts-v1/;
 
 #include "msm8939.dtsi"
+#include "msm8939-audio.dtsi"
 #include "msm8939-pm8916.dtsi"
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/gpio/gpio.h>
