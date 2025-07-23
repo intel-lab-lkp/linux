@@ -241,6 +241,8 @@ static int oprompci2node(void __user *argp, struct device_node *dp, struct openp
 		pdev = pci_get_domain_bus_and_slot(0,
 						((int *) op->oprom_array)[0],
 						((int *) op->oprom_array)[1]);
+		if (!pdev)
+			return -ENODEV;
 
 		dp = pci_device_to_OF_node(pdev);
 		data->current_node = dp;
