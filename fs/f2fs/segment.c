@@ -2811,7 +2811,7 @@ find_other_zone:
 	secno = find_next_zero_bit(free_i->free_secmap, MAIN_SECS(sbi), hint);
 
 #ifdef CONFIG_BLK_DEV_ZONED
-	if (secno >= MAIN_SECS(sbi) && f2fs_sb_has_blkzoned(sbi)) {
+	if (secno >= sbi->last_secno && f2fs_sb_has_blkzoned(sbi)) {
 		/* Write only to sequential zones */
 		if (sbi->blkzone_alloc_policy == BLKZONE_ALLOC_ONLY_SEQ) {
 			hint = GET_SEC_FROM_SEG(sbi, sbi->first_seq_zone_segno);
@@ -2827,7 +2827,7 @@ find_other_zone:
 	}
 #endif
 
-	if (secno >= MAIN_SECS(sbi)) {
+	if (secno >= sbi->last_secno) {
 		secno = find_first_zero_bit(free_i->free_secmap,
 							MAIN_SECS(sbi));
 		if (secno >= MAIN_SECS(sbi)) {

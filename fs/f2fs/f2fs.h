@@ -1802,6 +1802,7 @@ struct f2fs_sb_info {
 	spinlock_t dev_lock;			/* protect dirty_device */
 	bool aligned_blksize;			/* all devices has the same logical blksize */
 	unsigned int first_seq_zone_segno;	/* first segno in sequential zone */
+	unsigned int last_secno;		/* for adjust the end of target device */
 
 	/* For write statistics */
 	u64 sectors_written_start;

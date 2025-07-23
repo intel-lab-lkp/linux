@@ -870,3 +870,11 @@ Description:	This threshold is used to control triggering garbage collection whi
 		reserved section before preallocating on pinned file.
 		By default, the value is ovp_sections, especially, for zoned ufs, the
 		value is 1.
+
+What:		/sys/fs/f2fs/<disk>/last_secno
+Date:		July 2025
+Contact:	"Yuanhong Liao" <liaoyuanhong@vivo.com>
+Description:	This node is used to adjust the addressing end of f2fs when writing.
+		The default value is the maximum number of sections in the storage. If the
+		frontend space is full after adjusting the address, it will still address to
+		the back of the address until reaching the end of the memory.
