@@ -231,6 +231,7 @@ enum rpmsg_eth_state {
  * @dev: Device
  * @state: Interface state
  * @state_work: Delayed work for state machine
+ * @sync_msg: Completion for synchronous message
  */
 struct rpmsg_eth_common {
 	struct rpmsg_device *rpdev;
@@ -246,6 +247,7 @@ struct rpmsg_eth_common {
 	/** @state_lock: Lock for changing interface state */
 	struct mutex state_lock;
 	struct delayed_work state_work;
+	struct completion sync_msg;
 };
 
 /**
