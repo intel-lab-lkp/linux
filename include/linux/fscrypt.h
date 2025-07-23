@@ -209,10 +209,11 @@ static inline bool fscrypt_set_inode_info(struct inode *inode,
 					  struct fscrypt_inode_info *crypt_info)
 {
 	/*
-	 * For existing inodes, multiple tasks may race to set ->i_crypt_info.
-	 * So use cmpxchg_release().  This pairs with the smp_load_acquire() in
-	 * fscrypt_get_inode_info().  I.e., here we publish ->i_crypt_info with
-	 * a RELEASE barrier so that other tasks can ACQUIRE it.
+	 * For existing inodes, multiple tasks may race to set up the inode's
+	 * fscrypt info. So use cmpxchg_release().  This pairs with the
+	 * smp_load_acquire() in fscrypt_get_inode_info().  I.e., here we
+	 * publish the inode's fscrypt info with a RELEASE barrier so that
+	 * other tasks can ACQUIRE it.
 	 */
 	return cmpxchg_release(fscrypt_addr(inode), NULL, crypt_info) == NULL;
 }
@@ -230,9 +231,10 @@ fscrypt_get_inode_info(const struct inode *inode)
 {
 	/*
 	 * Pairs with the cmpxchg_release() in fscrypt_setup_encryption_info().
-	 * I.e., another task may publish ->i_crypt_info concurrently, executing
-	 * a RELEASE barrier.  We need to use smp_load_acquire() here to safely
-	 * ACQUIRE the memory the other task published.
+	 * I.e., another task may publish the inode's fscrypt info
+	 * concurrently, executing a RELEASE barrier.  We need to use
+	 * smp_load_acquire() here to safely ACQUIRE the memory the other task
+	 * published.
 	 */
 	VFS_WARN_ON_ONCE(!inode->i_sb->s_cop);
 	VFS_WARN_ON_ONCE(!inode->i_sb->s_cop->inode_info_offs);

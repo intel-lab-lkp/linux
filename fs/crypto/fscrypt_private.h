@@ -231,8 +231,8 @@ struct fscrypt_prepared_key {
  * fscrypt_inode_info - the "encryption key" for an inode
  *
  * When an encrypted file's key is made available, an instance of this struct is
- * allocated and stored in ->i_crypt_info.  Once created, it remains until the
- * inode is evicted.
+ * allocated and stored in the inode's fscrypt info.  Once created, it remains
+ * until the inode is evicted.
  */
 struct fscrypt_inode_info {
 
