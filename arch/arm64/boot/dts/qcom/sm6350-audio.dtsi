@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+#include "elite-audio.dtsi"
+&q6asmdai{
+	iommus = <&apps_smmu 0x1001 0x0>;
+};
+
+&q6afe{
+	q6usbdai: usbd {
+		compatible = "qcom,q6usb";
+		#sound-dai-cells = <1>;
+		iommus = <&apps_smmu 0x100f 0x0>;
+		qcom,usb-audio-intr-idx = /bits/ 16 <2>;
+	};
+};

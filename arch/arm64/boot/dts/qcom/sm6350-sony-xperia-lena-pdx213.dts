@@ -7,6 +7,7 @@
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm6350.dtsi"
+#include "sm6350-audio.dtsi"
 #include "pm6350.dtsi"
 
 / {

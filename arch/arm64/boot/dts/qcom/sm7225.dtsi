@@ -4,6 +4,7 @@
  */
 
 #include "sm6350.dtsi"
+#include "sm6350-audio.dtsi"
 
 /* SM7225 uses Kryo 570 instead of Kryo 560 */
 &cpu0 { compatible = "qcom,kryo570"; };
