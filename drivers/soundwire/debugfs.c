@@ -306,12 +306,12 @@ out:
 DEFINE_DEBUGFS_ATTRIBUTE(cmd_go_fops, NULL,
 			 cmd_go, "%llu\n");
 
-#define MAX_LINE_LEN 128
-
 static int read_buffer_show(struct seq_file *s_file, void *data)
 {
-	char buf[MAX_LINE_LEN];
 	int i;
+	char *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
 	if (num_bytes == 0 || num_bytes > MAX_CMD_BYTES)
 		return -EINVAL;
