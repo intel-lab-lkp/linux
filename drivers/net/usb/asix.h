@@ -32,6 +32,7 @@
 #define DRIVER_VERSION "22-Dec-2011"
 #define DRIVER_NAME "asix"
 
+
 /* ASIX AX8817X based USB 2.0 Ethernet Devices */
 
 #define AX_CMD_SET_SW_MII		0x06
@@ -72,7 +73,12 @@
 #define AX_HOST_EN			0x01
 
 #define AX_PHYSEL_PSEL			0x01
-#define AX_PHYSEL_SSMII			0
+#define AX_PHYSEL_SSMII			0x00
+#define AX_PHYSEL_ASEL			0x02
+#define AX_PHYSEL_MASK			0x0C
+#define AX_PHYSEL_SSMII			0x00
+#define AX_PHYSEL_SSRMII		0x04
+#define AX_PHYSEL_SSRRMII		0x0C
 #define AX_PHYSEL_SSEN			0x10
 
 #define AX_PHY_SELECT_MASK		(BIT(3) | BIT(2))
@@ -160,6 +166,9 @@
 
 #define AX_EMBD_PHY_ADDR	0x10
 
+#define OPERATION_MAC_MODE	0
+#define OPERATION_PHY_MODE 	1
+
 /* This structure cannot exceed sizeof(unsigned long [5]) AKA 20 bytes */
 struct asix_data {
 	u8 multi_filter[AX_MCAST_FILTER_SIZE];
@@ -191,6 +200,7 @@ struct asix_common_private {
 	u16 phy_addr;
 	bool embd_phy;
 	u8 chipcode;
+	u8 OperationMode;
 };
 
 extern const struct driver_info ax88172a_info;

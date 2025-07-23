@@ -42,11 +42,17 @@ struct ax88172_int_data {
 
 static void asix_status(struct usbnet *dev, struct urb *urb)
 {
+	struct asix_common_private *priv = dev->driver_priv;
 	struct ax88172_int_data *event;
 	int link;
 
 	if (urb->actual_length < 8)
 		return;
+        if (priv->OperationMode == OPERATION_PHY_MODE){
+                usbnet_link_change(dev, 1, 0);
+                return;
+        }
+
 
 	event = urb->transfer_buffer;
 	link = event->link & 0x01;
@@ -834,6 +840,15 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	usbnet_get_endpoints(dev, intf);
 
+        ret = asix_read_cmd(dev, AX_CMD_SW_PHY_STATUS, 0, 0, 1, buf, 0);
+        *buf &= AX_PHYSEL_MASK;
+
+        if(*buf == AX_PHYSEL_SSRRMII){
+               priv->OperationMode = OPERATION_PHY_MODE;
+               netdev_dbg(dev->net, "PHY MODE\n");
+        }
+
+
 	/* Maybe the boot loader passed the MAC address via device tree */
 	if (!eth_platform_get_mac_address(&dev->udev->dev, buf)) {
 		netif_dbg(dev, ifup, dev->net,
@@ -873,6 +888,10 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	priv->phy_addr = ret;
 	priv->embd_phy = ((priv->phy_addr & 0x1f) == AX_EMBD_PHY_ADDR);
+
+	if(priv->OperationMode == OPERATION_PHY_MODE) {
+		priv->embd_phy = 0;
+	}
 
 	ret = asix_read_cmd(dev, AX_CMD_STATMNGSTS_REG, 0, 0, 1,
 			    &priv->chipcode, 0);
