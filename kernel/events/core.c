@@ -2684,18 +2684,28 @@ static void perf_event_unthrottle_group(struct perf_event *event, bool skip_star
 {
 	struct perf_event *sibling, *leader = event->group_leader;
 
-	perf_event_unthrottle(leader, skip_start_event ? leader != event : true);
-	for_each_sibling_event(sibling, leader)
-		perf_event_unthrottle(sibling, skip_start_event ? sibling != event : true);
+	if (leader->state > PERF_EVENT_STATE_OFF)
+		perf_event_unthrottle(leader,
+			skip_start_event ? leader != event : true);
+
+	for_each_sibling_event(sibling, leader) {
+		if (sibling->state > PERF_EVENT_STATE_OFF)
+			perf_event_unthrottle(sibling,
+				skip_start_event ? sibling != event : true);
+	}
 }
 
 static void perf_event_throttle_group(struct perf_event *event)
 {
 	struct perf_event *sibling, *leader = event->group_leader;
 
-	perf_event_throttle(leader);
-	for_each_sibling_event(sibling, leader)
-		perf_event_throttle(sibling);
+	if (leader->state > PERF_EVENT_STATE_OFF)
+		perf_event_throttle(leader);
+
+	for_each_sibling_event(sibling, leader) {
+		if (sibling->state > PERF_EVENT_STATE_OFF)
+			perf_event_throttle(sibling);
+	}
 }
 
 static int
