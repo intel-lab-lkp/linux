@@ -17,6 +17,7 @@
 #include <linux/pvclock_gtod.h>
 #include <linux/timekeeper_internal.h>
 
+#include <asm/cpuid/api.h>
 #include <asm/pvclock.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/xen/hypercall.h>
