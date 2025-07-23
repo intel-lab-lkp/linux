@@ -61,6 +61,7 @@ Contents:
    wangxun/txgbevf
    wangxun/ngbe
    wangxun/ngbevf
+   rpmsg_eth
 
 .. only::  subproject and html
 
