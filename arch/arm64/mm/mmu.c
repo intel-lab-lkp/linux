@@ -46,6 +46,8 @@
 #define NO_CONT_MAPPINGS	BIT(1)
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
 
+DEFINE_STATIC_KEY_FALSE(arm64_ptdump_lock_key);
+
 enum pgtable_type {
 	TABLE_PTE,
 	TABLE_PMD,
@@ -1267,7 +1269,12 @@ int pmd_clear_huge(pmd_t *pmdp)
 	return 1;
 }
 
-int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
+/*
+ * If PMD has been isolated via pud_free_pmd_page(), ptdump cannot get
+ * a hold to it, so no need to serialize with mmap_lock, hence lock
+ * will be passed as false here. Otherwise, lock will be true.
+ */
+static int __pmd_free_pte_page(pmd_t *pmdp, unsigned long addr, bool lock)
 {
 	pte_t *table;
 	pmd_t pmd;
@@ -1279,11 +1286,22 @@ int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
 		return 1;
 	}
 
+	/* See comment in pud_free_pmd_page for static key logic */
 	table = pte_offset_kernel(pmdp, addr);
 	pmd_clear(pmdp);
 	__flush_tlb_kernel_pgtable(addr);
+	if (static_branch_unlikely(&arm64_ptdump_lock_key) && lock) {
+		mmap_read_lock(&init_mm);
+		mmap_read_unlock(&init_mm);
+	}
+
 	pte_free_kernel(NULL, table);
 	return 1;
+}
+
+int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
+{
+	return __pmd_free_pte_page(pmdp, addr, true);
 }
 
 int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
@@ -1301,16 +1319,76 @@ int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
 	}
 
 	table = pmd_offset(pudp, addr);
+
+	/*
+	 * Our objective is to prevent ptdump from reading a PMD table which has
+	 * been freed.  Assume that ptdump_walk_pgd() (call this thread T1)
+	 * executes completely on CPU1 and pud_free_pmd_page() (call this thread
+	 * T2) executes completely on CPU2. Let the region sandwiched by the
+	 * mmap_write_lock/unlock in T1 be called CS (the critical section).
+	 *
+	 * Claim: The CS of T1 will never operate on a freed PMD table.
+	 *
+	 * Proof:
+	 *
+	 * Case 1: The static branch is visible to T2.
+	 *
+	 * Case 1 (a): T1 acquires the lock before T2 can.
+	 * T2 will block until T1 drops the lock, so pmd_free() will only be
+	 * executed after T1 exits CS.
+	 *
+	 * Case 1 (b): T2 acquires the lock before T1 can.
+	 * The sequence of barriers issued in __flush_tlb_kernel_pgtable()
+	 * ensures that an empty PUD (via pud_clear()) is visible to T1 before
+	 * T1 can enter CS, therefore it is impossible for the CS to get hold
+	 * of the address of the isolated PMD table.
+	 *
+	 * Case 2: The static branch is not visible to T2.
+	 *
+	 * Since static_branch_enable() (via dmb(ish)) and mmap_write_lock()
+	 * have acquire semantics, it is guaranteed that the static branch
+	 * will be visible to all CPUs before T1 can enter CS. The static
+	 * branch not being visible to T2 therefore guarantees that T1 has
+	 * not yet entered CS .... (i)
+	 * The sequence of barriers via __flush_tlb_kernel_pgtable() in T2
+	 * implies that if the invisibility of the static branch has been
+	 * observed by T2 (i.e static_branch_unlikely() is observed as false),
+	 * then all CPUs will have observed an empty PUD ... (ii)
+	 * Combining (i) and (ii), we conclude that T1 observes an empty PUD
+	 * before entering CS => it is impossible for the CS to get hold of
+	 * the address of the isolated PMD table. Q.E.D
+	 *
+	 * We have proven that the claim is true on the assumption that
+	 * there is no context switch for T1 and T2. Note that the reasoning
+	 * of the proof uses barriers operating on the inner shareable domain,
+	 * which means that they will affect all CPUs, and also a context switch
+	 * will insert extra barriers into the code paths => the claim will
+	 * stand true even if we drop the assumption.
+	 *
+	 * It is also worth reasoning whether something can go wrong via
+	 * pud_free_pmd_page() -> __pmd_free_pte_page(), since the latter
+	 * will be called locklessly on this code path.
+	 *
+	 * For Case 1 (a), T2 will block until CS is finished, so we are safe.
+	 * For Case 1 (b) and Case 2, the PMD table will be isolated before
+	 * T1 can enter CS, therefore it is safe for T2 to operate on the
+	 * PMD table locklessly.
+	 */
+	pud_clear(pudp);
+	__flush_tlb_kernel_pgtable(addr);
+	if (static_branch_unlikely(&arm64_ptdump_lock_key)) {
+		mmap_read_lock(&init_mm);
+		mmap_read_unlock(&init_mm);
+	}
+
 	pmdp = table;
 	next = addr;
 	end = addr + PUD_SIZE;
 	do {
 		if (pmd_present(pmdp_get(pmdp)))
-			pmd_free_pte_page(pmdp, next);
+			__pmd_free_pte_page(pmdp, next, false);
 	} while (pmdp++, next += PMD_SIZE, next != end);
 
-	pud_clear(pudp);
-	__flush_tlb_kernel_pgtable(addr);
 	pmd_free(NULL, table);
 	return 1;
 }
