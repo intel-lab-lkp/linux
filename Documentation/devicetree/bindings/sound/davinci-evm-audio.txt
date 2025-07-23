@@ -15,7 +15,7 @@ Optional properties:
 - clocks : Reference to the master clock
 - clock-names : The clock should be named "mclk"
 - Either codec-clock-rate or the codec-clock reference has to be defined. If
-  the both are defined the driver attempts to set referenced clock to the
+  both are defined the driver attempts to set referenced clock to the
   defined rate and takes the rate from the clock reference.
 
   Board connectors:

@@ -455,7 +455,7 @@ deactivate
 	Deactivate an active workload and return the NSPs to idle.
 
 status
-	Query the QSM about it's NNC implementation. Returns the NNC version,
+	Query the QSM about its NNC implementation. Returns the NNC version,
 	and if CRC is used.
 
 terminate
@@ -487,7 +487,7 @@ one user crashes, the fallout of that should be limited to that workload and not
 impact other workloads. SSR accomplishes this.
 
 If a particular workload crashes, QSM notifies the host via the QAIC_SSR MHI
-channel. This notification identifies the workload by it's assigned DBC. A
+channel. This notification identifies the workload by its assigned DBC. A
 multi-stage recovery process is then used to cleanup both sides, and get the
 DBC/NSPs into a working state.
 

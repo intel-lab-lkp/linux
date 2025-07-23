@@ -55,7 +55,7 @@ additional internal voltages monitored (VSB and battery). It also features
 6 VID inputs. The VID inputs are not yet supported by this driver.
 
 The Fintek F71806F/FG Super-I/O chip is essentially the same as the
-F71872F/FG, and is undistinguishable therefrom.
+F71872F/FG, and is indistinguishable from it.
 
 The driver assumes that no more than one chip is present, which seems
 reasonable.

@@ -141,7 +141,7 @@ in future:
 1. Adding more fields to the end of the existing struct taskstats. Backward
    compatibility is ensured by the version number within the
    structure. Userspace will use only the fields of the struct that correspond
-   to the version its using.
+   to the version it's using.
 
 2. Defining separate statistic structs and using the netlink attributes
    interface to return them. Since userspace processes each netlink attribute

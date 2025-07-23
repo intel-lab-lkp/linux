@@ -11,7 +11,7 @@ protocols can encode e.g. an address (which device should respond) and a
 command: what it should do. The values for these are not always consistent
 across different devices for a given protocol.
 
-Therefore out the output of the IR decoder is a scancode; a single u32
+Therefore the output of the IR decoder is a scancode; a single u32
 value. Using keymap tables this can be mapped to linux key codes.
 
 Other things can be encoded too. Some IR protocols encode a toggle bit; this
@@ -19,7 +19,7 @@ is to distinguish whether the same button is being held down, or has been
 released and pressed again. If has been released and pressed again, the
 toggle bit will invert from one IR message to the next.
 
-Some remotes have a pointer-type device which can used to control the
+Some remotes have a pointer-type device which can be used to control the
 mouse; some air conditioning systems can have their target temperature
 target set in IR.
 
@@ -75,8 +75,8 @@ protocol, or the manchester BPF decoder.
      - Command
 
 There is a variant of rc5 called either rc5x or extended rc5
-where there the second stop bit is the 6th command bit, but inverted.
-This is done so it the scancodes and encoding is compatible with existing
+where the second stop bit is the 6th command bit, but inverted.
+This is done so the scancodes and encoding are compatible with existing
 schemes. This bit is stored in bit 6 of the scancode, inverted. This is
 done to keep it compatible with plain rc-5 where there are two start bits.
 
@@ -127,7 +127,7 @@ differently.
 rc-5x-20 (RC_PROTO_RC5X_20)
 ---------------------------
 
-This rc-5 extended to encoded 20 bits. The is a 3555 microseconds space
+This rc-5 extended to encoded 20 bits. There is a 3555 microsecond space
 after the 8th bit.
 
 .. flat-table:: rc-5x-20 bits scancode mapping
@@ -182,7 +182,7 @@ jvc (RC_PROTO_JVC)
 The jvc protocol is much like nec, without the inverted values. It is
 described here https://www.sbprojects.net/knowledge/ir/jvc.php.
 
-The scancode is a 16 bits value, where the address is the lower 8 bits
+The scancode is a 16 bit value, where the address is the lower 8 bits
 and the command the higher 8 bits; this is reversed from IR order.
 
 sony-12 (RC_PROTO_SONY12)
@@ -329,11 +329,11 @@ The scancode has a somewhat unusual encoding.
 sanyo (RC_PROTO_SANYO)
 ----------------------
 
-The sanyo protocol is like the nec protocol, but with 13 bits address
+The sanyo protocol is like the nec protocol, but with 13 bit address
 rather than 8 bits. Both the address and the command are followed by
 their inverted versions, but these are not present in the scancodes.
 
-Bis 8 to 20 of the scancode is the 13 bits address, and the lower 8
+Bis 8 to 20 of the scancode is the 13 bit address, and the lower 8
 bits are the command.
 
 mcir2-kbd (RC_PROTO_MCIR2_KBD)
@@ -388,7 +388,7 @@ rc-6-mce (RC_PROTO_RC6_MCE)
 This is the rc-6 in mode 6a, 32 bits. The upper 16 bits are the vendor,
 and the lower 16 bits are the vendor-specific bits. This protocol is
 for the Microsoft MCE variant (vendor = 0x800f). The toggle bit in the
-protocol itself is ignored, and the 16th bit should be takes as the toggle
+protocol itself is ignored, and the 16th bit should be taken as the toggle
 bit.
 
 sharp (RC_PROTO_SHARP)
@@ -399,7 +399,7 @@ https://www.sbprojects.net/knowledge/ir/sharp.php. There is a very long
 (40ms) space between the normal and inverted values, and some IR receivers
 cannot decode this.
 
-There is a 5 bit address and a 8 bit command. In the scancode the address is
+There is a 5 bit address and an 8 bit command. In the scancode the address is
 in bits 8 to 12, and the command in bits 0 to 7.
 
 xmp (RC_PROTO_XMP)
