@@ -11943,6 +11943,7 @@ static const struct scsi_host_template mpt2sas_driver_template = {
 	.shost_groups			= mpt3sas_host_groups,
 	.sdev_groups			= mpt3sas_dev_groups,
 	.track_queue_depth		= 1,
+	.no_ata_cdl			= 1,
 	.cmd_size			= sizeof(struct scsiio_tracker),
 };
 
@@ -11982,6 +11983,7 @@ static const struct scsi_host_template mpt3sas_driver_template = {
 	.shost_groups			= mpt3sas_host_groups,
 	.sdev_groups			= mpt3sas_dev_groups,
 	.track_queue_depth		= 1,
+	.no_ata_cdl			= 1,
 	.cmd_size			= sizeof(struct scsiio_tracker),
 	.map_queues			= scsih_map_queues,
 	.mq_poll			= mpt3sas_blk_mq_poll,
