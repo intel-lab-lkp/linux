@@ -2627,13 +2627,9 @@ retry:
 			goto err;
 	}
 	if (!folio_test_uptodate(folio)) {
-		bool no_wait = false;
-
-		if ((iocb->ki_flags & IOCB_WAITQ) &&
-		    folio_batch_count(fbatch) > 1)
-			no_wait = true;
 		err = filemap_update_page(iocb, mapping, count, folio,
-					  need_uptodate, no_wait);
+					  need_uptodate,
+					  folio_batch_count(fbatch) > 1);
 		if (err)
 			goto err;
 	}
