@@ -845,6 +845,9 @@ int v4l2_fwnode_device_parse(struct device *dev,
 		dev_dbg(dev, "device rotation: %u\n", val);
 	}
 
+	props->hflip = fwnode_property_read_bool(fwnode, "flip-horizontal");
+	props->vflip = fwnode_property_read_bool(fwnode, "flip-vertical");
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(v4l2_fwnode_device_parse);

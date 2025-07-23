@@ -75,10 +75,14 @@ enum v4l2_fwnode_orientation {
  * struct v4l2_fwnode_device_properties - fwnode device properties
  * @orientation: device orientation. See &enum v4l2_fwnode_orientation
  * @rotation: device rotation
+ * @hflip: device horizontal flip
+ * @vflip: device vertical flip
  */
 struct v4l2_fwnode_device_properties {
 	enum v4l2_fwnode_orientation orientation;
 	unsigned int rotation;
+	bool hflip;
+	bool vflip;
 };
 
 /**
