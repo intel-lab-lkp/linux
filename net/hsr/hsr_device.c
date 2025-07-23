@@ -679,6 +679,26 @@ struct net_device *hsr_get_port_ndev(struct net_device *ndev,
 }
 EXPORT_SYMBOL(hsr_get_port_ndev);
 
+/* Get hsr port type, return -EINVAL if not get.
+ */
+int hsr_get_port_type(struct net_device *hsr_dev, struct net_device *dev, enum hsr_port_type *type)
+{
+	struct hsr_priv *hsr;
+	struct hsr_port *port;
+
+	hsr = netdev_priv(hsr_dev);
+
+	hsr_for_each_port(hsr, port) {
+		if (port->dev == dev) {
+			*type = port->type;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(hsr_get_port_type);
+
 /* Default multicast address for HSR Supervision frames */
 static const unsigned char def_multicast_addr[ETH_ALEN] __aligned(2) = {
 	0x01, 0x15, 0x4e, 0x00, 0x01, 0x00
