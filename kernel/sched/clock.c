@@ -216,6 +216,7 @@ void __init sched_clock_init(void)
 	 */
 	local_irq_disable();
 	__sched_clock_gtod_offset();
+	generic_sched_clock_init();
 	local_irq_enable();
 
 	static_branch_inc(&sched_clock_running);
