@@ -4,6 +4,7 @@
  */
 
 #include "sc7180.dtsi"
+#include "sc7180-audio.dtsi"
 
 /* SM7125 uses Kryo 465 instead of Kryo 468 */
 &cpu0 { compatible = "qcom,kryo465"; };
