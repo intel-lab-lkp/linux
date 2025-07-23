@@ -18,10 +18,10 @@
 /*
  * This gives the physical RAM offset.
  */
-#ifndef __ASSEMBLER__
 #ifndef PHYS_OFFSET
 #define PHYS_OFFSET	_UL(0)
 #endif
+#ifndef __ASSEMBLER__
 extern unsigned long vm_map_base;
 #endif /* __ASSEMBLER__ */
 

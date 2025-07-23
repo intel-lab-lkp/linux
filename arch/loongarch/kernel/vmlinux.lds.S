@@ -3,10 +3,12 @@
 #include <asm/asm-offsets.h>
 #include <asm/thread_info.h>
 #include <asm/orc_lookup.h>
+#include <asm/addrspace.h>
 
 #define PAGE_SIZE _PAGE_SIZE
 #define RO_EXCEPTION_TABLE_ALIGN	4
 #define PHYSADDR_MASK			0xffffffffffff /* 48-bit */
+#define LOAD_OFFSET			PAGE_OFFSET
 
 /*
  * Put .bss..swapper_pg_dir as the first thing in .bss. This will
@@ -42,7 +44,7 @@ SECTIONS
 
 	. = ALIGN(PECOFF_SEGMENT_ALIGN);
 	_stext = .;
-	.text : {
+	.text : AT(ADDR(.text) - LOAD_OFFSET) {
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
@@ -60,7 +62,7 @@ SECTIONS
 	__inittext_begin = .;
 
 	INIT_TEXT_SECTION(PAGE_SIZE)
-	.exit.text : {
+	.exit.text : AT(ADDR(.exit.text) - LOAD_OFFSET) {
 		EXIT_TEXT
 	}
 
@@ -82,7 +84,7 @@ SECTIONS
 	}
 
 	INIT_DATA_SECTION(16)
-	.exit.data : {
+	.exit.data : AT(ADDR(.exit.data) - LOAD_OFFSET) {
 		EXIT_DATA
 	}
 
@@ -90,7 +92,7 @@ SECTIONS
 	PERCPU_SECTION(1 << CONFIG_L1_CACHE_SHIFT)
 #endif
 
-	.init.bss : {
+	.init.bss : AT(ADDR(.init.bss) - LOAD_OFFSET) {
 		*(.init.bss)
 	}
 	. = ALIGN(PECOFF_SEGMENT_ALIGN);
@@ -101,27 +103,34 @@ SECTIONS
 	_sdata = .;
 	RO_DATA(4096)
 
-	.got : ALIGN(16) { *(.got) }
-	.plt : ALIGN(16) { *(.plt) }
-	.got.plt : ALIGN(16) { *(.got.plt) }
+	. =  ALIGN(16);
+	.got : AT(ADDR(.got) - LOAD_OFFSET) { *(.got) }
+	. =  ALIGN(16);
+	.plt : AT(ADDR(.plt) - LOAD_OFFSET) { *(.plt) }
+	. =  ALIGN(16);
+	.got.plt : AT(ADDR(.got.plt) - LOAD_OFFSET) { *(.got.plt) }
 
 	RW_DATA(1 << CONFIG_L1_CACHE_SHIFT, PAGE_SIZE, THREAD_SIZE)
 
-	.rela.dyn : ALIGN(8) {
+	. = ALIGN(8);
+	.rela.dyn : AT(ADDR(.rela.dyn) - LOAD_OFFSET) {
 		__rela_dyn_begin = .;
 		 *(.rela.dyn) *(.rela*)
 		__rela_dyn_end = .;
 	}
 
 #ifdef CONFIG_RELR
-	.relr.dyn : ALIGN(8) {
+	. = ALIGN(8);
+	.relr.dyn : AT(ADDR(.relr.dyn) - LOAD_OFFSET) {
 		__relr_dyn_begin = .;
 		 *(.relr.dyn)
 		__relr_dyn_end = .;
 	}
 #endif
 
-	.data.rel : { *(.data.rel*) }
+	.data.rel : AT(ADDR(.data.rel) - LOAD_OFFSET) {
+		*(.data.rel*)
+	}
 
 #ifdef CONFIG_RELOCATABLE
 	. = ALIGN(8);
@@ -134,10 +143,13 @@ SECTIONS
 
 	ORC_UNWIND_TABLE
 
-	.sdata : {
+	.sdata : AT(ADDR(.sdata) - LOAD_OFFSET) {
 		*(.sdata)
 	}
-	.edata_padding : { BYTE(0); . = ALIGN(PECOFF_FILE_ALIGN); }
+	.edata_padding : AT(ADDR(.edata_padding) - LOAD_OFFSET) {
+		BYTE(0);
+		. = ALIGN(PECOFF_FILE_ALIGN);
+	}
 	_edata =  .;
 
 	BSS_SECTION(0, SZ_64K, 8)
