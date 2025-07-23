@@ -822,6 +822,9 @@ static void armv8pmu_enable_user_access(struct arm_pmu *cpu_pmu)
 
 static void armv8pmu_enable_event(struct perf_event *event)
 {
+	if (unlikely(event->hw.idx < 0))
+		return;
+
 	armv8pmu_write_event_type(event);
 	armv8pmu_enable_event_irq(event);
 	armv8pmu_enable_event_counter(event);
@@ -829,6 +832,9 @@ static void armv8pmu_enable_event(struct perf_event *event)
 
 static void armv8pmu_disable_event(struct perf_event *event)
 {
+	if (unlikely(event->hw.idx < 0))
+		return;
+
 	armv8pmu_disable_event_counter(event);
 	armv8pmu_disable_event_irq(event);
 }
