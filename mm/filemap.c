@@ -2455,11 +2455,15 @@ static bool filemap_range_uptodate(struct address_space *mapping,
 
 static int filemap_update_page(struct kiocb *iocb,
 		struct address_space *mapping, size_t count,
-		struct folio *folio, bool need_uptodate)
+		struct folio *folio, bool need_uptodate,
+		bool no_wait)
 {
 	int error;
+	int flags = iocb->ki_flags;
+	if (no_wait)
+		flags |= IOCB_NOWAIT;
 
-	if (iocb->ki_flags & IOCB_NOWAIT) {
+	if (flags & IOCB_NOWAIT) {
 		if (!filemap_invalidate_trylock_shared(mapping))
 			return -EAGAIN;
 	} else {
@@ -2468,9 +2472,9 @@ static int filemap_update_page(struct kiocb *iocb,
 
 	if (!folio_trylock(folio)) {
 		error = -EAGAIN;
-		if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_NOIO))
+		if (flags & (IOCB_NOWAIT | IOCB_NOIO))
 			goto unlock_mapping;
-		if (!(iocb->ki_flags & IOCB_WAITQ)) {
+		if (!(flags & IOCB_WAITQ)) {
 			filemap_invalidate_unlock_shared(mapping);
 			/*
 			 * This is where we usually end up waiting for a
@@ -2494,7 +2498,7 @@ static int filemap_update_page(struct kiocb *iocb,
 		goto unlock;
 
 	error = -EAGAIN;
-	if (iocb->ki_flags & (IOCB_NOIO | IOCB_NOWAIT | IOCB_WAITQ))
+	if (flags & (IOCB_NOIO | IOCB_NOWAIT | IOCB_WAITQ))
 		goto unlock;
 
 	error = filemap_read_folio(iocb->ki_filp, mapping->a_ops->read_folio,
@@ -2623,11 +2627,13 @@ retry:
 			goto err;
 	}
 	if (!folio_test_uptodate(folio)) {
+		bool no_wait = false;
+
 		if ((iocb->ki_flags & IOCB_WAITQ) &&
 		    folio_batch_count(fbatch) > 1)
-			iocb->ki_flags |= IOCB_NOWAIT;
+			no_wait = true;
 		err = filemap_update_page(iocb, mapping, count, folio,
-					  need_uptodate);
+					  need_uptodate, no_wait);
 		if (err)
 			goto err;
 	}
