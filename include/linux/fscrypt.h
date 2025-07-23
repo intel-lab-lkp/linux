@@ -200,6 +200,38 @@ struct fscrypt_operations {
 int fscrypt_d_revalidate(struct inode *dir, const struct qstr *name,
 			 struct dentry *dentry, unsigned int flags);
 
+static inline struct fscrypt_inode_info **fscrypt_addr(const struct inode *inode)
+{
+	return ((void *)inode + inode->i_sb->s_cop->inode_info_offs);
+}
+
+static inline bool fscrypt_set_inode_info(struct inode *inode,
+					  struct fscrypt_inode_info *crypt_info)
+{
+	void *p;
+
+	/*
+	 * For existing inodes, multiple tasks may race to set ->i_crypt_info.
+	 * So use cmpxchg_release().  This pairs with the smp_load_acquire() in
+	 * fscrypt_get_inode_info().  I.e., here we publish ->i_crypt_info with
+	 * a RELEASE barrier so that other tasks can ACQUIRE it.
+	 */
+
+	if (inode->i_sb->s_cop->inode_info_offs)
+		p = cmpxchg_release(fscrypt_addr(inode), NULL, crypt_info);
+	else
+		p = cmpxchg_release(&inode->i_crypt_info, NULL, crypt_info);
+	return p == NULL;
+}
+
+static inline struct fscrypt_inode_info *
+fscrypt_get_inode_info_raw(const struct inode *inode)
+{
+	if (inode->i_sb->s_cop->inode_info_offs)
+		return *fscrypt_addr(inode);
+	return inode->i_crypt_info;
+}
+
 static inline struct fscrypt_inode_info *
 fscrypt_get_inode_info(const struct inode *inode)
 {
@@ -209,6 +241,10 @@ fscrypt_get_inode_info(const struct inode *inode)
 	 * a RELEASE barrier.  We need to use smp_load_acquire() here to safely
 	 * ACQUIRE the memory the other task published.
 	 */
+
+	if (inode->i_sb->s_cop->inode_info_offs)
+		return smp_load_acquire(fscrypt_addr(inode));
+
 	return smp_load_acquire(&inode->i_crypt_info);
 }
 
