@@ -383,6 +383,14 @@ properties:
                         |                    |
                         +--------------------+
 
+  flip-horizontal:
+    description: boolean to flip image horizontally
+    type: boolean
+
+  flip-vertical:
+    description: boolean to flip image vertically
+    type: boolean
+
   orientation:
     description:
       The orientation of a device (typically an image sensor or a flash LED)
