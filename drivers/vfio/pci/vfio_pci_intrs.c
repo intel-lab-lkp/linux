@@ -517,6 +517,8 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 	}
 	ctx->trigger = trigger;
 
+	repair_irq(irq);
+
 	return 0;
 
 out_put_eventfd_ctx:

@@ -1921,6 +1921,18 @@ void irq_domain_free_irqs_parent(struct irq_domain *domain,
 }
 EXPORT_SYMBOL_GPL(irq_domain_free_irqs_parent);
 
+static void __irq_domain_repair_irq(struct irq_data *irq_data)
+{
+	if (irq_data && irq_data->domain) {
+		struct irq_domain *domain = irq_data->domain;
+
+		if (domain->ops->repair)
+			domain->ops->repair(domain, irq_data);
+		if (irq_data->parent_data)
+			__irq_domain_repair_irq(irq_data->parent_data);
+	}
+}
+
 static void __irq_domain_deactivate_irq(struct irq_data *irq_data)
 {
 	if (irq_data && irq_data->domain) {
@@ -1988,6 +2000,21 @@ void irq_domain_deactivate_irq(struct irq_data *irq_data)
 		irqd_clr_activated(irq_data);
 	}
 }
+
+/**
+ * irq_domain_repair_irq - Call domain_ops->repair recursively to
+ *			       repair interrupt
+ * @irq_data: outermost irq_data associated with interrupt
+ *
+ * It calls domain_ops->repair to program interrupt controllers to repair
+ * interrupt delivery.
+ */
+void irq_domain_repair_irq(struct irq_data *irq_data)
+{
+	if (irqd_is_activated(irq_data))
+		__irq_domain_repair_irq(irq_data);
+}
+
 
 static void irq_domain_check_hierarchy(struct irq_domain *domain)
 {

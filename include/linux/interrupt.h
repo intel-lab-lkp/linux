@@ -203,6 +203,9 @@ extern void free_percpu_irq(unsigned int, void __percpu *);
 extern const void *free_nmi(unsigned int irq, void *dev_id);
 extern void free_percpu_nmi(unsigned int irq, void __percpu *percpu_dev_id);
 
+extern void repair_irq(unsigned int irq);
+
+
 struct device;
 
 extern int __must_check

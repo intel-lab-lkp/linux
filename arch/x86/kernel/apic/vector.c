@@ -396,6 +396,23 @@ static void x86_vector_deactivate(struct irq_domain *dom, struct irq_data *irqd)
 	raw_spin_unlock_irqrestore(&vector_lock, flags);
 }
 
+static void x86_vector_repair(struct irq_domain *dom, struct irq_data *irqd)
+{
+	struct apic_chip_data *apicd = apic_chip_data(irqd);
+	struct irq_desc *desc = irq_data_to_desc(irqd);
+	unsigned int vector = apicd->vector;
+	unsigned int cpu = apicd->cpu;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&vector_lock, flags);
+	if (per_cpu(vector_irq, cpu)[vector] != desc) {
+		per_cpu(vector_irq, cpu)[vector] = desc;
+		pr_warn("irq %u: repair vector %u.%u\n",
+			irqd->irq, cpu, vector);
+	}
+	raw_spin_unlock_irqrestore(&vector_lock, flags);
+}
+
 static int activate_reserved(struct irq_data *irqd)
 {
 	struct apic_chip_data *apicd = apic_chip_data(irqd);
@@ -703,6 +720,7 @@ static const struct irq_domain_ops x86_vector_domain_ops = {
 	.free		= x86_vector_free_irqs,
 	.activate	= x86_vector_activate,
 	.deactivate	= x86_vector_deactivate,
+	.repair		= x86_vector_repair,
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
 	.debug_show	= x86_vector_debug_show,
 #endif
