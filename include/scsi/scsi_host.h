@@ -462,6 +462,12 @@ struct scsi_host_template {
 	/* True if the controller does not support WRITE SAME */
 	unsigned no_write_same:1;
 
+	/*
+	 * True if the controller does not support Command Duration Limits on
+	 * ATA devices.
+	 */
+	unsigned no_ata_cdl:1;
+
 	/* True if the host uses host-wide tagspace */
 	unsigned host_tagset:1;
 

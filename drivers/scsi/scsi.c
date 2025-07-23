@@ -651,6 +651,7 @@ static bool scsi_cdl_check_cmd(struct scsi_device *sdev, u8 opcode, u16 sa,
  */
 void scsi_cdl_check(struct scsi_device *sdev)
 {
+	const struct scsi_host_template *hostt = sdev->host->hostt;
 	bool cdl_supported;
 	unsigned char *buf;
 
@@ -659,8 +660,11 @@ void scsi_cdl_check(struct scsi_device *sdev)
 	 * lower SPC version. This also avoids problems with old drives choking
 	 * on MAINTENANCE_IN / MI_REPORT_SUPPORTED_OPERATION_CODES with a
 	 * service action specified, as done in scsi_cdl_check_cmd().
+	 * Also ignore CDL support with ATA devices for any host declaring
+	 * lacking support for this feature.
 	 */
-	if (sdev->scsi_level < SCSI_SPC_5) {
+	if (sdev->scsi_level < SCSI_SPC_5 ||
+	   (sdev->is_ata && hostt->no_ata_cdl)) {
 		sdev->cdl_supported = 0;
 		return;
 	}
