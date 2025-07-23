@@ -10,7 +10,7 @@ Description:
 		device datasheet for details. It's commonly used when the
 		product enter shipping stage. After entering shipping mode,
 		only 'VBUS' or 'Power key" pressed can make it leave this mode.
-		'Disable' also can help to leave it, but it's more like to
+		'Disable' also can help to leave it, but it's more likely to
 		abort the action before the device really enter shipping mode.
 
 		Access: Read, Write

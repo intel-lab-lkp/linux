@@ -2,8 +2,8 @@ What:           /sys/kernel/debug/hyperv/<UUID>/fuzz_test_state
 Date:           October 2019
 KernelVersion:  5.5
 Contact:        Branden Bonaby <brandonbonaby94@gmail.com>
-Description:    Fuzz testing status of a vmbus device, whether its in an ON
-                state or a OFF state
+Description:    Fuzz testing status of a vmbus device, whether it's in an ON
+                state or an OFF state
 Users:          Debugging tools
 
 What:           /sys/kernel/debug/hyperv/<UUID>/delay/fuzz_test_buffer_interrupt_delay

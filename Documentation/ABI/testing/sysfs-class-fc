@@ -15,7 +15,7 @@ Description:
 
 		The interface expects a string "<cgroupid>:<appid>" where:
 		<cgroupid> is inode of the cgroup in hexadecimal
-		<appid> is user provided string upto 128 characters
+		<appid> is user provided string up to 128 characters
 		in length.
 
 		If an appid_store is done for a cgroup id that already

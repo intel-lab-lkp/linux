@@ -3,7 +3,7 @@ Date:		June 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	The integer value of this attribute ranges from 0-4.
 		When read, this attribute returns the number of the actual
-		profile. This value is persistent, so its equivalent to the
+		profile. This value is persistent, so it's equivalent to the
 		profile that's active when the device is powered on next time.
 		When written, this file sets the number of the startup profile
 		and the device activates this profile immediately.

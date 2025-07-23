@@ -76,7 +76,7 @@ Date:		May 2023
 KernelVersion:	6.5
 Contact:	Yicong Yang <yangyicong@hisilicon.com>
 Description:	(Read) Indicates if this kind of filter can be selected at the same
-		time as others filters, or must be used on it's own. 1 indicates
+		time as others filters, or must be used on its own. 1 indicates
 		the former case and 0 indicates the latter.
 
 What:		/sys/devices/hisi_ptt<sicl_id>_<core_id>/root_port_filters/<bdf>
@@ -102,7 +102,7 @@ Date:		May 2023
 KernelVersion:	6.5
 Contact:	Yicong Yang <yangyicong@hisilicon.com>
 Description:	(Read) Indicates if this kind of filter can be selected at the same
-		time as others filters, or must be used on it's own. 1 indicates
+		time as others filters, or must be used on its own. 1 indicates
 		the former case and 0 indicates the latter.
 
 What:		/sys/devices/hisi_ptt<sicl_id>_<core_id>/requester_filters/<bdf>

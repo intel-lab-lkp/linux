@@ -206,7 +206,7 @@ Description:
 		reading by userspace (unlike _offset) and unlike calibbias
 		it does not affect the differential value measured because
 		the effect of _zeropoint cancels out across the two inputs
-		that make up the differential pair. It's purpose is to bring
+		that make up the differential pair. Its purpose is to bring
 		the individual signals, before the differential is measured,
 		within the measurement range of the device. The naming is
 		chosen because if the separate inputs that make the

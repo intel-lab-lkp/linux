@@ -37,8 +37,8 @@ Description:
 Files under /sys/class/ata_link
 -------------------------------
 
-Behind each port, there is a ata_link. If there is a SATA PM in the topology, 15
-ata_link objects are created.
+Behind each port, there is an ata_link. If there is a SATA PM in the topology,
+15 ata_link objects are created.
 
 If a link is behind a port, the directory name is linkX, where X is ata_port_id
 of the port. If a link is behind a PM, its name is linkX.Y where X is
