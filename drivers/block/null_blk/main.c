@@ -389,6 +389,12 @@ static int nullb_update_nr_hw_queues(struct nullb_device *dev,
 		return -EINVAL;
 
 	/*
+	 * Cannot update queues with shared tagset.
+	 */
+	if (dev->shared_tags)
+		return -EINVAL;
+
+	/*
 	 * Make sure that null_init_hctx() does not access nullb->queues[] past
 	 * the end of that array.
 	 */
@@ -1884,18 +1890,24 @@ static int null_validate_conf(struct nullb_device *dev)
 		dev->queue_mode = NULL_Q_MQ;
 	}
 
-	if (dev->use_per_node_hctx) {
-		if (dev->submit_queues != nr_online_nodes)
-			dev->submit_queues = nr_online_nodes;
-	} else if (dev->submit_queues > nr_cpu_ids)
-		dev->submit_queues = nr_cpu_ids;
-	else if (dev->submit_queues == 0)
-		dev->submit_queues = 1;
-	dev->prev_submit_queues = dev->submit_queues;
-
-	if (dev->poll_queues > g_poll_queues)
+	if (dev->shared_tags) {
+		dev->submit_queues = g_submit_queues;
 		dev->poll_queues = g_poll_queues;
+	} else {
+		if (dev->use_per_node_hctx) {
+			if (dev->submit_queues != nr_online_nodes)
+				dev->submit_queues = nr_online_nodes;
+		} else if (dev->submit_queues > nr_cpu_ids)
+			dev->submit_queues = nr_cpu_ids;
+		else if (dev->submit_queues == 0)
+			dev->submit_queues = 1;
+
+		if (dev->poll_queues > g_poll_queues)
+			dev->poll_queues = g_poll_queues;
+	}
+	dev->prev_submit_queues = dev->submit_queues;
 	dev->prev_poll_queues = dev->poll_queues;
+
 	dev->irqmode = min_t(unsigned int, dev->irqmode, NULL_IRQ_TIMER);
 
 	/* Do memory allocation, so set blocking */
