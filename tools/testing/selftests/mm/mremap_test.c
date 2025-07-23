@@ -525,10 +525,10 @@ out_unmap:
 out:
 	if (success)
 		ksft_test_result_pass("%s%s\n", test_name,
-				      dont_unmap ? " [dontunnmap]" : "");
+				      dont_unmap ? " [dontunmap]" : "");
 	else
 		ksft_test_result_fail("%s%s\n", test_name,
-				      dont_unmap ? " [dontunnmap]" : "");
+				      dont_unmap ? " [dontunmap]" : "");
 }
 
 static void mremap_shrink_multiple_vmas(unsigned long page_size,
@@ -727,10 +727,10 @@ out_unmap:
 out:
 	if (success)
 		ksft_test_result_pass("%s%s\n", test_name,
-				      dont_unmap ? " [dontunnmap]" : "");
+				      dont_unmap ? " [dontunmap]" : "");
 	else
 		ksft_test_result_fail("%s%s\n", test_name,
-				      dont_unmap ? " [dontunnmap]" : "");
+				      dont_unmap ? " [dontunmap]" : "");
 }
 
 /* Returns the time taken for the remap on success else returns -1. */
