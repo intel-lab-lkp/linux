@@ -4545,26 +4545,28 @@ ips_flush_and_reset(ips_ha_t *ha)
 	/* Create a usuable SCB */
 	scb = dma_alloc_coherent(&ha->pcidev->dev, sizeof(ips_scb_t),
 			&command_dma, GFP_KERNEL);
-	if (scb) {
-	    memset(scb, 0, sizeof(ips_scb_t));
-	    ips_init_scb(ha, scb);
-	    scb->scb_busaddr = command_dma;
+	if (!scb)
+		return;
 
-	    scb->timeout = ips_cmd_timeout;
-	    scb->cdb[0] = IPS_CMD_FLUSH;
+	memset(scb, 0, sizeof(ips_scb_t));
+	ips_init_scb(ha, scb);
+	scb->scb_busaddr = command_dma;
 
-	    scb->cmd.flush_cache.op_code = IPS_CMD_FLUSH;
-	    scb->cmd.flush_cache.command_id = IPS_MAX_CMDS;   /* Use an ID that would otherwise not exist */
-	    scb->cmd.flush_cache.state = IPS_NORM_STATE;
-	    scb->cmd.flush_cache.reserved = 0;
-	    scb->cmd.flush_cache.reserved2 = 0;
-	    scb->cmd.flush_cache.reserved3 = 0;
-	    scb->cmd.flush_cache.reserved4 = 0;
+	scb->timeout = ips_cmd_timeout;
+	scb->cdb[0] = IPS_CMD_FLUSH;
 
-	    ret = ips_send_cmd(ha, scb);                      /* Send the Flush Command */
+	scb->cmd.flush_cache.op_code = IPS_CMD_FLUSH;
+	scb->cmd.flush_cache.command_id = IPS_MAX_CMDS;   /* Use an ID that would otherwise not exist */
+	scb->cmd.flush_cache.state = IPS_NORM_STATE;
+	scb->cmd.flush_cache.reserved = 0;
+	scb->cmd.flush_cache.reserved2 = 0;
+	scb->cmd.flush_cache.reserved3 = 0;
+	scb->cmd.flush_cache.reserved4 = 0;
 
-	    if (ret == IPS_SUCCESS) {
-	        time = 60 * IPS_ONE_SEC;	              /* Max Wait time is 60 seconds */
+	ret = ips_send_cmd(ha, scb);                      /* Send the Flush Command */
+
+	if (ret == IPS_SUCCESS) {
+		time = 60 * IPS_ONE_SEC;	              /* Max Wait time is 60 seconds */
 	        done = 0;
 
 	        while ((time > 0) && (!done)) {
@@ -4574,7 +4576,6 @@ ips_flush_and_reset(ips_ha_t *ha)
 	           time--;
 	        }
         }
-	}
 
 	/* Now RESET and INIT the adapter */
 	(*ha->func.reset) (ha);
