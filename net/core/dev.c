@@ -12448,6 +12448,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 		else
 			____napi_schedule(sd, napi);
 	}
+	oldsd->backlog.state &= NAPIF_STATE_THREADED;
 
 	raise_softirq_irqoff(NET_TX_SOFTIRQ);
 	local_irq_enable();
