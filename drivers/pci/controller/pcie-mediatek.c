@@ -487,12 +487,10 @@ static const struct msi_parent_ops mtk_msi_parent_ops = {
 
 static int mtk_pcie_allocate_msi_domains(struct mtk_pcie_port *port)
 {
-	struct fwnode_handle *fwnode = of_fwnode_handle(port->pcie->dev->of_node);
-
 	mutex_init(&port->lock);
 
 	struct irq_domain_info info = {
-		.fwnode		= fwnode,
+		.fwnode		= dev_fwnode(port->pcie->dev),
 		.ops		= &msi_domain_ops,
 		.host_data	= port,
 		.size		= MTK_MSI_IRQS_NUM,

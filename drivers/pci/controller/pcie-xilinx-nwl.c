@@ -498,10 +498,9 @@ static int nwl_pcie_init_msi_irq_domain(struct nwl_pcie *pcie)
 {
 #ifdef CONFIG_PCI_MSI
 	struct device *dev = pcie->dev;
-	struct fwnode_handle *fwnode = of_fwnode_handle(dev->of_node);
 	struct nwl_msi *msi = &pcie->msi;
 	struct irq_domain_info info = {
-		.fwnode		= fwnode,
+		.fwnode		= dev_fwnode(dev),
 		.ops		= &dev_msi_domain_ops,
 		.host_data	= pcie,
 		.size		= INT_PCI_MSI_NR,

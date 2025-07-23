@@ -166,9 +166,8 @@ static const struct irq_domain_ops msi_domain_ops = {
 
 static int altera_allocate_domains(struct altera_msi *msi)
 {
-	struct fwnode_handle *fwnode = of_fwnode_handle(msi->pdev->dev.of_node);
 	struct irq_domain_info info = {
-		.fwnode		= fwnode,
+		.fwnode		= dev_fwnode(&msi->pdev->dev),
 		.ops		= &msi_domain_ops,
 		.host_data	= msi,
 		.size		= msi->num_of_vectors,

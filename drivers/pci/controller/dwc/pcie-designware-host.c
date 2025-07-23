@@ -214,9 +214,8 @@ static const struct irq_domain_ops dw_pcie_msi_domain_ops = {
 int dw_pcie_allocate_domains(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
-	struct fwnode_handle *fwnode = of_fwnode_handle(pci->dev->of_node);
 	struct irq_domain_info info = {
-		.fwnode		= fwnode,
+		.fwnode		= dev_fwnode(pci->dev),
 		.ops		= &dw_pcie_msi_domain_ops,
 		.size		= pp->num_vectors,
 		.host_data	= pp,

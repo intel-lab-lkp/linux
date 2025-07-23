@@ -153,13 +153,12 @@ static const struct msi_parent_ops plda_msi_parent_ops = {
 static int plda_allocate_msi_domains(struct plda_pcie_rp *port)
 {
 	struct device *dev = port->dev;
-	struct fwnode_handle *fwnode = of_fwnode_handle(dev->of_node);
 	struct plda_msi *msi = &port->msi;
 
 	mutex_init(&port->msi.lock);
 
 	struct irq_domain_info info = {
-		.fwnode		= fwnode,
+		.fwnode		= dev_fwnode(dev),
 		.ops		= &msi_domain_ops,
 		.host_data	= port,
 		.size		= msi->num_vectors,
