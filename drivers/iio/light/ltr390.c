@@ -38,12 +38,20 @@
 #define LTR390_ALS_UVS_GAIN		0x05
 #define LTR390_PART_ID			0x06
 #define LTR390_MAIN_STATUS		0x07
-#define LTR390_ALS_DATA			0x0D
-#define LTR390_UVS_DATA			0x10
+#define LTR390_ALS_DATA_0		0x0D
+#define LTR390_ALS_DATA_1		0x0E
+#define LTR390_ALS_DATA_2		0x0F
+#define LTR390_UVS_DATA_0		0x10
+#define LTR390_UVS_DATA_1		0x11
+#define LTR390_UVS_DATA_2		0x12
 #define LTR390_INT_CFG			0x19
 #define LTR390_INT_PST			0x1A
-#define LTR390_THRESH_UP		0x21
-#define LTR390_THRESH_LOW		0x24
+#define LTR390_THRESH_UP_0		0x21
+#define LTR390_THRESH_UP_1		0x22
+#define LTR390_THRESH_UP_2		0x23
+#define LTR390_THRESH_LOW_0		0x24
+#define LTR390_THRESH_LOW_1		0x25
+#define LTR390_THRESH_LOW_2		0x26
 
 #define LTR390_PART_NUMBER_ID		0xb
 #define LTR390_ALS_UVS_GAIN_MASK	GENMASK(2, 0)
@@ -98,11 +106,62 @@ struct ltr390_data {
 	int int_time_us;
 };
 
+static bool ltr390_is_readable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case LTR390_MAIN_CTRL:
+	case LTR390_ALS_UVS_MEAS_RATE:
+	case LTR390_ALS_UVS_GAIN:
+	case LTR390_PART_ID:
+	case LTR390_MAIN_STATUS:
+	case LTR390_ALS_DATA_0:
+	case LTR390_ALS_DATA_1:
+	case LTR390_ALS_DATA_2:
+	case LTR390_UVS_DATA_0:
+	case LTR390_UVS_DATA_1:
+	case LTR390_UVS_DATA_2:
+	case LTR390_INT_CFG:
+	case LTR390_INT_PST:
+	case LTR390_THRESH_UP_0:
+	case LTR390_THRESH_UP_1:
+	case LTR390_THRESH_UP_2:
+	case LTR390_THRESH_LOW_0:
+	case LTR390_THRESH_LOW_1:
+	case LTR390_THRESH_LOW_2:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool ltr390_is_writeable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case LTR390_MAIN_CTRL:
+	case LTR390_ALS_UVS_MEAS_RATE:
+	case LTR390_ALS_UVS_GAIN:
+	case LTR390_INT_CFG:
+	case LTR390_INT_PST:
+	case LTR390_THRESH_UP_0:
+	case LTR390_THRESH_UP_1:
+	case LTR390_THRESH_UP_2:
+	case LTR390_THRESH_LOW_0:
+	case LTR390_THRESH_LOW_1:
+	case LTR390_THRESH_LOW_2:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static const struct regmap_config ltr390_regmap_config = {
 	.name = "ltr390",
 	.reg_bits = 8,
 	.reg_stride = 1,
 	.val_bits = 8,
+	.max_register = LTR390_THRESH_LOW_2,
+	.readable_reg = ltr390_is_readable_reg,
+	.writeable_reg = ltr390_is_writeable_reg,
 };
 
 /* Sampling frequency is in mili Hz and mili Seconds */
@@ -194,7 +253,7 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 			if (ret < 0)
 				return ret;
 
-			ret = ltr390_register_read(data, LTR390_UVS_DATA);
+			ret = ltr390_register_read(data, LTR390_UVS_DATA_0);
 			if (ret < 0)
 				return ret;
 			break;
@@ -204,7 +263,7 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 			if (ret < 0)
 				return ret;
 
-			ret = ltr390_register_read(data, LTR390_ALS_DATA);
+			ret = ltr390_register_read(data, LTR390_ALS_DATA_0);
 			if (ret < 0)
 				return ret;
 			break;
@@ -454,14 +513,14 @@ static int ltr390_read_threshold(struct iio_dev *indio_dev,
 
 	switch (dir) {
 	case IIO_EV_DIR_RISING:
-		ret = ltr390_register_read(data, LTR390_THRESH_UP);
+		ret = ltr390_register_read(data, LTR390_THRESH_UP_0);
 		if (ret < 0)
 			return ret;
 		*val = ret;
 		return IIO_VAL_INT;
 
 	case IIO_EV_DIR_FALLING:
-		ret = ltr390_register_read(data, LTR390_THRESH_LOW);
+		ret = ltr390_register_read(data, LTR390_THRESH_LOW_0);
 		if (ret < 0)
 			return ret;
 		*val = ret;
@@ -480,10 +539,10 @@ static int ltr390_write_threshold(struct iio_dev *indio_dev,
 	guard(mutex)(&data->lock);
 	switch (dir) {
 	case IIO_EV_DIR_RISING:
-		return regmap_bulk_write(data->regmap, LTR390_THRESH_UP, &val, 3);
+		return regmap_bulk_write(data->regmap, LTR390_THRESH_UP_0, &val, 3);
 
 	case IIO_EV_DIR_FALLING:
-		return regmap_bulk_write(data->regmap, LTR390_THRESH_LOW, &val, 3);
+		return regmap_bulk_write(data->regmap, LTR390_THRESH_LOW_0, &val, 3);
 
 	default:
 		return -EINVAL;
@@ -586,6 +645,25 @@ static int ltr390_write_event_config(struct iio_dev *indio_dev,
 	}
 }
 
+static int ltr390_debugfs_reg_access(struct iio_dev *indio_dev,
+						unsigned int reg, unsigned int writeval,
+						unsigned int *readval)
+{
+	int ret;
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	guard(mutex)(&data->lock);
+
+	if (!readval)
+		return regmap_write(data->regmap, reg, writeval);
+
+	ret = regmap_read(data->regmap, reg, readval);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
 static const struct iio_info ltr390_info = {
 	.read_raw = ltr390_read_raw,
 	.write_raw = ltr390_write_raw,
@@ -594,6 +672,7 @@ static const struct iio_info ltr390_info = {
 	.read_event_config = ltr390_read_event_config,
 	.write_event_value = ltr390_write_event_value,
 	.write_event_config = ltr390_write_event_config,
+	.debugfs_reg_access = ltr390_debugfs_reg_access,
 };
 
 static irqreturn_t ltr390_interrupt_handler(int irq, void *private)
