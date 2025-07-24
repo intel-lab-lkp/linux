@@ -113,7 +113,9 @@ __devlink_health_reporter_create(struct devlink *devlink,
 {
 	struct devlink_health_reporter *reporter;
 
-	if (WARN_ON(ops->default_graceful_period && !ops->recover))
+	if (WARN_ON(ops->default_graceful_period_delay &&
+		    !ops->default_graceful_period) ||
+	    WARN_ON(ops->default_graceful_period && !ops->recover))
 		return ERR_PTR(-EINVAL);
 
 	reporter = kzalloc(sizeof(*reporter), GFP_KERNEL);
@@ -294,6 +296,11 @@ devlink_nl_health_reporter_fill(struct sk_buff *msg,
 			       reporter->graceful_period))
 		goto reporter_nest_cancel;
 	if (reporter->ops->recover &&
+	    devlink_nl_put_u64(msg,
+			       DEVLINK_ATTR_HEALTH_REPORTER_GP_DELAY,
+			       reporter->graceful_period_delay))
+		goto reporter_nest_cancel;
+	if (reporter->ops->recover &&
 	    nla_put_u8(msg, DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER,
 		       reporter->auto_recover))
 		goto reporter_nest_cancel;
@@ -458,16 +465,32 @@ int devlink_nl_health_reporter_set_doit(struct sk_buff *skb,
 
 	if (!reporter->ops->recover &&
 	    (info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD] ||
-	     info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER]))
+	     info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER] ||
+	     info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GP_DELAY]))
 		return -EOPNOTSUPP;
 
 	if (!reporter->ops->dump &&
 	    info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_DUMP])
 		return -EOPNOTSUPP;
 
-	if (info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD])
+	if (info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD]) {
 		reporter->graceful_period =
 			nla_get_u64(info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD]);
+		if (!reporter->graceful_period)
+			reporter->graceful_period_delay = 0;
+	}
+
+	if (info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GP_DELAY]) {
+		u64 configured_delay =
+			nla_get_u64(info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_GP_DELAY]);
+
+		if (!reporter->graceful_period && configured_delay) {
+			NL_SET_ERR_MSG_MOD(info->extack, "Cannot set grace period delay without a grace period.");
+			return -EINVAL;
+		}
+
+		reporter->graceful_period_delay = configured_delay;
+	}
 
 	if (info->attrs[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER])
 		reporter->auto_recover =

@@ -50,7 +50,7 @@ Once an error is reported, devlink health will perform the following actions:
   * Auto recovery attempt is being done. Depends on:
 
     - Auto-recovery configuration
-    - Grace period vs. time passed since last recover
+    - Grace period (and grace period delay)  vs. time passed since last recover
 
 Devlink formatted message
 =========================

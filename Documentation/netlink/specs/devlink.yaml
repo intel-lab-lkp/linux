@@ -853,6 +853,9 @@ attribute-sets:
         type: nest
         multi-attr: true
         nested-attributes: dl-rate-tc-bws
+      -
+        name: health-reporter-gp-delay
+        type: u64
   -
     name: dl-dev-stats
     subset-of: devlink
@@ -1216,6 +1219,8 @@ attribute-sets:
         name: health-reporter-dump-ts-ns
       -
         name: health-reporter-auto-dump
+      -
+        name: health-reporter-gp-delay
 
   -
     name: dl-attr-stats
@@ -1961,6 +1966,7 @@ operations:
             - health-reporter-graceful-period
             - health-reporter-auto-recover
             - health-reporter-auto-dump
+            - health-reporter-gp-delay
 
     -
       name: health-reporter-recover
