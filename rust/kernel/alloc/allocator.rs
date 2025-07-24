@@ -187,3 +187,60 @@ unsafe impl Allocator for KVmalloc {
         unsafe { ReallocFunc::KVREALLOC.call(ptr, layout, old_layout, flags) }
     }
 }
+
+#[macros::kunit_tests(rust_allocator_kunit)]
+mod tests {
+    use super::*;
+    use kernel::prelude::*;
+
+    const TEST_SIZE: usize = 1024;
+    const LARGE_ALIGN_TEST_SIZE: usize = kernel::page::PAGE_SIZE * 4;
+    #[repr(align(128))]
+    struct Blob([u8; TEST_SIZE]);
+    // This structure is used to test the allocation of alignments larger
+    // than PAGE_SIZE.
+    // Since this is not yet supported, avoid accessing the contents of
+    // the structure for now.
+    #[allow(dead_code)]
+    #[repr(align(8192))]
+    struct LargeAlignBlob([u8; LARGE_ALIGN_TEST_SIZE]);
+
+    #[test]
+    fn test_kmalloc() -> Result<(), AllocError> {
+        let blob = KBox::new(Blob([0xfeu8; TEST_SIZE]), GFP_KERNEL)?;
+        for b in blob.0.as_slice().iter() {
+            assert_eq!(*b, 0xfeu8);
+        }
+
+        let blob = KBox::new(LargeAlignBlob([0xfdu8; LARGE_ALIGN_TEST_SIZE]), GFP_KERNEL)?;
+        for b in blob.0.as_slice().iter() {
+            assert_eq!(*b, 0xfdu8);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vmalloc() -> Result<(), AllocError> {
+        let blob = VBox::new(Blob([0xfeu8; TEST_SIZE]), GFP_KERNEL)?;
+        for b in blob.0.as_slice().iter() {
+            assert_eq!(*b, 0xfeu8);
+        }
+
+        assert!(VBox::<LargeAlignBlob>::new_uninit(GFP_KERNEL).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_kvmalloc() -> Result<(), AllocError> {
+        let blob = KVBox::new(Blob([0xfeu8; TEST_SIZE]), GFP_KERNEL)?;
+        for b in blob.0.as_slice().iter() {
+            assert_eq!(*b, 0xfeu8);
+        }
+
+        assert!(KVBox::<LargeAlignBlob>::new_uninit(GFP_KERNEL).is_err());
+
+        Ok(())
+    }
+}
