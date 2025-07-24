@@ -1362,6 +1362,67 @@ static const struct v4l2_ioctl_ops pispbe_node_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
+static int pispbe_link_validate(struct media_link *link)
+{
+	const struct v4l2_mbus_framefmt *sd_fmt;
+	struct v4l2_pix_format_mplane *pix_mp;
+	struct v4l2_subdev_state *state;
+	struct media_entity *vdev_ent;
+	struct media_entity *sd_ent;
+	struct pispbe_node *node;
+	struct v4l2_subdev *sd;
+
+	if (is_media_entity_v4l2_video_device(link->source->entity)) {
+		vdev_ent = link->source->entity;
+		sd_ent = link->sink->entity;
+	} else {
+		sd_ent = link->source->entity;
+		vdev_ent = link->sink->entity;
+	}
+
+	node = container_of(media_entity_to_video_device(vdev_ent),
+			    struct pispbe_node, vfd);
+	switch (node->id) {
+	case TDN_INPUT_NODE:
+		fallthrough;
+	case STITCH_INPUT_NODE:
+		fallthrough;
+	case TDN_OUTPUT_NODE:
+		fallthrough;
+	case STITCH_OUTPUT_NODE:
+		fallthrough;
+	case CONFIG_NODE:
+		/* Skip validation for these nodes. */
+		return 0;
+	}
+	pix_mp = &node->format.fmt.pix_mp;
+
+	sd = media_entity_to_v4l2_subdev(sd_ent);
+	state = v4l2_subdev_get_unlocked_active_state(sd);
+	sd_fmt = v4l2_subdev_state_get_format(state, node->id);
+
+	/* Only check for sizes. */
+	if (pix_mp->width != sd_fmt->width) {
+		dev_dbg(node->pispbe->dev,
+			"%s: width does not match (vdev %u, sd %u)\n",
+			__func__, pix_mp->width, sd_fmt->width);
+		return -EPIPE;
+	}
+
+	if (pix_mp->height != sd_fmt->height) {
+		dev_dbg(node->pispbe->dev,
+			"%s: height does not match (vdev %u, sd %u)\n",
+			__func__, pix_mp->height, sd_fmt->height);
+		return -EPIPE;
+	}
+
+	return 0;
+}
+
+static const struct media_entity_operations pispbe_node_entity_ops = {
+	.link_validate = pispbe_link_validate,
+};
+
 static const struct video_device pispbe_videodev = {
 	.name = PISPBE_NAME,
 	.vfl_dir = VFL_DIR_M2M, /* gets overwritten */
@@ -1445,6 +1506,7 @@ static int pispbe_init_node(struct pispbe_dev *pispbe, unsigned int id)
 	vdev->device_caps = V4L2_CAP_STREAMING | node_desc[id].caps;
 
 	node->pad.flags = output ? MEDIA_PAD_FL_SOURCE : MEDIA_PAD_FL_SINK;
+	entity->ops = &pispbe_node_entity_ops;
 	ret = media_entity_pads_init(entity, 1, &node->pad);
 	if (ret) {
 		dev_err(pispbe->dev,
@@ -1561,6 +1623,10 @@ static const struct v4l2_subdev_internal_ops pispbe_subdev_internal_ops = {
 	.init_state = pispbe_init_state,
 };
 
+static const struct media_entity_operations pispbe_subdev_entity_ops = {
+	.link_validate = v4l2_subdev_link_validate,
+};
+
 static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 {
 	struct v4l2_subdev *sd = &pispbe->sd;
@@ -1569,6 +1635,7 @@ static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 	v4l2_subdev_init(sd, &pispbe_sd_ops);
 	sd->internal_ops = &pispbe_subdev_internal_ops;
 	sd->entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
+	sd->entity.ops = &pispbe_subdev_entity_ops;
 	sd->owner = THIS_MODULE;
 	sd->dev = pispbe->dev;
 	strscpy(sd->name, PISPBE_NAME, sizeof(sd->name));
