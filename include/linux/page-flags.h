@@ -933,6 +933,7 @@ enum pagetype {
 	PGTY_zsmalloc		= 0xf6,
 	PGTY_unaccepted		= 0xf7,
 	PGTY_large_kmalloc	= 0xf8,
+	PGTY_mgt_entry		= 0xf9,
 
 	PGTY_mapcount_underflow = 0xff
 };
@@ -1100,6 +1101,77 @@ PAGE_TYPE_OPS(Zsmalloc, zsmalloc, zsmalloc)
  */
 PAGE_TYPE_OPS(Unaccepted, unaccepted, unaccepted)
 FOLIO_TYPE_OPS(large_kmalloc, large_kmalloc)
+
+
+PAGE_TYPE_OPS(Mentry, mgt_entry, mgt_entry)
+
+#define PAGE_MGT_ENTRY_TYPE_MAX		PAGE_TYPE_MASK
+
+static inline void folio_remove_mgte(struct folio *folio)
+{
+	if (!folio_test_mgt_entry(folio))
+		return;
+
+	__folio_clear_mgt_entry(folio);
+}
+
+static inline void folio_init_mgte(struct folio *folio, int nr_mgt_entry)
+{
+	// PAGE_TYPE value currently do not support large folio.
+	VM_BUG_ON(folio_test_large(folio));
+	VM_BUG_ON(folio_test_mgt_entry(folio));
+
+	if (unlikely(nr_mgt_entry > PAGE_MGT_ENTRY_TYPE_MAX))
+		return;
+
+	__folio_set_mgt_entry(folio);
+	__PageSetMentryValue(&folio->page, nr_mgt_entry);
+}
+
+static inline int folio_get_mgte_count(struct folio *folio)
+{
+	if (!folio_test_mgt_entry(folio))
+		return 0;
+
+	VM_BUG_ON(folio_test_large(folio));
+
+	return __PageGetMentryValue(&folio->page);
+}
+
+static inline void folio_dec_mgte_count(struct folio *folio)
+{
+	unsigned int nr_mgte, old;
+
+	do {
+		old = READ_ONCE(folio->page.page_type);
+
+		if ((old >> PAGE_TYPE_SHIFT) != PGTY_mgt_entry)
+			return;
+
+		nr_mgte = old & PAGE_TYPE_MASK;
+		BUG_ON(nr_mgte == 0);
+	} while (cmpxchg(&folio->page.page_type, old, old - 1) != old);
+}
+
+static inline void folio_inc_mgte_count(struct folio *folio)
+{
+	unsigned int nr_mgte, old;
+
+	do {
+		old = READ_ONCE(folio->page.page_type);
+
+		if ((old >> PAGE_TYPE_SHIFT) != PGTY_mgt_entry)
+			return;
+
+		nr_mgte = old & PAGE_TYPE_MASK;
+
+		if (unlikely(nr_mgte == PAGE_MGT_ENTRY_TYPE_MAX)) {
+			// overflow, can't reuse PAGE_TYPE here.
+			folio_remove_mgte(folio);
+			break;
+		}
+	} while (cmpxchg(&folio->page.page_type, old, old + 1) != old);
+}
 
 /**
  * PageHuge - Determine if the page belongs to hugetlbfs
