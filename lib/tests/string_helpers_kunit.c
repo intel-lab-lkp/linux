@@ -611,10 +611,166 @@ static void test_unescape(struct kunit *test)
 		test_string_escape(test, "escape 1", escape1, i, TEST_STRING_2_DICT_1);
 }
 
+/* Test structure for memcpy_and_pad structure copying tests */
+struct test_struct {
+	u8 byte1;
+	u16 word1;
+	u8 byte2;
+	u32 dword1;
+	u8 byte3;
+} __packed;
+
+static void test_memcpy_and_pad(struct kunit *test)
+{
+	char dest[20];
+	const char *src = "hello";
+	struct test_struct struct_dest[3];
+	const struct test_struct struct_src = {
+		.byte1 = 0xAA,
+		.word1 = 0xBBCC,
+		.byte2 = 0xDD,
+		.dword1 = 0xEEFF1122,
+		.byte3 = 0x33
+	};
+	u8 *struct_bytes;
+	int i;
+
+	/* Test 1: Basic functionality - dest_len > count */
+	memset(dest, 0xFF, sizeof(dest));  /* Fill with known pattern */
+	memcpy_and_pad(dest, 10, src, 5, 0x11);
+	KUNIT_EXPECT_MEMEQ(test, dest, "hello", 5);
+	/* Check padding */
+	for (i = 5; i < 10; i++)
+		KUNIT_EXPECT_EQ(test, (unsigned char)dest[i], 0x11);
+	/* Ensure we didn't write past dest_len */
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[10], 0xFF);
+
+	/* Test 2: dest_len == count */
+	memset(dest, 0xFF, sizeof(dest));
+	memcpy_and_pad(dest, 5, src, 5, 0x22);
+	KUNIT_EXPECT_MEMEQ(test, dest, "hello", 5);
+	/* No padding should occur */
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[5], 0xFF);
+
+	/* Test 3: dest_len < count (truncation) */
+	memset(dest, 0xFF, sizeof(dest));
+	memcpy_and_pad(dest, 3, src, 5, 0x33);
+	KUNIT_EXPECT_MEMEQ(test, dest, "hel", 3);
+	/* No padding should occur, and nothing beyond dest_len should be touched */
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[3], 0xFF);
+
+	/* Test 4: Zero count */
+	memset(dest, 0xFF, sizeof(dest));
+	memcpy_and_pad(dest, 5, src, 0, 0x44);
+	/* Should be all padding */
+	for (i = 0; i < 5; i++)
+		KUNIT_EXPECT_EQ(test, (unsigned char)dest[i], 0x44);
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[5], 0xFF);
+
+	/* Test 5: Zero dest_len */
+	memset(dest, 0xFF, sizeof(dest));
+	memcpy_and_pad(dest, 0, src, 5, 0x55);
+	/* Should do nothing */
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[0], 0xFF);
+
+	/* Test 6: Different padding characters */
+	memset(dest, 0xFF, sizeof(dest));
+	memcpy_and_pad(dest, 8, "hi", 2, '\0');
+	KUNIT_EXPECT_MEMEQ(test, dest, "hi", 2);
+	for (i = 2; i < 8; i++)
+		KUNIT_EXPECT_EQ(test, dest[i], '\0');
+
+	/* Test 7: Negative pad value (should work as unsigned char) */
+	memset(dest, 0x00, sizeof(dest));
+	memcpy_and_pad(dest, 5, "a", 1, -1);
+	KUNIT_EXPECT_EQ(test, dest[0], 'a');
+	for (i = 1; i < 5; i++)
+		KUNIT_EXPECT_EQ(test, (unsigned char)dest[i], 0xFF);
+
+	/* Test 8: Single byte operations */
+	memset(dest, 0x00, sizeof(dest));
+	memcpy_and_pad(dest, 1, "X", 1, 0x88);
+	KUNIT_EXPECT_EQ(test, dest[0], 'X');
+	KUNIT_EXPECT_EQ(test, (unsigned char)dest[1], 0x00);
+
+	/* Test 9: Large pad scenario */
+	memset(dest, 0x00, sizeof(dest));
+	memcpy_and_pad(dest, 15, "test", 4, 0x99);
+	KUNIT_EXPECT_MEMEQ(test, dest, "test", 4);
+	for (i = 4; i < 15; i++)
+		KUNIT_EXPECT_EQ(test, (unsigned char)dest[i], 0x99);
+
+	/* Test 10: Structure copying - full copy with padding */
+	memset(struct_dest, 0xFF, sizeof(struct_dest));
+	memcpy_and_pad(struct_dest, sizeof(struct_dest), &struct_src, sizeof(struct_src), 0x55);
+
+	/* Verify first struct copied correctly */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte1, struct_src.byte1);
+	KUNIT_EXPECT_EQ(test, struct_dest[0].word1, struct_src.word1);
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte2, struct_src.byte2);
+	KUNIT_EXPECT_EQ(test, struct_dest[0].dword1, struct_src.dword1);
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte3, struct_src.byte3);
+
+	/* Verify padding area - remaining struct elements should be filled with 0x55 */
+	struct_bytes = (u8 *)&struct_dest[1];
+	for (i = 0; i < sizeof(struct_dest) - sizeof(struct_src); i++)
+		KUNIT_EXPECT_EQ(test, struct_bytes[i], 0x55);
+
+	/* Test 11: Structure copying - partial copy with padding */
+	memset(struct_dest, 0xFF, sizeof(struct_dest));
+	memcpy_and_pad(struct_dest, sizeof(struct_src) * 2, &struct_src,
+		       sizeof(struct_src) / 2, 0x77);
+
+	/* Verify partial struct data copied (first 4 bytes of 9-byte struct) */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte1, struct_src.byte1);   /* offset 0: copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].word1, struct_src.word1);   /* offset 1-2: copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte2, struct_src.byte2);   /* offset 3: copied */
+	/* offset 4 and beyond should be padding since only 4 bytes were copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].dword1, 0x77777777);
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte3, 0x77);
+
+	/* Second struct should be entirely padding */
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte1, 0x77);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].word1, 0x7777);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte2, 0x77);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].dword1, 0x77777777);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte3, 0x77);
+
+	/* Test 12: Structure copying - truncation (dest_len < count, no padding) */
+	memset(struct_dest, 0xFF, sizeof(struct_dest));
+	memcpy_and_pad(struct_dest, sizeof(struct_src) - 2, &struct_src, sizeof(struct_src), 0x99);
+
+	/* Verify truncated data - only first 7 bytes of 9-byte struct copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte1, struct_src.byte1);    /* offset 0: copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].word1, struct_src.word1);    /* offset 1-2: copied */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte2, struct_src.byte2);    /* offset 3: copied */
+	/* offset 4-7: dword1 partially copied (first 3 bytes), last byte remains 0xFF */
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	KUNIT_EXPECT_EQ(test, struct_dest[0].dword1, 0xFFFF1122); /* LE: 22 11 FF FF */
+#else
+	KUNIT_EXPECT_EQ(test, struct_dest[0].dword1, 0xEEFF11FF); /* BE: EE FF 11 FF */
+#endif
+	/* byte3 should remain as initialization since truncated at 7 bytes */
+	KUNIT_EXPECT_EQ(test, struct_dest[0].byte3, 0xFF);
+
+	/* Remaining struct elements should be untouched */
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte1, 0xFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].word1, 0xFFFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte2, 0xFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].dword1, 0xFFFFFFFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[1].byte3, 0xFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[2].byte1, 0xFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[2].word1, 0xFFFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[2].byte2, 0xFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[2].dword1, 0xFFFFFFFF);
+	KUNIT_EXPECT_EQ(test, struct_dest[2].byte3, 0xFF);
+}
+
 static struct kunit_case string_helpers_test_cases[] = {
 	KUNIT_CASE(test_get_size),
 	KUNIT_CASE(test_upper_lower),
 	KUNIT_CASE(test_unescape),
+	KUNIT_CASE(test_memcpy_and_pad),
 	{}
 };
 
