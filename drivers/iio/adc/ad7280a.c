@@ -27,38 +27,19 @@
 /* Registers */
 
 #define AD7280A_CELL_VOLTAGE_1_REG		0x0  /* D11 to D0, Read only */
-#define AD7280A_CELL_VOLTAGE_2_REG		0x1  /* D11 to D0, Read only */
-#define AD7280A_CELL_VOLTAGE_3_REG		0x2  /* D11 to D0, Read only */
-#define AD7280A_CELL_VOLTAGE_4_REG		0x3  /* D11 to D0, Read only */
-#define AD7280A_CELL_VOLTAGE_5_REG		0x4  /* D11 to D0, Read only */
 #define AD7280A_CELL_VOLTAGE_6_REG		0x5  /* D11 to D0, Read only */
 #define AD7280A_AUX_ADC_1_REG			0x6  /* D11 to D0, Read only */
-#define AD7280A_AUX_ADC_2_REG			0x7  /* D11 to D0, Read only */
-#define AD7280A_AUX_ADC_3_REG			0x8  /* D11 to D0, Read only */
-#define AD7280A_AUX_ADC_4_REG			0x9  /* D11 to D0, Read only */
-#define AD7280A_AUX_ADC_5_REG			0xA  /* D11 to D0, Read only */
 #define AD7280A_AUX_ADC_6_REG			0xB  /* D11 to D0, Read only */
-#define AD7280A_SELF_TEST_REG			0xC  /* D11 to D0, Read only */
 
 #define AD7280A_CTRL_HB_REG			0xD  /* D15 to D8, Read/write */
 #define   AD7280A_CTRL_HB_CONV_INPUT_MSK		GENMASK(7, 6)
 #define     AD7280A_CTRL_HB_CONV_INPUT_ALL			0
-#define     AD7280A_CTRL_HB_CONV_INPUT_6CELL_AUX1_3_5		1
-#define     AD7280A_CTRL_HB_CONV_INPUT_6CELL			2
-#define     AD7280A_CTRL_HB_CONV_INPUT_SELF_TEST		3
 #define   AD7280A_CTRL_HB_CONV_RREAD_MSK		GENMASK(5, 4)
 #define     AD7280A_CTRL_HB_CONV_RREAD_ALL			0
-#define     AD7280A_CTRL_HB_CONV_RREAD_6CELL_AUX1_3_5		1
-#define     AD7280A_CTRL_HB_CONV_RREAD_6CELL			2
 #define     AD7280A_CTRL_HB_CONV_RREAD_NO		        3
 #define   AD7280A_CTRL_HB_CONV_START_MSK		BIT(3)
-#define     AD7280A_CTRL_HB_CONV_START_CNVST			0
 #define     AD7280A_CTRL_HB_CONV_START_CS			1
 #define   AD7280A_CTRL_HB_CONV_AVG_MSK			GENMASK(2, 1)
-#define     AD7280A_CTRL_HB_CONV_AVG_DIS			0
-#define     AD7280A_CTRL_HB_CONV_AVG_2				1
-#define     AD7280A_CTRL_HB_CONV_AVG_4			        2
-#define     AD7280A_CTRL_HB_CONV_AVG_8			        3
 #define   AD7280A_CTRL_HB_PWRDN_SW			BIT(0)
 
 #define AD7280A_CTRL_LB_REG			0xE  /* D7 to D0, Read/write */
@@ -71,7 +52,6 @@
 #define   AD7280A_CTRL_LB_MUST_SET			BIT(4)
 #define   AD7280A_CTRL_LB_THERMISTOR_MSK		BIT(3)
 #define   AD7280A_CTRL_LB_LOCK_DEV_ADDR_MSK		BIT(2)
-#define   AD7280A_CTRL_LB_INC_DEV_ADDR_MSK		BIT(1)
 #define   AD7280A_CTRL_LB_DAISY_CHAIN_RB_MSK		BIT(0)
 
 #define AD7280A_CELL_OVERVOLTAGE_REG		0xF  /* D7 to D0, Read/write */
@@ -81,8 +61,6 @@
 
 #define AD7280A_ALERT_REG			0x13 /* D7 to D0, Read/write */
 #define   AD7280A_ALERT_REMOVE_MSK			GENMASK(3, 0)
-#define     AD7280A_ALERT_REMOVE_AUX5			BIT(0)
-#define     AD7280A_ALERT_REMOVE_AUX3_AUX5		BIT(1)
 #define     AD7280A_ALERT_REMOVE_VIN5			BIT(2)
 #define     AD7280A_ALERT_REMOVE_VIN4_VIN5		BIT(3)
 #define   AD7280A_ALERT_GEN_STATIC_HIGH			BIT(6)
@@ -92,15 +70,8 @@
 #define  AD7280A_CELL_BALANCE_CHAN_BITMAP_MSK		GENMASK(7, 2)
 #define AD7280A_CB1_TIMER_REG			0x15 /* D7 to D0, Read/write */
 #define  AD7280A_CB_TIMER_VAL_MSK			GENMASK(7, 3)
-#define AD7280A_CB2_TIMER_REG			0x16 /* D7 to D0, Read/write */
-#define AD7280A_CB3_TIMER_REG			0x17 /* D7 to D0, Read/write */
-#define AD7280A_CB4_TIMER_REG			0x18 /* D7 to D0, Read/write */
-#define AD7280A_CB5_TIMER_REG			0x19 /* D7 to D0, Read/write */
-#define AD7280A_CB6_TIMER_REG			0x1A /* D7 to D0, Read/write */
-#define AD7280A_PD_TIMER_REG			0x1B /* D7 to D0, Read/write */
 #define AD7280A_READ_REG			0x1C /* D7 to D0, Read/write */
 #define   AD7280A_READ_ADDR_MSK				GENMASK(7, 2)
-#define AD7280A_CNVST_CTRL_REG			0x1D /* D7 to D0, Read/write */
 
 /* Transfer fields */
 #define AD7280A_TRANS_WRITE_DEVADDR_MSK		GENMASK(31, 27)
@@ -116,8 +87,6 @@
 #define AD7280A_TRANS_READ_CONV_DATA_MSK	GENMASK(22, 11)
 #define AD7280A_TRANS_READ_REG_REGADDR_MSK	GENMASK(26, 21)
 #define AD7280A_TRANS_READ_REG_DATA_MSK		GENMASK(20, 13)
-#define AD7280A_TRANS_READ_WRITE_ACK_MSK	BIT(10)
-#define AD7280A_TRANS_READ_CRC_MSK		GENMASK(9, 2)
 
 /* Magic value used to indicate this special case */
 #define AD7280A_ALL_CELLS				(0xAD << 16)
@@ -135,7 +104,6 @@
 					     (c) - AD7280A_CELLS_PER_DEV)
 
 #define AD7280A_DEVADDR_MASTER		0
-#define AD7280A_DEVADDR_ALL		0x1F
 
 static const unsigned short ad7280a_n_avg[4] = {1, 2, 4, 8};
 static const unsigned short ad7280a_t_acq_ns[4] = {470, 1030, 1510, 1945};
