@@ -2689,6 +2689,21 @@ void drm_atomic_helper_commit_hw_done(struct drm_atomic_state *state)
 		/* backend must have consumed any event by now */
 		WARN_ON(new_crtc_state->event);
 		complete_all(&commit->hw_done);
+
+		if (new_crtc_state->active &&
+		    (!old_crtc_state->active ||
+		     drm_atomic_crtc_needs_modeset(new_crtc_state))) {
+			struct drm_display_mode *mode = &new_crtc_state->mode;
+			unsigned deadline_lines, deadline_us;
+
+			/* Reset HW done deadline to start of vblank */
+			deadline_lines = mode->crtc_vtotal - mode->crtc_vdisplay;
+			deadline_us = DIV_ROUND_UP(deadline_lines * mode->crtc_htotal * 1000u,
+						   mode->crtc_clock);
+			drm_crtc_set_hw_done_deadline_property(crtc, deadline_us);
+		} else if (old_crtc_state->active && !new_crtc_state->active) {
+			drm_crtc_set_hw_done_deadline_property(crtc, 0);
+		}
 	}
 
 	if (state->fake_commit) {

@@ -229,6 +229,16 @@ struct dma_fence *drm_crtc_create_fence(struct drm_crtc *crtc)
  * 		Driver's default scaling filter
  * 	Nearest Neighbor:
  * 		Nearest Neighbor scaling filter
+ * HW_DONE_DEADLINE:
+ * 	Immutable atomic property describing the deadline for programming an
+ * 	atomic commit to HW to finish, to guarantee that the commit takes
+ * 	effect for the next refresh cycle.
+ *
+ * 	With fixed refresh rate, the value is the number of microseconds before
+ * 	the end of vblank.
+ *
+ * 	With variable refresh rate (VRR), the value is the number of microseconds
+ * 	before the latest possible end of vblank.
  */
 
 __printf(6, 0)
@@ -303,6 +313,8 @@ static int __drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *
 					   config->prop_out_fence_ptr, 0);
 		drm_object_attach_property(&crtc->base,
 					   config->prop_vrr_enabled, 0);
+		drm_object_attach_property(&crtc->base,
+					   config->prop_hw_done_deadline, 0);
 	}
 
 	return 0;
@@ -939,6 +951,24 @@ int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 	return 0;
 }
 EXPORT_SYMBOL(drm_crtc_create_scaling_filter_property);
+
+/**
+ * drm_crtc_set_hw_done_deadline_property - sets the HW done deadline property for a CRTC
+ * @crtc: drm CRTC
+ * @capable: True if the connector is variable refresh rate capable
+ *
+ * If the actual deadline differs from start of vblank, the atomic driver can call this to
+ * update the deadline after a modeset.
+ */
+void drm_crtc_set_hw_done_deadline_property(struct drm_crtc *crtc, unsigned deadline)
+{
+	struct drm_device *dev = crtc->dev;
+
+	drm_object_property_set_value(&crtc->base,
+				      dev->mode_config.prop_hw_done_deadline,
+				      deadline);
+}
+EXPORT_SYMBOL(drm_crtc_set_hw_done_deadline_property);
 
 /**
  * drm_crtc_in_clone_mode - check if the given CRTC state is in clone mode

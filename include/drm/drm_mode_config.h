@@ -680,6 +680,11 @@ struct drm_mode_config {
 	struct drm_property *prop_vrr_enabled;
 
 	/**
+	 * @prop_hw_done_deadline: Atomic CRTC HW_DONE_DEADLINE property.
+	 */
+	struct drm_property *prop_hw_done_deadline;
+
+	/**
 	 * @dvi_i_subconnector_property: Optional DVI-I property to
 	 * differentiate between analog or digital mode.
 	 */
