@@ -1063,11 +1063,13 @@ config KASAN_SHADOW_OFFSET
 	default 0xffffffff
 
 config NR_CPUS
-	int "Maximum number of CPUs (2-32)"
+	int "Maximum number of CPUs (1-32)"
+	range 1 1 if !SMP
 	range 2 16 if DEBUG_KMAP_LOCAL
 	range 2 32 if !DEBUG_KMAP_LOCAL
 	depends on SMP
-	default "4"
+	default "1" if !SMP
+	default "4" if SMP
 	help
 	  The maximum number of CPUs that the kernel can support.
 	  Up to 32 CPUs can be supported, or up to 16 if kmap_local()
