@@ -7480,8 +7480,24 @@ out7:
 	return err;
 }
 
+static void ext4_busy_check(struct super_block *sb, void *data)
+{
+	int *is_busy = data;
+	*is_busy = 1;
+}
+
 static void __exit ext4_exit_fs(void)
 {
+
+	int is_busy = 0;
+
+	iterate_supers_type(&ext4_fs_type, ext4_busy_check, &is_busy);
+
+	if (is_busy) {
+		pr_warn("ext4: Cannot unload module, filesystem is still in use.\n");
+		return;
+	}
+
 	ext4_destroy_lazyinit_thread();
 	unregister_as_ext2();
 	unregister_as_ext3();
