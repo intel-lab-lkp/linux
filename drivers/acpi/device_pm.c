@@ -84,8 +84,23 @@ int acpi_device_get_power(struct acpi_device *device, int *state)
 	parent = acpi_dev_parent(device);
 
 	if (!device->flags.power_manageable) {
-		/* TBD: Non-recursive algorithm for walking up hierarchy. */
-		*state = parent ? parent->power.state : ACPI_STATE_D0;
+		/*
+		 * If the device itself is not power-manageable,
+		 * walk up the parent hierarchy to find the closest
+		 * ancestor that is power-manageable.
+		 * Use that ancestor's power state as an estimate
+		 * for this device. If no such ancestor exists,
+		 * default to D0 (Fully On).
+		 */
+		struct acpi_device *ancestor = parent;
+		/*
+		 * Keep traversing up until a power-manageable ancestor
+		 * is found or the root is reached
+		 */
+		while (ancestor && !ancestor->flags.power_manageable)
+			ancestor = acpi_dev_parent(ancestor);
+		/* Use the found ancestor's power state, or D0 if none is found */
+		*state = ancestor ? ancestor->power.state : ACPI_STATE_D0;
 		goto out;
 	}
 
