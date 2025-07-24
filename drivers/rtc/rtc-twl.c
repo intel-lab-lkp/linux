@@ -224,8 +224,11 @@ static int twl_rtc_alarm_irq_enable(struct device *dev, unsigned enabled)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct twl_rtc *twl_rtc = dev_get_drvdata(dev);
-	int irq = platform_get_irq(pdev, 0);
-	int ret;
+	int irq, ret;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	if (enabled) {
 		ret = set_rtc_irq_bit(twl_rtc,
