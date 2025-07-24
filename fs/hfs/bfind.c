@@ -133,6 +133,8 @@ int hfs_brec_find(struct hfs_find_data *fd)
 			goto invalid;
 		if (bnode->type != (--height ? HFS_NODE_INDEX : HFS_NODE_LEAF))
 			goto invalid;
+		if (!bnode->num_recs)
+			goto invalid;
 		bnode->parent = parent;
 
 		res = __hfs_brec_find(bnode, fd);
