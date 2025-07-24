@@ -157,11 +157,13 @@ retry:
 		u16 gso_size = __virtio16_to_cpu(little_endian, hdr->gso_size);
 		unsigned int nh_off = p_off;
 		struct skb_shared_info *shinfo = skb_shinfo(skb);
+		u16 min_gso_size = 0;
 
 		switch (gso_type & ~SKB_GSO_TCP_ECN) {
 		case SKB_GSO_UDP:
 			/* UFO may not include transport header in gso_size. */
 			nh_off -= thlen;
+			min_gso_size = sizeof(struct udphdr) + 1;
 			break;
 		case SKB_GSO_UDP_L4:
 			if (!(hdr->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM))
@@ -172,6 +174,7 @@ retry:
 				return -EINVAL;
 			if (gso_type != SKB_GSO_UDP_L4)
 				return -EINVAL;
+			min_gso_size = sizeof(struct udphdr) + 1;
 			break;
 		case SKB_GSO_TCPV4:
 		case SKB_GSO_TCPV6:
@@ -182,7 +185,7 @@ retry:
 		}
 
 		/* Kernel has a special handling for GSO_BY_FRAGS. */
-		if (gso_size == GSO_BY_FRAGS)
+		if ((gso_size == GSO_BY_FRAGS) || (gso_size < min_gso_size))
 			return -EINVAL;
 
 		/* Too small packets are not really GSO ones. */
