@@ -992,6 +992,7 @@ void remove_migration_ptes(struct folio *src, struct folio *dst, int flags);
  * arg: passed to rmap_one() and invalid_vma()
  * try_lock: bail out if the rmap lock is contended
  * contended: indicate the rmap traversal bailed out due to lock contention
+ * locked: already locked before invoke rmap_walk
  * rmap_one: executed on each vma where page is mapped
  * done: for checking traversing termination condition
  * anon_lock: for getting anon_lock by optimized way rather than default
@@ -1001,6 +1002,7 @@ struct rmap_walk_control {
 	void *arg;
 	bool try_lock;
 	bool contended;
+	bool locked;
 	/*
 	 * Return false if page table scanning in rmap_walk should be stopped.
 	 * Otherwise, return true.
@@ -1014,7 +1016,6 @@ struct rmap_walk_control {
 };
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc);
-void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc);
 struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 					  struct rmap_walk_control *rwc);
 

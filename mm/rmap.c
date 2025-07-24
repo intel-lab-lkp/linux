@@ -2261,14 +2261,12 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 	struct rmap_walk_control rwc = {
 		.rmap_one = try_to_unmap_one,
 		.arg = (void *)flags,
+		.locked = flags & TTU_RMAP_LOCKED,
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
 
-	if (flags & TTU_RMAP_LOCKED)
-		rmap_walk_locked(folio, &rwc);
-	else
-		rmap_walk(folio, &rwc);
+	rmap_walk(folio, &rwc);
 }
 
 /*
@@ -2589,6 +2587,7 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 		.rmap_one = try_to_migrate_one,
 		.arg = (void *)flags,
 		.done = folio_not_mapped,
+		.locked = flags & TTU_RMAP_LOCKED,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
 
@@ -2615,10 +2614,7 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 	if (!folio_test_ksm(folio) && folio_test_anon(folio))
 		rwc.invalid_vma = invalid_migration_vma;
 
-	if (flags & TTU_RMAP_LOCKED)
-		rmap_walk_locked(folio, &rwc);
-	else
-		rmap_walk(folio, &rwc);
+	rmap_walk(folio, &rwc);
 }
 
 #ifdef CONFIG_DEVICE_PRIVATE
@@ -2803,17 +2799,16 @@ out:
  * rmap method
  * @folio: the folio to be handled
  * @rwc: control variable according to each walk type
- * @locked: caller holds relevant rmap lock
  *
  * Find all the mappings of a folio using the mapping pointer and the vma
  * chains contained in the anon_vma struct it points to.
  */
-static void rmap_walk_anon(struct folio *folio,
-		struct rmap_walk_control *rwc, bool locked)
+static void rmap_walk_anon(struct folio *folio, struct rmap_walk_control *rwc)
 {
 	struct anon_vma *anon_vma;
 	pgoff_t pgoff_start, pgoff_end;
 	struct anon_vma_chain *avc;
+	bool locked = rwc->locked;
 
 	if (locked) {
 		anon_vma = folio_anon_vma(folio);
@@ -2916,14 +2911,14 @@ done:
  * rmap_walk_file - do something to file page using the object-based rmap method
  * @folio: the folio to be handled
  * @rwc: control variable according to each walk type
- * @locked: caller holds relevant rmap lock
  *
  * Find all the mappings of a folio using the mapping pointer and the vma chains
  * contained in the address_space struct it points to.
  */
-static void rmap_walk_file(struct folio *folio,
-		struct rmap_walk_control *rwc, bool locked)
+static void rmap_walk_file(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	bool locked = rwc->locked;
+
 	/*
 	 * The folio lock not only makes sure that folio->mapping cannot
 	 * suddenly be NULLified by truncation, it makes sure that the structure
@@ -2941,23 +2936,17 @@ static void rmap_walk_file(struct folio *folio,
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	/* no ksm support for now if locked */
+	VM_BUG_ON_FOLIO(rwc->locked && folio_test_ksm(folio), folio);
+	/* if already locked, why try lock again? */
+	VM_BUG_ON(rwc->locked && rwc->try_lock);
+
 	if (unlikely(folio_test_ksm(folio)))
 		rmap_walk_ksm(folio, rwc);
 	else if (folio_test_anon(folio))
-		rmap_walk_anon(folio, rwc, false);
+		rmap_walk_anon(folio, rwc);
 	else
-		rmap_walk_file(folio, rwc, false);
-}
-
-/* Like rmap_walk, but caller holds relevant rmap lock */
-void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc)
-{
-	/* no ksm support for now */
-	VM_BUG_ON_FOLIO(folio_test_ksm(folio), folio);
-	if (folio_test_anon(folio))
-		rmap_walk_anon(folio, rwc, true);
-	else
-		rmap_walk_file(folio, rwc, true);
+		rmap_walk_file(folio, rwc);
 }
 
 #ifdef CONFIG_HUGETLB_PAGE

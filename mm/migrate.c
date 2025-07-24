@@ -439,15 +439,13 @@ void remove_migration_ptes(struct folio *src, struct folio *dst, int flags)
 
 	struct rmap_walk_control rwc = {
 		.rmap_one = remove_migration_pte,
+		.locked = flags & RMP_LOCKED,
 		.arg = &rmap_walk_arg,
 	};
 
 	VM_BUG_ON_FOLIO((flags & RMP_USE_SHARED_ZEROPAGE) && (src != dst), src);
 
-	if (flags & RMP_LOCKED)
-		rmap_walk_locked(dst, &rwc);
-	else
-		rmap_walk(dst, &rwc);
+	rmap_walk(dst, &rwc);
 }
 
 /*
