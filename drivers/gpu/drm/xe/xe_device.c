@@ -1157,6 +1157,28 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
 }
 
 /**
+ * DOC: Xe Device Wedging
+ *
+ * Xe driver uses drm device wedged uevent as documented in Documentation/gpu/drm-uapi.rst.
+ *
+ * When device is in wedged state, every IOCTL will be blocked and GT cannot be
+ * used. Certain critical errors like gt reset failure, firmware failures can cause
+ * the device to be wedged. The default recovery method for a wedged state
+ * is rebind/bus-reset.
+ *
+ * Another recovery method is vendor-specific. Below are the usecases that trigger
+ * vendor-specific drm device wedged uevent and the procedure to be performed
+ * to recover the device.
+ *
+ * Case 1: CSC firmware errors require a firmware flash to restore normal device
+ *         operation. Since firmware flash is a vendor-specific action
+ *         ``WEDGED=vendor-specific`` recovery method along with
+ *         :ref:`runtime survivability mode <xe-survivability-mode>` is used to
+ *         notify userspace. User can then initiate a firmware flash using userspace tools
+ *         like fwupd to restore device to normal situation.
+ */
+
+/*
  * xe_device_set_wedged_method - Set wedged recovery method
  * @xe: xe device instance
  * @method: recovery method to set
