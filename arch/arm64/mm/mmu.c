@@ -483,11 +483,11 @@ void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
 
 #define INVALID_PHYS_ADDR	-1
 
-static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
+static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm, gfp_t gfp,
 				       enum pgtable_type pgtable_type)
 {
 	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
-	struct ptdesc *ptdesc = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_ZERO, 0);
+	struct ptdesc *ptdesc = pagetable_alloc(gfp, 0);
 	phys_addr_t pa;
 
 	if (!ptdesc)
@@ -514,9 +514,16 @@ static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
 }
 
 static phys_addr_t __maybe_unused
-split_pgtable_alloc(enum pgtable_type pgtable_type)
+split_pgtable_alloc(enum pgtable_type pgtable_type, int flags)
 {
-	return __pgd_pgtable_alloc(&init_mm, pgtable_type);
+	gfp_t gfp;
+
+	if ((flags & (NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS)) == 0)
+		gfp = GFP_PGTABLE_KERNEL & ~__GFP_ZERO;
+	else
+		gfp = GFP_ATOMIC;
+
+	return __pgd_pgtable_alloc(&init_mm, gfp, pgtable_type);
 }
 
 static phys_addr_t __maybe_unused
@@ -524,7 +531,8 @@ pgd_pgtable_alloc_init_mm(enum pgtable_type pgtable_type)
 {
 	phys_addr_t pa;
 
-	pa = __pgd_pgtable_alloc(&init_mm, pgtable_type);
+	pa = __pgd_pgtable_alloc(&init_mm, GFP_PGTABLE_KERNEL & ~__GFP_ZERO,
+				 pgtable_type);
 	BUG_ON(pa == INVALID_PHYS_ADDR);
 	return pa;
 }
@@ -534,7 +542,8 @@ pgd_pgtable_alloc_special_mm(enum pgtable_type pgtable_type)
 {
 	phys_addr_t pa;
 
-	pa = __pgd_pgtable_alloc(NULL, pgtable_type);
+	pa = __pgd_pgtable_alloc(NULL, GFP_PGTABLE_KERNEL & ~__GFP_ZERO,
+				 pgtable_type);
 	BUG_ON(pa == INVALID_PHYS_ADDR);
 	return pa;
 }
@@ -573,7 +582,8 @@ void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 
 static DEFINE_MUTEX(pgtable_split_lock);
 
-static int split_cont_pte(pmd_t *pmdp, unsigned long addr, unsigned long end)
+static int split_cont_pte(pmd_t *pmdp, unsigned long addr, unsigned long end,
+			  unsigned int flags)
 {
 	pte_t *ptep;
 	unsigned long next;
@@ -587,14 +597,16 @@ static int split_cont_pte(pmd_t *pmdp, unsigned long addr, unsigned long end)
 
 		nr = 0;
 		next = pte_cont_addr_end(addr, end);
-		if (next < end)
+		if (next < end &&
+		    (flags & NO_CONT_MAPPINGS) == 0)
 			nr = max(nr, ((end - next) / CONT_PTE_SIZE));
 		span = nr * CONT_PTE_SIZE;
 
 		_ptep = PTR_ALIGN_DOWN(ptep, sizeof(*ptep) * CONT_PTES);
 		ptep += pte_index(next) - pte_index(addr) + nr * CONT_PTES;
 
-		if (((addr | next) & ~CONT_PTE_MASK) == 0)
+		if (((addr | next) & ~CONT_PTE_MASK) == 0 &&
+		    (flags & NO_CONT_MAPPINGS) == 0)
 			continue;
 
 		if (!pte_cont(__ptep_get(_ptep)))
@@ -607,7 +619,8 @@ static int split_cont_pte(pmd_t *pmdp, unsigned long addr, unsigned long end)
 	return 0;
 }
 
-static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
+static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
+		     unsigned int flags)
 {
 	unsigned long next;
 	unsigned int nr;
@@ -619,11 +632,13 @@ static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
 
 		nr = 1;
 		next = pmd_addr_end(addr, end);
-		if (next < end)
+		if (next < end &&
+		    (flags & NO_BLOCK_MAPPINGS) == 0)
 			nr = max(nr, ((end - next) / PMD_SIZE));
 		span = (nr - 1) * PMD_SIZE;
 
-		if (((addr | next) & ~PMD_MASK) == 0)
+		if (((addr | next) & ~PMD_MASK) == 0 &&
+		    (flags & NO_BLOCK_MAPPINGS) == 0)
 			continue;
 
 		pmd = pmdp_get(pmdp);
@@ -635,7 +650,7 @@ static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
 			unsigned long pfn = pmd_pfn(pmd);
 			pgprot_t prot = pmd_pgprot(pmd);
 
-			pte_phys = split_pgtable_alloc(TABLE_PTE);
+			pte_phys = split_pgtable_alloc(TABLE_PTE, flags);
 			if (pte_phys == INVALID_PHYS_ADDR)
 				return -ENOMEM;
 
@@ -644,7 +659,8 @@ static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
 
 			prot = __pgprot((pgprot_val(prot) & ~PTE_TYPE_MASK) |
 					PTE_TYPE_PAGE);
-			prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			if ((flags & NO_CONT_MAPPINGS) == 0)
+				prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 			ptep = (pte_t *)phys_to_virt(pte_phys);
 			for (int i = 0; i < PTRS_PER_PTE; i++, ptep++, pfn++)
 				__set_pte(ptep, pfn_pte(pfn, prot));
@@ -654,7 +670,7 @@ static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
 			__pmd_populate(pmdp, pte_phys, pmdval);
 		}
 
-		ret = split_cont_pte(pmdp, addr, next);
+		ret = split_cont_pte(pmdp, addr, next, flags);
 		if (ret)
 			break;
 	} while (pmdp += nr, addr = next + span, addr != end);
@@ -662,7 +678,8 @@ static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
 	return ret;
 }
 
-static int split_cont_pmd(pud_t *pudp, unsigned long addr, unsigned long end)
+static int split_cont_pmd(pud_t *pudp, unsigned long addr, unsigned long end,
+			  unsigned int flags)
 {
 	pmd_t *pmdp;
 	unsigned long next;
@@ -677,11 +694,13 @@ static int split_cont_pmd(pud_t *pudp, unsigned long addr, unsigned long end)
 
 		nr = 0;
 		next = pmd_cont_addr_end(addr, end);
-		if (next < end)
+		if (next < end &&
+		    (flags & NO_CONT_MAPPINGS) == 0)
 			nr = max(nr, ((end - next) / CONT_PMD_SIZE));
 		span = nr * CONT_PMD_SIZE;
 
-		if (((addr | next) & ~CONT_PMD_MASK) == 0) {
+		if (((addr | next) & ~CONT_PMD_MASK) == 0 &&
+		    (flags & NO_CONT_MAPPINGS) == 0) {
 			pmdp += pmd_index(next) - pmd_index(addr) +
 				nr * CONT_PMDS;
 			continue;
@@ -695,7 +714,7 @@ static int split_cont_pmd(pud_t *pudp, unsigned long addr, unsigned long end)
 			set_pmd(_pmdp, pmd_mknoncont(pmdp_get(_pmdp)));
 
 split:
-		ret = split_pmd(pmdp, addr, next);
+		ret = split_pmd(pmdp, addr, next, flags);
 		if (ret)
 			break;
 
@@ -705,7 +724,8 @@ split:
 	return ret;
 }
 
-static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
+static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
+		     unsigned int flags)
 {
 	pud_t *pudp;
 	unsigned long next;
@@ -720,11 +740,13 @@ static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
 
 		nr = 1;
 		next = pud_addr_end(addr, end);
-		if (next < end)
+		if (next < end &&
+		    (flags & NO_BLOCK_MAPPINGS) == 0)
 			nr = max(nr, ((end - next) / PUD_SIZE));
 		span = (nr - 1) * PUD_SIZE;
 
-		if (((addr | next) & ~PUD_MASK) == 0)
+		if (((addr | next) & ~PUD_MASK) == 0 &&
+		    (flags & NO_BLOCK_MAPPINGS) == 0)
 			continue;
 
 		pud = pudp_get(pudp);
@@ -737,7 +759,7 @@ static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
 			pgprot_t prot = pud_pgprot(pud);
 			unsigned int step = PMD_SIZE >> PAGE_SHIFT;
 
-			pmd_phys = split_pgtable_alloc(TABLE_PMD);
+			pmd_phys = split_pgtable_alloc(TABLE_PMD, flags);
 			if (pmd_phys == INVALID_PHYS_ADDR)
 				return -ENOMEM;
 
@@ -746,7 +768,8 @@ static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
 
 			prot = __pgprot((pgprot_val(prot) & ~PMD_TYPE_MASK) |
 					PMD_TYPE_SECT);
-			prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			if ((flags & NO_CONT_MAPPINGS) == 0)
+				prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 			pmdp = (pmd_t *)phys_to_virt(pmd_phys);
 			for (int i = 0; i < PTRS_PER_PMD; i++, pmdp++) {
 				set_pmd(pmdp, pfn_pmd(pfn, prot));
@@ -758,7 +781,7 @@ static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
 			__pud_populate(pudp, pmd_phys, pudval);
 		}
 
-		ret = split_cont_pmd(pudp, addr, next);
+		ret = split_cont_pmd(pudp, addr, next, flags);
 		if (ret)
 			break;
 	} while (pudp += nr, addr = next + span, addr != end);
@@ -766,7 +789,8 @@ static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
 	return ret;
 }
 
-static int split_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end)
+static int split_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
+		     unsigned int flags)
 {
 	p4d_t *p4dp;
 	unsigned long next;
@@ -777,7 +801,7 @@ static int split_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end)
 	do {
 		next = p4d_addr_end(addr, end);
 
-		ret = split_pud(p4dp, addr, next);
+		ret = split_pud(p4dp, addr, next, flags);
 		if (ret)
 			break;
 	} while (p4dp++, addr = next, addr != end);
@@ -785,14 +809,15 @@ static int split_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end)
 	return ret;
 }
 
-static int split_pgd(pgd_t *pgdp, unsigned long addr, unsigned long end)
+static int split_pgd(pgd_t *pgdp, unsigned long addr, unsigned long end,
+		     unsigned int flags)
 {
 	unsigned long next;
 	int ret = 0;
 
 	do {
 		next = pgd_addr_end(addr, end);
-		ret = split_p4d(pgdp, addr, next);
+		ret = split_p4d(pgdp, addr, next, flags);
 		if (ret)
 			break;
 	} while (pgdp++, addr = next, addr != end);
@@ -800,7 +825,8 @@ static int split_pgd(pgd_t *pgdp, unsigned long addr, unsigned long end)
 	return ret;
 }
 
-int split_kernel_pgtable_mapping(unsigned long start, unsigned long end)
+int split_kernel_pgtable_mapping(unsigned long start, unsigned long end,
+				 unsigned int flags)
 {
 	int ret;
 
@@ -812,7 +838,7 @@ int split_kernel_pgtable_mapping(unsigned long start, unsigned long end)
 
 	mutex_lock(&pgtable_split_lock);
 	arch_enter_lazy_mmu_mode();
-	ret = split_pgd(pgd_offset_k(start), start, end);
+	ret = split_pgd(pgd_offset_k(start), start, end, flags);
 	arch_leave_lazy_mmu_mode();
 	mutex_unlock(&pgtable_split_lock);
 
@@ -850,6 +876,75 @@ void __init mark_linear_text_alias_ro(void)
 	update_mapping_prot(__pa_symbol(_stext), (unsigned long)lm_alias(_stext),
 			    (unsigned long)__init_begin - (unsigned long)_stext,
 			    PAGE_KERNEL_RO);
+}
+
+extern u32 repaint_done;
+
+int __init linear_map_split_to_ptes(void *__unused)
+{
+	typedef void (repaint_wait_fn)(void);
+	extern repaint_wait_fn bbml2_wait_for_repainting;
+	repaint_wait_fn *wait_fn;
+
+	int cpu = smp_processor_id();
+
+	wait_fn = (void *)__pa_symbol(bbml2_wait_for_repainting);
+
+	/*
+	 * Repainting just can be run on CPU 0 because we just can be sure
+	 * CPU 0 supports BBML2.
+	 */
+	if (!cpu) {
+		phys_addr_t kernel_start = __pa_symbol(_stext);
+		phys_addr_t kernel_end = __pa_symbol(__init_begin);
+		phys_addr_t start, end;
+		unsigned long vstart, vend;
+		int flags = NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+		u64 i;
+		int ret;
+
+		/*
+		 * Wait for all secondary CPUs get prepared for repainting
+		 * the linear mapping.
+		 */
+		smp_cond_load_acquire(&repaint_done, VAL == num_online_cpus());
+
+		memblock_mark_nomap(kernel_start, kernel_end - kernel_start);
+		/* Split the whole linear mapping */
+		for_each_mem_range(i, &start, &end) {
+			if (start >= end)
+				return -EINVAL;
+
+			vstart = __phys_to_virt(start);
+			vend = __phys_to_virt(end);
+			ret = split_kernel_pgtable_mapping(vstart, vend, flags);
+			if (ret)
+				panic("Failed to split linear mappings\n");
+
+			flush_tlb_kernel_range(vstart, vend);
+		}
+		memblock_clear_nomap(kernel_start, kernel_end - kernel_start);
+
+		/*
+		 * Relies on dsb in flush_tlb_kernel_range() to avoid
+		 * reordering before any page table split operations.
+		 */
+		WRITE_ONCE(repaint_done, 0);
+	} else {
+		/*
+		 * The secondary CPUs can't run in the same address space
+		 * with CPU 0 because accessing the linear mapping address
+		 * when CPU 0 is repainting it is not safe.
+		 *
+		 * Let the secondary CPUs run busy loop in idmap address
+		 * space when repainting is ongoing.
+		 */
+		cpu_install_idmap();
+		wait_fn();
+		cpu_uninstall_idmap();
+	}
+
+	return 0;
 }
 
 #ifdef CONFIG_KFENCE
@@ -1080,7 +1175,8 @@ void __pi_map_range(u64 *pgd, u64 start, u64 end, u64 pa, pgprot_t prot,
 		    int level, pte_t *tbl, bool may_use_cont, u64 va_offset);
 
 static u8 idmap_ptes[IDMAP_LEVELS - 1][PAGE_SIZE] __aligned(PAGE_SIZE) __ro_after_init,
-	  kpti_ptes[IDMAP_LEVELS - 1][PAGE_SIZE] __aligned(PAGE_SIZE) __ro_after_init;
+	  kpti_ptes[IDMAP_LEVELS - 1][PAGE_SIZE] __aligned(PAGE_SIZE) __ro_after_init,
+	  bbml2_ptes[IDMAP_LEVELS - 1][PAGE_SIZE] __aligned(PAGE_SIZE) __ro_after_init;
 
 static void __init create_idmap(void)
 {
@@ -1101,6 +1197,19 @@ static void __init create_idmap(void)
 		 * of its synchronization flag in the ID map.
 		 */
 		ptep = __pa_symbol(kpti_ptes);
+		__pi_map_range(&ptep, pa, pa + sizeof(u32), pa, PAGE_KERNEL,
+			       IDMAP_ROOT_LEVEL, (pte_t *)idmap_pg_dir, false,
+			       __phys_to_virt(ptep) - ptep);
+	}
+
+	/*
+	 * Setup idmap mapping for repaint_done flag.  It will be used if
+	 * repainting the linear mapping is needed later.
+	 */
+	if (linear_map_requires_bbml2) {
+		u64 pa = __pa_symbol(&repaint_done);
+		ptep = __pa_symbol(bbml2_ptes);
+
 		__pi_map_range(&ptep, pa, pa + sizeof(u32), pa, PAGE_KERNEL,
 			       IDMAP_ROOT_LEVEL, (pte_t *)idmap_pg_dir, false,
 			       __phys_to_virt(ptep) - ptep);

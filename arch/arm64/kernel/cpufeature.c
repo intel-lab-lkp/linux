@@ -85,6 +85,7 @@
 #include <asm/insn.h>
 #include <asm/kvm_host.h>
 #include <asm/mmu_context.h>
+#include <asm/mmu.h>
 #include <asm/mte.h>
 #include <asm/hypervisor.h>
 #include <asm/processor.h>
@@ -2013,6 +2014,12 @@ static int __init __kpti_install_ng_mappings(void *__unused)
 	return 0;
 }
 
+static void __init linear_map_maybe_split_to_ptes(void)
+{
+	if (linear_map_requires_bbml2 && !system_supports_bbml2_noabort())
+		stop_machine(linear_map_split_to_ptes, NULL, cpu_online_mask);
+}
+
 static void __init kpti_install_ng_mappings(void)
 {
 	/* Check whether KPTI is going to be used */
@@ -3896,6 +3903,7 @@ void __init setup_system_features(void)
 {
 	setup_system_capabilities();
 
+	linear_map_maybe_split_to_ptes();
 	kpti_install_ng_mappings();
 
 	sve_setup();

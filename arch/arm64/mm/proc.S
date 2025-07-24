@@ -239,6 +239,25 @@ SYM_FUNC_ALIAS(__pi_idmap_cpu_replace_ttbr1, idmap_cpu_replace_ttbr1)
 	dsb	nshst
 	.endm
 
+	.macro wait_for_boot_cpu, tmp1, tmp2, tmp3, tmp4
+	/* Increment the flag to let the boot CPU know we're ready */
+1:	ldxr	\tmp3, [\tmp2]
+	add	\tmp3, \tmp3, #1
+	stxr	\tmp4, \tmp3, [\tmp2]
+	cbnz	\tmp4, 1b
+
+	/* Wait for the boot CPU to finish its job */
+	sevl
+1:	wfe
+	ldxr	\tmp3, [\tmp2]
+	cbnz	\tmp3, 1b
+
+	/* All done, act like nothing happened */
+	msr	ttbr1_el1, \tmp1
+	isb
+	ret
+	.endm
+
 /*
  * void __kpti_install_ng_mappings(int cpu, int num_secondaries, phys_addr_t temp_pgd,
  *				   unsigned long temp_pte_va)
@@ -416,29 +435,35 @@ alternative_else_nop_endif
 __idmap_kpti_secondary:
 	/* Uninstall swapper before surgery begins */
 	__idmap_cpu_set_reserved_ttbr1 x16, x17
-
-	/* Increment the flag to let the boot CPU we're ready */
-1:	ldxr	w16, [flag_ptr]
-	add	w16, w16, #1
-	stxr	w17, w16, [flag_ptr]
-	cbnz	w17, 1b
-
-	/* Wait for the boot CPU to finish messing around with swapper */
-	sevl
-1:	wfe
-	ldxr	w16, [flag_ptr]
-	cbnz	w16, 1b
-
-	/* All done, act like nothing happened */
-	msr	ttbr1_el1, swapper_ttb
-	isb
-	ret
+	wait_for_boot_cpu swapper_ttb, flag_ptr, w16, w17
 
 	.unreq	swapper_ttb
 	.unreq	flag_ptr
 SYM_FUNC_END(idmap_kpti_install_ng_mappings)
 	.popsection
 #endif
+
+/*
+ * Wait for repainting is done. Run on secondary CPUs
+ * only.
+ */
+	.pushsection	".data", "aw", %progbits
+SYM_DATA(repaint_done, .long 1)
+	.popsection
+
+	.pushsection ".idmap.text", "a"
+SYM_TYPED_FUNC_START(bbml2_wait_for_repainting)
+	swapper_ttb	.req	x0
+	flag_ptr	.req	x1
+	mrs     swapper_ttb, ttbr1_el1
+	adr_l   flag_ptr, repaint_done
+	__idmap_cpu_set_reserved_ttbr1 x16, x17
+	wait_for_boot_cpu swapper_ttb, flag_ptr, w16, w17
+
+	.unreq	swapper_ttb
+	.unreq	flag_ptr
+SYM_FUNC_END(bbml2_wait_for_repainting)
+	.popsection
 
 /*
  *	__cpu_setup
