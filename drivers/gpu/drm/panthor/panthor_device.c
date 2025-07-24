@@ -33,8 +33,7 @@ static int panthor_gpu_coherency_init(struct panthor_device *ptdev)
 	/* Check if the ACE-Lite coherency protocol is actually supported by the GPU.
 	 * ACE protocol has never been supported for command stream frontend GPUs.
 	 */
-	if ((gpu_read(ptdev, GPU_COHERENCY_FEATURES) &
-		      GPU_COHERENCY_PROT_BIT(ACE_LITE)))
+	if (ptdev->gpu_info.coherency_features & GPU_COHERENCY_FEATURE_ACE_LITE)
 		return 0;
 
 	drm_err(&ptdev->base, "Coherency not supported by the device");
