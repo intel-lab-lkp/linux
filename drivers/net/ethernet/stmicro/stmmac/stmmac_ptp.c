@@ -180,6 +180,19 @@ static int stmmac_enable(struct ptp_clock_info *ptp,
 
 		cfg->start.tv_sec = rq->perout.start.sec;
 		cfg->start.tv_nsec = rq->perout.start.nsec;
+		if (IS_ENABLED(CONFIG_STMMAC_RELATIVE_FLEX_PPS)) {
+			struct timespec64 curr_time;
+			u64 ns = 0;
+
+			/* Be aware that an offset too low may not trigger flexible PPS generation
+			 * if time spent in this configuration makes this relative time already
+			 * outdated.
+			 */
+			stmmac_get_systime(priv, priv->ptpaddr, &ns);
+			curr_time = ns_to_timespec64(ns);
+			cfg->start.tv_sec += curr_time.tv_sec;
+			cfg->start.tv_nsec += curr_time.tv_nsec;
+		}
 		cfg->period.tv_sec = rq->perout.period.sec;
 		cfg->period.tv_nsec = rq->perout.period.nsec;
 

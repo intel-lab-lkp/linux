@@ -357,3 +357,12 @@ config STMMAC_PCI
 
 	  If unsure, say N.
 endif
+
+config STMMAC_RELATIVE_FLEX_PPS
+	bool "Support for STMMAC system time relative flexible PPS generation"
+	default n
+	help
+	  Say Y to add the MAC system time to the arguments passed to the
+	  PTP driver when requesting a flexible PPS generation. This avoids
+	  the tedious task of passing an absolute time value when using sysfs
+	  entry.
