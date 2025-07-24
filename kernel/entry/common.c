@@ -85,13 +85,18 @@ void __weak arch_do_signal_or_restart(struct pt_regs *regs) { }
 
 static inline bool rseq_delay_resched(unsigned long ti_work)
 {
+	unsigned long tiflag;
+
 	if (!IS_ENABLED(CONFIG_RSEQ_RESCHED_DELAY))
 		return false;
 
 	if (unlikely(current->rseq_delay_resched != RSEQ_RESCHED_DELAY_PROBE))
 		return false;
 
-	if (!(ti_work & (_TIF_NEED_RESCHED|_TIF_NEED_RESCHED_LAZY)))
+	tiflag = sysctl_sched_delay_rt ? _TIF_NEED_RESCHED|_TIF_NEED_RESCHED_LAZY :
+		 _TIF_NEED_RESCHED_LAZY;
+
+	if (!(ti_work & tiflag))
 		return false;
 
 	if (__rseq_delay_resched()) {

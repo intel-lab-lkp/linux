@@ -412,6 +412,7 @@ static inline void sched_domains_mutex_unlock(void) { }
 #ifdef CONFIG_RSEQ_RESCHED_DELAY
 /* Scheduler time slice extension duration */
 extern unsigned int sysctl_sched_preempt_delay_us;
+extern unsigned int sysctl_sched_delay_rt;
 #endif
 
 struct sched_param {

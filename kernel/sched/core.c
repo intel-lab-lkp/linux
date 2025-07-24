@@ -157,6 +157,11 @@ __read_mostly unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
  */
 #define SCHED_PREEMPT_DELAY_DEFAULT_US	30
 __read_mostly unsigned int sysctl_sched_preempt_delay_us = SCHED_PREEMPT_DELAY_DEFAULT_US;
+
+/*
+ * Scheduler time slice extension - Enable delaying RT threads. Disabled by default.
+ */
+__read_mostly unsigned int sysctl_sched_delay_rt = 0;
 #endif
 
 __read_mostly int scheduler_running;
@@ -4789,6 +4794,15 @@ static const struct ctl_table sched_core_sysctls[] = {
 		.proc_handler	= sysctl_sched_preempt_delay,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE_HUNDRED,
+	},
+	{
+		.procname	= "sched_delay_rt",
+		.data		= &sysctl_sched_delay_rt,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
 	},
 #endif /* CONFIG_RSEQ_RESCHED_DELAY */
 };
