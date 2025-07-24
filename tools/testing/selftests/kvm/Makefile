@@ -6,7 +6,9 @@ ARCH            ?= $(SUBARCH)
 ifeq ($(ARCH),$(filter $(ARCH),arm64 s390 riscv x86 x86_64 loongarch))
 # Top-level selftests allows ARCH=x86_64 :-(
 ifeq ($(ARCH),x86_64)
-	ARCH := x86
+	ARCH_DIR := x86
+else
+	ARCH_DIR := $(ARCH)
 endif
 include Makefile.kvm
 else
