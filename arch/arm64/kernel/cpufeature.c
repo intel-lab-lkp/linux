@@ -2219,36 +2219,7 @@ static bool hvhe_possible(const struct arm64_cpu_capabilities *entry,
 
 static bool has_bbml2_noabort(const struct arm64_cpu_capabilities *caps, int scope)
 {
-	/*
-	 * We want to allow usage of BBML2 in as wide a range of kernel contexts
-	 * as possible. This list is therefore an allow-list of known-good
-	 * implementations that both support BBML2 and additionally, fulfill the
-	 * extra constraint of never generating TLB conflict aborts when using
-	 * the relaxed BBML2 semantics (such aborts make use of BBML2 in certain
-	 * kernel contexts difficult to prove safe against recursive aborts).
-	 *
-	 * Note that implementations can only be considered "known-good" if their
-	 * implementors attest to the fact that the implementation never raises
-	 * TLB conflict aborts for BBML2 mapping granularity changes.
-	 */
-	static const struct midr_range supports_bbml2_noabort_list[] = {
-		MIDR_REV_RANGE(MIDR_CORTEX_X4, 0, 3, 0xf),
-		MIDR_REV_RANGE(MIDR_NEOVERSE_V3, 0, 2, 0xf),
-		MIDR_ALL_VERSIONS(MIDR_AMPERE1),
-		MIDR_ALL_VERSIONS(MIDR_AMPERE1A),
-		{}
-	};
-
-	/* Does our cpu guarantee to never raise TLB conflict aborts? */
-	if (!is_midr_in_range_list(supports_bbml2_noabort_list))
-		return false;
-
-	/*
-	 * We currently ignore the ID_AA64MMFR2_EL1 register, and only care
-	 * about whether the MIDR check passes.
-	 */
-
-	return true;
+	return bbml2_noabort_available();
 }
 
 #ifdef CONFIG_ARM64_PAN

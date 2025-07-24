@@ -481,6 +481,8 @@ void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
 			     int flags);
 #endif
 
+#define INVALID_PHYS_ADDR	-1
+
 static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
 				       enum pgtable_type pgtable_type)
 {
@@ -488,7 +490,9 @@ static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
 	struct ptdesc *ptdesc = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_ZERO, 0);
 	phys_addr_t pa;
 
-	BUG_ON(!ptdesc);
+	if (!ptdesc)
+		return INVALID_PHYS_ADDR;
+
 	pa = page_to_phys(ptdesc_page(ptdesc));
 
 	switch (pgtable_type) {
@@ -510,15 +514,29 @@ static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
 }
 
 static phys_addr_t __maybe_unused
-pgd_pgtable_alloc_init_mm(enum pgtable_type pgtable_type)
+split_pgtable_alloc(enum pgtable_type pgtable_type)
 {
 	return __pgd_pgtable_alloc(&init_mm, pgtable_type);
+}
+
+static phys_addr_t __maybe_unused
+pgd_pgtable_alloc_init_mm(enum pgtable_type pgtable_type)
+{
+	phys_addr_t pa;
+
+	pa = __pgd_pgtable_alloc(&init_mm, pgtable_type);
+	BUG_ON(pa == INVALID_PHYS_ADDR);
+	return pa;
 }
 
 static phys_addr_t
 pgd_pgtable_alloc_special_mm(enum pgtable_type pgtable_type)
 {
-	return __pgd_pgtable_alloc(NULL, pgtable_type);
+	phys_addr_t pa;
+
+	pa = __pgd_pgtable_alloc(NULL, pgtable_type);
+	BUG_ON(pa == INVALID_PHYS_ADDR);
+	return pa;
 }
 
 /*
@@ -551,6 +569,254 @@ void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 
 	__create_pgd_mapping(mm->pgd, phys, virt, size, prot,
 			     pgd_pgtable_alloc_special_mm, flags);
+}
+
+static DEFINE_MUTEX(pgtable_split_lock);
+
+static int split_cont_pte(pmd_t *pmdp, unsigned long addr, unsigned long end)
+{
+	pte_t *ptep;
+	unsigned long next;
+	unsigned int nr;
+	unsigned long span;
+
+	ptep = pte_offset_kernel(pmdp, addr);
+
+	do {
+		pte_t *_ptep;
+
+		nr = 0;
+		next = pte_cont_addr_end(addr, end);
+		if (next < end)
+			nr = max(nr, ((end - next) / CONT_PTE_SIZE));
+		span = nr * CONT_PTE_SIZE;
+
+		_ptep = PTR_ALIGN_DOWN(ptep, sizeof(*ptep) * CONT_PTES);
+		ptep += pte_index(next) - pte_index(addr) + nr * CONT_PTES;
+
+		if (((addr | next) & ~CONT_PTE_MASK) == 0)
+			continue;
+
+		if (!pte_cont(__ptep_get(_ptep)))
+			continue;
+
+		for (int i = 0; i < CONT_PTES; i++, _ptep++)
+			__set_pte(_ptep, pte_mknoncont(__ptep_get(_ptep)));
+	} while (addr = next + span, addr != end);
+
+	return 0;
+}
+
+static int split_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end)
+{
+	unsigned long next;
+	unsigned int nr;
+	unsigned long span;
+	int ret = 0;
+
+	do {
+		pmd_t pmd;
+
+		nr = 1;
+		next = pmd_addr_end(addr, end);
+		if (next < end)
+			nr = max(nr, ((end - next) / PMD_SIZE));
+		span = (nr - 1) * PMD_SIZE;
+
+		if (((addr | next) & ~PMD_MASK) == 0)
+			continue;
+
+		pmd = pmdp_get(pmdp);
+		if (pmd_leaf(pmd)) {
+			phys_addr_t pte_phys;
+			pte_t *ptep;
+			pmdval_t pmdval = PMD_TYPE_TABLE | PMD_TABLE_UXN |
+					  PMD_TABLE_AF;
+			unsigned long pfn = pmd_pfn(pmd);
+			pgprot_t prot = pmd_pgprot(pmd);
+
+			pte_phys = split_pgtable_alloc(TABLE_PTE);
+			if (pte_phys == INVALID_PHYS_ADDR)
+				return -ENOMEM;
+
+			if (pgprot_val(prot) & PMD_SECT_PXN)
+				pmdval |= PMD_TABLE_PXN;
+
+			prot = __pgprot((pgprot_val(prot) & ~PTE_TYPE_MASK) |
+					PTE_TYPE_PAGE);
+			prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			ptep = (pte_t *)phys_to_virt(pte_phys);
+			for (int i = 0; i < PTRS_PER_PTE; i++, ptep++, pfn++)
+				__set_pte(ptep, pfn_pte(pfn, prot));
+
+			dsb(ishst);
+
+			__pmd_populate(pmdp, pte_phys, pmdval);
+		}
+
+		ret = split_cont_pte(pmdp, addr, next);
+		if (ret)
+			break;
+	} while (pmdp += nr, addr = next + span, addr != end);
+
+	return ret;
+}
+
+static int split_cont_pmd(pud_t *pudp, unsigned long addr, unsigned long end)
+{
+	pmd_t *pmdp;
+	unsigned long next;
+	unsigned int nr;
+	unsigned long span;
+	int ret = 0;
+
+	pmdp = pmd_offset(pudp, addr);
+
+	do {
+		pmd_t *_pmdp;
+
+		nr = 0;
+		next = pmd_cont_addr_end(addr, end);
+		if (next < end)
+			nr = max(nr, ((end - next) / CONT_PMD_SIZE));
+		span = nr * CONT_PMD_SIZE;
+
+		if (((addr | next) & ~CONT_PMD_MASK) == 0) {
+			pmdp += pmd_index(next) - pmd_index(addr) +
+				nr * CONT_PMDS;
+			continue;
+		}
+
+		_pmdp = PTR_ALIGN_DOWN(pmdp, sizeof(*pmdp) * CONT_PMDS);
+		if (!pmd_cont(pmdp_get(_pmdp)))
+			goto split;
+
+		for (int i = 0; i < CONT_PMDS; i++, _pmdp++)
+			set_pmd(_pmdp, pmd_mknoncont(pmdp_get(_pmdp)));
+
+split:
+		ret = split_pmd(pmdp, addr, next);
+		if (ret)
+			break;
+
+		pmdp += pmd_index(next) - pmd_index(addr) + nr * CONT_PMDS;
+	} while (addr = next + span, addr != end);
+
+	return ret;
+}
+
+static int split_pud(p4d_t *p4dp, unsigned long addr, unsigned long end)
+{
+	pud_t *pudp;
+	unsigned long next;
+	unsigned int nr;
+	unsigned long span;
+	int ret = 0;
+
+	pudp = pud_offset(p4dp, addr);
+
+	do {
+		pud_t pud;
+
+		nr = 1;
+		next = pud_addr_end(addr, end);
+		if (next < end)
+			nr = max(nr, ((end - next) / PUD_SIZE));
+		span = (nr - 1) * PUD_SIZE;
+
+		if (((addr | next) & ~PUD_MASK) == 0)
+			continue;
+
+		pud = pudp_get(pudp);
+		if (pud_leaf(pud)) {
+			phys_addr_t pmd_phys;
+			pmd_t *pmdp;
+			pudval_t pudval = PUD_TYPE_TABLE | PUD_TABLE_UXN |
+					  PUD_TABLE_AF;
+			unsigned long pfn = pud_pfn(pud);
+			pgprot_t prot = pud_pgprot(pud);
+			unsigned int step = PMD_SIZE >> PAGE_SHIFT;
+
+			pmd_phys = split_pgtable_alloc(TABLE_PMD);
+			if (pmd_phys == INVALID_PHYS_ADDR)
+				return -ENOMEM;
+
+			if (pgprot_val(prot) & PMD_SECT_PXN)
+				pudval |= PUD_TABLE_PXN;
+
+			prot = __pgprot((pgprot_val(prot) & ~PMD_TYPE_MASK) |
+					PMD_TYPE_SECT);
+			prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			pmdp = (pmd_t *)phys_to_virt(pmd_phys);
+			for (int i = 0; i < PTRS_PER_PMD; i++, pmdp++) {
+				set_pmd(pmdp, pfn_pmd(pfn, prot));
+				pfn += step;
+			}
+
+			dsb(ishst);
+
+			__pud_populate(pudp, pmd_phys, pudval);
+		}
+
+		ret = split_cont_pmd(pudp, addr, next);
+		if (ret)
+			break;
+	} while (pudp += nr, addr = next + span, addr != end);
+
+	return ret;
+}
+
+static int split_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end)
+{
+	p4d_t *p4dp;
+	unsigned long next;
+	int ret = 0;
+
+	p4dp = p4d_offset(pgdp, addr);
+
+	do {
+		next = p4d_addr_end(addr, end);
+
+		ret = split_pud(p4dp, addr, next);
+		if (ret)
+			break;
+	} while (p4dp++, addr = next, addr != end);
+
+	return ret;
+}
+
+static int split_pgd(pgd_t *pgdp, unsigned long addr, unsigned long end)
+{
+	unsigned long next;
+	int ret = 0;
+
+	do {
+		next = pgd_addr_end(addr, end);
+		ret = split_p4d(pgdp, addr, next);
+		if (ret)
+			break;
+	} while (pgdp++, addr = next, addr != end);
+
+	return ret;
+}
+
+int split_kernel_pgtable_mapping(unsigned long start, unsigned long end)
+{
+	int ret;
+
+	if (!system_supports_bbml2_noabort())
+		return 0;
+
+	if (start != PAGE_ALIGN(start) || end != PAGE_ALIGN(end))
+		return -EINVAL;
+
+	mutex_lock(&pgtable_split_lock);
+	arch_enter_lazy_mmu_mode();
+	ret = split_pgd(pgd_offset_k(start), start, end);
+	arch_leave_lazy_mmu_mode();
+	mutex_unlock(&pgtable_split_lock);
+
+	return ret;
 }
 
 static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
@@ -640,6 +906,20 @@ static inline void arm64_kfence_map_pool(phys_addr_t kfence_pool, pgd_t *pgdp) {
 
 #endif /* CONFIG_KFENCE */
 
+bool linear_map_requires_bbml2;
+
+static inline bool force_pte_mapping(void)
+{
+	/*
+	 * Can't use cpufeature API to determine whether BBM level 2
+	 * is supported or not since cpufeature have not been
+	 * finalized yet.
+	 */
+	return (!bbml2_noabort_available() && (rodata_full ||
+		arm64_kfence_can_set_direct_map() || is_realm_world())) ||
+		debug_pagealloc_enabled();
+}
+
 static void __init map_mem(pgd_t *pgdp)
 {
 	static const u64 direct_map_end = _PAGE_END(VA_BITS_MIN);
@@ -665,7 +945,9 @@ static void __init map_mem(pgd_t *pgdp)
 
 	early_kfence_pool = arm64_kfence_alloc_pool();
 
-	if (can_set_direct_map())
+	linear_map_requires_bbml2 = !force_pte_mapping() && rodata_full;
+
+	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	/*
@@ -1367,7 +1649,8 @@ int arch_add_memory(int nid, u64 start, u64 size,
 
 	VM_BUG_ON(!mhp_range_allowed(start, size, true));
 
-	if (can_set_direct_map())
+	if (force_pte_mapping() ||
+	    (linear_map_requires_bbml2 && !system_supports_bbml2_noabort()))
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
