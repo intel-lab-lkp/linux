@@ -67,6 +67,14 @@ enum syscall_work_bit {
 #define _TIF_NEED_RESCHED_LAZY _TIF_NEED_RESCHED
 #endif
 
+#ifndef TIF_NEED_RESCHED_NODELAY
+#ifdef CONFIG_ARCH_HAS_PREEMPT_NODELAY
+#error Inconsistent PREEMPT_NODELAY
+#endif
+#define TIF_NEED_RESCHED_NODELAY TIF_NEED_RESCHED
+#define _TIF_NEED_RESCHED_NODELAY _TIF_NEED_RESCHED
+#endif
+
 #ifdef __KERNEL__
 
 #ifndef arch_set_restart_data
@@ -205,7 +213,8 @@ static __always_inline bool tif_test_bit(int bit)
 
 static __always_inline bool tif_need_resched(void)
 {
-	return tif_test_bit(TIF_NEED_RESCHED);
+	return (tif_test_bit(TIF_NEED_RESCHED) ||
+		    tif_test_bit(TIF_NEED_RESCHED_NODELAY));
 }
 
 #ifndef CONFIG_HAVE_ARCH_WITHIN_STACK_FRAMES

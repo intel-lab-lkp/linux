@@ -1141,13 +1141,13 @@ static void __resched_curr(struct rq *rq, int tif)
 
 	if (cpu == smp_processor_id()) {
 		set_ti_thread_flag(cti, tif);
-		if (tif == TIF_NEED_RESCHED)
+		if (tif & (TIF_NEED_RESCHED | _TIF_NEED_RESCHED_NODELAY))
 			set_preempt_need_resched();
 		return;
 	}
 
 	if (set_nr_and_not_polling(cti, tif)) {
-		if (tif == TIF_NEED_RESCHED)
+		if (tif & (TIF_NEED_RESCHED | _TIF_NEED_RESCHED_NODELAY))
 			smp_send_reschedule(cpu);
 	} else {
 		trace_sched_wake_idle_without_ipi(cpu);
