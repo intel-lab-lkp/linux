@@ -23,6 +23,11 @@ properties:
           - const: img,img-rogue
       - items:
           - enum:
+              - thead,th1520-gpu
+          - const: img,img-bxm-4-64
+          - const: img,img-rogue
+      - items:
+          - enum:
               - ti,j721s2-gpu
           - const: img,img-bxs-4-64
           - const: img,img-rogue
@@ -84,10 +89,28 @@ allOf:
         compatible:
           contains:
             const: img,img-rogue
+      not:
+        properties:
+          compatible:
+            contains:
+              const: thead,th1520-gpu
     then:
       required:
         - power-domains
         - power-domain-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: thead,th1520-gpu
+    then:
+      required:
+        - power-domains
+      properties:
+        power-domains:
+          maxItems: 1
+        power-domain-names: false
 
   - if:
       properties:
@@ -105,7 +128,14 @@ allOf:
       properties:
         compatible:
           contains:
-            const: img,img-bxs-4-64
+            enum:
+              - img,img-bxm-4-64
+              - img,img-bxs-4-64
+      not:
+        properties:
+          compatible:
+            contains:
+              const: thead,th1520-gpu
     then:
       properties:
         power-domains:
