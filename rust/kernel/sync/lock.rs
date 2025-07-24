@@ -228,7 +228,41 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
         self.lock
     }
 
-    pub(crate) fn do_unlocked<U>(&mut self, cb: impl FnOnce() -> U) -> U {
+    /// Releases this [`Guard`]'s lock temporary, executes `cb` and then re-acquires it.
+    ///
+    /// This can be useful for situations where you may need to do a temporary unlock dance to avoid
+    /// issues like circular locking dependencies.
+    ///
+    /// If the closure returns a value, it will be returned by this function.
+    ///
+    /// # Examples
+    ///
+    /// The following example shows how to use [`Guard::do_unlocked`] to temporarily release a lock,
+    /// do some work, then re-lock it.
+    ///
+    /// ```
+    /// # use kernel::{new_spinlock, sync::lock::{Backend, Guard, Lock}};
+    /// # use pin_init::stack_pin_init;
+    ///
+    /// fn assert_held<T, B: Backend>(guard: &Guard<'_, T, B>, lock: &Lock<T, B>) {
+    ///     // Address-equal means the same lock.
+    ///     assert!(core::ptr::eq(guard.lock_ref(), lock));
+    /// }
+    ///
+    /// stack_pin_init! {
+    ///     let l = new_spinlock!(42)
+    /// }
+    ///
+    /// let mut g = l.lock();
+    /// let val = *g;
+    ///
+    /// // The lock will be released, but only temporarily
+    /// g.do_unlocked(|| assert_eq!(val, 42));
+    ///
+    /// // `g` originates from `l` and should be relocked now.
+    /// assert_held(&g, &l);
+    /// ```
+    pub fn do_unlocked<U>(&mut self, cb: impl FnOnce() -> U) -> U {
         // SAFETY: The caller owns the lock, so it is safe to unlock it.
         unsafe { B::unlock(self.lock.state.get(), &self.state) };
 
