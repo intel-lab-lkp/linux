@@ -41,6 +41,23 @@ static int __sgx_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static int sgx_open(struct inode *inode, struct file *file)
+{
+	int ret;
+
+	ret = sgx_inc_usage_count();
+	if (ret)
+		return ret;
+
+	ret = __sgx_open(inode, file);
+	if (ret) {
+		sgx_dec_usage_count();
+		return ret;
+	}
+
+	return 0;
+}
+
 static int sgx_release(struct inode *inode, struct file *file)
 {
 	struct sgx_encl *encl = file->private_data;
@@ -126,7 +143,7 @@ static long sgx_compat_ioctl(struct file *filep, unsigned int cmd,
 
 static const struct file_operations sgx_encl_fops = {
 	.owner			= THIS_MODULE,
-	.open			= __sgx_open,
+	.open			= sgx_open,
 	.release		= sgx_release,
 	.unlocked_ioctl		= sgx_ioctl,
 #ifdef CONFIG_COMPAT

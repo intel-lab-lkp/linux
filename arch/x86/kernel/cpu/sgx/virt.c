@@ -255,6 +255,7 @@ static int sgx_vepc_release(struct inode *inode, struct file *file)
 	xa_destroy(&vepc->page_array);
 	kfree(vepc);
 
+	sgx_dec_usage_count();
 	return 0;
 }
 
@@ -265,10 +266,28 @@ static int __sgx_vepc_open(struct inode *inode, struct file *file)
 	vepc = kzalloc(sizeof(struct sgx_vepc), GFP_KERNEL);
 	if (!vepc)
 		return -ENOMEM;
+
 	mutex_init(&vepc->lock);
 	xa_init(&vepc->page_array);
 
 	file->private_data = vepc;
+
+	return 0;
+}
+
+static int sgx_vepc_open(struct inode *inode, struct file *file)
+{
+	int ret;
+
+	ret = sgx_inc_usage_count();
+	if (ret)
+		return ret;
+
+	ret =  __sgx_vepc_open(inode, file);
+	if (ret) {
+		sgx_dec_usage_count();
+		return ret;
+	}
 
 	return 0;
 }
@@ -291,7 +310,7 @@ static long sgx_vepc_ioctl(struct file *file,
 
 static const struct file_operations sgx_vepc_fops = {
 	.owner		= THIS_MODULE,
-	.open		= __sgx_vepc_open,
+	.open		= sgx_vepc_open,
 	.unlocked_ioctl	= sgx_vepc_ioctl,
 	.compat_ioctl	= sgx_vepc_ioctl,
 	.release	= sgx_vepc_release,
