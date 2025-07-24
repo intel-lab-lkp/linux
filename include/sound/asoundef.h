@@ -12,6 +12,15 @@
  *        Digital audio interface					    *
  *                                                                          *
  ****************************************************************************/
+/* IEC958 subframe format */
+#define IEC958_SUBFRAME_PREAMBLE_MASK	(0xf)
+#define IEC958_SUBFRAME_AUXILIARY_MASK	(0xf<<4)
+#define IEC958_SUBFRAME_SAMPLE_24_MASK	(0xffffff<<4)
+#define IEC958_SUBFRAME_SAMPLE_20_MASK	(0xfffff<<8)
+#define IEC958_SUBFRAME_VALIDITY	(0x1<<28)
+#define IEC958_SUBFRAME_USER_DATA	(0x1<<29)
+#define IEC958_SUBFRAME_CHANNEL_STATUS	(0x1<<30)
+#define IEC958_SUBFRAME_PARITY		(0x1<<31)
 
 /* AES/IEC958 channel status bits */
 #define IEC958_AES0_PROFESSIONAL	(1<<0)	/* 0 = consumer, 1 = professional */
