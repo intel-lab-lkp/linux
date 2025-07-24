@@ -2240,7 +2240,7 @@ static bool invalid_migration_vma(struct vm_area_struct *vma, void *arg)
 	return vma_is_temporary_stack(vma);
 }
 
-static int folio_not_mapped(struct folio *folio)
+static int folio_not_mapped(struct folio *folio, struct rmap_walk_control *rwc)
 {
 	return !folio_mapped(folio);
 }
@@ -2836,7 +2836,7 @@ static void rmap_walk_anon(struct folio *folio, struct rmap_walk_control *rwc)
 
 		if (!rwc->rmap_one(folio, vma, address, rwc->arg))
 			break;
-		if (rwc->done && rwc->done(folio))
+		if (rwc->done && rwc->done(folio, rwc))
 			break;
 	}
 
@@ -2899,7 +2899,7 @@ lookup:
 
 		if (!rwc->rmap_one(folio, vma, address, rwc->arg))
 			goto done;
-		if (rwc->done && rwc->done(folio))
+		if (rwc->done && rwc->done(folio, rwc))
 			goto done;
 	}
 done:
