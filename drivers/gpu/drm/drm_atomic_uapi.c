@@ -940,6 +940,21 @@ static struct drm_pending_vblank_event *create_vblank_event(
 	return e;
 }
 
+static struct drm_pending_atomic_hw_done_event *create_hw_done_event(uint64_t user_data)
+{
+	struct drm_pending_atomic_hw_done_event *e = NULL;
+
+	e = kzalloc(sizeof *e, GFP_KERNEL);
+	if (!e)
+		return NULL;
+
+	e->event.base.type = DRM_EVENT_ATOMIC_HW_DONE;
+	e->event.base.length = sizeof(e->event);
+	e->event.user_data = user_data;
+
+	return e;
+}
+
 int drm_atomic_connector_commit_dpms(struct drm_atomic_state *state,
 				     struct drm_connector *connector,
 				     int mode)
@@ -1315,6 +1330,24 @@ static int prepare_signaling(struct drm_device *dev,
 		return -EINVAL;
 	}
 
+	if (arg->flags & DRM_MODE_ATOMIC_HW_DONE_EVENT &&
+	    file_priv) {
+		struct drm_pending_atomic_hw_done_event *e;
+
+		e = create_hw_done_event(arg->user_data);
+		if (!e)
+			return -ENOMEM;
+
+		ret = drm_event_reserve_init(dev, file_priv, &e->base,
+					     &e->event.base);
+		if (ret) {
+			kfree(e);
+			return ret;
+		}
+
+		state->hw_done_event = e;
+	}
+
 	return 0;
 }
 
@@ -1432,9 +1465,9 @@ int drm_mode_atomic_ioctl(struct drm_device *dev,
 
 	/* can't test and expect an event at the same time. */
 	if ((arg->flags & DRM_MODE_ATOMIC_TEST_ONLY) &&
-			(arg->flags & DRM_MODE_PAGE_FLIP_EVENT)) {
+	    (arg->flags & (DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_HW_DONE_EVENT))) {
 		drm_dbg_atomic(dev,
-			       "commit failed: page-flip event requested with test-only commit\n");
+			       "commit failed: event requested with test-only commit\n");
 		return -EINVAL;
 	}
 

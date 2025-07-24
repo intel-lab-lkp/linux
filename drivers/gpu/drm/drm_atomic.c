@@ -108,6 +108,7 @@ void drm_atomic_state_default_release(struct drm_atomic_state *state)
 	kfree(state->crtcs);
 	kfree(state->planes);
 	kfree(state->private_objs);
+	kfree(state->hw_done_event);
 }
 EXPORT_SYMBOL(drm_atomic_state_default_release);
 

@@ -2626,6 +2626,27 @@ void drm_atomic_helper_fake_vblank(struct drm_atomic_state *state)
 }
 EXPORT_SYMBOL(drm_atomic_helper_fake_vblank);
 
+static void send_hw_done_event(struct drm_device *dev,
+			       struct drm_pending_atomic_hw_done_event **e,
+			       ktime_t done)
+{
+	struct timespec64 tv;
+	unsigned long irqflags;
+
+	if (!*e)
+		return;
+
+	tv = ktime_to_timespec64(done);
+	(*e)->event.tv_sec = tv.tv_sec;
+	(*e)->event.tv_usec = tv.tv_nsec / 1000;
+
+	spin_lock_irqsave(&dev->event_lock, irqflags);
+	drm_send_event_timestamp_locked(dev, &(*e)->base, done);
+	spin_unlock_irqrestore(&dev->event_lock, irqflags);
+
+	*e = NULL;
+}
+
 /**
  * drm_atomic_helper_commit_hw_done - setup possible nonblocking commit
  * @state: atomic state object being committed
@@ -2647,6 +2668,8 @@ void drm_atomic_helper_commit_hw_done(struct drm_atomic_state *state)
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
 	struct drm_crtc_commit *commit;
 	int i;
+
+	send_hw_done_event(state->dev, &state->hw_done_event, ktime_get());
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		commit = new_crtc_state->commit;

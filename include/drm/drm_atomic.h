@@ -29,7 +29,22 @@
 #define DRM_ATOMIC_H_
 
 #include <drm/drm_crtc.h>
+#include <drm/drm_file.h>
 #include <drm/drm_util.h>
+
+/**
+ * struct drm_pending_atomic_hw_done_event - pending atomic HW done event tracking
+ */
+struct drm_pending_atomic_hw_done_event {
+	/**
+	 * @base: Base structure for tracking pending DRM events.
+	 */
+	struct drm_pending_event base;
+	/**
+	 * @event: Actual event which will be sent to userspace.
+	 */
+	struct drm_event_atomic_hw_done event;
+};
 
 /**
  * struct drm_crtc_commit - track modeset commits on a CRTC
@@ -516,6 +531,13 @@ struct drm_atomic_state {
 	 * drm_atomic_helper_commit_hw_done() is called.
 	 */
 	struct drm_crtc_commit *fake_commit;
+
+	/**
+	 * @hw_done_event:
+	 *
+	 * Used for sending an event to user space when programming a commit to HW is done.
+	 */
+	struct drm_pending_atomic_hw_done_event *hw_done_event;
 
 	/**
 	 * @commit_work:
