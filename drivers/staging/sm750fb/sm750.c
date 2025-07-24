@@ -121,12 +121,12 @@ static int lynxfb_ops_cursor(struct fb_info *info, struct fb_cursor *fbcursor)
 	sm750_hw_cursor_disable(cursor);
 	if (fbcursor->set & FB_CUR_SETSIZE)
 		sm750_hw_cursor_set_size(cursor,
-					fbcursor->image.width,
+					 fbcursor->image.width,
 					fbcursor->image.height);
 
 	if (fbcursor->set & FB_CUR_SETPOS)
 		sm750_hw_cursor_set_pos(cursor,
-				       fbcursor->image.dx - info->var.xoffset,
+					fbcursor->image.dx - info->var.xoffset,
 				       fbcursor->image.dy - info->var.yoffset);
 
 	if (fbcursor->set & FB_CUR_SETCMAP) {
@@ -249,10 +249,51 @@ static void lynxfb_ops_imageblit(struct fb_info *info,
 	pitch = info->fix.line_length;
 	Bpp = info->var.bits_per_pixel >> 3;
 
-	/* TODO: Implement hardware acceleration for image->depth > 1 */
-	if (image->depth != 1) {
-		cfb_imageblit(info, image);
-		return;
+	static void write_pixel(struct fb_info *info, int x, int y, u32 color)
+
+	{
+		u32 location;
+		u8 *fb_ptr = (u8 *)info->screen_base;
+
+		location = (y * info->fix.line_length) + (x * (info->var.bits_per_pixel / 8));
+
+		if (info->var.bits_per_pixel == 16) {
+			u16 c = ((color >> 8) & 0xF800) |
+				((color >> 5) & 0x07E0) |
+				((color >> 3) & 0x001F); // Convert 24-bit RGB to RGB565
+			*((u16 *)(fb_ptr + location)) = c;
+		} else if (info->var.bits_per_pixel == 32) {
+			*((u32 *)(fb_ptr + location)) = color;
+		}
+	}
+
+	void sm750fb_imageblit(struct fb_info *info, const struct fb_image *image)
+
+	{
+		/*
+		 * TODO: Add hardware-accelerated support for more image depths
+		 * Currently only 16-bit (RGB565) images are handled in fast path.
+		 */
+		if (image->depth != 16) {
+			cfb_imageblit(info, image);
+			return;
+		}
+
+		/* Accelerated rendering for 16-bit (RGB565) images */
+		const u16 *src = (const u16 *)image->data;
+
+		u32 fg_color = ((image->fg_color & 0xF800) << 8) |
+			       ((image->fg_color & 0x07E0) << 5) |
+			       ((image->fg_color & 0x001F) << 3); // RGB565 → RGB888
+
+		for (int j = 0; j < image->height; j++) {
+			for (int i = 0; i < image->width; i++) {
+				u16 pixel = src[j * image->width + i];
+
+				if (pixel) // Draw only non-zero (foreground) pixels
+					write_pixel(info, image->dx + i, image->dy + j, fg_color);
+			}
+		}
 	}
 
 	if (info->fix.visual == FB_VISUAL_TRUECOLOR ||
