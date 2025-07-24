@@ -21,6 +21,7 @@
 #include <drm/bridge/analogix_dp.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
@@ -95,8 +96,7 @@ static int exynos_dp_get_modes(struct analogix_dp_plat_data *plat_data,
 }
 
 static int exynos_dp_bridge_attach(struct analogix_dp_plat_data *plat_data,
-				   struct drm_bridge *bridge,
-				   struct drm_connector *connector)
+				   struct drm_bridge *bridge)
 {
 	struct exynos_dp_device *dp = to_dp(plat_data);
 	int ret;
@@ -147,6 +147,7 @@ static int exynos_dp_bind(struct device *dev, struct device *master, void *data)
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
 	struct drm_encoder *encoder = &dp->encoder;
 	struct drm_device *drm_dev = data;
+	struct drm_connector *connector;
 	int ret;
 
 	dp->drm_dev = drm_dev;
@@ -168,10 +169,19 @@ static int exynos_dp_bind(struct device *dev, struct device *master, void *data)
 	dp->plat_data.encoder = encoder;
 
 	ret = analogix_dp_bind(dp->adp, dp->drm_dev);
-	if (ret)
+	if (ret) {
 		dp->encoder.funcs->destroy(&dp->encoder);
+		return ret;
+	}
 
-	return ret;
+	connector = drm_bridge_connector_init(dp->drm_dev, dp->plat_data.encoder);
+	if (IS_ERR(connector)) {
+		ret = PTR_ERR(connector);
+		dev_err(dp->dev, "Failed to initialize bridge_connector\n");
+		return ret;
+	}
+
+	return drm_connector_attach_encoder(connector, dp->plat_data.encoder);
 }
 
 static void exynos_dp_unbind(struct device *dev, struct device *master,
