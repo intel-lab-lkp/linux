@@ -661,6 +661,24 @@ foreach my $entry (@link_tags) {
 }
 $link_tags_search = "(?:${link_tags_search})";
 
+# Ordered commit tags
+our @commit_tags = (
+	"Fixes:",
+	"Reported-by:",
+	"Closes:",
+	"Originally-by:",
+	"Suggested-by:",
+	"Co-developed-by:",
+	"Signed-off-by:",
+	"Tested-by:",
+	"Reviewed-by",
+	"Acked-by:",
+	"Cc:",
+	"Link:"
+);
+our $commit_tag_pattern = join '|', map { quotemeta($_) } @commit_tags;
+our $commit_tags_regex = qr{(?xi: ^\s*($commit_tag_pattern))};
+
 our $tracing_logging_tags = qr{(?xi:
 	[=-]*> |
 	<[=-]* |
@@ -2712,6 +2730,8 @@ sub process {
 
 	my $checklicenseline = 1;
 
+	my $last_matched_tag;
+
 	sanitise_line_reset();
 	my $line;
 	foreach my $rawline (@rawlines) {
@@ -3255,6 +3275,26 @@ sub process {
 				    $fix) {
 					$fixed[$fixlinenr] = $fixed;
 				}
+			}
+		}
+
+# Check commit tags sorting
+		if (!$in_header_lines && $line =~ $commit_tags_regex) {
+			my $tag = $1;
+			my ($tag_index) = grep { lc($commit_tags[$_]) eq lc($tag) } 0..$#commit_tags;
+
+			if ($last_matched_tag &&
+			    $last_matched_tag->{tag_index} > $tag_index) {
+				WARN("BAD_TAG_ORDER",
+				     "Tag '$tag' is out of order. Should come before '$last_matched_tag->{tag}'\n" . $herecurr);
+			}
+
+			# Allow link tags to occur before the commit tags
+			if (lc($tag) ne "link:" || defined $last_matched_tag) {
+				$last_matched_tag = {
+					tag       => $tag,
+					tag_index => $tag_index,
+				};
 			}
 		}
 

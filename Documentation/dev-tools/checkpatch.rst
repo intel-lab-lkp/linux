@@ -599,6 +599,12 @@ Commit message
 
     See: https://www.kernel.org/doc/html/latest/process/submitting-patches.html#describe-your-changes
 
+  **BAD_TAG_ORDER**
+    The tags in the commit message are not in the correct order according to
+    community conventions. Common tags like Signed-off-by, Reviewed-by,
+    Tested-by, Acked-by, Fixes, Cc, etc., should follow a standardized sequence.
+
+    See: https://www.kernel.org/doc/html/latest/process/maintainer-tip.html#ordering-of-commit-tags
 
 Comparison style
 ----------------
