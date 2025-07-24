@@ -650,7 +650,8 @@
 				 <&audsys CLK_AUDIO_AFE>,
 				 <&audsys CLK_AUDIO_AFE_CONN>,
 				 <&audsys CLK_AUDIO_A1SYS>,
-				 <&audsys CLK_AUDIO_A2SYS>;
+				 <&audsys CLK_AUDIO_A2SYS>,
+				 <&audsys CLK_AUDIO_AFE_MRGIF>;
 
 			clock-names = "infra_sys_audio_clk",
 				      "top_audio_mux1_sel",
@@ -684,7 +685,8 @@
 				      "audio_afe_pd",
 				      "audio_afe_conn_pd",
 				      "audio_a1sys_pd",
-				      "audio_a2sys_pd";
+				      "audio_a2sys_pd",
+				      "audio_mrgif_pd";
 
 			assigned-clocks = <&topckgen CLK_TOP_A1SYS_HP_SEL>,
 					  <&topckgen CLK_TOP_A2SYS_HP_SEL>,
