@@ -66,6 +66,7 @@ Function Reference
     vidioc-remove-bufs
     vidioc-s-hw-freq-seek
     vidioc-streamon
+    vidioc-subdev-bind-context
     vidioc-subdev-enum-frame-interval
     vidioc-subdev-enum-frame-size
     vidioc-subdev-enum-mbus-code
