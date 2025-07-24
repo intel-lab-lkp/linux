@@ -3933,13 +3933,14 @@ static int xhci_discover_or_reset_device(struct usb_hcd *hcd,
 		 * the USB device has been reset.
 		 */
 		ret = xhci_disable_slot(xhci, udev->slot_id);
-		xhci_free_virt_device(xhci, udev->slot_id);
 		if (!ret) {
 			ret = xhci_alloc_dev(hcd, udev);
 			if (ret == 1)
 				ret = 0;
 			else
 				ret = -EINVAL;
+		} else {
+			xhci_free_virt_device(xhci, udev->slot_id);
 		}
 		return ret;
 	}
@@ -4087,10 +4088,11 @@ static void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	for (i = 0; i < 31; i++)
 		virt_dev->eps[i].ep_state &= ~EP_STOP_CMD_PENDING;
 	virt_dev->udev = NULL;
-	xhci_disable_slot(xhci, udev->slot_id);
+	ret = xhci_disable_slot(xhci, udev->slot_id);
 
 	spin_lock_irqsave(&xhci->lock, flags);
-	xhci_free_virt_device(xhci, udev->slot_id);
+	if (ret)
+		xhci_free_virt_device(xhci, udev->slot_id);
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
 }
@@ -4130,9 +4132,20 @@ int xhci_disable_slot(struct xhci_hcd *xhci, u32 slot_id)
 
 	wait_for_completion(command->completion);
 
-	if (command->status != COMP_SUCCESS)
+	if (command->status != COMP_SUCCESS) {
 		xhci_warn(xhci, "Unsuccessful disable slot %u command, status %d\n",
 			  slot_id, command->status);
+		switch (command->status) {
+		case COMP_COMMAND_ABORTED:
+		case COMP_COMMAND_RING_STOPPED:
+			xhci_warn(xhci, "Timeout while waiting for disable slot command\n");
+			ret = -ETIME;
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+	}
 
 	xhci_free_command(xhci, command);
 
@@ -4245,8 +4258,9 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	return 1;
 
 disable_slot:
-	xhci_disable_slot(xhci, udev->slot_id);
-	xhci_free_virt_device(xhci, udev->slot_id);
+	ret = xhci_disable_slot(xhci, udev->slot_id);
+	if (ret)
+		xhci_free_virt_device(xhci, udev->slot_id);
 
 	return 0;
 }
@@ -4383,10 +4397,11 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 
 		mutex_unlock(&xhci->mutex);
 		ret = xhci_disable_slot(xhci, udev->slot_id);
-		xhci_free_virt_device(xhci, udev->slot_id);
 		if (!ret) {
 			if (xhci_alloc_dev(hcd, udev) == 1)
 				xhci_setup_addressable_virt_dev(xhci, udev);
+		} else {
+			xhci_free_virt_device(xhci, udev->slot_id);
 		}
 		kfree(command->completion);
 		kfree(command);
