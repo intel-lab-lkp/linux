@@ -365,6 +365,64 @@ static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg)
 	return copy_to_user(arg, extoff, sizeof(*extoff)) ? -EFAULT : 0;
 }
 
+static long ptp_sys_offset_extended_trusted(struct ptp_clock *ptp,
+					    void __user *arg)
+{
+	struct ptp_sys_offset_extended_trusted *extofftrst __free(kfree) = NULL;
+	struct ptp_system_timestamp sts;
+	struct ptp_clock_attributes att;
+
+	if (!ptp->info->gettimextrusted64)
+		return -EOPNOTSUPP;
+
+	extofftrst = memdup_user(arg, sizeof(*extofftrst));
+	if (IS_ERR(extofftrst))
+		return PTR_ERR(extofftrst);
+
+	if (extofftrst->n_samples > PTP_MAX_SAMPLES ||
+	    extofftrst->rsv[0] ||
+	    extofftrst->rsv[1])
+		return -EINVAL;
+
+	switch (extofftrst->clockid) {
+	case CLOCK_REALTIME:
+	case CLOCK_MONOTONIC:
+	case CLOCK_MONOTONIC_RAW:
+		break;
+	case CLOCK_AUX ... CLOCK_AUX_LAST:
+		if (IS_ENABLED(CONFIG_POSIX_AUX_CLOCKS))
+			break;
+		fallthrough;
+	default:
+		return -EINVAL;
+	}
+
+	sts.clockid = extofftrst->clockid;
+	for (unsigned int i = 0; i < extofftrst->n_samples; i++) {
+		struct timespec64 ts;
+		int err;
+
+		err = ptp->info->gettimextrusted64(ptp->info, &ts, &sts, &att);
+		if (err)
+			return err;
+
+		/* Filter out disabled or unavailable clocks */
+		if (sts.pre_ts.tv_sec < 0 || sts.post_ts.tv_sec < 0)
+			return -EINVAL;
+
+		extofftrst->ts[i][0].pct.sec = sts.pre_ts.tv_sec;
+		extofftrst->ts[i][0].pct.nsec = sts.pre_ts.tv_nsec;
+		extofftrst->ts[i][1].pct.sec = ts.tv_sec;
+		extofftrst->ts[i][1].pct.nsec = ts.tv_nsec;
+		extofftrst->ts[i][1].att.error_bound = att.error_bound;
+		extofftrst->ts[i][1].att.clock_status = att.clock_status;
+		extofftrst->ts[i][2].pct.sec = sts.post_ts.tv_sec;
+		extofftrst->ts[i][2].pct.nsec = sts.post_ts.tv_nsec;
+	}
+
+	return copy_to_user(arg, extofftrst, sizeof(*extofftrst)) ? -EFAULT : 0;
+}
+
 static long ptp_sys_offset(struct ptp_clock *ptp, void __user *arg)
 {
 	struct ptp_sys_offset *sysoff __free(kfree) = NULL;
@@ -502,6 +560,9 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 	case PTP_SYS_OFFSET_EXTENDED:
 	case PTP_SYS_OFFSET_EXTENDED2:
 		return ptp_sys_offset_extended(ptp, argptr);
+
+	case PTP_SYS_OFFSET_EXTENDED_TRUSTED:
+		return ptp_sys_offset_extended_trusted(ptp, argptr);
 
 	case PTP_SYS_OFFSET:
 	case PTP_SYS_OFFSET2:

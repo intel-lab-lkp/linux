@@ -120,6 +120,21 @@ struct ptp_system_timestamp {
  *               reading the lowest bits of the PHC timestamp and the second
  *               reading immediately follows that.
  *
+ * @gettimextrusted64:  Reads the current time from the hardware clock and
+ *                      optionally also the system clock with additional data on
+ *                      hardware clock accuracy and reliability.
+ *                      parameter ts: Holds the PHC timestamp.
+ *                      parameter sts: If not NULL, it holds a pair of
+ *                      timestamps from the system clock. The first reading is
+ *                      made right before reading the lowest bits of the PHC
+ *                      timestamp and the second reading immediately follows
+ *                      that.
+ *                      parameter error_bound: If not NULL, it holds the maximum
+ *                      error bound for the PHC timestamp in nanoseconds.
+ *                      parameter clock_status: If not NULL, it holds
+ *                      qualitative clock states indicating its synchronization
+ *                      status and reliability.
+ *
  * @getcrosststamp:  Reads the current time from the hardware clock and
  *                   system clock simultaneously.
  *                   parameter cts: Contains timestamp (device,system) pair,
@@ -200,6 +215,10 @@ struct ptp_clock_info {
 	int (*gettime64)(struct ptp_clock_info *ptp, struct timespec64 *ts);
 	int (*gettimex64)(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			  struct ptp_system_timestamp *sts);
+	int (*gettimextrusted64)(struct ptp_clock_info *ptp,
+				 struct timespec64 *ts,
+				 struct ptp_system_timestamp *sts,
+				 struct ptp_clock_attributes *att);
 	int (*getcrosststamp)(struct ptp_clock_info *ptp,
 			      struct system_device_crosststamp *cts);
 	int (*settime64)(struct ptp_clock_info *p, const struct timespec64 *ts);

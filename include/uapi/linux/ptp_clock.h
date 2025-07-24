@@ -77,6 +77,26 @@
 #define PTP_PEROUT_V1_VALID_FLAGS	(0)
 
 /*
+ * Clock status values for struct ptp_clock_attributes.clock_status
+ */
+enum ptp_clock_status {
+	/* clock synchronization status cannot be reliably determined */
+	PTP_CLOCK_STATUS_UNKNOWN      = 0,
+
+	/* clock is acquiring synchronization */
+	PTP_CLOCK_STATUS_INITIALIZING = 1,
+
+	/* clock is synchronized and maintained accurately by the device */
+	PTP_CLOCK_STATUS_SYNCED       = 2,
+
+	/* clock is drifting and not being synchronized by the device */
+	PTP_CLOCK_STATUS_FREE_RUNNING = 3,
+
+	/* clock is unreliable, the error_bound value cannot be trusted */
+	PTP_CLOCK_STATUS_UNRELIABLE   = 4
+};
+
+/*
  * struct ptp_clock_time - represents a time value
  *
  * The sign of the seconds field applies to the whole value. The
@@ -89,6 +109,33 @@ struct ptp_clock_time {
 	__s64 sec;  /* seconds */
 	__u32 nsec; /* nanoseconds */
 	__u32 reserved;
+};
+
+/*
+ * struct ptp_clock_attributes - describes additional data for a PTP clock
+ *                               timestamp
+ *
+ * @error_bound:   The maximum possible error (in nanoseconds) associated with
+ *                 the reported timestamp, this value quantifies the inaccuracy
+ *                 of the clock at the time of reading.
+ * @clock_status:  Qualitative state of the clock (enum ptp_clock_status)
+ * @rsv:           Reserved for future use, should be set to zero.
+ */
+struct ptp_clock_attributes {
+	__u32 error_bound;
+	__u8 clock_status;
+	__u8 rsv[3];
+};
+
+/*
+ * struct ptp_clock_time_trusted - PTP timestamp with its associated attributes
+ *
+ * @pct: The PTP clock timestamp value.
+ * @att: PTP clock attributes about the timestamp
+ */
+struct ptp_clock_time_trusted {
+	struct ptp_clock_time pct;
+	struct ptp_clock_attributes att;
 };
 
 struct ptp_clock_caps {
@@ -177,6 +224,30 @@ struct ptp_sys_offset_extended {
 	struct ptp_clock_time ts[PTP_MAX_SAMPLES][3];
 };
 
+/*
+ * ptp_sys_offset_extended_trusted - data structure for IOCTL operation
+ *				     PTP_SYS_OFFSET_EXTENDED_TRUSTED
+ *
+ * @n_samples:	Desired number of measurements.
+ * @clockid:	clockid of a clock-base used for pre/post timestamps.
+ * @rsv:	Reserved for future use.
+ * @ts:		Array of samples in the form [pre-TS, PHC, post-TS].
+ *		Each sample consists of timestamp in the form [sec, nsec],
+ *		while the PHC sample also includes clock attributes in the form
+ *		[error_bound, clock_status],
+ *
+ * Starting from kernel 6.12 and onwards, the first word of the reserved-field
+ * is used for @clockid. That's backward compatible since previous kernel
+ * expect all three reserved words (@rsv[3]) to be 0 while the clockid (first
+ * word in the new structure) for CLOCK_REALTIME is '0'.
+ */
+struct ptp_sys_offset_extended_trusted {
+	unsigned int n_samples;
+	__kernel_clockid_t clockid;
+	unsigned int rsv[2];
+	struct ptp_clock_time_trusted ts[PTP_MAX_SAMPLES][3];
+};
+
 struct ptp_sys_offset_precise {
 	struct ptp_clock_time device;
 	struct ptp_clock_time sys_realtime;
@@ -231,6 +302,8 @@ struct ptp_pin_desc {
 	_IOWR(PTP_CLK_MAGIC, 8, struct ptp_sys_offset_precise)
 #define PTP_SYS_OFFSET_EXTENDED \
 	_IOWR(PTP_CLK_MAGIC, 9, struct ptp_sys_offset_extended)
+#define PTP_SYS_OFFSET_EXTENDED_TRUSTED \
+	_IOWR(PTP_CLK_MAGIC, 10, struct ptp_sys_offset_extended_trusted)
 
 #define PTP_CLOCK_GETCAPS2  _IOR(PTP_CLK_MAGIC, 10, struct ptp_clock_caps)
 #define PTP_EXTTS_REQUEST2  _IOW(PTP_CLK_MAGIC, 11, struct ptp_extts_request)
