@@ -211,7 +211,6 @@ impl<C: ClockSource> Instant<C> {
     /// # Safety
     ///
     /// The caller promises that `nanos` is in the range from 0 to `KTIME_MAX`.
-    #[expect(unused)]
     #[inline]
     pub(crate) unsafe fn from_nanos(nanos: i64) -> Self {
         debug_assert!(nanos >= 0);
