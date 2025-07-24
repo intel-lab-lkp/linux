@@ -316,6 +316,7 @@ struct user_event_mm;
  */
 enum {
 	TASK_COMM_LEN = 16,
+	TASK_COMM_EXT_LEN = 64,
 };
 
 extern void sched_tick(void);
@@ -1162,7 +1163,7 @@ struct task_struct {
 	 *   - logic inside set_task_comm() will ensure it is always NUL-terminated and
 	 *     zero-padded
 	 */
-	char				comm[TASK_COMM_LEN];
+	char				comm[TASK_COMM_EXT_LEN];
 
 	struct nameidata		*nameidata;
 
@@ -1981,7 +1982,7 @@ static inline void kick_process(struct task_struct *tsk) { }
 
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 #define set_task_comm(tsk, from) ({			\
-	BUILD_BUG_ON(sizeof(from) != TASK_COMM_LEN);	\
+	BUILD_BUG_ON(sizeof(from) < TASK_COMM_LEN);	\
 	__set_task_comm(tsk, from, false);		\
 })
 
@@ -2001,6 +2002,10 @@ extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec
 #define get_task_comm(buf, tsk) ({			\
 	BUILD_BUG_ON(sizeof(buf) < TASK_COMM_LEN);	\
 	strscpy_pad(buf, (tsk)->comm);			\
+	if ((sizeof(buf)) == TASK_COMM_LEN)		\
+		buf[TASK_COMM_LEN - 1] = '\0';		\
+	else						\
+		buf[TASK_COMM_EXT_LEN - 1] = '\0';	\
 	buf;						\
 })
 
