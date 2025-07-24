@@ -203,9 +203,6 @@ static int exynos_dp_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np;
 	struct exynos_dp_device *dp;
-	struct drm_panel *panel;
-	struct drm_bridge *bridge;
-	int ret;
 
 	dp = devm_kzalloc(&pdev->dev, sizeof(struct exynos_dp_device),
 			  GFP_KERNEL);
@@ -225,32 +222,31 @@ static int exynos_dp_probe(struct platform_device *pdev)
 	if (np) {
 		dp->plat_data.panel = of_drm_find_panel(np);
 
-		of_node_put(np);
 		if (IS_ERR(dp->plat_data.panel))
 			return PTR_ERR(dp->plat_data.panel);
 
 		goto out;
 	}
 
-	ret = drm_of_find_panel_or_bridge(dev->of_node, 0, 0, &panel, &bridge);
-	if (ret)
-		return ret;
-
 	/* The remote port can be either a panel or a bridge */
-	dp->plat_data.panel = panel;
-	dp->plat_data.bridge = bridge;
 	dp->plat_data.dev_type = EXYNOS_DP;
 	dp->plat_data.power_on = exynos_dp_poweron;
 	dp->plat_data.power_off = exynos_dp_poweroff;
 	dp->plat_data.attach = exynos_dp_bridge_attach;
 	dp->plat_data.get_modes = exynos_dp_get_modes;
+	dp->plat_data.ops = &exynos_dp_ops;
 
 out:
 	dp->adp = analogix_dp_probe(dev, &dp->plat_data);
 	if (IS_ERR(dp->adp))
 		return PTR_ERR(dp->adp);
 
-	return component_add(&pdev->dev, &exynos_dp_ops);
+	if (np) {
+		of_node_put(np);
+		return component_add(&pdev->dev, &exynos_dp_ops);
+	} else {
+		return analogix_dp_find_panel_or_bridge(dp->adp);
+	}
 }
 
 static void exynos_dp_remove(struct platform_device *pdev)
