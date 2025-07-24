@@ -449,6 +449,19 @@ static inline void __folio_rmap_sanity_checks(const struct folio *folio,
 	default:
 		VM_WARN_ON_ONCE(true);
 	}
+
+	/*
+	 * Anon folios must have an associated live anon_vma as long as they're
+	 * mapped into userspace.
+	 * Part of the purpose of the atomic_read() is to make KASAN check that
+	 * the anon_vma is still alive.
+	 */
+	if (IS_ENABLED(CONFIG_DEBUG_VM) && PageAnonNotKsm(page)) {
+		unsigned long mapping = (unsigned long)folio->mapping;
+		struct anon_vma *anon_vma = (void *)(mapping - PAGE_MAPPING_ANON);
+
+		VM_WARN_ON_FOLIO(atomic_read(&anon_vma->refcount) == 0, folio);
+	}
 }
 
 /*
