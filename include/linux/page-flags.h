@@ -1000,6 +1000,23 @@ static __always_inline void __ClearPage##uname(struct page *page)	\
 		return;							\
 	VM_BUG_ON_PAGE(!Page##uname(page), page);			\
 	page->page_type = UINT_MAX;					\
+}									\
+static __always_inline void __PageSet##uname##Value(struct page *page,	\
+						    unsigned int value) \
+{									\
+	if (!Page##uname(page))						\
+		return;							\
+	if (unlikely(value > (PAGE_TYPE_MASK)))				\
+		return;							\
+	WRITE_ONCE(page->page_type, (unsigned int)PGTY_##lname		\
+				    << PAGE_TYPE_SHIFT | value);	\
+}									\
+static __always_inline unsigned int __PageGet##uname##Value(		\
+				    struct page *page)			\
+{									\
+	if (!Page##uname(page))						\
+		return 0;						\
+	return READ_ONCE(page->page_type) & PAGE_TYPE_MASK;		\
 }
 
 /*
