@@ -371,4 +371,7 @@ struct prctl_mm_map {
 # define PR_FUTEX_HASH_GET_SLOTS	2
 # define PR_FUTEX_HASH_GET_IMMUTABLE	3
 
+/* TASK sched nodelay request */
+#define PR_SET_SCHED_NODELAY		79
+#define PR_GET_SCHED_NODELAY		80
 #endif /* _LINUX_PRCTL_H */

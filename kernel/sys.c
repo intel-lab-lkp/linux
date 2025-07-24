@@ -2824,6 +2824,24 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_FUTEX_HASH:
 		error = futex_hash_prctl(arg2, arg3, arg4);
 		break;
+	case PR_SET_SCHED_NODELAY:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (current->sched_class != &rt_sched_class)
+			return -EINVAL;
+		if (arg2)
+			current->sched_nodelay = 1;
+		else
+			current->sched_nodelay = 0;
+		break;
+	case PR_GET_SCHED_NODELAY:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (current->sched_class != &rt_sched_class)
+			return -EINVAL;
+		error = (current->sched_nodelay == 1);
+		break;
+
 	default:
 		trace_task_prctl_unknown(option, arg2, arg3, arg4, arg5);
 		error = -EINVAL;

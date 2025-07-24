@@ -1062,6 +1062,7 @@ struct task_struct {
 #endif
 	unsigned			in_nf_duplicate:1;
 	unsigned			rseq_delay_resched:2;
+	unsigned			sched_nodelay:1;
 #ifdef CONFIG_PREEMPT_RT
 	struct netdev_xmit		net_xmit;
 #endif
