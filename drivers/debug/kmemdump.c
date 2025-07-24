@@ -28,14 +28,33 @@ static const struct kmemdump_backend kmemdump_default_backend = {
 static const struct kmemdump_backend *backend = &kmemdump_default_backend;
 static DEFINE_MUTEX(kmemdump_lock);
 static struct kmemdump_zone kmemdump_zones[MAX_ZONES];
+static bool kmemdump_initialized;
 
 static int __init init_kmemdump(void)
 {
 	const struct kmemdump_zone *e;
+	enum kmemdump_uid uid;
+
+	init_elfheader();
 
 	/* Walk the kmemdump section for static variables and register them */
 	for_each_kmemdump_entry(e)
 		kmemdump_register_id(e->id, e->zone, e->size);
+
+	mutex_lock(&kmemdump_lock);
+	/*
+	 * Some regions may have been registered very early.
+	 * Update the elf header for all existing regions,
+	 * except for KMEMDUMP_ID_COREIMAGE_ELF and
+	 * KMEMDUMP_ID_COREIMAGE_VMCOREINFO, those are included in the
+	 * ELF header upon its creation.
+	 */
+	for (uid = KMEMDUMP_ID_COREIMAGE_CONFIG; uid < MAX_ZONES; uid++)
+		if (kmemdump_zones[uid].id)
+			update_elfheader(&kmemdump_zones[uid]);
+
+	kmemdump_initialized = true;
+	mutex_unlock(&kmemdump_lock);
 
 	return 0;
 }
@@ -95,6 +114,9 @@ int kmemdump_register_id(enum kmemdump_uid req_id, void *zone, size_t size)
 	z->size = size;
 	z->id = uid;
 
+	if (kmemdump_initialized)
+		update_elfheader(z);
+
 	mutex_unlock(&kmemdump_lock);
 
 	return uid;
@@ -121,6 +143,9 @@ void kmemdump_unregister(enum kmemdump_uid id)
 	}
 
 	backend->unregister_region(backend, z->id);
+
+	if (kmemdump_initialized)
+		clear_elfheader(z);
 
 	memset(z, 0, sizeof(*z));
 
