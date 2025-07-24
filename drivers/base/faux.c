@@ -33,12 +33,6 @@ static struct device faux_bus_root = {
 	.init_name	= "faux",
 };
 
-static int faux_match(struct device *dev, const struct device_driver *drv)
-{
-	/* Match always succeeds, we only have one driver */
-	return 1;
-}
-
 static int faux_probe(struct device *dev)
 {
 	struct faux_object *faux_obj = to_faux_object(dev);
@@ -77,7 +71,6 @@ static void faux_remove(struct device *dev)
 
 static const struct bus_type faux_bus_type = {
 	.name		= "faux",
-	.match		= faux_match,
 	.probe		= faux_probe,
 	.remove		= faux_remove,
 };
