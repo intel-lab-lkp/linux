@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/temperature/nxp,p3t1755.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP P3T175x Temperature Sensor
+
+maintainers:
+  - Lakshay Piplani <lakshay.piplani@nxp.com>
+
+description: |
+  Datasheet: https://www.nxp.com/docs/en/data-sheet/P3T1755.pdf
+
+  P3T175x (P3T1755/P3T1750) is a digital temperature sensor with a range of -40°C to
+  +125°C and a 12-bit resolution. It supports communication over
+  both I2C and I3C interfaces.
+
+  The I2C interface supports up to 32 static addresses and provides
+  an ALERT output to signal when temperature thresholds are crossed.
+
+  The I3C interface supports In-Band interrupts (IBI) in interrupt mode,
+  allowing the device to notify the controller of threshold events without
+  dedicated alert pin.
+
+  The device supports configurable thermostat modes (interrupt or comparator),
+  fault queue length etc.
+
+properties:
+  compatible:
+    enum:
+      - nxp,p3t1755
+      - nxp,p3t1750
+
+  interrupts:
+    maxItems: 1
+
+  reg:
+    maxItems: 1
+    description: |
+      In I2C mode, the device supports up to 32 static addresses.
+      In I3C mode, the 'reg' property encodes a triplet of
+      <static-address BCR PID> used for device matching.
+      Static address is optional if matching is done via PID.
+
+  nxp,interrupt-mode:
+    type: boolean
+    description: |
+      Enables interrupt mode (TM = 1), where alerts are latched until
+      cleared by a register read.
+      Required for IBI support over I3C. On I2C, both interrupt and
+      comparator mode support events.
+
+  nxp,alert-active-high:
+    type: boolean
+    description: |
+      Only applicable for I2C mode.
+      Sets the polarity of ALERT pin to active high, if true.
+      Ignored in I3C mode (which uses IBI signaling).
+
+  nxp,fault-queue:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2, 4, 6]
+    description: |
+      Number of consecutive temperature limit
+      violations required before an alert is triggered.
+      valid values:- 1, 2, 4 or 6.
+      If unspecified, hardware default (2) is used.
+
+  assigned-address:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0x1
+    maximum: 0xff
+    description: |
+      Dynamic address to be assigned to this device. In case static address is
+      present (first cell of the reg property != 0), this address is assigned
+      through SETDASA. If static address is not present, this address is assigned
+      through SETNEWDA after assigning a temporary address via ENTDAA.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        temp-sensor@48 {
+            compatible = "nxp,p3t1755";
+            reg = <0x48>;
+            nxp,interrupt-mode;
+            nxp,fault-queue = <6>;
+            interrupt-parent = <&gpio2>;
+            interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+        };
+    };
+
+  - |
+    i3c {
+      #address-cells = <3>;
+      #size-cells = <0>;
+      temp-sensor@48,236152a00 {
+        reg = <0x48 0x236 0x152a00>;
+        assigned-address = <0x50>;
+      };
+    };
+
+  - |
+    i3c {
+      #address-cells = <3>;
+      #size-cells = <0>;
+      temp-sensor@0 {
+        reg = <0x0 0x236 0x152a00>;
+        nxp,interrupt-mode;
+        nxp,fault-queue = <6>;
+      };
+    };
