@@ -2269,6 +2269,10 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 	rmap_walk(folio, &rwc);
 }
 
+struct migrate_walk_arg {
+	enum ttu_flags flags;
+};
+
 /*
  * @arg: enum ttu_flags will be passed to this argument.
  *
@@ -2284,7 +2288,8 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	pte_t pteval;
 	struct page *subpage;
 	struct mmu_notifier_range range;
-	enum ttu_flags flags = (enum ttu_flags)(long)arg;
+	struct migrate_walk_arg *mwa = (struct migrate_walk_arg *)arg;
+	enum ttu_flags flags = mwa->flags;
 	unsigned long pfn;
 	unsigned long hsz = 0;
 
@@ -2583,9 +2588,13 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
  */
 void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 {
+	struct migrate_walk_arg arg = {
+		.flags = flags,
+	};
+
 	struct rmap_walk_control rwc = {
 		.rmap_one = try_to_migrate_one,
-		.arg = (void *)flags,
+		.arg = (void *)&arg,
 		.done = folio_not_mapped,
 		.locked = flags & TTU_RMAP_LOCKED,
 		.anon_lock = folio_lock_anon_vma_read,
