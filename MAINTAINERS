@@ -3026,6 +3026,7 @@ F:	arch/arm64/boot/dts/qcom/sdm845-cheza*
 ARM/QUALCOMM MAILING LIST
 L:	linux-arm-msm@vger.kernel.org
 C:	irc://irc.oftc.net/linux-msm
+S:	Maintained
 F:	Documentation/devicetree/bindings/*/qcom*
 F:	Documentation/devicetree/bindings/soc/qcom/
 F:	arch/arm/boot/dts/qcom/
