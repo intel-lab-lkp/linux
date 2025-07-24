@@ -1488,7 +1488,36 @@ err_mutex_destroy:
 	return ret;
 }
 
+static int pispbe_subdev_set_pad_fmt(struct v4l2_subdev *sd,
+				     struct v4l2_subdev_state *state,
+				     struct v4l2_subdev_format *format)
+{
+	struct v4l2_mbus_framefmt *fmt = &format->format;
+
+	/* Only allow setting sizes on the image input and output pads. */
+
+	switch (format->pad) {
+	case TDN_INPUT_NODE:
+	case STITCH_INPUT_NODE:
+	case TDN_OUTPUT_NODE:
+	case STITCH_OUTPUT_NODE:
+		return -EINVAL;
+	}
+
+	fmt->width = clamp(fmt->width, PISP_BACK_END_MIN_TILE_WIDTH,
+			   PISP_BACK_END_MAX_TILE_WIDTH);
+	fmt->height = clamp(fmt->height, PISP_BACK_END_MIN_TILE_HEIGHT,
+			    PISP_BACK_END_MAX_TILE_HEIGHT);
+	fmt->code = MEDIA_BUS_FMT_FIXED;
+
+	*v4l2_subdev_state_get_format(state, format->pad) = *fmt;
+
+	return 0;
+}
+
 static const struct v4l2_subdev_pad_ops pispbe_pad_ops = {
+	.set_fmt = pispbe_subdev_set_pad_fmt,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.link_validate = v4l2_subdev_link_validate_default,
 };
 
