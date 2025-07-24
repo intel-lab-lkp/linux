@@ -1085,8 +1085,9 @@
  *	%NL80211_ATTR_NAN_MASTER_PREF attribute and optional
  *	%NL80211_ATTR_BANDS attributes.  If %NL80211_ATTR_BANDS is
  *	omitted or set to 0, it means don't-care and the device will
- *	decide what to use.  After this command NAN functions can be
- *	added.
+ *	decide what to use. Additional cluster configuration may be
+ *	optionally provided with %NL80211_ATTR_NAN_CONFIG.
+ *	After this command NAN functions can be added.
  * @NL80211_CMD_STOP_NAN: Stop the NAN operation, identified by
  *	its %NL80211_ATTR_WDEV interface.
  * @NL80211_CMD_ADD_NAN_FUNCTION: Add a NAN function. The function is defined
@@ -1115,6 +1116,8 @@
  *	current configuration is not changed.  If it is present but
  *	set to zero, the configuration is changed to don't-care
  *	(i.e. the device can decide what to do).
+ *	Additional parameters may be provided with
+ *	%NL80211_ATTR_NAN_CONFIG.
  * @NL80211_CMD_NAN_MATCH: Notification sent when a match is reported.
  *	This will contain a %NL80211_ATTR_NAN_MATCH nested attribute and
  *	%NL80211_ATTR_COOKIE.
@@ -2927,6 +2930,11 @@ enum nl80211_commands {
  *	bringing up a new interface, %NL80211_ATTR_S1G_LONG_BEACON_PERIOD is
  *	required alongside this attribute. Refer to
  *	@enum nl80211_s1g_short_beacon_attrs for the attribute definitions.
+ * @NL80211_ATTR_NAN_CONFIG: Nested attribute for
+ *	extended NAN cluster configuration. This is used with
+ *	%NL80211_CMD_START_NAN and %NL80211_CMD_CHANGE_NAN_CONFIG.
+ *	See &enum nl80211_nan_conf_attributes for details.
+ *	This attribute is optional.
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3490,6 +3498,7 @@ enum nl80211_attrs {
 	NL80211_ATTR_S1G_LONG_BEACON_PERIOD,
 	NL80211_ATTR_S1G_SHORT_BEACON,
 
+	NL80211_ATTR_NAN_CONFIG,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -7276,6 +7285,100 @@ enum nl80211_nan_match_attributes {
 	/* keep last */
 	NUM_NL80211_NAN_MATCH_ATTR,
 	NL80211_NAN_MATCH_ATTR_MAX = NUM_NL80211_NAN_MATCH_ATTR - 1
+};
+
+/**
+ * enum nl80211_nan_band_conf_attributes - NAN band configuration attributes
+ * @__NL80211_NAN_BAND_CONF_INVALID: Invalid.
+ * @NL80211_NAN_BAND_CONF_BAND: Band for which the configuration is
+ *	being set. The value is according to &enum nl80211_band.
+ * @NL80211_NAN_BAND_CONF_FREQ: Discovery frequency. This attribute shall not
+ *	be present on 2.4 GHZ band. On 5 GHz band it's presence is optional.
+ *	The allowed values are 5220 (channel 44) or 5745 (channel 149).
+ *	If not present, channel 149 is used if allowed, otherwise channel 44
+ *	will be selected. The value is in MHz (u16).
+ * @NL80211_NAN_BAND_CONF_RSSI_CLOSE: RSSI close threshold used for NAN state
+ *	transition algorithm as described in chapters 3.3.6 and 3.3.7 "NAN
+ *	Device Role and State Transition" of Wi-Fi Aware Specification v4.0".
+ *	If not specified, default device value is used. The value should
+ *	be greater than -60 dBm (s8).
+ * @NL80211_NAN_BAND_CONF_RSSI_MIDDLE: RSSI middle threshold used for NAN state
+ *	transition algorithm as described in chapters 3.3.6 and 3.3.7 "NAN
+ *	Device Role and State Transition" of Wi-Fi Aware Specification v4.0".
+ *	If not present, default device value is used. The value should be
+ *	greater than -75 dBm and less than %NL80211_NAN_BAND_CONF_RSSI_CLOSE
+ *	(s8).
+ * @NL80211_NAN_BAND_CONF_WAKE_DW: Committed DW information (values 0-5).
+ *	Value 0 means that the device will not wake up during the
+ *	discovery window. Values 1-5 mean that the device will wake up
+ *	during each 2^(n - 1) discovery window, where n is the value of
+ *	this attribute. Setting this attribute to 0 is not allowed on
+ *	2.4 GHz band (u8).
+ * @NL80211_NAN_BAND_CONF_DISABLE_SCAN: Optional flag attribute to disable
+ *	scanning (for cluster merge) on the band. If set, the device will not
+ *	scan on this band anymore. Disabling scanning on 2.4 GHz band is not
+ *	allowed.
+ * @NUM_NL80211_NAN_BAND_CONF_ATTR: Internal.
+ * @NL80211_NAN_BAND_CONF_ATTR_MAX: Highest NAN band configuration attribute.
+ *
+ * These attributes are used to configure NAN band-specific parameters. Note,
+ * that both RSSI attributes should be configured (or both left unset), while
+ * RSSI close should be higher than (>) -60 dBm and RSSI middle should be
+ * below the RSSI close value but not lower than (>=) -75 dBm.
+ */
+enum nl80211_nan_band_conf_attributes {
+	__NL80211_NAN_BAND_CONF_INVALID,
+	NL80211_NAN_BAND_CONF_BAND,
+	NL80211_NAN_BAND_CONF_FREQ,
+	NL80211_NAN_BAND_CONF_RSSI_CLOSE,
+	NL80211_NAN_BAND_CONF_RSSI_MIDDLE,
+	NL80211_NAN_BAND_CONF_WAKE_DW,
+	NL80211_NAN_BAND_CONF_DISABLE_SCAN,
+
+	/* keep last */
+	NUM_NL80211_NAN_BAND_CONF_ATTR,
+	NL80211_NAN_BAND_CONF_ATTR_MAX = NUM_NL80211_NAN_BAND_CONF_ATTR - 1,
+};
+
+/**
+ * enum nl80211_nan_conf_attributes - NAN configuration attributes
+ * @__NL80211_NAN_CONF_INVALID: Invalid attribute, used for validation.
+ * @NL80211_NAN_CONF_CLUSTER_ID: ID for the NAN cluster.
+ * @NL80211_NAN_CONF_EXTRA_ATTRS: Additional NAN attributes to be
+ *	published in the beacons. (optional)
+ * @NL80211_NAN_CONF_VENDOR_ELEMS: Vendor-specific elements that will
+ *	be published in the beacons. (optional)
+ * @NL80211_NAN_CONF_BAND_CONFIGS: This is a nested array attribute,
+ *	containing multiple entries for each supported band. Each band
+ *	configuration consists of &enum nl80211_nan_band_conf_attributes.
+ * @NL80211_NAN_CONF_SCAN_PERIOD: Scan period in seconds.
+ *	Zero value will disable scanning.
+ * @NL80211_NAN_CONF_SCAN_DWELL_TIME: Scan dwell time in TUs per channel.
+ *	Only non-zero values are valid.
+ * @NL80211_NAN_CONF_DISCOVERY_BEACON_INTERVAL: Discovery beacon interval
+ *	in TUs. Valid range is 50-200 TUs.
+ * @NL80211_NAN_CONF_NOTIFY_DW: If set, the driver will notify userspace about
+ *	the upcoming discovery window with
+ *	%NL80211_CMD_NAN_NEXT_DW_NOTIFICATION.
+ * @NUM_NL80211_NAN_CONF_ATTR: Internal.
+ * @NL80211_NAN_CONF_ATTR_MAX: Highest NAN configuration attribute.
+ *
+ * These attributes are used to configure NAN-specific parameters.
+ */
+enum nl80211_nan_conf_attributes {
+	__NL80211_NAN_CONF_INVALID,
+	NL80211_NAN_CONF_CLUSTER_ID,
+	NL80211_NAN_CONF_EXTRA_ATTRS,
+	NL80211_NAN_CONF_VENDOR_ELEMS,
+	NL80211_NAN_CONF_BAND_CONFIGS,
+	NL80211_NAN_CONF_SCAN_PERIOD,
+	NL80211_NAN_CONF_SCAN_DWELL_TIME,
+	NL80211_NAN_CONF_DISCOVERY_BEACON_INTERVAL,
+	NL80211_NAN_CONF_NOTIFY_DW,
+
+	/* keep last */
+	NUM_NL80211_NAN_CONF_ATTR,
+	NL80211_NAN_CONF_ATTR_MAX = NUM_NL80211_NAN_CONF_ATTR - 1,
 };
 
 /**
