@@ -937,9 +937,12 @@ enum pagetype {
 	PGTY_mapcount_underflow = 0xff
 };
 
+#define PAGE_TYPE_SHIFT		24
+#define PAGE_TYPE_MASK		((1 << PAGE_TYPE_SHIFT) - 1)
+
 static inline bool page_type_has_type(int page_type)
 {
-	return page_type < (PGTY_mapcount_underflow << 24);
+	return page_type < (PGTY_mapcount_underflow << PAGE_TYPE_SHIFT);
 }
 
 /* This takes a mapcount which is one more than page->_mapcount */
@@ -956,7 +959,8 @@ static inline bool page_has_type(const struct page *page)
 #define FOLIO_TYPE_OPS(lname, fname)					\
 static __always_inline bool folio_test_##fname(const struct folio *folio) \
 {									\
-	return data_race(folio->page.page_type >> 24) == PGTY_##lname;	\
+	return data_race(folio->page.page_type >> PAGE_TYPE_SHIFT)      \
+	       == PGTY_##lname;						\
 }									\
 static __always_inline void __folio_set_##fname(struct folio *folio)	\
 {									\
@@ -964,7 +968,8 @@ static __always_inline void __folio_set_##fname(struct folio *folio)	\
 		return;							\
 	VM_BUG_ON_FOLIO(data_race(folio->page.page_type) != UINT_MAX,	\
 			folio);						\
-	folio->page.page_type = (unsigned int)PGTY_##lname << 24;	\
+	folio->page.page_type = (unsigned int)PGTY_##lname		\
+					      << PAGE_TYPE_SHIFT;	\
 }									\
 static __always_inline void __folio_clear_##fname(struct folio *folio)	\
 {									\
@@ -978,14 +983,16 @@ static __always_inline void __folio_clear_##fname(struct folio *folio)	\
 FOLIO_TYPE_OPS(lname, fname)						\
 static __always_inline int Page##uname(const struct page *page)		\
 {									\
-	return data_race(page->page_type >> 24) == PGTY_##lname;	\
+	return data_race(page->page_type >> PAGE_TYPE_SHIFT)		\
+	       == PGTY_##lname;						\
 }									\
 static __always_inline void __SetPage##uname(struct page *page)		\
 {									\
 	if (Page##uname(page))						\
 		return;							\
 	VM_BUG_ON_PAGE(data_race(page->page_type) != UINT_MAX, page);	\
-	page->page_type = (unsigned int)PGTY_##lname << 24;		\
+	page->page_type = (unsigned int)PGTY_##lname			\
+					<< PAGE_TYPE_SHIFT;		\
 }									\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 {									\
