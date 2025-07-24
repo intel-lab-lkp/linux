@@ -627,14 +627,24 @@ static ssize_t target_stat_tgt_port_in_cmds_show(struct config_item *item,
 		char *page)
 {
 	struct se_lun *lun = to_stat_tgt_port(item);
+	struct scsi_port_stats *stats;
 	struct se_device *dev;
 	ssize_t ret = -ENODEV;
+	unsigned int cpu;
+	u32 pdus = 0;
 
 	rcu_read_lock();
 	dev = rcu_dereference(lun->lun_se_dev);
-	if (dev)
-		ret = snprintf(page, PAGE_SIZE, "%lu\n",
-			       atomic_long_read(&lun->lun_stats.cmd_pdus));
+	if (!dev)
+		goto unlock;
+
+	for_each_possible_cpu(cpu) {
+		stats = per_cpu_ptr(lun->lun_stats, cpu);
+		pdus += stats->cmd_pdus;
+	}
+
+	ret = snprintf(page, PAGE_SIZE, "%u\n", pdus);
+unlock:
 	rcu_read_unlock();
 	return ret;
 }
@@ -643,14 +653,24 @@ static ssize_t target_stat_tgt_port_write_mbytes_show(struct config_item *item,
 		char *page)
 {
 	struct se_lun *lun = to_stat_tgt_port(item);
+	struct scsi_port_stats *stats;
 	struct se_device *dev;
 	ssize_t ret = -ENODEV;
+	unsigned int cpu;
+	u32 octets = 0;
 
 	rcu_read_lock();
 	dev = rcu_dereference(lun->lun_se_dev);
-	if (dev)
-		ret = snprintf(page, PAGE_SIZE, "%u\n",
-			(u32)(atomic_long_read(&lun->lun_stats.rx_data_octets) >> 20));
+	if (!dev)
+		goto unlock;
+
+	for_each_possible_cpu(cpu) {
+		stats = per_cpu_ptr(lun->lun_stats, cpu);
+		octets += stats->rx_data_octets;
+	}
+
+	ret = snprintf(page, PAGE_SIZE, "%u\n", octets);
+unlock:
 	rcu_read_unlock();
 	return ret;
 }
@@ -659,14 +679,24 @@ static ssize_t target_stat_tgt_port_read_mbytes_show(struct config_item *item,
 		char *page)
 {
 	struct se_lun *lun = to_stat_tgt_port(item);
+	struct scsi_port_stats *stats;
 	struct se_device *dev;
 	ssize_t ret = -ENODEV;
+	unsigned int cpu;
+	u32 octets = 0;
 
 	rcu_read_lock();
 	dev = rcu_dereference(lun->lun_se_dev);
-	if (dev)
-		ret = snprintf(page, PAGE_SIZE, "%u\n",
-				(u32)(atomic_long_read(&lun->lun_stats.tx_data_octets) >> 20));
+	if (!dev)
+		goto unlock;
+
+	for_each_possible_cpu(cpu) {
+		stats = per_cpu_ptr(lun->lun_stats, cpu);
+		octets += stats->tx_data_octets;
+	}
+
+	ret = snprintf(page, PAGE_SIZE, "%u\n", octets);
+unlock:
 	rcu_read_unlock();
 	return ret;
 }

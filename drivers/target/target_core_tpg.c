@@ -609,12 +609,21 @@ struct se_lun *core_tpg_alloc_lun(
 	u64 unpacked_lun)
 {
 	struct se_lun *lun;
+	int ret;
 
 	lun = kzalloc(sizeof(*lun), GFP_KERNEL);
 	if (!lun) {
 		pr_err("Unable to allocate se_lun memory\n");
 		return ERR_PTR(-ENOMEM);
 	}
+
+	lun->lun_stats = alloc_percpu(struct scsi_port_stats);
+	if (!lun->lun_stats) {
+		pr_err("Unable to allocate se_lun stats memory\n");
+		ret = -ENOMEM;
+		goto free_lun;
+	}
+
 	lun->unpacked_lun = unpacked_lun;
 	atomic_set(&lun->lun_acl_count, 0);
 	init_completion(&lun->lun_shutdown_comp);
@@ -628,6 +637,18 @@ struct se_lun *core_tpg_alloc_lun(
 	lun->lun_tpg = tpg;
 
 	return lun;
+
+free_lun:
+	kfree(lun);
+	return ERR_PTR(-ENOMEM);
+}
+
+void target_tpg_free_lun(struct rcu_head *head)
+{
+	struct se_lun *lun = container_of(head, struct se_lun, rcu_head);
+
+	free_percpu(lun->lun_stats);
+	kfree(lun);
 }
 
 int core_tpg_add_lun(
