@@ -111,6 +111,9 @@ enum {
 /* bMaxNumOfRTT is equal to two after device manufacturing */
 #define DEFAULT_MAX_NUM_RTT 2
 
+/* Time limit in usecs for hardirq context */
+#define HARDIRQ_TIMELIMIT 20
+
 /* UFSHC 4.0 compliant HC support this mode. */
 static bool use_mcq_mode = true;
 
@@ -5603,14 +5606,31 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
  * __ufshcd_transfer_req_compl - handle SCSI and query command completion
  * @hba: per adapter instance
  * @completed_reqs: bitmask that indicates which requests to complete
+ * @time_limit: maximum amount of jiffies to spend executing command completion
+ *
+ * This completes the individual requests as per @completed_reqs with an
+ * optional time limit. If a time limit is given and it expired before all
+ * requests were handled, the return value will indicate which requests have not
+ * been handled.
+ *
+ * Return: Bitmask that indicates which requests have not been completed due to
+ *time limit expiry.
  */
-static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
-					unsigned long completed_reqs)
+static unsigned long __ufshcd_transfer_req_compl(struct ufs_hba *hba,
+						 unsigned long completed_reqs,
+						 unsigned long time_limit)
 {
 	int tag;
 
-	for_each_set_bit(tag, &completed_reqs, hba->nutrs)
+	for_each_set_bit(tag, &completed_reqs, hba->nutrs) {
 		ufshcd_compl_one_cqe(hba, tag, NULL);
+		__clear_bit(tag, &completed_reqs);
+		if (time_limit && time_after_eq(jiffies, time_limit))
+			break;
+	}
+
+	/* any bits still set represent unhandled requests due to timeout */
+	return completed_reqs;
 }
 
 /* Any value that is not an existing queue number is fine for this constant. */
@@ -5633,16 +5653,29 @@ static void ufshcd_clear_polled(struct ufs_hba *hba,
 	}
 }
 
-/*
- * Return: > 0 if one or more commands have been completed or 0 if no
- * requests have been completed.
+/**
+ * ufshcd_poll_impl - handle SCSI and query command completion helper
+ * @shost: Scsi_Host instance
+ * @queue_num: The h/w queue number, or UFSHCD_POLL_FROM_INTERRUPT_CONTEXT when
+ *             invoked from the interrupt handler
+ * @time_limit: maximum amount of jiffies to spend executing command completion
+ * @__pending: Pointer to store any still pending requests in case of time limit
+ *             expiry
+ *
+ * This handles completed commands with an optional time limit. If a time limit
+ * is given and it expires, @__pending will be set to the requests that could
+ * not be completed in time and are still pending.
+ *
+ * Return: true if one or more commands have been completed, false otherwise.
  */
-static int ufshcd_poll(struct Scsi_Host *shost, unsigned int queue_num)
+static int ufshcd_poll_impl(struct Scsi_Host *shost, unsigned int queue_num,
+			    unsigned long time_limit, unsigned long *__pending)
 {
 	struct ufs_hba *hba = shost_priv(shost);
 	unsigned long completed_reqs, flags;
 	u32 tr_doorbell;
 	struct ufs_hw_queue *hwq;
+	unsigned long pending = 0;
 
 	if (hba->mcq_enabled) {
 		hwq = &hba->uhq[queue_num];
@@ -5656,17 +5689,37 @@ static int ufshcd_poll(struct Scsi_Host *shost, unsigned int queue_num)
 	WARN_ONCE(completed_reqs & ~hba->outstanding_reqs,
 		  "completed: %#lx; outstanding: %#lx\n", completed_reqs,
 		  hba->outstanding_reqs);
-	if (queue_num == UFSHCD_POLL_FROM_INTERRUPT_CONTEXT) {
-		/* Do not complete polled requests from interrupt context. */
+	if (time_limit) {
+		/* Do not complete polled requests from hardirq context. */
 		ufshcd_clear_polled(hba, &completed_reqs);
 	}
-	hba->outstanding_reqs &= ~completed_reqs;
-	spin_unlock_irqrestore(&hba->outstanding_lock, flags);
 
 	if (completed_reqs)
-		__ufshcd_transfer_req_compl(hba, completed_reqs);
+		pending = __ufshcd_transfer_req_compl(hba, completed_reqs,
+						      time_limit);
+
+	completed_reqs &= ~pending;
+	hba->outstanding_reqs &= ~completed_reqs;
+
+	spin_unlock_irqrestore(&hba->outstanding_lock, flags);
+
+	if (__pending)
+		*__pending = pending;
 
 	return completed_reqs != 0;
+}
+
+/*
+ * ufshcd_poll - SCSI interface of blk_poll to poll for IO completions
+ * @shost: Scsi_Host instance
+ * @queue_num: The h/w queue number
+ *
+ * Return: > 0 if one or more commands have been completed or 0 if no
+ * requests have been completed.
+ */
+static int ufshcd_poll(struct Scsi_Host *shost, unsigned int queue_num)
+{
+	return ufshcd_poll_impl(shost, queue_num, 0, NULL);
 }
 
 /**
@@ -5722,13 +5775,19 @@ static void ufshcd_mcq_compl_pending_transfer(struct ufs_hba *hba,
 /**
  * ufshcd_transfer_req_compl - handle SCSI and query command completion
  * @hba: per adapter instance
+ * @time_limit: maximum amount of jiffies to spend executing command completion
  *
  * Return:
- *  IRQ_HANDLED - If interrupt is valid
- *  IRQ_NONE    - If invalid interrupt
+ *  IRQ_HANDLED     - If interrupt is valid
+ *  IRQ_WAKE_THREAD - If further interrupt processing should be delegated to the
+ *                    thread
+ *  IRQ_NONE        - If invalid interrupt
  */
-static irqreturn_t ufshcd_transfer_req_compl(struct ufs_hba *hba)
+static irqreturn_t ufshcd_transfer_req_compl(struct ufs_hba *hba,
+					     unsigned long time_limit)
 {
+	unsigned long pending;
+
 	/* Resetting interrupt aggregation counters first and reading the
 	 * DOOR_BELL afterward allows us to handle all the completed requests.
 	 * In order to prevent other interrupts starvation the DB is read once
@@ -5744,12 +5803,19 @@ static irqreturn_t ufshcd_transfer_req_compl(struct ufs_hba *hba)
 		return IRQ_HANDLED;
 
 	/*
-	 * Ignore the ufshcd_poll() return value and return IRQ_HANDLED since we
-	 * do not want polling to trigger spurious interrupt complaints.
+	 * Ignore the ufshcd_poll() return value and return IRQ_HANDLED or
+	 * IRQ_WAKE_THREAD since we do not want polling to trigger spurious
+	 * interrupt complaints.
 	 */
-	ufshcd_poll(hba->host, UFSHCD_POLL_FROM_INTERRUPT_CONTEXT);
+	ufshcd_poll_impl(hba->host, UFSHCD_POLL_FROM_INTERRUPT_CONTEXT,
+			 time_limit, &pending);
 
-	return IRQ_HANDLED;
+	/*
+	 * If a time limit was set, some requests completions might not have
+	 * been handled yet and will need to be dealt with in the threaded
+	 * interrupt handler.
+	 */
+	return pending ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
 
 int __ufshcd_write_ee_control(struct ufs_hba *hba, u32 ee_ctrl_mask)
@@ -6310,7 +6376,7 @@ static void ufshcd_complete_requests(struct ufs_hba *hba, bool force_compl)
 	if (hba->mcq_enabled)
 		ufshcd_mcq_compl_pending_transfer(hba, force_compl);
 	else
-		ufshcd_transfer_req_compl(hba);
+		ufshcd_transfer_req_compl(hba, 0);
 
 	ufshcd_tmc_handler(hba);
 }
@@ -7012,12 +7078,16 @@ static irqreturn_t ufshcd_handle_mcq_cq_events(struct ufs_hba *hba)
  * ufshcd_sl_intr - Interrupt service routine
  * @hba: per adapter instance
  * @intr_status: contains interrupts generated by the controller
+ * @time_limit: maximum amount of jiffies to spend executing command completion
  *
  * Return:
- *  IRQ_HANDLED - If interrupt is valid
- *  IRQ_NONE    - If invalid interrupt
+ *  IRQ_HANDLED     - If interrupt is valid
+ *  IRQ_WAKE_THREAD - If further interrupt processing should be delegated to the
+ *                    thread
+ *  IRQ_NONE        - If invalid interrupt
  */
-static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
+static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status,
+				  unsigned long time_limit)
 {
 	irqreturn_t retval = IRQ_NONE;
 
@@ -7031,7 +7101,7 @@ static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
 		retval |= ufshcd_tmc_handler(hba);
 
 	if (intr_status & UTP_TRANSFER_REQ_COMPL)
-		retval |= ufshcd_transfer_req_compl(hba);
+		retval |= ufshcd_transfer_req_compl(hba, time_limit);
 
 	if (intr_status & MCQ_CQ_EVENT_STATUS)
 		retval |= ufshcd_handle_mcq_cq_events(hba);
@@ -7040,15 +7110,25 @@ static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
 }
 
 /**
- * ufshcd_threaded_intr - Threaded interrupt service routine
+ * ufshcd_intr_helper - hardirq and threaded interrupt service routine
  * @irq: irq number
  * @__hba: pointer to adapter instance
+ * @time_limit: maximum amount of jiffies to spend executing
+ *
+ * Interrupts are initially served from hardirq context with a time limit, but
+ * if there is more work to be done than can be completed before the limit
+ * expires, remaining work is delegated to the IRQ thread. This helper does the
+ * bulk of the work in either case - if @time_limit is set, it is being run from
+ * hardirq context, otherwise from the threaded interrupt handler.
  *
  * Return:
- *  IRQ_HANDLED - If interrupt is valid
- *  IRQ_NONE    - If invalid interrupt
+ *  IRQ_HANDLED     - If interrupt was fully handled
+ *  IRQ_WAKE_THREAD - If further interrupt processing should be delegated to the
+ *                    thread
+ *  IRQ_NONE        - If invalid interrupt
  */
-static irqreturn_t ufshcd_threaded_intr(int irq, void *__hba)
+static irqreturn_t ufshcd_intr_helper(int irq, void *__hba,
+				      unsigned long time_limit)
 {
 	u32 last_intr_status, intr_status, enabled_intr_status = 0;
 	irqreturn_t retval = IRQ_NONE;
@@ -7062,15 +7142,22 @@ static irqreturn_t ufshcd_threaded_intr(int irq, void *__hba)
 	 * if the reqs get finished 1 by 1 after the interrupt status is
 	 * read, make sure we handle them by checking the interrupt status
 	 * again in a loop until we process all of the reqs before returning.
+	 * This done until the time limit is exceeded, at which point further
+	 * processing is delegated to the threaded handler.
 	 */
-	while (intr_status && retries--) {
+	while (intr_status && !(retval & IRQ_WAKE_THREAD) && retries--) {
 		enabled_intr_status =
 			intr_status & ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
 		ufshcd_writel(hba, intr_status, REG_INTERRUPT_STATUS);
 		if (enabled_intr_status)
-			retval |= ufshcd_sl_intr(hba, enabled_intr_status);
+			retval |= ufshcd_sl_intr(hba, enabled_intr_status,
+						 time_limit);
 
 		intr_status = ufshcd_readl(hba, REG_INTERRUPT_STATUS);
+
+		if (intr_status && time_limit && time_after_eq(jiffies,
+							       time_limit))
+			retval |= IRQ_WAKE_THREAD;
 	}
 
 	if (enabled_intr_status && retval == IRQ_NONE &&
@@ -7088,26 +7175,53 @@ static irqreturn_t ufshcd_threaded_intr(int irq, void *__hba)
 }
 
 /**
+ * ufshcd_threaded_intr - Threaded interrupt service routine
+ * @irq: irq number
+ * @__hba: pointer to adapter instance
+ *
+ * Return:
+ *  IRQ_HANDLED - If interrupt was fully handled
+ *  IRQ_NONE    - If invalid interrupt
+ */
+static irqreturn_t ufshcd_threaded_intr(int irq, void *__hba)
+{
+	return ufshcd_intr_helper(irq, __hba, 0);
+}
+
+/**
  * ufshcd_intr - Main interrupt service routine
  * @irq: irq number
  * @__hba: pointer to adapter instance
  *
  * Return:
  *  IRQ_HANDLED     - If interrupt is valid
- *  IRQ_WAKE_THREAD - If handling is moved to threaded handled
+ *  IRQ_WAKE_THREAD - If handling is moved to threaded handler
  *  IRQ_NONE        - If invalid interrupt
  */
 static irqreturn_t ufshcd_intr(int irq, void *__hba)
 {
 	struct ufs_hba *hba = __hba;
+	unsigned long time_limit = jiffies +
+		usecs_to_jiffies(HARDIRQ_TIMELIMIT);
 
-	/* Move interrupt handling to thread when MCQ & ESI are not enabled */
-	if (!hba->mcq_enabled || !hba->mcq_esi_enabled)
-		return IRQ_WAKE_THREAD;
+	/*
+	 * Directly handle interrupts when MCQ & ESI are enabled since MCQ
+	 * ESI handlers do the hard job.
+	 */
+	if (hba->mcq_enabled && hba->mcq_esi_enabled)
+		return ufshcd_sl_intr(hba,
+				      ufshcd_readl(hba, REG_INTERRUPT_STATUS) &
+				      ufshcd_readl(hba, REG_INTERRUPT_ENABLE),
+				      0);
 
-	/* Directly handle interrupts since MCQ ESI handlers does the hard job */
-	return ufshcd_sl_intr(hba, ufshcd_readl(hba, REG_INTERRUPT_STATUS) &
-				   ufshcd_readl(hba, REG_INTERRUPT_ENABLE));
+	/* Otherwise handle interrupt in thread */
+	if (!time_limit)
+		/*
+		 * To deal with jiffies wrapping, we just add one so that other
+		 * code can reliably detect if a time limit was requested.
+		 */
+		time_limit++;
+	return ufshcd_intr_helper(irq, __hba, time_limit);
 }
 
 static int ufshcd_clear_tm_cmd(struct ufs_hba *hba, int tag)
@@ -7540,7 +7654,7 @@ static int ufshcd_eh_device_reset_handler(struct scsi_cmnd *cmd)
 				__func__, pos);
 		}
 	}
-	__ufshcd_transfer_req_compl(hba, pending_reqs & ~not_cleared_mask);
+	__ufshcd_transfer_req_compl(hba, pending_reqs & ~not_cleared_mask, 0);
 
 out:
 	hba->req_abort_count = 0;
@@ -7696,7 +7810,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 		dev_err(hba->dev,
 		"%s: cmd was completed, but without a notifying intr, tag = %d",
 		__func__, tag);
-		__ufshcd_transfer_req_compl(hba, 1UL << tag);
+		__ufshcd_transfer_req_compl(hba, 1UL << tag, 0);
 		goto release;
 	}
 
