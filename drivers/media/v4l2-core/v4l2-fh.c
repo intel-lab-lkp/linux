@@ -93,6 +93,7 @@ int v4l2_fh_release(struct file *filp)
 	struct v4l2_fh *fh = filp->private_data;
 
 	if (fh) {
+		video_device_context_put(fh->context);
 		v4l2_fh_del(fh);
 		v4l2_fh_exit(fh);
 		kfree(fh);
