@@ -1635,6 +1635,7 @@ static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 	v4l2_subdev_init(sd, &pispbe_sd_ops);
 	sd->internal_ops = &pispbe_subdev_internal_ops;
 	sd->entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
+	sd->flags = V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sd->entity.ops = &pispbe_subdev_entity_ops;
 	sd->owner = THIS_MODULE;
 	sd->dev = pispbe->dev;
@@ -1658,7 +1659,7 @@ static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 	if (ret)
 		goto error;
 
-	return 0;
+	return v4l2_device_register_subdev_nodes(&pispbe->v4l2_dev);
 
 error:
 	media_entity_cleanup(&sd->entity);
