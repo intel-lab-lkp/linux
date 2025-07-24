@@ -23,8 +23,10 @@
 #include <linux/cred.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
+#include <linux/ptrace.h>
 
 #include "internal.h"
+#include "../internal.h"
 
 struct proc_fs_context {
 	struct pid_namespace	*pid_ns;
@@ -430,15 +432,63 @@ static int proc_root_readdir(struct file *file, struct dir_context *ctx)
 	return proc_pid_readdir(file, ctx);
 }
 
+static long int proc_root_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+#ifdef CONFIG_PID_NS
+	case PROCFS_GET_PID_NAMESPACE: {
+		struct pid_namespace *active = task_active_pid_ns(current);
+		struct pid_namespace *ns = proc_pid_ns(file_inode(filp)->i_sb);
+		bool can_access_pidns = false;
+
+		/*
+		 * If we are in an ancestors of the pidns, or have join
+		 * privileges (CAP_SYS_ADMIN), then it makes sense that we
+		 * would be able to grab a handle to the pidns.
+		 *
+		 * Otherwise, if there is a root process, then being able to
+		 * access /proc/$pid/ns/pid is equivalent to this ioctl and so
+		 * we should probably match the permission model. For empty
+		 * namespaces it seems unlikely for there to be a downside to
+		 * allowing unprivileged users to open a handle to it (setns
+		 * will fail for unprivileged users anyway).
+		 */
+		can_access_pidns = pidns_is_ancestor(ns, active) ||
+				   ns_capable(ns->user_ns, CAP_SYS_ADMIN);
+		if (!can_access_pidns) {
+			bool cannot_ptrace_pid1 = false;
+
+			read_lock(&tasklist_lock);
+			if (ns->child_reaper)
+				cannot_ptrace_pid1 = ptrace_may_access(ns->child_reaper,
+								       PTRACE_MODE_READ_FSCREDS);
+			read_unlock(&tasklist_lock);
+			can_access_pidns = !cannot_ptrace_pid1;
+		}
+		if (!can_access_pidns)
+			return -EPERM;
+
+		/* open_namespace() unconditionally consumes the reference. */
+		get_pid_ns(ns);
+		return open_namespace(to_ns_common(ns));
+	}
+#endif /* CONFIG_PID_NS */
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
 /*
  * The root /proc directory is special, as it has the
  * <pid> directories. Thus we don't use the generic
  * directory handling functions for that..
  */
 static const struct file_operations proc_root_operations = {
-	.read		 = generic_read_dir,
-	.iterate_shared	 = proc_root_readdir,
+	.read		= generic_read_dir,
+	.iterate_shared	= proc_root_readdir,
 	.llseek		= generic_file_llseek,
+	.unlocked_ioctl = proc_root_ioctl,
+	.compat_ioctl   = compat_ptr_ioctl,
 };
 
 /*
