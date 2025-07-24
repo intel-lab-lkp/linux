@@ -12,6 +12,7 @@
 
 #include "common.h"
 
+#include <trace/events/sched.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
@@ -95,6 +96,7 @@ static inline bool rseq_delay_resched(unsigned long ti_work)
 
 	if (__rseq_delay_resched()) {
 		clear_tsk_need_resched(current);
+		trace_sched_delay_resched(current, ti_work);
 		return true;
 	}
 	return false;
