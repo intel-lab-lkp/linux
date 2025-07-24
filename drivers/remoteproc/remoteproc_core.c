@@ -640,6 +640,20 @@ static int rproc_handle_devmem(struct rproc *rproc, void *ptr,
 		return -EINVAL;
 	}
 
+	/*
+	 * When attaching to a remote processor, it is implied that the rproc
+	 * was booted by an external entity. Thus, it's devmem resources would
+	 * already have been mapped by the external entity during boot. There is
+	 * no need to re-map the memory regions here.
+	 *
+	 * Skip adding the devmem rsc to the mapping list and return without
+	 * complaining.
+	 */
+	if (rproc->state == RPROC_DETACHED) {
+		dev_info(dev, "skipping devmem rsc in attach mode\n");
+		return 0;
+	}
+
 	mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
 	if (!mapping)
 		return -ENOMEM;
@@ -837,6 +851,22 @@ static int rproc_handle_carveout(struct rproc *rproc,
 	if (rsc->reserved) {
 		dev_err(dev, "carveout rsc has non zero reserved bytes\n");
 		return -EINVAL;
+	}
+
+	/*
+	 * When attaching to a remote processor, it is implied that the rproc
+	 * was booted by an external entity. Thus, it's carveout resources would
+	 * already have been allocated by the external entity during boot.
+	 * Re-allocating the carveouts here (without proper flags) would zero
+	 * out the memory regions used by the firmware and can lead to undefined
+	 * behaviour.
+	 *
+	 * Skip adding the carveouts to the alloc list and return without
+	 * complaining.
+	 */
+	if (rproc->state == RPROC_DETACHED) {
+		dev_info(dev, "skipping carveout allocation in attach mode\n");
+		return 0;
 	}
 
 	dev_dbg(dev, "carveout rsc: name: %s, da 0x%x, pa 0x%x, len 0x%x, flags 0x%x\n",
