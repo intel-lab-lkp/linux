@@ -25,6 +25,7 @@
 //! C header: [`include/linux/ktime.h`](srctree/include/linux/ktime.h).
 
 use core::marker::PhantomData;
+use core::ops;
 
 pub mod delay;
 pub mod hrtimer;
@@ -202,7 +203,7 @@ impl<C: ClockSource> Instant<C> {
     }
 }
 
-impl<C: ClockSource> core::ops::Sub for Instant<C> {
+impl<C: ClockSource> ops::Sub for Instant<C> {
     type Output = Delta;
 
     // By the type invariant, it never overflows.
@@ -210,6 +211,32 @@ impl<C: ClockSource> core::ops::Sub for Instant<C> {
     fn sub(self, other: Instant<C>) -> Delta {
         Delta {
             nanos: self.inner - other.inner,
+        }
+    }
+}
+
+impl<T: ClockSource> ops::Add<Delta> for Instant<T> {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: Delta) -> Self::Output {
+        // INVARIANT: We clamp the resulting value to be between `0` and `KTIME_MAX`.
+        Self {
+            inner: self.inner.saturating_add(rhs.nanos).clamp(0, i64::MAX),
+            _c: PhantomData,
+        }
+    }
+}
+
+impl<T: ClockSource> ops::Sub<Delta> for Instant<T> {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: Delta) -> Self::Output {
+        // INVARIANT: We clamp the resulting value to be between `0` and `KTIME_MAX`.
+        Self {
+            inner: self.inner.saturating_sub(rhs.nanos).clamp(0, i64::MAX),
+            _c: PhantomData,
         }
     }
 }
