@@ -1958,6 +1958,14 @@ nla_put_failure:
 	return -ENOSPC;
 }
 
+static int hook_device_attr(struct nft_hook *hook)
+{
+	if (hook->ifname[hook->ifnamelen - 1] == '\0')
+		return NFTA_DEVICE_NAME;
+
+	return NFTA_DEVICE_WILDCARD;
+}
+
 static int nft_dump_basechain_hook(struct sk_buff *skb,
 				   const struct net *net, int family,
 				   const struct nft_base_chain *basechain,
@@ -1989,7 +1997,7 @@ static int nft_dump_basechain_hook(struct sk_buff *skb,
 			if (!first)
 				first = hook;
 
-			if (nla_put(skb, NFTA_DEVICE_NAME,
+			if (nla_put(skb, hook_device_attr(hook),
 				    hook->ifnamelen, hook->ifname))
 				goto nla_put_failure;
 			n++;
@@ -1997,6 +2005,7 @@ static int nft_dump_basechain_hook(struct sk_buff *skb,
 		nla_nest_end(skb, nest_devs);
 
 		if (n == 1 &&
+		    hook_device_attr(first) != NFTA_DEVICE_WILDCARD &&
 		    nla_put(skb, NFTA_HOOK_DEV,
 			    first->ifnamelen, first->ifname))
 			goto nla_put_failure;
@@ -2373,7 +2382,8 @@ static int nf_tables_parse_netdev_hooks(struct net *net,
 	int rem, n = 0, err;
 
 	nla_for_each_nested(tmp, attr, rem) {
-		if (nla_type(tmp) != NFTA_DEVICE_NAME) {
+		if (nla_type(tmp) != NFTA_DEVICE_NAME &&
+		    nla_type(tmp) != NFTA_DEVICE_WILDCARD) {
 			err = -EINVAL;
 			goto err_hook;
 		}
@@ -9419,7 +9429,7 @@ static int nf_tables_fill_flowtable_info(struct sk_buff *skb, struct net *net,
 
 	list_for_each_entry_rcu(hook, hook_list, list,
 				lockdep_commit_lock_is_held(net)) {
-		if (nla_put(skb, NFTA_DEVICE_NAME,
+		if (nla_put(skb, hook_device_attr(hook),
 			    hook->ifnamelen, hook->ifname))
 			goto nla_put_failure;
 	}
