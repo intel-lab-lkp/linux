@@ -149,6 +149,16 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
  */
 __read_mostly unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
 
+#ifdef CONFIG_RSEQ_RESCHED_DELAY
+/*
+ * Scheduler time slice extension, duration in microsecs.
+ * Max value allowed 100us, default is 30us.
+ * If set to 0, scheduler time slice extension is disabled.
+ */
+#define SCHED_PREEMPT_DELAY_DEFAULT_US	30
+__read_mostly unsigned int sysctl_sched_preempt_delay_us = SCHED_PREEMPT_DELAY_DEFAULT_US;
+#endif
+
 __read_mostly int scheduler_running;
 
 #ifdef CONFIG_SCHED_CORE
@@ -4683,6 +4693,25 @@ static int sysctl_schedstats(const struct ctl_table *table, int write, void *buf
 #endif /* CONFIG_PROC_SYSCTL */
 #endif /* CONFIG_SCHEDSTATS */
 
+#ifdef CONFIG_PROC_SYSCTL
+#ifdef CONFIG_RSEQ_RESCHED_DELAY
+static int sysctl_sched_preempt_delay(const struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int err;
+
+	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (err < 0)
+		return err;
+	if (sysctl_sched_preempt_delay_us > SCHED_PREEMPT_DELAY_DEFAULT_US)
+		pr_warn("Sched preemption delay set to %d us is higher than the default value %d us\n",
+                        sysctl_sched_preempt_delay_us, SCHED_PREEMPT_DELAY_DEFAULT_US);
+
+	return err;
+}
+#endif /* CONFIG_RSEQ_RESCHED_DELAY */
+#endif /* CONFIG_PROC_SYSCTL */
+
 #ifdef CONFIG_SYSCTL
 static const struct ctl_table sched_core_sysctls[] = {
 #ifdef CONFIG_SCHEDSTATS
@@ -4730,6 +4759,17 @@ static const struct ctl_table sched_core_sysctls[] = {
 		.extra2		= SYSCTL_FOUR,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
+#ifdef CONFIG_RSEQ_RESCHED_DELAY
+	{
+		.procname	= "sched_preempt_delay_us",
+		.data		= &sysctl_sched_preempt_delay_us,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sysctl_sched_preempt_delay,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE_HUNDRED,
+	},
+#endif /* CONFIG_RSEQ_RESCHED_DELAY */
 };
 static int __init sched_core_sysctl_init(void)
 {

@@ -6389,6 +6389,14 @@
 
 	sched_verbose	[KNL,EARLY] Enables verbose scheduler debug messages.
 
+	sched_preempt_delay_us=	[KNL]
+			Scheduler preemption delay in microseconds.
+			Allowed range is 0 to 100us. A thread can request
+			extending its scheduler time slice on the cpu by
+			delaying preemption. Duration of preemption delay
+			granted is specified by this parameter. Setting it
+			to 0 will disable this feature.
+
 	schedstats=	[KNL,X86] Enable or disable scheduled statistics.
 			Allowed values are enable and disable. This feature
 			incurs a small amount of overhead in the scheduler

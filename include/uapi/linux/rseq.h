@@ -137,8 +137,9 @@ struct rseq {
 	 *     this thread.
 	 * - RSEQ_CS_FLAG_DELAY_RESCHED
 	 *     Request by user thread to delay preemption. With use
-	 *     of a timer, kernel grants extra cpu time upto 30us for this
-	 *     thread before being rescheduled.
+	 *     of a timer, kernel grants extra cpu time upto the tunable
+	 *     'sched_preempt_delay_us' value for this thread before it gets
+	 *     rescheduled.
 	 * - RSEQ_CS_FLAG_RESCHEDULED
 	 *     Set by kernel if the thread was rescheduled in the extra time
 	 *     granted due to request RSEQ_CS_DELAY_RESCHED. This bit is

@@ -454,6 +454,9 @@ bool __rseq_delay_resched(void)
 	struct task_struct *t = current;
 	u32 flags;
 
+	if (!sysctl_sched_preempt_delay_us)
+		return false;
+
 	if (copy_from_user_nofault(&flags, &t->rseq->flags, sizeof(flags)))
 		return false;
 
@@ -471,8 +474,9 @@ bool __rseq_delay_resched(void)
 
 void rseq_delay_resched_arm_timer(void)
 {
-	if (unlikely(current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED))
-		hrtick_local_start(30 * NSEC_PER_USEC);
+	if (unlikely(sysctl_sched_preempt_delay_us &&
+	    current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED))
+		hrtick_local_start(sysctl_sched_preempt_delay_us * NSEC_PER_USEC);
 }
 
 void rseq_delay_resched_tick(void)

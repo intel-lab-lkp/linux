@@ -1232,6 +1232,14 @@ Documentation/accounting/delay-accounting.rst. Enabling this feature incurs
 a small amount of overhead in the scheduler but is useful for debugging
 and performance tuning. It is required by some tools such as iotop.
 
+sched_preempt_delay_us
+======================
+
+Scheduler preemption delay in microseconds.  Allowed range is 0 to 100us.
+A thread can request extending its scheduler time slice on the cpu by
+delaying preemption. Duration of preemption delay granted is specified by
+this parameter. Setting it to 0 will disable this feature.
+
 sched_schedstats
 ================
 
