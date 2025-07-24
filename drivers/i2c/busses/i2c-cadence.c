@@ -192,6 +192,7 @@ enum cdns_i2c_slave_state {
  * @transfer_size:	The maximum number of bytes in one transfer
  * @atomic:		Mode of transfer
  * @err_status_atomic:	Error status in atomic mode
+ * @irq:		IRQ Number
  */
 struct cdns_i2c {
 	struct device		*dev;
@@ -224,6 +225,7 @@ struct cdns_i2c {
 	unsigned int transfer_size;
 	bool atomic;
 	int err_status_atomic;
+	int irq;
 };
 
 struct cdns_platform_data {
@@ -1495,7 +1497,7 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 {
 	struct resource *r_mem;
 	struct cdns_i2c *id;
-	int ret, irq;
+	int ret;
 	const struct of_device_id *match;
 
 	id = devm_kzalloc(&pdev->dev, sizeof(*id), GFP_KERNEL);
@@ -1526,9 +1528,9 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 	if (IS_ERR(id->membase))
 		return PTR_ERR(id->membase);
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	id->irq = platform_get_irq(pdev, 0);
+	if (id->irq < 0)
+		return id->irq;
 
 	id->adap.owner = THIS_MODULE;
 	id->adap.dev.of_node = pdev->dev.of_node;
@@ -1590,10 +1592,10 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 		goto err_clk_notifier_unregister;
 	}
 
-	ret = devm_request_irq(&pdev->dev, irq, cdns_i2c_isr, 0,
+	ret = devm_request_irq(&pdev->dev, id->irq, cdns_i2c_isr, 0,
 				 DRIVER_NAME, id);
 	if (ret) {
-		dev_err(&pdev->dev, "cannot get irq %d\n", irq);
+		dev_err(&pdev->dev, "cannot get irq %d\n", id->irq);
 		goto err_clk_notifier_unregister;
 	}
 	cdns_i2c_init(id);
@@ -1636,6 +1638,23 @@ static void cdns_i2c_remove(struct platform_device *pdev)
 	reset_control_assert(id->reset);
 }
 
+/**
+ * cdns_i2c_shutdown - Shutdown the i2c device
+ * @pdev:	Handle to the platform device structure
+ *
+ * This function handles shutdown sequence
+ */
+static void cdns_i2c_shutdown(struct platform_device *pdev)
+{
+	struct cdns_i2c *id = platform_get_drvdata(pdev);
+
+	/* Disable interrupts */
+	disable_irq(id->irq);
+
+	/* Initiate failure of client i2c transfers */
+	i2c_mark_adapter_suspended(&id->adap);
+}
+
 static struct platform_driver cdns_i2c_drv = {
 	.driver = {
 		.name  = DRIVER_NAME,
@@ -1644,6 +1663,7 @@ static struct platform_driver cdns_i2c_drv = {
 	},
 	.probe  = cdns_i2c_probe,
 	.remove = cdns_i2c_remove,
+	.shutdown = cdns_i2c_shutdown,
 };
 
 module_platform_driver(cdns_i2c_drv);
