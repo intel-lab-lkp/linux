@@ -781,6 +781,13 @@ struct drm_gem_open {
  * commits.
  */
 #define DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP	0x15
+/**
+ * DRM_CAP_ATOMIC_HW_DONE_EVENT
+ *
+ * If set to 1, the kernel supports &DRM_MODE_ATOMIC_HW_DONE_EVENT for atomic
+ * commits.
+ */
+#define DRM_CAP_ATOMIC_HW_DONE_EVENT	0x16
 
 /* DRM_IOCTL_GET_CAP ioctl argument type */
 struct drm_get_cap {
@@ -1332,7 +1339,7 @@ extern "C" {
  *
  * Event types 0 - 0x7fffffff are generic DRM events, 0x80000000 and
  * up are chipset specific. Generic DRM events include &DRM_EVENT_VBLANK,
- * &DRM_EVENT_FLIP_COMPLETE and &DRM_EVENT_CRTC_SEQUENCE.
+ * &DRM_EVENT_FLIP_COMPLETE, &DRM_EVENT_CRTC_SEQUENCE and &DRM_EVENT_ATOMIC_HW_DONE.
  */
 struct drm_event {
 	__u32 type;
@@ -1365,6 +1372,17 @@ struct drm_event {
  * The event payload is a struct drm_event_crtc_sequence.
  */
 #define DRM_EVENT_CRTC_SEQUENCE	0x03
+/**
+ * DRM_EVENT_ATOMIC_HW_DONE - atomic commit HW done event
+ *
+ * This event is sent in response to an atomic commit with the
+ * &DRM_MODE_ATOMIC_HW_DONE_EVENT flag set.
+ *
+ * One event is sent per commit.
+ *
+ * The event payload is a struct drm_event_atomic_hw_done.
+ */
+#define DRM_EVENT_ATOMIC_HW_DONE 0x04
 
 struct drm_event_vblank {
 	struct drm_event base;
@@ -1373,6 +1391,17 @@ struct drm_event_vblank {
 	__u32 tv_usec;
 	__u32 sequence;
 	__u32 crtc_id; /* 0 on older kernels that do not support this */
+};
+
+struct drm_event_atomic_hw_done {
+	struct drm_event base;
+	__u64 user_data;
+
+	/**
+	 * Timestamp corresponding to when programming the commit to HW completed.
+	 */
+	__u32 tv_sec;
+	__u32 tv_usec;
 };
 
 /* Event delivered at sequence. Time stamp marks when the first pixel

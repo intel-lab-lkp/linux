@@ -1137,6 +1137,15 @@ struct drm_mode_destroy_dumb {
 #define DRM_MODE_ATOMIC_ALLOW_MODESET 0x0400
 
 /**
+ * DRM_MODE_ATOMIC_HW_DONE_EVENT
+ *
+ * Request that the kernel sends back an atomic commit HW done event (see
+ * struct drm_event_atomic_hw_done) with the &DRM_EVENT_ATOMIC_HW_DONE type when
+ * programming the atomic commit to HW completes.
+ */
+#define DRM_MODE_ATOMIC_HW_DONE_EVENT 0x0800
+
+/**
  * DRM_MODE_ATOMIC_FLAGS
  *
  * Bitfield of flags accepted by the &DRM_IOCTL_MODE_ATOMIC IOCTL in
