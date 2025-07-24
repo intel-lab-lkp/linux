@@ -251,6 +251,92 @@ pub struct Delta {
     nanos: i64,
 }
 
+impl ops::Add for Delta {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            nanos: self.nanos + rhs.nanos,
+        }
+    }
+}
+
+impl ops::AddAssign for Delta {
+    fn add_assign(&mut self, rhs: Self) {
+        self.nanos += rhs.nanos;
+    }
+}
+
+impl ops::Sub for Delta {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            nanos: self.nanos - rhs.nanos,
+        }
+    }
+}
+
+impl ops::SubAssign for Delta {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.nanos -= rhs.nanos;
+    }
+}
+
+impl ops::Mul for Delta {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            nanos: self.nanos * rhs.nanos,
+        }
+    }
+}
+
+impl ops::MulAssign for Delta {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.nanos *= rhs.nanos;
+    }
+}
+
+// TODO: When we get support for u64/u64 division and remainders helpers remove this, until then
+// these ops only work on 64bit platforms.
+#[cfg(CONFIG_64BIT)]
+impl ops::Div for Delta {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Self {
+            nanos: self.nanos / rhs.nanos,
+        }
+    }
+}
+
+#[cfg(CONFIG_64BIT)]
+impl ops::DivAssign for Delta {
+    fn div_assign(&mut self, rhs: Self) {
+        self.nanos /= rhs.nanos;
+    }
+}
+
+#[cfg(CONFIG_64BIT)]
+impl ops::Rem for Delta {
+    type Output = Self;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        Self {
+            nanos: self.nanos % rhs.nanos,
+        }
+    }
+}
+
+#[cfg(CONFIG_64BIT)]
+impl ops::RemAssign for Delta {
+    fn rem_assign(&mut self, rhs: Self) {
+        self.nanos %= rhs.nanos;
+    }
+}
+
 impl Delta {
     /// A span of time equal to zero.
     pub const ZERO: Self = Self { nanos: 0 };
