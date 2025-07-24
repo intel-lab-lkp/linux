@@ -468,6 +468,7 @@ bool __rseq_delay_resched(void)
 		return false;
 
 	t->rseq_delay_resched = RSEQ_RESCHED_DELAY_REQUESTED;
+	update_stat_preempt_delayed(t);
 
 	return true;
 }
