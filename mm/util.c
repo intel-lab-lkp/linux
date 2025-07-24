@@ -143,6 +143,27 @@ void *kmemdup_noprof(const void *src, size_t len, gfp_t gfp)
 EXPORT_SYMBOL(kmemdup_noprof);
 
 /**
+ * kmemdup_const - conditionally duplicate a region of memory
+ *
+ * @src: memory region to duplicate
+ * @len: memory region length,
+ * @gfp: GFP mask to use
+ *
+ * Return: source address if it is in .rodata or the return value of kmemdup()
+ * to which the function falls back otherwise.
+ *
+ * Note: the returned address must not be passed to kfree(), the caller must
+ * use kfree_const() instead.
+ */
+const void *kmemdup_const(const void *src, size_t len, gfp_t gfp)
+{
+	if (is_kernel_rodata((unsigned long)src))
+		return src;
+
+	return kmemdup(src, len, gfp);
+}
+
+/**
  * kmemdup_array - duplicate a given array.
  *
  * @src: array to duplicate.
