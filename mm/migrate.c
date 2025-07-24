@@ -314,7 +314,7 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 }
 
 struct rmap_walk_arg {
-	struct folio *folio;
+	struct folio *src;
 	bool map_unused_to_zeropage;
 };
 
@@ -325,7 +325,7 @@ static bool remove_migration_pte(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
 	struct rmap_walk_arg *rmap_walk_arg = arg;
-	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
+	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->src, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		rmap_t rmap_flags = RMAP_NONE;
@@ -433,7 +433,7 @@ static bool remove_migration_pte(struct folio *folio,
 void remove_migration_ptes(struct folio *src, struct folio *dst, int flags)
 {
 	struct rmap_walk_arg rmap_walk_arg = {
-		.folio = src,
+		.src = src,
 		.map_unused_to_zeropage = flags & RMP_USE_SHARED_ZEROPAGE,
 	};
 
