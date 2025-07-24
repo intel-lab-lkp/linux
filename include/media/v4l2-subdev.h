@@ -758,6 +758,78 @@ struct v4l2_subdev_state {
 };
 
 /**
+ * struct v4l2_subdev_context - The v4l2 subdevice context
+ * @base: The media entity context base class member
+ * @state: The subdevice state associated with this context
+ *
+ * This structure represents an isolated execution context of a subdevice.
+ * This type 'derives' the base 'struct media_entity_context' type which
+ * implements refcounting on our behalf and allows instances of this type to be
+ * linked in the media_device_context contexts list.
+ *
+ * The subdevice context stores the subdev state in a per-file handle context,
+ * userspace is allowed to multiplex the usage of a subdevice devnode by opening
+ * it multiple times and by associating it with a media device context. This
+ * operation is called 'bounding' and is performed using the
+ * VIDIOC_SUBDEV_BIND_CONTEXT ioctl.
+ *
+ * A subdevice context is created and stored in the v4l2_fh file handle
+ * associated with an open file descriptor when a subdevice is 'bound' to a
+ * media device context. The 'bounding' operation realizes a permanent
+ * association valid until the subdevice context is released.
+ *
+ * A subdevice can be bound to the same media device context once only.
+ * Trying to bind the same subdevice to the same media device context a
+ * second time, without releasing the already established context by closing the
+ * bound file descriptor first, will result in an error.
+ *
+ * To create a subdevice context userspace shall use the
+ * VIDIOC_SUBDEV_BIND_CONTEXT ioctl that creates the subdevice context and
+ * uniquely associates it with a media device file descriptor.
+ *
+ * Once a subdevice file descriptor has been bound to a media device context,
+ * all the operations performed on the subdevice file descriptor will be
+ * directed on the just created subdevice context. This means, in example, that
+ * the subdevice state and configuration is isolated from the ones associated
+ * with a different file descriptor obtained by opening again the same subdevice
+ * devnode but bound to a different media device context.
+ *
+ * Drivers that implement multiplexing support have to provide a valid
+ * implementation of the context-related operations in the media entity
+ * operations.
+ *
+ * Drivers are allowed to sub-class the v4l2_subdevice_context structure by
+ * defining a driver-specific type which embeds a struct v4l2_subdevice_context
+ * instance as first member, and allocate the driver-specific structure size in
+ * their implementation of the `alloc_context` operation.
+ *
+ * Subdevice contexts are ref-counted by embedding an instance of 'struct
+ * media_entity_context' and are freed once all the references to it are
+ * released.
+ *
+ * A subdevice context ref-count is increased when:
+ * - The context is created by bounding a video device to a media device context
+ * - The media pipeline it is part of starts streaming
+ * A subdevice context ref-count is decreased when:
+ * - The associated file handle is closed
+ * - The media pipeline it is part of stops streaming
+ *
+ * The ref-count is increased by a call to v4l2_subdev_context_get() and is
+ * reponsibility of the caller to decrease the reference count with a call to
+ * v4l2_subdev_context_put().
+ */
+struct v4l2_subdev_context {
+	struct media_entity_context base;
+	/*
+	 * TODO: active_state should most likely be changed from a pointer to an
+	 * embedded field. For the time being it's kept as a pointer to more
+	 * easily catch uses of active_state in the cases where the driver
+	 * doesn't support it.
+	 */
+	struct v4l2_subdev_state *state;
+};
+
+/**
  * struct v4l2_subdev_pad_ops - v4l2-subdev pad level operations
  *
  * @enum_mbus_code: callback for VIDIOC_SUBDEV_ENUM_MBUS_CODE() ioctl handler
@@ -1152,6 +1224,7 @@ struct v4l2_subdev_fh {
 	struct module *owner;
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 	struct v4l2_subdev_state *state;
+	struct v4l2_subdev_context *context;
 	u64 client_caps;
 #endif
 };
@@ -1284,6 +1357,59 @@ int v4l2_subdev_link_validate(struct media_link *link);
  */
 bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
 				  unsigned int pad0, unsigned int pad1);
+
+/**
+ * v4l2_subdev_context_get - Helper to get a v4l2 subdev context from a
+ *			     media device context
+ *
+ * @mdev_context: The media device context
+ * @sd: The V4L2 subdevice the context refers to
+ *
+ * Helper function that wraps media_device_get_entity_context() and returns
+ * the v4l2 subdevice context associated with a subdevice in a media device
+ * context.
+ *
+ * The reference count of the returned v4l2 subdevice context is increased.
+ * Callers of this function are required to decrease the reference count of
+ * the context reference with a call to v4l2_subdev_context_put().
+ */
+struct v4l2_subdev_context *
+v4l2_subdev_context_get(struct media_device_context *mdev_context,
+			struct v4l2_subdev *sd);
+
+/**
+ * v4l2_subdev_context_put - Helper to decrease a v4l2 subdevice context
+ *			     reference count
+ *
+ * @ctx: The v4l2 subdevice context to put
+ */
+void v4l2_subdev_context_put(struct v4l2_subdev_context *ctx);
+
+/**
+ * v4l2_subdev_init_context - Initialize the v4l2 subdevice context
+ *
+ * @sd: The subdevice the context belongs to
+ * @ctx: The context to initialize
+ *
+ * Initialize the v4l2 subdevice context. The intended callers of this function
+ * are driver-specific implementations of the media_entity_ops.alloc_context()
+ * function that allocates their driver specific types that derive from
+ * struct v4l2_subdev_context.
+ */
+int v4l2_subdev_init_context(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_context *ctx);
+
+/**
+ * v4l2_subdev_cleanup_context - Cleanup the v4l2 subdevice context
+ *
+ * @ctx: The context to cleanup.
+ *
+ * Cleanup the v4l2 subdevice context. The intended callers of this function are
+ * driver specific implementation of the media_entity_ops.destroy_context()
+ * function before releasing the memory previously allocated by
+ * media_entity_ops.alloc_context().
+ */
+void v4l2_subdev_cleanup_context(struct v4l2_subdev_context *ctx);
 
 /**
  * __v4l2_subdev_state_alloc - allocate v4l2_subdev_state
