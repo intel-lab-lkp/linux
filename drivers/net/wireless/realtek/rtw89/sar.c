@@ -319,7 +319,7 @@ int rtw89_print_sar(struct rtw89_dev *rtwdev, char *buf, size_t bufsz,
 	/* its members are protected by rtw89_sar_set_src() */
 	const struct rtw89_sar_handler *sar_hdl = &rtw89_sar_handlers[src];
 	const u8 fct_mac = rtwdev->chip->txpwr_factor_mac;
-	char *p = buf, *end = buf + bufsz;
+	char *p = buf;
 	int ret;
 	s32 cfg;
 	u8 fct;
@@ -327,17 +327,17 @@ int rtw89_print_sar(struct rtw89_dev *rtwdev, char *buf, size_t bufsz,
 	lockdep_assert_wiphy(rtwdev->hw->wiphy);
 
 	if (src == RTW89_SAR_SOURCE_NONE) {
-		p += scnprintf(p, end - p, "no SAR is applied\n");
+		p += sysfs_emit(p, "no SAR is applied\n");
 		goto out;
 	}
 
-	p += scnprintf(p, end - p, "source: %d (%s)\n", src,
+	p += sysfs_emit(p, "source: %d (%s)\n", src,
 		       sar_hdl->descr_sar_source);
 
 	ret = sar_hdl->query_sar_config(rtwdev, sar_parm, &cfg);
 	if (ret) {
-		p += scnprintf(p, end - p, "config: return code: %d\n", ret);
-		p += scnprintf(p, end - p,
+		p += sysfs_emit(p, "config: return code: %d\n", ret);
+		p += sysfs_emit(p,
 			       "assign: max setting: %d (unit: 1/%lu dBm)\n",
 			       RTW89_SAR_TXPWR_MAC_MAX, BIT(fct_mac));
 		goto out;
@@ -345,10 +345,10 @@ int rtw89_print_sar(struct rtw89_dev *rtwdev, char *buf, size_t bufsz,
 
 	fct = sar_hdl->txpwr_factor_sar;
 
-	p += scnprintf(p, end - p, "config: %d (unit: 1/%lu dBm)\n", cfg,
+	p += sysfs_emit(p, "config: %d (unit: 1/%lu dBm)\n", cfg,
 		       BIT(fct));
 
-	p += scnprintf(p, end - p, "support different configs by antenna: %s\n",
+	p += sysfs_emit(p, "support different configs by antenna: %s\n",
 		       str_yes_no(rtwdev->chip->support_sar_by_ant));
 out:
 	return p - buf;
@@ -357,24 +357,24 @@ out:
 int rtw89_print_tas(struct rtw89_dev *rtwdev, char *buf, size_t bufsz)
 {
 	struct rtw89_tas_info *tas = &rtwdev->tas;
-	char *p = buf, *end = buf + bufsz;
+	char *p = buf;
 
 	if (!rtw89_tas_is_active(rtwdev)) {
-		p += scnprintf(p, end - p, "no TAS is applied\n");
+		p += sysfs_emit(p, "no TAS is applied\n");
 		goto out;
 	}
 
-	p += scnprintf(p, end - p, "State: %s\n",
+	p += sysfs_emit(p, "State: %s\n",
 		       rtw89_tas_state_str(tas->state));
-	p += scnprintf(p, end - p, "Average time: %d\n",
+	p += sysfs_emit(p, "Average time: %d\n",
 		       tas->window_size * 2);
-	p += scnprintf(p, end - p, "SAR gap: %d dBm\n",
+	p += sysfs_emit(p, "SAR gap: %d dBm\n",
 		       RTW89_TAS_SAR_GAP >> RTW89_TAS_FACTOR);
-	p += scnprintf(p, end - p, "DPR gap: %d dBm\n",
+	p += sysfs_emit(p, "DPR gap: %d dBm\n",
 		       RTW89_TAS_DPR_GAP >> RTW89_TAS_FACTOR);
-	p += scnprintf(p, end - p, "DPR ON offset: %d dBm\n",
+	p += sysfs_emit(p, "DPR ON offset: %d dBm\n",
 		       RTW89_TAS_DPR_ON_OFFSET >> RTW89_TAS_FACTOR);
-	p += scnprintf(p, end - p, "DPR OFF offset: %d dBm\n",
+	p += sysfs_emit(p, "DPR OFF offset: %d dBm\n",
 		       RTW89_TAS_DPR_OFF_OFFSET >> RTW89_TAS_FACTOR);
 
 out:
