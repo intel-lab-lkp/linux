@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menuconfig IIO_P3T1755
+	tristate "NXP P3T1755 temperature sensor support"
+	help
+	  Enable support for the NXP P3T1755 digital temperature sensor family.
+
+	  The P3T1755 is a high-accuracy temperature sensor with programmable
+	  alert limits and fault queue settings. It supports both I2C and I3C
+	  interfaces for communication and can be used in a variety of embedded
+	  and industrial applications where precise thermal monitoring is required.
+
+	  This option enables common functionality shared across all supported
+	  variants and interfaces. You must also select the appropriate interface
+	  (I2C or I3C) and corresponding driver to enable full support
+
+
+if IIO_P3T1755
+
+choice
+	prompt "Interface for P3T1755"
+	help
+	  Select the hardware interface used to communicate with the NXP P3T1755
+	  temperature sensor.
+
+	  The P3T1755 supports both I2C and I3C interfaces. Choose the interface
+	  that matches your hardware configuration. Only one interface can be
+	  selected at a time. You must also enable the corresponding driver option
+	  to build support for the selected interface
+
+
+config IIO_P3T1755_I2C
+	bool "Use I2C interface"
+	depends on I2C
+	help
+	  Select this option if the P3T1755 temperature sensor is connected via
+	  the I2C bus.
+
+	  This enables support for configuring and communicating with the sensor
+	  over the I2C interface. You must also enable the corresponding I2C driver
+	  (IIO_P3T1755_I2C_DRIVER) to build full support for this interface.
+
+
+config IIO_P3T1755_I3C
+	bool "Use I3C interface"
+	depends on I3C
+	help
+	  Select this option if the P3T1755 temperature sensor is connected via
+	  the I3C bus.
+
+	  This enables support for configuring and communicating with the sensor
+	  over the I3C interface. I3C offers improved performance and lower power
+	  consumption compared to I2C, making it suitable for advanced applications.
+
+	  You must also enable the corresponding I3C driver (IIO_P3T1755_I3C_DRIVER)
+	  to build full support for this interface.
+
+endchoice
+
+config IIO_P3T1755_I2C_DRIVER
+	tristate "Build I2C driver"
+	depends on IIO_P3T1755_I2C
+	select REGMAP_I2C
+	help
+	  Enable this option to build the I2C driver for the NXP P3T1755 temperature sensor.
+
+	  This driver provides support for communication with the P3T1755 sensor
+	  over the I2C bus, allowing temperature data to be read and configuration
+	  registers to be accessed via the Industrial I/O (IIO) subsystem.
+
+	  Select this if your hardware connects the sensor using I2C and you want
+	  to include the driver either built-in or as a loadable module.
+
+
+config IIO_P3T1755_I3C_DRIVER
+	tristate "Build I3C driver"
+	depends on IIO_P3T1755_I3C
+	select REGMAP_I3C
+	help
+	  Enable this option to build the I3C driver for the NXP P3T1755 temperature sensor.
+
+	  This driver provides support for communication with the P3T1755 sensor
+	  over the I3C bus, allowing temperature readings and configuration access
+	  through the Industrial I/O (IIO) subsystem.
+
+	  Select this if your hardware connects the sensor using I3C and you want
+	  to include the driver either built-in or as a loadable module
+
+endif
