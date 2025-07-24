@@ -15,12 +15,12 @@
 #include "../perf_event.h"
 
 /* Event code: LSB 8 bits, passed in attr->config any other bit is reserved. */
-#define AMD_POWER_EVENT_MASK		0xFFULL
+#define AMD_POWER_EVENT_MASK 0xFFULL
 
 /*
  * Accumulated power status counters.
  */
-#define AMD_POWER_EVENTSEL_PKG		1
+#define AMD_POWER_EVENTSEL_PKG 1
 
 /*
  * The ratio of compute unit power accumulator sample period to the
@@ -65,7 +65,7 @@ static void event_update(struct perf_event *event)
 	delta *= cpu_pwr_sample_ratio * 1000;
 	tdelta = new_ptsc - prev_ptsc;
 
-	do_div(delta, tdelta);
+	div64_u64(delta, tdelta);
 	local64_add(delta, &event->count);
 }
 
@@ -144,8 +144,8 @@ static void pmu_event_read(struct perf_event *event)
 	event_update(event);
 }
 
-static ssize_t
-get_attr_cpumask(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t get_attr_cpumask(struct device *dev,
+				struct device_attribute *attr, char *buf)
 {
 	return cpumap_print_to_pagebuf(true, buf, &cpu_mask);
 }
@@ -165,12 +165,12 @@ static struct attribute_group pmu_attr_group = {
  * Currently it only supports to report the power of each
  * processor/package.
  */
-EVENT_ATTR_STR(power-pkg, power_pkg, "event=0x01");
+EVENT_ATTR_STR(power - pkg, power_pkg, "event=0x01");
 
-EVENT_ATTR_STR(power-pkg.unit, power_pkg_unit, "mWatts");
+EVENT_ATTR_STR(power - pkg.unit, power_pkg_unit, "mWatts");
 
 /* Convert the count from micro-Watts to milli-Watts. */
-EVENT_ATTR_STR(power-pkg.scale, power_pkg_scale, "1.000000e-3");
+EVENT_ATTR_STR(power - pkg.scale, power_pkg_scale, "1.000000e-3");
 
 static struct attribute *events_attr[] = {
 	EVENT_PTR(power_pkg),
@@ -180,8 +180,8 @@ static struct attribute *events_attr[] = {
 };
 
 static struct attribute_group pmu_events_group = {
-	.name	= "events",
-	.attrs	= events_attr,
+	.name = "events",
+	.attrs = events_attr,
 };
 
 PMU_FORMAT_ATTR(event, "config:0-7");
@@ -192,8 +192,8 @@ static struct attribute *formats_attr[] = {
 };
 
 static struct attribute_group pmu_format_group = {
-	.name	= "format",
-	.attrs	= formats_attr,
+	.name = "format",
+	.attrs = formats_attr,
 };
 
 static const struct attribute_group *attr_groups[] = {
@@ -204,17 +204,17 @@ static const struct attribute_group *attr_groups[] = {
 };
 
 static struct pmu pmu_class = {
-	.attr_groups	= attr_groups,
+	.attr_groups = attr_groups,
 	/* system-wide only */
-	.task_ctx_nr	= perf_invalid_context,
-	.event_init	= pmu_event_init,
-	.add		= pmu_event_add,
-	.del		= pmu_event_del,
-	.start		= pmu_event_start,
-	.stop		= pmu_event_stop,
-	.read		= pmu_event_read,
-	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
-	.module		= THIS_MODULE,
+	.task_ctx_nr = perf_invalid_context,
+	.event_init = pmu_event_init,
+	.add = pmu_event_add,
+	.del = pmu_event_del,
+	.start = pmu_event_start,
+	.stop = pmu_event_stop,
+	.read = pmu_event_read,
+	.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
+	.module = THIS_MODULE,
 };
 
 static int power_cpu_exit(unsigned int cpu)
@@ -278,10 +278,9 @@ static int __init amd_power_pmu_init(void)
 		return -ENODEV;
 	}
 
-
 	cpuhp_setup_state(CPUHP_AP_PERF_X86_AMD_POWER_ONLINE,
-			  "perf/x86/amd/power:online",
-			  power_cpu_init, power_cpu_exit);
+			  "perf/x86/amd/power:online", power_cpu_init,
+			  power_cpu_exit);
 
 	ret = perf_pmu_register(&pmu_class, "power", -1);
 	if (WARN_ON(ret)) {
