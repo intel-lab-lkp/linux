@@ -233,6 +233,7 @@ config DWMAC_STM32
 	default ARCH_STM32
 	depends on OF && HAS_IOMEM && (ARCH_STM32 || COMPILE_TEST)
 	select MFD_SYSCON
+	select STMMAC_RELATIVE_FLEX_PPS
 	help
 	  Support for ethernet controller on STM32 SOCs.
 
