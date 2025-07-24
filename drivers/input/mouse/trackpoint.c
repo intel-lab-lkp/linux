@@ -16,6 +16,8 @@
 #include "psmouse.h"
 #include "trackpoint.h"
 
+static struct trackpoint_data *trackpoint_dev;
+
 static const char * const trackpoint_variants[] = {
 	[TP_VARIANT_IBM]		= "IBM",
 	[TP_VARIANT_ALPS]		= "ALPS",
@@ -61,6 +63,21 @@ static int trackpoint_write(struct ps2dev *ps2dev, u8 loc, u8 val)
 	u8 param[3] = { TP_WRITE_MEM, loc, val };
 
 	return ps2_command(ps2dev, param, MAKE_PS2_CMD(3, 0, TP_COMMAND));
+}
+
+/* Read function for TrackPoint extended registers */
+static int trackpoint_extended_read(struct ps2dev *ps2dev, u8 loc, u8 *val)
+{
+	u8 ext_param[2] = {TP_READ_MEM, loc};
+	int error;
+
+	error = ps2_command(ps2dev,
+			    ext_param, MAKE_PS2_CMD(2, 1, TP_COMMAND));
+
+	if (!error)
+		*val = ext_param[0];
+
+	return error;
 }
 
 static int trackpoint_toggle_bit(struct ps2dev *ps2dev, u8 loc, u8 mask)
@@ -393,6 +410,131 @@ static int trackpoint_reconnect(struct psmouse *psmouse)
 	return 0;
 }
 
+/* List of known incapable device PNP IDs */
+static const char * const dt_incompatible_devices[] = {
+	"LEN0304",
+	"LEN0306",
+	"LEN0317",
+	"LEN031A",
+	"LEN031B",
+	"LEN031C",
+	"LEN031D",
+};
+
+/*
+ * checks if it’s a doubletap capable device
+ * The PNP ID format eg: is "PNP: LEN030d PNP0f13".
+ */
+static bool is_trackpoint_dt_capable(const char *pnp_id)
+{
+	const char *id_start;
+	char id[8];
+
+	if (!strstarts(pnp_id, "PNP: LEN03"))
+		return false;
+
+	/* Points to "LEN03xxxx" */
+	id_start = pnp_id + 5;
+	if (sscanf(id_start, "%7s", id) != 1)
+		return false;
+
+	/* Check if it's blacklisted */
+	for (size_t i = 0; i < ARRAY_SIZE(dt_incompatible_devices); ++i) {
+		if (strcmp(id, dt_incompatible_devices[i]) == 0)
+			return false;
+	}
+	return true;
+}
+
+/* Trackpoint doubletap status function */
+static int trackpoint_doubletap_status(bool *status)
+{
+	struct trackpoint_data *tp = trackpoint_dev;
+	struct ps2dev *ps2dev = &tp->parent_psmouse->ps2dev;
+	u8 reg_val;
+	int rc;
+
+	/* Reading the Doubletap register using extended read */
+	rc = trackpoint_extended_read(ps2dev, TP_DOUBLETAP, &reg_val);
+	if (rc)
+		return rc;
+
+	*status = reg_val & TP_DOUBLETAP_STATUS ? true : false;
+
+	return 0;
+}
+
+/* Trackpoint doubletap enable/disable function */
+static int trackpoint_set_doubletap(bool enable)
+{
+	struct trackpoint_data *tp = trackpoint_dev;
+	struct ps2dev *ps2dev = &tp->parent_psmouse->ps2dev;
+	static u8 doubletap_state;
+	u8 new_val;
+
+	if (!tp)
+		return -ENODEV;
+
+	new_val = enable ? TP_DOUBLETAP_ENABLE : TP_DOUBLETAP_DISABLE;
+
+	if (doubletap_state == new_val)
+		return 0;
+
+	doubletap_state = new_val;
+
+	return trackpoint_write(ps2dev, TP_DOUBLETAP, new_val);
+}
+
+/*
+ * Trackpoint Doubletap Interface
+ * Control/Monitoring of Trackpoint Doubletap from:
+ * /sys/bus/serio/devices/seriox/doubletap_enabled
+ */
+static ssize_t doubletap_enabled_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct serio *serio = to_serio_port(dev);
+	struct psmouse *psmouse = psmouse_from_serio(serio);
+	struct trackpoint_data *tp = psmouse->private;
+	bool status;
+	int rc;
+
+	if (!tp || !tp->doubletap_capable)
+		return -ENODEV;
+
+	rc = trackpoint_doubletap_status(&status);
+	if (rc)
+		return rc;
+
+	return sysfs_emit(buf, "%d\n", status ? 1 : 0);
+}
+
+static ssize_t doubletap_enabled_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct serio *serio = to_serio_port(dev);
+	struct psmouse *psmouse = psmouse_from_serio(serio);
+	struct trackpoint_data *tp = psmouse->private;
+	bool enable;
+	int err;
+
+	if (!tp || !tp->doubletap_capable)
+		return -ENODEV;
+
+	err = kstrtobool(buf, &enable);
+	if (err)
+		return err;
+
+	err = trackpoint_set_doubletap(enable);
+	if (err)
+		return err;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(doubletap_enabled);
+
 int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 {
 	struct ps2dev *ps2dev = &psmouse->ps2dev;
@@ -424,6 +566,9 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 
 	psmouse->reconnect = trackpoint_reconnect;
 	psmouse->disconnect = trackpoint_disconnect;
+
+	trackpoint_dev = psmouse->private;
+	trackpoint_dev->parent_psmouse = psmouse;
 
 	if (variant_id != TP_VARIANT_IBM) {
 		/* Newer variants do not support extended button query. */
@@ -469,6 +614,10 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 		     "%s TrackPoint firmware: 0x%02x, buttons: %d/%d\n",
 		     psmouse->vendor, firmware_id,
 		     (button_info & 0xf0) >> 4, button_info & 0x0f);
+
+	tp->doubletap_capable = is_trackpoint_dt_capable(ps2dev->serio->firmware_id);
+	if (tp->doubletap_capable)
+		device_create_file(&psmouse->ps2dev.serio->dev, &dev_attr_doubletap_enabled);
 
 	return 0;
 }

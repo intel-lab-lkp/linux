@@ -8,6 +8,8 @@
 #ifndef _TRACKPOINT_H
 #define _TRACKPOINT_H
 
+#include <linux/bitops.h>
+
 /*
  * These constants are from the TrackPoint System
  * Engineering documentation Version 4 from IBM Watson
@@ -68,6 +70,8 @@
 #define TP_DRAGHYS		0x58	/* Drag Hysteresis */
 					/* (how hard it is to drag */
 					/* with Z-axis pressed) */
+
+#define TP_DOUBLETAP		0x58	/* TrackPoint doubletap register */
 
 #define TP_MINDRAG		0x59	/* Minimum amount of force needed */
 					/* to trigger dragging */
@@ -139,6 +143,14 @@
 #define TP_DEF_TWOHAND		0x00
 #define TP_DEF_SOURCE_TAG	0x00
 
+/* Doubletap register values */
+#define TP_DOUBLETAP_ENABLE	0xFF	/* Enable value */
+#define TP_DOUBLETAP_DISABLE	0xFE	/* Disable value */
+
+#define TP_DOUBLETAP_STATUS_BIT 0	/* 0th bit defines enable/disable */
+
+#define TP_DOUBLETAP_STATUS   BIT(TP_DOUBLETAP_STATUS_BIT)
+
 #define MAKE_PS2_CMD(params, results, cmd) ((params<<12) | (results<<8) | (cmd))
 
 struct trackpoint_data {
@@ -150,11 +162,14 @@ struct trackpoint_data {
 	u8 thresh, upthresh;
 	u8 ztime, jenks;
 	u8 drift_time;
+	bool doubletap_capable;
 
 	/* toggles */
 	bool press_to_select;
 	bool skipback;
 	bool ext_dev;
+
+	struct psmouse *parent_psmouse;
 };
 
 int trackpoint_detect(struct psmouse *psmouse, bool set_properties);
