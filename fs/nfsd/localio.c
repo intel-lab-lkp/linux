@@ -103,10 +103,11 @@ nfsd_open_local_fh(struct net *net, struct auth_domain *dom,
 			if (nfsd_file_get(new) == NULL)
 				goto again;
 			/*
-			 * Drop the ref we were going to install and the
-			 * one we were going to return.
+			 * Drop the ref we were going to install (both file and
+			 * net) and the one we were going to return (only file).
 			 */
 			nfsd_file_put(localio);
+			nfsd_net_put(net);
 			nfsd_file_put(localio);
 			localio = new;
 		}
@@ -121,7 +122,6 @@ static const struct nfsd_localio_operations nfsd_localio_ops = {
 	.nfsd_net_put  = nfsd_net_put,
 	.nfsd_open_local_fh = nfsd_open_local_fh,
 	.nfsd_file_put_local = nfsd_file_put_local,
-	.nfsd_file_get_local = nfsd_file_get_local,
 	.nfsd_file_file = nfsd_file_file,
 };
 
