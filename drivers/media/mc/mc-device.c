@@ -121,6 +121,7 @@ static long media_device_get_info(struct media_device *dev, void *arg)
 	info->media_version = LINUX_VERSION_CODE;
 	info->driver_version = info->media_version;
 	info->hw_revision = dev->hw_revision;
+	info->flags = dev->flags;
 
 	return 0;
 }

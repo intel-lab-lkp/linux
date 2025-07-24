@@ -235,6 +235,19 @@ Types and flags used to represent the media graph elements
 
 ..  tabularcolumns:: |p{5.5cm}|p{12.0cm}|
 
+.. _media-device-flag:
+.. _MEDIA-DEVICE-FL-CONTEXT:
+
+.. flat-table:: Media device flags
+    :header-rows:  0
+    :stub-columns: 0
+
+    *  -  ``MEDIA_DEVICE_FL_CONTEXT``
+       -  The media device supports multi-context operations
+
+
+..  tabularcolumns:: |p{5.5cm}|p{12.0cm}|
+
 .. _media-entity-flag:
 .. _MEDIA-ENT-FL-DEFAULT:
 .. _MEDIA-ENT-FL-CONNECTOR:

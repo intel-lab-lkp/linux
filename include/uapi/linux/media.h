@@ -23,6 +23,9 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
+/* Media device flags. */
+#define MEDIA_DEVICE_FL_CONTEXT			0x00000001
+
 struct media_device_info {
 	char driver[16];
 	char model[32];
@@ -31,7 +34,8 @@ struct media_device_info {
 	__u32 media_version;
 	__u32 hw_revision;
 	__u32 driver_version;
-	__u32 reserved[31];
+	__u32 flags;
+	__u32 reserved[30];
 };
 
 /*

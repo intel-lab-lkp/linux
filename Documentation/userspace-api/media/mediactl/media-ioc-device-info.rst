@@ -87,7 +87,11 @@ ioctl never fails.
 	  this identifies a particular driver.
 
     *  -  __u32
-       -  ``reserved``\ [31]
+       -  ``flags``
+       -  Media device flags, see :ref:`media-device-flag` for more details.
+
+    *  -  __u32
+       -  ``reserved``\ [30]
        -  Reserved for future extensions. Drivers and applications must set
 	  this array to zero.
 
