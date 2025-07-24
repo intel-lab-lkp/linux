@@ -18,6 +18,7 @@
 #include <linux/videodev2.h>
 
 #include <media/media-entity.h>
+#include <media/videobuf2-core.h>
 
 #define VIDEO_MAJOR	81
 
@@ -659,6 +660,131 @@ __must_check int video_device_pipeline_alloc_start(struct video_device *vdev);
  * This is a convenience wrapper around media_entity_pipeline().
  */
 struct media_pipeline *video_device_pipeline(struct video_device *vdev);
+
+/**
+ * struct video_device_context - The video device context
+ * @base: The media entity context base class member
+ * @vdev: The video device this context belongs to
+ * @queue_lock: Protects the vb2 queue
+ * @queue: The vb2 queue
+ *
+ * This structure represents an isolated execution context of a video device.
+ * This type 'derives' the base 'struct media_entity_context' type which
+ * implements refcounting on our behalf and allows instances of this type to be
+ * linked in the media_device_context contexts list.
+ *
+ * By storing the data and the configuration of a video device in a per-file
+ * handle context, userspace is allowed to multiplex the usage of a single video
+ * device devnode by opening it multiple times and by associating it with a
+ * media device context. This operation is called 'bounding' and is performed
+ * using the VIDIOC_BIND_CONTEXT ioctl.
+ *
+ * A video device context is created and stored in the v4l2-fh file handle
+ * associated with an open file descriptor when a video device is 'bound' to a
+ * media device context. The 'bounding' operation realizes a permanent
+ * association valid until the video device context is released.
+ *
+ * A video device can be bound to the same media device context once only.
+ * Trying to bind the same video device to the same media device context a
+ * second time, without releasing the already established context by closing the
+ * bound file descriptor first, will result in an error.
+ *
+ * To create a video device context userspace shall use the VIDIOC_BIND_CONTEXT
+ * ioctl that creates the video device context and uniquely associates it with a
+ * media device file descriptor.
+ *
+ * Once a video device file descriptor has been bound to a media device context,
+ * all the operations performed on the video device file descriptor will be
+ * directed on the just created video device context. This means, in example,
+ * that the video device format and the buffer queue are isolated from the ones
+ * associated with a different file descriptor obtained by opening again the
+ * same video device devnode but bound to a different media device context.
+ *
+ * Drivers that implement multiplexing support have to provide a valid
+ * implementation of the context-related operations in the
+ * media entity operations.
+ *
+ * Drivers are allowed to sub-class the video_device_context structure by
+ * defining a driver-specific type which embeds a struct video_device_context
+ * instance as first member, and allocate the driver-specific structure size in
+ * their implementation of the `alloc_context` operation.
+ *
+ * Video device contexts are ref-counted by embedding an instance of 'struct
+ * media_entity_context' and are freed once all the references to it are
+ * released.
+ *
+ * A video device context ref-count is increased when:
+ * - The context is created by bounding a video device to a media device context
+ * - The media pipeline starts streaming
+ * A video device context ref-count is decreased when:
+ * - The associated file handle is closed
+ * - The media pipeline stops streaming
+ *
+ * The ref-count is increased by a call to video_device_context_get() and is
+ * reponsibility of the caller to decrease the reference count with a call to
+ * video_device_context_put().
+ */
+struct video_device_context {
+	struct media_entity_context base;
+
+	struct video_device *vdev;
+	/* Protects the vb2 queue. */
+	struct mutex queue_lock;
+	struct vb2_queue queue;
+};
+
+/**
+ * video_device_context_get - Helper to get a video device context from a
+ *			      media device context
+ *
+ * @mdev_context: The media device context
+ * @vdev: The video device the context refers to
+ *
+ * Helper function that wraps media_device_get_entity_context() and returns
+ * the video device context associated with a video device in a media device
+ * context.
+ *
+ * The reference count of the returned video device context is increased.
+ * Callers of this function are required to decrease the reference count of
+ * the context reference with a call to video_device_context_put().
+ */
+struct video_device_context *
+video_device_context_get(struct media_device_context *mdev_context,
+			 struct video_device *vdev);
+
+/**
+ * video_device_context_put - Helper to decrease a video context reference
+ *			      count
+ *
+ * @ctx: The video context to release
+ */
+void video_device_context_put(struct video_device_context *ctx);
+
+/**
+ * video_device_init_context - Initialize the video device context
+ *
+ * @vdev: The video device this context belongs to
+ * @ctx: The context to initialize
+ *
+ * Initialize the video device context. The intended callers of this function
+ * are driver-specific implementations of the media_entity_ops.alloc_context()
+ * function that allocates their driver specific types that derive from
+ * struct video_device_context.
+ */
+int video_device_init_context(struct video_device *vdev,
+			      struct video_device_context *ctx);
+
+/**
+ * video_device_cleanup_context - Cleanup the video device context
+ *
+ * @ctx: The context to cleanup.
+ *
+ * Cleanup the video device context. The intended callers of this function are
+ * driver specific implementation of the media_entity_ops.destroy_context()
+ * function before releasing the memory previously allocated by
+ * media_entity_ops.alloc_context().
+ */
+void video_device_cleanup_context(struct video_device_context *ctx);
 
 #endif /* CONFIG_MEDIA_CONTROLLER */
 

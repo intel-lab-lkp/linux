@@ -20,6 +20,7 @@
 
 struct video_device;
 struct v4l2_ctrl_handler;
+struct video_device_context;
 
 /**
  * struct v4l2_fh - Describes a V4L2 file handler
@@ -38,6 +39,7 @@ struct v4l2_ctrl_handler;
  * @sequence: event sequence number
  *
  * @m2m_ctx: pointer to &struct v4l2_m2m_ctx
+ * @context: The video device context
  */
 struct v4l2_fh {
 	struct list_head	list;
@@ -54,6 +56,7 @@ struct v4l2_fh {
 	u32			sequence;
 
 	struct v4l2_m2m_ctx	*m2m_ctx;
+	struct video_device_context *context;
 };
 
 /**

@@ -1200,6 +1200,49 @@ struct media_pipeline *video_device_pipeline(struct video_device *vdev)
 }
 EXPORT_SYMBOL_GPL(video_device_pipeline);
 
+struct video_device_context *
+video_device_context_get(struct media_device_context *mdev_context,
+			 struct video_device *vdev)
+{
+	struct media_entity *entity = &vdev->entity;
+	struct media_entity_context *ctx =
+		media_device_get_entity_context(mdev_context, entity);
+
+	if (!ctx)
+		return NULL;
+
+	return container_of(ctx, struct video_device_context, base);
+}
+EXPORT_SYMBOL_GPL(video_device_context_get);
+
+void video_device_context_put(struct video_device_context *ctx)
+{
+	if (!ctx)
+		return;
+
+	media_entity_context_put(&ctx->base);
+}
+EXPORT_SYMBOL_GPL(video_device_context_put);
+
+int video_device_init_context(struct video_device *vdev,
+			      struct video_device_context *ctx)
+{
+	media_entity_init_context(&vdev->entity, &ctx->base);
+
+	ctx->vdev = vdev;
+	mutex_init(&ctx->queue_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(video_device_init_context);
+
+void video_device_cleanup_context(struct video_device_context *ctx)
+{
+	mutex_destroy(&ctx->queue_lock);
+	media_entity_cleanup_context(&ctx->base);
+}
+EXPORT_SYMBOL_GPL(video_device_cleanup_context);
+
 #endif /* CONFIG_MEDIA_CONTROLLER */
 
 /*
