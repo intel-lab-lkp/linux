@@ -700,11 +700,17 @@ enum zone_watermarks {
 
 /*
  * One per migratetype for each PAGE_ALLOC_COSTLY_ORDER. Two additional lists
- * are added for THP. One PCP list is used by GPF_MOVABLE, and the other PCP list
- * is used by GFP_UNMOVABLE and GFP_RECLAIMABLE.
+ * are added for THP: one for GFP_MOVABLE, and one for GFP_UNMOVABLE and
+ * GFP_RECLAIMABLE. With CMA enabled, an extra THP PCP list is added for
+ * MIGRATE_CMA, allowing further distinction between MIGRATE_MOVABLE and
+ * MIGRATE_CMA for THP allocations.
  */
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_CMA
+#define NR_PCP_THP 3
+#else
 #define NR_PCP_THP 2
+#endif
 #else
 #define NR_PCP_THP 0
 #endif

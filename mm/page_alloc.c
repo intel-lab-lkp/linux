@@ -663,6 +663,11 @@ static inline unsigned int order_to_pindex(int migratetype, int order)
 	if (order > PAGE_ALLOC_COSTLY_ORDER) {
 		VM_BUG_ON(order != HPAGE_PMD_ORDER);
 
+#ifdef CONFIG_CMA
+		if (migratetype == MIGRATE_CMA)
+			return NR_LOWORDER_PCP_LISTS + 2;
+#endif
+
 		movable = migratetype == MIGRATE_MOVABLE;
 
 		return NR_LOWORDER_PCP_LISTS + movable;
