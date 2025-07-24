@@ -243,6 +243,16 @@ struct v4l2_subdev_routing {
 	__u32 reserved[11];
 };
 
+/**
+ * struct v4l2_subdev_bind_context - Subdev context information
+ *
+ * @context_fd: The file descriptor of the media_device instance the subdevice
+ *		has to be bound to
+ */
+struct v4l2_subdev_bind_context {
+	__u32 context_fd;
+};
+
 /*
  * The client is aware of streams. Setting this flag enables the use of 'stream'
  * fields (referring to the stream number) with various ioctls. If this is not
@@ -285,6 +295,7 @@ struct v4l2_subdev_client_capability {
 #define VIDIOC_SUBDEV_S_SELECTION		_IOWR('V', 62, struct v4l2_subdev_selection)
 #define VIDIOC_SUBDEV_G_ROUTING			_IOWR('V', 38, struct v4l2_subdev_routing)
 #define VIDIOC_SUBDEV_S_ROUTING			_IOWR('V', 39, struct v4l2_subdev_routing)
+#define VIDIOC_SUBDEV_BIND_CONTEXT		_IOWR('V', 50, struct v4l2_subdev_bind_context)
 #define VIDIOC_SUBDEV_G_CLIENT_CAP		_IOR('V',  101, struct v4l2_subdev_client_capability)
 #define VIDIOC_SUBDEV_S_CLIENT_CAP		_IOWR('V',  102, struct v4l2_subdev_client_capability)
 

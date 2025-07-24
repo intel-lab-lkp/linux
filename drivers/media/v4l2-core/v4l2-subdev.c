@@ -607,6 +607,46 @@ subdev_ioctl_get_state(struct v4l2_subdev *sd, struct v4l2_subdev_fh *subdev_fh,
 			     v4l2_subdev_get_unlocked_active_state(sd);
 }
 
+static int subdev_do_bind_context(struct v4l2_subdev *sd,
+				  struct v4l2_subdev_context **context,
+				  struct media_device_context *mdev_context)
+{
+	static struct lock_class_key key;
+	struct v4l2_subdev_state *state;
+	int ret;
+
+	ret = sd->entity.ops->alloc_context(&sd->entity,
+					    (struct media_entity_context **)
+					    context);
+	if (ret)
+		return ret;
+
+	state = __v4l2_subdev_state_alloc(sd, "context->state->lock", &key);
+	if (IS_ERR(state)) {
+		ret = PTR_ERR(state);
+		goto err_put_context;
+	}
+	(*context)->state = state;
+
+	/*
+	 * Bind the newly created video device context to the media device
+	 * context identified by the file descriptor.
+	 */
+	ret = media_device_bind_context(mdev_context,
+					(struct media_entity_context *)
+					*context);
+	if (ret)
+		goto err_free_state;
+
+	return 0;
+
+err_free_state:
+	__v4l2_subdev_state_free((*context)->state);
+err_put_context:
+	v4l2_subdev_context_put(*context);
+	return ret;
+}
+
 static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 			    struct v4l2_subdev_state *state)
 {
@@ -1087,6 +1127,25 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 		routing->num_routes = state->routing.num_routes;
 
 		return 0;
+	}
+
+	case VIDIOC_SUBDEV_BIND_CONTEXT: {
+		struct v4l2_subdev_bind_context *c = arg;
+		struct media_device_context *mdev_context;
+		int ret;
+
+		if (!sd->entity.ops || !sd->entity.ops->alloc_context ||
+		    !sd->entity.ops->destroy_context)
+			return -ENOTTY;
+
+		mdev_context = media_device_context_get_from_fd(c->context_fd);
+		if (!mdev_context)
+			return -EINVAL;
+
+		ret = subdev_do_bind_context(sd, &subdev_fh->context,
+					     mdev_context);
+		media_device_context_put(mdev_context);
+		return ret;
 	}
 
 	case VIDIOC_SUBDEV_G_CLIENT_CAP: {
