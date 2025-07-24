@@ -45,8 +45,9 @@ static inline void __user *media_get_uptr(__u64 arg)
 	return (void __user *)(uintptr_t)arg;
 }
 
-static int media_device_open(struct file *filp)
+static int media_device_open(struct media_devnode *devnode, struct file *filp)
 {
+	struct media_device *mdev = devnode->media_dev;
 	struct media_device_fh *fh;
 
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
@@ -55,12 +56,22 @@ static int media_device_open(struct file *filp)
 
 	filp->private_data = &fh->fh;
 
+	spin_lock_irq(&mdev->fh_list_lock);
+	list_add(&fh->mdev_list, &mdev->fh_list);
+	spin_unlock_irq(&mdev->fh_list_lock);
+
 	return 0;
 }
 
 static int media_device_close(struct file *filp)
 {
+	struct media_devnode *devnode = media_devnode_data(filp);
+	struct media_device *mdev = devnode->media_dev;
 	struct media_device_fh *fh = media_device_fh(filp);
+
+	spin_lock_irq(&mdev->fh_list_lock);
+	list_del(&fh->mdev_list);
+	spin_unlock_irq(&mdev->fh_list_lock);
 
 	kfree(fh);
 
@@ -698,10 +709,12 @@ void media_device_init(struct media_device *mdev)
 	INIT_LIST_HEAD(&mdev->pads);
 	INIT_LIST_HEAD(&mdev->links);
 	INIT_LIST_HEAD(&mdev->entity_notify);
+	INIT_LIST_HEAD(&mdev->fh_list);
 
 	mutex_init(&mdev->req_queue_mutex);
 	mutex_init(&mdev->graph_mutex);
 	ida_init(&mdev->entity_internal_idx);
+	spin_lock_init(&mdev->fh_list_lock);
 
 	atomic_set(&mdev->request_id, 0);
 
@@ -808,6 +821,10 @@ void media_device_unregister(struct media_device *mdev)
 		mutex_unlock(&mdev->graph_mutex);
 		return;
 	}
+
+	spin_lock_irq(&mdev->fh_list_lock);
+	list_del_init(&mdev->fh_list);
+	spin_unlock_irq(&mdev->fh_list_lock);
 
 	/* Clear the devnode register bit to avoid races with media dev open */
 	media_devnode_unregister_prepare(mdev->devnode);
