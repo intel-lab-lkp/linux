@@ -1347,6 +1347,16 @@
  *	control EPCS configuration. Used to notify userland on the current state
  *	of EPCS.
  *
+ * @NL80211_CMD_NAN_NEXT_DW_NOTIFICATION: This command is used to notify
+ *	user space about the next NAN Discovery Window (DW). User space may use
+ *	it to prepare frames to be sent in the next DW.
+ *	%NL80211_ATTR_WIPHY_FREQ is used to indicate the frequency of the next
+ *	DW. SDF transmission should be requested with %NL80211_CMD_FRAME and
+ *	the device/driver shall take care of the actual transmission timing.
+ *	Untransmitted multicast frames shall not be carried over to the next DW
+ *	and should be dropped. This notification is only sent to the netlink
+ *	socket owner (see %NL80211_ATTR_SOCKET_OWNER flag).
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1606,6 +1616,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_ASSOC_MLO_RECONF,
 	NL80211_CMD_EPCS_CFG,
+
+	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 
 	/* add new commands above here */
 
