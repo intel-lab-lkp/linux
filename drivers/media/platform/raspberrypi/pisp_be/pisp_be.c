@@ -878,6 +878,10 @@ static int pispbe_node_start_streaming(struct vb2_queue *q, unsigned int count)
 	if (ret < 0)
 		goto err_return_buffers;
 
+	ret = video_device_pipeline_alloc_start(&node->vfd);
+	if (ret)
+		goto err_return_buffers;
+
 	scoped_guard(spinlock_irq, &pispbe->hw_lock) {
 		node->pispbe->streaming_map |=  BIT(node->id);
 		node->pispbe->sequence = 0;
@@ -932,6 +936,8 @@ static void pispbe_node_stop_streaming(struct vb2_queue *q)
 	} while (buf);
 
 	vb2_wait_for_all_buffers(&node->queue);
+
+	video_device_pipeline_stop(&node->vfd);
 
 	spin_lock_irq(&pispbe->hw_lock);
 	pispbe->streaming_map &= ~BIT(node->id);
