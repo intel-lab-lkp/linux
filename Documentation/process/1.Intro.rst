@@ -235,9 +235,9 @@ code must be compatible with version 2 of the GNU General Public License
 (GPLv2), which is the license covering the kernel distribution as a whole.
 In practice, that means that all code contributions are covered either by
 GPLv2 (with, optionally, language allowing distribution under later
-versions of the GPL) or the three-clause BSD license.  Any contributions
-which are not covered by a compatible license will not be accepted into the
-kernel.
+versions of the GPL), the three-clause BSD license or the MIT license.
+Any contributions which are not covered by a compatible license will not
+be accepted into the kernel.
 
 Copyright assignments are not required (or requested) for code contributed
 to the kernel.  All code merged into the mainline kernel retains its
