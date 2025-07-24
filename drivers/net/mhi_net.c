@@ -351,11 +351,20 @@ static void mhi_net_dellink(struct mhi_device *mhi_dev, struct net_device *ndev)
 static int mhi_net_probe(struct mhi_device *mhi_dev,
 			 const struct mhi_device_id *id)
 {
-	const struct mhi_device_info *info = (struct mhi_device_info *)id->driver_data;
+	const struct mhi_device_info *info;
+	struct device *dev = &mhi_dev->dev;
+	char netname[IFNAMSIZ] = {0};
 	struct net_device *ndev;
 	int err;
 
-	ndev = alloc_netdev(sizeof(struct mhi_net_dev), info->netname,
+	info = (struct mhi_device_info *)id->driver_data;
+
+	if (snprintf(netname, sizeof(netname), "%s", dev_name(dev)) >= IFNAMSIZ) {
+		dev_err(dev, "Invalid interface name: '%s'\n", netname);
+		return -EINVAL;
+	}
+
+	ndev = alloc_netdev(sizeof(struct mhi_net_dev), netname,
 			    NET_NAME_PREDICTABLE, mhi_net_setup);
 	if (!ndev)
 		return -ENOMEM;
