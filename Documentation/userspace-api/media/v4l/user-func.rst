@@ -12,6 +12,7 @@ Function Reference
 
     func-close
     func-ioctl
+    vidioc-bind-context
     vidioc-create-bufs
     vidioc-cropcap
     vidioc-dbg-g-chip-info
