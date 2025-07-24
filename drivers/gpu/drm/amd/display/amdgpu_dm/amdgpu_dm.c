@@ -10008,6 +10008,21 @@ static void dm_set_writeback(struct amdgpu_display_manager *dm,
 	drm_writeback_queue_job(wb_conn, new_con_state);
 }
 
+static void
+update_hw_done_deadline(struct dm_crtc_state *dm_new_crtc_state)
+{
+	struct dc_stream_state *stream = dm_new_crtc_state->stream;
+	struct dc_crtc_timing *timing = &stream->timing;
+	struct drm_crtc *crtc = dm_new_crtc_state->base.crtc;
+	uint32_t deadline_lines, deadline_us;
+
+	/* XXX: My guess, AMD display team to the rescue! */
+	deadline_lines = timing->v_total - timing->v_addressable - timing->v_front_porch;
+	deadline_us = DIV_ROUND_UP(deadline_lines * stream->timing.h_total * 10000u,
+				   stream->timing.pix_clk_100hz);
+	drm_crtc_set_hw_done_deadline_property(crtc, deadline_us);
+}
+
 /**
  * amdgpu_dm_atomic_commit_tail() - AMDgpu DM's commit tail implementation.
  * @state: The atomic state to commit
@@ -10405,6 +10420,13 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 
 	/* Signal HW programming completion */
 	drm_atomic_helper_commit_hw_done(state);
+
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		if (new_crtc_state->active &&
+		    (!old_crtc_state->active ||
+		     drm_atomic_crtc_needs_modeset(new_crtc_state)))
+			update_hw_done_deadline(to_dm_crtc_state(new_crtc_state));
+	}
 
 	if (wait_for_vblank)
 		drm_atomic_helper_wait_for_flip_done(dev, state);
