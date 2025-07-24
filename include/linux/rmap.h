@@ -458,8 +458,9 @@ static inline void __folio_rmap_sanity_checks(const struct folio *folio,
 	 */
 	if (IS_ENABLED(CONFIG_DEBUG_VM) && PageAnonNotKsm(page)) {
 		unsigned long mapping = (unsigned long)folio->mapping;
-		struct anon_vma *anon_vma = (void *)(mapping - PAGE_MAPPING_ANON);
+		struct anon_vma *anon_vma;
 
+		anon_vma = (void *)(mapping - FOLIO_MAPPING_ANON);
 		VM_WARN_ON_FOLIO(atomic_read(&anon_vma->refcount) == 0, folio);
 	}
 }
