@@ -1116,6 +1116,13 @@ config SCHED_MM_CID
 	def_bool y
 	depends on SMP && RSEQ
 
+config RSEQ_RESCHED_DELAY
+	def_bool y
+	depends on SMP && RSEQ && SCHED_HRTICK
+	help
+	  This feature enables a thread to request extending its time slice on
+	  the cpu by delaying preemption.
+
 config UCLAMP_TASK_GROUP
 	bool "Utilization clamping per group of tasks"
 	depends on CGROUP_SCHED

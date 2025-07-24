@@ -448,6 +448,40 @@ error:
 	force_sigsegv(sig);
 }
 
+#ifdef	CONFIG_RSEQ_RESCHED_DELAY
+bool __rseq_delay_resched(void)
+{
+	struct task_struct *t = current;
+	u32 flags;
+
+	if (copy_from_user_nofault(&flags, &t->rseq->flags, sizeof(flags)))
+		return false;
+
+	if (!(flags & RSEQ_CS_FLAG_DELAY_RESCHED))
+		return false;
+
+	flags &= ~RSEQ_CS_FLAG_DELAY_RESCHED;
+	if (copy_to_user_nofault(&t->rseq->flags, &flags, sizeof(flags)))
+		return false;
+
+	t->rseq_delay_resched = RSEQ_RESCHED_DELAY_REQUESTED;
+
+	return true;
+}
+
+void rseq_delay_resched_arm_timer(void)
+{
+	if (unlikely(current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED))
+		hrtick_local_start(30 * NSEC_PER_USEC);
+}
+
+void rseq_delay_resched_tick(void)
+{
+	if (current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED)
+		set_tsk_need_resched(current);
+}
+#endif /* CONFIG_RSEQ_RESCHED_DELAY */
+
 #ifdef CONFIG_DEBUG_RSEQ
 
 /*
@@ -493,6 +527,8 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len,
 		current->rseq = NULL;
 		current->rseq_sig = 0;
 		current->rseq_len = 0;
+		if (IS_ENABLED(CONFIG_RSEQ_RESCHED_DELAY))
+			current->rseq_delay_resched = RSEQ_RESCHED_DELAY_NONE;
 		return 0;
 	}
 
@@ -561,6 +597,8 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len,
 	current->rseq = rseq;
 	current->rseq_len = rseq_len;
 	current->rseq_sig = sig;
+	if (IS_ENABLED(CONFIG_RSEQ_RESCHED_DELAY))
+		current->rseq_delay_resched = RSEQ_RESCHED_DELAY_PROBE;
 
 	/*
 	 * If rseq was previously inactive, and has just been

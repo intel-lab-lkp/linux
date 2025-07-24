@@ -338,6 +338,7 @@ extern int __must_check io_schedule_prepare(void);
 extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
+extern void hrtick_local_start(u64 delay);
 
 /* wrapper function to trace from this header file */
 DECLARE_TRACEPOINT(sched_set_state_tp);
@@ -1048,6 +1049,7 @@ struct task_struct {
 	unsigned                        in_thrashing:1;
 #endif
 	unsigned			in_nf_duplicate:1;
+	unsigned			rseq_delay_resched:2;
 #ifdef CONFIG_PREEMPT_RT
 	struct netdev_xmit		net_xmit;
 #endif
@@ -1711,6 +1713,13 @@ static inline char task_state_to_char(struct task_struct *tsk)
 extern struct pid *cad_pid;
 
 /*
+ * Used in tsk->rseq_delay_resched.
+ */
+#define	RSEQ_RESCHED_DELAY_NONE		0	/* tsk->rseq not registered */
+#define	RSEQ_RESCHED_DELAY_PROBE	1	/* Evaluate tsk->rseq->flags */
+#define	RSEQ_RESCHED_DELAY_REQUESTED	2	/* Request to delay reschedule successful */
+
+/*
  * Per process flags
  */
 #define PF_VCPU			0x00000001	/* I'm a virtual CPU */
@@ -2243,6 +2252,25 @@ static inline bool owner_on_cpu(struct task_struct *owner)
 /* Returns effective CPU energy utilization, as seen by the scheduler */
 unsigned long sched_cpu_util(int cpu);
 #endif /* CONFIG_SMP */
+
+#ifdef CONFIG_RSEQ_RESCHED_DELAY
+extern bool __rseq_delay_resched(void);
+extern void rseq_delay_resched_arm_timer(void);
+extern void rseq_delay_resched_tick(void);
+static inline bool rseq_delay_set_need_resched(void)
+{
+    if (current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED) {
+	    set_tsk_need_resched(current);
+	    return true;
+    }
+    return false;
+}
+#else
+static inline bool __rseq_delay_resched(void) { return false; }
+static inline void rseq_delay_resched_arm_timer(void) { }
+static inline void rseq_delay_resched_tick(void) { }
+static inline bool rseq_delay_set_need_resched(void) { return false; }
+#endif
 
 #ifdef CONFIG_SCHED_CORE
 extern void sched_core_free(struct task_struct *tsk);

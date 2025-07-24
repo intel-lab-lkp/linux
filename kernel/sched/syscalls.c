@@ -1377,6 +1377,10 @@ static void do_sched_yield(void)
  */
 SYSCALL_DEFINE0(sched_yield)
 {
+	/* Reschedule if scheduler time delay was granted */
+	if (rseq_delay_set_need_resched())
+		return 0;
+
 	do_sched_yield();
 	return 0;
 }
