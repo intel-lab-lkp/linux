@@ -258,8 +258,9 @@ static struct property *dup_and_fixup_symbol_prop(
 	if (!new_prop->name || !new_prop->value)
 		goto err_free_new_prop;
 
-	strcpy(new_prop->value, target_path);
-	strcpy(new_prop->value + target_path_len, path_tail);
+	strscpy(new_prop->value, target_path, new_prop->length);
+	strscpy(new_prop->value + target_path_len, path_tail,
+	new_prop->length - target_path_len);
 
 	of_property_set_flag(new_prop, OF_DYNAMIC);
 

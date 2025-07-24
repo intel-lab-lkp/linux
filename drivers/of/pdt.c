@@ -51,7 +51,7 @@ static char * __init of_pdt_build_full_name(struct device_node *dp)
 	if (!of_pdt_prom_ops->pkg2path(dp->phandle, path, sizeof(path), &len)) {
 		name = kbasename(path);
 		buf = prom_early_alloc(strlen(name) + 1);
-		strcpy(buf, name);
+		strscpy(buf, name, sizeof(buf));
 		return buf;
 	}
 
@@ -84,7 +84,7 @@ static struct property * __init of_pdt_build_one_prop(phandle node, char *prev,
 
 	p->name = (char *) (p + 1);
 	if (special_name) {
-		strcpy(p->name, special_name);
+		strscpy(p->name, special_name, sizeof(p->name));
 		p->length = special_len;
 		p->value = prom_early_alloc(special_len);
 		memcpy(p->value, special_val, special_len);
