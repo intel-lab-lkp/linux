@@ -1496,12 +1496,49 @@ static const struct v4l2_subdev_ops pispbe_sd_ops = {
 	.pad = &pispbe_pad_ops,
 };
 
+static int pispbe_init_state(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *state)
+{
+	struct v4l2_mbus_framefmt *fmt;
+
+	for (unsigned int i = 0; i < PISPBE_NUM_NODES; i++) {
+		fmt = v4l2_subdev_state_get_format(state, i);
+
+		switch (i) {
+		case MAIN_INPUT_NODE:
+			fallthrough;
+		case OUTPUT0_NODE:
+			fallthrough;
+		case OUTPUT1_NODE:
+			fmt->width = 1920;
+			fmt->height = 1080;
+			fmt->code = MEDIA_BUS_FMT_FIXED;
+			break;
+		case CONFIG_NODE:
+			fmt->width =  sizeof(struct pisp_be_tiles_config);
+			fmt->height = 1;
+			fmt->code = MEDIA_BUS_FMT_METADATA_FIXED;
+			break;
+		default:
+			/* No need to configure other nodes. */
+			continue;
+		}
+	}
+
+	return 0;
+}
+
+static const struct v4l2_subdev_internal_ops pispbe_subdev_internal_ops = {
+	.init_state = pispbe_init_state,
+};
+
 static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 {
 	struct v4l2_subdev *sd = &pispbe->sd;
 	int ret;
 
 	v4l2_subdev_init(sd, &pispbe_sd_ops);
+	sd->internal_ops = &pispbe_subdev_internal_ops;
 	sd->entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
 	sd->owner = THIS_MODULE;
 	sd->dev = pispbe->dev;
@@ -1514,6 +1551,10 @@ static int pispbe_init_subdev(struct pispbe_dev *pispbe)
 
 	ret = media_entity_pads_init(&sd->entity, PISPBE_NUM_NODES,
 				     pispbe->pad);
+	if (ret)
+		goto error;
+
+	ret = v4l2_subdev_init_finalize(sd);
 	if (ret)
 		goto error;
 
