@@ -703,9 +703,20 @@ subdev_ioctl_get_state(struct v4l2_subdev *sd, struct v4l2_subdev_fh *subdev_fh,
 		break;
 	}
 
-	return which == V4L2_SUBDEV_FORMAT_TRY ?
-			     subdev_fh->state :
-			     v4l2_subdev_get_unlocked_active_state(sd);
+	/*
+	 * If which is FORMAT_TRY return the state stored in the file handle.
+	 * If a context has been allocated because the subdev has been bound
+	 * then return the state stored in the context. Otherwise default to the
+	 * subdevice active state.
+	 */
+
+	if (which == V4L2_SUBDEV_FORMAT_TRY)
+		return subdev_fh->state;
+
+	if (subdev_fh->context)
+		return v4l2_subdev_get_unlocked_active_state(subdev_fh->context);
+
+	return v4l2_subdev_get_unlocked_active_state(sd);
 }
 
 static int subdev_do_bind_context(struct v4l2_subdev *sd,
