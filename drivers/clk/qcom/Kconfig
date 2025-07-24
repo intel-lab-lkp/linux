@@ -1411,13 +1411,6 @@ config KRAITCC
 	  Support for the Krait CPU clocks on Qualcomm devices.
 	  Say Y if you want to support CPU frequency scaling.
 
-config CLK_GFM_LPASS_SM8250
-	tristate "SM8250 GFM LPASS Clocks"
-	depends on ARM64 || COMPILE_TEST
-	help
-	  Support for the Glitch Free Mux (GFM) Low power audio
-          subsystem (LPASS) clocks found on SM8250 SoCs.
-
 config SM_VIDEOCC_8450
 	tristate "SM8450 Video Clock Controller"
 	depends on ARM64 || COMPILE_TEST
