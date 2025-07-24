@@ -28,11 +28,11 @@ properties:
     description:
       Should contain the address ranges for memory regions SRAM, CFG, and,
       on some platforms, L1TCM.
-    minItems: 2
+    minItems: 1
     maxItems: 3
 
   reg-names:
-    minItems: 2
+    minItems: 1
     maxItems: 3
 
   clocks:
@@ -171,8 +171,10 @@ allOf:
     then:
       properties:
         reg:
+          minItems: 2
           maxItems: 2
         reg-names:
+          minItems: 2
           items:
             - const: sram
             - const: cfg
@@ -185,8 +187,10 @@ allOf:
     then:
       properties:
         reg:
+          minItems: 2
           maxItems: 3
         reg-names:
+          minItems: 2
           items:
             - const: sram
             - const: cfg
@@ -196,12 +200,25 @@ allOf:
         compatible:
           enum:
             - mediatek,mt8188-scp-dual
+    then:
+      properties:
+        reg:
+          minItems: 1
+        reg-names:
+          minItems: 1
+          items:
+            - const: cfg
+  - if:
+      properties:
+        compatible:
+          enum:
             - mediatek,mt8195-scp-dual
     then:
       properties:
         reg:
-          maxItems: 2
+          minItems: 2
         reg-names:
+          minItems: 2
           items:
             - const: cfg
             - const: l1tcm
