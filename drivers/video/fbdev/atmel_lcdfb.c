@@ -922,6 +922,7 @@ static int atmel_lcdfb_of_init(struct atmel_lcdfb_info *sinfo)
 	struct device *dev = &sinfo->pdev->dev;
 	struct device_node *np =dev->of_node;
 	struct device_node *display_np;
+	const struct of_device_id *match;
 	struct atmel_lcdfb_power_ctrl_gpio *og;
 	bool is_gpio_power = false;
 	struct fb_videomode fb_vm;
@@ -930,8 +931,11 @@ static int atmel_lcdfb_of_init(struct atmel_lcdfb_info *sinfo)
 	int ret;
 	int i;
 
-	sinfo->config = (struct atmel_lcdfb_config*)
-		of_match_device(atmel_lcdfb_dt_ids, dev)->data;
+	match = of_match_device(atmel_lcdfb_dt_ids, dev);
+	if (!match)
+		return -ENODEV;
+
+	sinfo->config = (struct atmel_lcdfb_config *)match->data;
 
 	display_np = of_parse_phandle(np, "display", 0);
 	if (!display_np) {
