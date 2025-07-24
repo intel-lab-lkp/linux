@@ -1620,7 +1620,7 @@ static int do_insn_ioctl(struct comedi_device *dev,
 		n_data = MAX_SAMPLES;
 	}
 
-	data = kmalloc_array(n_data, sizeof(unsigned int), GFP_KERNEL);
+	data = kcalloc(n_data, sizeof(unsigned int), GFP_KERNEL);
 	if (!data) {
 		ret = -ENOMEM;
 		goto error;
