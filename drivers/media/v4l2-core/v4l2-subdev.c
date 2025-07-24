@@ -1276,6 +1276,56 @@ const struct v4l2_file_operations v4l2_subdev_fops = {
 };
 
 #ifdef CONFIG_MEDIA_CONTROLLER
+static int v4l2_subdev_register_default_context(struct v4l2_subdev *sd)
+{
+	struct media_device_context *mdev_context;
+
+	/* If the driver does not support contexts, return here. */
+	if (!sd->entity.ops || !sd->entity.ops->alloc_context ||
+	    !sd->entity.ops->destroy_context)
+		return 0;
+
+	mdev_context = sd->entity.graph_obj.mdev->default_context;
+	return subdev_do_bind_context(sd, &sd->default_context, mdev_context);
+}
+#endif /* CONFIG_MEDIA_CONTROLLER */
+
+int v4l2_subdev_registered(struct v4l2_subdev *sd)
+{
+	int ret;
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	ret = v4l2_subdev_register_default_context(sd);
+	if (ret)
+		return ret;
+#endif /* CONFIG_MEDIA_CONTROLLER */
+
+	if (sd->internal_ops && sd->internal_ops->registered) {
+		ret = sd->internal_ops->registered(sd);
+		if (ret)
+			goto err_registered;
+	}
+
+	return 0;
+
+err_registered:
+	if (sd->default_context)
+		v4l2_subdev_context_put(sd->default_context);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_registered);
+
+void v4l2_subdev_unregistered(struct v4l2_subdev *sd)
+{
+	if (sd->default_context)
+		v4l2_subdev_context_put(sd->default_context);
+
+	if (sd->internal_ops && sd->internal_ops->unregistered)
+		sd->internal_ops->unregistered(sd);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_unregistered);
+
+#ifdef CONFIG_MEDIA_CONTROLLER
 
 int v4l2_subdev_get_fwnode_pad_1_to_1(struct media_entity *entity,
 				      struct fwnode_endpoint *endpoint)

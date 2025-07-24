@@ -1130,6 +1130,10 @@ struct v4l2_subdev_platform_data {
  * @active_state: Active state for the subdev (NULL for subdevs tracking the
  *		  state internally). Initialized by calling
  *		  v4l2_subdev_init_finalize().
+ * @default_context: Default context for the subdev, allows to operate
+ *		     context-aware drivers with a context-unaware userspace.
+ *		     It is initialized when the subdev is registered in
+ *		     v4l2_subdev_registered().
  * @enabled_pads: Bitmask of enabled pads used by v4l2_subdev_enable_streams()
  *		  and v4l2_subdev_disable_streams() helper functions for
  *		  fallback cases.
@@ -1182,6 +1186,7 @@ struct v4l2_subdev {
 	 * doesn't support it.
 	 */
 	struct v4l2_subdev_state *active_state;
+	struct v4l2_subdev_context *default_context;
 	u64 enabled_pads;
 	bool s_stream_enabled;
 };
@@ -1285,6 +1290,30 @@ static inline void *v4l2_get_subdev_hostdata(const struct v4l2_subdev *sd)
 {
 	return sd->host_priv;
 }
+
+/**
+ * v4l2_subdev_registered - Subdevice registered notification
+ *
+ * @sd: The subdevice that has been registered
+ *
+ * Notify that a subdevice has been registered by the core. This function wraps
+ * a call to sd->internal_ops->registered (if available) and instantiates the
+ * default v4l2 subdevice context.
+ *
+ * Returns 0 on success, a negative error code otherwise.
+ */
+int v4l2_subdev_registered(struct v4l2_subdev *sd);
+
+/**
+ * v4l2_subdev_unregistered - Subdevice unregistered notification
+ *
+ * @sd: The subdevice that has been unregistered
+ *
+ * Notify that a subdevice has been unregistered by the core. This function
+ * wraps a call to sd->internal_ops->unregistered (if available) and deletes
+ * the default v4l2 subdevice context.
+ */
+void v4l2_subdev_unregistered(struct v4l2_subdev *sd);
 
 #ifdef CONFIG_MEDIA_CONTROLLER
 
