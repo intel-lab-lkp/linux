@@ -237,6 +237,8 @@ struct v4l2_file_operations {
  * @ctrl_handler: Control handler associated with this device node.
  *	 May be NULL.
  * @queue: &struct vb2_queue associated with this device node. May be NULL.
+ * @default_context: &struct video_device_context associated with this device
+ *		     node
  * @prio: pointer to &struct v4l2_prio_state with device's Priority state.
  *	 If NULL, then v4l2_dev->prio will be used.
  * @name: video device name
@@ -283,6 +285,7 @@ struct video_device {
 
 	struct vb2_queue *queue;
 
+	struct video_device_context *default_context;
 	struct v4l2_prio_state *prio;
 
 	/* device info */
