@@ -85,7 +85,7 @@ u32 intel_crtc_get_vblank_counter(struct intel_crtc *crtc)
 		return 0;
 
 	if (!vblank->max_vblank_count)
-		return (u32)drm_crtc_accurate_vblank_count(&crtc->base);
+		return (u32)drm_crtc_vblank_count(&crtc->base);
 
 	return crtc->base.funcs->get_vblank_counter(&crtc->base);
 }
