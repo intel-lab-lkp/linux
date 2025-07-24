@@ -2271,6 +2271,7 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 
 struct migrate_walk_arg {
 	enum ttu_flags flags;
+	unsigned int nr_migrate_entry;
 };
 
 /*
@@ -2290,6 +2291,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	struct mmu_notifier_range range;
 	struct migrate_walk_arg *mwa = (struct migrate_walk_arg *)arg;
 	enum ttu_flags flags = mwa->flags;
+	unsigned int nr_migrate_entry = 0;
 	unsigned long pfn;
 	unsigned long hsz = 0;
 
@@ -2556,6 +2558,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 						hsz);
 			else
 				set_pte_at(mm, address, pvmw.pte, swp_pte);
+			nr_migrate_entry++;
 			trace_set_migration_pte(address, pte_val(swp_pte),
 						folio_order(folio));
 			/*
@@ -2573,9 +2576,22 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 		folio_put(folio);
 	}
 
+	mwa->nr_migrate_entry += nr_migrate_entry;
+
 	mmu_notifier_invalidate_range_end(&range);
 
 	return ret;
+}
+
+static void folio_set_migrate_entry_type(struct folio *folio,
+					 struct rmap_walk_control *rwc)
+{
+	struct migrate_walk_arg *mwa = (struct migrate_walk_arg *)rwc->arg;
+	unsigned int nr_migrate_entry = mwa->nr_migrate_entry;
+
+	if (nr_migrate_entry && !folio_test_large(folio) &&
+	    !folio_mapped(folio))
+		folio_init_mgte(folio, nr_migrate_entry);
 }
 
 /**
@@ -2596,6 +2612,7 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 		.rmap_one = try_to_migrate_one,
 		.arg = (void *)&arg,
 		.done = folio_not_mapped,
+		.exit = folio_set_migrate_entry_type,
 		.locked = flags & TTU_RMAP_LOCKED,
 		.anon_lock = folio_lock_anon_vma_read,
 	};

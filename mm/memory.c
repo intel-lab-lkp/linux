@@ -824,6 +824,7 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 				pte = pte_swp_mkuffd_wp(pte);
 			set_pte_at(src_mm, addr, src_pte, pte);
 		}
+		folio_inc_mgte_count(folio);
 	} else if (is_device_private_entry(entry)) {
 		page = pfn_swap_entry_to_page(entry);
 		folio = page_folio(page);
@@ -1606,6 +1607,7 @@ static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
 		if (!should_zap_folio(details, folio))
 			return 1;
 		rss[mm_counter(folio)]--;
+		folio_dec_mgte_count(folio);
 	} else if (pte_marker_entry_uffd_wp(entry)) {
 		/*
 		 * For anon: always drop the marker; for file: only

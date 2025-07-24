@@ -325,7 +325,8 @@ static bool remove_migration_pte(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
 	struct rmap_walk_arg *rmap_walk_arg = arg;
-	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->src, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
+	struct folio *src = rmap_walk_arg->src;
+	DEFINE_FOLIO_VMA_WALK(pvmw, src, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		rmap_t rmap_flags = RMAP_NONE;
@@ -418,6 +419,7 @@ static bool remove_migration_pte(struct folio *folio,
 
 		trace_remove_migration_pte(pvmw.address, pte_val(pte),
 					   compound_order(new));
+		folio_dec_mgte_count(src);
 
 		/* No need to invalidate - it was non-present before */
 		update_mmu_cache(vma, pvmw.address, pvmw.pte);
@@ -426,12 +428,27 @@ static bool remove_migration_pte(struct folio *folio,
 	return true;
 }
 
+static int folio_removed_all_migrate_entry(struct folio *folio,
+					   struct rmap_walk_control *rwc)
+{
+	struct rmap_walk_arg *arg = (struct rmap_walk_arg *)rwc->arg;
+	struct folio *src = arg->src;
+
+	VM_BUG_ON(!folio_test_mgt_entry(src));
+
+	if (!folio_get_mgte_count(src))
+		return true;
+	return false;
+}
+
 /*
  * Get rid of all migration entries and replace them by
  * references to the indicated page.
  */
 void remove_migration_ptes(struct folio *src, struct folio *dst, int flags)
 {
+	bool undo = src == dst;
+
 	struct rmap_walk_arg rmap_walk_arg = {
 		.src = src,
 		.map_unused_to_zeropage = flags & RMP_USE_SHARED_ZEROPAGE,
@@ -440,12 +457,21 @@ void remove_migration_ptes(struct folio *src, struct folio *dst, int flags)
 	struct rmap_walk_control rwc = {
 		.rmap_one = remove_migration_pte,
 		.locked = flags & RMP_LOCKED,
+		.done = !undo && folio_test_mgt_entry(src) ?
+				folio_removed_all_migrate_entry :
+				NULL,
 		.arg = &rmap_walk_arg,
 	};
 
 	VM_BUG_ON_FOLIO((flags & RMP_USE_SHARED_ZEROPAGE) && (src != dst), src);
 
+	if (undo)
+		folio_remove_mgte(src);
+
 	rmap_walk(dst, &rwc);
+
+	if (!undo)
+		folio_remove_mgte(src);
 }
 
 /*
