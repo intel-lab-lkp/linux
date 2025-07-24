@@ -82,6 +82,14 @@ MODULE_FIRMWARE("amd/amd_sev_fam19h_model1xh.sbin"); /* 4th gen EPYC */
 static bool psp_dead;
 static int psp_timeout;
 
+struct snp_hv_fixed_pages_entry {
+	u64 base;
+	int npages;
+	struct list_head list;
+};
+static LIST_HEAD(snp_hv_fixed_pages);
+static DEFINE_SPINLOCK(snp_hv_fixed_pages_lock);
+
 /* Trusted Memory Region (TMR):
  *   The TMR is a 1MB area that must be 1MB aligned.  Use the page allocator
  *   to allocate the memory, which will return aligned memory for the specified
@@ -1073,6 +1081,76 @@ static void snp_set_hsave_pa(void *arg)
 	wrmsrq(MSR_VM_HSAVE_PA, 0);
 }
 
+int snp_insert_hypervisor_fixed_pages_list(u64 paddr, int npages)
+{
+	struct snp_hv_fixed_pages_entry *entry;
+
+	spin_lock(&snp_hv_fixed_pages_lock);
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry) {
+		spin_unlock(&snp_hv_fixed_pages_lock);
+		return -ENOMEM;
+	}
+	entry->base = paddr;
+	entry->npages = npages;
+	list_add_tail(&entry->list, &snp_hv_fixed_pages);
+
+	spin_unlock(&snp_hv_fixed_pages_lock);
+
+	return 0;
+}
+
+void snp_delete_hypervisor_fixed_pages_list(u64 paddr)
+{
+	struct snp_hv_fixed_pages_entry *entry, *nentry;
+
+	spin_lock(&snp_hv_fixed_pages_lock);
+	list_for_each_entry_safe(entry, nentry, &snp_hv_fixed_pages, list) {
+		if (entry->base == paddr) {
+			list_del(&entry->list);
+			kfree(entry);
+			break;
+		}
+	}
+	spin_unlock(&snp_hv_fixed_pages_lock);
+}
+
+static int snp_extend_hypervisor_fixed_pages(struct sev_data_range_list *range_list)
+{
+	struct sev_data_range *range = &range_list->ranges[range_list->num_elements];
+	struct snp_hv_fixed_pages_entry *entry;
+	int new_element_count, ret = 0;
+
+	spin_lock(&snp_hv_fixed_pages_lock);
+	if (list_empty(&snp_hv_fixed_pages))
+		goto out;
+
+	new_element_count = list_count_nodes(&snp_hv_fixed_pages) +
+			    range_list->num_elements;
+
+	/*
+	 * Ensure the list of HV_FIXED pages that will be passed to firmware
+	 * do not exceed the page-sized argument buffer.
+	 */
+	if (new_element_count * sizeof(struct sev_data_range) +
+	    sizeof(struct sev_data_range_list) > PAGE_SIZE) {
+		ret = -E2BIG;
+		goto out;
+	}
+
+	list_for_each_entry(entry, &snp_hv_fixed_pages, list) {
+		range->base = entry->base;
+		range->page_count = entry->npages;
+		range++;
+	}
+	range_list->num_elements = new_element_count;
+out:
+	spin_unlock(&snp_hv_fixed_pages_lock);
+
+	return ret;
+}
+
 static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 {
 	struct sev_data_range_list *range_list = arg;
@@ -1162,6 +1240,16 @@ static int __sev_snp_init_locked(int *error)
 				"SEV: SNP_INIT_EX walk_iomem_res_desc failed rc = %d\n", rc);
 			return rc;
 		}
+
+		/*
+		 * Extend the HV_Fixed pages list with HV_Fixed pages added from other
+		 * PSP sub-devices such as SFS. Warn if the list can't be extended
+		 * but continue with SNP_INIT_EX.
+		 */
+		rc = snp_extend_hypervisor_fixed_pages(snp_range_list);
+		if (rc)
+			dev_warn(sev->dev,
+				 "SEV: SNP_INIT_EX extend HV_Fixed pages failed rc = %d\n", rc);
 
 		memset(&data, 0, sizeof(data));
 		data.init_rmp = 1;

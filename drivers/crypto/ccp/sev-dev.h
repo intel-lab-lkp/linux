@@ -65,4 +65,7 @@ void sev_dev_destroy(struct psp_device *psp);
 void sev_pci_init(void);
 void sev_pci_exit(void);
 
+int snp_insert_hypervisor_fixed_pages_list(u64 paddr, int npages);
+void snp_delete_hypervisor_fixed_pages_list(u64 paddr);
+
 #endif /* __SEV_DEV_H */
