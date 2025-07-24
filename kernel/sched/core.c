@@ -1185,6 +1185,20 @@ void resched_curr_lazy(struct rq *rq)
 	__resched_curr(rq, get_lazy_tif_bit());
 }
 
+#ifdef	CONFIG_RSEQ_RESCHED_DELAY
+void resched_curr_nodelay(struct rq *rq, struct task_struct *p)
+{
+	int tif;
+	tif = p->sched_nodelay ? TIF_NEED_RESCHED_NODELAY : TIF_NEED_RESCHED;
+	__resched_curr(rq, tif);
+}
+#else
+void resched_curr_nodelay(struct rq *rq, struct task_struct *p)
+{
+	__resched_curr(rq, TIF_NEED_RESCHED);
+}
+#endif
+
 void resched_cpu(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);

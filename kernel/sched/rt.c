@@ -1027,7 +1027,7 @@ static void update_curr_rt(struct rq *rq)
 			rt_rq->rt_time += delta_exec;
 			exceeded = sched_rt_runtime_exceeded(rt_rq);
 			if (exceeded)
-				resched_curr(rq);
+				resched_curr_nodelay(rq, rq->curr);
 			raw_spin_unlock(&rt_rq->rt_runtime_lock);
 			if (exceeded)
 				do_start_rt_bandwidth(sched_rt_bandwidth(rt_rq));
@@ -1634,7 +1634,7 @@ static void check_preempt_equal_prio(struct rq *rq, struct task_struct *p)
 	 * to try and push the current task away:
 	 */
 	requeue_task_rt(rq, p, 1);
-	resched_curr(rq);
+	resched_curr_nodelay(rq, p);
 }
 
 static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
@@ -1663,7 +1663,7 @@ static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 	struct task_struct *donor = rq->donor;
 
 	if (p->prio < donor->prio) {
-		resched_curr(rq);
+		resched_curr_nodelay(rq, p);
 		return;
 	}
 
@@ -1999,7 +1999,7 @@ retry:
 	 * just reschedule current.
 	 */
 	if (unlikely(next_task->prio < rq->donor->prio)) {
-		resched_curr(rq);
+		resched_curr_nodelay(rq, next_task);
 		return 0;
 	}
 
@@ -2087,7 +2087,7 @@ retry:
 	}
 
 	move_queued_task_locked(rq, lowest_rq, next_task);
-	resched_curr(lowest_rq);
+	resched_curr_nodelay(lowest_rq, next_task);
 	ret = 1;
 
 	double_unlock_balance(rq, lowest_rq);

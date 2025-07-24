@@ -14,6 +14,9 @@ config PREEMPT_BUILD
 config ARCH_HAS_PREEMPT_LAZY
 	bool
 
+config ARCH_HAS_PREEMPT_NODELAY
+	bool
+
 choice
 	prompt "Preemption Model"
 	default PREEMPT_NONE

@@ -1118,7 +1118,7 @@ config SCHED_MM_CID
 
 config RSEQ_RESCHED_DELAY
 	def_bool y
-	depends on SMP && RSEQ && SCHED_HRTICK
+	depends on SMP && RSEQ && SCHED_HRTICK && ARCH_HAS_PREEMPT_NODELAY
 	help
 	  This feature enables a thread to request extending its time slice on
 	  the cpu by delaying preemption.
