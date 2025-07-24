@@ -87,6 +87,7 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/memcontrol.h>
+#include <linux/kmemdump.h>
 
 #include <asm/cacheflush.h>
 #include <asm/sections.h>
@@ -3341,6 +3342,8 @@ void __init setup_per_cpu_areas(void)
 }
 
 #endif	/* CONFIG_SMP */
+
+KMEMDUMP_VAR_CORE(__per_cpu_offset, sizeof(__per_cpu_offset));
 
 /*
  * pcpu_nr_pages - calculate total number of populated backing pages
