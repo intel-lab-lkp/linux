@@ -603,6 +603,48 @@ __must_check int __video_device_pipeline_start(struct video_device *vdev,
 					       struct media_pipeline *pipe);
 
 /**
+ * video_device_context_pipeline_start - Mark a pipeline as streaming starting
+ *					 from a video device context
+ * @context: The video device context that starts the streaming
+ * @pipe: Media pipeline to be assigned to all entities in the pipeline.
+ *
+ * ..note:: This is the multi-context version of video_device_pipeline_start()
+ *          Documentation of this function only describes specific aspects of
+ *          this version. Refer to the video_device_pipeline_start()
+ *          documentation for a complete reference.
+ *
+ * Validate that all entities connected to a video device through enabled links
+ * by ensuring that a context associated with the same media device context
+ * exists for them. Increase the reference counting of each of the contexts part
+ * of the pipeline to guarantee their lifetime is maintained as long as the
+ * pipeline is streaming.
+ *
+ * Context validation and refcounting of all entities that are part of a
+ * streaming pipeline ensures that device drivers can safely access device
+ * contexts in a media device context during streaming. References to contexts
+ * retried by a call to media_device_get_entity_context(), are guaranteed to be
+ * valid as long as the pipeline is streaming. Likewise, the media device
+ * context that contains the device contexts is guaranteed to be valid as long
+ * as the pipeline is streaming.
+ */
+__must_check int
+video_device_context_pipeline_start(struct video_device_context *context,
+				    struct media_pipeline *pipe);
+
+/**
+ * __video_device_context_pipeline_start - Mark a pipeline as streaming starting
+ *					   from a video device context
+ * @context: The video device context that starts the streaming
+ * @pipe: Media pipeline to be assigned to all entities in the pipeline.
+ *
+ * ..note:: This is the non-locking version of
+ *	    __video_device_context_pipeline_start()
+ */
+__must_check int
+__video_device_context_pipeline_start(struct video_device_context *context,
+				      struct media_pipeline *pipe);
+
+/**
  * video_device_pipeline_stop - Mark a pipeline as not streaming
  * @vdev: Starting video device
  *
@@ -645,6 +687,21 @@ void __video_device_pipeline_stop(struct video_device *vdev);
  * video_device_pipeline_stop().
  */
 __must_check int video_device_pipeline_alloc_start(struct video_device *vdev);
+
+/**
+ * video_device_context_pipeline_alloc_start - Mark a pipeline as streaming
+ * @context: The video device context that starts the streaming
+ *
+ * video_device_context_pipeline_alloc_start() is similar to
+ * video_device_context_pipeline_start() but instead of working on a given
+ * pipeline the function will use an existing pipeline if the video device is
+ * already part of a pipeline, or allocate a new pipeline.
+ *
+ * Calls to video_device_context_pipeline_alloc_start() must be matched with
+ * video_device_pipeline_stop().
+ */
+__must_check int
+video_device_context_pipeline_alloc_start(struct video_device_context *context);
 
 /**
  * video_device_pipeline - Get the media pipeline a video device is part of
