@@ -6757,9 +6757,8 @@ static void __sched notrace __schedule(int sched_mode)
 picked:
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
-	if (IS_ENABLED(CONFIG_RSEQ_RESCHED_DELAY) &&
-	    prev->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED)
-		prev->rseq_delay_resched = RSEQ_RESCHED_DELAY_PROBE;
+	if(IS_ENABLED(CONFIG_RSEQ_RESCHED_DELAY))
+		rseq_delay_resched_clear(prev);
 	rq->last_seen_need_resched_ns = 0;
 
 	is_switch = prev != next;

@@ -2257,6 +2257,7 @@ unsigned long sched_cpu_util(int cpu);
 extern bool __rseq_delay_resched(void);
 extern void rseq_delay_resched_arm_timer(void);
 extern void rseq_delay_resched_tick(void);
+extern void rseq_delay_resched_clear(struct task_struct *tsk);
 static inline bool rseq_delay_set_need_resched(void)
 {
     if (current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED) {
@@ -2270,6 +2271,7 @@ static inline bool __rseq_delay_resched(void) { return false; }
 static inline void rseq_delay_resched_arm_timer(void) { }
 static inline void rseq_delay_resched_tick(void) { }
 static inline bool rseq_delay_set_need_resched(void) { return false; }
+static inline void rseq_delay_resched_clear(struct task_struct *tsk) { }
 #endif
 
 #ifdef CONFIG_SCHED_CORE

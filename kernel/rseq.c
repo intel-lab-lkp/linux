@@ -480,6 +480,19 @@ void rseq_delay_resched_tick(void)
 	if (current->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED)
 		set_tsk_need_resched(current);
 }
+
+void rseq_delay_resched_clear(struct task_struct *tsk)
+{
+	u32 flags;
+
+	if (tsk->rseq_delay_resched == RSEQ_RESCHED_DELAY_REQUESTED) {
+		tsk->rseq_delay_resched = RSEQ_RESCHED_DELAY_PROBE;
+		if (copy_from_user_nofault(&flags, &tsk->rseq->flags, sizeof(flags)))
+                        return;
+                flags |= RSEQ_CS_FLAG_RESCHEDULED;
+                copy_to_user_nofault(&tsk->rseq->flags, &flags, sizeof(flags));
+	}
+}
 #endif /* CONFIG_RSEQ_RESCHED_DELAY */
 
 #ifdef CONFIG_DEBUG_RSEQ
