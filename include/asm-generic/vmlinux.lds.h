@@ -488,6 +488,8 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 	FW_LOADER_BUILT_IN_DATA						\
 	TRACEDATA							\
 									\
+	KMEMDUMP_TABLE							\
+									\
 	PRINTK_INDEX							\
 									\
 	/* Kernel symbol table: Normal symbols */			\
@@ -889,6 +891,17 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 	}
 #else
 #define TRACEDATA
+#endif
+
+#ifdef CONFIG_KMEMDUMP
+#define KMEMDUMP_TABLE							\
+	. = ALIGN(8);							\
+	.kmemdump : AT(ADDR(.kmemdump) - LOAD_OFFSET) {			\
+		BOUNDED_SECTION_POST_LABEL(.kmemdump, __kmemdump_table,	\
+					   , _end)			\
+	}
+#else
+#define KMEMDUMP_TABLE
 #endif
 
 #ifdef CONFIG_PRINTK_INDEX
