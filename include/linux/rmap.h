@@ -995,6 +995,7 @@ void remove_migration_ptes(struct folio *src, struct folio *dst, int flags);
  * locked: already locked before invoke rmap_walk
  * rmap_one: executed on each vma where page is mapped
  * done: for checking traversing termination condition
+ * exit: do some clean work below lock before leave rmap_walk
  * anon_lock: for getting anon_lock by optimized way rather than default
  * invalid_vma: for skipping uninterested vma
  */
@@ -1010,6 +1011,7 @@ struct rmap_walk_control {
 	bool (*rmap_one)(struct folio *folio, struct vm_area_struct *vma,
 					unsigned long addr, void *arg);
 	int (*done)(struct folio *folio, struct rmap_walk_control *rwc);
+	void (*exit)(struct folio *folio, struct rmap_walk_control *rwc);
 	struct anon_vma *(*anon_lock)(const struct folio *folio,
 				      struct rmap_walk_control *rwc);
 	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);

@@ -2840,6 +2840,9 @@ static void rmap_walk_anon(struct folio *folio, struct rmap_walk_control *rwc)
 			break;
 	}
 
+	if (rwc->exit)
+		rwc->exit(folio, rwc);
+
 	if (!locked)
 		anon_vma_unlock_read(anon_vma);
 }
@@ -2903,6 +2906,9 @@ lookup:
 			goto done;
 	}
 done:
+	if (rwc->exit)
+		rwc->exit(folio, rwc);
+
 	if (!locked)
 		i_mmap_unlock_read(mapping);
 }
