@@ -208,6 +208,13 @@ config IPQ_CMN_PLL
 	  Say Y or M if you want to support CMN PLL clock on the IPQ
 	  based devices.
 
+config IPQ_APSS_5424
+	tristate "IPQ APSS Clock Controller"
+	help
+	  Support for APSS Clock controller on Qualcom IPQ5424 platform.
+	  Say Y if you want to support CPU frequency scaling on ipq based
+	  devices.
+
 config IPQ_GCC_4019
 	tristate "IPQ4019 Global Clock Controller"
 	help
