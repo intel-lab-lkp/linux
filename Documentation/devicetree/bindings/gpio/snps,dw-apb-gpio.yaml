@@ -20,7 +20,13 @@ properties:
     pattern: "^gpio@[0-9a-f]+$"
 
   compatible:
-    const: snps,dw-apb-gpio
+    oneOf:
+      - const: snps,dw-apb-gpio
+      - items:
+          - enum:
+              - renesas,r9a06g032-gpio
+          - const: renesas,rzn1-gpio
+          - const: snps,dw-apb-gpio
 
   "#address-cells":
     const: 1
