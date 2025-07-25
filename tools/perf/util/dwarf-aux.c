@@ -2121,3 +2121,72 @@ Dwarf_Die *die_deref_ptr_type(Dwarf_Die *ptr_die, int offset,
 
 	return die_get_member_type(&type_die, offset, die_mem);
 }
+
+struct find_pointer_type_data {
+	/* DIE offset of the type we want to point to */
+	Dwarf_Off target_type_offset;
+	Dwarf_Die *found_die;
+};
+
+static int __die_find_pointer_to_type_cb(Dwarf_Die *die_mem, void *arg)
+{
+	struct find_pointer_type_data *data = arg;
+	Dwarf_Attribute type_attr;
+	Dwarf_Die type_die;
+	Dwarf_Off ref_type_offset;
+
+	if (dwarf_tag(die_mem) != DW_TAG_pointer_type)
+		return DIE_FIND_CB_CONTINUE;
+
+	if (!dwarf_attr(die_mem, DW_AT_type, &type_attr))
+		return DIE_FIND_CB_SIBLING;
+
+	/* Get the DIE this pointer points to */
+	if (!dwarf_formref_die(&type_attr, &type_die))
+		return DIE_FIND_CB_SIBLING;
+
+	ref_type_offset = dwarf_dieoffset(&type_die);
+
+	if (ref_type_offset != 0 && ref_type_offset == data->target_type_offset) {
+		/* This die_mem is a pointer to the target type */
+		if (data->found_die)
+			*data->found_die = *die_mem;
+		return DIE_FIND_CB_END;
+	}
+
+	return DIE_FIND_CB_SIBLING;
+}
+
+/**
+ * die_find_pointer_to_type - Find a DIE for a pointer to a given type
+ * @cu_die: The compilation unit to search within.
+ * @target_type: The DIE of the type you want to find a pointer to.
+ * @result_die: Buffer to store the found DW_TAG_pointer_type DIE.
+ *
+ * Scans the children of the @cu_die for a DW_TAG_pointer_type DIE
+ * whose DW_AT_type attribute references the @target_type.
+ *
+ * Return: @result_die if found, NULL otherwise.
+ */
+Dwarf_Die *die_find_pointer_to_type(Dwarf_Die *cu_die, Dwarf_Die *target_type,
+				   Dwarf_Die *result_die)
+{
+	struct find_pointer_type_data data;
+	Dwarf_Die search_mem;
+
+	if (!cu_die || !target_type || !result_die)
+		return NULL;
+
+	data.target_type_offset = dwarf_dieoffset(target_type);
+	if (data.target_type_offset == 0) {
+		pr_debug("Target type DIE has no offset\n");
+		return NULL;
+	}
+	data.found_die = result_die;
+
+	if (die_find_child(cu_die, __die_find_pointer_to_type_cb, &data, &search_mem))
+		return result_die;
+
+	return NULL;
+}
+
