@@ -155,6 +155,9 @@ intel_pmdemand_update_phys_mask(struct intel_display *display,
 	if (!encoder)
 		return;
 
+	if (encoder->type == INTEL_OUTPUT_WRITEBACK)
+		return;
+
 	if (intel_encoder_is_tc(encoder))
 		return;
 

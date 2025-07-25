@@ -17,6 +17,7 @@ struct intel_writeback_connector;
 int intel_writeback_init(struct intel_display *display);
 void intel_writeback_atomic_commit(struct intel_atomic_state *state);
 void intel_writeback_isr_handler(struct intel_display *display);
+bool intel_writeback_transcoder_is_wd(enum transcoder transcoder);
 
 #endif /* __INTEL_WRITEBACK_H__ */
 
