@@ -308,6 +308,30 @@ properties:
       sequence. To successfully detect an (e)MMC/SD/SDIO card, that
       power sequence must be maintained while initializing the card.
 
+  reg-settings:
+    $ref: /schemas/regset/register-settings.yaml
+
+    properties:
+      default-settings:
+        type: object
+        description:
+          Default MMC register settings.
+
+      sdr50:
+        type: object
+        description:
+          Register settings for MMC sdr50 operating mode.
+
+      sdr104:
+        type: object
+        description:
+          Register settings for MMC sdr104 operating mode.
+
+      hs200:
+        type: object
+        description:
+          Register settings for MMC hs200 operating mode.
+
 patternProperties:
   "^.*@[0-9]+$":
     type: object

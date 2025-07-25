@@ -17,6 +17,15 @@ description: |
   This file documents differences between the core properties described by
   mmc-controller.yaml and the properties for the Tegra SDHCI controller.
 
+definitions:
+  reg-settings:
+    properties:
+      nvidia,num-tuning-iterations:
+        description: The number of tuning iterations to be used by tuning circuit.
+        $ref: /schemas/types.yaml#/definitions/uint8
+        minimum: 0
+        maximum: 4
+
 properties:
   compatible:
     oneOf:
@@ -177,6 +186,27 @@ properties:
       operates at a 1.8 V fixed I/O voltage.
     $ref: /schemas/types.yaml#/definitions/flag
 
+  reg-settings:
+    $ref: /schemas/mmc/mmc-controller-common.yaml#/properties/reg-settings
+
+    properties:
+      default-settings:
+        $ref: "#/definitions/reg-settings"
+        unevaluatedProperties: false
+
+      sdr50:
+        $ref: "#/definitions/reg-settings"
+        unevaluatedProperties: false
+
+      sdr104:
+        $ref: "#/definitions/reg-settings"
+        unevaluatedProperties: false
+
+      hs200:
+        $ref: "#/definitions/reg-settings"
+        unevaluatedProperties: false
+    unevaluatedProperties: false
+
 required:
   - compatible
   - reg
@@ -310,4 +340,22 @@ examples:
                           <&tegra_car TEGRA210_CLK_PLL_C4>;
         assigned-clock-parents = <&tegra_car TEGRA210_CLK_PLL_C4_OUT0>;
         assigned-clock-rates = <200000000>, <1000000000>, <1000000000>;
+
+        reg-settings {
+            default-settings {
+                nvidia,num-tuning-iterations = /bits/ 8 <0>;
+            };
+
+            sdr50 {
+                nvidia,num-tuning-iterations = /bits/ 8 <4>;
+            };
+
+            sdr104 {
+                nvidia,num-tuning-iterations = /bits/ 8 <2>;
+            };
+
+            hs200 {
+                nvidia,num-tuning-iterations = /bits/ 8 <2>;
+            };
+        };
     };
