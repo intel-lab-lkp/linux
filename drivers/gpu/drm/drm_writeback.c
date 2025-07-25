@@ -120,6 +120,18 @@ drm_connector_to_writeback(struct drm_connector *connector)
 }
 EXPORT_SYMBOL(drm_connector_to_writeback);
 
+static struct drm_connector *
+drm_connector_from_writeback(struct drm_writeback_connector *wb_connector)
+{
+	const struct drm_writeback_connector_helper_funcs *funcs =
+		wb_connector->helper_private;
+
+	if (funcs && funcs->get_connector_from_writeback)
+		return funcs->get_connector_from_writeback(wb_connector);
+
+	return &wb_connector->base;
+}
+
 static int create_writeback_properties(struct drm_device *dev)
 {
 	struct drm_property *prop;
@@ -477,6 +489,7 @@ drm_writeback_connector_init_with_conn(struct drm_device *dev, struct drm_connec
 	if (ret)
 		goto connector_fail;
 
+	drm_writeback_connector_helper_add(wb_connector, wb_funcs);
 	INIT_LIST_HEAD(&wb_connector->job_queue);
 	spin_lock_init(&wb_connector->job_lock);
 
@@ -526,13 +539,15 @@ int drm_writeback_set_fb(struct drm_connector_state *conn_state,
 
 int drm_writeback_prepare_job(struct drm_writeback_job *job)
 {
-	struct drm_writeback_connector *connector = job->connector;
+	struct drm_writeback_connector *wb_connector = job->connector;
+	struct drm_connector *connector =
+		drm_connector_from_writeback(wb_connector);
 	const struct drm_connector_helper_funcs *funcs =
-		connector->base.helper_private;
+		connector->helper_private;
 	int ret;
 
 	if (funcs->prepare_writeback_job) {
-		ret = funcs->prepare_writeback_job(connector, job);
+		ret = funcs->prepare_writeback_job(wb_connector, job);
 		if (ret < 0)
 			return ret;
 	}
@@ -578,12 +593,14 @@ EXPORT_SYMBOL(drm_writeback_queue_job);
 
 void drm_writeback_cleanup_job(struct drm_writeback_job *job)
 {
-	struct drm_writeback_connector *connector = job->connector;
+	struct drm_writeback_connector *wb_connector = job->connector;
+	struct drm_connector *connector =
+		drm_connector_from_writeback(wb_connector);
 	const struct drm_connector_helper_funcs *funcs =
-		connector->base.helper_private;
+		connector->helper_private;
 
 	if (job->prepared && funcs->cleanup_writeback_job)
-		funcs->cleanup_writeback_job(connector, job);
+		funcs->cleanup_writeback_job(wb_connector, job);
 
 	if (job->fb)
 		drm_framebuffer_put(job->fb);
@@ -664,9 +681,11 @@ EXPORT_SYMBOL(drm_writeback_signal_completion);
 struct dma_fence *
 drm_writeback_get_out_fence(struct drm_writeback_connector *wb_connector)
 {
+	struct drm_connector *connector =
+		drm_connector_from_writeback(wb_connector);
 	struct dma_fence *fence;
 
-	if (WARN_ON(wb_connector->base.connector_type !=
+	if (WARN_ON(connector->connector_type !=
 		    DRM_MODE_CONNECTOR_WRITEBACK))
 		return NULL;
 
