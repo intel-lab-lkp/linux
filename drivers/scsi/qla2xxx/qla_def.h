@@ -4890,8 +4890,9 @@ struct purex_item {
 			     struct purex_item *pkt);
 	atomic_t in_use;
 	uint16_t size;
-	struct {
-		uint8_t iocb[64];
+	union {
+		uint8_t __padding[QLA_DEFAULT_PAYLOAD_SIZE];
+		DECLARE_FLEX_ARRAY(uint8_t, iocb);
 	} iocb;
 };
 
