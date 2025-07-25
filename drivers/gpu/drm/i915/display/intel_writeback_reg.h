@@ -19,6 +19,9 @@
 /* Gen12 WD */
 #define _MMIO_WD(tc, wd0, wd1)	_MMIO_TRANS((tc) - TRANSCODER_WD_0, wd0, wd1)
 
+#define TRANSCONF_WD(tc)	_MMIO_WD(tc,\
+				PIPE_WD0_OFFSET,\
+				PIPE_WD1_OFFSET)
 #define WD_TRANS_ENABLE		REG_BIT(31)
 #define WD_TRANS_STATE		REG_BIT(30)
 
