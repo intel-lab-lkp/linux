@@ -1588,7 +1588,7 @@ static inline int alloc_consistency_checks(struct kmem_cache *s,
 		return 0;
 
 	if (!check_valid_pointer(s, slab, object)) {
-		object_err(s, slab, object, "Freelist Pointer check fails");
+		slab_err(s, slab, "Freelist Pointer (0x%p) check fails", object);
 		return 0;
 	}
 
