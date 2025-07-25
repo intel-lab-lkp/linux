@@ -308,42 +308,6 @@ int __copy_io(unsigned long clone_flags, struct task_struct *tsk)
 
 #ifdef CONFIG_BLK_ICQ
 /**
- * ioc_lookup_icq - lookup io_cq from ioc
- * @q: the associated request_queue
- *
- * Look up io_cq associated with @ioc - @q pair from @ioc.  Must be called
- * with @q->queue_lock held.
- */
-struct io_cq *ioc_lookup_icq(struct request_queue *q)
-{
-	struct io_context *ioc = current->io_context;
-	struct io_cq *icq;
-
-	lockdep_assert_held(&q->queue_lock);
-
-	/*
-	 * icq's are indexed from @ioc using radix tree and hint pointer,
-	 * both of which are protected with RCU.  All removals are done
-	 * holding both q and ioc locks, and we're holding q lock - if we
-	 * find a icq which points to us, it's guaranteed to be valid.
-	 */
-	rcu_read_lock();
-	icq = rcu_dereference(ioc->icq_hint);
-	if (icq && icq->q == q)
-		goto out;
-
-	icq = radix_tree_lookup(&ioc->icq_tree, q->id);
-	if (icq && icq->q == q)
-		rcu_assign_pointer(ioc->icq_hint, icq);	/* allowed to race */
-	else
-		icq = NULL;
-out:
-	rcu_read_unlock();
-	return icq;
-}
-EXPORT_SYMBOL(ioc_lookup_icq);
-
-/**
  * ioc_lookup_icq_rcu - lookup io_cq from ioc in io path
  * @q: the associated request_queue
  *
@@ -420,7 +384,7 @@ static struct io_cq *ioc_create_icq(struct request_queue *q)
 			et->ops.init_icq(icq);
 	} else {
 		kmem_cache_free(et->icq_cache, icq);
-		icq = ioc_lookup_icq(q);
+		icq = ioc_lookup_icq_rcu(q);
 		if (!icq)
 			printk(KERN_ERR "cfq: icq link failed!\n");
 	}
@@ -454,9 +418,9 @@ struct io_cq *ioc_find_get_icq(struct request_queue *q)
 	} else {
 		get_io_context(ioc);
 
-		spin_lock_irq(&q->queue_lock);
-		icq = ioc_lookup_icq(q);
-		spin_unlock_irq(&q->queue_lock);
+		rcu_read_lock();
+		icq = ioc_lookup_icq_rcu(q);
+		rcu_read_unlock();
 	}
 
 	if (!icq) {
