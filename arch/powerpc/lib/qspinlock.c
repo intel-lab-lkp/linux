@@ -9,6 +9,7 @@
 #include <linux/sched/clock.h>
 #include <asm/qspinlock.h>
 #include <asm/paravirt.h>
+#include <trace/events/lock.h>
 
 #define MAX_NODES	4
 
@@ -708,8 +709,9 @@ release:
 	qnodesp->count--;
 }
 
-void queued_spin_lock_slowpath(struct qspinlock *lock)
+void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock)
 {
+	trace_contention_begin(lock, LCB_F_SPIN);
 	/*
 	 * This looks funny, but it induces the compiler to inline both
 	 * sides of the branch rather than share code as when the condition
@@ -718,16 +720,17 @@ void queued_spin_lock_slowpath(struct qspinlock *lock)
 	if (IS_ENABLED(CONFIG_PARAVIRT_SPINLOCKS) && is_shared_processor()) {
 		if (try_to_steal_lock(lock, true)) {
 			spec_barrier();
-			return;
+		} else {
+			queued_spin_lock_mcs_queue(lock, true);
 		}
-		queued_spin_lock_mcs_queue(lock, true);
 	} else {
 		if (try_to_steal_lock(lock, false)) {
 			spec_barrier();
-			return;
+		} else {
+			queued_spin_lock_mcs_queue(lock, false);
 		}
-		queued_spin_lock_mcs_queue(lock, false);
 	}
+	trace_contention_end(lock, 0);
 }
 EXPORT_SYMBOL(queued_spin_lock_slowpath);
 
