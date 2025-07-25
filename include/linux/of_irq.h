@@ -47,6 +47,10 @@ extern int of_irq_get_byname(struct device_node *dev, const char *name);
 extern int of_irq_to_resource_table(struct device_node *dev,
 		struct resource *res, int nr_irqs);
 extern struct device_node *of_irq_find_parent(struct device_node *child);
+extern int of_irq_foreach_imap(struct device_node *np,
+			       int (*func)(void *data, const __be32 *imap,
+					   const struct of_phandle_args *parent_args),
+			       void *data);
 extern struct irq_domain *of_msi_get_domain(struct device *dev,
 					    const struct device_node *np,
 					    enum irq_domain_bus_token token);
@@ -84,6 +88,13 @@ static inline int of_irq_to_resource_table(struct device_node *dev,
 static inline void *of_irq_find_parent(struct device_node *child)
 {
 	return NULL;
+}
+static inline int of_irq_foreach_imap(struct device_node *np,
+				      int (*func)(void *data, const __be32 *imap,
+						  const struct of_phandle_args *parent_args),
+				      void *data)
+{
+	return -EINVAL;
 }
 
 static inline struct irq_domain *of_msi_get_domain(struct device *dev,

@@ -158,6 +158,76 @@ const __be32 *of_irq_parse_imap_parent(const __be32 *imap, int len, struct of_ph
 }
 
 /**
+ * of_irq_foreach_imap - Iterate through interrupt-map items
+ * @np: device node where interrupt-map is available
+ * @func: function called on each interrupt-map items
+ * @data: data passe to @func
+ *
+ * This function iterates through interrupt-map items and calls @func on each
+ * item. The parent interrupt described in the interrupt-map item is parsed
+ * and passed to @func using a pointer to a struct of_phandle_args.
+ * Also the imap raw value is passed in order to allow @func to look at other
+ * values of the interrupt-map (child unit address and child interrupt
+ * specificer)
+ *
+ * If @func returns an error, the iteration stops and this error is returned.
+ */
+int of_irq_foreach_imap(struct device_node *np,
+			int (*func)(void *data,
+				    const __be32 *imap,
+				    const struct of_phandle_args *parent_args),
+			void *data)
+{
+	const __be32 *imap, *imap_end, *imap_parent, *imap_next;
+	struct of_phandle_args parent_args;
+	u32 tmp, parent_offset;
+	int imaplen;
+	int ret;
+
+	/*
+	 * parent_offset is the offset where the parent part is starting.
+	 * In other words, the offset where the parent interrupt controller
+	 * phandle is present.
+	 *
+	 * Compute this offset (child #interrupt-cells + child #address-cells)
+	 */
+	parent_offset = of_bus_n_addr_cells(np);
+
+	ret = of_property_read_u32(np, "#interrupt-cells", &tmp);
+	if (ret)
+		return ret;
+
+	parent_offset += tmp;
+
+	imap = of_get_property(np, "interrupt-map", &imaplen);
+	if (!imap)
+		return -ENOENT;
+
+	imaplen /= sizeof(*imap);
+	imap_end = imap + imaplen;
+
+	while (imap + parent_offset + 1 < imap_end) {
+		imap_parent = imap + parent_offset;
+
+		imap_next = of_irq_parse_imap_parent(imap_parent,
+						     imap_end - imap_parent,
+						     &parent_args);
+		if (!imap_next)
+			return -EINVAL;
+
+		ret = func(data, imap, &parent_args);
+		of_node_put(parent_args.np);
+		if (ret)
+			return ret;
+
+		imap = imap_next;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_irq_foreach_imap);
+
+/**
  * of_irq_parse_raw - Low level interrupt tree parsing
  * @addr:	address specifier (start of "reg" property of the device) in be32 format
  * @out_irq:	structure of_phandle_args updated by this function
