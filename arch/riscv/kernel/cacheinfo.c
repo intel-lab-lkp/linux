@@ -73,7 +73,11 @@ static void ci_leaf_init(struct cacheinfo *this_leaf,
 
 int init_cache_level(unsigned int cpu)
 {
-	return init_of_cache_level(cpu);
+#ifdef CONFIG_SMP
+	return 0;
+#endif
+
+	return fetch_cache_info(cpu);
 }
 
 int populate_cache_leaves(unsigned int cpu)
