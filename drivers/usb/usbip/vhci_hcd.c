@@ -708,7 +708,7 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 		pr_err("invalid port number %d\n", portnum);
 		return -ENODEV;
 	}
-	vdev = &vhci_hcd->vdev[portnum-1];
+	vdev = &vhci_hcd->vdev[portnum - 1];
 
 	if (!urb->transfer_buffer && !urb->num_sgs &&
 	     urb->transfer_buffer_length) {
@@ -1157,7 +1157,7 @@ static int hcd_name_to_id(const char *name)
 	if (c == NULL)
 		return 0;
 
-	ret = kstrtol(c+1, 10, &val);
+	ret = kstrtol(c + 1, 10, &val);
 	if (ret < 0)
 		return ret;
 
