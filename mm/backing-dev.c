@@ -84,13 +84,14 @@ static void collect_wb_stats(struct wb_stats *stats,
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
+
 static void bdi_collect_stats(struct backing_dev_info *bdi,
 			      struct wb_stats *stats)
 {
 	struct bdi_writeback *wb;
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(wb, &bdi->wb_list, bdi_node) {
+	list_for_each_entry_rcu(wb, &bdi->wb_ctx[0]->wb_list, bdi_node) {
 		if (!wb_tryget(wb))
 			continue;
 
@@ -103,7 +104,7 @@ static void bdi_collect_stats(struct backing_dev_info *bdi,
 static void bdi_collect_stats(struct backing_dev_info *bdi,
 			      struct wb_stats *stats)
 {
-	collect_wb_stats(stats, &bdi->wb);
+	collect_wb_stats(stats, &bdi->wb_ctx[0]->wb);
 }
 #endif
 
@@ -149,7 +150,7 @@ static int bdi_debug_stats_show(struct seq_file *m, void *v)
 		   stats.nr_io,
 		   stats.nr_more_io,
 		   stats.nr_dirty_time,
-		   !list_empty(&bdi->bdi_list), bdi->wb.state);
+		   !list_empty(&bdi->bdi_list), bdi->wb_ctx[0]->wb.state);
 
 	return 0;
 }
@@ -193,14 +194,14 @@ static void wb_stats_show(struct seq_file *m, struct bdi_writeback *wb,
 static int cgwb_debug_stats_show(struct seq_file *m, void *v)
 {
 	struct backing_dev_info *bdi = m->private;
+	struct bdi_writeback *wb;
 	unsigned long background_thresh;
 	unsigned long dirty_thresh;
-	struct bdi_writeback *wb;
 
 	global_dirty_limits(&background_thresh, &dirty_thresh);
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(wb, &bdi->wb_list, bdi_node) {
+	list_for_each_entry_rcu(wb, &bdi->wb_ctx[0]->wb_list, bdi_node) {
 		struct wb_stats stats = { .dirty_thresh = dirty_thresh };
 
 		if (!wb_tryget(wb))
@@ -520,6 +521,7 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 	memset(wb, 0, sizeof(*wb));
 
 	wb->bdi = bdi;
+	wb->bdi_wb_ctx = bdi->wb_ctx[0];
 	wb->last_old_flush = jiffies;
 	INIT_LIST_HEAD(&wb->b_dirty);
 	INIT_LIST_HEAD(&wb->b_io);
@@ -643,11 +645,12 @@ static void cgwb_release(struct percpu_ref *refcnt)
 	queue_work(cgwb_release_wq, &wb->release_work);
 }
 
-static void cgwb_kill(struct bdi_writeback *wb)
+static void cgwb_kill(struct bdi_writeback *wb,
+		      struct bdi_writeback_ctx *bdi_wb_ctx)
 {
 	lockdep_assert_held(&cgwb_lock);
 
-	WARN_ON(!radix_tree_delete(&wb->bdi->cgwb_tree, wb->memcg_css->id));
+	WARN_ON(!radix_tree_delete(&bdi_wb_ctx->cgwb_tree, wb->memcg_css->id));
 	list_del(&wb->memcg_node);
 	list_del(&wb->blkcg_node);
 	list_add(&wb->offline_node, &offline_cgwbs);
@@ -662,6 +665,7 @@ static void cgwb_remove_from_bdi_list(struct bdi_writeback *wb)
 }
 
 static int cgwb_create(struct backing_dev_info *bdi,
+		       struct bdi_writeback_ctx *bdi_wb_ctx,
 		       struct cgroup_subsys_state *memcg_css, gfp_t gfp)
 {
 	struct mem_cgroup *memcg;
@@ -678,9 +682,9 @@ static int cgwb_create(struct backing_dev_info *bdi,
 
 	/* look up again under lock and discard on blkcg mismatch */
 	spin_lock_irqsave(&cgwb_lock, flags);
-	wb = radix_tree_lookup(&bdi->cgwb_tree, memcg_css->id);
+	wb = radix_tree_lookup(&bdi_wb_ctx->cgwb_tree, memcg_css->id);
 	if (wb && wb->blkcg_css != blkcg_css) {
-		cgwb_kill(wb);
+		cgwb_kill(wb, bdi_wb_ctx);
 		wb = NULL;
 	}
 	spin_unlock_irqrestore(&cgwb_lock, flags);
@@ -721,12 +725,13 @@ static int cgwb_create(struct backing_dev_info *bdi,
 	 */
 	ret = -ENODEV;
 	spin_lock_irqsave(&cgwb_lock, flags);
-	if (test_bit(WB_registered, &bdi->wb.state) &&
+	if (test_bit(WB_registered, &bdi_wb_ctx->wb.state) &&
 	    blkcg_cgwb_list->next && memcg_cgwb_list->next) {
 		/* we might have raced another instance of this function */
-		ret = radix_tree_insert(&bdi->cgwb_tree, memcg_css->id, wb);
+		ret = radix_tree_insert(&bdi_wb_ctx->cgwb_tree,
+					memcg_css->id, wb);
 		if (!ret) {
-			list_add_tail_rcu(&wb->bdi_node, &bdi->wb_list);
+			list_add_tail_rcu(&wb->bdi_node, &bdi_wb_ctx->wb_list);
 			list_add(&wb->memcg_node, memcg_cgwb_list);
 			list_add(&wb->blkcg_node, blkcg_cgwb_list);
 			blkcg_pin_online(blkcg_css);
@@ -779,16 +784,16 @@ out_put:
  * each lookup.  On mismatch, the existing wb is discarded and a new one is
  * created.
  */
-struct bdi_writeback *wb_get_lookup(struct backing_dev_info *bdi,
+struct bdi_writeback *wb_get_lookup(struct bdi_writeback_ctx *bdi_wb_ctx,
 				    struct cgroup_subsys_state *memcg_css)
 {
 	struct bdi_writeback *wb;
 
 	if (!memcg_css->parent)
-		return &bdi->wb;
+		return &bdi_wb_ctx->wb;
 
 	rcu_read_lock();
-	wb = radix_tree_lookup(&bdi->cgwb_tree, memcg_css->id);
+	wb = radix_tree_lookup(&bdi_wb_ctx->cgwb_tree, memcg_css->id);
 	if (wb) {
 		struct cgroup_subsys_state *blkcg_css;
 
@@ -813,6 +818,7 @@ struct bdi_writeback *wb_get_lookup(struct backing_dev_info *bdi,
  * create one.  See wb_get_lookup() for more details.
  */
 struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
+				    struct bdi_writeback_ctx *bdi_wb_ctx,
 				    struct cgroup_subsys_state *memcg_css,
 				    gfp_t gfp)
 {
@@ -821,8 +827,8 @@ struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
 	might_alloc(gfp);
 
 	do {
-		wb = wb_get_lookup(bdi, memcg_css);
-	} while (!wb && !cgwb_create(bdi, memcg_css, gfp));
+		wb = wb_get_lookup(bdi_wb_ctx, memcg_css);
+	} while (!wb && !cgwb_create(bdi, bdi_wb_ctx, memcg_css, gfp));
 
 	return wb;
 }
@@ -830,36 +836,40 @@ struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
 static int cgwb_bdi_init(struct backing_dev_info *bdi)
 {
 	int ret;
+	struct bdi_writeback_ctx *bdi_wb_ctx = bdi->wb_ctx[0];
 
-	INIT_RADIX_TREE(&bdi->cgwb_tree, GFP_ATOMIC);
+	INIT_RADIX_TREE(&bdi_wb_ctx->cgwb_tree, GFP_ATOMIC);
 	mutex_init(&bdi->cgwb_release_mutex);
-	init_rwsem(&bdi->wb_switch_rwsem);
+	init_rwsem(&bdi_wb_ctx->wb_switch_rwsem);
 
-	ret = wb_init(&bdi->wb, bdi, GFP_KERNEL);
+	ret = wb_init(&bdi_wb_ctx->wb, bdi, GFP_KERNEL);
 	if (!ret) {
-		bdi->wb.memcg_css = &root_mem_cgroup->css;
-		bdi->wb.blkcg_css = blkcg_root_css;
+		bdi_wb_ctx->wb.memcg_css = &root_mem_cgroup->css;
+		bdi_wb_ctx->wb.blkcg_css = blkcg_root_css;
 	}
 	return ret;
 }
 
-static void cgwb_bdi_unregister(struct backing_dev_info *bdi)
+/* callers should create a loop and pass bdi_wb_ctx */
+static void cgwb_bdi_unregister(struct backing_dev_info *bdi,
+	struct bdi_writeback_ctx *bdi_wb_ctx)
 {
 	struct radix_tree_iter iter;
 	void **slot;
 	struct bdi_writeback *wb;
 
-	WARN_ON(test_bit(WB_registered, &bdi->wb.state));
+	WARN_ON(test_bit(WB_registered, &bdi_wb_ctx->wb.state));
 
 	spin_lock_irq(&cgwb_lock);
-	radix_tree_for_each_slot(slot, &bdi->cgwb_tree, &iter, 0)
-		cgwb_kill(*slot);
+	radix_tree_for_each_slot(slot, &bdi_wb_ctx->cgwb_tree, &iter, 0)
+		cgwb_kill(*slot, bdi_wb_ctx);
 	spin_unlock_irq(&cgwb_lock);
 
 	mutex_lock(&bdi->cgwb_release_mutex);
 	spin_lock_irq(&cgwb_lock);
-	while (!list_empty(&bdi->wb_list)) {
-		wb = list_first_entry(&bdi->wb_list, struct bdi_writeback,
+	while (!list_empty(&bdi_wb_ctx->wb_list)) {
+		wb = list_first_entry(&bdi_wb_ctx->wb_list,
+				      struct bdi_writeback,
 				      bdi_node);
 		spin_unlock_irq(&cgwb_lock);
 		wb_shutdown(wb);
@@ -930,7 +940,7 @@ void wb_memcg_offline(struct mem_cgroup *memcg)
 
 	spin_lock_irq(&cgwb_lock);
 	list_for_each_entry_safe(wb, next, memcg_cgwb_list, memcg_node)
-		cgwb_kill(wb);
+		cgwb_kill(wb, wb->bdi_wb_ctx);
 	memcg_cgwb_list->next = NULL;	/* prevent new wb's */
 	spin_unlock_irq(&cgwb_lock);
 
@@ -950,15 +960,16 @@ void wb_blkcg_offline(struct cgroup_subsys_state *css)
 
 	spin_lock_irq(&cgwb_lock);
 	list_for_each_entry_safe(wb, next, list, blkcg_node)
-		cgwb_kill(wb);
+		cgwb_kill(wb, wb->bdi_wb_ctx);
 	list->next = NULL;	/* prevent new wb's */
 	spin_unlock_irq(&cgwb_lock);
 }
 
-static void cgwb_bdi_register(struct backing_dev_info *bdi)
+static void cgwb_bdi_register(struct backing_dev_info *bdi,
+		struct bdi_writeback_ctx *bdi_wb_ctx)
 {
 	spin_lock_irq(&cgwb_lock);
-	list_add_tail_rcu(&bdi->wb.bdi_node, &bdi->wb_list);
+	list_add_tail_rcu(&bdi_wb_ctx->wb.bdi_node, &bdi_wb_ctx->wb_list);
 	spin_unlock_irq(&cgwb_lock);
 }
 
@@ -981,14 +992,18 @@ subsys_initcall(cgwb_init);
 
 static int cgwb_bdi_init(struct backing_dev_info *bdi)
 {
-	return wb_init(&bdi->wb, bdi, GFP_KERNEL);
+	return wb_init(&bdi->wb_ctx[0]->wb, bdi, GFP_KERNEL);
 }
 
-static void cgwb_bdi_unregister(struct backing_dev_info *bdi) { }
+static void cgwb_bdi_unregister(struct backing_dev_info *bdi,
+		struct bdi_writeback_ctx *bdi_wb_ctx)
+{ }
 
-static void cgwb_bdi_register(struct backing_dev_info *bdi)
+/* callers should create a loop and pass bdi_wb_ctx */
+static void cgwb_bdi_register(struct backing_dev_info *bdi,
+		struct bdi_writeback_ctx *bdi_wb_ctx)
 {
-	list_add_tail_rcu(&bdi->wb.bdi_node, &bdi->wb_list);
+	list_add_tail_rcu(&bdi_wb_ctx->wb.bdi_node, &bdi_wb_ctx->wb_list);
 }
 
 static void cgwb_remove_from_bdi_list(struct bdi_writeback *wb)
@@ -1006,9 +1021,15 @@ int bdi_init(struct backing_dev_info *bdi)
 	bdi->min_ratio = 0;
 	bdi->max_ratio = 100 * BDI_RATIO_SCALE;
 	bdi->max_prop_frac = FPROP_FRAC_BASE;
+	bdi->nr_wb_ctx = 1;
+	bdi->wb_ctx = kcalloc(bdi->nr_wb_ctx,
+				  sizeof(struct bdi_writeback_ctx *),
+				  GFP_KERNEL);
 	INIT_LIST_HEAD(&bdi->bdi_list);
-	INIT_LIST_HEAD(&bdi->wb_list);
-	init_waitqueue_head(&bdi->wb_waitq);
+	bdi->wb_ctx[0] = (struct bdi_writeback_ctx *)
+			kzalloc(sizeof(struct bdi_writeback_ctx), GFP_KERNEL);
+	INIT_LIST_HEAD(&bdi->wb_ctx[0]->wb_list);
+	init_waitqueue_head(&bdi->wb_ctx[0]->wb_waitq);
 	bdi->last_bdp_sleep = jiffies;
 
 	return cgwb_bdi_init(bdi);
@@ -1023,6 +1044,8 @@ struct backing_dev_info *bdi_alloc(int node_id)
 		return NULL;
 
 	if (bdi_init(bdi)) {
+		kfree(bdi->wb_ctx[0]);
+		kfree(bdi->wb_ctx);
 		kfree(bdi);
 		return NULL;
 	}
@@ -1095,11 +1118,11 @@ int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 	if (IS_ERR(dev))
 		return PTR_ERR(dev);
 
-	cgwb_bdi_register(bdi);
+	cgwb_bdi_register(bdi, bdi->wb_ctx[0]);
+	set_bit(WB_registered, &bdi->wb_ctx[0]->wb.state);
 	bdi->dev = dev;
 
 	bdi_debug_register(bdi, dev_name(dev));
-	set_bit(WB_registered, &bdi->wb.state);
 
 	spin_lock_bh(&bdi_lock);
 
@@ -1155,8 +1178,8 @@ void bdi_unregister(struct backing_dev_info *bdi)
 
 	/* make sure nobody finds us on the bdi_list anymore */
 	bdi_remove_from_list(bdi);
-	wb_shutdown(&bdi->wb);
-	cgwb_bdi_unregister(bdi);
+	wb_shutdown(&bdi->wb_ctx[0]->wb);
+	cgwb_bdi_unregister(bdi, bdi->wb_ctx[0]);
 
 	/*
 	 * If this BDI's min ratio has been set, use bdi_set_min_ratio() to
@@ -1183,9 +1206,11 @@ static void release_bdi(struct kref *ref)
 	struct backing_dev_info *bdi =
 			container_of(ref, struct backing_dev_info, refcnt);
 
-	WARN_ON_ONCE(test_bit(WB_registered, &bdi->wb.state));
 	WARN_ON_ONCE(bdi->dev);
-	wb_exit(&bdi->wb);
+	WARN_ON_ONCE(test_bit(WB_registered, &bdi->wb_ctx[0]->wb.state));
+	wb_exit(&bdi->wb_ctx[0]->wb);
+	kfree(bdi->wb_ctx[0]);
+	kfree(bdi->wb_ctx);
 	kfree(bdi);
 }
 

@@ -2050,6 +2050,7 @@ int balance_dirty_pages_ratelimited_flags(struct address_space *mapping,
 {
 	struct inode *inode = mapping->host;
 	struct backing_dev_info *bdi = inode_to_bdi(inode);
+	struct bdi_writeback_ctx *bdi_wb_ctx = fetch_bdi_writeback_ctx(inode);
 	struct bdi_writeback *wb = NULL;
 	int ratelimit;
 	int ret = 0;
@@ -2059,9 +2060,9 @@ int balance_dirty_pages_ratelimited_flags(struct address_space *mapping,
 		return ret;
 
 	if (inode_cgwb_enabled(inode))
-		wb = wb_get_create_current(bdi, GFP_KERNEL);
+		wb = wb_get_create_current(bdi, bdi_wb_ctx, GFP_KERNEL);
 	if (!wb)
-		wb = &bdi->wb;
+		wb = &bdi_wb_ctx->wb;
 
 	ratelimit = current->nr_dirtied_pause;
 	if (wb->dirty_exceeded)

@@ -1795,8 +1795,8 @@ static void fuse_writepage_finish(struct fuse_writepage_args *wpa)
 		 * contention and noticeably improves performance.
 		 */
 		folio_end_writeback(ap->folios[i]);
-		dec_wb_stat(&bdi->wb, WB_WRITEBACK);
-		wb_writeout_inc(&bdi->wb);
+		dec_wb_stat(&bdi->wb_ctx[0]->wb, WB_WRITEBACK);
+		wb_writeout_inc(&bdi->wb_ctx[0]->wb);
 	}
 
 	wake_up(&fi->page_waitq);
@@ -1990,7 +1990,7 @@ static void fuse_writepage_args_page_fill(struct fuse_writepage_args *wpa, struc
 	ap->descs[folio_index].offset = 0;
 	ap->descs[folio_index].length = folio_size(folio);
 
-	inc_wb_stat(&inode_to_bdi(inode)->wb, WB_WRITEBACK);
+	inc_wb_stat(&inode_to_bdi(inode)->wb_ctx[0]->wb, WB_WRITEBACK);
 }
 
 static struct fuse_writepage_args *fuse_writepage_args_setup(struct folio *folio,
