@@ -47,25 +47,61 @@ impl_frombytes! {
 ///
 /// Values of this type may not contain any uninitialized bytes. This type must not have interior
 /// mutability.
-pub unsafe trait AsBytes {}
+pub unsafe trait AsBytes {
+    /// Returns `self` as a slice of bytes.
+    fn as_bytes(&self) -> &[u8];
+}
 
-macro_rules! impl_asbytes {
+/// Proxy trait for `AsBytes`, providing an implementation valid for all sized types.
+///
+/// If your type implements `Sized`, then you want to implement this instead of `AsBytes`.
+///
+/// # Safety
+///
+/// Values of this type may not contain any uninitialized bytes. This type must not have interior
+/// mutability.
+pub unsafe trait AsBytesSized: Sized {}
+
+unsafe impl<T: AsBytesSized> AsBytes for T {
+    fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts((self as *const Self).cast::<u8>(), size_of::<Self>())
+        }
+    }
+}
+
+macro_rules! impl_asbytessized {
     ($($({$($generics:tt)*})? $t:ty, )*) => {
         // SAFETY: Safety comments written in the macro invocation.
-        $(unsafe impl$($($generics)*)? AsBytes for $t {})*
+        $(unsafe impl$($($generics)*)? AsBytesSized for $t {})*
     };
 }
 
-impl_asbytes! {
+impl_asbytessized! {
     // SAFETY: Instances of the following types have no uninitialized portions.
     u8, u16, u32, u64, usize,
     i8, i16, i32, i64, isize,
     bool,
     char,
-    str,
 
     // SAFETY: If individual values in an array have no uninitialized portions, then the array
     // itself does not have any uninitialized portions either.
-    {<T: AsBytes>} [T],
     {<T: AsBytes, const N: usize>} [T; N],
+}
+
+unsafe impl AsBytes for str {
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+unsafe impl<T> AsBytes for [T]
+where
+    T: AsBytes,
+{
+    fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self.as_ptr().cast::<u8>(), self.len() * size_of::<T>())
+        }
+    }
 }

@@ -30,7 +30,7 @@ impl MyStruct {
     }
 }
 // SAFETY: All bit patterns are acceptable values for `MyStruct`.
-unsafe impl kernel::transmute::AsBytes for MyStruct {}
+unsafe impl kernel::transmute::AsBytesSized for MyStruct {}
 // SAFETY: Instances of `MyStruct` have no uninitialized portions.
 unsafe impl kernel::transmute::FromBytes for MyStruct {}
 

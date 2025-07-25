@@ -439,7 +439,7 @@ unsafe impl<T: AsBytes + FromBytes + Send> Send for CoherentAllocation<T> {}
 /// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
 /// unsafe impl kernel::transmute::FromBytes for MyStruct{};
 /// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
-/// unsafe impl kernel::transmute::AsBytes for MyStruct{};
+/// unsafe impl kernel::transmute::AsBytesSized for MyStruct{};
 ///
 /// # fn test(alloc: &kernel::dma::CoherentAllocation<MyStruct>) -> Result {
 /// let whole = kernel::dma_read!(alloc[2]);
@@ -483,7 +483,7 @@ macro_rules! dma_read {
 /// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
 /// unsafe impl kernel::transmute::FromBytes for MyStruct{};
 /// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
-/// unsafe impl kernel::transmute::AsBytes for MyStruct{};
+/// unsafe impl kernel::transmute::AsBytesSized for MyStruct{};
 ///
 /// # fn test(alloc: &kernel::dma::CoherentAllocation<MyStruct>) -> Result {
 /// kernel::dma_write!(alloc[2].member = 0xf);
