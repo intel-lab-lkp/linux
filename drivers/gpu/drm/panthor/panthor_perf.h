@@ -14,6 +14,8 @@ struct panthor_file;
 struct panthor_perf;
 
 int panthor_perf_init(struct panthor_device *ptdev);
+void panthor_perf_suspend(struct panthor_device *ptdev);
+void panthor_perf_resume(struct panthor_device *ptdev);
 void panthor_perf_unplug(struct panthor_device *ptdev);
 
 int panthor_perf_session_setup(struct drm_file *file, struct panthor_perf *perf,
@@ -29,6 +31,10 @@ int panthor_perf_session_sample(struct panthor_file *pfile, struct panthor_perf 
 void panthor_perf_session_destroy(struct panthor_file *pfile, struct panthor_perf *perf);
 
 void panthor_perf_report_irq(struct panthor_device *ptdev, u32 status);
+
+void panthor_perf_pre_reset(struct panthor_device *ptdev);
+
+void panthor_perf_post_reset(struct panthor_device *ptdev);
 
 #endif /* __PANTHOR_PERF_H__ */
 

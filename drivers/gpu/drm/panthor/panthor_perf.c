@@ -1846,6 +1846,63 @@ void panthor_perf_session_destroy(struct panthor_file *pfile, struct panthor_per
 }
 
 /**
+ * panthor_perf_suspend - Prepare the performance counter subsystem for system suspend.
+ * @ptdev: Panthor device.
+ *
+ * Indicate to the performance counters that the system is suspending.
+ *
+ * This function must not be used to handle MCU power state transitions: just before MCU goes
+ * from on to any inactive state, an automatic sample will be performed by the firmware, and
+ * the performance counter firmware state will be restored on warm boot.
+ *
+ */
+void panthor_perf_suspend(struct panthor_device *ptdev)
+{
+	int ret;
+	struct panthor_perf *perf = ptdev->perf;
+	struct panthor_perf_sampler *sampler;
+
+	if (!perf)
+		return;
+
+	sampler = &perf->sampler;
+
+	if (!atomic_read(&sampler->enabled_clients))
+		return;
+
+	ret = panthor_perf_fw_stop_sampling(sampler->ptdev);
+	if (ret)
+		drm_warn(&ptdev->base, "Could not stop sampling before suspend, err = %d", ret);
+}
+
+/**
+ * panthor_perf_resume - Resume the performance counter subsystem after system resumption.
+ * @ptdev: Panthor device.
+ *
+ * Indicate to the performance counters that the system has resumed. This must not be used
+ * to handle MCU state transitions, for the same reasons as detailed in the kerneldoc for
+ * @panthor_perf_suspend.
+ */
+void panthor_perf_resume(struct panthor_device *ptdev)
+{
+	int ret;
+	struct panthor_perf *perf = ptdev->perf;
+	struct panthor_perf_sampler *sampler;
+
+	if (!perf)
+		return;
+
+	sampler = &perf->sampler;
+
+	if (!atomic_read(&sampler->enabled_clients))
+		return;
+
+	ret = panthor_perf_fw_start_sampling(sampler->ptdev);
+	if (ret)
+		drm_warn(&ptdev->base, "Could not resume sampling, err = %d", ret);
+}
+
+/**
  * panthor_perf_unplug - Terminate the performance counter subsystem.
  * @ptdev: Panthor device.
  *
@@ -1877,4 +1934,36 @@ void panthor_perf_unplug(struct panthor_device *ptdev)
 	kfree(ptdev->perf);
 
 	ptdev->perf = NULL;
+}
+
+void panthor_perf_pre_reset(struct panthor_device *ptdev)
+{
+	struct panthor_perf_sampler *sampler;
+
+	if (drm_WARN_ON_ONCE(&ptdev->base, !ptdev->perf))
+		return;
+
+	sampler = &ptdev->perf->sampler;
+
+	if (!atomic_read(&sampler->enabled_clients))
+		return;
+
+	panthor_perf_fw_stop_sampling(sampler->ptdev);
+}
+
+void panthor_perf_post_reset(struct panthor_device *ptdev)
+{
+	struct panthor_perf_sampler *sampler;
+
+	if (drm_WARN_ON_ONCE(&ptdev->base, !ptdev->perf))
+		return;
+
+	sampler = &ptdev->perf->sampler;
+
+	if (!atomic_read(&sampler->enabled_clients))
+		return;
+
+	panthor_perf_fw_write_sampler_config(sampler);
+
+	panthor_perf_fw_start_sampling(sampler->ptdev);
 }
