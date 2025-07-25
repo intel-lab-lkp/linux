@@ -187,3 +187,61 @@ unsafe impl Allocator for KVmalloc {
         unsafe { ReallocFunc::KVREALLOC.call(ptr, layout, old_layout, flags) }
     }
 }
+
+#[macros::kunit_tests(rust_allocator_kunit)]
+mod tests {
+    use super::*;
+    use core::mem::MaybeUninit;
+    use kernel::prelude::*;
+
+    const TEST_SIZE: usize = 1024;
+    const TEST_LARGE_ALIGN_SIZE: usize = kernel::page::PAGE_SIZE * 4;
+
+    // These two structs are used to test allocating aligned memory.
+    // they don't need to be accessed, so they're marked as dead_code.
+    #[allow(dead_code)]
+    #[repr(align(128))]
+    struct Blob([u8; TEST_SIZE]);
+    #[allow(dead_code)]
+    #[repr(align(8192))]
+    struct LargeAlignBlob([u8; TEST_LARGE_ALIGN_SIZE]);
+
+    struct TestAlign<T, A: Allocator>(Box<MaybeUninit<T>, A>);
+    impl<T, A: Allocator> TestAlign<T, A> {
+        fn new() -> Result<Self> {
+            Ok(Self(Box::<_, A>::new_uninit(GFP_KERNEL)?))
+        }
+
+        fn alignment_valid(&self, align: usize) -> bool {
+            assert!(align.is_power_of_two());
+
+            let addr = self.0.as_ptr() as usize;
+            if addr & (align - 1) != 0 {
+                false
+            } else {
+                true
+            }
+        }
+    }
+
+    #[test]
+    fn test_alignment() -> Result<()> {
+        let ta = TestAlign::<Blob, Kmalloc>::new()?;
+        assert!(ta.alignment_valid(128));
+
+        let ta = TestAlign::<LargeAlignBlob, Kmalloc>::new()?;
+        assert!(ta.alignment_valid(8192));
+
+        let ta = TestAlign::<Blob, Vmalloc>::new()?;
+        assert!(ta.alignment_valid(128));
+
+        assert!(TestAlign::<LargeAlignBlob, Vmalloc>::new().is_err());
+
+        let ta = TestAlign::<Blob, KVmalloc>::new()?;
+        assert!(ta.alignment_valid(128));
+
+        assert!(TestAlign::<LargeAlignBlob, KVmalloc>::new().is_err());
+
+        Ok(())
+    }
+}
