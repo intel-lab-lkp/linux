@@ -227,15 +227,41 @@ static int tmc_prepare_crashdata(struct tmc_drvdata *drvdata)
 	return 0;
 }
 
+static const struct tmc_read_ops *tmc_qcom_byte_cntr_in_use(struct tmc_drvdata *drvdata,
+							    bool *in_use)
+{
+	struct tmc_read_ops *byte_cntr_read_ops;
+	struct coresight_device *helper;
+
+	helper = coresight_get_helper(drvdata->csdev, CORESIGHT_DEV_SUBTYPE_HELPER_CTCU);
+	if (helper)
+		*in_use = helper_ops(helper)->qcom_byte_cntr_in_use(drvdata->csdev,
+								    (void **)&byte_cntr_read_ops);
+
+	if (*in_use)
+		return byte_cntr_read_ops;
+
+	return NULL;
+}
+
 static int tmc_read_prepare(struct tmc_drvdata *drvdata)
 {
+	const struct tmc_read_ops *byte_cntr_read_ops;
+	bool in_use = false;
 	int ret = 0;
+
+	byte_cntr_read_ops = tmc_qcom_byte_cntr_in_use(drvdata, &in_use);
+	if (in_use) {
+		ret = byte_cntr_read_ops->read_prepare(drvdata);
+		goto out;
+	}
 
 	if (drvdata->read_ops)
 		ret = drvdata->read_ops->read_prepare(drvdata);
 	else
 		ret = -EINVAL;
 
+out:
 	if (!ret)
 		dev_dbg(&drvdata->csdev->dev, "TMC read start\n");
 
@@ -244,13 +270,22 @@ static int tmc_read_prepare(struct tmc_drvdata *drvdata)
 
 static int tmc_read_unprepare(struct tmc_drvdata *drvdata)
 {
+	const struct tmc_read_ops *byte_cntr_read_ops;
+	bool in_use = false;
 	int ret = 0;
+
+	byte_cntr_read_ops = tmc_qcom_byte_cntr_in_use(drvdata, &in_use);
+	if (in_use) {
+		ret = byte_cntr_read_ops->read_unprepare(drvdata);
+		goto out;
+	}
 
 	if (drvdata->read_ops)
 		ret = drvdata->read_ops->read_unprepare(drvdata);
 	else
 		ret = -EINVAL;
 
+out:
 	if (!ret)
 		dev_dbg(&drvdata->csdev->dev, "TMC read end\n");
 
@@ -276,6 +311,13 @@ static int tmc_open(struct inode *inode, struct file *file)
 static ssize_t tmc_get_sysfs_trace(struct tmc_drvdata *drvdata, loff_t pos, size_t len,
 				   char **bufpp)
 {
+	const struct tmc_read_ops *byte_cntr_read_ops;
+	bool in_use = false;
+
+	byte_cntr_read_ops = tmc_qcom_byte_cntr_in_use(drvdata, &in_use);
+	if (in_use)
+		return byte_cntr_read_ops->get_trace_data(drvdata, pos, len, bufpp);
+
 	if (drvdata->read_ops)
 		return drvdata->read_ops->get_trace_data(drvdata, pos, len, bufpp);
 
@@ -299,7 +341,11 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 		return -EFAULT;
 	}
 
-	*ppos += actual;
+	if (drvdata->reading_node)
+		drvdata->reading_node->pos += actual;
+	else
+		*ppos += actual;
+
 	dev_dbg(&drvdata->csdev->dev, "%zu bytes copied\n", actual);
 
 	return actual;
