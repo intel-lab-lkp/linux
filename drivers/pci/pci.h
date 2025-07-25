@@ -109,17 +109,17 @@ int pci_bus_read_config(void *priv, unsigned int devfn, int where, u32 size,
 ({									\
 	int __ttl = PCI_FIND_CAP_TTL;					\
 	u8 __id, __found_pos = 0;					\
-	u8 __pos = (start);						\
-	u16 __ent;							\
+	u32 __pos = (start);						\
+	u32 __ent;							\
 									\
-	read_cfg(args, __pos, 1, (u32 *)&__pos);			\
+	read_cfg(args, __pos, 1, &__pos);				\
 									\
 	while (__ttl--) {						\
 		if (__pos < PCI_STD_HEADER_SIZEOF)			\
 			break;						\
 									\
 		__pos = ALIGN_DOWN(__pos, 4);				\
-		read_cfg(args, __pos, 2, (u32 *)&__ent);		\
+		read_cfg(args, __pos, 2, &__ent);			\
 									\
 		__id = FIELD_GET(PCI_CAP_ID_MASK, __ent);		\
 		if (__id == 0xff)					\
