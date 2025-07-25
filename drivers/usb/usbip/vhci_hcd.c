@@ -360,7 +360,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 	if (usbip_dbg_flag_vhci_rh) {
 		if (!invalid_rhport)
 			memcpy(prev_port_status, vhci_hcd->port_status,
-				sizeof(prev_port_status));
+			       sizeof(prev_port_status));
 	}
 
 	switch (typeReq) {
@@ -408,8 +408,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 	case GetHubDescriptor:
 		usbip_dbg_vhci_rh(" GetHubDescriptor\n");
 		if (hcd->speed >= HCD_USB3 &&
-				(wLength < USB_DT_SS_HUB_SIZE ||
-				 wValue != (USB_DT_SS_HUB << 8))) {
+		    (wLength < USB_DT_SS_HUB_SIZE || wValue != (USB_DT_SS_HUB << 8))) {
 			pr_err("Wrong hub descriptor type for USB 3.0 roothub.\n");
 			goto error;
 		}
@@ -711,7 +710,7 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	vdev = &vhci_hcd->vdev[portnum - 1];
 
 	if (!urb->transfer_buffer && !urb->num_sgs &&
-	     urb->transfer_buffer_length) {
+	    urb->transfer_buffer_length) {
 		dev_dbg(dev, "Null URB transfer buffer\n");
 		return -EINVAL;
 	}
@@ -978,7 +977,7 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 }
 
 static void vhci_cleanup_unlink_list(struct vhci_device *vdev,
-		struct list_head *unlink_list)
+				     struct list_head *unlink_list)
 {
 	struct vhci_hcd *vhci_hcd = vdev_to_vhci_hcd(vdev);
 	struct usb_hcd *hcd = vhci_hcd_to_hcd(vhci_hcd);
@@ -1322,8 +1321,8 @@ static int vhci_bus_resume(struct usb_hcd *hcd)
 
 /* Change a group of bulk endpoints to support multiple stream IDs */
 static int vhci_alloc_streams(struct usb_hcd *hcd, struct usb_device *udev,
-	struct usb_host_endpoint **eps, unsigned int num_eps,
-	unsigned int num_streams, gfp_t mem_flags)
+			      struct usb_host_endpoint **eps, unsigned int num_eps,
+			      unsigned int num_streams, gfp_t mem_flags)
 {
 	dev_dbg(&hcd->self.root_hub->dev, "vhci_alloc_streams not implemented\n");
 	return 0;
@@ -1331,8 +1330,8 @@ static int vhci_alloc_streams(struct usb_hcd *hcd, struct usb_device *udev,
 
 /* Reverts a group of bulk endpoints back to not using stream IDs. */
 static int vhci_free_streams(struct usb_hcd *hcd, struct usb_device *udev,
-	struct usb_host_endpoint **eps, unsigned int num_eps,
-	gfp_t mem_flags)
+			     struct usb_host_endpoint **eps, unsigned int num_eps,
+			     gfp_t mem_flags)
 {
 	dev_dbg(&hcd->self.root_hub->dev, "vhci_free_streams not implemented\n");
 	return 0;
