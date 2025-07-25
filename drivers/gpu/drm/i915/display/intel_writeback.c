@@ -43,6 +43,13 @@ static struct intel_writeback_connector
 			    connector);
 }
 
+static struct intel_writeback_connector
+*to_intel_writeback_connector(struct drm_writeback_connector *wb_conn)
+{
+	return container_of(wb_conn, struct intel_writeback_connector,
+			    base);
+}
+
 static int intel_writeback_connector_init(struct intel_connector *connector)
 {
 	struct intel_digital_connector_state *conn_state;
@@ -77,6 +84,15 @@ intel_get_writeback_connector(struct drm_connector *connector)
 	return &wb_conn->base;
 }
 
+static struct drm_connector *
+intel_get_connector_from_writeback(struct drm_writeback_connector *connector)
+{
+	struct intel_writeback_connector *wb_conn =
+		to_intel_writeback_connector(connector);
+
+	return &wb_conn->connector.base;
+}
+
 static const struct drm_encoder_funcs drm_writeback_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
@@ -92,6 +108,7 @@ static const struct drm_connector_helper_funcs conn_helper_funcs = {
 };
 
 static const struct drm_writeback_connector_helper_funcs writeback_conn_helper_funcs = {
+	.get_connector_from_writeback = intel_get_connector_from_writeback,
 };
 
 int intel_writeback_init(struct intel_display *display)
