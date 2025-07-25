@@ -256,6 +256,24 @@ static struct netconsole_target *alloc_and_init(void)
 	return nt;
 }
 
+static int netconsole_setup_and_enable(struct netconsole_target *nt)
+{
+	int ret;
+
+	ret = netpoll_setup(&nt->np);
+	if (ret)
+		return ret;
+
+	/* Make sure all NAPI polls which started before dev->npinfo
+	 * was visible have exited before we start calling NAPI poll.
+	 * NAPI skips locking if dev->npinfo is NULL.
+	 */
+	synchronize_rcu();
+	nt->enabled = true;
+
+	return 0;
+}
+
 /* Clean up every target in the cleanup_list and move the clean targets back to
  * the main target_list.
  */
@@ -574,11 +592,10 @@ static ssize_t enabled_store(struct config_item *item,
 		 */
 		netconsole_print_banner(&nt->np);
 
-		ret = netpoll_setup(&nt->np);
+		ret = netconsole_setup_and_enable(nt);
 		if (ret)
 			goto out_unlock;
 
-		nt->enabled = true;
 		pr_info("network logging started\n");
 	} else {	/* false */
 		/* We need to disable the netconsole before cleaning it up
@@ -1889,7 +1906,7 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	if (err)
 		goto fail;
 
-	err = netpoll_setup(&nt->np);
+	err = netconsole_setup_and_enable(nt);
 	if (err) {
 		pr_err("Not enabling netconsole for %s%d. Netpoll setup failed\n",
 		       NETCONSOLE_PARAM_TARGET_PREFIX, cmdline_count);
@@ -1898,8 +1915,6 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 			 * otherwise, keep the target in the list, but disabled.
 			 */
 			goto fail;
-	} else {
-		nt->enabled = true;
 	}
 	populate_configfs_item(nt, cmdline_count);
 
