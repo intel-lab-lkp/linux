@@ -705,10 +705,11 @@ static int xhci_enter_test_mode(struct xhci_hcd *xhci,
 			continue;
 
 		retval = xhci_disable_slot(xhci, i);
-		xhci_free_virt_device(xhci, i);
-		if (retval)
+		if (retval) {
 			xhci_err(xhci, "Failed to disable slot %d, %d. Enter test mode anyway\n",
 				 i, retval);
+			xhci_free_virt_device(xhci, i);
+		}
 	}
 	spin_lock_irqsave(&xhci->lock, *flags);
 	/* Put all ports to the Disable state by clear PP */
