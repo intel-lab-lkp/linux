@@ -4890,10 +4890,7 @@ struct purex_item {
 			     struct purex_item *pkt);
 	atomic_t in_use;
 	uint16_t size;
-	union {
-		uint8_t __padding[QLA_DEFAULT_PAYLOAD_SIZE];
-		DECLARE_FLEX_ARRAY(uint8_t, iocb);
-	} iocb;
+	uint8_t iocb[] __counted_by(size);
 };
 
 #include "qla_edif.h"
@@ -5103,6 +5100,7 @@ typedef struct scsi_qla_host {
 		spinlock_t lock;
 	} purex_list;
 	struct purex_item default_item;
+	uint8_t __default_item_iocb[QLA_DEFAULT_PAYLOAD_SIZE];
 
 	struct name_list_extended gnl;
 	/* Count of active session/fcport */
