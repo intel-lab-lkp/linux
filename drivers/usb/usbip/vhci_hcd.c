@@ -415,9 +415,9 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		}
 
 		if (hcd->speed >= HCD_USB3)
-			ss_hub_descriptor((struct usb_hub_descriptor *) buf);
+			ss_hub_descriptor((struct usb_hub_descriptor *)buf);
 		else
-			hub_descriptor((struct usb_hub_descriptor *) buf);
+			hub_descriptor((struct usb_hub_descriptor *)buf);
 		break;
 	case DeviceRequest | USB_REQ_GET_DESCRIPTOR:
 		if (hcd->speed < HCD_USB3)
@@ -431,7 +431,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		break;
 	case GetHubStatus:
 		usbip_dbg_vhci_rh(" GetHubStatus\n");
-		*(__le32 *) buf = cpu_to_le32(0);
+		*(__le32 *)buf = cpu_to_le32(0);
 		break;
 	case GetPortStatus:
 		usbip_dbg_vhci_rh(" GetPortStatus port %x\n", wIndex);
@@ -490,8 +490,9 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				}
 			}
 		}
-		((__le16 *) buf)[0] = cpu_to_le16(vhci_hcd->port_status[rhport]);
-		((__le16 *) buf)[1] =
+
+		((__le16 *)buf)[0] = cpu_to_le16(vhci_hcd->port_status[rhport]);
+		((__le16 *)buf)[1] =
 			cpu_to_le16(vhci_hcd->port_status[rhport] >> 16);
 
 		usbip_dbg_vhci_rh(" GetPortStatus bye %x %x\n", ((u16 *)buf)[0],
@@ -625,7 +626,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			goto error;
 		}
 		/* We'll always return 0 since this is a dummy hub */
-		*(__le32 *) buf = cpu_to_le32(0);
+		*(__le32 *)buf = cpu_to_le32(0);
 		break;
 	case SetHubDepth:
 		usbip_dbg_vhci_rh(" SetHubDepth\n");
@@ -685,7 +686,7 @@ static void vhci_tx_urb(struct urb *urb, struct vhci_device *vdev)
 	priv->vdev = vdev;
 	priv->urb = urb;
 
-	urb->hcpriv = (void *) priv;
+	urb->hcpriv = (void *)priv;
 
 	list_add_tail(&priv->list, &vdev->priv_tx);
 
@@ -752,7 +753,7 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 		struct usb_device *old;
 		__u8 type = usb_pipetype(urb->pipe);
 		struct usb_ctrlrequest *ctrlreq =
-			(struct usb_ctrlrequest *) urb->setup_packet;
+			(struct usb_ctrlrequest *)urb->setup_packet;
 
 		if (type != PIPE_CONTROL || !ctrlreq) {
 			dev_err(dev, "invalid request to devnum 0\n");
