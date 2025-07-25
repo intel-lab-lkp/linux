@@ -104,6 +104,7 @@
 #define   SVC_I3C_MDATACTRL_TXTRIG_FIFO_NOT_FULL GENMASK(5, 4)
 #define   SVC_I3C_MDATACTRL_RXTRIG_FIFO_NOT_EMPTY 0
 #define   SVC_I3C_MDATACTRL_RXCOUNT(x) FIELD_GET(GENMASK(28, 24), (x))
+#define   SVC_I3C_MDATACTRL_TXCOUNT(x) FIELD_GET(GENMASK(20, 16), (x))
 #define   SVC_I3C_MDATACTRL_TXFULL BIT(30)
 #define   SVC_I3C_MDATACTRL_RXEMPTY BIT(31)
 
@@ -278,6 +279,13 @@ static inline bool svc_has_daa_corrupt(struct svc_i3c_master *master)
 static inline bool is_events_enabled(struct svc_i3c_master *master, u32 mask)
 {
 	return !!(master->enabled_events & mask);
+}
+
+static inline bool svc_i3c_master_tx_empty(struct svc_i3c_master *master)
+{
+	u32 reg = readl(master->regs + SVC_I3C_MDATACTRL);
+
+	return (SVC_I3C_MDATACTRL_TXCOUNT(reg) == 0);
 }
 
 static bool svc_i3c_master_error(struct svc_i3c_master *master)
@@ -1303,7 +1311,8 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 		 * The only way to work around this hardware issue is to let the
 		 * FIFO start filling as soon as possible after EmitStartAddr.
 		 */
-		if (svc_has_quirk(master, SVC_I3C_QUIRK_FIFO_EMPTY) && !rnw && xfer_len) {
+		if (svc_has_quirk(master, SVC_I3C_QUIRK_FIFO_EMPTY) && !rnw && xfer_len &&
+		    svc_i3c_master_tx_empty(master)) {
 			u32 end = xfer_len > SVC_I3C_FIFO_SIZE ? 0 : SVC_I3C_MWDATAB_END;
 			u32 len = min_t(u32, xfer_len, SVC_I3C_FIFO_SIZE);
 
