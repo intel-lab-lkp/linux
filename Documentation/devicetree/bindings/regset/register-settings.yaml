@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regset/register-settings.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Register Settings
+
+maintainers:
+  - Thierry Reding <thierry.reding@gmail.com>
+  - Krishna Yarlagadda <kyarlagadda@nvidia.com>
+  - Rajesh Gumasta <rgumasta@nvidia.com>
+  - Jon Hunter <jonathanh@nvidia.com>
+
+description: |
+  Register Settings provides a generic way to specify register configurations
+  for any hardware controllers. Settings are specified under a "reg-settings"
+  sub-node under the controller device tree node. It allows defining both
+  default and operating mode specific register settings in the device tree.
+
+properties:
+  reg-settings:
+    type: object
+    description: |
+      Container node for register settings configurations. Each child node
+      represents a specific configuration mode or operating condition.
+
+    additionalProperties:
+      type: object
+
+additionalProperties: true
