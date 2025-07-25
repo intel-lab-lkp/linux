@@ -98,6 +98,7 @@ struct workqueue_struct *md_bitmap_wq;
 
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
+static void remove_spare(struct md_rdev *rdev, bool recovery);
 static void mddev_detach(struct mddev *mddev);
 static void export_rdev(struct md_rdev *rdev, struct mddev *mddev);
 static void md_wakeup_thread_directly(struct md_thread __rcu *thread);
@@ -2976,7 +2977,7 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 	} else if (cmd_match(buf, "remove")) {
 		if (rdev->mddev->pers) {
 			clear_bit(Blocked, &rdev->flags);
-			remove_and_add_spares(rdev->mddev, rdev);
+			remove_spare(rdev, false);
 		}
 		if (rdev->raid_disk >= 0)
 			err = -EBUSY;
@@ -3180,7 +3181,7 @@ slot_store(struct md_rdev *rdev, const char *buf, size_t len)
 		if (rdev->mddev->pers->hot_remove_disk == NULL)
 			return -EINVAL;
 		clear_bit(Blocked, &rdev->flags);
-		remove_and_add_spares(rdev->mddev, rdev);
+		remove_spare(rdev, false);
 		if (rdev->raid_disk >= 0)
 			return -EBUSY;
 		set_bit(MD_RECOVERY_NEEDED, &rdev->mddev->recovery);
@@ -7135,7 +7136,7 @@ static int hot_remove_disk(struct mddev *mddev, dev_t dev)
 		goto kick_rdev;
 
 	clear_bit(Blocked, &rdev->flags);
-	remove_and_add_spares(mddev, rdev);
+	remove_spare(rdev, false);
 
 	if (rdev->raid_disk >= 0)
 		goto busy;
@@ -9459,29 +9460,34 @@ static bool md_spares_need_change(struct mddev *mddev)
 	return false;
 }
 
-static bool remove_spares(struct mddev *mddev, struct md_rdev *this)
+static void remove_spare(struct md_rdev *rdev, bool recovery)
+{
+	struct mddev *mddev = rdev->mddev;
+
+	/* Mustn't remove devices when resync thread is running */
+	if (!recovery && test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
+		return;
+
+	if (!rdev_removeable(rdev) ||
+	    mddev->pers->hot_remove_disk(mddev, rdev) != 0)
+		return;
+
+	sysfs_unlink_rdev(mddev, rdev);
+	rdev->saved_raid_disk = rdev->raid_disk;
+	rdev->raid_disk = -1;
+
+	if (mddev->kobj.sd)
+		sysfs_notify_dirent_safe(mddev->sysfs_degraded);
+
+	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
+}
+
+static void remove_spares(struct mddev *mddev)
 {
 	struct md_rdev *rdev;
-	bool removed = false;
 
-	rdev_for_each(rdev, mddev) {
-		if ((this == NULL || rdev == this) && rdev_removeable(rdev) &&
-		    !mddev->pers->hot_remove_disk(mddev, rdev)) {
-			sysfs_unlink_rdev(mddev, rdev);
-			rdev->saved_raid_disk = rdev->raid_disk;
-			rdev->raid_disk = -1;
-			removed = true;
-		}
-	}
-
-	if (removed) {
-		if (mddev->kobj.sd)
-			sysfs_notify_dirent_safe(mddev->sysfs_degraded);
-
-		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
-	}
-
-	return this && removed;
+	rdev_for_each(rdev, mddev)
+		remove_spare(rdev, true);
 }
 
 static int remove_and_add_spares(struct mddev *mddev,
@@ -9494,8 +9500,7 @@ static int remove_and_add_spares(struct mddev *mddev,
 		/* Mustn't remove devices when resync thread is running */
 		return 0;
 
-	if (remove_spares(mddev, this))
-		return 0;
+	remove_spares(mddev);
 
 	rdev_for_each(rdev, mddev) {
 		if (this && this != rdev)
@@ -9534,7 +9539,7 @@ static bool md_choose_sync_action(struct mddev *mddev, int *spares)
 
 	/* Check if resync is in progress. */
 	if (mddev->recovery_cp < MaxSector) {
-		remove_spares(mddev, NULL);
+		remove_spares(mddev);
 		set_bit(MD_RECOVERY_SYNC, &mddev->recovery);
 		clear_bit(MD_RECOVERY_RECOVER, &mddev->recovery);
 		return true;
