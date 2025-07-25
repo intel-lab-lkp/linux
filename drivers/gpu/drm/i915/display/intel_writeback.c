@@ -10,6 +10,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_encoder.h>
+#include <drm/drm_edid.h>
 
 #include "i915_drv.h"
 #include "intel_atomic.h"
@@ -74,6 +75,11 @@ intel_writeback_connector_alloc(struct intel_connector *connector)
 	return 0;
 }
 
+static int intel_writeback_get_modes(struct drm_connector *connector)
+{
+	return drm_add_modes_noedid(connector, 3840, 2160);
+}
+
 static struct drm_writeback_connector *
 intel_get_writeback_connector(struct drm_connector *connector)
 {
@@ -105,6 +111,7 @@ const struct drm_connector_funcs conn_funcs = {
 
 static const struct drm_connector_helper_funcs conn_helper_funcs = {
 	.get_writeback_connector = intel_get_writeback_connector,
+	.get_modes = intel_writeback_get_modes,
 };
 
 static const struct drm_writeback_connector_helper_funcs writeback_conn_helper_funcs = {
