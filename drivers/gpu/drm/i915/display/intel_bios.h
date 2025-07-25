@@ -274,5 +274,7 @@ void intel_bios_for_each_encoder(struct intel_display *display,
 					      const struct intel_bios_encoder_data *devdata));
 
 void intel_bios_debugfs_register(struct intel_display *display);
+bool
+intel_bios_need_edp_data_override(const struct intel_bios_encoder_data *devdata, int rate);
 
 #endif /* _INTEL_BIOS_H_ */

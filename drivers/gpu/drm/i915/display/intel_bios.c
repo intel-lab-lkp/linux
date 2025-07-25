@@ -2480,6 +2480,54 @@ static int parse_bdb_216_dp_max_link_rate(const int vbt_max_link_rate)
 	}
 }
 
+static bool parse_bdb_263_edp_data_override(const u32 edp_data_override_mask, int rate)
+{
+	u32 val;
+
+	switch (rate) {
+	case 2000000:
+		val = BDB_263_VBT_EDP_LINK_RATE_20;
+		break;
+	case 1350000:
+		val = BDB_263_VBT_EDP_LINK_RATE_13_5;
+		break;
+	case 1000000:
+		val = BDB_263_VBT_EDP_LINK_RATE_10;
+		break;
+	case 810000:
+		val = BDB_263_VBT_EDP_LINK_RATE_8_1;
+		break;
+	case 675000:
+		val = BDB_263_VBT_EDP_LINK_RATE_6_75;
+		break;
+	case 540000:
+		val = BDB_263_VBT_EDP_LINK_RATE_5_4;
+		break;
+	case 432000:
+		val = BDB_263_VBT_EDP_LINK_RATE_4_32;
+		break;
+	case 324000:
+		val = BDB_263_VBT_EDP_LINK_RATE_3_24;
+		break;
+	case 270000:
+		val = BDB_263_VBT_EDP_LINK_RATE_2_7;
+		break;
+	case 243000:
+		val = BDB_263_VBT_EDP_LINK_RATE_2_43;
+		break;
+	case 216000:
+		val = BDB_263_VBT_EDP_LINK_RATE_2_16;
+		break;
+	case 162000:
+		val = BDB_263_VBT_EDP_LINK_RATE_1_62;
+		break;
+	default:
+		break;
+	}
+
+	return edp_data_override_mask & val;
+}
+
 int intel_bios_dp_max_link_rate(const struct intel_bios_encoder_data *devdata)
 {
 	if (!devdata || devdata->display->vbt.version < 216)
@@ -2497,6 +2545,16 @@ int intel_bios_dp_max_lane_count(const struct intel_bios_encoder_data *devdata)
 		return 0;
 
 	return devdata->child.dp_max_lane_count + 1;
+}
+
+bool
+intel_bios_need_edp_data_override(const struct intel_bios_encoder_data *devdata,
+				  int rate)
+{
+	if (!devdata || devdata->display->vbt.version < 263)
+		return false;
+
+	return parse_bdb_263_edp_data_override(devdata->child.edp_data_override, rate);
 }
 
 static void sanitize_device_type(struct intel_bios_encoder_data *devdata,
