@@ -2607,7 +2607,7 @@ static int btintel_pcie_suspend_late(struct device *dev, pm_message_t mesg)
 	btintel_pcie_wr_sleep_cntrl(data, dxstate);
 	err = wait_event_timeout(data->gp0_wait_q, data->gp0_received,
 				 msecs_to_jiffies(BTINTEL_DEFAULT_INTR_TIMEOUT_MS));
-	delta = ktime_to_ns(ktime_get() - start) / 1000;
+	delta = ktime_to_us(ktime_get() - start);
 
 	if (err == 0) {
 		bt_dev_err(data->hdev, "Timeout (%u ms) on alive interrupt for D3 entry",
@@ -2651,7 +2651,7 @@ static int btintel_pcie_resume(struct device *dev)
 	btintel_pcie_wr_sleep_cntrl(data, BTINTEL_PCIE_STATE_D0);
 	err = wait_event_timeout(data->gp0_wait_q, data->gp0_received,
 				 msecs_to_jiffies(BTINTEL_DEFAULT_INTR_TIMEOUT_MS));
-	delta = ktime_to_ns(ktime_get() - start) / 1000;
+	delta = ktime_to_us(ktime_get() - start);
 
 	if (err == 0) {
 		bt_dev_err(data->hdev, "Timeout (%u ms) on alive interrupt for D0 entry",
