@@ -1633,6 +1633,9 @@ static int samsung_dsim_attach(struct drm_bridge *bridge,
 {
 	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
 
+	if (!dsi->out_bridge)
+		return -EPROBE_DEFER;
+
 	return drm_bridge_attach(encoder, dsi->out_bridge, bridge,
 				 flags);
 }
@@ -1748,8 +1751,6 @@ of_find_panel_or_bridge:
 		     device->name, device->lanes,
 		     mipi_dsi_pixel_format_to_bpp(device->format),
 		     device->mode_flags);
-
-	drm_bridge_add(&dsi->bridge);
 
 	/*
 	 * This is a temporary solution and should be made by more generic way.
@@ -2010,6 +2011,8 @@ int samsung_dsim_probe(struct platform_device *pdev)
 		if (ret)
 			goto err_disable_runtime;
 	}
+
+	drm_bridge_add(&dsi->bridge);
 
 	return 0;
 
