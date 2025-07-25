@@ -53,7 +53,6 @@ intel_dump_infoframe(struct intel_display *display,
 }
 
 #define OUTPUT_TYPE(x) [INTEL_OUTPUT_ ## x] = #x
-
 static const char * const output_type_str[] = {
 	OUTPUT_TYPE(UNUSED),
 	OUTPUT_TYPE(ANALOG),
@@ -67,6 +66,7 @@ static const char * const output_type_str[] = {
 	OUTPUT_TYPE(DSI),
 	OUTPUT_TYPE(DDI),
 	OUTPUT_TYPE(DP_MST),
+	OUTPUT_TYPE(WRITEBACK),
 };
 
 #undef OUTPUT_TYPE
