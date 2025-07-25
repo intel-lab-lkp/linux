@@ -419,11 +419,14 @@ struct coresight_ops_source {
  *
  * @enable	: Enable the device
  * @disable	: Disable the device
+ * @qcom_byte_cntr_in_use:	check whether the byte-cntr is enabled.
  */
 struct coresight_ops_helper {
 	int (*enable)(struct coresight_device *csdev, enum cs_mode mode,
 		      void *data);
 	int (*disable)(struct coresight_device *csdev, void *data);
+	bool (*qcom_byte_cntr_in_use)(struct coresight_device *csdev,
+				      void **data);
 };
 
 

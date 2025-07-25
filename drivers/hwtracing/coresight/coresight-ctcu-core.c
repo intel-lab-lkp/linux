@@ -234,9 +234,44 @@ static int ctcu_disable(struct coresight_device *csdev, void *data)
 	return ctcu_set_etr_traceid(csdev, path, false);
 }
 
+static bool ctcu_qcom_byte_cntr_in_use(struct coresight_device *csdev,
+				       void **data)
+{
+	struct ctcu_byte_cntr *byte_cntr_data;
+	struct coresight_device *helper;
+	struct ctcu_drvdata *drvdata;
+	int port;
+
+	if (!csdev)
+		return false;
+
+	helper = coresight_get_helper(csdev, CORESIGHT_DEV_SUBTYPE_HELPER_CTCU);
+	if (!helper)
+		return false;
+
+	port = coresight_get_in_port_dest(csdev, helper);
+	if (port < 0)
+		return false;
+
+	drvdata = dev_get_drvdata(helper->dev.parent);
+	/* Something wrong when initialize byte_cntr_read_ops */
+	if (!drvdata->byte_cntr_read_ops)
+		return false;
+
+	byte_cntr_data = &drvdata->byte_cntr_data[port];
+	/* Return the pointer of the ctcu_drvdata if byte-cntr has enabled */
+	if (byte_cntr_data && byte_cntr_data->thresh_val) {
+		*data = (void *)drvdata->byte_cntr_read_ops;
+		return true;
+	}
+
+	return false;
+}
+
 static const struct coresight_ops_helper ctcu_helper_ops = {
 	.enable = ctcu_enable,
 	.disable = ctcu_disable,
+	.qcom_byte_cntr_in_use = ctcu_qcom_byte_cntr_in_use,
 };
 
 static const struct coresight_ops ctcu_ops = {
