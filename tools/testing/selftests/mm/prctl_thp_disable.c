@@ -65,6 +65,101 @@ static int test_mmap_thp(enum madvise_buffer madvise_buf, size_t pmdsize)
 	munmap(buffer, buf_size);
 	return ret;
 }
+
+FIXTURE(prctl_thp_disable_except_madvise)
+{
+	struct thp_settings settings;
+	size_t pmdsize;
+};
+
+FIXTURE_SETUP(prctl_thp_disable_except_madvise)
+{
+	if (!thp_is_enabled())
+		SKIP(return, "Transparent Hugepages not available\n");
+
+	self->pmdsize = read_pmd_pagesize();
+	if (!self->pmdsize)
+		SKIP(return, "Unable to read PMD size\n");
+
+	thp_read_settings(&self->settings);
+	self->settings.thp_enabled = THP_ALWAYS;
+	self->settings.hugepages[sz2ord(self->pmdsize, getpagesize())].enabled = THP_INHERIT;
+	thp_save_settings();
+	thp_push_settings(&self->settings);
+
+}
+
+FIXTURE_TEARDOWN(prctl_thp_disable_except_madvise)
+{
+	thp_restore_settings();
+}
+
+/* prctl_thp_disable_except_madvise fixture sets system THP setting to always */
+static void prctl_thp_disable_except_madvise(struct __test_metadata *const _metadata,
+					     size_t pmdsize)
+{
+	int res = 0;
+
+	res = prctl(PR_GET_THP_DISABLE, NULL, NULL, NULL, NULL);
+	ASSERT_EQ(res, 3);
+
+	/* global = always, process = madvise, we shouldn't get HPs without madvise */
+	res = test_mmap_thp(NONE, pmdsize);
+	ASSERT_EQ(res, 0);
+
+	res = test_mmap_thp(HUGE, pmdsize);
+	ASSERT_EQ(res, 1);
+
+	res = test_mmap_thp(COLLAPSE, pmdsize);
+	ASSERT_EQ(res, 1);
+
+	/* Reset to system policy */
+	res =  prctl(PR_SET_THP_DISABLE, 0, NULL, NULL, NULL);
+	ASSERT_EQ(res, 0);
+
+	/* global = always, hence we should get HPs without madvise */
+	res = test_mmap_thp(NONE, pmdsize);
+	ASSERT_EQ(res, 1);
+
+	res = test_mmap_thp(HUGE, pmdsize);
+	ASSERT_EQ(res, 1);
+
+	res = test_mmap_thp(COLLAPSE, pmdsize);
+	ASSERT_EQ(res, 1);
+}
+
+TEST_F(prctl_thp_disable_except_madvise, nofork)
+{
+	int res = 0;
+
+	res = prctl(PR_SET_THP_DISABLE, 1, PR_THP_DISABLE_EXCEPT_ADVISED, NULL, NULL);
+	ASSERT_EQ(res, 0);
+	prctl_thp_disable_except_madvise(_metadata, self->pmdsize);
+}
+
+TEST_F(prctl_thp_disable_except_madvise, fork)
+{
+	int res = 0, ret = 0;
+	pid_t pid;
+
+	res = prctl(PR_SET_THP_DISABLE, 1, PR_THP_DISABLE_EXCEPT_ADVISED, NULL, NULL);
+	ASSERT_EQ(res, 0);
+
+	/* Make sure prctl changes are carried across fork */
+	pid = fork();
+	ASSERT_GE(pid, 0);
+
+	if (!pid)
+		prctl_thp_disable_except_madvise(_metadata, self->pmdsize);
+
+	wait(&ret);
+	if (WIFEXITED(ret))
+		ret = WEXITSTATUS(ret);
+	else
+		ret = -EINVAL;
+	ASSERT_EQ(ret, 0);
+}
+
 FIXTURE(prctl_thp_disable_completely)
 {
 	struct thp_settings settings;
