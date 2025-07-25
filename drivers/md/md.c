@@ -9459,10 +9459,10 @@ static bool md_spares_need_change(struct mddev *mddev)
 	return false;
 }
 
-static int remove_spares(struct mddev *mddev, struct md_rdev *this)
+static bool remove_spares(struct mddev *mddev, struct md_rdev *this)
 {
 	struct md_rdev *rdev;
-	int removed = 0;
+	bool removed = false;
 
 	rdev_for_each(rdev, mddev) {
 		if ((this == NULL || rdev == this) && rdev_removeable(rdev) &&
@@ -9470,14 +9470,18 @@ static int remove_spares(struct mddev *mddev, struct md_rdev *this)
 			sysfs_unlink_rdev(mddev, rdev);
 			rdev->saved_raid_disk = rdev->raid_disk;
 			rdev->raid_disk = -1;
-			removed++;
+			removed = true;
 		}
 	}
 
-	if (removed && mddev->kobj.sd)
-		sysfs_notify_dirent_safe(mddev->sysfs_degraded);
+	if (removed) {
+		if (mddev->kobj.sd)
+			sysfs_notify_dirent_safe(mddev->sysfs_degraded);
 
-	return removed;
+		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
+	}
+
+	return this && removed;
 }
 
 static int remove_and_add_spares(struct mddev *mddev,
@@ -9485,15 +9489,13 @@ static int remove_and_add_spares(struct mddev *mddev,
 {
 	struct md_rdev *rdev;
 	int spares = 0;
-	int removed = 0;
 
 	if (this && test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
 		/* Mustn't remove devices when resync thread is running */
 		return 0;
 
-	removed = remove_spares(mddev, this);
-	if (this && removed)
-		goto no_add;
+	if (remove_spares(mddev, this))
+		return 0;
 
 	rdev_for_each(rdev, mddev) {
 		if (this && this != rdev)
@@ -9513,9 +9515,7 @@ static int remove_and_add_spares(struct mddev *mddev,
 			set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 		}
 	}
-no_add:
-	if (removed)
-		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
+
 	return spares;
 }
 
