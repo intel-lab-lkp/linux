@@ -40,6 +40,7 @@ enum lm75_type {		/* keep sorted in alphabetical order */
 	max31725,
 	mcp980x,
 	p3t1755,
+	p3t1750,
 	pct2075,
 	stds75,
 	stlm75,
@@ -223,6 +224,13 @@ static const struct lm75_params device_params[] = {
 		.default_sample_time = MSEC_PER_SEC / 18,
 	},
 	[p3t1755] = {
+		.clr_mask = 1 << 1 | 1 << 7,	/* disable SMBAlert and one-shot */
+		.default_resolution = 12,
+		.default_sample_time = 55,
+		.num_sample_times = 4,
+		.sample_times = (unsigned int []){ 28, 55, 110, 220 },
+	},
+	[p3t1750] = {
 		.clr_mask = 1 << 1 | 1 << 7,	/* disable SMBAlert and one-shot */
 		.default_resolution = 12,
 		.default_sample_time = 55,
@@ -806,6 +814,7 @@ static const struct i2c_device_id lm75_i2c_ids[] = {
 	{ "max31726", max31725, },
 	{ "mcp980x", mcp980x, },
 	{ "p3t1755", p3t1755, },
+	{ "p3t1750", p3t1750, },
 	{ "pct2075", pct2075, },
 	{ "stds75", stds75, },
 	{ "stlm75", stlm75, },
@@ -919,6 +928,10 @@ static const struct of_device_id __maybe_unused lm75_of_match[] = {
 	{
 		.compatible = "nxp,p3t1755",
 		.data = (void *)p3t1755
+	},
+	{
+		.compatible = "nxp,p3t1750",
+		.data = (void *)p3t1750
 	},
 	{
 		.compatible = "nxp,pct2075",
