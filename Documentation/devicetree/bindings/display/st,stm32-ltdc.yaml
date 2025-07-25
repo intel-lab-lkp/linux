@@ -12,7 +12,9 @@ maintainers:
 
 properties:
   compatible:
-    const: st,stm32-ltdc
+    enum:
+      - st,stm32-ltdc
+      - st,stm32mp25-ltdc
 
   reg:
     maxItems: 1
@@ -24,11 +26,12 @@ properties:
     minItems: 1
 
   clocks:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
 
   clock-names:
-    items:
-      - const: lcd
+    minItems: 1
+    maxItems: 4
 
   resets:
     maxItems: 1
@@ -50,6 +53,32 @@ required:
   - clock-names
   - resets
   - port
+
+if:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - st,stm32-ltdc
+then:
+  properties:
+    clocks:
+      maxItems: 1
+    clock-names:
+      maxItems: 1
+      items:
+        - const: lcd
+else:
+  properties:
+    clocks:
+      maxItems: 4
+    clock-names:
+      maxItems: 4
+      items:
+      - const: bus
+      - const: lcd
+      - const: ref
+      - const: lvds
 
 additionalProperties: false
 
