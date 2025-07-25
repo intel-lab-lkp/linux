@@ -85,7 +85,9 @@ static inline unsigned long kcov_remote_start_usb_softirq(u64 id)
 	unsigned long flags = 0;
 
 	if (in_serving_softirq()) {
+#ifndef CONFIG_PREEMPT_RT
 		local_irq_save(flags);
+#endif
 		kcov_remote_start_usb(id);
 	}
 
@@ -96,7 +98,9 @@ static inline void kcov_remote_stop_softirq(unsigned long flags)
 {
 	if (in_serving_softirq()) {
 		kcov_remote_stop();
+#ifndef CONFIG_PREEMPT_RT
 		local_irq_restore(flags);
+#endif
 	}
 }
 
