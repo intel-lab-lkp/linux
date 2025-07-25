@@ -1424,6 +1424,38 @@ static bool match_var_offset(Dwarf_Die *die_mem, struct find_var_data *data,
 	return true;
 }
 
+/**
+ * is_breg_access_indirect - Check if breg based access implies type dereference
+ * @ops: DWARF operations array
+ * @nops: Number of operations in @ops
+ *
+ * Returns true if the DWARF expression indicates the variable's value is
+ * a pointer that the memory access dereferences.
+ * Returns false if the expression evaluates to the variable's value directly.
+ * This is called after check_allowed_ops.
+ */
+static bool is_breg_access_indirect(Dwarf_Op *ops, size_t nops)
+{
+	ops++;
+	nops--;
+
+	/* only the base register */
+	if (nops == 0)
+		return false;
+
+	switch (ops->atom) {
+	case DW_OP_stack_value:
+		return true;
+	case DW_OP_deref_size:
+	case DW_OP_deref:
+	case DW_OP_piece:
+		return false;
+	default:
+		/* unreachable, OP not supported */
+		return false;
+	}
+}
+
 /* Only checks direct child DIEs in the given scope. */
 static int __die_find_var_reg_cb(Dwarf_Die *die_mem, void *arg)
 {
@@ -1452,7 +1484,7 @@ static int __die_find_var_reg_cb(Dwarf_Die *die_mem, void *arg)
 		if (data->is_fbreg && ops->atom == DW_OP_fbreg &&
 		    check_allowed_ops(ops, nops) &&
 		    match_var_offset(die_mem, data, data->offset, ops->number,
-				     /*is_pointer=*/false))
+				     /*is_pointer=*/is_breg_access_indirect(ops, nops)))
 			return DIE_FIND_CB_END;
 
 		/* Only match with a simple case */
@@ -1464,11 +1496,11 @@ static int __die_find_var_reg_cb(Dwarf_Die *die_mem, void *arg)
 					     /*is_pointer=*/true))
 				return DIE_FIND_CB_END;
 
-			/* Local variables accessed by a register + offset */
+			/* variables accessed by a register + offset */
 			if (ops->atom == (DW_OP_breg0 + data->reg) &&
 			    check_allowed_ops(ops, nops) &&
 			    match_var_offset(die_mem, data, data->offset, ops->number,
-					     /*is_pointer=*/false))
+					     /*is_pointer=*/is_breg_access_indirect(ops, nops)))
 				return DIE_FIND_CB_END;
 		} else {
 			/* pointer variables saved in a register 32 or above */
@@ -1478,11 +1510,11 @@ static int __die_find_var_reg_cb(Dwarf_Die *die_mem, void *arg)
 					     /*is_pointer=*/true))
 				return DIE_FIND_CB_END;
 
-			/* Local variables accessed by a register + offset */
+			/* variables accessed by a register + offset */
 			if (ops->atom == DW_OP_bregx && data->reg == ops->number &&
 			    check_allowed_ops(ops, nops) &&
 			    match_var_offset(die_mem, data, data->offset, ops->number2,
-					     /*is_poitner=*/false))
+					     /*is_pointer=*/is_breg_access_indirect(ops, nops)))
 				return DIE_FIND_CB_END;
 		}
 	}
