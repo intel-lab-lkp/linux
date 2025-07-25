@@ -308,18 +308,17 @@ int __copy_io(unsigned long clone_flags, struct task_struct *tsk)
 
 #ifdef CONFIG_BLK_ICQ
 /**
- * ioc_lookup_icq - lookup io_cq from ioc
+ * ioc_lookup_icq - lookup io_cq from ioc in io issue path
  * @q: the associated request_queue
  *
  * Look up io_cq associated with @ioc - @q pair from @ioc.  Must be called
- * with @q->queue_lock held.
+ * from io issue path, either return NULL if current issue io to @q for the
+ * first time, or return a valid icq.
  */
 struct io_cq *ioc_lookup_icq(struct request_queue *q)
 {
 	struct io_context *ioc = current->io_context;
 	struct io_cq *icq;
-
-	lockdep_assert_held(&q->queue_lock);
 
 	/*
 	 * icq's are indexed from @ioc using radix tree and hint pointer,
@@ -419,10 +418,7 @@ struct io_cq *ioc_find_get_icq(struct request_queue *q)
 		task_unlock(current);
 	} else {
 		get_io_context(ioc);
-
-		spin_lock_irq(&q->queue_lock);
 		icq = ioc_lookup_icq(q);
-		spin_unlock_irq(&q->queue_lock);
 	}
 
 	if (!icq) {
