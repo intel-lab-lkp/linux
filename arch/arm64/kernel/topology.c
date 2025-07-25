@@ -357,12 +357,15 @@ static void amu_fie_setup(const struct cpumask *cpus)
 
 	/* We are already set since the last insmod of cpufreq driver */
 	if (cpumask_available(amu_fie_cpus) &&
-	    unlikely(cpumask_subset(cpus, amu_fie_cpus)))
+	    cpumask_subset(cpus, amu_fie_cpus))
 		return;
 
-	for_each_cpu(cpu, cpus)
-		if (!freq_counters_valid(cpu))
+	for_each_cpu(cpu, cpus) {
+		if (!freq_counters_valid(cpu)) {
+			topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpus);
 			return;
+		}
+	}
 
 	if (!cpumask_available(amu_fie_cpus) &&
 	    !zalloc_cpumask_var(&amu_fie_cpus, GFP_KERNEL)) {
@@ -385,7 +388,7 @@ static int init_amu_fie_callback(struct notifier_block *nb, unsigned long val,
 	struct cpufreq_policy *policy = data;
 
 	if (val == CPUFREQ_CREATE_POLICY)
-		amu_fie_setup(policy->related_cpus);
+		amu_fie_setup(policy->cpus);
 
 	/*
 	 * We don't need to handle CPUFREQ_REMOVE_POLICY event as the AMU
@@ -404,10 +407,46 @@ static struct notifier_block init_amu_fie_notifier = {
 	.notifier_call = init_amu_fie_callback,
 };
 
+static int cpuhp_topology_online(unsigned int cpu)
+{
+	struct cpufreq_policy *policy __free(put_cpufreq_policy);
+	cpumask_var_t cpus_to_set;
+
+	if (!zalloc_cpumask_var(&cpus_to_set, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_copy(cpus_to_set, cpumask_of(cpu));
+
+	policy = cpufreq_cpu_get(cpu);
+	if (policy) {
+		cpumask_or(cpus_to_set, cpus_to_set, policy->cpus);
+		amu_fie_setup(cpus_to_set);
+	}
+
+	free_cpumask_var(cpus_to_set);
+	return 0;
+}
+
 static int __init init_amu_fie(void)
 {
-	return cpufreq_register_notifier(&init_amu_fie_notifier,
+	int ret;
+
+	ret = cpufreq_register_notifier(&init_amu_fie_notifier,
 					CPUFREQ_POLICY_NOTIFIER);
+	if (ret)
+		return ret;
+
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+					"arm64/topology:online",
+					cpuhp_topology_online,
+					NULL);
+	if (ret < 0) {
+		cpufreq_unregister_notifier(&init_amu_fie_notifier,
+					    CPUFREQ_POLICY_NOTIFIER);
+		return ret;
+	}
+
+	return 0;
 }
 core_initcall(init_amu_fie);
 
