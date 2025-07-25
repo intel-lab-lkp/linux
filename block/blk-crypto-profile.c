@@ -237,7 +237,7 @@ EXPORT_SYMBOL_GPL(blk_crypto_keyslot_index);
  *	      will be stored here.  blk_crypto_put_keyslot() must be called
  *	      later to release it.  Otherwise, NULL will be stored here.
  *
- * If the device has keyslots, this gets a keyslot that's been programmed with
+ * If the device has keyslots, this gets a keyslot that's been programed with
  * the specified key.  If the key is already in a slot, this reuses it;
  * otherwise this waits for a slot to become idle and programs the key into it.
  *
@@ -278,7 +278,7 @@ blk_status_t blk_crypto_get_keyslot(struct blk_crypto_profile *profile,
 
 		/*
 		 * If we're here, that means there wasn't a slot that was
-		 * already programmed with the key. So try to program it.
+		 * already programed with the key. So try to program it.
 		 */
 		if (!list_empty(&profile->idle_slots))
 			break;
@@ -412,7 +412,7 @@ out:
  * blk_crypto_reprogram_all_keys() - Re-program all keyslots.
  * @profile: The crypto profile
  *
- * Re-program all keyslots that are supposed to have a key programmed.  This is
+ * Re-program all keyslots that are supposed to have a key programed.  This is
  * intended only for use by drivers for hardware that loses its keys on reset.
  *
  * Context: Process context. Takes and releases profile->lock.
