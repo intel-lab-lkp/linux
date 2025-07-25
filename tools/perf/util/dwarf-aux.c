@@ -1635,6 +1635,14 @@ static int __die_collect_vars_cb(Dwarf_Die *die_mem, void *arg)
 	if (die_get_real_type(die_mem, &type_die) == NULL)
 		return DIE_FIND_CB_SIBLING;
 
+	if ((ops->atom == DW_OP_fbreg || ops->atom == DW_OP_breg7) &&
+	    dwarf_tag(&type_die) == DW_TAG_pointer_type &&
+	    is_breg_access_indirect(ops, nops)) {
+		/* Get the target type of the pointer */
+		if (die_get_real_type(&type_die, &type_die) == NULL)
+			return DIE_FIND_CB_SIBLING;
+	}
+
 	vt = malloc(sizeof(*vt));
 	if (vt == NULL)
 		return DIE_FIND_CB_END;
