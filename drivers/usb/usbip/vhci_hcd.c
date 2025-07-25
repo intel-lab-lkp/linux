@@ -347,7 +347,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 	if (wIndex < 1 || wIndex > VHCI_HC_PORTS) {
 		invalid_rhport = true;
 		if (wIndex > VHCI_HC_PORTS)
-			pr_err("invalid port number %d\n", wIndex);
+			dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 	} else {
 		rhport = wIndex - 1;
 	}
@@ -370,7 +370,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		break;
 	case ClearPortFeature:
 		if (invalid_rhport) {
-			pr_err("invalid port number %d\n", wIndex);
+			dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 			goto error;
 		}
 
@@ -410,7 +410,8 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		usbip_dbg_vhci_rh(" GetHubDescriptor\n");
 		if (hcd->speed >= HCD_USB3 &&
 		    (wLength < USB_DT_SS_HUB_SIZE || wValue != (USB_DT_SS_HUB << 8))) {
-			pr_err("Wrong hub descriptor type for USB 3.0 roothub.\n");
+			dev_err(hcd_dev(hcd),
+				"Wrong hub descriptor type for USB 3.0 roothub.\n");
 			goto error;
 		}
 
@@ -436,7 +437,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 	case GetPortStatus:
 		usbip_dbg_vhci_rh(" GetPortStatus port %x\n", wIndex);
 		if (invalid_rhport) {
-			pr_err("invalid port number %d\n", wIndex);
+			dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 			retval = -EPIPE;
 			goto error;
 		}
@@ -485,7 +486,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 						USB_PORT_STAT_LOW_SPEED;
 					break;
 				default:
-					pr_err("vhci_device speed not set\n");
+					dev_err(hcd_dev(hcd), "vhci_device speed not set\n");
 					break;
 				}
 			}
@@ -539,7 +540,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 
 			if (invalid_rhport) {
-				pr_err("invalid port number %d\n", wIndex);
+				dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 				goto error;
 			}
 
@@ -548,7 +549,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_POWER:
 			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_POWER\n");
 			if (invalid_rhport) {
-				pr_err("invalid port number %d\n", wIndex);
+				dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 				goto error;
 			}
 
@@ -560,7 +561,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_BH_PORT_RESET:
 			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_BH_PORT_RESET\n");
 			if (invalid_rhport) {
-				pr_err("invalid port number %d\n", wIndex);
+				dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 				goto error;
 			}
 
@@ -574,7 +575,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_RESET:
 			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_RESET\n");
 			if (invalid_rhport) {
-				pr_err("invalid port number %d\n", wIndex);
+				dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 				goto error;
 			}
 
@@ -598,7 +599,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			usbip_dbg_vhci_rh(" SetPortFeature: default %d\n",
 					  wValue);
 			if (invalid_rhport) {
-				pr_err("invalid port number %d\n", wIndex);
+				dev_err(hcd_dev(hcd), "invalid port number %d\n", wIndex);
 				goto error;
 			}
 
@@ -637,7 +638,8 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		}
 		break;
 	default:
-		pr_err("default hub control req: %04x v%04x i%04x l%d\n",
+		dev_err(hcd_dev(hcd),
+			"default hub control req: %04x v%04x i%04x l%d\n",
 			typeReq, wValue, wIndex, wLength);
 error:
 		/* "protocol stall" on error */
@@ -645,7 +647,7 @@ error:
 	}
 
 	if (usbip_dbg_flag_vhci_rh) {
-		pr_debug("port %d\n", rhport);
+		dev_dbg(hcd_dev(hcd), "%s port %d\n", __func__, rhport);
 		/* Only dump valid port status */
 		if (!invalid_rhport) {
 			dump_port_status_diff(prev_port_status[rhport],
@@ -705,7 +707,7 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	unsigned long flags;
 
 	if (portnum > VHCI_HC_PORTS) {
-		pr_err("invalid port number %d\n", portnum);
+		dev_err(hcd_dev(hcd), "invalid port number %d\n", portnum);
 		return -ENODEV;
 	}
 	vdev = &vhci_hcd->vdev[portnum - 1];
@@ -958,7 +960,7 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 
 		unlink->seqnum = atomic_inc_return(&vhci_hcd->seqnum);
 		if (unlink->seqnum == 0xffff)
-			pr_info("seqnum max\n");
+			dev_info(hcd_dev(hcd), "seqnum max\n");
 
 		unlink->unlink_seqnum = priv->seqnum;
 
@@ -1035,10 +1037,11 @@ static void vhci_device_unlink_cleanup(struct vhci_device *vdev)
 static void vhci_shutdown_connection(struct usbip_device *ud)
 {
 	struct vhci_device *vdev = container_of(ud, struct vhci_device, ud);
+	struct usb_hcd *hcd = vhci_hcd_to_hcd(vdev_to_vhci_hcd(vdev));
 
 	/* need this? see stub_dev.c */
 	if (ud->tcp_socket) {
-		pr_debug("shutdown tcp_socket %d\n", ud->sockfd);
+		dev_dbg(hcd_dev(hcd), "shutdown tcp_socket %d\n", ud->sockfd);
 		kernel_sock_shutdown(ud->tcp_socket, SHUT_RDWR);
 	}
 
@@ -1051,7 +1054,7 @@ static void vhci_shutdown_connection(struct usbip_device *ud)
 		kthread_stop_put(vdev->ud.tcp_tx);
 		vdev->ud.tcp_tx = NULL;
 	}
-	pr_info("stop threads\n");
+	dev_info(hcd_dev(hcd), "stop threads\n");
 
 	/* active connection is closed */
 	if (vdev->ud.tcp_socket) {
@@ -1059,7 +1062,7 @@ static void vhci_shutdown_connection(struct usbip_device *ud)
 		vdev->ud.tcp_socket = NULL;
 		vdev->ud.sockfd = -1;
 	}
-	pr_info("release socket\n");
+	dev_info(hcd_dev(hcd), "release socket\n");
 
 	vhci_device_unlink_cleanup(vdev);
 
@@ -1085,7 +1088,7 @@ static void vhci_shutdown_connection(struct usbip_device *ud)
 	 */
 	rh_port_disconnect(vdev);
 
-	pr_info("disconnect device\n");
+	dev_info(hcd_dev(hcd), "disconnect device\n");
 }
 
 static void vhci_device_reset(struct usbip_device *ud)
@@ -1219,7 +1222,7 @@ static int vhci_start(struct usb_hcd *hcd)
 
 	id = hcd_name_to_id(hcd_name(hcd));
 	if (id < 0) {
-		pr_err("invalid vhci name %s\n", hcd_name(hcd));
+		dev_err(hcd_dev(hcd), "invalid vhci name %s\n", hcd_name(hcd));
 		return -EINVAL;
 	}
 
@@ -1238,7 +1241,7 @@ static int vhci_start(struct usb_hcd *hcd)
 			return err;
 		}
 
-		pr_info("created sysfs %s\n", hcd_name(hcd));
+		dev_info(hcd_dev(hcd), "created sysfs %s\n", hcd_name(hcd));
 	}
 
 	return 0;
