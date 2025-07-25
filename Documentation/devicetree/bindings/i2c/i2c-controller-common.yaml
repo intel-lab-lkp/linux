@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/i2c-controller-common.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: I2C Controller Common Properties
+
+maintainers:
+  - Thierry Reding <thierry.reding@gmail.com>
+  - Krishna Yarlagadda <kyarlagadda@nvidia.com>
+  - Rajesh Gumasta <rgumasta@nvidia.com>
+  - Jon Hunter <jonathanh@nvidia.com>
+
+description:
+  These properties are common to multiple I2C controllers.
+
+definitions:
+  reg-settings:
+    properties:
+      scl-low-period-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: Low period of the SCL clock in parent clock cycles.
+      scl-high-period-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: High period of the SCL clock in parent clock cycles.
+      bus-free-time-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: Bus free time between STOP and START conditions in parent
+          clock cycles.
+      start-setup-time-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: Set-up time for START condition in parent clock cycles.
+      stop-setup-time-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: Set-up time for STOP condition in parent clock cycles.
+      start-hold-time-cycles:
+        $ref: /schemas/types.yaml#/definitions/uint8
+        description: Hold time for STOP condition in parent clock cycles.
+
+properties:
+  reg-settings:
+    $ref: /schemas/regset/register-settings.yaml
+
+    properties:
+      default-setting:
+        type: object
+        $ref: "#/definitions/reg-settings"
+        description:
+          Default register settings.
+
+      fast:
+        type: object
+        $ref: "#/definitions/reg-settings"
+        description:
+          Register settings for I2C fast operating mode.
+
+      fastplus:
+        type: object
+        $ref: "#/definitions/reg-settings"
+        description:
+          Register settings for I2C fastplus operating mode.
+
+      standard:
+        type: object
+        $ref: "#/definitions/reg-settings"
+        description:
+          Register settings for I2C standard operating mode.
+
+allOf:
+  - $ref: /schemas/i2c/i2c-controller.yaml
+
+additionalProperties: true

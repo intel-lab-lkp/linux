@@ -119,6 +119,28 @@ properties:
       - const: rx
       - const: tx
 
+  reg-settings:
+    $ref: /schemas/i2c/i2c-controller-common.yaml#/properties/reg-settings
+
+    properties:
+      default-setting:
+        $ref: /schemas/i2c/i2c-controller-common.yaml#/definitions/reg-settings
+        unevaluatedProperties: false
+
+      fast:
+        $ref: /schemas/i2c/i2c-controller-common.yaml#/definitions/reg-settings
+        unevaluatedProperties: false
+
+      fastplus:
+        $ref: /schemas/i2c/i2c-controller-common.yaml#/definitions/reg-settings
+        unevaluatedProperties: false
+
+      standard:
+        $ref: /schemas/i2c/i2c-controller-common.yaml#/definitions/reg-settings
+        unevaluatedProperties: false
+
+    unevaluatedProperties: false
+
 required:
   - compatible
   - reg
@@ -127,7 +149,7 @@ required:
   - clock-names
 
 allOf:
-  - $ref: /schemas/i2c/i2c-controller.yaml
+  - $ref: /schemas/i2c/i2c-controller-common.yaml
   - if:
       properties:
         compatible:
@@ -206,6 +228,42 @@ examples:
         dmas = <&apbdma 16>, <&apbdma 16>;
         dma-names = "rx", "tx";
 
-        #address-cells = <1>;
-        #size-cells = <0>;
+        i2c-bus {
+            #address-cells = <1>;
+            #size-cells = <0>;
+        };
+
+        reg-settings {
+            default-setting {
+                scl-high-period-cycles = /bits/ 8 <3>;
+                scl-low-period-cycles = /bits/ 8 <8>;
+            };
+
+            fast {
+                scl-high-period-cycles = /bits/ 8 <2>;
+                scl-low-period-cycles = /bits/ 8 <2>;
+                bus-free-time-cycles = /bits/ 8 <2>;
+                stop-setup-time-cycles = /bits/ 8 <2>;
+                start-hold-time-cycles = /bits/ 8 <2>;
+                start-setup-time-cycles = /bits/ 8 <2>;
+            };
+
+            fastplus {
+                scl-high-period-cycles = /bits/ 8 <2>;
+                scl-low-period-cycles = /bits/ 8 <2>;
+                bus-free-time-cycles = /bits/ 8 <2>;
+                stop-setup-time-cycles = /bits/ 8 <2>;
+                start-hold-time-cycles = /bits/ 8 <2>;
+                start-setup-time-cycles = /bits/ 8 <2>;
+            };
+
+            standard {
+                scl-high-period-cycles = /bits/ 8 <7>;
+                scl-low-period-cycles = /bits/ 8 <8>;
+                bus-free-time-cycles = /bits/ 8 <8>;
+                stop-setup-time-cycles = /bits/ 8 <8>;
+                start-hold-time-cycles = /bits/ 8 <8>;
+                start-setup-time-cycles = /bits/ 8 <8>;
+            };
+        };
     };
